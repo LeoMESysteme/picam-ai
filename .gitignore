@@ -1,0 +1,14 @@
+# SSH-Schluesselpaar fuer den Remote-Zugang - gehoert nie ins Repo.
+remoteclaude
+remoteclaude.pub
+
+# Projekt-venv (wird per install.sh mit --system-site-packages erzeugt)
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Laufzeit- und Diagnoseartefakte (Beispielausgaben, Sessions, Snapshots)
+var/
