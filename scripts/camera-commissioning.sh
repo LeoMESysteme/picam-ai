@@ -62,17 +62,15 @@ else
 fi
 
 # ------------------------------------------------------------------ Overlays ---
-sec "Geladene Device-Tree-Overlays"
+sec "Device-Tree-Overlays (nur informativ)"
 overlays=$(dtoverlay -l 2>&1)
 if echo "$overlays" | grep -qi "no overlays loaded"; then
-    bad "keine Overlays geladen - insbesondere kein Kamera-Overlay"
+    info "dtoverlay -l: keine Overlays geladen"
+    info "Das ist KEIN Fehlerkriterium: camera_auto_detect wird von der Firmware"
+    info "beim Booten angewandt und erscheint hier nicht - dtoverlay -l zeigt nur"
+    info "zur Laufzeit nachgeladene Overlays. Beweis ist der Sensorknoten unten."
 else
     echo "$overlays" | sed 's/^/         /'
-    if echo "$overlays" | grep -qiE 'imx[0-9]+'; then
-        ok "Kamera-Overlay ist aktiv"
-    else
-        bad "Overlays geladen, aber keines fuer eine Kamera"
-    fi
 fi
 
 # --------------------------------------------------------------- Device-Tree ---
@@ -89,11 +87,15 @@ else
     warn "keine CAM-Anschlussknoten gefunden - unerwartet fuer einen Pi 5"
 fi
 
-# Ein Sensorknoten entsteht erst durch das Kamera-Overlay.
+# Ein Sensorknoten entsteht erst durch das Kamera-Overlay - das ist der
+# eigentliche Nachweis, dass die Kamera beim Booten erkannt wurde.
 sensor_nodes=$(find -L "$DT_BASE" -maxdepth 8 -iname 'imx[0-9]*@*' 2>/dev/null | head -5)
 if [ -n "$sensor_nodes" ]; then
     ok "Sensorknoten im Device-Tree:"
     echo "$sensor_nodes" | sed "s|$DT_BASE|         DT:|"
+    # Der I2C-Knoten im Pfad ist der CAM-Bus des belegten Anschlusses.
+    sensor_i2c=$(echo "$sensor_nodes" | head -1 | grep -oE 'i2c@[0-9a-f]+' || true)
+    [ -n "$sensor_i2c" ] && info "belegter CAM-I2C-Knoten: $sensor_i2c"
 else
     bad "kein Sensorknoten im Device-Tree (Anschluss da, Kamera nicht erkannt)"
 fi
@@ -125,14 +127,15 @@ else
 fi
 
 # ---------------------------------------------------------------------- I2C ---
-sec "I2C-Busse"
+sec "I2C-Busse (nur informativ)"
 buses=$(ls -1 /dev/i2c-* 2>/dev/null | sed 's|/dev/i2c-||' | sort -n | tr '\n' ' ')
 info "vorhanden: ${buses:-keine}"
-# Die CAM-Busse (typisch i2c-4 / i2c-6 auf dem Pi 5) erscheinen erst mit Overlay.
-if ls /dev/i2c-4 /dev/i2c-6 >/dev/null 2>&1; then
-    ok "CAM-I2C-Bus vorhanden"
-else
-    bad "kein CAM-I2C-Bus (erscheint erst, wenn das Kamera-Overlay geladen ist)"
+# Ohne Kamera sind auf diesem Pi nur 1, 13 und 14 da; die CAM-Busse kommen mit
+# dem Overlay hinzu. Die Nummern sind nicht stabil, deshalb kein Fehlerkriterium
+# - der Sensorknoten oben ist der belastbare Nachweis.
+extra_buses=$(echo " $buses" | tr ' ' '\n' | grep -vxE '1|13|14|' | tr '\n' ' ')
+if [ -n "${extra_buses// /}" ]; then
+    info "zusaetzlich zur Grundausstattung: ${extra_buses}(CAM-Busse)"
 fi
 
 # ------------------------------------------------------------ libcamera/rpicam ---
@@ -224,8 +227,9 @@ fi
 printf '  \033[31mKamera NICHT einsatzbereit\033[0m (%s Fehler, %s Warnungen).\n' \
        "$fail_count" "$warn_count"
 
-if echo "$overlays" | grep -qi "no overlays loaded" && \
-   grep -qE '^\s*camera_auto_detect=1' "$BOOT_CFG" 2>/dev/null; then
+# Fehlt der Sensorknoten, wurde die Kamera beim Booten nicht erkannt. Das ist
+# der Fall, fuer den die Eskalationsleiter gilt.
+if [ -z "$sensor_nodes" ]; then
     cat <<'EOF'
 
   Wahrscheinlichste Ursache: die Kamera wurde nach dem letzten Boot angesteckt.
