@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -11,7 +11,7 @@ import numpy as np
 from dispread.records import TimeBaseKind, Timestamp
 
 
-class Capability(str, Enum):
+class Capability(StrEnum):
     """Was eine Bildquelle kann.
 
     Der einzige Ort, an dem die Pipeline Unterschiede zwischen Quellen bemerken

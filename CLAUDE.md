@@ -2,67 +2,111 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status
+## Einstiegsreihenfolge (verbindlich)
 
-This repository currently contains **no source code** — only [Konzept.md](Konzept.md), a German-language concept document. There is no build system, no dependency manifest, no tests, and no CI to run yet. Do not invent build/lint/test commands; none exist. When implementation begins, this file should be updated with the actual toolchain and commands.
+1. [docs/status.md](docs/status.md) — aktueller Stand, Blocker, nächste Schritte
+2. [docs/open-questions.md](docs/open-questions.md) — was offen ist und warum
+3. [AGENTS.md](AGENTS.md) — verbindliche Daueranweisungen, inkl. Doku-Pflicht
+4. [Konzept.md](Konzept.md) — **autoritativ** für alle Anforderungen (deutsch)
+5. [CHANGELOG.md](CHANGELOG.md) — die letzten drei Einträge
 
-## What this project is
+Die Doku-Pflicht steht in `AGENTS.md` und wird hier absichtlich **nicht**
+dupliziert, damit sie nicht auseinanderläuft.
 
-The goal (per [Konzept.md](Konzept.md)) is an AI-assisted display-reading system for a calibration lab:
+## Befehle
 
-- A Raspberry Pi 5 with a Raspberry Pi AI Camera (Sony IMX500) optically reads the displays of changing measurement amplifiers (e.g. GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI, and AST devices from Dresden).
-- Recognized values are continuously streamed over a serial interface to **GSVmulti** (ME-Systeme's data acquisition software).
-- The device under test (DUT) and the calibration machine's reference must be time-correlated as closely as possible, even though devices, display types, camera positions, and framing change regularly.
-- LLMs / generative AI are explicitly **not** part of the live measurement path — this is a computer-vision/OCR + classical rule-checking pipeline, operator-guided rather than fully autonomous (at least initially).
+```bash
+./.venv/bin/pytest -q                          # Mock-Tests, kein Hardwarebedarf
+./.venv/bin/pytest -q --mode=real              # zusätzlich @hardware und @serial
+./.venv/bin/ruff check src tests examples
+./scripts/camera-commissioning.sh              # Kamera-Diagnose, Exit 0 = einsatzbereit
+./.venv/bin/python examples/16_end_to_end_headless.py   # ganze Kette ohne Hardware
+```
 
-## Intended architecture (from the concept doc)
+Einrichtung von Null (die Flags sind nicht optional, siehe `AGENTS.md`):
 
-The proposed processing chain, in order:
+```bash
+python3 -m venv --system-site-packages .venv
+./.venv/bin/pip install --no-deps -e .
+./.venv/bin/pip install pytest ruff
+```
 
-1. Capture a camera frame plus its metadata.
-2. Automatically localize the relevant display (small object detector).
-3. Rectify perspective/rotation and enhance contrast (OpenCV) on the display crop.
-4. Recognize digits, sign, decimal point, unit, and relevant status indicators (specialized OCR / small character model; classical 7-segment decoding as a complementary check).
-5. Validate the result against readability, syntax, and allowed operating states.
-6. Attach capture timestamp, sequence number, and quality/confidence status to the value.
-7. Convert to the format GSVmulti accepts via a separate protocol adapter.
-8. Stream continuously over serial and log diagnostics locally.
+## Was dieses Projekt ist
 
-Localization and OCR are not expected to run at the same rate — after initial setup, the confirmed display region can be tracked, with re-localization triggered on position changes.
+Ein Raspberry Pi 5 mit Raspberry Pi AI Camera (Sony IMX500) liest die Anzeigen
+wechselnder Messverstärker (GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI, AST-Geräte)
+optisch aus und überträgt die Werte zeitgestempelt über eine serielle
+Schnittstelle an **GSVmulti**. Einsatz im Kalibrierlabor; Prüfling und Referenz
+müssen zeitlich zugeordnet werden können.
 
-### Candidate tools/components (not yet chosen/validated)
+Große Sprachmodelle oder generative KI sind für den laufenden Messpfad
+ausdrücklich **nicht** vorgesehen — es ist eine CV-/OCR-Kette mit klassischer
+Regelprüfung, bedienergeführt.
 
-| Concern | Candidate |
-| --- | --- |
-| Camera access | Picamera2, libcamera, rpicam-apps |
-| Image processing | OpenCV, NumPy |
-| Display localization | Small YOLO/SSD-family detector or corner-point model |
-| OCR (prototyping) | Tesseract, PaddleOCR, or a specialized digit recognizer |
-| Custom models | PyTorch or TensorFlow, runtime TBD |
-| Serial output | Python + pyserial |
-| Long-running operation | systemd, watchdog, bounded buffers, diagnostic logs |
-| Device configuration | JSON profiles |
+## Aufbau
 
-The IMX500 sensor can run compatible neural nets on-camera; the plan is to build/measure the pipeline on the Pi 5 first, then evaluate moving display localization (or another suitable stage) onto the IMX500. A generic OCR model cannot be transferred to the sensor unmodified — it needs proper quantization/conversion/packaging.
+Die Verarbeitungskette aus Konzept.md §3, jede Stufe eine austauschbare
+Trennstelle:
 
-### Internal record fields (draft, not a confirmed GSVmulti telegram)
+```
+frames/    Bildquelle      synthetic:// [fertig] · picamera2:// imx500:// folder://
+                           video:// replay:// [nur Registry-Eintrag, TODO]
+detect/    Anzeige finden  manual_roi [fertig, PRIMÄRPFAD]
+                           contour_heuristic · imx500_detector [TODO]
+rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
+ocr/       Wert lesen      sevenseg mit Per-Segment-Evidenz [fertig]
+                           tesseract_cli [TODO, braucht OQ-15]
+validate   Freigabe        Syntax-, Qualitäts- und Zustandsregeln (§7) [fertig]
+sink/      Ausgabe         jsonl (Audit) · serial_out · protocol/ascii_csv [fertig]
+                           protocol/gsv_ascii [wirft absichtlich, OQ-07]
+pipeline   verdrahtet alles und führt den PipelineTrace mit [fertig]
+records    ValueRecord (§8), Timestamp, TxReceipt — der stabile Vertrag [fertig]
+layout     Ziffernraster, kommt im Betrieb aus dem bestätigten Profil (§4) [fertig]
+```
 
-`frame_sequence`, `capture_timestamp`, `value`, `unit`, `status` (valid / transitioning / unreadable / stale), `confidence`, `profile_id`, `trigger_sequence`, `result_timestamp`.
+`open_source()` kennt alle sechs URI-Schemata, aber nur `synthetic://` hat eine
+Implementierung — die übrigen scheitern mit `ImportError`. Was fertig ist und
+was nicht, führt [docs/ROADMAP.md](docs/ROADMAP.md) unter P0.
 
-### Key constraints to keep in mind when implementing
+Zentrale Verträge in [src/dispread/records.py](src/dispread/records.py):
+`ValueRecord` mit genau den neun Feldern aus Konzept §8, `status` als
+`VALID | TRANSITION | UNREADABLE | STALE`.
 
-- **No silent smoothing/correction**: recognition must not use the reference value to "correct" the DUT reading, and real value jumps must not be smoothed away by plausibility rules.
-- **Stale/invalid values must be marked, never carried forward silently** as current valid values when tracking/recognition is lost.
-- **Timing is subtle**: a steady serial output rate does not by itself imply synchronism with the reference. Capture timestamp, display update/hold time, exposure/readout timing, OCR latency, and serial transmission delay are all distinct and need to be accounted for separately (see Konzept.md §6).
-- **Model confidence ≠ error probability** — acceptance thresholds must be validated against real, including previously unseen, device types, and unreadable/unknown input must be explicitly rejected rather than guessed at.
-- Physical serial connection must not tie Pi GPIO levels directly to RS-232; galvanic isolation needs evaluation for the lab setup.
+## Erwartete Zustände, die keine Bugs sind
 
-### Open protocol/hardware questions (unresolved — check before implementing the serial adapter)
+* **Ohne angeschlossene Kamera:** `Picamera2.global_camera_info()` liefert `[]`
+  und `IMX500(...)` wirft `RuntimeError: IMX500: Requested camera dev-node not
+  found`. Der reine Import von `picamera2`/`IMX500` funktioniert trotzdem.
+* **`dtoverlay -l` meldet `No overlays loaded`, obwohl die Kamera läuft.**
+  `camera_auto_detect` wird von der Firmware beim Booten angewandt und
+  erscheint dort nicht. Nachweis ist der Sensorknoten im Device-Tree plus die
+  libcamera-Enumeration.
+* **`camera_auto_detect` greift nur beim Booten.** Nach dem Anstecken der
+  Kamera ist ein Reboot nötig.
 
-- Exact GSVmulti version and the serial format/telegram it accepts (baud rate, framing, delimiters, decimal separator, unit/channel handling, device identification/init commands).
-- Whether GSVmulti honors an embedded capture timestamp or only records receive time.
-- Physical link choice (USB-serial adapter vs. UART + RS-232/RS-485 transceiver vs. virtual USB-COM) — not guaranteed available on Pi 5 by default.
+Neue Funktionalität muss über `folder://`, `synthetic://` oder `replay://`
+testbar sein — `picamera2` wird nur in den beiden Kameramodulen importiert, und
+zwar lazy in der Factory. Das ist die Voraussetzung dafür, dass Tests ohne
+Kamera laufen.
 
-## Working in this repo
+## Hardware-Fakten, die man leicht falsch annimmt
 
-Since there is no code yet, early work here is likely to involve scaffolding a new Python project (per the candidate tool list: Picamera2/libcamera, OpenCV, pyserial). When you add the first source files, also add to this CLAUDE.md: how to install dependencies, how to run the pipeline/tests, and any hardware-specific setup (camera enablement, serial device permissions) required on the Raspberry Pi.
+* Datenport für GSVmulti ist **`/dev/ttyAMA0`**. `/dev/serial0` zeigt auf
+  `ttyAMA10` und ist der **3-Pin-Debug-Header**, nicht der Nutzdatenport.
+* Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden werden
+  ([OQ-09](docs/open-questions.md)).
+* Die 23 `.rpk` unter `/usr/share/imx500-models/` sind **COCO-/ImageNet-Modelle**
+  (`person`, `bicycle`, `tv`). Für Messverstärker-Displays taugen sie nicht —
+  deshalb ist die bestätigte manuelle ROI der Primärpfad.
+* IMX500-Warmlauf beim ersten `.rpk`-Upload: **6,8 s** gemessen. Der
+  *Converter* für eigene Modelle fehlt auf dem Pi, nur der *Packager* ist da.
+* `SensorTimestamp` liegt in der **CLOCK_BOOTTIME**-Domäne (gemessen). Die
+  *Semantik* — Belichtungsbeginn oder Auslese-Ende — ist noch offen (Messung M2
+  in [docs/TIMING.md](docs/TIMING.md)).
+
+## Nicht verhandelbar
+
+Siehe [AGENTS.md](AGENTS.md). Kurz: veraltete Werte nie unmarkiert
+weiterführen, den Referenzwert nie zur Korrektur des DUT-Werts benutzen, echte
+Sprünge nicht glätten, Konfidenz ist keine Fehlerwahrscheinlichkeit, Unlesbares
+ablehnen statt raten — und **kein Erfinden von Protokollen**.

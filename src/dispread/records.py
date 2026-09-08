@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 SCHEMA_VERSION = 1
 
 
-class TimeBaseKind(str, Enum):
+class TimeBaseKind(StrEnum):
     """Herkunft und damit Belastbarkeit eines Aufnahmezeitstempels.
 
     Pflichtfeld in jedem Frame und jedem ValueRecord. Es wird nie geschoent:
@@ -44,7 +44,7 @@ class TimeBaseKind(str, Enum):
         return self in (TimeBaseKind.SENSOR_BOOTTIME, TimeBaseKind.REPLAY_RECORDED)
 
 
-class TimestampSemantics(str, Enum):
+class TimestampSemantics(StrEnum):
     """Worauf sich ein Zeitstempel physikalisch bezieht.
 
     Platzhalter fuer Messung M2 (docs/TIMING.md). Vor der Messung steht hier
@@ -59,7 +59,7 @@ class TimestampSemantics(str, Enum):
     HOST_DEQUEUE = "host_dequeue"
 
 
-class ValueStatus(str, Enum):
+class ValueStatus(StrEnum):
     """Zustandslogik aus Konzept.md §7.
 
     TRANSITION und UNREADABLE sind ausdruecklich keine Fehler des Systems,
@@ -268,7 +268,7 @@ class ValueRecord:
         )
 
 
-class InvalidValuePolicy(str, Enum):
+class InvalidValuePolicy(StrEnum):
     """Wie ungueltige Werte nach aussen abgebildet werden.
 
     Konzept.md §11 Frage 6 ist offen (OQ-06): welche Variante GSVmulti und die

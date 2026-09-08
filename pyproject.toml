@@ -19,9 +19,9 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
-[project.scripts]
-dispread-doctor = "dispread.cli.doctor:main"
-dispread-replay = "dispread.cli.replay:main"
+# Noch keine Konsolenskripte. Ein deklarierter Einsprungpunkt auf ein nicht
+# vorhandenes Modul ist schlechter als keiner - er scheitert erst zur Laufzeit.
+# Die Kamera-Diagnose liegt bis dahin als scripts/camera-commissioning.sh vor.
 
 [tool.setuptools.packages.find]
 where = ["src"]
