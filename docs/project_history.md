@@ -349,3 +349,42 @@ begrenzt; gekürzte Historie wird beim Wiederverbinden sichtbar gemeldet.
 keine Messwertfreigabe. Auto-Setup bleibt bestätigungspflichtige Einstellhilfe
 (OQ-20). Hardware-Worker und TLS/WSS-Backend sind geprüft; Browser-Gesamtabnahme
 unter Windows und mit echter PAM-Anmeldung bleibt offen (OQ-21).
+
+## 2026-09-08 — Ablesung in der Workbench: Anzeige statt Freigabe
+
+**Entscheidung:** Der Controller liest bei bestätigter ROI jedes Kamerabild mit
+`SevenSegmentReader` und führt `ReleaseGate` mit — aber ausschließlich als
+**Anzeige** für den Bediener. Es entsteht kein `ValueRecord`, keine Freigabe und
+keine serielle Ausgabe; `released` ist konstant `false`. Angezeigt werden der
+Rohtext, die Evidenz je Stelle und vor allem die **Ablehnungsgründe** des Gates,
+weil das die eigentliche Bedienhilfe ist: der Bediener sieht, woran eine
+Ablesung scheitert, statt nur „unlesbar" zu lesen.
+
+**Verworfene Alternativen:**
+
+* *Freigabe direkt in der Workbench, inklusive Senden.* Die Freigabeschwellen
+  sind Vorabdefaults und an echten Geräten nicht validiert (OQ-14), das
+  GSVmulti-Telegramm ist unbekannt (OQ-07). Eine Freigabe hier hätte beides
+  stillschweigend als geklärt behandelt.
+* *Eigene Leseimplementierung in der Workbench.* Hätte die Kette aus Konzept §3
+  gedoppelt. Stattdessen benutzt die Workbench `rectify`, `SevenSegmentReader`
+  und `ReleaseGate` unverändert — dieselben Verträge, dieselbe Evidenz.
+* *Zahlenformat aus dem Bild schätzen.* Konzept §4 verlangt die Bestätigung
+  durch den Bediener; das Format steht deshalb im Profil (`layout`) und wird
+  validiert, nicht geraten. `decimals: null` bleibt wählbar, führt aber
+  ehrlich zur Ablehnung, weil der Dezimalpunkt nicht gemessen wird (OQ-17).
+* *Zeitstempel der Vorschau als Messwertzeitbezug.* Die Veralterung im Gate
+  bekommt CLOCK_MONOTONIC, klar als solches gekennzeichnet. Der
+  Aufnahmezeitstempel liegt in SENSOR_BOOTTIME mit unbekannter Semantik; beides
+  zu vermischen wäre genau der Fehler, den AGENTS.md verbietet.
+
+**Umsetzungshinweis:** Die sieben Abtastpunkte je Ziffernstelle werden ins
+Kamerabild zurückprojiziert und je nach gemessenem Zustand hell oder dunkel
+gezeichnet. Weil die ROI achsparallel ist, genügt dafür eine lineare Abbildung
+aus dem entzerrten Ausschnitt. Das macht Rasterfehler sofort sichtbar — ohne
+diese Rückmeldung ist ein Zahlenformat kaum einzustellen.
+
+**Grenzen:** Die Bedienzeilen für das Zahlenformat und die Tests des Lesepfads
+fehlen noch (Stand in `docs/status.md`). Geprüft ist der Kern nur gegen eine
+synthetisch gerenderte Anzeige — synthetische Daten ergänzen nach Konzept §9,
+sie zählen nie zum Testset.

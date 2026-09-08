@@ -5,6 +5,39 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-09-08
 
+### Zahlenerkennung an der Kamera angeschlossen (Zwischenstand, Bedienung fehlt)
+
+**Problem:** Die Verarbeitungskette aus Konzept §3 war fertig, lief aber nur
+gegen synthetische Bilder. Die Workbench besaß Kamera und bestätigte ROI, hat
+daraus aber nie einen Wert gelesen — und im Profil fehlte das Zahlenformat, das
+der Segmentleser laut Konzept §4 braucht.
+
+**Änderung:** Das Workbench-Profil führt einen `layout`-Block (`digits`,
+`decimals`, `has_sign`, `unit` plus Rasterverhältnisse) mit eigener Prüfung in
+`profiles.validate_layout` — unmögliche Formate wie „mehr Nachkommastellen als
+Stellen" werden abgelehnt. Der Controller entzerrt bei bestätigter ROI jedes
+Bild über `rectify` auf feste 400×160, liest es mit `SevenSegmentReader` und
+führt die Freigabeprüfung `ReleaseGate` **als Anzeige** mit. Ergebnis, Evidenz
+je Stelle, Ablehnungsgründe und Qualität des Ausschnitts stehen in `snapshot()["reading"]`.
+Die Abtastpunkte der sieben Segmente werden ins Kamerabild zurückgezeichnet,
+hell wenn gemessen aktiv — damit sieht der Bediener, ob das Raster sitzt. Neuer
+Befehl `layout.set`.
+
+**Konsequenz:** Aus einem scharfen Kamerabild entsteht ein gelesener Wert samt
+Begründung, warum er freigegeben würde oder nicht. **Kein** `ValueRecord`, keine
+Freigabe, keine serielle Ausgabe — `released` ist konstant `false`, und die
+Zeitangabe der Vorschau-Veralterung ist CLOCK_MONOTONIC und ausdrücklich kein
+Messwertzeitbezug. Die Einheit stammt weiter aus dem Profil
+(`unit_source=profile`), sie wird nicht gelesen.
+
+**Was noch fehlt:** Die Bedienzeilen in `fields.py` (Zahlenformat als
+Auswahlfelder, Ablesung und Ablehnungsgründe als Anzeigezeilen) und die Tests
+für den Lesepfad. Der Kern ist gegen einen synthetisch gerenderten Wert geprüft:
+gezeichnet `-12.34`, gelesen `-012.34`, Wert −12,34, Freigabeprüfung `valid`
+ohne Ablehnungsgründe. Bis das UI steht, ist das Zahlenformat nur über
+`layout.set` oder die Profildatei erreichbar. 63 Tests und Ruff grün — die
+Tests deckten diesen Pfad noch **nicht** ab.
+
 ### Einstelltabelle in der Weboberfläche, Werte werden ausgewählt statt getippt
 
 **Problem:** Die Einrichtung lag nur in `dispread tui`, das der Bediener erst in

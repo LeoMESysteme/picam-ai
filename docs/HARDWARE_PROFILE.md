@@ -31,6 +31,8 @@ externen Speicher. Im Betrieb Ringpuffer mit harter Obergrenze — der
 | Modi | 2028×1520 @ 30,02 fps · 4056×3040 @ 10,00 fps |
 | Fokus | **manuell**, mit Fokuswerkzeug |
 | Fokus-Controls in libcamera | **keine** — kein `AfMode`, `LensPosition`, `AfState` (gemessen 2026-09-08) |
+| Fokusstellung | am 2026-09-08 eingestellt, Schärfe 216,6; Objektiv **nicht** gegen Verdrehen gesichert |
+| Herstellerangabe Optik | f = 4,74 mm, F1.79, Fokusbereich ca. 20 cm – ∞ |
 
 Gemessene Kenngrößen siehe [TIMING.md](TIMING.md): 6,8 s `.rpk`-Warmlauf,
 15,0 Inferenzen/s mit SSD MobileNetV2 320×320, `SensorTimestamp` in

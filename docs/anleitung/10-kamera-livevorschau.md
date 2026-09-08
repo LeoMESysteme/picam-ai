@@ -169,7 +169,13 @@ beim Verschieben oder Speichern trainiert.
 
 ## Profile und Befehle
 
-Profile liegen unter `var/workbench/profiles/NAME.json`. Vorschauänderungen
+Profile liegen unter `var/workbench/profiles/NAME.json` und enthalten
+Kameraeinstellungen, Anzeigebereich, Rolle, Erkennungsfilter und den
+`layout`-Block mit dem Zahlenformat (`digits`, `decimals`, `has_sign`, `unit`).
+Das Zahlenformat ist die Grundlage der Ablesung: der Segmentleser tastet gegen
+dieses Raster ab und rät nicht. Solange die Bedienzeilen dafür fehlen, ist es
+über `dispread camera set` nicht erreichbar — es geht per Profildatei oder über
+den Befehl `layout.set` am lokalen Steuer-Socket. Vorschauänderungen
 werden nicht automatisch gespeichert. Gültige externe Dateiänderungen werden
 nach kurzem Entprellen übernommen. Bei ungültigem JSON bleibt die letzte
 Konfiguration aktiv; bei gleichzeitig ungespeicherten lokalen Änderungen

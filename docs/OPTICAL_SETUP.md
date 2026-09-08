@@ -29,11 +29,25 @@ Voraussetzung, nicht Feinarbeit.
   (Konzept §4).
 * Der Arbeitsabstand muss zum **manuellen Fokus** der AI Camera passen. Bei der
   ersten Aufnahme am 2026-09-07 war der Fokus deutlich verstellt — das
-  Fokuswerkzeug liegt dem Modul bei.
+  Fokuswerkzeug liegt dem Modul bei. Unter etwa 20 cm kann das Objektiv nicht
+  scharfstellen, egal wie weit man dreht (Herstellerangabe 20 cm – ∞).
+* **Stand 2026-09-08: Fokus eingestellt, aber nicht gesichert.** Schärfe 216,6
+  gegenüber 11,53 in der Ausgangslage; am Testgerät 37 px Ziffernhöhe. Objektiv
+  gegen Verdrehen sichern (Konterring, sonst ein Tropfen Schraubensicherung) und
+  die Halterung starr ausführen — sonst ist die Einstellung beim nächsten
+  Anstoßen verloren. Zahlen in [VALIDATION.md](VALIDATION.md).
 
 ## Ziffernhöhe im Bild
 
 Zielmarke: **≥ 30 px Ziffernhöhe** im verwendeten Stream.
+
+Am 2026-09-08 gemessen: **960×720 erreicht diese Marke** am Testgerät mit
+≈ 37 px, ohne `ScalerCrop` und ohne den höher auflösenden Modus. Damit ist die
+Vorschaugröße für die Auslesung brauchbar — was wichtig ist, weil die großen
+Sensormodi im Verdacht stehen, den Treiberfehler aus
+[OQ-22](open-questions.md) häufiger auszulösen. Reicht die Ziffernhöhe an einem
+Gerät nicht, ist `ScalerCrop` der Weg: digitaler Ausschnitt auf die Anzeige bei
+gleicher Ausgabegröße; der Sensormodus bleibt ohnehin 2028×1520.
 
 Begründung: der Dekoder tastet je Ziffernzelle sieben Segmentpositionen mit
 einem Fenster von ±6 % der Zellenbreite ab. Bei deutlich kleineren Ziffern
