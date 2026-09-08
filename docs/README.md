@@ -1,5 +1,14 @@
 # Dokumentationsübersicht
 
+## Selbst programmieren
+
+| Dokument | Inhalt |
+| --- | --- |
+| [anleitung/README.md](anleitung/README.md) | **Lernpfad in zehn Kapiteln (0–9):** was als Nächstes gebaut wird, mit Gerüst, Test und Fallenliste je Aufgabe. Einstieg für Menschen, die selbst implementieren |
+| [anleitung/02-vertraege.md](anleitung/02-vertraege.md) | Alle Trennstellen und Datenklassen auf einer Seite |
+| [anleitung/rezepte.md](anleitung/rezepte.md) | Codeschnipsel zum Kopieren |
+| [anleitung/glossar.md](anleitung/glossar.md) | Fachbegriffe des Projekts |
+
 ## Immer zuerst
 
 | Dokument | Inhalt |

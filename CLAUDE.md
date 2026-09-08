@@ -13,6 +13,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Die Doku-Pflicht steht in `AGENTS.md` und wird hier absichtlich **nicht**
 dupliziert, damit sie nicht auseinanderläuft.
 
+Für den menschlichen Entwickler liegt unter
+[docs/anleitung/](docs/anleitung/README.md) ein Lernpfad, der die offenen
+P0-Punkte als Schritt-für-Schritt-Aufgaben führt (Gerüst, Test, Fallen).
+Wird Code aus einem dieser Kapitel gebaut, gehört das Kapitel mit
+aktualisiert — insbesondere seine „Fertig, wenn"-Checkliste.
+
 ## Befehle
 
 ```bash
