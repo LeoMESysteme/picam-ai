@@ -286,3 +286,66 @@ künftige Session sie kopieren.
 Konfiguration in JSON statt YAML, weil Konzept §5 „JSON-Profile" festschreibt
 und `json` in der stdlib ist — das vermeidet zwei weitere Abhängigkeiten, die
 Systempakete überschatten könnten.
+
+---
+
+# 2026-09-08 — Eigenständige Kameravorschau mit MJPEG und Konturheuristik
+
+## Entscheidung
+
+Ein einzelnes Beispielskript kombiniert Kamera, geometrische Display-Vorschläge
+und HTTP-Vorschau auf Loopback. Windows verwendet einen SSH-Tunnel und den
+Browser. Das Skript bleibt unabhängig von Messwertpipeline und Quellenregistry;
+der nächste Versuch braucht weder OCR noch eine vollständige `picamera2://`-
+Implementierung. Keine Änderung des manuellen ROI-Primärpfads.
+
+## Verworfene Alternativen
+
+* X11/VNC: zusätzliche Einrichtung auf Windows für eine reine Bildvorschau.
+* WebRTC/H.264: mehr Protokoll-/Clientaufwand als für den ersten Versuch nötig;
+  MJPEG benötigt mehr Bandbreite, ist hier aber direkt im Browser nutzbar.
+* Flask oder separates Frontend-Projekt: Standardbibliothek plus eingebettete
+  HTML-Seite genügen, zusätzliche Abhängigkeiten entfallen.
+* Stock-IMX500-Modelle: laut bisherigen Versuchen kein geeigneter
+  Messgeräte-Displaydetektor. Training eines eigenen Modells benötigt Daten.
+* Nur manuelle ROI: vom Nutzer für diesen Prototyp zugunsten automatischer
+  Vorschläge verworfen; die Heuristik bleibt ausdrücklich unbestätigt.
+
+## Konsequenz
+
+Schneller, nachvollziehbarer Versuch mit geometrischen Filtern. Keine
+Behauptung semantischer Display-Erkennung und keine Konfidenzwahrscheinlichkeit.
+Reale Kameraübertragung ist lokal geprüft; die visuelle Abnahme am Gerät und
+unter Windows steht aus. Anleitung: [Livevorschau](anleitung/10-kamera-livevorschau.md).
+
+---
+
+# 2026-09-08 — Workbench statt weiter wachsendem Beispielskript
+
+**Entscheidung:** Kamerabesitzer, Profile, HTTPS-Server, Shellverwaltung,
+CLI/TUI und Browserassets unter `dispread.workbench` getrennt. Das Beispiel
+bleibt Einstieg. HTTP/WebSockets mit aiohttp, TUI mit Textual, echte Shells
+über PTYs und xterm.js. Systempakete erhalten die Projekt-ABI-Regel.
+
+**Bedienentscheidung des Nutzers:** Möglichst keine Buttons/Slider. TUI in der
+Shell statt separater Regleroberfläche oder reiner Befehlsliste. Kamera oben,
+Shell darunter, Log rechts. Shell-Tabs überleben Browsertrennung. Gesamte
+Oberfläche mit dem normalen SSH-/Linux-Passwort von `me-systeme` schützen;
+nicht mit einem separaten root-Passwort. Interne Bindadresse bleibt erhalten,
+TLS mit lokalem oder Firmenzertifikat schützt die Passwortübertragung.
+
+**Verworfene Alternativen:** Webserver als root (unnötige Privilegien),
+Passwortkopie im Profil (PAM prüft das Linux-Konto), unabhängige Kameraprozesse
+je Bedienweg (Gerätekonflikte), Live-Nachtraining bei Boxkorrektur (fehlende
+getrennte Validierung). Die aktuelle Konturheuristik ist kein trainierbares
+Modell. Annotationen werden auf eingefrorenen Originalbildern gespeichert.
+
+**Umsetzungshinweis:** Ein frischer Shell-Hilfsprozess übernimmt das PTY und
+führt Bash aus. Das ersetzt `forkpty` im mehrthreadigen Server, das im Test
+berechtigt vor möglichen Deadlocks warnte. Ausgabe ist pro Tab auf 2 MiB
+begrenzt; gekürzte Historie wird beim Wiederverbinden sichtbar gemeldet.
+
+**Grenzen:** `run` ist in dieser Workbench fester Vorschau-/Erkennungsbetrieb,
+keine Messwertfreigabe. Auto-Setup bleibt bestätigungspflichtige Einstellhilfe
+(OQ-20). Hardware-Worker und TLS/WSS-Backend sind geprüft; Browser-Gesamtabnahme
+unter Windows und mit echter PAM-Anmeldung bleibt offen (OQ-21).

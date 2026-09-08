@@ -19,12 +19,17 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
-# Noch keine Konsolenskripte. Ein deklarierter Einsprungpunkt auf ein nicht
-# vorhandenes Modul ist schlechter als keiner - er scheitert erst zur Laufzeit.
-# Die Kamera-Diagnose liegt bis dahin als scripts/camera-commissioning.sh vor.
+[project.scripts]
+dispread = "dispread.workbench.cli:main"
+
+# Workbench-Pakete werden durch scripts/install-workbench.sh als Debian-Pakete
+# installiert; keine pip-Abhaengigkeiten fuer die Kamera-/CV-Systembibliotheken.
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"dispread.workbench" = ["static/*", "static/vendor/*"]
 
 [tool.ruff]
 line-length = 120

@@ -30,6 +30,7 @@ externen Speicher. Im Betrieb Ringpuffer mit harter Obergrenze — der
 | Sensor | 4056×3040, 10 bit, RGGB |
 | Modi | 2028×1520 @ 30,02 fps · 4056×3040 @ 10,00 fps |
 | Fokus | **manuell**, mit Fokuswerkzeug |
+| Fokus-Controls in libcamera | **keine** — kein `AfMode`, `LensPosition`, `AfState` (gemessen 2026-09-08) |
 
 Gemessene Kenngrößen siehe [TIMING.md](TIMING.md): 6,8 s `.rpk`-Warmlauf,
 15,0 Inferenzen/s mit SSD MobileNetV2 320×320, `SensorTimestamp` in
@@ -98,3 +99,40 @@ kein Fehler.
 | `HAS_ISOLATION` | galvanische Trennung vorhanden? | offen |
 | `OCR_BACKEND` | `sevenseg` oder `tesseract_cli` | `sevenseg` |
 | `IMX500_RPK` | Modell für die Detektion | keines (manual_roi ist Primärpfad) |
+
+## Temporäre Vorschaukonfiguration (2026-09-08)
+
+`examples/17_camera_display_preview.py`: Kameraindex 0, 960×720 RGB888,
+15 Bilder/s angefordert, automatische Belichtung, kein IMX500-Inferenzmodell.
+Diese Einstellungen gelten nur für den laufenden Prozess; keine Boot- oder
+Hardwarekonfiguration geändert. Fokus und Aufbau unverändert.
+Technischer Kurztest: [Laborjournal](lab_journal.md), 2026-09-08.
+
+## Workbench-Controls (2026-09-08)
+
+Nach Modularisierung gleicher temporärer Vorschauaufbau. Neue Liveabfrage:
+ExposureTime 101..105904066 µs, AnalogueGain 1..22,26087, Contrast 0..32,
+AeEnable unterstützt. Diese Treibergrenzen sind keine empfohlenen Messparameter;
+insbesondere können sehr lange Belichtungen mit Vorschau-/Timeoutgrenzen
+kollidieren. Tatsächlicher Kurztest und Metadaten: [Laborjournal](lab_journal.md).
+Keine physische oder persistente Systemkonfiguration geändert.
+
+## Fokus- und Kamera-Controls (2026-09-08 gemessen)
+
+Vollständige Controlliste der laufenden Kamera: `AeConstraintMode`, `AeEnable`,
+`AeExposureMode`, `AeFlickerMode`, `AeFlickerPeriod`, `AeMeteringMode`,
+`AnalogueGain`, `AnalogueGainMode`, `AwbEnable`, `AwbMode`, `Brightness`,
+`CnnEnableInputTensor`, `ColourCorrectionMatrix`, `ColourGains`,
+`ColourTemperature`, `Contrast`, `ExposureTime`, `ExposureTimeMode`,
+`ExposureValue`, `FrameDurationLimits`, `HdrMode`, `NoiseReductionMode`,
+`Saturation`, `ScalerCrop`, `ScalerCrops`, `Sharpness`, `StatsOutputEnable`,
+`SyncFrames`, `SyncMode`.
+
+**Kein Fokus-Control.** `Sharpness` ist ISP-Nachschärfung und verstellt das
+Objektiv nicht. Fokussiert wird ausschließlich mechanisch am Objektiv. Die
+Fokusassistenz der Workbench vergrößert nur die bestätigte ROI und zeigt einen
+relativen Schärfewert; sie bewegt nichts.
+
+Ebenfalls sichtbar: `ExposureTimeMode`/`AnalogueGainMode` sind die neueren
+libcamera-Controls neben dem älteren `AeEnable`. Die Workbench benutzt weiter
+`AeEnable`; ob ein Wechsel nötig ist, ist nicht geprüft.

@@ -1,0 +1,648 @@
+"""Ein Kamerabesitzer; Profil- und UI-Zustand unabhaengig vom Webtransport."""
+
+from __future__ import annotations
+
+import contextlib
+import copy
+import json
+import threading
+import time
+import uuid
+from collections import deque
+from datetime import UTC, datetime
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+from dispread.detect.manual_roi import quad_from_box
+from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
+from dispread.ocr.sevenseg import SevenSegmentReader
+from dispread.records import TimeBaseKind
+from dispread.rectify import rectify
+from dispread.validate import GateConfig, ReleaseGate
+
+from .profiles import DEFAULT, atomic_json, profile_name, validate
+from .vision import DetectionConfig, find_display_candidates
+
+#: Zielgroesse des entzerrten Ausschnitts. Fest, weil der Segmentleser gegen
+#: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
+CROP_SIZE = (400, 160)
+
+
+def roi_box(image, roi):
+    """Normierte ROI in Bildkoordinaten, mindestens ein Pixel gross."""
+    height, width = image.shape[:2]
+    x, y, w, h = roi
+    return int(x * width), int(y * height), max(1, int(w * width)), max(1, int(h * height))
+
+
+def quality(image, roi):
+    h, w = image.shape[:2]
+    if roi:
+        x, y, rw, rh = roi
+        image = image[
+            int(y * h) : max(int((y + rh) * h), int(y * h) + 1), int(x * w) : max(int((x + rw) * w), int(x * w) + 1)
+        ]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return {
+        "sharpness": round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2),
+        "saturated_fraction": round(float((gray >= 250).mean()), 4),
+        "contrast": round(float(np.percentile(gray, 95) - np.percentile(gray, 5)) / 255, 4),
+        "brightness": float(gray.mean()) / 255,
+    }
+
+
+class Controller:
+    def __init__(self, root, camera_index=0, simulate=False):
+        self.root = Path(root)
+        self.camera_index, self.simulate = camera_index, simulate
+        self.lock = threading.RLock()
+        self.config = copy.deepcopy(DEFAULT)
+        self.saved = copy.deepcopy(DEFAULT)
+        self.name = "default"
+        self.revision, self.applied = 0, -1
+        self.mode, self.error = "setup", None
+        self.dirty = False
+        self.conflict = None
+        self.file_seen = None
+        self.logs = deque(maxlen=300)
+        self.log_id = 0
+        self.sequence, self.last_frame, self.first_frame = 0, None, None
+        self.jpeg, self.raw = None, None
+        self.metadata, self.metrics, self.capabilities, self.observed = {}, {}, {}, {}
+        self.frames = {}
+        self.focus = False
+        self.reader = SevenSegmentReader()
+        self.gate, self.gate_revision = None, None
+        self.reading = None
+        self.stop = threading.Event()
+        self.cancel_auto = threading.Event()
+        self.auto = {"state": "idle"}
+        self.auto_requested = False
+        self.thread = None
+        self.log("info", "Workbench gestartet; gelbe Boxen sind unbestaetigte Vorschlaege.")
+        if self.path.exists():
+            self._load(self.path)
+
+    @property
+    def path(self):
+        return self.root / "profiles" / (self.name + ".json")
+
+    def profile_names(self):
+        """Nur wirklich vorhandene Profildateien; ungueltige Namen ueberspringen."""
+        names = set()
+        try:
+            for entry in (self.root / "profiles").glob("*.json"):
+                with contextlib.suppress(ValueError):
+                    names.add(profile_name(entry.stem))
+        except OSError as error:
+            self.log("error", f"Profilverzeichnis nicht lesbar: {error}")
+        return sorted(names)
+
+    def log(self, level, message):
+        with self.lock:
+            self.log_id += 1
+            self.logs.append(
+                {
+                    "id": self.log_id,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timebase": "UTC",
+                    "level": level,
+                    "message": str(message),
+                }
+            )
+
+    def snapshot(self):
+        with self.lock:
+            now = time.monotonic()
+            age = None if self.last_frame is None else now - self.last_frame
+            return {
+                "live": age is not None and age < 2 and self.error is None and not self.stop.is_set(),
+                "sequence": self.sequence,
+                "processing_fps": round((self.sequence - 1) / max(now - (self.first_frame or now), 1e-6), 1),
+                "frame_age_seconds": age,
+                "age_timebase": "CLOCK_MONOTONIC",
+                "error": self.error,
+                "mode": self.mode,
+                "profile": self.name,
+                "profiles": self.profile_names(),
+                "config": copy.deepcopy(self.config),
+                "revision": self.revision,
+                "applied_revision": self.applied,
+                "dirty": self.dirty,
+                "conflict": bool(self.conflict),
+                "observed": dict(self.observed),
+                "capabilities": dict(self.capabilities),
+                "quality": dict(self.metrics),
+                "focus": self.focus,
+                "reading": copy.deepcopy(self.reading),
+                "auto": copy.deepcopy(self.auto),
+                "logs": list(self.logs),
+                "stopped": self.stop.is_set(),
+                "simulated": self.simulate,
+            }
+
+    def _change(self, data):
+        if self.auto["state"] in ("running", "queued"):
+            raise ValueError("Automatische Einrichtung zuerst abbrechen")
+        self.config = validate(data, self.capabilities or None)
+        # Die Freigabepruefung ist zustandsbehaftet; nach einer Aenderung darf
+        # sie keine Bestaetigung aus der alten Konfiguration mitschleppen.
+        self.gate, self.gate_revision = None, None
+        self.revision += 1
+        self.dirty = self.config != self.saved
+        if self.mode == "run":
+            self.mode = "setup"
+            self.log("warn", "Konfiguration geaendert; run -> setup")
+        self.log("info", f"Konfiguration r{self.revision} angefordert")
+
+    def _load(self, path):
+        data = validate(json.loads(path.read_text()), self.capabilities or None)
+        self._change(data)
+        self.saved, self.dirty = copy.deepcopy(data), False
+        self.conflict = None
+        self.file_seen = path.read_bytes()
+        self.log("info", f"Profil {self.name} geladen")
+
+    def watch_profile(self):
+        with self.lock:
+            if not self.path.exists():
+                return
+            raw = self.path.read_bytes()
+            if raw == self.file_seen:
+                return
+            # Erster Tick merkt den Inhalt, zweiter unveraenderter Tick wendet an.
+            if raw != getattr(self, "file_pending", None):
+                self.file_pending = raw
+                return
+            self.file_seen = raw
+            try:
+                data = validate(json.loads(raw), self.capabilities or None)
+                if self.dirty or self.auto["state"] in ("running", "queued"):
+                    self.conflict = data
+                    self.log("warn", "Externe Profiländerung: profile resolve disk|local erforderlich")
+                else:
+                    self._change(data)
+                    self.saved, self.dirty = copy.deepcopy(data), False
+            except (ValueError, TypeError, KeyError) as error:
+                self.log("error", f"Profil nicht übernommen: {error}")
+
+    def command(self, op, args=None):
+        args = args or {}
+        with self.lock:
+            if op == "status":
+                return self.snapshot()
+            if op == "mode":
+                mode = args["value"]
+                if mode not in ("setup", "run", "annotate"):
+                    raise ValueError("Modus: setup|run|annotate")
+                if self.auto["state"] in ("running", "queued"):
+                    raise ValueError("Automatische Einrichtung zuerst beenden")
+                if mode == "run" and (
+                    not self.config["confirmed"]
+                    or not self.snapshot()["live"]
+                    or self.applied != self.revision
+                    or self.config["camera"]["controls"].get("AeEnable", True)
+                ):
+                    raise ValueError("run braucht bestaetigte ROI, Livebild und uebernommene feste Belichtung")
+                self.mode = mode
+                self.log("info", f"Modus: {mode}; keine Messwertfreigabe in diesem Prototyp")
+            elif op == "camera.set":
+                data = copy.deepcopy(self.config)
+                key, value = args["key"], args["value"]
+                if key in ("width", "height", "fps"):
+                    data["camera"][key] = value
+                    if key in ("width", "height"):
+                        data["confirmed"] = False
+                else:
+                    data["camera"]["controls"][key] = value
+                    if key == "AeEnable" and value is True:
+                        for name in ("ExposureTime", "AnalogueGain"):
+                            data["camera"]["controls"].pop(name, None)
+                    elif key == "AeEnable" and value is False:
+                        for name in ("ExposureTime", "AnalogueGain"):
+                            current = self.observed.get(name)
+                            if current is None and name in self.capabilities:
+                                current = self.capabilities[name][2]
+                            if current is not None:
+                                data["camera"]["controls"][name] = current
+                self._change(data)
+            elif op == "layout.set":
+                data = copy.deepcopy(self.config)
+                key = args["key"]
+                if key not in DEFAULT["layout"]:
+                    raise ValueError(f"Unbekanntes Layoutfeld: {key}")
+                data["layout"][key] = args["value"]
+                self._change(data)
+            elif op == "focus":
+                if type(args["value"]) is not bool:
+                    raise ValueError("Fokusassistenz erwartet true/false")
+                self.focus = bool(args["value"])
+                self.log("info", "Fokusassistenz: Objektiv mechanisch einstellen; Schärfewert relativ")
+            elif op == "profile.load":
+                name = profile_name(args["name"])
+                if self.dirty:
+                    raise ValueError("Ungespeicherte Vorschau zuerst speichern oder revert ausfuehren")
+                path = self.root / "profiles" / (name + ".json")
+                data = validate(json.loads(path.read_text()), self.capabilities or None)
+                self._change(data)
+                self.name, self.saved, self.dirty = name, copy.deepcopy(data), False
+                self.file_seen, self.conflict = path.read_bytes(), None
+            elif op == "profile.save":
+                if self.conflict:
+                    raise ValueError("Profilkonflikt zuerst mit resolve disk|local loesen")
+                if self.applied != self.revision or self.auto["state"] in ("running", "queued"):
+                    raise ValueError("Erst auf erfolgreiche Kamerauebernahme warten")
+                name = profile_name(args.get("name") or self.name)
+                data = copy.deepcopy(self.config)
+                data["version"] += 1
+                atomic_json(self.root / "profiles" / (name + ".json"), data)
+                self.name, self.config = name, data
+                self.saved, self.dirty = copy.deepcopy(self.config), False
+                self.file_seen = self.path.read_bytes()
+                self.log("info", f"Profil {self.name} v{self.config['version']} gespeichert")
+            elif op == "profile.revert":
+                self._change(self.saved)
+            elif op == "profile.role":
+                data = copy.deepcopy(self.config)
+                data["role"] = args["value"]
+                self._change(data)
+            elif op == "profile.resolve":
+                if args["value"] not in ("disk", "local") or self.conflict is None:
+                    raise ValueError("Kein Konflikt oder ungueltige Auswahl")
+                if args["value"] == "disk":
+                    self._change(self.conflict)
+                    self.saved, self.dirty = copy.deepcopy(self.config), False
+                self.conflict = None
+                self.log("info", "Profilkonflikt aufgeloest")
+            elif op == "freeze":
+                if self.mode not in ("setup", "annotate") or not self.snapshot()["live"]:
+                    raise ValueError("Editieren braucht Livebild und setup/annotate")
+                token = uuid.uuid4().hex
+                if len(self.frames) >= 4:
+                    self.frames.pop(next(iter(self.frames)))
+                self.frames[token] = {
+                    "image": self.raw.copy(),
+                    "metadata": copy.deepcopy(self.metadata),
+                    "sequence": self.sequence,
+                    "profile": copy.deepcopy(self.config),
+                    "revision": self.revision,
+                    "profile_name": self.name,
+                }
+                return {
+                    "id": token,
+                    "width": self.raw.shape[1],
+                    "height": self.raw.shape[0],
+                    "roi": self.config["roi"] or [0.2, 0.3, 0.6, 0.3],
+                }
+            elif op == "roi":
+                frame = self.frames[args["id"]]
+                if self.mode not in ("setup", "annotate") or frame["revision"] != self.revision:
+                    raise ValueError("Modus/Profil geaendert; neues Bild einfrieren")
+                data = copy.deepcopy(self.config)
+                data.update(roi=args["roi"], confirmed=True, role=args.get("role", "main"))
+                data = validate(data, self.capabilities or None)
+                if self.mode == "annotate":
+                    target = self.root / "annotations" / uuid.uuid4().hex
+                    target.mkdir(parents=True)
+                    if not cv2.imwrite(str(target / "image.png"), frame["image"]):
+                        raise ValueError("Bild konnte nicht gespeichert werden")
+                    atomic_json(
+                        target / "annotation.json",
+                        {
+                            "schema_version": 1,
+                            "frame_sequence": frame["sequence"],
+                            "metadata": frame["metadata"],
+                            "profile": frame["profile"],
+                            "profile_name": frame["profile_name"],
+                            "revision": frame["revision"],
+                            "image": "image.png",
+                            "roi": data["roi"],
+                            "role": data["role"],
+                            "coordinate_system": "normalized_xywh",
+                            "formatter_provisional": True,
+                            "created_at": datetime.now(UTC).isoformat(),
+                            "created_timebase": "UTC",
+                        },
+                    )
+                    self.log("info", f"Annotation gespeichert: {target}")
+                else:
+                    self._change(data)
+                del self.frames[args["id"]]
+            elif op == "auto.start":
+                if self.mode != "setup" or not self.config["confirmed"] or not self.snapshot()["live"]:
+                    raise ValueError("Auto-Setup braucht Livebild und bestaetigte ROI im setup-Modus")
+                if self.auto["state"] in ("running", "queued"):
+                    raise ValueError("Auto-Setup laeuft bereits")
+                self.cancel_auto.clear()
+                self.auto, self.auto_requested = {"state": "queued"}, True
+            elif op == "auto.cancel":
+                self.cancel_auto.set()
+            elif op == "auto.accept":
+                if self.auto["state"] != "proposal":
+                    raise ValueError("Kein Auto-Vorschlag vorhanden")
+                data = copy.deepcopy(self.config)
+                data["camera"]["controls"] = self.auto["controls"]
+                self._change(data)
+                self.auto = {"state": "accepted"}
+            else:
+                raise ValueError(f"Unbekannter Befehl: {op}")
+            return self.snapshot()
+
+    def publish(self, image, metadata):
+        with self.lock:
+            config = copy.deepcopy(self.config)
+            self.raw, self.metadata = image, metadata
+            self.metrics = quality(image, config["roi"])
+            self.observed = {k: metadata[k] for k in ("ExposureTime", "AnalogueGain", "FrameDuration") if k in metadata}
+            boxes = find_display_candidates(image, DetectionConfig(**config["detection"]))
+            overlay = image.copy()
+            for x, y, w, h in boxes:
+                cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 220, 220), 2)
+            self.reading = None
+            if config["confirmed"]:
+                ih, iw = image.shape[:2]
+                a, b, c, d = roi_box(image, config["roi"])
+                cv2.rectangle(overlay, (a, b), (a + c, b + d), (130, 220, 130), 2)
+                self.reading = self._read(image, config, (a, b, c, d))
+                if self.focus:
+                    # Fokusansicht zeigt das Objektiv-Zoombild; die
+                    # Abtastpunkte passen darin nicht mehr und entfallen.
+                    overlay = cv2.resize(image[b : b + d, a : a + c], (iw, ih))
+                elif self.reading and not self.reading.get("error"):
+                    self._draw_cells(overlay, (a, b, c, d), config["layout"], self.reading)
+            ok, jpeg = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if not ok:
+                raise RuntimeError("JPEG fehlgeschlagen")
+            self.jpeg = jpeg.tobytes()
+            self.sequence += 1
+            self.last_frame = time.monotonic()
+            if self.first_frame is None:
+                self.first_frame = self.last_frame
+            self.error = None
+
+    def _read(self, image, config, box):
+        """Bestaetigte ROI entzerren, Ziffern lesen, Freigabe nur als Vorschau.
+
+        Erzeugt ausdruecklich **keinen** `ValueRecord` und sendet nichts. Die
+        Freigabeentscheidung wird angezeigt, damit der Bediener sieht, woran
+        eine Ablesung scheitert - sie ist keine Freigabe (Konzept.md §7).
+        """
+        try:
+            layout = DisplayLayout.from_dict(config["layout"])
+            crop = rectify(image, quad_from_box(*box), target_size=CROP_SIZE)
+            read = self.reader.read(crop.image, layout)
+            if self.gate is None or self.gate_revision != self.revision:
+                self.gate = ReleaseGate(GateConfig(expected_unit=layout.unit))
+                self.gate_revision = self.revision
+            # CLOCK_MONOTONIC, nur fuer die Veralterung dieser Vorschau. Aus
+            # dieser Zahl darf kein Zeitbezug eines Messwerts abgeleitet
+            # werden; der Aufnahmezeitstempel liegt in SENSOR_BOOTTIME.
+            decision = self.gate.evaluate(read, time.monotonic_ns())
+            return {
+                "raw_text": read.raw_text,
+                "value": read.value,
+                "unit": read.unit_text,
+                "unit_source": read.diagnostics.get("unit_source"),
+                "sign_detected": read.sign_detected,
+                "sign_region_readable": read.sign_region_readable,
+                "decimal_point_detected": read.decimal_point_detected,
+                "status_flags": sorted(read.status_flags),
+                "digits": [g.text for g in read.glyphs],
+                "segments": [list(g.segments) if g.segments else None for g in read.glyphs],
+                "ambiguous_with": [list(g.ambiguous_with) for g in read.glyphs],
+                "min_margin": round(float(read.diagnostics.get("min_margin", 0.0)), 4),
+                "contrast": round(float(read.diagnostics.get("contrast", 0.0)), 4),
+                "unreadable_cells": int(read.diagnostics.get("unreadable_cells", 0)),
+                "crop_sharpness": round(crop.sharpness, 2),
+                "crop_saturated_fraction": round(crop.saturated_fraction, 4),
+                "backend": f"{read.backend_id}/{read.backend_version}",
+                "confidence_calibrated": self.reader.declares_confidence_calibrated,
+                "gate_status": decision.status.value,
+                "gate_reasons": list(decision.reject_reasons),
+                "gate_confidence": round(decision.confidence, 4),
+                "gate_timebase": "CLOCK_MONOTONIC",
+                "released": False,
+                "error": None,
+            }
+        except (ValueError, TypeError, KeyError, cv2.error) as error:
+            return {"error": str(error), "raw_text": None, "value": None, "released": False}
+
+    def _draw_cells(self, overlay, box, layout_data, reading):
+        """Ziffernzellen und Abtastpunkte ins Kamerabild zurueckzeichnen.
+
+        Die ROI ist achsparallel, deshalb genuegt eine lineare Abbildung aus
+        dem entzerrten Ausschnitt zurueck ins Bild. Der Bediener sieht damit
+        unmittelbar, ob die Abtastpunkte auf den Segmenten sitzen.
+        """
+        a, b, c, d = box
+        layout = DisplayLayout.from_dict(layout_data)
+        crop_w, crop_h = CROP_SIZE
+
+        def to_image(cx, cy):
+            return int(a + cx / crop_w * c), int(b + cy / crop_h * d)
+
+        sign = layout.sign_box(crop_w, crop_h)
+        if sign:
+            p0, p1 = to_image(sign[0], sign[1]), to_image(sign[0] + sign[2], sign[1] + sign[3])
+            colour = (130, 220, 130) if reading.get("sign_detected") else (90, 120, 90)
+            cv2.rectangle(overlay, p0, p1, colour, 1)
+
+        segments = reading.get("segments") or []
+        for index, cell in enumerate(layout.cell_boxes(crop_w, crop_h)):
+            cx, cy, cw, ch = cell
+            cv2.rectangle(overlay, to_image(cx, cy), to_image(cx + cw, cy + ch), (90, 120, 90), 1)
+            active = segments[index] if index < len(segments) else None
+            for name, (rx, ry) in SEGMENT_SAMPLE_POINTS.items():
+                point = to_image(cx + rx * cw, cy + ry * ch)
+                on = bool(active[SEGMENT_NAMES.index(name)]) if active else False
+                cv2.circle(overlay, point, 2, (130, 220, 130) if on else (70, 90, 110), -1)
+
+    def start(self):
+        self.thread = threading.Thread(target=self._worker, name="camera", daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.stop.set()
+        self.cancel_auto.set()
+        if self.thread:
+            self.thread.join(timeout=8)
+            if self.thread.is_alive():
+                self.log("error", "Kamerathread hat nicht rechtzeitig beendet")
+
+    def _capture(self, camera):
+        request = camera.capture_request(wait=2.0)
+        try:
+            image = request.make_array("main").copy()
+            metadata = request.get_metadata()
+            # Nur JSON-faehige echte Metadaten; SensorTimestamp unveraendert.
+            metadata = {k: v for k, v in metadata.items() if isinstance(v, (str, bool, int, float))}
+            metadata["timebase"] = TimeBaseKind.SENSOR_BOOTTIME.value
+            metadata["timestamp_semantics"] = "unknown"
+            metadata["uncertainty_ns"] = None
+            return image, metadata
+        finally:
+            request.release()
+
+    def _settle(self, camera, controls):
+        """Warte auf Istwerte manueller Belichtung, nicht nur set_controls()."""
+        for index in range(20):
+            _image, metadata = self._capture(camera)
+            matched = True
+            if controls.get("AeEnable") is False:
+                for name, tolerance in (("ExposureTime", 0.03), ("AnalogueGain", 0.08)):
+                    if name in controls:
+                        actual = metadata.get(name)
+                        matched &= actual is not None and abs(actual - controls[name]) <= max(
+                            1e-6, abs(controls[name]) * tolerance
+                        )
+            if index >= 3 and matched:
+                return metadata
+        raise ValueError("Manuelle Belichtung nicht in Kamerametadaten bestaetigt")
+
+    def _automatic(self, camera):
+        with self.lock:
+            original = copy.deepcopy(self.config)
+            self.auto_requested = False
+            self.auto = {"state": "running"}
+        self.log("info", "Auto-Setup sucht Vorschlag; keine Lesegarantie")
+        try:
+            camera.set_controls({"AeEnable": True})
+            for _ in range(20):
+                image, md = self._capture(camera)
+                self.publish(image, md)
+                if self.cancel_auto.is_set() or self.stop.is_set():
+                    raise InterruptedError("Auto-Setup abgebrochen")
+            baseline = (md["ExposureTime"], md["AnalogueGain"])
+            candidates = []
+            for exp_factor in (0.5, 1.0, 2.0):
+                for gain_factor in (0.75, 1.0, 1.5):
+                    controls = dict(original["camera"]["controls"], AeEnable=False)
+                    for name, value in zip(
+                        ("ExposureTime", "AnalogueGain"),
+                        (baseline[0] * exp_factor, baseline[1] * gain_factor),
+                        strict=True,
+                    ):
+                        low, high = self.capabilities[name][:2]
+                        controls[name] = max(low, min(high, value))
+                    controls["ExposureTime"] = int(controls["ExposureTime"])
+                    camera.set_controls(controls)
+                    self._settle(camera, controls)
+                    samples = []
+                    for index in range(10):
+                        if self.cancel_auto.is_set() or self.stop.is_set():
+                            raise InterruptedError("Auto-Setup abgebrochen")
+                        image, md = self._capture(camera)
+                        self.publish(image, md)
+                        if index >= 4:
+                            samples.append(quality(image, original["roi"]))
+                    glare = max(s["saturated_fraction"] for s in samples)
+                    contrast = min(s["contrast"] for s in samples)
+                    variation = float(np.std([s["brightness"] for s in samples]))
+                    if glare < 0.02 and contrast > 0.05 and variation < 0.05:
+                        candidates.append((contrast - variation - 5 * glare, controls))
+            with self.lock:
+                self.auto = (
+                    {"state": "proposal", "controls": max(candidates, key=lambda v: v[0])[1]}
+                    if candidates
+                    else {"state": "failed", "reason": "Kein brauchbarer Vorschlag"}
+                )
+            self.log("info", "Auto-Setup beendet: " + self.auto["state"] + "; Originaleinstellungen wiederhergestellt")
+        except InterruptedError:
+            self.auto = {"state": "cancelled"}
+            self.log("warn", "Auto-Setup abgebrochen; Original wiederhergestellt")
+        finally:
+            camera.set_controls(original["camera"]["controls"])
+            with self.lock:
+                self.applied = -1
+
+    def _worker(self):
+        camera = None
+        try:
+            if self.simulate:
+                self.capabilities = {
+                    "AeEnable": [False, True, True],
+                    "ExposureTime": [100, 100000, 10000],
+                    "AnalogueGain": [1.0, 16.0, 1.0],
+                    "Contrast": [0.1, 4.0, 1.0],
+                }
+            else:
+                from picamera2 import Picamera2
+
+                camera = Picamera2(self.camera_index)
+            previous = None
+            while not self.stop.is_set():
+                with self.lock:
+                    data, revision = copy.deepcopy(self.config), self.revision
+                cam = data["camera"]
+                geometry = (cam["width"], cam["height"], cam["fps"])
+                if previous != geometry:
+                    if camera:
+                        if previous:
+                            camera.stop()
+                        camera.configure(
+                            camera.create_video_configuration(
+                                main={"size": geometry[:2], "format": "RGB888"},
+                                controls={"FrameRate": cam["fps"]},
+                                queue=False,
+                            )
+                        )
+                        self.capabilities = {
+                            k: list(v)
+                            for k, v in camera.camera_controls.items()
+                            if k in ("AeEnable", "ExposureTime", "AnalogueGain", "Contrast")
+                        }
+                        camera.start(show_preview=False)
+                    previous = geometry
+                    self.applied = -1
+                    self.log("info", f"Kamerastream {geometry}; Fokus mechanisch")
+                if revision != self.applied:
+                    validate(data, self.capabilities)
+                    if camera:
+                        camera.set_controls(cam["controls"])
+                        self._settle(camera, cam["controls"])
+                    with self.lock:
+                        self.applied = revision
+                    self.log("info", f"Controls r{revision} gesetzt; Ist-Belichtung separat in Metadaten")
+                if self.auto_requested:
+                    if camera:
+                        self._automatic(camera)
+                    else:
+                        self.auto_requested = False
+                        self.auto = {"state": "failed", "reason": "Auto-Setup braucht echte Kamera"}
+                if camera:
+                    image, metadata = self._capture(camera)
+                else:
+                    image = np.zeros((cam["height"], cam["width"], 3), np.uint8)
+                    cv2.rectangle(
+                        image,
+                        (int(cam["width"] * 0.2), int(cam["height"] * 0.3)),
+                        (int(cam["width"] * 0.8), int(cam["height"] * 0.6)),
+                        (160, 160, 160),
+                        -1,
+                    )
+                    cv2.putText(
+                        image,
+                        "012.50",
+                        (int(cam["width"] * 0.25), int(cam["height"] * 0.52)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        2,
+                        (0, 0, 0),
+                        3,
+                    )
+                    metadata = {"timebase": TimeBaseKind.SYNTHETIC.value, "uncertainty_ns": None}
+                    self.stop.wait(1 / cam["fps"])
+                self.publish(image, metadata)
+        except Exception as error:
+            with self.lock:
+                self.error, self.jpeg = str(error), None
+            self.log("error", f"Kamera gestoppt: {error}")
+            if isinstance(error, TimeoutError) and camera:
+                camera.cancel_all_and_flush()
+        finally:
+            if camera:
+                try:
+                    camera.stop()
+                finally:
+                    camera.close()

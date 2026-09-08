@@ -87,3 +87,29 @@ Nichts über die Systempakete hinaus. Die Kette läuft mit `numpy`, `cv2` und
 `pyserial`; `picamera2` wird ausschließlich in den beiden Kameramodulen
 importiert, und zwar lazy in der Factory. Deshalb laufen Tests und Beispiele
 auch ohne Kamera.
+
+## Kamera-Workbench (2026-09-08)
+
+Installation: `bash scripts/install-workbench.sh`. Weiterhin nur die Projekt-
+venv mit Systempaketen und `pip install --no-deps -e .` verwenden. Der neue
+Konsolenbefehl `dispread` ist in `pyproject.toml` registriert.
+
+| Paket | Installierte Version bei Implementierung | Zweck |
+| --- | --- | --- |
+| Debian `python3-aiohttp` | 3.11.16 | HTTPS, MJPEG, WebSockets, Unix-Socket-API |
+| Debian `python3-textual` | 2.1.2 | Tastaturbediente TUI und TUI-Tests |
+| Debian `python3-pam` | 0.4.2 (Modul `PAM`) | Linux-Passwort- und Kontostatusprüfung |
+| Debian `openssl` | Systempaket | Lokales TLS-Zertifikat und Fingerabdruck |
+| `@xterm/xterm` | 5.5.0 | Browser-Terminalemulator |
+| `@xterm/addon-fit` | 0.10.0 | Anpassung der Terminalgröße |
+
+Die beiden xterm-Pakete wurden versioniert von jsDelivr bezogen und liegen
+mit MIT-Lizenzen unter `src/dispread/workbench/static/vendor/`. Im Betrieb
+werden keine CDN-Verbindungen benötigt. Browserassets werden mit dem Python-
+Paket ausgeliefert; es ist keine Node.js-Laufzeit erforderlich.
+
+Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
+übernimmt das steuernde Terminal vor `exec`; kein Python-Code nach einem
+Fork aus dem mehrthreadigen Kameraprozess. Kein tmux notwendig. PAM nutzt den
+vorhandenen Dienst `login` für den eigenen Benutzer `me-systeme`; Serverstart
+als root oder als anderer Benutzer wird abgelehnt.

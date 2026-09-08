@@ -10,6 +10,10 @@ Fachlich autoritativ bleibt [../../Konzept.md](../../Konzept.md). Die
 Daueranweisungen in [../../AGENTS.md](../../AGENTS.md) gelten für jede Zeile,
 die du schreibst.
 
+**Direkt ausprobieren:** [Kamera-Livevorschau über SSH](10-kamera-livevorschau.md)
+zeigt das echte Kamerabild mit unbestätigten Display-Kandidaten im
+Windows-Browser. Dieser kleine Prototyp läuft unabhängig vom Lernpfad.
+
 ## So ist jedes Kapitel aufgebaut
 
 | Abschnitt | Bedeutung |

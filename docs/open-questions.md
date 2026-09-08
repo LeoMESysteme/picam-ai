@@ -206,3 +206,132 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Evidenzregeln definieren, ohne fehlende Diagnosen mit erfundenen Werten zu füllen.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später
   Freigabelogik und `docs/VALIDATION.md`.
+
+## OQ-20 — Auto-Setup gegen Multiplexing echter Anzeigen absichern
+
+* **Status:** offen · erkannt 2026-09-08 beim Workbench-Ausbau
+* **Befund:** Die neue begrenzte Belichtungs-/Gain-Suche bewertet Kontrast,
+  Überstrahlung und zeitliche Helligkeitsschwankungen im bestätigten Bereich.
+  Diese Kriterien beweisen nicht, dass alle multiplexenden Segmente vollständig
+  aufgenommen wurden; eine stabile Phasenlage kann fehlende Segmente verbergen.
+* **Klärung:** Je realem Gerät geeignete Belichtungsbereiche und Multiplexperiode
+  messen; automatische Vorschläge mit optisch bestätigten vollständigen Anzeigen
+  vergleichen. Bis dahin bleibt Auto-Setup eine Einstellhilfe mit menschlicher
+  Bestätigung, keine automatische Freigabe.
+* **Antwort landet in:** `docs/OPTICAL_SETUP.md`, Geräteprofile und
+  `docs/VALIDATION.md`; Aufbau in `docs/lab_journal.md`.
+
+## OQ-21 — HTTPS-Browserabnahme der Workbench
+
+* **Status:** offen · erkannt 2026-09-08 beim Workbench-Ausbau
+* **Befund:** Der lokale Chromium-152-Headless-Test lädt HTTPS-Seiten trotz
+  erfolgreicher TLS-Handshakes auf Serverseite nicht fertig; Navigation und
+  anschließende CDP-Auswertung laufen in Timeouts. Direkte Python-/curl-
+  HTTPS-Abfragen laden die Loginseite vollständig. Die konkrete Ursache in
+  dieser Browserumgebung ist nicht geklärt.
+* **Eingegrenzt am 2026-09-08:** Es ist kein TLS- und kein Zertifikatsproblem.
+  Dasselbe Chromium lädt auch eine reine HTTP-Seite eines lokalen
+  `python -m http.server` nicht (leerer Body, `net_error -101`, „Page load timed
+  out"), während `file://`-Seiten samt JavaScript einwandfrei laufen. Zusätzlich
+  feuern Timer im Headless-Modus nur mit `--virtual-time-budget`, nicht mit
+  `--timeout`. Browserprüfungen dieser Umgebung laufen deshalb über eine
+  `file://`-Seite mit eingespielter echter `/status`-Antwort; das prüft das
+  Frontend, aber weder TLS noch Anmeldung noch WebSocket.
+* **Klärung:** Mit vertrautem Zertifikat im Windows-Browser anmelden und
+  Kamera, echte Shell, TUI sowie Wiederverbindung gemeinsam abnehmen. Falls
+  reproduzierbar: Browser-/TLS-Netzwerkdiagnose ergänzen. Keine Sicherheits-
+  umgehung oder passwortfreie Produktionsanmeldung als Ersatz einbauen.
+* **Antwort landet in:** `docs/anleitung/10-kamera-livevorschau.md`,
+  `docs/status.md`; technische Befunde gegebenenfalls `docs/lab_journal.md`.
+
+## OQ-22 — Sensor setzt nach Streamwechsel keinen Stream mehr auf
+
+* **Status:** offen · erkannt 2026-09-08 bei der Fokusdiagnose
+* **Befund:** Nach einer Messreihe, die im selben Prozess erst 960×720 und dann
+  2028×1520 streamte (`configure` → `start` → `stop` → `configure` → `start`),
+  liefert der Sensor **überhaupt keine Bilder mehr**. Jeder weitere Startversuch
+  — auch aus einem frischen Prozess und auch mit `rpicam-still` — endet im
+  Kernel mit `rp1-cfe 1f00110000.csi: stream on failed in subdev`, begleitet von
+  `WARNING ... call_s_stream+0x100/0x118 [videodev]` und
+  `videobuf2_common: driver bug: stop_streaming operation is leaving buffer 0 in
+  active state`. 8.429 solche Zeilen zwischen 15:20:32 und 15:22:12 Ortszeit.
+  Enumeration bleibt intakt: `global_camera_info()` und
+  `scripts/camera-commissioning.sh` melden weiter „einsatzbereit" — die
+  Diagnose prüft den Bilddurchlauf also **nicht**. Letzte erfolgreiche Aufnahme
+  vor dem Reboot 15:14, erster Fehlschlag 15:20:32.
+* **Zwischenstand 1 (verworfen): PipeWire/WirePlumber.** Beide hielten
+  `/dev/v4l-subdev2`, den imx500-Sensorknoten, und WirePlumber 0.5.8 hatte den
+  libcamera-Monitor aktiv — zwei libcamera-Klienten am selben Sensor. Der
+  Monitor wurde benutzerseitig abgeschaltet
+  (`~/.config/wireplumber/wireplumber.conf.d/50-kein-kameramonitor.conf`,
+  `monitor.libcamera = disabled`); danach hält PipeWire den Sensorknoten
+  nachweislich **nicht** mehr. **Der Fehler tritt trotzdem weiter auf.** Damit
+  ist Kamerakonkurrenz als Ursache widerlegt. Die Abschaltung darf bleiben, sie
+  entfernt einen Störfaktor.
+* **Zwischenstand 2 (verworfen): hängender Prozess.** Ein beendeter
+  Fokusmesser-Lauf blieb nach Strg+C 1:57 min als PID 4681 in
+  `futex_wait_queue` stehen und hielt den Sensor. Das ist aber **Folge, nicht
+  Ursache**: `Picamera2.stop()` wartet auf Puffer, die der Treiber nie
+  zurückgibt. Den Prozess zu töten gibt die Kamera **nicht** frei — der
+  anschließende Startversuch scheiterte weiter, und der Kill selbst löste
+  erneut `cfe_stop_streaming ... leaving buffer 0 in active state` aus.
+* **Stand: es ist ein Treiberfehler, und der Kernel sagt es selbst.**
+  `videobuf2_common: driver bug: stop_streaming operation is leaving buffer 0
+  in active state`, aufgerufen aus `cfe_stop_streaming+0xd4/0x200 [rp1_cfe]`.
+  Jeder Streamabbau — sauber beendet oder per Signal — kann die vb2-Warteschlange
+  in diesem Zustand hinterlassen. Danach scheitert jeder weitere Start, in zwei
+  Varianten: `stream on failed in subdev` oder
+  `/dev/video4[15:cap]: Failed to queue buffer N: Invalid argument`. Zuletzt
+  hängt sogar `Picamera2(0)` beim Öffnen. **Nur ein Reboot hilft**; ein
+  Modul-Reload wäre die Alternative und verlangt `sudo`.
+* **Beste offene Hypothese: die Streamgröße entscheidet.** Sechs Datenpunkte,
+  lückenlos konsistent:
+
+  | Zeit | Sitzung | Modus | Ergebnis |
+  | --- | --- | --- | --- |
+  | 10:31 | Vorschaubeispiel | 960×720 | lief, Folge-Sitzungen weiter möglich |
+  | 12:03 | Workbench-Kameradienst | 960×720 | lief, Folge-Sitzungen weiter möglich |
+  | 14:03 | Kamera-Smoke-Test | 960×720 | lief, Folge-Sitzungen weiter möglich |
+  | 15:14 | Fokusdiagnose | 960×720, dann **2028×1520** | lief; **danach alles blockiert** (15:20:32) |
+  | 15:31 | `rpicam-still` | **4056×3040** | lief; **10 s später blockiert** |
+  | 15:47 | Fokusmesser | **2028×1520** | lief (Bestwert 75); **danach blockiert** |
+
+  Drei Sitzungen bei 960×720 hintereinander überlebten den Abbau, jede Sitzung
+  mit einem der großen Sensormodi war die letzte des Boots.
+* **Hypothese am 2026-09-08 abgeschwächt:** In der nächsten Runde liefen bei
+  960×720 **mehrere** Sitzungen hintereinander (Fokussieren in mehreren Läufen,
+  Bestwert 216,6), dann trat derselbe Fehler wieder auf. Die Streamgröße ist
+  also nicht der Schalter, sondern höchstens ein Einflussfaktor: 960×720
+  verzögert das Problem, hebt es nicht auf. Es bleibt ein Wettlauf beim
+  Streamabbau, der nicht bei jedem Abbau zuschlägt. Damit ist keine
+  Konfiguration bekannt, die dauerhaft sicher ist.
+* **Konsequenz für die Bildkette, unabhängig von der Ursache:** Der Messbetrieb
+  bleibt bei 960×720. Ziffernhöhe wird, falls nötig, über **`ScalerCrop`** geholt
+  — digitaler Ausschnitt auf die Anzeige bei gleichbleibender Ausgabegröße; der
+  Sensormodus ist ohnehin in beiden Fällen 2028×1520. Am 2026-09-08 gemessen
+  wurde das nicht gebraucht: 960×720 erreichte am Testgerät 37 px Ziffernhöhe
+  ([VALIDATION.md](VALIDATION.md)).
+* **Was die Workbench tun muss, solange der Treiber so ist:** (a) den Stream
+  nicht ohne Not neu aufsetzen, (b) beim Beenden nach begrenzter Wartezeit hart
+  aussteigen, damit ein hängendes `Picamera2.stop()` das Gerät nicht zusätzlich
+  belegt, (c) den blockierten Sensor als solchen melden („Reboot nötig") statt
+  als anonymen Timeout, (d) `scripts/camera-commissioning.sh` um eine echte
+  Aufnahmeprüfung ergänzen, damit „einsatzbereit" Bilddurchlauf bedeutet.
+* **Warum das wichtig ist:*** **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
+  jeder Änderung von Breite, Höhe oder Bildrate genau so neu auf
+  (`Controller._worker`). Trifft das denselben Treiberzustand, fällt die Kamera
+  mitten im Betrieb aus und ist ohne Reboot nicht zurückzuholen. Im Labor wäre
+  das ein Ausfall während einer Kalibrierung.
+* **Klärung:** (1) Den Größentest oben fahren. (2) Unabhängig davon gehört der
+  Befund upstream gemeldet — der Kernel bezeichnet ihn selbst als `driver bug`,
+  mit Aufrufpfad `cfe_stop_streaming` im `rp1_cfe`-Treiber, libcamera
+  v0.7.2+rpt20260817, libpisp v1.7.0. (3) Solange es unklar ist:
+  Auflösung und Bildrate nur bei stehender Kamera ändern, nicht im laufenden
+  Messbetrieb — und die Auflösungszeile im setup-Tab entsprechend
+  kennzeichnen. (4) `camera-commissioning.sh` um eine echte Aufnahmeprüfung
+  ergänzen, damit „einsatzbereit" auch Bilddurchlauf bedeutet.
+* **Nicht tun:** Den Fehlschlag im Kamerathread stillschweigend wegfangen und
+  weiterlaufen. Ein Sensor, der keinen Stream aufsetzt, ist ein harter Ausfall
+  und muss als Fehler sichtbar bleiben.
+* **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
+  gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.

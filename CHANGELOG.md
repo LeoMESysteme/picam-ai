@@ -5,6 +5,88 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-09-08
 
+### Einstelltabelle in der Weboberfläche, Werte werden ausgewählt statt getippt
+
+**Problem:** Die Einrichtung lag nur in `dispread tui`, das der Bediener erst in
+der Web-Shell von Hand starten musste. Dort war jedes Feld ein Freitextdialog
+mit `json.loads`: `true`/`false` für Belichtungsautomatik und Fokusassistenz,
+Zahlen für die Belichtung, aber `mode` und `role` ohne Anführungszeichen. Typ,
+Grenzen und Default lagen in den Kamera-Capabilities längst maschinenlesbar vor.
+
+**Änderung:** Neues Modul `workbench/fields.py` beschreibt Zeilen und Aktionen
+einmal als Daten (`rows()`, `actions()`, `run_blocked()`); `/status` liefert sie
+mit, die Weboberfläche rendert daraus einen festen `setup`-Tab neben den Shells,
+der nach der Anmeldung sofort aktiv ist. Auswahlfelder für Modus, Rolle,
+Auflösung, Bildrate, Belichtungsautomatik, Fokusassistenz und Profil;
+Zahlenfelder mit Kameragrenzen und Schnellwahl für Belichtungszeit, Verstärkung
+und Kontrast; Anzeigebereich und Erkennungsfilter als reine Anzeigezeilen.
+Gesperrte Zeilen und Aktionen nennen ihren Grund, statt erst am Kommando zu
+scheitern. `dispread tui` bleibt für den Betrieb ohne Browser und rendert
+dieselbe Quelle mit Auswahllisten statt Freitext. `snapshot()` führt die
+vorhandenen Profilnamen mit; Freitext bleibt nur für einen neuen Profilnamen.
+
+**Konsequenz:** Einrichtung ohne zusätzliches Kommando und ohne JSON-Kenntnis;
+Web und Terminal können nicht mehr auseinanderlaufen, weil beide dieselben
+Optionen lesen. Der Controller bleibt die durchsetzende Instanz — `fields.py`
+ist Bedienhilfe, keine Regel. Keine OCR, Messwertfreigabe oder neue
+Abhängigkeit. 63 Tests und Ruff grün, darunter der Nachweis, dass jede
+angebotene Auswahl vom Controller angenommen wird. setup-Tab mit 21 Prüfpunkten
+in Chromium über eine `file://`-Seite mit echter `/status`-Antwort geprüft;
+Netzwerknavigation dieses Chromium bleibt defekt (OQ-21). Keine erneute
+Hardwaremessung.
+
+### Authentifizierte Kamera-Workbench mit Shell, TUI und Profilen
+
+**Problem:** Der Ein-Datei-Prototyp bot weder echte Shells noch eine gemeinsame
+Steuerung für Kameraeinstellungen, gespeicherte Profile und Boxkorrekturen.
+
+**Änderung:** `dispread serve` startet eine HTTPS-Workbench mit Linux-PAM-
+Anmeldung für `me-systeme`, echten PTY-Shell-Tabs und lokaler Unix-Socket-API.
+`dispread tui` bietet eine tastaturbediente Einstelltabelle. Ein Kamerathread
+verwaltet validierte Live-Controls, automatische Einstellvorschläge,
+Fokusassistenz, Profilkonflikte und eingefrorene Bilder für ROI/Annotationen.
+Der bisherige Beispielaufruf bleibt als Einstieg erhalten. Systemabhängigkeiten
+und lokal ausgelieferte xterm-Assets sind dokumentiert.
+
+**Konsequenz:** Einheitliche Steuerung ohne Sliderwand; Browsertrennung beendet
+keine Shell. Noch keine OCR, Messwertfreigabe oder Modelltraining. 58 Tests
+einschließlich TLS/WebSocket/Shell/TUI grün; realer Kameradienst geprüft.
+Chromium-UI mit simuliertem Transport geprüft. Vollständige HTTPS-Browserabnahme
+bleibt wegen lokaler Chromium-Navigationsprobleme offen (OQ-21); ebenso
+gerätespezifische Auto-Setup-Validierung (OQ-20).
+
+### Barebones-Terminalansicht für die Kameravorschau
+
+**Problem:** Die Vorschauseite enthielt erklärenden Fließtext und kein
+eigenes Logfenster.
+
+**Änderung:** Dunkle Monospace-Oberfläche mit Kamera- und Logfenster,
+kompaktem Live-Status, Bildnummer und Verarbeitungsrate. Auf schmalen
+Bildschirmen stehen die Fenster untereinander. Erklärungen, Verbindungswechsel,
+Kamerafehler und periodische Statusmeldungen erscheinen im Browserlog mit
+UTC-Zeitangabe. Maximal 300 Zeilen, `clear`, automatisches Scrollen nur am Ende.
+
+**Konsequenz:** Weniger Text außerhalb des Logs. Das Log enthält
+Vorschaudiagnostik, keine Shell und keine vollständige Prozess-stdout-Umleitung.
+Neun Vorschautests und Ruff grün; Terminalansicht mit simuliertem Feed in
+Chromium geprüft. Keine erneute Hardwaremessung.
+
+### Kameralivebild mit Display-Kandidaten über SSH
+
+**Problem:** Für den ersten Versuch fehlte eine Livevorschau auf dem
+Windows-Rechner und eine automatische Suche nach möglichen Anzeigebereichen.
+
+**Änderung:** `examples/17_camera_display_preview.py` verbindet Picamera2,
+OpenCV-Konturfilter, gelbe Kandidatenboxen und einen lokalen MJPEG-HTTP-Server.
+Windows greift über SSH-Portweiterleitung im Browser zu. Nur das neueste Bild
+wird vorgehalten; die Seite blendet bei ausbleibendem Bildfortschritt oder
+Verbindungsabbruch das Bild aus. Filter sind per Argument einstellbar.
+
+**Konsequenz:** Vorschau ohne zusätzliche Abhängigkeiten; keine OCR oder
+Messwertfreigabe. Neun neue Tests prüfen Erkennung, HTTP und Fehlerbehandlung.
+Realer Kamerastream lokal geprüft, Windows/SSH und Erkennungsqualität am
+Gerät noch offen. Anleitung: `docs/anleitung/10-kamera-livevorschau.md`.
+
 ### Kamera in Betrieb genommen und vermessen
 
 **Problem:** Die AI Camera war an CAM/DISP0 angeschlossen, wurde aber nicht
