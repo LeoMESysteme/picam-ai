@@ -496,3 +496,92 @@ Warnung/Blockade vor dem gemessenen Limit wäre eine mögliche Absicherung;
 nicht umgesetzt, da eine Entscheidung über die Workbench-Architektur nötig
 ist. Vollständige Log-Ausschnitte: Sitzungsverlauf, nicht separat abgelegt.
 Stand und offene Fragen: [OQ-22](open-questions.md).
+
+## 2026-09-09 — Workbench-OCR: synthetischer Rundlauf und erster VFD-Befund
+
+**Ziel:** Die neue Bedienoberfläche der bereits vorhandenen
+7-Segment-Erkennung prüfen und erstmals feststellen, ob der Leser auf dem
+realen BK-5491B-Bild einen Wert liefert. Keine Freigabe und keine
+Konfidenzkalibrierung.
+
+**Automatischer Aufbau:** `render_display(-12.34)` mit fünf Stellen, zwei
+Nachkommastellen, Vorzeichen und Einheit `mV` wurde über die echte
+`Controller.publish()`-Strecke geschickt. Ergebnis: Rohtext `-012.34`, Wert
+−12,34, fünf Segmentbelege, Gate-Vorschau `valid`, keine Ablehnungsgründe,
+`released=false`, `confidence_calibrated=false`. Die unbekannte
+Dezimalposition wurde separat geprüft und mit `decimal_point_unknown` plus
+`no_value` abgelehnt.
+
+**Realer Offline-Aufbau:** Vorhandenes, am 2026-09-08 aufgenommenes Bild
+`fokus-erreicht-960x720.jpg` des BK Precision 5491B; sichtbare Anzeige
+`-000.13 mV DC`. Manuell bestätigte ROI in Bildpixeln `[322,325,180,40]`, nur
+Vorzeichen und fünf Ziffern, Zielausschnitt 400×160. Layout: fünf Stellen,
+zwei profilfeste Nachkommastellen, Vorzeichen, Einheit `mV`,
+`sign_cell_ratio=0.6`. Die manuelle Wahrheit wurde dem Leser und dem Gate
+nicht übergeben. Zeitbasis des Quellbilds `FILE_MTIME`, Unsicherheit `None`;
+keine Latenzaussage zulässig.
+
+**Ergebnis Offline:** Rohtext `777?7`, kein Wert, Gate `unreadable`, Gründe
+`unreadable_cells:1` und `no_value`. Crop-Schärfe 88,37,
+Segmentkontrast 0,4602, kleinste Marge 0,6495, Sättigung 0,0000. Das Overlay
+zeigt, dass die festen relativen Segmentpunkte aus dem synthetischen Layout
+nicht zur realen VFD-Glyphengeometrie passen; die schmale `1` ist besonders
+deutlich. Wichtig: keine stille gültige Fehlablesung, aber auch keine reale
+Lesefähigkeit. Als [OQ-23](open-questions.md) festgehalten.
+
+**Laufender Kamerastream:** Ein bereits laufender Workbench-Prozess bei
+960×720 und 15 fps wurde ohne Neustart, Auflösungswechsel oder zusätzlichen
+RP2040-Power-Zyklus benutzt. Die alte ROI wurde reversibel gesetzt und 30
+verschiedene Frames (Sequenzen 34329–34358) gelesen: 30× `?????`, 30×
+`unreadable`, kein Wert; Gründe `unreadable_cells:5`, `no_value`.
+Crop-Schärfe 1,57. Weil die aktuelle Szene nicht visuell bestätigt werden
+konnte, ist das **kein** Gerätedatenpunkt und fließt in keine Quote ein. Das
+Profil wurde danach auf den vorherigen unbestätigten Defaultzustand
+zurückgesetzt. Keine physische Einstellung und keine dauerhafte
+Hardwarekonfiguration geändert; deshalb kein Update am Hardwareprofil.
+
+**Artefakte:**
+`var/workbench/diagnostics/ocr-bk5491b-offline.jpg` (Original mit ROI,
+Zellen und Abtastpunkten) und `ocr-bk5491b-offline.json` (Layout, Evidenz,
+Zeitbasis, manuelle Wahrheit, `reference_was_reader_input=false`,
+`formatter_provisional=true`).
+
+## 2026-09-09 — ROI-Lag eingegrenzt und Shutdown isoliert geprüft
+
+**Auslöser:** Bedienerrückmeldung: Nach Bestätigung der ROI wird die Web-UI
+langsam/unbedienbar, der Dienst lässt sich nicht zuverlässig stoppen, und die
+Zahlenerkennung passt nicht auf die Anzeige. Der laufende reale Prozess blieb
+über den privaten Statussocket erreichbar. Beobachtet wurden 15,0 verarbeitete
+Bilder/s und rund 50 % CPU über den Python-/OpenCV-Threadverbund; diese
+Momentaufnahme ist keine normierte Lastmessung.
+
+**Codebefund:** `Controller.publish()` hielt den gemeinsamen `RLock` über
+Qualitätsberechnung, Vollbild-Kandidatensuche, OCR, Overlay und
+JPEG-Kompression. Die Kandidatensuche lief auch nach Bestätigung der ROI weiter.
+Damit konkurrierten Status, ROI-Befehl und Shutdown 15-mal pro Sekunde mit dem
+gesamten Bildpfad. Die ROI war ausschließlich ein achsparalleles Rechteck; eine
+geneigte Anzeige konnte nicht passend auf das feste 400×160-Raster entzerrt
+werden. Der Shutdown rief im `finally` Kamera-`stop()`/`close()` ohne Wachhund
+auf.
+
+**Änderung und Offline-Messung:** Vollbildsuche nur noch vor Bestätigung;
+Bildarbeit außerhalb des Controller-Locks; OCR-Vorschau 5 Hz; vier editierbare
+Ecken mit Perspektivtransformation; bewachte Kameraabschlussaufrufe. Je 100
+Aufrufe auf dem gespeicherten 960×720-Bild, Dauerbasis CLOCK_MONOTONIC:
+30,837 ms/Bild unbestätigt mit Kandidatensuche, 5,801 ms/Bild bestätigt und
+gedrosselt, 9,515 ms/Bild bei künstlich in jedem Bild erzwungener OCR. Diese
+Zahlen sind reine Verarbeitungslaufzeiten, keine Aussage zur Aufnahmezeit oder
+End-to-End-Latenz.
+
+**Shutdown-Test:** Separater `serve --simulate` auf Loopback, eigener privater
+Unix-Socket und temporäres Datenverzeichnis. `dispread stop` antwortete
+`{"stopping": true}`; der Prozess endete anschließend mit Exit 0. Keine echte
+Kamera und keine Hardwarekonfiguration berührt. Der bereits laufende reale
+Dienst wurde nicht gestoppt oder neu gestartet, weil darin ein ungespeicherter
+Bediener-ROI aktiv war.
+
+**Bewertung:** Die statischen Ursachen sind beseitigt und synthetisch geprüft;
+die konkrete Windows-Browserreaktion sowie Shutdown mit echter Kamera sind erst
+nach einem kontrollierten Neustart des realen Dienstes belastbar. Daher OQ-24
+`in Arbeit`, nicht `geklärt`. Perspektivkorrektur verbessert die Geometrie,
+löst aber nicht ohne reale Bildsammlung die VFD-Glyphenfrage OQ-23.

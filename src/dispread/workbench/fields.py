@@ -8,10 +8,14 @@ Regel ersetzen.
 
 from __future__ import annotations
 
+from dispread.layout import DisplayLayout
+
+from .profiles import LAYOUT_RATIOS
+
 MODES = (
     ("setup", "setup", "einrichten, keine Messwertfreigabe"),
     ("run", "run", "Betrieb; in diesem Prototyp ohne Messwertfreigabe"),
-    ("annotate", "annotate", "Bild und ROI als Trainingsbeispiel ablegen"),
+    ("annotate", "annotate", "Originalbild und ROI als Geometriebeispiel ablegen"),
 )
 ROLES = (("main", "main (Pruefling)"), ("secondary", "secondary (Referenz)"))
 RESOLUTIONS = ((640, 480), (960, 720), (1280, 960), (1640, 1232), (2028, 1520))
@@ -24,6 +28,9 @@ CONTROL_HINTS = {
     "AnalogueGain": "Analogverstaerkung; hoehere Werte rauschen mehr",
     "Contrast": "Bildkontrast der Kamerapipeline",
 }
+LAYOUT_DIGITS = tuple(range(3, 9))
+LAYOUT_DECIMALS = tuple(range(5))
+LAYOUT_UNITS = (None, "N", "kN", "V", "mV", "A", "mA", "mV/V")
 
 
 def _number(value):
@@ -57,6 +64,212 @@ def _row(key, label, kind, value, display, hint, **extra):
 
 def _option(value, label, ops, disabled=False, reason=""):
     return {"value": value, "label": label, "ops": ops, "disabled": disabled, "reason": reason}
+
+
+def _layout_rows(layout):
+    """Bedienbare Profilannahmen fuer das Raster des Segmentlesers."""
+    digits = layout["digits"]
+    decimals = layout["decimals"]
+
+    digit_choices = sorted({*LAYOUT_DIGITS, digits})
+    digit_options = []
+    for value in digit_choices:
+        incompatible = decimals is not None and decimals >= value
+        digit_options.append(
+            _option(
+                str(value),
+                str(value),
+                [["layout.set", {"key": "digits", "value": value}]],
+                disabled=incompatible,
+                reason="zuerst weniger Nachkommastellen waehlen" if incompatible else "",
+            )
+        )
+
+    decimal_choices = sorted({*LAYOUT_DECIMALS, *(() if decimals is None else (decimals,))})
+    decimal_options = [
+        _option("unknown", "unbestimmt (wird abgelehnt)", [["layout.set", {"key": "decimals", "value": None}]])
+    ]
+    decimal_options.extend(
+        _option(
+            str(value),
+            str(value),
+            [["layout.set", {"key": "decimals", "value": value}]],
+            disabled=value >= digits,
+            reason="muss kleiner als die Ziffernzahl sein" if value >= digits else "",
+        )
+        for value in decimal_choices
+    )
+
+    units = list(LAYOUT_UNITS)
+    if layout["unit"] not in units:
+        units.append(layout["unit"])
+    unit_options = [
+        _option(
+            "none" if value is None else value,
+            "keine" if value is None else value,
+            [["layout.set", {"key": "unit", "value": value}]],
+        )
+        for value in units
+    ]
+
+    low, high = LAYOUT_RATIOS["sign_cell_ratio"]
+    default_ratio = DisplayLayout().sign_cell_ratio
+    ratio_presets = []
+    for label, value in (("min", low), ("Standard", default_ratio), ("aktuell", layout["sign_cell_ratio"]), ("max", high)):
+        if all(preset["raw"] != value for preset in ratio_presets):
+            ratio_presets.append({"raw": value, "value": _number(value), "label": f"{label}: {_number(value)}"})
+
+    gap_low, gap_high = LAYOUT_RATIOS["digit_gap_ratio"]
+    default_gap = DisplayLayout().digit_gap_ratio
+    gap_presets = []
+    for label, value in (
+        ("keiner", gap_low),
+        ("Standard", default_gap),
+        ("aktuell", layout["digit_gap_ratio"]),
+        ("max", gap_high),
+    ):
+        if all(preset["raw"] != value for preset in gap_presets):
+            gap_presets.append({"raw": value, "value": _number(value), "label": f"{label}: {_number(value)}"})
+
+    return [
+        _row(
+            "layout.digits",
+            "ziffernstellen",
+            "choice",
+            str(digits),
+            str(digits),
+            "nur Ziffern; die Vorzeichenstelle wird getrennt behandelt",
+            options=digit_options,
+        ),
+        _row(
+            "layout.decimals",
+            "nachkommastellen",
+            "choice",
+            "unknown" if decimals is None else str(decimals),
+            "unbestimmt" if decimals is None else str(decimals),
+            "kommt aus dem Profil; unbestimmt wird sicher abgelehnt, nicht optisch geraten",
+            options=decimal_options,
+        ),
+        _row(
+            "layout.has_sign",
+            "vorzeichenstelle",
+            "choice",
+            "true" if layout["has_sign"] else "false",
+            "ja" if layout["has_sign"] else "nein",
+            "Vorzeichenbereich wird getrennt auf Lesbarkeit geprueft",
+            options=[
+                _option("true", "ja", [["layout.set", {"key": "has_sign", "value": True}]]),
+                _option("false", "nein", [["layout.set", {"key": "has_sign", "value": False}]]),
+            ],
+        ),
+        _row(
+            "layout.unit",
+            "einheit",
+            "choice",
+            "none" if layout["unit"] is None else layout["unit"],
+            "keine" if layout["unit"] is None else layout["unit"],
+            "bestaetigte Profileinheit; wird nicht aus dem Bild gelesen",
+            options=unit_options,
+        ),
+        _row(
+            "layout.sign_cell_ratio",
+            "vorzeichenbreite",
+            "number",
+            _number(layout["sign_cell_ratio"]),
+            _number(layout["sign_cell_ratio"]),
+            f"Breite relativ zu einer Ziffernzelle; {low}..{high}",
+            op="layout.set",
+            arg="sign_cell_ratio",
+            integer=False,
+            min=low,
+            max=high,
+            step=0.05,
+            presets=ratio_presets,
+        ),
+        _row(
+            "layout.digit_gap_ratio",
+            "ziffernabstand",
+            "number",
+            _number(layout["digit_gap_ratio"]),
+            _number(layout["digit_gap_ratio"]),
+            f"Zwischenraum vor jeder Ziffernstelle relativ zu einer Ziffernzelle; {gap_low}..{gap_high}",
+            op="layout.set",
+            arg="digit_gap_ratio",
+            integer=False,
+            min=gap_low,
+            max=gap_high,
+            step=0.05,
+            presets=gap_presets,
+        ),
+    ]
+
+
+def _reading_rows(state):
+    """Live-Ablesung und Evidenz anzeigen, ohne eine Freigabe zu behaupten."""
+    reading = state.get("reading")
+    if not state["config"]["confirmed"]:
+        unavailable = "nicht verfuegbar: ROI nicht bestaetigt"
+        return [
+            _row("reading.value", "ablesung", "info", "", unavailable, "Zahlenformat und ROI zuerst bestaetigen"),
+            _row("reading.gate", "freigabepruefung", "info", "", "nicht ausgefuehrt", "Vorschau; keine Messwertfreigabe"),
+            _row("reading.evidence", "evidenz", "info", "", "nicht verfuegbar", "noch keine Segmentmessung"),
+        ]
+    if reading is None:
+        reason = "kein Livebild" if not state["live"] else "noch keine Ablesung"
+        return [
+            _row("reading.value", "ablesung", "info", "", reason, "warte auf ein Kamerabild"),
+            _row("reading.gate", "freigabepruefung", "info", "", "nicht ausgefuehrt", "Vorschau; keine Messwertfreigabe"),
+            _row("reading.evidence", "evidenz", "info", "", "nicht verfuegbar", "noch keine Segmentmessung"),
+        ]
+    if reading.get("error"):
+        return [
+            _row("reading.value", "ablesung", "info", "", "Fehler: " + reading["error"], "Lesergebnis wurde abgelehnt"),
+            _row("reading.gate", "freigabepruefung", "info", "", "nicht ausgefuehrt", "Vorschau; keine Messwertfreigabe"),
+            _row("reading.evidence", "evidenz", "info", "", "nicht verfuegbar", "Leserfehler"),
+        ]
+
+    value = "kein Zahlenwert" if reading["value"] is None else _number(reading["value"])
+    unit = reading.get("unit") or "ohne Einheit"
+    source = reading.get("unit_source") or "unbekannt"
+    reasons = reading.get("gate_reasons") or []
+    gate = reading.get("gate_status") or "unbekannt"
+    flags = reading.get("status_flags") or []
+    digits = "".join(reading.get("digits") or []) or "—"
+    calibrated = "ja" if reading.get("confidence_calibrated") else "nein"
+    return [
+        _row(
+            "reading.value",
+            "ablesung",
+            "info",
+            "",
+            f"{reading.get('raw_text') or '—'} -> {value} {unit}",
+            f"Einheit aus {source}; Dezimalstelle aus dem Profil",
+        ),
+        _row(
+            "reading.gate",
+            "freigabepruefung",
+            "info",
+            "",
+            f"{gate}; nicht freigegeben",
+            "Ablehnung: " + (", ".join(reasons) if reasons else "keine") + "; Status: " + (", ".join(flags) if flags else "keiner"),
+        ),
+        _row(
+            "reading.evidence",
+            "evidenz",
+            "info",
+            "",
+            (
+                f"Stellen={digits} Kontrast={_number(reading.get('contrast', 0))} "
+                f"Marge={_number(reading.get('min_margin', 0))} "
+                f"unlesbar={reading.get('unreadable_cells', 0)}"
+            ),
+            (
+                f"Crop-Schaerfe={_number(reading.get('crop_sharpness', 0))}; "
+                f"Saettigung={_number(reading.get('crop_saturated_fraction', 0))}; "
+                f"Backend={reading.get('backend', 'unbekannt')}; Konfidenz kalibriert={calibrated}"
+            ),
+        ),
+    ]
 
 
 def rows(state):
@@ -235,18 +448,29 @@ def rows(state):
     )
 
     roi = config["roi"]
+    quad = config.get("roi_quad")
+    ocr_box = config["ocr_box"]
     result.append(
         _row(
             "roi",
             "anzeigebereich",
             "info",
             "",
-            ("bestaetigt " + ", ".join(_number(round(v, 4)) for v in roi))
+            ("4 Ecken bestaetigt; Huelle " + ", ".join(_number(round(v, 4)) for v in roi))
             if config["confirmed"] and roi
             else "nicht bestaetigt",
-            "im Kamerabild mit E oder Doppelklick bearbeiten, Enter bestaetigt",
+            (
+                "Quad: "
+                + " ".join(f"({_number(x)},{_number(y)})" for x, y in quad)
+                + "; OCR innen: "
+                + ",".join(_number(value) for value in ocr_box)
+            )
+            if config["confirmed"] and quad
+            else "mit E/Doppelklick bearbeiten; gruene ROI und gelben OCR-Rahmen ausrichten",
         )
     )
+    result.extend(_layout_rows(config["layout"]))
+    result.extend(_reading_rows(state))
     result.append(
         _row(
             "detection",

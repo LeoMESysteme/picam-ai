@@ -152,20 +152,57 @@ Im Modus `setup` oder `annotate`:
 
 1. Kameraansicht fokussieren und `e` drücken oder doppelt klicken. Das Originalbild
    wird eingefroren; auch bei weiterlaufender Kamera bleibt dieses Bild maßgeblich.
-2. Box ziehen; rechte untere Ecke zum Ändern der Größe ziehen. Pfeiltasten
-   verschieben pixelweise, Shift+Pfeiltasten ändern die Größe.
-3. `Enter` bestätigt, `Esc` verwirft.
+2. Eine der vier Ecken ziehen, bis der **grüne** Rahmen den tatsächlichen
+   Displaykanten folgt. Er bestimmt die perspektivische Entzerrung.
+3. Den **gelben** OCR-Rahmen anklicken oder mit `g` zwischen grün und gelb
+   wechseln. Gelber Rahmen, Vorzeichenbox, Ziffernzellen und Punkte sind genau
+   das Raster, das der Segmentleser verwendet. Den gelben Rahmen eng um
+   Vorzeichen und Ziffern legen; Blende, Einheit und Leerraum ausschließen.
+4. Ziehen innerhalb des aktiven Rahmens verschiebt ihn. Pfeiltasten verschieben
+   pixelweise; Shift+Pfeiltasten bewegen die zuletzt gewählte Ecke (ohne Wahl:
+   rechts unten).
+5. `Strg+Enter` (bzw. `Cmd+Enter`) bestätigt beide Rahmen, `Esc` verwirft.
+   Bewusst nicht das bloße `Enter`: Solange der Kamerabereich fokussiert
+   bleibt — auch während einer laufenden Ziehbewegung oder nach einem
+   Seitenblick auf die Einstelltabelle — hätte ein einzelnes `Enter` sonst
+   leicht unbeabsichtigt eine noch unfertige Geometrie endgültig bestätigt.
+   Eine Bestätigung mitten in einer aktiven Ziehbewegung wird zusätzlich
+   ignoriert.
 
-`setup` übernimmt die normierte ROI ins aktive Profil; mit `s` dauerhaft speichern.
-`annotate` speichert das eingefrorene Original als PNG zusammen mit Box,
-Anzeigenrolle, Originalmetadaten, Bildnummer und Profil unter
+`setup` übernimmt das normierte Vierpunktpolygon ins aktive Profil und
+entzerrt es für die OCR. Der innere `ocr_box` wird danach ausgeschnitten und
+auf das 400×160-Leserformat skaliert; mit `s` dauerhaft speichern. Alte Profile
+aus Schema 1 und 2 werden beim Laden automatisch auf Profilschema 3 migriert
+und beginnen mit einem inneren Rahmen über die volle ROI. `annotate` speichert
+das eingefrorene Original als PNG zusammen mit Quad, OCR-Rahmen, Anzeigenrolle,
+Originalmetadaten, Bildnummer und Profil unter
 `var/workbench/annotations/`. Ändert sich das Profil während des Editierens,
-wird die Bestätigung abgelehnt. Erst ein neues Bild einfrieren.
+werden reine OCR-Layoutänderungen (`digits`, `decimals`, Vorzeichen,
+Rasterverhältnisse und Ziffernabstand) sofort im Overlay übernommen und bleiben
+mit `Strg+Enter` bestätigbar. Der cyanfarbene Kreis markiert die profilfeste
+Dezimalposition; er
+ist noch keine optische Punktmessung (OQ-17). Kamera- oder andere
+Profiländerungen machen das eingefrorene Bild weiterhin ungültig; dann erst ein
+neues Bild einfrieren.
+
+Diese Annotation ist zunächst ein **Geometriebeispiel**, noch kein vollständig
+beschriftetes OCR-Trainingsbeispiel: Sie enthält weder den abgelesenen Text noch
+einen Referenzwert als Label. Für die Weiterarbeit an OQ-23 müssen mehrere
+solche Bilder anschließend mit der sichtbaren Wahrheit beschriftet und vor dem
+Abstimmen in getrennte Entwicklungs- und Testsätze aufgeteilt werden. Die
+Labels bleiben außerhalb von `ValueReader.read` und `ReleaseGate.evaluate`.
 
 Gelbe Rechtecke sind automatische Vorschläge, grüne markieren bestätigte
 Bereiche. Die ROI ist an den bestätigten Aufbau gebunden; es gibt noch keinen
 Tracker. Ein verschobenes Gerät muss neu eingerichtet werden. Kein Modell wird
 beim Verschieben oder Speichern trainiert.
+
+Eine automatische Live-Ermittlung des Ziffernrahmens ist grundsätzlich
+möglich, braucht aber bestätigte reale Beispiele und eine getrennte
+Fehlerauswertung. Aus nur einem Frame können leuchtende Segmente, Blende,
+Dezimalpunkte und Einheit nicht sicher als Rastergrenzen unterschieden werden.
+Die Workbench übernimmt deshalb derzeit ausschließlich die sichtbare manuelle
+Kalibrierung; sie rät keine Grenze, die später als bestätigt gelten würde.
 
 ## Profile und Befehle
 
@@ -173,17 +210,36 @@ Profile liegen unter `var/workbench/profiles/NAME.json` und enthalten
 Kameraeinstellungen, Anzeigebereich, Rolle, Erkennungsfilter und den
 `layout`-Block mit dem Zahlenformat (`digits`, `decimals`, `has_sign`, `unit`).
 Das Zahlenformat ist die Grundlage der Ablesung: der Segmentleser tastet gegen
-dieses Raster ab und rät nicht. Solange die Bedienzeilen dafür fehlen, ist es
-über `dispread camera set` nicht erreichbar — es geht per Profildatei oder über
-den Befehl `layout.set` am lokalen Steuer-Socket. Vorschauänderungen
-werden nicht automatisch gespeichert. Gültige externe Dateiänderungen werden
-nach kurzem Entprellen übernommen. Bei ungültigem JSON bleibt die letzte
-Konfiguration aktiv; bei gleichzeitig ungespeicherten lokalen Änderungen
-erscheint ein Konflikt. `resolve local` behält die Vorschau, ein anschließendes
-`save` überschreibt die Datei bewusst.
+dieses Raster ab und rät nicht. Der `setup`-Tab und `dispread tui` bieten dafür
+dieselben Auswahlzeilen: 3–8 Ziffernstellen, 0–4 Nachkommastellen oder
+`unbestimmt`, Vorzeichenstelle ja/nein, eine kurze Liste bestätigter Einheiten
+und die relative Breite der Vorzeichenstelle. Unmögliche Kombinationen sind
+gesperrt. `unbestimmt` bedeutet ausdrücklich nicht automatische Erkennung: Weil
+der Dezimalpunkt noch nicht optisch geprüft wird, lehnt die Freigabevorschau den
+Wert mit `decimal_point_unknown` ab.
+
+Unter den Einstellungen stehen drei reine Anzeigezeilen. `ablesung` zeigt
+Rohtext, Zahlenwert und die aus dem Profil stammende Einheit;
+`freigabepruefung` zeigt Status und Ablehnungsgründe; `evidenz` zeigt gelesene
+Stellen, Segmentkontrast, kleinste Segmentmarge, unlesbare Stellen und
+Ausschnittqualität. Auch ein Status `valid` ist hier nur eine Vorschau:
+`released` bleibt `false`, es entsteht kein `ValueRecord` und es wird nichts
+seriell ausgegeben. Die Modell-/Segmentkonfidenz ist nicht als
+Fehlerwahrscheinlichkeit kalibriert.
+
+Der aktuelle Leser unterstützt helle LED/VFD-Segmente auf dunklem Grund.
+Inverse LCD-Anzeigen bleiben [OQ-13](../open-questions.md), die sichtbare
+Prüfung des Dezimalpunkts und der Einheit [OQ-17](../open-questions.md).
+Statusanzeigen wie `DC` werden in diesem Schritt ebenfalls nicht gelesen.
+Vorschauänderungen werden nicht automatisch gespeichert. Gültige externe
+Dateiänderungen werden nach kurzem Entprellen übernommen. Bei ungültigem JSON
+bleibt die letzte Konfiguration aktiv; bei gleichzeitig ungespeicherten lokalen
+Änderungen erscheint ein Konflikt. `resolve local` behält die Vorschau, ein
+anschließendes `save` überschreibt die Datei bewusst.
 
 ```bash
 dispread status
+dispread stop
 dispread mode setup
 dispread camera get
 dispread camera set AeEnable false
@@ -206,6 +262,11 @@ Profiländerung verlässt `run` und führt nach `setup`. Es entsteht weiterhin k
 Messwertdatensatz. Die lokale Steuerung verwendet einen Unix-Socket in einem
 privaten 0700-Verzeichnis, standardmäßig `/tmp/dispread-UID/control.sock`.
 `DISPREAD_SOCKET` kann einen anderen Socket angeben.
+
+`dispread stop` spricht ausschließlich den privaten lokalen Unix-Socket an; die
+authentifizierte Web-API bietet keinen Fernabschaltbefehl. Beim Beenden haben
+auch blockierende Kamera-`stop`/`close`-Aufrufe eine Zeitgrenze, damit ein
+Treiberproblem den gesamten Prozess nicht endlos festhält.
 
 Für Entwicklung ohne Kamera:
 

@@ -3,6 +3,234 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-09 (Editorstart an erkannter Box; Mehrbildbestätigung gegen Flackern)
+
+### Editieren-Start ignorierte die gerade sichtbare erkannte Displayposition
+
+**Problem:** Bedienerrückmeldung: Beim Doppelklick zum Editieren ging die
+zuvor sichtbare "erkannte" ROI-Position verloren. Ursache: Die
+Vollbild-Kandidatensuche (`find_display_candidates`) zeichnet vor der
+Bestätigung laufend gelbe Vorschlagsboxen ins Live-Bild, aber der `freeze`-
+Befehl kannte diese Kandidaten nicht - er startete ein frisches, nie
+bestätigtes Profil immer an einer festen Standardbox `[0.2, 0.3, 0.6, 0.3]`
+in der Bildmitte, unabhängig davon, wo das System die Anzeige gerade
+erkannt hatte.
+
+**Änderung:** `Controller` merkt sich die letzte Kandidatenliste
+(`self.candidates`, gesetzt in `publish()`). `freeze` startet ein frisches
+Profil jetzt an der besten aktuellen Kandidatenbox (nach Rechteckigkeit und
+Fläche sortiert), sofern noch nie eine ROI bestätigt wurde; ein bereits
+vorhandener - auch unbestätigter - `roi`-Wert bleibt wie zuvor unangetastet
+und wird nicht überschrieben. Neuer Regressionstest
+`test_freeze_starts_from_last_detected_candidate`.
+
+**Konsequenz:** Der erste Editierschritt eines frischen Profils beginnt jetzt
+in der Nähe der tatsächlichen Anzeige statt in der Bildmitte. Bereits
+bestätigte oder zuvor gesetzte Geometrie ist von der Änderung nicht
+betroffen.
+
+### Live-Vorschau flackerte bei multiplexenden Anzeigen zwischen falschen Werten
+
+**Problem:** Bedienerrückmeldung: Bei Anzeigen mit sichtbarem Flackern
+(Multiplexbetrieb gegen die niedrige Kamerabildrate, OQ-20) sprang die
+OCR-Vorschau zwischen falschen Werten hin und her - ein einzelnes Bild kann
+mitten in einem Umschaltvorgang liegen. `ReleaseGate` unterstützt bereits
+Mehrbildbestätigung (`confirm_frames`, auch in
+`examples/16_end_to_end_headless.py` als CLI-Option genutzt), die
+Workbench-Vorschau instanziierte ihr Gate aber immer mit dem Default `1` -
+keine Bestätigung, jedes Einzelbild zählte sofort als `valid`.
+
+**Änderung:** Neue Konstante `GATE_CONFIRM_FRAMES = 3` in `controller.py`;
+die Vorschau verlangt jetzt drei übereinstimmende Bilder, bevor
+`gate_status` auf `valid` wechselt (`transition`/`awaiting_confirmation`
+davor, weiterhin sichtbar in der Bedienzeile „freigabepruefung"). Ein
+abweichender Wert setzt die Bestätigung zurück statt zu glätten oder zu
+mitteln (Konzept.md §7) - echte Sprünge bleiben sichtbar, nur ein
+Flacker-Frame allein reicht nicht mehr, um kurzzeitig als bestätigt zu
+gelten. Bestehender Test `test_publish_reads_synthetic_display_and_exposes_evidence`
+angepasst (ruft `publish` jetzt dreimal auf, `last_ocr_at` zurückgesetzt, um
+die 5-Hz-Drosselung im Test zu umgehen).
+
+**Konsequenz:** Die Vorschau reagiert bis zu `GATE_CONFIRM_FRAMES *
+OCR_INTERVAL_S` (rund 0,6 s) langsamer auf einen neuen stabilen Wert, zeigt
+dafür aber deutlich seltener einen durch Multiplex-Flackern verursachten
+Fehlwert als `valid` an. Behebt nicht die zugrunde liegende Multiplex-/
+Belichtungsfrage aus OQ-20 - dafür bleibt eine reale Messung an typischen
+Geräten nötig -, mindert aber ihre sichtbare Auswirkung in der Vorschau.
+Die Vorschau bleibt ohnehin nur Anzeige, keine Messwertfreigabe.
+
+## 0.1.0.dev0 — 2026-09-09 (Strg+Enter gegen unbeabsichtigte Bestätigung; Ziffernabstand nachgeschärft)
+
+### Bloßes `Enter` bestätigte ROI/OCR-Rahmen zu leicht unbeabsichtigt
+
+**Problem:** Bedienerrückmeldung: Während der ROI-/OCR-Rahmen-Bearbeitung
+wurde das Profil gelegentlich ohne bewusste Bestätigung als `confirmed`
+markiert. Ursache: `viewport.onkeydown` löste die Bestätigung
+(`command('roi', ...)`, setzt serverseitig `confirmed=True` unbedingt,
+`controller.py`) allein durch ein einzelnes `Enter` aus — ohne Rücksicht
+darauf, ob gerade noch eine Ziehbewegung lief (`drag` gesetzt), und ohne
+jede Rückfrage. Der Kamerabereich behält während der ganzen Editiersitzung
+den Tastaturfokus; ein einzelnes `Enter`, etwa aus Gewohnheit nach einer
+Pfeiltasten-Korrektur oder nach einem Seitenblick auf die Einstelltabelle,
+reichte deshalb aus, um eine noch unfertige Geometrie endgültig zu
+übernehmen.
+
+**Änderung:** Die Bestätigung verlangt jetzt `Strg+Enter` (bzw. auf dem Mac
+`Cmd+Enter`) statt eines einzelnen `Enter`, und wird zusätzlich ignoriert,
+solange eine Ziehbewegung noch läuft. Log-Hinweis, `aria-label` und
+Anleitung (`docs/anleitung/10-kamera-livevorschau.md`) wurden entsprechend
+aktualisiert.
+
+**Konsequenz:** Bestätigen bleibt ein Tastaturbefehl, verlangt aber eine
+bewusste Zweitasten-Kombination statt der im übrigen Formular ohnehin
+mehrfach belegten `Enter`-Taste. Das Konzept-§4-Prinzip der einmaligen,
+bewussten Bediener-Bestätigung wird damit tatsächlich durchgesetzt statt nur
+dokumentiert.
+
+### `digit_gap_ratio`-Obergrenze war zu eng
+
+**Problem:** Die frisch eingeführte Bedienzeile „ziffernabstand" ließ sich
+laut Rückmeldung „nur bis zu einem bestimmten Grad" erhöhen; danach passierte
+sichtbar nichts mehr. Das war die absichtliche, aber zu knapp gewählte
+Obergrenze `LAYOUT_RATIOS["digit_gap_ratio"] = (0.0, 1.0)` — ein
+Zwischenraum bis zur vollen Zellenbreite reicht nicht für jede reale Anzeige
+oder jeden großzügig gezogenen OCR-Rahmen. Das native Zahlenfeld klemmt am
+`max`-Attribut ohne jede Rückmeldung, sobald man per Spinner/Mausrad statt
+per Eingabe+Bestätigung erhöht — das erzeugte den Eindruck eines defekten
+Reglers statt einer erreichten, gewollten Grenze.
+
+**Änderung:** Obergrenze auf `3.0` angehoben (weiterhin ein unvalidierter
+Vorabdefault wie die übrigen `LAYOUT_RATIOS`-Einträge), Schrittweite in der
+Bedienzeile von `0.02` auf `0.05` vergröbert.
+
+**Konsequenz:** Deutlich mehr Kopfraum für reale Zwischenraumverhältnisse.
+Der Regler bleibt weiterhin endlich begrenzt und klemmt am `max` weiterhin
+ohne Rückmeldung, wenn per Spinner statt per Zahleneingabe bedient wird —
+das ist ein allgemeines Verhalten aller Zahlenfelder dieser Oberfläche
+(auch `ExposureTime`, `AnalogueGain`, `Contrast`, `sign_cell_ratio`), nicht
+auf dieses Feld beschränkt, und hier bewusst nicht separat behoben.
+
+## 0.1.0.dev0 — 2026-09-09 (Zwischenraum zwischen Ziffernstellen)
+
+### `digit_gap_ratio` ergänzt das bisher lückenlose Ziffernraster
+
+**Problem:** `DisplayLayout.cell_boxes` teilte den OCR-Rahmen ohne jeden
+Zwischenraum durch die Stellenzahl — Ziffernzellen (und die Vorzeichenstelle)
+lagen rechnerisch exakt aneinander. Bei der Bedienprüfung im Browser zeigte
+sich, dass die gelben Segment-Abtastpunkte an mehreren Stellen zu weit
+auseinander lagen, sobald der Bediener den OCR-Rahmen auf eine reale Anzeige
+mit sichtbarem physischem Abstand zwischen den Stellen legte: Das Raster nahm
+diesen Abstand fälschlich als Teil der Ziffernzelle an, wodurch die festen
+relativen Segmentpunkte (`SEGMENT_SAMPLE_POINTS`) neben statt auf den
+Segmenten landeten — ein weiterer Beitrag zur unter OQ-23 dokumentierten
+Fehlablesung, unabhängig von der VFD-Glyphenform.
+
+**Änderung:** `DisplayLayout` bekommt ein neues Feld `digit_gap_ratio`
+(Default `0.0`, reproduziert exakt das bisherige Verhalten). `cell_boxes`,
+`sign_box` und der synthetische Renderer (`synthetic_source.render_display`)
+verwenden dieselbe Formel für Zellenbreite und -abstand, sodass Generator und
+Leser weiterhin dasselbe Raster meinen. Ältere gespeicherte Profile ohne das
+Feld werden beim Laden mit dem Default aufgefüllt, keine Vermutung über die
+tatsächliche Anzeige. Die Workbench zeigt den Wert als eigene Bedienzeile
+„ziffernabstand" neben „vorzeichenbreite", inklusive Presets und Grenzen aus
+`LAYOUT_RATIOS`.
+
+**Konsequenz:** Der Bediener kann den Zwischenraum zwischen den Stellen jetzt
+am eingefrorenen Realbild sichtbar nachjustieren, statt ein lückenloses
+Raster zu unterstellen. Behebt nicht die abweichende VFD-Glyphenform aus
+OQ-23 — dafür bleibt ein bestätigter Real-Testsatz nötig —, entfernt aber
+eine unabhängige Fehlerquelle in der Geometrie selbst.
+
+## 0.1.0.dev0 — 2026-09-09 (sichtbare OCR-Rasterkalibrierung)
+
+### Äußere Perspektiv-ROI und inneres Ziffernraster getrennt einstellbar
+
+**Problem:** Die perspektivische ROI ließ sich bereits an vier Displayecken
+ausrichten, der Segmentleser verteilte seine Zellen aber immer über den gesamten
+entzerrten Ausschnitt. Enthielt dieser Rahmen Blende, Einheit oder seitlichen
+Leerraum, lagen Zellen und sieben Segment-Abtastpunkte neben den Ziffern. Im
+eingefrorenen Editor war das wirksame OCR-Raster außerdem nicht sichtbar.
+
+**Änderung:** Profilschema 3 ergänzt `ocr_box` als normierten Innenausschnitt
+der entzerrten ROI; Profile aus Schema 1 und 2 werden mit einem zunächst vollen
+Innenausschnitt migriert. Der Browser zeichnet während der Kalibrierung die
+grüne Perspektiv-ROI und darüber den gelben OCR-Rahmen, Ziffernzellen,
+Vorzeichenbereich und alle tatsächlichen Abtastpunkte. Anklicken oder `g`
+wechselt den aktiven Rahmen; Maus und Pfeiltasten verschieben beziehungsweise
+skalieren ihn. Der Leser schneidet `ocr_box` vor der Segmentanalyse wirklich
+aus, und Fokusansicht sowie Live-Overlay benutzen dieselbe Geometrie. Das
+eingefrorene Overlay übernimmt reine Layoutänderungen sofort aus dem laufenden
+Status; Ziffernzahl und Vorzeichenbreite bauen das Raster neu auf, die feste
+Dezimalposition erscheint als eigener cyanfarbener Marker. Solche Änderungen
+aktualisieren die Editierrevision, sodass `Enter` weiterhin funktioniert;
+Kamera- und sonstige Profiländerungen machen das Bild weiterhin ungültig.
+
+**Konsequenz:** Der Bediener kann das Leseraster an einem eingefrorenen echten
+Frame exakt auf Vorzeichen und Ziffern kalibrieren, ohne die äußere
+Perspektivkorrektur zu verlieren. Eine automatische Grenzerkennung aus einem
+einzelnen Frame wurde bewusst nicht als Wahrheit übernommen: Leuchtsegmente,
+Blende und Einheit sind ohne bestätigte Realbeispiele nicht zuverlässig zu
+trennen. Unlesbare Raster bleiben abgelehnt statt automatisch passend geraten.
+
+## 0.1.0.dev0 — 2026-09-09 (perspektivische OCR-ROI und Reaktionsfähigkeit)
+
+### Vier Ecken statt starrer Box; Bildarbeit blockiert die Bedienung nicht mehr
+
+**Problem:** Nach der ROI-Bestätigung rechnete die Workbench weiterhin in
+jedem Bild die Vollbild-Kandidatensuche, Entzerrung, OCR, Overlays und
+JPEG-Kompression, während sie den zentralen Controller-Lock hielt. Status-,
+Editier- und Stopbefehle konnten dadurch hinter der Bildschleife verhungern.
+Die ROI war außerdem nur achsparallel; ein schräg aufgenommenes Display ließ
+sich nicht passend entzerren. Zum Stoppen gab es keinen lokalen
+Workbench-Befehl.
+
+**Änderung:** Die Bildarbeit läuft jetzt weitgehend außerhalb des Locks. Nach
+Bestätigung entfällt die Vollbildsuche, die OCR-Vorschau läuft mit 5 Hz und das
+15-fps-Kamerabild bleibt flüssig. Die Profilversion 2 speichert zusätzlich ein
+normiertes Vierpunkt-`roi_quad`; v1-Rechtecke werden beim Laden automatisch und
+verlustfrei migriert. Der Browsereditor bietet vier einzeln verschiebbare
+Ecken, `rectify` korrigiert Perspektive und Neigung, und Zellen/Abtastpunkte
+werden perspektivisch ins Kamerabild zurückprojiziert. `dispread stop` beendet
+den Dienst über den nur lokal zugänglichen Unix-Socket. Auch Kamera-`stop` und
+`close` haben beim Shutdown einen Wachhund.
+
+**Konsequenz:** Bestätigte ROIs erzeugen keine dauernde Vollbildsuche mehr;
+Status und Stop bleiben während der Bildverarbeitung erreichbar. Eine isolierte
+Messung am gespeicherten 960×720-Bild sank von 30,837 ms/Bild vor Bestätigung
+auf 5,801 ms/Bild mit bestätigter ROI und gedrosselter OCR. Die perspektivische
+Entzerrung ist synthetisch getestet. Sie löst nicht die abweichende reale
+VFD-Glyphengeometrie aus OQ-23; dafür werden echte, getrennte Trainings- und
+Testbilder benötigt.
+
+## 0.1.0.dev0 — 2026-09-09 (OCR-Bedienung)
+
+### Zahlenerkennung ist in Web-Setup und TUI bedienbar
+
+**Problem:** Der Segmentleser lief bereits auf der bestätigten Kamera-ROI und
+lieferte seine Evidenz in `snapshot()["reading"]`, aber Zahlenformat und
+Ergebnis waren in der gemeinsamen Einstelltabelle nicht sichtbar. Die
+Bedienperson musste das Layout über Profildatei oder lokalen Rohbefehl setzen
+und konnte Ablehnungsgründe nicht im Setup prüfen.
+
+**Änderung:** `workbench/fields.py` liefert jetzt Auswahlzeilen für
+Ziffernzahl, profilfeste Nachkommastellen, Vorzeichen und bestätigte Einheit
+sowie ein Zahlenfeld für die Vorzeichenbreite. Unmögliche Kombinationen werden
+vor der Auswahl gesperrt; geladene Sonderwerte bleiben sichtbar. Drei
+Anzeigezeilen zeigen Rohtext/Zahlenwert, die Freigabevorschau und erklärbare
+Segment-/Ausschnittevidenz. Web und TUI verwenden diese Zeilen ohne eigenen
+OCR-Pfad. Integrationstests schicken eine synthetische Anzeige durch
+`Controller.publish()` und belegen außerdem, dass eine unbekannte
+Dezimalposition abgelehnt statt geraten wird.
+
+**Konsequenz:** Die bestehende Bright-on-dark-7-Segment-Erkennung kann jetzt
+vollständig aus der Workbench eingerichtet und diagnostiziert werden. Sie
+bleibt bewusst eine Vorschau: kein `ValueRecord`, keine Messwertfreigabe, keine
+serielle Ausgabe; Einheit und Dezimalposition stammen weiter aus dem Profil,
+und `declares_confidence_calibrated` bleibt `False`. Die erste Prüfung am
+beschrifteten BK-5491B-Realbild wurde sicher abgelehnt (`777?7`, kein Wert),
+zeigt aber, dass das feste synthetische Segmentraster nicht auf diese
+VFD-Schrift übertragbar ist; die Weiterarbeit ist als OQ-23 dokumentiert.
+
 ## 0.1.0.dev0 — 2026-09-09 (noch später)
 
 ### Power-Zyklus-Budget überlebt jetzt einen dispread-Neustart korrekt (OQ-22)

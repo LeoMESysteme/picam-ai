@@ -15,10 +15,19 @@ from dispread.layout import DisplayLayout
 from .vision import DetectionConfig
 
 DEFAULT = {
-    "schema_version": 1,
+    "schema_version": 3,
     "version": 0,
     "camera": {"width": 960, "height": 720, "fps": 15.0, "controls": {"AeEnable": True, "Contrast": 1.0}},
     "roi": None,
+    # Vier perspektivische Ecken, normiert auf das Kamerabild, in der
+    # Reihenfolge oben-links, oben-rechts, unten-rechts, unten-links.
+    # `roi` bleibt als achsparallele Huelle fuer Qualitaetsmetriken und die
+    # Rueckwaertskompatibilitaet mit Profilversion 1 erhalten.
+    "roi_quad": None,
+    # Achsparalleler OCR-Ausschnitt innerhalb der perspektivisch entzerrten
+    # ROI. Damit koennen Displayrahmen und tatsaechliches Ziffernraster
+    # unabhaengig voneinander kalibriert werden.
+    "ocr_box": [0.0, 0.0, 1.0, 1.0],
     "role": "main",
     "confirmed": False,
     "detection": vars(DetectionConfig()),
@@ -29,7 +38,16 @@ DEFAULT = {
 CONTROL_NAMES = {"AeEnable", "ExposureTime", "AnalogueGain", "Contrast"}
 #: Erlaubte Spannen der Layout-Verhaeltnisse. Vorabdefaults, keine
 #: validierten Grenzen.
-LAYOUT_RATIOS = {"sign_cell_ratio": (0.2, 1.5), "thickness_ratio": (0.02, 0.45), "inset_ratio": (0.0, 0.35)}
+LAYOUT_RATIOS = {
+    "sign_cell_ratio": (0.2, 1.5),
+    "thickness_ratio": (0.02, 0.45),
+    "inset_ratio": (0.0, 0.35),
+    # 1.0 erwies sich in der Bedienpruefung als zu eng: bei Anzeigen mit
+    # deutlichem physischem Abstand zwischen den Stellen (bzw. einem grosszuegig
+    # gezogenen OCR-Rahmen) reichte ein Zwischenraum bis zur Zellenbreite nicht.
+    # Weiterhin ein Vorabdefault, keine an realen Geraeten validierte Grenze.
+    "digit_gap_ratio": (0.0, 3.0),
+}
 
 
 def profile_name(name):
@@ -44,7 +62,24 @@ def finite(value):
 
 def validate(data, capabilities=None):
     data = copy.deepcopy(data)
-    if set(data) != set(DEFAULT) or data["schema_version"] != 1:
+    # Profile v1 hatten nur eine achsparallele ROI. Beim Laden verlustfrei in
+    # das neue Vierpunktformat ueberfuehren; beim naechsten Speichern wird v3
+    # geschrieben.
+    if data.get("schema_version") == 1 and set(data) == set(DEFAULT) - {"roi_quad", "ocr_box"}:
+        data["roi_quad"] = quad_from_roi(data.get("roi"))
+        data["ocr_box"] = copy.deepcopy(DEFAULT["ocr_box"])
+        data["schema_version"] = 3
+    if data.get("schema_version") == 2 and set(data) == set(DEFAULT) - {"ocr_box"}:
+        data["ocr_box"] = copy.deepcopy(DEFAULT["ocr_box"])
+        data["schema_version"] = 3
+    # Innerhalb von Schema 3 kamen neue Layout-Felder hinzu (digit_gap_ratio).
+    # Fehlende Felder in aelteren gespeicherten Profilen bekommen den
+    # Default - das reproduziert exakt das bisherige lueckenlose Raster,
+    # keine Vermutung ueber die tatsaechliche Anzeige.
+    if isinstance(data.get("layout"), dict):
+        for key, default in DEFAULT["layout"].items():
+            data["layout"].setdefault(key, default)
+    if set(data) != set(DEFAULT) or data["schema_version"] != 3:
         raise ValueError("Unbekanntes Profilschema oder unbekannte Felder")
     if type(data["version"]) is not int or data["version"] < 0:
         raise ValueError("Ungueltige Profilversion")
@@ -88,6 +123,17 @@ def validate(data, capabilities=None):
         raise ValueError("Ungueltige Anzeigenrolle/Bestaetigung")
     if data["confirmed"] and roi is None:
         raise ValueError("Keine ROI bestaetigt")
+    quad = data["roi_quad"]
+    if quad is None and roi is not None:
+        quad = data["roi_quad"] = quad_from_roi(roi)
+    if quad is not None:
+        validate_quad(quad)
+        bounds = roi_from_quad(quad)
+        if roi is None or any(abs(a - b) > 1e-6 for a, b in zip(roi, bounds, strict=True)):
+            data["roi"] = bounds
+    if data["confirmed"] and quad is None:
+        raise ValueError("Keine perspektivische ROI bestaetigt")
+    validate_box(data["ocr_box"], "OCR-Rahmen")
     d = data["detection"]
     if set(d) != set(DEFAULT["detection"]) or not all(finite(v) for v in d.values()):
         raise ValueError("Ungueltige Erkennungsfilter")
@@ -99,6 +145,49 @@ def validate(data, capabilities=None):
         raise ValueError("Erkennungsfilter ausserhalb der Grenzen")
     validate_layout(data["layout"])
     return data
+
+
+def quad_from_roi(roi):
+    """Achsparallele normierte ROI in vier geordnete Ecken umwandeln."""
+    if roi is None:
+        return None
+    x, y, width, height = roi
+    return [[x, y], [x + width, y], [x + width, y + height], [x, y + height]]
+
+
+def roi_from_quad(quad):
+    """Kleinste achsparallele Huelle eines normierten Vierpunktausschnitts."""
+    xs = [point[0] for point in quad]
+    ys = [point[1] for point in quad]
+    x, y = min(xs), min(ys)
+    return [x, y, max(xs) - x, max(ys) - y]
+
+
+def validate_box(box, label="ROI"):
+    """Normiertes achsparalleles Rechteck innerhalb 0..1 pruefen."""
+    if not isinstance(box, list) or len(box) != 4 or not all(finite(value) for value in box):
+        raise ValueError(f"{label} erwartet [x,y,w,h] normiert auf 0..1")
+    x, y, width, height = box
+    if min(x, y) < 0 or min(width, height) <= 0 or x + width > 1.000001 or y + height > 1.000001:
+        raise ValueError(f"{label} liegt ausserhalb des Bildes")
+
+
+def validate_quad(quad):
+    """Geordnetes, konvexes Vierpunktpolygon innerhalb des Bildes pruefen."""
+    if (
+        not isinstance(quad, list)
+        or len(quad) != 4
+        or any(not isinstance(point, list) or len(point) != 2 or not all(finite(v) for v in point) for point in quad)
+    ):
+        raise ValueError("ROI-Quad erwartet vier normierte [x,y]-Punkte")
+    if any(not 0 <= value <= 1 for point in quad for value in point):
+        raise ValueError("ROI-Quad liegt ausserhalb des Bildes")
+    crosses = []
+    for index in range(4):
+        a, b, c = quad[index], quad[(index + 1) % 4], quad[(index + 2) % 4]
+        crosses.append((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]))
+    if min(abs(value) for value in crosses) < 1e-6 or not (all(value > 0 for value in crosses) or all(value < 0 for value in crosses)):
+        raise ValueError("ROI-Quad muss konvex und im Uhrzeigersinn geordnet sein")
 
 
 def validate_layout(layout):

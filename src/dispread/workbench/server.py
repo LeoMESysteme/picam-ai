@@ -247,6 +247,9 @@ async def serve(args):
     async def control(request):
         try:
             data = await request.json()
+            if data["op"] == "server.stop":
+                stop.set()
+                return web.json_response({"stopping": True})
             return web.json_response(controller.command(data["op"], data.get("args")))
         except (ValueError, KeyError, TypeError, OSError) as error:
             return web.json_response({"error": str(error)}, status=400)

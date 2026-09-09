@@ -258,3 +258,57 @@ in dieser Datei korrigiert: die Rechnung „960×720 liefert nur ~24 px" galt f�
 10 mm Ziffern bei 30 cm und trifft dieses Gerät nicht. Die Zahlen belegen
 Bildqualität, **keine** Erkennungsleistung — dafür fehlt weiter ein echter
 Gerätedatensatz ([OQ-04](open-questions.md)).
+
+## 2026-09-09 — Erste Workbench-OCR-Prüfung an einem realen VFD-Bild
+
+Kein kalibrierter Datensatz und keine Abnahme. Aufbau und Deutung:
+[Laborjournal](lab_journal.md), Eintrag „Workbench-OCR: synthetischer Rundlauf
+und erster VFD-Befund". Backend `sevenseg/2`, Layout 5 Stellen / 2
+Nachkommastellen / Vorzeichen / bestätigte Einheit `mV`, Ausschnitt 400×160.
+Die manuelle Wahrheit wurde nur nach der Erkennung verglichen und war kein
+Parameter von Leser oder Gate.
+
+| Quelle | Erwartung | Rohtext | Gate | Ergebnis |
+| --- | --- | --- | --- | --- |
+| synthetischer Integrationstest | `-012.34 mV` | `-012.34` | `valid` | Wert −12,34; `released=false` |
+| gespeichertes BK-5491B-Realbild | `-000.13 mV` | `777?7` | `unreadable` | kein Wert; `unreadable_cells:1`, `no_value` |
+| laufender Stream, 30 verschiedene Frames | nicht bestätigt | `?????` in 30/30 | `unreadable` in 30/30 | kein Wert; kein verwertbarer Gerätetest |
+
+Beim gespeicherten Realbild: Crop-Schärfe 88,37, Segmentkontrast 0,4602,
+kleinste Marge 0,6495, gesättigter Anteil 0,0000. Die feste
+Segmentpunktgeometrie passt nicht zur VFD-Schrift; insbesondere ist die `1`
+schmaler/anders positioniert als im synthetischen Generator. Die korrekte
+Sicherheitsreaktion ist belegt — keine Ausgabe eines geratenen Zahlenwerts —,
+nicht aber reale Lesefähigkeit. Weiterarbeit: [OQ-23](open-questions.md).
+
+Der laufende Stream wurde ohne Streamneustart oder Geometrieänderung über die
+bereits aktive Workbench geprüft (Sequenzen 34329–34358). Seine aktuelle Szene
+konnte nicht visuell bestätigt werden; die aus dem älteren Bild übernommene ROI
+hatte Crop-Schärfe 1,57. Deshalb gehen diese 30 Ablehnungen in keine
+Erkennungsquote ein. Das aktive Profil wurde anschließend vollständig auf den
+vorherigen Defaultzustand zurückgesetzt.
+
+Artefakte:
+`var/workbench/diagnostics/ocr-bk5491b-offline.jpg` und
+`ocr-bk5491b-offline.json`. Die Bildquelle trägt `FILE_MTIME`; daraus wird
+keine Zeit- oder Latenzaussage abgeleitet. Konfidenz bleibt unkalibriert,
+`formatter_provisional=true` ist im Runartefakt festgehalten.
+
+## 2026-09-09 — Workbench-Verarbeitungsbudget nach ROI-Umbau
+
+Reiner Offline-Durchsatztest auf dem Pi, kein Kamerazeit- oder
+End-to-End-Latenztest. Quelle war das gespeicherte 960×720-BK-Bild mit
+`FILE_MTIME`; Dauer gemessen über je 100 Aufrufe mit `time.perf_counter()` in
+CLOCK_MONOTONIC. Aufbau und Deutung im [Laborjournal](lab_journal.md).
+
+| Pfad | Dauer je Bild | rechnerischer Durchsatz |
+| --- | ---: | ---: |
+| ROI unbestätigt, einschließlich Vollbild-Kandidatensuche | 30,837 ms | 32,4 Bilder/s |
+| ROI bestätigt, OCR-Vorschau auf 5 Hz begrenzt | 5,801 ms | 172,4 Bilder/s |
+| ROI bestätigt, OCR künstlich in jedem Bild erzwungen | 9,515 ms | 105,1 Bilder/s |
+
+Die Zahlen belegen die lokale Rechenentlastung, nicht die Reaktionszeit im
+Windows-Browser. Ein Nebenläufigkeitstest hält die Kandidatensuche künstlich an
+und belegt, dass `snapshot()` währenddessen in unter 50 ms zurückkehrt. Der
+isolierte simulierte Dienst ließ sich über `dispread stop` vollständig beenden.
+Die reale Browser-/Kameraabnahme bleibt [OQ-24](open-questions.md).

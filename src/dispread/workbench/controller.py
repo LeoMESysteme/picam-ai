@@ -15,14 +15,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from dispread.detect.manual_roi import quad_from_box
 from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.records import TimeBaseKind
 from dispread.rectify import rectify
 from dispread.validate import GateConfig, ReleaseGate
 
-from .profiles import DEFAULT, atomic_json, profile_name, validate
+from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
 from .vision import DetectionConfig, find_display_candidates
 
 #: Zielgroesse des entzerrten Ausschnitts. Fest, weil der Segmentleser gegen
@@ -52,6 +51,22 @@ MAX_GEOMETRY_CYCLES = 15
 #: einfrieren statt die RP2040-Sperre (OQ-22) sichtbar zu melden.
 CAMERA_OP_TIMEOUT_S = 6.0
 
+#: Die Vorschau bleibt fluessig, waehrend die deutlich langsamere
+#: Werterkennung mit eigener, fuer die Einrichtung ausreichender Rate laeuft.
+#: Ein Messpfad darf daraus spaeter keine Zeit- oder Latenzaussage ableiten.
+OCR_INTERVAL_S = 0.2
+
+#: Mehrbildbestaetigung fuer die Live-Vorschau (ReleaseGate.confirm_frames).
+#: Bedienerrueckmeldung: multiplexende Anzeigen flackern gegen die niedrige
+#: Kamerabildrate, ein einzelnes Bild kann mitten in einem Umschaltvorgang
+#: liegen und wird dann falsch gelesen. Ein anderer Wert setzt die Bestaetigung
+#: zurueck statt zu glaetten (Konzept.md §7); das kostet hier nur zusaetzliche
+#: Vorschau-Latenz (bis zu GATE_CONFIRM_FRAMES * OCR_INTERVAL_S), keine
+#: Messwertfreigabe findet in der Workbench ohnehin statt. Vorabdefault wie in
+#: examples/16_end_to_end_headless.py; nicht an realen Multiplexperioden
+#: validiert (OQ-20).
+GATE_CONFIRM_FRAMES = 3
+
 
 class CameraWedgedError(RuntimeError):
     """Eine Kamera-Ioctl kehrte nicht innerhalb von CAMERA_OP_TIMEOUT_S zurueck.
@@ -66,6 +81,46 @@ def roi_box(image, roi):
     height, width = image.shape[:2]
     x, y, w, h = roi
     return int(x * width), int(y * height), max(1, int(w * width)), max(1, int(h * height))
+
+
+def roi_quad(image, config):
+    """Bestaetigten normierten Vierpunktausschnitt in Bildpixel umrechnen."""
+    height, width = image.shape[:2]
+    normalized = config.get("roi_quad") or quad_from_roi(config["roi"])
+    if normalized is None:
+        raise ValueError("Keine ROI bestaetigt")
+    return tuple((float(x * width), float(y * height)) for x, y in normalized)
+
+
+def crop_box(image, box):
+    """Normierten Innenausschnitt schneiden und auf Leserformat skalieren."""
+    height, width = image.shape[:2]
+    x, y, box_width, box_height = box
+    left, top = int(round(x * width)), int(round(y * height))
+    right, bottom = int(round((x + box_width) * width)), int(round((y + box_height) * height))
+    cropped = image[max(0, top) : min(height, bottom), max(0, left) : min(width, right)]
+    if cropped.size == 0:
+        raise ValueError("OCR-Rahmen ist leer")
+    return cv2.resize(cropped, CROP_SIZE, interpolation=cv2.INTER_LINEAR)
+
+
+def grid_geometry(layout_data):
+    """Normiertes Leseraster fuer den Browsereditor bereitstellen."""
+    layout = DisplayLayout.from_dict(layout_data)
+    width, height = CROP_SIZE
+
+    def normalized(box):
+        x, y, box_width, box_height = box
+        return [x / width, y / height, box_width / width, box_height / height]
+
+    return {
+        "cells": [normalized(box) for box in layout.cell_boxes(width, height)],
+        "sign": normalized(layout.sign_box(width, height)) if layout.sign_box(width, height) else None,
+        "samples": [[name, x, y] for name, (x, y) in SEGMENT_SAMPLE_POINTS.items()],
+        # Profilfeste Dezimalposition: nur Kalibriermarker, solange OQ-17 die
+        # optische Punktmessung noch nicht geklaert hat.
+        "decimal_after": layout.decimal_point_index(),
+    }
 
 
 def quality(image, roi):
@@ -104,10 +159,16 @@ class Controller:
         self.jpeg, self.raw = None, None
         self.metadata, self.metrics, self.capabilities, self.observed = {}, {}, {}, {}
         self.frames = {}
+        # Letzte Vollbild-Kandidatensuche (gelbe Vorschlagsboxen, Pixelkoordinaten).
+        # Nur solange gepflegt, wie das Profil unbestaetigt ist - siehe publish().
+        # Erstes Einfrieren eines frischen Profils startet damit an der zuletzt
+        # sichtbaren erkannten Position statt an einer festen Standardbox.
+        self.candidates = ()
         self.focus = False
         self.reader = SevenSegmentReader()
         self.gate, self.gate_revision = None, None
         self.reading = None
+        self.last_ocr_at = 0.0
         self.stop = threading.Event()
         self.cancel_auto = threading.Event()
         self.auto = {"state": "idle"}
@@ -193,6 +254,7 @@ class Controller:
                 "profile": self.name,
                 "profiles": self.profile_names(),
                 "config": copy.deepcopy(self.config),
+                "ocr_grid": grid_geometry(self.config["layout"]),
                 "revision": self.revision,
                 "applied_revision": self.applied,
                 "geometry_cycles": self.geometry_cycles,
@@ -217,6 +279,8 @@ class Controller:
         # Die Freigabepruefung ist zustandsbehaftet; nach einer Aenderung darf
         # sie keine Bestaetigung aus der alten Konfiguration mitschleppen.
         self.gate, self.gate_revision = None, None
+        self.reading = None
+        self.last_ocr_at = 0.0
         self.revision += 1
         self.dirty = self.config != self.saved
         if self.mode == "run":
@@ -331,6 +395,13 @@ class Controller:
                     raise ValueError(f"Unbekanntes Layoutfeld: {key}")
                 data["layout"][key] = args["value"]
                 self._change(data)
+                # Ein eingefrorenes Original bleibt fuer reine
+                # Leseraster-Aenderungen gueltig: Bildgeometrie und Aufnahme
+                # haben sich nicht geaendert. Andere Konfigurationsbefehle
+                # aktualisieren diese Revision bewusst nicht.
+                for frame in self.frames.values():
+                    frame["revision"] = self.revision
+                    frame["profile"]["layout"] = copy.deepcopy(self.config["layout"])
             elif op == "focus":
                 if type(args["value"]) is not bool:
                     raise ValueError("Fokusassistenz erwartet true/false")
@@ -386,18 +457,38 @@ class Controller:
                     "revision": self.revision,
                     "profile_name": self.name,
                 }
+                img_h, img_w = self.raw.shape[:2]
+                roi = self.config["roi"]
+                if roi is None and self.candidates:
+                    # Frisches, nie bestaetigtes Profil: an der besten gerade
+                    # sichtbaren gelben Vorschlagsbox starten statt an einer
+                    # festen Standardbox in der Bildmitte - sonst verliert der
+                    # Bediener beim Editieren-Start die bereits erkannte Position.
+                    x, y, w, h = self.candidates[0]
+                    roi = [x / img_w, y / img_h, w / img_w, h / img_h]
+                roi = roi or [0.2, 0.3, 0.6, 0.3]
                 return {
                     "id": token,
-                    "width": self.raw.shape[1],
-                    "height": self.raw.shape[0],
-                    "roi": self.config["roi"] or [0.2, 0.3, 0.6, 0.3],
+                    "width": img_w,
+                    "height": img_h,
+                    "roi": roi,
+                    "quad": copy.deepcopy(self.config.get("roi_quad") or quad_from_roi(roi)),
+                    "ocr_box": copy.deepcopy(self.config["ocr_box"]),
+                    "ocr_grid": grid_geometry(self.config["layout"]),
                 }
             elif op == "roi":
                 frame = self.frames[args["id"]]
                 if self.mode not in ("setup", "annotate") or frame["revision"] != self.revision:
                     raise ValueError("Modus/Profil geaendert; neues Bild einfrieren")
                 data = copy.deepcopy(self.config)
-                data.update(roi=args["roi"], confirmed=True, role=args.get("role", "main"))
+                quad = copy.deepcopy(args.get("quad") or quad_from_roi(args["roi"]))
+                data.update(
+                    roi=roi_from_quad(quad),
+                    roi_quad=quad,
+                    ocr_box=copy.deepcopy(args.get("ocr_box", data["ocr_box"])),
+                    confirmed=True,
+                    role=args.get("role", "main"),
+                )
                 data = validate(data, self.capabilities or None)
                 if self.mode == "annotate":
                     target = self.root / "annotations" / uuid.uuid4().hex
@@ -407,7 +498,7 @@ class Controller:
                     atomic_json(
                         target / "annotation.json",
                         {
-                            "schema_version": 1,
+                            "schema_version": 2,
                             "frame_sequence": frame["sequence"],
                             "metadata": frame["metadata"],
                             "profile": frame["profile"],
@@ -415,8 +506,11 @@ class Controller:
                             "revision": frame["revision"],
                             "image": "image.png",
                             "roi": data["roi"],
+                            "roi_quad": data["roi_quad"],
+                            "ocr_box": data["ocr_box"],
+                            "ocr_box_coordinate_system": "rectified_roi_normalized_xywh",
                             "role": data["role"],
-                            "coordinate_system": "normalized_xywh",
+                            "coordinate_system": "normalized_quad_tl_tr_br_bl",
                             "formatter_provisional": True,
                             "created_at": datetime.now(UTC).isoformat(),
                             "created_timebase": "UTC",
@@ -447,38 +541,67 @@ class Controller:
             return self.snapshot()
 
     def publish(self, image, metadata):
+        """Ein Bild ohne lange Sperre fuer Status-, ROI- oder Stopbefehle verarbeiten."""
         with self.lock:
-            config = copy.deepcopy(self.config)
-            self.raw, self.metadata = image, metadata
-            self.metrics = quality(image, config["roi"])
-            self.observed = {k: metadata[k] for k in ("ExposureTime", "AnalogueGain", "FrameDuration") if k in metadata}
-            boxes = find_display_candidates(image, DetectionConfig(**config["detection"]))
-            overlay = image.copy()
-            for x, y, w, h in boxes:
-                cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 220, 220), 2)
-            self.reading = None
-            if config["confirmed"]:
+            config, revision = copy.deepcopy(self.config), self.revision
+            focus = self.focus
+            cached_reading = copy.deepcopy(self.reading)
+            now = time.monotonic()
+            should_read = config["confirmed"] and (cached_reading is None or now - self.last_ocr_at >= OCR_INTERVAL_S)
+
+        # OpenCV-Arbeit bewusst ausserhalb des Controller-Locks. Vor der
+        # Bestaetigung bleiben gelbe Vorschlaege sichtbar; danach ist die
+        # bestaetigte Geometrie massgeblich und die teure Vollbildsuche endet.
+        metrics = quality(image, config["roi"])
+        boxes = () if config["confirmed"] else find_display_candidates(image, DetectionConfig(**config["detection"]))
+        overlay = image.copy()
+        for x, y, w, h in boxes:
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 220, 220), 2)
+
+        reading = cached_reading
+        quad = None
+        if config["confirmed"]:
+            quad = roi_quad(image, config)
+            cv2.polylines(overlay, [np.rint(quad).astype(np.int32)], True, (130, 220, 130), 2)
+            if should_read:
+                # Gate-Zustand ist geteilter Controllerzustand; nur dieser
+                # kurze Teil bleibt gesperrt. Entzerrung/Segmentanalyse sind
+                # klein gegen die vorherige Vollbildsuche.
+                with self.lock:
+                    if revision != self.revision:
+                        return
+                    reading = self._read(image, config, quad)
+                    self.last_ocr_at = now
+            if focus:
                 ih, iw = image.shape[:2]
-                a, b, c, d = roi_box(image, config["roi"])
-                cv2.rectangle(overlay, (a, b), (a + c, b + d), (130, 220, 130), 2)
-                self.reading = self._read(image, config, (a, b, c, d))
-                if self.focus:
-                    # Fokusansicht zeigt das Objektiv-Zoombild; die
-                    # Abtastpunkte passen darin nicht mehr und entfallen.
-                    overlay = cv2.resize(image[b : b + d, a : a + c], (iw, ih))
-                elif self.reading and not self.reading.get("error"):
-                    self._draw_cells(overlay, (a, b, c, d), config["layout"], self.reading)
-            ok, jpeg = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if not ok:
-                raise RuntimeError("JPEG fehlgeschlagen")
+                crop = rectify(image, quad, target_size=(iw, ih))
+                overlay = cv2.resize(crop_box(crop.image, config["ocr_box"]), (iw, ih))
+            elif reading and not reading.get("error"):
+                self._draw_cells(overlay, quad, config["ocr_box"], config["layout"], reading)
+
+        ok, jpeg = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if not ok:
+            raise RuntimeError("JPEG fehlgeschlagen")
+        observed = {k: metadata[k] for k in ("ExposureTime", "AnalogueGain", "FrameDuration") if k in metadata}
+
+        with self.lock:
+            # Eine waehrend der Bildarbeit geaenderte Geometrie darf kein
+            # Ergebnis aus der alten Revision zurueckschreiben.
+            if revision != self.revision:
+                return
+            self.raw, self.metadata = image, metadata
+            self.metrics = metrics
+            self.candidates = boxes
+            self.observed = observed
+            self.reading = reading
             self.jpeg = jpeg.tobytes()
             self.sequence += 1
-            self.last_frame = time.monotonic()
+            self.last_frame = now
             if self.first_frame is None:
                 self.first_frame = self.last_frame
             self.error = None
 
-    def _read(self, image, config, box):
+    def _read(self, image, config, quad):
         """Bestaetigte ROI entzerren, Ziffern lesen, Freigabe nur als Vorschau.
 
         Erzeugt ausdruecklich **keinen** `ValueRecord` und sendet nichts. Die
@@ -487,10 +610,11 @@ class Controller:
         """
         try:
             layout = DisplayLayout.from_dict(config["layout"])
-            crop = rectify(image, quad_from_box(*box), target_size=CROP_SIZE)
-            read = self.reader.read(crop.image, layout)
+            crop = rectify(image, quad, target_size=CROP_SIZE)
+            reader_crop = crop_box(crop.image, config["ocr_box"])
+            read = self.reader.read(reader_crop, layout)
             if self.gate is None or self.gate_revision != self.revision:
-                self.gate = ReleaseGate(GateConfig(expected_unit=layout.unit))
+                self.gate = ReleaseGate(GateConfig(expected_unit=layout.unit, confirm_frames=GATE_CONFIRM_FRAMES))
                 self.gate_revision = self.revision
             # CLOCK_MONOTONIC, nur fuer die Veralterung dieser Vorschau. Aus
             # dieser Zahl darf kein Zeitbezug eines Messwerts abgeleitet
@@ -525,30 +649,39 @@ class Controller:
         except (ValueError, TypeError, KeyError, cv2.error) as error:
             return {"error": str(error), "raw_text": None, "value": None, "released": False}
 
-    def _draw_cells(self, overlay, box, layout_data, reading):
+    def _draw_cells(self, overlay, quad, ocr_box, layout_data, reading):
         """Ziffernzellen und Abtastpunkte ins Kamerabild zurueckzeichnen.
 
-        Die ROI ist achsparallel, deshalb genuegt eine lineare Abbildung aus
-        dem entzerrten Ausschnitt zurueck ins Bild. Der Bediener sieht damit
-        unmittelbar, ob die Abtastpunkte auf den Segmenten sitzen.
+        Die Punkte werden mit der inversen Perspektivtransformation aus dem
+        entzerrten Ausschnitt zurueck ins Kamerabild gelegt. Der Bediener sieht
+        damit unmittelbar, ob Ecken, Zellen und Abtastpunkte sitzen.
         """
-        a, b, c, d = box
         layout = DisplayLayout.from_dict(layout_data)
         crop_w, crop_h = CROP_SIZE
+        source = np.float32([[0, 0], [crop_w - 1, 0], [crop_w - 1, crop_h - 1], [0, crop_h - 1]])
+        transform = cv2.getPerspectiveTransform(source, np.float32(quad))
+        box_x, box_y, box_width, box_height = ocr_box
 
         def to_image(cx, cy):
-            return int(a + cx / crop_w * c), int(b + cy / crop_h * d)
+            outer_x = (box_x + cx / crop_w * box_width) * (crop_w - 1)
+            outer_y = (box_y + cy / crop_h * box_height) * (crop_h - 1)
+            point = cv2.perspectiveTransform(np.float32([[[outer_x, outer_y]]]), transform)[0, 0]
+            return int(round(float(point[0]))), int(round(float(point[1])))
+
+        def draw_box(cell, colour):
+            x, y, width, height = cell
+            points = np.int32([to_image(x, y), to_image(x + width, y), to_image(x + width, y + height), to_image(x, y + height)])
+            cv2.polylines(overlay, [points], True, colour, 1)
 
         sign = layout.sign_box(crop_w, crop_h)
         if sign:
-            p0, p1 = to_image(sign[0], sign[1]), to_image(sign[0] + sign[2], sign[1] + sign[3])
             colour = (130, 220, 130) if reading.get("sign_detected") else (90, 120, 90)
-            cv2.rectangle(overlay, p0, p1, colour, 1)
+            draw_box(sign, colour)
 
         segments = reading.get("segments") or []
         for index, cell in enumerate(layout.cell_boxes(crop_w, crop_h)):
             cx, cy, cw, ch = cell
-            cv2.rectangle(overlay, to_image(cx, cy), to_image(cx + cw, cy + ch), (90, 120, 90), 1)
+            draw_box(cell, (90, 120, 90))
             active = segments[index] if index < len(segments) else None
             for name, (rx, ry) in SEGMENT_SAMPLE_POINTS.items():
                 point = to_image(cx + rx * cw, cy + ry * ch)
@@ -567,7 +700,7 @@ class Controller:
             if self.thread.is_alive():
                 self.log("error", "Kamerathread hat nicht rechtzeitig beendet")
 
-    def _guarded(self, action, func):
+    def _guarded(self, action, func, timeout_s=CAMERA_OP_TIMEOUT_S):
         """Fuehrt eine blockierende Kamera-Operation mit Wachhund aus.
 
         Ein transienter Stau (z. B. `capture_request(wait=2.0)` bei kurzem
@@ -589,7 +722,7 @@ class Controller:
 
         thread = threading.Thread(target=run, name=f"camera-{action}", daemon=True)
         thread.start()
-        thread.join(CAMERA_OP_TIMEOUT_S)
+        thread.join(timeout_s)
         if thread.is_alive():
             raise CameraWedgedError(
                 f"Kamera reagiert nicht ({action}); vermutlich RP2040-Sperre (OQ-22), Reboot noetig"
@@ -793,7 +926,11 @@ class Controller:
             # der Kamera fest (siehe _guarded); ein weiterer stop()/close()
             # auf demselben Objekt wuerde nur denselben Zustand erneut treffen.
             if camera and not wedged:
-                try:
-                    camera.stop()
-                finally:
-                    camera.close()
+                for action, operation in (("stop", camera.stop), ("close", camera.close)):
+                    try:
+                        self._guarded(action, operation, timeout_s=3.0)
+                    except CameraWedgedError as error:
+                        self.log("error", f"Kameraabschluss abgebrochen: {error}")
+                        break
+                    except Exception as error:  # noqa: BLE001 - Shutdown darf den Prozess nicht festhalten
+                        self.log("warn", f"Kameraabschluss {action}: {error}")

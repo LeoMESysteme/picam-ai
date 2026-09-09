@@ -513,3 +513,159 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
+
+## OQ-23 — Festes Segmentraster passt nicht zur realen BK-5491B-VFD-Schrift
+
+* **Status:** offen · erkannt 2026-09-09 bei der ersten realen
+  Workbench-OCR-Prüfung
+* **Befund:** Im beschrifteten Realbild
+  `var/workbench/diagnostics/fokus-erreicht-960x720.jpg` steht `-000.13 mV`.
+  Mit manuell auf Vorzeichen und fünf Stellen gelegter ROI, Layout
+  5 Stellen / 2 Nachkommastellen / `mV` und `sign_cell_ratio=0.6` liefert
+  `sevenseg/2` jedoch `777?7`, keinen Zahlenwert und die Ablehnungsgründe
+  `unreadable_cells:1`, `no_value`. Die Freigabe bleibt korrekt
+  `unreadable`; es entstand keine stille gültige Fehlablesung. Das Overlay
+  zeigt als Ursache eine nicht ausreichend passende feste Abtastgeometrie:
+  insbesondere die schmale VFD-`1` liegt nicht auf denselben relativen
+  Segmentpunkten wie der synthetische Generator.
+* **Konsequenz:** Die Workbench-Bedienung und die sichere Ablehnung sind
+  implementiert, aber eine reale Erkennungsquote ist damit nicht belegt.
+  Dieser eine Aufbau darf weder zum Nachstimmen und anschließenden Bewerten
+  desselben Bildes noch zur Konfidenzkalibrierung verwendet werden.
+* **Klärung:** Einen bestätigten Replay-Datensatz mit getrenntem Entwicklungs-
+  und Testsatz erfassen. Dann profilierbare Segmentgeometrie bzw. flächige
+  Segmentmessung gegen Tesseract/weitere Backends vergleichen und pro
+  Fehlerklasse auswerten. Referenzwerte bleiben außerhalb von
+  `ValueReader.read` und `ReleaseGate.evaluate`.
+* **Blockiert:** reale Abnahme des Segmentlesers in P3, nicht die
+  Workbench-Einrichtung.
+* **Antwort landet in:** `src/dispread/ocr/`, Geräteprofile und
+  `docs/VALIDATION.md`; Rohbefund im Laborjournal vom 2026-09-09.
+
+* **Update 2026-09-09:** Die Workbench kann jetzt vier Displayecken einzeln
+  bestätigen und perspektivisch auf 400×160 entzerren. Das beseitigt einen
+  Geometriefehler des bisherigen achsparallelen Ausschnitts, klärt OQ-23 aber
+  nicht: Die abweichende VFD-Glyphenform braucht weiterhin mehrere bestätigte
+  reale Entwicklungs- und Testbilder.
+
+* **Update 2026-09-09, Rasterkalibrierung:** Ein eigener `ocr_box` kann jetzt
+  innerhalb der entzerrten ROI an Vorzeichen und Ziffern ausgerichtet werden.
+  Der eingefrorene Editor zeigt dabei Zellen und reale Segment-Abtastpunkte.
+  Damit lässt sich die bekannte Rasterverschiebung manuell beseitigen; ob die
+  VFD-Glyphen danach mit den festen relativen Segmentpunkten zuverlässig lesbar
+  sind, bleibt am getrennten Real-Testset zu klären.
+
+* **Update 2026-09-09, Ziffernabstand:** Bedienerbeobachtung im Browser zeigte
+  zu weit auseinanderliegende Segment-Abtastpunkte, weil `cell_boxes` bislang
+  keinen Zwischenraum zwischen den Stellen kannte. Neues Layoutfeld
+  `digit_gap_ratio` (Default `0.0`, Bedienzeile „ziffernabstand") lässt den
+  Abstand jetzt mitkalibrieren; siehe [CHANGELOG.md](../CHANGELOG.md) 2026-09-09
+  (Zwischenraum zwischen Ziffernstellen). Das ist eine unabhängige
+  Geometriekorrektur und klärt OQ-23 weiterhin nicht abschließend — die
+  abweichende VFD-Glyphenform braucht weiterhin einen bestätigten
+  Real-Testsatz.
+
+* **Update 2026-09-09, Obergrenze nachgeschärft:** Bedienerrückmeldung: Die
+  Obergrenze `digit_gap_ratio <= 1.0` reichte für die reale Anzeige nicht;
+  das native Zahlenfeld klemmte dort ohne Rückmeldung. Auf `3.0` angehoben,
+  siehe [CHANGELOG.md](../CHANGELOG.md) 2026-09-09. Weiterhin ein
+  unvalidierter Vorabdefault wie die übrigen `LAYOUT_RATIOS`-Einträge.
+
+* **Update 2026-09-09, Empfindlichkeit gegen Helligkeits- und
+  Punktabweichung:** Bedienerrückmeldung am realen Gerät: Eine Ziffer, die
+  etwas schwächer leuchtet als die übrigen, oder ein Abtastpunkt, der nicht
+  exakt auf der Segmentmitte liegt, führt spürbar häufig zur Ablehnung
+  ("funktioniert nicht mehr richtig"). Zwei mögliche, nicht gegeneinander
+  abgegrenzte Ursachen im aktuellen `sevenseg.py`:
+  1. `segment_threshold()` schwellt bewusst über die **gepoolten** Segmentmessungen
+     aller Stellen (Begründung im Code: verhindert Fehlablehnung bei "8" und
+     falsche Panel/Segment-Trennung, siehe OQ-13). Das macht die Schwelle aber
+     unempfindlich für eine Stelle, die insgesamt dunkler ist als die
+     übrigen - ihre eigenen aktiven Segmente können unter der von den
+     helleren Stellen dominierten globalen Schwelle liegen.
+  2. `_SAMPLE_HALFWIDTH = 0.06` (Fensterradius je Abtastpunkt, Anteil der
+     Zellenbreite) ist klein genug, dass ein leicht daneben liegender Punkt
+     bereits Panel- statt Segmentpixel mittelt - dieselbe Rasterungenauigkeit
+     wie OQ-23, hier als Messempfindlichkeit statt als Positionsfehler
+     sichtbar.
+  * **Bewusst nicht angefasst:** `_MIN_CONTRAST`/`_SAMPLE_HALFWIDTH` ohne
+    reale Testbilder zu lockern hätte nach Konzept.md §7 das falsche
+    Vorzeichen - es senkt die Ablehnungsschwelle blind und kann aus einer
+    sicheren Ablehnung eine unsichere, falsch "sichere" Ablesung machen.
+    Genau das verbietet AGENTS.md ("keine Vermutung"). `GATE_CONFIRM_FRAMES`
+    (siehe oben, [CHANGELOG.md](../CHANGELOG.md) 2026-09-09) mindert nur das
+    Flackerbild, nicht diese Empfindlichkeit.
+  * **Klärung:** Braucht denselben bestätigten Real-Testsatz wie OQ-23 -
+    insbesondere Aufnahmen mit gezielt unterschiedlich hellen Stellen -, um
+    zwischen (1) und (2) zu unterscheiden und eine Änderung tatsächlich zu
+    validieren statt zu raten.
+
+* **Update 2026-09-09, mit zwei echten Annotationen belegt - Ursache (1)
+  bestätigt, (2) nicht die Hauptursache:** Bediener speicherte im neuen
+  `annotate`-Modus zwei echte Aufnahmen einer roten LED-Anzeige, beide
+  zeigen `11.00` (4 Stellen, 2 Nachkommastellen, `digit_gap_ratio=0.65`,
+  Profile `var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd` und
+  `.../8a18ee05e31241b9b6702c5bb904ec97`). Der aktuelle Leser liest sie als
+  `11?0` bzw. `110?` - exakt die gemeldete Ablehnung.
+  * **Direkt nachgemessen** (`_sample()` je Segment vor dem Schwellwert,
+    reproduziert über `crop_box`+`SevenSegmentReader.read` wie im echten
+    Pfad): Die "aus"-Segmente liegen in beiden Bildern eng gebündelt bei
+    Helligkeit 0,20-0,28. Die tatsächlich **an**-Segmente einer echten `0`
+    streuen dagegen breit von rund 0,38 bis 0,85 - je nach Aufnahme ist ein
+    anderes Segment das dunkelste (Stelle `a` in Bild 1, Stelle `c`/`e` in
+    Bild 2). Der eine gepoolte, globale Schwellwert aus
+    `segment_threshold()` liegt zwangsläufig irgendwo in dieser breiten
+    Spanne und reisst je nach Aufnahme ein anderes, tatsächlich leuchtendes
+    Segment mit ab. Damit ist Ursache (1) oben an echten Daten bestätigt.
+  * **Gegenprobe zu Ursache (2) (Punkt-/Rasterversatz) durchgeführt:** Ein
+    Einzelschritt-Warp direkt vom Rohbild statt der doppelten
+    Größenänderung `rectify()` (auf 400×160) gefolgt von `crop_box()`
+    (nochmals auf 400×160 hochskaliert) wurde probeweise nachgebaut. Er
+    behebt die Fehlablesung nicht zuverlässig - in Bild 1 wird dadurch sogar
+    eine zweite Stelle unlesbar, in Bild 2 bleibt weiterhin eine Stelle
+    unlesbar, nur eine andere. (2) ist damit nicht die Hauptursache dieses
+    konkreten Befunds; die doppelte Größenänderung bleibt aber eine separat
+    beobachtete, unnötige Auflösungs-/Schärfeverlustquelle im
+    `rectify()`→`crop_box()`-Pfad, unabhängig bewertet.
+  * **Vorgeschlagene, noch nicht umgesetzte Lösung (auf Bedienerwunsch
+    zurückgestellt, "erstmal nur dokumentieren"):** Grenzfall-Auflösung im
+    Decoder - wenn das binäre An/Aus-Muster einer Zelle in keiner Tabelle
+    steht, aber genau einem Tabellen-Digit bis auf Segmente entspricht, die
+    innerhalb einer kleinen Toleranzbreite um den Schwellwert liegen, dieses
+    eine Digit mit entsprechend reduzierter Konfidenz übernehmen - sonst wie
+    bisher ablehnen. Enger als `_MIN_CONTRAST`/`_SAMPLE_HALFWIDTH` pauschal
+    zu lockern, aber weiterhin eine Änderung an "unlesbar ablehnen statt
+    raten" (Konzept.md §7) und deshalb nicht ohne ausdrückliche Freigabe
+    umzusetzen.
+  * **Klärung:** Umsetzung und Validierung der Grenzfall-Auflösung gegen
+    diese zwei Bilder plus die bestehende Testsuite, sobald gewünscht.
+    Zusätzliche echte Annotationen (auch mit bewusst unterschiedlicher
+    Displayhelligkeit) würden die Validierung deutlich verlässlicher machen
+    als zwei Aufnahmen aus derselben Kalibriersitzung.
+
+## OQ-24 — Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen
+
+* **Status:** in Arbeit · erkannt 2026-09-09 durch Bedienerrückmeldung
+* **Befund:** Der Browser wurde nach ROI-Bestätigung langsam bis unbedienbar;
+  auch der gestartete Dienst ließ sich aus der Bedienumgebung nicht mehr
+  zuverlässig stoppen. Im bisherigen Controller lief pro 15-fps-Bild die
+  Vollbild-Kandidatensuche trotz bestätigter ROI weiter, und die gesamte
+  OpenCV-/JPEG-Arbeit hielt den Controller-Lock. Der lokale Statussocket des
+  beobachteten Prozesses antwortete noch, die UI-Symptomatik selbst ist in der
+  Browserumgebung aber nicht reproduziert/profiliert.
+* **Änderung:** Vollbildsuche endet nach Bestätigung, OCR-Vorschau ist auf 5 Hz
+  begrenzt, OpenCV-/JPEG-Arbeit liegt außerhalb des Locks. Neuer lokaler Befehl
+  `dispread stop`; Kameraabschluss mit Zeitgrenze. Ein isolierter simulierter
+  Dienst wurde damit erfolgreich beendet.
+* **Update 2026-09-09, Editorzustand:** Eine Bedienprüfung zeigte, dass das
+  eingefrorene OCR-Raster Layoutänderungen nicht übernahm und die erhöhte
+  Profilrevision danach `Enter` blockierte. Der Status liefert nun das aktuelle
+  Raster; reine Layoutänderungen aktualisieren die offene Editierrevision und
+  bleiben bestätigbar. Die reale Browserprüfung braucht einen Neustart des vor
+  dieser Korrektur gestarteten Diensts und bleibt deshalb Teil der Klärung.
+* **Klärung:** Den realen Dienst kontrolliert neu starten, ROI im Windows-
+  Browser als Quad bestätigen, Status-/Bildrate beobachten und sowohl Ctrl-C
+  als auch `dispread stop` abnehmen. Erst dann auf `geklärt` setzen. Keine
+  Aussage über Kameralatenz aus synthetischen oder `FILE_MTIME`-Bildern.
+* **Antwort landet in:** `docs/VALIDATION.md`, `docs/lab_journal.md` und dieser
+  Eintrag; Browser-Grundproblem siehe auch OQ-21.

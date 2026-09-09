@@ -84,6 +84,7 @@ def parser():
         serve.add_argument("--" + name, type=float)
     sub.add_parser("tui")
     sub.add_parser("status")
+    sub.add_parser("stop", help="laufenden Dienst ueber den lokalen Socket sauber beenden")
     mode = sub.add_parser("mode")
     mode.add_argument("value", choices=["setup", "run", "annotate"])
     profile = sub.add_parser("profile")
@@ -115,7 +116,7 @@ def main(argv=None):
 
             WorkbenchTUI().run()
             return 0
-        op, values = args.command, {}
+        op, values = ("server.stop" if args.command == "stop" else args.command), {}
         if args.command == "mode":
             values = {"value": args.value}
         elif args.command == "profile":

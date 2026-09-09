@@ -27,6 +27,7 @@ async function poll(){
  if(busy || sessionEnded)return;busy=true;
  try{
   const s=await api('/status');state=s;csrf=s.csrf;lastReply=performance.now();
+  if(editing){editing.ocr_grid=s.ocr_grid;draw();}
   if(sequence!==s.sequence){sequence=s.sequence;lastProgress=performance.now();}
   if(s.logs.length && s.logs.at(-1).id<lastLog)lastLog=0;
   for(const entry of s.logs)if(entry.id>lastLog){log(entry.level,entry.message,entry.timestamp);lastLog=entry.id;}
@@ -210,21 +211,42 @@ new ResizeObserver(()=>{for(const t of terminals.values())fit(t);}).observe($('t
 /* Kamerabild einfrieren und Anzeigebereich setzen. */
 async function freeze(){
  if(editing)return;
- try{editing=await command('freeze');feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;viewport.focus();draw();
- log('info','Eingefrorenes Original: ziehen = verschieben, Ecke = Größe, Pfeile = korrigieren, Shift+Pfeile = Größe, Enter = bestätigen, Esc = verwerfen.');
+ try{editing=await command('freeze');editing.target='roi';editing.selected=null;feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;viewport.focus();draw();
+  log('info','Kalibrierung: grün = Perspektiv-ROI, gelb = OCR-Rahmen/Raster. Rahmen anklicken oder G wechseln; Ecke ziehen, innen verschieben, Shift+Pfeile = Ecke, Strg+Enter = bestätigen.');
  }catch(e){log('error',e.message);}
 }
+function homography(q){
+ const [p0,p1,p2,p3]=q,dx1=p1[0]-p2[0],dx2=p3[0]-p2[0],dx3=p0[0]-p1[0]+p2[0]-p3[0],dy1=p1[1]-p2[1],dy2=p3[1]-p2[1],dy3=p0[1]-p1[1]+p2[1]-p3[1],den=dx1*dy2-dx2*dy1;
+ let g=0,h=0;if(Math.abs(den)>1e-12){g=(dx3*dy2-dx2*dy3)/den;h=(dx1*dy3-dx3*dy1)/den;}
+ return [p1[0]-p0[0]+g*p1[0],p3[0]-p0[0]+h*p3[0],p0[0],p1[1]-p0[1]+g*p1[1],p3[1]-p0[1]+h*p3[1],p0[1],g,h,1];
+}
+function invert3(m){const [a,b,c,d,e,f,g,h,i]=m,A=e*i-f*h,B=c*h-b*i,C=b*f-c*e,D=f*g-d*i,E=a*i-c*g,F=c*d-a*f,G=d*h-e*g,H=b*g-a*h,I=a*e-b*d,det=a*A+b*D+c*G;if(Math.abs(det)<1e-12)return null;return [A,B,C,D,E,F,G,H,I].map(v=>v/det);}
+function transform(m,x,y){const z=m[6]*x+m[7]*y+m[8];return [(m[0]*x+m[1]*y+m[2])/z,(m[3]*x+m[4]*y+m[5])/z];}
+function project(u,v){return transform(homography(editing.quad),u,v);}
+function unproject(x,y){const inverse=invert3(homography(editing.quad));return inverse?transform(inverse,x,y):[x,y];}
+function ocrPoint(u,v){const [x,y,w,h]=editing.ocr_box;return project(x+u*w,y+v*h);}
+function ocrCorners(){return [[0,0],[1,0],[1,1],[0,1]].map(([u,v])=>ocrPoint(u,v));}
+function path(points,colour,width=1){ctx.strokeStyle=colour;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(points[0][0]*canvas.width,points[0][1]*canvas.height);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0]*canvas.width,points[i][1]*canvas.height);ctx.closePath();ctx.stroke();}
+function gridBox(box,colour,width=1){const [x,y,w,h]=box;path([[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([u,v])=>ocrPoint(u,v)),colour,width);}
 function draw(){
  if(!editing)return;
  const scale=Math.min(viewport.clientWidth/editing.width,viewport.clientHeight/editing.height);
  const w=Math.round(editing.width*scale),h=Math.round(editing.height*scale);
  canvas.width=w;canvas.height=h;canvas.style.width=w+'px';canvas.style.height=h+'px';canvas.style.left=(viewport.clientWidth-w)/2+'px';canvas.style.top=(viewport.clientHeight-h)/2+'px';
- const [x,y,rw,rh]=editing.roi;ctx.clearRect(0,0,w,h);ctx.strokeStyle='#a6d6a6';ctx.lineWidth=2;ctx.strokeRect(x*w,y*h,rw*w,rh*h);ctx.fillStyle='#a6d6a6';ctx.fillRect((x+rw)*w-5,(y+rh)*h-5,10,10);
+ ctx.clearRect(0,0,w,h);path(editing.quad,'#a6d6a6',editing.target==='roi'?2:1);
+ for(const box of editing.ocr_grid.cells)gridBox(box,'rgba(240,208,128,.65)');if(editing.ocr_grid.sign)gridBox(editing.ocr_grid.sign,'rgba(240,208,128,.65)');
+ for(const box of editing.ocr_grid.cells)for(const [,sx,sy] of editing.ocr_grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
+ if(editing.ocr_grid.decimal_after!==null){const box=editing.ocr_grid.cells[editing.ocr_grid.decimal_after],p=ocrPoint(box[0]+box[2],box[1]+.88*box[3]);ctx.strokeStyle='#7fdbe8';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,4,0,2*Math.PI);ctx.stroke();}
+ const oc=ocrCorners();path(oc,'#f0d080',editing.target==='ocr'?2:1);
+ const handles=editing.target==='ocr'?oc:editing.quad;for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':editing.target==='ocr'?'#f0d080':'#a6d6a6';ctx.fillRect(handles[i][0]*w-5,handles[i][1]*h-5,10,10);}
 }
-function clamp(){const r=editing.roi;r[2]=Math.max(.01,Math.min(1,r[2]));r[3]=Math.max(.01,Math.min(1,r[3]));r[0]=Math.max(0,Math.min(1-r[2],r[0]));r[1]=Math.max(0,Math.min(1-r[3],r[1]));}
 function point(event){const box=canvas.getBoundingClientRect();return [(event.clientX-box.left)/box.width,(event.clientY-box.top)/box.height];}
-canvas.onpointerdown=event=>{if(!editing)return;canvas.setPointerCapture(event.pointerId);const [x,y]=point(event),r=editing.roi;drag={start:[x,y],roi:[...r],resize:Math.abs(x-r[0]-r[2])*canvas.width<15&&Math.abs(y-r[1]-r[3])*canvas.height<15};};
-canvas.onpointermove=event=>{if(!drag)return;const [x,y]=point(event),dx=x-drag.start[0],dy=y-drag.start[1],r=[...drag.roi];if(drag.resize){r[2]+=dx;r[3]+=dy;}else{r[0]+=dx;r[1]+=dy;}editing.roi=r;clamp();draw();};
+function nearestHandle(x,y){let best=null,distance=Infinity;for(const [target,points] of [['roi',editing.quad],['ocr',ocrCorners()]])for(let i=0;i<4;i++){const dx=(x-points[i][0])*canvas.width,dy=(y-points[i][1])*canvas.height,d=Math.hypot(dx,dy);if(d<distance){best={target,corner:i};distance=d;}}return distance<=18?best:null;}
+function moveQuad(dx,dy){const q=editing.quad,minX=Math.min(...q.map(p=>p[0])),maxX=Math.max(...q.map(p=>p[0])),minY=Math.min(...q.map(p=>p[1])),maxY=Math.max(...q.map(p=>p[1]));dx=Math.max(-minX,Math.min(1-maxX,dx));dy=Math.max(-minY,Math.min(1-maxY,dy));editing.quad=q.map(([x,y])=>[x+dx,y+dy]);}
+function moveOcr(dx,dy){const r=editing.ocr_box;dx=Math.max(-r[0],Math.min(1-r[0]-r[2],dx));dy=Math.max(-r[1],Math.min(1-r[1]-r[3],dy));editing.ocr_box=[r[0]+dx,r[1]+dy,r[2],r[3]];}
+function setOcrCorner(index,u,v){const r=editing.ocr_box,left=r[0],top=r[1],right=left+r[2],bottom=top+r[3],gap=.01;u=Math.max(0,Math.min(1,u));v=Math.max(0,Math.min(1,v));const nl=index===0||index===3?Math.min(u,right-gap):left,nr=index===1||index===2?Math.max(u,left+gap):right,nt=index===0||index===1?Math.min(v,bottom-gap):top,nb=index===2||index===3?Math.max(v,top+gap):bottom;editing.ocr_box=[nl,nt,nr-nl,nb-nt];}
+canvas.onpointerdown=event=>{if(!editing)return;canvas.setPointerCapture(event.pointerId);const [x,y]=point(event),handle=nearestHandle(x,y),uv=unproject(x,y),r=editing.ocr_box,inside=uv[0]>=r[0]&&uv[0]<=r[0]+r[2]&&uv[1]>=r[1]&&uv[1]<=r[1]+r[3];editing.target=handle?.target||(inside?'ocr':'roi');editing.selected=handle?.corner??null;drag={start:[x,y],startUV:uv,quad:editing.quad.map(p=>[...p]),ocr:[...editing.ocr_box],corner:editing.selected,target:editing.target};draw();};
+canvas.onpointermove=event=>{if(!drag)return;const [x,y]=point(event);if(drag.target==='roi'){editing.quad=drag.quad.map(p=>[...p]);if(drag.corner===null)moveQuad(x-drag.start[0],y-drag.start[1]);else editing.quad[drag.corner]=[Math.max(0,Math.min(1,x)),Math.max(0,Math.min(1,y))];}else{editing.ocr_box=[...drag.ocr];const uv=unproject(x,y);if(drag.corner===null)moveOcr(uv[0]-drag.startUV[0],uv[1]-drag.startUV[1]);else setOcrCorner(drag.corner,uv[0],uv[1]);}draw();};
 canvas.onpointerup=()=>drag=null;canvas.onpointercancel=()=>drag=null;
 function unfreeze(){editing=null;drag=null;canvas.hidden=true;feed.removeAttribute('src');stream=false;poll();}
 viewport.ondblclick=freeze;
@@ -232,9 +254,15 @@ viewport.onkeydown=async event=>{
  if(event.key==='e'&&!editing){event.preventDefault();await freeze();return;}
  if(!editing)return;
  if(event.key==='Escape'){event.preventDefault();unfreeze();return;}
- if(event.key==='Enter'){event.preventDefault();try{await command('roi',{id:editing.id,roi:editing.roi,role:state.config.role});unfreeze();}catch(e){log('error',e.message);}return;}
+ if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
+  event.preventDefault();
+  if(drag)return; // laufende Ziehbewegung nicht mit noch unfertiger Geometrie bestaetigen
+  try{await command('roi',{id:editing.id,quad:editing.quad,ocr_box:editing.ocr_box,role:state.config.role});unfreeze();}catch(e){log('error',e.message);}
+  return;
+ }
+ if(event.key.toLowerCase()==='g'){event.preventDefault();editing.target=editing.target==='roi'?'ocr':'roi';editing.selected=null;draw();return;}
  const dir={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
- if(dir){event.preventDefault();const offset=event.shiftKey?2:0;editing.roi[offset]+=dir[0]/editing.width;editing.roi[offset+1]+=dir[1]/editing.height;clamp();draw();}
+ if(dir){event.preventDefault();if(editing.target==='roi'){const dx=dir[0]/editing.width,dy=dir[1]/editing.height;if(event.shiftKey){const corner=editing.selected??2;editing.selected=corner;editing.quad[corner][0]=Math.max(0,Math.min(1,editing.quad[corner][0]+dx));editing.quad[corner][1]=Math.max(0,Math.min(1,editing.quad[corner][1]+dy));}else moveQuad(dx,dy);}else{const dx=dir[0]/400,dy=dir[1]/160;if(event.shiftKey){const corner=editing.selected??2;editing.selected=corner;const r=editing.ocr_box,u=corner===0||corner===3?r[0]:r[0]+r[2],v=corner<2?r[1]:r[1]+r[3];setOcrCorner(corner,u+dx,v+dy);}else moveOcr(dx,dy);}draw();}
 };
 setInterval(()=>{if(!editing && (performance.now()-lastReply>2000||performance.now()-lastProgress>2000))disconnect();},250);
 select('setup');

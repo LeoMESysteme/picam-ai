@@ -102,11 +102,13 @@ def render_display(
                 -1,
             )
 
-    # Ziffernstellen.
-    x_start = pad_x + (cell_w * layout.sign_cell_ratio if layout.has_sign else 0.0)
+    # Ziffernstellen. Formel deckungsgleich mit DisplayLayout.cell_boxes,
+    # damit Generator und Leser dasselbe Raster meinen.
+    step = cell_w * (1.0 + layout.digit_gap_ratio)
+    x_start = pad_x + (cell_w * (layout.sign_cell_ratio + layout.digit_gap_ratio) if layout.has_sign else 0.0)
     dp_index = layout.decimal_point_index()
     for i, ch in enumerate(digits_text):
-        cx = int(x_start + i * cell_w)
+        cx = int(x_start + i * step)
         rects = _segment_rects(cx, pad_y, int(cell_w), area_h, thickness, inset)
         active = frozenset("g") if ch == "-" else DIGIT_SEGMENTS.get(ch, frozenset())
         for seg, (x1, y1, x2, y2) in rects.items():

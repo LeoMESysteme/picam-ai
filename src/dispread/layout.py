@@ -75,23 +75,33 @@ class DisplayLayout:
     thickness_ratio: float = 0.16
     #: Rand innerhalb einer Zelle als Anteil der Zellenbreite.
     inset_ratio: float = 0.10
+    #: Zwischenraum vor jeder Ziffernstelle (und vor der ersten, falls
+    #: Vorzeichenstelle vorhanden) als Anteil einer Ziffernzelle. Default 0.0
+    #: reproduziert das bisherige luecklose Raster. Reale Anzeigen haben
+    #: oft einen sichtbaren Abstand zwischen den Stellen, den ein lueckenloses
+    #: Raster nicht abbildet - die festen relativen Segment-Abtastpunkte
+    #: landen dann teils im Zwischenraum statt auf dem Segment (OQ-23).
+    digit_gap_ratio: float = 0.0
 
     @property
     def n_cells(self) -> float:
-        """Zellenbreiten insgesamt, Vorzeichenstelle anteilig."""
-        return self.digits + (self.sign_cell_ratio if self.has_sign else 0.0)
+        """Zellenbreiten insgesamt, Vorzeichenstelle und Zwischenraeume anteilig."""
+        gaps = (self.digits - 1) + (1 if self.has_sign else 0)
+        return self.digits + (self.sign_cell_ratio if self.has_sign else 0.0) + gaps * self.digit_gap_ratio
 
     def cell_boxes(self, width: int, height: int) -> list[tuple[int, int, int, int]]:
         """Ziffernzellen als (x, y, w, h) im entzerrten Ausschnitt.
 
         Index 0 ist die linke Ziffernstelle. Die Vorzeichenstelle liefert
-        `sign_box` separat.
+        `sign_box` separat. Zwischen den Stellen bleibt, falls
+        `digit_gap_ratio` gesetzt ist, ein Zwischenraum frei.
         """
         cell_w = width / self.n_cells
-        x0 = cell_w * self.sign_cell_ratio if self.has_sign else 0.0
+        step = cell_w * (1.0 + self.digit_gap_ratio)
+        x0 = cell_w * (self.sign_cell_ratio + self.digit_gap_ratio) if self.has_sign else 0.0
         boxes = []
         for i in range(self.digits):
-            x = x0 + i * cell_w
+            x = x0 + i * step
             boxes.append((int(round(x)), 0, int(round(cell_w)), height))
         return boxes
 
@@ -127,6 +137,7 @@ class DisplayLayout:
             "sign_cell_ratio": self.sign_cell_ratio,
             "thickness_ratio": self.thickness_ratio,
             "inset_ratio": self.inset_ratio,
+            "digit_gap_ratio": self.digit_gap_ratio,
         }
 
     @classmethod

@@ -388,3 +388,63 @@ diese Rückmeldung ist ein Zahlenformat kaum einzustellen.
 fehlen noch (Stand in `docs/status.md`). Geprüft ist der Kern nur gegen eine
 synthetisch gerenderte Anzeige — synthetische Daten ergänzen nach Konzept §9,
 sie zählen nie zum Testset.
+
+## 2026-09-09 — Perspektivisches ROI-Quad und kurze Controller-Sperren
+
+**Entscheidung:** Das Profil behält die achsparallele `roi` als Hülle für
+Qualitätsmetriken und Abwärtskompatibilität, ergänzt aber in Schema 2 ein
+geordnetes `roi_quad` aus vier normierten Ecken. Der OCR-Ausschnitt wird aus
+diesem Quad entzerrt; Profile aus Schema 1 werden beim Laden aus ihrem Rechteck
+verlustfrei migriert. Bildsuche, Overlay und JPEG-Kompression laufen außerhalb
+des Controller-Locks. Nach Bestätigung endet die Vollbildsuche, während die
+OCR-Vorschau mit eigener 5-Hz-Rate weiterläuft.
+
+**Verworfene Alternativen:**
+
+* `roi` selbst je nach Version als Rechteck oder Polygon zu überladen: Jeder
+  Verbraucher müsste den Typ erraten; eine getrennte kanonische Quad-Geometrie
+  hält den Vertrag eindeutig.
+* Nur Drehwinkel plus Rechteck zu speichern: korrigiert Rotation, aber keine
+  perspektivische Trapezverzerrung.
+* Die gesamte Verarbeitung unter dem Controller-Lock zu lassen und nur die
+  Bildrate zu senken: Status und Shutdown blieben im ungünstigen Moment an
+  OpenCV gebunden.
+* Einen Web-Abschaltknopf anzubieten: unnötig großer externer
+  Zustandsänderungspfad. `dispread stop` bleibt auf den privaten Unix-Socket
+  begrenzt.
+
+**Konsequenz:** Vier Ecken sind im eingefrorenen Original direkt editierbar;
+Zellen und Segmentpunkte werden perspektivisch zurückgezeichnet. Alte Profile
+bleiben ladbar. Die Änderung verbessert Ausrichtung und Bedienbarkeit, ist aber
+kein Training und behebt die reale VFD-Glyphenabweichung aus OQ-23 nicht.
+
+## 2026-09-09 — Separater, sichtbarer OCR-Innenrahmen
+
+**Entscheidung:** Profilschema 3 ergänzt ein normiertes `ocr_box` innerhalb des
+perspektivisch entzerrten `roi_quad`. Das äußere Quad beschreibt die physische
+Displayebene und ihre Perspektive; der innere Rahmen beschreibt ausschließlich
+den Bereich, über den Vorzeichen- und Ziffernzellen verteilt werden. Im
+eingefrorenen Browserbild werden Rahmen, Zellen und dieselben sieben
+Abtastpunkte gezeichnet, die `SevenSegmentReader` tatsächlich misst.
+
+**Verworfene Alternativen:** Nur das äußere Quad enger um die Ziffern zu legen
+vermischt Perspektivkante und Lesergrenze und wird bei Blenden/Leerraum
+unpräzise. Frei editierbare Grenzen je einzelner Zelle würden viele kaum
+prüfbare Profilparameter erzeugen und könnten eine Anzeige auf genau einen
+Frame überanpassen. Eine automatisch als bestätigt gespeicherte Grenzerkennung
+aus dem Einzelbild würde helle Segmente, Einheit und Reflexionen ohne reale
+Validierung verwechseln; unbekannte Eingaben müssen abgelehnt statt geraten
+werden.
+
+**Konsequenz:** Die manuelle Framekalibrierung ist direkt wirksam und visuell
+nachprüfbar. Schema-1/2-Profile bleiben durch Migration mit vollem `ocr_box`
+ladbar. Automatische Vorschläge können später auf gelabelten Realbildern
+ergänzt werden, dürfen aber die Bedienbestätigung nicht ersetzen.
+
+**Korrektur nach Bedienprüfung:** Das zunächst beim Einfrieren kopierte Raster
+blieb bei Änderungen an `layout` stehen, während die allgemeine Profilrevision
+`Enter` mit „Modus/Profil geändert“ ablehnte. Reine Rasteränderungen übernehmen
+nun die Revision des offenen Editierbilds und `snapshot()` liefert das aktuelle
+Raster für den Browser. Bild- oder Kamerageometrieänderungen tun das bewusst
+nicht. Die feste Dezimalposition wird als Kalibriermarker gezeichnet, aber
+weiterhin nicht als optisch erkannt ausgegeben.
