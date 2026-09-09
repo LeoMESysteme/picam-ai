@@ -9,7 +9,7 @@ import pytest
 
 from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
-from dispread.workbench.controller import Controller
+from dispread.workbench.controller import MAX_GEOMETRY_CYCLES, Controller
 from dispread.workbench.profiles import DEFAULT, atomic_json, validate
 
 
@@ -90,6 +90,62 @@ def test_mode_and_unsupported_controls(tmp_path):
     c.capabilities = {"Contrast": [0, 4, 1]}
     with pytest.raises(ValueError):
         c.command("camera.set", {"key": "LensPosition", "value": 2})
+
+
+def test_camera_set_many_is_one_atomic_revision(tmp_path):
+    """Aufloesungswechsel darf nur einen Stream-Neuaufbau kosten (OQ-22:
+    jeder Neuaufbau ist ein RP2040-Power-Zyklus, das Budget ist begrenzt).
+    camera.set_many muss Breite und Hoehe in EINER Revision setzen statt
+    zwei getrennten camera.set-Aufrufen, die der Worker als zwei
+    Geometrieaenderungen sehen wuerde.
+    """
+    c = Controller(tmp_path)
+    before = c.revision
+    result = c.command("camera.set_many", {"values": {"width": 1280, "height": 960}})
+    assert result["revision"] == before + 1
+    assert (result["config"]["camera"]["width"], result["config"]["camera"]["height"]) == (1280, 960)
+    assert result["config"]["confirmed"] is False
+
+
+def test_geometry_budget_blocks_change_but_allows_same_value(tmp_path):
+    """OQ-22: der RP2040-Bridge-Chip haengt sich nach ~20-25 Power-Zyklen auf.
+    Ist das Budget erschoepft, muss eine echte Aufloesungs-/Bildraten-
+    aenderung verweigert werden - ein Wiederwaehlen der bereits aktiven
+    Werte (kein neuer Zyklus) darf dagegen weiter funktionieren.
+    """
+    c = Controller(tmp_path)
+    c.geometry_cycles = MAX_GEOMETRY_CYCLES
+    width, height = c.config["camera"]["width"], c.config["camera"]["height"]
+    with pytest.raises(ValueError, match="Power-Zyklus-Budget"):
+        c.command("camera.set_many", {"values": {"width": width + 1, "height": height}})
+    # Dieselbe Aufloesung erneut waehlen loest keinen neuen Zyklus aus und
+    # bleibt deshalb erlaubt.
+    result = c.command("camera.set_many", {"values": {"width": width, "height": height}})
+    assert result["config"]["camera"]["width"] == width
+
+
+def test_geometry_cycles_survive_process_restart_same_boot(tmp_path):
+    """OQ-22: der RP2040-Zyklenzaehler gehoert zum Boot, nicht zum Prozess.
+    Ein Controller-Neustart (gleicher Host, gleiche Boot-ID) darf den
+    Zaehler nicht auf 0 zuruecksetzen - sonst waeren nach einem
+    dispread-Neustart faelschlich wieder volle 15 Zyklen "frei", obwohl der
+    RP2040 sie laengst verbraucht hat.
+    """
+    first = Controller(tmp_path)
+    if first.boot_id is None:
+        pytest.skip("keine Boot-ID auf diesem System verfuegbar")
+    first.geometry_cycles = 10
+    first._save_geometry_cycles()
+
+    second = Controller(tmp_path)
+    assert second.geometry_cycles == 10
+
+
+def test_geometry_cycles_reset_on_new_boot(tmp_path):
+    """Eine andere Boot-ID (echter Reboot) muss den Zaehler zuruecksetzen."""
+    (tmp_path / "camera_cycles.json").write_text('{"boot_id": "not-the-real-one", "cycles": 999}')
+    c = Controller(tmp_path)
+    assert c.geometry_cycles == 0
 
 
 def test_session_expiry_rate_limit():

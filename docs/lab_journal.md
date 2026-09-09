@@ -353,3 +353,146 @@ Sensormodi lösen es aus" ist damit zu eng: 960×720 verzögert das Problem, heb
 es aber nicht auf. Der Streamabbau bleibt der Verdächtige, offenbar mit einem
 Wettlauf, der nicht bei jedem Abbau zuschlägt. Stand in
 [OQ-22](open-questions.md).
+
+## 2026-09-09 — Kamerasperre auch nach frischem Reboot; neue Spur GPIO-Kontention
+
+**Ziel:** `./.venv/bin/dispread serve` scheiterte beim Start mit
+`Failed to queue buffer N: Invalid argument` auf `/dev/video4`. Ursache
+gesucht, mit dem Anspruch, diesmal einen echten Reboot von einem bloßen
+Wiederauftreten des alten Fehlers zu unterscheiden.
+
+**Aufbau:** Kein physischer Eingriff. Auswertung von `dmesg -T`,
+`journalctl` (alle Boots), `/proc/uptime`, `/proc/stat` (`btime`), `chronyd`-
+Log, `apt`-Historie, `lsmod`, Device-Tree-Overlay (`imx500-pi5.dtbo`,
+dekompiliert mit `dtc`), und dem entpackten `imx500.ko` (Strings, kein
+Kernel-Quellcode vorhanden).
+
+**Beobachtung 1 — es war ein echter Reboot, keine Fortsetzung der alten
+Sperre:** `dmesg -T` zeigt „Booting Linux on physical CPU 0x0” um 09:35:40,
+`btime` in `/proc/stat` bestätigt denselben Zeitpunkt, `/proc/uptime` lag beim
+ersten Fehlschlag bei ca. 370 s. `who -b` und `journalctl --list-boots` hatten
+fälschlich noch den 2026-09-07 15:26 als Bootzeit eingetragen — das ist ein
+reiner Anzeigefehler: Dieser Pi hat keine batteriegepufferte RTC, startet mit
+der beim letzten Herunterfahren gespeicherten Zeit, und `chronyd` korrigiert
+sie erst **nach** dem Booten (`System clock was stepped by 151759.56
+seconds` um 09:36:19). Dienste, deren Startzeit-Bookkeeping vor diesem Schritt
+lief (u. a. `wireplumber.service`), zeigen deshalb ebenfalls das falsche
+Datum. Für die Kette selbst folgenlos, aber beim nächsten Debugging dieser Art
+zuerst `chronyd`-Log statt `who -b`/`uptime` prüfen.
+
+**Beobachtung 2 — der Fehler trat trotzdem sechs Minuten nach dem Reboot beim
+allerersten Streamversuch auf:** Erster Fehlschlag 09:41:51, zweiter 09:44:06.
+Beide Male dieselbe Abfolge: `imx500 10-001a: setup of GPIO led failed: -121`
+→ `imx500_power_on: failed to get led gpio` → `rp1-cfe: stream on failed in
+subdev` → beim Abbau `videobuf2_common: driver bug: stop_streaming operation
+is leaving buffer 0 in active state` aus `cfe_stop_streaming`. Damit widerlegt
+diese Session die bisherige OQ-22-Annahme „nur ein Reboot hilft" — hier half
+er nicht, jedenfalls nicht sofort.
+
+**Beobachtung 3 — kein Software-Regressions-Kandidat:** Der große
+Kamera-Stack-Umbau (`libcamera` 0.7.1→0.7.2+rpt20260817, `libpisp`
+1.6.0→1.7.0, `rpicam-apps`/`picamera2` 1.12.0/0.3.36→1.13.0/0.3.37) lief laut
+`apt`-Historie bereits am 2026-09-07 um 13:31:59 — vor allen dokumentierten
+erfolgreichen Sitzungen am 2026-09-08. Der tägliche `apt-daily-upgrade.timer`
+hatte heute vor dem Fehlschlag noch nicht gefeuert. Der Fehler ist also nicht
+durch ein neues Paket entstanden. Nebenbefund: `linux-headers-6.18.34…` und
+passende `imx500.ko` liegen bereits unter `/usr/lib/modules/6.18.34+rpt-rpi-2712/`,
+gebootet wird aber weiter `6.12.34+rpt-rpi-2712` — ein separater, hier nicht
+verfolgter Punkt (kein Rollback nötig, nur nicht der aktive Kernel).
+
+**Beobachtung 4 — neue Spur, GPIO-Kontention über den gemeinsamen RP1-Chip:**
+`imx500-pi5.dtbo` (dekompiliert) zeigt `led-gpios` und `reset-gpios` am selben
+GPIO-Controller-Phandle. Die entpackten Strings aus `imx500.ko` zeigen, dass
+beide über `devm_gpiod_get_optional()` geholt werden — die Fehlermeldung
+erscheint bei diesem Aufruf nur bei einem echten Fehler vom GPIO-Subsystem,
+nicht bei einer fehlenden, optionalen Eigenschaft. Auf demselben Pi laufen
+minütlich `x1201-monitor.service` (Geekworm-x120x-USV-Fuel-Gauge, Skript
+`/usr/local/bin/x1200_once.py`) und `rm520n-signal-cache`/`-watchdog`
+(MEhub, 5G-Modem). `x1200_once.py` fasst direkt `/dev/gpiochip0` an
+(`python3-gpiod`, `PLD_PIN` als Input) — auf dem Pi 5 ist das der RP1-Chip,
+derselbe Chip, der auch CSI/CFE und die Kamera-GPIOs bedient. Beide
+Fehlschläge heute (09:41:51, 09:44:06) lagen in derselben Minute wie ein
+`x1201-monitor.service`-Tick (09:41:00 bzw. 09:44:00) — bei minütlichem
+Tick statistisch nicht beweisend, aber mechanistisch plausibel: ein
+Firmware-/Kontroller-seitiger Konflikt zwischen zwei gleichzeitigen
+RP1-GPIO-Anfragen (Kamera-Power-on vs. USV-Pegelabfrage) würde exakt so ein
+`-EREMOTEIO` an einer Seite erzeugen.
+
+**Schluss:** Kein Codefehler in `dispread`, keine Paket-Regression. Neue,
+bislang nicht dokumentierte Hypothese: Die Kamerasperre kann durch
+RP1-GPIO-Kontention mit anderen, auf demselben Pi laufenden Diensten
+(`x1201-monitor`, ggf. `rm520n-*`) ausgelöst werden, nicht nur durch den
+bereits bekannten Streamabbau-Wettlauf. Nicht geprüft und offen: ob ein
+echter Stromzyklus (statt `sudo reboot`) den Zustand zuverlässiger auflöst als
+der bisher übliche Warmstart — dazu wurde nichts unternommen, das hätte
+andere MEhub-Dienste auf demselben Gerät unterbrochen. Details und
+vorgeschlagene Prüfschritte: [OQ-22](open-questions.md).
+
+**Nachtrag 10:05 — reiner Picamera2-Minimalreproducer bestätigt, Sperre
+inzwischen dauerhaft:** Ein isolierter Test ohne `dispread`
+(`Picamera2().configure(create_preview_configuration(960x720)).start()`,
+kein Projektcode) scheiterte identisch — damit ist die Ursache beim
+Plattform-/Treiberstack angesiedelt, nicht bei `dispread`. Der Prozess hing
+bis zum 30-s-Timeout und löste beim Beenden erneut denselben
+vb2-Treiberfehler aus; kein Zombie-Prozess blieb zurück, das Gerät ist danach
+wieder unbelegt, aber weiterhin defekt. Die Kamera ist damit seit 09:41 Uhr
+durchgehend gesperrt — ein gezielter Kontentionstest (Timer pausieren, dann in
+der Minutenmitte erneut versuchen) liefert jetzt keine neue Information mehr,
+weil jeder Versuch ohnehin scheitert; er müsste unmittelbar nach dem nächsten
+Reboot laufen, bevor die Sperre wieder eintritt. Blockiert an zwei Stellen ohne
+`sudo`-Passwort: `systemctl stop x1201-monitor.timer`/`rm520n-*.timer` (nicht
+in der NOPASSWD-Liste) und `dynamic_debug` (kein `debugfs` gemountet,
+verlangt root). `sudo poweroff` ist zwar NOPASSWD hinterlegt, wurde aber
+bewusst nicht ausgeführt: ohne Fernsteuerung der Stromversorgung wäre die
+Maschine danach nicht selbst wieder hochzubringen.
+
+## 2026-09-09, Nachmittag — Kamerasperre reproduzierbar nach ~24 Power-Zyklen; Ursache beim RP2040 der AI-Camera, nicht bei RP1/x1201
+
+**Ziel:** Die Vormittags-Spur (GPIO-Kontention mit `x1201-monitor` über
+RP1/`/dev/gpiochip0`) gezielt prüfen. Nutzer hat vor einem erneuten Reboot die
+Timer gestoppt; nach dem Reboot liefen sie aber automatisch wieder an
+(`systemctl stop` überlebt keinen Neustart aktivierter Timer) — die geplante
+saubere Trennung war so nicht möglich, stattdessen ergab sich ein aussagekräftiger
+Dauertest mit aktiven Timern.
+
+**Aufbau:** Reboot um 10:09:16 verifiziert (`Booting Linux on physical CPU`).
+Minimalreproducer ohne `dispread`: `Picamera2().configure(
+create_preview_configuration(960x720)).start().capture_array().stop().close()`
+im Loop, alle ca. 12 s, `timeout 20s` je Versuch.
+
+**Messergebnis:** Zyklen 1–24 (uptime 0 bis 442 s) liefen **alle** sauber
+durch (`closed. OK`, exit 0) — über drei Minutengrenzen der `x1201`/`rm520n`-
+Timer hinweg, ohne einen einzigen Fehlschlag. Zyklus 25 (uptime 472 s)
+scheiterte und blieb ab da dauerhaft gesperrt (Zyklen 25–30 alle
+Timeout/Fehler). Kernel-Log exakt zum Fehlschlagzeitpunkt (10:16:48, kein
+Zusammenhang zu einem Timer-Tick, die lagen bei :00/:20):
+
+```
+rp2040-gpio-bridge 10-0040: rp2040_gbdg_i2c_send() rp2040_gbdg_wait_until_free failed
+rp2040-gpio-bridge 10-0040: rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL
+rp2040-gpio-bridge 10-0040: rp2040_gbdg_i2c_send() rp2040_gbdg_wait_until_free failed
+imx500 10-001a: setup of GPIO led failed: -121
+imx500 10-001a: imx500_power_on: failed to get led gpio
+rp1-cfe 1f00110000.csi: stream on failed in subdev
+```
+
+**Deutung:** `led-gpios`/`reset-gpios` aus `imx500-pi5.dtbo` hängen nicht am
+RP1, sondern an einem **eigenen RP2040-Mikrocontroller auf dem AI-Camera-
+Modul**, der Power-Sequencing/Reset/LED über I2C-Bus 10 Adresse 0x40 steuert
+(`rp2040-gpio-bridge`). Nach genug Power-Zyklen antwortet dieser RP2040 nicht
+mehr auf I2C — die Vormittags-Hypothese „Kontention mit `x1201-monitor` über
+RP1" ist damit widerlegt (falscher Chip, und der Wedge-Zeitpunkt lag nicht
+bei einem Tick). Ob RP2040-Firmwarefehler, I2C-Timing-Grenzfall bei
+Wiederholung oder Ressourcenleck ist offen. Der Reboot um 10:09 hat den
+RP2040 zuverlässig zurückgesetzt (24 saubere Zyklen danach) — die Sperre
+entsteht **innerhalb** einer Bootsitzung, reproduzierbar nach grob 20–25
+Power-Zyklen, unabhängig von Sensorauflösung oder Fremdprozessen.
+
+**Praktische Konsequenz für `dispread`:** `workbench/Controller._worker`
+konfiguriert den Stream bei jeder Auflösungs-/Bildraten-Änderung neu — jede
+Einstelländerung im laufenden Betrieb nähert das System diesem Limit, nicht
+nur der Wechsel zu großen Sensormodi. Ein Zähler laufender Power-Zyklen mit
+Warnung/Blockade vor dem gemessenen Limit wäre eine mögliche Absicherung;
+nicht umgesetzt, da eine Entscheidung über die Workbench-Architektur nötig
+ist. Vollständige Log-Ausschnitte: Sitzungsverlauf, nicht separat abgelegt.
+Stand und offene Fragen: [OQ-22](open-questions.md).

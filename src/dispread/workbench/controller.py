@@ -29,6 +29,37 @@ from .vision import DetectionConfig, find_display_candidates
 #: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
 CROP_SIZE = (400, 160)
 
+#: Jeder Stream-Neuaufbau ist ein Power-Zyklus des RP2040-Bridge-Chips auf
+#: der AI-Camera; nach ~20-25 Zyklen in einer Bootsitzung antwortet er nicht
+#: mehr auf I2C (OQ-22). Mehrere Aenderungen in kurzer Folge - z. B. Breite
+#: und Hoehe als getrennte "camera.set"-Befehle - werden deshalb zu einem
+#: einzigen Neuaufbau gebuendelt statt je Befehl einen auszuloesen.
+GEOMETRY_DEBOUNCE_S = 0.25
+
+#: Harte Obergrenze fuer Geometrie-Neuaufbauten je Bootsitzung. Beobachtet:
+#: der RP2040-Bridge-Chip antwortet nach rund 20-25 Power-Zyklen nicht mehr
+#: auf I2C (OQ-22), reproduzierbar, unabhaengig von Aufloesung/Fremdprozessen.
+#: Mit Sicherheitsabstand darunter verweigert die Workbench weitere
+#: Aufloesungs-/Bildratenaenderungen, statt den Chip unkontrolliert
+#: gegen das tatsaechliche Limit laufen zu lassen - ein Neustart von
+#: `dispread` (mit anschliessendem Host-Reboot) wird dann verlangt, statt
+#: dass die Kamera mitten in einer Messreihe unvorhersehbar haengt.
+MAX_GEOMETRY_CYCLES = 15
+
+#: Wachhund fuer blockierende Kamera-Ioctls. Eine haengende Operation laesst
+#: sich aus Python nicht abbrechen (der Treiber-Thread bleibt in einem
+#: ioctl haengen), aber ohne Wachhund wuerde der Worker fuer immer schweigend
+#: einfrieren statt die RP2040-Sperre (OQ-22) sichtbar zu melden.
+CAMERA_OP_TIMEOUT_S = 6.0
+
+
+class CameraWedgedError(RuntimeError):
+    """Eine Kamera-Ioctl kehrte nicht innerhalb von CAMERA_OP_TIMEOUT_S zurueck.
+
+    Bekanntes Symptom des RP2040-Bridge-Fehlers (OQ-22): nur ein Reboot hilft,
+    ein erneuter Zugriff auf dasselbe Kameraobjekt haengt ebenfalls.
+    """
+
 
 def roi_box(image, roi):
     """Normierte ROI in Bildkoordinaten, mindestens ein Pixel gross."""
@@ -62,6 +93,7 @@ class Controller:
         self.saved = copy.deepcopy(DEFAULT)
         self.name = "default"
         self.revision, self.applied = 0, -1
+        self.boot_id, self.geometry_cycles = self._load_geometry_cycles()
         self.mode, self.error = "setup", None
         self.dirty = False
         self.conflict = None
@@ -88,6 +120,39 @@ class Controller:
     @property
     def path(self):
         return self.root / "profiles" / (self.name + ".json")
+
+    @property
+    def cycles_path(self):
+        return self.root / "camera_cycles.json"
+
+    def _load_geometry_cycles(self):
+        """Power-Zyklus-Zaehler ueber Prozessneustarts hinweg fortfuehren.
+
+        Der RP2040-Chip merkt sich Power-Zyklen pro **Boot**, nicht pro
+        Prozess (OQ-22: ein Test mit je einem frischen Python-Prozess je
+        Zyklus haengte trotzdem nach ~24 Zyklen). Ein reiner
+        In-Memory-Zaehler wuerde nach einem `dispread`-Neustart faelschlich
+        wieder bei 0 anfangen und so mehr echte Zyklen erlauben, als das
+        Budget vorsieht. Deshalb an die Boot-ID gebunden persistieren; bei
+        echtem Reboot (andere Boot-ID oder Datei fehlt) faengt der Zaehler
+        korrekt wieder bei 0 an.
+        """
+        try:
+            boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        except OSError:
+            boot_id = None
+        try:
+            data = json.loads(self.cycles_path.read_text())
+        except (OSError, ValueError):
+            data = {}
+        if boot_id is not None and data.get("boot_id") == boot_id:
+            return boot_id, int(data.get("cycles", 0))
+        return boot_id, 0
+
+    def _save_geometry_cycles(self):
+        if self.boot_id is None:
+            return  # keine Boot-ID verfuegbar - nichts Verlaessliches zu persistieren
+        atomic_json(self.cycles_path, {"boot_id": self.boot_id, "cycles": self.geometry_cycles})
 
     def profile_names(self):
         """Nur wirklich vorhandene Profildateien; ungueltige Namen ueberspringen."""
@@ -130,6 +195,8 @@ class Controller:
                 "config": copy.deepcopy(self.config),
                 "revision": self.revision,
                 "applied_revision": self.applied,
+                "geometry_cycles": self.geometry_cycles,
+                "geometry_cycles_max": MAX_GEOMETRY_CYCLES,
                 "dirty": self.dirty,
                 "conflict": bool(self.conflict),
                 "observed": dict(self.observed),
@@ -188,6 +255,40 @@ class Controller:
             except (ValueError, TypeError, KeyError) as error:
                 self.log("error", f"Profil nicht übernommen: {error}")
 
+    def _apply_camera_key(self, data, key, value):
+        """Ein Kamerafeld in `data` setzen; von camera.set und camera.set_many geteilt."""
+        if key in ("width", "height", "fps"):
+            data["camera"][key] = value
+            if key in ("width", "height"):
+                data["confirmed"] = False
+        else:
+            data["camera"]["controls"][key] = value
+            if key == "AeEnable" and value is True:
+                for name in ("ExposureTime", "AnalogueGain"):
+                    data["camera"]["controls"].pop(name, None)
+            elif key == "AeEnable" and value is False:
+                for name in ("ExposureTime", "AnalogueGain"):
+                    current = self.observed.get(name)
+                    if current is None and name in self.capabilities:
+                        current = self.capabilities[name][2]
+                    if current is not None:
+                        data["camera"]["controls"][name] = current
+
+    def _check_geometry_budget(self, data):
+        """Verweigert eine echte Geometrieaenderung, sobald das RP2040-Power-
+        Zyklus-Budget erreicht ist (OQ-22). Ein Wiederwaehlen der bereits
+        aktiven Aufloesung/Bildrate ist immer erlaubt, da es keinen neuen
+        Stream-Neuaufbau ausloest.
+        """
+        old = (self.config["camera"]["width"], self.config["camera"]["height"], self.config["camera"]["fps"])
+        new = (data["camera"]["width"], data["camera"]["height"], data["camera"]["fps"])
+        if new != old and self.geometry_cycles >= MAX_GEOMETRY_CYCLES:
+            raise ValueError(
+                f"Power-Zyklus-Budget der Kamera erreicht ({MAX_GEOMETRY_CYCLES}, OQ-22) - "
+                "dispread neu starten (danach Host-Reboot empfohlen), bevor Aufloesung "
+                "oder Bildrate erneut geaendert wird"
+            )
+
     def command(self, op, args=None):
         args = args or {}
         with self.lock:
@@ -210,23 +311,18 @@ class Controller:
                 self.log("info", f"Modus: {mode}; keine Messwertfreigabe in diesem Prototyp")
             elif op == "camera.set":
                 data = copy.deepcopy(self.config)
-                key, value = args["key"], args["value"]
-                if key in ("width", "height", "fps"):
-                    data["camera"][key] = value
-                    if key in ("width", "height"):
-                        data["confirmed"] = False
-                else:
-                    data["camera"]["controls"][key] = value
-                    if key == "AeEnable" and value is True:
-                        for name in ("ExposureTime", "AnalogueGain"):
-                            data["camera"]["controls"].pop(name, None)
-                    elif key == "AeEnable" and value is False:
-                        for name in ("ExposureTime", "AnalogueGain"):
-                            current = self.observed.get(name)
-                            if current is None and name in self.capabilities:
-                                current = self.capabilities[name][2]
-                            if current is not None:
-                                data["camera"]["controls"][name] = current
+                self._apply_camera_key(data, args["key"], args["value"])
+                self._check_geometry_budget(data)
+                self._change(data)
+            elif op == "camera.set_many":
+                # Mehrere Kamerafelder atomar in einer Revision setzen - z. B.
+                # Breite und Hoehe einer Aufloesung zusammen, damit daraus
+                # genau ein Stream-Neuaufbau (ein RP2040-Power-Zyklus, OQ-22)
+                # wird statt zwei durch getrennte "camera.set"-Befehle.
+                data = copy.deepcopy(self.config)
+                for key, value in args["values"].items():
+                    self._apply_camera_key(data, key, value)
+                self._check_geometry_budget(data)
                 self._change(data)
             elif op == "layout.set":
                 data = copy.deepcopy(self.config)
@@ -471,8 +567,39 @@ class Controller:
             if self.thread.is_alive():
                 self.log("error", "Kamerathread hat nicht rechtzeitig beendet")
 
+    def _guarded(self, action, func):
+        """Fuehrt eine blockierende Kamera-Operation mit Wachhund aus.
+
+        Ein transienter Stau (z. B. `capture_request(wait=2.0)` bei kurzem
+        Rueckstand) laeuft in der eigenen Frist ab und wird normal
+        durchgereicht. Kehrt der Aufruf gar nicht zurueck, ist das nach
+        OQ-22 die RP2040-Sperre - das wird als `CameraWedgedError` sichtbar,
+        statt den Worker fuer immer schweigend haengen zu lassen. Der
+        blockierte Thread selbst laesst sich aus Python nicht abbrechen und
+        bleibt bewusst haengen; die aufrufende Seite darf `camera` danach
+        nicht mehr anfassen.
+        """
+        outcome = {}
+
+        def run():
+            try:
+                outcome["value"] = func()
+            except Exception as error:  # noqa: BLE001 - an den Aufrufer weiterreichen
+                outcome["error"] = error
+
+        thread = threading.Thread(target=run, name=f"camera-{action}", daemon=True)
+        thread.start()
+        thread.join(CAMERA_OP_TIMEOUT_S)
+        if thread.is_alive():
+            raise CameraWedgedError(
+                f"Kamera reagiert nicht ({action}); vermutlich RP2040-Sperre (OQ-22), Reboot noetig"
+            )
+        if "error" in outcome:
+            raise outcome["error"]
+        return outcome["value"]
+
     def _capture(self, camera):
-        request = camera.capture_request(wait=2.0)
+        request = self._guarded("capture", lambda: camera.capture_request(wait=2.0))
         try:
             image = request.make_array("main").copy()
             metadata = request.get_metadata()
@@ -559,6 +686,7 @@ class Controller:
 
     def _worker(self):
         camera = None
+        wedged = False
         try:
             if self.simulate:
                 self.capabilities = {
@@ -572,31 +700,50 @@ class Controller:
 
                 camera = Picamera2(self.camera_index)
             previous = None
+            pending_geometry, pending_since = None, 0.0
             while not self.stop.is_set():
                 with self.lock:
                     data, revision = copy.deepcopy(self.config), self.revision
                 cam = data["camera"]
                 geometry = (cam["width"], cam["height"], cam["fps"])
-                if previous != geometry:
+                if camera:
+                    if geometry != pending_geometry:
+                        pending_geometry, pending_since = geometry, time.monotonic()
+                    stable = time.monotonic() - pending_since >= GEOMETRY_DEBOUNCE_S
+                else:
+                    # Simulation fasst keine Hardware an, keine Entprellung noetig.
+                    stable = True
+                if previous != geometry and stable:
                     if camera:
                         if previous:
-                            camera.stop()
-                        camera.configure(
-                            camera.create_video_configuration(
-                                main={"size": geometry[:2], "format": "RGB888"},
-                                controls={"FrameRate": cam["fps"]},
-                                queue=False,
-                            )
+                            self._guarded("stop", camera.stop)
+                        self._guarded(
+                            "configure",
+                            lambda geometry=geometry, cam=cam: camera.configure(
+                                camera.create_video_configuration(
+                                    main={"size": geometry[:2], "format": "RGB888"},
+                                    controls={"FrameRate": cam["fps"]},
+                                    queue=False,
+                                )
+                            ),
                         )
                         self.capabilities = {
                             k: list(v)
                             for k, v in camera.camera_controls.items()
                             if k in ("AeEnable", "ExposureTime", "AnalogueGain", "Contrast")
                         }
-                        camera.start(show_preview=False)
+                        self._guarded("start", lambda: camera.start(show_preview=False))
+                        with self.lock:
+                            self.geometry_cycles += 1
+                            self._save_geometry_cycles()
                     previous = geometry
                     self.applied = -1
                     self.log("info", f"Kamerastream {geometry}; Fokus mechanisch")
+                if camera and previous is None:
+                    # Entprellfrist fuer die allererste Konfiguration laeuft noch;
+                    # es gibt noch keinen aktiven Stream zum Auslesen.
+                    self.stop.wait(0.05)
+                    continue
                 if revision != self.applied:
                     validate(data, self.capabilities)
                     if camera:
@@ -638,10 +785,14 @@ class Controller:
             with self.lock:
                 self.error, self.jpeg = str(error), None
             self.log("error", f"Kamera gestoppt: {error}")
+            wedged = isinstance(error, CameraWedgedError)
             if isinstance(error, TimeoutError) and camera:
                 camera.cancel_all_and_flush()
         finally:
-            if camera:
+            # Bei einer erkannten RP2040-Sperre haengt bereits ein Thread in
+            # der Kamera fest (siehe _guarded); ein weiterer stop()/close()
+            # auf demselben Objekt wuerde nur denselben Zustand erneut treffen.
+            if camera and not wedged:
                 try:
                     camera.stop()
                 finally:

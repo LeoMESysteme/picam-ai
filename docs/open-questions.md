@@ -333,5 +333,183 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Nicht tun:** Den Fehlschlag im Kamerathread stillschweigend wegfangen und
   weiterlaufen. Ein Sensor, der keinen Stream aufsetzt, ist ein harter Ausfall
   und muss als Fehler sichtbar bleiben.
+
+* **Update 2026-09-09, Nachmittag — korrigiert: nicht RP1/x1201-Kontention,
+  sondern der Onboard-RP2040 der AI-Camera hängt sich nach genau
+  reproduzierbar ~24 Power-Zyklen auf.** Mit einem minimalen Reproducer ohne
+  `dispread` (`Picamera2().configure().start().capture_array().stop().close()`
+  im Loop, alle 12 s) liefen **24 Zyklen sauber durch** (uptime 0 bis 442 s,
+  über drei Minutengrenzen hinweg), dann scheiterte Zyklus 25 (uptime 472 s)
+  und blieb ab da dauerhaft gesperrt. Im Kernel-Log genau zu diesem Zeitpunkt:
+  `rp2040-gpio-bridge 10-0040: rp2040_gbdg_i2c_send() rp2040_gbdg_wait_until_free
+  failed`, `rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL`, danach erst
+  `imx500 10-001a: setup of GPIO led failed: -121` und `stream on failed in
+  subdev`. Das ordnet die Vormittags-Spur ein: `led-gpios`/`reset-gpios`
+  hängen nicht an RP1, sondern an einem **eigenen RP2040-Mikrocontroller auf
+  dem AI-Camera-Modul selbst**, der Reset/LED/Power-Sequencing über I2C-Bus 10
+  (Adresse 0x40) steuert (`rp2040-gpio-bridge`, Modul
+  `spi_rp2040_gpio_bridge`). Die Kontentionshypothese mit
+  `x1201-monitor`/`/dev/gpiochip0` (RP1) ist damit hinfällig — die Timer waren
+  während des gesamten Tests aktiv und liefen erkennbar unabhängig vom
+  Wedge-Zeitpunkt (Ticks um :00/:20, Wedge um :48). Stattdessen: der
+  RP2040 selbst wird nach genügend Power-Sequencing-Zyklen für den
+  I2C-Bridge-Verkehr unerreichbar — ob Firmware-Bug im RP2040, ein
+  I2C-Timing-Grenzfall bei schneller Wiederholung oder ein Ressourcenleck,
+  ist offen und braucht das RP2040-Firmware-Log (nicht zugänglich) oder einen
+  I2C-Bus-Trace. **Das bestätigt und quantifiziert die viel ältere Vermutung
+  aus diesem Dokument** („Streamabbau bleibt der Verdächtige, ein Wettlauf,
+  der nicht bei jedem Abbau zuschlägt") — nur dass der Auslöser nicht die
+  Streamgröße ist, sondern die **Anzahl** der Power-Zyklen, grob 20–25.
+  Praktisch bedeutet das: Der Workbench-Kamerathread (`Controller._worker`),
+  der bei jeder Auflösungs-/Bildraten-Änderung neu konfiguriert, nähert sich
+  diesem Limit mit jeder Einstelländerung im laufenden Betrieb — nicht nur bei
+  großen Sensormodi. Ein frischer Reboot setzt den RP2040 zuverlässig zurück
+  (dieser Test lief direkt nach einem verifiziert echten Reboot und begann
+  sauber); ob auch ein Modul-Reload ohne Reboot reicht, ist nicht getestet.
+
+* **Update 2026-09-09 vormittags (überholt, siehe oben) — Reboot allein hat
+  diesmal nicht geholfen; erste Spur GPIO-Kontention über RP1.** Nach einem verifiziert echten, frischen Reboot
+  (Kernel-Meldung „Booting Linux on physical CPU”, `btime`/`uptime` bestätigt —
+  `who -b`/`journalctl --list-boots` zeigten wegen fehlender batteriegepufferter
+  RTC und nachträglichem `chronyd`-Zeitsprung fälschlich noch den alten
+  Boot-Zeitpunkt) scheiterte der **erste** Streamversuch bereits sechs Minuten
+  nach dem Hochfahren, mit zusätzlichem, bisher nie beobachtetem Symptom davor:
+  `imx500 10-001a: setup of GPIO led failed: -121` /
+  `imx500_power_on: failed to get led gpio`, dann erst `stream on failed in
+  subdev` und der bekannte vb2-Treiberfehler beim Abbau. Diese Zeile fehlt in
+  der gesamten bisherigen Journal-Historie (alle vorherigen erfolgreichen
+  Sitzungen) komplett — sie ist neu, nicht ein wiederkehrendes Rauschen.
+  Ausgeschlossen: eine Paket-Regression (der Kamera-Stack-Umbau `libcamera`
+  0.7.2/`libpisp` 1.7.0/`rpicam-apps` 1.13.0 lief bereits am 2026-09-07 vor
+  allen erfolgreichen Sitzungen vom 2026-09-08; `apt-daily-upgrade.timer`
+  hatte heute noch nicht gefeuert).
+  `led-gpios` und `reset-gpios` hängen im Overlay (`imx500-pi5.dtbo`) am
+  selben GPIO-Controller-Phandle und werden laut den Strings in `imx500.ko`
+  über `devm_gpiod_get_optional()` geholt — diese Fehlermeldung erscheint nur
+  bei einem echten Fehler des GPIO-Subsystems, nicht bei einer fehlenden
+  optionalen Eigenschaft. Auf demselben Pi läuft minütlich
+  `x1201-monitor.service` (Geekworm-x120x-USV, `/usr/local/bin/x1200_once.py`),
+  das direkt `/dev/gpiochip0` anfasst — auf dem Pi 5 derselbe RP1-Chip, der
+  auch CSI/CFE und die Kamera-GPIOs bedient. Beide heutigen Fehlschläge lagen
+  in derselben Minute wie ein `x1201-monitor`-Tick; bei minütlichem Tick für
+  sich genommen nicht beweisend, aber mechanistisch naheliegend: zwei
+  gleichzeitige RP1-GPIO-Anfragen (Kamera-Power-on vs. USV-Pegelabfrage)
+  könnten sich das `-EREMOTEIO` liefern. **Nicht geprüft:** ob ein echter
+  Stromzyklus (Netzteil ziehen, nicht `sudo reboot`) zuverlässiger hilft als
+  der bisher übliche Warmstart — dazu hätte dieser Pi andere produktive
+  MEhub-Dienste unterbrochen, das braucht eine bewusste Freigabe.
+  Vorgeschlagene nächste Schritte, aufsteigend im Aufwand:
+  1. `x1201-monitor.timer` und `rm520n-*.timer` für einen Testlauf stoppen und
+     gezielt in der Minutengrenze mehrfach `dispread serve` starten — bestätigt
+     oder widerlegt die Kontentionshypothese ohne Risiko für den Kamerapfad.
+  2. Prüfen, ob `imx500_power_on` beim Fehlschlag von `devm_gpiod_get_optional`
+     für die LED wirklich früh abbricht (Reset/Regulator/Takt also nie gesetzt
+     werden) — würde erklären, warum danach kein Stream zustande kommt; dazu
+     reicht ein erneuter Fehlschlag mit `dynamic_debug` auf `imx500.c`, kein
+     Kernel-Rebuild nötig.
+  3. Erst danach, falls (1) nichts zeigt: ein echter Stromzyklus als
+     Gegenprobe zum reinen `reboot` — mit Ansage, da er MEhub mit betrifft.
+  Aufbau, vollständige Zeitleiste und Befehle: `docs/lab_journal.md`,
+  Eintrag 2026-09-09.
+
+* **Update 2026-09-09, Nachmittag spät — zwei Abmilderungen in
+  `workbench/Controller._worker` umgesetzt (beheben die RP2040-Sperre
+  nicht, verringern/entschärfen sie nur):** (1) Geometrie-Änderungen
+  (Breite/Höhe/Bildrate) werden jetzt über ein 250-ms-Fenster gebündelt,
+  bevor der Stream neu aufgebaut wird — eine Auflösungsänderung (bisher zwei
+  Befehle, zwei Power-Zyklen) kostet jetzt höchstens einen. (2) Die
+  riskanten Kameraaufrufe laufen über einen Wachhund
+  (`CAMERA_OP_TIMEOUT_S = 6 s`); hängt einer davon, wird das sofort als
+  `CameraWedgedError` mit Verweis auf diese OQ gemeldet, statt den
+  Kamerathread endlos schweigend hängen zu lassen — deckt damit den unter
+  „Was die Workbench tun muss" Punkt (c) ab. Details:
+  [CHANGELOG.md](../CHANGELOG.md) 2026-09-09. Noch offen: ein gezielter Test
+  für den neuen Entprell-/Wachhundpfad (bestehende Tests laufen alle mit
+  `simulate=True`), und ob (2) auch bei einem hängenden `Picamera2()`-
+  Konstruktoraufruf selbst greift — der liegt außerhalb von `_worker`s
+  Guard.
+
+* **Update 2026-09-09, spät — bei Raspberry Pi gemeldet, kein Fix ohne Reboot
+  bislang verifiziert.** Vollständige Commit-Historie von
+  `drivers/spi/spi-rp2040-gpio-bridge.c` geprüft (`gh api`): seit Einführung
+  2024-05-21 nur zwei Commits, keiner adressiert diesen Fehler; keine
+  offenen oder geschlossenen Issues im `raspberrypi/linux`-Tracker erwähnen
+  ihn. Damit ist der Fehler **nirgends dokumentiert** — gemeldet als
+  [raspberrypi/linux#7613](https://github.com/raspberrypi/linux/issues/7613)
+  mit Reproducer, Kernel-Log-Signatur und allem, was ausgeschlossen wurde
+  (RP1-GPIO-Kontention, veraltete RP2040-Firmware, Kernel-6.18.34-Diff).
+  Ein möglicher Wiederherstellungsweg ohne vollen Reboot — Unbind/Rebind von
+  `10-0040` (RP2040-Bridge) am I2C-Bus, wodurch `cam0_reg` (der von Sensor
+  **und** Bridge gemeinsam genutzte, GPIO-rückende Regulator, live per
+  `gpiod` als von `cam0_reg` exklusiv gehalten bestätigt) auf `num_users: 0`
+  fallen und danach real neu einschalten sollte — liegt vorbereitet als
+  Skript vor (`/tmp/rp2040_recover_test.sh` dieser Sitzung, nicht
+  versioniert), aber **noch nicht ausgeführt**: das Unbind/Bind
+  braucht Root, kein Nicht-Root-Weg existiert nachweislich (kein
+  gecachtes `sudo`, kein Setuid-/Polkit-Helfer, alle relevanten
+  Sysfs-Pfade `root:root`, die GPIO-Leitung selbst vom Kernel exklusiv
+  gehalten). Nächster Schritt bei Gelegenheit: das Skript mit `sudo`
+  ausführen und das Ergebnis hier sowie im GitHub-Issue nachtragen —
+  unabhängig vom Ausgang, da auch ein Fehlschlag für die Meldung relevant
+  ist.
+
+* **Update 2026-09-09, 11:15 — Test durchgeführt, Ergebnis negativ, Zustand
+  danach schlechter als vorher.** `sudo`-Zugriff kurz verfügbar (Cache),
+  Skript ausgeführt. `echo 10-0040 > .../rp2040-gpio-bridge/unbind` senkte
+  `cam0_reg` erwartungsgemäß auf `num_users: 0 / disabled` — die
+  Power-Gating-Analyse stimmt. Der anschließende Rebind scheiterte jedoch:
+  `i2c_designware 1f00088000.i2c: controller timed out`, dann **`SDA stuck
+  at low`** — ein echter I2C-Bus-Lockup, kein reines Treiberproblem. Danach
+  wurde die Kamera **nicht mehr erkannt** (`No camera number 0 found`),
+  vorher war sie zumindest noch enumeriert, nur blockiert beim Streamen.
+  **Schluss: Unbind/Rebind ist keine funktionierende Wiederherstellung ohne
+  Reboot — im Test hat es den Zustand verschlechtert.** Vermutung: der
+  RP2040 braucht entweder eine längere Aus-Phase als die getesteten ~2 s,
+  oder eine bestimmte Reihenfolge/Timing beim I2C-Wiederanlauf, die ein
+  simples Unbind/Bind nicht liefert. Nachtrag im Issue:
+  [Kommentar](https://github.com/raspberrypi/linux/issues/7613#issuecomment-5599453376).
+  Reboot war danach nötig. `/tmp/rp2040_recover_test.sh` nicht ohne
+  Weiteres wiederverwenden.
+
+* **Update 2026-09-09, spätabends — hartes Power-Zyklus-Budget in der
+  Workbench, verhindert das Auslösen über die eigene Bedienoberfläche.**
+  Da keine funktionierende Wiederherstellung existiert und der Fehler
+  hardwareseitig ungeloest bleibt, verweigert `Controller` jetzt eine
+  echte Aufloesungs-/Bildratenaenderung, sobald `geometry_cycles` das
+  Sicherheitsbudget (`MAX_GEOMETRY_CYCLES = 15`, unter dem beobachteten
+  ~20-25er-Bereich) erreicht - mit klarer Fehlermeldung statt eines
+  spaeteren, unvorhersehbaren Ausfalls. Behebt den RP2040-Fehler nicht,
+  verhindert aber zuverlaessig, ihn ueber `dispread` selbst auszuloesen.
+  Details: [CHANGELOG.md](../CHANGELOG.md) 2026-09-09 spätabends, Test
+  `test_geometry_budget_blocks_change_but_allows_same_value`.
+
+* **Update 2026-09-09, noch später — Lücke im Budget geschlossen: Zähler
+  überlebt jetzt einen dispread-Neustart korrekt.** Der Zähler lag nur im
+  Prozessspeicher; ein reiner `dispread`-Neustart (ohne Host-Reboot) hätte
+  ihn faelschlich auf 0 gesetzt, obwohl der RP2040 die Zyklen laengst
+  verbraucht hatte (belegt: Fehlschlag trat in einem frueheren Test auch
+  ueber mehrere frische Prozesse hinweg auf derselben Bootsitzung ein).
+  Jetzt an die Kernel-Boot-ID gebunden persistiert
+  (`camera_cycles.json`) — haelt ueber Prozessneustarts, setzt sich nur bei
+  echtem Reboot zurueck. Details:
+  [CHANGELOG.md](../CHANGELOG.md) 2026-09-09 noch später.
+
+* **Update 2026-09-09, noch später — mögliche echte Abhilfe auf
+  Devicetree-Ebene gefunden, nicht selbst umsetzbar (kein Root, Reboot zum
+  Testen nötig).** Der beim Rebind-Test aufgetretene I2C-Bus-Lockup
+  (`SDA stuck at low`) betrifft `i2c@88000` (RP1) — dessen Devicetree-Knoten
+  hat **keine** `scl-gpios`/`sda-gpios`-Eigenschaften. Linux' eingebaute
+  generische GPIO-Bus-Recovery (`i2c_generic_gpio_recovery`, Standardmechanismus
+  genau für einen haengenden SDA-Zustand) ist fuer diesen Bus also gar nicht
+  verdrahtet — ein Stuck-Zustand kann sich derzeit nicht von selbst
+  erholen. Waere dieses Feature per Overlay/Basis-Devicetree ergaenzt
+  (setzt voraus, dass RP1s Pinmux SCL/SDA waehrend der Recovery als
+  reine GPIOs freigeben kann), koennte der Kernel einen solchen Lockup
+  selbststaendig ohne jeden Host-Reboot beheben — unabhaengig davon, was
+  die eigentliche RP2040-Ursache ist. Im Issue nachgetragen:
+  [Kommentar](https://github.com/raspberrypi/linux/issues/7613#issuecomment-5599575083).
+  Nicht selbst umgesetzt: braucht Root zum Bauen/Installieren eines
+  Overlays und einen Reboot zum Testen.
+
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.

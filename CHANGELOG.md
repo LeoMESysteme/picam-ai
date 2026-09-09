@@ -3,6 +3,128 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-09 (noch später)
+
+### Power-Zyklus-Budget überlebt jetzt einen dispread-Neustart korrekt (OQ-22)
+
+**Problem:** `geometry_cycles` lebte nur im Prozessspeicher. Der RP2040
+merkt sich Power-Zyklen aber pro **Boot**, nicht pro Prozess (belegt: ein
+Test mit je einem frischen Python-Prozess pro Zyklus hing trotzdem nach
+~24 Zyklen). Ein Neustart von `dispread` allein — ohne Host-Reboot — hätte
+den Zähler faelschlich auf 0 gesetzt und so mehr echte Power-Zyklen erlaubt,
+als das Sicherheitsbudget vorsieht. Das Sicherheitsversprechen aus der
+vorigen Änderung war damit lückenhaft.
+
+**Änderung:** `geometry_cycles` wird jetzt zusammen mit der aktuellen
+Kernel-Boot-ID (`/proc/sys/kernel/random/boot_id`) in
+`camera_cycles.json` persistiert (`_load_geometry_cycles`,
+`_save_geometry_cycles`, `atomic_json`). Stimmt beim Start die gespeicherte
+Boot-ID mit der aktuellen überein, wird der Zähler fortgeführt; bei einem
+echten Reboot (andere oder fehlende Boot-ID) beginnt er korrekt bei 0.
+
+**Konsequenz:** Das Sicherheitsbudget haelt jetzt auch ueber
+`dispread`-Neustarts hinweg, ohne dass ein Host-Reboot noetig ist, um den
+Zaehler zu "umgehen". Zwei neue Tests beweisen beide Faelle:
+`test_geometry_cycles_survive_process_restart_same_boot` (gleiche Boot-ID
+-> Zaehler bleibt) und `test_geometry_cycles_reset_on_new_boot`
+(abweichende Boot-ID -> Zaehler auf 0). 67 Tests und `ruff check src tests
+examples` grün.
+
+## 0.1.0.dev0 — 2026-09-09 (spätabends)
+
+### Hartes Power-Zyklus-Budget: RP2040-Sperre kann durch Workbench-Bedienung nicht mehr ausgeloest werden (OQ-22)
+
+**Problem:** Bislang konnte eine Bedienperson im `setup`-Tab beliebig oft
+Aufloesung oder Bildrate aendern. Jede echte Aenderung kostet einen
+RP2040-Power-Zyklus (bestaetigt: unbind/rebind-Test hat den Regulator
+tatsaechlich auf 0 Nutzer fallen lassen). Nach real gemessenen ~20-25
+Zyklen antwortet der Chip nicht mehr auf I2C - bislang ohne Vorwarnung,
+mitten in einer Sitzung.
+
+**Änderung:** Neue Konstante `MAX_GEOMETRY_CYCLES = 15` (Sicherheitsabstand
+unter dem beobachteten Bereich). `Controller.geometry_cycles` zaehlt jeden
+tatsaechlichen Stream-Neuaufbau in `_worker`. `_check_geometry_budget()`
+verweigert `camera.set`/`camera.set_many`, sobald eine **echte** Aenderung
+(nicht das Wiederwaehlen des bereits aktiven Werts) das Budget
+ueberschreiten wuerde, mit klarer Fehlermeldung statt eines spaeteren,
+unvorhersehbaren Ausfalls. `geometry_cycles`/`geometry_cycles_max` stehen
+jetzt in `snapshot()`.
+
+**Konsequenz:** Solange nur ueber die Workbench bedient wird, kann die
+RP2040-Sperre **nicht mehr unbeabsichtigt ausgeloest werden** - die
+Bedienperson bekommt stattdessen rechtzeitig die Aufforderung, `dispread`
+(und danach den Host) neu zu starten, statt dass die Kamera mitten in einer
+Messreihe unvorhersehbar haengt. Das behebt den RP2040-Fehler selbst nicht,
+verhindert aber zuverlaessig, ueber die eigene Bedienoberflaeche
+hineinzulaufen. Neuer Test
+`test_geometry_budget_blocks_change_but_allows_same_value` beweist beides:
+echte Aenderung wird bei erschoepftem Budget verweigert, Wiederwaehlen des
+aktiven Werts bleibt erlaubt. 65 Tests und `ruff check src tests examples`
+grün.
+
+## 0.1.0.dev0 — 2026-09-09 (später)
+
+### Aufloesungswechsel kostet jetzt deterministisch einen statt zwei Power-Zyklen (OQ-22)
+
+**Problem:** Der `resolution`-Auswahlzeile in `fields.py` sandte Breite und
+Hoehe als zwei getrennte `camera.set`-Befehle. Der zuvor ergaenzte
+250-ms-Entprellpfad in `_worker` buendelt das meistens zu einem
+Stream-Neuaufbau, ist aber eine Zeitfensterheuristik - kein garantiertes
+Verhalten, falls die beiden Befehle mit mehr Abstand ankommen.
+
+**Änderung:** Neuer Controller-Befehl `camera.set_many` setzt mehrere
+Kamerafelder in genau einer `_change()`-Revision; die per-Feld-Logik aus
+`camera.set` ist dafuer in `_apply_camera_key()` ausgelagert (von beiden
+Befehlen geteilt, keine Dopplung). Die Aufloesungszeile in `fields.py`
+sendet jetzt einen einzigen `camera.set_many`-Befehl mit Breite und Hoehe
+zusammen statt zwei `camera.set`-Befehlen.
+
+**Konsequenz:** Ein Aufloesungswechsel kostet garantiert genau einen
+RP2040-Power-Zyklus statt (zeitfensterabhaengig) bis zu zwei - unabhaengig
+vom Timing zwischen den beiden Feldern. Neuer Test
+`test_camera_set_many_is_one_atomic_revision` beweist das direkt: eine
+Revision, beide Felder gesetzt. 64 Tests und `ruff check src tests
+examples` grün.
+
+## 0.1.0.dev0 — 2026-09-09
+
+### Kamerathread: Geometrie-Aenderungen buendeln, haengende Kamera-Ioctls sichtbar machen (OQ-22)
+
+**Problem:** Ein Diagnose-Reproducer ohne `dispread`-Code hat gezeigt, dass
+der RP2040-Bridge-Chip auf der AI-Camera nach rund 20-25 Power-Zyklen
+(`stop`/`configure`/`start`) innerhalb einer Bootsitzung nicht mehr auf I2C
+antwortet — danach haengt jeder weitere Kamerazugriff, nur ein Reboot hilft
+(Details: [OQ-22](docs/open-questions.md)). `Controller._worker` loeste
+bislang bei **jeder** einzelnen Aenderung von Breite, Hoehe oder Bildrate
+sofort einen Neuaufbau aus; da die Weboberflaeche Breite und Hoehe als zwei
+getrennte Befehle sendet, kostete eine Aufloesungsaenderung im Betrieb zwei
+Power-Zyklen statt einem. Zusaetzlich hing der Worker bei einer haengenden
+Kamera-Ioctl (`configure`/`start`/`stop`/`capture_request`) fuer immer
+schweigend, statt den Fehler als das zu melden, was er ist.
+
+**Änderung:** `_worker` puffert Geometrie-Aenderungen ueber ein kurzes
+Zeitfenster (`GEOMETRY_DEBOUNCE_S`, 250 ms) und baut den Stream erst neu auf,
+wenn Breite/Hoehe/Bildrate sich nicht mehr aendern — mehrere schnelle
+Befehle buendeln sich so zu einem Neuaufbau statt mehrerer. Die riskanten
+Kameraaufrufe (`stop`, `configure`, `start`, `capture_request`) laufen jetzt
+ueber `_guarded()`: ein Wachhund-Thread mit `CAMERA_OP_TIMEOUT_S` (6 s).
+Kehrt der Aufruf nicht zurueck, wird das als `CameraWedgedError` gemeldet
+("Kamera reagiert nicht (...); vermutlich RP2040-Sperre (OQ-22), Reboot
+noetig") statt als endloser Timeout; die anschliessende Aufraeumroutine
+verzichtet dann bewusst auf einen weiteren `stop()`/`close()` auf demselben,
+bereits blockierten Kameraobjekt.
+
+**Konsequenz:** Reine Belichtungs-/Verstaerkungs-/Kontraständerungen waren
+bereits vorher `set_controls()`-only und bleiben unveraendert kostenlos.
+Aufloesungs-/Bildratenaenderungen kosten jetzt hoechstens einen Power-Zyklus
+statt zwei. Eine echte RP2040-Sperre wird jetzt innerhalb von rund
+`CAMERA_OP_TIMEOUT_S` als klarer Fehlerzustand sichtbar (`snapshot()["error"]`)
+statt als unbestimmt haengender Kamerathread — behebt die Sperre selbst
+nicht, macht sie aber sofort erkennbar. 63 Tests und `ruff check src tests
+examples` weiterhin grün; die bestehenden Workbench-Tests laufen alle mit
+`simulate=True` und durchlaufen den neuen Entprell-/Wachhundpfad nicht — ein
+gezielter Test dafür fehlt noch.
+
 ## 0.1.0.dev0 — 2026-09-08
 
 ### Zahlenerkennung an der Kamera angeschlossen (Zwischenstand, Bedienung fehlt)

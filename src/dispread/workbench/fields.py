@@ -115,7 +115,7 @@ def rows(state):
                 _option(
                     f"{width}x{height}",
                     f"{width}x{height}",
-                    [["camera.set", {"key": "width", "value": width}], ["camera.set", {"key": "height", "value": height}]],
+                    [["camera.set_many", {"values": {"width": width, "height": height}}]],
                 )
                 for width, height in sizes
             ],
