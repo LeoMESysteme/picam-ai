@@ -3,6 +3,32 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-10, nachmittags (OQ-22: Maintainer-Antwort beantwortet, Testkernel-Plan vorgemerkt — kein Codechange)
+
+### Raspberry-Pi-Maintainer hat auf das gemeldete RP2040-Bridge-Wedge (OQ-22) geantwortet
+
+**Problem:** `naushir` konnte die gemeldete Kamerasperre
+([raspberrypi/linux#7613](https://github.com/raspberrypi/linux/issues/7613))
+mit dem gegebenen Reproducer nicht nachstellen und fragte nach Abweichungen
+in `config.txt`; zusätzlich verwies er auf einen Testkernel-Branch
+(`naushir/linux#imx500_tests`) mit "speculative fixes + a real PM runtime
+fix".
+
+**Änderung:** Im Issue geantwortet (kein Codechange): die Kernel-Cmdline
+dieses Pi ist projektfremd angepasst, insbesondere `pcie_port_pm=off` — RP1
+trägt den I2C-Bus zu imx500 **und** rp2040-gpio-bridge und hängt hinter
+PCIe, passt also zu einem "PM runtime fix". Zusätzlich bestätigt: die
+Reproduktion ist auflösungsunabhängig (fester 960×720-Loop reicht). Ein
+gestufter Testplan (erst Cmdline probeweise auf Standard zurücksetzen, erst
+danach ggf. den Testkernel-Branch parallel installieren und booten) ist für
+das nächste Wartungsfenster vorgemerkt — bewusst **nicht** während dieser
+laufenden Entwicklungssitzung (aktiver `dispread serve`-Prozess) ausgeführt,
+ein Neustart hätte sie unterbrochen.
+
+**Konsequenz:** OQ-22 bleibt offen, aber der Maintainer-Dialog läuft weiter.
+Details und der vollständige Testplan: [OQ-22](docs/open-questions.md).
+
+
 ## 0.1.0.dev0 — 2026-09-10 spät nachts (TUI-style zweistufiger Bestätigungsablauf; Race-Condition-Fix)
 
 ### Klick auf die ROI-Box während einer laufenden Vermutungsanfrage verwarf das Ergebnis

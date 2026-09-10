@@ -533,6 +533,41 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Nicht selbst umgesetzt: braucht Root zum Bauen/Installieren eines
   Overlays und einen Reboot zum Testen.
 
+* **Update 2026-09-10, nachmittags — Rückmeldung von Raspberry-Pi-Maintainer
+  `naushir` im Issue, beantwortet.** Zwei Punkte: (1) Reproduktion bei ihm
+  nicht gelungen, Frage nach Abweichungen in `config.txt`. (2) Verweis auf
+  einen Testkernel-Branch mit "speculative fixes + a real PM runtime fix":
+  https://github.com/naushir/linux/tree/imx500_tests. Antwort gepostet
+  ([Kommentar](https://github.com/raspberrypi/linux/issues/7613#issuecomment-5619533288)):
+  `config.txt` selbst ist nahe am Standardimage, aber die Kernel-Cmdline
+  dieses Pi ist projektfremd angepasst und enthält u. a. `pcie_port_pm=off`
+  — relevant, weil RP1 (trägt den I2C-Bus zu imx500 **und**
+  rp2040-gpio-bridge) hinter PCIe hängt und der genannte Fix als
+  "PM runtime fix" beschrieben ist. Außerdem bestätigt: die Reproduktion ist
+  nachweislich auflösungsunabhängig (fester 960×720-Loop ohne Rekonfiguration
+  wedgt zuverlässig bei Zyklus ~24-25, siehe Journal-Eintrag „2026-09-09,
+  Nachmittag" oben) — die im Issue genannte Reproduzieranleitung war also
+  korrekt, nicht die Ursache des Nichtreproduzierens bei ihm.
+  **Vereinbarter nächster Schritt, absichtlich noch nicht ausgeführt:**
+  Bediener ist aktiv am Entwickeln (laufender `dispread serve`-Prozess auf
+  diesem Pi); ein Neustart würde das jetzt unterbrechen. Für das nächste
+  Wartungsfenster vorgemerkt, aufsteigend im Aufwand:
+  1. Cmdline probeweise auf ein Standardimage zurücksetzen (insbesondere
+     `pcie_port_pm=off`, `numa=fake=8`, `cgroup_disable=memory` entfernen),
+     reproduzieren erneut versuchen — billig, reversibel, kein Kernel-Build.
+  2. Nur falls (1) nichts zeigt: `naushir/linux` Branch `imx500_tests` bauen
+     und **parallel** installieren (eigenes `kernel*.img` + eigener
+     `/lib/modules/<ver>`-Pfad, ausgewählt über einen zusätzlichen
+     `config.txt`-Eintrag; `kernel_2712.img` und
+     `/boot/firmware/overlays/` nicht überschreiben — dort liegt das
+     Bootrisiko, falls der Branch Devicetree-Änderungen mitbringt), damit
+     testen und das Ergebnis (inklusive `dmesg` bei Erfolg wie Misserfolg)
+     im Issue nachtragen. Hinweis: `linux-headers-6.18.34+rpt-*` ist auf
+     diesem Pi bereits installiert, aber unbebootet — enthält die von
+     `naushir` genannten Fixes nicht, ist aber ein kostenloser
+     Zwischendatenpunkt, falls ohnehin neu gestartet wird.
+
+
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
 
