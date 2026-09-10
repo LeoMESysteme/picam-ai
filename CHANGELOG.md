@@ -3,6 +3,338 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-10 spät nachts (TUI-style zweistufiger Bestätigungsablauf; Race-Condition-Fix)
+
+### Klick auf die ROI-Box während einer laufenden Vermutungsanfrage verwarf das Ergebnis
+
+**Problem:** Bedienerrückmeldung: "wenn ich die roi box anklicke verliert er
+die vorgeschlagene box und schlägt wieder die letzte confirmte box vor."
+Ursache, durch Nachverfolgung bestätigt: `suggest()` (`workbench.js`, `R`-Zug)
+rief nacheinander `roi.suggest` und `ocr.suggest` auf; beide rechneten ihre
+OpenCV-Arbeit (`fit_quad_in_region`/`fit_ocr_box`) vollständig **innerhalb**
+von `Controller.command()`s einzigem `with self.lock:`-Block — anders als
+`publish()`, das seine OpenCV-Arbeit bewusst ausserhalb des Locks haelt.
+Das machte den Umlauf langsam genug, dass ein Klick/Zug auf die ROI-Box
+während der Wartezeit `onpointerdown` den **noch alten** Zustand in `drag`
+einfror; ein nachfolgendes `onpointermove` überschrieb damit die gerade
+eingetroffene Vermutung mit der veralteten, zuletzt bestätigten Geometrie.
+Nirgends wurde die Zeigereingabe waehrend einer laufenden Anfrage gesperrt.
+
+**Änderung:** Bei der Fehlersuche äusserte der Bediener den weitergehenden
+Wunsch, die tastaturgesteuerte Bedienung (`R` Hinweisrechteck, `G`
+Rahmenwechsel, `Shift+Pfeile` Eckenverschiebung, `Strg+Enter` Bestätigung)
+durch einen zweistufigen, knopfbasierten Ablauf zu ersetzen:
+
+- **Stufe A (ROI):** die laufende Live-Kandidatensuche zeigt mehrere duenne,
+  einzeln anklickbare Vorschlagsboxen; ein Klick waehlt die passende aus.
+  Zwei TUI-Knoepfe (✓/✎) an der aktiven Box: ✎ schaltet in einen Bearbeiten-
+  Modus (Koerper verschieben, Ecken ziehen — beides bleibt erhalten, wird
+  waehrenddessen zu ✕ zum Abbrechen), ✓ uebernimmt die Position.
+- Nach ✓ ruft der Client automatisch `ocr.suggest` mit dieser Position auf
+  und wechselt zu **Stufe B (OCR)**: derselbe ✓/✎-Ablauf an der
+  OCR-Box. Ein Klick auf die jetzt inaktive ROI-Box fuehrt zurueck zu
+  Stufe A, ohne die Kandidatensuche neu zu starten.
+- ✓ an der OCR-Box sendet den bestehenden `roi`-Op (Quad+OCR-Box zusammen,
+  im `annotate`-Modus zusaetzlich das unveraendert Ground-Truth-Textfeld) —
+  weiterhin die einzige Stelle, an der `confirmed` wahr wird.
+- **Kernbehebung:** waehrend eine Vermutungs-/Bestaetigungsanfrage laeuft
+  (`editing.pending`), ignoriert `canvas.onpointerdown` jede Zeigereingabe
+  vollstaendig und alle vier Knoepfe sind deaktiviert — genau das verhindert
+  die gemeldete Race Condition strukturell, nicht nur zufaellig.
+- `ocr.suggest` rechnet seine OpenCV-Arbeit jetzt ausserhalb des Controller-
+  Locks (`Controller._suggest_ocr_box`, vor dem `with self.lock:` in
+  `command()` abgefangen) — mirror von `publish()`s Muster.
+- Der jetzt ungenutzte `roi.suggest`-Op ist entfernt (Kandidatenauswahl liest
+  die ohnehin laufend berechnete Kandidatenliste, keine erneute
+  hinweisgebundene Suche mehr). `fit_quad_in_region` selbst bleibt - `publish()`s
+  Vergleichssuche (heute frueher ergaenzt) nutzt sie weiter unveraendert.
+- `freeze()` liefert jetzt die volle Kandidatenliste statt nur der einen
+  besten Vermutung (mit einmaligem Nachsuchlauf, falls nach einer
+  Bestätigung in derselben Sitzung keine Kandidaten mehr zwischengespeichert
+  sind); die vormittags ergänzte automatische OCR-Vorschlag-Vermutung direkt
+  in `freeze()` entfällt wieder — die Vermutung passiert jetzt explizit beim
+  Stufenübergang.
+
+**Konsequenz:** Der gemeldete Bug ist strukturell behoben (keine
+Zeigereingabe waehrend einer offenen Anfrage moeglich), nicht nur seltener
+gemacht. Neue Tests: `test_ocr_suggest_does_not_hold_the_controller_lock_during_detection`
+(Kernbehebung, Lock-Freigabe), `test_freeze_returns_all_current_candidates`,
+`test_freeze_populates_candidates_even_when_none_were_cached`,
+`test_command_rejects_the_removed_roi_suggest_op`. `docs/anleitung/10-kamera-livevorschau.md`
+aktualisiert. Manuelle Bedienprüfung im echten Browser steht aus (OQ-21).
+
+## 0.1.0.dev0 — 2026-09-10 nachts (Sitzungsstart erzwingt erneute Bestätigung; OCR-Box-Vorschlag beim Öffnen des Editors)
+
+### Bedienerwunsch: jede Sitzung soll mit laufender Erkennung beginnen, nicht mit stillschweigend übernommener alter Bestätigung
+
+**Problem:** Bedienerrückmeldung, nach Klärung per Rückfrage: Der Bediener
+möchte beim Start der Web-UI aktiv laufende ROI-Erkennung sehen, daraus die
+richtige Anzeige auswählen bzw. den Rahmen nachziehen, dann bestätigen -
+woraufhin der Innenbereich automatisch auf Ziffern durchsucht und eine
+OCR-Box vorgeschlagen wird, die er wiederum bestätigt oder korrigiert. Die
+bisherige Lösung (gedrosselte, auf die bestätigte ROI eingegrenzte
+Vergleichssuche) erfüllte das nicht: eine bereits bestätigte Geometrie blieb
+sofort `confirmed` und damit run-fähig, ohne dass der Bediener sie in dieser
+Sitzung überhaupt gesehen oder bestätigt hätte.
+
+**Änderung:** `Controller.__init__` setzt nach dem Laden eines bereits
+bestätigten Profils `confirmed` auf `false` - nur in der Laufzeitkopie, die
+gespeicherte Profildatei bleibt unverändert, und `roi`/`roi_quad`/`ocr_box`
+bleiben als Startpunkt für eine schnelle erneute Bestätigung erhalten. Das
+reaktiviert automatisch die volle, ungedrosselte Vollbild-Kandidatensuche auf
+dem Livebild (`publish()`: unbestätigt sucht wie schon immer jedes Bild) und
+sperrt den `run`-Modus, bis der Bediener aktiv erneut bestätigt (Konzept.md
+§4: „Bestätigung ist der Akt eines Menschen" - jetzt auch nach einem
+Neustart, nicht nur einmalig). Zusätzlich ruft `Controller.command("freeze")`
+jetzt automatisch `fit_ocr_box` auf dem aktuellen ROI-Ausschnitt auf und
+bietet das Ergebnis direkt als `ocr_box` an (gestrichelt markiert,
+`ocr_suggested` im Editier-Zustand) - der zweite Schritt des Kalibrierflusses
+läuft damit ohne einen zusätzlichen manuellen `R`-Zug für die OCR-Box. Kein
+Kandidat ist weiterhin inert: Rückfall auf den bisher gespeicherten oder
+(Stufe 1) geschrumpften Default-Wert. Neue Tests
+`test_startup_requires_re_confirmation_of_a_previously_confirmed_profile`,
+`test_startup_does_not_touch_an_already_unconfirmed_profile`,
+`test_freeze_suggests_a_fresh_ocr_box_for_the_current_quad`,
+`test_freeze_falls_back_when_no_ocr_box_can_be_suggested`.
+
+**Konsequenz:** End-to-End an einer echten Annotation nachgestellt (Profil
+mit bestätigter Geometrie gespeichert, Controller neu instanziiert): nach dem
+Neustart ist `confirmed=false`, die Kandidatensuche läuft wieder
+(Vollbildsuche findet die Anzeige), `run`-Modus ist gesperrt, `freeze()`
+startet am alten `roi` und bietet sofort eine frische OCR-Box-Vermutung an.
+Bekannte, unveränderte Grenze: Die automatische OCR-Box-Vermutung trifft am
+selben Netzteil-Beispiel wie in OQ-25 dokumentiert weiterhin gelegentlich die
+falsche von zwei übereinanderliegenden Anzeigen - das ist ein reiner
+Vorschlag, gestrichelt dargestellt, keine automatische Übernahme; siehe
+aktualisierter [OQ-25](docs/open-questions.md). Beantwortet **nicht** die
+weiterhin offene Labor-/QM-Frage [OQ-05](docs/open-questions.md), ob eine
+einmalige Bestätigung je Geräteinstanz betrieblich vorgesehen ist - das ist
+eine Softwareentscheidung für den Editor-Workflow.
+
+## 0.1.0.dev0 — 2026-09-10 abends (unbeaufsichtigte Doku-Pflege-Routine)
+
+### Doku driftet zwischen Arbeitssitzungen, niemand räumt zwischendurch auf
+
+**Problem:** `docs/` wächst nur an (Konzept.md-Autorität, Doku-Pflicht aus
+AGENTS.md), aber es gibt keinen Mechanismus, der veraltete oder redundante
+Abschnitte zwischen Sitzungen kürzt oder Querverweise repariert. Der Pi ist
+nachts aus, der Bediener beginnt morgens direkt mit der Arbeit.
+
+**Änderung:** Neues Skript `scripts/repo-maintenance.sh` (per `@reboot`-
+Cron kurz nach dem morgendlichen Boot) ruft `claude -p` unbeaufsichtigt mit
+festem Prompt (`scripts/repo-maintenance-prompt.md`) auf. Harte Grenzen im
+Prompt: nur `docs/` und `CHANGELOG.md`, nie `Konzept.md`/`AGENTS.md`/
+`CLAUDE.md`/`src/`/`tests/`/`examples/`, OQ-Einträge werden nie gelöscht
+(nur auf „geklärt" gesetzt). Die Claude-Session läuft mit
+`--permission-mode acceptEdits` und `--disallowedTools
+"Bash,Agent,WebFetch,WebSearch"` (kein Shell-Zugriff, keine Subagenten,
+keine externen Abrufe — nur Datei-Tools und installierte Skills/Plugins).
+Der Wrapper committet automatisch, aber nur wenn (a) der Arbeitsbaum vor
+dem Lauf sauber war und (b) ausschließlich `docs/`/`CHANGELOG.md` geändert
+wurden — sonst bleibt alles unangetastet bzw. uncommittet für manuelle
+Prüfung liegen. Läuft im Log unter `~/.local/state/picam-ai-maintenance/`.
+
+**Konsequenz:** Ab dem nächsten Boot räumt sich die Doku morgens selbst
+auf, bevor die eigentliche Arbeitssitzung beginnt. Läuft nur an, wenn der
+Baum bereits committet war — mischt sich also nie mit laufender manueller
+Arbeit. Erster scharfer Lauf noch nicht beobachtet (Cron erst nach diesem
+Commit eingerichtet).
+
+## 0.1.0.dev0 — 2026-09-10 spätabends (Vergleichssuche schlug andere Bildschirme vor)
+
+### Die wiederhergestellte Vergleichssuche suchte weiter im ganzen Bild statt nur um die bestätigte ROI
+
+**Problem:** Bedienerrückmeldung direkt auf die spätnachmittägliche Änderung:
+Nach einem Neustart mit bestätigter ROI/OCR blieb zwar die alte Geometrie
+sichtbar, aber die wieder aktivierte Vergleichssuche schlug weiterhin andere
+Bildschirme/ROIs im Bild vor. Ursache: Die spätnachmittägliche Änderung ließ
+`find_display_candidates` — die Vollbildsuche — auch nach der Bestätigung
+weiterlaufen, nur gedrosselt statt bei jedem Bild. Am realen Testaufbau
+(Netzteil mit zwei Anzeigen `V`/`A`, zwei Monitore im Hintergrund, weitere
+Messgeräte) fand die Suche regelmäßig ein anderes rechteckiges Objekt im
+Bild statt der tatsächlich bestätigten Anzeige.
+
+**Änderung:** Die Vergleichssuche nutzt jetzt `fit_quad_in_region` (aus
+Stufe 2 der Vortagsarbeit) mit der bestätigten `config["roi"]` als
+Suchfenster-Hinweis statt der Vollbildsuche — der Suchraum bleibt auf die
+~25 % aufgeweitete Umgebung der bestätigten ROI beschränkt. Zusätzlich neuer
+Mindestüberdeckungsfilter `MIN_HINT_OVERLAP = 0.2` in `fit_quad_in_region`
+selbst: ein Kandidat muss den *ungepolsterten* Hinweisbereich zu mindestens
+20 % überdecken, sonst wird er verworfen — sonst hätte bei einer großzügig
+bestätigten ROI (das aufgeweitete Suchfenster kann dann beträchtlichen
+Spielraum haben) weiterhin ein zufällig rechteckigeres, aber unbeteiligtes
+Objekt am Rand des Fensters gewinnen können. Neuer, an einer nachgebauten
+Ablenker-Szene verifizierter Test
+`test_fit_quad_in_region_ignores_unrelated_objects_outside_the_hint` sowie
+`test_confirmed_roi_never_triggers_the_whole_frame_candidate_search` und
+`test_confirmed_roi_verification_search_is_scoped_to_the_confirmed_region`
+(ersetzen den bisherigen, auf `find_display_candidates` gestützten
+Drosselungstest). Ergebnis in `Controller.publish()` bleibt ein einzelnes
+gelbes Vergleichsquad statt mehrerer Kandidatenboxen; `self.candidates`
+bleibt (wie ursprünglich dokumentiert) ausschließlich der unbestätigten
+Vollbildsuche vorbehalten, das bestätigte Vergleichsergebnis liegt getrennt
+in `self.verify_quad`.
+
+**Konsequenz:** Am realen Beispiel (`var/workbench/annotations/*`) trifft
+die eingegrenzte Vergleichssuche mit der bestätigten ROI als Hinweis die
+tatsächliche Anzeige (IoU ≈ 0,91, wie schon für `roi.suggest` in
+[VALIDATION.md](docs/VALIDATION.md) gemessen) und ignoriert die im selben
+Bild sichtbaren Monitore vollständig. Nebenbei günstiger als die vorherige
+Vollbildsuche: rund 12,5 ms/Bild im (künstlich erzwungenen) Suchfall statt
+16,6 ms, Leerlauf und `run`-Modus unverändert bei rund 8,0–8,1 ms/Bild —
+aktualisierte Zahlen in [docs/VALIDATION.md](docs/VALIDATION.md). OQ-24
+erneut präzisiert, nicht neu eröffnet.
+
+## 0.1.0.dev0 — 2026-09-10 spätnachmittags (Kandidatensuche nach Neustart mit bestätigter ROI)
+
+### Bestätigte Geometrie hatte nach einem Neustart nie mehr einen visuellen Vergleich
+
+**Problem:** Bedienerrückmeldung: Beim Start der Web-UI ist die zuletzt
+eingestellte ROI/OCR-Geometrie weiterhin aktiv (korrekt, `Controller.__init__`
+lädt das Default-Profil unverändert), aber es wird nicht mehr automatisch
+gesucht. Ursache in der mit OQ-24 (2026-09-09) eingeführten Optimierung:
+`find_display_candidates` lief `boxes = () if config["confirmed"] else
+find_display_candidates(...)` — sobald einmal bestätigt, für immer aus, auch
+über Prozessneustarts hinweg. Der Bediener hatte damit keinerlei visuellen
+Hinweis mehr (gelbe Kandidatenbox neben dem grünen bestätigten Rahmen), ob die
+geladene Geometrie noch zur aktuell vor der Kamera stehenden Szene passt.
+
+**Änderung:** Neue Konstante `CANDIDATE_INTERVAL_S = 1.0` (`controller.py`).
+`publish()` sucht jetzt: vor einer Bestätigung weiterhin bei jedem Bild
+(unverändert), nach einer Bestätigung gedrosselt auf höchstens einmal je
+Sekunde, und **nie im `run`-Modus** — der Produktionsmodus behält die mit
+OQ-24 behobenen Vollbildsuche-pro-Bild-Kosten (30,837 ms/Bild) vollständig
+abgeschaltet. Zwischen zwei Suchen bleibt die zuletzt gefundene Kandidatenliste
+sichtbar (`cached_candidates`), damit die gelben Boxen nicht mit der
+Drosselfrequenz flackern. `Controller._load()` loggt beim Laden einer bereits
+bestätigten Geometrie zusätzlich einen Warnhinweis, dass sie noch nicht gegen
+die aktuelle Szene verglichen wurde. Die Bestätigung selbst bleibt
+unangetastet — kein automatisches Un-Confirm, kein automatischer Ersatz der
+Geometrie (Konzept.md §4: „Bestätigung ist der Akt eines Menschen"). Neuer
+Test `test_confirmed_roi_throttles_candidate_search_outside_run_mode`,
+`test_confirmed_roi_in_run_mode_skips_full_frame_candidate_search` (ersetzt
+den bisherigen, zu unbedingten Test) und
+`test_loading_a_confirmed_profile_warns_about_unverified_geometry`.
+
+**Konsequenz:** Nach einem Neustart mit bereits bestätigter Geometrie
+erscheint jetzt wieder eine gelbe Kandidatenbox neben dem grünen bestätigten
+Rahmen, mit der der Bediener vergleichen kann, ob die Geometrie noch passt —
+ohne dass irgendetwas automatisch übernommen wird. Kostenmessung (gleiches
+Realbild wie die OQ-24-Messung): rund 8,3 ms/Bild im gedrosselten Leerlauf,
+16,6 ms/Bild im (künstlich erzwungenen) Suchfall, `run`-Modus unverändert bei
+rund 8,3 ms/Bild ohne jede Suche — bei 1 Hz Drosselung im Mittel weit unter
+1 ms/Bild zusätzlich, siehe [docs/VALIDATION.md](docs/VALIDATION.md). OQ-24
+entsprechend präzisiert (`docs/open-questions.md`), nicht neu eröffnet.
+
+## 0.1.0.dev0 — 2026-09-10 (Workbench-Editor: Klickpriorität, automatische Box-Vorschläge, Ground-Truth-Erfassung)
+
+Setzt [docs/PLAN_2026-09-10-workbench-editor.md](docs/PLAN_2026-09-10-workbench-editor.md)
+vollständig um (alle drei dort geplanten Stufen).
+
+### Stufe 1 — Verklicken zwischen `roi_quad` und `ocr_box`
+
+**Problem:** Bedienerrückmeldung: Direkt nach einer frischen `roi`-Bestätigung
+startet `ocr_box` deckungsgleich mit `roi_quad` (`[0,0,1,1]`). `nearestHandle`
+(`workbench.js`) suchte den nächsten Punkt global über beide Boxen zusammen;
+an eng benachbarten Ecken traf der Klick oft die äußere ROI statt der
+gewollten inneren OCR-Box.
+
+**Änderung:** `nearestHandle` prüft jetzt zuerst alle `ocr`-Ecken innerhalb des
+Trefferradius (18 px), erst wenn keine trifft die `roi`-Ecken — die gelbe Box
+liegt auch optisch über der grünen (`draw()` zeichnet `roi` zuerst).
+`Controller.command("freeze")` bietet zusätzlich, wenn `ocr_box` noch der
+unberührte Default ist, im **zurückgegebenen Editier-Zustand** einen spürbar
+kleineren Startwert `[0.15, 0.15, 0.7, 0.7]` an — reine Editor-Sitzungsgröße,
+weder `self.config` noch eine Bestätigung ändern sich dadurch. Neue Tests
+`test_freeze_offers_a_smaller_default_ocr_box_without_persisting_it`,
+`test_freeze_keeps_a_confirmed_ocr_box_unchanged`.
+
+**Konsequenz:** Die beiden Rahmen sind direkt nach dem Einfrieren sichtbar
+getrennt und die Trefferlogik bevorzugt den optisch obenliegenden Rahmen —
+das gemeldete Verklicken tritt nicht mehr auf. Kein Schema-, Migrations- oder
+Persistenzeffekt.
+
+### Stufe 2 — Automatische `roi_quad`-/`ocr_box`-Vorschläge über einen groben Bedienerhinweis
+
+**Problem:** Jede Kalibrierung eines neuen Geräts erforderte vollständiges
+manuelles Ziehen aller acht Eckpunkte. Eine Kontursuche ohne jeden Hinweis
+kann mehrere ähnlich rechteckige Objekte am Prüfstand nicht unterscheiden
+(Konzept.md §7: Haupt-/Nebenanzeige-Verwechslung), Vollautomatik wäre also
+unzuverlässiger als ein grober Bedienerhinweis.
+
+**Änderung:** Neue Taste `R` im Editor startet einen von der bestehenden
+Ecken-/Körper-Ziehlogik getrennten Interaktionsmodus (`hinting`/`hintDrag` in
+`workbench.js`): der Bediener zieht ein grobes achsparalleles Rechteck um das
+Display. Beim Loslassen ruft der Client `roi.suggest` (neue Funktion
+`fit_quad_in_region` in `workbench/vision.py`: Kantenpipeline wie
+`find_display_candidates`, aber `cv2.minAreaRect`/`cv2.boxPoints` statt
+`cv2.boundingRect`, damit `roi_quad` ein echtes, auch rotiertes Viereck sein
+kann; Eckenreihenfolge über die bestehende `dispread.rectify._order_quad`;
+Flächenanteil/Rechteckigkeit wie `DetectionConfig`, Seitenverhältnis bei
+vorhandenem Layout zusätzlich aus `DisplayLayout.n_cells` abgeleitet), danach
+sofort `ocr.suggest` mit dem übernommenen Quad (neue Funktion `fit_ocr_box`:
+Otsu-Schwelle in beiden Polaritäten, Blobs nach Höhe filtern, nach vertikaler
+Mitte zu Zeilen gruppieren — lückenbasiert statt über einen laufenden
+Mittelwert, sonst zieht ein einzelner Ausreißer die Gruppierung über eine
+Kette benachbarter Abstände in die falsche Zeile —, größte Zeile nach
+Gesamtfläche behalten). Beide neuen Controller-Ops (`roi.suggest`,
+`ocr.suggest`) sind reine, synchrone Vorschlagsfunktionen ohne jede
+Persistenz. Unbestätigte Vorschläge werden im Editor gestrichelt und
+transparent gezeichnet (`editing.roiSuggested`/`editing.ocrSuggested`) und
+fallen weg, sobald die jeweilige Box berührt wird. Findet der Server nichts,
+bleibt die Editorgeometrie unverändert und eine Logzeile erklärt das — ein
+Fehlschlag ist inert, nie eine schlechte Automatik-Übernahme.
+
+**Konsequenz:** `roi_quad`-Vorschläge treffen die beiden realen
+Annotationsbilder aus `var/workbench/annotations/` mit IoU ≈ 0,91 gegen die
+tatsächlich bestätigte Geometrie (gemessen, siehe
+[docs/VALIDATION.md](docs/VALIDATION.md)). `ocr_box`-Vorschläge sind an
+denselben zwei Bildern unzuverlässig (IoU 0,0), weil der dort verwendete
+Ausschnitt neben der Hauptanzeige eine baugleiche Nebenanzeige enthält — genau
+die aus Konzept.md §7 bekannte, ohne weiteren Hinweis strukturell nicht
+auflösbare Verwechslung. Neuer Eintrag [OQ-25](docs/open-questions.md). Die
+hier gebaute Kontursuche ist **Workbench-Editorhilfe, nicht** die
+`DisplayLocator`/`contour_heuristic`-Implementierung aus der ROADMAP-P0-Zeile
+„`contour_heuristic`- und `imx500_detector`-Lokalisierung, `RegionTracker`" —
+diese Zeile bleibt unverändert offen. `manual_roi` bleibt Primärpfad; jeder
+Vorschlag muss weiterhin über den unveränderten `roi`-Op bei `Strg+Enter`
+bestätigt werden.
+
+### Stufe 3 — Getippter Ground-Truth-Wert im `annotate`-Modus
+
+**Problem:** `annotate`-Aufnahmen enthielten bisher nur Geometrie, keinen
+abgelesenen Wert, und wurden nirgends zurückgelesen — für eine spätere
+Trefferquotenauswertung fehlte der einfachste Baustein: der tatsächlich
+angezeigte Wert je Aufnahme.
+
+**Änderung:** Neues, rein additives Feld `ground_truth_text` in
+`annotation.json` (`Controller.command`, `op == "roi"`, `self.mode ==
+"annotate"`-Zweig), vom Client mitgeschickt und ungeprüft übernommen — keine
+Schema-Version, keine `validate()`-Änderung, da `annotation.json` nicht gegen
+`profiles.py::validate` geprüft wird. `workbench.js` zeigt beim Bestätigen im
+`annotate`-Modus ein kleines Texteingabefeld (`#ground-truth` in
+`index.html`/`workbench.css`, analog zum bestehenden
+Profil-Speichern-unter-Dialog), bevor der `roi`-Befehl abgeschickt wird;
+`viewport.onkeydown` ignoriert Editor-Hotkeys, solange der Fokus auf einem
+Eingabefeld liegt.
+
+**Konsequenz:** `annotate`-Aufnahmen sind jetzt (Bild, `roi_quad`, `ocr_box`,
+Layout, Ground Truth)-Tupel — genug für einen späteren Trefferquotentest gegen
+`SevenSegmentReader`, ohne jede Trainingsinfrastruktur zu versprechen oder zu
+bauen. Kein `device_id`-Feld für geräteweise Testsplits — bewusst nicht Teil
+dieser Stufe (Konzept §9, ROADMAP P2).
+
+### Verifikation
+
+`./.venv/bin/pytest -q` (101 bestanden, inkl. 20 neuer Tests für
+`fit_quad_in_region`/`fit_ocr_box`/`roi.suggest`/`ocr.suggest`/Ground-Truth,
+zwei davon `skipif` gegen die realen `var/workbench/annotations/*`-Beispiele),
+`./.venv/bin/ruff check src tests examples` und
+`node --check src/dispread/workbench/static/workbench.js` grün. Manuelle
+Bedienprüfung im echten Browser (Klickpriorität, `R`-Vorschlagsfluss,
+gestrichelte Vorschlagsdarstellung, `annotate`-Eingabefeld) steht noch aus —
+siehe OQ-21/OQ-24, nicht aus `file://`- oder synthetischen Tests ableitbar.
+
 ## 0.1.0.dev0 — 2026-09-09 (Editorstart an erkannter Box; Mehrbildbestätigung gegen Flackern)
 
 ### Editieren-Start ignorierte die gerade sichtbare erkannte Displayposition

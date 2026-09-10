@@ -22,7 +22,7 @@ from dispread.rectify import rectify
 from dispread.validate import GateConfig, ReleaseGate
 
 from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
-from .vision import DetectionConfig, find_display_candidates
+from .vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_quad_in_region
 
 #: Zielgroesse des entzerrten Ausschnitts. Fest, weil der Segmentleser gegen
 #: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
@@ -55,6 +55,17 @@ CAMERA_OP_TIMEOUT_S = 6.0
 #: Werterkennung mit eigener, fuer die Einrichtung ausreichender Rate laeuft.
 #: Ein Messpfad darf daraus spaeter keine Zeit- oder Latenzaussage ableiten.
 OCR_INTERVAL_S = 0.2
+
+#: Bedienerrueckmeldung: nach einem Neustart laedt der Controller die zuletzt
+#: bestaetigte Geometrie unveraendert (Konzept.md §4 - Bestaetigung ist der
+#: Akt eines Menschen, kein automatischer Ersatz). Vor OQ-24 lief die
+#: Vollbild-Kandidatensuche (gelbe Boxen) aber *nie* mehr, sobald einmal
+#: bestaetigt war - der Bediener hatte danach keinerlei visuellen Hinweis
+#: mehr, ob die alte Geometrie noch zur aktuellen Szene passt. Gedrosselt statt
+#: unbedingt, um die mit OQ-24 behobene Vollbildsuche-pro-Bild-Kosten
+#: (30,837 ms/Bild, siehe VALIDATION.md) nicht wieder einzufuehren; lieber
+#: verglichen als blind vertraut, aber nie automatisch uebernommen.
+CANDIDATE_INTERVAL_S = 1.0
 
 #: Mehrbildbestaetigung fuer die Live-Vorschau (ReleaseGate.confirm_frames).
 #: Bedienerrueckmeldung: multiplexende Anzeigen flackern gegen die niedrige
@@ -159,11 +170,21 @@ class Controller:
         self.jpeg, self.raw = None, None
         self.metadata, self.metrics, self.capabilities, self.observed = {}, {}, {}, {}
         self.frames = {}
-        # Letzte Vollbild-Kandidatensuche (gelbe Vorschlagsboxen, Pixelkoordinaten).
-        # Nur solange gepflegt, wie das Profil unbestaetigt ist - siehe publish().
-        # Erstes Einfrieren eines frischen Profils startet damit an der zuletzt
-        # sichtbaren erkannten Position statt an einer festen Standardbox.
+        # Letzte Vollbild-Kandidatensuche (gelbe Vorschlagsboxen, Pixelkoordinaten,
+        # Bildkoordinatensystem). Nur solange gepflegt, wie das Profil
+        # unbestaetigt ist - erstes Einfrieren eines frischen Profils startet
+        # damit an der zuletzt sichtbaren erkannten Position statt an einer
+        # festen Standardbox.
         self.candidates = ()
+        # Nach einer Bestaetigung ersetzt eine lokale, auf die bestaetigte ROI
+        # eingegrenzte Suche (fit_quad_in_region statt der Vollbildsuche) die
+        # Kandidaten - sonst leuchten bei jedem Vergleich auch andere Anzeigen
+        # im Bild gelb auf (Bedienerbefund). Gedrosselt (CANDIDATE_INTERVAL_S,
+        # siehe publish()), damit eine bestaetigte Geometrie vergleichbar
+        # bleibt statt blind vertraut, ohne die mit OQ-24 behobene
+        # Vollbildsuche-pro-Bild-Kosten zurueckzubringen.
+        self.verify_quad = None
+        self.last_candidates_at = 0.0
         self.focus = False
         self.reader = SevenSegmentReader()
         self.gate, self.gate_revision = None, None
@@ -177,6 +198,23 @@ class Controller:
         self.log("info", "Workbench gestartet; gelbe Boxen sind unbestaetigte Vorschlaege.")
         if self.path.exists():
             self._load(self.path)
+            if self.config["confirmed"]:
+                # Bedienerwunsch: jede Sitzung beginnt mit einer frischen
+                # menschlichen Bestaetigung (Konzept.md §4 - Bestaetigung ist
+                # der Akt eines Menschen), statt stillschweigend eine alte
+                # Bestaetigung fuer den run-Modus weiterzuverwenden. Nur die
+                # Laufzeitkopie verliert `confirmed`; die gespeicherte Datei
+                # bleibt unveraendert, und roi/roi_quad/ocr_box bleiben als
+                # Startpunkt fuer eine schnelle erneute Bestaetigung erhalten.
+                # Reaktiviert nebenbei die volle Kandidatensuche auf dem
+                # Livebild (publish(): unbestaetigt sucht jedes Bild).
+                self._change({**copy.deepcopy(self.config), "confirmed": False})
+                self.log(
+                    "warn",
+                    "Sitzungsstart: geladene ROI/OCR-Geometrie muss diese Sitzung erneut "
+                    "bestaetigt werden, bevor der run-Modus verfuegbar ist - Kandidatensuche "
+                    "laeuft wieder auf dem Livebild.",
+                )
 
     @property
     def path(self):
@@ -295,6 +333,18 @@ class Controller:
         self.conflict = None
         self.file_seen = path.read_bytes()
         self.log("info", f"Profil {self.name} geladen")
+        if data["confirmed"]:
+            # Bedienerrueckmeldung: nach einem Neustart wirkte die geladene
+            # Geometrie wie unveraendert uebernommen, ohne jeden Hinweis, dass
+            # sie noch nicht gegen die aktuelle Szene verglichen wurde. Die
+            # Bestaetigung selbst bleibt unangetastet (Konzept.md §4) - die
+            # gedrosselte Kandidatensuche in publish() liefert den Vergleich.
+            self.log(
+                "warn",
+                "Geladene ROI/OCR-Geometrie ist bestaetigt, aber noch nicht gegen die "
+                "aktuelle Szene verglichen - gelbe Kandidatenbox beobachten, bevor "
+                "der Wert vertraut wird",
+            )
 
     def watch_profile(self):
         with self.lock:
@@ -355,6 +405,14 @@ class Controller:
 
     def command(self, op, args=None):
         args = args or {}
+        if op == "ocr.suggest":
+            # Eigener, absichtlich VOR dem Controller-Lock behandelter Befehl:
+            # die eigentliche OpenCV-Arbeit (fit_ocr_box) braucht das Lock
+            # nicht und soll es - wie publish() - nicht waehrend eines ganzen
+            # Suchlaufs halten. Das war die Ursache eines gemeldeten Bugs:
+            # eine langsame, gesperrte Anfrage liess genug Zeit fuer eine
+            # Bedienereingabe, die dann die eintreffende Vermutung ueberschrieb.
+            return self._suggest_ocr_box(args)
         with self.lock:
             if op == "status":
                 return self.snapshot()
@@ -458,22 +516,42 @@ class Controller:
                     "profile_name": self.name,
                 }
                 img_h, img_w = self.raw.shape[:2]
+                # Kandidatenliste fuer den Editor: die zuletzt bekannte, ausser
+                # sie ist leer (z. B. nach einer Bestaetigung in derselben
+                # Sitzung - publish() pflegt self.candidates nur unbestaetigt).
+                # Dann ein einmaliger Vollbild-Suchlauf, damit ein erneutes
+                # Editieren nicht ohne jede anklickbare Vorschlagsbox dasteht -
+                # kostet nur diesen einen Aufruf, nicht pro Livebild (OQ-24).
+                candidates = self.candidates or find_display_candidates(
+                    self.raw, DetectionConfig(**self.config["detection"])
+                )
                 roi = self.config["roi"]
-                if roi is None and self.candidates:
+                if roi is None and candidates:
                     # Frisches, nie bestaetigtes Profil: an der besten gerade
                     # sichtbaren gelben Vorschlagsbox starten statt an einer
                     # festen Standardbox in der Bildmitte - sonst verliert der
                     # Bediener beim Editieren-Start die bereits erkannte Position.
-                    x, y, w, h = self.candidates[0]
+                    x, y, w, h = candidates[0]
                     roi = [x / img_w, y / img_h, w / img_w, h / img_h]
                 roi = roi or [0.2, 0.3, 0.6, 0.3]
+                quad = copy.deepcopy(self.config.get("roi_quad") or quad_from_roi(roi))
+                ocr_box = self.config["ocr_box"]
+                if ocr_box == DEFAULT["ocr_box"]:
+                    # Unberuehrter Default deckt sich direkt nach einer
+                    # frischen roi-Bestaetigung mit roi_quad - das Verklicken
+                    # aus dem Bedienerbefund. Reine Editor-Sitzungsgroesse:
+                    # weder self.config noch eine Bestaetigung aendern sich.
+                    ocr_box = [0.15, 0.15, 0.7, 0.7]
                 return {
                     "id": token,
                     "width": img_w,
                     "height": img_h,
                     "roi": roi,
-                    "quad": copy.deepcopy(self.config.get("roi_quad") or quad_from_roi(roi)),
-                    "ocr_box": copy.deepcopy(self.config["ocr_box"]),
+                    "quad": quad,
+                    "candidates": [
+                        [x / img_w, y / img_h, w / img_w, h / img_h] for x, y, w, h in candidates
+                    ],
+                    "ocr_box": copy.deepcopy(ocr_box),
                     "ocr_grid": grid_geometry(self.config["layout"]),
                 }
             elif op == "roi":
@@ -511,6 +589,10 @@ class Controller:
                             "ocr_box_coordinate_system": "rectified_roi_normalized_xywh",
                             "role": data["role"],
                             "coordinate_system": "normalized_quad_tl_tr_br_bl",
+                            # Getippter Anzeigewert, rein additiv (Konzept.md
+                            # §9-Datensatzaufbau) - keine automatische
+                            # Ablesung, keine Erkennungsgarantie.
+                            "ground_truth_text": args.get("ground_truth_text"),
                             "formatter_provisional": True,
                             "created_at": datetime.now(UTC).isoformat(),
                             "created_timebase": "UTC",
@@ -540,23 +622,69 @@ class Controller:
                 raise ValueError(f"Unbekannter Befehl: {op}")
             return self.snapshot()
 
+    def _suggest_ocr_box(self, args):
+        """OCR-Rahmen-Vermutung fuer ein gegebenes, evtl. unbestaetigtes Quad.
+
+        Wird bewusst ausserhalb von `self.lock` gerechnet - siehe `command()`.
+        `frame["image"]` ist eine bei `freeze()` gezogene Kopie und wird sonst
+        nirgends veraendert; eine parallele LRU-Verdraengung in `self.frames`
+        entfernt nur den Dict-Eintrag, die hier gehaltene Referenz bleibt
+        gueltig. `self.log()` nimmt sein eigenes (reentrantes) Lock, ein
+        Aufruf ausserhalb dieses Locks ist unproblematisch.
+        """
+        with self.lock:
+            frame = self.frames[args["id"]]
+            layout_data = copy.deepcopy(self.config["layout"])
+        layout = DisplayLayout.from_dict(layout_data)
+        img_h, img_w = frame["image"].shape[:2]
+        quad_px = tuple((float(x * img_w), float(y * img_h)) for x, y in args["quad"])
+        crop = rectify(frame["image"], quad_px, target_size=CROP_SIZE)
+        ocr_box = fit_ocr_box(crop.image, layout=layout)
+        if ocr_box is None:
+            self.log("info", "ocr.suggest: kein Kandidat im markierten Bereich gefunden")
+        return {"ocr_box": list(ocr_box) if ocr_box is not None else None}
+
     def publish(self, image, metadata):
         """Ein Bild ohne lange Sperre fuer Status-, ROI- oder Stopbefehle verarbeiten."""
         with self.lock:
             config, revision = copy.deepcopy(self.config), self.revision
-            focus = self.focus
+            focus, mode = self.focus, self.mode
             cached_reading = copy.deepcopy(self.reading)
+            cached_verify_quad = self.verify_quad
             now = time.monotonic()
             should_read = config["confirmed"] and (cached_reading is None or now - self.last_ocr_at >= OCR_INTERVAL_S)
+            # Nach einer Bestaetigung nur noch gedrosselt und nie im
+            # run-Modus - die mit OQ-24 behobene Vollbildsuche-pro-Bild-Kosten
+            # sollen nicht zurueckkommen, aber eine bestaetigte Geometrie ohne
+            # jeden visuellen Vergleich zur aktuellen Szene war der gemeldete
+            # Mangel.
+            should_verify = (
+                config["confirmed"] and mode != "run" and now - self.last_candidates_at >= CANDIDATE_INTERVAL_S
+            )
 
-        # OpenCV-Arbeit bewusst ausserhalb des Controller-Locks. Vor der
-        # Bestaetigung bleiben gelbe Vorschlaege sichtbar; danach ist die
-        # bestaetigte Geometrie massgeblich und die teure Vollbildsuche endet.
+        # OpenCV-Arbeit bewusst ausserhalb des Controller-Locks.
         metrics = quality(image, config["roi"])
-        boxes = () if config["confirmed"] else find_display_candidates(image, DetectionConfig(**config["detection"]))
         overlay = image.copy()
+        boxes = ()
+        verify_quad = cached_verify_quad
+        if not config["confirmed"]:
+            # Vor der Bestaetigung jedes Bild frisch ueber das ganze Bild
+            # suchen (Kalibrierfluss, unveraendert) - hier gibt es noch keine
+            # bestaetigte Geometrie, die den Suchbereich eingrenzen koennte.
+            boxes = find_display_candidates(image, DetectionConfig(**config["detection"]))
+        elif should_verify:
+            # Eingegrenzt auf die bestaetigte ROI statt einer Vollbildsuche -
+            # sonst leuchten bei jedem Vergleich auch andere Anzeigen im Bild
+            # gelb auf (Bedienerbefund; dieselbe Haupt-/Nebenanzeige-Grenze
+            # wie bei OQ-25, hier durch den engen Suchbereich vermieden statt
+            # erneut riskiert).
+            verify_quad = fit_quad_in_region(image, config["roi"], layout=DisplayLayout.from_dict(config["layout"]))
         for x, y, w, h in boxes:
             cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 220, 220), 2)
+        if verify_quad is not None:
+            img_h, img_w = image.shape[:2]
+            verify_points = np.array([[px * img_w, py * img_h] for px, py in verify_quad], dtype=np.int32)
+            cv2.polylines(overlay, [verify_points], True, (0, 220, 220), 2)
 
         reading = cached_reading
         quad = None
@@ -592,6 +720,9 @@ class Controller:
             self.raw, self.metadata = image, metadata
             self.metrics = metrics
             self.candidates = boxes
+            self.verify_quad = verify_quad
+            if should_verify:
+                self.last_candidates_at = now
             self.observed = observed
             self.reading = reading
             self.jpeg = jpeg.tobytes()

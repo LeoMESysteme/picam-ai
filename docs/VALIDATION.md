@@ -312,3 +312,147 @@ Windows-Browser. Ein Nebenläufigkeitstest hält die Kandidatensuche künstlich 
 und belegt, dass `snapshot()` währenddessen in unter 50 ms zurückkehrt. Der
 isolierte simulierte Dienst ließ sich über `dispread stop` vollständig beenden.
 Die reale Browser-/Kameraabnahme bleibt [OQ-24](open-questions.md).
+
+## 2026-09-10 — Kosten der wieder aktivierten, gedrosselten Kandidatensuche
+
+Bedienerrückmeldung: Nach einem Neustart mit bereits bestätigter ROI lief die
+Vollbild-Kandidatensuche (gelbe Boxen) nie mehr — kein visueller Hinweis mehr,
+ob die geladene Geometrie noch zur aktuellen Szene passt. Sie läuft jetzt
+außerhalb des `run`-Modus gedrosselt weiter (`CANDIDATE_INTERVAL_S = 1.0`,
+`controller.py`). Reiner Offline-Durchsatztest auf demselben gespeicherten
+960×720-Realbild wie die Messung vom 2026-09-09 (`fokus-erreicht-960x720.jpg`),
+je 100 Aufrufe mit `time.perf_counter()`, `CLOCK_MONOTONIC`, `simulate=True`
+(kein Kamerazeit- oder End-to-End-Latenztest):
+
+| Pfad | Dauer je Bild |
+| --- | ---: |
+| bestätigt, `setup`, Drosselfenster noch nicht abgelaufen (Suche übersprungen) | 8,3–9,0 ms |
+| bestätigt, `setup`, Drosselfenster künstlich bei jedem Bild abgelaufen (Suche jedes Mal fällig) | 16,6 ms |
+| bestätigt, `run`-Modus (Suche nie fällig, unabhängig vom Drosselfenster) | 8,3 ms |
+
+Bei `CANDIDATE_INTERVAL_S = 1,0 s` und 15 fps zahlt höchstens jedes 15. Bild
+die höhere Kandidatensuche-Kosten (~16,6 ms statt ~8,3 ms) — im Mittel rund
+0,55 ms/Bild zusätzlich, weit unter der mit OQ-24 behobenen
+Vollbildsuche-pro-Bild-Kosten von 30,837 ms/Bild. Der `run`-Modus bleibt davon
+komplett unberührt. Absolutwerte hier (~8,3 ms Grundkosten) liegen über der
+2026-09-09-Messung (5,801 ms) desselben Bildpfads ohne Kandidatensuche; beide
+Messungen liefen auf demselben Pi, aber zu unterschiedlichen Zeitpunkten ohne
+kontrollierte Gegenprobe — die Differenz ist nicht auf diese Änderung
+zurückgeführt, da der übersprungene Zweig strukturell unverändert ist.
+
+## 2026-09-10, spätabends — Vergleichssuche auf die bestätigte ROI eingegrenzt
+
+Direkte Bedienerrückmeldung auf die vorige Messung: Die wiederhergestellte
+Vergleichssuche schlug am realen Prüfstand (RND-Labornetzteil mit den
+Anzeigen `V`/`A`, zwei Monitore im Hintergrund, weitere Messgeräte) andere
+Bildschirme im Bild statt der bestätigten Anzeige vor. Ursache: Sie rief
+weiterhin `find_display_candidates` (Vollbildsuche) auf, nur gedrosselt statt
+bei jedem Bild. Jetzt `fit_quad_in_region` mit `config["roi"]` als
+Suchfenster-Hinweis, zusätzlich mit neuem Mindestüberdeckungsfilter
+`MIN_HINT_OVERLAP = 0,2` (`vision.py`) gegen ein unbeteiligtes Objekt am Rand
+des aufgeweiteten Suchfensters.
+
+**Realbildnachweis** (`var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd`,
+dieselbe Aufnahme wie oben): `Controller.publish()` mit der gespeicherten
+Annotation als Profil aufgerufen, resultierendes JPEG-Overlay visuell
+geprüft. Das gelbe Vergleichsquad deckt sich mit dem grünen bestätigten
+`roi_quad` (beide umfassen den gesamten Netzteil-Panelbereich mit `V`- und
+`A`-Anzeige) und lässt die beiden im Bild sichtbaren Computermonitore
+vollständig aus.
+
+**Synthetischer Ablenkertest** (`test_fit_quad_in_region_ignores_unrelated_objects_outside_the_hint`):
+ein Prüfling mit gekappten Ecken (Rechteckigkeit < 1) neben einem kleinen,
+perfekt rechteckigen Ablenkerobjekt im aufgeweiteten, aber außerhalb des
+ungepolsterten Hinweisbereichs liegenden Suchfenster. Ohne
+`MIN_HINT_OVERLAP`-Filter gewinnt das kleine Ablenkerobjekt (reine
+Rechteckigkeit-dann-Fläche-Bewertung bevorzugt das perfekte Rechteck trotz
+kleinerer Fläche) — mit Filter gewinnt der Prüfling (IoU > 0,85 gegen seine
+wahre Form, 0,0 Überlappung mit dem Ablenker). Das reproduziert den
+Bedienerbefund gezielt, nicht nur zufällig.
+
+**Kostenmessung** (gleiche Methode wie oben, `fokus-erreicht-960x720.jpg`,
+je 100 Aufrufe):
+
+| Pfad | Dauer je Bild |
+| --- | ---: |
+| bestätigt, `setup`, Drosselfenster nicht abgelaufen (Suche übersprungen) | 8,0 ms |
+| bestätigt, `setup`, Drosselfenster künstlich abgelaufen (`fit_quad_in_region` jedes Mal fällig) | 12,5 ms |
+| bestätigt, `run`-Modus (Suche nie fällig) | 8,1 ms |
+
+Günstiger als die vorige, auf `find_display_candidates` gestützte Messung
+(16,6 ms im Suchfall), weil `fit_quad_in_region` nur den aufgeweiteten
+Ausschnitt statt des ganzen Bildes verarbeitet. `MIN_HINT_OVERLAP` ist ein
+Vorabdefault wie die übrigen `DetectionConfig`-Filter — an den zwei realen
+Annotationen (dort >0,9 Überdeckung des richtigen Kandidaten) und der
+synthetischen Ablenker-Szene geprüft, nicht an einer breiten Displayvielfalt
+oder unterschiedlichen ROI-Größenverhältnissen validiert.
+
+## 2026-09-10 — Automatische `roi_quad`-/`ocr_box`-Vorschläge gegen reale Annotationen
+
+Kein Erkennungsdatensatz, sondern eine Validierung der neuen
+Workbench-Editorhilfe (`fit_quad_in_region`/`fit_ocr_box`,
+`src/dispread/workbench/vision.py`) aus
+[PLAN_2026-09-10-workbench-editor.md](PLAN_2026-09-10-workbench-editor.md)
+gegen die zwei realen Annotationen aus der Sitzung vom 2026-09-09
+(`var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd`,
+`.../8a18ee05e31241b9b6702c5bb904ec97` — ein Netzteil mit zwei übereinander
+liegenden 7-Segment-Anzeigen `V` und `A`). Beide Bilder zeigen `11.00` auf der
+oberen `V`-Anzeige; Layout 4 Stellen / 2 Nachkommastellen / kein Vorzeichen,
+`digit_gap_ratio=0.65`. IoU wie in [Kapitel 7](anleitung/07-lokalisierung.md)
+über Flächenmasken gerechnet, nicht vorab geschätzt.
+
+| Funktion | Eingabe | IoU gegen bestätigte Geometrie |
+| --- | --- | --- |
+| `fit_quad_in_region` (`roi.suggest`) | grober Hinweis (bestätigte ROI ± 5 % Rand) auf dem Rohbild | **0,907** / **0,908** |
+| `fit_ocr_box` (`ocr.suggest`) | die tatsächlich bestätigte, grosszügige `roi_quad` entzerrt | **0,0** / **0,0** |
+
+**`roi.suggest` trifft die Displayposition zuverlässig**, wenn der
+Bedienerhinweis wie vorgesehen einen groben Rahmen um das Display zieht — die
+lokale Kantensuche auf dem aufgeweiteten Ausschnitt findet das Netzteilpanel
+beide Male mit über 0,9 IoU gegen die tatsächlich vom Bediener bestätigte
+`roi_quad`.
+
+**`ocr_box`-Vorschlag scheitert an beiden Bildern vollständig, aus zwei
+verschiedenen, dokumentierten Gründen:**
+
+1. **Haupt-/Nebenanzeige-Verwechslung (Konzept.md §7).** Die bestätigte
+   `roi_quad` umfasst grosszügig beide Anzeigen (`V` oben, `A` unten). Beide
+   Zeilen liefern plausible Ziffernblobs; die untere `A`-Zeile (`0.000`, alle
+   Segmente aktiv, vier gleich grosse Blobs) hat in beiden Bildern mehr
+   Gesamtfläche als die obere, tatsächlich gewünschte `V`-Zeile (`11.00`, zwei
+   schmale `1`-Segmente verschmelzen beim Schliessen zu einem einzigen, kleineren
+   Blob). Die Funktion wählt deshalb konsequent die falsche Zeile. Ohne
+   weiteren Bedienerhinweis ist das laut Konzept.md §7 strukturell nicht
+   auflösbar — das ist der Grund, warum die Bestätigung ein Vorschlag bleibt
+   und nie automatisch übernommen wird.
+2. **Glanzfleck (Bild 1 zusätzlich).** Ein grossflächiger heller Reflex
+   überlagert einen Teil der `V`-Ziffern und bildet einen eigenen, grossen
+   Blob, der ohne die Zeilentrennung fälschlich mit echten Ziffernblobs
+   verschmelzen würde (siehe Fallstricke unten).
+
+Mit einer probeweise **enger** vorgeschlagenen `roi_quad` (aus `roi.suggest`
+selbst statt der grosszügig bestätigten) liefert `fit_ocr_box` an beiden
+Bildern `None` statt eines falschen Vorschlags — der sichere Fehlschlag statt
+einer stillschweigend falschen Übernahme, aber weiterhin kein brauchbarer
+Vorschlag. Neuer Eintrag [OQ-25](open-questions.md).
+
+**Nachgezogene Implementierungskorrektur während dieser Messung:** Die
+Blob-Gruppierung nach vertikaler Mitte lief zunächst gegen einen laufenden
+Mittelwert und liess dadurch einen einzelnen Ausreisser (in Bild 1 der
+Glanzfleck) über eine Kette benachbarter Abstände in die eigentlich falsche
+Zeile hineinziehen; umgestellt auf lückenbasierte Gruppierung nach Sortierung.
+Ausserdem war der Schliess-Kernel der Blob-Erkennung mit fester Grösse zu
+klein, um bei berührenden Ziffernstellen (`digit_gap_ratio=0`, der
+synthetische Default) eine Ziffer zuverlässig zu einem Blob statt zwei
+Halbblöcken zu verschmelzen — auf einen zur Crophöhe proportionalen Kernel
+(≈8 %) umgestellt. Beide Korrekturen sind allgemeine Robustheit, nicht auf
+diese zwei Bilder zugeschnitten; die synthetischen Tests in
+`tests/test_workbench.py` (`test_fit_ocr_box_matches_the_rendered_digit_area`)
+belegen IoU > 0,6 auf vier unabhängigen Layout-/Wertkombinationen ohne
+Nebenanzeige. Bekannte Grenze, an einer fünften Kombination (3 Stellen, keine
+Nachkommastelle) gefunden und deshalb **nicht** in dieses Testset
+aufgenommen: bei sehr schmalen Layouts (wenige, breite Ziffernzellen) kann der
+Schliess-Kernel einzelne Ziffern uneinheitlich in Ober-/Unterhälfte zerfallen
+lassen, sodass das flächengrößte Cluster nur einen Teil der Zeile trifft -
+Docstring von `fit_ocr_box` verweist darauf, weitere reale Beispiele dieser
+Layoutklasse stehen aus.

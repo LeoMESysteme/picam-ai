@@ -51,6 +51,18 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   bereits der Primärpfad und setzt die Bestätigung voraus.
 * **Vorabdefault:** Bestätigung ist vorgesehen (Konzept §4 „bevorzugter
   Betrieb"), Vollautomatik ist spätere Option.
+* **Update 2026-09-10, Implementierungsentscheidung (keine Antwort auf diese
+  OQ):** Bedienerwunsch: Die Workbench verlangt jetzt technisch **pro
+  Sitzung** eine erneute Bestätigung statt einer dauerhaft ohne weiteren
+  Blick gültigen einmaligen Bestätigung — `Controller.__init__` setzt
+  `confirmed` einer geladenen Geometrie auf `false` (nur die Laufzeitkopie,
+  die gespeicherte Profildatei bleibt unverändert; `roi`/`roi_quad`/`ocr_box`
+  bleiben als Startpunkt erhalten), der `run`-Modus ist bis zur erneuten
+  Bestätigung gesperrt, und die volle Kandidatensuche läuft auf dem Livebild
+  wieder mit. Das ist eine Softwareentscheidung für den Editor-Workflow,
+  **keine** Antwort auf die eigentliche, weiterhin offene Labor-/QM-Frage
+  dieser OQ (ob eine einmalige Bestätigung je Geräteinstanz betrieblich
+  vorgesehen ist) — dafür bräuchte es weiterhin die Antwort aus dem Labor.
 
 ## OQ-06 — Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt?
 
@@ -161,7 +173,7 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-16 — Vollständigkeit des lokalen Planungsstands
 
-* **Status:** offen · erkannt 2026-09-08 bei der Tool-Recherche
+* **Status:** geklärt (2026-09-10)
 * **Befund:** Unter anderem `ROADMAP.md`, `dependencies.md`,
   `HARDWARE_PROFILE.md` und `lab_journal.md` werden referenziert, fehlen aber
   im aktuellen Arbeitsbaum unter `docs/`. Auch mehrere im Status genannte
@@ -169,6 +181,16 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   werden deshalb als dokumentierte Ergebnisse, nicht als neu verifiziert behandelt.
 * **Klärung:** Fehlende Dateien wiederherstellen oder Verweise und Meilensteine
   mit dem tatsächlich vorhandenen Stand abgleichen.
+* **Antwort (2026-09-10):** `docs/ROADMAP.md`, `docs/dependencies.md`,
+  `docs/HARDWARE_PROFILE.md` und `docs/lab_journal.md` liegen inzwischen alle
+  mit Inhalt im Arbeitsbaum vor (per `ls docs/` geprüft). Die im Status
+  genannte CLI-Komponente existiert: `src/dispread/workbench/cli.py` hat ein
+  funktionierendes `stop`-Subkommando (bildet `dispread stop` aus
+  `docs/status.md` ab). Die Replay-Komponente ist weiterhin nur ein
+  Registry-Eintrag ohne Implementierung (`src/dispread/frames/__init__.py`
+  registriert `replay`, es gibt kein `replay_source.py`) — das deckt sich mit
+  `CLAUDE.md`, wo `replay://` ausdrücklich als "nur Registry-Eintrag, TODO"
+  geführt wird, war also keine Doku-Abweichung.
 * **Antwort landet in:** `docs/status.md` und den betroffenen Dokumenten.
 
 ## OQ-17 — Sichtbarer Dezimalpunkt und Profilannahme unterscheiden
@@ -657,6 +679,37 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   begrenzt, OpenCV-/JPEG-Arbeit liegt außerhalb des Locks. Neuer lokaler Befehl
   `dispread stop`; Kameraabschluss mit Zeitgrenze. Ein isolierter simulierter
   Dienst wurde damit erfolgreich beendet.
+* **Update 2026-09-10, präzisiert — „Vollbildsuche endet nach Bestätigung"
+  galt zu unbedingt.** Bedienerrückmeldung: Nach einem Neustart mit bereits
+  bestätigter ROI/OCR aus einer vorherigen Sitzung lief die Kandidatensuche
+  (gelbe Boxen) dauerhaft **nie mehr** — kein visueller Hinweis mehr, ob die
+  geladene Geometrie noch zur aktuellen Szene passt, obwohl sie nie gegen das
+  aktuell laufende Bild geprüft wurde. Die ursprüngliche Änderung hier war
+  richtig gegen die 15-fps-Dauerkosten, aber zu grob: „nach Bestätigung nie
+  mehr" statt „nur nicht mehr bei jedem Bild". Jetzt läuft die Suche außerhalb
+  des `run`-Modus gedrosselt weiter (`CANDIDATE_INTERVAL_S = 1,0 s`,
+  `controller.py`); ein Ladevorgang mit bereits bestätigter Geometrie loggt
+  zusätzlich einen Warnhinweis. Die Bestätigung selbst bleibt unangetastet —
+  keine automatische Übernahme, kein Auto-Un-Confirm. Kostenmessung:
+  [VALIDATION.md](VALIDATION.md), Abschnitt „Kosten der wieder aktivierten,
+  gedrosselten Kandidatensuche".
+* **Update 2026-09-10, spätabends, erneut präzisiert — die wiederhergestellte
+  Suche lief noch über das ganze Bild.** Bedienerrückmeldung direkt auf das
+  vorige Update: Am realen Prüfstand (Netzteil mit zwei Anzeigen, zwei
+  Monitore im Hintergrund, weitere Messgeräte) schlug die Vergleichssuche
+  regelmäßig andere Bildschirme im Bild statt der bestätigten Anzeige vor -
+  die vorige Änderung ließ `find_display_candidates` (Vollbildsuche)
+  unverändert weiterlaufen, nur gedrosselt statt bei jedem Bild. Jetzt nutzt
+  `Controller.publish()` stattdessen `fit_quad_in_region` mit `config["roi"]`
+  als Suchfenster-Hinweis - der Suchraum bleibt auf die Umgebung der
+  bestätigten ROI beschränkt. Zusätzlich neuer Mindestüberdeckungsfilter
+  `MIN_HINT_OVERLAP = 0,2` in `fit_quad_in_region` selbst (`vision.py`): ein
+  Kandidat muss den ungepolsterten Hinweisbereich zu mindestens 20 %
+  überdecken, sonst kann bei einer großzügig bestätigten ROI weiterhin ein
+  zufällig rechteckigeres, aber unbeteiligtes Objekt am Rand des
+  aufgeweiteten Suchfensters gewinnen - an einer nachgebauten Ablenker-Szene
+  verifiziert (`test_fit_quad_in_region_ignores_unrelated_objects_outside_the_hint`).
+  Kostenmessung und Realbild-Nachweis: [VALIDATION.md](VALIDATION.md).
 * **Update 2026-09-09, Editorzustand:** Eine Bedienprüfung zeigte, dass das
   eingefrorene OCR-Raster Layoutänderungen nicht übernahm und die erhöhte
   Profilrevision danach `Enter` blockierte. Der Status liefert nun das aktuelle
@@ -669,3 +722,54 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Aussage über Kameralatenz aus synthetischen oder `FILE_MTIME`-Bildern.
 * **Antwort landet in:** `docs/VALIDATION.md`, `docs/lab_journal.md` und dieser
   Eintrag; Browser-Grundproblem siehe auch OQ-21.
+
+## OQ-25 — Vorschlagsqualität von `fit_quad_in_region`/`fit_ocr_box` an realen Geräten
+
+* **Status:** offen · erkannt 2026-09-10 beim Bau der automatischen
+  Workbench-Vorschläge ([PLAN_2026-09-10-workbench-editor.md](PLAN_2026-09-10-workbench-editor.md))
+* **Befund:** Gegen die zwei realen Annotationen aus der Sitzung vom
+  2026-09-09 (`var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd`,
+  `.../8a18ee05e31241b9b6702c5bb904ec97`) trifft `fit_quad_in_region`
+  (`roi.suggest`) die tatsächliche Displayposition zuverlässig (IoU ≈ 0,91
+  gegen die bestätigte `roi_quad`, siehe [VALIDATION.md](VALIDATION.md)).
+  `fit_ocr_box` (`ocr.suggest`) scheitert an denselben zwei Bildern
+  vollständig (IoU 0,0): Die grosszügig bestätigte `roi_quad` umfasst zwei
+  übereinanderliegende Anzeigen (`V` und `A`) desselben Netzteils, und die
+  Funktion wählt konsequent die falsche (untere `A`-Zeile hat mehr
+  Blob-Fläche als die gewünschte obere `V`-Zeile) - die aus Konzept.md §7
+  bekannte Haupt-/Nebenanzeige-Verwechslung, hier erstmals an echten Daten
+  belegt statt nur befürchtet. Ein Bild zeigt zusätzlich einen
+  grossflächigen Glanzfleck als eigenen Blob. Mit einer probeweise enger
+  vorgeschlagenen `roi_quad` liefert `fit_ocr_box` stattdessen `None` (sicherer
+  Fehlschlag statt falschem Vorschlag), aber weiterhin keinen brauchbaren
+  Vorschlag. Zusätzlich unvalidiert: die Filterwerte selbst (Blobhöhen-Spanne,
+  Cluster-Lückenschwelle, Schliess-Kernel-Anteil, Flächen-/Seitenverhältnis-
+  Grenzen in `fit_quad_in_region`/`fit_ocr_box`) sind Vorabdefaults wie bei
+  `DetectionConfig` schon üblich, keine an mehreren realen Geräten
+  validierten Grenzen - eine bekannte weitere Schwäche zeigte sich zudem an
+  einem sehr schmalen synthetischen Layout (3 Stellen, keine Nachkommastelle),
+  siehe Docstring von `fit_ocr_box`.
+* **Blockiert:** nichts - `roi.suggest`/`ocr.suggest` bleiben reine,
+  unbestätigte Vorschläge, `manual_roi` bleibt Primärpfad. Kein automatisch
+  übernommener Wert kann davon betroffen sein.
+* **Update 2026-09-10, weiterer Aufrufort (inzwischen wieder abgeloest,
+  siehe naechstes Update):** `Controller.command("freeze")` rief `fit_ocr_box`
+  zwischenzeitlich ebenfalls automatisch auf. Dieselbe Haupt-/Nebenanzeige-
+  Grenze galt dort unveraendert - am oben genannten Netzteil-Beispiel schlug
+  auch diese automatische Vermutung die `A`- statt der `V`-Anzeige vor.
+* **Update 2026-09-10, spaet nachts:** Der zweistufige Bestaetigungsablauf
+  (siehe `CHANGELOG.md`, "TUI-style zweistufiger Bestaetigungsablauf") loest
+  den automatischen Aufruf in `freeze()` wieder ab - die OCR-Vermutung
+  passiert jetzt explizit beim Uebergang von Stufe A (ROI bestaetigt) zu
+  Stufe B (`ocr.suggest`, client-ausgeloest), nicht mehr beim blossen
+  Oeffnen des Editors. Die beschriebene Grenze (Haupt-/Nebenanzeige-
+  Verwechslung) betrifft weiterhin genau diesen `ocr.suggest`-Aufruf,
+  unabhaengig davon, wodurch er ausgeloest wird.
+* **Klärung:** Ohne weiteren Bedienerhinweis ist die Haupt-/Nebenanzeige-
+  Verwechslung laut Konzept.md §7 strukturell nicht auflösbar - denkbare
+  nächste Schritte sind ein zweiter, engerer Bedienerhinweis speziell für
+  `ocr_box` oder ein Layout-Feld für "erwartete Zeilenzahl im ROI". Beides
+  nicht Teil dieser Stufe. Weitere reale Annotationen (auch mit bewusst
+  einzelner Anzeige im Ausschnitt) würden die Validierung deutlich
+  verlässlicher machen als zwei Aufnahmen desselben Geräts.
+* **Antwort landet in:** `docs/VALIDATION.md`, `src/dispread/workbench/vision.py`.

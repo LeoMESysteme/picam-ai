@@ -1,8 +1,26 @@
 # Plan: Workbench-Editor — Klickpriorität, automatische Box-Vorschläge, Ground-Truth-Erfassung
 
-Status: **geplant, noch nicht umgesetzt.** Nächster Schritt, vorgesehen für
-2026-09-10. Entstanden aus Bedienerrückmeldung und Recherche in der Sitzung
-vom 2026-09-09 (`docs/status.md`, `CHANGELOG.md` desselben Tages).
+Status: **umgesetzt am 2026-09-10**, siehe `CHANGELOG.md` (oberster
+Abschnitt), `docs/VALIDATION.md` (reale Vorschlagsqualität) und
+[OQ-25](open-questions.md) (bekannte Grenze: Haupt-/Nebenanzeige-
+Verwechslung bei `ocr.suggest`). Entstanden aus Bedienerrückmeldung und
+Recherche in der Sitzung vom 2026-09-09 (`docs/status.md`, `CHANGELOG.md`
+desselben Tages).
+
+**Update 2026-09-10, spät — Stufe 2 (der `R`-Zug-Vorschlagsfluss dieses
+Plans) noch am selben Tag abgelöst.** Ein gemeldeter Bug (Klick auf die
+ROI-Box während einer laufenden `roi.suggest`/`ocr.suggest`-Anfrage verwarf
+die eintreffende Vermutung und schlug wieder die alte bestätigte Geometrie
+vor — Ursache: beide Ops rechneten ihre OpenCV-Arbeit innerhalb des
+Controller-Locks, anders als `publish()`) führte zu einem grösseren
+Bedienerwunsch: die Tastatursteuerung (`R`, `G`, `Shift+Pfeile`,
+`Strg+Enter`) wich einem zweistufigen, TUI-artigen Knopf-Ablauf (✓/✎ an ROI-
+und OCR-Box, anklickbare Live-Kandidaten). Der `roi.suggest`-Op aus diesem
+Plan ist entfernt; `fit_quad_in_region`/`fit_ocr_box` selbst bleiben
+(anderweitig weiterverwendet). Details: `CHANGELOG.md`, Eintrag "TUI-style
+two-stage confirm workflow"; `docs/anleitung/10-kamera-livevorschau.md`
+entsprechend aktualisiert. Dieser Plan bleibt als Entstehungsgeschichte
+stehen, beschreibt aber nicht mehr den aktuellen Bedienablauf.
 
 ## Kontext
 

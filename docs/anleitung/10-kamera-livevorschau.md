@@ -148,26 +148,29 @@ vollständige Abbildung multiplexender Segmente ([OQ-20](../open-questions.md)).
 
 ## Box bearbeiten und Annotationen sammeln
 
-Im Modus `setup` oder `annotate`:
+**Stand 2026-09-10, zweistufiger Ablauf** (löst den früheren, rein
+tastaturgesteuerten Ablauf ab — Beweggründe und Bedienerbefund im
+`CHANGELOG.md`, Eintrag "TUI-style two-stage confirm workflow"). Im Modus
+`setup` oder `annotate`:
 
-1. Kameraansicht fokussieren und `e` drücken oder doppelt klicken. Das Originalbild
-   wird eingefroren; auch bei weiterlaufender Kamera bleibt dieses Bild maßgeblich.
-2. Eine der vier Ecken ziehen, bis der **grüne** Rahmen den tatsächlichen
-   Displaykanten folgt. Er bestimmt die perspektivische Entzerrung.
-3. Den **gelben** OCR-Rahmen anklicken oder mit `g` zwischen grün und gelb
-   wechseln. Gelber Rahmen, Vorzeichenbox, Ziffernzellen und Punkte sind genau
-   das Raster, das der Segmentleser verwendet. Den gelben Rahmen eng um
-   Vorzeichen und Ziffern legen; Blende, Einheit und Leerraum ausschließen.
-4. Ziehen innerhalb des aktiven Rahmens verschiebt ihn. Pfeiltasten verschieben
-   pixelweise; Shift+Pfeiltasten bewegen die zuletzt gewählte Ecke (ohne Wahl:
-   rechts unten).
-5. `Strg+Enter` (bzw. `Cmd+Enter`) bestätigt beide Rahmen, `Esc` verwirft.
-   Bewusst nicht das bloße `Enter`: Solange der Kamerabereich fokussiert
-   bleibt — auch während einer laufenden Ziehbewegung oder nach einem
-   Seitenblick auf die Einstelltabelle — hätte ein einzelnes `Enter` sonst
-   leicht unbeabsichtigt eine noch unfertige Geometrie endgültig bestätigt.
-   Eine Bestätigung mitten in einer aktiven Ziehbewegung wird zusätzlich
-   ignoriert.
+1. Kameraansicht fokussieren und `e` drücken oder doppelt klicken. Das
+   Originalbild wird eingefroren; auch bei weiterlaufender Kamera bleibt
+   dieses Bild maßgeblich. Solange keine Geometrie in dieser Sitzung
+   bestätigt wurde, läuft die Kandidatensuche weiter und zeigt mehrere
+   dünne, anklickbare Vorschlagsboxen.
+2. **Stufe A — ROI:** den passenden Kandidaten anklicken, oder ✎ neben der
+   aktiven Box drücken, um sie per Ziehen (Körper) oder Eckziehen
+   (Perspektive) von Hand anzupassen. Während des Bearbeitens wird aus ✎ ein
+   ✕, das die Bearbeitung abbricht und zur vorherigen Position zurückkehrt.
+   ✓ übernimmt die aktuelle Position.
+3. Nach ✓ sucht der Server automatisch im entzerrten Innenbereich nach
+   Vorzeichen und Ziffern und schlägt eine OCR-Box vor (**Stufe B**). Dieselbe
+   ✎/✓-Logik gilt jetzt für die gelbe OCR-Box — Vorzeichenbox, Ziffernzellen
+   und Punkte sind genau das Raster, das der Segmentleser verwendet.
+4. ✓ an der OCR-Box bestätigt beide Rahmen endgültig (entspricht dem früheren
+   `Strg+Enter`). Ein Klick in den (jetzt inaktiven) grünen ROI-Rahmen
+   während Stufe B führt zurück zu Stufe A, ohne die Kandidatensuche erneut
+   zu starten. `Esc` verwirft die gesamte Bearbeitung, jederzeit.
 
 `setup` übernimmt das normierte Vierpunktpolygon ins aktive Profil und
 entzerrt es für die OCR. Der innere `ocr_box` wird danach ausgeschnitten und
@@ -179,7 +182,7 @@ Originalmetadaten, Bildnummer und Profil unter
 `var/workbench/annotations/`. Ändert sich das Profil während des Editierens,
 werden reine OCR-Layoutänderungen (`digits`, `decimals`, Vorzeichen,
 Rasterverhältnisse und Ziffernabstand) sofort im Overlay übernommen und bleiben
-mit `Strg+Enter` bestätigbar. Der cyanfarbene Kreis markiert die profilfeste
+über die OCR-Box-✓ bestätigbar. Der cyanfarbene Kreis markiert die profilfeste
 Dezimalposition; er
 ist noch keine optische Punktmessung (OQ-17). Kamera- oder andere
 Profiländerungen machen das eingefrorene Bild weiterhin ungültig; dann erst ein

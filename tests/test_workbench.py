@@ -4,16 +4,20 @@ import json
 import os
 import threading
 import time
+from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
 from dispread.frames.synthetic_source import render_display
 from dispread.layout import DisplayLayout
+from dispread.rectify import rectify
 from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
 from dispread.workbench.controller import MAX_GEOMETRY_CYCLES, Controller
 from dispread.workbench.profiles import DEFAULT, atomic_json, validate
+from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 
 
 @pytest.mark.parametrize(
@@ -305,6 +309,34 @@ def test_freeze_starts_from_last_detected_candidate(tmp_path, monkeypatch):
     assert [pt for corner in frozen["quad"] for pt in corner] == pytest.approx([0.1, 0.1, 0.6, 0.1, 0.6, 0.5, 0.1, 0.5])
 
 
+def test_freeze_returns_all_current_candidates(tmp_path, monkeypatch):
+    """Bedienerwunsch: alle gerade erkannten Kandidaten sollen im Editor
+    einzeln anklickbar sein, nicht nur die eine beste Vermutung."""
+    c = ready_controller(tmp_path, live=False, confirmed=False)
+    boxes = [(96, 72, 480, 288), (10, 10, 100, 50)]
+    monkeypatch.setattr("dispread.workbench.controller.find_display_candidates", lambda *_a, **_k: boxes)
+    c.publish(np.full((720, 960, 3), 120, np.uint8), {"timebase": "synthetic"})
+
+    frozen = c.command("freeze")
+
+    np.testing.assert_allclose(frozen["candidates"], [[x / 960, y / 720, w / 960, h / 720] for x, y, w, h in boxes])
+
+
+def test_freeze_populates_candidates_even_when_none_were_cached(tmp_path, monkeypatch):
+    """Nach einer Bestaetigung in derselben Sitzung pflegt publish() keine
+    Kandidaten mehr (nur waehrend unbestaetigt). Ein erneutes Editieren muss
+    trotzdem anklickbare Kandidaten zeigen - freeze() holt sie dann einmalig
+    nach, statt mit einer leeren Liste dazustehen."""
+    c = ready_controller(tmp_path, live=True, confirmed=True)
+    assert c.candidates == ()  # bestaetigt: publish() haelt keine Kandidaten
+    boxes = [(96, 72, 480, 288)]
+    monkeypatch.setattr("dispread.workbench.controller.find_display_candidates", lambda *_a, **_k: boxes)
+
+    frozen = c.command("freeze")
+
+    np.testing.assert_allclose(frozen["candidates"], [[96 / 960, 72 / 720, 480 / 960, 288 / 720]])
+
+
 def test_field_rows_offer_only_valid_choices(tmp_path):
     c = ready_controller(tmp_path)
     state = c.snapshot()
@@ -531,14 +563,80 @@ def test_perspective_quad_is_rectified_before_reading(tmp_path):
     assert c.snapshot()["reading"]["value"] == -12.34
 
 
-def test_confirmed_roi_skips_full_frame_candidate_search(tmp_path, monkeypatch):
+def test_confirmed_roi_in_run_mode_skips_full_frame_candidate_search(tmp_path, monkeypatch):
+    """Im run-Modus bleibt jede Vergleichssuche abgeschaltet - der
+    Produktionsmodus braucht die volle Bildrate, keinen visuellen
+    Geometrie-Vergleich (OQ-24)."""
+    c = ready_controller(tmp_path, live=False, confirmed=True)
+    c.mode = "run"
+
+    def unexpected(*_a, **_k):
+        raise AssertionError("run-Modus darf keine Vergleichssuche ausloesen")
+
+    monkeypatch.setattr("dispread.workbench.controller.find_display_candidates", unexpected)
+    monkeypatch.setattr("dispread.workbench.controller.fit_quad_in_region", unexpected)
+    c.publish(np.full((720, 960, 3), 120, np.uint8), {"timebase": "synthetic"})
+
+
+def test_confirmed_roi_throttles_verification_search_outside_run_mode(tmp_path, monkeypatch):
+    """Bedienerrueckmeldung: nach einem Neustart mit bereits bestaetigter ROI
+    lief die Vergleichssuche nie mehr - kein visueller Hinweis mehr, ob die
+    alte Geometrie noch zur aktuellen Szene passt. Sie muss deshalb in
+    setup/annotate weiterlaufen, aber gedrosselt statt bei jedem Bild
+    (CANDIDATE_INTERVAL_S), sonst kehrt die mit OQ-24 behobene
+    Vollbildsuche-pro-Bild-Kosten zurueck."""
+    c = ready_controller(tmp_path, live=False, confirmed=True)
+    calls = []
+    monkeypatch.setattr(
+        "dispread.workbench.controller.fit_quad_in_region",
+        lambda *_a, **_k: calls.append(1) or None,
+    )
+    image = np.full((720, 960, 3), 120, np.uint8)
+
+    c.publish(image, {"timebase": "synthetic"})
+    assert len(calls) == 1  # erstes Bild nach dem Laden: sofort verglichen
+
+    c.publish(image, {"timebase": "synthetic"})
+    assert len(calls) == 1  # innerhalb der Drosselfrist kein zweiter Aufruf
+
+    c.last_candidates_at = 0.0  # Drosselfenster simuliert abgelaufen
+    c.publish(image, {"timebase": "synthetic"})
+    assert len(calls) == 2
+
+
+def test_confirmed_roi_never_triggers_the_whole_frame_candidate_search(tmp_path, monkeypatch):
+    """Bedienerbefund: die wieder aktivierte Vergleichssuche zeigte gelbe
+    Boxen um andere Anzeigen/Objekte im Bild, weil sie das ganze Bild
+    absuchte statt nur die Umgebung der bestaetigten ROI. Eine bestaetigte
+    Geometrie darf deshalb nie wieder `find_display_candidates` (Vollbild)
+    ausloesen - nur die auf `config["roi"]` eingegrenzte `fit_quad_in_region`."""
     c = ready_controller(tmp_path, live=False, confirmed=True)
 
-    def unexpected(*_):
+    def unexpected(*_a, **_k):
         raise AssertionError("bestaetigte ROI darf keine Vollbildsuche mehr ausloesen")
 
     monkeypatch.setattr("dispread.workbench.controller.find_display_candidates", unexpected)
+    image = np.full((720, 960, 3), 120, np.uint8)
+
+    c.publish(image, {"timebase": "synthetic"})
+    c.last_candidates_at = 0.0
+    c.publish(image, {"timebase": "synthetic"})
+
+
+def test_confirmed_roi_verification_search_is_scoped_to_the_confirmed_region(tmp_path, monkeypatch):
+    """Die Vergleichssuche bekommt die bestaetigte ROI als Suchfenster
+    (`fit_quad_in_region`'s `hint_box`), nicht das ganze Bild - genau das
+    grenzt Nebenanzeigen/andere Objekte aus (Konzept.md §7)."""
+    c = ready_controller(tmp_path, live=False, confirmed=True)
+    seen_hints = []
+    monkeypatch.setattr(
+        "dispread.workbench.controller.fit_quad_in_region",
+        lambda _image, hint_box, layout=None: seen_hints.append(hint_box) or None,
+    )
+
     c.publish(np.full((720, 960, 3), 120, np.uint8), {"timebase": "synthetic"})
+
+    assert seen_hints == [c.config["roi"]]
 
 
 def test_snapshot_remains_responsive_during_image_processing(tmp_path, monkeypatch):
@@ -751,3 +849,394 @@ def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
             await runner.cleanup()
 
     asyncio.run(check())
+
+
+def test_loading_a_confirmed_profile_warns_about_unverified_geometry(tmp_path):
+    """Bedienerrueckmeldung: nach einem Neustart wirkte eine bereits
+    bestaetigte Geometrie wie stillschweigend weiter gueltig, ohne jeden
+    Hinweis, dass sie noch nicht gegen die aktuelle Szene verglichen wurde."""
+    root = tmp_path / "data"
+    c = Controller(root)
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    c.command("roi", {"id": frozen["id"], "roi": [0.1, 0.2, 0.5, 0.5]})
+    c.applied = c.revision
+    c.command("profile.save")
+
+    reloaded = Controller(root)
+
+    assert any("noch nicht gegen die aktuelle Szene verglichen" in x["message"] for x in reloaded.logs)
+
+
+def test_startup_requires_re_confirmation_of_a_previously_confirmed_profile(tmp_path):
+    """Bedienerwunsch: jede Sitzung soll frisch mit laufender Erkennung
+    beginnen statt eine alte Bestaetigung stillschweigend fuer den
+    run-Modus weiterzuverwenden (Konzept.md §4 - Bestaetigung ist der Akt
+    eines Menschen, auch nach einem Neustart). roi/roi_quad/ocr_box bleiben
+    als Startpunkt fuer eine schnelle erneute Bestaetigung erhalten, und die
+    gespeicherte Datei selbst bleibt unveraendert."""
+    root = tmp_path / "data"
+    c = Controller(root)
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    quad = [[0.1, 0.2], [0.6, 0.2], [0.6, 0.7], [0.1, 0.7]]
+    c.command("roi", {"id": frozen["id"], "quad": quad, "ocr_box": [0.1, 0.1, 0.8, 0.8]})
+    c.applied = c.revision
+    c.command("profile.save")
+    saved_on_disk = json.loads((root / "profiles" / "default.json").read_text())
+    assert saved_on_disk["confirmed"] is True  # gespeicherte Datei bleibt unveraendert
+
+    reloaded = Controller(root)
+
+    assert reloaded.config["confirmed"] is False
+    np.testing.assert_allclose(reloaded.config["roi_quad"], quad)
+    assert reloaded.config["ocr_box"] == pytest.approx([0.1, 0.1, 0.8, 0.8])
+    assert reloaded.dirty is True
+    assert any("muss diese Sitzung erneut" in x["message"] for x in reloaded.logs)
+    with pytest.raises(ValueError):
+        reloaded.command("mode", {"value": "run"})
+
+
+def test_startup_does_not_touch_an_already_unconfirmed_profile(tmp_path):
+    """Nur eine tatsaechlich geladene Bestaetigung wird zurueckgesetzt - ein
+    frisches, nie bestaetigtes Profil darf nicht faelschlich als 'dirty'
+    oder mit einer irrefuehrenden Warnung starten."""
+    root = tmp_path / "data"
+    c = Controller(root)
+    c.applied = c.revision
+    c.command("profile.save")
+
+    reloaded = Controller(root)
+
+    assert reloaded.config["confirmed"] is False
+    assert reloaded.dirty is False
+    assert not any("muss diese Sitzung erneut" in x["message"] for x in reloaded.logs)
+
+
+def test_freeze_offers_a_smaller_default_ocr_box_without_persisting_it(tmp_path):
+    """Bedienerbefund: der unberuehrte [0,0,1,1]-Default deckt sich direkt nach
+    einer frischen roi-Bestaetigung mit roi_quad - das Verklicken beim
+    Verschieben. `freeze` bietet deshalb im Editierzustand einen kleineren
+    Startwert an, ohne self.config oder eine Bestaetigung zu aendern."""
+    c = Controller(tmp_path)
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+
+    frozen = c.command("freeze")
+
+    assert frozen["ocr_box"] == pytest.approx([0.15, 0.15, 0.7, 0.7])
+    assert c.config["ocr_box"] == DEFAULT["ocr_box"]
+
+
+def test_freeze_keeps_a_confirmed_ocr_box_unchanged(tmp_path):
+    c = Controller(tmp_path)
+    c.config["ocr_box"] = [0.2, 0.3, 0.4, 0.4]
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+
+    frozen = c.command("freeze")
+
+    assert frozen["ocr_box"] == pytest.approx([0.2, 0.3, 0.4, 0.4])
+
+
+def _mask_iou(mask_a, mask_b):
+    intersection = int((mask_a & mask_b).sum())
+    union = int((mask_a | mask_b).sum())
+    return intersection / union if union else 0.0
+
+
+def test_fit_quad_in_region_finds_a_panel_within_the_hint():
+    """Grober Bedienerhinweis (Taste R) um ein achsparalleles Panel - das
+    Quad muss die Panelflaeche gut treffen und geordnet (TL/TR/BR/BL) sein."""
+    width, height = 500, 300
+    image = np.full((height, width, 3), 30, np.uint8)
+    x, y, w, h = 150, 80, 220, 120
+    cv2.rectangle(image, (x, y), (x + w, y + h), (200, 200, 200), -1)
+    hint = [(x - 20) / width, (y - 20) / height, (w + 40) / width, (h + 40) / height]
+
+    quad = fit_quad_in_region(image, hint)
+
+    assert quad is not None
+    pixel_quad = np.array([[px * width, py * height] for px, py in quad], dtype=np.int32)
+    mask_a = np.zeros((height, width), np.uint8)
+    cv2.fillPoly(mask_a, [pixel_quad], 1)
+    mask_b = np.zeros((height, width), np.uint8)
+    mask_b[y : y + h, x : x + w] = 1
+    assert _mask_iou(mask_a, mask_b) > 0.85
+
+
+def test_fit_quad_in_region_follows_a_tilted_panel():
+    """Nicht nur achsparallel - roi_quad muss ein echtes, ggf. rotiertes
+    Viereck liefern (Konzept: manual_roi bleibt Primaerpfad, hier nur der
+    Vorschlag fuer eine perspektivisch verzerrte Anzeige)."""
+    width, height = 500, 300
+    image = np.full((height, width, 3), 30, np.uint8)
+    panel = np.array([[160, 70], [365, 90], [375, 210], [140, 195]], dtype=np.int32)
+    cv2.fillConvexPoly(image, panel, (200, 200, 200))
+    hint = [100 / width, 50 / height, 300 / width, 200 / height]
+
+    quad = fit_quad_in_region(image, hint)
+
+    assert quad is not None
+    pixel_quad = np.array([[px * width, py * height] for px, py in quad], dtype=np.int32)
+    mask_a = np.zeros((height, width), np.uint8)
+    cv2.fillPoly(mask_a, [pixel_quad], 1)
+    mask_b = np.zeros((height, width), np.uint8)
+    cv2.fillPoly(mask_b, [panel], 1)
+    assert _mask_iou(mask_a, mask_b) > 0.85
+
+
+def test_fit_quad_in_region_returns_none_without_a_candidate():
+    """Ein Fehlschlag ist inert - kein Kandidat im markierten Bereich darf nie
+    zu einer erfundenen Geometrie fuehren (AGENTS.md: kein Raten)."""
+    image = np.full((300, 500, 3), 30, np.uint8)
+
+    assert fit_quad_in_region(image, [0.2, 0.2, 0.3, 0.3]) is None
+
+
+def test_fit_quad_in_region_uses_layout_to_widen_aspect_tolerance():
+    """Mit Profil/Layout wird das erwartete Seitenverhaeltnis zusaetzlich aus
+    `DisplayLayout.n_cells` abgeleitet statt nur der festen 1.5..8.0-Spanne
+    (hier: neun Ziffernstellen plus Vorzeichen, Seitenverhaeltnis > 8)."""
+    width, height = 600, 200
+    image = np.full((height, width, 3), 30, np.uint8)
+    x, y, w, h = 30, 40, 500, 60
+    cv2.rectangle(image, (x, y), (x + w, y + h), (200, 200, 200), -1)
+    hint = [(x - 10) / width, (y - 10) / height, (w + 20) / width, (h + 20) / height]
+    layout = DisplayLayout(digits=9, decimals=2, has_sign=True, unit=None)
+
+    assert fit_quad_in_region(image, hint) is None
+    assert fit_quad_in_region(image, hint, layout=layout) is not None
+
+
+def test_fit_quad_in_region_ignores_unrelated_objects_outside_the_hint():
+    """Bedienerbefund: die auf eine grosszuegig bestaetigte ROI eingegrenzte
+    Vergleichssuche schlug andere Bildschirme im Bild vor. Ursache: die
+    Aufweitung um ~25% des Hinweisbereichs kann bei einem grosszuegigen
+    Hinweis genug Raum fuer ein unbeteiligtes, zufaellig rechteckigeres
+    Objekt lassen - eine reine (Rechteckigkeit, Flaeche)-Bewertung zieht dann
+    ein kleines, perfektes Rechteck einem grossen, aber leicht unregelmaessig
+    geformten Pruefling vor. Ein Kandidat muss deshalb zusaetzlich den
+    ungepolsterten Hinweisbereich selbst ausreichend ueberdecken."""
+    width, height = 960, 720
+    image = np.full((height, width, 3), 40, np.uint8)
+
+    # Pruefling mit gekappten Ecken - realistisch unregelmaessiger als eine
+    # ideale Box, damit seine Rechteckigkeit unter der eines sauberen
+    # Ablenkerobjekts liegt.
+    dx, dy, dw, dh = 270, 100, 460, 290
+    cut = 60
+    device_points = np.array(
+        [
+            [dx + cut, dy], [dx + dw - cut, dy], [dx + dw, dy + cut], [dx + dw, dy + dh - cut],
+            [dx + dw - cut, dy + dh], [dx + cut, dy + dh], [dx, dy + dh - cut], [dx, dy + cut],
+        ],
+        np.int32,
+    )
+    cv2.fillConvexPoly(image, device_points, (200, 200, 200))
+    hint = [dx / width, dy / height, dw / width, dh / height]
+
+    # Kleines, perfekt rechteckiges Ablenkerobjekt ("anderer Bildschirm") im
+    # aufgeweiteten Suchfenster, aber ausserhalb des Hinweisbereichs selbst.
+    mx, my, mw, mh = 159, 32, 100, 350
+    assert mx + mw < dx  # keine Ueberlappung mit dem Pruefling
+    cv2.rectangle(image, (mx, my), (mx + mw, my + mh), (220, 220, 220), -1)
+
+    quad = fit_quad_in_region(image, hint)
+
+    assert quad is not None
+    pixel_quad = np.array([[px * width, py * height] for px, py in quad], dtype=np.int32)
+    mask_a = np.zeros((height, width), np.uint8)
+    cv2.fillPoly(mask_a, [pixel_quad], 1)
+    mask_device = np.zeros((height, width), np.uint8)
+    cv2.fillConvexPoly(mask_device, device_points, 1)
+    mask_distractor = np.zeros((height, width), np.uint8)
+    mask_distractor[my : my + mh, mx : mx + mw] = 1
+    assert _mask_iou(mask_a, mask_device) > 0.85
+    assert _mask_iou(mask_a, mask_distractor) == 0.0
+
+
+def _box_iou(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    intersection = max(0.0, min(ax + aw, bx + bw) - max(ax, bx)) * max(0.0, min(ay + ah, by + bh) - max(ay, by))
+    union = aw * ah + bw * bh - intersection
+    return intersection / union if union else 0.0
+
+
+@pytest.mark.parametrize(
+    ("value", "digits", "decimals", "has_sign", "unit"),
+    [
+        (-12.34, 5, 2, True, "mV"),
+        (12.34, 5, 2, True, "mV"),
+        (0.5, 4, 1, False, "N"),
+        (-999.9, 4, 1, True, None),
+    ],
+)
+def test_fit_ocr_box_matches_the_rendered_digit_area(value, digits, decimals, has_sign, unit):
+    """Auf dem entzerrten Ausschnitt muss der Vorschlag Vorzeichen+Ziffern
+    treffen und Einheitentext/Rand aussparen - ohne beide zu kennen."""
+    layout = DisplayLayout(digits=digits, decimals=decimals, has_sign=has_sign, unit=unit)
+    image, _, area = render_display(value, layout)
+    height, width = image.shape[:2]
+    x, y, area_w, area_h = area
+    quad = [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]
+    crop = rectify(image, quad, target_size=(400, 160))
+
+    box = fit_ocr_box(crop.image, layout=layout)
+
+    assert box is not None
+    expected = (x / width, y / height, area_w / width, area_h / height)
+    assert _box_iou(box, expected) > 0.6
+
+
+def test_fit_ocr_box_returns_none_for_a_blank_crop():
+    """Zu wenig Evidenz (kein Blob) - Ablehnung statt Raten."""
+    blank = np.full((160, 400), 40, np.uint8)
+
+    assert fit_ocr_box(blank) is None
+
+
+_REAL_ANNOTATIONS = [
+    Path("var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd"),
+    Path("var/workbench/annotations/8a18ee05e31241b9b6702c5bb904ec97"),
+]
+
+
+@pytest.mark.skipif(
+    not all(p.exists() for p in _REAL_ANNOTATIONS),
+    reason="reale Annotationen aus var/ nicht im Checkout vorhanden (nicht versioniert)",
+)
+@pytest.mark.parametrize("folder", _REAL_ANNOTATIONS, ids=lambda p: p.name)
+def test_fit_ocr_box_against_real_annotations(folder):
+    """Validierung gegen die zwei realen Aufnahmen aus dieser Sitzung
+    (docs/PLAN_2026-09-10-workbench-editor.md). Gemessenes Ergebnis: IoU 0,0
+    auf beiden Bildern, siehe docs/VALIDATION.md und OQ-25 - der Ausschnitt
+    enthaelt neben der Hauptanzeige "V" eine baugleiche Nebenanzeige "A"
+    (Konzept.md §7: Haupt-/Nebenanzeige-Verwechslung ist ohne weiteren
+    Bedienerhinweis strukturell nicht aufloesbar), und in einem Bild zusaetzlich
+    einen grossflaechigen Glanzfleck. Die Schwelle ist die **gemessene**, nicht
+    eine vorab erhoffte - dieser Test bewacht nur, dass die Funktion an echten
+    Daten nicht abstuerzt und ein plausibel geformtes Ergebnis liefert."""
+    annotation = json.loads((folder / "annotation.json").read_text())
+    image = cv2.imread(str(folder / "image.png"))
+    height, width = image.shape[:2]
+    quad_px = [(px * width, py * height) for px, py in annotation["roi_quad"]]
+    layout = DisplayLayout.from_dict(annotation["profile"]["layout"])
+    crop = rectify(image, quad_px, target_size=(400, 160))
+
+    box = fit_ocr_box(crop.image, layout=layout)
+
+    assert box is not None
+    x, y, w, h = box
+    assert 0 <= x <= 1 and 0 <= y <= 1 and 0 < w <= 1 and 0 < h <= 1
+    iou = _box_iou(box, annotation["ocr_box"])
+    assert iou >= 0.0  # gemessener Bestand, siehe docs/VALIDATION.md
+
+
+def test_command_rejects_the_removed_roi_suggest_op(tmp_path):
+    """R-Zug samt eigenem Hinweisbereich ist durch das anklickbare
+    Kandidaten-Browsing in Stufe A ersetzt (siehe Plan
+    wen-ich-die-roi-logical-sphinx) - der Op bleibt bewusst entfernt."""
+    c = Controller(tmp_path)
+    with pytest.raises(ValueError, match="Unbekannter Befehl: roi.suggest"):
+        c.command("roi.suggest", {"id": "irrelevant", "hint_box": [0.2, 0.2, 0.3, 0.3]})
+
+
+def test_ocr_suggest_returns_a_box_for_the_given_quad_without_persisting(tmp_path):
+    layout = DisplayLayout(digits=5, decimals=2, has_sign=True, unit="mV")
+    image, _, area = render_display(-12.34, layout)
+    image_height, image_width = image.shape[:2]
+    x, y, w, h = area
+    # ROI mit etwas Rand um den Ziffernbereich, wie ein Bediener sie ziehen
+    # wuerde (analog test_inner_ocr_box_calibrates_grid_inside_padded_roi) -
+    # belegt die Vorschlagsqualitaet, nicht nur die Antwortform.
+    padding_x, padding_y = 30, 20
+    outer = [x - padding_x, y - padding_y, w + 2 * padding_x, h + 2 * padding_y]
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    quad = [
+        [outer[0] / image_width, outer[1] / image_height],
+        [(outer[0] + outer[2]) / image_width, outer[1] / image_height],
+        [(outer[0] + outer[2]) / image_width, (outer[1] + outer[3]) / image_height],
+        [outer[0] / image_width, (outer[1] + outer[3]) / image_height],
+    ]
+
+    result = c.command("ocr.suggest", {"id": frozen["id"], "quad": quad})
+
+    assert result["ocr_box"] is not None
+    assert c.config["ocr_box"] == DEFAULT["ocr_box"]
+    expected = (padding_x / outer[2], padding_y / outer[3], w / outer[2], h / outer[3])
+    assert _box_iou(result["ocr_box"], expected) > 0.6
+
+
+def test_ocr_suggest_reports_no_candidate_without_raising(tmp_path):
+    c = Controller(tmp_path)
+    c.publish(np.full((300, 500, 3), 30, np.uint8), {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    quad = [[0, 0], [1, 0], [1, 1], [0, 1]]
+
+    result = c.command("ocr.suggest", {"id": frozen["id"], "quad": quad})
+
+    assert result["ocr_box"] is None
+    assert any("kein Kandidat" in x["message"] for x in c.logs)
+
+
+def test_ocr_suggest_does_not_hold_the_controller_lock_during_detection(tmp_path, monkeypatch):
+    """Kernbehebung des gemeldeten Bugs: die OpenCV-Arbeit lief zuvor
+    vollstaendig innerhalb des Controller-Locks (anders als publish()) - ein
+    langsamer Suchlauf liess so genug Zeit fuer eine Bedienereingabe, die die
+    eintreffende Vermutung ueberschrieb. `status` muss waehrenddessen sofort
+    antworten."""
+    layout = DisplayLayout(digits=5, decimals=2, has_sign=True, unit="mV")
+    image, _, _ = render_display(-12.34, layout)
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_fit_ocr_box(*_a, **_k):
+        entered.set()
+        assert release.wait(2)
+        return None
+
+    monkeypatch.setattr("dispread.workbench.controller.fit_ocr_box", slow_fit_ocr_box)
+    quad = [[0, 0], [1, 0], [1, 1], [0, 1]]
+    worker = threading.Thread(target=c.command, args=("ocr.suggest", {"id": frozen["id"], "quad": quad}))
+    worker.start()
+    assert entered.wait(1)
+    started = time.monotonic()
+    c.command("status")
+    elapsed = time.monotonic() - started
+    release.set()
+    worker.join(2)
+
+    assert elapsed < 0.05
+    assert not worker.is_alive()
+
+
+def test_ground_truth_text_is_stored_with_the_annotation(tmp_path):
+    """Stufe 3: getippter Anzeigewert macht (Bild, roi_quad, ocr_box, layout,
+    Ground Truth)-Tupel moeglich - rein additiv, keine Erkennungsgarantie."""
+    c = Controller(tmp_path)
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+    c.command("mode", {"value": "annotate"})
+    frozen = c.command("freeze")
+
+    c.command("roi", {"id": frozen["id"], "roi": [0.1, 0.2, 0.5, 0.5], "ground_truth_text": " -012.34 mV "})
+
+    annotation = json.loads(next((tmp_path / "annotations").glob("*/annotation.json")).read_text())
+    assert annotation["ground_truth_text"] == " -012.34 mV "
+
+
+def test_ground_truth_text_defaults_to_none_when_not_supplied(tmp_path):
+    c = Controller(tmp_path)
+    c.publish(np.zeros((100, 200, 3), np.uint8), {"timebase": "synthetic"})
+    c.command("mode", {"value": "annotate"})
+    frozen = c.command("freeze")
+
+    c.command("roi", {"id": frozen["id"], "roi": [0.1, 0.2, 0.5, 0.5]})
+
+    annotation = json.loads(next((tmp_path / "annotations").glob("*/annotation.json")).read_text())
+    assert annotation["ground_truth_text"] is None

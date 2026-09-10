@@ -211,8 +211,13 @@ new ResizeObserver(()=>{for(const t of terminals.values())fit(t);}).observe($('t
 /* Kamerabild einfrieren und Anzeigebereich setzen. */
 async function freeze(){
  if(editing)return;
- try{editing=await command('freeze');editing.target='roi';editing.selected=null;feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;viewport.focus();draw();
-  log('info','Kalibrierung: grün = Perspektiv-ROI, gelb = OCR-Rahmen/Raster. Rahmen anklicken oder G wechseln; Ecke ziehen, innen verschieben, Shift+Pfeile = Ecke, Strg+Enter = bestätigen.');
+ try{
+  editing=await command('freeze');
+  editing.stage='roi';editing.mode='browse';editing.selected=null;
+  editing.preEdit=null;editing.pending=null;editing.requestId=0;
+  feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;
+  viewport.focus();draw();
+  log('info','Kalibrierung: erkannten Rahmen anklicken oder ✎ zum Verschieben/Ecken-ziehen, ✓ bestätigt. Danach folgt automatisch ein OCR-Vorschlag - ebenso mit ✎/✓ pruefen. Escape bricht die Bearbeitung ab.');
  }catch(e){log('error',e.message);}
 }
 function homography(q){
@@ -228,41 +233,164 @@ function ocrPoint(u,v){const [x,y,w,h]=editing.ocr_box;return project(x+u*w,y+v*
 function ocrCorners(){return [[0,0],[1,0],[1,1],[0,1]].map(([u,v])=>ocrPoint(u,v));}
 function path(points,colour,width=1){ctx.strokeStyle=colour;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(points[0][0]*canvas.width,points[0][1]*canvas.height);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0]*canvas.width,points[i][1]*canvas.height);ctx.closePath();ctx.stroke();}
 function gridBox(box,colour,width=1){const [x,y,w,h]=box;path([[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([u,v])=>ocrPoint(u,v)),colour,width);}
+function positionButtons(el,anchor,offsetX,offsetY,w,h){
+ el.style.left=(offsetX+anchor[0]*w+6)+'px';
+ el.style.top=(offsetY+anchor[1]*h-28)+'px';
+}
+function pointInQuad(pt,quad){
+ // Punkt-in-Polygon (Ray-Casting), auch fuer rotierte Vierecke gueltig.
+ let inside=false;
+ for(let i=0,j=3;i<4;j=i++){
+  const [xi,yi]=quad[i],[xj,yj]=quad[j];
+  if((yi>pt[1])!==(yj>pt[1]) && pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi)inside=!inside;
+ }
+ return inside;
+}
 function draw(){
  if(!editing)return;
  const scale=Math.min(viewport.clientWidth/editing.width,viewport.clientHeight/editing.height);
  const w=Math.round(editing.width*scale),h=Math.round(editing.height*scale);
- canvas.width=w;canvas.height=h;canvas.style.width=w+'px';canvas.style.height=h+'px';canvas.style.left=(viewport.clientWidth-w)/2+'px';canvas.style.top=(viewport.clientHeight-h)/2+'px';
- ctx.clearRect(0,0,w,h);path(editing.quad,'#a6d6a6',editing.target==='roi'?2:1);
- for(const box of editing.ocr_grid.cells)gridBox(box,'rgba(240,208,128,.65)');if(editing.ocr_grid.sign)gridBox(editing.ocr_grid.sign,'rgba(240,208,128,.65)');
- for(const box of editing.ocr_grid.cells)for(const [,sx,sy] of editing.ocr_grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
- if(editing.ocr_grid.decimal_after!==null){const box=editing.ocr_grid.cells[editing.ocr_grid.decimal_after],p=ocrPoint(box[0]+box[2],box[1]+.88*box[3]);ctx.strokeStyle='#7fdbe8';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,4,0,2*Math.PI);ctx.stroke();}
- const oc=ocrCorners();path(oc,'#f0d080',editing.target==='ocr'?2:1);
- const handles=editing.target==='ocr'?oc:editing.quad;for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':editing.target==='ocr'?'#f0d080':'#a6d6a6';ctx.fillRect(handles[i][0]*w-5,handles[i][1]*h-5,10,10);}
+ canvas.width=w;canvas.height=h;canvas.style.width=w+'px';canvas.style.height=h+'px';
+ const offsetX=(viewport.clientWidth-w)/2,offsetY=(viewport.clientHeight-h)/2;
+ canvas.style.left=offsetX+'px';canvas.style.top=offsetY+'px';
+ ctx.clearRect(0,0,w,h);
+ const roiActive=editing.stage==='roi';
+ // Kandidaten (nur Stufe A, Browse-Modus): duenn, anklickbar, keine Ecken.
+ if(roiActive&&editing.mode==='browse')
+  for(const [bx,by,bw,bh] of editing.candidates)path([[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx,by+bh]],'rgba(166,214,166,.35)',1);
+ // ROI-Rahmen: aktiv in Stufe A, sonst (Stufe B) inert, aber weiter
+ // anklickbar (Klick darin fuehrt zurueck zu Stufe A).
+ ctx.setLineDash(roiActive&&editing.pending?[6,4]:[]);
+ path(editing.quad,roiActive?'#a6d6a6':'rgba(166,214,166,.55)',roiActive?2:1);
+ ctx.setLineDash([]);
+ if(roiActive&&editing.mode==='edit')
+  for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':'#a6d6a6';ctx.fillRect(editing.quad[i][0]*w-5,editing.quad[i][1]*h-5,10,10);}
+ // OCR-Raster/-Rahmen erst ab Stufe B sichtbar.
+ if(!roiActive){
+  for(const box of editing.ocr_grid.cells)gridBox(box,'rgba(240,208,128,.65)');
+  if(editing.ocr_grid.sign)gridBox(editing.ocr_grid.sign,'rgba(240,208,128,.65)');
+  for(const box of editing.ocr_grid.cells)for(const [,sx,sy] of editing.ocr_grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
+  if(editing.ocr_grid.decimal_after!==null){const box=editing.ocr_grid.cells[editing.ocr_grid.decimal_after],p=ocrPoint(box[0]+box[2],box[1]+.88*box[3]);ctx.strokeStyle='#7fdbe8';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,4,0,2*Math.PI);ctx.stroke();}
+  const oc=ocrCorners();
+  ctx.setLineDash(editing.pending?[6,4]:[]);
+  path(oc,'#f0d080',2);
+  ctx.setLineDash([]);
+  if(editing.mode==='edit')
+   for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':'#f0d080';ctx.fillRect(oc[i][0]*w-5,oc[i][1]*h-5,10,10);}
+ }
+ // TUI-Buttons: nur die aktive Stufe zeigt ihr Paar, direkt an der Box.
+ $('roi-buttons').hidden=!roiActive;$('ocr-buttons').hidden=roiActive;
+ if(roiActive)positionButtons($('roi-buttons'),editing.quad[1],offsetX,offsetY,w,h);
+ else positionButtons($('ocr-buttons'),ocrPoint(1,0),offsetX,offsetY,w,h);
+ const pending=!!editing.pending;
+ for(const id of ['roi-confirm','roi-toggle','ocr-confirm','ocr-toggle'])$(id).disabled=pending;
+ $('roi-toggle').textContent=(roiActive&&editing.mode==='edit')?'✕':'✎';
+ $('ocr-toggle').textContent=(!roiActive&&editing.mode==='edit')?'✕':'✎';
 }
 function point(event){const box=canvas.getBoundingClientRect();return [(event.clientX-box.left)/box.width,(event.clientY-box.top)/box.height];}
-function nearestHandle(x,y){let best=null,distance=Infinity;for(const [target,points] of [['roi',editing.quad],['ocr',ocrCorners()]])for(let i=0;i<4;i++){const dx=(x-points[i][0])*canvas.width,dy=(y-points[i][1])*canvas.height,d=Math.hypot(dx,dy);if(d<distance){best={target,corner:i};distance=d;}}return distance<=18?best:null;}
+function nearestHandle(x,y){
+ // Nur die Ecken der jeweils aktiven Stufe - ROI und OCR sind nie
+ // gleichzeitig interaktiv, die fruehere Ecken-Prioritaetslogik zwischen
+ // beiden ist dadurch strukturell unnoetig geworden.
+ const points=editing.stage==='roi'?editing.quad:ocrCorners();
+ let best=null,distance=Infinity;
+ for(let i=0;i<4;i++){const dx=(x-points[i][0])*canvas.width,dy=(y-points[i][1])*canvas.height,d=Math.hypot(dx,dy);if(d<distance){best=i;distance=d;}}
+ return distance<=18?best:null;
+}
 function moveQuad(dx,dy){const q=editing.quad,minX=Math.min(...q.map(p=>p[0])),maxX=Math.max(...q.map(p=>p[0])),minY=Math.min(...q.map(p=>p[1])),maxY=Math.max(...q.map(p=>p[1]));dx=Math.max(-minX,Math.min(1-maxX,dx));dy=Math.max(-minY,Math.min(1-maxY,dy));editing.quad=q.map(([x,y])=>[x+dx,y+dy]);}
 function moveOcr(dx,dy){const r=editing.ocr_box;dx=Math.max(-r[0],Math.min(1-r[0]-r[2],dx));dy=Math.max(-r[1],Math.min(1-r[1]-r[3],dy));editing.ocr_box=[r[0]+dx,r[1]+dy,r[2],r[3]];}
 function setOcrCorner(index,u,v){const r=editing.ocr_box,left=r[0],top=r[1],right=left+r[2],bottom=top+r[3],gap=.01;u=Math.max(0,Math.min(1,u));v=Math.max(0,Math.min(1,v));const nl=index===0||index===3?Math.min(u,right-gap):left,nr=index===1||index===2?Math.max(u,left+gap):right,nt=index===0||index===1?Math.min(v,bottom-gap):top,nb=index===2||index===3?Math.max(v,top+gap):bottom;editing.ocr_box=[nl,nt,nr-nl,nb-nt];}
-canvas.onpointerdown=event=>{if(!editing)return;canvas.setPointerCapture(event.pointerId);const [x,y]=point(event),handle=nearestHandle(x,y),uv=unproject(x,y),r=editing.ocr_box,inside=uv[0]>=r[0]&&uv[0]<=r[0]+r[2]&&uv[1]>=r[1]&&uv[1]<=r[1]+r[3];editing.target=handle?.target||(inside?'ocr':'roi');editing.selected=handle?.corner??null;drag={start:[x,y],startUV:uv,quad:editing.quad.map(p=>[...p]),ocr:[...editing.ocr_box],corner:editing.selected,target:editing.target};draw();};
-canvas.onpointermove=event=>{if(!drag)return;const [x,y]=point(event);if(drag.target==='roi'){editing.quad=drag.quad.map(p=>[...p]);if(drag.corner===null)moveQuad(x-drag.start[0],y-drag.start[1]);else editing.quad[drag.corner]=[Math.max(0,Math.min(1,x)),Math.max(0,Math.min(1,y))];}else{editing.ocr_box=[...drag.ocr];const uv=unproject(x,y);if(drag.corner===null)moveOcr(uv[0]-drag.startUV[0],uv[1]-drag.startUV[1]);else setOcrCorner(drag.corner,uv[0],uv[1]);}draw();};
-canvas.onpointerup=()=>drag=null;canvas.onpointercancel=()=>drag=null;
-function unfreeze(){editing=null;drag=null;canvas.hidden=true;feed.removeAttribute('src');stream=false;poll();}
+canvas.onpointerdown=event=>{
+ // Waehrend eine Vermutung/Bestaetigung unterwegs ist, keine neue
+ // Ziehbewegung beginnen - das war die Ursache des gemeldeten Bugs: eine
+ // spaet eintreffende Vermutung wurde von einer zwischenzeitlichen
+ // Ziehbewegung mit noch altem Zustand ueberschrieben.
+ if(!editing||editing.pending)return;
+ canvas.setPointerCapture(event.pointerId);
+ const [x,y]=point(event);
+ if(editing.stage==='roi'&&editing.mode==='browse'){
+  const hit=editing.candidates.findIndex(([bx,by,bw,bh])=>x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh);
+  if(hit>=0){const [bx,by,bw,bh]=editing.candidates[hit];editing.quad=[[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx,by+bh]];draw();}
+  return;
+ }
+ if(editing.stage==='ocr'&&editing.mode==='browse'){
+  if(pointInQuad([x,y],editing.quad)){editing.stage='roi';editing.mode='browse';editing.selected=null;draw();}
+  return;
+ }
+ // Edit-Modus: Ecke ziehen oder Koerper verschieben.
+ const corner=nearestHandle(x,y);editing.selected=corner;
+ if(editing.stage==='roi')drag={target:'roi',start:[x,y],quad:editing.quad.map(p=>[...p]),corner};
+ else drag={target:'ocr',start:[x,y],startUV:unproject(x,y),ocr:[...editing.ocr_box],corner};
+ draw();
+};
+canvas.onpointermove=event=>{
+ if(!drag)return;
+ const [x,y]=point(event);
+ if(drag.target==='roi'){editing.quad=drag.quad.map(p=>[...p]);if(drag.corner===null)moveQuad(x-drag.start[0],y-drag.start[1]);else editing.quad[drag.corner]=[Math.max(0,Math.min(1,x)),Math.max(0,Math.min(1,y))];}
+ else{editing.ocr_box=[...drag.ocr];const uv=unproject(x,y);if(drag.corner===null)moveOcr(uv[0]-drag.startUV[0],uv[1]-drag.startUV[1]);else setOcrCorner(drag.corner,uv[0],uv[1]);}
+ draw();
+};
+canvas.onpointerup=()=>{drag=null;};
+canvas.onpointercancel=()=>{drag=null;draw();};
+function unfreeze(){editing=null;drag=null;canvas.hidden=true;feed.removeAttribute('src');stream=false;$('ground-truth').hidden=true;poll();}
 viewport.ondblclick=freeze;
 viewport.onkeydown=async event=>{
+ if(/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName))return;
  if(event.key==='e'&&!editing){event.preventDefault();await freeze();return;}
  if(!editing)return;
  if(event.key==='Escape'){event.preventDefault();unfreeze();return;}
- if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
-  event.preventDefault();
-  if(drag)return; // laufende Ziehbewegung nicht mit noch unfertiger Geometrie bestaetigen
-  try{await command('roi',{id:editing.id,quad:editing.quad,ocr_box:editing.ocr_box,role:state.config.role});unfreeze();}catch(e){log('error',e.message);}
-  return;
+};
+function toggleEdit(stage){
+ if(editing.pending)return;
+ if(editing.mode==='edit'){
+  if(stage==='roi')editing.quad=editing.preEdit;else editing.ocr_box=editing.preEdit;
+  editing.mode='browse';
+ }else{
+  editing.preEdit=stage==='roi'?editing.quad.map(p=>[...p]):[...editing.ocr_box];
+  editing.mode='edit';
  }
- if(event.key.toLowerCase()==='g'){event.preventDefault();editing.target=editing.target==='roi'?'ocr':'roi';editing.selected=null;draw();return;}
- const dir={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
- if(dir){event.preventDefault();if(editing.target==='roi'){const dx=dir[0]/editing.width,dy=dir[1]/editing.height;if(event.shiftKey){const corner=editing.selected??2;editing.selected=corner;editing.quad[corner][0]=Math.max(0,Math.min(1,editing.quad[corner][0]+dx));editing.quad[corner][1]=Math.max(0,Math.min(1,editing.quad[corner][1]+dy));}else moveQuad(dx,dy);}else{const dx=dir[0]/400,dy=dir[1]/160;if(event.shiftKey){const corner=editing.selected??2;editing.selected=corner;const r=editing.ocr_box,u=corner===0||corner===3?r[0]:r[0]+r[2],v=corner<2?r[1]:r[1]+r[3];setOcrCorner(corner,u+dx,v+dy);}else moveOcr(dx,dy);}draw();}
+ editing.selected=null;draw();
+}
+async function confirmRoi(){
+ if(editing.pending)return;
+ editing.pending='ocr.suggest';const requestId=++editing.requestId;draw();
+ try{
+  const result=await command('ocr.suggest',{id:editing.id,quad:editing.quad});
+  if(!editing||editing.requestId!==requestId)return; // ueberholt (Escape/erneuter Aufruf)
+  if(result.ocr_box)editing.ocr_box=result.ocr_box;
+  else log('warn','OCR-Vorschlag: kein Kandidat im markierten Bereich gefunden.');
+  editing.stage='ocr';editing.mode='browse';editing.selected=null;
+ }catch(e){log('error',e.message);}
+ finally{if(editing)editing.pending=null;draw();}
+}
+async function sendRoiConfirm(extra){
+ const requestId=editing.requestId+=1;
+ try{
+  await command('roi',{id:editing.id,quad:editing.quad,ocr_box:editing.ocr_box,role:state.config.role,...extra});
+  if(!editing||editing.requestId!==requestId)return;
+  unfreeze();
+ }catch(e){log('error',e.message);if(editing){editing.pending=null;draw();}}
+}
+async function confirmOcr(){
+ if(editing.pending)return;
+ editing.pending='roi';draw();
+ if(state.mode==='annotate'){$('ground-truth').hidden=false;$('ground-truth-input').value='';$('ground-truth-input').focus();return;}
+ await sendRoiConfirm({});
+}
+$('roi-confirm').onclick=()=>confirmRoi();
+$('roi-toggle').onclick=()=>toggleEdit('roi');
+$('ocr-confirm').onclick=()=>confirmOcr();
+$('ocr-toggle').onclick=()=>toggleEdit('ocr');
+$('ground-truth-cancel').onclick=()=>{$('ground-truth').hidden=true;if(editing){editing.pending=null;draw();}viewport.focus();};
+$('ground-truth-ok').onclick=async()=>{
+ const text=$('ground-truth-input').value.trim();
+ $('ground-truth').hidden=true;
+ await sendRoiConfirm({ground_truth_text:text});
+ viewport.focus();
+};
+$('ground-truth-input').onkeydown=event=>{
+ if(event.key==='Enter'){event.preventDefault();$('ground-truth-ok').click();}
+ if(event.key==='Escape'){event.preventDefault();$('ground-truth-cancel').click();}
 };
 setInterval(()=>{if(!editing && (performance.now()-lastReply>2000||performance.now()-lastProgress>2000))disconnect();},250);
 select('setup');
