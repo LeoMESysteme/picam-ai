@@ -585,3 +585,266 @@ die konkrete Windows-Browserreaktion sowie Shutdown mit echter Kamera sind erst
 nach einem kontrollierten Neustart des realen Dienstes belastbar. Daher OQ-24
 `in Arbeit`, nicht `geklärt`. Perspektivkorrektur verbessert die Geometrie,
 löst aber nicht ohne reale Bildsammlung die VFD-Glyphenfrage OQ-23.
+
+---
+
+## 2026-09-10, nach Mitternacht — Mehrkandidaten-OCR-Vorschlag gegen die realen OQ-25-Annotationen
+
+**Ziel:** Prüfen, ob eine Kandidatenliste statt eines Einzelvorschlags den in
+OQ-25 gemessenen Fehlgriff (`fit_ocr_box` wählt bei zwei übereinanderliegenden
+Anzeigen immer die falsche) für den Bediener auswählbar macht.
+
+**Aufbau:** Dieselben zwei realen Annotationen wie bei der OQ-25-Erstmessung
+(`var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd`,
+`.../8a18ee05e31241b9b6702c5bb904ec97`), IoU über Flächenmasken gegen die
+jeweils bestätigte `ocr_box`, gerechnet über `_box_iou` in
+`tests/test_workbench.py`. Neue Funktion `fit_ocr_box_candidates` liefert bis
+zu fünf nach Blobfläche geordnete, überlappungsdeduplizierte Kandidaten statt
+eines einzelnen.
+
+**Beobachtung:** An beiden Bildern erscheint der tatsächlich gewünschte
+Kandidat jetzt in der Liste, mit brauchbarem, aber nicht perfektem IoU. Ein
+synthetischer Nachbau derselben Zwei-Zeilen-Geometrie (zwei gestapelte
+`render_display`-Zeilen) bestätigt zusätzlich, dass die bestehende
+Singular-Funktion `fit_ocr_box` unverändert die flächengrössere, "falsche"
+Zeile liefert — die neue Funktion bietet die richtige zusätzlich an, ersetzt
+die alte Auswahl aber nicht.
+
+**Messergebnis:** IoU bester Kandidat 0,543 (Bild 1) bzw. 0,568 (Bild 2), beide
+Rang 1 von maximal 5. Synthetischer Nachbau: 0,737 (V-Zeile, Rang 2) / 0,910
+(A-Zeile, Rang 1). Volle Tabelle und Einordnung: `docs/VALIDATION.md`,
+Abschnitt „nach Mitternacht — `fit_ocr_box_candidates`".
+
+**Schluss:** Die Haupt-/Nebenanzeige-Verwechslung aus OQ-25 ist damit als
+Bedienerauswahl entschärft, nicht aufgelöst — ohne weiteren Layout-Hinweis
+bleibt die Unterscheidung laut Konzept.md §7 strukturell offen. Die
+dokumentierte Sicherheitseigenschaft von `fit_ocr_box` (lieber `None` als ein
+schwächerer, aber plausibler Kandidat) ist an einem gezielt konstruierten
+Fall gegengeprüft und bleibt erhalten. Zusätzlich geprüft und verworfen:
+Browser-Automatisierung dieser Prüfung über Playwright MCP — der Werkzeugkanal
+erzwingt das `chrome`-Kanalprofil, dessen Installation in dieser Umgebung
+`sudo` verlangt (nicht verfügbar); auch nach erfolgreicher Installation des
+sudo-freien Chromium-Pakets blieb derselbe Fehler bestehen, da das MCP-Tool
+kein Umschalten auf den installierten Kanal erlaubt. Kein TLS-/
+Zertifikatsproblem wie im älteren OQ-21-Befund — eine andere, aber ebenso
+abschliessende Ursache für denselben Gesamtbefund „kein Browser-Test in
+dieser Umgebung möglich". Details: OQ-21-Update.
+
+---
+
+## 2026-09-10, nach Mitternacht — Schliess-Kernel-Sweep für schmale OCR-Layouts
+
+**Ziel:** Die im Docstring von `fit_ocr_box` dokumentierte, bisher
+unvalidierte Grenze bei schmalen Layouts (wenige, breite Ziffernzellen)
+tatsächlich beheben und den nötigen Parameter empirisch statt geraten
+bestimmen.
+
+**Aufbau:** Rekonstruiertes Layout `digits=3, decimals=None, has_sign=False,
+unit=None` (Wert 321), synthetisch gerendert und auf 400×160 entzerrt wie
+die bestehenden Fälle. Zusätzlich alle vier bestehenden synthetischen
+Layout-/Wertkombinationen sowie alle sieben realen Annotationen unter
+`var/workbench/annotations/` mit vollständigen `roi_quad`/`ocr_box`/Layout-
+Feldern. Sweep über `OCR_CLOSE_WIDTH_RATIO` von 0,00 bis 0,30, direkt gegen
+die tatsächlich refaktorierte `vision.py` (`_digit_blobs`/`_best_blobs` mit
+getrennten y-/x-Kernel-Dimensionen), nicht gegen eine Standalone-Kopie.
+
+**Beobachtung:** Der erste Entwurf (aus dem Implementierungsplan
+übernommen) skalierte versehentlich die horizontale statt der vertikalen
+Kernel-Dimension mit der Zellenbreite. Direkt gemessen: das ändert am
+schmalen Fall zunächst gar nichts (der eigentliche Zwischenraum liegt
+vertikal, zwischen den beiden rechten Segmenten einer "1"), und ab einem
+bestimmten Wert verschmilzt es stattdessen benachbarte Ziffernzellen
+horizontal — mehrere reale Annotationen fielen dadurch komplett auf `None`
+zurück. Nach Umstellung auf die vertikale Kernel-Dimension (`close_kernel_y`)
+verschwindet der Fehler beim schmalen Layout scharf zwischen den Sweep-
+Schritten 0,13 (unverändert) und 0,14 (behoben), ohne messbare Auswirkung
+auf die vier bestehenden synthetischen Fälle oder alle sieben realen
+Annotationen bis einschliesslich 0,20.
+
+**Messergebnis:** Schmales Layout: IoU 0,510 (Ratio ≤0,13, unter der
+0,6-Testschwelle) → 0,799 (Ratio ≥0,14). Vier synthetische Referenzfälle:
+Minimum unverändert 0,819 bis Ratio 0,20, erste leichte Bewegung (0,807) erst
+ab 0,25. Sieben reale Annotationen: bitidentisch zur Baseline bei der
+gewählten Ratio 0,15. Volle Tabelle: `docs/VALIDATION.md`.
+
+**Schluss:** `OCR_CLOSE_WIDTH_RATIO = 0,15` gewählt — mit Sicherheitsabstand
+über der Wirkschwelle (0,14) und deutlich unter jedem gemessenen
+Regressionsbeginn (0,25). Die Korrektur ist eine reine, unabhängig
+revertierbare Kernel-Formel ohne API-Änderung; sie behebt die im Docstring
+von `fit_ocr_box` dokumentierte Grenze, ohne die vorherige
+Mehrkandidaten-Änderung (OQ-25) zu berühren.
+
+---
+
+## 2026-09-10, nach Mitternacht — erster Live-Messpfad-Test gegen Ground-Truth-Annotationen
+
+**Ziel:** Pruefen, ob der tatsaechliche Werte-Leser (`SevenSegmentReader`),
+nicht nur die Box-Vorschlaege aus `vision.py`, automatisch gegen jede reale
+Annotation mit getipptem Zielwert laeuft - und eine ehrliche Baseline
+aufnehmen, bevor an `segment_threshold()` etwas geaendert wird.
+
+**Aufbau:** Alle acht Ordner unter `var/workbench/annotations/` gesichtet;
+drei tragen einen nicht-leeren `ground_truth_text` (`23a1e0090...`: "28,80",
+`9359eb9a9...`: "12,76", `b1375256b...`: "28,80" - alle 4 Stellen/2
+Nachkomma/V, `digit_gap_ratio=0,65`). Neue Datei
+`tests/test_sevenseg_real_annotations.py` sammelt solche Ordner automatisch
+ein (`_discover_ground_truth_annotations`) und laesst fuer jeden den exakten
+Live-Pfad laufen: `rectify()` auf 400x160, `crop_box()` auf den bestaetigten
+`ocr_box`, `SevenSegmentReader.read()` mit dem Profil-Layout - bitgenau wie
+`Controller._read`. Keine Aenderung an `segment_threshold()`,
+`_decode_cell()`, `_MIN_CONTRAST` oder `_SAMPLE_HALFWIDTH` in diesem
+Schritt.
+
+**Beobachtung:** Alle drei Annotationen lesen mit dem heutigen (unveraenderten)
+Leser korrekt. Die beiden aus OQ-23 bekannten, tatsaechlich falsch gelesenen
+Aufnahmen (`6ffc561b...`, `8a18ee05...`) sind in diesem automatischen Test
+NICHT enthalten, weil sie kein `ground_truth_text` tragen - der Zielwert
+"11.00" steht bisher nur in der OQ-23-Dokumentation, nicht im
+`annotate`-Textfeld selbst. Eine Datenluecke, keine Codeluecke.
+
+**Messergebnis:** 3/3 korrekt gelesen. Kontrast 0,428-0,525, Schwelle
+0,440-0,598, minimale Margin 0,478-0,619 - deutlich ueber `_MIN_CONTRAST
+=0,10` in allen drei Faellen. Volle Tabelle: `docs/VALIDATION.md`.
+
+**Schluss:** Der gepoolte Schwellwert funktioniert zuverlaessig bei
+gleichmaessig hellen Anzeigen - das bestaetigt, dass der in OQ-23
+dokumentierte Fehlermodus spezifisch bei *ungleich hellen* Ziffernstellen
+auftritt, nicht generell. Diese drei Messungen sind jetzt die Baseline, die
+ein kuenftiger Pro-Zelle-Schwellwert-Fix nicht regressieren darf. Der Test
+waechst automatisch mit jeder weiteren `annotate`-Aufnahme mit
+`ground_truth_text` mit; die naheliegendste naechste Verbesserung ist
+keine Codeaenderung, sondern `ground_truth_text` fuer die beiden bereits
+vorhandenen, tatsaechlich fehlschlagenden Aufnahmen nachzutragen (oder neue,
+aehnlich beleuchtete Aufnahmen zu erfassen), damit der automatische Test den
+bekannten Fehler auch tatsaechlich sieht.
+
+---
+
+## 2026-09-10, spät — Nachtrag: `ground_truth_text` fuer die beiden OQ-23-Belegbilder ergaenzt
+
+**Ziel:** Die oben genannte Datenluecke sofort schliessen, statt sie offen zu
+lassen, da die naheliegende Nachbesserung sofort verfuegbar war.
+
+**Aufbau:** `var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd/
+image.png` und `.../8a18ee05e31241b9b6702c5bb904ec97/image.png` selbst
+angesehen (nicht aus der Dokumentation uebernommen) - beide zeigen eindeutig
+`11.00` auf der oberen V-Anzeige, `0.000` auf der unteren A-Anzeige.
+`ground_truth_text: "11,00"` plus ein erklaerendes `ground_truth_text_note`-
+Feld in beiden `annotation.json` ergaenzt.
+
+**Beobachtung:** Der automatische Test (`test_sevenseg_real_annotations.py`)
+sammelt beide sofort ein. Gegen die dort aktuell gespeicherte Geometrie liest
+`6ffc561b...` uebrigens korrekt - anders als in der urspruenglichen
+OQ-23-Messung vom 2026-09-09, wo beide Bilder falsch lasen. Nur
+`8a18ee05...` reproduziert den gepoolten-Schwellwert-Fehler weiterhin exakt
+("110?").
+
+**Messergebnis:** `8a18ee05...`: Kontrast 0,398, Schwelle 0,484, minimale
+Margin 0,210, `unreadable_cells=1`. Als `xfail(strict=True)` markiert statt
+stillschweigend rot zu lassen oder die Baseline-Aussage unkorrigiert zu
+lassen.
+
+**Schluss:** Die Baseline aus dem vorigen Eintrag war unvollstaendig, nicht
+falsch - mit den ergaenzten Ground-Truth-Werten deckt der automatische Test
+jetzt den tatsaechlichen OQ-23-Fehlermodus ab. Das ist die Zielscheibe fuer
+den naechsten Schritt (Pro-Zelle-Schwellwert-Fix): 4 korrekte reale
+Ablesungen duerfen nicht regressieren, 1 bekannter Fehlgriff soll behoben
+werden. Volle Tabelle: `docs/VALIDATION.md`.
+
+---
+
+## 2026-09-10, spät — Pro-Zelle-Schwellwert-Fix versucht und wieder verworfen
+
+**Ziel:** Den in OQ-23 bestaetigten Fehlermodus (gepoolter Schwellwert reisst
+eine insgesamt dunklere Ziffernstelle mit ab) durch eine je Zelle eigene
+Otsu-Schwelle beheben, mit Ruecksfall auf die gepoolte Schwelle bei zu
+geringem Zellkontrast (`_MIN_CONTRAST=0,10`, dieselbe Konstante wie die
+Ablehnungsschwelle).
+
+**Aufbau:** Aenderung in `SevenSegmentReader.read()` implementiert. Vor der
+Validierung `tests/test_sevenseg.py` und `tests/test_gate_und_referenz.py`
+komplett gruen (28/28) - die Aenderung bricht keinen der bestehenden
+Sicherheitstests. Dann `tests/test_sevenseg_real_annotations.py` erneut
+laufen lassen.
+
+**Beobachtung:** Der automatische Discovery-Mechanismus fand dabei eine
+waehrend dieser Sitzung neu hinzugekommene reale Annotation
+(`fdc840cd9c4a4ae0b19152ba017879cd`, 2026-09-10T13:07 UTC,
+`ground_truth_text="28,80"`) - ohne jede Codeaenderung automatisch erfasst,
+genau wie der Harness es soll. Gegen diese neue Aufnahme regressierte der
+Pro-Zelle-Entwurf: `28.80` wurde als `26.60` gelesen. Direkt nachgemessen:
+beide `8`-Zellen zeigen alle sieben Segmente sichtbar aktiv (0,69-0,84), aber
+Segment `b` liegt in beiden minimal niedriger (vermutlich ein
+Abtast-/Geometrieartefakt) - genug, damit die zellinterne Otsu-Schwelle
+einen Kontrast von 0,104 bzw. 0,125 "findet" (knapp ueber der
+`_MIN_CONTRAST`-Schwelle) und Segment `b` faelschlich als "aus" wertet.
+Ergebnis: `8` -> `6` an beiden Stellen.
+
+**Messergebnis:** Vollstaendige Rohwerte und die Otsu-Ausgabe je Zelle stehen
+in `docs/VALIDATION.md` (Update "Pro-Zelle-Schwellwert-Fix versucht, an
+echten Daten verworfen").
+
+**Schluss:** Der Fehler ist strukturell, keine falsch gewaehlte Konstante:
+eine 6-aktiv/1-inaktiv-Aufteilung ist selbst ein gueltiges Ziffernmuster
+(`0`/`6`/`9`), also laesst sich aus sieben Messwerten einer einzelnen Zelle
+allein nicht unterscheiden, ob eine "niedrige" Klasse echt ist oder nur
+Rauschen. Nur ein hoeherer `_MIN_CONTRAST`-Grenzwert fuer den Zell-Ruecksfall
+haette diesen konkreten Fall vermutlich abgefangen, waere aber an nur zwei
+Realbeispielen (1 Ziel-, 1 Gegenbeispiel) nicht seriös kalibrierbar - nach
+AGENTS.md/Konzept.md §7 kein vertretbarer Weg. Aenderung deshalb komplett
+zurueckgenommen (`git checkout` auf `sevenseg.py`), OQ-23 bleibt offen. Eine
+tragfaehigere Richtung braeuchte eine "aus"-Referenz aus einer
+zellübergreifenden, robusteren Schaetzung statt aus nur sieben Punkten pro
+Zelle - dafuer fehlen weiterhin ausreichend reale, gezielt unterschiedlich
+beleuchtete Vergleichsdaten.
+
+---
+
+## 2026-09-10, spät — CLAHE (`apply_enhance`) im Live-Pfad ausprobiert und behalten
+
+**Ziel:** Bedienerfrage "ocr is still bad" — prüfen, ob eine bereits im Code
+vorhandene, aber im Live-Pfad hart deaktivierte Funktion (`rectify.enhance()`,
+CLAHE) etwas bringt, statt einen neuen Algorithmus zu entwerfen. Auf einer
+eigenen Branch (`test/clahe-ocr-accuracy`) getestet, nicht direkt auf
+`master`.
+
+**Aufbau:** `apply_enhance=True` in `Controller._read` fest aktiviert;
+`PipelineConfig` um dasselbe Feld ergaenzt (Default `False`, um bestehende
+Aufrufer nicht zu aendern). Drei Pruefungen: (1) die 28 bestehenden
+Sicherheitstests (`test_sevenseg.py`, `test_gate_und_referenz.py` - beide
+umgehen `rectify()` und sind strukturell unempfindlich gegen diese Aenderung,
+liefen trotzdem zur Sicherheit), (2) alle sechs realen Annotationen unter
+`var/workbench/annotations/` (inklusive der waehrend dieser Sitzung neu
+aufgetauchten `fdc840cd...`), (3) Nachbau der "Messreihe 2026-09-07"-Tabelle
+(Rauschen/Unschaerfe/Glanz/Perspektive) ueber ein eigenes Sweep-Skript
+(`Pipeline` direkt, nicht ueber `examples/16`, da dessen CLI keinen
+`apply_enhance`-Schalter hat) - jeweils mit und ohne `apply_enhance`.
+
+**Beobachtung:** Alle 28 Sicherheitstests bleiben gruen. Fuenf der sechs
+realen Annotationen lesen unveraendert korrekt, `8a18ee05...` bleibt
+unveraendert falsch (`110?`) - CLAHE aendert an dieser konkreten,
+dokumentierten Verwechslung nichts. Im synthetischen Sweep verbessert CLAHE
+zwei Zeilen deutlich (Unschaerfe sigma=12 und sigma=15, vorher teilweise/
+vollstaendig abgelehnt, jetzt 40/40 korrekt) und eine Zeile leicht (Glanz
+0,9: stille Fehlablesungen 2->1 von 40). Keine Zeile verschlechtert sich.
+Stichprobe bei sigma=15 (5 Frames einzeln): Konfidenz 0,35-0,48, kein
+Wackelkandidat.
+
+**Messergebnis:** Volle Tabellen in `docs/VALIDATION.md`. Auffaellig: die
+hier gemessene Unschaerfe-sigma=12-Basiszeile (26/14 korrekt/abgelehnt ohne
+CLAHE) weicht von der 2026-09-07-Messung (17/23) ab, dreifach reproduzierbar
+identisch in diesem Lauf - vermutlich eine andere exakte Wertfolge als beim
+Originallauf, dessen Skript nicht mehr vorliegt. Der interne Vergleich
+False/True im selben Lauf ist davon unberuehrt.
+
+**Schluss:** CLAHE bleibt aktiviert (Workbench-Vorschau fest, `Pipeline`
+optional ueber `PipelineConfig.apply_enhance`). Es ist eine echte, gemessene
+Verbesserung der Ablehnungsgrenze bei Unschaerfe und eine kleine Verbesserung
+bei Glanz, ohne in irgendeinem gemessenen Fall eine neue stille Fehlablesung.
+Es loest NICHT den OQ-23-Hauptfehlermodus (eine einzelne, echt dunklere
+Ziffernstelle unter einer gepoolten Schwelle) - CLAHE gleicht Kontrast nur
+lokal innerhalb einer Kachel an, die Schwelle bleibt global gepoolt.
+`rectify()`s Docstring korrigiert: die fruehere "wuerde die Evidenz
+verfaelschen"-Sorge war unvalidiert, nicht durch Messung gestuetzt, solange
+Entscheidung und gemeldete Evidenz konsistent auf demselben (aufbereiteten
+oder unveraenderten) Bild rechnen.

@@ -3,6 +3,262 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-10, spät (CLAHE-Default auch im echten Messpfad aktiviert)
+
+### `PipelineConfig.apply_enhance` stand konservativ auf `False` — CLAHE half nur der Vorschau, nicht dem sendenden Messpfad
+
+**Problem:** Der vorherige Schritt aktivierte CLAHE fest in
+`Controller._read` (Workbench-Vorschau, erzeugt keinen `ValueRecord`, sendet
+nichts), liess aber `PipelineConfig.apply_enhance` — den Schalter für
+`Pipeline.process`, den tatsächlichen, sendenden Messpfad — bewusst
+konservativ bei `False`. Ohne expliziten Aufrufer-Eingriff hätte der
+eigentliche Messbetrieb also gar nichts von der gemessenen Verbesserung
+gehabt.
+
+**Änderung:** Default auf `True` umgestellt, nach eigener Gegenprüfung: volle
+Testsuite (127 bestanden, 1 `xfail`) und `examples/16_end_to_end_headless.py`
+mit dem neuen Default (40/40 korrekt, 0 still falsch) laufen unverändert
+sicher. `docs/TIMING.md` um eine `rectify`-Kostenmessung mit CLAHE ergänzt
+(p50 ≈ 2 552 µs, in derselben Grössenordnung wie ohne CLAHE — die
+Perspektivverzerrung dominiert die Stufe, nicht die Kontrastspreizung).
+Bleibt ein expliziter, jederzeit auf `False` rücksetzbarer Konfigurationswert.
+
+**Konsequenz:** Die in der vorherigen Änderung gemessene Verbesserung
+(Unschärfe-Robustheit, leichte Glanzverbesserung, keine neue stille
+Fehlablesung) kommt jetzt tatsächlich im Messpfad an, nicht nur in der
+Bedienvorschau.
+
+## 0.1.0.dev0 — 2026-09-10, spät (CLAHE im Live-Messpfad aktiviert)
+
+### Blockig degradierende Bilder (Unschärfe, teils Glanz) wurden abgelehnt, obwohl lokaler Kontrastausgleich sie lesbar macht
+
+**Problem:** Bedieneranfrage: "ocr is still bad, was können wir tun?" Ein
+bereits vorhandener, aber im Live-Pfad hart deaktivierter Baustein
+(`rectify.enhance()`, CLAHE) wurde nie gegen die tatsächlichen
+Degradationsfälle getestet — nur mit einer unvalidierten Docstring-Vorsicht
+("würde die Evidenz verfälschen") ausgeschlossen.
+
+**Änderung:** `apply_enhance=True` in `Controller._read` (Workbench-Vorschau)
+fest aktiviert; `PipelineConfig` bekommt ein neues Feld `apply_enhance:
+bool = False` (Default unverändert, bestehende Aufrufer nicht betroffen) und
+gibt es an `rectify()` weiter — `examples/16_end_to_end_headless.py` und
+`tests/test_gate_und_referenz.py` bleiben dadurch beim bisherigen Verhalten.
+`tests/test_sevenseg_real_annotations.py` wendet es jetzt ebenfalls an, um
+"bitgenau wie `Controller._read`" zu bleiben. `rectify()`s Docstring korrigiert:
+die frühere Verfälschungs-Sorge war unvalidiert, nicht gemessen falsch, siehe
+unten.
+
+**Konsequenz (empirisch geprüft, siehe `docs/VALIDATION.md`):** Auf
+synthetischem Material verbessert CLAHE die Unschärfe-Robustheit erheblich
+(σ=12: 26→40 von 40 korrekt statt Ablehnung; σ=15: 0→40 von 40, vorher
+vollständige Ablehnung) und senkt bei starkem Glanz sogar die Zahl stiller
+Fehlablesungen leicht (2→1 von 40) — **in keinem gemessenen Fall entstehen
+neue stille Fehlablesungen**, die einzige nicht verhandelbare Grenze
+(Konzept.md §7). Behebt **nicht** den in OQ-23 dokumentierten Fehlermodus
+einer einzelnen, echt dunkleren Ziffernstelle — an der realen Annotation
+`8a18ee05...` bleibt die Ablesung unverändert falsch (`xfail` in
+`_KNOWN_MISREADS` bleibt bestehen, jetzt mit Hinweis auf CLAHE). Alle 28
+bestehenden Sicherheitstests sowie alle bisher korrekt lesenden realen
+Annotationen (inkl. der neu hinzugekommenen `fdc840cd...` mit zwei echten
+"8"en) bleiben unverändert grün.
+
+## 0.1.0.dev0 — 2026-09-10, spät (Pro-Zelle-Schwellwert-Fix versucht und verworfen — kein Codechange)
+
+### Ein Fix-Versuch gegen OQ-23 hätte eine neue, während der Sitzung real aufgenommene Annotation stumm falsch gelesen
+
+**Problem:** OQ-23 dokumentiert, dass `segment_threshold()`s gepoolte
+Schwelle eine insgesamt dunklere Ziffernstelle mitreissen kann. Versuchter
+Fix: eigene Otsu-Schwelle je Zelle, mit Rückfall auf die gepoolte Schwelle
+bei zu geringem Zellkontrast (`_MIN_CONTRAST`). Beim Validierungslauf gegen
+`tests/test_sevenseg_real_annotations.py` erschien automatisch eine neue
+reale Annotation (`fdc840cd...`, vom Auto-Discovery-Harness ohne
+Codeänderung erfasst) — und der Fix las sie falsch: zwei echte `8`-Stellen
+kippten auf `6`, weil eine zellinterne Otsu-Schwelle auf nur sieben
+Messwerten ein einzelnes, minimal dunkleres Segment (Abtastartefakt, keine
+echte "aus"-Stelle) fälschlich isolierte — ein strukturelles Problem, nicht
+eine falsch gewählte Konstante (eine 6-aktiv/1-inaktiv-Aufteilung ist selbst
+ein gültiges Ziffernmuster, sieben Messwerte reichen nicht, um echte
+Bimodalität von Rauschen zu unterscheiden).
+
+**Änderung:** Keine — `sevenseg.py` bleibt unverändert (`git checkout` nach
+dem gescheiterten Validierungslauf). Ergänzt wurden nur die
+Dokumentationsspuren des Versuchs (`docs/VALIDATION.md`,
+`docs/lab_journal.md`, OQ-23-Update).
+
+**Konsequenz:** Der in OQ-23 dokumentierte Fehlermodus bleibt offen. Kein
+sicherheitskritischer Kompromiss wurde ausgeliefert, um an einem einzelnen
+Zielbild Fortschritt zu zeigen. Positiver Nebenbefund: der neue automatische
+Live-Messpfad-Harness hat genau seinen Zweck erfüllt — eine neu
+hinzugekommene reale Aufnahme wurde ohne jede Codeänderung sofort in die
+Validierung aufgenommen und deckte die Regression noch vor jeder Auslieferung
+auf.
+
+## 0.1.0.dev0 — 2026-09-10, spät (Ground-Truth-Lücke der zwei OQ-23-Belegbilder geschlossen)
+
+### Der neue Live-Messpfad-Test erfasste die eigentlichen Bugbelegbilder nicht
+
+**Problem:** Der eben eingeführte automatische Test gegen reale
+Annotationen (`tests/test_sevenseg_real_annotations.py`) sammelt nur
+Annotationen mit gesetztem `ground_truth_text` ein. Die zwei Aufnahmen, die
+den OQ-23-Fehlermodus (gepoolter Schwellwert reisst eine dunklere
+Ziffernstelle mit ab) ursprünglich belegen (`6ffc561b...`, `8a18ee05...`),
+wurden vor Einführung dieses Felds gespeichert und trugen deshalb keinen
+Zielwert — der Test lief also am eigentlichen Beweisbild vorbei.
+
+**Änderung:** `ground_truth_text: "11,00"` beiden `annotation.json` ergänzt
+— visuell selbst gegen `image.png` bestätigt, nicht aus der Dokumentation
+übernommen (nachvollziehbar per neuem `ground_truth_text_note`-Feld).
+`8a18ee05...` reproduziert damit jetzt automatisch den dokumentierten
+Fehlgriff (`11.00` → `110?`); überraschend liest `6ffc561b...` gegen die
+inzwischen mehrfach nachgezogene Kalibrierung korrekt. Der neue Fehlschlag
+ist in `test_sevenseg_real_annotations.py` als `pytest.mark.xfail(strict=
+True)` markiert (`_KNOWN_MISREADS`), damit die Suite grün bleibt, ohne den
+Fehler zu verstecken.
+
+**Konsequenz:** Der automatische Test deckt jetzt den tatsächlichen
+OQ-23-Fehlermodus ab, nicht nur unproblematische Fälle. Das ist die
+vollständige Zielscheibe für einen künftigen Pro-Zelle-Schwellwert-Fix: 4
+reale Ablesungen dürfen nicht regressieren, 1 bekannter Fehlgriff soll durch
+bewusstes Entfernen des `xfail`-Eintrags geschlossen werden. Details:
+`docs/VALIDATION.md`, `docs/lab_journal.md`, OQ-23.
+
+## 0.1.0.dev0 — 2026-09-10, nach Mitternacht (automatischer Live-Messpfad-Regressionstest gegen Ground-Truth-Annotationen)
+
+### Neue reale Annotationen liefen nirgends gegen den tatsächlichen Werte-Leser
+
+**Problem:** Die bisherigen realen Annotationstests (`test_workbench.py`)
+prüfen nur die Box-*Vorschläge* aus `vision.py` (`fit_ocr_box*`), nicht den
+tatsächlichen Werte-Lesepfad `SevenSegmentReader.read()`. Der dokumentierte
+Fehlgriff aus OQ-23 (gepoolter Schwellwert liest eine dunklere Ziffernstelle
+falsch, "11.00" wird zu "11?0"/"110?") wurde bisher nur einmalig von Hand
+nachgemessen, nicht dauerhaft als Regressionstest geführt — und neue, im
+`annotate`-Modus mit Ground-Truth-Text gespeicherte Aufnahmen (inzwischen 3
+von 8 Annotationsordnern) nahmen an keiner automatischen Prüfung teil.
+
+**Änderung:** Neue Datei `tests/test_sevenseg_real_annotations.py`:
+`_discover_ground_truth_annotations()` sammelt automatisch jeden Ordner unter
+`var/workbench/annotations/` ein, dessen `annotation.json` einen als Zahl
+lesbaren `ground_truth_text` trägt (frei formatiert — Komma oder Punkt,
+optionale Einheit/Vorzeichen/Leerzeichen, per Regex herausgelöst) —
+zusätzlich zu den bereits vorhandenen Geometriefeldern. Für jede gefundene
+Annotation läuft der exakte Live-Pfad (`rectify()` → `crop_box()` →
+`SevenSegmentReader.read()`, bitgenau wie `Controller._read`) und der
+gelesene Wert wird gegen den getippten Zielwert geprüft. Keine
+`segment_threshold()`/`_decode_cell()`-Änderung in diesem Schritt — reine
+Messinfrastruktur.
+
+**Konsequenz:** Der Test wächst automatisch mit jeder neuen `annotate`-
+Aufnahme mit `ground_truth_text` mit, ohne dass Testcode angefasst werden
+muss. Gemessene Baseline: alle drei aktuell auswertbaren Annotationen lesen
+korrekt (siehe `docs/VALIDATION.md`) — die aus OQ-23 bekannten, tatsächlich
+falsch gelesenen Aufnahmen tragen bislang **kein** `ground_truth_text` und
+werden von diesem Test deshalb noch nicht erfasst; das ist eine Datenlücke,
+keine Testlücke. Bereitet damit die eigentliche `segment_threshold()`-
+Korrektur vor (Pro-Zelle-Schwellwert statt gepoolter Schwellwert), die ein
+Folgeschritt validiert gegen genau diesen Test durchführt.
+
+## 0.1.0.dev0 — 2026-09-10 nach Mitternacht (breitenabhängiger Schliess-Kernel für schmale Layouts)
+
+### Bei wenigen, breiten Ziffernzellen zerfiel eine "1" in zwei Blobs statt eines
+
+**Problem:** `fit_ocr_box`/`fit_ocr_box_candidates` (`vision.py`) schliessen
+Ziffernblobs mit einem quadratischen, nur an der Crophöhe bemessenen Kernel
+(`close_kernel = round(height * 0.08)`). Bei sehr schmalen Layouts (wenige,
+breite Ziffernzellen) skaliert die Segmentdicke — und damit der Zwischenraum
+zwischen den beiden rechten Segmenten einer "1" (dort läge das inaktive
+Segment `g`) — mit der Zellenbreite, nicht mit der Crophöhe. Ein rein
+höhenbasierter Kernel bricht die "1" deshalb in zwei kleine, eigenständige
+Blobs auf, die einzeln unter der Mindesthöhe fürs Clustern verschwinden
+können — bisher als unvalidierte, dokumentierte Grenze im Docstring von
+`fit_ocr_box` festgehalten (3-stelliges Layout ohne Nachkommastelle).
+
+**Änderung:**
+- `vision.py`: `_digit_blobs`/`_best_blobs` nehmen jetzt zwei unabhängige
+  Kernel-Dimensionen (`close_kernel_y`, `close_kernel_x` — numpy-Achsreihenfolge
+  Zeilen/Spalten = vertikal/horizontal, absichtlich nicht vertauscht) statt
+  eines einzigen quadratischen Werts. Neue Funktion `_ocr_close_kernel(height,
+  width, layout)`: ohne Layout bitidentisch zur bisherigen quadratischen
+  Formel; mit Layout wird zusätzlich **nur die vertikale** Kernel-Dimension
+  (`close_kernel_y`) an die erwartete Zellenbreite gekoppelt
+  (`OCR_CLOSE_WIDTH_RATIO = 0,15`) — bewusst nicht die horizontale, siehe
+  unten.
+- Empirisch bestimmt (nicht aus dem Plan-Entwurf übernommen — der hatte die
+  Kernel-Achse versehentlich vertauscht, siehe Sweep-Tabelle in
+  `docs/VALIDATION.md`): eine Version, die stattdessen die horizontale
+  Kernel-Ausdehnung mit der Zellenbreite skaliert, wurde gemessen und
+  verworfen — sie verschmilzt ab demselben Wertebereich benachbarte
+  Ziffernzellen zu einem gemeinsamen Blob und lässt mehrere reale
+  Annotationen vollständig auf `None` zurückfallen, statt sie zu
+  verbessern. Das eigentliche Problem ist ein vertikaler Zwischenraum
+  innerhalb einer Ziffer, keine horizontale Lücke zwischen Ziffern.
+- Testsuite: schmales 3-stelliges Layout ohne Nachkommastelle dauerhaft in
+  `test_fit_ocr_box_matches_the_rendered_digit_area`s Parametrisierung
+  aufgenommen (reproduziert die vormals dokumentierte Grenze und pinnt die
+  Behebung). `tests/test_workbench.py`s `_REAL_ANNOTATIONS`-Liste ist nicht
+  mehr auf zwei feste Pfade beschränkt, sondern sammelt automatisch jeden
+  Ordner unter `var/workbench/annotations/` ein, dessen `annotation.json`
+  `roi_quad`+`ocr_box`+Layout enthält (`_discover_annotations`,
+  wiederverwendbares Muster) — läuft jetzt gegen 7 statt 2 reale Aufnahmen,
+  ohne dass künftige neue Annotationen eine Codeänderung brauchen.
+- `fit_ocr_box`s Docstring: die jetzt behobene Grenze durch eine kurze
+  Erklärung der Kernel-Kopplung ersetzt.
+
+**Konsequenz:** Das schmale Layout erreicht jetzt IoU 0,799 (vorher 0,510,
+unterhalb der 0,6-Testschwelle) ohne messbare Regression an den vier
+bestehenden synthetischen Fällen oder an sieben realen Annotationen (siehe
+Sweep-Tabelle, `docs/VALIDATION.md`). Unabhängig revertierbar von der
+vorherigen Mehrkandidaten-Änderung — reine Kernel-Formel, keine API-Änderung.
+
+## 0.1.0.dev0 — 2026-09-10 nach Mitternacht (OCR-Kandidatenliste statt Einzelvorschlag)
+
+### `ocr.suggest` warf die Haupt-/Nebenanzeige-Alternative weg statt sie anzubieten
+
+**Problem:** `PLANNED_FEATURES.md` (NEXT FEATURE) verlangte, dass die
+automatische OCR-Box-Platzierung — wie schon bei der ROI — eine
+Auswahlmöglichkeit unter mehreren erkannten Kandidaten bietet, statt blind
+einen einzigen zu übernehmen. Root-Cause-Analyse (`vision.py`): `fit_ocr_box`
+gruppierte Ziffernblobs bereits korrekt in Zeilen-Cluster, verwarf aber alle
+bis auf das flächengrösste. An den beiden realen OQ-25-Annotationen (Netzteil
+mit übereinanderliegenden `V`-/`A`-Anzeigen in einer ROI) ist das genau die
+falsche Zeile — die Funktion hatte keine Möglichkeit, dem Bediener die
+richtige stattdessen anzubieten.
+
+**Änderung:**
+- `vision.py`: `_rank_clusters`/`_best_blobs`/`_box_from_cluster` aus dem
+  bisherigen `fit_ocr_box`-Rumpf als gemeinsame private Helfer extrahiert
+  (keine Verhaltensänderung). Neue Funktion `fit_ocr_box_candidates(...,
+  max_candidates=5)` liefert alle plausiblen, nach Blobfläche geordneten,
+  IoU-deduplizierten (`box_iou <= 0,5`) Zeilen-Kandidaten — nie `None`,
+  höchstens eine leere Liste. `fit_ocr_box` (Singular) ist auf denselben
+  Helfern neu aufgebaut, betrachtet aber bewusst weiterhin **nur** Rang 1
+  ohne Rückfall auf einen schwächeren Kandidaten — eine naive
+  `fit_ocr_box_candidates(...)[0]`-Verpackung hätte die in `VALIDATION.md`
+  dokumentierte Sicherheitseigenschaft zerstört, dass eine zu eng
+  gewählte ROI lieber `None` liefert als eine falsche Vermutung. Pin dafür:
+  `test_fit_ocr_box_never_falls_through_to_a_weaker_candidate`.
+- `controller.py`: `_suggest_ocr_box` ruft `fit_ocr_box_candidates` auf und
+  liefert `{"ocr_boxes": [...]}` (Plural, immer eine Liste) statt des
+  bisherigen `{"ocr_box": ...|null}`.
+- `workbench.js`: neue `editing.ocrCandidates` (in derselben Koordinatenraum
+  wie `editing.ocr_box`, **nicht** die `gridBox`/`ocrPoint`-Zellraster-Raum —
+  ein `quadCorners`/`quadBox`-Helfer zeichnet sie korrekt über `project()`).
+  `confirmRoi()` füllt die Liste aus der neuen Plural-Antwort und wählt
+  Rang 1 vor; Stufe B zeichnet alle Kandidaten als dünne Umrisse, ein Klick
+  auf einen davon übernimmt ihn als aktive `ocr_box` (Koordinatenraum-
+  Hit-Test per `unproject()`, vor dem Rücksprung-Check nach Stufe A geprüft,
+  da jeder Kandidat innerhalb des ROI-Quads liegt).
+
+**Konsequenz:** Die Haupt-/Nebenanzeige-Verwechslung aus OQ-25 ist damit eine
+Bedienerentscheidung statt eines stillen Fehlgriffs — an den zwei realen
+Annotationsbildern liegt der richtige Kandidat jetzt nachweisbar unter den
+Vorschlägen (Rang 1, IoU 0,543/0,568), siehe `docs/VALIDATION.md`. Die
+darunterliegende Verwechslungslogik bleibt laut Konzept.md §7 strukturell
+ungelöst; das ist eine Milderung, keine Auflösung — OQ-25 bleibt `offen`. Die
+Docstring-Sicherheitsgarantie von `fit_ocr_box` (kein Rückfall auf einen
+schwächeren Kandidaten) ist erhalten und eigens getestet. Der noch offene,
+separat geplante Schliess-Kernel-Fix (breiten-abhängig statt nur höhen-
+abhängig, für schmale Layouts) ist bewusst **nicht** Teil dieser Änderung.
+
 ## 0.1.0.dev0 — 2026-09-10 spät nachts (TUI-style zweistufiger Bestätigungsablauf; Race-Condition-Fix)
 
 ### Klick auf die ROI-Box während einer laufenden Vermutungsanfrage verwarf das Ergebnis

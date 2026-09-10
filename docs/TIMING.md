@@ -108,6 +108,16 @@ Auffällig ist die Streuung: p95 ist das 2,5-Fache von p50, das Maximum das
 Unsicherheitsbudget ein. Ursache ist noch nicht untersucht (Verdacht:
 Speicherallokation in `warpPerspective`, Scheduling).
 
+**Update 2026-09-10:** `PipelineConfig.apply_enhance` (CLAHE vor der
+Werterkennung, siehe `docs/open-questions.md` OQ-23) ist seit dieser
+Änderung standardmäßig `True` — die `rectify`-Stufe schliesst diese Kosten
+jetzt mit ein. Nachgemessen mit `examples/16_end_to_end_headless.py`:
+`rectify` p50 ≈ 2 552 µs, in derselben Größenordnung wie die obige Messung
+ohne CLAHE (die Perspektivverzerrung dominiert die Stufe, nicht die
+8×8-Kachel-Kontrastspreizung). Keine spürbare Regression, aber auch keine
+saubere Vorher/Nachher-Gegenprobe unter identischen Bedingungen — bei
+Bedarf mit `apply_enhance=False` explizit gegenmessen.
+
 ## Unsicherheitsbudget (Vorlage)
 
 Wird von M1–M7 gefüllt. Erst wenn diese Tabelle ausgefüllt ist, ist
