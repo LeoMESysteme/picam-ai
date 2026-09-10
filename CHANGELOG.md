@@ -28,7 +28,6 @@ ein Neustart hätte sie unterbrochen.
 **Konsequenz:** OQ-22 bleibt offen, aber der Maintainer-Dialog läuft weiter.
 Details und der vollständige Testplan: [OQ-22](docs/open-questions.md).
 
-
 ## 0.1.0.dev0 — 2026-09-10 spät nachts (TUI-style zweistufiger Bestätigungsablauf; Race-Condition-Fix)
 
 ### Klick auf die ROI-Box während einer laufenden Vermutungsanfrage verwarf das Ergebnis

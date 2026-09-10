@@ -567,7 +567,6 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
      `naushir` genannten Fixes nicht, ist aber ein kostenloser
      Zwischendatenpunkt, falls ohnehin neu gestartet wird.
 
-
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
 
