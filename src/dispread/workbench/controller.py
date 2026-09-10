@@ -746,7 +746,7 @@ class Controller:
         """
         try:
             layout = DisplayLayout.from_dict(config["layout"])
-            crop = rectify(image, quad, target_size=CROP_SIZE)
+            crop = rectify(image, quad, target_size=CROP_SIZE, apply_enhance=True)
             reader_crop = crop_box(crop.image, config["ocr_box"])
             read = self.reader.read(reader_crop, layout)
             if self.gate is None or self.gate_revision != self.revision:

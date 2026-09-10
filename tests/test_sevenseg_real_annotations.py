@@ -80,7 +80,10 @@ _KNOWN_MISREADS = {
         "die zweite Stelle liegt unter der von den helleren Stellen "
         "dominierten Schwelle. Ground-Truth-Text nachtraeglich 2026-09-10 "
         "ergaenzt (visuell aus image.png bestaetigt), siehe annotation.json "
-        "'ground_truth_text_note' und docs/VALIDATION.md."
+        "'ground_truth_text_note' und docs/VALIDATION.md. Bleibt mit "
+        "apply_enhance=True (CLAHE, seit 2026-09-10 im Live-Pfad aktiv) "
+        "unveraendert falsch - CLAHE gleicht Kontrast lokal an, verschiebt "
+        "aber die gepoolte Schwelle mit, siehe docs/open-questions.md OQ-23."
     ),
 }
 
@@ -142,7 +145,7 @@ def test_sevenseg_reads_the_annotated_ground_truth(folder):
     height, width = image.shape[:2]
     quad_px = [(x * width, y * height) for x, y in annotation["roi_quad"]]
     layout = DisplayLayout.from_dict(annotation["profile"]["layout"])
-    crop = rectify(image, quad_px, target_size=CROP_SIZE)
+    crop = rectify(image, quad_px, target_size=CROP_SIZE, apply_enhance=True)
     reader_crop = crop_box(crop.image, annotation["ocr_box"])
 
     result = SevenSegmentReader().read(reader_crop, layout)

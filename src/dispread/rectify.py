@@ -76,10 +76,27 @@ def rectify(
 ) -> DisplayCrop:
     """Viereck auf einen achsparallelen Ausschnitt abbilden.
 
-    `apply_enhance` ist standardmaessig aus: die Segmentauswertung schwellt
-    ueber die gepoolten Segmentmessungen und braucht keine Kontrastspreizung.
-    Eine Aufbereitung wuerde die gemessenen Helligkeiten veraendern und damit
-    die Evidenz, die die Freigabe bewertet.
+    `apply_enhance` ist standardmaessig aus (Default unveraendert `False`,
+    um bestehende Aufrufer nicht stillschweigend umzustellen). Der fruehere
+    Docstring-Einwand ("wuerde die Evidenz verfaelschen") war unvalidierte
+    Vorsicht, keine gemessene Einschraenkung: **solange `SevenSegmentReader.
+    read()` und die Freigabe auf demselben (ggf. CLAHE-aufbereiteten) Bild
+    rechnen wie die Entzerrung zurueckgibt**, sind `contrast`/`threshold`/
+    `margin` eine ehrliche Beschreibung der tatsaechlichen Entscheidung, keine
+    Verfaelschung - eine Verfaelschung waere nur, die Entscheidung auf dem
+    aufbereiteten, die gemeldete Evidenz aber auf dem unveraenderten Bild zu
+    rechnen (das passiert hier nicht, siehe `Controller._read`/`Pipeline.
+    process`, die beide entweder konsistent aufbereiten oder konsistent nicht).
+    Empirisch geprueft (`docs/VALIDATION.md`, 2026-09-10, CLAHE-Sweep): auf
+    synthetischem Material verbessert `apply_enhance=True` die Ablehnungsgrenze
+    bei Unschaerfe deutlich (mehrere vorher abgelehnte Faelle lesen korrekt)
+    und senkt bei starkem Glanz sogar die Zahl stiller Fehlablesungen leicht -
+    in keinem gemessenen Fall entstehen neue stille Fehlablesungen. Behebt
+    NICHT den in OQ-23 dokumentierten Fehlermodus einer einzelnen, echt
+    dunkleren Ziffernstelle (an realen Annotationen unveraendert falsch,
+    siehe OQ-23-Update) - CLAHE gleicht Kontrast lokal an, verschiebt aber die
+    gepoolte Schwelle mit, ohne die betroffene Zelle relativ zu den anderen
+    anzuheben.
     """
     width, height = target_size
     src = _order_quad(quad)

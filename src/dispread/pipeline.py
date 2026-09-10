@@ -43,6 +43,15 @@ class PipelineConfig:
     #: Nur jeden n-ten Frame neu lokalisieren. Konzept.md §3: Lokalisierung und
     #: OCR muessen nicht mit derselben Frequenz arbeiten.
     locate_every: int = 30
+    #: CLAHE vor der Werterkennung anwenden (`rectify.enhance`). Seit
+    #: 2026-09-10 Default `True`: an 28 bestehenden Sicherheitstests, der
+    #: synthetischen Stoerungsreihe (Rauschen/Unschaerfe/Glanz/Perspektive)
+    #: und allen realen Annotationen validiert, keine Zeile regressiert
+    #: (Glanz sogar verbessert: 2/40 -> 1/40 stille Fehlablesungen) - siehe
+    #: `docs/open-questions.md` OQ-23 und `docs/VALIDATION.md`. Weiterhin ein
+    #: expliziter Parameter, kein stillschweigend fester Codepfad: `False`
+    #: setzen, falls ein Aufrufer die alten Rohwerte braucht.
+    apply_enhance: bool = True
 
 
 @dataclass
@@ -114,7 +123,12 @@ class Pipeline:
             )
 
         # --- Entzerrung ------------------------------------------------------
-        crop = rectify(frame.image, self._candidate.quad, target_size=self.config.target_size)
+        crop = rectify(
+            frame.image,
+            self._candidate.quad,
+            target_size=self.config.target_size,
+            apply_enhance=self.config.apply_enhance,
+        )
         t_rectify = time.monotonic_ns()
 
         # --- Werterkennung ---------------------------------------------------
