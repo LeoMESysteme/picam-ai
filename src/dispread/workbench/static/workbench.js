@@ -214,7 +214,7 @@ async function freeze(){
  try{
   editing=await command('freeze');
   editing.stage='roi';editing.mode='browse';editing.selected=null;
-  editing.preEdit=null;editing.pending=null;editing.requestId=0;
+  editing.preEdit=null;editing.pending=null;editing.requestId=0;editing.ocrCandidates=[];
   feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;
   viewport.focus();draw();
   log('info','Kalibrierung: erkannten Rahmen anklicken oder ✎ zum Verschieben/Ecken-ziehen, ✓ bestätigt. Danach folgt automatisch ein OCR-Vorschlag - ebenso mit ✎/✓ pruefen. Escape bricht die Bearbeitung ab.');
@@ -230,9 +230,16 @@ function transform(m,x,y){const z=m[6]*x+m[7]*y+m[8];return [(m[0]*x+m[1]*y+m[2]
 function project(u,v){return transform(homography(editing.quad),u,v);}
 function unproject(x,y){const inverse=invert3(homography(editing.quad));return inverse?transform(inverse,x,y):[x,y];}
 function ocrPoint(u,v){const [x,y,w,h]=editing.ocr_box;return project(x+u*w,y+v*h);}
-function ocrCorners(){return [[0,0],[1,0],[1,1],[0,1]].map(([u,v])=>ocrPoint(u,v));}
 function path(points,colour,width=1){ctx.strokeStyle=colour;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(points[0][0]*canvas.width,points[0][1]*canvas.height);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0]*canvas.width,points[i][1]*canvas.height);ctx.closePath();ctx.stroke();}
 function gridBox(box,colour,width=1){const [x,y,w,h]=box;path([[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([u,v])=>ocrPoint(u,v)),colour,width);}
+// Box im gleichen Koordinatensystem wie editing.ocr_box selbst (Quad-UV-
+// Raum) - NICHT dasselbe wie gridBox()/ocrPoint(), die eine Box relativ zu
+// editing.ocr_box projizieren (eine Ebene tiefer, z. B. Ziffernzellen).
+// OCR-Kandidaten liegen im aeusseren Raum, brauchen deshalb project()
+// direkt statt ocrPoint().
+function quadCorners(box){const [x,y,w,h]=box;return [[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([u,v])=>project(u,v));}
+function quadBox(box,colour,width=1){path(quadCorners(box),colour,width);}
+function ocrCorners(){return quadCorners(editing.ocr_box);}
 function positionButtons(el,anchor,offsetX,offsetY,w,h){
  el.style.left=(offsetX+anchor[0]*w+6)+'px';
  el.style.top=(offsetY+anchor[1]*h-28)+'px';
@@ -267,6 +274,12 @@ function draw(){
   for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':'#a6d6a6';ctx.fillRect(editing.quad[i][0]*w-5,editing.quad[i][1]*h-5,10,10);}
  // OCR-Raster/-Rahmen erst ab Stufe B sichtbar.
  if(!roiActive){
+  // Andere OCR-Kandidaten (Browse-Modus): duenn, anklickbar. Wie bei den
+  // ROI-Kandidaten wird nicht versucht, den mit editing.ocr_box
+  // uebereinstimmenden auszusparen - die fette Auswahl ueberzeichnet ihn
+  // ohnehin an derselben Stelle.
+  if(editing.mode==='browse')
+   for(const box of editing.ocrCandidates)quadBox(box,'rgba(240,208,128,.35)',1);
   for(const box of editing.ocr_grid.cells)gridBox(box,'rgba(240,208,128,.65)');
   if(editing.ocr_grid.sign)gridBox(editing.ocr_grid.sign,'rgba(240,208,128,.65)');
   for(const box of editing.ocr_grid.cells)for(const [,sx,sy] of editing.ocr_grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
@@ -314,6 +327,14 @@ canvas.onpointerdown=event=>{
   return;
  }
  if(editing.stage==='ocr'&&editing.mode==='browse'){
+  // Kandidaten-Trefferpruefung im Quad-UV-Raum (unproject), nicht im
+  // Rohbildraum - erst danach, falls kein Kandidat traf, der raumfremde
+  // Rueckweg-Test gegen die (jetzt inerte) ROI-Quad im Rohbildraum. Eine
+  // OCR-Kandidatenflaeche liegt immer innerhalb der ROI-Quad, die
+  // umgekehrte Reihenfolge wuerde jeden Kandidatenklick verschlucken.
+  const [u,v]=unproject(x,y);
+  const hit=editing.ocrCandidates.findIndex(([bx,by,bw,bh])=>u>=bx&&u<=bx+bw&&v>=by&&v<=by+bh);
+  if(hit>=0){editing.ocr_box=[...editing.ocrCandidates[hit]];draw();return;}
   if(pointInQuad([x,y],editing.quad)){editing.stage='roi';editing.mode='browse';editing.selected=null;draw();}
   return;
  }
@@ -357,7 +378,8 @@ async function confirmRoi(){
  try{
   const result=await command('ocr.suggest',{id:editing.id,quad:editing.quad});
   if(!editing||editing.requestId!==requestId)return; // ueberholt (Escape/erneuter Aufruf)
-  if(result.ocr_box)editing.ocr_box=result.ocr_box;
+  editing.ocrCandidates=result.ocr_boxes||[];
+  if(editing.ocrCandidates.length)editing.ocr_box=editing.ocrCandidates[0];
   else log('warn','OCR-Vorschlag: kein Kandidat im markierten Bereich gefunden.');
   editing.stage='ocr';editing.mode='browse';editing.selected=null;
  }catch(e){log('error',e.message);}

@@ -17,7 +17,7 @@ from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
 from dispread.workbench.controller import MAX_GEOMETRY_CYCLES, Controller
 from dispread.workbench.profiles import DEFAULT, atomic_json, validate
-from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
+from dispread.workbench.vision import fit_ocr_box, fit_ocr_box_candidates, fit_quad_in_region
 
 
 @pytest.mark.parametrize(
@@ -1069,6 +1069,10 @@ def _box_iou(a, b):
         (12.34, 5, 2, True, "mV"),
         (0.5, 4, 1, False, "N"),
         (-999.9, 4, 1, True, None),
+        # Schmales Layout (wenige, breite Ziffernzellen): frueher eine bekannte
+        # Grenze (siehe CHANGELOG, OCR_CLOSE_WIDTH_RATIO) - die "1" in "321"
+        # zerfiel ohne den breitenabhaengigen Schliess-Kernel in zwei Blobs.
+        (321.0, 3, None, False, None),
     ],
 )
 def test_fit_ocr_box_matches_the_rendered_digit_area(value, digits, decimals, has_sign, unit):
@@ -1093,29 +1097,116 @@ def test_fit_ocr_box_returns_none_for_a_blank_crop():
     blank = np.full((160, 400), 40, np.uint8)
 
     assert fit_ocr_box(blank) is None
+    assert fit_ocr_box_candidates(blank) == []
 
 
-_REAL_ANNOTATIONS = [
-    Path("var/workbench/annotations/6ffc561bb18f47f0aa14648b1f904dcd"),
-    Path("var/workbench/annotations/8a18ee05e31241b9b6702c5bb904ec97"),
-]
+def test_fit_ocr_box_candidates_returns_both_rows_of_a_stacked_display():
+    """Synthetische Nachbildung der OQ-25-Geometrie: zwei uebereinanderliegende
+    Zeilen (V/A) in einem Ausschnitt. `fit_ocr_box` (Singular) waehlt weiterhin
+    nur die flaechengroessere Zeile (bekannter, dokumentierter Fehlfall) -
+    `fit_ocr_box_candidates` muss beide liefern, geordnet, dedupliziert."""
+    layout_v = DisplayLayout(digits=4, decimals=2, has_sign=False, unit="V")
+    layout_a = DisplayLayout(digits=4, decimals=3, has_sign=False, unit="A")
+    img_v, _, area_v = render_display(11.00, layout_v, size=(480, 200))
+    img_a, _, area_a = render_display(0.000, layout_a, size=(480, 200))
+    composite = np.vstack([img_v, img_a])
+    height, width = composite.shape[:2]
+    quad = [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]
+    crop = rectify(composite, quad, target_size=(400, 160))
+    xv, yv, wv, hv = area_v
+    xa, ya, wa, ha = area_a
+    ya_full = ya + img_v.shape[0]
+    expected_v = (xv / width, yv / height, wv / width, hv / height)
+    expected_a = (xa / width, ya_full / height, wa / width, ha / height)
+
+    candidates = fit_ocr_box_candidates(crop.image, layout=layout_v, max_candidates=5)
+
+    assert len(candidates) == 2
+    ious_v = [_box_iou(c, expected_v) for c in candidates]
+    ious_a = [_box_iou(c, expected_a) for c in candidates]
+    assert max(ious_v) > 0.6  # V-Zeile irgendwo in der Liste (gemessen: 0,737)
+    assert max(ious_a) > 0.8  # A-Zeile irgendwo in der Liste (gemessen: 0,910)
+    assert _box_iou(candidates[0], candidates[1]) <= 0.5  # dedupliziert
+    assert ious_a[0] > ious_v[0]  # A gewinnt Rang 1 (mehr Blobflaeche) - wie OQ-25
+    assert fit_ocr_box(crop.image, layout=layout_v) == candidates[0]  # Singular-Wrapper unveraendert
 
 
-@pytest.mark.skipif(
-    not all(p.exists() for p in _REAL_ANNOTATIONS),
-    reason="reale Annotationen aus var/ nicht im Checkout vorhanden (nicht versioniert)",
+def test_fit_ocr_box_never_falls_through_to_a_weaker_candidate(monkeypatch):
+    """Kernbehebung eines waehrend der Planung entdeckten Entwurfsfehlers: ein
+    naives `fit_ocr_box_candidates(...)[0]` wuerde bei einem fuer sich
+    scheiternden flaechengroessten Cluster still zum naechst-schwaecheren
+    durchreichen und damit die in VALIDATION.md/OQ-25 gemessene
+    Sicherheitseigenschaft brechen ("mit enger vorgeschlagener roi_quad
+    liefert fit_ocr_box None statt eines falschen Vorschlags"). `fit_ocr_box`
+    darf deshalb strukturell nur Rang 1 nehmen, nie durchreichen."""
+    layout = DisplayLayout(digits=4, decimals=1, has_sign=False, unit=None)
+    # Flaechengroesserer, aber wegen Seitenverhaeltnis abgelehnter Kandidat
+    # (fast quadratisch) - "gewinnt" die Flaechen-Rangfolge, muss aber durch
+    # die Seitenverhaeltnis-Pruefung fallen.
+    rejected = [(50, 10, 40, 90), (110, 10, 40, 90)]
+    # Kleinerer, aber gueltiger Kandidat in einer klar getrennten Zeile.
+    valid = [(100, 100, 60, 40), (240, 100, 60, 40)]
+    monkeypatch.setattr("dispread.workbench.vision._best_blobs", lambda *_a, **_k: rejected + valid)
+    crop = np.zeros((160, 400, 3), np.uint8)
+
+    candidates = fit_ocr_box_candidates(crop, layout=layout)
+
+    assert len(candidates) == 1  # der abgelehnte Kandidat taucht gar nicht erst auf
+    assert fit_ocr_box(crop, layout=layout) is None  # und wird NICHT stillschweigend uebersprungen
+
+
+def _annotation_has_ocr_fields(data):
+    """Ob eine `annotation.json` genug enthaelt, um gegen `roi_quad`/`ocr_box`
+    zu pruefen - wiederverwendbares Kriterium fuer jede Stelle, die reale
+    Annotationen automatisch einsammelt (auch ausserhalb dieser Datei, z. B.
+    fuer eine kuenftige `sevenseg.py`-Regression)."""
+    return "roi_quad" in data and "ocr_box" in data and data.get("profile", {}).get("layout") is not None
+
+
+def _discover_annotations(base=Path("var/workbench/annotations"), predicate=_annotation_has_ocr_fields):
+    """Alle Annotationsordner unter `base`, deren `annotation.json` `predicate`
+    erfuellt - automatisch, statt eine feste Pfadliste bei jeder neu
+    aufgenommenen realen Annotation von Hand nachzuziehen. `var/` ist nicht
+    versioniert, deshalb leere Liste statt Fehler, wenn `base` fehlt."""
+    if not base.exists():
+        return []
+    return sorted(
+        p.parent for p in base.glob("*/annotation.json") if predicate(json.loads(p.read_text()))
+    )
+
+
+_REAL_ANNOTATIONS = _discover_annotations()
+_REAL_ANNOTATION_PARAMS = (
+    [pytest.param(p, id=p.name) for p in _REAL_ANNOTATIONS]
+    if _REAL_ANNOTATIONS
+    else [
+        pytest.param(
+            None,
+            id="keine-annotationen",
+            marks=pytest.mark.skip(
+                reason="reale Annotationen aus var/ nicht im Checkout vorhanden (nicht versioniert)"
+            ),
+        )
+    ]
 )
-@pytest.mark.parametrize("folder", _REAL_ANNOTATIONS, ids=lambda p: p.name)
-def test_fit_ocr_box_against_real_annotations(folder):
-    """Validierung gegen die zwei realen Aufnahmen aus dieser Sitzung
-    (docs/PLAN_2026-09-10-workbench-editor.md). Gemessenes Ergebnis: IoU 0,0
-    auf beiden Bildern, siehe docs/VALIDATION.md und OQ-25 - der Ausschnitt
-    enthaelt neben der Hauptanzeige "V" eine baugleiche Nebenanzeige "A"
-    (Konzept.md §7: Haupt-/Nebenanzeige-Verwechslung ist ohne weiteren
-    Bedienerhinweis strukturell nicht aufloesbar), und in einem Bild zusaetzlich
-    einen grossflaechigen Glanzfleck. Die Schwelle ist die **gemessene**, nicht
-    eine vorab erhoffte - dieser Test bewacht nur, dass die Funktion an echten
-    Daten nicht abstuerzt und ein plausibel geformtes Ergebnis liefert."""
+
+
+@pytest.mark.parametrize("folder", _REAL_ANNOTATION_PARAMS)
+def test_fit_ocr_box_candidates_ranks_the_true_box_against_real_annotations(folder):
+    """Staerkere, durch das Mehrkandidaten-Design neu ermoeglichte Abnahme
+    gegen jede reale Annotation unter `var/workbench/annotations/`
+    (automatisch eingesammelt via `_discover_annotations` - waechst mit
+    jeder neu aufgenommenen Annotation mit, kein Codeaenderung noetig): die
+    tatsaechlich bestaetigte ocr_box muss irgendwo unter den Top-K
+    Kandidaten auftauchen (nicht notwendig auf Rang 1) - gemessene Werte
+    zwischen 0,543 und 0,890 je nach Aufnahme, siehe docs/VALIDATION.md. Bei
+    den zwei urspruenglichen Aufnahmen aus
+    docs/PLAN_2026-09-10-workbench-editor.md bleibt Rang 1 weiterhin die
+    dokumentierte Haupt-/Nebenanzeige-Verwechslung (OQ-25: der Ausschnitt
+    enthaelt neben der Hauptanzeige "V" eine baugleiche Nebenanzeige "A",
+    Konzept.md §7) - das ist hier kein Fehlschlag mehr, weil der Bediener
+    aus der Liste waehlt statt dass `fit_ocr_box` (Singular) still die
+    falsche uebernimmt."""
     annotation = json.loads((folder / "annotation.json").read_text())
     image = cv2.imread(str(folder / "image.png"))
     height, width = image.shape[:2]
@@ -1123,13 +1214,14 @@ def test_fit_ocr_box_against_real_annotations(folder):
     layout = DisplayLayout.from_dict(annotation["profile"]["layout"])
     crop = rectify(image, quad_px, target_size=(400, 160))
 
-    box = fit_ocr_box(crop.image, layout=layout)
+    candidates = fit_ocr_box_candidates(crop.image, layout=layout, max_candidates=5)
 
-    assert box is not None
-    x, y, w, h = box
-    assert 0 <= x <= 1 and 0 <= y <= 1 and 0 < w <= 1 and 0 < h <= 1
-    iou = _box_iou(box, annotation["ocr_box"])
-    assert iou >= 0.0  # gemessener Bestand, siehe docs/VALIDATION.md
+    # >=2 Kandidaten nur bei einer echten Haupt-/Nebenanzeige-Doppelbelegung
+    # (die zwei urspruenglichen OQ-25-Aufnahmen) - Annotationen mit nur einer
+    # Anzeige im ROI liefern erwartungsgemaess genau einen Kandidaten.
+    assert candidates
+    ious = [_box_iou(c, annotation["ocr_box"]) for c in candidates]
+    assert max(ious) > 0.5  # gemessener Bestand 0,543-0,890 je Aufnahme, siehe docs/VALIDATION.md
 
 
 def test_command_rejects_the_removed_roi_suggest_op(tmp_path):
@@ -1164,10 +1256,10 @@ def test_ocr_suggest_returns_a_box_for_the_given_quad_without_persisting(tmp_pat
 
     result = c.command("ocr.suggest", {"id": frozen["id"], "quad": quad})
 
-    assert result["ocr_box"] is not None
+    assert result["ocr_boxes"]
     assert c.config["ocr_box"] == DEFAULT["ocr_box"]
     expected = (padding_x / outer[2], padding_y / outer[3], w / outer[2], h / outer[3])
-    assert _box_iou(result["ocr_box"], expected) > 0.6
+    assert _box_iou(result["ocr_boxes"][0], expected) > 0.6
 
 
 def test_ocr_suggest_reports_no_candidate_without_raising(tmp_path):
@@ -1178,7 +1270,7 @@ def test_ocr_suggest_reports_no_candidate_without_raising(tmp_path):
 
     result = c.command("ocr.suggest", {"id": frozen["id"], "quad": quad})
 
-    assert result["ocr_box"] is None
+    assert result["ocr_boxes"] == []
     assert any("kein Kandidat" in x["message"] for x in c.logs)
 
 
@@ -1196,12 +1288,12 @@ def test_ocr_suggest_does_not_hold_the_controller_lock_during_detection(tmp_path
     frozen = c.command("freeze")
     entered, release = threading.Event(), threading.Event()
 
-    def slow_fit_ocr_box(*_a, **_k):
+    def slow_fit_ocr_box_candidates(*_a, **_k):
         entered.set()
         assert release.wait(2)
-        return None
+        return []
 
-    monkeypatch.setattr("dispread.workbench.controller.fit_ocr_box", slow_fit_ocr_box)
+    monkeypatch.setattr("dispread.workbench.controller.fit_ocr_box_candidates", slow_fit_ocr_box_candidates)
     quad = [[0, 0], [1, 0], [1, 1], [0, 1]]
     worker = threading.Thread(target=c.command, args=("ocr.suggest", {"id": frozen["id"], "quad": quad}))
     worker.start()

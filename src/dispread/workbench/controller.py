@@ -22,7 +22,7 @@ from dispread.rectify import rectify
 from dispread.validate import GateConfig, ReleaseGate
 
 from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
-from .vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_quad_in_region
+from .vision import DetectionConfig, find_display_candidates, fit_ocr_box_candidates, fit_quad_in_region
 
 #: Zielgroesse des entzerrten Ausschnitts. Fest, weil der Segmentleser gegen
 #: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
@@ -623,7 +623,7 @@ class Controller:
             return self.snapshot()
 
     def _suggest_ocr_box(self, args):
-        """OCR-Rahmen-Vermutung fuer ein gegebenes, evtl. unbestaetigtes Quad.
+        """OCR-Rahmen-Kandidaten fuer ein gegebenes, evtl. unbestaetigtes Quad.
 
         Wird bewusst ausserhalb von `self.lock` gerechnet - siehe `command()`.
         `frame["image"]` ist eine bei `freeze()` gezogene Kopie und wird sonst
@@ -631,6 +631,11 @@ class Controller:
         entfernt nur den Dict-Eintrag, die hier gehaltene Referenz bleibt
         gueltig. `self.log()` nimmt sein eigenes (reentrantes) Lock, ein
         Aufruf ausserhalb dieses Locks ist unproblematisch.
+
+        Liefert alle plausiblen Kandidaten (Bedienerwunsch: Auswahlprozess wie
+        bei den ROI-Kandidaten in `freeze()`, statt einer einzelnen, evtl.
+        falschen Automatikwahl - siehe OQ-25, Haupt-/Nebenanzeige-
+        Verwechslung). Nie `None`, hoechstens eine leere Liste.
         """
         with self.lock:
             frame = self.frames[args["id"]]
@@ -639,10 +644,10 @@ class Controller:
         img_h, img_w = frame["image"].shape[:2]
         quad_px = tuple((float(x * img_w), float(y * img_h)) for x, y in args["quad"])
         crop = rectify(frame["image"], quad_px, target_size=CROP_SIZE)
-        ocr_box = fit_ocr_box(crop.image, layout=layout)
-        if ocr_box is None:
+        ocr_boxes = fit_ocr_box_candidates(crop.image, layout=layout)
+        if not ocr_boxes:
             self.log("info", "ocr.suggest: kein Kandidat im markierten Bereich gefunden")
-        return {"ocr_box": list(ocr_box) if ocr_box is not None else None}
+        return {"ocr_boxes": [list(box) for box in ocr_boxes]}
 
     def publish(self, image, metadata):
         """Ein Bild ohne lange Sperre fuer Status-, ROI- oder Stopbefehle verarbeiten."""
