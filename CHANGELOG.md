@@ -3,6 +3,59 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (repo-maintenance.sh: toter Lauf committete trotzdem; jetzt auch andere lokale Branches)
+
+### Ein während des Laufs abgestürzter/gekillter Claude-Prozess konnte trotzdem committet werden, und nur `master` wurde gepflegt
+
+**Problem:** Bedienerauftrag: "Das maintenance script soll claude status
+checken so das wenn ein run während des runs stirbt nicht einfach trotzdem
+commitet wird. Das maintenance skript soll nicht nur main sondern auch
+andere branches checken und managen." Zwei getrennte Lücken im ursprünglichen
+Wrapper (Commit `82f63ff`): (1) `$CLAUDE_STATUS` wurde erfasst, aber nie
+geprüft — schlimmer noch, der Fallback-Zweig für eine nicht parsebare
+Commit-Message committete trotzdem mit einer generischen Nachricht statt
+abzubrechen. Genau das ist die Signatur eines mittendrin getöteten Laufs
+(ein gekillter, dann reaped `claude -p` kann trotzdem Exit 0 liefern). (2)
+Der Wrapper kannte nur den bei Cron-Start ausgecheckten Branch (`master`);
+`docs/oq22-rp2040-wedge` und `test/clahe-ocr-accuracy` wurden nie geprüft.
+
+**Änderung:** Schleife über alle lokalen Branches (`git for-each-ref
+refs/heads/`); je Branch derselbe Ablauf wie zuvor, plus: (a) Abbruch **ohne
+Commit** wenn `$CLAUDE_STATUS` ungleich 0 UND Änderungen vorliegen, wenn
+Dateien ausserhalb `docs/`/`CHANGELOG.md` angefasst wurden, oder wenn keine
+parsebare Commit-Message-Markierung im Output steht — alle drei Fälle gelten
+jetzt als Signatur eines gestorbenen Laufs, nicht mehr nur als Spezialfall.
+(b) Bei Abbruch: gezielter `git stash push -u -- docs CHANGELOG.md` (nur der
+betroffene Pfad, damit unrelated Werkstattunordnung im restlichen Baum nicht
+mitgerissen wird), plus ein Eintrag `branch: <name>` in der Markerdatei
+`~/.local/state/picam-ai-maintenance/needs-review` — **nur dieser eine
+Branch** wird ab sofort übersprungen, bis ein Mensch die Zeile entfernt; alle
+anderen Branches laufen im selben und in künftigen Läufen unbeeinflusst
+weiter (ein reiner Stash wäre für `git status` unsichtbar und hätte sich auf
+demselben Branch Nacht für Nacht unbemerkt wiederholt). (c) Die
+Schmutzig-Prüfung (Start des Laufs, vor jedem Branch-Wechsel) ist jetzt auf
+`docs/`+`CHANGELOG.md` beschränkt statt auf den ganzen Baum — unrelated nicht
+committete Tooling-Dateien blockierten die Routine sonst dauerhaft. (d)
+Branches mit identischem `docs/`+`CHANGELOG.md`-Stand (gleicher Baum-Hash)
+werden übersprungen, damit dieselbe Korrektur nicht auf drei Branches
+gleichzeitig landet und Merge-Konflikte erzeugt. Ein `restore_branch`-Trap
+kehrt am Ende immer zum ursprünglich ausgecheckten Branch zurück (nie
+erzwungen; verweigert die Rückkehr, falls dabei etwas schiefgelaufen sein
+sollte, statt zu forcieren). Verifiziert mit einem Fake-`claude`-Binary gegen
+Scratch-Repos: normaler Zweig-Durchlauf inkl. Dedup, gekillter Lauf ohne
+Commit-Marker, Exit-Status ungleich 0, Fremdpfad-Änderung (jeweils Stash
+statt Commit, gezielter Marker-Eintrag, betroffener Branch bleibt beim
+Folgelauf übersprungen) sowie ein Drei-Branch-Lauf, in dem genau ein Branch
+scheitert, während die beiden anderen trotzdem committet werden.
+
+**Konsequenz:** Ein toter Lauf hinterlässt nie mehr einen stillen,
+schlecht beschrifteten Commit, und ein einzelner scheiternder Branch
+blockiert nicht mehr die Pflege der übrigen. Alle drei lokalen Branches
+(`master`, `docs/oq22-rp2040-wedge`, `test/clahe-ocr-accuracy`) werden ab
+sofort gepflegt statt nur `master`. `docs/status.md` behauptete bisher, die
+beiden Skript-Dateien seien noch uncommittet — das war seit `82f63ff` falsch,
+korrigiert im gleichen Zug.
+
 ## 0.1.0.dev0 — 2026-09-10 spät nachts (TUI-style zweistufiger Bestätigungsablauf; Race-Condition-Fix)
 
 ### Klick auf die ROI-Box während einer laufenden Vermutungsanfrage verwarf das Ergebnis

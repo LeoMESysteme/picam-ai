@@ -1,4 +1,4 @@
-# Status — Stand 2026-09-10
+# Status — Stand 2026-09-11
 
 Wird **überschrieben**, nicht angehängt. Verlauf und Messaufbauten stehen in
 [project_history.md](project_history.md) und [lab_journal.md](lab_journal.md).
@@ -8,25 +8,29 @@ Abschnitt beschreibt nur den **aktuellen** Endzustand.
 
 ## Sofort zu wissen
 
-Der noch **nicht committete** Arbeitsbaum baut die Workbench-Editor-
-Bedienung für ROI/OCR-Kalibrierung vollständig um (Ausgangspunkt:
-[PLAN_2026-09-10-workbench-editor.md](PLAN_2026-09-10-workbench-editor.md),
-mehrfach durch reale Bedienerrückmeldung nachgezogen — Details im
-`CHANGELOG.md`). Der letzte committete Stand ist `abe9427` (nur der
-ursprüngliche Plan, noch keine Umsetzung). Kein Server lief während dieser
-Sitzung; es gibt keinen laufenden Prozess mit ungespeicherter Konfiguration
-zu berücksichtigen.
+Diese Sitzung hat ausschliesslich `scripts/repo-maintenance.sh` (plus
+`CHANGELOG.md` und diese Datei) geändert — kein `src/`, kein `Konzept.md`,
+keine Hardware angefasst, kein Server lief. Auftrag: der unbeaufsichtigte
+Cron-Wrapper (aus der Vorsitzung, Commit `82f63ff`) commitete bisher auch
+dann, wenn der `claude -p`-Lauf mittendrin starb (Exit-Code wurde erfasst,
+aber nie geprüft; der Fallback-Zweig für eine nicht parsebare Commit-Message
+commitete sogar mit einer generischen Nachricht statt abzubrechen), und
+kannte nur den bei Cron-Start ausgecheckten Branch (`master`). Beides
+behoben — Details im CHANGELOG-Eintrag „2026-09-11". Letzter committeter
+Stand vor dieser Sitzung: `ac5c5f4`.
 
-**Fremdänderung im selben Arbeitsbaum, nicht von dieser Sitzung:** Neben den
-eigenen Änderungen liegen unabhängig davon `.claude/settings.json` sowie die
-neuen, nicht versionierten Dateien `scripts/repo-maintenance.sh` und
-`scripts/repo-maintenance-prompt.md` uncommittet im Baum — eine per Cron
-geplante unbeaufsichtigte `claude -p`-Doku-Pflegeroutine (siehe CHANGELOG
-„abends"-Eintrag). Nicht angefasst oder geprüft; wer als Nächstes committet,
-sollte das im Blick behalten, damit sich ein späterer Cron-Lauf nicht mit
-noch offener manueller Arbeit überschneidet.
+**Fremdänderung im selben Arbeitsbaum, nicht von dieser Sitzung:**
+`.claude/settings.json` liegt unabhängig davon uncommittet im Baum, dazu
+mehrere unversionierte Node/Playwright-Dateien (`.github/`, `package.json`,
+`package-lock.json`, `playwright.config.ts`, `tests/example.spec.ts`) sowie
+eine Änderung an `.gitignore` — nicht von dieser Sitzung angelegt, nicht
+angefasst oder geprüft. Wer als Nächstes committet, sollte das im Blick
+behalten.
 
 ## Implementierter Stand — aktueller Bedienablauf
+
+**Workbench-Editor** (seit `64b1f90` committet, in dieser Sitzung nicht
+verändert):
 
 **Sitzungsstart:** Eine geladene, bereits bestätigte Profilgeometrie wird
 für die laufende Sitzung auf `confirmed=false` zurückgesetzt (nur die
@@ -92,53 +96,68 @@ Unverändert gültig aus vorherigen Sitzungen: zweistufige OCR-Kalibrierung
 (`roi_quad`/`ocr_box`), Bildpfad-Entkopplung, OCR-Drosselung, `dispread stop`,
 RP2040-Power-Zyklus-Budget (OQ-22).
 
+**Unbeaufsichtigte Doku-Pflege** (`scripts/repo-maintenance.sh`, diese
+Sitzung geändert): per `@reboot`-Cron ruft ein Wrapper `claude -p` mit festem
+Prompt (`scripts/repo-maintenance-prompt.md`, `--disallowedTools
+"Bash,Agent,WebFetch,WebSearch"`) einmal je lokalem Branch auf. Commit nur,
+wenn ausschliesslich `docs/`/`CHANGELOG.md` geändert wurden **und** eine
+parsebare Commit-Message-Markierung vorliegt — jede andere Abweichung
+(Exit-Status ungleich 0 mit Änderungen, Fremdpfad, fehlende Markierung) gilt
+als toter/gescheiterter Lauf: gezielter `git stash push -- docs
+CHANGELOG.md` plus ein `branch: <name>`-Eintrag in
+`~/.local/state/picam-ai-maintenance/needs-review`, der **nur diesen
+Branch** bei künftigen Läufen überspringt, bis ein Mensch die Zeile entfernt.
+Andere Branches laufen unbeeinflusst weiter. Branches mit identischem
+`docs/`+`CHANGELOG.md`-Baum werden übersprungen (kein dreifacher Commit
+derselben Korrektur). Noch kein scharfer Cron-Lauf beobachtet — nur gegen
+Scratch-Repos mit einem Fake-`claude`-Binary verifiziert (siehe CHANGELOG).
+
 ## Verifiziert
 
 ```text
 ./.venv/bin/pytest -q                                      113 passed
 ./.venv/bin/ruff check src tests examples                  All checks passed!
-node --check src/dispread/workbench/static/workbench.js    erfolgreich
+bash -n scripts/repo-maintenance.sh                        erfolgreich
 ```
 
-Gegenüber dem committeten Stand `abe9427`: neue/aktualisierte Tests decken
-Klickpriorität und Default-`ocr_box` am Controller, `fit_quad_in_region`
-(achsparalleles/gekipptes synthetisches Panel, kein Kandidat,
-Layout-Seitenverhältnis-Aufweitung, Ablenkerobjekt außerhalb des
-Hinweisbereichs — reproduziert die "andere Bildschirme"-Rückmeldung gezielt),
-`fit_ocr_box` (vier synthetische Layout-/Wertkombinationen, leerer Crop,
-IoU-Qualität gegen ein gepolstertes ROI), `ocr.suggest` inklusive eines
-Lock-Freigabe-Tests (deckt die eigentliche Race-Condition-Behebung ab, nicht
-nur die Antwortform), Ground-Truth-Feld in `annotation.json`, die auf die
-bestätigte ROI eingegrenzte Vergleichssuche, die erzwungene erneute
-Bestätigung beim Sitzungsstart (samt unveränderter gespeicherter Datei und
-Sperre des `run`-Modus) sowie `freeze()`s vollständige Kandidatenliste
-(inkl. Nachsuchlauf-Fall). Der entfernte `roi.suggest`-Op hat einen
-Regressions-Test, der seine Abwesenheit pinnt. Zwei weitere Tests laufen
-gegen die realen Annotationen unter `var/workbench/annotations/` und werden
-per `skipif` übersprungen, falls dieser (nicht versionierte) Ordner fehlt.
+Gegenüber dem committeten Stand `ac5c5f4`: keine Python-/JS-Änderung in
+dieser Sitzung, daher unveränderte Testzahl. `scripts/repo-maintenance.sh`
+selbst hat keine automatisierten Tests im Projekt-Testlauf (kein
+Hardwarebedarf, aber auch kein pytest-Ziel) — stattdessen manuell gegen
+mehrere Scratch-Git-Repos mit einem kontrollierbaren Fake-`claude`-Binary
+verifiziert: normaler Drei-Branch-Durchlauf inkl. Dedup identischer
+docs-Bäume, ein Lauf mit Exit-Status ungleich 0 und liegen gebliebenen
+Änderungen, ein Lauf ohne parsebare Commit-Message („getöteter" Lauf), ein
+Lauf mit Fremdpfad-Änderung, sowie ein gemischter Drei-Branch-Lauf, in dem
+genau ein Branch scheitert (Stash + gezielter Marker) während die beiden
+anderen trotzdem committet werden und der Branch bei einem zweiten Lauf
+übersprungen bleibt. Details siehe CHANGELOG-Eintrag „2026-09-11".
 
-**Reale Validierung durchgeführt** (siehe [VALIDATION.md](VALIDATION.md)):
-`fit_quad_in_region` trifft die bestätigte `roi_quad` beider realer
-Annotationsbilder mit IoU ≈ 0,91 und ignoriert die im selben Bild sichtbaren
-Monitore. `fit_ocr_box` scheitert an denselben zwei Bildern vollständig
-(IoU 0,0) — Ursache ist die aus Konzept.md §7 bekannte Haupt-/Nebenanzeige-
-Verwechslung (ein Netzteil mit zwei übereinanderliegenden Anzeigen `V`/`A`
-in derselben bestätigten ROI) plus ein Glanzfleck in einem der beiden
-Bilder; dieselbe Grenze gilt für jeden Aufrufer von `ocr.suggest`,
-unabhängig davon, wodurch er ausgelöst wird. Neuer Eintrag
-[OQ-25](open-questions.md). Kein automatisch übernommener Wert ist davon
-betroffen — jeder Vorschlag bleibt bis zum expliziten ✓-Klick unbestätigt.
+Aus der vorherigen Sitzung weiterhin gültig (nicht neu geprüft, keine
+Codeänderung seither): `fit_quad_in_region`/`fit_ocr_box`-Testabdeckung
+(Klickpriorität, Layout-Seitenverhältnis-Aufweitung, Ablenkerobjekt,
+Lock-Freigabe für `ocr.suggest`, Ground-Truth-Feld, erzwungene erneute
+Bestätigung beim Sitzungsstart, `freeze()`s vollständige Kandidatenliste,
+Regressionstest für den entfernten `roi.suggest`-Op). **Reale Validierung**
+(siehe [VALIDATION.md](VALIDATION.md)): `fit_quad_in_region` trifft die
+bestätigte `roi_quad` beider realer Annotationsbilder mit IoU ≈ 0,91;
+`fit_ocr_box` scheitert an denselben zwei Bildern (IoU 0,0, Haupt-/
+Nebenanzeige-Verwechslung plus Glanzfleck — [OQ-25](open-questions.md)). Kein
+automatisch übernommener Wert ist davon betroffen — jeder Vorschlag bleibt
+bis zum expliziten ✓-Klick unbestätigt.
 
 ## Offene reale Abnahme
 
-Manuelle Bedienprüfung im echten Browser steht für den gesamten neuen
-Editor-Ablauf noch aus (Kandidat anklicken, ✎/✓-Zyklus an ROI und OCR-Box,
-Stufenübergang und Rücksprung, das gemeldete Bugszenario gezielt
-nachstellen, `annotate`-Eingabefeld, erzwungene erneute Bestätigung nach
-Neustart, Knopf-Positionierung bei Fenstergrößenänderung) — nicht aus
-`file://`- oder synthetischen Tests ableitbar, Teil von
+Manuelle Bedienprüfung im echten Browser steht für den gesamten
+Workbench-Editor-Ablauf noch aus (Kandidat anklicken, ✎/✓-Zyklus an ROI und
+OCR-Box, Stufenübergang und Rücksprung, das ursprünglich gemeldete
+Bugszenario gezielt nachstellen, `annotate`-Eingabefeld, erzwungene erneute
+Bestätigung nach Neustart, Knopf-Positionierung bei Fenstergrößenänderung)
+— nicht aus `file://`- oder synthetischen Tests ableitbar, Teil von
 [OQ-21](open-questions.md)/[OQ-24](open-questions.md), die weiterhin offen
 bleiben (kein Server lief in dieser Sitzung, keine neue Abnahme möglich).
+Zusätzlich noch offen: der erste scharfe Cron-Lauf der überarbeiteten
+`repo-maintenance.sh` auf dem echten Pi (bisher nur Scratch-Repo-Tests).
 
 Unverändert offen: BK-5491B-VFD-Rastererkennung ([OQ-23](open-questions.md)),
 GSVmulti-Telegrammformat ([OQ-01](open-questions.md)/[OQ-07](open-questions.md)),
