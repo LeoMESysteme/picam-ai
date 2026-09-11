@@ -38,6 +38,7 @@ async function poll(){
    $('metrics').textContent=`#${s.sequence} · ${s.processing_fps} fps · ${s.profile}${s.dirty?' *':''}`;
   }else disconnect();
   if(s.setup)renderSetup(s.setup);
+  updateClipPanel(s.clip);
   syncTabs(s.terminals);
   if(!s.terminals.length && !terminalBusy){terminalBusy=true;try{await api('/terminals','POST',{});}finally{terminalBusy=false;}}
  }catch(e){disconnect();}finally{busy=false;}
@@ -391,6 +392,28 @@ $('ground-truth-ok').onclick=async()=>{
 $('ground-truth-input').onkeydown=event=>{
  if(event.key==='Enter'){event.preventDefault();$('ground-truth-ok').click();}
  if(event.key==='Escape'){event.preventDefault();$('ground-truth-cancel').click();}
+};
+/* Clipaufnahme: ein getipptes Label deckt den ganzen Clip ab, kein Bestaetigungsmechanismus. */
+function updateClipPanel(clip){
+ if(!clip)return;
+ const recording=clip.state==='recording';
+ $('clip-start').disabled=recording;
+ $('clip-device').disabled=$('clip-text').disabled=$('clip-seconds').disabled=recording;
+ $('clip-stop').disabled=!recording;
+ $('clip-status').textContent=recording?`${clip.frames} Bilder · ${clip.dropped} verworfen · ${clip.seconds_left.toFixed(1)} s`:'';
+}
+$('clip-start').onclick=async()=>{
+ const device_id=$('clip-device').value.trim();
+ const ground_truth_text=$('clip-text').value.trim();
+ const seconds=Number($('clip-seconds').value);
+ try{await command('clip.start',{device_id,ground_truth_text,seconds});}
+ catch(e){log('error',e.message);}
+ await poll();
+};
+$('clip-stop').onclick=async()=>{
+ try{await command('clip.stop');}
+ catch(e){log('error',e.message);}
+ await poll();
 };
 setInterval(()=>{if(!editing && (performance.now()-lastReply>2000||performance.now()-lastProgress>2000))disconnect();},250);
 select('setup');

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import json
+import queue
 import threading
 import time
 import uuid
@@ -15,6 +16,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dispread.frames.replay_source import CLIP_SCHEMA_VERSION
 from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.records import TimeBaseKind
@@ -77,6 +79,15 @@ CANDIDATE_INTERVAL_S = 1.0
 #: examples/16_end_to_end_headless.py; nicht an realen Multiplexperioden
 #: validiert (OQ-20).
 GATE_CONFIRM_FRAMES = 3
+
+#: Wieviele Bilder hoechstens auf das Schreiben warten duerfen. Ein PNG von
+#: 960x720 kostet 20-30 ms; im publish()-Pfad wuerde das die Vorschau bei
+#: 15 fps anhalten. Laeuft die Queue voll, wird gezaehlt statt still verworfen.
+CLIP_QUEUE_DEPTH = 24
+
+#: Obergrenze je Clip. Ein Kalibrierpunkt braucht Sekunden, nicht Minuten;
+#: ohne Grenze laeuft eine vergessene Aufnahme die Platte voll.
+CLIP_MAX_SECONDS = 120
 
 
 class CameraWedgedError(RuntimeError):
@@ -195,6 +206,10 @@ class Controller:
         self.auto = {"state": "idle"}
         self.auto_requested = False
         self.thread = None
+        self.clip = None  # laufende Aufnahme oder None
+        self.clip_queue = None  # queue.Queue der zu schreibenden Bilder
+        self.clip_thread = None
+        self.calibrated_on = None  # Frame-Sequenz der letzten Bestaetigung; Task 5 setzt es
         self.log("info", "Workbench gestartet; gelbe Boxen sind unbestaetigte Vorschlaege.")
         if self.path.exists():
             self._load(self.path)
@@ -308,6 +323,15 @@ class Controller:
                 "logs": list(self.logs),
                 "stopped": self.stop.is_set(),
                 "simulated": self.simulate,
+                "clip": {
+                    "state": "idle" if self.clip is None else "recording",
+                    "frames": 0 if self.clip is None else len(self.clip["entries"]),
+                    "dropped": 0 if self.clip is None else self.clip["dropped"],
+                    "path": None if self.clip is None else str(self.clip["path"]),
+                    "seconds_left": None
+                    if self.clip is None
+                    else max(0.0, self.clip["deadline"] - time.monotonic()),
+                },
             }
 
     def _change(self, data):
@@ -618,6 +642,27 @@ class Controller:
                 data["camera"]["controls"] = self.auto["controls"]
                 self._change(data)
                 self.auto = {"state": "accepted"}
+            elif op == "clip.start":
+                if not self.config["confirmed"] or not self.snapshot()["live"]:
+                    raise ValueError("Clipaufnahme braucht bestaetigte Geometrie und Livebild")
+                if self.mode not in ("setup", "annotate"):
+                    raise ValueError("Clipaufnahme laeuft in setup oder annotate")
+                if self.clip is not None:
+                    raise ValueError("Clipaufnahme laeuft bereits")
+                device_id = str(args.get("device_id", "")).strip()
+                text = str(args.get("ground_truth_text", "")).strip()
+                if not device_id:
+                    # Splitgrenze ist die Geraeteinstanz, nie der Frame (ROADMAP).
+                    # Ohne Kennung ist der Datensatz fuer einen Gruppensplit wertlos.
+                    raise ValueError("Geraetekennung fehlt")
+                if not text:
+                    raise ValueError("Sollwert fehlt - ein Clip ohne Label ist kein Testdatum")
+                seconds = float(args.get("seconds", 5.0))
+                if not 0.5 <= seconds <= CLIP_MAX_SECONDS:
+                    raise ValueError(f"Clipdauer 0.5..{CLIP_MAX_SECONDS} s")
+                self._clip_start(device_id, text, seconds)
+            elif op == "clip.stop":
+                self._clip_stop()
             else:
                 raise ValueError(f"Unbekannter Befehl: {op}")
             return self.snapshot()
@@ -643,6 +688,80 @@ class Controller:
         if ocr_box is None:
             self.log("info", "ocr.suggest: kein Kandidat im markierten Bereich gefunden")
         return {"ocr_box": list(ocr_box) if ocr_box is not None else None}
+
+    def _clip_start(self, device_id, text, seconds):
+        target = self.root / "clips" / uuid.uuid4().hex
+        target.mkdir(parents=True)
+        self.clip_queue = queue.Queue(maxsize=CLIP_QUEUE_DEPTH)
+        self.clip = {
+            "path": target,
+            "device_id": device_id,
+            "ground_truth_text": text,
+            "deadline": time.monotonic() + seconds,
+            "profile": copy.deepcopy(self.config),
+            "profile_name": self.name,
+            "calibrated_on_frame_sequence": self.calibrated_on,
+            "entries": [],
+            "dropped": 0,
+        }
+        # Die Queue an den Thread binden statt sie ueber self.clip_queue immer
+        # wieder neu nachzuschlagen: ein rasches stop/start-Paar zeigt
+        # self.clip_queue sonst schon auf die naechste Aufnahme, waehrend
+        # dieser Thread noch die alte leerraeumt.
+        self.clip_thread = threading.Thread(
+            target=self._clip_writer, args=(self.clip_queue,), name="clip", daemon=True
+        )
+        self.clip_thread.start()
+        self.log("info", f"Clipaufnahme {target.name} gestartet: {device_id}, Sollwert {text!r}")
+
+    def _clip_writer(self, clip_queue):
+        """Bilder schreiben, ohne den Bildpfad aufzuhalten.
+
+        `clip_queue` ist die beim Threadstart uebergebene Queue dieser einen
+        Aufnahme - nicht `self.clip_queue`, das ein nachfolgender
+        clip.start bereits auf eine neue Queue umgebogen haben kann,
+        waehrend dieser Thread noch die alte leerraeumt.
+        """
+        while True:
+            item = clip_queue.get()
+            if item is None:
+                return
+            path, image = item
+            if not cv2.imwrite(str(path), image):
+                self.log("error", f"Clipbild nicht geschrieben: {path}")
+
+    def _clip_stop(self):
+        if self.clip is None:
+            return
+        clip, self.clip = self.clip, None
+        if self.clip_queue is not None:
+            self.clip_queue.put(None)
+        atomic_json(
+            clip["path"] / "clip.json",
+            {
+                "schema_version": CLIP_SCHEMA_VERSION,
+                "clip_id": clip["path"].name,
+                "device_id": clip["device_id"],
+                "ground_truth_text": clip["ground_truth_text"],
+                "profile": clip["profile"],
+                "profile_name": clip["profile_name"],
+                "calibrated_on_frame_sequence": clip["calibrated_on_frame_sequence"],
+                "dropped_frames": clip["dropped"],
+                "created_at": datetime.now(UTC).isoformat(),
+                "created_timebase": "UTC",
+                "frames": clip["entries"],
+            },
+        )
+        self.log(
+            "info",
+            f"Clip {clip['path'].name}: {len(clip['entries'])} Bilder, {clip['dropped']} verworfen",
+        )
+
+    def drain_clip_writer(self):
+        """Auf den Schreib-Thread warten. Fuer Tests - kein Bedienbefehl."""
+        if self.clip_thread is not None:
+            self.clip_thread.join(timeout=10)
+            self.clip_thread = None
 
     def publish(self, image, metadata):
         """Ein Bild ohne lange Sperre fuer Status-, ROI- oder Stopbefehle verarbeiten."""
@@ -727,6 +846,31 @@ class Controller:
             self.reading = reading
             self.jpeg = jpeg.tobytes()
             self.sequence += 1
+            if self.clip is not None:
+                if time.monotonic() >= self.clip["deadline"]:
+                    self._clip_stop()
+                else:
+                    name = f"frame_{len(self.clip['entries']) + 1:06d}.png"
+                    try:
+                        self.clip_queue.put_nowait((self.clip["path"] / name, image))
+                    except queue.Full:
+                        # Gezaehlt, nicht stillschweigend verworfen - die Zahl steht im
+                        # clip.json und macht einen lueckenhaften Clip erkennbar.
+                        self.clip["dropped"] += 1
+                    else:
+                        self.clip["entries"].append(
+                            {
+                                "file": name,
+                                "frame_sequence": self.sequence,
+                                "capture_timestamp": {
+                                    "value_ns": int(metadata.get("SensorTimestamp", 0)),
+                                    "base": metadata.get("timebase", TimeBaseKind.FILE_MTIME.value),
+                                    "semantics": metadata.get("timestamp_semantics", "unknown"),
+                                    "uncertainty_ns": metadata.get("uncertainty_ns"),
+                                },
+                                "metadata": copy.deepcopy(metadata),
+                            }
+                        )
             self.last_frame = now
             if self.first_frame is None:
                 self.first_frame = self.last_frame
@@ -824,6 +968,18 @@ class Controller:
         self.thread.start()
 
     def close(self):
+        with self.lock:
+            self._clip_stop()
+        # _clip_stop() nur schreibt clip.json und weckt den Schreib-Thread mit
+        # dem None-Sentinel auf - es wartet NICHT, bis die letzten PNGs
+        # tatsaechlich auf der Platte liegen. Ohne diesen Join koennte der
+        # Prozess beenden, waehrend im gerade geschriebenen Manifest gelistete
+        # Bilder noch fehlen. Gleicher Stil/Timeout wie der Kamerathread unten.
+        if self.clip_thread is not None:
+            self.clip_thread.join(timeout=8)
+            if self.clip_thread.is_alive():
+                self.log("error", "Clip-Schreiber hat nicht rechtzeitig beendet")
+            self.clip_thread = None
         self.stop.set()
         self.cancel_auto.set()
         if self.thread:

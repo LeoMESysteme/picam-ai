@@ -3,6 +3,33 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Clipaufnahme in der Workbench: ein getipptes Label je Clip)
+
+### Labeling kostete pro Bild, nicht pro Kalibrierpunkt
+
+**Problem:** Ein Testdatensatz für die OCR-Selbstkalibrierung braucht viele
+gelabelte Bilder pro Messwert, aber annotation.json verlangt bisher pro
+eingefrorenem Einzelbild eine eigene Bedienereingabe — bei mehreren Sekunden
+Aufnahme je Kalibrierpunkt ein unverhältnismäßiger Tippaufwand.
+
+**Änderung:** Neue Controller-Ops `clip.start`/`clip.stop` nehmen ein paar
+Sekunden Livebild in das Clipformat aus Task 1 (`CLIP_SCHEMA_VERSION`) auf;
+der Bediener tippt Gerätekennung und Sollwert genau einmal, jeder Frame
+trägt danach dasselbe Label. PNGs werden in einem eigenen Thread über eine
+begrenzte Queue geschrieben, damit die 15-fps-Vorschau nicht auf
+PNG-Kodierung (20–30 ms/Bild bei 960×720) wartet; läuft die Queue voll,
+wird gezählt (`dropped_frames`) statt still verworfen. `close()` wartet
+jetzt auf das Ende des Schreib-Threads, bevor der Prozess beendet — sonst
+könnte er enden, während im gerade geschriebenen `clip.json` gelistete
+Bilder noch nicht auf der Platte liegen. Die Workbench bekommt dafür ein
+`clip-panel` (Gerätekennung, Sollwert, Dauer, Start/Stop); die Aufnahme
+ändert nichts an `confirmed` und braucht keinen neuen
+Bestätigungsmechanismus.
+
+**Konsequenz:** Ein Kalibrierpunkt kostet einen Tippvorgang statt N
+Annotationen. Die aufgezeichneten Clips sind über `replay://` (Task 1)
+unverändert lesbar — 3 neue Tests, 121 insgesamt grün, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-11 (replay:// implementiert für gelabelte Clip-Archivierung)
 
 ### Erkennungsänderungen sind mangels Datensatz nicht belegbar

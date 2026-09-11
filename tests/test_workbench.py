@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import pytest
 
+from dispread.frames import open_source
 from dispread.frames.synthetic_source import render_display
 from dispread.layout import DisplayLayout
 from dispread.rectify import rectify
@@ -272,6 +273,11 @@ def test_shell_persistence_resize_and_cleanup(tmp_path):
             os.kill(terminal.pid, 0)
 
     asyncio.run(check())
+
+
+def _frame():
+    """Ein Livebild wie es publish() waehrend einer Clipaufnahme erhaelt."""
+    return np.full((720, 960, 3), 120, np.uint8)
 
 
 def ready_controller(tmp_path, live=True, confirmed=True):
@@ -1240,3 +1246,60 @@ def test_ground_truth_text_defaults_to_none_when_not_supplied(tmp_path):
 
     annotation = json.loads(next((tmp_path / "annotations").glob("*/annotation.json")).read_text())
     assert annotation["ground_truth_text"] is None
+
+
+def test_clip_schreibt_manifest_mit_einem_label_fuer_alle_frames(tmp_path):
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start",
+        {"device_id": "geraet-1", "ground_truth_text": "28,80", "seconds": 60},
+    )
+    for _ in range(3):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.command("clip.stop")
+    controller.drain_clip_writer()  # deterministisch statt sleep
+
+    clips = sorted((controller.root / "clips").iterdir())
+    assert len(clips) == 1
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert manifest["schema_version"] == 1
+    assert manifest["ground_truth_text"] == "28,80"
+    assert manifest["device_id"] == "geraet-1"
+    assert len(manifest["frames"]) == 3
+    assert manifest["dropped_frames"] == 0
+    for entry in manifest["frames"]:
+        assert (clips[0] / entry["file"]).exists()
+
+
+def test_clip_braucht_bestaetigte_geometrie_und_geraeteangabe(tmp_path):
+    controller = ready_controller(tmp_path / "unconfirmed", live=False, confirmed=False)
+    with pytest.raises(ValueError, match="bestaetigt"):
+        controller.command("clip.start", {"device_id": "g", "ground_truth_text": "1", "seconds": 5})
+
+    controller = ready_controller(tmp_path / "confirmed")
+    controller.command("mode", {"value": "annotate"})
+    with pytest.raises(ValueError, match="Geraetekennung"):
+        controller.command("clip.start", {"device_id": "", "ground_truth_text": "1", "seconds": 5})
+    with pytest.raises(ValueError, match="Sollwert"):
+        controller.command("clip.start", {"device_id": "g", "ground_truth_text": "  ", "seconds": 5})
+
+
+def test_clip_ist_ueber_replay_wieder_lesbar(tmp_path):
+    """Aufnahme und Wiedergabe muessen dasselbe Format meinen."""
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "11,00", "seconds": 60}
+    )
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.command("clip.stop")
+    controller.drain_clip_writer()
+
+    clip = next(iter(sorted((controller.root / "clips").iterdir())))
+    source = open_source(f"replay://{clip}")
+    source.open()
+    frames = list(source.frames())
+    source.close()
+    assert len(frames) == 1
+    assert frames[0].raw_metadata["ground_truth"]["text"] == "11,00"
