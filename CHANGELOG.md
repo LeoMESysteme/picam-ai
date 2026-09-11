@@ -3,6 +3,55 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Autofit-Vorschlag wurde nicht ungültig, wenn die Geometrie sich änderte)
+
+### Ein veralteter Autofit-Vorschlag konnte gegen eine Geometrie übernommen werden, für die er nie gefittet wurde
+
+**Problem:** Reviewfund zu Task 5 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](docs/PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+(commit `2f98f41`). `editing.autofit` (`static/workbench.js`) wurde nie
+ungültig gemacht, wenn sich die angezeigte ROI-/OCR-Geometrie änderte, ohne
+dass ein frischer erfolgreicher `runAutofit()`-Lauf ein neues Ergebnis
+lieferte. Zwei konkrete Pfade: (1) `runAutofit()` blendete bei einem
+Fehlschlag (`!r.matched`) oder einer Ausnahme die Ergebniszeile aus
+(`updateAutofitResult(null)`), ließ `editing.autofit` selbst aber unverändert
+— ein Bediener, der nach einem erfolgreichen Autofit mit einem Tippfehler
+erneut kalibrierte, sah scheinbar nichts Übernehmbares, aber der nächste
+✓-Klick sendete trotzdem den alten Vorschlag per `layout.set_many`. (2) Ein
+Klick zurück in die ROI-Box während der `ocr`-Stufe führte zurück zu Stufe A,
+ohne `editing.autofit` zu löschen; eine erneut bestätigte ROI (`confirmRoi()`)
+überschrieb `editing.ocr_box` per `ocr.suggest`, ließ den alten Vorschlag aber
+stehen — da `rectify()` unabhängig von der Quad-Form immer auf `CROP_SIZE`
+skaliert, kann eine geänderte ROI die Zifferngeometrie im Ausschnitt
+tatsächlich ändern, wodurch `digit_gap_ratio`/`thickness_ratio`/etc. aus dem
+alten Vorschlag nicht mehr passen. Verstößt gegen die Festlegung, dass Autofit
+nur vorschlägt und ausschließlich der ✓-Klick übernimmt (AGENTS.md) — der
+✓-Klick hätte sonst einen Vorschlag übernommen, den die Oberfläche nicht mehr
+anzeigt und der zur aktuellen Geometrie nicht mehr passt.
+
+**Änderung:** `editing.autofit=null` (und `updateAutofitResult(null)`, blendet
+`#autofit-result` aus) an jeder Stelle ergänzt, an der sich die angezeigte
+ROI-/OCR-Geometrie ändert, ohne dass `runAutofit()` gerade frisch ein neues
+Ergebnis liefert: im `!r.matched`-Zweig und im `catch`-Block von
+`runAutofit()`, im Klick-Handler, der aus der `ocr`-Stufe zurück zu `roi`
+führt (`canvas.onpointerdown`), und in `toggleEdit()` — dort sowohl beim
+Betreten des Edit-Modus (weiteres Ziehen kann die Geometrie ändern) als auch
+beim Verwerfen (Rückfall auf `preEdit` ist selbst eine Geometrieänderung).
+Der Ecken-/Körper-Zug per Maus (`onpointermove`) ist ausschließlich im
+Edit-Modus erreichbar, der nur über `toggleEdit()` betreten wird — damit ist
+dieser Pfad durch die `toggleEdit()`-Änderung mit abgedeckt, ohne eine eigene
+Prüfung pro Zugbewegung zu brauchen.
+
+**Konsequenz:** `editing.autofit` ist jetzt nie mehr gesetzt, außer er stammt
+aus dem zuletzt erfolgreichen `runAutofit()`-Lauf gegen die aktuell
+angezeigte Geometrie — ein ✓-Klick kann keinen unsichtbaren, veralteten
+Vorschlag mehr stillschweigend übernehmen. Verifiziert mit einem
+node-`vm`-Testharness, der die reale `workbench.js` lädt (kein JS-Testrunner
+im Projekt, nur `node --check` — siehe
+`.superpowers/sdd/PLAN_2026-09-11-ocr-selbstkalibrierung/task-5-report.md`,
+Abschnitt „Fix round 1"): beide im Reviewfund genannten Szenarien schlagen
+gegen den alten Code fehl und bestehen gegen den Fix.
+
 ## 0.1.0.dev0 — 2026-09-11 (Einrichtung per getipptem Wert statt per Regler)
 
 ### Die Segmentpunkte müssen exakt sitzen, sonst liest das System nicht — das Justieren kostete die meiste Einrichtzeit

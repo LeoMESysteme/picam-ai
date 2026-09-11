@@ -317,7 +317,14 @@ canvas.onpointerdown=event=>{
   return;
  }
  if(editing.stage==='ocr'&&editing.mode==='browse'){
-  if(pointInQuad([x,y],editing.quad)){editing.stage='roi';editing.mode='browse';editing.selected=null;draw();}
+  // Zurueck zu Stufe A hebt einen evtl. vorhandenen Autofit-Vorschlag auf: er
+  // wurde gegen die bisherige ROI/OCR-Geometrie gefittet und ist ungueltig,
+  // sobald die ROI erneut zur Bearbeitung freigegeben wird (Review-Fund).
+  if(pointInQuad([x,y],editing.quad)){
+   editing.stage='roi';editing.mode='browse';editing.selected=null;
+   if(editing.autofit){editing.autofit=null;updateAutofitResult(null);log('info','Autofit-Vorschlag verworfen: ROI wird erneut bearbeitet.');}
+   draw();
+  }
   return;
  }
  // Edit-Modus: Ecke ziehen oder Koerper verschieben.
@@ -345,6 +352,12 @@ viewport.onkeydown=async event=>{
 };
 function toggleEdit(stage){
  if(editing.pending)return;
+ // Ecken-/Koerper-Ziehen (onpointermove) findet nur im Edit-Modus statt, der
+ // ausschliesslich hier betreten wird - ein evtl. Autofit-Vorschlag war fuer
+ // die bisherige Geometrie gefittet und darf weder beim Betreten (weitere
+ // Ziehbewegungen aendern die Geometrie) noch beim Verwerfen (Rueckfall auf
+ // preEdit ist ebenfalls eine Geometrieaenderung) weiter gueltig sein.
+ if(editing.autofit){editing.autofit=null;updateAutofitResult(null);log('info','Autofit-Vorschlag verworfen: Geometrie wird bearbeitet.');}
  if(editing.mode==='edit'){
   if(stage==='roi')editing.quad=editing.preEdit;else editing.ocr_box=editing.preEdit;
   editing.mode='browse';
@@ -409,12 +422,12 @@ async function runAutofit(text){
  try{
   const r=await command('layout.autofit',{id:editing.id,quad:editing.quad,ocr_box:editing.ocr_box,text});
   if(!editing||editing.requestId!==requestId)return; // ueberholt (Escape/erneuter Aufruf)
-  if(!r.matched){log('warn','Autofit: '+(r.reason||'kein passendes Raster gefunden'));updateAutofitResult(null);return;}
+  if(!r.matched){log('warn','Autofit: '+(r.reason||'kein passendes Raster gefunden'));editing.autofit=null;updateAutofitResult(null);return;}
   editing.autofit=r;editing.ocr_box=r.ocr_box; // nur Vorschau, uebernommen erst durch confirmOcr()
   if(r.flat_optimum)log('warn','Autofit: mehrere verschiedene Raster lesen diesen Wert gleich gut - Raster im Bild pruefen.');
   log('info',`Autofit: liest ${r.preview.raw_text}, Trennschärfe ${r.separation}`);
   updateAutofitResult(r);
- }catch(e){log('error',e.message);updateAutofitResult(null);}
+ }catch(e){log('error',e.message);if(editing)editing.autofit=null;updateAutofitResult(null);}
  finally{if(editing)editing.pending=null;draw();}
 }
 $('roi-confirm').onclick=()=>confirmRoi();
