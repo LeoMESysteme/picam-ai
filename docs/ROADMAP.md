@@ -32,7 +32,8 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 - [x] Kamera-Diagnoseskript mit Eskalationsleiter
 - [x] 36 Tests grün, `ruff` grün
 - [x] Doku-Set inkl. `status.md`, `project_history.md`, `open-questions.md`
-- [ ] `folder://`, `video://`, `replay://`, `picamera2://`, `imx500://` — Registry vorhanden, Implementierungen noch nicht. `open_source()` scheitert für diese Schemata mit `ImportError`
+- [x] `replay://` — implementiert (Clips mit einem Label je Clip)
+- [ ] `folder://`, `video://`, `picamera2://`, `imx500://` — Registry vorhanden, Implementierungen noch nicht. `open_source()` scheitert für diese Schemata mit `ImportError`
 - [ ] Tesseract-Vergleichsbackend (braucht [OQ-15](open-questions.md))
 - [ ] CLI (`dispread.cli.*`, geplant mit `dispread run --source … --profile …`,
   [anleitung/05-cli.md](anleitung/05-cli.md)) — nicht gebaut. Der

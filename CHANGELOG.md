@@ -3,6 +3,31 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (replay:// implementiert für gelabelte Clip-Archivierung)
+
+### Erkennungsänderungen sind mangels Datensatz nicht belegbar
+
+**Problem:** Jede Verbesserung des OCR-Readers braucht Validierung gegen
+reale, gelabelte Bilder. Bislang gab es keinen Mechanismus, um
+aufgezeichnete Clips mit einem bestätigten Sollwert zurückzuspielen —
+nur synthetische oder Live-Quellen. Ein Testdatensatz musste händisch
+annotation.json lesen und von außen testen; das Labeling kostet pro Bild.
+
+**Änderung:** Neuer Frame-Source `replay://` liest Clip-Verzeichnisse mit
+dem Manifestformat aus Task 2. Ein Clip trägt genau **ein** Sollwert-Label
+für alle seine Frames (kein Pro-Frame-Label), der in `raw_metadata["ground_truth"]`
+verfügbar ist. Aufgezeichnete Sensorzeitstempel werden als `REPLAY_RECORDED`
+gefährt (tragen die Zeitaussage der Aufnahme), synthetische bleiben
+`SYNTHETIC` ohne Zeitaussage — ein Replay darf aus synthetischen
+Aufnahmen keine Zeitinformation erfinden.
+
+**Konsequenz:** Labelkosten sinken von pro Bild (bei annotation.json)
+auf pro Clip — dieselbe Laborstunde kann damit mehrere Order-of-Magnitude
+mehr Frames abdecken. Task-2-Schreiber können jetzt Clips erzeugen und
+Task-3-Tester können sie gegen beliebige Reader-Versionen auswerten,
+ohne dass Pro-Frame-Annotation nötig wäre. 5 Tests grün, `ruff check`
+sauber.
+
 ## 0.1.0.dev0 — 2026-09-11 (repo-maintenance.sh: toter Lauf committete trotzdem; jetzt auch andere lokale Branches)
 
 ### Ein während des Laufs abgestürzter/gekillter Claude-Prozess konnte trotzdem committet werden, und nur `master` wurde gepflegt
