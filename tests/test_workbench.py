@@ -13,6 +13,7 @@ import pytest
 from dispread.frames import open_source
 from dispread.frames.synthetic_source import render_display
 from dispread.layout import DisplayLayout
+from dispread.ocr.autofit import AutofitResult
 from dispread.rectify import rectify
 from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
@@ -1220,6 +1221,136 @@ def test_ocr_suggest_does_not_hold_the_controller_lock_during_detection(tmp_path
 
     assert elapsed < 0.05
     assert not worker.is_alive()
+
+
+def _typed_text(value, layout):
+    """Wie ein Bediener den Anzeigewert eintippen wuerde - dieselbe
+    Zeichenkette, die der 7-Segment-Leser aus dem gerenderten Bild als
+    `raw_text` lesen wuerde (siehe DisplayLayout.format_value und
+    test_publish_reads_synthetic_display_and_exposes_evidence)."""
+    digits_text = layout.format_value(value)
+    decimals = layout.decimals if layout.decimals is not None else 0
+    whole_len = layout.digits - decimals
+    whole, fraction = digits_text[:whole_len], digits_text[whole_len:]
+    body = whole + ("." + fraction if decimals else "")
+    return ("-" if value < 0 else "") + body
+
+
+def _autofit_scene(value=-12.34, digits=5, decimals=2, has_sign=True, unit="mV", padding_x=30, padding_y=20):
+    """Wie test_ocr_suggest_returns_a_box_for_the_given_quad_without_persisting:
+    ein Sollwert-Bild mit etwas Rand um den Ziffernbereich, wie ein Bediener
+    ihn beim Einrichten stehen laesst."""
+    layout = DisplayLayout(digits=digits, decimals=decimals, has_sign=has_sign, unit=unit)
+    image, _shown, area = render_display(value, layout)
+    image_height, image_width = image.shape[:2]
+    x, y, w, h = area
+    outer = [x - padding_x, y - padding_y, w + 2 * padding_x, h + 2 * padding_y]
+    quad = [
+        [outer[0] / image_width, outer[1] / image_height],
+        [(outer[0] + outer[2]) / image_width, outer[1] / image_height],
+        [(outer[0] + outer[2]) / image_width, (outer[1] + outer[3]) / image_height],
+        [outer[0] / image_width, (outer[1] + outer[3]) / image_height],
+    ]
+    ocr_box = [padding_x / outer[2], padding_y / outer[3], w / outer[2], h / outer[3]]
+    text = _typed_text(value, layout)
+    return layout, image, text, quad, ocr_box
+
+
+def test_autofit_liefert_einen_vorschlag_ohne_etwas_zu_bestaetigen(tmp_path):
+    layout, image, text, quad, ocr_box = _autofit_scene()
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    before = copy.deepcopy(c.config)
+
+    result = c.command(
+        "layout.autofit",
+        {"id": frozen["id"], "quad": quad, "ocr_box": ocr_box, "text": text},
+    )
+
+    assert set(result) >= {"matched", "layout", "ocr_box", "separation", "runner_up", "flat_optimum", "evaluated"}
+    assert result["matched"] is True
+    assert result["preview"]["raw_text"] == text
+    assert c.config == before, "Autofit darf nichts uebernehmen"
+    # Welcher Frame die Rasterparameter geliefert hat - fuer clip.start
+    # (calibrated_on_frame_sequence, OQ-23: Nachstimmen und Bewerten duerfen
+    # nicht am selben Bild passieren).
+    assert c.calibrated_on == c.frames[frozen["id"]]["sequence"]
+
+
+def test_autofit_rechnet_ausserhalb_des_locks(tmp_path, monkeypatch):
+    """Wie ocr.suggest: eine lange Suche darf keine Bedieneingabe blockieren
+    (Ursache des am 2026-09-10 gemeldeten Bugs, OQ-24)."""
+    layout, image, text, quad, ocr_box = _autofit_scene()
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_fit_layout(crop, requested_text, layout_arg, ocr_box_arg, **kwargs):
+        entered.set()
+        assert release.wait(2)
+        return AutofitResult(
+            matched=False,
+            layout=layout_arg,
+            ocr_box=tuple(ocr_box_arg),
+            separation=-1.0,
+            runner_up=-1.0,
+            flat_optimum=False,
+            evaluated=0,
+            reason="langsam (Test)",
+        )
+
+    monkeypatch.setattr("dispread.workbench.controller.fit_layout", slow_fit_layout)
+    worker = threading.Thread(
+        target=c.command,
+        args=("layout.autofit", {"id": frozen["id"], "quad": quad, "ocr_box": ocr_box, "text": text}),
+    )
+    worker.start()
+    assert entered.wait(1)
+    started = time.monotonic()
+    c.command("status")
+    elapsed = time.monotonic() - started
+    release.set()
+    worker.join(2)
+
+    assert elapsed < 0.05
+    assert not worker.is_alive()
+
+
+def test_layout_set_many_setzt_alle_felder_in_einer_revision(tmp_path):
+    c = Controller(tmp_path)
+    before = c.revision
+    c.command(
+        "layout.set_many",
+        {"values": {"digit_gap_ratio": 0.65, "thickness_ratio": 0.12, "digits": 4}},
+    )
+    assert c.revision == before + 1
+    assert c.config["layout"]["digit_gap_ratio"] == 0.65
+    assert c.config["layout"]["thickness_ratio"] == 0.12
+    assert c.config["layout"]["digits"] == 4
+
+
+def test_layout_set_many_lehnt_unbekannte_felder_ab(tmp_path):
+    c = Controller(tmp_path)
+    with pytest.raises(ValueError, match="Unbekanntes Layoutfeld"):
+        c.command("layout.set_many", {"values": {"gibtsnicht": 1}})
+
+
+def test_autofit_uebernahme_macht_das_eingefrorene_bild_nicht_ungueltig(tmp_path):
+    """layout.set_many erhoeht self.revision (_change()) - ohne die
+    Mitfuehrung wie bei layout.set wuerde der nachfolgende roi-Op gegen ein
+    vor dem Autofit eingefrorenes Bild mit "Modus/Profil geaendert" scheitern
+    (siehe confirmOcr() im Client: erst layout.set_many, dann roi)."""
+    c = ready_controller(tmp_path)
+    frozen = c.command("freeze")
+
+    c.command("layout.set_many", {"values": {"digit_gap_ratio": 0.65}})
+    c.command("roi", {"id": frozen["id"], "quad": frozen["quad"], "ocr_box": frozen["ocr_box"]})
+
+    assert c.config["confirmed"] is True
 
 
 def test_ground_truth_text_is_stored_with_the_annotation(tmp_path):

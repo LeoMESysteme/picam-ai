@@ -216,6 +216,7 @@ async function freeze(){
   editing=await command('freeze');
   editing.stage='roi';editing.mode='browse';editing.selected=null;
   editing.preEdit=null;editing.pending=null;editing.requestId=0;
+  editing.awaiting=null;editing.autofit=null;$('autofit-result').hidden=true;
   feed.src='/frozen/'+editing.id+'.jpg';feed.hidden=false;$('empty').hidden=true;stream=false;canvas.hidden=false;
   viewport.focus();draw();
   log('info','Kalibrierung: erkannten Rahmen anklicken oder ✎ zum Verschieben/Ecken-ziehen, ✓ bestätigt. Danach folgt automatisch ein OCR-Vorschlag - ebenso mit ✎/✓ pruefen. Escape bricht die Bearbeitung ab.');
@@ -281,10 +282,11 @@ function draw(){
  }
  // TUI-Buttons: nur die aktive Stufe zeigt ihr Paar, direkt an der Box.
  $('roi-buttons').hidden=!roiActive;$('ocr-buttons').hidden=roiActive;
+ if(roiActive)$('autofit-result').hidden=true; // nur in Stufe B relevant
  if(roiActive)positionButtons($('roi-buttons'),editing.quad[1],offsetX,offsetY,w,h);
  else positionButtons($('ocr-buttons'),ocrPoint(1,0),offsetX,offsetY,w,h);
  const pending=!!editing.pending;
- for(const id of ['roi-confirm','roi-toggle','ocr-confirm','ocr-toggle'])$(id).disabled=pending;
+ for(const id of ['roi-confirm','roi-toggle','ocr-confirm','ocr-calibrate','ocr-toggle'])$(id).disabled=pending;
  $('roi-toggle').textContent=(roiActive&&editing.mode==='edit')?'✕':'✎';
  $('ocr-toggle').textContent=(!roiActive&&editing.mode==='edit')?'✕':'✎';
 }
@@ -333,7 +335,7 @@ canvas.onpointermove=event=>{
 };
 canvas.onpointerup=()=>{drag=null;};
 canvas.onpointercancel=()=>{drag=null;draw();};
-function unfreeze(){editing=null;drag=null;canvas.hidden=true;feed.removeAttribute('src');stream=false;$('ground-truth').hidden=true;poll();}
+function unfreeze(){editing=null;drag=null;canvas.hidden=true;feed.removeAttribute('src');stream=false;$('ground-truth').hidden=true;$('autofit-result').hidden=true;poll();}
 viewport.ondblclick=freeze;
 viewport.onkeydown=async event=>{
  if(/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName))return;
@@ -374,18 +376,58 @@ async function sendRoiConfirm(extra){
 }
 async function confirmOcr(){
  if(editing.pending)return;
+ // Sperre VOR jedem await setzen (wie ueberall sonst in diesem Modul) - sonst
+ // koennte ein zweiter Klick waehrend des layout.set_many-Sendens denselben
+ // Uebernahmepfad ein zweites Mal anstossen, oder Escape zwischendurch
+ // editing auf null setzen, waehrend dieser Aufruf noch darauf schreibt.
  editing.pending='roi';draw();
- if(state.mode==='annotate'){$('ground-truth').hidden=false;$('ground-truth-input').value='';$('ground-truth-input').focus();return;}
+ // Autofit-Vorschlag ist bis hierher reine Vorschau (siehe runAutofit) - erst
+ // der ✓-Klick uebernimmt sein Raster, und zwar VOR der roi-Bestaetigung:
+ // roi prueft frame.revision gegen die aktuelle Revision, die layout.set_many
+ // gerade erhoeht (siehe layout.set_many im Controller).
+ if(editing.autofit){
+  try{await command('layout.set_many',{values:editing.autofit.layout});}
+  catch(e){log('error',e.message);if(editing){editing.pending=null;draw();}return;}
+  if(!editing)return; // Escape waehrend des Sendens
+ }
+ if(state.mode==='annotate'){editing.awaiting='confirm';$('ground-truth').hidden=false;$('ground-truth-input').value='';$('ground-truth-input').focus();return;}
  await sendRoiConfirm({});
+}
+async function calibrate(){
+ if(editing.pending)return;
+ $('ground-truth').hidden=false;$('ground-truth-input').value='';$('ground-truth-input').focus();
+ editing.awaiting='autofit';
+}
+function updateAutofitResult(r){
+ const el=$('autofit-result');
+ if(!r){el.hidden=true;return;}
+ el.hidden=false;el.classList.toggle('flat',!!r.flat_optimum);
+ el.textContent=`Autofit: liest ${r.preview.raw_text} · Trennschärfe ${r.separation}`+(r.flat_optimum?' · mehrdeutig, Raster prüfen':'');
+}
+async function runAutofit(text){
+ editing.pending='layout.autofit';const requestId=++editing.requestId;draw();
+ try{
+  const r=await command('layout.autofit',{id:editing.id,quad:editing.quad,ocr_box:editing.ocr_box,text});
+  if(!editing||editing.requestId!==requestId)return; // ueberholt (Escape/erneuter Aufruf)
+  if(!r.matched){log('warn','Autofit: '+(r.reason||'kein passendes Raster gefunden'));updateAutofitResult(null);return;}
+  editing.autofit=r;editing.ocr_box=r.ocr_box; // nur Vorschau, uebernommen erst durch confirmOcr()
+  if(r.flat_optimum)log('warn','Autofit: mehrere verschiedene Raster lesen diesen Wert gleich gut - Raster im Bild pruefen.');
+  log('info',`Autofit: liest ${r.preview.raw_text}, Trennschärfe ${r.separation}`);
+  updateAutofitResult(r);
+ }catch(e){log('error',e.message);updateAutofitResult(null);}
+ finally{if(editing)editing.pending=null;draw();}
 }
 $('roi-confirm').onclick=()=>confirmRoi();
 $('roi-toggle').onclick=()=>toggleEdit('roi');
 $('ocr-confirm').onclick=()=>confirmOcr();
+$('ocr-calibrate').onclick=()=>calibrate();
 $('ocr-toggle').onclick=()=>toggleEdit('ocr');
-$('ground-truth-cancel').onclick=()=>{$('ground-truth').hidden=true;if(editing){editing.pending=null;draw();}viewport.focus();};
+$('ground-truth-cancel').onclick=()=>{$('ground-truth').hidden=true;if(editing){editing.awaiting=null;editing.pending=null;draw();}viewport.focus();};
 $('ground-truth-ok').onclick=async()=>{
  const text=$('ground-truth-input').value.trim();
  $('ground-truth').hidden=true;
+ const awaiting=editing?editing.awaiting:null;if(editing)editing.awaiting=null;
+ if(awaiting==='autofit'){await runAutofit(text);viewport.focus();return;}
  await sendRoiConfirm({ground_truth_text:text});
  viewport.focus();
 };

@@ -167,10 +167,23 @@ tastaturgesteuerten Ablauf ab — Beweggründe und Bedienerbefund im
    Vorzeichen und Ziffern und schlägt eine OCR-Box vor (**Stufe B**). Dieselbe
    ✎/✓-Logik gilt jetzt für die gelbe OCR-Box — Vorzeichenbox, Ziffernzellen
    und Punkte sind genau das Raster, das der Segmentleser verwendet.
-4. ✓ an der OCR-Box bestätigt beide Rahmen endgültig (entspricht dem früheren
-   `Strg+Enter`). Ein Klick in den (jetzt inaktiven) grünen ROI-Rahmen
-   während Stufe B führt zurück zu Stufe A, ohne die Kandidatensuche erneut
-   zu starten. `Esc` verwirft die gesamte Bearbeitung, jederzeit.
+4. **Stufe B, optional — 🎯 kalibrieren:** statt Ziffernabstand,
+   Vorzeichenbreite und die übrigen Rasterverhältnisse einzeln mit den
+   Reglern der Einstelltabelle zu justieren, einmal den auf der Anzeige
+   abgelesenen Wert eintippen (dasselbe Eingabefeld wie bei `annotate`). Der
+   Server sucht daraus (`layout.autofit`) das Rasterverhältnis, das genau
+   diesen Wert dekodiert, und zeigt Ergebniszeile mit gelesenem Wert und
+   Trennschärfe. Passen mehrere deutlich verschiedene Raster gleich gut,
+   erscheint ein sichtbarer Hinweis auf ein flaches (mehrdeutiges) Optimum —
+   dann im Bild prüfen, nicht blind übernehmen. Der Vorschlag ist bis hierher
+   reine Vorschau; er verändert das aktive Profil **nicht**.
+5. ✓ an der OCR-Box übernimmt einen offenen 🎯-Vorschlag zuerst
+   (`layout.set_many`) und bestätigt danach beide Rahmen endgültig
+   (entspricht dem früheren `Strg+Enter`). Das ist die **einzige** Stelle, an
+   der überhaupt etwas bestätigt wird — auch mit 🎯 bleibt das so. Ein Klick
+   in den (jetzt inaktiven) grünen ROI-Rahmen während Stufe B führt zurück zu
+   Stufe A, ohne die Kandidatensuche erneut zu starten. `Esc` verwirft die
+   gesamte Bearbeitung, jederzeit.
 
 `setup` übernimmt das normierte Vierpunktpolygon ins aktive Profil und
 entzerrt es für die OCR. Der innere `ocr_box` wird danach ausgeschnitten und
@@ -299,3 +312,31 @@ Python/curl und der TLS/WSS-Integrationstest funktionieren. Dieser Befund ist
 [OQ-21](../open-questions.md). Windows-Zertifikatsvertrauen, Anmeldung mit deinem
 wirklichen Linux-Passwort und der gemeinsame Betrieb im Windows-Browser sind
 noch manuell abzunehmen. Es gibt keinen Testpasswort-Modus im Produkt.
+
+`layout.autofit`/`layout.set_many` sind mit synthetischen Anzeigen getestet
+(`tests/test_workbench.py`, u. a. dass die Suche außerhalb des Controller-Locks
+läuft und ein eingefrorenes Bild nach der Rasterübernahme weiter bestätigbar
+bleibt); der 🎯-Knopf selbst ist noch nicht am Windows-Browser gegen ein
+reales Gerät geprüft.
+
+## Fertig, wenn
+
+Dieser Prototyp folgt nicht dem Kapitelraster aus der
+[Lernpfad-Übersicht](README.md) (kein `Vertrag`, keine `Fallen`-Liste) — diese
+Liste bleibt bewusst kurz und prüft nur, was hier tatsächlich gebaut wurde.
+
+* [ ] `./.venv/bin/pytest -q` und `./.venv/bin/ruff check src tests examples scripts`
+  laufen beide fehlerfrei durch.
+* [ ] Im Browser: Bild einfrieren (`E`/Doppelklick), Stufe A (ROI) und
+  Stufe B (OCR-Box) je per ✎/✓ bestätigen — der bisherige Ablauf ist
+  unverändert.
+* [ ] In Stufe B 🎯 drücken, einen Wert eintippen, der zur angezeigten Anzahl
+  Ziffernstellen passt: die Ergebniszeile zeigt gelesenen Wert und
+  Trennschärfe, **ohne** dass die Einstelltabelle sich bereits ändert.
+* [ ] Erst nach ✓ steht das vorgeschlagene Raster im aktiven Profil (`s`
+  speichert es dauerhaft); `confirmed` wird ausschließlich durch diesen
+  ✓-Klick wahr, nie durch 🎯 allein.
+* [ ] Ein absichtlich unpassender Tippwert (z. B. eine Ziffer zu viel) liefert
+  eine Ablehnung mit Begründung statt eines stillschweigend falschen Rasters.
+* [ ] Dieses Kapitel ist aktuell (dieser Abschnitt und der Ablauf oben) und
+  `CHANGELOG.md` trägt den zugehörigen Eintrag.

@@ -18,6 +18,7 @@ import numpy as np
 
 from dispread.frames.replay_source import CLIP_SCHEMA_VERSION
 from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
+from dispread.ocr.autofit import fit_layout
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.records import TimeBaseKind
 from dispread.rectify import rectify
@@ -445,6 +446,11 @@ class Controller:
             # eine langsame, gesperrte Anfrage liess genug Zeit fuer eine
             # Bedienereingabe, die dann die eintreffende Vermutung ueberschrieb.
             return self._suggest_ocr_box(args)
+        if op == "layout.autofit":
+            # Wie ocr.suggest absichtlich VOR dem Lock: die Suche kostet rund
+            # hundert Leseraufrufe und darf waehrenddessen keine Bedieneingabe
+            # blockieren (OQ-24).
+            return self._autofit(args)
         with self.lock:
             if op == "status":
                 return self.snapshot()
@@ -489,6 +495,24 @@ class Controller:
                 # Leseraster-Aenderungen gueltig: Bildgeometrie und Aufnahme
                 # haben sich nicht geaendert. Andere Konfigurationsbefehle
                 # aktualisieren diese Revision bewusst nicht.
+                for frame in self.frames.values():
+                    frame["revision"] = self.revision
+                    frame["profile"]["layout"] = copy.deepcopy(self.config["layout"])
+            elif op == "layout.set_many":
+                # Mehrere Layoutfelder atomar in einer Revision setzen - so wie
+                # camera.set_many fuer die Kamera: der Autofit-Vorschlag (siehe
+                # _autofit) uebernimmt alle gefundenen Parameter zusammen statt
+                # ueber mehrere layout.set-Aufrufe verteilt.
+                data = copy.deepcopy(self.config)
+                for key, value in args["values"].items():
+                    if key not in DEFAULT["layout"]:
+                        raise ValueError(f"Unbekanntes Layoutfeld: {key}")
+                    data["layout"][key] = value
+                self._change(data)
+                # Wie layout.set: ein eingefrorenes Original bleibt gueltig,
+                # sonst wuerde der nachfolgende roi-Op (siehe confirmOcr() im
+                # Client) mit "Modus/Profil geaendert" scheitern, obwohl sich
+                # nur das Leseraster geaendert hat.
                 for frame in self.frames.values():
                     frame["revision"] = self.revision
                     frame["profile"]["layout"] = copy.deepcopy(self.config["layout"])
@@ -696,6 +720,53 @@ class Controller:
         if ocr_box is None:
             self.log("info", "ocr.suggest: kein Kandidat im markierten Bereich gefunden")
         return {"ocr_box": list(ocr_box) if ocr_box is not None else None}
+
+    def _autofit(self, args):
+        """Rastervorschlag aus dem getippten Sollwert. Bestaetigt nichts.
+
+        Wie `_suggest_ocr_box`: bewusst ausserhalb von `self.lock` gerechnet,
+        siehe `command()`. Die Suche kostet rund hundert Leseraufrufe
+        (`fit_layout`, Task 4) und darf waehrenddessen keine Bedieneingabe
+        blockieren.
+        """
+        with self.lock:
+            frame = self.frames[args["id"]]
+            layout = DisplayLayout.from_dict(copy.deepcopy(self.config["layout"]))
+        height, width = frame["image"].shape[:2]
+        quad_px = tuple((float(x * width), float(y * height)) for x, y in args["quad"])
+        crop = rectify(frame["image"], quad_px, target_size=CROP_SIZE)
+        # fit_layout erwartet den vollen entzerrten Ausschnitt, nicht schon
+        # auf ocr_box zugeschnitten - es variiert ocr_box selbst als einen der
+        # Freiheitsgrade (siehe _box_candidates in autofit.py) und schneidet
+        # bei jeder Auswertung selbst zu. Ein vorheriges crop_box(...) hier
+        # wuerde ein zweites Mal auf dieselben (bereits verbrauchten)
+        # Koordinaten zuschneiden und den Ziffernbereich verstuemmeln.
+        try:
+            result = fit_layout(crop.image, args["text"], layout, tuple(args["ocr_box"]))
+        except ValueError as error:
+            self.log("warn", f"Autofit: {error}")
+            return {"matched": False, "reason": str(error)}
+
+        preview = self.reader.read(crop_box(crop.image, result.ocr_box), result.layout)
+        if result.matched and result.flat_optimum:
+            self.log(
+                "warn",
+                "Autofit: mehrere deutlich verschiedene Raster lesen diesen Wert gleich gut - "
+                "Geometrie ist durch ein Bild nicht eindeutig bestimmt, Raster im Bild pruefen",
+            )
+        with self.lock:
+            self.calibrated_on = frame["sequence"] if result.matched else None
+        return {
+            "matched": result.matched,
+            "layout": result.layout.to_dict(),
+            "ocr_box": list(result.ocr_box),
+            "separation": round(result.separation, 4),
+            "runner_up": round(result.runner_up, 4),
+            "flat_optimum": result.flat_optimum,
+            "evaluated": result.evaluated,
+            "reason": result.reason,
+            "preview": {"raw_text": preview.raw_text, "value": preview.value},
+        }
 
     def _clip_start(self, device_id, text, seconds):
         # Laengst beendete Schreiber wegwerfen, bevor ein neuer hinzukommt -

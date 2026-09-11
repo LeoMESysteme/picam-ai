@@ -3,6 +3,68 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Einrichtung per getipptem Wert statt per Regler)
+
+### Die Segmentpunkte müssen exakt sitzen, sonst liest das System nicht — das Justieren kostete die meiste Einrichtzeit
+
+**Problem:** Task 5 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](docs/PLAN_2026-09-11-ocr-selbstkalibrierung.md).
+Task 4 lieferte `fit_layout` (`src/dispread/ocr/autofit.py`), aber ohne
+Anbindung an Controller oder Bedienoberfläche blieb die einzige Möglichkeit,
+`digit_gap_ratio`, `sign_cell_ratio`, `thickness_ratio` und `inset_ratio` zu
+setzen, weiterhin die manuelle Reglerjustage in der Einstelltabelle — Zeile
+für Zeile, Probieren, erneut ablesen.
+
+**Änderung:** Neuer Op `layout.autofit` (`src/dispread/workbench/controller.py`,
+`Controller._autofit`): nimmt `{id, quad, ocr_box, text}`, entzerrt das
+eingefrorene Bild, ruft `fit_layout` und liefert Raster, OCR-Box,
+Trennschärfe/Gegenkandidat und eine Vorschau (`self.reader.read` auf dem
+Vorschlag) — **übernimmt nichts**. Wie `ocr.suggest` bewusst außerhalb des
+Controller-Locks behandelt (`command()`, vor dem `with self.lock:`-Block):
+`fit_layout` braucht rund hundert Leseraufrufe, und genau eine über das Lock
+blockierte Bedieneingabe während einer solchen Suche war die Ursache des am
+2026-09-10 gemeldeten Race-Condition-Bugs (OQ-24). Neuer Op `layout.set_many`
+setzt mehrere Layoutfelder atomar in einer Revision (Vorbild:
+`camera.set_many`) und zieht — wie `layout.set` es bereits tut — die Revision
+eingefrorener Bilder mit; ohne das würde der nachfolgende `roi`-Op mit
+„Modus/Profil geändert" scheitern, obwohl sich nur das Leseraster geändert
+hat. `self.calibrated_on` (von Task 2 vorbereitet) wird hier erstmals gesetzt:
+die Frame-Sequenz des zuletzt erfolgreich verrasterten Bildes.
+
+Bedienoberfläche (`static/index.html`, `static/workbench.js`): dritter Knopf
+🎯 „kalibrieren" neben ✓/✎ in Stufe B öffnet dasselbe Werteingabefeld, das
+bisher nur `annotate` zeigte (`editing.awaiting` unterscheidet jetzt, wofür
+der nächste „übernehmen"-Klick bestimmt ist). `runAutofit()` folgt demselben
+`editing.pending`/`editing.requestId`-Überholschutz wie `confirmRoi()` — eine
+spät eintreffende Antwort auf eine bereits verlassene Bearbeitung wird
+verworfen. Eine neue Ergebniszeile (`autofit-result`) zeigt gelesenen Wert und
+Trennschärfe, mit sichtbarem Hinweis bei `flat_optimum`. `confirmOcr()` sendet
+bei einem offenen Vorschlag zuerst `layout.set_many`, erst danach den
+unveränderten `roi`-Op — die Reihenfolge ist Pflicht, damit `roi` gegen die
+durch `layout.set_many` bereits erhöhte Revision läuft. **Der ✓-Klick bleibt
+die einzige Stelle, an der `confirmed` wahr wird**, auch mit 🎯: der Vorschlag
+selbst ändert das aktive Profil nicht.
+
+Beim Verdrahten fiel ein Fehler in der Task-5-Vorlage auf: `fit_layout`
+erwartet als `crop`-Argument den vollen entzerrten ROI-Ausschnitt (es schneidet
+`ocr_box` bei jeder Auswertung selbst zu, siehe `_box_candidates` in
+autofit.py — `ocr_box` ist einer der gesuchten Freiheitsgrade). Ein
+vorheriges `crop_box(crop.image, ocr_box)` vor dem Aufruf hätte denselben
+Ausschnitt ein zweites Mal auf dieselben Koordinaten zugeschnitten und den
+Ziffernbereich verstümmelt — durch einen Test mit einem echten
+gerenderten Sollwert aufgedeckt (`test_autofit_liefert_einen_vorschlag_ohne_etwas_zu_bestaetigen`
+schlug mit `matched=False` fehl, obwohl Bild und Text exakt zusammenpassten).
+
+**Konsequenz:** Der Bediener tippt einmal den angezeigten Wert; `layout.autofit`
+schlägt daraus das Raster vor und zeigt, was damit gelesen wird. Die Regler
+bleiben als Handkorrektur, nicht mehr als einziger Weg. Mehrdeutige (flache)
+Optima werden gemeldet statt still aufgelöst — der aus Task 4 bekannte Befund
+(`flat_optimum=True` bei allen fünf real gefundenen Rastern, weil
+`thickness_ratio`/`inset_ratio` die tatsächliche Lesegeometrie noch gar nicht
+beeinflussen) bleibt dadurch für den Bediener sichtbar statt verdeckt zu
+werden; die zugrundeliegende Ursache ist weiterhin offen (siehe Task-4-Eintrag
+unten, docs/VALIDATION.md).
+
 ## 0.1.0.dev0 — 2026-09-11 (Autofit: Rastergeometrie aus einem einmal getippten Sollwert)
 
 ### Vier Geometrie-Verhältnisse mussten von Hand justiert werden, und mindestens zwei davon sind unterbestimmt
