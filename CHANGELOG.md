@@ -3,6 +3,59 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Clipaufnahme: Deadlock in `_clip_stop()` behoben, verworfene Frames bei Revisionswechsel gezählt)
+
+### `_clip_stop()` konnte die gesamte Workbench einfrieren, nicht nur die Clipaufnahme
+
+**Problem:** Ein Reviewfund zur Clipaufnahme (Task 2, Commit `79ba47e`): stirbt
+der Schreib-Thread an einem unbehandelten `cv2.error` aus `cv2.imwrite`, ruft
+er `self.log()` auf, die `self.lock` braucht. `_clip_stop()` reiht den
+Beenden-Sentinel bislang per blockierendem `queue.put(None)` ein — und läuft
+selbst immer unter `self.lock` (aus `clip.stop`, dem Deadline-Zweig in
+`publish()` und aus `close()`). Ist die begrenzte Queue voll, blockiert
+`_clip_stop()` unter dem Lock auf Platz, den nur der Schreiber per `get()`
+schaffen könnte — der aber erst durch `self.log()` muss, was denselben Lock
+braucht: klassischer Deadlock, der den kompletten Controller wedgt, nicht nur
+die Aufnahme. Zusätzlich zählten `publish()`s zwei Revisionswechsel-Abbrüche
+(`if revision != self.revision: return` — einer um die gedrosselte
+OCR-Auswertung, einer am Ende der Funktion) übersprungene Frames nicht in
+`clip["dropped"]` — ein Verstoß gegen die eigene Zusicherung dieses Tasks
+(„gezählt, nicht stillschweigend verworfen"). Zwei
+weitere Important-Funde: `close()`/`drain_clip_writer()` sammelten nur den
+zuletzt gestarteten Schreiber ein, nicht jeden noch laufenden (ein
+Stop/Start-Paar hätte einen vorherigen Thread verwaist); `CLIP_QUEUE_DEPTH`/
+`CLIP_MAX_SECONDS` waren nicht als `Vorabdefault` gekennzeichnet, und die
+20-30-ms-PNG-Zahl stand als gemessene Tatsache im Code und im Changelog, war
+aber nie gemessen.
+
+**Änderung:** `_clip_writer` fängt jetzt jede Ausnahme um `cv2.imwrite`
+(nicht nur den `False`-Rückgabewert) — der Thread stirbt nie mehr und kommt
+immer zu seinem nächsten `get()` zurück. `_clip_stop()` reiht den Sentinel
+über `put_nowait()` ein; ist die Queue in dem seltenen Fall wirklich voll,
+liefert ein kurzlebiger Hilfsthread ihn außerhalb des Locks blockierend nach
+— der aufrufende Thread wartet darauf nie. `self.clip_thread` (Singular)
+wurde durch `self.clip_threads` (Liste noch nicht eingesammelter Schreiber)
+ersetzt; `close()` und `drain_clip_writer()` joinen jetzt alle, `_clip_start()`
+wirft beendete Threads vorher aus der Liste, damit sie nicht unbegrenzt
+wächst. Beide Revisionswechsel-Abbrüche in `publish()` zählen bei laufender
+Aufnahme jetzt in `clip["dropped"]`. `CLIP_QUEUE_DEPTH`/`CLIP_MAX_SECONDS` sind als
+`Vorabdefault` markiert, die PNG-Schreibdauer ist im Code und im Changelog
+jetzt als Annahme (nicht gemessen) benannt. Fünf neue Tests: zwei belegen,
+dass ein Revisionswechsel waehrend einer Aufnahme jetzt gezaehlt statt
+verloren wird (frueher und spaeter Abbruchpfad in `publish()`); drei decken
+den Queue-voll→`dropped_frames`-Pfad und beide Ruling-Szenarien ab (close()
+ueber einen noch schreibenden Thread hinweg ohne Verlust; rasches Stop/Start
+verwechselt Schreiber/Queue nicht) - von diesen drei ist nur der
+Stop/Start-Test ein echter Regressionstest gegen den Vorzustand, die anderen
+beiden bestaetigen lediglich, dass bereits vorhandenes Verhalten nun auch
+getestet ist.
+
+**Konsequenz:** Eine volle Clip-Queue oder ein defektes Bild kann die
+Workbench nicht mehr einfrieren; ein Revisionswechsel mitten in einer
+Aufnahme erzeugt eine sichtbare Lücke im Manifest statt einer stillen. Alle
+124 Tests grün (121 vor diesem Fix + 3 neue), `ruff check` und
+`node --check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-11 (Clipaufnahme in der Workbench: ein getipptes Label je Clip)
 
 ### Labeling kostete pro Bild, nicht pro Kalibrierpunkt
@@ -17,7 +70,8 @@ Sekunden Livebild in das Clipformat aus Task 1 (`CLIP_SCHEMA_VERSION`) auf;
 der Bediener tippt Gerätekennung und Sollwert genau einmal, jeder Frame
 trägt danach dasselbe Label. PNGs werden in einem eigenen Thread über eine
 begrenzte Queue geschrieben, damit die 15-fps-Vorschau nicht auf
-PNG-Kodierung (20–30 ms/Bild bei 960×720) wartet; läuft die Queue voll,
+PNG-Kodierung wartet (Annahme, nicht gemessen: grob 20–30 ms/Bild bei
+960×720); läuft die Queue voll,
 wird gezählt (`dropped_frames`) statt still verworfen. `close()` wartet
 jetzt auf das Ende des Schreib-Threads, bevor der Prozess beendet — sonst
 könnte er enden, während im gerade geschriebenen `clip.json` gelistete

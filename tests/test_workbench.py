@@ -16,7 +16,7 @@ from dispread.layout import DisplayLayout
 from dispread.rectify import rectify
 from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
-from dispread.workbench.controller import MAX_GEOMETRY_CYCLES, Controller
+from dispread.workbench.controller import CLIP_QUEUE_DEPTH, MAX_GEOMETRY_CYCLES, Controller
 from dispread.workbench.profiles import DEFAULT, atomic_json, validate
 from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 
@@ -1303,3 +1303,187 @@ def test_clip_ist_ueber_replay_wieder_lesbar(tmp_path):
     source.close()
     assert len(frames) == 1
     assert frames[0].raw_metadata["ground_truth"]["text"] == "11,00"
+
+
+def test_clip_zaehlt_frame_bei_revisionswechsel_waehrend_der_gedrosselten_ocr(tmp_path, monkeypatch):
+    """Aendert sich revision zwischen der Bildarbeit ausserhalb des Locks und
+    dem naechsten gesperrten Abschnitt (z. B. durch layout.set/roi/
+    camera.set_many waehrend eine Aufnahme laeuft), darf publish() den
+    uebersprungenen Frame nicht stillschweigend verlieren - er muss in
+    clip["dropped"] auftauchen (Review-Fund, Important 2). Dieser Test trifft
+    den FRUEHEN Abbruch innerhalb des should_read-Zweigs (direkt um die
+    OCR-Auswertung), der zweite Revisionswechsel-Test unten trifft den
+    SPAETEN Abbruch am Ende von publish()."""
+    controller = ready_controller(tmp_path, confirmed=True)
+    controller.command("mode", {"value": "annotate"})
+    controller.command("clip.start", {"device_id": "geraet-1", "ground_truth_text": "3,00", "seconds": 60})
+    # OCR_INTERVAL_S-Drossel erzwungen aufgehoben, damit should_read in
+    # publish() sicher True ist - der zu treffende Zweig liegt VOR diesem
+    # "haette-die-Drossel-verpasst"-Fall.
+    controller.last_ocr_at = 0.0
+
+    import dispread.workbench.controller as controller_module
+
+    original_roi_quad = controller_module.roi_quad
+
+    def bump_revision_then_compute(image, config):
+        # should_read ist hier True (last_ocr_at auf 0 erzwungen) - die
+        # Revision aendert sich also VOR dem ersten gesperrten Abschnitt in
+        # publish() (Zeile ~864).
+        controller.revision += 1
+        return original_roi_quad(image, config)
+
+    monkeypatch.setattr(controller_module, "roi_quad", bump_revision_then_compute)
+
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+    snap = controller.snapshot()
+    assert snap["clip"]["frames"] == 0
+    assert snap["clip"]["dropped"] == 1
+
+
+def test_clip_zaehlt_frame_bei_revisionswechsel_am_ende_von_publish(tmp_path, monkeypatch):
+    """Wie oben, aber should_read ist diesmal False (OCR_INTERVAL_S noch nicht
+    abgelaufen) - die Revision aendert sich dann erst kurz vor dem SPAETEN,
+    gesperrten Abschnitt am Ende von publish(). Auch dieser Pfad darf den
+    Frame nicht stillschweigend verlieren."""
+    controller = ready_controller(tmp_path, confirmed=True)  # live=True: erste Ablesung schon gecacht
+    controller.command("mode", {"value": "annotate"})
+    controller.command("clip.start", {"device_id": "geraet-1", "ground_truth_text": "4,00", "seconds": 60})
+
+    import dispread.workbench.controller as controller_module
+
+    original_roi_quad = controller_module.roi_quad
+
+    def bump_revision_then_compute(image, config):
+        controller.revision += 1
+        return original_roi_quad(image, config)
+
+    monkeypatch.setattr(controller_module, "roi_quad", bump_revision_then_compute)
+
+    # Direkt nach ready_controller() liegt last_ocr_at im selben Sekundenbruchteil -
+    # should_read (Drossel OCR_INTERVAL_S=0.2s) ist also False, der Frueh-Abbruch
+    # in should_read wird gar nicht erst betreten.
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+    snap = controller.snapshot()
+    assert snap["clip"]["frames"] == 0
+    assert snap["clip"]["dropped"] == 1
+
+
+def test_clip_zaehlt_verworfene_bilder_statt_zu_blockieren_wenn_die_queue_voll_laeuft(tmp_path, monkeypatch):
+    """Der eigentliche Grund fuer den Schreib-Thread/die begrenzte Queue: laeuft
+    sie voll, weil der Schreiber (hier absichtlich blockiert) nicht mitkommt,
+    muss publish() zaehlen statt zu warten oder still zu verwerfen - und das
+    Manifest muss dieselbe Zahl tragen wie der Live-Status waehrend der
+    Aufnahme."""
+    block = threading.Event()
+    original_imwrite = cv2.imwrite
+
+    def blocking_imwrite(path, image):
+        block.wait(timeout=5)
+        return original_imwrite(path, image)
+
+    monkeypatch.setattr(cv2, "imwrite", blocking_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start",
+        {"device_id": "geraet-1", "ground_truth_text": "1,00", "seconds": 60},
+    )
+    try:
+        # Der Schreiber haengt im ersten Bild; deutlich mehr Bilder als
+        # CLIP_QUEUE_DEPTH fuellen die Queue sicher, unabhaengig von Timing.
+        for _ in range(CLIP_QUEUE_DEPTH + 20):
+            controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+        dropped_live = controller.snapshot()["clip"]["dropped"]
+        assert dropped_live > 0
+    finally:
+        block.set()
+
+    controller.command("clip.stop")
+    controller.drain_clip_writer()
+
+    clips = sorted((controller.root / "clips").iterdir())
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert manifest["dropped_frames"] == dropped_live
+    assert len(manifest["frames"]) + manifest["dropped_frames"] == CLIP_QUEUE_DEPTH + 20
+    for entry in manifest["frames"]:
+        assert (clips[0] / entry["file"]).exists()
+
+
+def test_close_beendet_eine_laufende_aufnahme_ohne_bereits_eingereihte_bilder_zu_verlieren(tmp_path, monkeypatch):
+    """Ruling 1 (Review-Fund, jetzt als Test statt Ad-hoc-Skript): close() muss
+    auf den Schreib-Thread warten, bevor der Prozess beendet - sonst koennte
+    er enden, waehrend im gerade geschriebenen clip.json gelistete Bilder noch
+    nicht auf der Platte liegen. Kein vorheriger clip.stop/drain_clip_writer -
+    close() muss das selbststaendig sauber abschliessen."""
+    original_imwrite = cv2.imwrite
+
+    def slow_imwrite(path, image):
+        time.sleep(0.05)
+        return original_imwrite(path, image)
+
+    monkeypatch.setattr(cv2, "imwrite", slow_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "5,00", "seconds": 60}
+    )
+    for _ in range(5):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+    controller.close()
+
+    clips = sorted((controller.root / "clips").iterdir())
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert manifest["dropped_frames"] == 0
+    assert len(manifest["frames"]) == 5
+    for entry in manifest["frames"]:
+        assert (clips[0] / entry["file"]).exists()
+
+
+def test_rasches_stop_start_verwechselt_schreiber_und_warteschlange_nicht(tmp_path, monkeypatch):
+    """Ruling 2 (Review-Fund, jetzt als Test statt reiner Codeinspektion): der
+    Schreiber liest die ihm beim Start uebergebene Queue, nicht self.clip_queue.
+    Ohne diese Bindung wuerde ein Stop/Start-Paar kurz hintereinander den noch
+    leerraeumenden alten Thread auf die neue Queue umbiegen - die alte Aufnahme
+    liesse dann im eigenen Manifest gelistete Bilder unbeschrieben zurueck."""
+    original_imwrite = cv2.imwrite
+
+    def slow_imwrite(path, image):
+        time.sleep(0.03)
+        return original_imwrite(path, image)
+
+    monkeypatch.setattr(cv2, "imwrite", slow_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+
+    controller.command(
+        "clip.start", {"device_id": "geraet-a", "ground_truth_text": "1,00", "seconds": 60}
+    )
+    for _ in range(5):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.command("clip.stop")  # Sentinel eingereiht; der alte Schreiber laeuft noch
+
+    controller.command(
+        "clip.start", {"device_id": "geraet-b", "ground_truth_text": "2,00", "seconds": 60}
+    )
+    for _ in range(3):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.command("clip.stop")
+
+    controller.drain_clip_writer()  # muss BEIDE Threads einsammeln, nicht nur den letzten
+
+    clip_dirs = sorted((controller.root / "clips").iterdir())
+    assert len(clip_dirs) == 2
+    for directory in clip_dirs:
+        manifest = json.loads((directory / "clip.json").read_text())
+        assert manifest["dropped_frames"] == 0
+        assert len(manifest["frames"]) > 0
+        for entry in manifest["frames"]:
+            assert (directory / entry["file"]).exists()
