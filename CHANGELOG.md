@@ -3,6 +3,33 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (QuadTracker: Nachfuehrung gegen Referenzbild, nicht Bild-zu-Bild)
+
+### Bedienerrückmeldung: bei längeren Lesungen verrutscht die Kamera, Erkennung bricht ab
+
+**Problem:** Bei längeren Messvorgängen (>10 Minuten) rutscht die Raspberry-Pi-Kamera oder der Messverstärker graduell aus der Position, und die Erkennung bricht mit `UNREADABLE` ab. Ein manueller Neustart der Workbench oder ein Neukalibrieren der ROI behebt das Problem. Ursache ist eine Kette von Bild-zu-Bild-Registrierungen, die Drift akkumuliert — nach einer Stunde ist die gemessene Geometrie weit von der ursprünglich bestätigten entfernt, ohne dass eine einzelne Registrierung je ihre Grenzen (±10%, ±3°) verletzt hätte.
+
+**Änderung:** Neuer `QuadTracker` in `src/dispread/track.py` (Task 6 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](docs/PLAN_2026-09-11-ocr-selbstkalibrierung.md)),
+implementiert in TDD nach dem Plan-Brief mit sechs Tests. Der Tracker registriert
+jedes neue Bild immer gegen das bei der ROI-Bestätigung (im `confirm`-Modus)
+gespeicherte Referenzbild, niemals gegen das vorige Bild. Die gefundene
+Verschiebung, Drehung und ECC-Güte werden gegen feste Grenzen (`max_shift=10%`,
+`max_rotation_deg=3.0`, `min_score=0.60`) geprüft; Verletzungen führen zur
+Ablehnung ohne Korrektur (sichere Richtung laut Konzept.md §7). Das Arbeitsbild
+wird einschrittig direkt aus dem Rohbild auf `work_size` entzerrt, nicht aus
+dem bereits `CROP_SIZE`-entzerrten Ausschnitt, damit ECC keine Resampling-Artefakte
+als Bewegung misst (Konzept.md §3).
+
+Laufzeitmessung auf realen 960×720-Bildern (`var/workbench/annotations/8a18ee05…`):
+Median **2.63 ms**, P95 2.82 ms, Max 3.50 ms — deutlich unter der 10-ms-Schwelle.
+
+**Konsequenz:** Die Nachfuehrung läuft bei jedem gelesenen Bild (keine Drosselung),
+analog zur Kandidatensuche im `run`-Modus ohne `CANDIDATE_INTERVAL_S`-Throttling.
+Bei 15 fps ist der Nachführungsaufwand <5 % der pro-Frame-Zeit und blockiert nicht.
+Die Nachfuehrung für Task 7 wird nicht gedrosselt (`run` bei jedem Frame).
+Gemessene Timing und Entscheidung sind dokumentiert in `docs/VALIDATION.md`.
+
 ## 0.1.0.dev0 — 2026-09-11 (Autofit-Vorschlag wurde nicht ungültig, wenn die Geometrie sich änderte)
 
 ### Ein veralteter Autofit-Vorschlag konnte gegen eine Geometrie übernommen werden, für die er nie gefittet wurde

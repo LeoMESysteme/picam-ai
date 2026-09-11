@@ -667,3 +667,22 @@ matched = 5   nicht matched = 1   davon flach = 5 von 5 matched
    `thickness_ratio`/`inset_ratio` auch in die Lesegeometrie einbeziehen, oder
    sie aus dem Autofit-Suchraum entfernen und als reine Zeichenparameter
    dokumentieren.
+
+## 2026-09-11 — QuadTracker-Nachführung auf realen Bildern (Task 6)
+
+Laufzeitmessung des `QuadTracker.update()` auf realen 960×720-Bildern aus
+`var/workbench/annotations/8a18ee05e31241b9b6702c5bb904ec97` (RND-Labornetzteil,
+7-Segment-Display mit Layout 4/2/ohne Vorzeichen). Je 200 Aufrufe nach einem
+Warmluafen, gemessen mit `time.perf_counter()` in `CLOCK_MONOTONIC`,
+`simulate=False` (echter Bildpfad, keine Kamera, aber echter Decoder):
+
+| Größe | Wert |
+| --- | ---: |
+| Median | **2.63 ms** |
+| P95 | **2.82 ms** |
+| Max | 3.50 ms |
+
+**Entscheidung für Task 7:** Der Median liegt deutlich unter der 10-ms-Schwelle.
+Die Nachführung läuft bei jedem Frame (nicht gedrosselt), analog zur
+Kandidatensuche im `run`-Modus ohne `CANDIDATE_INTERVAL_S`-Throttling. Bei 15 fps
+Bildrate ist der Nachführungsaufwand <5 % der pro-Frame-Zeit.
