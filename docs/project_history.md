@@ -350,7 +350,9 @@ keine Messwertfreigabe. Auto-Setup bleibt bestätigungspflichtige Einstellhilfe
 (OQ-20). Hardware-Worker und TLS/WSS-Backend sind geprüft; Browser-Gesamtabnahme
 unter Windows und mit echter PAM-Anmeldung bleibt offen (OQ-21).
 
-## 2026-09-08 — Ablesung in der Workbench: Anzeige statt Freigabe
+---
+
+# 2026-09-08 — Ablesung in der Workbench: Anzeige statt Freigabe
 
 **Entscheidung:** Der Controller liest bei bestätigter ROI jedes Kamerabild mit
 `SevenSegmentReader` und führt `ReleaseGate` mit — aber ausschließlich als
@@ -389,7 +391,9 @@ fehlen noch (Stand in `docs/status.md`). Geprüft ist der Kern nur gegen eine
 synthetisch gerenderte Anzeige — synthetische Daten ergänzen nach Konzept §9,
 sie zählen nie zum Testset.
 
-## 2026-09-09 — Perspektivisches ROI-Quad und kurze Controller-Sperren
+---
+
+# 2026-09-09 — Perspektivisches ROI-Quad und kurze Controller-Sperren
 
 **Entscheidung:** Das Profil behält die achsparallele `roi` als Hülle für
 Qualitätsmetriken und Abwärtskompatibilität, ergänzt aber in Schema 2 ein
@@ -418,7 +422,9 @@ Zellen und Segmentpunkte werden perspektivisch zurückgezeichnet. Alte Profile
 bleiben ladbar. Die Änderung verbessert Ausrichtung und Bedienbarkeit, ist aber
 kein Training und behebt die reale VFD-Glyphenabweichung aus OQ-23 nicht.
 
-## 2026-09-09 — Separater, sichtbarer OCR-Innenrahmen
+---
+
+# 2026-09-09 — Separater, sichtbarer OCR-Innenrahmen
 
 **Entscheidung:** Profilschema 3 ergänzt ein normiertes `ocr_box` innerhalb des
 perspektivisch entzerrten `roi_quad`. Das äußere Quad beschreibt die physische

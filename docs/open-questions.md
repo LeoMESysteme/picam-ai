@@ -339,7 +339,7 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   belegt, (c) den blockierten Sensor als solchen melden („Reboot nötig") statt
   als anonymen Timeout, (d) `scripts/camera-commissioning.sh` um eine echte
   Aufnahmeprüfung ergänzen, damit „einsatzbereit" Bilddurchlauf bedeutet.
-* **Warum das wichtig ist:*** **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
+* **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
   jeder Änderung von Breite, Höhe oder Bildrate genau so neu auf
   (`Controller._worker`). Trifft das denselben Treiberzustand, fällt die Kamera
   mitten im Betrieb aus und ist ohne Reboot nicht zurückzuholen. Im Labor wäre

@@ -34,7 +34,11 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 - [x] Doku-Set inkl. `status.md`, `project_history.md`, `open-questions.md`
 - [ ] `folder://`, `video://`, `replay://`, `picamera2://`, `imx500://` — Registry vorhanden, Implementierungen noch nicht. `open_source()` scheitert für diese Schemata mit `ImportError`
 - [ ] Tesseract-Vergleichsbackend (braucht [OQ-15](open-questions.md))
-- [ ] CLI (`dispread.cli.*`). Die Deklaration in `pyproject.toml` wurde entfernt, weil ein Einsprungpunkt auf ein fehlendes Modul erst zur Laufzeit scheitert. Kamera-Diagnose liegt als `scripts/camera-commissioning.sh` vor
+- [ ] CLI (`dispread.cli.*`, geplant mit `dispread run --source … --profile …`,
+  [anleitung/05-cli.md](anleitung/05-cli.md)) — nicht gebaut. Der
+  `pyproject.toml`-Einsprungpunkt `dispread` zeigt inzwischen auf die separate,
+  bereits implementierte Workbench-CLI (`dispread.workbench.cli:main`), nicht
+  auf diese. Kamera-Diagnose: `scripts/camera-commissioning.sh`
 - [ ] `contour_heuristic`- und `imx500_detector`-Lokalisierung, `RegionTracker`
 - [ ] Geräteprofile: `config/profiles/` samt JSON-Schema und `ProfileStore`
 - [ ] `install.sh`, systemd-Units, udev-Regel, pre-commit-Hook
