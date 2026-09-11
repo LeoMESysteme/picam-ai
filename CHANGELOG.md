@@ -3,6 +3,49 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Benchmark mit dreigeteilter Metrik und erzwungenem Geräte-Gruppensplit)
+
+### Eine einzelne Trefferquote verdeckt die gefährliche Zahl: die falsche Annahme
+
+**Problem:** Task 3 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](docs/PLAN_2026-09-11-ocr-selbstkalibrierung.md).
+Es gab kein wiederholbares Werkzeug, das Leseergebnisse gegen einen Sollwert
+prüft — nur Handmessungen im Sitzungs-Scratchpad (siehe
+[docs/VALIDATION.md](docs/VALIDATION.md)). Eine einzelne Trefferquote
+unterscheidet zudem nicht zwischen einer Ablehnung (kostet einen Messwert)
+und einer falschen Annahme (verfälscht eine Kalibrierung, AGENTS.md) — genau
+die Unterscheidung, auf die es in diesem Projekt ankommt.
+
+**Änderung:** `src/dispread/benchmark.py` liest Clips (`ReplaySource`, Task 1)
+und reale `var/workbench/annotations/<id>/`-Verzeichnisse und führt
+korrekt/falsch/abgelehnt getrennt, schlüsselt Fehler nach Klasse auf
+(Vorzeichen `sign`, Stellenzahl `count`, Ziffer `digit`) und Ablehnungen nach
+Grund (aus den Reader-Diagnosen, nicht geraten). `read_frame()` geht exakt den
+Weg des echten Lesepfads (`rectify` auf `CROP_SIZE`, dann `crop_box` mit der
+bestätigten `ocr_box`) — ein abweichender Weg würde etwas anderes messen als
+der Betrieb. `assert_disjoint_devices()` erzwingt als Test, dass
+Entwicklungs- und Testsatz nie dieselbe Geräteinstanz teilen (Splitgrenze ist
+laut ROADMAP die Geräteinstanz, nie der Frame). `evaluate_annotation()`
+überspringt Annotationen ohne getippten Sollwert oder ohne `profile.layout`
+(Altschema) statt sie stillschweigend als falsch oder korrekt zu zählen;
+`evaluate_set()` fasst mehrere Verzeichnisse zu einem Gesamtbericht zusammen.
+Dazu die dünne CLI `scripts/ocr-benchmark.py` (`--annotations DIR` oder
+`--dev MUSTER --test MUSTER`), die nichts in die Doku schreibt.
+Ausgangsmessung auf den sechs auswertbaren der neun realen Annotationen
+(eine Geräteinstanz, siehe VALIDATION.md): 5 korrekt, 0 falsch angenommen,
+1 abgelehnt (`8a18ee05…`, wegen `unreadable_cells`).
+
+**Konsequenz:** Die gemessene Rate falscher Annahmen (0) ist die
+konservative Obergrenze dessen, was nach der Freigabe (`validate.py`, die
+nur zusätzlich ablehnen, nie zusätzlich annehmen kann) beim Bediener ankommen
+könnte — Docstring in `benchmark.py`. Der Datensatz ist ausdrücklich ein
+**Entwicklungssatz, kein Testsatz**: alle sechs auswertbaren Annotationen
+stammen von einer einzigen Geräteinstanz. Jede künftige Decoder-Änderung
+(z. B. die in Phase B/C des Plans geplante Selbstkalibrierung) lässt sich ab
+jetzt gegen dieselben drei Zahlen prüfen, statt gegen eine einzelne
+Trefferquote, die eine falsche Annahme hinter einer hohen Ablehnungsrate
+verstecken könnte.
+
 ## 0.1.0.dev0 — 2026-09-11 (Clipaufnahme: Deadlock in `_clip_stop()` behoben, verworfene Frames bei Revisionswechsel gezählt)
 
 ### `_clip_stop()` konnte die gesamte Workbench einfrieren, nicht nur die Clipaufnahme

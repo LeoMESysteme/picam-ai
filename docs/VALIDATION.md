@@ -551,3 +551,44 @@ unterbestimmen die Geometrie. Daraus folgt für
 die Messvorrichtung kommt vor jeder Decoder-Änderung, und eine automatische
 Rasteranpassung muss auf **Trennschärfe** optimieren, nicht auf bloße
 Übereinstimmung.
+
+## Ausgangsmessung `sevenseg/2` auf den realen Annotationen (2026-09-11)
+
+Die Zahlen oben in diesem Abschnitt stammen aus einem Sitzungs-Scratchpad
+ohne Werkzeug im Repo. Mit Task 3 des Plans existiert jetzt ein
+wiederholbares Werkzeug dafür: `src/dispread/benchmark.py`
+(`evaluate_set`/`evaluate_annotation`) und die dünne CLI
+`scripts/ocr-benchmark.py`. Lauf:
+
+```
+./.venv/bin/python scripts/ocr-benchmark.py --annotations var/workbench/annotations
+```
+
+Ergebnis, deckungsgleich mit der obigen Handmessung:
+
+```
+auswertbar: 6  uebersprungen: 3
+korrekt=5  falsch angenommen=0  abgelehnt=1
+  Ablehnungsgruende:
+    unreadable_cells: 1
+  [abgelehnt] annotation:8a18ee05e31241b9b6702c5bb904ec97 (Geraet default): soll=1100
+```
+
+**Von neun Annotationen unter `var/workbench/annotations/` sind sechs
+auswertbar** — drei fehlt entweder `ground_truth_text` oder `profile.layout`
+(darunter `0dd69042…`, die einzige Altannotation ohne `layout`) und werden
+von `evaluate_annotation` übersprungen, nicht stillschweigend als falsch oder
+korrekt gezählt.
+
+⚠️ **Alle sechs auswertbaren Annotationen stammen von einer einzigen
+Geräteinstanz.** Nach Konzept.md §9 und der Splitregel der ROADMAP
+(`assert_disjoint_devices`, erzwungen als Test in `tests/test_benchmark.py`)
+ist dieser Satz damit ausdrücklich ein **Entwicklungssatz, kein Testsatz** —
+er belegt keine Trefferquote über Geräte hinweg und darf nicht als eine
+gelesen werden.
+
+Die Metrik ist eine Leserzahl, keine Gate-Zahl: die Freigabe (`validate.py`)
+kann gegenüber diesen Zahlen nur zusätzlich ablehnen, nie zusätzlich
+annehmen — die gemessene Rate falscher Annahmen (hier: 0) ist die
+konservative Obergrenze dessen, was nach der Freigabe beim Bediener ankommen
+könnte.

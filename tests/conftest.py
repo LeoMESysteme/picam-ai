@@ -32,7 +32,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
-def _write_clip(directory, *, base="sensor_boottime", frames=2, label="28,80"):
+def _write_clip(directory, *, base="sensor_boottime", frames=2, label="28,80", device_id="geraet-1"):
     directory.mkdir(parents=True, exist_ok=True)
     entries = []
     for index in range(frames):
@@ -57,7 +57,7 @@ def _write_clip(directory, *, base="sensor_boottime", frames=2, label="28,80"):
             {
                 "schema_version": 1,
                 "clip_id": directory.name,
-                "device_id": "geraet-1",
+                "device_id": device_id,
                 "ground_truth_text": label,
                 "profile": {},
                 "profile_name": "test",
