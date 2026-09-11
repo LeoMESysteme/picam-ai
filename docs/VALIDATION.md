@@ -592,3 +592,78 @@ kann gegenüber diesen Zahlen nur zusätzlich ablehnen, nie zusätzlich
 annehmen — die gemessene Rate falscher Annahmen (hier: 0) ist die
 konservative Obergrenze dessen, was nach der Freigabe beim Bediener ankommen
 könnte.
+
+## 2026-09-11 — Autofit (`fit_layout`) gegen dieselben sechs Annotationen (Task 4)
+
+Task 4 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+ersetzt das manuelle Justieren von `digit_gap_ratio`, `sign_cell_ratio`,
+`thickness_ratio` und `inset_ratio` durch eine Suche, die aus einem einmal
+getippten Sollwert unter allen exakt passenden Parametersätzen den mit der
+größten Trennschärfe (`min_margin`) wählt (`src/dispread/ocr/autofit.py`).
+
+⚠️ **Dieselbe eine Geräteinstanz wie oben.** Diese Zahlen belegen keine
+Trefferquote über Geräte hinweg, siehe Warnhinweis im vorigen Abschnitt.
+
+**Verfahren, bewusst anders als die Ausgangsmessung oben:** Start ist ein
+`DisplayLayout` mit den **Defaultwerten** von `digit_gap_ratio` /
+`sign_cell_ratio` / `thickness_ratio` / `inset_ratio`, nicht die vom Bediener
+bereits bestätigte Geometrie — sonst würde der Versuch messen, wie gut der
+Bediener war, nicht den Autofit. `digits`/`decimals`/`has_sign` kommen wie
+immer aus dem getippten Sollwert. Übergeben wird der volle rektifizierte
+400×160-Ausschnitt (`rectify(...).image`) plus die gespeicherte `ocr_box` —
+**nicht** der damit bereits ausgeschnittene Leserausschnitt: `fit_layout`
+verschiebt/skaliert die `ocr_box` selbst und ihr Rückgabewert ist nur relativ
+zum vollen Crop sinnvoll. Das Messskript im Plan-Brief schneidet die Box vor
+dem Aufruf ein zweites Mal heraus — hier korrigiert, siehe Docstring des
+Messskripts.
+
+| Annotation | Sollwert | `matched` | Trennschärfe (Zweitbester) | flach | gefunden gap/dicke/rand | Hand gap/dicke |
+| --- | --- | --- | --- | --- | --- | --- |
+| `23a1e009` | 28,80 | True | 0,669 (0,669) | **True** | 0,80 / 0,16 / 0,10 | 0,65 / 0,16 |
+| `6ffc561b` | 11,00 | True | 0,278 (0,278) | **True** | 0,65 / 0,16 / 0,10 | 0,65 / 0,16 |
+| `8a18ee05` | 11,00 | **False** | — | — | (Eingabelayout unverändert) | 0,65 / 0,16 |
+| `9359eb9a` | 12,76 | True | 0,650 (0,650) | **True** | 0,65 / 0,16 / 0,10 | 0,65 / 0,16 |
+| `b1375256` | 28,80 | True | 0,656 (0,656) | **True** | 0,65 / 0,16 / 0,10 | 0,65 / 0,16 |
+| `fdc840cd` | 28,80 | True | 0,749 (0,749) | **True** | 0,65 / 0,16 / 0,10 | 0,65 / 0,16 |
+
+```
+matched = 5   nicht matched = 1   davon flach = 5 von 5 matched
+```
+
+**Zu den drei im Plan genannten Fragen:**
+
+1. **`8a18ee05` (heute in Task 3 abgelehnt) wird auch vom Autofit nicht
+   gelöst** — `fit_layout` meldet ehrlich `matched=False` und liefert das
+   unveränderte Eingabelayout zurück. Aus rund 100 deterministisch geprüften
+   Parametersätzen dekodiert keiner den Sollwert `11,00` exakt. Das ist
+   konsistent mit der bereits in Task 3 nachgemessenen Ursache (eine globale
+   Segmentschwelle reißt das schwächer leuchtende `e` von Stelle 3 mit ab) —
+   diese Ursache liegt im Dekoder selbst (`segment_threshold`), nicht in der
+   Rastergeometrie, und ist durch Geometrieanpassung folgerichtig nicht
+   behebbar. Autofit löst also **nicht** von sich aus das Problem, das bisher
+   der Decoder-Änderung zugeschrieben wurde.
+2. Die restlichen fünf Annotationen finden ein passendes Raster; keine
+   liefert eine stillschweigend falsche Geometrie (nicht direkt prüfbar ohne
+   ein zweites, unabhängiges Bewertungsbild pro Annotation — hier nur
+   indirekt daran, dass die gefundenen `digit_gap_ratio`-Werte bei vier von
+   fünf exakt der vom Bediener bestätigten Geometrie entsprechen).
+3. **`flach=True` bei allen fünf gefundenen Rastern, nicht nur gelegentlich.**
+   Ursache dafür ist strukturell und mit `_box_candidates`/Parameter-Sonden
+   direkt nachgewiesen, nicht nur vermutet: `DisplayLayout.cell_boxes()` und
+   `.sign_box()` — die einzige Geometrie, die der Leser (`SevenSegmentReader`)
+   tatsächlich abtastet — verwenden `thickness_ratio` und `inset_ratio`
+   **überhaupt nicht**; beide Felder wirken ausschließlich auf den
+   *synthetischen Zeichner* (`render_display`). Jede Änderung dieser beiden
+   Parameter ist für die Bewertungsfunktion deshalb bei jedem Bild ein exaktes
+   Unentschieden (`score` bitidentisch) — das erklärt auch die schon in der
+   vorigen Messreihe dieser Sitzung gefundene Mehrdeutigkeit
+   `thickness=0,20/inset=0,05` vs. `thickness=0,12/inset=0,10`. `flach=True`
+   ist hier also weniger ein Aussage über die konkrete Anzeige als ein
+   Hinweis, dass zwei der vier gesuchten Parameter für die aktuelle
+   Leser-Geometrie wirkungslos sind. Das ist eine Beobachtung dieser
+   Session, keine Korrektur — die Kandidatenmenge wurde **nicht** nachträglich
+   verkleinert, um diesen Befund zu vermeiden. Für spätere Sitzungen: entweder
+   `thickness_ratio`/`inset_ratio` auch in die Lesegeometrie einbeziehen, oder
+   sie aus dem Autofit-Suchraum entfernen und als reine Zeichenparameter
+   dokumentieren.

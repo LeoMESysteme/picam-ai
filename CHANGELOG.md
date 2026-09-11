@@ -3,6 +3,56 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-11 (Autofit: Rastergeometrie aus einem einmal getippten Sollwert)
+
+### Vier Geometrie-Verhältnisse mussten von Hand justiert werden, und mindestens zwei davon sind unterbestimmt
+
+**Problem:** Task 4 des Plans
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](docs/PLAN_2026-09-11-ocr-selbstkalibrierung.md).
+`digit_gap_ratio`, `sign_cell_ratio`, `thickness_ratio` und `inset_ratio`
+mussten bislang von Hand geschätzt werden. Die Ausgangsmessung dieser Sitzung
+(docs/VALIDATION.md) zeigte zudem: zwei weit auseinanderliegende Sätze
+(`thickness=0,20/inset=0,05` und `thickness=0,12/inset=0,10`) erreichen an
+sechs realen Bildern dieselbe Trefferzahl — ein Autofit, der nur auf „stimmt"
+optimiert, würde davon einen beliebigen wählen und der Bediener bestätigte
+eine zufällige Geometrie.
+
+**Änderung:** `src/dispread/ocr/autofit.py`, `fit_layout(crop, text, layout,
+ocr_box)`: `digits`/`decimals`/`has_sign` werden aus dem einmal getippten
+Sollwert abgeleitet (`parse_expected`), nicht gesucht — ein positiv gezeigter
+Wert beweist keine fehlende Vorzeichenstelle. Koordinatenabstieg über zwei
+Durchläufe, rund 100 deterministische, fest aufgezählte Auswertungen ohne
+Zufall. Zielfunktion ist nicht bloße Übereinstimmung, sondern unter allen
+exakt passenden Parametersätzen die größte Trennschärfe
+(`read.diagnostics["min_margin"]`, das vorhandene, dafür gedachte Maß).
+`AutofitResult` führt `separation`, `runner_up` und `flat_optimum` getrennt,
+damit ein flaches Optimum als solches erkennbar bleibt statt als scheinbar
+sichere Zahl anzukommen. Findet die Suche keinen exakt passenden Satz, bleibt
+`matched=False` und das **unveränderte** Eingabelayout wird zurückgegeben —
+keine Teilvermutung. Eigene, lokale `_crop_box`/`CROP_SIZE`-Nachbildung statt
+Import aus `dispread.workbench.controller`, um den für Task 5 vorgesehenen
+umgekehrten Import (Controller importiert `fit_layout`) nicht zirkulär zu
+machen.
+
+Gemessen an den sechs auswertbaren realen Annotationen (eine Geräteinstanz,
+docs/VALIDATION.md): 5 finden ein passendes Raster, 1 (`8a18ee05…`) meldet
+ehrlich `matched=False` — dieselbe Annotation, die Task 3 aus einem im
+Dekoder liegenden Grund ablehnt, wird also durch Geometrieanpassung
+folgerichtig nicht gelöst. Bei allen 5 gefundenen Rastern steht
+`flat_optimum=True`; direkt nachgewiesene Ursache: `DisplayLayout.cell_boxes`/
+`.sign_box` — die vom Leser tatsächlich abgetastete Geometrie — verwenden
+`thickness_ratio`/`inset_ratio` gar nicht, beide Felder wirken nur auf den
+synthetischen Zeichner. Jede Änderung dieser zwei von vier gesuchten
+Parametern ist für die Bewertung deshalb ein exaktes Unentschieden.
+
+**Konsequenz:** Ersetzt eine Handjustage durch eine nachvollziehbare,
+deterministische Suche, die ihre eigene Unsicherheit meldet statt sie zu
+verschweigen. Der `flat_optimum`-Befund ist eine neue, offene Erkenntnis für
+künftige Sitzungen (docs/VALIDATION.md): `thickness_ratio`/`inset_ratio`
+entweder in die Lesegeometrie einbeziehen oder als reine Zeichenparameter aus
+dem Autofit-Suchraum entfernen. `8a18ee05…` bleibt ein Fall für die
+Decoder-Seite, nicht für die Geometrie.
+
 ## 0.1.0.dev0 — 2026-09-11 (Benchmark mit dreigeteilter Metrik und erzwungenem Geräte-Gruppensplit)
 
 ### Eine einzelne Trefferquote verdeckt die gefährliche Zahl: die falsche Annahme
