@@ -585,3 +585,66 @@ die konkrete Windows-Browserreaktion sowie Shutdown mit echter Kamera sind erst
 nach einem kontrollierten Neustart des realen Dienstes belastbar. Daher OQ-24
 `in Arbeit`, nicht `geklärt`. Perspektivkorrektur verbessert die Geometrie,
 löst aber nicht ohne reale Bildsammlung die VFD-Glyphenfrage OQ-23.
+
+## 2026-09-11 — Warum drei Kandidatenänderungen am Decoder verworfen wurden
+
+**Anlass:** Bedienerauftrag, das OCR-Problem zu lösen — die Einrichtung kostet
+zu viel Zeit, weil die Segmentpunkte exakt sitzen müssen, und eine im Lauf
+verrutschende Kamera bricht die Erkennung ab. Eigene Annotation hunderter
+Fotos ist ausdrücklich nicht praktikabel, weil das System universell
+7-Segment-Anzeigen lesen soll.
+
+**Aufbau:** Kein Hardwarezugriff. Ausgewertet wurden ausschließlich die bereits
+vorhandenen Aufnahmen unter `var/workbench/annotations/`, mit dem jeweils
+gespeicherten `roi_quad`, `ocr_box` und `layout` — also mit genau der
+Geometrie, die der Bediener seinerzeit selbst bestätigt hatte. Gelesen wurde
+über denselben Weg wie im Betrieb (`rectify` auf 400×160, dann `crop_box`).
+Der Vergleichscode lag im Sitzungs-Scratchpad und wurde bewusst nicht ins Repo
+übernommen: er war Entscheidungsgrundlage, kein Baustein.
+
+**Zahlen:** vollständig in [VALIDATION.md](VALIDATION.md), Abschnitt
+„2026-09-11 — Ausgangsmessung `sevenseg/2`".
+
+**Deutung — und warum die ursprüngliche Reihenfolge falsch war.** Der Plan
+dieser Sitzung sollte zuerst die Segmentmessung robuster machen: Segmente über
+ihre Fläche statt an einem Punkt messen, und je Stelle gegen eine
+Panel-Referenz normieren statt gegen eine globale Schwelle. Beides war gut
+begründet — OQ-13 schlägt die Panel-Referenz selbst vor, und OQ-23 führt die
+Punktempfindlichkeit seit dem 2026-09-09.
+
+Gegen echte Bilder gehalten trägt keine der beiden Änderungen:
+
+* Die Panel-Referenz mit einer Otsu-Schwelle *innerhalb* der Zelle punktet
+  exakt wie der Ist-Stand. Der Grund ist elementar und hätte vorher auffallen
+  können: eine Ziffer wie `0` hat sechs aktive und ein inaktives Segment, und
+  Otsu maximiert eine **gewichtete** Zwischenklassenvarianz. Der ausgewogene
+  4:3-Schnitt schlägt den richtigen 6:1-Schnitt.
+* Mit einer spannenrelativen Schwelle statt Otsu wird das bisher abgelehnte
+  Bild korrekt gelesen — dafür wird in einem anderen Bild aus einer `1` eine
+  `7`. Dass das überhaupt auffiel, war Glück: eine weitere Stelle desselben
+  Bildes wurde `?`, sonst wäre es als stille Fehlablesung durchgelaufen. Der
+  Rohwert von Segment `a` liegt dort bei 0,38, obwohl die Stelle eine `1`
+  zeigt und `a` aus sein muss. Ob das Übersprechen, Nachleuchten oder ein zu
+  weit reichender Abtastpunkt ist, ist offen (OQ-23).
+* Die Flächenmessung ist mit den heutigen Profilwerten deutlich **schlechter**
+  als die Punktmessung. `thickness_ratio=0,16` und `inset_ratio=0,10` sind
+  Defaults, die nie an einem realen Gerät kalibriert wurden; die Segmentmasken
+  liegen damit systematisch neben den echten Leuchtflächen.
+
+Der eigentlich lehrreiche Befund steckt im Sweep über diese beiden Parameter:
+`0,12/0,10` und `0,20/0,05` erreichen dieselbe Punktzahl. Das sind keine zwei
+guten Antworten, sondern ein unterbestimmtes Problem. Sechs Bilder **eines**
+Geräts können zwischen konkurrierenden Decodern nicht entscheiden — zwei
+Kandidaten punkteten identisch mit dem Ist-Stand und versagen trotzdem auf
+verschiedenen Bildern.
+
+**Konsequenz für die Planung:** Die Reihenfolge wurde umgedreht. Erst die
+Messvorrichtung (Clipaufnahme mit einem getippten Label je Clip, `replay://`,
+Benchmark mit getrennter Zählung von korrekt / **falsch angenommen** /
+abgelehnt), dann die Kalibrierung der Geometrie aus dem getippten Wert, dann
+die Nachführung — und die Decoder-Änderung zuletzt und datengesperrt. Details
+in [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md).
+
+Dass der Ist-Stand auf diesen sechs Bildern **null** falsche Annahmen hat, ist
+dabei die wichtigste Zahl: sie ist ab jetzt die Nichtregressionsbedingung, und
+gegen null blockiert schon eine einzige falsche Annahme jede Änderung.

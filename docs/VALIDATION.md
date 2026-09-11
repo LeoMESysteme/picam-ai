@@ -456,3 +456,98 @@ Schliess-Kernel einzelne Ziffern uneinheitlich in Ober-/Unterhälfte zerfallen
 lassen, sodass das flächengrößte Cluster nur einen Teil der Zeile trifft -
 Docstring von `fit_ocr_box` verweist darauf, weitere reale Beispiele dieser
 Layoutklasse stehen aus.
+
+## 2026-09-11 — Ausgangsmessung `sevenseg/2` auf allen gelabelten realen Annotationen
+
+**Datensatz:** `var/workbench/annotations/` enthält inzwischen **neun**
+Annotationen, nicht die in [OQ-25](open-questions.md) und `docs/status.md`
+genannten zwei. Sechs davon tragen einen getippten `ground_truth_text`; eine
+weitere liegt noch im alten Schema ohne `layout` und ist nicht auswertbar.
+
+⚠️ **Alle sechs stammen von einer einzigen Geräteinstanz** (4 Stellen, 2
+Nachkommastellen, ohne Vorzeichenstelle, `digit_gap_ratio=0,65`, Einheit `V`)
+mit drei verschiedenen angezeigten Werten. Nach Konzept.md §9 und der
+Splitregel der ROADMAP ist das ein **Entwicklungssatz, kein Testset**. Keine
+Zahl hier belegt eine Trefferquote.
+
+**Verfahren:** Je Annotation mit dem gespeicherten `roi_quad` auf 400×160
+entzerrt, mit der gespeicherten `ocr_box` geschnitten (`crop_box`) — exakt der
+Weg aus `Controller._read()`.
+
+| Annotation | Sollwert | gelesen | Kontrast | min_margin |
+| --- | --- | --- | --- | --- |
+| `23a1e009` | 28,80 | `28.80` | 0,497 | 0,478 |
+| `6ffc561b` | 11,00 | `11.00` | 0,419 | 0,278 |
+| `8a18ee05` | 11,00 | `110?` — **abgelehnt** | 0,398 | 0,210 |
+| `9359eb9a` | 12,76 | `12.76` | 0,525 | 0,619 |
+| `b1375256` | 28,80 | `28.80` | 0,428 | 0,570 |
+| `fdc840cd` | 28,80 | `28.80` | 0,515 | 0,749 |
+
+```
+korrekt = 5     falsch angenommen = 0     abgelehnt = 1
+```
+
+**Die maßgebliche Zahl ist die mittlere: null falsche Annahmen.** Sie ist ab
+jetzt die Nichtregressionsbedingung für jede Decoder-Änderung — gegen eine
+Ausgangszahl von null blockiert bereits eine einzige falsche Annahme.
+
+### Ursache der einen Ablehnung, direkt nachgemessen
+
+Punktmessungen je Segment in `8a18ee05` (Sollwert der letzten Stelle ist `0`,
+also sechs aktive Segmente):
+
+```
+Stelle 3   a:AN 0,42  b:AN 0,60  c:AN 0,44  d:AN 0,53  e:AN 0,38  f:AN 0,54  g:aus 0,28
+Stelle 2   a:AN 0,59  b:AN 0,85  c:AN 0,69  d:AN 0,81  e:AN 0,58  f:AN 0,77  g:aus 0,26
+```
+
+Stelle 3 leuchtet als Ganzes schwächer als Stelle 2. Die eine globale Schwelle
+aus `segment_threshold()` liegt zwangsläufig zwischen beiden Niveaus und reißt
+das tatsächlich leuchtende `e` (0,38) mit ab. Das ist **Ursache (1) aus
+[OQ-23](open-questions.md), unabhängig erneut bestätigt** — diesmal an einer
+Stelle-zu-Stelle-Differenz statt an einer Streuung innerhalb einer Stelle.
+
+### Drei Kandidatenänderungen, prototypisch gegen dieselben Bilder gemessen
+
+Der Prototyp lag im Sitzungs-Scratchpad und wurde **nicht** ins Repo
+übernommen — er war Entscheidungsgrundlage, kein Baustein.
+
+| Variante | korrekt | falsch | abgelehnt |
+| --- | --- | --- | --- |
+| A — Ist-Stand: Punktabtastung, eine globale Schwelle | 5 | 0 | 1 |
+| B — Panelbezug je Stelle, Otsu innerhalb der Zelle | 5 | 0 | 1 |
+| D — Panelbezug je Stelle, Schwelle als Anteil der Zellspanne | 5 | 0 | 1 |
+| E — Segmentflächen statt Punkte, Profil-Defaults 0,16/0,10 | 3 | 0 | 3 |
+| C — erste Fassung der Flächenmessung, ohne Trennungsprüfung | 0 | **1** | 5 |
+
+Drei Befunde:
+
+1. **Die Entscheidungsregel allein ändert nichts.** Variante B punktet exakt
+   wie der Ist-Stand. Otsu *innerhalb* einer Zelle wählt bei sechs aktiven und
+   einem inaktiven Segment den falschen Schnitt: es maximiert die gewichtete
+   Zwischenklassenvarianz und bevorzugt deshalb einen ausgewogenen 4:3-Schnitt
+   gegenüber dem richtigen 6:1-Schnitt.
+2. **Variante D repariert ein Bild und zerbricht ein anderes.** Sie liest
+   `8a18ee05` korrekt, dekodiert dafür `6ffc561b` Stelle 0 als `7` statt `1`.
+   Sichtbar wurde das nur, weil eine andere Stelle desselben Bildes `?` wurde.
+   Siehe den neuen Befund in OQ-23.
+3. **Flächige Segmentmessung ist mit den heutigen Profilwerten schlechter.**
+   `thickness_ratio=0,16` und `inset_ratio=0,10` sind nie kalibriert worden.
+   Sweep über beide, Variante D als Entscheidungsregel:
+
+   ```
+   thickness=0,12  inset=0,10   korrekt=5  falsch=0  abgelehnt=1
+   thickness=0,20  inset=0,05   korrekt=5  falsch=0  abgelehnt=1
+   thickness=0,25  inset=0,00   korrekt=4  falsch=0  abgelehnt=2
+   thickness=0,16  inset=0,05   korrekt=4  falsch=0  abgelehnt=2
+   thickness=0,16  inset=0,10   korrekt=3  falsch=0  abgelehnt=3   <- heutiger Default
+   ```
+
+**Der wichtigste Befund dieser Messreihe ist nicht eine Zahl, sondern ihre
+Mehrdeutigkeit:** zwei weit auseinanderliegende Parametersätze (0,12/0,10 und
+0,20/0,05) erreichen dieselbe Punktzahl. Sechs Bilder eines Geräts
+unterbestimmen die Geometrie. Daraus folgt für
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md):
+die Messvorrichtung kommt vor jeder Decoder-Änderung, und eine automatische
+Rasteranpassung muss auf **Trennschärfe** optimieren, nicht auf bloße
+Übereinstimmung.

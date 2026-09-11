@@ -665,6 +665,43 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
     Displayhelligkeit) würden die Validierung deutlich verlässlicher machen
     als zwei Aufnahmen aus derselben Kalibriersitzung.
 
+* **Update 2026-09-11, breitere Messung — Ursache (1) erneut bestätigt, und ein
+  neuer, bisher unbekannter Befund.** Zahlen und Verfahren vollständig in
+  [VALIDATION.md](VALIDATION.md), Abschnitt „2026-09-11 — Ausgangsmessung
+  `sevenseg/2`"; Aufbau und Deutung in [lab_journal.md](lab_journal.md).
+  * **Datenlage korrigiert:** Es liegen **neun** Annotationen vor, sechs davon
+    mit getipptem Sollwert — dieser Eintrag und OQ-25 nannten bisher zwei.
+    Alle sechs stammen weiterhin von **einer** Geräteinstanz; der Satz bleibt
+    damit ein Entwicklungssatz, kein Testset.
+  * **Ist-Stand:** 5 korrekt, **0 falsch angenommen**, 1 abgelehnt.
+  * **Ursache (1) unabhängig erneut belegt, diesmal als Stelle-zu-Stelle-
+    Differenz:** In `8a18ee05` misst das tatsächlich leuchtende `e` der letzten
+    Stelle 0,38, während dieselben Segmente der Nachbarstelle bis 0,85
+    erreichen. Die eine globale Schwelle liegt dazwischen.
+  * **Neuer Befund — Segment `a` leuchtet, wo es nicht leuchten sollte:** In
+    `6ffc561b` misst Segment `a` der Stelle 0 roh 0,38, während `b`/`c`
+    derselben Stelle bei 0,76/0,84 liegen; die Stelle zeigt eine `1`, `a` muss
+    also aus sein. Eine panelbezogene Entscheidungsregel dekodiert diese Stelle
+    deshalb als `7`. Ursache ungeklärt — Übersprechen zur Nachbarstelle,
+    Nachleuchten des VFD oder ein Abtastpunkt, der über die Zellgrenze reicht,
+    sind nicht gegeneinander abgegrenzt.
+  * **Daraus das Abnahmekriterium für jede künftige Decoder-Änderung:**
+    `6ffc561b` Stelle 0 liefert `1` **oder** wird abgelehnt — niemals `7`. Und
+    die Zahl der falschen Annahmen bleibt bei **0**; gegen diese Ausgangszahl
+    blockiert bereits eine einzige falsche Annahme die Änderung, unabhängig
+    davon, wieviele zusätzliche Treffer sie bringt.
+  * **Verworfen, mit Grund:** Otsu *innerhalb* einer Zelle als
+    Entscheidungsschwelle. Bei sechs aktiven und einem inaktiven Segment
+    maximiert es die gewichtete Zwischenklassenvarianz mit einem ausgewogenen
+    4:3-Schnitt statt des richtigen 6:1-Schnitts — gemessen wirkungslos.
+  * **Flächige Segmentmessung ist mit den heutigen Profilwerten schlechter**
+    (3 statt 5 korrekt), weil `thickness_ratio`/`inset_ratio` nie kalibriert
+    wurden. Ein Sweep zeigt zwei weit auseinanderliegende Parametersätze mit
+    identischer Punktzahl — die Geometrie ist durch sechs Bilder eines Geräts
+    **unterbestimmt**. Deshalb kommt die Kalibrierung (Autofit) vor der
+    Messänderung, siehe
+    [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md).
+
 ## OQ-24 — Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen
 
 * **Status:** in Arbeit · erkannt 2026-09-09 durch Bedienerrückmeldung
@@ -772,4 +809,12 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   nicht Teil dieser Stufe. Weitere reale Annotationen (auch mit bewusst
   einzelner Anzeige im Ausschnitt) würden die Validierung deutlich
   verlässlicher machen als zwei Aufnahmen desselben Geräts.
+* **Update 2026-09-11, Datenlage korrigiert:** Der Befund oben spricht von
+  „den zwei realen Annotationen". Inzwischen liegen **neun** Annotationen vor,
+  sechs davon mit getipptem Sollwert (Aufzählung und Messung in
+  [VALIDATION.md](VALIDATION.md), Abschnitt „2026-09-11"). Alle stammen
+  weiterhin von **einer** Geräteinstanz, die Aussage dieses Eintrags über die
+  Vorschlagsqualität bleibt damit unverändert gültig — die Zahl war schlicht
+  veraltet. Die IoU-Messung von `fit_quad_in_region`/`fit_ocr_box` wurde
+  **nicht** auf die übrigen vier Bilder ausgeweitet; das steht weiterhin aus.
 * **Antwort landet in:** `docs/VALIDATION.md`, `src/dispread/workbench/vision.py`.

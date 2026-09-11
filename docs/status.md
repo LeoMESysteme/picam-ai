@@ -140,11 +140,20 @@ Lock-Freigabe für `ocr.suggest`, Ground-Truth-Feld, erzwungene erneute
 Bestätigung beim Sitzungsstart, `freeze()`s vollständige Kandidatenliste,
 Regressionstest für den entfernten `roi.suggest`-Op). **Reale Validierung**
 (siehe [VALIDATION.md](VALIDATION.md)): `fit_quad_in_region` trifft die
-bestätigte `roi_quad` beider realer Annotationsbilder mit IoU ≈ 0,91;
-`fit_ocr_box` scheitert an denselben zwei Bildern (IoU 0,0, Haupt-/
-Nebenanzeige-Verwechslung plus Glanzfleck — [OQ-25](open-questions.md)). Kein
-automatisch übernommener Wert ist davon betroffen — jeder Vorschlag bleibt
-bis zum expliziten ✓-Klick unbestätigt.
+bestätigte `roi_quad` beider damals vorhandener Annotationsbilder mit
+IoU ≈ 0,91; `fit_ocr_box` scheitert an denselben zwei Bildern (IoU 0,0,
+Haupt-/Nebenanzeige-Verwechslung plus Glanzfleck — [OQ-25](open-questions.md)).
+Kein automatisch übernommener Wert ist davon betroffen — jeder Vorschlag
+bleibt bis zum expliziten ✓-Klick unbestätigt.
+
+**Nachtrag 2026-09-11:** Der Annotationsbestand ist auf **neun** gewachsen,
+sechs davon mit getipptem Sollwert — die beiden IoU-Zahlen oben beziehen sich
+weiterhin nur auf die zwei Bilder, an denen sie gemessen wurden, und wurden
+nicht ausgeweitet. Neu gemessen wurde dagegen der Segmentleser über alle
+sechs gelabelten Bilder: **5 korrekt, 0 falsch angenommen, 1 abgelehnt**
+([VALIDATION.md](VALIDATION.md), Abschnitt 2026-09-11). Daraus entstand
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+— noch nicht umgesetzt, reine Planung.
 
 ## Offene reale Abnahme
 
