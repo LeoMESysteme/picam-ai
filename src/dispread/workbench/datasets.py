@@ -255,6 +255,19 @@ class DatasetStore:
         """Oeffentliche Vorabpruefung: existiert Geraet/Gruppe so wie behauptet?"""
         return self._resolve_group(self._load_devices(), device_id, group_id)
 
+    def get_export_dir(self, export_id: str) -> Path:
+        """Export-ID serverseitig zu einem Verzeichnis unterhalb der Exporte aufloesen.
+
+        Keine vom Browser frei bestimmbaren Pfadparameter (Konzept.md §4) -
+        nur ein bereits validiertes Hex-Format wird ueberhaupt angesehen.
+        """
+        if not re.fullmatch(r"[0-9a-f]{32}", export_id):
+            raise DatasetError("Ungueltige Export-ID")
+        path = self.root / "exports" / export_id
+        if not path.is_dir():
+            raise DatasetError(f"Unbekannter Export: {export_id}")
+        return path
+
     # -- Samples ---------------------------------------------------------
 
     def _sample_dir(self, sample_id: str) -> Path:

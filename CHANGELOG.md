@@ -3,6 +3,29 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
+
+**Problem:** Der Sammelmodus konnte Aufnahmen und Exporte nur über den
+generischen, JSON-basierten `/command`-Endpunkt bedienen. Weder eine
+Bildvorschau der eingefrorenen Aufnahme noch ein Export-Download waren über
+HTTP erreichbar.
+
+**Änderung:** Zwei neue authentifizierte GET-Routen in `server.py`:
+`/dataset/captures/{token}.jpg` (JPEG-Vorschau der offenen Aufnahme, wie die
+bestehende `/frozen/{id}.jpg`) und `/dataset/exports/{id}.zip` (ZIP eines
+bereits veröffentlichten Exports, on-demand über `datasets.zip_export()` und
+`asyncio.to_thread` gebaut, damit die Ereignisschleife nicht blockiert). Beide
+lösen ihre ID serverseitig auf (`DatasetStore.get_export_dir()` validiert das
+Hex-Format und die Existenz) - kein vom Browser frei bestimmbarer Dateipfad.
+Beide laufen durch die bestehende Middleware (Session-Pflicht, CSRF nur für
+nicht-GET); unbekannte/abgelaufene IDs liefern 400 ohne weitere Details.
+
+**Konsequenz:** Aufnahme-Vorschau und Exportdownload sind jetzt Teil derselben
+authentifizierten Oberfläche wie der restliche Kamerapfad. `4 neue Tests`
+(`tests/test_dataset_api.py`, echter aiohttp-Testclient wie
+`test_camera_preview.py`), `269 passed, 2 skipped` gesamt, `ruff check`
+sauber. Noch offen: Browserbedienung (Aufgabe 4).
+
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff: Save/Export blockieren den Kamerapfad nicht mehr)
 
 **Problem:** `dataset.save` und `dataset.export` liefen wie alle anderen
