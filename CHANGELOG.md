@@ -3,6 +3,39 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R2/R6: eine Aufnahme, eine Konfiguration; ehrliches Manifest)
+
+**Problem:** (R2) `_clip_start` kopiert das Profil einmal beim Start. Änderte
+der Bediener ROI, Leseraster oder Kameraeinstellungen *zwischen* zwei
+`publish()`-Aufrufen, lief die Aufnahme weiter — alle weiteren Bilder wurden
+von einem veralteten Profil beschrieben. Die Absicherung aus Task 2 greift nur
+bei einem Revisionswechsel *innerhalb* eines `publish()`-Aufrufs. (R6) Der
+Manifesteintrag eines Bildes entstand beim Einreihen in die Schreib-Queue, und
+`clip.json` wurde sofort beim Stop geschrieben: ein fehlgeschlagenes
+`cv2.imwrite` (Rückgabe `False` oder Ausnahme) hinterließ ein Manifest, das
+nie geschriebene Dateien auflistete, mit `dropped_frames: 0`.
+
+**Änderung:** (R2) `_change()` — der Trichter, durch den jeder
+konfigurationsändernde Befehl läuft — beendet eine laufende Aufnahme mit
+`_clip_stop()` und protokolliert das, statt sie stillschweigend fortzuführen.
+(R6) Der Schreib-Thread ist jetzt die einzige Stelle, die einen Frame ins
+Manifest aufnimmt, und tut das erst nach erfolgreichem `cv2.imwrite`; er
+schreibt am Ende auch `clip.json` selbst (neues Abschlusselement in der Queue
+statt des bisherigen `None`-Sentinels). Fehlgeschlagene Schreibvorgänge zählen
+wie verworfene Bilder. `_clip_stop()` bleibt damit nicht blockierend und hält
+weiterhin kein Lock über ein `put` (Deadlockfix aus Task 2 unangetastet);
+`close()` und `drain_clip_writer()` warten wie bisher begrenzt auf die
+Schreiber. Der Livestatus zählt weiter die *eingereihten* Bilder, das Manifest
+die *geschriebenen*.
+
+**Konsequenz:** Ein Clip beschreibt genau eine Konfiguration; wer mitten in
+einer Aufnahme etwas ändert, bekommt einen sauber beendeten Clip statt eines
+still falsch etikettierten Datensatzes. `clip.json` erscheint erst, wenn die
+Bilder wirklich auf der Platte liegen, und behauptet keine Datei, die nicht
+geschrieben wurde — Bilder im Manifest plus `dropped_frames` ergeben weiterhin
+die aufgenommenen. `205 passed` (9 neue Tests, davon 7 gegen den alten Stand
+rot nachgewiesen), `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R3/R4/R5/R7: Benchmark und Autofit-Eingabe)
 
 **Problem:** Das Abschlussreview des ganzen Zweigs `ocr-selbstkalibrierung`

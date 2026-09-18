@@ -1942,3 +1942,196 @@ def test_tui_oeffnet_nachfuehrzeile_ohne_absturz(tmp_path, monkeypatch):
     # abgebrochen, statt hierher zu kommen.
     assert messages, "Infozeile sollte einen Hinweis anzeigen, keine stille Aktion"
     assert any("nachfuehrung" in str(text).lower() for text in messages)
+
+
+# --- Abschlussreview R2: eine Aufnahme, eine Konfiguration -----------------
+
+
+@pytest.mark.parametrize(
+    ("op", "args"),
+    [
+        ("layout.set", {"key": "digits", "value": 5}),
+        ("camera.set", {"key": "Contrast", "value": 1.5}),
+        ("profile.role", {"value": "secondary"}),
+    ],
+)
+def test_konfigurationsaenderung_beendet_die_laufende_aufnahme(tmp_path, op, args):
+    """Ein Clip beschreibt genau EINE Konfiguration.
+
+    `_clip_start` kopiert das Profil einmal. Aendert der Bediener zwischen
+    zwei `publish()`-Aufrufen etwas daran, waeren alle weiteren Bilder von
+    einem veralteten Profil beschrieben - stillschweigend falsch etikettierte
+    Testdaten. Die Absicherung gegen einen Revisionswechsel *innerhalb* eines
+    publish()-Aufrufs (Task 2) deckt diesen Fall nicht ab (Review-Fund).
+    """
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "28,80", "seconds": 60}
+    )
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+    controller.command(op, args)
+
+    assert controller.clip is None
+    assert controller.snapshot()["clip"]["state"] == "idle"
+
+    # Dieses Bild gehoert bereits zur neuen Konfiguration und darf nicht mehr
+    # in der alten Aufnahme landen.
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.drain_clip_writer()
+
+    clips = sorted((controller.root / "clips").iterdir())
+    assert len(clips) == 1
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert len(manifest["frames"]) == 1
+    assert manifest["dropped_frames"] == 0
+    # Das Manifest beschreibt genau die Konfiguration, unter der das eine
+    # Bild aufgenommen wurde.
+    assert manifest["profile"]["layout"]["digits"] == DEFAULT["layout"]["digits"]
+    assert manifest["profile"]["camera"]["controls"] == DEFAULT["camera"]["controls"]
+    assert manifest["profile"]["role"] == DEFAULT["role"]
+
+
+def test_roi_bestaetigung_beendet_die_laufende_aufnahme(tmp_path):
+    """Auch die Geometriebestaetigung selbst ist eine Konfigurationsaenderung."""
+    controller = ready_controller(tmp_path)
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "28,80", "seconds": 60}
+    )
+    controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    frozen = controller.command("freeze")
+
+    controller.command("roi", {"id": frozen["id"], "quad": frozen["quad"], "ocr_box": frozen["ocr_box"]})
+
+    assert controller.clip is None
+    controller.drain_clip_writer()
+    clips = sorted((controller.root / "clips").iterdir())
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert len(manifest["frames"]) == 1
+
+
+# --- Abschlussreview R6: das Manifest behauptet nur Geschriebenes ----------
+
+
+@pytest.mark.parametrize("failure", ["false", "exception"])
+def test_manifest_zaehlt_fehlgeschlagene_schreibvorgaenge_nicht_als_bilder(
+    tmp_path, monkeypatch, failure
+):
+    """Ein fehlgeschlagenes `cv2.imwrite` ist ein verlorenes Bild.
+
+    Frueher wurde der Manifesteintrag schon beim Einreihen angelegt und
+    `clip.json` sofort beim Stop geschrieben: das Manifest listete Dateien,
+    die nie entstanden sind, `dropped_frames` stand trotzdem auf 0
+    (Review-Fund). Beides - Rueckgabewert `False` und geworfene Ausnahme -
+    muss ehrlich als Verlust erscheinen.
+    """
+
+    def failing_imwrite(path, image):
+        if failure == "exception":
+            raise cv2.error("kaputt")
+        return False
+
+    monkeypatch.setattr(cv2, "imwrite", failing_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "1,00", "seconds": 60}
+    )
+    for _ in range(3):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+    controller.command("clip.stop")
+    controller.drain_clip_writer()
+
+    clips = sorted((controller.root / "clips").iterdir())
+    manifest = json.loads((clips[0] / "clip.json").read_text())
+    assert manifest["frames"] == []
+    assert manifest["dropped_frames"] == 3
+
+
+def test_manifest_erscheint_erst_wenn_die_bilder_geschrieben_sind(tmp_path, monkeypatch):
+    """Zwischen "Aufnahme beendet" und "Manifest gueltig" liegt das Schreiben.
+
+    Ein Replay unmittelbar nach dem Stop darf kein Manifest vorfinden, das
+    noch nicht geschriebene Dateien auffuehrt. Entweder ist `clip.json` noch
+    nicht da - dann ist der Clip erkennbar unfertig - oder alle darin
+    genannten Bilder liegen wirklich auf der Platte.
+    """
+    original_imwrite = cv2.imwrite
+
+    def slow_imwrite(path, image):
+        time.sleep(0.05)
+        return original_imwrite(path, image)
+
+    monkeypatch.setattr(cv2, "imwrite", slow_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "2,00", "seconds": 60}
+    )
+    for _ in range(5):
+        controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+
+    controller.command("clip.stop")  # kehrt sofort zurueck, ohne zu warten
+    directory = next(iter(sorted((controller.root / "clips").iterdir())))
+    manifest_path = directory / "clip.json"
+    if manifest_path.exists():
+        for entry in json.loads(manifest_path.read_text())["frames"]:
+            assert (directory / entry["file"]).exists()
+
+    controller.drain_clip_writer()
+    manifest = json.loads(manifest_path.read_text())
+    assert len(manifest["frames"]) == 5
+    assert manifest["dropped_frames"] == 0
+    for entry in manifest["frames"]:
+        assert (directory / entry["file"]).exists()
+    # Und damit auch wirklich abspielbar.
+    source = open_source(f"replay://{directory}")
+    source.open()
+    assert len(list(source.frames())) == 5
+    source.close()
+
+
+def test_stop_bei_voller_warteschlange_blockiert_nicht_und_liefert_ein_manifest(tmp_path, monkeypatch):
+    """Das Abschlusselement trifft auf eine volle Queue - der klassische
+    Deadlockfall aus Task 2, nur jetzt mit dem Manifest daran. `clip.stop`
+    laeuft unter `self.lock`; ein blockierendes `put` wuerde auf den
+    Schreiber warten, der fuer seinen Fehlerpfad dasselbe Lock braucht."""
+    block = threading.Event()
+    original_imwrite = cv2.imwrite
+
+    def blocking_imwrite(path, image):
+        block.wait(timeout=5)
+        return original_imwrite(path, image)
+
+    monkeypatch.setattr(cv2, "imwrite", blocking_imwrite)
+
+    controller = ready_controller(tmp_path)
+    controller.command("mode", {"value": "annotate"})
+    controller.command(
+        "clip.start", {"device_id": "geraet-1", "ground_truth_text": "3,00", "seconds": 60}
+    )
+    try:
+        for _ in range(CLIP_QUEUE_DEPTH + 10):
+            controller.publish(_frame(), {"timebase": "synthetic", "uncertainty_ns": None})
+        queued = controller.snapshot()["clip"]["frames"]
+        dropped = controller.snapshot()["clip"]["dropped"]
+        assert dropped > 0  # die Queue ist wirklich voll gelaufen
+
+        started = time.monotonic()
+        controller.command("clip.stop")  # darf nicht blockieren
+        assert time.monotonic() - started < 1.0
+        assert controller.command("status")["clip"]["state"] == "idle"
+    finally:
+        block.set()
+
+    controller.drain_clip_writer()
+    directory = next(iter(sorted((controller.root / "clips").iterdir())))
+    manifest = json.loads((directory / "clip.json").read_text())
+    assert len(manifest["frames"]) == queued
+    assert manifest["dropped_frames"] == dropped
+    assert len(manifest["frames"]) + manifest["dropped_frames"] == CLIP_QUEUE_DEPTH + 10
+    for entry in manifest["frames"]:
+        assert (directory / entry["file"]).exists()

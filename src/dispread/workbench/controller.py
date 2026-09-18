@@ -339,7 +339,11 @@ class Controller:
                 "simulated": self.simulate,
                 "clip": {
                     "state": "idle" if self.clip is None else "recording",
-                    "frames": 0 if self.clip is None else len(self.clip["entries"]),
+                    # Eingereihte Bilder. Das Manifest zaehlt am Ende nur die
+                    # tatsaechlich geschriebenen (siehe _clip_writer); ein
+                    # fehlgeschlagener Schreibvorgang wandert dort zu
+                    # "dropped_frames".
+                    "frames": 0 if self.clip is None else self.clip["queued"],
                     "dropped": 0 if self.clip is None else self.clip["dropped"],
                     "path": None if self.clip is None else str(self.clip["path"]),
                     "seconds_left": None
@@ -352,6 +356,18 @@ class Controller:
         if self.auto["state"] in ("running", "queued"):
             raise ValueError("Automatische Einrichtung zuerst abbrechen")
         self.config = validate(data, self.capabilities or None)
+        if self.clip is not None:
+            # Ein Clip beschreibt genau EINE Konfiguration: sein Profil wird
+            # beim Start einmal kopiert (_clip_start). Aendert der Bediener
+            # zwischen zwei publish()-Aufrufen ROI, Raster oder Kamera, waeren
+            # alle weiteren Bilder von einem veralteten Profil beschrieben -
+            # ein still inkonsistenter Datensatz. Deshalb endet die Aufnahme
+            # hier, statt sie fortzufuehren (dieselbe Haltung wie beim
+            # Revisionswechsel mitten in publish()). `_clip_stop` blockiert
+            # nicht (siehe dort), das Lock darf hier also gehalten bleiben.
+            path = self.clip["path"].name
+            self._clip_stop()
+            self.log("warn", f"Konfiguration geaendert; Clipaufnahme {path} beendet")
         # Die Freigabepruefung ist zustandsbehaftet; nach einer Aenderung darf
         # sie keine Bestaetigung aus der alten Konfiguration mitschleppen.
         self.gate, self.gate_revision = None, None
@@ -804,7 +820,10 @@ class Controller:
             "profile": copy.deepcopy(self.config),
             "profile_name": self.name,
             "calibrated_on_frame_sequence": self.calibrated_on,
-            "entries": [],
+            # Eingereihte Bilder. Die Liste der tatsaechlich geschriebenen
+            # fuehrt allein der Schreib-Thread (siehe _clip_writer) - nur er
+            # weiss, ob `cv2.imwrite` erfolgreich war.
+            "queued": 0,
             "dropped": 0,
         }
         # Die Queue an den Thread binden statt sie ueber self.clip_queue immer
@@ -820,79 +839,131 @@ class Controller:
         self.log("info", f"Clipaufnahme {target.name} gestartet: {device_id}, Sollwert {text!r}")
 
     def _clip_writer(self, clip_queue):
-        """Bilder schreiben, ohne den Bildpfad aufzuhalten.
+        """Bilder schreiben und am Ende das Manifest - beides ohne den Bildpfad aufzuhalten.
 
         `clip_queue` ist die beim Threadstart uebergebene Queue dieser einen
         Aufnahme - nicht `self.clip_queue`, das ein nachfolgender
         clip.start bereits auf eine neue Queue umgebogen haben kann,
         waehrend dieser Thread noch die alte leerraeumt.
 
+        Dieser Thread ist die EINZIGE Stelle, die einen Frame ins Manifest
+        aufnimmt, und er tut es erst NACH einem erfolgreichen `cv2.imwrite`.
+        Frueher wurde der Eintrag schon beim Einreihen gezaehlt und `clip.json`
+        sofort beim Stop geschrieben: ein fehlgeschlagener Schreibvorgang
+        stand dann als vorhandenes Bild im Manifest, `dropped_frames` blieb 0
+        (Review-Fund). Dass der Schreiber das Manifest selbst schreibt, ist
+        zugleich die Antwort auf den frueheren Deadlock: `_clip_stop()` muss
+        nicht auf ihn warten und haelt dabei kein Lock.
+
         `cv2.imwrite` faengt auf: ein defektes Bild (z. B. leeres Array) darf
         diesen Thread nicht mit einem unbehandelten `cv2.error` sterben lassen
-        (Review-Fund, Critical) - stirbt der Thread, wird die Sentinel-Zustellung
-        in `_clip_stop`/`close` nie abgeholt und alles wartet auf einen Thread,
-        der nie wieder `get()` aufruft.
+        (Review-Fund, Critical) - stirbt der Thread, wird die Zustellung des
+        Abschlusselements in `_clip_stop`/`close` nie abgeholt und alles
+        wartet auf einen Thread, der nie wieder `get()` aufruft.
         """
+        written, failed = [], 0
         while True:
             item = clip_queue.get()
             if item is None:
                 return
-            path, image = item
+            if item[0] == "finalize":
+                _, manifest_path, manifest = item
+                # Erst hier steht fest, was wirklich auf der Platte liegt.
+                # Ein fehlgeschlagener Schreibvorgang ist ein verlorenes Bild
+                # und wird wie ein verworfenes gezaehlt - Bilder im Manifest
+                # plus verworfene ergeben weiter die aufgenommenen.
+                manifest = dict(
+                    manifest,
+                    frames=written,
+                    dropped_frames=manifest["dropped_frames"] + failed,
+                )
+                try:
+                    atomic_json(manifest_path, manifest)
+                except OSError as error:
+                    self.log("error", f"Clipmanifest nicht geschrieben: {manifest_path} ({error})")
+                    return
+                self.log(
+                    "info",
+                    f"Clip {manifest_path.parent.name}: {len(written)} Bilder geschrieben, "
+                    f"{manifest['dropped_frames']} verworfen (davon {failed} Schreibfehler)",
+                )
+                return
+            _, path, image, entry = item
             try:
                 ok = cv2.imwrite(str(path), image)
             except Exception as error:
                 self.log("error", f"Clipbild nicht geschrieben: {path} ({error})")
+                failed += 1
                 continue
-            if not ok:
+            if ok:
+                written.append(entry)
+            else:
+                failed += 1
                 self.log("error", f"Clipbild nicht geschrieben: {path}")
 
     def _clip_stop(self):
+        """Aufnahme beenden. Das Manifest schreibt der Schreib-Thread, nicht diese Methode.
+
+        Getrennt, weil "Aufnahme beendet" und "Manifest ist ehrlich
+        abgeschlossen" verschiedene Zeitpunkte sind: erst wenn die letzten
+        Bilder wirklich geschrieben sind, steht fest, was `clip.json` behaupten
+        darf. Ein Warten hier waere nicht moeglich, ohne `self.lock` zu halten
+        (siehe `_enqueue_clip_item`) - deshalb erbt der Schreiber die Aufgabe.
+        Tests warten mit `drain_clip_writer()`, `close()` joint ohnehin.
+        """
         if self.clip is None:
             return
         clip, self.clip = self.clip, None
-        self._enqueue_clip_sentinel(self.clip_queue)
-        atomic_json(
-            clip["path"] / "clip.json",
-            {
-                "schema_version": CLIP_SCHEMA_VERSION,
-                "clip_id": clip["path"].name,
-                "device_id": clip["device_id"],
-                "ground_truth_text": clip["ground_truth_text"],
-                "profile": clip["profile"],
-                "profile_name": clip["profile_name"],
-                "calibrated_on_frame_sequence": clip["calibrated_on_frame_sequence"],
-                "dropped_frames": clip["dropped"],
-                "created_at": datetime.now(UTC).isoformat(),
-                "created_timebase": "UTC",
-                "frames": clip["entries"],
-            },
+        self._enqueue_clip_item(
+            self.clip_queue,
+            (
+                "finalize",
+                clip["path"] / "clip.json",
+                {
+                    "schema_version": CLIP_SCHEMA_VERSION,
+                    "clip_id": clip["path"].name,
+                    "device_id": clip["device_id"],
+                    "ground_truth_text": clip["ground_truth_text"],
+                    "profile": clip["profile"],
+                    "profile_name": clip["profile_name"],
+                    "calibrated_on_frame_sequence": clip["calibrated_on_frame_sequence"],
+                    "dropped_frames": clip["dropped"],
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "created_timebase": "UTC",
+                },
+            ),
         )
         self.log(
             "info",
-            f"Clip {clip['path'].name}: {len(clip['entries'])} Bilder, {clip['dropped']} verworfen",
+            f"Clip {clip['path'].name}: Aufnahme beendet, {clip['queued']} Bilder eingereiht, "
+            f"{clip['dropped']} verworfen; Manifest folgt nach dem Schreiben",
         )
 
-    def _enqueue_clip_sentinel(self, clip_queue):
-        """Den Beenden-Sentinel einreihen, ohne unter `self.lock` zu blockieren.
+    def _enqueue_clip_item(self, clip_queue, item):
+        """Ein Element einreihen, ohne unter `self.lock` zu blockieren.
 
         `_clip_stop()` laeuft immer unter `self.lock` (RLock) - aufgerufen aus
         dem `clip.stop`-Zweig von `command()`, dem Deadline-Zweig in
-        `publish()` und aus `close()`. Ein blockierendes `put(None)` auf einer
-        vollen Queue wuerde deshalb warten, bis der Schreiber per `get()`
-        Platz macht - der Schreiber braucht fuer seinen eigenen Fehlerpfad
-        (`self.log()`) aber ebenfalls `self.lock` und kaeme nicht mehr bis zum
-        naechsten `get()`: klassischer Deadlock (Review-Fund, Critical).
-        `put_nowait()` blockiert nie; ist die Queue in diesem seltenen Fall
-        wirklich voll, liefert ein kurzlebiger Hilfsthread den Sentinel
-        blockierend nach - aber ausserhalb des Locks, der aufrufende Thread
-        wartet darauf nicht.
+        `publish()`, aus `_change()` und aus `close()`. Ein blockierendes
+        `put()` auf einer vollen Queue wuerde deshalb warten, bis der
+        Schreiber per `get()` Platz macht - der Schreiber braucht fuer seinen
+        eigenen Fehlerpfad (`self.log()`) aber ebenfalls `self.lock` und kaeme
+        nicht mehr bis zum naechsten `get()`: klassischer Deadlock
+        (Review-Fund, Critical). `put_nowait()` blockiert nie; ist die Queue
+        in diesem seltenen Fall wirklich voll, liefert ein kurzlebiger
+        Hilfsthread das Element blockierend nach - aber ausserhalb des Locks,
+        der aufrufende Thread wartet darauf nicht. Die Reihenfolge bleibt
+        gewahrt: nach dem Stop reiht niemand mehr Bilder ein, das
+        Abschlusselement ist also in jedem Fall das letzte.
         """
         if clip_queue is None:
             return
         try:
-            clip_queue.put_nowait(None)
+            clip_queue.put_nowait(item)
         except queue.Full:
-            threading.Thread(target=clip_queue.put, args=(None,), name="clip-sentinel", daemon=True).start()
+            threading.Thread(
+                target=clip_queue.put, args=(item,), name="clip-finalize", daemon=True
+            ).start()
 
     def drain_clip_writer(self):
         """Auf alle noch nicht eingesammelten Schreib-Threads warten. Fuer Tests - kein Bedienbefehl.
@@ -1036,27 +1107,29 @@ class Controller:
                 if time.monotonic() >= self.clip["deadline"]:
                     self._clip_stop()
                 else:
-                    name = f"frame_{len(self.clip['entries']) + 1:06d}.png"
+                    name = f"frame_{self.clip['queued'] + 1:06d}.png"
+                    entry = {
+                        "file": name,
+                        "frame_sequence": self.sequence,
+                        "capture_timestamp": {
+                            "value_ns": int(metadata.get("SensorTimestamp", 0)),
+                            "base": metadata.get("timebase", TimeBaseKind.FILE_MTIME.value),
+                            "semantics": metadata.get("timestamp_semantics", "unknown"),
+                            "uncertainty_ns": metadata.get("uncertainty_ns"),
+                        },
+                        "metadata": copy.deepcopy(metadata),
+                    }
                     try:
-                        self.clip_queue.put_nowait((self.clip["path"] / name, image))
+                        # Der Eintrag faehrt mit; ins Manifest nimmt ihn erst
+                        # der Schreiber auf, und nur nach erfolgreichem
+                        # Schreiben (siehe _clip_writer).
+                        self.clip_queue.put_nowait(("frame", self.clip["path"] / name, image, entry))
                     except queue.Full:
                         # Gezaehlt, nicht stillschweigend verworfen - die Zahl steht im
                         # clip.json und macht einen lueckenhaften Clip erkennbar.
                         self.clip["dropped"] += 1
                     else:
-                        self.clip["entries"].append(
-                            {
-                                "file": name,
-                                "frame_sequence": self.sequence,
-                                "capture_timestamp": {
-                                    "value_ns": int(metadata.get("SensorTimestamp", 0)),
-                                    "base": metadata.get("timebase", TimeBaseKind.FILE_MTIME.value),
-                                    "semantics": metadata.get("timestamp_semantics", "unknown"),
-                                    "uncertainty_ns": metadata.get("uncertainty_ns"),
-                                },
-                                "metadata": copy.deepcopy(metadata),
-                            }
-                        )
+                        self.clip["queued"] += 1
             self.last_frame = now
             if self.first_frame is None:
                 self.first_frame = self.last_frame
@@ -1170,11 +1243,10 @@ class Controller:
     def close(self):
         with self.lock:
             self._clip_stop()
-        # _clip_stop() nur schreibt clip.json und weckt den Schreib-Thread mit
-        # dem None-Sentinel auf - es wartet NICHT, bis die letzten PNGs
-        # tatsaechlich auf der Platte liegen. Ohne diesen Join koennte der
-        # Prozess beenden, waehrend im gerade geschriebenen Manifest gelistete
-        # Bilder noch fehlen. Gleicher Stil/Timeout wie der Kamerathread unten.
+        # _clip_stop() reiht nur das Abschlusselement ein - geschrieben werden
+        # die letzten PNGs und danach clip.json vom Schreib-Thread. Ohne
+        # diesen Join koennte der Prozess beenden, bevor Bilder und Manifest
+        # auf der Platte liegen. Gleicher Stil/Timeout wie der Kamerathread unten.
         # Alle noch nicht eingesammelten Schreiber werden gejoint, nicht nur
         # der letzte - ein vorheriger, bei einem raschen Stop/Start noch
         # leerraeumender Thread wuerde sonst nie beobachtet (Review-Fund).
