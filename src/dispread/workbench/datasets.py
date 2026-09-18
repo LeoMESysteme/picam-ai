@@ -618,6 +618,23 @@ class DatasetStore:
                 continue
             included.append(chosen)
 
+        # Der externe Experiment-Loader lehnt ein doppeltes Bildhash ueber ALLE
+        # Proben eines Exports hinweg ab (nicht nur innerhalb einer Gruppe) -
+        # zwei verschiedene Situationen koennten sonst zufaellig dasselbe Bild
+        # als je "eigene" unabhaengige Probe einreichen. Nur der erste Treffer
+        # bleibt drin, alle weiteren werden mit Grund ausgeschlossen.
+        deduped: list[dict] = []
+        seen_hashes: dict[str, str] = {}
+        for sample in included:
+            if sample["sha256"] in seen_hashes:
+                excluded.append(
+                    {"id": sample["id"], "reason": f"duplicate_image_hash_of={seen_hashes[sample['sha256']]}"}
+                )
+                continue
+            seen_hashes[sample["sha256"]] = sample["id"]
+            deduped.append(sample)
+        included = deduped
+
         export_id = uuid.uuid4().hex
         final_dir = self.root / "exports" / export_id
         temp_dir = Path(tempfile.mkdtemp(dir=self.root if self.root.is_dir() else None, prefix=".export-"))

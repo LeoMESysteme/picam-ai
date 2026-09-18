@@ -3,6 +3,40 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 6: unveränderlicher, direkt auswertbarer Export)
+
+**Problem:** Der Export aus Aufgabe 1 war gegen den *beschriebenen*
+Manifestvertrag getestet, aber nie gegen den echten Experiment-Loader aus
+`codex/automatic-seven-segment` (`src/dispread/experimental/evaluation.py::load_manifest`,
+Commit `6a18bdf`). Dessen `load_manifest` prüft zusätzlich projektübergreifend:
+kein doppeltes Bildhash über den *gesamten* Export hinweg (nicht nur je
+Gruppe) und höchstens ein Manifest-Eintrag je `heldout`-Unabhängigkeitsgruppe.
+
+**Änderung:** `DatasetStore._export_locked()` entfernt jetzt zusätzlich
+Proben mit einem bereits im Export vorhandenen Bildhash (Grund
+`duplicate_image_hash_of=<id>` in `selection.json`) - unabhängig davon, aus
+welcher Situation/Gruppe sie stammen. Neues
+`scripts/check-dataset-export.py`: lokale Schema-/Pfad-/Hashprüfung ohne
+Argument, oder mit `--experiment-root <worktree>` zusätzlich ein echter Aufruf
+von `load_manifest` in einem **separaten Prozess** mit dem venv jenes
+Worktrees (`subprocess.run` mit getrennten Argumenten, kein Shell-String,
+importiert nur `load_manifest`, keine Modelle/den Runner). Ohne
+`--experiment-root` meldet das Skript die externe Kompatibilität ausdrücklich
+als **nicht geprüft** statt als Erfolg.
+
+**Konsequenz:** `tests/test_dataset_export.py` verwendet ein bereits
+lizenziertes Realbild aus dem Experiment (`data/scale.jpg`, Public Domain,
+Original-Herkunft/-Label/-Split unverändert übernommen) und prüft: ein
+kompatibler Export wird vom echten Loader akzeptiert, eine nachträglich
+veränderte Bilddatei wird abgelehnt, der Export überlebt Verschieben in ein
+anderes Verzeichnis und einen anderen Arbeitsordner, und eine spätere
+Labelkorrektur (als neue, unabhängige Probe) verändert einen bereits
+veröffentlichten Export nicht. Die Tests überspringen sich selbst, falls der
+Experiment-Worktree lokal fehlt - ein fehlender Experimentstand ist kein
+Bestehen. `286 passed, 2 skipped` gesamt, `ruff check` sauber. Diese
+Integration erzeugt keine neue OCR-Messung.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
 
 **Problem:** Wiederholungsaufnahmen und beinahe-identische Bilder in

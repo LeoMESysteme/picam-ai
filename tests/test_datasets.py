@@ -544,6 +544,24 @@ def test_device_count_depends_only_on_uuids_not_on_sample_or_label_count(tmp_pat
     del device_b
 
 
+def test_export_deduplicates_identical_image_across_different_groups(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group_a = store.begin_group(device["id"], "Situation 1")
+    group_b = store.begin_group(device["id"], "Situation 2")
+    # Beide Proben sind mit demselben Standardbild eindeutig eigenstaendige
+    # Situationen (verschiedene group_id) - der externe Loader lehnt ein
+    # doppeltes Bildhash ueber den GESAMTEN Export hinweg trotzdem ab, deshalb
+    # muss der Export selbst nur die erste Probe aufnehmen.
+    store.save_sample(_capture(device["id"], group_a["group_id"], token="tok-1"), _annotation())
+    store.save_sample(_capture(device["id"], group_b["group_id"], token="tok-2"), _annotation())
+    result = store.export()
+    manifest = json.loads((result["path"] / "manifest.json").read_text())
+    selection = json.loads((result["path"] / "selection.json").read_text())
+    assert len(manifest["samples"]) == 1
+    assert any("duplicate_image_hash_of" in x["reason"] for x in selection["excluded"])
+
+
 def test_missing_conditions_are_reported_as_a_gap_not_fabricated_coverage(tmp_path):
     store = DatasetStore(tmp_path / "datasets")
     device = store.create_device(_device_payload())
