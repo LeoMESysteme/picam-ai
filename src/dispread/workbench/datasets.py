@@ -69,6 +69,7 @@ _VALUE_MAX = 64
 
 _FAMILY_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 _LABEL_RE = re.compile(r"^-?(\d+\.\d+|\.\d+|\d+)$")
+_SAMPLE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 class DatasetError(ValueError):
@@ -156,6 +157,15 @@ def _validate_device_fields(data: dict, *, partial: bool) -> dict:
         if split not in SPLITS:
             raise DatasetError(f"split muss eine von {SPLITS} sein")
         out["split"] = split
+    if "identity_evidence" in data or not partial:
+        # "identity_verified=true nur nach menschlicher Bestaetigung des
+        # physischen Geraets; Belegart zusaetzlich als identity_evidence
+        # protokollieren" (Konzept, Exportvertrag) - Software kann eine
+        # falsche menschliche Angabe nicht beweisen, aber die Belegart bleibt
+        # nachvollziehbar dokumentiert statt implizit "irgendwie bestaetigt".
+        out["identity_evidence"] = _short_text(
+            data.get("identity_evidence"), "Belegart der Identitätsbestätigung", _NOTE_MAX, required=True
+        )
     return out
 
 
@@ -186,11 +196,33 @@ class DatasetStore:
         except OSError as error:
             raise WriteFailure(f"Geraeteregistrierung nicht geschrieben: {error}") from error
 
-    def _device_has_samples(self, device_id: str) -> bool:
+    def _iter_sample_dirs(self) -> list[Path]:
+        """Nur vollständig veröffentlichte Sample-Verzeichnisse (UUID-Name).
+
+        Ein Absturz zwischen dem Schreiben von ``sample.json`` und dem
+        abschließenden ``rename()`` (siehe ``_save_sample_locked``)
+        hinterlässt ein temporäres ``.sample-*``-Verzeichnis mit demselben
+        Dateiinhalt. Das darf nach einem Neustart nicht als fertige Probe
+        zählen (Konzept, Aufgabe 1: "Unvollständige temporäre Verzeichnisse
+        zählen nach Neustart nicht mit"). Ausschließlich der UUID-Name
+        entscheidet, nicht die Existenz von ``sample.json`` allein.
+        """
         samples_dir = self.root / "samples"
         if not samples_dir.is_dir():
-            return False
-        for sample_dir in samples_dir.iterdir():
+            return []
+        return [entry for entry in sorted(samples_dir.iterdir()) if entry.is_dir() and _SAMPLE_ID_RE.fullmatch(entry.name)]
+
+    def _count_incomplete_sample_dirs(self) -> int:
+        """Diagnostische Zählung liegen gebliebener Temp-Verzeichnisse (siehe ``_iter_sample_dirs``)."""
+        samples_dir = self.root / "samples"
+        if not samples_dir.is_dir():
+            return 0
+        return sum(
+            1 for entry in samples_dir.iterdir() if entry.is_dir() and not _SAMPLE_ID_RE.fullmatch(entry.name)
+        )
+
+    def _device_has_samples(self, device_id: str) -> bool:
+        for sample_dir in self._iter_sample_dirs():
             sample_json = sample_dir / "sample.json"
             if not sample_json.exists():
                 continue
@@ -293,10 +325,7 @@ class DatasetStore:
         return self.root / "samples" / sample_id
 
     def _find_existing_sample_for_token(self, capture_token: str) -> dict | None:
-        samples_dir = self.root / "samples"
-        if not samples_dir.is_dir():
-            return None
-        for sample_dir in samples_dir.iterdir():
+        for sample_dir in self._iter_sample_dirs():
             sample_json = sample_dir / "sample.json"
             if not sample_json.exists():
                 continue
@@ -474,10 +503,7 @@ class DatasetStore:
         return best
 
     def _find_duplicate_hash(self, sha256: str) -> str | None:
-        samples_dir = self.root / "samples"
-        if not samples_dir.is_dir():
-            return None
-        for sample_dir in samples_dir.iterdir():
+        for sample_dir in self._iter_sample_dirs():
             sample_json = sample_dir / "sample.json"
             if not sample_json.exists():
                 continue
@@ -491,11 +517,8 @@ class DatasetStore:
         return None
 
     def _load_all_samples(self) -> list[dict]:
-        samples_dir = self.root / "samples"
-        if not samples_dir.is_dir():
-            return []
         out = []
-        for sample_dir in sorted(samples_dir.iterdir()):
+        for sample_dir in self._iter_sample_dirs():
             sample_json = sample_dir / "sample.json"
             if not sample_json.exists():
                 continue
@@ -570,6 +593,7 @@ class DatasetStore:
             "families": sorted(families),
             "technologies": sorted(technologies),
             "missing_conditions": self._missing_conditions(registry, real),
+            "incomplete_temp_dirs": self._count_incomplete_sample_dirs(),
         }
 
     def _missing_conditions(self, registry: dict, real_samples: list[dict]) -> dict:
@@ -596,12 +620,23 @@ class DatasetStore:
         registry = self._load_devices()
         samples = self._load_all_samples()
 
-        by_group: dict[str, list[dict]] = {}
-        for sample in samples:
-            by_group.setdefault(sample["independence_group"], []).append(sample)
-
         included: list[dict] = []
         excluded: list[dict] = []
+
+        # "Unsichere/Entwurfs-/synthetische/ueberzaehlige Wiederholungsbilder
+        # nicht in samples aufnehmen" (Konzept, Exportvertrag) - synthetisch
+        # steht ausdruecklich in derselben Aufzaehlung wie uncertain/draft und
+        # darf den Export ebensowenig als reale Abdeckung erreichen.
+        real_samples = []
+        for sample in samples:
+            if sample["synthetic"]:
+                excluded.append({"id": sample["id"], "reason": "synthetic"})
+                continue
+            real_samples.append(sample)
+
+        by_group: dict[str, list[dict]] = {}
+        for sample in real_samples:
+            by_group.setdefault(sample["independence_group"], []).append(sample)
         for _group_id, group_samples in by_group.items():
             selected = [s for s in group_samples if s.get("selected")]
             if len(group_samples) > 1 and not selected:
@@ -657,6 +692,7 @@ class DatasetStore:
                         "sha256": sha256,
                         "device_id": sample["device_id"],
                         "identity_verified": bool(device.get("identity_confirmed")),
+                        "identity_evidence": device.get("identity_evidence"),
                         "family": device.get("family"),
                         "technology": device.get("technology"),
                         "split": sample["split"],

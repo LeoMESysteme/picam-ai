@@ -148,6 +148,7 @@ const DatasetCollection = (function () {
           technology: $('dataset-device-input-technology').value,
           split: $('dataset-device-input-split').value,
           identity_confirmed: $('dataset-device-input-confirm').checked,
+          identity_evidence: $('dataset-device-input-evidence').value.trim(),
         };
         device = await op('dataset.device.create', payload);
         group = null;

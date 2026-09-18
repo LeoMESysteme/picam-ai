@@ -49,6 +49,7 @@ def _device_payload():
         "technology": "LED",
         "split": "development",
         "identity_confirmed": True,
+        "identity_evidence": "Laborsicht: Typenschild abgeglichen",
     }
     return device_args
 
@@ -91,7 +92,10 @@ def test_dataset_command_without_csrf_is_rejected(tmp_path):
 def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
-        c.publish(_image(fill=42), {"timebase": "synthetic"})
+        # Bewusst NICHT "timebase": "synthetic" - dieser Test prueft den
+        # vollen Exportpfad, und synthetische Fixtures zaehlen seit Aufgabe 6
+        # nie zur realen Exportabdeckung (Konzept, Exportvertrag).
+        c.publish(_image(fill=42), {"timebase": "file_mtime"})
         client, terminals, headers = await _authenticated_client(tmp_path, c)
         try:
             device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()

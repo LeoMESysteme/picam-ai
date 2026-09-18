@@ -50,7 +50,16 @@ class CaptureRegistry:
         open_count = sum(1 for entry in self._captures.values() if not entry.get("saved"))
         if open_count >= MAX_OPEN_CAPTURES:
             raise CaptureError("Maximal zwei offene Aufnahmen gleichzeitig; zuerst speichern oder verwerfen")
-        total = image.nbytes + sum(entry["image"].nbytes for entry in self._captures.values())
+        # Das Speicherbudget gilt fuer OFFENE Aufnahmen ("...64 MiB
+        # Rohbildspeicher dafuer", Konzept Abschnitt 5) - eine bereits
+        # gespeicherte Aufnahme bleibt zwar bis zum Ablauf fuer einen
+        # idempotenten Retry im Speicher, zaehlt aber nicht gegen das Budget
+        # fuer neue Aufnahmen. Sonst wuerde ein produktiver Sammelbetrieb
+        # (viele Saves in zehn Minuten) neue Aufnahmen ablehnen, obwohl
+        # nichts tatsaechlich offen ist.
+        total = image.nbytes + sum(
+            entry["image"].nbytes for entry in self._captures.values() if not entry.get("saved")
+        )
         if total > MAX_TOTAL_BYTES:
             raise CaptureError("Rohbildspeicher fuer offene Aufnahmen erschoepft (64 MiB)")
         token = uuid.uuid4().hex

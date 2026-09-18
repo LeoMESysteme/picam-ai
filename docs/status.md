@@ -58,10 +58,19 @@ Zielbox/Label erreichen nirgends `ValueRecord`, `ReleaseGate`,
 Plan gefordert. Strukturentscheidung dazu in `project_history.md`
 (2026-09-18, „eigener Rohbild-Sammelpfad statt Lockerung von `roi`/`clip.start`").
 
+* **Nachschliff nach Advisor-Review:** eine unabhängige Zweitprüfung nach
+  Aufgabe 7 fand vier Lücken gegen den eigenen Exportvertrag — synthetische
+  Proben liefen ungefiltert in den Export, ein Absturz zwischen
+  `sample.json`-Schreiben und `rename()` hätte ein liegen gebliebenes
+  Temp-Verzeichnis als fertige Probe (sogar als möglichen Gruppenvertreter im
+  Export) mitgezählt, `identity_evidence` fehlte vollständig, und das
+  64-MiB-Aufnahmebudget zählte fälschlich auch bereits gespeicherte Aufnahmen
+  mit. Alle vier behoben, sechs neue Tests, siehe CHANGELOG.
+
 ## Verifiziert
 
 ```text
-./.venv/bin/pytest -q                                      286 passed, 2 skipped
+./.venv/bin/pytest -q                                      291 passed, 2 skipped
 ./.venv/bin/ruff check src tests examples scripts           All checks passed!
 node --check src/dispread/workbench/static/workbench.js     Exit 0
 node --check src/dispread/workbench/static/dataset.js       Exit 0

@@ -3,6 +3,47 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff nach Advisor-Review)
+
+**Problem:** Eine unabhängige Zweitprüfung nach Abschluss der Aufgaben 1-7
+fand vier Lücken gegen den eigenen Exportvertrag/die eigene Spezifikation:
+(1) `synthetic: true`-Proben liefen ungefiltert in den Export, obwohl der
+Exportvertrag sie explizit in derselben Aufzählung wie `uncertain`/`draft`
+ausschließt — genau die Zählerinflation, die Aufgabe 5 für `summary()` schon
+behoben hatte, blieb im Exportpfad bestehen. (2) Ein Absturz zwischen dem
+Schreiben von `sample.json` und dem abschließenden `rename()` in
+`_save_sample_locked` hinterlässt ein `.sample-*`-Verzeichnis, das alle vier
+Scan-Methoden (`_load_all_samples`, `_device_has_samples`,
+`_find_existing_sample_for_token`, `_find_duplicate_hash`) als fertige Probe
+mitgezählt hätten — sortiert sogar vor echten UUID-Verzeichnissen und hätte
+so versehentlich Gruppenvertreter im Export werden können. (3)
+`identity_evidence` (Belegart der Identitätsbestätigung) war spezifiziert,
+aber nirgends implementiert. (4) Das 64-MiB-Aufnahmebudget zählte auch
+bereits gespeicherte (nicht mehr offene) Aufnahmen mit — bei üblichem
+Sammeltempo hätte das neue Aufnahmen ohne echten Grund abgelehnt.
+
+**Änderung:** `_export_locked()` filtert synthetische Proben zuerst heraus
+(Grund `synthetic` in `selection.json`). Neue `_iter_sample_dirs()` lässt nur
+Verzeichnisse mit gültigem UUID-Namen gelten; alle vier Scan-Methoden nutzen
+sie jetzt einheitlich; `summary()["incomplete_temp_dirs"]` zählt liegen
+gebliebene Temp-Verzeichnisse diagnostisch, statt sie stillschweigend zu
+ignorieren. `_validate_device_fields()` verlangt jetzt `identity_evidence`
+(Pflichtfeld, wie `identity_confirmed`); der Export gibt es je Probe mit;
+`dataset.js`/`index.html` haben dafür ein neues Eingabefeld. Das
+Aufnahmebudget in `dataset_capture.CaptureRegistry.begin()` summiert nur noch
+über *offene* (nicht gespeicherte) Einträge.
+
+**Konsequenz:** Sechs neue Tests
+(`test_synthetic_sample_is_excluded_from_export_like_uncertain`,
+`test_incomplete_temp_sample_directory_does_not_count_after_restart`,
+`test_device_creation_requires_identity_evidence`,
+`test_identity_evidence_is_carried_through_to_the_export_manifest`,
+`test_saved_captures_do_not_count_against_the_byte_budget`, plus eine
+Korrektur eines Testfixtures, das versehentlich einen synthetischen
+Testframe durch den vollen Exportpfad schickte). `291 passed, 2 skipped`
+gesamt, `ruff check` sauber.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 7: Doku-Abschluss und Übergabe)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 6: unveränderlicher, direkt auswertbarer Export)
 
 **Problem:** Der Export aus Aufgabe 1 war gegen den *beschriebenen*

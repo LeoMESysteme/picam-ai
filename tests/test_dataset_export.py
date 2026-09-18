@@ -44,6 +44,7 @@ def _device_payload(**overrides):
         "technology": "LCD",
         "split": "development",
         "identity_confirmed": True,
+        "identity_evidence": "Wikimedia Commons: lizenziertes Originalfoto, siehe source/license",
     }
     payload.update(overrides)
     return payload

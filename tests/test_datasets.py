@@ -39,6 +39,7 @@ def _device_payload(**overrides):
         "technology": "LED",
         "split": "development",
         "identity_confirmed": True,
+        "identity_evidence": "Laborsicht: Typenschild und Gehäuse mit dem Bediener abgeglichen",
     }
     payload.update(overrides)
     return payload
@@ -574,3 +575,65 @@ def test_missing_conditions_are_reported_as_a_gap_not_fabricated_coverage(tmp_pa
     assert "negative" in missing["overall"]
     assert "negative" in missing["by_device"][device["id"]]
     assert "frontal" not in missing["by_device"][device["id"]]
+
+
+# -- Nachschliff nach Advisor-Review: synthetisch/Temp-Verzeichnisse/Beleg --
+
+
+def test_synthetic_sample_is_excluded_from_export_like_uncertain(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-1", synthetic=True), _annotation()
+    )
+    result = store.export()
+    manifest = json.loads((result["path"] / "manifest.json").read_text())
+    selection = json.loads((result["path"] / "selection.json").read_text())
+    assert manifest["samples"] == []
+    assert any(x["reason"] == "synthetic" for x in selection["excluded"])
+
+
+def test_incomplete_temp_sample_directory_does_not_count_after_restart(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(_capture(device["id"], group["group_id"], token="tok-1"), _annotation())
+
+    # Simuliert einen Absturz zwischen sample.json-Schreiben und dem
+    # abschliessenden rename() in _save_sample_locked: ein Verzeichnis mit
+    # Inhalt, aber ohne UUID-Namen.
+    leftover = tmp_path / "datasets" / "samples" / ".sample-crashed"
+    leftover.mkdir()
+    (leftover / "sample.json").write_text("{}")
+    (leftover / "image.png").write_bytes(b"not a real png")
+
+    reloaded = DatasetStore(tmp_path / "datasets")
+    summary = reloaded.summary()
+    assert summary["samples"] == 1
+    assert summary["incomplete_temp_dirs"] == 1
+
+    # Ein liegen gebliebenes Temp-Verzeichnis darf auch nicht als
+    # Gruppenvertreter im Export landen.
+    result = reloaded.export()
+    manifest = json.loads((result["path"] / "manifest.json").read_text())
+    assert len(manifest["samples"]) == 1
+    assert manifest["samples"][0]["id"] != ".sample-crashed"
+
+
+def test_device_creation_requires_identity_evidence(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    with pytest.raises(DatasetError):
+        store.create_device(_device_payload(identity_evidence=None))
+    with pytest.raises(DatasetError):
+        store.create_device(_device_payload(identity_evidence=""))
+
+
+def test_identity_evidence_is_carried_through_to_the_export_manifest(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload(identity_evidence="Seriennummer am Typenschild fotografiert"))
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(_capture(device["id"], group["group_id"], token="tok-1"), _annotation())
+    result = store.export()
+    manifest = json.loads((result["path"] / "manifest.json").read_text())
+    assert manifest["samples"][0]["identity_evidence"] == "Seriennummer am Typenschild fotografiert"

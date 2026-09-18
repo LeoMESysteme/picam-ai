@@ -30,6 +30,7 @@ def _make_device_and_group(c):
         "technology": "LED",
         "split": "development",
         "identity_confirmed": True,
+        "identity_evidence": "Laborsicht: Typenschild abgeglichen",
     })
     group = c.command("dataset.group.begin", {"device_id": device["id"], "change_note": "Situation 1"})
     return device, group
@@ -149,6 +150,26 @@ def test_expired_token_cannot_be_saved():
     now["t"] += 601
     with pytest.raises(CaptureError):
         registry.get(token)
+
+
+def test_saved_captures_do_not_count_against_the_byte_budget():
+    """Nachschliff nach Advisor-Review: das 64-MiB-Budget gilt fuer OFFENE
+    Aufnahmen, nicht fuer bereits gespeicherte (die nur bis zum Ablauf fuer
+    einen idempotenten Retry im Speicher bleiben)."""
+    from dispread.workbench.dataset_capture import MAX_TOTAL_BYTES
+
+    registry = CaptureRegistry()
+    big_image = _image(width=2000, height=2000)  # 12 MB, absichtlich gross
+    assert big_image.nbytes * 6 > MAX_TOTAL_BYTES
+
+    for i in range(6):
+        token = registry.begin(big_image, {"device_id": "d", "group_id": f"g{i}"})
+        registry.mark_saved(token)
+
+    # Trotz sechs "gespeicherten" Grossbildern im Speicher (> Budget in
+    # Summe) muss eine neue, tatsaechlich offene Aufnahme weiterhin moeglich
+    # sein - sie zaehlt allein gegen das Budget.
+    registry.begin(big_image, {"device_id": "d", "group_id": "g-neu"})
 
 
 def test_double_save_with_different_label_is_a_conflict_not_a_silent_overwrite(tmp_path):
