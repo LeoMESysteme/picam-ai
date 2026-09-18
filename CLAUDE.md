@@ -60,10 +60,11 @@ frames/    Bildquelle      synthetic:// [fertig] · replay:// [fertig, Clips mit
                            folder:// video:// [nur Registry-Eintrag, TODO]
 detect/    Anzeige finden  manual_roi [fertig, PRIMÄRPFAD]
                            contour_heuristic · imx500_detector [TODO]
-rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
 track      Nachführen      QuadTracker, begrenzte ECC-Nachregistrierung eines
-                           bestätigten Quads gegen die Bestätigungsreferenz
+                           bestätigten Quads gegen die Bestätigungsreferenz —
+                           korrigiert das Quad, bevor damit entzerrt wird
                            [fertig]
+rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
 ocr/       Wert lesen      sevenseg mit Per-Segment-Evidenz [fertig]
                            tesseract_cli [TODO, braucht OQ-15]
 validate   Freigabe        Syntax-, Qualitäts- und Zustandsregeln (§7) [fertig]

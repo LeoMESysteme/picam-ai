@@ -894,7 +894,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-29 — Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence`
 
-* **Status:** offen
+* **Status:** offen · erkannt 2026-09-18 in Task 5's Review
+  (PLAN_2026-09-11-ocr-selbstkalibrierung.md)
 * **Befund:** In `Controller._autofit`
   (`src/dispread/workbench/controller.py`) wird `self.calibrated_on` (und
   darüber `calibrated_on_frame_sequence`, das über die Clipaufnahme aus Task 2
@@ -917,7 +918,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-30 — `roi`-Op ist nicht atomar gegenüber einem fehlschlagenden `QuadTracker`-Aufbau
 
-* **Status:** offen
+* **Status:** offen · erkannt 2026-09-18 in Task 7's Review
+  (PLAN_2026-09-11-ocr-selbstkalibrierung.md)
 * **Befund:** Im `roi`-Op-Bestätigungszweig
   (`src/dispread/workbench/controller.py`) wird `self._change(data)`
   (committet `confirmed=True`, erhöht die Revision, kann `run`→`setup`
@@ -939,7 +941,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-31 — Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit
 
-* **Status:** offen
+* **Status:** offen · erkannt 2026-09-18 in Task 5's Fix-Runde
+  (PLAN_2026-09-11-ocr-selbstkalibrierung.md), vom Re-Reviewer bestätigt
 * **Befund:** Task 5's Fix-Runde behob eine Bug-Klasse für den Canvas-/
   Geometrie-Editierfluss (ein stehengebliebenes `editing.autofit`-Ergebnis
   wurde beim Bestätigen stillschweigend angewendet, statt verworfen zu
@@ -957,14 +960,15 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-32 — `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind`
 
-* **Status:** offen (Ursprungsbug behoben, zugrunde liegende Lücke nicht)
+* **Status:** offen (Ursprungsbug behoben, zugrunde liegende Lücke nicht) ·
+  erkannt 2026-09-18 in Task 8's Review (PLAN_2026-09-11-ocr-selbstkalibrierung.md)
 * **Befund:** Task 8's Review fand und behob einen Critical-Bug: eine neue
   Zeile mit `kind="text"` (wörtlich aus dem damaligen — inzwischen
   korrigierten — Plantext kopiert) ließ `dispread tui`
   (`src/dispread/workbench/tui.py`, `edit_row()`) mit `KeyError: 'min'`
-  abstürzen, weil nur `kind=="info"`/`"choice"` (`edit_row()`, Zeilen 199 und
-  205) eine sichere Behandlung haben — jeder andere Wert fällt durch zu Code,
-  der numerische Editiermetadaten (`row["min"]`/`row["max"]`) voraussetzt. Der
+  abstürzen, weil nur die Zweige für `kind=="info"` und `kind=="choice"` eine
+  sichere Behandlung haben — jeder andere Wert fällt durch zu Code, der
+  numerische Editiermetadaten (`row["min"]`/`row["max"]`) voraussetzt. Der
   akute Bug wurde behoben (`kind="info"` statt `"text"`), aber `edit_row()`
   hat weiterhin keine Validierung oder einen sicheren Default für einen
   unbekannten/unbehandelten `kind` — die Gefahr würde beim nächsten neuen

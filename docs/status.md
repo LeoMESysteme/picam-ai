@@ -127,9 +127,10 @@ echtem Kamerastoß während eines Laufs) steht weiterhin aus —
 
 ## Neu erkannte offene Punkte aus dieser Sitzung
 
-Sechs Task-Reviews dieser Sitzung deckten Unbekannte auf, die über die drei
-im Plan selbst schon benannten (OQ-26–OQ-28) hinausgehen. Alle stehen jetzt
-in [open-questions.md](open-questions.md), Status `offen`:
+Die Reviews von Task 5, 7 und 8 deckten vier weitere Unbekannte auf, die
+über die drei im Plan selbst schon benannten (OQ-26–OQ-28) hinausgehen. Alle
+sieben stehen jetzt in [open-questions.md](open-questions.md), Status
+`offen`:
 
 * [OQ-26](open-questions.md) — Nachführungsschwellen (`max_shift`,
   `max_rotation_deg`, `min_score`) unvalidiert an echten Geräten.
