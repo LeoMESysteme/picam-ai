@@ -62,6 +62,29 @@ def test_zu_grosse_drehung_wird_abgelehnt():
     assert result.reason in ("rotation_out_of_bounds", "low_score", "ecc_diverged")
 
 
+def test_drehung_innerhalb_der_grenze_wird_korrekt_nachgefuehrt():
+    """Regressionstest fuer die invertierte-und-vorzeichengedrehte Warp-Falle:
+    bei einer Drehung *innerhalb* der Grenzen muss der zurueckgegebene Quad
+    tatsaechlich der Szenentransformation folgen (rigide Bewegung), nicht nur
+    ungleich None sein. Eine geometrisch verzerrte Rueckgabe wuerde von
+    keinem der anderen Tests aufgefallen, weil die reine Verschiebung
+    (test_kleine_verschiebung_wird_nachgefuehrt) keine Rotation enthaelt."""
+    shift_x, angle = 6.0, 2.0
+    tracker = QuadTracker(_scene(), _QUAD)
+    result = tracker.update(_scene(shift_x=shift_x, angle=angle))
+    assert result.quad is not None, result.reason
+
+    # Grundwahrheit: dieselbe affine Transformation, die _scene() auf die
+    # Szene anwendet, direkt auf die urspruenglichen Quad-Eckpunkte angewandt.
+    matrix = cv2.getRotationMatrix2D((320.0, 200.0), angle, 1.0)
+    matrix[0, 2] += shift_x
+    expected = cv2.transform(np.float32(_QUAD).reshape(-1, 1, 2), matrix).reshape(-1, 2)
+
+    for (expected_x, expected_y), (actual_x, actual_y) in zip(expected, result.quad, strict=True):
+        assert actual_x == pytest.approx(expected_x, abs=2.0)
+        assert actual_y == pytest.approx(expected_y, abs=2.0)
+
+
 def test_voellig_anderes_bild_wird_abgelehnt():
     """Wird die Anzeige verdeckt, darf keine Geometrie 'gefunden' werden."""
     tracker = QuadTracker(_scene(), _QUAD)

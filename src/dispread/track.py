@@ -101,9 +101,21 @@ class QuadTracker:
     def _moved_quad(self, warp):
         """Map the motion from work space back to image coordinates.
 
-        `findTransformECC(reference, current, ...)` returns the transformation
-        that aligns the current image to the reference. We seek the inverse:
-        where the display *is* now. Hence the inverted affine transformation.
+        `cv2.findTransformECC(reference, current, warp, ...)` fits `warp` as
+        a mapping from reference-space coordinates to current-space
+        coordinates: applying `warp` to a point of `reference` gives the
+        matching point of `current`. Applying it to the reference-space quad
+        (`corners`, i.e. `self.quad` in work-space coordinates) therefore
+        gives exactly where those points sit in the current image now — the
+        motion we want. No inversion needed; `warp` is applied directly.
+
+        (An earlier version inverted `warp` and then negated only the
+        translation column of the inverse to force the test below to pass.
+        That is neither the forward transform nor a valid inverse — it left
+        the rotation/scale block of the inverse untouched while flipping only
+        translation, which is geometrically inconsistent and corrupts the
+        quad under any rotation. Applying `warp` forward is both correct and
+        pinned by the direction check below.)
 
         Which direction is which is pinned by `test_kleine_verschiebung_wird_nachgefuehrt`:
         the corrected quad must follow the display. If the sign is wrong, the
@@ -111,10 +123,7 @@ class QuadTracker:
         """
         width, height = self.config.work_size
         corners = np.float32([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
-        inverse = cv2.invertAffineTransform(warp)
-        # Negate the translation to get the correct direction
-        inverse[:, 2] = -inverse[:, 2]
-        moved = cv2.transform(corners.reshape(-1, 1, 2), inverse).reshape(-1, 2)
+        moved = cv2.transform(corners.reshape(-1, 1, 2), warp).reshape(-1, 2)
         to_image = cv2.getPerspectiveTransform(corners, np.float32(self.quad))
         points = cv2.perspectiveTransform(moved.reshape(-1, 1, 2).astype(np.float32), to_image)
         return tuple((float(x), float(y)) for x, y in points.reshape(-1, 2))

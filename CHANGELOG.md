@@ -3,6 +3,52 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (QuadTracker: `_moved_quad` bildete unter Drehung eine geometrisch verzerrte Anzeige ab)
+
+### Reviewfund (Critical) zu Task 6: Invertierungs-plus-Vorzeichen-Hack in `_moved_quad` ist keine gültige Transformation
+
+**Problem:** `_moved_quad` in `src/dispread/track.py` invertierte die von
+`cv2.findTransformECC` gelieferte affine Matrix mit
+`cv2.invertAffineTransform` und negierte anschließend **nur** deren
+Translationsspalte (`inverse[:, 2] = -inverse[:, 2]`). Das war kein Bugfix,
+sondern ein Hack, um den einzigen gepinnten Test
+(`test_kleine_verschiebung_wird_nachgefuehrt`, reine Verschiebung ohne
+Drehung) zum Grünwerden zu bringen — bei reiner Translation fällt der Fehler
+nicht auf, weil der Rotationsanteil der Matrix dort die Einheitsmatrix ist.
+Für jede tatsächliche Drehung ist das Ergebnis weder die Vorwärtstransformation
+noch die echte Inverse, sondern eine inkonsistente Mischung aus beiden: der
+Rotationsanteil der Inversen bleibt unverändert, während nur die Translation
+umgedreht wird. Der Task-Reviewer hat unabhängig nachgewiesen, dass das für
+eine Szene mit 6 px Verschiebung und 2,0° Drehung (beide innerhalb der
+Standardgrenzen `max_shift=10%`, `max_rotation_deg=3.0`) zu einem um ca. 17 px
+verzerrten, nicht-rigiden Quad führt — unbemerkt, weil kein Test eine
+akzeptierte Drehung mit tatsächlicher Geometrieprüfung abdeckte. Der
+Implementierungsbericht zu Task 6 stellte das ursprünglich fälschlich als
+unauffälligen Vorzeichen-Fix dar.
+
+**Änderung:** Beide Zeilen (`cv2.invertAffineTransform` und die
+Negierung der Translationsspalte) entfernt. `_moved_quad` wendet die von
+`cv2.findTransformECC` zurückgegebene Matrix `warp` jetzt direkt (vorwärts,
+ohne Inversion) auf die Eckpunkte an — `cv2.findTransformECC(reference,
+current, warp, ...)` bestimmt `warp` so, dass es einen Punkt aus `current`
+auf den entsprechenden Punkt in `reference` abbildet; angewandt auf die
+referenzraum-Eckpunkte (die Arbeitsbild-Koordinaten des bestätigten Quads)
+liefert es genau deren aktuelle Position im neuen Bild — ohne Inversion.
+Neuer Test `test_drehung_innerhalb_der_grenze_wird_korrekt_nachgefuehrt` in
+`tests/test_track.py` deckt exakt die zuvor ungetestete Lücke: eine Drehung
+und Verschiebung *innerhalb* der Grenzen, mit Prüfung der zurückgegebenen
+Eckpunkte gegen eine unabhängig berechnete Grundwahrheit (dieselbe affine
+Transformation direkt auf die Original-Eckpunkte angewandt), nicht nur
+`quad is not None`. Der Test schlägt mit der alten Hack-Implementierung
+nachweislich fehl (verifiziert) und ist mit der Korrektur grün.
+
+**Konsequenz:** Die Nachführung ist unter Drehung jetzt geometrisch korrekt
+(rigide Transformation statt verzerrter Mischform); die bestehende
+Vorzeichenkonvention (Test `test_kleine_verschiebung_wird_nachgefuehrt`)
+bleibt unverändert erfüllt. Die neue Testabdeckung schließt die Lücke, die
+den ursprünglichen Fehler durch die volle Test- und Lint-Suite hindurch
+unentdeckt ließ.
+
 ## 0.1.0.dev0 — 2026-09-11 (QuadTracker: Nachfuehrung gegen Referenzbild, nicht Bild-zu-Bild)
 
 ### Bedienerrückmeldung: bei längeren Lesungen verrutscht die Kamera, Erkennung bricht ab
