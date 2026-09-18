@@ -3,6 +3,38 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 8 Review-Fund: TUI-Absturz bei `reading.track`)
+
+**Problem:** Die neue `reading.track`-Zeile aus Task 8
+(`fields._reading_rows()`) bekam `kind="text"` — wortgetreu aus dem
+Plan-Snippet übernommen, das der Reviewer nun als schlicht falsch einstuft.
+`rows(state)` versorgt sowohl `workbench.js` als auch `tui.py` mit denselben
+Zeilen. In `tui.py` behandelt `edit_row()` (`tui.py:195-234`) jede Zeile, die
+nicht `kind="info"` oder `kind="choice"` ist, als Zahleneingabe und greift
+dabei synchron, vor jeder Bedienereingabe, auf `row["min"]`/`row["max"]`/
+`row["presets"]` zu. Die Zeile übergibt keine dieser Kwargs — genau wie ihre
+drei Geschwister `reading.value`/`reading.gate`/`reading.evidence`, die
+deshalb korrekt `kind="info"` tragen. Das Ergebnis: `KeyError: 'min'`, sobald
+der Bediener die Zeile im Terminal (`dispread tui`) anwählt — ein echter,
+reproduzierbarer Absturz bei normaler Bedienung, kein hypothetischer Fall.
+
+**Änderung:** `reading.track` in `fields._reading_rows()` bekommt
+`kind="info"` statt `kind="text"` — identisch zu ihren drei Geschwisterzeilen.
+Sonst keine Änderung an Werten oder Kwargs. Neuer Regressionstest
+`tests/test_workbench.py::test_tui_oeffnet_nachfuehrzeile_ohne_absturz`: baut
+eine echte `WorkbenchTUI`, treibt sie über Textuals `run_test()`/Pilot per
+Tastatur genau auf die `reading.track`-Zeile (echter, über den `roi`-Op
+bestätigter Controller mit laufendem Tracker, damit die Zeile echt vorhanden
+ist) und wählt sie aus — der reale `DataTable.RowSelected` → `select()` →
+`edit_row()`-Pfad. Vor dem Fix schlägt der Test mit genau dem beschriebenen
+`KeyError: 'min'` fehl (verifiziert); nach dem Fix zeigt `edit_row()` nur den
+Hinweistext, ohne einen Eingabedialog zu öffnen.
+
+**Konsequenz:** Die Terminal-Oberfläche stürzt beim Anwählen der
+Nachführungszeile nicht mehr ab; der neue Test hätte den Fund erfasst und
+verhindert eine Wiederholung. `169 passed`, `ruff check` und
+`node --check workbench.js` weiterhin sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 8: Nachführgüte sichtbar machen)
 
 **Problem:** Task 7 verdrahtete den `QuadTracker`, hielt aber bewusst die

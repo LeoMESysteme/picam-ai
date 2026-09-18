@@ -288,7 +288,7 @@ def _reading_rows(state):
             _row(
                 "reading.track",
                 "nachfuehrung",
-                "text",
+                "info",
                 value,
                 value,
                 "verfolgt dieselbe bestaetigte Anzeige; ausserhalb der Grenze wird "

@@ -1881,3 +1881,63 @@ def test_nachfuehrzeile_fehlt_ohne_nachfuehrung(tmp_path):
     assert controller.reading["track"] is None
     keys = [row["key"] for row in fields.rows(controller.snapshot())]
     assert "reading.track" not in keys
+
+
+def test_tui_oeffnet_nachfuehrzeile_ohne_absturz(tmp_path, monkeypatch):
+    """Reviewer-Fund (Task 8): die `reading.track`-Zeile ist reine Evidenz
+    (siehe ihre eigenen Nachbarn `reading.value`/`reading.gate`/`reading.evidence`,
+    alle `kind="info"`), nicht eine bearbeitbare Einstellung. `tui.edit_row()`
+    (tui.py:195-234) behandelt aber jede Zeile, die nicht `kind="info"` oder
+    `kind="choice"` ist, als Zahleneingabe und greift dabei synchron - vor
+    jeder Bedienereingabe - auf row["min"]/["max"]/["presets"] zu. Eine
+    `_row(...)`-Zeile ohne diese Kwargs (wie `reading.track`) loest dort sofort
+    `KeyError: 'min'` aus, sobald der Bediener sie im Terminal anwaehlt.
+
+    Dieser Test baut - wie test_tui_uses_choices_and_reports_blocked_actions -
+    eine echte WorkbenchTUI, treibt sie ueber Textuals echten Pilot an und
+    navigiert per Tastatur (nicht per direktem Methodenaufruf) genau auf die
+    `reading.track`-Zeile, damit tatsaechlich der reale
+    DataTable.RowSelected -> select() -> edit_row()-Pfad durchlaufen wird.
+    Die Momentaufnahme kommt von einem echten, bestaetigten Controller mit
+    laufendem Tracker (wie test_nachfuehrzeile_erscheint_im_bedienbild), damit
+    `reading["track"]` echt gesetzt und die Zeile echt vorhanden ist - nicht
+    handgebaut."""
+    from dispread.workbench import tui
+
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=6), _metadaten())
+    assert controller.reading["track"]["corrected"] is True
+
+    state = controller.snapshot()
+    table_rows = fields.rows(state)
+    assert "reading.track" in {row["key"] for row in table_rows}
+
+    async def fake_request(op, args=None):
+        return state
+
+    monkeypatch.setattr(tui, "request", fake_request)
+
+    messages = []
+
+    async def check():
+        app = tui.WorkbenchTUI()
+        original_message = app.message
+        app.message = lambda text: (messages.append(text), original_message(text))[-1]
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            index = next(i for i, row in enumerate(app.rows) if row["key"] == "reading.track")
+            for _ in range(index):
+                await pilot.press("down")
+            await pilot.press("enter")  # loest DataTable.RowSelected -> edit_row() aus
+            await pilot.pause()
+
+    asyncio.run(check())
+
+    # Eine reine Infozeile zeigt nur einen Hinweis und oeffnet keinen
+    # Eingabedialog - waere die Zeile faelschlich editierbar (der Bug),
+    # haette edit_row() vor jeder dieser beiden Stellen mit KeyError('min')
+    # abgebrochen, statt hierher zu kommen.
+    assert messages, "Infozeile sollte einen Hinweis anzeigen, keine stille Aktion"
+    assert any("nachfuehrung" in str(text).lower() for text in messages)
