@@ -38,6 +38,9 @@
 <input id="dataset-target-label" placeholder="Bezeichnung, z. B. oben Spannung" maxlength="200" spellcheck="false" aria-label="Zielbezeichnung"></div>
 <div id="dataset-conditions" class="dataset-row"></div>
 <div class="dataset-row"><button id="dataset-save">Speichern und weiter</button><button id="dataset-discard">verwerfen</button></div>
+<div id="dataset-similarity" class="dataset-row" hidden>Ähnlich zu einer vorhandenen Probe dieser Situation (Heuristik, kein Beweis).
+<input id="dataset-similarity-reason" placeholder="Begründung, falls trotzdem eigenständig" maxlength="1000" spellcheck="false" aria-label="Begründung für die Ähnlichkeitsbestätigung">
+<button id="dataset-similarity-confirm">trotzdem speichern</button><button id="dataset-similarity-cancel">abbrechen</button></div>
 </div>
 <div class="dataset-row"><button id="dataset-export">Prüfsatz exportieren</button><a id="dataset-export-link" hidden download>Export</a></div>
 </div></section></main>

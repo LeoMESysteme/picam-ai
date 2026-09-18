@@ -218,6 +218,30 @@ def test_blocked_save_does_not_block_status_or_publish(tmp_path, monkeypatch):
     assert not thread.is_alive()
 
 
+def test_similarity_warning_roundtrips_through_command(tmp_path):
+    c = Controller(tmp_path)
+    device, group = _make_device_and_group(c)
+    c.publish(_image(fill=0), {"timebase": "synthetic"})
+    first_token = c.command("dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]})["token"]
+    c.command("dataset.save", {"token": first_token, **_annotation()})
+
+    c.publish(_image(fill=3), {"timebase": "synthetic"})
+    second_token = c.command("dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]})["token"]
+    with pytest.raises(DatasetError):
+        c.command("dataset.save", {"token": second_token, **_annotation(expected_text="99.99")})
+
+    confirmed = c.command(
+        "dataset.save",
+        {
+            "token": second_token,
+            **_annotation(expected_text="99.99"),
+            "similarity_confirmed": True,
+            "similarity_reason": "Bewusste Wiederholung mit leicht anderer Helligkeit",
+        },
+    )
+    assert confirmed["similarity_warning"]["candidate"]
+
+
 def test_discard_removes_the_draft(tmp_path):
     c = Controller(tmp_path)
     c.publish(_image(), {"timebase": "synthetic"})

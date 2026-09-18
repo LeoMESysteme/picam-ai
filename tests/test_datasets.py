@@ -27,6 +27,10 @@ def _image(width=100, height=80):
     return np.zeros((height, width, 3), dtype=np.uint8)
 
 
+def _filled_image(value, width=100, height=80):
+    return np.full((height, width, 3), value, dtype=np.uint8)
+
+
 def _device_payload(**overrides):
     payload = {
         "name": "Pruefling 1",
@@ -426,3 +430,129 @@ def test_export_requires_explicit_selection_for_repeated_group(tmp_path):
     result = store.export()
     manifest = json.loads((result["path"] / "manifest.json").read_text())
     assert manifest["samples"] == []
+
+
+# -- Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt ------------------
+
+
+def test_ten_repeats_of_one_situation_count_as_one_independence_group(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    for i in range(10):
+        store.save_sample(
+            _capture(device["id"], group["group_id"], token=f"tok-{i}"),
+            _annotation(bbox=[10, 10, 40, 20 + i]),
+        )
+    assert store.summary()["independence_groups"] == 1
+    assert store.summary()["samples"] == 10
+
+
+def test_changing_the_selection_does_not_change_the_independence_count(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    first = store.save_sample(_capture(device["id"], group["group_id"], token="tok-1"), _annotation())
+    second = store.save_sample(_capture(device["id"], group["group_id"], token="tok-2"), _annotation(bbox=[5, 5, 40, 20]))
+    before = store.summary()["independence_groups"]
+    store.select_sample(first["id"], revision=0)
+    store.select_sample(second["id"], revision=0)
+    assert store.summary()["independence_groups"] == before
+
+
+def test_similar_but_not_identical_image_requires_confirmation_and_reason(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-1", image=_filled_image(0)), _annotation()
+    )
+    with pytest.raises(DatasetError):
+        store.save_sample(
+            _capture(device["id"], group["group_id"], token="tok-2", image=_filled_image(3)), _annotation()
+        )
+    # Ohne Begruendung ebenfalls abgelehnt, auch mit similarity_confirmed=True.
+    with pytest.raises(DatasetError):
+        store.save_sample(
+            _capture(device["id"], group["group_id"], token="tok-2", image=_filled_image(3)),
+            _annotation(similarity_confirmed=True),
+        )
+    confirmed = store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-2", image=_filled_image(3)),
+        _annotation(similarity_confirmed=True, similarity_reason="Bewusste Wiederholung, leicht unterschiedliche Belichtung"),
+    )
+    assert confirmed["similarity_warning"]["candidate"]
+    assert confirmed["similarity_confirmation_reason"]
+
+
+def test_clearly_different_images_need_no_similarity_confirmation(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-1", image=_filled_image(0)), _annotation()
+    )
+    sample = store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-2", image=_filled_image(200)), _annotation()
+    )
+    assert sample["similarity_warning"] is None
+
+
+def test_similarity_check_is_scoped_to_the_same_independence_group(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group_a = store.begin_group(device["id"], "Situation 1")
+    group_b = store.begin_group(device["id"], "Situation 2")
+    store.save_sample(
+        _capture(device["id"], group_a["group_id"], token="tok-1", image=_filled_image(0)), _annotation()
+    )
+    # Selbe fast-identische Aufnahme, aber in einer ANDEREN Situation - keine
+    # Warnung, denn Aehnlichkeit ist nur innerhalb einer Situation relevant.
+    sample = store.save_sample(
+        _capture(device["id"], group_b["group_id"], token="tok-2", image=_filled_image(3)), _annotation()
+    )
+    assert sample["similarity_warning"] is None
+
+
+def test_synthetic_samples_do_not_inflate_real_readable_counters(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-real"), _annotation(expected_text="-01.25")
+    )
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-synthetic", synthetic=True, image=_filled_image(50)),
+        _annotation(expected_text="99.99"),
+    )
+    summary = store.summary()
+    assert summary["samples"] == 2
+    assert summary["readable"] == 1
+
+
+def test_device_count_depends_only_on_uuids_not_on_sample_or_label_count(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device_a = store.create_device(_device_payload(name="A"))
+    device_b = store.create_device(_device_payload(name="B"))
+    group_a = store.begin_group(device_a["id"], "Situation 1")
+    for i in range(5):
+        store.save_sample(
+            _capture(device_a["id"], group_a["group_id"], token=f"tok-{i}"),
+            _annotation(bbox=[10, 10, 40, 20 + i]),
+        )
+    assert store.summary()["devices"] == 2
+    del device_b
+
+
+def test_missing_conditions_are_reported_as_a_gap_not_fabricated_coverage(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    store.save_sample(
+        _capture(device["id"], group["group_id"], token="tok-1"), _annotation(conditions=["frontal"])
+    )
+    missing = store.summary()["missing_conditions"]
+    assert "frontal" not in missing["overall"]
+    assert "negative" in missing["overall"]
+    assert "negative" in missing["by_device"][device["id"]]
+    assert "frontal" not in missing["by_device"][device["id"]]

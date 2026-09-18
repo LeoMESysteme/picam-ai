@@ -227,32 +227,76 @@ const DatasetCollection = (function () {
     $('dataset-label-state').onchange = labelStateChanged;
     labelStateChanged();
 
+    let pendingSaveArgs = null;
+
+    function afterSave(sample) {
+      note('Probe gespeichert: ' + sample.id);
+      capture = null;
+      selection = null;
+      pendingSaveArgs = null;
+      $('dataset-editor').hidden = true;
+      $('dataset-similarity').hidden = true;
+      $('dataset-expected-text').value = '';
+      $('dataset-target-label').value = '';
+      $('dataset-similarity-reason').value = '';
+    }
+
+    function buildSaveArgs() {
+      if (!capture) throw new Error('Zuerst eine Aufnahme einfrieren');
+      if (!selection || selection.w <= 0 || selection.h <= 0) throw new Error('Zielbox fehlt - Rechteck über der Zahlenzeile ziehen');
+      const originalBox = toOriginalBox(
+        selection,
+        { width: canvas().clientWidth, height: canvas().clientHeight },
+        { width: capture.width, height: capture.height }
+      );
+      const labelState = $('dataset-label-state').value;
+      return {
+        token: capture.token,
+        bbox: [originalBox.x, originalBox.y, originalBox.w, originalBox.h],
+        target_label: $('dataset-target-label').value.trim() || null,
+        label_state: labelState,
+        expected_text: labelState === 'readable' ? $('dataset-expected-text').value.trim() : null,
+        conditions: conditionKeys(),
+      };
+    }
+
     $('dataset-save').onclick = () =>
       guarded(async () => {
-        if (!capture) throw new Error('Zuerst eine Aufnahme einfrieren');
-        if (!selection || selection.w <= 0 || selection.h <= 0) throw new Error('Zielbox fehlt - Rechteck über der Zahlenzeile ziehen');
-        const originalBox = toOriginalBox(
-          selection,
-          { width: canvas().clientWidth, height: canvas().clientHeight },
-          { width: capture.width, height: capture.height }
-        );
-        const labelState = $('dataset-label-state').value;
-        const sample = await op('dataset.save', {
-          token: capture.token,
-          bbox: [originalBox.x, originalBox.y, originalBox.w, originalBox.h],
-          target_label: $('dataset-target-label').value.trim() || null,
-          label_state: labelState,
-          expected_text: labelState === 'readable' ? $('dataset-expected-text').value.trim() : null,
-          conditions: conditionKeys(),
-        });
-        note('Probe gespeichert: ' + sample.id);
-        capture = null;
-        selection = null;
-        $('dataset-editor').hidden = true;
-        $('dataset-expected-text').value = '';
-        $('dataset-target-label').value = '';
-        await refreshSummary();
+        const args = buildSaveArgs();
+        try {
+          const sample = await op('dataset.save', args);
+          afterSave(sample);
+        } catch (error) {
+          // Aehnlichkeitswarnung ist kein gewoehnlicher Fehler: Rohdaten und
+          // Eingaben bleiben erhalten, der Bediener kann begruendet bestaetigen
+          // statt neu anzufangen (Konzept, Aufgabe 5).
+          if (/Ähnlich zu vorhandener Probe/.test(error.message)) {
+            pendingSaveArgs = args;
+            $('dataset-similarity').hidden = false;
+            note(error.message, true);
+            return;
+          }
+          throw error;
+        }
       });
+
+    $('dataset-similarity-confirm').onclick = () =>
+      guarded(async () => {
+        if (!pendingSaveArgs) return;
+        const reason = $('dataset-similarity-reason').value.trim();
+        if (!reason) throw new Error('Begründung fehlt');
+        const sample = await op('dataset.save', {
+          ...pendingSaveArgs,
+          similarity_confirmed: true,
+          similarity_reason: reason,
+        });
+        afterSave(sample);
+      });
+    $('dataset-similarity-cancel').onclick = () => {
+      pendingSaveArgs = null;
+      $('dataset-similarity').hidden = true;
+      $('dataset-similarity-reason').value = '';
+    };
 
     $('dataset-discard').onclick = () =>
       guarded(async () => {
@@ -264,9 +308,11 @@ const DatasetCollection = (function () {
 
     async function refreshSummary() {
       const summary = await op('dataset.summary');
+      const overallGaps = summary.missing_conditions.overall;
       $('dataset-summary').textContent =
         `${summary.devices} Geräte · ${summary.samples} Proben · ${summary.independence_groups} Situationen · ` +
-        `${summary.readable} lesbar · ${summary.unreadable} unlesbar · ${summary.uncertain_or_draft} unsicher/Entwurf`;
+        `${summary.readable} lesbar · ${summary.unreadable} unlesbar · ${summary.uncertain_or_draft} unsicher/Entwurf` +
+        (overallGaps.length ? ` · fehlend: ${overallGaps.join(', ')}` : '');
     }
 
     $('dataset-export').onclick = () =>

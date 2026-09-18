@@ -3,6 +3,37 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
+
+**Problem:** Wiederholungsaufnahmen und beinahe-identische Bilder in
+derselben Situation konnten unbemerkt als mehrere unabhängige Proben zählen;
+synthetische Fixtures hätten die Zähler für lesbare/unlesbare *reale*
+Testwerte künstlich aufblähen können; es gab keine Übersicht, welche
+Bedingungen (negatives Vorzeichen, mehrere Zeilen, …) für ein Gerät noch
+fehlen.
+
+**Änderung:** `DatasetStore._find_similar_in_group()` vergleicht ein neues,
+nicht-identisches Bild gegen die anderen Proben *derselben*
+Unabhängigkeitsgruppe (kleines Graustufenbild, mittlere normierte Differenz,
+`SIMILARITY_THRESHOLD = 0.02` ausdrücklich als Heuristik gekennzeichnet, keine
+validierte Grenze). Eine Ähnlichkeitswarnung blockiert das Speichern, bis
+`similarity_confirmed=true` **und** eine Begründung mitgeschickt werden -
+beide werden dauerhaft in `sample.json` mitgeführt
+(`similarity_warning`/`similarity_confirmation_reason`), keine stille
+Löschung. `summary()` zählt `readable`/`unreadable`/`uncertain_or_draft` sowie
+Familien/Technologien nur noch aus nicht-synthetischen Proben und liefert
+zusätzlich `missing_conditions` (gesamt und je Gerät) aus dem festen
+Aufgabenkatalog - eine Lücke wird als Lücke gemeldet, nicht als erledigt
+umgedeutet. `dataset.js` zeigt die Warnung inline mit Begründungsfeld
+(`#dataset-similarity`) und die fehlenden Bedingungen in der Übersichtszeile.
+
+**Konsequenz:** Zehn Wiederholungen einer Situation zählen weiterhin als eine
+Unabhängigkeitsgruppe, ein Auswahlwechsel ändert nur den Vertreter. Acht neue
+`DatasetStore`-Tests plus ein Controller-Test für den vollen
+Bestätigungs-Roundtrip. `280 passed, 2 skipped` gesamt, `ruff check` sauber,
+beide JS-Dateien syntaktisch geprüft.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
 
 **Problem:** Aufgaben 1-3 lieferten Speicherung, Kamerabindung und HTTP-Endpunkte,

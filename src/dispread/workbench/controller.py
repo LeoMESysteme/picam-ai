@@ -949,6 +949,8 @@ class Controller:
             "expected_text": args.get("expected_text"),
             "conditions": args.get("conditions", []),
             "independence_confirmation": args.get("independence_confirmation", True),
+            "similarity_confirmed": args.get("similarity_confirmed", False),
+            "similarity_reason": args.get("similarity_reason"),
         }
         sample = self.dataset_store.save_sample(capture, annotation)
         with self.lock:

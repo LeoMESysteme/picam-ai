@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import numpy as np
 
 from .profiles import atomic_json
 
@@ -42,6 +43,24 @@ EXPORT_SCHEMA_VERSION = 1
 TECHNOLOGIES = ("LED", "LCD", "VFD", "other")
 SPLITS = ("development", "heldout")
 LABEL_STATES = ("readable", "unreadable", "uncertain", "draft")
+#: Aufgabenkatalog aus Konzept.md, Ablauf-Schritt 4 - dieselben Schluessel wie
+#: in static/dataset.js. Dient hier nur der Luecken-Uebersicht (Aufgabe 5),
+#: keiner automatischen Vollstaendigkeitspruefung.
+CONDITION_KEYS = (
+    "frontal",
+    "angled",
+    "distance",
+    "digits",
+    "negative",
+    "decimal",
+    "multiline",
+    "reflection",
+    "dim",
+)
+#: Heuristischer Aehnlichkeitsschwellwert (mittlere normierte Graustufen-
+#: differenz eines kleinen Vergleichsbilds), keine validierte Grenze - siehe
+#: AGENTS.md ("kein Erfinden von Genauigkeit").
+SIMILARITY_THRESHOLD = 0.02
 
 _NAME_MAX = 120
 _MODEL_MAX = 120
@@ -368,6 +387,17 @@ class DatasetStore:
             sha256 = hashlib.sha256(image_bytes).hexdigest()
 
             duplicate_of = self._find_duplicate_hash(sha256)
+            similar = None if duplicate_of is not None else self._find_similar_in_group(image, group_id, sha256)
+            similarity_reason = None
+            if similar is not None:
+                similarity_reason = _short_text(annotation.get("similarity_reason"), "Begründung", _NOTE_MAX, required=False)
+                if not annotation.get("similarity_confirmed") or not similarity_reason:
+                    raise DatasetError(
+                        f"Ähnlich zu vorhandener Probe {similar[0]} in dieser Situation "
+                        f"(Heuristik-Score {similar[1]:.4f}, kein Beweis für/gegen Unabhängigkeit). "
+                        "Mit similarity_confirmed=true und einer Begründung erneut speichern, "
+                        "falls trotzdem eigenständig."
+                    )
 
             sample = {
                 "schema_version": SAMPLE_SCHEMA_VERSION,
@@ -398,6 +428,8 @@ class DatasetStore:
                 "formatter_provisional": True,
                 "metadata_revision": 0,
                 "duplicate_of": duplicate_of,
+                "similarity_warning": {"candidate": similar[0], "score": similar[1]} if similar else None,
+                "similarity_confirmation_reason": similarity_reason,
             }
             try:
                 with open(temp_dir / "sample.json", "w", encoding="utf-8") as handle:
@@ -415,6 +447,31 @@ class DatasetStore:
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise
         return copy.deepcopy(sample)
+
+    def _similarity_score(self, image: np.ndarray, other_path: Path) -> float:
+        """Mittlere normierte Graustufendifferenz eines kleinen Vergleichsbilds.
+
+        Nur ein Hinweis (Heuristik, siehe SIMILARITY_THRESHOLD) - kein Beweis
+        fuer/gegen tatsaechliche Bildidentitaet oder -unabhaengigkeit.
+        """
+        other = cv2.imread(str(other_path))
+        if other is None:
+            return 1.0
+        a = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        b = other if other.ndim == 2 else cv2.cvtColor(other, cv2.COLOR_BGR2GRAY)
+        a = cv2.resize(a, (32, 32)).astype(np.float32)
+        b = cv2.resize(b, (32, 32)).astype(np.float32)
+        return float(np.abs(a - b).mean() / 255.0)
+
+    def _find_similar_in_group(self, image: np.ndarray, group_id: str, own_sha256: str) -> tuple[str, float] | None:
+        best: tuple[str, float] | None = None
+        for other in self._load_all_samples():
+            if other["independence_group"] != group_id or other["sha256"] == own_sha256:
+                continue
+            score = self._similarity_score(image, self._sample_dir(other["id"]) / "image.png")
+            if score < SIMILARITY_THRESHOLD and (best is None or score < best[1]):
+                best = (other["id"], score)
+        return best
 
     def _find_duplicate_hash(self, sha256: str) -> str | None:
         samples_dir = self.root / "samples"
@@ -489,12 +546,20 @@ class DatasetStore:
     def summary(self) -> dict:
         registry = self._load_devices()
         samples = self._load_all_samples()
+        # Unabhaengigkeitszahl haengt an der Gruppen-ID, nicht an der Anzahl
+        # Wiederholungen darin - zehn Aufnahmen derselben Situation zaehlen als
+        # eine Gruppe, ein Auswahlwechsel (select_sample) aendert nur den
+        # Vertreter, nie diese Zahl.
         groups = {s["independence_group"] for s in samples}
-        readable = [s for s in samples if s["label_state"] == "readable"]
-        unreadable = [s for s in samples if s["label_state"] == "unreadable"]
-        uncertain = [s for s in samples if s["label_state"] in ("uncertain", "draft")]
-        families = {registry["devices"][s["device_id"]]["family"] for s in samples if s["device_id"] in registry["devices"]}
-        technologies = {registry["devices"][s["device_id"]]["technology"] for s in samples if s["device_id"] in registry["devices"]}
+        # "Real" schliesst synthetische Fixtures aus - sie duerfen den Zaehler
+        # lesbarer/unlesbarer *realer* Testwerte nicht aufblaehen (Aufgabe 5).
+        real = [s for s in samples if not s["synthetic"]]
+        readable = [s for s in real if s["label_state"] == "readable"]
+        unreadable = [s for s in real if s["label_state"] == "unreadable"]
+        uncertain = [s for s in real if s["label_state"] in ("uncertain", "draft")]
+        device_ids = {s["device_id"] for s in samples if not s["synthetic"]}
+        families = {registry["devices"][d]["family"] for d in device_ids if d in registry["devices"]}
+        technologies = {registry["devices"][d]["technology"] for d in device_ids if d in registry["devices"]}
         return {
             "devices": len(registry["devices"]),
             "samples": len(samples),
@@ -504,7 +569,22 @@ class DatasetStore:
             "uncertain_or_draft": len(uncertain),
             "families": sorted(families),
             "technologies": sorted(technologies),
+            "missing_conditions": self._missing_conditions(registry, real),
         }
+
+    def _missing_conditions(self, registry: dict, real_samples: list[dict]) -> dict:
+        """Fehlende Bedingungen je Geraet und insgesamt - eine Luecke, keine fingierte Abdeckung."""
+        seen_by_device: dict[str, set[str]] = {}
+        seen_overall: set[str] = set()
+        for sample in real_samples:
+            seen_by_device.setdefault(sample["device_id"], set()).update(sample["conditions"])
+            seen_overall.update(sample["conditions"])
+        by_device = {
+            device_id: sorted(set(CONDITION_KEYS) - seen)
+            for device_id, seen in seen_by_device.items()
+            if device_id in registry["devices"]
+        }
+        return {"overall": sorted(set(CONDITION_KEYS) - seen_overall), "by_device": by_device}
 
     # -- Export ------------------------------------------------------------
 
