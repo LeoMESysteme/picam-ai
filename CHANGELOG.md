@@ -3,6 +3,50 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 7: Nachführung im Lesepfad des Workbench-Controllers)
+
+**Problem:** Der `QuadTracker` aus Task 6 existierte, war aber an keiner
+Stelle verdrahtet — ein leichter Versatz der Anzeige (Vibration, angestoßene
+Kamera) brach den laufenden Ablesevorgang der Workbench genauso ab wie zuvor,
+weil `Controller.publish()`/`_read()` immer nur die einmal bestätigte
+`roi_quad` benutzten, ohne Nachführung.
+
+**Änderung:** `Controller` legt im `roi`-Op (Bestätigungspfad, nicht im
+`annotate`-Zweig) einen `QuadTracker` gegen das gerade eingefrorene Bild an
+(`self.tracker`) und verwirft ihn in `_change()` wie das bestehende
+`self.gate` — eine geänderte Konfiguration darf keine Referenz der alten
+mitschleppen. `publish()` ruft `self.tracker.update(image)` auf jedem Bild
+auf (unthrottled, wie in Task 6 gemessen: 2,63 ms Median) und liest/überlagert
+mit dem ggf. korrigierten Quad — zeichnet aber die grüne "bestätigt"-Kontur
+weiterhin aus der unveränderten `roi_quad(image, config)`
+(`confirmed_quad`), niemals aus `track.quad`. Ohne diese Trennung hätte eine
+begrenzte, maschinelle Nachführungskorrektur optisch nicht von der
+menschlichen Bestätigung zu unterscheiden ausgesehen — ein Verstoß gegen die
+eigene Invariante dieses Projekts, dass Bestätigtes und Nachgeführtes
+unterscheidbar bleiben (Task 8 gibt der Nachführung eine eigene Farbe).
+Verstößt die Nachführung gegen ihre Grenzen (`track.quad is None`), ersetzt
+`_read()` das eingefrorene `ReadResult` (`dataclasses.replace`, da `frozen`)
+um das Statusflag `tracking_lost` — ein Befund über das Bild, kein Befund des
+Lesers, deshalb nicht in `sevenseg.py`. `GateConfig.blocking_flags` (in
+`src/dispread/validate.py`) nimmt `tracking_lost` in die Menge der
+Betriebszustände auf, die einen Zahlenwert ausschließen (Konzept.md §4: bei
+Verlust der Anzeige wird der Messwert ungültig). Jedes Leseergebnis führt neu
+`reading["track"] = {"score", "shift", "rotation_deg", "corrected", "reason"}`.
+
+**Konsequenz:** Ein Bild lang toleriert die Workbench einen begrenzten
+Versatz derselben bereits bestätigten Anzeige, ohne dass der Bediener erneut
+bestätigen muss — eine andere Anzeige zu wählen bliebe weiterhin ein eigener
+Bestätigungsakt. `config["roi_quad"]` bleibt dabei unverändert und von der
+laufenden Korrektur getrennt sichtbar. Neue Tests: `tests/test_workbench.py`
+(`test_verrutschte_anzeige_wird_weiter_gelesen`,
+`test_zu_grosser_versatz_fuehrt_zur_ablehnung_nicht_zur_korrektur`,
+`test_tracker_wird_bei_konfigurationsaenderung_verworfen`,
+`test_gruene_kontur_bleibt_die_bestaetigte_geometrie_bei_nachfuehrung`) und
+`tests/test_gate_und_referenz.py`
+(`test_verlorene_nachfuehrung_blockiert_die_freigabe`) — alle mit echten
+gerenderten Anzeigen und echtem `QuadTracker`/`SevenSegmentReader`, keine
+Mocks der Trackinglogik.
+
 ## 0.1.0.dev0 — 2026-09-18 (QuadTracker: `_moved_quad` bildete unter Drehung eine geometrisch verzerrte Anzeige ab)
 
 ### Reviewfund (Critical) zu Task 6: Invertierungs-plus-Vorzeichen-Hack in `_moved_quad` ist keine gültige Transformation

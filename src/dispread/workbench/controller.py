@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from dispread.ocr.autofit import fit_layout
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.records import TimeBaseKind
 from dispread.rectify import rectify
+from dispread.track import QuadTracker
 from dispread.validate import GateConfig, ReleaseGate
 
 from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
@@ -203,6 +205,9 @@ class Controller:
         self.focus = False
         self.reader = SevenSegmentReader()
         self.gate, self.gate_revision = None, None
+        # Nachfuehrung (Task 7): entsteht ausschliesslich im roi-Op, sobald der
+        # Bediener bestaetigt (siehe dort) - keine Referenz ohne diesen Akt.
+        self.tracker, self.track_quad = None, None
         self.reading = None
         self.last_ocr_at = 0.0
         self.stop = threading.Event()
@@ -350,6 +355,9 @@ class Controller:
         # Die Freigabepruefung ist zustandsbehaftet; nach einer Aenderung darf
         # sie keine Bestaetigung aus der alten Konfiguration mitschleppen.
         self.gate, self.gate_revision = None, None
+        # Eine geaenderte Konfiguration darf keine Nachfuehrungsreferenz aus
+        # der alten Geometrie mitschleppen (Task 7, wie self.gate oben).
+        self.tracker, self.track_quad = None, None
         self.reading = None
         self.last_ocr_at = 0.0
         self.revision += 1
@@ -657,6 +665,10 @@ class Controller:
                     self.log("info", f"Annotation gespeichert: {target}")
                 else:
                     self._change(data)
+                    # Referenzbild dieser Bestaetigung, nicht das laufend
+                    # aktuelle Livebild - Task 7 (siehe track.py: gegen die
+                    # Bestaetigung registrieren, nie gegen den Vorframe).
+                    self.tracker = QuadTracker(frame["image"], roi_quad(frame["image"], data))
                 del self.frames[args["id"]]
             elif op == "auto.start":
                 if self.mode != "setup" or not self.config["confirmed"] or not self.snapshot()["live"]:
@@ -894,6 +906,12 @@ class Controller:
             focus, mode = self.focus, self.mode
             cached_reading = copy.deepcopy(self.reading)
             cached_verify_quad = self.verify_quad
+            # Referenz jetzt unter dem Lock ziehen, nicht spaeter direkt an
+            # self.tracker nachschlagen - ein _change() aus einem anderen
+            # Thread (z. B. layout.set) koennte self.tracker sonst zwischen
+            # der Pruefung "ist nicht None" und dem Aufruf von .update() auf
+            # None zuruecksetzen (Review-Fund).
+            tracker = self.tracker
             now = time.monotonic()
             should_read = config["confirmed"] and (cached_reading is None or now - self.last_ocr_at >= OCR_INTERVAL_S)
             # Nach einer Bestaetigung nur noch gedrosselt und nie im
@@ -931,9 +949,20 @@ class Controller:
 
         reading = cached_reading
         quad = None
+        track = None
         if config["confirmed"]:
-            quad = roi_quad(image, config)
-            cv2.polylines(overlay, [np.rint(quad).astype(np.int32)], True, (130, 220, 130), 2)
+            # Die bestaetigte Geometrie bleibt fuer die gruene Kontur
+            # eigenstaendig - eine begrenzte Nachfuehrungskorrektur darf sich
+            # nicht als die eigene Bestaetigung des Bedieners ausgeben (Task 7;
+            # Task 8 zeichnet die nachgefuehrte Kontur separat). Gelesen und
+            # ueberlagert wird dagegen mit der ggf. korrigierten `quad`.
+            confirmed_quad = roi_quad(image, config)
+            quad = confirmed_quad
+            if tracker is not None:
+                track = tracker.update(image)
+                if track.quad is not None:
+                    quad = track.quad
+            cv2.polylines(overlay, [np.rint(confirmed_quad).astype(np.int32)], True, (130, 220, 130), 2)
             if should_read:
                 # Gate-Zustand ist geteilter Controllerzustand; nur dieser
                 # kurze Teil bleibt gesperrt. Entzerrung/Segmentanalyse sind
@@ -948,7 +977,7 @@ class Controller:
                             # Important).
                             self.clip["dropped"] += 1
                         return
-                    reading = self._read(image, config, quad)
+                    reading = self._read(image, config, quad, track)
                     self.last_ocr_at = now
             if focus:
                 ih, iw = image.shape[:2]
@@ -981,6 +1010,11 @@ class Controller:
                 self.last_candidates_at = now
             self.observed = observed
             self.reading = reading
+            # Nachfuehrungsbefund dieses Bilds, unabhaengig von should_read -
+            # der Tracker laeuft auf jedem Bild (Task 6: 2.63 ms Median, keine
+            # Drosselung nötig). Fuer Task 8 (eigene Kontur); config["roi_quad"]
+            # bleibt davon unberuehrt.
+            self.track_quad = None if track is None else track.quad
             self.jpeg = jpeg.tobytes()
             self.sequence += 1
             if self.clip is not None:
@@ -1013,7 +1047,7 @@ class Controller:
                 self.first_frame = self.last_frame
             self.error = None
 
-    def _read(self, image, config, quad):
+    def _read(self, image, config, quad, track=None):
         """Bestaetigte ROI entzerren, Ziffern lesen, Freigabe nur als Vorschau.
 
         Erzeugt ausdruecklich **keinen** `ValueRecord` und sendet nichts. Die
@@ -1025,6 +1059,11 @@ class Controller:
             crop = rectify(image, quad, target_size=CROP_SIZE)
             reader_crop = crop_box(crop.image, config["ocr_box"])
             read = self.reader.read(reader_crop, layout)
+            if track is not None and track.quad is None:
+                # ReadResult ist frozen - ersetzen statt mutieren. Die
+                # Nachfuehrung ist ein Befund ueber das Bild, kein Befund des
+                # Lesers; sie darf deshalb nicht in sevenseg.py wandern.
+                read = replace(read, status_flags=read.status_flags | {"tracking_lost"})
             if self.gate is None or self.gate_revision != self.revision:
                 self.gate = ReleaseGate(GateConfig(expected_unit=layout.unit, confirm_frames=GATE_CONFIRM_FRAMES))
                 self.gate_revision = self.revision
@@ -1055,6 +1094,15 @@ class Controller:
                 "gate_reasons": list(decision.reject_reasons),
                 "gate_confidence": round(decision.confidence, 4),
                 "gate_timebase": "CLOCK_MONOTONIC",
+                "track": None
+                if track is None
+                else {
+                    "score": round(track.score, 3),
+                    "shift": round(track.shift, 4),
+                    "rotation_deg": round(track.rotation_deg, 2),
+                    "corrected": track.quad is not None,
+                    "reason": track.reason,
+                },
                 "released": False,
                 "error": None,
             }

@@ -1618,3 +1618,130 @@ def test_rasches_stop_start_verwechselt_schreiber_und_warteschlange_nicht(tmp_pa
         assert len(manifest["frames"]) > 0
         for entry in manifest["frames"]:
             assert (directory / entry["file"]).exists()
+
+
+# --- Task 7: Nachfuehrung im Lesepfad -------------------------------------
+#
+# Wie tests/test_track.py::_scene: eine Anzeige auf einer groesseren Flaeche,
+# real (affin) verschiebbar - keine gemockte QuadTracker/SevenSegmentReader,
+# damit der Test die tatsaechliche Nachfuehrung samt echtem Lesen prueft.
+
+_TRACK_LAYOUT = DisplayLayout(digits=4, decimals=2, has_sign=False, unit="V")
+_TRACK_OFFSET = (200, 150)  # Einbettung der Anzeige in die Szene
+
+
+def _szene(shift_x=0, shift_y=0, angle=0.0, value=12.34):
+    """Anzeige auf grosser Flaeche, optional verschoben/gedreht (wie
+    tests/test_track.py::_scene), aber mit echtem OCR-lesbarem Inhalt."""
+    display, _, _ = render_display(value, _TRACK_LAYOUT, size=(240, 100))
+    scene = np.full((400, 640, 3), 30, np.uint8)
+    ox, oy = _TRACK_OFFSET
+    scene[oy : oy + 100, ox : ox + 240] = display
+    if shift_x or shift_y or angle:
+        matrix = cv2.getRotationMatrix2D((320.0, 200.0), angle, 1.0)
+        matrix[0, 2] += shift_x
+        matrix[1, 2] += shift_y
+        scene = cv2.warpAffine(scene, matrix, (640, 400), borderValue=(30, 30, 30))
+    return scene
+
+
+def _metadaten():
+    return {"timebase": "synthetic"}
+
+
+def _ziffernbereich_quad():
+    """Der Ziffernbereich der unverschobenen Szene in Bildpixeln - genau das,
+    was ein Bediener nach Konzept.md §4 als ROI bestaetigen wuerde (siehe
+    render_display: Ziffernbereich ohne Einheitenzeile)."""
+    _, _, (x, y, w, h) = render_display(12.34, _TRACK_LAYOUT, size=(240, 100))
+    ox, oy = _TRACK_OFFSET
+    x, y = x + ox, y + oy
+    return ((x, y), (x + w, y), (x + w, y + h), (x, y + h))
+
+
+def _confirmed_controller_mit_anzeige(tmp_path):
+    """Controller mit einer echten, ueber den `roi`-Op bestaetigten Anzeige.
+
+    Bewusst ueber freeze()/command("roi", ...) statt direkt am Config-Dict
+    (anders als die meisten anderen Publish-Tests in dieser Datei) - nur der
+    `roi`-Op legt den Tracker an (controller.py, roi-Op, Task 7)."""
+    c = Controller(tmp_path)
+    c.config["layout"] = _TRACK_LAYOUT.to_dict()
+    c.publish(_szene(), _metadaten())
+    frozen = c.command("freeze")
+    width, height = frozen["width"], frozen["height"]
+    quad = [[x / width, y / height] for x, y in _ziffernbereich_quad()]
+    c.command("roi", {"id": frozen["id"], "quad": quad})
+    return c
+
+
+def test_verrutschte_anzeige_wird_weiter_gelesen(tmp_path):
+    """Der eigentliche Bedienerwunsch: ein leichter Versatz bricht den Lauf nicht ab."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    bestaetigtes_quad = copy.deepcopy(controller.config["roi_quad"])
+    controller.publish(_szene(), _metadaten())
+    assert controller.reading["value"] == 12.34
+
+    # OCR_INTERVAL_S umgehen, damit dieses Bild tatsaechlich (erneut) gelesen
+    # wird - sonst pruefte die Assertion nur den zwischengespeicherten alten
+    # Wert, nicht die Nachfuehrung dieses Bilds.
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=6), _metadaten())
+    assert controller.reading["value"] == 12.34, "Nachfuehrung haette folgen muessen"
+    assert controller.reading["track"]["corrected"] is True
+    assert controller.config["roi_quad"] == bestaetigtes_quad, "bestaetigte Geometrie bleibt"
+
+
+def test_zu_grosser_versatz_fuehrt_zur_ablehnung_nicht_zur_korrektur(tmp_path):
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=200), _metadaten())
+    assert "tracking_lost" in controller.reading["status_flags"]
+    assert controller.reading["gate_status"] == "unreadable"
+    assert "state:tracking_lost" in controller.reading["gate_reasons"]
+
+
+def test_tracker_wird_bei_konfigurationsaenderung_verworfen(tmp_path):
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    assert controller.tracker is not None
+    controller.command("layout.set", {"key": "digits", "value": 5})
+    assert controller.tracker is None
+
+
+def test_gruene_kontur_bleibt_die_bestaetigte_geometrie_bei_nachfuehrung(tmp_path, monkeypatch):
+    """Praezisierung gegenueber dem Plan-Entwurf: eine begrenzte, maschinelle
+    Nachfuehrungskorrektur darf sich nicht als die eigene Bestaetigung des
+    Bedieners ausgeben. Die gruene "bestaetigt"-Kontur (Farbe (130, 220, 130))
+    muss auch bei einer korrigierten Anzeige weiterhin `roi_quad(image,
+    config)` zeichnen, nicht `track.quad` - sonst waere die Korrektur optisch
+    nicht von der menschlichen Bestaetigung zu unterscheiden (bis Task 8 der
+    Nachfuehrung eine eigene Farbe gibt)."""
+    import dispread.workbench.controller as controller_module
+
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+
+    calls = []
+    original_polylines = cv2.polylines
+
+    def capture(overlay, points, is_closed, colour, thickness):
+        calls.append((colour, [p.copy() for p in points]))
+        return original_polylines(overlay, points, is_closed, colour, thickness)
+
+    monkeypatch.setattr(cv2, "polylines", capture)
+    controller.last_ocr_at = 0.0
+    shifted = _szene(shift_x=6)
+    controller.publish(shifted, _metadaten())
+
+    green_calls = [points for colour, points in calls if colour == (130, 220, 130)]
+    assert len(green_calls) == 1, "genau eine gruene Kontur je Bild erwartet"
+    expected = np.rint(np.array(controller_module.roi_quad(shifted, controller.config))).astype(np.int32)
+    np.testing.assert_array_equal(green_calls[0][0], expected)
+
+    # Gegenprobe: die Nachfuehrung hat hier tatsaechlich korrigiert (sonst
+    # waere confirmed_quad == track.quad ohnehin gleich und die obige
+    # Gleichheit wuerde die Unterscheidung nicht wirklich pruefen).
+    assert controller.reading["track"]["corrected"] is True
+    assert controller.reading["track"]["shift"] > 0.0

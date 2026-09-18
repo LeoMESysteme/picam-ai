@@ -55,7 +55,9 @@ class GateConfig:
     #: Ohne Freigabe innerhalb dieser Zeit gilt der letzte Wert als veraltet.
     stale_after_ns: int = 500_000_000
     #: Betriebszustaende, die einen Zahlenwert ausschliessen.
-    blocking_flags: frozenset[str] = field(default_factory=lambda: frozenset({"overflow", "menu", "hold", "glare"}))
+    blocking_flags: frozenset[str] = field(
+        default_factory=lambda: frozenset({"overflow", "menu", "hold", "glare", "tracking_lost"})
+    )
     #: Erwartete Einheit aus dem bestaetigten Profil.
     expected_unit: str | None = None
 

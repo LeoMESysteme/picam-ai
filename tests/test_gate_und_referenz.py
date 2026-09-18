@@ -204,6 +204,14 @@ def test_betriebszustand_blockiert_den_zahlenwert():
     assert "state:overflow" in decision.reject_reasons
 
 
+def test_verlorene_nachfuehrung_blockiert_die_freigabe():
+    """Konzept.md §4: bei Verlust der Anzeige wird der Messwert ungueltig."""
+    gate = ReleaseGate(GateConfig())
+    decision = gate.evaluate(_read_result(None, status_flags=frozenset({"tracking_lost"})), capture_ns=0)
+    assert decision.status is ValueStatus.UNREADABLE
+    assert "state:tracking_lost" in decision.reject_reasons
+
+
 # --- Serielle Ausgabe ueber ein pty --------------------------------------
 
 
