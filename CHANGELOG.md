@@ -3,6 +3,31 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 9 Review-Fund: Reflexion wird bei LCD-Polarität verschluckt)
+
+**Problem:** Selbstreview von Task 9 (Anzeigepolarität) deckte auf, dass
+`saturated_fraction` in `SevenSegmentReader.read` auf dem für den
+Segment-Dekoder umgekehrten Graustufenbild berechnet wurde
+(`gray` nach der `255 - gray`-Umkehr bei `polarity == "dark_on_bright"`).
+Eine echte Reflexion — roh nahe 255 — fällt nach dieser Umkehr auf nahe 0 und
+verschwindet aus der Überstrahlungsmessung. Empirisch nachgestellt: ein
+Reflexionsfleck, der roh 2,3 % der Fläche saturiert (über der 2 %-Schwelle),
+wurde nach der Umkehr mit `saturated_fraction=0.0` gemeldet, kein
+`glare`-Flag, Wert wurde weiterhin ausgegeben. Genau die stille
+Fehlablesung, die Konzept.md §9 als Hauptproblem nennt und die dieser
+Befund verhindern soll.
+
+**Änderung:** `SevenSegmentReader.read` sichert das Graustufenbild vor der
+Polaritätsumkehr als `raw_gray` und berechnet `saturated_fraction` daraus,
+nicht aus dem für den Dekoder umgekehrten `gray`. Für `bright_on_dark`
+(Default) ist `raw_gray` identisch zu `gray`, also keine Verhaltensänderung.
+Neuer Regressionstest
+`tests/test_sevenseg.py::test_reflexion_wird_bei_lcd_polaritaet_nicht_verschluckt`.
+
+**Konsequenz:** Eine echte Reflexion wird unter `dark_on_bright` jetzt
+zuverlässig als `glare` gemeldet statt stillschweigend als gültiger Wert
+durchzugehen. `173 passed`, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 9: Anzeigepolarität ins Profil)
 
 **Problem:** `SevenSegmentReader` und `DisplayLayout` gingen fest von heller

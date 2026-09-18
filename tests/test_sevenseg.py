@@ -131,3 +131,26 @@ def test_falsche_polaritaet_wird_abgelehnt_nicht_falsch_gelesen(reader):
 def test_unbekannte_polaritaet_wird_abgelehnt():
     with pytest.raises(ValueError, match="polarity"):
         validate_layout({**DEFAULT["layout"], "polarity": "irgendwas"})
+
+
+def test_reflexion_wird_bei_lcd_polaritaet_nicht_verschluckt(reader):
+    """Regression: die Polaritaetsumkehr darf eine echte Reflexion nicht unsichtbar machen.
+
+    Ueberstrahlung wird an den rohen Sensorwerten gemessen, nicht an der fuer
+    den Segment-Dekoder umgekehrten Ansicht - sonst wuerde eine Reflexion
+    (roh nahe 255) nach der Umkehr nahe 0 fallen und als 'glare' verschwinden
+    (OQ-13 Fall 2, Konzept.md §9).
+    """
+    lcd = DisplayLayout(digits=5, decimals=2, unit="N", polarity="dark_on_bright")
+    hell = DisplayLayout(digits=5, decimals=2, unit="N")
+    image, _, area = render_display(12.34, hell)
+    x, y, w, h = area
+    raw_capture = 255 - image[y : y + h, x : x + w]
+
+    glare_capture = raw_capture.copy()
+    glare_capture[0:20, 0:60] = 255  # Reflexion: echte Sensoruebersteuerung
+
+    clean = reader.read(raw_capture, lcd)
+    glare = reader.read(glare_capture, lcd)
+    assert "glare" not in clean.status_flags
+    assert "glare" in glare.status_flags, "Reflexion wurde nach der Polaritaetsumkehr uebersehen"

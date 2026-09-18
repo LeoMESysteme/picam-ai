@@ -149,6 +149,12 @@ class SevenSegmentReader:
 
     def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult:
         gray = _to_gray(crop)
+        # Vor der Polaritaetsumkehr sichern: Ueberstrahlung ist eine Eigenschaft
+        # der rohen Sensorwerte, nicht der semantischen "hell = an"-Auslegung.
+        # Nach einer Umkehrung wuerde eine echte Reflexion (roh nahe 255) auf
+        # nahe 0 fallen und nicht mehr auffallen - genau die stille
+        # Fehlablesung, die diese Messung verhindern soll (Konzept.md §9).
+        raw_gray = gray
         if layout.polarity == "dark_on_bright":
             # LCD: dunkle Segmente auf hellem Grund. Einmal umkehren, danach gilt im
             # ganzen Leser wieder "hell = an" - keine zweite Fallunterscheidung.
@@ -176,8 +182,10 @@ class SevenSegmentReader:
 
         # Ueberstrahlung messen: Reflexionen sind der gemessene Fall, in dem
         # stille Fehlablesungen entstehen. Der Leser meldet das als Befund,
-        # die Entscheidung darueber trifft die Freigabe (validate.py).
-        saturated_fraction = float((gray >= 250).mean())
+        # die Entscheidung darueber trifft die Freigabe (validate.py). Auf
+        # raw_gray statt gray, damit eine Polaritaetsumkehr eine echte
+        # Reflexion nicht verschluckt (siehe Kommentar oben).
+        saturated_fraction = float((raw_gray >= 250).mean())
 
         status_flags: set[str] = set()
         # Ueberlauf: jede Stelle zeigt ausschliesslich das Mittelsegment. Das
