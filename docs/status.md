@@ -135,6 +135,43 @@ importiert und keine neue OCR-Messung erzeugt.
 
 ## Nächste Schritte
 
-Kein automatischer Merge/Push. Vor einem Merge nach `master`: reale
-Browserabnahme (OQ-34/OQ-21) nachholen, sobald ein funktionierender Browser-
-Testweg existiert oder ein Mensch die Bedienung manuell abnimmt.
+**Nach `master` gemergt (2026-09-18), `dispread serve` läuft mit dem neuen
+Stand.** Reale Browserabnahme (OQ-34/OQ-21) steht weiterhin aus.
+
+### Hohe Priorität: UX/Workflow des Sammelmodus vereinfachen
+
+Nutzerrückmeldung nach erstem Kontakt mit der Oberfläche: "die oberfläche zum
+datensatz aufnehmen ist zu unverständlich und umständlich". Diagnose (im
+Code bestätigt): es gibt **keine Möglichkeit, ein bereits angelegtes Gerät
+auszuwählen** — die Oberfläche zeigt nur ein "neues Gerät anlegen"-Formular,
+was nach einem Neuladen faktisch zwingt, Geräte neu anzulegen. Dazu stehen
+Geräteformular, Situationsformular, Aufnahmeknopf, Label-Editor und Export
+alle undifferenziert flach untereinander, ohne Hinweis, welcher Schritt
+gerade dran ist.
+
+Abgestimmtes Design (Bounded-Pfad, kein Spec-Dokument nötig):
+
+1. **Neuer Read-Endpunkt:** `DatasetStore.list_devices()` +
+   `dataset.device.list`-Kommando (analog zu `summary()`).
+2. **Schrittgesteuerte Oberfläche** statt flacher Liste: drei Karten, nur die
+   aktuelle aufgeklappt, erledigte klappen zu einer Einzeiler-Zusammenfassung
+   zusammen ("Gerät: GSV-2ASD ✓ ändern"):
+   - **Schritt 1 – Gerät:** `<select>` aus `dataset.device.list`, letzte
+     Option "+ neues Gerät anlegen" blendet das bestehende Formular ein.
+   - **Schritt 2 – Situation:** vorhandene Situationen des Geräts als kleine
+     Liste zum Fortsetzen, plus "neue Situation". Überspringbar, wenn genau
+     eine Situation existiert und einfach weiter aufgenommen wird.
+   - **Schritt 3 – Aufnahme:** heutiger Capture-/Box-/Label-/Save-Ablauf
+     unverändert in der Mechanik, aber einzig sichtbarer Teil, sobald Gerät+
+     Situation gewählt sind; sichtbare Kopfzeile "Gerät: X · Situation: Y".
+3. Echte `<label>`s statt reiner Platzhaltertexte; Modell/Belegart-Felder
+   wandern in ein `<details>` im Geräteformular, damit der Normalfall
+   (vorhandenes Gerät wählen) ohne Zusatzfelder auskommt.
+4. Export bleibt unverändert als feste Zeile am Ende.
+
+Ändert keinen bestehenden Kommando-/Endpunktvertrag außer der einen neuen
+Leseoperation — reine UI-Restrukturierung. Tests: `list_devices()` in
+`tests/test_datasets.py` erweitern, ggf. `tests/dataset_client.test.mjs` für
+neue reine Schrittlogik; manuelle Prüfung über die laufende Workbench, da
+echte Browserautomatisierung hier weiterhin nicht verfügbar ist
+(OQ-21/OQ-34).
