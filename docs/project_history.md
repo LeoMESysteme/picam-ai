@@ -522,3 +522,56 @@ strukturell wirkungslos (nie gelesen in `sevenseg.py`) — offen als Teil von
 [OQ-28](open-questions.md). Die Nachführungsschwellen (`max_shift`,
 `max_rotation_deg`, `min_score`) bleiben unvalidierte Vorabdefaults —
 [OQ-26](open-questions.md).
+
+---
+
+# 2026-09-18 — Datensatz-Sammelmodus: eigener Rohbild-Sammelpfad statt Lockerung der produktiven ROI-/Clip-Voraussetzungen
+
+## Problem
+
+Reale, unkalibrierte Prüfbilder sollten im Browser gesammelt werden können,
+ohne Segmentraster oder bestätigtes Produktionsprofil vorauszusetzen. Die
+bestehende Clipaufnahme (`Controller._clip_start`) verlangt genau das:
+bestätigte Geometrie, Livebild und einen konstanten sichtbaren Wert je Clip.
+
+## Entscheidung
+
+Ein vollständig eigenständiger Speicher- und Bedienpfad
+(`src/dispread/workbench/datasets.py`, `dataset_capture.py`, `dataset.js`)
+statt einer Lockerung der bestehenden `roi`-/`clip.start`-Voraussetzungen.
+Eigene Geräteregistrierung mit UUID und Split-Sperre, eigene Capture-Tokens
+(getrennt vom kleinen ROI-Editor-Cache `Controller.frames`), eigenes
+`DatasetStore`-Lock, eigene `dataset.*`-Kommandos über das bestehende
+`/command`.
+
+## Begründung / Alternativen
+
+- **`clip.start`/`clip.stop` um einen unkalibrierten Modus erweitern.**
+  Verworfen: hätte bedeutet, `confirmed`-Prüfungen dort probeweise zu
+  umgehen — genau die Art Lockerung, die AGENTS.md für Freigaberegeln
+  ausschließt, und die bestehenden Clip-Regressionstests (Manifest,
+  Schreibfehlerbehandlung, `write_failures`) hätten für einen zweiten,
+  unverwandten Anwendungsfall mitgepflegt werden müssen.
+- **Zielbox/Label direkt in `ValueRecord` oder das Profilschema aufnehmen.**
+  Verworfen: `ValueRecord` ist der stabile Vertrag aus Konzept.md §8 und
+  darf laut Aufgabenstellung nicht angefasst werden; ein getipptes Label ist
+  zudem strukturell etwas anderes als ein erkannter Wert und darf nach
+  Konzept.md §7 niemals in `ValueReader`/`ReleaseGate` einfließen.
+- **Bestehenden `Controller.frames`-Editor-Cache für Capture-Tokens
+  wiederverwenden.** Verworfen: der ist an Profil-/Editorlogik gekoppelt
+  (Revision, `roi`-Bestätigung) und auf vier Einträge mit stiller
+  FIFO-Verdrängung ausgelegt — der Sammelmodus braucht dagegen eine
+  explizite Ablehnung statt Verdrängung bei Erreichen des Limits
+  (`MAX_OPEN_CAPTURES`).
+
+## Konsequenz
+
+Der Sammelmodus ergänzt den bestehenden Betriebspfad, ohne dessen
+Freigaberegeln zu berühren: `ValueRecord`, `ReleaseGate` und
+`TelegramFormatter` sind unverändert, Capture/Save fassen `self.config`,
+`self.tracker` und `self.reading` nicht an (siehe Tests in
+`tests/test_dataset_capture.py`). Kosten: zwei parallele Speicherpfade
+(`clips/` und `datasets/samples/`) mit ähnlicher, aber bewusst nicht
+gemeinsamer Schreiblogik — vertretbar, weil beide unterschiedliche
+Garantien geben (ein Clip ist ein konstanter Wert über die Zeit, eine
+Sample-Probe ein Einzelbild mit Zielbox).

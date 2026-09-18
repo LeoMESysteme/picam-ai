@@ -13,6 +13,9 @@ die du schreibst.
 **Direkt ausprobieren:** [Kamera-Livevorschau über SSH](10-kamera-livevorschau.md)
 zeigt das echte Kamerabild mit unbestätigten Display-Kandidaten im
 Windows-Browser. Dieser kleine Prototyp läuft unabhängig vom Lernpfad.
+[Datensatz-Sammelmodus](11-datensatz-sammeln.md) beschreibt den geführten
+Ablauf, mit dem reale Prüfbilder ohne Kalibrierung gesammelt werden — ebenso
+ein fertiger Prototyp, keine Bauaufgabe.
 
 ## So ist jedes Kapitel aufgebaut
 
