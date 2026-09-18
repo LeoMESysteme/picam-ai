@@ -3,6 +3,27 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Abschlussreview, Nachschliff R6: Verlustarten im Clipmanifest trennen)
+
+**Problem:** Mit dem R6-Fix zählen zwei verschiedene Verluste auf dasselbe
+Feld: eine volle Schreib-Queue („Kamera schneller als die Platte", unter Last
+erwartbar) und ein fehlgeschlagenes `cv2.imwrite` („Schreiben ging schief").
+Die Logzeile unterscheidet sie, `clip.json` nicht — wer den Clip später
+auswertet, kann die harmlose von der ernsten Ursache nicht trennen.
+
+**Änderung:** Das Manifest trägt zusätzlich `write_failures`. `dropped_frames`
+bleibt die Gesamtzahl der verlorenen Bilder (Invariante „Bilder im Manifest
+plus verworfene = aufgenommene" unverändert), `write_failures` ist die
+Teilmenge daraus, die am Schreiben scheiterte. Additiv und ohne
+Schemawechsel: `ReplaySource` prüft nur `schema_version` und liest `frames`.
+Zwei Tests prüfen jetzt zusätzlich die Diagnosewege: `write_failures` in
+beiden Fehlerfällen bzw. `0` im Queue-voll-Fall, und ein fehlendes Manifest
+nach `drain_clip_writer()` schlägt mit einer aussagekräftigen Meldung fehl
+statt mit einem `FileNotFoundError`.
+
+**Konsequenz:** Ein lückenhafter Clip sagt jetzt auch, *warum* er lückenhaft
+ist. `210 passed`, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R1/R8a/R8b: Vorschau, Vorschlagsgültigkeit, Nachführungsfrische)
 
 **Problem:** (R1) `runAutofit()` legte den Vorschlag in `editing.autofit` ab,

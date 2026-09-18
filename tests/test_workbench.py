@@ -2048,6 +2048,9 @@ def test_manifest_zaehlt_fehlgeschlagene_schreibvorgaenge_nicht_als_bilder(
     manifest = json.loads((clips[0] / "clip.json").read_text())
     assert manifest["frames"] == []
     assert manifest["dropped_frames"] == 3
+    # Getrennt ausgewiesen: ein Schreibfehler ist etwas anderes als eine volle
+    # Queue - das eine heisst "Platte kaputt", das andere "Kamera schneller".
+    assert manifest["write_failures"] == 3
 
 
 def test_manifest_erscheint_erst_wenn_die_bilder_geschrieben_sind(tmp_path, monkeypatch):
@@ -2082,6 +2085,7 @@ def test_manifest_erscheint_erst_wenn_die_bilder_geschrieben_sind(tmp_path, monk
             assert (directory / entry["file"]).exists()
 
     controller.drain_clip_writer()
+    assert manifest_path.exists(), "Schreiber wurde nicht rechtzeitig fertig - kein Manifest"
     manifest = json.loads(manifest_path.read_text())
     assert len(manifest["frames"]) == 5
     assert manifest["dropped_frames"] == 0
@@ -2128,8 +2132,14 @@ def test_stop_bei_voller_warteschlange_blockiert_nicht_und_liefert_ein_manifest(
         block.set()
 
     controller.drain_clip_writer()
-    directory = next(iter(sorted((controller.root / "clips").iterdir())))
-    manifest = json.loads((directory / "clip.json").read_text())
+    manifest_path = next(iter(sorted((controller.root / "clips").iterdir()))) / "clip.json"
+    # Legt die Diagnose offen, falls das Abschlusselement die volle Queue doch
+    # nicht erreicht haette: dann fehlt das Manifest, statt dass ein
+    # FileNotFoundError aus dem Lesen kommt.
+    assert manifest_path.exists(), "Abschlusselement erreichte den Schreiber nicht"
+    directory = manifest_path.parent
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["write_failures"] == 0
     assert len(manifest["frames"]) == queued
     assert manifest["dropped_frames"] == dropped
     assert len(manifest["frames"]) + manifest["dropped_frames"] == CLIP_QUEUE_DEPTH + 10

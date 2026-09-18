@@ -914,10 +914,17 @@ class Controller:
                 # Ein fehlgeschlagener Schreibvorgang ist ein verlorenes Bild
                 # und wird wie ein verworfenes gezaehlt - Bilder im Manifest
                 # plus verworfene ergeben weiter die aufgenommenen.
+                # `write_failures` trennt zusaetzlich die beiden Verlustarten:
+                # eine volle Queue heisst "Kamera schneller als die Platte"
+                # (erwartbar unter Last), ein Schreibfehler heisst
+                # "Schreiben ging schief" - das verlangt eine andere Reaktion.
+                # Additiv, deshalb ohne Schemawechsel: ReplaySource prueft nur
+                # `schema_version` und liest `frames`.
                 manifest = dict(
                     manifest,
                     frames=written,
                     dropped_frames=manifest["dropped_frames"] + failed,
+                    write_failures=failed,
                 )
                 try:
                     atomic_json(manifest_path, manifest)
