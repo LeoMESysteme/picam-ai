@@ -84,10 +84,17 @@ def parse_expected(text: str) -> tuple[str, bool, int, int]:
 
     Komma und Punkt gelten beide als Dezimaltrenner - Bediener tippen im
     deutschen Layout mit Komma, der Leser liefert einen Punkt.
+
+    Genau ein fuehrendes Vorzeichen ist erlaubt. Frueher schnitt
+    `lstrip("+-")` jede Kette ab: "--12" wurde still zu negativ 12, "+-12" zu
+    positiv 12 - beides mehrdeutige Eingabe, die nach AGENTS.md abgelehnt
+    statt geraten gehoert (Review-Fund).
     """
     cleaned = text.strip().replace(",", ".").replace(" ", "")
     minus = cleaned.startswith("-")
-    body = cleaned.lstrip("+-")
+    body = cleaned[1:] if cleaned[:1] in ("+", "-") else cleaned
+    if body[:1] in ("+", "-"):
+        raise ValueError(f"Mehrdeutiges Vorzeichen im Sollwert: {text!r}")
     if not body or not all(c.isdigit() or c == "." for c in body) or body.count(".") > 1:
         raise ValueError(f"Unlesbarer Sollwert: {text!r}")
     whole, _, fraction = body.partition(".")

@@ -16,13 +16,18 @@ URI-Schemata:
     video:///pfad/aufnahme.mp4
     synthetic://seven-seg?digits=6&unit=N&noise=0.2&glare=0.1
     replay:///var/lib/dispread/sessions/2026-09-07_first-light
+
+Eine URI aus einem Dateisystempfad wird mit `path_uri()` gebaut, nie per
+f-String - siehe dort, warum ein relativer Pfad sonst stillschweigend
+beschnitten wird.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from dispread.frames.types import Capability, Frame, InferenceResult
 
@@ -33,6 +38,7 @@ __all__ = [
     "InferenceResult",
     "known_schemes",
     "open_source",
+    "path_uri",
 ]
 
 
@@ -59,6 +65,33 @@ class FrameSource(Protocol):
 
 def _query_scalars(uri: str) -> dict[str, str]:
     return {k: v[0] for k, v in parse_qs(urlparse(uri).query).items()}
+
+
+def path_uri(scheme: str, path: str | Path, query: str = "") -> str:
+    """Dateisystempfad in eine URI dieses Schemas fassen - absolut und kodiert.
+
+    `f"replay://{directory}"` selbst zu bauen ist eine Falle: bei einem
+    relativen Pfad (`var/workbench/clips/abc`) liest `urlparse` das erste
+    Segment als *Autoritaet* (netloc) und nicht als Pfadanfang - `var` fiel
+    so stillschweigend weg und es wurde ein anderes, nicht existierendes
+    Verzeichnis geoeffnet (Review-Fund). Deshalb hier: erst absolut machen,
+    dann prozentkodieren (Leerzeichen und andere Sonderzeichen), damit der
+    ganze Rest wirklich Pfad ist.
+    """
+    absolute = Path(path).expanduser().resolve()
+    uri = f"{scheme}://{quote(str(absolute))}"
+    return f"{uri}?{query}" if query else uri
+
+
+def _filesystem_path(uri: str) -> str:
+    """Dateisystempfad aus einer URI - auch aus einer ohne fuehrenden Schraegstrich.
+
+    Gegenstueck zu `path_uri`. Ein von Hand gebautes `replay://relativ/pfad`
+    landet mit `relativ` in `netloc`; beide Teile werden hier wieder
+    zusammengesetzt, statt den Anfang des Pfads zu verlieren.
+    """
+    parsed = urlparse(uri)
+    return unquote(parsed.netloc + parsed.path)
 
 
 def _parse_size(value: str | None) -> tuple[int, int] | None:
@@ -90,10 +123,9 @@ def _open_synthetic(uri: str) -> FrameSource:
 def _open_folder(uri: str) -> FrameSource:
     from dispread.frames.folder_source import FolderSource
 
-    parsed = urlparse(uri)
     q = _query_scalars(uri)
     return FolderSource(
-        directory=parsed.path,
+        directory=_filesystem_path(uri),
         pattern=q.get("glob", "*.png"),
         rate_hz=float(q.get("rate", 10.0)),
     )
@@ -102,13 +134,13 @@ def _open_folder(uri: str) -> FrameSource:
 def _open_video(uri: str) -> FrameSource:
     from dispread.frames.video_source import VideoSource
 
-    return VideoSource(path=urlparse(uri).path)
+    return VideoSource(path=_filesystem_path(uri))
 
 
 def _open_replay(uri: str) -> FrameSource:
     from dispread.frames.replay_source import ReplaySource
 
-    return ReplaySource(session_dir=urlparse(uri).path)
+    return ReplaySource(session_dir=_filesystem_path(uri))
 
 
 def _open_picamera2(uri: str) -> FrameSource:

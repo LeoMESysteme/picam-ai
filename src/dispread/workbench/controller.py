@@ -657,6 +657,12 @@ class Controller:
                             # §9-Datensatzaufbau) - keine automatische
                             # Ablesung, keine Erkennungsgarantie.
                             "ground_truth_text": args.get("ground_truth_text"),
+                            # Geraetekennung wie bei der Clipaufnahme (Task 2),
+                            # optional. Ohne sie zaehlt die Annotation nicht
+                            # fuer einen geraetedisjunkten Split - der
+                            # Profilname ist dafuer kein Ersatz (siehe
+                            # dispread.benchmark._device_of).
+                            "device_id": str(args.get("device_id") or "").strip() or None,
                             "formatter_provisional": True,
                             "created_at": datetime.now(UTC).isoformat(),
                             "created_timebase": "UTC",

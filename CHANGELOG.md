@@ -3,6 +3,45 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R3/R4/R5/R7: Benchmark und Autofit-Eingabe)
+
+**Problem:** Das Abschlussreview des ganzen Zweigs `ocr-selbstkalibrierung`
+fand vier task-übergreifende Fehler, die kein Einzelreview sehen konnte.
+(R3) `benchmark.normalise()` entfernte den Dezimaltrenner ganz — „28.80" und
+„288.0" wurden beide zu „2880", `classify()` meldete `correct`, ein
+Zehnerfehler war im Benchmark unsichtbar; die im `Outcome`-Docstring
+versprochene Fehlerklasse `decimal` war nie implementiert. (R4)
+`evaluate_clip` baute die URI als `f"replay://{directory}"`: bei einem
+relativen Pfad las `urlparse` das erste Segment als URL-Autorität, `var` fiel
+weg, geöffnet wurde ein nicht existierendes Verzeichnis. (R5)
+`assert_disjoint_devices` nahm bei Annotationen ersatzweise `profile_name` —
+ein Bedieneretikett: dasselbe Gerät unter zwei Profilnamen galt als zwei
+Geräte, der Split sah fälschlich disjunkt aus. (R7) `parse_expected()` schnitt
+mit `lstrip("+-")` jede Vorzeichenkette ab, „+-12" wurde still zu +12,
+„--12" zu −12.
+
+**Änderung:** `normalise()` vereinheitlicht nur noch Schreibweisen desselben
+Werts (Komma/Punkt, „+", „1234." aus dem Ganzzahlformat, führende Null) und
+behält die Dezimalstelle; `classify()` bekam die Klasse `decimal` und
+vergleicht über `_parts()` Vorzeichen, Ziffernfolge und Nachkommastellen
+getrennt. Neu `dispread.frames.path_uri()` (absolut + prozentkodiert) als
+Bauvorschrift für Datei-URIs, benutzt von `evaluate_clip`; `_filesystem_path()`
+setzt beim Öffnen `netloc` und `path` wieder zusammen, sodass auch
+handgebaute `replay://relativ/pfad` (ebenso `folder://`, `video://`) nicht
+mehr beschnitten werden. `_device_of()` verlangt eine ausdrückliche
+`device_id` (Clip wie Annotation) und lehnt sonst ab, statt auf `profile_name`
+auszuweichen; die Workbench schreibt `device_id` optional in
+`annotation.json`. `parse_expected()` erlaubt genau ein führendes Vorzeichen
+und wirft sonst `ValueError`.
+
+**Konsequenz:** Ein Stellenfehler wird als eigene Klasse `decimal` gezählt
+statt als Treffer; der dokumentierte CLI-Aufruf mit relativem Glob wertet das
+richtige Verzeichnis aus; ein geräte­disjunkter Split wird nur noch
+bescheinigt, wenn die Geräteidentität wirklich bekannt ist (Altannotationen
+ohne `device_id` führen zu einer klaren Ablehnung statt zu einer falschen
+Zusicherung); mehrdeutige Vorzeicheneingabe wird abgelehnt statt gedeutet.
+`197 passed`, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 12: Doku-Abschluss der OCR-Selbstkalibrierung)
 
 **Problem:** PLAN_2026-09-11-ocr-selbstkalibrierung.md's Tasks 1–11 sind

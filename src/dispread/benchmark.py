@@ -17,7 +17,8 @@ Splitgrenze fuer Entwicklungs- und Testsatz ist immer die Geraeteinstanz, nie
 der Frame und nicht der Clip - benachbarte Aufnahmen desselben Geraets sind
 korreliert und wuerden ein Ergebnis zu optimistisch aussehen lassen
 (ROADMAP, Konzept.md §9). `assert_disjoint_devices` erzwingt das als Test,
-nicht nur als Doku-Regel.
+nicht nur als Doku-Regel - und verlangt dafuer eine ausdrueckliche
+`device_id` je Aufnahme, statt ersatzweise den Profilnamen zu nehmen.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from typing import Any
 
 import cv2
 
-from dispread.frames import open_source
+from dispread.frames import open_source, path_uri
 from dispread.layout import DisplayLayout
 from dispread.ocr import ReadResult, ValueReader
 from dispread.rectify import rectify
@@ -69,23 +70,67 @@ class Outcome:
 
 
 def normalise(text: str) -> str:
-    """Getippten oder gelesenen Wert auf vergleichbare Ziffernfolge bringen.
+    """Getippten oder gelesenen Wert vergleichbar machen, OHNE die Dezimalstelle zu verlieren.
 
-    Bediener tippen mit Komma ("28,80"), der Leser liefert einen Punkt. Der
-    Dezimaltrenner selbst wird entfernt - seine *Position* prueft die
-    Layoutstufe, nicht der Zeichenvergleich.
+    Bediener tippen mit Komma ("28,80"), der Leser liefert einen Punkt - das
+    ist reine Tippkonvention und wird vereinheitlicht. Die *Position* des
+    Trenners ist dagegen Messinhalt: "28.80" und "288.0" sind verschiedene
+    Werte um den Faktor zehn. Frueher entfernte diese Funktion den Trenner
+    ganz, beide wurden zu "2880" und `classify` meldete "correct" - ein
+    Stellenfehler war im Benchmark unsichtbar (Review-Fund). Konzept.md §7
+    nennt den uebersehenen Dezimalpunkt ausdruecklich als eigenstaendigen
+    kritischen Fehler.
+
+    Vereinheitlicht werden nur Schreibweisen, die denselben Wert meinen:
+    Komma/Punkt, Leerzeichen, der nachgestellte Punkt eines Ganzzahlformats
+    ("1234." bei `layout.decimals == 0`, siehe `SevenSegmentReader.read`) und
+    die fuehrende Null vor dem Trenner (".13" -> "0.13", entsteht bei
+    `digits == decimals`).
     """
-    text = text.strip().replace(",", "").replace(".", "").replace(" ", "")
+    text = text.strip().replace(",", ".").replace(" ", "")
+    if text.startswith("+"):
+        # Ein gesetztes Pluszeichen bedeutet dasselbe wie keines; ein
+        # Minuszeichen bleibt selbstverstaendlich stehen.
+        text = text[1:]
+    if text.endswith("."):
+        text = text[:-1]
+    if text.startswith("."):
+        text = "0" + text
+    elif text.startswith("-."):
+        text = "-0" + text[1:]
     return text
 
 
+def _parts(text: str) -> tuple[str, str, int]:
+    """(Vorzeichen, Ziffernfolge ohne Trenner, Anzahl Nachkommastellen).
+
+    Zerlegt genau ein fuehrendes Vorzeichen - eine Kette wie "--12" ist
+    mehrdeutige Eingabe und bleibt so als Abweichung sichtbar, statt still
+    zurechtgebogen zu werden (AGENTS.md: ablehnen statt raten).
+    """
+    sign = "-" if text.startswith("-") else ""
+    body = text[1:] if text[:1] in ("+", "-") else text
+    whole, dot, fraction = body.partition(".")
+    return sign, whole + fraction, len(fraction) if dot else 0
+
+
 def classify(expected: str, got: str) -> str:
-    """Fehlerklasse einer Abweichung. Konzept.md §7 verlangt getrennte Klassen."""
+    """Fehlerklasse einer Abweichung. Konzept.md §7 verlangt getrennte Klassen.
+
+    Reihenfolge der Pruefung ist bewusst: stimmen Ziffernfolge *und*
+    Dezimalstelle, bleibt nur das Vorzeichen uebrig. Stimmt die Ziffernfolge,
+    aber nicht die Dezimalstelle, ist es ein Stellenfehler ("decimal") - der
+    gefaehrlichste stille Fall, weil die Ziffern selbst richtig aussehen.
+    """
     if expected == got:
         return "correct"
-    if expected.lstrip("-") == got.lstrip("-"):
-        return "sign"
-    if len(expected.lstrip("-")) != len(got.lstrip("-")):
+    expected_sign, expected_digits, expected_decimals = _parts(expected)
+    got_sign, got_digits, got_decimals = _parts(got)
+    if expected_digits == got_digits and expected_decimals == got_decimals:
+        return "sign" if expected_sign != got_sign else "digit"
+    if expected_digits == got_digits:
+        return "decimal"
+    if len(expected_digits) != len(got_digits):
         return "count"
     return "digit"
 
@@ -138,8 +183,14 @@ def _reject_reasons(read: ReadResult) -> list[str]:
 
 
 def evaluate_clip(directory: Path, reader: ValueReader) -> Outcome:
-    """Einen aufgezeichneten Clip (Task 1/2, `replay://`) dreigeteilt auswerten."""
-    source = open_source(f"replay://{directory}")
+    """Einen aufgezeichneten Clip (Task 1/2, `replay://`) dreigeteilt auswerten.
+
+    Die URI kommt aus `path_uri` und nicht aus einem f-String: ein relativer
+    Pfad (`var/workbench/clips/abc`) landete sonst mit seinem ersten Segment
+    in der URL-Autoritaet und wurde beim Oeffnen stillschweigend abgeschnitten
+    (Review-Fund).
+    """
+    source = open_source(path_uri("replay", directory))
     source.open()
     clip = source.describe()
     expected = normalise(clip["ground_truth_text"])
@@ -177,9 +228,13 @@ def evaluate_annotation(directory: Path, reader: ValueReader) -> Outcome | None:
     sind die fuer diese Aufnahme bestaetigte Geometrie, `profile` kann davon
     abweichen (z.B. bei einer spaeteren Profilaenderung).
 
-    Es gibt in diesem Schema kein `device_id`-Feld (das ist ein Konzept der
-    Clipaufnahme aus Task 2) - als Ersatz dient `profile_name`, damit
-    mindestens Annahmen ueber "dieselbe Geraeteinstanz" grob pruefbar bleiben.
+    `device_id` ist optional und wird, falls vorhanden, unveraendert
+    uebernommen. Fehlt es, steht im Bericht `unbekannt` - ausdruecklich nur
+    als Etikett fuer die Ausgabe. Fuer die Splitgrenze zaehlt es nicht:
+    `_device_of`/`assert_disjoint_devices` verweigern die Bescheinigung eines
+    disjunkten Splits, statt ersatzweise `profile_name` zu nehmen (der ist
+    ein Profiletikett, kein Geraet - dasselbe Geraet kann nach einer
+    Neukalibrierung unter zwei Namen liegen, Review-Fund).
     """
     annotation = json.loads((directory / "annotation.json").read_text())
     ground_truth_text = annotation.get("ground_truth_text")
@@ -206,7 +261,7 @@ def evaluate_annotation(directory: Path, reader: ValueReader) -> Outcome | None:
     counts[_tally(expected, read, examples, wrong_classes, reject_classes)] += 1
     return Outcome(
         source_id=f"annotation:{directory.name}",
-        device_id=str(annotation.get("profile_name", "unknown")),
+        device_id=str(annotation.get("device_id") or "unbekannt"),
         expected=expected,
         correct=counts["correct"],
         wrong=counts["wrong"],
@@ -272,15 +327,32 @@ def evaluate_set(directories: Sequence[Path], reader: ValueReader) -> dict[str, 
 
 
 def _device_of(path: Path) -> str:
-    """Geraeteinstanz eines Clip- oder Annotationsverzeichnisses ermitteln."""
+    """Geraeteinstanz eines Clip- oder Annotationsverzeichnisses ermitteln.
+
+    Nur ein ausdrueckliches `device_id` gilt. Frueher diente bei Annotationen
+    ersatzweise `profile_name` - das ist aber ein vom Bediener gewaehltes
+    Profiletikett und keine Geraetekennung: dasselbe Geraet unter zwei
+    Profilnamen sah wie zwei Geraete aus, und der Split galt faelschlich als
+    disjunkt (Review-Fund). Ohne Kennung wird deshalb abgelehnt statt
+    geraten (AGENTS.md).
+    """
     clip_manifest = path / "clip.json"
-    if clip_manifest.exists():
-        return str(json.loads(clip_manifest.read_text())["device_id"])
     annotation_manifest = path / "annotation.json"
-    if annotation_manifest.exists():
-        annotation = json.loads(annotation_manifest.read_text())
-        return str(annotation.get("profile_name", "unknown"))
-    raise ValueError(f"Weder clip.json noch annotation.json in {path}")
+    if clip_manifest.exists():
+        device = json.loads(clip_manifest.read_text()).get("device_id")
+    elif annotation_manifest.exists():
+        device = json.loads(annotation_manifest.read_text()).get("device_id")
+    else:
+        raise ValueError(f"Weder clip.json noch annotation.json in {path}")
+    device = str(device or "").strip()
+    if not device:
+        raise ValueError(
+            f"Keine Geraetekennung (device_id) in {path} - ein geraetedisjunkter "
+            "Split laesst sich damit nicht bescheinigen. profile_name ist ein "
+            "Profiletikett, keine Geraeteinstanz, und wird hier bewusst nicht "
+            "ersatzweise verwendet."
+        )
+    return device
 
 
 def assert_disjoint_devices(development: Sequence[Path], test: Sequence[Path]) -> None:
@@ -289,6 +361,10 @@ def assert_disjoint_devices(development: Sequence[Path], test: Sequence[Path]) -
     Benachbarte Frames derselben Aufnahme in Entwicklung und Test wuerden das
     Ergebnis zu optimistisch aussehen lassen. Das hier ist der Test, der bei
     Verletzung fehlschlaegt - nicht nur eine Regel in der Doku.
+
+    Ist die Geraeteinstanz eines Eingabeverzeichnisses nicht ausdruecklich
+    bekannt, schlaegt das hier ebenfalls fehl (siehe `_device_of`): ein
+    "vermutlich disjunkt" waere keine Bescheinigung.
     """
     left = {_device_of(path) for path in development}
     right = {_device_of(path) for path in test}

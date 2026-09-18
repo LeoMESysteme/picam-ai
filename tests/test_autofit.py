@@ -22,6 +22,32 @@ def test_getippter_wert_wird_zerlegt(text, digits_text, minus, digits, decimals)
     assert parse_expected(text) == (digits_text, minus, digits, decimals)
 
 
+@pytest.mark.parametrize("text", ["--12", "+-12", "++12", "-+0,5", "- -12"])
+def test_mehrfaches_vorzeichen_wird_abgelehnt(text):
+    """Mehrdeutige Eingabe wird abgelehnt, nicht stillschweigend gedeutet.
+
+    `lstrip("+-")` schnitt frueher jede Vorzeichenkette ab: "+-12" wurde
+    positiv 12, "--12" negativ 12 - beides eine Vermutung ueber einen
+    Tippfehler (AGENTS.md: ablehnen statt raten, Review-Fund).
+    """
+    with pytest.raises(ValueError, match="Vorzeichen"):
+        parse_expected(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("-12,5", ("125", True, 3, 1)),
+        ("-000,13", ("00013", True, 5, 2)),
+        ("+28,80", ("2880", False, 4, 2)),
+        ("007", ("007", False, 3, 0)),
+    ],
+)
+def test_einfaches_vorzeichen_und_fuehrende_nullen_bleiben_gueltig(text, expected):
+    """Die Ablehnung mehrfacher Vorzeichen darf gueltige Eingaben nicht treffen."""
+    assert parse_expected(text) == expected
+
+
 def test_positiver_wert_beweist_keine_fehlende_vorzeichenstelle():
     """Nur ein Minuszeichen beweist eine Vorzeichenstelle - seine Abwesenheit nicht."""
     layout = DisplayLayout(digits=4, decimals=2, has_sign=True, unit="V")
