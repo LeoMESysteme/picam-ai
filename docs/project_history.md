@@ -454,3 +454,71 @@ nun die Revision des offenen Editierbilds und `snapshot()` liefert das aktuelle
 Raster für den Browser. Bild- oder Kamerageometrieänderungen tun das bewusst
 nicht. Die feste Dezimalposition wird als Kalibriermarker gezeichnet, aber
 weiterhin nicht als optisch erkannt ausgegeben.
+
+---
+
+# 2026-09-11 — OCR-Selbstkalibrierung: verankerte Werkzeuge statt genereller OCR/Klassifikator
+
+## Problem
+
+Die Ausgangsmessung vom 2026-09-11 (`sevenseg/2` gegen alle gelabelten realen
+Annotationen, siehe [VALIDATION.md](VALIDATION.md)) zeigte, dass Rastergeometrie,
+Segmentschwellen und Anzeigepolarität weiterhin von Hand kalibriert werden
+mussten und dabei fehleranfällig waren. Für
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+waren mehrere naheliegende Alternativen zu bewerten, bevor Autofit
+(`fit_layout`) und Nachführung (`QuadTracker`) gebaut wurden.
+
+## Entscheidung
+
+Der Plan bleibt bei Werkzeugen, die **am bestätigten manuellen Ausschnitt
+verankert** sind — Autofit aus einem einmal getippten Sollwert und begrenzte
+Nachführung eines bereits bestätigten Quads — statt einer generellen,
+unverankerten OCR- oder Klassifikatorlösung.
+
+## Begründung / Alternativen
+
+- **ssocr** (`https://www.unix-ag.uni-kl.de/~auerswal/ssocr/`, GPLv3, C, nur
+  CLI) — vom Bediener vorgeschlagen. Verworfen als Primärpfad: liefert nur die
+  Ziffernfolge, keine Per-Segment-Evidenz, und `ReleaseGate.evaluate` verlangt
+  `contrast` und `min_margin` aus der Segmentanalyse ([OQ-19](open-questions.md)).
+  Dazu Subprozessgrenze je Bild und eigene Ziffernsegmentierung, die den
+  bereits bestätigten Rasterhinweis nicht nutzt. Als späteres, unabhängig
+  implementiertes Vergleichsbackend neben Tesseract ([OQ-15](open-questions.md))
+  weiterhin denkbar.
+- **Gitterfreier Per-Ziffer-Decoder** (ssocr-Logik in-process, Raster je Bild
+  neu herleiten). Verworfen, weil er [OQ-25](open-questions.md) in den
+  **Lesepfad** erbt: `fit_ocr_box` wählt an dem realen Netzteil konsequent die
+  falsche Zeile (untere `A`-Anzeige statt oberer `V`-Anzeige, IoU 0,0 an
+  beiden Bildern). Als Vorschlag ist das folgenlos, im Lesepfad wäre es eine
+  stille Ablesung der falschen Messgröße — die Haupt-/Nebenanzeige-
+  Verwechslung aus `Konzept.md` §7. Die brauchbare Hälfte (Selbstskalierung je
+  Ziffer) ist stattdessen **verankert** aufgenommen: `fit_layout` optimiert
+  nur innerhalb einer Umgebung des bereits bestätigten Rasters.
+- **Kleiner Ziffernklassifikator, rein synthetisch trainiert.** Umgeht das
+  Annotationsproblem, nicht das Datenproblem — `Konzept.md` §9 und der
+  Docstring von `layout.py` sagen beide, dass synthetische Daten ein reales
+  Testset ergänzen und nie ersetzen. Dazu: Softmax ist keine
+  Fehlerwahrscheinlichkeit (`AGENTS.md`), die Freigabe bräuchte einen neuen
+  Evidenzvertrag ([OQ-19](open-questions.md)), und der IMX500-*Converter*
+  fehlt auf dem Pi ([OQ-11](open-questions.md)). Gehört nach ROADMAP-P8, nicht
+  in diesen Plan.
+- **Rasterfeinschliff je Bild** (Projektionsprofil zieht die Zellgrenzen pro
+  Frame nach). Aus diesem Plan gestrichen: Phase C (`QuadTracker`) fängt
+  starre Bewegung des ganzen Quads bereits ab, und ein Feinschliff ohne
+  Verankerung am bestätigten Raster bringt nur bei nicht-starren Änderungen
+  im Ausschnitt etwas — und würde ohne Verankerung dieselbe
+  Haupt-/Nebenanzeige-Verwechslung aus OQ-25 erben. Als eigener Punkt
+  festgehalten in [OQ-27](open-questions.md), nicht gebaut.
+
+## Konsequenz
+
+`fit_layout` (`src/dispread/ocr/autofit.py`) und `QuadTracker`
+(`src/dispread/track.py`) bleiben beide auf den einmal bestätigten manuellen
+Ausschnitt bezogen — kein Ersatz für `manual_roi`, kein automatisch
+übernommener Wert ohne diese Verankerung. Eine reale Messschwäche entdeckt:
+`thickness_ratio`/`inset_ratio` sind für den aktuellen Punktabtast-Decoder
+strukturell wirkungslos (nie gelesen in `sevenseg.py`) — offen als Teil von
+[OQ-28](open-questions.md). Die Nachführungsschwellen (`max_shift`,
+`max_rotation_deg`, `min_score`) bleiben unvalidierte Vorabdefaults —
+[OQ-26](open-questions.md).

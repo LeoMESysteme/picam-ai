@@ -1,175 +1,154 @@
-# Status — Stand 2026-09-11
+# Status — Stand 2026-09-18
 
 Wird **überschrieben**, nicht angehängt. Verlauf und Messaufbauten stehen in
 [project_history.md](project_history.md) und [lab_journal.md](lab_journal.md).
-Die volle Entstehungsgeschichte dieser Sitzung (mehrere Bedienerrückmeldungs-
-Runden, je mit Problem/Änderung/Konsequenz) steht im `CHANGELOG.md`; dieser
-Abschnitt beschreibt nur den **aktuellen** Endzustand.
+Die volle Entstehungsgeschichte dieser Sitzung (Task-für-Task, je mit
+Implementierung → Review → ggf. Fix-Runde → Re-Review) steht im
+`CHANGELOG.md`; dieser Abschnitt beschreibt nur den **aktuellen** Endzustand.
 
 ## Sofort zu wissen
 
-Diese Sitzung hat ausschliesslich `scripts/repo-maintenance.sh` (plus
-`CHANGELOG.md` und diese Datei) geändert — kein `src/`, kein `Konzept.md`,
-keine Hardware angefasst, kein Server lief. Auftrag: der unbeaufsichtigte
-Cron-Wrapper (aus der Vorsitzung, Commit `82f63ff`) commitete bisher auch
-dann, wenn der `claude -p`-Lauf mittendrin starb (Exit-Code wurde erfasst,
-aber nie geprüft; der Fallback-Zweig für eine nicht parsebare Commit-Message
-commitete sogar mit einer generischen Nachricht statt abzubrechen), und
-kannte nur den bei Cron-Start ausgecheckten Branch (`master`). Beides
-behoben — Details im CHANGELOG-Eintrag „2026-09-11". Letzter committeter
-Stand vor dieser Sitzung: `ac5c5f4`.
+Diese Sitzung hat
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+vollständig abgearbeitet, auf Branch `ocr-selbstkalibrierung`: alle 12 Tasks
+sind jetzt erledigt oder geprüft-und-bewusst-gesperrt. Das Ergebnis ist ein
+zusammenhängendes Selbstkalibrierungs-Feature-Set für die Workbench:
+Clipaufnahme (`replay://`-Sessions), ein dreigeteiltes Benchmark-Werkzeug,
+Rastergeometrie-Autofit aus einem einmal getippten Sollwert, begrenzte
+Nachführung einer bestätigten Anzeige, und Anzeigepolarität (LED/LCD) im
+Profil. Kein `Konzept.md`, keine `ValueRecord`-/Telegrammänderung — die
+Nicht-Ziele des Plans wurden eingehalten.
 
-**Fremdänderung im selben Arbeitsbaum, nicht von dieser Sitzung:**
-`.claude/settings.json` liegt unabhängig davon uncommittet im Baum, dazu
-mehrere unversionierte Node/Playwright-Dateien (`.github/`, `package.json`,
-`package-lock.json`, `playwright.config.ts`, `tests/example.spec.ts`) sowie
-eine Änderung an `.gitignore` — nicht von dieser Sitzung angelegt, nicht
-angefasst oder geprüft. Wer als Nächstes committet, sollte das im Blick
-behalten.
+**Task-Stand im Einzelnen:**
 
-## Implementierter Stand — aktueller Bedienablauf
+* **Tasks 1–9:** gebaut, getestet, reviewt — siehe CHANGELOG für die
+  Einzelfunde. Nennenswert:
+  - Task 1: `src/dispread/frames/replay_source.py`, `CLIP_SCHEMA_VERSION=1`.
+  - Task 2: Clipaufnahme im Controller (`clip.start`/`clip.stop`), inkl. eines
+    in der Fix-Runde behobenen Deadlocks in `_clip_stop()`.
+  - Task 3: `src/dispread/benchmark.py` + `scripts/ocr-benchmark.py` —
+    Baseline auf den sechs gelabelten realen Annotationen: **5 korrekt, 0
+    falsch, 1 abgelehnt** (siehe [VALIDATION.md](VALIDATION.md)).
+  - Task 4: `src/dispread/ocr/autofit.py`, `fit_layout` — Fund:
+    `thickness_ratio`/`inset_ratio` sind für den aktuellen
+    Punktabtast-Decoder strukturell wirkungslos (nie gelesen in
+    `sevenseg.py`); zwei gleich gut punktende, unterschiedliche
+    Parametersätze am realen Datensatz gefunden ([OQ-28](open-questions.md)).
+  - Task 5: Autofit in der Workbench-UI verdrahtet, Einrichtung per
+    getipptem Wert statt nur per Regler.
+  - Task 6/7: `src/dispread/track.py`, `QuadTracker` — begrenzte
+    ECC-Nachregistrierung eines bestätigten Quads, immer gegen die
+    Bestätigungsreferenz, nie Frame-zu-Frame (Drift-Vermeidung); in
+    `Controller.publish()`/`_read()` eingebunden, `tracking_lost` blockiert
+    die Freigabe (`GateConfig.blocking_flags`).
+  - Task 8: Nachführungsgüte sichtbar — `reading.track`-Zeile in der
+    Einstelltabelle, dritte Overlay-Farbe im Livebild; Review fand und behob
+    einen Absturz (`kind="text"` statt `"info"` ließ `dispread tui`
+    crashen — siehe [OQ-32](open-questions.md) für die verbleibende Lücke).
+  - Task 9: `DisplayLayout.polarity` (LED/LCD) — schließt OQ-13 Fall 2. Fall 1
+    (Anzeige zeigt ausschließlich „8") bleibt offen, unverändertes,
+    unabhängiges Problem. Self-Review fand zusätzlich, dass
+    `saturated_fraction` auf dem für `dark_on_bright` umgekehrten Bild
+    berechnet wurde und eine echte Reflexion verschluckte — behoben, eigener
+    Commit.
+* **Task 10:** war bereits erledigt — reiner Doku-Task, dessen Inhalt in den
+  Eröffnungscommit dieses Plans eingeflossen war.
+* **Task 11 (Messänderung am Decoder): bleibt gesperrt.** Direkt vor Task 12
+  erneut gegen die realen Daten geprüft:
+  `var/workbench/annotations/` hat 9 Einträge (`ground_truth_text` ∈
+  {11,00 / 12,76 / 28,80} plus unlabeled), `var/workbench/clips/` hat **4
+  reale, persistente Clips** (je 75 Frames, `device_id="RND Lab"`, Werte
+  {0.000, 28,80}) — echte, zwischen Sitzungen aufgenommene Daten aus dem
+  Tagesbetrieb der Workbench, keine Testartefakte (automatisierte
+  Task-Implementierer dieses Plans arbeiteten ausschließlich mit pytests
+  `tmp_path`). Kombiniert bleibt es bei **einer** Geräteinstanz. Die
+  Sperrbedingungen aus dem Plan: Bedingung 1 (≥ 6 Geräteinstanzen/≥ 3
+  Displaytypen) und Bedingung 2 (2 vorab gesperrte Instanzen) **nicht
+  erfüllt**; Bedingung 3 (≥ 8 Werte inkl. Vorzeichenwerten und 0/8 an jeder
+  Ziffernstelle) **nicht erfüllt** (~4 verschiedene Werte); Bedingung 4
+  (Werkzeug für disjunkten Split) existiert, ist mit einer Instanz aber
+  gegenstandslos; Bedingung 5 (Task 3's Baseline-Messung) **erfüllt**. Kein
+  Code für Task 11 angefasst.
+* **Task 12 (dieser Task):** Doku-Abschluss — `project_history.md`,
+  `open-questions.md` (OQ-26–OQ-32), `ROADMAP.md`, `CLAUDE.md`, diese Datei.
 
-**Workbench-Editor** (seit `64b1f90` committet, in dieser Sitzung nicht
-verändert):
+**Neue Erkenntnis, wert es hier festzuhalten:** Die echte Clipaufnahme aus
+Task 2 wird inzwischen tatsächlich im Laborbetrieb genutzt — die vier realen
+Clips unter `var/workbench/clips/` sind der erste Beleg dafür, dass reale
+Datensammlung für ROADMAP-P2 begonnen hat. Das Werkzeug-Problem ist damit
+gelöst, das Diversitätsproblem (eine Geräteinstanz) nicht.
 
-**Sitzungsstart:** Eine geladene, bereits bestätigte Profilgeometrie wird
-für die laufende Sitzung auf `confirmed=false` zurückgesetzt (nur die
-Laufzeitkopie — die gespeicherte Profildatei bleibt unverändert,
-`roi`/`roi_quad`/`ocr_box` bleiben als Startpunkt erhalten). Das reaktiviert
-die volle Kandidatensuche auf dem Livebild und sperrt den `run`-Modus, bis
-in dieser Sitzung aktiv erneut bestätigt wurde (Konzept.md §4: Bestätigung
-ist der Akt eines Menschen, jetzt auch nach einem Neustart durchgesetzt).
+**Nebenbei, unabhängig von diesem Plan:** Ein `docs-cleanup`-Durchlauf auf
+`master` prüfte die Projektdokumentation gegen den aktuellen Code und fand
+**nichts Korrekturbedürftiges** — `master` blieb von der Arbeit an diesem
+Plan unberührt (diese lief ausschließlich auf `ocr-selbstkalibrierung`).
 
-**Editor, zweistufiger Ablauf** (`E`/Doppelklick öffnet ihn weiterhin;
-`Escape` bricht jederzeit vollständig ab):
+## Implementierter Stand
 
-- **Stufe A (ROI):** die laufende Kandidatensuche zeigt mehrere dünne,
-  einzeln anklickbare Vorschlagsboxen (`freeze()` liefert die volle Liste,
-  nicht nur die beste Vermutung — mit einmaligem Nachsuchlauf, falls nach
-  einer Bestätigung in derselben Sitzung keine Kandidaten mehr
-  zwischengespeichert sind). Zwei TUI-Knöpfe (✓/✎) an der aktiven Box: ✎
-  schaltet in einen Bearbeiten-Modus (Körper verschieben, Ecken ziehen —
-  wird währenddessen zu ✕ zum Abbrechen), ✓ übernimmt die Position und ruft
-  serverseitig `ocr.suggest` für diese Position auf.
-- **Stufe B (OCR):** dieselbe ✓/✎-Logik an der vorgeschlagenen OCR-Box. Ein
-  Klick auf die jetzt inaktive ROI-Box führt zurück zu Stufe A, ohne die
-  Kandidatensuche neu zu starten. ✓ sendet den bestehenden `roi`-Op
-  (Quad+OCR-Box zusammen, im `annotate`-Modus zusätzlich das unveränderte
-  Ground-Truth-Textfeld) — weiterhin die einzige Stelle, an der `confirmed`
-  wahr wird und die Erkennungsvorschau (unverändert, bereits vorher
-  implementiert) automatisch startet.
-- **Race-Condition-Fix (der eigentliche Auslöser dieser Umbaurunde):**
-  während eine Vermutungs-/Bestätigungsanfrage läuft (`editing.pending`),
-  ignoriert die Zeigereingabe auf dem Canvas vollständig und alle vier
-  Knöpfe sind deaktiviert. Vorher konnte ein Klick auf die ROI-Box während
-  der (durch eine unnötig innerhalb des Controller-Locks laufende
-  OpenCV-Suche verlangsamten) Wartezeit die gerade eintreffende Vermutung
-  mit der alten bestätigten Geometrie überschreiben — exakt der gemeldete
-  Bug. `ocr.suggest` rechnet seine OpenCV-Arbeit jetzt ausserhalb des Locks
-  (mirror von `publish()`s bereits bestehendem Muster).
-- Entfernt: `R` (Hinweisrechteck), `G` (Rahmenwechsel), `Shift+Pfeile`
-  (Eckenverschiebung), `Strg+Enter` (Bestätigung) sowie der dafür gebaute
-  `roi.suggest`-Controller-Op. `fit_quad_in_region`/`fit_ocr_box` selbst
-  bleiben — `publish()`s auf die bestätigte ROI eingegrenzte Vergleichssuche
-  (siehe unten) nutzt `fit_quad_in_region` weiterhin.
+Die Verarbeitungskette (siehe `CLAUDE.md`, Abschnitt „Aufbau") hat jetzt eine
+zusätzliche, austauschbare Trennstelle `track` zwischen `rectify` und `ocr/`:
+`QuadTracker` registriert eine bestätigte Anzeige innerhalb enger Grenzen neu
+nach, bevor gelesen wird. `frames/` kennt jetzt zwei lauffähige Schemata
+(`synthetic://`, `replay://`); `picamera2://`, `imx500://`, `folder://`,
+`video://` bleiben `ImportError`.
 
-**Vergleichssuche nach Bestätigung** (unabhängig vom obigen Editor-Umbau,
-bleibt bestehen): `publish()` sucht ausserhalb des `run`-Modus gedrosselt
-(`CANDIDATE_INTERVAL_S = 1,0 s`) mit `fit_quad_in_region(image,
-config["roi"], layout=...)` — auf die bestätigte ROI eingegrenzt, mit
-Mindestüberdeckungsfilter `MIN_HINT_OVERLAP = 0,2` gegen ein unbeteiligtes
-Objekt am Rand des aufgeweiteten Suchfensters (Bedienerbefund: eine erste,
-ungegrenzte Version schlug andere Bildschirme im Bild vor). Kosten: ~8,0 ms/
-Bild Leerlauf, ~12,5 ms/Bild im Suchfall, `run`-Modus unverändert ohne jede
-Suche — [VALIDATION.md](VALIDATION.md).
-
-`annotate`-Aufnahmen speichern weiterhin zusätzlich einen vom Bediener
-getippten `ground_truth_text` (rein additiv, keine Schema-Version).
-
-Alles ausdrücklich **Workbench-Editorhilfe**, nicht die
-`contour_heuristic`/`imx500_detector`/`RegionTracker`-Lokalisierung aus der
-ROADMAP-P0-Zeile — die bleibt unverändert offen. `manual_roi` bleibt
-Primärpfad; jede Geometrie muss weiterhin über einen expliziten ✓-Klick
-bestätigt werden, nie automatisch übernommen.
-
-Unverändert gültig aus vorherigen Sitzungen: zweistufige OCR-Kalibrierung
-(`roi_quad`/`ocr_box`), Bildpfad-Entkopplung, OCR-Drosselung, `dispread stop`,
-RP2040-Power-Zyklus-Budget (OQ-22).
-
-**Unbeaufsichtigte Doku-Pflege** (`scripts/repo-maintenance.sh`, diese
-Sitzung geändert): per `@reboot`-Cron ruft ein Wrapper `claude -p` mit festem
-Prompt (`scripts/repo-maintenance-prompt.md`, `--disallowedTools
-"Bash,Agent,WebFetch,WebSearch"`) einmal je lokalem Branch auf. Commit nur,
-wenn ausschliesslich `docs/`/`CHANGELOG.md` geändert wurden **und** eine
-parsebare Commit-Message-Markierung vorliegt — jede andere Abweichung
-(Exit-Status ungleich 0 mit Änderungen, Fremdpfad, fehlende Markierung) gilt
-als toter/gescheiterter Lauf: gezielter `git stash push -- docs
-CHANGELOG.md` plus ein `branch: <name>`-Eintrag in
-`~/.local/state/picam-ai-maintenance/needs-review`, der **nur diesen
-Branch** bei künftigen Läufen überspringt, bis ein Mensch die Zeile entfernt.
-Andere Branches laufen unbeeinflusst weiter. Branches mit identischem
-`docs/`+`CHANGELOG.md`-Baum werden übersprungen (kein dreifacher Commit
-derselben Korrektur). Noch kein scharfer Cron-Lauf beobachtet — nur gegen
-Scratch-Repos mit einem Fake-`claude`-Binary verifiziert (siehe CHANGELOG).
+Alles Bisherige aus früheren Sitzungen bleibt unverändert gültig: zweistufige
+manuelle ROI-/OCR-Box-Kalibrierung, Bildpfad-Entkopplung, OCR-Drosselung,
+`dispread stop`, RP2040-Power-Zyklus-Budget ([OQ-22](open-questions.md)),
+`manual_roi` als Primärpfad — kein automatisch übernommener Wert ohne
+expliziten ✓-Klick, auch nicht durch Autofit oder Nachführung.
 
 ## Verifiziert
 
 ```text
-./.venv/bin/pytest -q                                      113 passed
-./.venv/bin/ruff check src tests examples                  All checks passed!
-bash -n scripts/repo-maintenance.sh                        erfolgreich
+./.venv/bin/pytest -q                                      173 passed
+./.venv/bin/ruff check src tests examples scripts           All checks passed!
 ```
 
-Gegenüber dem committeten Stand `ac5c5f4`: keine Python-/JS-Änderung in
-dieser Sitzung, daher unveränderte Testzahl. `scripts/repo-maintenance.sh`
-selbst hat keine automatisierten Tests im Projekt-Testlauf (kein
-Hardwarebedarf, aber auch kein pytest-Ziel) — stattdessen manuell gegen
-mehrere Scratch-Git-Repos mit einem kontrollierbaren Fake-`claude`-Binary
-verifiziert: normaler Drei-Branch-Durchlauf inkl. Dedup identischer
-docs-Bäume, ein Lauf mit Exit-Status ungleich 0 und liegen gebliebenen
-Änderungen, ein Lauf ohne parsebare Commit-Message („getöteter" Lauf), ein
-Lauf mit Fremdpfad-Änderung, sowie ein gemischter Drei-Branch-Lauf, in dem
-genau ein Branch scheitert (Stash + gezielter Marker) während die beiden
-anderen trotzdem committet werden und der Branch bei einem zweiten Lauf
-übersprungen bleibt. Details siehe CHANGELOG-Eintrag „2026-09-11".
-
-Aus der vorherigen Sitzung weiterhin gültig (nicht neu geprüft, keine
-Codeänderung seither): `fit_quad_in_region`/`fit_ocr_box`-Testabdeckung
-(Klickpriorität, Layout-Seitenverhältnis-Aufweitung, Ablenkerobjekt,
-Lock-Freigabe für `ocr.suggest`, Ground-Truth-Feld, erzwungene erneute
-Bestätigung beim Sitzungsstart, `freeze()`s vollständige Kandidatenliste,
-Regressionstest für den entfernten `roi.suggest`-Op). **Reale Validierung**
-(siehe [VALIDATION.md](VALIDATION.md)): `fit_quad_in_region` trifft die
-bestätigte `roi_quad` beider damals vorhandener Annotationsbilder mit
-IoU ≈ 0,91; `fit_ocr_box` scheitert an denselben zwei Bildern (IoU 0,0,
-Haupt-/Nebenanzeige-Verwechslung plus Glanzfleck — [OQ-25](open-questions.md)).
-Kein automatisch übernommener Wert ist davon betroffen — jeder Vorschlag
-bleibt bis zum expliziten ✓-Klick unbestätigt.
-
-**Nachtrag 2026-09-11:** Der Annotationsbestand ist auf **neun** gewachsen,
-sechs davon mit getipptem Sollwert — die beiden IoU-Zahlen oben beziehen sich
-weiterhin nur auf die zwei Bilder, an denen sie gemessen wurden, und wurden
-nicht ausgeweitet. Neu gemessen wurde dagegen der Segmentleser über alle
-sechs gelabelten Bilder: **5 korrekt, 0 falsch angenommen, 1 abgelehnt**
-([VALIDATION.md](VALIDATION.md), Abschnitt 2026-09-11). Daraus entstand
-[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
-— noch nicht umgesetzt, reine Planung.
+Reale Messungen aus dieser Sitzung stehen in [VALIDATION.md](VALIDATION.md):
+Benchmark-Baseline (Task 3), Autofit gegen die sechs Annotationen (Task 4),
+Nachführung auf realen Bildern (Task 6). Manuelle Browser-/Hardwareabnahme
+(Clipaufnahme am echten Gerät, Kalibrierschritt im Browser, Nachführung bei
+echtem Kamerastoß während eines Laufs) steht weiterhin aus —
+[OQ-21](open-questions.md)/[OQ-24](open-questions.md).
 
 ## Offene reale Abnahme
 
-Manuelle Bedienprüfung im echten Browser steht für den gesamten
-Workbench-Editor-Ablauf noch aus (Kandidat anklicken, ✎/✓-Zyklus an ROI und
-OCR-Box, Stufenübergang und Rücksprung, das ursprünglich gemeldete
-Bugszenario gezielt nachstellen, `annotate`-Eingabefeld, erzwungene erneute
-Bestätigung nach Neustart, Knopf-Positionierung bei Fenstergrößenänderung)
-— nicht aus `file://`- oder synthetischen Tests ableitbar, Teil von
-[OQ-21](open-questions.md)/[OQ-24](open-questions.md), die weiterhin offen
-bleiben (kein Server lief in dieser Sitzung, keine neue Abnahme möglich).
-Zusätzlich noch offen: der erste scharfe Cron-Lauf der überarbeiteten
-`repo-maintenance.sh` auf dem echten Pi (bisher nur Scratch-Repo-Tests).
+* Kalibrierschritt (Autofit) und Clipaufnahme im echten Browser gegen eine
+  angeschlossene Kamera — nicht aus `synthetic://`-/`replay://`-Tests
+  ableitbar ([OQ-21](open-questions.md)/[OQ-24](open-questions.md)).
+* Nachführungsverhalten, wenn die Kamera während eines laufenden Betriebs
+  tatsächlich angestoßen wird — [OQ-26](open-questions.md).
+* BK-5491B-VFD-Rastererkennung ([OQ-23](open-questions.md)), GSVmulti-
+  Telegrammformat ([OQ-01](open-questions.md)/[OQ-07](open-questions.md)),
+  RS-232-Transceiver ([OQ-09](open-questions.md)), RP2040-Bridge-Fehler
+  ([OQ-22](open-questions.md), bei Raspberry Pi gemeldet, kein Fix ohne
+  Reboot verifiziert) — unverändert offen, von dieser Sitzung nicht berührt.
 
-Unverändert offen: BK-5491B-VFD-Rastererkennung ([OQ-23](open-questions.md)),
-GSVmulti-Telegrammformat ([OQ-01](open-questions.md)/[OQ-07](open-questions.md)),
-RS-232-Transceiver ([OQ-09](open-questions.md)), RP2040-Bridge-Fehler
-([OQ-22](open-questions.md), bei Raspberry Pi gemeldet, kein Fix ohne Reboot
-verifiziert). Referenzwerte bleiben außerhalb von Reader und Gate.
+## Neu erkannte offene Punkte aus dieser Sitzung
+
+Sechs Task-Reviews dieser Sitzung deckten Unbekannte auf, die über die drei
+im Plan selbst schon benannten (OQ-26–OQ-28) hinausgehen. Alle stehen jetzt
+in [open-questions.md](open-questions.md), Status `offen`:
+
+* [OQ-26](open-questions.md) — Nachführungsschwellen (`max_shift`,
+  `max_rotation_deg`, `min_score`) unvalidiert an echten Geräten.
+* [OQ-27](open-questions.md) — Rasterfeinschliff je Bild bewusst nicht
+  gebaut.
+* [OQ-28](open-questions.md) — Eindeutigkeit der Autofit-Geometrie
+  (`flat_optimum`) an echten Geräten ungeprüft.
+* [OQ-29](open-questions.md) — `calibrated_on`/`calibrated_on_frame_sequence`
+  wird beim Autofit-Treffer gesetzt, nicht erst bei der Bestätigung —
+  Auswirkung auf `clip.json`-Provenienz begrenzt, nicht auf `ValueRecord`.
+* [OQ-30](open-questions.md) — `roi`-Op committet die Bestätigung, bevor der
+  `QuadTracker` aufgebaut wird — selbstlimitierend (FIFO-Frame-Cache),
+  Ursprungszustand bei Fehlschlag.
+* [OQ-31](open-questions.md) — möglicher Stale-Zustand, wenn nach einem
+  Autofit-Lauf manuell über die Regler der Einstelltabelle editiert wird,
+  bevor bestätigt wird — vermutet, nicht gefixt, nicht testabgedeckt.
+* [OQ-32](open-questions.md) — `edit_row()`/`_row()` haben keinen sicheren
+  Fallback für einen unbekannten `kind` — der akute Absturz (Task 8) ist
+  gefixt, die zugrunde liegende Lücke nicht.
+
+Keiner dieser Punkte blockiert etwas Bereits-Gebautes; alle sind Kandidaten
+für künftige Aufgaben.

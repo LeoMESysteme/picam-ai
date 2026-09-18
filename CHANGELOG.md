@@ -3,6 +3,34 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 12: Doku-Abschluss der OCR-Selbstkalibrierung)
+
+**Problem:** PLAN_2026-09-11-ocr-selbstkalibrierung.md's Tasks 1–11 sind
+abgeschlossen bzw. geprüft-und-bewusst-gesperrt (Task 11); die Doku-Pflicht
+aus `AGENTS.md` verlangt, das vor dem Sitzungsende in `docs/` nachzuziehen —
+inklusive neuer Unbekannten, die während der Task-Reviews entdeckt wurden.
+
+**Änderung:** `docs/project_history.md` um den Entscheidungseintrag „OCR-
+Selbstkalibrierung: verankerte Werkzeuge statt genereller OCR/Klassifikator"
+ergänzt (ssocr, gitterfreier Per-Ziffer-Decoder, synthetisch trainierter
+Klassifikator, Rasterfeinschliff je Bild — alle verworfen, mit Begründung).
+`docs/open-questions.md` um OQ-26 bis OQ-32 ergänzt: drei aus dem Plan selbst
+(Nachführungsgrenzen, Rasterfeinschliff, Autofit-Eindeutigkeit) und vier neu
+aus dieser Sitzung (`calibrated_on`-Zeitpunkt, nicht-atomarer `roi`-Op
+gegenüber einem fehlschlagenden `QuadTracker`-Aufbau, möglicher
+Regler-Stale-Zustand nach Autofit, fehlender Fallback für einen unbekannten
+`kind` in `edit_row()`/`_row()`). `docs/ROADMAP.md`s P1-/P2-Zeilen korrigiert
+(widersprachen zuvor der bereits fertigen `replay://`-Implementierung bzw.
+ignorierten die inzwischen vier realen Clips). `CLAUDE.md`s Aufbau-Tabelle:
+`replay://` von TODO auf fertig gezogen, `track` (`QuadTracker`) als neue
+Pipelinestufe aufgenommen. `docs/status.md` komplett neu geschrieben
+(Sitzungsendstand, nicht angehängt).
+
+**Konsequenz:** Die Dokumentation spiegelt den tatsächlichen Endstand dieser
+Sitzung wider — inklusive der bewussten Sperrung von Task 11 und der neuen,
+noch offenen Punkte. `173 passed`, `ruff check` sauber, keine `src/`-Änderung
+in diesem Task.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 9 Review-Fund: Reflexion wird bei LCD-Polarität verschluckt)
 
 **Problem:** Selbstreview von Task 9 (Anzeigepolarität) deckte auf, dass

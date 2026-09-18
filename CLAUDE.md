@@ -55,11 +55,15 @@ Die Verarbeitungskette aus Konzept.md §3, jede Stufe eine austauschbare
 Trennstelle:
 
 ```
-frames/    Bildquelle      synthetic:// [fertig] · picamera2:// imx500:// folder://
-                           video:// replay:// [nur Registry-Eintrag, TODO]
+frames/    Bildquelle      synthetic:// [fertig] · replay:// [fertig, Clips mit
+                           einem Label je Clip] · picamera2:// imx500://
+                           folder:// video:// [nur Registry-Eintrag, TODO]
 detect/    Anzeige finden  manual_roi [fertig, PRIMÄRPFAD]
                            contour_heuristic · imx500_detector [TODO]
 rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
+track      Nachführen      QuadTracker, begrenzte ECC-Nachregistrierung eines
+                           bestätigten Quads gegen die Bestätigungsreferenz
+                           [fertig]
 ocr/       Wert lesen      sevenseg mit Per-Segment-Evidenz [fertig]
                            tesseract_cli [TODO, braucht OQ-15]
 validate   Freigabe        Syntax-, Qualitäts- und Zustandsregeln (§7) [fertig]
@@ -70,9 +74,9 @@ records    ValueRecord (§8), Timestamp, TxReceipt — der stabile Vertrag [fert
 layout     Ziffernraster, kommt im Betrieb aus dem bestätigten Profil (§4) [fertig]
 ```
 
-`open_source()` kennt alle sechs URI-Schemata, aber nur `synthetic://` hat eine
-Implementierung — die übrigen scheitern mit `ImportError`. Was fertig ist und
-was nicht, führt [docs/ROADMAP.md](docs/ROADMAP.md) unter P0.
+`open_source()` kennt alle sechs URI-Schemata; `synthetic://` und `replay://`
+haben eine Implementierung, die übrigen vier scheitern mit `ImportError`. Was
+fertig ist und was nicht, führt [docs/ROADMAP.md](docs/ROADMAP.md) unter P0.
 
 Zentrale Verträge in [src/dispread/records.py](src/dispread/records.py):
 `ValueRecord` mit genau den neun Feldern aus Konzept §8, `status` als

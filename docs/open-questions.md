@@ -836,3 +836,141 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   veraltet. Die IoU-Messung von `fit_quad_in_region`/`fit_ocr_box` wurde
   **nicht** auf die übrigen vier Bilder ausgeweitet; das steht weiterhin aus.
 * **Antwort landet in:** `docs/VALIDATION.md`, `src/dispread/workbench/vision.py`.
+
+## OQ-26 — Grenzen der Nachführung an realen Geräten validieren
+
+* **Status:** offen · erkannt 2026-09-11 in
+  [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+  (Task 12, aus der Spezifikation übernommen)
+* **Befund:** `TrackConfig` in `src/dispread/track.py` legt drei Schwellen für
+  die begrenzte Nachführung eines bestätigten Quads fest —
+  `max_shift=0.10`, `max_rotation_deg=3.0`, `min_score=0.60`. Wie alle Werte
+  in `DetectionConfig` sind das Vorabdefaults, die nicht gegen echte
+  Gerätebewegung (Vibration, thermische Drift, versehentlicher
+  Bedienereingriff) validiert wurden — nur gegen synthetisches Material
+  (`tests/test_track.py`) und die vier realen Clips unter
+  `var/workbench/clips/`, die alle von einer einzigen Geräteinstanz
+  (`device_id="RND Lab"`) stammen.
+* **Klärung:** Braucht mehrere reale Geräteinstanzen mit provozierter
+  Bewegung (siehe ROADMAP-P2-Sperrbedingungen), um zu prüfen, ob die drei
+  Schwellen echte Fehlausrichtung zuverlässig fangen, ohne bei normaler
+  Vibration `tracking_lost` fälschlich auszulösen oder umgekehrt eine echte
+  Verschiebung durchzulassen.
+* **Antwort landet in:** `docs/VALIDATION.md`.
+
+## OQ-27 — Rasterfeinschliff je Bild bewusst nicht gebaut
+
+* **Status:** offen (bewusste Nicht-Entscheidung, kein Fix ausstehend)
+* **Befund:** Ein Rasterfeinschliff je Bild (Projektionsprofil zieht die
+  Zellgrenzen pro Frame nach) wurde für
+  [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+  erwogen und verworfen — Begründung in
+  [project_history.md](project_history.md), Eintrag „2026-09-11 — OCR-
+  Selbstkalibrierung: verankerte Werkzeuge statt genereller OCR/
+  Klassifikator". Phase C dieses Plans (`QuadTracker`) fängt starre Bewegung
+  des ganzen Quads bereits ab; ein Feinschliff ohne Verankerung am
+  bestätigten Raster würde die Haupt-/Nebenanzeige-Verwechslung aus
+  [OQ-25](open-questions.md) in den Lesepfad erben.
+* **Klärung:** Offen bleibt, ob ein verankerter (nicht frei laufender)
+  Feinschliff für nicht-starre Änderungen im Ausschnitt (z. B. leichte
+  Verzerrung durch Temperatur) je gebraucht wird — bislang keine reale
+  Messung, die dafür spricht.
+* **Antwort landet in:** `src/dispread/ocr/`.
+
+## OQ-28 — Eindeutigkeit der Autofit-Geometrie
+
+* **Status:** offen · erkannt 2026-09-11 (Task 4 dieses Plans)
+* **Befund:** Der Koordinatenabstiegs-Sweep in `fit_layout`
+  (`src/dispread/ocr/autofit.py`) fand auf dem realen Annotationssatz zwei
+  strukturell unterschiedliche, aber gleich gut punktende Parametersätze
+  (siehe [VALIDATION.md](VALIDATION.md), Abschnitt „2026-09-11 — Autofit
+  (`fit_layout`) gegen dieselben sechs Annotationen (Task 4)"). `flat_optimum`
+  soll genau diesen Fall anzeigen.
+* **Klärung:** Ob `flat_optimum` diesen Fall an einem echten Gerät im
+  laufenden Betrieb zuverlässig erkennt — statt z. B. knapp daneben zu liegen
+  und einen der beiden Sätze unmarkiert zurückzugeben — ist mit einer
+  einzigen Geräteinstanz nicht zu beantworten.
+* **Antwort landet in:** `docs/VALIDATION.md`.
+
+## OQ-29 — Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence`
+
+* **Status:** offen
+* **Befund:** In `Controller._autofit`
+  (`src/dispread/workbench/controller.py`) wird `self.calibrated_on` (und
+  darüber `calibrated_on_frame_sequence`, das über die Clipaufnahme aus Task 2
+  in `clip.json` landet) gesetzt, sobald `layout.autofit` irgendein passendes
+  Ergebnis liefert — nicht erst, wenn der Bediener es über den `roi`-Op
+  tatsächlich bestätigt. In Task 5's Review plan-mandated so belassen, nicht
+  gefixt. Szenario: Bediener lässt Autofit laufen, sieht ein unüberzeugendes
+  Ergebnis (z. B. `flat_optimum=True`), verwirft es, bestätigt stattdessen
+  manuell eine unabhängige/handjustierte ROI — `calibrated_on_frame_sequence`
+  behauptet in `clip.json` weiterhin irreführend, die bestätigte Geometrie
+  stamme aus dem verworfenen Autofit-Versuch.
+* **Blockiert:** nichts Sicherheitsrelevantes — das Feld erreicht nur die
+  `clip.json`-Provenienz-/Audit-Metadaten, nie `ValueRecord`, die serielle
+  Ausgabe oder das Freigabegate (gemäß den Nicht-Zielen dieses Plans).
+* **Klärung:** Ob `calibrated_on` erst beim tatsächlichen `roi`-
+  Bestätigungsschritt gesetzt werden soll statt beim bloßen Autofit-Treffer.
+* **Antwort landet in:** `src/dispread/workbench/controller.py`
+  (`_autofit`/`roi`-Op), ggf. `docs/VALIDATION.md` bei einer künftigen
+  Messung.
+
+## OQ-30 — `roi`-Op ist nicht atomar gegenüber einem fehlschlagenden `QuadTracker`-Aufbau
+
+* **Status:** offen
+* **Befund:** Im `roi`-Op-Bestätigungszweig
+  (`src/dispread/workbench/controller.py`) wird `self._change(data)`
+  (committet `confirmed=True`, erhöht die Revision, kann `run`→`setup`
+  zurückschalten) **vor** dem Aufbau von
+  `self.tracker = QuadTracker(frame["image"], roi_quad(frame["image"], data))`
+  aufgerufen. Schlägt der Tracker-Aufbau fehl (Exception), ist die
+  Bestätigung bereits committet, aber es existiert kein Tracker, und der
+  auslösende Frame wird nicht aus `self.frames` entfernt. Gefunden in Task 7's
+  Review; vom Controller als zutreffend bestätigt — korrigiert die
+  ursprüngliche „pre-existing"-Einordnung des Implementierers.
+* **Blockiert:** nichts Akutes — die Auswirkung ist selbstlimitierend:
+  `self.frames` ist auf 4 Einträge mit FIFO-Verdrängung begrenzt, und der
+  Fehler degradiert exakt auf den Vor-Task-7-Zustand (bestätigt, kein
+  Tracker, schließt sicher ab, keine Fehlkorrektur).
+* **Klärung:** Ein günstiger Fix existiert (Tracker vor `self._change(data)`
+  konstruieren, danach erst zuweisen), war aber keine Bedingung für Task 7's
+  Abnahme.
+* **Antwort landet in:** `src/dispread/workbench/controller.py` (`roi`-Op).
+
+## OQ-31 — Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit
+
+* **Status:** offen
+* **Befund:** Task 5's Fix-Runde behob eine Bug-Klasse für den Canvas-/
+  Geometrie-Editierfluss (ein stehengebliebenes `editing.autofit`-Ergebnis
+  wurde beim Bestätigen stillschweigend angewendet, statt verworfen zu
+  werden). Der Implementierer flaggte selbst, dass dieselbe Bug-Klasse
+  vermutlich auch für die manuelle Layout-Regler-UI in der Einstelltabelle
+  gilt: Läuft ein Autofit erfolgreich, editiert der Bediener danach **vor**
+  dem Bestätigen ein Layout-Feld direkt über die Regler der Einstelltabelle,
+  könnte das stehengebliebene Autofit-Ergebnis diese manuelle Bearbeitung
+  beim Bestätigen trotzdem überschreiben. Vom Re-Reviewer als real bestätigt,
+  aber als andere Bugoberfläche eingestuft als das in dieser Runde tatsächlich
+  Gefixte.
+* **Klärung:** Nicht gefixt, nicht testabgedeckt — Kandidat für eine künftige
+  Aufgabe.
+* **Antwort landet in:** `src/dispread/workbench/static/workbench.js`.
+
+## OQ-32 — `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind`
+
+* **Status:** offen (Ursprungsbug behoben, zugrunde liegende Lücke nicht)
+* **Befund:** Task 8's Review fand und behob einen Critical-Bug: eine neue
+  Zeile mit `kind="text"` (wörtlich aus dem damaligen — inzwischen
+  korrigierten — Plantext kopiert) ließ `dispread tui`
+  (`src/dispread/workbench/tui.py`, `edit_row()`) mit `KeyError: 'min'`
+  abstürzen, weil nur `kind=="info"`/`"choice"` (`edit_row()`, Zeilen 199 und
+  205) eine sichere Behandlung haben — jeder andere Wert fällt durch zu Code,
+  der numerische Editiermetadaten (`row["min"]`/`row["max"]`) voraussetzt. Der
+  akute Bug wurde behoben (`kind="info"` statt `"text"`), aber `edit_row()`
+  hat weiterhin keine Validierung oder einen sicheren Default für einen
+  unbekannten/unbehandelten `kind` — die Gefahr würde beim nächsten neuen
+  Zeilentyp lautlos wiederkehren.
+* **Klärung:** `edit_row()` (und die zugehörige `_row()`-Zeilenerzeugung in
+  `fields.py`) braucht einen expliziten `else`-Zweig, der einen unbekannten
+  `kind` ablehnt statt anzunehmen, dass Zahlenmetadaten vorhanden sind.
+* **Antwort landet in:** `src/dispread/workbench/tui.py`,
+  `src/dispread/workbench/fields.py`.

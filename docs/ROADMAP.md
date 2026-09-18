@@ -9,8 +9,8 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
 | --- | --- | --- | --- | --- | --- |
 | **P0** | Grundgerüst, Trennstellen, Diagnose, Doku, Beispiele | nein | nein | `pytest` + `ruff` grün; Beispiel 16 erzeugt `values.jsonl` + Telegramme auf der Leitung | ✅ **erreicht** 2026-09-07 |
-| **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — Kamera läuft, Zeitbasis-Domäne geklärt; `replay://` und Messung M2 offen |
-| **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | offen |
+| **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — Kamera läuft, Zeitbasis-Domäne geklärt, `replay://` implementiert (Task 1 dieser Sitzung); Messung M2 (Zeitstempel-Semantik) offen |
+| **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | offen — Werkzeug jetzt da (Clipaufnahme, Task 2 dieser Sitzung), Datensatz nicht: 4 reale Clips unter `var/workbench/clips/`, aber weiterhin nur **eine** Geräteinstanz (`device_id="RND Lab"`) |
 | **P3** | Werterkennung an realen Anzeigen, Freigabeschwellen kalibrieren | ja | nein | Trefferquote **pro Fehlerklasse** aufgeschlüsselt | offen |
 | **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | blockiert durch OQ-01, OQ-06 |
 | **P5** | Zeitbezug vollständig: §6 von Prosa in Zahlen | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | offen |
