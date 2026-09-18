@@ -244,6 +244,10 @@ class DatasetStore:
             raise DatasetError(f"Unbekannte Situationsgruppe: {group_id}")
         return group
 
+    def resolve_group(self, device_id: str, group_id: str) -> dict:
+        """Oeffentliche Vorabpruefung: existiert Geraet/Gruppe so wie behauptet?"""
+        return self._resolve_group(self._load_devices(), device_id, group_id)
+
     # -- Samples ---------------------------------------------------------
 
     def _sample_dir(self, sample_id: str) -> Path:

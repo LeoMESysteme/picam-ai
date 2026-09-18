@@ -3,6 +3,36 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 2: Rohbildaufnahme ohne Profilkalibrierung)
+
+**Problem:** Die bestehende Clipaufnahme (`clip.start`/`clip.stop`) verlangt
+bestätigte Geometrie und Livebild - unbrauchbar für unkalibrierte reale
+Prüfbilder. Der neue `DatasetStore` (Aufgabe 1) hatte noch keine Anbindung an
+den Kamerabesitzer.
+
+**Änderung:** Neues Modul `src/dispread/workbench/dataset_capture.py`
+(`CaptureRegistry`): eigene Capture-Tokens, unabhängig vom kleinen
+ROI-Editor-Cache (`Controller.frames`) - höchstens zwei gleichzeitig offene
+Aufnahmen, insgesamt höchstens 64 MiB Rohbildspeicher, Ablauf nach zehn
+Minuten. `Controller` bekommt `dataset_store`/`dataset_captures` sowie die
+neuen `command()`-Operationen `dataset.device.create/update`,
+`dataset.group.begin`, `dataset.capture`, `dataset.save`, `dataset.discard`,
+`dataset.select`, `dataset.summary`, `dataset.export`. `_dataset_capture()`
+kopiert `self.raw` sofort beim Aufruf - ein späteres `publish()` mit einem
+neuen Bild ändert die offene Aufnahme nicht mehr. Capture/Save fassen
+`self.config`, `self.tracker`, `self.reading` und den Gate-Zustand nicht an;
+Capture lehnt `run`-Modus, fehlendes Livebild und unbekanntes Gerät/Gruppe ab.
+Ein erfolgreich gespeicherter Token bleibt im Speicher (als `saved` markiert,
+zählt nicht mehr gegen das Zwei-Aufnahmen-Limit) - ein Retry nach einer
+verlorenen HTTP-Antwort trifft so wieder auf dieselbe gespeicherte Probe statt
+auf "Aufnahme unbekannt"; ein Retry mit anderem Label bleibt über
+`DatasetStore` ein Revisionskonflikt.
+
+**Konsequenz:** Ein Rohbild lässt sich jetzt ohne bestätigtes Produktionsprofil
+aufnehmen und mit Zielbox/Label sichern, ohne den bestehenden ROI-/Clip-/
+OCR-Pfad zu berühren. `10 neue Tests`, `264 passed, 2 skipped` gesamt, `ruff
+check` sauber. Noch offen: HTTP-Endpunkte und Browserbedienung (Aufgabe 3/4).
+
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 1: Geräte, Samples, sichere Persistenz)
 
 **Problem:** Die bestehende Clipaufnahme verlangt bestätigte Geometrie,

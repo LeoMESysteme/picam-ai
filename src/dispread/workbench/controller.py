@@ -26,6 +26,8 @@ from dispread.rectify import rectify
 from dispread.track import QuadTracker
 from dispread.validate import GateConfig, ReleaseGate
 
+from .dataset_capture import CaptureRegistry
+from .datasets import DatasetStore
 from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
 from .vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_quad_in_region
 
@@ -222,6 +224,10 @@ class Controller:
         self.jpeg, self.raw = None, None
         self.metadata, self.metrics, self.capabilities, self.observed = {}, {}, {}, {}
         self.frames = {}
+        # Eigener Speicherbereich, eigene Locks/Tokens - siehe datasets.py und
+        # dataset_capture.py. Unabhaengig von Produktionsprofil/OCR/ROI.
+        self.dataset_store = DatasetStore(self.root / "datasets")
+        self.dataset_captures = CaptureRegistry()
         # Letzte Vollbild-Kandidatensuche (gelbe Vorschlagsboxen, Pixelkoordinaten,
         # Bildkoordinatensystem). Nur solange gepflegt, wie das Profil
         # unbestaetigt ist - erstes Einfrieren eines frischen Profils startet
@@ -764,6 +770,26 @@ class Controller:
                 self._clip_start(device_id, text, seconds)
             elif op == "clip.stop":
                 self._clip_stop()
+            elif op == "dataset.device.create":
+                return self.dataset_store.create_device(args)
+            elif op == "dataset.device.update":
+                return self.dataset_store.update_device(args["device_id"], args["revision"], args["changes"])
+            elif op == "dataset.group.begin":
+                return self.dataset_store.begin_group(args["device_id"], args["change_note"])
+            elif op == "dataset.capture":
+                return self._dataset_capture(args)
+            elif op == "dataset.save":
+                return self._dataset_save(args)
+            elif op == "dataset.discard":
+                self.dataset_captures.discard(args["token"])
+                return {"discarded": True}
+            elif op == "dataset.select":
+                return self.dataset_store.select_sample(args["sample_id"], args["revision"])
+            elif op == "dataset.summary":
+                return self.dataset_store.summary()
+            elif op == "dataset.export":
+                result = self.dataset_store.export()
+                return {"export_id": result["export_id"], "coverage": result["coverage"]}
             else:
                 raise ValueError(f"Unbekannter Befehl: {op}")
             return self.snapshot()
@@ -843,6 +869,80 @@ class Controller:
             "reason": result.reason,
             "preview": {"raw_text": preview.raw_text, "value": preview.value},
         }
+
+    def _dataset_capture(self, args):
+        """Ein Rohbild fuer den Sammelmodus einfrieren - unabhaengig von ROI/Layout/Profil.
+
+        Bewusst kein Zugriff auf ``self.config``/``self.tracker``/``self.reading``:
+        der Sammelmodus braucht kein bestaetigtes Profil (Konzept.md, Aufgabe 2).
+        Das Rohbild wird HIER kopiert, nicht erst beim Save - ein
+        zwischenzeitliches ``publish()`` mit einem neueren Bild darf die
+        offene Aufnahme nicht veraendern.
+        """
+        if self.mode == "run":
+            raise ValueError("Datensatzaufnahme waehrend eines Produktionslaufs (run) nicht moeglich")
+        if self.raw is None:
+            raise ValueError("Kein Livebild vorhanden")
+        device_id, group_id = args["device_id"], args["group_id"]
+        self.dataset_store.resolve_group(device_id, group_id)
+        image = self.raw.copy()
+        height, width = image.shape[:2]
+        fields = {
+            "device_id": device_id,
+            "group_id": group_id,
+            "source_id": "simulate" if self.simulate else f"camera{self.camera_index}",
+            "frame_sequence": self.sequence,
+            "source_revision": self.revision,
+            "capture_timestamp": {
+                "value_ns": int(self.metadata.get("SensorTimestamp", 0)),
+                "base": self.metadata.get("timebase", TimeBaseKind.FILE_MTIME.value),
+                "uncertainty_ns": self.metadata.get("uncertainty_ns"),
+            },
+            "stored_at_utc": datetime.now(UTC).isoformat(),
+            "synthetic": self.metadata.get("timebase") == TimeBaseKind.SYNTHETIC.value,
+            "source": None,
+            "license": None,
+        }
+        token = self.dataset_captures.begin(image, fields)
+        self.log("info", f"Datensatzaufnahme {token} eingefroren: Geraet {device_id}")
+        return {"token": token, "width": width, "height": height}
+
+    def _dataset_save(self, args):
+        """Zielbox/Label zu einer offenen Aufnahme sichern - siehe DatasetStore.save_sample.
+
+        Der Token bleibt bei Erfolg im Speicher (als ``saved`` markiert) statt
+        entfernt zu werden: ein Retry nach einer verlorenen HTTP-Antwort trifft
+        so wieder auf denselben, bereits gespeicherten Datensatz statt auf
+        "Aufnahme unbekannt" (siehe dataset_capture.CaptureRegistry).
+        """
+        token = args["token"]
+        entry = self.dataset_captures.get(token)
+        capture = {
+            "image": entry["image"],
+            "capture_token": token,
+            "device_id": entry["device_id"],
+            "group_id": entry["group_id"],
+            "source_id": entry["source_id"],
+            "frame_sequence": entry["frame_sequence"],
+            "source_revision": entry["source_revision"],
+            "capture_timestamp": entry["capture_timestamp"],
+            "stored_at_utc": entry["stored_at_utc"],
+            "synthetic": entry["synthetic"],
+            "source": entry["source"],
+            "license": entry["license"],
+        }
+        annotation = {
+            "bbox": args["bbox"],
+            "target_label": args.get("target_label"),
+            "label_state": args["label_state"],
+            "expected_text": args.get("expected_text"),
+            "conditions": args.get("conditions", []),
+            "independence_confirmation": args.get("independence_confirmation", True),
+        }
+        sample = self.dataset_store.save_sample(capture, annotation)
+        self.dataset_captures.mark_saved(token)
+        self.log("info", f"Datensatz-Probe {sample['id']} gespeichert (Aufnahme {token})")
+        return sample
 
     def _clip_start(self, device_id, text, seconds):
         # Laengst beendete Schreiber wegwerfen, bevor ein neuer hinzukommt -
