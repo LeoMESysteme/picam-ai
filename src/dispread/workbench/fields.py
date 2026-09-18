@@ -171,6 +171,26 @@ def _layout_rows(layout):
             ],
         ),
         _row(
+            "layout.polarity",
+            "polaritaet",
+            "choice",
+            layout["polarity"],
+            "hell auf dunkel" if layout["polarity"] == "bright_on_dark" else "dunkel auf hell",
+            "LED: helle Segmente auf dunklem Grund. LCD: dunkle Segmente auf hellem Grund (OQ-13)",
+            options=[
+                _option(
+                    "bright_on_dark",
+                    "hell auf dunkel (LED)",
+                    [["layout.set", {"key": "polarity", "value": "bright_on_dark"}]],
+                ),
+                _option(
+                    "dark_on_bright",
+                    "dunkel auf hell (LCD)",
+                    [["layout.set", {"key": "polarity", "value": "dark_on_bright"}]],
+                ),
+            ],
+        ),
+        _row(
             "layout.unit",
             "einheit",
             "choice",

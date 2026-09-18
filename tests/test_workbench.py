@@ -360,6 +360,7 @@ def test_field_rows_offer_only_valid_choices(tmp_path):
         "layout.digits",
         "layout.decimals",
         "layout.has_sign",
+        "layout.polarity",
         "layout.unit",
         "layout.sign_cell_ratio",
         "reading.value",

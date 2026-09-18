@@ -211,6 +211,8 @@ def validate_layout(layout):
     for name, (low, high) in LAYOUT_RATIOS.items():
         if not finite(layout[name]) or not low <= layout[name] <= high:
             raise ValueError(f"{name} ausserhalb {low}..{high}")
+    if layout["polarity"] not in ("bright_on_dark", "dark_on_bright"):
+        raise ValueError("polarity muss bright_on_dark oder dark_on_bright sein")
 
 
 def atomic_json(path: Path, data):

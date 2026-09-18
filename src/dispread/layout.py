@@ -82,6 +82,11 @@ class DisplayLayout:
     #: Raster nicht abbildet - die festen relativen Segment-Abtastpunkte
     #: landen dann teils im Zwischenraum statt auf dem Segment (OQ-23).
     digit_gap_ratio: float = 0.0
+    #: Anzeigepolaritaet. "bright_on_dark" (Default, LED: helle Segmente auf
+    #: dunklem Grund) oder "dark_on_bright" (LCD: dunkle Segmente auf hellem
+    #: Grund). Kommt aus dem bestaetigten Profil, wird nicht geraten
+    #: (OQ-13 Fall 2).
+    polarity: str = "bright_on_dark"
 
     @property
     def n_cells(self) -> float:
@@ -138,6 +143,7 @@ class DisplayLayout:
             "thickness_ratio": self.thickness_ratio,
             "inset_ratio": self.inset_ratio,
             "digit_gap_ratio": self.digit_gap_ratio,
+            "polarity": self.polarity,
         }
 
     @classmethod

@@ -8,6 +8,7 @@ from dispread.frames import open_source
 from dispread.frames.synthetic_source import render_display
 from dispread.layout import DIGIT_SEGMENTS, DisplayLayout
 from dispread.ocr.sevenseg import SevenSegmentReader, segment_threshold
+from dispread.workbench.profiles import DEFAULT, validate_layout
 
 
 @pytest.fixture
@@ -105,3 +106,28 @@ def test_segmenttabelle_ist_eindeutig():
     """Keine zwei Ziffern duerfen dasselbe Segmentmuster haben."""
     patterns = list(DIGIT_SEGMENTS.values())
     assert len(patterns) == len(set(patterns))
+
+
+def test_lcd_polaritaet_wird_gelesen(reader):
+    """OQ-13 Fall 2: dunkle Ziffern auf hellem Grund."""
+    layout = DisplayLayout(digits=5, decimals=2, unit="N", polarity="dark_on_bright")
+    hell = DisplayLayout(digits=5, decimals=2, unit="N")
+    image, _, area = render_display(12.34, hell)
+    x, y, w, h = area
+    inverted = 255 - image[y : y + h, x : x + w]
+    assert reader.read(inverted, layout).value == 12.34
+
+
+def test_falsche_polaritaet_wird_abgelehnt_nicht_falsch_gelesen(reader):
+    layout = DisplayLayout(digits=5, decimals=2, unit="N")  # bright_on_dark
+    hell = DisplayLayout(digits=5, decimals=2, unit="N")
+    image, _, area = render_display(12.34, hell)
+    x, y, w, h = area
+    result = reader.read(255 - image[y : y + h, x : x + w], layout)
+    assert result.value != 12.34
+    assert result.value is None, "falsche Polaritaet muss ablehnen, nicht raten"
+
+
+def test_unbekannte_polaritaet_wird_abgelehnt():
+    with pytest.raises(ValueError, match="polarity"):
+        validate_layout({**DEFAULT["layout"], "polarity": "irgendwas"})

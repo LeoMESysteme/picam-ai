@@ -3,6 +3,37 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 9: Anzeigepolarität ins Profil)
+
+**Problem:** `SevenSegmentReader` und `DisplayLayout` gingen fest von heller
+Anzeige auf dunklem Grund aus (LED). Für LCD-Anzeigen mit umgekehrter
+Polarität (dunkle Segmente auf hellem Grund) fehlte jede Behandlung —
+OQ-13 Fall 2. Ein LCD-Bild ungeprüft durch den Leser zu schicken hätte auf den
+komplementären Segmentmustern gearbeitet, die in aller Regel keinem gültigen
+Ziffernmuster entsprechen und dadurch zwar meist, aber nicht garantiert
+abgelehnt worden wären — kein Ersatz für eine explizite Profilangabe.
+
+**Änderung:** Neues Feld `DisplayLayout.polarity: str = "bright_on_dark"`
+(sonst `"dark_on_bright"`), wandert über `to_dict`/`from_dict` automatisch ins
+Profil; `profiles.validate_layout` lehnt unbekannte Werte ab.
+`SevenSegmentReader.read` invertiert das Graustufenbild einmalig ganz am
+Anfang, wenn `polarity == "dark_on_bright"` — danach gilt im ganzen Leser
+wieder "hell = an", keine zweite Fallunterscheidung. Neue Auswahlzeile
+`layout.polarity` in der Workbench (`fields.py`), modelliert auf
+`layout.has_sign`. Gespeicherte Profile ohne das Feld bekommen beim Laden
+automatisch `bright_on_dark` (bestehende Schema-3-Migration in
+`profiles.validate()`) — keine Schemaversion nötig, heutiges Verhalten bleibt
+unverändert. Neue Tests in `tests/test_sevenseg.py`
+(`test_lcd_polaritaet_wird_gelesen`,
+`test_falsche_polaritaet_wird_abgelehnt_nicht_falsch_gelesen`,
+`test_unbekannte_polaritaet_wird_abgelehnt`) sowie eine erweiterte Prüfung in
+`tests/test_workbench.py::test_field_rows_offer_only_valid_choices`.
+
+**Konsequenz:** LCD-Anzeigen lassen sich jetzt über das bestätigte Profil
+korrekt lesen; eine falsch eingestellte Polarität führt zur Ablehnung, nicht
+zu einer stillen Fehlablesung. OQ-13 Fall 2 ist geklärt, Fall 1 (Anzeige
+zeigt ausschließlich "8") bleibt offen. `172 passed`, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 8 Review-Fund: TUI-Absturz bei `reading.track`)
 
 **Problem:** Die neue `reading.track`-Zeile aus Task 8

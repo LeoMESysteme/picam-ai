@@ -149,6 +149,10 @@ class SevenSegmentReader:
 
     def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult:
         gray = _to_gray(crop)
+        if layout.polarity == "dark_on_bright":
+            # LCD: dunkle Segmente auf hellem Grund. Einmal umkehren, danach gilt im
+            # ganzen Leser wieder "hell = an" - keine zweite Fallunterscheidung.
+            gray = 255 - gray
         h, w = gray.shape[:2]
 
         boxes = layout.cell_boxes(w, h)

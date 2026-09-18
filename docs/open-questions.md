@@ -147,9 +147,27 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
      Falschablehnung ist nach Konzept §7 die zulässige Richtung — geraten wird
      nicht —, aber es ist eine Einschränkung.
   2. Vorausgesetzt ist helle Anzeige auf dunklem Grund (LED). Für LCD mit
-     umgekehrter Polarität fehlt die Behandlung.
+     umgekehrter Polarität fehlt die Behandlung. — **geklärt (2026-09-18)**,
+     siehe Update unten. Fall 1 bleibt offen.
 * **Lösungsansatz:** Polarität ins Geräteprofil aufnehmen; als
   Off-Referenz zusätzlich eine Panelfläche außerhalb der Segmente abtasten.
+
+* **Update 2026-09-18, Fall 2 (Polarität):** `DisplayLayout` hat jetzt ein
+  Feld `polarity: "bright_on_dark" | "dark_on_bright"` (Default
+  `bright_on_dark`, reproduziert das bisherige Verhalten unveränderten
+  gespeicherten Profilen gegenüber). `SevenSegmentReader.read` invertiert das
+  Graustufenbild einmalig am Anfang, wenn `polarity == "dark_on_bright"`
+  (`src/dispread/ocr/sevenseg.py`) — danach gilt im ganzen Leser wieder
+  "hell = an", keine zweite Fallunterscheidung. `profiles.validate_layout`
+  lehnt unbekannte Polaritätswerte ab. Die Workbench hat dazu eine
+  Auswahlzeile `layout.polarity` (`src/dispread/workbench/fields.py`).
+  Getestet in `tests/test_sevenseg.py`
+  (`test_lcd_polaritaet_wird_gelesen`,
+  `test_falsche_polaritaet_wird_abgelehnt_nicht_falsch_gelesen`,
+  `test_unbekannte_polaritaet_wird_abgelehnt`): eine falsch eingestellte
+  Polarität lehnt ab, sie liest nicht stillschweigend falsch. Fall 1 (Anzeige
+  zeigt ausschließlich "8", keine inaktive Klasse vorhanden) ist davon
+  unberührt und bleibt offen.
 
 ## OQ-14 — Freigabeschwellen an realen Geräten validieren
 
