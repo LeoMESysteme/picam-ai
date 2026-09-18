@@ -1,7 +1,7 @@
 <!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>picam / workbench</title><link rel="stylesheet" href="/static/vendor/xterm.css"><link rel="stylesheet" href="/static/workbench.css">
-<header><span>picam <span class="muted">/ workbench</span></span><span id="status">connecting</span><button id="logout">logout</button></header>
-<main><div id="left"><section id="camera"><div class="bar"><span>camera <span id="mode"></span></span><span id="metrics">—</span></div>
+<header><span>picam <span class="muted">/ workbench</span></span><button id="dataset-tab">Datensatz sammeln</button><span id="status">connecting</span><button id="logout">logout</button></header>
+<main id="main"><div id="left"><section id="camera"><div class="bar"><span>camera <span id="mode"></span></span><span id="metrics">—</span></div>
 <div id="viewport" tabindex="0" aria-label="Kamera. E oder Doppelklick: Bild einfrieren. Erkannten Rahmen anklicken oder mit ✎ verschieben/Ecken ziehen, ✓ bestätigt. Danach OCR-Rahmen ebenso prüfen, 🎯 schlaegt aus einem getippten Wert ein Raster vor. Escape: abbrechen."><img id="feed" alt="Kameralivebild" hidden><canvas id="overlay" hidden></canvas><span id="empty">—</span>
 <div id="roi-buttons" class="box-buttons" hidden><button id="roi-confirm" aria-label="ROI bestätigen">✓</button><button id="roi-toggle" aria-label="ROI bearbeiten">✎</button></div>
 <div id="ocr-buttons" class="box-buttons" hidden><button id="ocr-confirm" aria-label="OCR-Rahmen bestätigen">✓</button><button id="ocr-calibrate" aria-label="Aus abgelesenem Wert kalibrieren">🎯</button><button id="ocr-toggle" aria-label="OCR-Rahmen bearbeiten">✎</button></div>
@@ -13,5 +13,36 @@
 <div id="setup-head" class="setup-row"><span>parameter</span><span>soll</span><span>ist / hinweis</span></div>
 <div id="setup-rows" role="grid"></div><div id="setup-actions"></div>
 <div id="setup-name" hidden>profilname <input id="name-input" maxlength="64" spellcheck="false" aria-label="Neuer Profilname"><button id="name-ok">speichern</button><button id="name-cancel">abbrechen</button></div></div><div id="terminals"></div></div></section></div>
-<section id="log"><div class="bar"><span>log / UTC</span><button id="clear">clear</button></div><div id="logs" role="log" tabindex="0"></div></section></main>
-<script src="/static/vendor/xterm.js"></script><script src="/static/vendor/addon-fit.js"></script><script src="/static/workbench.js"></script></html>
+<section id="log"><div class="bar"><span>log / UTC</span><button id="clear">clear</button></div><div id="logs" role="log" tabindex="0"></div></section>
+<section id="dataset" hidden><div class="bar"><span>Datensatz sammeln</span><span id="dataset-summary" class="muted"></span></div>
+<div id="dataset-body">
+<div id="dataset-note" class="muted"></div>
+<div class="dataset-row"><strong id="dataset-device-name">(kein Gerät gewählt)</strong> <span id="dataset-split" class="muted"></span></div>
+<fieldset><legend>Neues Gerät</legend>
+<input id="dataset-device-input-name" placeholder="Anzeigename" maxlength="120" spellcheck="false" aria-label="Anzeigename">
+<input id="dataset-device-input-model" placeholder="Modell (optional)" maxlength="120" spellcheck="false" aria-label="Modell">
+<input id="dataset-device-input-family" placeholder="Familie, z. B. gsv2asd" maxlength="32" spellcheck="false" aria-label="Familie">
+<select id="dataset-device-input-technology" aria-label="Technologie"><option value="LED">LED</option><option value="LCD">LCD</option><option value="VFD">VFD</option><option value="other">sonstige</option></select>
+<select id="dataset-device-input-split" aria-label="Split"><option value="development">Entwicklung</option><option value="heldout">Abschlusstest</option></select>
+<label><input id="dataset-device-input-confirm" type="checkbox"> Dieses konkrete physische Gerät</label>
+<input id="dataset-device-input-evidence" placeholder="Beleg, z. B. Typenschild/Seriennummer geprüft" maxlength="1000" spellcheck="false" aria-label="Beleg der Identitätsbestätigung">
+<button id="dataset-device-create">Gerät anlegen</button></fieldset>
+<div class="dataset-row">Situation: <span id="dataset-group-note">(keine Situation)</span>
+<input id="dataset-group-input" placeholder="Was hat sich geändert?" maxlength="1000" spellcheck="false" aria-label="Was hat sich geändert">
+<button id="dataset-group-begin">Neue Situation</button></div>
+<div class="dataset-row"><button id="dataset-capture-button" disabled>● aufnehmen</button></div>
+<div id="dataset-editor" hidden>
+<div id="dataset-viewport"><img id="dataset-image" alt="Eingefrorene Aufnahme"><canvas id="dataset-canvas"></canvas></div>
+<div class="dataset-row">Lesbarkeit:
+<select id="dataset-label-state" aria-label="Lesbarkeit"><option value="readable">lesbar</option><option value="unreadable">unlesbar</option><option value="uncertain">unsicher</option></select>
+<input id="dataset-expected-text" placeholder="abgelesener Wert" maxlength="64" spellcheck="false" aria-label="Abgelesener Wert">
+<input id="dataset-target-label" placeholder="Bezeichnung, z. B. oben Spannung" maxlength="200" spellcheck="false" aria-label="Zielbezeichnung"></div>
+<div id="dataset-conditions" class="dataset-row"></div>
+<div class="dataset-row"><button id="dataset-save">Speichern und weiter</button><button id="dataset-discard">verwerfen</button></div>
+<div id="dataset-similarity" class="dataset-row" hidden>Ähnlich zu einer vorhandenen Probe dieser Situation (Heuristik, kein Beweis).
+<input id="dataset-similarity-reason" placeholder="Begründung, falls trotzdem eigenständig" maxlength="1000" spellcheck="false" aria-label="Begründung für die Ähnlichkeitsbestätigung">
+<button id="dataset-similarity-confirm">trotzdem speichern</button><button id="dataset-similarity-cancel">abbrechen</button></div>
+</div>
+<div class="dataset-row"><button id="dataset-export">Prüfsatz exportieren</button><a id="dataset-export-link" hidden download>Export</a></div>
+</div></section></main>
+<script src="/static/vendor/xterm.js"></script><script src="/static/vendor/addon-fit.js"></script><script src="/static/workbench.js"></script><script src="/static/dataset.js"></script></html>

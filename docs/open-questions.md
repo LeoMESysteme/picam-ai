@@ -987,3 +987,37 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `kind` ablehnt statt anzunehmen, dass Zahlenmetadaten vorhanden sind.
 * **Antwort landet in:** `src/dispread/workbench/tui.py`,
   `src/dispread/workbench/fields.py`.
+
+## OQ-33 — Ähnlichkeitsschwellwert des Datensatz-Sammelmodus ist unvalidiert
+
+* **Status:** offen · erkannt 2026-09-18 beim Bau des Datensatz-Sammelmodus
+  (`src/dispread/workbench/datasets.py`)
+* **Befund:** `DatasetStore._find_similar_in_group()` warnt vor einer
+  Wiederholungsaufnahme, deren mittlere normierte Graustufendifferenz zu
+  einer anderen Probe derselben Situation unter `SIMILARITY_THRESHOLD = 0.02`
+  liegt. Der Wert ist ein Vorabdefault wie `LAYOUT_RATIOS` — an keinem realen
+  Datensatz kalibriert. Zu niedrig gesetzt, warnt er nie; zu hoch gesetzt,
+  nervt er bei echten unabhängigen Wiederholungen mit ähnlicher Beleuchtung.
+* **Klärung:** Braucht echte, als unabhängig bestätigte Wiederholungsaufnahmen
+  am selben Gerät, um den Schwellwert gegen tatsächlich beobachtete
+  Bildähnlichkeit zu kalibrieren — dieselbe Art Realdatensatz, den dieser
+  Sammelmodus überhaupt erst beschaffen soll.
+* **Antwort landet in:** `src/dispread/workbench/datasets.py`,
+  `docs/VALIDATION.md`.
+
+## OQ-34 — Realer interaktiver Browserdurchlauf des Datensatz-Sammelmodus steht aus
+
+* **Status:** offen · erkannt 2026-09-18 beim Bau des Datensatz-Sammelmodus
+* **Befund:** `static/dataset.js` ist durch reine Geometrietests
+  (`tests/dataset_client.test.mjs`) und aiohttp-Endpunkttests
+  (`tests/test_dataset_api.py`) abgedeckt, aber ein echter interaktiver Klick-
+  Durchlauf (Gerät anlegen → Aufnahme → Zielbox ziehen → speichern → Neustart
+  → Export) hat in dieser Umgebung nicht stattgefunden — derselbe Grund wie
+  OQ-21: der headless Chromium dieser Umgebung lädt laut dortigem Befund auch
+  einfache lokale HTTP-Seiten nicht zuverlässig.
+* **Klärung:** Abnahme mit einem echten Browser (siehe OQ-21) nachholen,
+  inklusive der Szenarien mehrere Zeilen, `-.125`, führende Null, unlesbar,
+  unsicher, ungültige Box, Gerätewechsel bei offenem Entwurf, doppelter Save,
+  Schreibfehler, zwei Browsertabs, Tokenablauf, abgeschnittener Export.
+* **Antwort landet in:** `docs/anleitung/08-datensatz-sammeln.md`,
+  `docs/status.md`.

@@ -3,6 +3,253 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff nach Advisor-Review)
+
+**Problem:** Eine unabhängige Zweitprüfung nach Abschluss der Aufgaben 1-7
+fand vier Lücken gegen den eigenen Exportvertrag/die eigene Spezifikation:
+(1) `synthetic: true`-Proben liefen ungefiltert in den Export, obwohl der
+Exportvertrag sie explizit in derselben Aufzählung wie `uncertain`/`draft`
+ausschließt — genau die Zählerinflation, die Aufgabe 5 für `summary()` schon
+behoben hatte, blieb im Exportpfad bestehen. (2) Ein Absturz zwischen dem
+Schreiben von `sample.json` und dem abschließenden `rename()` in
+`_save_sample_locked` hinterlässt ein `.sample-*`-Verzeichnis, das alle vier
+Scan-Methoden (`_load_all_samples`, `_device_has_samples`,
+`_find_existing_sample_for_token`, `_find_duplicate_hash`) als fertige Probe
+mitgezählt hätten — sortiert sogar vor echten UUID-Verzeichnissen und hätte
+so versehentlich Gruppenvertreter im Export werden können. (3)
+`identity_evidence` (Belegart der Identitätsbestätigung) war spezifiziert,
+aber nirgends implementiert. (4) Das 64-MiB-Aufnahmebudget zählte auch
+bereits gespeicherte (nicht mehr offene) Aufnahmen mit — bei üblichem
+Sammeltempo hätte das neue Aufnahmen ohne echten Grund abgelehnt.
+
+**Änderung:** `_export_locked()` filtert synthetische Proben zuerst heraus
+(Grund `synthetic` in `selection.json`). Neue `_iter_sample_dirs()` lässt nur
+Verzeichnisse mit gültigem UUID-Namen gelten; alle vier Scan-Methoden nutzen
+sie jetzt einheitlich; `summary()["incomplete_temp_dirs"]` zählt liegen
+gebliebene Temp-Verzeichnisse diagnostisch, statt sie stillschweigend zu
+ignorieren. `_validate_device_fields()` verlangt jetzt `identity_evidence`
+(Pflichtfeld, wie `identity_confirmed`); der Export gibt es je Probe mit;
+`dataset.js`/`index.html` haben dafür ein neues Eingabefeld. Das
+Aufnahmebudget in `dataset_capture.CaptureRegistry.begin()` summiert nur noch
+über *offene* (nicht gespeicherte) Einträge.
+
+**Konsequenz:** Sechs neue Tests
+(`test_synthetic_sample_is_excluded_from_export_like_uncertain`,
+`test_incomplete_temp_sample_directory_does_not_count_after_restart`,
+`test_device_creation_requires_identity_evidence`,
+`test_identity_evidence_is_carried_through_to_the_export_manifest`,
+`test_saved_captures_do_not_count_against_the_byte_budget`, plus eine
+Korrektur eines Testfixtures, das versehentlich einen synthetischen
+Testframe durch den vollen Exportpfad schickte). `291 passed, 2 skipped`
+gesamt, `ruff check` sauber.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 7: Doku-Abschluss und Übergabe)
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 6: unveränderlicher, direkt auswertbarer Export)
+
+**Problem:** Der Export aus Aufgabe 1 war gegen den *beschriebenen*
+Manifestvertrag getestet, aber nie gegen den echten Experiment-Loader aus
+`codex/automatic-seven-segment` (`src/dispread/experimental/evaluation.py::load_manifest`,
+Commit `6a18bdf`). Dessen `load_manifest` prüft zusätzlich projektübergreifend:
+kein doppeltes Bildhash über den *gesamten* Export hinweg (nicht nur je
+Gruppe) und höchstens ein Manifest-Eintrag je `heldout`-Unabhängigkeitsgruppe.
+
+**Änderung:** `DatasetStore._export_locked()` entfernt jetzt zusätzlich
+Proben mit einem bereits im Export vorhandenen Bildhash (Grund
+`duplicate_image_hash_of=<id>` in `selection.json`) - unabhängig davon, aus
+welcher Situation/Gruppe sie stammen. Neues
+`scripts/check-dataset-export.py`: lokale Schema-/Pfad-/Hashprüfung ohne
+Argument, oder mit `--experiment-root <worktree>` zusätzlich ein echter Aufruf
+von `load_manifest` in einem **separaten Prozess** mit dem venv jenes
+Worktrees (`subprocess.run` mit getrennten Argumenten, kein Shell-String,
+importiert nur `load_manifest`, keine Modelle/den Runner). Ohne
+`--experiment-root` meldet das Skript die externe Kompatibilität ausdrücklich
+als **nicht geprüft** statt als Erfolg.
+
+**Konsequenz:** `tests/test_dataset_export.py` verwendet ein bereits
+lizenziertes Realbild aus dem Experiment (`data/scale.jpg`, Public Domain,
+Original-Herkunft/-Label/-Split unverändert übernommen) und prüft: ein
+kompatibler Export wird vom echten Loader akzeptiert, eine nachträglich
+veränderte Bilddatei wird abgelehnt, der Export überlebt Verschieben in ein
+anderes Verzeichnis und einen anderen Arbeitsordner, und eine spätere
+Labelkorrektur (als neue, unabhängige Probe) verändert einen bereits
+veröffentlichten Export nicht. Die Tests überspringen sich selbst, falls der
+Experiment-Worktree lokal fehlt - ein fehlender Experimentstand ist kein
+Bestehen. `286 passed, 2 skipped` gesamt, `ruff check` sauber. Diese
+Integration erzeugt keine neue OCR-Messung.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
+
+**Problem:** Wiederholungsaufnahmen und beinahe-identische Bilder in
+derselben Situation konnten unbemerkt als mehrere unabhängige Proben zählen;
+synthetische Fixtures hätten die Zähler für lesbare/unlesbare *reale*
+Testwerte künstlich aufblähen können; es gab keine Übersicht, welche
+Bedingungen (negatives Vorzeichen, mehrere Zeilen, …) für ein Gerät noch
+fehlen.
+
+**Änderung:** `DatasetStore._find_similar_in_group()` vergleicht ein neues,
+nicht-identisches Bild gegen die anderen Proben *derselben*
+Unabhängigkeitsgruppe (kleines Graustufenbild, mittlere normierte Differenz,
+`SIMILARITY_THRESHOLD = 0.02` ausdrücklich als Heuristik gekennzeichnet, keine
+validierte Grenze). Eine Ähnlichkeitswarnung blockiert das Speichern, bis
+`similarity_confirmed=true` **und** eine Begründung mitgeschickt werden -
+beide werden dauerhaft in `sample.json` mitgeführt
+(`similarity_warning`/`similarity_confirmation_reason`), keine stille
+Löschung. `summary()` zählt `readable`/`unreadable`/`uncertain_or_draft` sowie
+Familien/Technologien nur noch aus nicht-synthetischen Proben und liefert
+zusätzlich `missing_conditions` (gesamt und je Gerät) aus dem festen
+Aufgabenkatalog - eine Lücke wird als Lücke gemeldet, nicht als erledigt
+umgedeutet. `dataset.js` zeigt die Warnung inline mit Begründungsfeld
+(`#dataset-similarity`) und die fehlenden Bedingungen in der Übersichtszeile.
+
+**Konsequenz:** Zehn Wiederholungen einer Situation zählen weiterhin als eine
+Unabhängigkeitsgruppe, ein Auswahlwechsel ändert nur den Vertreter. Acht neue
+`DatasetStore`-Tests plus ein Controller-Test für den vollen
+Bestätigungs-Roundtrip. `280 passed, 2 skipped` gesamt, `ruff check` sauber,
+beide JS-Dateien syntaktisch geprüft.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
+
+**Problem:** Aufgaben 1-3 lieferten Speicherung, Kamerabindung und HTTP-Endpunkte,
+aber keine Bedienoberfläche - der Sammelmodus war nur über rohe `/command`-Aufrufe
+erreichbar.
+
+**Änderung:** Neues, eigenständiges `static/dataset.js` (eigener Namespace
+`DatasetCollection`, eigene `csrf`-Beschaffung, kein Zugriff auf
+`workbench.js`-internen Zustand) plus ein neuer Bereich in `index.html`
+("Datensatz sammeln"-Knopf im Header schaltet `#dataset` frei, `main.dataset-mode`
+blendet Kamera/Shell/Log dafür aus - beide Ansichten teilen sich nichts
+Zustandsbehaftetes). Ablauf: Gerät anlegen, Situation eröffnen, Rohbild
+einfrieren (`dataset.capture`), Zielbox per Ziehen auf einem Canvas über der
+Vorschau (`/dataset/captures/{token}.jpg`) markieren, Lesbarkeit/Wert/Bedingungen
+eintragen, `dataset.save`, danach Übersicht und Export. Die Zielbox-Umrechnung
+von sichtbaren CSS-Pixeln (object-fit:contain, inklusive Letterboxing) in
+Originalbildpixel ist eine reine, exportierte Funktion (`toOriginalBox`) -
+bewusst die einzige aus dem Modul sichtbare Funktion, weil eine falsche
+Umrechnung sonst eine falsche Zielbox in einer gespeicherten Probe erzeugen
+würde. Sie ist nachweislich unabhängig von `window.devicePixelRatio`, weil
+ausschließlich mit `getBoundingClientRect()`-Größen (CSS-Pixel) gerechnet wird.
+
+**Konsequenz:** Neue Tests `tests/dataset_client.test.mjs` (node, reine
+Geometrie: gleiches Seitenverhältnis, horizontales und vertikales
+Letterboxing, DPR-Unabhängigkeit, Klemmung an den sichtbaren Bildrand) und
+`tests/test_dataset_client.py` als pytest-Anbindung plus `node --check`.
+`271 passed, 2 skipped` gesamt, `ruff check` sauber, beide JS-Dateien
+syntaktisch geprüft. **Offen:** ein echter interaktiver Browserdurchlauf
+(Geräteanlage → Aufnahme → Speichern → Neustart → Export) ist in dieser
+Umgebung nicht möglich - der headless Chromium dieser Umgebung lädt laut
+[OQ-21](docs/open-questions.md) auch einfache lokale HTTP-Seiten nicht
+zuverlässig; dieser Nachweis bleibt eine reale Browserabnahme (Aufgabe 7).
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
+
+**Problem:** Der Sammelmodus konnte Aufnahmen und Exporte nur über den
+generischen, JSON-basierten `/command`-Endpunkt bedienen. Weder eine
+Bildvorschau der eingefrorenen Aufnahme noch ein Export-Download waren über
+HTTP erreichbar.
+
+**Änderung:** Zwei neue authentifizierte GET-Routen in `server.py`:
+`/dataset/captures/{token}.jpg` (JPEG-Vorschau der offenen Aufnahme, wie die
+bestehende `/frozen/{id}.jpg`) und `/dataset/exports/{id}.zip` (ZIP eines
+bereits veröffentlichten Exports, on-demand über `datasets.zip_export()` und
+`asyncio.to_thread` gebaut, damit die Ereignisschleife nicht blockiert). Beide
+lösen ihre ID serverseitig auf (`DatasetStore.get_export_dir()` validiert das
+Hex-Format und die Existenz) - kein vom Browser frei bestimmbarer Dateipfad.
+Beide laufen durch die bestehende Middleware (Session-Pflicht, CSRF nur für
+nicht-GET); unbekannte/abgelaufene IDs liefern 400 ohne weitere Details.
+
+**Konsequenz:** Aufnahme-Vorschau und Exportdownload sind jetzt Teil derselben
+authentifizierten Oberfläche wie der restliche Kamerapfad. `4 neue Tests`
+(`tests/test_dataset_api.py`, echter aiohttp-Testclient wie
+`test_camera_preview.py`), `269 passed, 2 skipped` gesamt, `ruff check`
+sauber. Noch offen: Browserbedienung (Aufgabe 4).
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff: Save/Export blockieren den Kamerapfad nicht mehr)
+
+**Problem:** `dataset.save` und `dataset.export` liefen wie alle anderen
+`command()`-Operationen unter `Controller.lock` - Bildkodierung, Plattenschreiben,
+Hashbildung und ZIP-Erzeugung sind aber genau die teure I/O, die Abschnitt 5
+der Spezifikation ausdrücklich ausserhalb dieses Locks verlangt. Ein
+laufender Save hätte damit `status`, `stream.mjpg` und `publish()` (den
+Kamera-Empfangspfad) blockiert.
+
+**Änderung:** `dataset.save` und `dataset.export` werden jetzt wie
+`ocr.suggest`/`layout.autofit` VOR dem `with self.lock:`-Block behandelt.
+`_dataset_save()` haelt das Controller-Lock nur noch fuer die kurze Entnahme/
+Markierung des Capture-Tokens, nicht fuer `DatasetStore.save_sample()` selbst.
+`DatasetStore` bekommt dafuer ein eigenes `threading.Lock()`
+(`create_device`/`update_device`/`begin_group`/`save_sample`/`select_sample`/
+`export` serialisieren sich selbst, unabhaengig vom Controller).
+
+**Konsequenz:** Ein neuer Test (`test_blocked_save_does_not_block_status_or_publish`)
+haelt einen simulierten langsamen Save in einem Thread offen und misst, dass
+`status` und `publish()` im Hauptthread währenddessen nicht blockieren.
+`265 passed, 2 skipped` gesamt, `ruff check` sauber.
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 2: Rohbildaufnahme ohne Profilkalibrierung)
+
+**Problem:** Die bestehende Clipaufnahme (`clip.start`/`clip.stop`) verlangt
+bestätigte Geometrie und Livebild - unbrauchbar für unkalibrierte reale
+Prüfbilder. Der neue `DatasetStore` (Aufgabe 1) hatte noch keine Anbindung an
+den Kamerabesitzer.
+
+**Änderung:** Neues Modul `src/dispread/workbench/dataset_capture.py`
+(`CaptureRegistry`): eigene Capture-Tokens, unabhängig vom kleinen
+ROI-Editor-Cache (`Controller.frames`) - höchstens zwei gleichzeitig offene
+Aufnahmen, insgesamt höchstens 64 MiB Rohbildspeicher, Ablauf nach zehn
+Minuten. `Controller` bekommt `dataset_store`/`dataset_captures` sowie die
+neuen `command()`-Operationen `dataset.device.create/update`,
+`dataset.group.begin`, `dataset.capture`, `dataset.save`, `dataset.discard`,
+`dataset.select`, `dataset.summary`, `dataset.export`. `_dataset_capture()`
+kopiert `self.raw` sofort beim Aufruf - ein späteres `publish()` mit einem
+neuen Bild ändert die offene Aufnahme nicht mehr. Capture/Save fassen
+`self.config`, `self.tracker`, `self.reading` und den Gate-Zustand nicht an;
+Capture lehnt `run`-Modus, fehlendes Livebild und unbekanntes Gerät/Gruppe ab.
+Ein erfolgreich gespeicherter Token bleibt im Speicher (als `saved` markiert,
+zählt nicht mehr gegen das Zwei-Aufnahmen-Limit) - ein Retry nach einer
+verlorenen HTTP-Antwort trifft so wieder auf dieselbe gespeicherte Probe statt
+auf "Aufnahme unbekannt"; ein Retry mit anderem Label bleibt über
+`DatasetStore` ein Revisionskonflikt.
+
+**Konsequenz:** Ein Rohbild lässt sich jetzt ohne bestätigtes Produktionsprofil
+aufnehmen und mit Zielbox/Label sichern, ohne den bestehenden ROI-/Clip-/
+OCR-Pfad zu berühren. `10 neue Tests`, `264 passed, 2 skipped` gesamt, `ruff
+check` sauber. Noch offen: HTTP-Endpunkte und Browserbedienung (Aufgabe 3/4).
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 1: Geräte, Samples, sichere Persistenz)
+
+**Problem:** Die bestehende Clipaufnahme verlangt bestätigte Geometrie,
+Gerätekennung und einen konstanten sichtbaren Wert je Clip - sie taugt nicht
+als Sammelassistent für unkalibrierte reale Prüfbilder. Es fehlte ein eigener,
+von Produktionsprofil/OCR unabhängiger Speicherpfad für Geräte, Rohbilder und
+getippte Labels.
+
+**Änderung:** Neues Modul `src/dispread/workbench/datasets.py` mit
+`DatasetStore` (eigene Instanz, eigener Speicherbereich
+`Controller.root / "datasets"`, keine Kamera-/Profilabhängigkeit):
+Gerätestammdaten mit UUID, Revisionszähler und Split-Sperre nach der ersten
+Aufnahme (`create_device`, `update_device`); Unabhängigkeitsgruppen
+(`begin_group`); atomare, idempotente Sample-Speicherung über ein temporäres
+Verzeichnis plus `rename` (`save_sample`) - ein Schreibfehler bei Bild oder
+Metadaten hinterlässt keine fertige Probe, ein Retry mit demselben
+`capture_token` erzeugt genau eine; ein zweiter Token mit anderem Label auf
+denselben, bereits gespeicherten Token ist ein Revisionskonflikt statt eines
+stillen Überschreibens. `normalize_label()` erhält Vorzeichen, führende
+Nullen und Dezimalzeichen exakt, wandelt nur Komma zu Punkt und lehnt alles
+andere ab. `validate_bbox()` lehnt eine Box außerhalb des Bildes ab, statt sie
+an den Rand zu klemmen. Export erzeugt ein unveränderliches, formatkompatibles
+Manifest (`schema_version: 1`) samt Abdeckungs- und Ausschlussliste; unsichere/
+Entwurfs-Proben und unausgewählte Wiederholungen einer Gruppe bleiben draußen.
+
+**Konsequenz:** Reale, unkalibrierte Prüfbilder lassen sich jetzt sicher
+sammeln, ohne Produktionsfreigaberegeln zu berühren oder zu lockern.
+`ValueRecord`, `ReleaseGate` und `TelegramFormatter` sind unverändert. Noch
+offen: Anbindung an die Kamera/Workbench-Bedienung (Aufgabe 2 ff.) und die
+Prüfung gegen den echten Experiment-Loader (Aufgabe 6). `44 neue Tests`,
+`254 passed, 2 skipped` gesamt, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Abschlussreview, Nachschliff R6: Verlustarten im Clipmanifest trennen)
 
 **Problem:** Mit dem R6-Fix zählen zwei verschiedene Verluste auf dasselbe

@@ -7,7 +7,9 @@ import contextlib
 import json
 import os
 import pwd
+import re
 import ssl
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -15,8 +17,11 @@ from aiohttp import WSMsgType, web
 
 from .auth import Sessions, authenticate
 from .controller import Controller
+from .datasets import zip_export
 from .fields import actions, rows
 from .terminals import Terminals
+
+_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 
 STATIC = Path(__file__).parent / "static"
 COOKIE = "dispread_session"
@@ -103,6 +108,34 @@ def make_app(controller, terminals, verifier=authenticate):
         if not ok:
             raise ValueError("JPEG fehlgeschlagen")
         return web.Response(body=jpeg.tobytes(), content_type="image/jpeg")
+
+    async def dataset_capture_preview(request):
+        token = request.match_info["token"]
+        if not _TOKEN_RE.fullmatch(token):
+            raise ValueError("Ungueltiger Aufnahme-Token")
+        with controller.lock:
+            image = controller.dataset_captures.get(token)["image"]
+            ok, jpeg = cv2.imencode(".jpg", image)
+        if not ok:
+            raise ValueError("JPEG fehlgeschlagen")
+        return web.Response(body=jpeg.tobytes(), content_type="image/jpeg")
+
+    async def dataset_export_download(request):
+        export_id = request.match_info["id"]
+        export_dir = controller.dataset_store.get_export_dir(export_id)
+
+        def build():
+            with tempfile.TemporaryDirectory() as scratch:
+                zip_path = Path(scratch) / f"{export_id}.zip"
+                zip_export(export_dir, zip_path)
+                return zip_path.read_bytes()
+
+        data = await asyncio.to_thread(build)
+        return web.Response(
+            body=data,
+            content_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{export_id}.zip"'},
+        )
 
     async def stream(request):
         if not controller.snapshot()["live"]:
@@ -199,6 +232,8 @@ def make_app(controller, terminals, verifier=authenticate):
     app.router.add_get("/status", status)
     app.router.add_post("/command", command)
     app.router.add_get("/frozen/{id}.jpg", frozen)
+    app.router.add_get("/dataset/captures/{token}.jpg", dataset_capture_preview)
+    app.router.add_get("/dataset/exports/{id}.zip", dataset_export_download)
     app.router.add_get("/stream.mjpg", stream)
     app.router.add_post("/terminals", new_terminal)
     app.router.add_delete("/terminals/{id}", close_terminal)
