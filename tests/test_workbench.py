@@ -1782,6 +1782,42 @@ def test_keine_nachfuehrungskontur_ohne_tracker_korrektur(tmp_path, monkeypatch)
     monkeypatch.setattr(cv2, "polylines", capture)
     controller.publish(_szene(), _metadaten())
 
+    # Positivkontrolle: der Zweig `if config["confirmed"]:` wurde tatsaechlich
+    # erreicht (sonst koennte die Abwesenheit der orangen Kontur trivial
+    # daraus folgen, dass ueberhaupt nichts gezeichnet wurde).
+    green_calls = [points for colour, points in calls if colour == (130, 220, 130)]
+    assert len(green_calls) == 1
+    orange_calls = [points for colour, points in calls if colour == (60, 140, 230)]
+    assert orange_calls == []
+
+
+def test_keine_nachfuehrungskontur_bei_abgelehnter_korrektur(tmp_path, monkeypatch):
+    """Ein lebender Tracker, dessen Korrektur die Grenzen verletzt
+    (`track.quad is None`), darf nicht so gezeichnet werden, als waere sie
+    angewandt worden - genau die stille Vermischung von Ablehnung und
+    Korrektur, die Task 7/8 vermeiden sollen. Anders als
+    test_keine_nachfuehrungskontur_ohne_tracker_korrektur: hier LAEUFT der
+    Tracker (`controller.tracker is not None`), seine Korrektur wird aber
+    verworfen (wie in
+    test_zu_grosser_versatz_fuehrt_zur_ablehnung_nicht_zur_korrektur)."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    assert controller.tracker is not None
+
+    calls = []
+    original_polylines = cv2.polylines
+
+    def capture(overlay, points, is_closed, colour, thickness):
+        calls.append((colour, [p.copy() for p in points]))
+        return original_polylines(overlay, points, is_closed, colour, thickness)
+
+    monkeypatch.setattr(cv2, "polylines", capture)
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=200), _metadaten())
+    assert controller.reading["track"]["corrected"] is False
+
+    green_calls = [points for colour, points in calls if colour == (130, 220, 130)]
+    assert len(green_calls) == 1
     orange_calls = [points for colour, points in calls if colour == (60, 140, 230)]
     assert orange_calls == []
 
@@ -1804,6 +1840,26 @@ def test_nachfuehrzeile_erscheint_im_bedienbild(tmp_path):
     assert "%" in row["display"]
 
 
+def test_nachfuehrzeile_zeigt_ablehnungsgrund_bei_verletzter_grenze(tmp_path):
+    """Verletzt die Nachfuehrung ihre Grenze (`track.quad is None`, wie in
+    test_zu_grosser_versatz_fuehrt_zur_ablehnung_nicht_zur_korrektur), zeigt
+    die Zeile "AUS DEM RAHMEN: <Grund>" statt eines Versatzes - der Grund
+    kommt aus `controller.reading["track"]["reason"]`, nicht hartkodiert,
+    damit der Test die tatsaechliche `REASONS`-Uebersetzung prueft."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=200), _metadaten())
+    assert controller.reading["track"]["corrected"] is False
+    reason = controller.reading["track"]["reason"]
+
+    table = {row["key"]: row for row in fields.rows(controller.snapshot())}
+    assert "reading.track" in table
+    row = table["reading.track"]
+    assert row["display"].startswith("AUS DEM RAHMEN: ")
+    assert fields.REASONS.get(reason, reason) in row["display"]
+
+
 def test_nachfuehrzeile_fehlt_ohne_nachfuehrung(tmp_path):
     """Ohne laufenden Tracker gibt es nichts nachzufuehren, also auch keine
     Zeile dafuer (Tracker verworfen wie in
@@ -1815,5 +1871,13 @@ def test_nachfuehrzeile_fehlt_ohne_nachfuehrung(tmp_path):
 
     controller.last_ocr_at = 0.0
     controller.publish(_szene(), _metadaten())
+    # Positivkontrolle: der Normalfall von `_reading_rows` wurde tatsaechlich
+    # erreicht (kein Fehler, kein aktiver Tracker) - sonst koennte die
+    # Abwesenheit der Zeile trivial aus einem der drei fruehen Sonderfaelle
+    # (nicht bestaetigt/kein Livebild/Leserfehler) folgen statt aus der neuen
+    # Bedingung `if reading.get("track")`.
+    assert controller.reading is not None
+    assert controller.reading.get("error") is None
+    assert controller.reading["track"] is None
     keys = [row["key"] for row in fields.rows(controller.snapshot())]
     assert "reading.track" not in keys

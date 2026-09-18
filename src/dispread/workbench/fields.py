@@ -244,7 +244,7 @@ def _reading_rows(state):
     flags = reading.get("status_flags") or []
     digits = "".join(reading.get("digits") or []) or "—"
     calibrated = "ja" if reading.get("confidence_calibrated") else "nein"
-    rows = [
+    result = [
         _row(
             "reading.value",
             "ablesung",
@@ -284,7 +284,7 @@ def _reading_rows(state):
             value = f"folgt, {track['shift'] * 100:.1f} % versetzt, {track['rotation_deg']:+.1f}°"
         else:
             value = "AUS DEM RAHMEN: " + REASONS.get(track["reason"], track["reason"] or "unbekannt")
-        rows.append(
+        result.append(
             _row(
                 "reading.track",
                 "nachfuehrung",
@@ -295,7 +295,7 @@ def _reading_rows(state):
                 f"abgelehnt statt korrigiert. Guete {track['score']:.2f}",
             )
         )
-    return rows
+    return result
 
 
 def rows(state):

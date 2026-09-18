@@ -36,8 +36,12 @@ Bestätigung, ist damit ausgeschlossen. Neue/erweiterte Tests:
 (`test_gruene_kontur_bleibt_die_bestaetigte_geometrie_bei_nachfuehrung` um die
 Orange-Kontur-Prüfung erweitert,
 `test_keine_nachfuehrungskontur_ohne_tracker_korrektur`,
+`test_keine_nachfuehrungskontur_bei_abgelehnter_korrektur` (lebender Tracker,
+aber verworfene Korrektur — die eigentliche Invariante),
 `test_nachfuehrzeile_erscheint_im_bedienbild`,
-`test_nachfuehrzeile_fehlt_ohne_nachfuehrung`) — über echte
+`test_nachfuehrzeile_zeigt_ablehnungsgrund_bei_verletzter_grenze`,
+`test_nachfuehrzeile_fehlt_ohne_nachfuehrung`, je mit Positivkontrolle, dass
+der jeweils erwartete Zweig auch wirklich erreicht wurde) — über echte
 `Controller`-Momentaufnahmen (`fields.rows(controller.snapshot())`), nicht
 über handgebaute Zustände.
 
