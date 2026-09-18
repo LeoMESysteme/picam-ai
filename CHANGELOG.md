@@ -3,6 +3,44 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Task 8: Nachführgüte sichtbar machen)
+
+**Problem:** Task 7 verdrahtete den `QuadTracker`, hielt aber bewusst die
+grüne "bestätigt"-Kontur an `roi_quad(image, config)` fest statt an
+`track.quad` — richtig, aber damit blieb eine tatsächlich angewandte
+Nachführungskorrektur für den Bediener unsichtbar: weder im Livebild noch in
+der Einstelltabelle war zu erkennen, dass und wie weit nachgeführt wurde. Der
+Planentwurf für diesen Task verlangte die dritte Farbe fälschlich in
+`workbench.js`s `draw()` — die läuft aber nur während einer eingefrorenen
+Editier-Sitzung auf einem statischen Bild, nie während des laufenden
+Betriebs; das serverseitig in die MJPEG-Bytes eingebrannte Overlay in
+`Controller.publish()` ist der einzige Ort, an dem der Bediener das
+Livebild überhaupt sieht.
+
+**Änderung:** `Controller.publish()` zeichnet direkt nach der grünen
+bestätigten Kontur — wenn `track is not None and track.quad is not None`,
+also wenn die Nachführung tatsächlich korrigiert hat — eine zweite Kontur in
+Orange/Rot `(60, 140, 230)` (BGR) aus `track.quad`; von Grün `(130, 220,
+130)` (bestätigt) und Gelb/Cyan `(0, 220, 220)` (Vorschlagsboxen/
+Vergleichssuche) klar unterscheidbar. Ohne Tracker oder bei verworfener
+Korrektur wird nichts zusätzlich gezeichnet. `fields._reading_rows()` fügt im
+Normalfall (bestätigt, Livebild, lesbares Ergebnis) eine Zeile
+`reading.track` an, sofern `reading["track"]` gesetzt ist: bei `corrected`
+den Versatz in Prozent und die Drehung in Grad, sonst
+"AUS DEM RAHMEN: <Grund>" über die neue `REASONS`-Übersetzungstabelle.
+
+**Konsequenz:** Der Bediener sieht im Livebild sofort, ob und wie weit
+nachgeführt wurde — eine stille Korrektur, die aussieht wie die eigene
+Bestätigung, ist damit ausgeschlossen. Neue/erweiterte Tests:
+`tests/test_workbench.py`
+(`test_gruene_kontur_bleibt_die_bestaetigte_geometrie_bei_nachfuehrung` um die
+Orange-Kontur-Prüfung erweitert,
+`test_keine_nachfuehrungskontur_ohne_tracker_korrektur`,
+`test_nachfuehrzeile_erscheint_im_bedienbild`,
+`test_nachfuehrzeile_fehlt_ohne_nachfuehrung`) — über echte
+`Controller`-Momentaufnahmen (`fields.rows(controller.snapshot())`), nicht
+über handgebaute Zustände.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 7: Nachführung im Lesepfad des Workbench-Controllers)
 
 **Problem:** Der `QuadTracker` aus Task 6 existierte, war aber an keiner

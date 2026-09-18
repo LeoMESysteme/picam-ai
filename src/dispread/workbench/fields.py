@@ -31,6 +31,14 @@ CONTROL_HINTS = {
 LAYOUT_DIGITS = tuple(range(3, 9))
 LAYOUT_DECIMALS = tuple(range(5))
 LAYOUT_UNITS = (None, "N", "kN", "V", "mV", "A", "mA", "mV/V")
+# Human-readable Gruende fuer eine abgelehnte Nachfuehrung (track.py:
+# TrackResult.reason); siehe _reading_rows.
+REASONS = {
+    "low_score": "Bild passt nicht mehr zur Referenz",
+    "shift_out_of_bounds": "zu weit verschoben",
+    "rotation_out_of_bounds": "zu stark gedreht",
+    "ecc_diverged": "Anzeige nicht wiedergefunden",
+}
 
 
 def _number(value):
@@ -236,7 +244,7 @@ def _reading_rows(state):
     flags = reading.get("status_flags") or []
     digits = "".join(reading.get("digits") or []) or "—"
     calibrated = "ja" if reading.get("confidence_calibrated") else "nein"
-    return [
+    rows = [
         _row(
             "reading.value",
             "ablesung",
@@ -270,6 +278,24 @@ def _reading_rows(state):
             ),
         ),
     ]
+    track = reading.get("track")
+    if track:
+        if track["corrected"]:
+            value = f"folgt, {track['shift'] * 100:.1f} % versetzt, {track['rotation_deg']:+.1f}°"
+        else:
+            value = "AUS DEM RAHMEN: " + REASONS.get(track["reason"], track["reason"] or "unbekannt")
+        rows.append(
+            _row(
+                "reading.track",
+                "nachfuehrung",
+                "text",
+                value,
+                value,
+                "verfolgt dieselbe bestaetigte Anzeige; ausserhalb der Grenze wird "
+                f"abgelehnt statt korrigiert. Guete {track['score']:.2f}",
+            )
+        )
+    return rows
 
 
 def rows(state):

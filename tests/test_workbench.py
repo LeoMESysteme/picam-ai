@@ -1745,3 +1745,75 @@ def test_gruene_kontur_bleibt_die_bestaetigte_geometrie_bei_nachfuehrung(tmp_pat
     # Gleichheit wuerde die Unterscheidung nicht wirklich pruefen).
     assert controller.reading["track"]["corrected"] is True
     assert controller.reading["track"]["shift"] > 0.0
+
+    # Task 8: die tatsaechlich angewandte Korrektur bekommt eine eigene,
+    # von gruen (bestaetigt) und gelb/cyan (Vorschlagsboxen) unterscheidbare
+    # Farbe - sonst saehe die stille Korrektur wie die menschliche
+    # Bestaetigung aus.
+    orange_calls = [points for colour, points in calls if colour == (60, 140, 230)]
+    assert len(orange_calls) == 1, "genau eine Nachfuehrungskontur bei angewandter Korrektur erwartet"
+    tracked_expected = np.rint(np.array(controller.track_quad)).astype(np.int32)
+    np.testing.assert_array_equal(orange_calls[0][0], tracked_expected)
+    assert not np.array_equal(orange_calls[0][0], green_calls[0][0]), (
+        "nachgefuehrte und bestaetigte Kontur muessen bei tatsaechlicher Korrektur "
+        "unterschiedliche Koordinaten zeigen"
+    )
+
+
+def test_keine_nachfuehrungskontur_ohne_tracker_korrektur(tmp_path, monkeypatch):
+    """Ohne laufenden Tracker darf die dritte Farbe nicht erscheinen - es gibt
+    nichts nachzufuehren. Wie test_tracker_wird_bei_konfigurationsaenderung_verworfen:
+    ein `layout.set` (hier mit unveraendertem Wert) verwirft den Tracker ueber
+    `_change()`, ohne die Bestaetigung selbst aufzuheben."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    assert controller.tracker is not None
+    controller.command("layout.set", {"key": "unit", "value": _TRACK_LAYOUT.unit})
+    assert controller.config["confirmed"] is True
+    assert controller.tracker is None
+
+    calls = []
+    original_polylines = cv2.polylines
+
+    def capture(overlay, points, is_closed, colour, thickness):
+        calls.append((colour, [p.copy() for p in points]))
+        return original_polylines(overlay, points, is_closed, colour, thickness)
+
+    monkeypatch.setattr(cv2, "polylines", capture)
+    controller.publish(_szene(), _metadaten())
+
+    orange_calls = [points for colour, points in calls if colour == (60, 140, 230)]
+    assert orange_calls == []
+
+
+def test_nachfuehrzeile_erscheint_im_bedienbild(tmp_path):
+    """fields.py, Task 8: eine tatsaechlich laufende Nachfuehrung bekommt
+    eine eigene Zeile im Bedienbild - ueber eine echte Controller-Momentaufnahme,
+    nicht ueber einen handgebauten Zustand (siehe fields.rows(c.snapshot())
+    an jeder anderen Stelle dieser Datei)."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(shift_x=6), _metadaten())
+    assert controller.reading["track"]["corrected"] is True
+
+    table = {row["key"]: row for row in fields.rows(controller.snapshot())}
+    assert "reading.track" in table
+    row = table["reading.track"]
+    assert "folgt" in row["display"]
+    assert "%" in row["display"]
+
+
+def test_nachfuehrzeile_fehlt_ohne_nachfuehrung(tmp_path):
+    """Ohne laufenden Tracker gibt es nichts nachzufuehren, also auch keine
+    Zeile dafuer (Tracker verworfen wie in
+    test_tracker_wird_bei_konfigurationsaenderung_verworfen)."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.publish(_szene(), _metadaten())
+    controller.command("layout.set", {"key": "unit", "value": _TRACK_LAYOUT.unit})
+    assert controller.tracker is None
+
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(), _metadaten())
+    keys = [row["key"] for row in fields.rows(controller.snapshot())]
+    assert "reading.track" not in keys

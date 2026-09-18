@@ -963,6 +963,15 @@ class Controller:
                 if track.quad is not None:
                     quad = track.quad
             cv2.polylines(overlay, [np.rint(confirmed_quad).astype(np.int32)], True, (130, 220, 130), 2)
+            if track is not None and track.quad is not None:
+                # Orange/rot (130,220,130 gruen und (0,220,220) gelb sind
+                # bereits belegt) - eine eigene Farbe fuer die tatsaechlich
+                # angewandte Nachfuehrungskorrektur (Task 8). Der Bediener
+                # muss sehen, dass und wie weit korrigiert wurde; ohne
+                # eigene Farbe saehe eine stille Korrektur wie die
+                # bestaetigte Geometrie aus.
+                tracked_points = np.rint(np.array(track.quad)).astype(np.int32)
+                cv2.polylines(overlay, [tracked_points], True, (60, 140, 230), 2)
             if should_read:
                 # Gate-Zustand ist geteilter Controllerzustand; nur dieser
                 # kurze Teil bleibt gesperrt. Entzerrung/Segmentanalyse sind
