@@ -3,6 +3,40 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
+
+**Problem:** Aufgaben 1-3 lieferten Speicherung, Kamerabindung und HTTP-Endpunkte,
+aber keine Bedienoberfläche - der Sammelmodus war nur über rohe `/command`-Aufrufe
+erreichbar.
+
+**Änderung:** Neues, eigenständiges `static/dataset.js` (eigener Namespace
+`DatasetCollection`, eigene `csrf`-Beschaffung, kein Zugriff auf
+`workbench.js`-internen Zustand) plus ein neuer Bereich in `index.html`
+("Datensatz sammeln"-Knopf im Header schaltet `#dataset` frei, `main.dataset-mode`
+blendet Kamera/Shell/Log dafür aus - beide Ansichten teilen sich nichts
+Zustandsbehaftetes). Ablauf: Gerät anlegen, Situation eröffnen, Rohbild
+einfrieren (`dataset.capture`), Zielbox per Ziehen auf einem Canvas über der
+Vorschau (`/dataset/captures/{token}.jpg`) markieren, Lesbarkeit/Wert/Bedingungen
+eintragen, `dataset.save`, danach Übersicht und Export. Die Zielbox-Umrechnung
+von sichtbaren CSS-Pixeln (object-fit:contain, inklusive Letterboxing) in
+Originalbildpixel ist eine reine, exportierte Funktion (`toOriginalBox`) -
+bewusst die einzige aus dem Modul sichtbare Funktion, weil eine falsche
+Umrechnung sonst eine falsche Zielbox in einer gespeicherten Probe erzeugen
+würde. Sie ist nachweislich unabhängig von `window.devicePixelRatio`, weil
+ausschließlich mit `getBoundingClientRect()`-Größen (CSS-Pixel) gerechnet wird.
+
+**Konsequenz:** Neue Tests `tests/dataset_client.test.mjs` (node, reine
+Geometrie: gleiches Seitenverhältnis, horizontales und vertikales
+Letterboxing, DPR-Unabhängigkeit, Klemmung an den sichtbaren Bildrand) und
+`tests/test_dataset_client.py` als pytest-Anbindung plus `node --check`.
+`271 passed, 2 skipped` gesamt, `ruff check` sauber, beide JS-Dateien
+syntaktisch geprüft. **Offen:** ein echter interaktiver Browserdurchlauf
+(Geräteanlage → Aufnahme → Speichern → Neustart → Export) ist in dieser
+Umgebung nicht möglich - der headless Chromium dieser Umgebung lädt laut
+[OQ-21](docs/open-questions.md) auch einfache lokale HTTP-Seiten nicht
+zuverlässig; dieser Nachweis bleibt eine reale Browserabnahme (Aufgabe 7).
+
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
 
 **Problem:** Der Sammelmodus konnte Aufnahmen und Exporte nur über den
