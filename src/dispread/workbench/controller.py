@@ -516,6 +516,16 @@ class Controller:
             # hundert Leseraufrufe und darf waehrenddessen keine Bedieneingabe
             # blockieren (OQ-24).
             return self._autofit(args)
+        if op == "dataset.save":
+            # Wie ocr.suggest/layout.autofit VOR dem Lock: Bildkodierung,
+            # Plattenschreiben und Hashbildung sind teuer und duerfen den
+            # Kamerapfad (publish(), status, stream) nicht blockieren
+            # (Datensatz-Sammelmodus, Aufgabe 3/5 - eigenes DatasetStore-Lock
+            # statt Controller.lock waehrend der eigentlichen I/O).
+            return self._dataset_save(args)
+        if op == "dataset.export":
+            result = self.dataset_store.export()
+            return {"export_id": result["export_id"], "coverage": result["coverage"]}
         with self.lock:
             if op == "status":
                 return self.snapshot()
@@ -778,8 +788,6 @@ class Controller:
                 return self.dataset_store.begin_group(args["device_id"], args["change_note"])
             elif op == "dataset.capture":
                 return self._dataset_capture(args)
-            elif op == "dataset.save":
-                return self._dataset_save(args)
             elif op == "dataset.discard":
                 self.dataset_captures.discard(args["token"])
                 return {"discarded": True}
@@ -787,9 +795,6 @@ class Controller:
                 return self.dataset_store.select_sample(args["sample_id"], args["revision"])
             elif op == "dataset.summary":
                 return self.dataset_store.summary()
-            elif op == "dataset.export":
-                result = self.dataset_store.export()
-                return {"export_id": result["export_id"], "coverage": result["coverage"]}
             else:
                 raise ValueError(f"Unbekannter Befehl: {op}")
             return self.snapshot()
@@ -916,21 +921,27 @@ class Controller:
         "Aufnahme unbekannt" (siehe dataset_capture.CaptureRegistry).
         """
         token = args["token"]
-        entry = self.dataset_captures.get(token)
-        capture = {
-            "image": entry["image"],
-            "capture_token": token,
-            "device_id": entry["device_id"],
-            "group_id": entry["group_id"],
-            "source_id": entry["source_id"],
-            "frame_sequence": entry["frame_sequence"],
-            "source_revision": entry["source_revision"],
-            "capture_timestamp": entry["capture_timestamp"],
-            "stored_at_utc": entry["stored_at_utc"],
-            "synthetic": entry["synthetic"],
-            "source": entry["source"],
-            "license": entry["license"],
-        }
+        # Nur die Entnahme der eingefrorenen Metadaten braucht das
+        # Controller-Lock (CaptureRegistry ist nicht selbst threadsicher) -
+        # die eigentliche Bild-/Metadaten-Schreibarbeit unten laeuft bewusst
+        # ausserhalb, damit sie Status-/Stream-Anfragen nicht blockiert
+        # (Konzept, Aufgabe 5).
+        with self.lock:
+            entry = self.dataset_captures.get(token)
+            capture = {
+                "image": entry["image"],
+                "capture_token": token,
+                "device_id": entry["device_id"],
+                "group_id": entry["group_id"],
+                "source_id": entry["source_id"],
+                "frame_sequence": entry["frame_sequence"],
+                "source_revision": entry["source_revision"],
+                "capture_timestamp": entry["capture_timestamp"],
+                "stored_at_utc": entry["stored_at_utc"],
+                "synthetic": entry["synthetic"],
+                "source": entry["source"],
+                "license": entry["license"],
+            }
         annotation = {
             "bbox": args["bbox"],
             "target_label": args.get("target_label"),
@@ -940,7 +951,8 @@ class Controller:
             "independence_confirmation": args.get("independence_confirmation", True),
         }
         sample = self.dataset_store.save_sample(capture, annotation)
-        self.dataset_captures.mark_saved(token)
+        with self.lock:
+            self.dataset_captures.mark_saved(token)
         self.log("info", f"Datensatz-Probe {sample['id']} gespeichert (Aufnahme {token})")
         return sample
 

@@ -3,6 +3,28 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff: Save/Export blockieren den Kamerapfad nicht mehr)
+
+**Problem:** `dataset.save` und `dataset.export` liefen wie alle anderen
+`command()`-Operationen unter `Controller.lock` - Bildkodierung, Plattenschreiben,
+Hashbildung und ZIP-Erzeugung sind aber genau die teure I/O, die Abschnitt 5
+der Spezifikation ausdrücklich ausserhalb dieses Locks verlangt. Ein
+laufender Save hätte damit `status`, `stream.mjpg` und `publish()` (den
+Kamera-Empfangspfad) blockiert.
+
+**Änderung:** `dataset.save` und `dataset.export` werden jetzt wie
+`ocr.suggest`/`layout.autofit` VOR dem `with self.lock:`-Block behandelt.
+`_dataset_save()` haelt das Controller-Lock nur noch fuer die kurze Entnahme/
+Markierung des Capture-Tokens, nicht fuer `DatasetStore.save_sample()` selbst.
+`DatasetStore` bekommt dafuer ein eigenes `threading.Lock()`
+(`create_device`/`update_device`/`begin_group`/`save_sample`/`select_sample`/
+`export` serialisieren sich selbst, unabhaengig vom Controller).
+
+**Konsequenz:** Ein neuer Test (`test_blocked_save_does_not_block_status_or_publish`)
+haelt einen simulierten langsamen Save in einem Thread offen und misst, dass
+`status` und `publish()` im Hauptthread währenddessen nicht blockieren.
+`265 passed, 2 skipped` gesamt, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 2: Rohbildaufnahme ohne Profilkalibrierung)
 
 **Problem:** Die bestehende Clipaufnahme (`clip.start`/`clip.stop`) verlangt

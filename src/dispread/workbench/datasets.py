@@ -25,6 +25,7 @@ import math
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 import zipfile
 from pathlib import Path
@@ -145,6 +146,9 @@ class DatasetStore:
     def __init__(self, root: Path):
         self.root = Path(root)
         self._devices_path = self.root / "devices.json"
+        # Eigenes Lock, unabhaengig von Controller.lock - serialisiert nur
+        # die eigenen Lese-Aendere-Schreibe-Abschnitte dieser Instanz.
+        self._lock = threading.Lock()
 
     # -- interne Persistenz ------------------------------------------------
 
@@ -186,18 +190,19 @@ class DatasetStore:
         fields = _validate_device_fields(data, partial=False)
         if data.get("identity_confirmed") is not True:
             raise DatasetError("Physische Geraeteidentitaet muss bestaetigt werden")
-        registry = self._load_devices()
-        device_id = uuid.uuid4().hex
-        record = {
-            "id": device_id,
-            "revision": 0,
-            "identity_confirmed": True,
-            "groups": {},
-            **fields,
-        }
-        registry["devices"][device_id] = record
-        self._save_devices(registry)
-        return copy.deepcopy(record)
+        with self._lock:
+            registry = self._load_devices()
+            device_id = uuid.uuid4().hex
+            record = {
+                "id": device_id,
+                "revision": 0,
+                "identity_confirmed": True,
+                "groups": {},
+                **fields,
+            }
+            registry["devices"][device_id] = record
+            self._save_devices(registry)
+            return copy.deepcopy(record)
 
     def get_device(self, device_id: str) -> dict:
         registry = self._load_devices()
@@ -207,33 +212,35 @@ class DatasetStore:
         return copy.deepcopy(device)
 
     def update_device(self, device_id: str, revision: int, changes: dict) -> dict:
-        registry = self._load_devices()
-        device = registry["devices"].get(device_id)
-        if device is None:
-            raise DatasetError(f"Unbekanntes Geraet: {device_id}")
-        if device["revision"] != revision:
-            raise RevisionConflict(
-                f"Geraet {device_id}: erwartete Revision {revision}, aktuell {device['revision']}"
-            )
-        if "split" in changes and changes["split"] != device["split"] and self._device_has_samples(device_id):
-            raise DatasetError("Gerätesplit ist nach der ersten Aufnahme gesperrt")
-        fields = _validate_device_fields({**device, **changes}, partial=False)
-        device = {**device, **fields, "revision": device["revision"] + 1}
-        registry["devices"][device_id] = device
-        self._save_devices(registry)
-        return copy.deepcopy(device)
+        with self._lock:
+            registry = self._load_devices()
+            device = registry["devices"].get(device_id)
+            if device is None:
+                raise DatasetError(f"Unbekanntes Geraet: {device_id}")
+            if device["revision"] != revision:
+                raise RevisionConflict(
+                    f"Geraet {device_id}: erwartete Revision {revision}, aktuell {device['revision']}"
+                )
+            if "split" in changes and changes["split"] != device["split"] and self._device_has_samples(device_id):
+                raise DatasetError("Gerätesplit ist nach der ersten Aufnahme gesperrt")
+            fields = _validate_device_fields({**device, **changes}, partial=False)
+            device = {**device, **fields, "revision": device["revision"] + 1}
+            registry["devices"][device_id] = device
+            self._save_devices(registry)
+            return copy.deepcopy(device)
 
     def begin_group(self, device_id: str, change_note: str) -> dict:
-        registry = self._load_devices()
-        device = registry["devices"].get(device_id)
-        if device is None:
-            raise DatasetError(f"Unbekanntes Geraet: {device_id}")
         note = _short_text(change_note, "Situationsbeschreibung", _NOTE_MAX, required=True)
-        group_id = uuid.uuid4().hex
-        device["groups"][group_id] = {"device_id": device_id, "change_note": note}
-        registry["devices"][device_id] = device
-        self._save_devices(registry)
-        return {"group_id": group_id, "device_id": device_id, "change_note": note}
+        with self._lock:
+            registry = self._load_devices()
+            device = registry["devices"].get(device_id)
+            if device is None:
+                raise DatasetError(f"Unbekanntes Geraet: {device_id}")
+            group_id = uuid.uuid4().hex
+            device["groups"][group_id] = {"device_id": device_id, "change_note": note}
+            registry["devices"][device_id] = device
+            self._save_devices(registry)
+            return {"group_id": group_id, "device_id": device_id, "change_note": note}
 
     def _resolve_group(self, registry: dict, device_id: str, group_id: str) -> dict:
         device = registry["devices"].get(device_id)
@@ -271,6 +278,10 @@ class DatasetStore:
         return None
 
     def save_sample(self, capture: dict, annotation: dict) -> dict:
+        with self._lock:
+            return self._save_sample_locked(capture, annotation)
+
+    def _save_sample_locked(self, capture: dict, annotation: dict) -> dict:
         """Ein eingefrorenes Rohbild plus Zielbox/Label sicher, atomar speichern.
 
         Idempotent fuer denselben ``capture_token``: ein wiederholter Aufruf
@@ -426,6 +437,10 @@ class DatasetStore:
         return out
 
     def select_sample(self, sample_id: str, revision: int) -> dict:
+        with self._lock:
+            return self._select_sample_locked(sample_id, revision)
+
+    def _select_sample_locked(self, sample_id: str, revision: int) -> dict:
         """Diese Probe als Vertreter ihrer Unabhaengigkeitsgruppe markieren."""
         final_dir = self._sample_dir(sample_id)
         sample_json = final_dir / "sample.json"
@@ -481,6 +496,10 @@ class DatasetStore:
     # -- Export ------------------------------------------------------------
 
     def export(self) -> dict:
+        with self._lock:
+            return self._export_locked()
+
+    def _export_locked(self) -> dict:
         registry = self._load_devices()
         samples = self._load_all_samples()
 

@@ -7,12 +7,15 @@ des bereits vorhandenen ``self.raw``.
 
 from __future__ import annotations
 
+import threading
+import time
+
 import numpy as np
 import pytest
 
 from dispread.workbench.controller import Controller
 from dispread.workbench.dataset_capture import CaptureError, CaptureRegistry
-from dispread.workbench.datasets import DatasetError, RevisionConflict
+from dispread.workbench.datasets import DatasetError, DatasetStore, RevisionConflict
 
 
 def _image(fill=100, width=200, height=100):
@@ -177,6 +180,42 @@ def test_saved_capture_no_longer_counts_against_open_limit(tmp_path):
     c.command("dataset.save", {"token": captured["token"], **_annotation()})
     c.command("dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]})
     c.command("dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]})
+
+
+# -- Sperrverhalten (Aufgabe 5: kein Blockieren des Kamerapfads) ----------
+
+
+def test_blocked_save_does_not_block_status_or_publish(tmp_path, monkeypatch):
+    c = Controller(tmp_path)
+    c.publish(_image(), {"timebase": "synthetic"})
+    device, group = _make_device_and_group(c)
+    captured = c.command("dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]})
+
+    started = threading.Event()
+    release = threading.Event()
+    real_save_sample = DatasetStore.save_sample
+
+    def slow_save_sample(self, capture, annotation):
+        started.set()
+        release.wait(timeout=5)
+        return real_save_sample(self, capture, annotation)
+
+    monkeypatch.setattr(DatasetStore, "save_sample", slow_save_sample)
+    thread = threading.Thread(
+        target=lambda: c.command("dataset.save", {"token": captured["token"], **_annotation()})
+    )
+    thread.start()
+    assert started.wait(timeout=5)
+
+    start = time.monotonic()
+    c.command("status")
+    c.publish(_image(fill=5), {"timebase": "synthetic"})
+    elapsed = time.monotonic() - start
+    assert elapsed < 1.0
+
+    release.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
 
 
 def test_discard_removes_the_draft(tmp_path):
