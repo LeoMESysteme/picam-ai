@@ -3,6 +3,38 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 1: Geräte, Samples, sichere Persistenz)
+
+**Problem:** Die bestehende Clipaufnahme verlangt bestätigte Geometrie,
+Gerätekennung und einen konstanten sichtbaren Wert je Clip - sie taugt nicht
+als Sammelassistent für unkalibrierte reale Prüfbilder. Es fehlte ein eigener,
+von Produktionsprofil/OCR unabhängiger Speicherpfad für Geräte, Rohbilder und
+getippte Labels.
+
+**Änderung:** Neues Modul `src/dispread/workbench/datasets.py` mit
+`DatasetStore` (eigene Instanz, eigener Speicherbereich
+`Controller.root / "datasets"`, keine Kamera-/Profilabhängigkeit):
+Gerätestammdaten mit UUID, Revisionszähler und Split-Sperre nach der ersten
+Aufnahme (`create_device`, `update_device`); Unabhängigkeitsgruppen
+(`begin_group`); atomare, idempotente Sample-Speicherung über ein temporäres
+Verzeichnis plus `rename` (`save_sample`) - ein Schreibfehler bei Bild oder
+Metadaten hinterlässt keine fertige Probe, ein Retry mit demselben
+`capture_token` erzeugt genau eine; ein zweiter Token mit anderem Label auf
+denselben, bereits gespeicherten Token ist ein Revisionskonflikt statt eines
+stillen Überschreibens. `normalize_label()` erhält Vorzeichen, führende
+Nullen und Dezimalzeichen exakt, wandelt nur Komma zu Punkt und lehnt alles
+andere ab. `validate_bbox()` lehnt eine Box außerhalb des Bildes ab, statt sie
+an den Rand zu klemmen. Export erzeugt ein unveränderliches, formatkompatibles
+Manifest (`schema_version: 1`) samt Abdeckungs- und Ausschlussliste; unsichere/
+Entwurfs-Proben und unausgewählte Wiederholungen einer Gruppe bleiben draußen.
+
+**Konsequenz:** Reale, unkalibrierte Prüfbilder lassen sich jetzt sicher
+sammeln, ohne Produktionsfreigaberegeln zu berühren oder zu lockern.
+`ValueRecord`, `ReleaseGate` und `TelegramFormatter` sind unverändert. Noch
+offen: Anbindung an die Kamera/Workbench-Bedienung (Aufgabe 2 ff.) und die
+Prüfung gegen den echten Experiment-Loader (Aufgabe 6). `44 neue Tests`,
+`254 passed, 2 skipped` gesamt, `ruff check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Abschlussreview, Nachschliff R6: Verlustarten im Clipmanifest trennen)
 
 **Problem:** Mit dem R6-Fix zählen zwei verschiedene Verluste auf dasselbe
