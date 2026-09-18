@@ -3,6 +3,33 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (isolierter Automatik-Machbarkeitsvergleich)
+
+**Problem:** Der Produktablauf „automatisch finden → wählen → Segmentraster
+passen → kontinuierlich lesen“ war mit dem referenzwertgestützten Autofit
+nicht belegt. Der Ausgangsbenchmark konnte Dezimalfehler übersehen und keine
+verlässliche Geräteunabhängigkeit garantieren.
+
+**Änderung:** Offline-Paket `dispread.experimental` mit separatem Scorer,
+geometrischem DisplayLocator, spezialisierten Tesseract-Adaptern und direktem
+PP-OCRv5-Mobile-ONNX-Adapter. Originalpixelentzerrung, strikte Vorzeichen-/
+Dezimalvergleiche, konservative Geometrieunsicherheit, Geräte-/Hash-/Split-
+Prüfungen, Entwicklungswahl vor eingefrorener Testauswertung, Pi-Laufzeiten
+und Prozess-RSS. Gepinnte Downloadhilfe, Modell-/Lizenzmanifest, elf reale
+Originalbilder mit Herkunft/Labels, maschinenlesbare Ergebnisse und
+Erfolgs-/Fehleroverlays. Keine Änderung des Produktionsdecoders, des alten
+Benchmarkscorers, der Workbench oder der seriellen Freigabe.
+
+**Konsequenz:** Kein Kandidat qualifiziert: nur vier unabhängige Testbilder,
+keine akzeptierte korrekte Testlesung und keine belegte Segmenttopologie.
+Deshalb vereinbarungsgemäß Lückenbericht statt UI-Demonstration; Task 11
+bleibt gesperrt. Empfehlung: gezielt synthetisches Training separat
+untersuchen, reale unabhängige Prüfung erweitern. Kein Training/Cloud-Upload.
+236 Tests bestanden, Ruff/JS-Prüfung sauber, eingefrorener Wiederholungslauf
+mit 94 identischen Auswertungen (keine zusätzlichen unabhängigen Samples).
+Details: `docs/automatic-seven-segment-report.md`, `VALIDATION.md`,
+`lab_journal.md`, `dependencies.md`; neue offene Punkte OQ-33/OQ-34.
+
 ## 0.1.0.dev0 — 2026-09-18 (Task 12: Doku-Abschluss der OCR-Selbstkalibrierung)
 
 **Problem:** PLAN_2026-09-11-ocr-selbstkalibrierung.md's Tasks 1–11 sind

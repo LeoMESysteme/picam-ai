@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "config": {
+    "schema_version": 1,
+    "models_dir": "models",
+    "tesseract_variants": [
+      "ssd_int",
+      "ssd",
+      "7seg"
+    ],
+    "additional_candidates": [
+      "ppocr"
+    ],
+    "match_iou": 0.5,
+    "read_modes": [
+      "full_frame",
+      "known_crop"
+    ],
+    "preprocessing_policy": "adapter defaults; all source hashes frozen before heldout",
+    "screening": {
+      "correct_fraction": 0.9,
+      "wrong": 0,
+      "initial_detection_ms": 2000,
+      "selected_processing_p95_ms": 200
+    },
+    "serial_output": false,
+    "provisional": true
+  },
+  "manifest_sha256": "86acc8386ca001e1d587afdeb70542ac7cc014b7c647ebc9edde09444962234a",
+  "source_sha256": {
+    "dispread/__init__.py": "1fdbf0bacd119ea983a81c4067f2b5cf108377cb614a8380e968c921af7bbf70",
+    "dispread/benchmark.py": "95e87625831737cd9b4ea7b105d8530afb93b59af6270581abc812f1768459a1",
+    "dispread/detect/__init__.py": "89bc10e2600ec4d41dee4e44d420749e85eff9dd0bc7ff3aff011d939c68c10f",
+    "dispread/detect/manual_roi.py": "2505bb8ecfaf1dd4b20e1866da30d218967c205b7f7c7d150c139e4840c955b2",
+    "dispread/experimental/__init__.py": "f134df00253f1226d43adab4b62d36a0964da156e78fb99d65a0fdf53d0bd333",
+    "dispread/experimental/auto_adapters.py": "3fa6668386b6594cab324c8cb0a5a708cad869f34faae7533b56bcbf771d8239",
+    "dispread/experimental/evaluation.py": "c2b81b59faa899c3ebcb8752f1aa8e9d105ef8cd0c2e40ea37fb31925c6757aa",
+    "dispread/experimental/ppocr_adapter.py": "703e5a02dcc58719afe1a9595871793d217a12b16a83c1123c3c1f30b1194db9",
+    "dispread/experimental/runner.py": "222ccef57a49ce04e1a433291cbf604470c95476d11021446bc21c684b536c64",
+    "dispread/frames/__init__.py": "bcffd8ee5178161469dcf36b3df01c49fb7191e29cb50e940016675a0f48e201",
+    "dispread/frames/replay_source.py": "7b1eec5dc1afc38df4425200ace236d0fc69b69641861c9982aa6e4b0297bce7",
+    "dispread/frames/synthetic_source.py": "c7e183f36f1e0e4f1c3409fcc214926c7b45935683ee6c366879fbe6f3fa0e4d",
+    "dispread/frames/types.py": "e3d85b01141bef31095d4f8a8669cae38225193b14c4f1a8078810ec4eaa0793",
+    "dispread/layout.py": "7ca18af1745d80b52096960f287b9577a104491a17ba544e75cc4f9be4c79346",
+    "dispread/ocr/__init__.py": "6eb9bd9922c98fd55b4ecf67e3f5536e83a1e07734403c5b8f7d6322e41e3ffc",
+    "dispread/ocr/autofit.py": "0773061f4c6e4fab2df30b9b9724046f46c7e3dc97364530702f446403cbe4b8",
+    "dispread/ocr/sevenseg.py": "98faf0fbb986192e059dea7a896e9f06bac6563506840c9b8bd1823dd41c9138",
+    "dispread/paths.py": "77c2cd9a9d3e4d92a0fec49d5eb9a9097de00761d047d75599c1e201d72577b2",
+    "dispread/pipeline.py": "c9f6938be5e669cbe6db3ed57149a2117e8955dbcb772ab8c89cd8dca3dace6a",
+    "dispread/records.py": "fe3963a584492cbe07c014c3ee0cfe1ab1b2312f848529b9f459850158e21f0a",
+    "dispread/rectify.py": "5bff4de444a0400e3afc5db5518d28d53b740f6ac0162cdb27aac0e85c379c7b",
+    "dispread/sink/__init__.py": "6bea8ef7a0368c3947b906695fe46a3675900b84877327a81f35bfaf7a720040",
+    "dispread/sink/jsonl.py": "bc6dc4109a8af6096b77059922006cdea64df06a3061a49ca237e11ad38cc5ca",
+    "dispread/sink/protocol/__init__.py": "b1bc46e41f208523fdd8e4717ea2b8ba9c155eeacbed3bf53583d1cccd9e98c8",
+    "dispread/sink/protocol/ascii_csv.py": "b9ce7946f515932a21ff60298681c64e85024b4c02aff1f27066ffd394acff94",
+    "dispread/sink/protocol/gsv_ascii.py": "ce8266644e45587999f9edded0b269e52f6a95e03f1b82939f0b586ffea5584b",
+    "dispread/sink/serial_out.py": "9b75068bc2c1ac9125447e8b83882c215234e8146acc81d22bfd828888c0a49b",
+    "dispread/track.py": "8aaf498b47eed8a7068722b13f9b5c71380cfd86fbd6d13767199afb24d25b93",
+    "dispread/validate.py": "c696701083bd24e315bf15c30303b6e0e9e30baff0cd47d110c00af0dbaa27ec",
+    "dispread/workbench/__init__.py": "7c11e107510aee42e0973f17ba9701a3adabcc5dbbf6d48c6e1dac47d8b4487b",
+    "dispread/workbench/auth.py": "a8d7d6fbd624431bf46d4f9d695480ad21199fa45f7254e414aa2d5d8c05c77f",
+    "dispread/workbench/cli.py": "baf9cce2626011b5b53b71e482fa86ad342f1ec46e216286b292755791100031",
+    "dispread/workbench/controller.py": "9fff4715d092dcc8cd746a4c7b83dd7d1d25a39ec5e5a28b00355d77023f3f1c",
+    "dispread/workbench/fields.py": "8cf0e97ae94dfb75d0f1b4861e9993724e4f87505f6d338315d89cbef5e50fbb",
+    "dispread/workbench/profiles.py": "ae586e6311ac85cbd1f4faee4d67bc860114cecf459616da3f65700ca52baf20",
+    "dispread/workbench/server.py": "c26dc381d254014be3d5c21d0bac70c5f8c0664e9a70b762b1d27b49c91fdc8e",
+    "dispread/workbench/shell.py": "a32ae62bc675c5975a4ace44767c21c9c577c5a585849faf0223979f252c3a98",
+    "dispread/workbench/terminals.py": "a129b68332561474afc99003c11462e51fd36f509e8a1183d77bc3f9b1c785bd",
+    "dispread/workbench/tui.py": "eccd17db28237099bd1e628d76b7f748da829df8309a3ac007264a67bf916ffc",
+    "dispread/workbench/vision.py": "50187a19af282f97e7bcd9c01714291eaa38154c0c9ad18ee511fd135049d816"
+  },
+  "model_sha256": {
+    "ssd_int.traineddata": "557759383e030694420ee9f6a88e824abae4acf17f7b94415ca07e1152339339",
+    "ssd.traineddata": "f0060f4d2acb107f7c48c418f60887eddb37656fbbc2c21677df06ecbdf44ca5",
+    "7seg.traineddata": "7e170293e5ac660295d7d3f53346453447bd9c9845f9f384cc1005c791487291",
+    "PP-OCRv5_mobile_det_onnx/inference.onnx": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+    "PP-OCRv5_mobile_det_onnx/inference.yml": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
+    "PP-OCRv5_mobile_det_onnx/README.md": "951c155673ac6c15feb85857c9024a62266e5956d15319ce578a8f508f399d66",
+    "PP-OCRv5_mobile_rec_onnx/inference.onnx": "da72dc72ca4dc220df0dfde68c1dedc31c58d3e76a25871122e5056227d50092",
+    "PP-OCRv5_mobile_rec_onnx/inference.yml": "5dfeb2777f6d0db8177d8128a8acfcf6e6276dc4ac73ea3bf0dc06d6a5e85d8e",
+    "PP-OCRv5_mobile_rec_onnx/README.md": "7331c129fd5024b6a0abd1f510cfdfb2d7714fdcdbb00df21a0cb8b48e6683ee"
+  },
+  "selected_tesseract": "7seg",
+  "runtime_versions": {
+    "numpy": "2.2.4",
+    "onnxruntime": "1.30.0",
+    "PyYAML": "6.0.2",
+    "flatbuffers": "25.12.19",
+    "protobuf": "6.33.2",
+    "pytest": "8.3.5",
+    "ruff": "0.16.6"
+  },
+  "selection_rule": "development_full_frame_correct_then_wrong_then_processing_p95",
+  "heldout_device_ids": [
+    "commons-adhishb-casio-dq750f-2007",
+    "commons-alexkok-fluke23-2014",
+    "commons-andy116-tes1302-2024",
+    "commons-chabrez-m832-2009"
+  ],
+  "frozen_before_heldout_inference": true
+}

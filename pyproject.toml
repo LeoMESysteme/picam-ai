@@ -18,6 +18,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+# Only the isolated offline experiment; install --no-deps, preserving Debian numpy.
+experiment = ["onnxruntime==1.30.0", "flatbuffers==25.12.19", "protobuf==6.33.2"]
 
 [project.scripts]
 dispread = "dispread.workbench.cli:main"

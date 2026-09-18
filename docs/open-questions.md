@@ -978,3 +978,28 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `kind` ablehnt statt anzunehmen, dass Zahlenmetadaten vorhanden sind.
 * **Antwort landet in:** `src/dispread/workbench/tui.py`,
   `src/dispread/workbench/fields.py`.
+
+## OQ-33 — Automatische Erkennung: unabhängige Geräteabdeckung und Segmentgeometrie
+
+* **Status:** offen · erkannt 2026-09-18.
+* **Befund:** Die vorhandenen RND-Aufnahmen allein belegen keine sechs unabhängigen
+  Geräte / drei Familien / 30 unabhängigen Testbilder. Spezialisierte OCR-Texte
+  liefern außerdem keine nachgewiesenen Segmentpositionen.
+* **Klärung:** Isolierter Vergleich in `experiments/automatic_seven_segment/`;
+  unzureichende Abdeckung sperrt die Demonstrationsauswahl unabhängig von Scores.
+  Produktionsbenchmark-Reviewfixes bleiben getrennt.
+* **Antwort landet in:** `docs/automatic-seven-segment-report.md`, `docs/VALIDATION.md`.
+
+## OQ-34 — Produktions-Ecksortierung bei etwa 45° gedrehten Vierecken
+
+* **Status:** offen · erkannt 2026-09-18 im isolierten Automatik-Experiment.
+* **Befund:** `rectify._order_quad` wählt bei gleichen Koordinatensummen oder
+  -differenzen dieselbe Ecke mehrfach. Reproduziert mit zwei gültigen konvexen
+  PP-OCR-Entwicklungskandidaten (RND-1100 Nr. 33, RND-2880 Nr. 23). Der
+  experimentelle Adapter umgeht die Sortierung durch direkte Entzerrung der
+  bereits zyklisch geordneten Kandidaten und hat einen Regressionstest.
+* **Klärung:** Wirkung/Abhilfe für manuell bestätigte Produktions-ROIs separat
+  prüfen; keine Änderung am Produktionshelper in diesem Experiment.
+* **Antwort landet in:** `src/dispread/rectify.py`, zugehörige Produktionstests
+  und `docs/VALIDATION.md`; Experimentnachweis:
+  `tests/test_auto_adapters.py` und `docs/automatic-seven-segment-report.md`.

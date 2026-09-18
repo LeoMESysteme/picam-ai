@@ -1,0 +1,9 @@
+{
+  "sample_id": "fluke23",
+  "source": "https://commons.wikimedia.org/wiki/File:Fluke_23_multimeter.jpg",
+  "license": "CC BY-SA 4.0",
+  "attribution": "Alex P. Kok",
+  "original_sha256": "018f9b063af91655fb4ca623ba7c22cc031bd1704a7f2344c00270337518bddf",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}

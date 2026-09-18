@@ -113,3 +113,37 @@ Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
 Fork aus dem mehrthreadigen Kameraprozess. Kein tmux notwendig. PAM nutzt den
 vorhandenen Dienst `login` für den eigenen Benutzer `me-systeme`; Serverstart
 als root oder als anderer Benutzer wird abgelehnt.
+
+## Isoliertes Automatik-Experiment (2026-09-18)
+
+Nur im Worktree `codex/automatic-seven-segment`, keine Änderung der aktiven
+Kamera-venv. `pyproject.toml` führt ein optionales `experiment`-Extra auf;
+wegen der Systempakete **nicht** automatisch dessen Abhängigkeiten auflösen.
+Verifizierter Host: Raspberry Pi 5 Model B Rev 1.1, aarch64, Debian 13,
+Python 3.13.5; NumPy 2.2.4 und OpenCV 4.10.0 weiterhin aus
+`/usr/lib/python3/dist-packages`. PyYAML 6.0.2 ist vorhandenes Debian-Paket.
+
+```bash
+./.venv/bin/pip install --no-deps --no-build-isolation -e .
+./.venv/bin/pip install --no-deps onnxruntime==1.30.0 flatbuffers==25.12.19 protobuf==6.33.2
+```
+
+| Zusatz im Experiment | Version | Lizenz / Zweck |
+| --- | --- | --- |
+| ONNX Runtime | 1.30.0, cp313 manylinux aarch64 | MIT; reine CPU-Inferenz der offiziellen PP-OCRv5-Mobile-ONNX-Modelle |
+| flatbuffers | 25.12.19 | Apache-2.0; deklarierte ORT-Abhängigkeit |
+| protobuf | 6.33.2 | BSD-3-Clause; deklarierte ORT-Abhängigkeit |
+| pytest / iniconfig / ruff | 8.3.5 / 2.3.0 / 0.16.6 | isolierte Entwicklungswerkzeuge |
+| Tesseract / Leptonica | 5.5.0 / 1.84.1 | bereits installiert, kein neues Systempaket |
+
+Exakte Modellrevisionen, Bytes, Hashes, Download-URLs, Lizenzen und Wheel-Hashes:
+[`candidates.json`](../experiments/automatic_seven_segment/candidates.json).
+Die früher zurückgestellte ORT-Option wird damit ausschließlich für dieses
+konkrete Offline-Experiment benutzt. Torch, TensorFlow, Paddle und PyPI-Kopien
+von NumPy/OpenCV bleiben ausgeschlossen. Keine allgemeine Freigabe des
+PP-OCR-Python-Komplettpakets. Der TFLite-Kandidat bleibt mangels Lizenznachweis
+und passendem veröffentlichten Laufzeit-Wheel ausgeschlossen.
+
+`pip check` meldet bestehende System-Metadaten-/Typstub-Probleme
+(apt-listchanges/debconf, types-seaborn, Flask-Stubs); keine fehlende
+ONNX-Runtime-Abhängigkeit. Diese fremden Systempakete wurden nicht geändert.

@@ -1,0 +1,9 @@
+{
+  "sample_id": "dt830b",
+  "source": "https://commons.wikimedia.org/wiki/File:Digital_Multimeter_(To_measure_Voltage,_Current_and_Resistance).jpg",
+  "license": "CC0",
+  "attribution": "K.Venkataramana",
+  "original_sha256": "dda087b672efb6e90446665aa19a44a7a8c31cfed75c859353b94df40e27719f",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}

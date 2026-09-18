@@ -1,0 +1,9 @@
+{
+  "sample_id": "digem",
+  "source": "https://commons.wikimedia.org/wiki/File:DIGEM_ff1B.jpg",
+  "license": "CC BY-SA 4.0",
+  "attribution": "Mister rf",
+  "original_sha256": "f1958ccfb632185770cf63be7a5907ac7b7cd5d782492373b28ecc24471ca574",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}

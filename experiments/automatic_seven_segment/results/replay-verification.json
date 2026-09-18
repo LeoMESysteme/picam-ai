@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "provisional": true,
+  "frozen_sha256": "18d74baede31a93679b8805a326b54abcbd927e3b8117bf56b18463a14e9d5b2",
+  "comparison": "sample/candidate/mode/outcome/errors/selection/geometry and every prediction bbox/read/geometry; timings excluded",
+  "readings_compared": 94,
+  "identical": true,
+  "new_independent_samples": 0
+}

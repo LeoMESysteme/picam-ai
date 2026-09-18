@@ -1,0 +1,9 @@
+{
+  "sample_id": "scale",
+  "source": "https://commons.wikimedia.org/wiki/File:K%C3%BCchenwaage_digital.jpg",
+  "license": "Public domain",
+  "attribution": "Sarang",
+  "original_sha256": "d2c0b655c064ee9a1bad94fdd7cba198f6757b74d53ef7f4a35f8380c256f6d7",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}

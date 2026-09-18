@@ -686,3 +686,36 @@ Warmluafen, gemessen mit `time.perf_counter()` in `CLOCK_MONOTONIC`,
 Die Nachführung läuft bei jedem Frame (nicht gedrosselt), analog zur
 Kandidatensuche im `run`-Modus ohne `CANDIDATE_INTERVAL_S`-Throttling. Bei 15 fps
 Bildrate ist der Nachführungsaufwand <5 % der pro-Frame-Zeit.
+
+
+## Automatik-Experiment — 2026-09-18, negativer Screeningbefund
+
+Realer Pi 5/aarch64, Python 3.13.5, System-NumPy 2.2.4/OpenCV 4.10.0,
+Tesseract 5.5.0, ORT 1.30.0. Daten: 11 Originalbilder, Entwicklung 7,
+Test 4 unabhängige Geräte/Bilder, davon 2 lesbar. Ziel 30 Testbilder verfehlt.
+Vollbild-Test, eingefrorene Auswahl Tesseract `7seg`:
+
+- 7seg: 0 korrekt, 0 falsch, 0 abgelehnt, 4 verfehlt; Detektion 0%; Detektor-p95 101.4 ms; zugeordnete Verarbeitung-p95 — ms.
+- baseline: 0 korrekt, 0 falsch, 0 abgelehnt, 4 verfehlt; Detektion 0%; Detektor-p95 112.2 ms; zugeordnete Verarbeitung-p95 — ms.
+- ppocr: 0 korrekt, 0 falsch, 1 abgelehnt, 3 verfehlt; Detektion 25%; Detektor-p95 831.6 ms; zugeordnete Verarbeitung-p95 62.9 ms.
+
+Bekannter Ausschnitt: alle drei Testkandidaten 0 korrekt / 0 falsch /
+4 abgelehnt. PP-Text `22.0` im Casio-Ausschnitt wegen Zeichenscore abgelehnt.
+Alle 94 Kandidaten-/Bild-/Modusauswertungen ohne bestätigte Segmenttopologie;
+keine Konfidenzkalibrierung, kein Task-11-Nachweis, keine Demo-Freigabe.
+
+Messung mit CLOCK_MONOTONIC/perf_counter_ns; nur Verarbeitungsdauer, keine
+Capture-Latenz aus den offline als SYNTHETIC markierten Frames. `None` ist
+unbekannte Unsicherheit. p95 bei einer zugeordneten PP-Testregion ist nur
+deren Einzelwert. Peak-RSS ist Prozessgesamtbedarf inklusive Bildern und
+Overlays, nicht reine Modellgröße.
+
+Synthetische Entwicklungssmokes: weißes Bild löst bei rohem `ssd`/`ssd_int`
+`1` aus; Kontrastguard verwirft danach alle drei Varianten. PP-ONNX liest
+synthetisches `-12.3` und verwirft das folgende leere Bild. Diese Smokes zählen
+nicht zum realen Testsatz. 180 PP-Entwicklungsvorschläge nach experimenteller
+45°-Quad-Korrektur erfolgreich entzerrt, keine Aussage zur Segmentausrichtung.
+
+[Bericht](automatic-seven-segment-report.md),
+[exakte Messdaten](../experiments/automatic_seven_segment/results/results.json),
+[Freeze und Hashes](../experiments/automatic_seven_segment/results/frozen.json).

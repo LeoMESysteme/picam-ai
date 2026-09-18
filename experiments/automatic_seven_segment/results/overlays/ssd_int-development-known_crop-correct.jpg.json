@@ -1,0 +1,9 @@
+{
+  "sample_id": "rnd-2880",
+  "source": "../../../picam-ai/var/workbench/annotations/fdc840cd9c4a4ae0b19152ba017879cd/annotation.json",
+  "license": "LicenseRef-Project-Local-Evaluation",
+  "attribution": "Existing picam-ai local camera recording; no public redistribution license supplied.",
+  "original_sha256": "11a5db8e1b7b789fafa38e3621e53e5a5690f410efd8f9d285854d53885c9a11",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}

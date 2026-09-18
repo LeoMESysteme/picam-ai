@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-09-18",
+  "host": {
+    "model": "Raspberry Pi 5 Model B Rev 1.1",
+    "machine": "aarch64",
+    "os": "Debian GNU/Linux 13 (trixie)",
+    "python": "3.13.5",
+    "numpy": "2.2.4 (Debian system)",
+    "opencv": "4.10.0 (Debian system)",
+    "tesseract": "5.5.0",
+    "leptonica": "1.84.1"
+  },
+  "scope": "Eligibility and source pinning only; accuracy and speed live in separate measured results.",
+  "candidates": [
+    {
+      "id": "tesseract_ssd_int",
+      "status": "eligible_experimental",
+      "model_version": "e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "code_license": "Apache-2.0",
+      "weights_license": "Apache-2.0",
+      "source": "https://github.com/Shreeshrii/tessdata_ssd/tree/e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "license_source": "https://github.com/Shreeshrii/tessdata_ssd/blob/e493a10a4bf81632506cf24ba99d83854afff9f6/LICENSE",
+      "runtime": {
+        "name": "tesseract",
+        "version": "5.5.0",
+        "architecture": "aarch64",
+        "installation": "pre-existing Debian system executable",
+        "load_smoke_exit_code": 0
+      },
+      "artifacts": [
+        {
+          "path": "models/ssd_int.traineddata",
+          "url": "https://raw.githubusercontent.com/Shreeshrii/tessdata_ssd/e493a10a4bf81632506cf24ba99d83854afff9f6/ssd_int.traineddata",
+          "sha256": "557759383e030694420ee9f6a88e824abae4acf17f7b94415ca07e1152339339",
+          "bytes": 1442809
+        }
+      ],
+      "limitations": [
+        "Proof-of-concept weights; synthetic training accuracy is not real-world accuracy.",
+        "Recognizer only: requires independently tested automatic detector and evidence-based geometry.",
+        "No calibrated probability; language whitelist cannot establish readability."
+      ],
+      "blank_white_psm7_smoke_text": "1"
+    },
+    {
+      "id": "tesseract_ssd",
+      "status": "eligible_experimental",
+      "model_version": "e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "code_license": "Apache-2.0",
+      "weights_license": "Apache-2.0",
+      "source": "https://github.com/Shreeshrii/tessdata_ssd/tree/e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "license_source": "https://github.com/Shreeshrii/tessdata_ssd/blob/e493a10a4bf81632506cf24ba99d83854afff9f6/LICENSE",
+      "runtime": {
+        "name": "tesseract",
+        "version": "5.5.0",
+        "architecture": "aarch64",
+        "installation": "pre-existing Debian system executable",
+        "load_smoke_exit_code": 0
+      },
+      "artifacts": [
+        {
+          "path": "models/ssd.traineddata",
+          "url": "https://raw.githubusercontent.com/Shreeshrii/tessdata_ssd/e493a10a4bf81632506cf24ba99d83854afff9f6/ssd.traineddata",
+          "sha256": "f0060f4d2acb107f7c48c418f60887eddb37656fbbc2c21677df06ecbdf44ca5",
+          "bytes": 11314684
+        }
+      ],
+      "limitations": [
+        "Proof-of-concept weights; synthetic training accuracy is not real-world accuracy.",
+        "Recognizer only: requires independently tested automatic detector and evidence-based geometry.",
+        "No calibrated probability; language whitelist cannot establish readability."
+      ],
+      "blank_white_psm7_smoke_text": "1"
+    },
+    {
+      "id": "tesseract_7seg",
+      "status": "eligible_experimental",
+      "model_version": "e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "code_license": "Apache-2.0",
+      "weights_license": "Apache-2.0",
+      "source": "https://github.com/Shreeshrii/tessdata_ssd/tree/e493a10a4bf81632506cf24ba99d83854afff9f6",
+      "license_source": "https://github.com/Shreeshrii/tessdata_ssd/blob/e493a10a4bf81632506cf24ba99d83854afff9f6/LICENSE",
+      "runtime": {
+        "name": "tesseract",
+        "version": "5.5.0",
+        "architecture": "aarch64",
+        "installation": "pre-existing Debian system executable",
+        "load_smoke_exit_code": 0
+      },
+      "artifacts": [
+        {
+          "path": "models/7seg.traineddata",
+          "url": "https://raw.githubusercontent.com/Shreeshrii/tessdata_ssd/e493a10a4bf81632506cf24ba99d83854afff9f6/7seg.traineddata",
+          "sha256": "7e170293e5ac660295d7d3f53346453447bd9c9845f9f384cc1005c791487291",
+          "bytes": 11435044
+        }
+      ],
+      "limitations": [
+        "Proof-of-concept weights; synthetic training accuracy is not real-world accuracy.",
+        "Recognizer only: requires independently tested automatic detector and evidence-based geometry.",
+        "No calibrated probability; language whitelist cannot establish readability."
+      ],
+      "blank_white_psm7_smoke_text": ""
+    },
+    {
+      "id": "ppocrv5_mobile_onnx",
+      "status": "eligible_experimental",
+      "code_license": "Apache-2.0 (PaddleOCR); MIT (ONNX Runtime)",
+      "weights_license": "Apache-2.0",
+      "source": "https://github.com/PaddlePaddle/PaddleOCR/tree/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf",
+      "model_versions": {
+        "det": "e6f4fa85f00e168c862bc462aebca69eef9b3d3d",
+        "rec": "ed152b8b495f84de93cda5709d768548a9127622"
+      },
+      "artifacts": [
+        {
+          "path": "models/PP-OCRv5_mobile_det_onnx/inference.onnx",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.onnx",
+          "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+          "bytes": 4826518
+        },
+        {
+          "path": "models/PP-OCRv5_mobile_det_onnx/inference.yml",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.yml",
+          "sha256": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
+          "bytes": 903
+        },
+        {
+          "path": "models/PP-OCRv5_mobile_det_onnx/README.md",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/README.md",
+          "sha256": "951c155673ac6c15feb85857c9024a62266e5956d15319ce578a8f508f399d66",
+          "bytes": 1828
+        },
+        {
+          "path": "models/PP-OCRv5_mobile_rec_onnx/inference.onnx",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx/resolve/ed152b8b495f84de93cda5709d768548a9127622/inference.onnx",
+          "sha256": "da72dc72ca4dc220df0dfde68c1dedc31c58d3e76a25871122e5056227d50092",
+          "bytes": 16534782
+        },
+        {
+          "path": "models/PP-OCRv5_mobile_rec_onnx/inference.yml",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx/resolve/ed152b8b495f84de93cda5709d768548a9127622/inference.yml",
+          "sha256": "5dfeb2777f6d0db8177d8128a8acfcf6e6276dc4ac73ea3bf0dc06d6a5e85d8e",
+          "bytes": 148345
+        },
+        {
+          "path": "models/PP-OCRv5_mobile_rec_onnx/README.md",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx/resolve/ed152b8b495f84de93cda5709d768548a9127622/README.md",
+          "sha256": "7331c129fd5024b6a0abd1f510cfdfb2d7714fdcdbb00df21a0cb8b48e6683ee",
+          "bytes": 1768
+        }
+      ],
+      "runtime": {
+        "name": "onnxruntime",
+        "version": "1.30.0",
+        "architecture": "aarch64",
+        "python_abi": "cp313",
+        "wheel_url": "https://files.pythonhosted.org/packages/89/06/e603c71f43f4fe3fd156a053af79cbed6e27a2c649f0988a67d97fedd39f/onnxruntime-1.30.0-cp313-cp313-manylinux_2_28_aarch64.whl",
+        "wheel_sha256": "5327cf6aa15a02bad805fac8bd6882a62571e8b72f6f2938a8f37e6bd1966ce9",
+        "wheel_bytes": 21344996,
+        "installed_at_research_start": false,
+        "requires_paddle_for_inference": false,
+        "load_and_inference_verified": true,
+        "verification": "tests/test_ppocr_adapter.py::test_optional_real_onnx_models_read_then_reject_blank (2026-09-18)",
+        "intra_op_threads": 2,
+        "inter_op_threads": 1,
+        "yaml_version": "6.0.2 (Debian)",
+        "declared_dependencies_absent_at_initial_smoke": [
+          "flatbuffers",
+          "protobuf>=4.25.8"
+        ],
+        "dependencies": [
+          {
+            "name": "flatbuffers",
+            "version": "25.12.19",
+            "wheel_url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+            "wheel_sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+            "wheel_bytes": 26661,
+            "license": "Apache 2.0"
+          },
+          {
+            "name": "protobuf",
+            "version": "6.33.2",
+            "wheel_url": "https://files.pythonhosted.org/packages/7d/4f/f743761e41d3b2b2566748eb76bbff2b43e14d5fcab694f494a16458b05f/protobuf-6.33.2-cp39-abi3-manylinux2014_aarch64.whl",
+            "wheel_sha256": "b5d3b5625192214066d99b2b605f5783483575656784de223f00a8d00754fc0e",
+            "wheel_bytes": 324460,
+            "license": "3-Clause BSD License"
+          }
+        ],
+        "declared_dependencies_satisfied": true
+      },
+      "limitations": [
+        "Preconverted official ONNX models successfully loaded and exercised using CPUExecutionProvider on this Pi; seven-segment accuracy still requires evaluation.",
+        "Published Android timings are not Raspberry Pi timings.",
+        "Runtime must be installed --no-deps in the isolated worktree venv; retain Debian numpy/cv2.",
+        "Detection boxes and recognition strings do not establish segment geometry."
+      ],
+      "frozen_preprocessing": {
+        "det_resize_long": 960,
+        "det_stride": 128,
+        "det_threshold": 0.3,
+        "det_box_threshold": 0.6,
+        "det_max_candidates": 1000,
+        "det_unclip_ratio": 1.5,
+        "rec_height": 48,
+        "rec_min_width": 320,
+        "rec_max_width": 3200,
+        "min_character_score": 0.9,
+        "min_crop_gray_std": 1.0,
+        "confidence_calibrated": false,
+        "geometry_from_text": false,
+        "db_unclip_implementation": "analytic rectangle offset without integer polygon quantization"
+      }
+    },
+    {
+      "id": "specialized_tflite",
+      "status": "excluded",
+      "source": "https://github.com/renjithsasidharan/seven-segment-ocr/tree/1e8a42e4f8bed8934220c312c9b682c77ba01d9b",
+      "model_version": "1e8a42e4f8bed8934220c312c9b682c77ba01d9b",
+      "code_license": null,
+      "weights_license": null,
+      "model_sha256": null,
+      "exclusion_reasons": [
+        "Recursive repository tree contains no LICENSE/COPYING/NOTICE; code and weight reuse permission not established.",
+        "Published predict.py imports tensorflow; lightweight tflite-runtime 2.14.0 publishes ARM64 wheels only for CPython 3.8-3.11, not this CPython 3.13.",
+        "Published recognizer alphabet contains digits, lowercase letters and decimal dot, but no minus sign.",
+        "Recognizer only, no full-frame detector or segment geometry."
+      ],
+      "downloaded_or_executed": false
+    }
+  ],
+  "sources": [
+    "https://github.com/PaddlePaddle/PaddleOCR/blob/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf/docs/version3.x/inference_deployment/cross_platform/android_deployment.en.md",
+    "https://onnxruntime.ai/docs/get-started/with-python.html",
+    "https://pypi.org/pypi/onnxruntime/1.30.0/json",
+    "https://pypi.org/pypi/tflite-runtime/2.14.0/json"
+  ]
+}

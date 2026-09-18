@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "models_dir": "models",
+  "tesseract_variants": ["ssd_int", "ssd", "7seg"],
+  "additional_candidates": ["ppocr"],
+  "match_iou": 0.5,
+  "read_modes": ["full_frame", "known_crop"],
+  "preprocessing_policy": "adapter defaults; all source hashes frozen before heldout",
+  "screening": {"correct_fraction": 0.9, "wrong": 0, "initial_detection_ms": 2000, "selected_processing_p95_ms": 200},
+  "serial_output": false,
+  "provisional": true
+}

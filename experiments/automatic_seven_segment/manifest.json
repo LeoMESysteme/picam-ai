@@ -1,0 +1,733 @@
+{
+  "schema_version": 1,
+  "name": "automatic-seven-segment-feasibility-2026-09-18",
+  "frozen_at": "2026-09-18T11:29:34.448074+00:00",
+  "frozen_timebase": "UTC",
+  "bbox_coordinate_system": "pixel_xywh_after_opencv_exif_orientation",
+  "split_policy": "Physical device disjoint; four reserved identities frozen before candidate testing. No synthetic transforms. Legacy RND identities are unknown and development-only; shared conservative independence group.",
+  "reserved_heldout_devices": [
+    "commons-chabrez-m832-2009",
+    "commons-andy116-tes1302-2024",
+    "commons-adhishb-casio-dq750f-2007",
+    "commons-alexkok-fluke23-2014"
+  ],
+  "coverage": {
+    "status": "insufficient",
+    "samples": 11,
+    "public_identified_devices": 8,
+    "heldout_devices": 4,
+    "independent_heldout_images": 4,
+    "readable_heldout_images": 2,
+    "required_independent_heldout_images": 30,
+    "negative_sign_examples": 0,
+    "heldout_led_examples": 0,
+    "unrepresented_conditions": [
+      "negative_values",
+      "decimal_position_changes_on_same_device",
+      "occlusion",
+      "tracking_loss_and_recovery",
+      "heldout_LED"
+    ],
+    "note": "Device count includes unpowered instruments; it must not be read as eight-device recognition coverage. No universal-recognition or production claim."
+  },
+  "samples": [
+    {
+      "id": "m832",
+      "path": "data/m832.jpg",
+      "sha256": "dfe9e0ce632c418b7b8033826ceb14f48d48f946f2f0854be4e1ea132c63c568",
+      "device_id": "commons-chabrez-m832-2009",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "multimeter",
+      "technology": "LCD",
+      "split": "heldout",
+      "independence_group": "commons-chabrez-m832-2009-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Multimeter_DT-830.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/7e/Multimeter_DT-830.jpg",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Multimeter_DT-830.jpg",
+      "attribution": "Chabrez",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": null,
+      "bbox": [
+        325,
+        190,
+        395,
+        120
+      ],
+      "conditions": [
+        "unreadable",
+        "powered_off",
+        "sensor_noise"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "tes1302",
+      "path": "data/tes1302.jpg",
+      "sha256": "1fbe5a90c45023d38781957b75cbc399ccb74c8b840a607c972774f307a4e335",
+      "device_id": "commons-andy116-tes1302-2024",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "thermometer",
+      "technology": "LCD",
+      "split": "heldout",
+      "independence_group": "commons-andy116-tes1302-2024-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Digital_Thermometer_TES-1302.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/47/Digital_Thermometer_TES-1302.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "attribution": "Andy116",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": null,
+      "bbox": [
+        1850,
+        675,
+        585,
+        285
+      ],
+      "conditions": [
+        "unreadable",
+        "powered_off",
+        "angled"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "casio",
+      "path": "data/casio.jpg",
+      "sha256": "644864aab5fcb4e0a24d892533fa897b03862bdd7845dea1b2ca5246b1bce4d7",
+      "device_id": "commons-adhishb-casio-dq750f-2007",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "clock_thermometer",
+      "technology": "LCD",
+      "split": "heldout",
+      "independence_group": "commons-adhishb-casio-dq750f-2007-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Casiodq750f.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Casiodq750f.jpg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+      "attribution": "Adhish Bhargava (Adhishb)",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": "22.0",
+      "bbox": [
+        1180,
+        1060,
+        230,
+        170
+      ],
+      "conditions": [
+        "multiple_rows",
+        "decimal",
+        "reflections"
+      ],
+      "all_displays_annotated": false,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null,
+      "target_displays": [
+        {
+          "bbox": [
+            1180,
+            1060,
+            230,
+            170
+          ],
+          "expected_text": "22.0",
+          "role": "temperature"
+        },
+        {
+          "bbox": [
+            740,
+            510,
+            670,
+            420
+          ],
+          "expected_text": "9:13",
+          "role": "clock"
+        },
+        {
+          "bbox": [
+            555,
+            1070,
+            270,
+            155
+          ],
+          "expected_text": "4/24",
+          "role": "date"
+        }
+      ]
+    },
+    {
+      "id": "fluke23",
+      "path": "data/fluke23.jpg",
+      "sha256": "018f9b063af91655fb4ca623ba7c22cc031bd1704a7f2344c00270337518bddf",
+      "device_id": "commons-alexkok-fluke23-2014",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "multimeter",
+      "technology": "LCD",
+      "split": "heldout",
+      "independence_group": "commons-alexkok-fluke23-2014-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluke_23_multimeter.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/5/5f/Fluke_23_multimeter.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "attribution": "Alex P. Kok",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": ".000",
+      "bbox": [
+        695,
+        390,
+        570,
+        380
+      ],
+      "conditions": [
+        "angled",
+        "decimal",
+        "low_contrast"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "dt830b",
+      "path": "data/dt830b.jpg",
+      "sha256": "dda087b672efb6e90446665aa19a44a7a8c31cfed75c859353b94df40e27719f",
+      "device_id": "commons-kvenkataramana-haoyue-dt830d-2025",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "multimeter",
+      "technology": "LCD",
+      "split": "development",
+      "independence_group": "commons-kvenkataramana-haoyue-dt830d-2025-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Digital_Multimeter_(To_measure_Voltage,_Current_and_Resistance).jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/d/df/Digital_Multimeter_%28To_measure_Voltage%2C_Current_and_Resistance%29.jpg",
+      "license": "CC0",
+      "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+      "attribution": "K.Venkataramana",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": null,
+      "bbox": [
+        1270,
+        520,
+        565,
+        180
+      ],
+      "conditions": [
+        "unreadable",
+        "powered_off"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "scale",
+      "path": "data/scale.jpg",
+      "sha256": "d2c0b655c064ee9a1bad94fdd7cba198f6757b74d53ef7f4a35f8380c256f6d7",
+      "device_id": "commons-sarang-silvercrest-scale-2016",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "scale",
+      "technology": "LCD",
+      "split": "development",
+      "independence_group": "commons-sarang-silvercrest-scale-2016-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:K%C3%BCchenwaage_digital.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/K%C3%BCchenwaage_digital.jpg",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:K%C3%BCchenwaage_digital.jpg",
+      "attribution": "Sarang",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": "22.5",
+      "bbox": [
+        990,
+        810,
+        185,
+        88
+      ],
+      "conditions": [
+        "multiple_rows",
+        "decimal",
+        "blue_backlight"
+      ],
+      "all_displays_annotated": false,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null,
+      "target_displays": [
+        {
+          "bbox": [
+            990,
+            810,
+            185,
+            88
+          ],
+          "expected_text": "22.5",
+          "role": "temperature"
+        },
+        {
+          "bbox": [
+            605,
+            730,
+            260,
+            130
+          ],
+          "expected_text": "9:37",
+          "role": "clock"
+        },
+        {
+          "bbox": [
+            1000,
+            724,
+            220,
+            88
+          ],
+          "expected_text": "99:59",
+          "role": "timer"
+        }
+      ]
+    },
+    {
+      "id": "irthermometer",
+      "path": "data/irthermometer.jpg",
+      "sha256": "daec939b4096550bfdaf8a4991d66a48adc29b34d0429cb8d43ad79e2df857e9",
+      "device_id": "commons-sarang-curamed-ir-2012",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "thermometer",
+      "technology": "LCD",
+      "split": "development",
+      "independence_group": "commons-sarang-curamed-ir-2012-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:Digital_IR-Thermometer.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Digital_IR-Thermometer.jpg",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Digital_IR-Thermometer.jpg",
+      "attribution": "Sarang",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": null,
+      "bbox": [
+        595,
+        700,
+        270,
+        120
+      ],
+      "conditions": [
+        "unreadable",
+        "powered_off"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "digem",
+      "path": "data/digem.jpg",
+      "sha256": "f1958ccfb632185770cf63be7a5907ac7b7cd5d782492373b28ecc24471ca574",
+      "device_id": "commons-misterrf-digem-ff1b-2022",
+      "identity_verified": true,
+      "identity_evidence": "One original photograph of this physical device, distinct visible model/housing from all other devices in this corpus. No serial-number claim; repeated views from this source must retain this identity.",
+      "family": "panel_meter",
+      "technology": "LED",
+      "split": "development",
+      "independence_group": "commons-misterrf-digem-ff1b-2022-single-photo",
+      "source": "https://commons.wikimedia.org/wiki/File:DIGEM_ff1B.jpg",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/5/52/DIGEM_ff1B.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "attribution": "Mister rf",
+      "changes": "Original file bytes, unchanged. File name shortened locally. Coordinates use OpenCV default EXIF-oriented decoding.",
+      "expected_text": null,
+      "bbox": [
+        2060,
+        1810,
+        1780,
+        1240
+      ],
+      "conditions": [
+        "unreadable",
+        "unpowered_segment_outlines",
+        "angled"
+      ],
+      "all_displays_annotated": true,
+      "label_method": "Visual transcription from original photograph by development agent; no OCR output used. Blank or unpowered display has null expected_text.",
+      "timebase": "file_mtime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "rnd-1100",
+      "path": "data/rnd-1100.png",
+      "sha256": "f4470d516025835490a1d3fe95a32c98222f615cbb94b61dd8e81b6e339ac15f",
+      "device_id": null,
+      "identity_verified": false,
+      "identity_evidence": "Legacy artifacts contain no explicit physical device identity. All RND setup images conservatively share one independence group and remain development-only.",
+      "family": "bench_power_supply",
+      "technology": "LED",
+      "split": "development",
+      "independence_group": "rnd-local-legacy-setup-all-sessions",
+      "source": "../../../picam-ai/var/workbench/annotations/8a18ee05e31241b9b6702c5bb904ec97/annotation.json",
+      "source_url": null,
+      "license": "LicenseRef-Project-Local-Evaluation",
+      "license_url": null,
+      "attribution": "Existing picam-ai local camera recording; no public redistribution license supplied.",
+      "changes": "Unchanged original image.png bytes copied for local experiment.",
+      "expected_text": "11.00",
+      "bbox": [
+        372,
+        154,
+        170,
+        65
+      ],
+      "conditions": [
+        "multiple_rows",
+        "decimal",
+        "angled",
+        "reflections"
+      ],
+      "all_displays_annotated": false,
+      "target_displays": [
+        {
+          "bbox": [
+            372,
+            154,
+            170,
+            65
+          ],
+          "expected_text": "11.00",
+          "role": "voltage"
+        },
+        {
+          "bbox": [
+            354,
+            275,
+            190,
+            66
+          ],
+          "expected_text": "0.000",
+          "role": "current"
+        }
+      ],
+      "baseline_profile": {
+        "schema_version": 3,
+        "version": 1,
+        "camera": {
+          "width": 960,
+          "height": 720,
+          "fps": 15.0,
+          "controls": {
+            "AeEnable": true,
+            "Contrast": 1.0
+          }
+        },
+        "roi": [
+          0.274789029535865,
+          0.13924050632911392,
+          0.48101259384477185,
+          0.40600094480018245
+        ],
+        "roi_quad": [
+          [
+            0.3268283892281448,
+            0.13924050632911392
+          ],
+          [
+            0.7558016233806368,
+            0.1589310829817159
+          ],
+          [
+            0.7438467162570873,
+            0.5452414511292963
+          ],
+          [
+            0.274789029535865,
+            0.5283638139984946
+          ]
+        ],
+        "ocr_box": [
+          0.1660340765417667,
+          0.2143262409316199,
+          0.3908511431841242,
+          0.17236196126515618
+        ],
+        "role": "main",
+        "confirmed": true,
+        "detection": {
+          "min_area": 0.005,
+          "max_area": 0.6,
+          "min_aspect": 1.5,
+          "max_aspect": 8.0,
+          "min_rectangularity": 0.65
+        },
+        "layout": {
+          "digits": 4,
+          "decimals": 2,
+          "has_sign": false,
+          "unit": "V",
+          "sign_cell_ratio": 0.6,
+          "thickness_ratio": 0.16,
+          "inset_ratio": 0.1,
+          "digit_gap_ratio": 0.65
+        }
+      },
+      "label_method": "Existing ground_truth_text in annotation.json, visually rechecked against image.png.",
+      "source_annotation_id": "8a18ee05e31241b9b6702c5bb904ec97",
+      "timebase": "sensor_boottime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "rnd-1276",
+      "path": "data/rnd-1276.png",
+      "sha256": "113521d41f9a8ea9d497caa585880632648c5185805b3b2c980b7e05e9e1a152",
+      "device_id": null,
+      "identity_verified": false,
+      "identity_evidence": "Legacy artifacts contain no explicit physical device identity. All RND setup images conservatively share one independence group and remain development-only.",
+      "family": "bench_power_supply",
+      "technology": "LED",
+      "split": "development",
+      "independence_group": "rnd-local-legacy-setup-all-sessions",
+      "source": "../../../picam-ai/var/workbench/annotations/9359eb9a944a4c1691fa93495ea7ae16/annotation.json",
+      "source_url": null,
+      "license": "LicenseRef-Project-Local-Evaluation",
+      "license_url": null,
+      "attribution": "Existing picam-ai local camera recording; no public redistribution license supplied.",
+      "changes": "Unchanged original image.png bytes copied for local experiment.",
+      "expected_text": "12.76",
+      "bbox": [
+        385,
+        176,
+        160,
+        62
+      ],
+      "conditions": [
+        "multiple_rows",
+        "decimal",
+        "angled",
+        "reflections"
+      ],
+      "all_displays_annotated": false,
+      "target_displays": [
+        {
+          "bbox": [
+            385,
+            176,
+            160,
+            62
+          ],
+          "expected_text": "12.76",
+          "role": "voltage"
+        },
+        {
+          "bbox": [
+            365,
+            290,
+            182,
+            67
+          ],
+          "expected_text": "0.000",
+          "role": "current"
+        }
+      ],
+      "baseline_profile": {
+        "schema_version": 3,
+        "version": 3,
+        "camera": {
+          "width": 960,
+          "height": 720,
+          "fps": 15.0,
+          "controls": {
+            "AeEnable": false,
+            "Contrast": 1.0,
+            "ExposureTime": 35000,
+            "AnalogueGain": 1.5036710500717163
+          }
+        },
+        "roi": [
+          0.364419478404371,
+          0.2254910348707209,
+          0.24050632911392406,
+          0.13340464724770076
+        ],
+        "roi_quad": [
+          [
+            0.38411007651799833,
+            0.2254910348707209
+          ],
+          [
+            0.6049258075182951,
+            0.23580513929698013
+          ],
+          [
+            0.5914844473431655,
+            0.35889568211842166
+          ],
+          [
+            0.364419478404371,
+            0.346447434308133
+          ]
+        ],
+        "ocr_box": [
+          0.10780737227448553,
+          0.23191267672242924,
+          0.7129623260183805,
+          0.4985709958527159
+        ],
+        "role": "main",
+        "confirmed": true,
+        "detection": {
+          "min_area": 0.005,
+          "max_area": 0.6,
+          "min_aspect": 1.5,
+          "max_aspect": 8.0,
+          "min_rectangularity": 0.65
+        },
+        "layout": {
+          "digits": 4,
+          "decimals": 2,
+          "has_sign": false,
+          "unit": "V",
+          "sign_cell_ratio": 0.6,
+          "thickness_ratio": 0.16,
+          "inset_ratio": 0.1,
+          "digit_gap_ratio": 0.65
+        }
+      },
+      "label_method": "Existing ground_truth_text in annotation.json, visually rechecked against image.png.",
+      "source_annotation_id": "9359eb9a944a4c1691fa93495ea7ae16",
+      "timebase": "sensor_boottime",
+      "timestamp_uncertainty_ns": null
+    },
+    {
+      "id": "rnd-2880",
+      "path": "data/rnd-2880.png",
+      "sha256": "11a5db8e1b7b789fafa38e3621e53e5a5690f410efd8f9d285854d53885c9a11",
+      "device_id": null,
+      "identity_verified": false,
+      "identity_evidence": "Legacy artifacts contain no explicit physical device identity. All RND setup images conservatively share one independence group and remain development-only.",
+      "family": "bench_power_supply",
+      "technology": "LED",
+      "split": "development",
+      "independence_group": "rnd-local-legacy-setup-all-sessions",
+      "source": "../../../picam-ai/var/workbench/annotations/fdc840cd9c4a4ae0b19152ba017879cd/annotation.json",
+      "source_url": null,
+      "license": "LicenseRef-Project-Local-Evaluation",
+      "license_url": null,
+      "attribution": "Existing picam-ai local camera recording; no public redistribution license supplied.",
+      "changes": "Unchanged original image.png bytes copied for local experiment.",
+      "expected_text": "28.80",
+      "bbox": [
+        444,
+        111,
+        203,
+        71
+      ],
+      "conditions": [
+        "multiple_rows",
+        "decimal",
+        "angled",
+        "reflections"
+      ],
+      "all_displays_annotated": false,
+      "target_displays": [
+        {
+          "bbox": [
+            444,
+            111,
+            203,
+            71
+          ],
+          "expected_text": "28.80",
+          "role": "voltage"
+        },
+        {
+          "bbox": [
+            433,
+            246,
+            214,
+            79
+          ],
+          "expected_text": "0.000",
+          "role": "current"
+        }
+      ],
+      "baseline_profile": {
+        "schema_version": 3,
+        "version": 3,
+        "camera": {
+          "width": 960,
+          "height": 720,
+          "fps": 15.0,
+          "controls": {
+            "AeEnable": false,
+            "Contrast": 1.0,
+            "ExposureTime": 35000,
+            "AnalogueGain": 1.5036710500717163
+          }
+        },
+        "roi": [
+          0.4418872091383325,
+          0.13803680981595093,
+          0.24856160013530276,
+          0.13905931250449335
+        ],
+        "roi_quad": [
+          [
+            0.45569618497262476,
+            0.13803680981595093
+          ],
+          [
+            0.6904488092736353,
+            0.15030674846625766
+          ],
+          [
+            0.6843114398565611,
+            0.2770961223204443
+          ],
+          [
+            0.4418872091383325,
+            0.26278117829305264
+          ]
+        ],
+        "ocr_box": [
+          0.0675,
+          0.185,
+          0.8425,
+          0.5800000000000001
+        ],
+        "role": "main",
+        "confirmed": true,
+        "detection": {
+          "min_area": 0.005,
+          "max_area": 0.6,
+          "min_aspect": 1.5,
+          "max_aspect": 8.0,
+          "min_rectangularity": 0.65
+        },
+        "layout": {
+          "digits": 4,
+          "decimals": 2,
+          "has_sign": false,
+          "unit": "V",
+          "sign_cell_ratio": 0.6,
+          "thickness_ratio": 0.16,
+          "inset_ratio": 0.1,
+          "digit_gap_ratio": 0.65
+        }
+      },
+      "label_method": "Existing ground_truth_text in annotation.json, visually rechecked against image.png.",
+      "source_annotation_id": "fdc840cd9c4a4ae0b19152ba017879cd",
+      "timebase": "sensor_boottime",
+      "timestamp_uncertainty_ns": null
+    }
+  ]
+}

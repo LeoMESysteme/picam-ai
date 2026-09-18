@@ -522,3 +522,40 @@ strukturell wirkungslos (nie gelesen in `sevenseg.py`) — offen als Teil von
 [OQ-28](open-questions.md). Die Nachführungsschwellen (`max_shift`,
 `max_rotation_deg`, `min_score`) bleiben unvalidierte Vorabdefaults —
 [OQ-26](open-questions.md).
+
+## 2026-09-18 — Automatische Siebensegment-Erkennung als isolierter Vergleich
+
+Entscheidung: eigene Offline-Adapter und ein strenger Scorer unter
+`dispread.experimental`, Worktree `codex/automatic-seven-segment` ab `e0c263f`.
+Der bestehende Benchmark entfernt Dezimalpunkte, löst relative Replay-URLs
+fehlerhaft auf und ersetzt Geräteidentität durch Profilnamen. Seine Scores
+werden deshalb nicht übernommen. Eine Mitreparatur dieser Produktionsdateien
+wurde verworfen: sie gehört zu Claudes getrennten Reviewfixes. Nur die
+bildbasierte `read_frame`-Funktion dient als manuell konfigurierter
+Diagnosebaseline; automatische Kandidaten erhalten keine Sollwerte oder Raster.
+
+Verglichen werden Tesseract `ssd_int`/`ssd`/`7seg` mit geometrischem Detektor und
+PP-OCRv5 mobile über offizielle ONNX-Gewichte. Eine Vollinstallation von Paddle
+oder TensorFlow wurde verworfen; die passende reine ORT-Inferenz läuft auf
+ARM64/Python 3.13 ohne Ersatz der Debian-CV-Pakete. Der spezialisierte
+TFLite-Kandidat hat keinen belegten Code-/Gewichtslizenznachweis und bleibt aus.
+
+Vollbild und annotierter Ausschnitt werden getrennt bewertet. Erst wird auf
+Entwicklungsdaten eine Tesseract-Variante gewählt, dann werden Quell-/Modell-/
+Datenhashes und Laufzeitversionen vor der Testinferenz eingefroren. Benachbarte
+RND-Aufnahmen zählen nicht als unabhängige Testgeräte. Fremde Rechtecke werden
+ohne vollständige Szenenannotation nicht pauschal zu Fehlalarmen erklärt.
+
+OCR-Ziffern in erfundene Segmentpositionen umzuwandeln wurde verworfen:
+Blob-Ausdehnungen bleiben Vorschläge, Segmenttopologie unbereit. Auch nach
+einem numerisch plausiblen Text gibt es keine experimentelle Produktions-
+freigabe oder serielle Ausgabe. Die UI-Demonstration ist an ausreichende
+unabhängige Daten, vollständige Lesungen, belegte Geometrie und Laufzeitziele
+gebunden. Bei negativem Screening ist ein dokumentierter Lückenbericht das
+vereinbarte Ergebnis. Task 11 bleibt gesperrt.
+
+Im Entwicklungslauf führte die Produktionshilfe `_order_quad` bei ~45°-Quads
+zu doppelten Ecken. Das Experiment wahrt die bereits zyklische
+`DisplayCandidate`-Eckreihenfolge und entzerrt direkt aus Originalpixeln;
+der Produktionshelper wird nicht verändert. Jede Kandidatenexception bleibt
+als Ablehnung im Experiment sichtbar, statt einen alten Messwert zu übernehmen.

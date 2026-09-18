@@ -648,3 +648,61 @@ in [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibri
 Dass der Ist-Stand auf diesen sechs Bildern **null** falsche Annahmen hat, ist
 dabei die wichtigste Zahl: sie ist ab jetzt die Nichtregressionsbedingung, und
 gegen null blockiert schon eine einzige falsche Annahme jede Änderung.
+
+
+## 2026-09-18 — Automatische Anzeigeerkennung, Offline-Vergleich auf Pi 5
+
+Aufbau: isolierter Worktree `/home/me-systeme/picam-ai-auto-seven-segment`,
+Branch `codex/automatic-seven-segment`, Basis `e0c263f`. Vorhandene RND-
+Einzelbilder aus Aufzeichnungen/Annotationen und acht lizenzierte Commons-
+Originalfotos; keine neue Aufnahme, Kamera nicht geöffnet und keine Hardware
+oder Kamerakonfiguration geändert. Rechnerzugang nur zur Entwicklungsarbeit.
+Neue venv mit Systempaketen, Paketinstallation --no-deps; nur ORT und kleine
+Runtime-Abhängigkeiten ergänzt, keine Trainingsframeworks.
+
+Die anfängliche Bestandsprüfung ergab 171 bestandene Tests und zwei mangels
+nichtversionierter Originalannotation im Worktree ausgelassene Tests. Die bestehenden
+Benchmarkprobleme im Ausgangscommit wurden nicht mit Scores übergangen;
+separater Scorer erhält Dezimalposition und prüft Identität/Hashes/Pfade.
+Die spätere Ruff-Gesamtprüfung mit zunächst installiertem Ruff 0.11.0 meldete
+drei Bestands-UP038-Warnungen. Angleichung auf das im Hauptcheckout benutzte
+Ruff 0.16.6 beseitigt die Toolversionsabweichung ohne Produktionscodefix.
+
+Modell- und Datenrecherche geschah getrennt von Inferenz. Vier Testgeräte
+wurden vor der Variantenwahl reserviert, zwei davon sind ausgeschaltet.
+RND-Geräteidentität bleibt unbestätigt, deshalb ausschließlich Entwicklung,
+mit gemeinsamer Abhängigkeitsgruppe. Kein OCR-Resultat diente als Solltext.
+
+Erster Entwicklungslauf brach bei gültigen ~45°-PP-Vierecken ab: der
+Produktions-Ecksortierer duplizierte Punkte. Experimenteller Originalpixel-Warp
+mit bereits geordneter Kandidatengeometrie behebt das; OQ-34 hält die getrennt
+zu prüfende Produktionswirkung fest. Dieser abgebrochene Lauf erreichte keine
+Testinferenz. Ein weißes synthetisches Bild zeigte Tesseract-Halluzinationen
+(`ssd`/`ssd_int`: `1`), weshalb kontrastlose Bilder vorab abgelehnt werden.
+
+Vollständiger Lauf mit festen Schwellen, Entwicklungsauswahl `7seg`, danach
+Testinferenz: kein Kandidat liefert eine akzeptierte korrekte Testlesung.
+PP lokalisiert eine von vier Zielregionen und erkennt im bekannten Casio-
+Ausschnitt zwar `22.0`, lehnt wegen Zeichenscore aber ab. Das ist ein
+konkreter Ablehnungs-/Detektionsbefund, keine Evidenz universell untauglicher
+OCR. Weder Zeichenscore noch Crop wurden anhand dieser Testresultate getunt.
+Der archivierte Wiederholungslauf nach Toolversionsangleichung enthält
+dieselben Vorhersagen; Laufzeitunterschiede sind keine zusätzlichen Samples.
+
+Deutung: lokale ONNX-Ausführung ist möglich, aktuelle Genauigkeit/Detektion
+und fehlende Segmenttopologie erfüllen den Produktablauf nicht. Datenumfang
+und fehlende LED-/Vorzeichen-/Bewegungsbedingungen begrenzen jede weitergehende
+Aussage. Empfehlung: separat synthetisches Training für diese konkreten
+Erkennungslücken untersuchen und unabhängige reale Prüfung erweitern. Keine
+UI-Demo gebaut, keine Ausgabe-/Gateintegration, kein Cloud-Upload, kein Training.
+
+Zahlen in [VALIDATION.md](VALIDATION.md), Aufbau/Kommandos/Artefakte in
+[automatic-seven-segment-report.md](automatic-seven-segment-report.md).
+
+Abschlussverifikation: Die zwei bislang ausgelassenen Bestandsprüfungen
+benötigten lokale Annotationen (keine fehlenden Tesseract-Sprachmodelle).
+Zwei Originalverzeichnisse wurden nur lesend in das ignorierte Worktree-`var/`
+kopiert; anschließend 236 Tests bestanden, Ruff/JavaScript/Git-Whitespace sauber.
+Der explizite `--frozen`-Replay ergab dieselben 94 Auswertungen einschließlich
+aller Texte, Ablehnungen und Kandidatengeometrien; Dauern dürfen schwanken.
+Es handelt sich um dieselben Bilder, nicht um neue unabhängige Evidenz.

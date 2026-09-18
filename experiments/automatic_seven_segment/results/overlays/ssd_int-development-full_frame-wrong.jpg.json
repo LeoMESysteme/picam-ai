@@ -1,0 +1,9 @@
+{
+  "sample_id": "irthermometer",
+  "source": "https://commons.wikimedia.org/wiki/File:Digital_IR-Thermometer.jpg",
+  "license": "Public domain",
+  "attribution": "Sarang",
+  "original_sha256": "daec939b4096550bfdaf8a4991d66a48adc29b34d0429cb8d43ad79e2df857e9",
+  "modification": "evaluation rectangles/text; resized to max 1000 pixels wide",
+  "provisional": true
+}
