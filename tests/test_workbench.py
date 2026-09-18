@@ -2135,3 +2135,55 @@ def test_stop_bei_voller_warteschlange_blockiert_nicht_und_liefert_ein_manifest(
     assert len(manifest["frames"]) + manifest["dropped_frames"] == CLIP_QUEUE_DEPTH + 10
     for entry in manifest["frames"]:
         assert (directory / entry["file"]).exists()
+
+
+def test_nachfuehrungsverlust_erscheint_auch_ohne_frische_ablesung(tmp_path):
+    """Abschlussreview R8b: der angezeigte Nachfuehrungszustand gehoert zum
+    AKTUELLEN Bild, unabhaengig davon, ob die gedrosselte Werterkennung in
+    diesem Bild lief.
+
+    Der Tracker laeuft je Bild, `_read()` nur alle OCR_INTERVAL_S. Vorher
+    stammte `reading["track"]` samt Statusflags immer aus der letzten
+    Ablesung - die Einstelltabelle meldete bis zu ein Drosselintervall lang
+    "Nachfuehrung folgt", obwohl das gezeigte Bild die Anzeige verloren hatte.
+    Der Fix muss chirurgisch bleiben: Rohtext, Wert und Freigabeentscheidung
+    sind weiterhin die der letzten Ablesung (keine Neuablesung je Bild)."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(), _metadaten())
+    gelesen = copy.deepcopy(controller.reading)
+    assert gelesen["value"] == 12.34
+    assert gelesen["track"]["corrected"] is True
+    assert "tracking_lost" not in gelesen["status_flags"]
+
+    # Kein last_ocr_at-Reset: dieses Bild liegt innerhalb der Drossel,
+    # should_read ist False. Die Anzeige ist aber aus dem Rahmen gelaufen.
+    controller.publish(_szene(shift_x=200), _metadaten())
+
+    assert controller.reading["track"]["corrected"] is False, (
+        "der Nachfuehrungsbefund muss der dieses Bilds sein"
+    )
+    assert "tracking_lost" in controller.reading["status_flags"]
+    # Chirurgisch: die Ablesung selbst wurde NICHT erneuert.
+    assert controller.reading["value"] == gelesen["value"]
+    assert controller.reading["raw_text"] == gelesen["raw_text"]
+    assert controller.reading["gate_status"] == gelesen["gate_status"]
+    # Und die Einstelltabelle zeigt den Verlust wirklich an.
+    rows = {row["key"]: row for row in fields.rows(controller.snapshot())}
+    assert "AUS DEM RAHMEN" in rows["reading.track"]["display"]
+    assert "tracking_lost" in rows["reading.gate"]["hint"]
+
+
+def test_gedrosselte_ablesung_bleibt_ohne_nachfuehrungsverlust_unveraendert(tmp_path):
+    """Gegenprobe: laeuft die Nachfuehrung weiter, aendert die Auffrischung
+    nichts an der gecachten Ablesung - sie ist keine zweite Leseschleife."""
+    controller = _confirmed_controller_mit_anzeige(tmp_path)
+    controller.last_ocr_at = 0.0
+    controller.publish(_szene(), _metadaten())
+    vorher = copy.deepcopy(controller.reading)
+
+    controller.publish(_szene(shift_x=6), _metadaten())  # innerhalb der Drossel
+
+    assert "tracking_lost" not in controller.reading["status_flags"]
+    assert controller.reading["value"] == vorher["value"]
+    assert controller.reading["gate_status"] == vorher["gate_status"]

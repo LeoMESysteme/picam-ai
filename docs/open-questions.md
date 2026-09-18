@@ -941,8 +941,9 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-31 — Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit
 
-* **Status:** offen · erkannt 2026-09-18 in Task 5's Fix-Runde
-  (PLAN_2026-09-11-ocr-selbstkalibrierung.md), vom Re-Reviewer bestätigt
+* **Status:** geklärt (2026-09-18) · erkannt 2026-09-18 in Task 5's Fix-Runde
+  (PLAN_2026-09-11-ocr-selbstkalibrierung.md), vom Re-Reviewer bestätigt,
+  im Abschlussreview desselben Plans als R8a behoben
 * **Befund:** Task 5's Fix-Runde behob eine Bug-Klasse für den Canvas-/
   Geometrie-Editierfluss (ein stehengebliebenes `editing.autofit`-Ergebnis
   wurde beim Bestätigen stillschweigend angewendet, statt verworfen zu
@@ -954,8 +955,16 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   beim Bestätigen trotzdem überschreiben. Vom Re-Reviewer als real bestätigt,
   aber als andere Bugoberfläche eingestuft als das in dieser Runde tatsächlich
   Gefixte.
-* **Klärung:** Nicht gefixt, nicht testabgedeckt — Kandidat für eine künftige
-  Aufgabe.
+* **Klärung (2026-09-18, Abschlussreview R8a):** Bestätigt und behoben. Jede
+  Layout-Änderung aus der Einstelltabelle (`layout.set`/`layout.set_many` in
+  `send()`) verwirft einen anstehenden Autofit-Vorschlag über den neuen
+  gemeinsamen Pfad `invalidateAutofit()` — derselbe, den Task 5's Fix-Runde
+  für den Canvas-Fluss benutzt. Eine noch laufende Autofit-Anfrage gilt dabei
+  ebenfalls als überholt (`requestId` wird erhöht), sonst hätte eine spät
+  eintreffende Antwort die zwischenzeitliche Handänderung überschrieben — das
+  war ein echtes Rennen, nicht nur eine Reihenfolgefrage. Testabdeckung:
+  `tests/workbench_client.test.mjs` (R8a, beide Fälle inkl. Polarität),
+  angestoßen von `tests/test_workbench_client.py`.
 * **Antwort landet in:** `src/dispread/workbench/static/workbench.js`.
 
 ## OQ-32 — `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind`

@@ -27,6 +27,9 @@ async function poll(){
  if(busy || sessionEnded)return;busy=true;
  try{
   const s=await api('/status');state=s;csrf=s.csrf;lastReply=performance.now();
+  // `s.ocr_grid` ist das serverseitig UEBERNOMMENE Raster. Es darf hier
+  // weiter aufgefrischt werden, ohne einen anstehenden Autofit-Vorschlag zu
+  // beruehren - welches von beiden gezeichnet wird, entscheidet draw().
   if(editing){editing.ocr_grid=s.ocr_grid;draw();}
   if(sequence!==s.sequence){sequence=s.sequence;lastProgress=performance.now();}
   if(s.logs.length && s.logs.at(-1).id<lastLog)lastLog=0;
@@ -109,6 +112,11 @@ function renderSetup(setup){
 }
 async function send(operations){
  if(setupBusy)return;setupBusy=true;
+ // Eine Handänderung am Leseraster sticht einen Autofit-Vorschlag: der
+ // ✓-Klick schickt sonst ueber layout.set_many das ganze alte Vorschlagsraster
+ // und ueberschreibt die gerade getippte Aenderung (inkl. Polaritaet)
+ // stillschweigend (OQ-31, Review-Fund).
+ if(operations.some(([op])=>op==='layout.set'||op==='layout.set_many'))invalidateAutofit('Layoutfeld von Hand geändert.');
  try{for(const [op,args] of operations)await command(op,args);}
  catch(e){log('error',e.message);}
  finally{setupBusy=false;await poll();}
@@ -269,10 +277,15 @@ function draw(){
   for(let i=0;i<4;i++){ctx.fillStyle=i===editing.selected?'#ffffff':'#a6d6a6';ctx.fillRect(editing.quad[i][0]*w-5,editing.quad[i][1]*h-5,10,10);}
  // OCR-Raster/-Rahmen erst ab Stufe B sichtbar.
  if(!roiActive){
-  for(const box of editing.ocr_grid.cells)gridBox(box,'rgba(240,208,128,.65)');
-  if(editing.ocr_grid.sign)gridBox(editing.ocr_grid.sign,'rgba(240,208,128,.65)');
-  for(const box of editing.ocr_grid.cells)for(const [,sx,sy] of editing.ocr_grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
-  if(editing.ocr_grid.decimal_after!==null){const box=editing.ocr_grid.cells[editing.ocr_grid.decimal_after],p=ocrPoint(box[0]+box[2],box[1]+.88*box[3]);ctx.strokeStyle='#7fdbe8';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,4,0,2*Math.PI);ctx.stroke();}
+  // Steht ein Autofit-Vorschlag an, zeigt die Leinwand SEIN Raster - sonst
+  // saehe der Bediener das noch uebernommene Raster, bestaetigte mit ✓ aber
+  // ein anderes (Review-Fund). editing.ocr_grid wird vom Polling laufend
+  // aufgefrischt und ist genau deshalb hier nicht die Vorschauquelle.
+  const grid=editing.autofit?editing.autofit.ocr_grid:editing.ocr_grid;
+  for(const box of grid.cells)gridBox(box,'rgba(240,208,128,.65)');
+  if(grid.sign)gridBox(grid.sign,'rgba(240,208,128,.65)');
+  for(const box of grid.cells)for(const [,sx,sy] of grid.samples){const p=ocrPoint(box[0]+sx*box[2],box[1]+sy*box[3]);ctx.fillStyle='rgba(240,208,128,.8)';ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,1.6,0,2*Math.PI);ctx.fill();}
+  if(grid.decimal_after!==null){const box=grid.cells[grid.decimal_after],p=ocrPoint(box[0]+box[2],box[1]+.88*box[3]);ctx.strokeStyle='#7fdbe8';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0]*w,p[1]*h,4,0,2*Math.PI);ctx.stroke();}
   const oc=ocrCorners();
   ctx.setLineDash(editing.pending?[6,4]:[]);
   path(oc,'#f0d080',2);
@@ -322,7 +335,7 @@ canvas.onpointerdown=event=>{
   // sobald die ROI erneut zur Bearbeitung freigegeben wird (Review-Fund).
   if(pointInQuad([x,y],editing.quad)){
    editing.stage='roi';editing.mode='browse';editing.selected=null;
-   if(editing.autofit){editing.autofit=null;updateAutofitResult(null);log('info','Autofit-Vorschlag verworfen: ROI wird erneut bearbeitet.');}
+   invalidateAutofit('ROI wird erneut bearbeitet.');
    draw();
   }
   return;
@@ -350,6 +363,18 @@ viewport.onkeydown=async event=>{
  if(!editing)return;
  if(event.key==='Escape'){event.preventDefault();unfreeze();return;}
 };
+function invalidateAutofit(reason){
+ // Ein Autofit-Vorschlag gilt genau fuer die Geometrie und das Leseraster, mit
+ // denen er gefittet wurde. Aendert sich eines davon, ist er ungueltig - und
+ // zwar auch dann, wenn er noch unterwegs ist: eine spaet eintreffende
+ // Antwort wuerde sonst die zwischenzeitliche Eingabe ueberschreiben
+ // (Rennen, nicht nur Reihenfolge). requestId wird deshalb nur bei genau
+ // dieser Anfrage erhoeht, damit ocr.suggest/roi davon unberuehrt bleiben.
+ if(!editing)return;
+ if(editing.pending==='layout.autofit')editing.requestId+=1;
+ if(!editing.autofit)return;
+ editing.autofit=null;updateAutofitResult(null);log('info','Autofit-Vorschlag verworfen: '+reason);
+}
 function toggleEdit(stage){
  if(editing.pending)return;
  // Ecken-/Koerper-Ziehen (onpointermove) findet nur im Edit-Modus statt, der
@@ -357,7 +382,7 @@ function toggleEdit(stage){
  // die bisherige Geometrie gefittet und darf weder beim Betreten (weitere
  // Ziehbewegungen aendern die Geometrie) noch beim Verwerfen (Rueckfall auf
  // preEdit ist ebenfalls eine Geometrieaenderung) weiter gueltig sein.
- if(editing.autofit){editing.autofit=null;updateAutofitResult(null);log('info','Autofit-Vorschlag verworfen: Geometrie wird bearbeitet.');}
+ invalidateAutofit('Geometrie wird bearbeitet.');
  if(editing.mode==='edit'){
   if(stage==='roi')editing.quad=editing.preEdit;else editing.ocr_box=editing.preEdit;
   editing.mode='browse';

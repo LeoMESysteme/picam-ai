@@ -151,6 +151,41 @@ def grid_geometry(layout_data):
     }
 
 
+def track_info(track):
+    """Nachfuehrungsbefund eines Bilds fuer die Anzeige. Keine Freigabeaussage."""
+    return {
+        "score": round(track.score, 3),
+        "shift": round(track.shift, 4),
+        "rotation_deg": round(track.rotation_deg, 2),
+        "corrected": track.quad is not None,
+        "reason": track.reason,
+    }
+
+
+def reading_with_current_track(reading, track):
+    """Nachfuehrungsbefund des AKTUELLEN Bilds in eine gecachte Ablesung ziehen.
+
+    Der Tracker laeuft auf jedem Bild (Task 6: 2,63 ms Median), die
+    Werterkennung nur gedrosselt (OCR_INTERVAL_S, OQ-24). Ohne diese
+    Auffrischung zeigte die Einstelltabelle bis zu ein Drosselintervall lang
+    "Nachfuehrung folgt", obwohl das gerade gezeigte Bild die bestaetigte
+    Anzeige bereits verloren hatte (Review-Fund R8b). Roher Text, Wert und
+    Freigabeentscheidung bleiben bewusst die der letzten Ablesung - nur die
+    Frische der Nachfuehrung wird bildaktuell; eine volle Neuablesung je Bild
+    wuerde die Drosselung aufheben, die genau dagegen existiert.
+
+    Ein einmal gesetztes `tracking_lost` bleibt bis zur naechsten echten
+    Ablesung stehen: ein wiedergefundener Rahmen macht einen unter Verlust
+    gelesenen Wert nicht nachtraeglich vertrauenswuerdig. Der aktuelle Befund
+    kann also nur hinzufuegen, nie entwarnen.
+    """
+    reading = dict(reading)
+    reading["track"] = track_info(track)
+    if track.quad is None:
+        reading["status_flags"] = sorted({*(reading.get("status_flags") or ()), "tracking_lost"})
+    return reading
+
+
 def quality(image, roi):
     h, w = image.shape[:2]
     if roi:
@@ -790,9 +825,16 @@ class Controller:
             )
         with self.lock:
             self.calibrated_on = frame["sequence"] if result.matched else None
+        layout_data = result.layout.to_dict()
         return {
             "matched": result.matched,
-            "layout": result.layout.to_dict(),
+            "layout": layout_data,
+            # Raster GENAU dieses Vorschlags, damit der Browser die Vorschau
+            # nicht aus dem uebernommenen Raster zeichnet. Dieselbe Rechnung
+            # wie fuer das eingefrorene Bild (grid_geometry) - so kann zwischen
+            # gezeigtem und bestaetigtem Raster nichts auseinanderlaufen
+            # (Review-Fund R1), und die Rastermathematik bleibt an einer Stelle.
+            "ocr_grid": grid_geometry(layout_data),
             "ocr_box": list(result.ocr_box),
             "separation": round(result.separation, 4),
             "runner_up": round(result.runner_up, 4),
@@ -1065,6 +1107,11 @@ class Controller:
                         return
                     reading = self._read(image, config, quad, track)
                     self.last_ocr_at = now
+            elif reading is not None and track is not None:
+                # Ohne frische Ablesung bleibt der Wert der gecachte - der
+                # Nachfuehrungsbefund dieses Bilds nicht (siehe
+                # reading_with_current_track).
+                reading = reading_with_current_track(reading, track)
             if focus:
                 ih, iw = image.shape[:2]
                 crop = rectify(image, quad, target_size=(iw, ih))
@@ -1182,15 +1229,7 @@ class Controller:
                 "gate_reasons": list(decision.reject_reasons),
                 "gate_confidence": round(decision.confidence, 4),
                 "gate_timebase": "CLOCK_MONOTONIC",
-                "track": None
-                if track is None
-                else {
-                    "score": round(track.score, 3),
-                    "shift": round(track.shift, 4),
-                    "rotation_deg": round(track.rotation_deg, 2),
-                    "corrected": track.quad is not None,
-                    "reason": track.reason,
-                },
+                "track": None if track is None else track_info(track),
                 "released": False,
                 "error": None,
             }

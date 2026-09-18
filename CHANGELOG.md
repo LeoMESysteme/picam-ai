@@ -3,6 +3,49 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R1/R8a/R8b: Vorschau, Vorschlagsgültigkeit, Nachführungsfrische)
+
+**Problem:** (R1) `runAutofit()` legte den Vorschlag in `editing.autofit` ab,
+die Leinwand zeichnete aber weiter `editing.ocr_grid` — das serverseitig
+*übernommene* Raster, das die Statusabfrage alle 500 ms auffrischt. Der
+Bediener sah damit ein anderes Raster als das, was sein ✓-Klick übernahm; die
+visuelle Bestätigung, um die es bei diesem Schritt geht, lief ins Leere.
+(R8a, zugleich OQ-31) Eine Handänderung an einem Layoutfeld der Einstelltabelle
+nach einem erfolgreichen Autofit machte den Vorschlag nicht ungültig — der
+✓-Klick schickte über `layout.set_many` das ganze alte Vorschlagsraster und
+überschrieb die Eingabe (inkl. Polarität) stillschweigend; eine noch laufende
+Autofit-Anfrage konnte dasselbe tun, wenn ihre Antwort spät eintraf. (R8b) Der
+Tracker läuft auf jedem Bild, `reading["track"]` und die Statusflags wurden
+aber nur bei einer frischen, gedrosselten Ablesung erneuert: die
+Einstelltabelle meldete bis zu ein Drosselintervall lang „Nachführung folgt",
+obwohl das gezeigte Bild die Anzeige verloren hatte.
+
+**Änderung:** (R1) `Controller._autofit()` liefert zusätzlich
+`ocr_grid = grid_geometry(layout)` des Vorschlags — dieselbe Rechnung wie für
+das eingefrorene Bild, damit gezeichnetes und bestätigtes Raster nicht
+auseinanderlaufen können; `draw()` zeichnet
+`editing.autofit ? editing.autofit.ocr_grid : editing.ocr_grid`, das Polling
+frischt weiterhin nur das übernommene Raster auf. (R8a) Neuer gemeinsamer
+Pfad `invalidateAutofit(grund)` — benutzt von den bisherigen Canvas-Fällen und
+neu von `send()` bei jedem `layout.set`/`layout.set_many`; er erhöht
+zusätzlich `editing.requestId`, wenn gerade eine Autofit-Anfrage läuft, sodass
+deren späte Antwort verworfen wird. (R8b) `reading_with_current_track()` zieht
+auf einem gedrosselten Bild den Nachführungsbefund *dieses* Bilds in die
+zwischengespeicherte Ablesung und setzt `tracking_lost`; Rohtext, Wert und
+Freigabeentscheidung bleiben unangetastet die der letzten Ablesung, ein
+einmal gesetztes `tracking_lost` wird nicht wieder entfernt.
+
+**Konsequenz:** Was der Bediener vor dem ✓ sieht, ist das, was übernommen wird
+— auch über beliebig viele Statusabfragen hinweg. Eine Handänderung sticht den
+Vorschlag statt umgekehrt (OQ-31 damit geklärt). Der angezeigte
+Nachführungszustand gehört zum aktuellen Bild, ohne die OCR-Drosselung
+(OQ-24) aufzuheben. Neu: `tests/workbench_client.test.mjs` fährt
+`workbench.js` im Auslieferungsstand unter `node` mit minimalem DOM-Ersatz
+(kein neues Paket; angestoßen von `tests/test_workbench_client.py`, die
+Rasterfixtures kommen aus `grid_geometry()`); 4 der 5 Browsertests sind gegen
+den alten Stand rot nachgewiesen. `210 passed`, `ruff check` sauber,
+`node --check` sauber.
+
 ## 0.1.0.dev0 — 2026-09-18 (Abschlussreview R2/R6: eine Aufnahme, eine Konfiguration; ehrliches Manifest)
 
 **Problem:** (R2) `_clip_start` kopiert das Profil einmal beim Start. Änderte
