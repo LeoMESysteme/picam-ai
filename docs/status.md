@@ -86,7 +86,7 @@ Plan unberührt (diese lief ausschließlich auf `ocr-selbstkalibrierung`).
 ## Implementierter Stand
 
 Die Verarbeitungskette (siehe `CLAUDE.md`, Abschnitt „Aufbau") hat jetzt eine
-zusätzliche, austauschbare Trennstelle `track` zwischen `rectify` und `ocr/`:
+zusätzliche, austauschbare Trennstelle `track` zwischen `detect/` und `rectify`:
 `QuadTracker` registriert eine bestätigte Anzeige innerhalb enger Grenzen neu
 nach, bevor gelesen wird. `frames/` kennt jetzt zwei lauffähige Schemata
 (`synthetic://`, `replay://`); `picamera2://`, `imx500://`, `folder://`,
