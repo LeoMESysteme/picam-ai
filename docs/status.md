@@ -6,7 +6,10 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 ## Sofort zu wissen
 
 **Neues OCR-Backend `tesseract_cli` gebaut, aber noch nicht erfolgreich
-gegen echte GSV-Sensor-Fotos.** Über 4 Aufgaben plus eine abschließende
+gegen echte GSV-Sensor-Fotos.** Wie der Dataset-Benchmark unten liegt auch
+das im eigenen, noch nicht gemergten Worktree `worktree-dataset-benchmark`
+(siehe „Nächste Schritte" für den vollständigen Commit-Stand). Über 4
+Aufgaben plus eine abschließende
 Fix-Runde vollständig Ende-zu-Ende verdrahtet: `src/dispread/ocr/tesseract_cli.py`
 (`TesseractReader`, ruft die bereits installierte `tesseract`-CLI als
 Subprozess auf), Profilschema (`backend`-Feld, Schema 4), `Controller`
@@ -24,8 +27,10 @@ Design und Plan: [2026-09-21-tesseract-backend-design.md](superpowers/specs/2026
 [2026-09-21-tesseract-backend.md](superpowers/plans/2026-09-21-tesseract-backend.md).
 
 **Neuester Stand dieser Sitzung, eigener Worktree
-`worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 5
-Commits, noch nicht nach `master` gemergt): der geplante Dataset-Benchmark
+`worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 17
+Commits gegenüber `master`, noch nicht gemergt — Dataset-Benchmark,
+OQ-04-Bestätigung/Polaritätsfix und der `tesseract_cli`-Backend oben, alle
+in diesem einen Worktree): der geplante Dataset-Benchmark
 (`docs/PLAN_2026-09-21-dataset-benchmark.md`) ist vollständig umgesetzt
 (`src/dispread/benchmark.py` + `scripts/dataset-benchmark.py`) und gegen den
 vollständigen realen Sammelmodus-Bestand gelaufen. **Kernbefund: von 73
@@ -330,7 +335,7 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
-0. **Dataset-Benchmark-Worktree nach `master` integrieren** (7 Commits in
+0. **Dataset-Benchmark-Worktree nach `master` integrieren** (17 Commits in
    `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
 00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,
     [OQ-04](open-questions.md)-Update): alle im Betrieb zu lesenden Anzeigen
