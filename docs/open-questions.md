@@ -199,7 +199,7 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-15 — `tesseract-ocr`, `socat` und `chrony` installieren
 
-* **Status:** offen · **Zuständig:** Mensch mit `sudo`-Passwort
+* **Status:** geklärt (2026-09-21)
 * **Befund:** Seit dem Reboot am 2026-09-07 verlangt `sudo` ein Passwort, die
   Installation konnte nicht automatisch erfolgen. Benötigt:
   `sudo apt install -y tesseract-ocr tesseract-ocr-eng socat chrony`
@@ -207,6 +207,11 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   ist Messung M1 (Offset und Drift) nicht protokollierbar. `socat` ist nur
   Komfort — die Tests nutzen `os.openpty()` aus der stdlib.
 * **Antwort landet in:** [dependencies.md](dependencies.md)
+* **Antwort (2026-09-21):** Alle drei sind auf dem Lab-Pi installiert
+  (`tesseract 5.5.0`, `socat`, `chrony 4.6.1-3`) - per `which`/`dpkg -l`
+  geprueft. Der Eintrag war nur nicht aktualisiert; kein offener Blocker
+  mehr. `dispread.ocr.tesseract_cli` nutzt die tesseract-Binary produktiv
+  (siehe CHANGELOG 2026-09-21).
 
 ## OQ-16 — Vollständigkeit des lokalen Planungsstands
 

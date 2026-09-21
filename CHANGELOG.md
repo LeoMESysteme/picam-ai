@@ -3,6 +3,38 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Neues OCR-Backend tesseract_cli fuer dot-matrix-/Zeichen-LCDs)
+
+**Problem:** Der neu angelegte GSV-Sensor ist eine dot-matrix-Zeichen-LCD
+(HD44780-artig, z. B. `+1.05000 mV/V`), keine 7-Segment-Anzeige. Der
+bestehende `sevenseg`-Leser kann sie strukturell nicht lesen - `DIGIT_SEGMENTS`
+kennt Balkenmuster, keine Punktraster-Glyphen, und keine Buchstaben/Symbole.
+
+**Änderung:** Neues `src/dispread/ocr/tesseract_cli.py`, `TesseractReader`,
+implementiert dieselbe `ValueReader`-Schnittstelle wie `sevenseg` - keine
+Schnittstellenänderung. Nutzt die bereits installierte `tesseract`-CLI
+(5.5.0) als Subprozess (TSV-Ausgabemodus, liefert Text und Wortkonfidenz in
+einem Aufruf), keine neue Python-Abhängigkeit. Zeichen-Whitelist und
+erwartete Ziffern-/Nachkomma-/Vorzeichenform kommen ausschließlich aus dem
+bestätigten `DisplayLayout` - nie geraten. Zwei unabhängige
+Ablehnungskriterien (Konzept.md §7): Formatprüfung (erkannte Ziffernzahl
+muss exakt zum Profil passen) und eine Konfidenzschwelle - beide müssen
+bestehen, sonst `value=None`. 10 neue Tests, davon 8 deterministisch gegen
+einen gefakten Tesseract-Output (Parser-/Ablehnungslogik, unabhängig von der
+tatsächlichen Bilderkennungsgüte) und ein Sicherheitstest gegen die drei
+echten GSV-Sensor-Fotos (`nie ein falscher Wert, höchstens eine Ablehnung`).
+OQ-15 geklärt: `tesseract-ocr`/`socat`/`chrony` sind bereits installiert.
+
+**Konsequenz:** Zweites lauffähiges OCR-Backend, noch nicht mit dem
+`Controller`/Profilschema verdrahtet (folgt in einem separaten Commit).
+Die Erkennungsgüte des Standard-Tesseract-Modells auf dieser dot-matrix-
+Schrift ist noch nicht zuverlässig (manuelle Stichproben lasen z. B.
+`1.05000` als `1.75000`) - die Konfidenzschwelle verhindert nachweislich,
+dass solche Fehllesungen als Wert durchgehen, aber die Trefferquote selbst
+braucht weitere Arbeit (mehr/bessere Vorverarbeitung oder ein
+segmentschrift-trainiertes Tesseract-Modell wie `letsgodigital`) - bewusst
+nicht Teil dieses Commits.
+
 ## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: Leser-Polarität kam nie vom Gerät - jede LCD-Probe wäre garantiert gescheitert)
 
 **Problem:** Der Nutzer hat ein neues Gerät ("GSV", `technology=LCD`)
