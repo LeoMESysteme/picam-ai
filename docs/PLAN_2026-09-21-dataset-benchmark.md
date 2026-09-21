@@ -1,8 +1,18 @@
 # Plan: Bridging-Skript — Datensatz-Proben gegen den 7-Segment-Leser messen
 
-> **Stand 2026-09-21: geplant, noch nicht umgesetzt.** Enthält eine bereits
-> gelaufene Vorab-Messung (read-only Spike), deren Befund den Zuschnitt des
-> Skripts geändert hat — siehe Abschnitt „Vorab-Messung".
+> **Stand 2026-09-21: umgesetzt (Task 1–4), erster echter Lauf gefahren.**
+> `src/dispread/benchmark.py` und `scripts/dataset-benchmark.py` sind fertig
+> und getestet (5 Commits im Worktree `worktree-dataset-benchmark`). Der
+> erste echte Lauf gegen den vollständigen Sammelmodus-Bestand (73 lesbare
+> Proben, 2 Geräte) bestätigt die Vorab-Messung: **0 von 73 Proben passen**,
+> Phase B liefert dadurch in keiner der sechs durchgeführten Faltungen eine
+> Übertragungszahl. Zahlen in [VALIDATION.md](VALIDATION.md) (2026-09-21),
+> Deutung in [lab_journal.md](lab_journal.md) (2026-09-21), Updates an
+> [OQ-23](open-questions.md), [OQ-25](open-questions.md) und
+> [OQ-17](open-questions.md). Offen: Integration in `master` (noch im
+> Worktree), Behebung der zwei gefundenen Lücken (fehlender `selected`-
+> Vertreter für eine BK-Situation; Rastergeometrie selbst, siehe
+> OQ-23-Update).
 
 **Ziel:** Die im Sammelmodus erfassten realen Proben (Zielbox + getippter
 Sollwert) erstmals messbar machen, ohne dabei eine Zahl zu erzeugen, die besser

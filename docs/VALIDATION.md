@@ -3,8 +3,13 @@
 Jede Zahl hier trägt Datum, Datensatz und Verweis auf den Lauf. Aufbau und
 Deutung von Experimenten gehören nach [lab_journal.md](lab_journal.md).
 
-⚠️ **Die Erkennungskennzahlen stammen bisher von synthetischem Material.** Es
-existiert noch kein Datensatz echter Geräte ([OQ-04](open-questions.md)).
+⚠️ **Die Erkennungskennzahlen stammen bisher überwiegend von synthetischem
+Material.** Seit 2026-09-21 existiert ein realer Proben-Bestand aus dem
+Sammelmodus (73 lesbare Proben, 2 Geräte, siehe unten „2026-09-21 —
+Dataset-Benchmark"), aber **beide Geräte stehen auf `split=development`,
+keines auf `heldout`** — nach Konzept.md §9 ist damit weiterhin **kein**
+Testergebnis erreichbar, nur eine Entwicklungsmessung. Ein Datensatz mit
+breiterer Gerätevielfalt bleibt offen ([OQ-04](open-questions.md)).
 Konzept.md §9 ist ausdrücklich: synthetische Daten ergänzen, sie zählen **nie**
 zum Testset. Technische Kamerastream-Tests sind gesondert gekennzeichnet und
 belegen keine Erkennungszuverlässigkeit im Realbetrieb.
@@ -686,3 +691,68 @@ Warmluafen, gemessen mit `time.perf_counter()` in `CLOCK_MONOTONIC`,
 Die Nachführung läuft bei jedem Frame (nicht gedrosselt), analog zur
 Kandidatensuche im `run`-Modus ohne `CANDIDATE_INTERVAL_S`-Throttling. Bei 15 fps
 Bildrate ist der Nachführungsaufwand <5 % der pro-Frame-Zeit.
+
+## 2026-09-21 — Dataset-Benchmark: erster echter Lauf gegen den Sammelmodus-Bestand
+
+`scripts/dataset-benchmark.py --samples var/workbench/datasets --split
+development --deskew both --diagnose 2`, gegen den vollständigen
+Sammelmodus-Bestand zum Zeitpunkt des Laufs: **77 Proben, 2 Geräte** (RND-Lab,
+BK Precision), **73 lesbar, 4 unlesbar**. Beide Geräte stehen auf
+`split=development`, keines auf `heldout` — alle Zahlen hier sind
+**Entwicklungszahlen**, kein Konzept-§9-Testergebnis. Aufbau/Deutung siehe
+`docs/lab_journal.md`, 2026-09-21; Deutung der Segmentgeometrie in
+[OQ-23](open-questions.md), der `fit_quad_in_region`-Befund in
+[OQ-25](open-questions.md).
+
+**Phase A (Passbarkeit/Diagnose, ausdrücklich kein Erkennungswert):** grobe
+Rahmenvorsuche (~36 Geometrie-Kandidaten je Probe) + `fit_layout` je lesbarer
+Probe einzeln.
+
+| Gerät | lesbar | gefittet (achsparallel) | kein Quad (achsparallel) | gefittet (entzerrt) | kein Quad (entzerrt) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| RND-Lab | 40 | 0 | 0 | 0 | **40** |
+| BK Precision | 33 | 0 | 0 | 0 | **33** |
+| **gesamt** | **73** | **0** | **0** | **0** | **73** |
+
+Achsparallel: jede der 73 Proben bekommt ein Quad, aber **kein einziges**
+Raster dekodiert den Sollwert exakt — 0/73. Entzerrt: `fit_quad_in_region`
+liefert für **keine einzige** der 73 Proben überhaupt ein Quad (0/73 vor der
+Rastersuche); siehe OQ-25-Update, mutmaßlich weil die von Hand gezogenen
+Sammelmodus-Zielboxen deutlich großzügiger sind als die engeren
+`roi_quad`-Hinweise, gegen die die Funktion 2026-09-10 gemessen wurde.
+
+**Segmentdiagnose (Beispiele, unbestätigter Rahmen, achsparallel):**
+`0b5eaacf...` (BK, soll `-000.13`) — Stelle 1 (Sollziffer `0`) hat **kein**
+Segment über der Schwelle (Werte 0,12–0,16, Kontrast zu gering). `0282bca7...`
+(RND-Lab, soll `25.36`) — Stelle 2 (Sollziffer `3` = a,b,c,d,g) misst
+a,b,f,g aktiv: zwei von fünf Segmenten falsch, kein Rauschen. Kein
+einheitlicher Fehlertyp über beide Beispiele.
+
+**Phase B (Leave-one-group-out-Übertragung):** 7 mögliche Faltungen (3
+BK-Situationen + 4 RND-Lab-Situationen), 6 durchgeführt. Die dritte
+BK-Situation (`57227b16...`, „schräg links") hat noch keine als `selected`
+markierte Probe — als Lücke gemeldet (`FEHLER:` auf stderr, Exit-Code 1),
+keine Ersatzwahl getroffen.
+
+| Geometrie | Faltungen durchgeführt | davon mit Übertragungszahl |
+| --- | ---: | ---: |
+| achsparallel | 6 | **0** |
+| entzerrt | 6 | **0** |
+
+In **jeder** durchgeführten Faltung, beider Geometrien, meldet Phase B „kein
+Raster gefunden, keine Übertragung möglich" — der Vertreter der jeweiligen
+Situation passte selbst nicht (achsparallel: 0 von 36 Kandidaten dekodierte
+den Sollwert exakt, 2485–2556 Leseversuche je Vertreter; entzerrt: kein Quad).
+**Keine einzige Zelle dieser Messung liefert eine korrekt/falsch/abgelehnt-Zahl**
+— das ist der ehrliche Befund, nicht „0 % korrekt" (Plan-Vorgabe,
+„ehrliches Ausfallverhalten").
+
+**Einzelfalldiagnose (unlesbare Proben, n=1 je Eintrag, keine Quote):** 3
+BK-Precision-Proben, 1 RND-Lab-Probe — nicht gezählt, nur benannt.
+
+**Einordnung:** Die geplante Übertragungszahl (Phase B) ist mit dem heutigen
+festen relativen Segment-Abtastraster **nicht erreichbar**, weil bereits
+Phase A auf keiner einzigen Probe ein passendes Raster findet — Phase B kann
+also gar nicht erst starten. Die nächste sinnvolle Stufe ist eine Prüfung der
+Rastergeometrie selbst (OQ-23-Update), nicht ein erneuter Lauf mit mehr
+Proben.

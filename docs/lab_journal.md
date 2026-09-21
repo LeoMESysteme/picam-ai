@@ -648,3 +648,49 @@ in [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibri
 Dass der Ist-Stand auf diesen sechs Bildern **null** falsche Annahmen hat, ist
 dabei die wichtigste Zahl: sie ist ab jetzt die Nichtregressionsbedingung, und
 gegen null blockiert schon eine einzige falsche Annahme jede Änderung.
+
+## 2026-09-21 — Dataset-Benchmark: erster echter Lauf, OQ-23 erstmals gezählt
+
+Aufbau: `scripts/dataset-benchmark.py` (neu diese Sitzung, siehe
+[PLAN_2026-09-21-dataset-benchmark.md](PLAN_2026-09-21-dataset-benchmark.md))
+gegen den vollständigen realen Sammelmodus-Bestand gefahren, `--split
+development --deskew both`. Vorher eine Vorab-Messung (read-only Spike, im
+Plan dokumentiert) an fünf markierten Vertretern, danach die vier Bausteine
+(`search_ocr_box`, `fit_dataset_sample`, `target_layout`,
+`evaluate_dataset_sample`, `segment_report`, `aggregate`) gebaut, jeweils an
+einer `render_display`-Pflichtprüfung verifiziert, bevor überhaupt reale
+Bilder angefasst wurden — die Reihenfolge war bewusst so, um bei einem
+Fehlschlag zwischen „Skript kaputt" und „OQ-23 bestätigt" unterscheiden zu
+können (Konsequenz aus der Messreihe 2026-09-11 oben).
+
+**Erster Lauf brach sofort ab** — nicht wegen eines Bugs, sondern weil die
+BK-Precision-Situation „schräg links" noch keine als `selected` markierte
+Probe hat (Datensatz ist seit dem Plan von 52 auf 77 Proben gewachsen). Die
+ursprüngliche CLI-Fassung beendete beim ersten fehlenden `selected` den
+kompletten Lauf; das wurde noch in derselben Sitzung korrigiert (nur die
+betroffene Faltung wird übersprungen, der Rest läuft weiter, `exit_code`
+bleibt 1) — sonst hätte eine einzelne Bedienlücke bei einem Gerät den
+gesamten Befund für das andere Gerät verschluckt.
+
+**Befund (Zahlen in [VALIDATION.md](VALIDATION.md), 2026-09-21):** Von 73
+lesbaren Proben (beide Geräte) passt achsparallel **kein einziges** Raster
+(0/73) — die Vorab-Messung an fünf Bildern war also keine Anomalie, sondern
+der tatsächliche Zustand über den ganzen Bestand. Überraschender zweiter
+Fund, nicht Teil der ursprünglichen Fragestellung: der `deskewed`-Arm
+(`fit_quad_in_region`) findet für **keine einzige** der 73 Proben überhaupt
+ein Quad — bei den zwei Annotationen von 2026-09-10 lag die IoU noch bei
+0,91. Vermutung (nicht nachgewiesen): die Sammelmodus-Zielboxen sind absichtlich
+locker gezogen (Plan misst ~5-fache Flächenstreuung selbst innerhalb einer
+Situation) und reißen damit `fit_quad_in_region`s Flächen-/Überdeckungsfilter,
+die gegen engere, bereits bestätigte `roi_quad`-Hinweise gemessen wurden.
+Das ist jetzt [OQ-25](open-questions.md) zugeordnet, nicht neu erfunden.
+
+**Deutung:** Phase B (die eigentliche Übertragungszahl) kam über keine
+einzige der sechs durchgeführten Faltungen hinaus, weil schon der Vertreter
+jeder Faltung in Phase A nicht passte — kein „0 % korrekt", sondern
+„nicht messbar", und das Skript sagt das auch genau so, nicht beschönigt.
+Die nächste sinnvolle Handlung ist **nicht** mehr Proben sammeln, sondern die
+Rastergeometrie selbst untersuchen (OQ-23-Update): entweder der
+Kandidatenraum in `dispread.ocr.autofit._CANDIDATES` ist für reale Displays
+zu eng, oder `cell_boxes` braucht grundsätzlich eine andere Aufteilung als
+die für synthetisches Material entworfene.

@@ -5,7 +5,28 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-Diese Sitzung (2026-09-21) hat zunächst die als hohe Priorität markierte
+**Neuester Stand dieser Sitzung, eigener Worktree
+`worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 5
+Commits, noch nicht nach `master` gemergt): der geplante Dataset-Benchmark
+(`docs/PLAN_2026-09-21-dataset-benchmark.md`) ist vollständig umgesetzt
+(`src/dispread/benchmark.py` + `scripts/dataset-benchmark.py`) und gegen den
+vollständigen realen Sammelmodus-Bestand gelaufen. **Kernbefund: von 73
+lesbaren Proben passt achsparallel kein einziges Raster (0/73), der
+`deskewed`-Arm findet für keine einzige Probe überhaupt ein Quad (0/73) —
+Phase B (Übertragungszahl) ist dadurch in keiner der sechs durchgeführten
+Faltungen erreichbar.** Das bestätigt OQ-23 erstmals gezählt statt vermutet
+und öffnet einen neuen Befund zu `fit_quad_in_region` (OQ-25-Update). Details:
+[VALIDATION.md](VALIDATION.md) (2026-09-21), [lab_journal.md](lab_journal.md)
+(2026-09-21). Zwei offene Punkte aus diesem Lauf: (1) die BK-Precision-
+Situation „schräg links" hat noch keinen `selected`-Vertreter — reine
+Bedienaufgabe in der Workbench, keine Code-Lücke; (2) die eigentliche
+Rastergeometrie (`dispread.ocr.autofit._CANDIDATES`/`layout.cell_boxes`)
+braucht eine Überprüfung, bevor ein weiterer Lauf gegen mehr Proben sinnvoll
+wäre. Dieser Worktree ist noch **nicht** in `master` integriert — das ist der
+nächste Schritt, siehe „Nächste Schritte" unten.
+
+Vorherige Arbeit dieser Sitzung, direkt auf `master`: zunächst die als hohe
+Priorität markierte
 UX-Vereinfachung des Datensatz-Sammelmodus umgesetzt (siehe unten,
 „Sammelmodus-UX vereinfacht"), direkt danach — beim ersten echten
 Sammeldurchlauf durch den Nutzer selbst — einen zweiten, schwereren Fund:
@@ -291,6 +312,17 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
+0. **Dataset-Benchmark-Worktree nach `master` integrieren** (5 Commits in
+   `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
+0a. **Rastergeometrie untersuchen** (OQ-23-Update, 2026-09-21): 0/73 reale
+    Proben passen zum festen relativen Segment-Abtastraster. Vor einem
+    weiteren Dataset-Benchmark-Lauf klären, ob `dispread.ocr.autofit._CANDIDATES`
+    für reale Displays zu eng ist oder `layout.cell_boxes` grundsätzlich neu
+    zugeschnitten werden muss.
+0b. **BK-Precision-Situation „schräg links" braucht einen `selected`-
+    Vertreter** — reine Bedienaufgabe in der Workbench (eine der zehn
+    vorhandenen Proben als Vertreter markieren), sonst bleibt diese Faltung
+    im Dataset-Benchmark eine gemeldete Lücke.
 1. **Phase 2 der Vertreterauswahl:** Übersicht/Galerie je Situation zum
    nachträglichen Markieren älterer Proben, plus eine Ansicht des
    Entwicklungs-/Abschlusstestbestands mit Verschiebemöglichkeit — vom

@@ -223,6 +223,21 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später Leser,
   Profile und `docs/VALIDATION.md`.
 
+* **Update 2026-09-21, empirischer Datenpunkt aus dem Sammelmodus
+  (`docs/PLAN_2026-09-21-dataset-benchmark.md`):** Die BK-Precision-Situation
+  `26692830cde04118b69f5b2c60c40335` mischt innerhalb **einer** Sitzung zwei
+  Punktpositionen bei gleicher Ziffernzahl: Werte wie `012.38` (2
+  Nachkommastellen) stehen neben `-0.0009`/`-0.0010` (4 Nachkommastellen) -
+  das Gerät hat den Messbereich mitten in der Aufnahmesitzung gewechselt.
+  Das ist die konkrete Antwort auf die obige Frage „welche Geräte können
+  Punkt/Messbereich während eines Laufs wechseln": mindestens das
+  BK-5491B tut es, beobachtet, nicht nur befürchtet. Für den Dataset-
+  Benchmark (Task 3, `target_layout`) folgt daraus: Nachkommastellen dürfen
+  **nie** über eine ganze Faltung eingefroren werden, sondern müssen je
+  Zielprobe aus deren eigenem `expected_text` kommen - ein eingefrorenes
+  `decimals` hätte hier garantiert die Fehlerklasse `decimal` erzeugt, nicht
+  von der Optik verursacht, sondern vom Prüfstand selbst fabriziert.
+
 ## OQ-18 — Welches neuronale OCR-Modell trägt auf realen Displays?
 
 * **Status:** offen · erkannt 2026-09-08 bei der Tool-Recherche
@@ -720,6 +735,40 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
     Messänderung, siehe
     [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md).
 
+* **Update 2026-09-21, erstmals gezählt statt an einem Einzelbild vermutet
+  (`scripts/dataset-benchmark.py`,
+  [PLAN_2026-09-21-dataset-benchmark.md](PLAN_2026-09-21-dataset-benchmark.md)):**
+  Gegen **alle 73 lesbaren Proben** des Sammelmodus-Bestands (2 Geräte,
+  „RND-Lab" 40, „BK Precision" 33) passt eine grobe Rahmenvorsuche
+  (~36 Geometrie-Kandidaten je Probe) **kein einziges Mal** — **0 von 73**,
+  achsparallel wie entzerrt, in beiden Geräten. Das bestätigt die frühere
+  Einzelbild-Vermutung als gemessenen Befund, nicht mehr als Verdacht: das
+  feste relative Segment-Abtastraster passt bei diesem Bestand grundsätzlich
+  nicht zur Kameraaufnahme, unabhängig von Geräteserie oder Technologie —
+  RND-Lab ist LED, nicht VFD wie BK-5491B, betroffen sind also beide.
+  Segmentdiagnose (`segment_report`) an Beispielen zeigt keinen einheitlichen
+  Fehlertyp: teils liegt kein einziges Segment über der Schwelle (Stelle 1 in
+  `0b5eaacf...`: alle Werte 0,12–0,16, Kontrast zu gering), teils liegt ein
+  Muster nahe am Sollmuster, aber nicht identisch (Stelle 2 in
+  `0282bca7...`: gemessen `a`/`b`/`f`/`g` aktiv statt `a`/`b`/`c`/`d`/`g` für
+  die erwartete „3" — zwei von fünf Segmenten falsch). Das deutet eher auf
+  eine grundsätzlich falsche
+  Rasterposition/-skalierung als auf eine einzelne Schwellenverschiebung —
+  siehe auch OQ-25-Update unten zur Geometrievorsuche selbst. Phase B
+  (Leave-one-group-out-Übertragung) konnte dadurch in keiner der 6
+  durchgeführten Faltungen (2 von 3 BK-Situationen + 4 RND-Lab-Situationen;
+  die dritte BK-Situation „schräg links" hat noch keinen `selected`-Vertreter
+  und wurde als Lücke gemeldet, nicht ersetzt) überhaupt eine Übertragungszahl
+  liefern — der Vertreter jeder Faltung passte selbst nicht. Rohdaten:
+  `docs/VALIDATION.md`, Abschnitt „2026-09-21".
+* **Klärung, präzisiert:** Die nächste sinnvolle Stufe ist nicht mehr „mehr
+  Bilder sammeln", sondern die Rastergeometrie selbst prüfen — vermutlich
+  braucht es eine größere/andere Werte-Spanne in
+  `dispread.ocr.autofit._CANDIDATES` als die für synthetische Bilder
+  gewählte, oder eine grundsätzlich andere Zellaufteilung (`cell_boxes`)
+  für reale Aufnahmen. Das ist jetzt eine Aussage über die Geometrie, keine
+  über die Datenmenge mehr.
+
 ## OQ-24 — Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen
 
 * **Status:** in Arbeit · erkannt 2026-09-09 durch Bedienerrückmeldung
@@ -836,6 +885,27 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   veraltet. Die IoU-Messung von `fit_quad_in_region`/`fit_ocr_box` wurde
   **nicht** auf die übrigen vier Bilder ausgeweitet; das steht weiterhin aus.
 * **Antwort landet in:** `docs/VALIDATION.md`, `src/dispread/workbench/vision.py`.
+
+* **Update 2026-09-21, `fit_quad_in_region` an 73 realen Proben - 0 von 73
+  liefern ein Quad** (`scripts/dataset-benchmark.py`, Arm „deskewed" der
+  Dataset-Benchmark-Geometrie, siehe OQ-23-Update oben): Für **jede einzelne**
+  der 73 lesbaren Sammelmodus-Proben (beide Geräte) lehnt `fit_quad_in_region`
+  die von Hand gezogene Zielbox als Hinweisbereich vollständig ab (`None`).
+  Anders als bei den zwei Annotationen von 2026-09-10 (IoU ≈ 0,91) trifft die
+  Funktion hier **nie**. Wahrscheinlichste Ursache, noch nicht einzeln
+  nachgewiesen: die Sammelmodus-Zielboxen sind bewusst locker um die Anzeige
+  gezogen (Plan 2026-09-21 misst eine ~5-fache Flächenstreuung allein
+  innerhalb einer Situation) und dadurch systematisch zu großzügig für
+  `fit_quad_in_region`s `MIN_HINT_OVERLAP=0,2`/Flächenfilter - eine andere
+  Belastung als die bestätigten, engeren `roi_quad`-Hinweise aus dem
+  Annotationspfad, für die die Funktion ursprünglich gemessen wurde. Betrifft
+  ausschließlich den `deskewed`-Arm des Dataset-Benchmarks; `manual_roi`
+  bleibt unberührt (reiner Vorschlag, nie automatisch übernommen).
+* **Klärung, präzisiert:** Vor einer Änderung an `fit_quad_in_region` selbst
+  erst klären, ob die Ursache tatsächlich die lockere Zielbox ist (z. B.
+  testweise `MIN_HINT_OVERLAP` senken oder die Zielbox vor dem Aufruf enger
+  fitten) statt die Funktion blind nachzuschärfen - siehe AGENTS.md, keine
+  Vermutung ohne Messung.
 
 ## OQ-26 — Grenzen der Nachführung an realen Geräten validieren
 
