@@ -20,3 +20,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/.repowise/
+/.vscode/
+/.codex/
+/.codegraph/
+/.mcp.json
+/.claude/

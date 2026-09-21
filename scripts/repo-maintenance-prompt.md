@@ -21,6 +21,20 @@ sieh unten) und `superpowers:verification-before-completion` (eigene
 zusammenfasst). Setz sie ein, wenn sie den Auftrag unten unterstützen —
 erfinde aber keinen zusätzlichen Umfang daraus.
 
+Falls in diesem Repo Repowise eingerichtet ist (`.repowise/`-Verzeichnis
+vorhanden, `mcp__repowise__*`-Tools lösen auf): die MCP-Tools
+(`get_answer`, `search_codebase`, `get_why`, `get_risk`/
+`get_change_risk`) dürfen genutzt werden, um schneller eine Spur zu
+finden — welche Dateien zuletzt geändert wurden, ob ein scheinbar
+veralteter Punkt in Wahrheit eine dokumentierte Entscheidung ist, ob eine
+Doku-Behauptung noch zum Code passt. `Bash` ist hier absichtlich
+gesperrt, das `repowise`-CLI ist also **nicht** aufrufbar — nur die
+MCP-Tools. Sie ersetzen nie den Beleg selbst: eine Änderung ist erst
+zulässig, wenn sie zusätzlich mit `Read`/`Grep`/`Glob` gegen den
+aktuellen `src/`/`tests/`/`examples/`-Stand bestätigt ist (siehe Regel 1
+unten). Ohne Repowise oder wenn die Tools fehlschlagen: einfach
+überspringen und wie gehabt mit `Read`/`Grep`/`Glob` arbeiten.
+
 ## Auftrag
 
 Halte die Projektdokumentation unter `docs/` sowie `CHANGELOG.md` aktuell,

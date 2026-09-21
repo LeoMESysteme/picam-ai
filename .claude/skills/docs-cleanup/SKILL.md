@@ -27,7 +27,30 @@ All paths below are relative to the repo root.
    change what you can point at concrete evidence for — a `Grep`/`Read`
    hit in `src/`/`tests/`/`examples/`, or an obviously duplicated/dead
    section. When unsure, leave it and note it instead of guessing.
-3. Do **not** run `git commit` yourself. When done, give the user:
+3. **If this repo has Repowise wired up** (a `.repowise/` directory
+   exists and `mcp__repowise__*` tools resolve — check once, don't
+   assume), use it to work faster, not as a replacement for step 2:
+   - `get_change_risk`/`get_risk` to see which `src/`/`tests/` files
+     changed most recently — a fast pointer to *where* a doc claim is
+     most likely to have gone stale, before you go hunting with `Grep`.
+   - `get_answer`/`search_codebase` to check a specific doc claim
+     against current code faster than a manual `Grep` sweep.
+   - `get_why` to check whether something that looks outdated or odd
+     is actually a documented, deliberate decision (a `docs/open-
+     questions.md` entry can look "wrong" and just be unresolved on
+     purpose) before touching it.
+   - Any of these are a **shortcut to finding a lead, never the
+     evidence itself** — the hard rule from `repo-maintenance-prompt.md`
+     still applies unchanged: only change something once you've
+     confirmed it with an actual `Read`/`Grep` of the current
+     `src/`/`tests/`/`examples/` file. Repowise's own health/complexity
+     scores and dead-code findings are heuristic triage, not proof of a
+     doc being wrong.
+   - **No Repowise, no MCP tools reachable, or any of the above errors
+     out:** skip this step entirely and fall back to plain
+     `Read`/`Grep`/`Glob` as below — that path is the baseline and must
+     work on its own regardless of Repowise's presence.
+4. Do **not** run `git commit` yourself. When done, give the user:
    - a short summary of what changed and why
    - the commit message in the exact
      `===COMMIT-MESSAGE-START===` / `===COMMIT-MESSAGE-END===` format
