@@ -78,7 +78,6 @@ Bestehen. `286 passed, 2 skipped` gesamt, `ruff check` sauber. Diese
 Integration erzeugt keine neue OCR-Messung.
 
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
-## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 5: Gruppen, Ähnlichkeitswarnung, Fortschritt)
 
 **Problem:** Wiederholungsaufnahmen und beinahe-identische Bilder in
 derselben Situation konnten unbemerkt als mehrere unabhängige Proben zählen;
@@ -108,7 +107,6 @@ Unabhängigkeitsgruppe, ein Auswahlwechsel ändert nur den Vertreter. Acht neue
 Bestätigungs-Roundtrip. `280 passed, 2 skipped` gesamt, `ruff check` sauber,
 beide JS-Dateien syntaktisch geprüft.
 
-## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 4: geführter Browserablauf)
 
 **Problem:** Aufgaben 1-3 lieferten Speicherung, Kamerabindung und HTTP-Endpunkte,
@@ -142,7 +140,6 @@ Umgebung nicht möglich - der headless Chromium dieser Umgebung lädt laut
 [OQ-21](docs/open-questions.md) auch einfache lokale HTTP-Seiten nicht
 zuverlässig; dieser Nachweis bleibt eine reale Browserabnahme (Aufgabe 7).
 
-## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Aufgabe 3: geschützte Vorschau- und Export-Endpunkte)
 
 **Problem:** Der Sammelmodus konnte Aufnahmen und Exporte nur über den
