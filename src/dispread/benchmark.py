@@ -443,6 +443,12 @@ class DatasetSample:
     image_path: Path
     width: int
     height: int
+    #: Vertreter ihrer `independence_group` fuer Phase B (Task 4)? Optional,
+    #: default `False` fuer aeltere Proben/Testfixtures ohne dieses Feld.
+    selected: bool = False
+    #: Rohes `similarity_warning` aus `sample.json` (Kandidat + Score), oder
+    #: `None`. Unveraendert durchgereicht - keine eigene Interpretation hier.
+    similarity_warning: dict[str, Any] | None = None
 
 
 #: Schluessel, die jede Probe unabhaengig vom Label-Zustand tragen muss.
@@ -531,6 +537,8 @@ def load_dataset_samples(root: Path) -> tuple[list[DatasetSample], list[str]]:
                 image_path=sample_dir / "image.png",
                 width=int(raw["width"]),
                 height=int(raw["height"]),
+                selected=bool(raw.get("selected", False)),
+                similarity_warning=raw.get("similarity_warning"),
             )
         )
     return samples, skipped

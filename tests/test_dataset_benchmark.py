@@ -12,6 +12,9 @@ durchgehen - das beweist, dass die neue Geometrie genau das erzeugt, was
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import cv2
 import pytest
@@ -225,6 +228,33 @@ def test_load_dataset_samples_uncertain_wird_uebersprungen(tmp_path):
     assert samples == []
     assert len(skipped) == 1
     assert "uncertain-1" in skipped[0]
+
+
+def test_load_dataset_samples_laedt_selected_und_similarity_warning(tmp_path):
+    root = tmp_path / "datasets"
+    ok = _write_sample(
+        root,
+        "ok-1",
+        overrides={"selected": True, "similarity_warning": {"candidate": "x", "score": 0.01}},
+    )
+    _write_valid_image(ok)
+
+    samples, skipped = load_dataset_samples(root)
+
+    assert skipped == []
+    assert samples[0].selected is True
+    assert samples[0].similarity_warning == {"candidate": "x", "score": 0.01}
+
+
+def test_load_dataset_samples_selected_default_false_ohne_feld(tmp_path):
+    root = tmp_path / "datasets"
+    ok = _write_sample(root, "ok-1")
+    _write_valid_image(ok)
+
+    samples, _skipped = load_dataset_samples(root)
+
+    assert samples[0].selected is False
+    assert samples[0].similarity_warning is None
 
 
 def test_load_dataset_samples_leerer_root_liefert_leere_listen(tmp_path):
@@ -511,3 +541,124 @@ def test_aggregate_summiert_mehrere_outcomes():
     assert report["wrong_classes"] == {"digit": 1}
     assert report["reject_classes"] == {"no_value": 1}
     assert report["outcomes"] == [a, b, c]
+
+
+# === Task 4: CLI (scripts/dataset-benchmark.py) als Subprozess =============
+#
+# Muster aus tests/test_dataset_export.py: die CLI wird als eigener Prozess
+# gestartet, keine internen Funktionen importiert - das prueft tatsaechlich
+# das Kommandozeileninterface, nicht nur die dahinterliegende Bibliothek.
+
+SCRIPT = Path(__file__).parents[1] / "scripts" / "dataset-benchmark.py"
+
+
+def _write_cli_sample(root, sample_id, *, device_id, group, selected, expected_text, image, bbox):
+    sample_dir = root / "samples" / sample_id
+    sample_dir.mkdir(parents=True, exist_ok=True)
+    x, y, w, h = bbox
+    data = {
+        "id": sample_id,
+        "device_id": device_id,
+        "independence_group": group,
+        "split": "development",
+        "label_state": "readable",
+        "expected_text": expected_text,
+        "bbox": [float(x), float(y), float(w), float(h)],
+        "width": int(image.shape[1]),
+        "height": int(image.shape[0]),
+        "synthetic": False,
+        "selected": selected,
+    }
+    (sample_dir / "sample.json").write_text(json.dumps(data))
+    cv2.imwrite(str(sample_dir / "image.png"), image)
+    return sample_dir
+
+
+def _build_cli_dataset(tmp_path):
+    root = tmp_path / "datasets"
+    layout = _layout()
+    device_id = "geraet-cli-1"
+
+    image_a, shown_a, bbox_a = render_display(12.34, layout, size=(480, 200))
+    _write_cli_sample(
+        root, "sample-a", device_id=device_id, group="situation-a", selected=True,
+        expected_text=shown_a, image=image_a, bbox=bbox_a,
+    )
+    image_b, shown_b, bbox_b = render_display(56.78, layout, size=(480, 200))
+    _write_cli_sample(
+        root, "sample-b", device_id=device_id, group="situation-b", selected=True,
+        expected_text=shown_b, image=image_b, bbox=bbox_b,
+    )
+    return root, device_id
+
+
+def test_cli_laeuft_gegen_zwei_situationen_und_meldet_phase_a_und_b(tmp_path):
+    root, device_id = _build_cli_dataset(tmp_path)
+
+    completed = subprocess.run(
+        [
+            sys.executable, str(SCRIPT),
+            "--samples", str(root),
+            "--split", "development",
+            "--deskew", "off",
+            "--diagnose", "0",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert device_id in completed.stdout
+    assert "Phase A" in completed.stdout
+    assert "Phase B" in completed.stdout
+    assert "situation-a" in completed.stdout or "situation-b" in completed.stdout
+    assert "decimal" in completed.stdout  # Hinweis auf strukturelle Unmessbarkeit
+
+
+def test_cli_bricht_laut_ab_wenn_selected_fehlt(tmp_path):
+    root = tmp_path / "datasets"
+    layout = _layout()
+    device_id = "geraet-cli-2"
+    image_a, shown_a, bbox_a = render_display(1.23, layout, size=(480, 200))
+    _write_cli_sample(
+        root, "sample-a", device_id=device_id, group="situation-a", selected=False,
+        expected_text=shown_a, image=image_a, bbox=bbox_a,
+    )
+    image_b, shown_b, bbox_b = render_display(4.56, layout, size=(480, 200))
+    _write_cli_sample(
+        root, "sample-b", device_id=device_id, group="situation-b", selected=False,
+        expected_text=shown_b, image=image_b, bbox=bbox_b,
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--samples", str(root), "--deskew", "off", "--diagnose", "0"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 1
+    assert "selected" in completed.stderr.lower() or "FEHLER" in completed.stderr
+
+
+def test_cli_meldet_luecke_bei_nur_einer_situation(tmp_path):
+    root = tmp_path / "datasets"
+    layout = _layout()
+    device_id = "geraet-cli-3"
+    image_a, shown_a, bbox_a = render_display(1.23, layout, size=(480, 200))
+    _write_cli_sample(
+        root, "sample-a", device_id=device_id, group="einzige-situation", selected=True,
+        expected_text=shown_a, image=image_a, bbox=bbox_a,
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--samples", str(root), "--deskew", "off", "--diagnose", "0"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "LUECKE" in completed.stdout
+    assert "Situation" in completed.stdout

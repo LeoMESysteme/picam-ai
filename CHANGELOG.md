@@ -3,6 +3,43 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 4: CLI und Faltungslogik)
+
+**Problem:** Task 2/3 lieferten die Fitting-/Auswertungsbausteine
+(`search_ocr_box`, `fit_dataset_sample`, `target_layout`,
+`evaluate_dataset_sample`, `segment_report`, `aggregate`), aber noch kein
+lauffähiges Werkzeug - die Leave-one-group-out-Faltung (Phase B) und die
+Zusammenfassung je Gerät (Phase A) fehlten.
+
+**Änderung:** `scripts/dataset-benchmark.py` (neu), dünne CLI wie
+`ocr-benchmark.py`. `--samples`/`--split`/`--deskew`/`--device`/`--diagnose`.
+Phase A und Phase B je Gerät und Geometrie getrennt gedruckt, nie gepoolt.
+Ehrliches Ausfallverhalten wie im Plan gefordert: fehlt eine
+`selected`-markierte Probe in einer Situation, bricht der ganze Lauf mit
+`FEHLER:` auf stderr ab (Exit 1) statt eine Situation stillschweigend
+auszulassen; ein Gerät mit nur einer Situation meldet die
+Übertragungslücke explizit (`LUECKE:`); ein fehlendes Quad/`ocr_box` in
+Phase B landet als eigener Ablehnungsgrund im festgenagelten Nenner, nie als
+stiller Rückfall. `has_sign` kommt NICHT von einem Gerätefeld - das gibt es
+im aktuellen `DatasetStore`-Schema nicht (Abweichung vom Plan, dort
+dokumentiert) - sondern aus dem Vorzeichen aller lesbaren Proben eines
+Geräts, aggregiert über den ganzen Bestand, nie aus der einzelnen
+Zielprobe einer laufenden Auswertung. `DatasetSample` um `selected` und
+`similarity_warning` erweitert (optional, Default aus, rückwärtskompatibel),
+damit die CLI beides ohne eigenen `DatasetStore`-Import lesen kann.
+5 neue Tests, darunter 3 CLI-Subprozesstests (Muster aus
+`tests/test_dataset_export.py`).
+
+**Konsequenz:** `scripts/dataset-benchmark.py` ist jetzt lauffähig.
+`322 passed`, `ruff check src tests examples scripts` sauber. Bekannte,
+bewusste Lücken dieses Laufs (im Skript selbst dokumentiert): keine
+Aufschlüsselung nach Bedingung (reflection/angled/...), keine gesonderte
+Ähnlichkeitsmessung je Faltung (nur das je Probe gespeicherte
+`similarity_warning` wird durchgereicht). Der erste echte volle Lauf gegen
+`var/workbench/datasets` steht noch aus (Laufzeit im Minutenbereich je
+Gerät/Geometrie) - Protokollierung in `docs/VALIDATION.md`/
+`docs/lab_journal.md` sowie das Update an OQ-23/OQ-17 folgen danach.
+
 ## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 2/3: Phase-A-Fitting + Phase-B-Uebertragung)
 
 **Problem:** Die im Sammelmodus gesammelten realen Proben (52+, siehe
