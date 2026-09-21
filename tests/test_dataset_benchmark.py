@@ -318,6 +318,30 @@ def _dataset_sample_from_render(image, shown, bbox, *, device_id="geraet-1", gro
     )
 
 
+def test_fit_dataset_sample_falsche_polaritaet_scheitert_richtige_matcht():
+    """Regressionstest fuer den LCD-Fund vom 2026-09-21: eine falsche
+    Polaritaet laesst JEDE Probe scheitern, egal wie gut die Geometrie sitzt
+    - `fit_layout` sucht Polaritaet nicht mit. Ein invertiertes Bild simuliert
+    ein LCD (dunkle Segmente auf hellem Grund) aus dem sonst LED-artigen
+    `render_display`."""
+    from dispread.benchmark import fit_dataset_sample
+
+    layout = _layout()
+    image, shown, bbox = render_display(12.34, layout, size=(480, 200))
+    inverted = 255 - image
+
+    sample = _dataset_sample_from_render(inverted, shown, bbox)
+    reader = SevenSegmentReader()
+
+    wrong = fit_dataset_sample(inverted, sample, has_sign=False, deskew=False, reader=reader)
+    assert wrong.matched is False
+
+    correct = fit_dataset_sample(
+        inverted, sample, has_sign=False, deskew=False, reader=reader, polarity="dark_on_bright"
+    )
+    assert correct.matched is True
+
+
 def test_fit_dataset_sample_synthetische_probe_wird_gematcht():
     from dispread.benchmark import fit_dataset_sample
 
@@ -400,6 +424,27 @@ def test_target_layout_uebernimmt_has_sign_niemals_aus_dem_zieltext():
     assert layout_false_on_negative.has_sign is False
     assert layout_true_on_positive.digits == 4
     assert layout_true_on_positive.decimals == 2
+
+
+def test_target_layout_polarity_default_bright_on_dark_explizit_dark_on_bright():
+    from dispread.benchmark import target_layout
+
+    sample = DatasetSample(
+        id="s1",
+        device_id="geraet-1",
+        independence_group="gruppe-1",
+        split="development",
+        label_state="readable",
+        expected_text="12.34",
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        image_path=None,  # type: ignore[arg-type]
+        width=100,
+        height=100,
+    )
+    ratios = {"digit_gap_ratio": 0.0, "sign_cell_ratio": 0.6, "thickness_ratio": 0.16, "inset_ratio": 0.10}
+
+    assert target_layout(False, sample, ratios).polarity == "bright_on_dark"
+    assert target_layout(False, sample, ratios, polarity="dark_on_bright").polarity == "dark_on_bright"
 
 
 def test_target_layout_wirft_bei_unreadable_probe():

@@ -723,6 +723,7 @@ def fit_dataset_sample(
     has_sign: bool,
     deskew: bool,
     reader: Any = None,
+    polarity: str = "bright_on_dark",
 ) -> SampleFit:
     """Eine Probe fitten: Zielbox -> `sample_quad` -> Ausschnitt -> `search_ocr_box`.
 
@@ -731,8 +732,14 @@ def fit_dataset_sample(
     diese Probe selbst nie zur Ermittlung von `has_sign` herangezogen werden
     darf (ein Geraet mit `has_sign=True`, dessen aktuelle Probe zufaellig
     positiv ist, soll trotzdem eine Vorzeichenstelle im Rasterversuch haben).
-    Wirft, wenn `sample.expected_text is None` (unlesbare Probe): die gehoert
-    als benannte Einzelfalldiagnose ausgegeben, nie in die Fitting-Schleife
+    `polarity` ebenso vom Aufrufer (Geraete-`technology`, LCD =
+    `dark_on_bright`) - der Default `bright_on_dark` passt zu LED/VFD und zu
+    `render_display` (Pflichtpruefung), ist aber fuer ein LCD-Geraet falsch
+    und wuerde JEDEN Kandidaten scheitern lassen, unabhaengig von der
+    Geometrie - `fit_layout` sucht Polaritaet nicht mit (kein Eintrag in
+    `_CANDIDATES`), sie muss von aussen stimmen. Wirft, wenn
+    `sample.expected_text is None` (unlesbare Probe): die gehoert als
+    benannte Einzelfalldiagnose ausgegeben, nie in die Fitting-Schleife
     gefaltet (Plan, "ehrliches Ausfallverhalten").
     """
     if sample.expected_text is None:
@@ -760,7 +767,7 @@ def fit_dataset_sample(
     height, width = image.shape[:2]
     pixel_quad = tuple((x * width, y * height) for x, y in quad)
     crop = rectify(image, pixel_quad, target_size=CROP_SIZE).image
-    layout_hint = DisplayLayout(has_sign=has_sign)
+    layout_hint = DisplayLayout(has_sign=has_sign, polarity=polarity)
     result = search_ocr_box(crop, sample.expected_text, layout_hint, reader=reader)
 
     return SampleFit(
@@ -870,15 +877,24 @@ def segment_report(
 # Zielformat, eingefrorenen Verhaeltnissen) baut (Plan-Dateiliste).
 
 
-def target_layout(has_sign: bool, sample: DatasetSample, frozen_ratios: dict[str, float]) -> DisplayLayout:
-    """Zielraster fuer Phase B: NUR aus (Geraet-`has_sign`, Zielformat, eingefrorenen Verhaeltnissen).
+def target_layout(
+    has_sign: bool,
+    sample: DatasetSample,
+    frozen_ratios: dict[str, float],
+    *,
+    polarity: str = "bright_on_dark",
+) -> DisplayLayout:
+    """Zielraster fuer Phase B: NUR aus (Geraet-`has_sign`/`polarity`, Zielformat, eingefrorenen Verhaeltnissen).
 
     `digits`/`decimals` kommen aus `sample.expected_text` (wie der Bediener
-    das Format im Betrieb bestaetigt). `has_sign` kommt dagegen NIEMALS aus
-    dem Zieltext - immer als expliziter Parameter, den der Aufrufer aus dem
-    Geraet ableitet (ueber alle Proben aggregiert, nicht aus dieser
-    Zielprobe). Das Vorzeichen ist eine eigene kritische Fehlerklasse und
-    darf nicht vom Sollwert abgeleitet werden (Plan, Konzept.md §7).
+    das Format im Betrieb bestaetigt). `has_sign`/`polarity` kommen dagegen
+    NIEMALS aus dem Zieltext oder dem Bild dieser Probe - immer als
+    explizite Parameter, die der Aufrufer aus dem Geraet ableitet (`has_sign`
+    ueber alle Proben aggregiert, `polarity` aus der Geraete-`technology`,
+    LCD = `dark_on_bright`). Das Vorzeichen ist eine eigene kritische
+    Fehlerklasse und darf nicht vom Sollwert abgeleitet werden (Plan,
+    Konzept.md §7); eine falsche Polaritaet laesst *jede* Probe scheitern,
+    unabhaengig von der Geometrie, weil `fit_layout` sie nicht mitsucht.
     `frozen_ratios` sind die eigentlich uebertragene Groesse der Faltung -
     sie kommen nie aus dieser Zielprobe selbst.
     """
@@ -888,7 +904,9 @@ def target_layout(has_sign: bool, sample: DatasetSample, frozen_ratios: dict[str
             "target_layout braucht digits/decimals aus einem Sollwert."
         )
     _digits, _minus, digits, decimals = parse_expected(sample.expected_text)
-    return DisplayLayout(digits=digits, decimals=decimals, has_sign=has_sign, unit=None, **frozen_ratios)
+    return DisplayLayout(
+        digits=digits, decimals=decimals, has_sign=has_sign, unit=None, polarity=polarity, **frozen_ratios
+    )
 
 
 def evaluate_dataset_sample(

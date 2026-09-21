@@ -3,6 +3,39 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: Leser-Polarität kam nie vom Gerät - jede LCD-Probe wäre garantiert gescheitert)
+
+**Problem:** Der Nutzer hat ein neues Gerät ("GSV", `technology=LCD`)
+angelegt - das erste Gerät im Sammelmodus, das die tatsächliche Zielhardware
+repräsentiert (Nutzerbestätigung: alle Produktivanzeigen sind LCD, siehe
+OQ-04-Update). `fit_dataset_sample`/`target_layout` bauten ihr Testraster
+bisher aber immer mit dem `DisplayLayout`-Default `polarity=bright_on_dark`
+(LED: helle Segmente auf dunklem Grund) - unabhängig von der tatsächlichen
+Geräte-Technologie. `dispread.ocr.autofit.fit_layout` sucht Polarität nicht
+mit (kein Eintrag in `_CANDIDATES`), eine falsche Polarität lässt daher JEDE
+Probe scheitern, unabhängig von der Geometrie - das hätte die eigentliche
+Geometriefrage für LCD-Geräte dauerhaft unsichtbar gemacht.
+
+**Änderung:** `fit_dataset_sample`/`target_layout` bekommen einen expliziten
+`polarity`-Parameter (Default `bright_on_dark`, rückwärtskompatibel zu allen
+bisherigen Tests/`render_display`). `scripts/dataset-benchmark.py` liest die
+Geräte-`technology` direkt aus `devices.json` (`_device_polarities`, kein
+`DatasetStore` nötig) und leitet daraus `dark_on_bright` für LCD ab, sonst
+den Default. Neuer Regressionstest
+`test_fit_dataset_sample_falsche_polaritaet_scheitert_richtige_matcht`:
+ein invertiertes `render_display`-Bild (simuliert LCD) scheitert mit
+Standard-Polarität garantiert und matcht garantiert mit der richtigen -
+beweist den Fehler und die Behebung in einem Test statt nur zu behaupten.
+
+**Konsequenz:** Ein erneuter Lauf gegen das neue GSV-Gerät zeigt jetzt
+korrekt `Polaritaet (aus Geraete-technology, LCD=dark_on_bright):
+dark_on_bright`. Weiterhin 0 von 3 Proben gefittet - aber diesmal ist das
+eine Aussage über die Geometrie, nicht über eine falsche Polaritätsannahme.
+Der Bestand ist mit 3 Proben, alle mit identischem Sollwert, in einer
+einzigen Situation, noch zu klein für eine belastbare Aussage zur
+LCD-Geometrie. `324 passed`, `ruff check` sauber.
+
+
 ## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: fehlendes `selected` bricht nur die eine Faltung ab, nicht den ganzen Lauf)
 
 **Problem:** Der erste echte Volllauf gegen `var/workbench/datasets` (77

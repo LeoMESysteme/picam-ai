@@ -35,6 +35,12 @@ docs/PLAN_2026-09-21-dataset-benchmark.md):
     dem Vorzeichen aller LESBAREN Proben eines Geräts aggregiert - nie aus
     der einzelnen Zielprobe einer Auswertung (siehe `benchmark.target_layout`).
 
+Die Leser-Polarität (`dark_on_bright` für LCD, sonst `bright_on_dark`) kommt
+dagegen SEHR WOHL aus einem Gerätefeld (`technology` in `devices.json`,
+direkt gelesen, siehe `_device_polarities`) - eine falsche Polarität lässt
+JEDE Probe scheitern, unabhängig von der Geometrie, weil `fit_layout` sie
+nicht mitsucht (2026-09-21, GSV-Sensor-Fund).
+
 Die Fehlerklasse "decimal" ist in dieser Messanordnung strukturell
 unerreichbar (der Dezimalpunkt kommt aus dem eingefrorenen Layout, nicht aus
 einer Messung, siehe OQ-17) - "0 Dezimalfehler" ist daher kein Befund.
@@ -43,6 +49,7 @@ einer Messung, siehe OQ-17) - "0 Dezimalfehler" ist daher kein Befund.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -72,6 +79,37 @@ from dispread.workbench.vision import fit_ocr_box
 GEOMETRIES = {"axis_aligned": False, "deskewed": True}
 
 _FROZEN_RATIO_KEYS = ("digit_gap_ratio", "sign_cell_ratio", "thickness_ratio", "inset_ratio")
+
+#: Geraete-`technology` (`dispread.workbench.datasets.TECHNOLOGIES`) -> Leser-Polaritaet.
+#: LCD zeigt dunkle Segmente auf hellem Grund, alles andere (LED/VFD/other)
+#: den DisplayLayout-Default. `fit_layout` sucht Polaritaet nicht mit (kein
+#: Eintrag in `autofit._CANDIDATES`) - eine falsche Polaritaet laesst JEDE
+#: Probe scheitern, unabhaengig von der Geometrie (2026-09-21, GSV-Sensor-Fund).
+_TECHNOLOGY_POLARITY = {"LCD": "dark_on_bright"}
+_DEFAULT_POLARITY = "bright_on_dark"
+
+
+def _device_polarities(root: Path) -> dict[str, str]:
+    """`device_id -> Polaritaet`, aus `root/devices.json` direkt gelesen.
+
+    Keine `DatasetStore`-Instanz (siehe Task-1-Docstring in `benchmark.py`,
+    dieselbe Begruendung: reiner Lesezugriff auf eine bereits geschriebene
+    Datei, kein Grund fuer die volle Store-Maschinerie). Fehlt die Datei oder
+    ein Geraet darin, bekommt es den Default - eine fehlende Zuordnung ist
+    kein Grund, den ganzen Lauf abzubrechen, aber sie wird nicht erraten:
+    unbekannte Technologie-Werte fallen auf den LED/VFD-Default, nicht auf LCD.
+    """
+    devices_path = root / "devices.json"
+    if not devices_path.is_file():
+        return {}
+    try:
+        registry = json.loads(devices_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        device_id: _TECHNOLOGY_POLARITY.get(device.get("technology"), _DEFAULT_POLARITY)
+        for device_id, device in registry.get("devices", {}).items()
+    }
 
 
 def _device_has_sign(samples: list[DatasetSample]) -> bool:
@@ -106,7 +144,13 @@ def _load_image(sample: DatasetSample) -> Any:
 
 
 def _print_phase_a(
-    device_id: str, geometry: str, fits: list[tuple[DatasetSample, Any]], *, diagnose: int, reader: SevenSegmentReader
+    device_id: str,
+    geometry: str,
+    fits: list[tuple[DatasetSample, Any]],
+    *,
+    diagnose: int,
+    reader: SevenSegmentReader,
+    polarity: str,
 ) -> None:
     matched = [f for _s, f in fits if f.matched]
     no_quad = [f for _s, f in fits if f.quad is None]
@@ -120,12 +164,12 @@ def _print_phase_a(
         print(f"     flat_optimum: {flat}/{len(matched)}")
     unmatched = [(s, f) for s, f in fits if not f.matched and f.quad is not None]
     if unmatched and diagnose > 0:
-        print(f"     Segmentdiagnose (bis zu {diagnose} Beispiele, unbestaetigter Rahmen):")
+        print(f"     Segmentdiagnose (bis zu {diagnose} Beispiele, unbestaetigter Rahmen, Polaritaet={polarity}):")
         for sample, fit in unmatched[:diagnose]:
-            _print_segment_diagnosis(sample, fit, reader)
+            _print_segment_diagnosis(sample, fit, reader, polarity)
 
 
-def _print_segment_diagnosis(sample: DatasetSample, fit, reader: SevenSegmentReader) -> None:
+def _print_segment_diagnosis(sample: DatasetSample, fit, reader: SevenSegmentReader, polarity: str) -> None:
     assert sample.expected_text is not None
     try:
         image = _load_image(sample)
@@ -133,7 +177,7 @@ def _print_segment_diagnosis(sample: DatasetSample, fit, reader: SevenSegmentRea
         pixel_quad = tuple((x * width, y * height) for x, y in fit.quad)
         crop = rectify(image, pixel_quad, target_size=CROP_SIZE).image
         _digits_str, minus, digits, decimals = parse_expected(sample.expected_text)
-        layout_hint = DisplayLayout(digits=digits, decimals=decimals, has_sign=minus)
+        layout_hint = DisplayLayout(digits=digits, decimals=decimals, has_sign=minus, polarity=polarity)
         box = fit_ocr_box(crop, layout_hint) or (0.0, 0.0, 1.0, 1.0)
         report = segment_report(crop, layout_hint, box, sample.expected_text, reader=reader)
     except Exception as exc:  # Diagnose ist best-effort, darf den Lauf nicht abbrechen.
@@ -172,6 +216,7 @@ def _run_fold(
     has_sign: bool,
     deskew: bool,
     reader: SevenSegmentReader,
+    polarity: str,
 ) -> None:
     geometry = "deskewed" if deskew else "axis_aligned"
     print(f"  -- Phase B, Situation '{held_out_group}' ausgelassen ({geometry}) --")
@@ -180,7 +225,9 @@ def _run_fold(
     assert_disjoint_groups([representative], evaluation)
 
     rep_image = _load_image(representative)
-    rep_fit = fit_dataset_sample(rep_image, representative, has_sign=has_sign, deskew=deskew, reader=reader)
+    rep_fit = fit_dataset_sample(
+        rep_image, representative, has_sign=has_sign, deskew=deskew, reader=reader, polarity=polarity
+    )
     if not rep_fit.matched:
         print(
             "     kein Raster gefunden, keine Uebertragung moeglich "
@@ -192,7 +239,7 @@ def _run_fold(
     outcomes: list[Outcome] = []
     for sample in evaluation:
         expected = sample.expected_text or ""
-        target = target_layout(has_sign, sample, frozen_ratios)
+        target = target_layout(has_sign, sample, frozen_ratios, polarity=polarity)
         image = _load_image(sample)
         quad = sample_quad(image, sample.bbox, deskew=deskew)
         if quad is None:
@@ -254,6 +301,7 @@ def main() -> int:
     for sample in all_samples:
         by_device[sample.device_id].append(sample)
 
+    polarities = _device_polarities(args.samples)
     devices = [args.device] if args.device else sorted(by_device)
     reader = SevenSegmentReader()
     geometries = _geometries(args.deskew)
@@ -276,15 +324,27 @@ def main() -> int:
             continue
 
         has_sign = _device_has_sign(readable)
+        polarity = polarities.get(device_id, _DEFAULT_POLARITY)
         print(f"  has_sign (aus allen lesbaren Proben aggregiert): {has_sign}")
+        print(f"  Polaritaet (aus Geraete-technology, LCD=dark_on_bright): {polarity}")
 
         for geometry in geometries:
             deskew = GEOMETRIES[geometry]
             fits = [
-                (sample, fit_dataset_sample(_load_image(sample), sample, has_sign=has_sign, deskew=deskew, reader=reader))
+                (
+                    sample,
+                    fit_dataset_sample(
+                        _load_image(sample),
+                        sample,
+                        has_sign=has_sign,
+                        deskew=deskew,
+                        reader=reader,
+                        polarity=polarity,
+                    ),
+                )
                 for sample in readable
             ]
-            _print_phase_a(device_id, geometry, fits, diagnose=args.diagnose, reader=reader)
+            _print_phase_a(device_id, geometry, fits, diagnose=args.diagnose, reader=reader, polarity=polarity)
 
             groups = sorted({s.independence_group for s in readable})
             if len(groups) < 2:
@@ -313,6 +373,7 @@ def main() -> int:
                     has_sign=has_sign,
                     deskew=deskew,
                     reader=reader,
+                    polarity=polarity,
                 )
 
     return exit_code
