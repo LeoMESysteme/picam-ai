@@ -10,13 +10,14 @@
  * Aufruf: node tests/dataset_client.test.mjs
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { toOriginalBox, clampSelectionToImage } = require(
+const { toOriginalBox, clampSelectionToImage, chooseInitialGroup } = require(
   path.join(here, '..', 'src', 'dispread', 'workbench', 'static', 'dataset.js'),
 );
 
@@ -78,6 +79,64 @@ const { toOriginalBox, clampSelectionToImage } = require(
     { width: 1000, height: 500 },
   );
   assert.ok(clamped.x >= 0);
+}
+
+// chooseInitialGroup: Schritt 2 der Sammelmodus-Oberflaeche darf nur bei
+// genau einer vorhandenen Situation automatisch uebersprungen werden - bei
+// keiner oder mehreren muss der Bediener bewusst waehlen (docs/status.md,
+// "Sammelmodus-UX vereinfacht").
+{
+  assert.equal(chooseInitialGroup({}), null);
+  assert.equal(chooseInitialGroup(undefined), null);
+}
+{
+  const chosen = chooseInitialGroup({ g1: { change_note: 'erste Situation' } });
+  assert.deepEqual(chosen, { group_id: 'g1', change_note: 'erste Situation' });
+}
+{
+  const chosen = chooseInitialGroup({
+    g1: { change_note: 'erste Situation' },
+    g2: { change_note: 'zweite Situation' },
+  });
+  assert.equal(chosen, null);
+}
+
+// Struktur-Regression: "als Vertreter markieren" (#dataset-representative)
+// stand vorher als Kind von #dataset-editor im Markup. afterSave() setzt
+// #dataset-editor.hidden=true, BEVOR es #dataset-representative.hidden=false
+// setzt - ein verstecktes Vorfahrenelement blendet ein Kind aber unabhaengig
+// von dessen eigenem hidden-Attribut aus (Nutzerfund: der Knopf existierte
+// im DOM und die Logik lief, war aber nie sichtbar). Diese Prüfung liest das
+// echte Markup und stellt sicher, dass #dataset-representative NICHT
+// innerhalb von #dataset-editor verschachtelt ist, ohne dafuer einen vollen
+// DOM/jsdom in diesem Testharness zu brauchen (siehe OQ-21: Browsertests
+// dieser Umgebung sind eingeschraenkt).
+{
+  const htmlPath = path.join(here, '..', 'src', 'dispread', 'workbench', 'static', 'index.html');
+  const html = readFileSync(htmlPath, 'utf8');
+  const editorStart = html.indexOf('id="dataset-editor"');
+  assert.ok(editorStart >= 0, '#dataset-editor nicht im Markup gefunden');
+  const openTagStart = html.lastIndexOf('<div', editorStart);
+  let depth = 0;
+  let cursor = openTagStart;
+  let editorEnd = -1;
+  const tagRe = /<div\b|<\/div>/g;
+  tagRe.lastIndex = openTagStart;
+  let match;
+  while ((match = tagRe.exec(html))) {
+    if (match[0] === '<div') depth += 1;
+    else depth -= 1;
+    if (depth === 0) {
+      editorEnd = match.index + match[0].length;
+      break;
+    }
+  }
+  assert.ok(editorEnd > openTagStart, '#dataset-editor: schliessendes </div> nicht gefunden');
+  const editorMarkup = html.slice(openTagStart, editorEnd);
+  assert.ok(
+    !editorMarkup.includes('id="dataset-representative"'),
+    '#dataset-representative darf nicht innerhalb von #dataset-editor verschachtelt sein - sonst bleibt es unsichtbar, sobald der Editor nach dem Speichern versteckt wird',
+  );
 }
 
 console.log('dataset_client.test.mjs: alle Pruefungen bestanden');

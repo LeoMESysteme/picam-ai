@@ -139,6 +139,18 @@ def test_create_device_assigns_uuid_and_revision(tmp_path):
     assert device["split"] == "development"
 
 
+def test_list_devices_is_sorted_by_name_and_includes_groups(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    store.create_device(_device_payload(name="Zebra"))
+    beta = store.create_device(_device_payload(name="Beta"))
+    store.begin_group(beta["id"], "erste Situation")
+
+    listed = store.list_devices()
+
+    assert [d["name"] for d in listed] == ["Beta", "Zebra"]
+    assert len(listed[0]["groups"]) == 1
+
+
 def test_update_device_requires_matching_revision(tmp_path):
     store = DatasetStore(tmp_path / "datasets")
     device = store.create_device(_device_payload())

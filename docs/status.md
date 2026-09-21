@@ -1,21 +1,33 @@
-# Status — Stand 2026-09-18
+# Status — Stand 2026-09-21
 
 Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 `docs/project_history.md`.
 
 ## Sofort zu wissen
 
-Branch `feature/dataset-collection` (eigener Worktree
-`/home/me-systeme/picam-ai-dataset-collection`), abgezweigt von `master` HEAD
-`41a4241`. Noch **nicht** nach `master` gemergt, kein Push. Der ursprüngliche
+Diese Sitzung (2026-09-21) hat zunächst die als hohe Priorität markierte
+UX-Vereinfachung des Datensatz-Sammelmodus umgesetzt (siehe unten,
+„Sammelmodus-UX vereinfacht"), direkt danach — beim ersten echten
+Sammeldurchlauf durch den Nutzer selbst — einen zweiten, schwereren Fund:
+**„Prüfsatz exportieren" lieferte 0 Bilder**, obwohl 46 reale Proben
+gespeichert waren (siehe „Vertreterauswahl fehlte in der Oberfläche"
+unten), und danach einen dritten, unabhängigen Fund: **`dispread serve`
+reagierte auf kein Strg+C mehr** (siehe „Serve liess sich nicht beenden"
+unten — kein Kamera-/OQ-22-Problem, eine reine Nebenläufigkeitslücke im
+Shutdown). Alles direkt auf `master`, kein eigener Worktree — der
+Sammelmodus selbst war bereits vorher nach `master` gemergt.
+
+Vorherige Sitzung (2026-09-18): Branch `feature/dataset-collection` (eigener
+Worktree `/home/me-systeme/picam-ai-dataset-collection`), abgezweigt von
+`master` HEAD `41a4241`, danach nach `master` gemergt. Der ursprüngliche
 Implementierungsplan (`docs/superpowers/plans/2026-09-18-dataset-collection-handoff.md`)
 wurde vollständig eingelesen, die Aufgaben/Abnahmekriterien übernommen und die
 Datei danach wie vom Nutzer gewünscht gelöscht (nicht committet).
 
-Umgesetzt: Aufgaben 1–6 aus diesem Plan, jede mit eigenem Commit, jeweils mit
-CHANGELOG-Eintrag im selben Commit. `master` selbst ist unberührt — die
-laufende Produktions-Workbench (Prozess auf diesem Pi aktiv, siehe unten)
-wurde nicht angefasst.
+Umgesetzt (2026-09-18): Aufgaben 1–6 aus diesem Plan, jede mit eigenem Commit,
+jeweils mit CHANGELOG-Eintrag im selben Commit. Die laufende
+Produktions-Workbench (Prozess auf diesem Pi aktiv, siehe unten) wurde in
+keiner der beiden Sitzungen angefasst — nur Dateien bearbeitet.
 
 ## Was gebaut wurde
 
@@ -92,7 +104,7 @@ Prototyp beschreibt statt einer Bauaufgabe. `08-datensatz-sammeln.md` aus dem
 ursprünglichen Plantext war bereits durch `08-ocr-backends.md` belegt — die
 nächste freie Nummer wurde stattdessen verwendet.
 
-## Tatsächlich offene Abnahmen dieser Sitzung
+## Tatsächlich offene Abnahmen (Stand 2026-09-18-Sitzung, weiterhin gültig)
 
 * **Realer interaktiver Browserdurchlauf** (Geräteanlage → Aufnahme → Box/Wert
   → Speichern → zweite Situation → Neustart → Export) hat **nicht**
@@ -133,45 +145,168 @@ Separates abgeschlossenes Erkennungsexperiment: Branch
 Loader **verwendet** (siehe oben), aber keinen seiner Modelle/Runner
 importiert und keine neue OCR-Messung erzeugt.
 
-## Nächste Schritte
-
-**Nach `master` gemergt (2026-09-18), `dispread serve` läuft mit dem neuen
-Stand.** Reale Browserabnahme (OQ-34/OQ-21) steht weiterhin aus.
-
-### Hohe Priorität: UX/Workflow des Sammelmodus vereinfachen
+## Sammelmodus-UX vereinfacht (2026-09-21)
 
 Nutzerrückmeldung nach erstem Kontakt mit der Oberfläche: "die oberfläche zum
-datensatz aufnehmen ist zu unverständlich und umständlich". Diagnose (im
-Code bestätigt): es gibt **keine Möglichkeit, ein bereits angelegtes Gerät
-auszuwählen** — die Oberfläche zeigt nur ein "neues Gerät anlegen"-Formular,
-was nach einem Neuladen faktisch zwingt, Geräte neu anzulegen. Dazu stehen
+datensatz aufnehmen ist zu unverständlich und umständlich". Ursache (im Code
+bestätigt): es gab **keine Möglichkeit, ein bereits angelegtes Gerät
+auszuwählen** — die Oberfläche zeigte nur ein "neues Gerät anlegen"-Formular,
+was nach einem Neuladen faktisch zwang, Geräte neu anzulegen. Dazu standen
 Geräteformular, Situationsformular, Aufnahmeknopf, Label-Editor und Export
 alle undifferenziert flach untereinander, ohne Hinweis, welcher Schritt
 gerade dran ist.
 
-Abgestimmtes Design (Bounded-Pfad, kein Spec-Dokument nötig):
+Umgesetzt wie im zuvor abgestimmten Bounded-Design:
 
-1. **Neuer Read-Endpunkt:** `DatasetStore.list_devices()` +
-   `dataset.device.list`-Kommando (analog zu `summary()`).
-2. **Schrittgesteuerte Oberfläche** statt flacher Liste: drei Karten, nur die
-   aktuelle aufgeklappt, erledigte klappen zu einer Einzeiler-Zusammenfassung
-   zusammen ("Gerät: GSV-2ASD ✓ ändern"):
-   - **Schritt 1 – Gerät:** `<select>` aus `dataset.device.list`, letzte
-     Option "+ neues Gerät anlegen" blendet das bestehende Formular ein.
-   - **Schritt 2 – Situation:** vorhandene Situationen des Geräts als kleine
-     Liste zum Fortsetzen, plus "neue Situation". Überspringbar, wenn genau
-     eine Situation existiert und einfach weiter aufgenommen wird.
-   - **Schritt 3 – Aufnahme:** heutiger Capture-/Box-/Label-/Save-Ablauf
-     unverändert in der Mechanik, aber einzig sichtbarer Teil, sobald Gerät+
-     Situation gewählt sind; sichtbare Kopfzeile "Gerät: X · Situation: Y".
-3. Echte `<label>`s statt reiner Platzhaltertexte; Modell/Belegart-Felder
-   wandern in ein `<details>` im Geräteformular, damit der Normalfall
-   (vorhandenes Gerät wählen) ohne Zusatzfelder auskommt.
-4. Export bleibt unverändert als feste Zeile am Ende.
+1. Neuer Read-Endpunkt `DatasetStore.list_devices()` +
+   `dataset.device.list`-Kommando (analog zu `summary()`), sortiert nach
+   Anzeigename, inklusive der Situationsgruppen je Gerät.
+2. Schrittgesteuerte Oberfläche (`static/dataset.js`, `static/index.html`)
+   statt flacher Liste: drei Karten, nur die aktuelle aufgeklappt, erledigte
+   klappen zu einer Einzeiler-Zusammenfassung mit "ändern"-Knopf zusammen.
+   Schritt 1 (Gerät) per `<select>`, letzte Option öffnet das bestehende
+   "neues Gerät"-Formular. Schritt 2 (Situation) zeigt vorhandene Situationen
+   zum Fortsetzen plus "neue Situation"; bei genau einer vorhandenen
+   Situation automatisch übersprungen. Schritt 3 (Aufnahme) ist unverändert
+   in der Mechanik, aber einzig sichtbar sobald Gerät+Situation gewählt sind,
+   mit Kopfzeile "Gerät: X · Situation: Y".
+3. Echte `<label>`s statt reiner Platzhaltertexte; Modell/Familie/Technologie
+   wandern im Geräteformular hinter ein `<details>` "Weitere Angaben".
+4. Export unverändert als feste Zeile am Ende.
 
 Ändert keinen bestehenden Kommando-/Endpunktvertrag außer der einen neuen
-Leseoperation — reine UI-Restrukturierung. Tests: `list_devices()` in
-`tests/test_datasets.py` erweitern, ggf. `tests/dataset_client.test.mjs` für
-neue reine Schrittlogik; manuelle Prüfung über die laufende Workbench, da
-echte Browserautomatisierung hier weiterhin nicht verfügbar ist
-(OQ-21/OQ-34).
+Leseoperation — reine UI-Restrukturierung. Die Schrittentscheidung "genau
+eine Situation → automatisch fortsetzen" wurde als reine Funktion
+`chooseInitialGroup` extrahiert und in `tests/dataset_client.test.mjs`
+getestet (0/1/mehrere Situationen), statt nur im ungetesteten DOM-Code zu
+stecken. Verifiziert: `./.venv/bin/pytest -q` (295 passed), `ruff check`
+(all checks passed), `node --check` auf `dataset.js`/`workbench.js`,
+`node tests/dataset_client.test.mjs` (alle Prüfungen bestanden), sowie ein
+neuer HTTP-Test, dass `/command` mit `dataset.device.list` tatsächlich eine
+JSON-Liste liefert (nicht nur ein Dict wie die übrigen `dataset.*`-Befehle).
+**Nicht verifiziert:** ein echter interaktiver Klick-Durchlauf im Browser —
+dieselbe Ursache wie OQ-21/OQ-34, die DOM-Verdrahtung (Sichtbarkeit,
+Button-Handler) bleibt insofern ungetestet gegenüber echtem
+Bedienerverhalten. **Genau dieser blinde Fleck hat den nächsten Fund
+verursacht** (siehe unten) — die neue Schrittoberfläche selbst war nicht das
+Problem, aber sie hat den Nutzer zum ersten Mal wirklich sammeln lassen, und
+erst dabei ist der Exportfehler aufgefallen.
+
+## Vertreterauswahl fehlte in der Oberfläche (2026-09-21, direkt danach)
+
+Der Nutzer hat nach der UX-Vereinfachung tatsächlich gesammelt: zwei Geräte,
+5 Situationen, 46 reale Proben. **„Prüfsatz exportieren" lieferte trotzdem
+0 Bilder.**
+
+**Ursache:** `DatasetStore._export_locked()` schließt eine Situation mit
+mehr als einer Probe komplett aus, solange keine davon ausdrücklich als
+Vertreter markiert ist (Grund `group_without_selection` — verhindert, dass
+zufällig eine von mehreren Wiederholungen automatisch "die" Probe wird). Das
+dafür nötige Backend (`DatasetStore.select_sample`/`dataset.select`) gibt es
+seit Aufgabe 5 (2026-09-18) — es wurde aber **nie mit einem Knopf in der
+Oberfläche verdrahtet**, in keiner der bisherigen Sitzungen. Jede Situation
+mit mehr als einer Aufnahme war seit Einführung des Sammelmodus faktisch
+nicht exportierbar, das ist erst jetzt beim ersten echten Mehrfach-Sammeln
+aufgefallen.
+
+**Behoben (Phase 1, mit Nutzer abgestimmt):** Neue Zeile "als Vertreter
+dieser Situation markieren" direkt nach "Speichern und weiter" in Schritt 3
+(`static/dataset.js`, `static/index.html`), ruft den bestehenden
+`dataset.select`-Befehl für die soeben gespeicherte Probe auf. Bewusst
+minimal — markiert nur die zuletzt gespeicherte Probe, keine nachträgliche
+Auswahl älterer Proben. Neuer HTTP-Test
+`test_marking_a_sample_as_representative_makes_the_group_exportable`
+belegt: ohne Auswahl 0 exportierte Bilder, nach `dataset.select` 1.
+`296 passed`, `ruff check` sauber, `node --check`/`dataset_client.test.mjs`
+unverändert grün.
+
+**Phase 2, vom Nutzer bewusst vertagt statt jetzt mitgebaut:** eine
+Übersicht/Galerie je Situation, in der auch ältere Proben nachträglich als
+Vertreter markiert werden können, inklusive einer Ansicht des
+Entwicklungs-/Abschlusstestbestands mit der Möglichkeit, Proben zwischen
+beiden zu verschieben, falls nötig. Noch nicht begonnen.
+
+**Für den Nutzer wichtig, sofort:** die bereits vor diesem Fix gespeicherten
+46 Proben sind weiterhin vorhanden, aber in ihren jeweiligen Situationen
+weiterhin ohne Vertreter (der neue Knopf wirkt nur auf künftige Speicherungen).
+Um eine bestehende Situation exportierbar zu machen, muss aktuell noch
+einmal in dieser Situation aufgenommen und gespeichert werden, dann direkt
+per neuem Knopf als Vertreter markiert — bis Phase 2 (Galerie) eine
+rückwirkende Auswahl erlaubt.
+
+**Nachschliff, unmittelbar danach:** Nutzerbefund "ich kann in dispread
+keinen 'Vertreter' für eine Situation festlegen" — der neue Knopf war real
+unsichtbar. Ursache: `#dataset-representative` war im Markup als Kind von
+`#dataset-editor` verschachtelt; `afterSave()` versteckt `#dataset-editor`,
+bevor es den Vertreter-Knopf einblenden will — ein versteckter Vorfahre
+blendet aber jedes Kind mit aus, egal was dessen eigenes `hidden`-Attribut
+sagt. Der Knopf existierte im DOM, die Logik (inkl. `dataset.select`-Aufruf)
+lief korrekt, er war nur nicht sichtbar. Behoben: als Geschwister von
+`#dataset-editor` verschoben. Neue Struktur-Prüfung in
+`tests/dataset_client.test.mjs` (am alten, fehlerhaften Markup verifiziert,
+dass sie tatsächlich anschlägt) — keiner der vorherigen JS- oder
+HTTP-Tests hätte das auffangen können, da keiner tatsächliche
+DOM-Sichtbarkeit prüft.
+
+## Serve liess sich nicht beenden (2026-09-21, dritter Fund dieser Sitzung)
+
+Nutzerbefund: `dispread serve` reagierte auf kein Strg+C mehr — auch nach
+vielen Versuchen. Live-Diagnose am tatsächlich hängenden Prozess auf dem Pi
+(`/proc`-Thread-Zustände, `gdb`, `py-spy`, siehe unten für die Beweisketten)
+ergab: **kein Kamera-/OQ-22-Problem.** Alle Threads standen im Zustand `S`
+(unterbrechbar), keiner in `D` — SIGINT wurde korrekt verarbeitet, `serve()`
+lief bis zum Ende der eigenen `finally`-Kette vollständig durch (HTTPS-Port
+7777 bereits geschlossen, `py-spy dump` zeigte den Hauptthread schon in
+`threading._shutdown`/`concurrent.futures.thread._python_exit`) — der
+Prozess blieb trotzdem für immer hängen, weit außerhalb von `serve()` selbst.
+
+**Ursache:** Nebenläufigkeitslücke, nicht Hardware. Die alte Reihenfolge in
+`serve()`s `finally`-Block schloss `terminals.close()` **vor**
+`runner.cleanup()`/`unix.cleanup()` ab. Solange der HTTPS-Server (bzw. der
+lokale Steuersocket) noch Verbindungen annahm, konnte zwischen dem Setzen
+von `stop` und diesem Zeitpunkt ein neues `POST /terminals` (eine über die
+Werkbank-Oberfläche angelegte Shell) `terminals.close()` entgehen. Deren
+Reap-Task (`asyncio.to_thread(subprocess.wait)`) blockierte dauerhaft einen
+Worker-Thread des asyncio-Default-Executors — und genau den joint
+`asyncio.run()` bei seinem eigenen, nicht unterbrechbaren Abbau, lange nachdem
+`serve()` selbst schon zurückgekehrt und der Signal-Handler damit weg war.
+Jedes weitere Strg+C traf ins Leere, weil zu diesem Zeitpunkt gar kein
+Event-Loop mit Signal-Handler mehr existierte.
+
+**Behoben:** `finally`-Block in `src/dispread/workbench/server.py` ruft
+jetzt `runner.cleanup()`/`unix.cleanup()` (stoppt beide
+Verbindungsannahmen) **vor** `terminals.close()`. Neuer Test
+`test_serve_stops_accepting_connections_before_closing_terminals`
+(`tests/test_workbench.py`) prüft die Reihenfolge end-to-end gegen den
+echten `serve()`-Ablauf, deterministisch über den lokalen Steuersocket
+(`server.stop`) statt über ein zeitlich unzuverlässiges HTTP-Rennen.
+
+**Der zuvor hängende Prozess auf dem Lab-Pi** wurde risikofrei mit
+`SIGKILL` beendet, nachdem bestätigt war, dass alle eigenen Aufräumschritte
+(`runner.cleanup`/`terminals.close`/`controller.close`/Socket- und
+Lock-Datei) bereits vollständig durchgelaufen waren — Port 7777 war schon
+frei, kein Kamerathread mehr aktiv, kein `D`-Zustand. Kein Datenverlust
+möglich, da die eigentliche Aufräumarbeit der Anwendung längst erledigt war;
+nur die Python-interne Executor-Verwaltung hing noch.
+
+## Nächste Schritte
+
+1. **Phase 2 der Vertreterauswahl:** Übersicht/Galerie je Situation zum
+   nachträglichen Markieren älterer Proben, plus eine Ansicht des
+   Entwicklungs-/Abschlusstestbestands mit Verschiebemöglichkeit — vom
+   Nutzer für diese Sitzung bewusst vertagt, aber die aktuell direkteste
+   Möglichkeit, echten Sammelfortschritt zu machen.
+2. Fehlende Bedingungen an den bestehenden Geräten nachholen (aktuell
+   overall fehlend: `multiline`; je Gerät auch `decimal`/`negative` bzw.
+   `angled`/`dim`/`distance` — siehe `dataset.summary()`).
+3. Mehr Geräte mit unterschiedlicher Familie/Technologie anlegen (aktuell
+   nur `gsva`/`BK_Precision`, beide LED) — die Exportziele verlangen
+   mindestens 6 verifizierte Geräte, 3 Familien, LED **und** LCD.
+4. Split bewusst wählen: aktuell stehen beide Geräte auf „Entwicklung" —
+   für das 30-Situationen-Abschlusstestziel braucht es Geräte mit Split
+   `heldout`, festgelegt **vor** der ersten Aufnahme.
+5. **Reale Browserabnahme der Schrittoberfläche** (OQ-34/OQ-21) —
+   insbesondere: Gerät aus der Liste wählen nach Neuladen, Situationsauswahl
+   bei mehreren vorhandenen Situationen, automatisches Überspringen bei
+   genau einer Situation, "ändern"-Knöpfe, neuer "als Vertreter
+   markieren"-Knopf.

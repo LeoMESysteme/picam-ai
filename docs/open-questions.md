@@ -1021,3 +1021,44 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Schreibfehler, zwei Browsertabs, Tokenablauf, abgeschnittener Export.
 * **Antwort landet in:** `docs/anleitung/08-datensatz-sammeln.md`,
   `docs/status.md`.
+
+## OQ-35 — Automatisierte Testwerterzeugung für den Datensatz-Sammelmodus (GPIO/BK-5491B)
+
+* **Status:** offen · erkannt 2026-09-21 auf Nutzeranfrage
+  (`PLANNED_FEATURES.md`, Abschnitt „Other features", Zeile zu GPIO-Sensordaten)
+* **Idee:** Das Bench-Multimeter BK Precision 5491B (Geräteeintrag im
+  Sammelmodus: `identity_evidence="5491B"`, `model="Count Multimeter"`, siehe
+  auch [OQ-23](open-questions.md) zur VFD-Anzeige desselben Geräts) über die
+  GPIO-Pins des Pi automatisiert mit Testwerten versorgen, um viele reale
+  Bilder mit bekanntem Sollwert ohne manuelles Eintippen zu erzeugen —
+  optional auch über verschiedene Kamerawinkel hinweg.
+* **Erste Einschätzung, ungeprüft an der realen Hardware:** Ein Multimeter
+  *misst* ein anliegendes Signal, es *nimmt* über GPIO keinen Sollwert an —
+  "GPIO an das Gerät anschließen" trifft die Richtung also nicht ganz. Zwei
+  Bausteine, unabhängig kombinierbar:
+  1. **Sollwert automatisch auslesen statt eintippen:** Modelle dieser Baureihe
+     führen laut allgemeinem Datenblattwissen üblicherweise RS-232 und GPIB
+     als Fernsteuerschnittstellen — **an diesem konkreten Gerät nicht
+     nachgewiesen.** Falls vorhanden und verkabelt, ließe sich der intern
+     gemessene Wert per Befehl abfragen und als Sollwert für die Probe
+     verwenden — vertrauenswürdiger als ein selbst erzeugter Sollwert, weil
+     es exakt das ist, was das Gerät selbst als seinen Messwert führt (bei
+     dem auch die Anzeige gespeist wird). Braucht keine GPIO-Signalerzeugung,
+     nur eine serielle/GPIB-Verbindung zum Pi.
+  2. **Ein bekanntes Testsignal in den Messeingang einspeisen**, um gezielt
+     verschiedene Anzeigewerte durchzufahren: reine Pi-GPIO-Pins liefern
+     dafür keine geeignete, kalibrierte Analogspannung — nötig wäre ein
+     DAC (z. B. I2C-Baustein) mit passender Pegelanpassung/Impedanz für den
+     Messeingang, keine direkte Drahtverbindung GPIO→Messeingang. Dieselbe
+     Vorsicht wie in [OQ-09](open-questions.md) (Pi-GPIO-Pegel nicht direkt
+     mit einer externen Signalstrecke verbinden, galvanische Trennung
+     prüfen) gilt hier analog, auch wenn es kein RS-232 ist.
+* **Ungeklärt:** Hat dieses konkrete Gerät ein funktionierendes RS-232-
+  oder GPIB-Interface, und liegt ein passendes Kabel/Adapter vor? Soll
+  Baustein 1 (Auslesen) allein reichen, oder wird auch Baustein 2
+  (Signaleinspeisung) gewünscht? Beides betrifft ausschließlich den
+  Sammelmodus (`DatasetStore`/`dataset.capture`/`dataset.save`) - erreicht
+  wie andere Zielbox-/Label-Daten nie `ValueReader`, `ReleaseGate` oder die
+  Produktionskette.
+* **Antwort landet in:** `docs/HARDWARE_PROFILE.md` (Schnittstellenbefund),
+  `docs/anleitung/11-datensatz-sammeln.md` (falls umgesetzt).

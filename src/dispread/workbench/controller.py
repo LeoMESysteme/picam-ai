@@ -780,6 +780,8 @@ class Controller:
                 self._clip_start(device_id, text, seconds)
             elif op == "clip.stop":
                 self._clip_stop()
+            elif op == "dataset.device.list":
+                return self.dataset_store.list_devices()
             elif op == "dataset.device.create":
                 return self.dataset_store.create_device(args)
             elif op == "dataset.device.update":

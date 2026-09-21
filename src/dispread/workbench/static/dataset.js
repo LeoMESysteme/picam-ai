@@ -5,6 +5,10 @@
  * Zustand. Nur `DatasetCollection.toOriginalBox` ist absichtlich auf
  * `window` sichtbar - eine reine Geometriefunktion, die
  * tests/dataset_client.test.mjs ohne DOM-Umbau pruefen kann.
+ *
+ * Ablauf als drei Schritte (Geraet -> Situation -> Aufnahme), jeder
+ * abgeschlossene Schritt klappt zu einer Einzeiler-Zusammenfassung zusammen -
+ * siehe docs/status.md, Abschnitt "UX/Workflow des Sammelmodus vereinfachen".
  */
 const DatasetCollection = (function () {
   const CONDITIONS = [
@@ -70,15 +74,36 @@ const DatasetCollection = (function () {
     return { x: Math.min(x, x2), y: Math.min(y, y2), w: Math.abs(x2 - x), h: Math.abs(y2 - y) };
   }
 
+  /* Reine Entscheidung: welche Situation ist nach Geraeteauswahl aktiv?
+   * Bei genau einer vorhandenen Situation wird sie automatisch fortgesetzt
+   * (Schritt 2 bleibt zugeklappt) - bei keiner oder mehreren muss der
+   * Bediener bewusst waehlen. `groups` ist die vom Server gelieferte
+   * device.groups-Struktur ({group_id: {change_note, ...}}).
+   */
+  function chooseInitialGroup(groups) {
+    const entries = Object.entries(groups || {});
+    if (entries.length !== 1) return null;
+    const [groupId, g] = entries[0];
+    return { group_id: groupId, change_note: g.change_note };
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   function init() {
     if (typeof document === 'undefined') return; // im Node-Testharness nicht aufgerufen
     const $ = (id) => document.getElementById(id);
     let csrf = '';
-    let device = null; // {id, revision, split, ...}
+    let devices = []; // aus dataset.device.list
+    let device = null; // {id, revision, split, groups, ...}
     let group = null; // {group_id, device_id, change_note}
+    let deviceStepExpanded = true;
+    let groupStepExpanded = true;
     let capture = null; // {token, width, height}
     let dragStart = null;
     let selection = null; // {x,y,w,h} in Canvas-CSS-Pixeln
+    let lastSavedSample = null; // zuletzt gespeicherte Probe, fuer "als Vertreter markieren"
     let busy = false;
 
     async function api(path, method = 'GET', body) {
@@ -132,12 +157,90 @@ const DatasetCollection = (function () {
       }
     }
 
-    function renderDeviceState() {
-      $('dataset-device-name').textContent = device ? device.name : '(kein Gerät gewählt)';
-      $('dataset-split').textContent = device ? device.split : '';
-      $('dataset-group-note').textContent = group ? group.change_note : '(keine Situation)';
-      $('dataset-capture-button').disabled = !device || !group;
+    function deviceLabel(d) {
+      return d.model ? `${d.name} (${d.model})` : d.name;
     }
+
+    function populateDeviceSelect() {
+      const select = $('dataset-device-select');
+      const current = select.value;
+      select.innerHTML =
+        '<option value="">– Gerät wählen –</option>' +
+        devices.map((d) => `<option value="${d.id}">${escapeHtml(deviceLabel(d))}</option>`).join('') +
+        '<option value="__new__">+ neues Gerät anlegen</option>';
+      if (devices.some((d) => d.id === current)) select.value = current;
+    }
+
+    function groupEntries() {
+      return device ? Object.entries(device.groups) : [];
+    }
+
+    function populateGroupSelect() {
+      const select = $('dataset-group-select');
+      select.innerHTML =
+        '<option value="">– keine –</option>' +
+        groupEntries().map(([id, g]) => `<option value="${id}">${escapeHtml(g.change_note)}</option>`).join('');
+    }
+
+    function renderSteps() {
+      const deviceDone = !!device && !deviceStepExpanded;
+      $('dataset-step-device').classList.toggle('done', deviceDone);
+      $('dataset-device-summary-text').textContent = device ? `Gerät: ${deviceLabel(device)} ✓` : '';
+
+      $('dataset-step-group').hidden = !device;
+      const groupDone = !!group && !groupStepExpanded;
+      $('dataset-step-group').classList.toggle('done', groupDone);
+      $('dataset-group-summary-text').textContent = group ? `Situation: ${group.change_note} ✓` : '';
+
+      const ready = !!device && !!group;
+      $('dataset-step-capture').hidden = !ready;
+      $('dataset-capture-header').textContent = ready ? `Gerät: ${deviceLabel(device)} · Situation: ${group.change_note}` : '';
+    }
+
+    async function discardOpenCapture() {
+      if (capture) {
+        try {
+          await op('dataset.discard', { token: capture.token });
+        } catch (_) {
+          /* Aufnahme war bereits abgelaufen/entfernt - kein Grund, den Schrittwechsel zu blockieren. */
+        }
+      }
+      capture = null;
+      selection = null;
+      $('dataset-editor').hidden = true;
+      $('dataset-similarity').hidden = true;
+      lastSavedSample = null;
+      $('dataset-representative').hidden = true;
+    }
+
+    async function afterDeviceChosen() {
+      await discardOpenCapture();
+      populateGroupSelect();
+      const initial = chooseInitialGroup(device.groups);
+      if (initial) {
+        group = { ...initial, device_id: device.id };
+        groupStepExpanded = false;
+      } else {
+        group = null;
+        groupStepExpanded = true;
+      }
+      deviceStepExpanded = false;
+      renderSteps();
+    }
+
+    $('dataset-device-select').onchange = () =>
+      guarded(async () => {
+        const value = $('dataset-device-select').value;
+        if (value === '__new__') {
+          $('dataset-device-new').hidden = false;
+          return;
+        }
+        $('dataset-device-new').hidden = true;
+        if (!value) return;
+        device = devices.find((d) => d.id === value) || null;
+        if (!device) return;
+        await afterDeviceChosen();
+      });
 
     $('dataset-device-create').onclick = () =>
       guarded(async () => {
@@ -151,9 +254,33 @@ const DatasetCollection = (function () {
           identity_evidence: $('dataset-device-input-evidence').value.trim(),
         };
         device = await op('dataset.device.create', payload);
-        group = null;
+        devices = devices.filter((d) => d.id !== device.id).concat(device);
+        populateDeviceSelect();
+        $('dataset-device-select').value = device.id;
+        $('dataset-device-new').hidden = true;
+        $('dataset-device-input-name').value = '';
+        $('dataset-device-input-model').value = '';
+        $('dataset-device-input-family').value = '';
+        $('dataset-device-input-confirm').checked = false;
+        $('dataset-device-input-evidence').value = '';
         note('Gerät angelegt: ' + device.name);
-        renderDeviceState();
+        await afterDeviceChosen();
+      });
+
+    $('dataset-device-change').onclick = () => {
+      deviceStepExpanded = true;
+      renderSteps();
+    };
+
+    $('dataset-group-continue').onclick = () =>
+      guarded(async () => {
+        const value = $('dataset-group-select').value;
+        if (!value) throw new Error('Situation wählen');
+        const g = device.groups[value];
+        await discardOpenCapture();
+        group = { group_id: value, device_id: device.id, change_note: g.change_note };
+        groupStepExpanded = false;
+        renderSteps();
       });
 
     $('dataset-group-begin').onclick = () =>
@@ -161,11 +288,20 @@ const DatasetCollection = (function () {
         if (!device) throw new Error('Zuerst ein Gerät anlegen oder wählen');
         const changeNote = $('dataset-group-input').value.trim();
         if (!changeNote) throw new Error('Was hat sich geändert? Bitte kurz beschreiben.');
-        group = await op('dataset.group.begin', { device_id: device.id, change_note: changeNote });
+        const created = await op('dataset.group.begin', { device_id: device.id, change_note: changeNote });
+        device.groups[created.group_id] = { device_id: device.id, change_note: created.change_note };
+        await discardOpenCapture();
+        group = created;
+        groupStepExpanded = false;
         $('dataset-group-input').value = '';
         note('Neue Situation eröffnet.');
-        renderDeviceState();
+        renderSteps();
       });
+
+    $('dataset-group-change').onclick = () => {
+      groupStepExpanded = true;
+      renderSteps();
+    };
 
     function conditionKeys() {
       return [...$('dataset-conditions').querySelectorAll('input:checked')].map((el) => el.value);
@@ -240,7 +376,33 @@ const DatasetCollection = (function () {
       $('dataset-expected-text').value = '';
       $('dataset-target-label').value = '';
       $('dataset-similarity-reason').value = '';
+      showRepresentativeChoice(sample);
     }
+
+    function showRepresentativeChoice(sample) {
+      // Ohne ausdrueckliche Auswahl schliesst der Export eine ganze Situation
+      // aus, sobald sie mehr als eine Probe hat (DatasetStore._export_locked,
+      // Grund "group_without_selection") - dieser Knopf ist der einzige Weg,
+      // das aus der Oberflaeche heraus zu setzen (Nutzerfund 2026-09-21).
+      lastSavedSample = sample;
+      $('dataset-representative').hidden = false;
+      $('dataset-representative-info').textContent = sample.expected_text || sample.label_state;
+      $('dataset-representative-mark').disabled = false;
+      $('dataset-representative-mark').textContent = 'als Vertreter dieser Situation markieren';
+    }
+
+    $('dataset-representative-mark').onclick = () =>
+      guarded(async () => {
+        if (!lastSavedSample) return;
+        const updated = await op('dataset.select', {
+          sample_id: lastSavedSample.id,
+          revision: lastSavedSample.metadata_revision,
+        });
+        lastSavedSample = updated;
+        $('dataset-representative-mark').disabled = true;
+        $('dataset-representative-mark').textContent = '✓ ist Vertreter dieser Situation';
+        note('Als Vertreter der Situation markiert: ' + updated.id);
+      });
 
     function buildSaveArgs() {
       if (!capture) throw new Error('Zuerst eine Aufnahme einfrieren');
@@ -299,13 +461,7 @@ const DatasetCollection = (function () {
       $('dataset-similarity-reason').value = '';
     };
 
-    $('dataset-discard').onclick = () =>
-      guarded(async () => {
-        if (capture) await op('dataset.discard', { token: capture.token });
-        capture = null;
-        selection = null;
-        $('dataset-editor').hidden = true;
-      });
+    $('dataset-discard').onclick = () => guarded(discardOpenCapture);
 
     async function refreshSummary() {
       const summary = await op('dataset.summary');
@@ -343,15 +499,17 @@ const DatasetCollection = (function () {
         $('main').classList.toggle('dataset-mode', entering);
         if (entering) {
           await refreshCsrf();
+          devices = await op('dataset.device.list');
+          populateDeviceSelect();
           await refreshSummary();
-          renderDeviceState();
+          renderSteps();
         }
       });
 
-    renderDeviceState();
+    renderSteps();
   }
 
-  return { toOriginalBox, clampSelectionToImage, init };
+  return { toOriginalBox, clampSelectionToImage, chooseInitialGroup, init };
 })();
 
 if (typeof window !== 'undefined') {

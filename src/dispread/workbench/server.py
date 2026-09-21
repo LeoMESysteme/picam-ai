@@ -320,9 +320,22 @@ async def serve(args):
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
-        await terminals.close()
-        await asyncio.to_thread(controller.close)
+        # Reihenfolge ist sicherheitsrelevant fuer ein saubers Beenden: solange
+        # runner/unix noch Verbindungen annehmen, kann "POST /terminals" (oder
+        # der lokale Steuersocket) zwischen SIGINT und hier eine neue Shell
+        # anlegen, die terminals.close() nie zu Gesicht bekommt. Ihr
+        # Reap-Task (asyncio.to_thread(subprocess.wait)) haengt dann fuer
+        # immer in einem Worker-Thread des Default-Executors - und genau den
+        # joint asyncio.run() beim eigenen, unterbrechungsfreien Abbau nach
+        # dem Ende dieser Funktion. Ergebnis: der Prozess reagiert auf kein
+        # weiteres Ctrl+C mehr, weil der Event-Loop und sein Signal-Handler zu
+        # diesem Zeitpunkt schon weg sind (beobachteter Bug: eine ueber die
+        # Werkbank-Oberflaeche angelegte Shell blieb so als Zombie-Aufnahme
+        # zurueck). Erst wenn runner/unix nichts mehr annehmen, ist
+        # terminals.close() garantiert vollstaendig.
         await runner.cleanup()
         await unix.cleanup()
+        await terminals.close()
+        await asyncio.to_thread(controller.close)
         socket_path.unlink(missing_ok=True)
         lockfile.close()
