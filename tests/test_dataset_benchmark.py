@@ -262,3 +262,252 @@ def test_assert_disjoint_groups_wirft_nicht_bei_disjunkten_gruppen():
     fitting = [_sample("a", "gruppe-1")]
     evaluation = [_sample("b", "gruppe-2")]
     assert_disjoint_groups(fitting, evaluation)  # wirft nicht
+
+
+# === Task 2/3: Phase A (Passbarkeit/Diagnose) + Phase B (Uebertragung) =====
+#
+# Pflichtpruefung wie bei Task 1: eine `render_display`-Probe muss durch
+# `fit_dataset_sample`/`evaluate_dataset_sample` sauber durchgehen - sonst
+# ist ein Fehlschlag an realen Bildern nicht von einem kaputten Skript zu
+# unterscheiden (Plan, "Erwartungsmanagement").
+
+
+def _dataset_sample_from_render(image, shown, bbox, *, device_id="geraet-1", group="gruppe-1"):
+    x, y, w, h = bbox
+    return DatasetSample(
+        id="synth-1",
+        device_id=device_id,
+        independence_group=group,
+        split="development",
+        label_state="readable",
+        expected_text=shown,
+        bbox=(float(x), float(y), float(w), float(h)),
+        image_path=None,  # type: ignore[arg-type]
+        width=image.shape[1],
+        height=image.shape[0],
+    )
+
+
+def test_fit_dataset_sample_synthetische_probe_wird_gematcht():
+    from dispread.benchmark import fit_dataset_sample
+
+    layout = _layout()
+    image, shown, bbox = render_display(12.34, layout, size=(480, 200))
+    sample = _dataset_sample_from_render(image, shown, bbox)
+
+    fit = fit_dataset_sample(image, sample, has_sign=False, deskew=False, reader=SevenSegmentReader())
+
+    assert fit.sample_id == "synth-1"
+    assert fit.geometry == "axis_aligned"
+    assert fit.quad is not None
+    assert fit.matched is True
+    assert fit.layout is not None
+    assert fit.reason is None
+
+
+def test_fit_dataset_sample_wirft_bei_unlesbarer_probe():
+    from dispread.benchmark import fit_dataset_sample
+
+    layout = _layout()
+    image, _shown, bbox = render_display(1.0, layout, size=(480, 200))
+    sample = _dataset_sample_from_render(image, None, bbox)
+    object.__setattr__(sample, "expected_text", None)
+
+    with pytest.raises(ValueError, match="unlesbare"):
+        fit_dataset_sample(image, sample, has_sign=False, deskew=False)
+
+
+def test_fit_dataset_sample_liefert_kein_quad_bei_degenerierter_bbox_deskew_true():
+    from dispread.benchmark import fit_dataset_sample
+
+    layout = _layout()
+    image, shown, _bbox = render_display(1.0, layout, size=(480, 200))
+    sample = _dataset_sample_from_render(image, shown, (10.0, 10.0, 0.5, 0.5))
+
+    fit = fit_dataset_sample(image, sample, has_sign=False, deskew=True)
+
+    assert fit.quad is None
+    assert fit.matched is False
+    assert "Quad" in fit.reason
+
+
+def test_target_layout_uebernimmt_has_sign_niemals_aus_dem_zieltext():
+    """Leck-Test: `has_sign` kommt ausschliesslich aus dem Parameter, egal was
+    im Sollwert der Zielprobe steht (auch ein positiver Wert bei
+    `has_sign=True`, ein negativer bei `has_sign=False`)."""
+    from dispread.benchmark import target_layout
+
+    sample_positive = DatasetSample(
+        id="s1",
+        device_id="geraet-1",
+        independence_group="gruppe-1",
+        split="development",
+        label_state="readable",
+        expected_text="12.34",
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        image_path=None,  # type: ignore[arg-type]
+        width=100,
+        height=100,
+    )
+    sample_negative = DatasetSample(
+        id="s2",
+        device_id="geraet-1",
+        independence_group="gruppe-1",
+        split="development",
+        label_state="readable",
+        expected_text="-12.34",
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        image_path=None,  # type: ignore[arg-type]
+        width=100,
+        height=100,
+    )
+    ratios = {"digit_gap_ratio": 0.0, "sign_cell_ratio": 0.6, "thickness_ratio": 0.16, "inset_ratio": 0.10}
+
+    layout_true_on_positive = target_layout(True, sample_positive, ratios)
+    layout_false_on_negative = target_layout(False, sample_negative, ratios)
+
+    assert layout_true_on_positive.has_sign is True
+    assert layout_false_on_negative.has_sign is False
+    assert layout_true_on_positive.digits == 4
+    assert layout_true_on_positive.decimals == 2
+
+
+def test_target_layout_wirft_bei_unreadable_probe():
+    from dispread.benchmark import target_layout
+
+    sample = DatasetSample(
+        id="s1",
+        device_id="geraet-1",
+        independence_group="gruppe-1",
+        split="development",
+        label_state="unreadable",
+        expected_text=None,
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        image_path=None,  # type: ignore[arg-type]
+        width=100,
+        height=100,
+    )
+    with pytest.raises(ValueError, match="unlesbare"):
+        target_layout(False, sample, {})
+
+
+def test_evaluate_dataset_sample_liest_synthetische_probe_korrekt_mit_target_layout():
+    """Pflichtpruefung fuer Phase B (analog Task 1): `target_layout` liefert ein
+    Raster, mit dem `evaluate_dataset_sample` eine `render_display`-Probe
+    korrekt liest. `ocr_box=(0,0,1,1)` wie in Task 1 - `render_display`
+    fuellt das ganze `bbox` mit dem Panel, `fit_ocr_box` ist eine eigene,
+    hier nicht zu pruefende Geometriestufe (siehe Task 2s
+    `search_ocr_box`-Tests)."""
+    from dispread.benchmark import evaluate_dataset_sample, target_layout
+
+    layout = _layout()
+    image, shown, bbox = render_display(56.78, layout, size=(480, 200))
+    sample = _dataset_sample_from_render(image, shown, bbox)
+    ratios = {
+        "digit_gap_ratio": layout.digit_gap_ratio,
+        "sign_cell_ratio": layout.sign_cell_ratio,
+        "thickness_ratio": layout.thickness_ratio,
+        "inset_ratio": layout.inset_ratio,
+    }
+    target = target_layout(False, sample, ratios)
+
+    outcome = evaluate_dataset_sample(
+        image, sample, target, (0.0, 0.0, 1.0, 1.0), SevenSegmentReader(), deskew=False
+    )
+
+    assert outcome is not None
+    assert outcome.correct == 1
+    assert outcome.wrong == 0
+    assert outcome.rejected == 0
+
+
+def test_evaluate_dataset_sample_gibt_none_bei_fehlendem_quad():
+    from dispread.benchmark import evaluate_dataset_sample, target_layout
+
+    layout = _layout()
+    image, shown, _bbox = render_display(1.0, layout, size=(480, 200))
+    sample = _dataset_sample_from_render(image, shown, (10.0, 10.0, 0.5, 0.5))
+    ratios = {"digit_gap_ratio": 0.0, "sign_cell_ratio": 0.6, "thickness_ratio": 0.16, "inset_ratio": 0.10}
+    target = target_layout(False, sample, ratios)
+
+    outcome = evaluate_dataset_sample(
+        image, sample, target, (0.0, 0.0, 1.0, 1.0), SevenSegmentReader(), deskew=True
+    )
+
+    assert outcome is None
+
+
+def test_segment_report_liefert_je_ziffernstelle_erwartetes_und_gemessenes_muster():
+    from dispread.benchmark import segment_report
+
+    layout = _layout()
+    image, shown, bbox = render_display(12.34, layout, size=(480, 200))
+    x, y, w, h = bbox
+    crop = image[int(y) : int(y + h), int(x) : int(x + w)]
+
+    report = segment_report(crop, layout, (0.0, 0.0, 1.0, 1.0), shown, reader=SevenSegmentReader())
+
+    assert len(report) == layout.digits
+    for entry in report:
+        assert entry["expected_digit"] in "0123456789"
+        assert entry["got_segments"] == entry["expected_segments"]
+
+
+def test_segment_report_wirft_bei_stellenzahl_mismatch():
+    from dispread.benchmark import segment_report
+
+    layout = _layout()
+    image, _shown, bbox = render_display(12.34, layout, size=(480, 200))
+    x, y, w, h = bbox
+    crop = image[int(y) : int(y + h), int(x) : int(x + w)]
+
+    with pytest.raises(ValueError, match="Ziffernstellen"):
+        segment_report(crop, layout, (0.0, 0.0, 1.0, 1.0), "1.2", reader=SevenSegmentReader())
+
+
+def test_aggregate_summiert_mehrere_outcomes():
+    from dispread.benchmark import Outcome, aggregate
+
+    a = Outcome(
+        source_id="a",
+        device_id="g1",
+        expected="1.00",
+        correct=1,
+        wrong=0,
+        rejected=0,
+        wrong_classes={},
+        reject_classes={},
+        examples=(),
+    )
+    b = Outcome(
+        source_id="b",
+        device_id="g1",
+        expected="2.00",
+        correct=0,
+        wrong=1,
+        rejected=0,
+        wrong_classes={"digit": 1},
+        reject_classes={},
+        examples=("2.00 -> 3.00",),
+    )
+    c = Outcome(
+        source_id="c",
+        device_id="g1",
+        expected="3.00",
+        correct=0,
+        wrong=0,
+        rejected=1,
+        wrong_classes={},
+        reject_classes={"no_value": 1},
+        examples=(),
+    )
+
+    report = aggregate([a, b, c])
+
+    assert report["evaluated"] == 3
+    assert report["correct"] == 1
+    assert report["wrong"] == 1
+    assert report["rejected"] == 1
+    assert report["wrong_classes"] == {"digit": 1}
+    assert report["reject_classes"] == {"no_value": 1}
+    assert report["outcomes"] == [a, b, c]

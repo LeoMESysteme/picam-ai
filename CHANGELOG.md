@@ -3,6 +3,38 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 2/3: Phase-A-Fitting + Phase-B-Uebertragung)
+
+**Problem:** Die im Sammelmodus gesammelten realen Proben (52+, siehe
+`docs/PLAN_2026-09-21-dataset-benchmark.md`) waren zwar ladbar und geometrisch
+zuschneidbar (Task 1: `load_dataset_samples`, `sample_quad`), aber noch nicht
+gegen den 7-Segment-Leser messbar - es fehlte die eigentliche Fitting- und
+Auswertungslogik.
+
+**Änderung:** `src/dispread/benchmark.py` um Phase A (Passbarkeit/Diagnose,
+ausdrücklich kein Erkennungswert) und Phase B (Übertragung) erweitert:
+`search_ocr_box` (grobe, wertfreie Rahmenvorsuche gegen `ocr.autofit.fit_layout`,
+~36 Kandidaten statt eines vollen Kreuzprodukts), `fit_dataset_sample` (Zielbox
+→ `sample_quad` → `search_ocr_box`, liefert `SampleFit`), `target_layout`
+(Zielraster NUR aus Zielformat + eingefrorenen Glyphenverhältnissen +
+geräteseitigem `has_sign` - **niemals** aus dem Zieltext der Probe selbst),
+`evaluate_dataset_sample` (liest eine Probe mit einem Phase-B-Raster),
+`segment_report` (Segmentdiagnose je Ziffernstelle: gemessene Helligkeiten vs.
+Sollmuster aus `DIGIT_SEGMENTS`) und `aggregate` (aus `evaluate_set`
+herausgezogen, damit Clip-/Annotationspfad und Datensatz-Pfad dieselbe
+Summierung benutzen). 20 neue Tests in `tests/test_dataset_benchmark.py`,
+darunter ein Leck-Test für `target_layout` (has_sign kommt beweisbar nie aus
+dem Sollwert) und die Pflichtprüfung gegen eine `render_display`-Probe für
+`fit_dataset_sample`/`evaluate_dataset_sample`.
+
+**Konsequenz:** Gegen eine echte Probe bestätigt `fit_dataset_sample` empirisch
+den Spike-Befund aus dem Plan (OQ-23): `search_ocr_box` findet unter 35
+Kandidaten keinen, der den Sollwert exakt dekodiert (`matched=False`,
+2485 Leseversuche, ~4s). Laufzeit pro Probe/Geometrie liegt damit im
+Minutenbereich für den gesamten realen Bestand, nicht Stunden. `317 passed`,
+`ruff check` sauber. Die CLI (`scripts/dataset-benchmark.py`, Task 4) und die
+Phase-B-Faltungslogik (Leave-one-group-out) fehlen noch.
+
 ## 0.1.0.dev0 — 2026-09-21 ("als Vertreter markieren" war unsichtbar - Nachschliff zur eigenen Sitzung)
 
 **Problem:** Nutzerbefund direkt nach dem vorigen Fix: "ich kann in dispread
