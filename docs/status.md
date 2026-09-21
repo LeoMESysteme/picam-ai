@@ -312,8 +312,15 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
-0. **Dataset-Benchmark-Worktree nach `master` integrieren** (5 Commits in
+0. **Dataset-Benchmark-Worktree nach `master` integrieren** (7 Commits in
    `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
+00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,
+    [OQ-04](open-questions.md)-Update): alle im Betrieb zu lesenden Anzeigen
+    sind LCD. Die beiden bisher gesammelten Geräte ("RND-Lab", "BK Precision",
+    73 reale Proben) sind LED/VFD-Laboraufbauten, **keines davon LCD** — der
+    bisherige reale Dataset-Benchmark prüft also die Pipeline-Mechanik, nicht
+    die Zielhardware. Ein LCD-Gerät gehört vorrangig in den Sammelmodus
+    aufgenommen, sobald verfügbar.
 0a. **Rastergeometrie untersuchen** (OQ-23-Update, 2026-09-21): 0/73 reale
     Proben passen zum festen relativen Segment-Abtastraster. Vor einem
     weiteren Dataset-Benchmark-Lauf klären, ob `dispread.ocr.autofit._CANDIDATES`

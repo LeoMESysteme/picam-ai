@@ -36,13 +36,32 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-04 — Welche Gerätetypen bilden den ersten freizugebenden Umfang?
 
-* **Status:** offen · **Zuständig:** Labor
+* **Status:** teilweise geklärt (Technologie), Gerätezahl/-familie weiter offen
+  · **Zuständig:** Labor
 * **Blockiert:** Umfang des Datensatzes (P2) und die Abnahmekriterien (P7).
 * **Vorabdefault:** mit GSV-2ASD und einem AST-Gerät beginnen; die Architektur
   bleibt anzeigetyp-agnostisch.
 * **Günstigstes Experiment:** zwei Wochen Zählstrich am Prüfplatz — welche
   Geräte kommen tatsächlich am häufigsten?
 * **Antwort landet in:** [ROADMAP.md](ROADMAP.md), `datasets/README.md`
+
+* **Update 2026-09-21, Technologie vom Nutzer bestätigt:** Alle im
+  Produktivbetrieb zu lesenden Anzeigen sind **LCD**
+  (`layout.polarity = "dark_on_bright"`), nicht LED/VFD. Das betrifft die
+  eigentlichen Messverstärker-Displays (GSV-/AST-Geräte), **nicht** den
+  aktuellen Sammelmodus-Entwicklungsbestand: die beiden bisher registrierten
+  Geräte "RND-Lab" und "BK Precision" (73 reale Proben, siehe
+  [VALIDATION.md](VALIDATION.md) 2026-09-21) sind Laboraufbauten mit
+  `technology=LED`, physisch aber teils VFD (BK-5491B, siehe OQ-23-Kopf) —
+  keines davon ist LCD. Der bisherige reale Dataset-Benchmark-Lauf prüft
+  damit die Pipeline-Mechanik korrekt, ist aber **nicht** repräsentativ für
+  die tatsächliche Zielhardware. Konsequenz: Sobald ein LCD-Gerät verfügbar
+  ist, gehört es vorrangig in den Sammelmodus aufgenommen - die
+  LED/LCD-Vielfaltsvorgabe aus dem Exportziel
+  (`docs/status.md`, „mindestens 6 verifizierte Geräte, 3 Familien, LED und
+  LCD") ist jetzt weniger eine Vielfaltsvorgabe als eine **Zielhardware-
+  Vorgabe**: LCD ist Pflicht, LED/VFD bleiben nur als zusätzliche
+  Entwicklungsdaten wertvoll.
 
 ## OQ-05 — Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen?
 
