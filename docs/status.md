@@ -316,11 +316,22 @@ nur die Python-interne Executor-Verwaltung hing noch.
    `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
 00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,
     [OQ-04](open-questions.md)-Update): alle im Betrieb zu lesenden Anzeigen
-    sind LCD. Die beiden bisher gesammelten Geräte ("RND-Lab", "BK Precision",
+    sind LCD. Die beiden zuerst gesammelten Geräte ("RND-Lab", "BK Precision",
     73 reale Proben) sind LED/VFD-Laboraufbauten, **keines davon LCD** — der
     bisherige reale Dataset-Benchmark prüft also die Pipeline-Mechanik, nicht
-    die Zielhardware. Ein LCD-Gerät gehört vorrangig in den Sammelmodus
-    aufgenommen, sobald verfügbar.
+    die Zielhardware. **Update, direkt danach:** Nutzer hat bereits ein
+    LCD-Gerät angelegt ("GSV", `family=GSV_Sensor`, 3 Proben, 1 Situation).
+    Der erste Lauf dagegen deckte einen echten Bug auf: die Leser-Polarität
+    kam nie vom Gerät, sondern immer vom LED-Default (`bright_on_dark`) -
+    für ein LCD-Gerät garantiert jeder Fitversuch zum Scheitern, unabhängig
+    von der Geometrie (`fit_layout` sucht Polarität nicht mit). Behoben
+    (siehe CHANGELOG, „Leser-Polarität kommt vom Gerät"): `technology` aus
+    `devices.json` bestimmt jetzt `polarity`. Mit der Korrektur weiterhin
+    0/3 Proben gefittet - aber jetzt eine echte Aussage über die Geometrie,
+    nicht über eine falsche Polaritätsannahme. **Nächster Schritt: mehr,
+    vielfältigere GSV-Proben sammeln** (aktuell 1 Situation, identischer
+    Sollwert in allen dreien) - der Bestand ist noch zu klein für eine
+    belastbare Aussage.
 0a. **Rastergeometrie untersuchen** (OQ-23-Update, 2026-09-21): 0/73 reale
     Proben passen zum festen relativen Segment-Abtastraster. Vor einem
     weiteren Dataset-Benchmark-Lauf klären, ob `dispread.ocr.autofit._CANDIDATES`
