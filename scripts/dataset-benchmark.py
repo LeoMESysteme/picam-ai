@@ -297,10 +297,12 @@ def main() -> int:
                 if len(candidates) != 1:
                     print(
                         f"FEHLER: Situation {held_out!r} von Geraet {device_id} hat "
-                        f"{len(candidates)} als 'selected' markierte Proben (erwartet genau 1) - Abbruch",
+                        f"{len(candidates)} als 'selected' markierte Proben (erwartet genau 1) - "
+                        "diese Faltung wird uebersprungen, kein Ersatzvertreter erraten",
                         file=sys.stderr,
                     )
-                    return 1
+                    exit_code = 1
+                    continue
                 representative = candidates[0]
                 evaluation = [s for s in readable if s.independence_group != held_out]
                 _run_fold(

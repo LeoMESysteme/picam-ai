@@ -3,6 +3,32 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: fehlendes `selected` bricht nur die eine Faltung ab, nicht den ganzen Lauf)
+
+**Problem:** Der erste echte Volllauf gegen `var/workbench/datasets` (77
+Proben, gewachsen gegenüber den 52 aus dem Plan) brach sofort ab: die
+BK-Precision-Situation „schräg links" (`57227b16...`) hat noch keine als
+`selected` markierte Probe - eine echte, nicht erfundene Datenlücke. Die
+ursprüngliche CLI-Implementierung beendete beim ersten fehlenden `selected`
+den GESAMTEN Lauf (`return 1`), was auch die bereits berechneten,
+brauchbaren Befunde des anderen Geräts (RND-Lab) und der anderen zwei
+BK-Situationen verschluckt hätte.
+
+**Änderung:** `scripts/dataset-benchmark.py`: ein fehlendes `selected` bricht
+jetzt nur die betroffene Faltung ab (`FEHLER:` auf stderr, Faltung
+übersprungen, `exit_code=1` gesetzt), der Lauf läuft für alle anderen
+Situationen/Geräte weiter. Kein Ersatzvertreter wird erraten - das bleibt
+wie im Plan gefordert. Exit-Code des gesamten Laufs bleibt `1`, wenn
+irgendeine Faltung deswegen übersprungen wurde - der Fehler ist also
+weiterhin sichtbar, nur nicht mehr blockierend für den Rest des Berichts.
+
+**Konsequenz:** Ein Volllauf liefert jetzt den vollständigen Befund für alle
+auswertbaren Situationen/Geräte in einem Durchgang, meldet die BK-Situation
+ohne Vertreter aber weiterhin laut als offenen Punkt (nicht als „0 %
+korrekt", nicht stillschweigend übersprungen). Diese Lücke gehört als
+Bedienaufgabe behoben (Vertreter für „schräg links" markieren), nicht durch
+Software geraten.
+
 ## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 4: CLI und Faltungslogik)
 
 **Problem:** Task 2/3 lieferten die Fitting-/Auswertungsbausteine
