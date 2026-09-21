@@ -15,7 +15,7 @@ from dispread.layout import DisplayLayout
 from .vision import DetectionConfig
 
 DEFAULT = {
-    "schema_version": 3,
+    "schema_version": 4,
     "version": 0,
     "camera": {"width": 960, "height": 720, "fps": 15.0, "controls": {"AeEnable": True, "Contrast": 1.0}},
     "roi": None,
@@ -34,6 +34,11 @@ DEFAULT = {
     # Zahlenformat der Anzeige. Kommt laut Konzept §4 aus dem bestaetigten
     # Profil und wird nicht geraten - der Leser tastet dagegen ab.
     "layout": DisplayLayout().to_dict(),
+    # Welcher ValueReader diesen Ausschnitt liest. "sevenseg" fuer 7-Segment-
+    # Anzeigen (Default, unveraendertes Verhalten), "tesseract_cli" fuer
+    # Zeichen-/dot-matrix-LCDs, die sevenseg strukturell nicht lesen kann
+    # (siehe docs/superpowers/specs/2026-09-21-tesseract-backend-design.md).
+    "backend": "sevenseg",
 }
 CONTROL_NAMES = {"AeEnable", "ExposureTime", "AnalogueGain", "Contrast"}
 #: Erlaubte Spannen der Layout-Verhaeltnisse. Vorabdefaults, keine
@@ -79,7 +84,18 @@ def validate(data, capabilities=None):
     if isinstance(data.get("layout"), dict):
         for key, default in DEFAULT["layout"].items():
             data["layout"].setdefault(key, default)
-    if set(data) != set(DEFAULT) or data["schema_version"] != 3:
+    # Schema 3 -> 4: neues backend-Feld. Unbedingt auf schema_version == 3
+    # geprueft (nicht zusaetzlich auf "backend" not in data) - sonst wuerde
+    # ein Testfixture, das DEFAULT komplett kopiert und nur roi_quad/ocr_box
+    # entfernt (wie die bestehenden v1/v2-Migrationstests es tun), "backend"
+    # bereits enthalten und schema_version bliebe faelschlich bei 3 haengen.
+    # setdefault reproduziert exakt das bisherige Verhalten fuer ein
+    # echtes altes Profil ohne dieses Feld, ohne ein bereits vorhandenes
+    # backend zu ueberschreiben.
+    if data.get("schema_version") == 3:
+        data.setdefault("backend", "sevenseg")
+        data["schema_version"] = 4
+    if set(data) != set(DEFAULT) or data["schema_version"] != 4:
         raise ValueError("Unbekanntes Profilschema oder unbekannte Felder")
     if type(data["version"]) is not int or data["version"] < 0:
         raise ValueError("Ungueltige Profilversion")
@@ -121,6 +137,8 @@ def validate(data, capabilities=None):
             raise ValueError("ROI liegt ausserhalb des Bildes")
     if data["role"] not in ("main", "secondary") or type(data["confirmed"]) is not bool:
         raise ValueError("Ungueltige Anzeigenrolle/Bestaetigung")
+    if data["backend"] not in ("sevenseg", "tesseract_cli"):
+        raise ValueError("backend muss sevenseg oder tesseract_cli sein")
     if data["confirmed"] and roi is None:
         raise ValueError("Keine ROI bestaetigt")
     quad = data["roi_quad"]

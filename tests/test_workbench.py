@@ -25,7 +25,7 @@ from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 @pytest.mark.parametrize(
     "patch",
     [
-        {"schema_version": 4},
+        {"schema_version": 5},
         {"roi": [-0.1, 0, 0.5, 0.5]},
         {"roi": [0, 0, 2, 1]},
         {"ocr_box": [0.2, 0.2, 0.9, 0.5]},
@@ -93,6 +93,31 @@ def test_frozen_annotation_matches_original(tmp_path):
     assert data["ocr_box_coordinate_system"] == "rectified_roi_normalized_xywh"
 
 
+def test_profile_v3_is_migrated_with_sevenseg_backend():
+    profile = copy.deepcopy(DEFAULT)
+    profile.pop("backend")
+    profile["schema_version"] = 3
+
+    migrated = validate(profile)
+
+    assert migrated["schema_version"] == 4
+    assert migrated["backend"] == "sevenseg"
+
+
+def test_unknown_backend_is_rejected():
+    profile = copy.deepcopy(DEFAULT)
+    profile["backend"] = "unknown_backend"
+    with pytest.raises(ValueError, match="backend"):
+        validate(profile)
+
+
+def test_tesseract_cli_backend_is_accepted():
+    profile = copy.deepcopy(DEFAULT)
+    profile["backend"] = "tesseract_cli"
+    validated = validate(profile)
+    assert validated["backend"] == "tesseract_cli"
+
+
 def test_profile_v1_rectangle_is_migrated_to_quad():
     profile = copy.deepcopy(DEFAULT)
     profile.pop("roi_quad")
@@ -102,7 +127,7 @@ def test_profile_v1_rectangle_is_migrated_to_quad():
     profile["confirmed"] = True
 
     migrated = validate(profile)
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     np.testing.assert_allclose(migrated["roi_quad"], [[0.1, 0.2], [0.6, 0.2], [0.6, 0.6], [0.1, 0.6]])
     np.testing.assert_allclose(migrated["ocr_box"], [0, 0, 1, 1])
 
@@ -114,7 +139,7 @@ def test_profile_v2_is_migrated_with_full_ocr_box():
 
     migrated = validate(profile)
 
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     np.testing.assert_allclose(migrated["ocr_box"], [0, 0, 1, 1])
 
 

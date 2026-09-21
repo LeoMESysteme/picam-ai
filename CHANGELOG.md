@@ -3,6 +3,31 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Profilschema: backend-Feld fuer tesseract_cli)
+
+**Problem:** `src/dispread/ocr/tesseract_cli.py` (voriger Commit) existiert,
+aber kein Profil kann es auswaehlen - `DisplayLayout`/das Profilschema
+kannten nur `sevenseg`.
+
+**Änderung:** `DEFAULT["backend"] = "sevenseg"`, Schema 3 -> 4. Migration:
+ein Profil mit Schema 3 ohne `backend`-Feld bekommt `"sevenseg"` - exakt das
+bisherige Verhalten, keine Vermutung; die Umstellung erfolgt unbedingt bei
+`schema_version == 3` (nicht zusaetzlich an der Feldabwesenheit geprueft),
+sonst haetten die bestehenden v1/v2-Migrationstests (die DEFAULT komplett
+kopieren) das neue Feld bereits mitgebracht und waeren faelschlich bei
+Schema 3 haengen geblieben. `validate()` lehnt unbekannte `backend`-Werte
+ab. 3 neue Tests (Migration, unbekannter Wert abgelehnt, `tesseract_cli`
+akzeptiert); zwei bestehende Migrationstests
+(`test_profile_v1_rectangle_is_migrated_to_quad`,
+`test_profile_v2_is_migrated_with_full_ocr_box`) erwarten jetzt
+`schema_version == 4` statt `3`; ein bestehender Parametrisierungsfall in
+`test_profile_validation` von `schema_version: 4` auf `5` verschoben (4 ist
+jetzt die gueltige aktuelle Version).
+
+**Konsequenz:** Das Feld existiert und wird validiert, aber `Controller`
+liest es noch nicht (naechster Commit) - ein gesetztes `backend` hat bisher
+keine Wirkung.
+
 ## 0.1.0.dev0 — 2026-09-21 (Neues OCR-Backend tesseract_cli fuer dot-matrix-/Zeichen-LCDs)
 
 **Problem:** Der neu angelegte GSV-Sensor ist eine dot-matrix-Zeichen-LCD
