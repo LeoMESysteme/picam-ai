@@ -37,6 +37,7 @@ from dispread.layout import DisplayLayout
 from dispread.ocr import ReadResult, ValueReader
 from dispread.rectify import rectify
 from dispread.workbench.controller import CROP_SIZE, crop_box
+from dispread.workbench.vision import fit_quad_in_region
 
 __all__ = [
     "Outcome",
@@ -48,6 +49,10 @@ __all__ = [
     "evaluate_set",
     "assert_disjoint_devices",
     "directories_from_glob",
+    "DatasetSample",
+    "load_dataset_samples",
+    "sample_quad",
+    "assert_disjoint_groups",
 ]
 
 
@@ -378,3 +383,180 @@ def assert_disjoint_devices(development: Sequence[Path], test: Sequence[Path]) -
 def directories_from_glob(pattern: str) -> list[Path]:
     """Hilfsfunktion fuer die CLI: Glob-Muster zu vorhandenen Verzeichnissen."""
     return [Path(p) for p in sorted(glob.glob(pattern)) if Path(p).is_dir()]
+
+
+# --- Datensatz-Benchmark (Sammelmodus-Proben) ------------------------------
+#
+# Ab hier: Proben aus `var/workbench/datasets/` (geführter Sammelmodus,
+# `dispread.workbench.datasets.DatasetStore`), nicht Clips/Annotationen. Die
+# Zahlengeometrie (`sample_quad`) und der Split-Schutz (`assert_disjoint_groups`)
+# sind eigene Bausteine, weil eine Probe eine `bbox` in Pixelkoordinaten traegt,
+# nicht bereits ein bestaetigtes `roi_quad`.
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetSample:
+    """Eine geladene Sammelmodus-Probe (`samples/<uuid>/{sample.json,image.png}`).
+
+    `expected_text` ist `None` genau dann, wenn `label_state == "unreadable"` -
+    eine unlesbare Probe hat per Exportvertrag keinen Sollwert und wird als
+    benannte Einzelfalldiagnose weitergereicht (Konzept §7: Unlesbares
+    ablehnen statt raten), nicht in eine Zaehlung gefaltet. `bbox` bleibt in
+    Pixelkoordinaten, wie in `sample.json` gespeichert - `sample_quad`
+    normiert sie erst bei Bedarf.
+    """
+
+    id: str
+    device_id: str
+    independence_group: str
+    split: str
+    label_state: str
+    expected_text: str | None
+    bbox: tuple[float, float, float, float]
+    image_path: Path
+    width: int
+    height: int
+
+
+#: Schluessel, die jede Probe unabhaengig vom Label-Zustand tragen muss.
+_REQUIRED_SAMPLE_KEYS = (
+    "id",
+    "device_id",
+    "independence_group",
+    "split",
+    "label_state",
+    "bbox",
+    "width",
+    "height",
+    "synthetic",
+)
+
+
+def load_dataset_samples(root: Path) -> tuple[list[DatasetSample], list[str]]:
+    """`root/samples/<uuid>/sample.json` laden, wie es `DatasetStore` ablegt.
+
+    Liest die Manifeste direkt (kein `DatasetStore` - dessen Instanzierung ist
+    erst Task 3s Sache fuer `list_devices`/`_similarity_score`). Uebersprungen
+    wird, "wie der Exportvertrag" es vormacht (`DatasetStore.export_dataset`):
+    synthetische Proben (`synthetic: true`) und Proben mit
+    `label_state in ("uncertain", "draft")` - deren Sollwert gilt nicht als
+    belastbar genug fuer einen Benchmark. Jeder Uebersprung, jedes defekte
+    Verzeichnis und jedes fehlende Pflichtfeld wird einzeln in `skipped`
+    benannt (AGENTS.md: nie unmarkiert weglassen) statt eine Ausnahme zu
+    werfen, die den ganzen Ladevorgang fuer eine einzelne kaputte Datei
+    abbricht.
+
+    `label_state == "unreadable"` ist dagegen KEIN Uebersprung: die Probe wird
+    geladen (mit `expected_text=None`), damit ein Aufrufer sie als benannte
+    Einzelfalldiagnose ausgeben kann, statt sie stillschweigend wegzulassen
+    oder faelschlich in einen Nenner zu falten (Plan-Vorgabe, siehe
+    Docstring von `DatasetSample`).
+    """
+    samples: list[DatasetSample] = []
+    skipped: list[str] = []
+    samples_root = root / "samples"
+    if not samples_root.is_dir():
+        return samples, skipped
+
+    for sample_dir in sorted(p for p in samples_root.iterdir() if p.is_dir()):
+        manifest_path = sample_dir / "sample.json"
+        try:
+            raw = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            skipped.append(f"{sample_dir}: sample.json nicht lesbar ({exc})")
+            continue
+
+        missing = [key for key in _REQUIRED_SAMPLE_KEYS if key not in raw]
+        if missing:
+            skipped.append(f"{sample_dir}: fehlende Felder {missing}")
+            continue
+
+        if raw["synthetic"] is True:
+            skipped.append(f"{sample_dir}: synthetisch (nicht Teil der realen Auswertung)")
+            continue
+
+        label_state = raw["label_state"]
+        if label_state in ("uncertain", "draft"):
+            skipped.append(f"{sample_dir}: label_state={label_state} (kein belastbarer Sollwert)")
+            continue
+
+        expected_text: str | None
+        if label_state == "readable":
+            expected_text = raw.get("expected_text")
+            if not expected_text:
+                skipped.append(f"{sample_dir}: label_state=readable ohne expected_text")
+                continue
+        elif label_state == "unreadable":
+            expected_text = None
+        else:
+            skipped.append(f"{sample_dir}: unbekannter label_state={label_state!r}")
+            continue
+
+        samples.append(
+            DatasetSample(
+                id=str(raw["id"]),
+                device_id=str(raw["device_id"]),
+                independence_group=str(raw["independence_group"]),
+                split=str(raw["split"]),
+                label_state=label_state,
+                expected_text=expected_text,
+                bbox=tuple(float(v) for v in raw["bbox"]),
+                image_path=sample_dir / "image.png",
+                width=int(raw["width"]),
+                height=int(raw["height"]),
+            )
+        )
+    return samples, skipped
+
+
+def sample_quad(
+    image: Any, bbox: tuple[float, float, float, float], *, deskew: bool
+) -> tuple[tuple[float, float], ...] | None:
+    """Pixel-`bbox` in das normierte Quad ueberfuehren, das `read_frame` erwartet.
+
+    `deskew=False` (Arm 1): reine Normierung der achsparallelen Box auf ihre
+    vier Eckpunkte - keine Suche, keine Rotation. `deskew=True` (Arm 2): erst
+    normieren, dann `fit_quad_in_region` als perspektivischen Vorschlag
+    innerhalb dieses Hinweisbereichs suchen lassen. Liefert `fit_quad_in_region`
+    `None` (kein Kandidat besteht die Filter), gibt auch `sample_quad` `None`
+    zurueck - **kein** stiller Rueckfall auf Arm 1. Der Plan verlangt den
+    Vergleich beider Arme nur ueber Proben, bei denen beide ein Quad
+    geliefert haben, plus eine getrennte Zahl der `None`-Faelle; ein Rueckfall
+    wuerde die beiden Arme vermischen und den Vergleich uninterpretierbar
+    machen.
+    """
+    height, width = image.shape[:2]
+    x, y, w, h = bbox
+    nx, ny, nw, nh = x / width, y / height, w / width, h / height
+    if deskew:
+        return fit_quad_in_region(image, (nx, ny, nw, nh))
+    return (
+        (nx, ny),
+        (nx + nw, ny),
+        (nx + nw, ny + nh),
+        (nx, ny + nh),
+    )
+
+
+def assert_disjoint_groups(
+    fitting: Sequence[DatasetSample], evaluation: Sequence[DatasetSample]
+) -> None:
+    """Unabhaengigkeitsgruppen-Analogon zu `assert_disjoint_devices`.
+
+    Fuer Phase Bs "RND-Lab"-Faltungen (Raster auf dem Vertreter einer
+    Situation fitten, gegen die Proben der anderen Situationen pruefen):
+    dieselbe `independence_group` darf nicht gleichzeitig auf der
+    Fitting-Seite und der Auswertungsseite einer Faltung stehen, sonst waere
+    das Ergebnis der Faltung durch korrelierte Proben optimistisch verzerrt -
+    exakt dieselbe Begruendung wie bei `assert_disjoint_devices`, nur auf
+    Gruppen- statt Geraeteebene. Dies ist die Pruefprimitive, die Task 3 pro
+    Faltung einmal aufruft - der Aufbau der Faltungen selbst gehoert Task 3.
+    """
+    left = {sample.independence_group for sample in fitting}
+    right = {sample.independence_group for sample in evaluation}
+    shared = sorted(left & right)
+    if shared:
+        raise ValueError(
+            "Dieselbe Unabhaengigkeitsgruppe steht auf beiden Seiten einer Faltung: "
+            + ", ".join(shared)
+        )
