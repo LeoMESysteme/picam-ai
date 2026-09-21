@@ -66,9 +66,10 @@ track      Nachführen      QuadTracker, begrenzte ECC-Nachregistrierung eines
                            [fertig]
 rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
 ocr/       Wert lesen      sevenseg mit Per-Segment-Evidenz [fertig]
-                           tesseract_cli [fertig, fuer dot-matrix-/Zeichen-
-                           LCDs wie GSV-Sensor; Erkennungsguete auf dieser
-                           Schrift noch nicht validiert]
+                           tesseract_cli [gebaut, fuer dot-matrix-/Zeichen-
+                           LCDs wie GSV-Sensor; lehnt bisher alle 11 echten
+                           GSV-Proben ab (0/11 liefern einen Wert) — nie
+                           falsch, aber Erkennungsguete noch nicht erreicht]
 validate   Freigabe        Syntax-, Qualitäts- und Zustandsregeln (§7) [fertig]
 sink/      Ausgabe         jsonl (Audit) · serial_out · protocol/ascii_csv [fertig]
                            protocol/gsv_ascii [wirft absichtlich, OQ-07]

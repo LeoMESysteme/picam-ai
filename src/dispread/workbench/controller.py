@@ -600,6 +600,16 @@ class Controller:
                 data = copy.deepcopy(self.config)
                 data["backend"] = args["value"]
                 self._change(data)
+                # Fehlt die tesseract-Binary, soll das JETZT auffallen - als
+                # aiohttp-500-Antwort auf diesen einen command()-Aufruf
+                # (server.py's command()-Handler hat keinen umschliessenden
+                # try/except) - statt zwei Frames spaeter beim ersten
+                # tatsaechlichen Read: dort wuerde der RuntimeError aus
+                # TesseractReader.__init__() sonst bis in publish()s breiten
+                # except Exception durchschlagen und die ganze Kamera stoppen
+                # (Befund der Abschluss-Review), nicht nur diesen einen Read.
+                if data["backend"] == "tesseract_cli":
+                    self._reader_for("tesseract_cli")
             elif op == "focus":
                 if type(args["value"]) is not bool:
                     raise ValueError("Fokusassistenz erwartet true/false")
@@ -1389,7 +1399,17 @@ class Controller:
                 "released": False,
                 "error": None,
             }
-        except (ValueError, TypeError, KeyError, cv2.error) as error:
+        except (ValueError, TypeError, KeyError, cv2.error, RuntimeError, OSError) as error:
+            # RuntimeError/OSError zusaetzlich zur bisherigen Liste (Befund
+            # der Abschluss-Review): backend.set faengt eine fehlende
+            # tesseract-Binary zwar schon beim Auswaehlen ab, aber falls die
+            # Binary erst NACH einem erfolgreichen backend.set aus dem PATH
+            # verschwindet (z. B. waehrend einer laufenden Sitzung entfernt),
+            # wuerfe TesseractReader/_run_tesseract hier RuntimeError bzw.
+            # OSError (Subprozess-/Tempfile-Fehler) - ohne diese beiden Typen
+            # wuerde das ungefangen bis zu publish()s breitem except Exception
+            # durchschlagen und die ganze Kamera stoppen statt nur diesen
+            # einen Read als Fehler anzuzeigen. Guertel-und-Hosentraeger.
             return {"error": str(error), "raw_text": None, "value": None, "released": False}
 
     def _draw_cells(self, overlay, quad, ocr_box, layout_data, reading):

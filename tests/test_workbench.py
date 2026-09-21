@@ -1444,13 +1444,33 @@ def test_backend_set_rejects_unknown_value(tmp_path):
         c.command("backend.set", {"value": "not_a_backend"})
 
 
+def test_backend_set_to_tesseract_cli_raises_immediately_without_binary(tmp_path, monkeypatch):
+    """Abschluss-Review-Befund: eine fehlende tesseract-Binary muss beim
+    Auswaehlen des Backends auffallen (-> aiohttp-500 auf genau diesen
+    command()-Aufruf), nicht erst beim naechsten Read, wo der RuntimeError
+    sonst bis in publish()s breites except Exception durchschlagen und die
+    ganze Kamera stoppen wuerde statt nur diesen einen Vorgang."""
+    import dispread.ocr.tesseract_cli as tesseract_cli_mod
+
+    monkeypatch.setattr(tesseract_cli_mod.shutil, "which", lambda name: None)
+    c = Controller(tmp_path)
+
+    with pytest.raises(RuntimeError, match="tesseract"):
+        c.command("backend.set", {"value": "tesseract_cli"})
+
+
 def test_layout_autofit_rejects_immediately_for_tesseract_backend(tmp_path):
     """Kein tesseract-Binary noetig: der Backend-Check in `_autofit` gibt
-    zurueck, bevor irgendein Reader instanziiert wird."""
+    zurueck, bevor irgendein Reader instanziiert wird. Setzt das Backend
+    deshalb bewusst direkt am `config`-Dict statt ueber den `backend.set`-
+    Befehl - seit der Abschluss-Review-Fixrunde (Finding 7) konstruiert
+    `backend.set` sofort einen `TesseractReader`, was hier unnoetig die
+    Binary voraussetzen wuerde, obwohl `_autofit` selbst keinen Reader
+    braucht."""
     layout, image, text, quad, ocr_box = _autofit_scene()
     c = Controller(tmp_path)
     c.config["layout"] = layout.to_dict()
-    c.command("backend.set", {"value": "tesseract_cli"})
+    c.config["backend"] = "tesseract_cli"
     c.publish(image, {"timebase": "synthetic"})
     frozen = c.command("freeze")
 

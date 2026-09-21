@@ -210,8 +210,10 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort (2026-09-21):** Alle drei sind auf dem Lab-Pi installiert
   (`tesseract 5.5.0`, `socat`, `chrony 4.6.1-3`) - per `which`/`dpkg -l`
   geprueft. Der Eintrag war nur nicht aktualisiert; kein offener Blocker
-  mehr. `dispread.ocr.tesseract_cli` nutzt die tesseract-Binary produktiv
-  (siehe CHANGELOG 2026-09-21).
+  mehr. `dispread.ocr.tesseract_cli` ist geschrieben und ruft die
+  tesseract-Binary auf (siehe CHANGELOG 2026-09-21) — ein produktiver,
+  erfolgreicher Read gegen echte GSV-Sensor-Fotos steht noch aus (0/11
+  Proben liefern bisher einen Wert, siehe docs/status.md).
 
 ## OQ-16 — Vollständigkeit des lokalen Planungsstands
 

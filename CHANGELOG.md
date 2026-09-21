@@ -81,21 +81,23 @@ erwartete Ziffern-/Nachkomma-/Vorzeichenform kommen ausschließlich aus dem
 bestätigten `DisplayLayout` - nie geraten. Zwei unabhängige
 Ablehnungskriterien (Konzept.md §7): Formatprüfung (erkannte Ziffernzahl
 muss exakt zum Profil passen) und eine Konfidenzschwelle - beide müssen
-bestehen, sonst `value=None`. 10 neue Tests, davon 8 deterministisch gegen
+bestehen, sonst `value=None`. 11 neue Tests, davon 8 deterministisch gegen
 einen gefakten Tesseract-Output (Parser-/Ablehnungslogik, unabhängig von der
-tatsächlichen Bilderkennungsgüte) und ein Sicherheitstest gegen die drei
-echten GSV-Sensor-Fotos (`nie ein falscher Wert, höchstens eine Ablehnung`).
+tatsächlichen Bilderkennungsgüte) und ein Sicherheitstest gegen die echten
+GSV-Sensor-Fotos im Datensatz (`nie ein falscher Wert, höchstens eine
+Ablehnung`).
 OQ-15 geklärt: `tesseract-ocr`/`socat`/`chrony` sind bereits installiert.
 
 **Konsequenz:** Zweites lauffähiges OCR-Backend, noch nicht mit dem
 `Controller`/Profilschema verdrahtet (folgt in einem separaten Commit).
 Die Erkennungsgüte des Standard-Tesseract-Modells auf dieser dot-matrix-
 Schrift ist noch nicht zuverlässig (manuelle Stichproben lasen z. B.
-`1.05000` als `1.75000`) - die Konfidenzschwelle verhindert nachweislich,
-dass solche Fehllesungen als Wert durchgehen, aber die Trefferquote selbst
-braucht weitere Arbeit (mehr/bessere Vorverarbeitung oder ein
-segmentschrift-trainiertes Tesseract-Modell wie `letsgodigital`) - bewusst
-nicht Teil dieses Commits.
+`1.05000` als `1.75000`) - die Ablehnungslogik hat in den bisherigen 11
+Stichproben jede Fehllesung gestoppt (3 kein Text erkannt, 6 Ziffernzahl
+stimmt nicht, 1 Vorzeichen nicht erkannt, 1 Konfidenz zu niedrig) - kein
+einziger falscher Wert, aber die Trefferquote selbst braucht weitere Arbeit
+(mehr/bessere Vorverarbeitung oder ein segmentschrift-trainiertes
+Tesseract-Modell wie `letsgodigital`) - bewusst nicht Teil dieses Commits.
 
 ## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: Leser-Polarität kam nie vom Gerät - jede LCD-Probe wäre garantiert gescheitert)
 

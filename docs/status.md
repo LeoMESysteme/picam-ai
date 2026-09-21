@@ -5,6 +5,24 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
+**Neues OCR-Backend `tesseract_cli` gebaut, aber noch nicht erfolgreich
+gegen echte GSV-Sensor-Fotos.** Über 4 Aufgaben plus eine abschließende
+Fix-Runde vollständig Ende-zu-Ende verdrahtet: `src/dispread/ocr/tesseract_cli.py`
+(`TesseractReader`, ruft die bereits installierte `tesseract`-CLI als
+Subprozess auf), Profilschema (`backend`-Feld, Schema 4), `Controller`
+(`_reader_for`, `backend.set`-Befehl, `layout.autofit`-Sonderfall) und die
+Workbench-UI (Leser-Backend-Auswahl). Sicherheitseigenschaft hält: gegen
+alle 11 echten GSV-Sensor-Fotos im Datensatz (Gerät
+`87564e345aa047338f954c045bc9df02`) liefert der Leser **nie einen falschen
+Wert** — aber er liest bisher auch **keine einzige davon erfolgreich (0/11,
+alle Ablehnungen)**. Die Konfidenzschwelle (`_MIN_WORD_CONFIDENCE`) ist ein
+ausdrücklich unvalidierter Platzhalter, keine gemessene Grenze. Nächster
+Schritt: Erkennungsgüte auf dieser dot-matrix-Schrift verbessern (mehr/
+bessere Vorverarbeitung oder ein segmentschrift-trainiertes Tesseract-Modell
+wie `letsgodigital`) — kein Code-Bug, ein offener Genauigkeits-Folgeaufwand.
+Design und Plan: [2026-09-21-tesseract-backend-design.md](superpowers/specs/2026-09-21-tesseract-backend-design.md),
+[2026-09-21-tesseract-backend.md](superpowers/plans/2026-09-21-tesseract-backend.md).
+
 **Neuester Stand dieser Sitzung, eigener Worktree
 `worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 5
 Commits, noch nicht nach `master` gemergt): der geplante Dataset-Benchmark

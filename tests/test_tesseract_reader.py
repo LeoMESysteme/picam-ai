@@ -195,6 +195,21 @@ def test_run_tesseract_liefert_liste_von_konfidenz_text_paaren():
 # --- Sicherheitseigenschaft gegen echte GSV-Sensor-Fotos -------------------
 
 
+#: Alle bekannten Ablehnungsgruende von TesseractReader.read() (siehe
+#: tesseract_cli.py). Aktuell (2026-09-21) lehnen alle 11 echten GSV-Proben
+#: ab, keine liefert einen Wert - deshalb prueft dieser Test zusaetzlich, dass
+#: jede Ablehnung einen dieser bekannten Gruende hat. Ohne diese Pruefung
+#: waere der Test vakuos: die value-is-not-None-Assertion unten wuerde nie
+#: ausgefuehrt und ein kuenftiger stiller Bug, der aus einem ganz anderen,
+#: unbekannten Grund `value=None` liefert, wuerde nicht auffallen.
+_KNOWN_REJECT_REASONS = {
+    "kein_text_erkannt",
+    "vorzeichen_nicht_erkannt",
+    "ziffernzahl_stimmt_nicht",
+    "konfidenz_zu_niedrig",
+}
+
+
 @pytest.mark.skipif(TESSERACT_MISSING, reason="tesseract-Binary fehlt (OQ-15)")
 @pytest.mark.skipif(not _gsv_samples(), reason="keine GSV-Sensor-Proben im Arbeitsbaum")
 def test_reale_gsv_proben_liefern_nie_einen_falschen_wert():
@@ -209,4 +224,10 @@ def test_reale_gsv_proben_liefern_nie_einen_falschen_wert():
             assert result.value == pytest.approx(float(data["expected_text"])), (
                 f"{sample_dir.name}: gelesen {result.raw_text!r} -> {result.value}, "
                 f"soll {data['expected_text']!r} - falsche Annahme, keine Ablehnung"
+            )
+        else:
+            assert result.diagnostics.get("reject_reason") in _KNOWN_REJECT_REASONS, (
+                f"{sample_dir.name}: unbekannter Ablehnungsgrund "
+                f"{result.diagnostics.get('reject_reason')!r} - moeglicherweise ein neuer, "
+                "unbeabsichtigter Fehlerpfad statt einer der bekannten Ablehnungen"
             )

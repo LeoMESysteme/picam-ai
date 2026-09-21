@@ -60,6 +60,17 @@ def _whitelist_for(layout: DisplayLayout) -> str:
     Nie geraten: nur Ziffern/Punkt immer, Vorzeichen nur wenn `has_sign`, die
     Zeichen der bestaetigten `unit` (nie gemessen, siehe Konzept.md §7/OQ-17)
     plus ein Leerzeichen als Worttrenner.
+
+    Bekannte Grenze (Abschluss-Review, 2026-09-21): die Einheit steht in
+    derselben Textzeile wie die Zahl (z. B. "+1.05000 mV/V"), ihre Zeichen
+    gehen deshalb mit in die Whitelist. `read()` fuegt aber alle erkannten
+    Woerter ohne Trenner zusammen (`"".join(...)`), sodass die Einheit direkt
+    an die Ziffernfolge klebt (z. B. "+1.05000mV/V"). Der nachfolgende
+    Formatcheck (`digits_only.isdigit()`) lehnt das dann als
+    "ziffernzahl_stimmt_nicht" ab - fail-safe (nie ein falscher Wert), aber
+    ein Nebeneffekt der Ziffernzahlpruefung, keine bewusste Trennung von
+    Einheit und Zahl. Absichtlich nicht behoben in dieser Fix-Runde
+    (Finding 8: nur dokumentiert, Verhalten unveraendert).
     """
     chars = set("0123456789.")
     if layout.has_sign:
