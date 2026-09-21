@@ -107,26 +107,34 @@ def test_parsing_falsche_ziffernzahl_wird_abgelehnt_nicht_falsch_angenommen(monk
     import dispread.ocr.tesseract_cli as mod
 
     # Layout erwartet 6 Ziffern, der (gefakte) erkannte Text hat nur 4.
-    monkeypatch.setattr(mod, "_run_tesseract", lambda image, *, whitelist: [(90.0, "+1.05")])
+    # Negative sign ensures we test that sign_detected is correctly preserved in rejection path.
+    monkeypatch.setattr(mod, "_run_tesseract", lambda image, *, whitelist: [(90.0, "-1.05")])
     reader = TesseractReader()
 
     result = reader.read(np.zeros((160, 400, 3), np.uint8), _layout(digits=6, decimals=5))
 
     assert result.value is None
     assert result.diagnostics.get("reject_reason") == "ziffernzahl_stimmt_nicht"
+    # Bug fix: sign_detected and sign_region_readable must be preserved even in rejection paths
+    assert result.sign_detected is True  # "-" was recognized
+    assert result.sign_region_readable is True  # sign parsing succeeded
 
 
 @pytest.mark.skipif(TESSERACT_MISSING, reason="tesseract-Binary fehlt (OQ-15)")
 def test_parsing_niedrige_konfidenz_wird_abgelehnt_trotz_passendem_muster(monkeypatch):
     import dispread.ocr.tesseract_cli as mod
 
-    monkeypatch.setattr(mod, "_run_tesseract", lambda image, *, whitelist: [(5.0, "+1.05000")])
+    # Negative sign ensures we test that sign_detected is correctly preserved in rejection path.
+    monkeypatch.setattr(mod, "_run_tesseract", lambda image, *, whitelist: [(5.0, "-1.05000")])
     reader = TesseractReader()
 
     result = reader.read(np.zeros((160, 400, 3), np.uint8), _layout())
 
     assert result.value is None
     assert result.diagnostics.get("reject_reason") == "konfidenz_zu_niedrig"
+    # Bug fix: sign_detected and sign_region_readable must be preserved even in rejection paths
+    assert result.sign_detected is True  # "-" was recognized
+    assert result.sign_region_readable is True  # sign parsing succeeded
 
 
 @pytest.mark.skipif(TESSERACT_MISSING, reason="tesseract-Binary fehlt (OQ-15)")

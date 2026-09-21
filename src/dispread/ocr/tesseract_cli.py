@@ -197,12 +197,17 @@ class TesseractReader:
 
         digits_only = rest.replace(".", "")
         if len(digits_only) != layout.digits or not digits_only.isdigit():
-            return _empty_result(layout, self._version, reason="ziffernzahl_stimmt_nicht", raw_text=full_text)
+            return replace(
+                _empty_result(layout, self._version, reason="ziffernzahl_stimmt_nicht", raw_text=full_text),
+                sign_detected=sign_detected,
+                sign_region_readable=True,
+            )
 
         if overall_confidence < _MIN_WORD_CONFIDENCE:
             return replace(
                 _empty_result(layout, self._version, reason="konfidenz_zu_niedrig", raw_text=full_text),
                 sign_detected=sign_detected,
+                sign_region_readable=True,
             )
 
         dp_index = layout.decimal_point_index()
