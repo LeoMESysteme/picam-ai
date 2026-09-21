@@ -548,6 +548,20 @@ def test_inner_ocr_box_calibrates_grid_inside_padded_roi(tmp_path):
     assert c.snapshot()["reading"]["value"] == -12.34
 
 
+def test_backend_row_is_present_and_reflects_current_value(tmp_path):
+    c = Controller(tmp_path)
+
+    backend_rows = [row for row in fields.rows(c.snapshot()) if row["key"] == "backend"]
+
+    assert len(backend_rows) == 1
+    row = backend_rows[0]
+    assert row["value"] == "sevenseg"
+    option_values = {option["value"] for option in row["options"]}
+    assert option_values == {"sevenseg", "tesseract_cli"}
+    tesseract_option = next(o for o in row["options"] if o["value"] == "tesseract_cli")
+    assert tesseract_option["ops"] == [["backend.set", {"value": "tesseract_cli"}]]
+
+
 def test_unknown_decimal_position_is_rejected_without_guessing(tmp_path):
     layout = DisplayLayout(digits=5, decimals=None, has_sign=True, unit="mV")
     image, _, area = render_display(-12, layout)

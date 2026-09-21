@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Workbench-UI: Leser-Backend waehlbar)
+
+**Problem:** `backend.set` (voriger Commit) war nur ueber einen direkten
+Befehl erreichbar, keine Bedienoberflaeche dafuer.
+
+**Änderung:** Neue Zeile "leser-backend" in `fields.rows()`, direkt vor den
+Layout-Feldern - Auswahl zwischen `sevenseg` (7-Segment) und `tesseract_cli`
+(Zeichen-/dot-matrix-LCDs wie GSV-Sensor), demselben deklarativen
+`_row`/`_option`-Muster wie die bestehende `polaritaet`-Zeile. Die
+bestehende `reading.evidence`-Zeile zeigt das aktive Backend bereits generisch
+(`reading.get('backend')`) - keine Aenderung dort noetig.
+
+**Konsequenz:** Ein Bediener kann jetzt ueber die Werkbank-Oberflaeche
+zwischen den beiden Lesern wechseln. Kein echter Browser-Klick-Durchlauf
+verifiziert (dieselbe Einschraenkung wie OQ-21/OQ-34 fuer den ganzen
+Prototyp) - `fields.rows()` ist unit-getestet, nicht die DOM-Interaktion.
+
 ## 0.1.0.dev0 — 2026-09-21 (Controller: backend-Feld waehlt den Leser)
 
 **Problem:** `backend` existierte im Profilschema (voriger Commit), aber
