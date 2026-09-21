@@ -3,6 +3,26 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Controller: backend-Feld waehlt den Leser)
+
+**Problem:** `backend` existierte im Profilschema (voriger Commit), aber
+`Controller` benutzte immer die fest instanzierte `SevenSegmentReader` -
+das Feld hatte keine Wirkung.
+
+**Änderung:** `Controller._reader_for(backend)` waehlt zwischen der
+bestehenden `SevenSegmentReader`-Instanz und einer bei Bedarf erzeugten,
+wiederverwendeten `TesseractReader`-Instanz. `_read`/`_autofit` nutzen das
+statt des fest verdrahteten `self.reader`. Neuer Befehl `backend.set`
+(analog `profile.role`). `layout.autofit` (die sevenseg-Glyphenverhaeltnis-
+Suche) lehnt bei `backend=tesseract_cli` sofort mit einer erklaerenden
+Meldung ab, statt eine fuer dieses Backend bedeutungslose Suche laufen zu
+lassen. 3 neue Tests: Backend-Wechsel aendert tatsaechlich, welcher Leser
+antwortet; unbekannter Wert abgelehnt; `layout.autofit` lehnt sofort ab.
+
+**Konsequenz:** Ein Profil kann jetzt tatsaechlich `tesseract_cli` als
+Leser nutzen. Noch offen: eine UI-Auswahl dafuer (naechster Commit) - bisher
+nur ueber den `backend.set`-Befehl direkt erreichbar.
+
 ## 0.1.0.dev0 — 2026-09-21 (Profilschema: backend-Feld fuer tesseract_cli)
 
 **Problem:** `src/dispread/ocr/tesseract_cli.py` (voriger Commit) existiert,

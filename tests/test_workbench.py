@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -1396,6 +1397,58 @@ def test_autofit_liefert_einen_vorschlag_ohne_etwas_zu_bestaetigen(tmp_path):
     # (calibrated_on_frame_sequence, OQ-23: Nachstimmen und Bewerten duerfen
     # nicht am selben Bild passieren).
     assert c.calibrated_on == c.frames[frozen["id"]]["sequence"]
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract-Binary fehlt (OQ-15)")
+def test_backend_set_switches_which_reader_answers_reads(tmp_path):
+    layout = DisplayLayout(digits=4, decimals=2, has_sign=False, unit=None)
+    image, _shown, area = render_display(12.34, layout)
+    x, y, width, height = area
+    image_height, image_width = image.shape[:2]
+
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.config["roi"] = [x / image_width, y / image_height, width / image_width, height / image_height]
+    c.config["ocr_box"] = [0.0, 0.0, 1.0, 1.0]
+    c.config["confirmed"] = True
+    c.publish(image, {"timebase": "synthetic"})
+
+    assert c.config["backend"] == "sevenseg"
+    reading_sevenseg = c.snapshot()["reading"]
+    assert reading_sevenseg["backend"].startswith("sevenseg/")
+
+    c.command("backend.set", {"value": "tesseract_cli"})
+    assert c.config["backend"] == "tesseract_cli"
+    c.publish(image, {"timebase": "synthetic"})
+    reading_tesseract = c.snapshot()["reading"]
+    assert reading_tesseract["backend"].startswith("tesseract_cli/")
+
+
+def test_backend_set_rejects_unknown_value(tmp_path):
+    c = Controller(tmp_path)
+    with pytest.raises(ValueError, match="backend"):
+        c.command("backend.set", {"value": "not_a_backend"})
+
+
+def test_layout_autofit_rejects_immediately_for_tesseract_backend(tmp_path):
+    """Kein tesseract-Binary noetig: der Backend-Check in `_autofit` gibt
+    zurueck, bevor irgendein Reader instanziiert wird."""
+    layout, image, text, quad, ocr_box = _autofit_scene()
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.command("backend.set", {"value": "tesseract_cli"})
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+
+    result = c.command("layout.autofit", {"id": frozen["id"], "quad": quad, "ocr_box": ocr_box, "text": text})
+
+    assert result == {
+        "matched": False,
+        "reason": (
+            "layout.autofit ist fuer backend=tesseract_cli nicht anwendbar - "
+            "die gesuchten Glyphenverhaeltnisse gelten nur fuer sevenseg"
+        ),
+    }
 
 
 def test_autofit_rechnet_ausserhalb_des_locks(tmp_path, monkeypatch):

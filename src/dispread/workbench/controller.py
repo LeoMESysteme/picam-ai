@@ -21,6 +21,7 @@ from dispread.frames.replay_source import CLIP_SCHEMA_VERSION
 from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
 from dispread.ocr.autofit import fit_layout
 from dispread.ocr.sevenseg import SevenSegmentReader
+from dispread.ocr.tesseract_cli import TesseractReader
 from dispread.records import TimeBaseKind
 from dispread.rectify import rectify
 from dispread.track import QuadTracker
@@ -245,6 +246,10 @@ class Controller:
         self.last_candidates_at = 0.0
         self.focus = False
         self.reader = SevenSegmentReader()
+        # tesseract_cli ist teurer zu instanzieren (prueft die Binary,
+        # fragt die Version ab) - nur bei Bedarf erzeugen, dann fuer die
+        # Laufzeit dieser Controller-Instanz wiederverwenden.
+        self._tesseract_reader = None
         self.gate, self.gate_revision = None, None
         # Nachfuehrung (Task 7): entsteht ausschliesslich im roi-Op, sobald der
         # Bediener bestaetigt (siehe dort) - keine Referenz ohne diesen Akt.
@@ -591,6 +596,10 @@ class Controller:
                 for frame in self.frames.values():
                     frame["revision"] = self.revision
                     frame["profile"]["layout"] = copy.deepcopy(self.config["layout"])
+            elif op == "backend.set":
+                data = copy.deepcopy(self.config)
+                data["backend"] = args["value"]
+                self._change(data)
             elif op == "focus":
                 if type(args["value"]) is not bool:
                     raise ValueError("Fokusassistenz erwartet true/false")
@@ -834,6 +843,15 @@ class Controller:
         with self.lock:
             frame = self.frames[args["id"]]
             layout = DisplayLayout.from_dict(copy.deepcopy(self.config["layout"]))
+            backend = self.config["backend"]
+        if backend == "tesseract_cli":
+            return {
+                "matched": False,
+                "reason": (
+                    "layout.autofit ist fuer backend=tesseract_cli nicht anwendbar - "
+                    "die gesuchten Glyphenverhaeltnisse gelten nur fuer sevenseg"
+                ),
+            }
         height, width = frame["image"].shape[:2]
         quad_px = tuple((float(x * width), float(y * height)) for x, y in args["quad"])
         crop = rectify(frame["image"], quad_px, target_size=CROP_SIZE)
@@ -849,7 +867,7 @@ class Controller:
             self.log("warn", f"Autofit: {error}")
             return {"matched": False, "reason": str(error)}
 
-        preview = self.reader.read(crop_box(crop.image, result.ocr_box), result.layout)
+        preview = self._reader_for(backend).read(crop_box(crop.image, result.ocr_box), result.layout)
         if result.matched and result.flat_optimum:
             self.log(
                 "warn",
@@ -1305,6 +1323,20 @@ class Controller:
                 self.first_frame = self.last_frame
             self.error = None
 
+    def _reader_for(self, backend):
+        """`ValueReader` fuer das aktuell konfigurierte `backend`-Feld.
+
+        `sevenseg` ist die bereits bei `__init__` erzeugte Standardinstanz.
+        `tesseract_cli` wird erst bei Bedarf erzeugt (prueft dabei, ob die
+        Binary vorhanden ist) und danach wiederverwendet, nicht bei jedem
+        Read neu instanziiert.
+        """
+        if backend == "tesseract_cli":
+            if self._tesseract_reader is None:
+                self._tesseract_reader = TesseractReader()
+            return self._tesseract_reader
+        return self.reader
+
     def _read(self, image, config, quad, track=None):
         """Bestaetigte ROI entzerren, Ziffern lesen, Freigabe nur als Vorschau.
 
@@ -1316,7 +1348,8 @@ class Controller:
             layout = DisplayLayout.from_dict(config["layout"])
             crop = rectify(image, quad, target_size=CROP_SIZE)
             reader_crop = crop_box(crop.image, config["ocr_box"])
-            read = self.reader.read(reader_crop, layout)
+            reader = self._reader_for(config["backend"])
+            read = reader.read(reader_crop, layout)
             if track is not None and track.quad is None:
                 # ReadResult ist frozen - ersetzen statt mutieren. Die
                 # Nachfuehrung ist ein Befund ueber das Bild, kein Befund des
@@ -1347,7 +1380,7 @@ class Controller:
                 "crop_sharpness": round(crop.sharpness, 2),
                 "crop_saturated_fraction": round(crop.saturated_fraction, 4),
                 "backend": f"{read.backend_id}/{read.backend_version}",
-                "confidence_calibrated": self.reader.declares_confidence_calibrated,
+                "confidence_calibrated": reader.declares_confidence_calibrated,
                 "gate_status": decision.status.value,
                 "gate_reasons": list(decision.reject_reasons),
                 "gate_confidence": round(decision.confidence, 4),
