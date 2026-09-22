@@ -399,6 +399,27 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
   Drei Sitzungen bei 960×720 hintereinander überlebten den Abbau, jede Sitzung
   mit einem der großen Sensormodi war die letzte des Boots.
+* **Siebter Datenpunkt, 2026-09-22 — die Regel wurde verletzt und der Fehler
+  trat sofort wieder auf.** Nach einem Reboot (Kamera wurde erst danach
+  überhaupt wieder enumeriert) startete `scripts/sync-record.py` mit seiner
+  damaligen Vorgabe **2028×1520**. Ergebnis: kein einziges Bild, der Prozess
+  hing in `capture_request`, wurde per Signal beendet — und ab da setzte der
+  Sensor keinen Stream mehr auf. `rpicam-hello -t 3000` erzeugte danach
+  **33 × `stream on failed in subdev` in 0,11 s**, mit
+  `cfe_stop_streaming+0xd4/0x200 [rp1_cfe]` im Aufrufpfad. Enumeration blieb
+  wie gehabt intakt (`rpicam-hello --list-cameras` meldet den Sensor
+  vollständig) — die Diagnose prüft den Bilddurchlauf eben nicht.
+
+  Der Datenpunkt fügt der Tabelle nichts Neues hinzu, er **bestätigt sie**:
+  grosser Sensormodus → letzte Sitzung des Boots. Bemerkenswert ist nur, dass
+  ein neu gebautes Werkzeug die dokumentierte Betriebsgrösse nicht übernommen
+  hatte.
+
+  **Konsequenz, umgesetzt:** `scripts/sync-record.py` hat jetzt die Vorgabe
+  **960×720** und **weist grosse Sensormodi hart ab** (`--camera-size` über
+  1 MPixel → Abbruch mit Verweis auf diesen Eintrag), aufhebbar nur über ein
+  ausdrückliches `--allow-large-sensor-mode`. Eine Warnung auf stderr wäre zu
+  wenig gewesen: die Folge ist ein Reboot des Labor-Pi.
 * **Hypothese am 2026-09-08 abgeschwächt:** In der nächsten Runde liefen bei
   960×720 **mehrere** Sitzungen hintereinander (Fokussieren in mehreren Läufen,
   Bestwert 216,6), dann trat derselbe Fehler wieder auf. Die Streamgröße ist

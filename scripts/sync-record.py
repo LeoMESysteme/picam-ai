@@ -113,10 +113,58 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--image-format", choices=["png", "jpg"], default="png")
     parser.add_argument(
         "--camera-size",
-        default="2028x1520",
-        help="Nur --source camera: Aufloesung BxH",
+        # 960x720 ist NICHT beliebig gewaehlt, sondern die in OQ-22
+        # festgehaltene Betriebsgroesse. Jede dort protokollierte Sitzung mit
+        # einem grossen Sensormodus (2028x1520, 4056x3040) war die letzte des
+        # Boots - danach setzt der Sensor keinen Stream mehr auf und nur ein
+        # Reboot hilft. Am 2026-09-22 mit der Vorgabe 2028x1520 erneut
+        # ausgeloest. 960x720 hebt das Problem nicht auf, verzoegert es aber
+        # nachweislich; mehr Ziffernhoehe kommt ueber ScalerCrop, nicht ueber
+        # den Sensormodus.
+        default="960x720",
+        help="Nur --source camera: Aufloesung BxH. Vorgabe 960x720 - "
+             "groessere Sensormodi blockieren den Sensor bis zum Reboot (OQ-22)",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--allow-large-sensor-mode",
+        action="store_true",
+        help="Sperre gegen grosse Sensormodi aufheben. Nur bewusst setzen - "
+             "siehe OQ-22, Folge ist im Zweifel ein Reboot des Labor-Pi",
+    )
+    args = parser.parse_args(argv)
+    _check_camera_size(parser, args)
+    return args
+
+
+#: Ab dieser Pixelzahl gilt ein Modus als "gross" im Sinne von OQ-22.
+#: 960x720 = 691 200 liegt darunter, 2028x1520 = 3 082 560 darueber.
+LARGE_SENSOR_MODE_PIXELS = 1_000_000
+
+
+def _check_camera_size(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Grosse Sensormodi abweisen, solange OQ-22 offen ist.
+
+    Das ist bewusst ein harter Abbruch und keine Warnung: die Folge eines
+    grossen Modus ist ein Sensor, der bis zum Reboot keinen Stream mehr
+    aufsetzt. Auf einem Laborrechner ist das teuer genug, um es nicht von
+    einer uebersehenen Zeile auf stderr abhaengen zu lassen. Am 2026-09-22
+    genau so passiert.
+    """
+    if args.source != "camera" or args.allow_large_sensor_mode:
+        return
+    width, _, height = args.camera_size.partition("x")
+    try:
+        pixels = int(width) * int(height)
+    except ValueError:
+        parser.error(f"--camera-size muss die Form BxH haben, nicht {args.camera_size!r}")
+    if pixels > LARGE_SENSOR_MODE_PIXELS:
+        parser.error(
+            f"--camera-size {args.camera_size} ist ein grosser Sensormodus. Laut OQ-22 "
+            "(docs/open-questions.md) war jede protokollierte Sitzung mit einem solchen "
+            "Modus die letzte des Boots - danach setzt der Sensor keinen Stream mehr auf "
+            "und nur ein Reboot hilft. Nimm 960x720 (mehr Ziffernhoehe ueber ScalerCrop) "
+            "oder setze --allow-large-sensor-mode, wenn du das bewusst in Kauf nimmst."
+        )
 
 
 # --- Serieller Strom, eigener Thread, nur lesen -----------------------------
@@ -193,17 +241,37 @@ def _synthetic_frames(uri: str):
         source.close()
 
 
-def _camera_frames(size: tuple[int, int]):
-    """Echte Kamera - lazy Import, siehe CLAUDE.md. NICHT von hier aus
-    ausgefuehrt/verifiziert; Feldbehandlung ist `Controller._capture`
-    nachgebildet (Zeile ~1515 in controller.py)."""
+def _camera_frames(size: tuple[int, int], fps: float):
+    """Echte Kamera - lazy Import, siehe CLAUDE.md.
+
+    Feldbehandlung ist `Controller._capture` nachgebildet (controller.py
+    ~Zeile 1515), **und die Konfiguration ebenfalls** (~Zeile 1638). Das ist
+    kein Schoenheitsdetail:
+
+    Die erste Fassung nahm `create_still_configuration`. Am echten IMX500
+    liefert das ueber zwei Minuten **kein einziges Bild** - der Standbildpfad
+    ist auf Einzelaufnahmen ausgelegt, nicht auf einen Dauerlauf, und der
+    Sensor laeuft bei voller Aufloesung mit 10 fps. Gemessen am 2026-09-22:
+    serieller Strom lief, `frames.jsonl` blieb leer.
+
+    `create_video_configuration` ist der im Repo erprobte Streaming-Pfad; mit
+    ihm sind die 88 Bestandsproben aufgenommen worden. `format="RGB888"` und
+    die gesetzte `FrameRate` gehoeren dazu - ohne das Format liefert
+    `make_array("main")` eine andere Kanalanordnung als der Rest der Kette
+    erwartet. `queue=False` verhindert, dass ein gepuffertes altes Bild
+    ausgeliefert wird; fuer eine Zeitversatzmessung waere genau das fatal.
+    """
     from picamera2 import Picamera2
 
     camera = Picamera2()
     try:
-        config = camera.create_still_configuration(main={"size": size})
+        config = camera.create_video_configuration(
+            main={"size": size, "format": "RGB888"},
+            controls={"FrameRate": fps} if fps > 0 else {},
+            queue=False,
+        )
         camera.configure(config)
-        camera.start()
+        camera.start(show_preview=False)
         while True:
             request = camera.capture_request(wait=2.0)
             try:
@@ -230,7 +298,7 @@ def _frame_generator(args: argparse.Namespace):
         yield from _synthetic_frames(args.synthetic_uri)
     else:
         w, _, h = args.camera_size.partition("x")
-        yield from _camera_frames((int(w), int(h)))
+        yield from _camera_frames((int(w), int(h)), args.frame_rate)
 
 
 # --- Hauptablauf --------------------------------------------------------------

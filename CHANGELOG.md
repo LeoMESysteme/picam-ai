@@ -3,6 +3,40 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-22 (sync-record: Betriebsgroesse 960x720, grosse Sensormodi gesperrt)
+
+**Problem:** Der Kamerazweig von `scripts/sync-record.py` lief zum ersten Mal
+gegen echte Hardware - mit der Vorgabe **2028x1520**. Das ist einer der
+grossen Sensormodi, von denen OQ-22 seit dem 2026-09-08 sagt: jede
+protokollierte Sitzung damit war die letzte des Boots. Genau das trat ein:
+kein einziges Bild, Prozess haengt in `capture_request`, danach setzt der
+Sensor keinen Stream mehr auf (33 x `stream on failed in subdev` in 0,11 s,
+`cfe_stop_streaming` im Aufrufpfad). Reboot noetig.
+
+Zweites Problem im selben Zweig: `create_still_configuration` statt
+`create_video_configuration`. Der Standbildpfad ist nicht fuer Dauerlauf
+gedacht; der erprobte Weg im Repo (und der, mit dem die 88 Bestandsproben
+entstanden sind) ist die Videokonfiguration mit `format="RGB888"`, gesetzter
+`FrameRate` und `queue=False`.
+
+**Änderung:**
+* Vorgabe `--camera-size` von `2028x1520` auf **`960x720`** - die in OQ-22
+  festgehaltene Betriebsgroesse.
+* Neue **harte Sperre**: eine Aufloesung ueber 1 MPixel bricht mit einer
+  Meldung ab, die auf OQ-22 verweist. Aufhebbar nur ueber das ausdrueckliche
+  `--allow-large-sensor-mode`. Bewusst ein Abbruch und keine Warnung - die
+  Folge eines grossen Modus ist ein Reboot des Labor-Pi, das haengt man nicht
+  an eine uebersehene Zeile auf stderr.
+* Kamerakonfiguration auf `create_video_configuration` umgestellt, mit
+  Begruendung im Docstring, warum jeder Teil davon gebraucht wird.
+
+**Konsequenz:** Der Kamerazweig ist damit an die dokumentierte Betriebsgrenze
+gebunden, statt sie zu umgehen. **Weiterhin ungetestet gegen echte
+Hardware** - der Sensor ist blockiert, bis der Pi neu startet. Nebenbefund
+fuer Nachahmer: `capture_request(wait=2.0)` ist ein **Timeout in Sekunden**,
+kein Flag; bei blockiertem Sensor sieht der `TimeoutError` aus wie ein
+Konfigurationsfehler, ist aber der Sensorzustand.
+
 ## 0.1.0.dev0 — 2026-09-22 (Registerstand des GSV-2 als Rueckstellpunkt)
 
 **Problem:** Die Anzeige des GSV-2AS laesst sich ueber `set norm` (16) und

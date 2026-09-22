@@ -1171,3 +1171,57 @@ Der Nutzer muss den Stimulus nicht mehr bewegen.
 **Nicht angefasst:** `set zero` (Nullpunktabgleich) — das wäre ein Eingriff
 in die Messkette des Laborgeräts und der einzige Weg zu negativen Werten,
 aber keiner, den man nebenbei geht.
+
+---
+
+## 2026-09-22 — Kamera nach Reboot da, sofort wieder blockiert (OQ-22)
+
+**Ausgangspunkt:** Der Nutzer hat den Pi neu gestartet, damit die AI Camera
+erkannt wird. Sie wurde erkannt: `rpicam-hello --list-cameras` meldet den
+IMX500 mit beiden Modi.
+
+**Was ich getan habe — und was daran falsch war.** Ich habe den Kamerazweig
+von `scripts/sync-record.py` das erste Mal gegen echte Hardware gestartet. Das
+Skript hatte als Vorgabe **2028×1520**. Ich habe diese Vorgabe nicht gegen
+[OQ-22](open-questions.md) geprüft, obwohl dort seit dem 2026-09-08 steht:
+„Der Messbetrieb bleibt bei 960×720", und die Tabelle sechs Datenpunkte führt,
+in denen **jede** Sitzung mit einem grossen Sensormodus die letzte des Boots
+war.
+
+**Verlauf:** Kein einziges Bild; der Prozess hing in `capture_request`. Ich
+habe ihn per Signal beendet — auch das beschreibt OQ-22 bereits als Auslöser
+des Pufferfehlers. Ab da setzte der Sensor keinen Stream mehr auf.
+`rpicam-hello -t 3000` erzeugte **33 × `stream on failed in subdev` in
+0,11 s**, mit `cfe_stop_streaming+0xd4/0x200 [rp1_cfe]` im Aufrufpfad.
+
+**Eine Fehldeutung, die ich unterwegs hatte und korrigieren musste.** Aus
+„alle Kernel-Fehler liegen im Zeitfenster meines *letzten* Tests" hatte ich
+geschlossen, meine früheren Versuche hätten nichts kaputtgemacht. Das war
+falsch gefolgert: die picamera2-Versuche laufen still in den Timeout und
+schreiben gar nichts ins Kernel-Log, erst `rpicam-hello` meldet sich laut.
+Und der allererste Streamversuch nach dem Boot **war** mein 2028×1520-Lauf —
+es gab keine erfolgreiche Sitzung davor, mit der sich vergleichen liesse. Der
+Nutzer hatte den Verdacht zuerst geäussert und lag richtig.
+
+**Zweiter Befund, unabhängig davon:** Das Skript nutzte
+`create_still_configuration`. Der erprobte Pfad im Repo ist
+`create_video_configuration` mit `format="RGB888"`, gesetzter `FrameRate` und
+`queue=False` — so nimmt der Workbench-Kamerathread auf, und so sind die 88
+Bestandsproben entstanden. `queue=False` ist für eine Versatzmessung nicht
+optional: ein gepuffertes altes Bild würde den gesuchten Zeitversatz
+verfälschen. Beides ist korrigiert.
+
+**Ausserdem gelernt:** `capture_request(wait=2.0)` ist ein **Timeout in
+Sekunden**, kein Flag — der Aufruf endet mit `TimeoutError` aus
+`job.get_result(timeout=...)`. Bei einem blockierten Sensor sieht das aus wie
+ein Konfigurationsfehler, ist aber der Sensorzustand.
+
+**Konsequenz, umgesetzt:** `sync-record.py` hat jetzt die Vorgabe 960×720 und
+**weist grosse Sensormodi hart ab** statt zu warnen, aufhebbar nur über
+`--allow-large-sensor-mode`. Eine Warnzeile auf stderr wäre zu wenig: die
+Folge ist ein Reboot des Labor-Pi.
+
+**Offen:** Die Kamera braucht erneut einen Reboot. `camera-commissioning.sh`
+prüft weiterhin nur die Enumeration, nicht den Bilddurchlauf — genau deshalb
+meldet es „einsatzbereit", während der Sensor blockiert ist. Das steht als
+Punkt (d) in OQ-22 und ist weiterhin offen.
