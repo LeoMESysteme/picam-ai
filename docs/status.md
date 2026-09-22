@@ -5,6 +5,27 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
+> ### ⚠ Der Sammelmodus ist gesperrt, bis ein Befehl gelaufen ist
+>
+> Mit dem neuen Pflichtfeld `label_origin` (`SAMPLE_SCHEMA_VERSION` 1 → 2,
+> [OQ-38](open-questions.md) Punkt 6) lehnt `DatasetStore` **alle 88
+> Bestandsproben** ab — sie stehen noch auf Version 1. Das ist Absicht: eine
+> Herkunft zu unterstellen wäre genau das Raten, das hier nicht vorkommen
+> soll. Der Weg zurück:
+>
+> ```bash
+> ./.venv/bin/python scripts/migrate-samples-v1-to-v2.py           # Trockenlauf
+> ./.venv/bin/python scripts/migrate-samples-v1-to-v2.py --apply   # schreibt
+> ```
+>
+> Trägt `label_origin="manual"` ein — keine Annahme, sondern Tatsache: alle
+> Bestandsproben entstanden, bevor es einen automatischen Labelpfad gab.
+> Sichert vorher jede Datei und ist umkehrbar. Trockenlauf geprüft (88/88/0);
+> dass die migrierten Proben anschliessend laden, wurde auf einer **Kopie**
+> durchgespielt — alle 88, Summary läuft. **Nicht ausgeführt**: das Schreiben
+> in `var/` gehört dem Nutzer.
+
+
 **Sollwertkanal steht: der GSV-2AS liefert am Pi ASCII-Telegramme, die dem
 Displayinhalt entsprechen sollen.** Aus der Machbarkeitsfrage „Sensordaten
 mitschreiben und gegen den Kamerafeed labeln" ist an einem Tag eine laufende
@@ -28,6 +49,29 @@ die Lücke in Minuten.
 Telegrammen/s und 15 fps Kamera kommen rund acht Bilder auf einen Sollwert;
 dazu hinkt das LCD optisch nach. Ohne gemessenes Schutzintervall dürfen Bilder
 im Wechselfenster nicht automatisch gelabelt werden.
+
+**Stand 2026-09-22 abends — die Vorarbeit dazu ist erledigt.** Plan:
+[superpowers/plans/2026-09-22-auto-labeling-seriell.md](superpowers/plans/2026-09-22-auto-labeling-seriell.md).
+
+* **Gemessen:** 599 s, 1125 Telegramme, rein passiv. 0 Formatabweichungen,
+  Plateaus der exakten Zeichenkette bis 30 s; bei einem Schutzintervall von
+  1 s bleiben 51,9 % der Wanduhrzeit nutzbar. Die Sperrfrage ist beantwortet.
+* **Gebaut:** `label_origin` im `DatasetStore`, das Migrationsskript, und
+  `scripts/sync-record.py` (Kamera + serieller Strom in einer Sitzung, beide
+  Zeitstempel in CLOCK_BOOTTIME). Dessen **Kamerazweig ist nie gelaufen** —
+  erster Einsatz kurz halten und `frames.jsonl` ansehen.
+
+**Nächster Schritt, und er braucht das Labor:** eine Aufnahmesitzung, in der
+der Stimulus **bewusst gefahren** wird — langsam über den erreichbaren
+Bereich, mit einigen grossen Sprüngen und Ruhepausen. Ein passiver Dauerlauf
+bringt nichts: im Ruhezustand trägt der Strom praktisch **eine** Zeichenkette
+(`+0.46776 mV/V` in 379 von 660 Telegrammen), und das sind nach der
+Split-Regel 4700 Bilder **einer** Beobachtung — dieselbe Grenze, an der die
+Verankerungsarbeit schon bei 11 Proben stehengeblieben ist. Die eine Sitzung
+beantwortet dagegen drei Dinge: den Versatz (aus den Sprüngen), die
+Ziffernabdeckung samt der Frage nach **negativen** Werten
+([OQ-39](open-questions.md), aus dem Durchlauf) und die reale Ausbeute (aus
+den Pausen).
 
 *Die Untersuchung hatte im Verlauf eine Kehrtwende: zunächst wurde der
 Displaybus empfohlen, weil das Gerät für undokumentiert gehalten wurde. Die
