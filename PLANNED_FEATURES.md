@@ -16,6 +16,9 @@
 - small camera feed of the cropped/ROI region (so its clearer for the user whats fed into the ocr. picture could be on the top right side of the camera feed)
 - rotation of the camera feed (eg. if the camera is placed upsidedown)
 - creating big datasets by feeding sensor data trough the gpio pins to the sensor and reading that data with the camera, read values can then instantly be checked against sent values, calibrating for the display. this process can be done under different camera angles fo rbetter accuracy (check feasibilit.)
+  - Machbarkeit geprüft 2026-09-22: Sollwertquelle siehe [OQ-38](docs/open-questions.md) (Displaybus statt Geräteschnittstelle, Skizze [DISPLAYBUS_TAP.md](docs/DISPLAYBUS_TAP.md)); die Grenze des Verfahrens — mehr Bilder, aber keine zusätzliche Ziffernabdeckung — steht in [OQ-39](docs/open-questions.md).
+- after detection and accuracy are done/accurate optimization needs to come up (reducing latency of detection/readings, auto correction/smoothing of reading errors)
+- when readings are stable and accurete the web ui should get a live graph of the incoming readings, enabling easy overview over the data and possible error/missreads (could add a smart autodetection of missreadings, giving the user the option to enable an automatic correction/smoothing of the data. errors/missreads could also get marked red in the live graph, to make them easier to spot and if possible the graph could somehow display accuracy/confidence eg with colors in the live graph)
 
 ## Idea
 

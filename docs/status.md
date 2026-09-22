@@ -5,6 +5,15 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
+> **Die Arbeitsliste steht in [../TODO.md](../TODO.md)** — was als nächstes
+> ansteht, in welcher Reihenfolge, mit den Befehlen dazu. Diese Datei hier
+> sagt, *wo wir stehen*; die TODO sagt, *was zu tun ist*.
+>
+> **Stand 2026-09-22 abends: der Pi braucht einen Reboot.** Die Kamera ist
+> blockiert (OQ-22), `rpicam-hello --list-cameras` meldet sie trotzdem als
+> normal — Enumeration ist nicht Bilddurchlauf.
+
+
 > ### Die Anzeige ist steuerbar — der Stimulus muss nicht mehr bewegt werden
 >
 > **Gemessen am 2026-09-22 (abends).** Der bewegte Stimulus taugt nicht als

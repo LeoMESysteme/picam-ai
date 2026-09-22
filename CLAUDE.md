@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Einstiegsreihenfolge (verbindlich)
 
+0. [TODO.md](TODO.md) — **die Arbeitsliste**: was als nächstes ansteht, mit
+   genug Kontext zum Wiedereinstieg ohne Recherche. Wenn dort ein Blocker
+   ganz oben steht (z. B. „Pi braucht einen Reboot"), gilt der zuerst.
 1. [docs/status.md](docs/status.md) — aktueller Stand, Blocker, nächste Schritte
 2. [docs/open-questions.md](docs/open-questions.md) — was offen ist und warum
 3. [AGENTS.md](AGENTS.md) — verbindliche Daueranweisungen, inkl. Doku-Pflicht
