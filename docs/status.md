@@ -6,9 +6,9 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 ## Sofort zu wissen
 
 **Neues OCR-Backend `tesseract_cli` gebaut, aber noch nicht erfolgreich
-gegen echte GSV-Sensor-Fotos.** Wie der Dataset-Benchmark unten liegt auch
-das im eigenen, noch nicht gemergten Worktree `worktree-dataset-benchmark`
-(siehe „Nächste Schritte" für den vollständigen Commit-Stand). Über 4
+gegen echte GSV-Sensor-Fotos.** Wie der Dataset-Benchmark unten kam das aus
+dem Worktree `worktree-dataset-benchmark` und ist inzwischen nach `master`
+gemergt (Merge-Commit `742be84`). Über 4
 Aufgaben plus eine abschließende
 Fix-Runde vollständig Ende-zu-Ende verdrahtet: `src/dispread/ocr/tesseract_cli.py`
 (`TesseractReader`, ruft die bereits installierte `tesseract`-CLI als
@@ -26,11 +26,11 @@ wie `letsgodigital`) — kein Code-Bug, ein offener Genauigkeits-Folgeaufwand.
 Design und Plan: [2026-09-21-tesseract-backend-design.md](superpowers/specs/2026-09-21-tesseract-backend-design.md),
 [2026-09-21-tesseract-backend.md](superpowers/plans/2026-09-21-tesseract-backend.md).
 
-**Neuester Stand dieser Sitzung, eigener Worktree
+**Neuester Stand dieser Sitzung, aus dem Worktree
 `worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 17
-Commits gegenüber `master`, noch nicht gemergt — Dataset-Benchmark,
+Commits, jetzt nach `master` gemergt (Merge-Commit `742be84`) — Dataset-Benchmark,
 OQ-04-Bestätigung/Polaritätsfix und der `tesseract_cli`-Backend oben, alle
-in diesem einen Worktree): der geplante Dataset-Benchmark
+aus diesem einen Worktree): der geplante Dataset-Benchmark
 (`docs/PLAN_2026-09-21-dataset-benchmark.md`) ist vollständig umgesetzt
 (`src/dispread/benchmark.py` + `scripts/dataset-benchmark.py`) und gegen den
 vollständigen realen Sammelmodus-Bestand gelaufen. **Kernbefund: von 73
@@ -45,8 +45,7 @@ Situation „schräg links" hat noch keinen `selected`-Vertreter — reine
 Bedienaufgabe in der Workbench, keine Code-Lücke; (2) die eigentliche
 Rastergeometrie (`dispread.ocr.autofit._CANDIDATES`/`layout.cell_boxes`)
 braucht eine Überprüfung, bevor ein weiterer Lauf gegen mehr Proben sinnvoll
-wäre. Dieser Worktree ist noch **nicht** in `master` integriert — das ist der
-nächste Schritt, siehe „Nächste Schritte" unten.
+wäre.
 
 Vorherige Arbeit dieser Sitzung, direkt auf `master`: zunächst die als hohe
 Priorität markierte
@@ -335,8 +334,8 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
-0. **Dataset-Benchmark-Worktree nach `master` integrieren** (17 Commits in
-   `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
+0. ~~Dataset-Benchmark-Worktree nach `master` integrieren~~ — erledigt
+   (Merge-Commit `742be84`, siehe oben).
 00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,
     [OQ-04](open-questions.md)-Update): alle im Betrieb zu lesenden Anzeigen
     sind LCD. Die beiden zuerst gesammelten Geräte ("RND-Lab", "BK Precision",
