@@ -1135,7 +1135,7 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   inklusive der Szenarien mehrere Zeilen, `-.125`, führende Null, unlesbar,
   unsicher, ungültige Box, Gerätewechsel bei offenem Entwurf, doppelter Save,
   Schreibfehler, zwei Browsertabs, Tokenablauf, abgeschnittener Export.
-* **Antwort landet in:** `docs/anleitung/08-datensatz-sammeln.md`,
+* **Antwort landet in:** `docs/anleitung/11-datensatz-sammeln.md`,
   `docs/status.md`.
 
 ## OQ-35 — Automatisierte Testwerterzeugung für den Datensatz-Sammelmodus (GPIO/BK-5491B)
