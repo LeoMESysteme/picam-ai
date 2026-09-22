@@ -1,9 +1,84 @@
-# Status — Stand 2026-09-21
+# Status — Stand 2026-09-22
 
 Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 `docs/project_history.md`.
 
 ## Sofort zu wissen
+
+**Sollwertkanal steht: der GSV-2AS liefert am Pi ASCII-Telegramme, die dem
+Displayinhalt entsprechen sollen.** Aus der Machbarkeitsfrage „Sensordaten
+mitschreiben und gegen den Kamerafeed labeln" ist an einem Tag eine laufende
+Verbindung geworden: Gerät identifiziert → Anleitung beschafft → Adapter
+angeschlossen → Binärstrom verifiziert → mit Freigabe auf ASCII umgeschaltet →
+Telegrammformat gemessen. **Kein Code gebaut**; am Gerät wurde genau eine
+Einstellung verändert (Mode-Register `0x00` → `0x02`, persistent).
+
+Gemessen: `+0.46776 mV/V<CR><LF>`, **18/18 Zeilen** passen auf
+`^[+-]\d\.\d{5} mV/V$`, 1,8 Zeilen/s über `/dev/ttyUSB0` (PL2303, 38400 8N1).
+Zahlen in [VALIDATION.md](VALIDATION.md), Aufbau und Fallstricke in
+[lab_journal.md](lab_journal.md), Gerätezustand in
+[HARDWARE_PROFILE.md](HARDWARE_PROFILE.md).
+
+**Der letzte fehlende Beleg:** niemand hat während des Mitschnitts auf das
+Display gesehen. Dass der ASCII-String der Anzeige entspricht, sagt bisher nur
+die Anleitung — ein Foto des Displays mit gleichzeitigem Mitschnitt schliesst
+die Lücke in Minuten.
+
+**Danach bleibt eine echte Messfrage:** die *zeitliche* Zuordnung. Bei 1,8
+Telegrammen/s und 15 fps Kamera kommen rund acht Bilder auf einen Sollwert;
+dazu hinkt das LCD optisch nach. Ohne gemessenes Schutzintervall dürfen Bilder
+im Wechselfenster nicht automatisch gelabelt werden.
+
+*Die Untersuchung hatte im Verlauf eine Kehrtwende: zunächst wurde der
+Displaybus empfohlen, weil das Gerät für undokumentiert gehalten wurde. Die
+Nutzerangabe der Startmeldung hat das gedreht. Beide Stände stehen
+nachvollziehbar in [OQ-38](open-questions.md).*
+
+* **Das Gerät ist ein ME-Systeme GSV-2AS** (Startmeldung
+  `GSV-2AS (GSV21 V1.3.07)`). Die Bedienungsanleitung ist öffentlich abrufbar
+  und liegt lokal unter `var/datenblaetter/gsv2-bedienungsanleitung.pdf`.
+* **Der Abgriffpunkt ist bereits im Gerät:** die kleine 5-polige Klemme neben
+  der 15-poligen Leiste ist die RS232-Klemme — `A = GNDC`, `B = Rx`,
+  `C = Tx`. Die auf den Fotos sichtbaren Aufkleber „B" und „C" sind genau
+  diese Datenleitungen. Belegung vollständig in
+  [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md).
+* **Der entscheidende Satz aus der Anleitung:** im ASCII-Modus „entspricht die
+  ausgegebene Zeichenkette der Anzeige im Display". Damit fällt das Argument
+  weg, das für den Displaybus sprach. Der GSV sendet permanent von selbst,
+  ab Werk 38400 Baud 8N1; Format „Vorzeichen, 6 Stellen mit Dezimalpunkt,
+  Leerzeichen, Einheit, CR, LF" — passt exakt auf das beobachtete
+  `-0.00063 mV/V`.
+* **Der Displaybus bleibt Rückfallebene** und einziger Weg zu den
+  Code-zu-Glyph-Paaren für die Zeichensatz-ROM-Variante:
+  [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md).
+* **Zwei Funde am Rande, beide mit Folgen:** (1) `Get Mode` und verwandte
+  Lesebefehle antworten mit vorangestelltem Semikolon `0x3B` — die Anleitung
+  zählt in „Länge der Befehlsantwort" nur die Datenbytes; wer ein Byte liest,
+  bekommt das Präfix und deutet den Modus falsch. (2) Der Vollausschlag dieses
+  Exemplars ist **1,05 mV/V**, und `FFFFFF` (105 % des Bereichs) ergibt exakt
+  `1.05000` — die drei identischen `1.05000`-Proben im Datensatz sind damit
+  sehr wahrscheinlich Übersteuerung, keine Messwerte. Nutzbare Probenzahl
+  sinkt faktisch von 11 auf 8 ([OQ-39](open-questions.md)).
+* **Pegel:** Klemme B/C führt **RS-232**, nicht TTL. Direkter Pi-GPIO-Anschluss
+  ist unzulässig ([OQ-09](open-questions.md)) — USB-RS232-Adapter oder
+  Transceiver.
+* **Zur Ziffernabdeckung** ([OQ-39](open-questions.md)): die Stimulatoren sind
+  beweglich, die frühere Sorge „immer derselbe Wert" ist damit vom Tisch.
+  Zwei harte Grenzen bleiben: **negative Werte sind mit den vorhandenen
+  Stimulatoren nicht erzeugbar** (Nutzerauskunft), und eine **Anzeige ab 10**
+  ist über den Messwert unerreichbar — selbst die höchste Empfindlichkeit des
+  GSV-2 (3,5 mV/V) endet bei 3,675 Vollausschlag. Über den Normierungsfaktor
+  (`set norm`) ginge es trotzdem; das beantwortet
+  [OQ-37](open-questions.md) ohne jeden Stimulus, ist aber eine weitere
+  persistente Konfigurationsänderung und gehört abgesprochen.
+* Nebenbefund für die Umsetzung: `DatasetStore` hat **kein Herkunftsmerkmal
+  für Labels**. Von Hand und automatisch gelabelte Proben wären nicht
+  unterscheidbar — das muss vor dem ersten Auto-Label kommen.
+* **Nebenbefund zu [OQ-07](open-questions.md):** die Aussage „me-systeme.de
+  blockt automatische Abrufe mit HTTP 403" war zu pauschal. PDF-Anleitungen
+  liefern 200, nur HTML-Produktseiten 403. Das GSVmulti-Handbuch (2011) ist
+  jetzt lokal — es enthält aber **keine** Telegrammspezifikation, OQ-07 bleibt
+  offen.
 
 **Neues OCR-Backend `tesseract_cli` gebaut, aber noch nicht erfolgreich
 gegen echte GSV-Sensor-Fotos.** Wie der Dataset-Benchmark unten kam das aus
@@ -334,6 +409,16 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
+000. **Nächster Schritt zu OQ-38 — es fehlt nur noch ein Adapter.** Klemme
+     B/C ist verdrahtet und führt auf einen RS232-Steckverbinder
+     (Nutzerauskunft 2026-09-22), am Pi ist **kein** USB-Seriell-Adapter
+     angesteckt. Also: FTDI-USB-RS232-Adapter besorgen, straight-through
+     anstecken, mit 38400 8N1 mitschneiden. Zeigt sich Binärformat, per
+     `Set Mode`/GSV Control auf ASCII umstellen. Danach die zwei offenen
+     Messungen: zeitliche Kopplung Stream ↔ Anzeige und optische
+     Einschwingzeit des LCD. Erst danach Herkunftsmerkmal im `DatasetStore`
+     und automatisches Labeln. Anschlussdetails:
+     [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md).
 0. ~~Dataset-Benchmark-Worktree nach `master` integrieren~~ — erledigt
    (Merge-Commit `742be84`, siehe oben).
 00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,

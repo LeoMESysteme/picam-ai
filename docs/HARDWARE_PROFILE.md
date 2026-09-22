@@ -53,6 +53,127 @@ direkt mit RS-232 verbunden werden. Es braucht einen RS-232-/RS-485-Transceiver,
 und die galvanische Trennung ist für den Laboraufbau zu bewerten. Ein virtueller
 USB-COM-Port am Pi 5 darf nicht pauschal vorausgesetzt werden.
 
+## Messverstärker GSV-2AS — Klemmenbelegung und Schnittstelle
+
+Quelle: ME-Systeme, „DMS Messverstärker GSV-2 Bedienungsanleitung (GSV-2LS,
+GSV-2AS, GSV-2FSD)", lokal unter
+`var/datenblaetter/gsv2-bedienungsanleitung.pdf` (+ `.txt`), abgerufen
+2026-09-22 von
+`https://www.me-systeme.de/produkte/elektronik/gsv-2/anleitungen/gsv2-bedienungsanleitung.pdf`.
+**`var/` ist gitignored** — die lokale Kopie überlebt keinen frischen Clone,
+dauerhaft ist nur die URL. Das Laborgerät meldet beim Hochfahren
+`GSV-2AS (GSV21 V1.3.07)`.
+
+**5-polige Schraubklemme (RS232 / RS422):**
+
+| Klemme | Standard | Bedeutung |
+| --- | --- | --- |
+| A | GNDC | Masse RS232 / RS422 |
+| B | Rx | Datenleitung Rx (RS232) bzw. Rx− (RS422) |
+| C | Tx | Datenleitung Tx (RS232) bzw. Tx− (RS422) |
+| D | Rx+ | Rx+ (RS422) · bei CAN: CAN_GND |
+| E | Tx+ | Tx+ (RS422) · bei CAN: CAN_L |
+
+**15-polige Schraubklemme**, soweit für den Laboraufbau relevant: 1 = GNDB,
+2…7 = Brückenanschluss (+US, +UF, +UD, −UD, −UF, −US), 8 = UE (Analogeingang
+0…10 V), 9 = UA (Analogausgang ±5 V), 10 = GNDA, 11 = SW1, 12 = Tara
+(Nullsetzeingang, wirkt auf seriellen **und** analogen Ausgang), 13 = SW2,
+**14 = UB (Versorgung 12…24 V DC), 15 = GNDB**.
+
+**Serielle Parameter:** Werkseinstellung 38400 Baud, 8N1. Der GSV „schreibt
+seine Messwerte permanent auf die serielle Schnittstelle" — kein Polling
+nötig; abschaltbar über Logger-Modus bzw. `GSVStop`. Zwei Ausgabeformate,
+umschaltbar per `Set Mode` (38d): Binär (5 Byte je Messwert, 24 bit) oder
+**ASCII**. Im ASCII-Modus entspricht die Zeichenkette der Displayanzeige;
+Format ab Werk „Vorzeichen, 6 Stellen mit Dezimalpunkt, Leerzeichen, Einheit,
+CR, LF". Maximale ASCII-Datenrate bei 38400 Baud: 200 Hz.
+
+**Nicht verwechseln:** Diese Parameter beschreiben das **Messgerät**, nicht
+das von GSVmulti erwartete Telegramm ([OQ-01](open-questions.md),
+[OQ-07](open-questions.md)). Dass beide zusammenfallen, ist plausibel, aber
+nicht belegt.
+
+**Anschluss an den PC/Pi** (Anleitung, „Anschluss des Schnittstellenkabels"):
+
+| GSV-Klemme | | 9-pol. Sub-D-Pin (PC-seitig) |
+| --- | --- | --- |
+| A | GND → GND | 5 |
+| B | RX → TX | 3 |
+| C | TX → RX | 2 |
+
+„Die Datenleitungen RX und TX zwischen Verstärker und PC sind dabei gekreuzt."
+Für das **GSV-2AS genügen diese drei Adern** — das vollständig beschaltete
+Nullmodemkabel (RTS/CTS, DCD+DSR/DTR) verlangt die Anleitung nur für den
+GSV-2TSD-DI. Ab 50 Hz Datenrate soll die Schirmung des RS232-Kabels auf die
+Erdungsklemme des Gehäuses gelegt werden.
+
+Ist das vorhandene Kabel nach dieser Tabelle konfektioniert, verhält sich sein
+Steckverbinder wie ein Modem (DCE): Pin 2 = GSV-Tx, Pin 3 = GSV-Rx. Ein
+USB-RS232-Adapter stellt eine PC-Schnittstelle (DTE) bereit, also Pin 2 = Rx
+des Adapters. **Damit passt es gerade (straight-through), ohne Nullmodem.**
+Kommt nichts an, ist ein 2↔3-Tausch der erste Versuch — das ist gefahrlos.
+
+**Warum nicht direkt an Pi-GPIO ([OQ-09](open-questions.md)):** zwei
+unabhängige Gründe.
+
+1. **Spannung.** RS-232-Treiber schalten zwischen etwa −12 V und +12 V (die
+   Norm erlaubt bis ±25 V). Pi-GPIO ist 3,3 V und **nicht einmal
+   5-V-tolerant**. Positive Spitzen treiben Strom über die Klemmdioden in die
+   3,3-V-Versorgung; negative Spannung öffnet die Substratdiode und speist
+   Strom in das Substrat — das kann Latch-up auslösen und nicht nur den Pin,
+   sondern den SoC zerstören. Ein Vorwiderstand macht das nicht zulässig.
+2. **Invertierte Logik.** RS-232 ist gegenüber TTL-UART invertiert: Mark
+   (logisch 1, Ruhezustand) ist **negativ**, Space (logisch 0) positiv. Ein
+   TTL-UART ruht dagegen auf High. Selbst bei verträglichen Pegeln kämen die
+   Bits verkehrt herum an.
+
+Ein Transceiver erledigt **beides** — Pegelwandlung und Invertierung.
+
+**Empfohlener Weg: USB-RS232-Adapter** (FTDI-Chipsatz, erscheint als
+`/dev/ttyUSB0`). Gründe: kein Eingriff in die Verdrahtung, und vor allem
+**keine Kollision mit `/dev/ttyAMA0`**, das als ausgehender GSVmulti-Datenport
+belegt ist. `/dev/serial0` scheidet ohnehin aus (Debug-Header). Stand
+2026-09-22 ist **kein** USB-Seriell-Adapter angesteckt (`/dev/ttyUSB*` fehlt);
+der Benutzer ist bereits in `dialout`, Rechtearbeit entfällt. Für stabile
+Namen bei mehreren Adaptern eine udev-Regel auf die Seriennummer vorsehen.
+
+Galvanische Trennung ist im Laboraufbau zu bewerten
+([OQ-09](open-questions.md)); isolierte USB-RS232-Adapter gibt es fertig.
+
+**Ist-Zustand des Laborgeräts (Stand 2026-09-22):**
+
+| Einstellung | Wert | Herkunft |
+| --- | --- | --- |
+| Mode-Register | **`0x02`** (Bit 1 = Text-Modus/ASCII) | am 2026-09-22 von `0x00` umgestellt, **persistent** |
+| Ausgabeformat | ASCII, `+0.46776 mV/V<CR><LF>`, 13 Zeichen + CRLF | gemessen |
+| Zeilenrate | ≈ 1,8 /s | gemessen |
+| Vollausschlag | **1,05 mV/V** (`FFFFFF` = 105 % des Bereichs) | rechnerisch aus Binär- und ASCII-Mitschnitt |
+| Schnittstelle am Pi | `/dev/ttyUSB0`, PL2303 (`067b:2303`), 38400 8N1 | gemessen |
+
+Die Modusänderung **überlebt das Ausschalten**. Wer das Gerät im Binärformat
+erwartet (etwa eine ältere Auswertung oder GSV Control mit gespeichertem
+Profil), muss das wissen. Rückweg: `Set Mode` (38) mit gelöschtem Bit 1.
+
+**Fallstrick beim Lesen von Registern:** `Get Mode` (39) und verwandte
+Lesebefehle antworten mit einem vorangestellten Semikolon `0x3B`. Die Spalte
+„Länge der Befehlsantwort in Bytes" der Anleitung zählt nur die Datenbytes.
+Wer nur ein Byte liest, bekommt `0x3B` statt des Registerwerts.
+
+**`Set Range` (50) kennt nur 2 oder 3,5 mV/V**, der Vollausschlag endet also
+auch im günstigsten Fall bei 3,675 mV/V. Eine Anzeige ab 10 ist nur über den
+Normierungsfaktor (`set norm`, 16) erreichbar, nicht über den Messwert —
+siehe [OQ-37](open-questions.md).
+
+Verwendungszweck im Projekt: Sollwertquelle für den Datensatz-Sammelmodus,
+siehe [OQ-38](open-questions.md).
+
+**Nicht mit `SERIAL_PORT`/`SERIAL_BAUD` verwechseln.** Diese Schlüssel (unten)
+beschreiben den **ausgehenden** Datenport nach GSVmulti (`/dev/ttyAMA0`). Der
+GSV-2AS-Abgriff ist ein **zweiter, eingehender** Pfad über einen
+USB-RS232-Adapter und gehört zum Sammelmodus — er bekommt **keine** Schlüssel
+in `/etc/dispread/hardware.conf`. Die 38400 Baud aus der GSV-2-Anleitung
+gelten für das Messgerät, nicht für `SERIAL_BAUD`.
+
 ## Bootkonfiguration
 
 Relevante Zeilen in `/boot/firmware/config.txt`:

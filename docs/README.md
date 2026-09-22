@@ -39,6 +39,7 @@
 | [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md) | Rechner, Kamera, serielle Ports, Bootkonfiguration, Konfigurationsschlüssel |
 | [CAMERA_COMMISSIONING.md](CAMERA_COMMISSIONING.md) | Checkliste und Fehlerbaum für die Inbetriebnahme |
 | [OPTICAL_SETUP.md](OPTICAL_SETUP.md) | Halterung, Ziffernhöhe, Beleuchtung, Reflexionen (Konzept §9) |
+| [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md) | Konzeptskizze: passiver Mitleser am HD44780-Displaybus des GSV als Sollwertquelle für den Sammelmodus (nicht gebaut, [OQ-38](open-questions.md)) |
 
 ## Schnittstellen
 

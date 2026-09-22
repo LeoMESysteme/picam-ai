@@ -742,3 +742,284 @@ legitimer Bereichsumschaltung als nach Tippfehlern aussehen. Dort wurde
 **nichts geändert**; ohne Bildprüfung ist „Tippfehler" von „anderer Messwert"
 nicht unterscheidbar. Beide Geräte sind ohnehin LED-/VFD-Laborvertreter und
 für den späteren Produktionspfad (durchgehend GSV-LCD) nicht maßgeblich.
+
+---
+
+## 2026-09-22 — Task-2-Gate: Rasterverankerung nicht erreicht
+
+**Ziel:** Entscheiden, ob der Dot-Matrix-Zellenleser tragfähig ist — konkret:
+lässt sich das 16-Zellen-Raster pro Bild zuverlässig anlegen?
+
+**Aufbau:** Rein rechnerisch auf den 11 GSV-Proben. Entzerrung über
+`lcd_quad_in_region`, adaptive Binarisierung, drei verschiedene
+Verankerungsverfahren. Zahlen in [VALIDATION.md](VALIDATION.md), 2026-09-22.
+Die laufende Produktions-Workbench wurde nicht angefasst.
+
+**Beobachtung — die Messung war dreimal selbst der Fehler.** Die Zahl stieg
+19,3 % → 37,5 % → 67,9 %, und **jede** Steigerung kam von einem behobenen
+Werkzeugfehler, keiner von einer Änderung am Verfahren:
+
+1. Die Score-Suche über Kante *und* Teilung entartet: Eine halb so grosse
+   Teilung packt alle 16 Zellen in den dichten Textbereich und maximiert
+   „Tinte in der Mitte, wenig am Rand" besser als das richtige Raster.
+2. Die globale Otsu-Schwelle kippt an einem Helligkeitsverlauf über das
+   Display und macht das rechte Drittel zu einem schwarzen Klumpen. Eine
+   adaptive Schwelle (Gauss, 51, 15) löst das vollständig.
+3. Eine 5×7-Zellreduktion mit Schwelle 0,4 löscht tintenarme Glyphen: Der
+   Punkt `.` wird zum Nullvektor und damit ununterscheidbar von einer leeren
+   Zelle. Das erklärte die zunächst unsinnigen 0/44 bei `blank`.
+
+Ein vierter Fehler in meiner Vorgabe an die Autokorrelation („kleinster Lag,
+der ein lokales Maximum ist") drückte die Teilungswahl systematisch an die
+Bereichsuntergrenze — die Autokorrelation hatte bei der Referenzprobe ein
+lokales Maximum bei Lag 25 (0,328) und ein **stärkeres** bei Lag 36 (0,396),
+und 36 ist der richtige Wert.
+
+**Messergebnis:** Bestes Verfahren ist die Tintenausdehnung als Anker mit
+**67,9 %** Median über sechs Parameterkombinationen. Die vorab festgelegte
+Abbruchgrenze lag bei 70 %. Gate **nicht bestanden**.
+
+**Schluss.** Die Vorab-Festlegung wird eingehalten, statt weiter zu iterieren,
+bis eine Zahl gefällt — genau dafür war sie da. Wichtiger als die Zahl ist
+aber der Hinweis auf die Ursache: Die drei `1.05000`-Proben, alle aus
+derselben Aufnahmeposition, verhalten sich durchgehend gutartig (16 Zellen
+belegen 0,94 der Crop-Breite, Autokorrelation trifft den Referenzwert), die
+übrigen acht liegen bei 0,73–0,78. Der Sättigungs-Quad erfasst also je nach
+Aufnahmesituation unterschiedlich viel physischen Ausschnitt. Damit ist der
+nächste sinnvolle Schritt **nicht** ein weiteres Verankerungsverfahren,
+sondern eine stabilere Bezugsgrösse für den Ausschnitt — oder eine
+Aufnahmeprozedur, die den markierten Bereich reproduzierbar macht.
+
+---
+
+## 2026-09-22 — GSV-Aufbau aus Fotos aufgenommen (keine Hardware angefasst)
+
+**Ziel:** Klären, ob und wo sich am GSV Sensordaten mitlesen lassen, um Proben
+des Sammelmodus automatisch statt von Hand zu labeln.
+
+**Aufbau:** Keine Messung, keine Berührung des Geräts. Ausgewertet wurden acht
+Fotos unter `var/beispielbilder/gsv_aufbau/` (OnePlus GM1901, 4000×3000,
+2026-09-22 11:42–11:44), teils in Vollauflösung ausgeschnitten. Ergänzt durch
+zwei Auskünfte des Nutzers am selben Tag.
+
+**Beobachtung:**
+
+* **Gehäuse/Verkabelung.** Alu-Gussgehäuse, Displayfenster in der Front. Zwei
+  Verschraubungen links (graues Sensorkabel, dazu rot/schwarz), eine rechts.
+  Die Anzeige stand während der Aufnahme auf `-0.00063 mV/V`.
+* **Hauptplatine.** Lesbar bestückt mit **ADS1256** (24-bit-ADC, SPI),
+  **ADG733** (Analogmux), **REF02C** (Spannungsreferenz), einem 10-MHz-Quarz,
+  einem Schaltregler (Speicherdrossel „151") und einem mehrreihigen
+  Stiftleistenblock. **Kein Bestückungsdruck mit Teilenummer sichtbar** — der
+  Platinenrand liegt oben unter dem Flachband, rechts unter dem
+  Stiftleistenblock.
+* **Kein RS-232-Treiber erkennbar.** Weder ein SOIC-16 mit der typischen
+  Vierergruppe Ladungspumpen-Kondensatoren noch ein eindeutig als Transceiver
+  lesbarer Baustein. Das ist ein Negativbefund aus Fotos, **kein Beweis der
+  Abwesenheit**: Teile der Platine liegen unter der Klemmenadapterplatine und
+  dem Flachband.
+* **Klemmleiste.** 15-polige Schraubklemme (1–15) auf einer aufgesteckten
+  Adapterplatine, dazu ein Taster (vermutlich Tara/Null) und eine kleine
+  Zusatzklemme mit den Aufklebern „B" und „C". **Die Mehrzahl der 15 Schrauben
+  ist unbelegt.** Belegt sind ein mehradriges Bündel (gelb/braun/weiss/grün/
+  rot/violett) im Bereich 1–6 — der Brückenanschluss — sowie 14/15.
+* **Anzeige.** 16-poliges Flachband von der Hauptplatine zur Displayplatine;
+  auf dieser steht **DISPLAYTECH 161A**. Das ist der HD44780-übliche
+  Parallelbus. Deckt sich mit dem, was CLAUDE.md bereits festhält.
+* **Messgrössengeber.** Die extern angeschlossene Lochrasterplatine
+  (`gsv_angeschlossene_platine1/2.jpg`, `…_unterseite.jpg`, Rademacher Nr. 915)
+  ist **kein Datenausgang, sondern der Stimulus**: ein Widerstandsnetz mit
+  vierfachem DIP-Schalter und handschriftlicher Beschriftung „4: 2 mV/V",
+  „3: 1 mV/V" — also eine Handvoll diskreter Brückenwerte.
+
+**Auskünfte des Nutzers (2026-09-22):**
+
+1. Es gibt **kein Typenschild**; das Gerät ist kein offizieller Bau.
+   → **Später am selben Tag widerrufen**, siehe Nachtragseintrag unten
+   („GSV als GSV-2AS identifiziert"). Das Gerät meldet sich beim Hochfahren
+   als `GSV-2AS (GSV21 V1.3.07)`. Alle Schlüsse dieses Eintrags, die auf
+   „undokumentiertes Gerät" beruhen, sind damit hinfällig.
+2. Das schwarze zweiadrige Kabel aus der rechten Verschraubung auf Klemme
+   14/15 ist die **Stromversorgung**.
+3. Die Stimulus-Platine ist **verklebt**, damit sie nicht verstellt wird, und
+   soll vorerst nicht bewegt oder benutzt werden.
+
+**Messergebnis:** Keines — es wurde nicht gemessen. Die Fotoauswertung liefert
+Indizien, keine Zahlen.
+
+**Schluss:** Der Weg „Typbezeichnung → Datenblatt → Schnittstellenpin" ist
+mangels Typenschild versperrt; ob dieses Exemplar eine digitale Schnittstelle
+besitzt, kann nur jemand beantworten, der die verbaute OEM-Platine kennt.
+Unabhängig davon ist der **Displaybus** der tragfähigere Abgriff für
+OCR-Sollwerte, weil er den Zeichenstring liefert, den die Kette lesen soll,
+statt eines intern geführten Messwerts — festgehalten als
+[OQ-38](open-questions.md), Skizze in [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md).
+Zweiter, davon unabhängiger Schluss: der verklebte Stimulus begrenzt die
+erreichbare **Ziffernabdeckung**, egal wie viele Bilder automatisch gelabelt
+werden — [OQ-39](open-questions.md).
+
+---
+
+## 2026-09-22 — Nachtrag: GSV als GSV-2AS identifiziert, serieller Weg dokumentiert
+
+**Ziel:** Den Befund des vorigen Eintrags korrigieren, nachdem der Nutzer eine
+Gerätekennung nachgereicht hat.
+
+**Aufbau:** Keine Hardware angefasst. Nutzerauskunft plus öffentlich
+abrufbare Herstellerdokumentation.
+
+**Beobachtung:**
+
+* Der Sensor zeigt beim Hochfahren `GSV-2AS (GSV21 V1.3.07)`. Es ist also ein
+  reguläres ME-Systeme GSV-2AS; die Annahme „kein offizieller Bau, kein
+  Datenblatt" aus dem vorigen Eintrag war falsch.
+* Die Bedienungsanleitung „DMS Messverstärker GSV-2 (GSV-2LS, GSV-2AS,
+  GSV-2FSD)" liess sich **ohne Hürde herunterladen** (HTTP 200) und liegt
+  lokal unter `var/datenblaetter/gsv2-bedienungsanleitung.pdf` (+ `.txt`).
+* Aus ihr bestätigt bzw. neu:
+  * GSV-2AS = „Aluminiumgehäuse mit RS232, RS422, CANbus, Display".
+  * **5-polige Klemme:** `A = GNDC`, `B = Rx`, `C = Tx`, `D = Rx+/CAN_GND`,
+    `E = Tx+/CAN_L`. Diese Klemme ist auf den Fotos vorhanden — die kleine
+    grüne Zusatzklemme trägt einen Beschriftungsstreifen `A`/`B`/`C`. Die im
+    vorigen Eintrag als unklar notierten Aufkleber „B" und „C" sind also die
+    RS232-Datenleitungen.
+  * **15-polige Klemme:** 14 = UB, 15 = GNDB. Die Nutzerauskunft
+    „14/15 = Stromversorgung" ist damit unabhängig bestätigt. Ebenso passt
+    2…7 = Brücke zum beobachteten mehradrigen Bündel, und 9/10 = Analogausgang
+    zu den dickeren rot/schwarzen Adern.
+  * Der GSV „schreibt seine Messwerte **permanent** auf die serielle
+    Schnittstelle"; Werkseinstellung 38400 Baud, 8N1.
+  * Im umschaltbaren **ASCII-Modus** „entspricht die ausgegebene Zeichenkette
+    der Anzeige im Display", Format ab Werk „Vorzeichen, 6 Stellen mit
+    Dezimalpunkt, Leerzeichen, Einheit, CR, LF".
+  * Das beobachtete `-0.00063 mV/V` passt exakt auf dieses Format, ebenso die
+    durchgängig 6 Ziffern der 11 bestätigten Proben ([OQ-37](open-questions.md)).
+
+**Messergebnis:** Keines — weiterhin nichts gemessen. Alles Dokumentenbefund.
+
+**Schluss:** Die Empfehlung des vorigen Eintrags dreht sich. Das Argument
+„Displaybus, weil ein interner Wert von der Anzeige abweichen kann" trägt für
+dieses Gerät nicht, weil der Hersteller ASCII-Ausgabe und Anzeige ausdrücklich
+koppelt. **Primärweg ist RS232 im ASCII-Modus** über die vorhandene Klemme
+A/B/C; der Displaybus bleibt Gegenprobe und einziger Weg zu den
+Code-zu-Glyph-Paaren. Ungeprüft bleiben: ob der ASCII-Modus an diesem Exemplar
+aktiv ist, ob B/C nach draussen verdrahtet sind, und vor allem die **zeitliche**
+Kopplung zwischen Stream und Anzeige — die Anleitung sagt nur etwas über den
+Inhalt, nicht über den Zeitpunkt. Details: [OQ-38](open-questions.md).
+
+**Warnung, unverändert:** Klemme B/C führt **RS-232-Pegel**. Direkter
+Anschluss an Pi-GPIO ist unzulässig ([OQ-09](open-questions.md)) — es braucht
+einen USB-RS232-Adapter oder einen Transceiver.
+
+---
+
+## 2026-09-22 — Serieller Abgriff am GSV-2AS angeschlossen und mitgelesen
+
+**Ziel:** Prüfen, ob über die RS232-Klemme A/B/C tatsächlich ein Messwertstrom
+am Pi ankommt.
+
+**Aufbau:** Der Nutzer hat den RS232-Steckverbinder des GSV-2AS mit einem
+USB-RS232-Adapter verbunden und diesen am Pi angesteckt. Der Adapter meldet
+sich als `067b:2303` (Prolific PL2303), Kernel legt `/dev/ttyUSB0` an. Port
+per `stty` auf 38400 8N1 raw ohne Handshake gesetzt. Kein `dispread`-Prozess
+lief; die Kamera war nicht beteiligt.
+
+**Nur gelesen.** An das Gerät wurde **kein Byte gesendet** — keine
+Konfiguration verändert, kein Befehl abgesetzt.
+
+**Beobachtung:**
+
+* Es kommen Daten. 3-s-Mitschnitt: 30 Bytes = 6 Frames. 10-s-Mitschnitt:
+  95 Bytes = 19 Frames, also **≈ 1,9 Frames/s**.
+* Das dokumentierte 5-Byte-Framing sitzt exakt: Synchronbyte `0x2C` bei
+  Offset 0 in **19/19** Frames. Baudrate, Verdrahtung und Adapter stimmen
+  damit alle drei.
+* **Binärformat, nicht ASCII** — wie ab Werk erwartet.
+* Status-Byte durchgehend `0x18` im 10-s-Lauf (Schwellwertschalter SW1 und
+  SW2 gesetzt); im 3-s-Lauf zuerst `0x00`, dann `0x18`.
+* Rohwerte wandern über `B8A95A` … `EF346B`. **Während des Mitschnitts hat der
+  Nutzer die extern an den Sensor angeschlossenen Stimulatoren bewegt** — die
+  Streuung ist also die erwünschte Reaktion, kein Rauschen.
+
+**Messergebnis:** Zahlen in [VALIDATION.md](VALIDATION.md), Eintrag
+2026-09-22 „GSV-2AS: serieller Abgriff verifiziert". Rohmitschnitte unter
+`var/diagnostics/gsv-serial-2026-09-22/`.
+
+**Schluss:** Der in [OQ-38](open-questions.md) empfohlene Weg ist **praktisch
+bestätigt**, nicht mehr nur aus der Anleitung abgeleitet: der Abgriff liefert
+einen lebenden, dem Sensoreingang folgenden Messwertstrom, ohne Eingriff ins
+Gerät. Zwei Dinge fehlen noch:
+
+1. **ASCII-Modus.** Im Binärformat ist der Anzeigewert nicht berechenbar — die
+   Anleitung überträgt binär „normiert auf ±1", die Anzeige ergibt sich aus
+   „Normierungsfaktor x Messwert", und dieser Faktor ist für dieses Exemplar
+   unbekannt. Erst der ASCII-Modus liefert die Zeichenkette, die der Anzeige
+   entspricht. Die Umschaltung ist ein **schreibender** Eingriff (`Set Mode`,
+   Befehl 38) und bleibt laut Anleitung **auch nach dem Abschalten erhalten** —
+   deshalb nicht eigenmächtig ausgeführt.
+2. **Zeitliche Kopplung.** Bei ≈ 2 Hz Messwertrate und 15 fps Kamera kommen
+   rund sieben Bilder auf einen Messwert. Wie Stream und Anzeige zeitlich
+   zueinander stehen, ist ungemessen.
+
+**Nebenbefund mit Folgen für [OQ-39](open-questions.md):** Die Stimulatoren
+sind offenbar **doch beweglich** — der Nutzer hat sie während des Mitschnitts
+bedient. Damit ist die dort festgehaltene Grenze („fester Wert, keine
+zusätzliche Ziffernabdeckung") möglicherweise weitgehend hinfällig. Welcher
+Wertebereich so erreichbar ist, ist offen.
+
+---
+
+## 2026-09-22 — GSV-2AS auf ASCII umgeschaltet, Telegramm steht
+
+**Ziel:** Den Messwertstrom von Binär auf das Textformat umstellen, damit der
+Sollwert der Anzeige entspricht und als Label taugt.
+
+**Aufbau:** unverändert — GSV-2AS über Klemme A/B/C und USB-RS232-Adapter
+(PL2303) an `/dev/ttyUSB0`, 38400 8N1.
+
+**Eingriff, mit Freigabe des Nutzers:** Mode-Register von `0x00` auf `0x02`
+gesetzt (Bit 1 = Text-Modus), in der von der Anleitung vorgeschriebenen
+Reihenfolge und mit Kontroll-Rücklesen. Sonst wurde nichts verändert. Die
+Änderung ist **persistent**; Rückweg ist dasselbe mit gelöschtem Bit 1.
+
+**Beobachtung:**
+
+* **Fallstrick, der fast zu einer Fehlkonfiguration geführt hätte:** `get mode`
+  antwortet mit **zwei** Bytes, `3B 00`. Das `0x3B` ist das Semikolon-Präfix
+  für Registerwerte; die Anleitung zählt in der Spalte „Länge der
+  Befehlsantwort" nur das Datenbyte. Der erste Versuch las nur ein Byte, hielt
+  `0x3B` für den Modus und schloss daraus „Text-Modus ist bereits aktiv" —
+  falsch, aber folgenlos, weil das Skript genau deshalb ohne Schreibzugriff
+  abbrach. Der tatsächliche Modus war `0x00`, passend zum beobachteten
+  Binärstrom.
+* Nach der Umschaltung kommt sofort Text. Rohbytes einer Zeile:
+  `2b 30 2e 34 36 37 37 36 20 6d 56 2f 56 0d 0a` = `+0.46776 mV/V<CR><LF>`.
+* 10-s-Mitschnitt: 18 vollständige Zeilen, **18/18** passen auf
+  `^[+-]\d\.\d{5} mV/V$`, alle 13 Zeichen lang. 1,8 Zeilen/s — dieselbe Rate
+  wie vorher im Binärmodus.
+* Einmal war der Strom nach dem Umschalten still: `start transmission` war
+  offenbar nicht durchgekommen, weil die Portsitzung unmittelbar danach
+  geschlossen wurde. Ein erneutes `0x24` in derselben Sitzung hat ihn sofort
+  wieder gestartet. **Merke:** `start transmission` in derselben offenen
+  Sitzung absetzen und die Wirkung dort prüfen.
+
+**Messergebnis:** [VALIDATION.md](VALIDATION.md), Eintrag 2026-09-22 „GSV-2AS
+auf ASCII-Modus umgeschaltet". Rohmitschnitt
+`var/diagnostics/gsv-serial-2026-09-22/capture_ascii_10s.bin`.
+
+**Schluss:** Der Sollwertkanal steht. Das Telegramm ist gemessen statt
+angenommen, und sein Format deckt sich mit den 11 bestätigten Datensatzproben.
+Damit ist der Hauptteil von [OQ-38](open-questions.md) erledigt; offen bleibt
+die **zeitliche** Zuordnung zwischen Telegramm und Anzeige.
+
+**Zweiter Schluss, der eine Datensatzfrage klärt:** Der Vollausschlag dieses
+Exemplars ist 1,05 mV/V — der früher gemessene Binärwert `B8C62C` ergibt
+bipolar mit diesem Endwert `+0.46573`, und der ASCII-Strom zeigt bei
+praktisch gleicher Stimuluslage `+0.46776`. `FFFFFF` (laut Anleitung 105 % des
+Messbereichs) entspricht damit rechnerisch exakt `+1.05000`. Die drei
+identischen `1.05000`-Proben im Datensatz sind also sehr wahrscheinlich
+**Übersteuerung**, nicht Messwerte — siehe [OQ-39](open-questions.md).
+
+**Ungeprüft geblieben:** ob die Anzeige in diesem Moment wirklich `+0.46776`
+zeigt. Niemand hat währenddessen aufs Display gesehen; das ist der letzte
+fehlende Beleg für „ASCII-String = Anzeige".

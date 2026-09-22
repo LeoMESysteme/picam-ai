@@ -251,33 +251,41 @@ Heute findet `fit_quad_in_region` auf dem realen Datensatz **0 von 73** Quads
 lässt sich der neue Leser gegen den Datensatz gar nicht erst ausführen.
 
 **Files:**
-- Modify: `src/dispread/rectify.py` (neue Funktion `lcd_quad_in_region`)
+- Modify: `src/dispread/workbench/vision.py` (neue Funktion `lcd_quad_in_region`)
 - Create: `tests/test_lcd_quad.py`
 - Modify: `CHANGELOG.md`
-- Modify: `docs/open-questions.md` (neu: **OQ-30**, siehe unten)
+- Modify: `docs/open-questions.md` (neu: **OQ-36**, siehe unten)
+
+**Korrekturen gegenüber der ersten Planfassung (2026-09-22):** Die Funktion
+gehört nach `workbench/vision.py` neben ihr Geschwisterteil
+`fit_quad_in_region` (`vision.py:87`) — `rectify.py` entzerrt ein *bekanntes*
+Quad, es findet keines. Und die nächste freie Fragenummer ist **OQ-36**, nicht
+OQ-30 (das ist längst vergeben; der Katalog steht bei 35).
+
+**Status: erledigt am 2026-09-22.**
 
 **Steps:**
-- [ ] `lcd_quad_in_region(frame, region, *, saturation_threshold=60)` schreiben:
+- [x] `lcd_quad_in_region(frame, region, *, saturation_threshold=60)` schreiben:
       HSV-Sättigungsmaske → `MORPH_CLOSE` → größte Kontur → `minAreaRect` →
       vier Ecken in der Reihenfolge `tl, tr, br, bl`.
-- [ ] Rückgabe `None`, wenn keine Kontur gefunden wird **oder** der größte
+- [x] Rückgabe `None`, wenn keine Kontur gefunden wird **oder** der größte
       gesättigte Bereich unter einem Mindestflächenanteil des ROI liegt
       (Vorabdefault; der gemessene Bereich auf GSV war 0,54–0,97).
-- [ ] Tests gegen synthetische Bilder (gekipptes helles Rechteck auf dunklem
+- [x] Tests gegen synthetische Bilder (gekipptes helles Rechteck auf dunklem
       Grund) — muss ohne Kamera und ohne Datensatz laufen.
-- [ ] Ein Test, der die Rückgabe `None` für einen ungesättigten (grauen)
+- [x] Ein Test, der die Rückgabe `None` für einen ungesättigten (grauen)
       Ausschnitt festhält — die Funktion darf auf nicht-hinterleuchteten
       Anzeigen nicht raten.
-- [ ] **OQ-30 anlegen:** „Sättigungsbasierte LCD-Quad-Findung nur an einem
+- [x] **OQ-36 anlegen:** „Sättigungsbasierte LCD-Quad-Findung nur an einem
       Gerät gemessen". Inhalt: auf GSV (n=11) Median-Flächenanteil 0,96; auf
       den beiden anderen Datensatzgeräten nur 0,58 bzw. 0,69 — das sind
       LED-/VFD-Laborvertreter, laut Zielhardware **nicht** repräsentativ
       (Produktionsanzeigen sind durchgehend LCD). Offen: ob die Schwelle 60
       über mehrere echte LCD-Geräte trägt.
-- [ ] Im Docstring festhalten: Diese Funktion ist **kein Ersatz** für
+- [x] Im Docstring festhalten: Diese Funktion ist **kein Ersatz** für
       `fit_quad_in_region`, sondern ein Sonderpfad für hinterleuchtete,
       farbige LCDs. Sie ersetzt keine Bedienerbestätigung.
-- [ ] **Aufgabenzuschnitt nicht überdehnen:** Task 2 misst, dass dieser Quad
+- [x] **Aufgabenzuschnitt nicht überdehnen:** Task 2 misst, dass dieser Quad
       als *Rasteranker* zu ungenau ist (linke Kante 4,2–18,3 %). Seine Aufgabe
       ist damit nur „entkippter, gehäusefreier Ausschnitt" — die Rasterlage
       kommt aus dem Fit, nicht aus der Glaskante. Nicht in die Feinabstimmung
@@ -287,6 +295,26 @@ lässt sich der neue Leser gegen den Datensatz gar nicht erst ausführen.
 ---
 
 ## Task 2 (GATE): Rasterverankerung gegen alle 11 Proben prüfen
+
+> **Ergebnis 2026-09-22: Gate NICHT bestanden.** Bestes Verfahren
+> (Tintenausdehnung als Anker) erreicht **67,9 %** Median über die sechs
+> vorab festgelegten Parameterkombinationen; die Abbruchgrenze lag bei 70 %.
+> Drei Verankerungsverfahren gemessen, Zahlen in
+> [VALIDATION.md](../../VALIDATION.md) 2026-09-22 und
+> [lab_journal.md](../../lab_journal.md).
+>
+> **Ausdrücklich nicht belegt: dass der Ansatz scheitert.** In drei Anläufen
+> war jeder Rückschlag ein Werkzeugfehler, nicht ein Befund über das
+> Verfahren. Belegt ist nur: die Verankerung ist in drei Anläufen nicht
+> zuverlässig gelungen.
+>
+> **Ursachenhinweis:** Der Sättigungs-Quad erfasst je nach Aufnahmesituation
+> unterschiedlich viel physischen Ausschnitt (16 Zellen belegen 0,94 der
+> Crop-Breite bei den drei Proben aus einer Aufnahmeposition, 0,73–0,78 bei
+> den übrigen acht). Der nächste sinnvolle Schritt ist deshalb eine stabilere
+> Bezugsgrösse für den Ausschnitt, kein viertes Verankerungsverfahren.
+>
+> Task 3 und folgende bleiben damit **gesperrt**, bis das entschieden ist.
 
 **Dieser Task ist ein Abbruchtor.** Dass ein gleichmäßiges Raster existiert,
 ist gemessen (±0,5 px auf den Ziffern). Offen ist die *Verankerung*: Der
@@ -308,26 +336,76 @@ einer offenen Rastersuche.
 - [ ] Linke Kante und Teilung **pro Bild** fitten, bei **fest 16 Zellen**.
       Nicht über Tintenblockmitten — die sind durch die Glyphenform verzerrt
       (gemessen: `.` liegt 2,9 px links, `+` 2,0 px rechts der Zellmitte).
-- [ ] **Nicht-zirkuläre Prüfung gegen die bekannte Wahrheit:** Das erwartete
-      Belegt/Leer-Muster der 16 Zellen **pro Probe** aus `expected_text` plus
-      den Formatregeln des Profils herleiten — **nicht** als Konstante
-      hinschreiben. Prüfen, ob die belegten/leeren Zellen des gefitteten
-      Rasters damit übereinstimmen. Das ist das entscheidende Maß: Ein Score
-      „Tinte in der Mitte, keine am Rand" allein lässt sich auch von einem
-      *falschen* Raster maximieren.
-      Für das hier belegte Festformat `+X.XXXXX mV/V` ergibt das 13 belegte und
-      3 leere Zellen — aber die Herleitung muss allgemein bleiben, sonst bricht
-      die Prüfung beim ersten Gerät mit anderem Format.
+- [ ] **Nicht-zirkuläre Prüfung — Zeichenkonsistenz über Proben hinweg.**
+
+      *Verworfen (2026-09-22):* die zunächst geplante Belegt/Leer-Prüfung der
+      16 Zellen gegen `expected_text`. Sie diskriminiert nicht — alle 11
+      Proben haben dasselbe Festformat (6 Ziffern / 5 Nachkommastellen), also
+      auch dasselbe Muster „8 belegt, Lücke, 4 belegt, 3 leer". Das erfüllt
+      jedes halbwegs richtig liegende Raster. Ebenso untauglich ist ein Score
+      „Tinte in der Mitte, wenig am Rand": den maximiert auch ein falsches
+      Raster.
+
+      *Stattdessen:* Zellen extrahieren, jede auf ein 5×7-Punktmuster
+      herunterrechnen, und messen, ob Zellen **mit demselben erwarteten
+      Zeichen** über alle 11 Proben hinweg gleich aussehen:
+      * mittlerer Hamming-Abstand innerhalb einer Zeichenklasse
+        (within-class),
+      * gegen den mittleren Abstand zwischen verschiedenen Klassen
+        (between-class),
+      * und pro Zelle: liegt sie ihrer *eigenen* Klasse am nächsten?
+
+      Sitzt das Raster auf jedem Bild richtig, müssen sich gleiche Zeichen
+      ähneln und verschiedene unterscheiden. Driftet es zwischen Bildern,
+      explodiert der within-class-Abstand und das Verhältnis fällt gegen 1.
+      Das ist nicht zirkulär und liefert nebenbei genau die Vorlagen, die
+      [Task 3](#task-3-zeichentabelle-aus-bestätigten-proben-aufbauen) braucht.
 - [ ] **Mittenlücke prüfen** (bisher ungemessen): Liegen die Zellen 9–16 auf
       demselben gleichmäßigen Raster wie 1–8, oder hat das Modul die bei
       8+8-adressierten 16×1-Displays verbreitete breitere Lücke in der
       Zeilenmitte? Falls ja, braucht das Raster einen zusätzlichen
       Mittenversatz — und der Wertbereich (Zelle 1–8) bleibt davon unberührt.
-- [ ] **Abbruchbedingung, vorab festgelegt:** Wenn das Belegt/Leer-Muster bei
-      **mehr als 3 von 11** Proben nicht passt, ist B in dieser Form nicht
-      tragfähig. Dann **stoppen**, Befund in `docs/VALIDATION.md` und
-      `docs/lab_journal.md` schreiben, und die Entscheidung A/B mit dem Nutzer
-      neu aufmachen — nicht „irgendwie weiterbauen".
+- [ ] **Abbruchbedingung, vorab festgelegt** (angepasst an das neue Maß,
+      2026-09-22): Maßgeblich ist der Anteil der Zellen, die ihrer eigenen
+      Zeichenklasse am nächsten liegen — das ist die direkteste Entsprechung
+      dazu, ob ein Tabellennachschlag später treffen würde.
+      * **≥ 90 %** → tragfähig, weiter mit Task 3.
+      * **70–90 %** → nicht sauber; erst die Verankerungs-Alternative unten
+        (Tintenprofil statt Glaskante) messen, bevor entschieden wird.
+      * **< 70 %** → **stoppen.** Befund nach `docs/VALIDATION.md` und
+        `docs/lab_journal.md`, Entscheidung A/B mit dem Nutzer neu aufmachen —
+        nicht „irgendwie weiterbauen".
+
+      Die Schwellen sind vorab gesetzt, damit sie nicht nachträglich an das
+      Ergebnis angepasst werden.
+
+### Vorab-Festlegung für den entscheidenden Lauf (2026-09-22, vor der Messung)
+
+Der erste Messversuch lieferte nacheinander 19,3 % → 37,5 % → 65–74 %, und
+**jede** Steigerung kam von einem behobenen Werkzeugfehler, nicht von einer
+Änderung am Ansatz (entarteter Rasterfit; globale Otsu-Schwelle gegen einen
+Helligkeitsverlauf; eine 5×7-Reduktion, die tintenarme Glyphen wie `.` zum
+Nullvektor macht). Die 73,9 % waren zudem der **beste von sechs** nachträglich
+durchprobierten Parametersätzen — also kein zulässiges Ergebnis.
+
+Damit der nächste Lauf zählt, steht die Verarbeitungskette hier **vor** der
+Messung fest:
+
+| Stufe | Festlegung |
+|---|---|
+| Entzerrung | `lcd_quad_in_region` → `warpPerspective` auf 640×128 |
+| Beschnitt | vertikal 12 %–88 %, horizontal je 14 px |
+| Binarisierung | `adaptiveThreshold`, Gauss, Blockgröße 51, C = 15 |
+| **Teilung** | **Autokorrelation** des mittelwertbefreiten Tinten-Spaltenprofils, erste Grundperiode im Bereich 25–55 px. Unüberwacht — immun gegen die Score-Entartung, an der der erste Versuch scheiterte |
+| Phase | bei *fester* Teilung: Versatz maximiert (Tinte in 16 Zellmitten − Tinte an 17 Zellgrenzen). Nur ein Freiheitsgrad, keine Entartung mehr |
+| Zellraster | Parametergitter 5×7 und 8×10 × Schwellen 0,15 / 0,25 / 0,35 |
+| Klassen | `space` und `empty` zu **`blank`** zusammengefasst — beide sind leer und prinzipiell ununterscheidbar |
+
+**Entscheidungsgröße ist der MEDIAN über alle sechs Parameterkombinationen**,
+nicht der beste Wert. Grund: Die Reduktionsparameter sind aus dem ersten Sweep
+bereits bekannt; sie jetzt als „vorab gewählt" auszugeben wäre unredlich. Der
+Median ist gegen genau dieses Rosinenpicken robust. Alle sechs Einzelwerte
+werden mitberichtet.
 - [ ] Falls die Verankerung über den Sättigungs-Quad scheitert: als Alternative
       prüfen, ob sich das Raster direkt am Tintenprofil verankern lässt (erste
       und letzte belegte Zelle als Anker) statt an der Glaskante.

@@ -756,3 +756,332 @@ Phase A auf keiner einzigen Probe ein passendes Raster findet — Phase B kann
 also gar nicht erst starten. Die nächste sinnvolle Stufe ist eine Prüfung der
 Rastergeometrie selbst (OQ-23-Update), nicht ein erneuter Lauf mit mehr
 Proben.
+
+## 2026-09-22 — Quad-Findung: `fit_quad_in_region` vs. `lcd_quad_in_region`
+
+**Datensatz:** voller Sammelmodus-Bestand zum Zeitpunkt der Messung, **88
+Proben, 3 Geräte** — die beiden LED-/VFD-Laborgeräte aus dem Lauf vom
+2026-09-21 plus das seither angelegte GSV-Gerät (`87564e34…`, 11 Proben,
+hinterleuchtete Farb-LCD, Displaytech 161A). Alle Geräte stehen auf
+`split=development`; das bleibt eine **Entwicklungsmessung**, kein
+Konzept-§9-Testergebnis.
+
+**Aufruf:** beide Funktionen direkt mit dem aus `sample.json` normierten
+`bbox` als `hint_box`, also genau so, wie `benchmark.sample_quad(deskew=True)`
+es tut. Kein Rasterfit, kein OCR — gemessen wird allein, ob ein Quad
+zurückkommt und wie es zur markierten Region liegt.
+
+| Gerät | n | `fit_quad_in_region` | `lcd_quad_in_region` | Fläche/Region (Median) | Quad ragt hinaus |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `87564e34…` (GSV, Farb-LCD) | 11 | 7 | **11** | 0,96 | 0 |
+| `4237c46d…` (RND-Lab) | 36 | 0 | 35 | 1,00 | 0 |
+| `91853b73…` (BK Precision) | 41 | 0 | 41 | 0,75 (0,53–0,98) | 8 |
+| **gesamt** | **88** | **7** | **87** | — | — |
+
+**Verhältnis zum 0/73-Befund vom 2026-09-21:** Dieser ist hiermit
+**reproduziert**, nicht widerlegt. Die 73 Proben von damals sind die lesbaren
+Proben genau der zwei LED-/VFD-Geräte, und auf denen findet
+`fit_quad_in_region` auch heute kein einziges Quad (0/36 und 0/41 über alle
+Proben, lesbar wie unlesbar). Die 7 Treffer stammen ausschliesslich vom
+GSV-Gerät, das zum Zeitpunkt jenes Laufs noch nicht existierte.
+
+**Einordnung — die Trefferzahl allein ist irreführend.** `lcd_quad_in_region`
+liefert bei 87 von 88 Proben *ein* Quad, aber nur beim GSV-Gerät ist es auch
+brauchbar: dort deckt es im Median 0,96 der markierten Region ab und liegt
+ausnahmslos innerhalb. Bei `4237c46d…` entartet es zur markierten Box selbst
+(Median 1,00) und bringt damit keinerlei Entkippung; bei `91853b73…`
+schwankt die Abdeckung stark und **8 von 41** Quads ragen über die markierte
+Region hinaus — bei `minAreaRect` geometrisch zulässig, als Vorschlag aber
+unbrauchbar. „Findet ein Quad" heisst auf nicht hinterleuchteten Anzeigen
+also ausdrücklich nicht „findet die Anzeige" ([OQ-36](open-questions.md)).
+
+Für den Produktionspfad ist das verkraftbar: dort werden ausschliesslich
+GSV-LCD-Anzeigen ausgelesen (Nutzerentscheidung 2026-09-22), die beiden
+anderen Geräte sind Laborvertreter.
+
+## 2026-09-22 — Rasterverankerung auf der GSV-Zeichen-LCD (Task-2-Gate)
+
+**Frage:** Lässt sich das 16-Zellen-Raster der Displaytech 161A pro Bild
+zuverlässig anlegen? Davon hängt ab, ob ein Zellen-Vorlagenleser tragfähig ist.
+
+**Datensatz:** die 11 bestätigten GSV-Proben (`87564e34…`), `split=development`.
+Entwicklungsmessung, kein Konzept-§9-Testergebnis.
+
+**Maß:** Anteil der extrahierten Zellen, die ihrer *eigenen* Zeichenklasse am
+nächsten liegen (Klassenmittel über alle Proben, Hamming-Abstand). `space` und
+`empty` zu `blank` zusammengefasst — beide sind leer und prinzipiell
+ununterscheidbar. Vorab festgelegt: Entscheidungsgröße ist der **Median über
+sechs Parameterkombinationen** (Zellraster 5×7 / 8×10 × Binarisierungsschwelle
+0,15 / 0,25 / 0,35), nicht der beste Einzelwert.
+
+**Drei Verankerungsverfahren, alle gemessen:**
+
+| Verfahren | Teilung (px) | Median über 6 Kombinationen |
+| --- | --- | ---: |
+| Score-Suche über Kante *und* Teilung | 18 (entartet) | 19,3 % |
+| Tintenausdehnung: erste bis letzte Tintenspalte = 13 Zellen | 35–43,5 | **67,9 %** |
+| Autokorrelation, stärkster Peak in 25–55 px | 28–37 | 38,9 % |
+
+Referenzwert für die Teilung: **34,4 px** — aus einem Kleinste-Quadrate-Fit
+gegen die tatsächlichen Zeichenpositionen einer sauberen Probe (maximale
+Abweichung 2,93 px bei 33,7 px Zellbreite).
+
+**Ergebnis gegen das vorab gesetzte Gate:** 67,9 % liegt unter der
+Abbruchgrenze von 70 %. Das Gate ist **nicht bestanden**.
+
+**Was damit belegt ist und was nicht.** Belegt ist, dass die Zeichen auf einem
+gleichmäßigen Raster sitzen: der überwachte Fit trifft die Ziffern auf ±0,5 px.
+Belegt ist auch, dass die Extraktion dort, wo die Verankerung trifft, klar
+erkennbare Glyphen liefert — im Kontaktabzug sind die Nullen der passenden
+Proben eindeutig als Nullen lesbar. **Nicht** belegt ist, dass der Ansatz
+scheitert: In drei Anläufen war jeder Rückschlag ein Werkzeugfehler
+(entarteter Score; globale Otsu-Schwelle gegen einen Helligkeitsverlauf; eine
+Zellreduktion, die den Punkt `.` zum Nullvektor macht; eine
+Autokorrelations-Peakwahl, die systematisch an die Bereichsuntergrenze rutscht).
+Ein vierter Werkzeugfehler ist nicht ausgeschlossen.
+
+**Der belastbarste Hinweis auf die Ursache:** Die drei `1.05000`-Proben
+verhalten sich durchgehend gutartig — Autokorrelationsteilung 36/37/36 px gegen
+den Referenzwert 34,4, und 16 Zellen belegen 0,94 der Crop-Breite. Die
+übrigen acht liegen bei 0,73–0,78. Die drei gutartigen stammen aus derselben
+Aufnahmeposition. Der Sättigungs-Quad erfasst also je nach Aufnahmesituation
+einen unterschiedlich grossen physischen Ausschnitt, und daran scheitert die
+Verankerung — nicht am Leseverfahren. Das deckt sich mit
+[OQ-36](open-questions.md) (Quad-Abdeckung 0,54–0,97 auf demselben Gerät).
+
+### Nachtrag 2026-09-22 — vierter Verankerungsversuch: Block-Anker
+
+**Idee:** Der Zahlenblock belegt immer 8 Zellen (Vorzeichen + 6 Ziffern +
+Punkt), der Einheitsblock 4, dazwischen eine leere Zelle. Aus den beiden
+Blockbreiten sollte sich die Teilung als `(Breite₈ − Breite₄) / 4` ergeben,
+wobei sich der Glyphen-Einzug herauskürzt. Gewählt, weil er — anders als eine
+Dezimalpunkt-Landmarke — unabhängig davon ist, wo der Punkt steht
+([OQ-37](open-questions.md)).
+
+**Zwei Befunde:**
+
+1. *Blockerkennung:* „breiteste Lücke = Zelle 9" ist unbrauchbar. Punktraster-
+   Glyphen zerfallen in 16–25 Spaltenläufe statt 13, und eine Lücke innerhalb
+   von `mV/V` kann breiter sein als die echte Trennlücke (bei `17ef5739`:
+   43 px gegen 42 px). Erst ein Selbstkonsistenz-Kriterium — jede Lücke
+   durchprobieren, die nehmen, deren Blockteilung zur Gesamtausdehnung passt —
+   verankert alle 11 Proben.
+2. *Die Einzugs-Annahme hält nicht.* Die Blockteilung liegt bei **jeder**
+   Probe systematisch unter der Gesamtteilung. Ursache quantifiziert an
+   `17ef5739`: Zahlenblock 4,7 px eingezogen (schmales `+`), Einheitsblock
+   −1,2 px (`m`/`V` füllen ihre Zellen aus). Die Differenz von ~5,9 px
+   erklärt die Abweichung exakt (34,92 − 5,9/2 = 32,0; gemessen 32,00). Der
+   Einzug kürzt sich nur heraus, wenn er in beiden Blöcken gleich ist — er
+   ist es nicht.
+
+**Ergebnis: 45,2 % Median** (Spanne 38,6–51,1 %), gegenüber 67,9 % beim
+Tinten-Anker. Der Block-Anker ist damit **nicht** die Lösung.
+
+**Stand nach vier Verfahren:**
+
+| Verfahren | Verankerte Proben | Median |
+| --- | ---: | ---: |
+| Score-Suche über Kante und Teilung | 11/11 | 19,3 % |
+| Tintenausdehnung = 13 Zellen | 11/11 | **67,9 %** |
+| Autokorrelation, stärkster Peak | 11/11 | 38,9 % |
+| Block-Anker mit Selbstkonsistenz | 11/11 | 45,2 % |
+
+Das Gate (70 %) bleibt in allen vier Verfahren unerreicht.
+
+**Methodische Grenze, die hier sichtbar wird:** Der Fehler des Block-Ankers
+ist vollständig verstanden und liesse sich mit einer kalibrierten
+Einzugsdifferenz korrigieren. Diese Konstante müsste aber aus denselben 11
+Proben stammen, gegen die anschliessend geprüft wird — das wäre Anpassung an
+die Prüfmenge, kein Nachweis. **11 Proben reichen nicht, um ein
+Verankerungsverfahren gleichzeitig zu entwickeln und zu validieren**
+([OQ-04](open-questions.md): breiterer Datensatz bleibt offen).
+
+## 2026-09-22 — GSV-2AS: serieller Abgriff verifiziert, Ausgabe ist Binärformat
+
+**Aufbau:** GSV-2AS (Startmeldung `GSV-2AS (GSV21 V1.3.07)`), Klemme A/B/C auf
+einen RS232-Steckverbinder geführt, daran ein USB-RS232-Adapter
+(`067b:2303`, Prolific PL2303) am Pi. Port `/dev/ttyUSB0`, eingestellt auf
+**38400 8N1 raw**, ohne Handshake. **Nur gelesen — es wurde kein einziges Byte
+an das Gerät gesendet.** Rohmitschnitte:
+`var/diagnostics/gsv-serial-2026-09-22/capture_3s.bin` und `capture_10s.bin`
+(`var/` ist gitignored).
+
+| Grösse | Wert |
+| --- | --- |
+| Mitschnitt 1 | 30 Bytes in 3 s = 6 Frames |
+| Mitschnitt 2 | 95 Bytes in 10 s = 19 Frames |
+| Frame-Rate | **≈ 1,9 Frames/s** (19 Frames / 10 s, CLOCK_MONOTONIC über `timeout`) |
+| Framing | 5 Bytes je Messwert, Synchronbyte `0x2C` bei Offset 0 in **19/19** Frames |
+| Status-Byte | `0x18` in 19/19 Frames des 10-s-Laufs (SW1 **und** SW2 gesetzt); im 3-s-Lauf zunächst `0x00`, dann `0x18` |
+| Rohwertbereich (24 bit) | `B8A95A` … `EF346B`, 19 distinkte Werte |
+
+**Deutung:**
+
+* **Der Abgriff funktioniert Ende zu Ende.** Das 5-Byte-Raster sitzt über alle
+  19 Frames exakt — Baudrate, Verdrahtung und Adapter stimmen. Damit ist der
+  in [OQ-38](open-questions.md) empfohlene Weg praktisch bestätigt, nicht mehr
+  nur dokumentiert.
+* **Das Gerät sendet im Binärformat, nicht im ASCII-Modus.** Werksseitig
+  erwartet ([HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)).
+* **Die Werte sind kein Stabilitätsmass.** Der Nutzer hat während des
+  Mitschnitts die extern angeschlossenen Stimulatoren bewegt. Die Streuung
+  über den Rohwertbereich ist also **erwünschte Reaktion**, kein Rauschen —
+  und zugleich der Beleg, dass der Stream live dem Sensoreingang folgt.
+* **Aus dem Binärstrom lässt sich der Anzeigewert nicht berechnen.** Die
+  Anleitung: „Beim binär codierten Datenprotokoll werden die Messwerte
+  normiert auf ±1 übertragen. Die Displayanzeige ergibt sich aus
+  Normierungsfaktor x Messwert." Der Normierungsfaktor dieses Exemplars ist
+  unbekannt. Für Ground-Truth-Labels ist deshalb der **ASCII-Modus** nötig,
+  in dem die Zeichenkette laut Anleitung der Anzeige entspricht. Das ist
+  genau die Kopplung, auf der [OQ-38](open-questions.md) beruht.
+* **Fallstrick für einen Parser:** `0x2C` ist nur ein Synchronzeichen, kein
+  reserviertes Byte — es kann auch als Datenbyte auftreten. Ein Parser muss
+  über die 5-Byte-Kadenz synchronisieren, nicht über das Zeichen allein.
+* **≈ 2 Hz gegen 15 fps Kamera:** auf einen Messwert kommen rund sieben
+  Kamerabilder. Das verschärft die in [OQ-38](open-questions.md) offene Frage
+  nach der zeitlichen Kopplung zwischen Stream und Anzeige — sie ist damit
+  keine Feinheit, sondern bestimmt, wie viele Bilder pro Sollwert überhaupt
+  eindeutig zuzuordnen sind.
+
+**Nicht gemessen:** Anzeigeinhalt zum jeweiligen Frame (niemand hat das
+Display dabei mitfotografiert), zeitliche Kopplung Stream ↔ Anzeige,
+optische Einschwingzeit des LCD, Normierungsfaktor.
+
+## 2026-09-22 — GSV-2AS auf ASCII-Modus umgeschaltet, Telegrammformat gemessen
+
+**Eingriff:** Mode-Register des GSV-2AS von `0x00` auf `0x02` gesetzt (Bit 1 =
+Text-Modus). Ablauf wie in der Anleitung vorgeschrieben: `stop transmission`
+(35) → `clear buffer` (37) → `get mode` (39) → `set mode` (38) → `get mode`
+zur Kontrolle → `start transmission` (36). Freigabe durch den Nutzer
+eingeholt. **Die Änderung ist persistent** („bleibt auch nach dem Abschalten
+erhalten"); Rückweg ist dasselbe mit gelöschtem Bit 1.
+
+**Nebenbefund zum Antwortformat:** `get mode` antwortet mit **zwei** Bytes
+`3B <wert>` — das führende `0x3B` ist das in der Anleitung beschriebene
+Semikolon-Präfix für Registerwerte, nicht der Wert. Die Spalte „Länge der
+Befehlsantwort in Bytes = 1" zählt nur das Datenbyte. Wer das Präfix als Wert
+liest, bekommt `0x3B` und damit eine völlig falsche Modus-Deutung.
+
+**Gemessener Datenstrom nach der Umschaltung** (10 s, `/dev/ttyUSB0`,
+38400 8N1, CLOCK_BOOTTIME; Rohmitschnitt
+`var/diagnostics/gsv-serial-2026-09-22/capture_ascii_10s.bin`):
+
+| Grösse | Wert |
+| --- | --- |
+| Bytes / vollständige Zeilen | 270 / 18 |
+| Zeilenrate | **1,8 Zeilen/s** (Binärmodus vorher: ≈ 1,9 Frames/s — unverändert) |
+| Zeilenende | `CR LF` (`0d 0a`) |
+| Zeilenlänge | 13 Zeichen, **einheitlich über alle 18 Zeilen** |
+| Formattreffer `^[+-]\d\.\d{5} mV/V$` | **18/18** |
+| Wertespanne (Stimulus in Ruhe) | `+0.46775` … `+0.46776` |
+
+Beispielzeile, byteweise:
+
+```
+2b 30 2e 34 36 37 37 36 20 6d 56 2f 56 0d 0a
+ +  0  .  4  6  7  7  6 SP  m  V  /  V CR LF
+```
+
+Das entspricht exakt der Formatangabe der Anleitung („Vorzeichen, 6 Stellen
+mit Dezimalpunkt, Leerzeichen, Einheit, CR, LF") und der Form der 11
+bestätigten Datensatzproben (6 Ziffern, 5 Nachkommastellen,
+[OQ-37](open-questions.md)).
+
+**Abgeleitet: `1.05000` im Datensatz ist der Bereichsanschlag, kein Messwert.**
+Die Anleitung führt `FFFFFF` als 105 % des physikalischen Messbereichs. Rechnet
+man den früher gemessenen Binärwert `B8C62C` bipolar mit Vollausschlag 1,05
+um, ergibt sich `+0.46573` — und der ASCII-Strom zeigt bei praktisch gleicher
+Stimuluslage `+0.46776`. Der Vollausschlag dieses Exemplars ist damit
+**1,05 mV/V**, und `FFFFFF` ergibt rechnerisch **exakt `+1.05000`**. Die drei
+identischen `1.05000`-Proben im Datensatz sind also mit hoher Wahrscheinlichkeit
+Übersteuerung. Bestätigen liesse sich das mit einem einzigen Versuch: Stimulus
+bis an den Anschlag fahren und prüfen, ob die Anzeige auf `1.05000` stehen
+bleibt.
+
+**Weiterhin nicht gemessen:** ob die Anzeige zum selben Zeitpunkt denselben
+String zeigt (Inhalt laut Anleitung ja, Zeitlage ungemessen), die optische
+Einschwingzeit des LCD, und das Verhalten ab 10 mV/V. Negative Werte sind mit
+den vorhandenen Stimulatoren **nicht erzeugbar** (Nutzerauskunft 2026-09-22).
+
+## 2026-09-22 — GSV-2AS: Plateau-Statistik des ASCII-Stroms (Sperrfrage Auto-Labeling)
+
+**Frage.** Automatisches Labeln aus dem seriellen Telegramm ist nur zulässig,
+wenn zum Aufnahmezeitpunkt eines Bildes feststeht, *welche* Zeichenkette auf
+dem Glas steht. Die Regel dafür ist ein Schutzintervall M um jeden
+Wertwechsel (Herleitung:
+[superpowers/plans/2026-09-22-auto-labeling-seriell.md](superpowers/plans/2026-09-22-auto-labeling-seriell.md)).
+Sie taugt nur, wenn der Strom überhaupt lange genug still steht. Zappelt die
+letzte Stelle dauerhaft mit der Telegrammrate, bleibt bei realistischem M
+nichts übrig, und der ganze Weg trägt nicht. Diese Messung klärt das
+**vor** dem Bau des Aufzeichners.
+
+**Aufbau.** GSV-2AS über Klemme A/B/C und USB-RS232-Adapter (PL2303) an
+`/dev/ttyUSB0`, 38400 8N1, kein Handshake. Rein passiv — **an das Gerät wurde
+kein Byte gesendet.** Jede vollständige Zeile mit Ankunftszeit in
+CLOCK_BOOTTIME (dieselbe Domäne wie `SensorTimestamp` der Kamera). Kamera war
+nicht beteiligt, kein `dispread`-Prozess lief. Der Stimulus wurde **nicht**
+absichtlich bedient; in den Sekunden 20–35 ist eine Störung sichtbar (siehe
+unten).
+
+Rohmitschnitt und Auswertskript:
+`var/diagnostics/gsv-serial-2026-09-22/capture_ascii_600s_timestamped.jsonl`
+und `…/plateaus.py`. **`var/` ist gitignored** — die Zahlen hier sind die
+dauerhafte Fassung.
+
+**Zahlen (599,4 s, 1125 Telegramme).**
+
+| Grösse | Wert |
+| --- | --- |
+| Telegrammrate | 1,88 /s |
+| Abstand zwischen Telegrammen | min 502 ms · p50 553 ms · p95 555 ms · max 562 ms |
+| Formatabweichungen von `^[+-]\d\.\d{5} mV/V$` | **0 von 1125** |
+| Verschiedene Zeichenketten | 40 |
+| Wertebereich | `+0.46714` … `+1.05000` |
+| Negative Werte | 0 |
+| Werte ab 10 | 0 |
+
+**Plateaus der exakten Zeichenkette** (Lauf gleicher Werte, Ende beim nächsten
+abweichenden Telegramm): 265 Stück, Dauer p50 0,56 s · p75 2,16 s ·
+p90 6,40 s · max 30,36 s. 127 Plateaus ≥ 1 s, 74 ≥ 2 s, 33 ≥ 5 s. Je Plateau
+p50 **1** Telegramm, p90 12, max 57.
+
+**Ausbeute je Schutzintervall** — nutzbarer Anteil der Wanduhrzeit, daraus
+labelbare Bilder pro Minute bei 15 fps:
+
+| M | nutzbar | Anteil | Bilder/min | Plateaus |
+| --- | --- | --- | --- | --- |
+| 200 ms | 493,4 s | 82,3 % | 741 | 265 |
+| 300 ms | 449,6 s | 75,0 % | 675 | 127 |
+| 500 ms | 398,8 s | 66,5 % | 599 | 127 |
+| 750 ms | 350,1 s | 58,4 % | 526 | 93 |
+| 1000 ms | 311,3 s | 51,9 % | 467 | 74 |
+| 1500 ms | 250,7 s | 41,8 % | 376 | 53 |
+| 2000 ms | 203,9 s | 34,0 % | 306 | 43 |
+
+**Befund.** Die Sperrfrage ist beantwortet: selbst bei einem sehr grosszügigen
+M von 1 s bleibt rund die Hälfte der Wanduhrzeit nutzbar. Der Strom steht im
+Ruhezustand weit länger still, als die Telegrammrate vermuten lässt —
+Plateaus bis 30 s.
+
+**Der Befund, der dabei wichtiger ist.** Diese Zahl ist **Bilder** pro Minute,
+nicht **Information** pro Minute. Im Ruhezustand trägt der Strom praktisch
+**eine** Zeichenkette: `+0.46776 mV/V` in 379 von 660 Telegrammen der ersten
+sechs Minuten, die nächsthäufigen unterscheiden sich in **einem** Zeichen der
+fünften Nachkommastelle. Eine zehnminütige Ruheaufzeichnung liefert also rund
+4700 Bilder **einer** Anzeige. Nach der Split-Regel des Plans
+(`independence_group` je Sitzung) ist das **eine** unabhängige Beobachtung,
+nicht 4700 — genau die Grenze, die schon bei 11 Proben zum Stehen geführt hat.
+Die entscheidende Grösse ist damit nicht die hier gemessene Bildrate, sondern
+**verschiedene Zeichenketten je Minute bewusst gefahrenen Stimulus**, und die
+ist **ungemessen**.
+
+**Nebenbefund.** In den Sekunden 20–35 wandert der Wert bis `+1.05000` und
+über `+0.56679` zurück — offenbar eine mechanische Störung am Aufbau, nicht
+bedient. Die beiden `1.05000`-Telegramme sind der **erste beobachtete**
+Anschlag an den Vollausschlag; bisher war die Übersteuerungsvermutung zu den
+drei gleichlautenden Datensatzproben nur rechnerisch hergeleitet
+([OQ-39](open-questions.md)).
+
+**Nicht gemessen und ausdrücklich offen:** der Versatz zwischen Telegramm und
+Anzeige. Ohne ihn ist M nicht bestimmt, und keine Zeile dieser Tabelle ist
+eine Freigabe zum Labeln.

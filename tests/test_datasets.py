@@ -64,6 +64,18 @@ def _capture(device_id, group_id, token="tok-1", **overrides):
     return capture
 
 
+def _serial_ascii_detail(**overrides):
+    detail = {
+        "source_port": "/dev/ttyUSB0",
+        "guard_margin_ms": 150,
+        "plateau_start_ns": 1_000_000_000,
+        "plateau_end_ns": 1_200_000_000,
+        "telegram_count": 3,
+    }
+    detail.update(overrides)
+    return detail
+
+
 def _annotation(**overrides):
     annotation = {
         "bbox": [10, 10, 40, 20],
@@ -71,6 +83,7 @@ def _annotation(**overrides):
         "label_state": "readable",
         "expected_text": "-01.25",
         "conditions": ["frontal"],
+        "label_origin": "manual",
     }
     annotation.update(overrides)
     return annotation
@@ -254,6 +267,110 @@ def test_save_sample_rejects_unknown_group_for_device(tmp_path):
         store.save_sample(_capture(device_b["id"], group_a["group_id"]), _annotation())
 
 
+# -- label_origin (OQ-38 Punkt 6, Herkunftsmerkmal) -----------------------
+
+
+def test_save_sample_without_label_origin_is_rejected(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    annotation = _annotation()
+    del annotation["label_origin"]
+    with pytest.raises(DatasetError):
+        store.save_sample(_capture(device["id"], group["group_id"]), annotation)
+
+
+def test_save_sample_with_explicit_none_label_origin_is_rejected(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    with pytest.raises(DatasetError):
+        store.save_sample(_capture(device["id"], group["group_id"]), _annotation(label_origin=None))
+
+
+def test_manual_label_origin_with_detail_is_rejected(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    with pytest.raises(DatasetError):
+        store.save_sample(
+            _capture(device["id"], group["group_id"]),
+            _annotation(label_origin="manual", label_origin_detail=_serial_ascii_detail()),
+        )
+
+
+def test_serial_ascii_label_origin_without_detail_is_rejected(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    with pytest.raises(DatasetError):
+        store.save_sample(
+            _capture(device["id"], group["group_id"]),
+            _annotation(label_origin="serial_ascii", label_origin_detail=None),
+        )
+
+
+@pytest.mark.parametrize(
+    "missing_key", ["source_port", "guard_margin_ms", "plateau_start_ns", "plateau_end_ns", "telegram_count"]
+)
+def test_serial_ascii_label_origin_with_incomplete_detail_is_rejected(tmp_path, missing_key):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    detail = _serial_ascii_detail()
+    del detail[missing_key]
+    with pytest.raises(DatasetError):
+        store.save_sample(
+            _capture(device["id"], group["group_id"]),
+            _annotation(label_origin="serial_ascii", label_origin_detail=detail),
+        )
+
+
+def test_valid_serial_ascii_sample_is_saved_and_reads_back_unchanged(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    detail = _serial_ascii_detail()
+    sample = store.save_sample(
+        _capture(device["id"], group["group_id"]),
+        _annotation(label_origin="serial_ascii", label_origin_detail=detail),
+    )
+    assert sample["label_origin"] == "serial_ascii"
+    assert sample["label_origin_detail"] == detail
+
+    sample_json = tmp_path / "datasets" / "samples" / sample["id"] / "sample.json"
+    reloaded = json.loads(sample_json.read_text())
+    assert reloaded["label_origin"] == "serial_ascii"
+    assert reloaded["label_origin_detail"] == detail
+
+
+def test_idempotent_retry_with_same_label_origin_returns_same_sample(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    detail = _serial_ascii_detail()
+    capture = _capture(device["id"], group["group_id"])
+    annotation = _annotation(label_origin="serial_ascii", label_origin_detail=detail)
+    first = store.save_sample(capture, annotation)
+    second = store.save_sample(capture, annotation)
+    assert first["id"] == second["id"]
+    samples_dir = tmp_path / "datasets" / "samples"
+    assert len(list(samples_dir.iterdir())) == 1
+
+
+def test_retry_with_same_token_but_different_label_origin_is_a_conflict(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    capture = _capture(device["id"], group["group_id"])
+    store.save_sample(
+        capture,
+        _annotation(label_origin="serial_ascii", label_origin_detail=_serial_ascii_detail()),
+    )
+    with pytest.raises(RevisionConflict):
+        store.save_sample(capture, _annotation(label_origin="manual", label_origin_detail=None))
+
+
 # -- Idempotenz und Revisionskonflikte ------------------------------------
 
 
@@ -421,6 +538,31 @@ def test_relabel_sample_corrects_a_typo_and_records_history(tmp_path):
     reloaded = json.loads((tmp_path / "datasets" / "samples" / sample["id"] / "sample.json").read_text())
     assert reloaded["expected_text"] == "0.94801"
     assert reloaded["label_history"][0]["previous_expected_text"] == sample["expected_text"]
+
+
+def test_relabel_sample_on_serial_ascii_sample_flips_origin_to_manual(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    detail = _serial_ascii_detail()
+    sample = store.save_sample(
+        _capture(device["id"], group["group_id"]),
+        _annotation(label_origin="serial_ascii", label_origin_detail=detail),
+    )
+    assert sample["label_origin"] == "serial_ascii"
+
+    corrected = store.relabel_sample(
+        sample["id"], revision=sample["metadata_revision"], expected_text="0.94801", reason="Tippfehler, visuell nachgeprueft"
+    )
+
+    assert corrected["label_origin"] == "manual"
+    assert corrected["label_origin_detail"] is None
+    assert corrected["label_history"][-1]["previous_label_origin"] == "serial_ascii"
+    assert corrected["label_history"][-1]["previous_label_origin_detail"] == detail
+
+    reloaded = json.loads((tmp_path / "datasets" / "samples" / sample["id"] / "sample.json").read_text())
+    assert reloaded["label_origin"] == "manual"
+    assert reloaded["label_origin_detail"] is None
 
 
 def test_relabel_sample_requires_matching_revision(tmp_path):

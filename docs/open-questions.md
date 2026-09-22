@@ -97,13 +97,33 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 ## OQ-07 — GSVmulti-Telegrammspezifikation beschaffen
 
 * **Status:** offen · **Zuständig:** Mensch bei ME-Systeme
-* **Befund:** Die Spezifikation liegt lokal nicht vor. `me-systeme.de` blockt
-  automatische Abrufe mit **HTTP 403** — die im Konzept §12 verlinkte
-  Datenformat-Seite und das GSVmulti-Handbuch sind so nicht erreichbar. Ein
-  Mensch muss sie intern beschaffen.
+* **Befund:** Die Spezifikation liegt lokal nicht vor.
+* **Korrektur der Abrufaussage (2026-09-22):** Die bisherige Formulierung
+  „`me-systeme.de` blockt automatische Abrufe mit HTTP 403" ist **zu pauschal**.
+  Gemessen am 2026-09-22:
+  * **PDF-Anleitungen unter `/produkte/.../anleitungen/` liefern HTTP 200.**
+    Heruntergeladen und lokal abgelegt sind jetzt
+    `var/datenblaetter/gsv2-bedienungsanleitung.pdf` (GSV-2, enthält das
+    RS232-Protokoll des **Geräts**) und `var/datenblaetter/ba-gsvmulti.pdf`
+    (GSVmulti-Bedienungsanleitung, Stand 13.08.2011, 10 Seiten). **`var/` ist
+    gitignored** — beide Dateien sind lokal, nicht im Repo; dauerhaft sind nur
+    die oben genannten URLs.
+  * **HTML-Produktseiten liefern weiterhin HTTP 403** (geprüft an
+    `https://www.me-systeme.de/en/gsv-2as-05`).
+* **Warum OQ-07 trotzdem offen bleibt:** Das beschaffte GSVmulti-Handbuch von
+  2011 ist eine **Bedienungsanleitung der Oberfläche** (Kanal hinzufügen,
+  Skalierung, Speichern), **keine Telegrammspezifikation**. Gesucht ist laut
+  Konzept §12 ausserdem die Version 2.6, nicht die von 2011. Die
+  GSV-2-Anleitung dokumentiert das Protokoll des **Messverstärkers** — was
+  GSVmulti als Eingang **akzeptiert**, ist damit nicht belegt, sondern nur
+  plausibel. Es wird nichts geraten ([AGENTS.md](../AGENTS.md), „Kein Erfinden
+  von Protokollen").
 * **Belastbarste Quelle ist nicht die Doku, sondern ein Mitschnitt:** ein
   vorhandenes GSV-2/GSV-3 im ASCII-Modus an GSVmulti hängen und den realen
-  Datenstrom aufzeichnen. Das liefert das tatsächliche Telegramm.
+  Datenstrom aufzeichnen. Das liefert das tatsächliche Telegramm. **Neu
+  verfügbar dafür:** das Laborgerät ist als **GSV-2AS** identifiziert
+  ([OQ-38](open-questions.md)) und beherrscht laut Anleitung genau diesen
+  ASCII-Modus — das für dieses Experiment nötige Gerät ist also vorhanden.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md),
   Implementierung in `src/dispread/sink/protocol/gsv_ascii.py`
 
@@ -1158,3 +1178,373 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Produktionskette.
 * **Antwort landet in:** `docs/HARDWARE_PROFILE.md` (Schnittstellenbefund),
   `docs/anleitung/11-datensatz-sammeln.md` (falls umgesetzt).
+
+## OQ-36 — Sättigungsbasierte LCD-Quad-Findung nur an einem Gerät gemessen
+
+* **Status:** offen · erkannt 2026-09-22 (Spike zu `lcd_quad_in_region`,
+  `src/dispread/workbench/vision.py`)
+* **Befund:** `fit_quad_in_region` (Canny-Kantenzug) liefert auf den beiden
+  LED-/VFD-Laborgeräten kein einziges Quad (0/36 und 0/41, gemessen
+  2026-09-22) — das ist der in `docs/VALIDATION.md` (2026-09-21) als 0/73
+  dokumentierte Befund, hier reproduziert; die 73 sind die lesbaren Proben
+  genau dieser zwei Geräte. Auf dem GSV-Gerät, das zum Zeitpunkt jenes Laufs
+  noch nicht existierte, liefert die Funktion 7 von 11.
+
+  `lcd_quad_in_region` liefert dagegen bei 87 von 88 Proben ein Quad. Die
+  reine Trefferzahl sagt aber nichts über die Brauchbarkeit; gemessen an der
+  Fläche des gelieferten Quads relativ zur markierten Region:
+
+  | Gerät | n | Quad gefunden | Median | innerhalb der Region |
+  |---|---|---|---|---|
+  | `87564e34…` (GSV, Farb-LCD) | 11 | 11 | 0.96 | alle |
+  | `4237c46d…` | 36 | 35 | 1.00 | alle |
+  | `91853b73…` | 41 | 41 | 0.75 (0.53–0.98) | 8 ragen hinaus |
+
+  Nur der GSV-Fall ist brauchbar. Bei `4237c46d…` entartet das Quad zur
+  markierten Box selbst (Median 1.00) und bringt keine Entkippung; bei
+  `91853b73…` ragen 8 von 41 Quads über die markierte Region hinaus. Beide
+  sind LED-/VFD-Laborersatzgeräte, laut Nutzer (2026-09-22) für den
+  Produktionspfad nicht relevant, weil dort ausschliesslich LCD-Anzeigen
+  eingesetzt werden — die Zahlen belegen aber, dass „findet ein Quad" dort
+  nicht „findet die Anzeige" bedeutet.
+* **Blockiert:** Ob die implementierte Schwelle `saturation_threshold=60`
+  auch auf mehreren echten LCD-Geraeten (nicht nur dem einen gemessenen)
+  haelt, ist ungeprueft. Die Methode ist bewusst nur als Vorschlag verdrahtet
+  (`lcd_quad_in_region`), niemals als automatische Uebernahme - trotzdem
+  bleibt unklar, ob sie bei weiteren LCD-Geraeten ebenso zuverlaessig einen
+  ausreichend grossen, bezelfreien Bereich liefert.
+* **Klärung:** Mit mehreren echten LCD-Geraeten (nicht nur `87564e34…`)
+  messen, ob 60 ein brauchbarer Schwellenwert bleibt oder je Geraet/Beleuchtung
+  nachjustiert werden muss.
+* **Antwort landet in:** `docs/VALIDATION.md` (Messreihe je Geraet),
+  `src/dispread/workbench/vision.py` (Docstring/Default von
+  `lcd_quad_in_region`, falls sich der Wert aendert).
+
+## OQ-37 — Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen
+
+* **Status:** offen · erkannt 2026-09-22 (Rückfrage des Nutzers beim Entwurf
+  des Block-Ankers für den Dot-Matrix-Leser)
+* **Befund:** Alle 11 bestätigten GSV-Proben liegen zwischen `0.00042` und
+  `1.05000`, also **unter 1,06**. Alle zeigen durchgängig 6 Ziffern und 5
+  Nachkommastellen (`+X.XXXXX mV/V`). Über das Verhalten bei Werten **ab 10**
+  sagt der Datensatz nichts.
+* **Warum das zählt:** Der geplante Block-Anker der Rasterverankerung
+  (`docs/superpowers/plans/2026-09-22-dotmatrix-backend.md`, Task 2) stützt
+  sich darauf, dass der Zahlenblock **immer genau 8 Zellen** belegt —
+  Vorzeichen + 6 Ziffern + Dezimalpunkt. Das gilt unabhängig davon, *wo* der
+  Punkt steht: `+1.05000` und `+10.5000` enden beide bei Zelle 8, Zelle 9
+  bleibt leer, die Einheit beginnt bei Zelle 10.
+
+  Behält die Anzeige bei ≥ 10 die 6 Ziffern und verschiebt nur den Punkt,
+  hält der Anker. Wechselt sie dagegen auf 7 Ziffern, verschiebt sich die
+  Blockgrenze und der Anker bricht. Der Dezimalpunkt als Landmarke mit fester
+  Zellposition ist aus demselben Grund bereits verworfen worden — er wandert
+  mit der Grösse.
+* **Blockiert:** nichts unmittelbar; der Anker lässt sich mit den vorhandenen
+  Proben messen. Betrifft die Tragfähigkeit im Feld, sobald reale Messwerte
+  den Bereich überschreiten.
+* **Klärung:** Den Sensor einmal über 10 mV/V fahren und ein Foto aufnehmen.
+  Eine einzige Probe genügt, um zwischen „Punkt wandert, 6 Ziffern bleiben"
+  und „Format wechselt" zu unterscheiden. Gleiches gilt sinngemäss für
+  negative Werte grosser Beträge.
+* **Präzisierung 2026-09-22 — über den Messwert geht es nicht, über die
+  Anzeige schon.** Der Vollausschlag des Laborgeräts ist **1,05 mV/V**
+  (gemessen, [VALIDATION.md](VALIDATION.md)), und die höchste
+  Eingangsempfindlichkeit des GSV-2 endet bei 3,5 mV/V (`Set Range`, Befehl
+  50, nur 2 oder 3,5 zulässig; entspricht 3,675 Vollausschlag). **Ein
+  Messwert ab 10 mV/V ist an diesem Gerät also physikalisch unerreichbar** —
+  mit keinem Stimulus.
+
+  Die Frage zielt aber auf das **Anzeigeformat**, nicht auf die Physik. Die
+  Anleitung: „Die Displayanzeige ergibt sich aus Normierungsfaktor x
+  Messwert", gesetzt über `set norm` (16), Einheit getrennt über `set unit`
+  (15). Ein Normierungsfaktor, der die Anzeige bei unverändertem Sensorsignal
+  über 10 bringt, beantwortet OQ-37 damit **ohne jeden Stimulus** — eine
+  Konfigurationsänderung, eine Aufnahme, fertig. Da sie persistent ist
+  (wie der Mode-Wechsel) und die Anzeige des Laborgeräts verändert, gehört
+  sie abgesprochen und danach zurückgestellt.
+* **Nebenbefund 2026-09-22:** Drei der 11 Proben (`1.05000`) sind sehr
+  wahrscheinlich Bereichsübersteuerung statt Messwert, siehe
+  [OQ-39](open-questions.md). Die nutzbare Probenzahl sinkt damit auf 8.
+* **Antwort landet in:** `docs/VALIDATION.md`, dem Profilschema (falls die
+  Ziffernzahl doch variabel ist) und der Verankerungslogik des
+  Dot-Matrix-Lesers.
+
+## OQ-38 — Ground-Truth-Quelle für Auto-Labeling: Displaybus oder Geräteschnittstelle?
+
+* **Status:** **weitgehend geklärt 2026-09-22** — Gerät identifiziert,
+  angeschlossen, auf ASCII umgeschaltet, Telegramm gemessen. **Verbliebene
+  Sachfrage: die zeitliche Zuordnung** zwischen Telegramm und Anzeige
+  (Punkt 4/5 unten). Das Herkunftsmerkmal im `DatasetStore` (Punkt 6) ist
+  seit 2026-09-22 gebaut, mit zwei offenen Lücken (Migration der
+  Bestandsproben, Export gibt die Herkunft noch nicht weiter — Details bei
+  Punkt 6). · **Zuständig:** Labor
+* **Praktische Bestätigung 2026-09-22:** USB-RS232-Adapter (PL2303) an
+  `/dev/ttyUSB0`, 38400 8N1 — der Strom kommt an, 5-Byte-Framing sitzt in
+  19/19 Frames, ≈ 1,9 Frames/s, und die Werte folgen dem bewegten Stimulus.
+  Zahlen in [VALIDATION.md](VALIDATION.md), Aufbau in
+  [lab_journal.md](lab_journal.md). **Es wurde nur gelesen.**
+* **Frage:** Woher kommt der Sollwert, wenn Proben des Sammelmodus nicht mehr
+  von Hand, sondern automatisch gelabelt werden sollen — vom Displaybus des
+  Geräts oder von einer seriellen Geräteschnittstelle?
+
+### Ursprüngliche Einschätzung (2026-09-22 vormittags) — überholt
+
+Aus der Fotoserie allein wurde geschlossen: kein Typenschild, kein erkennbarer
+RS-232-Treiber, Schnittstelle nicht nachweisbar → **Displaybus empfohlen**,
+mit dem Argument, ein intern geführter Messwert könne von der Anzeige
+abweichen (Rundung, Stellenzahl, Formatierung). Dieses Argument ist durch die
+Herstellerdokumentation widerlegt, siehe unten.
+
+### Was den Befund gedreht hat
+
+Der Nutzer hat am 2026-09-22 nachgereicht, dass das Gerät sich beim Hochfahren
+meldet mit:
+
+```
+GSV-2AS (GSV21 V1.3.07)
+```
+
+Damit ist es ein **reguläres ME-Systeme GSV-2AS**, kein undokumentierter Bau.
+Die Bedienungsanleitung „DMS Messverstärker GSV-2 (GSV-2LS, GSV-2AS,
+GSV-2FSD)" ist öffentlich abrufbar und liegt lokal unter
+`var/datenblaetter/gsv2-bedienungsanleitung.pdf` (+ `.txt`), Quelle:
+`https://www.me-systeme.de/produkte/elektronik/gsv-2/anleitungen/gsv2-bedienungsanleitung.pdf`.
+**`var/` ist gitignored** — die Datei überlebt keinen frischen Clone; die URL
+ist die dauerhafte Quelle.
+
+Aus ihr, wörtlich:
+
+* Gerätefamilie: „GSV-2AS, GSV-2ASD: Aluminiumgehäuse mit **RS232**, RS422,
+  CANbus, Display" — deckt sich mit dem Gehäuse auf den Fotos.
+* **5-polige Schraubklemme für RS232 / RS422** (Tabelle S. 7):
+  `A = GNDC` (Masse), `B = Rx`, `C = Tx`, `D = Rx+/CAN_GND`, `E = Tx+/CAN_L`.
+  **Genau diese Klemme ist auf den Fotos vorhanden** — die kleine grüne
+  Zusatzklemme neben der 15-poligen Leiste trägt einen Beschriftungsstreifen
+  mit `A`/`B`/`C`. Der Abgriffpunkt ist also bereits im Gerät.
+* **15-polige Klemme** (Tabelle 1): 1 = GNDB, 2…7 = Brücke (+US, +UF, +UD,
+  -UD, -UF, -US), 8 = UE, 9 = UA (Analogausgang), 10 = GNDA, 11 = SW1,
+  12 = Tara, 13 = SW2, **14 = UB, 15 = GNDB**. Die Nutzerauskunft
+  „14/15 = Stromversorgung" ist damit unabhängig bestätigt.
+* **Der GSV sendet von selbst:** „Der GSV schreibt seine Messwerte permanent
+  auf die serielle Schnittstelle." Kein Polling nötig.
+* Werkseinstellung: **38400 Baud, 8N1**. Umschaltbar (SetBaud); im
+  Konfigurationsmodus über Steckbrücke JP2 fest 38400.
+* Zwei Ausgabeformate, umschaltbar per `Set Mode` (Befehl 38d): Binär (5 Byte,
+  24 bit) oder **ASCII**.
+* **Der entscheidende Satz:** im ASCII-Modus „**entspricht** die ausgegebene
+  Zeichenkette **der Anzeige im Display**". Format ab Werk: „Vorzeichen, 6
+  Stellen mit Dezimalpunkt, Leerzeichen, Einheit, CR, LF", Beispiel
+  `+1.2345 kg<CR><LF>`.
+* Diese Kopplung ist auch im Befehlssatz verankert: `Set Digits` (61) „setzt
+  die Anzahl der im LC-Display dargestellten Ziffern. Wenn die
+  ASCII-Datenausgabe aktiviert ist, wird **auch die Anzahl der übertragenen
+  Ziffern-Bytes** gesetzt."
+* Maximale ASCII-Datenrate bei 38400 Baud: 200 Hz — weit über den 15 fps der
+  Kamera.
+
+Das beobachtete Anzeigeformat passt dazu exakt: `-0.00063 mV/V` ist Vorzeichen
++ 6 Stellen mit Dezimalpunkt + Leerzeichen + Einheit, und die 11 bestätigten
+Proben zeigen durchgängig 6 Ziffern ([OQ-37](open-questions.md)).
+
+### Geänderte Empfehlung
+
+**RS232 im ASCII-Modus ist jetzt der Primärweg**, der Displaybus rückt auf den
+Platz der Rückfallebene und Gegenprobe. Begründung:
+
+* Das tragende Gegenargument ist weg. „Der Bus liefert das Glas, die
+  Schnittstelle nur einen internen Wert" gilt für dieses Gerät **nicht** — der
+  Hersteller koppelt ASCII-Ausgabe und Anzeige ausdrücklich.
+* Der Abgriffpunkt existiert bereits (Klemme B/C/A), dokumentiert und
+  spezifiziert. Kein Mitlesen an einem Flachband, kein Eingriff in das Gerät,
+  kein Eigenbau.
+* Es ist ein Standard-Seriellpfad, für den das Projekt ohnehin Infrastruktur
+  hat.
+
+Der Displaybus behält genau einen eigenen Nutzen, den die Serielle nicht
+bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
+(`°`/`Ω`/`µ`, siehe CLAUDE.md). Skizze bleibt in
+[DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md).
+
+### Was noch offen ist — und warum es nicht übersprungen werden darf
+
+1. **Pegel: RS232, nicht TTL.** Klemme B/C führt RS-232-Pegel. Ein direkter
+   Anschluss an Pi-GPIO ist unzulässig — das ist wörtlich
+   [OQ-09](open-questions.md). Nötig ist ein USB-RS232-Adapter oder ein
+   Transceiver.
+2. ~~**Ist der ASCII-Modus an diesem Exemplar aktiv?**~~ **Geklärt und
+   erledigt 2026-09-22.** Der Modus stand auf `0x00` (Binär); mit Freigabe des
+   Nutzers auf `0x02` (Bit 1 = Text-Modus) gesetzt und zurückgelesen. Der
+   Strom liefert seither `+0.46776 mV/V<CR><LF>`, **18/18 Zeilen** passen auf
+   `^[+-]\d\.\d{5} mV/V$`. Zahlen in [VALIDATION.md](VALIDATION.md).
+   **Die Änderung ist persistent** — Rückweg ist `Set Mode` mit gelöschtem
+   Bit 1. Fallstrick für Nachahmer: `Get Mode` antwortet mit **zwei** Bytes
+   `3B <wert>`; das `0x3B` ist das Semikolon-Präfix, nicht der Wert.
+3. ~~**Sind B/C überhaupt nach draussen verdrahtet?**~~ **Geklärt 2026-09-22
+   (Nutzerauskunft):** B und C sind angeschlossen und führen auf einen
+   RS232-Steckverbinder. Der Abgriff ist damit ohne jeden Eingriff ins Gerät
+   erreichbar. Anschlussbelegung und Adapterwahl stehen in
+   [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md).
+4. **Zeitliche Kopplung Anzeige ↔ Stream ist nicht dokumentiert.** Dass der
+   *Inhalt* übereinstimmt, sagt die Anleitung. Dass er zum *selben Zeitpunkt*
+   übereinstimmt, sagt sie nicht. **Verschärft durch die Messung:** der Strom
+   läuft mit ≈ 2 Hz, die Kamera mit 15 fps — auf einen Messwert kommen rund
+   sieben Bilder. Ohne bekannte Zeitkopplung ist nicht entscheidbar, welchem
+   der sieben Bilder der Wert gehört. **Muss gemessen werden.**
+5. **Die optische Einschwingzeit des LCD bleibt unverändert relevant.** Das
+   Glas hinkt jeder Änderung nach; Bilder im Wechselfenster dürfen nicht
+   automatisch gelabelt werden, sondern bekommen `label_state="uncertain"`.
+   Siehe [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md), Abschnitt „Der kritische
+   Punkt".
+6. ~~**`DatasetStore` hat kein Herkunftsmerkmal für Labels.**~~ **Merkmal
+   selbst gebaut, 2026-09-22.** `save_sample` verlangt jetzt das
+   Pflichtfeld `label_origin` (`"manual"` | `"serial_ascii"`, kein stiller
+   `"manual"`-Default bei Fehlen) und bei `"serial_ascii"` ein typgeprüftes
+   `label_origin_detail` (`source_port`, `guard_margin_ms`,
+   `plateau_start_ns`, `plateau_end_ns`, `telegram_count`). Beide Felder
+   gehen in die Unveränderlichkeitsprüfung ein (anderer `label_origin` auf
+   denselben `capture_token` → `RevisionConflict`). `relabel_sample` setzt
+   beim manuellen Korrigieren die Herkunft auf `"manual"` zurück und
+   protokolliert die vorherige Herkunft in `label_history`
+   (`previous_label_origin`/`previous_label_origin_detail`) — Details und
+   Begründung: [CHANGELOG.md](../CHANGELOG.md) 2026-09-22 („Herkunftsmerkmal
+   `label_origin`"), `src/dispread/workbench/datasets.py`
+   (`_validate_label_origin`, `_relabel_sample_locked`),
+   `tests/test_datasets.py`. **Automatisches Labeln selbst ist damit nicht
+   gebaut** — nur die Voraussetzung dafür. Zwei Lücken bleiben offen:
+   1. **Migration der Bestandsproben fehlt.** `SAMPLE_SCHEMA_VERSION` ist auf
+      2 gestiegen; jede Probe mit `schema_version == 1` (kein
+      `label_origin`, das betrifft alle 88 realen Proben unter
+      `var/workbench/datasets/`) wird beim Laden jetzt hart abgelehnt
+      (`_load_sample_json`, analog zu `_load_devices`). Ein Migrationsschritt,
+      der den Bestandsproben nachträglich `label_origin="manual"` zuweist,
+      ist nötig, **bevor** der Sammelmodus wieder auf sie zugreift — und ist
+      absichtlich nicht Teil dieser Änderung.
+   2. **Export gibt die Herkunft noch nicht weiter.** `_export_locked`/
+      `manifest.json` (`EXPORT_SCHEMA_VERSION`) kennen `label_origin` noch
+      nicht — die Herkunftsspur endet an der Probe und erreicht den
+      Benchmark (noch) nicht. Bräuchte eine eigene Schemaversion und einen
+      eigenen Test.
+* **Abgrenzung:** Betrifft ausschliesslich den Sammelmodus
+  (`DatasetStore`/`dataset.capture`/`dataset.save`). Ein so gewonnener Sollwert
+  erreicht wie jedes andere Label **nie** `ValueReader`, `ReleaseGate` oder die
+  Produktionskette.
+* **Nicht in `hardware.conf`:** Der Abgriff ist ein **zweiter, eingehender**
+  serieller Pfad (USB-RS232, 38400 8N1) und hat nichts mit `SERIAL_PORT`/
+  `SERIAL_BAUD` zu tun — die beschreiben den **ausgehenden** Datenport nach
+  GSVmulti (`/dev/ttyAMA0`, Baudrate offen über
+  [OQ-01](open-questions.md)). Wer `SERIAL_BAUD=38400` aus der
+  GSV-2AS-Anleitung übernimmt, konfiguriert den falschen Pfad. Die Parameter
+  des Abgriffs gehören zum Sammelmodus, nicht nach
+  `/etc/dispread/hardware.conf`.
+* **Verwandt:** [OQ-35](open-questions.md) (dieselbe Frage am BK-5491B),
+  [OQ-39](open-questions.md) (was ein Abgriff **nicht** löst),
+  [OQ-09](open-questions.md) (Pegel), [OQ-07](open-questions.md) (die
+  GSV-2-Anleitung ist zugleich die Quelle, die dort gesucht wurde).
+* **Antwort landet in:** [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
+  (Klemmenbelegung, Schnittstellenparameter),
+  [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md) (Rückfallebene),
+  `docs/anleitung/11-datensatz-sammeln.md` (falls umgesetzt).
+
+## OQ-39 — Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt
+
+* **Status:** offen · erkannt 2026-09-22 (bei der Machbarkeitsprüfung zu
+  OQ-38) · **wesentlich relativiert am selben Tag**, siehe direkt unten
+* **Wichtige Einschränkung dieses Eintrags (2026-09-22, Nutzerauskunft beim
+  ersten seriellen Mitschnitt):** Der Nutzer hat mitgeteilt, dass er **die
+  extern an den Sensor angeschlossenen Stimulatoren bewegt** — im Mitschnitt
+  sichtbar als Wanderung der Rohwerte über `B8A95A`…`EF346B`
+  ([VALIDATION.md](VALIDATION.md)). Der Stimulus ist also **nicht fest**. Die
+  unten festgehaltene Grenze („neue Bilder zeigen nur noch denselben Wert")
+  beruhte auf der früheren Angabe, die verklebte DIP-Platine solle nicht
+  bewegt werden, und **gilt so nicht mehr**. Was offen bleibt: **welcher
+  Anzeigebereich** mit den beweglichen Stimulatoren erreichbar ist —
+  insbesondere negative Werte und Werte ab 10 mV/V
+  ([OQ-37](open-questions.md)). Erst diese Antwort sagt, wie viel
+  Ziffernabdeckung wirklich zu holen ist.
+* **Befund:** Der Messgrössengeber am GSV ist eine **Lochrasterplatine mit
+  DIP-Schalter** (Fotos `gsv_angeschlossene_platine1/2.jpg`,
+  `…_unterseite.jpg`): ein Widerstandsnetz, handschriftlich beschriftet
+  „4: 2 mV/V", „3: 1 mV/V". Sie erzeugt also eine Handvoll **diskreter**
+  Brückenwerte. Der Nutzer hat am 2026-09-22 mitgeteilt, dass die Platine
+  **verklebt** ist, damit sie nicht bewegt wird, und dass sie vorerst nicht
+  benutzt werden soll.
+* **Warum das zählt:** Auto-Labeling (OQ-38) vervielfacht die **Bilderzahl**,
+  nicht die **Ziffernabdeckung**. Steht der Stimulus fest, zeigen alle künftig
+  aufgenommenen Bilder denselben Anzeigewert — die Abdeckung bleibt genau die
+  der bereits vorhandenen Proben, gleichgültig wie viele Bilder dazukommen.
+  Ein Leser lernt keine Ziffer, die er nie an einer Stelle gesehen hat, an der
+  sie vorkommen kann.
+* **Was der Abgriff trotzdem bringt** — nicht kleinreden, es ist real:
+  1. **Exakte Labels für die zappelnden letzten Stellen.** Im Bestand direkt
+     sichtbar: der 0.948er-Cluster streut über `0.94801`…`0.94836`, also in
+     den letzten beiden Stellen. Bei 15 fps ist das von Hand nicht zuverlässig
+     zu labeln, von der Schnittstelle schon.
+  2. **Pose-, Licht-, Fokus- und Glanzvielfalt** in beliebiger Menge, bei
+     korrektem Label.
+  Beides verbessert die Robustheit, keines die Ziffernabdeckung.
+* **Was der Datensatz heute abdeckt** (ausgezählt 2026-09-22 über
+  `var/workbench/datasets/samples/*/sample.json`, Gerät
+  `87564e345aa047338f954c045bc9df02`, alle 11 `label_state="readable"`):
+
+  | Sollwert | Anzahl |
+  | --- | --- |
+  | `0.00042` | 1 |
+  | `0.00045` | 1 |
+  | `0.94801` | 2 |
+  | `0.94802` | 1 |
+  | `0.94804` | 1 |
+  | `0.94809` | 1 |
+  | `0.94836` | 1 |
+  | `1.05000` | 3 |
+
+  Also **drei Cluster**, nicht ein einzelner Wert: Rauschbereich (~0.0004),
+  ein Arbeitspunkt bei ~0.948 und `1.05000`. Führende Ziffern werden damit
+  durchaus geübt (9, 4, 8 in vorderen Stellen). Durchgängig 6 Ziffern und 5
+  Nachkommastellen ([OQ-37](open-questions.md)).
+
+  **Zwei Lücken, die auffallen:**
+  * **Kein einziger negativer Wert** — obwohl die Anzeige zum Zeitpunkt der
+    Fotoserie auf `-0.00063 mV/V` stand. Die Vorzeichenstelle ist im Datensatz
+    also unbelegt.
+  * `1.05000` erscheint **dreimal exakt gleich**. **Rechnerisch belegt am
+    2026-09-22:** der Vollausschlag dieses Exemplars ist 1,05 mV/V (der
+    Binärwert `B8C62C` ergibt bipolar mit diesem Endwert `+0.46573`, und der
+    ASCII-Strom zeigt bei gleicher Stimuluslage `+0.46776`). `FFFFFF` — laut
+    Anleitung 105 % des Messbereichs — entspricht damit **exakt `+1.05000`**.
+    Diese drei Proben sind also sehr wahrscheinlich **Übersteuerung**, nicht
+    Messwerte. Ein Anschlagwert ist kein Abdeckungsgewinn; die nutzbare
+    Probenzahl sinkt damit faktisch von 11 auf 8. Endgültig bestätigen liesse
+    sich das mit einem Versuch: Stimulus an den Anschlag fahren und prüfen, ob
+    die Anzeige auf `1.05000` stehen bleibt.
+
+  Ungemessen bleiben Werte ab 10 und negative Werte. **Negative Werte sind mit
+  den vorhandenen Stimulatoren gar nicht erzeugbar** (Nutzerauskunft
+  2026-09-22) — die Vorzeichenstelle bleibt unbelegt, solange kein anderer
+  Stimulus dazukommt. Eine **Anzeige ab 10** ist mit stärkerem Stimulus
+  ebenfalls nicht zu holen: der Vollausschlag dieses Exemplars ist 1,05 mV/V,
+  und selbst die höchste Empfindlichkeit des GSV-2 (3,5 mV/V, `Set Range` 50)
+  endet bei 3,675. Siehe dazu den Hinweis in [OQ-37](open-questions.md) — über
+  den Normierungsfaktor ist es trotzdem erreichbar.
+
+  Wie die drei Cluster zustande kamen, lässt sich aus den Fotos **nicht**
+  ablesen: ob der DIP-Schalter vor dem Verkleben umgestellt wurde oder eine
+  andere Quelle im Einsatz war, ist unbekannt und wird hier nicht behauptet.
+* **Wege zu mehr Vielfalt, die die verklebte Platine nicht anfassen**
+  (gesammelt, nicht entschieden — die Auswahl ist eine Laborentscheidung):
+  * ein **zweiter** Brückensimulator am selben Sensorkabel, steckbar statt
+    verklebt;
+  * eine echte Kraft-/Wägezelle mit variabler Last;
+  * die Tara-/Nulltaste des Geräts (verschiebt die Anzeige, ändert die
+    Ziffernfolge);
+  * eine andere Verstärkungs-/Bereichseinstellung, falls zugänglich;
+  * ein weiteres GSV-Exemplar mit anderem Anzeigezustand.
+* **Blockiert:** nichts unmittelbar. Betrifft die Aussagekraft jeder
+  Erkennungsgüte-Zahl, die auf dem so vergrösserten Datensatz gemessen wird —
+  eine hohe Trefferquote auf 50 000 Bildern derselben drei Werte ist **keine**
+  Aussage über die Erkennung im Feld.
+* **Verwandt:** [OQ-37](open-questions.md) (Anzeigeformat ab 10 mV/V),
+  [OQ-35](open-questions.md) (Baustein 2: Signaleinspeisung, gleiches Problem
+  am BK-5491B), [OQ-38](open-questions.md).
+* **Antwort landet in:** [VALIDATION.md](VALIDATION.md) (Abdeckungsangabe zu
+  jeder Benchmarkzahl), `docs/anleitung/11-datensatz-sammeln.md`.

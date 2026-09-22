@@ -138,6 +138,7 @@ def test_marking_a_sample_as_representative_makes_the_group_exportable(tmp_path)
                     "label_state": "readable",
                     "expected_text": "-01.25",
                     "conditions": ["frontal"],
+                    "label_origin": "manual",
                 }
                 response = await _command(client, headers, "dataset.save", save_args)
                 if response.status != 200:
@@ -206,6 +207,7 @@ def test_relabel_command_corrects_a_typo_over_http(tmp_path):
                         "label_state": "readable",
                         "expected_text": "-01.25",
                         "conditions": ["frontal"],
+                        "label_origin": "manual",
                     },
                 )
             ).json()
@@ -269,6 +271,7 @@ def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
                     "label_state": "readable",
                     "expected_text": "-01.25",
                     "conditions": ["frontal"],
+                    "label_origin": "manual",
                 },
             )
             assert save_response.status == 200

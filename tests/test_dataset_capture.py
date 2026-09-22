@@ -43,6 +43,7 @@ def _annotation(**overrides):
         "label_state": "readable",
         "expected_text": "-01.25",
         "conditions": ["frontal"],
+        "label_origin": "manual",
     }
     annotation.update(overrides)
     return annotation

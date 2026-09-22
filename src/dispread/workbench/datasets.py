@@ -38,12 +38,38 @@ import numpy as np
 from .profiles import atomic_json
 
 DEVICES_SCHEMA_VERSION = 1
-SAMPLE_SCHEMA_VERSION = 1
+#: Version 2 (2026-09-22, OQ-38 Punkt 6): fuegt das Pflichtfeld
+#: ``label_origin`` (+ optional ``label_origin_detail``) hinzu. Proben mit
+#: ``schema_version == 1`` haben dieses Feld nicht und werden beim Laden
+#: ABSICHTLICH hart abgelehnt (siehe ``_load_sample_json``), analog zu
+#: ``_load_devices``. Eine Migration der Bestandsproben unter ``var/`` ist
+#: noch NICHT gebaut - siehe CHANGELOG.md und OQ-38 Punkt 6.
+SAMPLE_SCHEMA_VERSION = 2
 EXPORT_SCHEMA_VERSION = 1
 
 TECHNOLOGIES = ("LED", "LCD", "VFD", "other")
 SPLITS = ("development", "heldout")
 LABEL_STATES = ("readable", "unreadable", "uncertain", "draft")
+#: Herkunft eines Labels (OQ-38 Punkt 6, DISPLAYBUS_TAP.md "Anbindung an den
+#: Sammelmodus"): "manual" - ein Mensch hat den Sollwert eingetippt;
+#: "serial_ascii" - aus dem seriellen GSV-2AS-ASCII-Strom abgeleitet (noch
+#: nicht implementiert, nur das Herkunftsmerkmal selbst ist Gegenstand
+#: dieser Aenderung). Ohne dieses Feld waeren von Hand und automatisch
+#: gelabelte Proben im Bestand nicht mehr unterscheidbar.
+LABEL_ORIGINS = ("manual", "serial_ascii")
+#: Pflichtschluessel in ``label_origin_detail`` bei ``label_origin ==
+#: "serial_ascii"`` und ihr erwarteter Python-Typ. Zusaetzliche, unbekannte
+#: Schluessel sind erlaubt (nicht antizipierbar, welche Diagnosefelder ein
+#: spaeterer Ableiter braucht) - nur diese hier sind Pflicht und typgeprueft.
+_SERIAL_ASCII_DETAIL_REQUIRED: dict[str, type | tuple[type, ...]] = {
+    "source_port": str,
+    "guard_margin_ms": (int, float),
+    "plateau_start_ns": int,
+    "plateau_end_ns": int,
+    "telegram_count": int,
+}
+_LABEL_ORIGIN_DETAIL_MAX_KEYS = 20
+_LABEL_ORIGIN_DETAIL_STRING_MAX = 200
 #: Aufgabenkatalog aus Konzept.md, Ablauf-Schritt 4 - dieselben Schluessel wie
 #: in static/dataset.js. Dient hier nur der Luecken-Uebersicht (Aufgabe 5),
 #: keiner automatischen Vollstaendigkeitspruefung.
@@ -137,6 +163,95 @@ def _short_text(value: Any, field: str, max_len: int, *, required: bool) -> str 
     return text
 
 
+def _validate_label_origin_detail(detail: Any) -> dict:
+    """``label_origin_detail`` fuer ``label_origin == "serial_ascii"`` pruefen.
+
+    Verlangt die fuenf Pflichtschluessel aus ``_SERIAL_ASCII_DETAIL_REQUIRED``
+    mit passendem Typ (Konzept: kein stilles "wird schon passen"). Weitere
+    Schluessel sind erlaubt, aber begrenzt (Gesamtgroesse, Stringlaenge) und
+    nur als JSON-faehige Skalare/Zahlen - kein Erfinden zusaetzlicher
+    Nachrichtenstruktur.
+    """
+    if not isinstance(detail, dict):
+        raise DatasetError("label_origin_detail muss ein Objekt sein")
+    if len(detail) > _LABEL_ORIGIN_DETAIL_MAX_KEYS:
+        raise DatasetError(f"label_origin_detail: hoechstens {_LABEL_ORIGIN_DETAIL_MAX_KEYS} Schluessel")
+
+    for key, expected_type in _SERIAL_ASCII_DETAIL_REQUIRED.items():
+        if key not in detail:
+            raise DatasetError(f"label_origin_detail: Pflichtschluessel {key!r} fehlt")
+        value = detail[key]
+        if isinstance(value, bool) or not isinstance(value, expected_type):
+            raise DatasetError(f"label_origin_detail[{key!r}] hat den falschen Typ")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise DatasetError(f"label_origin_detail[{key!r}] muss endlich sein")
+
+    out: dict[str, Any] = {}
+    for key, value in detail.items():
+        if not isinstance(key, str) or not key or len(key) > _NAME_MAX:
+            raise DatasetError("label_origin_detail: Schluessel muessen kurze Zeichenketten sein")
+        if isinstance(value, bool):
+            out[key] = value
+        elif isinstance(value, str):
+            if len(value) > _LABEL_ORIGIN_DETAIL_STRING_MAX:
+                raise DatasetError(f"label_origin_detail[{key!r}]: Text zu lang")
+            out[key] = value
+        elif isinstance(value, int):
+            out[key] = value
+        elif isinstance(value, float):
+            if not math.isfinite(value):
+                raise DatasetError(f"label_origin_detail[{key!r}] muss endlich sein")
+            out[key] = value
+        elif value is None:
+            out[key] = None
+        else:
+            raise DatasetError(f"label_origin_detail[{key!r}]: nicht JSON-faehiger Skalarwert")
+    return out
+
+
+def _validate_label_origin(annotation: dict) -> tuple[str, dict | None]:
+    """``label_origin``/``label_origin_detail`` einer Annotation pruefen.
+
+    ``label_origin`` ist Pflicht - ein fehlender Wert ist ein Fehler, kein
+    stiller "manual"-Default (OQ-38 Punkt 6: ein stillschweigendes "war wohl
+    manuell" ist genau die Art Annahme, die dieses Projekt nicht haben will).
+    Fehlend und explizit ``None`` werden gleich behandelt, beides lehnt ab.
+    """
+    label_origin = annotation.get("label_origin")
+    if label_origin not in LABEL_ORIGINS:
+        raise DatasetError(f"label_origin ist Pflicht und muss eine von {LABEL_ORIGINS} sein")
+    detail = annotation.get("label_origin_detail")
+    if label_origin == "manual":
+        if detail is not None:
+            raise DatasetError("label_origin_detail muss bei label_origin=manual None sein")
+        return label_origin, None
+    # label_origin == "serial_ascii"
+    return label_origin, _validate_label_origin_detail(detail)
+
+
+def _load_sample_json(path: Path) -> dict:
+    """``sample.json`` laden und die Schemaversion pruefen.
+
+    Analog zu ``DatasetStore._load_devices``: eine unerwartete
+    ``schema_version`` wird hart abgelehnt, nicht still als aktuelles Schema
+    behandelt. Seit Version 2 (OQ-38 Punkt 6) ist ``label_origin`` Pflicht;
+    eine Probe mit ``schema_version == 1`` hat dieses Feld nicht und
+    verlangt eine Migration, bevor der Sammelmodus wieder darauf zugreift
+    (siehe CHANGELOG.md und ``docs/open-questions.md`` OQ-38 Punkt 6 - die
+    Migration selbst ist bewusst NICHT Teil dieser Aenderung).
+    """
+    with open(path, encoding="utf-8") as handle:
+        sample = json.load(handle)
+    if sample.get("schema_version") != SAMPLE_SCHEMA_VERSION:
+        raise DatasetError(
+            f"Probe {path}: unbekannte/veraltete schema_version "
+            f"{sample.get('schema_version')!r} (erwartet {SAMPLE_SCHEMA_VERSION}) - "
+            "Migration der Bestandsproben noetig, bevor der Sammelmodus sie liest "
+            "(siehe OQ-38 Punkt 6)"
+        )
+    return sample
+
+
 def _validate_device_fields(data: dict, *, partial: bool) -> dict:
     out = {}
     if "name" in data or not partial:
@@ -228,8 +343,7 @@ class DatasetStore:
             if not sample_json.exists():
                 continue
             try:
-                with open(sample_json, encoding="utf-8") as handle:
-                    sample = json.load(handle)
+                sample = _load_sample_json(sample_json)
             except (OSError, json.JSONDecodeError):
                 continue
             if sample.get("device_id") == device_id:
@@ -342,8 +456,7 @@ class DatasetStore:
             if not sample_json.exists():
                 continue
             try:
-                with open(sample_json, encoding="utf-8") as handle:
-                    sample = json.load(handle)
+                sample = _load_sample_json(sample_json)
             except (OSError, json.JSONDecodeError):
                 continue
             if sample.get("capture_token") == capture_token:
@@ -388,6 +501,7 @@ class DatasetStore:
         conditions = list(annotation.get("conditions") or [])
         if not all(isinstance(c, str) and c and len(c) <= 64 for c in conditions):
             raise DatasetError("conditions muessen kurze Textschluessel sein")
+        label_origin, label_origin_detail = _validate_label_origin(annotation)
 
         existing = self._find_existing_sample_for_token(capture_token)
         pending = {
@@ -408,6 +522,8 @@ class DatasetStore:
                 and existing["label_state"] == label_state
                 and existing["expected_text"] == expected_text
                 and existing["conditions"] == conditions
+                and existing.get("label_origin") == label_origin
+                and existing.get("label_origin_detail") == label_origin_detail
             )
             if not unchanged:
                 raise RevisionConflict(
@@ -460,6 +576,8 @@ class DatasetStore:
                 "label_state": label_state,
                 "expected_text": expected_text,
                 "conditions": conditions,
+                "label_origin": label_origin,
+                "label_origin_detail": label_origin_detail,
                 "independence_confirmation": bool(annotation.get("independence_confirmation", True)),
                 "synthetic": bool(capture.get("synthetic", False)),
                 "stored_at_utc": capture.get("stored_at_utc"),
@@ -520,8 +638,7 @@ class DatasetStore:
             if not sample_json.exists():
                 continue
             try:
-                with open(sample_json, encoding="utf-8") as handle:
-                    sample = json.load(handle)
+                sample = _load_sample_json(sample_json)
             except (OSError, json.JSONDecodeError):
                 continue
             if sample.get("sha256") == sha256:
@@ -535,8 +652,7 @@ class DatasetStore:
             if not sample_json.exists():
                 continue
             try:
-                with open(sample_json, encoding="utf-8") as handle:
-                    out.append(json.load(handle))
+                out.append(_load_sample_json(sample_json))
             except (OSError, json.JSONDecodeError):
                 continue
         return out
@@ -551,8 +667,7 @@ class DatasetStore:
         sample_json = final_dir / "sample.json"
         if not sample_json.exists():
             raise DatasetError(f"Unbekannte Probe: {sample_id}")
-        with open(sample_json, encoding="utf-8") as handle:
-            sample = json.load(handle)
+        sample = _load_sample_json(sample_json)
         if sample.get("metadata_revision", 0) != revision:
             raise RevisionConflict(
                 f"Probe {sample_id}: erwartete Revision {revision}, aktuell {sample.get('metadata_revision', 0)}"
@@ -582,13 +697,32 @@ class DatasetStore:
         ``label_history`` die einzige Spur des vorherigen Werts. Nur bei
         ``label_state="readable"`` sinnvoll - bei unlesbaren Proben ist
         ``expected_text`` bereits ``None`` und eine andere Operation gefragt.
+
+        Entscheidung zu ``label_origin`` (OQ-38 Punkt 6): ein Umlabeln von
+        Hand setzt ``label_origin`` immer auf ``"manual"`` und loescht ein
+        vorhandenes ``label_origin_detail`` (die Invariante "manual ⇒ detail
+        ist None" gilt danach wieder). Die Alternative - automatisch
+        gelabelte Proben vom Umlabeln auszuschliessen - wurde verworfen: ein
+        Mensch, der eine Probe korrigiert, IST in diesem Moment die neue,
+        massgebliche Quelle, und die vorherige Herkunft (samt ihrem Detail)
+        bleibt vollstaendig im ``label_history``-Eintrag erhalten
+        (``previous_label_origin``/``previous_label_origin_detail``) statt
+        verloren zu gehen. ``previous_label_origin`` wird IMMER geschrieben,
+        auch wenn die Probe schon ``"manual"`` war - ein einheitliches Schema
+        ist verlaesslicher als ein bedingter Schluessel.
+
+        Nebenwirkung, bewusst in Kauf genommen: der bestehende Leerlauf-Schutz
+        weiter unten (unveraendertes ``expected_text`` ist ein Fehler) gilt
+        auch hier - eine ``serial_ascii``-Probe, deren Wert bereits korrekt
+        ist, kann NICHT allein zum Zweck der Herkunftsaenderung "umgelabelt"
+        werden. Das ist gewollt: keine Herkunfts-Reinwaschung ohne echte
+        Wertkorrektur.
         """
         final_dir = self._sample_dir(sample_id)
         sample_json = final_dir / "sample.json"
         if not sample_json.exists():
             raise DatasetError(f"Unbekannte Probe: {sample_id}")
-        with open(sample_json, encoding="utf-8") as handle:
-            sample = json.load(handle)
+        sample = _load_sample_json(sample_json)
         if sample.get("metadata_revision", 0) != revision:
             raise RevisionConflict(
                 f"Probe {sample_id}: erwartete Revision {revision}, aktuell {sample.get('metadata_revision', 0)}"
@@ -609,10 +743,14 @@ class DatasetStore:
                 "previous_expected_text": sample.get("expected_text"),
                 "changed_at_utc": datetime.now(UTC).isoformat(),
                 "reason": reason_text,
+                "previous_label_origin": sample.get("label_origin"),
+                "previous_label_origin_detail": sample.get("label_origin_detail"),
             }
         )
         sample["label_history"] = history
         sample["expected_text"] = new_text
+        sample["label_origin"] = "manual"
+        sample["label_origin_detail"] = None
         sample["metadata_revision"] = sample.get("metadata_revision", 0) + 1
         self._rewrite_sample(sample)
         return copy.deepcopy(sample)

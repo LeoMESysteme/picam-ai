@@ -76,6 +76,7 @@ def _annotation_from_real_entry(entry):
         "label_state": "readable",
         "expected_text": entry["expected_text"],
         "conditions": entry["conditions"],
+        "label_origin": "manual",
     }
 
 

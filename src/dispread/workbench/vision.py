@@ -153,6 +153,77 @@ def fit_quad_in_region(image, hint_box, config=DetectionConfig(), layout: Displa
     return tuple((float((left + x) / width), float((top + y) / height)) for x, y in ordered)
 
 
+def lcd_quad_in_region(image, hint_box, *, saturation_threshold=60, min_area_fraction=0.25):
+    """Quad ueber HSV-Saettigung finden - Sonderpfad fuer hinterleuchtete Farb-LCDs.
+
+    Das ist **kein Ersatz** fuer `fit_quad_in_region` (Canny-Kantenzug), sondern
+    ein zusaetzlicher Pfad fuer genau eine Geraeteklasse: hinterleuchtete,
+    farbige LCDs (z.B. die gruene Zeichen-LCD des GSV-Sensors). Dort trennt
+    eine Saettigungsschwelle das leuchtende Glas sauber vom grauen Metallrahmen
+    und den Schrauben drumherum - eine Stelle, an der Kantenerkennung
+    scheitert. Gemessen 2026-09-22 ueber alle 88 Datensatzproben:
+    `fit_quad_in_region` liefert auf den beiden LED-/VFD-Laborgeraeten
+    **kein einziges** Quad (0/36 und 0/41; das ist der in docs/VALIDATION.md
+    2026-09-21 als 0/73 dokumentierte Befund, hier reproduziert - die 73 sind
+    die lesbaren Proben genau dieser zwei Geraete) und auf dem GSV-Geraet nur
+    7 von 11.
+
+    Ersetzt die Bedienerbestaetigung nicht - `manual_roi` bleibt Primaerpfad,
+    ein Fehlschlag hier ist inert (liefert `None`), nie eine automatische
+    Uebernahme.
+
+    Die Schwellen `saturation_threshold` und `min_area_fraction` sind
+    **unvalidierte Vorabdefaults** - siehe OQ-36. Gemessen 2026-09-22 ueber
+    alle 88 Datensatzproben, Flaeche des gelieferten Quads relativ zur
+    markierten Region:
+
+    * `87564e34…` (GSV, hinterleuchtete Farb-LCD, n=11): 11/11 Quads, Median
+      0.96, alle innerhalb der markierten Region. Das ist der Zielfall.
+    * `4237c46d…` (n=36): 35/36, aber Median 1.00 - das Quad entartet dort zur
+      markierten Box selbst, bringt also keinerlei Entkippung.
+    * `91853b73…` (n=41): 41/41, Median 0.75 bei Spanne 0.53-0.98, und
+      **8 der 41 Quads ragen ueber die markierte Region hinaus** (zulaessige
+      Geometrie bei `minAreaRect`, aber unbrauchbar als Vorschlag).
+
+    Die Methode generalisiert also ausdruecklich nicht auf nicht-hinterleuchtete
+    Anzeigen: „findet ein Quad" heisst dort nicht „findet die Anzeige".
+
+    Kein Padding des Hinweisbereichs (anders als `fit_quad_in_region`): das
+    aufgeweitete Suchfenster dort dient dazu, ein knapp geschnittenes Rechteck
+    trotzdem zu erfassen; bei einer Saettigungsmaske wuerde zusaetzliches
+    Padding nur mehr Bezel/Nachbarobjekte in den Ausschnitt holen, ohne dass
+    das dem eigentlichen Ziel (bezelfreier, entzerrter Crop) hilft.
+
+    `hint_box` und Rueckgabeformat sind identisch zu `fit_quad_in_region`:
+    normierte achsparallele Box `[x,y,w,h]`, Rueckgabe ein geordnetes,
+    normiertes Vierpunktquad (oben-links, oben-rechts, unten-rechts,
+    unten-links) in vollen Bildkoordinaten, oder `None`.
+    """
+    height, width = image.shape[:2]
+    hint_x, hint_y, hint_w, hint_h = hint_box
+    left, top = int(round(hint_x * width)), int(round(hint_y * height))
+    right, bottom = int(round((hint_x + hint_w) * width)), int(round((hint_y + hint_h) * height))
+    if right - left < 4 or bottom - top < 4:
+        return None
+
+    region = image[top:bottom, left:right]
+    region_area = region.shape[0] * region.shape[1]
+    hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+    mask = (hsv[:, :, 1] > saturation_threshold).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    largest = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(largest) / region_area < min_area_fraction:
+        return None
+
+    rect = cv2.minAreaRect(largest)
+    ordered = _order_quad(cv2.boxPoints(rect))
+    return tuple((float((left + x) / width), float((top + y) / height)) for x, y in ordered)
+
+
 def _threshold_variants(gray):
     """Otsu-Schwelle in beide Polaritaeten; welche gemeint ist, entscheidet
     die spaetere Blobstruktur - kein neuer Bedienregler in dieser Stufe."""

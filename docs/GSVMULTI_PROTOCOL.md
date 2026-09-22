@@ -3,10 +3,33 @@
 ## Stand: das Format ist unbekannt
 
 Die Telegrammspezifikation der eingesetzten GSVmulti-Version liegt **nicht**
-vor. `me-systeme.de` blockt automatische Abrufe mit HTTP 403 — die in Konzept
-§12 verlinkte Datenformat-Seite und das GSVmulti-Handbuch v2.6 sind so nicht
-erreichbar. Ein Mensch muss sie intern beschaffen
-([OQ-07](open-questions.md)).
+vor. Ein Mensch muss sie intern beschaffen ([OQ-07](open-questions.md)).
+
+**Präzisierung 2026-09-22.** Die frühere Aussage „`me-systeme.de` blockt
+automatische Abrufe mit HTTP 403" galt pauschal und ist so falsch: **PDFs unter
+`/produkte/.../anleitungen/` sind abrufbar (HTTP 200)**, nur die
+HTML-Produktseiten antworten mit 403. Beschafft und lokal abgelegt sind
+seither:
+
+* `var/datenblaetter/gsv2-bedienungsanleitung.pdf` — Bedienungsanleitung
+  GSV-2 (GSV-2LS/-2AS/-2FSD) mit dem vollständigen **RS232-Protokoll des
+  Messverstärkers**: 38400 Baud 8N1 ab Werk, permanentes Senden, Binär- und
+  ASCII-Format, Befehlssatz. Ausgewertet in
+  [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md) und
+  [OQ-38](open-questions.md).
+* `var/datenblaetter/ba-gsvmulti.pdf` — GSVmulti-Bedienungsanleitung, Stand
+  13.08.2011, 10 Seiten. **Enthält keine Telegrammspezifikation**, sondern die
+  Bedienung der Oberfläche. Gesucht ist ausserdem v2.6.
+
+**`var/` ist gitignored** — beide PDFs liegen nur lokal und überleben keinen
+frischen Clone. Dauerhaft sind allein die Quell-URLs; wer sie erneut braucht,
+lädt sie unter denselben Pfaden wieder herunter.
+
+Damit ist geklärt, *warum* die Spezifikation fehlt: sie steht nicht in den
+öffentlichen Anleitungen, nicht dass sie unerreichbar wäre. **An der
+Kernaussage dieses Dokuments ändert das nichts** — das Format, das GSVmulti
+akzeptiert, ist weiterhin unbekannt. Dass es mit dem ASCII-Format des GSV-2
+zusammenfällt, ist plausibel und **nicht belegt**.
 
 **Es wird nichts geraten.** `sink/protocol/gsv_ascii.py` wirft absichtlich
 `NotImplementedError`. Ein geratenes Format wäre schädlicher als keines: es

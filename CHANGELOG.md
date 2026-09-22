@@ -3,6 +3,199 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-22 (Migration der Bestandsproben auf schema_version 2)
+
+**Problem:** Mit dem Pflichtfeld `label_origin` (schema_version 2) lehnt
+`DatasetStore` jede Probe mit `schema_version == 1` hart ab. Das ist richtig
+so - eine Herkunft zu unterstellen waere genau das Raten, das dieses Projekt
+nicht haben will. Praktisch bedeutet es aber, dass die 88 Bestandsproben ab
+sofort unlesbar sind und der Sammelmodus steht, bis sie gehoben werden.
+
+**Änderung:** Neues Wartungsskript
+`scripts/migrate-samples-v1-to-v2.py`. Es traegt `label_origin="manual"`,
+`label_origin_detail=None` und `schema_version=2` ein. Das ist keine
+Annahme, sondern Tatsache: alle Bestandsproben entstanden, bevor es
+ueberhaupt einen automatischen Labelpfad gab.
+
+Schutzvorkehrungen, weil das Skript echte Messdaten unter `var/` aendert:
+Trockenlauf ist die Vorgabe, geschrieben wird nur mit `--apply`; vorher wird
+jede betroffene Datei in ein Zeitstempelverzeichnis gesichert und die
+Vollstaendigkeit der Sicherung geprueft, bevor die erste Datei angefasst
+wird; geschrieben wird atomar; bereits gehobene Proben werden uebersprungen,
+der Lauf ist also wiederholbar; und bei auch nur EINER unklaren Datei bricht
+es ab, ohne irgendetwas zu schreiben.
+
+**Konsequenz:** Der Weg zurueck in den Sammelmodus ist ein Befehl, und er ist
+umkehrbar (Sicherung zurueckkopieren). **Nicht ausgefuehrt** - das Schreiben
+in `var/` gehoert dem Nutzer. Trockenlauf gegen den Bestand geprueft:
+88 Proben, davon 88 zu migrieren, 0 unklar.
+
+## 0.1.0.dev0 — 2026-09-22 (Synchronaufzeichner: Kamera + serieller Strom, Task E)
+
+**Problem:** Um den Ende-zu-Ende-Versatz zwischen dem seriellen Telegramm des
+GSV-2AS und dem, was die Kamera auf dem LC-Display sieht, zu messen (Task B
+aus `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`), braucht es
+eine gemeinsame, zeitgestempelte Aufzeichnung beider Ströme in derselben
+Zeitdomäne (CLOCK_BOOTTIME). Bisher gab es keinen Weg, Kamera und seriellen
+Mitschnitt gemeinsam wegzuschreiben, ohne sich gegenseitig zu blockieren.
+
+**Änderung:** `scripts/sync-record.py` (Diagnosecode, kein Produktionspfad)
+zeichnet für eine angegebene Dauer parallel auf: den seriellen Strom in einem
+eigenen Thread, rein lesend (kein Byte, kein Handshakesignal geht an den
+Port), jede Zeile mit `t_boot` (`CLOCK_BOOTTIME`); und Bilder je Sequenz mit
+`SensorTimestamp` unverändert als `value_ns`, `timebase`,
+`timestamp_semantics: "unknown"`, `uncertainty_ns: None` — dieselben
+Feldnamen und dieselbe Behandlung wie `Controller._capture`
+(`src/dispread/workbench/controller.py`), nicht neu erfunden. Zwei
+Bildquellen: `--source synthetic` (Vorgabe, über
+`dispread.frames.open_source`, vollständig ohne Hardware testbar) und
+`--source camera` (echte Kamera, `picamera2` lazy importiert, absichtlich
+NICHT von hier aus ausgeführt — Kamera kann nur ein Prozess halten, siehe
+OQ-22). Ctrl-C hinterlässt vollständige, gültige Dateien (zeilenweise
+geflusht, `session.json` auch im Abbruchfall mit `"aborted": true`); kommt
+über die ganze Dauer kein einziges Telegramm an, wird das am Ende laut auf
+stderr gemeldet statt stillschweigend eine leere `serial.jsonl` zu
+hinterlassen.
+
+**Konsequenz:** Aufzeichnen und Labeln sind bewusst getrennt (Task E vs. Task
+F) — dieselbe Aufzeichnung lässt sich später mit einem anderen
+Schutzintervall M erneut auswerten, ohne neu zu messen. `tests/test_sync_record.py`
+prüft den `synthetic`-Pfad als Subprozess (Muster aus
+`test_dataset_benchmark.py`) mit einem `os.openpty()`-Pseudo-Terminal statt
+eines echten Ports (Muster aus `test_gate_und_referenz.py`): vollständiger
+Lauf, leerer Telegrammstrom, Ctrl-C-Abbruch, nicht öffenbarer Port. Der
+`camera`-Zweig ist ungetestet und wartet auf eine Ausführung durch den
+Supervisor auf dem Pi; welche `picamera2`-Metadatenfelder real JSON-fähig
+sind, bleibt bis dahin unverifiziert (Annahme aus `Controller._capture`
+übernommen).
+
+## 0.1.0.dev0 — 2026-09-22 (Herkunftsmerkmal `label_origin` im Sammelmodus, OQ-38 Punkt 6)
+
+**Problem:** Der Sammelmodus soll perspektivisch auch automatisch aus dem
+seriellen GSV-2AS-ASCII-Strom gelabelt werden (OQ-38, `DISPLAYBUS_TAP.md`
+„Anbindung an den Sammelmodus"). `DatasetStore` kannte bislang keine Herkunft
+fuer ein Label - von Hand und automatisch gelabelte Proben waeren nicht mehr
+unterscheidbar gewesen, und ein systematischer Fehler des seriellen Abgriffs
+haette sich unsichtbar in jede Benchmarkzahl eingeschlichen, ohne dass sich
+der Datensatz je wieder entmischen liesse.
+
+**Änderung:** `src/dispread/workbench/datasets.py` bekommt zwei neue
+Probenfelder: `label_origin` (Pflicht, `"manual"` oder `"serial_ascii"` -
+ein fehlender Wert ist jetzt ein `DatasetError`, kein stiller
+`"manual"`-Default) und `label_origin_detail` (bei `"manual"` zwingend
+`None`, bei `"serial_ascii"` ein Pflicht-Dict mit `source_port`,
+`guard_margin_ms`, `plateau_start_ns`, `plateau_end_ns`, `telegram_count`,
+typgeprueft, groessenbegrenzt, unbekannte Zusatzschluessel erlaubt aber nur
+als JSON-faehige Skalare). Beide Felder gehen in die
+Unveraenderlichkeitspruefung von `_save_sample_locked` ein - ein Retry mit
+demselben `capture_token`, aber anderer Herkunft, ist jetzt ein
+`RevisionConflict`, kein stilles Ueberschreiben. `relabel_sample` setzt beim
+manuellen Korrigieren `label_origin` immer auf `"manual"` und
+`label_origin_detail` auf `None`; die vorherige Herkunft samt Detail landet
+unter `previous_label_origin`/`previous_label_origin_detail` im
+`label_history`-Eintrag (Entscheidung, keine verworfene Alternative: ein
+Mensch, der korrigiert, ist die neue Quelle, die Spur bleibt erhalten - siehe
+Docstring von `_relabel_sample_locked`). `SAMPLE_SCHEMA_VERSION` ist von 1 auf
+2 gestiegen; eine Probe mit `schema_version == 1` (kein `label_origin`) wird
+beim Laden jetzt hart abgelehnt (`_load_sample_json`), analog zum bestehenden
+Muster in `_load_devices` - kein stilles "wird schon manuell gewesen sein".
+`Controller._dataset_save` reicht `label_origin`/`label_origin_detail` aus
+den Op-Argumenten durch, im selben Stil wie die Nachbarfelder. Kein
+automatisches Labeln implementiert - nur das Herkunftsmerkmal selbst.
+
+**Konsequenz:** Die 88 echten Proben unter `var/workbench/datasets/` (nicht
+Teil dieser Änderung, `var/` bleibt unangetastet) liegen weiterhin mit
+`schema_version=1` vor. **Bevor der Sammelmodus wieder auf sie zugreift -
+speichern, auswaehlen, umlabeln, zusammenfassen, exportieren -, braucht es
+einen Migrationsschritt, der ihnen nachtraeglich `label_origin="manual"`
+zuweist.** Diese Migration ist bewusst nicht Teil dieser Änderung. Bis dahin
+wirft jede dieser Operationen einen `DatasetError` mit Verweis auf OQ-38
+Punkt 6; reine Kamera-/Statusabfragen (`Controller.snapshot`) sind davon
+unberuehrt, da sie `DatasetStore` nicht beruehren. Ebenfalls offen und in
+OQ-38 Punkt 6 nachgetragen: `_export_locked`/`manifest.json` geben
+`label_origin` noch nicht in den Export weiter - eine spaetere Änderung an
+`EXPORT_SCHEMA_VERSION` mit eigenem Test ist noetig, sonst endet die
+Herkunftsspur an der Probe und erreicht den Benchmark nicht.
+
+## 0.1.0.dev0 — 2026-09-22 (Diagnose-Skript: Dotmatrix-Rasterfit-Probe)
+
+**Problem:** Der vorgeschlagene dotmatrix-Leser fuer die Displaytech-161A
+(GSV-Sensor) haengt komplett daran, ob sich das feste 16-Zellen-Raster pro
+Bild zuverlaessig verankern laesst. Ein Spike zeigte gute Passung auf einer
+einzelnen sauberen Probe, aber auch, dass das entzerrte Quad zwischen Bildern
+stark schwankt - ohne eine Messung ueber alle 11 echten GSV-Proben ist nicht
+feststellbar, ob der Rasterfit traegt.
+
+**Änderung (2. Fassung):** Die erste Fassung fittete `left` UND `pitch`
+gemeinsam ueber denselben "Mitte dunkel/Rand hell"-Score - das ist entartet
+und konvergiert auf einen Pitch nahe der HALBEN wahren Zellbreite (alle 16
+Zellen passen dann in die dichte Textregion; gemessen: ~18px statt der
+wahren ~35px bei 640px Warpbreite). Globaler Otsu machte zudem wegen des
+Helligkeitsgradienten der Anzeige das rechte Drittel zu einem soliden
+dunklen Blob, und die 5x7-Zell-Downsampling+Binarisierung liess Zeichen mit
+wenig Tinte (v.a. den Dezimalpunkt) zu einem Nullvektor kollabieren.
+
+`scripts/dotmatrix-grid-probe.py` bestimmt den Pitch jetzt unabhaengig per
+Autokorrelation des Spalten-Tintenprofils (staerkster lokaler Peak im
+Bereich 25-55px - die Harmonik-Sorge bei 2x/3x ist bereits durch diesen
+Bereichsschnitt abgedeckt, keine gesonderte Harmonik-Erkennung noetig),
+sucht danach nur noch die Phase (1 freier Parameter statt 2), binarisiert
+adaptiv (`ADAPTIVE_THRESH_GAUSSIAN_C`, 51/15) statt global per Otsu, und
+extrahiert Zellen als Float-Tintendichte (INTER_AREA), die erst NACH dem
+Downsampling binarisiert wird. Das komplette Parametergrid (Zellaufloesung
+5x7/8x10 x Binarisierungsschwelle 0.15/0.25/0.35, sechs Kombinationen) wird
+gemessen, nicht nur eine Wahl. Druckt: Rasterfit je Probe (Pitch, Phase,
+Raster-Breitenanteil), den Nearest-Class-Treffertest je Kombination, den
+Median darueber, sowie fuer die Median-Kombination die Aufschluesselung je
+Zeichenlabel plus within-/between-class Hamming-Distanz samt Verhaeltnis.
+Schreibt weiterhin nur einen Kontaktabzug (PNG) in ein Scratch-Verzeichnis
+ausserhalb des Repos, keine Produktionscode-Aenderung.
+
+**Korrektur (Autokorrelations-Peakwahl):** Die erste Fassung der obigen
+Regel waehlte den KLEINSTEN Lag im Bereich, der ein lokales Maximum ueber
+Schwelle ist - das zieht die Wahl systematisch an den Bereichsboden.
+Gemessen an der Referenzprobe: lokales Maximum bei Lag 25 (Wert 0.328) und
+ein staerkeres bei Lag 36 (Wert 0.396) - die alte Regel lieferte 25, korrekt
+ist 36. Korrigiert auf den staerksten lokalen Peak im Bereich; die
+Harmonik-Sorge (2x/3x-Peaks) ist bereits durch den Bereichsschnitt
+PITCH_LAG_MIN/PITCH_LAG_MAX abgedeckt.
+
+**Konsequenz:** Inzwischen sind vier Verankerungsverfahren gemessen (Zahlen
+in `docs/VALIDATION.md`): Score-Suche 19,3 %, Tintenausdehnung 67,9 %,
+Autokorrelation (nach obiger Korrektur) 38,9 %, Block-Anker 45,2 % -
+jeweils Median der Nearest-Class-Trefferquote ueber sechs
+Parameterkombinationen. Das vorab festgelegte 70-%-Gate ist in keinem der
+vier Verfahren erreicht. Das Skript selbst faellt kein Urteil, ob der
+dotmatrix-Ansatz weiterverfolgt wird. Ergebnis bislang nicht in `var/`
+uebernommen.
+
+## 0.1.0.dev0 — 2026-09-22 (LCD-Quad-Vorschlag ueber HSV-Saettigung)
+
+**Problem:** `fit_quad_in_region` (Canny-Kantenzug) liefert auf den beiden
+LED-/VFD-Laborgeraeten kein einziges Quad (0/36 und 0/41, gemessen
+2026-09-22 - der als 0/73 in docs/VALIDATION.md 2026-09-21 dokumentierte
+Befund, hier reproduziert) und auf dem GSV-Geraet nur 7 von 11. Ein Blocker,
+weil nichts nachgelagert zuverlaessig gegen echte Daten getestet werden kann.
+Ein Spike (2026-09-22) zeigte, dass bei hinterleuchteten Farb-LCDs
+(GSV-Sensor) eine HSV-Saettigungsmaske das leuchtende Glas sauber vom grauen
+Metallrahmen trennt, wo Kantenerkennung scheitert.
+
+**Änderung:** Neue Funktion `lcd_quad_in_region`
+(`src/dispread/workbench/vision.py`), gleicher Vertrag wie
+`fit_quad_in_region` (normierter `hint_box`, normiertes geordnetes
+Vierpunktquad oder `None`). Saettigungsmaske > Schwelle, MORPH_CLOSE,
+groesste Aussenkontur, Mindestflaechenanteil, `minAreaRect` -> `_order_quad`
+(`dispread.rectify`). Kein Ersatz fuer `fit_quad_in_region`, sondern
+Sonderpfad fuer genau diese Geraeteklasse; Fehlschlag ist inert, `manual_roi`
+bleibt Primaerpfad. Schwellen sind unvalidierte Vorabdefaults, gemessen an
+einem Geraet (n=11) - siehe neues OQ-36 (`docs/open-questions.md`).
+
+**Konsequenz:** Fuer hinterleuchtete LCDs existiert jetzt ein Vorschlagspfad,
+der auf echten Daten tatsaechlich einen Quad liefert, statt wie bisher 0/73.
+Generalisiert nachweislich nicht auf die zwei LED-/VFD-Laborersatzgeraete im
+Datensatz - laut Nutzer nicht relevant, weil die Produktionshardware LCD ist.
+Ob die Schwelle auf weiteren echten LCD-Geraeten haelt, bleibt offen (OQ-36).
+
 ## 0.1.0.dev0 — 2026-09-22 (DatasetStore: begruendete Label-Korrektur)
 
 **Problem:** `save_sample` lehnt ein anderes Label fuer denselben

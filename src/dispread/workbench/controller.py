@@ -982,6 +982,8 @@ class Controller:
             "label_state": args["label_state"],
             "expected_text": args.get("expected_text"),
             "conditions": args.get("conditions", []),
+            "label_origin": args.get("label_origin"),
+            "label_origin_detail": args.get("label_origin_detail"),
             "independence_confirmation": args.get("independence_confirmation", True),
             "similarity_confirmed": args.get("similarity_confirmed", False),
             "similarity_reason": args.get("similarity_reason"),
