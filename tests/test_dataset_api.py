@@ -89,6 +89,95 @@ def test_dataset_command_without_csrf_is_rejected(tmp_path):
     asyncio.run(check())
 
 
+def test_device_list_command_returns_a_json_list_over_http(tmp_path):
+    async def check():
+        c = Controller(tmp_path, simulate=True)
+        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        try:
+            created = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
+            listed = await (await _command(client, headers, "dataset.device.list")).json()
+            assert isinstance(listed, list)
+            assert [d["id"] for d in listed] == [created["id"]]
+        finally:
+            c.stop.set()
+            await terminals.close()
+            await client.close()
+
+    asyncio.run(check())
+
+
+def test_marking_a_sample_as_representative_makes_the_group_exportable(tmp_path):
+    """Vor jeder Auswahl schliesst der Export eine Gruppe mit mehreren Proben
+    komplett aus (``group_without_selection``) - das ist der Fund aus der
+    Nutzersitzung 2026-09-21: mehrere Wiederholungen je Situation ohne
+    ausdrueckliche Auswahl lieferten 0 exportierbare Bilder. ``dataset.select``
+    behebt das ueber genau den HTTP-Pfad, den der neue Oberflaechenknopf
+    aufruft.
+    """
+
+    async def check():
+        c = Controller(tmp_path, simulate=True)
+        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        try:
+            device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
+            group = await (
+                await _command(client, headers, "dataset.group.begin", {"device_id": device["id"], "change_note": "Situation 1"})
+            ).json()
+
+            samples = []
+            for fill in (42, 43):
+                c.publish(_image(fill=fill), {"timebase": "file_mtime"})
+                captured = await (
+                    await _command(
+                        client, headers, "dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]}
+                    )
+                ).json()
+                save_args = {
+                    "token": captured["token"],
+                    "bbox": [10, 10, 40, 20],
+                    "label_state": "readable",
+                    "expected_text": "-01.25",
+                    "conditions": ["frontal"],
+                }
+                response = await _command(client, headers, "dataset.save", save_args)
+                if response.status != 200:
+                    # Zwei fast identische Testbilder loesen dieselbe
+                    # Aehnlichkeitswarnung aus wie zwei echte Wiederholungen -
+                    # genau der Fall, den mehrere Proben pro Situation im
+                    # Alltag erzeugen. Bewusst bestaetigt statt umgangen.
+                    response = await _command(
+                        client,
+                        headers,
+                        "dataset.save",
+                        {**save_args, "similarity_confirmed": True, "similarity_reason": "bewusste Wiederholung fuer diesen Test"},
+                    )
+                    assert response.status == 200
+                samples.append(await response.json())
+
+            without_selection = await (await _command(client, headers, "dataset.export")).json()
+            assert without_selection["coverage"]["images"] == 0
+
+            chosen = samples[1]
+            selected = await (
+                await _command(
+                    client,
+                    headers,
+                    "dataset.select",
+                    {"sample_id": chosen["id"], "revision": chosen["metadata_revision"]},
+                )
+            ).json()
+            assert selected["selected"] is True
+
+            with_selection = await (await _command(client, headers, "dataset.export")).json()
+            assert with_selection["coverage"]["images"] == 1
+        finally:
+            c.stop.set()
+            await terminals.close()
+            await client.close()
+
+    asyncio.run(check())
+
+
 def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)

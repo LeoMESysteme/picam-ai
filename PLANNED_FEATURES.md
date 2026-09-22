@@ -15,10 +15,13 @@
 - select desired format that fed to GSVMulti
 - small camera feed of the cropped/ROI region (so its clearer for the user whats fed into the ocr. picture could be on the top right side of the camera feed)
 - rotation of the camera feed (eg. if the camera is placed upsidedown)
+- creating big datasets by feeding sensor data trough the gpio pins to the sensor and reading that data with the camera, read values can then instantly be checked against sent values, calibrating for the display. this process can be done under different camera angles fo rbetter accuracy (check feasibilit.)
 
 ## Idea
 
 In the end, this project should offer a clean and simple ux, where the user just starts the tool and then opens the webui sees the live feed an can place the camera accordingly, so that the display is in the fov of the cameras. then he confirms if the display borders and the numbers/ocr are detected correctly, after confirming the process starts and the values are cleanly fed into the  GSVMulti/CSV.
+
+- Maybe in the end everything built into a package? (npm package? ready to go libary, framework...) for easier install, development, configuration,etc...? feasible?
 
 ## NEXT FEATURE (priority high)
 

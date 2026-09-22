@@ -3,6 +3,143 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 ("als Vertreter markieren" war unsichtbar - Nachschliff zur eigenen Sitzung)
+
+**Problem:** Nutzerbefund direkt nach dem vorigen Fix: "ich kann in dispread
+keinen 'Vertreter' für eine Situation festlegen". Ursache: `#dataset-representative`
+(der neue Knopf aus dem vorherigen Eintrag dieser Sitzung) war im Markup als
+**Kind** von `#dataset-editor` verschachtelt. `afterSave()` setzt
+`#dataset-editor.hidden = true`, bevor es `#dataset-representative.hidden =
+false` setzt - ein verstecktes Vorfahrenelement (`display:none` via
+`[hidden]`) blendet aber jedes Kind aus, unabhängig von dessen eigenem
+`hidden`-Attribut. Der Knopf existierte im DOM, die Logik lief korrekt
+(Backend-Aufruf `dataset.select` funktionierte), er war aber schlicht nie
+sichtbar.
+
+**Änderung:** `#dataset-representative` in `static/index.html` als Geschwister
+von `#dataset-editor` verschoben (beide Kinder von `#dataset-step-capture`).
+Neue Struktur-Prüfung in `tests/dataset_client.test.mjs`: liest das echte
+Markup und stellt sicher, dass `#dataset-representative` nicht innerhalb von
+`#dataset-editor` verschachtelt ist - verifiziert am alten (fehlerhaften)
+Markup, dass sie tatsächlich anschlägt, bevor sie gegen den Fix bestätigt
+wurde. Kein DOM/jsdom nötig, passt zum bestehenden Teststil dieser Datei
+(siehe OQ-21 zu den Grenzen echter Browsertests in dieser Umgebung).
+
+**Konsequenz:** Der Knopf ist jetzt tatsächlich sichtbar. `297 passed`,
+`ruff check` weiterhin sauber. Lehre für diese Sitzung: eine rein
+strukturelle Markup-Änderung wie diese hätte durch die vorhandenen
+JS-Unit- und Python-HTTP-Tests nicht auffallen können, weil keiner von ihnen
+tatsächliche DOM-Sichtbarkeit prüft - das war eine Lücke im eigenen
+Verifikationsschritt, nicht in der Testabdeckung an sich.
+
+## 0.1.0.dev0 — 2026-09-21 (`dispread serve` liess sich nicht mit Strg+C beenden)
+
+**Problem:** `dispread serve` reagierte auf kein Strg+C mehr, auch nicht nach
+vielen Versuchen. Live-Diagnose am haengenden Prozess (Thread-Zustaende via
+`/proc`, `gdb`, `py-spy`): Das SIGINT wurde korrekt verarbeitet, `serve()`
+lief bis zum Ende der eigenen `finally`-Kette vollstaendig durch (HTTPS-Port
+bereits geschlossen) - der Prozess blieb trotzdem fuer immer haengen. Ursache
+war eine Nebenlaeufigkeitsluecke, keine Kamera-/Treiberfrage (OQ-22): die
+alte Reihenfolge schloss `terminals.close()` **vor** `runner.cleanup()`/
+`unix.cleanup()` ab. Solange der HTTPS-Server (bzw. der lokale
+Steuersocket) noch Verbindungen annahm, konnte in der Luecke zwischen dem
+Setzen von `stop` und diesem Zeitpunkt ein neues `POST /terminals` eine
+Shell anlegen, die `terminals.close()` nie zu Gesicht bekam. Deren
+Reap-Task (`asyncio.to_thread(subprocess.wait)`) blockierte dann fuer immer
+einen Worker-Thread des asyncio-Default-Executors - und genau den joint
+`asyncio.run()` bei seinem eigenen, nicht unterbrechbaren Abbau, lange
+nachdem `serve()` selbst schon zurueckgekehrt und der Signal-Handler damit
+weg war. Ein zweites, drittes, ... Strg+C danach traf ins Leere.
+
+**Änderung:** `serve()` in `src/dispread/workbench/server.py`: die
+`finally`-Kette ruft jetzt zuerst `runner.cleanup()` und `unix.cleanup()`
+(stoppt beide Verbindungsannahmen, oeffentliches HTTPS **und** lokalen
+Steuersocket) und erst danach `terminals.close()` auf. Neuer Test
+`test_serve_stops_accepting_connections_before_closing_terminals`
+(`tests/test_workbench.py`) prueft genau diese Reihenfolge end-to-end gegen
+den echten `serve()`-Ablauf (via `server.stop` am lokalen Steuersocket,
+nicht ueber ein zeitlich unzuverlaessiges HTTP-Rennen).
+
+**Konsequenz:** Eine waehrend des Herunterfahrens angelegte Shell kann
+`terminals.close()` nicht mehr entgehen. Der zuvor haengende Prozess auf dem
+Lab-Pi wurde nach Bestaetigung, dass alle eigenen Aufräumschritte
+(`runner.cleanup`/`terminals.close`/`controller.close`/Socket-/Lock-Datei)
+bereits vollstaendig durchgelaufen waren (Port 7777 nicht mehr belegt, kein
+Kamerathread mehr aktiv, alle Threads im Zustand `S`, kein `D`-Zustand -
+somit kein OQ-22-Kamera-Wedge), risikofrei mit `SIGKILL` beendet. `297
+passed`, `ruff check` weiterhin sauber.
+
+## 0.1.0.dev0 — 2026-09-21 (Datensatz-Sammelmodus: "als Vertreter markieren" fehlte in der Oberfläche)
+
+**Problem:** Beim ersten echten Sammeldurchlauf mit mehreren Situationen à
+mehrere Aufnahmen lieferte "Prüfsatz exportieren" durchgängig **0 Bilder**.
+Ursache: `DatasetStore._export_locked()` schließt eine Situation mit mehr
+als einer Probe komplett aus, solange keine davon ausdrücklich als Vertreter
+markiert ist (`group_without_selection` — verhindert, dass zufällig eine von
+zehn Wiederholungen automatisch "die" Probe wird). Das dafür nötige Backend
+(`DatasetStore.select_sample`/`dataset.select`-Kommando) existiert bereits
+seit Aufgabe 5, wurde aber **nie mit einem Knopf in der Oberfläche
+verdrahtet** — unabhängig von der heutigen Schrittumstellung, dieser Knopf
+hat schlicht noch nie existiert.
+
+**Änderung:** Neue Zeile "als Vertreter dieser Situation markieren" in
+Schritt 3, erscheint direkt nach "Speichern und weiter" für die soeben
+gespeicherte Probe; ruft den bestehenden `dataset.select`-Befehl auf. Bei
+genau einer Aufnahme je Situation ist der Knopf nicht nötig (die einzige
+Probe wird beim Export automatisch Vertreter). Bewusst minimal: markiert nur
+die zuletzt gespeicherte Probe, keine nachträgliche Auswahl älterer Proben —
+eine Übersicht/Galerie je Situation (auch zum Verschieben zwischen
+Entwicklungs- und Abschlusstestbestand) ist als nächster Schritt vorgesehen,
+siehe `docs/status.md`.
+
+**Konsequenz:** Eine Situation mit mehreren Aufnahmen lässt sich jetzt
+tatsächlich exportieren. Neuer Test
+`test_marking_a_sample_as_representative_makes_the_group_exportable`
+(`tests/test_dataset_api.py`) belegt über den echten HTTP-Pfad: ohne Auswahl
+0 exportierte Bilder, nach `dataset.select` 1. `296 passed`, `ruff check`
+weiterhin sauber, `node --check`/`dataset_client.test.mjs` unverändert grün.
+
+## 0.1.0.dev0 — 2026-09-21 (Datensatz-Sammelmodus: Schrittoberfläche statt flacher Formularliste)
+
+**Problem:** Nutzerrückmeldung nach erstem Kontakt: "die oberfläche zum
+datensatz aufnehmen ist zu unverständlich und umständlich". Ursache: es gab
+keine Möglichkeit, ein bereits angelegtes Gerät auszuwählen — die Oberfläche
+zeigte nur ein "neues Gerät anlegen"-Formular, was nach jedem Neuladen
+faktisch zwang, Geräte erneut anzulegen. Geräteformular, Situationsformular,
+Aufnahmeknopf, Label-Editor und Export standen zudem undifferenziert flach
+untereinander, ohne Hinweis, welcher Schritt gerade dran ist.
+
+**Änderung:** Neuer Lesebefehl `DatasetStore.list_devices()` /
+`dataset.device.list` (sortiert nach Anzeigename, inkl. Situationsgruppen je
+Gerät). `static/index.html`/`static/dataset.js` bauen den Sammelmodus jetzt
+als drei Schritte: **Gerät** (`<select>` aus vorhandenen Geräten, letzte
+Option öffnet das bestehende "neues Gerät"-Formular), **Situation**
+(vorhandene Situationen des Geräts zum Fortsetzen, plus "neue Situation";
+bei genau einer vorhandenen Situation automatisch übersprungen) und
+**Aufnahme** (unveränderte Capture-/Box-/Label-/Save-Mechanik, jetzt einzig
+sichtbarer Teil sobald Gerät+Situation stehen, mit Kopfzeile "Gerät: X ·
+Situation: Y"). Jeder abgeschlossene Schritt klappt zu einer
+Einzeiler-Zusammenfassung mit "ändern"-Knopf zusammen. Echte `<label>`s
+statt reiner Platzhaltertexte; Modell/Familie/Technologie wandern im
+Geräteformular hinter ein `<details>` "Weitere Angaben", damit der
+Normalfall (vorhandenes Gerät wählen) ohne Zusatzfelder auskommt. Ein
+Schrittwechsel über "ändern" verwirft eine noch offene, nicht gespeicherte
+Aufnahme automatisch. Export bleibt unverändert als feste Zeile am Ende.
+Ändert keinen bestehenden Kommando-/Endpunktvertrag außer der einen neuen
+Leseoperation.
+
+**Konsequenz:** Ein vorhandenes Gerät lässt sich jetzt direkt wählen statt es
+neu anzulegen; der jeweils nächste Schritt ist eindeutig erkennbar. Neue
+Tests: `test_list_devices_is_sorted_by_name_and_includes_groups`,
+`test_device_list_command_returns_a_json_list_over_http` (belegt, dass der
+`/command`-Pfad eine Liste unverändert durchreicht, nicht nur ein Dict), und
+drei Faelle fuer die aus `dataset.js` extrahierte reine Entscheidungsfunktion
+`chooseInitialGroup` (0/1/mehrere Situationen) in
+`tests/dataset_client.test.mjs`. Bestehende ROI-/Clip-/OCR-/Tracking-/
+Serial-/Dataset-Regressionstests laufen unverändert mit (`295 passed`).
+Reale Browserabnahme bleibt wegen OQ-21/OQ-34 aus dieser Umgebung nicht
+möglich — manuelle Prüfung im laufenden `dispread serve` steht noch aus.
+
 ## 0.1.0.dev0 — 2026-09-18 (Datensatz-Sammelmodus, Nachschliff nach Advisor-Review)
 
 **Problem:** Eine unabhängige Zweitprüfung nach Abschluss der Aufgaben 1-7

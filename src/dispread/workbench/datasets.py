@@ -262,6 +262,17 @@ class DatasetStore:
             raise DatasetError(f"Unbekanntes Geraet: {device_id}")
         return copy.deepcopy(device)
 
+    def list_devices(self) -> list[dict]:
+        """Alle Geraete inkl. ihrer Situationsgruppen, fuer die Schrittauswahl der Oberflaeche.
+
+        Sortiert nach Anzeigename - keine Identitaet, nur eine stabile
+        Bedienreihenfolge (die UUID bleibt die eigentliche Kennung).
+        """
+        registry = self._load_devices()
+        devices = [copy.deepcopy(device) for device in registry["devices"].values()]
+        devices.sort(key=lambda device: device["name"].lower())
+        return devices
+
     def update_device(self, device_id: str, revision: int, changes: dict) -> dict:
         with self._lock:
             registry = self._load_devices()

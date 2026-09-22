@@ -10,4 +10,11 @@ legend{color:#68747f}
 #dataset-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #dataset-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
 #dataset-conditions label{margin-right:8px}
+.dataset-step{border:1px solid #282d33;padding:8px;display:flex;flex-direction:column;gap:8px}
+.dataset-step-head{color:#68747f}
+.dataset-step-summary,.dataset-step.done .dataset-step-body{display:none}
+.dataset-step.done .dataset-step-summary{display:flex;align-items:center;gap:8px;color:#91c998}
+.dataset-step-body{display:flex;flex-direction:column;gap:8px}
+.dataset-step-body label{color:#68747f;min-width:9em}
+details{color:#68747f}details>summary{cursor:pointer}
 #ground-truth{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:6px;color:#68747f;background:#0b0d0fcc;padding:4px 6px;border:1px solid #282d33}#ground-truth input{font:inherit;color:#c6ccd2;background:#0b0d0f;border:1px solid #282d33;padding:0 2px}#ground-truth input:focus-visible{outline:none;border-color:#91c998;color:#eee}.box-buttons{position:absolute;display:flex;gap:2px;background:#0b0d0fcc;border:1px solid #282d33}.box-buttons button:disabled{color:#454d55;cursor:not-allowed}.box-buttons button:disabled:hover{color:#454d55;outline:none}

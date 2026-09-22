@@ -859,6 +859,99 @@ def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
     asyncio.run(check())
 
 
+def test_serve_stops_accepting_connections_before_closing_terminals(tmp_path, monkeypatch):
+    """Nutzerfund: 'dispread serve' liess sich nicht mit Strg+C beenden.
+
+    Live-Diagnose auf dem Pi (gdb/py-spy an einem haengenden Prozess) zeigte:
+    das SIGINT wurde korrekt verarbeitet, `serve()` lief bis zum Ende der
+    eigenen `finally`-Kette durch - der Prozess blieb trotzdem fuer immer
+    haengen, unerreichbar fuer jedes weitere Strg+C. Ursache: die alte
+    Reihenfolge schloss `terminals.close()` VOR `runner.cleanup()`/
+    `unix.cleanup()` ab. Solange der HTTP-Server (bzw. der lokale
+    Steuersocket) noch Verbindungen annimmt, kann zwischen dem Setzen von
+    `stop` und diesem Zeitpunkt ein neues `POST /terminals` eine Shell
+    anlegen, die `terminals.close()` nie zu Gesicht bekommt. Ihr
+    Reap-Task (`asyncio.to_thread(subprocess.wait)`) blockiert dann fuer
+    immer einen Worker-Thread des asyncio-Default-Executors - und genau den
+    joint `asyncio.run()` beim eigenen, nicht unterbrechbaren Abbau, lange
+    nachdem `serve()` selbst schon zurueckgekehrt ist und der
+    Signal-Handler damit weg ist.
+
+    Dieser Test prueft die eigentliche Korrektur direkt: `runner.cleanup()`
+    und `unix.cleanup()` (beide reale `web.AppRunner`-Instanzen) muessen vor
+    `Terminals.close()` aufgerufen werden - unabhaengig vom genauen Timing
+    eines echten HTTP-Requests, der sich nicht ohne Flakiness nachstellen
+    laesst.
+    """
+    import argparse
+    import socket
+    import subprocess as sp
+
+    from aiohttp import web
+
+    from dispread.workbench import cli as cli_module
+    from dispread.workbench.server import serve
+    from dispread.workbench.terminals import Terminals
+
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    sp.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+            "-keyout", str(key), "-out", str(cert), "-subj", "/CN=localhost",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    control_socket = tmp_path / "control.sock"
+
+    order = []
+    original_terminals_close = Terminals.close
+
+    async def recording_terminals_close(self):
+        order.append("terminals.close")
+        return await original_terminals_close(self)
+
+    original_apprunner_cleanup = web.AppRunner.cleanup
+
+    async def recording_apprunner_cleanup(self):
+        order.append("apprunner.cleanup")
+        return await original_apprunner_cleanup(self)
+
+    monkeypatch.setattr(Terminals, "close", recording_terminals_close)
+    monkeypatch.setattr(web.AppRunner, "cleanup", recording_apprunner_cleanup)
+
+    args = argparse.Namespace(
+        host="127.0.0.1",
+        port=port,
+        camera=0,
+        data=str(tmp_path / "data"),
+        socket=str(control_socket),
+        cert=str(cert),
+        key=str(key),
+        simulate=True,
+    )
+
+    async def check():
+        serve_task = asyncio.ensure_future(serve(args))
+        for _ in range(100):
+            if control_socket.exists():
+                break
+            await asyncio.sleep(0.05)
+        await cli_module.request("server.stop", socket_path=str(control_socket))
+        await asyncio.wait_for(serve_task, timeout=10)
+
+    asyncio.run(check())
+
+    # runner.cleanup() (öffentliches HTTPS, inkl. "POST /terminals") und
+    # unix.cleanup() (lokaler Steuersocket) muessen abgeschlossen sein, bevor
+    # terminals.close() beginnt - sonst kann in der Luecke eine Shell
+    # entstehen, die nie geschlossen wird.
+    assert order == ["apprunner.cleanup", "apprunner.cleanup", "terminals.close"]
+
+
 def test_loading_a_confirmed_profile_warns_about_unverified_geometry(tmp_path):
     """Bedienerrueckmeldung: nach einem Neustart wirkte eine bereits
     bestaetigte Geometrie wie stillschweigend weiter gueltig, ohne jeden

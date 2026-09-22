@@ -17,20 +17,50 @@
 <section id="dataset" hidden><div class="bar"><span>Datensatz sammeln</span><span id="dataset-summary" class="muted"></span></div>
 <div id="dataset-body">
 <div id="dataset-note" class="muted"></div>
-<div class="dataset-row"><strong id="dataset-device-name">(kein Gerät gewählt)</strong> <span id="dataset-split" class="muted"></span></div>
-<fieldset><legend>Neues Gerät</legend>
-<input id="dataset-device-input-name" placeholder="Anzeigename" maxlength="120" spellcheck="false" aria-label="Anzeigename">
-<input id="dataset-device-input-model" placeholder="Modell (optional)" maxlength="120" spellcheck="false" aria-label="Modell">
-<input id="dataset-device-input-family" placeholder="Familie, z. B. gsv2asd" maxlength="32" spellcheck="false" aria-label="Familie">
-<select id="dataset-device-input-technology" aria-label="Technologie"><option value="LED">LED</option><option value="LCD">LCD</option><option value="VFD">VFD</option><option value="other">sonstige</option></select>
-<select id="dataset-device-input-split" aria-label="Split"><option value="development">Entwicklung</option><option value="heldout">Abschlusstest</option></select>
-<label><input id="dataset-device-input-confirm" type="checkbox"> Dieses konkrete physische Gerät</label>
-<input id="dataset-device-input-evidence" placeholder="Beleg, z. B. Typenschild/Seriennummer geprüft" maxlength="1000" spellcheck="false" aria-label="Beleg der Identitätsbestätigung">
-<button id="dataset-device-create">Gerät anlegen</button></fieldset>
-<div class="dataset-row">Situation: <span id="dataset-group-note">(keine Situation)</span>
-<input id="dataset-group-input" placeholder="Was hat sich geändert?" maxlength="1000" spellcheck="false" aria-label="Was hat sich geändert">
-<button id="dataset-group-begin">Neue Situation</button></div>
-<div class="dataset-row"><button id="dataset-capture-button" disabled>● aufnehmen</button></div>
+
+<div id="dataset-step-device" class="dataset-step">
+<div class="dataset-step-head"><strong>1. Gerät</strong></div>
+<div class="dataset-step-summary"><span id="dataset-device-summary-text"></span> <button id="dataset-device-change" class="dataset-step-change">ändern</button></div>
+<div class="dataset-step-body">
+<div class="dataset-row"><label for="dataset-device-select">Gerät</label>
+<select id="dataset-device-select" aria-label="Gerät wählen"><option value="">– Gerät wählen –</option><option value="__new__">+ neues Gerät anlegen</option></select></div>
+<fieldset id="dataset-device-new" hidden><legend>Neues Gerät</legend>
+<div class="dataset-row"><label for="dataset-device-input-name">Anzeigename</label>
+<input id="dataset-device-input-name" maxlength="120" spellcheck="false"></div>
+<div class="dataset-row"><label for="dataset-device-input-split">Split</label>
+<select id="dataset-device-input-split" aria-label="Split"><option value="development">Entwicklung</option><option value="heldout">Abschlusstest</option></select></div>
+<div class="dataset-row"><label><input id="dataset-device-input-confirm" type="checkbox"> Dieses konkrete physische Gerät</label></div>
+<div class="dataset-row"><label for="dataset-device-input-evidence">Beleg der Identitätsbestätigung</label>
+<input id="dataset-device-input-evidence" placeholder="z. B. Typenschild/Seriennummer geprüft" maxlength="1000" spellcheck="false"></div>
+<details><summary>Weitere Angaben (Modell, Familie, Technologie)</summary>
+<div class="dataset-row"><label for="dataset-device-input-model">Modell</label>
+<input id="dataset-device-input-model" placeholder="optional" maxlength="120" spellcheck="false"></div>
+<div class="dataset-row"><label for="dataset-device-input-family">Familie</label>
+<input id="dataset-device-input-family" placeholder="z. B. gsv2asd" maxlength="32" spellcheck="false"></div>
+<div class="dataset-row"><label for="dataset-device-input-technology">Technologie</label>
+<select id="dataset-device-input-technology" aria-label="Technologie"><option value="LED">LED</option><option value="LCD">LCD</option><option value="VFD">VFD</option><option value="other">sonstige</option></select></div>
+</details>
+<div class="dataset-row"><button id="dataset-device-create">Gerät anlegen</button></div>
+</fieldset>
+</div>
+</div>
+
+<div id="dataset-step-group" class="dataset-step" hidden>
+<div class="dataset-step-head"><strong>2. Situation</strong></div>
+<div class="dataset-step-summary"><span id="dataset-group-summary-text"></span> <button id="dataset-group-change" class="dataset-step-change">ändern</button></div>
+<div class="dataset-step-body">
+<div class="dataset-row"><label for="dataset-group-select">Vorhandene Situation fortsetzen</label>
+<select id="dataset-group-select" aria-label="Situation wählen"><option value="">– keine –</option></select>
+<button id="dataset-group-continue">fortsetzen</button></div>
+<div class="dataset-row"><label for="dataset-group-input">Neue Situation: was hat sich geändert?</label>
+<input id="dataset-group-input" maxlength="1000" spellcheck="false">
+<button id="dataset-group-begin">anlegen</button></div>
+</div>
+</div>
+
+<div id="dataset-step-capture" class="dataset-step" hidden>
+<div class="dataset-step-head"><strong>3. Aufnahme</strong> <span id="dataset-capture-header" class="muted"></span></div>
+<div class="dataset-row"><button id="dataset-capture-button">● aufnehmen</button></div>
 <div id="dataset-editor" hidden>
 <div id="dataset-viewport"><img id="dataset-image" alt="Eingefrorene Aufnahme"><canvas id="dataset-canvas"></canvas></div>
 <div class="dataset-row">Lesbarkeit:
@@ -43,6 +73,10 @@
 <input id="dataset-similarity-reason" placeholder="Begründung, falls trotzdem eigenständig" maxlength="1000" spellcheck="false" aria-label="Begründung für die Ähnlichkeitsbestätigung">
 <button id="dataset-similarity-confirm">trotzdem speichern</button><button id="dataset-similarity-cancel">abbrechen</button></div>
 </div>
+<div id="dataset-representative" class="dataset-row" hidden>Zuletzt gespeichert: <span id="dataset-representative-info"></span>
+<button id="dataset-representative-mark" title="Ohne Vertreter zählt keine Probe dieser Situation für den Export, wenn mehrere Aufnahmen vorliegen.">als Vertreter dieser Situation markieren</button></div>
+</div>
+
 <div class="dataset-row"><button id="dataset-export">Prüfsatz exportieren</button><a id="dataset-export-link" hidden download>Export</a></div>
 </div></section></main>
 <script src="/static/vendor/xterm.js"></script><script src="/static/vendor/addon-fit.js"></script><script src="/static/workbench.js"></script><script src="/static/dataset.js"></script></html>
