@@ -1023,3 +1023,64 @@ identischen `1.05000`-Proben im Datensatz sind also sehr wahrscheinlich
 **Ungeprüft geblieben:** ob die Anzeige in diesem Moment wirklich `+0.46776`
 zeigt. Niemand hat währenddessen aufs Display gesehen; das ist der letzte
 fehlende Beleg für „ASCII-String = Anzeige".
+
+---
+
+## 2026-09-22 — Plateau-Statistik des ASCII-Stroms und Vorbereitung des Auto-Labelings
+
+**Ziel:** Vor dem Bau eines Synchronaufzeichners klären, ob der serielle
+Strom überhaupt lange genug still steht, um Bilder daraus labeln zu können.
+Die Regel dafür ist ein Schutzintervall um jeden Wertwechsel; sie trägt nur,
+wenn es zwischen den Wechseln ruhige Strecken gibt.
+
+**Aufbau:** unverändert — GSV-2AS über Klemme A/B/C, USB-RS232-Adapter
+(PL2303) an `/dev/ttyUSB0`, 38400 8N1. **Rein passiv, es wurde kein Byte
+gesendet.** Kamera nicht beteiligt, kein `dispread`-Prozess lief. Jede Zeile
+mit Ankunftszeit in CLOCK_BOOTTIME, also derselben Domäne wie der
+`SensorTimestamp` der Kamera — das ist die Voraussetzung dafür, beide Ströme
+später überhaupt zusammenbringen zu können.
+
+**Messergebnis:** [VALIDATION.md](VALIDATION.md), Eintrag „Plateau-Statistik
+des ASCII-Stroms". Rohmitschnitt und Auswertskript unter
+`var/diagnostics/gsv-serial-2026-09-22/`.
+
+**Schluss:** Die Sperre ist gelöst. 1125 Telegramme über 599 s, keine einzige
+Formatabweichung, Plateaus der exakten Zeichenkette bis 30 s. Selbst bei einem
+sehr grosszügigen Schutzintervall von 1 s bleibt rund die Hälfte der
+Wanduhrzeit nutzbar.
+
+**Der Schluss, der beim Hinsehen wichtiger wurde.** Die Zahl zählt *Bilder*,
+nicht *Information*. Im Ruhezustand trägt der Strom praktisch **eine**
+Zeichenkette — `+0.46776 mV/V` in 379 von 660 Telegrammen der ersten sechs
+Minuten, die nächsthäufigen unterscheiden sich in einem Zeichen der fünften
+Nachkommastelle. Eine zehnminütige Ruheaufzeichnung liefert also rund 4700
+Bilder derselben Anzeige, und das ist nach der Split-Regel des Plans
+(`independence_group` je Sitzung) **eine** unabhängige Beobachtung. Damit wäre
+nichts gewonnen: es ist dieselbe Grenze, an der die Verankerungsarbeit schon
+bei 11 Proben stehengeblieben ist.
+
+Die erste Kameraaufzeichnung darf deshalb **kein passiver Dauerlauf** sein,
+sondern muss eine Sitzung mit bewusst gefahrenem Stimulus werden — langsam
+über den erreichbaren Bereich, mit einigen grossen Sprüngen und Ruhepausen
+dazwischen. Dieselbe Sitzung beantwortet dann drei Dinge auf einmal: den
+Versatz zwischen Telegramm und Anzeige (aus den Sprüngen), die erreichbare
+Ziffernabdeckung ([OQ-39](open-questions.md), aus dem Durchlauf) und die
+reale Ausbeute (aus den Pausen).
+
+**Nebenbefund:** In den Sekunden 20–35 wandert der Wert bis `+1.05000` — eine
+mechanische Störung am Aufbau, nicht bedient. Das sind die **ersten
+beobachteten** Anschläge an den Vollausschlag; bisher war die
+Übersteuerungsvermutung zu den drei gleichlautenden Datensatzproben nur
+rechnerisch hergeleitet.
+
+**Was dabei gebaut wurde:** das Herkunftsmerkmal `label_origin` im
+`DatasetStore` (OQ-38 Punkt 6), das Migrationsskript für die 88
+Bestandsproben und der Synchronaufzeichner. Einzelheiten im
+[CHANGELOG](../CHANGELOG.md) und im
+[Plan](superpowers/plans/2026-09-22-auto-labeling-seriell.md).
+
+**Zwei Dinge sind ausdrücklich NICHT ausgeführt worden.** Die Migration
+schreibt in `var/` und gehört dem Nutzer; solange sie nicht gelaufen ist,
+**lehnt der Sammelmodus die 88 Bestandsproben ab**. Und der Kamerazweig des
+Aufzeichners ist nie gelaufen — sein erster realer Einsatz ist selbst ein
+Prüfschritt und gehört kurz gehalten, bevor eine lange Sitzung entsteht.

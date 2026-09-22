@@ -1513,7 +1513,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
     ASCII-Strom zeigt bei gleicher Stimuluslage `+0.46776`). `FFFFFF` — laut
     Anleitung 105 % des Messbereichs — entspricht damit **exakt `+1.05000`**.
     Diese drei Proben sind also sehr wahrscheinlich **Übersteuerung**, nicht
-    Messwerte. Ein Anschlagwert ist kein Abdeckungsgewinn; die nutzbare
+    Messwerte. **Erstmals beobachtet am 2026-09-22:** im 599-s-Mitschnitt
+    (Plateau-Statistik, [VALIDATION.md](VALIDATION.md)) erreicht der Wert
+    während einer mechanischen Störung des Aufbaus zweimal genau `+1.05000`
+    und kehrt danach zurück. Damit ist der Anschlag nicht mehr nur
+    rechnerisch hergeleitet, sondern gesehen. Ein Anschlagwert ist kein Abdeckungsgewinn; die nutzbare
     Probenzahl sinkt damit faktisch von 11 auf 8. Endgültig bestätigen liesse
     sich das mit einem Versuch: Stimulus an den Anschlag fahren und prüfen, ob
     die Anzeige auf `1.05000` stehen bleibt.
