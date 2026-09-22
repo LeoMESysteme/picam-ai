@@ -3,6 +3,83 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-22 (Registerstand des GSV-2 als Rueckstellpunkt)
+
+**Problem:** Die Anzeige des GSV-2AS laesst sich ueber `set norm` (16) und
+`set dpoint` (17) gezielt veraendern - das ist der Weg zu Ziffernvielfalt bei
+festem Stimulus. Es sind aber Schreibbefehle an ein Laborgeraet. Ohne
+festgehaltenen Ausgangszustand gibt es keinen Rueckweg, und die vorige
+Sitzung hat gezeigt, wie leicht man sich beim Lesen der Register vertut: der
+`0x3B`-Praefix wurde einmal fuer den Registerwert gehalten.
+
+**Änderung:** Neues Skript `scripts/gsv-registers.py`. Liest norm, unit,
+dpoint, mode, digits, range, firmware, options, bridge_type, device_type und
+last_error, rechnet den Normierungsfaktor zurueck und schreibt alles als
+JSON-Rueckstellpunkt. Sendet **ausschliesslich Lesebefehle** plus stop/start
+transmission - keinen einzigen Schreibbefehl auf ein Konfigurationsregister.
+
+Zwei Fallstricke sind eingebaut statt dokumentiert: das Semikolon-Praefix
+wird gelesen **und geprueft** (`1 + n` Bytes statt `n`), und
+`start transmission` laeuft im `finally`-Block in derselben offenen Sitzung,
+mit anschliessender Verifikation, dass wirklich wieder Daten kommen.
+
+**Konsequenz:** Der Ausgangszustand ist gesichert
+(`var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`). Beim ersten
+Lauf hat sich nebenbei die Umrechnungsvorschrift der Anleitung gegen das
+Geraet bestaetigt: der Rohwert ist exakt 5250020, die Konstante aus der
+Rechenvorschrift, passend zu Faktor 1,0. Messungen dazu in
+`docs/VALIDATION.md`.
+
+## 0.1.0.dev0 — 2026-09-22 (Offline-Gate für das Auto-Labeling, Task F)
+
+**Problem:** Eine `sync-record.py`-Aufzeichnung hat Kamerabilder und den
+seriellen GSV-Strom nebeneinander, aber noch keine Entscheidung, welches
+Bild welchen Sollwert bekommen darf. Diese Entscheidung folgt dem im Plan
+(`docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`, „Der Kern:
+das Schutzintervall") hergeleiteten Schutzintervall `[t_i + M, t_{j+1} − M)`
+um einen Lauf gleicher Telegrammzeichenketten, und muss vier stille
+Fehlerquellen ausdrücklich ablehnen statt sie zu übersehen.
+
+**Änderung:** Neues Skript `scripts/gate-label.py`. Wertet eine
+Aufzeichnung rein offline aus (liest keine Bilddateien, nur Zeitstempel),
+schreibt keine Datensatzproben, sondern eine Vorschlagsdatei (JSON, je
+gelabeltem Bild Bildpfad, exakte Telegrammzeichenkette, führender
+Zahlenteil und ein `label_origin_detail`-Block mit genau den Feldnamen, die
+`DatasetStore` bei `label_origin="serial_ascii"` verlangt) plus einen
+Bericht auf stdout, der die Zahl **verschiedener Zeichenketten** unter den
+gelabelten Bildern deutlich herausstellt (wichtiger als die Bilderzahl,
+siehe Plan). `--guard-margin-ms` (M) und `--max-gap-ms` haben absichtlich
+keinen Vorgabewert — beides sind offene Mess-/Festlegungsgrößen.
+
+Vier Ablehnungsgründe werden getrennt gezählt: Wertwechsel im
+Schutzfenster, außerhalb des Telegrammbereichs (vor dem ersten/nach dem
+letzten Telegramm), der letzte Lauf ohne Folgetelegramm (konservativ mit
+dem letzten passenden Telegramm statt mit einer unterstellten Dauer
+geschlossen) und Telegrammlücken. Lückenfall-Entscheidung: der betroffene
+Lauf wird an der Lücke **geteilt**, nicht komplett verworfen — verwirft nur
+die tatsächlich unsichere Stelle statt des ganzen Laufs. Das gilt sowohl
+für Lücken *innerhalb* eines Laufs gleicher Werte als auch — das ist der
+gefährlichste, in der ersten Fassung übersehene Fall — für eine Lücke
+**genau an einem Wertwechsel**: dort sah der Strom sonst wie ein normaler
+A→B-Übergang aus, obwohl dazwischen unbemerkt ein dritter Wert gestanden
+haben kann. Fenstergrenze halboffen, wie die Klammerschreibweise des Plans
+sie vorgibt: `t_i + M` eingeschlossen, `t_{j+1} − M` ausgeschlossen.
+
+Test-first in `tests/test_gate_label.py` (9 Tests, u. a. der geforderte
+Falsifikationstest: ein Bild exakt im Wechselfenster wird abgelehnt, nicht
+irgendwie gelabelt), alle scheiterten vor der Implementierung (Skript fehlte).
+382 Bestandstests weiterhin grün, `ruff check src tests scripts` sauber.
+
+**Konsequenz:** Der Gate-Schritt ist gebaut und geprüft, aber **nicht
+scharf geschaltet** — er erzeugt nur einen Vorschlag, legt keine Proben an.
+Das Anlegen von Proben aus dem Vorschlag ist eine spätere, getrennte
+Aufgabe mit Menschenbeteiligung. `M` und `--max-gap-ms` bleiben offene
+Messgrößen; ohne eine gemessene Zahl für M (Task B) lässt sich dieses
+Skript nicht sinnvoll gegen eine echte Aufzeichnung fahren. Für
+`--max-gap-ms` gibt es bislang keinen dokumentierten OQ-Eintrag — das
+gehört nachgezogen, ist aber in dieser Änderung nicht passiert, weil
+`docs/open-questions.md` außerhalb des Auftrags dieser Aufgabe lag.
+
 ## 0.1.0.dev0 — 2026-09-22 (Migration der Bestandsproben auf schema_version 2)
 
 **Problem:** Mit dem Pflichtfeld `label_origin` (schema_version 2) lehnt

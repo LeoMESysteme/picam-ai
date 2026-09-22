@@ -1084,3 +1084,90 @@ schreibt in `var/` und gehört dem Nutzer; solange sie nicht gelaufen ist,
 **lehnt der Sammelmodus die 88 Bestandsproben ab**. Und der Kamerazweig des
 Aufzeichners ist nie gelaufen — sein erster realer Einsatz ist selbst ein
 Prüfschritt und gehört kurz gehalten, bevor eine lange Sitzung entsteht.
+
+---
+
+## 2026-09-22 — Der Stimulus ist die falsche Stellschraube; die Anzeige ist direkt steuerbar
+
+**Ausgangspunkt:** Der Nutzer hat gemeldet, dass er den Stimulus dauerhaft
+bewegen muss, damit die Werte fluktuieren, und gefragt, ob sich Werte nicht
+über GPIO einspeisen liessen, um über längere Zeit ohne Handbetrieb zu
+sammeln.
+
+**Erste Messung — warum der bewegte Stimulus nicht trägt.** 1199 s passiver
+Mitschnitt bei bewegtem Stimulus. Im Rohstrom stehen 217 verschiedene
+Zeichenketten; das sieht nach reichlich Vielfalt aus. Nach dem
+Schutzintervall bleibt davon fast nichts: bei M = 500 ms noch 25
+Zeichenketten, und 96,3 % der nutzbaren Zeit entfallen auf vier praktisch
+gleiche Werte.
+
+Der Mechanismus ist strukturell, nicht statistisch: die Vielfalt steckt in
+Ausschlägen von ein bis zwei Telegrammen Länge, und das Fenster verwirft
+jedes Plateau kürzer als 2·M. Zwischen M = 200 ms und M = 300 ms bricht die
+Vielfalt schlagartig ein — dort unterschreitet der Telegrammabstand von
+553 ms die Schwelle. **Das Gate kostet 44 % der Bilder, aber 88 % der
+Information.** Länger aufzeichnen ändert daran nichts.
+
+**Zur GPIO-Frage.** Technisch ginge es, aber es wäre der aufwendige Weg: ein
+Bridge-Signal von 1 mV/V bei 5 V Speisung sind 5 mV, ein 12-bit-DAC über
+3,3 V hat 0,8 mV Schritte — gröber als der gesamte interessante Bereich. Dazu
+ist mV/V ratiometrisch, das eingespeiste Signal müsste der Speisespannung
+folgen, und es ginge in den Messeingang des Laborverstärkers. Für den Zweck —
+Glyphen auf dem Glas erzeugen — gibt es einen direkteren Weg.
+
+**Zweite Messung — der direkte Weg.** Die Anleitung: „Die Displayanzeige
+ergibt sich aus Normierungsfaktor × Messwert", `set norm` (16), dazu
+`set dpoint` (17). Vor jedem Eingriff wurde der komplette Registerstand
+ausgelesen und als Rückstellpunkt gesichert
+(`scripts/gsv-registers.py`, neu).
+
+Drei Dinge, die dabei von „abgeleitet" auf „gemessen" gewechselt sind:
+
+1. **Die Umrechnungsvorschrift stimmt.** Der ausgelesene Normierungs-Rohwert
+   ist exakt 5250020 — genau die Konstante aus der Rechenvorschrift der
+   Anleitung, passend zu Faktor 1,0. Die Rückrechnung war damit gegen das
+   Gerät bestätigt, bevor irgendetwas geschrieben wurde.
+2. **`EEnow = 0`.** Das Special-Mode-Register sagt: Schreibbefehle landen
+   „erst nach dem Ausschalten" im EEPROM. Die Abnutzungssorge bei hunderten
+   Normierungswechseln ist damit gegenstandslos — gemessen, nicht gehofft.
+3. **Der ASCII-Strom folgt der Normierung.** Das war die eine ungeprüfte
+   Verkettung zweier Anleitungssätze. Wechsel auf Faktor 2,0: Median vorher
+   `0.60661`, nachher `1.21095`, Verhältnis **1,9963**.
+
+**Der Befund, der eine offene Frage schliesst.** Durchlauf über 14
+Normierungsfaktoren von 1,0 bis 9000, Anzeigen von `+0.59696` bis
+`+05372.5`. In **14 von 14** Fällen: genau 6 Ziffern, genau 8 Zellen für den
+Zahlenblock. Der Dezimalpunkt wandert, führende Nullen bleiben stehen, das
+Format wechselt nicht. Damit ist [OQ-37](open-questions.md) beantwortet, und
+zwar ohne jeden Stimulus — die Voraussetzung des Block-Ankers hält über den
+ganzen Bereich.
+
+**Messergebnis:** [VALIDATION.md](VALIDATION.md), zwei Einträge vom
+2026-09-22 („Schutzintervall verwirft bevorzugt die Vielfalt" und „Anzeige
+über den Normierungsfaktor steuerbar"). Rohdaten und Skripte unter
+`var/diagnostics/gsv-serial-2026-09-22/`.
+
+**Schluss.** Die Ziffernabdeckung ist nicht mehr an den Stimulus gebunden,
+sondern planbar: für jede gewünschte Anzeige lässt sich der Normierungsfaktor
+ausrechnen, und der Wert steht dann beliebig lange still. Damit lösen sich
+Vielfalt und Plateaulänge, die sich bisher widersprochen haben, gleichzeitig.
+Der Nutzer muss den Stimulus nicht mehr bewegen.
+
+**Was ausdrücklich offen bleibt:**
+
+* **Negative Werte.** Negative Normierung gibt es laut Anleitung erst ab
+  Firmware 1.5.06; dieses Gerät meldet 1.3.07. Die Stimulatoren erzeugen
+  ebenfalls keine negativen Werte. Die **Vorzeichenstelle bleibt unbelegt**,
+  und das gehört an jede Benchmarkzahl geschrieben.
+* **Die Kamera.** Sie wird nicht erkannt — kein Knoten im Device-Tree, keine
+  dmesg-Einträge. Ohne sie ist der zeitliche Versatz zwischen Telegramm und
+  Anzeige nicht messbar, und ohne den gibt es kein M. Der Nutzer prüft das
+  Kabel.
+* **Ob eine über die Normierung erzeugte Ziffernfolge dieselbe Bildstatistik
+  hat wie eine real gemessene.** Für den Leser zählt, was auf dem Glas steht,
+  und das entsteht auf demselben Weg — ein Unterschied ist nicht ersichtlich,
+  aber auch nicht gemessen.
+
+**Nicht angefasst:** `set zero` (Nullpunktabgleich) — das wäre ein Eingriff
+in die Messkette des Laborgeräts und der einzige Weg zu negativen Werten,
+aber keiner, den man nebenbei geht.

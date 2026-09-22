@@ -117,6 +117,20 @@ Kamera laufen.
 * `SensorTimestamp` liegt in der **CLOCK_BOOTTIME**-Domäne (gemessen). Die
   *Semantik* — Belichtungsbeginn oder Auslese-Ende — ist noch offen (Messung M2
   in [docs/TIMING.md](docs/TIMING.md)).
+* **Die Anzeige des GSV-2AS ist über RS232 direkt steuerbar** — und das ist
+  der Weg zu Ziffernvielfalt, nicht der Stimulus. `set norm` (16) skaliert
+  die Anzeige (`Anzeige = Normierungsfaktor × Messwert`, Bereich
+  0,15…1 580 000), `set dpoint` (17) setzt den Dezimalpunkt. Gemessen: der
+  ASCII-Strom folgt der Normierung, und über 14 Faktoren von 1,0 bis 9000
+  zeigt die Anzeige **ausnahmslos 6 Ziffern** — der Zahlenblock belegt immer
+  genau 8 Zellen, der Punkt wandert. `EEnow = 0` an diesem Gerät: Schreib-
+  befehle nutzen das EEPROM nicht ab. **Negative Normierung gibt es erst ab
+  Firmware 1.5.06; dieses Gerät hat 1.3.07** — die Vorzeichenstelle bleibt
+  damit unerreichbar.
+* Registerantworten des GSV-2 tragen ein **Semikolon-Präfix `0x3B`**. Die
+  Spalte „Länge der Befehlsantwort" der Anleitung zählt nur die Datenbytes —
+  wer genau so viele Bytes liest, hält `0x3B` für den Registerwert.
+  `scripts/gsv-registers.py` macht es richtig.
 * Die Anzeige des GSV-Sensors ist ein **Displaytech 161A** (von der Platine
   abgelesen): Punktraster-Zeichen-LCD mit **16 Zeichen × 1 Zeile**. Die
   Zellenzahl ist damit bekannt und keine Messgröße. Der Modultyp legt aber

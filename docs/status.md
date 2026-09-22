@@ -5,7 +5,30 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-> ### ⚠ Der Sammelmodus ist gesperrt, bis ein Befehl gelaufen ist
+> ### Die Anzeige ist steuerbar — der Stimulus muss nicht mehr bewegt werden
+>
+> **Gemessen am 2026-09-22 (abends).** Der bewegte Stimulus taugt nicht als
+> Vielfaltsquelle: das Schutzintervall kostet 44 % der Bilder, aber **88 %
+> der verschiedenen Zeichenketten** — die Vielfalt steckt in ein bis zwei
+> Telegramme kurzen Ausschlägen, genau die verwirft das Fenster. Längeres
+> Aufzeichnen ändert daran nichts.
+>
+> **Der Ausweg ist gemessen und funktioniert:** `set norm` (16) plus
+> `set dpoint` (17) verändern die Anzeige bei **festem** Stimulus, der
+> ASCII-Strom folgt nachweislich (Verhältnis 1,9963 bei Faktor 2,0), und
+> jeder Wert steht beliebig lange still. `EEnow = 0` — kein EEPROM-Verschleiss.
+> Rückstellpunkt: `var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`,
+> erzeugt mit `scripts/gsv-registers.py`.
+>
+> **[OQ-37](open-questions.md) ist damit beantwortet:** über 14 Faktoren von
+> 1,0 bis 9000 (Anzeigen bis `+05372.5`) immer genau **6 Ziffern, 8 Zellen**.
+> Das Format wechselt nicht.
+>
+> **Offen bleibt das Vorzeichen:** negative Normierung gibt es erst ab
+> Firmware 1.5.06, dieses Gerät hat 1.3.07. Und **die Kamera wird nicht
+> erkannt** — ohne sie kein Versatz und damit kein M.
+
+> ### ~~⚠ Der Sammelmodus ist gesperrt, bis ein Befehl gelaufen ist~~ — erledigt 2026-09-22
 >
 > Mit dem neuen Pflichtfeld `label_origin` (`SAMPLE_SCHEMA_VERSION` 1 → 2,
 > [OQ-38](open-questions.md) Punkt 6) lehnt `DatasetStore` **alle 88

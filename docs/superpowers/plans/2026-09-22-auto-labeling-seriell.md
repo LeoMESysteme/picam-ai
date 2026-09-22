@@ -301,12 +301,50 @@ AI Camera trägt, ist aus der Codegleichheit mit `Controller._capture`
 Prüfschritt: **kurz** starten (z. B. 10 s) und `frames.jsonl` ansehen, bevor
 eine lange Sitzung aufgezeichnet wird.
 
-### Task F — Offline-Labeler
+### Task F — Offline-Labeler — **gebaut, gegen synthetische Fälle geprüft**
 
-Wendet die oben festgelegte Gate-Regel auf eine Aufzeichnung an und legt
-Proben an. **Muss einen Falsifikationstest bestehen:** ein synthetischer Fall,
-in dem sich der Wert mitten im Fenster ändert, muss **abgelehnt** werden —
-nicht nur „irgendein Label" erzeugen.
+`scripts/gate-label.py`. Wendet die oben festgelegte Gate-Regel offline auf
+eine `sync-record.py`-Aufzeichnung an. **Legt keine Proben an** — das bleibt
+bewusst eine spätere, getrennte Aufgabe mit Menschenbeteiligung; das Skript
+liest nicht einmal `DatasetStore`. Ergebnis: ein Bericht auf stdout (Anzahl
+Bilder gesamt/gelabelt/abgelehnt je der vier Ablehnungsgründe einzeln, und —
+deutlich herausgestellt, wichtiger als die Bilderzahl — die Zahl
+verschiedener Zeichenketten unter den gelabelten Bildern) und eine
+Vorschlagsdatei (JSON) mit Bildpfad, exakter Zeichenkette, führendem
+Zahlenteil und einem `label_origin_detail`-Block, dessen Feldnamen
+wortgleich aus `_SERIAL_ASCII_DETAIL_REQUIRED`
+(`src/dispread/workbench/datasets.py`) übernommen sind.
+
+**Falsifikationstest besteht:** `tests/test_gate_label.py` enthält den
+geforderten Fall — ein Bild exakt im Wechselfenster wird abgelehnt, nicht
+irgendwie gelabelt. Neun test-first geschriebene Tests insgesamt (alle
+scheiterten vor der Implementierung), inklusive Randfall Fenstergrenze,
+Bild vor/nach dem Telegrammbereich, Telegrammlücke, und einem von Hand
+durchgerechneten größeren Szenario.
+
+**Entscheidung beim Lücken-Fall** (Aufgabentext: „der subtile und
+wichtigste"): der betroffene Lauf wird an der Lücke **geteilt**, nicht
+komplett verworfen — das ist die genauere Lösung, weil nur die tatsächlich
+unsichere Stelle verworfen wird. Wichtig, und in einer ersten Fassung
+übersehen (bei Review aufgefallen): eine Telegrammlücke kann auch **genau an
+einem Wertwechsel** liegen. Fällt dort ein Telegramm aus, sieht der Strom wie
+ein gewöhnlicher A→B-Übergang aus, obwohl dazwischen ein dritter, nie
+angekommener Wert gestanden haben kann. Der letzte Telegrammabstand vor
+einem Wertwechsel wird deshalb ebenfalls gegen `--max-gap-ms` geprüft, nicht
+nur Abstände innerhalb eines gleichbleibenden Laufs; ist er zu groß,
+schließt der Lauf konservativ mit seinem letzten TELEGRAMM ab (wie ein
+echter Lücken-Split), statt mit `t_{j+1} - M`.
+
+**Fenstergrenzen-Festlegung:** halboffen, wie die Klammerschreibweise des
+Plans es vorgibt — `t_i + M` eingeschlossen, `t_{j+1} - M` ausgeschlossen.
+
+**Was ungeprüft bleibt:** das Skript wurde nur gegen synthetische
+`serial.jsonl`/`frames.jsonl` gefahren, nie gegen eine echte
+`sync-record.py`-Aufzeichnung (die braucht Task B/M zuerst). `M` und
+`--max-gap-ms` haben weiterhin keinen begründeten Wert — beide müssen vor
+dem ersten echten Lauf angegeben werden, das Skript verweigert sich ohne
+sie. Für `--max-gap-ms` fehlt noch ein OQ-Eintrag in
+`docs/open-questions.md` (nicht Teil dieser Änderung).
 
 ### Task G — Unabhängigkeitsgruppen und Split
 

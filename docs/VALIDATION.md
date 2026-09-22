@@ -1085,3 +1085,113 @@ drei gleichlautenden Datensatzproben nur rechnerisch hergeleitet
 **Nicht gemessen und ausdrücklich offen:** der Versatz zwischen Telegramm und
 Anzeige. Ohne ihn ist M nicht bestimmt, und keine Zeile dieser Tabelle ist
 eine Freigabe zum Labeln.
+
+## 2026-09-22 — GSV-2AS: das Schutzintervall verwirft bevorzugt die Vielfalt
+
+**Frage.** Der Nutzer berichtet, die Werte fluktuierten zwischen 0,4 und 1,05,
+sobald der Stimulus bewegt wird. Bringt eine lange passive Aufzeichnung damit
+die Ziffernvielfalt, die dem Datensatz fehlt?
+
+**Aufbau.** Wie im Eintrag „Plateau-Statistik" — rein passiv, kein Byte
+gesendet, 1199 s, 2250 Telegramme. Rohmitschnitt
+`var/diagnostics/gsv-serial-2026-09-22/capture_ascii_1200s_fluktuation.jsonl`,
+Auswertung `…/gate_diversity.py` und `…/coverage.py`.
+
+**Zahlen.** 723 Plateaus, **217 verschiedene Zeichenketten im Rohstrom**.
+Entscheidend ist aber, was das Gate davon übriglässt:
+
+| M | Bilder/min | verschiedene Zeichenketten | Anteil der Vielfalt |
+| --- | --- | --- | --- |
+| 0 ms | 900 | 217 | 100 % |
+| 200 ms | 683 | 217 | 100 % |
+| **300 ms** | 595 | **25** | **12 %** |
+| 500 ms | 504 | 25 | 12 % |
+| 1000 ms | 357 | 15 | 7 % |
+| 2000 ms | 208 | 4 | 2 % |
+
+Bei M = 500 ms entfallen 96,3 % der nutzbaren Zeit auf vier praktisch gleiche
+Werte (`+0.46776` … `+0.46779`).
+
+**Befund — und er ist der Grund, den Weg zu ändern.** Das Schutzintervall
+wirkt **nicht neutral**. Es kostet zwischen M = 0 und M = 500 ms nur 44 % der
+Bilder, aber **88 % der verschiedenen Zeichenketten**. Der Grund ist
+strukturell: die Vielfalt steckt in kurzen Ausschlägen von ein bis zwei
+Telegrammen, und das Fenster verwirft jedes Plateau kürzer als 2·M. Zwischen
+200 ms und 300 ms bricht die Vielfalt schlagartig ein — genau dort
+unterschreitet der Telegrammabstand von 553 ms die Schwelle 2·M.
+
+Länger aufzuzeichnen hilft dagegen nicht: der Effekt ist eine Eigenschaft der
+Zeitstruktur, nicht der Stichprobengrösse. Ein bewegter Stimulus liefert
+deshalb **Bilder**, aber kaum **Information**.
+
+## 2026-09-22 — GSV-2AS: Anzeige über den Normierungsfaktor steuerbar (OQ-37 beantwortet)
+
+**Frage.** Lässt sich die Anzeige bei **festem** Stimulus gezielt verändern,
+statt auf zufällige Ausschläge zu warten? Und — das ist
+[OQ-37](open-questions.md) — bleibt es bei 6 Ziffern, wenn die Anzeige über
+10 geht?
+
+**Eingriff, mit Freigabe des Nutzers.** `set norm` (16) und `set dpoint` (17)
+über dieselbe RS232-Verbindung. Jeder Schritt mit Rücklesen und Prüfung des
+Fehlerregisters; am Ende auf den Ausgangszustand zurückgestellt.
+
+**Ausgangszustand, vorher ausgelesen und als Rückstellpunkt gesichert**
+(`var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`, erzeugt mit
+`scripts/gsv-registers.py`):
+
+| Register | Rohbytes | Bedeutung |
+| --- | --- | --- |
+| norm | `50 1B E4` = 5250020 | Faktor **1,0** |
+| dpoint | `01` | Punkt nach der 1. Stelle |
+| unit | `00` | mV/V |
+| digits | `06` | 6 Ziffern |
+| mode | `02` | Text-/ASCII-Modus |
+| range | `23` = 35 | 3,5 mV/V Eingangsempfindlichkeit |
+| firmware | `0D 07` | 1.3.07 |
+| last_error | `A0` | „No Error (OK)" |
+
+**Erster Befund — die Umrechnungsvorschrift ist gegen das Gerät bestätigt.**
+Die Anleitung gibt für `set norm` eine Rechenvorschrift mit der Konstanten
+5250020. Der ausgelesene Rohwert ist **exakt 5250020**, und der Faktor ist
+nachweislich 1,0. Die Rückrechnung war damit nicht mehr nur abgeleitet.
+
+**Zweiter Befund — `EEnow = 0`.** Das Special-Mode-Register (`Get Special
+Mode`, 137) liefert `00 12`. Bit 8 (`EEnow`) ist **0**: Schreibbefehle landen
+laut Anleitung „erst nach dem Ausschalten" im EEPROM. Hunderte
+Normierungswechsel kosten also keine EEPROM-Zyklen.
+
+**Dritter Befund — der ASCII-Strom folgt dem Normierungsfaktor.** Das war
+bisher aus zwei Anleitungssätzen verkettet, nicht gemessen. Umstellung auf
+norm = 2,0: Median des Stroms vorher `0.60661`, nachher `1.21095`,
+**Verhältnis 1,9963**. Die Abweichung von 2,0 erklärt sich durch den
+gleichzeitig driftenden Stimulus.
+
+**Vierter Befund — OQ-37 ist beantwortet.** Durchlauf über 14
+Normierungsfaktoren von 1,0 bis 9000, Anzeigewerte von `+0.59696` bis
+`+05372.5`:
+
+| norm | dpoint | Anzeige | Ziffern | Zellen des Zahlenblocks |
+| --- | --- | --- | --- | --- |
+| 1,0 | 1 | `+0.59696 mV/V` | 6 | 8 |
+| 3,0 | 2 | `+01.7908 mV/V` | 6 | 8 |
+| 20,0 | 3 | `+011.939 mV/V` | 6 | 8 |
+| 100,0 | 3 | `+059.695 mV/V` | 6 | 8 |
+| 250,0 | 4 | `+0149.24 mV/V` | 6 | 8 |
+| 1500,0 | 4 | `+0895.42 mV/V` | 6 | 8 |
+| 9000,0 | 5 | `+05372.5 mV/V` | 6 | 8 |
+
+**14 von 14 Faktoren: immer genau 6 Ziffern, immer genau 8 Zellen.** Das
+Format wechselt nicht, der Dezimalpunkt wandert, führende Nullen bleiben
+stehen. Damit hält die Voraussetzung des Block-Ankers der Rasterverankerung
+über den gesamten Bereich — die in OQ-37 befürchtete Formatänderung tritt
+nicht ein.
+
+**Alle 14 Schritte mit Fehlercode `0xA0` („OK"), Rückstellung auf norm = 1,0 /
+dpoint = 1 verifiziert.**
+
+**Was das löst und was nicht.** Gelöst: die Anzeige ist bei festem Stimulus
+gezielt und beliebig lange stabil einstellbar — der Konflikt zwischen
+Vielfalt und Plateaulänge aus dem vorigen Eintrag entfällt. **Nicht** gelöst:
+**negative Werte.** Die Anleitung erlaubt negative Normierung erst „ab
+Firmware-Version 1.5.06"; dieses Gerät hat 1.3.07. Die Vorzeichenstelle
+bleibt damit unbelegt.

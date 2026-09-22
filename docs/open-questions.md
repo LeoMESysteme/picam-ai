@@ -1222,8 +1222,32 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-37 — Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen
 
-* **Status:** offen · erkannt 2026-09-22 (Rückfrage des Nutzers beim Entwurf
-  des Block-Ankers für den Dot-Matrix-Leser)
+* **Status:** **BEANTWORTET 2026-09-22.** Das Format wechselt **nicht**. Über
+  14 Normierungsfaktoren von 1,0 bis 9000 — Anzeigewerte `+0.59696` bis
+  `+05372.5`, also weit über 10 — zeigt die Anzeige **ausnahmslos 6 Ziffern**,
+  der Dezimalpunkt wandert, führende Nullen bleiben stehen. Der Zahlenblock
+  belegt damit in **14 von 14** Fällen genau **8 Zellen**. Zahlen und Aufbau:
+  [VALIDATION.md](VALIDATION.md), Eintrag „Anzeige über den
+  Normierungsfaktor steuerbar".
+
+  **Folge für die Rasterverankerung:** die Voraussetzung des Block-Ankers
+  (Zahlenblock = 8 Zellen, unabhängig von der Punktposition) hält über den
+  gesamten erreichbaren Bereich. Die hier befürchtete Formatänderung tritt
+  nicht ein. Der Block-Anker selbst bleibt davon unberührt an seinem
+  gemessenen Ergebnis (45,2 %, Gate nicht bestanden).
+
+  **Wie es beantwortet wurde — ohne jeden Stimulus:** über `set norm` (16)
+  und `set dpoint` (17), genau wie es die Präzisierung unten vorgeschlagen
+  hatte. Der Eingriff war mit Freigabe des Nutzers, jeder Schritt mit
+  Rücklesen, und der Ausgangszustand ist wiederhergestellt
+  (Rückstellpunkt: `var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`).
+
+  **Was dabei NICHT beantwortet wurde:** das Verhalten bei **negativen**
+  Werten grossen Betrags. Negative Normierung erlaubt die Anleitung erst ab
+  Firmware 1.5.06; dieses Gerät hat 1.3.07. Die Vorzeichenstelle bleibt
+  unbelegt — siehe [OQ-39](open-questions.md).
+* **Ursprünglicher Stand:** offen · erkannt 2026-09-22 (Rückfrage des Nutzers
+  beim Entwurf des Block-Ankers für den Dot-Matrix-Leser)
 * **Befund:** Alle 11 bestätigten GSV-Proben liegen zwischen `0.00042` und
   `1.05000`, also **unter 1,06**. Alle zeigen durchgängig 6 Ziffern und 5
   Nachkommastellen (`+X.XXXXX mV/V`). Über das Verhalten bei Werten **ab 10**
@@ -1534,6 +1558,40 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Wie die drei Cluster zustande kamen, lässt sich aus den Fotos **nicht**
   ablesen: ob der DIP-Schalter vor dem Verkleben umgestellt wurde oder eine
   andere Quelle im Einsatz war, ist unbekannt und wird hier nicht behauptet.
+* **Wesentliche Wendung 2026-09-22 (abends) — die Anzeige ist direkt
+  steuerbar, der Stimulus muss gar nicht mitspielen.** Zwei Messungen
+  desselben Tages zusammen:
+
+  1. **Der bewegte Stimulus taugt nicht.** 1199 s Mitschnitt bei bewegtem
+     Stimulus: 217 verschiedene Zeichenketten im Rohstrom, aber nach dem
+     Schutzintervall bleiben bei M = 500 ms nur **25** davon übrig, und
+     96,3 % der nutzbaren Zeit entfallen auf vier praktisch gleiche Werte.
+     Das Gate kostet 44 % der Bilder, aber **88 % der Vielfalt** — die
+     Vielfalt steckt in ein bis zwei Telegramme kurzen Ausschlägen, und
+     genau die verwirft das Fenster. Das ist strukturell und wird durch
+     längeres Aufzeichnen nicht besser.
+  2. **Der Normierungsfaktor löst es.** `set norm` (16) plus `set dpoint`
+     (17) verändern die Anzeige bei **festem** Stimulus, und der ASCII-Strom
+     folgt nachweislich (Verhältnis 1,9963 bei einem Faktorwechsel auf 2,0).
+     Jeder so eingestellte Wert steht **beliebig lange** still — Vielfalt und
+     Plateaulänge stehen damit nicht mehr im Widerspruch. `EEnow = 0` am
+     Gerät gemessen: die Schreibbefehle nutzen das EEPROM nicht ab.
+
+  Damit ist der Kern dieses Eintrags entschärft: Ziffernabdeckung ist nicht
+  mehr an den Stimulus gebunden, sondern planbar. Beide Messungen in
+  [VALIDATION.md](VALIDATION.md).
+
+  **Was offen bleibt — und es ist der härtere Rest:** **negative Werte.**
+  Negative Normierung gibt es erst ab Firmware 1.5.06, dieses Gerät hat
+  1.3.07, und die Stimulatoren erzeugen keine negativen Werte. Die
+  **Vorzeichenstelle bleibt unbelegt.** Ein Leser, der ein `-` nie gesehen
+  hat, ist an dieser Stelle unbelegt geprüft — das gehört an jede
+  Benchmarkzahl geschrieben.
+
+  Zweitens bleibt offen, ob eine über die Normierung erzeugte Ziffernfolge
+  dieselbe **Bildstatistik** hat wie eine real gemessene. Für den Leser
+  zählt, was auf dem Glas steht, und das ist identisch erzeugt — ein
+  systematischer Unterschied ist nicht ersichtlich, aber auch nicht gemessen.
 * **Wege zu mehr Vielfalt, die die verklebte Platine nicht anfassen**
   (gesammelt, nicht entschieden — die Auswahl ist eine Laborentscheidung):
   * ein **zweiter** Brückensimulator am selben Sensorkabel, steckbar statt
@@ -1552,3 +1610,35 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   am BK-5491B), [OQ-38](open-questions.md).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) (Abdeckungsangabe zu
   jeder Benchmarkzahl), `docs/anleitung/11-datensatz-sammeln.md`.
+
+## OQ-40 — Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen
+
+* **Status:** offen · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
+  · **Zuständig:** Labor
+* **Frage:** Ab welchem Telegrammabstand gilt ein Lauf gleicher Werte als
+  nicht mehr vertrauenswürdig?
+* **Warum das zählt:** Fällt ein Telegramm aus, sieht der Strom durchgehend
+  aus, obwohl dazwischen ein **anderer** Wert gestanden haben kann, der nie
+  ankam. Ein Bild aus dieser Lücke bekäme dann ein falsches Label, das wie
+  Wahrheit aussieht — genau die Fehlerart, die dieses Projekt ausschliesst.
+  Der Fall tritt auch **an einem echten Wertwechsel** auf: fehlt dort ein
+  Telegramm, sieht ein A→B-Übergang harmlos aus, obwohl dazwischen ein
+  drittes C gestanden haben kann.
+* **Stand der Umsetzung:** `scripts/gate-label.py` prüft beides — Abstände
+  innerhalb eines Laufs **und** den Abstand zum nächsten abweichenden
+  Telegramm — gegen `--max-gap-ms`. Das Argument hat **bewusst keinen
+  Vorgabewert**: eine erfundene Schwelle wäre eine unbelegte Zahl an der
+  Stelle, an der es auf Belegbarkeit ankommt.
+* **Datenlage:** Über 1125 Telegramme (599 s) gemessen: Abstand min 502 ms,
+  p50 553 ms, p95 555 ms, max 562 ms — also sehr eng verteilt, kein einziger
+  Ausfall. Das ist ein guter Ausgangspunkt, aber **eine Aufzeichnung ohne
+  Ausfälle sagt nichts darüber, wie ein Ausfall aussieht**, wenn er auftritt.
+* **Klärung:** Über eine längere Strecke (Stunden) mitschreiben und die
+  Abstandsverteilung auf Ausreisser prüfen; zusätzlich unter Last (Kamera
+  läuft parallel, USB ausgelastet) messen, weil dort Pufferüberläufe
+  wahrscheinlicher sind. Die Schwelle dann aus der gemessenen Verteilung
+  ableiten und **vor** der Ernte festschreiben — wie M, aus demselben Grund.
+* **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
+* **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
+  Vorab-Festlegung des Plans
+  `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`.
