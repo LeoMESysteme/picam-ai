@@ -397,6 +397,97 @@ def test_selecting_a_repeat_moves_the_representative(tmp_path):
     assert reloaded_second["selected"] is True
 
 
+# -- relabel_sample -----------------------------------------------------------
+
+
+def test_relabel_sample_corrects_a_typo_and_records_history(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
+
+    corrected = store.relabel_sample(
+        sample["id"], revision=sample["metadata_revision"], expected_text="0.94801", reason="Tippfehler, visuell nachgeprueft"
+    )
+
+    assert corrected["expected_text"] == "0.94801"
+    assert corrected["metadata_revision"] == sample["metadata_revision"] + 1
+    assert len(corrected["label_history"]) == 1
+    entry = corrected["label_history"][0]
+    assert entry["previous_expected_text"] == sample["expected_text"]
+    assert entry["reason"] == "Tippfehler, visuell nachgeprueft"
+    assert "changed_at_utc" in entry
+
+    reloaded = json.loads((tmp_path / "datasets" / "samples" / sample["id"] / "sample.json").read_text())
+    assert reloaded["expected_text"] == "0.94801"
+    assert reloaded["label_history"][0]["previous_expected_text"] == sample["expected_text"]
+
+
+def test_relabel_sample_requires_matching_revision(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
+
+    with pytest.raises(RevisionConflict):
+        store.relabel_sample(sample["id"], revision=5, expected_text="0.94801", reason="Tippfehler")
+
+
+def test_relabel_sample_rejects_unknown_sample(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    with pytest.raises(DatasetError):
+        store.relabel_sample("0" * 32, revision=0, expected_text="0.94801", reason="Tippfehler")
+
+
+def test_relabel_sample_rejects_unreadable_samples(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(
+        _capture(device["id"], group["group_id"]),
+        _annotation(label_state="unreadable", expected_text=None),
+    )
+    with pytest.raises(DatasetError):
+        store.relabel_sample(sample["id"], revision=sample["metadata_revision"], expected_text="0.94801", reason="Tippfehler")
+
+
+@pytest.mark.parametrize("reason", [None, "", "   "])
+def test_relabel_sample_rejects_missing_or_blank_reason(tmp_path, reason):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
+    with pytest.raises(DatasetError):
+        store.relabel_sample(sample["id"], revision=sample["metadata_revision"], expected_text="0.94801", reason=reason)
+
+
+def test_relabel_sample_rejects_a_no_op_change(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
+    with pytest.raises(DatasetError):
+        store.relabel_sample(
+            sample["id"], revision=sample["metadata_revision"], expected_text=sample["expected_text"], reason="Tippfehler"
+        )
+
+
+def test_relabel_sample_leaves_image_and_hash_untouched(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
+    image_path = tmp_path / "datasets" / "samples" / sample["id"] / "image.png"
+    image_bytes_before = image_path.read_bytes()
+
+    corrected = store.relabel_sample(
+        sample["id"], revision=sample["metadata_revision"], expected_text="0.94801", reason="Tippfehler"
+    )
+
+    assert corrected["sha256"] == sample["sha256"]
+    assert image_path.read_bytes() == image_bytes_before
+
+
 # -- Export (Grundverhalten; Loaderintegration siehe Aufgabe 6) -----------
 
 

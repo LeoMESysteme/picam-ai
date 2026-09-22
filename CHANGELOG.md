@@ -3,6 +3,34 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-22 (DatasetStore: begruendete Label-Korrektur)
+
+**Problem:** `save_sample` lehnt ein anderes Label fuer denselben
+`capture_token` bewusst als `RevisionConflict` ab (Labels sind unveraenderlich)
+- aber damit gab es keinen unterstuetzten Weg, ein von Menschenhand
+vertipptes `expected_text` zu korrigieren. `var/` liegt nicht unter
+Versionskontrolle, also haette ein direktes Editieren der `sample.json` keine
+Spur des vorherigen Werts hinterlassen.
+
+**Änderung:** `DatasetStore.relabel_sample`/`_relabel_sample_locked`
+(`src/dispread/workbench/datasets.py`), nach demselben Revisions-Check-Muster
+wie `select_sample`/`_select_sample_locked`. Nur fuer `label_state=readable`,
+verlangt eine Begruendung, lehnt No-Op-Aenderungen ab, haengt den vorherigen
+Wert plus Zeitstempel und Begruendung an ein neues `label_history`-Feld an,
+erhoeht `metadata_revision`. Neuer Controller-Befehl `dataset.relabel`
+(`src/dispread/workbench/controller.py`), analog zu `dataset.select`.
+
+**Konsequenz:** Fehlgetippte Ground Truth kann jetzt nachvollziehbar
+korrigiert werden, ohne die Unveraenderlichkeitsregel fuer echte
+Label-Konflikte aufzuweichen. `label_history` ist ein zusaetzliches Feld -
+`benchmark.load_dataset_samples` und der Exportpfad pruefen nur bekannte
+Pflichtfelder, ignorieren unbekannte, also bricht nichts Bestehendes.
+
+Erstmals angewandt am selben Tag auf zwei vertippte GSV-Beschriftungen
+(`663591e6…`, `e96bd68c…`, beide `0.94801`); Befund und Begruendung im
+[Laborjournal](docs/lab_journal.md) 2026-09-22. Danach weichen 0 von 11
+GSV-Beschriftungen vom Festformat ab.
+
 ## 0.1.0.dev0 — 2026-09-21 (Workbench-UI: Leser-Backend waehlbar)
 
 **Problem:** `backend.set` (voriger Commit) war nur ueber einen direkten

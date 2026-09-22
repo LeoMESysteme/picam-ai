@@ -694,3 +694,51 @@ Rastergeometrie selbst untersuchen (OQ-23-Update): entweder der
 Kandidatenraum in `dispread.ocr.autofit._CANDIDATES` ist für reale Displays
 zu eng, oder `cell_boxes` braucht grundsätzlich eine andere Aufteilung als
 die für synthetisches Material entworfene.
+
+---
+
+## 2026-09-22 — Zwei fehlerhafte GSV-Beschriftungen gefunden und korrigiert
+
+**Ziel:** Vor dem Festlegen eines Abnahmekriteriums für einen neuen
+Dot-Matrix-Leser prüfen, ob die 11 bestätigten GSV-Beschriftungen überhaupt
+als Wahrheit taugen.
+
+**Aufbau:** Rein rechnerisch auf dem vorhandenen Datensatz
+(`var/workbench/datasets/samples/`, Gerät `87564e345aa047338f954c045bc9df02`),
+plus visuelle Kontrolle der beiden auffälligen Bilder nach Entzerrung über
+eine Sättigungsmaske. Kein Hardwarezugriff, die laufende Produktions-Workbench
+auf Port 7777 wurde nicht angefasst.
+
+**Beobachtung:** Neun der elf Beschriftungen haben exakt 6 Ziffern und 5
+Nachkommastellen — das Anzeigeformat des GSV-Sensors ist fest
+(`+X.XXXXX mV/V`). Genau zwei wichen ab, und beide erwiesen sich in den
+Bildern als Tippfehler bei der Erfassung:
+
+| Probe | Beschriftung war | Anzeige zeigt | Fehler |
+|---|---|---|---|
+| `663591e6…` | `0.904801` | `+0.94801` | eine `0` zu viel |
+| `e96bd68c…` | `0.9801` | `+0.94801` | die `4` fehlt |
+
+**Messergebnis:** Nach der Korrektur weichen **0 von 11** Beschriftungen vom
+Festformat ab. Die Bilder blieben unberührt (`sha256` unverändert, gegen die
+Sicherungskopien geprüft), `benchmark.load_dataset_samples` lädt weiterhin
+alle 88 Proben ohne Übersprungene.
+
+Ein Korrekturweg existierte vorher nicht: `save_sample` lehnt ein abweichendes
+Label für denselben `capture_token` bewusst ab. Dafür wurde
+`DatasetStore.relabel_sample` gebaut (siehe CHANGELOG). Da `var/` nicht unter
+Versionskontrolle steht, hält das neue Feld `label_history` den vorherigen
+Wert samt Begründung fest — sonst gäbe es **keinerlei** Spur, dass hier
+Grundwahrheit verändert wurde.
+
+**Schluss:** Die Formatkonsistenz-Prüfung ist als Routine für künftige
+Sammelläufe brauchbar — sie hat beide Fehler ohne Bildbetrachtung gefunden,
+und zwar in Sekunden. Sie trägt aber **nur bei Geräten mit festem
+Anzeigeformat**. Dasselbe Verfahren auf die beiden anderen Datensatzgeräte
+angewandt liefert bei `91853b73…` (41 Proben) ein völlig einheitliches Bild,
+bei `4237c46d…` (36 Proben) sieben Ausreißer — von denen vier einen in sich
+stimmigen Nahe-Null-Cluster (`-0.0002` … `-0.0010`) bilden und damit eher nach
+legitimer Bereichsumschaltung als nach Tippfehlern aussehen. Dort wurde
+**nichts geändert**; ohne Bildprüfung ist „Tippfehler" von „anderer Messwert"
+nicht unterscheidbar. Beide Geräte sind ohnehin LED-/VFD-Laborvertreter und
+für den späteren Produktionspfad (durchgehend GSV-LCD) nicht maßgeblich.

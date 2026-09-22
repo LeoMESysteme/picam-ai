@@ -814,6 +814,10 @@ class Controller:
                 return {"discarded": True}
             elif op == "dataset.select":
                 return self.dataset_store.select_sample(args["sample_id"], args["revision"])
+            elif op == "dataset.relabel":
+                return self.dataset_store.relabel_sample(
+                    args["sample_id"], args["revision"], args["expected_text"], args["reason"]
+                )
             elif op == "dataset.summary":
                 return self.dataset_store.summary()
             else:

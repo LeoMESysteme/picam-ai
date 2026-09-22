@@ -28,6 +28,7 @@ import tempfile
 import threading
 import uuid
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -566,6 +567,54 @@ class DatasetStore:
         sample["metadata_revision"] = sample.get("metadata_revision", 0) + 1
         self._rewrite_sample(sample)
         del device
+        return copy.deepcopy(sample)
+
+    def relabel_sample(self, sample_id: str, revision: int, expected_text: str, reason: str) -> dict:
+        with self._lock:
+            return self._relabel_sample_locked(sample_id, revision, expected_text, reason)
+
+    def _relabel_sample_locked(self, sample_id: str, revision: int, expected_text: str, reason: str) -> dict:
+        """Getippte Ground Truth einer bereits gespeicherten Probe korrigieren.
+
+        Anders als ``save_sample`` (Idempotenz/Revisionskonflikt bei *neuen*
+        Proben) ist das hier die ausdrueckliche, begruendete Korrektur einer
+        vorhandenen: ``var/`` liegt nicht unter Versionskontrolle, also ist
+        ``label_history`` die einzige Spur des vorherigen Werts. Nur bei
+        ``label_state="readable"`` sinnvoll - bei unlesbaren Proben ist
+        ``expected_text`` bereits ``None`` und eine andere Operation gefragt.
+        """
+        final_dir = self._sample_dir(sample_id)
+        sample_json = final_dir / "sample.json"
+        if not sample_json.exists():
+            raise DatasetError(f"Unbekannte Probe: {sample_id}")
+        with open(sample_json, encoding="utf-8") as handle:
+            sample = json.load(handle)
+        if sample.get("metadata_revision", 0) != revision:
+            raise RevisionConflict(
+                f"Probe {sample_id}: erwartete Revision {revision}, aktuell {sample.get('metadata_revision', 0)}"
+            )
+        if sample.get("label_state") != "readable":
+            raise DatasetError(
+                "relabel_sample nur fuer label_state=readable - "
+                "eine unlesbare Probe braucht eine andere Operation, kein Umlabeln"
+            )
+        reason_text = _short_text(reason, "Begründung", _NOTE_MAX, required=True)
+        new_text = normalize_label(expected_text)
+        if new_text == sample.get("expected_text"):
+            raise DatasetError("expected_text unveraendert - kein Umlabeln noetig")
+
+        history = list(sample.get("label_history") or [])
+        history.append(
+            {
+                "previous_expected_text": sample.get("expected_text"),
+                "changed_at_utc": datetime.now(UTC).isoformat(),
+                "reason": reason_text,
+            }
+        )
+        sample["label_history"] = history
+        sample["expected_text"] = new_text
+        sample["metadata_revision"] = sample.get("metadata_revision", 0) + 1
+        self._rewrite_sample(sample)
         return copy.deepcopy(sample)
 
     def _rewrite_sample(self, sample: dict) -> None:

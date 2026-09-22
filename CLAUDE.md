@@ -117,6 +117,13 @@ Kamera laufen.
 * `SensorTimestamp` liegt in der **CLOCK_BOOTTIME**-Domäne (gemessen). Die
   *Semantik* — Belichtungsbeginn oder Auslese-Ende — ist noch offen (Messung M2
   in [docs/TIMING.md](docs/TIMING.md)).
+* Die Anzeige des GSV-Sensors ist ein **Displaytech 161A** (von der Platine
+  abgelesen): Punktraster-Zeichen-LCD mit **16 Zeichen × 1 Zeile**. Die
+  Zellenzahl ist damit bekannt und keine Messgröße. Der Modultyp legt aber
+  **nur die Geometrie** fest, nicht den Zeichensatz — der Controller
+  (HD44780-kompatibel) kommt in ROM-Varianten mit unterschiedlichen
+  Sonderzeichen. Bei Ziffern fällt eine falsch angenommene Variante nicht auf,
+  erst bei `°`/`Ω`/`µ`.
 
 ## Nicht verhandelbar
 

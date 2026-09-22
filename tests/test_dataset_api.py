@@ -178,6 +178,61 @@ def test_marking_a_sample_as_representative_makes_the_group_exportable(tmp_path)
     asyncio.run(check())
 
 
+def test_relabel_command_corrects_a_typo_over_http(tmp_path):
+    """``dataset.relabel`` ueber denselben HTTP-Befehlspfad wie ``dataset.select``."""
+
+    async def check():
+        c = Controller(tmp_path, simulate=True)
+        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        try:
+            device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
+            group = await (
+                await _command(client, headers, "dataset.group.begin", {"device_id": device["id"], "change_note": "Situation 1"})
+            ).json()
+            c.publish(_image(), {"timebase": "file_mtime"})
+            captured = await (
+                await _command(
+                    client, headers, "dataset.capture", {"device_id": device["id"], "group_id": group["group_id"]}
+                )
+            ).json()
+            saved = await (
+                await _command(
+                    client,
+                    headers,
+                    "dataset.save",
+                    {
+                        "token": captured["token"],
+                        "bbox": [10, 10, 40, 20],
+                        "label_state": "readable",
+                        "expected_text": "-01.25",
+                        "conditions": ["frontal"],
+                    },
+                )
+            ).json()
+
+            relabeled = await (
+                await _command(
+                    client,
+                    headers,
+                    "dataset.relabel",
+                    {
+                        "sample_id": saved["id"],
+                        "revision": saved["metadata_revision"],
+                        "expected_text": "0.94801",
+                        "reason": "Tippfehler, visuell nachgeprueft",
+                    },
+                )
+            ).json()
+            assert relabeled["expected_text"] == "0.94801"
+            assert relabeled["label_history"][0]["previous_expected_text"] == "-01.25"
+        finally:
+            c.stop.set()
+            await terminals.close()
+            await client.close()
+
+    asyncio.run(check())
+
+
 def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
