@@ -1195,3 +1195,31 @@ Vielfalt und Plateaulänge aus dem vorigen Eintrag entfällt. **Nicht** gelöst:
 **negative Werte.** Die Anleitung erlaubt negative Normierung erst „ab
 Firmware-Version 1.5.06"; dieses Gerät hat 1.3.07. Die Vorzeichenstelle
 bleibt damit unbelegt.
+
+### Nachtrag — hängt die Plateaulänge vom Normierungsfaktor ab?
+
+**Sorge:** Ein hoher Faktor verstärkt die Drift des Stimulus in die sichtbaren
+Stellen. Bei norm = 9000 bewegt dieselbe Drift, die `+0.59696` um einen
+Zählschritt verschiebt, die Anzeige `+05372.5` um rund neun. Zerlegt das die
+Plateaus, kehrt der Konflikt zwischen Vielfalt und Plateaulänge bei den hohen
+Faktoren zurück — und die Sitzungsplanung müsste moderate Faktoren bevorzugen.
+
+**Messung:** je 90 s bei norm = 1,0 / 100,0 / 1500,0, selbstrücksetzend.
+
+| norm | Beispielanzeige | versch. | Plateau p50 | p90 | max | nutzbar bei M = 500 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1,0 | `+0.59694 mV/V` | 33 | 0,60 s | 2,61 s | 12,25 s | 49,9 % |
+| 100,0 | `+059.996 mV/V` | 2 | 1,00 s | 5,42 s | 11,85 s | 55,1 % |
+| 1500,0 | `+0899.93 mV/V` | 5 | 1,00 s | 3,01 s | 5,82 s | 40,1 % |
+
+**Befund: die Sorge trifft nicht zu.** Die Plateaulänge ist über drei
+Grössenordnungen des Faktors praktisch unverändert (p50 0,6–1,0 s, nutzbare
+Zeit 40–55 %). Der Grund ist einfach und war übersehen worden: die Anzeige
+zeigt **immer 6 Ziffern**, also immer dieselbe *relative* Auflösung. Bei
+norm = 1 entspricht die letzte Stelle 10⁻⁵ mV/V, bei norm = 1500 sind es
+0,01/1500 ≈ 6,7·10⁻⁶ mV/V — dieselbe Grössenordnung. Die Verstärkung des
+Werts und die Verstärkung der Auflösung heben sich auf.
+
+**Folge:** Die Sitzungsplanung ist im Faktor frei. Die Schwankung der Spalte
+„versch." (33 / 2 / 5) ist Drift des Stimulus im jeweiligen 90-s-Fenster,
+kein Effekt des Faktors.
