@@ -36,13 +36,32 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-04 — Welche Gerätetypen bilden den ersten freizugebenden Umfang?
 
-* **Status:** offen · **Zuständig:** Labor
+* **Status:** teilweise geklärt (Technologie), Gerätezahl/-familie weiter offen
+  · **Zuständig:** Labor
 * **Blockiert:** Umfang des Datensatzes (P2) und die Abnahmekriterien (P7).
 * **Vorabdefault:** mit GSV-2ASD und einem AST-Gerät beginnen; die Architektur
   bleibt anzeigetyp-agnostisch.
 * **Günstigstes Experiment:** zwei Wochen Zählstrich am Prüfplatz — welche
   Geräte kommen tatsächlich am häufigsten?
 * **Antwort landet in:** [ROADMAP.md](ROADMAP.md), `datasets/README.md`
+
+* **Update 2026-09-21, Technologie vom Nutzer bestätigt:** Alle im
+  Produktivbetrieb zu lesenden Anzeigen sind **LCD**
+  (`layout.polarity = "dark_on_bright"`), nicht LED/VFD. Das betrifft die
+  eigentlichen Messverstärker-Displays (GSV-/AST-Geräte), **nicht** den
+  aktuellen Sammelmodus-Entwicklungsbestand: die beiden bisher registrierten
+  Geräte "RND-Lab" und "BK Precision" (73 reale Proben, siehe
+  [VALIDATION.md](VALIDATION.md) 2026-09-21) sind Laboraufbauten mit
+  `technology=LED`, physisch aber teils VFD (BK-5491B, siehe OQ-23-Kopf) —
+  keines davon ist LCD. Der bisherige reale Dataset-Benchmark-Lauf prüft
+  damit die Pipeline-Mechanik korrekt, ist aber **nicht** repräsentativ für
+  die tatsächliche Zielhardware. Konsequenz: Sobald ein LCD-Gerät verfügbar
+  ist, gehört es vorrangig in den Sammelmodus aufgenommen - die
+  LED/LCD-Vielfaltsvorgabe aus dem Exportziel
+  (`docs/status.md`, „mindestens 6 verifizierte Geräte, 3 Familien, LED und
+  LCD") ist jetzt weniger eine Vielfaltsvorgabe als eine **Zielhardware-
+  Vorgabe**: LCD ist Pflicht, LED/VFD bleiben nur als zusätzliche
+  Entwicklungsdaten wertvoll.
 
 ## OQ-05 — Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen?
 
@@ -180,7 +199,7 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
 ## OQ-15 — `tesseract-ocr`, `socat` und `chrony` installieren
 
-* **Status:** offen · **Zuständig:** Mensch mit `sudo`-Passwort
+* **Status:** geklärt (2026-09-21)
 * **Befund:** Seit dem Reboot am 2026-09-07 verlangt `sudo` ein Passwort, die
   Installation konnte nicht automatisch erfolgen. Benötigt:
   `sudo apt install -y tesseract-ocr tesseract-ocr-eng socat chrony`
@@ -188,6 +207,13 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   ist Messung M1 (Offset und Drift) nicht protokollierbar. `socat` ist nur
   Komfort — die Tests nutzen `os.openpty()` aus der stdlib.
 * **Antwort landet in:** [dependencies.md](dependencies.md)
+* **Antwort (2026-09-21):** Alle drei sind auf dem Lab-Pi installiert
+  (`tesseract 5.5.0`, `socat`, `chrony 4.6.1-3`) - per `which`/`dpkg -l`
+  geprueft. Der Eintrag war nur nicht aktualisiert; kein offener Blocker
+  mehr. `dispread.ocr.tesseract_cli` ist geschrieben und ruft die
+  tesseract-Binary auf (siehe CHANGELOG 2026-09-21) — ein produktiver,
+  erfolgreicher Read gegen echte GSV-Sensor-Fotos steht noch aus (0/11
+  Proben liefern bisher einen Wert, siehe docs/status.md).
 
 ## OQ-16 — Vollständigkeit des lokalen Planungsstands
 
@@ -222,6 +248,21 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   vorsehen; Profilannahmen dürfen keine optische Erkennung vortäuschen.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später Leser,
   Profile und `docs/VALIDATION.md`.
+
+* **Update 2026-09-21, empirischer Datenpunkt aus dem Sammelmodus
+  (`docs/PLAN_2026-09-21-dataset-benchmark.md`):** Die BK-Precision-Situation
+  `26692830cde04118b69f5b2c60c40335` mischt innerhalb **einer** Sitzung zwei
+  Punktpositionen bei gleicher Ziffernzahl: Werte wie `012.38` (2
+  Nachkommastellen) stehen neben `-0.0009`/`-0.0010` (4 Nachkommastellen) -
+  das Gerät hat den Messbereich mitten in der Aufnahmesitzung gewechselt.
+  Das ist die konkrete Antwort auf die obige Frage „welche Geräte können
+  Punkt/Messbereich während eines Laufs wechseln": mindestens das
+  BK-5491B tut es, beobachtet, nicht nur befürchtet. Für den Dataset-
+  Benchmark (Task 3, `target_layout`) folgt daraus: Nachkommastellen dürfen
+  **nie** über eine ganze Faltung eingefroren werden, sondern müssen je
+  Zielprobe aus deren eigenem `expected_text` kommen - ein eingefrorenes
+  `decimals` hätte hier garantiert die Fehlerklasse `decimal` erzeugt, nicht
+  von der Optik verursacht, sondern vom Prüfstand selbst fabriziert.
 
 ## OQ-18 — Welches neuronale OCR-Modell trägt auf realen Displays?
 
@@ -720,6 +761,40 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
     Messänderung, siehe
     [PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md).
 
+* **Update 2026-09-21, erstmals gezählt statt an einem Einzelbild vermutet
+  (`scripts/dataset-benchmark.py`,
+  [PLAN_2026-09-21-dataset-benchmark.md](PLAN_2026-09-21-dataset-benchmark.md)):**
+  Gegen **alle 73 lesbaren Proben** des Sammelmodus-Bestands (2 Geräte,
+  „RND-Lab" 40, „BK Precision" 33) passt eine grobe Rahmenvorsuche
+  (~36 Geometrie-Kandidaten je Probe) **kein einziges Mal** — **0 von 73**,
+  achsparallel wie entzerrt, in beiden Geräten. Das bestätigt die frühere
+  Einzelbild-Vermutung als gemessenen Befund, nicht mehr als Verdacht: das
+  feste relative Segment-Abtastraster passt bei diesem Bestand grundsätzlich
+  nicht zur Kameraaufnahme, unabhängig von Geräteserie oder Technologie —
+  RND-Lab ist LED, nicht VFD wie BK-5491B, betroffen sind also beide.
+  Segmentdiagnose (`segment_report`) an Beispielen zeigt keinen einheitlichen
+  Fehlertyp: teils liegt kein einziges Segment über der Schwelle (Stelle 1 in
+  `0b5eaacf...`: alle Werte 0,12–0,16, Kontrast zu gering), teils liegt ein
+  Muster nahe am Sollmuster, aber nicht identisch (Stelle 2 in
+  `0282bca7...`: gemessen `a`/`b`/`f`/`g` aktiv statt `a`/`b`/`c`/`d`/`g` für
+  die erwartete „3" — zwei von fünf Segmenten falsch). Das deutet eher auf
+  eine grundsätzlich falsche
+  Rasterposition/-skalierung als auf eine einzelne Schwellenverschiebung —
+  siehe auch OQ-25-Update unten zur Geometrievorsuche selbst. Phase B
+  (Leave-one-group-out-Übertragung) konnte dadurch in keiner der 6
+  durchgeführten Faltungen (2 von 3 BK-Situationen + 4 RND-Lab-Situationen;
+  die dritte BK-Situation „schräg links" hat noch keinen `selected`-Vertreter
+  und wurde als Lücke gemeldet, nicht ersetzt) überhaupt eine Übertragungszahl
+  liefern — der Vertreter jeder Faltung passte selbst nicht. Rohdaten:
+  `docs/VALIDATION.md`, Abschnitt „2026-09-21".
+* **Klärung, präzisiert:** Die nächste sinnvolle Stufe ist nicht mehr „mehr
+  Bilder sammeln", sondern die Rastergeometrie selbst prüfen — vermutlich
+  braucht es eine größere/andere Werte-Spanne in
+  `dispread.ocr.autofit._CANDIDATES` als die für synthetische Bilder
+  gewählte, oder eine grundsätzlich andere Zellaufteilung (`cell_boxes`)
+  für reale Aufnahmen. Das ist jetzt eine Aussage über die Geometrie, keine
+  über die Datenmenge mehr.
+
 ## OQ-24 — Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen
 
 * **Status:** in Arbeit · erkannt 2026-09-09 durch Bedienerrückmeldung
@@ -836,6 +911,27 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   veraltet. Die IoU-Messung von `fit_quad_in_region`/`fit_ocr_box` wurde
   **nicht** auf die übrigen vier Bilder ausgeweitet; das steht weiterhin aus.
 * **Antwort landet in:** `docs/VALIDATION.md`, `src/dispread/workbench/vision.py`.
+
+* **Update 2026-09-21, `fit_quad_in_region` an 73 realen Proben - 0 von 73
+  liefern ein Quad** (`scripts/dataset-benchmark.py`, Arm „deskewed" der
+  Dataset-Benchmark-Geometrie, siehe OQ-23-Update oben): Für **jede einzelne**
+  der 73 lesbaren Sammelmodus-Proben (beide Geräte) lehnt `fit_quad_in_region`
+  die von Hand gezogene Zielbox als Hinweisbereich vollständig ab (`None`).
+  Anders als bei den zwei Annotationen von 2026-09-10 (IoU ≈ 0,91) trifft die
+  Funktion hier **nie**. Wahrscheinlichste Ursache, noch nicht einzeln
+  nachgewiesen: die Sammelmodus-Zielboxen sind bewusst locker um die Anzeige
+  gezogen (Plan 2026-09-21 misst eine ~5-fache Flächenstreuung allein
+  innerhalb einer Situation) und dadurch systematisch zu großzügig für
+  `fit_quad_in_region`s `MIN_HINT_OVERLAP=0,2`/Flächenfilter - eine andere
+  Belastung als die bestätigten, engeren `roi_quad`-Hinweise aus dem
+  Annotationspfad, für die die Funktion ursprünglich gemessen wurde. Betrifft
+  ausschließlich den `deskewed`-Arm des Dataset-Benchmarks; `manual_roi`
+  bleibt unberührt (reiner Vorschlag, nie automatisch übernommen).
+* **Klärung, präzisiert:** Vor einer Änderung an `fit_quad_in_region` selbst
+  erst klären, ob die Ursache tatsächlich die lockere Zielbox ist (z. B.
+  testweise `MIN_HINT_OVERLAP` senken oder die Zielbox vor dem Aufruf enger
+  fitten) statt die Funktion blind nachzuschärfen - siehe AGENTS.md, keine
+  Vermutung ohne Messung.
 
 ## OQ-26 — Grenzen der Nachführung an realen Geräten validieren
 

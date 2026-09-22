@@ -26,17 +26,20 @@ from __future__ import annotations
 import glob
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import cv2
 
 from dispread.frames import open_source, path_uri
-from dispread.layout import DisplayLayout
+from dispread.layout import DIGIT_SEGMENTS, SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
 from dispread.ocr import ReadResult, ValueReader
+from dispread.ocr.autofit import AutofitResult, fit_layout, parse_expected
+from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.rectify import rectify
 from dispread.workbench.controller import CROP_SIZE, crop_box
+from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 
 __all__ = [
     "Outcome",
@@ -46,9 +49,24 @@ __all__ = [
     "evaluate_clip",
     "evaluate_annotation",
     "evaluate_set",
+    "aggregate",
     "assert_disjoint_devices",
     "directories_from_glob",
+    "DatasetSample",
+    "load_dataset_samples",
+    "sample_quad",
+    "assert_disjoint_groups",
+    "SampleFit",
+    "search_ocr_box",
+    "fit_dataset_sample",
+    "target_layout",
+    "evaluate_dataset_sample",
+    "segment_report",
 ]
+
+#: Sortierbares "kein Treffer"-Mass, wie `dispread.ocr.autofit._NO_MATCH` -
+#: hier lokal dupliziert statt aus einem privaten Namen importiert.
+_NO_MATCH = -1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +321,21 @@ def evaluate_set(directories: Sequence[Path], reader: ValueReader) -> dict[str, 
         else:
             outcomes.append(outcome)
 
+    report = aggregate(outcomes)
+    report["skipped"] = skipped
+    return report
+
+
+def aggregate(outcomes: Sequence[Outcome]) -> dict[str, Any]:
+    """Mehrere `Outcome`s zu einer Gesamtstatistik summieren.
+
+    Aus `evaluate_set` herausgezogen (Plan-Dateiliste), damit der
+    Clip-/Annotationspfad und der Datensatz-Benchmark-Pfad (Task 4) dieselbe
+    Aggregation benutzen statt zwei Kopien zu pflegen, die auseinanderlaufen
+    koennten. Traegt bewusst kein `skipped` - das ist je nach Aufrufer
+    unterschiedlich benannt (Verzeichnisse hier, Proben/Faltungen bei Task 4)
+    und wird dort selbst angefuegt.
+    """
     correct = sum(o.correct for o in outcomes)
     wrong = sum(o.wrong for o in outcomes)
     rejected = sum(o.rejected for o in outcomes)
@@ -316,13 +349,12 @@ def evaluate_set(directories: Sequence[Path], reader: ValueReader) -> dict[str, 
 
     return {
         "evaluated": len(outcomes),
-        "skipped": skipped,
         "correct": correct,
         "wrong": wrong,
         "rejected": rejected,
         "wrong_classes": wrong_classes,
         "reject_classes": reject_classes,
-        "outcomes": outcomes,
+        "outcomes": list(outcomes),
     }
 
 
@@ -378,3 +410,546 @@ def assert_disjoint_devices(development: Sequence[Path], test: Sequence[Path]) -
 def directories_from_glob(pattern: str) -> list[Path]:
     """Hilfsfunktion fuer die CLI: Glob-Muster zu vorhandenen Verzeichnissen."""
     return [Path(p) for p in sorted(glob.glob(pattern)) if Path(p).is_dir()]
+
+
+# --- Datensatz-Benchmark (Sammelmodus-Proben) ------------------------------
+#
+# Ab hier: Proben aus `var/workbench/datasets/` (geführter Sammelmodus,
+# `dispread.workbench.datasets.DatasetStore`), nicht Clips/Annotationen. Die
+# Zahlengeometrie (`sample_quad`) und der Split-Schutz (`assert_disjoint_groups`)
+# sind eigene Bausteine, weil eine Probe eine `bbox` in Pixelkoordinaten traegt,
+# nicht bereits ein bestaetigtes `roi_quad`.
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetSample:
+    """Eine geladene Sammelmodus-Probe (`samples/<uuid>/{sample.json,image.png}`).
+
+    `expected_text` ist `None` genau dann, wenn `label_state == "unreadable"` -
+    eine unlesbare Probe hat per Exportvertrag keinen Sollwert und wird als
+    benannte Einzelfalldiagnose weitergereicht (Konzept §7: Unlesbares
+    ablehnen statt raten), nicht in eine Zaehlung gefaltet. `bbox` bleibt in
+    Pixelkoordinaten, wie in `sample.json` gespeichert - `sample_quad`
+    normiert sie erst bei Bedarf.
+    """
+
+    id: str
+    device_id: str
+    independence_group: str
+    split: str
+    label_state: str
+    expected_text: str | None
+    bbox: tuple[float, float, float, float]
+    image_path: Path
+    width: int
+    height: int
+    #: Vertreter ihrer `independence_group` fuer Phase B (Task 4)? Optional,
+    #: default `False` fuer aeltere Proben/Testfixtures ohne dieses Feld.
+    selected: bool = False
+    #: Rohes `similarity_warning` aus `sample.json` (Kandidat + Score), oder
+    #: `None`. Unveraendert durchgereicht - keine eigene Interpretation hier.
+    similarity_warning: dict[str, Any] | None = None
+
+
+#: Schluessel, die jede Probe unabhaengig vom Label-Zustand tragen muss.
+_REQUIRED_SAMPLE_KEYS = (
+    "id",
+    "device_id",
+    "independence_group",
+    "split",
+    "label_state",
+    "bbox",
+    "width",
+    "height",
+    "synthetic",
+)
+
+
+def load_dataset_samples(root: Path) -> tuple[list[DatasetSample], list[str]]:
+    """`root/samples/<uuid>/sample.json` laden, wie es `DatasetStore` ablegt.
+
+    Liest die Manifeste direkt (kein `DatasetStore` - dessen Instanzierung ist
+    erst Task 3s Sache fuer `list_devices`/`_similarity_score`). Uebersprungen
+    wird, "wie der Exportvertrag" es vormacht (`DatasetStore.export_dataset`):
+    synthetische Proben (`synthetic: true`) und Proben mit
+    `label_state in ("uncertain", "draft")` - deren Sollwert gilt nicht als
+    belastbar genug fuer einen Benchmark. Jeder Uebersprung, jedes defekte
+    Verzeichnis und jedes fehlende Pflichtfeld wird einzeln in `skipped`
+    benannt (AGENTS.md: nie unmarkiert weglassen) statt eine Ausnahme zu
+    werfen, die den ganzen Ladevorgang fuer eine einzelne kaputte Datei
+    abbricht.
+
+    `label_state == "unreadable"` ist dagegen KEIN Uebersprung: die Probe wird
+    geladen (mit `expected_text=None`), damit ein Aufrufer sie als benannte
+    Einzelfalldiagnose ausgeben kann, statt sie stillschweigend wegzulassen
+    oder faelschlich in einen Nenner zu falten (Plan-Vorgabe, siehe
+    Docstring von `DatasetSample`).
+    """
+    samples: list[DatasetSample] = []
+    skipped: list[str] = []
+    samples_root = root / "samples"
+    if not samples_root.is_dir():
+        return samples, skipped
+
+    for sample_dir in sorted(p for p in samples_root.iterdir() if p.is_dir()):
+        manifest_path = sample_dir / "sample.json"
+        try:
+            raw = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            skipped.append(f"{sample_dir}: sample.json nicht lesbar ({exc})")
+            continue
+
+        missing = [key for key in _REQUIRED_SAMPLE_KEYS if key not in raw]
+        if missing:
+            skipped.append(f"{sample_dir}: fehlende Felder {missing}")
+            continue
+
+        if raw["synthetic"] is True:
+            skipped.append(f"{sample_dir}: synthetisch (nicht Teil der realen Auswertung)")
+            continue
+
+        label_state = raw["label_state"]
+        if label_state in ("uncertain", "draft"):
+            skipped.append(f"{sample_dir}: label_state={label_state} (kein belastbarer Sollwert)")
+            continue
+
+        expected_text: str | None
+        if label_state == "readable":
+            expected_text = raw.get("expected_text")
+            if not expected_text:
+                skipped.append(f"{sample_dir}: label_state=readable ohne expected_text")
+                continue
+        elif label_state == "unreadable":
+            expected_text = None
+        else:
+            skipped.append(f"{sample_dir}: unbekannter label_state={label_state!r}")
+            continue
+
+        samples.append(
+            DatasetSample(
+                id=str(raw["id"]),
+                device_id=str(raw["device_id"]),
+                independence_group=str(raw["independence_group"]),
+                split=str(raw["split"]),
+                label_state=label_state,
+                expected_text=expected_text,
+                bbox=tuple(float(v) for v in raw["bbox"]),
+                image_path=sample_dir / "image.png",
+                width=int(raw["width"]),
+                height=int(raw["height"]),
+                selected=bool(raw.get("selected", False)),
+                similarity_warning=raw.get("similarity_warning"),
+            )
+        )
+    return samples, skipped
+
+
+def sample_quad(
+    image: Any, bbox: tuple[float, float, float, float], *, deskew: bool
+) -> tuple[tuple[float, float], ...] | None:
+    """Pixel-`bbox` in das normierte Quad ueberfuehren, das `read_frame` erwartet.
+
+    `deskew=False` (Arm 1): reine Normierung der achsparallelen Box auf ihre
+    vier Eckpunkte - keine Suche, keine Rotation. `deskew=True` (Arm 2): erst
+    normieren, dann `fit_quad_in_region` als perspektivischen Vorschlag
+    innerhalb dieses Hinweisbereichs suchen lassen. Liefert `fit_quad_in_region`
+    `None` (kein Kandidat besteht die Filter), gibt auch `sample_quad` `None`
+    zurueck - **kein** stiller Rueckfall auf Arm 1. Der Plan verlangt den
+    Vergleich beider Arme nur ueber Proben, bei denen beide ein Quad
+    geliefert haben, plus eine getrennte Zahl der `None`-Faelle; ein Rueckfall
+    wuerde die beiden Arme vermischen und den Vergleich uninterpretierbar
+    machen.
+    """
+    height, width = image.shape[:2]
+    x, y, w, h = bbox
+    nx, ny, nw, nh = x / width, y / height, w / width, h / height
+    if deskew:
+        return fit_quad_in_region(image, (nx, ny, nw, nh))
+    return (
+        (nx, ny),
+        (nx + nw, ny),
+        (nx + nw, ny + nh),
+        (nx, ny + nh),
+    )
+
+
+def assert_disjoint_groups(
+    fitting: Sequence[DatasetSample], evaluation: Sequence[DatasetSample]
+) -> None:
+    """Unabhaengigkeitsgruppen-Analogon zu `assert_disjoint_devices`.
+
+    Fuer Phase Bs "RND-Lab"-Faltungen (Raster auf dem Vertreter einer
+    Situation fitten, gegen die Proben der anderen Situationen pruefen):
+    dieselbe `independence_group` darf nicht gleichzeitig auf der
+    Fitting-Seite und der Auswertungsseite einer Faltung stehen, sonst waere
+    das Ergebnis der Faltung durch korrelierte Proben optimistisch verzerrt -
+    exakt dieselbe Begruendung wie bei `assert_disjoint_devices`, nur auf
+    Gruppen- statt Geraeteebene. Dies ist die Pruefprimitive, die Task 3 pro
+    Faltung einmal aufruft - der Aufbau der Faltungen selbst gehoert Task 3.
+    """
+    left = {sample.independence_group for sample in fitting}
+    right = {sample.independence_group for sample in evaluation}
+    shared = sorted(left & right)
+    if shared:
+        raise ValueError(
+            "Dieselbe Unabhaengigkeitsgruppe steht auf beiden Seiten einer Faltung: "
+            + ", ".join(shared)
+        )
+
+
+# --- Phase A: Passbarkeit/Diagnose (Task 2) ---------------------------------
+#
+# Bewusst getrennt von Phase B (`target_layout`/`evaluate_dataset_sample`
+# unten): Phase A fittet lokal auf JEDER Probe einzeln, ohne eingefrorene
+# Verhaeltnisse, um deren Passbarkeit ueberhaupt erst zu pruefen (OQ-23). Eine
+# Trefferquote aus Phase A waere kein Erkennungswert - der ist Phase B
+# vorbehalten (Plan: "ausdruecklich kein Erkennungswert").
+
+
+@dataclass(frozen=True, slots=True)
+class SampleFit:
+    """Ergebnis der Phase-A-Rahmenvorsuche + `fit_layout` fuer eine Probe."""
+
+    sample_id: str
+    #: "axis_aligned" (Arm 1) oder "deskewed" (Arm 2), siehe `sample_quad`.
+    geometry: str
+    quad: tuple[tuple[float, float], ...] | None
+    matched: bool
+    layout: DisplayLayout | None
+    ocr_box: tuple[float, float, float, float] | None
+    separation: float
+    runner_up: float
+    flat_optimum: bool
+    evaluated: int
+    reason: str | None
+
+
+#: Grobe Startrahmen, Breite/Hoehe/Position sweepend, relativ zum ganzen
+#: (entzerrten) Ausschnitt - siehe `_ocr_box_grid`.
+_SEARCH_WIDTHS = (0.3, 0.45, 0.6, 0.75, 0.9, 1.0)
+_SEARCH_HEIGHTS = (0.3, 0.45, 0.6, 0.8, 1.0)
+_SEARCH_POSITIONS = (0.0, 0.25, 0.5, 0.75, 1.0)
+_SEARCH_MID_WIDTH = 0.7
+_SEARCH_MID_HEIGHT = 0.6
+
+
+def _ocr_box_grid() -> tuple[tuple[float, float, float, float], ...]:
+    """Deterministische Startrahmen fuer `search_ocr_box`.
+
+    Variiert ausschliesslich Geometrie (Groesse und Position), nie den
+    Sollwert - die Vorsuche kann also keine Ziffer "passend raten" (Plan:
+    OQ-23 verlangt eine ehrliche Passbarkeitspruefung). Kein volles
+    Kreuzprodukt aus Breite x Hoehe x X-Position x Y-Position (das waeren bei
+    diesen Werten 6x5x5x5 = 750 Kandidaten je Probe) - stattdessen, analog zu
+    `dispread.ocr.autofit._box_candidates`, je ein Sweep pro Freiheitsgrad:
+    Breite bei zentrierter Position, Hoehe bei zentrierter Position, Position
+    bei einer mittleren Groesse. Ergibt ~36 Kandidaten statt 750.
+    """
+    seen: set[tuple[float, float, float, float]] = set()
+    candidates: list[tuple[float, float, float, float]] = []
+
+    def add(box: tuple[float, float, float, float]) -> None:
+        rounded = tuple(round(v, 6) for v in box)
+        if rounded not in seen:
+            seen.add(rounded)
+            candidates.append(rounded)
+
+    for w in _SEARCH_WIDTHS:
+        add(((1.0 - w) / 2.0, 0.0, w, 1.0))
+    for h in _SEARCH_HEIGHTS:
+        add((0.0, (1.0 - h) / 2.0, 1.0, h))
+    for px in _SEARCH_POSITIONS:
+        for py in _SEARCH_POSITIONS:
+            add((px * (1.0 - _SEARCH_MID_WIDTH), py * (1.0 - _SEARCH_MID_HEIGHT), _SEARCH_MID_WIDTH, _SEARCH_MID_HEIGHT))
+
+    return tuple(candidates)
+
+
+def search_ocr_box(
+    crop: Any,
+    expected_text: str,
+    layout_hint: DisplayLayout,
+    *,
+    reader: Any = None,
+) -> AutofitResult:
+    """Grobe Rahmenvorsuche (`_ocr_box_grid` + `fit_ocr_box`-Vorschlag) gegen `fit_layout`.
+
+    Jeder Kandidatrahmen wird einzeln komplett an `fit_layout` uebergeben
+    (das seinerseits die Glyphenverhaeltnisse *und* den Rahmen selbst noch
+    feinjustiert); behalten wird der Kandidat mit der groessten
+    Trennschaerfe unter allen, die den Sollwert exakt dekodieren. Ohne
+    diese Vorsuche ist der enge Nachzieh-Bereich von `fit_layout` (Rahmen
+    +-6%, Skalierung 0,9-1,1) fuer eine von Hand gezogene Zielbox zu eng, um
+    "passt nicht" von "war nie in der Naehe" zu unterscheiden (Plan,
+    Vorab-Messung).
+    """
+    box_candidates: list[tuple[float, float, float, float]] = list(_ocr_box_grid())
+    proposed = fit_ocr_box(crop, layout_hint)
+    if proposed is not None:
+        rounded = tuple(round(v, 6) for v in proposed)
+        if rounded not in box_candidates:
+            box_candidates.append(rounded)
+
+    best: AutofitResult | None = None
+    total_evaluated = 0
+    for box in box_candidates:
+        result = fit_layout(crop, expected_text, layout_hint, box, reader=reader)
+        total_evaluated += result.evaluated
+        if result.matched and (best is None or result.separation > best.separation):
+            best = result
+
+    if best is not None:
+        return replace(best, evaluated=total_evaluated)
+
+    return AutofitResult(
+        matched=False,
+        layout=layout_hint,
+        ocr_box=box_candidates[0],
+        separation=_NO_MATCH,
+        runner_up=_NO_MATCH,
+        flat_optimum=False,
+        evaluated=total_evaluated,
+        reason=(
+            f"Kein Rahmen aus {len(box_candidates)} Kandidaten "
+            f"({total_evaluated} Leseversuche) dekodiert {expected_text!r} exakt."
+        ),
+    )
+
+
+def fit_dataset_sample(
+    image: Any,
+    sample: DatasetSample,
+    *,
+    has_sign: bool,
+    deskew: bool,
+    reader: Any = None,
+    polarity: str = "bright_on_dark",
+) -> SampleFit:
+    """Eine Probe fitten: Zielbox -> `sample_quad` -> Ausschnitt -> `search_ocr_box`.
+
+    `has_sign` kommt vom Aufrufer (Geraete-Ebene, siehe `target_layout`
+    unten), nie aus `sample.expected_text` - auch in Phase A nicht, obwohl
+    diese Probe selbst nie zur Ermittlung von `has_sign` herangezogen werden
+    darf (ein Geraet mit `has_sign=True`, dessen aktuelle Probe zufaellig
+    positiv ist, soll trotzdem eine Vorzeichenstelle im Rasterversuch haben).
+    `polarity` ebenso vom Aufrufer (Geraete-`technology`, LCD =
+    `dark_on_bright`) - der Default `bright_on_dark` passt zu LED/VFD und zu
+    `render_display` (Pflichtpruefung), ist aber fuer ein LCD-Geraet falsch
+    und wuerde JEDEN Kandidaten scheitern lassen, unabhaengig von der
+    Geometrie - `fit_layout` sucht Polaritaet nicht mit (kein Eintrag in
+    `_CANDIDATES`), sie muss von aussen stimmen. Wirft, wenn
+    `sample.expected_text is None` (unlesbare Probe): die gehoert als
+    benannte Einzelfalldiagnose ausgegeben, nie in die Fitting-Schleife
+    gefaltet (Plan, "ehrliches Ausfallverhalten").
+    """
+    if sample.expected_text is None:
+        raise ValueError(
+            f"{sample.id}: unlesbare Probe (expected_text=None) kann nicht gefittet "
+            "werden - als eigene Einzelfalldiagnose fuehren, nicht in die Zaehlung falten."
+        )
+    geometry = "deskewed" if deskew else "axis_aligned"
+    quad = sample_quad(image, sample.bbox, deskew=deskew)
+    if quad is None:
+        return SampleFit(
+            sample_id=sample.id,
+            geometry=geometry,
+            quad=None,
+            matched=False,
+            layout=None,
+            ocr_box=None,
+            separation=_NO_MATCH,
+            runner_up=_NO_MATCH,
+            flat_optimum=False,
+            evaluated=0,
+            reason="kein Quad (fit_quad_in_region lehnte den Hinweisbereich ab)",
+        )
+
+    height, width = image.shape[:2]
+    pixel_quad = tuple((x * width, y * height) for x, y in quad)
+    crop = rectify(image, pixel_quad, target_size=CROP_SIZE).image
+    layout_hint = DisplayLayout(has_sign=has_sign, polarity=polarity)
+    result = search_ocr_box(crop, sample.expected_text, layout_hint, reader=reader)
+
+    return SampleFit(
+        sample_id=sample.id,
+        geometry=geometry,
+        quad=quad,
+        matched=result.matched,
+        layout=result.layout if result.matched else None,
+        ocr_box=result.ocr_box if result.matched else None,
+        separation=result.separation,
+        runner_up=result.runner_up,
+        flat_optimum=result.flat_optimum,
+        evaluated=result.evaluated,
+        reason=result.reason,
+    )
+
+
+def _sample_segment_value(gray: Any, box: tuple[int, int, int, int], rel: tuple[float, float]) -> float:
+    """Mittlere Helligkeit (0..1) um einen relativen Punkt in einer Zelle.
+
+    Lokale Kopie von `dispread.ocr.sevenseg._sample` (privat, absichtlich
+    nicht importiert - dieses Diagnosewerkzeug soll unabhaengig von den
+    internen Namen des Lesers bleiben). Muss dieselbe Formel benutzen wie
+    der Leser, sonst diagnostiziert `segment_report` etwas anderes, als
+    `SevenSegmentReader.read` tatsaechlich gesehen hat.
+    """
+    x, y, w, h = box
+    cx = x + rel[0] * w
+    cy = y + rel[1] * h
+    r = max(1.0, 0.06 * w)
+    x1 = max(0, int(cx - r))
+    x2 = min(gray.shape[1], int(cx + r) + 1)
+    y1 = max(0, int(cy - r))
+    y2 = min(gray.shape[0], int(cy + r) + 1)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    return float(gray[y1:y2, x1:x2].mean()) / 255.0
+
+
+def segment_report(
+    crop: Any,
+    layout: DisplayLayout,
+    ocr_box: tuple[float, float, float, float],
+    expected_text: str,
+    *,
+    reader: Any = None,
+) -> list[dict[str, Any]]:
+    """Segmentdiagnose je Ziffernstelle: gemessene Helligkeiten vs. Sollmuster.
+
+    Der Regelfall heute ist "nichts passt" (Vorab-Messung im Plan) - dann ist
+    die Trefferzahl wertlos, aber *welches* Segment falsch abgetastet wird
+    ist beantwortbar. Nutzt dieselbe Zellgeometrie/Polaritaet wie
+    `SevenSegmentReader.read` (`layout.cell_boxes`, `SEGMENT_SAMPLE_POINTS`),
+    liest aber zusaetzlich die rohen Helligkeiten je Segment - die
+    `ReadResult`-Evidenz (`glyphs[i].segments`) traegt nur das binaere An/Aus.
+
+    `layout.digits` muss zu `expected_text` passen (gleiche Ziffernzahl) -
+    sonst wirft diese Funktion, statt Zellen und Sollziffern falsch
+    zuzuordnen.
+    """
+    reader = reader or SevenSegmentReader()
+    expected_digits, _minus, expected_count, _decimals = parse_expected(expected_text)
+    if expected_count != layout.digits:
+        raise ValueError(
+            f"Layout hat {layout.digits} Ziffernstellen, Sollwert {expected_text!r} "
+            f"aber {expected_count} - Segmentdiagnose braucht eine 1:1-Zuordnung."
+        )
+
+    reader_crop = crop_box(crop, ocr_box)
+    read = reader.read(reader_crop, layout)
+
+    gray = reader_crop if reader_crop.ndim == 2 else cv2.cvtColor(reader_crop, cv2.COLOR_BGR2GRAY)
+    if layout.polarity == "dark_on_bright":
+        gray = 255 - gray
+    height, width = gray.shape[:2]
+    boxes = layout.cell_boxes(width, height)
+
+    report: list[dict[str, Any]] = []
+    for index, (box, glyph, expected_char) in enumerate(zip(boxes, read.glyphs, expected_digits, strict=True)):
+        values = {seg: _sample_segment_value(gray, box, rel) for seg, rel in SEGMENT_SAMPLE_POINTS.items()}
+        got_segments = (
+            [seg for seg, on in zip(SEGMENT_NAMES, glyph.segments, strict=True) if on]
+            if glyph.segments is not None
+            else None
+        )
+        report.append(
+            {
+                "index": index,
+                "expected_digit": expected_char,
+                "expected_segments": sorted(DIGIT_SEGMENTS.get(expected_char, frozenset())),
+                "got_text": glyph.text,
+                "got_segments": got_segments,
+                "values": values,
+                "margin": glyph.margin,
+                "threshold": read.diagnostics.get("threshold"),
+                "contrast": read.diagnostics.get("contrast"),
+            }
+        )
+    return report
+
+
+# --- Phase B: Uebertragung (Task 3) -----------------------------------------
+#
+# Eingefroren wird NUR die Glyphengeometrie (`digit_gap_ratio`,
+# `sign_cell_ratio`, `thickness_ratio`, `inset_ratio`) - `target_layout` ist
+# der eine Engpass, der das Zielraster ausschliesslich aus (Geraet-`has_sign`,
+# Zielformat, eingefrorenen Verhaeltnissen) baut (Plan-Dateiliste).
+
+
+def target_layout(
+    has_sign: bool,
+    sample: DatasetSample,
+    frozen_ratios: dict[str, float],
+    *,
+    polarity: str = "bright_on_dark",
+) -> DisplayLayout:
+    """Zielraster fuer Phase B: NUR aus (Geraet-`has_sign`/`polarity`, Zielformat, eingefrorenen Verhaeltnissen).
+
+    `digits`/`decimals` kommen aus `sample.expected_text` (wie der Bediener
+    das Format im Betrieb bestaetigt). `has_sign`/`polarity` kommen dagegen
+    NIEMALS aus dem Zieltext oder dem Bild dieser Probe - immer als
+    explizite Parameter, die der Aufrufer aus dem Geraet ableitet (`has_sign`
+    ueber alle Proben aggregiert, `polarity` aus der Geraete-`technology`,
+    LCD = `dark_on_bright`). Das Vorzeichen ist eine eigene kritische
+    Fehlerklasse und darf nicht vom Sollwert abgeleitet werden (Plan,
+    Konzept.md §7); eine falsche Polaritaet laesst *jede* Probe scheitern,
+    unabhaengig von der Geometrie, weil `fit_layout` sie nicht mitsucht.
+    `frozen_ratios` sind die eigentlich uebertragene Groesse der Faltung -
+    sie kommen nie aus dieser Zielprobe selbst.
+    """
+    if sample.expected_text is None:
+        raise ValueError(
+            f"{sample.id}: unlesbare Probe (expected_text=None) hat kein Zielformat - "
+            "target_layout braucht digits/decimals aus einem Sollwert."
+        )
+    _digits, _minus, digits, decimals = parse_expected(sample.expected_text)
+    return DisplayLayout(
+        digits=digits, decimals=decimals, has_sign=has_sign, unit=None, polarity=polarity, **frozen_ratios
+    )
+
+
+def evaluate_dataset_sample(
+    image: Any,
+    sample: DatasetSample,
+    layout: DisplayLayout,
+    ocr_box: tuple[float, float, float, float],
+    reader: ValueReader,
+    *,
+    deskew: bool,
+) -> Outcome | None:
+    """Eine Probe mit einem vorgegebenen (Phase-B-)Raster lesen und dreiteilig auswerten.
+
+    Liefert `None`, wenn `sample_quad` kein Quad liefert (kein stiller
+    Rueckfall) - der Aufrufer (CLI) muss diese Probe dann selbst als
+    `rejected` in den vorab festgenagelten Nenner aufnehmen, statt sie aus
+    der Statistik verschwinden zu lassen (Plan, "ehrliches Ausfallverhalten").
+    """
+    if sample.expected_text is None:
+        raise ValueError(
+            f"{sample.id}: unlesbare Probe (expected_text=None) - nicht ueber "
+            "evaluate_dataset_sample fuehren, als Einzelfalldiagnose ausgeben."
+        )
+    quad = sample_quad(image, sample.bbox, deskew=deskew)
+    if quad is None:
+        return None
+
+    profile = {"layout": layout.to_dict(), "roi_quad": quad, "ocr_box": ocr_box}
+    read = read_frame(image, profile, reader)
+    expected = normalise(sample.expected_text)
+    counts = {"correct": 0, "wrong": 0, "rejected": 0}
+    wrong_classes: dict[str, int] = {}
+    reject_classes: dict[str, int] = {}
+    examples: list[str] = []
+    counts[_tally(expected, read, examples, wrong_classes, reject_classes)] += 1
+    return Outcome(
+        source_id=f"sample:{sample.id}",
+        device_id=sample.device_id,
+        expected=expected,
+        correct=counts["correct"],
+        wrong=counts["wrong"],
+        rejected=counts["rejected"],
+        wrong_classes=wrong_classes,
+        reject_classes=reject_classes,
+        examples=tuple(examples),
+    )

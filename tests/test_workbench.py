@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -25,7 +26,7 @@ from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 @pytest.mark.parametrize(
     "patch",
     [
-        {"schema_version": 4},
+        {"schema_version": 5},
         {"roi": [-0.1, 0, 0.5, 0.5]},
         {"roi": [0, 0, 2, 1]},
         {"ocr_box": [0.2, 0.2, 0.9, 0.5]},
@@ -93,6 +94,31 @@ def test_frozen_annotation_matches_original(tmp_path):
     assert data["ocr_box_coordinate_system"] == "rectified_roi_normalized_xywh"
 
 
+def test_profile_v3_is_migrated_with_sevenseg_backend():
+    profile = copy.deepcopy(DEFAULT)
+    profile.pop("backend")
+    profile["schema_version"] = 3
+
+    migrated = validate(profile)
+
+    assert migrated["schema_version"] == 4
+    assert migrated["backend"] == "sevenseg"
+
+
+def test_unknown_backend_is_rejected():
+    profile = copy.deepcopy(DEFAULT)
+    profile["backend"] = "unknown_backend"
+    with pytest.raises(ValueError, match="backend"):
+        validate(profile)
+
+
+def test_tesseract_cli_backend_is_accepted():
+    profile = copy.deepcopy(DEFAULT)
+    profile["backend"] = "tesseract_cli"
+    validated = validate(profile)
+    assert validated["backend"] == "tesseract_cli"
+
+
 def test_profile_v1_rectangle_is_migrated_to_quad():
     profile = copy.deepcopy(DEFAULT)
     profile.pop("roi_quad")
@@ -102,7 +128,7 @@ def test_profile_v1_rectangle_is_migrated_to_quad():
     profile["confirmed"] = True
 
     migrated = validate(profile)
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     np.testing.assert_allclose(migrated["roi_quad"], [[0.1, 0.2], [0.6, 0.2], [0.6, 0.6], [0.1, 0.6]])
     np.testing.assert_allclose(migrated["ocr_box"], [0, 0, 1, 1])
 
@@ -114,7 +140,7 @@ def test_profile_v2_is_migrated_with_full_ocr_box():
 
     migrated = validate(profile)
 
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     np.testing.assert_allclose(migrated["ocr_box"], [0, 0, 1, 1])
 
 
@@ -520,6 +546,20 @@ def test_inner_ocr_box_calibrates_grid_inside_padded_roi(tmp_path):
     c.publish(image, {"timebase": "synthetic"})
 
     assert c.snapshot()["reading"]["value"] == -12.34
+
+
+def test_backend_row_is_present_and_reflects_current_value(tmp_path):
+    c = Controller(tmp_path)
+
+    backend_rows = [row for row in fields.rows(c.snapshot()) if row["key"] == "backend"]
+
+    assert len(backend_rows) == 1
+    row = backend_rows[0]
+    assert row["value"] == "sevenseg"
+    option_values = {option["value"] for option in row["options"]}
+    assert option_values == {"sevenseg", "tesseract_cli"}
+    tesseract_option = next(o for o in row["options"] if o["value"] == "tesseract_cli")
+    assert tesseract_option["ops"] == [["backend.set", {"value": "tesseract_cli"}]]
 
 
 def test_unknown_decimal_position_is_rejected_without_guessing(tmp_path):
@@ -1371,6 +1411,78 @@ def test_autofit_liefert_einen_vorschlag_ohne_etwas_zu_bestaetigen(tmp_path):
     # (calibrated_on_frame_sequence, OQ-23: Nachstimmen und Bewerten duerfen
     # nicht am selben Bild passieren).
     assert c.calibrated_on == c.frames[frozen["id"]]["sequence"]
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract-Binary fehlt (OQ-15)")
+def test_backend_set_switches_which_reader_answers_reads(tmp_path):
+    layout = DisplayLayout(digits=4, decimals=2, has_sign=False, unit=None)
+    image, _shown, area = render_display(12.34, layout)
+    x, y, width, height = area
+    image_height, image_width = image.shape[:2]
+
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.config["roi"] = [x / image_width, y / image_height, width / image_width, height / image_height]
+    c.config["ocr_box"] = [0.0, 0.0, 1.0, 1.0]
+    c.config["confirmed"] = True
+    c.publish(image, {"timebase": "synthetic"})
+
+    assert c.config["backend"] == "sevenseg"
+    reading_sevenseg = c.snapshot()["reading"]
+    assert reading_sevenseg["backend"].startswith("sevenseg/")
+
+    c.command("backend.set", {"value": "tesseract_cli"})
+    assert c.config["backend"] == "tesseract_cli"
+    c.publish(image, {"timebase": "synthetic"})
+    reading_tesseract = c.snapshot()["reading"]
+    assert reading_tesseract["backend"].startswith("tesseract_cli/")
+
+
+def test_backend_set_rejects_unknown_value(tmp_path):
+    c = Controller(tmp_path)
+    with pytest.raises(ValueError, match="backend"):
+        c.command("backend.set", {"value": "not_a_backend"})
+
+
+def test_backend_set_to_tesseract_cli_raises_immediately_without_binary(tmp_path, monkeypatch):
+    """Abschluss-Review-Befund: eine fehlende tesseract-Binary muss beim
+    Auswaehlen des Backends auffallen (-> aiohttp-500 auf genau diesen
+    command()-Aufruf), nicht erst beim naechsten Read, wo der RuntimeError
+    sonst bis in publish()s breites except Exception durchschlagen und die
+    ganze Kamera stoppen wuerde statt nur diesen einen Vorgang."""
+    import dispread.ocr.tesseract_cli as tesseract_cli_mod
+
+    monkeypatch.setattr(tesseract_cli_mod.shutil, "which", lambda name: None)
+    c = Controller(tmp_path)
+
+    with pytest.raises(RuntimeError, match="tesseract"):
+        c.command("backend.set", {"value": "tesseract_cli"})
+
+
+def test_layout_autofit_rejects_immediately_for_tesseract_backend(tmp_path):
+    """Kein tesseract-Binary noetig: der Backend-Check in `_autofit` gibt
+    zurueck, bevor irgendein Reader instanziiert wird. Setzt das Backend
+    deshalb bewusst direkt am `config`-Dict statt ueber den `backend.set`-
+    Befehl - seit der Abschluss-Review-Fixrunde (Finding 7) konstruiert
+    `backend.set` sofort einen `TesseractReader`, was hier unnoetig die
+    Binary voraussetzen wuerde, obwohl `_autofit` selbst keinen Reader
+    braucht."""
+    layout, image, text, quad, ocr_box = _autofit_scene()
+    c = Controller(tmp_path)
+    c.config["layout"] = layout.to_dict()
+    c.config["backend"] = "tesseract_cli"
+    c.publish(image, {"timebase": "synthetic"})
+    frozen = c.command("freeze")
+
+    result = c.command("layout.autofit", {"id": frozen["id"], "quad": quad, "ocr_box": ocr_box, "text": text})
+
+    assert result == {
+        "matched": False,
+        "reason": (
+            "layout.autofit ist fuer backend=tesseract_cli nicht anwendbar - "
+            "die gesuchten Glyphenverhaeltnisse gelten nur fuer sevenseg"
+        ),
+    }
 
 
 def test_autofit_rechnet_ausserhalb_des_locks(tmp_path, monkeypatch):

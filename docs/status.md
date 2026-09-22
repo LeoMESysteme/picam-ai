@@ -5,7 +5,51 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-Diese Sitzung (2026-09-21) hat zunächst die als hohe Priorität markierte
+**Neues OCR-Backend `tesseract_cli` gebaut, aber noch nicht erfolgreich
+gegen echte GSV-Sensor-Fotos.** Wie der Dataset-Benchmark unten liegt auch
+das im eigenen, noch nicht gemergten Worktree `worktree-dataset-benchmark`
+(siehe „Nächste Schritte" für den vollständigen Commit-Stand). Über 4
+Aufgaben plus eine abschließende
+Fix-Runde vollständig Ende-zu-Ende verdrahtet: `src/dispread/ocr/tesseract_cli.py`
+(`TesseractReader`, ruft die bereits installierte `tesseract`-CLI als
+Subprozess auf), Profilschema (`backend`-Feld, Schema 4), `Controller`
+(`_reader_for`, `backend.set`-Befehl, `layout.autofit`-Sonderfall) und die
+Workbench-UI (Leser-Backend-Auswahl). Sicherheitseigenschaft hält: gegen
+alle 11 echten GSV-Sensor-Fotos im Datensatz (Gerät
+`87564e345aa047338f954c045bc9df02`) liefert der Leser **nie einen falschen
+Wert** — aber er liest bisher auch **keine einzige davon erfolgreich (0/11,
+alle Ablehnungen)**. Die Konfidenzschwelle (`_MIN_WORD_CONFIDENCE`) ist ein
+ausdrücklich unvalidierter Platzhalter, keine gemessene Grenze. Nächster
+Schritt: Erkennungsgüte auf dieser dot-matrix-Schrift verbessern (mehr/
+bessere Vorverarbeitung oder ein segmentschrift-trainiertes Tesseract-Modell
+wie `letsgodigital`) — kein Code-Bug, ein offener Genauigkeits-Folgeaufwand.
+Design und Plan: [2026-09-21-tesseract-backend-design.md](superpowers/specs/2026-09-21-tesseract-backend-design.md),
+[2026-09-21-tesseract-backend.md](superpowers/plans/2026-09-21-tesseract-backend.md).
+
+**Neuester Stand dieser Sitzung, eigener Worktree
+`worktree-dataset-benchmark`** (`.claude/worktrees/dataset-benchmark`, 17
+Commits gegenüber `master`, noch nicht gemergt — Dataset-Benchmark,
+OQ-04-Bestätigung/Polaritätsfix und der `tesseract_cli`-Backend oben, alle
+in diesem einen Worktree): der geplante Dataset-Benchmark
+(`docs/PLAN_2026-09-21-dataset-benchmark.md`) ist vollständig umgesetzt
+(`src/dispread/benchmark.py` + `scripts/dataset-benchmark.py`) und gegen den
+vollständigen realen Sammelmodus-Bestand gelaufen. **Kernbefund: von 73
+lesbaren Proben passt achsparallel kein einziges Raster (0/73), der
+`deskewed`-Arm findet für keine einzige Probe überhaupt ein Quad (0/73) —
+Phase B (Übertragungszahl) ist dadurch in keiner der sechs durchgeführten
+Faltungen erreichbar.** Das bestätigt OQ-23 erstmals gezählt statt vermutet
+und öffnet einen neuen Befund zu `fit_quad_in_region` (OQ-25-Update). Details:
+[VALIDATION.md](VALIDATION.md) (2026-09-21), [lab_journal.md](lab_journal.md)
+(2026-09-21). Zwei offene Punkte aus diesem Lauf: (1) die BK-Precision-
+Situation „schräg links" hat noch keinen `selected`-Vertreter — reine
+Bedienaufgabe in der Workbench, keine Code-Lücke; (2) die eigentliche
+Rastergeometrie (`dispread.ocr.autofit._CANDIDATES`/`layout.cell_boxes`)
+braucht eine Überprüfung, bevor ein weiterer Lauf gegen mehr Proben sinnvoll
+wäre. Dieser Worktree ist noch **nicht** in `master` integriert — das ist der
+nächste Schritt, siehe „Nächste Schritte" unten.
+
+Vorherige Arbeit dieser Sitzung, direkt auf `master`: zunächst die als hohe
+Priorität markierte
 UX-Vereinfachung des Datensatz-Sammelmodus umgesetzt (siehe unten,
 „Sammelmodus-UX vereinfacht"), direkt danach — beim ersten echten
 Sammeldurchlauf durch den Nutzer selbst — einen zweiten, schwereren Fund:
@@ -291,6 +335,35 @@ nur die Python-interne Executor-Verwaltung hing noch.
 
 ## Nächste Schritte
 
+0. **Dataset-Benchmark-Worktree nach `master` integrieren** (17 Commits in
+   `worktree-dataset-benchmark`, siehe oben) — noch nicht gemergt.
+00. **Zielhardware ist LCD, nicht LED/VFD** (Nutzerbestätigung 2026-09-21,
+    [OQ-04](open-questions.md)-Update): alle im Betrieb zu lesenden Anzeigen
+    sind LCD. Die beiden zuerst gesammelten Geräte ("RND-Lab", "BK Precision",
+    73 reale Proben) sind LED/VFD-Laboraufbauten, **keines davon LCD** — der
+    bisherige reale Dataset-Benchmark prüft also die Pipeline-Mechanik, nicht
+    die Zielhardware. **Update, direkt danach:** Nutzer hat bereits ein
+    LCD-Gerät angelegt ("GSV", `family=GSV_Sensor`, 3 Proben, 1 Situation).
+    Der erste Lauf dagegen deckte einen echten Bug auf: die Leser-Polarität
+    kam nie vom Gerät, sondern immer vom LED-Default (`bright_on_dark`) -
+    für ein LCD-Gerät garantiert jeder Fitversuch zum Scheitern, unabhängig
+    von der Geometrie (`fit_layout` sucht Polarität nicht mit). Behoben
+    (siehe CHANGELOG, „Leser-Polarität kommt vom Gerät"): `technology` aus
+    `devices.json` bestimmt jetzt `polarity`. Mit der Korrektur weiterhin
+    0/3 Proben gefittet - aber jetzt eine echte Aussage über die Geometrie,
+    nicht über eine falsche Polaritätsannahme. **Nächster Schritt: mehr,
+    vielfältigere GSV-Proben sammeln** (aktuell 1 Situation, identischer
+    Sollwert in allen dreien) - der Bestand ist noch zu klein für eine
+    belastbare Aussage.
+0a. **Rastergeometrie untersuchen** (OQ-23-Update, 2026-09-21): 0/73 reale
+    Proben passen zum festen relativen Segment-Abtastraster. Vor einem
+    weiteren Dataset-Benchmark-Lauf klären, ob `dispread.ocr.autofit._CANDIDATES`
+    für reale Displays zu eng ist oder `layout.cell_boxes` grundsätzlich neu
+    zugeschnitten werden muss.
+0b. **BK-Precision-Situation „schräg links" braucht einen `selected`-
+    Vertreter** — reine Bedienaufgabe in der Workbench (eine der zehn
+    vorhandenen Proben als Vertreter markieren), sonst bleibt diese Faltung
+    im Dataset-Benchmark eine gemeldete Lücke.
 1. **Phase 2 der Vertreterauswahl:** Übersicht/Galerie je Situation zum
    nachträglichen Markieren älterer Proben, plus eine Ansicht des
    Entwicklungs-/Abschlusstestbestands mit Verschiebemöglichkeit — vom

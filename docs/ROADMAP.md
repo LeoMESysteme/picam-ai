@@ -34,7 +34,11 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 - [x] Doku-Set inkl. `status.md`, `project_history.md`, `open-questions.md`
 - [x] `replay://` — implementiert (Clips mit einem Label je Clip)
 - [ ] `folder://`, `video://`, `picamera2://`, `imx500://` — Registry vorhanden, Implementierungen noch nicht. `open_source()` scheitert für diese Schemata mit `ImportError`
-- [ ] Tesseract-Vergleichsbackend (braucht [OQ-15](open-questions.md))
+- [ ] Tesseract-Vergleichsbackend — `dispread.ocr.tesseract_cli` ist gebaut
+  und Ende-zu-Ende verdrahtet (Profil/Controller/UI); [OQ-15](open-questions.md)
+  selbst ist geklärt (Binary installiert). Offen ist die Erkennungsgüte:
+  0/11 echte GSV-Sensor-Fotos werden bisher erfolgreich gelesen (nie falsch,
+  aber auch nicht richtig) — siehe `docs/status.md`
 - [ ] CLI (`dispread.cli.*`, geplant mit `dispread run --source … --profile …`,
   [anleitung/05-cli.md](anleitung/05-cli.md)) — nicht gebaut. Der
   `pyproject.toml`-Einsprungpunkt `dispread` zeigt inzwischen auf die separate,
@@ -72,7 +76,6 @@ M1–M8, siehe [TIMING.md](TIMING.md). Zwei Punkte prägen die Priorisierung:
 
 * [OQ-07](open-questions.md) — GSVmulti-Telegrammspezifikation intern beschaffen
 * [OQ-09](open-questions.md) — Transceiver und galvanische Trennung
-* [OQ-15](open-questions.md) — `tesseract-ocr`, `socat`, `chrony` installieren
 * [OQ-04](open-questions.md) — Gerätekreis festlegen, Sperrgeräte vereinbaren
 
 ## Top-Risiken mit Frühwarnsignal

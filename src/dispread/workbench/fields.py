@@ -515,6 +515,24 @@ def rows(state):
             else "mit E/Doppelklick bearbeiten; gruene ROI und gelben OCR-Rahmen ausrichten",
         )
     )
+    result.append(
+        _row(
+            "backend",
+            "leser-backend",
+            "choice",
+            config["backend"],
+            "7-Segment (sevenseg)" if config["backend"] == "sevenseg" else "Zeichen-OCR (tesseract)",
+            "sevenseg fuer 7-Segment-Anzeigen; tesseract_cli fuer Zeichen-/dot-matrix-LCDs (z. B. GSV-Sensor)",
+            options=[
+                _option("sevenseg", "7-Segment (sevenseg)", [["backend.set", {"value": "sevenseg"}]]),
+                _option(
+                    "tesseract_cli",
+                    "Zeichen-OCR (tesseract)",
+                    [["backend.set", {"value": "tesseract_cli"}]],
+                ),
+            ],
+        )
+    )
     result.extend(_layout_rows(config["layout"]))
     result.extend(_reading_rows(state))
     result.append(

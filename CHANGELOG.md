@@ -3,6 +3,230 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-21 (Workbench-UI: Leser-Backend waehlbar)
+
+**Problem:** `backend.set` (voriger Commit) war nur ueber einen direkten
+Befehl erreichbar, keine Bedienoberflaeche dafuer.
+
+**Änderung:** Neue Zeile "leser-backend" in `fields.rows()`, direkt vor den
+Layout-Feldern - Auswahl zwischen `sevenseg` (7-Segment) und `tesseract_cli`
+(Zeichen-/dot-matrix-LCDs wie GSV-Sensor), demselben deklarativen
+`_row`/`_option`-Muster wie die bestehende `polaritaet`-Zeile. Die
+bestehende `reading.evidence`-Zeile zeigt das aktive Backend bereits generisch
+(`reading.get('backend')`) - keine Aenderung dort noetig.
+
+**Konsequenz:** Ein Bediener kann jetzt ueber die Werkbank-Oberflaeche
+zwischen den beiden Lesern wechseln. Kein echter Browser-Klick-Durchlauf
+verifiziert (dieselbe Einschraenkung wie OQ-21/OQ-34 fuer den ganzen
+Prototyp) - `fields.rows()` ist unit-getestet, nicht die DOM-Interaktion.
+
+## 0.1.0.dev0 — 2026-09-21 (Controller: backend-Feld waehlt den Leser)
+
+**Problem:** `backend` existierte im Profilschema (voriger Commit), aber
+`Controller` benutzte immer die fest instanzierte `SevenSegmentReader` -
+das Feld hatte keine Wirkung.
+
+**Änderung:** `Controller._reader_for(backend)` waehlt zwischen der
+bestehenden `SevenSegmentReader`-Instanz und einer bei Bedarf erzeugten,
+wiederverwendeten `TesseractReader`-Instanz. `_read`/`_autofit` nutzen das
+statt des fest verdrahteten `self.reader`. Neuer Befehl `backend.set`
+(analog `profile.role`). `layout.autofit` (die sevenseg-Glyphenverhaeltnis-
+Suche) lehnt bei `backend=tesseract_cli` sofort mit einer erklaerenden
+Meldung ab, statt eine fuer dieses Backend bedeutungslose Suche laufen zu
+lassen. 3 neue Tests: Backend-Wechsel aendert tatsaechlich, welcher Leser
+antwortet; unbekannter Wert abgelehnt; `layout.autofit` lehnt sofort ab.
+
+**Konsequenz:** Ein Profil kann jetzt tatsaechlich `tesseract_cli` als
+Leser nutzen. Noch offen: eine UI-Auswahl dafuer (naechster Commit) - bisher
+nur ueber den `backend.set`-Befehl direkt erreichbar.
+
+## 0.1.0.dev0 — 2026-09-21 (Profilschema: backend-Feld fuer tesseract_cli)
+
+**Problem:** `src/dispread/ocr/tesseract_cli.py` (voriger Commit) existiert,
+aber kein Profil kann es auswaehlen - `DisplayLayout`/das Profilschema
+kannten nur `sevenseg`.
+
+**Änderung:** `DEFAULT["backend"] = "sevenseg"`, Schema 3 -> 4. Migration:
+ein Profil mit Schema 3 ohne `backend`-Feld bekommt `"sevenseg"` - exakt das
+bisherige Verhalten, keine Vermutung; die Umstellung erfolgt unbedingt bei
+`schema_version == 3` (nicht zusaetzlich an der Feldabwesenheit geprueft),
+sonst haetten die bestehenden v1/v2-Migrationstests (die DEFAULT komplett
+kopieren) das neue Feld bereits mitgebracht und waeren faelschlich bei
+Schema 3 haengen geblieben. `validate()` lehnt unbekannte `backend`-Werte
+ab. 3 neue Tests (Migration, unbekannter Wert abgelehnt, `tesseract_cli`
+akzeptiert); zwei bestehende Migrationstests
+(`test_profile_v1_rectangle_is_migrated_to_quad`,
+`test_profile_v2_is_migrated_with_full_ocr_box`) erwarten jetzt
+`schema_version == 4` statt `3`; ein bestehender Parametrisierungsfall in
+`test_profile_validation` von `schema_version: 4` auf `5` verschoben (4 ist
+jetzt die gueltige aktuelle Version).
+
+**Konsequenz:** Das Feld existiert und wird validiert, aber `Controller`
+liest es noch nicht (naechster Commit) - ein gesetztes `backend` hat bisher
+keine Wirkung.
+
+## 0.1.0.dev0 — 2026-09-21 (Neues OCR-Backend tesseract_cli fuer dot-matrix-/Zeichen-LCDs)
+
+**Problem:** Der neu angelegte GSV-Sensor ist eine dot-matrix-Zeichen-LCD
+(HD44780-artig, z. B. `+1.05000 mV/V`), keine 7-Segment-Anzeige. Der
+bestehende `sevenseg`-Leser kann sie strukturell nicht lesen - `DIGIT_SEGMENTS`
+kennt Balkenmuster, keine Punktraster-Glyphen, und keine Buchstaben/Symbole.
+
+**Änderung:** Neues `src/dispread/ocr/tesseract_cli.py`, `TesseractReader`,
+implementiert dieselbe `ValueReader`-Schnittstelle wie `sevenseg` - keine
+Schnittstellenänderung. Nutzt die bereits installierte `tesseract`-CLI
+(5.5.0) als Subprozess (TSV-Ausgabemodus, liefert Text und Wortkonfidenz in
+einem Aufruf), keine neue Python-Abhängigkeit. Zeichen-Whitelist und
+erwartete Ziffern-/Nachkomma-/Vorzeichenform kommen ausschließlich aus dem
+bestätigten `DisplayLayout` - nie geraten. Zwei unabhängige
+Ablehnungskriterien (Konzept.md §7): Formatprüfung (erkannte Ziffernzahl
+muss exakt zum Profil passen) und eine Konfidenzschwelle - beide müssen
+bestehen, sonst `value=None`. 11 neue Tests, davon 8 deterministisch gegen
+einen gefakten Tesseract-Output (Parser-/Ablehnungslogik, unabhängig von der
+tatsächlichen Bilderkennungsgüte) und ein Sicherheitstest gegen die echten
+GSV-Sensor-Fotos im Datensatz (`nie ein falscher Wert, höchstens eine
+Ablehnung`).
+OQ-15 geklärt: `tesseract-ocr`/`socat`/`chrony` sind bereits installiert.
+
+**Konsequenz:** Zweites lauffähiges OCR-Backend, noch nicht mit dem
+`Controller`/Profilschema verdrahtet (folgt in einem separaten Commit).
+Die Erkennungsgüte des Standard-Tesseract-Modells auf dieser dot-matrix-
+Schrift ist noch nicht zuverlässig (manuelle Stichproben lasen z. B.
+`1.05000` als `1.75000`) - die Ablehnungslogik hat in den bisherigen 11
+Stichproben jede Fehllesung gestoppt (3 kein Text erkannt, 6 Ziffernzahl
+stimmt nicht, 1 Vorzeichen nicht erkannt, 1 Konfidenz zu niedrig) - kein
+einziger falscher Wert, aber die Trefferquote selbst braucht weitere Arbeit
+(mehr/bessere Vorverarbeitung oder ein segmentschrift-trainiertes
+Tesseract-Modell wie `letsgodigital`) - bewusst nicht Teil dieses Commits.
+
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: Leser-Polarität kam nie vom Gerät - jede LCD-Probe wäre garantiert gescheitert)
+
+**Problem:** Der Nutzer hat ein neues Gerät ("GSV", `technology=LCD`)
+angelegt - das erste Gerät im Sammelmodus, das die tatsächliche Zielhardware
+repräsentiert (Nutzerbestätigung: alle Produktivanzeigen sind LCD, siehe
+OQ-04-Update). `fit_dataset_sample`/`target_layout` bauten ihr Testraster
+bisher aber immer mit dem `DisplayLayout`-Default `polarity=bright_on_dark`
+(LED: helle Segmente auf dunklem Grund) - unabhängig von der tatsächlichen
+Geräte-Technologie. `dispread.ocr.autofit.fit_layout` sucht Polarität nicht
+mit (kein Eintrag in `_CANDIDATES`), eine falsche Polarität lässt daher JEDE
+Probe scheitern, unabhängig von der Geometrie - das hätte die eigentliche
+Geometriefrage für LCD-Geräte dauerhaft unsichtbar gemacht.
+
+**Änderung:** `fit_dataset_sample`/`target_layout` bekommen einen expliziten
+`polarity`-Parameter (Default `bright_on_dark`, rückwärtskompatibel zu allen
+bisherigen Tests/`render_display`). `scripts/dataset-benchmark.py` liest die
+Geräte-`technology` direkt aus `devices.json` (`_device_polarities`, kein
+`DatasetStore` nötig) und leitet daraus `dark_on_bright` für LCD ab, sonst
+den Default. Neuer Regressionstest
+`test_fit_dataset_sample_falsche_polaritaet_scheitert_richtige_matcht`:
+ein invertiertes `render_display`-Bild (simuliert LCD) scheitert mit
+Standard-Polarität garantiert und matcht garantiert mit der richtigen -
+beweist den Fehler und die Behebung in einem Test statt nur zu behaupten.
+
+**Konsequenz:** Ein erneuter Lauf gegen das neue GSV-Gerät zeigt jetzt
+korrekt `Polaritaet (aus Geraete-technology, LCD=dark_on_bright):
+dark_on_bright`. Weiterhin 0 von 3 Proben gefittet - aber diesmal ist das
+eine Aussage über die Geometrie, nicht über eine falsche Polaritätsannahme.
+Der Bestand ist mit 3 Proben, alle mit identischem Sollwert, in einer
+einzigen Situation, noch zu klein für eine belastbare Aussage zur
+LCD-Geometrie. `324 passed`, `ruff check` sauber.
+
+
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark: fehlendes `selected` bricht nur die eine Faltung ab, nicht den ganzen Lauf)
+
+**Problem:** Der erste echte Volllauf gegen `var/workbench/datasets` (77
+Proben, gewachsen gegenüber den 52 aus dem Plan) brach sofort ab: die
+BK-Precision-Situation „schräg links" (`57227b16...`) hat noch keine als
+`selected` markierte Probe - eine echte, nicht erfundene Datenlücke. Die
+ursprüngliche CLI-Implementierung beendete beim ersten fehlenden `selected`
+den GESAMTEN Lauf (`return 1`), was auch die bereits berechneten,
+brauchbaren Befunde des anderen Geräts (RND-Lab) und der anderen zwei
+BK-Situationen verschluckt hätte.
+
+**Änderung:** `scripts/dataset-benchmark.py`: ein fehlendes `selected` bricht
+jetzt nur die betroffene Faltung ab (`FEHLER:` auf stderr, Faltung
+übersprungen, `exit_code=1` gesetzt), der Lauf läuft für alle anderen
+Situationen/Geräte weiter. Kein Ersatzvertreter wird erraten - das bleibt
+wie im Plan gefordert. Exit-Code des gesamten Laufs bleibt `1`, wenn
+irgendeine Faltung deswegen übersprungen wurde - der Fehler ist also
+weiterhin sichtbar, nur nicht mehr blockierend für den Rest des Berichts.
+
+**Konsequenz:** Ein Volllauf liefert jetzt den vollständigen Befund für alle
+auswertbaren Situationen/Geräte in einem Durchgang, meldet die BK-Situation
+ohne Vertreter aber weiterhin laut als offenen Punkt (nicht als „0 %
+korrekt", nicht stillschweigend übersprungen). Diese Lücke gehört als
+Bedienaufgabe behoben (Vertreter für „schräg links" markieren), nicht durch
+Software geraten.
+
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 4: CLI und Faltungslogik)
+
+**Problem:** Task 2/3 lieferten die Fitting-/Auswertungsbausteine
+(`search_ocr_box`, `fit_dataset_sample`, `target_layout`,
+`evaluate_dataset_sample`, `segment_report`, `aggregate`), aber noch kein
+lauffähiges Werkzeug - die Leave-one-group-out-Faltung (Phase B) und die
+Zusammenfassung je Gerät (Phase A) fehlten.
+
+**Änderung:** `scripts/dataset-benchmark.py` (neu), dünne CLI wie
+`ocr-benchmark.py`. `--samples`/`--split`/`--deskew`/`--device`/`--diagnose`.
+Phase A und Phase B je Gerät und Geometrie getrennt gedruckt, nie gepoolt.
+Ehrliches Ausfallverhalten wie im Plan gefordert: fehlt eine
+`selected`-markierte Probe in einer Situation, bricht der ganze Lauf mit
+`FEHLER:` auf stderr ab (Exit 1) statt eine Situation stillschweigend
+auszulassen; ein Gerät mit nur einer Situation meldet die
+Übertragungslücke explizit (`LUECKE:`); ein fehlendes Quad/`ocr_box` in
+Phase B landet als eigener Ablehnungsgrund im festgenagelten Nenner, nie als
+stiller Rückfall. `has_sign` kommt NICHT von einem Gerätefeld - das gibt es
+im aktuellen `DatasetStore`-Schema nicht (Abweichung vom Plan, dort
+dokumentiert) - sondern aus dem Vorzeichen aller lesbaren Proben eines
+Geräts, aggregiert über den ganzen Bestand, nie aus der einzelnen
+Zielprobe einer laufenden Auswertung. `DatasetSample` um `selected` und
+`similarity_warning` erweitert (optional, Default aus, rückwärtskompatibel),
+damit die CLI beides ohne eigenen `DatasetStore`-Import lesen kann.
+5 neue Tests, darunter 3 CLI-Subprozesstests (Muster aus
+`tests/test_dataset_export.py`).
+
+**Konsequenz:** `scripts/dataset-benchmark.py` ist jetzt lauffähig.
+`322 passed`, `ruff check src tests examples scripts` sauber. Bekannte,
+bewusste Lücken dieses Laufs (im Skript selbst dokumentiert): keine
+Aufschlüsselung nach Bedingung (reflection/angled/...), keine gesonderte
+Ähnlichkeitsmessung je Faltung (nur das je Probe gespeicherte
+`similarity_warning` wird durchgereicht). Der erste echte volle Lauf gegen
+`var/workbench/datasets` steht noch aus (Laufzeit im Minutenbereich je
+Gerät/Geometrie) - Protokollierung in `docs/VALIDATION.md`/
+`docs/lab_journal.md` sowie das Update an OQ-23/OQ-17 folgen danach.
+
+## 0.1.0.dev0 — 2026-09-21 (Dataset-Benchmark Task 2/3: Phase-A-Fitting + Phase-B-Uebertragung)
+
+**Problem:** Die im Sammelmodus gesammelten realen Proben (52+, siehe
+`docs/PLAN_2026-09-21-dataset-benchmark.md`) waren zwar ladbar und geometrisch
+zuschneidbar (Task 1: `load_dataset_samples`, `sample_quad`), aber noch nicht
+gegen den 7-Segment-Leser messbar - es fehlte die eigentliche Fitting- und
+Auswertungslogik.
+
+**Änderung:** `src/dispread/benchmark.py` um Phase A (Passbarkeit/Diagnose,
+ausdrücklich kein Erkennungswert) und Phase B (Übertragung) erweitert:
+`search_ocr_box` (grobe, wertfreie Rahmenvorsuche gegen `ocr.autofit.fit_layout`,
+~36 Kandidaten statt eines vollen Kreuzprodukts), `fit_dataset_sample` (Zielbox
+→ `sample_quad` → `search_ocr_box`, liefert `SampleFit`), `target_layout`
+(Zielraster NUR aus Zielformat + eingefrorenen Glyphenverhältnissen +
+geräteseitigem `has_sign` - **niemals** aus dem Zieltext der Probe selbst),
+`evaluate_dataset_sample` (liest eine Probe mit einem Phase-B-Raster),
+`segment_report` (Segmentdiagnose je Ziffernstelle: gemessene Helligkeiten vs.
+Sollmuster aus `DIGIT_SEGMENTS`) und `aggregate` (aus `evaluate_set`
+herausgezogen, damit Clip-/Annotationspfad und Datensatz-Pfad dieselbe
+Summierung benutzen). 20 neue Tests in `tests/test_dataset_benchmark.py`,
+darunter ein Leck-Test für `target_layout` (has_sign kommt beweisbar nie aus
+dem Sollwert) und die Pflichtprüfung gegen eine `render_display`-Probe für
+`fit_dataset_sample`/`evaluate_dataset_sample`.
+
+**Konsequenz:** Gegen eine echte Probe bestätigt `fit_dataset_sample` empirisch
+den Spike-Befund aus dem Plan (OQ-23): `search_ocr_box` findet unter 35
+Kandidaten keinen, der den Sollwert exakt dekodiert (`matched=False`,
+2485 Leseversuche, ~4s). Laufzeit pro Probe/Geometrie liegt damit im
+Minutenbereich für den gesamten realen Bestand, nicht Stunden. `317 passed`,
+`ruff check` sauber. Die CLI (`scripts/dataset-benchmark.py`, Task 4) und die
+Phase-B-Faltungslogik (Leave-one-group-out) fehlen noch.
+
 ## 0.1.0.dev0 — 2026-09-21 ("als Vertreter markieren" war unsichtbar - Nachschliff zur eigenen Sitzung)
 
 **Problem:** Nutzerbefund direkt nach dem vorigen Fix: "ich kann in dispread
