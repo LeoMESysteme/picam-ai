@@ -3,6 +3,34 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Ernte Phase 1: Zellenraster, Sitzungsprofil, ScalerCrop)
+
+**Problem:** Für den Zellen-Klassifikator (Plan `2026-09-23-ernte-phase1.md`)
+fehlten ein bestätigbares Zeichenzellenraster, ein Sitzungsprofil mit
+Auflösungsbefund und mehr Pixel je Anzeigepunkt. Bisher lagen im Vollbild nur
+≈ 2 px auf einer Punktspalte.
+
+**Änderung:**
+* `src/dispread/charcells.py` (neu) enthält `CharGrid` und
+  `source_dot_column_px`.
+  * `CharGrid` beschreibt das Zellenraster im entzerrten Bild, liefert die
+    Zellenboxen und prüft das Raster.
+  * `source_dot_column_px` misst die Punktspaltenbreite im **Quellbild** über
+    die inverse Homographie, als Minimum über alle Zellen. Es nimmt die
+    geometrische Eckabbildung ohne `-1`, weil es einen Massstab misst und
+    keine Pixel verzerrt.
+* `src/dispread/session_profile.py` (neu): `SessionProfile` (Schema 1) mit
+  Quad, Raster, ScalerCrop und Auflösungsbefund. Wird atomar gespeichert,
+  unbekanntes Schema führt zum Abbruch.
+* `scripts/sync-record.py`: neu ist `--scaler-crop X,Y,W,H`.
+  * Der Wert geht über `controls` in `create_video_configuration`
+    (picamera2.py:1292/1338) und gilt damit ab dem ersten Bild.
+  * `session.json` trägt `scaler_crop_requested` und `scaler_crop_actual`.
+
+**Konsequenz:** Auf der Hardware geprüft, Sensorausschnitt
+`1858,592,1520,1140`: 133 Bilder ohne Sequenzlücke, kein `stream on failed`.
+Das Glas ist im 960×720-Bild jetzt ≈ 560 px breit statt ≈ 210 px.
+
 ## 0.1.0.dev0 — 2026-09-23 (Stillstand beim Aufzeichnen behoben, OQ-40)
 
 **Problem:** In `sync-record.py` standen Kamera und serieller Strom zeitweise

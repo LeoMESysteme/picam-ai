@@ -146,6 +146,81 @@ def test_synthetischer_lauf_schreibt_vollstaendige_und_gueltige_sitzung(tmp_path
     assert session["source"] == "synthetic"
 
 
+def test_scaler_crop_landet_in_session_json_als_angefordert_und_leer_ohne_kamera(tmp_path):
+    """`--source synthetic` durchlaeuft nie `_camera_frames` - also traegt
+    `session.json["scaler_crop_actual"]` hier immer `null`, waehrend
+    `scaler_crop_requested` das geparste CLI-Argument widerspiegelt (Task 2,
+    Interfaces: 'scaler_crop_actual ist der Wert aus den Metadaten des
+    ersten Bildes ... oder null')."""
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-scaler-crop"
+    try:
+        completed = _run_cli(
+            duration=0.5,
+            output=output_dir,
+            port=os.ttyname(slave),
+            extra_args=("--scaler-crop", "1000,800,1600,1200"),
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["scaler_crop_requested"] == [1000, 800, 1600, 1200]
+    assert session["scaler_crop_actual"] is None
+
+
+def test_scaler_crop_ohne_argument_ist_null_in_session_json(tmp_path):
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-ohne-scaler-crop"
+    try:
+        completed = _run_cli(duration=0.5, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["scaler_crop_requested"] is None
+    assert session["scaler_crop_actual"] is None
+
+
+def test_scaler_crop_falsche_anzahl_bricht_mit_klarer_meldung_ab(tmp_path):
+    master, slave = os.openpty()
+    try:
+        completed = _run_cli(
+            duration=0.5,
+            output=tmp_path / "lauf-x",
+            port=os.ttyname(slave),
+            extra_args=("--scaler-crop", "1,2,3"),
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode != 0
+    assert "--scaler-crop" in completed.stderr
+
+
+@pytest.mark.parametrize("raw", ["1000,800,1600,0", "1000,-800,1600,1200", "0,0,1600,1200"])
+def test_scaler_crop_negativ_oder_null_bricht_mit_klarer_meldung_ab(tmp_path, raw):
+    master, slave = os.openpty()
+    try:
+        completed = _run_cli(
+            duration=0.5,
+            output=tmp_path / "lauf-y",
+            port=os.ttyname(slave),
+            extra_args=("--scaler-crop", raw),
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode != 0
+    assert "--scaler-crop" in completed.stderr
+
+
 def test_keine_telegramme_wird_am_ende_deutlich_gemeldet(tmp_path):
     """Schutzklausel aus dem Auftrag: kommt ueber die Dauer kein einziges
     Telegramm, muss das gemeldet werden statt stillschweigend eine leere
@@ -329,9 +404,10 @@ class _FakeLibcameraRequest:
 
 
 class _FakeCompletedRequest:
-    def __init__(self, sequence: int, sensor_timestamp_ns: int) -> None:
+    def __init__(self, sequence: int, sensor_timestamp_ns: int, *, scaler_crop: tuple | None = None) -> None:
         self.request = _FakeLibcameraRequest(sequence)
         self._sensor_timestamp_ns = sensor_timestamp_ns
+        self._scaler_crop = scaler_crop
         self.released = False
 
     def make_array(self, name: str):
@@ -341,7 +417,12 @@ class _FakeCompletedRequest:
         return np.zeros((4, 4, 3), dtype=np.uint8)
 
     def get_metadata(self) -> dict:
-        return {"SensorTimestamp": self._sensor_timestamp_ns}
+        metadata = {"SensorTimestamp": self._sensor_timestamp_ns}
+        if self._scaler_crop is not None:
+            # Echtes picamera2 liefert hier ein 4er-Tupel (`Rectangle.to_tuple()`,
+            # siehe /usr/lib/python3/dist-packages/picamera2/utils.py:6-13).
+            metadata["ScalerCrop"] = self._scaler_crop
+        return metadata
 
     def release(self) -> None:
         self.released = True
@@ -389,8 +470,8 @@ def test_kamera_zweig_liest_sensor_sequence_aus_completed_request(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0)
     try:
-        image1, ts1, seq1 = next(gen)
-        image2, ts2, seq2 = next(gen)
+        image1, ts1, seq1, _crop1 = next(gen)
+        image2, ts2, seq2, _crop2 = next(gen)
     finally:
         gen.close()
 
@@ -420,6 +501,7 @@ def test_kamera_zweig_liefert_none_wenn_sequence_fehlt(monkeypatch):
         def __init__(self, sensor_timestamp_ns: int) -> None:
             self.request = _RequestOhneSequence()
             self._sensor_timestamp_ns = sensor_timestamp_ns
+            self._scaler_crop = None
             self.released = False
 
     fake_camera = _FakeCamera([_CompletedRequestOhneSequence(sensor_timestamp_ns=42)])
@@ -428,11 +510,58 @@ def test_kamera_zweig_liefert_none_wenn_sequence_fehlt(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0)
     try:
-        _image, _ts, seq = next(gen)
+        _image, _ts, seq, _crop = next(gen)
     finally:
         gen.close()
 
     assert seq is None
+
+
+def test_camera_frames_setzt_scaler_crop_ueber_video_konfiguration(monkeypatch):
+    """`--scaler-crop` muss ueber die `controls`-Dict von
+    `create_video_configuration` gesetzt werden, nicht per `set_controls`
+    nach dem Start: `configure_()` uebernimmt `camera_config['controls']`
+    unveraendert in `self.controls`
+    (/usr/lib/python3/dist-packages/picamera2/picamera2.py:1292), und
+    `start_()` wendet das beim `camera.start(controls)` an
+    (picamera2.py:1338) - so ist der Crop schon im allerersten Request
+    aktiv, ein `set_controls` danach koennte erst ab dem zweiten Bild
+    wirken."""
+    module = _load_sync_record_module()
+
+    fake_requests = [
+        _FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1, scaler_crop=(1000, 800, 1600, 1200)),
+    ]
+    fake_camera = _FakeCamera(fake_requests)
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((320, 240), 15.0, scaler_crop=(1000, 800, 1600, 1200))
+    try:
+        _image, _ts, _seq, scaler_crop_actual = next(gen)
+    finally:
+        gen.close()
+
+    assert fake_camera.configured_with["controls"]["ScalerCrop"] == (1000, 800, 1600, 1200)
+    assert scaler_crop_actual == (1000, 800, 1600, 1200)
+
+
+def test_camera_frames_ohne_scaler_crop_setzt_kein_control(monkeypatch):
+    module = _load_sync_record_module()
+
+    fake_requests = [_FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1)]
+    fake_camera = _FakeCamera(fake_requests)
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((320, 240), 15.0)
+    try:
+        _image, _ts, _seq, scaler_crop_actual = next(gen)
+    finally:
+        gen.close()
+
+    assert "ScalerCrop" not in fake_camera.configured_with["controls"]
+    assert scaler_crop_actual is None
 
 
 def test_frames_jsonl_hat_sensor_sequence_und_intervall_felder(tmp_path):

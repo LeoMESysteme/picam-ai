@@ -237,6 +237,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
              "siehe OQ-22, Folge ist im Zweifel ein Reboot des Labor-Pi",
     )
     parser.add_argument(
+        "--scaler-crop",
+        default=None,
+        help=(
+            "Sensor-Ausschnitt 'X,Y,W,H' in Sensorkoordinaten (ganzzahlig), nur "
+            "--source camera. Mehr Ziffernhoehe ueber Zoom, nie ueber einen "
+            "groesseren Sensormodus (OQ-22, CLAUDE.md-Entscheidung 4 aus "
+            "docs/superpowers/plans/2026-09-23-ernte-phase1.md). Ohne diese "
+            "Option wird kein ScalerCrop gesetzt (Sensor-Vorgabe bleibt aktiv)."
+        ),
+    )
+    parser.add_argument(
         "--norm-schedule",
         default=None,
         help=(
@@ -278,6 +289,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             args.norm_schedule = _parse_norm_schedule(args.norm_schedule)
         except ValueError as exc:
             parser.error(str(exc))
+    if args.scaler_crop is not None:
+        try:
+            args.scaler_crop = _parse_scaler_crop(args.scaler_crop)
+        except ValueError as exc:
+            parser.error(str(exc))
     return args
 
 
@@ -307,6 +323,24 @@ def _parse_norm_schedule(raw: str) -> list[tuple[float, float]]:
     if not schedule:
         raise ValueError("--norm-schedule ergab keine Eintraege")
     return schedule
+
+
+def _parse_scaler_crop(raw: str) -> tuple[int, int, int, int]:
+    """'1000,800,1600,1200' -> (1000, 800, 1600, 1200) - X,Y,W,H in
+    Sensorkoordinaten, wie picamera2 sie fuer das `ScalerCrop`-Control
+    erwartet (siehe `_camera_frames`)."""
+    parts = raw.split(",")
+    if len(parts) != 4:
+        raise ValueError(f"--scaler-crop muss genau vier Werte X,Y,W,H haben, nicht {raw!r}")
+    try:
+        values = tuple(int(p) for p in parts)
+    except ValueError as exc:
+        raise ValueError(f"--scaler-crop-Werte muessen ganzzahlig sein: {raw!r}") from exc
+    if any(v <= 0 for v in values):
+        raise ValueError(
+            f"--scaler-crop-Werte muessen alle positiv sein (kein negativer oder Null-Wert): {raw!r}"
+        )
+    return values  # type: ignore[return-value]
 
 
 def _encode_norm(norm: float) -> tuple[tuple[int, int, int], int]:
@@ -679,17 +713,20 @@ def _synthetic_frames(uri: str):
 
     Liefert ein drittes Element `sensor_sequence=None` - es gibt bei
     `synthetic://` keine Sensor-/libcamera-Sequenznummer, das Feld existiert
-    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag)."""
+    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag). Das
+    vierte Element `scaler_crop_actual` ist aus demselben Grund immer
+    `None` - `ScalerCrop` ist ein Kamera-Control, `synthetic://` hat keine
+    Kamera (Task 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md)."""
     source = open_source(uri)
     source.open()
     try:
         for frame in source.frames():
-            yield frame.image, frame.capture_timestamp.to_dict(), None
+            yield frame.image, frame.capture_timestamp.to_dict(), None, None
     finally:
         source.close()
 
 
-def _camera_frames(size: tuple[int, int], fps: float):
+def _camera_frames(size: tuple[int, int], fps: float, scaler_crop: tuple[int, int, int, int] | None = None):
     """Echte Kamera - lazy Import, siehe CLAUDE.md.
 
     Feldbehandlung ist `Controller._capture` nachgebildet (controller.py
@@ -724,14 +761,44 @@ def _camera_frames(size: tuple[int, int], fps: float):
     (`from ._libcamera import *`) - `dir(libcamera.Request)` listet
     `sequence` dort auf. Muss VOR `request.release()` gelesen werden, wie
     `make_array`/`get_metadata` auch.
+
+    `scaler_crop` (Task 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md,
+    Entscheidung 4 - mehr Pixel je Punkt ueber `ScalerCrop`, nie ueber einen
+    groesseren Sensormodus, OQ-22) geht als `ScalerCrop`-Eintrag in die
+    `controls`-Dict von `create_video_configuration`, NICHT ueber
+    `camera.set_controls(...)` nach dem Start:
+    `Picamera2.configure_()` uebernimmt `camera_config['controls']`
+    unveraendert in `self.controls`
+    (`/usr/lib/python3/dist-packages/picamera2/picamera2.py:1292`,
+    `self.controls = Controls(self, controls=self.camera_config['controls'])`),
+    und `Picamera2.start_()` wendet genau diese Controls beim eigentlichen
+    Systemstart an (`picamera2.py:1338`, `self.camera.start(controls)`). Ein
+    `set_controls` nach `camera.start()` wird laut Docstring dort "delivered
+    with the next request that gets submitted" (`picamera2.py:1428`) - der
+    allererste Request koennte den Crop also noch nicht sehen. Der
+    Konfigurationsweg ist deshalb der einzige, der den Crop schon im ersten
+    Bild garantiert.
+
+    Der tatsaechlich wirksame Ausschnitt kommt aus den Metadaten des ersten
+    Bildes zurueck (`request.get_metadata()["ScalerCrop"]`,
+    `CompletedRequest.get_metadata` in
+    `/usr/lib/python3/dist-packages/picamera2/request.py:161`) - dort wird
+    jeder libcamera-`Rectangle`-Wert ueber `convert_from_libcamera_type`
+    (`/usr/lib/python3/dist-packages/picamera2/utils.py:6-13`) zu einem
+    reinen `(x, y, w, h)`-Tupel. Weil dieses Tupel kein `str`/`bool`/`int`/
+    `float` ist, faellt es durch den bestehenden JSON-Metadatenfilter unten
+    und wird deshalb VORHER separat ausgelesen.
     """
     from picamera2 import Picamera2
 
     camera = Picamera2()
     try:
+        controls: dict[str, Any] = {"FrameRate": fps} if fps > 0 else {}
+        if scaler_crop is not None:
+            controls["ScalerCrop"] = scaler_crop
         config = camera.create_video_configuration(
             main={"size": size, "format": "RGB888"},
-            controls={"FrameRate": fps} if fps > 0 else {},
+            controls=controls,
             queue=False,
         )
         camera.configure(config)
@@ -745,6 +812,7 @@ def _camera_frames(size: tuple[int, int], fps: float):
                     sensor_sequence = request.request.sequence
                 except AttributeError:
                     sensor_sequence = None
+                scaler_crop_actual = raw_metadata.get("ScalerCrop")
             finally:
                 request.release()
             # Nur JSON-faehige echte Metadaten; SensorTimestamp unveraendert -
@@ -756,7 +824,7 @@ def _camera_frames(size: tuple[int, int], fps: float):
                 semantics=TimestampSemantics.UNKNOWN,
                 uncertainty_ns=None,
             )
-            yield image, timestamp.to_dict(), sensor_sequence
+            yield image, timestamp.to_dict(), sensor_sequence, scaler_crop_actual
     finally:
         camera.stop()
 
@@ -766,7 +834,7 @@ def _frame_generator(args: argparse.Namespace):
         yield from _synthetic_frames(args.synthetic_uri)
     else:
         w, _, h = args.camera_size.partition("x")
-        yield from _camera_frames((int(w), int(h)), args.frame_rate)
+        yield from _camera_frames((int(w), int(h)), args.frame_rate, scaler_crop=args.scaler_crop)
 
 
 def _frame_acquisition_worker(
@@ -797,7 +865,11 @@ def _frame_acquisition_worker(
     `state["frames_dropped_queue_full"]`, und eine kleine Meldung (ohne
     Bilddaten) geht auf die unbegrenzte `frame_drop_queue`, damit sie trotzdem
     als eigener `frames.jsonl`-Eintrag sichtbar wird. `frame_queue.put(...)`
-    selbst blockiert dafuer NIE."""
+    selbst blockiert dafuer NIE.
+
+    `scaler_crop_actual` (Task 2) wird nur vom ERSTEN Bild in `state`
+    uebernommen - `session.json["scaler_crop_actual"]" soll den Wert aus den
+    Metadaten des ersten Bildes tragen, nicht den letzten gesehenen."""
     frame_period_s = 1.0 / args.frame_rate if args.frame_rate > 0 else 0.0
     start_mono = time.monotonic()
     next_due = start_mono
@@ -808,12 +880,16 @@ def _frame_acquisition_worker(
     max_frame_queue_depth = 0
     frames_acquired = 0
     frames_dropped = 0
+    scaler_crop_actual_captured = False
 
     gen = _frame_generator(args)
     try:
-        for image, timestamp_dict, sensor_sequence in gen:
+        for image, timestamp_dict, sensor_sequence, scaler_crop_actual in gen:
             if stop_event.is_set():
                 break
+            if not scaler_crop_actual_captured:
+                state["scaler_crop_actual"] = scaler_crop_actual
+                scaler_crop_actual_captured = True
             now = time.monotonic()
             iter_duration_s = now - prev_loop_end_mono
             if iter_duration_s > max_loop_iteration_s:
@@ -861,6 +937,7 @@ def _frame_acquisition_worker(
         state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
     finally:
         gen.close()
+        state.setdefault("scaler_crop_actual", None)
         state["frames_acquired"] = frames_acquired
         state["frames_dropped_queue_full"] = frames_dropped
         state["max_loop_iteration_s"] = max_loop_iteration_s
@@ -1138,6 +1215,16 @@ def run(args: argparse.Namespace) -> int:
             "max_frame_queue_depth": frame_acq_state.get("max_frame_queue_depth", 0),
             "max_serial_queue_depth": serial_state.get("max_serial_queue_depth", 0),
             "acquisition_error": frame_acq_state.get("acquisition_error"),
+            # Task 2 (docs/superpowers/plans/2026-09-23-ernte-phase1.md):
+            # angefordert = das geparste --scaler-crop-Argument, tatsaechlich =
+            # der Wert aus den Metadaten des ersten Bildes ("ScalerCrop") -
+            # nur im Kamerazweig ueberhaupt gesetzt, siehe _camera_frames.
+            "scaler_crop_requested": list(args.scaler_crop) if args.scaler_crop is not None else None,
+            "scaler_crop_actual": (
+                list(frame_acq_state["scaler_crop_actual"])
+                if frame_acq_state.get("scaler_crop_actual") is not None
+                else None
+            ),
         }
         session_json.write_text(json.dumps(session, indent=2, ensure_ascii=False, default=_json_default))
 
