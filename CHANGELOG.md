@@ -27,6 +27,23 @@ Auflösungsbefund und mehr Pixel je Anzeigepunkt. Bisher lagen im Vollbild nur
     (picamera2.py:1292/1338) und gilt damit ab dem ersten Bild.
   * `session.json` trägt `scaler_crop_requested` und `scaler_crop_actual`.
 
+* `src/dispread/glassquad.py` (neu): `glass_quad_in_region` findet das
+  beleuchtete LCD-Glas.
+  * Die Farbmaske richtet sich nach dem Farbton, der in der Mitte der
+    Hint-Box gemessen wird. Das Viereck wird mit vier freien Ecken angepasst
+    (eine Gerade je Kante), damit auch schräge Ansichten als Trapez
+    abgebildet werden.
+  * Ist der Fit schlecht, liefert die Funktion `None`.
+  * Anlass: Das Gehäuse des GSV-2AS ist selbst gesättigt. `lcd_quad_in_region`
+    hat deshalb Rahmen und Gehäuse mit eingeschlossen, und `minAreaRect` kann
+    kein Trapez darstellen.
+* `scripts/harvest-setup.py` (neu) mit den Befehlen `propose` und `confirm`.
+  * `propose` schlägt Quad und Raster vor und schreibt die Overlays für
+    Quell- und entzerrtes Bild.
+  * `confirm` prüft die Auflösung gegen `--resolution-threshold-px` (Pflicht,
+    ohne Vorgabe). Die unbestätigte Standardteilung lehnt es ab, ausser mit
+    `--accept-default-grid`.
+  * `lcd_quad_in_region` bleibt als Rückfall über `--detector saturation-only`.
 * `scripts/harvest.py` (neu): Ernte-Lauf.
   * Der Faktorplan ist deterministisch, log-uniform verteilt, mit
     Mindestabstand 1,3 zwischen zwei Schritten und im Gerätebereich
