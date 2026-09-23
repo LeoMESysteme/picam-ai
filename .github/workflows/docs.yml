@@ -1,4 +1,6 @@
-# Doku-Seite bauen und als offline-fähiges ZIP am Lauf ablegen.
+# Doku-Seite bauen, als offline-fähiges ZIP am Lauf ablegen und - sobald
+# eingerichtet - auf Cloudflare Pages hinter Cloudflare Access veröffentlichen
+# (docs/HOSTING.md).
 #
 # Wer Leserechte am Repo hat, lädt das Artefakt "doku-seite" unter
 # Actions -> Lauf -> Artefakte herunter, entpackt es und öffnet index.html.
@@ -48,3 +50,56 @@ jobs:
           name: doku-seite
           path: site/
           retention-days: 30
+
+      # --- Hosting auf Cloudflare Pages mit Forgejo-Anmeldung ----------------
+      # Inaktiv, solange die Repo-Variable CLOUDFLARE_PAGES_PROJECT fehlt.
+      # Schutz: cloudflare/functions/_middleware.js liegt vor JEDER Anfrage und
+      # lässt nur durch, wer das Repo in Forgejo lesen darf (docs/HOSTING.md).
+      # Ablauf: Tests -> Prüfstand "verify" -> Schutz dort prüfen -> erst dann
+      # Produktion -> Schutz dort prüfen. Ungeschützt geht nichts live.
+      # Node 22 nur für diesen Job (Wrangler 4 verlangt es).
+      - name: Node 22 für Wrangler
+        if: vars.CLOUDFLARE_PAGES_PROJECT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests des Zugriffsschutzes
+        if: vars.CLOUDFLARE_PAGES_PROJECT != ''
+        run: node --test cloudflare/test/
+
+      - name: Deploy auf Prüfstand und Schutz prüfen
+        if: vars.CLOUDFLARE_PAGES_PROJECT != ''
+        env:
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          cd cloudflare
+          npx --yes wrangler@4.136.3 pages deploy ../site --project-name="$PROJECT" \
+            --branch=verify --commit-hash="$GITHUB_SHA" --commit-dirty=false | tee ../deploy-verify.log
+          url=$(grep -oE 'https://[0-9a-f]+\.'"$PROJECT"'\.pages\.dev' ../deploy-verify.log | head -1)
+          [ -n "$url" ] || { echo "Deployment-URL nicht gefunden" >&2; exit 1; }
+          if ! ../scripts/check-auth-protected.sh "$url"; then
+            id=${url#https://}; id=${id%%.*}
+            echo "Prüfstand NICHT geschützt - lösche Deployment $id" >&2
+            curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/deployments/$id?force=true"
+            exit 1
+          fi
+
+      - name: Deploy auf Produktion und Schutz prüfen
+        if: vars.CLOUDFLARE_PAGES_PROJECT != ''
+        env:
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # Produktion ist immer --branch=master; solange die Doku nur auf
+          # docs/zensical-prototyp lebt, geht auch dieser Stand produktiv.
+          cd cloudflare
+          npx --yes wrangler@4.136.3 pages deploy ../site --project-name="$PROJECT" \
+            --branch=master --commit-hash="$GITHUB_SHA" --commit-dirty=false | tee ../deploy-prod.log
+          url=$(grep -oE 'https://[0-9a-f]+\.'"$PROJECT"'\.pages\.dev' ../deploy-prod.log | head -1)
+          ../scripts/check-auth-protected.sh "$url"
+          ../scripts/check-auth-protected.sh "https://$PROJECT.pages.dev"

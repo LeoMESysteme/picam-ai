@@ -48,6 +48,7 @@ nav = [
     { "Displaybus-Abgriff" = "docs/DISPLAYBUS_TAP.md" },
     { "GSVmulti-Protokoll" = "docs/GSVMULTI_PROTOCOL.md" },
     { "Abhängigkeiten" = "docs/dependencies.md" },
+    { "Doku-Hosting" = "docs/HOSTING.md" },
   ] },
   { "Messungen" = [
     { "Validierung (Zahlen)" = "docs/VALIDATION.md" },

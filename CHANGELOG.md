@@ -3,6 +3,43 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Doku-Hosting: Cloudflare Pages mit Forgejo-Anmeldung)
+
+**Problem:** Die Doku-Seite gab es nur als ZIP zum Herunterladen. Forgejo 15
+kann HTML nicht als Webseite ausliefern. Ein zusätzlicher Server soll es
+nicht geben, und Cloudflare Zero Trust verlangt eine Kreditkarte.
+Außerdem stand ein von Hand angelegtes Pages-Projekt `picam-ai` rund 2 h
+**ungeschützt öffentlich** im Netz, mit dem versionierten Repo-Stand von
+`889357e`. Es ist gelöscht, und die Adressen lösen nicht mehr auf.
+Zugangsdaten enthielt dieser Stand nicht (geprüft).
+
+**Änderung:**
+* `cloudflare/functions/_middleware.js` (neu) ist eine Pages Function vor
+  jeder Anfrage.
+  * Anmeldung über Forgejo (OAuth2 mit PKCE).
+  * Zugang nur mit Leserecht am Repo, geprüft per Forgejo-API mit dem Token
+    des Besuchers.
+  * HMAC-signierte `__Host-`-Sitzung, 8 h gültig.
+  * Im Zweifel Ablehnung.
+  * 12 Tests unter `cloudflare/test/` (`node --test`).
+* `.github/workflows/docs.yml` deployt, sobald `CLOUDFLARE_PAGES_PROJECT`
+  gesetzt ist.
+  * Reihenfolge: Tests → Prüfstand `verify` → Schutzprüfung → Produktion →
+    Schutzprüfung.
+  * Ein ungeschützter Prüfstand wird sofort gelöscht, und der Job bricht ab.
+  * Node 22 kommt nur für den Job, weil Wrangler 4 es verlangt.
+* `scripts/check-auth-protected.sh` (neu) ersetzt
+  `check-access-protected.sh`. Für jede Probeadresse verlangt es ein 302 auf
+  die Forgejo-Anmeldung ohne Inhalt, und es wartet, bis frische Deployments
+  angekommen sind.
+* `docs/HOSTING.md` beschreibt Aufbau, Einrichtung und Wartung.
+  `docs/project_history.md` hält die Entscheidung fest.
+
+**Konsequenz:** Die Doku ist unter `https://picam-docs.pages.dev` für genau
+die Forgejo-Konten lesbar, die das Repo lesen dürfen. Entzogene Rechte wirken
+spätestens nach 8 h. Die Doku liegt damit auch bei Cloudflare. Der
+Anmelde-Code ist selbst geschrieben, deshalb nur mit Tests ändern.
+
 ## 0.1.0.dev0 — 2026-09-23 (Doku-Seite mit Zensical, Forgejo-Runner auf dem Pi)
 
 **Problem:** Die Doku ist umfangreich, lag aber nur als lose Markdown-Dateien

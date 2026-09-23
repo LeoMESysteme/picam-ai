@@ -575,3 +575,67 @@ Freigaberegeln zu berühren: `ValueRecord`, `ReleaseGate` und
 gemeinsamer Schreiblogik — vertretbar, weil beide unterschiedliche
 Garantien geben (ein Clip ist ein konstanter Wert über die Zeit, eine
 Sample-Probe ein Einzelbild mit Zielbox).
+
+---
+
+# 2026-09-23 — Doku-Seite: Zensical statt KI-Wiki, Hosting auf Cloudflare Pages mit Forgejo-Anmeldung
+
+## Problem
+
+Die Doku ist umfangreich (> 20 000 Zeilen Markdown), hatte aber keine
+Navigation, keine Suche und keine API-Referenz. Wer nur Zugriff auf das
+Forgejo-Repo hat, soll sie als Web-Oberfläche lesen können.
+
+## Entscheidung
+
+* **Generator: Zensical** über die vorhandenen Markdown-Dateien, dazu eine
+  API-Referenz aus den Docstrings (mkdocstrings). Kein KI-generiertes Wiki.
+* **Build:** Forgejo-Runner auf dem Pi (Label `picam-docs`, Host-Modus,
+  per systemd abgeschottet). Ergebnis ist immer ein Offline-ZIP am Lauf.
+* **Hosting: Cloudflare Pages mit einer eigenen Pages Function** als
+  Zugriffsschutz. Anmeldung über Forgejo, Zugang nur mit Leserecht am Repo.
+  Live geht ein Stand nur nach bestandener Schutzprüfung auf einem
+  Prüfstand. Details in [HOSTING.md](HOSTING.md).
+
+## Begründung / Alternativen
+
+- **KI-Wikis** (Repowise, FSoft CodeWiki, deepwiki-open, Google Code Wiki,
+  DeepWiki). Verworfen: Sie erzeugen plausibel klingende Fehler, und im
+  Kalibrierlabor ist eine falsche Beschreibung schlimmer als eine fehlende.
+  Repowise schrieb über `src/dispread` nachweislich Unzutreffendes. Die
+  gehosteten Varianten können nur öffentliche GitHub-Repos.
+- **MkDocs + Material.** Verworfen: Material ist seit November 2025 im
+  Wartungsmodus, MkDocs 2.0 streicht Plugins und damit mkdocstrings. Zensical
+  ist der Nachfolger vom Material-Team und liest dieselbe Konfiguration.
+  **Sphinx + MyST** wäre die konservative Rückfallebene, die Markdown-Dateien
+  bleiben dafür unverändert.
+- **Hosting in Forgejo selbst.** Nicht möglich: Forgejo 15 hat keine Pages,
+  HTML aus dem Repo kommt als `text/plain` mit `nosniff`. Ein HTML-Renderer im
+  iframe (`app.ini`) hat offene Fehler und trägt keine mehrseitige Seite.
+  Das **Wiki** trüge nur schlichtes Markdown ohne Zensical-Oberfläche.
+- **Eigener Dienst** (Forge-Pages, oauth2-proxy). Technisch am saubersten,
+  die Daten blieben im Haus. Verworfen, weil es keinen zusätzlichen Server
+  geben soll. Den Pi als Webserver wollten wir nicht, weil er das Messgerät ist.
+- **Cloudflare Access (Zero Trust)** vor Pages. Zuerst gewählt, dann
+  verworfen: Auch der kostenlose Plan verlangt eine hinterlegte
+  Kreditkarte. Die Pages Function prüft zudem genauer, nämlich die
+  Repo-Rechte statt einer E-Mail-Regel. Dafür ist ihr Anmelde-Code selbst
+  geschrieben statt ein Fertigprodukt.
+- **Gemeinsames Passwort** (Basic Auth in der Function). Verworfen: Es wäre
+  nicht an Forgejo-Konten gebunden, und wer das Projekt verlässt, kennt es weiter.
+- **GitHub Pages.** Verworfen: ohne Enterprise Cloud öffentlich.
+- **Netlify, Vercel, Codeberg Pages.** Verworfen: Zugriffsschutz nur
+  kostenpflichtig, Hobby-Tarif nicht für gewerbliche Nutzung, bzw. öffentlich
+  und nur für Open Source gedacht.
+- **GitLab.com Pages** mit Zugriffsschutz im Free-Tarif. Verworfen: Jeder
+  Leser bräuchte ein GitLab-Konto, und private Gruppen sind seit August 2026
+  auf 5 Nutzer begrenzt.
+
+## Konsequenz
+
+Die Doku liegt zusätzlich bei Cloudflare. Der Schutz hält Fremde fern, nicht
+den Anbieter. Zugelassen ist genau, wer das Repo in Forgejo lesen darf.
+Entzogene Rechte wirken spätestens nach 8 h (Sitzungsdauer). Lehre aus einem
+ersten, von Hand angelegten und ungeschützten Pages-Projekt: Kein Deploy ohne
+automatische Schutzprüfung davor.
+Zensical ist jung (0.0.x) und deshalb in `requirements-docs.txt` gepinnt.
