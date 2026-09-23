@@ -289,7 +289,7 @@ auf `manual` und führt die vorherige in `label_history` mit.
 Datensatz die Herkunft nicht mit — die Entmischung ist dann nur im Bestand
 möglich, nicht im Export.
 
-### Task D — Migration der 88 Bestandsproben — **Skript fertig, nicht ausgeführt**
+### Task D — Migration der 88 Bestandsproben — **erledigt** (Trockenlauf 2026-09-23: 0 zu migrieren)
 
 Alle heutigen Proben sind von Hand gelabelt; sie brauchen `label_origin:
 "manual"` eingetragen. Das ist eine Änderung an echten Messdaten unter `var/`
