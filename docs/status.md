@@ -5,9 +5,9 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-Der Zensical-/Cloudflare-Stand aus `docs/zensical-prototyp` ist lokal per
-Fast-forward in `master` integriert. Der abschließende Push auf `origin/master`
-startet automatisch `.github/workflows/docs.yml`.
+Der Zensical-/Cloudflare-Stand aus `docs/zensical-prototyp` ist per Fast-forward
+in `master` integriert und auf `origin/master` veröffentlicht. Jeder weitere
+Push auf `master` startet automatisch `.github/workflows/docs.yml`.
 
 Der produktive Cloudflare-Deploy ist zweifach auf einen echten Push nach
 `master` begrenzt: durch den Workflow-Trigger und durch die Bedingung am
@@ -26,6 +26,9 @@ Zugriffsschutztests und den Prüfstand ausführen, aber Produktion nicht
   Leserecht auf `l.hentschke/picam-ai`; Details in [HOSTING.md](HOSTING.md).
 * Drei veraltete interne Anker im Dotmatrix-Plan sind an Zensicals erzeugte
   ASCII-IDs angepasst; der Doku-Build meldet keine Probleme mehr.
+* Der produktive Forgejo-Lauf `docs.yml` für den Integrationsstand `39cad8f`
+  endete erfolgreich. `https://picam-docs.pages.dev` leitete danach ohne
+  Sitzung weiterhin mit HTTP 302 zur Forgejo-OAuth-Anmeldung um.
 
 ## Verifikation vor dem Merge
 
@@ -60,8 +63,6 @@ uncommittierte Dateien im Haupt-Worktree wurden nicht verändert.
 
 ## Nächster Schritt
 
-Nach dem Push den Forgejo-Lauf „Doku-Seite“ bis zum erfolgreichen
-Produktions-Deploy beobachten und anschließend prüfen, dass
-`https://picam-docs.pages.dev` ohne Sitzung weiterhin zur Forgejo-Anmeldung
-umleitet. Danach kann `feat/task-b-versatz-normierung` unabhängig weitergeführt
-oder separat integriert werden.
+`feat/task-b-versatz-normierung` kann unabhängig weitergeführt oder separat
+integriert werden. Vor einem späteren Merge die dortigen uncommittierten
+Änderungen und den gemeinsamen Abzweig bei `3136b18` berücksichtigen.
