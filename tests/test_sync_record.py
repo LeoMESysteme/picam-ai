@@ -429,17 +429,39 @@ class _FakeCompletedRequest:
 
 
 class _FakeCamera:
-    def __init__(self, requests: list[_FakeCompletedRequest]) -> None:
+    """Fake fuer `picamera2.Picamera2`. `sensor_mode_size`/`sensor_array_size`
+    (Bug 2) stehen in echt erst NACH `configure()` zur Verfuegung
+    (`camera.camera_config["sensor"]["output_size"]`,
+    `camera.camera_properties["PixelArraySize"]`, siehe `_camera_frames`-
+    Docstring) - genauso hier: leer bis `configure()` laeuft, danach befuellt."""
+
+    def __init__(
+        self,
+        requests: list[_FakeCompletedRequest],
+        *,
+        sensor_mode_size: tuple[int, int] | None = None,
+        sensor_array_size: tuple[int, int] | None = None,
+    ) -> None:
         self._requests = list(requests)
+        self._sensor_mode_size = sensor_mode_size
+        self._sensor_array_size = sensor_array_size
         self.started = False
         self.stopped = False
         self.configured_with = None
+        self.camera_config: dict = {}
+        self.camera_properties: dict = {}
 
     def create_video_configuration(self, **kwargs):
         return kwargs
 
     def configure(self, config) -> None:
         self.configured_with = config
+        self.camera_config = {}
+        if self._sensor_mode_size is not None:
+            self.camera_config["sensor"] = {"output_size": self._sensor_mode_size}
+        self.camera_properties = {}
+        if self._sensor_array_size is not None:
+            self.camera_properties["PixelArraySize"] = self._sensor_array_size
 
     def start(self, show_preview: bool = False) -> None:
         self.started = True
@@ -470,8 +492,8 @@ def test_kamera_zweig_liest_sensor_sequence_aus_completed_request(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0)
     try:
-        image1, ts1, seq1, _crop1 = next(gen)
-        image2, ts2, seq2, _crop2 = next(gen)
+        image1, ts1, seq1, _crop1, _mode1, _array1 = next(gen)
+        image2, ts2, seq2, _crop2, _mode2, _array2 = next(gen)
     finally:
         gen.close()
 
@@ -510,7 +532,7 @@ def test_kamera_zweig_liefert_none_wenn_sequence_fehlt(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0)
     try:
-        _image, _ts, seq, _crop = next(gen)
+        _image, _ts, seq, _crop, _mode, _array = next(gen)
     finally:
         gen.close()
 
@@ -538,7 +560,7 @@ def test_camera_frames_setzt_scaler_crop_ueber_video_konfiguration(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0, scaler_crop=(1000, 800, 1600, 1200))
     try:
-        _image, _ts, _seq, scaler_crop_actual = next(gen)
+        _image, _ts, _seq, scaler_crop_actual, _mode, _array = next(gen)
     finally:
         gen.close()
 
@@ -556,12 +578,123 @@ def test_camera_frames_ohne_scaler_crop_setzt_kein_control(monkeypatch):
 
     gen = module._camera_frames((320, 240), 15.0)
     try:
-        _image, _ts, _seq, scaler_crop_actual = next(gen)
+        _image, _ts, _seq, scaler_crop_actual, _mode, _array = next(gen)
     finally:
         gen.close()
 
     assert "ScalerCrop" not in fake_camera.configured_with["controls"]
     assert scaler_crop_actual is None
+
+
+def test_camera_frames_liefert_sensor_mode_und_array_size_aus_configure(monkeypatch):
+    """Bug 2: `sensor_mode_size` kommt aus `camera.camera_config['sensor']
+    ['output_size']`, `sensor_array_size` aus
+    `camera.camera_properties['PixelArraySize']` - beide erst NACH
+    `camera.configure(...)` gueltig (siehe `_camera_frames`-Docstring)."""
+    module = _load_sync_record_module()
+
+    fake_requests = [_FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1)]
+    fake_camera = _FakeCamera(
+        fake_requests, sensor_mode_size=(2028, 1520), sensor_array_size=(4056, 3040)
+    )
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((960, 720), 15.0)
+    try:
+        _image, _ts, _seq, _crop, sensor_mode_size, sensor_array_size = next(gen)
+    finally:
+        gen.close()
+
+    assert sensor_mode_size == (2028, 1520)
+    assert sensor_array_size == (4056, 3040)
+
+
+def test_camera_frames_ohne_sensor_infos_liefert_none(monkeypatch):
+    """Fehlen die Angaben (andere picamera2-Version, alte Property nicht
+    gesetzt), muss `_camera_frames` `None` liefern statt abzustuerzen -
+    'null wenn nicht verfuegbar' wie bei sensor_sequence."""
+    module = _load_sync_record_module()
+
+    fake_requests = [_FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1)]
+    fake_camera = _FakeCamera(fake_requests)
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((320, 240), 15.0)
+    try:
+        _image, _ts, _seq, _crop, sensor_mode_size, sensor_array_size = next(gen)
+    finally:
+        gen.close()
+
+    assert sensor_mode_size is None
+    assert sensor_array_size is None
+
+
+def test_kamera_lauf_schreibt_sensor_mode_und_array_size_in_session_json(monkeypatch, tmp_path):
+    """Ende-zu-Ende ueber `module.run()`: beide Felder landen in
+    session.json, gelesen vom ERSTEN Bild (analog scaler_crop_actual)."""
+    module = _load_sync_record_module()
+
+    fake_requests = [
+        _FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1_000_000_000),
+        _FakeCompletedRequest(sequence=2, sensor_timestamp_ns=1_066_000_000),
+    ]
+    fake_camera = _FakeCamera(
+        fake_requests, sensor_mode_size=(2028, 1520), sensor_array_size=(4056, 3040)
+    )
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-sensor-groessen"
+    args = module.parse_args(
+        [
+            "--duration",
+            "0.3",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-size",
+            "320x240",
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+            # Streamstart-Budget-Pruefung liest das ECHTE Kernel-Log des
+            # Testrechners (Scope-Erweiterung) - fuer diesen Test irrelevant,
+            # deshalb bewusst uebersteuert statt vom lokalen Log abzuhaengen.
+            "--override-stream-budget",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["sensor_mode_size"] == [2028, 1520]
+    assert session["sensor_array_size"] == [4056, 3040]
+
+
+def test_synthetic_lauf_hat_sensor_mode_und_array_size_null(tmp_path):
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-synthetic-sensor-groessen"
+    try:
+        completed = _run_cli(duration=0.3, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["sensor_mode_size"] is None
+    assert session["sensor_array_size"] is None
 
 
 def test_frames_jsonl_hat_sensor_sequence_und_intervall_felder(tmp_path):
@@ -1051,3 +1184,508 @@ def test_ohne_norm_schedule_bleibt_verhalten_unveraendert(tmp_path):
     assert session["transmission_paused_during_writes"] is False
     assert session["precheck"] is None
     assert session["restore_verification"] is None
+
+
+# --- Bug 1 (Orchestrator 2026-09-23): haengender Kamerazweig darf nicht ----
+# --- still mit Exit 0/"vollstaendig" und 0 Bildern enden --------------------
+
+
+class _HangingCamera(_FakeCamera):
+    """`capture_request` kehrt nie zurueck - wie am 2026-09-23 real beobachtet
+    (Sensor durch OQ-22 blockiert, "stream on failed" im Kernel-Log, kein
+    TimeoutError, keine Ausnahme). Simuliert nicht `wait=2.0` als
+    picamera2-Timeout, weil genau das am echten Geraet ausblieb."""
+
+    def capture_request(self, wait: float = 2.0):
+        time.sleep(9999)
+
+
+class _TimeoutRaisingCamera(_FakeCamera):
+    """Alternative Auspraegung desselben Befunds: `capture_request` wirft
+    stattdessen einen Timeout (z.B. eine andere picamera2-Version)."""
+
+    def capture_request(self, wait: float = 2.0):
+        raise TimeoutError("Fake-Kamera: kein Bild innerhalb der Frist")
+
+
+def _run_camera_branch(module, monkeypatch, tmp_path, fake_camera_cls, *, extra_args=()):
+    monkeypatch.setattr(module, "STARTUP_TIMEOUT_S", 0.2)
+    fake_camera = fake_camera_cls([])
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-haengt"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-size",
+            "320x240",
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+            # Streamstart-Budget-Pruefung liest das ECHTE Kernel-Log des
+            # Testrechners (Scope-Erweiterung) - fuer diese Tests irrelevant.
+            "--override-stream-budget",
+            *extra_args,
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+    return returncode, output_dir
+
+
+def test_kamera_haengt_ohne_erstes_bild_wird_laut_gemeldet_und_bricht_ab(monkeypatch, tmp_path, capsys):
+    module = _load_sync_record_module()
+    returncode, output_dir = _run_camera_branch(module, monkeypatch, tmp_path, _HangingCamera)
+
+    assert returncode == module.EXIT_NO_FRAMES_ACQUIRED
+    assert returncode != 0
+
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 0
+    # kein Ctrl-C/SIGTERM - der Abbruch ist ein Befund, kein Nutzerabbruch.
+    assert session["aborted"] is False
+    assert session["abort_reason"] is None
+    assert session["acquisition_error"] is not None
+    assert "OQ-22" in session["acquisition_error"]
+    assert "blockiert" in session["acquisition_error"]
+
+    captured = capsys.readouterr()
+    assert "vollstaendig" not in captured.out
+    assert "OQ-22" in captured.err
+
+
+def test_kamera_wirft_timeout_error_wird_ebenso_laut_gemeldet(monkeypatch, tmp_path):
+    """Zweite Auspraegung desselben Befunds: capture_request wirft statt zu
+    haengen - auch das ist ein 'kein Bild bekommen'-Fall und muss denselben
+    Weg (Exit != 0, OQ-22-Hinweis, kein 'vollstaendig') nehmen."""
+    module = _load_sync_record_module()
+    returncode, output_dir = _run_camera_branch(module, monkeypatch, tmp_path, _TimeoutRaisingCamera)
+
+    assert returncode == module.EXIT_NO_FRAMES_ACQUIRED
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 0
+    assert session["acquisition_error"] is not None
+    assert "OQ-22" in session["acquisition_error"]
+
+
+def test_kamera_haengt_aber_norm_schedule_rueckstellung_laeuft_trotzdem(monkeypatch, tmp_path):
+    """Auch wenn die Bildaufnahme scheitert, muss die serielle Sitzung sauber
+    zu Ende laufen: die Rueckstellung nach --norm-schedule darf nicht
+    ausbleiben, nur weil die Kamera nie ein Bild lieferte. Das Skript darf
+    die Kamera dafuer nicht hart abwuergen (Auftrag) - der haengende
+    Kamera-Thread bleibt als Daemon zurueck, der serielle Pfad laeuft
+    unabhaengig davon vollstaendig durch."""
+    module = _load_sync_record_module()
+    monkeypatch.setattr(module, "STARTUP_TIMEOUT_S", 0.2)
+
+    fake_camera = _HangingCamera([])
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    master, slave = os.openpty()
+    device = _FakeGsvDevice(master)
+    device.start()
+    output_dir = tmp_path / "lauf-kamera-haengt-mit-rueckstellung"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.5",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-size",
+            "320x240",
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+            "--norm-schedule",
+            "2.0:0.5",
+            "--restore-point",
+            str(RESTORE_POINT_PATH),
+            "--override-stream-budget",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        device.stop()
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == module.EXIT_NO_FRAMES_ACQUIRED
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 0
+    assert session["acquisition_error"] is not None
+    # Die serielle Rueckstellung ist trotz gescheiterter Bildaufnahme gelaufen.
+    assert session["precheck"]["matches_restore_point"] is True
+    assert session["restore_verification"]["write_ok"] is True
+    assert session["restore_verification"]["matches_restore_point"] is True
+    assert device.norm_bytes == list(RESTORE_NORM_BYTES)
+    assert device.dpoint == RESTORE_DPOINT
+
+
+# --- Streamstart-Budget (Scope-Erweiterung, Orchestrator 2026-09-23) -------
+#
+# Root Cause der Blockade vom 2026-09-23: OQ-22 haelt fest, dass die
+# IMX500/RP2040-Bruecke nach rund 20-25 Streamstarts je Boot unerreichbar
+# wird. Reale Beobachtung: 20 erfolgreiche Starts, der 21. mit
+# "imx500_power_on: failed to get led gpio" gefolgt von "stream on failed".
+# count_stream_starts/has_stream_on_failed sind reine Funktionen (kein I/O),
+# check_stream_budget kapselt die I/O-Helfer (journalctl/dmesg/Zaehlerdatei)
+# hinter einer testbaren Entscheidungsfunktion.
+
+
+def _journal_line(t_boot_s: float, message: str) -> str:
+    return f"[{t_boot_s:14.6f}] {message}"
+
+
+def test_count_stream_starts_single_line_per_start():
+    """Normalfall: eine Log-Zeile je tatsaechlichem Streamstart."""
+    module = _load_sync_record_module()
+    text = "\n".join(
+        _journal_line(t, "rp1-cfe 1f00128000.csi2: Using a link rate of 456000000 bps")
+        for t in (10.0, 50.0, 200.0)
+    )
+    assert module.count_stream_starts(text) == 3
+
+
+def test_count_stream_starts_groups_burst_within_one_second_as_one_start():
+    """Der beobachtete Fehlschlag: 5 Zeilen innerhalb 1s gehoeren zu EINEM
+    Streamstart-Versuch, nicht zu 5."""
+    module = _load_sync_record_module()
+    burst = "\n".join(
+        _journal_line(1000.0 + 0.2 * i, "rp1-cfe: Using a link rate of 456000000 bps") for i in range(5)
+    )
+    text = (
+        _journal_line(10.0, "rp1-cfe: Using a link rate of 456000000 bps")
+        + "\n"
+        + _journal_line(50.0, "rp1-cfe: Using a link rate of 456000000 bps")
+        + "\n"
+        + burst
+    )
+    assert module.count_stream_starts(text) == 3  # 10.0, 50.0, und der Burst als ein Start
+
+
+def test_count_stream_starts_no_marker_is_zero():
+    module = _load_sync_record_module()
+    assert module.count_stream_starts("nichts Relevantes hier\nnoch eine Zeile\n") == 0
+
+
+def test_count_stream_starts_unparsable_timestamps_counts_every_line():
+    """Kein Zeitstempel erkennbar (unerwartetes Format) - sichere Richtung
+    ist Ueberzaehlen, nie Unterzaehlen (das Budget waere sonst faelschlich
+    'noch nicht erschoepft')."""
+    module = _load_sync_record_module()
+    text = "\n".join(["Using a link rate of foo"] * 4)
+    assert module.count_stream_starts(text) == 4
+
+
+def test_has_stream_on_failed_true_and_false():
+    module = _load_sync_record_module()
+    assert module.has_stream_on_failed("foo\nimx500_power_on: failed to get led gpio\nstream on failed\nbar")
+    assert not module.has_stream_on_failed("alles gut, kein Problem hier")
+
+
+def test_check_stream_budget_reads_from_journalctl_and_refuses_when_exhausted(monkeypatch):
+    module = _load_sync_record_module()
+
+    journal_text = "\n".join(
+        _journal_line(10.0 * i, "rp1-cfe: Using a link rate of 456000000 bps") for i in range(20)
+    )
+
+    def _fake_run(cmd, **kwargs):
+        assert cmd[0] == "journalctl"
+        return types.SimpleNamespace(returncode=0, stdout=journal_text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    info = module.check_stream_budget(stream_budget=15, override=False)
+    assert info["stream_budget_source"] == "journalctl"
+    assert info["stream_starts_this_boot_before"] == 20
+    assert info["stream_budget"] == 15
+    assert info["refuse"] is True
+    assert "OQ-22" in info["message"]
+    assert "20/15" in info["message"]
+
+
+def test_check_stream_budget_warns_near_budget_without_refusing(monkeypatch):
+    module = _load_sync_record_module()
+    journal_text = "\n".join(
+        _journal_line(10.0 * i, "rp1-cfe: Using a link rate of 456000000 bps") for i in range(13)
+    )
+
+    def _fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout=journal_text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    info = module.check_stream_budget(stream_budget=15, override=False)
+    assert info["stream_starts_this_boot_before"] == 13  # >= 15-3
+    assert info["refuse"] is False
+    assert info["warn"] is True
+    assert "OQ-22" in info["warn_message"]
+
+
+def test_check_stream_budget_below_warn_threshold_is_silent(monkeypatch):
+    module = _load_sync_record_module()
+    journal_text = "\n".join(
+        _journal_line(10.0 * i, "rp1-cfe: Using a link rate of 456000000 bps") for i in range(5)
+    )
+
+    def _fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout=journal_text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    info = module.check_stream_budget(stream_budget=15, override=False)
+    assert info["refuse"] is False
+    assert info["warn"] is False
+
+
+def test_check_stream_budget_refuses_on_existing_stream_on_failed(monkeypatch):
+    module = _load_sync_record_module()
+    journal_text = (
+        _journal_line(1.0, "rp1-cfe: Using a link rate of 456000000 bps")
+        + "\n"
+        + _journal_line(2.0, "imx500_power_on: failed to get led gpio")
+        + "\n"
+        + _journal_line(2.1, "stream on failed")
+    )
+
+    def _fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout=journal_text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    # Weit unter dem Budget, aber "stream on failed" ist allein schon ein
+    # Abbruchgrund (ein wiederholter Versuch gegen den blockierten Sensor
+    # wuerde nur weitere Fehler erzeugen).
+    info = module.check_stream_budget(stream_budget=15, override=False)
+    assert info["stream_on_failed_seen_before_start"] is True
+    assert info["refuse"] is True
+    assert "stream on failed" in info["message"]
+    assert "OQ-22" in info["message"]
+
+
+def test_check_stream_budget_override_bypasses_both_refusal_reasons(monkeypatch):
+    module = _load_sync_record_module()
+    journal_text = _journal_line(1.0, "stream on failed") + "\n" + "\n".join(
+        _journal_line(10.0 * i, "rp1-cfe: Using a link rate of 456000000 bps") for i in range(20)
+    )
+
+    def _fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout=journal_text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    info = module.check_stream_budget(stream_budget=15, override=True)
+    assert info["refuse"] is False
+
+
+def test_check_stream_budget_falls_back_to_dmesg_when_journalctl_unavailable(monkeypatch):
+    module = _load_sync_record_module()
+
+    def _fake_run(cmd, **kwargs):
+        if cmd[0] == "journalctl":
+            raise FileNotFoundError("journalctl nicht installiert")
+        assert cmd[0] == "dmesg"
+        text = _journal_line(1.0, "rp1-cfe: Using a link rate of 456000000 bps")
+        return types.SimpleNamespace(returncode=0, stdout=text, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    info = module.check_stream_budget(stream_budget=15, override=False)
+    assert info["stream_budget_source"] == "dmesg"
+    assert info["stream_starts_this_boot_before"] == 1
+
+
+def test_check_stream_budget_falls_back_to_counter_file_when_log_unavailable(monkeypatch, tmp_path):
+    """Weder journalctl noch dmesg liefern etwas - Zaehlerdatei-Fallback,
+    keyed ueber boot_id. Jeder Aufruf erhoeht den Stand um 1 und liefert den
+    Stand VOR der Erhoehung."""
+    module = _load_sync_record_module()
+
+    def _fake_run(cmd, **kwargs):
+        raise FileNotFoundError("weder journalctl noch dmesg verfuegbar")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(module, "_read_boot_id", lambda: "test-boot-id-123")
+
+    counter_path = tmp_path / "camera-stream-budget.json"
+
+    info1 = module.check_stream_budget(stream_budget=15, override=False, counter_path=counter_path)
+    assert info1["stream_budget_source"] == "unavailable"
+    assert info1["stream_starts_this_boot_before"] == 0
+
+    info2 = module.check_stream_budget(stream_budget=15, override=False, counter_path=counter_path)
+    assert info2["stream_starts_this_boot_before"] == 1
+
+    stored = json.loads(counter_path.read_text())
+    assert stored == {"test-boot-id-123": 2}
+
+
+def test_check_stream_budget_counter_fallback_without_boot_id_stays_zero(monkeypatch, tmp_path):
+    module = _load_sync_record_module()
+
+    def _fake_run(cmd, **kwargs):
+        raise FileNotFoundError("kein Kernel-Log verfuegbar")
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(module, "_read_boot_id", lambda: None)
+
+    counter_path = tmp_path / "camera-stream-budget.json"
+    info = module.check_stream_budget(stream_budget=15, override=False, counter_path=counter_path)
+    assert info["stream_starts_this_boot_before"] == 0
+    assert not counter_path.exists()
+
+
+def test_run_refuses_before_opening_camera_when_budget_exhausted(monkeypatch, tmp_path):
+    """Ende-zu-Ende: `run()` bricht VOR jedem Kamerazugriff ab - die
+    Fake-`Picamera2` darf nicht einmal instanziiert werden."""
+    module = _load_sync_record_module()
+
+    def _picamera2_not_allowed():
+        raise AssertionError("Picamera2() haette hier NICHT aufgerufen werden duerfen")
+
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=_picamera2_not_allowed)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+    monkeypatch.setattr(
+        module,
+        "check_stream_budget",
+        lambda **kwargs: {
+            "stream_starts_this_boot_before": 20,
+            "stream_budget": 15,
+            "stream_budget_source": "journalctl",
+            "stream_on_failed_seen_before_start": False,
+            "refuse": True,
+            "message": "FEHLER: Streamstart-Budget dieses Boots erschoepft (20/15), Reboot empfohlen, OQ-22.",
+            "warn": False,
+            "warn_message": None,
+        },
+    )
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-budget-erschoepft"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-size",
+            "320x240",
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == module.EXIT_STREAM_BUDGET_EXHAUSTED
+    assert returncode == 5
+    # Kein Aufnahmeverzeichnis, kein session.json - der Abbruch kam vor jedem
+    # Seiteneffekt.
+    assert not output_dir.exists()
+
+
+def test_run_override_stream_budget_bypasses_refusal(monkeypatch, tmp_path):
+    module = _load_sync_record_module()
+
+    fake_requests = [_FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1)]
+    fake_camera = _FakeCamera(fake_requests)
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+    monkeypatch.setattr(
+        module,
+        "check_stream_budget",
+        lambda **kwargs: {
+            "stream_starts_this_boot_before": 20,
+            "stream_budget": 15,
+            "stream_budget_source": "journalctl",
+            "stream_on_failed_seen_before_start": False,
+            "refuse": False,  # override wurde schon in check_stream_budget beruecksichtigt
+            "message": None,
+            "warn": False,
+            "warn_message": None,
+        },
+    )
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-budget-uebersteuert"
+    args = module.parse_args(
+        [
+            "--duration",
+            "0.3",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-size",
+            "320x240",
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+            "--override-stream-budget",
+        ]
+    )
+    try:
+        module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert (output_dir / "session.json").is_file()
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["stream_starts_this_boot_before"] == 20
+    assert session["stream_budget"] == 15
+    assert session["stream_budget_source"] == "journalctl"
+
+
+def test_synthetic_source_leaves_stream_budget_fields_null_in_session_json(tmp_path):
+    """--source synthetic hat keine Kamera - die Streamstart-Budget-Felder
+    bleiben `null`, das reale journalctl/dmesg des Testrechners darf hier
+    keine Rolle spielen (dieser Lauf ist ein eigener Subprozess, siehe
+    _run_cli - `run()` ruft `check_stream_budget` fuer diesen Zweig gar
+    nicht erst auf, siehe `if args.source == "camera":` in `run()`)."""
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-synthetic-kein-budget"
+    try:
+        completed = _run_cli(duration=0.3, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["stream_starts_this_boot_before"] is None
+    assert session["stream_budget"] is None
+    assert session["stream_budget_source"] is None

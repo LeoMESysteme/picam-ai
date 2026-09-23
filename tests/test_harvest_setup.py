@@ -76,7 +76,14 @@ def _build_synthetic_scene() -> np.ndarray:
     return canvas
 
 
-def _dummy_proposal(tmp_path: Path, *, grid_source: str, min_px: float = 4.0) -> dict:
+def _dummy_proposal(
+    tmp_path: Path, *, grid_source: str, min_px: float = 4.0, native_scale: float | None = 1.0
+) -> dict:
+    """`native_scale=1.0` (Vorgabe) ahmt propose mit --session-json und einem
+    Crop nach, der breiter als der Output ist (kein Aufskalieren, siehe
+    Bug 2/_compute_native_scale) - die bestehenden Gate-Tests pruefen damit
+    weiterhin unveraendert min_source_dot_column_px == min_native_dot_column_px.
+    `native_scale=None` simuliert propose OHNE --session-json."""
     grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
     return {
         "frame": str(tmp_path / "frame.png"),
@@ -88,6 +95,9 @@ def _dummy_proposal(tmp_path: Path, *, grid_source: str, min_px: float = 4.0) ->
         "grid_source": grid_source,
         "scaler_crop": None,
         "min_source_dot_column_px": min_px,
+        "session_json": None,
+        "native_scale": native_scale,
+        "min_native_dot_column_px": (min_px * native_scale) if native_scale is not None else None,
     }
 
 
@@ -256,3 +266,264 @@ def test_confirm_rejects_unconfirmed_default_grid(tmp_path):
     )
     assert rc_accepted == 0
     assert out_path.exists()
+
+
+# --- Bug 2 (Orchestrator 2026-09-23): natives Aufloesungs-Gate -------------
+#
+# ScalerCrop < Output-Groesse des Sensormodus heisst der ISP skaliert hoch -
+# source_dot_column_px (Quellbild = Output-Bild) ist dann zu optimistisch.
+# _compute_native_scale rechnet auf native (unbeschnittene, unbinned)
+# Sensorpixel zurueck; binning = sensor_array_size.width / sensor_mode_size.width.
+
+# 2x2-gebinnter Sensormodus (CLAUDE.md: "Selected sensor format: 2028x1520").
+_SENSOR_MODE_SIZE = (2028, 1520)
+_SENSOR_ARRAY_SIZE = (4056, 3040)
+_OUTPUT_SIZE = (960, 720)
+
+
+def test_compute_native_scale_frontal_crop_matches_worked_example():
+    # Aus dem Auftrag: 1195 px breiter Crop -> scale = 1195/2/960 ~= 0.622.
+    scale = harvest_setup._compute_native_scale(
+        scaler_crop_actual=(100, 100, 1195, 900),
+        sensor_mode_size=_SENSOR_MODE_SIZE,
+        sensor_array_size=_SENSOR_ARRAY_SIZE,
+        output_size=_OUTPUT_SIZE,
+    )
+    assert scale == pytest.approx(1195 / 2 / 960, rel=1e-6)
+    assert scale == pytest.approx(0.622, abs=1e-3)
+
+
+def test_compute_native_scale_no_crop_is_output_limited_scale_one():
+    # Kein Crop -> volle Sensorbreite (4056) als Crop-Breite - output-
+    # limitiert (der ISP skaliert nur herunter), scale bleibt bei 1.0.
+    scale = harvest_setup._compute_native_scale(
+        scaler_crop_actual=None,
+        sensor_mode_size=_SENSOR_MODE_SIZE,
+        sensor_array_size=_SENSOR_ARRAY_SIZE,
+        output_size=_OUTPUT_SIZE,
+    )
+    assert scale == pytest.approx(1.0)
+
+
+def test_compute_native_scale_wide_crop_stays_capped_at_one():
+    """Ein Crop breiter als der Output darf nie hochskalieren - min(1, ...)."""
+    scale = harvest_setup._compute_native_scale(
+        scaler_crop_actual=(0, 0, 3000, 2000),
+        sensor_mode_size=_SENSOR_MODE_SIZE,
+        sensor_array_size=_SENSOR_ARRAY_SIZE,
+        output_size=_OUTPUT_SIZE,
+    )
+    assert scale == pytest.approx(1.0)
+
+
+def _session_json(tmp_path: Path, *, scaler_crop_actual, sensor_mode_size, sensor_array_size) -> Path:
+    path = tmp_path / "session.json"
+    path.write_text(
+        json.dumps(
+            {
+                "scaler_crop_actual": list(scaler_crop_actual) if scaler_crop_actual is not None else None,
+                "sensor_mode_size": list(sensor_mode_size) if sensor_mode_size is not None else None,
+                "sensor_array_size": list(sensor_array_size) if sensor_array_size is not None else None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_propose_with_session_json_writes_native_scale_fields(tmp_path):
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    session_json_path = _session_json(
+        tmp_path,
+        scaler_crop_actual=(100, 100, 1195, 900),
+        sensor_mode_size=_SENSOR_MODE_SIZE,
+        sensor_array_size=_SENSOR_ARRAY_SIZE,
+    )
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+            "--session-json",
+            str(session_json_path),
+        ]
+    )
+    assert rc == 0
+    proposal = json.loads((out_dir / "proposal.json").read_text())
+    assert proposal["native_scale"] == pytest.approx(1195 / 2 / canvas.shape[1], rel=1e-6)
+    assert proposal["min_native_dot_column_px"] == pytest.approx(
+        proposal["min_source_dot_column_px"] * proposal["native_scale"], rel=1e-6
+    )
+    assert proposal["session_json"] == str(session_json_path)
+
+
+def test_propose_without_session_json_leaves_native_scale_none(tmp_path):
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    assert rc == 0
+    proposal = json.loads((out_dir / "proposal.json").read_text())
+    assert proposal["native_scale"] is None
+    assert proposal["min_native_dot_column_px"] is None
+    assert proposal["session_json"] is None
+
+
+def test_propose_session_json_without_sensor_fields_leaves_native_scale_none(tmp_path):
+    """z. B. eine synthetic://-Aufzeichnung: session.json existiert, aber
+    sensor_mode_size/sensor_array_size sind null - kein Rateversuch."""
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    session_json_path = _session_json(
+        tmp_path, scaler_crop_actual=None, sensor_mode_size=None, sensor_array_size=None
+    )
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+            "--session-json",
+            str(session_json_path),
+        ]
+    )
+    assert rc == 0
+    proposal = json.loads((out_dir / "proposal.json").read_text())
+    assert proposal["native_scale"] is None
+    assert proposal["min_native_dot_column_px"] is None
+
+
+def test_confirm_requires_assume_native_scale_when_proposal_has_none(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0, native_scale=None)
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main(
+        [
+            "confirm",
+            "--proposal",
+            str(proposal_path),
+            "--resolution-threshold-px",
+            "3.5",
+            "--confirmed-by",
+            "bediener",
+            "--out",
+            str(out_path),
+        ]
+    )
+    assert rc == 2
+    assert not out_path.exists()
+
+
+def test_confirm_accepts_explicit_assume_native_scale(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0, native_scale=None)
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main(
+        [
+            "confirm",
+            "--proposal",
+            str(proposal_path),
+            "--resolution-threshold-px",
+            "3.5",
+            "--confirmed-by",
+            "bediener",
+            "--out",
+            str(out_path),
+            "--assume-native-scale",
+            "1.0",
+        ]
+    )
+    assert rc == 0
+    profile = SessionProfile.load(out_path)
+    assert profile.native_scale == pytest.approx(1.0)
+    assert profile.min_native_dot_column_px == pytest.approx(4.0)
+    assert profile.resolution_ok is True
+
+
+def test_confirm_gate_uses_native_value_not_raw_source_value(tmp_path):
+    """Kernstueck von Bug 2: min_source_dot_column_px allein wuerde die
+    Schwelle bestehen, min_native_dot_column_px (mit dem gemessenen
+    Beispiel-Crop, scale ~= 0.622) nicht - das Gate MUSS den nativen Wert
+    pruefen, sonst waere die Aufloesung ueberschaetzt."""
+    grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
+    native_scale = 1195 / 2 / 960
+    min_px = 4.0
+    proposal = {
+        "frame": str(tmp_path / "frame.png"),
+        "device_id": "gsv2as-01",
+        "session_id": "s1",
+        "quad": QUAD_GT,
+        "target_size": [400, 160],
+        "grid": grid.to_dict(),
+        "grid_source": "operator_provided",
+        "scaler_crop": None,
+        "min_source_dot_column_px": min_px,
+        "session_json": None,
+        "native_scale": native_scale,
+        "min_native_dot_column_px": min_px * native_scale,
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    # Schwelle liegt zwischen dem rohen (4.0) und dem nativen (~2.49) Wert.
+    rc = harvest_setup.main(
+        [
+            "confirm",
+            "--proposal",
+            str(proposal_path),
+            "--resolution-threshold-px",
+            "3.0",
+            "--confirmed-by",
+            "bediener",
+            "--out",
+            str(out_path),
+        ]
+    )
+    assert rc == 3
+    profile = SessionProfile.load(out_path)
+    assert profile.resolution_ok is False
+    assert profile.min_source_dot_column_px == pytest.approx(4.0)
+    assert profile.min_native_dot_column_px < 3.0

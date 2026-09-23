@@ -439,6 +439,20 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   belegt, (c) den blockierten Sensor als solchen melden („Reboot nötig") statt
   als anonymen Timeout, (d) `scripts/camera-commissioning.sh` um eine echte
   Aufnahmeprüfung ergänzen, damit „einsatzbereit" Bilddurchlauf bedeutet.
+  **Erneut aufgetreten 2026-09-23, 12:15:23:** 6 × `stream on failed in
+  subdev`, dazu um 12:16:15 ein WARN-Trace in `cfe_stop_streaming`. Der Lauf
+  war 960×720 mit `ScalerCrop` `1730,966,806,604`. Davor liefen im selben
+  Boot mehr als 20 Aufnahmen sauber, auch mit `ScalerCrop`. Vorausgegangen
+  war das Drehen am Fokusring. **Wahrscheinlichere Ursache, vom Nutzer
+  vermutet und am Kernel-Log bestätigt:** In diesem Boot liefen **20
+  erfolgreiche Streamstarts** (`Using a link rate`, 09:54 bis 12:10), der
+  **21.** ist gescheitert. Direkt davor steht `imx500_power_on: failed to get
+  led gpio`. Das passt zur Grenze vom 2026-09-09 (nach grob 20–25
+  Power-Zyklen ist der RP2040 unerreichbar). Der Fokusring als Ursache ist
+  damit unwahrscheinlich. **Folge:** Die Streamstarts brauchen ein Budget je
+  Boot, und die Werkzeuge müssen mit wenigen, langen Kamerasitzungen
+  auskommen. `sync-record.py` meldete den Lauf mit 0 Bildern als vollständig.
+  Das ist ein Bug und wird behoben.
   **(d) erledigt 2026-09-23:** Das Skript prüft das Kernel-Log auf
   `stream on failed` und macht eine gebundene Testaufnahme (640×480). Bei
   belegtem Gerät weicht es aus, statt zu kollidieren. Gegen die Hardware

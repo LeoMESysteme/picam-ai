@@ -1298,3 +1298,41 @@ zeigt, dass der Fix trägt: Der serielle Strom bleibt exakt, verlorene Bilder
 sind gezählt. Die Systemeinstellungen (`vm.dirty_*`) habe ich bewusst nicht
 angefasst. Das wäre ein Eingriff ins System des Labor-Pi gewesen, und der
 Fix im Skript macht ihn unnötig.
+
+## 2026-09-23 — Winkelversuch unterbrochen: Kamera wieder blockiert
+
+Ernte Phase 1, Task 6.
+
+**Frontal**, `ScalerCrop` `1972,731,1195,896`:
+* 7,3 px je Punktspalte im Ausgabebild, Schärfe (Laplace-Varianz) 9,0.
+* Das Raster `4,24.4,40,115` sitzt. Die Zeichen stehen linksbündig ab
+  Zelle 0.
+* Die Zeichen wirken trotz 7 px weich. Das deutet auf Unschärfe hin, nicht
+  auf fehlende Auflösung.
+* Nachtrag: Die 7,3 px sind hochgerechnet. Der Sensormodus ist 2×2-gebinnt,
+  echt sind es × (1195/2)/960 ≈ 0,62, also ≈ 4,5 px. Das Gate wird darauf
+  umgestellt.
+
+**30°:** Der Nutzer hat die Kamera neu aufgestellt und **gleichzeitig** den
+Fokusring 1/4 im Uhrzeigersinn gedreht. Ergebnis:
+* Schärfe 3,5, damit deutlich schlechter.
+* Das Glas ist im Vollbild nur noch ≈ 140 px breit, weil die Kamera weiter
+  weg steht.
+
+Den Beitrag von Winkel und Fokus kann ich nicht trennen. Der Faktor 2,5
+spricht dafür, dass im Uhrzeigersinn die falsche Richtung war.
+
+**Blockade:** Danach hat der Nutzer 1/4 zurückgedreht. Die nächste Aufnahme
+lieferte 0 Bilder, dazu `stream on failed` (OQ-22). Einzige Einwirkung
+dazwischen war das Drehen am Fokusring. Weitere Streamversuche habe ich nicht
+gemacht, der Reboot ist beim Nutzer angefragt.
+
+**Lehre für den Aufbau:** Fokus und Aufstellung nie gleichzeitig ändern.
+Beim Drehen am Fokusring die Kamera und das Kabel festhalten.
+
+**Korrektur, gleicher Tag:** Der Nutzer hat an die Grenze von 20–25
+Power-Zyklen aus OQ-22 erinnert. Im Kernel-Log stehen 20 erfolgreiche
+Streamstarts in diesem Boot, der 21. ist gescheitert. Das ist die
+wahrscheinlichere Erklärung, der Fokusring ist es kaum. Meine Werkzeuge haben
+das Budget verschwendet: Der Winkelversuch kostete 3–4 Starts je Winkel,
+jede Schärfemessung einen weiteren.

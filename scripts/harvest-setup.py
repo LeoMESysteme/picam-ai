@@ -77,6 +77,34 @@ class SetupError(ValueError):
     """Fehlerhafte Eingabe (CLI-Werte, Datei-Inhalt) - fuehrt zu Exit 2."""
 
 
+def _compute_native_scale(
+    *,
+    scaler_crop_actual: tuple[int, int, int, int] | None,
+    sensor_mode_size: tuple[int, int],
+    sensor_array_size: tuple[int, int],
+    output_size: tuple[int, int],
+) -> float:
+    """Bug 2 (Orchestrator 2026-09-23): `source_dot_column_px` misst im
+    OUTPUT-Bild (z. B. 960x720). Ist der `ScalerCrop` schmaler als der
+    Output des gewaehlten Sensormodus (2x2-gebinnt, z. B. 2028x1520 aus
+    4056x3040), skaliert der ISP hoch - das Gate war damit zu optimistisch.
+
+    `binning = sensor_array_size.width / sensor_mode_size.width` (z. B.
+    4056/2028 = 2). Ohne Crop (`scaler_crop_actual is None`) gilt die volle
+    Sensorbreite (`sensor_array_size[0]`) als Crop-Breite - das ist der
+    Fall "kein Crop gesetzt, Sensor-Vorgabe (voller Array) bleibt aktiv"
+    aus sync-record.py.
+
+    `native_scale = min(1, (crop_w/binning) / output_width)` - nie > 1: ohne
+    Crop oder mit einem Crop breiter als der Output skaliert der ISP nur
+    herunter, nie hoch, das Gate bleibt dann bei der rohen Messung."""
+    crop_w = scaler_crop_actual[2] if scaler_crop_actual is not None else sensor_array_size[0]
+    binning = sensor_array_size[0] / sensor_mode_size[0]
+    native_crop_w = crop_w / binning
+    output_w = output_size[0]
+    return min(1.0, native_crop_w / output_w)
+
+
 def _parse_float_list(value: str, count: int, name: str) -> list[float]:
     parts = value.split(",")
     if len(parts) != count:
@@ -147,6 +175,17 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--target-size", default="400x160", help="Groesse des entzerrten Bildes, Vorgabe 400x160")
     propose.add_argument("--scaler-crop", default=None, help="X,Y,W,H - nur zur Ablage im Vorschlag, nichts wird gesetzt")
     propose.add_argument(
+        "--session-json",
+        type=Path,
+        default=None,
+        help=(
+            "session.json einer sync-record.py-Kameraaufzeichnung (Bug 2): liefert "
+            "scaler_crop_actual, sensor_mode_size, sensor_array_size fuer das native "
+            "Aufloesungs-Gate. Ohne diese Option bleibt native_scale in proposal.json "
+            "leer, und confirm verlangt dann --assume-native-scale."
+        ),
+    )
+    propose.add_argument(
         "--detector",
         choices=("glass", "saturation-only"),
         default="glass",
@@ -172,6 +211,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--accept-default-grid",
         action="store_true",
         help="erlaubt, ein ungeprueftes Default-Raster (grid_source=default_even_split) zu bestaetigen",
+    )
+    confirm.add_argument(
+        "--assume-native-scale",
+        type=float,
+        default=None,
+        help=(
+            "Bug 2: nur wenn proposal.json kein native_scale hat (propose ohne "
+            "--session-json). Explizite Uebersteuerung, z. B. 1.0 - wird NICHT "
+            "angenommen, das Fehlen ist ein harter Abbruch (Exit 2)."
+        ),
     )
 
     return parser
@@ -233,6 +282,38 @@ def run_propose(args: argparse.Namespace) -> int:
     # messen, nie eine zu kurze.
     min_px = source_dot_column_px(grid, quad, target_size)
 
+    # Bug 2: min_px ist im Quellbild gemessen - das ist genau das OUTPUT-Bild
+    # der Kamera (`args.frame`, hier bereits als `image`/`width`/`height`
+    # geladen), nicht das entzerrte Zielbild. --session-json liefert die
+    # Sensorgeometrie, um daraus native_scale/min_native_dot_column_px zu
+    # rechnen; ohne die Option bleiben beide `None` (confirm verlangt dann
+    # --assume-native-scale).
+    native_scale: float | None = None
+    min_native_dot_column_px: float | None = None
+    session_json_path: str | None = None
+    if args.session_json is not None:
+        session_json_path = str(args.session_json)
+        session_data = json.loads(args.session_json.read_text(encoding="utf-8"))
+        session_scaler_crop = session_data.get("scaler_crop_actual")
+        session_sensor_mode_size = session_data.get("sensor_mode_size")
+        session_sensor_array_size = session_data.get("sensor_array_size")
+        if session_sensor_mode_size is not None and session_sensor_array_size is not None:
+            native_scale = _compute_native_scale(
+                scaler_crop_actual=tuple(session_scaler_crop) if session_scaler_crop is not None else None,
+                sensor_mode_size=tuple(session_sensor_mode_size),
+                sensor_array_size=tuple(session_sensor_array_size),
+                output_size=(width, height),
+            )
+            min_native_dot_column_px = min_px * native_scale
+        else:
+            print(
+                f"WARNUNG: --session-json {args.session_json} enthaelt kein "
+                "sensor_mode_size/sensor_array_size (z. B. --source synthetic oder "
+                "vor Bug 2 aufgezeichnet) - natives Aufloesungs-Gate bleibt "
+                "unbestimmt, confirm verlangt dann --assume-native-scale.",
+                file=sys.stderr,
+            )
+
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -246,6 +327,9 @@ def run_propose(args: argparse.Namespace) -> int:
         "grid_source": grid_source,
         "scaler_crop": list(scaler_crop) if scaler_crop is not None else None,
         "min_source_dot_column_px": min_px,
+        "session_json": session_json_path,
+        "native_scale": native_scale,
+        "min_native_dot_column_px": min_native_dot_column_px,
     }
     (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -271,6 +355,10 @@ def run_propose(args: argparse.Namespace) -> int:
     print(f"Quad (Quellbildpixel): {quad}")
     print(f"Raster: {grid_source} ({grid.n_cells} Zellen, pitch={grid.pitch:.2f}px)")
     print(f"min_source_dot_column_px: {min_px:.3f}")
+    if native_scale is not None:
+        print(f"native_scale: {native_scale:.4f}  min_native_dot_column_px: {min_native_dot_column_px:.3f}")
+    else:
+        print("native_scale: unbestimmt (kein --session-json oder ohne sensor_mode_size/sensor_array_size)")
     print(f"Vorschlag geschrieben: {out_dir / 'proposal.json'}")
     print(f"Overlays: {out_dir / 'overlay_source.png'}, {out_dir / 'overlay_rectified.png'}")
     return 0
@@ -292,7 +380,29 @@ def run_confirm(args: argparse.Namespace) -> int:
     scaler_crop_value = proposal.get("scaler_crop")
     scaler_crop = tuple(scaler_crop_value) if scaler_crop_value is not None else None
     min_px = float(proposal["min_source_dot_column_px"])
-    resolution_ok = min_px >= args.resolution_threshold_px
+
+    # Bug 2: das Gate prueft gegen min_native_dot_column_px, nie gegen die
+    # rohe Output-Bild-Messung min_px. proposal.json traegt beide schon
+    # vorgerechnet, wenn propose ein --session-json bekam - sonst ist
+    # --assume-native-scale die einzige (bewusst explizite) Uebersteuerung.
+    native_scale = proposal.get("native_scale")
+    min_native_px = proposal.get("min_native_dot_column_px")
+    if native_scale is None:
+        if args.assume_native_scale is None:
+            print(
+                "Fehler: proposal.json enthaelt kein native_scale (propose lief ohne "
+                "--session-json oder ohne sensor_mode_size/sensor_array_size darin). "
+                "Mit --assume-native-scale explizit uebersteuerbar, z. B. 1.0 "
+                "(Bug 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md).",
+                file=sys.stderr,
+            )
+            return 2
+        native_scale = args.assume_native_scale
+        min_native_px = min_px * native_scale
+    native_scale = float(native_scale)
+    min_native_px = float(min_native_px)
+
+    resolution_ok = min_native_px >= args.resolution_threshold_px
 
     profile = SessionProfile(
         schema_version=PROFILE_SCHEMA_VERSION,
@@ -303,6 +413,8 @@ def run_confirm(args: argparse.Namespace) -> int:
         grid=grid,
         scaler_crop=scaler_crop,
         min_source_dot_column_px=min_px,
+        native_scale=native_scale,
+        min_native_dot_column_px=min_native_px,
         resolution_threshold_px=args.resolution_threshold_px,
         resolution_ok=resolution_ok,
         confirmed_by=args.confirmed_by,
@@ -313,7 +425,8 @@ def run_confirm(args: argparse.Namespace) -> int:
 
     print(f"Sitzungsprofil geschrieben: {args.out}")
     print(
-        f"min_source_dot_column_px={min_px:.3f}  Schwelle={args.resolution_threshold_px}  "
+        f"min_source_dot_column_px={min_px:.3f}  native_scale={native_scale:.4f}  "
+        f"min_native_dot_column_px={min_native_px:.3f}  Schwelle={args.resolution_threshold_px}  "
         f"resolution_ok={resolution_ok}"
     )
     if not resolution_ok:

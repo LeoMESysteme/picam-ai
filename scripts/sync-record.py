@@ -99,8 +99,11 @@ import argparse
 import importlib.util
 import json
 import math
+import os
 import queue
+import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -113,6 +116,8 @@ import cv2
 
 from dispread.frames import open_source
 from dispread.records import TimeBaseKind, Timestamp, TimestampSemantics
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_OUTPUT_ROOT = Path("var/diagnostics")
 DEFAULT_PORT = "/dev/ttyUSB0"
@@ -135,6 +140,224 @@ DEFAULT_FRAME_QUEUE_SIZE = 60
 #: Ende-Signal (`_QUEUE_DONE`) der Erzeugerseite selbst aufgibt.
 WRITER_DRAIN_JOIN_TIMEOUT_S = 30.0
 
+#: Bug 1 (Orchestrator, 2026-09-23): ein realer Lauf zeichnete 0 Bilder auf,
+#: weil der Sensor blockiert war ("stream on failed" im Kernel-Log) und
+#: `capture_request` unbegrenzt lange haengen blieb (kein TimeoutError, kein
+#: Fehler ueberhaupt) - `sync-record.py` beendete sich trotzdem mit Exit 0
+#: und "vollstaendig". Kommt im Kamerazweig innerhalb dieser Frist nach dem
+#: Kamerastart kein einziges Bild an, gilt das als Befund (OQ-22,
+#: docs/open-questions.md), nicht als stiller Leerlauf. Bewusst grosszuegiger
+#: als der einzelne `capture_request(wait=2.0)`-Versuch in `_camera_frames` -
+#: erst wiederholtes Ausbleiben nach dieser Frist zaehlt.
+STARTUP_TIMEOUT_S = 5.0
+
+#: Exitcode, wenn der Kamerazweig ohne ein einziges Bild endet (Timeout beim
+#: ersten Bild oder frames_recorded == 0 am Ende) - ungleich 0, damit ein
+#: Aufrufer (z.B. harvest.py) das nicht mit einem erfolgreichen Lauf
+#: verwechselt.
+EXIT_NO_FRAMES_ACQUIRED = 4
+
+# --- Streamstart-Budget (Scope-Erweiterung, Orchestrator 2026-09-23) --------
+#
+# Root Cause der heutigen Blockade: OQ-22 (2026-09-09) haelt fest, dass die
+# IMX500/RP2040-Bruecke nach rund 20-25 Streamstarts je Boot unerreichbar
+# wird. Heute: 20 erfolgreiche Streamstarts, der 21. scheiterte mit
+# `imx500_power_on: failed to get led gpio` gefolgt von `stream on failed`.
+# Diese Konstanten und Funktionen pruefen das Budget VOR jedem
+# `camera.start()` - lesend, oeffnen dabei selbst weder Kamera noch Port.
+
+#: Sicherheitsmarge unterhalb der beobachteten 20-25 Starts (Vorgabe fuer
+#: --stream-budget).
+DEFAULT_STREAM_BUDGET = 15
+
+#: Exitcode, wenn das Streamstart-Budget dieses Boots erschoepft ist ODER
+#: das Kernel-Log bereits ein "stream on failed" dieses Boots zeigt - die
+#: Kamera wird in diesem Fall gar nicht erst geoeffnet.
+EXIT_STREAM_BUDGET_EXHAUSTED = 5
+
+#: rp1-cfe (der CSI2-Frontend-Treiber) loggt diese Zeile bei jedem
+#: erfolgreichen Streamstart - gemessen: normalerweise eine Zeile, im
+#: beobachteten Fehlschlag ein Burst von 5 Zeilen innerhalb 1s. Deshalb wird
+#: nach ZEITSTEMPELN gruppiert, nicht nach Zeilenzahl gezaehlt.
+STREAM_START_LOG_MARKER = "Using a link rate of"
+
+#: Markiert einen bereits fehlgeschlagenen Streamstart dieses Boots -
+#: Oeffnen der Kamera wuerde auf einen vermutlich schon blockierten Sensor
+#: treffen und nur weitere Fehler erzeugen (OQ-22).
+STREAM_FAILED_LOG_MARKER = "stream on failed"
+
+#: Zwei Log-Zeilen mit `STREAM_START_LOG_MARKER` innerhalb dieses Fensters
+#: gehoeren zu EINEM Streamstart (siehe Burst-Beobachtung oben).
+STREAM_START_GROUP_WINDOW_S = 2.0
+
+#: `journalctl -o short-monotonic` UND `dmesg` beginnen beide eine Zeile mit
+#: `[   12.345678]` (Sekunden seit Boot, CLOCK_MONOTONIC) - ein gemeinsamer
+#: Parser reicht fuer beide Quellen.
+_KERNEL_LOG_TIMESTAMP_RE = re.compile(r"^\[\s*(\d+\.\d+)\]")
+
+#: Fallback, wenn das Kernel-Log nicht lesbar ist (z.B. eingeschraenkte
+#: journalctl-Policy): zaehlt die eigenen Aufrufe dieses Skripts je Boot,
+#: identifiziert ueber /proc/sys/kernel/random/boot_id. Eine Naeherung (kein
+#: Kernel-Nachweis), aber besser als kein Budget zu pruefen.
+DEFAULT_STREAM_BUDGET_COUNTER_PATH = REPO_ROOT / "var/diagnostics/camera-stream-budget.json"
+
+
+def count_stream_starts(log_text: str) -> int:
+    """Zaehlt Streamstarts (nicht Log-Zeilen) im Kerneltext: alle Zeilen mit
+    `STREAM_START_LOG_MARKER`, gruppiert nach Zeitstempel - Zeilen innerhalb
+    `STREAM_START_GROUP_WINDOW_S` zaehlen als EIN Start (siehe
+    Moduldocstring-Abschnitt oben, Burst-Beobachtung).
+
+    Reine Funktion, kein I/O - so mit eingebettetem Beispieltext testbar."""
+    timestamps: list[float | None] = []
+    for line in log_text.splitlines():
+        if STREAM_START_LOG_MARKER not in line:
+            continue
+        match = _KERNEL_LOG_TIMESTAMP_RE.match(line)
+        timestamps.append(float(match.group(1)) if match else None)
+    if not timestamps:
+        return 0
+    if any(ts is None for ts in timestamps):
+        # Zeitstempel nicht parsebar (unerwartetes Log-Format) - jede Zeile
+        # einzeln zaehlen ist die sichere Richtung: eine Unterzaehlung wuerde
+        # das Budget faelschlich als nicht erschoepft ausweisen.
+        return len(timestamps)
+    ordered = sorted(timestamps)
+    count = 1
+    for prev, cur in zip(ordered, ordered[1:], strict=False):
+        if cur - prev >= STREAM_START_GROUP_WINDOW_S:
+            count += 1
+    return count
+
+
+def has_stream_on_failed(log_text: str) -> bool:
+    """Reine Funktion: enthaelt der Text bereits einen gescheiterten
+    Streamstart dieses Boots?"""
+    return STREAM_FAILED_LOG_MARKER in log_text
+
+
+def _read_kernel_log() -> tuple[str | None, str]:
+    """Liest das Kernel-Log des laufenden Boots: zuerst `journalctl -k -b`
+    (ohne sudo lesbar, siehe Auftrag), sonst `dmesg`. `-o short-monotonic`
+    liefert dieselbe `[   12.345678]`-Zeitstempelform wie `dmesg`, damit ein
+    gemeinsamer Parser reicht. Liefert `(None, "unavailable")`, wenn beide
+    scheitern - der Aufrufer faellt dann auf den Zaehlerdatei-Fallback
+    zurueck."""
+    try:
+        result = subprocess.run(
+            ["journalctl", "-k", "-b", "-o", "short-monotonic", "--no-pager"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout, "journalctl"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        result = subprocess.run(["dmesg"], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout, "dmesg"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None, "unavailable"
+
+
+def _read_boot_id() -> str | None:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+    except OSError:
+        return None
+
+
+def _consult_counter_fallback(path: Path, boot_id: str | None) -> int:
+    """Zaehlerdatei-Fallback (Kernel-Log unlesbar): gibt den Stand VOR
+    diesem Aufruf zurueck (das ist `stream_starts_this_boot_before`) und
+    schreibt den um 1 erhoehten Stand fuer den naechsten Aufruf zurueck -
+    atomar wie `SessionProfile.save`. Alte `boot_id`-Eintraege werden dabei
+    verworfen (nur die aktuelle Boot-ID ist noch aussagekraeftig)."""
+    if boot_id is None:
+        # Keine Boot-ID lesbar - kann den Stand keiner Sitzung zuordnen,
+        # verhaelt sich wie "noch nichts gezaehlt" statt zu raten.
+        return 0
+    current = 0
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            stored = data.get(boot_id)
+            if isinstance(stored, int):
+                current = stored
+        except (OSError, json.JSONDecodeError):
+            current = 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps({boot_id: current + 1}), encoding="utf-8")
+    os.replace(tmp_path, path)
+    return current
+
+
+def check_stream_budget(
+    *,
+    stream_budget: int,
+    override: bool,
+    counter_path: Path = DEFAULT_STREAM_BUDGET_COUNTER_PATH,
+) -> dict[str, Any]:
+    """Prueft das Streamstart-Budget VOR jedem Kamerastart. Reine
+    Entscheidungslogik (keine Kamera-/Port-Zugriffe) mit den I/O-Helfern
+    oben - so mit gefaketem `subprocess.run`/Dateisystem testbar. Gibt ein
+    dict fuer session.json UND die Abbruchentscheidung zurueck:
+
+        stream_starts_this_boot_before, stream_budget, stream_budget_source,
+        stream_on_failed_seen_before_start, refuse (bool), message (str|None),
+        warn (bool), warn_message (str|None)
+    """
+    log_text, source = _read_kernel_log()
+    if log_text is not None:
+        count_before = count_stream_starts(log_text)
+        failed_seen = has_stream_on_failed(log_text)
+    else:
+        count_before = _consult_counter_fallback(counter_path, _read_boot_id())
+        failed_seen = False
+
+    info: dict[str, Any] = {
+        "stream_starts_this_boot_before": count_before,
+        "stream_budget": stream_budget,
+        "stream_budget_source": source,
+        "stream_on_failed_seen_before_start": failed_seen,
+        "refuse": False,
+        "message": None,
+        "warn": False,
+        "warn_message": None,
+    }
+
+    if failed_seen and not override:
+        info["refuse"] = True
+        info["message"] = (
+            "FEHLER: Im Kernel-Log dieses Boots steht bereits 'stream on failed' - "
+            "der Sensor ist vermutlich blockiert. Reboot empfohlen (OQ-22, "
+            "docs/open-questions.md). Die Kamera wird NICHT geoeffnet, das wuerde "
+            "nur weitere Fehler erzeugen. Mit --override-stream-budget uebersteuerbar."
+        )
+        return info
+
+    if count_before >= stream_budget and not override:
+        info["refuse"] = True
+        info["message"] = (
+            f"FEHLER: Streamstart-Budget dieses Boots erschoepft "
+            f"({count_before}/{stream_budget}), Reboot empfohlen, OQ-22 "
+            "(docs/open-questions.md). Mit --override-stream-budget uebersteuerbar."
+        )
+        return info
+
+    if count_before >= stream_budget - 3:
+        info["warn"] = True
+        info["warn_message"] = (
+            f"WARNUNG: Streamstart-Budget dieses Boots fast erschoepft "
+            f"({count_before}/{stream_budget}) - OQ-22, docs/open-questions.md."
+        )
+    return info
+
+
 #: Sentinel: die Erzeugerseite (Kamera-/Serial-Thread) ist fertig, keine
 #: weiteren Eintraege kommen mehr - der Schreiberthread leert die
 #: Warteschlange bis hierher und beendet sich dann selbst. Eine eigene
@@ -142,7 +365,6 @@ WRITER_DRAIN_JOIN_TIMEOUT_S = 30.0
 #: (leeren) Nutzlast-Eintrag verwechseln laesst.
 _QUEUE_DONE = object()
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESTORE_POINT = REPO_ROOT / "var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json"
 
 #: Erlaubter Normierungsbereich des GSV-2AS, siehe CLAUDE.md ("Hardware-Fakten") -
@@ -235,6 +457,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Sperre gegen grosse Sensormodi aufheben. Nur bewusst setzen - "
              "siehe OQ-22, Folge ist im Zweifel ein Reboot des Labor-Pi",
+    )
+    parser.add_argument(
+        "--stream-budget",
+        type=int,
+        default=DEFAULT_STREAM_BUDGET,
+        help=(
+            f"Nur --source camera: Sicherheitsmarge fuer Streamstarts dieses Boots, "
+            f"Vorgabe {DEFAULT_STREAM_BUDGET} (unter den beobachteten 20-25 Starts, "
+            "nach denen die IMX500/RP2040-Bruecke unerreichbar wird, OQ-22). Ist das "
+            "Budget erreicht, wird VOR dem Kamerastart abgebrochen (Exit 5)."
+        ),
+    )
+    parser.add_argument(
+        "--override-stream-budget",
+        action="store_true",
+        help=(
+            "Streamstart-Budget-Abbruch bewusst uebersteuern (auch bei bereits "
+            "geloggtem 'stream on failed') - nur bewusst setzen, siehe OQ-22."
+        ),
     )
     parser.add_argument(
         "--scaler-crop",
@@ -713,15 +954,16 @@ def _synthetic_frames(uri: str):
 
     Liefert ein drittes Element `sensor_sequence=None` - es gibt bei
     `synthetic://` keine Sensor-/libcamera-Sequenznummer, das Feld existiert
-    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag). Das
-    vierte Element `scaler_crop_actual` ist aus demselben Grund immer
-    `None` - `ScalerCrop` ist ein Kamera-Control, `synthetic://` hat keine
-    Kamera (Task 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md)."""
+    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag). Die
+    Elemente vier bis sechs (`scaler_crop_actual`, `sensor_mode_size`,
+    `sensor_array_size`) sind aus demselben Grund immer `None` - das sind
+    alles Kamera-Controls/-Eigenschaften, `synthetic://` hat keine Kamera
+    (Task 2/Bug 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md)."""
     source = open_source(uri)
     source.open()
     try:
         for frame in source.frames():
-            yield frame.image, frame.capture_timestamp.to_dict(), None, None
+            yield frame.image, frame.capture_timestamp.to_dict(), None, None, None, None
     finally:
         source.close()
 
@@ -788,6 +1030,31 @@ def _camera_frames(size: tuple[int, int], fps: float, scaler_crop: tuple[int, in
     reinen `(x, y, w, h)`-Tupel. Weil dieses Tupel kein `str`/`bool`/`int`/
     `float` ist, faellt es durch den bestehenden JSON-Metadatenfilter unten
     und wird deshalb VORHER separat ausgelesen.
+
+    `sensor_mode_size`/`sensor_array_size` (Bug 2, Orchestrator 2026-09-23):
+    das Aufloesungs-Gate (`source_dot_column_px`, `dispread.charcells`) misst
+    im OUTPUT-Bild (hier `size`). Ist der `ScalerCrop` schmaler als der
+    Output des gewaehlten Sensormodus, skaliert der ISP hoch - das Gate war
+    damit zu optimistisch. Fuer die Ruecktransformation auf native
+    Sensorpixel wird der tatsaechlich gewaehlte Sensormodus gebraucht:
+
+    - `camera.camera_config["sensor"]["output_size"]` - erst NACH
+      `camera.configure(...)` gueltig. Gesetzt in `_update_camera_config`
+      (`/usr/lib/python3/dist-packages/picamera2/picamera2.py:1177-1178`,
+      `sensor_config['output_size'] = ...; camera_config['sensor'] =
+      sensor_config`), aufgerufen aus `configure_()` direkt nach
+      `self.camera.configure(libcamera_config)`. Das ist der 2x2-gebinnte
+      Sensormodus (z. B. 2028x1520 aus "Selected sensor format" im Log),
+      NICHT die volle Sensorflaeche.
+    - `camera.camera_properties["PixelArraySize"]` - die volle,
+      unbeschnittene, unbinned Sensorflaeche (z. B. 4056x3040). Property-
+      Getter bei `picamera2.py:451`, befuellt aus `self.camera.properties`
+      in `configure_()` (`picamera2.py:1251`,
+      `self.camera_properties_[k.name] = utils.convert_from_libcamera_type(v)`).
+      Nach `camera.configure(...)` verlaesslich gesetzt, genau wie `sensor`.
+
+    Beide werden wie `scaler_crop_actual` roh als Tupel durchgereicht (kein
+    `str`/`bool`/`int`/`float`, faellt also ebenfalls durch den JSON-Filter).
     """
     from picamera2 import Picamera2
 
@@ -802,6 +1069,14 @@ def _camera_frames(size: tuple[int, int], fps: float, scaler_crop: tuple[int, in
             queue=False,
         )
         camera.configure(config)
+        sensor_mode_size = None
+        sensor_config = camera.camera_config.get("sensor") if camera.camera_config else None
+        if sensor_config is not None and sensor_config.get("output_size") is not None:
+            sensor_mode_size = tuple(sensor_config["output_size"])
+        sensor_array_size = None
+        pixel_array_size = camera.camera_properties.get("PixelArraySize")
+        if pixel_array_size is not None:
+            sensor_array_size = tuple(pixel_array_size)
         camera.start(show_preview=False)
         while True:
             request = camera.capture_request(wait=2.0)
@@ -824,7 +1099,14 @@ def _camera_frames(size: tuple[int, int], fps: float, scaler_crop: tuple[int, in
                 semantics=TimestampSemantics.UNKNOWN,
                 uncertainty_ns=None,
             )
-            yield image, timestamp.to_dict(), sensor_sequence, scaler_crop_actual
+            yield (
+                image,
+                timestamp.to_dict(),
+                sensor_sequence,
+                scaler_crop_actual,
+                sensor_mode_size,
+                sensor_array_size,
+            )
     finally:
         camera.stop()
 
@@ -835,6 +1117,63 @@ def _frame_generator(args: argparse.Namespace):
     else:
         w, _, h = args.camera_size.partition("x")
         yield from _camera_frames((int(w), int(h)), args.frame_rate, scaler_crop=args.scaler_crop)
+
+
+class _CameraStartupTimeout(Exception):
+    """Kein Bild innerhalb von `STARTUP_TIMEOUT_S` nach Kamerastart (Bug 1)."""
+
+
+def _no_frames_message(detail: str) -> str:
+    """Einheitlicher Wortlaut fuer jeden Fall, in dem der Kamerazweig ohne
+    Bild endet (Timeout, Ausnahme, oder frames_recorded == 0 am Ende) - immer
+    mit Verweis auf OQ-22 und dem Hinweis, den Prozess nicht hart zu beenden
+    (Bug 1, Auftrag)."""
+    return (
+        "Sensor liefert keine Bilder - moeglicherweise blockiert, Reboot noetig, "
+        f"Prozess NICHT hart beenden (OQ-22, docs/open-questions.md). {detail}"
+    )
+
+
+def _camera_startup_guard(gen, timeout_s: float):
+    """Wrapper-Generator: das ERSTE Element von `gen` wird mit einer
+    Zeitschranke `timeout_s` geholt, alle weiteren unveraendert durchgereicht.
+
+    Grund: eine haengende Kamera (z.B. nach OQ-22 blockiertem Sensor) laesst
+    `camera.capture_request(...)` in `_camera_frames` unter Umstaenden
+    unbegrenzt lange haengen - ohne TimeoutError, ohne jede Meldung. Das darf
+    nicht als stiller Leerlauf enden (Bug 1, Orchestrator 2026-09-23).
+
+    Das erste `next(gen)` laeuft dafuer in einem eigenen Daemon-Thread. Bei
+    Zeitueberschreitung wird dieser Thread NICHT abgebrochen - Python kann
+    einen blockierten Aufruf nicht sicher unterbrechen, und das Kamera-Objekt
+    soll laut Auftrag nicht aggressiv beendet werden. Der Thread stirbt mit
+    dem Prozess (daemon=True); der reguläre Abbruchpfad (`camera.stop()` im
+    `finally` von `_camera_frames`) laeuft nur, wenn `capture_request`
+    irgendwann doch noch zurueckkehrt oder wirft."""
+    result: dict[str, Any] = {}
+    done = threading.Event()
+
+    def _fetch_first() -> None:
+        try:
+            result["item"] = next(gen)
+        except StopIteration:
+            result["stopped"] = True
+        except Exception as exc:  # noqa: BLE001 - an den Aufrufer weiterreichen
+            result["exception"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=_fetch_first, daemon=True, name="camera-startup-guard")
+    thread.start()
+    if not done.wait(timeout=timeout_s):
+        raise _CameraStartupTimeout(
+            f"Kein Bild innerhalb von {timeout_s:.0f}s nach Kamerastart erhalten"
+        )
+    if "exception" in result:
+        raise result["exception"]
+    if not result.get("stopped"):
+        yield result["item"]
+    yield from gen
 
 
 def _frame_acquisition_worker(
@@ -883,12 +1222,29 @@ def _frame_acquisition_worker(
     scaler_crop_actual_captured = False
 
     gen = _frame_generator(args)
+    if args.source == "camera":
+        # Bug 1: nur der Kamerazweig kann haengen bleiben - synthetic:// ist
+        # ein reiner Generator ohne Hardware-I/O.
+        gen = _camera_startup_guard(gen, STARTUP_TIMEOUT_S)
     try:
-        for image, timestamp_dict, sensor_sequence, scaler_crop_actual in gen:
+        for (
+            image,
+            timestamp_dict,
+            sensor_sequence,
+            scaler_crop_actual,
+            sensor_mode_size,
+            sensor_array_size,
+        ) in gen:
             if stop_event.is_set():
                 break
             if not scaler_crop_actual_captured:
+                # Bug 2: sensor_mode_size/sensor_array_size sind je Sitzung
+                # konstant (aus camera.configure(), nicht je Bild neu
+                # gelesen) - werden hier wie scaler_crop_actual vom ERSTEN
+                # Bild uebernommen.
                 state["scaler_crop_actual"] = scaler_crop_actual
+                state["sensor_mode_size"] = sensor_mode_size
+                state["sensor_array_size"] = sensor_array_size
                 scaler_crop_actual_captured = True
             now = time.monotonic()
             iter_duration_s = now - prev_loop_end_mono
@@ -933,11 +1289,27 @@ def _frame_acquisition_worker(
                 if sleep_for > 0:
                     time.sleep(sleep_for)
             prev_loop_end_mono = time.monotonic()
+    except _CameraStartupTimeout as exc:
+        # Bug 1: laut ablehnen statt still 0 Bilder zu hinterlassen - Wortlaut
+        # zeigt auf OQ-22 (docs/open-questions.md), inkl. Hinweis, den Prozess
+        # NICHT hart zu beenden (siehe _camera_startup_guard-Docstring).
+        state["acquisition_error"] = _no_frames_message(f"{exc}.")
     except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
-        state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
+        if args.source == "camera" and frames_acquired == 0:
+            # Jede Ausnahme im Kamerazweig OHNE EIN EINZIGES BILD ist derselbe
+            # Befund wie der Startup-Timeout (Bug 1) - z.B. ein TimeoutError,
+            # den eine andere picamera2-Version statt eines Haengers wirft.
+            # Kam schon mindestens ein Bild an, ist es ein anderer Fehler (die
+            # Kamera lief ja) - dafuer waere "Sensor liefert keine Bilder"
+            # falsch, siehe generischer Zweig unten.
+            state["acquisition_error"] = _no_frames_message(f"{type(exc).__name__}: {exc}")
+        else:
+            state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
     finally:
         gen.close()
         state.setdefault("scaler_crop_actual", None)
+        state.setdefault("sensor_mode_size", None)
+        state.setdefault("sensor_array_size", None)
         state["frames_acquired"] = frames_acquired
         state["frames_dropped_queue_full"] = frames_dropped
         state["max_loop_iteration_s"] = max_loop_iteration_s
@@ -1032,6 +1404,21 @@ def _install_sigterm_handler() -> None:
 
 def run(args: argparse.Namespace) -> int:
     _install_sigterm_handler()
+
+    # Streamstart-Budget (Scope-Erweiterung, Orchestrator 2026-09-23): rein
+    # lesende Pruefung VOR jedem Kamerazugriff - Kamera/Port werden hier noch
+    # nicht angefasst. Nur relevant fuer --source camera.
+    stream_budget_info: dict[str, Any] | None = None
+    if args.source == "camera":
+        stream_budget_info = check_stream_budget(
+            stream_budget=args.stream_budget,
+            override=args.override_stream_budget,
+        )
+        if stream_budget_info["warn"]:
+            print(stream_budget_info["warn_message"], file=sys.stderr)
+        if stream_budget_info["refuse"]:
+            print(stream_budget_info["message"], file=sys.stderr)
+            return EXIT_STREAM_BUDGET_EXHAUSTED
 
     output_dir = args.output or (DEFAULT_OUTPUT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S"))
     frames_dir = output_dir / "frames"
@@ -1175,6 +1562,15 @@ def run(args: argparse.Namespace) -> int:
 
         frames_recorded = frame_writer_state.get("frames_recorded", 0)
         serial_lines_recorded = serial_writer_state.get("count", 0)
+
+        acquisition_error = frame_acq_state.get("acquisition_error")
+        if args.source == "camera" and frames_recorded == 0 and not acquisition_error:
+            # Bug 1, zweiter Fall: der Kamerazweig lieferte zwar irgendwann
+            # eine Antwort (kein Timeout, keine Ausnahme), aber am Ende steht
+            # trotzdem 0 aufgezeichnete Bilder da - auch das ist ein Befund,
+            # kein stiller Leerlauf.
+            acquisition_error = _no_frames_message("Kamerazweig endete mit 0 aufgezeichneten Bildern.")
+
         session = {
             "started_at_utc": started_at_utc,
             "started_at_boottime_ns": started_at_boottime_ns,
@@ -1214,7 +1610,7 @@ def run(args: argparse.Namespace) -> int:
             "frames_dropped_queue_full": frame_acq_state.get("frames_dropped_queue_full", 0),
             "max_frame_queue_depth": frame_acq_state.get("max_frame_queue_depth", 0),
             "max_serial_queue_depth": serial_state.get("max_serial_queue_depth", 0),
-            "acquisition_error": frame_acq_state.get("acquisition_error"),
+            "acquisition_error": acquisition_error,
             # Task 2 (docs/superpowers/plans/2026-09-23-ernte-phase1.md):
             # angefordert = das geparste --scaler-crop-Argument, tatsaechlich =
             # der Wert aus den Metadaten des ersten Bildes ("ScalerCrop") -
@@ -1225,13 +1621,35 @@ def run(args: argparse.Namespace) -> int:
                 if frame_acq_state.get("scaler_crop_actual") is not None
                 else None
             ),
+            # Bug 2 (Orchestrator 2026-09-23): fuer das native Aufloesungs-
+            # Gate in harvest-setup.py gebraucht (source_dot_column_px misst
+            # im Output-Bild, ScalerCrop < Output-Groesse des Sensormodus
+            # heisst der ISP skaliert hoch) - siehe _camera_frames-Docstring
+            # fuer die picamera2-Fundstellen. Nur im Kamerazweig gesetzt.
+            "sensor_mode_size": (
+                list(frame_acq_state["sensor_mode_size"])
+                if frame_acq_state.get("sensor_mode_size") is not None
+                else None
+            ),
+            "sensor_array_size": (
+                list(frame_acq_state["sensor_array_size"])
+                if frame_acq_state.get("sensor_array_size") is not None
+                else None
+            ),
+            # Streamstart-Budget (Scope-Erweiterung 2026-09-23): der Stand VOR
+            # diesem Lauf (nicht danach) - nur im Kamerazweig gesetzt.
+            "stream_starts_this_boot_before": (
+                stream_budget_info["stream_starts_this_boot_before"] if stream_budget_info else None
+            ),
+            "stream_budget": stream_budget_info["stream_budget"] if stream_budget_info else None,
+            "stream_budget_source": stream_budget_info["stream_budget_source"] if stream_budget_info else None,
         }
         session_json.write_text(json.dumps(session, indent=2, ensure_ascii=False, default=_json_default))
 
     if serial_state.get("read_error"):
         print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
-    if frame_acq_state.get("acquisition_error"):
-        print(f"Warnung: Bildaufnahme beendet mit Fehler: {frame_acq_state['acquisition_error']}", file=sys.stderr)
+    if acquisition_error:
+        print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=sys.stderr)
 
     if serial_writer_state.get("count", 0) == 0:
         print(
@@ -1247,11 +1665,26 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    # Bug 1: Exit 4 (und das "FEHLER"-Wort statt "vollstaendig") ist speziell
+    # der "keine Bilder"-Befund - ein Fehler NACH bereits aufgezeichneten
+    # Bildern bleibt beim bisherigen Verhalten (Warnung, Exit 0), das ist ein
+    # anderer Fall als der hier behandelte stille Leerlauf.
+    no_frames_acquired = args.source == "camera" and frames_recorded == 0 and bool(acquisition_error)
+    if aborted:
+        status_word = "ABGEBROCHEN"
+    elif no_frames_acquired:
+        # Dieses Wort darf hier nie stehen, wenn keine Bilder angekommen
+        # sind - "vollstaendig" hiesse stillschweigend erfolgreich.
+        status_word = "FEHLER (keine Bilder, siehe acquisition_error)"
+    else:
+        status_word = "vollstaendig"
     print(
         f"Fertig: {frame_writer_state.get('frames_recorded', 0)} Bilder, "
         f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
-        f"{'ABGEBROCHEN' if aborted else 'vollstaendig'} -> {output_dir}"
+        f"{status_word} -> {output_dir}"
     )
+    if no_frames_acquired:
+        return EXIT_NO_FRAMES_ACQUIRED
     return 0
 
 

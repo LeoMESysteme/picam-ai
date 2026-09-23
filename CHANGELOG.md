@@ -3,6 +3,40 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Lauf ohne Bilder, Auflösungs-Gate nativ, Streamstart-Budget)
+
+**Problem:** Beim Winkelversuch blockierte die Kamera wieder (OQ-22). Das war
+der 21. Streamstart des Boots, nach 20 erfolgreichen. `sync-record.py` meldete
+den Lauf mit 0 Bildern trotzdem als „vollständig" (Exit 0). Ausserdem mass
+das Auflösungs-Gate im hochgerechneten Ausgabebild. Mit engem `ScalerCrop`
+auf dem 2×2-gebinnten Sensormodus überschätzte es die echte Auflösung.
+
+**Änderung:**
+* `scripts/sync-record.py`:
+  * Kommt 5 s lang kein erstes Bild (`STARTUP_TIMEOUT_S`) oder bleibt es bei
+    0 Bildern, wird `acquisition_error` mit Verweis auf OQ-22 gesetzt und der
+    Lauf endet mit **Exit 4**. Der hängende Thread wird nicht abgewürgt, die
+    Rückstellung nach `--norm-schedule` läuft trotzdem.
+  * Neu ist ein **Streamstart-Budget** je Boot, `--stream-budget`, Vorgabe
+    15. Gezählt wird aus `journalctl -k -b` bzw. `dmesg` (`Using a link
+    rate`, Zeilen innerhalb von 2 s gelten als ein Start). Rückfall ist eine
+    Zählerdatei je `boot_id`.
+  * Vor dem Öffnen der Kamera gilt **Exit 5**, wenn das Budget erschöpft ist
+    oder dieser Boot schon ein `stream on failed` zeigt. Drei Starts vorher
+    gibt es eine Warnung, `--override-stream-budget` hebt die Sperre auf.
+  * `session.json` trägt `sensor_mode_size` und `sensor_array_size`.
+* `scripts/harvest-setup.py`: `propose --session-json` rechnet `native_scale`
+  = min(1, (Crop-Breite / Binning) / Ausgabebreite) und
+  `min_native_dot_column_px`. `confirm` prüft den nativen Wert und verlangt
+  ohne Sitzungsdaten ausdrücklich `--assume-native-scale`.
+* `src/dispread/session_profile.py`: Schema 2 mit `native_scale` und
+  `min_native_dot_column_px`. Schema 1 wird mit einer klaren Meldung
+  abgelehnt.
+
+**Konsequenz:** Ein blockierter Sensor fällt jetzt laut auf, und die Kamera
+wird vor dem Grenzbereich von 20–25 Starts nicht mehr geöffnet. Frontal mit
+Crop 1195 ergibt das ≈ 0,62 × 7,3 ≈ 4,5 native px je Punktspalte.
+
 ## 0.1.0.dev0 — 2026-09-23 (Ernte Phase 1: Zellenraster, Sitzungsprofil, ScalerCrop)
 
 **Problem:** Für den Zellen-Klassifikator (Plan `2026-09-23-ernte-phase1.md`)

@@ -45,6 +45,8 @@ def _profile(*, resolution_ok=True, scaler_crop=(1000, 800, 1600, 1200)):
         grid=CharGrid(n_cells=16, left=2.0, pitch=24.0, top=8.0, bottom=150.0),
         scaler_crop=scaler_crop,
         min_source_dot_column_px=2.2,
+        native_scale=1.0,
+        min_native_dot_column_px=2.2,
         resolution_threshold_px=2.0,
         resolution_ok=resolution_ok,
         confirmed_by="bediener",
@@ -316,4 +318,40 @@ def test_run_aborts_when_gate_label_fails(tmp_path):
                 port="/dev/ttyUSB0",
             )
     assert mock_run.call_count == 2
+    assert not (out_dir / "harvest.json").exists()
+
+
+def test_run_aborts_on_sync_record_no_frames_exit_code_and_mentions_oq22(tmp_path):
+    """Bug 1 (scripts/sync-record.py): 0 aufgezeichnete Bilder im Kamerazweig
+    enden mit Exitcode 4 (EXIT_NO_FRAMES_ACQUIRED) statt 0. harvest.py bricht
+    schon bei JEDEM Exitcode != 0 ab (siehe test_run_aborts_when_sync_record_
+    fails) - hier wird zusaetzlich geprueft, dass der OQ-22-Hinweis aus
+    sync-records stderr im HarvestError landet, nicht nur der Exitcode."""
+    profile_path = tmp_path / "profile.json"
+    _profile().save(profile_path)
+    out_dir = tmp_path / "out"
+
+    oq22_stderr = (
+        "FEHLER: Bildaufnahme: Sensor liefert keine Bilder - moeglicherweise "
+        "blockiert, Reboot noetig, Prozess NICHT hart beenden "
+        "(OQ-22, docs/open-questions.md). Kein Bild innerhalb von 5s nach "
+        "Kamerastart erhalten.\n"
+    )
+
+    def _fake_run(cmd, **kwargs):
+        return _ok_result(returncode=4, stderr=oq22_stderr)
+
+    with patch.object(harvest.subprocess, "run", side_effect=_fake_run) as mock_run:
+        with pytest.raises(harvest.HarvestError) as excinfo:
+            harvest.run(
+                profile_path=profile_path,
+                out_dir=out_dir,
+                n_steps=2,
+                hold_s=4.0,
+                seed=1,
+                port="/dev/ttyUSB0",
+            )
+    assert mock_run.call_count == 1  # gate-label wird nicht mehr aufgerufen
+    assert "4" in str(excinfo.value)
+    assert "OQ-22" in str(excinfo.value)
     assert not (out_dir / "harvest.json").exists()
