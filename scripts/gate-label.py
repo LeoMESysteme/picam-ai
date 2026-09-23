@@ -615,6 +615,17 @@ def run(args: argparse.Namespace) -> int:
         print(f"  {text!r}: {count}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    rejected_by_reason = {
+        reason_key: reject_counts.get(reason_key, 0)
+        for reason_key in (
+            REASON_VALUE_CHANGE,
+            REASON_OUTSIDE_RANGE,
+            REASON_TAIL_UNKNOWN,
+            REASON_GAP,
+            REASON_BURST,
+            REASON_NO_TELEGRAMS,
+        )
+    }
     proposal = {
         "recording": str(recording),
         "guard_margin_ms": args.guard_margin_ms,
@@ -625,6 +636,17 @@ def run(args: argparse.Namespace) -> int:
             for span in burst_spans
         ],
         "images": labeled,
+        # Dieselben Zahlen wie der stdout-Bericht oben (reject_counts/
+        # text_counts) - fuer harvest.py (Ernte Phase 1, Task 4), das kein
+        # stdout parsen soll. Jeder Ablehnungsgrund-Schluessel ist immer
+        # vorhanden, auch mit Zaehlwert 0.
+        "summary": {
+            "frames_total": total,
+            "labeled": len(labeled),
+            "rejected_total": rejected_total,
+            "rejected_by_reason": rejected_by_reason,
+            "distinct_label_texts": len(text_counts),
+        },
     }
     args.output.write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nVorschlagsdatei geschrieben: {args.output}")

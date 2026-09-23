@@ -27,6 +27,18 @@ Auflösungsbefund und mehr Pixel je Anzeigepunkt. Bisher lagen im Vollbild nur
     (picamera2.py:1292/1338) und gilt damit ab dem ersten Bild.
   * `session.json` trägt `scaler_crop_requested` und `scaler_crop_actual`.
 
+* `scripts/harvest.py` (neu): Ernte-Lauf.
+  * Der Faktorplan ist deterministisch, log-uniform verteilt, mit
+    Mindestabstand 1,3 zwischen zwei Schritten und im Gerätebereich
+    0,15…1 580 000.
+  * Ablauf: `sync-record.py --norm-schedule [--scaler-crop]`, danach
+    `gate-label.py`.
+  * Vor jedem Subprozess wird abgebrochen, wenn `resolution_ok=False` ist
+    oder die Haltezeit unter 2·M + 1 s liegt.
+  * `harvest.json` mit `gap_thresholds_provisional: true`.
+* `scripts/gate-label.py`: `proposal.json` trägt jetzt `summary` mit
+  denselben Zählern wie stdout (alle Ablehnungsgründe, auch Nullen).
+
 **Konsequenz:** Auf der Hardware geprüft, Sensorausschnitt
 `1858,592,1520,1140`: 133 Bilder ohne Sequenzlücke, kein `stream on failed`.
 Das Glas ist im 960×720-Bild jetzt ≈ 560 px breit statt ≈ 210 px.

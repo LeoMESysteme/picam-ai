@@ -333,6 +333,70 @@ def test_groesseres_szenario_erwartete_anzahl_von_hand_gerechnet(tmp_path):
         key = _image_path(recording, filename)
         assert key not in by_file, f"{filename} sollte ABGELEHNT sein"
 
+    assert proposal["summary"] == {
+        "frames_total": 11,
+        "labeled": 5,
+        "rejected_total": 6,
+        "rejected_by_reason": {
+            "wertwechsel_im_fenster": 3,
+            "ausserhalb_telegrammbereich": 1,
+            "letzter_lauf_ohne_folgetelegramm": 0,
+            "telegrammluecke": 2,
+            "telegrammburst": 0,
+            "keine_telegramme": 0,
+        },
+        "distinct_label_texts": 2,
+    }
+
+
+# --- summary in proposal.json -----------------------------------------------
+
+
+def test_summary_zaehlt_alle_grundschluessel_auch_mit_null(tmp_path):
+    """Jeder Ablehnungsgrund steht im Summary, auch mit Zaehlwert 0 -
+    harvest.py (Ernte Phase 1, Task 4) uebernimmt das Objekt verbatim."""
+    telegrams = [(i * 500 * MS, "+0.46776 mV/V") for i in range(20)]
+    t_mid = telegrams[10][0]
+    frames = [("frame_000001.png", t_mid)]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output = tmp_path / "proposal.json"
+
+    result = _run_cli(recording, output, guard_margin_ms=100, max_gap_ms=1000)
+    assert result.returncode == 0, result.stderr
+
+    proposal = json.loads(output.read_text())
+    summary = proposal["summary"]
+    assert summary["frames_total"] == 1
+    assert summary["labeled"] == 1
+    assert summary["rejected_total"] == 0
+    assert set(summary["rejected_by_reason"]) == {
+        "wertwechsel_im_fenster",
+        "ausserhalb_telegrammbereich",
+        "letzter_lauf_ohne_folgetelegramm",
+        "telegrammluecke",
+        "telegrammburst",
+        "keine_telegramme",
+    }
+    assert all(v == 0 for v in summary["rejected_by_reason"].values())
+    assert summary["distinct_label_texts"] == 1
+
+
+def test_summary_stdout_bleibt_unveraendert(tmp_path):
+    """Die stdout-Zaehlung (Bericht) und proposal.json['summary'] muessen
+    uebereinstimmen - dieselbe Quelle (reject_counts/text_counts)."""
+    telegrams = [(0, "A"), (300 * MS, "B")]
+    frames = [("frame_00.png", 100 * MS), ("frame_01.png", 5000 * MS)]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output = tmp_path / "proposal.json"
+
+    result = _run_cli(recording, output, guard_margin_ms=50, max_gap_ms=1000)
+    assert result.returncode == 0, result.stderr
+    assert "Gelabelt: " in result.stdout
+
+    proposal = json.loads(output.read_text())
+    summary = proposal["summary"]
+    assert f"Gelabelt: {summary['labeled']}  Abgelehnt: {summary['rejected_total']}" in result.stdout
+
 
 # --- Luecke GENAU an einem Wertwechsel - der gefaehrlichste Fall ----------
 
