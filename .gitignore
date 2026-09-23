@@ -31,3 +31,5 @@ node_modules/
 /.venv-docs/
 /docs-site/*
 !/docs-site/api/
+# Lokaler Wrangler-Cache (enthält Account-ID)
+/cloudflare/.wrangler/
