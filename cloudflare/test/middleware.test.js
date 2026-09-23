@@ -1,4 +1,4 @@
-// Tests für functions/_middleware.js - laufen mit `node --test cloudflare/test/`
+// Tests für functions/_middleware.js - laufen mit `node --test cloudflare/test/middleware.test.js`
 // ohne Cloudflare und ohne Netz (fetch wird ersetzt).
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";

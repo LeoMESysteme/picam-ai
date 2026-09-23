@@ -32,7 +32,7 @@ Dateien und dem Suchindex.
 4. Im Zweifel lehnt sie ab: Fehlt Konfiguration, kommt 500; ist Forgejo nicht
    erreichbar, kommt 502; ist das Cookie ungültig, geht es zurück zur Anmeldung.
 
-Tests: `node --test cloudflare/test/`. Sie decken ab:
+Tests: `node --test cloudflare/test/middleware.test.js`. Sie decken ab:
 
 * Ablehnung ohne, mit abgelaufener, manipulierter und fremd signierter Sitzung
 * fehlende und schwache Konfiguration
