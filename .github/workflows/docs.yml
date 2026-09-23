@@ -1,0 +1,50 @@
+# Doku-Seite bauen und als offline-fähiges ZIP am Lauf ablegen.
+#
+# Wer Leserechte am Repo hat, lädt das Artefakt "doku-seite" unter
+# Actions -> Lauf -> Artefakte herunter, entpackt es und öffnet index.html.
+#
+# Läuft auf dem Runner mit dem Label `picam-docs` (Host-Modus auf dem Pi,
+# siehe systemd/forgejo-runner.service). Bewusst NICHT `ubuntu-latest`:
+# dieser Runner soll keine fremden Jobs wie den Playwright-Lauf übernehmen,
+# der per apt Systempakete installieren würde.
+#
+# Liegt in .github/workflows/, weil Forgejo diesen Ordner nur liest, solange
+# es kein .forgejo/workflows/ gibt — sonst wäre playwright.yml abgeschaltet.
+name: Doku-Seite
+
+on:
+  push:
+    branches: [master, docs/zensical-prototyp]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: picam-docs
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Doku-Werkzeuge installieren
+        run: |
+          python3 -m venv .venv-docs
+          .venv-docs/bin/pip install --quiet -r requirements-docs.txt
+
+      - name: Seite bauen
+        run: ./scripts/docs-site.sh build
+
+      - name: Build-Info ablegen
+        run: |
+          {
+            echo "Commit:  $(git rev-parse HEAD)"
+            echo "Branch:  ${GITHUB_REF_NAME}"
+            echo "Gebaut:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Öffnen:  index.html im Browser"
+          } > site/BUILD-INFO.txt
+
+      # Forgejo braucht den Fork von upload-artifact@v4; das Original von
+      # GitHub verweigert Nicht-GitHub-Server.
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: doku-seite
+          path: site/
+          retention-days: 30

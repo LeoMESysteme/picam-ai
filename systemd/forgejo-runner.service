@@ -1,0 +1,52 @@
+# Forgejo-Runner für die Doku-Seite (Label picam-docs, Host-Modus).
+#
+# Installiert von scripts/forgejo-runner-install.sh. Der Pi ist ein Messgerät:
+# Jobs laufen ohne Docker direkt hier, deshalb ist der Dienst so abgeschottet,
+# dass ein Job weder an Kamera, serielle Ports und GPIO (PrivateDevices) noch
+# an /home mit den Zugangsdaten (ProtectHome) kommt, und dass er Messungen
+# nicht ausbremst (Nice, CPUQuota, IO idle).
+
+[Unit]
+Description=Forgejo Runner (picam-docs)
+Documentation=https://forgejo.org/docs/latest/admin/actions/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forgejo-runner
+Group=forgejo-runner
+WorkingDirectory=/var/lib/forgejo-runner
+ExecStart=/usr/local/bin/forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+Restart=on-failure
+RestartSec=30
+
+# Token nur über systemd-Credentials, nie in der Konfiguration.
+LoadCredential=token:/etc/forgejo-runner/token
+
+# Messungen haben Vorrang: höchstens 2 der 4 Kerne, niedrigste Priorität.
+Nice=19
+CPUQuota=200%
+CPUWeight=10
+IOSchedulingClass=idle
+MemoryMax=2G
+
+# Abschottung
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/forgejo-runner
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

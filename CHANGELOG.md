@@ -3,6 +3,42 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Doku-Seite mit Zensical, Forgejo-Runner auf dem Pi)
+
+**Problem:** Die Doku ist umfangreich, lag aber nur als lose Markdown-Dateien
+vor, ohne Navigation, Suche und API-Referenz. Wer nur Zugriff auf das
+Forgejo-Repo hat, konnte keine Web-Oberfläche aufrufen. Forgejo liefert HTML
+aus dem Repo als `text/plain` aus, und der vorhandene Playwright-Workflow
+startete nie, weil es keinen Runner gab.
+
+**Änderung:**
+* `zensical.toml` und `scripts/docs-site.sh` (neu) bauen eine offline-fähige
+  Doku-Seite nach `site/`.
+  * Navigation über alle Doku-Dateien, deutsche Volltextsuche.
+  * API-Referenz aus den Docstrings (`docs-site/api/`), mit mkdocstrings.
+  * `docs-site.sh` legt `docs-site/` vor jedem Lauf aus Datei-Symlinks an, so
+    bleiben alle relativen Links gültig. Zensical folgt keinen
+    Verzeichnis-Symlinks und erlaubt kein `docs_dir = "."`.
+* `.github/workflows/docs.yml` (neu) baut die Seite bei jedem Push auf
+  `master` und legt sie als Artefakt `doku-seite` (ZIP, 30 Tage) am Lauf ab.
+* `scripts/forgejo-runner-install.sh` und `systemd/forgejo-runner.service`
+  (neu) richten einen Runner mit dem Label `picam-docs` im Host-Modus auf dem
+  Pi ein.
+  * Eigener Systemnutzer ohne Zugriff auf Kamera, serielle Ports, GPIO und
+    `/home`.
+  * Nachrangig gegenüber Messungen (höchstens 2 Kerne, Nice 19, IO idle).
+  * Der Token kommt nur als systemd-Credential in den Dienst.
+  * Die Runner-Version ist über SHA-256 gepinnt.
+* `requirements-docs.txt` (neu) pinnt die Doku-Werkzeuge,
+  `docs/dependencies.md` beschreibt sie.
+
+**Konsequenz:** Wer Leserechte am Repo hat, lädt die Doku als ZIP aus dem
+letzten Lauf und öffnet `index.html` lokal. Aufrufen im Browser ohne Download
+braucht zusätzlich einen Webserver mit Forgejo-Anmeldung (Forge-Pages oder
+oauth2-proxy); das ist noch offen. Der Runner übernimmt bewusst keine
+`ubuntu-latest`-Jobs, `playwright.yml` wartet also weiter auf einen
+Docker-Runner.
+
 ## 0.1.0.dev0 — 2026-09-23 (Ernte Phase 1: Zellenraster, Sitzungsprofil, ScalerCrop)
 
 **Problem:** Für den Zellen-Klassifikator (Plan `2026-09-23-ernte-phase1.md`)

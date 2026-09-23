@@ -1,0 +1,6 @@
+# Doku-Seite (Zensical). Bewusst gepinnt: Zensical ist jung (0.0.x), ein
+# unbemerktes Update soll den Build nicht brechen. Anheben = bewusster Commit.
+zensical==0.0.64
+mkdocstrings==1.0.6
+mkdocstrings-python==2.0.9
+griffelib==2.3.0

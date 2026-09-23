@@ -26,3 +26,8 @@ node_modules/
 /.codegraph/
 /.mcp.json
 /.claude/
+# Doku-Seite (Zensical-Prototyp)
+/site/
+/.venv-docs/
+/docs-site/*
+!/docs-site/api/

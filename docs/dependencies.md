@@ -113,3 +113,22 @@ Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
 Fork aus dem mehrthreadigen Kameraprozess. Kein tmux notwendig. PAM nutzt den
 vorhandenen Dienst `login` für den eigenen Benutzer `me-systeme`; Serverstart
 als root oder als anderer Benutzer wird abgelehnt.
+
+## Doku-Seite und CI (2026-09-23)
+
+Nur für die Doku, nicht für den Messpfad. Deshalb eine **eigene** venv
+`.venv-docs` (ohne `--system-site-packages`), die Projekt-`.venv` bleibt
+unberührt. Einrichtung und Bauen: Kopf von `scripts/docs-site.sh`.
+
+| Paket | Version (gepinnt in `requirements-docs.txt`) | Zweck |
+| --- | --- | --- |
+| `zensical` | 0.0.64 | Statische Doku-Seite aus `docs/` und den Wurzel-Markdowns |
+| `mkdocstrings`, `mkdocstrings-python` | 1.0.6, 2.0.9 | API-Referenz aus den Docstrings |
+| `griffelib` | 2.3.0 | Liest den Quelltext statisch, importiert nichts |
+| `forgejo-runner` | 13.2.0 (arm64, SHA-256 gepinnt) | Führt `.github/workflows/docs.yml` auf dem Pi aus |
+
+Der Runner läuft als eigener Systemnutzer ohne Zugriff auf Kamera, serielle
+Ports, GPIO und `/home` (`systemd/forgejo-runner.service`). Einrichtung:
+`sudo ./scripts/forgejo-runner-install.sh`. Mermaid lädt die Seite zur
+Laufzeit von `unpkg.com`. Ohne Internet fehlen deshalb die Diagramme, der
+Rest der Seite funktioniert.
