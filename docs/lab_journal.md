@@ -1336,3 +1336,59 @@ Streamstarts in diesem Boot, der 21. ist gescheitert. Das ist die
 wahrscheinlichere Erklärung, der Fokusring ist es kaum. Meine Werkzeuge haben
 das Budget verschwendet: Der Winkelversuch kostete 3–4 Starts je Winkel,
 jede Schärfemessung einen weiteren.
+
+## 2026-09-23 — Fokusübergabe: zweiter Kameralauf des Boots blockiert
+
+**Ziel:** Den Fokus in der 30°-Stellung in einer einzigen 90-s-Kamerasitzung
+einstellen. Vorher sollte `camera-commissioning.sh` einmal den echten
+Bilddurchlauf bestätigen. Der Nutzer sollte erst nach dem Signal
+`READY_TO_TURN` drehen.
+
+**Ablauf:** Der Pi war seit 14:24:31 neu gebootet. Um 15:55 bestand die
+Commissioning-Aufnahme bei 640×480 (86 606 Byte, kein `stream on failed`).
+Der anschliessende Fokuslauf öffnete 960×720, 15 fps, `queue=False`. Noch vor
+dem ersten Bild meldete der Kernel um 15:57:10
+`imx500_power_on: failed to get led gpio` und sechsmal
+`stream on failed in subdev`; libcamera konnte keinen der sechs CFE-Puffer
+einreihen. `READY_TO_TURN` wurde nie ausgegeben. Der Nutzer hat weder Fokus
+noch Kameraposition verändert.
+
+**Abbruch:** Der Python-Prozess hing in `futex_wait_queue`. Ein einmaliges
+Ctrl+C als weicher Abbruch erreichte das Terminal, führte aber innerhalb von
+10 s nicht durch den Aufräumpfad. Kein SIGKILL und kein weiterer
+Streamversuch; der Prozess bleibt bis zum Reboot belegt.
+
+**Deutung:** Die bisherige Sicherheitsannahme „frischer Boot + Budget 15"
+reicht nicht aus. In diesem Boot scheiterte bereits die Kamerasitzung direkt
+nach einer erfolgreichen Commissioning-Sitzung. Ob `rpicam-still` intern zwei
+Power-Zyklen verursachte (zwei `Using a link rate`-Zeilen) oder der RP2040
+nicht zuverlässig durch den Warmstart zurückgesetzt wurde, ist offen. Die
+Fokusmessung selbst hat **keinen Messwert** geliefert.
+
+**Artefakte:**
+`var/diagnostics/focus-handoff-2026-09-23/commissioning.txt` und
+`focus-failure.txt` (nicht versioniert).
+
+## 2026-09-23 — Auch der erste Start nach Warmreboot scheitert (OQ-22)
+
+Der Nutzer hat erneut rebootet. Boot-ID
+`6c6abda2-d316-40da-b557-1124431ade30` und Bootzeit 16:13:22
+(Europe/Berlin) bestätigen den neuen Boot. Davor gab es darin keinen
+Kamerastart. Um 16:17:35 öffnete der Fokushelfer 960×720, 15 fps,
+`queue=False`. Bereits beim ersten Start war die RP2040-GPIO-Bridge über
+I²C nicht bereit: `rp2040_gbdg_wait_until_free failed`, darauf
+`rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL`, LED-GPIO `-121` und
+sechsmal `stream on failed in subdev`. libcamera meldete beim ersten
+CFE-Puffer `Remote I/O error`. Es kam kein Bild und kein Signal zum Drehen;
+die Kamera wurde vom Nutzer nicht angefasst.
+
+Der Python-Prozess blieb in `futex_wait_queue`. Ein weiterer Streamversuch
+wurde nicht gemacht. Das bisherige 20–25-Starts-Budget erklärt diesen
+Fehlschlag nicht. Warum die Bridge nach dem Warmreboot beim ersten Start
+nicht antwortet, bleibt offen. Ein vollständiger Stromzyklus des Pi wäre
+eine trennende Gegenprobe; er unterbricht auch andere Dienste auf diesem
+Pi und wurde hier nicht durchgeführt.
+
+**Artefakt:** `var/diagnostics/focus-handoff-2026-09-23/focus-first-start-failure.txt`
+(nicht versioniert). Der Fokushelfer liegt unter
+`/home/me-systeme/fokus-live-2026-09-23.py`.

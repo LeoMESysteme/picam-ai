@@ -1367,3 +1367,30 @@ der schreibende Prozess. Nach der Entkopplung bleibt der serielle Zeitstempel
 auch unter erzwungener Last exakt. Bilder können weiterhin verloren gehen,
 wenn die Bild-Warteschlange (60) länger als ≈ 4 s nicht abfliesst. Jeder
 Verlust ist aber gezählt, protokolliert und an `sensor_sequence` erkennbar.
+
+## 2026-09-23 — OQ-22 trotz frischem Boot beim zweiten Kameralauf
+
+**Zeitbasis:** Kernel-Journal des aktuellen Boots, Europe/Berlin.
+Bootzeit 14:24:31.
+
+| Zeit | Lauf | Ergebnis |
+| --- | --- | --- |
+| 15:55 | `camera-commissioning.sh`, 640×480 | Testaufnahme erfolgreich, 86 606 Byte; kein `stream on failed` |
+| 15:57 | temporärer Fokuslauf, 960×720, 15 fps, `queue=False` | 0 Bilder; `imx500_power_on: failed to get led gpio`; 6 × `stream on failed in subdev`; Prozess in `futex_wait_queue` |
+
+Zwei `Using a link rate`-Zeilen gehören zur erfolgreichen Commissioning-
+Sitzung (15:55:27/15:55:29), weitere sechs zum fehlgeschlagenen Fokusstart.
+Der Fokuslauf erreichte sein Bedienersignal nicht; es gab keine mechanische
+Änderung und keinen Schärfewert. Ein weiches Ctrl+C beendete den hängenden
+Prozess nicht. Kein weiterer Kameraversuch; Reboot nötig. Damit ist ein
+Streambudget von 15 zwar weiter eine obere Schutzgrenze, aber **keine Garantie
+für 15 erfolgreiche Sitzungen nach jedem Warmstart**.
+
+**Nachtrag, zweiter Boot um 16:13:22 (Europe/Berlin):** Boot-ID
+`6c6abda2-d316-40da-b557-1124431ade30`. Der erste Kamerastart dieses
+Boots um 16:17:35 (960×720, 15 fps) lieferte **0 Bilder**. Vor
+`stream on failed in subdev` (6 ×) stehen RP2040-Bridge-Fehler,
+darunter `rp2040_gbdg_wait_until_free failed`, und
+`setup of GPIO led failed: -121`. Der Fokuswert bleibt unbekannt. Die
+Grenze „20–25 Starts je Boot“ erklärt diesen Fehlschlag nicht; ein
+Warmreboot garantiert keine funktionierende erste Sitzung.

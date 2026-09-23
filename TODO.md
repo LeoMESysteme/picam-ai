@@ -9,12 +9,18 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Kein Blocker mehr — die Kamera läuft
+## Aktueller Blocker — Kamerabrücke hängt nach Reboot
 
-Der Kamerazweig von `scripts/sync-record.py` ist am 2026-09-23 erstmals
-erfolgreich gegen echte Hardware gelaufen (960×720, `create_video_configuration`,
-kein `stream on failed` im Kernel-Log). Regel bleibt trotzdem: **≤ 960×720**,
-kein Kill eines hängenden Kameraprozesses ([OQ-22](docs/open-questions.md)).
+Nach einem erfolgreichen Commissioning-Bild schlug am 2026-09-23 um 15:57
+bereits der direkt folgende 960×720-Fokuslauf fehl. PID 19971 hängt in
+`futex_wait_queue`; kein SIGKILL und kein weiterer Kameraversuch. Der Nutzer
+hat rebootet. Auch nach dem Reboot um 16:13 scheiterte schon
+der erste Start des Boots um 16:17 (`rp2040_gbdg_wait_until_free failed`,
+OQ-22). Ein weiterer Warmreboot allein ist keine belegte Abhilfe. Die
+nächste trennende Gegenprobe wäre ein vollständiger Stromzyklus des Pi;
+sie betrifft auch andere Dienste und braucht eine Entscheidung des Nutzers.
+Bis dahin keine Kameraversuche. Nach Wiederherstellung Fokus/ScalerCrop/
+Winkel in möglichst **einer** langen Kamerasitzung durchführen.
 
 ---
 
@@ -26,9 +32,9 @@ kein Kill eines hängenden Kameraprozesses ([OQ-22](docs/open-questions.md)).
 * Task B (Versatz Telegramm ↔ Glas) hat erste Zahlen: δ zwischen +80 und
   +116 ms über drei Aufzeichnungen, konsistent positiv (Glas nach Telegramm).
   M-Formel liefert je Population 499–695 ms.
-* Zwei neue Befunde brauchen Entscheidungen, bevor geerntet wird: die
-  unterdrückte führende Null auf dem Glas (OQ-41) und ein Prozess-Stau mit
-  verfälschten Zeitstempeln (OQ-40-Nachtrag).
+* Führende Null (OQ-41) und SD-Schreibstau (OQ-40) sind behandelt; die
+  endgültigen Gap-Schwellen bleiben offen, blockieren die erste Ernte aber
+  nicht.
 
 Details: [docs/status.md](docs/status.md), alle Zahlen in
 [docs/VALIDATION.md](docs/VALIDATION.md) (2026-09-23), Herleitung in
@@ -48,7 +54,22 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
   [OQ-41](docs/open-questions.md) bleiben (b), die leere Zelle im Zellenraster
   des Lesers, und (c), negative Werte (ungeprüft).
 
-### 3. OQ-40: Gap-Schwellen festlegen (Stau selbst ist behoben)
+### 3. Task 6: Fokus, ScalerCrop und Auflösungsschwelle
+
+Nach Wiederherstellung der Kamerabrücke eine lange 960×720-Sitzung verwenden. Startfehler/Timeout
+müssen laut diagnostiziert werden; der Bediener dreht erst nach einem echten
+Bildsignal. In derselben Sitzung Fokus einstellen, passenden ScalerCrop
+bestimmen und die noch fehlenden Winkelbilder gewinnen. Danach Raster-Overlay
+bestätigen und `resolution_threshold_px` aus dem kleinsten noch sicher
+getrennten nativen Punktspaltenwert vor der Ernte festschreiben.
+
+### 4. Task 7: echte Ernte und Import
+
+`harvest.py` ist bereits gebaut. Nach Task 6: Profil bestätigen, 30 Schritte
+à 4 s ernten, `import-harvest.py --dry-run`, `audit.json` mit dem Nutzer
+prüfen, dann importieren. Vorzeichen bleibt ungeprüft.
+
+### 5. OQ-40: Gap-Schwellen nachmessen (kein Ernte-Blocker)
 
 **Erledigt 2026-09-23:**
 * Ursache gemessen: Beim Zurückschreiben auf die SD-Karte blockieren die
@@ -60,21 +81,14 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 Zahlen: `docs/VALIDATION.md`, Eintrag „Stillstand beim Aufzeichnen".
 
-**Offen:** Werte für `--min-gap-ms` und `--max-gap-ms`. Beide Argumente
-haben bewusst keinen Vorgabewert. Datenlage unter Kameralast: alle Abstände
-529–536 ms, auch unter erzwungener Schreiblast. Es fehlt eine
-Stundenaufzeichnung. Danach die Schwellen aus der Verteilung ableiten und
-**vor** der Ernte im Plan festschreiben.
+**Offen:** Endgültige Werte für `--min-gap-ms` und `--max-gap-ms`. Laut
+Ernte-Phase-1-Plan wird die Stundenaufzeichnung bewusst nicht vorgezogen:
+die erste Ernte benutzt 300/800 ms und markiert
+`gap_thresholds_provisional: true`. Die Stundenmessung folgt separat.
 
 → [OQ-40](docs/open-questions.md).
 
-### 4. Dann erst: Ernte-Skript für Ziffernvielfalt
-
-`sync-record.py --norm-schedule` liefert den Mechanismus bereits. Beim Bauen
-beachten: jeder Schreibzyklus pausiert den Strom ~1,8 s (STOP → `set norm` →
-`set dpoint` → START) — das gehört in die Zeitplanung der Sitzung.
-
-### 5. Externer Loader lehnt Export-Schema 2 ab
+### 6. Externer Loader lehnt Export-Schema 2 ab
 
 `picam-ai-auto-seven-segment/src/dispread/experimental/evaluation.py:50`
 akzeptiert nur `schema_version` 1. Ein einzeiliger Relax auf `{1, 2}` würde
@@ -82,7 +96,7 @@ reichen. **Der Nutzer ist unentschieden (2026-09-23), deshalb bleibt es
 unverändert**, weil es ein anderes Repo ist. Bis dahin ist
 `test_real_export_is_accepted_by_the_actual_experiment_loader` `xfail(strict=True)`.
 
-### 6. Kleinere offene Punkte
+### 7. Kleinere offene Punkte
 
 * **Vorzeichenstelle unverifiziert** (Firmware 1.3.07, negative Normierung
   erst ab 1.5.06) — muss bei jeder Benchmarkzahl mitgenannt werden.
@@ -98,8 +112,8 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
    Toleranz, kein Runden. (Die OQ-41-Abbildung ist eine Vorschrift, keine
    Toleranz — Festlegung bleibt bestehen.)
 2. **Bilder im Schutzfenster bekommen keinen geratenen Wert.**
-3. **M fällt aus der Formel**, es wird nicht ausgesucht — aber welche
-   Population/Kombination gilt, ist noch offen zu entscheiden (Aufgabe 1).
+3. **M fällt aus der Formel**, es wird nicht ausgesucht. Die vorab
+   entschiedene konservative Kombination ergibt **695 ms**.
 4. **`independence_group` je Aufnahmesitzung**, nicht je Bild.
 5. **Jede Benchmarkzahl nennt die Herkunftsmischung** (`manual` vs.
    `serial_ascii`) und die unbelegte Vorzeichenstelle.
@@ -115,8 +129,9 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
   `RGB888`, gesetzter `FrameRate`, `queue=False`.
 * **Ein Normierungsschreibzyklus pausiert den Strom ~1,8 s** (STOP/CLEAR →
   schreiben → START) — sichtbar in `commands.jsonl` als `non_telegram`.
-* **`frame_sequence` in `sync-record.py` ist ein Skriptzähler**, kein
-  Sensorzähler — zeigt Staus/Lücken nicht an (siehe OQ-40).
+* **`frame_sequence` in `sync-record.py` ist ein Skriptzähler**; für
+  Sensorlücken das zusätzlich aufgezeichnete `sensor_sequence` verwenden
+  (siehe OQ-40).
 * **Das Telegramm hat eine führende Null, das Glas nicht** — Rohübernahme
   des Telegramms als Label ist ab Wert ≥ 1 falsch (OQ-41).
 
@@ -130,7 +145,7 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
 | Plan mit Tasks A–H, Vorab-Festlegungen | `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md` |
 | Alle Messzahlen | `docs/VALIDATION.md` (Einträge 2026-09-23 am Ende) |
 | Aufbau, Deutung, Irrwege | `docs/lab_journal.md` (letzter Eintrag) |
-| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamera, jetzt grösstenteils erledigt), OQ-38 (Zeitkopplung), OQ-40 (Lücke/Stau), OQ-41 (führende Null, neu) |
+| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamerabrücke erneut blockiert), OQ-38 (Zeitkopplung), OQ-40 (Gap-Schwellen), OQ-41 (führende Null) |
 | Dot-Matrix-Leser, nicht bestandenes Gate | `docs/superpowers/plans/2026-09-22-dotmatrix-backend.md` |
 
 ### Werkzeuge

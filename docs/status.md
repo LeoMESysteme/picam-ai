@@ -8,15 +8,36 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 > **Die Arbeitsliste steht in [../TODO.md](../TODO.md).** Diese Datei sagt
 > *wo wir stehen*, die TODO sagt *was zu tun ist*.
 >
-> **Kein Reboot-Blocker mehr.** Die Kamera lief heute erstmals erfolgreich
-> gegen Hardware (siehe unten). Weiter gilt: **≤ 960×720**, kein Kill eines
-> hängenden Kameraprozesses ([OQ-22](open-questions.md)).
+> **Aktueller Blocker: RP2040-Kamerabrücke antwortet nicht.** Nach dem
+> Reboot um 16:13 scheiterte schon der erste 960×720-Kamerastart um 16:17
+> (`rp2040_gbdg_wait_until_free failed`, OQ-22). Prozess PID 4238 hängt.
+> Kein weiterer Kameraversuch. Ein vollständiger Stromzyklus des Pi wäre
+> die nächste Gegenprobe; er betrifft auch andere Dienste und braucht eine
+> Entscheidung des Nutzers. Der Nutzer kann ihn frühestens am 2026-09-24
+> durchführen. Bis dahin die Kamera nicht erneut starten.
+
+**Wiedereinstieg morgen:** Zuerst mit dem Nutzer klären, ob ein echter
+Stromzyklus (Stromversorgung aus/ein) möglich ist; ein normaler Warmreboot
+hat den Fehler nicht beseitigt. Danach Boot-ID und Kernelmeldungen prüfen.
+Nur wenn die Brücke wieder ansprechbar ist, genau **eine** längere
+Fokussitzung versuchen. Der temporäre Helfer liegt unter
+`/home/me-systeme/fokus-live-2026-09-23.py` (nicht versioniert); er startet
+960×720 bei 15 fps und wartet erst nach dem **ersten echten Bild** auf `go`.
+Vor dem Bild weder den Fokusring drehen noch zusätzlich Commissioning oder
+andere Kameraskripte starten. Schlägt der erste Stream wieder fehl, Logs
+sichern und OQ-22 weiter untersuchen, nicht wiederholt starten. Diagnose
+dieser Sitzung: `var/diagnostics/focus-handoff-2026-09-23/` (lokal, ignoriert).
+Aufruf nach erfolgreicher Wiederherstellung:
+`./.venv/bin/python /home/me-systeme/fokus-live-2026-09-23.py --out
+var/diagnostics/focus-handoff-2026-09-23/focus-next` (`--hint x,y,w,h`
+setzt bei Bedarf die normierte Displayregion). Der Helfer hat noch keinen
+erfolgreichen Kamerastart erlebt und kann beim selben Treiberfehler hängen.
 
 ## Wo wir stehen
 
 Der Kamerazweig von `scripts/sync-record.py` ist heute zum ersten Mal
 erfolgreich gegen echte Hardware gelaufen (960×720, `create_video_configuration`,
-kein `stream on failed` im Log dieses Boots). Sechs Aufzeichnungen liegen vor,
+im damaligen Boot ohne `stream on failed`). Sechs Aufzeichnungen liegen vor,
 darunter Läufe mit `--norm-schedule` (Normierungssprünge aus der offenen
 Portsitzung heraus, mit Verify/Restore).
 
@@ -59,6 +80,12 @@ Enumeration (OQ-22 Punkt d erledigt); Export trägt `label_origin` jetzt mit
 `picam-ai-auto-seven-segment` lehnt Schema 2 noch ab
 (`evaluation.py:50`, Test `xfail(strict=True)`).
 
+**Codex-Arbeitsweise:** Der verbliebene lokale CodeGraph-MCP-Eintrag wurde
+entfernt. Das doppelte Repowise-Plugin ist in Codex deaktiviert; der gezielt
+nutzbare Repowise-MCP-Server und der lokale Distill-Hook bleiben eingerichtet.
+`AGENTS.md` beschreibt nun die aufgabenbezogene Doku-Lektüre und den Umgang
+mit gekürzten Ausgaben.
+
 Details und alle Zahlen: [VALIDATION.md](VALIDATION.md) (Einträge
 2026-09-23), [lab_journal.md](lab_journal.md) (letzter Eintrag),
 [open-questions.md](open-questions.md) OQ-38/OQ-40/OQ-41, Plan
@@ -67,10 +94,14 @@ Details und alle Zahlen: [VALIDATION.md](VALIDATION.md) (Einträge
 ## Was als Nächstes zählt
 
 Siehe [../TODO.md](../TODO.md) für die vollständige, priorisierte Liste. Kurz:
-M = 695 ms, die Normalisierung der führenden Null und die Behebung des Staus sind erledigt (2026-09-23) → OQ-40
-(Stau-Erkennung, `SensorSequence` statt Skriptzähler, Gap-Schwelle messen) →
-erst dann die eigentliche Ernte (Normierungsfaktoren abfahren für
-Ziffernvielfalt).
+Zuerst den RP2040-Zustand klären. Ein weiterer Warmreboot allein hat keinen
+funktionierenden Stream geliefert. Falls der Nutzer einen vollständigen
+Stromzyklus des Pi durchführt und die Kamera danach ein Bild liefert, Fokus,
+ScalerCrop und Winkelprobe in möglichst einer langen Sitzung erledigen.
+Erst danach Task 6 abschliessen
+(Raster-Overlay und native Auflösungsschwelle); dann Task 7, die eigentliche
+Ernte. OQ-40 blockiert sie laut Ernte-Phase-1-Plan nicht: 300/800 ms bleiben
+vorläufig und werden im Artefakt markiert.
 
 ## Unverändert aus vorherigen Sitzungen
 

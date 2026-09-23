@@ -8,13 +8,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    genug Kontext zum Wiedereinstieg ohne Recherche. Wenn dort ein Blocker
    ganz oben steht (z. B. „Pi braucht einen Reboot"), gilt der zuerst.
 1. [docs/status.md](docs/status.md) — aktueller Stand, Blocker, nächste Schritte
-2. [docs/open-questions.md](docs/open-questions.md) — was offen ist und warum
+2. [docs/open-questions.md](docs/open-questions.md) — **nur die Übersichtstabelle
+   oben** (zwischen `OQ-INDEX`-Markern, ≈ 3,5 KB; die ganze Datei hat > 100 KB).
+   Einzelne Einträge gezielt öffnen: `grep -n '^## OQ-22' docs/open-questions.md`
+   und ab dieser Zeile lesen
 3. [AGENTS.md](AGENTS.md) — verbindliche Daueranweisungen, inkl. Doku-Pflicht
-4. [Konzept.md](Konzept.md) — **autoritativ** für alle Anforderungen (deutsch)
-5. [CHANGELOG.md](CHANGELOG.md) — die letzten drei Einträge
+4. [Konzept.md](Konzept.md) — **autoritativ** für alle Anforderungen (deutsch).
+   Vor jeder Änderung am Messpfad oder an Verhalten lesen, für reine Doku- und
+   Werkzeugaufgaben nicht nötig
+5. [CHANGELOG.md](CHANGELOG.md) — nur der oberste Eintrag (mit Zeilenlimit
+   lesen, die Datei hat > 150 KB). Ältere Einträge über `grep -n '^## ' CHANGELOG.md`
 
 Die Doku-Pflicht steht in `AGENTS.md` und wird hier absichtlich **nicht**
 dupliziert, damit sie nicht auseinanderläuft.
+
+## Arbeitsweise für Agents
+
+* **Prozess-Skills** (Brainstorming, Pläne, subagentengetriebene Umsetzung mit
+  Reviews) nur für mehrstufige Features. Kleine Fixes, Doku-Nachträge,
+  Diagnosen und Fragen werden direkt erledigt, ohne diesen Ablauf.
+* **Suchen:** gezielt mit `grep` und `Read`. Breite Suchen über viele Dateien
+  gehen an einen Explore-Subagenten, damit die Dateiinhalte nicht im
+  Hauptkontext landen.
+* **Repowise:** Bash-Ausgaben von Tests, Lint und `git log` werden automatisch
+  gekürzt. Ein Marker `[repowise#<ref>: …]` lässt sich **im Repo-Verzeichnis**
+  mit `repowise expand <ref>` zurückholen. `grep`, `git diff` und `ls` bleiben
+  absichtlich ungekürzt. Die MCP-Tools (`get_risk`, `get_health`, `get_why`)
+  nur bei ausdrücklichem Bedarf; `get_answer` ist abgeschaltet, weil es ein
+  LLM-Umweg ist.
 
 Für den menschlichen Entwickler liegt unter
 [docs/anleitung/](docs/anleitung/README.md) ein Lernpfad, der die offenen

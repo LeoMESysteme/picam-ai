@@ -3,6 +3,31 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (OQ-Übersicht und Fokus-Übergabe)
+
+**Problem:** Der Einstieg in neue Agenten-Sitzungen las die ganze
+`docs/open-questions.md` (> 100 KB) und mehrere alte Changelog-Einträge.
+Beim Fokusversuch scheiterte zudem nach einem erfolgreichen Commissioning-Bild
+der nächste Streamstart; nach Warmreboot scheiterte sogar der erste Start des
+Boots (OQ-22). Es gab kein Fokusbild und keine Schärfemessung.
+
+**Änderung:**
+* `scripts/oq-index.py` erzeugt eine Übersicht (Nummer, Status, Titel) am
+  Anfang von `docs/open-questions.md`; `--check` und
+  `tests/test_oq_index.py` melden eine veraltete Tabelle.
+* `CLAUDE.md` und `AGENTS.md` verweisen auf gezielte Lektüre und die
+  Aktualisierung der OQ-Übersicht. Nicht mehr genutzte Claude-Plugins wurden
+  in `.claude/settings.json` deaktiviert.
+* Die zwei Fokus-Fehlversuche, Boot-IDs, Kernelbefunde und der Wiedereinstieg
+  nach einem möglichen Stromzyklus stehen in `docs/status.md`,
+  `docs/VALIDATION.md`, `docs/lab_journal.md` und OQ-22. Die Rohdiagnosen
+  liegen lokal unter `var/diagnostics/focus-handoff-2026-09-23/`.
+
+**Konsequenz:** Die nächste Sitzung kann gezielt beginnen. Ein Warmreboot ist
+keine belegte Abhilfe; bis zur Nutzerentscheidung über den Stromzyklus gibt
+es keinen weiteren Kamerastart. Die OQ-Tabelle muss bei neuen oder geänderten
+Status-Einträgen neu erzeugt werden.
+
 ## 0.1.0.dev0 — 2026-09-23 (Lauf ohne Bilder, Auflösungs-Gate nativ, Streamstart-Budget)
 
 **Problem:** Beim Winkelversuch blockierte die Kamera wieder (OQ-22). Das war

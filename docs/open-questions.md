@@ -8,6 +8,60 @@ Status: `offen` · `in Arbeit` · `geklärt` · `verworfen`
 
 OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
+**Übersicht.** Die Tabelle erzeugt `scripts/oq-index.py` aus den Überschriften
+und Statuszeilen. Nach einem neuen OQ oder einem Statuswechsel das Skript
+laufen lassen. `tests/test_oq_index.py` fällt, wenn die Tabelle veraltet ist.
+Einzelne Einträge gezielt öffnen: `grep -n '^## OQ-22' docs/open-questions.md`,
+dann ab dieser Zeile lesen.
+
+<!-- OQ-INDEX:START — erzeugt von scripts/oq-index.py, nicht von Hand bearbeiten -->
+
+| OQ | Status | Titel |
+| --- | --- | --- |
+| OQ-01 | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
+| OQ-02 | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
+| OQ-03 | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
+| OQ-04 | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
+| OQ-05 | offen | Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen? |
+| OQ-06 | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
+| OQ-07 | offen | GSVmulti-Telegrammspezifikation beschaffen |
+| OQ-08 | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
+| OQ-09 | offen | RS-232-/RS-485-Transceiver und galvanische Trennung |
+| OQ-10 | offen | Spezialisierte 7-Segment-Traineddata für Tesseract |
+| OQ-11 | offen | Workstation für die IMX500-Modellkonvertierung |
+| OQ-12 | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
+| OQ-13 | offen | Anzeigepolarität und der Fall „alle Stellen zeigen 8" |
+| OQ-14 | offen | Freigabeschwellen an realen Geräten validieren |
+| OQ-15 | geklärt | `tesseract-ocr`, `socat` und `chrony` installieren |
+| OQ-16 | geklärt | Vollständigkeit des lokalen Planungsstands |
+| OQ-17 | offen | Sichtbarer Dezimalpunkt und Profilannahme unterscheiden |
+| OQ-18 | offen | Welches neuronale OCR-Modell trägt auf realen Displays? |
+| OQ-19 | offen | Freigabeevidenz für weitere OCR-Backends |
+| OQ-20 | offen | Auto-Setup gegen Multiplexing echter Anzeigen absichern |
+| OQ-21 | offen | HTTPS-Browserabnahme der Workbench |
+| OQ-22 | offen | Sensor setzt nach Streamwechsel keinen Stream mehr auf |
+| OQ-23 | offen | Festes Segmentraster passt nicht zur realen BK-5491B-VFD-Schrift |
+| OQ-24 | in Arbeit | Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen |
+| OQ-25 | offen | Vorschlagsqualität von `fit_quad_in_region`/`fit_ocr_box` an realen Geräten |
+| OQ-26 | offen | Grenzen der Nachführung an realen Geräten validieren |
+| OQ-27 | offen | Rasterfeinschliff je Bild bewusst nicht gebaut |
+| OQ-28 | offen | Eindeutigkeit der Autofit-Geometrie |
+| OQ-29 | offen | Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence` |
+| OQ-30 | offen | `roi`-Op ist nicht atomar gegenüber einem fehlschlagenden `QuadTracker`-Aufbau |
+| OQ-31 | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
+| OQ-32 | offen | `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind` |
+| OQ-33 | offen | Ähnlichkeitsschwellwert des Datensatz-Sammelmodus ist unvalidiert |
+| OQ-34 | offen | Realer interaktiver Browserdurchlauf des Datensatz-Sammelmodus steht aus |
+| OQ-35 | offen | Automatisierte Testwerterzeugung für den Datensatz-Sammelmodus (GPIO/BK-5491B) |
+| OQ-36 | offen | Sättigungsbasierte LCD-Quad-Findung nur an einem Gerät gemessen |
+| OQ-37 | BEANTWORTET 2026-09-22 | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
+| OQ-38 | weitgehend geklärt 2026-09-22 | Ground-Truth-Quelle für Auto-Labeling: Displaybus oder Geräteschnittstelle? |
+| OQ-39 | offen | Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt |
+| OQ-40 | offen | Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen |
+| OQ-41 | teilweise geklärt 2026-09-23 | Telegramm und Anzeige unterscheiden sich in der führenden Null |
+
+<!-- OQ-INDEX:END -->
+
 ---
 
 ## OQ-01 — Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version?
@@ -457,6 +511,28 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `stream on failed` und macht eine gebundene Testaufnahme (640×480). Bei
   belegtem Gerät weicht es aus, statt zu kollidieren. Gegen die Hardware
   bestanden.
+  **Erneut aufgetreten 2026-09-23, 15:57:10, direkt nach Reboot und
+  Commissioning:** Bootzeit 14:24:31; die erste Commissioning-Sitzung um
+  15:55 lieferte ein echtes 640×480-Bild. Die unmittelbar folgende
+  960×720-Fokussitzung lieferte dagegen 0 Bilder und sofort
+  `imx500_power_on: failed to get led gpio` sowie 6 × `stream on failed in
+  subdev`. Der Nutzer hatte den Fokusring noch nicht berührt. Zwei
+  `Using a link rate`-Zeilen stehen bei der erfolgreichen Sitzung; ob diese
+  intern mehr als einen Power-Zyklus verbrauchte oder der Warmstart den
+  RP2040 nicht zuverlässig zurücksetzte, ist offen. **Folge:** Das Budget 15
+  bleibt eine Sperre gegen bekannte Erschöpfung, darf aber nicht als Zusage
+  von 15 erfolgreichen Starts verstanden werden. Diagnose:
+  `var/diagnostics/focus-handoff-2026-09-23/` (nicht versioniert), Zahlen in
+  `VALIDATION.md`, Aufbau im Laborjournal.
+  **Nachtrag 2026-09-23, 16:17:35:** Nach einem weiteren verifizierten
+  Warmreboot (Boot-ID `6c6abda2-d316-40da-b557-1124431ade30`) scheiterte
+  sogar der **erste** 960×720-Streamstart dieses Boots, ohne vorherige
+  Commissioning-Sitzung. Vor dem LED- und CFE-Fehler meldete die
+  `rp2040-gpio-bridge` selbst `rp2040_gbdg_wait_until_free failed` und
+  `rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL`. Das
+  Streamstart-Budget erklärt den neuen Fehlschlag nicht. Ob ein
+  vollständiger Stromzyklus des Pi die Bridge wiederherstellt, bleibt
+  offen; wegen anderer Dienste wurde er nicht durchgeführt.
 * **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
   jeder Änderung von Breite, Höhe oder Bildrate genau so neu auf
   (`Controller._worker`). Trifft das denselben Treiberzustand, fällt die Kamera

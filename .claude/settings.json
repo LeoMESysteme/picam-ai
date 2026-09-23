@@ -4,8 +4,8 @@
     "superpowers@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
-    "mintlify@claude-plugins-official": true,
+    "mintlify@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
-    "repowise@repowise": true
+    "repowise@repowise": false
   }
 }
