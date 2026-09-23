@@ -44,6 +44,20 @@ Auflösungsbefund und mehr Pixel je Anzeigepunkt. Bisher lagen im Vollbild nur
     ohne Vorgabe). Die unbestätigte Standardteilung lehnt es ab, ausser mit
     `--accept-default-grid`.
   * `lcd_quad_in_region` bleibt als Rückfall über `--detector saturation-only`.
+* `scripts/import-harvest.py` (neu): Die Ernte wird vollautomatisch in den
+  `DatasetStore` importiert (Plan-Entscheidung 5).
+  * Je Plateau werden höchstens k Bilder ausgewählt.
+  * Ablehnungsgründe: `bildguete` (Ausreisser nach MAD), `zellen_inkonsistent`
+    (Abstand zum Medoid, Schwelle je Zeichen), `nicht_pruefbar`,
+    `laenge_passt_nicht`, `store_abgelehnt`. Alle Gründe werden gezählt.
+  * Die Zeichen stehen linksbündig ab Zelle 0, die unterdrückte Null ist eine
+    leere Zelle.
+  * `expected_text` folgt der bestehenden Konvention, nur der Zahlenwert ohne
+    `+` und Einheit.
+  * `label_origin_detail` trägt `display_text`, `cell_text` (16 Zellen),
+    `telegram_text`, `label_normalization` und `unit_text`.
+  * Dazu kommt eine Stichprobenliste `audit.json`. `datasets.py` ist
+    unverändert.
 * `scripts/harvest.py` (neu): Ernte-Lauf.
   * Der Faktorplan ist deterministisch, log-uniform verteilt, mit
     Mindestabstand 1,3 zwischen zwei Schritten und im Gerätebereich
