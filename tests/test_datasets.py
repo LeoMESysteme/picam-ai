@@ -655,16 +655,68 @@ def test_export_includes_single_readable_sample_and_matches_hash(tmp_path):
     sample = store.save_sample(_capture(device["id"], group["group_id"]), _annotation())
     result = store.export()
     manifest = json.loads((result["path"] / "manifest.json").read_text())
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     assert len(manifest["samples"]) == 1
     entry = manifest["samples"][0]
     assert entry["id"] == sample["id"]
     assert entry["sha256"] == sample["sha256"]
     assert entry["expected_text"] == "-01.25"
+    assert entry["label_origin"] == "manual"
+    assert entry["label_origin_detail"] is None
     image_bytes = (result["path"] / entry["path"]).read_bytes()
     import hashlib
 
     assert hashlib.sha256(image_bytes).hexdigest() == entry["sha256"]
+
+
+def test_export_manifest_schema_version_is_bumped_for_label_origin():
+    from dispread.workbench.datasets import EXPORT_SCHEMA_VERSION
+
+    assert EXPORT_SCHEMA_VERSION == 2
+
+
+def test_export_carries_label_origin_and_detail_for_serial_ascii_sample(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+    group = store.begin_group(device["id"], "Situation 1")
+    sample = store.save_sample(
+        _capture(device["id"], group["group_id"]),
+        _annotation(label_origin="serial_ascii", label_origin_detail=_serial_ascii_detail()),
+    )
+    result = store.export()
+    manifest = json.loads((result["path"] / "manifest.json").read_text())
+    entry = manifest["samples"][0]
+    assert entry["id"] == sample["id"]
+    assert entry["label_origin"] == "serial_ascii"
+    assert entry["label_origin_detail"] == _serial_ascii_detail()
+
+
+def test_export_coverage_counts_samples_per_label_origin(tmp_path):
+    store = DatasetStore(tmp_path / "datasets")
+    device = store.create_device(_device_payload())
+
+    group_manual = store.begin_group(device["id"], "Situation manuell")
+    store.save_sample(
+        _capture(device["id"], group_manual["group_id"], token="tok-manual", image=_filled_image(10)),
+        _annotation(label_origin="manual"),
+    )
+
+    group_auto_1 = store.begin_group(device["id"], "Situation seriell 1")
+    store.save_sample(
+        _capture(device["id"], group_auto_1["group_id"], token="tok-auto-1", image=_filled_image(20)),
+        _annotation(label_origin="serial_ascii", label_origin_detail=_serial_ascii_detail()),
+    )
+
+    group_auto_2 = store.begin_group(device["id"], "Situation seriell 2")
+    store.save_sample(
+        _capture(device["id"], group_auto_2["group_id"], token="tok-auto-2", image=_filled_image(30)),
+        _annotation(label_origin="serial_ascii", label_origin_detail=_serial_ascii_detail()),
+    )
+
+    result = store.export()
+    coverage = json.loads((result["path"] / "coverage.json").read_text())
+    assert coverage["label_origin_counts"] == {"manual": 1, "serial_ascii": 2}
+    assert coverage["images"] == 3
 
 
 def test_export_requires_explicit_selection_for_repeated_group(tmp_path):

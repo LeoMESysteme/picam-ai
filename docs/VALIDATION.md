@@ -1182,7 +1182,12 @@ Normierungsfaktoren von 1,0 bis 9000, Anzeigewerte von `+0.59696` bis
 
 **14 von 14 Faktoren: immer genau 6 Ziffern, immer genau 8 Zellen.** Das
 Format wechselt nicht, der Dezimalpunkt wandert, führende Nullen bleiben
-stehen. Damit hält die Voraussetzung des Block-Ankers der Rasterverankerung
+stehen.
+
+> **Korrektur 2026-09-23:** Die Spalte „Anzeige" oben ist der ASCII-Strom.
+> Auf dem **Glas** ist die führende Null unterdrückt: `+01.7908` erscheint dort
+> als `+ 1.7908`. 6 Ziffern und 8 Zellen bleiben richtig. Siehe den Eintrag
+> vom 2026-09-23 und OQ-41. Damit hält die Voraussetzung des Block-Ankers der Rasterverankerung
 über den gesamten Bereich — die in OQ-37 befürchtete Formatänderung tritt
 nicht ein.
 
@@ -1223,3 +1228,120 @@ Werts und die Verstärkung der Auflösung heben sich auf.
 **Folge:** Die Sitzungsplanung ist im Faktor frei. Die Schwankung der Spalte
 „versch." (33 / 2 / 5) ist Drift des Stimulus im jeweiligen 90-s-Fenster,
 kein Effekt des Faktors.
+
+## 2026-09-23 — Kamerazweig von `sync-record.py` erstmals gegen echte Hardware erfolgreich
+
+**Aufbau.** Pi 5, IMX500, 960×720 RGB888, Videokonfiguration; GSV-2AS im
+ASCII-Modus an `/dev/ttyUSB0`, 38400 8N1. Die Kamera zeigt auf die grüne
+Punktmatrix-Anzeige des GSV-2AS. Kein `stream on failed` im Kernel-Log des
+laufenden Boots.
+
+| Lauf | fps soll | Dauer | Bilder | Sequenzlücken | Bildabstand | Anlauf bis 1. Bild | Telegramme |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `smoke-095440` | 5 | 10 s | 40 | 0 | – | ≈ 2,0 s | 19 |
+| `smoke15-095700` | 15 | 20 s | 284 | 0 | 66,64 ms (min 66,637 / max 66,650) | 1,10 s | 38 |
+| `offset-stim-100209` (Stimulator von Hand bewegt) | 15 | 180 s | 2634 | 0 | **ein** Sprung von 2,60 s bei t ≈ 34 s | – | 337 |
+| `normtest-101403` (3 Normierungsschritte) | 15 | 20 s | 284 | 0 | – | – | 29 |
+| `offset-norm-101440` (24 Normierungsschritte) | 15 | 215 s | 3176 | 0 | – | – | 332 |
+| `leadzero-102347` (Faktoren 20 / 250 / 9000) | 15 | 32 s | 463 | 0 | – | – | 53 |
+
+Die 40 statt 50 Bilder im 5-fps-Lauf sind **kein** Ratenverlust, sondern der
+Anlauf: das erste Bild kommt ≈ 2 s nach dem Sitzungsbeginn, danach läuft die
+Rate stetig. `scripts/camera-commissioning.sh` mit der neuen
+Aufnahme-Gegenprobe: Exit 0, Testaufnahme 640×480 gelungen.
+
+**Normierungsbefehle aus `sync-record.py` (`--norm-schedule`).** In allen vier
+Läufen mit Plan (3 + 24 + 3 Schritte + Vorprüfung/Rückstellung) antwortete
+jeder Schreibbefehl mit `3B A0` (OK). Vorprüfung gegen den Rückstellpunkt
+jedes Mal bestanden, Rückstellung auf norm = 1,0 / dpoint = 1 jedes Mal per
+Rücklesen bestätigt (`restore_verification.matches_restore_point = true`).
+Jeder Schreibzyklus hält den Strom an: STOP → `set norm` nach ≈ 0,75 s →
+`set dpoint` nach ≈ 0,35 s → START nach ≈ 0,70 s, also **≈ 1,8 s ohne
+Telegramm** je Schritt.
+
+**Die Anzeige folgt dem Befehl innerhalb von etwa einem Bild (qualitativ).**
+Bildfolge in `offset-norm-101440`, Schritt `factor=3.0`, relativ zum STOP:
+`+0.60966` bei +0,6 s, **`+0.18290`** bei +0,8 s (`set norm` bei +0,753 s
+wirkt, der Dezimalpunkt steht noch alt), Mischbild bei +1,0 s, `+ 1.8290` ab
++1,2 s (`set dpoint` bei +1,105 s). Eine belastbare Latenzzahl steht noch aus,
+siehe unten.
+
+**Befund — Telegramm und Anzeige unterscheiden sich in der führenden Null
+(OQ-38, OQ-41).** Optisch gegengeprüft über 15 Normierungsfaktoren (1,0 bis
+9000). Standbild 3 s nach dem Wiederanlauf, daneben das zeitnächste
+Telegramm:
+
+| Faktor | Telegramm | Glas |
+| --- | --- | --- |
+| 1,0 / 1,2 / 1,5 | `+0.60965` / `+0.73158` / `+0.91449` | identisch |
+| 2,0 | `+01.2193` | `+ 1.2193` |
+| 2,5 | `+01.5241` | `+ 1.5241` |
+| 3,0 | `+01.8290` | `+ 1.8290` |
+| 3,5 | `+02.1338` | `+ 2.1338` |
+| 4,0 | `+02.4386` | `+ 2.4386` |
+| 20 | `+012.193` | `+ 12.193` |
+| 250 | `+0152.42` | `+ 152.42` |
+| 9000 | `+05487.0` | `+ 5487.0` |
+
+**Das Gerät unterdrückt auf dem Glas die führende Null, im Telegramm nicht.**
+Das Telegramm hat an dieser Stelle eine `0`, das Glas eine leere Zelle. Die
+Zellenzahl des Zahlenblocks (8) bleibt, die Punktposition stimmt, alle
+übrigen Zeichen stimmen überein. Bei Werten < 1 ist die `0` vor dem Punkt
+die Einerstelle und steht auf beiden Seiten.
+
+**Korrektur des Eintrags vom 2026-09-22 („Anzeige über den
+Normierungsfaktor steuerbar").** Die dortige Spalte „Anzeige" ist der
+**ASCII-Strom**, nicht das Glas. Die Sätze „führende Nullen bleiben stehen"
+gelten für das Telegramm und sind für die Anzeige **falsch**. Unberührt
+bleiben die 6 Ziffern und die 8 Zellen: die unterdrückte Null belegt weiter
+eine Zelle.
+
+**Befund — Stillstand des ganzen Aufzeichnungsprozesses (OQ-40).** In
+`offset-stim-100209` bei t ≈ 34 s hat **keiner der beiden Kanäle** etwas
+geliefert. Die Kamera hatte eine Lücke von 2,60 s, die Sensorzeitstempel
+bestätigen das. Der serielle Strom hatte eine Lücke von 2,38 s, danach kamen
+**fünf Telegramme mit praktisch gleichem `t_boot`** (Abstände 0 / 0 / 0 /
+283 ms). Die Telegramme sind nicht verloren: fünf Intervalle zu 533 ms
+passen in die Lücke. Verloren sind ihre **Ankunftszeiten**. `frame_sequence`
+zeigt keine Lücke, weil es ein Zähler des Skripts ist und kein Sensorzähler.
+Wegen `queue=False` wurden die Bilder dazwischen stillschweigend verworfen.
+Unter Kameralast, ohne diesen Stillstand, über 391 Abstände:
+p50 533 ms, p95 534 ms.
+
+### Task B — Versatz Telegramm → Glas (`scripts/display-offset.py`, Vorlagen-Projektion)
+
+δ = Mitte des Glaswechsels (p = 0,5) minus Ankunftszeit des ersten
+abweichenden Telegramms. Positiv heisst, das Glas wechselt **nach** dem
+Telegramm. d_misch ist die Zeit von p = 0,1 bis p = 0,9. M kommt aus der
+vorab festgeschriebenen Formel `M = |δ| + d_misch + 3·σ_δ + 40 ms`.
+Rampenereignisse sind ausgeschlossen: Nur Wechsel zählen, denen mindestens
+ein unverändertes Telegrammintervall vorausgeht.
+
+| Aufzeichnung | Population | messbar | δ | σ_δ | d_misch | M |
+| --- | --- | --- | --- | --- | --- | --- |
+| `smoke15-095700` (Ruhe) | small | 4 / 5 | +97 ms | 14 ms | 319 ms | 499 ms |
+| `offset-stim-100209` (Stimulator) | large | 8 / 8 | +80 ms | 29 ms | 324 ms | 532 ms |
+| `offset-stim-100209` (Stimulator) | small | 5 / 7 | +116 ms | 60 ms | 360 ms | 695 ms |
+| `offset-norm-101440` (Normierung, Ruhewechsel zwischen den Sprüngen) | small | 23 / 28 | +94 ms | 90 ms | 260 ms | 664 ms |
+| `offset-norm-101440` | large (Telegramm nach Wiederanlauf) | 0 / 18 | – | – | – | nicht verwertbar |
+
+**Selbstkontrolle bestanden:** Im Stimulatorlauf stimmen `large` und `small`
+bis auf 36 ms überein. Über drei Aufzeichnungen liegt δ zwischen +80 und
++116 ms, in keiner erkannten Population ist es negativ.
+
+**Grenzen:**
+* Die Ereigniszahlen sind klein (4–23).
+* Die Null-Basislinie (Pseudoereignisse in langen Plateaus) fällt nur zu
+  67–83 % durch die |B−A|-Prüfung. Ein Teil der Pseudoereignisse sähe also
+  messbar aus. Die Übereinstimmung der Populationen trägt die Aussage, nicht
+  die Einzelprüfung.
+* `large` im Normierungslauf ist wie erwartet nicht verwertbar. Das
+  Telegramm-Referenzereignis setzt dort der Wiederanlauf, den Glaswechsel
+  der Befehl.
+* Normierungsbefehl → Glas, nur informativ: Stufe 1 (`set norm` → Zwischen-
+  zustand) ergab 23 / 25 messbar, δ ≈ 0 ms, σ 58 ms. Stufe 2 (`set dpoint` →
+  Endzustand) ergab 23 / 25, δ = −278 ms, σ 240 ms. Die Streuung ist zu gross
+  für eine Aussage, die Zuordnung der zweiten Stufe ist ungeklärt.
+
+**M = 695 ms**, der grösste Wert, wie vom Nutzer am 2026-09-23 vor jeder Ernte
+entschieden. Festgeschrieben im Plan unter Festlegung 3.

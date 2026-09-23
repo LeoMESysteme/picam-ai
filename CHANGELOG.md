@@ -3,6 +3,64 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Normierungsplan in sync-record, Versatzmessung, Export mit Herkunft)
+
+**Problem:** Task B (Versatz Telegramm ↔ Anzeige) brauchte grosse
+Anzeigesprünge während einer Aufzeichnung. `norm_sweep.py` kann den Port aber
+nicht neben `sync-record.py` öffnen. Ausserdem hinterliess ein `SIGTERM`
+keine `session.json`. Das Inbetriebnahme-Skript meldete „einsatzbereit" bei
+blockiertem Sensor. Und der Export trug `label_origin` nicht weiter.
+
+**Änderung:**
+* `scripts/sync-record.py`:
+  * `--norm-schedule "Faktor:Sekunden,..."` schreibt `set norm`/`set dpoint`
+    aus der bereits offenen Portsitzung. Die Byte-Kodierung ist aus
+    `norm_sweep.py` und `gsv-registers.py` übernommen.
+  * Jeder Schreibzyklus hält den Strom an (STOP/CLEAR → schreiben → START,
+    ≈ 1,8 s). Pause, Wiederanlauf, Befehle und Antworten landen als eigene
+    Ereignisse in `commands.jsonl`, mit `non_telegram` markiert.
+  * Vorher wird der Registerstand gegen den Rückstellpunkt geprüft und bei
+    Abweichung abgebrochen (`--ignore-restore-point-mismatch`). Danach wird
+    immer zurückgestellt und per Rücklesen bestätigt
+    (`session.json["restore_verification"]`).
+  * Ohne Plan geht kein Byte an den Port.
+  * `SIGTERM` nimmt jetzt denselben Abbruchpfad wie `SIGINT`
+    (`abort_reason: "SIGTERM"`).
+* `scripts/display-offset.py` (neu): Photometrische Versatzmessung ohne OCR.
+  * Jedes Bild wird auf die Differenz zweier Plateau-Vorlagen projiziert. Das
+    liefert Beginn, Mitte und Ende jedes Glaswechsels.
+  * Die Populationen `large`, `small` und Normierungsbefehl werden getrennt
+    ausgewertet. Rampen und Verdeckungen werden ausgeschlossen, eine
+    Null-Basislinie dient als Gegenprobe.
+  * M wird nur über die feste Formel aus Festlegung 3 berechnet.
+  * Eine erste Fassung mit Bild-zu-Bild-Differenz meldete fälschlich „kein
+    Signal". Das war ein Fehler der Methode, weil das träge LCD den Wechsel
+    über mehrere Bilder verschmiert, und kein Befund.
+* `scripts/camera-commissioning.sh`: echte Aufnahme-Gegenprobe (OQ-22 d).
+  * Das Kernel-Log wird auf `stream on failed` geprüft.
+  * Es folgt eine gebundene Testaufnahme mit 640×480, ohne SIGKILL.
+  * Ein belegtes Gerät wird als „nicht geprüft" gemeldet statt als Fehler.
+* `src/dispread/workbench/datasets.py`: `EXPORT_SCHEMA_VERSION` 1 → 2.
+  * `manifest.json` trägt `label_origin`/`label_origin_detail` je Probe.
+  * `coverage.json` zählt `label_origin_counts`.
+  * `scripts/check-dataset-export.py` akzeptiert die Versionen 1 und 2.
+* `scripts/gate-label.py`: Normalisierung der führenden Null (OQ-41).
+  * `telegram_to_display_text()` entfernt die `0` direkt nach dem Vorzeichen,
+    wenn ihr eine Ziffer folgt, weil das Glas sie nicht zeigt.
+  * Jeder Vorschlag trägt das Rohtelegramm (`telegram_text`), die
+    normalisierte Kette (`label_text`) und `label_normalization`.
+  * Die Laufbildung bleibt auf dem Rohtext. Das ist gleichwertig, weil die
+    Abbildung injektiv ist.
+  * Negative Werte sind ausdrücklich ungeprüft.
+* Plan, Vorab-Festlegungen: **M = 695 ms** festgeschrieben (grösster Wert
+  über die Populationen) und die Normalisierung der führenden Null ergänzt.
+
+**Konsequenz:** Der Kamerazweig ist gegen die Hardware gelaufen, und für
+Task B liegen Zahlen vor (VALIDATION.md, 2026-09-23). Der externe Loader in
+`picam-ai-auto-seven-segment` (`evaluation.py:50`) lehnt Schema 2 noch ab.
+`test_real_export_is_accepted_by_the_actual_experiment_loader` ist deshalb
+als `xfail(strict=True)` markiert.
+
 ## 0.1.0.dev0 — 2026-09-22 (sync-record: Betriebsgroesse 960x720, grosse Sensormodi gesperrt)
 
 **Problem:** Der Kamerazweig von `scripts/sync-record.py` lief zum ersten Mal

@@ -1225,3 +1225,58 @@ Folge ist ein Reboot des Labor-Pi.
 prüft weiterhin nur die Enumeration, nicht den Bilddurchlauf — genau deshalb
 meldet es „einsatzbereit", während der Sensor blockiert ist. Das steht als
 Punkt (d) in OQ-22 und ist weiterhin offen.
+
+## 2026-09-23 — Kamera läuft, Normierung aus der Aufzeichnung heraus, das Glas zeigt keine führende Null
+
+**Ausgangspunkt:** Pi-Uptime 17 h 39 min, der letzte Boot war also am
+2026-09-22 gegen 16:15. Im Kernel-Log dieses Boots steht kein `stream on
+failed`. Die Enumeration ist normal. Den vorgeschriebenen Smoke-Test habe ich
+zuerst mit 5 fps gefahren, dann mit 15 fps. Beide liefen sauber. Damit ist der
+Kamerazweig von `sync-record.py` zum ersten Mal erfolgreich gegen Hardware
+gelaufen. Die Kamera zeigt auf das GSV-2AS, `+0.60397 mV/V` ist gut lesbar.
+
+**Aufzeichnungen:**
+* `offset-stim-100209`: Der Nutzer hat den Stimulator von Hand bewegt. Das
+  ergab eher eine Rampe als einzelne Sprünge, der Wert ändert sich in fast
+  jedem Telegramm. Laut Nutzer hat er die Kamera dabei eventuell kurz
+  verdeckt. In der Auswertung war das weder in der Gesamthelligkeit noch in
+  der des Anzeigebereichs zu finden.
+* `normtest-101403`, `offset-norm-101440`, `leadzero-102347`: Normierungs-
+  sprünge über `--norm-schedule`, geschrieben aus der offenen Portsitzung von
+  `sync-record.py`, Stimulus unberührt. Nach jedem Lauf wurde auf norm = 1,0
+  und dpoint = 1 zurückgestellt und das per Rücklesen bestätigt.
+
+**Deutung 1 — die Plan-Abweichung.** Die grossen Sprünge für Task B kommen
+aus der Normierung und nicht vom Bediener. Das habe ich vor der Messung im
+Plan festgeschrieben, mit dem Stimulator als dritter Population. Der
+Schreibzyklus hält den Strom ≈ 1,8 s an. Das erste Telegramm nach einem
+Normierungssprung kommt deshalb zu einem Zeitpunkt, den der Wiederanlauf
+bestimmt und nicht der Takt des Geräts. Die Normierungspopulation misst also
+**Befehl → Glas**, nicht **Telegramm → Glas**. Für M zählt sie nicht.
+
+**Deutung 2 — die führende Null.** Dass die Zeichenkette der Anzeige
+entspricht, war bisher nur Herstelleraussage. In der Bildfolge der
+Normierungssprünge fiel sofort auf: Das Glas zeigt `+ 1.8290`, das Telegramm
+`+01.8290`. Das gilt über alle 15 Faktoren. Die Aussage vom Vortag „führende
+Nullen bleiben stehen" stammte aus dem ASCII-Strom. Ich habe sie korrigiert,
+nicht gelöscht. Die Folge ist neu erfasst als [OQ-41](open-questions.md): Ohne
+eine festgeschriebene Abbildung trüge jedes serielle Label ≥ 1 ein falsches
+Zeichen.
+
+**Deutung 3 — der Stillstand.** Einmal standen beide Kanäle ≈ 2,5 s
+gleichzeitig still. Danach kamen fünf Telegramme mit gleichem Zeitstempel.
+Die Ursache ist nicht geklärt. Es kommen SD-Schreibstau oder ein
+blockierender Hauptprozess in Frage. Das `frame_sequence` des Skripts zählt
+geschriebene Bilder, nicht Sensorbilder, und hat den Stillstand deshalb
+nicht gezeigt. Die Folge für den Labeler steht in OQ-40.
+
+**Irrweg bei der Auswertung.** Der erste Auswerteansatz lieferte für alle
+Populationen „nicht über der Null-Basislinie", auch für die Normierungs-
+sprünge, bei denen sich alle sechs Ziffern ändern. Der Ansatz war die
+Bild-zu-Bild-Differenz über einen grossen Ausschnitt. Das ist ein Fehler des
+Verfahrens, kein Befund: Das LCD schaltet träge, die Änderung verteilt sich
+über mehrere Bilder, und die geänderten Pixel machen nur einen kleinen Teil
+des Ausschnitts aus. Die grösste mittlere Differenz der ganzen Aufzeichnung
+lag bei 4,9 Graustufen, der Median bei 0,66. Die Bildfolge zeigt den Wechsel
+dagegen eindeutig. Neuer Ansatz: Projektion auf die Differenz zweier
+Plateau-Vorlagen.

@@ -30,6 +30,18 @@ from pathlib import Path
 
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:[.][0-9]+)?|[.][0-9]+)\Z")
 
+#: Vom lokalen Check akzeptierte manifest.json-Schemaversionen. Version 1
+#: (vor label_origin) bleibt zugelassen: dieses Skript prueft nur Struktur/
+#: Pfade/Hashes, nichts hier liest label_origin, und bereits vorhandene
+#: Alt-Exporte unter var/ muessen weiter lokal pruefbar bleiben (Konzept:
+#: alte Lesepfade nicht kaputtmachen). Version 2 (2026-09-23) fuegt je Probe
+#: label_origin/label_origin_detail hinzu - siehe
+#: dispread.workbench.datasets.EXPORT_SCHEMA_VERSION. Der externe
+#: Experiment-Loader (codex/automatic-seven-segment, siehe check_external)
+#: akzeptiert bisher NUR Version 1 - ein Export mit Version 2 besteht die
+#: lokale Pruefung hier, aber (noch) nicht check_external.
+_ACCEPTED_SCHEMA_VERSIONS = (1, 2)
+
 _LOADER_PROBE = (
     "import sys, json\n"
     "sys.path.insert(0, sys.argv[2])\n"
@@ -61,8 +73,11 @@ def check_local(manifest_path: Path) -> list[str]:
         manifest = json.loads(manifest_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         return [f"Manifest nicht lesbar: {error}"]
-    if manifest.get("schema_version") != 1:
-        problems.append("schema_version != 1")
+    if manifest.get("schema_version") not in _ACCEPTED_SCHEMA_VERSIONS:
+        problems.append(
+            f"schema_version {manifest.get('schema_version')!r} nicht unterstuetzt "
+            f"(akzeptiert: {_ACCEPTED_SCHEMA_VERSIONS})"
+        )
     ids: set[str] = set()
     for sample in manifest.get("samples", []):
         sample_id = sample.get("id")

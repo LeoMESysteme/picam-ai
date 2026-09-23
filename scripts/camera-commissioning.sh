@@ -214,10 +214,133 @@ else
     warn "Benutzer $(id -un) ist NICHT in video - kein Zugriff auf die Kamera-Nodes"
 fi
 
+# -------------------------------------------------------- Bilddurchlauf ---
+# OQ-22 (docs/open-questions.md): der Sensor kann vollstaendig enumeriert
+# bleiben und trotzdem keinen Stream mehr aufsetzen ("stream on failed in
+# subdev"). Enumeration ist deshalb KEIN Beweis fuer Einsatzbereitschaft -
+# dieser Abschnitt ist das eigentliche, abschliessende Urteil.
+sec "Bilddurchlauf (Aufnahme-Gegenprobe, OQ-22)"
+
+stream_blocked_oq22=0
+capture_verified=0
+capture_skip_reason=""
+
+read_kernel_log() {
+    # journalctl -k -b (nur aktueller Boot) bevorzugt, sonst dmesg - je
+    # nachdem, was ohne sudo lesbar ist. Setzt die Globals KLOG_SRC und
+    # KLOG_CONTENT direkt (NICHT ueber stdout/$(...) aufrufen - eine
+    # Kommandosubstitution liefe in einer Subshell und wuerde die Globals
+    # nicht ins Hauptskript zurueckschreiben). Leeres KLOG_SRC heisst
+    # "nichts ohne sudo lesbar".
+    if KLOG_CONTENT=$(journalctl -k -b --no-pager 2>/dev/null) && [ -n "$KLOG_CONTENT" ]; then
+        KLOG_SRC="journalctl -k -b"
+        return 0
+    fi
+    if KLOG_CONTENT=$(dmesg 2>/dev/null) && [ -n "$KLOG_CONTENT" ]; then
+        KLOG_SRC="dmesg"
+        return 0
+    fi
+    KLOG_SRC=""
+    KLOG_CONTENT=""
+    return 1
+}
+
+if [ -z "$sensor_nodes" ] || [ "$cfe_found" -eq 0 ] || ! compgen -G "/dev/v4l-subdev*" > /dev/null; then
+    capture_skip_reason="Sensor nicht (vollstaendig) enumeriert"
+    info "$capture_skip_reason - Aufnahme-Gegenprobe uebersprungen (bereits oben als FAIL markiert)."
+elif ! command -v rpicam-still >/dev/null 2>&1; then
+    capture_skip_reason="rpicam-still fehlt"
+    warn "rpicam-still nicht installiert - Aufnahme-Gegenprobe uebersprungen (nur Enumeration geprueft)"
+else
+    read_kernel_log; klog_before="$KLOG_CONTENT"; klog_src_before="$KLOG_SRC"
+    if [ -n "$klog_src_before" ] && echo "$klog_before" | grep -qi 'stream on failed in subdev'; then
+        bad "Kernel-Log ($klog_src_before) zeigt bereits 'stream on failed in subdev' (OQ-22)"
+        stream_blocked_oq22=1
+    else
+        [ -n "$klog_src_before" ] && ok "Kernel-Log ($klog_src_before): kein 'stream on failed in subdev'"
+        [ -z "$klog_src_before" ] && info "weder journalctl -k -b noch dmesg ohne sudo lesbar - Log-Gegenprobe entfaellt"
+
+        # Kollisionspruefung: nicht mit einem laufenden Kamera-Prozess
+        # kollidieren. Das wartet nur ab, es toetet nichts - ein getoeteter
+        # haengender Kameraprozess ist selbst ein dokumentierter OQ-22-Ausloeser.
+        busy=""
+        if command -v fuser >/dev/null 2>&1; then
+            for dev in /dev/media* /dev/video*; do
+                [ -e "$dev" ] || continue
+                fuser "$dev" >/dev/null 2>&1 && { busy="$dev"; break; }
+            done
+        elif command -v lsof >/dev/null 2>&1; then
+            for dev in /dev/media* /dev/video*; do
+                [ -e "$dev" ] || continue
+                lsof "$dev" >/dev/null 2>&1 && { busy="$dev"; break; }
+            done
+        else
+            info "weder fuser noch lsof vorhanden - Belegungspruefung der /dev/video*-Nodes entfaellt"
+        fi
+        # dispread haelt den Sensor manchmal offen, ohne dass fuser/lsof auf
+        # /dev/video* etwas findet (z.B. wenn der Stream selbst schon haengt).
+        dispread_proc=$(pgrep -af 'dispread' 2>/dev/null || true)
+
+        if [ -n "$busy" ] || [ -n "$dispread_proc" ]; then
+            capture_skip_reason="Kamera-Geraet belegt"
+            warn "Kamera-Geraet belegt (${busy:-dispread-Prozess laeuft}) - Aufnahme-Gegenprobe uebersprungen, keine Kollision erzwungen"
+            [ -n "$dispread_proc" ] && info "laufender Prozess: $(echo "$dispread_proc" | head -1)"
+            info "Ohne Bilddurchlauf-Bestaetigung gilt 'einsatzbereit' nur auf Basis der Enumeration."
+        else
+            tmp_img=$(mktemp --suffix=.jpg 2>/dev/null || echo /tmp/camera-commissioning-test.jpg)
+            # rpicam-still hat einen eigenen internen Timeout (--timeout, ms)
+            # und soll von selbst aufhoeren - das ist der Normalfall. Der
+            # aeussere `timeout` ist NUR ein grosszuegiges Sicherheitsnetz
+            # fuer den Fall, dass der OQ-22-Treiberbug den Stream-Abbau
+            # haengen laesst (dokumentiert: Picamera2.stop() haengt dann
+            # unbegrenzt in futex_wait_queue). timeout(1) schickt hier
+            # ausschliesslich SIGTERM, keine SIGKILL-Eskalation (kein `-k`) -
+            # ein hart getoeteter Kameraprozess ist selbst ein dokumentierter
+            # Ausloeser fuer die Blockade (OQ-22). Die 20 s sind bewusst weit
+            # ueber dem internen 2-s-Timeout, damit der aeussere Rahmen im
+            # Normalfall nie greift.
+            capture_err=$(timeout 20 rpicam-still -n --timeout 2000 \
+                --width 640 --height 480 -o "$tmp_img" 2>&1)
+            capture_rc=$?
+
+            if [ "$capture_rc" -eq 0 ] && [ -s "$tmp_img" ]; then
+                ok "Testaufnahme gelungen ($(stat -c%s "$tmp_img") Bytes, 640x480)"
+                capture_verified=1
+            elif echo "$capture_err" | grep -qi 'stream on failed in subdev'; then
+                bad "Testaufnahme fehlgeschlagen: 'stream on failed in subdev' (OQ-22)"
+                stream_blocked_oq22=1
+            elif [ "$capture_rc" -eq 124 ]; then
+                bad "Testaufnahme durch aeusseren Sicherheitsnetz-Timeout abgebrochen (20 s) - Sensor haengt vermutlich (OQ-22)"
+                stream_blocked_oq22=1
+            else
+                bad "Testaufnahme fehlgeschlagen (rc=$capture_rc): $(echo "$capture_err" | tail -3 | tr '\n' ' ')"
+            fi
+            rm -f "$tmp_img"
+
+            # Der Fehler kann auch erst beim (u.U. verzoegerten) Stream-Abbau
+            # im Kernel-Log auftauchen, selbst wenn rpicam-still rc=0 meldete.
+            if [ "$stream_blocked_oq22" -eq 0 ]; then
+                read_kernel_log; klog_after="$KLOG_CONTENT"; klog_src_after="$KLOG_SRC"
+                if [ -n "$klog_src_after" ] && echo "$klog_after" | grep -qi 'stream on failed in subdev' \
+                   && { [ -z "$klog_src_before" ] || ! echo "$klog_before" | grep -qi 'stream on failed in subdev'; }; then
+                    bad "Kernel-Log zeigt 'stream on failed in subdev' NACH dem Aufnahmeversuch (OQ-22)"
+                    stream_blocked_oq22=1
+                    capture_verified=0
+                fi
+            fi
+        fi
+    fi
+fi
+
 # ------------------------------------------------------------------- Urteil ---
 sec "Urteil"
 if [ "$fail_count" -eq 0 ]; then
-    printf '  \033[32mKamera einsatzbereit.\033[0m %s Warnung(en).\n' "$warn_count"
+    if [ "$capture_verified" -eq 1 ]; then
+        printf '  \033[32mKamera einsatzbereit.\033[0m Bilddurchlauf bestaetigt. %s Warnung(en).\n' "$warn_count"
+    else
+        printf '  \033[32mKamera vermutlich einsatzbereit\033[0m (Enumeration OK, Bilddurchlauf NICHT bestaetigt: %s). %s Warnung(en).\n' \
+               "${capture_skip_reason:-uebersprungen}" "$warn_count"
+    fi
     printf '\n  Naechster Schritt:\n'
     printf '    rpicam-still -o /tmp/first-light.jpg     # Testaufnahme\n'
     printf '    Objektivdeckel abnehmen, manuellen Fokus einstellen\n'
@@ -226,6 +349,32 @@ fi
 
 printf '  \033[31mKamera NICHT einsatzbereit\033[0m (%s Fehler, %s Warnungen).\n' \
        "$fail_count" "$warn_count"
+
+# Enumeriert, aber kein Bilddurchlauf: das ist OQ-22, keine Anschluss- oder
+# Konfigurationsfrage - nur ein Reboot hilft nachweislich.
+if [ "$stream_blocked_oq22" -eq 1 ]; then
+    cat <<'EOF'
+
+  Ursache: die Kamera ist enumeriert (Device-Tree-Sensorknoten, v4l-subdev,
+  ggf. rpicam-hello --list-cameras zeigen sie), liefert aber keinen
+  Bilddurchlauf mehr - 'stream on failed in subdev' im Kernel-Log.
+  Das ist der bekannte Treiberbug/RP2040-Wedge aus OQ-22
+  (docs/open-questions.md), KEIN Kabel-, Anschluss- oder Konfigurationsfehler.
+  Enumeration und Bilddurchlauf sind unabhaengige Zustaende - diese Diagnose
+  prueft ab jetzt beide.
+
+  Naechste Massnahme:
+    - Kein laufender Messbetrieb (pgrep -af dispread zeigt nichts)?
+        sudo reboot
+      Danach dieses Skript erneut ausfuehren. Ein Modul-Reload ist nicht
+      erprobt, nur der Reboot ist nachgewiesen wirksam.
+    - Laeuft dispread/eine Messung? NICHT rebooten. Erst mit dem Nutzer
+      abstimmen (siehe docs/open-questions.md OQ-22, Abschnitt zum
+      Hardware-Risiko).
+    - NICHT versuchen, einen haengenden Kameraprozess mit kill/SIGKILL zu
+      beenden - das ist selbst ein dokumentierter Ausloeser der Blockade.
+EOF
+fi
 
 # Fehlt der Sensorknoten, wurde die Kamera beim Booten nicht erkannt. Das ist
 # der Fall, fuer den die Eskalationsleiter gilt.

@@ -45,7 +45,15 @@ DEVICES_SCHEMA_VERSION = 1
 #: ``_load_devices``. Eine Migration der Bestandsproben unter ``var/`` ist
 #: noch NICHT gebaut - siehe CHANGELOG.md und OQ-38 Punkt 6.
 SAMPLE_SCHEMA_VERSION = 2
-EXPORT_SCHEMA_VERSION = 1
+#: Version 2 (2026-09-23): jeder exportierte Sample-Eintrag traegt jetzt
+#: ``label_origin`` (+ optional ``label_origin_detail``) mit, und
+#: ``coverage.json`` bekommt eine Aufschluesselung ``label_origin_counts``.
+#: Ohne dieses Feld waeren von Hand und automatisch gelabelte Proben im
+#: exportierten Datensatz nicht mehr unterscheidbar, und jede daraus
+#: berichtete Benchmark-Zahl muesste die Herkunftsmischung verschweigen statt
+#: nennen (siehe CLAUDE.md-Auftrag zu dieser Aenderung). Ein Export mit
+#: ``schema_version == 1`` hat dieses Feld nicht.
+EXPORT_SCHEMA_VERSION = 2
 
 TECHNOLOGIES = ("LED", "LCD", "VFD", "other")
 SPLITS = ("development", "heldout")
@@ -901,6 +909,8 @@ class DatasetStore:
                         "bbox": sample["bbox"],
                         "conditions": sample["conditions"],
                         "all_displays_annotated": False,
+                        "label_origin": sample["label_origin"],
+                        "label_origin_detail": sample.get("label_origin_detail"),
                     }
                 )
             manifest = {"schema_version": EXPORT_SCHEMA_VERSION, "samples": manifest_samples}
@@ -943,12 +953,21 @@ class DatasetStore:
             warnings.append("Abschlusstest enthaelt nur unlesbare Bilder")
         if not any(registry["devices"].get(s["device_id"], {}).get("technology") == "LED" for s in included):
             warnings.append("keine beleuchteten LED-Anzeigen im Export")
+        # Herkunftsmischung des Exports (OQ-38 Punkt 6 / label_origin, siehe
+        # EXPORT_SCHEMA_VERSION): jede aus diesem Export berichtete
+        # Benchmark-Zahl muss die Herkunftsmischung nennen koennen, statt sie
+        # zu verschweigen - deshalb hier gezaehlt, nicht nur pro Probe im
+        # Manifest mitgefuehrt.
+        label_origin_counts = {origin: 0 for origin in LABEL_ORIGINS}
+        for sample in included:
+            label_origin_counts[sample["label_origin"]] = label_origin_counts.get(sample["label_origin"], 0) + 1
         return {
             "images": len(included),
             "independence_groups": len({s["independence_group"] for s in included}),
             "verified_devices": len(verified_devices),
             "readable": len([s for s in included if s["label_state"] == "readable"]),
             "unreadable": len([s for s in included if s["label_state"] == "unreadable"]),
+            "label_origin_counts": label_origin_counts,
             "families": sorted(families),
             "technologies": sorted(technologies),
             "heldout_independence_groups": len(heldout_groups),

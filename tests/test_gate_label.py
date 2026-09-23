@@ -19,12 +19,20 @@ direkt in Nanosekunden, um exakte Randfaelle bauen zu koennen.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "gate-label.py"
+
+_spec = importlib.util.spec_from_file_location("gate_label", SCRIPT)
+gate_label = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = gate_label  # dataclasses braucht das Modul in sys.modules
+_spec.loader.exec_module(gate_label)
 
 MS = 1_000_000  # Nanosekunden je Millisekunde
 
@@ -376,3 +384,80 @@ def test_label_origin_detail_traegt_die_pflichtfelder_von_datasetstore(tmp_path)
     assert isinstance(detail["plateau_end_ns"], int)
     assert isinstance(detail["telegram_count"], int)
     assert detail["telegram_count"] == 5
+
+
+# --- telegram_to_display_text: OQ-41, alle 15 gemessenen Faktoren ----------
+# docs/VALIDATION.md, Eintrag 2026-09-23 ("Befund - Telegramm und Anzeige
+# unterscheiden sich in der fuehrenden Null"). Faktoren 1,0/1,2/1,5 teilen
+# sich eine Zeile in der Tabelle (identisch), macht 3+2+2+2+2+2+2+2+1 = 15
+# gemessene Faktoren ueber 11 verschiedene Telegramm/Glas-Zeichenketten-Paare.
+
+@pytest.mark.parametrize(
+    ("telegram", "expected_display"),
+    [
+        # Werte < 1: Null ist Einerstelle, bleibt auf beiden Seiten stehen.
+        ("+0.60965", "+0.60965"),
+        ("+0.73158", "+0.73158"),
+        ("+0.91449", "+0.91449"),
+        # Werte >= 1: fuehrende Null nach dem Vorzeichen faellt auf dem Glas weg.
+        ("+01.2193", "+1.2193"),
+        ("+01.5241", "+1.5241"),
+        ("+01.8290", "+1.8290"),
+        ("+02.1338", "+2.1338"),
+        ("+02.4386", "+2.4386"),
+        ("+012.193", "+12.193"),
+        ("+0152.42", "+152.42"),
+        ("+05487.0", "+5487.0"),
+    ],
+)
+def test_telegram_to_display_text_gemessene_paare(telegram, expected_display):
+    assert gate_label.telegram_to_display_text(telegram) == expected_display
+
+
+def test_telegram_to_display_text_einheitensuffix_bleibt_erhalten():
+    assert (
+        gate_label.telegram_to_display_text("+01.8290 mV/V") == "+1.8290 mV/V"
+    )
+    assert (
+        gate_label.telegram_to_display_text("+0.60965 mV/V") == "+0.60965 mV/V"
+    )
+
+
+def test_telegram_to_display_text_wert_unter_eins_mit_vielen_nachkommastellen_bleibt_unveraendert():
+    # "+0.0xxxx": die fuehrende Null vor dem Punkt bleibt (Einerstelle), egal
+    # wie viele Nullen/Ziffern danach folgen - der Punkt direkt nach der
+    # ersten Null verhindert die Entfernung.
+    assert gate_label.telegram_to_display_text("+0.01234") == "+0.01234"
+    assert gate_label.telegram_to_display_text("+0.00001") == "+0.00001"
+
+
+def test_telegram_to_display_text_fehlendes_vorzeichen_defensiv():
+    # Kein '+'/'-' als erstes Zeichen: dieselbe Regel ab Position 0.
+    assert gate_label.telegram_to_display_text("01.8290") == "1.8290"
+    assert gate_label.telegram_to_display_text("0.60965") == "0.60965"
+
+
+def test_telegram_to_display_text_leerstring_und_einzelzeichen():
+    assert gate_label.telegram_to_display_text("") == ""
+    assert gate_label.telegram_to_display_text("+") == "+"
+    assert gate_label.telegram_to_display_text("+0") == "+0"
+
+
+# --- label_text/label_normalization landen im Vorschlagsdatensatz ----------
+
+
+def test_label_text_und_normalisierung_im_proposal(tmp_path):
+    telegrams = [(i * 500 * MS, "+01.8290 mV/V") for i in range(5)]
+    t_mid = telegrams[2][0]
+    frames = [("frame_000001.png", t_mid)]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output = tmp_path / "proposal.json"
+
+    result = _run_cli(recording, output, guard_margin_ms=75, max_gap_ms=1000)
+    assert result.returncode == 0, result.stderr
+
+    proposal = json.loads(output.read_text())
+    entry = proposal["images"][0]
+    assert entry["telegram_text"] == "+01.8290 mV/V"
+    assert entry["label_text"] == "+1.8290 mV/V"
+    assert entry["label_normalization"] == "gsv2as_leading_zero_v1"

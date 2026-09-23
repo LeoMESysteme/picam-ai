@@ -95,6 +95,15 @@ Ergebnis angepasst werden.
    Fällt die Ausbeute dadurch klein aus, ist die Ausbeute klein — der Ausweg
    über eine Toleranz erzeugt Label, die wie Wahrheit aussehen, und ist nach
    [AGENTS.md](../../../AGENTS.md) und Konzept §7 ausgeschlossen.
+
+   **Ergänzt 2026-09-23 ([OQ-41](../../open-questions.md)):** Das Telegramm
+   trägt eine führende Null, die das Glas nicht zeigt (`+01.8290` → `+ 1.8290`,
+   gemessen über 15 Faktoren). Vor dem Vergleich wird deshalb **genau diese
+   Null** aus dem Telegramm entfernt, entschieden vom Nutzer: eine `0` direkt
+   nach dem Vorzeichen, der eine Ziffer folgt. Das ist eine feste Abbildung
+   und keine Toleranz, die Gleichheit bleibt exakt. Rohtelegramm und
+   normalisierte Kette werden beide im Label geführt. Negative Werte sind
+   davon nicht erfasst, sie sind ungeprüft.
 2. **Bilder im Schutzfenster bekommen keinen geratenen Wert.** Sie fallen
    entweder ganz heraus oder erhalten `label_state="uncertain"`. Nie einen
    Wert „aus der Nähe".
@@ -119,6 +128,13 @@ Ergebnis angepasst werden.
 
    Kommt M so gross heraus, dass die Ausbeute unbrauchbar wird, ist das ein
    **Befund**, kein Anlass, die Formel zu ändern.
+
+   **Festgelegt 2026-09-23, vor jeder Ernte: M = 695 ms.** Die Formel
+   lieferte je Population 499 / 532 / 664 / 695 ms (VALIDATION.md, Task B).
+   Es gilt der **grösste** Wert, entschieden vom Nutzer. Grund: kleine
+   Ereigniszahlen (4–23), und die Null-Basislinie fällt nicht vollständig
+   durch. Der vorsichtigste Wert ist der einzige, der keine Population
+   bevorzugt. Die Ausbeute war bei der Entscheidung nicht bekannt.
 4. **`independence_group` je Aufnahmesitzung/Stimuluseinstellung**, nicht je
    Bild. 500 Bilder derselben Sitzung sind eine Beobachtung in vielen
    Ausfertigungen, keine 500 unabhängigen Proben. Zufällig über Bilder
@@ -212,6 +228,18 @@ Leser gerade nicht funktioniert.
 4. Bild-zu-Bild-Differenz bilden → Zeitpunkt des Änderungsbeginns und des
    Wiedererreichens der Ruhe.
 5. Gegen den Zeitstempel des ersten abweichenden Telegramms auftragen.
+
+**Abweichung von Schritt 2, festgelegt 2026-09-23 vor der Messung:** die
+grossen Sprünge erzeugt der Pi selbst über `set norm` (16) innerhalb der
+offenen Portsitzung von `sync-record.py` (`--norm-schedule`), jeder Befehl mit
+eigenem CLOCK_BOOTTIME-Zeitstempel protokolliert. Grund: reproduzierbar,
+beliebig viele Ereignisse, kein Bediener nötig. Das Risiko: eine
+Normierungsänderung könnte Anzeige und Telegramm auf einem **anderen Weg**
+erreichen als eine echte Messwertänderung. Wenn möglich kommen deshalb
+einige Sprünge von Hand am Stimulator dazu, und zwar als **dritte
+Population**. Weicht δ(Normierung) von δ(Stimulator) ab, wird das als Befund
+berichtet und nicht als Mittelwert. Formel und Auswertung bleiben
+unverändert.
 
 Liefert: den Versatz δ **mit Vorzeichen** (zeigt das Glas vor oder nach dem
 Telegramm?) und die Dauer des Mischbilds. Beides zusammen ergibt M über die

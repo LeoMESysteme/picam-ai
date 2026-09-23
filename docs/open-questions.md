@@ -439,6 +439,10 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   belegt, (c) den blockierten Sensor als solchen melden („Reboot nötig") statt
   als anonymen Timeout, (d) `scripts/camera-commissioning.sh` um eine echte
   Aufnahmeprüfung ergänzen, damit „einsatzbereit" Bilddurchlauf bedeutet.
+  **(d) erledigt 2026-09-23:** Das Skript prüft das Kernel-Log auf
+  `stream on failed` und macht eine gebundene Testaufnahme (640×480). Bei
+  belegtem Gerät weicht es aus, statt zu kollidieren. Gegen die Hardware
+  bestanden.
 * **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
   jeder Änderung von Breite, Höhe oder Bildrate genau so neu auf
   (`Controller._worker`). Trifft das denselben Treiberzustand, fällt die Kamera
@@ -1246,7 +1250,9 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Status:** **BEANTWORTET 2026-09-22.** Das Format wechselt **nicht**. Über
   14 Normierungsfaktoren von 1,0 bis 9000 — Anzeigewerte `+0.59696` bis
   `+05372.5`, also weit über 10 — zeigt die Anzeige **ausnahmslos 6 Ziffern**,
-  der Dezimalpunkt wandert, führende Nullen bleiben stehen. Der Zahlenblock
+  der Dezimalpunkt wandert, führende Nullen bleiben stehen (**im Telegramm —
+  auf dem Glas ist die führende Null unterdrückt, korrigiert 2026-09-23, siehe
+  [OQ-41](open-questions.md)**). Der Zahlenblock
   belegt damit in **14 von 14** Fällen genau **8 Zellen**. Zahlen und Aufbau:
   [VALIDATION.md](VALIDATION.md), Eintrag „Anzeige über den
   Normierungsfaktor steuerbar".
@@ -1324,6 +1330,13 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   seit 2026-09-22 gebaut, mit zwei offenen Lücken (Migration der
   Bestandsproben, Export gibt die Herkunft noch nicht weiter — Details bei
   Punkt 6). · **Zuständig:** Labor
+* **Nachtrag 2026-09-23:** Der Export gibt `label_origin` jetzt weiter
+  (`EXPORT_SCHEMA_VERSION` 2). Die Lücke aus Punkt 6 ist damit in diesem Repo
+  geschlossen. Der externe Loader in `picam-ai-auto-seven-segment` lehnt
+  Version 2 noch ab (`evaluation.py:50`). **Optische Gegenprobe gelaufen:** Das
+  Telegramm entspricht inhaltlich der Anzeige, **bis auf die führende Null**.
+  Die unterdrückt das Glas, das Telegramm nicht, siehe [OQ-41](open-questions.md).
+  Die zeitliche Zuordnung (Punkt 4/5) ist weiter offen.
 * **Praktische Bestätigung 2026-09-22:** USB-RS232-Adapter (PL2303) an
   `/dev/ttyUSB0`, 38400 8N1 — der Strom kommt an, 5-Byte-Framing sitzt in
   19/19 Frames, ≈ 1,9 Frames/s, und die Werte folgen dem bewegten Stimulus.
@@ -1659,7 +1672,45 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   läuft parallel, USB ausgelastet) messen, weil dort Pufferüberläufe
   wahrscheinlicher sind. Die Schwelle dann aus der gemessenen Verteilung
   ableiten und **vor** der Ernte festschreiben — wie M, aus demselben Grund.
+* **Nachtrag 2026-09-23 — gemessen unter Kameralast:** Die Fehlerart ist
+  nicht nur der Ausfall, sondern auch der **Stau**. Einmal in 180 s stand der
+  ganze Aufzeichnungsprozess 2,4 s still, und danach kamen fünf Telegramme
+  mit fast gleichem `t_boot`. Die Werte sind vollständig, ihre Zeitstempel
+  aber nicht. Eine reine `--max-gap-ms`-Prüfung fängt die Lücke, **nicht**
+  die gestauchten Stempel danach. Nötig ist zusätzlich eine Untergrenze für
+  den Abstand, oder alle Telegramme eines Staus werden verworfen. Ausserhalb
+  des Staus: p50 533 ms, p95 534 ms (391 Abstände).
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
   `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`.
+
+## OQ-41 — Telegramm und Anzeige unterscheiden sich in der führenden Null
+
+* **Status:** **teilweise geklärt 2026-09-23.** Punkt (a) ist entschieden und
+  umgesetzt: Die Null wird vor dem Vergleich aus dem Telegramm entfernt
+  (`telegram_to_display_text` in `scripts/gate-label.py`, Plan Festlegung 1).
+  (b) und (c) sind offen. · erkannt 2026-09-23 bei der optischen Gegenprobe
+  (OQ-38) · **Zuständig:** Entwicklung
+* **Befund (gemessen):** Über 15 Normierungsfaktoren (1,0 bis 9000) trägt das
+  ASCII-Telegramm eine führende Null, die das Glas **nicht** zeigt. Zum
+  Beispiel wird `+01.8290` auf dem Glas zu `+ 1.8290` und `+05487.0` zu
+  `+ 5487.0`. Die Zelle bleibt belegt, als leere Zelle. Alle übrigen Zeichen
+  und die Punktposition stimmen überein. Zahlen:
+  [VALIDATION.md](VALIDATION.md), Eintrag 2026-09-23.
+* **Warum das zählt:** Die Vorab-Festlegung 1 des Plans verlangt **exakte
+  Zeichenkettengleichheit** zwischen Label und Anzeige. Übernimmt man das
+  Telegramm unverändert als Label, trägt **jedes** Bild mit einem Wert ≥ 1
+  ein Zeichen, das nicht auf dem Glas steht. Dieses falsche Label sähe aus
+  wie Wahrheit.
+* **Offen:** (a) Eine Abbildung Telegramm → Anzeige muss vor der Ernte als
+  Vorschrift festgeschrieben werden, gegen die gemessenen Fälle. Beobachtet
+  ist: eine `0` an Position 1, der eine Ziffer folgt, wird zur leeren Zelle.
+  Das ist eine Abbildung und keine Toleranz, Festlegung 1 bleibt bestehen.
+  (b) Welches Zeichen das Label für die leere Zelle trägt (Leerzeichen?),
+  muss zum Zellenraster des Lesers passen. (c) Negative Werte sind hier
+  ungeprüft, weil die Vorzeichenstelle unerreichbar ist (Firmware 1.3.07).
+  Sie dürfen nicht stillschweigend mitgemeint sein.
+* **Verwandt:** [OQ-37](open-questions.md), [OQ-38](open-questions.md).
+* **Antwort landet in:** Plan `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`
+  (Vorab-Festlegungen) und `scripts/gate-label.py`.

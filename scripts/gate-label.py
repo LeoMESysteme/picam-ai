@@ -126,6 +126,66 @@ _REASON_LABELS = {
 #: (Festlegung 1 des Plans), nie der geparste numerische Wert.
 _NUMBER_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?")
 
+#: Name der Normalisierung in `label_normalization` - siehe
+#: `telegram_to_display_text()`. Versioniert (Suffix `_v1`), falls die Regel
+#: sich spaeter aendert (z.B. wenn negative Normierung einmal verifiziert
+#: wird) und alte Vorschlagsdateien unterscheidbar bleiben sollen.
+LABEL_NORMALIZATION = "gsv2as_leading_zero_v1"
+
+
+def telegram_to_display_text(telegram: str) -> str:
+    """Bildet den ASCII-Telegrammtext des GSV-2AS auf den Text ab, den das
+    Anzeigeglas tatsaechlich zeigt (OQ-41, gemessen ueber 15 Normierungs-
+    faktoren, siehe docs/VALIDATION.md 2026-09-23).
+
+    Befund: das Geraet unterdrueckt auf dem Glas genau EINE fuehrende Null
+    direkt nach dem Vorzeichen, wenn danach eine weitere Ziffer folgt (Werte
+    >= 1, z.B. Telegramm "+01.8290 mV/V" -> Glas "+1.8290 mV/V" - die
+    Leerzelle selbst wird hier NICHT nachgebildet, siehe unten). Bei Werten
+    < 1 (z.B. "+0.60965") ist diese Null die Einerstelle vor dem Punkt und
+    steht auf beiden Seiten - sie wird NICHT entfernt, weil ihr nicht die
+    Ziffer '.' folgt, sondern eine tatsaechliche Ziffer waere die Bedingung;
+    hier folgt '.', also bleibt die Regel unwirksam.
+
+    Regel (Nutzerentscheidung, keine Toleranz/Rundung - reiner Zeichenketten-
+    Zuschnitt): genau eine '0' unmittelbar nach dem Vorzeichenzeichen wird
+    entfernt, wenn auf sie selbst eine Ziffer (nicht '.') folgt. Alles
+    andere - Vorzeichen, Dezimalpunkt, restliche Ziffern, Einheitensuffix
+    wie " mV/V" - bleibt unveraendert. Das Glas zeigt an der Stelle der
+    entfernten Null eine LEERE Zelle (8 Zellen im Zahlenblock bleiben
+    bestehen), keine echte Verkuerzung - diese Funktion bildet aber nur den
+    fuer den Textvergleich/Label relevanten Zeicheninhalt ab, nicht die
+    Zellengeometrie.
+
+    Fehlendes Vorzeichen (erstes Zeichen weder '+' noch '-'): defensiv
+    dieselbe Regel ab Position 0 anwenden, statt zu verwerfen. Begruendung:
+    das GSV-2AS-Protokoll liefert im Normalbetrieb IMMER ein Vorzeichen
+    (siehe Konzept/OQ-37-Messungen); ein fehlendes Vorzeichen deutet auf
+    Kappung/Uebertragungsfehler hin, bei dem ein Verwerfen des ganzen
+    Telegramms ohnehin an anderer Stelle (Syntaxregel, §7) passieren sollte -
+    diese Funktion ist kein Ersatz fuer eine Syntaxpruefung und soll auf
+    unerwarteter Eingabe nicht zusaetzlich raten, sondern nur mechanisch
+    dieselbe, klar spezifizierte Regel anwenden.
+
+    ACHTUNG negative Werte: die Regel wird auf ein fuehrendes '-' rein
+    mechanisch genauso angewendet wie auf '+' (dieselbe Position). Das ist
+    NICHT gemessen/verifiziert - negative Normierung existiert laut
+    Anleitung erst ab Firmware 1.5.06, das gemessene Geraet hat 1.3.07, die
+    Vorzeichenstelle '-' ist an diesem Geraet nie erreichbar (siehe
+    CLAUDE.md/OQ-37/docs/VALIDATION.md). Diese Funktion darf NICHT als Beleg
+    dafuer gelesen werden, dass negative Telegramme korrekt behandelt
+    werden.
+    """
+    if not telegram:
+        return telegram
+    if telegram[0] in "+-":
+        sign, rest = telegram[0], telegram[1:]
+    else:
+        sign, rest = "", telegram
+    if len(rest) >= 2 and rest[0] == "0" and rest[1].isdigit():
+        rest = rest[1:]
+    return sign + rest
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -231,6 +291,17 @@ class Window:
     tag_right: str  # "value_change" | "gap" | "tail_unknown"
 
 
+#: Plateau-/Gleichheitserkennung (Laufgruppierung) laeuft bewusst auf dem
+#: ROHEN Telegrammtext, nicht auf `telegram_to_display_text(...)`. Fuer die
+#: Gleichheitsfrage ("zwei Telegramme derselbe Zeichenkette?") ist das
+#: aequivalent, WEIL die Abbildung innerhalb eines festen Telegrammformats
+#: injektiv ist (sie entfernt hoechstens eine Ziffer an einer durch das
+#: Vorzeichen fest bestimmten Position - zwei verschiedene Rohtexte
+#: DESSELBEN Formats koennen also nie auf denselben normalisierten Text
+#: fallen). Der Rohtext bleibt trotzdem die Grundlage, weil er das ist, was
+#: tatsaechlich auf der Leitung ankam - die Normalisierung ist reine
+#: Aufbereitung fuer das Label (Vergleich mit dem Anzeigeglas), keine
+#: Aenderung an der Gate-Entscheidung selbst.
 def _group_raw_runs(telegrams: list[tuple[int, str]]) -> list[list[tuple[int, str]]]:
     runs: list[list[tuple[int, str]]] = []
     current = [telegrams[0]]
@@ -383,10 +454,13 @@ def run(args: argparse.Namespace) -> int:
             continue
         image_path = str(frames_dir / filename)
         numeric_text = extract_numeric_text(window.text)
+        label_text = telegram_to_display_text(window.text)
         labeled.append(
             {
                 "image_path": image_path,
                 "telegram_text": window.text,
+                "label_text": label_text,
+                "label_normalization": LABEL_NORMALIZATION,
                 "numeric_text": numeric_text,
                 "label_origin_detail": {
                     "source_port": source_port,
