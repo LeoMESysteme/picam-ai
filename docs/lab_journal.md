@@ -1280,3 +1280,21 @@ des Ausschnitts aus. Die grösste mittlere Differenz der ganzen Aufzeichnung
 lag bei 4,9 Graustufen, der Median bei 0,66. Die Bildfolge zeigt den Wechsel
 dagegen eindeutig. Neuer Ansatz: Projektion auf die Differenz zweier
 Plateau-Vorlagen.
+
+## 2026-09-23 — Der Stillstand kommt vom Zurückschreiben auf die SD-Karte
+
+Ich hatte vermutet, dass `dirty_expire` von 30 s dahintersteckt, weil der
+erste Stillstand ≈ 34 s nach dem Start auftrat. Die gemessene Korrelation
+fällt deutlicher aus: Jede Bildlücke liegt in einer Rückschreibphase, und ein
+danebenlaufender Prozess ohne Dateizugriffe hatte nie einen Aussetzer. Beide
+Kanäle standen still, weil **beide** Threads schrieben: der Hauptthread die
+JPEGs, der Lesethread `serial.jsonl`. `cv2.imwrite` gibt den GIL weitgehend
+frei (≈ 85 % Spinner-Rate). Der GIL war also nicht die Ursache, es war die
+blockierte Dateiarbeit selbst.
+
+Ein Lauf ohne nennenswertes Rückschreiben beweist die Abhilfe nicht. Die
+Last habe ich deshalb mit `dd … conv=fsync` erzwungen. Erst dieser Lauf
+zeigt, dass der Fix trägt: Der serielle Strom bleibt exakt, verlorene Bilder
+sind gezählt. Die Systemeinstellungen (`vm.dirty_*`) habe ich bewusst nicht
+angefasst. Das wäre ein Eingriff ins System des Labor-Pi gewesen, und der
+Fix im Skript macht ihn unnötig.

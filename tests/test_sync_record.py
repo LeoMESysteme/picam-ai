@@ -10,6 +10,7 @@ anderen Prozesses unberuehrt.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import signal
@@ -17,11 +18,26 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 
 import pytest
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "sync-record.py"
+
+
+def _load_sync_record_module():
+    """`sync-record.py` fuer In-Prozess-Tests laden (Bindestrich im Namen -
+    kein normaler `import`), wie das Skript selbst es mit
+    `gsv-registers.py` macht. Nur fuer den Kamera-Zweig gebraucht: der
+    faengt den Import von `picamera2` lazy in der Funktion ab, was sich nur
+    testen laesst, wenn `sys.modules["picamera2"]` VOR dem Aufruf gesetzt
+    ist - als Subprozess ginge das nicht ohne eine echte Kamera."""
+    spec = importlib.util.spec_from_file_location("_sync_record_under_test", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _feed_pty(master_fd: int, lines: list[bytes], *, interval_s: float, stop_after: threading.Event) -> None:
@@ -293,6 +309,373 @@ def test_sigterm_hinterlaesst_vollstaendige_gueltige_sitzung(tmp_path):
     for name in ("frames.jsonl", "serial.jsonl"):
         for line in (output_dir / name).read_text().splitlines():
             json.loads(line)
+
+
+# --- --source camera: Fake-Kamera, kein Hardwarebedarf ----------------------
+#
+# Kein Subprozess: der Kamera-Zweig faengt `from picamera2 import Picamera2`
+# lazy in `_camera_frames` ab - das laesst sich nur ueber ein zuvor
+# gesetztes `sys.modules["picamera2"]` testen, im selben Prozess.
+
+
+class _FakeLibcameraRequest:
+    """Steht fuer `CompletedRequest.request` (das zugrundeliegende
+    `libcamera.Request`) - traegt in echt `.sequence`, siehe
+    `/usr/lib/python3/dist-packages/picamera2/request.py:90` und
+    `/usr/lib/python3/dist-packages/libcamera/__init__.py:4`."""
+
+    def __init__(self, sequence: int) -> None:
+        self.sequence = sequence
+
+
+class _FakeCompletedRequest:
+    def __init__(self, sequence: int, sensor_timestamp_ns: int) -> None:
+        self.request = _FakeLibcameraRequest(sequence)
+        self._sensor_timestamp_ns = sensor_timestamp_ns
+        self.released = False
+
+    def make_array(self, name: str):
+        import numpy as np
+
+        assert name == "main"
+        return np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def get_metadata(self) -> dict:
+        return {"SensorTimestamp": self._sensor_timestamp_ns}
+
+    def release(self) -> None:
+        self.released = True
+
+
+class _FakeCamera:
+    def __init__(self, requests: list[_FakeCompletedRequest]) -> None:
+        self._requests = list(requests)
+        self.started = False
+        self.stopped = False
+        self.configured_with = None
+
+    def create_video_configuration(self, **kwargs):
+        return kwargs
+
+    def configure(self, config) -> None:
+        self.configured_with = config
+
+    def start(self, show_preview: bool = False) -> None:
+        self.started = True
+
+    def capture_request(self, wait: float = 2.0):
+        if not self._requests:
+            raise RuntimeError("Fake-Kamera: keine weiteren Requests")
+        return self._requests.pop(0)
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
+def test_kamera_zweig_liest_sensor_sequence_aus_completed_request(monkeypatch):
+    """OQ-40-Nachtrag: `frame_sequence` ist nur der Skriptzaehler und haette
+    die gemessene 2,60s-Luecke nicht gezeigt. `_camera_frames` muss
+    zusaetzlich `request.request.sequence` (die libcamera-Sequenznummer)
+    liefern."""
+    module = _load_sync_record_module()
+
+    fake_requests = [
+        _FakeCompletedRequest(sequence=100, sensor_timestamp_ns=1_000_000_000),
+        _FakeCompletedRequest(sequence=101, sensor_timestamp_ns=1_066_000_000),
+    ]
+    fake_camera = _FakeCamera(fake_requests)
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((320, 240), 15.0)
+    try:
+        image1, ts1, seq1 = next(gen)
+        image2, ts2, seq2 = next(gen)
+    finally:
+        gen.close()
+
+    assert seq1 == 100
+    assert seq2 == 101
+    assert ts1["value_ns"] == 1_000_000_000
+    assert ts2["value_ns"] == 1_066_000_000
+    assert ts1["base"] == "sensor_boottime"
+    # Sequenznummer/Metadaten muessen VOR dem Release gelesen worden sein.
+    assert fake_requests[0].released is True
+    assert fake_requests[1].released is True
+    assert fake_camera.started is True
+    assert fake_camera.stopped is True
+
+
+def test_kamera_zweig_liefert_none_wenn_sequence_fehlt(monkeypatch):
+    """Fehlt `.sequence` am zugrundeliegenden Request-Objekt (z.B. andere
+    libcamera-Version), darf `_camera_frames` nicht abstuerzen, sondern muss
+    `sensor_sequence=None` liefern - "null wenn nicht verfuegbar" aus dem
+    Auftrag."""
+    module = _load_sync_record_module()
+
+    class _RequestOhneSequence:
+        pass
+
+    class _CompletedRequestOhneSequence(_FakeCompletedRequest):
+        def __init__(self, sensor_timestamp_ns: int) -> None:
+            self.request = _RequestOhneSequence()
+            self._sensor_timestamp_ns = sensor_timestamp_ns
+            self.released = False
+
+    fake_camera = _FakeCamera([_CompletedRequestOhneSequence(sensor_timestamp_ns=42)])
+    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
+    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
+
+    gen = module._camera_frames((320, 240), 15.0)
+    try:
+        _image, _ts, seq = next(gen)
+    finally:
+        gen.close()
+
+    assert seq is None
+
+
+def test_frames_jsonl_hat_sensor_sequence_und_intervall_felder(tmp_path):
+    """End-zu-Ende ueber `--source synthetic`: `sensor_sequence` ist bei
+    synthetischen Bildern immer `null` (nicht anwendbar), aber das Feld
+    existiert, und `sensor_timestamp_interval_ns` ist beim ersten Bild
+    `null` und danach die Differenz aufeinanderfolgender `value_ns`."""
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-felder"
+    try:
+        completed = _run_cli(duration=0.5, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+    lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
+    assert len(lines) > 1
+    assert lines[0]["sensor_sequence"] is None
+    assert lines[0]["sensor_timestamp_interval_ns"] is None
+    prev_value_ns = lines[0]["capture_timestamp"]["value_ns"]
+    for entry in lines[1:]:
+        assert entry["sensor_sequence"] is None
+        value_ns = entry["capture_timestamp"]["value_ns"]
+        assert entry["sensor_timestamp_interval_ns"] == value_ns - prev_value_ns
+        prev_value_ns = value_ns
+
+    session = json.loads((output_dir / "session.json").read_text())
+    for field in ("max_loop_iteration_s", "stall_iteration_count", "stall_iterations"):
+        assert field in session, field
+    assert session["max_loop_iteration_s"] >= 0.0
+    assert session["stall_iteration_count"] == len(session["stall_iterations"])
+
+
+# --- Erzeuger/Schreiber-Trennung: ein langsamer Schreiber darf die ---------
+# --- aufgezeichneten Zeitstempel nicht verfaelschen (Scope-Erweiterung, ----
+# --- Orchestrator 2026-09-23, Root-Cause siehe Moduldocstring) -------------
+
+
+def test_serieller_schreiber_verzoegerung_beeinflusst_leseintervalle_nicht(monkeypatch, tmp_path):
+    """Ein 1s-Stau beim ERSTEN Schreiben nach serial.jsonl (simuliert das
+    gemessene Dirty-Page-Writeback) darf die aufgezeichneten `t_boot`-Werte
+    nicht verzerren - sie werden beim LESEN gestempelt (`_serial_worker`),
+    nicht beim Schreiben (`_serial_writer_worker`), verbunden nur ueber die
+    Warteschlange. Vorher (ungetrennt) haette ein solcher Stau exakt den
+    beobachteten Burst erzeugt (Intervalle 2384, 0, 0, 0, 283ms statt
+    533ms, siehe docs/open-questions.md OQ-40-Nachtrag)."""
+    module = _load_sync_record_module()
+
+    real_dumps = module.json.dumps
+    call_count = {"n": 0}
+
+    class _SlowJson:
+        @staticmethod
+        def dumps(obj, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                time.sleep(1.0)
+            return real_dumps(obj, **kwargs)
+
+    monkeypatch.setattr(module, "json", _SlowJson())
+
+    master, slave = os.openpty()
+    stop_feed = threading.Event()
+    interval_s = 0.1
+    feeder = threading.Thread(
+        target=_feed_pty,
+        args=(master, [b"+1.00000 mV/V\r\n"]),
+        kwargs={"interval_s": interval_s, "stop_after": stop_feed},
+        daemon=True,
+    )
+    feeder.start()
+
+    serial_queue = module.queue.Queue()
+    stop_event = threading.Event()
+    ready_event = threading.Event()
+    serial_state: dict = {"count": 0, "open_error": None}
+    serial_writer_state: dict = {"count": 0}
+    out_path = tmp_path / "serial.jsonl"
+
+    reader = threading.Thread(
+        target=module._serial_worker,
+        args=(os.ttyname(slave), 9600, serial_queue, stop_event, ready_event, serial_state),
+        daemon=True,
+    )
+    writer = threading.Thread(
+        target=module._serial_writer_worker,
+        args=(serial_queue, out_path, serial_writer_state),
+        daemon=True,
+    )
+    try:
+        writer.start()
+        reader.start()
+        assert ready_event.wait(timeout=5.0)
+        # Genug Telegramme trotz der 1s-Schreibverzoegerung beim ersten Schreiben.
+        time.sleep(1.5)
+        stop_event.set()
+        reader.join(timeout=5.0)
+        writer.join(timeout=5.0)
+    finally:
+        stop_feed.set()
+        feeder.join(timeout=2.0)
+        os.close(master)
+        os.close(slave)
+
+    lines = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert len(lines) >= 5, "zu wenige Telegramme aufgezeichnet - Test aussagelos"
+    t_boots = [entry["t_boot"] for entry in lines]
+    intervals = [b - a for a, b in zip(t_boots, t_boots[1:], strict=False)]
+    # Nominale Taktung 0.1s - trotz der 1s-Schreibverzoegerung darf kein
+    # Intervall in die Naehe von 1s kommen (das waere der alte Burst-Fehler).
+    assert max(intervals) < 0.3, intervals
+
+
+def test_volle_frame_queue_verwirft_und_zaehlt_statt_zu_blockieren(monkeypatch, tmp_path):
+    """`--frame-queue-size` klein + durchgehend langsamer Schreiber: die
+    Warteschlange laeuft ueber. Verworfene Bilder muessen GEZAEHLT
+    (`frames_dropped_queue_full`) und als eigener `frames.jsonl`-Eintrag
+    (`dropped: true`) sichtbar werden - nie still verschwinden, nie die
+    Aufnahme blockieren (Auftrag, Punkt 4)."""
+    module = _load_sync_record_module()
+
+    real_imwrite = module.cv2.imwrite
+
+    class _SlowCv2:
+        @staticmethod
+        def imwrite(path, image):
+            time.sleep(0.2)
+            return real_imwrite(path, image)
+
+    monkeypatch.setattr(module, "cv2", _SlowCv2())
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-volle-queue"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "synthetic",
+            "--synthetic-uri",
+            "synthetic://seven-seg?digits=4&decimals=2&count=200",
+            "--frame-rate",
+            "100",
+            "--frame-queue-size",
+            "2",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+
+    lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
+    dropped = [entry for entry in lines if entry.get("dropped")]
+    written = [entry for entry in lines if not entry.get("dropped")]
+    assert dropped, "bei --frame-queue-size 2 und 100fps gegen einen 0.2s-Schreiber muss verworfen werden"
+    for entry in dropped:
+        assert set(entry) == {"dropped", "sensor_sequence", "capture_timestamp", "t_boot"}
+        assert entry["dropped"] is True
+
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_dropped_queue_full"] == len(dropped)
+    assert session["frames_dropped_queue_full"] > 0
+    assert session["frames_recorded"] == len(written)
+    assert session["max_frame_queue_depth"] <= 2
+
+
+def test_bild_schreiber_verzoegerung_beeinflusst_aufnahmeintervalle_nicht(monkeypatch, tmp_path):
+    """Wie oben, fuer die Bildseite: ein 1s-Stau beim ERSTEN `cv2.imwrite`
+    darf weder die aufgezeichneten Bildintervalle noch die
+    Stall-Diagnostik (`max_loop_iteration_s`/`stall_iteration_count`)
+    verfaelschen - Aufnahme (`_frame_acquisition_worker`) und Schreiben
+    (`_frame_writer_worker`) sind ueber `frame_queue` entkoppelt."""
+    module = _load_sync_record_module()
+
+    real_imwrite = module.cv2.imwrite
+    call_count = {"n": 0}
+
+    class _SlowCv2:
+        @staticmethod
+        def imwrite(path, image):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                time.sleep(1.0)
+            return real_imwrite(path, image)
+
+    monkeypatch.setattr(module, "cv2", _SlowCv2())
+
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-langsamer-schreiber"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.5",
+            "--output",
+            str(output_dir),
+            "--source",
+            "synthetic",
+            "--synthetic-uri",
+            "synthetic://seven-seg?digits=4&decimals=2&count=200",
+            "--frame-rate",
+            "20",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+
+    lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
+    assert len(lines) >= 10, "zu wenige Bilder aufgezeichnet - Test aussagelos"
+    intervals_ns = [
+        entry["sensor_timestamp_interval_ns"] for entry in lines if entry["sensor_timestamp_interval_ns"] is not None
+    ]
+    assert intervals_ns
+    # Nominale Taktung 50ms (20 fps) - trotz der 1s-Schreibverzoegerung darf
+    # kein aufgezeichnetes Intervall in die Naehe von 1s kommen.
+    assert max(intervals_ns) < 300_000_000, intervals_ns
+
+    session = json.loads((output_dir / "session.json").read_text())
+    # Die Stall-Diagnostik wird im Aufnahmethread gemessen (entkoppelt von
+    # der Schreibseite) - der 1s-Schreibstau darf dort NICHT auftauchen.
+    assert session["stall_iteration_count"] == 0, session["stall_iterations"]
+    assert session["max_loop_iteration_s"] < 0.3
+    assert session["frames_dropped_queue_full"] == 0
 
 
 # --- --norm-schedule: Schreiben INNERHALB der bereits offenen Sitzung -------

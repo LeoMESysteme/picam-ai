@@ -44,13 +44,10 @@ Populationen (499–695 ms). Er steht im Plan unter Festlegung 3.
   nicht (`+01.8290` vs. `+ 1.8290`). Über alle 15 geprüften Normierungsfaktoren
   konsistent. **Umgesetzt:** `gate-label.py` entfernt die Null vor dem
   Vergleich (Plan, Festlegung 1).
-* **OQ-40 (Nachtrag):** Einmal standen beide Kanäle ~2,5 s still, danach kamen
-  5 Telegramme mit fast gleichem `t_boot` — die Werte sind vollständig, ihre
-  Ankunftszeiten nicht. `--max-gap-ms` allein fängt das nicht, es braucht
-  zusätzlich eine Untergrenze/Burst-Erkennung. Ausserdem: `frame_sequence` in
-  `sync-record.py` ist ein Skript-Zähler, kein Sensorzähler — zeigt so eine
-  Lücke gar nicht erst an. Der Gap-Schwellwert selbst bleibt ungemessen
-  (braucht eine längere Aufzeichnung).
+* **OQ-40:** Der Stau (beide Kanäle ≈ 2,5 s still) kam vom Zurückschreiben auf
+  die SD-Karte, das die Dateischreibvorgänge blockierte. Behoben durch
+  getrennte Schreibthreads, unter Last geprüft. Offen sind nur noch die
+  Gap-Schwellen.
 
 **Sonst erledigt heute:** `--norm-schedule` (Schreiben aus der offenen
 Portsitzung, mit Vorprüfung gegen den Rückstellpunkt und bestätigter
@@ -70,7 +67,7 @@ Details und alle Zahlen: [VALIDATION.md](VALIDATION.md) (Einträge
 ## Was als Nächstes zählt
 
 Siehe [../TODO.md](../TODO.md) für die vollständige, priorisierte Liste. Kurz:
-M = 695 ms und die Normalisierung der führenden Null sind erledigt (2026-09-23) → OQ-40
+M = 695 ms, die Normalisierung der führenden Null und die Behebung des Staus sind erledigt (2026-09-23) → OQ-40
 (Stau-Erkennung, `SensorSequence` statt Skriptzähler, Gap-Schwelle messen) →
 erst dann die eigentliche Ernte (Normierungsfaktoren abfahren für
 Ziffernvielfalt).

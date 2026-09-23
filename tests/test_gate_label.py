@@ -72,7 +72,11 @@ def _write_recording(
     return recording
 
 
-def _run_cli(recording: Path, output: Path, *, guard_margin_ms: float, max_gap_ms: float):
+def _run_cli(recording: Path, output: Path, *, guard_margin_ms: float, max_gap_ms: float, min_gap_ms: float = 0.0):
+    # min_gap_ms=0.0 als Testvorgabe (NICHT die des Skripts, das --min-gap-ms
+    # bewusst ohne Vorgabewert verlangt, siehe parse_args): ein Intervall von
+    # 0ms ist nicht < 0ms, die Burst-Erkennung bleibt also in allen Tests
+    # inaktiv, die den neuen Parameter nicht selbst adressieren.
     return subprocess.run(
         [
             sys.executable,
@@ -83,6 +87,8 @@ def _run_cli(recording: Path, output: Path, *, guard_margin_ms: float, max_gap_m
             str(guard_margin_ms),
             "--max-gap-ms",
             str(max_gap_ms),
+            "--min-gap-ms",
+            str(min_gap_ms),
             "--output",
             str(output),
         ],
@@ -461,3 +467,123 @@ def test_label_text_und_normalisierung_im_proposal(tmp_path):
     assert entry["telegram_text"] == "+01.8290 mV/V"
     assert entry["label_text"] == "+1.8290 mV/V"
     assert entry["label_normalization"] == "gsv2as_leading_zero_v1"
+
+
+# --- --min-gap-ms: Burst-/Stau-Erkennung (OQ-40-Nachtrag 2026-09-23) -------
+#
+# Beobachtetes Muster aus einem echten 180s-Lauf: der serielle Thread
+# lieferte nach einer 2,60s-Kamera-Luecke fuenf Telegramme mit fast
+# identischem t_boot - Intervalle 2384, 0, 0, 0, 283ms statt nominell 533ms.
+# Die folgenden Tests reproduzieren GENAU diese Intervallfolge
+# (...533, 533, 2384, 0, 0, 0, 283, 533...).
+
+_BURST_INTERVALS_MS = [533, 533, 2384, 0, 0, 0, 283, 533]
+
+
+def _telegram_times_from_intervals(intervals_ms: list[int]) -> list[int]:
+    """Kumuliert eine Intervallfolge (ms) zu absoluten Telegrammzeiten (ns),
+    beginnend bei 0."""
+    times = [0]
+    for interval_ms in intervals_ms:
+        times.append(times[-1] + interval_ms * MS)
+    return times
+
+
+def test_find_burst_spans_reproduziert_beobachtetes_muster():
+    """Reine Einheitenpruefung von `find_burst_spans`, ohne CLI/Dateien -
+    exakt die gemessene Intervallfolge. Bei `--min-gap-ms 300` (zwischen 283
+    und 533, siehe Docstring) sind die drei 0ms-Intervalle UND das
+    283ms-Intervall Burst-Mitglieder (alle < 300ms); das grosse
+    2384ms-Intervall davor ist selbst KEIN Burst-Mitglied (>= 300ms) - sein
+    Telegramm ist der "Vorgaenger", der den Span oeffnet."""
+    times = _telegram_times_from_intervals(_BURST_INTERVALS_MS)
+    telegrams = [(t, "+1.00000 mV/V") for t in times]
+    min_gap_ns = round(300 * MS)
+
+    spans = gate_label.find_burst_spans(telegrams, min_gap_ns)
+
+    assert len(spans) == 1
+    span = spans[0]
+    # T3 (Index 3, Vorgaenger des Bursts) bis T7 (letztes Burst-Mitglied,
+    # Index 7) - siehe Kommentar oben fuer die Indexrechnung.
+    assert span.lo_ns == times[3]
+    assert span.hi_ns == times[7]
+    assert span.telegram_count == 4  # T4, T5, T6, T7
+
+
+def test_burst_span_frames_im_zeitraum_abgelehnt_ausserhalb_unberuehrt(tmp_path):
+    """Ende-zu-Ende ueber die CLI: Bilder INNERHALB des Burst-Zeitraums
+    werden abgelehnt (`telegrammburst`), Bilder davor/danach - obwohl sie
+    ohne Burst-Erkennung zum selben, durchgehenden Zeichenketten-Fenster
+    gehoeren wuerden (alle Telegramme tragen denselben Text) - bleiben
+    unberuehrt."""
+    times = _telegram_times_from_intervals(_BURST_INTERVALS_MS)
+    telegrams = [(t, "+1.00000 mV/V") for t in times]  # ein einziger, durchgehender Text
+    burst_lo, burst_hi = times[3], times[7]
+
+    frames = [
+        ("vor_dem_burst.png", 200 * MS),  # weit vor jeder Burst-Aktivitaet
+        ("burst_start.png", burst_lo),  # untere Grenze, eingeschlossen
+        ("burst_mitte.png", (burst_lo + burst_hi) // 2),
+        ("burst_ende.png", burst_hi),  # obere Grenze, eingeschlossen
+        ("knapp_vor_dem_burst.png", burst_lo - 1 * MS),  # 1ms ausserhalb, unberuehrt
+        ("knapp_nach_dem_burst.png", burst_hi + 1 * MS),  # 1ms ausserhalb, unberuehrt
+        ("nach_dem_burst.png", 4000 * MS),  # deutlich nach dem Burst, noch im Gesamtfenster
+    ]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output = tmp_path / "proposal.json"
+
+    # --max-gap-ms grosszuegig ueber dem 2384ms-Intervall, damit die normale
+    # Luecken-Regel dieses Intervall NICHT selbst schon abtrennt - der Test
+    # soll ausschliesslich die Burst-Erkennung pruefen, keine Interaktion
+    # mit REASON_GAP.
+    result = _run_cli(recording, output, guard_margin_ms=10, max_gap_ms=3000, min_gap_ms=300)
+    assert result.returncode == 0, result.stderr
+
+    proposal = json.loads(output.read_text())
+    by_file = _labeled_by_file(proposal)
+
+    for filename in ("burst_start.png", "burst_mitte.png", "burst_ende.png"):
+        assert _image_path(recording, filename) not in by_file, filename
+
+    for filename in (
+        "vor_dem_burst.png",
+        "knapp_vor_dem_burst.png",
+        "knapp_nach_dem_burst.png",
+        "nach_dem_burst.png",
+    ):
+        key = _image_path(recording, filename)
+        assert key in by_file, filename
+        assert by_file[key]["telegram_text"] == "+1.00000 mV/V"
+
+    assert "Telegramm-Burst" in result.stdout
+    assert "Buerste erkannt: 1" in result.stdout
+
+    assert proposal["min_gap_ms"] == 300
+    assert proposal["burst_spans"] == [{"lo_ns": burst_lo, "hi_ns": burst_hi, "telegram_count": 4}]
+
+
+def test_min_gap_ms_ist_pflicht_ohne_vorgabewert(tmp_path):
+    """Wie --max-gap-ms: KEIN erfundener Vorgabewert, siehe Moduldocstring."""
+    recording = _write_recording(tmp_path, telegrams=[(0, "+1.00000 mV/V")], frames=[])
+    output = tmp_path / "proposal.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--recording",
+            str(recording),
+            "--guard-margin-ms",
+            "10",
+            "--max-gap-ms",
+            "1000",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "--min-gap-ms" in result.stderr

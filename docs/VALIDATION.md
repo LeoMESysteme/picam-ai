@@ -1345,3 +1345,25 @@ bis auf 36 ms überein. Über drei Aufzeichnungen liegt δ zwischen +80 und
 
 **M = 695 ms**, der grösste Wert, wie vom Nutzer am 2026-09-23 vor jeder Ernte
 entschieden. Festgeschrieben im Plan unter Festlegung 3.
+
+## 2026-09-23 — Stillstand beim Aufzeichnen: Ursache gemessen, Entkopplung geprüft (OQ-40)
+
+**Aufbau:** Wie zuvor, 960×720 bei 15 fps, JPEG auf die SD-Karte (`mmcblk0`,
+ext4). Parallel lief ein unabhängiger Herzschlag-Prozess ohne
+Dateizugriffe, der Aussetzer über 100 ms protokolliert. Dazu wurden
+`Dirty` und `Writeback` aus `/proc/meminfo` alle 0,25 s aufgezeichnet.
+Kernel: `dirty_ratio` 20, `dirty_background_ratio` 10, `dirty_expire` 30 s.
+Datenrate ≈ 2,6 MB/s.
+
+| Lauf | Aufbau | Dauer | Bildlücken > 0,2 s | serielle Unregelmässigkeiten | Herzschlag-Aussetzer | max. Writeback |
+| --- | --- | --- | --- | --- | --- | --- |
+| `stall-105143` | alt (Schreiben in den Erfassungsthreads) | 150 s | 4 (333 / 933 / 533 / 333 ms) | Stoss bei t ≈ 80 s (841 / 226 ms) | 0 | 130 MB |
+| `stall-fix-111410` | entkoppelt | 150 s | 0; `sensor_sequence` 6…2239 lückenlos | 0 (529–536 ms) | 0 | 6 MB (keine Belastung) |
+| `stall-stress-111712` | entkoppelt, dazu 2 × 300 MB `dd … conv=fsync` | 90 s | 2, **gleich den 17 gezählten Verwürfen** (Sequenzsprünge 869→879, 879→888) | **0 (532–534 ms)**, Warteschlange max. 8 | 0 | 153 MB |
+
+**Deutung:** Alle Lücken im alten Lauf fallen in Rückschreibphasen. Der
+Herzschlag hatte nie einen Aussetzer, also steht nicht das System, sondern
+der schreibende Prozess. Nach der Entkopplung bleibt der serielle Zeitstempel
+auch unter erzwungener Last exakt. Bilder können weiterhin verloren gehen,
+wenn die Bild-Warteschlange (60) länger als ≈ 4 s nicht abfliesst. Jeder
+Verlust ist aber gezählt, protokolliert und an `sensor_sequence` erkennbar.

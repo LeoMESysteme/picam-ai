@@ -111,6 +111,16 @@ REASON_OUTSIDE_RANGE = "ausserhalb_telegrammbereich"
 REASON_TAIL_UNKNOWN = "letzter_lauf_ohne_folgetelegramm"
 REASON_GAP = "telegrammluecke"
 REASON_NO_TELEGRAMS = "keine_telegramme"
+#: Scope-Erweiterung 2026-09-23 (docs/open-questions.md OQ-40-Nachtrag,
+#: docs/VALIDATION.md): im echten 180s-Lauf lieferte der serielle Thread nach
+#: einer 2,60s-Kamera-Luecke fuenf Telegramme mit fast identischem `t_boot`
+#: (Intervalle 2384, 0, 0, 0, 283ms statt nominell 533ms) - ein
+#: Verarbeitungsstau, kein tatsaechlicher Messwertwechsel. Ueber diesen
+#: Zeitraum ist die ARRIVAL-Zeit der Telegramme nicht vertrauenswuerdig,
+#: unabhaengig davon, was `build_windows` aus der Zeichenkettengleichheit
+#: ableiten wuerde - deshalb ein eigener Ablehnungsgrund, der VOR der
+#: normalen Fensterklassifikation greift (siehe `find_burst_spans`).
+REASON_BURST = "telegrammburst"
 
 _REASON_LABELS = {
     REASON_VALUE_CHANGE: "Wertwechsel im Fenster",
@@ -118,6 +128,7 @@ _REASON_LABELS = {
     REASON_TAIL_UNKNOWN: "letzter Lauf ohne Folge-Telegramm",
     REASON_GAP: "Telegrammluecke",
     REASON_NO_TELEGRAMS: "keine Telegramme in der Aufzeichnung",
+    REASON_BURST: "Telegramm-Burst (Verarbeitungsstau, keine verlaessliche Ankunftszeit)",
 }
 
 #: Fuehrender numerischer Teil eines GSV-Telegramms wie "+0.46776 mV/V" ->
@@ -212,6 +223,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         required=True,
         help="Schwelle fuer Telegrammluecken in Millisekunden - KEIN Vorgabewert, siehe docstring",
+    )
+    parser.add_argument(
+        "--min-gap-ms",
+        type=float,
+        required=True,
+        help=(
+            "Minimal plausibles Intervall zwischen zwei aufeinanderfolgenden Telegrammen in "
+            "Millisekunden - KEIN Vorgabewert (wie --max-gap-ms): unterschreitet das Intervall "
+            "diesen Wert, gilt das Telegramm als Teil eines Bursts (Verarbeitungsstau, siehe "
+            "docstring/OQ-40-Nachtrag) statt eines echten schnellen Wertwechsels."
+        ),
     )
     parser.add_argument("--output", type=Path, required=True, help="Zielpfad der Vorschlagsdatei (JSON)")
     parser.add_argument(
@@ -397,7 +419,76 @@ _TAG_TO_REASON = {
 }
 
 
-def classify(t_ns: int, telegrams: list[tuple[int, str]], windows: list[Window]) -> tuple[Window | None, str | None]:
+@dataclass(frozen=True)
+class BurstSpan:
+    """Ein zusammenhaengender Zeitraum, in dem die Telegramm-ANKUNFTSZEIT
+    nicht vertrauenswuerdig ist - siehe `find_burst_spans`. `lo_ns`/`hi_ns`
+    sind beide EINGESCHLOSSEN (anders als `Window.lo_ns`/`hi_ns`): der Span
+    beginnt beim letzten Telegramm VOR dem Burst (dessen eigener Zeitstempel
+    ist noch verlaesslich, aber das Intervall DANACH nicht mehr) und endet
+    beim letzten Telegramm DES Bursts."""
+
+    lo_ns: int
+    hi_ns: int
+    telegram_count: int
+
+
+def find_burst_spans(telegrams: list[tuple[int, str]], min_gap_ns: int) -> list[BurstSpan]:
+    """Findet Buerste: Telegramm i gilt als Burst-Mitglied, wenn sein
+    Intervall zum VORGAENGER `< min_gap_ns` ist (echtes Unterschreiten -
+    exakt `min_gap_ns` gilt noch als plausibel, symmetrisch zur Behandlung
+    von `--max-gap-ms` in `_split_on_gaps`, wo genau `max_gap_ns` noch KEINE
+    Luecke ist). Aufeinanderfolgende Burst-Mitglieder werden zu einem
+    zusammenhaengenden `BurstSpan` gruppiert, der zusaetzlich das jeweils
+    VORAUSGEHENDE (nicht selbst zu schnelle) Telegramm einschliesst - das ist
+    die "Luecke davor" aus dem Auftrag: die Zeitspanne zwischen diesem
+    Vorgaenger und dem letzten Burst-Telegramm ist als Ganzes unsicher, weil
+    der Verarbeitungsstau, der den Burst erzeugt hat, jederzeit in diesem
+    Fenster begonnen haben kann.
+
+    `telegram_count` zaehlt NUR die Burst-Mitglieder selbst (nicht den
+    vorausgehenden Telegramm), zur reinen Berichtsangabe."""
+    spans: list[BurstSpan] = []
+    current_start_idx: int | None = None
+    current_count = 0
+    for idx in range(1, len(telegrams)):
+        interval_ns = telegrams[idx][0] - telegrams[idx - 1][0]
+        if interval_ns < min_gap_ns:
+            if current_start_idx is None:
+                current_start_idx = idx - 1  # der (noch normale) Vorgaenger
+            current_count += 1
+        else:
+            if current_start_idx is not None:
+                spans.append(
+                    BurstSpan(
+                        lo_ns=telegrams[current_start_idx][0],
+                        hi_ns=telegrams[idx - 1][0],
+                        telegram_count=current_count,
+                    )
+                )
+                current_start_idx = None
+                current_count = 0
+    if current_start_idx is not None:
+        spans.append(
+            BurstSpan(
+                lo_ns=telegrams[current_start_idx][0],
+                hi_ns=telegrams[-1][0],
+                telegram_count=current_count,
+            )
+        )
+    return spans
+
+
+def _in_burst_span(t_ns: int, burst_spans: list[BurstSpan]) -> bool:
+    return any(span.lo_ns <= t_ns <= span.hi_ns for span in burst_spans)
+
+
+def classify(
+    t_ns: int,
+    telegrams: list[tuple[int, str]],
+    windows: list[Window],
+    burst_spans: list[BurstSpan] | None = None,
+) -> tuple[Window | None, str | None]:
     """`(fenster, ablehnungsgrund)` - genau eines von beiden ist nicht `None`."""
     if not telegrams:
         return None, REASON_NO_TELEGRAMS
@@ -405,6 +496,12 @@ def classify(t_ns: int, telegrams: list[tuple[int, str]], windows: list[Window])
     t_max = telegrams[-1][0]
     if t_ns < t_min or t_ns > t_max:
         return None, REASON_OUTSIDE_RANGE
+    # Burst-Pruefung VOR der normalen Fensterklassifikation (siehe
+    # REASON_BURST-Kommentar): ein Bild in einem Burst-Zeitraum wird
+    # unabhaengig davon abgelehnt, was die Zeichenkettengleichheit dort
+    # hergeben wuerde.
+    if burst_spans and _in_burst_span(t_ns, burst_spans):
+        return None, REASON_BURST
     for idx, window in enumerate(windows):
         if window.lo_ns <= t_ns < window.hi_ns:
             return window, None
@@ -437,18 +534,20 @@ def run(args: argparse.Namespace) -> int:
 
     guard_margin_ns = round(args.guard_margin_ms * MS_TO_NS)
     max_gap_ns = round(args.max_gap_ms * MS_TO_NS)
+    min_gap_ns = round(args.min_gap_ms * MS_TO_NS)
     source_port = load_source_port(recording, args.source_port)
 
     telegrams = load_serial(serial_path)
     frames = load_frames(frames_path)
     windows = build_windows(telegrams, guard_margin_ns, max_gap_ns)
+    burst_spans = find_burst_spans(telegrams, min_gap_ns)
 
     labeled: list[dict[str, Any]] = []
     reject_counts: Counter[str] = Counter()
     text_counts: Counter[str] = Counter()
 
     for filename, t_ns in frames:
-        window, reason = classify(t_ns, telegrams, windows)
+        window, reason = classify(t_ns, telegrams, windows, burst_spans)
         if window is None:
             reject_counts[reason or REASON_NO_TELEGRAMS] += 1
             continue
@@ -479,13 +578,29 @@ def run(args: argparse.Namespace) -> int:
 
     print("=== gate-label: Bericht ===")
     print(f"Aufzeichnung: {recording}")
-    print(f"M (--guard-margin-ms): {args.guard_margin_ms}  --max-gap-ms: {args.max_gap_ms}")
+    print(
+        f"M (--guard-margin-ms): {args.guard_margin_ms}  --max-gap-ms: {args.max_gap_ms}  "
+        f"--min-gap-ms: {args.min_gap_ms}"
+    )
     print(f"Telegramme: {len(telegrams)}  Bilder gesamt: {total}")
     print(f"Gelabelt: {len(labeled)}  Abgelehnt: {rejected_total}")
     print("Ablehnungen je Grund:")
-    for reason_key in (REASON_VALUE_CHANGE, REASON_OUTSIDE_RANGE, REASON_TAIL_UNKNOWN, REASON_GAP, REASON_NO_TELEGRAMS):
+    for reason_key in (
+        REASON_VALUE_CHANGE,
+        REASON_OUTSIDE_RANGE,
+        REASON_TAIL_UNKNOWN,
+        REASON_GAP,
+        REASON_BURST,
+        REASON_NO_TELEGRAMS,
+    ):
         count = reject_counts.get(reason_key, 0)
         print(f"  {_REASON_LABELS[reason_key]}: {count}")
+    if burst_spans:
+        burst_telegram_total = sum(span.telegram_count for span in burst_spans)
+        print(
+            f"Buerste erkannt: {len(burst_spans)}  betroffene Telegramme (ohne den Vorgaenger "
+            f"je Burst): {burst_telegram_total}"
+        )
     if unparseable_numeric:
         print(
             f"WARNUNG: bei {unparseable_numeric} gelabelten Bildern liess sich kein "
@@ -504,6 +619,11 @@ def run(args: argparse.Namespace) -> int:
         "recording": str(recording),
         "guard_margin_ms": args.guard_margin_ms,
         "max_gap_ms": args.max_gap_ms,
+        "min_gap_ms": args.min_gap_ms,
+        "burst_spans": [
+            {"lo_ns": span.lo_ns, "hi_ns": span.hi_ns, "telegram_count": span.telegram_count}
+            for span in burst_spans
+        ],
         "images": labeled,
     }
     args.output.write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")

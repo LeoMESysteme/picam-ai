@@ -3,6 +3,37 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Stillstand beim Aufzeichnen behoben, OQ-40)
+
+**Problem:** In `sync-record.py` standen Kamera und serieller Strom zeitweise
+bis 2,5 s still. Danach kamen Telegramme mit fast gleichem `t_boot`, ihre
+Werte waren vollständig, ihre Zeitstempel falsch. Gemessen wurde die
+Ursache: Beim Rückschreiben gepufferter Seiten auf die SD-Karte blockieren
+Dateischreibvorgänge. Das betraf sowohl das JPEG-Schreiben in der
+Hauptschleife als auch das Schreiben von `serial.jsonl` im Lesethread. Ein
+unabhängiger Prozess ohne Dateizugriffe lief lückenlos weiter. Verlorene
+Bilder blieben unsichtbar, weil `frame_sequence` ein Zähler des Skripts ist.
+
+**Änderung:**
+* `scripts/sync-record.py`: Erfassung und Schreiben sind getrennt.
+  * Der serielle Lesethread liest nur noch und vergibt den Zeitstempel. Die
+    Kameraschleife holt nur noch Bilder. Geschrieben wird in eigenen Threads
+    über Warteschlangen.
+  * Die Bild-Warteschlange ist begrenzt (`--frame-queue-size`, Vorgabe 60).
+    Bei Überlauf wird verworfen, gezählt (`frames_dropped_queue_full`) und
+    als `dropped`-Datensatz protokolliert, nie blockiert und nie still.
+  * Neu je Bild: `sensor_sequence` (libcamera `Request.sequence`) und
+    `sensor_timestamp_interval_ns`.
+  * `session.json` trägt die maximalen Warteschlangentiefen,
+    `max_loop_iteration_s` und `stall_iterations`.
+* `scripts/gate-label.py`: neues Pflichtargument `--min-gap-ms`, bewusst
+  ohne Vorgabewert. Ein Telegrammstoss wird zusammen mit der Lücke davor als
+  `telegrammburst` abgelehnt.
+
+**Konsequenz:** In der Belastungsprobe mit 152 MB Rückschreiben blieb der
+serielle Strom exakt (532–534 ms). 17 Bilder gingen verloren, sichtbar und
+gezählt. Zahlen: VALIDATION.md, 2026-09-23.
+
 ## 0.1.0.dev0 — 2026-09-23 (Normierungsplan in sync-record, Versatzmessung, Export mit Herkunft)
 
 **Problem:** Task B (Versatz Telegramm ↔ Anzeige) brauchte grosse

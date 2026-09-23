@@ -54,6 +54,43 @@ Robustheit:
   - Kommt ueber die ganze Dauer kein einziges Telegramm an, wird das am Ende
     laut gemeldet statt stillschweigend eine leere `serial.jsonl` zu
     hinterlassen.
+
+## Erzeugen und Schreiben sind getrennte Threads (seit OQ-40-Nachtrag 2026-09-23)
+
+Root-Cause-Messung vom 2026-09-23 (Aufzeichnung
+`var/diagnostics/stall-105143` + ein unabhaengiger, I/O-loser Herzschlag-
+prozess parallel): die Bildluecken (333/933/533/333 ms) UND der serielle
+Burst fielen zeitlich mit Kernel-Dirty-Page-Writeback auf die SD-Karte
+zusammen (bis 130 MB Writeback beobachtet). Der Herzschlagprozess selbst
+zeigte KEINE Luecke - das System stand nicht still, nur die Dateischreiber
+blockierten. Sowohl die Bildschleife (`cv2.imwrite`) als auch der serielle
+Thread (`serial.jsonl`-Schreiben) blockierten im Dateisystemzugriff; der
+serielle Thread rief dadurch `readline()` zu spaet auf und stempelte
+laengst angekommene, gepufferte Zeilen zu spaet - das erzeugte den Burst.
+
+Deshalb ist die Erzeugung (Kamera-`capture_request`/`synthetic`-Generator
+bzw. `ser.readline()`) jetzt strikt von der Schreibseite (JPEG-Kodierung +
+`frames.jsonl`, `serial.jsonl`) getrennt - je ein eigener Thread, verbunden
+ueber `queue.Queue`:
+
+  - `frame_queue` ist BEGRENZT (`--frame-queue-size`, Vorgabe 60 Bilder,
+    bei 15 fps rund 4 s) - Bilder sind gross, ein unbegrenzter Puffer wuerde
+    bei einem laengeren Schreibstau den Speicher aufbrauchen. Ist sie voll,
+    wird das Bild verworfen und GEZAEHLT (`frames_dropped_queue_full` in
+    `session.json`), nie still - dazu je ein `frames.jsonl`-Eintrag
+    `{"dropped": true, "sensor_sequence": ..., "capture_timestamp": ...}`
+    ueber eine eigene, unbegrenzte Meldungs-Warteschlange (Nutzdaten winzig).
+    Die Aufnahmeseite blockiert dafuer NIE am `frame_queue.put(...)`.
+  - `serial_queue` ist UNBEGRENZT wie die Drop-Meldungen - Telegrammzeilen
+    sind winzig, ein Rueckstau kostet nur etwas RAM, nie eine verpasste
+    Zeile.
+  - Die Taktung (`--frame-rate`) bleibt im Erzeugerthread (regelt, wie
+    schnell der naechste Frame angefordert wird), nicht im Schreiberthread -
+    ein langsamer Schreiber darf die Aufnahmetaktung nie veraendern.
+  - Bei Beendigung (Dauer erreicht, Ctrl-C, SIGTERM) werden beide
+    Warteschlangen vollstaendig GELEERT, bevor `session.json` geschrieben
+    wird - kein Bild/Telegramm, das schon in der Warteschlange steht, geht
+    beim Abbruch verloren.
 """
 
 from __future__ import annotations
@@ -62,6 +99,7 @@ import argparse
 import importlib.util
 import json
 import math
+import queue
 import signal
 import sys
 import threading
@@ -89,6 +127,20 @@ JOIN_TIMEOUT_S = 20.0
 #: Registerlesen + Schreibsequenz kann vor dem ersten Telegramm laufen
 #: (--norm-schedule) - grosszuegiger bemessen als das reine Portoeffnen.
 READY_TIMEOUT_S = 15.0
+#: Bilder sind gross (im Gegensatz zu Telegrammzeilen) - ein unbegrenzter
+#: Puffer wuerde bei einem laengeren Schreibstau den Speicher aufbrauchen.
+#: 60 bei 15 fps sind rund 4 s Reserve, siehe Moduldocstring.
+DEFAULT_FRAME_QUEUE_SIZE = 60
+#: Wie lange der Schreiberthread beim Leeren wartet, bevor er nach dem
+#: Ende-Signal (`_QUEUE_DONE`) der Erzeugerseite selbst aufgibt.
+WRITER_DRAIN_JOIN_TIMEOUT_S = 30.0
+
+#: Sentinel: die Erzeugerseite (Kamera-/Serial-Thread) ist fertig, keine
+#: weiteren Eintraege kommen mehr - der Schreiberthread leert die
+#: Warteschlange bis hierher und beendet sich dann selbst. Eine eigene
+#: Objektidentitaet statt z.B. `None`, damit sie sich nie mit einem echten
+#: (leeren) Nutzlast-Eintrag verwechseln laesst.
+_QUEUE_DONE = object()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESTORE_POINT = REPO_ROOT / "var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json"
@@ -153,6 +205,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--baudrate", type=int, default=DEFAULT_BAUDRATE)
     parser.add_argument("--image-format", choices=["png", "jpg"], default="png")
     parser.add_argument(
+        "--frame-queue-size",
+        type=int,
+        default=DEFAULT_FRAME_QUEUE_SIZE,
+        help=(
+            "Kapazitaet der Warteschlange zwischen Bildaufnahme und Schreiber "
+            f"(JPEG-Kodierung + frames.jsonl); Vorgabe {DEFAULT_FRAME_QUEUE_SIZE} "
+            "Bilder. Bei Ueberlauf wird das Bild verworfen und gezaehlt statt die "
+            "Aufnahme zu blockieren, siehe Moduldocstring 'Erzeugen und Schreiben "
+            "sind getrennte Threads'."
+        ),
+    )
+    parser.add_argument(
         "--camera-size",
         # 960x720 ist NICHT beliebig gewaehlt, sondern die in OQ-22
         # festgehaltene Betriebsgroesse. Jede dort protokollierte Sitzung mit
@@ -205,6 +269,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     args = parser.parse_args(argv)
     _check_camera_size(parser, args)
+    if args.frame_queue_size < 1:
+        parser.error("--frame-queue-size muss mindestens 1 sein")
     if args.ignore_restore_point_mismatch and not args.norm_schedule:
         parser.error("--ignore-restore-point-mismatch ergibt nur mit --norm-schedule einen Sinn")
     if args.norm_schedule is not None:
@@ -430,7 +496,7 @@ def _apply_norm_dpoint(ser, norm_bytes, dpoint_byte: int, f_cmd, state, *, label
 def _serial_worker(
     port: str,
     baudrate: int,
-    out_path: Path,
+    serial_queue: queue.Queue[Any],
     stop_event: threading.Event,
     ready_event: threading.Event,
     state: dict[str, Any],
@@ -440,108 +506,125 @@ def _serial_worker(
     restore_point: dict | None = None,
     ignore_restore_point_mismatch: bool = False,
 ) -> None:
-    """Liest zeilenweise, sendet nichts. Signalisiert `ready_event`, sobald
-    der Port entweder offen ist oder das Oeffnen endgueltig fehlgeschlagen
-    ist - der Aufrufer wartet darauf, bevor er die Bildaufnahme startet."""
+    """Liest zeilenweise, sendet nichts (ausser den bewusst dokumentierten
+    `--norm-schedule`-Schreibbefehlen, siehe unten). Signalisiert
+    `ready_event`, sobald der Port entweder offen ist oder das Oeffnen
+    endgueltig fehlgeschlagen ist - der Aufrufer wartet darauf, bevor er die
+    Bildaufnahme startet.
+
+    Schreibt NIE selbst nach `serial.jsonl` - jede gelesene Zeile geht sofort
+    auf `serial_queue` (Erzeuger/Schreiber-Trennung, siehe Moduldocstring).
+    Ein eigener Schreiberthread (`_serial_writer_worker`) leert die
+    Warteschlange; nur so bleibt `ser.readline()` frei von Dateisystem-
+    Wartezeit, die frueher (OQ-40-Nachtrag 2026-09-23) genau hier den
+    beobachteten Burst erzeugt hat. Legt auf JEDEM Ausstiegspfad genau einmal
+    `_QUEUE_DONE` auf `serial_queue`, damit der Schreiberthread sich sicher
+    beenden kann, auch wenn der Port nie geoeffnet werden konnte."""
     import serial
 
-    try:
-        ser = serial.Serial(
-            port,
-            baudrate=baudrate,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=SERIAL_READ_TIMEOUT_S,
-            xonxoff=False,
-            rtscts=False,
-            dsrdtr=False,
-        )
-    except Exception as exc:  # noqa: BLE001 - an den Aufrufer weiterreichen
-        state["open_error"] = f"{type(exc).__name__}: {exc}"
-        ready_event.set()
-        return
-
-    state["open_error"] = None
-
+    ser = None
     f_cmd = None
-    if norm_schedule is not None:
-        assert commands_path is not None and restore_point is not None
-        f_cmd = open(commands_path, "a", encoding="utf-8")
-
-        # Precheck: Registerstand mit dem Rueckstellpunkt vergleichen, BEVOR
-        # auch nur ein Schreibbefehl geschickt wird. Der Strom wird dafuer
-        # kurz angehalten und danach sofort wieder gestartet (eigenes
-        # pause/resume-Ereignispaar, Label "precheck").
-        matches, precheck_detail = _check_restore_point(ser, restore_point, f_cmd, state, label="precheck")
-        state["precheck"] = precheck_detail
-        if not matches and not ignore_restore_point_mismatch:
-            state["schedule_error"] = (
-                "Geraet steht nicht am Rueckstellpunkt "
-                f"(erwartet norm={precheck_detail['expected_norm']} dpoint={precheck_detail['expected_dpoint']}, "
-                f"gelesen norm={precheck_detail['actual_norm']} dpoint={precheck_detail['actual_dpoint']}). "
-                "Kein Schreibbefehl wurde gesendet. Mit --ignore-restore-point-mismatch uebersteuerbar."
+    try:
+        try:
+            ser = serial.Serial(
+                port,
+                baudrate=baudrate,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                timeout=SERIAL_READ_TIMEOUT_S,
+                xonxoff=False,
+                rtscts=False,
+                dsrdtr=False,
             )
-            f_cmd.close()
-            try:
-                ser.close()
-            except Exception:  # noqa: BLE001
-                pass
+        except Exception as exc:  # noqa: BLE001 - an den Aufrufer weiterreichen
+            state["open_error"] = f"{type(exc).__name__}: {exc}"
             ready_event.set()
             return
-        if not matches and ignore_restore_point_mismatch:
-            precheck_detail["ignored"] = True
 
-    ready_event.set()
-    count = 0
-    schedule_index = 0
-    next_switch_mono: float | None = None
-    if norm_schedule:
-        factor, hold_s = norm_schedule[0]
-        norm_bytes, dpoint_byte = _encode_norm(factor)
-        ok = _apply_norm_dpoint(ser, norm_bytes, dpoint_byte, f_cmd, state, label=f"schedule[0] factor={factor}")
-        state.setdefault("schedule_steps", []).append(
-            {"index": 0, "factor": factor, "hold_s": hold_s, "last_error_ok": ok}
-        )
-        next_switch_mono = time.monotonic() + hold_s
-        schedule_index = 1
+        state["open_error"] = None
 
-    try:
-        with open(out_path, "a", encoding="utf-8") as f:
-            while not stop_event.is_set():
-                if (
-                    norm_schedule
-                    and schedule_index < len(norm_schedule)
-                    and next_switch_mono is not None
-                    and time.monotonic() >= next_switch_mono
-                ):
-                    factor, hold_s = norm_schedule[schedule_index]
-                    norm_bytes, dpoint_byte = _encode_norm(factor)
-                    ok = _apply_norm_dpoint(
-                        ser, norm_bytes, dpoint_byte, f_cmd, state,
-                        label=f"schedule[{schedule_index}] factor={factor}",
-                    )
-                    state.setdefault("schedule_steps", []).append(
-                        {"index": schedule_index, "factor": factor, "hold_s": hold_s, "last_error_ok": ok}
-                    )
-                    next_switch_mono = time.monotonic() + hold_s
-                    schedule_index += 1
-                    continue
-                try:
-                    raw = ser.readline()
-                except Exception as exc:  # noqa: BLE001
-                    state["read_error"] = f"{type(exc).__name__}: {exc}"
-                    break
-                if not raw:
-                    # Lesetimeout, kein Byte angekommen - weiter warten.
-                    continue
-                t_boot = time.clock_gettime(time.CLOCK_BOOTTIME)
-                text = raw.decode("ascii", errors="replace").rstrip("\r\n")
-                f.write(json.dumps({"t_boot": t_boot, "text": text}, ensure_ascii=False) + "\n")
-                f.flush()
-                count += 1
+        if norm_schedule is not None:
+            assert commands_path is not None and restore_point is not None
+            f_cmd = open(commands_path, "a", encoding="utf-8")
+
+            # Precheck: Registerstand mit dem Rueckstellpunkt vergleichen, BEVOR
+            # auch nur ein Schreibbefehl geschickt wird. Der Strom wird dafuer
+            # kurz angehalten und danach sofort wieder gestartet (eigenes
+            # pause/resume-Ereignispaar, Label "precheck").
+            matches, precheck_detail = _check_restore_point(ser, restore_point, f_cmd, state, label="precheck")
+            state["precheck"] = precheck_detail
+            if not matches and not ignore_restore_point_mismatch:
+                state["schedule_error"] = (
+                    "Geraet steht nicht am Rueckstellpunkt "
+                    f"(erwartet norm={precheck_detail['expected_norm']} dpoint={precheck_detail['expected_dpoint']}, "
+                    f"gelesen norm={precheck_detail['actual_norm']} dpoint={precheck_detail['actual_dpoint']}). "
+                    "Kein Schreibbefehl wurde gesendet. Mit --ignore-restore-point-mismatch uebersteuerbar."
+                )
+                ready_event.set()
+                return
+            if not matches and ignore_restore_point_mismatch:
+                precheck_detail["ignored"] = True
+
+        ready_event.set()
+        count = 0
+        max_queue_depth = 0
+        schedule_index = 0
+        next_switch_mono: float | None = None
+        if norm_schedule:
+            factor, hold_s = norm_schedule[0]
+            norm_bytes, dpoint_byte = _encode_norm(factor)
+            ok = _apply_norm_dpoint(ser, norm_bytes, dpoint_byte, f_cmd, state, label=f"schedule[0] factor={factor}")
+            state.setdefault("schedule_steps", []).append(
+                {"index": 0, "factor": factor, "hold_s": hold_s, "last_error_ok": ok}
+            )
+            next_switch_mono = time.monotonic() + hold_s
+            schedule_index = 1
+
+        while not stop_event.is_set():
+            if (
+                norm_schedule
+                and schedule_index < len(norm_schedule)
+                and next_switch_mono is not None
+                and time.monotonic() >= next_switch_mono
+            ):
+                factor, hold_s = norm_schedule[schedule_index]
+                norm_bytes, dpoint_byte = _encode_norm(factor)
+                ok = _apply_norm_dpoint(
+                    ser, norm_bytes, dpoint_byte, f_cmd, state,
+                    label=f"schedule[{schedule_index}] factor={factor}",
+                )
+                state.setdefault("schedule_steps", []).append(
+                    {"index": schedule_index, "factor": factor, "hold_s": hold_s, "last_error_ok": ok}
+                )
+                next_switch_mono = time.monotonic() + hold_s
+                schedule_index += 1
+                continue
+            try:
+                raw = ser.readline()
+            except Exception as exc:  # noqa: BLE001
+                state["read_error"] = f"{type(exc).__name__}: {exc}"
+                break
+            if not raw:
+                # Lesetimeout, kein Byte angekommen - weiter warten.
+                continue
+            t_boot = time.clock_gettime(time.CLOCK_BOOTTIME)
+            text = raw.decode("ascii", errors="replace").rstrip("\r\n")
+            serial_queue.put({"t_boot": t_boot, "text": text})
+            count += 1
+            max_queue_depth = max(max_queue_depth, serial_queue.qsize())
+        state["count"] = count
+        state["max_serial_queue_depth"] = max_queue_depth
     finally:
-        if norm_schedule is not None and f_cmd is not None:
+        # `not state.get("schedule_error")`: bei abweichendem Rueckstellpunkt
+        # (Precheck-Mismatch ohne --ignore-restore-point-mismatch) wurde
+        # bewusst NIE ein Schreibbefehl gesendet ("Kein Schreibbefehl wurde
+        # gesendet." in der Fehlermeldung) - dieser `finally`-Block wird
+        # jetzt (anders als vor der Erzeuger/Schreiber-Trennung) auch beim
+        # fruehen Rueckkehrpfad des Precheck-Mismatch durchlaufen, darf die
+        # Rueckstellung dort aber NICHT ausloesen, sonst wuerde genau dort
+        # doch noch ein Schreibbefehl rausgehen.
+        if norm_schedule is not None and f_cmd is not None and ser is not None and not state.get("schedule_error"):
             try:
                 restore_norm_bytes = restore_point["register"]["norm"]["daten"]
                 restore_dpoint_byte = restore_point["register"]["dpoint"]["daten"][0]
@@ -554,25 +637,54 @@ def _serial_worker(
                 state["restore_verification"] = {"write_ok": write_ok, **verify_detail}
             except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
                 state["restore_verification"] = {"error": f"{type(exc).__name__}: {exc}"}
-            finally:
-                f_cmd.close()
-        try:
-            ser.close()
-        except Exception:  # noqa: BLE001 - Aufraeumen, kein neuer Fehler beim Beenden
-            pass
-        state["count"] = count
+        if f_cmd is not None:
+            f_cmd.close()
+        if ser is not None:
+            try:
+                ser.close()
+            except Exception:  # noqa: BLE001 - Aufraeumen, kein neuer Fehler beim Beenden
+                pass
+        serial_queue.put(_QUEUE_DONE)
+
+
+def _serial_writer_worker(
+    serial_queue: queue.Queue[Any],
+    out_path: Path,
+    state: dict[str, Any],
+) -> None:
+    """Entkoppelter Schreiber fuer `serial.jsonl`. Leert `serial_queue`
+    zeilenweise geflusht, bis das `_QUEUE_DONE`-Sentinel des Lesethreads
+    kommt - danach ist die Warteschlange per Konstruktion leer (FIFO, das
+    Sentinel ist immer der letzte Eintrag des Lesethreads), es geht also
+    nichts verloren. `state["count"]` ist die massgebliche Zahl tatsaechlich
+    geschriebener Telegrammzeilen (ersetzt das frueher im Lesethread selbst
+    gefuehrte `count`)."""
+    count = 0
+    with open(out_path, "a", encoding="utf-8") as f:
+        while True:
+            item = serial_queue.get()
+            if item is _QUEUE_DONE:
+                break
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            f.flush()
+            count += 1
+    state["count"] = count
 
 
 # --- Bildstrom ---------------------------------------------------------------
 
 
 def _synthetic_frames(uri: str):
-    """`Frame`-Objekte aus `dispread.frames.open_source`, roh durchgereicht."""
+    """`Frame`-Objekte aus `dispread.frames.open_source`, roh durchgereicht.
+
+    Liefert ein drittes Element `sensor_sequence=None` - es gibt bei
+    `synthetic://` keine Sensor-/libcamera-Sequenznummer, das Feld existiert
+    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag)."""
     source = open_source(uri)
     source.open()
     try:
         for frame in source.frames():
-            yield frame.image, frame.capture_timestamp.to_dict()
+            yield frame.image, frame.capture_timestamp.to_dict(), None
     finally:
         source.close()
 
@@ -596,6 +708,22 @@ def _camera_frames(size: tuple[int, int], fps: float):
     `make_array("main")` eine andere Kanalanordnung als der Rest der Kette
     erwartet. `queue=False` verhindert, dass ein gepuffertes altes Bild
     ausgeliefert wird; fuer eine Zeitversatzmessung waere genau das fatal.
+
+    Zusaetzlich zur `SensorTimestamp`-basierten `Timestamp` liefert jedes
+    Bild die Sensor-/libcamera-Sequenznummer (drittes Element im Tupel,
+    `sensor_sequence`) - das eigentliche Gegenmittel zum OQ-40-Nachtrag: der
+    Skript-eigene Zaehler `frame_sequence` in `run()` zaehlt nur, wie oft
+    dieses Skript geschrieben hat, und haette die 2,60s-Luecke vom
+    2026-09-23 NICHT gezeigt, weil `queue=False` das verpasste Bild
+    stillschweigend ausliess. `request.request` ist das zugrundeliegende
+    `libcamera.Request`-Objekt (siehe
+    `/usr/lib/python3/dist-packages/picamera2/request.py:90`,
+    `self.request = request` im `CompletedRequest.__init__`); dessen
+    `.sequence`-Attribut stammt aus der kompilierten `_libcamera`-Erweiterung,
+    reexportiert ueber `/usr/lib/python3/dist-packages/libcamera/__init__.py:4`
+    (`from ._libcamera import *`) - `dir(libcamera.Request)` listet
+    `sequence` dort auf. Muss VOR `request.release()` gelesen werden, wie
+    `make_array`/`get_metadata` auch.
     """
     from picamera2 import Picamera2
 
@@ -613,6 +741,10 @@ def _camera_frames(size: tuple[int, int], fps: float):
             try:
                 image = request.make_array("main").copy()
                 raw_metadata = request.get_metadata()
+                try:
+                    sensor_sequence = request.request.sequence
+                except AttributeError:
+                    sensor_sequence = None
             finally:
                 request.release()
             # Nur JSON-faehige echte Metadaten; SensorTimestamp unveraendert -
@@ -624,7 +756,7 @@ def _camera_frames(size: tuple[int, int], fps: float):
                 semantics=TimestampSemantics.UNKNOWN,
                 uncertainty_ns=None,
             )
-            yield image, timestamp.to_dict()
+            yield image, timestamp.to_dict(), sensor_sequence
     finally:
         camera.stop()
 
@@ -635,6 +767,167 @@ def _frame_generator(args: argparse.Namespace):
     else:
         w, _, h = args.camera_size.partition("x")
         yield from _camera_frames((int(w), int(h)), args.frame_rate)
+
+
+def _frame_acquisition_worker(
+    args: argparse.Namespace,
+    frame_queue: queue.Queue[Any],
+    frame_drop_queue: queue.Queue[Any],
+    stop_event: threading.Event,
+    state: dict[str, Any],
+) -> None:
+    """Zieht Bilder aus `_frame_generator` und legt sie in `frame_queue` ab -
+    kodiert und schreibt NICHTS (siehe Moduldocstring, Abschnitt "Erzeugen
+    und Schreiben sind getrennte Threads"): genau die Dateisystemzugriffe,
+    die dort frueher in dieser Schleife lagen, blockierten am 2026-09-23
+    unter Kernel-Dirty-Page-Writeback (bis 130 MB) - ein I/O-loser
+    Herzschlagprozess zeigte im selben Zeitraum KEINE Luecke.
+
+    Die Taktung (`--frame-rate`) bleibt bewusst HIER, nicht im
+    Schreiberthread: sie regelt, wie schnell dieser Thread den naechsten
+    Generator-`next()` aufruft - fuer `synthetic://` ist das die einzige
+    Bremse ueberhaupt (Erzeugung ist praktisch sofort), fuer `--source
+    camera` taktet die Hardware selbst schon (`FrameRate`-Control) und diese
+    Sleep bleibt zusaetzlich wirksam, exakt wie vor dieser Aufteilung -
+    reines Verschieben der Zustaendigkeit, keine Verhaltensaenderung an der
+    Taktung selbst.
+
+    Ist `frame_queue` voll (Schreiber kommt nicht hinterher), wird das Bild
+    NICHT geschrieben und NICHT still verworfen: es zaehlt in
+    `state["frames_dropped_queue_full"]`, und eine kleine Meldung (ohne
+    Bilddaten) geht auf die unbegrenzte `frame_drop_queue`, damit sie trotzdem
+    als eigener `frames.jsonl`-Eintrag sichtbar wird. `frame_queue.put(...)`
+    selbst blockiert dafuer NIE."""
+    frame_period_s = 1.0 / args.frame_rate if args.frame_rate > 0 else 0.0
+    start_mono = time.monotonic()
+    next_due = start_mono
+    max_loop_iteration_s = 0.0
+    stall_iterations: list[dict[str, Any]] = []
+    prev_loop_end_mono = start_mono
+    prev_sensor_timestamp_ns: int | None = None
+    max_frame_queue_depth = 0
+    frames_acquired = 0
+    frames_dropped = 0
+
+    gen = _frame_generator(args)
+    try:
+        for image, timestamp_dict, sensor_sequence in gen:
+            if stop_event.is_set():
+                break
+            now = time.monotonic()
+            iter_duration_s = now - prev_loop_end_mono
+            if iter_duration_s > max_loop_iteration_s:
+                max_loop_iteration_s = iter_duration_s
+            if frame_period_s > 0 and iter_duration_s > 3 * frame_period_s:
+                stall_iterations.append({
+                    "t_boot": time.clock_gettime(time.CLOCK_BOOTTIME),
+                    "duration_s": iter_duration_s,
+                })
+            if now - start_mono >= args.duration:
+                break
+            frames_acquired += 1
+
+            value_ns = timestamp_dict.get("value_ns")
+            sensor_timestamp_interval_ns = None
+            if prev_sensor_timestamp_ns is not None and value_ns is not None:
+                sensor_timestamp_interval_ns = value_ns - prev_sensor_timestamp_ns
+            if value_ns is not None:
+                prev_sensor_timestamp_ns = value_ns
+
+            try:
+                frame_queue.put_nowait({
+                    "sensor_sequence": sensor_sequence,
+                    "sensor_timestamp_interval_ns": sensor_timestamp_interval_ns,
+                    "capture_timestamp": timestamp_dict,
+                    "image": image,
+                })
+            except queue.Full:
+                frames_dropped += 1
+                frame_drop_queue.put({
+                    "dropped": True,
+                    "sensor_sequence": sensor_sequence,
+                    "capture_timestamp": timestamp_dict,
+                    "t_boot": time.clock_gettime(time.CLOCK_BOOTTIME),
+                })
+            max_frame_queue_depth = max(max_frame_queue_depth, frame_queue.qsize())
+
+            if frame_period_s > 0:
+                next_due += frame_period_s
+                sleep_for = next_due - time.monotonic()
+                if sleep_for > 0:
+                    time.sleep(sleep_for)
+            prev_loop_end_mono = time.monotonic()
+    except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
+        state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        gen.close()
+        state["frames_acquired"] = frames_acquired
+        state["frames_dropped_queue_full"] = frames_dropped
+        state["max_loop_iteration_s"] = max_loop_iteration_s
+        state["stall_iterations"] = stall_iterations
+        state["max_frame_queue_depth"] = max_frame_queue_depth
+        frame_queue.put(_QUEUE_DONE)
+        frame_drop_queue.put(_QUEUE_DONE)
+
+
+def _frame_writer_worker(
+    frame_queue: queue.Queue[Any],
+    frame_drop_queue: queue.Queue[Any],
+    frames_jsonl: Path,
+    frames_dir: Path,
+    ext: str,
+    state: dict[str, Any],
+) -> None:
+    """Entkoppelter Schreiber: JPEG/PNG-Kodierung (`cv2.imwrite`) +
+    `frames.jsonl` - siehe Moduldocstring. `frame_sequence` wird HIER
+    vergeben (luecken-/abbruchfreie, aufsteigende Zaehlung der tatsaechlich
+    geschriebenen Bilder, unveraendert gegenueber dem Verhalten vor dieser
+    Aufteilung) - verworfene Bilder tragen keine `frame_sequence`, ihre
+    `frames.jsonl`-Meldung traegt stattdessen `sensor_sequence`/
+    `capture_timestamp` (das, was von ihnen bekannt ist).
+
+    `cv2.imwrite` ist eine OpenCV-C++-Funktion; das Kodieren blockiert
+    trotzdem bewusst NUR hier und nie den Aufnahmethread - unabhaengig
+    davon, wie lange dabei der GIL gehalten wird, darf ein langsamer
+    Schreibvorgang nie die naechste Bildaufnahme verzoegern. `cv2` ist am
+    Modulanfang importiert (kein Hardwarebedarf, siehe dort) - kein
+    zusaetzlicher lokaler Import noetig."""
+    frames_written = 0
+    frame_done = False
+    drop_done = False
+    with open(frames_jsonl, "a", encoding="utf-8") as f_frames:
+        while not (frame_done and drop_done):
+            try:
+                item = frame_queue.get(timeout=0.1)
+            except queue.Empty:
+                item = None
+            if item is not None:
+                if item is _QUEUE_DONE:
+                    frame_done = True
+                else:
+                    frames_written += 1
+                    filename = f"frame_{frames_written:06d}.{ext}"
+                    cv2.imwrite(str(frames_dir / filename), item["image"])
+                    entry = {
+                        "file": filename,
+                        "frame_sequence": frames_written,
+                        "sensor_sequence": item["sensor_sequence"],
+                        "sensor_timestamp_interval_ns": item["sensor_timestamp_interval_ns"],
+                        "capture_timestamp": item["capture_timestamp"],
+                    }
+                    f_frames.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    f_frames.flush()
+            while True:
+                try:
+                    drop_item = frame_drop_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if drop_item is _QUEUE_DONE:
+                    drop_done = True
+                else:
+                    f_frames.write(json.dumps(drop_item, ensure_ascii=False) + "\n")
+                    f_frames.flush()
+    state["frames_recorded"] = frames_written
 
 
 # --- Hauptablauf --------------------------------------------------------------
@@ -689,10 +982,12 @@ def run(args: argparse.Namespace) -> int:
     stop_event = threading.Event()
     ready_event = threading.Event()
     serial_state: dict[str, Any] = {"count": 0, "open_error": None}
+    serial_writer_state: dict[str, Any] = {"count": 0}
+    serial_queue: queue.Queue[Any] = queue.Queue()  # unbegrenzt, siehe Moduldocstring
 
     serial_thread = threading.Thread(
         target=_serial_worker,
-        args=(args.port, args.baudrate, serial_jsonl, stop_event, ready_event, serial_state),
+        args=(args.port, args.baudrate, serial_queue, stop_event, ready_event, serial_state),
         kwargs={
             "commands_path": commands_jsonl,
             "norm_schedule": args.norm_schedule,
@@ -702,6 +997,15 @@ def run(args: argparse.Namespace) -> int:
         name="serial-reader",
         daemon=True,
     )
+    serial_writer_thread = threading.Thread(
+        target=_serial_writer_worker,
+        args=(serial_queue, serial_jsonl, serial_writer_state),
+        name="serial-writer",
+        daemon=True,
+    )
+    # Schreiber zuerst starten: er soll sofort abholen koennen, sobald der
+    # Lesethread die erste Zeile auf die Warteschlange legt.
+    serial_writer_thread.start()
     serial_thread.start()
 
     if not ready_event.wait(timeout=READY_TIMEOUT_S):
@@ -710,6 +1014,8 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         stop_event.set()
+        serial_thread.join(timeout=JOIN_TIMEOUT_S)
+        serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
         return 1
     if serial_state["open_error"]:
         print(
@@ -719,44 +1025,48 @@ def run(args: argparse.Namespace) -> int:
         )
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
+        serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
         return 1
     if serial_state.get("schedule_error"):
         print(f"Fehler: {serial_state['schedule_error']}", file=sys.stderr)
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
+        serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
         return 1
 
-    frame_period_s = 1.0 / args.frame_rate if args.frame_rate > 0 else 0.0
     ext = "png" if args.image_format == "png" else "jpg"
 
-    frames_recorded = 0
+    frame_acq_state: dict[str, Any] = {}
+    frame_writer_state: dict[str, Any] = {}
+    frame_queue: queue.Queue[Any] = queue.Queue(maxsize=args.frame_queue_size)  # begrenzt, siehe Moduldocstring
+    frame_drop_queue: queue.Queue[Any] = queue.Queue()  # unbegrenzt, nur kleine Meldungen
+
+    frame_acq_thread = threading.Thread(
+        target=_frame_acquisition_worker,
+        args=(args, frame_queue, frame_drop_queue, stop_event, frame_acq_state),
+        name="frame-acquisition",
+        daemon=True,
+    )
+    frame_writer_thread = threading.Thread(
+        target=_frame_writer_worker,
+        args=(frame_queue, frame_drop_queue, frames_jsonl, frames_dir, ext, frame_writer_state),
+        name="frame-writer",
+        daemon=True,
+    )
+    frame_writer_thread.start()
+    frame_acq_thread.start()
+
     aborted = False
     abort_reason: str | None = None
     start_mono = time.monotonic()
-    next_due = start_mono
 
     try:
-        with open(frames_jsonl, "a", encoding="utf-8") as f_frames:
-            for image, timestamp_dict in _frame_generator(args):
-                now = time.monotonic()
-                if now - start_mono >= args.duration:
-                    break
-                frames_recorded += 1
-                filename = f"frame_{frames_recorded:06d}.{ext}"
-                cv2.imwrite(str(frames_dir / filename), image)
-                entry = {
-                    "file": filename,
-                    "frame_sequence": frames_recorded,
-                    "capture_timestamp": timestamp_dict,
-                }
-                f_frames.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                f_frames.flush()
-
-                if frame_period_s > 0:
-                    next_due += frame_period_s
-                    sleep_for = next_due - time.monotonic()
-                    if sleep_for > 0:
-                        time.sleep(sleep_for)
+        # Die eigentliche Aufnahme laeuft komplett in den beiden Threads
+        # oben - dieser Hauptthread wartet nur auf das Dauerende oder ein
+        # Signal (SIGINT/SIGTERM landen hier als KeyboardInterrupt, siehe
+        # `_install_sigterm_handler`, genau wie zuvor bei der blockierenden
+        # Bildschleife).
+        stop_event.wait(timeout=args.duration)
     except KeyboardInterrupt as exc:
         aborted = True
         if exc.args and exc.args[0] == _SIGTERM_MARKER:
@@ -772,12 +1082,22 @@ def run(args: argparse.Namespace) -> int:
     finally:
         elapsed_s = time.monotonic() - start_mono
         stop_event.set()
-        # Bei --norm-schedule laeuft hier noch die Rueckstellung im
-        # finally-Block des Lesethreads (siehe _serial_worker) - deshalb
-        # JOIN_TIMEOUT_S grosszuegig bemessen, nicht das kurze Portoeffnen.
-        serial_thread.join(timeout=JOIN_TIMEOUT_S)
 
-        serial_lines_recorded = serial_state.get("count", 0)
+        # Reihenfolge ist Teil der Abbruchgarantie (siehe Moduldocstring):
+        # erst die Erzeugerseiten fertig werden lassen - ihr jeweils letzter
+        # Schritt ist `_QUEUE_DONE` auf die eigene Warteschlange zu legen -,
+        # dann die Schreiberseiten, die bis zu diesem Sentinel vollstaendig
+        # leeren. Erst danach ist bekannt, was wirklich geschrieben wurde.
+        # JOIN_TIMEOUT_S ist grosszuegig bemessen (--norm-schedule laesst im
+        # finally-Block des Lesethreads noch die Rueckstellung laufen; die
+        # Kamera kann bis zu `wait=2.0` in `capture_request` haengen).
+        frame_acq_thread.join(timeout=JOIN_TIMEOUT_S)
+        frame_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
+        serial_thread.join(timeout=JOIN_TIMEOUT_S)
+        serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
+
+        frames_recorded = frame_writer_state.get("frames_recorded", 0)
+        serial_lines_recorded = serial_writer_state.get("count", 0)
         session = {
             "started_at_utc": started_at_utc,
             "started_at_boottime_ns": started_at_boottime_ns,
@@ -806,22 +1126,43 @@ def run(args: argparse.Namespace) -> int:
             "precheck": serial_state.get("precheck"),
             "schedule_steps": serial_state.get("schedule_steps"),
             "restore_verification": serial_state.get("restore_verification"),
+            # Stall-Diagnostik OQ-40-Nachtrag 2026-09-23 - jetzt im
+            # Aufnahmethread gemessen, unbeeinflusst von der Schreibseite
+            # (siehe Moduldocstring "Erzeugen und Schreiben sind getrennte
+            # Threads"): ein langsamer Schreiber darf hier nie mehr
+            # faelschlich als Stall auftauchen.
+            "max_loop_iteration_s": frame_acq_state.get("max_loop_iteration_s", 0.0),
+            "stall_iteration_count": len(frame_acq_state.get("stall_iterations", [])),
+            "stall_iterations": frame_acq_state.get("stall_iterations", []),
+            "frames_dropped_queue_full": frame_acq_state.get("frames_dropped_queue_full", 0),
+            "max_frame_queue_depth": frame_acq_state.get("max_frame_queue_depth", 0),
+            "max_serial_queue_depth": serial_state.get("max_serial_queue_depth", 0),
+            "acquisition_error": frame_acq_state.get("acquisition_error"),
         }
         session_json.write_text(json.dumps(session, indent=2, ensure_ascii=False, default=_json_default))
 
     if serial_state.get("read_error"):
         print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
+    if frame_acq_state.get("acquisition_error"):
+        print(f"Warnung: Bildaufnahme beendet mit Fehler: {frame_acq_state['acquisition_error']}", file=sys.stderr)
 
-    if serial_state.get("count", 0) == 0:
+    if serial_writer_state.get("count", 0) == 0:
         print(
             "WARNUNG: In der gesamten Aufzeichnung wurde kein einziges Telegramm "
             f"empfangen (Dauer={args.duration}s, Port={args.port!r}, Baudrate={args.baudrate}). "
             "serial.jsonl ist leer - das ist eine Meldung, kein stiller Erfolg.",
             file=sys.stderr,
         )
+    if frame_acq_state.get("frames_dropped_queue_full", 0) > 0:
+        print(
+            f"WARNUNG: {frame_acq_state['frames_dropped_queue_full']} Bild(er) verworfen, weil die "
+            f"Schreiber-Warteschlange voll war (--frame-queue-size {args.frame_queue_size}).",
+            file=sys.stderr,
+        )
 
     print(
-        f"Fertig: {frames_recorded} Bilder, {serial_state.get('count', 0)} Telegrammzeilen, "
+        f"Fertig: {frame_writer_state.get('frames_recorded', 0)} Bilder, "
+        f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
         f"{'ABGEBROCHEN' if aborted else 'vollstaendig'} -> {output_dir}"
     )
     return 0

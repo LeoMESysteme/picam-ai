@@ -1680,6 +1680,14 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   die gestauchten Stempel danach. Nötig ist zusätzlich eine Untergrenze für
   den Abstand, oder alle Telegramme eines Staus werden verworfen. Ausserhalb
   des Staus: p50 533 ms, p95 534 ms (391 Abstände).
+* **Nachtrag 2026-09-23, Ursache und Abhilfe:** Der Stau entstand durch
+  blockierende Dateischreibvorgänge beim Rückschreiben auf die SD-Karte.
+  Behoben durch getrennte Schreibthreads in `sync-record.py`. Unter
+  erzwungener Last blieb der serielle Strom exakt (532–534 ms).
+  `gate-label.py` lehnt Stösse jetzt über `--min-gap-ms` ab. **Weiter offen:**
+  die Werte für `--min-gap-ms` und `--max-gap-ms`. Unter Kameralast liegen
+  über 3 Läufe alle Abstände bei 529–536 ms. Eine Stundenmessung fehlt
+  noch.
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans

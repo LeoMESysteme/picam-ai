@@ -48,20 +48,23 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
   [OQ-41](docs/open-questions.md) bleiben (b), die leere Zelle im Zellenraster
   des Lesers, und (c), negative Werte (ungeprüft).
 
-### 3. OQ-40: Prozess-Stau und Lückenschwelle
+### 3. OQ-40: Gap-Schwellen festlegen (Stau selbst ist behoben)
 
-Einmal standen beide Kanäle (Kamera + seriell) ~2,5 s still, danach kamen
-5 Telegramme mit fast identischem `t_boot` — die Werte sind vollständig,
-ihre Ankunftszeiten nicht. Drei Teilaufgaben:
+**Erledigt 2026-09-23:**
+* Ursache gemessen: Beim Zurückschreiben auf die SD-Karte blockieren die
+  Dateischreibvorgänge.
+* `sync-record.py` schreibt jetzt in eigenen Threads.
+* `sensor_sequence` wird je Bild mitgeschrieben, verlorene Bilder sind
+  gezählt.
+* `gate-label.py` lehnt Stösse über `--min-gap-ms` ab.
 
-* Ursache finden (SD-Schreibstau? blockierender Hauptprozess?).
-* `scripts/gate-label.py` um Burst-/Mindestabstand-Erkennung ergänzen —
-  reines `--max-gap-ms` fängt den gestauchten Fall nicht.
-* `sync-record.py`: `frames.jsonl` soll `SensorSequence` (echter
-  Sensorzähler) statt nur des Skript-Zählers `frame_sequence` mitschreiben —
-  sonst zeigt ein Stau gar keine Lücke.
-* Der Gap-Schwellwert selbst ist weiterhin ungemessen; braucht eine längere
-  Aufzeichnung (Stunden, möglichst unter Kameralast).
+Zahlen: `docs/VALIDATION.md`, Eintrag „Stillstand beim Aufzeichnen".
+
+**Offen:** Werte für `--min-gap-ms` und `--max-gap-ms`. Beide Argumente
+haben bewusst keinen Vorgabewert. Datenlage unter Kameralast: alle Abstände
+529–536 ms, auch unter erzwungener Schreiblast. Es fehlt eine
+Stundenaufzeichnung. Danach die Schwellen aus der Verteilung ableiten und
+**vor** der Ernte im Plan festschreiben.
 
 → [OQ-40](docs/open-questions.md).
 
