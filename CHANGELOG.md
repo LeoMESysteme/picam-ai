@@ -3,6 +3,26 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-23 (Zensical-Integration nach master abgesichert)
+
+**Problem:** Der Doku-Workflow konnte den produktiven Cloudflare-Stand auch
+aus dem Prototyp-Branch oder aus einem manuell gestarteten Lauf überschreiben.
+Zudem hingen zwei serielle Tests von einer ignorierten Hardware-Diagnosedatei
+im lokalen Haupt-Worktree ab und scheiterten in einem frischen Worktree.
+
+**Änderung:** `.github/workflows/docs.yml` reagiert auf Pushes nur noch auf
+`master`; der Produktionsschritt prüft zusätzlich Ereignis und vollständige
+Git-Referenz. Manuelle Läufe dürfen weiterhin Build, Tests und Prüfstand
+ausführen. Die seriellen Tests erzeugen ihren minimalen Rückstellpunkt nun im
+jeweiligen temporären Testverzeichnis. `docs/HOSTING.md` beschreibt den
+Produktions-Gate ausdrücklich. Drei ungültige Zensical-Anker im Dotmatrix-Plan
+sind an die tatsächlich erzeugten ASCII-IDs angepasst.
+
+**Konsequenz:** Ein erfolgreicher Push auf `master` hält das geschützte Wiki
+automatisch aktuell. Andere Branches und manuelle Läufe können Produktion
+nicht mehr mit einem abweichenden Stand überschreiben; die Python-Suite ist
+in einem isolierten Worktree reproduzierbar.
+
 ## 0.1.0.dev0 — 2026-09-23 (Doku-Hosting: Cloudflare Pages mit Forgejo-Anmeldung)
 
 **Problem:** Die Doku-Seite gab es nur als ZIP zum Herunterladen. Forgejo 15

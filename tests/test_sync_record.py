@@ -809,9 +809,25 @@ def test_bild_schreiber_verzoegerung_beeinflusst_aufnahmeintervalle_nicht(monkey
 
 # --- --norm-schedule: Schreiben INNERHALB der bereits offenen Sitzung -------
 
-RESTORE_POINT_PATH = Path(__file__).parents[1] / "var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json"
-RESTORE_NORM_BYTES = (80, 27, 228)  # entspricht norm=1.0, siehe RESTORE_POINT_PATH
+RESTORE_NORM_BYTES = (80, 27, 228)  # entspricht norm=1.0
 RESTORE_DPOINT = 1
+
+
+def _write_restore_point(tmp_path: Path) -> Path:
+    """Erzeugt den minimalen Rueckstellpunktvertrag ohne Labordatei."""
+    path = tmp_path / "restore-point.json"
+    path.write_text(
+        json.dumps(
+            {
+                "register": {
+                    "norm": {"daten": list(RESTORE_NORM_BYTES)},
+                    "dpoint": {"daten": [RESTORE_DPOINT]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 class _FakeGsvDevice:
@@ -901,6 +917,7 @@ def test_norm_schedule_schreibt_commands_jsonl_und_stellt_zurueck(tmp_path):
     device = _FakeGsvDevice(master)
     device.start()
     output_dir = tmp_path / "lauf-schedule"
+    restore_point_path = _write_restore_point(tmp_path)
     try:
         completed = _run_cli(
             duration=2.0,
@@ -910,7 +927,7 @@ def test_norm_schedule_schreibt_commands_jsonl_und_stellt_zurueck(tmp_path):
                 "--norm-schedule",
                 "2.0:0.5,1.0:0.5",
                 "--restore-point",
-                str(RESTORE_POINT_PATH),
+                str(restore_point_path),
             ],
         )
     finally:
@@ -961,6 +978,7 @@ def test_norm_schedule_lehnt_abweichenden_registerstand_ab(tmp_path):
     device = _FakeGsvDevice(master, dpoint=RESTORE_DPOINT + 1)
     device.start()
     output_dir = tmp_path / "lauf-mismatch"
+    restore_point_path = _write_restore_point(tmp_path)
     try:
         completed = _run_cli(
             duration=1.0,
@@ -970,7 +988,7 @@ def test_norm_schedule_lehnt_abweichenden_registerstand_ab(tmp_path):
                 "--norm-schedule",
                 "2.0:5",
                 "--restore-point",
-                str(RESTORE_POINT_PATH),
+                str(restore_point_path),
             ],
         )
     finally:
@@ -996,6 +1014,7 @@ def test_norm_schedule_mismatch_mit_override_laeuft_trotzdem(tmp_path):
     device = _FakeGsvDevice(master, dpoint=RESTORE_DPOINT + 1)
     device.start()
     output_dir = tmp_path / "lauf-override"
+    restore_point_path = _write_restore_point(tmp_path)
     try:
         completed = _run_cli(
             duration=1.5,
@@ -1005,7 +1024,7 @@ def test_norm_schedule_mismatch_mit_override_laeuft_trotzdem(tmp_path):
                 "--norm-schedule",
                 "2.0:0.5",
                 "--restore-point",
-                str(RESTORE_POINT_PATH),
+                str(restore_point_path),
                 "--ignore-restore-point-mismatch",
             ],
         )

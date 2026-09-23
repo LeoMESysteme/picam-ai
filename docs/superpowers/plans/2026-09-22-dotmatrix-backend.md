@@ -54,7 +54,7 @@ Gewählt: **B**. Gründe, in der Reihenfolge ihres Gewichts:
 generalisiert nicht von selbst auf unbekannte Displaytypen oder Schriftarten.
 Das ist im Projekt die akzeptierte Richtung (bestätigtes Profil statt Raten),
 aber es heißt: jeder neue Zeichensatz braucht eine Tabellenerweiterung.
-Siehe [Task 3](#task-3-zeichentabelle-aus-bestätigten-proben-aufbauen).
+Siehe [Task 3](#task-3-zeichentabelle-aus-bestatigten-proben-aufbauen).
 
 ### Ausgangsmessungen
 
@@ -94,7 +94,7 @@ unterschiedlich gut beantwortet sind:
    4,2–18,3 %, Spanne 74,5–94,5 % über die 11 Proben). Ein Raster pro Bild zu
    fitten bleibt deshalb nötig.
 
-Deshalb bleibt [Task 2](#task-2-gate-rasterverankerung-gegen-alle-11-proben-prüfen)
+Deshalb bleibt [Task 2](#task-2-gate-rasterverankerung-gegen-alle-11-proben-prufen)
 ein **Abbruchtor** — aber die Frage hat sich verschoben: nicht mehr „gibt es
 ein Raster", sondern „lässt es sich pro Bild richtig anlegen".
 
@@ -359,7 +359,7 @@ einer offenen Rastersuche.
       ähneln und verschiedene unterscheiden. Driftet es zwischen Bildern,
       explodiert der within-class-Abstand und das Verhältnis fällt gegen 1.
       Das ist nicht zirkulär und liefert nebenbei genau die Vorlagen, die
-      [Task 3](#task-3-zeichentabelle-aus-bestätigten-proben-aufbauen) braucht.
+      [Task 3](#task-3-zeichentabelle-aus-bestatigten-proben-aufbauen) braucht.
 - [ ] **Mittenlücke prüfen** (bisher ungemessen): Liegen die Zellen 9–16 auf
       demselben gleichmäßigen Raster wie 1–8, oder hat das Modul die bei
       8+8-adressierten 16×1-Displays verbreitete breitere Lücke in der

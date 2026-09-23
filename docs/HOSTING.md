@@ -5,6 +5,10 @@ Das Offline-ZIP `doku-seite` hängt immer am Lauf. Zusätzlich liegt die Seite
 unter **https://picam-docs.pages.dev**. Lesen darf sie nur, wer sich über
 Forgejo anmeldet **und das Repo `l.hentschke/picam-ai` lesen darf**.
 
+Ein Push auf `master` baut und veröffentlicht die Seite automatisch. Ein
+manuell gestarteter Lauf darf Build, Tests und den Prüfstand ausführen, aber
+nie das produktive Deployment überschreiben; ebenso wenig ein Feature-Branch.
+
 ```mermaid
 flowchart LR
     P[Push] --> R[Runner auf dem Pi<br>baut site/]
@@ -62,6 +66,9 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+* **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
+  Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
+  aktualisiert.
 * **Deploy-Token erneuern** (jährlich): neuen Token mit nur *Pages Write*
   anlegen und das Forgejo-Secret `CLOUDFLARE_API_TOKEN` ersetzen.
 * **Alle Sitzungen beenden:** `SESSION_SECRET` im Pages-Projekt durch einen
