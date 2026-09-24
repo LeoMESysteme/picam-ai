@@ -28,7 +28,7 @@ node_modules/
 /.claude/
 # Doku-Seite (Zensical-Prototyp)
 /site/
-/.venv-docs/
+/.venv-docs
 /docs-site/*
 !/docs-site/api/
 !/docs-site/assets/

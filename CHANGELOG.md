@@ -15,7 +15,8 @@ Codex-Anmeldung. Der tägliche Workflow prüft Änderungen zuerst ohne
 Modellaufruf, lässt Codex gezielt Einsteigertexte und Vorschau-Links pflegen
 und prüft OQ-Index, strengen Build und Browsertests. Erst danach pusht ein
 separater Schritt per Bot-Token nach `master`. Der alte Cron-Eintrag entfällt;
-das Claude-Skript bleibt nur für gezielte manuelle Nutzung erhalten.
+das Claude-Skript bleibt nur für gezielte manuelle Nutzung erhalten. Der
+gemeinsam genutzte Doku-venv-Symlink ist als Laufzeitartefakt ignoriert.
 
 **Konsequenz:** Geprüfte Doku-Änderungen lösen den bestehenden Cloudflare-
 Deploy aus. Fehlende Anmeldung, Tests oder ein inzwischen veränderter
