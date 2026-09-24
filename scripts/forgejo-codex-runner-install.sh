@@ -31,7 +31,7 @@ fi
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner/.codex
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner/work
-install -d -m 750 -o root -g root /etc/picam-codex-runner
+install -d -m 750 -o root -g picam-codex-runner /etc/picam-codex-runner
 
 if [[ -n "$TOKEN_FILE" ]]; then
     [[ -s "$TOKEN_FILE" ]] || { echo "Tokendatei fehlt oder ist leer." >&2; exit 2; }

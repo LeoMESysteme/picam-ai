@@ -14,11 +14,12 @@ Docs-Build prüft die erzeugte Übersicht. Die Vorschau-Ziele in
 ## Doku-Pflege in dieser Sitzung
 
 Der bisherige Claude-`@reboot`-Eintrag wurde aus der Benutzer-Crontab auf dem
-Pi entfernt; ein Claude-Wartungsprozess läuft nicht. Im isolierten Branch
-`feat/codex-docs-maintenance` entsteht ein eigener Forgejo-Workflow mit
-getrenntem Pi-Runner, Codex-CLI-Anmeldung, Prüf-Gate und Bot-Push auf
-`master`. Das persönliche `master`-Worktree enthält eine nicht committete
-Änderung an `PLANNED_FEATURES.md`, die unangetastet bleibt.
+Pi entfernt; ein Claude-Wartungsprozess läuft nicht. Ein eigener Forgejo-
+Workflow mit getrenntem Pi-Runner, Codex-CLI-Anmeldung, Prüf-Gate und Bot-
+Push auf `master` ist implementiert. Der Audit prüft vollständige
+Änderungslisten; der Runner-Token bleibt vom Dienstbenutzer abgeschirmt.
+Das persönliche `master`-Worktree enthält eine nicht committete Änderung an
+`PLANNED_FEATURES.md`, die unangetastet bleibt.
 
 Der neue Runner ist noch **nicht** registriert oder gestartet: Für die
 Inbetriebnahme fehlen derzeit sudo-Zugriff, die Forgejo-Runner-Registrierung,
@@ -30,7 +31,10 @@ sind daher noch nicht geprüft.
 
 * Ausgangsstand im isolierten Worktree: 490 Python-Tests bestanden,
   3 übersprungen, 1 xfailed.
-* Neuer Wartungs-Gate: 20 gezielte Tests bestanden; Ruff ohne Befund.
+* Neuer Wartungs-Gate: 22 gezielte Tests bestanden, darunter ein Audit mit
+  70 geänderten Dateien und ein erfolgreicher Test-Push; Ruff ohne Befund.
+* Vollständige Python-Suite nach der letzten Korrektur: 512 bestanden,
+  3 übersprungen, 1 erwarteter Fehlschlag.
 * Strenger Zensical-Build: erfolgreich; bestehende Vorschau-Ziele gültig.
 * Bestehende Dokubrowser-Tests: 12 bestanden.
 * Workflow-YAML, eingebettete Bash-Blöcke, Installationsskript und systemd-
@@ -38,7 +42,7 @@ sind daher noch nicht geprüft.
 
 ## Nächster Schritt
 
-Die Implementierung vollständig prüfen und den Branch veröffentlichen.
+Die Implementierung nach abschließender Prüfung auf `master` veröffentlichen.
 Danach Runner und Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer
 einmalig anmelden und zuerst einen manuellen Vorschaulauf, dann einen
 kontrollierten Veröffentlichungsdurchlauf mit Cloudflare-Abnahme ausführen.

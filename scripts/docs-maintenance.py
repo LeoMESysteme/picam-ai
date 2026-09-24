@@ -226,16 +226,17 @@ def probe(repo: Path, state_file: Path) -> None:
     if previous_is_ancestor:
         files = git(repo, "diff", "--name-only", f"{previous}..{base}").splitlines()
     else:
-        files = []
+        # A missing or rebased audit revision needs a complete inventory.
+        files = git(repo, "ls-files").splitlines()
     info = {
         "base": base,
+        "diff_base": previous if previous_is_ancestor else None,
         "week": week,
         "weekly": weekly,
         "initial": initial,
         "guide_pages": guide_pages if initial or weekly else [],
         "next_guide_cursor": next_cursor,
-        "changed_files": files[:60],
-        "truncated_files": len(files) > 60,
+        "changed_files": files,
         "run": run,
     }
     save_json(metadata_path(repo), info)
@@ -259,7 +260,7 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
     prompt = (repo / "scripts" / "docs-maintenance-prompt.md").read_text(encoding="utf-8")
     prompt += "\n\n## Auftrag für diesen Lauf\n"
     prompt += json.dumps(
-        {key: info[key] for key in ("base", "weekly", "initial", "guide_pages", "changed_files", "truncated_files")},
+        {key: info[key] for key in ("diff_base", "base", "weekly", "initial", "guide_pages", "changed_files")},
         ensure_ascii=False,
         indent=2,
     )

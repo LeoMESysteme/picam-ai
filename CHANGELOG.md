@@ -17,6 +17,9 @@ und prüft OQ-Index, strengen Build und Browsertests. Erst danach pusht ein
 separater Schritt per Bot-Token nach `master`. Der alte Cron-Eintrag entfällt;
 das Claude-Skript bleibt nur für gezielte manuelle Nutzung erhalten. Der
 gemeinsam genutzte Doku-venv-Symlink ist als Laufzeitartefakt ignoriert.
+Der Audit erhält die vollständige Änderungsliste mit Diff-Grenzen; der
+separate Runner kann seine Konfiguration lesen, während sein Token root-
+geschützt bleibt. Vorschauläufe nutzen Forgejos angepassten Artifact-Upload.
 
 **Konsequenz:** Geprüfte Doku-Änderungen lösen den bestehenden Cloudflare-
 Deploy aus. Fehlende Anmeldung, Tests oder ein inzwischen veränderter

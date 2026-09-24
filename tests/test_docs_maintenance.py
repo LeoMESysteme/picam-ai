@@ -146,7 +146,42 @@ def test_probe_recovers_when_saved_revision_is_not_in_checkout(tmp_path: Path):
 
     info = maintenance.load_json(maintenance.metadata_path(repo))
     assert info["run"] is True
-    assert info["changed_files"] == []
+    assert info["diff_base"] is None
+    assert "docs/anleitung/README.md" in info["changed_files"]
+
+
+def test_probe_keeps_all_changed_files_and_diff_boundaries(tmp_path: Path):
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    _git(remote, "init", "--bare", "--initial-branch=master")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--initial-branch=master")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    guide = repo / "docs" / "anleitung"
+    guide.mkdir(parents=True)
+    (guide / "README.md").write_text("guide\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    old = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "remote", "add", "origin", str(remote))
+    for number in range(70):
+        (guide / f"page-{number:02d}.md").write_text(f"Page {number}\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "many pages")
+    new = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "push", "origin", "master")
+    state = tmp_path / "state.json"
+    maintenance.save_json(state, {"last_audited": old, "last_week": "2026-W01"})
+
+    maintenance.probe(repo, state)
+
+    info = maintenance.load_json(maintenance.metadata_path(repo))
+    assert info["diff_base"] == old
+    assert info["base"] == new
+    assert len(info["changed_files"]) == 70
+    assert "docs/anleitung/page-69.md" in info["changed_files"]
 
 
 def test_no_edit_audit_does_not_mark_broken_site_as_current(tmp_path: Path):
@@ -181,3 +216,48 @@ def test_no_edit_audit_does_not_mark_broken_site_as_current(tmp_path: Path):
     with pytest.raises(subprocess.CalledProcessError):
         maintenance.audit(repo, state, str(codex), publish_requested=True)
     assert not state.exists()
+
+
+def test_successful_audit_and_publish_advances_state_only_after_push(tmp_path: Path, monkeypatch):
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    _git(remote, "init", "--bare", "--initial-branch=master")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--initial-branch=master")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    (repo / "docs" / "anleitung").mkdir(parents=True)
+    (repo / "docs" / "anleitung" / "README.md").write_text("guide\n")
+    (repo / "docs" / "status.md").write_text("before\n")
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "docs-maintenance-prompt.md").write_text("Review the docs.\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    _git(repo, "remote", "add", "origin", str(remote))
+    _git(repo, "push", "origin", "master")
+    base = _git(repo, "rev-parse", "HEAD")
+    codex = tmp_path / "fake-codex"
+    codex.write_text(
+        '#!/bin/sh\nprintf "after\\n" > docs/status.md\n'
+        'printf "%s\\n" \'{"type":"turn.completed","usage":{"input_tokens":2}}\'\n'
+    )
+    codex.chmod(0o755)
+    monkeypatch.setattr(maintenance, "_run_checked", lambda *args, **kwargs: None)
+    monkeypatch.setattr(maintenance, "validate_publish_remote", lambda remote: None)
+    monkeypatch.setenv("DOCS_BOT_USERNAME", "bot")
+    monkeypatch.setenv("DOCS_BOT_TOKEN", "local-test-token")
+    state = tmp_path / "state.json"
+
+    maintenance.probe(repo, state)
+    maintenance.audit(repo, state, str(codex), publish_requested=True)
+
+    candidate = _git(repo, "rev-parse", "HEAD")
+    assert candidate != base
+    assert not state.exists()
+    assert _git(remote, "rev-parse", "refs/heads/master") == base
+
+    maintenance.publish(repo, state)
+
+    assert _git(remote, "rev-parse", "refs/heads/master") == candidate
+    assert maintenance.load_json(state)["last_audited"] == candidate

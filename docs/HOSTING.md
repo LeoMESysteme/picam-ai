@@ -74,6 +74,7 @@ Manuell gestartete Läufe erzeugen standardmäßig nur einen geprüften Patch al
 Action-Artefakt. Mit `mode=publish` dürfen sie nach erfolgreichen Prüfungen
 direkt nach `master` pushen. Der bestehende `docs.yml`-Workflow übernimmt
 anschließend den Cloudflare-Deploy und dessen Schutzprüfung.
+Der Patch-Upload verwendet die Forgejo-Version von `upload-artifact@v4`.
 
 Einmalige Einrichtung auf dem Pi:
 
@@ -108,7 +109,10 @@ Einmalige Einrichtung auf dem Pi:
 Der Job nutzt einen frischen Checkout und berührt keine lokalen Worktrees.
 Er prüft anfangs täglich drei Anleitungsseiten, bis die erste Runde fertig
 ist. Danach ruft er Codex nur bei Änderungen seit dem letzten erfolgreichen
-Audit oder für eine wöchentlich wechselnde Anleitungsseite auf. Das Modell
+Audit oder für eine wöchentlich wechselnde Anleitungsseite auf. Der Auftrag
+nennt sämtliche geänderten Dateien und beide Diff-Grenzen; falls der letzte
+Audit-Commit nicht mehr erreichbar ist, erhält Codex eine vollständige
+Dateiliste für einen neuen Ausgangspunkt. Das Modell
 ist standardmäßig `gpt-6-luna`; höchstens zwei lesende Subagents helfen bei unabhängigen
 Bereichen. Der Codex-Lauf ist auf 20 Minuten und der Workflow auf 45 Minuten
 begrenzt. ChatGPT-Anmeldung hat keine technisch durchsetzbare

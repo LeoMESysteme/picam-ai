@@ -8,8 +8,12 @@ wenn eine Aussage nicht belegbar ist, lass sie unverändert und melde die Lücke
 ## Ziel
 
 Halte die Zensical-Seite für neue Entwickler verständlich, knapp und aktuell.
-Nutze den im JSON unten genannten Git-Diff als Einstieg und lies nur die
-betroffenen Code- und Dokumentationsstellen. Die genannten `guide_pages`
+Nutze die vollständige Dateiliste im JSON unten als Einstieg. Wenn `diff_base`
+gesetzt ist, prüfe die Änderungen mit `git diff diff_base..base -- <pfad>`;
+ohne `diff_base` ist die Liste ein vollständiges Datei-Inventar für den
+Erstaudit oder einen nicht mehr erreichbaren früheren Stand. Berücksichtige
+**alle** genannten Pfade, bündele zusammengehörige Änderungen und lies nur
+die betroffenen Code- und Dokumentationsstellen. Die genannten `guide_pages`
 werden auch ohne Codeänderung geprüft: anfangs in Dreierpaketen, danach
 wöchentlich eine Seite. Beim ersten Paket: prüfe zusätzlich die Navigation
 und finde die wichtigsten fehlenden Kontextverweise der Anleitung.
