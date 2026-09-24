@@ -32,13 +32,20 @@ Bevorzuge eine gezielte Änderung an höchstens fünf Seiten pro Lauf.
    belegten Navigationslücke anlegen und in der Navigation aufnehmen.
    Markdown-Links innerhalb eines umzaeunten Codeblocks erscheinen nur als
    Text. Setze anklickbare Verweise deshalb im Fliesstext oder in einer
-   Markdown-Tabelle ausserhalb des Codeblocks.
+   Markdown-Tabelle ausserhalb des Codeblocks. Rate Abschnittsanker nicht aus
+   Ueberschriften: Zensical normalisiert Satzzeichen und Code-Formatierung.
+   Wenn du die tatsaechliche Ziel-ID nicht geprueft hast, verlinke die Seite
+   ohne `#`-Anker.
 3. Roadmap-Status nur mit eindeutigen Belegen aus dem aktuellen Stand
    korrigieren. `docs/status.md` bei jeder tatsächlichen Änderung als
    aktuellen, belegten Snapshot neu schreiben, ohne Produktfakten zu raten.
 4. Wenn eine **neue echte Projekt-Unbekannte** sichtbar wird, füge ein neues
    OQ in `docs/open-questions.md` hinzu. Bestehende OQ-Einträge nie ändern
    oder löschen. Der Gate-Prozess erzeugt die Übersicht danach neu.
+
+Nach allen Doku-Aenderungen einmal selbst `./scripts/docs-site.sh build -s` ausfuehren.
+Repariere dabei gemeldete Links und Anker anhand der tatsaechlichen IDs in
+`site/`, bevor du den Lauf beendest. Der Gate wiederholt den Build unabhaengig.
 
 ## Grenzen
 

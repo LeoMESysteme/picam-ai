@@ -25,21 +25,25 @@ geschützte Kopie der vorhandenen ChatGPT-Anmeldung. Ein manueller
 Forgejo-Vorschaulauf ([Run 35](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/35))
 hat einen Doku-Patch erzeugt und den strengen Zensical-Build sowie die
 Browsertests bestanden. Der Patch wurde vor Veröffentlichung geprüft und
-fachlich korrigiert. Der tägliche Job kann erst nach Einrichtung eines
-auf dieses Repo begrenzten Forgejo-Schreib-Tokens nach `master` pushen;
-`DOCS_BOT_TOKEN` und `DOCS_BOT_USERNAME` sind noch nicht gesetzt. Ein
-automatischer Veröffentlichungslauf und das anschließende
-Cloudflare-Deployment sind noch nicht abgenommen.
+fachlich korrigiert. Für den täglichen Push ist ein auf dieses Repo
+begrenzter Forgejo-Schreib-Token vorgesehen. `DOCS_BOT_TOKEN` und
+`DOCS_BOT_USERNAME` sind inzwischen gesetzt; der
+Benutzername wurde auf `l.hentschke` korrigiert. Der manuell geprüfte Patch
+ist auf `master`; der [Doku-Deploy 36](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/36)
+einschließlich Cloudflare-Schutzprüfung war erfolgreich. Ein erster
+automatischer Publish-Versuch ([Run 38](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/38))
+wurde wegen eines falschen Abschnittsankers vom strengen Build gestoppt;
+der Wartungsauftrag prüft solche Anker nun vor der Gate-Abnahme selbst.
 
 ## Verifikation
 
 Für den geprüften Patch: OQ-Index-Prüfung und strenger Zensical-Build
-erfolgreich; 13 Dokubrowser-Tests bestanden. Der Lauf prüfte außerdem
-Quelltext, Anleitung und Navigation. Hardware-Messungen fanden in diesem
-Pflegelauf nicht statt.
+erfolgreich; 24 Wartungs-Gate-Tests und 13 Dokubrowser-Tests bestanden.
+Der öffentliche Zugriffsschutz der Live-Seite wurde nach dem Deploy
+erneut erfolgreich geprüft. Hardware-Messungen fanden in diesem Pflegelauf
+nicht statt.
 
 ## Nächster Schritt
 
-Forgejo-Token mit Schreibrecht nur auf dieses Repo einrichten. Token und
-Benutzername als Forgejo-Secret beziehungsweise Variable hinterlegen. Einen
-manuellen `mode=publish`-Lauf samt Cloudflare-Ergebnis prüfen.
+Einen erneuten manuellen `mode=publish`-Lauf starten und bei einem
+Doku-Commit den Bot-Push und den nachgelagerten Cloudflare-Deploy prüfen.

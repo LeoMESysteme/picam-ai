@@ -3,6 +3,19 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Abschnittsanker vor Doku-Publish prüfen)
+
+**Problem:** Der erste manuelle Publish-Lauf verlinkte `ReplaySource` mit
+einem geratenen Abschnittsanker. Zensical erzeugt fuer die Zielueberschrift
+eine andere ID; der strenge Build stoppte den Lauf vor dem Push.
+
+**Änderung:** Der Codex-Auftrag verlangt die Pruefung realer Ziel-IDs und
+einen eigenen strengen Build nach jeder Doku-Aenderung. Ohne gepruefte ID
+soll Codex nur die Zielseite verlinken. Der Gate baut weiterhin unabhaengig.
+
+**Konsequenz:** Fehlerhafte Anker koennen bereits im Codex-Schritt korrigiert
+werden; ein verbleibender Fehler stoppt den Publish weiterhin.
+
 ## 0.1.0.dev0 — 2026-09-24 (Doku-Links ausserhalb von Codebloecken)
 
 **Problem:** Der erste echte Codex-Vorschaulauf setzte API-Verweise in eine
