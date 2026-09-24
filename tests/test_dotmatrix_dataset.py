@@ -135,11 +135,11 @@ def test_load_cell_samples_resolves_profile_from_detail_or_map_and_counts_missin
     detail_a["profile_grid"] = json.dumps(grid_dict)
     _write_sample(dataset_root, "sample-a", detail_a)
 
-    # Probe B: nur session_id, Profil kommt aus profile_map.
+    # Probe B: nur session_id, Profil kommt aus profile_map (Pruefsumme passt).
     detail_b = _base_detail("sessB")
     _write_sample(dataset_root, "sample-b", detail_b)
     profile_path = _save_profile(tmp_path)
-    profile_map = {"sessB": str(profile_path)}
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": dotmatrix_dataset._profile_sha256(profile_path)}}
 
     # Probe C: weder profile_quad/profile_grid im Detail noch ein Eintrag in
     # profile_map fuer ihre session_id - nicht aufloesbar.
@@ -216,7 +216,71 @@ def test_write_map_and_read_profile_map_roundtrip(tmp_path):
         assert written["ernte1"]["sha256"] == dotmatrix_dataset._profile_sha256(profile_a)
 
         profile_map = dotmatrix_dataset.read_profile_map(out_path)
-        assert profile_map["ernte1"] == str(profile_a)
-        assert profile_map["auf2"] == str(profile_b)
+        assert profile_map["ernte1"]["path"] == str(profile_a)
+        assert profile_map["ernte1"]["sha256"] == dotmatrix_dataset._profile_sha256(profile_a)
+        assert profile_map["auf2"]["path"] == str(profile_b)
+        assert profile_map["auf2"]["sha256"] == dotmatrix_dataset._profile_sha256(profile_b)
     finally:
         dotmatrix_dataset.SESSION_PROFILE_PATHS = original_paths
+
+
+def test_load_cell_samples_skips_sample_when_map_profile_was_reconfirmed(tmp_path):
+    """Fix Runde 1 (Review-Befund): die `profile_map` traegt die `sha256`,
+    die `write-map` beim Schreiben gemessen hat. Wird die Profildatei DANACH
+    erneut bestaetigt (anderes Quad/Raster), darf die Probe NICHT mit dem
+    neuen Profil entzerrt werden - sie wird uebersprungen und gezaehlt."""
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+
+    detail = _base_detail("sessB")
+    _write_sample(dataset_root, "sample-b", detail)
+
+    profile_path = _save_profile(tmp_path)
+    recorded_sha256 = dotmatrix_dataset._profile_sha256(profile_path)
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": recorded_sha256}}
+
+    # Sitzung wurde nach write-map erneut bestaetigt - andere Profildatei am
+    # selben Pfad (anderer Inhalt, damit auch der Hash anders ist).
+    reconfirmed = SessionProfile(
+        schema_version=PROFILE_SCHEMA_VERSION,
+        device_id="gsv-sensor-161a",
+        session_id="sessB",
+        quad=[[0.0, 0.0], [399.0, 0.0], [399.0, 159.0], [0.0, 159.0]],
+        target_size=TARGET_SIZE,
+        grid=GRID,
+        scaler_crop=None,
+        min_source_dot_column_px=5.0,
+        native_scale=1.0,
+        min_native_dot_column_px=5.0,
+        resolution_threshold_px=2.0,
+        resolution_ok=True,
+        confirmed_by="tester",
+        confirmed_at_utc="2026-09-24T13:00:00+00:00",
+    )
+    reconfirmed.save(profile_path)
+    assert dotmatrix_dataset._profile_sha256(profile_path) != recorded_sha256
+
+    stats: dict[str, int] = {}
+    samples = dotmatrix_dataset.load_cell_samples(dataset_root, profile_map, stats=stats)
+
+    assert samples == []
+    assert stats["profil_pruefsumme_abweichend"] == 1
+    assert stats["ohne_profil"] == 0
+
+
+def test_load_cell_samples_treats_map_entry_without_sha256_as_unresolved(tmp_path):
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+
+    detail = _base_detail("sessB")
+    _write_sample(dataset_root, "sample-b", detail)
+
+    profile_path = _save_profile(tmp_path)
+    profile_map = {"sessB": {"path": str(profile_path)}}  # keine sha256
+
+    stats: dict[str, int] = {}
+    samples = dotmatrix_dataset.load_cell_samples(dataset_root, profile_map, stats=stats)
+
+    assert samples == []
+    assert stats["ohne_profil"] == 1
+    assert stats["profil_pruefsumme_abweichend"] == 0

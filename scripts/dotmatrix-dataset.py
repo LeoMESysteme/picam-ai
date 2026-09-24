@@ -18,9 +18,21 @@ ablesbar, unabhaengig davon, ob die Profildatei spaeter geaendert oder
 geloescht wird. Aeltere, vor Task 6 importierte Proben haben diese Felder
 nicht (siehe `var/workbench/datasets/samples/*/sample.json`, `session_id`
 allein reicht dort) - fuer sie liefert der Aufrufer eine `profile_map`
-(Sitzungs-ID -> Pfad zu `profile.json`), siehe `write-map`/`read_profile_map`
-unten. Eine Probe, deren Profil auf keinem der beiden Wege auflösbar ist,
-wird gezaehlt und uebersprungen, nie geraten (AGENTS.md).
+(Sitzungs-ID -> `{"path": ..., "sha256": ...}`), siehe
+`write-map`/`read_profile_map` unten. Eine Probe, deren Profil auf keinem der
+beiden Wege auflösbar ist, wird gezaehlt und uebersprungen, nie geraten
+(AGENTS.md).
+
+## Fix Runde 1 (Review): Pruefsumme der `profile_map`-Datei
+
+`profile_map` traegt neben dem Pfad auch die `sha256`, die `write-map` beim
+Schreiben der Zuordnung gemessen hat. Beim Aufloesen ueber `profile_map`
+(nicht ueber `label_origin_detail`) wird die Datei am Pfad NEU gehasht und
+gegen diese erwartete Pruefsumme geprueft - stimmt sie nicht (Profil wurde
+nach `write-map` erneut bestaetigt/veraendert), wird die Probe NICHT mit dem
+inzwischen anderen Quad/Raster entzerrt, sondern unter
+`REASON_HASH_MISMATCH` gezaehlt und uebersprungen. Ein Map-Eintrag ohne
+`sha256` gilt als nicht aufloesbar (`write-map` schreibt immer eine).
 """
 
 from __future__ import annotations
@@ -50,6 +62,14 @@ DEVICE_NAME = "gsv-sensor-161a"
 #: Trennzelle, Formatregel `gsv2as_v1`, global-constraints.md) - Einheit und
 #: Rest (Zellen 9-15) werden in diesem Schritt nicht klassifiziert.
 CELL_COUNT = 9
+
+#: Zaehlergruende in `stats` (Fix Runde 1): eine Probe ohne aufloesbares
+#: Profil ueberhaupt, bzw. eine Probe, deren `profile_map`-Eintrag auf eine
+#: inzwischen anders lautende Profildatei zeigt (Pruefsummen-Mismatch) - in
+#: beiden Faellen wird NIE mit einem moeglicherweise falschen Quad/Raster
+#: entzerrt.
+REASON_NO_PROFILE = "ohne_profil"
+REASON_HASH_MISMATCH = "profil_pruefsumme_abweichend"
 
 #: Von `write-map` bekannte Sitzungsprofile (Ernte Phase 1). Relativ zur
 #: Repo-Wurzel, wie in der Zuordnungsdatei abgelegt.
@@ -116,11 +136,26 @@ def _quad_from_json(quad_json: str) -> list[list[float]] | None:
 
 
 def _resolve_profile(
-    detail: dict, session_id: str | None, profile_map: dict[str, str]
-) -> tuple[list[list[float]], CharGrid, tuple[int, int]] | None:
+    detail: dict, session_id: str | None, profile_map: dict[str, dict[str, str]]
+) -> tuple[list[list[float]], CharGrid, tuple[int, int]] | str:
     """Profil einer Probe: bevorzugt aus `label_origin_detail` (Task 6,
     belegt genau, was zur Import-Zeit galt), sonst ueber `profile_map`
-    (aeltere Proben, nur `session_id`)."""
+    (aeltere Proben, nur `session_id`).
+
+    `profile_map[session_id]` ist `{"path": ..., "sha256": ...}` (das Format
+    von `write-map`/`read_profile_map`). Beim Map-Weg wird die Datei am Pfad
+    NEU gehasht und gegen die gespeicherte `sha256` geprueft, bevor sie
+    geladen wird - eine seit `write-map` veraenderte Profildatei (z. B. eine
+    neu bestaetigte Sitzung mit anderem Quad) darf nie unbemerkt fuer eine
+    aeltere Probe verwendet werden (Fix Runde 1, Review-Befund). Ein
+    Map-Eintrag ohne `sha256` gilt als nicht aufloesbar - `write-map`
+    schreibt sie immer, ein fehlender Wert ist also ein Format-/Datenfehler,
+    keine gueltige Zuordnung.
+
+    Rueckgabe: das aufgeloeste Profil, oder ein Ablehnungsgrund-String
+    (`REASON_NO_PROFILE`/`REASON_HASH_MISMATCH`) statt eines geratenen
+    Profils.
+    """
     quad_json = detail.get("profile_quad")
     grid_json = detail.get("profile_grid")
     if isinstance(quad_json, str) and isinstance(grid_json, str):
@@ -131,18 +166,23 @@ def _resolve_profile(
             return quad, grid, target_size
 
     if session_id:
-        path_str = profile_map.get(session_id)
-        if path_str:
-            profile_path = Path(path_str)
-            if profile_path.is_file():
-                profile = SessionProfile.load(profile_path)
-                return profile.quad, profile.grid, profile.target_size
-    return None
+        entry = profile_map.get(session_id)
+        if entry:
+            path_str = entry.get("path")
+            expected_sha256 = entry.get("sha256")
+            if path_str and expected_sha256:
+                profile_path = Path(path_str)
+                if profile_path.is_file():
+                    if _profile_sha256(profile_path) != expected_sha256:
+                        return REASON_HASH_MISMATCH
+                    profile = SessionProfile.load(profile_path)
+                    return profile.quad, profile.grid, profile.target_size
+    return REASON_NO_PROFILE
 
 
 def load_cell_samples(
     dataset_root: Path,
-    profile_map: dict[str, str],
+    profile_map: dict[str, dict[str, str]],
     *,
     stats: dict[str, int] | None = None,
 ) -> list[CellSample]:
@@ -150,14 +190,18 @@ def load_cell_samples(
 
     Nur `label_origin == "serial_ascii"`, `label_state == "readable"` und
     Geraet `DEVICE_NAME`. Gruppe = `label_origin_detail["session_id"]`.
-    Proben ohne auflösbares Profil oder mit einem `cell_text` ausserhalb der
+    `profile_map` ist `{session_id: {"path": ..., "sha256": ...}}` (siehe
+    `read_profile_map`/`write-map`). Proben ohne auflösbares Profil, mit
+    einer seit `write-map` veraenderten Profildatei (Pruefsummen-Mismatch,
+    siehe `_resolve_profile`) oder mit einem `cell_text` ausserhalb der
     bekannten Zeichenklassen (`CLASSES`) werden gezaehlt (in `stats`, falls
     uebergeben) und uebersprungen, nie geraten.
     """
     dataset_root = Path(dataset_root)
     if stats is None:
         stats = {}
-    stats.setdefault("ohne_profil", 0)
+    stats.setdefault(REASON_NO_PROFILE, 0)
+    stats.setdefault(REASON_HASH_MISMATCH, 0)
     stats.setdefault("ungueltige_zeichen", 0)
     stats.setdefault("geladen", 0)
 
@@ -185,8 +229,8 @@ def load_cell_samples(
         detail = sample.get("label_origin_detail") or {}
         session_id = detail.get("session_id")
         resolved = _resolve_profile(detail, session_id, profile_map)
-        if resolved is None:
-            stats["ohne_profil"] += 1
+        if isinstance(resolved, str):
+            stats[resolved] = stats.get(resolved, 0) + 1
             continue
         quad, grid, target_size = resolved
 
@@ -218,18 +262,20 @@ def load_cell_samples(
     return out
 
 
-def read_profile_map(path: Path) -> dict[str, str]:
+def read_profile_map(path: Path) -> dict[str, dict[str, str]]:
     """Liest das von `write-map` geschriebene Format
-    (`{"session_id": {"path": ..., "sha256": ...}}`) und liefert die einfache
-    `profile_map`-Form, die `load_cell_samples` erwartet (`session_id ->
-    Pfad`). Relative Pfade werden gegen die Repo-Wurzel aufgeloest."""
+    (`{"session_id": {"path": ..., "sha256": ...}}`) und liefert die
+    `profile_map`-Form, die `load_cell_samples`/`_resolve_profile` erwarten -
+    Pfade relativ zur Repo-Wurzel werden aufgeloest, die `sha256` bleibt
+    erhalten (Fix Runde 1: sie wird beim Aufloesen gegen die dann aktuelle
+    Datei geprueft, statt kommentarlos verworfen zu werden)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    out: dict[str, str] = {}
+    out: dict[str, dict[str, str]] = {}
     for session_id, entry in data.items():
         p = Path(entry["path"])
         if not p.is_absolute():
             p = _REPO_ROOT / p
-        out[session_id] = str(p)
+        out[session_id] = {"path": str(p), "sha256": entry.get("sha256", "")}
     return out
 
 
