@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# LEGACY: Der @reboot-Cronjob ist deaktiviert. Die aktive Zensical-Pflege
+# laeuft ueber .github/workflows/docs-maintenance.yml. Dieses Skript bleibt
+# nur fuer gezielte manuelle Rueckgriffe auf die alte Claude-Routine erhalten.
 # Unbeaufsichtigte taegliche Doku-Pflege, per @reboot-Cron kurz nach dem
 # morgendlichen Boot des Pi ausgefuehrt (der Pi ist nachts aus).
 #
@@ -27,9 +30,6 @@
 # weiter gepflegt werden. Ohne diese Markerdatei waere ein Stash sonst
 # unsichtbar fuer `git status` und wuerde sich auf demselben Branch Nacht
 # fuer Nacht unbemerkt wiederholen.
-#
-# Installation (einmalig):
-#   (crontab -l 2>/dev/null; echo "@reboot sleep 20 && /home/me-systeme/picam-ai/scripts/repo-maintenance.sh") | crontab -
 #
 # Bezug: CLAUDE.md (Einstiegsreihenfolge, Doku-Pflicht), AGENTS.md
 # (Dokumentationspflicht-Tabelle: OQ-Eintraege nie loeschen).

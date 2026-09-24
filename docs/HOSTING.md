@@ -65,6 +65,58 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Automatische Zensical-Pflege einrichten
+
+Der bisherige Claude-`@reboot`-Eintrag ist deaktiviert. Forgejo startet
+`.github/workflows/docs-maintenance.yml` täglich um 06:00 Uhr Berliner Zeit;
+ist der Pi aus, wartet der Lauf auf das Runner-Label `picam-codex-docs`.
+Manuell gestartete Läufe erzeugen standardmäßig nur einen geprüften Patch als
+Action-Artefakt. Mit `mode=publish` dürfen sie nach erfolgreichen Prüfungen
+direkt nach `master` pushen. Der bestehende `docs.yml`-Workflow übernimmt
+anschließend den Cloudflare-Deploy und dessen Schutzprüfung.
+
+Einmalige Einrichtung auf dem Pi:
+
+1. In Forgejo unter **Repo → Einstellungen → Actions → Runners** einen neuen,
+   nur für dieses Repo registrierten Runner anlegen. UUID und Token erhalten
+   einen eigenen Eintrag; den Token ausschließlich in einer lokalen Datei mit
+   Modus `0600` ablegen, nie in Kommandozeile, Repo oder Chat.
+2. `sudo ./scripts/forgejo-codex-runner-install.sh --uuid <UUID> --token-file <DATEI>`
+   ausführen. Das Skript installiert die gepinnte Codex CLI, den Systemnutzer
+   `picam-codex-runner` und den ressourcenbegrenzten Dienst. Der vorhandene
+   `picam-docs`-Runner bleibt für den Cloudflare-Build zuständig.
+3. Unter dem neuen Systemnutzer einmalig anmelden:
+   ```bash
+   sudo -u picam-codex-runner env HOME=/var/lib/picam-codex-runner \
+     CODEX_HOME=/var/lib/picam-codex-runner/.codex \
+     /opt/picam-codex/node_modules/.bin/codex \
+     -c 'cli_auth_credentials_store="file"' login --device-auth
+   ```
+   Den Gerätecode im eigenen Browser bestätigen. Danach muss
+   `auth.json` nur für diesen Benutzer lesbar sein (`0600`); die Datei
+   bleibt zwischen Läufen bestehen und wird nie ins Repo kopiert.
+4. Einen Forgejo-Bot mit Schreibrecht **nur auf dieses Repo** anlegen und
+   dessen PAT als Repo-Secret `DOCS_BOT_TOKEN` hinterlegen. Den Bot-Namen als
+   Repo-Variable `DOCS_BOT_USERNAME` setzen. Falls `master` geschützt ist,
+   braucht dieser Bot die ausdrücklich erlaubte Push-Berechtigung. Der
+   automatische `FORGEJO_TOKEN` kann den Publish-Schritt nicht ersetzen:
+   seine Pushes lösen keine weiteren Actions aus.
+5. Einen manuellen Lauf mit `mode=preview` starten und den Patch prüfen.
+   Danach einen kleinen `mode=publish`-Lauf abnehmen: Bot-Commit, neuer
+   `docs.yml`-Lauf, geschütztes Cloudflare-Deployment und Hover-Vorschau.
+
+Der Job nutzt einen frischen Checkout und berührt keine lokalen Worktrees.
+Er prüft anfangs täglich drei Anleitungsseiten, bis die erste Runde fertig
+ist. Danach ruft er Codex nur bei Änderungen seit dem letzten erfolgreichen
+Audit oder für eine wöchentlich wechselnde Anleitungsseite auf. Das Modell
+ist standardmäßig `gpt-6-luna`; höchstens zwei lesende Subagents helfen bei unabhängigen
+Bereichen. Der Codex-Lauf ist auf 20 Minuten und der Workflow auf 45 Minuten
+begrenzt. ChatGPT-Anmeldung hat keine technisch durchsetzbare
+10-USD-API-Kostengrenze; die Forgejo-Logs enthalten nur Status und
+Token-Nutzung, keine Anmelde- oder Bot-Tokens. Bei Problemen bleiben die privaten Codex-JSONL-Logs
+auf dem Runner unter `CODEX_HOME`; bei fehlgeschlagenem Gate gibt es keinen
+Push.
+
 * **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
   OQ-Index-Check, Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
   aktualisiert.

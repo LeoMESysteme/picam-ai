@@ -5,35 +5,40 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-Die Zensical-Doku hat interaktive OQ- und Roadmap-Ansichten. Die OQ-Übersicht
-wird aus `docs/open-questions.md` und den aktiven Aufgaben in `TODO.md`
-erzeugt. Nach Änderungen an diesen Quellen
-`./.venv/bin/python scripts/oq-index.py` ausführen. Der strenge Docs-Build
-prüft den Index.
+Die Zensical-Doku ist auf `master` mit interaktiver OQ- und Roadmap-Ansicht
+sowie ersten Kontextvorschauen vorhanden. OQ-Titel, Status und aktive
+TODO-Verweise erfordern `./.venv/bin/python scripts/oq-index.py`; der strenge
+Docs-Build prüft die erzeugte Übersicht. Die Vorschau-Ziele in
+`zensical.toml` brauchen kurze Texte und stabile Abschnittsanker.
 
-Für die Anleitung gibt es einen ersten Satz Kontextvorschauen: kurze
-Glossarbegriffe und der Timing-Grundsatz öffnen sich beim Überfahren oder
-Fokussieren eines Links. Zwei Codezeilen haben Erklärungen. API-Links zeigen
-kurze Titel statt ganzer generierter Klassen. Die Pflegehinweise stehen in
-`AGENTS.md` und `docs/HOSTING.md`.
+## Doku-Pflege in dieser Sitzung
 
-Die Arbeit liegt auf dem Branch `docs/hover-previews` im Worktree
-`/home/me-systeme/picam-ai-docs-zensical`. Eine Veröffentlichung erfordert
-einen Merge nach `master` und den erfolgreichen Forgejo-Deploy. Der aktuelle
-Cloudflare-Stand wurde in dieser Sitzung nicht geprüft.
+Der bisherige Claude-`@reboot`-Eintrag wurde aus der Benutzer-Crontab auf dem
+Pi entfernt; ein Claude-Wartungsprozess läuft nicht. Im isolierten Branch
+`feat/codex-docs-maintenance` entsteht ein eigener Forgejo-Workflow mit
+getrenntem Pi-Runner, Codex-CLI-Anmeldung, Prüf-Gate und Bot-Push auf
+`master`. Das persönliche `master`-Worktree enthält eine nicht committete
+Änderung an `PLANNED_FEATURES.md`, die unangetastet bleibt.
 
-## Verifikation dieser Sitzung
+Der neue Runner ist noch **nicht** registriert oder gestartet: Für die
+Inbetriebnahme fehlen derzeit sudo-Zugriff, die Forgejo-Runner-Registrierung,
+ein Bot-Token und die einmalige Geräteanmeldung für den eigenen Runner-
+Benutzer. Ein produktiver Codex-Lauf und der nachgelagerte Cloudflare-Deploy
+sind daher noch nicht geprüft.
 
-* `./scripts/docs-site.sh build -s`: erfolgreich.
-* `npx playwright test -c playwright.docs.config.ts`: 12 bestanden.
-* `./.venv/bin/pytest -q`: 490 bestanden, 3 übersprungen, 1 xfailed.
-* `./.venv/bin/ruff check .`: ohne Befund.
-* `./.venv/bin/python scripts/oq-index.py --check`: aktuell.
-* `git diff --check`: ohne Befund.
+## Verifikation
+
+* Ausgangsstand im isolierten Worktree: 490 Python-Tests bestanden,
+  3 übersprungen, 1 xfailed.
+* Neuer Wartungs-Gate: 20 gezielte Tests bestanden; Ruff ohne Befund.
+* Strenger Zensical-Build: erfolgreich; bestehende Vorschau-Ziele gültig.
+* Bestehende Dokubrowser-Tests: 12 bestanden.
+* Workflow-YAML, eingebettete Bash-Blöcke, Installationsskript und systemd-
+  Service wurden statisch geprüft.
 
 ## Nächster Schritt
 
-Den Branch prüfen und in `master` integrieren. Nach dem Push den
-Forgejo-Docs-Job und den Cloudflare-Deploy kontrollieren. Für das Produkt
-bleiben OQ-22 (Kamera auf höchstens 960×720) und OQ-07 (unbekanntes
-GSVmulti-Telegramm) zu beachten; `AsciiCsvFormatter` ist provisorisch.
+Die Implementierung vollständig prüfen und den Branch veröffentlichen.
+Danach Runner und Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer
+einmalig anmelden und zuerst einen manuellen Vorschaulauf, dann einen
+kontrollierten Veröffentlichungsdurchlauf mit Cloudflare-Abnahme ausführen.
