@@ -1,6 +1,6 @@
 # 2 — Die Verträge (Nachschlagewerk)
 
-Alle Trennstellen und Datenklassen auf einer Seite. Nicht zum Durchlesen,
+Alle [Trennstellen](glossar.md#trennstelle) und Datenklassen auf einer Seite. Nicht zum Durchlesen,
 sondern zum Danebenlegen, während du ein neues Modul schreibst.
 
 Quelle der Wahrheit bleibt der Code — bei Abweichung gilt der Code, und diese
@@ -42,12 +42,16 @@ Pipeline macht daraus `UNREADABLE` mit Grund `display_not_located`.
 ### `ValueReader` — `src/dispread/ocr/__init__.py`
 
 ```python
-def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult: ...
+def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult: ...  # (1)!
 @property
 def backend_id(self) -> str: ...
 @property
 def declares_confidence_calibrated(self) -> bool: ...   # False, solange unbelegt
 ```
+
+1. Die Signatur lässt keinen Referenzwert zu. Der Leser verarbeitet nur den
+   Bildausschnitt und das bestätigte Layout; die Referenz bleibt außerhalb
+   dieses Erkennungspfads.
 
 Bekommt **nur** Bildausschnitt und bestätigtes Profil. Kein Referenzwert, keine
 Historie, kein letzter Wert. Diese Signatur ist der strukturelle Schutz gegen
@@ -60,7 +64,8 @@ def evaluate(self, read: ReadResult, capture_ns: int) -> GateDecision: ...
 def reset(self) -> None: ...
 ```
 
-Zustandsbehaftet (Mehrbildbestätigung, Veralterung). Auch hier: kein
+Die [Freigabe](glossar.md#freigabe-gate) ist zustandsbehaftet
+(Mehrbildbestätigung, Veralterung). Auch hier: kein
 Referenzwert.
 
 ### `ValueSink` — `src/dispread/sink/__init__.py`
@@ -72,7 +77,8 @@ def emit(self, record: ValueRecord) -> TxReceipt: ...
 def health(self) -> SinkHealth: ...
 ```
 
-`emit` **wirft nicht** bei Übertragungsfehlern, sondern zählt sie in
+Die [Senke](glossar.md#senke-sink) **wirft nicht** bei Übertragungsfehlern,
+sondern zählt sie in
 `health()` und liefert einen Receipt mit `t_complete_ns=None`. Ein Sink darf
 den Messbetrieb nicht anhalten — aber der Fehler darf auch nicht verschwinden.
 
@@ -168,6 +174,8 @@ gelesen.
 ### `ValueRecord` — `records.py`
 
 Die neun Pflichtfelder aus Konzept §8 zuerst, danach Nachvollziehbarkeit.
+Die [API-Referenz](../../api/vertraege.md#dispread.records.ValueRecord "ValueRecord: der interne Datensatz mit Wert, Status und Zeitbezug")
+zeigt die aktuelle Signatur.
 
 | Feld | Erzeuger | darf ändern |
 | --- | --- | --- |
@@ -184,7 +192,8 @@ Zwei Invarianten, im Konstruktor erzwungen:
 1. `status != VALID` ⇒ `reject_reasons` nicht leer.
 2. `status in (STALE, UNREADABLE)` ⇒ `value is None`.
 
-`to_dict()` / `from_dict()` müssen verlustfrei sein — das ist ein
+[to_dict()](../../api/vertraege.md#dispread.records.ValueRecord.to_dict "Serialisiert den ValueRecord für das JSONL-Log") /
+`from_dict()` müssen verlustfrei sein — das ist ein
 Abnahmekriterium aus P0 und in `tests/test_records.py` geprüft.
 
 ### `TxReceipt` — `records.py`

@@ -82,6 +82,20 @@ Prüfstand dient nur der automatischen Schutzprüfung.
   dazukommen oder Statuswörter wechseln,
   `docs-site/assets/docs-interactive.js` und `tests/docs-site.spec.ts`
   gemeinsam anpassen.
+* **Begriffsvorschauen:** `zensical.toml` aktiviert Vorschauen gezielt für
+  `docs/anleitung/glossar.md` und `docs/TIMING.md`. Links auf diese Seiten
+  zeigen deren kurze Einleitung; Links mit `#`-Anker zeigen den jeweiligen
+  Überschriftenabschnitt. Deshalb auch die Seiteneinleitungen knapp halten. Die
+  expliziten Glossar-IDs (`#value-record` usw.) beim Umbenennen beibehalten
+  oder alle Verweise darauf aktualisieren. Der Abschnitt bis zur nächsten
+  Überschrift soll als kurzer Erklärungstext lesbar bleiben. Bei weiteren
+  Vorschau-Zielen erst einen kurzen Zielabschnitt schaffen, dann den Pfad in
+  `zensical.toml` aufnehmen und einen Browsertest ergänzen.
+* **API- und Code-Erklärungen:** Generierte API-Klassen sind für eine
+  Inhaltsvorschau zu umfangreich. Bei ausgewählten API-Verweisen einen kurzen
+  Markdown-Linktitel ergänzen. Erklärungen zu einzelnen Codezeilen nutzen
+  `# (1)!` und die zugehörige nummerierte Erläuterung nach dem Codeblock.
+  Links und Erklärungen beim Ändern der Signatur gegen den Quellcode prüfen.
 * **Vor dem Merge prüfen:** `./scripts/docs-site.sh build -s` und
   `npx playwright test -c playwright.docs.config.ts`. Der Build stoppt bei
   einem veralteten OQ-Index; die Browserprüfung meldet eine nicht mehr

@@ -49,10 +49,17 @@ Zwei harte Sätze:
   `docs-site/assets/docs-interactive.js` und `tests/docs-site.spec.ts`
   zusammen anpassen. Status und Exit-Kriterien bei neuen Belegen in der
   Roadmap selbst aktualisieren.
+* Vorschau-Links auf Glossarbegriffe und Dokumentabschnitte brauchen stabile
+  Überschriften-IDs und kurze Zielabschnitte. Links ohne Abschnittsanker auf
+  Glossar und Timing zeigen die jeweilige Seiteneinleitung; diese knapp
+  halten. Bei Umbenennungen die Links in `docs/anleitung/` und die
+  Vorschau-Ziele in `zensical.toml` prüfen.
+  API-Links mit kurzem Markdown-Linktitel erklären; generierte API-Seiten
+  nicht pauschal als Vorschau-Ziele aufnehmen.
 * Vor dem Merge von Doku-Änderungen `./scripts/docs-site.sh build -s` und
   `npx playwright test -c playwright.docs.config.ts` ausführen. Der Build
   bricht bei einem veralteten OQ-Index ab; die Browsertests prüfen Filter,
-  Suche, Roadmap und Fallback ohne JavaScript.
+  Suche, Roadmap, Vorschauen und Fallback ohne JavaScript.
 
 ## Nicht verhandelbar (Konzept.md §7)
 

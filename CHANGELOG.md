@@ -3,6 +3,21 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Kontextvorschauen in der Doku)
+
+**Problem:** Begriffe, Querverweise und API-Symbole unterbrechen beim Lesen
+der Anleitung den Zusammenhang, wenn ihre Bedeutung erst auf einer anderen
+Seite nachgeschlagen werden muss.
+
+**Änderung:** Kurze Glossar- und Timing-Abschnitte erscheinen als Zensical-
+Vorschau beim Überfahren oder Fokussieren ihrer Links. Zwei Codebeispiele
+erklären markierte Zeilen; ausgewählte API-Links tragen eine knappe Erklärung.
+Stabile Glossar-IDs, Pflegehinweise und Browsertests sichern die Verweise ab.
+
+**Konsequenz:** Leser können die Bedeutung im Kontext prüfen und bei Bedarf
+zum vollständigen Ziel navigieren. Lange generierte API-Inhalte bleiben auf
+der API-Seite.
+
 ## 0.1.0.dev0 — 2026-09-24 (Interaktive Roadmap und OQ-Übersicht)
 
 **Problem:** Die Roadmap war nur als breite Tabelle lesbar; die OQ-Seite hatte

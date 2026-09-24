@@ -67,38 +67,60 @@ das Gate kann daraus begründen, statt zu glauben.
 
 ## Kette und Verträge
 
-**Freigabe / Gate** (`ReleaseGate`) — entscheidet aus Leseergebnis, Profil und
+### Freigabe / Gate {#freigabe-gate}
+
+`ReleaseGate` entscheidet aus Leseergebnis, Profil und
 eigener Historie über `VALID | TRANSITION | UNREADABLE | STALE`. Bekommt
 strukturell keinen Referenzwert.
 
-**Konfidenz** — aggregiertes Qualitätsmaß, hier die Segmentmarge.
+### Konfidenz {#konfidenz}
+
+Aggregiertes Qualitätsmaß, hier die Segmentmarge.
 **Ausdrücklich keine Fehlerwahrscheinlichkeit** (Konzept §7).
 
-**Marge** (`margin`) — Abstand der knappsten Segmentmessung zur
+### Marge {#marge}
+
+`margin` ist der Abstand der knappsten Segmentmessung zur
 Entscheidungsschwelle, normiert 0..1. Klein = knapp entschieden.
 
-**Mehrbildbestätigung** — *n* aufeinanderfolgende Frames müssen denselben Wert
+### Mehrbildbestätigung {#mehrbildbestaetigung}
+
+*n* aufeinanderfolgende Frames müssen denselben Wert
 zeigen (`GateConfig.confirm_frames`). Kostet Zeit, die als
 `confirmation_span_ns` dokumentiert wird.
 
-**Senke / Sink** — Ausgabe (`JsonlSink`, `SerialSink`). Zählt Fehler statt zu
+### Senke / Sink {#senke-sink}
+
+Ausgabe (`JsonlSink`, `SerialSink`). Zählt Fehler statt zu
 werfen und liefert je Datensatz einen `TxReceipt`.
 
-**STALE** — es gibt **keinen** aktuellen Wert mehr (nach
+### STALE {#stale}
+
+Es gibt **keinen** aktuellen Wert mehr (nach
 `stale_after_ns` ohne Freigabe). Trägt keinen Zahlenwert.
 
-**TRANSITION** — die Anzeige wechselt bzw. die Bestätigung läuft noch. Aussage
+### TRANSITION {#transition}
+
+Die Anzeige wechselt bzw. die Bestätigung läuft noch. Aussage
 über die Anzeige, kein Systemfehler.
 
-**Trennstelle** — eine der sechs austauschbaren Nahtstellen aus Konzept §3, je
+### Trennstelle {#trennstelle}
+
+Eine der sechs austauschbaren Nahtstellen aus Konzept §3, je
 als `typing.Protocol`. Siehe [Kapitel 2](02-vertraege.md).
 
-**UNREADABLE** — gerade nicht lesbar. Trägt keinen Zahlenwert.
+### UNREADABLE {#unreadable}
 
-**`ValueRecord`** — der interne Datensatz (Konzept §8): was das System erkannt
+Gerade nicht lesbar. Trägt keinen Zahlenwert.
+
+### ValueRecord {#value-record}
+
+Der interne Datensatz (Konzept §8): was das System erkannt
 hat. Neun Pflichtfelder, `frozen`, verlustfrei serialisierbar.
 
-**`TxReceipt`** — was tatsächlich über die Leitung ging: Sendezeit, Bytes,
+### TxReceipt {#tx-receipt}
+
+Was tatsächlich über die Leitung ging: Sendezeit, Bytes,
 Format, Retries. Bewusst getrennt vom `ValueRecord`.
 
 ## Zeit

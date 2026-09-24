@@ -85,6 +85,7 @@ nav = [
 [project.theme]
 language = "de"
 features = [
+  "content.code.annotate",
   "content.code.copy",
   "content.tooltips",
   "navigation.footer",
@@ -136,6 +137,15 @@ pymdownx.superfences.custom_fences = [
 ]
 pymdownx.tabbed.alternate_style = true
 pymdownx.tasklist.custom_checkbox = true
+
+# Vorschauen bewusst auf Abschnitte mit gepflegtem Kurztext begrenzen.
+# Die Erweiterung markiert passende Markdown-Links mit data-preview;
+# Zensical rendert den Zielabschnitt oder bei Links ohne Anker die Einleitung.
+[[project.markdown_extensions.zensical.extensions.preview.configurations]]
+targets.include = [
+  "docs/anleitung/glossar.md",
+  "docs/TIMING.md",
+]
 
 # API-Referenz aus den Docstrings. griffe liest den Quelltext statisch, importiert
 # also nichts — picamera2, cv2 & Co. muessen in .venv-docs nicht vorhanden sein.

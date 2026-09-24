@@ -9,6 +9,45 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — Kontextvorschauen in der Anleitung
+
+## Problem
+
+Fachbegriffe, Dokumentverweise und API-Symbole verlangen beim Lesen der
+Anleitung häufig einen Seitenwechsel. Ein allgemeines Hover-Popup für alle
+Links würde bei generierten API-Seiten ganze Klassen samt Quelltext anzeigen.
+
+## Entscheidung
+
+Zensicals Inhaltsvorschau gilt nur für Glossar und Timing: Seitenlinks zeigen
+die kurze Einleitung, Abschnittslinks den jeweiligen kurzen Abschnitt.
+Die Anleitung verlinkt diese Abschnitte mit festen Überschriften-IDs. Zwei
+Codebeispiele erhalten native Zeilenanmerkungen. Ausgewählte API-Verweise
+zeigen eine kurze Erklärung über den Markdown-Linktitel.
+
+## Begründung
+
+Die Vorschau übernimmt den gepflegten Text des Zielabschnitts; es entsteht
+keine zweite Definition pro Begriff. Feste IDs halten Links bei Änderungen
+der Überschrift stabil. Die bestehenden Zensical-Funktionen unterstützen
+Maus, Tastatur und schmale Bildschirme ohne eigenen Popup-Code.
+
+## Alternativen
+
+Ein eigenes JavaScript-Popup könnte auch beliebige Textstellen erkennen,
+würde aber eine zweite Auflösungs- und Darstellungsschicht benötigen.
+Alle internen Links als Vorschau zu markieren wurde verworfen, weil die
+Inhalte zu unterschiedlich lang sind. Die generierte API-Referenz wurde als
+Vorschau-Ziel ausprobiert und wegen der überlangen Popups verworfen.
+
+## Konsequenz
+
+Neue Vorschau-Ziele brauchen einen kurzen Abschnitt mit stabiler ID und einen
+Browsertest. Bei Änderungen an den referenzierten API-Signaturen sind die
+kurzen Linktitel zu prüfen. Die Pflegeschritte stehen in `docs/HOSTING.md`.
+
+---
+
 # 2026-09-24 — OQ-Fokus aus TODO und nur noch Cloudflare-Doku
 
 ## Problem

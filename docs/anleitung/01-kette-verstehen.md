@@ -30,7 +30,8 @@ Fünf Dinge, die man daran ablesen muss:
 
 1. **`traegt Zeitaussage: False`** — die Quelle ist synthetisch. Die weiter
    unten gezeigten Latenzen sind Verarbeitungszeiten der Software, **keine**
-   Aussage über die reale Kette von der Anzeige bis zum Telegramm.
+   Aussage über die reale Kette von der Anzeige bis zum Telegramm. Siehe den
+   [Grundsatz zum Zeitverhalten](../TIMING.md#grundsatz-latenz-ist-nicht-zeitunsicherheit).
 2. **`STILL FALSCH`** ist die einzige Zahl, die den Lauf fehlschlagen lässt.
    `abgelehnt` ist kein Fehler — Ablehnen ist die erlaubte Richtung.
 3. **`provisorisch`** klebt am Formatnamen. Das Telegramm ist erfunden und
@@ -41,7 +42,7 @@ Fünf Dinge, die man daran ablesen muss:
    `telegrams.txt`, `report.json`) sind der Nachweis, nicht die Konsolenausgabe.
 
 Schau in `report.json` nach `timing_is_meaningful` und in `values.jsonl` in die
-erste Zeile — das ist ein vollständiger `ValueRecord`.
+erste Zeile — das ist ein vollständiger [ValueRecord](glossar.md#value-record).
 
 ## Die sechs Stufen und wo sie wohnen
 
@@ -93,7 +94,7 @@ frame = next(iter(src.frames()))
 print("Frame   ", frame.frame_sequence, frame.size, frame.timebase, frame.is_time_bearing)
 print("Wahrheit", frame.raw_metadata["ground_truth"])
 
-x, y, w, h = frame.raw_metadata["digit_area"]           # im Betrieb: aus dem Profil
+x, y, w, h = frame.raw_metadata["digit_area"]           # (1)!
 cand = ManualRoiLocator(quad_from_box(x, y, w, h), role_hint="main").locate(frame)[0]
 print("ROI     ", cand.quad, cand.locator_id, cand.score)
 
@@ -111,6 +112,10 @@ d = gate.evaluate(read, frame.capture_timestamp.value_ns)
 print("Freigabe", d.status.value, d.reject_reasons, round(d.confidence, 3))
 src.close()
 ```
+
+1. Im synthetischen Beispiel stammt der Anzeigebereich aus Metadaten. Im
+   Betrieb muss er aus dem bestätigten Geräteprofil kommen; eine automatisch
+   gefundene Region darf nicht unbemerkt als bestätigte Geometrie gelten.
 
 Erwartete Ausgabe (gemessen):
 
@@ -130,7 +135,7 @@ Was hier zu bemerken ist:
 * `raw_text` ist `'-012.50'` — **exakt wie gelesen**, mit führender Null. Der
   Zahlenwert daneben ist die Interpretation. Beides wird getrennt geführt, weil
   sonst nicht mehr rekonstruierbar ist, was auf der Anzeige stand.
-* `margin` pro Ziffer ist der Abstand der knappsten Segmentmessung zur
+* [Marge](glossar.md#marge) (`margin`) pro Ziffer ist der Abstand der knappsten Segmentmessung zur
   Schwelle. Das ist die **erklärbare Evidenz**, die dem Gate erlaubt, „knapp
   entschieden" von „klar" zu unterscheiden. Eine generische OCR liefert das
   nicht — siehe [Kapitel 8](08-ocr-backends.md).
@@ -138,7 +143,8 @@ Was hier zu bemerken ist:
   dem Layout. Dasselbe gilt für den Dezimalpunkt
   ([OQ-17](../open-questions.md)). Wer das übersieht, hält eine
   Profilannahme für eine Messung.
-* `d.confidence` ist die Marge, **keine** Fehlerwahrscheinlichkeit.
+* `d.confidence` ist eine [Konfidenz](glossar.md#konfidenz) aus der Marge,
+  **keine** Fehlerwahrscheinlichkeit.
 
 ## Übungen
 
@@ -154,7 +160,7 @@ anderen Parametern. Notiere jeweils, *welche* Ablehnungsgründe erscheinen.
    ihre `min_margin` an. Merksatz: das `glare`-Flag fängt den Großteil, aber
    **nicht alles** — der optische Aufbau ist die eigentliche Gegenmaßnahme
    ([../OPTICAL_SETUP.md](../OPTICAL_SETUP.md)).
-2. **Mehrbildbestätigung.** `--confirm-frames 3`. Gemessen:
+2. **[Mehrbildbestätigung](glossar.md#mehrbildbestaetigung).** `--confirm-frames 3`. Gemessen:
    `{'transition': 37, 'valid': 3}`. Warum so wenige `valid`? Weil die
    synthetische Wertfolge ständig springt und jeder neue Wert die Bestätigung
    zurücksetzt. Was kostet die Bestätigung an Zeit? Steht als
@@ -177,8 +183,9 @@ anderen Parametern. Notiere jeweils, *welche* Ablehnungsgründe erscheinen.
 
 * Wer setzt `capture_timestamp`, und wer darf ihn ändern? (Antwort:
   `FrameSource`; niemand — insbesondere kein Ausgabeadapter.)
-* Warum ist `TxReceipt` vom `ValueRecord` getrennt?
-* Was ist der Unterschied zwischen `UNREADABLE` und `STALE`?
+* Warum ist [TxReceipt](glossar.md#tx-receipt) vom `ValueRecord` getrennt?
+* Was ist der Unterschied zwischen [UNREADABLE](glossar.md#unreadable) und
+  [STALE](glossar.md#stale)?
 * Warum bekommt `ValueReader.read()` das Layout, aber nie den Referenzwert?
 * Warum ist `rectify(..., apply_enhance=False)` der Default?
 * Warum poolt `segment_threshold()` über alle Ziffernstellen statt pro Zelle?
