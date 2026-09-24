@@ -3,6 +3,22 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Codex-Sandbox und Audit-Gate repariert)
+
+**Problem:** Der neue Pi-Runner startete, aber `bwrap` konnte wegen der
+systemd-Adressfamilien-Sperre keinen `NETLINK_ROUTE`-Socket oeffnen. Codex
+las daher keine Quellen. Der Doku-Gate wertete den Modell-Exitcode `0`
+trotzdem als erfolgreichen Audit ohne Aenderungen.
+
+**Änderung:** Der Dienst erlaubt `AF_NETLINK`; alle anderen bisherigen
+Netzwerk- und Dateisystemgrenzen bleiben bestehen. Der Gate verlangt
+mindestens einen erfolgreichen Codex-Shell-Aufruf und lehnt Sandbox-Fehler
+auch bei einem formal abgeschlossenen Modell-Turn ab.
+
+**Konsequenz:** Ein Doku-Lauf ohne tatsaechliche Quellpruefung scheitert
+sichtbar. Der `bwrap`-Start wurde unter den vollstaendigen Dienstregeln
+geprueft; ein weiterer Forgejo-Vorschaulauf prueft den kompletten Pfad.
+
 ## 0.1.0.dev0 — 2026-09-24 (Codex-CLI fuer Runner lesbar installieren)
 
 **Problem:** Eine restriktive `umask` aus der Token-Erstellung wurde von

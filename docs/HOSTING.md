@@ -105,6 +105,20 @@ Einmalige Einrichtung auf dem Pi:
    Den Gerätecode im eigenen Browser bestätigen. Danach muss
    `auth.json` nur für diesen Benutzer lesbar sein (`0600`); die Datei
    bleibt zwischen Läufen bestehen und wird nie ins Repo kopiert.
+   Falls Gerätecodes nicht freigegeben sind, erlaubt die
+   [OpenAI-Dokumentation](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)
+   stattdessen eine Kopie der vorhandenen lokalen Anmeldedatei:
+   ```bash
+   chmod 600 "$HOME/.codex/auth.json"
+   sudo install -m 600 -o picam-codex-runner -g picam-codex-runner \
+     "$HOME/.codex/auth.json" /var/lib/picam-codex-runner/.codex/auth.json
+   sudo -u picam-codex-runner env HOME=/var/lib/picam-codex-runner \
+     CODEX_HOME=/var/lib/picam-codex-runner/.codex \
+     /opt/picam-codex/node_modules/.bin/codex login status
+   ```
+   Die Kopie nutzt dasselbe ChatGPT-Konto, liegt aber nur im geschützten
+   Runner-Verzeichnis. Bei einem späteren Anmeldefehler den Status prüfen
+   und die Kopie nötigenfalls erneuern.
 4. Einen Forgejo-Bot mit Schreibrecht **nur auf dieses Repo** anlegen und
    dessen PAT als Repo-Secret `DOCS_BOT_TOKEN` hinterlegen. Den Bot-Namen als
    Repo-Variable `DOCS_BOT_USERNAME` setzen. Falls `master` geschützt ist,

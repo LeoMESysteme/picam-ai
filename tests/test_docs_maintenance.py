@@ -90,6 +90,25 @@ def test_codex_usage_is_summarized_without_logging_agent_text(tmp_path: Path):
     assert maintenance.token_usage(log) == (50, 20, 7)
 
 
+def test_codex_audit_rejects_sandbox_failure_even_if_turn_completed(tmp_path: Path):
+    log = tmp_path / "codex.jsonl"
+    log.write_text(
+        '{"type":"item.completed","item":{"type":"command_execution","status":"failed",'
+        '"exit_code":1,"aggregated_output":"bwrap: loopback: Failed to create NETLINK_ROUTE socket"}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":100}}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="inspect"):  # a failed tool is not a completed audit
+        maintenance.ensure_codex_inspected_repo(log)
+    log.write_text(
+        '{"type":"item.completed","item":{"type":"command_execution","status":"completed",'
+        '"exit_code":0,"aggregated_output":"docs reviewed"}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":100}}\n',
+        encoding="utf-8",
+    )
+    maintenance.ensure_codex_inspected_repo(log)
+
+
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=cwd, text=True).strip()
 
@@ -208,7 +227,12 @@ def test_no_edit_audit_does_not_mark_broken_site_as_current(tmp_path: Path):
     _git(repo, "remote", "add", "origin", str(remote))
     _git(repo, "push", "origin", "master")
     codex = tmp_path / "fake-codex"
-    codex.write_text('#!/bin/sh\nprintf "%s\\n" \'{"type":"turn.completed","usage":{}}\'\n')
+    codex.write_text(
+        '#!/bin/sh\n'
+        'printf "%s\\n" \'{"type":"item.completed","item":{"type":"command_execution",'
+        '"status":"completed","exit_code":0}}\'\n'
+        'printf "%s\\n" \'{"type":"turn.completed","usage":{}}\'\n'
+    )
     codex.chmod(0o755)
     state = tmp_path / "state.json"
     maintenance.probe(repo, state)
@@ -240,6 +264,8 @@ def test_successful_audit_and_publish_advances_state_only_after_push(tmp_path: P
     codex = tmp_path / "fake-codex"
     codex.write_text(
         '#!/bin/sh\nprintf "after\\n" > docs/status.md\n'
+        'printf "%s\\n" \'{"type":"item.completed","item":{"type":"command_execution",'
+        '"status":"completed","exit_code":0}}\'\n'
         'printf "%s\\n" \'{"type":"turn.completed","usage":{"input_tokens":2}}\'\n'
     )
     codex.chmod(0o755)
