@@ -9,12 +9,15 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Kein Blocker — Kamera läuft wieder (2026-09-24)
+## Aktueller Blocker — Kamerabrücke seit 2026-09-24 11:11 blockiert
 
-Nach der nächtlichen Abschaltung meldeten sich IMX500 und RP2040-Brücke
-sauber; sechs Streamstarts ohne Fehler (OQ-22-Nachtrag). Regel bleibt:
-**≤ 960×720**, mehr Pixel nur über ScalerCrop, kein Kill eines hängenden
-Kameraprozesses, Streambudget je Boot beachten.
+Sieben Starts nach dem Morgen-Boot liefen, der achte (Ernte-Einrichtung,
+ScalerCrop) scheiterte mit `rp2040_gbdg_wait_until_free failed` und
+`stream on failed` (OQ-22-Nachtrag). **Keine Kameraversuche bis zum
+Neustart.** Heute früh half die nächtliche Abschaltung; ein Warmreboot half
+gestern nicht. Nach dem Neustart die Starts sparen: Ernte-Einrichtung und
+Ernte mit möglichst wenigen Streams (Kamera nicht mehr verstellen, den
+Ausschnitt aus einem einzigen Vollbild bestimmen).
 
 ---
 

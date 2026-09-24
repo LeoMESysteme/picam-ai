@@ -1435,3 +1435,8 @@ Trennung stärker als die Pixelzahl. Der Nutzer hat die Schwelle auf
 Fokus: Laplace-Varianz im Glas stieg nach Nachstellen von ≈ 36 auf ≈ 75
 (Vollbild vs. Ausschnitt nicht vergleichbar); höhere Einzelwerte stammten
 von verschobener Rahmung, nicht von Schärfe.
+
+**Nachtrag 11:11 (gleicher Boot):** Der 7. Start (`ernte1-full`, 10 s
+Vollbild, 133 Bilder) lief normal, der 8. (`ernte1-crop`, ScalerCrop
+880,1015,1920,1440 angefordert) lieferte 0 Bilder mit RP2040-Bridge-Fehler
+und 6 × `stream on failed` (OQ-22-Nachtrag). Kein hängender Prozess.

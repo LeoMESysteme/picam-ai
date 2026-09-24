@@ -735,6 +735,17 @@ dann ab dieser Zeile lesen.
   nicht belegt; ein einzelner guter Kaltstart beweist nicht, dass nur ein
   Stromzyklus hilft. Zahlen: [VALIDATION.md](VALIDATION.md), 2026-09-24.
 
+* **Nachtrag 2026-09-24, 11:11 — im selben Boot erneut blockiert, beim
+  8. Streamstart.** Sieben Starts liefen (zuletzt 10 s Vollbild um 11:11:06),
+  der achte (ScalerCrop 880,1015,1920,1440, 11:11:31) lieferte 0 Bilder:
+  `rp2040_gbdg_wait_until_free failed`, `gpio_dir_out(19, 0) could not
+  ST_CL`, `setup of GPIO led failed: -121`, 6 × `stream on failed in
+  subdev`, danach eine `WARNING` in `__vb2_queue_cancel` (videobuf2-core.c:2215).
+  Der Prozess beendete sich selbst (Timeout 5 s), nichts hing. Gesamte
+  Streamdauer des Boots vorher ≈ 36 min. Damit liegt die Grenze hier weit
+  unter 20–25 Starts; das Budget von 15 schützt nicht. Kernel-Auszug:
+  `var/diagnostics/ernte1-crop/kernel-11-10.txt` (lokal).
+
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
 

@@ -8,10 +8,11 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 > **Die Arbeitsliste steht in [../TODO.md](../TODO.md).** Diese Datei sagt
 > *wo wir stehen*, die TODO sagt *was zu tun ist*.
 >
-> **Kein Blocker. Die Kamera läuft wieder** (seit dem Boot am 2026-09-24
-> nach nächtlicher Abschaltung, sechs Streamstarts ohne Fehler, OQ-22-
-> Nachtrag). Regel bleibt: **≤ 960×720**, mehr Pixel nur über ScalerCrop,
-> kein Kill eines hängenden Kameraprozesses.
+> **Aktueller Blocker: Kamerabrücke seit 11:11 wieder blockiert (OQ-22).**
+> Nach sieben erfolgreichen Starts scheiterte der achte dieses Boots mit
+> RP2040-Bridge-Fehler. Keine weiteren Kameraversuche bis zum Neustart;
+> gestern half ein Warmreboot nicht, heute früh lief es nach nächtlicher
+> Abschaltung. Ob und wann neu gestartet wird, entscheidet der Nutzer.
 
 **Task 6 ist erledigt (2026-09-24):** ScalerCrop 1920×1440 um die Anzeige
 ergibt `native_scale = 1,0`; gemessen frontal 3,36, „30°" 3,34, „45°"
