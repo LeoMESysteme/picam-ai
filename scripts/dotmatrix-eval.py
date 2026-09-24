@@ -15,6 +15,11 @@ zurueckgehaltener Gruppe werden Vorlagen und Schwellen **ausschliesslich**
 aus den uebrigen Gruppen gebaut (nie aus der Testgruppe, auch nicht
 indirekt) und gegen die Testgruppe bewertet. Scheitert dabei die
 ROM-Gegenprobe (siehe `dotmatrix-train.py`), wird kein Bericht geschrieben.
+`--exclude-groups` (mit Pflicht-`--exclude-reason`) wirft Gruppen VOR jedem
+Training/jeder Messung raus - fuer Aufbauten mit erwiesenermassen falsch
+sitzendem Profil (z. B. Kamera zwischen Bestaetigung und Ernte verschoben).
+Ausgeschlossene Gruppen erscheinen in keinem Durchgang und werden im
+Bericht unter `excluded_groups` mit ihrem Grund aufgefuehrt.
 
 `reader-check` belegt, dass der volle Leser (`DotMatrixReader.read`, mit
 Kontrast-/Saettigungspruefung) und diese Messung (`evaluate`, ohne beide)
@@ -131,9 +136,15 @@ def _cmd_loo(args: argparse.Namespace) -> int:
     dataset = _load_dataset_module()
     train_mod = _load_train_module()
 
+    exclude_groups = [g.strip() for g in (args.exclude_groups or "").split(",") if g.strip()]
+    if exclude_groups and not args.exclude_reason:
+        print("--exclude-reason ist Pflicht, wenn --exclude-groups gesetzt ist.", file=sys.stderr)
+        return 2
+
     profile_map = dataset.read_profile_map(args.profile_map)
     stats: dict[str, int] = {}
     all_samples = dataset.load_cell_samples(args.dataset_root, profile_map, stats=stats)
+    all_samples = [s for s in all_samples if s.group not in exclude_groups]
     groups = sorted({s.group for s in all_samples})
 
     durchgaenge = []
@@ -162,6 +173,7 @@ def _cmd_loo(args: argparse.Namespace) -> int:
     report = {
         "groups": groups,
         "durchgaenge": durchgaenge,
+        "excluded_groups": [{"group": g, "reason": args.exclude_reason} for g in sorted(exclude_groups)],
         "label_origin_counts": stats,
         "vorzeichen": "ungeprueft (nur +)",
         "threshold_formula": THRESHOLD_FORMULA,
@@ -246,6 +258,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     loo.add_argument("--dataset-root", type=Path, required=True)
     loo.add_argument("--profile-map", type=Path, required=True)
     loo.add_argument("--out", type=Path, required=True)
+    loo.add_argument(
+        "--exclude-groups",
+        default="",
+        help="Kommagetrennte Gruppen, die vor jedem Training/jeder Messung verworfen werden "
+        "(z. B. ein Aufbau mit erwiesenermassen falsch sitzendem Profil). Erscheinen in keinem "
+        "Durchgang, weder als train_groups noch als test_group. Braucht --exclude-reason.",
+    )
+    loo.add_argument(
+        "--exclude-reason", default=None, help="Begruendung fuer --exclude-groups, steht im Bericht (Pflicht, wenn gesetzt)."
+    )
     loo.set_defaults(func=_cmd_loo)
 
     reader_check = sub.add_parser("reader-check", help="Volle Leser-Ausgabe gegen evaluate() vergleichen.")

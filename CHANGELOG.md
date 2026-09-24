@@ -57,7 +57,8 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   Training aus gewählten Aufstellungen (Exit 3 und keine Datei bei
   ROM-Abweichung, mit gelerntem und ROM-Muster in der Ausgabe) und
   Entwicklungsmessung `loo` (je Aufstellung zurückgehalten, Schwellen nur
-  aus den übrigen; Ergebnis je Probe `richtig`/`falsch`/`abgelehnt:<grund>`,
+  aus den übrigen; `--exclude-groups`/`--exclude-reason` schliesst
+  Aufstellungen mit Begründung im Bericht aus; Ergebnis je Probe `richtig`/`falsch`/`abgelehnt:<grund>`,
   Verwechslungsmatrix, Plateaus, Herkunft, Formel, Commit) sowie
   `reader-check` (kompletter Leser gegen die Messung auf echten Bildern).
   `dotmatrix-dataset.py` liefert dafür `load_resolved_records`,

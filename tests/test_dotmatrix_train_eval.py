@@ -19,6 +19,7 @@ nur lesen). Deckt die drei in der Aufgabe verlangten Verhaltensweisen ab:
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import sys
@@ -422,3 +423,168 @@ def test_reader_check_agrees_with_evaluate_on_synthetic_dataset(tmp_path):
         ]
     )
     assert rc == 0
+
+
+def test_reader_check_reports_genuine_disagreement(tmp_path, monkeypatch, capsys):
+    """Fix Runde 1 (Review-Befund): `reader-check` war nur auf einem
+    Datensatz getestet, auf dem Leser und Messung immer einig sind - das
+    beweist nicht, dass eine echte Uneinigkeit erkannt und gemeldet wird.
+    Der Leser wird hier fuer GENAU eine erfolgreich gelesene Probe auf einen
+    Ablehnungsgrund gezwungen, den `evaluate()` fuer dieselbe Probe NICHT
+    liefert (`zelle_unbekannt` ist kein Bild-only-Grund wie `kontrast`/
+    `ueberbelichtet` - siehe `_IMAGE_ONLY_REASONS`), damit eine echte
+    Uneinigkeit entsteht."""
+    from dispread.ocr.dotmatrix import DotMatrixReader
+
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = tmp_path / "templates.json"
+    rc = train_mod.main(
+        [
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--groups", "g1,g2,g3",
+            "--out", str(templates_path),
+        ]
+    )
+    assert rc == 0
+    capsys.readouterr()  # Ausgabe des Trainings verwerfen, nur reader-check auswerten
+
+    original_read = DotMatrixReader.read
+    state = {"forced_sample": None}
+
+    def forcing_read(self, crop, layout):
+        result = original_read(self, crop, layout)
+        if state["forced_sample"] is None and result.diagnostics.get("reject_reason") is None:
+            # Genau die erste bislang erfolgreich gelesene Probe kapern -
+            # ein Grund, den evaluate() fuer dieselbe Probe nicht kennt.
+            state["forced_sample"] = True
+            diag = dict(result.diagnostics)
+            diag["reject_reason"] = "zelle_unbekannt"
+            return dataclasses.replace(result, value=None, raw_text="", diagnostics=diag)
+        return result
+
+    monkeypatch.setattr(DotMatrixReader, "read", forcing_read)
+
+    rc = eval_mod.main(
+        [
+            "reader-check",
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--templates", str(templates_path),
+            "--limit", "10",
+        ]
+    )
+
+    assert state["forced_sample"] is True  # sonst waere der Test bedeutungslos
+    assert rc == 1
+    out = json.loads(capsys.readouterr().out)
+    assert len(out["uneinig"]) == 1
+    entry = out["uneinig"][0]
+    assert entry["leser"] == "abgelehnt:zelle_unbekannt"
+    assert entry["messung"] != "abgelehnt:zelle_unbekannt"
+
+
+def test_reader_check_normalizes_vorzeichen_to_format_as_agreement(tmp_path):
+    """Fix Runde 1: die `vorzeichen`->`format`-Normierung (`_normalize_reason`)
+    war unbeuebt - eine Probe mit falscher Vorzeichenzelle (Bild zeigt '8'
+    statt '+') laesst den Leser mit eigenem Grund `vorzeichen` ablehnen,
+    `evaluate()` (kennt kein `vorzeichen`) mit `format`. Beides verweigert
+    denselben Wert und muss als Einigkeit zaehlen, nicht als `uneinig`."""
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = tmp_path / "templates.json"
+    rc = train_mod.main(
+        [
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--groups", "g1,g2,g3",
+            "--out", str(templates_path),
+        ]
+    )
+    assert rc == 0
+
+    # Eigener Mini-Datensatz mit einer einzigen Probe: Vorzeichenzelle zeigt
+    # '8' statt '+' (aus dem Leser-Code bekannt: eine konfident falsch
+    # erkannte Vorzeichenzelle -> Grund "vorzeichen", nicht "zelle_unbekannt").
+    sign_root = tmp_path / "sign_dataset"
+    _write_devices(sign_root)
+    rng = np.random.default_rng(42)
+    _write_sample(sign_root, "wrong-sign-0", "signtest", "80.60972 ", "80.60972 ", (1_000, 2_000), rng)
+    sign_profiles = tmp_path / "sign_profiles"
+    sign_profiles.mkdir()
+    sign_map = _write_profile_map(sign_profiles, ["signtest"])
+
+    from dispread.layout import CharLayout
+    from dispread.ocr.dotmatrix import DotMatrixReader
+    from dispread.ocr.dotmatrix_templates import load_templates
+
+    templates = load_templates(templates_path)
+    records = dataset_mod.load_resolved_records(sign_root, dataset_mod.read_profile_map(sign_map))
+    assert len(records) == 1
+    result = DotMatrixReader(templates).read(records[0].crop_gray, CharLayout(grid=records[0].grid, unit="mV/V"))
+    assert result.diagnostics["reject_reason"] == "vorzeichen"  # Testannahme absichern
+
+    rc = eval_mod.main(
+        [
+            "reader-check",
+            "--dataset-root", str(sign_root),
+            "--profile-map", str(sign_map),
+            "--templates", str(templates_path),
+            "--limit", "5",
+        ]
+    )
+
+    assert rc == 0  # als Einigkeit gezaehlt, nicht "uneinig"
+
+
+# --- Fix Runde 1 (Controller): --exclude-groups ----------------------------
+
+
+def test_loo_exclude_groups_drops_group_from_every_fold_and_lists_it_with_reason(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    out = tmp_path / "report.json"
+
+    rc = eval_mod.main(
+        [
+            "loo",
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--out", str(out),
+            "--exclude-groups", "g3",
+            "--exclude-reason", "Kamera zwischen Bestaetigung und Ernte verschoben (Test)",
+        ]
+    )
+    assert rc == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+
+    assert "g3" not in report["groups"]
+    assert set(report["groups"]) == {"g1", "g2"}
+    assert report["excluded_groups"] == [
+        {"group": "g3", "reason": "Kamera zwischen Bestaetigung und Ernte verschoben (Test)"}
+    ]
+    assert len(report["durchgaenge"]) == 2
+    for durchgang in report["durchgaenge"]:
+        assert "g3" not in durchgang["train_groups"]
+        assert durchgang["test_group"] != "g3"
+    # 24 statt 36 geladene Proben: g3s 12 Proben wurden zwar geladen (die
+    # Datensatz-Zaehler zaehlen das Laden, nicht die Verwendung), aber vor
+    # Training/Messung verworfen - siehe oben, kein g3 in irgendeinem
+    # Durchgang.
+    assert report["label_origin_counts"]["geladen"] == 36
+
+
+def test_loo_exclude_groups_requires_reason(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    out = tmp_path / "report.json"
+
+    rc = eval_mod.main(
+        [
+            "loo",
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--out", str(out),
+            "--exclude-groups", "g3",
+        ]
+    )
+
+    assert rc == 2
+    assert not out.exists()
