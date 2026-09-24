@@ -65,8 +65,13 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 des Datensatzes davor: `var/backup-datasets-vor-ernte1-20260924T1159/`.
 
 **Nächste Schritte:**
-* **Stand 16 Uhr:** 316 Proben, 228 geerntet aus 2 Aufstellungen, Zellen 3–7
-  vollständig, Zelle 2 ohne `6` (VALIDATION.md, „Ernte 2 und Aufstellung 2").
+* **Stand Abend 2026-09-24:** 389 Proben, 301 geerntet aus 98 Zeichenketten
+  in 3 Aufstellungen, **Ziffernabdeckung vollständig** (VALIDATION.md,
+  „Aufstellung 3"). Vor jeder Ernte die Stichprobe ansehen — so wurde der
+  Zwei-Nullen-Fehler gefunden (OQ-41).
+* **Schärfe vor jeder Ernte prüfen:** die Schwelle 2,6 px lässt unscharfe
+  Aufstellungen durch. Fokus in einer eigenen Sitzung mit Ausschnitt und
+  Schärfemesser, Kamera dabei nicht bewegen.
 * Weitere Aufstellungen (Winkel, Abstand, Licht) für unabhängige Testgruppen;
   ≤ 7 Starts je Boot, danach Neustart.
 * Weitere Ernten mit anderen `--seed`, um die Ziffernlücken je Zelle zu

@@ -1526,3 +1526,30 @@ der Mittelwert ≈ 28 kommt von Schritten, in denen die letzte Ziffer bei
 grossem Faktor vom Messrauschen springt (`wertwechsel_im_fenster`). Die
 Gate-Regel arbeitet wie festgelegt; da höchstens 3 Bilder je Plateau
 importiert werden, begrenzt die Ausbeute den Datensatz nicht.
+
+## 2026-09-24 — Aufstellung 3 und volle Ziffernabdeckung
+
+**Aufstellung 3** (frontal, weiter weg, Boot `25aaeb7e-4305-486c-a8c3-cdf77dae34fe`,
+6 Starts): Beim ersten Versuch war das Glas im Vollbild nur ≈ 100 px breit
+(geschätzt 2,2 native px je Punktspalte, unter der Schwelle) — Kamera näher
+gerückt. Danach 2,74 px, aber stark unscharf; die Schwelle hätte das
+durchgelassen (Entscheidung 7 prüft keine Schärfe). Nachfokussiert in einer
+10-min-Sitzung mit Ausschnitt; Laplace-Varianz im Glas ≈ 55 → ≈ 98, dabei
+verschob sich die Kamera, das Quad wurde auf den letzten ruhigen ≈ 40 s neu
+bestimmt. Raster `left=17.5, pitch=22.8, top=44, bottom=120`,
+`min_native_dot_column_px = 2,760`.
+
+Ernte mit Seed 20261160 (gewählt, weil der Plan 7 Anzeigewerte mit
+führender 6 enthält — Stimulusauswahl, keine Auswertungsentscheidung):
+2834 Bilder, 584 gelabelt (882 `wertwechsel_im_fenster`, viele Werte mit
+springender letzter Ziffer), 30 Zeichenketten, 97 ausgewählt, 4 `bildguete`,
+20 `zellen_inkonsistent`, **73 importiert**. Die Stichprobe fand den Fehler
+mit zwei führenden Nullen (`+00988.5`, OQ-41-Nachtrag); die Ernte wurde mit
+Regel v2 offline neu gelabelt (`proposal-v1.json` bleibt daneben) und erst
+dann importiert. Die drei importierten `+988.5`-Proben tragen
+`cell_text = "+  988.5 mV/V"`.
+
+**Stand:** 389 Proben, davon 301 seriell geerntet aus **98 Zeichenketten**
+in 3 Aufstellungen (`ernte1` 152, `auf2` 76, `auf3` 73). **Ziffernabdeckung
+vollständig:** Zelle 2 hat 1–9 (eine 0 ist dort durch die Unterdrückung
+ausgeschlossen), Zellen 3–7 alle zehn Ziffern. Vorzeichen weiter nur `+`.
