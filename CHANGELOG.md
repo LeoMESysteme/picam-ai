@@ -3,6 +3,20 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Mobilen Glossarlink stabilisieren)
+
+**Problem:** Ein Doku-Publish erreichte den Browser-Gate, scheiterte dort aber
+wechselnd am mobilen Glossarlink. Der Klick auf `#value-record` landete
+teilweise mit dem Anker `#erst-laufen-lassen` auf der Glossarseite.
+
+**Änderung:** Die automatische URL-Nachfuehrung `navigation.tracking` ist in
+Zensical deaktiviert. Sofortnavigation und Kontextvorschauen bleiben aktiv.
+Der betroffene Test scheiterte zuvor 2 von 5 Mal und bestand danach 8 von 8
+Laeufen; die komplette Dokubrowser-Suite wurde erneut ausgefuehrt.
+
+**Konsequenz:** Abschnittslinks behalten beim Seitenwechsel ihren Zielanker;
+der Wartungs-Gate wird nicht mehr durch diese URL-Ueberschreibung gestoppt.
+
 ## 0.1.0.dev0 — 2026-09-24 (Forgejo-Checkout beim Publish akzeptieren)
 
 **Problem:** Nach bestandenem Doku-Audit stoppte der Publish-Schritt, weil

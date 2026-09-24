@@ -19,35 +19,30 @@ Kapitel 0 nennt keine feste Testanzahl. Kapitel 1 verlinkt die API der sechs
 Pipeline-Stufen mit kurzen Hover-Erklärungen. Kapitel 2 unterscheidet fünf
 `Protocol`-Schnittstellen von der konkreten Klasse `ReleaseGate`.
 
-Der alte Claude-`@reboot`-Job ist deaktiviert. Der eigene
-`picam-codex-docs`-Runner ist registriert; seine Codex-CLI hat eine
-geschützte Kopie der vorhandenen ChatGPT-Anmeldung. Ein manueller
-Forgejo-Vorschaulauf ([Run 35](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/35))
-hat einen Doku-Patch erzeugt und den strengen Zensical-Build sowie die
-Browsertests bestanden. Der Patch wurde vor Veröffentlichung geprüft und
-fachlich korrigiert. Für den täglichen Push ist ein auf dieses Repo
-begrenzter Forgejo-Schreib-Token vorgesehen. `DOCS_BOT_TOKEN` und
-`DOCS_BOT_USERNAME` sind inzwischen gesetzt; der
-Benutzername wurde auf `l.hentschke` korrigiert. Der manuell geprüfte Patch
-ist auf `master`; der [Doku-Deploy 36](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/36)
-einschließlich Cloudflare-Schutzprüfung war erfolgreich. Ein erster
-automatischer Publish-Versuch ([Run 38](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/38))
-wurde wegen eines falschen Abschnittsankers vom strengen Build gestoppt;
-der Wartungsauftrag prüft solche Anker nun vor der Gate-Abnahme selbst. Im
-[zweiten Publish-Versuch](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/41)
-bestanden Audit und Prüf-Gate; erst die zu enge `origin`-Prüfung stoppte den
-Push. Sie akzeptiert nun beide üblichen Checkout-URLs für genau dieses Repo.
-Ein späterer Publish-Fehler bewahrt den geprüften Patch als Artefakt auf.
+Der Claude-`@reboot`-Job ist deaktiviert. Der separate
+`picam-codex-docs`-Runner ist angemeldet und registriert;
+`DOCS_BOT_TOKEN` und `DOCS_BOT_USERNAME` sind in Forgejo gesetzt. Der
+manuell geprüfte Patch ist auf `master`, und [Doku-Deploy 36](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/36)
+mit Cloudflare-Schutzprüfung war erfolgreich.
+
+Der automatische Publish ist noch nicht end-to-end bestätigt. Der letzte
+[Versuch 44](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/44)
+bestand den strengen Build, stoppte aber im Mobiltest: Zensicals
+`navigation.tracking` übernahm gelegentlich den Abschnittsanker der
+Ausgangsseite. Die automatische URL-Nachführung ist nun deaktiviert;
+Sofortnavigation und Kontextvorschauen bleiben aktiv. Der Gate sichert
+einen bereits geprüften Patch bei einem späteren Publish-Fehler als Artefakt.
 
 ## Verifikation
 
-Für den geprüften Patch: OQ-Index-Prüfung und strenger Zensical-Build
-erfolgreich; 24 Wartungs-Gate-Tests und 13 Dokubrowser-Tests bestanden.
-Der öffentliche Zugriffsschutz der Live-Seite wurde nach dem Deploy
-erneut erfolgreich geprüft. Hardware-Messungen fanden in diesem Pflegelauf
-nicht statt.
+OQ-Index-Prüfung und strenger Zensical-Build erfolgreich. Der mobile
+Glossar-Test scheiterte mit URL-Nachführung 2 von 5 Mal und bestand ohne
+sie 8 von 8 Mal; die gesamte Dokubrowser-Suite bestand mit 13 Tests.
+24 Wartungs-Gate-Tests und Ruff sind grün. Der Zugriffsschutz der
+Live-Seite wurde nach dem Deploy erneut geprüft. Keine Hardware-Messung
+in diesem Doku-Pflegelauf.
 
 ## Nächster Schritt
 
-Einen erneuten manuellen `mode=publish`-Lauf starten und bei einem
-Doku-Commit den Bot-Push und den nachgelagerten Cloudflare-Deploy prüfen.
+Einen erneuten `mode=publish`-Lauf starten und Bot-Push sowie den
+nachgelagerten Cloudflare-Deploy prüfen.

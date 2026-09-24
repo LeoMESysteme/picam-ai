@@ -9,6 +9,35 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — Keine automatische URL-Nachfuehrung in Zensical
+
+## Problem
+
+Mit `navigation.tracking` wurde beim mobilen Wechsel von der Anleitung zum
+Glossar gelegentlich der Anker des Ausgangsabschnitts in die Ziel-URL
+uebernommen. Der Link selbst zeigte korrekt auf `#value-record`.
+
+## Entscheidung
+
+`navigation.tracking` ist deaktiviert. `navigation.instant` und die
+Kontextvorschauen bleiben aktiv.
+
+## Begründung und Alternativen
+
+Der bestehende Mobiltest scheiterte mit Tracking in 2 von 5 Wiederholungen
+und bestand ohne Tracking 8 von 8 Mal. Eine Aenderung am Link oder ein
+groesserer Eingriff in Zensicals Navigationsskript wuerde die Ursache nicht
+gezielter behandeln. Die automatisch nachgefuehrte Abschnitts-URL ist fuer
+die Doku weniger wichtig als verlaessliche Querverweise.
+
+## Konsequenz
+
+Beim Scrollen wird der Hash nicht mehr automatisch auf den sichtbaren
+Abschnitt gesetzt. Explizite Links auf Abschnittsanker bleiben beim
+Seitenwechsel stabil.
+
+---
+
 # 2026-09-24 — Systemdienst erlaubt Codex-Namespace
 
 ## Problem

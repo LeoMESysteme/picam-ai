@@ -75,6 +75,9 @@ Action-Artefakt. Mit `mode=publish` dürfen sie nach erfolgreichen Prüfungen
 direkt nach `master` pushen. Der bestehende `docs.yml`-Workflow übernimmt
 anschließend den Cloudflare-Deploy und dessen Schutzprüfung.
 Der Patch-Upload verwendet die Forgejo-Version von `upload-artifact@v4`.
+`navigation.tracking` bleibt deaktiviert, weil es beim mobilen Seitenwechsel
+gelegentlich den Abschnittsanker des Ausgangstextes in die Ziel-URL schrieb.
+Sofortnavigation und Hover-Vorschauen bleiben aktiviert.
 
 Einmalige Einrichtung auf dem Pi:
 
