@@ -3,6 +3,24 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Führende Nullen: zwei statt einer)
+
+**Problem:** Das GSV-2AS-Telegramm trägt immer sechs Ziffern; bei
+`dpoint = 1` und Werten unter 1000 kommen zwei führende Nullen vor
+(`+00988.5`). Die Anzeige zeigt dafür zwei Leerzellen. `gate-label.py` und
+`import-harvest.py` entfernten nur eine Null — das Label wäre `+0988.5 mV/V`
+gewesen (OQ-41-Nachtrag). Gefunden in der Stichprobe vor dem Import.
+
+**Änderung:** `telegram_to_display_text()` und `_cell_text_for_telegram()`
+unterdrücken alle führenden Nullen des Ganzzahlteils bis auf die Stelle vor
+dem Punkt; mehr als zwei (unbelegt) werden abgelehnt und als
+`fuehrende_nullen_ungeprueft` gezählt. `label_normalization` jetzt
+`gsv2as_leading_zero_v2`. Tests in `tests/test_gate_label.py` und
+`tests/test_import_harvest.py`.
+
+**Konsequenz:** Aufstellung 3 wurde offline neu gelabelt (nur die 32 Bilder
+mit `+00988.5` ändern sich). Bisher importierte Proben sind nicht betroffen.
+
 ## 0.1.0.dev0 — 2026-09-24 (Ernte 1: erste echte Ernte mit Import)
 
 **Problem:** Die Ernte-Kette (`harvest-setup.py`, `harvest.py`,

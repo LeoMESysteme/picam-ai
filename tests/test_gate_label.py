@@ -344,6 +344,7 @@ def test_groesseres_szenario_erwartete_anzahl_von_hand_gerechnet(tmp_path):
             "telegrammluecke": 2,
             "telegrammburst": 0,
             "keine_telegramme": 0,
+            "fuehrende_nullen_ungeprueft": 0,
         },
         "distinct_label_texts": 2,
     }
@@ -376,6 +377,7 @@ def test_summary_zaehlt_alle_grundschluessel_auch_mit_null(tmp_path):
         "telegrammluecke",
         "telegrammburst",
         "keine_telegramme",
+        "fuehrende_nullen_ungeprueft",
     }
     assert all(v == 0 for v in summary["rejected_by_reason"].values())
     assert summary["distinct_label_texts"] == 1
@@ -478,10 +480,22 @@ def test_label_origin_detail_traegt_die_pflichtfelder_von_datasetstore(tmp_path)
         ("+012.193", "+12.193"),
         ("+0152.42", "+152.42"),
         ("+05487.0", "+5487.0"),
+        # OQ-41-Nachtrag 2026-09-24: ZWEI unterdrueckte fuehrende Nullen,
+        # belegt an var/diagnostics/auf3-run ("+00988.5 mV/V" -> Glas
+        # "+  988.5 mV/V").
+        ("+00988.5", "+988.5"),
+        ("+0909.09", "+909.09"),
     ],
 )
 def test_telegram_to_display_text_gemessene_paare(telegram, expected_display):
     assert gate_label.telegram_to_display_text(telegram) == expected_display
+
+
+def test_telegram_to_display_text_drei_fuehrende_nullen_ungeprueft():
+    # Kein Beleg auf dem Glas fuer 3+ unterdrueckte fuehrende Nullen -
+    # ablehnen statt raten (AGENTS.md), siehe OQ-41-Nachtrag 2026-09-24.
+    assert gate_label.telegram_to_display_text("+0009.09 mV/V") is None
+    assert gate_label.telegram_to_display_text("+00009.0 mV/V") is None
 
 
 def test_telegram_to_display_text_einheitensuffix_bleibt_erhalten():
@@ -530,7 +544,26 @@ def test_label_text_und_normalisierung_im_proposal(tmp_path):
     entry = proposal["images"][0]
     assert entry["telegram_text"] == "+01.8290 mV/V"
     assert entry["label_text"] == "+1.8290 mV/V"
-    assert entry["label_normalization"] == "gsv2as_leading_zero_v1"
+    assert entry["label_normalization"] == "gsv2as_leading_zero_v2"
+
+
+def test_drei_fuehrende_nullen_werden_abgelehnt_und_gezaehlt(tmp_path):
+    # OQ-41-Nachtrag 2026-09-24: 3+ unterdrueckte fuehrende Nullen sind nicht
+    # belegt - das Bild wird abgelehnt (nicht gelabelt), der Grund gezaehlt.
+    telegrams = [(i * 500 * MS, "+0009.09 mV/V") for i in range(5)]
+    t_mid = telegrams[2][0]
+    frames = [("frame_000001.png", t_mid)]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output = tmp_path / "proposal.json"
+
+    result = _run_cli(recording, output, guard_margin_ms=75, max_gap_ms=1000)
+    assert result.returncode == 0, result.stderr
+
+    proposal = json.loads(output.read_text())
+    assert proposal["images"] == []
+    assert proposal["summary"]["labeled"] == 0
+    assert proposal["summary"]["rejected_total"] == 1
+    assert proposal["summary"]["rejected_by_reason"]["fuehrende_nullen_ungeprueft"] == 1
 
 
 # --- --min-gap-ms: Burst-/Stau-Erkennung (OQ-40-Nachtrag 2026-09-23) -------

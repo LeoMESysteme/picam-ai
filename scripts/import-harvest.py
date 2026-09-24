@@ -100,6 +100,15 @@ REASON_NICHT_PRUEFBAR = "nicht_pruefbar"
 REASON_LAENGE = "laenge_passt_nicht"
 REASON_STORE = "store_abgelehnt"
 REASON_BILD_FEHLT = "bild_nicht_ladbar"
+#: OQ-41-Nachtrag 2026-09-24, dieselbe Erweiterung wie in
+#: `gate_label.REASON_LEADING_ZEROS_UNVERIFIED` - 3 oder mehr unterdrueckte
+#: fuehrende Nullen sind auf dem Glas nicht belegt. `gate-label.py` filtert
+#: solche Bilder normalerweise schon vor dem Import aus, aber diese Pruefung
+#: ist eine zweite, unabhaengige Verteidigungslinie (defensiv), falls je ein
+#: `proposal.json` mit einer aelteren gate-label-Version oder von Hand
+#: erstellt hier ankommt (AGENTS.md: Unlesbares/Unbekanntes wird abgelehnt,
+#: nicht geraten).
+REASON_LEADING_ZEROS_UNVERIFIED = "fuehrende_nullen_ungeprueft"
 
 _ALL_REASONS = (
     REASON_BILDGUETE,
@@ -108,36 +117,71 @@ _ALL_REASONS = (
     REASON_LAENGE,
     REASON_STORE,
     REASON_BILD_FEHLT,
+    REASON_LEADING_ZEROS_UNVERIFIED,
 )
+
+#: Gleicher Schwellwert wie `gate_label.MAX_VERIFIED_SUPPRESSED_ZEROS` -
+#: absichtlich dupliziert (die beiden Skripte teilen keine gemeinsame
+#: Regel-Implementierung, siehe Moduldocstring "Regel 5").
+MAX_VERIFIED_SUPPRESSED_ZEROS = 2
 
 #: Nur informativ, taucht im Bericht auf - kein Ablehnungsgrund fuer sich.
 COUNTER_ZEICHEN_ZU_SELTEN = "zeichen_zu_selten_fuer_pruefung"
 
 
-def _cell_text_for_telegram(telegram_text: str) -> str:
+def _count_leading_zeros_to_suppress(rest: str) -> int:
+    """Wie `gate_label._count_leading_zeros_to_suppress` - absichtlich
+    dupliziert, siehe Moduldocstring "Regel 5"/OQ-41-Nachtrag."""
+    int_len = 0
+    while int_len < len(rest) and rest[int_len].isdigit():
+        int_len += 1
+    if int_len <= 1:
+        return 0
+    zeros = 0
+    while zeros < int_len - 1 and rest[zeros] == "0":
+        zeros += 1
+    return zeros
+
+
+def _cell_text_for_telegram(telegram_text: str) -> str | None:
     """Erwarteter Zellinhalt je Position 0..len-1 (siehe Modul-Docstring,
     Regel 5). Gleiche Regel wie `gate_label.telegram_to_display_text()`
-    (Vorzeichen ueberspringen, genau eine fuehrende '0' vor einer weiteren
-    Ziffer betroffen) - ABER die betroffene Null wird durch ein Leerzeichen
-    ERSETZT statt entfernt, damit Position i weiterhin exakt Zelle i
-    entspricht (belegt an zwei Bildern, s. o.). NICHT auf `n_cells` aufgefuellt
-    - das macht `_padded_cell_text`."""
+    (Vorzeichen ueberspringen, fuehrende Nullen vor der letzten Ziffer des
+    Ganzzahlteils betroffen, OQ-41-Nachtrag 2026-09-24) - ABER jede
+    betroffene Null wird durch ein Leerzeichen ERSETZT statt entfernt, damit
+    Position i weiterhin exakt Zelle i entspricht (belegt an zwei Bildern,
+    s. o., und am Zweifach-Fall "+00988.5 mV/V" -> "+  988.5 mV/V" aus
+    var/diagnostics/auf3-run). NICHT auf `n_cells` aufgefuellt - das macht
+    `_padded_cell_text`.
+
+    Liefert `None`, wenn mehr als `MAX_VERIFIED_SUPPRESSED_ZEROS` fuehrende
+    Nullen unterdrueckt wuerden - dafuer fehlt jeder Beleg auf dem Glas
+    (siehe `gate_label.telegram_to_display_text`-Docstring). Aufrufer
+    muessen das als Ablehnung behandeln (`REASON_LEADING_ZEROS_UNVERIFIED`)."""
     if not telegram_text:
         return telegram_text
     if telegram_text[0] in "+-":
         sign, rest = telegram_text[0], telegram_text[1:]
     else:
         sign, rest = "", telegram_text
-    if len(rest) >= 2 and rest[0] == "0" and rest[1].isdigit():
-        rest = " " + rest[1:]
+    zeros = _count_leading_zeros_to_suppress(rest)
+    if zeros > MAX_VERIFIED_SUPPRESSED_ZEROS:
+        return None
+    if zeros:
+        rest = (" " * zeros) + rest[zeros:]
     return sign + rest
 
 
-def _padded_cell_text(telegram_text: str, n_cells: int) -> str:
+def _padded_cell_text(telegram_text: str, n_cells: int) -> str | None:
     """`_cell_text_for_telegram` rechtsseitig mit Leerzeichen auf `n_cells`
     aufgefuellt - das ist der Zellen-fuer-Zellen-Sollwert, wie ihn Phase 2
-    (Zellen-Klassifikator) braucht, siehe `label_origin_detail["cell_text"]`."""
-    return _cell_text_for_telegram(telegram_text).ljust(n_cells)
+    (Zellen-Klassifikator) braucht, siehe `label_origin_detail["cell_text"]`.
+    Gibt `None` weiter, wenn `_cell_text_for_telegram` bereits `None`
+    liefert (siehe dort)."""
+    cell_text = _cell_text_for_telegram(telegram_text)
+    if cell_text is None:
+        return None
+    return cell_text.ljust(n_cells)
 
 
 def _expected_text_and_unit(label_text: str) -> tuple[str, str]:
@@ -316,6 +360,14 @@ def run(args: argparse.Namespace) -> int:
         detail = entry["label_origin_detail"]
         key = (int(detail["plateau_start_ns"]), int(detail["plateau_end_ns"]))
         telegram_text = entry["telegram_text"]
+        cell_text = _padded_cell_text(telegram_text, profile.grid.n_cells)
+        if cell_text is None:
+            # 3+ unterdrueckte fuehrende Nullen - siehe
+            # `_cell_text_for_telegram`-Docstring/OQ-41-Nachtrag. Zweite,
+            # unabhaengige Verteidigungslinie: `gate-label.py` sollte solche
+            # Bilder schon vorher ausgefiltert haben.
+            reject_counts[REASON_LEADING_ZEROS_UNVERIFIED] += 1
+            continue
         image_path = _resolve_image_path(harvest_dir, entry["image_path"])
         frame_meta = frames_map.get(image_path.name)
         cand = _Candidate(
@@ -327,7 +379,7 @@ def run(args: argparse.Namespace) -> int:
             plateau_key=key,
             capture_timestamp=frame_meta.get("capture_timestamp") if frame_meta else None,
             frame_sequence=frame_meta.get("frame_sequence") if frame_meta else None,
-            cell_text=_padded_cell_text(telegram_text, profile.grid.n_cells),
+            cell_text=cell_text,
         )
         raw = cv2.imread(str(image_path))
         if raw is None:

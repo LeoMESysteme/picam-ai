@@ -1840,6 +1840,18 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   muss zum Zellenraster des Lesers passen. (c) Negative Werte sind hier
   ungeprüft, weil die Vorzeichenstelle unerreichbar ist (Firmware 1.3.07).
   Sie dürfen nicht stillschweigend mitgemeint sein.
+* **Nachtrag 2026-09-24 — zwei unterdrückte Nullen:** Das Telegramm
+  `+00988.5 mV/V` (Aufstellung 3, `var/diagnostics/auf3-run`) erscheint auf
+  dem Glas als `+  988.5 mV/V`, mit **zwei** Leerzellen. Die bisherige Regel
+  (genau eine Null) hätte `+0988.5 mV/V` gelabelt; die Stichprobe vor dem
+  Import hat es gefunden, keine importierte Probe war betroffen. Neue Regel
+  `gsv2as_leading_zero_v2` in `scripts/gate-label.py`
+  (`telegram_to_display_text`) und `scripts/import-harvest.py`
+  (`_cell_text_for_telegram`): alle führenden Nullen des Ganzzahlteils werden
+  unterdrückt (Label ohne, Zellsoll mit Leerzelle), ausser der letzten Ziffer
+  vor dem Punkt. Belegt sind 0, 1 und 2 unterdrückte Nullen; bei 3 oder mehr
+  fehlt ein Glasbeleg, solche Bilder werden abgelehnt
+  (`fuehrende_nullen_ungeprueft`). Für 0 und 1 Null bleibt der Text wie in v1.
 * **Verwandt:** [OQ-37](open-questions.md), [OQ-38](open-questions.md).
 * **Antwort landet in:** Plan `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`
   (Vorab-Festlegungen) und `scripts/gate-label.py`.

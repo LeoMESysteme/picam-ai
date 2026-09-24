@@ -111,6 +111,15 @@ REASON_OUTSIDE_RANGE = "ausserhalb_telegrammbereich"
 REASON_TAIL_UNKNOWN = "letzter_lauf_ohne_folgetelegramm"
 REASON_GAP = "telegrammluecke"
 REASON_NO_TELEGRAMS = "keine_telegramme"
+#: OQ-41-Nachtrag 2026-09-24: reales Telegramm "+00988.5 mV/V" (Aufzeichnung
+#: var/diagnostics/auf3-run) zeigte auf dem Glas ZWEI unterdrueckte fuehrende
+#: Nullen ("+  988.5 mV/V"), nicht nur eine wie bisher gemessen - die v1-Regel
+#: (genau eine Null) normierte das falsch zu "+0988.5 mV/V". Gemessen sind
+#: jetzt 0, 1 und 2 unterdrueckte Nullen (docs/VALIDATION.md). Fuer 3 oder
+#: mehr fehlt jeder Beleg, ob das Glas weiter Nullen unterdrueckt oder ab
+#: einer bestimmten Anzahl anders reagiert - AGENTS.md verbietet hier zu
+#: raten, also werden solche Bilder abgelehnt statt gelabelt.
+REASON_LEADING_ZEROS_UNVERIFIED = "fuehrende_nullen_ungeprueft"
 #: Scope-Erweiterung 2026-09-23 (docs/open-questions.md OQ-40-Nachtrag,
 #: docs/VALIDATION.md): im echten 180s-Lauf lieferte der serielle Thread nach
 #: einer 2,60s-Kamera-Luecke fuenf Telegramme mit fast identischem `t_boot`
@@ -129,7 +138,22 @@ _REASON_LABELS = {
     REASON_GAP: "Telegrammluecke",
     REASON_NO_TELEGRAMS: "keine Telegramme in der Aufzeichnung",
     REASON_BURST: "Telegramm-Burst (Verarbeitungsstau, keine verlaessliche Ankunftszeit)",
+    REASON_LEADING_ZEROS_UNVERIFIED: (
+        "fuehrende Nullen ungeprueft (3+ unterdrueckte Nullen, OQ-41-Nachtrag)"
+    ),
 }
+
+#: Feste Reihenfolge fuer Bericht/`rejected_by_reason` - jeder Grund immer
+#: vorhanden, auch mit Zaehlwert 0 (siehe `run`).
+_ALL_REASON_KEYS = (
+    REASON_VALUE_CHANGE,
+    REASON_OUTSIDE_RANGE,
+    REASON_TAIL_UNKNOWN,
+    REASON_GAP,
+    REASON_BURST,
+    REASON_NO_TELEGRAMS,
+    REASON_LEADING_ZEROS_UNVERIFIED,
+)
 
 #: Fuehrender numerischer Teil eines GSV-Telegramms wie "+0.46776 mV/V" ->
 #: "+0.46776". Rein informativ fuer die Vorschlagsdatei - fuer die
@@ -138,35 +162,74 @@ _REASON_LABELS = {
 _NUMBER_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?")
 
 #: Name der Normalisierung in `label_normalization` - siehe
-#: `telegram_to_display_text()`. Versioniert (Suffix `_v1`), falls die Regel
-#: sich spaeter aendert (z.B. wenn negative Normierung einmal verifiziert
-#: wird) und alte Vorschlagsdateien unterscheidbar bleiben sollen.
-LABEL_NORMALIZATION = "gsv2as_leading_zero_v1"
+#: `telegram_to_display_text()`. Versioniert (Suffix `_vN`), damit alte
+#: Vorschlagsdateien unterscheidbar bleiben, wenn sich die Regel aendert.
+#: v1 -> v2 (OQ-41-Nachtrag 2026-09-24): v1 kannte nur GENAU eine
+#: unterdrueckte fuehrende Null; ein reales Telegramm mit zwei unterdrueckten
+#: Nullen ("+00988.5 mV/V") zeigte, dass die Regel verallgemeinert werden
+#: musste (siehe docstring unten). Fuer 0 oder 1 unterdrueckte Null liefert
+#: v2 exakt denselben Text wie v1 - nur der Name in `label_normalization`
+#: unterscheidet die Proben.
+LABEL_NORMALIZATION = "gsv2as_leading_zero_v2"
+
+#: Ab wie vielen unterdrueckten fuehrenden Nullen die Regel als unbelegt gilt
+#: (OQ-41-Nachtrag 2026-09-24). Gemessen sind 0 ("+0.60965"), 1 ("+01.8290")
+#: und 2 ("+00988.5") unterdrueckte Nullen. Fuer 3 oder mehr fehlt jeder
+#: Beleg auf dem Glas - AGENTS.md verbietet hier zu raten, solche Telegramme
+#: werden daher abgelehnt (`REASON_LEADING_ZEROS_UNVERIFIED`), nicht gelabelt.
+MAX_VERIFIED_SUPPRESSED_ZEROS = 2
 
 
-def telegram_to_display_text(telegram: str) -> str:
+def _count_leading_zeros_to_suppress(rest: str) -> int:
+    """Anzahl fuehrender Nullen im Ganzzahlteil von `rest` (Telegrammtext
+    OHNE das Vorzeichenzeichen), die laut Regel unterdrueckt werden.
+
+    Der Ganzzahlteil ist die laengste Ziffernfolge ab Position 0 (endet am
+    Dezimalpunkt oder am Stringende). Die LETZTE Ziffer dieses Ganzzahlteils
+    wird NIE mitgezaehlt - Nutzerentscheidung, belegt an "+0.60965": dort ist
+    die einzige Ziffer vor dem Punkt zugleich die letzte und bleibt stehen,
+    obwohl sie '0' ist. Alle fuehrenden Nullen DAVOR (bei einem Ganzzahlteil
+    mit mehr als einer Ziffer) zaehlen mit, siehe `telegram_to_display_text`."""
+    int_len = 0
+    while int_len < len(rest) and rest[int_len].isdigit():
+        int_len += 1
+    if int_len <= 1:
+        return 0
+    zeros = 0
+    while zeros < int_len - 1 and rest[zeros] == "0":
+        zeros += 1
+    return zeros
+
+
+def telegram_to_display_text(telegram: str) -> str | None:
     """Bildet den ASCII-Telegrammtext des GSV-2AS auf den Text ab, den das
-    Anzeigeglas tatsaechlich zeigt (OQ-41, gemessen ueber 15 Normierungs-
-    faktoren, siehe docs/VALIDATION.md 2026-09-23).
+    Anzeigeglas tatsaechlich zeigt (OQ-41, siehe docs/VALIDATION.md
+    2026-09-23 und Nachtrag 2026-09-24).
 
-    Befund: das Geraet unterdrueckt auf dem Glas genau EINE fuehrende Null
-    direkt nach dem Vorzeichen, wenn danach eine weitere Ziffer folgt (Werte
-    >= 1, z.B. Telegramm "+01.8290 mV/V" -> Glas "+1.8290 mV/V" - die
-    Leerzelle selbst wird hier NICHT nachgebildet, siehe unten). Bei Werten
-    < 1 (z.B. "+0.60965") ist diese Null die Einerstelle vor dem Punkt und
-    steht auf beiden Seiten - sie wird NICHT entfernt, weil ihr nicht die
-    Ziffer '.' folgt, sondern eine tatsaechliche Ziffer waere die Bedingung;
-    hier folgt '.', also bleibt die Regel unwirksam.
+    Befund: das Geraet unterdrueckt auf dem Glas fuehrende Nullen im
+    Ganzzahlteil nach dem Vorzeichen, behaelt aber IMMER mindestens die
+    letzte Ziffer vor dem Dezimalpunkt (Werte >= 1, z.B. Telegramm
+    "+01.8290 mV/V" -> Glas "+1.8290 mV/V", "+00988.5 mV/V" -> Glas
+    "+988.5 mV/V" - die Leerzellen selbst werden hier NICHT nachgebildet,
+    siehe unten/`import-harvest.py:_cell_text_for_telegram`). Bei Werten < 1
+    (z.B. "+0.60965") ist diese eine verbleibende Ziffer vor dem Punkt
+    zugleich die einzige - sie wird NICHT entfernt.
 
     Regel (Nutzerentscheidung, keine Toleranz/Rundung - reiner Zeichenketten-
-    Zuschnitt): genau eine '0' unmittelbar nach dem Vorzeichenzeichen wird
-    entfernt, wenn auf sie selbst eine Ziffer (nicht '.') folgt. Alles
+    Zuschnitt): alle fuehrenden '0' unmittelbar nach dem Vorzeichenzeichen
+    werden entfernt, ausser der letzten Ziffer des Ganzzahlteils. Alles
     andere - Vorzeichen, Dezimalpunkt, restliche Ziffern, Einheitensuffix
-    wie " mV/V" - bleibt unveraendert. Das Glas zeigt an der Stelle der
+    wie " mV/V" - bleibt unveraendert. Das Glas zeigt an der Stelle jeder
     entfernten Null eine LEERE Zelle (8 Zellen im Zahlenblock bleiben
     bestehen), keine echte Verkuerzung - diese Funktion bildet aber nur den
     fuer den Textvergleich/Label relevanten Zeicheninhalt ab, nicht die
     Zellengeometrie.
+
+    Sind es MEHR als `MAX_VERIFIED_SUPPRESSED_ZEROS` (aktuell 2) fuehrende
+    Nullen, liefert diese Funktion `None` statt zu raten, ob das Glas
+    weiterhin alle bis auf die letzte unterdrueckt - dafuer fehlt jeder
+    Beleg. Aufrufer muessen `None` als Ablehnung behandeln
+    (`REASON_LEADING_ZEROS_UNVERIFIED`), nicht als leeren Text.
 
     Fehlendes Vorzeichen (erstes Zeichen weder '+' noch '-'): defensiv
     dieselbe Regel ab Position 0 anwenden, statt zu verwerfen. Begruendung:
@@ -193,9 +256,10 @@ def telegram_to_display_text(telegram: str) -> str:
         sign, rest = telegram[0], telegram[1:]
     else:
         sign, rest = "", telegram
-    if len(rest) >= 2 and rest[0] == "0" and rest[1].isdigit():
-        rest = rest[1:]
-    return sign + rest
+    zeros = _count_leading_zeros_to_suppress(rest)
+    if zeros > MAX_VERIFIED_SUPPRESSED_ZEROS:
+        return None
+    return sign + rest[zeros:]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -551,9 +615,14 @@ def run(args: argparse.Namespace) -> int:
         if window is None:
             reject_counts[reason or REASON_NO_TELEGRAMS] += 1
             continue
+        label_text = telegram_to_display_text(window.text)
+        if label_text is None:
+            # 3+ unterdrueckte fuehrende Nullen - nicht belegt, siehe
+            # `telegram_to_display_text`-Docstring/OQ-41-Nachtrag.
+            reject_counts[REASON_LEADING_ZEROS_UNVERIFIED] += 1
+            continue
         image_path = str(frames_dir / filename)
         numeric_text = extract_numeric_text(window.text)
-        label_text = telegram_to_display_text(window.text)
         labeled.append(
             {
                 "image_path": image_path,
@@ -585,14 +654,7 @@ def run(args: argparse.Namespace) -> int:
     print(f"Telegramme: {len(telegrams)}  Bilder gesamt: {total}")
     print(f"Gelabelt: {len(labeled)}  Abgelehnt: {rejected_total}")
     print("Ablehnungen je Grund:")
-    for reason_key in (
-        REASON_VALUE_CHANGE,
-        REASON_OUTSIDE_RANGE,
-        REASON_TAIL_UNKNOWN,
-        REASON_GAP,
-        REASON_BURST,
-        REASON_NO_TELEGRAMS,
-    ):
+    for reason_key in _ALL_REASON_KEYS:
         count = reject_counts.get(reason_key, 0)
         print(f"  {_REASON_LABELS[reason_key]}: {count}")
     if burst_spans:
@@ -615,17 +677,7 @@ def run(args: argparse.Namespace) -> int:
         print(f"  {text!r}: {count}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    rejected_by_reason = {
-        reason_key: reject_counts.get(reason_key, 0)
-        for reason_key in (
-            REASON_VALUE_CHANGE,
-            REASON_OUTSIDE_RANGE,
-            REASON_TAIL_UNKNOWN,
-            REASON_GAP,
-            REASON_BURST,
-            REASON_NO_TELEGRAMS,
-        )
-    }
+    rejected_by_reason = {reason_key: reject_counts.get(reason_key, 0) for reason_key in _ALL_REASON_KEYS}
     proposal = {
         "recording": str(recording),
         "guard_margin_ms": args.guard_margin_ms,

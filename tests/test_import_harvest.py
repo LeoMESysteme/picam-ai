@@ -204,6 +204,28 @@ def test_padded_cell_text_fills_to_n_cells():
     assert import_harvest._padded_cell_text("+01.2193 mV/V", 16) == "+ 1.2193 mV/V   "
 
 
+def test_cell_text_for_telegram_two_suppressed_zeros_becomes_two_blank_cells():
+    # OQ-41-Nachtrag 2026-09-24, belegt an var/diagnostics/auf3-run:
+    # "+00988.5 mV/V" -> Glas "+  988.5 mV/V" (ZWEI Leerzellen).
+    assert import_harvest._cell_text_for_telegram("+00988.5 mV/V") == "+  988.5 mV/V"
+
+
+def test_cell_text_for_telegram_zero_before_point_kept():
+    # Werte < 1: die Null vor dem Punkt bleibt stehen (letzte Ziffer des
+    # Ganzzahlteils), egal wie viele Nachkommastellen folgen.
+    assert import_harvest._cell_text_for_telegram("+0.01234 mV/V") == "+0.01234 mV/V"
+
+
+def test_cell_text_for_telegram_three_suppressed_zeros_is_unverified():
+    # 3+ unterdrueckte fuehrende Nullen sind nicht belegt - ablehnen statt
+    # raten (AGENTS.md), siehe OQ-41-Nachtrag 2026-09-24.
+    assert import_harvest._cell_text_for_telegram("+0009.09 mV/V") is None
+
+
+def test_padded_cell_text_three_suppressed_zeros_is_unverified():
+    assert import_harvest._padded_cell_text("+0009.09 mV/V", 16) is None
+
+
 def test_expected_text_and_unit_strips_sign_and_unit():
     # Store-Konvention (Orchestrator-Entscheidung): expected_text ist der
     # reine Zahlenwert wie bei manuell gelabelten Proben, siehe
