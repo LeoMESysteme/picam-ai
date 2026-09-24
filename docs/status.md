@@ -18,6 +18,7 @@ Pi entfernt; ein Claude-Wartungsprozess läuft nicht. Ein eigener Forgejo-
 Workflow mit getrenntem Pi-Runner, Codex-CLI-Anmeldung, Prüf-Gate und Bot-
 Push auf `master` ist implementiert. Der Audit prüft vollständige
 Änderungslisten; der Runner-Token bleibt vom Dienstbenutzer abgeschirmt.
+Die Implementierung ist auf `master` in Forgejo veröffentlicht.
 Das persönliche `master`-Worktree enthält eine nicht committete Änderung an
 `PLANNED_FEATURES.md`, die unangetastet bleibt.
 
@@ -42,7 +43,6 @@ sind daher noch nicht geprüft.
 
 ## Nächster Schritt
 
-Die Implementierung nach abschließender Prüfung auf `master` veröffentlichen.
-Danach Runner und Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer
+Runner und Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer
 einmalig anmelden und zuerst einen manuellen Vorschaulauf, dann einen
 kontrollierten Veröffentlichungsdurchlauf mit Cloudflare-Abnahme ausführen.
