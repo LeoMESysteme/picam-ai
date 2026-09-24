@@ -28,6 +28,16 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   Schwellenformel `thresholds_v1` nur aus Trainingsdaten, ROM-Gegenprobe
   (Training bricht bei Abweichung ab) und Speichern/Laden mit SHA-256,
   Formatversion und Formelkennung. Tests: `tests/test_dotmatrix_templates.py`.
+* `src/dispread/ocr/dotmatrix.py`, `src/dispread/layout.py`,
+  `src/dispread/ocr/__init__.py` (Task 4): `DotMatrixReader` (Leser-ID
+  `dotmatrix`) mit `CharLayout` (bestätigtes `CharGrid`, Einheit aus dem
+  Profil, Format `gsv2as_v1`, 9 klassifizierte Zellen). Liest Zellen 0–8,
+  lehnt mit benanntem Grund ab (`zelle_unbekannt`, `zelle_mehrdeutig`,
+  `kontrast`, `ueberbelichtet`, `format`, `vorzeichen`), prüft den ganzen
+  Wert gegen die Formatregel (0–2 unterdrückte Nullen, genau ein Punkt, 6
+  Ziffernstellen) und gibt nie einen negativen Wert aus.
+  `declares_confidence_calibrated = False`. `ValueReader.read` akzeptiert
+  jetzt `DisplayLayout | CharLayout`. Tests: `tests/test_dotmatrix_reader.py`.
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).

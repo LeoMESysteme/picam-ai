@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from dispread.charcells import CharGrid
+
 #: Segmentreihenfolge in allen Masken dieses Projekts.
 #:
 #:      aaaa
@@ -150,3 +152,18 @@ class DisplayLayout:
     def from_dict(cls, data: dict[str, object]) -> DisplayLayout:
         known = {f for f in cls.__slots__}
         return cls(**{k: v for k, v in data.items() if k in known})  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True, slots=True)
+class CharLayout:
+    """Bestaetigtes Profil einer Punktraster-Anzeige fuer `DotMatrixReader`.
+
+    `grid` stammt aus dem vom Bediener bestaetigten `SessionProfile`
+    (Ernte Phase 1, Entscheidung 2), `unit` aus dem Profil - gelesen wird sie
+    nicht (OQ-17). `classified_cells` = Vorzeichen + Zahlenblock + Trennzelle.
+    """
+
+    grid: CharGrid
+    unit: str
+    format_id: str = "gsv2as_v1"
+    classified_cells: int = 9

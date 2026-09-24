@@ -14,7 +14,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-from dispread.layout import DisplayLayout
+from dispread.layout import CharLayout, DisplayLayout
 
 __all__ = ["GlyphEvidence", "ReadResult", "ValueReader"]
 
@@ -72,7 +72,7 @@ class ValueReader(Protocol):
     Signatur macht es strukturell unmoeglich.
     """
 
-    def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult: ...
+    def read(self, crop: np.ndarray, layout: DisplayLayout | CharLayout) -> ReadResult: ...
 
     @property
     def backend_id(self) -> str: ...
