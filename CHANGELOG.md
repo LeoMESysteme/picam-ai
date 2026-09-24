@@ -15,6 +15,12 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   A00) als 5×8-Bitmuster für Ziffern, `.`, `+`, Leerzelle (dazu `-`/`°` für
   Ablehnungstests) und `rom_vector()`; Gegenprobe für gelernte Vorlagen.
   Tests: `tests/test_dotmatrix_font.py`.
+* `src/dispread/ocr/dotmatrix_sampling.py` (Task 2): Punktmitten je Zelle
+  aus dem bestätigten `CharGrid`, gewichtete Abtastung (Gaussfilter +
+  bilinear, am Bildrand geklemmt), Normierung je Bild (Hintergrund je Zelle,
+  Punktpegel global) und Verschiebungssuche ±1 px (`SHIFTS`, 9 Lagen);
+  `MIN_CONTRAST = 0.08` als unvalidierter Vorabwert. Tests:
+  `tests/test_dotmatrix_sampling.py`, Helfer `tests/dotmatrix_helpers.py`.
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
