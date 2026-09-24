@@ -14,8 +14,10 @@ oder in Tabellen. Der Gate lehnt Markdown-Links auf `.md`-Ziele in anderen
 umzaeunten Codebloecken ab. Ein gezielter Test deckt den Fehler ab.
 
 **Konsequenz:** Solche nicht nutzbaren Verweise gelangen nicht mehr als
-gepruefter Doku-Commit nach `master`. Der Vorschau-Patch wird vor einer
-Veroeffentlichung entsprechend korrigiert.
+gepruefter Doku-Commit nach `master`. Der erste Vorschau-Patch wurde vor
+Veroeffentlichung geprueft: Die sechs Stufen sind jetzt anklickbar und haben
+kurze Hover-Erklaerungen. Roadmap und Anleitung nennen keine veraltete feste
+Testzahl oder falsche `Protocol`-Einordnung mehr.
 
 ## 0.1.0.dev0 — 2026-09-24 (vollstaendige Codex-Sandbox starten)
 

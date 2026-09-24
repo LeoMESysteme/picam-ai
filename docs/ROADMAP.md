@@ -23,22 +23,26 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 - [x] Repo-Grundgerüst nach MEhub-Konventionen, Importpaket `dispread`
 - [x] Projekt-venv mit `--system-site-packages`, Paket mit `--no-deps`
 - [x] `ValueRecord` mit genau den neun Feldern aus Konzept §8, verlustfrei serialisierbar
-- [x] Trennstellen als `Protocol`: `FrameSource`, `DisplayLocator`, `ValueReader`, `ReleaseGate`, `ValueSink`, `TelegramFormatter`
+- [x] Trennstellen: `FrameSource`, `DisplayLocator`, `ValueReader`,
+  `ValueSink` und `TelegramFormatter` als `Protocol`; `ReleaseGate` als
+  konkrete Klasse
 - [x] Bildquellen-Registry über URI, `synthetic://` lauffähig
 - [x] 7-Segment-Dekoder mit Per-Segment-Evidenz
 - [x] Freigabelogik mit Veralterung, Mehrbildbestätigung, eigenständigen Kriterien für Vorzeichen, Dezimalpunkt und Einheit
 - [x] JSONL-Audit-Log mit Rotation, serielle Ausgabe, provisorisches ASCII-CSV
 - [x] Ende-zu-Ende-Beispiel ohne Hardware, mit Latenzmessung und Sink-Gesundheit
 - [x] Kamera-Diagnoseskript mit Eskalationsleiter
-- [x] 36 Tests grün, `ruff` grün
+- [x] Tests und `ruff` für den damaligen P0-Stand grün (die konkrete
+  Testanzahl ist kein aktueller Projektstatus)
 - [x] Doku-Set inkl. `status.md`, `project_history.md`, `open-questions.md`
 - [x] `replay://` — implementiert (Clips mit einem Label je Clip)
-- [ ] `folder://`, `video://`, `picamera2://`, `imx500://` — Registry vorhanden, Implementierungen noch nicht. `open_source()` scheitert für diese Schemata mit `ImportError`
+- [ ] `folder://`, `video://`, `picamera2://`, `imx500://` — Registry vorhanden;
+  die dazugehörigen Quellmodule sind im aktuellen Stand nicht vorhanden.
 - [ ] Tesseract-Vergleichsbackend — `dispread.ocr.tesseract_cli` ist gebaut
   und Ende-zu-Ende verdrahtet (Profil/Controller/UI); [OQ-15](open-questions.md)
   selbst ist geklärt (Binary installiert). Offen ist die Erkennungsgüte:
   0/11 echte GSV-Sensor-Fotos werden bisher erfolgreich gelesen (nie falsch,
-  aber auch nicht richtig) — siehe `docs/status.md`
+  aber auch nicht richtig) — siehe [OQ-15](open-questions.md#oq-15)
 - [ ] CLI (`dispread.cli.*`, geplant mit `dispread run --source … --profile …`,
   [anleitung/05-cli.md](anleitung/05-cli.md)) — nicht gebaut. Der
   `pyproject.toml`-Einsprungpunkt `dispread` zeigt inzwischen auf die separate,

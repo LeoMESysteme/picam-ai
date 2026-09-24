@@ -46,18 +46,17 @@ erste Zeile — das ist ein vollständiger [ValueRecord](glossar.md#value-record
 
 ## Die sechs Stufen und wo sie wohnen
 
-```
-             Datei                                     erzeugt
-  ─────────────────────────────────────────────────────────────────────────
-1 frames/synthetic_source.py    Bildquelle             Frame
-2 detect/manual_roi.py          Anzeige finden         DisplayCandidate
-3 rectify.py                    Entzerren              DisplayCrop
-4 ocr/sevenseg.py               Wert lesen             ReadResult
-5 validate.py                   Freigabe               GateDecision
-6 sink/jsonl.py, sink/serial_out.py  Ausgabe           TxReceipt
-  ─────────────────────────────────────────────────────────────────────────
-  pipeline.py verdrahtet 1–6 und baut aus 4 + 5 den ValueRecord
-```
+| Stufe | Bereich und Aufgabe | Erzeugt |
+| --- | --- | --- |
+| 1 | [Bildquellen](../../api/frames.md "Bildquellen und open_source(): Frame und Zeitbasis kommen von der Quelle.") | `Frame` |
+| 2 | [Anzeige finden](../../api/detect.md "Lokalisierung der Anzeige: der bestätigte Bildbereich wird zum DisplayCandidate.") | `DisplayCandidate` |
+| 3 | [Entzerren](../../api/geometrie.md "Geometrie und Nachführung: aus dem Bildbereich entsteht ein entzerrter DisplayCrop.") | `DisplayCrop` |
+| 4 | [Wert lesen](../../api/ocr.md "OCR-Backends lesen Vorzeichen, Ziffern, Dezimalpunkt und Einheit aus dem Crop.") | `ReadResult` |
+| 5 | [Freigabe](../../api/validate.md "ReleaseGate prüft Syntax, Bildqualität und Zustand und entscheidet über die Freigabe.") | `GateDecision` |
+| 6 | [Ausgabe](../../api/sink.md "Senken schreiben Audit-Daten und geben Telegramme aus; TxReceipt bestätigt die Übertragung.") | `TxReceipt` |
+
+Die [Pipeline](../../api/pipeline.md "Die Pipeline verbindet alle Stufen und protokolliert Zwischenergebnisse.") verdrahtet die Stufen und baut aus
+`ReadResult` und `GateDecision` den `ValueRecord`.
 
 **Lesereihenfolge des Codes** (so ist es am schnellsten verständlich):
 

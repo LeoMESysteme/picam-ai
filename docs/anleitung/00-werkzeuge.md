@@ -18,8 +18,11 @@ wird.
 Immer mit `./.venv/bin/…`. Nie `python3` ohne Pfad, nie `pip install` ohne die
 Flags unten — sonst schießt du die ABI ab (nächster Abschnitt).
 
-Erwartete Ausgabe heute: `36 passed`, `All checks passed!`, und beim Beispiel
-`korrekt: 40`, `STILL FALSCH: 0`.
+Die Anzahl der Tests ändert sich mit dem Projektstand. Prüfe den Exit-Code
+und lies die Zusammenfassung von `pytest`; `ruff` meldet bei Erfolg
+`All checks passed!`. Beim Beispiel sind insbesondere `korrekt` und
+`STILL FALSCH` wichtig: der zweite Wert muss null sein, damit der Lauf als
+erfolgreich gilt.
 
 ## Warum die venv so aussieht
 

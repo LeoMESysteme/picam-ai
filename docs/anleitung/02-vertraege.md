@@ -8,9 +8,11 @@ Seite ist zu korrigieren.
 
 ## Die sechs Trennstellen
 
-Alle sind `typing.Protocol` mit `@runtime_checkable`. Du erbst **nicht** von
-ihnen; du schreibst eine Klasse mit den passenden Methoden. Der Test prüft
-`isinstance(meine_klasse, FrameSource)`.
+Fünf Trennstellen sind `typing.Protocol` mit `@runtime_checkable`. Du erbst
+**nicht** von ihnen; du schreibst eine Klasse mit den passenden Methoden.
+Der Test prüft zum Beispiel `isinstance(meine_klasse, FrameSource)`. Die
+Freigabe ist die sechste Trennstelle und wird durch die konkrete Klasse
+`ReleaseGate` umgesetzt.
 
 ### `FrameSource` — `src/dispread/frames/__init__.py`
 

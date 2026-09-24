@@ -119,11 +119,12 @@ Einmalige Einrichtung auf dem Pi:
    Die Kopie nutzt dasselbe ChatGPT-Konto, liegt aber nur im geschützten
    Runner-Verzeichnis. Bei einem späteren Anmeldefehler den Status prüfen
    und die Kopie nötigenfalls erneuern.
-4. Einen Forgejo-Bot mit Schreibrecht **nur auf dieses Repo** anlegen und
-   dessen PAT als Repo-Secret `DOCS_BOT_TOKEN` hinterlegen. Den Bot-Namen als
-   Repo-Variable `DOCS_BOT_USERNAME` setzen. Falls `master` geschützt ist,
-   braucht dieser Bot die ausdrücklich erlaubte Push-Berechtigung. Der
-   automatische `FORGEJO_TOKEN` kann den Publish-Schritt nicht ersetzen:
+4. Einen Forgejo-PAT mit `write:repository` und Zugriff **nur auf dieses Repo**
+   anlegen. Dafür kann das eigene Konto oder ein separater Bot genutzt werden.
+   Den PAT als Repo-Secret `DOCS_BOT_TOKEN` hinterlegen und den zugehörigen
+   Forgejo-Benutzernamen als Repo-Variable `DOCS_BOT_USERNAME` setzen. Falls
+   `master` geschützt ist, braucht der Benutzer die ausdrücklich erlaubte
+   Push-Berechtigung. Der automatische `FORGEJO_TOKEN` kann den Publish-Schritt nicht ersetzen:
    seine Pushes lösen keine weiteren Actions aus.
 5. Einen manuellen Lauf mit `mode=preview` starten und den Patch prüfen.
    Danach einen kleinen `mode=publish`-Lauf abnehmen: Bot-Commit, neuer

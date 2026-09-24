@@ -125,6 +125,20 @@ test('Glossarbegriff und Dokumentabschnitt zeigen eine Vorschau', async ({ page 
   await expect(page.locator('.md-tooltip2--active').filter({ hasText: 'Latenz ist' })).toBeVisible();
 });
 
+test('API-Stufen zeigen kurze Erklärungen aus der Anleitung', async ({ page }) => {
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  const links = page.locator('.md-content__inner table a[href*="/api/"]');
+  await expect(links).toHaveCount(6);
+  for (const link of await links.all()) {
+    await expect(link).not.toHaveAttribute('data-preview', '');
+    await expect(link).toHaveAttribute('title', /.+/);
+  }
+  await links.first().hover();
+  const popup = page.locator('.md-tooltip2--active').last();
+  await expect(popup).toContainText('Frame und Zeitbasis');
+  expect((await popup.innerText()).length).toBeLessThan(250);
+});
+
 test('Link auf die Glossarseite zeigt nur die kurze Einleitung', async ({ page }) => {
   await page.goto('/docs/anleitung/');
   const link = page.locator('.md-content__inner a[href$="glossar.html"]');
