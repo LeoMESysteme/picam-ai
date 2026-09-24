@@ -62,6 +62,25 @@ class GateConfig:
     expected_unit: str | None = None
 
 
+_READER_OWN_THRESHOLDS = frozenset({"dotmatrix"})
+_KNOWN_BACKENDS = frozenset({"sevenseg", "tesseract_cli"}) | _READER_OWN_THRESHOLDS
+
+
+def default_gate_config(backend_id: str, **overrides: object) -> GateConfig:
+    """Freigabeschwellen je Leser.
+
+    `min_margin`/`min_contrast` sind auf die 7-Segment-Kennzahlen geeicht. Der
+    Dot-Matrix-Leser wendet seine eingefrorenen Schwellen (templates.json,
+    Formel thresholds_v1) selbst an und lehnt ab - hier doppelt zu schwellen,
+    wuerde eine zweite, ungemessene Grenze einfuehren.
+    """
+    if backend_id not in _KNOWN_BACKENDS:
+        raise ValueError(f"unbekannter Leser {backend_id!r}")
+    if backend_id in _READER_OWN_THRESHOLDS:
+        overrides = {"min_margin": 0.0, "min_contrast": 0.0, **overrides}
+    return GateConfig(**overrides)
+
+
 @dataclass
 class _Candidate:
     value: float

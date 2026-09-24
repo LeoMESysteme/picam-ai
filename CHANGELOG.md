@@ -38,6 +38,11 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   Ziffernstellen) und gibt nie einen negativen Wert aus.
   `declares_confidence_calibrated = False`. `ValueReader.read` akzeptiert
   jetzt `DisplayLayout | CharLayout`. Tests: `tests/test_dotmatrix_reader.py`.
+* `src/dispread/validate.py` (Task 5): `default_gate_config(backend_id,
+  **overrides)`. `sevenseg`/`tesseract_cli` unverändert; `dotmatrix` setzt
+  `min_margin`/`min_contrast` auf 0, weil der Leser seine eingefrorenen,
+  gemessenen Schwellen selbst anwendet — keine zweite, ungemessene Grenze.
+  Unbekannte Leser → `ValueError`. Tests: `tests/test_gate_config.py`.
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
