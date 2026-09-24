@@ -44,6 +44,7 @@ done
 [[ $EUID -eq 0 ]] || { echo "Bitte mit sudo ausführen." >&2; exit 1; }
 [[ "$(uname -m)" == "aarch64" ]] || { echo "Nur für arm64 (Pi 5) gebaut." >&2; exit 1; }
 [[ "$UUID" =~ ^[0-9a-f-]{36}$ ]] || { echo "--uuid fehlt oder ist keine UUID." >&2; exit 2; }
+"$ROOT/scripts/forgejo-runner-identity.sh" /etc/forgejo-runner/config.yml "$UUID" "$TOKEN_FILE"
 
 # 1. Binary
 tmp="$(mktemp -d)"
@@ -100,4 +101,5 @@ systemctl daemon-reload
 systemctl enable forgejo-runner.service
 systemctl restart forgejo-runner.service
 sleep 5
-systemctl --no-pager --lines=15 status forgejo-runner.service || true
+systemctl --no-pager --lines=15 status forgejo-runner.service
+systemctl is-active --quiet forgejo-runner.service

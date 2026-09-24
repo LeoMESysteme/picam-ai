@@ -22,11 +22,14 @@ Die Implementierung ist auf `master` in Forgejo veröffentlicht.
 Das persönliche `master`-Worktree enthält eine nicht committete Änderung an
 `PLANNED_FEATURES.md`, die unangetastet bleibt.
 
-Der neue Runner ist noch **nicht** registriert oder gestartet: Für die
-Inbetriebnahme fehlen derzeit sudo-Zugriff, die Forgejo-Runner-Registrierung,
-ein Bot-Token und die einmalige Geräteanmeldung für den eigenen Runner-
-Benutzer. Ein produktiver Codex-Lauf und der nachgelagerte Cloudflare-Deploy
-sind daher noch nicht geprüft.
+Ein Installationsversuch mit der neuen Runner-UUID und dem Skript des
+bestehenden `picam-docs`-Runners führte zu `unregistered runner`, weil sein
+alter Token erhalten blieb. Die ursprüngliche UUID wurde wiederhergestellt;
+der Dienst ist aktiv und meldet `declared successfully`. Beide Installer
+schützen jetzt gegen diesen UUID/Token-Mismatch. Für den **neuen** Codex-
+Runner fehlen noch seine Token-Datei, ein Bot-PAT und die Geräteanmeldung.
+Ein produktiver Codex-Lauf und der nachgelagerte Cloudflare-Deploy sind noch
+nicht geprüft.
 
 ## Verifikation
 
@@ -34,12 +37,15 @@ sind daher noch nicht geprüft.
   3 übersprungen, 1 xfailed.
 * Neuer Wartungs-Gate: 22 gezielte Tests bestanden, darunter ein Audit mit
   70 geänderten Dateien und ein erfolgreicher Test-Push; Ruff ohne Befund.
-* Vollständige Python-Suite nach der letzten Korrektur: 512 bestanden,
+* Vollständige Python-Suite vor dem Runner-Fix: 512 bestanden,
   3 übersprungen, 1 erwarteter Fehlschlag.
 * Strenger Zensical-Build: erfolgreich; bestehende Vorschau-Ziele gültig.
 * Bestehende Dokubrowser-Tests: 12 bestanden.
 * Workflow-YAML, eingebettete Bash-Blöcke, Installationsskript und systemd-
   Service wurden statisch geprüft.
+* 24 gezielte Tests nach dem Runner-Fix bestanden. Darunter prüfen zwei Tests
+  den UUID-Wechsel mit und ohne Token-Datei. Der bestehende Runner wurde nach
+  Wiederherstellung erfolgreich bei Forgejo deklariert.
 
 ## Nächster Schritt
 

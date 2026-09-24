@@ -80,12 +80,21 @@ Einmalige Einrichtung auf dem Pi:
 
 1. In Forgejo unter **Repo → Einstellungen → Actions → Runners** einen neuen,
    nur für dieses Repo registrierten Runner anlegen. UUID und Token erhalten
-   einen eigenen Eintrag; den Token ausschließlich in einer lokalen Datei mit
-   Modus `0600` ablegen, nie in Kommandozeile, Repo oder Chat.
-2. `sudo ./scripts/forgejo-codex-runner-install.sh --uuid <UUID> --token-file <DATEI>`
-   ausführen. Das Skript installiert die gepinnte Codex CLI, den Systemnutzer
-   `picam-codex-runner` und den ressourcenbegrenzten Dienst. Der vorhandene
-   `picam-docs`-Runner bleibt für den Cloudflare-Build zuständig.
+   einen eigenen Eintrag. **Nur den Token** in einer lokalen Datei mit Modus
+   `0600` ablegen; die UUID bleibt ein Argument. Token nie in Kommandozeile,
+   Repo oder Chat schreiben:
+   ```bash
+   umask 077
+   nano "$HOME/.forgejo-codex-runner-token"
+   chmod 600 "$HOME/.forgejo-codex-runner-token"
+   ```
+   Falls Forgejo den Token nicht mehr anzeigt, einen neuen Runner registrieren
+   und dessen UUID und Token zusammen verwenden.
+2. `sudo ./scripts/forgejo-codex-runner-install.sh --uuid <UUID> --token-file "$HOME/.forgejo-codex-runner-token"`
+   ausführen. **`forgejo-runner-install.sh` gehört zum bestehenden
+   `picam-docs`-Runner.** Das Codex-Skript installiert die gepinnte Codex CLI,
+   den Systemnutzer `picam-codex-runner` und den ressourcenbegrenzten Dienst.
+   Der vorhandene `picam-docs`-Runner bleibt für den Cloudflare-Build zuständig.
 3. Unter dem neuen Systemnutzer einmalig anmelden:
    ```bash
    sudo -u picam-codex-runner env HOME=/var/lib/picam-codex-runner \

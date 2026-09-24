@@ -17,6 +17,7 @@ done
 [[ $EUID -eq 0 ]] || { echo "Bitte mit sudo ausfuehren." >&2; exit 1; }
 [[ "$(uname -m)" == aarch64 ]] || { echo "Nur fuer den Pi 5 (arm64)." >&2; exit 1; }
 [[ "$UUID" =~ ^[0-9a-f-]{36}$ ]] || { echo "--uuid fehlt oder ist ungueltig." >&2; exit 2; }
+"$ROOT/scripts/forgejo-runner-identity.sh" /etc/picam-codex-runner/config.yml "$UUID" "$TOKEN_FILE"
 command -v /usr/local/bin/forgejo-runner >/dev/null
 command -v npm >/dev/null
 
@@ -65,5 +66,8 @@ EOF
 chmod 644 /etc/picam-codex-runner/config.yml
 install -m 644 "$ROOT/systemd/forgejo-codex-runner.service" /etc/systemd/system/forgejo-codex-runner.service
 systemctl daemon-reload
-systemctl enable --now forgejo-codex-runner.service
+systemctl enable forgejo-codex-runner.service
+systemctl restart forgejo-codex-runner.service
+sleep 5
 systemctl --no-pager --lines=12 status forgejo-codex-runner.service
+systemctl is-active --quiet forgejo-codex-runner.service
