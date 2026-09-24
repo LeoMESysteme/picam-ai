@@ -308,8 +308,8 @@ Regeln, in dieser Reihenfolge:
 
 ### Task 7 (Orchestrator): Ende-zu-Ende an der echten Anzeige
 
-- [ ] Einrichten: `harvest-setup.py propose` und `confirm`. Das Overlay wird dem Nutzer gezeigt, bestätigt wird erst nach seinem OK.
-- [ ] `harvest.py` mit 30 Schritten à 4 s (≈ 3,5 min).
-- [ ] `import-harvest.py --dry-run`, dann echt. Die Stichprobe aus `audit.json` wird dem Nutzer gezeigt.
-- [ ] Berichtet werden: Bilder gesamt, gelabelt, importiert, abgelehnt je Grund, die Zahl verschiedener Zeichenketten und die Ziffernabdeckung je Stelle (OQ-39). Dazu gehören `gap_thresholds_provisional` und der Hinweis „Vorzeichen ungeprüft".
-- [ ] Doku: VALIDATION, lab_journal, CHANGELOG, OQ-39-Nachtrag, Status des Auto-Labeling-Plans (Tasks E/F/G), `status.md`, `TODO.md`. Danach Commit.
+- [x] Einrichten: `harvest-setup.py propose` und `confirm`. Das Overlay wird dem Nutzer gezeigt, bestätigt wird erst nach seinem OK.
+- [x] `harvest.py` mit 30 Schritten à 4 s (≈ 3,5 min).
+- [x] `import-harvest.py --dry-run`, dann echt. Die Stichprobe aus `audit.json` wird dem Nutzer gezeigt.
+- [x] Berichtet werden: Bilder gesamt, gelabelt, importiert, abgelehnt je Grund, die Zahl verschiedener Zeichenketten und die Ziffernabdeckung je Stelle (OQ-39). Dazu gehören `gap_thresholds_provisional` und der Hinweis „Vorzeichen ungeprüft".
+- [x] Doku: VALIDATION, lab_journal, CHANGELOG, OQ-39-Nachtrag, Status des Auto-Labeling-Plans (Tasks E/F/G), `status.md`, `TODO.md`. Danach Commit.

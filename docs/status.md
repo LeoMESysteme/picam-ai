@@ -8,19 +8,16 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 > **Die Arbeitsliste steht in [../TODO.md](../TODO.md).** Diese Datei sagt
 > *wo wir stehen*, die TODO sagt *was zu tun ist*.
 >
-> **Aktueller Blocker: Kamerabrücke seit 11:11 wieder blockiert (OQ-22).**
-> Nach sieben erfolgreichen Starts scheiterte der achte dieses Boots mit
-> RP2040-Bridge-Fehler. Keine weiteren Kameraversuche bis zum Neustart;
-> gestern half ein Warmreboot nicht, heute früh lief es nach nächtlicher
-> Abschaltung. Ob und wann neu gestartet wird, entscheidet der Nutzer.
+> **Kein Blocker.** Nach dem Neustart (Boot `18ba46e9…`) liefen zwei
+> Streamstarts fehlerfrei. OQ-22 bleibt offen: Heute Vormittag blockierte die
+> Brücke schon beim 8. Start eines Boots — **Starts sparen**, Kamera nicht
+> verstellen.
 
-**Task 6 ist erledigt (2026-09-24):** ScalerCrop 1920×1440 um die Anzeige
-ergibt `native_scale = 1,0`; gemessen frontal 3,36, „30°" 3,34, „45°"
-2,68 native px je Punktspalte. Der Nutzer hat
-`resolution_threshold_px = 2,6` festgelegt (Plan Ernte Phase 1,
-Entscheidung 7). **Nächster Schritt: Task 7**, die erste echte Ernte. Vorher
-die Lichtspiegelung links oben auf dem Glas beseitigen oder das Quad von
-Hand setzen — sie schneidet die automatische Glaserkennung ab.
+**Ernte 1 ist durch (Task 7, 2026-09-24):** 2835 Bilder, 837 gelabelt,
+**81 Proben importiert** (Datensatz 88 → 169, 31 Zeichenketten, 100 %
+`serial_ascii`, Vorzeichen ungeprüft, Gap-Schwellen vorläufig). Stichprobe
+von 12 Bildern: alle Labels stimmen. Details: VALIDATION.md, „Ernte 1".
+Task 6 (Schwelle 2,6 px) ist ebenfalls erledigt.
 
 ## Wo wir stehen
 

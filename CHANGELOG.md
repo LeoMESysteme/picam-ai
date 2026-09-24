@@ -3,6 +3,24 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Ernte 1: erste echte Ernte mit Import)
+
+**Problem:** Die Ernte-Kette (`harvest-setup.py`, `harvest.py`,
+`import-harvest.py`) war nur gegen Attrappen geprüft; der Datensatz enthielt
+keine seriell gelabelten Proben. Um 11:11 blockierte zudem die Kamerabrücke
+beim 8. Start des Boots (OQ-22-Nachtrag).
+
+**Änderung:** Kein Code geändert. Nach Neustart eine Ernte mit 30 Schritten
+à 4 s gefahren: 2835 Bilder, 837 gelabelt, 81 importiert (Datensatz 88 →
+169). Doku: `docs/VALIDATION.md` und `docs/lab_journal.md` („Ernte 1"),
+OQ-39-Nachtrag, Status der Tasks E/F/G im Auto-Labeling-Plan, Task 7 im
+Plan Ernte Phase 1 abgehakt, `docs/status.md`, `TODO.md`.
+
+**Konsequenz:** Die Kette läuft Ende zu Ende gegen echte Hardware. Weitere
+Ernten brauchen je nur einen Streamstart, solange die Kamera steht. Offen:
+Vorzeichenstelle, endgültige Gap-Schwellen (OQ-40), Ziffernlücken je Zelle
+(OQ-39).
+
 ## 0.1.0.dev0 — 2026-09-24 (Task 6: ScalerCrop, Winkel, Auflösungsschwelle)
 
 **Problem:** Für die erste Ernte fehlten Fokus, ein Sensorausschnitt um die

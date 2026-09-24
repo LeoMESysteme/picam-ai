@@ -1748,6 +1748,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Erkennungsgüte-Zahl, die auf dem so vergrösserten Datensatz gemessen wird —
   eine hohe Trefferquote auf 50 000 Bildern derselben drei Werte ist **keine**
   Aussage über die Erkennung im Feld.
+* **Nachtrag 2026-09-24, Ernte 1:** 81 Proben aus 31 Zeichenketten
+  importiert. Zelle 6 deckt alle zehn Ziffern ab, Zellen 3–5 je neun,
+  Zelle 1 acht, Zelle 2 sieben, Zelle 7 fünf (4, 6–9). Vorzeichen weiter nur
+  `+`. Tabelle: [VALIDATION.md](VALIDATION.md), 2026-09-24, „Ernte 1".
+  Mehr Ernten mit anderen Seeds schliessen die Lücken; offen bleibt die
+  Vorzeichenstelle.
 * **Verwandt:** [OQ-37](open-questions.md) (Anzeigeformat ab 10 mV/V),
   [OQ-35](open-questions.md) (Baustein 2: Signaleinspeisung, gleiches Problem
   am BK-5491B), [OQ-38](open-questions.md).

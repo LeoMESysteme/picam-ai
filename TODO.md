@@ -9,15 +9,12 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Aktueller Blocker — Kamerabrücke seit 2026-09-24 11:11 blockiert
+## Kein Blocker — aber Streamstarts sparen (OQ-22)
 
-Sieben Starts nach dem Morgen-Boot liefen, der achte (Ernte-Einrichtung,
-ScalerCrop) scheiterte mit `rp2040_gbdg_wait_until_free failed` und
-`stream on failed` (OQ-22-Nachtrag). **Keine Kameraversuche bis zum
-Neustart.** Heute früh half die nächtliche Abschaltung; ein Warmreboot half
-gestern nicht. Nach dem Neustart die Starts sparen: Ernte-Einrichtung und
-Ernte mit möglichst wenigen Streams (Kamera nicht mehr verstellen, den
-Ausschnitt aus einem einzigen Vollbild bestimmen).
+Am 2026-09-24 blockierte die Brücke beim 8. Start eines Boots; nach Neustart
+liefen zwei Starts fehlerfrei. Jede Sitzung so planen, dass sie mit wenigen
+Starts auskommt: Kamera nicht verstellen, ScalerCrop aus **einem** Vollbild,
+Ernte direkt anschliessen.
 
 ---
 
@@ -61,15 +58,19 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
   Der Ausschnitt gilt nur für die jeweilige Kameralage; nach jedem
   Verstellen neu bestimmen (10-s-Vollbild, dann Ausschnitt).
 
-### 4. Task 7: echte Ernte und Import — jetzt dran
+### 4. Erledigt 2026-09-24: Task 7, Ernte 1
 
-`harvest.py` ist bereits gebaut. Nach Task 6: Profil bestätigen, 30 Schritte
-à 4 s ernten, `import-harvest.py --dry-run`, `audit.json` mit dem Nutzer
-prüfen, dann importieren. Vorzeichen bleibt ungeprüft.
-**Vorher:** Lichtspiegelung links oben auf dem Glas beseitigen — sie
-schneidet die automatische Glaserkennung ab (Quad sonst von Hand setzen)
-und überstrahlt bei schrägem Blick `+` und `0`. Kamera vor dem Fokussieren
-fixieren. `confirm --resolution-threshold-px 2.6`.
+81 Proben importiert (VALIDATION.md, „Ernte 1"). Profil und Lauf:
+`var/diagnostics/ernte1-profile/`, `var/diagnostics/ernte1-run/`; Sicherung
+des Datensatzes davor: `var/backup-datasets-vor-ernte1-20260924T1159/`.
+
+**Nächste Schritte:**
+* Weitere Ernten mit anderen `--seed`, um die Ziffernlücken je Zelle zu
+  schliessen (OQ-39-Nachtrag). Solange die Kamera nicht bewegt wird, gilt
+  `ernte1-profile/profile.json` weiter — dann ist jede Ernte **ein** Start.
+* Prüfen, warum nur ≈ 28 statt ≈ 39 Bilder je Schritt gelabelt werden
+  (`telegrammluecke` 1497): nur die Schreibpause oder auch zu knappe 800 ms?
+* Phase 2: Zellen-Klassifikator (Plan, Entscheidung 1).
 
 ### 5. OQ-40: Gap-Schwellen nachmessen (kein Ernte-Blocker)
 

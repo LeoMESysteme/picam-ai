@@ -1440,3 +1440,53 @@ von verschobener Rahmung, nicht von Schärfe.
 Vollbild, 133 Bilder) lief normal, der 8. (`ernte1-crop`, ScalerCrop
 880,1015,1920,1440 angefordert) lieferte 0 Bilder mit RP2040-Bridge-Fehler
 und 6 × `stream on failed` (OQ-22-Nachtrag). Kein hängender Prozess.
+
+## 2026-09-24 — Ernte 1: erste echte Ernte mit Import (Task 7)
+
+**Zeitbasis:** `SensorTimestamp` (CLOCK_BOOTTIME) und serielle Zeitstempel
+derselben Domäne; Boot `18ba46e9-02ed-40ac-8bf9-139a2fbbc136` (Neustart
+durch den Nutzer nach der Blockade um 11:11). Zwei Streamstarts in diesem
+Boot, beide ohne Fehler.
+
+**Einrichtung:** ScalerCrop 880,1015,1920,1440 (tatsächlich 880,1014,…),
+Quad automatisch (`glass`-Detektor, keine Spiegelung mehr), Raster vom
+Bediener `left=19.5, pitch=22.9, top=44, bottom=120` (400×160 entzerrt),
+`min_native_dot_column_px = 3,461` ≥ Schwelle 2,6 → `resolution_ok=True`.
+Profil: `var/diagnostics/ernte1-profile/profile.json` (lokal).
+
+**Lauf:** `harvest.py --n-steps 30 --hold-s 4.0 --seed 20260924`,
+`--guard-margin-ms 695 --min-gap-ms 300 --max-gap-ms 800`
+(`gap_thresholds_provisional: true`). Registerstand danach verifiziert
+zurückgesetzt (`norm` [80, 27, 228], `dpoint` [1]).
+
+| Grösse | Wert |
+| --- | --- |
+| Bilder gesamt | 2835, 0 verworfen |
+| gelabelt (`gate-label`) | 837 |
+| abgelehnt `telegrammluecke` | 1497 |
+| abgelehnt `wertwechsel_im_fenster` | 487 |
+| abgelehnt `ausserhalb_telegrammbereich` | 14 |
+| verschiedene Zeichenketten | 31 (25 × 12, 6 × 13 Zeichen) |
+| ausgewählt (≤ 3 je Plateau) | 101 |
+| abgelehnt beim Import | 14 `bildguete`, 6 `zellen_inkonsistent` |
+| **importiert** | **81** (Datensatz 88 → 169) |
+
+Herkunft der neuen Proben: 100 % `serial_ascii`. Vorzeichenstelle
+**ungeprüft** (nur `+`, Firmware 1.3.07). Dezimalpunkt in Zelle 2, 3, 4
+oder 5. Ziffernabdeckung je Zelle (Zelle 0 = Vorzeichen, Zelle 1 = Leerzelle
+bei unterdrückter Null):
+
+| Zelle | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Ziffern | 01234589 | 0134789 | 012345679 | 013456789 | 013456789 | 0123456789 | 46789 |
+
+**Stichprobe:** 12 zufällige gelabelte Bilder entzerrt gegen ihr Label
+geprüft (`var/diagnostics/ernte1-run/stichprobe*.png`, lokal) — alle 12
+stimmen Zeichen für Zeichen. Zellsoll mit Leerzelle für die unterdrückte
+Null (`cell_text`, z. B. `+ 909.09 mV/V`) stimmt mit dem Glas überein.
+
+**Auffällig:** `telegrammluecke` verwirft mehr als erwartet. Der Plan
+rechnete mit ≈ 39 labelbaren Bildern je Schritt, erreicht sind ≈ 28. Der
+Hauptteil der Lücken entspricht der ≈ 1,8-s-Pause je Normierungswechsel;
+ob die 800-ms-Schwelle zusätzlich gute Plateaus beschneidet, ist nicht
+untersucht.

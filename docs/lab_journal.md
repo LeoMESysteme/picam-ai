@@ -1425,3 +1425,18 @@ oder das Quad von Hand setzen.
 
 Schwelle `resolution_threshold_px = 2,6`, vom Nutzer festgelegt. Zahlen in
 VALIDATION.md (2026-09-24).
+
+## 2026-09-24 — Ernte 1 läuft durch, 81 Proben importiert
+
+Der Nutzer hat nach der Blockade um 11:11 neu gestartet und die
+Lichtspiegelung beseitigt. Mit zwei Streamstarts ging es: 20 s Ausschnitt
+zum Einrichten, dann die Ernte selbst. Die Kamera war zwischen dem Vollbild
+vor der Blockade und dem Neustart leicht verrutscht; die Anzeige lag danach
+am oberen Bildrand, aber vollständig im Ausschnitt und grösser als vorher
+(3,46 native px je Punktspalte, Punkte klar getrennt). Ohne Spiegelung fand
+der Glas-Detektor das Quad allein.
+
+Kurzer Fehlalarm: In der Stichprobe zeigt das Glas `+ 28.681` mit Leerzelle,
+das Label heisst `+28.681 mV/V`. `import-harvest.py` legt die Zellen aber
+nach dem Rohtelegramm mit Leerzelle an (`cell_text`), die Zuordnung stimmt.
+Zahlen: VALIDATION.md, 2026-09-24, „Ernte 1".

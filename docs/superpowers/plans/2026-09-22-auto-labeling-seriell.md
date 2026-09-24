@@ -305,7 +305,7 @@ wiederholbar, Abbruch bei einer einzigen unklaren Datei. Trockenlauf geprüft:
 > Task C jede Version-1-Probe ab. Ein Befehl:
 > `./.venv/bin/python scripts/migrate-samples-v1-to-v2.py --apply`
 
-### Task E — Synchronaufzeichner — **gebaut, gegen echte Hardware ungetestet**
+### Task E — Synchronaufzeichner — **gebaut, gegen echte Hardware gelaufen (Ernte 1, 2026-09-24)**
 
 `scripts/sync-record.py`. Schreibt Bilder **und** zeitgestempelte Telegramme derselben Sitzung
 gemeinsam weg. Bewusst getrennt vom Labeln: erst aufzeichnen, dann offline
@@ -329,7 +329,7 @@ AI Camera trägt, ist aus der Codegleichheit mit `Controller._capture`
 Prüfschritt: **kurz** starten (z. B. 10 s) und `frames.jsonl` ansehen, bevor
 eine lange Sitzung aufgezeichnet wird.
 
-### Task F — Offline-Labeler — **gebaut, gegen synthetische Fälle geprüft**
+### Task F — Offline-Labeler — **gebaut, auf echten Daten gelaufen (Ernte 1, 2026-09-24: 837 von 2835 Bildern gelabelt)**
 
 `scripts/gate-label.py`. Wendet die oben festgelegte Gate-Regel offline auf
 eine `sync-record.py`-Aufzeichnung an. **Legt keine Proben an** — das bleibt
@@ -375,6 +375,9 @@ sie. Für `--max-gap-ms` fehlt noch ein OQ-Eintrag in
 `docs/open-questions.md` (nicht Teil dieser Änderung).
 
 ### Task G — Unabhängigkeitsgruppen und Split
+
+**Stand 2026-09-24:** Ernte 1 importiert mit einer `independence_group` je
+Aufnahmesitzung (81 Proben, Split `development`).
 
 Gruppen je Sitzung vergeben, Entwicklungs- und Prüfmenge auf Gruppenebene
 trennen. Erst danach ist eine Zahl aus dem vergrösserten Datensatz eine
