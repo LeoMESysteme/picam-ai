@@ -1,0 +1,98 @@
+# Taeglicher Codex-Audit der Zensical-Doku. Auf diesem Repo weiterhin nur
+# .github/workflows/ verwenden, sonst ignoriert Forgejo die bestehenden Jobs.
+name: Zensical-Doku pflegen
+enable-email-notifications: true
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+      timezone: Europe/Berlin
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview prueft nur; publish pusht nach erfolgreichen Tests'
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - publish
+
+jobs:
+  maintain:
+    if: github.ref == 'refs/heads/master'
+    runs-on: picam-codex-docs
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Venv nach Projektregeln anlegen
+        run: python3 -m venv --system-site-packages .venv
+
+      - name: Publikationsmodus festlegen
+        id: intent
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$INPUT_MODE" == publish ]]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Aenderungen seit letztem Audit pruefen
+        id: probe
+        env:
+          CODEX_HOME: /var/lib/picam-codex-runner/.codex
+        run: ./.venv/bin/python scripts/docs-maintenance.py probe
+
+      - name: Zensical- und Browserwerkzeuge vorbereiten
+        if: steps.probe.outputs.run == 'true'
+        env:
+          CODEX_HOME: /var/lib/picam-codex-runner/.codex
+          PLAYWRIGHT_BROWSERS_PATH: /var/lib/picam-codex-runner/playwright-browsers
+        run: |
+          /opt/picam-codex/node_modules/.bin/codex login status
+          docs_venv="$CODEX_HOME/docs-venv-$(sha256sum requirements-docs.txt | cut -c1-12)"
+          if [[ ! -f "$docs_venv/.ready" || ! -x "$docs_venv/bin/zensical" ]]; then
+            python3 -m venv "$docs_venv"
+            "$docs_venv/bin/pip" install -r requirements-docs.txt
+            touch "$docs_venv/.ready"
+          fi
+          ln -s "$docs_venv" .venv-docs
+          npm ci --no-audit --no-fund
+          npx playwright install chromium
+
+      - name: Doku aktualisieren und pruefen
+        if: steps.probe.outputs.run == 'true'
+        id: audit
+        env:
+          CODEX_HOME: /var/lib/picam-codex-runner/.codex
+          PLAYWRIGHT_BROWSERS_PATH: /var/lib/picam-codex-runner/playwright-browsers
+        run: |
+          args=()
+          if [[ '${{ steps.intent.outputs.publish }}' == true ]]; then args+=(--publish-requested); fi
+          ./.venv/bin/python scripts/docs-maintenance.py audit \
+            --codex-bin /opt/picam-codex/node_modules/.bin/codex "${args[@]}"
+
+      - name: Geprueften Commit nach master pushen
+        if: steps.audit.outputs.changed == 'true' && steps.intent.outputs.publish == 'true'
+        env:
+          CODEX_HOME: /var/lib/picam-codex-runner/.codex
+          DOCS_BOT_USERNAME: ${{ vars.DOCS_BOT_USERNAME }}
+          DOCS_BOT_TOKEN: ${{ secrets.DOCS_BOT_TOKEN }}
+        run: ./.venv/bin/python scripts/docs-maintenance.py publish
+
+      - name: Patch fuer manuelle Vorschau erzeugen
+        if: steps.audit.outputs.changed == 'true' && steps.intent.outputs.publish != 'true'
+        run: git format-patch -1 --stdout > docs-maintenance.patch
+
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        if: steps.audit.outputs.changed == 'true' && steps.intent.outputs.publish != 'true'
+        with:
+          name: zensical-doku-vorschau
+          path: docs-maintenance.patch
+          retention-days: 7

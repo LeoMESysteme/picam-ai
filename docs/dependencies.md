@@ -1,5 +1,18 @@
 # Abhängigkeiten
 
+## Zensical-Pflege auf dem Forgejo-Runner
+
+Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
+unter `/opt/picam-codex` (siehe
+`scripts/forgejo-codex-runner-install.sh`). Das Paket gehört nur zum
+Dokumentations-Workflow und nicht zur Messpipeline. Der Job nutzt die
+ChatGPT-Anmeldung der Codex CLI im privaten, persistenten `CODEX_HOME` des
+Runner-Benutzers; es wird kein API-Schlüssel im Repo abgelegt.
+Die Zensical-Build-Abhängigkeiten stehen weiter in `requirements-docs.txt`
+und werden in einem eigenen `.venv-docs` installiert. Das Projekt-`.venv`
+bleibt mit `--system-site-packages` angelegt; das Projektpaket wird, falls
+benötigt, ausschließlich mit `--no-deps` installiert.
+
 ## Die wichtigste Regel
 
 ```bash

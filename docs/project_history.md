@@ -9,6 +9,44 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — Unbeaufsichtigte Zensical-Pflege auf getrenntem Pi-Runner
+
+## Problem
+
+Der bisherige Claude-Job wurde per `@reboot` auf dem Pi gestartet, arbeitete
+auf lokalen Branches und veröffentlichte seine Commits nicht. Die neue
+Zensical-Anleitung und deren Kontextvorschauen brauchen eine Pflege, die
+Quellcodeänderungen nachverfolgt und das veröffentlichte Ergebnis prüft.
+
+## Entscheidung
+
+Forgejo plant einen täglichen Workflow. Ein zweiter, repo-gebundener Runner
+läuft auf demselben Pi unter eigenem Unix-Benutzer und hält eine eigene
+Codex-CLI-Anmeldung. Der Job arbeitet auf `master`, prüft die Anleitung
+anfangs in täglichen Dreierpaketen und ruft Codex danach nur bei Änderungen
+oder für den wöchentlichen Anleitungsaudit auf. Er pusht nur nach
+erfolgreichem Site-Build und Browsertests. Der Push verwendet einen
+eingeschränkten Bot-Token, damit der vorhandene Cloudflare-Workflow startet.
+
+## Begründung und Alternativen
+
+Forgejo Actions benötigen einen ausführenden Runner; Cloudflare Pages bietet
+keinen dauerhaften CLI-Arbeitsplatz mit persistentem Codex-Login. Ein Runner
+auf dem Forgejo-NAS wurde erwogen; der Nutzer hat den Raspberry Pi als Ort
+gewählt. Der vorhandene Doku-Runner bleibt getrennt, damit dessen Jobs keine
+Codex-Anmeldedatei lesen können. Der automatische Forgejo-Workflow-Token
+wurde für den Push verworfen, weil seine Commits keine weiteren Workflows
+auslösen.
+
+## Konsequenz
+
+Die beiden Pi-Runner sind ressourcenbegrenzt und haben getrennte
+Identitäten. Der Codex-Job setzt eine einmalige Runner-Registrierung,
+Bot-Berechtigung und Geräteanmeldung voraus. Bei Ausfall bleibt `master`
+unverändert; der Forgejo-Lauf zeigt den Fehler.
+
+---
+
 # 2026-09-24 — Kontextvorschauen in der Anleitung
 
 ## Problem

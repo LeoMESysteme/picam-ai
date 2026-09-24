@@ -1,0 +1,41 @@
+# Eigener Forgejo-Runner fuer Codex-Doku-Pflege auf dem Pi.
+# Getrennte Unix-Identitaet verhindert Zugriff der anderen Jobs auf auth.json.
+[Unit]
+Description=Forgejo Runner (picam-codex-docs)
+Documentation=https://forgejo.org/docs/v15.0/admin/actions/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=picam-codex-runner
+Group=picam-codex-runner
+WorkingDirectory=/var/lib/picam-codex-runner
+Environment=HOME=/var/lib/picam-codex-runner
+ExecStart=/usr/local/bin/forgejo-runner daemon --config /etc/picam-codex-runner/config.yml
+Restart=on-failure
+RestartSec=30
+LoadCredential=token:/etc/picam-codex-runner/token
+
+Nice=19
+CPUQuota=150%
+CPUWeight=10
+IOSchedulingClass=idle
+MemoryMax=3G
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/picam-codex-runner
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

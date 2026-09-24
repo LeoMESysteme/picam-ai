@@ -3,6 +3,29 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Zensical-Doku-Pflege mit Codex)
+
+**Problem:** Der bisherige Claude-Cronjob lief nur nach dem Pi-Boot, pflegte
+keine Kontextvorschauen und konnte seine lokalen Commits nicht selbst auf die
+gehostete Doku bringen. Seine Pflegegrenzen schlossen größere Verbesserungen
+der Anleitung aus.
+
+**Änderung:** Ein eigener Forgejo-Runner auf dem Pi bekommt eine getrennte
+Codex-Anmeldung. Der tägliche Workflow prüft Änderungen zuerst ohne
+Modellaufruf, lässt Codex gezielt Einsteigertexte und Vorschau-Links pflegen
+und prüft OQ-Index, strengen Build und Browsertests. Erst danach pusht ein
+separater Schritt per Bot-Token nach `master`. Der alte Cron-Eintrag entfällt;
+das Claude-Skript bleibt nur für gezielte manuelle Nutzung erhalten. Der
+gemeinsam genutzte Doku-venv-Symlink ist als Laufzeitartefakt ignoriert.
+Der Audit erhält die vollständige Änderungsliste mit Diff-Grenzen; der
+separate Runner kann seine Konfiguration lesen, während sein Token root-
+geschützt bleibt. Vorschauläufe nutzen Forgejos angepassten Artifact-Upload.
+
+**Konsequenz:** Geprüfte Doku-Änderungen lösen den bestehenden Cloudflare-
+Deploy aus. Fehlende Anmeldung, Tests oder ein inzwischen veränderter
+`master` verhindern den Push. Registrierung, Bot-Token und einmalige Codex-
+Anmeldung sind für die Inbetriebnahme erforderlich.
+
 ## 0.1.0.dev0 — 2026-09-24 (Kontextvorschauen in der Doku)
 
 **Problem:** Begriffe, Querverweise und API-Symbole unterbrechen beim Lesen
