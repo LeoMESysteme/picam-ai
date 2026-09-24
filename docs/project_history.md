@@ -9,6 +9,40 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — Systemdienst erlaubt Codex-Namespace
+
+## Problem
+
+Die Codex-CLI nutzt `bwrap` fuer ihre Dateisystem- und Netzwerk-Sandbox.
+Ein vollstaendiger Namespace konnte unter den urspruenglichen systemd-
+Regeln weder den `NETLINK_ROUTE`-Socket oeffnen noch `/proc` mounten. Zwei
+Vorschaulaeufe konnten deshalb keine Quelldatei pruefen.
+
+## Entscheidung
+
+Der separate Runner erlaubt `AF_NETLINK` und verzichtet auf
+`ProtectKernelTunables`, `ProtectKernelLogs` und `ProtectHostname`. Gezielt
+ausgefuehrte Transienteinheiten reproduzierten jeden Fehler und bestaetigten
+den `bwrap`-Start mit den verbleibenden Dienstregeln. Der Audit-Gate verlangt
+zusaetzlich eine erfolgreiche Quellpruefung durch Codex.
+
+## Begründung und Alternativen
+
+Die Codex-Sandbox abzuschalten haette den Agenten unbeschraenkt auf dem Pi
+arbeiten lassen und wurde verworfen. Die weiterhin aktiven Grenzen umfassen
+einen eigenen Unix-Benutzer, `ProtectSystem=strict`, `ProtectHome`,
+`PrivateDevices`, `NoNewPrivileges`, beschraenkte Schreibpfade und CPU-/RAM-
+Limits. Die drei entfernten Optionen waren in den Tests mit dem Namespace-
+Start unvereinbar.
+
+## Konsequenz
+
+Die vom Modell gestarteten Shell-Aufrufe bleiben in der Codex-Sandbox.
+Ein Doku-Audit ohne erfolgreiche Shell-Pruefung kann nicht mehr als aktueller
+Stand gespeichert werden.
+
+---
+
 # 2026-09-24 — Anmeldedatei fuer den getrennten Codex-Runner
 
 ## Problem

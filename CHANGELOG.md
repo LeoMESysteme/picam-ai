@@ -3,6 +3,22 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (vollstaendige Codex-Sandbox starten)
+
+**Problem:** Nach Freigabe von `AF_NETLINK` scheiterte `bwrap` beim Mounten
+von `/proc` im vollstaendigen Namespace. Der Gate lehnte den zweiten
+Vorschaulauf wie vorgesehen ab.
+
+**Änderung:** Gezielte systemd-Transienteinheiten zeigten drei unvertraegliche
+Dienstoptionen: `ProtectKernelTunables`, `ProtectKernelLogs` und
+`ProtectHostname`. Sie entfallen fuer den Codex-Runner. Die anderen
+Ressourcen-, Geraete- und Dateisystemgrenzen bleiben aktiv. Ein `bwrap`-
+Start mit vollstaendigem Namespace und den verbleibenden Regeln war
+erfolgreich.
+
+**Konsequenz:** Codex kann seine eigene Sandbox unter dem Systemdienst
+starten; der Forgejo-Lauf muss diese Annahme noch end-to-end bestaetigen.
+
 ## 0.1.0.dev0 — 2026-09-24 (Codex-Sandbox und Audit-Gate repariert)
 
 **Problem:** Der neue Pi-Runner startete, aber `bwrap` konnte wegen der
