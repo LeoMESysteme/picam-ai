@@ -192,7 +192,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   vorhandenes GSV-2/GSV-3 im ASCII-Modus an GSVmulti hängen und den realen
   Datenstrom aufzeichnen. Das liefert das tatsächliche Telegramm. **Neu
   verfügbar dafür:** das Laborgerät ist als **GSV-2AS** identifiziert
-  ([OQ-38](open-questions.md)) und beherrscht laut Anleitung genau diesen
+  ([OQ-38](#oq-38)) und beherrscht laut Anleitung genau diesen
   ASCII-Modus — das für dieses Experiment nötige Gerät ist also vorhanden.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md),
   Implementierung in `src/dispread/sink/protocol/gsv_ascii.py`
@@ -1121,7 +1121,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Klassifikator". Phase C dieses Plans (`QuadTracker`) fängt starre Bewegung
   des ganzen Quads bereits ab; ein Feinschliff ohne Verankerung am
   bestätigten Raster würde die Haupt-/Nebenanzeige-Verwechslung aus
-  [OQ-25](open-questions.md) in den Lesepfad erben.
+  [OQ-25](#oq-25) in den Lesepfad erben.
 * **Klärung:** Offen bleibt, ob ein verankerter (nicht frei laufender)
   Feinschliff für nicht-starre Änderungen im Ausschnitt (z. B. leichte
   Verzerrung durch Temperatur) je gebraucht wird — bislang keine reale
@@ -1295,7 +1295,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   (`PLANNED_FEATURES.md`, Abschnitt „Other features", Zeile zu GPIO-Sensordaten)
 * **Idee:** Das Bench-Multimeter BK Precision 5491B (Geräteeintrag im
   Sammelmodus: `identity_evidence="5491B"`, `model="Count Multimeter"`, siehe
-  auch [OQ-23](open-questions.md) zur VFD-Anzeige desselben Geräts) über die
+  auch [OQ-23](#oq-23) zur VFD-Anzeige desselben Geräts) über die
   GPIO-Pins des Pi automatisiert mit Testwerten versorgen, um viele reale
   Bilder mit bekanntem Sollwert ohne manuelles Eintippen zu erzeugen —
   optional auch über verschiedene Kamerawinkel hinweg.
@@ -1317,7 +1317,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
      dafür keine geeignete, kalibrierte Analogspannung — nötig wäre ein
      DAC (z. B. I2C-Baustein) mit passender Pegelanpassung/Impedanz für den
      Messeingang, keine direkte Drahtverbindung GPIO→Messeingang. Dieselbe
-     Vorsicht wie in [OQ-09](open-questions.md) (Pi-GPIO-Pegel nicht direkt
+     Vorsicht wie in [OQ-09](#oq-09) (Pi-GPIO-Pegel nicht direkt
      mit einer externen Signalstrecke verbinden, galvanische Trennung
      prüfen) gilt hier analog, auch wenn es kein RS-232 ist.
 * **Ungeklärt:** Hat dieses konkrete Gerät ein funktionierendes RS-232-
@@ -1382,7 +1382,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   `+05372.5`, also weit über 10 — zeigt die Anzeige **ausnahmslos 6 Ziffern**,
   der Dezimalpunkt wandert, führende Nullen bleiben stehen (**im Telegramm —
   auf dem Glas ist die führende Null unterdrückt, korrigiert 2026-09-23, siehe
-  [OQ-41](open-questions.md)**). Der Zahlenblock
+  [OQ-41](#oq-41)**). Der Zahlenblock
   belegt damit in **14 von 14** Fällen genau **8 Zellen**. Zahlen und Aufbau:
   [VALIDATION.md](VALIDATION.md), Eintrag „Anzeige über den
   Normierungsfaktor steuerbar".
@@ -1402,7 +1402,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   **Was dabei NICHT beantwortet wurde:** das Verhalten bei **negativen**
   Werten grossen Betrags. Negative Normierung erlaubt die Anleitung erst ab
   Firmware 1.5.06; dieses Gerät hat 1.3.07. Die Vorzeichenstelle bleibt
-  unbelegt — siehe [OQ-39](open-questions.md).
+  unbelegt — siehe [OQ-39](#oq-39).
 * **Ursprünglicher Stand:** offen · erkannt 2026-09-22 (Rückfrage des Nutzers
   beim Entwurf des Block-Ankers für den Dot-Matrix-Leser)
 * **Befund:** Alle 11 bestätigten GSV-Proben liegen zwischen `0.00042` und
@@ -1446,7 +1446,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   sie abgesprochen und danach zurückgestellt.
 * **Nebenbefund 2026-09-22:** Drei der 11 Proben (`1.05000`) sind sehr
   wahrscheinlich Bereichsübersteuerung statt Messwert, siehe
-  [OQ-39](open-questions.md). Die nutzbare Probenzahl sinkt damit auf 8.
+  [OQ-39](#oq-39). Die nutzbare Probenzahl sinkt damit auf 8.
 * **Antwort landet in:** `docs/VALIDATION.md`, dem Profilschema (falls die
   Ziffernzahl doch variabel ist) und der Verankerungslogik des
   Dot-Matrix-Lesers.
@@ -1467,7 +1467,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   geschlossen. Der externe Loader in `picam-ai-auto-seven-segment` lehnt
   Version 2 noch ab (`evaluation.py:50`). **Optische Gegenprobe gelaufen:** Das
   Telegramm entspricht inhaltlich der Anzeige, **bis auf die führende Null**.
-  Die unterdrückt das Glas, das Telegramm nicht, siehe [OQ-41](open-questions.md).
+  Die unterdrückt das Glas, das Telegramm nicht, siehe [OQ-41](#oq-41).
   Die zeitliche Zuordnung (Punkt 4/5) ist weiter offen.
 * **Praktische Bestätigung 2026-09-22:** USB-RS232-Adapter (PL2303) an
   `/dev/ttyUSB0`, 38400 8N1 — der Strom kommt an, 5-Byte-Framing sitzt in
@@ -1535,7 +1535,7 @@ Aus ihr, wörtlich:
 
 Das beobachtete Anzeigeformat passt dazu exakt: `-0.00063 mV/V` ist Vorzeichen
 + 6 Stellen mit Dezimalpunkt + Leerzeichen + Einheit, und die 11 bestätigten
-Proben zeigen durchgängig 6 Ziffern ([OQ-37](open-questions.md)).
+Proben zeigen durchgängig 6 Ziffern ([OQ-37](#oq-37)).
 
 ### Geänderte Empfehlung
 
@@ -1560,7 +1560,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 1. **Pegel: RS232, nicht TTL.** Klemme B/C führt RS-232-Pegel. Ein direkter
    Anschluss an Pi-GPIO ist unzulässig — das ist wörtlich
-   [OQ-09](open-questions.md). Nötig ist ein USB-RS232-Adapter oder ein
+   [OQ-09](#oq-09). Nötig ist ein USB-RS232-Adapter oder ein
    Transceiver.
 2. ~~**Ist der ASCII-Modus an diesem Exemplar aktiv?**~~ **Geklärt und
    erledigt 2026-09-22.** Der Modus stand auf `0x00` (Binär); mit Freigabe des
@@ -1623,13 +1623,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   serieller Pfad (USB-RS232, 38400 8N1) und hat nichts mit `SERIAL_PORT`/
   `SERIAL_BAUD` zu tun — die beschreiben den **ausgehenden** Datenport nach
   GSVmulti (`/dev/ttyAMA0`, Baudrate offen über
-  [OQ-01](open-questions.md)). Wer `SERIAL_BAUD=38400` aus der
+  [OQ-01](#oq-01)). Wer `SERIAL_BAUD=38400` aus der
   GSV-2AS-Anleitung übernimmt, konfiguriert den falschen Pfad. Die Parameter
   des Abgriffs gehören zum Sammelmodus, nicht nach
   `/etc/dispread/hardware.conf`.
-* **Verwandt:** [OQ-35](open-questions.md) (dieselbe Frage am BK-5491B),
-  [OQ-39](open-questions.md) (was ein Abgriff **nicht** löst),
-  [OQ-09](open-questions.md) (Pegel), [OQ-07](open-questions.md) (die
+* **Verwandt:** [OQ-35](#oq-35) (dieselbe Frage am BK-5491B),
+  [OQ-39](#oq-39) (was ein Abgriff **nicht** löst),
+  [OQ-09](#oq-09) (Pegel), [OQ-07](#oq-07) (die
   GSV-2-Anleitung ist zugleich die Quelle, die dort gesucht wurde).
 * **Antwort landet in:** [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
   (Klemmenbelegung, Schnittstellenparameter),
@@ -1652,7 +1652,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   bewegt werden, und **gilt so nicht mehr**. Was offen bleibt: **welcher
   Anzeigebereich** mit den beweglichen Stimulatoren erreichbar ist —
   insbesondere negative Werte und Werte ab 10 mV/V
-  ([OQ-37](open-questions.md)). Erst diese Antwort sagt, wie viel
+  ([OQ-37](#oq-37)). Erst diese Antwort sagt, wie viel
   Ziffernabdeckung wirklich zu holen ist.
 * **Befund:** Der Messgrössengeber am GSV ist eine **Lochrasterplatine mit
   DIP-Schalter** (Fotos `gsv_angeschlossene_platine1/2.jpg`,
@@ -1693,7 +1693,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Also **drei Cluster**, nicht ein einzelner Wert: Rauschbereich (~0.0004),
   ein Arbeitspunkt bei ~0.948 und `1.05000`. Führende Ziffern werden damit
   durchaus geübt (9, 4, 8 in vorderen Stellen). Durchgängig 6 Ziffern und 5
-  Nachkommastellen ([OQ-37](open-questions.md)).
+  Nachkommastellen ([OQ-37](#oq-37)).
 
   **Zwei Lücken, die auffallen:**
   * **Kein einziger negativer Wert** — obwohl die Anzeige zum Zeitpunkt der
@@ -1720,7 +1720,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Stimulus dazukommt. Eine **Anzeige ab 10** ist mit stärkerem Stimulus
   ebenfalls nicht zu holen: der Vollausschlag dieses Exemplars ist 1,05 mV/V,
   und selbst die höchste Empfindlichkeit des GSV-2 (3,5 mV/V, `Set Range` 50)
-  endet bei 3,675. Siehe dazu den Hinweis in [OQ-37](open-questions.md) — über
+  endet bei 3,675. Siehe dazu den Hinweis in [OQ-37](#oq-37) — über
   den Normierungsfaktor ist es trotzdem erreichbar.
 
   Wie die drei Cluster zustande kamen, lässt sich aus den Fotos **nicht**
@@ -1773,9 +1773,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Erkennungsgüte-Zahl, die auf dem so vergrösserten Datensatz gemessen wird —
   eine hohe Trefferquote auf 50 000 Bildern derselben drei Werte ist **keine**
   Aussage über die Erkennung im Feld.
-* **Verwandt:** [OQ-37](open-questions.md) (Anzeigeformat ab 10 mV/V),
-  [OQ-35](open-questions.md) (Baustein 2: Signaleinspeisung, gleiches Problem
-  am BK-5491B), [OQ-38](open-questions.md).
+* **Verwandt:** [OQ-37](#oq-37) (Anzeigeformat ab 10 mV/V),
+  [OQ-35](#oq-35) (Baustein 2: Signaleinspeisung, gleiches Problem
+  am BK-5491B), [OQ-38](#oq-38).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) (Abdeckungsangabe zu
   jeder Benchmarkzahl), `docs/anleitung/11-datensatz-sammeln.md`.
 
@@ -1824,7 +1824,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   die Werte für `--min-gap-ms` und `--max-gap-ms`. Unter Kameralast liegen
   über 3 Läufe alle Abstände bei 529–536 ms. Eine Stundenmessung fehlt
   noch.
-* **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
+* **Verwandt:** [OQ-38](#oq-38) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
   `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`.
@@ -1857,6 +1857,6 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   muss zum Zellenraster des Lesers passen. (c) Negative Werte sind hier
   ungeprüft, weil die Vorzeichenstelle unerreichbar ist (Firmware 1.3.07).
   Sie dürfen nicht stillschweigend mitgemeint sein.
-* **Verwandt:** [OQ-37](open-questions.md), [OQ-38](open-questions.md).
+* **Verwandt:** [OQ-37](#oq-37), [OQ-38](#oq-38).
 * **Antwort landet in:** Plan `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`
   (Vorab-Festlegungen) und `scripts/gate-label.py`.
