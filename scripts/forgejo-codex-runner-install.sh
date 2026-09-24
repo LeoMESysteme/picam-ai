@@ -22,7 +22,10 @@ command -v /usr/local/bin/forgejo-runner >/dev/null
 command -v npm >/dev/null
 
 # Codex bewusst auf eine getestete Version pinnen; /opt ist nur Installation.
+# Ein 077-umask aus der Token-Erstellung darf das Paket nicht unlesbar machen.
+umask 022
 npm install --prefix /opt/picam-codex --no-audit --no-fund @openai/codex@0.156.1
+chmod -R a+rX /opt/picam-codex
 /opt/picam-codex/node_modules/.bin/codex --version
 
 if ! id picam-codex-runner >/dev/null 2>&1; then
@@ -32,6 +35,7 @@ fi
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner/.codex
 install -d -m 700 -o picam-codex-runner -g picam-codex-runner /var/lib/picam-codex-runner/work
+runuser -u picam-codex-runner -- /opt/picam-codex/node_modules/.bin/codex --version
 install -d -m 750 -o root -g picam-codex-runner /etc/picam-codex-runner
 
 if [[ -n "$TOKEN_FILE" ]]; then
