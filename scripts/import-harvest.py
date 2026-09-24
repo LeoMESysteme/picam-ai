@@ -204,6 +204,29 @@ def _expected_text_and_unit(label_text: str) -> tuple[str, str]:
     return numeric, unit
 
 
+def _profile_sha256(profile_path: Path) -> str:
+    """SHA-256 der Profildatei selbst (Bytes, nicht des geparsten Inhalts) -
+    Nachverfolgbarkeit (Task 6): welches genaue `profile.json` stand hinter
+    dieser Probe."""
+    return hashlib.sha256(profile_path.read_bytes()).hexdigest()
+
+
+def _profile_quad_json(quad: list[list[float]]) -> str:
+    """Die vier Quad-Ecken als JSON-String, auf 2 Nachkommastellen gerundet
+    (Task 6) - `label_origin_detail` erlaubt nur Skalare, kein verschachteltes
+    Array (`_validate_label_origin_detail`), deshalb als Text."""
+    return json.dumps([[round(x, 2), round(y, 2)] for x, y in quad])
+
+
+def _profile_grid_json(profile: SessionProfile) -> str:
+    """`CharGrid.to_dict()` plus `target_size` als JSON-String (Task 6) -
+    aus denselben Gruenden wie `_profile_quad_json` als Text statt
+    verschachteltem Objekt."""
+    grid_dict = profile.grid.to_dict()
+    grid_dict["target_size"] = list(profile.target_size)
+    return json.dumps(grid_dict)
+
+
 def _axis_aligned_bbox(quad: list[list[float]]) -> list[float]:
     xs = [p[0] for p in quad]
     ys = [p[1] for p in quad]
@@ -508,6 +531,12 @@ def run(args: argparse.Namespace) -> int:
         note = f"Ernte-Sitzung {profile.session_id} (automatischer Import, Plan 2026-09-23-ernte-phase1)"
         group_id = _resolve_or_create_group(store, device_id, note)
         bbox = _axis_aligned_bbox(profile.quad)
+        # Task 6 (Nachverfolgbarkeit): fuer alle Proben dieses Laufs gleich -
+        # einmal berechnen statt je Probe neu.
+        profile_sha256 = _profile_sha256(args.profile)
+        profile_quad_json = _profile_quad_json(profile.quad)
+        profile_grid_json = _profile_grid_json(profile)
+        harvest_run = Path(args.harvest).name
 
         for cand in consistent:
             token = hashlib.sha256(f"{profile.session_id}:{cand.image_path}".encode()).hexdigest()
@@ -536,6 +565,10 @@ def run(args: argparse.Namespace) -> int:
                     "display_text": cand.label_text,
                     "cell_text": cand.cell_text,
                     "unit_text": unit_text,
+                    "profile_sha256": profile_sha256,
+                    "profile_quad": profile_quad_json,
+                    "profile_grid": profile_grid_json,
+                    "harvest_run": harvest_run,
                 }
             )
             annotation = {

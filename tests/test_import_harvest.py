@@ -510,3 +510,11 @@ def test_realistic_label_imported_with_numeric_expected_text_and_cell_text(tmp_p
     assert detail["telegram_text"] == "+01.2193 mV/V"
     assert detail["unit_text"] == "mV/V"
     assert detail["cell_text"] == "+ 1.2193 mV/V   "
+
+    # Task 6 (Nachverfolgbarkeit): Herkunft des Profils steht bei jeder Probe.
+    assert detail["harvest_run"] == harvest_dir.name
+    assert detail["profile_sha256"] == import_harvest._profile_sha256(profile_path)
+    assert json.loads(detail["profile_quad"]) == [[round(x, 2), round(y, 2)] for x, y in quad]
+    grid_dict = json.loads(detail["profile_grid"])
+    assert grid_dict["pitch"] == grid.pitch
+    assert grid_dict["target_size"] == list(size)

@@ -43,6 +43,15 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   `min_margin`/`min_contrast` auf 0, weil der Leser seine eingefrorenen,
   gemessenen Schwellen selbst anwendet — keine zweite, ungemessene Grenze.
   Unbekannte Leser → `ValueError`. Tests: `tests/test_gate_config.py`.
+* `scripts/import-harvest.py`, neu `scripts/dotmatrix-dataset.py` (Task 6):
+  Der Import schreibt `profile_sha256`, `profile_quad`, `profile_grid` und
+  `harvest_run` in `label_origin_detail`, damit eine Probe ohne Nebendatei
+  auswertbar ist. `dotmatrix-dataset.py` lädt die seriell geernteten Proben
+  als Zellvektoren (`load_cell_samples`, Profil aus der Probe oder aus der
+  Zuordnungsdatei `write-map`), Proben ohne Profil oder mit unbekannten
+  Zeichen werden gezählt und übersprungen. Echter Datensatz: 301 Proben,
+  alle mit Profil (`ernte1` 152, `auf2` 76, `auf3` 73). Tests:
+  `tests/test_dotmatrix_dataset.py`, `tests/test_import_harvest.py`.
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
