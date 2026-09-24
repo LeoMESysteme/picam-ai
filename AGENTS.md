@@ -26,6 +26,7 @@ bearbeitet. Die Regel nicht übernehmen.
 | Strukturelle Entscheidung mit verworfenen Alternativen | `docs/project_history.md` | im selben Commit |
 | Neue Unbekannte erkannt | neuer `OQ-nn` in `docs/open-questions.md`, danach `scripts/oq-index.py` | sofort, auch ohne Code-Änderung |
 | Unbekannte geklärt | OQ-Eintrag auf `geklärt` + Datum + Antwort + Verweis. **Nicht löschen.** Zielort füllen, danach `scripts/oq-index.py` | im selben Commit |
+| OQ-Titel/Status oder aktive Aufgaben/OQ-Verweise in `TODO.md` geändert | `./.venv/bin/python scripts/oq-index.py`; erzeugte Übersicht mitcommitten | im selben Commit |
 | Messung gelaufen | `docs/VALIDATION.md` (Zahlen) **und** `docs/lab_journal.md` (Aufbau, Deutung) | am selben Tag |
 | Hardware angefasst | `docs/lab_journal.md`; bei Konfigwirkung `docs/HARDWARE_PROFILE.md`; Diagnose-Schnappschuss ablegen | direkt danach |
 | Neue Abhängigkeit | `docs/dependencies.md` + `pyproject.toml`/`install.sh` | im selben Commit |
@@ -35,6 +36,23 @@ Zwei harte Sätze:
 
 * **Kein Commit an `src/` ohne CHANGELOG-Eintrag.**
 * **Vor Sessionende `docs/status.md` aktualisieren.**
+
+## Zensical-Übersichten pflegen
+
+* Den erzeugten Block in `docs/open-questions.md` zwischen `OQ-INDEX:START`
+  und `OQ-INDEX:END` sowie die `#oq-nn`-Anker nicht von Hand bearbeiten.
+  „Jetzt“ folgt den unerledigten Aufgaben in `TODO.md`.
+* Die interaktive Roadmap liest die erste Tabelle in `docs/ROADMAP.md`: P0–P8,
+  sechs Spalten (`Phase`, `Ziel`, `Kamera?`, `GSVmulti-Spec?`,
+  `Hartes Exit-Kriterium`, `Stand`) und die Statuswörter `erreicht`,
+  `teilweise`, `blockiert`, `offen`. Bei einer Strukturänderung
+  `docs-site/assets/docs-interactive.js` und `tests/docs-site.spec.ts`
+  zusammen anpassen. Status und Exit-Kriterien bei neuen Belegen in der
+  Roadmap selbst aktualisieren.
+* Vor dem Merge von Doku-Änderungen `./scripts/docs-site.sh build -s` und
+  `npx playwright test -c playwright.docs.config.ts` ausführen. Der Build
+  bricht bei einem veralteten OQ-Index ab; die Browsertests prüfen Filter,
+  Suche, Roadmap und Fallback ohne JavaScript.
 
 ## Nicht verhandelbar (Konzept.md §7)
 

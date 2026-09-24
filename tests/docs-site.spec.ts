@@ -4,21 +4,45 @@ test('OQ-Fokus, Filter und Suche bleiben mit den Einträgen verlinkt', async ({ 
   await page.goto('/docs/open-questions.html');
   const index = page.locator('#oq-index');
   await expect(index).toBeVisible();
-  await expect(index.locator('tbody tr').first()).toContainText('OQ-40');
-  await expect(index.locator('tbody tr').first()).toContainText('Jetzt');
-  await expect(page.locator('h2[id^="oq-01-"]')).toHaveCount(1);
-  await expect(page.locator('#oq-01')).toHaveCount(1);
+  const rows = index.locator('tbody tr');
+  const questionCount = await rows.count();
+  expect(questionCount).toBeGreaterThan(0);
+  const focusCount = await rows.locator('td:nth-child(2):text-is("Jetzt")').count();
+  await page.getByRole('button', { name: 'Jetzt' }).click();
+  const visible = index.locator('tbody tr:visible');
+  await expect(visible).toHaveCount(focusCount);
+  for (const focus of await visible.locator('td:nth-child(2)').allTextContents()) {
+    expect(focus.trim()).toBe('Jetzt');
+  }
 
   await page.getByRole('button', { name: 'Geklärt' }).click();
-  await expect(index.locator('tbody tr:visible').first()).toContainText('OQ-08');
-  await expect(index.locator('tbody tr:visible')).not.toContainText(['OQ-40']);
+  const resolvedCount = await rows.locator('td:nth-child(3)').evaluateAll((cells) =>
+    cells.filter((cell) => /^(geklärt|beantwortet)$/.test(cell.textContent?.trim() ?? '')).length,
+  );
+  await expect(visible).toHaveCount(resolvedCount);
+  for (const status of await visible.locator('td:nth-child(3)').allTextContents()) {
+    expect(status.trim()).toMatch(/^(geklärt|beantwortet)$/);
+  }
 
   await page.getByRole('button', { name: 'Alle' }).click();
-  await page.getByRole('searchbox', { name: 'OQ suchen' }).fill('OQ-40');
-  await expect(index.locator('tbody tr:visible')).toHaveCount(1);
-  await index.locator('tbody tr:visible a').first().click();
-  await expect(page).toHaveURL(/#oq-40$/);
-  await expect(page.locator('h2[id^="oq-40-"]')).toBeVisible();
+  const titles = (await rows.locator('td:nth-child(4)').allTextContents()).map((title) => title.trim());
+  const title = titles[0];
+  const matchingTitles = titles.filter((candidate) =>
+    candidate.toLocaleLowerCase('de').includes(title.toLocaleLowerCase('de')),
+  );
+  expect(matchingTitles.length).toBeLessThan(questionCount);
+  await page.getByRole('searchbox', { name: 'OQ suchen' }).fill(title);
+  await expect(visible).toHaveCount(matchingTitles.length);
+  for (const match of await visible.locator('td:nth-child(4)').allTextContents()) {
+    expect(match.toLocaleLowerCase('de')).toContain(title.toLocaleLowerCase('de'));
+  }
+  const firstMatch = visible.first();
+  const anchor = await firstMatch.locator('td:first-child a').getAttribute('href');
+  const hash = new URL(anchor!, page.url()).hash;
+  expect(hash).toMatch(/^#oq-\d+$/);
+  await expect(page.locator(hash)).toHaveCount(1);
+  await firstMatch.locator('td:first-child a').click();
+  await expect(page).toHaveURL(new RegExp(`${hash}$`));
 });
 
 test('Roadmap zeigt Phasen mit Exit-Kriterium und OQ-Link', async ({ page }) => {
@@ -36,19 +60,21 @@ test('Roadmap zeigt Phasen mit Exit-Kriterium und OQ-Link', async ({ page }) => 
 
 test('Sofortnavigation initialisiert die OQ-Ansicht erneut', async ({ page }) => {
   await page.goto('/docs/open-questions.html');
+  const questionCount = await page.locator('#oq-index tbody tr').count();
+  expect(questionCount).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Geklärt' }).click();
   await page.getByRole('link', { name: 'Roadmap', exact: true }).first().click();
   await expect(page.locator('[data-roadmap] details')).toHaveCount(9);
   await page.getByRole('link', { name: 'Offene Punkte (OQ)' }).first().click();
   await expect(page.getByRole('button', { name: 'Geklärt' })).toBeVisible();
-  await expect(page.locator('#oq-index tbody tr:visible')).toHaveCount(41);
+  await expect(page.locator('#oq-index tbody tr:visible')).toHaveCount(questionCount);
 });
 
 test('schmale Ansicht bleibt ohne horizontales Scrollen bedienbar', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto('/docs/open-questions.html');
   await expect(page.getByRole('searchbox', { name: 'OQ suchen' })).toBeVisible();
-  await expect(page.locator('#oq-index tbody tr:visible')).toHaveCount(41);
+  expect(await page.locator('#oq-index tbody tr:visible').count()).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
@@ -78,8 +104,8 @@ test('Quelltabellen bleiben ohne JavaScript nutzbar', async ({ browser }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/docs/open-questions.html');
   const questions = page.locator('.md-content__inner table').first().locator('tbody tr');
-  await expect(questions).toHaveCount(41);
-  await expect(questions.first()).toContainText('OQ-40');
+  expect(await questions.count()).toBeGreaterThan(0);
+  await expect(questions.first().locator('td:first-child a')).toHaveAttribute('href', /^#oq-\d+$/);
   await page.goto('http://127.0.0.1:8766/docs/ROADMAP.html');
   await expect(page.locator('.md-content__inner table tbody tr').first()).toContainText('P0');
   await context.close();

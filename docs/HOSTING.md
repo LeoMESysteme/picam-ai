@@ -68,6 +68,25 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 * **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
   OQ-Index-Check, Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
   aktualisiert.
+* **OQ-Übersicht:** Nach Änderungen an OQ-Titel oder Status sowie an aktiven
+  Aufgaben/OQ-Verweisen in `TODO.md` mit
+  `./.venv/bin/python scripts/oq-index.py` neu erzeugen und die Änderung an
+  `docs/open-questions.md` mitcommitten. Den generierten Block und die
+  `#oq-nn`-Anker nicht direkt bearbeiten. „Jetzt“ kommt aus den unerledigten
+  TODO-Aufgaben; es ist kein eigener OQ-Status.
+* **Roadmap:** Phasenstand und Exit-Kriterien in `docs/ROADMAP.md` pflegen.
+  Die aufklappbare Ansicht erwartet derzeit die erste Tabelle mit P0–P8,
+  den Spalten `Phase`, `Ziel`, `Kamera?`, `GSVmulti-Spec?`,
+  `Hartes Exit-Kriterium`, `Stand` in dieser Reihenfolge und den Statuswörtern
+  `erreicht`, `teilweise`, `blockiert` oder `offen`. Wenn Phasen oder Spalten
+  dazukommen oder Statuswörter wechseln,
+  `docs-site/assets/docs-interactive.js` und `tests/docs-site.spec.ts`
+  gemeinsam anpassen.
+* **Vor dem Merge prüfen:** `./scripts/docs-site.sh build -s` und
+  `npx playwright test -c playwright.docs.config.ts`. Der Build stoppt bei
+  einem veralteten OQ-Index; die Browserprüfung meldet eine nicht mehr
+  funktionierende interaktive Ansicht. Der Forgejo-Playwright-Workflow führt
+  beides auch für Pull Requests nach `master` aus.
 * **Lokale Vorschau:** `./scripts/docs-site.sh serve`; für einen Build
   `./scripts/docs-site.sh build`. Beides prüft zuerst die OQ-Übersicht gegen
   `TODO.md` und `docs/open-questions.md`.

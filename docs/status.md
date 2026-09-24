@@ -5,48 +5,51 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 
 ## Sofort zu wissen
 
-Die Zensical-Seite zeigt jetzt eine OQ-Übersicht mit Fokus aus den aktiven
-Aufgaben in `TODO.md` sowie eine aufklappbare Roadmap. Die Änderung liegt im
-isolierten Branch `docs/zensical-prototyp`; sie ist noch nicht nach `master`
-integriert oder auf Cloudflare veröffentlicht. Der vorhandene Produktions-Gate
-deployed weiterhin nur nach einem Push auf `master` und prüft zuvor den
-Anmeldeschutz.
+Die interaktiven OQ- und Roadmap-Ansichten wurden mit Commit `9462a2e` nach
+`master` gepusht. `origin/master` zeigte bei der Prüfung auf diesen Commit.
+Ob der anschließende Cloudflare-Deploy erfolgreich abgeschlossen wurde, ist
+ohne Forgejo-Jobstatus nicht bestätigt; ein anonymer Aufruf der Pages-Adresse
+führte zur Forgejo-Anmeldung. Die Kamera- und OQ-22-Branches sind separat
+gepusht und noch nicht in `master` integriert.
+
+Zur Pflege der Zensical-Ansichten wurden Anweisungen für TODO-, OQ- und
+Roadmap-Änderungen ergänzt. Die Browserprüfungen hängen nicht mehr an einer
+festen OQ-Zahl oder OQ-Nummer und prüfen die sichtbaren Filter- und
+Suchergebnisse auf ihren Inhalt.
 
 ## Doku und Hosting
 
-* `scripts/oq-index.py` erzeugt die OQ-Tabelle und stabile `#oq-nn`-Anker.
-  `./scripts/docs-site.sh build` prüft den Index vor jedem Build. Auf dem
-  Stand dieses Branches ist **OQ-40** der einzige OQ-Fokus aus `TODO.md`.
-* OQ-Filter, Suche, Statusfarben und Roadmap-Phasen laufen als lokale
-  JavaScript/CSS-Assets. Ohne JavaScript bleiben die Quelltabellen lesbar.
-* Die Doku wird nur noch auf `https://picam-docs.pages.dev` bereitgestellt.
-  Das Offline-ZIP entfällt; bestehende `.html`-Links bleiben gültig.
-* Die Pages Function verlangt weiter Forgejo-Anmeldung und Leserecht am Repo.
-  Details und Wartung: [HOSTING.md](HOSTING.md).
+* `scripts/oq-index.py` erzeugt OQ-Tabelle und stabile `#oq-nn`-Anker aus
+  `docs/open-questions.md` und den aktiven Aufgaben in `TODO.md`. Der Docs-Build
+  prüft den Index vor dem Bauen. Auf dem Stand von `master` ist OQ-40 der
+  einzige „Jetzt“-Eintrag.
+* Die Roadmap-Ansicht nutzt die erste Tabelle in `docs/ROADMAP.md`. Bei einer
+  Änderung der Phasen- oder Spaltenstruktur müssen JavaScript und Browsertest
+  gemeinsam angepasst werden. Die Pflegeregeln stehen in `AGENTS.md` und
+  `docs/HOSTING.md`.
+* Die Seite liegt unter `https://picam-docs.pages.dev`; das Offline-ZIP
+  entfällt. Die Pages Function verlangt Forgejo-Anmeldung und Repo-Leserecht.
 
-## Verifikation
+## Verifikation dieser Sitzung
 
-Im isolierten Doku-Worktree am 2026-09-24 ausgeführt:
-
-* `./.venv/bin/pytest -q`: **490 bestanden, 3 übersprungen, 1 xfailed**
-* `./.venv/bin/ruff check .`: **ohne Befund**
-* `node --test cloudflare/test/middleware.test.js`: **12 bestanden**
-* `./scripts/docs-site.sh build`: **Build erfolgreich, keine Probleme**
-* Playwright: **6 Browserprüfungen** zu OQ-Filter und Suche, Phasen und Links, Sofortnavigation,
-  Mobilbreite, dunkles Design und Ansicht ohne JavaScript geprüft
-
-## Stand anderer Arbeiten
-
-Dieser Branch enthält noch nicht die neuere Kamerabrücken-Dokumentation und
-die TODO-Priorisierung aus `feat/task-b-versatz-normierung`. Bei deren späterer
-Integration muss `./.venv/bin/python scripts/oq-index.py` erneut laufen;
-sonst stoppt der Doku-Build. Die Kamera bleibt wegen OQ-22 auf höchstens
-960×720 begrenzt; einen hängenden Kameraprozess nicht hart beenden. Für die
-Ernte gilt weiterhin **M = 695 ms**. Das GSVmulti-Telegramm ist unbekannt
-(OQ-07); `AsciiCsvFormatter` bleibt provisorisch.
+* Ausgangsstand: `./.venv/bin/pytest -q`: 490 bestanden, 3 übersprungen,
+  1 xfailed; `./scripts/docs-site.sh build -s`: erfolgreich.
+* Regressionsprobe: Eine temporäre 42. OQ ließ den alten Browsertest an der
+  festen Erwartung 41 scheitern. Nach Anpassung bestanden alle sechs
+  Browsertests auch mit 42 OQs. Die Prüffrage wurde danach entfernt.
+* Abschlussprüfung nach Entfernen der Prüffrage:
+  `./.venv/bin/pytest -q`: 490 bestanden, 3 übersprungen, 1 xfailed;
+  `./.venv/bin/ruff check .`: ohne Befund;
+  `./scripts/docs-site.sh build -s`: erfolgreich;
+  `npx playwright test -c playwright.docs.config.ts`: 6 bestanden;
+  `./.venv/bin/python scripts/oq-index.py --check`: aktuell.
 
 ## Nächster Schritt
 
-Den Doku-Branch reviewen und getrennt von den Kameraänderungen nach `master`
-integrieren. Der bestehende Workflow prüft den Schutz auf `verify`, bevor er
-Produktion aktualisiert. Der Commit-Graph ist eine spätere Ausbaustufe.
+Den Forgejo-Jobstatus des nächsten `master`-Pushs prüfen. Wenn die neueren
+Kamera-/OQ-22-Branches später folgen, den OQ-Index erneut erzeugen und die
+Roadmap auf neue Belege prüfen. Die Kamera bleibt wegen OQ-22 auf höchstens
+960×720 begrenzt; einen hängenden Kameraprozess nicht hart beenden. Für die
+Ernte gilt M = 695 ms. Das
+GSVmulti-Telegramm ist unbekannt (OQ-07); `AsciiCsvFormatter` bleibt
+provisorisch.
