@@ -65,6 +65,10 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 des Datensatzes davor: `var/backup-datasets-vor-ernte1-20260924T1159/`.
 
 **Nächste Schritte:**
+* **Stand 16 Uhr:** 316 Proben, 228 geerntet aus 2 Aufstellungen, Zellen 3–7
+  vollständig, Zelle 2 ohne `6` (VALIDATION.md, „Ernte 2 und Aufstellung 2").
+* Weitere Aufstellungen (Winkel, Abstand, Licht) für unabhängige Testgruppen;
+  ≤ 7 Starts je Boot, danach Neustart.
 * Weitere Ernten mit anderen `--seed`, um die Ziffernlücken je Zelle zu
   schliessen (OQ-39-Nachtrag). Solange die Kamera nicht bewegt wird, gilt
   `ernte1-profile/profile.json` weiter — dann ist jede Ernte **ein** Start.

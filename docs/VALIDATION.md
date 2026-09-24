@@ -1490,3 +1490,39 @@ rechnete mit ≈ 39 labelbaren Bildern je Schritt, erreicht sind ≈ 28. Der
 Hauptteil der Lücken entspricht der ≈ 1,8-s-Pause je Normierungswechsel;
 ob die 800-ms-Schwelle zusätzlich gute Plateaus beschneidet, ist nicht
 untersucht.
+
+## 2026-09-24 — Ernte 2 und Aufstellung 2, Analyse der Telegrammlücken
+
+**Ernte 2** (gleiche Aufstellung und gleiches Profil wie Ernte 1, Seed
+20260925, 1 Streamstart): 2835 Bilder, 845 gelabelt, 28 Zeichenketten,
+88 ausgewählt, 13 `bildguete`, 4 `zellen_inkonsistent`, **71 importiert**.
+Stichprobe 8/8 korrekt. Die Proben tragen dieselbe `independence_group`
+und dieselbe `source_id` (`harvest:ernte1`) wie Ernte 1, weil der Import
+Gruppe und Kennung aus dem Profil bildet. Die Gruppe entspricht damit der
+**Aufstellung**, nicht dem einzelnen Lauf — für den Split die konservative
+Richtung; die Läufe sind nur über `stored_at_utc` trennbar.
+
+**Aufstellung 2** (schräg von links, näher, Boot `18ba46e9…`, 3 Starts):
+ScalerCrop 733,344,1920,1440, Quad automatisch, Raster vom Bediener
+`left=7.5, pitch=23.5, top=44, bottom=120`, `min_native_dot_column_px =
+3,294`. Schärfe sichtbar weicher als Aufstellung 1, vom Nutzer bewusst so
+geerntet. Seed 20260926: 2835 Bilder, 830 gelabelt, 31 Zeichenketten, 94
+ausgewählt, 7 `bildguete`, 11 `zellen_inkonsistent`, **76 importiert**.
+Stichprobe 8/8 korrekt.
+
+**Stand danach:** 316 Proben, davon 228 seriell geerntet aus 75
+Zeichenketten in 2 Aufstellungen. Ziffernabdeckung Zellen 3–7 vollständig;
+Zelle 2 (erste Ziffer bei Werten ≥ 1) ohne `6` — log-gleichverteilte
+Faktoren erzeugen Benford-verteilte Führungsziffern (`6` ≈ 7 %). Zelle 1
+trägt bei Werten ≥ 1 immer die Leerzelle.
+
+**Telegrammlücken (Ernte 1, Offline-Analyse):** Alle 1497
+`telegrammluecke`-Ablehnungen stammen aus den 29 Schreibpausen der
+Normierungswechsel: 772 Bilder in der Telegrammstille selbst (≈ 2,3 s je
+Pause), 425 im Schutzfenster davor, 300 danach. Die seriellen Abstände sind
+bimodal — 237 × ≤ 536 ms, 29 × 2305–2313 ms, dazwischen keiner —, die
+800-ms-Schwelle trennt also sicher. Saubere Schritte liefern 32–33 Bilder;
+der Mittelwert ≈ 28 kommt von Schritten, in denen die letzte Ziffer bei
+grossem Faktor vom Messrauschen springt (`wertwechsel_im_fenster`). Die
+Gate-Regel arbeitet wie festgelegt; da höchstens 3 Bilder je Plateau
+importiert werden, begrenzt die Ausbeute den Datensatz nicht.

@@ -1440,3 +1440,10 @@ Kurzer Fehlalarm: In der Stichprobe zeigt das Glas `+ 28.681` mit Leerzelle,
 das Label heisst `+28.681 mV/V`. `import-harvest.py` legt die Zellen aber
 nach dem Rohtelegramm mit Leerzelle an (`cell_text`), die Zuordnung stimmt.
 Zahlen: VALIDATION.md, 2026-09-24, „Ernte 1".
+
+Nachmittags: Ernte 2 in derselben Aufstellung (1 Start), dann Aufstellung 2
+schräg von links und näher (3 Starts), danach Neustart vorsorglich vor dem
+8. Start. Für Aufstellung 3 wird der Seed so gewählt, dass der Faktorplan
+Werte mit führender 6 enthält (Seed 20261160, 7 von 30) — nur Stimulus-
+auswahl, keine Auswertungsentscheidung. Zahlen: VALIDATION.md, „Ernte 2
+und Aufstellung 2".
