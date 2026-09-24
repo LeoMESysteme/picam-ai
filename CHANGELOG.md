@@ -3,6 +3,22 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Dot-Matrix-Leser, Phase 2)
+
+**Problem:** Für die Punktraster-Anzeige des GSV-2AS gab es keinen Leser,
+der Zeichen erklärbar liest und im Zweifel ablehnt (`tesseract_cli` las
+0/11 Proben). Spec: `docs/superpowers/specs/2026-09-24-dotmatrix-reader-design.md`,
+Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
+
+**Änderung:**
+* `src/dispread/ocr/dotmatrix_font.py` (Task 1): HD44780-Zeichensatz (ROM
+  A00) als 5×8-Bitmuster für Ziffern, `.`, `+`, Leerzelle (dazu `-`/`°` für
+  Ablehnungstests) und `rom_vector()`; Gegenprobe für gelernte Vorlagen.
+  Tests: `tests/test_dotmatrix_font.py`.
+<!-- dotmatrix-bullets -->
+
+**Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
+
 ## 0.1.0.dev0 — 2026-09-24 (Führende Nullen: zwei statt einer)
 
 **Problem:** Das GSV-2AS-Telegramm trägt immer sechs Ziffern; bei
