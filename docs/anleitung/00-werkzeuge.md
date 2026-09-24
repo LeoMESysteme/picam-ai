@@ -139,27 +139,16 @@ Jede Aufgabe in dieser Anleitung läuft in derselben Schleife:
 4. **Kleinsten Schritt implementieren**, bis ein Test grün wird. Nicht mehr.
 5. `./.venv/bin/pytest -q` **und** `./.venv/bin/ruff check src tests examples`.
 6. **Doku-Pflicht** erfüllen: `CHANGELOG.md`, ggf. `OQ-nn`, ROADMAP-Häkchen.
-7. **Commit** in einem Schritt mit der Doku.
+
+Im automatisierten Pflegeablauf prüft der Gate-Prozess die Änderungen und
+führt Build und Browsertests aus, bevor er committet und pusht. In einem
+normalen Entwicklungsablauf gelten die Projektregeln aus
+[AGENTS.md](../../AGENTS.md); dieser Abschnitt ersetzt sie nicht.
 
 Warum so streng mit Schritt 2: die gefährlichen Fehler dieses Projekts sind
 still. Ein falsch gelesener Wert, der als `VALID` durchgeht, sieht in keiner
 Konsolenausgabe verdächtig aus. Der Test muss deshalb nicht „läuft durch"
 prüfen, sondern **„lehnt das Unlesbare ab"**.
-
-## Commit-Nachrichten
-
-Deutsch, Imperativ oder Nominalstil, erste Zeile ≤ 72 Zeichen. Im Rumpf die
-drei Fragen, die auch der CHANGELOG stellt:
-
-```
-folder://-Bildquelle implementiert
-
-Problem:     Fuenf der sechs URI-Schemata scheiterten mit ImportError, damit
-             war kein reales Bildmaterial durch die Kette zu schicken.
-Aenderung:   FolderSource liest ein Verzeichnis in natuerlicher Sortierung,
-             Zeitbasis FILE_MTIME (traegt keine Zeitaussage).
-Konsequenz:  Aufgenommene PNG-Saetze sind ab jetzt regressionsfaehig.
-```
 
 ## Wenn etwas nicht geht
 

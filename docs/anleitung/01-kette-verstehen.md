@@ -29,8 +29,9 @@ Telegramme:  40 auf der Leitung  (Format ascii_csv/provisional, provisorisch)
 Fünf Dinge, die man daran ablesen muss:
 
 1. **`traegt Zeitaussage: False`** — die Quelle ist synthetisch. Die weiter
-   unten gezeigten Latenzen sind Verarbeitungszeiten der Software, **keine**
-   Aussage über die reale Kette von der Anzeige bis zum Telegramm. Siehe den
+   unten gezeigten Stufendauern sind Verarbeitungszeiten der Software,
+   **keine** Aussage über die reale Kette von der Anzeige bis zum Telegramm.
+   Siehe den
    [Grundsatz zum Zeitverhalten](../TIMING.md#grundsatz-latenz-ist-nicht-zeitunsicherheit).
 2. **`STILL FALSCH`** ist die einzige Zahl, die den Lauf fehlschlagen lässt.
    `abgelehnt` ist kein Fehler — Ablehnen ist die erlaubte Richtung.
@@ -159,7 +160,8 @@ anderen Parametern. Notiere jeweils, *welche* Ablehnungsgründe erscheinen.
    ihre `min_margin` an. Merksatz: das `glare`-Flag fängt den Großteil, aber
    **nicht alles** — der optische Aufbau ist die eigentliche Gegenmaßnahme
    ([../OPTICAL_SETUP.md](../OPTICAL_SETUP.md)).
-2. **[Mehrbildbestätigung](glossar.md#mehrbildbestaetigung).** `--confirm-frames 3`. Gemessen:
+2. **[Mehrbildbestätigung](glossar.md#mehrbildbestaetigung).** `--confirm-frames 3`. Beim
+   dokumentierten Lauf am 2026-09-08 gemessen:
    `{'transition': 37, 'valid': 3}`. Warum so wenige `valid`? Weil die
    synthetische Wertfolge ständig springt und jeder neue Wert die Bestätigung
    zurücksetzt. Was kostet die Bestätigung an Zeit? Steht als

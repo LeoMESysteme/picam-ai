@@ -3,6 +3,11 @@
 Alle [Trennstellen](glossar.md#trennstelle) und Datenklassen auf einer Seite. Nicht zum Durchlesen,
 sondern zum Danebenlegen, während du ein neues Modul schreibst.
 
+Für den ersten Durchlauf empfiehlt sich [Kapitel 1](01-kette-verstehen.md):
+es zeigt, wie die sechs Stufen zusammenspielen. Hier stehen ihre konkreten
+Schnittstellen und die Regeln für Daten, die zwischen ihnen weitergegeben
+werden.
+
 Quelle der Wahrheit bleibt der Code — bei Abweichung gilt der Code, und diese
 Seite ist zu korrigieren.
 

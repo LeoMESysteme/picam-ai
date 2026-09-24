@@ -14,10 +14,13 @@ GSVmulti-Telegramm bleibt [OQ-07](open-questions.md#oq-07); das
 
 ## Zensical-Doku
 
-Roadmap und erste Anleitungskapitel wurden gegen den aktuellen Code geprüft.
-Kapitel 0 nennt keine feste Testanzahl. Kapitel 1 verlinkt die API der sechs
-Pipeline-Stufen mit kurzen Hover-Erklärungen. Kapitel 2 unterscheidet fünf
-`Protocol`-Schnittstellen von der konkreten Klasse `ReleaseGate`.
+Roadmap und die Anleitungskapitel 0–2 wurden gegen den aktuellen Code geprüft.
+Der Lernpfad-Einstieg unterscheidet jetzt Orientierungs- und Baukapitel.
+Kapitel 0 verweist für den automatisierten Ablauf auf `AGENTS.md`; Kapitel 1
+ordnet die Stufendauern ausdrücklich als Software-Verarbeitungszeiten ein und
+datiert den dokumentierten Mehrbildlauf. Kapitel 2 verweist für die
+Verarbeitungskette auf Kapitel 1. Die Navigation führt vom Werkzeugkapitel
+über Beispiel und Verträge weiter zu den Baukapiteln.
 
 Der Claude-`@reboot`-Job ist deaktiviert. Der separate
 `picam-codex-docs`-Runner ist angemeldet und registriert;
@@ -35,9 +38,11 @@ einen bereits geprüften Patch bei einem späteren Publish-Fehler als Artefakt.
 
 ## Verifikation
 
-OQ-Index-Prüfung und strenger Zensical-Build erfolgreich. Der mobile
-Glossar-Test scheiterte mit URL-Nachführung 2 von 5 Mal und bestand ohne
-sie 8 von 8 Mal; die gesamte Dokubrowser-Suite bestand mit 13 Tests.
+Der strenge Zensical-Build nach dem aktuellen Anleitungsupdate war erfolgreich
+(„No issues found“). Die vorherige OQ-Index-Prüfung und strenge Builds waren
+erfolgreich. Der mobile Glossar-Test scheiterte mit URL-Nachführung 2 von 5
+Mal und bestand ohne sie 8 von 8 Mal; die gesamte Dokubrowser-Suite bestand
+mit 13 Tests.
 24 Wartungs-Gate-Tests und Ruff sind grün. Der Zugriffsschutz der
 Live-Seite wurde nach dem Deploy erneut geprüft. Keine Hardware-Messung
 in diesem Doku-Pflegelauf.

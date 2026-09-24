@@ -17,7 +17,14 @@ Windows-Browser. Dieser kleine Prototyp läuft unabhängig vom Lernpfad.
 Ablauf, mit dem reale Prüfbilder ohne Kalibrierung gesammelt werden — ebenso
 ein fertiger Prototyp, keine Bauaufgabe.
 
-## So ist jedes Kapitel aufgebaut
+## So ist der Lernpfad aufgebaut
+
+Kapitel 0 erklärt Werkzeuge und Arbeitsablauf, Kapitel 1 führt ein Beispiel
+durch die Verarbeitungskette und Kapitel 2 ist ein Schnittstellen-Nachschlagewerk.
+Die Baukapitel ab Kapitel 3 folgen dem unten beschriebenen wiederkehrenden
+Aufbau.
+
+## Aufbau der Baukapitel
 
 | Abschnitt | Bedeutung |
 | --- | --- |
