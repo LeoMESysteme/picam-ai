@@ -3,6 +3,30 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Task 6: ScalerCrop, Winkel, Auflösungsschwelle)
+
+**Problem:** Für die erste Ernte fehlten Fokus, ein Sensorausschnitt um die
+Anzeige und die Auflösungsschwelle `resolution_threshold_px`; die Kamera
+war seit gestern blockiert (OQ-22). Beim Prüfen der Overlays kam zudem der
+Verdacht auf, `harvest-setup.py propose` entzerre gespiegelt.
+
+**Änderung:**
+* Kamera nach nächtlicher Abschaltung wieder funktionsfähig; sechs
+  Streamstarts, Fokus nachgestellt, ScalerCrop 1920×1440 (1:1 nativ im
+  2028×1520-Modus), drei Stellungen gemessen. Schwelle 2,6 px vom Nutzer
+  festgelegt (Plan Ernte Phase 1, Entscheidung 7). Zahlen in
+  `docs/VALIDATION.md`, Verlauf in `docs/lab_journal.md`, Nachträge zu
+  OQ-22 und OQ-40, `docs/status.md` und `TODO.md` nachgezogen.
+* Spiegelverdacht geprüft, nicht bestätigt: die Eckenreihenfolge
+  (`dispread.rectify._order_quad`) ist in allen Aufrufern gleich. Neu
+  `tests/test_harvest_setup.py::test_propose_rectified_image_is_not_mirrored`
+  mit asymmetrischem Muster; der bisherige Test hätte eine Spiegelung nicht
+  bemerkt.
+
+**Konsequenz:** Task 7 (erste echte Ernte) ist frei. Die Lichtspiegelung
+auf dem Glas schneidet die automatische Glaserkennung ab und muss vorher
+beseitigt oder per Hand-Quad umgangen werden.
+
 ## 0.1.0.dev0 — 2026-09-23 (OQ-Übersicht und Fokus-Übergabe)
 
 **Problem:** Der Einstieg in neue Agenten-Sitzungen las die ganze

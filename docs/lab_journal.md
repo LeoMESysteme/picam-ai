@@ -1392,3 +1392,36 @@ Pi und wurde hier nicht durchgeführt.
 **Artefakt:** `var/diagnostics/focus-handoff-2026-09-23/focus-first-start-failure.txt`
 (nicht versioniert). Der Fokushelfer liegt unter
 `/home/me-systeme/fokus-live-2026-09-23.py`.
+
+## 2026-09-24 — Kamera wieder da, Task 6 in einer Vormittagssitzung
+
+Nach der nächtlichen Abschaltung meldeten sich IMX500 und RP2040-Brücke
+beim Boot sauber, und der erste Kamerastart lieferte sofort Bilder. Damit
+bleibt offen, ob der Warmreboot-Fehlschlag von gestern nur durch einen
+Kaltstart behebbar ist; ein Gegenbeweis ist ein einzelner guter Kaltstart
+nicht.
+
+Ablauf: eine 20-min-Sitzung im vollen Bildfeld zum groben Fokussieren
+(Schärfemesser `var/diagnostics/task6-tools/focus_meter.py`, liest nur die
+geschriebenen JPEGs), dann 15 min mit ScalerCrop 1920×1440 für den Feinfokus.
+Im vollen Bildfeld ist die Anzeige nur ≈ 175 px breit, die Punkte laufen
+zusammen; erst der Ausschnitt macht sie sichtbar. Der Fokuswert wurde beim
+Drehen mehrfach durch Verschieben der Kamera verfälscht — beim nächsten Mal
+Kamera fixieren, bevor fokussiert wird.
+
+Die Kamera stand von Anfang an auf der „30°"-Stellung; die zuerst als
+frontal bezeichneten Bilder sind umbenannt (`task6-30deg*`). Frontal und
+„45°" kamen je als 10-s-Vollbild (Anzeige suchen) plus 30-s-Ausschnitt dazu.
+
+Irrweg: Das Gitter-Overlay `overlay_rectified.png` las ich bei 400 px Breite
+als gespiegelt. Ein Subagent fand keinen Fehler in der Eckenreihenfolge;
+ohne Gitter vergrössert liest der Text richtig. Geblieben ist ein
+Regressionstest mit asymmetrischem Muster.
+
+Befund für die Ernte: Eine Lichtspiegelung links oben auf dem Glas
+schneidet bei frontal und „45°" die automatische Glaserkennung ab und
+überstrahlt bei „45°" `+` und `0`. Vor der Ernte Licht oder Winkel ändern
+oder das Quad von Hand setzen.
+
+Schwelle `resolution_threshold_px = 2,6`, vom Nutzer festgelegt. Zahlen in
+VALIDATION.md (2026-09-24).

@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-23
+# TODO — Stand 2026-09-24
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,18 +9,12 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Aktueller Blocker — Kamerabrücke hängt nach Reboot
+## Kein Blocker — Kamera läuft wieder (2026-09-24)
 
-Nach einem erfolgreichen Commissioning-Bild schlug am 2026-09-23 um 15:57
-bereits der direkt folgende 960×720-Fokuslauf fehl. PID 19971 hängt in
-`futex_wait_queue`; kein SIGKILL und kein weiterer Kameraversuch. Der Nutzer
-hat rebootet. Auch nach dem Reboot um 16:13 scheiterte schon
-der erste Start des Boots um 16:17 (`rp2040_gbdg_wait_until_free failed`,
-OQ-22). Ein weiterer Warmreboot allein ist keine belegte Abhilfe. Die
-nächste trennende Gegenprobe wäre ein vollständiger Stromzyklus des Pi;
-sie betrifft auch andere Dienste und braucht eine Entscheidung des Nutzers.
-Bis dahin keine Kameraversuche. Nach Wiederherstellung Fokus/ScalerCrop/
-Winkel in möglichst **einer** langen Kamerasitzung durchführen.
+Nach der nächtlichen Abschaltung meldeten sich IMX500 und RP2040-Brücke
+sauber; sechs Streamstarts ohne Fehler (OQ-22-Nachtrag). Regel bleibt:
+**≤ 960×720**, mehr Pixel nur über ScalerCrop, kein Kill eines hängenden
+Kameraprozesses, Streambudget je Boot beachten.
 
 ---
 
@@ -54,20 +48,25 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
   [OQ-41](docs/open-questions.md) bleiben (b), die leere Zelle im Zellenraster
   des Lesers, und (c), negative Werte (ungeprüft).
 
-### 3. Task 6: Fokus, ScalerCrop und Auflösungsschwelle
+### 3. Erledigt 2026-09-24: Task 6, Fokus, ScalerCrop, Schwelle
 
-Nach Wiederherstellung der Kamerabrücke eine lange 960×720-Sitzung verwenden. Startfehler/Timeout
-müssen laut diagnostiziert werden; der Bediener dreht erst nach einem echten
-Bildsignal. In derselben Sitzung Fokus einstellen, passenden ScalerCrop
-bestimmen und die noch fehlenden Winkelbilder gewinnen. Danach Raster-Overlay
-bestätigen und `resolution_threshold_px` aus dem kleinsten noch sicher
-getrennten nativen Punktspaltenwert vor der Ernte festschreiben.
+* Fokus nachgestellt, ScalerCrop 1920×1440 um die Anzeige → `native_scale = 1,0`.
+* Gemessen: frontal 3,36, „30°" (≈ 20°) 3,34, „45°" (≈ 23°) 2,68 native px
+  je Punktspalte. **`resolution_threshold_px = 2,6`**, vom Nutzer festgelegt
+  (Plan, Entscheidung 7).
+* Profile und Bilder: `var/diagnostics/task6-{frontal,30deg,45deg}-setup/`.
+  Der Ausschnitt gilt nur für die jeweilige Kameralage; nach jedem
+  Verstellen neu bestimmen (10-s-Vollbild, dann Ausschnitt).
 
-### 4. Task 7: echte Ernte und Import
+### 4. Task 7: echte Ernte und Import — jetzt dran
 
 `harvest.py` ist bereits gebaut. Nach Task 6: Profil bestätigen, 30 Schritte
 à 4 s ernten, `import-harvest.py --dry-run`, `audit.json` mit dem Nutzer
 prüfen, dann importieren. Vorzeichen bleibt ungeprüft.
+**Vorher:** Lichtspiegelung links oben auf dem Glas beseitigen — sie
+schneidet die automatische Glaserkennung ab (Quad sonst von Hand setzen)
+und überstrahlt bei schrägem Blick `+` und `0`. Kamera vor dem Fokussieren
+fixieren. `confirm --resolution-threshold-px 2.6`.
 
 ### 5. OQ-40: Gap-Schwellen nachmessen (kein Ernte-Blocker)
 
@@ -145,7 +144,7 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
 | Plan mit Tasks A–H, Vorab-Festlegungen | `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md` |
 | Alle Messzahlen | `docs/VALIDATION.md` (Einträge 2026-09-23 am Ende) |
 | Aufbau, Deutung, Irrwege | `docs/lab_journal.md` (letzter Eintrag) |
-| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamerabrücke erneut blockiert), OQ-38 (Zeitkopplung), OQ-40 (Gap-Schwellen), OQ-41 (führende Null) |
+| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamerabrücke, seit 2026-09-24 wieder funktionsfähig), OQ-38 (Zeitkopplung), OQ-40 (Gap-Schwellen), OQ-41 (führende Null) |
 | Dot-Matrix-Leser, nicht bestandenes Gate | `docs/superpowers/plans/2026-09-22-dotmatrix-backend.md` |
 
 ### Werkzeuge

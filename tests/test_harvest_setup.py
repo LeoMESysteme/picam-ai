@@ -139,6 +139,99 @@ def test_propose_finds_quad_and_writes_files(tmp_path):
         assert abs(fy - gy) <= 3
 
 
+def _build_synthetic_scene_asymmetric() -> np.ndarray:
+    """Wie `_build_synthetic_scene`, aber mit einem asymmetrischen Merkmal:
+    Zelle 0 (die am weitesten links liegende) ist vollstaendig schwarz
+    ausgefuellt, alle anderen Zellen bleiben einfarbig gesaettigt-gruen ohne
+    Punktmuster.
+
+    `_build_synthetic_scene` benutzt in jeder der 16 Zellen dasselbe 5x8-
+    Punktmuster - ein Links-Rechts-Tausch der Eckenzuordnung waere darin
+    unsichtbar, weil das gespiegelte Bild pixelgleich zum unveraenderten
+    waere. Diese Szene hat genau ein unterscheidbares Merkmal an einem
+    bekannten Rand, damit eine falsch orientierte Entzerrung (Spiegelung
+    oder Vertauschung der Eckenreihenfolge) den Test tatsaechlich zum
+    Scheitern bringt.
+    """
+    canvas_w, canvas_h = CANVAS_SIZE
+    canvas = np.full((canvas_h, canvas_w, 3), 128, dtype=np.uint8)
+
+    flat_w, flat_h = 400, 160
+    flat = np.zeros((flat_h, flat_w, 3), dtype=np.uint8)
+    flat[:, :] = (0, 180, 0)  # gesaettigtes Gruen wie die Hintergrundbeleuchtung
+    pitch = flat_w / 16
+    marker_width = int(pitch)
+    flat[:, :marker_width] = (0, 0, 0)  # Zelle 0 (ganz links) komplett schwarz
+
+    src_pts = np.array([[0, 0], [flat_w, 0], [flat_w, flat_h], [0, flat_h]], dtype=np.float32)
+    dst_pts = np.array(QUAD_GT, dtype=np.float32)
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    warped = cv2.warpPerspective(flat, matrix, (canvas_w, canvas_h), flags=cv2.INTER_NEAREST)
+    mask = cv2.warpPerspective(
+        np.full((flat_h, flat_w), 255, dtype=np.uint8),
+        matrix,
+        (canvas_w, canvas_h),
+        flags=cv2.INTER_NEAREST,
+    )
+    canvas[mask > 0] = warped[mask > 0]
+    return canvas
+
+
+def test_propose_rectified_image_is_not_mirrored(tmp_path):
+    """`overlay_rectified.png` muss den dunklen Marker aus Zelle 0 links
+    zeigen, nicht rechts - Regressionstest gegen eine vertauschte
+    Eckenreihenfolge zwischen `lcd_quad_in_region`/`glass_quad_in_region`
+    und `rectify()` (beide muessen dieselbe oben-links/oben-rechts/unten-
+    rechts/unten-links-Konvention aus `dispread.rectify._order_quad`
+    benutzen). Der bestehende `test_propose_finds_quad_and_writes_files`
+    prueft nur die Quad-Koordinaten, nicht die Bildorientierung, und sein
+    Punktmuster ist in jeder Zelle identisch - eine Spiegelung waere dort
+    unsichtbar."""
+    # `--quad` statt Suche: der Marker (Zelle 0, komplett schwarz) hat keine
+    # Saettigung und waere fuer `glass_quad_in_region`s huegestuetzte Maske
+    # selbst ein Ausschluss (Glas vs. Rahmen) statt eines Merkmals *innerhalb*
+    # des Glases - das ist ein eigenes, hier nicht zu testendes Detektionsver-
+    # halten. Mit `--quad` wird die bekannte Zielgeometrie direkt vorgegeben,
+    # das isoliert die Frage auf Eckenreihenfolge -> Entzerrung.
+    canvas = _build_synthetic_scene_asymmetric()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    out_dir = tmp_path / "session"
+    quad_arg = ",".join(f"{x:.4f},{y:.4f}" for x, y in QUAD_GT)
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--quad",
+            quad_arg,
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    assert rc == 0
+
+    rectified = cv2.imread(str(out_dir / "overlay_rectified.png"))
+    gray = cv2.cvtColor(rectified, cv2.COLOR_BGR2GRAY)
+    width = gray.shape[1]
+    left_quarter = gray[:, : width // 4]
+    right_quarter = gray[:, -width // 4 :]
+    # Der schwarze Marker liegt in Zelle 0 (links) - links muss deutlich
+    # dunkler sein als rechts. Bei vertauschter Eckenzuordnung (Spiegelung)
+    # laege der Marker stattdessen rechts, und die Ungleichung kippt.
+    assert left_quarter.mean() < right_quarter.mean() - 15, (
+        f"links={left_quarter.mean():.1f} rechts={right_quarter.mean():.1f} "
+        "- Marker aus Zelle 0 liegt nicht links, Bild vermutlich gespiegelt/falsch orientiert"
+    )
+
+
 def test_propose_fails_without_guessing_when_no_quad_found(tmp_path):
     # Rein grauer Hintergrund - keine gesaettigte Flaeche, also kein Quad.
     canvas = np.full((*CANVAS_SIZE[::-1], 3), 128, dtype=np.uint8)

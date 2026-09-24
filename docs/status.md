@@ -1,4 +1,4 @@
-# Status — Stand 2026-09-23
+# Status — Stand 2026-09-24
 
 Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 `docs/project_history.md`.
@@ -8,30 +8,18 @@ Wird **überschrieben**, nicht angehängt. Historie in `CHANGELOG.md` und
 > **Die Arbeitsliste steht in [../TODO.md](../TODO.md).** Diese Datei sagt
 > *wo wir stehen*, die TODO sagt *was zu tun ist*.
 >
-> **Aktueller Blocker: RP2040-Kamerabrücke antwortet nicht.** Nach dem
-> Reboot um 16:13 scheiterte schon der erste 960×720-Kamerastart um 16:17
-> (`rp2040_gbdg_wait_until_free failed`, OQ-22). Prozess PID 4238 hängt.
-> Kein weiterer Kameraversuch. Ein vollständiger Stromzyklus des Pi wäre
-> die nächste Gegenprobe; er betrifft auch andere Dienste und braucht eine
-> Entscheidung des Nutzers. Der Nutzer kann ihn frühestens am 2026-09-24
-> durchführen. Bis dahin die Kamera nicht erneut starten.
+> **Kein Blocker. Die Kamera läuft wieder** (seit dem Boot am 2026-09-24
+> nach nächtlicher Abschaltung, sechs Streamstarts ohne Fehler, OQ-22-
+> Nachtrag). Regel bleibt: **≤ 960×720**, mehr Pixel nur über ScalerCrop,
+> kein Kill eines hängenden Kameraprozesses.
 
-**Wiedereinstieg morgen:** Zuerst mit dem Nutzer klären, ob ein echter
-Stromzyklus (Stromversorgung aus/ein) möglich ist; ein normaler Warmreboot
-hat den Fehler nicht beseitigt. Danach Boot-ID und Kernelmeldungen prüfen.
-Nur wenn die Brücke wieder ansprechbar ist, genau **eine** längere
-Fokussitzung versuchen. Der temporäre Helfer liegt unter
-`/home/me-systeme/fokus-live-2026-09-23.py` (nicht versioniert); er startet
-960×720 bei 15 fps und wartet erst nach dem **ersten echten Bild** auf `go`.
-Vor dem Bild weder den Fokusring drehen noch zusätzlich Commissioning oder
-andere Kameraskripte starten. Schlägt der erste Stream wieder fehl, Logs
-sichern und OQ-22 weiter untersuchen, nicht wiederholt starten. Diagnose
-dieser Sitzung: `var/diagnostics/focus-handoff-2026-09-23/` (lokal, ignoriert).
-Aufruf nach erfolgreicher Wiederherstellung:
-`./.venv/bin/python /home/me-systeme/fokus-live-2026-09-23.py --out
-var/diagnostics/focus-handoff-2026-09-23/focus-next` (`--hint x,y,w,h`
-setzt bei Bedarf die normierte Displayregion). Der Helfer hat noch keinen
-erfolgreichen Kamerastart erlebt und kann beim selben Treiberfehler hängen.
+**Task 6 ist erledigt (2026-09-24):** ScalerCrop 1920×1440 um die Anzeige
+ergibt `native_scale = 1,0`; gemessen frontal 3,36, „30°" 3,34, „45°"
+2,68 native px je Punktspalte. Der Nutzer hat
+`resolution_threshold_px = 2,6` festgelegt (Plan Ernte Phase 1,
+Entscheidung 7). **Nächster Schritt: Task 7**, die erste echte Ernte. Vorher
+die Lichtspiegelung links oben auf dem Glas beseitigen oder das Quad von
+Hand setzen — sie schneidet die automatische Glaserkennung ab.
 
 ## Wo wir stehen
 

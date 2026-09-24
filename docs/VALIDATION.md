@@ -1394,3 +1394,44 @@ darunter `rp2040_gbdg_wait_until_free failed`, und
 `setup of GPIO led failed: -121`. Der Fokuswert bleibt unbekannt. Die
 Grenze „20–25 Starts je Boot“ erklärt diesen Fehlschlag nicht; ein
 Warmreboot garantiert keine funktionierende erste Sitzung.
+
+## 2026-09-24 — Task 6: Kamera nach Neustart, ScalerCrop, Winkel, Auflösungsschwelle
+
+**Zeitbasis:** Kernel-Journal und `session.json` der Läufe, Europe/Berlin.
+Boot-ID `b973b67f-69a7-488a-9870-9e8daea714b8`, Start gegen 09:57 nach
+nächtlicher Abschaltung des Pi (ob die Versorgung dabei ganz getrennt war,
+ist nicht belegt). Probe von `imx500` und `rp2040-gpio-bridge` (fw 15)
+ohne Fehler.
+
+| Lauf | Ausschnitt angefordert → tatsächlich | Dauer | Bilder | verworfen | `sensor_sequence` | max. Schleife |
+| --- | --- | --- | --- | --- | --- | --- |
+| `task6-100540` | keiner → 2,0,4052,3040 | 1200 s | 17 978 | 8 (Warteschlange voll, t ≈ 13,5 min) | sonst lückenlos | 1,40 s |
+| `task6-crop-102651` | 1214,547,1920,1440 → 1214,546,1920,1440 | 900 s | 13 487 | 0 | lückenlos | 1,18 s |
+| `task6-frontal-full` / `-crop` | keiner / 1113,614,… → 1112,614,1920,1440 | 10 / 30 s | 133 / 434 | 0 | lückenlos | — |
+| `task6-45deg-full` / `-crop` | keiner / 1438,631,… → 1438,630,1920,1440 | 10 / 30 s | 134 / 434 | 0 | lückenlos | — |
+
+Alle sechs Streamstarts dieses Boots ohne `stream on failed` und ohne
+RP2040-Fehler. Sensormodus jeweils 2028×1520 (2×2-gebinnt); ein
+ScalerCrop von 1920×1440 Sensorkoordinaten ergibt damit bei 960×720
+`native_scale = 1,0`. Enger zuschneiden bringt keine neue Information.
+
+**Auflösung je Stellung** (`harvest-setup.py propose --session-json`):
+
+| Stellung (benannt) | Stellung (geschätzt) | `min_native_dot_column_px` | Quad |
+| --- | --- | --- | --- |
+| frontal | 0° (Bezug) | 3,359 | von Hand; automatisch 2,539, weil die Spiegelung links oben die Glaserkennung abschneidet |
+| 30° | ≈ 20° | 3,338 | automatisch |
+| 45° | ≈ 23° | 2,677 | von Hand; automatisch 2,869, gleiche Ursache |
+
+Schätzung aus dem Seitenverhältnis des Glases (Breite/Höhe, frontal 4,69),
+Neigung nach oben nicht herausgerechnet. „30°" und „45°" liegen also näher
+beieinander als benannt.
+
+**Deutung:** Entzerrt (`var/diagnostics/task6-rectified-alle.png`, lokal)
+sind die Punkte in allen drei Stellungen einzeln erkennbar, frontal am
+weichsten, obwohl dort die meisten Pixel liegen — die Schärfe bestimmt die
+Trennung stärker als die Pixelzahl. Der Nutzer hat die Schwelle auf
+**2,6 px** gelegt (Plan `2026-09-23-ernte-phase1.md`, Entscheidung 7).
+Fokus: Laplace-Varianz im Glas stieg nach Nachstellen von ≈ 36 auf ≈ 75
+(Vollbild vs. Ausschnitt nicht vergleichbar); höhere Einzelwerte stammten
+von verschobener Rahmung, nicht von Schärfe.

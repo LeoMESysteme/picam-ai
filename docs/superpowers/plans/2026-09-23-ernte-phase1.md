@@ -37,8 +37,9 @@ eine Spec. Mitzulesen sind
    aufgeweicht.
 3. **Auflösungs-Gate:** Gemessen wird die Punktspaltenbreite im
    **Quellbild** (nicht im hochgerechneten entzerrten Bild). Liegt sie unter
-   der Schwelle, wird die Sitzung abgelehnt. Die Schwelle legt Task 6 fest,
-   bis dahin hat das Argument **keinen Vorgabewert**.
+   der Schwelle, wird die Sitzung abgelehnt. Die Schwelle legt Task 6 fest
+   (erledigt: 2,6 px, Entscheidung 7). Das Argument behält trotzdem
+   **keinen Vorgabewert**, der Wert wird beim Aufruf ausdrücklich gesetzt.
 4. **Mehr Pixel je Punkt über `ScalerCrop`**, nie über einen grösseren
    Sensormodus (OQ-22).
 5. **Labels werden voll automatisch importiert.** Das ist eine Abweichung
@@ -52,6 +53,15 @@ eine Spec. Mitzulesen sind
    (0 ms, 2384 ms) liegen weit ausserhalb. Jedes Ergebnis, das mit diesen
    Werten entsteht, trägt `gap_thresholds_provisional: true`. Die
    Stundenmessung aus OQ-40 bleibt offen.
+7. **`resolution_threshold_px = 2.6`** (native Sensorpixel je Punktspalte),
+   vom Nutzer am 2026-09-24 festgelegt, **vor** der ersten Ernte. Grundlage
+   ist Task 6: frontal 3,36, „30°" 3,34, „45°" 2,68 native px; entzerrt waren
+   die Punkte in allen drei Stellungen noch einzeln erkennbar, bei 2,68 px
+   eher am klarsten. 2,6 liegt knapp unter dem kleinsten Messwert, darunter
+   gibt es keine Messung. **Grenzen:** Die Schwelle prüft keine Schärfe
+   (frontal war mit mehr Pixeln weicher als „45°"), und die Stellungen waren
+   flacher als benannt, grob ≈ 20° und ≈ 23° aus dem Seitenverhältnis des
+   Glases, Neigung nicht herausgerechnet. Zahlen: VALIDATION.md, 2026-09-24.
 
 ## Global Constraints
 
@@ -292,9 +302,9 @@ Regeln, in dieser Reihenfolge:
 
 ### Task 6 (Labor, Orchestrator mit Nutzer): ScalerCrop und Winkelversuch, Schwelle festlegen
 
-- [ ] Den Sensorausschnitt um die Anzeige wählen (`ScalerCrop`, Seitenverhältnis 4:3 wie 960×720). Kurz aufzeichnen und prüfen, dass `scaler_crop_actual` gesetzt ist, kein `stream on failed` auftritt und 15 fps ohne `sensor_sequence`-Lücken laufen.
-- [ ] Frontal, bei ≈ 30° und bei ≈ 45° (der Nutzer dreht die Kamera): je `harvest-setup.py propose` mit bestätigtem Raster. Gemessen werden `min_source_dot_column_px` und, per Augenschein am Overlay, ob die Punkte getrennt bleiben.
-- [ ] Die Schwelle `resolution_threshold_px` legt der **kleinste Messwert fest, bei dem die Punkte noch sicher getrennt sind**. Sie wird in diesem Plan unter „Entscheidungen" eingetragen, **vor** der ersten Ernte. Dazu kommen ein VALIDATION-Eintrag und ein lab_journal-Eintrag.
+- [x] Den Sensorausschnitt um die Anzeige wählen (`ScalerCrop`, Seitenverhältnis 4:3 wie 960×720). Kurz aufzeichnen und prüfen, dass `scaler_crop_actual` gesetzt ist, kein `stream on failed` auftritt und 15 fps ohne `sensor_sequence`-Lücken laufen.
+- [x] Frontal, bei ≈ 30° und bei ≈ 45° (der Nutzer dreht die Kamera): je `harvest-setup.py propose` mit bestätigtem Raster. Gemessen werden `min_source_dot_column_px` und, per Augenschein am Overlay, ob die Punkte getrennt bleiben.
+- [x] Die Schwelle `resolution_threshold_px` legt der **kleinste Messwert fest, bei dem die Punkte noch sicher getrennt sind**. Sie wird in diesem Plan unter „Entscheidungen" eingetragen, **vor** der ersten Ernte. Dazu kommen ein VALIDATION-Eintrag und ein lab_journal-Eintrag.
 
 ### Task 7 (Orchestrator): Ende-zu-Ende an der echten Anzeige
 

@@ -727,6 +727,14 @@ dann ab dieser Zeile lesen.
   Nicht selbst umgesetzt: braucht Root zum Bauen/Installieren eines
   Overlays und einen Reboot zum Testen.
 
+* **Nachtrag 2026-09-24 — nach nächtlicher Abschaltung wieder
+  funktionsfähig.** Boot `b973b67f-69a7-488a-9870-9e8daea714b8`: Probe von
+  IMX500 und RP2040-Brücke sauber, danach sechs erfolgreiche 960×720-
+  Streamstarts (bis 20 min Dauer, mit und ohne ScalerCrop) ohne
+  `stream on failed`. Ob die Versorgung über Nacht ganz getrennt war, ist
+  nicht belegt; ein einzelner guter Kaltstart beweist nicht, dass nur ein
+  Stromzyklus hilft. Zahlen: [VALIDATION.md](VALIDATION.md), 2026-09-24.
+
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
 
@@ -1778,6 +1786,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   die Werte für `--min-gap-ms` und `--max-gap-ms`. Unter Kameralast liegen
   über 3 Läufe alle Abstände bei 529–536 ms. Eine Stundenmessung fehlt
   noch.
+* **Nachtrag 2026-09-24:** In einer 20-min-Sitzung (15 fps, JPEG, ohne
+  Last von aussen) liefen bei t ≈ 13,5 min 8 Bilder in die volle
+  Warteschlange (60) und wurden verworfen, gezählt und protokolliert; sonst
+  `sensor_sequence` lückenlos. Die folgende 15-min-Sitzung blieb ohne
+  Verwurf. Der Schreibstau tritt also auch ohne erzwungene Last auf; für
+  3,5-min-Ernten unkritisch, für die Stundenmessung zu beachten.
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
