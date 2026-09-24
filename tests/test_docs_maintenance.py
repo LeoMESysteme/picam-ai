@@ -80,6 +80,16 @@ def test_preview_gate_rejects_missing_target_anchor(tmp_path: Path):
     maintenance.validate_preview_targets(tmp_path)
 
 
+def test_documentation_links_in_code_blocks_are_rejected():
+    diagram = "```text\n1 [frames](../../api/frames.md)   Bildquelle\n```\n"
+    with pytest.raises(ValueError, match="code fence"):
+        maintenance.validate_markdown_links(diagram, "docs/anleitung/01-kette-verstehen.md")
+    maintenance.validate_markdown_links(
+        "[frames](../../api/frames.md)\n```markdown\n[example](example.md)\n```\n",
+        "docs/anleitung/01-kette-verstehen.md",
+    )
+
+
 def test_codex_usage_is_summarized_without_logging_agent_text(tmp_path: Path):
     log = tmp_path / "codex.jsonl"
     log.write_text(

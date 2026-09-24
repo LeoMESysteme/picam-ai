@@ -30,6 +30,9 @@ Bevorzuge eine gezielte Änderung an höchstens fünf Seiten pro Lauf.
    API-Symbole nutze knappe Linktitel oder Code-Anmerkungen; generierte
    API-Klassen sind keine Vorschauziele. Neue Übersichtsseiten nur bei einer
    belegten Navigationslücke anlegen und in der Navigation aufnehmen.
+   Markdown-Links innerhalb eines umzaeunten Codeblocks erscheinen nur als
+   Text. Setze anklickbare Verweise deshalb im Fliesstext oder in einer
+   Markdown-Tabelle ausserhalb des Codeblocks.
 3. Roadmap-Status nur mit eindeutigen Belegen aus dem aktuellen Stand
    korrigieren. `docs/status.md` bei jeder tatsächlichen Änderung als
    aktuellen, belegten Snapshot neu schreiben, ohne Produktfakten zu raten.

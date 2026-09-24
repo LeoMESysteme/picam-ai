@@ -3,6 +3,20 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Doku-Links ausserhalb von Codebloecken)
+
+**Problem:** Der erste echte Codex-Vorschaulauf setzte API-Verweise in eine
+ASCII-Skizze innerhalb eines Markdown-Codeblocks. Der Build war gruen,
+aber die vermeintlichen Links erschienen nur als Text.
+
+**Änderung:** Der Wartungsauftrag verlangt anklickbare Links im Fliesstext
+oder in Tabellen. Der Gate lehnt Markdown-Links auf `.md`-Ziele in anderen
+umzaeunten Codebloecken ab. Ein gezielter Test deckt den Fehler ab.
+
+**Konsequenz:** Solche nicht nutzbaren Verweise gelangen nicht mehr als
+gepruefter Doku-Commit nach `master`. Der Vorschau-Patch wird vor einer
+Veroeffentlichung entsprechend korrigiert.
+
 ## 0.1.0.dev0 — 2026-09-24 (vollstaendige Codex-Sandbox starten)
 
 **Problem:** Nach Freigabe von `AF_NETLINK` scheiterte `bwrap` beim Mounten

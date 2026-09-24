@@ -147,6 +147,23 @@ def validate_paths(repo: Path, paths: list[str]) -> None:
             raise ValueError(f"unsafe documentation path: {path}")
 
 
+def validate_markdown_links(document: str, source: str) -> None:
+    fence: tuple[str, int, str] | None = None
+    link = re.compile(r"\[[^\]]+\]\([^)\n]+\.md(?:#[^)]*)?\)")
+    for number, line in enumerate(document.splitlines(), 1):
+        opening = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if opening:
+            marker = opening.group(1)
+            if fence is None:
+                language = opening.group(2).strip().split(maxsplit=1)[0].lower() if opening.group(2).strip() else ""
+                fence = (marker[0], len(marker), language)
+            elif marker[0] == fence[0] and len(marker) >= fence[1]:
+                fence = None
+            continue
+        if fence and fence[2] not in {"markdown", "md"} and link.search(line):
+            raise ValueError(f"Markdown link in code fence: {source}:{number}")
+
+
 class _SiteLinks(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -312,6 +329,9 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
         raise ValueError("Codex created a commit; only the gate may commit")
     paths = changed_paths(repo)
     validate_paths(repo, paths)
+    for path in paths:
+        if path.endswith(".md"):
+            validate_markdown_links((repo / path).read_text(encoding="utf-8"), path)
     if "docs/open-questions.md" in paths:
         original = git(repo, "show", f"{base}:docs/open-questions.md")
         _run_checked([str(repo / ".venv" / "bin" / "python"), "scripts/oq-index.py"], repo)

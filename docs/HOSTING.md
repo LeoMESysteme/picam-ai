@@ -169,7 +169,9 @@ Push.
   oder alle Verweise darauf aktualisieren. Der Abschnitt bis zur nächsten
   Überschrift soll als kurzer Erklärungstext lesbar bleiben. Bei weiteren
   Vorschau-Zielen erst einen kurzen Zielabschnitt schaffen, dann den Pfad in
-  `zensical.toml` aufnehmen und einen Browsertest ergänzen.
+  `zensical.toml` aufnehmen und einen Browsertest ergänzen. Anklickbare
+  Markdown-Verweise gehören außerhalb von Codeblöcken; der automatische
+  Doku-Gate prüft dies für `.md`-Ziele.
 * **API- und Code-Erklärungen:** Generierte API-Klassen sind für eine
   Inhaltsvorschau zu umfangreich. Bei ausgewählten API-Verweisen einen kurzen
   Markdown-Linktitel ergänzen. Erklärungen zu einzelnen Codezeilen nutzen
