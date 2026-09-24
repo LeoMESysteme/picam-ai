@@ -3,6 +3,20 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (ersten Codex-Doku-Publish abgenommen)
+
+**Problem:** Der automatische Publish-Pfad war bisher nur in Teilstuecken
+geprueft. Im ersten Bot-Commit fehlte im Lernkapitel zudem der Commit als
+ausdruecklicher letzter Schritt des Entwicklungsablaufs.
+
+**Änderung:** Der manuelle Publish-Lauf schrieb den geprueften Doku-Commit
+`b35f545` nach `master`; der dadurch ausgeloeste Cloudflare-Deploy und die
+Schutzpruefung waren erfolgreich. Der Lernpfad nennt den Commit wieder
+ausdruecklich. Der Status ist als aktueller Snapshot neu geschrieben.
+
+**Konsequenz:** Der direkte Bot-Push und die nachgelagerte Veroeffentlichung
+sind end-to-end belegt. Der erste planmaessige Lauf um 06:00 Uhr steht noch aus.
+
 ## 0.1.0.dev0 — 2026-09-24 (Mobilen Glossarlink stabilisieren)
 
 **Problem:** Ein Doku-Publish erreichte den Browser-Gate, scheiterte dort aber

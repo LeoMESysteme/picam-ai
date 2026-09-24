@@ -139,6 +139,7 @@ Jede Aufgabe in dieser Anleitung läuft in derselben Schleife:
 4. **Kleinsten Schritt implementieren**, bis ein Test grün wird. Nicht mehr.
 5. `./.venv/bin/pytest -q` **und** `./.venv/bin/ruff check src tests examples`.
 6. **Doku-Pflicht** erfüllen: `CHANGELOG.md`, ggf. `OQ-nn`, ROADMAP-Häkchen.
+7. **Commit** mit der zugehörigen Doku erstellen.
 
 Im automatisierten Pflegeablauf prüft der Gate-Prozess die Änderungen und
 führt Build und Browsertests aus, bevor er committet und pusht. In einem
