@@ -22,6 +22,12 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   skaliert, damit ein Helligkeitsverlauf über das Glas ausgeglichen wird) und Verschiebungssuche ±1 px (`SHIFTS`, 9 Lagen);
   `MIN_CONTRAST = 0.08` als unvalidierter Vorabwert. Tests:
   `tests/test_dotmatrix_sampling.py`, Helfer `tests/dotmatrix_helpers.py`.
+* `src/dispread/ocr/dotmatrix_templates.py` (Task 3): Vorlagen je Zeichen
+  (Mittelwert und Streuung je Punkt), diagonal gewichteter Abstand,
+  Zellentscheid mit Ablehnung (`zelle_unbekannt`, `zelle_mehrdeutig`),
+  Schwellenformel `thresholds_v1` nur aus Trainingsdaten, ROM-Gegenprobe
+  (Training bricht bei Abweichung ab) und Speichern/Laden mit SHA-256,
+  Formatversion und Formelkennung. Tests: `tests/test_dotmatrix_templates.py`.
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
