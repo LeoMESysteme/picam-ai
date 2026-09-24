@@ -53,6 +53,17 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   Zeichen werden gezählt und übersprungen. Echter Datensatz: 301 Proben,
   alle mit Profil (`ernte1` 152, `auf2` 76, `auf3` 73). Tests:
   `tests/test_dotmatrix_dataset.py`, `tests/test_import_harvest.py`.
+* neu `scripts/dotmatrix-train.py`, `scripts/dotmatrix-eval.py` (Task 7):
+  Training aus gewählten Aufstellungen (Exit 3 und keine Datei bei
+  ROM-Abweichung, mit gelerntem und ROM-Muster in der Ausgabe) und
+  Entwicklungsmessung `loo` (je Aufstellung zurückgehalten, Schwellen nur
+  aus den übrigen; Ergebnis je Probe `richtig`/`falsch`/`abgelehnt:<grund>`,
+  Verwechslungsmatrix, Plateaus, Herkunft, Formel, Commit) sowie
+  `reader-check` (kompletter Leser gegen die Messung auf echten Bildern).
+  `dotmatrix-dataset.py` liefert dafür `load_resolved_records`,
+  `dotmatrix_templates.binarized_pattern` die Musterausgabe. Tests:
+  `tests/test_dotmatrix_train_eval.py` (u. a. Leckagetest: Proben der
+  zurückgehaltenen Gruppe ändern deren Schwellen nicht).
 <!-- dotmatrix-bullets -->
 
 **Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).

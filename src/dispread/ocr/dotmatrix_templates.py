@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dispread.ocr.dotmatrix_font import CLASSES, N_DOTS, rom_vector
+from dispread.ocr.dotmatrix_font import CLASSES, COLS, N_DOTS, ROWS, rom_vector
 
 FORMAT_VERSION = 1
 THRESHOLD_FORMULA = "thresholds_v1"
@@ -97,6 +97,16 @@ def fit_templates(samples: dict[str, list[np.ndarray]], groups: tuple[str, ...])
 
 def rom_check(mean: dict[str, np.ndarray]) -> list[str]:
     return [ch for ch in CLASSES if not np.array_equal(mean[ch] >= 0.5, rom_vector(ch) >= 0.5)]
+
+
+def binarized_pattern(vec: np.ndarray) -> list[str]:
+    """`vec` (40 Punktwerte) bei 0,5 binarisiert, zeilenweise als Bitmuster -
+    fuer den Bericht bei einer gescheiterten ROM-Gegenprobe (Task 7,
+    Trainings-/Entwicklungsmessung): zeigt gelerntes und ROM-Muster
+    nebeneinander, ohne dass Training oder Schwellen daraufhin angepasst
+    werden (das waere Nachbesserung an geheimen Daten, nicht erlaubt)."""
+    bits = (vec >= 0.5).astype(int)
+    return ["".join(str(b) for b in bits[r * COLS : (r + 1) * COLS]) for r in range(ROWS)]
 
 
 def compute_thresholds(samples, mean, std) -> tuple[float, float]:

@@ -92,6 +92,24 @@ class CellSample:
     vectors: np.ndarray  # Form (CELL_COUNT, 9, 40), siehe dotmatrix_sampling.normalized
 
 
+@dataclass
+class ResolvedRecord:
+    """Eine Probe mit dem entzerrten Graubild statt fertig abgetasteter
+    Vektoren - fuer Task 7 (`dotmatrix-eval.py reader-check`), das den
+    kompletten `DotMatrixReader.read()` (inklusive Kontrast-/
+    Saettigungspruefung, die auf `CellSample.vectors` nicht mehr moeglich
+    ist) gegen dieselbe Probe laufen lassen muss, die `evaluate()` sieht.
+    Teilt sich die Profilaufloesung mit `load_cell_samples` ueber
+    `_iter_resolved_records`, statt sie zu duplizieren."""
+
+    sample_id: str
+    group: str
+    plateau: tuple[int, int]
+    cell_text: str
+    crop_gray: np.ndarray
+    grid: CharGrid
+
+
 def _profile_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -180,40 +198,36 @@ def _resolve_profile(
     return REASON_NO_PROFILE
 
 
-def load_cell_samples(
-    dataset_root: Path,
-    profile_map: dict[str, dict[str, str]],
-    *,
-    stats: dict[str, int] | None = None,
-) -> list[CellSample]:
-    """Ladet alle passenden Proben aus `dataset_root` (nur lesen).
-
-    Nur `label_origin == "serial_ascii"`, `label_state == "readable"` und
-    Geraet `DEVICE_NAME`. Gruppe = `label_origin_detail["session_id"]`.
-    `profile_map` ist `{session_id: {"path": ..., "sha256": ...}}` (siehe
-    `read_profile_map`/`write-map`). Proben ohne auflösbares Profil, mit
-    einer seit `write-map` veraenderten Profildatei (Pruefsummen-Mismatch,
-    siehe `_resolve_profile`) oder mit einem `cell_text` ausserhalb der
-    bekannten Zeichenklassen (`CLASSES`) werden gezaehlt (in `stats`, falls
-    uebergeben) und uebersprungen, nie geraten.
-    """
-    dataset_root = Path(dataset_root)
+def _init_stats(stats: dict[str, int] | None) -> dict[str, int]:
     if stats is None:
         stats = {}
     stats.setdefault(REASON_NO_PROFILE, 0)
     stats.setdefault(REASON_HASH_MISMATCH, 0)
     stats.setdefault("ungueltige_zeichen", 0)
     stats.setdefault("geladen", 0)
+    return stats
 
+
+def _iter_resolved_records(
+    dataset_root: Path,
+    profile_map: dict[str, dict[str, str]],
+    *,
+    stats: dict[str, int],
+):
+    """Gemeinsamer Kern von `load_cell_samples` und `load_resolved_records`:
+    findet passende Proben, loest ihr Profil auf (`_resolve_profile`) und
+    entzerrt das Bild - EINMAL, damit beide Aufrufer mit derselben
+    Zuordnung und demselben entzerrten Bild arbeiten. Liefert
+    `ResolvedRecord`s (entzerrtes Graubild, noch nicht abgetastet)."""
+    dataset_root = Path(dataset_root)
     device_id = _find_device_id(dataset_root, DEVICE_NAME)
     if device_id is None:
-        return []
+        return
 
     samples_dir = dataset_root / "samples"
     if not samples_dir.is_dir():
-        return []
+        return
 
-    out: list[CellSample] = []
     for sample_dir in sorted(samples_dir.iterdir()):
         sample_path = sample_dir / "sample.json"
         if not sample_path.is_file():
@@ -246,19 +260,72 @@ def load_cell_samples(
 
         crop = rectify(image, tuple(tuple(p) for p in quad), target_size=target_size)
         gray = crop.image if crop.image.ndim == 2 else cv2.cvtColor(crop.image, cv2.COLOR_BGR2GRAY)
-        vectors = normalized(sample_image(gray, grid, range(CELL_COUNT)))
 
         plateau = (int(detail.get("plateau_start_ns", 0)), int(detail.get("plateau_end_ns", 0)))
+        stats["geladen"] += 1
+        yield ResolvedRecord(
+            sample_id=sample.get("id", sample_dir.name),
+            group=session_id or "",
+            plateau=plateau,
+            cell_text=cell_text,
+            crop_gray=gray,
+            grid=grid,
+        )
+
+
+def load_cell_samples(
+    dataset_root: Path,
+    profile_map: dict[str, dict[str, str]],
+    *,
+    stats: dict[str, int] | None = None,
+) -> list[CellSample]:
+    """Ladet alle passenden Proben aus `dataset_root` (nur lesen).
+
+    Nur `label_origin == "serial_ascii"`, `label_state == "readable"` und
+    Geraet `DEVICE_NAME`. Gruppe = `label_origin_detail["session_id"]`.
+    `profile_map` ist `{session_id: {"path": ..., "sha256": ...}}` (siehe
+    `read_profile_map`/`write-map`). Proben ohne auflösbares Profil, mit
+    einer seit `write-map` veraenderten Profildatei (Pruefsummen-Mismatch,
+    siehe `_resolve_profile`) oder mit einem `cell_text` ausserhalb der
+    bekannten Zeichenklassen (`CLASSES`) werden gezaehlt (in `stats`, falls
+    uebergeben) und uebersprungen, nie geraten.
+    """
+    stats = _init_stats(stats)
+    out: list[CellSample] = []
+    for rec in _iter_resolved_records(dataset_root, profile_map, stats=stats):
+        vectors = normalized(sample_image(rec.crop_gray, rec.grid, range(CELL_COUNT)))
         out.append(
             CellSample(
-                sample_id=sample.get("id", sample_dir.name),
-                group=session_id or "",
-                plateau=plateau,
-                cell_text=cell_text,
+                sample_id=rec.sample_id,
+                group=rec.group,
+                plateau=rec.plateau,
+                cell_text=rec.cell_text,
                 vectors=vectors,
             )
         )
-        stats["geladen"] += 1
+    return out
+
+
+def load_resolved_records(
+    dataset_root: Path,
+    profile_map: dict[str, dict[str, str]],
+    *,
+    stats: dict[str, int] | None = None,
+    limit: int | None = None,
+) -> list[ResolvedRecord]:
+    """Wie `load_cell_samples`, aber mit dem entzerrten Graubild statt
+    fertiger Vektoren (Task 7, `dotmatrix-eval.py reader-check`) - teilt
+    sich die Profilaufloesung ueber `_iter_resolved_records`, damit reader-
+    check und die Zellenmessung (`evaluate`) garantiert dieselbe Zuordnung
+    und dasselbe entzerrte Bild sehen. `limit` bricht nach den ersten `N`
+    geladenen Proben ab (nicht nach den ersten `N` Dateien - uebersprungene
+    Proben zaehlen nicht mit)."""
+    stats = _init_stats(stats)
+    out: list[ResolvedRecord] = []
+    for rec in _iter_resolved_records(dataset_root, profile_map, stats=stats):
+        out.append(rec)
+        if limit is not None and len(out) >= limit:
+            break
     return out
 
 
