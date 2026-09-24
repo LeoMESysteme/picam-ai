@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Runner-Identität beim Installieren schützen)
+
+**Problem:** Der Aufruf des bisherigen `picam-docs`-Installers mit der UUID
+eines neuen Runners überschrieb seine Konfiguration, ohne den dazugehörigen
+Token auszutauschen. Forgejo lehnte den bestehenden Runner danach als
+`unregistered runner` ab; das Installationsskript meldete trotzdem Erfolg.
+
+**Änderung:** Beide Runner-Installer stoppen vor Änderungen, wenn eine andere
+UUID ohne neue Token-Datei angegeben wird. Sie prüfen nach einem Neustart den
+Dienststatus. Die Anleitung zeigt die getrennten Skripte und den sicheren Weg
+zur lokalen Codex-Token-Datei.
+
+**Konsequenz:** Ein falscher UUID-Aufruf lässt den laufenden Runner in Ruhe;
+ein fehlschlagender Dienststart führt zu einem Fehlerstatus des Installers.
+Der bestehende `picam-docs`-Runner wurde mit seiner ursprünglichen UUID
+wiederhergestellt und meldet sich bei Forgejo erfolgreich.
+
 ## 0.1.0.dev0 — 2026-09-24 (Zensical-Doku-Pflege mit Codex)
 
 **Problem:** Der bisherige Claude-Cronjob lief nur nach dem Pi-Boot, pflegte
