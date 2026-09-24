@@ -65,8 +65,14 @@ def test_bot_token_is_not_available_to_codex_process():
 
 def test_publish_token_is_limited_to_expected_forgejo_remote():
     maintenance.validate_publish_remote("https://ds1515.me-systeme.de/l.hentschke/picam-ai.git")
+    maintenance.validate_publish_remote("https://ds1515.me-systeme.de/l.hentschke/picam-ai")
     with pytest.raises(ValueError, match="origin"):
         maintenance.validate_publish_remote("https://elsewhere.invalid/l.hentschke/picam-ai.git")
+    with pytest.raises(ValueError, match="origin"):
+        maintenance.validate_publish_remote("https://ds1515.me-systeme.de/l.hentschke/other-repo")
+    with pytest.raises(ValueError, match="origin") as exc:
+        maintenance.validate_publish_remote("https://user:token@ds1515.me-systeme.de/l.hentschke/picam-ai")
+    assert "token" not in str(exc.value)
 
 
 def test_preview_gate_rejects_missing_target_anchor(tmp_path: Path):

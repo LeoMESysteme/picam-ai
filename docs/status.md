@@ -33,7 +33,11 @@ ist auf `master`; der [Doku-Deploy 36](https://ds1515.me-systeme.de/l.hentschke/
 einschließlich Cloudflare-Schutzprüfung war erfolgreich. Ein erster
 automatischer Publish-Versuch ([Run 38](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/38))
 wurde wegen eines falschen Abschnittsankers vom strengen Build gestoppt;
-der Wartungsauftrag prüft solche Anker nun vor der Gate-Abnahme selbst.
+der Wartungsauftrag prüft solche Anker nun vor der Gate-Abnahme selbst. Im
+[zweiten Publish-Versuch](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/41)
+bestanden Audit und Prüf-Gate; erst die zu enge `origin`-Prüfung stoppte den
+Push. Sie akzeptiert nun beide üblichen Checkout-URLs für genau dieses Repo.
+Ein späterer Publish-Fehler bewahrt den geprüften Patch als Artefakt auf.
 
 ## Verifikation
 

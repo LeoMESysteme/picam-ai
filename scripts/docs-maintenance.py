@@ -79,8 +79,19 @@ def codex_environment(source: dict[str, str]) -> dict[str, str]:
 
 
 def validate_publish_remote(remote: str) -> None:
-    if remote != EXPECTED_REMOTE:
-        raise ValueError("origin is not the expected Forgejo repository")
+    expected = urlsplit(EXPECTED_REMOTE)
+    actual = urlsplit(remote)
+    if (
+        actual.scheme != expected.scheme
+        or actual.netloc != expected.netloc
+        or actual.path not in {expected.path, expected.path.removesuffix(".git")}
+        or actual.query
+        or actual.fragment
+    ):
+        raise ValueError(
+            "origin is not the expected Forgejo repository "
+            f"(scheme={actual.scheme}, host={actual.hostname}, path={actual.path})"
+        )
 
 
 def ensure_master_unchanged(repo: Path, base: str) -> None:

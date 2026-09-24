@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Forgejo-Checkout beim Publish akzeptieren)
+
+**Problem:** Nach bestandenem Doku-Audit stoppte der Publish-Schritt, weil
+die `origin`-Pruefung nur die URL mit `.git`-Endung akzeptierte. `master`
+blieb unveraendert; der lokal gepruefte Commit wurde nicht als Artefakt
+gesichert.
+
+**Änderung:** Der Gate akzeptiert fuer exakt denselben HTTPS-Host und
+Repo-Pfad die ueblichen URLs mit und ohne `.git`. Andere Hosts, Pfade,
+eingebettete Anmeldedaten und URL-Parameter bleiben verboten. Bei einem
+spaeteren Publish-Fehler wird der gepruefte Commit als Patch-Artefakt
+gesichert.
+
+**Konsequenz:** Der Checkout kann den geprueften Commit mit dem Repo-Token
+pushen; ein anderer Remote bleibt gesperrt. Ein spaeterer Fehler verliert
+den bereits geprueften Doku-Patch nicht mehr.
+
 ## 0.1.0.dev0 — 2026-09-24 (Abschnittsanker vor Doku-Publish prüfen)
 
 **Problem:** Der erste manuelle Publish-Lauf verlinkte `ReplaySource` mit
