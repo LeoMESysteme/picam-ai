@@ -1447,3 +1447,40 @@ schräg von links und näher (3 Starts), danach Neustart vorsorglich vor dem
 Werte mit führender 6 enthält (Seed 20261160, 7 von 30) — nur Stimulus-
 auswahl, keine Auswertungsentscheidung. Zahlen: VALIDATION.md, „Ernte 2
 und Aufstellung 2".
+
+## 2026-09-24 — Erster Dot-Matrix-Trainingslauf und Übergabe
+
+**Aufbau:** Offline-Auswertung der 301 bereits importierten GSV-2AS-Bilder
+(152 `ernte1`, 76 `auf2`, 73 `auf3`). Es gab in dieser Korrektursitzung
+keinen zusätzlichen Hardwareeingriff. Profilzuordnung:
+`var/diagnostics/dotmatrix-profile-map.json`; geplanter Bericht:
+`var/diagnostics/dotmatrix-stufe1/report.json`. Zeitangaben werden aus
+dieser Offline-Auswertung nicht abgeleitet.
+
+**Ablauf:** `dotmatrix-eval.py loo` stoppte im ersten Fold durch die
+vorab festgelegte ROM-Gegenprobe (Exit 3, acht abweichende Zeichen,
+kein Bericht). Ein separater Vergleich zeigte: `ernte1` passt zum ROM;
+`auf3` weicht systematisch ab. Am Bild gemessen lag die Kamera beim
+`auf3`-Erntelauf gegenüber dem Profil um ungefähr `dx=0,3`, `dy=4,6`
+Quellpixel versetzt. Das ist größer als die ±1-Pixel-Suche im
+entzerrten Bild. Die Kamera war beim Fokussieren bewegt worden; das
+zunächst bestätigte Raster darf für diese Bilder nicht mehr gelten.
+Ohne `auf3` scheitert der Fold mit nur `auf2` als Trainingsgruppe noch
+bei vier Zeichen um je einen Punkt. `auf2` war bewusst weich geerntet;
+ob allein die Unschärfe diese Abweichungen erklärt, bleibt offen
+([OQ-42](open-questions.md#oq-42)).
+
+**Deutung:** Die Gegenprobe hat eine Auswertung mit unpassendem Raster
+verhindert. Weder ROM-Tabelle noch Schwellen wurden angepasst. Für echte
+Daten gibt es noch keine Fehler- oder Ablehnungsrate; die synthetische
+Störprobe aus der Abschlussprüfung ist nur eine Entwicklungsdiagnose
+(Zahlen in [VALIDATION.md](VALIDATION.md)). Vor einer Wiederholung muss
+`auf3` ein belegtes Raster erhalten; über eine mögliche ROM-Toleranz bei
+weichen Bildern ist anhand der Glasbilder zu entscheiden.
+
+**Artefakte:** Task-7-Bericht und `final-fix-brief.md` unter
+`.superpowers/sdd/2026-09-24-dotmatrix-reader/` (lokal ignoriert),
+Chat-Exporte `codex_main.txt`/`codex_subagent.txt` im Haupt-Checkout.
+Der letzte Claude-Subagent endete wegen API-Limit während einer
+uncommitteten Korrekturrunde. Diese Änderungen sind keine abgeschlossene
+Messung und kein freigegebener Codezustand.

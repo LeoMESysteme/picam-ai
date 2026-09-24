@@ -59,6 +59,7 @@ dann ab dieser Zeile lesen.
 | OQ-39 | offen | Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt |
 | OQ-40 | offen | Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen |
 | OQ-41 | teilweise geklärt 2026-09-23 | Telegramm und Anzeige unterscheiden sich in der führenden Null |
+| OQ-42 | offen | Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar? |
 
 <!-- OQ-INDEX:END -->
 
@@ -1855,3 +1856,29 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Verwandt:** [OQ-37](open-questions.md), [OQ-38](open-questions.md).
 * **Antwort landet in:** Plan `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`
   (Vorab-Festlegungen) und `scripts/gate-label.py`.
+
+## OQ-42 — Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar?
+
+* **Status:** offen · erkannt 2026-09-24 beim ersten echten
+  Dot-Matrix-Trainingslauf · **Zuständig:** Labor / Entwicklung
+* **Frage:** Wie trennt man Rasterversatz, Unschärfe und einen wirklichen
+  Zeichenunterschied, bevor die strenge ROM-Gegenprobe gegebenenfalls
+  verändert wird?
+* **Befund:** Training auf `auf3` + `ernte1` scheitert für acht Zeichen.
+  `auf3` verschob sich zwischen Profilbestätigung und Ernte um etwa
+  `dx=0,3`, `dy=4,6` Quellpixel; das Profil ist für die Erntebilder
+  unbrauchbar. `ernte1` stimmt allein mit dem ROM überein. Nach Ausschluss
+  von `auf3` scheitert der Fold mit Training nur auf `auf2` bei vier Zeichen
+  um je einen Punkt; `auf2` ist sichtbar weich. Zahlen und Grenzen:
+  [VALIDATION.md](VALIDATION.md), Eintrag „Dot-Matrix-Entwicklungsmessung".
+* **Vorabdefault:** Strenge ROM-Regel beibehalten; bei Abweichung Exit 3
+  ohne Vorlagendatei oder Auswertungsbericht. Kein Nachstellen der
+  ROM-Tabelle oder Schwellen anhand der Auswertung.
+* **Klärung:** `auf3` mit neu bestätigtem Raster erneut erfassen oder
+  nachvollziehbar relabeln, `auf2` anhand der Glasbilder und Punktmuster
+  prüfen. Jede Änderung der ROM-Toleranz zuerst als versionierte
+  Spezifikationsentscheidung samt Gegenprobe gegen falsch gelabelte
+  Zeichen festhalten; danach Stufe 1 neu laufen lassen.
+* **Antwort landet in:**
+  [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
+  [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

@@ -1553,3 +1553,33 @@ dann importiert. Die drei importierten `+988.5`-Proben tragen
 in 3 Aufstellungen (`ernte1` 152, `auf2` 76, `auf3` 73). **Ziffernabdeckung
 vollständig:** Zelle 2 hat 1–9 (eine 0 ist dort durch die Unterdrückung
 ausgeschlossen), Zellen 3–7 alle zehn Ziffern. Vorzeichen weiter nur `+`.
+
+## 2026-09-24 — Dot-Matrix-Entwicklungsmessung, vor dem ROM-Gate gestoppt
+
+**Datenbasis:** 301 seriell gelabelte Proben aus drei Aufstellungen:
+`ernte1` 152, `auf2` 76, `auf3` 73. Herkunft 100 % `serial_ascii`;
+Vorzeichen nur `+` und daher nicht geprüft. Die Zahlen stammen aus dem
+Claude-Sitzungsprotokoll und dem lokalen Task-7-Bericht
+`.superpowers/sdd/2026-09-24-dotmatrix-reader/task-7-report.md`.
+Es liegt kein vollständiger Stufe-1-Bericht vor.
+
+| Gegenprobe | Ergebnis |
+| --- | --- |
+| `dotmatrix-eval.py loo`, alle drei Gruppen | Exit 3 im ersten Fold (Testgruppe `auf2`, Training `auf3` + `ernte1`); 8 Zeichen weichen vom HD44780-ROM A00 ab; kein `report.json` |
+| Diagnose `ernte1` | gelernte Muster stimmen mit ROM überein |
+| Diagnose `auf3` | Kamera zwischen Profilbestätigung und Ernte um ungefähr `dx=0,3`, `dy=4,6` Quellpixel verschoben; Profilraster für diese Bilder nicht mehr gültig |
+| `loo` ohne `auf3` | Fold mit Training nur auf `auf2` scheitert: 4 Zeichen mit je 1 abweichendem Punkt; `auf2` war die weichere Aufstellung |
+
+**Keine Abnahmerate ableitbar:** Das ROM-Gate stoppte vor der Auswertung.
+Es gibt deshalb weder eine belegte Quote falsch freigegebener Werte noch
+eine Ablehnungsquote oder eine Clopper-Pearson-Grenze für echte Plateaus.
+Die ROM-Regel und die Vorlagen wurden nicht nachträglich angepasst.
+Die Ursache der Ein-Punkt-Abweichungen bei `auf2` und das weitere Vorgehen
+stehen in [OQ-42](open-questions.md#oq-42).
+
+**Zusätzlicher, nicht als Realdaten-Abnahme verwendeter Test aus der
+Abschlussprüfung:** 1500 synthetische gültige Werte mit Rasterversatz
+±1,5 px, Unschärfe 0–2, Rauschen bis σ=12 und multiplikativem
+Helligkeitsverlauf bis 0,6: 419 richtig, 1081 abgelehnt, 0 falsch
+freigegeben. Das war ein Ad-hoc-Sweep ohne versioniertes Testartefakt;
+er ersetzt weder Stufe 1 noch Stufe 2.
