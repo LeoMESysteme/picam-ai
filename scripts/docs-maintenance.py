@@ -195,6 +195,27 @@ def token_usage(log_file: Path) -> tuple[int, int, int]:
     return usage
 
 
+def ensure_codex_inspected_repo(log_file: Path) -> None:
+    inspected = False
+    with log_file.open(encoding="utf-8") as log:
+        for line in log:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") != "item.completed":
+                continue
+            item = event.get("item", {})
+            if item.get("type") != "command_execution":
+                continue
+            if "bwrap:" in item.get("aggregated_output", ""):
+                raise ValueError("Codex sandbox failed; repository could not be inspected")
+            if item.get("exit_code") == 0:
+                inspected = True
+    if not inspected:
+        raise ValueError("Codex did not successfully inspect the repository")
+
+
 def guide_batch(pages: list[str], cursor: int, week: str) -> tuple[list[str], int]:
     if not pages:
         raise ValueError("guide pages are missing")
@@ -286,6 +307,7 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
         raise ValueError(f"Codex failed with exit code {result.returncode}; private log: {log_file}")
     input_tokens, cached_tokens, output_tokens = token_usage(log_file)
     print(f"Codex-Nutzung: {input_tokens} Eingabe, {cached_tokens} davon Cache, {output_tokens} Ausgabe")
+    ensure_codex_inspected_repo(log_file)
     if git(repo, "rev-parse", "HEAD") != base:
         raise ValueError("Codex created a commit; only the gate may commit")
     paths = changed_paths(repo)

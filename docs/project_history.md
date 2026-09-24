@@ -9,6 +9,37 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — Anmeldedatei fuer den getrennten Codex-Runner
+
+## Problem
+
+Die Codex-CLI auf dem Pi brauchte eine dauerhafte Anmeldung. Der vorgesehene
+Device-Code-Login war fuer das vorhandene ChatGPT-Konto nicht freigegeben.
+
+## Entscheidung
+
+Die bestehende lokale `auth.json` wurde als separate Datei mit Besitzer
+`picam-codex-runner` und Modus `0600` in dessen geschuetztes `CODEX_HOME`
+kopiert. Der Runner nutzt damit dasselbe ChatGPT-Konto, haelt seine
+Anmeldedatei aber unter einer anderen Unix-Identitaet. Bei Anmeldefehlern
+wird die Kopie erneut geprueft beziehungsweise erneuert.
+
+## Begründung und Alternativen
+
+OpenAI dokumentiert die Dateikopie als Ausweichweg fuer Headless-Geraete.
+Eine API-Key-Anmeldung haette eine getrennte Platform-Abrechnung und einen
+neuen Schluessel erfordert; Device-Code-Login war nicht verfuegbar. Ein
+gemeinsam beschreibbares `auth.json` wurde wegen der Benutzertrennung
+verworfen.
+
+## Konsequenz
+
+Die Anmeldung funktioniert unter dem Dienstbenutzer; eine kleine Anfrage
+an `gpt-6-luna` war erfolgreich. Die Datei enthaelt Zugangstoken und darf
+weder ins Repo noch in Action-Artefakte oder Logs gelangen.
+
+---
+
 # 2026-09-24 — Unbeaufsichtigte Zensical-Pflege auf getrenntem Pi-Runner
 
 ## Problem
