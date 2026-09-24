@@ -17,8 +17,9 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   Tests: `tests/test_dotmatrix_font.py`.
 * `src/dispread/ocr/dotmatrix_sampling.py` (Task 2): Punktmitten je Zelle
   aus dem bestätigten `CharGrid`, gewichtete Abtastung (Gaussfilter +
-  bilinear, am Bildrand geklemmt), Normierung je Bild (Hintergrund je Zelle,
-  Punktpegel global) und Verschiebungssuche ±1 px (`SHIFTS`, 9 Lagen);
+  bilinear, am Bildrand geklemmt), Normierung je Bild mit multiplikativem
+  Beleuchtungsmodell (Hintergrund je Zelle, Punktpegel mit dem Hintergrund
+  skaliert, damit ein Helligkeitsverlauf über das Glas ausgeglichen wird) und Verschiebungssuche ±1 px (`SHIFTS`, 9 Lagen);
   `MIN_CONTRAST = 0.08` als unvalidierter Vorabwert. Tests:
   `tests/test_dotmatrix_sampling.py`, Helfer `tests/dotmatrix_helpers.py`.
 <!-- dotmatrix-bullets -->

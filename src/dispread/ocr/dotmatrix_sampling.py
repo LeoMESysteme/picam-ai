@@ -3,9 +3,13 @@
 Jede Zelle des bestaetigten `CharGrid` hat 5 x 8 Punktmitten. Abgetastet wird
 ein gewichteter Mittelwert um jede Mitte (Gaussfilter, dann bilinear), nicht
 ein einzelnes Pixel. Normiert wird je Bild: Hintergrund je Zelle (hellste
-Punkte der Zelle), Punktpegel global - so gleicht sich ein Helligkeitsverlauf
-ueber das Glas aus (in allen drei Ernte-Aufstellungen war das rechte Drittel
-dunkler, VALIDATION.md 2026-09-24).
+Punkte der Zelle), Punktpegel global gemessen, aber je Zelle multiplikativ
+mit dem Hintergrund dieser Zelle skaliert (`ink_zelle = ink_global *
+background_zelle / median(background)`) - so gleicht sich ein
+Helligkeitsverlauf ueber das Glas aus, der wie eine ungleichmaessige
+Hintergrundbeleuchtung multiplikativ wirkt, nicht additiv (in allen drei
+Ernte-Aufstellungen war das rechte Drittel dunkler, VALIDATION.md
+2026-09-24).
 """
 
 from __future__ import annotations
@@ -83,8 +87,20 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range) -> SampledImage
 
 
 def normalized(s: SampledImage) -> np.ndarray:
-    """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an)."""
-    depth = s.background[:, None, None] - s.ink
+    """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an).
+
+    Die Beleuchtung ueber das Glas wirkt multiplikativ (eine dunklere Stelle
+    daempft Hintergrund und Tinte im gleichen Verhaeltnis), deshalb wird der
+    global gemessene Tintenpegel `s.ink` je Zelle mit dem Verhaeltnis ihres
+    Hintergrunds zum Median-Hintergrund skaliert, statt ihn unveraendert
+    (additiv) abzuziehen.
+    """
+    median_bg = float(np.median(s.background))
+    if median_bg > 0:
+        ink_cell = s.ink * s.background / median_bg
+    else:
+        ink_cell = np.full_like(s.background, s.ink)
+    depth = s.background - ink_cell
     depth = np.where(depth > 1e-3, depth, 1e-3)
-    out = (s.background[:, None, None] - s.raw) / depth
+    out = (s.background[:, None, None] - s.raw) / depth[:, None, None]
     return np.clip(out, 0.0, 1.0).astype(np.float32)

@@ -49,3 +49,16 @@ def test_shift_at_image_border_does_not_raise():
     img = render("+0.60972 ", grid=grid)
     s = sample_image(img, grid, range(9))
     assert s.raw.shape == (9, 9, 40)
+
+
+def test_normalized_survives_multiplicative_illumination_gradient():
+    text = "+0.60972 "
+    img = render(text)
+    w = img.shape[1]
+    gain = np.linspace(1.0, 0.4, w, dtype=np.float32)
+    gradient_img = np.clip(img.astype(np.float32) * gain[None, :], 0, 255).astype(np.uint8)
+    s = sample_image(gradient_img, GRID, range(9))
+    n = normalized(s)
+    zero = SHIFTS.index((0, 0))
+    for i, ch in enumerate(text):
+        assert np.abs(n[i, zero] - rom_vector(ch)).max() < 0.35
