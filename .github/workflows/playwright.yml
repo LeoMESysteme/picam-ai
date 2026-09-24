@@ -19,6 +19,14 @@ jobs:
       run: npx playwright install --with-deps
     - name: Run Playwright tests
       run: npx playwright test
+    - name: Doku-Werkzeuge installieren
+      run: |
+        python3 -m venv .venv-docs
+        .venv-docs/bin/pip install -r requirements-docs.txt
+    - name: Interaktive Doku prüfen
+      run: |
+        ./scripts/docs-site.sh build
+        npx playwright test -c playwright.docs.config.ts
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:

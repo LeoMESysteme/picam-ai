@@ -26,6 +26,9 @@ if [[ ! -x "$ZENSICAL" ]]; then
     exit 1
 fi
 
+# Der versionierte OQ-Index muss vor dem Build zur TODO-Reihenfolge passen.
+"$ROOT/.venv-docs/bin/python" "$ROOT/scripts/oq-index.py" --check
+
 rm -rf "$SITE_SRC/docs"
 cp -rs "$ROOT/docs" "$SITE_SRC/docs"
 for f in "${ROOT_DOCS[@]}"; do

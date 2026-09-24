@@ -9,6 +9,46 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-24 — OQ-Fokus aus TODO und nur noch Cloudflare-Doku
+
+## Problem
+
+Die OQ-Liste zeigte Nummern und Freitext, aber keine aktuelle Reihenfolge.
+Eine zusätzliche Prioritätsliste hätte neben `TODO.md` gepflegt werden müssen.
+Das Offline-ZIP erforderte außerdem eine zweite Navigationskonfiguration für
+interaktive Seiten.
+
+## Entscheidung
+
+Der OQ-Index liest die aktive Aufgabenreihenfolge aus `TODO.md`, überspringt
+erledigte Aufgaben und beantwortete OQ und bleibt als statische Tabelle
+lesbar. Roadmap und OQ werden auf ihren bestehenden Seiten erweitert. Die
+Doku wird nur noch auf Cloudflare Pages veröffentlicht; das Offline-ZIP
+entfällt.
+
+## Begründung
+
+`TODO.md` ist bereits der priorisierte Wiedereinstieg. Ein Generator hält
+die Übersicht daraus und aus `open-questions.md` synchron. Die bestehenden
+Quelltabellen bewahren die Inhalte auch ohne JavaScript. Ein einziger
+gehosteter Build kann Zensicals Sofortnavigation mit `site_url` verwenden.
+
+## Alternativen
+
+Eine manuell markierte OQ-Priorität wäre stabiler gegen Änderungen am
+TODO-Format, würde aber eine zweite Reihenfolge schaffen. Nur nach Status
+zu sortieren sagt nichts über die nächsten Aufgaben. Ein zusätzlicher
+Offline-Build mit abgeschalteter Sofortnavigation wurde verworfen.
+
+## Konsequenz
+
+Wird das TODO-Format so verändert, dass die Aufgabenüberschrift nicht mehr
+erkannt wird, stoppt der Doku-Build mit einer Meldung. Nach einem TODO- oder
+OQ-Statuswechsel muss `scripts/oq-index.py` laufen. Die Cloudflare-Seite
+bleibt durch die bestehende Forgejo-Anmeldung und Schutzprüfung abgesichert.
+
+---
+
 # 2026-09-07 — Kamera wurde nicht erkannt: Reboot statt Fehlersuche
 
 ## Problem

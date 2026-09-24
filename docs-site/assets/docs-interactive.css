@@ -1,0 +1,146 @@
+:root {
+  --docs-open-bg: #fff2d0;
+  --docs-open-fg: #654700;
+  --docs-progress-bg: #dfedff;
+  --docs-progress-fg: #164578;
+  --docs-partial-bg: #efe5ff;
+  --docs-partial-fg: #56338a;
+  --docs-resolved-bg: #ddf3df;
+  --docs-resolved-fg: #205629;
+  --docs-discarded-bg: #ececec;
+  --docs-discarded-fg: #4f4f4f;
+  --docs-blocked-bg: #ffe0df;
+  --docs-blocked-fg: #842c28;
+}
+
+[data-md-color-scheme="slate"] {
+  --docs-open-bg: #443816;
+  --docs-open-fg: #ffe4a0;
+  --docs-progress-bg: #183751;
+  --docs-progress-fg: #b9dcff;
+  --docs-partial-bg: #342547;
+  --docs-partial-fg: #e1ccff;
+  --docs-resolved-bg: #1c4028;
+  --docs-resolved-fg: #c2ebc8;
+  --docs-discarded-bg: #353535;
+  --docs-discarded-fg: #dedede;
+  --docs-blocked-bg: #502827;
+  --docs-blocked-fg: #ffd1ce;
+}
+
+.oq-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin: 1rem 0;
+}
+
+.oq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  width: 100%;
+}
+
+.oq-filter {
+  background: transparent;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .3rem;
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  font: inherit;
+  padding: .2rem .55rem;
+}
+
+.oq-filter[aria-pressed="true"] {
+  background: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-default-bg-color);
+}
+
+.oq-search {
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .3rem;
+  color: var(--md-default-fg-color);
+  font: inherit;
+  min-width: 12rem;
+  padding: .3rem .55rem;
+}
+
+.oq-count {
+  color: var(--md-default-fg-color--light);
+}
+
+.oq-badge,
+.roadmap-state {
+  border-radius: 1rem;
+  display: inline-block;
+  font-weight: 600;
+  padding: .1rem .5rem;
+  white-space: nowrap;
+}
+
+.oq-badge--open,
+.roadmap-state--open { background: var(--docs-open-bg); color: var(--docs-open-fg); }
+.oq-badge--progress { background: var(--docs-progress-bg); color: var(--docs-progress-fg); }
+.oq-badge--partial,
+.roadmap-state--partial { background: var(--docs-partial-bg); color: var(--docs-partial-fg); }
+.oq-badge--resolved,
+.roadmap-state--done { background: var(--docs-resolved-bg); color: var(--docs-resolved-fg); }
+.oq-badge--discarded { background: var(--docs-discarded-bg); color: var(--docs-discarded-fg); }
+.roadmap-state--blocked { background: var(--docs-blocked-bg); color: var(--docs-blocked-fg); }
+
+#oq-index [hidden],
+#roadmap-phases[hidden] { display: none !important; }
+
+.roadmap-list {
+  list-style: none;
+  margin: 1rem 0 !important;
+  padding: 0 !important;
+}
+
+.roadmap-item { margin: 0 0 .55rem; }
+
+.md-typeset details.roadmap-phase {
+  background: transparent;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .35rem;
+  box-shadow: none;
+  margin: 0;
+  padding: .15rem .7rem;
+}
+
+.md-typeset details.roadmap-phase > summary.roadmap-summary {
+  align-items: start;
+  background: transparent;
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  display: grid;
+  gap: .25rem .6rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  margin: 0;
+  padding: .45rem 0;
+}
+
+.md-typeset details.roadmap-phase > summary.roadmap-summary::before,
+.md-typeset details.roadmap-phase > summary.roadmap-summary::after { display: none; }
+
+.roadmap-number { grid-column: 1; grid-row: 1; }
+.roadmap-goal { grid-column: 2; grid-row: 1; }
+.roadmap-state { grid-column: 2; grid-row: 2; justify-self: start; }
+.roadmap-chevron { grid-column: 3; grid-row: 1; font-size: 1.5rem; line-height: 1; }
+.roadmap-phase[open] .roadmap-chevron { transform: rotate(90deg); }
+.roadmap-detail { padding: .1rem 0 .4rem 1.5rem; }
+.roadmap-detail p { margin: .35rem 0; }
+.roadmap-note { color: var(--md-default-fg-color--light); }
+
+@media (max-width: 600px) {
+  .oq-search { flex: 1 1 100%; min-width: 0; }
+  #oq-index thead { display: none; }
+  #oq-index tbody tr { display: block; border-bottom: 1px solid var(--md-default-fg-color--lighter); padding: .35rem 0; }
+  #oq-index tbody td { display: inline; border: 0; padding: 0 .4rem 0 0; }
+  #oq-index tbody td:last-child { display: block; padding: .2rem 0 0; }
+  .roadmap-detail { padding-left: 0; }
+}

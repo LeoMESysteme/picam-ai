@@ -1,8 +1,8 @@
 # Doku-Hosting: Cloudflare Pages mit Forgejo-Anmeldung
 
-Die Doku-Seite baut der Forgejo-Runner auf dem Pi (`.github/workflows/docs.yml`).
-Das Offline-ZIP `doku-seite` hängt immer am Lauf. Zusätzlich liegt die Seite
-unter **https://picam-docs.pages.dev**. Lesen darf sie nur, wer sich über
+Die Doku-Seite baut der Forgejo-Runner auf dem Pi (`.github/workflows/docs.yml`)
+und veröffentlicht sie unter **https://picam-docs.pages.dev**. Ein Offline-ZIP
+wird nicht mehr erzeugt. Lesen darf die Seite nur, wer sich über
 Forgejo anmeldet **und das Repo `l.hentschke/picam-ai` lesen darf**.
 
 Ein Push auf `master` baut und veröffentlicht die Seite automatisch. Ein
@@ -12,7 +12,6 @@ nie das produktive Deployment überschreiben; ebenso wenig ein Feature-Branch.
 ```mermaid
 flowchart LR
     P[Push] --> R[Runner auf dem Pi<br>baut site/]
-    R --> Z[ZIP am Lauf]
     R --> T[Tests des Schutzes] --> V[Deploy Prüfstand<br>verify] --> C1{ohne Login<br>überall 302?}
     C1 -- nein --> X[Deployment löschen,<br>Abbruch]
     C1 -- ja --> D[Deploy Produktion] --> C2{ohne Login<br>überall 302?}
@@ -67,8 +66,11 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 ## Wartung
 
 * **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
-  Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
+  OQ-Index-Check, Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
   aktualisiert.
+* **Lokale Vorschau:** `./scripts/docs-site.sh serve`; für einen Build
+  `./scripts/docs-site.sh build`. Beides prüft zuerst die OQ-Übersicht gegen
+  `TODO.md` und `docs/open-questions.md`.
 * **Deploy-Token erneuern** (jährlich): neuen Token mit nur *Pages Write*
   anlegen und das Forgejo-Secret `CLOUDFLARE_API_TOKEN` ersetzen.
 * **Alle Sitzungen beenden:** `SESSION_SECRET` im Pages-Projekt durch einen

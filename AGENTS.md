@@ -24,8 +24,8 @@ bearbeitet. Die Regel nicht übernehmen.
 | --- | --- | --- |
 | Änderung unter `src/`, `examples/`, `scripts/`, `systemd/`, `udev/` | `CHANGELOG.md`, oberster Abschnitt | **im selben Commit** |
 | Strukturelle Entscheidung mit verworfenen Alternativen | `docs/project_history.md` | im selben Commit |
-| Neue Unbekannte erkannt | neuer `OQ-nn` in `docs/open-questions.md` | sofort, auch ohne Code-Änderung |
-| Unbekannte geklärt | OQ-Eintrag auf `geklärt` + Datum + Antwort + Verweis. **Nicht löschen.** Zielort füllen | im selben Commit |
+| Neue Unbekannte erkannt | neuer `OQ-nn` in `docs/open-questions.md`, danach `scripts/oq-index.py` | sofort, auch ohne Code-Änderung |
+| Unbekannte geklärt | OQ-Eintrag auf `geklärt` + Datum + Antwort + Verweis. **Nicht löschen.** Zielort füllen, danach `scripts/oq-index.py` | im selben Commit |
 | Messung gelaufen | `docs/VALIDATION.md` (Zahlen) **und** `docs/lab_journal.md` (Aufbau, Deutung) | am selben Tag |
 | Hardware angefasst | `docs/lab_journal.md`; bei Konfigwirkung `docs/HARDWARE_PROFILE.md`; Diagnose-Schnappschuss ablegen | direkt danach |
 | Neue Abhängigkeit | `docs/dependencies.md` + `pyproject.toml`/`install.sh` | im selben Commit |

@@ -3,6 +3,25 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Interaktive Roadmap und OQ-Übersicht)
+
+**Problem:** Die Roadmap war nur als breite Tabelle lesbar; die OQ-Seite hatte
+keine priorisierte Übersicht. Erledigte, offene und teilweise beantwortete
+Fragen waren schwer zu unterscheiden.
+
+**Änderung:** `scripts/oq-index.py` erzeugt die OQ-Übersicht mit stabilen
+`#oq-nn`-Ankern (die bisherigen Überschriften-Links bleiben gültig) und zieht
+„Jetzt“ aus den noch aktiven Aufgaben in `TODO.md`.
+Zensical ergänzt Statusfilter, Suche und eine aufklappbare Phasenansicht;
+die Quelltabellen bleiben ohne JavaScript lesbar. Der Site-Build prüft den
+Index, bevor er baut. Die gehostete Seite behält ihre `.html`-URLs und
+Sofortnavigation; das Offline-ZIP und dessen Plugin entfallen. Browser- und
+Generatortests decken die Ansichten ab.
+
+**Konsequenz:** Leser sehen anstehende Fragen und Phasenstände direkt auf den
+bestehenden Seiten. Die Reihenfolge folgt dem versionierten Arbeitsstand;
+Cloudflare bleibt der einzige Veröffentlichungsweg.
+
 ## 0.1.0.dev0 — 2026-09-23 (Zensical-Integration nach master abgesichert)
 
 **Problem:** Der Doku-Workflow konnte den produktiven Cloudflare-Stand auch

@@ -1,14 +1,72 @@
 # Offene Punkte
 
+„Jetzt“ zeigt die noch offenen Fragen aus der [Arbeitsliste](../TODO.md) in
+deren Reihenfolge. Darunter stehen alle übrigen Fragen.
+
+<!-- OQ-INDEX:START — erzeugt von scripts/oq-index.py, nicht von Hand bearbeiten -->
+
+| OQ | Fokus | Status | Titel |
+| --- | --- | --- | --- |
+| [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
+| [OQ-01](#oq-01) | — | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
+| [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
+| [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
+| [OQ-04](#oq-04) | — | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
+| [OQ-05](#oq-05) | — | offen | Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen? |
+| [OQ-06](#oq-06) | — | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
+| [OQ-07](#oq-07) | — | offen | GSVmulti-Telegrammspezifikation beschaffen |
+| [OQ-09](#oq-09) | — | offen | RS-232-/RS-485-Transceiver und galvanische Trennung |
+| [OQ-10](#oq-10) | — | offen | Spezialisierte 7-Segment-Traineddata für Tesseract |
+| [OQ-11](#oq-11) | — | offen | Workstation für die IMX500-Modellkonvertierung |
+| [OQ-13](#oq-13) | — | offen | Anzeigepolarität und der Fall „alle Stellen zeigen 8&quot; |
+| [OQ-14](#oq-14) | — | offen | Freigabeschwellen an realen Geräten validieren |
+| [OQ-17](#oq-17) | — | offen | Sichtbarer Dezimalpunkt und Profilannahme unterscheiden |
+| [OQ-18](#oq-18) | — | offen | Welches neuronale OCR-Modell trägt auf realen Displays? |
+| [OQ-19](#oq-19) | — | offen | Freigabeevidenz für weitere OCR-Backends |
+| [OQ-20](#oq-20) | — | offen | Auto-Setup gegen Multiplexing echter Anzeigen absichern |
+| [OQ-21](#oq-21) | — | offen | HTTPS-Browserabnahme der Workbench |
+| [OQ-22](#oq-22) | — | offen | Sensor setzt nach Streamwechsel keinen Stream mehr auf |
+| [OQ-23](#oq-23) | — | offen | Festes Segmentraster passt nicht zur realen BK-5491B-VFD-Schrift |
+| [OQ-24](#oq-24) | — | in Arbeit | Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen |
+| [OQ-25](#oq-25) | — | offen | Vorschlagsqualität von `fit_quad_in_region`/`fit_ocr_box` an realen Geräten |
+| [OQ-26](#oq-26) | — | offen | Grenzen der Nachführung an realen Geräten validieren |
+| [OQ-27](#oq-27) | — | offen | Rasterfeinschliff je Bild bewusst nicht gebaut |
+| [OQ-28](#oq-28) | — | offen | Eindeutigkeit der Autofit-Geometrie |
+| [OQ-29](#oq-29) | — | offen | Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence` |
+| [OQ-30](#oq-30) | — | offen | `roi`-Op ist nicht atomar gegenüber einem fehlschlagenden `QuadTracker`-Aufbau |
+| [OQ-32](#oq-32) | — | offen | `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind` |
+| [OQ-33](#oq-33) | — | offen | Ähnlichkeitsschwellwert des Datensatz-Sammelmodus ist unvalidiert |
+| [OQ-34](#oq-34) | — | offen | Realer interaktiver Browserdurchlauf des Datensatz-Sammelmodus steht aus |
+| [OQ-35](#oq-35) | — | offen | Automatisierte Testwerterzeugung für den Datensatz-Sammelmodus (GPIO/BK-5491B) |
+| [OQ-36](#oq-36) | — | offen | Sättigungsbasierte LCD-Quad-Findung nur an einem Gerät gemessen |
+| [OQ-38](#oq-38) | — | weitgehend geklärt | Ground-Truth-Quelle für Auto-Labeling: Displaybus oder Geräteschnittstelle? |
+| [OQ-39](#oq-39) | — | offen | Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt |
+| [OQ-41](#oq-41) | — | teilweise geklärt | Telegramm und Anzeige unterscheiden sich in der führenden Null |
+| [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
+| [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
+| [OQ-15](#oq-15) | — | geklärt | `tesseract-ocr`, `socat` und `chrony` installieren |
+| [OQ-16](#oq-16) | — | geklärt | Vollständigkeit des lokalen Planungsstands |
+| [OQ-31](#oq-31) | — | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
+| [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
+
+<!-- OQ-INDEX:END -->
+
+## Zur Pflege
+
 Jede Unbekannte hat eine Nummer `OQ-nn`. **Einträge werden nie gelöscht**, nur
 auf `geklärt` oder `verworfen` gesetzt — mit Datum, Antwort und Verweis darauf,
 wo die Antwort gelandet ist. So bleibt nachvollziehbar, warum etwas so ist.
 
-Status: `offen` · `in Arbeit` · `geklärt` · `verworfen`
-
+Status: `offen` · `in Arbeit` · `teilweise/weitgehend geklärt` · `geklärt`/`beantwortet` · `verworfen`.
 OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 
+Die Übersicht wird mit `./.venv/bin/python scripts/oq-index.py` aus den Einträgen
+und den aktiven Aufgaben in [TODO.md](../TODO.md) erzeugt. Das Skript nach
+einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand.
+
 ---
+
+<span id="oq-01"></span>
 
 ## OQ-01 — Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version?
 
@@ -18,12 +76,16 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md)
 * Siehe OQ-07 — praktisch dieselbe Frage aus der Beschaffungsperspektive.
 
+<span id="oq-02"></span>
+
 ## OQ-02 — Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig?
 
 * **Status:** offen · **Zuständig:** Labor / QM
 * **Blockiert:** die **Abnahme**, nicht das Bauen. Das Messprogramm M1–M8
   läuft unabhängig davon; der Grenzwert wird am Ende gegen die Zahlen gelegt.
 * **Antwort landet in:** [TIMING.md](TIMING.md), Abschnitt Unsicherheitsbudget
+
+<span id="oq-03"></span>
 
 ## OQ-03 — Kann die Referenz einen Trigger oder Zeitstempel bereitstellen?
 
@@ -33,6 +95,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Günstigstes Experiment:** Handbuch der Kalibriermaschine prüfen, ob es
   einen Triggerausgang oder eine Netzwerk-Zeitquelle gibt. Etwa eine Stunde.
 * **Antwort landet in:** [TIMING.md](TIMING.md)
+
+<span id="oq-04"></span>
 
 ## OQ-04 — Welche Gerätetypen bilden den ersten freizugebenden Umfang?
 
@@ -63,6 +127,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Vorgabe**: LCD ist Pflicht, LED/VFD bleiben nur als zusätzliche
   Entwicklungsdaten wertvoll.
 
+<span id="oq-05"></span>
+
 ## OQ-05 — Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen?
 
 * **Status:** offen · **Zuständig:** Labor
@@ -83,6 +149,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   dieser OQ (ob eine einmalige Bestätigung je Geräteinstanz betrieblich
   vorgesehen ist) — dafür bräuchte es weiterhin die Antwort aus dem Labor.
 
+<span id="oq-06"></span>
+
 ## OQ-06 — Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt?
 
 * **Status:** offen · **Zuständig:** ME-Systeme intern + QM
@@ -93,6 +161,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md)
 
 ---
+
+<span id="oq-07"></span>
 
 ## OQ-07 — GSVmulti-Telegrammspezifikation beschaffen
 
@@ -127,6 +197,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md),
   Implementierung in `src/dispread/sink/protocol/gsv_ascii.py`
 
+<span id="oq-08"></span>
+
 ## OQ-08 — An welchem CAM-Anschluss hängt die Kamera?
 
 * **Status:** geklärt (2026-09-07)
@@ -134,6 +206,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `/axi/pcie@1000120000/rp1/i2c@88000/imx500@1a`, die CAM-I2C-Busse sind 6
   und 10. Erkannt über `camera_auto_detect=1`, ohne explizites Overlay.
 * **Gelandet in:** [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
+
+<span id="oq-09"></span>
 
 ## OQ-09 — RS-232-/RS-485-Transceiver und galvanische Trennung
 
@@ -148,6 +222,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   dahin gegen pty.
 * **Antwort landet in:** [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
 
+<span id="oq-10"></span>
+
 ## OQ-10 — Spezialisierte 7-Segment-Traineddata für Tesseract
 
 * **Status:** offen
@@ -156,6 +232,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Download müsste off-Pi erfolgen, mit Lizenzprüfung.
 * **Relevanz:** gering, solange der klassische Segment-Dekoder trägt. Tesseract
   ist die Vergleichsbasis, nicht der Primärpfad.
+
+<span id="oq-11"></span>
 
 ## OQ-11 — Workstation für die IMX500-Modellkonvertierung
 
@@ -168,6 +246,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   dem Pi bleibt nur Paketierung und Deployment.
 * **Relevanz:** erst für P8 (optional).
 
+<span id="oq-12"></span>
+
 ## OQ-12 — Was ohne angeschlossene Kamera nicht verifizierbar war
 
 * **Status:** geklärt (2026-09-07) — durch die Inbetriebnahme abgearbeitet.
@@ -175,6 +255,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   6,8 s, 15,0 Inferenzen/s, `SensorTimestamp` in CLOCK_BOOTTIME,
   `CnnInputTensor` **fehlt** in den Standardmetadaten, Stock-Modelle liefern
   COCO-Labels.
+
+<span id="oq-13"></span>
 
 ## OQ-13 — Anzeigepolarität und der Fall „alle Stellen zeigen 8"
 
@@ -208,6 +290,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   zeigt ausschließlich "8", keine inaktive Klasse vorhanden) ist davon
   unberührt und bleibt offen.
 
+<span id="oq-14"></span>
+
 ## OQ-14 — Freigabeschwellen an realen Geräten validieren
 
 * **Status:** offen
@@ -216,6 +300,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   bisher unbekannten Gerätetypen zu validieren.
 * **Blockiert:** die Abnahme. Aufgabe von P3/P7.
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md)
+
+<span id="oq-15"></span>
 
 ## OQ-15 — `tesseract-ocr`, `socat` und `chrony` installieren
 
@@ -234,6 +320,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   tesseract-Binary auf (siehe CHANGELOG 2026-09-21) — ein produktiver,
   erfolgreicher Read gegen echte GSV-Sensor-Fotos steht noch aus (0/11
   Proben liefern bisher einen Wert, siehe docs/status.md).
+
+<span id="oq-16"></span>
 
 ## OQ-16 — Vollständigkeit des lokalen Planungsstands
 
@@ -256,6 +344,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `CLAUDE.md`, wo `replay://` ausdrücklich als "nur Registry-Eintrag, TODO"
   geführt wird, war also keine Doku-Abweichung.
 * **Antwort landet in:** `docs/status.md` und den betroffenen Dokumenten.
+
+<span id="oq-17"></span>
 
 ## OQ-17 — Sichtbarer Dezimalpunkt und Profilannahme unterscheiden
 
@@ -284,6 +374,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   `decimals` hätte hier garantiert die Fehlerklasse `decimal` erzeugt, nicht
   von der Optik verursacht, sondern vom Prüfstand selbst fabriziert.
 
+<span id="oq-18"></span>
+
 ## OQ-18 — Welches neuronale OCR-Modell trägt auf realen Displays?
 
 * **Status:** offen · erkannt 2026-09-08 bei der Tool-Recherche
@@ -297,6 +389,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später
   `docs/dependencies.md` und `docs/VALIDATION.md`.
 
+<span id="oq-19"></span>
+
 ## OQ-19 — Freigabeevidenz für weitere OCR-Backends
 
 * **Status:** offen · erkannt 2026-09-08 bei der Tool-Recherche
@@ -307,6 +401,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Evidenzregeln definieren, ohne fehlende Diagnosen mit erfundenen Werten zu füllen.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später
   Freigabelogik und `docs/VALIDATION.md`.
+
+<span id="oq-20"></span>
 
 ## OQ-20 — Auto-Setup gegen Multiplexing echter Anzeigen absichern
 
@@ -321,6 +417,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Bestätigung, keine automatische Freigabe.
 * **Antwort landet in:** `docs/OPTICAL_SETUP.md`, Geräteprofile und
   `docs/VALIDATION.md`; Aufbau in `docs/lab_journal.md`.
+
+<span id="oq-21"></span>
 
 ## OQ-21 — HTTPS-Browserabnahme der Workbench
 
@@ -344,6 +442,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   umgehung oder passwortfreie Produktionsanmeldung als Ersatz einbauen.
 * **Antwort landet in:** `docs/anleitung/10-kamera-livevorschau.md`,
   `docs/status.md`; technische Befunde gegebenenfalls `docs/lab_journal.md`.
+
+<span id="oq-22"></span>
 
 ## OQ-22 — Sensor setzt nach Streamwechsel keinen Stream mehr auf
 
@@ -640,6 +740,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
 
+<span id="oq-23"></span>
+
 ## OQ-23 — Festes Segmentraster passt nicht zur realen BK-5491B-VFD-Schrift
 
 * **Status:** offen · erkannt 2026-09-09 bei der ersten realen
@@ -840,6 +942,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   für reale Aufnahmen. Das ist jetzt eine Aussage über die Geometrie, keine
   über die Datenmenge mehr.
 
+<span id="oq-24"></span>
+
 ## OQ-24 — Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen
 
 * **Status:** in Arbeit · erkannt 2026-09-09 durch Bedienerrückmeldung
@@ -897,6 +1001,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Aussage über Kameralatenz aus synthetischen oder `FILE_MTIME`-Bildern.
 * **Antwort landet in:** `docs/VALIDATION.md`, `docs/lab_journal.md` und dieser
   Eintrag; Browser-Grundproblem siehe auch OQ-21.
+
+<span id="oq-25"></span>
 
 ## OQ-25 — Vorschlagsqualität von `fit_quad_in_region`/`fit_ocr_box` an realen Geräten
 
@@ -978,6 +1084,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   fitten) statt die Funktion blind nachzuschärfen - siehe AGENTS.md, keine
   Vermutung ohne Messung.
 
+<span id="oq-26"></span>
+
 ## OQ-26 — Grenzen der Nachführung an realen Geräten validieren
 
 * **Status:** offen · erkannt 2026-09-11 in
@@ -999,6 +1107,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Verschiebung durchzulassen.
 * **Antwort landet in:** `docs/VALIDATION.md`.
 
+<span id="oq-27"></span>
+
 ## OQ-27 — Rasterfeinschliff je Bild bewusst nicht gebaut
 
 * **Status:** offen (bewusste Nicht-Entscheidung, kein Fix ausstehend)
@@ -1018,6 +1128,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Messung, die dafür spricht.
 * **Antwort landet in:** `src/dispread/ocr/`.
 
+<span id="oq-28"></span>
+
 ## OQ-28 — Eindeutigkeit der Autofit-Geometrie
 
 * **Status:** offen · erkannt 2026-09-11 (Task 4 dieses Plans)
@@ -1032,6 +1144,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   und einen der beiden Sätze unmarkiert zurückzugeben — ist mit einer
   einzigen Geräteinstanz nicht zu beantworten.
 * **Antwort landet in:** `docs/VALIDATION.md`.
+
+<span id="oq-29"></span>
 
 ## OQ-29 — Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence`
 
@@ -1057,6 +1171,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   (`_autofit`/`roi`-Op), ggf. `docs/VALIDATION.md` bei einer künftigen
   Messung.
 
+<span id="oq-30"></span>
+
 ## OQ-30 — `roi`-Op ist nicht atomar gegenüber einem fehlschlagenden `QuadTracker`-Aufbau
 
 * **Status:** offen · erkannt 2026-09-18 in Task 7's Review
@@ -1079,6 +1195,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   konstruieren, danach erst zuweisen), war aber keine Bedingung für Task 7's
   Abnahme.
 * **Antwort landet in:** `src/dispread/workbench/controller.py` (`roi`-Op).
+
+<span id="oq-31"></span>
 
 ## OQ-31 — Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit
 
@@ -1108,6 +1226,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   angestoßen von `tests/test_workbench_client.py`.
 * **Antwort landet in:** `src/dispread/workbench/static/workbench.js`.
 
+<span id="oq-32"></span>
+
 ## OQ-32 — `_row()`/`edit_row()` haben keinen sicheren Fallback für einen unbekannten `kind`
 
 * **Status:** offen (Ursprungsbug behoben, zugrunde liegende Lücke nicht) ·
@@ -1129,6 +1249,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `src/dispread/workbench/tui.py`,
   `src/dispread/workbench/fields.py`.
 
+<span id="oq-33"></span>
+
 ## OQ-33 — Ähnlichkeitsschwellwert des Datensatz-Sammelmodus ist unvalidiert
 
 * **Status:** offen · erkannt 2026-09-18 beim Bau des Datensatz-Sammelmodus
@@ -1146,6 +1268,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `src/dispread/workbench/datasets.py`,
   `docs/VALIDATION.md`.
 
+<span id="oq-34"></span>
+
 ## OQ-34 — Realer interaktiver Browserdurchlauf des Datensatz-Sammelmodus steht aus
 
 * **Status:** offen · erkannt 2026-09-18 beim Bau des Datensatz-Sammelmodus
@@ -1162,6 +1286,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
   Schreibfehler, zwei Browsertabs, Tokenablauf, abgeschnittener Export.
 * **Antwort landet in:** `docs/anleitung/11-datensatz-sammeln.md`,
   `docs/status.md`.
+
+<span id="oq-35"></span>
 
 ## OQ-35 — Automatisierte Testwerterzeugung für den Datensatz-Sammelmodus (GPIO/BK-5491B)
 
@@ -1204,6 +1330,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/HARDWARE_PROFILE.md` (Schnittstellenbefund),
   `docs/anleitung/11-datensatz-sammeln.md` (falls umgesetzt).
 
+<span id="oq-36"></span>
+
 ## OQ-36 — Sättigungsbasierte LCD-Quad-Findung nur an einem Gerät gemessen
 
 * **Status:** offen · erkannt 2026-09-22 (Spike zu `lcd_quad_in_region`,
@@ -1244,6 +1372,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/VALIDATION.md` (Messreihe je Geraet),
   `src/dispread/workbench/vision.py` (Docstring/Default von
   `lcd_quad_in_region`, falls sich der Wert aendert).
+
+<span id="oq-37"></span>
 
 ## OQ-37 — Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen
 
@@ -1320,6 +1450,8 @@ OQ-01 bis OQ-06 sind die sechs offenen Entscheidungen aus Konzept.md §11.
 * **Antwort landet in:** `docs/VALIDATION.md`, dem Profilschema (falls die
   Ziffernzahl doch variabel ist) und der Verankerungslogik des
   Dot-Matrix-Lesers.
+
+<span id="oq-38"></span>
 
 ## OQ-38 — Ground-Truth-Quelle für Auto-Labeling: Displaybus oder Geräteschnittstelle?
 
@@ -1504,6 +1636,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [DISPLAYBUS_TAP.md](DISPLAYBUS_TAP.md) (Rückfallebene),
   `docs/anleitung/11-datensatz-sammeln.md` (falls umgesetzt).
 
+<span id="oq-39"></span>
+
 ## OQ-39 — Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt
 
 * **Status:** offen · erkannt 2026-09-22 (bei der Machbarkeitsprüfung zu
@@ -1645,6 +1779,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) (Abdeckungsangabe zu
   jeder Benchmarkzahl), `docs/anleitung/11-datensatz-sammeln.md`.
 
+<span id="oq-40"></span>
+
 ## OQ-40 — Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen
 
 * **Status:** offen · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
@@ -1692,6 +1828,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
   `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`.
+
+<span id="oq-41"></span>
 
 ## OQ-41 — Telegramm und Anzeige unterscheiden sich in der führenden Null
 

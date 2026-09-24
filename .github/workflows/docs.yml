@@ -1,9 +1,5 @@
-# Doku-Seite bauen, als offline-fähiges ZIP am Lauf ablegen und - sobald
-# eingerichtet - auf Cloudflare Pages hinter Cloudflare Access veröffentlichen
+# Doku-Seite bauen und auf Cloudflare Pages mit Forgejo-Anmeldung veröffentlichen
 # (docs/HOSTING.md).
-#
-# Wer Leserechte am Repo hat, lädt das Artefakt "doku-seite" unter
-# Actions -> Lauf -> Artefakte herunter, entpackt es und öffnet index.html.
 #
 # Läuft auf dem Runner mit dem Label `picam-docs` (Host-Modus auf dem Pi,
 # siehe systemd/forgejo-runner.service). Bewusst NICHT `ubuntu-latest`:
@@ -40,16 +36,7 @@ jobs:
             echo "Commit:  $(git rev-parse HEAD)"
             echo "Branch:  ${GITHUB_REF_NAME}"
             echo "Gebaut:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "Öffnen:  index.html im Browser"
           } > site/BUILD-INFO.txt
-
-      # Forgejo braucht den Fork von upload-artifact@v4; das Original von
-      # GitHub verweigert Nicht-GitHub-Server.
-      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
-        with:
-          name: doku-seite
-          path: site/
-          retention-days: 30
 
       # --- Hosting auf Cloudflare Pages mit Forgejo-Anmeldung ----------------
       # Inaktiv, solange die Repo-Variable CLOUDFLARE_PAGES_PROJECT fehlt.
