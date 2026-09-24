@@ -3,6 +3,21 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-24 (Codex-CLI fuer Runner lesbar installieren)
+
+**Problem:** Eine restriktive `umask` aus der Token-Erstellung wurde von
+`sudo` an npm weitergegeben. Das Codex-Paket unter `/opt/picam-codex` war
+danach nur fuer root ausfuehrbar; der neue Runner konnte sich nicht anmelden.
+
+**Änderung:** Der Installer setzt fuer das oeffentliche Programmpaket eine
+`022`-umask, korrigiert bereits installierte Dateirechte und prueft die CLI
+als `picam-codex-runner` vor dem Dienststart. Die vorhandene Installation auf
+dem Pi wurde entsprechend repariert.
+
+**Konsequenz:** Der Runner kann `codex-cli 0.156.1` aufrufen. Fuer den ersten
+Automationslauf fehlen noch die getrennte Codex-Anmeldung und der Forgejo-
+Bot-Token.
+
 ## 0.1.0.dev0 — 2026-09-24 (Runner-Identität beim Installieren schützen)
 
 **Problem:** Der Aufruf des bisherigen `picam-docs`-Installers mit der UUID

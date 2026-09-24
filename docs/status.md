@@ -27,9 +27,13 @@ bestehenden `picam-docs`-Runners führte zu `unregistered runner`, weil sein
 alter Token erhalten blieb. Die ursprüngliche UUID wurde wiederhergestellt;
 der Dienst ist aktiv und meldet `declared successfully`. Beide Installer
 schützen jetzt gegen diesen UUID/Token-Mismatch. Für den **neuen** Codex-
-Runner fehlen noch seine Token-Datei, ein Bot-PAT und die Geräteanmeldung.
-Ein produktiver Codex-Lauf und der nachgelagerte Cloudflare-Deploy sind noch
-nicht geprüft.
+Runner ist inzwischen mit eigener UUID und eigenem Token installiert; sein
+Dienst meldet `declared successfully`. Die Codex-CLI war wegen einer
+restriktiven Installations-`umask` zuerst nur fuer root ausfuehrbar. Die
+Dateirechte auf dem Pi sind korrigiert; der Installer prueft das kuenftig
+als Runner-Benutzer. Ein Bot-PAT und die Geräteanmeldung fehlen noch. Ein
+produktiver Codex-Lauf und der nachgelagerte Cloudflare-Deploy sind nicht
+geprüft.
 
 ## Verifikation
 
@@ -49,6 +53,6 @@ nicht geprüft.
 
 ## Nächster Schritt
 
-Runner und Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer
-einmalig anmelden und zuerst einen manuellen Vorschaulauf, dann einen
+Bot in Forgejo einrichten, Codex unter dem Runner-Benutzer einmalig anmelden
+und zuerst einen manuellen Vorschaulauf, dann einen
 kontrollierten Veröffentlichungsdurchlauf mit Cloudflare-Abnahme ausführen.
