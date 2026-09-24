@@ -44,22 +44,14 @@ System-pip, nicht das venv.
 | `rpicam-apps` | 1.13.0 | Inbetriebnahme, inkl. IMX500-Postprocessing |
 | `imx500-all`, `-firmware`, `-models`, `-tools` | — | Sensorfirmware, 23 Fertigmodelle, Packager |
 | `v4l-utils`, `ffmpeg`, `i2c-tools`, `git` | — | Diagnose, Videokonvertierung |
-
-## Noch zu installieren
-
-```bash
-sudo apt install -y tesseract-ocr tesseract-ocr-eng socat chrony
-```
-
-Blockiert, weil `sudo` seit dem Reboot ein Passwort verlangt
-([OQ-15](open-questions.md)).
-
-| Paket | Version | Warum |
-| --- | --- | --- |
 | `tesseract-ocr` | 5.5.0 | OCR-Vergleichsbasis. Konzept §5 nennt Tesseract als Kandidaten — ihn unbewertet stehen zu lassen wäre die schlechtere Option. Angebunden per **CLI über `subprocess`**, nicht über `pytesseract`: das spart eine Abhängigkeit, und `python3-pytesseract` existiert in Debian 13 ohnehin nicht |
-| `tesseract-ocr-eng` | 4.1.0 | Ohne Traineddata startet Tesseract nicht |
-| `socat` | 1.8.0.3 | pty-Paare mit stabilen Symlinks für interaktive Serial-Tests. **Für die Unit-Tests nicht nötig** — die nutzen `os.openpty()` aus der stdlib, damit `pytest` auch ohne socat läuft |
-| `chrony` | — | Ersetzt `systemd-timesyncd`. Nur chrony liefert eine protokollierbare Offset- und Drift-Historie (`chronyc tracking`). Ohne dieses Log ist die Aussage „Pi-Zeit gegen Referenz" nicht belegbar — Messung M1 in [TIMING.md](TIMING.md) |
+| `tesseract-ocr-eng` | — | Ohne Traineddata startet Tesseract nicht |
+| `socat` | — | pty-Paare mit stabilen Symlinks für interaktive Serial-Tests. **Für die Unit-Tests nicht nötig** — die nutzen `os.openpty()` aus der stdlib, damit `pytest` auch ohne socat läuft |
+| `chrony` | 4.6.1-3 | Ersetzt `systemd-timesyncd`. Nur chrony liefert eine protokollierbare Offset- und Drift-Historie (`chronyc tracking`). Ohne dieses Log ist die Aussage „Pi-Zeit gegen Referenz" nicht belegbar — Messung M1 in [TIMING.md](TIMING.md) |
+
+Alle fünf waren zwischenzeitlich installiert, ohne dass dieser Eintrag
+nachgezogen wurde — bestätigt am 2026-09-21 per `which`/`dpkg -l`
+([OQ-15](open-questions.md), geklärt).
 
 **Einschränkung, die dokumentiert bleiben muss:** `tesseract-ocr-eng` ist auf
 Prosa trainiert. Auf 7-Segment-Anzeigen sind die Trefferquoten typischerweise
