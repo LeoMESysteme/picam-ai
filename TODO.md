@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-24
+# TODO — Stand 2026-09-25 (Wiedereinstieg Montag 2026-09-28)
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,16 +9,53 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Jetzt: Dot-Matrix-Leser — Training braucht schärfere Aufstellungen
+## Zuerst (Montag): Kamerawechsel IMX500 → Logitech StreamCam fertigstellen
+
+Nutzerentscheidung 2026-09-25: offiziell StreamCam (USB 046d:0893, UVC)
+statt IMX500. Spec `docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`,
+Plan `docs/superpowers/plans/2026-09-25-streamcam-switch.md`, Fortschritt im
+SDD-Ledger `.superpowers/sdd/2026-09-25-streamcam-switch/progress.md`
+(Controller-Regeln, Rulings, zurückgestellte Kleinigkeiten).
+
+* Erledigt und reviewt: Task 1 (Zeitbasis `v4l2_monotonic`,
+  `to_boottime_ns`), Task 2 (`CameraSettings`, `UvcSource`, `v4l2://`),
+  Task 3 (`sync-record` über StreamCam, Budget/ScalerCrop raus,
+  Bildzähler-Fix), Task 4 (Profil v3, `harvest-setup focus`).
+* Task 5 (Timing-Kalibrierung, `harvest.py`) committet (`cf8be28`), Review
+  lief bei Sitzungsende — Ergebnis in `task-5-review.md` prüfen.
+* Offen: Task 6 (Werkbank-Kamera deaktivieren, `camera-commissioning.sh`
+  neu, Hardwaretest), danach Abschlussreview, Doku (project_history,
+  Konzept-Abweichung, CLAUDE.md, OQ-22-Nachtrag, neue OQ, status, ROADMAP,
+  VALIDATION), `camera-commissioning.sh` an der echten Kamera, dann
+  Messsitzung: `harvest-setup focus` → `sync-record --norm-schedule` →
+  `display-offset.py` → `timing-calibration.py` → Ernten.
+
+## Zuerst (Montag): `var/` zusammenführen
+
+`/home/me-systeme/picam-ai/var` wurde am 2026-09-25 12:06 versehentlich
+gelöscht (einzige Kopie, gitignored; `picam-ai-ernte/var` ist ein Symlink).
+* Per Carving wiederhergestellt (`var/rescue-20260925/carve.py`): alle 389
+  Proben (sha256 geprüft), `devices.json`, 4 Profile, Profil-Zuordnungen.
+* Der Nutzer hat zusätzlich eine Wiederherstellung nach
+  `/home/me-systeme/picam-ai/.var_recovered` gelegt (Upload lief bei
+  Sitzungsende noch). Enthält u. a. den fehlenden Rückstellpunkt
+  `diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json` (ohne ihn
+  fallen 2 Tests in `tests/test_sync_record.py`) und Ernte-Aufnahmen.
+  **Zu tun:** nach Upload-Ende vergleichen (Proben per sha256 gegen
+  `var/workbench/datasets`), Fehlendes nach `var/` übernehmen, nichts
+  überschreiben ohne Abgleich; danach Sicherung für `var/` einrichten.
+
+---
+
+## Danach: Dot-Matrix-Leser — Training braucht schärfere Aufstellungen
 
 Leser fertig und geprüft (bis `870d680`+, `rom_check_v2`, `auf3` neu
 bestätigt). Vorab festgelegte Messung bricht im Durchgang „nur weiche
 Aufstellungen im Training" an der Gegenprobe ab. Diagnose: nie ein falscher
 Wert; `ernte1`+`auf2` → `auf3` 67 richtig / 6 abgelehnt; sonst alles
 abgelehnt (VALIDATION.md 2026-09-25, OQ-42-Nachtrag). Nächste Schritte:
-1. 2–3 weitere **scharf fokussierte** Aufstellungen ernten (Fokus mit
-   Schärfemesser in eigener Sitzung, Kamera danach fixieren; Versatz
-   Einrichtung ↔ Ernte per Phasenkorrelation prüfen).
+1. 2–3 weitere **scharf fokussierte** Aufstellungen ernten — jetzt mit der
+   StreamCam (Fokus per Software, `harvest-setup focus`).
 2. Entscheiden (OQ-42), ob Aufstellungen unter einer Schärfegrenze nur als
    Testmaterial dienen.
 3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
@@ -26,7 +63,7 @@ abgelehnt (VALIDATION.md 2026-09-25, OQ-42-Nachtrag). Nächste Schritte:
 
 ---
 
-## Kein Blocker — aber Streamstarts sparen (OQ-22)
+## Historisch (IMX500 außer Betrieb): Streamstarts sparen (OQ-22)
 
 Am 2026-09-24 blockierte die Brücke beim 8. Start eines Boots; nach Neustart
 liefen zwei Starts fehlerfrei. Jede Sitzung so planen, dass sie mit wenigen
