@@ -32,6 +32,17 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   entfernt, Aufruf meldet „IMX500 ausser Betrieb seit 2026-09-25".
   Tests: `tests/test_camera_settings.py`, `tests/test_uvc_source.py`,
   `tests/test_frames_registry.py`.
+* Aufnahme (Task 3): `scripts/sync-record.py` nimmt mit `--source camera`
+  über `UvcSource` auf (`--camera-settings` Pflicht, `--camera-device`
+  optional). Entfernt: Picamera2-Zweig, Streamstart-Budget (Exit 5,
+  Zählerdatei, Kernel-Log-Zählung), `--scaler-crop`, 960×720-Sperre,
+  `--allow-large-sensor-mode`. Neu in `session.json`: `camera`
+  (Einstellungen und Rücklesewerte), `clock_offset_boottime_minus_monotonic_ns`
+  (Median aus 5 Messungen, Start und Ende), `frame_gaps` (Lücken
+  > 1,5 × Bildabstand), `usb_speed_warning`, `frame_writer_finished`.
+  Fehler behoben: `frames_recorded` zeigt nach einem Kameraausfall mitten in
+  der Aufnahme die tatsächlich geschriebenen Bilder statt 0. Tests:
+  `tests/test_sync_record.py` (IMX500-Tests entfernt).
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
