@@ -27,11 +27,13 @@ from pathlib import Path
 
 from dispread.ocr.dotmatrix_font import CLASSES, rom_vector
 from dispread.ocr.dotmatrix_templates import (
+    ROM_CHECK,
     Templates,
     binarized_pattern,
     compute_thresholds,
     fit_templates,
     rom_check,
+    rom_deviations,
     save_templates,
 )
 
@@ -127,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
     sha = save_templates(result, args.out)
     print(f"Vorlagen geschrieben: {args.out} (sha256={sha})")
     print(f"d_max={result.d_max:.4f} margin_min={result.margin_min:.4f}")
+    print(f"ROM-Gegenprobe: {ROM_CHECK}")
+    devs = {ch: n for ch, n in rom_deviations(result.mean).items() if n >= 1}
+    if devs:
+        print("Abweichungen (Punkte je Zeichen, innerhalb der Toleranz):", json.dumps(devs, sort_keys=True, ensure_ascii=False))
     print("Zellen je Klasse:", json.dumps(result.counts, sort_keys=True, ensure_ascii=False))
     print("Datensatz-Zaehler:", json.dumps(stats, sort_keys=True, ensure_ascii=False))
     return 0

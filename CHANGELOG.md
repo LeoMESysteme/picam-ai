@@ -80,6 +80,14 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   `reader-check` geprüft). `default_gate_config` benennt, dass die
   Konfidenz für `dotmatrix` aus Abstandseinheiten stammt.
 
+* ROM-Gegenprobe `rom_check_v2` (Nutzerentscheidung OQ-42): höchstens ein
+  abweichender Punkt je Zeichen, sonst Abbruch; `templates.json` trägt
+  `rom_check` und `rom_deviations`, `FORMAT_VERSION` 2 (alte Dateien werden
+  abgewiesen). Gegenprobe erkennt systematische Fehler (Mehrheit einer
+  Klasse, synthetisch ab ≈ 60 %), keine vereinzelten falschen Labels — in
+  der Spec korrigiert. Tests in `tests/test_dotmatrix_templates.py`,
+  `tests/test_dotmatrix_train_eval.py`.
+
 **Konsequenz:** Der Leser ist gebaut und lehnt im Zweifel ab (synthetisch: 0
 falsch freigegebene Werte). Die Entwicklungsmessung auf echten Daten ist
 noch nicht gelaufen: die ROM-Gegenprobe scheitert an Aufstellung `auf3`

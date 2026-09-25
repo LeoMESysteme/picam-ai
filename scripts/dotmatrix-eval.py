@@ -41,7 +41,14 @@ from pathlib import Path
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
 from dispread.ocr.dotmatrix_sampling import normalized, sample_image
-from dispread.ocr.dotmatrix_templates import THRESHOLD_FORMULA, Templates, classify, load_templates
+from dispread.ocr.dotmatrix_templates import (
+    ROM_CHECK,
+    THRESHOLD_FORMULA,
+    Templates,
+    classify,
+    load_templates,
+    rom_deviations,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -164,12 +171,15 @@ def _cmd_loo(args: argparse.Namespace) -> int:
             return 3
 
         ev = evaluate(test_samples, result)
+        devs = {ch: n for ch, n in rom_deviations(result.mean).items() if n >= 1}
         durchgaenge.append(
             {
                 "train_groups": list(train_groups),
                 "test_group": held_out,
                 "d_max": result.d_max,
                 "margin_min": result.margin_min,
+                "rom_check": ROM_CHECK,
+                "rom_deviations": devs,
                 **ev,
             }
         )

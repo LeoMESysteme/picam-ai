@@ -87,9 +87,19 @@ verschiebt eine Vorlage deshalb um mehrere Punkte und fällt weiterhin auf.
 Eine einzelne Abweichung ist bei weicher Schärfe beobachtet (Aufstellung
 `auf2`, VALIDATION.md 2026-09-24) und kein Hinweis auf ein falsches Label.
 Die Toleranz gilt nur für die Gegenprobe; Schwellenformel und Leser bleiben
-unverändert. Beleg im Test: Falsch gelabelte Trainingszellen (≥ 40 % der
-Zellen einer Klasse) werden auch mit `rom_check_v2` erkannt. Die Version der
-Gegenprobe steht in `templates.json` und im Bericht.
+unverändert. Die Version der Gegenprobe steht in `templates.json` und im
+Bericht.
+
+**Korrektur 2026-09-25 (Befund bei der Umsetzung):** Die ursprüngliche
+Angabe „erkennt ≥ 40 % falsch gelabelte Zellen einer Klasse" war falsch.
+Weil die Gegenprobe den binarisierten **Mittelwert** vergleicht, schlägt sie
+erst an, wenn die Mehrheit der Zellen einer Klasse ein anderes Zeichen zeigt;
+synthetisch verlässlich ab ≈ 60 % für alle engen Paare — das gilt für die
+strenge Fassung ebenso. Die Gegenprobe fängt also **systematische** Fehler
+(verschobenes Raster, vertauschte Klasse), **nicht vereinzelte** falsche
+Labels. Diese erhöhen die gelernte Streuung und lockern damit die Schwellen;
+gegen sie stehen die Stichprobe vor jedem Import und die Zellenprüfung von
+`import-harvest.py`. Tests: 60 % wird erkannt, 40 % ausdrücklich nicht.
 
 ## 3. Messung und Abnahme (vorab festgelegt)
 

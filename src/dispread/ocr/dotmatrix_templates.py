@@ -18,9 +18,16 @@ import numpy as np
 
 from dispread.ocr.dotmatrix_font import CLASSES, COLS, N_DOTS, ROWS, rom_vector
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 THRESHOLD_FORMULA = "thresholds_v1"
 SIGMA_FLOOR = 0.05
+ROM_CHECK = "rom_check_v2"
+#: Toleranz der ROM-Gegenprobe in Punkten je Zeichen (Nutzerentscheidung
+#: OQ-42, Spec-Aenderung 2026-09-25). Der kleinste Abstand zweier Zeichen
+#: des Satzes betraegt 4 Punkte - eine einzelne Abweichung ist bei weicher
+#: Schaerfe beobachtet (Aufstellung `auf2`, VALIDATION.md 2026-09-24) und
+#: kein Hinweis auf ein falsches Label, zwei oder mehr Abweichungen schon.
+ROM_TOLERANCE_DOTS = 1
 
 
 @dataclass(frozen=True)
@@ -96,8 +103,18 @@ def fit_templates(samples: dict[str, list[np.ndarray]], groups: tuple[str, ...])
     return mean, std
 
 
+def rom_deviations(mean: dict[str, np.ndarray]) -> dict[str, int]:
+    """Zahl der Punkte je Zeichen, in denen die bei 0,5 binarisierte Vorlage
+    vom ROM-Muster abweicht - Grundlage von `rom_check` und fuer Berichte
+    (`scripts/dotmatrix-train.py`, `scripts/dotmatrix-eval.py`)."""
+    return {ch: int(np.sum((mean[ch] >= 0.5) != (rom_vector(ch) >= 0.5))) for ch in CLASSES}
+
+
 def rom_check(mean: dict[str, np.ndarray]) -> list[str]:
-    return [ch for ch in CLASSES if not np.array_equal(mean[ch] >= 0.5, rom_vector(ch) >= 0.5)]
+    """Zeichen, deren binarisierte Vorlage in mehr als `ROM_TOLERANCE_DOTS`
+    Punkten vom ROM-Muster abweicht (`rom_check_v2`, OQ-42)."""
+    deviations = rom_deviations(mean)
+    return [ch for ch in CLASSES if deviations[ch] > ROM_TOLERANCE_DOTS]
 
 
 def binarized_pattern(vec: np.ndarray) -> list[str]:
@@ -140,6 +157,8 @@ def save_templates(t: Templates, path: Path) -> str:
     data = {
         "format_version": FORMAT_VERSION,
         "threshold_formula": THRESHOLD_FORMULA,
+        "rom_check": ROM_CHECK,
+        "rom_deviations": rom_deviations(t.mean),
         "d_max": t.d_max,
         "margin_min": t.margin_min,
         "groups": list(t.groups),
@@ -169,6 +188,8 @@ def load_templates(path: Path, expected_sha256: str | None = None) -> Templates:
         raise ValueError(f"format_version {data.get('format_version')!r} statt {FORMAT_VERSION}")
     if data.get("threshold_formula") != THRESHOLD_FORMULA:
         raise ValueError(f"threshold_formula {data.get('threshold_formula')!r} statt {THRESHOLD_FORMULA}")
+    if data.get("rom_check") != ROM_CHECK:
+        raise ValueError(f"rom_check {data.get('rom_check')!r} statt {ROM_CHECK}")
 
     for key in ("d_max", "margin_min", "groups", "counts"):
         if key not in data:
