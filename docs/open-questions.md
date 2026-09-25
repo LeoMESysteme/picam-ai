@@ -1879,6 +1879,16 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   prüfen. Jede Änderung der ROM-Toleranz zuerst als versionierte
   Spezifikationsentscheidung samt Gegenprobe gegen falsch gelabelte
   Zeichen festhalten; danach Stufe 1 neu laufen lassen.
+* **Nachtrag 2026-09-25:** Nutzer hat entschieden: `auf3` auf einem
+  Erntebild neu bestätigt, Gegenprobe `rom_check_v2` (1 Punkt Toleranz).
+  Danach bricht die festgelegte Messung nur noch im Durchgang „Training
+  `auf2`+`auf3`" ab (`4`, 3 Punkte neben der Diagonale — Unschärfe). Diagnose
+  aller Kombinationen: nie ein falscher Wert, `ernte1`+`auf2` → `auf3` 67
+  richtig / 6 abgelehnt, übrige Kombinationen 100 % abgelehnt
+  ([VALIDATION.md](VALIDATION.md), 2026-09-25). Weiter offen: mehr scharfe
+  Aufstellungen fürs Training; ob die festgelegte Messung Aufstellungen
+  unterhalb einer Schärfegrenze aus dem **Training** ausschliessen darf,
+  braucht eine Entscheidung vor dem nächsten Lauf.
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

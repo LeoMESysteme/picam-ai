@@ -1583,3 +1583,42 @@ Abschlussprüfung:** 1500 synthetische gültige Werte mit Rasterversatz
 Helligkeitsverlauf bis 0,6: 419 richtig, 1081 abgelehnt, 0 falsch
 freigegeben. Das war ein Ad-hoc-Sweep ohne versioniertes Testartefakt;
 er ersetzt weder Stufe 1 noch Stufe 2.
+
+## 2026-09-25 — Dot-Matrix-Leser: Entwicklungsmessung nach auf3-Neubestätigung und rom_check_v2
+
+**Stand der Daten:** 301 seriell geerntete Proben, `ernte1` 152, `auf2` 76,
+`auf3` 73 (Herkunft 100 % `serial_ascii`, Vorzeichen ungeprüft, nur `+`).
+`auf3` mit neu bestätigtem Profil (Umriss auf Erntebild `frame_001400`
+bestimmt, ≈ 4,3 px tiefer als vorher, Raster unverändert, 2,765 native px;
+`var/diagnostics/auf3b-profile/`, alte Zuordnung `dotmatrix-profile-map.v1.json`).
+Gegenprobe `rom_check_v2` (höchstens 1 abweichender Punkt je Zeichen,
+Spec-Änderung vom 2026-09-25, **vor** diesem Lauf festgelegt).
+
+**Vorab festgelegte Messung (`dotmatrix-eval.py loo`):** bricht im Durchgang
+„Training `auf2`+`auf3`, Test `ernte1`" ab — die gelernte `4` weicht in 3
+Punkten ab, alle direkt neben der Diagonale (die beiden weichen
+Aufstellungen lassen die Schräge zulaufen). Kein Bericht; die Regel wurde
+nicht nachträglich gelockert.
+
+**Diagnose (nicht die vorab festgelegte Messung, gleiche Formel und
+Schwellenregel, Trainings-/Testgruppen getrennt):**
+
+| Training | Test | richtig | abgelehnt | falsch | Plateaus richtig |
+| --- | --- | --- | --- | --- | --- |
+| `ernte1` | `auf2` | 0 | 76 (`zelle_unbekannt`) | **0** | 0/26 |
+| `ernte1` | `auf3` | 0 | 73 (`zelle_unbekannt`) | **0** | 0/26 |
+| `ernte1`+`auf2` | `auf3` | 67 (91,8 %) | 6 (3 unbekannt, 3 mehrdeutig) | **0** | 25/26 |
+| `ernte1`+`auf3` | `auf2` | 0 | 76 (`zelle_unbekannt`) | **0** | 0/26 |
+| `auf2`+`auf3` | `ernte1` | — ROM-Gegenprobe gescheitert (`4`, 3 Punkte) | | | |
+
+Schwellen: nur `ernte1` `d_max` 1,54 / `margin_min` 1,10; `ernte1`+`auf2`
+2,52 / 0,60; `ernte1`+`auf3` 2,17 / 0,82.
+
+**Deutung:** Kein einziger falsch freigegebener Wert. Wo Training und Test
+ähnlich scharf sind, erreicht der Leser das Ziel (0 falsch, 8 % Ablehnung,
+Obergrenze bei 0 von 26 Plateaus ≈ 11 %). Vorlagen aus einer scharfen
+Aufstellung übertragen sich nicht auf weiche, und `auf2` wird auch mit `auf3`
+im Training vollständig abgelehnt — `auf2` unterscheidet sich systematisch
+(weicher Fokus, heller linker Glasrand). Diese Zahlen sind Entwicklungs-
+diagnose mit 3 Aufstellungen, keine Abnahme (Stufe 2 braucht neue, nie
+gesehene Aufstellungen).

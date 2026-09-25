@@ -1484,3 +1484,23 @@ Chat-Exporte `codex_main.txt`/`codex_subagent.txt` im Haupt-Checkout.
 Der letzte Claude-Subagent endete wegen API-Limit während einer
 uncommitteten Korrekturrunde. Diese Änderungen sind keine abgeschlossene
 Messung und kein freigegebener Codezustand.
+
+## 2026-09-25 — Dot-Matrix-Leser fertig gebaut, Entwicklungsmessung hängt an Schärfe
+
+Nach dem Sessionlimit übernommen: Korrekturwelle der Abschlussprüfung
+abgeschlossen (u. a. `NaN`-Schwellen in `templates.json` hätten jede Zelle
+durchgelassen), geseedeter Sicherheitstest mit 300 gestörten Werten: 0
+falsch. Nutzerentscheidung zu OQ-42: `auf3` auf einem Erntebild neu
+bestätigt, Gegenprobe mit 1 Punkt Toleranz (`rom_check_v2`). Bei der
+Umsetzung zeigte sich, dass meine Spec-Angabe „erkennt ≥ 40 % falsche Labels"
+nicht stimmte — die Gegenprobe vergleicht Mittelwerte und schlägt erst bei
+einer Mehrheit an (≈ 60 %); korrigiert.
+
+Die vorab festgelegte Messung bricht trotzdem ab: die zwei weichen
+Aufstellungen zusammen lassen die Diagonale der `4` zulaufen (3 Punkte). Die
+Diagnose über alle Kombinationen zeigt nie einen falschen Wert; eine
+Kombination erfüllt das Ziel schon (`ernte1`+`auf2` → `auf3`: 67 richtig, 6
+abgelehnt), die anderen lehnen alles ab. Schluss: Das Training braucht mehr
+Aufstellungen mit ähnlicher, guter Schärfe; weiche Aufstellungen eignen sich
+als Testmaterial für Ablehnung, nicht als alleinige Vorlagenquelle. Zahlen:
+VALIDATION.md, 2026-09-25.

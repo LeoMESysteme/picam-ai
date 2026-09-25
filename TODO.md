@@ -9,17 +9,20 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Jetzt: Dot-Matrix-Leser — Stufe 1 an OQ-42 blockiert
+## Jetzt: Dot-Matrix-Leser — Training braucht schärfere Aufstellungen
 
-Worktree `/home/me-systeme/picam-ai-ernte`, Branch
-`feat/task-b-versatz-normierung`: Tasks 1–7 und die Korrekturen aus der
-Abschlussprüfung sind committet (bis `7c9c4d5`, 614 Tests grün; geseedeter
-Sicherheitstest: 300 gestörte Werte, 0 falsch freigegeben). Offen ist Task 8,
-die echte Entwicklungsmessung: Die ROM-Gegenprobe scheitert an `auf3`
-(Kamera nach der Profilbestätigung um ≈ 4,6 Quellpixel verschoben) und am
-weichen `auf2` (4 Zeichen mit je einem Punkt Abweichung), siehe
-[OQ-42](docs/open-questions.md). Entscheidung des Nutzers nötig, danach
-`dotmatrix-eval.py loo` erneut. Bis dahin keine Realdaten-Rate behaupten.
+Leser fertig und geprüft (bis `870d680`+, `rom_check_v2`, `auf3` neu
+bestätigt). Vorab festgelegte Messung bricht im Durchgang „nur weiche
+Aufstellungen im Training" an der Gegenprobe ab. Diagnose: nie ein falscher
+Wert; `ernte1`+`auf2` → `auf3` 67 richtig / 6 abgelehnt; sonst alles
+abgelehnt (VALIDATION.md 2026-09-25, OQ-42-Nachtrag). Nächste Schritte:
+1. 2–3 weitere **scharf fokussierte** Aufstellungen ernten (Fokus mit
+   Schärfemesser in eigener Sitzung, Kamera danach fixieren; Versatz
+   Einrichtung ↔ Ernte per Phasenkorrelation prüfen).
+2. Entscheiden (OQ-42), ob Aufstellungen unter einer Schärfegrenze nur als
+   Testmaterial dienen.
+3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
+   solcher erscheint, statt den ganzen Lauf abzubrechen.
 
 ---
 

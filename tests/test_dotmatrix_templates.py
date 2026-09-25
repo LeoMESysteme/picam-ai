@@ -142,7 +142,7 @@ _CLOSEST_PAIRS = ((".", " "), ("0", "8"), ("8", "9"), ("6", "8"), ("3", "5"), ("
 
 #: Anteil, ab dem alle sechs Paare oben ueber build_templates() zuverlaessig
 #: erkannt werden (mit den Vektoren aus `noisy()`, Seeds 0-9 durchprobiert,
-#: siehe romv2-report.md). 40 % (Spec-Beleg) loest bei KEINEM der Paare aus -
+#: Seed-Durchlauf 2026-09-25: 55 % bei `8`/`9` unzuverlaessig, 60 % ueber 10 Seeds verlaesslich; Spec-Korrektur 2026-09-25). 40 % (Spec-Beleg) loest bei KEINEM der Paare aus -
 #: `fit_templates` mittelt Punktwerte, eine binarisierte Mehrheitsentscheidung
 #: kippt bei einer linearen Mischung aus (fast) 0/1-Werten strukturell erst
 #: oberhalb von 50 % Fehletikettierung; 55 % reicht fuer "8"/"9" noch nicht
@@ -169,7 +169,7 @@ def test_rom_check_v2_catches_majority_mislabeled_class(samples, label_ch, true_
 def test_rom_check_v2_does_not_catch_forty_percent_mislabeled_class(samples):
     """Gegenprobe/Beleg fuer den obigen Konzern: bei genau 40 % - dem in der
     Spec genannten Anteil - loest keines der engsten Paare aus (siehe
-    Kommentar bei `_MAJORITY_MISLABEL_FRACTION` und romv2-report.md).
+    Kommentar bei `_MAJORITY_MISLABEL_FRACTION`).
     Dokumentiert die Grenze, statt sie stillschweigend zu unterschlagen."""
     rng = np.random.default_rng(7)
     for label_ch, true_ch in _CLOSEST_PAIRS:
