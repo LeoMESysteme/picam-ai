@@ -9,29 +9,17 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Jetzt: Dot-Matrix-Leser nach Claude-Limit übernehmen
+## Jetzt: Dot-Matrix-Leser — Stufe 1 an OQ-42 blockiert
 
 Worktree `/home/me-systeme/picam-ai-ernte`, Branch
-`feat/task-b-versatz-normierung`: Tasks 1–7 sind bis `666e8a1`
-committet. Die letzte Korrekturrunde liegt **uncommittet** in 13 Code-
-und Testdateien; der Subagent wurde vom API-Limit vor Abschlussbericht
-und Nachprüfung gestoppt. Brief:
-`.superpowers/sdd/2026-09-24-dotmatrix-reader/final-fix-brief.md`.
-
-1. Brief und Diff abgleichen, insbesondere Prüfsumme/NaN, bestätigte
-   Profile und die Restzellenprüfung. Die Auswertung `evaluate()` kennt
-   nur Zellen 0–8; diesen Umfang im Bericht ehrlich benennen.
-2. Volle Tests und Ruff; bei Commit von `src/`/`scripts/` den
-   CHANGELOG-Eintrag im selben Commit ergänzen.
-3. Echte Stufe 1 ist am ROM-Gate blockiert: `auf3` hat nach der
-   Profilbestätigung etwa 4,6 Quellpixel Versatz; ohne `auf3` hat das
-   weichere `auf2` vier Ein-Punkt-Abweichungen. Raster und Glasbelege
-   prüfen, [OQ-42](docs/open-questions.md#oq-42) klären, dann Task 8
-   aus [dem Plan](docs/superpowers/plans/2026-09-24-dotmatrix-reader.md)
-   fortsetzen. Bis dahin keine Realdaten-Abnahmerate behaupten.
-
-Weitere Übergabedetails: [docs/status.md](docs/status.md). Die zwei
-lokalen Chat-Exporte im Haupt-Checkout sind nicht versioniert.
+`feat/task-b-versatz-normierung`: Tasks 1–7 und die Korrekturen aus der
+Abschlussprüfung sind committet (bis `7c9c4d5`, 614 Tests grün; geseedeter
+Sicherheitstest: 300 gestörte Werte, 0 falsch freigegeben). Offen ist Task 8,
+die echte Entwicklungsmessung: Die ROM-Gegenprobe scheitert an `auf3`
+(Kamera nach der Profilbestätigung um ≈ 4,6 Quellpixel verschoben) und am
+weichen `auf2` (4 Zeichen mit je einem Punkt Abweichung), siehe
+[OQ-42](docs/open-questions.md). Entscheidung des Nutzers nötig, danach
+`dotmatrix-eval.py loo` erneut. Bis dahin keine Realdaten-Rate behaupten.
 
 ---
 
