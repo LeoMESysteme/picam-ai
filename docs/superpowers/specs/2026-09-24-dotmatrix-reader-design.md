@@ -77,6 +77,20 @@ binarisiert und mit dem HD44780-Standardzeichensatz (ROM A00, 5×7 plus
 leere Cursorzeile) verglichen. Jede Abweichung bricht das Training ab —
 sie deutet auf falsche Labels oder ein verschobenes Raster.
 
+**Änderung 2026-09-25 — `rom_check_v2` (Nutzerentscheidung, OQ-42), vor
+der ersten Stufe-1-Messung festgelegt:** Je Zeichen darf die binarisierte
+Vorlage in **höchstens einem Punkt** vom ROM-Muster abweichen; zwei oder mehr
+Abweichungen bei einem Zeichen brechen das Training ab. Begründung: Der
+kleinste Abstand zweier Zeichen des Satzes beträgt 4 Punkte (`.` gegen
+Leerzelle, dann `0`/`8`, `6`/`8`, `8`/`9` mit 6); ein vertauschtes Label
+verschiebt eine Vorlage deshalb um mehrere Punkte und fällt weiterhin auf.
+Eine einzelne Abweichung ist bei weicher Schärfe beobachtet (Aufstellung
+`auf2`, VALIDATION.md 2026-09-24) und kein Hinweis auf ein falsches Label.
+Die Toleranz gilt nur für die Gegenprobe; Schwellenformel und Leser bleiben
+unverändert. Beleg im Test: Falsch gelabelte Trainingszellen (≥ 40 % der
+Zellen einer Klasse) werden auch mit `rom_check_v2` erkannt. Die Version der
+Gegenprobe steht in `templates.json` und im Bericht.
+
 ## 3. Messung und Abnahme (vorab festgelegt)
 
 **Daten für Stufe 1:** die 301 seriell geernteten Proben des Geräts
