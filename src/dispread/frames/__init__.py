@@ -1,21 +1,25 @@
 """Bildquellen: die Trennstelle, die Arbeiten ohne Kamera moeglich macht.
 
-Die Pipeline sieht nur `Iterator[Frame]`. Ob dahinter die AI Camera, eine
+Die Pipeline sieht nur `Iterator[Frame]`. Ob dahinter die StreamCam, eine
 aufgezeichnete Session, ein Bildordner oder ein Generator steckt, bemerkt sie
 nur an `capabilities` und an `Frame.timebase`.
 
-`picamera2` wird ausschliesslich in den Kameramodulen importiert, und zwar erst
-in der Factory (Lazy Import). Das ist die technische Voraussetzung dafuer, dass
-Tests und Beispiele ohne Kamera - und sogar auf einem Nicht-Pi - laufen.
+`cv2`-Kamerazugriff erst in der Factory (Lazy Import). Das ist die technische
+Voraussetzung dafuer, dass Tests und Beispiele ohne Kamera - und sogar auf
+einem Nicht-Pi - laufen.
 
 URI-Schemata:
 
-    picamera2://?size=2028x1520&fps=10
-    imx500://?rpk=/usr/share/imx500-models/....rpk&size=2028x1520
+    v4l2:///dev/video8?settings=/pfad/camera.json
+    v4l2://?settings=/pfad/camera.json   (Geraet ueber USB-ID gesucht)
     folder:///pfad?rate=10&glob=*.png
     video:///pfad/aufnahme.mp4
     synthetic://seven-seg?digits=6&unit=N&noise=0.2&glare=0.1
     replay:///var/lib/dispread/sessions/2026-09-07_first-light
+
+`picamera2://` und `imx500://` sind außer Betrieb seit 2026-09-25 (StreamCam
+statt IMX500, siehe docs/project_history.md) - `open_source()` wirft dafuer
+eine gezielte `ValueError`, kein generisches "unbekanntes Schema".
 
 Eine URI aus einem Dateisystempfad wird mit `path_uri()` gebaut, nie per
 f-String - siehe dort, warum ein relativer Pfad sonst stillschweigend
@@ -143,27 +147,18 @@ def _open_replay(uri: str) -> FrameSource:
     return ReplaySource(session_dir=_filesystem_path(uri))
 
 
-def _open_picamera2(uri: str) -> FrameSource:
-    from dispread.frames.picamera_source import Picamera2Source
+def _open_v4l2(uri: str) -> FrameSource:
+    from dispread.camera_settings import load_camera_settings
+    from dispread.frames.uvc_source import UvcSource
 
     q = _query_scalars(uri)
-    return Picamera2Source(
-        size=_parse_size(q.get("size")) or (2028, 1520),
-        fps=float(q["fps"]) if "fps" in q else None,
-    )
-
-
-def _open_imx500(uri: str) -> FrameSource:
-    from dispread.frames.imx500_source import Imx500Source
-
-    q = _query_scalars(uri)
-    if "rpk" not in q:
-        raise ValueError("imx500:// braucht den Parameter rpk=<pfad zur .rpk>")
-    return Imx500Source(
-        rpk=q["rpk"],
-        size=_parse_size(q.get("size")) or (2028, 1520),
-        fps=float(q["fps"]) if "fps" in q else None,
-    )
+    if "settings" not in q:
+        raise ValueError(
+            "v4l2:// braucht den Parameter settings=<pfad zur camera.json>"
+        )
+    settings = load_camera_settings(Path(q["settings"]))
+    device = _filesystem_path(uri) or None
+    return UvcSource(settings, device=device)
 
 
 _REGISTRY: dict[str, Callable[[str], FrameSource]] = {
@@ -171,9 +166,16 @@ _REGISTRY: dict[str, Callable[[str], FrameSource]] = {
     "folder": _open_folder,
     "video": _open_video,
     "replay": _open_replay,
-    "picamera2": _open_picamera2,
-    "imx500": _open_imx500,
+    "v4l2": _open_v4l2,
 }
+
+#: `picamera2://`/`imx500://` sind ausser Betrieb seit 2026-09-25 (StreamCam
+#: statt IMX500) - eine gezielte Fehlermeldung statt "unbekanntes Schema".
+_RETIRED_SCHEME_MESSAGE = (
+    "IMX500 ausser Betrieb seit 2026-09-25 (StreamCam statt IMX500) - "
+    "siehe docs/project_history.md. Aktiver Schema-Ersatz: v4l2://"
+)
+_RETIRED_SCHEMES = frozenset({"picamera2", "imx500"})
 
 
 def known_schemes() -> tuple[str, ...]:
@@ -184,9 +186,11 @@ def open_source(uri: str) -> FrameSource:
     """Bildquelle aus einer URI erzeugen.
 
     Der Import der jeweiligen Implementierung passiert erst hier, damit ein
-    fehlendes picamera2 die uebrigen Quellen nicht unbenutzbar macht.
+    fehlendes cv2 die uebrigen Quellen nicht unbenutzbar macht.
     """
     scheme = urlparse(uri).scheme
+    if scheme in _RETIRED_SCHEMES:
+        raise ValueError(_RETIRED_SCHEME_MESSAGE)
     if scheme not in _REGISTRY:
         raise ValueError(f"unbekanntes Schema {scheme!r}; bekannt: {', '.join(known_schemes())}")
     return _REGISTRY[scheme](uri)

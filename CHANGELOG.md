@@ -21,6 +21,17 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   `display-offset.py` rechnen darüber um; alte `sensor_boottime`-Sessions
   unverändert. Tests: `tests/test_records.py`, `tests/test_gate_label.py`,
   `tests/test_display_offset.py`, `tests/test_import_harvest.py`.
+* Bildquelle (Task 2): `src/dispread/camera_settings.py` (`CameraSettings`:
+  Modell, USB-ID, Größe, FourCC, fps, Pflicht-Controls; feste Reihenfolge
+  Automatiken aus → feste Controls → Einstellwerte) und
+  `src/dispread/frames/uvc_source.py` (`UvcSource` für `v4l2://`: Gerät
+  per USB-ID über sysfs, OpenCV-V4L2-Capture, Controls über `v4l2-ctl`
+  mit Rücklesen und Abbruch bei Abweichung, Größenprüfung, Zeitstempel
+  `v4l2_monotonic` roh, Verwerfen von Null-/Rückwärts-Zeitstempeln,
+  Ende nach 2 s ohne Bild). `picamera2://`/`imx500://` aus der Registry
+  entfernt, Aufruf meldet „IMX500 ausser Betrieb seit 2026-09-25".
+  Tests: `tests/test_camera_settings.py`, `tests/test_uvc_source.py`,
+  `tests/test_frames_registry.py`.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
