@@ -20,6 +20,7 @@ nur lesen). Deckt die drei in der Aufgabe verlangten Verhaltensweisen ab:
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import importlib.util
 import json
 import sys
@@ -153,6 +154,10 @@ def _save_profile(tmp_path: Path, session_id: str) -> Path:
     path = tmp_path / f"{session_id}-profile.json"
     profile.save(path)
     return path
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _write_profile_map(tmp_path: Path, sessions: list[str]) -> Path:
@@ -380,6 +385,19 @@ def test_evaluate_unknown_pattern_is_abgelehnt():
     assert result["plateaus"] == {"gesamt": 1, "richtig": 0, "falsch": 0, "abgelehnt": 1}
 
 
+def test_build_samples_by_char_skips_short_cell_text_instead_of_indexerror():
+    """Final-Fix 5: eine Probe mit `cell_text` kuerzer als 9 Zeichen wird
+    gezaehlt und uebersprungen statt mit IndexError abzubrechen."""
+    good = _cell_sample("s1", "g1", (0, 1), "+0.60972 ", "+0.60972 ")
+    short = dataset_mod.CellSample("s2", "g1", (0, 1), "+0.6097", good.vectors[:7])
+
+    stats: dict[str, int] = {}
+    samples_by_char = train_mod.build_samples_by_char([good, short], stats=stats)
+
+    assert stats["zelltext_zu_kurz"] == 1
+    assert sum(len(v) for v in samples_by_char.values()) == 9  # nur "good" eingesortiert
+
+
 # --- Zusaetzliche Absicherung: loo-Berichtsstruktur, reader-check ----------
 
 
@@ -393,7 +411,11 @@ def test_loo_report_has_required_fields(tmp_path):
     assert report["vorzeichen"] == "ungeprueft (nur +)"
     assert report["threshold_formula"] == "thresholds_v1"
     assert len(report["git_commit"]) == 40
-    assert report["label_origin_counts"]["geladen"] == 36
+    assert report["lade_zaehler"]["geladen"] == 36
+    # Final-Fix 5: `herkunft` zaehlt `label_origin` ueber die geladenen
+    # Proben - hier laedt der Loader ausschliesslich `serial_ascii` (der
+    # Filter in `_iter_resolved_records` laesst nichts anderes durch).
+    assert report["herkunft"] == {"serial_ascii": 36}
     for durchgang in report["durchgaenge"]:
         for key in ("train_groups", "test_group", "d_max", "margin_min", "summary", "confusion", "plateaus"):
             assert key in durchgang
@@ -419,6 +441,7 @@ def test_reader_check_agrees_with_evaluate_on_synthetic_dataset(tmp_path):
             "--dataset-root", str(dataset_root),
             "--profile-map", str(map_path),
             "--templates", str(templates_path),
+            "--templates-sha256", _sha256(templates_path),
             "--limit", "10",
         ]
     )
@@ -471,6 +494,7 @@ def test_reader_check_reports_genuine_disagreement(tmp_path, monkeypatch, capsys
             "--dataset-root", str(dataset_root),
             "--profile-map", str(map_path),
             "--templates", str(templates_path),
+            "--templates-sha256", _sha256(templates_path),
             "--limit", "10",
         ]
     )
@@ -529,6 +553,7 @@ def test_reader_check_normalizes_vorzeichen_to_format_as_agreement(tmp_path):
             "--dataset-root", str(sign_root),
             "--profile-map", str(sign_map),
             "--templates", str(templates_path),
+            "--templates-sha256", _sha256(templates_path),
             "--limit", "5",
         ]
     )
@@ -569,7 +594,7 @@ def test_loo_exclude_groups_drops_group_from_every_fold_and_lists_it_with_reason
     # Datensatz-Zaehler zaehlen das Laden, nicht die Verwendung), aber vor
     # Training/Messung verworfen - siehe oben, kein g3 in irgendeinem
     # Durchgang.
-    assert report["label_origin_counts"]["geladen"] == 36
+    assert report["lade_zaehler"]["geladen"] == 36
 
 
 def test_loo_exclude_groups_requires_reason(tmp_path):

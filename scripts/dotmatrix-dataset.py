@@ -70,6 +70,14 @@ CELL_COUNT = 9
 #: entzerrt.
 REASON_NO_PROFILE = "ohne_profil"
 REASON_HASH_MISMATCH = "profil_pruefsumme_abweichend"
+#: Final-Fix 2: ein ueber `profile_map` aufgeloestes Profil, das das
+#: Aufloesungs-Gate nicht bestanden hat (`resolution_ok=False`) oder nicht
+#: bestaetigt wurde (`confirmed_by` leer), wird nie fuer die Entzerrung
+#: benutzt - siehe `dispread.layout.CharLayout.from_profile`. Proben mit
+#: Profil im `label_origin_detail` sind davon nicht betroffen: sie wurden
+#: nur importiert, wenn `import-harvest.py` das Profil schon zur Import-Zeit
+#: als bestaetigt akzeptiert hat.
+REASON_UNCONFIRMED = "profil_unbestaetigt"
 
 #: Von `write-map` bekannte Sitzungsprofile (Ernte Phase 1). Relativ zur
 #: Repo-Wurzel, wie in der Zuordnungsdatei abgelegt.
@@ -90,6 +98,10 @@ class CellSample:
     plateau: tuple[int, int]
     cell_text: str
     vectors: np.ndarray  # Form (CELL_COUNT, 9, 40), siehe dotmatrix_sampling.normalized
+    #: `label_origin` der geladenen Probe (heute immer "serial_ascii", der
+    #: Filter in `_iter_resolved_records` laedt nichts anderes) - fuer den
+    #: `herkunft`-Zaehler im loo-Bericht (Final-Fix 5).
+    label_origin: str = "serial_ascii"
 
 
 @dataclass
@@ -108,6 +120,7 @@ class ResolvedRecord:
     cell_text: str
     crop_gray: np.ndarray
     grid: CharGrid
+    label_origin: str = "serial_ascii"
 
 
 def _profile_sha256(path: Path) -> str:
@@ -194,6 +207,8 @@ def _resolve_profile(
                     if _profile_sha256(profile_path) != expected_sha256:
                         return REASON_HASH_MISMATCH
                     profile = SessionProfile.load(profile_path)
+                    if not profile.resolution_ok or not profile.confirmed_by:
+                        return REASON_UNCONFIRMED
                     return profile.quad, profile.grid, profile.target_size
     return REASON_NO_PROFILE
 
@@ -203,7 +218,9 @@ def _init_stats(stats: dict[str, int] | None) -> dict[str, int]:
         stats = {}
     stats.setdefault(REASON_NO_PROFILE, 0)
     stats.setdefault(REASON_HASH_MISMATCH, 0)
+    stats.setdefault(REASON_UNCONFIRMED, 0)
     stats.setdefault("ungueltige_zeichen", 0)
+    stats.setdefault("bild_unlesbar", 0)
     stats.setdefault("geladen", 0)
     return stats
 
@@ -256,6 +273,7 @@ def _iter_resolved_records(
         image_path = sample_dir / "image.png"
         image = cv2.imread(str(image_path))
         if image is None:
+            stats["bild_unlesbar"] += 1
             continue
 
         crop = rectify(image, tuple(tuple(p) for p in quad), target_size=target_size)
@@ -270,6 +288,7 @@ def _iter_resolved_records(
             cell_text=cell_text,
             crop_gray=gray,
             grid=grid,
+            label_origin=sample.get("label_origin", "serial_ascii"),
         )
 
 
@@ -301,6 +320,7 @@ def load_cell_samples(
                 plateau=rec.plateau,
                 cell_text=rec.cell_text,
                 vectors=vectors,
+                label_origin=rec.label_origin,
             )
         )
     return out

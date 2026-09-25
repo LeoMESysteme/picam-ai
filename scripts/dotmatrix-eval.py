@@ -147,13 +147,17 @@ def _cmd_loo(args: argparse.Namespace) -> int:
     all_samples = [s for s in all_samples if s.group not in exclude_groups]
     groups = sorted({s.group for s in all_samples})
 
+    herkunft: dict[str, int] = {}
+    for s in all_samples:
+        herkunft[s.label_origin] = herkunft.get(s.label_origin, 0) + 1
+
     durchgaenge = []
     for held_out in groups:
         train_samples = [s for s in all_samples if s.group != held_out]
         test_samples = [s for s in all_samples if s.group == held_out]
         train_groups = tuple(sorted({s.group for s in train_samples}))
 
-        samples_by_char = train_mod.build_samples_by_char(train_samples)
+        samples_by_char = train_mod.build_samples_by_char(train_samples, stats=stats)
         result = train_mod.train(samples_by_char, train_groups)
         if isinstance(result, list):  # ROM-Gegenprobe gescheitert, Muster bereits ausgegeben
             print(f"Durchgang mit Testgruppe {held_out!r}: kein Bericht geschrieben.", file=sys.stderr)
@@ -174,7 +178,12 @@ def _cmd_loo(args: argparse.Namespace) -> int:
         "groups": groups,
         "durchgaenge": durchgaenge,
         "excluded_groups": [{"group": g, "reason": args.exclude_reason} for g in sorted(exclude_groups)],
-        "label_origin_counts": stats,
+        "lade_zaehler": stats,
+        "herkunft": herkunft,
+        "hinweis": (
+            "Zellen 13-15 (Rest) nur im reader-check geprueft: evaluate() hat nur "
+            "die gespeicherten 9-Zellen-Vektoren, keine Zellen 13-15 (Final-Fix 3)."
+        ),
         "vorzeichen": "ungeprueft (nur +)",
         "threshold_formula": THRESHOLD_FORMULA,
         "git_commit": _git_commit(),
@@ -213,7 +222,7 @@ def _reader_outcome(result, true_text: str) -> tuple[str, str | None]:
 def _cmd_reader_check(args: argparse.Namespace) -> int:
     dataset = _load_dataset_module()
     profile_map = dataset.read_profile_map(args.profile_map)
-    templates = load_templates(args.templates)
+    templates = load_templates(args.templates, args.templates_sha256)
     reader = DotMatrixReader(templates)
 
     stats: dict[str, int] = {}
@@ -274,6 +283,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     reader_check.add_argument("--dataset-root", type=Path, required=True)
     reader_check.add_argument("--profile-map", type=Path, required=True)
     reader_check.add_argument("--templates", type=Path, required=True)
+    reader_check.add_argument(
+        "--templates-sha256", required=True, help="Erwartete Pruefsumme von --templates (Pflicht, fail-open schliessen)"
+    )
     reader_check.add_argument("--limit", type=int, default=20)
     reader_check.set_defaults(func=_cmd_reader_check)
 

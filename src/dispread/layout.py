@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from dispread.charcells import CharGrid
+from dispread.session_profile import SessionProfile
 
 #: Segmentreihenfolge in allen Masken dieses Projekts.
 #:
@@ -167,3 +168,20 @@ class CharLayout:
     unit: str
     format_id: str = "gsv2as_v1"
     classified_cells: int = 9
+    #: Zellen, die immer leer sein muessen ("Rest", Zellen 9-15 abzueglich der
+    #: nicht gelesenen Einheit 9-12) - siehe `DotMatrixReader.read`.
+    blank_cells: tuple[int, ...] = (13, 14, 15)
+
+    @classmethod
+    def from_profile(cls, profile: SessionProfile, unit: str) -> CharLayout:
+        """Baut ein `CharLayout` aus einem bestaetigten `SessionProfile`.
+
+        Wirft `ValueError`, wenn das Profil das Aufloesungs-Gate nicht
+        bestanden hat (`resolution_ok` False) oder nicht bestaetigt wurde
+        (`confirmed_by` leer) - ein unbestaetigtes Profil darf nie fuer den
+        Leser verwendet werden (Konzept.md §4, Ernte Phase 1 Entscheidung 2)."""
+        if not profile.resolution_ok:
+            raise ValueError("Profil nicht bestaetigt: resolution_ok ist False")
+        if not profile.confirmed_by:
+            raise ValueError("Profil nicht bestaetigt: confirmed_by ist leer")
+        return cls(grid=profile.grid, unit=unit)

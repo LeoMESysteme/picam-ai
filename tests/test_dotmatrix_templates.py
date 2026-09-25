@@ -98,3 +98,94 @@ def test_save_load_checksum_and_version(tmp_path, samples):
 
 def test_rom_check_passes_on_rom():
     assert rom_check({ch: rom_vector(ch) for ch in CLASSES}) == []
+
+
+# --- Fail-open bei beschaedigter Vorlagendatei schliessen (Final-Fix 1) ----
+
+
+def _save(tmp_path, samples, name="templates.json"):
+    t = build_templates(samples, ("g1",))
+    p = tmp_path / name
+    save_templates(t, p)
+    return p
+
+
+def test_load_templates_rejects_nan_d_max(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    data["d_max"] = float("nan")
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="d_max"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_nan_margin_min(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    data["margin_min"] = float("nan")
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="margin_min"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_non_positive_d_max(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    data["d_max"] = 0.0
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="d_max"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_negative_std(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    data["std"]["0"][0] = -1.0
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="std"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_nan_mean(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    data["mean"]["0"][0] = float("nan")
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="mean"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_missing_d_max(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    del data["d_max"]
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="d_max"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_missing_margin_min(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    del data["margin_min"]
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="margin_min"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_missing_groups(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    del data["groups"]
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="groups"):
+        load_templates(p)
+
+
+def test_load_templates_rejects_missing_counts(tmp_path, samples):
+    p = _save(tmp_path, samples)
+    data = json.loads(p.read_text())
+    del data["counts"]
+    p.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="counts"):
+        load_templates(p)

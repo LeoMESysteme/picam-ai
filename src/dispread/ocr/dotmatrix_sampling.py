@@ -64,7 +64,7 @@ def _bilinear(img: np.ndarray, pts: np.ndarray) -> np.ndarray:
     return a * (1 - fy) + b * fy
 
 
-def sample_image(gray: np.ndarray, grid: CharGrid, cells: range) -> SampledImage:
+def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...]) -> SampledImage:
     """Tastet jede Zelle bei allen `SHIFTS` ab (Rohhelligkeiten, ungeglaettet)."""
     img = gray.astype(np.float32)
     col_w = grid.pitch / (grid.dot_columns + grid.gap_columns)
@@ -86,20 +86,30 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range) -> SampledImage
     return SampledImage(raw, background.astype(np.float32), ink, float(max(contrast, 0.0)), saturated)
 
 
-def normalized(s: SampledImage) -> np.ndarray:
+def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
     """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an).
 
     Die Beleuchtung ueber das Glas wirkt multiplikativ (eine dunklere Stelle
     daempft Hintergrund und Tinte im gleichen Verhaeltnis), deshalb wird der
-    global gemessene Tintenpegel `s.ink` je Zelle mit dem Verhaeltnis ihres
-    Hintergrunds zum Median-Hintergrund skaliert, statt ihn unveraendert
-    (additiv) abzuziehen.
+    global gemessene Tintenpegel (`s.ink`, oder das ueberschriebene `ink`) je
+    Zelle mit dem Verhaeltnis ihres Hintergrunds zum Median-Hintergrund
+    skaliert, statt ihn unveraendert (additiv) abzuziehen.
+
+    `ink` erlaubt, den global gemessenen Tintenpegel EINER anderen Abtastung
+    zu uebernehmen (Final-Fix 3: die "Rest leer"-Pruefung tastet Zellen 13-15
+    fuer sich ab; ohne Ziffern in dieser Teilmenge waere ihr eigener
+    Tintenpegel ~= Hintergrund, `depth` liefe auf den Bodenwert 1e-3 und
+    verstaerkte Rauschen zu einem Scheinmuster statt einer sauberen
+    Leerzelle. Der Tintenpegel der Zellen 0-8 ist stabil, weil dort echte
+    Ziffern vorkommen, und aendert das Ergebnis fuer 0-8 selbst nicht, wenn
+    `ink=None` bleibt).
     """
+    ink_level = s.ink if ink is None else ink
     median_bg = float(np.median(s.background))
     if median_bg > 0:
-        ink_cell = s.ink * s.background / median_bg
+        ink_cell = ink_level * s.background / median_bg
     else:
-        ink_cell = np.full_like(s.background, s.ink)
+        ink_cell = np.full_like(s.background, ink_level)
     depth = s.background - ink_cell
     depth = np.where(depth > 1e-3, depth, 1e-3)
     out = (s.background[:, None, None] - s.raw) / depth[:, None, None]

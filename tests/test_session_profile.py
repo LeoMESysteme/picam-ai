@@ -1,8 +1,10 @@
+import dataclasses
 import json
 
 import pytest
 
 from dispread.charcells import CharGrid
+from dispread.layout import CharLayout
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 
 
@@ -55,3 +57,24 @@ def test_schema_version_2_requires_native_scale_fields(tmp_path):
     p.write_text(json.dumps(d))
     with pytest.raises(ValueError, match="native_scale"):
         SessionProfile.load(p)
+
+
+# --- CharLayout.from_profile: unbestaetigte Profile abweisen (Final-Fix 2) -
+
+
+def test_char_layout_from_profile_builds_layout_from_confirmed_profile():
+    layout = CharLayout.from_profile(_profile(), unit="mV/V")
+    assert layout.grid == _profile().grid
+    assert layout.unit == "mV/V"
+
+
+def test_char_layout_from_profile_rejects_resolution_not_ok():
+    profile = dataclasses.replace(_profile(), resolution_ok=False)
+    with pytest.raises(ValueError, match="resolution_ok"):
+        CharLayout.from_profile(profile, unit="mV/V")
+
+
+def test_char_layout_from_profile_rejects_empty_confirmed_by():
+    profile = dataclasses.replace(_profile(), confirmed_by="")
+    with pytest.raises(ValueError, match="confirmed_by"):
+        CharLayout.from_profile(profile, unit="mV/V")

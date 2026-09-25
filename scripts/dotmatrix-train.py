@@ -53,11 +53,21 @@ def _load_dataset_module():
     return module
 
 
-def build_samples_by_char(samples) -> dict[str, list]:
+def build_samples_by_char(samples, stats: dict[str, int] | None = None) -> dict[str, list]:
     """Aus `CellSample`s: je Zelle 0..8 einer Probe wird ihr Vektor unter
-    dem gelabelten Zeichen einsortiert (Auftrag Task 7)."""
+    dem gelabelten Zeichen einsortiert (Auftrag Task 7).
+
+    Eine Probe mit `cell_text` kuerzer als 9 Zeichen wird gezaehlt (in
+    `stats`, falls uebergeben, unter `zelltext_zu_kurz`) und uebersprungen,
+    statt mit `IndexError` abzubrechen (Final-Fix 5)."""
+    if stats is not None:
+        stats.setdefault("zelltext_zu_kurz", 0)
     samples_by_char: dict[str, list] = {c: [] for c in CLASSES}
     for s in samples:
+        if len(s.cell_text) < 9:
+            if stats is not None:
+                stats["zelltext_zu_kurz"] += 1
+            continue
         for i in range(9):
             samples_by_char[s.cell_text[i]].append(s.vectors[i])
     return samples_by_char
@@ -109,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Keine Trainingsproben - nichts zu tun.", file=sys.stderr)
         return 2
 
-    samples_by_char = build_samples_by_char(chosen)
+    samples_by_char = build_samples_by_char(chosen, stats=stats)
     result = train(samples_by_char, groups)
     if isinstance(result, list):  # ROM-Gegenprobe gescheitert, bereits ausgegeben
         return 3

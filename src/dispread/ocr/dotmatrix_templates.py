@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -152,6 +153,14 @@ def save_templates(t: Templates, path: Path) -> str:
 
 
 def load_templates(path: Path, expected_sha256: str | None = None) -> Templates:
+    """Laedt eine Vorlagendatei. Wirft `ValueError` statt eines fail-open
+    Verhaltens bei jeder Beschaedigung, die die Klassifikation lautlos
+    verfaelschen wuerde: fehlende Pflichtfelder, nicht-endliche oder
+    unplausible Schwellen (`d_max`/`margin_min` muessen > 0 sein), nicht-
+    endliche `mean`-Werte und nicht-endliche oder negative `std`-Werte (eine
+    negative Streuung ist kein gueltiges Modell, `distance()` erwartet
+    `std >= 0`). Konzept.md §7: Unlesbares/Unplausibles wird abgelehnt, nie
+    stillschweigend weiterverwendet."""
     blob = Path(path).read_bytes()
     if expected_sha256 is not None and hashlib.sha256(blob).hexdigest() != expected_sha256:
         raise ValueError(f"Pruefsumme von {path} weicht ab")
@@ -160,16 +169,37 @@ def load_templates(path: Path, expected_sha256: str | None = None) -> Templates:
         raise ValueError(f"format_version {data.get('format_version')!r} statt {FORMAT_VERSION}")
     if data.get("threshold_formula") != THRESHOLD_FORMULA:
         raise ValueError(f"threshold_formula {data.get('threshold_formula')!r} statt {THRESHOLD_FORMULA}")
+
+    for key in ("d_max", "margin_min", "groups", "counts"):
+        if key not in data:
+            raise ValueError(f"Feld {key!r} fehlt in {path}")
+
+    d_max = data["d_max"]
+    margin_min = data["margin_min"]
+    if not isinstance(d_max, (int, float)) or not math.isfinite(d_max) or d_max <= 0:
+        raise ValueError(f"d_max {d_max!r} ist nicht endlich oder <= 0")
+    if not isinstance(margin_min, (int, float)) or not math.isfinite(margin_min) or margin_min <= 0:
+        raise ValueError(f"margin_min {margin_min!r} ist nicht endlich oder <= 0")
+
     for key in ("mean", "std"):
+        if key not in data:
+            raise ValueError(f"Feld {key!r} fehlt in {path}")
         _require_classes(data[key])
         for c in CLASSES:
-            if len(data[key][c]) != N_DOTS:
+            values = data[key][c]
+            if len(values) != N_DOTS:
                 raise ValueError(f"{key}[{c!r}] hat nicht {N_DOTS} Werte")
+            for x in values:
+                if not isinstance(x, (int, float)) or not math.isfinite(x):
+                    raise ValueError(f"{key}[{c!r}] enthaelt einen nicht endlichen Wert")
+                if key == "std" and x < 0:
+                    raise ValueError(f"std[{c!r}] enthaelt einen negativen Wert")
+
     return Templates(
         mean={c: np.asarray(data["mean"][c], np.float32) for c in CLASSES},
         std={c: np.asarray(data["std"][c], np.float32) for c in CLASSES},
-        d_max=float(data["d_max"]),
-        margin_min=float(data["margin_min"]),
+        d_max=float(d_max),
+        margin_min=float(margin_min),
         groups=tuple(data["groups"]),
         counts=dict(data["counts"]),
     )

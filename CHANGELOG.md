@@ -65,9 +65,26 @@ Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
   `dotmatrix_templates.binarized_pattern` die Musterausgabe. Tests:
   `tests/test_dotmatrix_train_eval.py` (u. a. Leckagetest: Proben der
   zurückgehaltenen Gruppe ändern deren Schwellen nicht).
-<!-- dotmatrix-bullets -->
+* Abschlussprüfung, Korrekturwelle: `load_templates` lehnt nicht endliche
+  oder nicht positive Schwellen und ungültige Streuungen ab (vorher hätte
+  eine beschädigte Datei mit `NaN` jede Zelle durchgelassen);
+  `DotMatrixReader.from_file` und `reader-check` verlangen die Prüfsumme.
+  `CharLayout.from_profile` weist Profile mit `resolution_ok=False` oder ohne
+  `confirmed_by` ab, der Lader zählt sie als `profil_unbestaetigt`. Der Leser
+  prüft zusätzlich, dass Zellen 13–15 leer sind (sonst `format`); die
+  Einheit in Zellen 9–12 wird weiterhin nicht gelesen. Unbekanntes
+  `format_id` wird abgewiesen. Neuer geseedeter Sicherheitstest (300 gültige
+  Werte mit Rasterversatz, Unschärfe, Rauschen und Helligkeitsverlauf):
+  jeder Wert richtig oder abgelehnt, keiner falsch. Loo-Bericht:
+  `lade_zaehler`, `herkunft`, `hinweis` (Zellen 13–15 nur im
+  `reader-check` geprüft). `default_gate_config` benennt, dass die
+  Konfidenz für `dotmatrix` aus Abstandseinheiten stammt.
 
-**Konsequenz:** siehe Plan, Task 8 (Stufe 1) und Stufe 2 (Abnahme).
+**Konsequenz:** Der Leser ist gebaut und lehnt im Zweifel ab (synthetisch: 0
+falsch freigegebene Werte). Die Entwicklungsmessung auf echten Daten ist
+noch nicht gelaufen: die ROM-Gegenprobe scheitert an Aufstellung `auf3`
+(Kamera nach der Profilbestätigung verschoben) und am weichen `auf2`
+(OQ-42). Freigabe erst nach Stufe 1 und der einmaligen Abnahme (Stufe 2).
 
 ## 0.1.0.dev0 — 2026-09-24 (Führende Nullen: zwei statt einer)
 

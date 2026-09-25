@@ -268,6 +268,108 @@ def test_load_cell_samples_skips_sample_when_map_profile_was_reconfirmed(tmp_pat
     assert stats["ohne_profil"] == 0
 
 
+def test_load_cell_samples_skips_unconfirmed_profile_from_map(tmp_path):
+    """Final-Fix 2: ein ueber `profile_map` aufgeloestes Profil mit
+    `resolution_ok=False` wird nie fuer die Entzerrung benutzt - gezaehlt
+    unter `profil_unbestaetigt`, nicht geraten."""
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+
+    detail = _base_detail("sessB")
+    _write_sample(dataset_root, "sample-b", detail)
+
+    profile = SessionProfile(
+        schema_version=PROFILE_SCHEMA_VERSION,
+        device_id="gsv-sensor-161a",
+        session_id="sessB",
+        quad=_quad(),
+        target_size=TARGET_SIZE,
+        grid=GRID,
+        scaler_crop=None,
+        min_source_dot_column_px=5.0,
+        native_scale=1.0,
+        min_native_dot_column_px=5.0,
+        resolution_threshold_px=2.0,
+        resolution_ok=False,
+        confirmed_by="tester",
+        confirmed_at_utc="2026-09-24T12:00:00+00:00",
+    )
+    profile_path = tmp_path / "sessB-profile.json"
+    profile.save(profile_path)
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": dotmatrix_dataset._profile_sha256(profile_path)}}
+
+    stats: dict[str, int] = {}
+    samples = dotmatrix_dataset.load_cell_samples(dataset_root, profile_map, stats=stats)
+
+    assert samples == []
+    assert stats["profil_unbestaetigt"] == 1
+
+
+def test_load_cell_samples_skips_map_profile_with_empty_confirmed_by(tmp_path):
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+
+    detail = _base_detail("sessB")
+    _write_sample(dataset_root, "sample-b", detail)
+
+    profile = SessionProfile(
+        schema_version=PROFILE_SCHEMA_VERSION,
+        device_id="gsv-sensor-161a",
+        session_id="sessB",
+        quad=_quad(),
+        target_size=TARGET_SIZE,
+        grid=GRID,
+        scaler_crop=None,
+        min_source_dot_column_px=5.0,
+        native_scale=1.0,
+        min_native_dot_column_px=5.0,
+        resolution_threshold_px=2.0,
+        resolution_ok=True,
+        confirmed_by="",
+        confirmed_at_utc="2026-09-24T12:00:00+00:00",
+    )
+    profile_path = tmp_path / "sessB-profile.json"
+    profile.save(profile_path)
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": dotmatrix_dataset._profile_sha256(profile_path)}}
+
+    stats: dict[str, int] = {}
+    samples = dotmatrix_dataset.load_cell_samples(dataset_root, profile_map, stats=stats)
+
+    assert samples == []
+    assert stats["profil_unbestaetigt"] == 1
+
+
+def test_load_cell_samples_counts_unreadable_image(tmp_path):
+    """Final-Fix 5: ein unlesbares `image.png` wird gezaehlt, nicht
+    stillschweigend uebersprungen."""
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+
+    detail = _base_detail("sessA")
+    detail["profile_quad"] = json.dumps([[round(x, 2), round(y, 2)] for x, y in _quad()])
+    grid_dict = GRID.to_dict()
+    grid_dict["target_size"] = list(TARGET_SIZE)
+    detail["profile_grid"] = json.dumps(grid_dict)
+    sample_dir = dataset_root / "samples" / "sample-a"
+    sample_dir.mkdir(parents=True)
+    (sample_dir / "image.png").write_bytes(b"nicht-wirklich-ein-bild")
+    sample = {
+        "schema_version": 2,
+        "id": "sample-a",
+        "device_id": DEVICE_ID,
+        "label_state": "readable",
+        "label_origin": "serial_ascii",
+        "label_origin_detail": detail,
+    }
+    (sample_dir / "sample.json").write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+
+    stats: dict[str, int] = {}
+    samples = dotmatrix_dataset.load_cell_samples(dataset_root, {}, stats=stats)
+
+    assert samples == []
+    assert stats["bild_unlesbar"] == 1
+
+
 def test_load_cell_samples_treats_map_entry_without_sha256_as_unresolved(tmp_path):
     dataset_root = tmp_path / "dataset"
     _write_devices(dataset_root)

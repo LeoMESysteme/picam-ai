@@ -49,7 +49,10 @@ class DotMatrixReader:
         self._t = templates
 
     @classmethod
-    def from_file(cls, path: Path, expected_sha256: str | None = None) -> DotMatrixReader:
+    def from_file(cls, path: Path, expected_sha256: str) -> DotMatrixReader:
+        """Laedt Vorlagen von `path`. `expected_sha256` ist Pflicht (keine
+        Default) - ein Betrieb ohne geprueften Bezug auf eine bekannte
+        Vorlagendatei waere fail-open (Final-Fix 1)."""
         return cls(load_templates(path, expected_sha256))
 
     @property
@@ -61,6 +64,8 @@ class DotMatrixReader:
         return False
 
     def read(self, crop: np.ndarray, layout: CharLayout) -> ReadResult:
+        if layout.format_id != "gsv2as_v1":
+            raise ValueError(f"unbekanntes format_id {layout.format_id!r}, erwartet 'gsv2as_v1'")
         gray = crop if crop.ndim == 2 else cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         cells = range(layout.classified_cells)
         sampled = sample_image(gray, layout.grid, cells)
@@ -106,7 +111,9 @@ class DotMatrixReader:
             return self._reject(first_reject, diag, layout, glyphs)
         cells_text = "".join(d.text for d in decisions)
         parsed = parse_gsv2as(cells_text)
-        if parsed is None:
+        blank_ok = self._blank_cells_ok(gray, layout, sampled.ink)
+        diag["blank_cells_ok"] = blank_ok
+        if parsed is None or not blank_ok:
             return self._reject("format", diag, layout, glyphs)
         raw, value = parsed
         diag["reject_reason"] = None
@@ -116,6 +123,23 @@ class DotMatrixReader:
             unit_text=layout.unit, status_flags=frozenset(), glyphs=glyphs,
             backend_id=BACKEND_ID, backend_version=BACKEND_VERSION, diagnostics=diag,
         )
+
+    def _blank_cells_ok(self, gray: np.ndarray, layout: CharLayout, ink: float) -> bool:
+        """`layout.blank_cells` (Rest, Zellen 13-15) muss sicher als
+        Leerzelle erkannt werden. Eigene Abtastung, getrennt von den Zellen
+        0-8 - Hintergrund/Punktpegel duerfen sich fuer 0-8 durch diese
+        zusaetzliche Pruefung nicht aendern (Final-Fix 3). Der global
+        gemessene Tintenpegel `ink` der Zellen 0-8 wird uebernommen statt
+        neu (nur ueber 13-15) gemessen: ohne Ziffern in dieser Teilmenge
+        waere ihr eigener Tintenpegel praktisch gleich dem Hintergrund, was
+        `normalized()` zu einer Rauschverstaerkung statt einer sauberen
+        Leerzelle fuehren wuerde (siehe `normalized`-Docstring)."""
+        if not layout.blank_cells:
+            return True
+        sampled = sample_image(gray, layout.grid, layout.blank_cells)
+        norm = normalized(sampled, ink=ink)
+        decisions = [classify(norm[i], self._t) for i in range(len(layout.blank_cells))]
+        return all(d.text == " " for d in decisions)
 
     def _reject(self, reason, diag, layout, glyphs=(), sign_readable=True) -> ReadResult:
         diag["reject_reason"] = reason

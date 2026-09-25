@@ -51,6 +51,39 @@ def test_shift_at_image_border_does_not_raise():
     assert s.raw.shape == (9, 9, 40)
 
 
+def test_normalized_ink_override_prevents_noise_amplification_on_blank_subset():
+    """Final-Fix 3: eine Zellenteilmenge ohne eigene Ziffern (z. B. die drei
+    'Rest'-Zellen) hat praktisch keinen eigenen Kontrast - ihr eigener
+    Tintenpegel liegt nahe am Hintergrund, `depth` faellt auf den Bodenwert
+    und verstaerkt Rauschen zu einem Scheinmuster statt einer sauberen
+    Leerzelle. Mit dem global (an echten Ziffern) gemessenen Tintenpegel
+    ueberschrieben bleibt die Teilmenge sauber nahe Null."""
+    text = "+0.60972 "
+    img = render(text)
+    img = np.clip(img.astype(np.float32) + np.random.default_rng(3).normal(0, 3, img.shape), 0, 255).astype(
+        np.uint8
+    )
+    digits = sample_image(img, GRID, range(9))
+    blanks = sample_image(img, GRID, (13, 14, 15))
+    zero = SHIFTS.index((0, 0))
+
+    own = normalized(blanks)
+    assert own[:, zero].max() > 0.5  # eigener Tintenpegel: Rauschen an den Clip getrieben
+
+    shared = normalized(blanks, ink=digits.ink)
+    assert shared[:, zero].max() < 0.35  # uebernommener Tintenpegel: sauber leer
+
+
+def test_normalized_default_ink_unchanged_for_classified_cells():
+    """`normalized(s)` ohne `ink`-Argument bleibt fuer die Zellen 0-8 exakt
+    das bisherige Verhalten - die neue `ink`-Uebernahme ist ein Opt-in, kein
+    Default-Wechsel (Final-Fix 3)."""
+    img = render("+0.60972 ")
+    s = sample_image(img, GRID, range(9))
+    assert np.array_equal(normalized(s), normalized(s, ink=s.ink))
+    assert np.array_equal(normalized(s), normalized(s, ink=None))
+
+
 def test_normalized_survives_multiplicative_illumination_gradient():
     text = "+0.60972 "
     img = render(text)

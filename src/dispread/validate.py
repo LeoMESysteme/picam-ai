@@ -73,6 +73,14 @@ def default_gate_config(backend_id: str, **overrides: object) -> GateConfig:
     Dot-Matrix-Leser wendet seine eingefrorenen Schwellen (templates.json,
     Formel thresholds_v1) selbst an und lehnt ab - hier doppelt zu schwellen,
     wuerde eine zweite, ungemessene Grenze einfuehren.
+
+    Fuer `backend_id="dotmatrix"` stammt `GateDecision.confidence`
+    (`min(1.0, min_margin)` in `ReleaseGate.evaluate`) aus dem `min_margin`
+    der Diagnostics, das der Dot-Matrix-Leser in Abstandseinheiten der
+    Vorlagen liefert (Templates-Skala, siehe `dotmatrix_templates.py`) - NICHT
+    aus der 0..1-Skala des 7-Segment-Lesers. Der Wert ist wie bei sevenseg
+    keine Fehlerwahrscheinlichkeit (Konzept.md §7,
+    `declares_confidence_calibrated` bleibt `False`).
     """
     if backend_id not in _KNOWN_BACKENDS:
         raise ValueError(f"unbekannter Leser {backend_id!r}")
