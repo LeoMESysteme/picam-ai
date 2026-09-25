@@ -20,9 +20,8 @@ SDD-Ledger `.superpowers/sdd/2026-09-25-streamcam-switch/progress.md`
 * Erledigt und reviewt: Task 1 (Zeitbasis `v4l2_monotonic`,
   `to_boottime_ns`), Task 2 (`CameraSettings`, `UvcSource`, `v4l2://`),
   Task 3 (`sync-record` über StreamCam, Budget/ScalerCrop raus,
-  Bildzähler-Fix), Task 4 (Profil v3, `harvest-setup focus`).
-* Task 5 (Timing-Kalibrierung, `harvest.py`) committet (`cf8be28`), Review
-  lief bei Sitzungsende — Ergebnis in `task-5-review.md` prüfen.
+  Bildzähler-Fix), Task 4 (Profil v3, `harvest-setup focus`), Task 5
+  (Timing-Kalibrierung Pflicht, `harvest.py`), bis `cf8be28`.
 * Offen: Task 6 (Werkbank-Kamera deaktivieren, `camera-commissioning.sh`
   neu, Hardwaretest), danach Abschlussreview, Doku (project_history,
   Konzept-Abweichung, CLAUDE.md, OQ-22-Nachtrag, neue OQ, status, ROADMAP,
