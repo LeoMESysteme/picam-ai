@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from dispread.charcells import CharGrid
-from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
+from dispread.session_profile import SessionProfile
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "harvest.py"
 
@@ -37,7 +37,7 @@ harvest = _load_harvest_module()
 
 def _profile(*, resolution_ok=True, scaler_crop=(1000, 800, 1600, 1200)):
     return SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv2as-01",
         session_id="s1",
         quad=[[1, 2], [3, 4], [5, 6], [7, 8]],

@@ -43,6 +43,18 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   Fehler behoben: `frames_recorded` zeigt nach einem Kameraausfall mitten in
   der Aufnahme die tatsächlich geschriebenen Bilder statt 0. Tests:
   `tests/test_sync_record.py` (IMX500-Tests entfernt).
+* Einrichtung (Task 4): `SessionProfile` Schema 3 mit Block `camera`
+  (`CameraSettings`), bei v3 fest `scaler_crop = null`, `native_scale = 1.0`;
+  v2-Profile (IMX500) bleiben lesbar und werden unverändert serialisiert.
+  Neu `src/dispread/focus_sweep.py` (Laplace-Schärfe, Fokus-Sweep grob →
+  fein) und `harvest-setup.py focus` (Fokus per Software, Belichtung und
+  Weißabgleich einmal automatisch, dann eingefroren, `camera-settings.json`
+  + Kontrollbild). `propose` verlangt `--camera-settings` statt
+  `--session-json`/`--scaler-crop`, `confirm` schreibt Profil v3 und
+  verweigert Vorschläge ohne Kameraeinstellungen; `--assume-native-scale`
+  und die Binning-Rechnung entfallen. Tests: `tests/test_session_profile.py`,
+  `tests/test_focus_sweep.py`, `tests/test_harvest_setup.py`
+  (Profil-Hilfen in den Datensatz-/Trainingstests auf explizit v2 gestellt).
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

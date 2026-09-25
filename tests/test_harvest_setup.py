@@ -1,5 +1,5 @@
-"""`scripts/harvest-setup.py` - Task 3 aus
-docs/superpowers/plans/2026-09-23-ernte-phase1.md.
+"""`scripts/harvest-setup.py` - Task 3 (`propose`/`confirm`) und Task 4
+(`focus`, Profil v3, StreamCam-Umstieg).
 
 Test-first: jeder Test hier muss scheitern, bevor das Skript existiert. Das
 synthetische Bild ist ein graues Bild mit einem gesaettigten gruenen
@@ -8,6 +8,11 @@ ein leicht geneigtes Vierpunktquad projiziert wird - genau der Fall, fuer den
 `lcd_quad_in_region` gebaut ist (hinterleuchtete Zeichen-LCD).
 
 Muster fuer das Laden des Skripts per importlib aus `tests/test_gate_label.py`.
+
+`focus` wird nie gegen echte Hardware getestet (AGENTS.md) - `_open_camera_io`
+wird komplett per Monkeypatch ersetzt, `time.sleep` ebenso (sonst wuerde die
+Testsuite die realen Wartezeiten des Sweeps/der Weissabgleich-Einschwingzeit
+mitmachen).
 """
 
 from __future__ import annotations
@@ -16,11 +21,13 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
 
+from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
 from dispread.session_profile import SessionProfile
 
@@ -76,69 +83,6 @@ def _build_synthetic_scene() -> np.ndarray:
     return canvas
 
 
-def _dummy_proposal(
-    tmp_path: Path, *, grid_source: str, min_px: float = 4.0, native_scale: float | None = 1.0
-) -> dict:
-    """`native_scale=1.0` (Vorgabe) ahmt propose mit --session-json und einem
-    Crop nach, der breiter als der Output ist (kein Aufskalieren, siehe
-    Bug 2/_compute_native_scale) - die bestehenden Gate-Tests pruefen damit
-    weiterhin unveraendert min_source_dot_column_px == min_native_dot_column_px.
-    `native_scale=None` simuliert propose OHNE --session-json."""
-    grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
-    return {
-        "frame": str(tmp_path / "frame.png"),
-        "device_id": "gsv2as-01",
-        "session_id": "s1",
-        "quad": QUAD_GT,
-        "target_size": [400, 160],
-        "grid": grid.to_dict(),
-        "grid_source": grid_source,
-        "scaler_crop": None,
-        "min_source_dot_column_px": min_px,
-        "session_json": None,
-        "native_scale": native_scale,
-        "min_native_dot_column_px": (min_px * native_scale) if native_scale is not None else None,
-    }
-
-
-def test_propose_finds_quad_and_writes_files(tmp_path):
-    canvas = _build_synthetic_scene()
-    frame_path = tmp_path / "frame.png"
-    cv2.imwrite(str(frame_path), canvas)
-    out_dir = tmp_path / "session"
-
-    rc = harvest_setup.main(
-        [
-            "propose",
-            "--frame",
-            str(frame_path),
-            "--hint-box",
-            HINT_BOX,
-            "--device-id",
-            "gsv2as-01",
-            "--session-id",
-            "s1",
-            "--out",
-            str(out_dir),
-        ]
-    )
-    assert rc == 0
-
-    proposal = json.loads((out_dir / "proposal.json").read_text())
-    assert (out_dir / "overlay_source.png").exists()
-    assert (out_dir / "overlay_rectified.png").exists()
-    assert proposal["grid_source"] == "default_even_split"
-    assert proposal["device_id"] == "gsv2as-01"
-    assert proposal["session_id"] == "s1"
-    assert proposal["min_source_dot_column_px"] > 0
-
-    found_quad = proposal["quad"]
-    assert len(found_quad) == 4
-    for (fx, fy), (gx, gy) in zip(found_quad, QUAD_GT, strict=True):
-        assert abs(fx - gx) <= 3
-        assert abs(fy - gy) <= 3
-
-
 def _build_synthetic_scene_asymmetric() -> np.ndarray:
     """Wie `_build_synthetic_scene`, aber mit einem asymmetrischen Merkmal:
     Zelle 0 (die am weitesten links liegende) ist vollstaendig schwarz
@@ -177,6 +121,149 @@ def _build_synthetic_scene_asymmetric() -> np.ndarray:
     return canvas
 
 
+def _camera_settings(*, size: tuple[int, int] = CANVAS_SIZE) -> CameraSettings:
+    return CameraSettings(
+        model=STREAMCAM_MODEL,
+        usb_id=STREAMCAM_USB_ID,
+        size=size,
+        fourcc="YUYV",
+        fps=30,
+        controls={
+            "focus_absolute": 48,
+            "exposure_time_absolute": 157,
+            "white_balance_temperature": 4600,
+            "gain": 32,
+        },
+    )
+
+
+def _write_camera_settings(tmp_path: Path, *, size: tuple[int, int] = CANVAS_SIZE, name: str = "camera-settings.json") -> Path:
+    path = tmp_path / name
+    path.write_text(json.dumps({"camera": _camera_settings(size=size).to_dict()}), encoding="utf-8")
+    return path
+
+
+def _dummy_proposal(tmp_path: Path, *, grid_source: str, min_px: float = 4.0, with_camera: bool = True) -> dict:
+    grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
+    proposal = {
+        "frame": str(tmp_path / "frame.png"),
+        "device_id": "gsv2as-01",
+        "session_id": "s1",
+        "quad": QUAD_GT,
+        "target_size": [400, 160],
+        "grid": grid.to_dict(),
+        "grid_source": grid_source,
+        "scaler_crop": None,
+        "min_source_dot_column_px": min_px,
+        "native_scale": 1.0,
+        "min_native_dot_column_px": min_px,
+    }
+    if with_camera:
+        proposal["camera"] = _camera_settings().to_dict()
+    return proposal
+
+
+def test_propose_finds_quad_and_writes_files(tmp_path):
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    camera_settings_path = _write_camera_settings(tmp_path)
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--camera-settings",
+            str(camera_settings_path),
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    assert rc == 0
+
+    proposal = json.loads((out_dir / "proposal.json").read_text())
+    assert (out_dir / "overlay_source.png").exists()
+    assert (out_dir / "overlay_rectified.png").exists()
+    assert proposal["grid_source"] == "default_even_split"
+    assert proposal["device_id"] == "gsv2as-01"
+    assert proposal["session_id"] == "s1"
+    assert proposal["min_source_dot_column_px"] > 0
+    assert proposal["native_scale"] == 1.0
+    assert proposal["min_native_dot_column_px"] == pytest.approx(proposal["min_source_dot_column_px"])
+    assert proposal["scaler_crop"] is None
+    assert proposal["camera"] == _camera_settings().to_dict()
+
+    found_quad = proposal["quad"]
+    assert len(found_quad) == 4
+    for (fx, fy), (gx, gy) in zip(found_quad, QUAD_GT, strict=True):
+        assert abs(fx - gx) <= 3
+        assert abs(fy - gy) <= 3
+
+
+def test_propose_rejects_frame_size_mismatch(tmp_path):
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    # Kameraeinstellungen fuer eine ANDERE Groesse als das Bild (640x360).
+    camera_settings_path = _write_camera_settings(tmp_path, size=(1920, 1080))
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--camera-settings",
+            str(camera_settings_path),
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    assert rc == 2
+    assert not (out_dir / "proposal.json").exists()
+
+
+def test_propose_rejects_missing_camera_settings(tmp_path):
+    canvas = _build_synthetic_scene()
+    frame_path = tmp_path / "frame.png"
+    cv2.imwrite(str(frame_path), canvas)
+    out_dir = tmp_path / "session"
+
+    rc = harvest_setup.main(
+        [
+            "propose",
+            "--frame",
+            str(frame_path),
+            "--hint-box",
+            HINT_BOX,
+            "--camera-settings",
+            str(tmp_path / "does-not-exist.json"),
+            "--device-id",
+            "gsv2as-01",
+            "--session-id",
+            "s1",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    assert rc == 2
+    assert not (out_dir / "proposal.json").exists()
+
+
 def test_propose_rectified_image_is_not_mirrored(tmp_path):
     """`overlay_rectified.png` muss den dunklen Marker aus Zelle 0 links
     zeigen, nicht rechts - Regressionstest gegen eine vertauschte
@@ -196,6 +283,7 @@ def test_propose_rectified_image_is_not_mirrored(tmp_path):
     canvas = _build_synthetic_scene_asymmetric()
     frame_path = tmp_path / "frame.png"
     cv2.imwrite(str(frame_path), canvas)
+    camera_settings_path = _write_camera_settings(tmp_path)
     out_dir = tmp_path / "session"
     quad_arg = ",".join(f"{x:.4f},{y:.4f}" for x, y in QUAD_GT)
 
@@ -208,6 +296,8 @@ def test_propose_rectified_image_is_not_mirrored(tmp_path):
             HINT_BOX,
             "--quad",
             quad_arg,
+            "--camera-settings",
+            str(camera_settings_path),
             "--device-id",
             "gsv2as-01",
             "--session-id",
@@ -237,6 +327,7 @@ def test_propose_fails_without_guessing_when_no_quad_found(tmp_path):
     canvas = np.full((*CANVAS_SIZE[::-1], 3), 128, dtype=np.uint8)
     frame_path = tmp_path / "frame.png"
     cv2.imwrite(str(frame_path), canvas)
+    camera_settings_path = _write_camera_settings(tmp_path)
     out_dir = tmp_path / "session"
 
     rc = harvest_setup.main(
@@ -246,6 +337,8 @@ def test_propose_fails_without_guessing_when_no_quad_found(tmp_path):
             str(frame_path),
             "--hint-box",
             HINT_BOX,
+            "--camera-settings",
+            str(camera_settings_path),
             "--device-id",
             "gsv2as-01",
             "--session-id",
@@ -281,6 +374,10 @@ def test_confirm_below_threshold_ok_above_threshold_rejected(tmp_path):
     profile_ok = SessionProfile.load(out_ok)
     assert profile_ok.resolution_ok is True
     assert profile_ok.min_source_dot_column_px == pytest.approx(4.0)
+    assert profile_ok.schema_version == 3
+    assert profile_ok.camera == _camera_settings()
+    assert profile_ok.scaler_crop is None
+    assert profile_ok.native_scale == pytest.approx(1.0)
 
     out_bad = tmp_path / "bad" / "profile.json"
     rc_bad = harvest_setup.main(
@@ -361,171 +458,10 @@ def test_confirm_rejects_unconfirmed_default_grid(tmp_path):
     assert out_path.exists()
 
 
-# --- Bug 2 (Orchestrator 2026-09-23): natives Aufloesungs-Gate -------------
-#
-# ScalerCrop < Output-Groesse des Sensormodus heisst der ISP skaliert hoch -
-# source_dot_column_px (Quellbild = Output-Bild) ist dann zu optimistisch.
-# _compute_native_scale rechnet auf native (unbeschnittene, unbinned)
-# Sensorpixel zurueck; binning = sensor_array_size.width / sensor_mode_size.width.
-
-# 2x2-gebinnter Sensormodus (CLAUDE.md: "Selected sensor format: 2028x1520").
-_SENSOR_MODE_SIZE = (2028, 1520)
-_SENSOR_ARRAY_SIZE = (4056, 3040)
-_OUTPUT_SIZE = (960, 720)
-
-
-def test_compute_native_scale_frontal_crop_matches_worked_example():
-    # Aus dem Auftrag: 1195 px breiter Crop -> scale = 1195/2/960 ~= 0.622.
-    scale = harvest_setup._compute_native_scale(
-        scaler_crop_actual=(100, 100, 1195, 900),
-        sensor_mode_size=_SENSOR_MODE_SIZE,
-        sensor_array_size=_SENSOR_ARRAY_SIZE,
-        output_size=_OUTPUT_SIZE,
-    )
-    assert scale == pytest.approx(1195 / 2 / 960, rel=1e-6)
-    assert scale == pytest.approx(0.622, abs=1e-3)
-
-
-def test_compute_native_scale_no_crop_is_output_limited_scale_one():
-    # Kein Crop -> volle Sensorbreite (4056) als Crop-Breite - output-
-    # limitiert (der ISP skaliert nur herunter), scale bleibt bei 1.0.
-    scale = harvest_setup._compute_native_scale(
-        scaler_crop_actual=None,
-        sensor_mode_size=_SENSOR_MODE_SIZE,
-        sensor_array_size=_SENSOR_ARRAY_SIZE,
-        output_size=_OUTPUT_SIZE,
-    )
-    assert scale == pytest.approx(1.0)
-
-
-def test_compute_native_scale_wide_crop_stays_capped_at_one():
-    """Ein Crop breiter als der Output darf nie hochskalieren - min(1, ...)."""
-    scale = harvest_setup._compute_native_scale(
-        scaler_crop_actual=(0, 0, 3000, 2000),
-        sensor_mode_size=_SENSOR_MODE_SIZE,
-        sensor_array_size=_SENSOR_ARRAY_SIZE,
-        output_size=_OUTPUT_SIZE,
-    )
-    assert scale == pytest.approx(1.0)
-
-
-def _session_json(tmp_path: Path, *, scaler_crop_actual, sensor_mode_size, sensor_array_size) -> Path:
-    path = tmp_path / "session.json"
-    path.write_text(
-        json.dumps(
-            {
-                "scaler_crop_actual": list(scaler_crop_actual) if scaler_crop_actual is not None else None,
-                "sensor_mode_size": list(sensor_mode_size) if sensor_mode_size is not None else None,
-                "sensor_array_size": list(sensor_array_size) if sensor_array_size is not None else None,
-            }
-        ),
-        encoding="utf-8",
-    )
-    return path
-
-
-def test_propose_with_session_json_writes_native_scale_fields(tmp_path):
-    canvas = _build_synthetic_scene()
-    frame_path = tmp_path / "frame.png"
-    cv2.imwrite(str(frame_path), canvas)
-    session_json_path = _session_json(
-        tmp_path,
-        scaler_crop_actual=(100, 100, 1195, 900),
-        sensor_mode_size=_SENSOR_MODE_SIZE,
-        sensor_array_size=_SENSOR_ARRAY_SIZE,
-    )
-    out_dir = tmp_path / "session"
-
-    rc = harvest_setup.main(
-        [
-            "propose",
-            "--frame",
-            str(frame_path),
-            "--hint-box",
-            HINT_BOX,
-            "--device-id",
-            "gsv2as-01",
-            "--session-id",
-            "s1",
-            "--out",
-            str(out_dir),
-            "--session-json",
-            str(session_json_path),
-        ]
-    )
-    assert rc == 0
-    proposal = json.loads((out_dir / "proposal.json").read_text())
-    assert proposal["native_scale"] == pytest.approx(1195 / 2 / canvas.shape[1], rel=1e-6)
-    assert proposal["min_native_dot_column_px"] == pytest.approx(
-        proposal["min_source_dot_column_px"] * proposal["native_scale"], rel=1e-6
-    )
-    assert proposal["session_json"] == str(session_json_path)
-
-
-def test_propose_without_session_json_leaves_native_scale_none(tmp_path):
-    canvas = _build_synthetic_scene()
-    frame_path = tmp_path / "frame.png"
-    cv2.imwrite(str(frame_path), canvas)
-    out_dir = tmp_path / "session"
-
-    rc = harvest_setup.main(
-        [
-            "propose",
-            "--frame",
-            str(frame_path),
-            "--hint-box",
-            HINT_BOX,
-            "--device-id",
-            "gsv2as-01",
-            "--session-id",
-            "s1",
-            "--out",
-            str(out_dir),
-        ]
-    )
-    assert rc == 0
-    proposal = json.loads((out_dir / "proposal.json").read_text())
-    assert proposal["native_scale"] is None
-    assert proposal["min_native_dot_column_px"] is None
-    assert proposal["session_json"] is None
-
-
-def test_propose_session_json_without_sensor_fields_leaves_native_scale_none(tmp_path):
-    """z. B. eine synthetic://-Aufzeichnung: session.json existiert, aber
-    sensor_mode_size/sensor_array_size sind null - kein Rateversuch."""
-    canvas = _build_synthetic_scene()
-    frame_path = tmp_path / "frame.png"
-    cv2.imwrite(str(frame_path), canvas)
-    session_json_path = _session_json(
-        tmp_path, scaler_crop_actual=None, sensor_mode_size=None, sensor_array_size=None
-    )
-    out_dir = tmp_path / "session"
-
-    rc = harvest_setup.main(
-        [
-            "propose",
-            "--frame",
-            str(frame_path),
-            "--hint-box",
-            HINT_BOX,
-            "--device-id",
-            "gsv2as-01",
-            "--session-id",
-            "s1",
-            "--out",
-            str(out_dir),
-            "--session-json",
-            str(session_json_path),
-        ]
-    )
-    assert rc == 0
-    proposal = json.loads((out_dir / "proposal.json").read_text())
-    assert proposal["native_scale"] is None
-    assert proposal["min_native_dot_column_px"] is None
-
-
-def test_confirm_requires_assume_native_scale_when_proposal_has_none(tmp_path):
-    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0, native_scale=None)
+def test_confirm_rejects_proposal_without_camera(tmp_path):
+    """Ein IMX500-Vorschlag von vor dem StreamCam-Umstieg (kein 'camera') -
+    harter Abbruch statt eines Profils ohne Kameraeinstellungen."""
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", with_camera=False)
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
     out_path = tmp_path / "profile.json"
@@ -536,7 +472,7 @@ def test_confirm_requires_assume_native_scale_when_proposal_has_none(tmp_path):
             "--proposal",
             str(proposal_path),
             "--resolution-threshold-px",
-            "3.5",
+            "1.0",
             "--confirmed-by",
             "bediener",
             "--out",
@@ -547,76 +483,103 @@ def test_confirm_requires_assume_native_scale_when_proposal_has_none(tmp_path):
     assert not out_path.exists()
 
 
-def test_confirm_accepts_explicit_assume_native_scale(tmp_path):
-    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0, native_scale=None)
-    proposal_path = tmp_path / "proposal.json"
-    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
-    out_path = tmp_path / "profile.json"
-
-    rc = harvest_setup.main(
-        [
-            "confirm",
-            "--proposal",
-            str(proposal_path),
-            "--resolution-threshold-px",
-            "3.5",
-            "--confirmed-by",
-            "bediener",
-            "--out",
-            str(out_path),
-            "--assume-native-scale",
-            "1.0",
-        ]
-    )
-    assert rc == 0
-    profile = SessionProfile.load(out_path)
-    assert profile.native_scale == pytest.approx(1.0)
-    assert profile.min_native_dot_column_px == pytest.approx(4.0)
-    assert profile.resolution_ok is True
+# --- focus ------------------------------------------------------------
 
 
-def test_confirm_gate_uses_native_value_not_raw_source_value(tmp_path):
-    """Kernstueck von Bug 2: min_source_dot_column_px allein wuerde die
-    Schwelle bestehen, min_native_dot_column_px (mit dem gemessenen
-    Beispiel-Crop, scale ~= 0.622) nicht - das Gate MUSS den nativen Wert
-    pruefen, sonst waere die Aufloesung ueberschaetzt."""
-    grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
-    native_scale = 1195 / 2 / 960
-    min_px = 4.0
-    proposal = {
-        "frame": str(tmp_path / "frame.png"),
-        "device_id": "gsv2as-01",
-        "session_id": "s1",
-        "quad": QUAD_GT,
-        "target_size": [400, 160],
-        "grid": grid.to_dict(),
-        "grid_source": "operator_provided",
-        "scaler_crop": None,
-        "min_source_dot_column_px": min_px,
-        "session_json": None,
-        "native_scale": native_scale,
-        "min_native_dot_column_px": min_px * native_scale,
+def _checkerboard(size: int = 240, cell: int = 8) -> np.ndarray:
+    row = (np.arange(size) // cell) % 2
+    pattern = (np.logical_xor(row[:, None], row[None, :]).astype(np.uint8)) * 255
+    return cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
+
+
+_SHARP_BASE = _checkerboard()
+
+
+def _frame_for_focus(focus: int, best_focus: int = 48) -> np.ndarray:
+    """Schaerfe (Laplace-Varianz) ist bei `focus == best_focus` maximal und
+    faellt mit wachsendem Abstand monoton - genau das Signal, das ein echter
+    Fokus-Sweep vorfaende."""
+    distance = abs(focus - best_focus)
+    if distance == 0:
+        return _SHARP_BASE.copy()
+    k = 1 + 2 * min(distance, 15)  # ungerade Kernelgroesse, waechst mit dem Abstand
+    return cv2.GaussianBlur(_SHARP_BASE, (k, k), 0)
+
+
+class _FakeCapture:
+    def __init__(self, state: dict, *, width: int = 1920, height: int = 1080):
+        self._state = state
+        self._width = width
+        self._height = height
+        self._pos_msec = 0.0
+
+    def set(self, prop, value):  # noqa: ARG002 - Breite/Hoehe kommen aus dem Konstruktor
+        pass
+
+    def get(self, prop):
+        if prop == cv2.CAP_PROP_FRAME_WIDTH:
+            return self._width
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+            return self._height
+        if prop == cv2.CAP_PROP_POS_MSEC:
+            self._pos_msec += 33.3
+            return self._pos_msec
+        return 0.0
+
+    def read(self):
+        return True, _frame_for_focus(self._state.get("focus_absolute", 0))
+
+    def release(self):
+        pass
+
+
+def _make_fake_camera_io():
+    state = {
+        "focus_absolute": 0,
+        "exposure_time_absolute": 157,
+        "white_balance_temperature": 4600,
+        "gain": 32,
     }
-    proposal_path = tmp_path / "proposal.json"
-    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
-    out_path = tmp_path / "profile.json"
+    capture = _FakeCapture(state)
 
-    # Schwelle liegt zwischen dem rohen (4.0) und dem nativen (~2.49) Wert.
-    rc = harvest_setup.main(
-        [
-            "confirm",
-            "--proposal",
-            str(proposal_path),
-            "--resolution-threshold-px",
-            "3.0",
-            "--confirmed-by",
-            "bediener",
-            "--out",
-            str(out_path),
-        ]
-    )
-    assert rc == 3
-    profile = SessionProfile.load(out_path)
-    assert profile.resolution_ok is False
-    assert profile.min_source_dot_column_px == pytest.approx(4.0)
-    assert profile.min_native_dot_column_px < 3.0
+    def fake_set_controls(device, controls):  # noqa: ARG001
+        for name, value in controls:
+            state[name] = value
+
+    def fake_get_controls(device, names):  # noqa: ARG001
+        return {name: state[name] for name in names}
+
+    return SimpleNamespace(
+        device="/dev/video0",
+        capture=capture,
+        capture_factory=lambda d: capture,  # noqa: ARG005 - dieselbe Aufnahme, kein zweites Oeffnen
+        set_controls=fake_set_controls,
+        get_controls=fake_get_controls,
+    ), state
+
+
+def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
+    fake_io, state = _make_fake_camera_io()
+    monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda device: fake_io)
+    monkeypatch.setattr(harvest_setup.time, "sleep", lambda seconds: None)
+
+    out_dir = tmp_path / "focus"
+    rc = harvest_setup.main(["focus", "--out", str(out_dir), "--settle-s", "0"])
+    assert rc == 0
+
+    data = json.loads((out_dir / "camera-settings.json").read_text())
+    assert data["camera"]["controls"]["focus_absolute"] == 48
+    assert data["camera"]["controls"]["exposure_time_absolute"] == 157
+    assert data["camera"]["controls"]["white_balance_temperature"] == 4600
+    assert data["camera"]["controls"]["gain"] == 32
+    assert data["camera"]["model"] == STREAMCAM_MODEL
+    assert data["camera"]["size"] == [1920, 1080]
+    assert len(data["focus_sweep"]) > 0
+    assert "created_at_utc" in data
+    assert (out_dir / "control.png").exists()
+    # Nach `focus` steht die Automatik wieder auf manuell (`auto_exposure=3`
+    # ist der v4l2-Wert fuer manuelle Belichtung mit Weissabgleich-Automatik
+    # kurzzeitig aktiviert, danach fixiert `UvcSource.open()` alles wieder
+    # auf die festen Werte aus `settings.controls`/MODE_CONTROLS).
+    assert state["focus_automatic_continuous"] == 0
+    assert state["white_balance_automatic"] == 0

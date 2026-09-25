@@ -21,6 +21,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.workbench.datasets import DatasetStore
@@ -73,8 +74,12 @@ def _render(
 
 
 def _profile(tmp_path: Path, *, resolution_ok: bool = True) -> Path:
+    """v2-Profil (kein `camera`) - `import-harvest.py` liest `profile.quad`/
+    `.grid`/`.target_size`/`.device_id`/`.session_id`/`.resolution_ok`, keins
+    davon haengt an der Kamera-Generation. `test_import_with_v3_profile`
+    unten deckt v3 (mit `camera`) separat ab."""
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv2as-test",
         session_id="sess-1",
         quad=_quad(),
@@ -88,6 +93,38 @@ def _profile(tmp_path: Path, *, resolution_ok: bool = True) -> Path:
         resolution_ok=resolution_ok,
         confirmed_by="tester",
         confirmed_at_utc="2026-09-23T12:00:00+00:00",
+    )
+    path = tmp_path / "profile.json"
+    profile.save(path)
+    return path
+
+
+def _profile_v3(tmp_path: Path, *, resolution_ok: bool = True) -> Path:
+    """Profil v3 (StreamCam-Umstieg, Task 4) mit `camera` - deckt ab, dass
+    `import-harvest.py` v3-Profile genauso liest wie v2 (`profile_sha256`,
+    `profile_grid`, `profile_quad` haengen an keiner Kamera-Generation)."""
+    camera = CameraSettings(
+        model=STREAMCAM_MODEL, usb_id=STREAMCAM_USB_ID, size=(1920, 1080),
+        fourcc="YUYV", fps=30,
+        controls={"focus_absolute": 48, "exposure_time_absolute": 157,
+                  "white_balance_temperature": 4600, "gain": 32},
+    )
+    profile = SessionProfile(
+        schema_version=PROFILE_SCHEMA_VERSION,
+        device_id="gsv2as-test",
+        session_id="sess-v3",
+        quad=_quad(),
+        target_size=TARGET_SIZE,
+        grid=_grid(),
+        scaler_crop=None,
+        min_source_dot_column_px=5.0,
+        native_scale=1.0,
+        min_native_dot_column_px=5.0,
+        resolution_threshold_px=2.0,
+        resolution_ok=resolution_ok,
+        confirmed_by="tester",
+        confirmed_at_utc="2026-09-25T12:00:00+00:00",
+        camera=camera,
     )
     path = tmp_path / "profile.json"
     profile.save(path)
@@ -334,6 +371,29 @@ def test_successful_import_creates_samples_in_one_group(tmp_path):
     assert len(group_ids) == 1
 
 
+def test_successful_import_with_v3_profile(tmp_path):
+    """StreamCam-Umstieg (Task 4): ein Profil v3 (mit `camera`) muss genauso
+    importierbar sein wie v2 - `import-harvest.py` liest nur `quad`/`grid`/
+    `target_size`/`device_id`/`session_id`/`resolution_ok`, keins davon
+    haengt an der Kamera-Generation."""
+    profile_path = _profile_v3(tmp_path)
+    harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3)
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["imported"] > 0, result
+
+    sample_id = result["sample_ids"][0]
+    sample = json.loads((dataset_root / "samples" / sample_id / "sample.json").read_text())
+    assert sample["label_origin_detail"]["session_id"] == "sess-v3"
+    assert sample["label_origin_detail"]["profile_sha256"] == import_harvest._profile_sha256(profile_path)
+
+
 def test_v4l2_monotonic_capture_timestamp_landet_unveraendert_in_der_probe(tmp_path):
     """import-harvest.py vergleicht keine Zeiten, es traegt nur durch - eine
     `v4l2_monotonic`-Aufzeichnung wird nicht nach CLOCK_BOOTTIME umgerechnet
@@ -445,7 +505,7 @@ def test_realistic_label_imported_with_numeric_expected_text_and_cell_text(tmp_p
     ]
 
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv2as-test-16",
         session_id="sess-16",
         quad=quad,

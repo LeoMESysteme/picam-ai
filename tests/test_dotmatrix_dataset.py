@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 from dotmatrix_helpers import GRID, render
 
-from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
+from dispread.session_profile import SessionProfile
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "dotmatrix-dataset.py"
 
@@ -103,7 +103,7 @@ def _base_detail(session_id: str, plateau: tuple[int, int] = (1_000, 2_000)) -> 
 
 def _save_profile(tmp_path: Path) -> Path:
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv-sensor-161a",
         session_id="sessB",
         quad=_quad(),
@@ -242,7 +242,7 @@ def test_load_cell_samples_skips_sample_when_map_profile_was_reconfirmed(tmp_pat
     # Sitzung wurde nach write-map erneut bestaetigt - andere Profildatei am
     # selben Pfad (anderer Inhalt, damit auch der Hash anders ist).
     reconfirmed = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv-sensor-161a",
         session_id="sessB",
         quad=[[0.0, 0.0], [399.0, 0.0], [399.0, 159.0], [0.0, 159.0]],
@@ -279,7 +279,7 @@ def test_load_cell_samples_skips_unconfirmed_profile_from_map(tmp_path):
     _write_sample(dataset_root, "sample-b", detail)
 
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv-sensor-161a",
         session_id="sessB",
         quad=_quad(),
@@ -313,7 +313,7 @@ def test_load_cell_samples_skips_map_profile_with_empty_confirmed_by(tmp_path):
     _write_sample(dataset_root, "sample-b", detail)
 
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv-sensor-161a",
         session_id="sessB",
         quad=_quad(),

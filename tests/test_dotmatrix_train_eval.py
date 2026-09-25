@@ -33,7 +33,7 @@ from dotmatrix_helpers import GRID, render
 from dispread.ocr.dotmatrix_font import CLASSES
 from dispread.ocr.dotmatrix_sampling import normalized, sample_image
 from dispread.ocr.dotmatrix_templates import build_templates
-from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
+from dispread.session_profile import SessionProfile
 
 _SCRIPTS = Path(__file__).parents[1] / "scripts"
 
@@ -136,7 +136,7 @@ def _write_sample(
 
 def _save_profile(tmp_path: Path, session_id: str) -> Path:
     profile = SessionProfile(
-        schema_version=PROFILE_SCHEMA_VERSION,
+        schema_version=2,
         device_id="gsv-sensor-161a",
         session_id=session_id,
         quad=_quad(),

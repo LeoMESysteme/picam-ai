@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Sitzung fuer die automatische Ernte einrichten - Task 3 aus
-docs/superpowers/plans/2026-09-23-ernte-phase1.md.
+docs/superpowers/plans/2026-09-23-ernte-phase1.md, `focus` aus dem
+StreamCam-Umstieg (Task 4, 2026-09-25).
 
-Aufruf (zwei Unterbefehle):
+Aufruf (drei Unterbefehle):
+
+    ./.venv/bin/python scripts/harvest-setup.py focus \\
+        --out var/diagnostics/lauf1/setup
 
     ./.venv/bin/python scripts/harvest-setup.py propose \\
         --frame var/diagnostics/lauf1/frames/frame_000001.jpg \\
         --hint-box 0.49,0.30,0.34,0.14 \\
+        --camera-settings var/diagnostics/lauf1/setup/camera-settings.json \\
         --device-id gsv2as-01 --session-id lauf1 \\
         --out var/diagnostics/lauf1/setup
 
@@ -14,6 +19,16 @@ Aufruf (zwei Unterbefehle):
         --proposal var/diagnostics/lauf1/setup/proposal.json \\
         --resolution-threshold-px 2.0 --confirmed-by bediener \\
         --out var/diagnostics/lauf1/setup/profile.json
+
+`focus` faehrt einen Software-Fokus-Sweep (`dispread.focus_sweep.sweep_focus`)
+direkt ueber `cv2.VideoCapture` (1920x1080, YUYV, 30 fps - noch ohne
+bestaetigten `CameraSettings`-Vertrag, den ermittelt dieser Schritt erst),
+friert danach Belichtung und Weissabgleich ein und schreibt die gefundenen
+Werte als `CameraSettings` (siehe `dispread.camera_settings`) nach
+`camera-settings.json` - das ist die Kamera-Grundlage, die `propose`
+zwingend braucht (`--camera-settings`) und die im bestaetigten Profil landet
+(Version 3: Bildpixel = native Pixel, StreamCam ohne ScalerCrop/Binning,
+Zoom fest 100).
 
 `propose` schlaegt Quad und Zeichenzellenraster vor (Quad ueber
 `glass_quad_in_region`, sofern nicht `--quad` gesetzt ist - ein Fehlschlag ist
@@ -45,9 +60,11 @@ unter der Schwelle, wird trotzdem ein Profil geschrieben (mit
 `resolution_ok=False`), aber mit Exit 3 - `import-harvest.py` (Task 5) lehnt
 solche Profile ab.
 
-Reiner Einrichtungscode, Stil an `gate-label.py` angelehnt. Bestaetigt der
-Bediener nichts, oeffnet dieses Skript weder Kamera noch seriellen Port -
-es liest nur ein bereits aufgenommenes Bild.
+Reiner Einrichtungscode, Stil an `gate-label.py` angelehnt. `propose` und
+`confirm` oeffnen weder Kamera noch seriellen Port - sie lesen nur ein
+bereits aufgenommenes Bild bzw. den `focus`-Vorschlag. `focus` oeffnet die
+Kamera direkt (`_open_camera_io`, per Monkeypatch ersetzbar) - das ist der
+einzige Unterbefehl hier, der das tut.
 """
 
 from __future__ import annotations
@@ -55,17 +72,40 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
 
+from dispread.camera_settings import (
+    STREAMCAM_MODEL,
+    STREAMCAM_USB_ID,
+    CameraSettings,
+    load_camera_settings,
+)
 from dispread.charcells import CharGrid, source_dot_column_px
+from dispread.focus_sweep import sharpness, sweep_focus
+from dispread.frames.uvc_source import (
+    UvcError,
+    UvcSource,
+    find_uvc_device,
+    v4l2_get_controls,
+    v4l2_set_controls,
+)
 from dispread.glassquad import glass_quad_in_region
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.workbench.vision import lcd_quad_in_region
+
+#: Fixe Wartezeit nach dem Umschalten auf automatische Belichtung/Weiss-
+#: abgleich (`focus`), bevor die Werte zurueckgelesen werden - kein Regler,
+#: die Automatik braucht eine Sekundenbruchteile bis Sekunden dauernde
+#: Einschwingzeit (Auftrag).
+WHITE_BALANCE_SETTLE_S = 3.0
 
 #: Anzahl Zeichenzellen des GSV-2AS-Displays (HD44780, 16 x 1). Kein
 #: CLI-Regler - die Geometrie des angeschlossenen Geraets ist keine freie Wahl.
@@ -75,34 +115,6 @@ DEFAULT_TARGET_SIZE = (400, 160)
 
 class SetupError(ValueError):
     """Fehlerhafte Eingabe (CLI-Werte, Datei-Inhalt) - fuehrt zu Exit 2."""
-
-
-def _compute_native_scale(
-    *,
-    scaler_crop_actual: tuple[int, int, int, int] | None,
-    sensor_mode_size: tuple[int, int],
-    sensor_array_size: tuple[int, int],
-    output_size: tuple[int, int],
-) -> float:
-    """Bug 2 (Orchestrator 2026-09-23): `source_dot_column_px` misst im
-    OUTPUT-Bild (z. B. 960x720). Ist der `ScalerCrop` schmaler als der
-    Output des gewaehlten Sensormodus (2x2-gebinnt, z. B. 2028x1520 aus
-    4056x3040), skaliert der ISP hoch - das Gate war damit zu optimistisch.
-
-    `binning = sensor_array_size.width / sensor_mode_size.width` (z. B.
-    4056/2028 = 2). Ohne Crop (`scaler_crop_actual is None`) gilt die volle
-    Sensorbreite (`sensor_array_size[0]`) als Crop-Breite - das ist der
-    Fall "kein Crop gesetzt, Sensor-Vorgabe (voller Array) bleibt aktiv"
-    aus sync-record.py.
-
-    `native_scale = min(1, (crop_w/binning) / output_width)` - nie > 1: ohne
-    Crop oder mit einem Crop breiter als der Output skaliert der ISP nur
-    herunter, nie hoch, das Gate bleibt dann bei der rohen Messung."""
-    crop_w = scaler_crop_actual[2] if scaler_crop_actual is not None else sensor_array_size[0]
-    binning = sensor_array_size[0] / sensor_mode_size[0]
-    native_crop_w = crop_w / binning
-    output_w = output_size[0]
-    return min(1.0, native_crop_w / output_w)
 
 
 def _parse_float_list(value: str, count: int, name: str) -> list[float]:
@@ -135,14 +147,6 @@ def _parse_target_size(value: str) -> tuple[int, int]:
         raise SetupError(f"--target-size: erwarte BREITExHOEHE, bekam {value!r}") from exc
 
 
-def _parse_scaler_crop(value: str) -> tuple[int, int, int, int]:
-    values = _parse_float_list(value, 4, "--scaler-crop")
-    ints = tuple(round(v) for v in values)
-    if any(v <= 0 for v in ints[2:]) or any(v < 0 for v in ints[:2]):
-        raise SetupError(f"--scaler-crop: X,Y muessen >= 0 und W,H > 0 sein, bekam {value!r}")
-    return ints  # type: ignore[return-value]
-
-
 def _default_grid(target_size: tuple[int, int]) -> CharGrid:
     """Startraster: 16 gleich breite Zellen ueber die ganze Zielbreite/-hoehe.
 
@@ -173,16 +177,14 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--quad", default=None, help="x1,y1,x2,y2,x3,y3,x4,y4 in Quellbildpixeln, ersetzt die Suche")
     propose.add_argument("--grid", default=None, help="left,pitch,top,bottom im entzerrten Bild, ersetzt den Default")
     propose.add_argument("--target-size", default="400x160", help="Groesse des entzerrten Bildes, Vorgabe 400x160")
-    propose.add_argument("--scaler-crop", default=None, help="X,Y,W,H - nur zur Ablage im Vorschlag, nichts wird gesetzt")
     propose.add_argument(
-        "--session-json",
+        "--camera-settings",
         type=Path,
-        default=None,
+        required=True,
         help=(
-            "session.json einer sync-record.py-Kameraaufzeichnung (Bug 2): liefert "
-            "scaler_crop_actual, sensor_mode_size, sensor_array_size fuer das native "
-            "Aufloesungs-Gate. Ohne diese Option bleibt native_scale in proposal.json "
-            "leer, und confirm verlangt dann --assume-native-scale."
+            "camera-settings.json aus 'harvest-setup.py focus' - die StreamCam-Einstellungen, "
+            "die diese Sitzung reproduzieren muss (Profil v3, Pflichtfeld 'camera'). "
+            "--frame muss genau settings.size gross sein."
         ),
     )
     propose.add_argument(
@@ -212,26 +214,41 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="erlaubt, ein ungeprueftes Default-Raster (grid_source=default_even_split) zu bestaetigen",
     )
-    confirm.add_argument(
-        "--assume-native-scale",
-        type=float,
-        default=None,
-        help=(
-            "Bug 2: nur wenn proposal.json kein native_scale hat (propose ohne "
-            "--session-json). Explizite Uebersteuerung, z. B. 1.0 - wird NICHT "
-            "angenommen, das Fehlen ist ein harter Abbruch (Exit 2)."
-        ),
+    focus = sub.add_parser(
+        "focus", help="Fokus per Software-Sweep bestimmen, Belichtung/Weissabgleich einfrieren"
     )
+    focus.add_argument("--out", type=Path, required=True, help="Zielverzeichnis fuer camera-settings.json/control.png")
+    focus.add_argument(
+        "--hint-box",
+        default=None,
+        help="normierte Box x,y,w,h - ROI fuer die Schaerfemessung, Vorgabe: mittleres Drittel",
+    )
+    focus.add_argument("--device", default=None, help="/dev/videoN - Vorgabe: Erkennung ueber die USB-ID")
+    focus.add_argument("--settle-s", type=float, default=1.0, help="Wartezeit nach jedem Fokuswert vor der Messung")
 
     return parser
 
 
 def run_propose(args: argparse.Namespace) -> int:
+    try:
+        camera_settings = load_camera_settings(args.camera_settings)
+    except (OSError, ValueError) as exc:
+        print(f"--camera-settings {args.camera_settings}: {exc}", file=sys.stderr)
+        return 2
+
     image = cv2.imread(str(args.frame))
     if image is None:
         print(f"Bild nicht lesbar: {args.frame}", file=sys.stderr)
         return 2
     height, width = image.shape[:2]
+    settings_width, settings_height = camera_settings.size
+    if (width, height) != (settings_width, settings_height):
+        print(
+            f"--frame {args.frame} ist {width}x{height}, camera-settings.json verlangt aber "
+            f"{settings_width}x{settings_height} - Bild passt nicht zu den Kameraeinstellungen dieser Sitzung.",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         target_size = _parse_target_size(args.target_size)
@@ -265,8 +282,6 @@ def run_propose(args: argparse.Namespace) -> int:
         else:
             grid = _default_grid(target_size)
             grid_source = "default_even_split"
-
-        scaler_crop = _parse_scaler_crop(args.scaler_crop) if args.scaler_crop else None
     except SetupError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -282,37 +297,11 @@ def run_propose(args: argparse.Namespace) -> int:
     # messen, nie eine zu kurze.
     min_px = source_dot_column_px(grid, quad, target_size)
 
-    # Bug 2: min_px ist im Quellbild gemessen - das ist genau das OUTPUT-Bild
-    # der Kamera (`args.frame`, hier bereits als `image`/`width`/`height`
-    # geladen), nicht das entzerrte Zielbild. --session-json liefert die
-    # Sensorgeometrie, um daraus native_scale/min_native_dot_column_px zu
-    # rechnen; ohne die Option bleiben beide `None` (confirm verlangt dann
-    # --assume-native-scale).
-    native_scale: float | None = None
-    min_native_dot_column_px: float | None = None
-    session_json_path: str | None = None
-    if args.session_json is not None:
-        session_json_path = str(args.session_json)
-        session_data = json.loads(args.session_json.read_text(encoding="utf-8"))
-        session_scaler_crop = session_data.get("scaler_crop_actual")
-        session_sensor_mode_size = session_data.get("sensor_mode_size")
-        session_sensor_array_size = session_data.get("sensor_array_size")
-        if session_sensor_mode_size is not None and session_sensor_array_size is not None:
-            native_scale = _compute_native_scale(
-                scaler_crop_actual=tuple(session_scaler_crop) if session_scaler_crop is not None else None,
-                sensor_mode_size=tuple(session_sensor_mode_size),
-                sensor_array_size=tuple(session_sensor_array_size),
-                output_size=(width, height),
-            )
-            min_native_dot_column_px = min_px * native_scale
-        else:
-            print(
-                f"WARNUNG: --session-json {args.session_json} enthaelt kein "
-                "sensor_mode_size/sensor_array_size (z. B. --source synthetic oder "
-                "vor Bug 2 aufgezeichnet) - natives Aufloesungs-Gate bleibt "
-                "unbestimmt, confirm verlangt dann --assume-native-scale.",
-                file=sys.stderr,
-            )
+    # StreamCam (Task 4, Profil v3): kein ScalerCrop, kein Sensor-Binning -
+    # Bildpixel = native Pixel. Das Aufloesungs-Gate misst deshalb direkt im
+    # Quellbild, ohne Umrechnung: native_scale ist immer 1.0.
+    native_scale = 1.0
+    min_native_dot_column_px = min_px
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -325,11 +314,11 @@ def run_propose(args: argparse.Namespace) -> int:
         "target_size": list(target_size),
         "grid": grid.to_dict(),
         "grid_source": grid_source,
-        "scaler_crop": list(scaler_crop) if scaler_crop is not None else None,
+        "scaler_crop": None,
         "min_source_dot_column_px": min_px,
-        "session_json": session_json_path,
         "native_scale": native_scale,
         "min_native_dot_column_px": min_native_dot_column_px,
+        "camera": camera_settings.to_dict(),
     }
     (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -354,11 +343,7 @@ def run_propose(args: argparse.Namespace) -> int:
     print(f"Bild: {args.frame} ({width}x{height})")
     print(f"Quad (Quellbildpixel): {quad}")
     print(f"Raster: {grid_source} ({grid.n_cells} Zellen, pitch={grid.pitch:.2f}px)")
-    print(f"min_source_dot_column_px: {min_px:.3f}")
-    if native_scale is not None:
-        print(f"native_scale: {native_scale:.4f}  min_native_dot_column_px: {min_native_dot_column_px:.3f}")
-    else:
-        print("native_scale: unbestimmt (kein --session-json oder ohne sensor_mode_size/sensor_array_size)")
+    print(f"min_source_dot_column_px: {min_px:.3f}  (native_scale=1.0, StreamCam ohne ScalerCrop/Binning)")
     print(f"Vorschlag geschrieben: {out_dir / 'proposal.json'}")
     print(f"Overlays: {out_dir / 'overlay_source.png'}, {out_dir / 'overlay_rectified.png'}")
     return 0
@@ -375,32 +360,23 @@ def run_confirm(args: argparse.Namespace) -> int:
         )
         return 2
 
+    if "camera" not in proposal:
+        print(
+            "Vorschlag ohne Kameraeinstellungen (IMX500-Vorschlag?) - propose mit "
+            "--camera-settings neu ausfuehren",
+            file=sys.stderr,
+        )
+        return 2
+    camera_settings = CameraSettings.from_dict(proposal["camera"])
+
     grid = CharGrid.from_dict(proposal["grid"])
     target_size = tuple(proposal["target_size"])
-    scaler_crop_value = proposal.get("scaler_crop")
-    scaler_crop = tuple(scaler_crop_value) if scaler_crop_value is not None else None
     min_px = float(proposal["min_source_dot_column_px"])
 
-    # Bug 2: das Gate prueft gegen min_native_dot_column_px, nie gegen die
-    # rohe Output-Bild-Messung min_px. proposal.json traegt beide schon
-    # vorgerechnet, wenn propose ein --session-json bekam - sonst ist
-    # --assume-native-scale die einzige (bewusst explizite) Uebersteuerung.
-    native_scale = proposal.get("native_scale")
-    min_native_px = proposal.get("min_native_dot_column_px")
-    if native_scale is None:
-        if args.assume_native_scale is None:
-            print(
-                "Fehler: proposal.json enthaelt kein native_scale (propose lief ohne "
-                "--session-json oder ohne sensor_mode_size/sensor_array_size darin). "
-                "Mit --assume-native-scale explizit uebersteuerbar, z. B. 1.0 "
-                "(Bug 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md).",
-                file=sys.stderr,
-            )
-            return 2
-        native_scale = args.assume_native_scale
-        min_native_px = min_px * native_scale
-    native_scale = float(native_scale)
-    min_native_px = float(min_native_px)
+    # StreamCam (Profil v3): kein ScalerCrop, native_scale immer 1.0 - propose
+    # schreibt beide Felder schon so, hier nur noch uebernehmen.
+    native_scale = float(proposal["native_scale"])
+    min_native_px = float(proposal["min_native_dot_column_px"])
 
     resolution_ok = min_native_px >= args.resolution_threshold_px
 
@@ -411,7 +387,7 @@ def run_confirm(args: argparse.Namespace) -> int:
         quad=[list(p) for p in proposal["quad"]],
         target_size=target_size,
         grid=grid,
-        scaler_crop=scaler_crop,
+        scaler_crop=None,
         min_source_dot_column_px=min_px,
         native_scale=native_scale,
         min_native_dot_column_px=min_native_px,
@@ -419,6 +395,7 @@ def run_confirm(args: argparse.Namespace) -> int:
         resolution_ok=resolution_ok,
         confirmed_by=args.confirmed_by,
         confirmed_at_utc=datetime.now(UTC).isoformat(),
+        camera=camera_settings,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     profile.save(args.out)
@@ -439,6 +416,136 @@ def run_confirm(args: argparse.Namespace) -> int:
     return 0
 
 
+@dataclass
+class _CameraIO:
+    """Hardware-Zugriffspunkt fuer `focus` - `_open_camera_io` ist die
+    einzige Stelle, die echt Kamera/`v4l2-ctl` anfasst; Tests ersetzen die
+    ganze Funktion per Monkeypatch (nie echte Hardware in Tests, AGENTS.md).
+
+    `capture` ist die bereits fuer den Fokus-Sweep geoeffnete und
+    konfigurierte Aufnahme (1920x1080, YUYV, 30 fps) - direkt gelesen.
+    `capture_factory`/`set_controls`/`get_controls` werden unveraendert an
+    den abschliessenden `UvcSource`-Schritt weitergereicht, damit der nicht
+    ein zweites Mal eigene Hardware-Funktionen aufruft."""
+
+    device: str
+    capture: Any
+    capture_factory: Any
+    set_controls: Any
+    get_controls: Any
+
+
+def _open_camera_io(device: str | None) -> _CameraIO:
+    """Oeffnet die StreamCam direkt (1920x1080, YUYV, 30 fps) - noch ohne
+    einen bestaetigten `CameraSettings`-Vertrag, den soll `focus` erst
+    ermitteln. Immer echte Hardware/echtes `v4l2-ctl` (`cv2` ist hier bereits
+    Modul-Top-Level importiert, siehe oben - kein Lazy-Import noetig, dieses
+    Skript ist kein Teil von `dispread.frames`)."""
+    dev = device or find_uvc_device(STREAMCAM_USB_ID)
+    capture = cv2.VideoCapture(dev, cv2.CAP_V4L2)
+    capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+    capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    capture.set(cv2.CAP_PROP_FPS, 30)
+    return _CameraIO(
+        device=dev,
+        capture=capture,
+        capture_factory=lambda d: cv2.VideoCapture(d, cv2.CAP_V4L2),
+        set_controls=v4l2_set_controls,
+        get_controls=v4l2_get_controls,
+    )
+
+
+def _measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float] | None) -> np.ndarray:
+    """ROI fuer die Schaerfemessung: `hint_box` (normiert x,y,w,h) oder, ohne
+    Angabe, das mittlere Drittel in beiden Achsen."""
+    height, width = gray.shape[:2]
+    if hint_box is None:
+        x0, x1 = width // 3, 2 * width // 3
+        y0, y1 = height // 3, 2 * height // 3
+    else:
+        bx, by, bw, bh = hint_box
+        x0, y0 = int(round(bx * width)), int(round(by * height))
+        x1, y1 = int(round((bx + bw) * width)), int(round((by + bh) * height))
+    return gray[y0:y1, x0:x1]
+
+
+def run_focus(args: argparse.Namespace) -> int:
+    hint_box = tuple(_parse_float_list(args.hint_box, 4, "--hint-box")) if args.hint_box else None
+    io = _open_camera_io(args.device)
+    io.set_controls(io.device, [("focus_automatic_continuous", 0)])
+
+    def measure(focus: int) -> float:
+        io.set_controls(io.device, [("focus_absolute", focus)])
+        time.sleep(args.settle_s)
+        for _ in range(3):
+            io.capture.read()
+        ok, frame = io.capture.read()
+        if not ok:
+            raise UvcError(f"kein Bild von {io.device} (Fokus-Sweep)")
+        gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return sharpness(_measurement_roi(gray, hint_box))
+
+    best_focus, sweep_log = sweep_focus(measure)
+
+    io.set_controls(io.device, [("auto_exposure", 3), ("white_balance_automatic", 1)])
+    time.sleep(WHITE_BALANCE_SETTLE_S)
+    readback = io.get_controls(
+        io.device, ["exposure_time_absolute", "white_balance_temperature", "gain"]
+    )
+    io.capture.release()
+
+    settings = CameraSettings(
+        model=STREAMCAM_MODEL,
+        usb_id=STREAMCAM_USB_ID,
+        size=(1920, 1080),
+        fourcc="YUYV",
+        fps=30,
+        controls={
+            "focus_absolute": best_focus,
+            "exposure_time_absolute": readback["exposure_time_absolute"],
+            "white_balance_temperature": readback["white_balance_temperature"],
+            "gain": readback["gain"],
+        },
+        device=io.device,
+    )
+
+    out_dir = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data = {
+        "camera": settings.to_dict(),
+        "focus_sweep": [[f, s] for f, s in sweep_log],
+        "created_at_utc": datetime.now(UTC).isoformat(),
+    }
+    (out_dir / "camera-settings.json").write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    # Kontrollschritt: dieselbe injizierbare Schnittstelle wie oben, kein
+    # zweites eigenes Hardware-Oeffnen (siehe `_CameraIO`-Docstring). Das
+    # ist der Vertragstest fuer `settings` selbst - setzt und prueft ALLE
+    # Regler (Automatiken, feste, und die eben ermittelten), nicht nur den
+    # Fokus.
+    source = UvcSource(
+        settings,
+        device=io.device,
+        capture_factory=io.capture_factory,
+        set_controls=io.set_controls,
+        get_controls=io.get_controls,
+    )
+    source.open()
+    try:
+        frame = next(iter(source.frames()))
+        cv2.imwrite(str(out_dir / "control.png"), frame.image)
+    finally:
+        source.close()
+
+    print(f"Bester Fokus: {best_focus}")
+    print(f"Kameraeinstellungen geschrieben: {out_dir / 'camera-settings.json'}")
+    print(f"Kontrollbild: {out_dir / 'control.png'}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -446,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_propose(args)
     if args.command == "confirm":
         return run_confirm(args)
+    if args.command == "focus":
+        return run_focus(args)
     raise AssertionError(f"unbekanntes Kommando {args.command!r}")  # von argparse ausgeschlossen
 
 
