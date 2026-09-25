@@ -930,8 +930,10 @@ def _frame_acquisition_worker(
         # StreamCam liess sich nicht wie im Profil verlangt einrichten
         # (`UvcSource.open()`, z.B. Aufloesung oder ein Regler-Ist-Wert
         # weicht ab) - dasselbe "keine Bilder"-Ergebnis wie der Startup-
-        # Timeout, nur mit dem `UvcError`-Text als Detail.
-        if args.source == "camera" and frames_acquired == 0:
+        # Timeout, nur mit dem `UvcError`-Text als Detail. `UvcError` kann
+        # nur aus `_uvc_frames` stammen, also immer im Kamerazweig - kein
+        # `args.source`-Fallunterschied noetig.
+        if frames_acquired == 0:
             state["acquisition_error"] = _no_frames_message(f"UvcError: {exc}")
         else:
             state["acquisition_error"] = f"UvcError: {exc}"
@@ -958,6 +960,26 @@ def _frame_acquisition_worker(
             if args.source == "camera" and camera_settings is not None
             else None
         )
+        # Kameraausfall MITTEN in der Aufnahme (Review-Fund, Fix-Runde 1):
+        # `UvcSource.frames()` wirft bei einem Lesefehler NICHT - sie setzt
+        # `read_error` und beendet den Generator regulaer (siehe
+        # `UvcSource.frames()`/READ_FAIL_TIMEOUT_S). Ohne Ausnahme durchlaeuft
+        # die `for`-Schleife oben keinen `except`-Zweig, `acquisition_error`
+        # bliebe also unbemerkt `None`, obwohl schon Bilder aufgezeichnet
+        # wurden. Nur relevant, wenn schon mindestens ein Bild ankam (kam gar
+        # keins an, greift stattdessen der no-frames-Pfad in `run()`, der
+        # `frames_recorded == 0` prueft und Exit 4 ausloest) und noch kein
+        # anderer Zweig oben schon einen Grund gesetzt hat.
+        if (
+            args.source == "camera"
+            and frames_acquired > 0
+            and state.get("acquisition_error") is None
+            and state.get("camera") is not None
+            and state["camera"].get("read_error")
+        ):
+            state["acquisition_error"] = (
+                f"Kameraausfall waehrend der Aufnahme: {state['camera']['read_error']}"
+            )
         frame_queue.put(_QUEUE_DONE)
         frame_drop_queue.put(_QUEUE_DONE)
 

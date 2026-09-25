@@ -850,7 +850,14 @@ class _FakeUvcSource:
 
     `hang_event`: wenn gesetzt, blockiert `frames()` NACH dem letzten Bild
     auf `hang_event.wait()` - simuliert einen haengenden Aufnahmethread
-    (Review Focus 2), ohne echte Hardware."""
+    (Review Focus 2), ohne echte Hardware.
+
+    `read_error_after`: wenn gesetzt, endet `frames()` NACH dem letzten Bild
+    regulaer (kein `raise`) und setzt vorher `self.read_error` auf diesen
+    Text - genau der Vertrag des echten `UvcSource.frames()` bei einem
+    Kameraausfall mitten in der Aufnahme (`READ_FAIL_TIMEOUT_S` ohne
+    erfolgreiches Bild, siehe `src/dispread/frames/uvc_source.py`): der
+    Generator endet normal, wirft NICHT (Review-Fund Fix-Runde 1)."""
 
     def __init__(
         self,
@@ -861,6 +868,7 @@ class _FakeUvcSource:
         interval_ns: int = 33_000_000,
         open_error: Exception | None = None,
         hang_event: threading.Event | None = None,
+        read_error_after: str | None = None,
     ) -> None:
         self.settings = settings
         self._device_arg = device
@@ -869,6 +877,7 @@ class _FakeUvcSource:
         self._interval_ns = interval_ns
         self._open_error = open_error
         self._hang_event = hang_event
+        self._read_error_after = read_error_after
         self.read_error: str | None = None
         self.rejected_timestamps = 0
         self._sequence = 0
@@ -897,6 +906,9 @@ class _FakeUvcSource:
                 ),
                 source_id=f"v4l2:{self.device}",
             )
+        if self._read_error_after is not None:
+            self.read_error = self._read_error_after
+            return
         if self._hang_event is not None:
             self._hang_event.wait()
 
@@ -1114,6 +1126,63 @@ def test_frames_recorded_stimmt_wenn_aufnahmethread_haengt(monkeypatch, tmp_path
     session = json.loads((output_dir / "session.json").read_text())
     assert session["frames_recorded"] == 5
     assert len(list((output_dir / "frames").iterdir())) == 5
+
+
+def test_kameraausfall_mitten_in_der_aufnahme_setzt_acquisition_error(monkeypatch, tmp_path):
+    """Review-Fund (Fix-Runde 1): `UvcSource.frames()` wirft bei einem
+    Lesefehler NICHT - sie setzt `read_error` und beendet den Generator
+    regulaer (`READ_FAIL_TIMEOUT_S` ohne Bild). Kamen vorher schon Bilder an,
+    darf das nicht als stiller Erfolg durchgehen: `acquisition_error` muss
+    den `read_error`-Text tragen, `frames_recorded` bleibt korrekt (die schon
+    gelieferten Bilder), und der Lauf bleibt Exit 0 (ein Fehler NACH bereits
+    aufgezeichneten Bildern ist eine Warnung, kein `EXIT_NO_FRAMES_ACQUIRED`
+    - das bleibt dem reinen 0-Bilder-Befund vorbehalten)."""
+    module = _load_sync_record_module()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings,
+            device=device,
+            frame_count=3,
+            interval_ns=10_000_000,
+            read_error_after="kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s",
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json")
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kameraausfall-mittendrin"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "0",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 3
+    assert session["acquisition_error"] is not None
+    assert "kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s" in session["acquisition_error"]
+    assert session["camera"]["read_error"] == "kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s"
 
 
 def test_synthetic_traegt_versatz_und_keine_kamera(tmp_path):
