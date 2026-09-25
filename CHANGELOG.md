@@ -55,6 +55,16 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   und die Binning-Rechnung entfallen. Tests: `tests/test_session_profile.py`,
   `tests/test_focus_sweep.py`, `tests/test_harvest_setup.py`
   (Profil-Hilfen in den Datensatz-/Trainingstests auf explizit v2 gestellt).
+* Zeitbezug der Ernte (Task 5): `src/dispread/timing_calibration.py` und
+  `scripts/timing-calibration.py` bauen aus `display-offset.py`-Berichten
+  eine Kalibrierdatei `var/calibration/timing-streamcam.json` (M = größter
+  M-Wert der erkannten Populationen, mit sha256 der Quellberichte; ohne
+  erkannte Population Abbruch). `harvest.py` verlangt diese Datei
+  (`--calibration`), nimmt M daraus, prüft die USB-ID gegen das Profil,
+  gibt die Kameraeinstellungen des Profils an `sync-record` weiter und
+  lehnt IMX500-Profile (v2) ab; `--guard-margin-ms` und der alte Vorgabewert
+  695 ms entfallen. Tests: `tests/test_timing_calibration.py`,
+  `tests/test_harvest.py`.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

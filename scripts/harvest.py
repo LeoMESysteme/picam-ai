@@ -8,6 +8,14 @@ fuehrt damit `sync-record.py --norm-schedule` und anschliessend
 (`harvest.json`). Setzt ein bestaetigtes `SessionProfile` (Task 1) voraus:
 ohne `resolution_ok=True` wird gar nicht erst gestartet.
 
+StreamCam-Umstieg 2026-09-25 (Task 5): M (`--guard-margin-ms` fuer
+`gate-label.py`) kommt seither aus einer Timing-Kalibrierungsdatei
+(`dispread.timing_calibration`), nicht mehr aus einer festen Konstante - die
+695 ms aus `docs/VALIDATION.md` waren fuer die IMX500 gemessen und gelten
+nicht fuer die StreamCam. Ein v2-Profil (IMX500, `camera is None`) wird
+abgelehnt, ebenso eine Kalibrierung fuer eine andere Kamera-USB-ID als die im
+Profil.
+
 Weder Kamera noch serieller Port werden aus diesem Prozess direkt
 angefasst - das geschieht ausschliesslich in den beiden Subprozessen.
 """
@@ -15,6 +23,7 @@ angefasst - das geschieht ausschliesslich in den beiden Subprozessen.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -25,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from dispread.session_profile import SessionProfile  # noqa: E402
+from dispread.timing_calibration import DEFAULT_CALIBRATION_PATH, load_calibration  # noqa: E402
 
 #: Geraetebereich des Normierungsfaktors am GSV-2AS (CLAUDE.md, gemessen
 #: gegen scripts/sync-record.py::NORM_MIN/NORM_MAX). Nur zur Validierung,
@@ -36,8 +46,6 @@ _DEVICE_NORM_MIN, _DEVICE_NORM_MAX = 0.15, 1_580_000.0
 #: (Plan, Task 4, Interfaces).
 _MIN_STEP_RATIO = 1.3
 
-#: M aus Task B (--guard-margin-ms), Global Constraints des Plans.
-_DEFAULT_GUARD_MARGIN_MS = 695.0
 _DEFAULT_MIN_GAP_MS = 300.0
 _DEFAULT_MAX_GAP_MS = 800.0
 _DEFAULT_HOLD_S = 4.0
@@ -117,7 +125,7 @@ def run(
     hold_s: float,
     seed: int,
     port: str,
-    guard_margin_ms: float = _DEFAULT_GUARD_MARGIN_MS,
+    calibration_path: Path,
     min_gap_ms: float = _DEFAULT_MIN_GAP_MS,
     max_gap_ms: float = _DEFAULT_MAX_GAP_MS,
 ) -> dict:
@@ -125,18 +133,42 @@ def run(
     als Subprozesse aus und schreibt `out_dir/harvest.json`.
 
     Bricht vor jedem Subprozessaufruf ab (`HarvestError`), wenn das Profil
-    das Aufloesungs-Gate nicht bestanden hat oder `hold_s` zu kurz fuer ein
-    labelbares Plateau ist. Bricht nach `sync-record.py` ab, wenn dessen
-    Exitcode != 0 ist - `gate-label.py` wird dann gar nicht erst gestartet.
+    ein v2-Profil (IMX500, `camera is None`) ist, das Aufloesungs-Gate nicht
+    bestanden hat, die Timing-Kalibrierung nicht ladbar ist, sie zu einer
+    anderen Kamera-USB-ID gehoert, oder `hold_s` zu kurz fuer ein labelbares
+    Plateau ist. Bricht nach `sync-record.py` ab, wenn dessen Exitcode != 0
+    ist - `gate-label.py` wird dann gar nicht erst gestartet.
     """
     profile_path = Path(profile_path)
     profile = SessionProfile.load(profile_path)
+    if profile.camera is None:
+        raise HarvestError(
+            "IMX500-Profil (schema_version 2), Kamera ausser Betrieb - "
+            "neues Profil mit harvest-setup anlegen"
+        )
     if not profile.resolution_ok:
         raise HarvestError(
             f"Sitzungsprofil {profile_path} hat resolution_ok=False - "
             "Aufloesungs-Gate nicht bestanden, Ernte-Lauf nicht gestartet "
             "(Entscheidung 3, docs/superpowers/plans/2026-09-23-ernte-phase1.md)."
         )
+
+    calibration_path = Path(calibration_path)
+    try:
+        calibration = load_calibration(calibration_path)
+    except ValueError as exc:
+        raise HarvestError(
+            f"Timing-Kalibrierung {calibration_path} konnte nicht geladen "
+            f"werden: {exc}"
+        ) from exc
+    if calibration.camera_usb_id != profile.camera.usb_id:
+        raise HarvestError(
+            f"Timing-Kalibrierung {calibration_path} ist fuer Kamera "
+            f"{calibration.camera_usb_id!r}, Sitzungsprofil {profile_path} "
+            f"fuer {profile.camera.usb_id!r} - Kalibrierung passt nicht zur "
+            "Kamera dieser Sitzung."
+        )
+    guard_margin_ms = calibration.guard_margin_ms
 
     min_hold_s = 2 * guard_margin_ms / 1000.0 + 1.0
     if hold_s < min_hold_s:
@@ -172,9 +204,9 @@ def run(
         str(recording_dir),
         "--port",
         port,
+        "--camera-settings",
+        str(profile_path),
     ]
-    if profile.scaler_crop is not None:
-        sync_cmd += ["--scaler-crop", ",".join(str(v) for v in profile.scaler_crop)]
 
     sync_result = subprocess.run(sync_cmd, capture_output=True, text=True)
     if sync_result.returncode != 0:
@@ -228,7 +260,9 @@ def run(
         "min_gap_ms": min_gap_ms,
         "max_gap_ms": max_gap_ms,
         "gap_thresholds_provisional": True,
-        "scaler_crop": list(profile.scaler_crop) if profile.scaler_crop is not None else None,
+        "camera": profile.camera.to_dict(),
+        "calibration_path": str(calibration_path),
+        "calibration_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest(),
         "sync_record_exit_code": sync_result.returncode,
         "gate_label_exit_code": gate_result.returncode,
         "summary": summary,
@@ -257,7 +291,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, required=True, help="Seed fuer den deterministischen Faktorplan")
     parser.add_argument("--port", default="/dev/ttyUSB0", help="Serieller Port fuer sync-record.py")
-    parser.add_argument("--guard-margin-ms", type=float, default=_DEFAULT_GUARD_MARGIN_MS)
+    parser.add_argument(
+        "--calibration",
+        type=Path,
+        default=DEFAULT_CALIBRATION_PATH,
+        help=(
+            "Pfad zur Timing-Kalibrierung (dispread.timing_calibration), "
+            f"Vorgabe {DEFAULT_CALIBRATION_PATH}. Ersetzt M aus der IMX500-Messung "
+            "(695 ms) durch einen je Kamera-USB-ID gemessenen Wert."
+        ),
+    )
     parser.add_argument("--min-gap-ms", type=float, default=_DEFAULT_MIN_GAP_MS)
     parser.add_argument("--max-gap-ms", type=float, default=_DEFAULT_MAX_GAP_MS)
     return parser.parse_args(argv)
@@ -273,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             hold_s=args.hold_s,
             seed=args.seed,
             port=args.port,
-            guard_margin_ms=args.guard_margin_ms,
+            calibration_path=args.calibration,
             min_gap_ms=args.min_gap_ms,
             max_gap_ms=args.max_gap_ms,
         )
