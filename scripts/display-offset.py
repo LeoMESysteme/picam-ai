@@ -59,10 +59,14 @@ Uebergang). Berichtet werden Durchfallquote (wie oft faellt der
 |B-A|-Rauschtest zu Recht durch) und, falls doch "gemessen", die Streuung
 der erfundenen Uebergangszeiten.
 
-Zeitbasis: `frames.jsonl` traegt `capture_timestamp.value_ns` (int,
-CLOCK_BOOTTIME, `sensor_boottime`), `serial.jsonl` traegt `t_boot` (float,
-Sekunden, CLOCK_BOOTTIME) - dieselbe Domaene, siehe AGENTS.md "Zeitangaben
-immer mit Zeitbasis".
+Zeitbasis: `frames.jsonl` traegt `capture_timestamp` mit `base`
+`sensor_boottime` (bereits CLOCK_BOOTTIME) ODER `v4l2_monotonic`
+(CLOCK_MONOTONIC der UVC-Kamera) - `load_frames()` rechnet ueber
+`to_boottime_ns` (src/dispread/records.py, einzige Umrechnungsstelle) in
+beiden Faellen nach CLOCK_BOOTTIME um, mit dem in `session.json` gemessenen
+Versatz fuer `v4l2_monotonic`. `serial.jsonl` traegt `t_boot` (float,
+Sekunden, CLOCK_BOOTTIME) - dieselbe Domaene nach der Umrechnung, siehe
+AGENTS.md "Zeitangaben immer mit Zeitbasis".
 
 Vorzeichenkonvention (unveraendert):
 
@@ -90,6 +94,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import cv2  # noqa: E402
 
+from dispread.records import to_boottime_ns  # noqa: E402
 from dispread.rectify import rectify  # noqa: E402
 from dispread.workbench.vision import lcd_quad_in_region  # noqa: E402
 
@@ -114,8 +119,14 @@ M_FIXED_EXTRA_S = 0.040
 
 
 def load_frames(session_dir: Path) -> list[dict[str, Any]]:
-    """`frames.jsonl` laden. `capture_timestamp.value_ns` ist Nanosekunden
-    (int), hier nach Sekunden (float) umgerechnet - CLOCK_BOOTTIME bleibt."""
+    """`frames.jsonl` laden. `t` ist CLOCK_BOOTTIME in Sekunden (float), ueber
+    `to_boottime_ns` (src/dispread/records.py) aus `capture_timestamp`
+    gewonnen - fuer `sensor_boottime` unveraendert, fuer `v4l2_monotonic` mit
+    dem in `session.json` gemessenen Versatz umgerechnet (ValueError, falls
+    der Versatz fehlt). `timestamp_base` bleibt die ROHE Basis aus
+    `capture_timestamp.base`, zur Nachvollziehbarkeit."""
+    session_path = session_dir / "session.json"
+    session = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else None
     rows = []
     path = session_dir / "frames.jsonl"
     with path.open() as fh:
@@ -132,7 +143,7 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
                 {
                     "file": f"frames/{obj['file']}",
                     "frame_sequence": obj.get("frame_sequence"),
-                    "t": ts["value_ns"] / 1e9,
+                    "t": to_boottime_ns(ts, session) / 1e9,
                     "timestamp_base": ts.get("base"),
                 }
             )
@@ -929,7 +940,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     result = {
         "session_dir": str(session_dir),
-        "time_base": "CLOCK_BOOTTIME (frames: capture_timestamp.value_ns/1e9, serial: t_boot)",
+        "time_base": "CLOCK_BOOTTIME (frames: to_boottime_ns(capture_timestamp), serial: t_boot)",
         "sign_convention": "delta = t_glas - t_telegramm; delta>0: Telegramm zuerst, Glas folgt",
         "method": "template_projection",
         "n_frames": len(frames),

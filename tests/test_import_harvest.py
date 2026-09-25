@@ -108,6 +108,7 @@ def _build_harvest(
     tmp_path: Path,
     *,
     plateaus: list[tuple[str, int, list[str | None]]],
+    time_base: str = "sensor_boottime",
 ) -> Path:
     """Baut `harvest/recording/frames/*.jpg`, `recording/frames.jsonl` und
     `harvest/proposal.json`.
@@ -116,6 +117,10 @@ def _build_harvest(
     - `glyphs_override[i]` ersetzt die tatsaechlich GEZEICHNETEN Zeichen des
     i-ten Bildes dieses Plateaus (Standard: `telegram_text` selbst), um
     absichtlich fehlerhafte oder qualitativ schlechte Bilder zu bauen.
+
+    `time_base` wird unveraendert (roh) in `capture_timestamp.base` jedes
+    Frames geschrieben - `import-harvest.py` rechnet keine Zeiten um, es
+    traegt nur durch (siehe Task-1-Brief).
     """
     harvest_dir = tmp_path / "harvest"
     frames_dir = harvest_dir / "recording" / "frames"
@@ -152,7 +157,7 @@ def _build_harvest(
                     "frame_sequence": seq,
                     "capture_timestamp": {
                         "value_ns": t_ns,
-                        "base": "sensor_boottime",
+                        "base": time_base,
                         "semantics": "unknown",
                         "uncertainty_ns": None,
                     },
@@ -327,6 +332,28 @@ def test_successful_import_creates_samples_in_one_group(tmp_path):
         assert sample["expected_text"] == "1.234"
         group_ids.add(sample["independence_group"])
     assert len(group_ids) == 1
+
+
+def test_v4l2_monotonic_capture_timestamp_landet_unveraendert_in_der_probe(tmp_path):
+    """import-harvest.py vergleicht keine Zeiten, es traegt nur durch - eine
+    `v4l2_monotonic`-Aufzeichnung wird nicht nach CLOCK_BOOTTIME umgerechnet
+    (das ist Sache von gate-label.py/display-offset.py ueber to_boottime_ns),
+    siehe Task-1-Brief."""
+    profile_path = _profile(tmp_path)
+    harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3, time_base="v4l2_monotonic")
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["imported"] > 0, result
+
+    for sample_id in result["sample_ids"]:
+        sample = json.loads((dataset_root / "samples" / sample_id / "sample.json").read_text())
+        assert sample["capture_timestamp"]["base"] == "v4l2_monotonic"
 
 
 def test_bildguete_rejects_black_image(tmp_path):

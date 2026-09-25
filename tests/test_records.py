@@ -11,6 +11,7 @@ from dispread.records import (
     TimestampSemantics,
     ValueRecord,
     ValueStatus,
+    to_boottime_ns,
 )
 
 
@@ -84,6 +85,43 @@ def test_unbekannte_unsicherheit_ist_none_nicht_null():
     ts = Timestamp(value_ns=1, base=TimeBaseKind.SENSOR_BOOTTIME)
     assert ts.uncertainty_ns is None
     assert ts.semantics is TimestampSemantics.UNKNOWN
+
+
+def _ts(value_ns, base):
+    return {"value_ns": value_ns, "base": base, "semantics": "unknown", "uncertainty_ns": None}
+
+
+def test_v4l2_monotonic_zaehlt_als_zeitbehaftet():
+    assert TimeBaseKind("v4l2_monotonic") is TimeBaseKind.V4L2_MONOTONIC
+    assert TimeBaseKind.V4L2_MONOTONIC.carries_time_information
+
+
+def test_sensor_boottime_bleibt_unveraendert_auch_ohne_session():
+    assert to_boottime_ns(_ts(123, "sensor_boottime"), None) == 123
+
+
+def test_v4l2_monotonic_wird_mit_startversatz_umgerechnet():
+    session = {"clock_offset_boottime_minus_monotonic_ns": {"start": 5_000, "end": 5_400}}
+    assert to_boottime_ns(_ts(1_000_000, "v4l2_monotonic"), session) == 1_005_000
+
+
+def test_v4l2_monotonic_ohne_versatz_wird_abgelehnt():
+    with pytest.raises(ValueError, match="clock_offset"):
+        to_boottime_ns(_ts(1, "v4l2_monotonic"), {})
+    with pytest.raises(ValueError, match="clock_offset"):
+        to_boottime_ns(_ts(1, "v4l2_monotonic"), None)
+
+
+def test_suspend_zwischen_start_und_ende_wird_abgelehnt():
+    session = {"clock_offset_boottime_minus_monotonic_ns": {"start": 0, "end": 1_000_001}}
+    with pytest.raises(ValueError, match="Suspend"):
+        to_boottime_ns(_ts(1, "v4l2_monotonic"), session)
+
+
+@pytest.mark.parametrize("base", ["synthetic", "file_mtime", "replay_recorded", "quatsch"])
+def test_andere_basen_werden_abgelehnt(base):
+    with pytest.raises(ValueError, match="Zeitbasis"):
+        to_boottime_ns(_ts(1, base), {"clock_offset_boottime_minus_monotonic_ns": {"start": 0, "end": 0}})
 
 
 def test_stufendauern_werden_berechnet():

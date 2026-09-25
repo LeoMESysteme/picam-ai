@@ -74,6 +74,54 @@ def test_load_frames_rechnet_nanosekunden_korrekt_in_sekunden_um(tmp_path):
     assert rows[0]["file"] == "frames/frame_000001.jpg"
 
 
+def test_load_frames_v4l2_monotonic_wird_mit_versatz_umgerechnet(tmp_path):
+    session = tmp_path / "session"
+    (session / "frames").mkdir(parents=True)
+    (session / "frames.jsonl").write_text(
+        json.dumps(
+            {
+                "file": "frame_000001.jpg",
+                "frame_sequence": 1,
+                "capture_timestamp": {
+                    "value_ns": 1_000_000,
+                    "base": "v4l2_monotonic",
+                    "semantics": "unknown",
+                    "uncertainty_ns": None,
+                },
+            }
+        )
+        + "\n"
+    )
+    (session / "session.json").write_text(
+        json.dumps({"clock_offset_boottime_minus_monotonic_ns": {"start": 5_000, "end": 5_400}})
+    )
+    rows = mod.load_frames(session)
+    assert len(rows) == 1
+    assert rows[0]["t"] == pytest.approx((1_000_000 + 5_000) / 1e9, abs=1e-9)
+
+
+def test_load_frames_v4l2_monotonic_ohne_versatz_wird_abgelehnt(tmp_path):
+    session = tmp_path / "session"
+    (session / "frames").mkdir(parents=True)
+    (session / "frames.jsonl").write_text(
+        json.dumps(
+            {
+                "file": "frame_000001.jpg",
+                "frame_sequence": 1,
+                "capture_timestamp": {
+                    "value_ns": 1_000_000,
+                    "base": "v4l2_monotonic",
+                    "semantics": "unknown",
+                    "uncertainty_ns": None,
+                },
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="clock_offset"):
+        mod.load_frames(session)
+
+
 def test_load_serial_t_boot_bleibt_sekunden_und_markiert_nicht_telegramm_zeilen(tmp_path):
     session = tmp_path / "session"
     session.mkdir()

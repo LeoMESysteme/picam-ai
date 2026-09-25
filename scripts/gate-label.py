@@ -104,6 +104,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from dispread.records import to_boottime_ns  # noqa: E402
+
 MS_TO_NS = 1_000_000
 
 REASON_VALUE_CHANGE = "wertwechsel_im_fenster"
@@ -326,16 +330,18 @@ def load_serial(path: Path) -> list[tuple[int, str]]:
     return records
 
 
-def load_frames(path: Path) -> list[tuple[str, int]]:
-    """`(dateiname, capture_timestamp_ns)` - `capture_timestamp.value_ns` ist
-    bereits Nanosekunden derselben CLOCK_BOOTTIME-Domaene (Timestamp.to_dict())."""
+def load_frames(path: Path, session: dict[str, Any] | None) -> list[tuple[str, int]]:
+    """`(dateiname, capture_timestamp_ns)` - Zeit ist nach `to_boottime_ns`
+    (src/dispread/records.py) bereits CLOCK_BOOTTIME-Nanosekunden, auch wenn
+    der Frame urspruenglich `v4l2_monotonic` trug (dann braucht es `session`
+    mit `clock_offset_boottime_minus_monotonic_ns`, sonst ValueError)."""
     frames: list[tuple[str, int]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
         obj = json.loads(line)
-        t_ns = int(obj["capture_timestamp"]["value_ns"])
+        t_ns = to_boottime_ns(obj["capture_timestamp"], session)
         frames.append((str(obj["file"]), t_ns))
     return frames
 
@@ -601,8 +607,15 @@ def run(args: argparse.Namespace) -> int:
     min_gap_ns = round(args.min_gap_ms * MS_TO_NS)
     source_port = load_source_port(recording, args.source_port)
 
+    session_path = recording / "session.json"
+    session = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else None
+
     telegrams = load_serial(serial_path)
-    frames = load_frames(frames_path)
+    try:
+        frames = load_frames(frames_path, session)
+    except ValueError as exc:
+        print(f"Fehler: {exc}", file=sys.stderr)
+        return 2
     windows = build_windows(telegrams, guard_margin_ns, max_gap_ns)
     burst_spans = find_burst_spans(telegrams, min_gap_ns)
 

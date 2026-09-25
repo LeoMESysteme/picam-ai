@@ -3,6 +3,30 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-25 (Kamerawechsel: Logitech StreamCam statt IMX500)
+
+**Problem:** Die IMX500 (AI Camera) blieb beim Streamstart hängen
+(OQ-22, RP2040-Brücke) und fiel am 2026-09-25 zusätzlich mitten im Stream
+aus; Fokus nur mechanisch, AI-Funktionen ungenutzt. Nutzerentscheidung
+2026-09-25: offizieller Wechsel auf die Logitech StreamCam (USB, UVC).
+Spec: `docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`,
+Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
+
+**Änderung:**
+* Zeitbasis (Task 1): `TimeBaseKind.V4L2_MONOTONIC` für die rohen
+  V4L2-Pufferzeitstempel der UVC-Kamera und `to_boottime_ns()` in
+  `src/dispread/records.py` als einzige Umrechnung nach CLOCK_BOOTTIME
+  (Versatz aus `session.json`, Ablehnung bei fehlendem Versatz, Suspend
+  > 1 ms oder Zeitbasis ohne BOOTTIME-Bezug). `gate-label.py` und
+  `display-offset.py` rechnen darüber um; alte `sensor_boottime`-Sessions
+  unverändert. Tests: `tests/test_records.py`, `tests/test_gate_label.py`,
+  `tests/test_display_offset.py`, `tests/test_import_harvest.py`.
+<!-- streamcam-bullets -->
+
+**Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
+ScalerCrop) sind außer Betrieb; vor der ersten StreamCam-Ernte ist eine
+Timing-Kalibrierung Pflicht.
+
 ## 0.1.0.dev0 — 2026-09-24 (Dot-Matrix-Leser, Phase 2)
 
 **Problem:** Für die Punktraster-Anzeige des GSV-2AS gab es keinen Leser,

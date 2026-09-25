@@ -43,12 +43,16 @@ def _write_recording(
     telegrams: list[tuple[int, str]],
     frames: list[tuple[str, int]],
     port: str = "/dev/ttyUSB0",
+    time_base: str = "sensor_boottime",
+    clock_offset: dict | None = None,
+    write_session: bool = True,
 ) -> Path:
     """Baut ein synthetisches Aufzeichnungsverzeichnis wie `sync-record.py`
     es hinterlaesst - ohne die Bilddateien selbst.
 
     `telegrams`: Liste (t_ns, text). `frames`: Liste (dateiname,
-    capture_timestamp_ns).
+    capture_timestamp_ns). `time_base`/`clock_offset` erlauben Aufzeichnungen
+    mit `v4l2_monotonic`-Zeitstempeln (mit oder ohne Versatz in session.json).
     """
     recording = tmp_path / "lauf"
     recording.mkdir()
@@ -62,13 +66,17 @@ def _write_recording(
                 "frame_sequence": seq,
                 "capture_timestamp": {
                     "value_ns": t_ns,
-                    "base": "sensor_boottime",
+                    "base": time_base,
                     "semantics": "unknown",
                     "uncertainty_ns": None,
                 },
             }
             f.write(json.dumps(entry) + "\n")
-    (recording / "session.json").write_text(json.dumps({"port": port}))
+    if write_session:
+        session: dict = {"port": port}
+        if clock_offset is not None:
+            session["clock_offset_boottime_minus_monotonic_ns"] = clock_offset
+        (recording / "session.json").write_text(json.dumps(session))
     return recording
 
 
@@ -684,3 +692,94 @@ def test_min_gap_ms_ist_pflicht_ohne_vorgabewert(tmp_path):
     )
     assert result.returncode != 0
     assert "--min-gap-ms" in result.stderr
+
+
+# --- v4l2_monotonic: Umrechnung ueber to_boottime_ns -----------------------
+
+
+def test_v4l2_monotonic_mit_versatz_liefert_dieselben_labels_wie_sensor_boottime(tmp_path):
+    telegrams = [(i * 500 * MS, "+0.46776 mV/V") for i in range(20)]
+    t_mid = telegrams[10][0]
+    frames = [("frame_000001.png", t_mid)]
+
+    recording_boottime = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+    output_boottime = tmp_path / "proposal_boottime.json"
+    result_boottime = _run_cli(recording_boottime, output_boottime, guard_margin_ms=100, max_gap_ms=1000)
+    assert result_boottime.returncode == 0, result_boottime.stderr
+
+    offset_ns = 5_000_000_000
+    # Dieselbe Aufzeichnung, aber v4l2_monotonic-Zeitstempel (um -offset_ns
+    # verschoben, damit to_boottime_ns sie mit dem Versatz auf dieselben
+    # BOOTTIME-Werte zurueckrechnet).
+    frames_monotonic = [(filename, t_ns - offset_ns) for filename, t_ns in frames]
+    recording_monotonic = tmp_path / "lauf-monotonic"
+    recording_monotonic.mkdir()
+    (recording_monotonic / "serial.jsonl").write_text((recording_boottime / "serial.jsonl").read_text())
+    with open(recording_monotonic / "frames.jsonl", "w", encoding="utf-8") as f:
+        for seq, (filename, t_ns) in enumerate(frames_monotonic, start=1):
+            entry = {
+                "file": filename,
+                "frame_sequence": seq,
+                "capture_timestamp": {
+                    "value_ns": t_ns,
+                    "base": "v4l2_monotonic",
+                    "semantics": "unknown",
+                    "uncertainty_ns": None,
+                },
+            }
+            f.write(json.dumps(entry) + "\n")
+    (recording_monotonic / "session.json").write_text(
+        json.dumps(
+            {
+                "port": "/dev/ttyUSB0",
+                "clock_offset_boottime_minus_monotonic_ns": {"start": offset_ns, "end": offset_ns},
+            }
+        )
+    )
+    output_monotonic = tmp_path / "proposal_monotonic.json"
+    result_monotonic = _run_cli(recording_monotonic, output_monotonic, guard_margin_ms=100, max_gap_ms=1000)
+    assert result_monotonic.returncode == 0, result_monotonic.stderr
+
+    proposal_boottime = json.loads(output_boottime.read_text())
+    proposal_monotonic = json.loads(output_monotonic.read_text())
+    labels_boottime = {Path(e["image_path"]).name: e["label_text"] for e in proposal_boottime["images"]}
+    labels_monotonic = {Path(e["image_path"]).name: e["label_text"] for e in proposal_monotonic["images"]}
+    assert labels_boottime == labels_monotonic
+
+
+def test_v4l2_monotonic_ohne_session_wird_mit_klarer_fehlermeldung_abgelehnt(tmp_path):
+    telegrams = [(i * 500 * MS, "+0.46776 mV/V") for i in range(5)]
+    t_mid = telegrams[2][0]
+    frames = [("frame_000001.png", t_mid)]
+    recording = _write_recording(
+        tmp_path,
+        telegrams=telegrams,
+        frames=frames,
+        time_base="v4l2_monotonic",
+        write_session=False,
+    )
+    output = tmp_path / "proposal.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--recording",
+            str(recording),
+            "--guard-margin-ms",
+            "100",
+            "--max-gap-ms",
+            "1000",
+            "--min-gap-ms",
+            "0",
+            "--source-port",
+            "/dev/ttyUSB0",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "clock_offset" in result.stderr
