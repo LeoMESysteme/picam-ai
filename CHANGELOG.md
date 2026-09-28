@@ -65,6 +65,17 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   lehnt IMX500-Profile (v2) ab; `--guard-margin-ms` und der alte Vorgabewert
   695 ms entfallen. Tests: `tests/test_timing_calibration.py`,
   `tests/test_harvest.py`.
+- **Task 6 — Werkbank-Kamera außer Betrieb, Inbetriebnahme, Hardwaretest:**
+  Der Kamerathread der Werkbank importiert `picamera2` außerhalb von
+  `--simulate` nicht mehr; er meldet über den bestehenden Fehlerkanal
+  „Kamera der Werkbank ausser Betrieb … Simulationsmodus (--simulate)
+  nutzen" und liefert keine Bilder (StreamCam-Anbindung folgt).
+  `scripts/camera-commissioning.sh` prüft jetzt die StreamCam: `v4l2-ctl`,
+  Gerät 046d:0893, USB3-Geschwindigkeit, YUYV 1920x1080, Fokus-Controls
+  setzen und zurücklesen, Testbild nach
+  `var/diagnostics/camera-commissioning/test.png`. Neuer Hardwaretest
+  `tests/test_uvc_hardware.py` (nur `--mode=real`): 30 Bilder, streng
+  monotone Zeitstempel, Controls-Rücklesung.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

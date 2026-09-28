@@ -107,6 +107,17 @@ class CameraWedgedError(RuntimeError):
     """
 
 
+#: Werkbank-Kamera ausser Betrieb (StreamCam-Umstieg 2026-09-25,
+#: docs/project_history.md): IMX500/Picamera2 wird im Nicht-Simulationsmodus
+#: nicht mehr importiert oder angefasst - die StreamCam-Anbindung des
+#: Kamerathreads folgt erst noch. Bis dahin ist `--simulate` der einzige
+#: lauffaehige Pfad; dieser Text ist der einzige sichtbare Fehlerzustand.
+CAMERA_AUSSER_BETRIEB_MSG = (
+    "Kamera der Werkbank ausser Betrieb (IMX500 abgeloest durch StreamCam, 2026-09-25) - "
+    "StreamCam-Anbindung folgt; Simulationsmodus (--simulate) nutzen"
+)
+
+
 def roi_box(image, roi):
     """Normierte ROI in Bildkoordinaten, mindestens ein Pixel gross."""
     height, width = image.shape[:2]
@@ -1612,9 +1623,18 @@ class Controller:
                     "Contrast": [0.1, 4.0, 1.0],
                 }
             else:
-                from picamera2 import Picamera2
-
-                camera = Picamera2(self.camera_index)
+                # IMX500/Picamera2 ausser Betrieb (StreamCam-Umstieg
+                # 2026-09-25) - kein Import, keine Instanziierung. Der
+                # Fehlerzustand nutzt denselben Kanal wie jeder andere
+                # Kamerafehler (self.error, siehe snapshot()); der Worker
+                # bleibt am Leben, bis stop gesetzt wird, statt Bilder zu
+                # erfinden.
+                with self.lock:
+                    self.error = CAMERA_AUSSER_BETRIEB_MSG
+                self.log("error", CAMERA_AUSSER_BETRIEB_MSG)
+                while not self.stop.is_set():
+                    self.stop.wait(0.2)
+                return
             previous = None
             pending_geometry, pending_since = None, 0.0
             while not self.stop.is_set():
