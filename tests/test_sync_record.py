@@ -1029,6 +1029,9 @@ def test_session_json_traegt_camera_versatz_und_gaps(monkeypatch, tmp_path):
 
     lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
     assert lines
+    # Fix-Runde 1 (Task 7): --frame-rate == camera_settings.fps darf gar
+    # nicht ausduennen - alle 8 gelieferten Bilder muessen geschrieben werden.
+    assert len(lines) == 8
     for entry in lines:
         assert entry["capture_timestamp"]["base"] == "v4l2_monotonic"
         assert entry["sensor_sequence"] is None
@@ -1321,6 +1324,111 @@ def test_kamera_echte_luecke_wird_trotz_ausduennung_gezaehlt(monkeypatch, tmp_pa
     assert returncode == 0
     session = json.loads((output_dir / "session.json").read_text())
     assert session["frame_gaps"]["count"] >= 1
+
+    # Fix-Runde 1 (Task 7): nach einer echten Luecke resynchronisiert der
+    # Soll-Zeitplan auf das gerade eingetroffene Bild - kein "Nachziehen"
+    # mehrerer Bilder in schneller Folge (Burst). Die Luecke selbst darf im
+    # Intervall auftauchen (echter Befund), danach muss sofort wieder der
+    # normale ~66.7ms-Sollabstand gelten.
+    written = [
+        json.loads(line)["capture_timestamp"]["value_ns"]
+        for line in (output_dir / "frames.jsonl").read_text().splitlines()
+    ]
+    intervals_ms = [(b - a) / 1e6 for a, b in zip(written, written[1:], strict=False)]
+    assert all(interval_ms > 50.0 for interval_ms in intervals_ms), intervals_ms
+
+
+def test_kamera_30fps_mit_jitter_liefert_trotzdem_etwa_die_haelfte(monkeypatch, tmp_path):
+    """Fix-Runde 1 (Task 7): eine echte 10s-Aufnahme (30 fps, --frame-rate 15)
+    lieferte mit der ersten Fassung nur ~97 statt ~150 Bilder (effektiv 10-12
+    statt 15 fps), weil Zeitstempel-Jitter das Bild zwei Kameraperioden
+    spaeter gelegentlich knapp VOR die (nicht-tolerante) Schwelle rutschen
+    liess ("Abstand zum zuletzt GESCHRIEBENEN Bild" driftet mit jedem
+    geschriebenen, selbst leicht verschobenen Bild weiter) - siehe Docstring
+    in `_frame_acquisition_worker`.
+
+    Deterministischer Jitter im 4er-Zyklus (+0.5ms, +0.5ms, -0.5ms, -0.5ms,
+    wiederholt) auf sonst exakten 30-fps-Zeitstempeln reproduziert genau
+    diesen Drift: ein rein alternierender +-0.5ms-Jitter haette sich ueber
+    jedes geschriebene Paar exakt aufgehoben (kein Bug sichtbar) - der
+    4er-Zyklus nicht. Mit dem Soll-Zeitplan (`next_due_ns` + Toleranz =
+    halbe Kameraperiode) darf das nicht mehr passieren: weiterhin etwa jedes
+    zweite von 60 Bildern (~30) wird geschrieben."""
+    module = _load_sync_record_module()
+
+    class _FakeUvcSourceMitJitter(_FakeUvcSource):
+        def frames(self):
+            nominal_ns = 0
+            for i in range(self._frame_count):
+                nominal_ns += self._interval_ns
+                jitter_ns = 500_000 if i % 4 < 2 else -500_000
+                value_ns = nominal_ns + jitter_ns
+                self._sequence += 1
+                yield Frame(
+                    frame_sequence=self._sequence,
+                    image=np.zeros((4, 4, 3), dtype=np.uint8),
+                    capture_timestamp=Timestamp(
+                        value_ns=value_ns,
+                        base=TimeBaseKind.V4L2_MONOTONIC,
+                        semantics=TimestampSemantics.UNKNOWN,
+                        uncertainty_ns=None,
+                    ),
+                    source_id=f"v4l2:{self.device}",
+                )
+
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSourceMitJitter(
+            settings, device=device, frame_count=60, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-jitter"
+    args = module.parse_args(
+        [
+            "--duration",
+            "10.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0, "returncode war " + str(returncode)
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] == 0
+    frames_recorded = session["frames_recorded"]
+    # 60 gelieferte Bilder, geschrieben etwa jedes zweite -> ~30. Mit der
+    # fehlerhaften ersten Fassung driftete das auf effektiv jedes dritte Bild
+    # (~20), reproduziert den Feldbefund (97 statt ~150 bei 10s/15fps-Ziel).
+    assert 27 <= frames_recorded <= 33, frames_recorded
+
+    written = [
+        json.loads(line)["capture_timestamp"]["value_ns"]
+        for line in (output_dir / "frames.jsonl").read_text().splitlines()
+    ]
+    intervals_ms = [(b - a) / 1e6 for a, b in zip(written, written[1:], strict=False)]
+    # Mit Schwelle+Toleranz erwartet: kein Intervall wesentlich groesser als
+    # eine Kameraperiode (~33.3ms) ueber dem Sollabstand (~66.7ms) - der
+    # Feldbefund zeigte bis zu 100ms (drei Kameraperioden statt zwei).
+    assert all(interval_ms < 90.0 for interval_ms in intervals_ms), intervals_ms
 
 
 def test_frame_rate_ueber_kamera_fps_wird_abgelehnt(tmp_path):

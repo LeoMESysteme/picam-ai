@@ -844,10 +844,31 @@ def _frame_acquisition_worker(
     aufeinanderfolgende GELIEFERTE Bilder liegen dann rund
     Puffertiefe/camera_settings.fps statt 1/frame_rate auseinander - genau
     der Review-Befund. Stattdessen wird im Kamerazweig nach dem Lesen jedes
-    Bildes anhand des Zeitstempels ausgeduennt: weitergegeben (in
-    `frame_queue` gelegt) wird ein Bild, wenn es das erste ist oder der
-    Abstand zum zuletzt weitergegebenen Bild >= 1/frame_rate ist. Nicht
-    weitergegebene Bilder sind KEIN Drop (die zaehlen nur bei voller
+    Bildes anhand des Zeitstempels ausgeduennt.
+
+    Fix-Runde 1 (Task 7): eine erste Fassung verglich nur gegen das zuletzt
+    weitergegebene Bild ("`value_ns - letztes_geschriebenes >= 1/frame_rate`").
+    Eine echte 10s-Aufnahme (30 fps, --frame-rate 15) zeigte damit nur ~97
+    statt ~150 Bilder (effektiv 10-12 statt 15 fps): Zeitstempel-Jitter laesst
+    das Bild zwei Kameraperioden spaeter gelegentlich eine Bruchteils-ms VOR
+    der Schwelle ankommen, es wird uebersprungen, und erst das naechste (eine
+    volle Kameraperiode spaeter) wird geschrieben - die Ausduennung "driftet"
+    sich damit selbst auf einen groeberen Takt.
+
+    Fix: ein Soll-Zeitplan (`next_due_ns`) statt eines Abstands zum letzten
+    Bild. Das erste Bild wird geschrieben und setzt
+    `next_due_ns = value_ns + frame_period_ns`. Ein Bild wird geschrieben,
+    wenn `value_ns >= next_due_ns - tolerance_ns`
+    (`tolerance_ns = camera_period_ns // 2`, `camera_period_ns` aus
+    `camera_settings.fps`) - toleriert also bis zu einer halben Kameraperiode
+    Jitter, ohne den Soll-Takt zu verschieben. Nach dem Schreiben ruecken wir
+    `next_due_ns` um `frame_period_ns` weiter; ist die Kamera weiter zurueck
+    als eine volle `frame_period_ns` (`value_ns - next_due_ns >
+    frame_period_ns`, z.B. nach einem echten Aussetzer), wird auf
+    `value_ns + frame_period_ns` resynchronisiert statt mit mehreren
+    Bildern in Folge aufzuholen (kein Burst nach einer Luecke).
+
+    Nicht weitergegebene Bilder sind KEIN Drop (die zaehlen nur bei voller
     `frame_queue`, siehe unten) - sie werden einfach nicht geschrieben.
 
     `sensor_timestamp_interval_ns` (Feld je `frames.jsonl`-Zeile) bezieht
@@ -885,6 +906,18 @@ def _frame_acquisition_worker(
     # dritte statt jedes zweite Bild geschrieben wird - beobachtet in
     # test_kamera_30fps_frame_rate_15_liefert_keine_luecken_und_duennt_aus.
     frame_period_ns = int(1e9 // args.frame_rate) if args.frame_rate > 0 else 0
+    # Fix-Runde 1 (Task 7): `camera_period_ns`/`tolerance_ns` fuer den
+    # Soll-Zeitplan der Ausduennung (`next_due_value_ns` unten) - siehe
+    # Docstring oben. Eine halbe Kameraperiode Toleranz ist grosszuegig
+    # gegenueber dem beobachteten Jitter (Bruchteils-ms) und trotzdem klein
+    # genug, um zwei echt aufeinanderfolgende Sollzeitpunkte nicht zu
+    # verwechseln.
+    camera_period_ns = (
+        int(1e9 // camera_settings.fps)
+        if is_camera and camera_settings is not None and camera_settings.fps > 0
+        else 0
+    )
+    tolerance_ns = camera_period_ns // 2
     stall_period_s = (
         (1.0 / camera_settings.fps)
         if is_camera and camera_settings is not None and camera_settings.fps > 0
@@ -896,6 +929,7 @@ def _frame_acquisition_worker(
     stall_iterations: list[dict[str, Any]] = []
     prev_loop_end_mono = start_mono
     prev_written_value_ns: int | None = None
+    next_due_value_ns: int | None = None
     max_frame_queue_depth = 0
     frames_acquired = 0
     frames_dropped = 0
@@ -931,14 +965,26 @@ def _frame_acquisition_worker(
 
             if (
                 is_camera
-                and frame_period_s > 0
-                and prev_written_value_ns is not None
+                and frame_period_ns > 0
                 and value_ns is not None
-                and (value_ns - prev_written_value_ns) < frame_period_ns
+                and next_due_value_ns is not None
+                and value_ns < next_due_value_ns - tolerance_ns
             ):
                 # Ausgeduennt: gelesen, aber nicht weitergegeben - kein Drop.
+                # Soll-Zeitplan bleibt unveraendert (siehe Docstring
+                # "Fix-Runde 1") - nur ueberspringen, nicht nachziehen.
                 prev_loop_end_mono = time.monotonic()
                 continue
+
+            if is_camera and frame_period_ns > 0 and value_ns is not None:
+                if next_due_value_ns is None or value_ns - next_due_value_ns > frame_period_ns:
+                    # Erstes Bild ueberhaupt, oder die Kamera liegt mehr als
+                    # eine volle Sollperiode zurueck (echter Aussetzer) -
+                    # auf den aktuellen Zeitstempel resynchronisieren statt
+                    # mit mehreren Bildern in Folge aufzuholen (kein Burst).
+                    next_due_value_ns = value_ns + frame_period_ns
+                else:
+                    next_due_value_ns += frame_period_ns
 
             sensor_timestamp_interval_ns = None
             if prev_written_value_ns is not None and value_ns is not None:

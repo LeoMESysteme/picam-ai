@@ -102,6 +102,13 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   `display-offset.py` überspringen `frames.jsonl`-Zeilen mit
   `dropped: true` statt mit `KeyError` abzubrechen (Fehler seit
   2026-09-23). `camera-commissioning.sh` prüft die Größe des Testbilds.
+- **Task 7, Nachbesserung nach der Probeaufnahme an der StreamCam:** Das
+  Ausdünnen läuft jetzt nach festem Zeitplan mit einer Toleranz von einem
+  halben Kamera-Bildabstand. Vorher zählte der Abstand zum letzten
+  geschriebenen Bild, und das Zeitstempel-Zittern ließ oft erst das Bild
+  nach 100 ms durch. Gemessen 2026-09-28, 10 s mit `--frame-rate 15`:
+  vorher 97 Bilder (68–100 ms Abstand), nachher 137 Bilder (überwiegend
+  64/68 ms), jeweils `frame_gaps.count = 0` und kein Drop.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
