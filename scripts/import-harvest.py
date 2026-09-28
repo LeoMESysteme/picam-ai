@@ -268,18 +268,39 @@ class _Candidate:
     sharpness: float | None = None
 
 
-def _load_frames_map(recording_dir: Path) -> dict[str, dict]:
+def _load_frames_map(recording_dir: Path) -> tuple[dict[str, dict], int]:
+    """`frames.jsonl` als `{Dateiname: Zeile}` laden. Liefert zusaetzlich die
+    Zahl uebersprungener Drop-Zeilen fuer den Bericht in `run()`.
+
+    Eine wegen voller Schreib-Warteschlange verworfene Zeile
+    (`"dropped": true`) traegt kein `file` und wird uebersprungen - siehe
+    dasselbe Muster in `display-offset.py`/`gate-label.py` (Task 7). Eine
+    Zeile ohne `file` und OHNE `dropped: true` ist dagegen ein Fehler (kein
+    Raten, AGENTS.md) und wird mit Zeilennummer abgelehnt.
+    """
     frames_path = recording_dir / "frames.jsonl"
     out: dict[str, dict] = {}
     if not frames_path.is_file():
-        return out
-    for line in frames_path.read_text(encoding="utf-8").splitlines():
+        return out, 0
+    skipped_dropped = 0
+    for lineno, line in enumerate(frames_path.read_text(encoding="utf-8").splitlines(), start=1):
         line = line.strip()
         if not line:
             continue
         obj = json.loads(line)
+        if "file" not in obj:
+            if obj.get("dropped"):
+                # final-review.md, "Nicht bewertet": eine wegen voller
+                # frame_queue verworfene Zeile traegt kein Bild - nicht mit
+                # KeyError abbrechen.
+                skipped_dropped += 1
+                continue
+            raise ValueError(
+                f"Fehler: {frames_path}, Zeile {lineno}: Feld 'file' fehlt und "
+                "'dropped: true' ist nicht gesetzt - keine Annahme moeglich."
+            )
         out[str(obj["file"])] = obj
-    return out
+    return out, skipped_dropped
 
 
 def _resolve_image_path(harvest_dir: Path, image_path: str) -> Path:
@@ -371,7 +392,7 @@ def run(args: argparse.Namespace) -> int:
     proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
     images: list[dict] = proposal.get("images", [])
 
-    frames_map = _load_frames_map(harvest_dir / "recording")
+    frames_map, frames_jsonl_dropped_skipped = _load_frames_map(harvest_dir / "recording")
 
     selected_raw = _select_per_plateau(images, args.per_plateau)
 
@@ -610,6 +631,7 @@ def run(args: argparse.Namespace) -> int:
         "dry_run": bool(args.dry_run),
         "per_plateau": args.per_plateau,
         "frames_total": total,
+        "frames_jsonl_dropped_skipped": frames_jsonl_dropped_skipped,
         "selected": len(selected_raw),
         "imported": len(created_ids),
         "sample_ids": created_ids,
@@ -621,6 +643,12 @@ def run(args: argparse.Namespace) -> int:
 
     print("=== import-harvest: Bericht ===")
     print(f"Ernte: {harvest_dir}")
+    if frames_jsonl_dropped_skipped:
+        print(
+            f"Hinweis: {frames_jsonl_dropped_skipped} Zeile(n) in "
+            f"{harvest_dir / 'recording' / 'frames.jsonl'} uebersprungen "
+            "(dropped=true, volle Warteschlange beim Aufnehmen)."
+        )
     print(f"Bilder im Vorschlag: {total}  Ausgewaehlt (je Plateau <= {args.per_plateau}): {len(selected_raw)}")
     print(f"Importiert: {len(created_ids)}")
     print("Abgelehnt je Grund:")

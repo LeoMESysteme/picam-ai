@@ -127,6 +127,12 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   einer Grenze von 0,01. Die Stabilitätsgrenze bleibt unverändert. Bei
   v3-Profilen muss `camera.size` zur Bildgröße passen. Der Bericht vermerkt
   `quad_source` mit Profilpfad und sha256.
+- **Task 9 — `import-harvest.py` überspringt Drop-Zeilen:** Zeilen mit
+  `dropped: true` in `frames.jsonl` führten zum Abbruch mit `KeyError`.
+  Das fiel bei der ersten StreamCam-Ernte `sc1` auf (8 Drops wegen voller
+  Schreib-Warteschlange). Jetzt werden diese Zeilen übersprungen und als
+  `frames_jsonl_dropped_skipped` in `import.json` gezählt. Eine Zeile ohne
+  `file` und ohne `dropped` bleibt ein Fehler mit Zeilennummer.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

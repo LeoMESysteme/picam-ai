@@ -456,6 +456,98 @@ def test_zellen_inkonsistent_rejects_mislabeled_cell(tmp_path):
     assert result["rejected_by_reason"]["zellen_inkonsistent"] >= 1
 
 
+def test_load_frames_map_skips_dropped_lines_without_file(tmp_path):
+    """Task 9: eine wegen voller Warteschlange verworfene Zeile
+    (`dropped: true`) traegt kein `file` - `_load_frames_map` darf daran
+    nicht mit KeyError scheitern, siehe Anlass in task-9-brief.md
+    (`import-harvest.py --dry-run` brach an genau dieser Stelle ab)."""
+    recording_dir = tmp_path / "recording"
+    recording_dir.mkdir()
+    lines = [
+        json.dumps({"file": "frame_000001.jpg", "frame_sequence": 1, "capture_timestamp": None}),
+        json.dumps(
+            {
+                "dropped": True,
+                "sensor_sequence": None,
+                "capture_timestamp": {
+                    "value_ns": 1,
+                    "base": "v4l2_monotonic",
+                    "semantics": "unknown",
+                    "uncertainty_ns": None,
+                },
+                "t_boot": 1.0,
+            }
+        ),
+        json.dumps({"file": "frame_000002.jpg", "frame_sequence": 2, "capture_timestamp": None}),
+    ]
+    (recording_dir / "frames.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    frames_map, skipped = import_harvest._load_frames_map(recording_dir)
+
+    assert set(frames_map) == {"frame_000001.jpg", "frame_000002.jpg"}
+    assert skipped == 1
+
+
+def test_load_frames_map_rejects_line_without_file_and_without_dropped_flag(tmp_path):
+    """Eine Zeile ohne `file`, die NICHT `dropped: true` traegt, ist ein
+    Fehler und wird nicht still uebersprungen (kein Raten, AGENTS.md) - die
+    Meldung nennt die Zeilennummer."""
+    recording_dir = tmp_path / "recording"
+    recording_dir.mkdir()
+    lines = [
+        json.dumps({"file": "frame_000001.jpg", "frame_sequence": 1, "capture_timestamp": None}),
+        json.dumps({"frame_sequence": 2, "capture_timestamp": None}),
+    ]
+    (recording_dir / "frames.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    try:
+        import_harvest._load_frames_map(recording_dir)
+        raise AssertionError("erwartete Ablehnung ohne 'file' und ohne 'dropped: true'")
+    except ValueError as error:
+        assert "Zeile 2" in str(error)
+
+
+def test_dry_run_skips_dropped_frame_lines_and_still_imports(tmp_path):
+    """End-to-end (Aufgabe 3, Task-9-Brief): eine Drop-Zeile in
+    `frames.jsonl` darf `import-harvest.py --dry-run` nicht mit KeyError
+    abbrechen lassen - der Import laeuft normal weiter."""
+    profile_path = _profile(tmp_path)
+    harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3)
+    frames_path = harvest_dir / "recording" / "frames.jsonl"
+    dropped_line = json.dumps(
+        {
+            "dropped": True,
+            "sensor_sequence": None,
+            "capture_timestamp": {
+                "value_ns": 1,
+                "base": "v4l2_monotonic",
+                "semantics": "unknown",
+                "uncertainty_ns": None,
+            },
+            "t_boot": 1.0,
+        }
+    )
+    with frames_path.open("a", encoding="utf-8") as fh:
+        fh.write(dropped_line + "\n")
+
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--dry-run",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["frames_jsonl_dropped_skipped"] == 1
+
+
 def test_store_error_is_counted_not_swallowed(tmp_path):
     """Ein Label, das die Store-eigene `normalize_label`-Syntax nicht
     erfuellt (hier: Buchstaben statt eines reinen Dezimalwerts), wird als
