@@ -29,9 +29,13 @@ committet. Ledger mit Rulings:
   Regler zurückgelesen). 10-s-Probeaufnahme mit `--frame-rate 15`: 137
   Bilder, `frame_gaps.count = 0`, kein Drop, Versatz BOOTTIME − MONOTONIC
   −9/+10 ns ([VALIDATION.md](VALIDATION.md), 2026-09-28).
-* **Noch nicht gemessen:** Zeitversatz Telegramm ↔ Glas und Schutzfenster M
-  für die StreamCam. Ohne `var/calibration/timing-streamcam.json` startet
-  `harvest.py` nicht. Das alte M = 695 ms gilt nur für die IMX500.
+* **Messsitzung 2026-09-28:** Timing-Kalibrierung steht, M = 1225,8 ms
+  aus drei Aufnahmen (Nutzerentscheidung: Maximum über alle, konservativ),
+  `var/calibration/timing-streamcam.json`. Zwei neue scharfe Aufstellungen
+  geerntet und importiert: `sc1` (schräg, Profil `sc1b`, 45 Proben), `sc2`
+  (frontal, 58 Proben); Datensatz 492 Proben ([VALIDATION.md](VALIDATION.md),
+  2026-09-28). Neu dafür: `display-offset.py --profile` (Task 8),
+  `import-harvest.py` übersteht Drop-Zeilen (Task 9).
 * **Dot-Matrix-Leser:** fertig und geprüft, nie ein falscher Wert. Die
   festgelegte Messung scheitert an zu weichen Aufstellungen im Training
   ([OQ-42](open-questions.md), [VALIDATION.md](VALIDATION.md) 2026-09-25).
@@ -44,16 +48,14 @@ committet. Ledger mit Rulings:
 
 ## Nächste Schritte
 
-1. **Messsitzung mit dem Nutzer:** `harvest-setup.py focus` →
-   `sync-record.py --source camera --camera-settings … --norm-schedule …` →
-   `display-offset.py` → `timing-calibration.py`. Dabei prüfen, ob sich die
-   „eingefrorenen" Belichtungswerte bei anderem Licht ändern (Befund M-10
-   des Abschlussreviews).
-2. Zwei scharf fokussierte Ernten mit der StreamCam, dann die
-   Dot-Matrix-Messung erneut (OQ-42-Entscheidung vorher).
-3. Sicherung für `var/` einrichten.
-4. Zweig-Integration vorbereiten: Die Gates der Doku-Site (`master`) müssen
-   auf dem zusammengeführten Stand laufen.
+1. OQ-42 entscheiden (Nutzer), dann `dotmatrix-eval.py loo` mit fünf Gruppen.
+2. Befunde der Messsitzung abarbeiten (TODO.md): Fokus-Sweep liest nach
+   großen Sprüngen ein veraltetes Pufferbild (M-9), Glasdetektor scheitert an
+   der StreamCam, Raster-Prüfung auf 8 Zeilen in `propose`, JPEG-Warteschlange.
+3. Sicherung für `var/` auf einem anderen Medium einrichten (lokale erste
+   Sicherung: `/home/me-systeme/var-backups/var-20260928-vor-import.tar`).
+4. Zweig nach `master` integrieren; die Gates der Doku-Site müssen auf dem
+   zusammengeführten Stand laufen.
 
-Mock-Suite am 2026-09-28: 682 bestanden, 3 übersprungen, 1 erwarteter
+Mock-Suite am 2026-09-28: 690 bestanden, 3 übersprungen, 1 erwarteter
 Fehlschlag; Ruff ohne Befund. Das GSVmulti-Telegramm bleibt OQ-07.

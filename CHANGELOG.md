@@ -133,6 +133,13 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   Schreib-Warteschlange). Jetzt werden diese Zeilen übersprungen und als
   `frames_jsonl_dropped_skipped` in `import.json` gezählt. Eine Zeile ohne
   `file` und ohne `dropped` bleibt ein Fehler mit Zeilennummer.
+- **Messsitzung 2026-09-28 (Doku):** In `VALIDATION.md` sind die
+  StreamCam-Timing-Kalibrierung (M = 1225,8 ms, Nutzerentscheidung:
+  Maximum aus A + B + C) und die ersten beiden StreamCam-Ernten `sc1`
+  (Profil `sc1b`) und `sc2` festgehalten, mit 45 bzw. 58 importierten
+  Proben (Datensatz 492). Befund: `top`…`bottom` des Rasters umfasst
+  8 Zeilen einschließlich Cursorzeile, deshalb wurde `sc1` zu `sc1b`
+  korrigiert. `TODO.md` und `status.md` sind auf dem neuen Stand.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

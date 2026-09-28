@@ -9,34 +9,39 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Messsitzung StreamCam (Timing-Kalibrierung) — mit dem Nutzer
+## Zuerst: Dot-Matrix-Messung mit den StreamCam-Aufstellungen
 
-Der Kamerawechsel IMX500 → Logitech StreamCam ist gebaut, reviewt und an
-der Hardware geprüft (2026-09-28: `camera-commissioning.sh` Exit 0,
-Hardwaretest grün, Probeaufnahme ohne Lücken; VALIDATION.md 2026-09-28).
-Spec/Plan: `docs/superpowers/specs|plans/2026-09-25-streamcam-switch*.md`,
-Ledger `.superpowers/sdd/2026-09-25-streamcam-switch/progress.md`.
+Stand 2026-09-28: Timing-Kalibrierung steht (M = 1225,8 ms, Nutzerentscheidung
+A+B+C), zwei neue scharfe Aufstellungen geerntet und importiert: `sc1` (schräg,
+Profil `sc1b`, 45 Proben) und `sc2` (frontal, 58 Proben). Datensatz 492
+Proben, 404 davon geerntet in 5 Gruppen; Profil-Zuordnung
+`var/diagnostics/dotmatrix-profile-map.json` enthält alle 5. Details:
+VALIDATION.md 2026-09-28.
 
-Ohne Timing-Kalibrierung startet keine Ernte. Ablauf (Kamera vorher so
-ausrichten, dass das GSV-Glas mehr als das bisherige Fünftel der
-Bildbreite füllt):
-1. `harvest-setup.py focus` → Fokus + eingefrorene Belichtung/Weißabgleich,
-   dann `propose` / `confirm` → Profil v3.
-2. `sync-record.py --source camera --camera-settings <profil> --norm-schedule …`
-   (Normierungssprünge; Rückstellpunkt-Datei ist wieder da).
-3. `display-offset.py` auf die Aufnahme(n) → `offset-analyse.json`.
-4. `timing-calibration.py` → `var/calibration/timing-streamcam.json` (M).
-5. Nebenbei prüfen: ändern sich die von `focus` zurückgelesenen
-   Belichtungswerte bei anderem Licht (Befund M-10 des Abschlussreviews)?
-   Wenn nicht, liefert die Kamera im Automatikmodus veraltete Werte.
+1. **OQ-42 entscheiden (Nutzer):** Dürfen weiche Aufstellungen (`auf2`) aus
+   dem Training ausgeschlossen werden? Vor dem nächsten `loo`-Lauf festlegen.
+2. `dotmatrix-eval.py loo` mit 5 Gruppen laufen lassen, Ergebnis nach
+   VALIDATION.
+3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
+   solcher erscheint, statt den ganzen Lauf abzubrechen.
 
-Danach zwei scharf fokussierte Ernten (`harvest.py`), siehe nächster
-Abschnitt.
+Offene Befunde der Sitzung:
+* **M-9 bestätigt:** Der Fokus-Sweep misst nach großen Sprüngen ein veraltetes
+  Pufferbild; die Wahl stimmte trotzdem (Nachmessung). Fix: nach dem Setzen
+  lesen, bis der Pufferzeitstempel nach Setzzeit + `settle_s` liegt.
+* **Glasdetektor (`propose`, `glass`) scheitert an der StreamCam**
+  (Blende/Reflexe); beide Quads mussten von Hand bzw. über die Punktmitten
+  bestimmt werden. Ein Werkzeug für die Punktgitter-Anpassung wäre nützlich.
+* **Raster-Konvention:** `top`/`bottom` umfassen 8 Zeilen (inkl. Cursorzeile).
+  `propose` sollte das prüfen oder ein Overlay mit den Abtastpunkten zeigen
+  (so wie `overlay_sampling.png`, heute von Hand erzeugt).
+* **JPEG-Schreib-Warteschlange** läuft bei 1080p gelegentlich voll (bis
+  1,2 % verworfen). Größere Warteschlange oder schnellere Kodierung prüfen.
+* M-10 (eingefrorene Belichtung bei anderem Licht) ist noch nicht geprüft.
 
 Zurückgestellt aus dem Abschlussreview (bewusst, siehe `final-review.md`):
 Werkbank-Kamera an die StreamCam anbinden (heute außer Betrieb, toter
-Picamera2-Code in `controller.py`), Fokus-Sweep verlässt sich auf 4
-OpenCV-Puffer (M-9), Replay verliert die Zeitbasis (M-6).
+Picamera2-Code in `controller.py`), Replay verliert die Zeitbasis (M-6).
 
 ## Sicherung für `var/` einrichten
 
@@ -45,24 +50,21 @@ Löschung vom 2026-09-25 ist wiederhergestellt, was ging (alle 389 Proben,
 Profile, `devices.json`, Rückstellpunkt; `var/rescue-20260925/NOTES.md`).
 Verloren: Einzelbilder der Ernte-Aufnahmen, die meisten Diagnosebilder.
 `/home/me-systeme/picam-ai/.var_recovered` ist ausgewertet und kann weg.
-Zu tun: regelmäßige Sicherung von mindestens `var/workbench/datasets`,
-`var/diagnostics/*-profile`, `var/calibration` auf ein anderes Medium.
+Erste Sicherung (gleiche SD-Karte, nur gegen versehentliches Löschen):
+`/home/me-systeme/var-backups/var-20260928-vor-import.tar` (vor den
+StreamCam-Importen). Zu tun: regelmäßige Sicherung von mindestens
+`var/workbench/datasets`, `var/diagnostics/*-profile*`, `var/calibration`
+auf ein **anderes Medium**.
 
 ---
 
-## Danach: Dot-Matrix-Leser — Training braucht schärfere Aufstellungen
+## Hintergrund Dot-Matrix-Leser
 
-Leser fertig und geprüft (bis `870d680`+, `rom_check_v2`, `auf3` neu
-bestätigt). Vorab festgelegte Messung bricht im Durchgang „nur weiche
-Aufstellungen im Training" an der Gegenprobe ab. Diagnose: nie ein falscher
-Wert; `ernte1`+`auf2` → `auf3` 67 richtig / 6 abgelehnt; sonst alles
-abgelehnt (VALIDATION.md 2026-09-25, OQ-42-Nachtrag). Nächste Schritte:
-1. 2–3 weitere **scharf fokussierte** Aufstellungen ernten — jetzt mit der
-   StreamCam (Fokus per Software, `harvest-setup focus`).
-2. Entscheiden (OQ-42), ob Aufstellungen unter einer Schärfegrenze nur als
-   Testmaterial dienen.
-3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
-   solcher erscheint, statt den ganzen Lauf abzubrechen.
+Leser fertig und geprüft (`rom_check_v2`, `auf3` neu bestätigt). Die vorab
+festgelegte Messung brach bisher im Durchgang „nur weiche Aufstellungen im
+Training" an der Gegenprobe ab; nie ein falscher Wert (VALIDATION.md
+2026-09-25, OQ-42). Seit 2026-09-28 gibt es zwei scharfe StreamCam-
+Aufstellungen dazu, siehe oben.
 
 ---
 

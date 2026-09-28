@@ -1648,3 +1648,77 @@ Stand der Kamera übernommen, **kein** bestätigtes Profil).
 **Noch nicht gemessen:** Zeitversatz Telegramm ↔ Glas und M für die StreamCam
 (Messsitzung). Die Probeaufnahme lief ohne `--norm-schedule` und ist keine
 Kalibrieraufnahme.
+
+## 2026-09-28 — StreamCam: Timing-Kalibrierung und erste zwei Ernten (`sc1`, `sc2`)
+
+**Aufbau:** Logitech StreamCam an USB3, GSV-2AS mit Punktraster-Anzeige
+(Displaytech 161A), `/dev/ttyUSB0` 38400 8N1. Aufnahmen mit 15 fps (aus 30 fps
+nach Zeitstempel ausgedünnt), JPEG. Code-Stand `c1b75d1` (Task 8) und `e92a30e` (Task 9).
+
+### Aufstellungen
+
+| Aufstellung | Blick | Glasbreite | Fokus | Belichtung / WB / Gain | Quad | Raster (400×160) | px je Punktspalte |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `sc1` → Profil `sc1b` | schräg (linke Kante näher, ≈ 4° gekippt) | ≈ 430 px | 52 | 100 / 5785 K / 25 | Homographie aus den Punktmitten (Rest 0,23 px), das Glasquad lag auf der Blende | left 0, pitch 25, top 17,78, bottom 160,0 | 3,617 |
+| `sc2` | frontal, Reflex abgeschattet | ≈ 510 px | 58 | 100 / 5904 K / 27 | Glaskanten gemessen (Glasdetektor und Punktanpassung scheiterten) | left 16,7, pitch 23,88, top 36,3, bottom 111,0 | 4,792 |
+
+Beide Profile hat der Nutzer bestätigt (Schwelle 2,6 px). **Korrektur `sc1` →
+`sc1b`:** `dotmatrix_sampling` teilt `top`…`bottom` in **8** Zeilen (7 Zeichen-
+zeilen + Cursorzeile). Das zuerst bestätigte `sc1`-Raster deckte nur die 7
+Zeichenzeilen ab (bottom 142,2). `sc1b` hat dasselbe Quad und bottom 160,0.
+Die Zuordnung `dotmatrix-profile-map.json` führt `sc1` → `sc1b`, Stand davor
+in `dotmatrix-profile-map.v2.json`.
+
+**Fokus-Sweep (`harvest-setup focus`), Befund M-9 bestätigt:** Der erste
+Feinschritt nach dem Rücksprung von 248 misst ein veraltetes Pufferbild (in
+`sc1` 50 → 14,2, in `sc2` 58 → 14,0 bzw. 20,1). Nachmessung mit 1 s Wartezeit,
+10 verworfenen Bildern und 3 gemittelten: Maxima eindeutig, beide
+Anfahrrichtungen gleich (keine Hysterese des Fokusmotors, Unterschiede
+liegen in der Streuung durch die flackernde letzte Ziffer). In einer ersten,
+näheren `sc2`-Stellung lag der Sweep bei 64, die Nachmessung bei 66.
+
+### Timing-Kalibrierung (`display-offset.py --profile`, Profil `sc1`)
+
+| Aufnahme | Dauer | Bilder | Wechselart | messbar | δ | σ_δ | d_misch | M |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `sc1-cal-a` (Ruhe) | 180 s | 2687 | klein | 25/35 | +51 ms | 108 ms | 378 ms | 792 ms |
+| `sc1-cal-b` (24 Normierungssprünge, Seed 20260928, 7 s) | 250 s | 3737 | groß | 6/25 | +58 ms | 193 ms | 550 ms | 1226 ms |
+| `sc1-cal-b` | | | klein | 12/19 | +78 ms | 225 ms | 357 ms | 1151 ms |
+| `sc1-cal-c` (Stimulus von Hand) | 180 s | 2687 | groß | 9/10 | +86 ms | 15 ms | 277 ms | 448 ms |
+
+Alle drei ohne Bildlücke. In `sc1-cal-b` antworteten alle 50 Schreibbefehle
+mit `3B A0`, Vorprüfung und Rückstellung gegen den Rückstellpunkt bestanden.
+δ ist in allen Wechselarten positiv (+51 … +86 ms, IMX500: +80 … +116 ms).
+Normierungsbefehl → Glas (informativ): `set norm` δ = +15 ms (σ 59),
+`set dpoint` δ = −155 ms (σ 210).
+
+`display-offset.py --hint-box` lehnte alle Aufnahmen ab: Die
+Sättigungssuche grenzte das Glas nicht von Blende und Reflexen ab (Spanne
+0,025–0,054 bei einer Grenze von 0,01). Deshalb gibt es jetzt `--profile`
+(Task 8).
+
+**Nutzerentscheidung:** Kalibrierung aus A + B + C, also
+**M = 1225,8 ms** (Maximum, aus „B groß“), Anzeigeversatz 57,5 ms,
+`var/calibration/timing-streamcam.json`. „B groß“ gilt seit dem 2026-09-23
+als methodisch fragwürdig (der Wiederanlauf setzt das Referenzereignis);
+bewusst konservativ übernommen, weil „B klein“ allein 1151 ms ergibt.
+
+### Ernten (`harvest.py --n-steps 30 --hold-s 6`)
+
+| Grösse | `sc1` (Seed 2026092801) | `sc2` (Seed 2026092802) |
+| --- | --- | --- |
+| Bilder | 3729, 8 verworfen (Warteschlange voll) | 3691, 46 verworfen |
+| Bildlücken (`frame_gaps`) | 0 | 0 |
+| gelabelt | 954 | 971 |
+| abgelehnt `telegrammluecke` / `wertwechsel_im_fenster` | 1859 / 877 | 1949 / 736 |
+| verschiedene Zeichenketten | 24 | 25 |
+| ausgewählt (≤ 3 je Plateau) | 72 | 75 |
+| abgelehnt beim Import `bildguete` / `zellen_inkonsistent` | 14 / 13 | 17 / 0 |
+| **importiert** | **45** | **58** |
+
+Rückstellung jeweils per Rücklesen bestätigt. Datensatz 389 → 492 Proben;
+der Dot-Matrix-Lader löst alle 404 geernteten Proben mit Profil auf
+(`ernte1` 152, `auf2` 76, `auf3` 73, `sc2` 58, `sc1` 45). Der Import brach
+zunächst an den Drop-Zeilen ab (`KeyError`, behoben in Task 9).
+**Befund:** Die JPEG-Schreib-Warteschlange (60) läuft bei 1080p gelegentlich
+voll (0,2 % bzw. 1,2 % der Bilder).
