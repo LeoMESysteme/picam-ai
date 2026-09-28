@@ -18,10 +18,13 @@ import subprocess
 import sys
 import threading
 import time
-import types
 from pathlib import Path
 
+import numpy as np
 import pytest
+
+from dispread.frames.types import Frame
+from dispread.records import TimeBaseKind, Timestamp, TimestampSemantics
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "sync-record.py"
 
@@ -29,10 +32,10 @@ SCRIPT = Path(__file__).parents[1] / "scripts" / "sync-record.py"
 def _load_sync_record_module():
     """`sync-record.py` fuer In-Prozess-Tests laden (Bindestrich im Namen -
     kein normaler `import`), wie das Skript selbst es mit
-    `gsv-registers.py` macht. Nur fuer den Kamera-Zweig gebraucht: der
-    faengt den Import von `picamera2` lazy in der Funktion ab, was sich nur
-    testen laesst, wenn `sys.modules["picamera2"]` VOR dem Aufruf gesetzt
-    ist - als Subprozess ginge das nicht ohne eine echte Kamera."""
+    `gsv-registers.py` macht. Fuer den Kamera-Zweig gebraucht: `module.UvcSource`
+    laesst sich per Monkeypatch durch eine Fake-Klasse ersetzen (`UvcSource`
+    ist am Modulanfang importiert) - als Subprozess ginge das nicht ohne
+    eine echte Kamera."""
     spec = importlib.util.spec_from_file_location("_sync_record_under_test", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -144,81 +147,6 @@ def test_synthetischer_lauf_schreibt_vollstaendige_und_gueltige_sitzung(tmp_path
     assert session["frames_recorded"] == len(frame_files)
     assert session["serial_lines_recorded"] == len(serial_lines)
     assert session["source"] == "synthetic"
-
-
-def test_scaler_crop_landet_in_session_json_als_angefordert_und_leer_ohne_kamera(tmp_path):
-    """`--source synthetic` durchlaeuft nie `_camera_frames` - also traegt
-    `session.json["scaler_crop_actual"]` hier immer `null`, waehrend
-    `scaler_crop_requested` das geparste CLI-Argument widerspiegelt (Task 2,
-    Interfaces: 'scaler_crop_actual ist der Wert aus den Metadaten des
-    ersten Bildes ... oder null')."""
-    master, slave = os.openpty()
-    output_dir = tmp_path / "lauf-scaler-crop"
-    try:
-        completed = _run_cli(
-            duration=0.5,
-            output=output_dir,
-            port=os.ttyname(slave),
-            extra_args=("--scaler-crop", "1000,800,1600,1200"),
-        )
-    finally:
-        os.close(master)
-        os.close(slave)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    session = json.loads((output_dir / "session.json").read_text())
-    assert session["scaler_crop_requested"] == [1000, 800, 1600, 1200]
-    assert session["scaler_crop_actual"] is None
-
-
-def test_scaler_crop_ohne_argument_ist_null_in_session_json(tmp_path):
-    master, slave = os.openpty()
-    output_dir = tmp_path / "lauf-ohne-scaler-crop"
-    try:
-        completed = _run_cli(duration=0.5, output=output_dir, port=os.ttyname(slave))
-    finally:
-        os.close(master)
-        os.close(slave)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    session = json.loads((output_dir / "session.json").read_text())
-    assert session["scaler_crop_requested"] is None
-    assert session["scaler_crop_actual"] is None
-
-
-def test_scaler_crop_falsche_anzahl_bricht_mit_klarer_meldung_ab(tmp_path):
-    master, slave = os.openpty()
-    try:
-        completed = _run_cli(
-            duration=0.5,
-            output=tmp_path / "lauf-x",
-            port=os.ttyname(slave),
-            extra_args=("--scaler-crop", "1,2,3"),
-        )
-    finally:
-        os.close(master)
-        os.close(slave)
-
-    assert completed.returncode != 0
-    assert "--scaler-crop" in completed.stderr
-
-
-@pytest.mark.parametrize("raw", ["1000,800,1600,0", "1000,-800,1600,1200", "0,0,1600,1200"])
-def test_scaler_crop_negativ_oder_null_bricht_mit_klarer_meldung_ab(tmp_path, raw):
-    master, slave = os.openpty()
-    try:
-        completed = _run_cli(
-            duration=0.5,
-            output=tmp_path / "lauf-y",
-            port=os.ttyname(slave),
-            extra_args=("--scaler-crop", raw),
-        )
-    finally:
-        os.close(master)
-        os.close(slave)
-
-    assert completed.returncode != 0
-    assert "--scaler-crop" in completed.stderr
 
 
 def test_keine_telegramme_wird_am_ende_deutlich_gemeldet(tmp_path):
@@ -384,184 +312,6 @@ def test_sigterm_hinterlaesst_vollstaendige_gueltige_sitzung(tmp_path):
     for name in ("frames.jsonl", "serial.jsonl"):
         for line in (output_dir / name).read_text().splitlines():
             json.loads(line)
-
-
-# --- --source camera: Fake-Kamera, kein Hardwarebedarf ----------------------
-#
-# Kein Subprozess: der Kamera-Zweig faengt `from picamera2 import Picamera2`
-# lazy in `_camera_frames` ab - das laesst sich nur ueber ein zuvor
-# gesetztes `sys.modules["picamera2"]` testen, im selben Prozess.
-
-
-class _FakeLibcameraRequest:
-    """Steht fuer `CompletedRequest.request` (das zugrundeliegende
-    `libcamera.Request`) - traegt in echt `.sequence`, siehe
-    `/usr/lib/python3/dist-packages/picamera2/request.py:90` und
-    `/usr/lib/python3/dist-packages/libcamera/__init__.py:4`."""
-
-    def __init__(self, sequence: int) -> None:
-        self.sequence = sequence
-
-
-class _FakeCompletedRequest:
-    def __init__(self, sequence: int, sensor_timestamp_ns: int, *, scaler_crop: tuple | None = None) -> None:
-        self.request = _FakeLibcameraRequest(sequence)
-        self._sensor_timestamp_ns = sensor_timestamp_ns
-        self._scaler_crop = scaler_crop
-        self.released = False
-
-    def make_array(self, name: str):
-        import numpy as np
-
-        assert name == "main"
-        return np.zeros((4, 4, 3), dtype=np.uint8)
-
-    def get_metadata(self) -> dict:
-        metadata = {"SensorTimestamp": self._sensor_timestamp_ns}
-        if self._scaler_crop is not None:
-            # Echtes picamera2 liefert hier ein 4er-Tupel (`Rectangle.to_tuple()`,
-            # siehe /usr/lib/python3/dist-packages/picamera2/utils.py:6-13).
-            metadata["ScalerCrop"] = self._scaler_crop
-        return metadata
-
-    def release(self) -> None:
-        self.released = True
-
-
-class _FakeCamera:
-    def __init__(self, requests: list[_FakeCompletedRequest]) -> None:
-        self._requests = list(requests)
-        self.started = False
-        self.stopped = False
-        self.configured_with = None
-
-    def create_video_configuration(self, **kwargs):
-        return kwargs
-
-    def configure(self, config) -> None:
-        self.configured_with = config
-
-    def start(self, show_preview: bool = False) -> None:
-        self.started = True
-
-    def capture_request(self, wait: float = 2.0):
-        if not self._requests:
-            raise RuntimeError("Fake-Kamera: keine weiteren Requests")
-        return self._requests.pop(0)
-
-    def stop(self) -> None:
-        self.stopped = True
-
-
-def test_kamera_zweig_liest_sensor_sequence_aus_completed_request(monkeypatch):
-    """OQ-40-Nachtrag: `frame_sequence` ist nur der Skriptzaehler und haette
-    die gemessene 2,60s-Luecke nicht gezeigt. `_camera_frames` muss
-    zusaetzlich `request.request.sequence` (die libcamera-Sequenznummer)
-    liefern."""
-    module = _load_sync_record_module()
-
-    fake_requests = [
-        _FakeCompletedRequest(sequence=100, sensor_timestamp_ns=1_000_000_000),
-        _FakeCompletedRequest(sequence=101, sensor_timestamp_ns=1_066_000_000),
-    ]
-    fake_camera = _FakeCamera(fake_requests)
-    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
-    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
-
-    gen = module._camera_frames((320, 240), 15.0)
-    try:
-        image1, ts1, seq1, _crop1 = next(gen)
-        image2, ts2, seq2, _crop2 = next(gen)
-    finally:
-        gen.close()
-
-    assert seq1 == 100
-    assert seq2 == 101
-    assert ts1["value_ns"] == 1_000_000_000
-    assert ts2["value_ns"] == 1_066_000_000
-    assert ts1["base"] == "sensor_boottime"
-    # Sequenznummer/Metadaten muessen VOR dem Release gelesen worden sein.
-    assert fake_requests[0].released is True
-    assert fake_requests[1].released is True
-    assert fake_camera.started is True
-    assert fake_camera.stopped is True
-
-
-def test_kamera_zweig_liefert_none_wenn_sequence_fehlt(monkeypatch):
-    """Fehlt `.sequence` am zugrundeliegenden Request-Objekt (z.B. andere
-    libcamera-Version), darf `_camera_frames` nicht abstuerzen, sondern muss
-    `sensor_sequence=None` liefern - "null wenn nicht verfuegbar" aus dem
-    Auftrag."""
-    module = _load_sync_record_module()
-
-    class _RequestOhneSequence:
-        pass
-
-    class _CompletedRequestOhneSequence(_FakeCompletedRequest):
-        def __init__(self, sensor_timestamp_ns: int) -> None:
-            self.request = _RequestOhneSequence()
-            self._sensor_timestamp_ns = sensor_timestamp_ns
-            self._scaler_crop = None
-            self.released = False
-
-    fake_camera = _FakeCamera([_CompletedRequestOhneSequence(sensor_timestamp_ns=42)])
-    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
-    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
-
-    gen = module._camera_frames((320, 240), 15.0)
-    try:
-        _image, _ts, seq, _crop = next(gen)
-    finally:
-        gen.close()
-
-    assert seq is None
-
-
-def test_camera_frames_setzt_scaler_crop_ueber_video_konfiguration(monkeypatch):
-    """`--scaler-crop` muss ueber die `controls`-Dict von
-    `create_video_configuration` gesetzt werden, nicht per `set_controls`
-    nach dem Start: `configure_()` uebernimmt `camera_config['controls']`
-    unveraendert in `self.controls`
-    (/usr/lib/python3/dist-packages/picamera2/picamera2.py:1292), und
-    `start_()` wendet das beim `camera.start(controls)` an
-    (picamera2.py:1338) - so ist der Crop schon im allerersten Request
-    aktiv, ein `set_controls` danach koennte erst ab dem zweiten Bild
-    wirken."""
-    module = _load_sync_record_module()
-
-    fake_requests = [
-        _FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1, scaler_crop=(1000, 800, 1600, 1200)),
-    ]
-    fake_camera = _FakeCamera(fake_requests)
-    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
-    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
-
-    gen = module._camera_frames((320, 240), 15.0, scaler_crop=(1000, 800, 1600, 1200))
-    try:
-        _image, _ts, _seq, scaler_crop_actual = next(gen)
-    finally:
-        gen.close()
-
-    assert fake_camera.configured_with["controls"]["ScalerCrop"] == (1000, 800, 1600, 1200)
-    assert scaler_crop_actual == (1000, 800, 1600, 1200)
-
-
-def test_camera_frames_ohne_scaler_crop_setzt_kein_control(monkeypatch):
-    module = _load_sync_record_module()
-
-    fake_requests = [_FakeCompletedRequest(sequence=1, sensor_timestamp_ns=1)]
-    fake_camera = _FakeCamera(fake_requests)
-    fake_picamera2_module = types.SimpleNamespace(Picamera2=lambda: fake_camera)
-    monkeypatch.setitem(sys.modules, "picamera2", fake_picamera2_module)
-
-    gen = module._camera_frames((320, 240), 15.0)
-    try:
-        _image, _ts, _seq, scaler_crop_actual = next(gen)
-    finally:
-        gen.close()
-
-    assert "ScalerCrop" not in fake_camera.configured_with["controls"]
-    assert scaler_crop_actual is None
 
 
 def test_frames_jsonl_hat_sensor_sequence_und_intervall_felder(tmp_path):
@@ -1070,3 +820,661 @@ def test_ohne_norm_schedule_bleibt_verhalten_unveraendert(tmp_path):
     assert session["transmission_paused_during_writes"] is False
     assert session["precheck"] is None
     assert session["restore_verification"] is None
+
+
+
+
+# --- --source camera: Fake `UvcSource`, kein Hardwarebedarf (StreamCam) -----
+#
+# Ersetzt den frueheren Picamera2-Fake (IMX500 ausser Betrieb seit
+# 2026-09-25, siehe docs/project_history.md). `module.UvcSource` wird per
+# Monkeypatch durch `_FakeUvcSource` ersetzt - kein echtes `/dev/video*`,
+# kein `v4l2-ctl`.
+
+
+def _camera_settings_payload(**overrides) -> dict:
+    camera = {
+        "model": "logitech_streamcam",
+        "usb_id": "046d:0893",
+        "size": [640, 480],
+        "fourcc": "MJPG",
+        "fps": 30,
+        "controls": {
+            "focus_absolute": 0,
+            "exposure_time_absolute": 156,
+            "white_balance_temperature": 4600,
+            "gain": 32,
+        },
+    }
+    camera.update(overrides)
+    return {"camera": camera}
+
+
+def _write_camera_settings(path: Path, **overrides) -> Path:
+    path.write_text(json.dumps(_camera_settings_payload(**overrides)), encoding="utf-8")
+    return path
+
+
+class _FakeUvcSource:
+    """Fake fuer `UvcSource` (Interfaces: `open()`/`close()`/`frames()`/
+    `describe()`, Attribute `read_error`/`rejected_timestamps`). Liefert
+    `frame_count` `Frame`s mit aufsteigendem `v4l2_monotonic`-Zeitstempel im
+    festen Abstand `interval_ns`; `sensor_sequence` gibt es bei der
+    StreamCam nicht, das bildet `_uvc_frames` selbst als `None` ab (nicht
+    Teil dieses Fakes).
+
+    `open_error`: wird in `open()` geworfen (z.B. ein `UvcError`), bevor
+    `self.device` gesetzt wird - wie am echten `UvcSource` bei einem
+    abweichenden Regler-Ist-Wert.
+
+    `hang_event`: wenn gesetzt, blockiert `frames()` NACH dem letzten Bild
+    auf `hang_event.wait()` - simuliert einen haengenden Aufnahmethread
+    (Review Focus 2), ohne echte Hardware.
+
+    `read_error_after`: wenn gesetzt, endet `frames()` NACH dem letzten Bild
+    regulaer (kein `raise`) und setzt vorher `self.read_error` auf diesen
+    Text - genau der Vertrag des echten `UvcSource.frames()` bei einem
+    Kameraausfall mitten in der Aufnahme (`READ_FAIL_TIMEOUT_S` ohne
+    erfolgreiches Bild, siehe `src/dispread/frames/uvc_source.py`): der
+    Generator endet normal, wirft NICHT (Review-Fund Fix-Runde 1)."""
+
+    def __init__(
+        self,
+        settings,
+        *,
+        device=None,
+        frame_count: int = 5,
+        interval_ns: int = 33_000_000,
+        open_error: Exception | None = None,
+        hang_event: threading.Event | None = None,
+        read_error_after: str | None = None,
+    ) -> None:
+        self.settings = settings
+        self._device_arg = device
+        self.device: str | None = None
+        self._frame_count = frame_count
+        self._interval_ns = interval_ns
+        self._open_error = open_error
+        self._hang_event = hang_event
+        self._read_error_after = read_error_after
+        self.read_error: str | None = None
+        self.rejected_timestamps = 0
+        self._sequence = 0
+
+    def open(self) -> None:
+        if self._open_error is not None:
+            raise self._open_error
+        self.device = self._device_arg or "/dev/video0"
+
+    def close(self) -> None:
+        pass
+
+    def frames(self):
+        value_ns = 0
+        for _ in range(self._frame_count):
+            value_ns += self._interval_ns
+            self._sequence += 1
+            yield Frame(
+                frame_sequence=self._sequence,
+                image=np.zeros((4, 4, 3), dtype=np.uint8),
+                capture_timestamp=Timestamp(
+                    value_ns=value_ns,
+                    base=TimeBaseKind.V4L2_MONOTONIC,
+                    semantics=TimestampSemantics.UNKNOWN,
+                    uncertainty_ns=None,
+                ),
+                source_id=f"v4l2:{self.device}",
+            )
+        if self._read_error_after is not None:
+            self.read_error = self._read_error_after
+            return
+        if self._hang_event is not None:
+            self._hang_event.wait()
+
+    def describe(self) -> dict:
+        return {
+            "camera_model": self.settings.model,
+            "device": self.device,
+            "usb_id": self.settings.usb_id,
+            "usb_speed_mbps": 5000,
+            "size": list(self.settings.size),
+            "fourcc": self.settings.fourcc,
+            "fps": self.settings.fps,
+            "controls_requested": dict(self.settings.ordered_controls()),
+            "controls_readback": dict(self.settings.controls),
+            "rejected_timestamps": self.rejected_timestamps,
+            "read_error": self.read_error,
+        }
+
+
+def test_camera_ohne_camera_settings_bricht_ab(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--duration",
+            "1.0",
+            "--output",
+            str(tmp_path / "lauf-ohne-settings"),
+            "--source",
+            "camera",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 2
+    assert "--camera-settings" in completed.stderr
+
+
+def test_measure_clock_offset_nimmt_median():
+    """`clock` liefert je Einzelmessung `(m1, b, m2)` - mit `m1=m2=0` ist
+    `b - (m1+m2)//2 == b`, die 5 Einzelwerte sind also direkt `[10, 12, 1000,
+    11, 13]`. Median davon (sortiert `[10, 11, 12, 13, 1000]`) ist 12."""
+    module = _load_sync_record_module()
+    values = [10, 12, 1000, 11, 13]
+    calls = []
+    for v in values:
+        calls.extend([0, v, 0])
+    calls_iter = iter(calls)
+
+    def _fake_clock(_clock_id):
+        return next(calls_iter)
+
+    result = module.measure_clock_offset_ns(samples=5, clock=_fake_clock)
+    assert result == 12
+
+
+def test_count_frame_gaps():
+    """30 fps -> Schwelle 1,5 * 1e9/30 = 50ms. Eine eingestreute Luecke von
+    100ms muss als genau eine Luecke zaehlen, mit `max_gap_ns == 100ms`."""
+    module = _load_sync_record_module()
+    interval_ns = round(1e9 / 30)
+    timestamps = [0]
+    for _ in range(5):
+        timestamps.append(timestamps[-1] + interval_ns)
+    timestamps.append(timestamps[-1] + 100_000_000)
+    for _ in range(5):
+        timestamps.append(timestamps[-1] + interval_ns)
+
+    result = module.count_frame_gaps(timestamps, 30.0)
+    assert result["count"] == 1
+    assert result["max_gap_ns"] == 100_000_000
+    assert result["threshold_ns"] == 1.5 * 1e9 / 30
+
+
+def test_session_json_traegt_camera_versatz_und_gaps(monkeypatch, tmp_path):
+    module = _load_sync_record_module()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings, device=device, frame_count=8, interval_ns=33_000_000
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json")
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-versatz"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "30",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["camera"]["camera_model"] == "logitech_streamcam"
+    assert set(session["clock_offset_boottime_minus_monotonic_ns"]) == {"start", "end"}
+    assert session["frame_gaps"]["count"] >= 0
+
+    lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
+    assert lines
+    # Fix-Runde 1 (Task 7): --frame-rate == camera_settings.fps darf gar
+    # nicht ausduennen - alle 8 gelieferten Bilder muessen geschrieben werden.
+    assert len(lines) == 8
+    for entry in lines:
+        assert entry["capture_timestamp"]["base"] == "v4l2_monotonic"
+        assert entry["sensor_sequence"] is None
+
+
+def test_uvc_fehler_beim_oeffnen_ergibt_acquisition_error(monkeypatch, tmp_path):
+    module = _load_sync_record_module()
+    error = module.UvcError("focus_absolute: soll 48, ist 60")
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(settings, device=device, open_error=error),
+    )
+    monkeypatch.setattr(module, "STARTUP_TIMEOUT_S", 1.0)
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json")
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-uvc-fehler"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == module.EXIT_NO_FRAMES_ACQUIRED
+    session = json.loads((output_dir / "session.json").read_text())
+    assert "focus_absolute: soll 48, ist 60" in session["acquisition_error"]
+
+
+def test_frames_recorded_stimmt_wenn_aufnahmethread_haengt(monkeypatch, tmp_path):
+    """Review Focus 2 / Bildzaehler-Fix: haengt der Aufnahmethread NACH
+    bereits gelieferten Bildern (kommt also nie `_QUEUE_DONE` an), muss
+    `session["frames_recorded"]` trotzdem die Anzahl der tatsaechlich
+    geschriebenen Bilder zeigen, nicht 0 - der Schreiberthread aktualisiert
+    `state["frames_recorded"]` nach JEDEM Bild, nicht erst am Ende."""
+    module = _load_sync_record_module()
+    hang_event = threading.Event()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings, device=device, frame_count=5, interval_ns=10_000_000, hang_event=hang_event
+        ),
+    )
+    monkeypatch.setattr(module, "JOIN_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(module, "WRITER_DRAIN_JOIN_TIMEOUT_S", 0.5)
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json")
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-haengender-aufnahmethread"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "0",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        module.run(args)
+    finally:
+        # Aufraeumen: der gefakte Aufnahmethread haengt in `frames()` auf
+        # `hang_event.wait()` - erst jetzt (nach der Kernaussage des Tests)
+        # freigeben, damit kein Thread ueber das Testende hinaus haengt.
+        hang_event.set()
+        os.close(master)
+        os.close(slave)
+
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 5
+    assert len(list((output_dir / "frames").iterdir())) == 5
+
+
+def test_kameraausfall_mitten_in_der_aufnahme_setzt_acquisition_error(monkeypatch, tmp_path):
+    """Review-Fund (Fix-Runde 1): `UvcSource.frames()` wirft bei einem
+    Lesefehler NICHT - sie setzt `read_error` und beendet den Generator
+    regulaer (`READ_FAIL_TIMEOUT_S` ohne Bild). Kamen vorher schon Bilder an,
+    darf das nicht als stiller Erfolg durchgehen: `acquisition_error` muss
+    den `read_error`-Text tragen, `frames_recorded` bleibt korrekt (die schon
+    gelieferten Bilder), und der Lauf bleibt Exit 0 (ein Fehler NACH bereits
+    aufgezeichneten Bildern ist eine Warnung, kein `EXIT_NO_FRAMES_ACQUIRED`
+    - das bleibt dem reinen 0-Bilder-Befund vorbehalten)."""
+    module = _load_sync_record_module()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings,
+            device=device,
+            frame_count=3,
+            interval_ns=10_000_000,
+            read_error_after="kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s",
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json")
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kameraausfall-mittendrin"
+    args = module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "0",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_recorded"] == 3
+    assert session["acquisition_error"] is not None
+    assert "kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s" in session["acquisition_error"]
+    assert session["camera"]["read_error"] == "kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s"
+
+
+def test_synthetic_traegt_versatz_und_keine_kamera(tmp_path):
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-synthetic-versatz"
+    try:
+        completed = _run_cli(duration=0.3, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["camera"] is None
+    assert set(session["clock_offset_boottime_minus_monotonic_ns"]) == {"start", "end"}
+    assert "scaler_crop_actual" not in session
+    assert "stream_budget" not in session
+
+
+# --- I-1: gedrosseltes Lesen im Kamerazweig (final-review.md) ---------------
+
+
+def test_kamera_30fps_frame_rate_15_liefert_keine_luecken_und_duennt_aus(monkeypatch, tmp_path):
+    """Kamera liefert lueckenlos 30 fps, --frame-rate 15: `frame_gaps` muss
+    ueber die UNGEDROSSELTE Folge gerechnet werden (count == 0, weil 30 fps
+    keine Luecke gegen die 30-fps-Schwelle hat) und ungefaehr die Haelfte der
+    18 gelieferten Bilder muss geschrieben werden (Ausduennung nach
+    Zeitstempel, kein Sleep mehr im Kamerazweig, siehe final-review.md I-1)."""
+    module = _load_sync_record_module()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings, device=device, frame_count=18, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-ausduennen"
+    args = module.parse_args(
+        [
+            "--duration",
+            "5.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0, "returncode war " + str(returncode)
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] == 0
+    frames_recorded = session["frames_recorded"]
+    # 18 gelieferte Bilder bei 30fps, geschrieben etwa jedes zweite -> ~9.
+    assert 7 <= frames_recorded <= 10, frames_recorded
+    assert session["frames_dropped_queue_full"] == 0
+
+
+def test_kamera_echte_luecke_wird_trotz_ausduennung_gezaehlt(monkeypatch, tmp_path):
+    """Eine echte Aussetzer-Luecke in der rohen Kamerafolge muss weiterhin
+    als Luecke gezaehlt werden, unabhaengig von der Ausduennung fuers
+    Schreiben."""
+    module = _load_sync_record_module()
+
+    class _FakeUvcSourceMitLuecke(_FakeUvcSource):
+        def frames(self):
+            value_ns = 0
+            for i in range(10):
+                if i == 5:
+                    value_ns += 200_000_000  # echte Luecke, weit ueber Schwelle
+                else:
+                    value_ns += self._interval_ns
+                self._sequence += 1
+                yield Frame(
+                    frame_sequence=self._sequence,
+                    image=np.zeros((4, 4, 3), dtype=np.uint8),
+                    capture_timestamp=Timestamp(
+                        value_ns=value_ns,
+                        base=TimeBaseKind.V4L2_MONOTONIC,
+                        semantics=TimestampSemantics.UNKNOWN,
+                        uncertainty_ns=None,
+                    ),
+                    source_id=f"v4l2:{self.device}",
+                )
+
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSourceMitLuecke(
+            settings, device=device, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-echte-luecke"
+    args = module.parse_args(
+        [
+            "--duration",
+            "5.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] >= 1
+
+    # Fix-Runde 1 (Task 7): nach einer echten Luecke resynchronisiert der
+    # Soll-Zeitplan auf das gerade eingetroffene Bild - kein "Nachziehen"
+    # mehrerer Bilder in schneller Folge (Burst). Die Luecke selbst darf im
+    # Intervall auftauchen (echter Befund), danach muss sofort wieder der
+    # normale ~66.7ms-Sollabstand gelten.
+    written = [
+        json.loads(line)["capture_timestamp"]["value_ns"]
+        for line in (output_dir / "frames.jsonl").read_text().splitlines()
+    ]
+    intervals_ms = [(b - a) / 1e6 for a, b in zip(written, written[1:], strict=False)]
+    assert all(interval_ms > 50.0 for interval_ms in intervals_ms), intervals_ms
+
+
+def test_kamera_30fps_mit_jitter_liefert_trotzdem_etwa_die_haelfte(monkeypatch, tmp_path):
+    """Fix-Runde 1 (Task 7): eine echte 10s-Aufnahme (30 fps, --frame-rate 15)
+    lieferte mit der ersten Fassung nur ~97 statt ~150 Bilder (effektiv 10-12
+    statt 15 fps), weil Zeitstempel-Jitter das Bild zwei Kameraperioden
+    spaeter gelegentlich knapp VOR die (nicht-tolerante) Schwelle rutschen
+    liess ("Abstand zum zuletzt GESCHRIEBENEN Bild" driftet mit jedem
+    geschriebenen, selbst leicht verschobenen Bild weiter) - siehe Docstring
+    in `_frame_acquisition_worker`.
+
+    Deterministischer Jitter im 4er-Zyklus (+0.5ms, +0.5ms, -0.5ms, -0.5ms,
+    wiederholt) auf sonst exakten 30-fps-Zeitstempeln reproduziert genau
+    diesen Drift: ein rein alternierender +-0.5ms-Jitter haette sich ueber
+    jedes geschriebene Paar exakt aufgehoben (kein Bug sichtbar) - der
+    4er-Zyklus nicht. Mit dem Soll-Zeitplan (`next_due_ns` + Toleranz =
+    halbe Kameraperiode) darf das nicht mehr passieren: weiterhin etwa jedes
+    zweite von 60 Bildern (~30) wird geschrieben."""
+    module = _load_sync_record_module()
+
+    class _FakeUvcSourceMitJitter(_FakeUvcSource):
+        def frames(self):
+            nominal_ns = 0
+            for i in range(self._frame_count):
+                nominal_ns += self._interval_ns
+                jitter_ns = 500_000 if i % 4 < 2 else -500_000
+                value_ns = nominal_ns + jitter_ns
+                self._sequence += 1
+                yield Frame(
+                    frame_sequence=self._sequence,
+                    image=np.zeros((4, 4, 3), dtype=np.uint8),
+                    capture_timestamp=Timestamp(
+                        value_ns=value_ns,
+                        base=TimeBaseKind.V4L2_MONOTONIC,
+                        semantics=TimestampSemantics.UNKNOWN,
+                        uncertainty_ns=None,
+                    ),
+                    source_id=f"v4l2:{self.device}",
+                )
+
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSourceMitJitter(
+            settings, device=device, frame_count=60, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-jitter"
+    args = module.parse_args(
+        [
+            "--duration",
+            "10.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0, "returncode war " + str(returncode)
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] == 0
+    frames_recorded = session["frames_recorded"]
+    # 60 gelieferte Bilder, geschrieben etwa jedes zweite -> ~30. Mit der
+    # fehlerhaften ersten Fassung driftete das auf effektiv jedes dritte Bild
+    # (~20), reproduziert den Feldbefund (97 statt ~150 bei 10s/15fps-Ziel).
+    assert 27 <= frames_recorded <= 33, frames_recorded
+
+    written = [
+        json.loads(line)["capture_timestamp"]["value_ns"]
+        for line in (output_dir / "frames.jsonl").read_text().splitlines()
+    ]
+    intervals_ms = [(b - a) / 1e6 for a, b in zip(written, written[1:], strict=False)]
+    # Mit Schwelle+Toleranz erwartet: kein Intervall wesentlich groesser als
+    # eine Kameraperiode (~33.3ms) ueber dem Sollabstand (~66.7ms) - der
+    # Feldbefund zeigte bis zu 100ms (drei Kameraperioden statt zwei).
+    assert all(interval_ms < 90.0 for interval_ms in intervals_ms), intervals_ms
+
+
+def test_frame_rate_ueber_kamera_fps_wird_abgelehnt(tmp_path):
+    """--frame-rate darf im Kamerazweig nicht groesser als camera_settings.fps
+    sein - sonst waere die Ausduennung wirkungslos (jedes Bild wuerde
+    geschrieben, aber der Bediener erwartet eine Drosselung)."""
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=15)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--duration",
+            "1.0",
+            "--output",
+            str(tmp_path / "lauf-frame-rate-zu-hoch"),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "30",
+            "--port",
+            "/dev/null",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 2
+    assert "--frame-rate" in completed.stderr

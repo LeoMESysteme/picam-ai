@@ -1,5 +1,13 @@
 # Zeitbezug — Messplan und Messwerte
 
+> **Seit 2026-09-25 (StreamCam):** Kamerabilder tragen den
+> V4L2-Pufferzeitstempel in CLOCK_MONOTONIC (`v4l2_monotonic`), nicht mehr
+> `SensorTimestamp` in BOOTTIME. Umgerechnet wird über den je Aufnahme
+> gemessenen Versatz BOOTTIME − MONOTONIC (`records.to_boottime_ns`). Die
+> Semantik ist offen (OQ-43); der Gesamtversatz Telegramm ↔ Glas wird durch
+> die Timing-Kalibrierung gemessen (`scripts/timing-calibration.py`). Die
+> IMX500-Messwerte unten sind historisch.
+
 Setzt Konzept.md §6 von Prosa in Zahlen um. Jede Zeitgröße hat eine Domäne, ein
 Messverfahren und einen Messwert **oder** ein ausdrückliches „unbekannt".
 

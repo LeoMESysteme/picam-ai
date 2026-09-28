@@ -37,11 +37,53 @@ class TimeBaseKind(StrEnum):
     SYNTHETIC = "synthetic"
     #: Aus der Dateizeit abgeleitet. Traegt praktisch keine Zeitaussage.
     FILE_MTIME = "file_mtime"
+    #: V4L2-Pufferzeitstempel der UVC-Kamera (uvcvideo, clock=CLOCK_MONOTONIC,
+    #: gemessen 2026-09-25). Roh gespeichert; nach CLOCK_BOOTTIME nur ueber
+    #: `to_boottime_ns` mit dem in session.json gemessenen Versatz.
+    V4L2_MONOTONIC = "v4l2_monotonic"
 
     @property
     def carries_time_information(self) -> bool:
         """Darf aus diesem Zeitstempel eine Latenz- oder Zeitaussage werden?"""
-        return self in (TimeBaseKind.SENSOR_BOOTTIME, TimeBaseKind.REPLAY_RECORDED)
+        return self in (
+            TimeBaseKind.SENSOR_BOOTTIME,
+            TimeBaseKind.REPLAY_RECORDED,
+            TimeBaseKind.V4L2_MONOTONIC,
+        )
+
+
+#: Weichen die bei Start und Ende gemessenen Versaetze BOOTTIME-MONOTONIC
+#: staerker ab, lag ein Suspend dazwischen - Umrechnung wird abgelehnt.
+SUSPEND_TOLERANCE_NS = 1_000_000
+
+
+def to_boottime_ns(timestamp: dict[str, Any], session: dict[str, Any] | None) -> int:
+    """Aufnahmezeitstempel (Timestamp.to_dict()-Form) nach CLOCK_BOOTTIME.
+
+    Einzige Umrechnungsstelle (Spec 2026-09-25, Abschnitt 2). Lehnt ab statt
+    zu raten: fehlender Versatz, Suspend waehrend der Aufnahme oder eine
+    Zeitbasis ohne BOOTTIME-Bezug -> ValueError.
+    """
+    base = timestamp.get("base")
+    value_ns = int(timestamp["value_ns"])
+    if base == TimeBaseKind.SENSOR_BOOTTIME.value:
+        return value_ns
+    if base == TimeBaseKind.V4L2_MONOTONIC.value:
+        offsets = (session or {}).get("clock_offset_boottime_minus_monotonic_ns")
+        if not offsets or offsets.get("start") is None or offsets.get("end") is None:
+            raise ValueError(
+                "v4l2_monotonic-Zeitstempel ohne clock_offset_boottime_minus_monotonic_ns "
+                "in session.json - Umrechnung nach CLOCK_BOOTTIME nicht moeglich."
+            )
+        start, end = int(offsets["start"]), int(offsets["end"])
+        if abs(end - start) > SUSPEND_TOLERANCE_NS:
+            raise ValueError(
+                f"BOOTTIME-MONOTONIC-Versatz aenderte sich waehrend der Aufnahme um "
+                f"{end - start} ns (> {SUSPEND_TOLERANCE_NS}) - vermutlich Suspend, "
+                "Zeitstempel werden nicht umgerechnet."
+            )
+        return value_ns + start
+    raise ValueError(f"Zeitbasis {base!r} hat keinen CLOCK_BOOTTIME-Bezug - abgelehnt.")
 
 
 class TimestampSemantics(StrEnum):

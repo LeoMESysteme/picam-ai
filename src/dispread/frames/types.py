@@ -27,7 +27,8 @@ class Capability(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class InferenceResult:
-    """Ergebnis einer On-Sensor-Inferenz (IMX500), unveraendert durchgereicht."""
+    """Ergebnis einer On-Sensor-Inferenz (IMX500, außer Betrieb seit 2026-09-25),
+    unveraendert durchgereicht."""
 
     tensors: tuple[np.ndarray, ...]
     #: dnn_runtime und dsp_runtime in Mikrosekunden, aus CnnKpiInfo.

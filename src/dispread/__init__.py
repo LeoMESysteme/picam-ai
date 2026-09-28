@@ -6,6 +6,7 @@ Aufbau (die Trennstellen aus Konzept.md §3):
 
     frames/     Bildquelle    - Kamera, Aufnahme, Bildordner, synthetisch
     detect/     Anzeige finden - bestaetigte ROI (Primaerpfad), Heuristik, IMX500
+                (ausser Betrieb seit 2026-09-25, StreamCam statt IMX500)
     rectify     Entzerren und Kontrast aufbereiten
     ocr/        Wert lesen    - 7-Segment (mit Segment-Evidenz), Tesseract
     validate    Freigabe      - Syntax-, Qualitaets- und Zustandsregeln (§7)

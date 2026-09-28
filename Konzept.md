@@ -61,7 +61,20 @@ Bestätigte Profile können Anzeigeart, Einheit, Zahlenformat, relevante Statuss
 
 Ein vollautomatischer Betrieb ist eine spätere Option, wenn die Validierung seine Zuverlässigkeit für die freigegebenen Gerätegruppen belegt.
 
+> **Abweichung seit 2026-09-25 (Kamera):** Statt der Raspberry Pi AI Camera
+> (Sony IMX500) ist eine **Logitech StreamCam** (USB 3, UVC) angeschlossen,
+> angebunden über V4L2. Gründe: wiederholte Hänger der Kamerabrücke beim
+> Streamstart (OQ-22), ein Ausfall mitten im Stream, Fokus nur mechanisch;
+> die AI-Funktionen des Sensors wurden nicht genutzt. Begründung und
+> verworfene Alternativen: `docs/project_history.md`, 2026-09-25. Die
+> IMX500-bezogenen Aussagen in diesem Dokument (§1, §5, Phasenplan) sind
+> damit historisch, bis die Entscheidung zurückgenommen wird.
+
 ## 5. Tools und Rolle der AI Camera
+
+> **Abweichung seit 2026-09-25:** Kamerazugriff über V4L2/OpenCV
+> (`v4l2://`, Logitech StreamCam) statt Picamera2/libcamera; die Rolle der
+> AI Camera entfällt, solange die IMX500 außer Betrieb ist (siehe §1).
 
 | Baustein | Kandidaten bzw. Ansatz |
 | --- | --- |

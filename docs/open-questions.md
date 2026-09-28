@@ -42,6 +42,8 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-38](#oq-38) | — | weitgehend geklärt | Ground-Truth-Quelle für Auto-Labeling: Displaybus oder Geräteschnittstelle? |
 | [OQ-39](#oq-39) | — | offen | Ziffernabdeckung des GSV-Datensatzes ist durch den festen Stimulus begrenzt |
 | [OQ-41](#oq-41) | — | teilweise geklärt | Telegramm und Anzeige unterscheiden sich in der führenden Null |
+| [OQ-42](#oq-42) | — | offen | Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar? |
+| [OQ-43](#oq-43) | — | offen | Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
 | [OQ-15](#oq-15) | — | geklärt | `tesseract-ocr`, `socat` und `chrony` installieren |
@@ -447,7 +449,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-22 — Sensor setzt nach Streamwechsel keinen Stream mehr auf
 
-* **Status:** offen · erkannt 2026-09-08 bei der Fokusdiagnose
+* **Status:** offen, für den Betrieb gegenstandslos (IMX500 außer Betrieb seit 2026-09-25) · erkannt 2026-09-08 bei der Fokusdiagnose
 * **Befund:** Nach einer Messreihe, die im selben Prozess erst 960×720 und dann
   2028×1520 streamte (`configure` → `start` → `stop` → `configure` → `start`),
   liefert der Sensor **überhaupt keine Bilder mehr**. Jeder weitere Startversuch
@@ -539,10 +541,46 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   belegt, (c) den blockierten Sensor als solchen melden („Reboot nötig") statt
   als anonymen Timeout, (d) `scripts/camera-commissioning.sh` um eine echte
   Aufnahmeprüfung ergänzen, damit „einsatzbereit" Bilddurchlauf bedeutet.
+  **Erneut aufgetreten 2026-09-23, 12:15:23:** 6 × `stream on failed in
+  subdev`, dazu um 12:16:15 ein WARN-Trace in `cfe_stop_streaming`. Der Lauf
+  war 960×720 mit `ScalerCrop` `1730,966,806,604`. Davor liefen im selben
+  Boot mehr als 20 Aufnahmen sauber, auch mit `ScalerCrop`. Vorausgegangen
+  war das Drehen am Fokusring. **Wahrscheinlichere Ursache, vom Nutzer
+  vermutet und am Kernel-Log bestätigt:** In diesem Boot liefen **20
+  erfolgreiche Streamstarts** (`Using a link rate`, 09:54 bis 12:10), der
+  **21.** ist gescheitert. Direkt davor steht `imx500_power_on: failed to get
+  led gpio`. Das passt zur Grenze vom 2026-09-09 (nach grob 20–25
+  Power-Zyklen ist der RP2040 unerreichbar). Der Fokusring als Ursache ist
+  damit unwahrscheinlich. **Folge:** Die Streamstarts brauchen ein Budget je
+  Boot, und die Werkzeuge müssen mit wenigen, langen Kamerasitzungen
+  auskommen. `sync-record.py` meldete den Lauf mit 0 Bildern als vollständig.
+  Das ist ein Bug und wird behoben.
   **(d) erledigt 2026-09-23:** Das Skript prüft das Kernel-Log auf
   `stream on failed` und macht eine gebundene Testaufnahme (640×480). Bei
   belegtem Gerät weicht es aus, statt zu kollidieren. Gegen die Hardware
   bestanden.
+  **Erneut aufgetreten 2026-09-23, 15:57:10, direkt nach Reboot und
+  Commissioning:** Bootzeit 14:24:31; die erste Commissioning-Sitzung um
+  15:55 lieferte ein echtes 640×480-Bild. Die unmittelbar folgende
+  960×720-Fokussitzung lieferte dagegen 0 Bilder und sofort
+  `imx500_power_on: failed to get led gpio` sowie 6 × `stream on failed in
+  subdev`. Der Nutzer hatte den Fokusring noch nicht berührt. Zwei
+  `Using a link rate`-Zeilen stehen bei der erfolgreichen Sitzung; ob diese
+  intern mehr als einen Power-Zyklus verbrauchte oder der Warmstart den
+  RP2040 nicht zuverlässig zurücksetzte, ist offen. **Folge:** Das Budget 15
+  bleibt eine Sperre gegen bekannte Erschöpfung, darf aber nicht als Zusage
+  von 15 erfolgreichen Starts verstanden werden. Diagnose:
+  `var/diagnostics/focus-handoff-2026-09-23/` (nicht versioniert), Zahlen in
+  `VALIDATION.md`, Aufbau im Laborjournal.
+  **Nachtrag 2026-09-23, 16:17:35:** Nach einem weiteren verifizierten
+  Warmreboot (Boot-ID `6c6abda2-d316-40da-b557-1124431ade30`) scheiterte
+  sogar der **erste** 960×720-Streamstart dieses Boots, ohne vorherige
+  Commissioning-Sitzung. Vor dem LED- und CFE-Fehler meldete die
+  `rp2040-gpio-bridge` selbst `rp2040_gbdg_wait_until_free failed` und
+  `rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL`. Das
+  Streamstart-Budget erklärt den neuen Fehlschlag nicht. Ob ein
+  vollständiger Stromzyklus des Pi die Bridge wiederherstellt, bleibt
+  offen; wegen anderer Dienste wurde er nicht durchgeführt.
 * **Warum das wichtig ist:** Der Kamerathread der Workbench setzt den Stream bei
   jeder Änderung von Breite, Höhe oder Bildrate genau so neu auf
   (`Controller._worker`). Trifft das denselben Treiberzustand, fällt die Kamera
@@ -736,6 +774,34 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   [Kommentar](https://github.com/raspberrypi/linux/issues/7613#issuecomment-5599575083).
   Nicht selbst umgesetzt: braucht Root zum Bauen/Installieren eines
   Overlays und einen Reboot zum Testen.
+
+* **Nachtrag 2026-09-24 — nach nächtlicher Abschaltung wieder
+  funktionsfähig.** Boot `b973b67f-69a7-488a-9870-9e8daea714b8`: Probe von
+  IMX500 und RP2040-Brücke sauber, danach sechs erfolgreiche 960×720-
+  Streamstarts (bis 20 min Dauer, mit und ohne ScalerCrop) ohne
+  `stream on failed`. Ob die Versorgung über Nacht ganz getrennt war, ist
+  nicht belegt; ein einzelner guter Kaltstart beweist nicht, dass nur ein
+  Stromzyklus hilft. Zahlen: [VALIDATION.md](VALIDATION.md), 2026-09-24.
+
+* **Nachtrag 2026-09-24, 11:11 — im selben Boot erneut blockiert, beim
+  8. Streamstart.** Sieben Starts liefen (zuletzt 10 s Vollbild um 11:11:06),
+  der achte (ScalerCrop 880,1015,1920,1440, 11:11:31) lieferte 0 Bilder:
+  `rp2040_gbdg_wait_until_free failed`, `gpio_dir_out(19, 0) could not
+  ST_CL`, `setup of GPIO led failed: -121`, 6 × `stream on failed in
+  subdev`, danach eine `WARNING` in `__vb2_queue_cancel` (videobuf2-core.c:2215).
+  Der Prozess beendete sich selbst (Timeout 5 s), nichts hing. Gesamte
+  Streamdauer des Boots vorher ≈ 36 min. Damit liegt die Grenze hier weit
+  unter 20–25 Starts; das Budget von 15 schützt nicht. Kernel-Auszug:
+  `var/diagnostics/ernte1-crop/kernel-11-10.txt` (lokal).
+
+* **Nachtrag 2026-09-25 — für den Betrieb gegenstandslos.** Am 2026-09-25
+  fiel die Kamera zusätzlich **mitten in einem laufenden Stream** aus
+  (I2C `-121`, „Camera frontend has timed out"), nachdem sie mechanisch
+  bewegt worden war. Nutzerentscheidung am selben Tag: offizieller Wechsel
+  auf die Logitech StreamCam (USB/UVC), die IMX500 ist außer Betrieb
+  ([project_history.md](project_history.md), 2026-09-25). Die Frage bleibt
+  offen, falls die IMX500 zurückkommt; der Testplan mit dem
+  Kernel-Maintainer (raspberrypi/linux#7613) wird nicht weiter verfolgt.
 
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
@@ -1773,6 +1839,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Erkennungsgüte-Zahl, die auf dem so vergrösserten Datensatz gemessen wird —
   eine hohe Trefferquote auf 50 000 Bildern derselben drei Werte ist **keine**
   Aussage über die Erkennung im Feld.
+* **Nachtrag 2026-09-24, Ernte 1:** 81 Proben aus 31 Zeichenketten
+  importiert. Zelle 6 deckt alle zehn Ziffern ab, Zellen 3–5 je neun,
+  Zelle 1 acht, Zelle 2 sieben, Zelle 7 fünf (4, 6–9). Vorzeichen weiter nur
+  `+`. Tabelle: [VALIDATION.md](VALIDATION.md), 2026-09-24, „Ernte 1".
+  Mehr Ernten mit anderen Seeds schliessen die Lücken; offen bleibt die
+  Vorzeichenstelle.
 * **Verwandt:** [OQ-37](open-questions.md) (Anzeigeformat ab 10 mV/V),
   [OQ-35](open-questions.md) (Baustein 2: Signaleinspeisung, gleiches Problem
   am BK-5491B), [OQ-38](open-questions.md).
@@ -1824,6 +1896,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   die Werte für `--min-gap-ms` und `--max-gap-ms`. Unter Kameralast liegen
   über 3 Läufe alle Abstände bei 529–536 ms. Eine Stundenmessung fehlt
   noch.
+* **Nachtrag 2026-09-24:** In einer 20-min-Sitzung (15 fps, JPEG, ohne
+  Last von aussen) liefen bei t ≈ 13,5 min 8 Bilder in die volle
+  Warteschlange (60) und wurden verworfen, gezählt und protokolliert; sonst
+  `sensor_sequence` lückenlos. Die folgende 15-min-Sitzung blieb ohne
+  Verwurf. Der Schreibstau tritt also auch ohne erzwungene Last auf; für
+  3,5-min-Ernten unkritisch, für die Stundenmessung zu beachten.
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
@@ -1857,6 +1935,84 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   muss zum Zellenraster des Lesers passen. (c) Negative Werte sind hier
   ungeprüft, weil die Vorzeichenstelle unerreichbar ist (Firmware 1.3.07).
   Sie dürfen nicht stillschweigend mitgemeint sein.
+* **Nachtrag 2026-09-24 — zwei unterdrückte Nullen:** Das Telegramm
+  `+00988.5 mV/V` (Aufstellung 3, `var/diagnostics/auf3-run`) erscheint auf
+  dem Glas als `+  988.5 mV/V`, mit **zwei** Leerzellen. Die bisherige Regel
+  (genau eine Null) hätte `+0988.5 mV/V` gelabelt; die Stichprobe vor dem
+  Import hat es gefunden, keine importierte Probe war betroffen. Neue Regel
+  `gsv2as_leading_zero_v2` in `scripts/gate-label.py`
+  (`telegram_to_display_text`) und `scripts/import-harvest.py`
+  (`_cell_text_for_telegram`): alle führenden Nullen des Ganzzahlteils werden
+  unterdrückt (Label ohne, Zellsoll mit Leerzelle), ausser der letzten Ziffer
+  vor dem Punkt. Belegt sind 0, 1 und 2 unterdrückte Nullen; bei 3 oder mehr
+  fehlt ein Glasbeleg, solche Bilder werden abgelehnt
+  (`fuehrende_nullen_ungeprueft`). Für 0 und 1 Null bleibt der Text wie in v1.
 * **Verwandt:** [OQ-37](open-questions.md), [OQ-38](open-questions.md).
 * **Antwort landet in:** Plan `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md`
   (Vorab-Festlegungen) und `scripts/gate-label.py`.
+
+<span id="oq-42"></span>
+
+## OQ-42 — Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar?
+
+* **Status:** offen · erkannt 2026-09-24 beim ersten echten
+  Dot-Matrix-Trainingslauf · **Zuständig:** Labor / Entwicklung
+* **Frage:** Wie trennt man Rasterversatz, Unschärfe und einen wirklichen
+  Zeichenunterschied, bevor die strenge ROM-Gegenprobe gegebenenfalls
+  verändert wird?
+* **Befund:** Training auf `auf3` + `ernte1` scheitert für acht Zeichen.
+  `auf3` verschob sich zwischen Profilbestätigung und Ernte um etwa
+  `dx=0,3`, `dy=4,6` Quellpixel; das Profil ist für die Erntebilder
+  unbrauchbar. `ernte1` stimmt allein mit dem ROM überein. Nach Ausschluss
+  von `auf3` scheitert der Fold mit Training nur auf `auf2` bei vier Zeichen
+  um je einen Punkt; `auf2` ist sichtbar weich. Zahlen und Grenzen:
+  [VALIDATION.md](VALIDATION.md), Eintrag „Dot-Matrix-Entwicklungsmessung".
+* **Vorabdefault:** Strenge ROM-Regel beibehalten; bei Abweichung Exit 3
+  ohne Vorlagendatei oder Auswertungsbericht. Kein Nachstellen der
+  ROM-Tabelle oder Schwellen anhand der Auswertung.
+* **Klärung:** `auf3` mit neu bestätigtem Raster erneut erfassen oder
+  nachvollziehbar relabeln, `auf2` anhand der Glasbilder und Punktmuster
+  prüfen. Jede Änderung der ROM-Toleranz zuerst als versionierte
+  Spezifikationsentscheidung samt Gegenprobe gegen falsch gelabelte
+  Zeichen festhalten; danach Stufe 1 neu laufen lassen.
+* **Nachtrag 2026-09-25:** Nutzer hat entschieden: `auf3` auf einem
+  Erntebild neu bestätigt, Gegenprobe `rom_check_v2` (1 Punkt Toleranz).
+  Danach bricht die festgelegte Messung nur noch im Durchgang „Training
+  `auf2`+`auf3`" ab (`4`, 3 Punkte neben der Diagonale — Unschärfe). Diagnose
+  aller Kombinationen: nie ein falscher Wert, `ernte1`+`auf2` → `auf3` 67
+  richtig / 6 abgelehnt, übrige Kombinationen 100 % abgelehnt
+  ([VALIDATION.md](VALIDATION.md), 2026-09-25). Weiter offen: mehr scharfe
+  Aufstellungen fürs Training; ob die festgelegte Messung Aufstellungen
+  unterhalb einer Schärfegrenze aus dem **Training** ausschliessen darf,
+  braucht eine Entscheidung vor dem nächsten Lauf.
+* **Antwort landet in:**
+  [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
+  [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).
+
+---
+
+<span id="oq-43"></span>
+
+## OQ-43 — Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang?
+
+* **Status:** offen · erkannt 2026-09-25 beim Wechsel auf die Logitech
+  StreamCam · **Zuständig:** Entwicklung
+* **Befund:** OpenCV liefert je Bild `CAP_PROP_POS_MSEC` = den
+  V4L2-Pufferzeitstempel (uvcvideo `clock=CLOCK_MONOTONIC`, Auflösung µs),
+  im Test rund 35–40 ms vor Ankunft im Programm. Ob er den
+  Belichtungsbeginn, das Belichtungsende oder den Empfang des letzten
+  USB-Pakets markiert, ist nicht dokumentiert und nicht gemessen. Bei der
+  IMX500 lag `SensorTimestamp` in BOOTTIME (gemessen), die Semantik war
+  ebenfalls offen (Messung M2 in [TIMING.md](TIMING.md)).
+* **Warum es zählt:** Der Versatz Telegramm ↔ Glas und damit das
+  Schutzfenster M beim Gate-Labeling hängen davon ab. Eine Annahme würde M
+  verfälschen.
+* **Umgang bis zur Klärung:** empirisch abgedeckt. `display-offset.py`
+  misst den Gesamtversatz aus Aufnahmen mit wechselnder Normierung, und
+  `timing-calibration.py` schreibt M nach
+  `var/calibration/timing-streamcam.json`. Ohne diese Datei startet
+  `harvest.py` nicht. Der Zeitstempel trägt `semantics=UNKNOWN`.
+* **Klärung:** optional über Hardware-Zeitstempel (`uvcvideo hwtimestamps`)
+  oder eine LED-Messung mit bekanntem Schaltzeitpunkt. Solange die
+  Kalibrierung trägt, nicht nötig.
+* **Antwort landet in:** [TIMING.md](TIMING.md), [VALIDATION.md](VALIDATION.md).

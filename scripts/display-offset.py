@@ -59,10 +59,14 @@ Uebergang). Berichtet werden Durchfallquote (wie oft faellt der
 |B-A|-Rauschtest zu Recht durch) und, falls doch "gemessen", die Streuung
 der erfundenen Uebergangszeiten.
 
-Zeitbasis: `frames.jsonl` traegt `capture_timestamp.value_ns` (int,
-CLOCK_BOOTTIME, `sensor_boottime`), `serial.jsonl` traegt `t_boot` (float,
-Sekunden, CLOCK_BOOTTIME) - dieselbe Domaene, siehe AGENTS.md "Zeitangaben
-immer mit Zeitbasis".
+Zeitbasis: `frames.jsonl` traegt `capture_timestamp` mit `base`
+`sensor_boottime` (bereits CLOCK_BOOTTIME) ODER `v4l2_monotonic`
+(CLOCK_MONOTONIC der UVC-Kamera) - `load_frames()` rechnet ueber
+`to_boottime_ns` (src/dispread/records.py, einzige Umrechnungsstelle) in
+beiden Faellen nach CLOCK_BOOTTIME um, mit dem in `session.json` gemessenen
+Versatz fuer `v4l2_monotonic`. `serial.jsonl` traegt `t_boot` (float,
+Sekunden, CLOCK_BOOTTIME) - dieselbe Domaene nach der Umrechnung, siehe
+AGENTS.md "Zeitangaben immer mit Zeitbasis".
 
 Vorzeichenkonvention (unveraendert):
 
@@ -79,6 +83,7 @@ Festlegung 3 des Plans festgeschriebenen Formel gebildet - unveraendert:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -90,7 +95,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import cv2  # noqa: E402
 
+from dispread.records import to_boottime_ns  # noqa: E402
 from dispread.rectify import rectify  # noqa: E402
+from dispread.session_profile import SessionProfile  # noqa: E402
 from dispread.workbench.vision import lcd_quad_in_region  # noqa: E402
 
 CROP_SIZE = (400, 160)  # wie src/dispread/workbench/controller.py:CROP_SIZE
@@ -114,9 +121,16 @@ M_FIXED_EXTRA_S = 0.040
 
 
 def load_frames(session_dir: Path) -> list[dict[str, Any]]:
-    """`frames.jsonl` laden. `capture_timestamp.value_ns` ist Nanosekunden
-    (int), hier nach Sekunden (float) umgerechnet - CLOCK_BOOTTIME bleibt."""
+    """`frames.jsonl` laden. `t` ist CLOCK_BOOTTIME in Sekunden (float), ueber
+    `to_boottime_ns` (src/dispread/records.py) aus `capture_timestamp`
+    gewonnen - fuer `sensor_boottime` unveraendert, fuer `v4l2_monotonic` mit
+    dem in `session.json` gemessenen Versatz umgerechnet (ValueError, falls
+    der Versatz fehlt). `timestamp_base` bleibt die ROHE Basis aus
+    `capture_timestamp.base`, zur Nachvollziehbarkeit."""
+    session_path = session_dir / "session.json"
+    session = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else None
     rows = []
+    skipped_dropped = 0
     path = session_dir / "frames.jsonl"
     with path.open() as fh:
         for line in fh:
@@ -124,6 +138,12 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
             if not line:
                 continue
             obj = json.loads(line)
+            if obj.get("dropped"):
+                # final-review.md, "Nicht bewertet": eine wegen voller
+                # frame_queue verworfene Zeile hat kein 'file' und darf hier
+                # nicht mit KeyError abbrechen - sie traegt kein Bild.
+                skipped_dropped += 1
+                continue
             ts = obj["capture_timestamp"]
             # `frames.jsonl` traegt nur den Dateinamen, das Bild liegt unter
             # <session_dir>/frames/ (sync-record.py: frames_dir = output_dir
@@ -132,10 +152,16 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
                 {
                     "file": f"frames/{obj['file']}",
                     "frame_sequence": obj.get("frame_sequence"),
-                    "t": ts["value_ns"] / 1e9,
+                    "t": to_boottime_ns(ts, session) / 1e9,
                     "timestamp_base": ts.get("base"),
                 }
             )
+    if skipped_dropped:
+        print(
+            f"Hinweis: {skipped_dropped} Zeile(n) in {path} uebersprungen "
+            "(dropped=true, volle Warteschlange beim Aufnehmen).",
+            file=sys.stderr,
+        )
     rows.sort(key=lambda r: r["t"])
     return rows
 
@@ -302,6 +328,49 @@ def locate_quad(
 
 def quad_to_pixels(quad_norm, width: int, height: int) -> tuple[tuple[float, float], ...]:
     return tuple((float(x * width), float(y * height)) for x, y in quad_norm)
+
+
+def _sha256_of_file(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def quad_from_profile(
+    profile_path: Path, width: int, height: int
+) -> tuple[tuple[tuple[float, float], ...], dict[str, Any], dict[str, Any]]:
+    """Quad aus einem bestaetigten `SessionProfile` statt Saettigungssuche
+    (Task 8, `--profile`): `lcd_quad_in_region` grenzt am StreamCam-Aufbau
+    das Glas nicht zuverlaessig von Blende/Reflexen ab (Spanne 0,04-0,05
+    ueber die Stichprobe, siehe Aufgabenbeschreibung), das vom Bediener
+    bestaetigte Profil kennt das Quad dagegen schon in Quellbildpixeln -
+    `locate_quad` wird in diesem Zweig nicht aufgerufen.
+
+    Ein v3-Profil traegt `camera.size` (StreamCam-Umstieg) - stimmt es nicht
+    mit der Groesse des ersten Bilds ueberein, wird abgelehnt (kein Erfinden
+    ueber Sitzungen hinweg: Profil und Aufzeichnung passen dann schlicht
+    nicht zusammen). Ein v2-Profil (IMX500, kein `camera`-Block) wird ohne
+    Groessenpruefung akzeptiert - es hat nie einen vergleichbaren
+    `size`-Vertrag gefuehrt (ScalerCrop/native_scale statt fester
+    Aufloesung), eine Pruefung liesse sich dafuer nicht nachruesten, ohne
+    selbst zu erfinden."""
+    profile = SessionProfile.load(profile_path)
+    if profile.camera is not None:
+        expected = tuple(profile.camera.size)
+        actual = (width, height)
+        if expected != actual:
+            raise RuntimeError(
+                f"Sitzungsprofil {profile_path}: Kamera-Bildgroesse {expected} passt "
+                f"nicht zur Groesse des ersten Bilds dieser Aufzeichnung {actual} - "
+                "Profil und Sitzung gehoeren nicht zusammen (kein Erfinden ueber "
+                "Groessen hinweg)."
+            )
+    quad_px = tuple(tuple(float(v) for v in pt) for pt in profile.quad)
+    quad_report = {"pixel": [list(pt) for pt in quad_px], "source": "profile"}
+    quad_source = {
+        "type": "profile",
+        "profile_path": str(profile_path),
+        "sha256": _sha256_of_file(profile_path),
+    }
+    return quad_px, quad_report, quad_source
 
 
 # ---------------------------------------------------------------------------
@@ -789,11 +858,21 @@ def _parse_hint_box(text: str) -> tuple[float, float, float, float]:
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("session_dir", type=Path, help="Aufzeichnungsverzeichnis (frames.jsonl, serial.jsonl, frames/)")
-    p.add_argument(
+    quad_group = p.add_mutually_exclusive_group(required=True)
+    quad_group.add_argument(
         "--hint-box",
         type=_parse_hint_box,
-        required=True,
         help="Normierte Suchbox x,y,w,h (0..1) um den Anzeigebereich, fuer lcd_quad_in_region",
+    )
+    quad_group.add_argument(
+        "--profile",
+        type=Path,
+        help=(
+            "Pfad zu einem bestaetigten Sitzungsprofil (SessionProfile.load) - "
+            "Quad kommt direkt aus dem Profil (Quellbildpixel), locate_quad "
+            "wird nicht aufgerufen. Schliesst sich mit --hint-box aus, genau "
+            "eine der beiden Optionen ist Pflicht."
+        ),
     )
     p.add_argument("--out", type=Path, default=None, help="Ausgabeverzeichnis (default: <session_dir>/offset-analyse)")
     p.add_argument("--half-window-s", type=float, default=DEFAULT_HALF_WINDOW_S)
@@ -840,17 +919,37 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     n_telegram_lines = sum(1 for r in serial if r["is_telegram"])
     n_skipped_lines = len(serial) - n_telegram_lines
 
-    loc = locate_quad(session_dir, frames, args.hint_box, sample_frames=args.sample_frames)
-    if not loc["stable"]:
-        raise RuntimeError(
-            "Anzeigebereich ueber die Bildstichprobe nicht stabil "
-            f"(Spanne {loc['spread_norm']:.4f} normiert) - kein Quad wird geraten. "
-            "Pro-Bild-Lokalisierung ist in diesem Skript nicht implementiert; "
-            "hint-box oder Aufzeichnung pruefen."
-        )
     first_img = cv2.imread(str(session_dir / frames[0]["file"]))
     height, width = first_img.shape[:2]
-    quad_px = quad_to_pixels(loc["quad_norm"], width, height)
+
+    if args.profile is not None:
+        quad_px, quad_report, quad_source = quad_from_profile(args.profile, width, height)
+    else:
+        loc = locate_quad(session_dir, frames, args.hint_box, sample_frames=args.sample_frames)
+        if not loc["stable"]:
+            raise RuntimeError(
+                "Anzeigebereich ueber die Bildstichprobe nicht stabil "
+                f"(Spanne {loc['spread_norm']:.4f} normiert) - kein Quad wird geraten. "
+                "Pro-Bild-Lokalisierung ist in diesem Skript nicht implementiert; "
+                "hint-box oder Aufzeichnung pruefen."
+            )
+        quad_px = quad_to_pixels(loc["quad_norm"], width, height)
+        quad_report = {
+            "normalized": loc["quad_norm"],
+            "stable": loc["stable"],
+            "spread_norm": loc["spread_norm"],
+            "n_samples": loc["n_samples"],
+            "sample_files": loc["sample_files"],
+        }
+        quad_source = {
+            "type": "hint_box",
+            "hint_box": list(args.hint_box),
+            "normalized": loc["quad_norm"],
+            "stable": loc["stable"],
+            "spread_norm": loc["spread_norm"],
+            "n_samples": loc["n_samples"],
+            "sample_files": loc["sample_files"],
+        }
 
     crop_means = compute_crop_means(frames, session_dir, quad_px)
     occluded_mask = detect_occlusion_mask(crop_means, mad_k=args.occlusion_mad_k)
@@ -929,7 +1028,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     result = {
         "session_dir": str(session_dir),
-        "time_base": "CLOCK_BOOTTIME (frames: capture_timestamp.value_ns/1e9, serial: t_boot)",
+        "time_base": "CLOCK_BOOTTIME (frames: to_boottime_ns(capture_timestamp), serial: t_boot)",
         "sign_convention": "delta = t_glas - t_telegramm; delta>0: Telegramm zuerst, Glas folgt",
         "method": "template_projection",
         "n_frames": len(frames),
@@ -939,13 +1038,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "n_commands_jsonl_rows": len(commands),
         "occlusion": {"n_frames_occluded": n_occluded, "mad_k": args.occlusion_mad_k, "sample_files": occluded_files[:20]},
         "isolated_only": args.isolated_only,
-        "quad": {
-            "normalized": loc["quad_norm"],
-            "stable": loc["stable"],
-            "spread_norm": loc["spread_norm"],
-            "n_samples": loc["n_samples"],
-            "sample_files": loc["sample_files"],
-        },
+        "quad": quad_report,
+        "quad_source": quad_source,
         "params": {
             "half_window_s": args.half_window_s,
             "min_template_frames": args.min_template_frames,
@@ -980,11 +1074,22 @@ def format_summary(result: dict[str, Any]) -> str:
         f"Sitzung: {result['session_dir']} (Methode: {result['method']})",
         f"Bilder: {result['n_frames']}, Telegramme: {result['n_telegram_lines']} "
         f"(uebersprungen als Nicht-Telegramm: {result['n_non_telegram_lines_skipped']})",
-        f"Quad stabil ueber {result['quad']['n_samples']} Stichprobenbilder "
-        f"(Spanne {result['quad']['spread_norm']:.4f}): {result['quad']['stable']}",
-        f"Verdeckte Bilder ausgeschlossen: {result['occlusion']['n_frames_occluded']} "
-        f"(Schwelle {result['occlusion']['mad_k']}x robuste Streuung)",
     ]
+    quad_source = result["quad_source"]
+    if quad_source["type"] == "profile":
+        lines.append(
+            f"Quad aus Sitzungsprofil: {quad_source['profile_path']} "
+            f"(sha256 {quad_source['sha256']})"
+        )
+    else:
+        lines.append(
+            f"Quad stabil ueber {result['quad']['n_samples']} Stichprobenbilder "
+            f"(Spanne {result['quad']['spread_norm']:.4f}): {result['quad']['stable']}"
+        )
+    lines.append(
+        f"Verdeckte Bilder ausgeschlossen: {result['occlusion']['n_frames_occluded']} "
+        f"(Schwelle {result['occlusion']['mad_k']}x robuste Streuung)"
+    )
     for pop in result["populations"]:
         ramp_note = f" (+{pop['n_events_ramp_excluded']} Rampenereignisse ausgeschlossen)" if pop.get("n_events_ramp_excluded") else ""
         null = pop["null_baseline"]

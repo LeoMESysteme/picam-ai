@@ -1,5 +1,15 @@
 # Kamera-Inbetriebnahme
 
+> **Seit 2026-09-25 historisch.** Diese Checkliste und der Fehlerbaum gelten
+> für die Raspberry Pi AI Camera (IMX500), die außer Betrieb ist
+> (`docs/project_history.md`, 2026-09-25). `scripts/camera-commissioning.sh`
+> prüft jetzt die Logitech StreamCam: `v4l2-ctl`, Gerät `046d:0893` mit
+> `index == 0`, USB3, YUYV 1920×1080, Fokus-Regler setzen und zurücklesen,
+> Testbild nach `var/diagnostics/camera-commissioning/test.png` in
+> 1920×1080. Das Skript ist nicht mehr rein lesend: Es setzt
+> `focus_automatic_continuous` und `focus_absolute` und stellt danach die
+> Ausgangswerte wieder her.
+
 Checkliste plus Fehlerbaum. Werkzeug ist
 [`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh) —
 rein lesend, Exit 0 = einsatzbereit.

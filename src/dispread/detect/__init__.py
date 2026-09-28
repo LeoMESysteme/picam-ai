@@ -1,7 +1,9 @@
 """Anzeige lokalisieren.
 
 Primaerpfad ist die vom Bediener bestaetigte ROI (`manual_roi`), nicht die
-IMX500-Detektion. Begruendung (docs/project_history.md): die 23 mitgelieferten
+IMX500-Detektion - die seit 2026-09-25 ohnehin ausser Betrieb ist (StreamCam
+statt IMX500, siehe docs/project_history.md). Begruendung fuer die
+Prioritaetsumkehr selbst: die 23 mitgelieferten
 .rpk sind COCO-/ImageNet-Modelle - gemessen liefern sie Labels wie "person"
 und "tv" -, eigene Modelle sind nur off-Pi konvertierbar, und Konzept.md §10
 Ph. 2 nennt den manuellen Ausschnitt selbst als Rueckfalloption. Diese

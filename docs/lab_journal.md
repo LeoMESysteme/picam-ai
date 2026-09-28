@@ -1298,3 +1298,209 @@ zeigt, dass der Fix trägt: Der serielle Strom bleibt exakt, verlorene Bilder
 sind gezählt. Die Systemeinstellungen (`vm.dirty_*`) habe ich bewusst nicht
 angefasst. Das wäre ein Eingriff ins System des Labor-Pi gewesen, und der
 Fix im Skript macht ihn unnötig.
+
+## 2026-09-23 — Winkelversuch unterbrochen: Kamera wieder blockiert
+
+Ernte Phase 1, Task 6.
+
+**Frontal**, `ScalerCrop` `1972,731,1195,896`:
+* 7,3 px je Punktspalte im Ausgabebild, Schärfe (Laplace-Varianz) 9,0.
+* Das Raster `4,24.4,40,115` sitzt. Die Zeichen stehen linksbündig ab
+  Zelle 0.
+* Die Zeichen wirken trotz 7 px weich. Das deutet auf Unschärfe hin, nicht
+  auf fehlende Auflösung.
+* Nachtrag: Die 7,3 px sind hochgerechnet. Der Sensormodus ist 2×2-gebinnt,
+  echt sind es × (1195/2)/960 ≈ 0,62, also ≈ 4,5 px. Das Gate wird darauf
+  umgestellt.
+
+**30°:** Der Nutzer hat die Kamera neu aufgestellt und **gleichzeitig** den
+Fokusring 1/4 im Uhrzeigersinn gedreht. Ergebnis:
+* Schärfe 3,5, damit deutlich schlechter.
+* Das Glas ist im Vollbild nur noch ≈ 140 px breit, weil die Kamera weiter
+  weg steht.
+
+Den Beitrag von Winkel und Fokus kann ich nicht trennen. Der Faktor 2,5
+spricht dafür, dass im Uhrzeigersinn die falsche Richtung war.
+
+**Blockade:** Danach hat der Nutzer 1/4 zurückgedreht. Die nächste Aufnahme
+lieferte 0 Bilder, dazu `stream on failed` (OQ-22). Einzige Einwirkung
+dazwischen war das Drehen am Fokusring. Weitere Streamversuche habe ich nicht
+gemacht, der Reboot ist beim Nutzer angefragt.
+
+**Lehre für den Aufbau:** Fokus und Aufstellung nie gleichzeitig ändern.
+Beim Drehen am Fokusring die Kamera und das Kabel festhalten.
+
+**Korrektur, gleicher Tag:** Der Nutzer hat an die Grenze von 20–25
+Power-Zyklen aus OQ-22 erinnert. Im Kernel-Log stehen 20 erfolgreiche
+Streamstarts in diesem Boot, der 21. ist gescheitert. Das ist die
+wahrscheinlichere Erklärung, der Fokusring ist es kaum. Meine Werkzeuge haben
+das Budget verschwendet: Der Winkelversuch kostete 3–4 Starts je Winkel,
+jede Schärfemessung einen weiteren.
+
+## 2026-09-23 — Fokusübergabe: zweiter Kameralauf des Boots blockiert
+
+**Ziel:** Den Fokus in der 30°-Stellung in einer einzigen 90-s-Kamerasitzung
+einstellen. Vorher sollte `camera-commissioning.sh` einmal den echten
+Bilddurchlauf bestätigen. Der Nutzer sollte erst nach dem Signal
+`READY_TO_TURN` drehen.
+
+**Ablauf:** Der Pi war seit 14:24:31 neu gebootet. Um 15:55 bestand die
+Commissioning-Aufnahme bei 640×480 (86 606 Byte, kein `stream on failed`).
+Der anschliessende Fokuslauf öffnete 960×720, 15 fps, `queue=False`. Noch vor
+dem ersten Bild meldete der Kernel um 15:57:10
+`imx500_power_on: failed to get led gpio` und sechsmal
+`stream on failed in subdev`; libcamera konnte keinen der sechs CFE-Puffer
+einreihen. `READY_TO_TURN` wurde nie ausgegeben. Der Nutzer hat weder Fokus
+noch Kameraposition verändert.
+
+**Abbruch:** Der Python-Prozess hing in `futex_wait_queue`. Ein einmaliges
+Ctrl+C als weicher Abbruch erreichte das Terminal, führte aber innerhalb von
+10 s nicht durch den Aufräumpfad. Kein SIGKILL und kein weiterer
+Streamversuch; der Prozess bleibt bis zum Reboot belegt.
+
+**Deutung:** Die bisherige Sicherheitsannahme „frischer Boot + Budget 15"
+reicht nicht aus. In diesem Boot scheiterte bereits die Kamerasitzung direkt
+nach einer erfolgreichen Commissioning-Sitzung. Ob `rpicam-still` intern zwei
+Power-Zyklen verursachte (zwei `Using a link rate`-Zeilen) oder der RP2040
+nicht zuverlässig durch den Warmstart zurückgesetzt wurde, ist offen. Die
+Fokusmessung selbst hat **keinen Messwert** geliefert.
+
+**Artefakte:**
+`var/diagnostics/focus-handoff-2026-09-23/commissioning.txt` und
+`focus-failure.txt` (nicht versioniert).
+
+## 2026-09-23 — Auch der erste Start nach Warmreboot scheitert (OQ-22)
+
+Der Nutzer hat erneut rebootet. Boot-ID
+`6c6abda2-d316-40da-b557-1124431ade30` und Bootzeit 16:13:22
+(Europe/Berlin) bestätigen den neuen Boot. Davor gab es darin keinen
+Kamerastart. Um 16:17:35 öffnete der Fokushelfer 960×720, 15 fps,
+`queue=False`. Bereits beim ersten Start war die RP2040-GPIO-Bridge über
+I²C nicht bereit: `rp2040_gbdg_wait_until_free failed`, darauf
+`rp2040_gbdg_gpio_dir_out(19, 0) could not ST_CL`, LED-GPIO `-121` und
+sechsmal `stream on failed in subdev`. libcamera meldete beim ersten
+CFE-Puffer `Remote I/O error`. Es kam kein Bild und kein Signal zum Drehen;
+die Kamera wurde vom Nutzer nicht angefasst.
+
+Der Python-Prozess blieb in `futex_wait_queue`. Ein weiterer Streamversuch
+wurde nicht gemacht. Das bisherige 20–25-Starts-Budget erklärt diesen
+Fehlschlag nicht. Warum die Bridge nach dem Warmreboot beim ersten Start
+nicht antwortet, bleibt offen. Ein vollständiger Stromzyklus des Pi wäre
+eine trennende Gegenprobe; er unterbricht auch andere Dienste auf diesem
+Pi und wurde hier nicht durchgeführt.
+
+**Artefakt:** `var/diagnostics/focus-handoff-2026-09-23/focus-first-start-failure.txt`
+(nicht versioniert). Der Fokushelfer liegt unter
+`/home/me-systeme/fokus-live-2026-09-23.py`.
+
+## 2026-09-24 — Kamera wieder da, Task 6 in einer Vormittagssitzung
+
+Nach der nächtlichen Abschaltung meldeten sich IMX500 und RP2040-Brücke
+beim Boot sauber, und der erste Kamerastart lieferte sofort Bilder. Damit
+bleibt offen, ob der Warmreboot-Fehlschlag von gestern nur durch einen
+Kaltstart behebbar ist; ein Gegenbeweis ist ein einzelner guter Kaltstart
+nicht.
+
+Ablauf: eine 20-min-Sitzung im vollen Bildfeld zum groben Fokussieren
+(Schärfemesser `var/diagnostics/task6-tools/focus_meter.py`, liest nur die
+geschriebenen JPEGs), dann 15 min mit ScalerCrop 1920×1440 für den Feinfokus.
+Im vollen Bildfeld ist die Anzeige nur ≈ 175 px breit, die Punkte laufen
+zusammen; erst der Ausschnitt macht sie sichtbar. Der Fokuswert wurde beim
+Drehen mehrfach durch Verschieben der Kamera verfälscht — beim nächsten Mal
+Kamera fixieren, bevor fokussiert wird.
+
+Die Kamera stand von Anfang an auf der „30°"-Stellung; die zuerst als
+frontal bezeichneten Bilder sind umbenannt (`task6-30deg*`). Frontal und
+„45°" kamen je als 10-s-Vollbild (Anzeige suchen) plus 30-s-Ausschnitt dazu.
+
+Irrweg: Das Gitter-Overlay `overlay_rectified.png` las ich bei 400 px Breite
+als gespiegelt. Ein Subagent fand keinen Fehler in der Eckenreihenfolge;
+ohne Gitter vergrössert liest der Text richtig. Geblieben ist ein
+Regressionstest mit asymmetrischem Muster.
+
+Befund für die Ernte: Eine Lichtspiegelung links oben auf dem Glas
+schneidet bei frontal und „45°" die automatische Glaserkennung ab und
+überstrahlt bei „45°" `+` und `0`. Vor der Ernte Licht oder Winkel ändern
+oder das Quad von Hand setzen.
+
+Schwelle `resolution_threshold_px = 2,6`, vom Nutzer festgelegt. Zahlen in
+VALIDATION.md (2026-09-24).
+
+## 2026-09-24 — Ernte 1 läuft durch, 81 Proben importiert
+
+Der Nutzer hat nach der Blockade um 11:11 neu gestartet und die
+Lichtspiegelung beseitigt. Mit zwei Streamstarts ging es: 20 s Ausschnitt
+zum Einrichten, dann die Ernte selbst. Die Kamera war zwischen dem Vollbild
+vor der Blockade und dem Neustart leicht verrutscht; die Anzeige lag danach
+am oberen Bildrand, aber vollständig im Ausschnitt und grösser als vorher
+(3,46 native px je Punktspalte, Punkte klar getrennt). Ohne Spiegelung fand
+der Glas-Detektor das Quad allein.
+
+Kurzer Fehlalarm: In der Stichprobe zeigt das Glas `+ 28.681` mit Leerzelle,
+das Label heisst `+28.681 mV/V`. `import-harvest.py` legt die Zellen aber
+nach dem Rohtelegramm mit Leerzelle an (`cell_text`), die Zuordnung stimmt.
+Zahlen: VALIDATION.md, 2026-09-24, „Ernte 1".
+
+Nachmittags: Ernte 2 in derselben Aufstellung (1 Start), dann Aufstellung 2
+schräg von links und näher (3 Starts), danach Neustart vorsorglich vor dem
+8. Start. Für Aufstellung 3 wird der Seed so gewählt, dass der Faktorplan
+Werte mit führender 6 enthält (Seed 20261160, 7 von 30) — nur Stimulus-
+auswahl, keine Auswertungsentscheidung. Zahlen: VALIDATION.md, „Ernte 2
+und Aufstellung 2".
+
+## 2026-09-24 — Erster Dot-Matrix-Trainingslauf und Übergabe
+
+**Aufbau:** Offline-Auswertung der 301 bereits importierten GSV-2AS-Bilder
+(152 `ernte1`, 76 `auf2`, 73 `auf3`). Es gab in dieser Korrektursitzung
+keinen zusätzlichen Hardwareeingriff. Profilzuordnung:
+`var/diagnostics/dotmatrix-profile-map.json`; geplanter Bericht:
+`var/diagnostics/dotmatrix-stufe1/report.json`. Zeitangaben werden aus
+dieser Offline-Auswertung nicht abgeleitet.
+
+**Ablauf:** `dotmatrix-eval.py loo` stoppte im ersten Fold durch die
+vorab festgelegte ROM-Gegenprobe (Exit 3, acht abweichende Zeichen,
+kein Bericht). Ein separater Vergleich zeigte: `ernte1` passt zum ROM;
+`auf3` weicht systematisch ab. Am Bild gemessen lag die Kamera beim
+`auf3`-Erntelauf gegenüber dem Profil um ungefähr `dx=0,3`, `dy=4,6`
+Quellpixel versetzt. Das ist größer als die ±1-Pixel-Suche im
+entzerrten Bild. Die Kamera war beim Fokussieren bewegt worden; das
+zunächst bestätigte Raster darf für diese Bilder nicht mehr gelten.
+Ohne `auf3` scheitert der Fold mit nur `auf2` als Trainingsgruppe noch
+bei vier Zeichen um je einen Punkt. `auf2` war bewusst weich geerntet;
+ob allein die Unschärfe diese Abweichungen erklärt, bleibt offen
+([OQ-42](open-questions.md#oq-42)).
+
+**Deutung:** Die Gegenprobe hat eine Auswertung mit unpassendem Raster
+verhindert. Weder ROM-Tabelle noch Schwellen wurden angepasst. Für echte
+Daten gibt es noch keine Fehler- oder Ablehnungsrate; die synthetische
+Störprobe aus der Abschlussprüfung ist nur eine Entwicklungsdiagnose
+(Zahlen in [VALIDATION.md](VALIDATION.md)). Vor einer Wiederholung muss
+`auf3` ein belegtes Raster erhalten; über eine mögliche ROM-Toleranz bei
+weichen Bildern ist anhand der Glasbilder zu entscheiden.
+
+**Artefakte:** Task-7-Bericht und `final-fix-brief.md` unter
+`.superpowers/sdd/2026-09-24-dotmatrix-reader/` (lokal ignoriert),
+Chat-Exporte `codex_main.txt`/`codex_subagent.txt` im Haupt-Checkout.
+Der letzte Claude-Subagent endete wegen API-Limit während einer
+uncommitteten Korrekturrunde. Diese Änderungen sind keine abgeschlossene
+Messung und kein freigegebener Codezustand.
+
+## 2026-09-25 — Dot-Matrix-Leser fertig gebaut, Entwicklungsmessung hängt an Schärfe
+
+Nach dem Sessionlimit übernommen: Korrekturwelle der Abschlussprüfung
+abgeschlossen (u. a. `NaN`-Schwellen in `templates.json` hätten jede Zelle
+durchgelassen), geseedeter Sicherheitstest mit 300 gestörten Werten: 0
+falsch. Nutzerentscheidung zu OQ-42: `auf3` auf einem Erntebild neu
+bestätigt, Gegenprobe mit 1 Punkt Toleranz (`rom_check_v2`). Bei der
+Umsetzung zeigte sich, dass meine Spec-Angabe „erkennt ≥ 40 % falsche Labels"
+nicht stimmte — die Gegenprobe vergleicht Mittelwerte und schlägt erst bei
+einer Mehrheit an (≈ 60 %); korrigiert.
+
+Die vorab festgelegte Messung bricht trotzdem ab: die zwei weichen
+Aufstellungen zusammen lassen die Diagonale der `4` zulaufen (3 Punkte). Die
+Diagnose über alle Kombinationen zeigt nie einen falschen Wert; eine
+Kombination erfüllt das Ziel schon (`ernte1`+`auf2` → `auf3`: 67 richtig, 6
+abgelehnt), die anderen lehnen alles ab. Schluss: Das Training braucht mehr
+Aufstellungen mit ähnlicher, guter Schärfe; weiche Aufstellungen eignen sich
+als Testmaterial für Ablehnung, nicht als alleinige Vorlagenquelle. Zahlen:
+VALIDATION.md, 2026-09-25.

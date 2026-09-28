@@ -3,6 +3,370 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-25 (Kamerawechsel: Logitech StreamCam statt IMX500)
+
+**Problem:** Die IMX500 (AI Camera) blieb beim Streamstart hängen
+(OQ-22, RP2040-Brücke) und fiel am 2026-09-25 zusätzlich mitten im Stream
+aus; Fokus nur mechanisch, AI-Funktionen ungenutzt. Nutzerentscheidung
+2026-09-25: offizieller Wechsel auf die Logitech StreamCam (USB, UVC).
+Spec: `docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`,
+Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
+
+**Änderung:**
+* Zeitbasis (Task 1): `TimeBaseKind.V4L2_MONOTONIC` für die rohen
+  V4L2-Pufferzeitstempel der UVC-Kamera und `to_boottime_ns()` in
+  `src/dispread/records.py` als einzige Umrechnung nach CLOCK_BOOTTIME
+  (Versatz aus `session.json`, Ablehnung bei fehlendem Versatz, Suspend
+  > 1 ms oder Zeitbasis ohne BOOTTIME-Bezug). `gate-label.py` und
+  `display-offset.py` rechnen darüber um; alte `sensor_boottime`-Sessions
+  unverändert. Tests: `tests/test_records.py`, `tests/test_gate_label.py`,
+  `tests/test_display_offset.py`, `tests/test_import_harvest.py`.
+* Bildquelle (Task 2): `src/dispread/camera_settings.py` (`CameraSettings`:
+  Modell, USB-ID, Größe, FourCC, fps, Pflicht-Controls; feste Reihenfolge
+  Automatiken aus → feste Controls → Einstellwerte) und
+  `src/dispread/frames/uvc_source.py` (`UvcSource` für `v4l2://`: Gerät
+  per USB-ID über sysfs, OpenCV-V4L2-Capture, Controls über `v4l2-ctl`
+  mit Rücklesen und Abbruch bei Abweichung, Größenprüfung, Zeitstempel
+  `v4l2_monotonic` roh, Verwerfen von Null-/Rückwärts-Zeitstempeln,
+  Ende nach 2 s ohne Bild). `picamera2://`/`imx500://` aus der Registry
+  entfernt, Aufruf meldet „IMX500 ausser Betrieb seit 2026-09-25".
+  Tests: `tests/test_camera_settings.py`, `tests/test_uvc_source.py`,
+  `tests/test_frames_registry.py`.
+* Aufnahme (Task 3): `scripts/sync-record.py` nimmt mit `--source camera`
+  über `UvcSource` auf (`--camera-settings` Pflicht, `--camera-device`
+  optional). Entfernt: Picamera2-Zweig, Streamstart-Budget (Exit 5,
+  Zählerdatei, Kernel-Log-Zählung), `--scaler-crop`, 960×720-Sperre,
+  `--allow-large-sensor-mode`. Neu in `session.json`: `camera`
+  (Einstellungen und Rücklesewerte), `clock_offset_boottime_minus_monotonic_ns`
+  (Median aus 5 Messungen, Start und Ende), `frame_gaps` (Lücken
+  > 1,5 × Bildabstand), `usb_speed_warning`, `frame_writer_finished`.
+  Fehler behoben: `frames_recorded` zeigt nach einem Kameraausfall mitten in
+  der Aufnahme die tatsächlich geschriebenen Bilder statt 0. Tests:
+  `tests/test_sync_record.py` (IMX500-Tests entfernt).
+* Einrichtung (Task 4): `SessionProfile` Schema 3 mit Block `camera`
+  (`CameraSettings`), bei v3 fest `scaler_crop = null`, `native_scale = 1.0`;
+  v2-Profile (IMX500) bleiben lesbar und werden unverändert serialisiert.
+  Neu `src/dispread/focus_sweep.py` (Laplace-Schärfe, Fokus-Sweep grob →
+  fein) und `harvest-setup.py focus` (Fokus per Software, Belichtung und
+  Weißabgleich einmal automatisch, dann eingefroren, `camera-settings.json`
+  + Kontrollbild). `propose` verlangt `--camera-settings` statt
+  `--session-json`/`--scaler-crop`, `confirm` schreibt Profil v3 und
+  verweigert Vorschläge ohne Kameraeinstellungen; `--assume-native-scale`
+  und die Binning-Rechnung entfallen. Tests: `tests/test_session_profile.py`,
+  `tests/test_focus_sweep.py`, `tests/test_harvest_setup.py`
+  (Profil-Hilfen in den Datensatz-/Trainingstests auf explizit v2 gestellt).
+* Zeitbezug der Ernte (Task 5): `src/dispread/timing_calibration.py` und
+  `scripts/timing-calibration.py` bauen aus `display-offset.py`-Berichten
+  eine Kalibrierdatei `var/calibration/timing-streamcam.json` (M = größter
+  M-Wert der erkannten Populationen, mit sha256 der Quellberichte; ohne
+  erkannte Population Abbruch). `harvest.py` verlangt diese Datei
+  (`--calibration`), nimmt M daraus, prüft die USB-ID gegen das Profil,
+  gibt die Kameraeinstellungen des Profils an `sync-record` weiter und
+  lehnt IMX500-Profile (v2) ab; `--guard-margin-ms` und der alte Vorgabewert
+  695 ms entfallen. Tests: `tests/test_timing_calibration.py`,
+  `tests/test_harvest.py`.
+- **Task 6 — Werkbank-Kamera außer Betrieb, Inbetriebnahme, Hardwaretest:**
+  Der Kamerathread der Werkbank importiert `picamera2` außerhalb von
+  `--simulate` nicht mehr; er meldet über den bestehenden Fehlerkanal
+  „Kamera der Werkbank ausser Betrieb … Simulationsmodus (--simulate)
+  nutzen" und liefert keine Bilder (StreamCam-Anbindung folgt).
+  `scripts/camera-commissioning.sh` prüft jetzt die StreamCam: `v4l2-ctl`,
+  Gerät 046d:0893, USB3-Geschwindigkeit, YUYV 1920x1080, Fokus-Controls
+  setzen und zurücklesen, Testbild nach
+  `var/diagnostics/camera-commissioning/test.png`. Neuer Hardwaretest
+  `tests/test_uvc_hardware.py` (nur `--mode=real`): 30 Bilder, streng
+  monotone Zeitstempel, Controls-Rücklesung.
+- **Task 6, Nachbesserung nach dem ersten Lauf an der echten StreamCam:**
+  `camera-commissioning.sh` durchsucht den YUYV-Block jetzt vollständig
+  (die StreamCam listet sieben Bildraten je Größe, das feste
+  `grep -A 40` fand 1920x1080 nicht) und setzt `focus_automatic_continuous`
+  und `focus_absolute` in getrennten Aufrufen. Im selben Aufruf schlug
+  `focus_absolute` bei noch aktivem Autofokus mit EIO fehl. Hardwaretest:
+  `itertools.pairwise` statt `zip(..., strict=True)`. Gemessen 2026-09-28:
+  Skript Exit 0 (6/6 OK, USB3), `pytest --mode=real tests/test_uvc_hardware.py`
+  grün.
+- **Task 7 — Befunde des Abschlussreviews:** Der Kamerazweig von
+  `sync-record.py` liest jetzt jedes Bild und dünnt erst beim Schreiben
+  nach Zeitstempel auf `--frame-rate` aus. Vorher drosselte ein Sleep das
+  Lesen, die StreamCam verwarf Bilder und `frame_gaps` zählte fast jedes
+  Bild als Lücke. `--frame-rate` über der Kamera-fps wird abgelehnt.
+  `UvcSource.open()` liest alle gesetzten Regler zurück (auch Automatiken,
+  Zoom/Pan/Tilt, Netzfrequenz), prüft ein explizit angegebenes Gerät gegen
+  seine USB-ID und meldet eine belegte Kamera klar statt als „0x0".
+  `timing-calibration.py` prüft die Kamera-Herkunft jedes Versatzberichts
+  über `session.json` (`camera.usb_id`); ein IMX500-Bericht wird
+  abgelehnt. Profile: v3 ohne bzw. mit `camera: null` und v2 mit
+  `camera`-Feld werden abgelehnt. `harvest.py` hasht die Kalibrierung aus
+  denselben Bytes, aus denen es sie liest; Lesefehler der Kalibrierung
+  enden als Meldung statt Traceback. `gate-label.py` und
+  `display-offset.py` überspringen `frames.jsonl`-Zeilen mit
+  `dropped: true` statt mit `KeyError` abzubrechen (Fehler seit
+  2026-09-23). `camera-commissioning.sh` prüft die Größe des Testbilds.
+- **Task 7, Nachbesserung nach der Probeaufnahme an der StreamCam:** Das
+  Ausdünnen läuft jetzt nach festem Zeitplan mit einer Toleranz von einem
+  halben Kamera-Bildabstand. Vorher zählte der Abstand zum letzten
+  geschriebenen Bild, und das Zeitstempel-Zittern ließ oft erst das Bild
+  nach 100 ms durch. Gemessen 2026-09-28, 10 s mit `--frame-rate 15`:
+  vorher 97 Bilder (68–100 ms Abstand), nachher 137 Bilder (überwiegend
+  64/68 ms), jeweils `frame_gaps.count = 0` und kein Drop.
+- **Doku:** Entscheidung mit verworfenen Alternativen in
+  `docs/project_history.md`. Abweichungsvermerk in `Konzept.md` (§1, §5).
+  `CLAUDE.md` beschreibt die StreamCam als aktive Kamera; die IMX500-Fakten
+  sind als historisch markiert. OQ-22 hat einen Nachtrag („für den Betrieb
+  gegenstandslos"), neu ist OQ-43 (Semantik des UVC-Zeitstempels).
+  Hardwarebefunde vom 2026-09-28 in `VALIDATION.md`. `status.md`,
+  `ROADMAP.md` und `TODO.md` sind auf dem neuen Stand;
+  `CAMERA_COMMISSIONING.md`, `HARDWARE_PROFILE.md` und `TIMING.md` tragen
+  einen Hinweis zur StreamCam.
+- **Task 8 — `display-offset.py --profile`:** Neu ist die Option
+  `--profile`. Sie nimmt das Quad aus einem bestätigten Sitzungsprofil,
+  statt es über die Sättigungssuche zu bestimmen (schließt sich mit
+  `--hint-box` aus, eine der beiden ist Pflicht). Anlass: An der
+  StreamCam-Aufstellung `sc1` (2026-09-28) grenzte die Sättigungssuche das
+  Glas nicht von Blende und Reflexen ab, die Spanne lag bei 0,025–0,054 bei
+  einer Grenze von 0,01. Die Stabilitätsgrenze bleibt unverändert. Bei
+  v3-Profilen muss `camera.size` zur Bildgröße passen. Der Bericht vermerkt
+  `quad_source` mit Profilpfad und sha256.
+- **Task 9 — `import-harvest.py` überspringt Drop-Zeilen:** Zeilen mit
+  `dropped: true` in `frames.jsonl` führten zum Abbruch mit `KeyError`.
+  Das fiel bei der ersten StreamCam-Ernte `sc1` auf (8 Drops wegen voller
+  Schreib-Warteschlange). Jetzt werden diese Zeilen übersprungen und als
+  `frames_jsonl_dropped_skipped` in `import.json` gezählt. Eine Zeile ohne
+  `file` und ohne `dropped` bleibt ein Fehler mit Zeilennummer.
+- **Messsitzung 2026-09-28 (Doku):** In `VALIDATION.md` sind die
+  StreamCam-Timing-Kalibrierung (M = 1225,8 ms, Nutzerentscheidung:
+  Maximum aus A + B + C) und die ersten beiden StreamCam-Ernten `sc1`
+  (Profil `sc1b`) und `sc2` festgehalten, mit 45 bzw. 58 importierten
+  Proben (Datensatz 492). Befund: `top`…`bottom` des Rasters umfasst
+  8 Zeilen einschließlich Cursorzeile, deshalb wurde `sc1` zu `sc1b`
+  korrigiert. `TODO.md` und `status.md` sind auf dem neuen Stand.
+- **Task 10 — Ausrichtungsprüfung Ernte ↔ Profilbild:** `harvest-setup.py
+  confirm` speichert das Profilbild als `reference_frame` (Pfad und
+  sha256) im Profil. `import-harvest.py` schätzt für jedes ausgewählte Bild
+  per ORB und RANSAC-Ähnlichkeitstransformation die Verschiebung gegenüber
+  dem Profilbild (`src/dispread/frame_alignment.py`). Wandern die Quad-Ecken
+  um mehr als `--max-shift-dot-columns` (0,5 Punktspalten), wird das Bild
+  als `ausschnitt_verschoben` abgelehnt, ist die Schätzung unzuverlässig,
+  als `ausschnitt_unpruefbar`. Ohne `reference_frame` oder bei geänderter
+  Prüfsumme bricht der Import ab (`--no-alignment-check` schaltet die
+  Prüfung ab und vermerkt das in `import.json`). Anlass: Die Ernten `sc1`
+  und `sc2` vom 2026-09-28 waren durch Bewegung der Kamera verschoben
+  (≈ 105 px bzw. +7 → −11 px). Ihre 103 Proben wurden trotzdem importiert
+  und dann wieder aus dem Datensatz genommen (`var/removed-20260928-sc/`).
+<!-- streamcam-bullets -->
+
+**Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
+ScalerCrop) sind außer Betrieb; vor der ersten StreamCam-Ernte ist eine
+Timing-Kalibrierung Pflicht.
+
+## 0.1.0.dev0 — 2026-09-24 (Dot-Matrix-Leser, Phase 2)
+
+**Problem:** Für die Punktraster-Anzeige des GSV-2AS gab es keinen Leser,
+der Zeichen erklärbar liest und im Zweifel ablehnt (`tesseract_cli` las
+0/11 Proben). Spec: `docs/superpowers/specs/2026-09-24-dotmatrix-reader-design.md`,
+Plan: `docs/superpowers/plans/2026-09-24-dotmatrix-reader.md`.
+
+**Änderung:**
+* `src/dispread/ocr/dotmatrix_font.py` (Task 1): HD44780-Zeichensatz (ROM
+  A00) als 5×8-Bitmuster für Ziffern, `.`, `+`, Leerzelle (dazu `-`/`°` für
+  Ablehnungstests) und `rom_vector()`; Gegenprobe für gelernte Vorlagen.
+  Tests: `tests/test_dotmatrix_font.py`.
+* `src/dispread/ocr/dotmatrix_sampling.py` (Task 2): Punktmitten je Zelle
+  aus dem bestätigten `CharGrid`, gewichtete Abtastung (Gaussfilter +
+  bilinear, am Bildrand geklemmt), Normierung je Bild mit multiplikativem
+  Beleuchtungsmodell (Hintergrund je Zelle, Punktpegel mit dem Hintergrund
+  skaliert, damit ein Helligkeitsverlauf über das Glas ausgeglichen wird) und Verschiebungssuche ±1 px (`SHIFTS`, 9 Lagen);
+  `MIN_CONTRAST = 0.08` als unvalidierter Vorabwert. Tests:
+  `tests/test_dotmatrix_sampling.py`, Helfer `tests/dotmatrix_helpers.py`.
+* `src/dispread/ocr/dotmatrix_templates.py` (Task 3): Vorlagen je Zeichen
+  (Mittelwert und Streuung je Punkt), diagonal gewichteter Abstand,
+  Zellentscheid mit Ablehnung (`zelle_unbekannt`, `zelle_mehrdeutig`),
+  Schwellenformel `thresholds_v1` nur aus Trainingsdaten, ROM-Gegenprobe
+  (Training bricht bei Abweichung ab) und Speichern/Laden mit SHA-256,
+  Formatversion und Formelkennung. Tests: `tests/test_dotmatrix_templates.py`.
+* `src/dispread/ocr/dotmatrix.py`, `src/dispread/layout.py`,
+  `src/dispread/ocr/__init__.py` (Task 4): `DotMatrixReader` (Leser-ID
+  `dotmatrix`) mit `CharLayout` (bestätigtes `CharGrid`, Einheit aus dem
+  Profil, Format `gsv2as_v1`, 9 klassifizierte Zellen). Liest Zellen 0–8,
+  lehnt mit benanntem Grund ab (`zelle_unbekannt`, `zelle_mehrdeutig`,
+  `kontrast`, `ueberbelichtet`, `format`, `vorzeichen`), prüft den ganzen
+  Wert gegen die Formatregel (0–2 unterdrückte Nullen, genau ein Punkt, 6
+  Ziffernstellen) und gibt nie einen negativen Wert aus.
+  `declares_confidence_calibrated = False`. `ValueReader.read` akzeptiert
+  jetzt `DisplayLayout | CharLayout`. Tests: `tests/test_dotmatrix_reader.py`.
+* `src/dispread/validate.py` (Task 5): `default_gate_config(backend_id,
+  **overrides)`. `sevenseg`/`tesseract_cli` unverändert; `dotmatrix` setzt
+  `min_margin`/`min_contrast` auf 0, weil der Leser seine eingefrorenen,
+  gemessenen Schwellen selbst anwendet — keine zweite, ungemessene Grenze.
+  Unbekannte Leser → `ValueError`. Tests: `tests/test_gate_config.py`.
+* `scripts/import-harvest.py`, neu `scripts/dotmatrix-dataset.py` (Task 6):
+  Der Import schreibt `profile_sha256`, `profile_quad`, `profile_grid` und
+  `harvest_run` in `label_origin_detail`, damit eine Probe ohne Nebendatei
+  auswertbar ist. `dotmatrix-dataset.py` lädt die seriell geernteten Proben
+  als Zellvektoren (`load_cell_samples`, Profil aus der Probe oder aus der
+  Zuordnungsdatei `write-map`, deren SHA-256 beim Laden geprüft wird),
+  Proben ohne Profil, mit abweichender Profil-Prüfsumme oder mit unbekannten
+  Zeichen werden gezählt und übersprungen. Echter Datensatz: 301 Proben,
+  alle mit Profil (`ernte1` 152, `auf2` 76, `auf3` 73). Tests:
+  `tests/test_dotmatrix_dataset.py`, `tests/test_import_harvest.py`.
+* neu `scripts/dotmatrix-train.py`, `scripts/dotmatrix-eval.py` (Task 7):
+  Training aus gewählten Aufstellungen (Exit 3 und keine Datei bei
+  ROM-Abweichung, mit gelerntem und ROM-Muster in der Ausgabe) und
+  Entwicklungsmessung `loo` (je Aufstellung zurückgehalten, Schwellen nur
+  aus den übrigen; `--exclude-groups`/`--exclude-reason` schliesst
+  Aufstellungen mit Begründung im Bericht aus; Ergebnis je Probe `richtig`/`falsch`/`abgelehnt:<grund>`,
+  Verwechslungsmatrix, Plateaus, Herkunft, Formel, Commit) sowie
+  `reader-check` (kompletter Leser gegen die Messung auf echten Bildern).
+  `dotmatrix-dataset.py` liefert dafür `load_resolved_records`,
+  `dotmatrix_templates.binarized_pattern` die Musterausgabe. Tests:
+  `tests/test_dotmatrix_train_eval.py` (u. a. Leckagetest: Proben der
+  zurückgehaltenen Gruppe ändern deren Schwellen nicht).
+* Abschlussprüfung, Korrekturwelle: `load_templates` lehnt nicht endliche
+  oder nicht positive Schwellen und ungültige Streuungen ab (vorher hätte
+  eine beschädigte Datei mit `NaN` jede Zelle durchgelassen);
+  `DotMatrixReader.from_file` und `reader-check` verlangen die Prüfsumme.
+  `CharLayout.from_profile` weist Profile mit `resolution_ok=False` oder ohne
+  `confirmed_by` ab, der Lader zählt sie als `profil_unbestaetigt`. Der Leser
+  prüft zusätzlich, dass Zellen 13–15 leer sind (sonst `format`); die
+  Einheit in Zellen 9–12 wird weiterhin nicht gelesen. Unbekanntes
+  `format_id` wird abgewiesen. Neuer geseedeter Sicherheitstest (300 gültige
+  Werte mit Rasterversatz, Unschärfe, Rauschen und Helligkeitsverlauf):
+  jeder Wert richtig oder abgelehnt, keiner falsch. Loo-Bericht:
+  `lade_zaehler`, `herkunft`, `hinweis` (Zellen 13–15 nur im
+  `reader-check` geprüft). `default_gate_config` benennt, dass die
+  Konfidenz für `dotmatrix` aus Abstandseinheiten stammt.
+
+* ROM-Gegenprobe `rom_check_v2` (Nutzerentscheidung OQ-42): höchstens ein
+  abweichender Punkt je Zeichen, sonst Abbruch; `templates.json` trägt
+  `rom_check` und `rom_deviations`, `FORMAT_VERSION` 2 (alte Dateien werden
+  abgewiesen). Gegenprobe erkennt systematische Fehler (Mehrheit einer
+  Klasse, synthetisch ab ≈ 60 %), keine vereinzelten falschen Labels — in
+  der Spec korrigiert. Tests in `tests/test_dotmatrix_templates.py`.
+
+**Konsequenz:** Der Leser ist gebaut und lehnt im Zweifel ab (synthetisch: 0
+falsch freigegebene Werte). Die Entwicklungsmessung auf echten Daten ist
+noch nicht gelaufen: die ROM-Gegenprobe scheitert an Aufstellung `auf3`
+(Kamera nach der Profilbestätigung verschoben) und am weichen `auf2`
+(OQ-42). Freigabe erst nach Stufe 1 und der einmaligen Abnahme (Stufe 2).
+
+## 0.1.0.dev0 — 2026-09-24 (Führende Nullen: zwei statt einer)
+
+**Problem:** Das GSV-2AS-Telegramm trägt immer sechs Ziffern; bei
+`dpoint = 1` und Werten unter 1000 kommen zwei führende Nullen vor
+(`+00988.5`). Die Anzeige zeigt dafür zwei Leerzellen. `gate-label.py` und
+`import-harvest.py` entfernten nur eine Null — das Label wäre `+0988.5 mV/V`
+gewesen (OQ-41-Nachtrag). Gefunden in der Stichprobe vor dem Import.
+
+**Änderung:** `telegram_to_display_text()` und `_cell_text_for_telegram()`
+unterdrücken alle führenden Nullen des Ganzzahlteils bis auf die Stelle vor
+dem Punkt; mehr als zwei (unbelegt) werden abgelehnt und als
+`fuehrende_nullen_ungeprueft` gezählt. `label_normalization` jetzt
+`gsv2as_leading_zero_v2`. Tests in `tests/test_gate_label.py` und
+`tests/test_import_harvest.py`.
+
+**Konsequenz:** Aufstellung 3 wurde offline neu gelabelt (nur die 32 Bilder
+mit `+00988.5` ändern sich). Bisher importierte Proben sind nicht betroffen.
+
+## 0.1.0.dev0 — 2026-09-24 (Ernte 1: erste echte Ernte mit Import)
+
+**Problem:** Die Ernte-Kette (`harvest-setup.py`, `harvest.py`,
+`import-harvest.py`) war nur gegen Attrappen geprüft; der Datensatz enthielt
+keine seriell gelabelten Proben. Um 11:11 blockierte zudem die Kamerabrücke
+beim 8. Start des Boots (OQ-22-Nachtrag).
+
+**Änderung:** Kein Code geändert. Nach Neustart eine Ernte mit 30 Schritten
+à 4 s gefahren: 2835 Bilder, 837 gelabelt, 81 importiert (Datensatz 88 →
+169). Doku: `docs/VALIDATION.md` und `docs/lab_journal.md` („Ernte 1"),
+OQ-39-Nachtrag, Status der Tasks E/F/G im Auto-Labeling-Plan, Task 7 im
+Plan Ernte Phase 1 abgehakt, `docs/status.md`, `TODO.md`.
+
+**Konsequenz:** Die Kette läuft Ende zu Ende gegen echte Hardware. Weitere
+Ernten brauchen je nur einen Streamstart, solange die Kamera steht. Offen:
+Vorzeichenstelle, endgültige Gap-Schwellen (OQ-40), Ziffernlücken je Zelle
+(OQ-39).
+
+## 0.1.0.dev0 — 2026-09-24 (Task 6: ScalerCrop, Winkel, Auflösungsschwelle)
+
+**Problem:** Für die erste Ernte fehlten Fokus, ein Sensorausschnitt um die
+Anzeige und die Auflösungsschwelle `resolution_threshold_px`; die Kamera
+war seit gestern blockiert (OQ-22). Beim Prüfen der Overlays kam zudem der
+Verdacht auf, `harvest-setup.py propose` entzerre gespiegelt.
+
+**Änderung:**
+* Kamera nach nächtlicher Abschaltung wieder funktionsfähig; sechs
+  Streamstarts, Fokus nachgestellt, ScalerCrop 1920×1440 (1:1 nativ im
+  2028×1520-Modus), drei Stellungen gemessen. Schwelle 2,6 px vom Nutzer
+  festgelegt (Plan Ernte Phase 1, Entscheidung 7). Zahlen in
+  `docs/VALIDATION.md`, Verlauf in `docs/lab_journal.md`, Nachträge zu
+  OQ-22 und OQ-40, `docs/status.md` und `TODO.md` nachgezogen.
+* Spiegelverdacht geprüft, nicht bestätigt: die Eckenreihenfolge
+  (`dispread.rectify._order_quad`) ist in allen Aufrufern gleich. Neu
+  `tests/test_harvest_setup.py::test_propose_rectified_image_is_not_mirrored`
+  mit asymmetrischem Muster; der bisherige Test hätte eine Spiegelung nicht
+  bemerkt.
+
+**Konsequenz:** Task 7 (erste echte Ernte) ist frei. Die Lichtspiegelung
+auf dem Glas schneidet die automatische Glaserkennung ab und muss vorher
+beseitigt oder per Hand-Quad umgangen werden.
+
+## 0.1.0.dev0 — 2026-09-23 (OQ-Übersicht und Fokus-Übergabe)
+
+**Problem:** Der Einstieg in neue Agenten-Sitzungen las die ganze
+`docs/open-questions.md` (> 100 KB) und mehrere alte Changelog-Einträge.
+Beim Fokusversuch scheiterte zudem nach einem erfolgreichen Commissioning-Bild
+der nächste Streamstart; nach Warmreboot scheiterte sogar der erste Start des
+Boots (OQ-22). Es gab kein Fokusbild und keine Schärfemessung.
+
+**Änderung:**
+* `scripts/oq-index.py` erzeugt eine Übersicht (Nummer, Status, Titel) am
+  Anfang von `docs/open-questions.md`; `--check` und
+  `tests/test_oq_index.py` melden eine veraltete Tabelle.
+* `CLAUDE.md` und `AGENTS.md` verweisen auf gezielte Lektüre und die
+  Aktualisierung der OQ-Übersicht. Nicht mehr genutzte Claude-Plugins wurden
+  in `.claude/settings.json` deaktiviert.
+* Die zwei Fokus-Fehlversuche, Boot-IDs, Kernelbefunde und der Wiedereinstieg
+  nach einem möglichen Stromzyklus stehen in `docs/status.md`,
+  `docs/VALIDATION.md`, `docs/lab_journal.md` und OQ-22. Die Rohdiagnosen
+  liegen lokal unter `var/diagnostics/focus-handoff-2026-09-23/`.
+
+**Konsequenz:** Die nächste Sitzung kann gezielt beginnen. Ein Warmreboot ist
+keine belegte Abhilfe; bis zur Nutzerentscheidung über den Stromzyklus gibt
+es keinen weiteren Kamerastart. Die OQ-Tabelle muss bei neuen oder geänderten
+Status-Einträgen neu erzeugt werden.
+
+## 0.1.0.dev0 — 2026-09-23 (Lauf ohne Bilder, Auflösungs-Gate nativ, Streamstart-Budget)
+
+**Problem:** Beim Winkelversuch blockierte die Kamera wieder (OQ-22). Das war
+der 21. Streamstart des Boots, nach 20 erfolgreichen. `sync-record.py` meldete
+den Lauf mit 0 Bildern trotzdem als „vollständig" (Exit 0). Ausserdem mass
+das Auflösungs-Gate im hochgerechneten Ausgabebild. Mit engem `ScalerCrop`
+auf dem 2×2-gebinnten Sensormodus überschätzte es die echte Auflösung.
+
+**Änderung:**
+* `scripts/sync-record.py`:
+  * Kommt 5 s lang kein erstes Bild (`STARTUP_TIMEOUT_S`) oder bleibt es bei
+    0 Bildern, wird `acquisition_error` mit Verweis auf OQ-22 gesetzt und der
+    Lauf endet mit **Exit 4**. Der hängende Thread wird nicht abgewürgt, die
+    Rückstellung nach `--norm-schedule` läuft trotzdem.
+  * Neu ist ein **Streamstart-Budget** je Boot, `--stream-budget`, Vorgabe
+    15. Gezählt wird aus `journalctl -k -b` bzw. `dmesg` (`Using a link
+    rate`, Zeilen innerhalb von 2 s gelten als ein Start). Rückfall ist eine
+    Zählerdatei je `boot_id`.
+  * Vor dem Öffnen der Kamera gilt **Exit 5**, wenn das Budget erschöpft ist
+    oder dieser Boot schon ein `stream on failed` zeigt. Drei Starts vorher
+    gibt es eine Warnung, `--override-stream-budget` hebt die Sperre auf.
+  * `session.json` trägt `sensor_mode_size` und `sensor_array_size`.
+* `scripts/harvest-setup.py`: `propose --session-json` rechnet `native_scale`
+  = min(1, (Crop-Breite / Binning) / Ausgabebreite) und
+  `min_native_dot_column_px`. `confirm` prüft den nativen Wert und verlangt
+  ohne Sitzungsdaten ausdrücklich `--assume-native-scale`.
+* `src/dispread/session_profile.py`: Schema 2 mit `native_scale` und
+  `min_native_dot_column_px`. Schema 1 wird mit einer klaren Meldung
+  abgelehnt.
+
+**Konsequenz:** Ein blockierter Sensor fällt jetzt laut auf, und die Kamera
+wird vor dem Grenzbereich von 20–25 Starts nicht mehr geöffnet. Frontal mit
+Crop 1195 ergibt das ≈ 0,62 × 7,3 ≈ 4,5 native px je Punktspalte.
 ## 0.1.0.dev0 — 2026-09-24 (ersten Codex-Doku-Publish abgenommen)
 
 **Problem:** Der automatische Publish-Pfad war bisher nur in Teilstuecken

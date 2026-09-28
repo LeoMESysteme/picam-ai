@@ -33,3 +33,7 @@ Work on roi and ocr box selection/editing and confirmation ux is still confusing
 --> think how this ui/ux workflow can be optimized. (are there testing pipelines that can check if ux/ui interactions are ideal? a pipeline complex pipeline would help catch this at the source and make development more efficent)
 -> ocr automatic box placement is already working but is often slightly offset, needing user editing, otherwise the detection has no accuracy (think how this can be improved)
 -> ocr detection also currently has no selection process like roi, where multiple screens can be detected and one can be selected and confirmed.
+
+
+## Optimization
+- code cleanup (simplification of complex functions, clear dead code, refactor, etc...)

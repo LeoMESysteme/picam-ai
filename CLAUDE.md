@@ -8,13 +8,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    genug Kontext zum Wiedereinstieg ohne Recherche. Wenn dort ein Blocker
    ganz oben steht (z. B. „Pi braucht einen Reboot"), gilt der zuerst.
 1. [docs/status.md](docs/status.md) — aktueller Stand, Blocker, nächste Schritte
-2. [docs/open-questions.md](docs/open-questions.md) — was offen ist und warum
+2. [docs/open-questions.md](docs/open-questions.md) — **nur die Übersichtstabelle
+   oben** (zwischen `OQ-INDEX`-Markern, ≈ 3,5 KB; die ganze Datei hat > 100 KB).
+   Einzelne Einträge gezielt öffnen: `grep -n '^## OQ-22' docs/open-questions.md`
+   und ab dieser Zeile lesen
 3. [AGENTS.md](AGENTS.md) — verbindliche Daueranweisungen, inkl. Doku-Pflicht
-4. [Konzept.md](Konzept.md) — **autoritativ** für alle Anforderungen (deutsch)
-5. [CHANGELOG.md](CHANGELOG.md) — die letzten drei Einträge
+4. [Konzept.md](Konzept.md) — **autoritativ** für alle Anforderungen (deutsch).
+   Vor jeder Änderung am Messpfad oder an Verhalten lesen, für reine Doku- und
+   Werkzeugaufgaben nicht nötig
+5. [CHANGELOG.md](CHANGELOG.md) — nur der oberste Eintrag (mit Zeilenlimit
+   lesen, die Datei hat > 150 KB). Ältere Einträge über `grep -n '^## ' CHANGELOG.md`
 
 Die Doku-Pflicht steht in `AGENTS.md` und wird hier absichtlich **nicht**
 dupliziert, damit sie nicht auseinanderläuft.
+
+## Arbeitsweise für Agents
+
+* **Prozess-Skills** (Brainstorming, Pläne, subagentengetriebene Umsetzung mit
+  Reviews) nur für mehrstufige Features. Kleine Fixes, Doku-Nachträge,
+  Diagnosen und Fragen werden direkt erledigt, ohne diesen Ablauf.
+* **Suchen:** gezielt mit `grep` und `Read`. Breite Suchen über viele Dateien
+  gehen an einen Explore-Subagenten, damit die Dateiinhalte nicht im
+  Hauptkontext landen.
+* **Repowise:** Bash-Ausgaben von Tests, Lint und `git log` werden automatisch
+  gekürzt. Ein Marker `[repowise#<ref>: …]` lässt sich **im Repo-Verzeichnis**
+  mit `repowise expand <ref>` zurückholen. `grep`, `git diff` und `ls` bleiben
+  absichtlich ungekürzt. Die MCP-Tools (`get_risk`, `get_health`, `get_why`)
+  nur bei ausdrücklichem Bedarf; `get_answer` ist abgeschaltet, weil es ein
+  LLM-Umweg ist.
 
 Für den menschlichen Entwickler liegt unter
 [docs/anleitung/](docs/anleitung/README.md) ein Lernpfad, der die offenen
@@ -28,7 +49,7 @@ aktualisiert — insbesondere seine „Fertig, wenn"-Checkliste.
 ./.venv/bin/pytest -q                          # Mock-Tests, kein Hardwarebedarf
 ./.venv/bin/pytest -q --mode=real              # zusätzlich @hardware und @serial
 ./.venv/bin/ruff check src tests examples
-./scripts/camera-commissioning.sh              # Kamera-Diagnose, Exit 0 = einsatzbereit
+./scripts/camera-commissioning.sh              # StreamCam-Diagnose, Exit 0 = einsatzbereit
 ./.venv/bin/python examples/16_end_to_end_headless.py   # ganze Kette ohne Hardware
 ```
 
@@ -42,7 +63,9 @@ python3 -m venv --system-site-packages .venv
 
 ## Was dieses Projekt ist
 
-Ein Raspberry Pi 5 mit Raspberry Pi AI Camera (Sony IMX500) liest die Anzeigen
+Ein Raspberry Pi 5 mit einer **Logitech StreamCam** (USB 3, UVC, `046d:0893`;
+seit 2026-09-25, vorher Raspberry Pi AI Camera / Sony IMX500, siehe
+[docs/project_history.md](docs/project_history.md)) liest die Anzeigen
 wechselnder Messverstärker (GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI, AST-Geräte)
 optisch aus und überträgt die Werte zeitgestempelt über eine serielle
 Schnittstelle an **GSVmulti**. Einsatz im Kalibrierlabor; Prüfling und Referenz
@@ -58,11 +81,14 @@ Die Verarbeitungskette aus Konzept.md §3, jede Stufe eine austauschbare
 Trennstelle:
 
 ```
-frames/    Bildquelle      synthetic:// [fertig] · replay:// [fertig, Clips mit
-                           einem Label je Clip] · picamera2:// imx500://
-                           folder:// video:// [nur Registry-Eintrag, TODO]
+frames/    Bildquelle      v4l2:// [fertig, StreamCam, UvcSource] ·
+                           synthetic:// [fertig] · replay:// [fertig, Clips mit
+                           einem Label je Clip] · folder:// video://
+                           [Registry-Eintrag] · picamera2:// imx500://
+                           [außer Betrieb seit 2026-09-25, gezielte Fehlermeldung]
 detect/    Anzeige finden  manual_roi [fertig, PRIMÄRPFAD]
-                           contour_heuristic · imx500_detector [TODO]
+                           contour_heuristic [TODO] · imx500_detector
+                           [außer Betrieb mit der IMX500]
 track      Nachführen      QuadTracker, begrenzte ECC-Nachregistrierung eines
                            bestätigten Quads gegen die Bestätigungsreferenz —
                            korrigiert das Quad, bevor damit entzerrt wird
@@ -81,9 +107,18 @@ records    ValueRecord (§8), Timestamp, TxReceipt — der stabile Vertrag [fert
 layout     Ziffernraster, kommt im Betrieb aus dem bestätigten Profil (§4) [fertig]
 ```
 
-`open_source()` kennt alle sechs URI-Schemata; `synthetic://` und `replay://`
-haben eine Implementierung, die übrigen vier scheitern mit `ImportError`. Was
-fertig ist und was nicht, führt [docs/ROADMAP.md](docs/ROADMAP.md) unter P0.
+`open_source()` kennt `v4l2`, `synthetic`, `replay`, `folder` und `video`;
+`picamera2://` und `imx500://` enden mit einer gezielten `ValueError`
+(„IMX500 außer Betrieb"). Was fertig ist und was nicht, führt
+[docs/ROADMAP.md](docs/ROADMAP.md) unter P0.
+
+**Zeitbasis der Kamera:** StreamCam-Bilder tragen den V4L2-Pufferzeitstempel
+in CLOCK_MONOTONIC (`TimeBaseKind.V4L2_MONOTONIC`, Semantik offen, OQ-43).
+Serielle Telegramme liegen in BOOTTIME. Verglichen wird nur über
+`records.to_boottime_ns` mit dem in `session.json` gemessenen Versatz; fehlt
+er, wird abgelehnt. Vor einer StreamCam-Ernte ist die Timing-Kalibrierung
+Pflicht (`scripts/timing-calibration.py` →
+`var/calibration/timing-streamcam.json`).
 
 Zentrale Verträge in [src/dispread/records.py](src/dispread/records.py):
 `ValueRecord` mit genau den neun Feldern aus Konzept §8, `status` als
@@ -91,20 +126,28 @@ Zentrale Verträge in [src/dispread/records.py](src/dispread/records.py):
 
 ## Erwartete Zustände, die keine Bugs sind
 
-* **Ohne angeschlossene Kamera:** `Picamera2.global_camera_info()` liefert `[]`
-  und `IMX500(...)` wirft `RuntimeError: IMX500: Requested camera dev-node not
-  found`. Der reine Import von `picamera2`/`IMX500` funktioniert trotzdem.
-* **`dtoverlay -l` meldet `No overlays loaded`, obwohl die Kamera läuft.**
-  `camera_auto_detect` wird von der Firmware beim Booten angewandt und
-  erscheint dort nicht. Nachweis ist der Sensorknoten im Device-Tree plus die
-  libcamera-Enumeration.
-* **`camera_auto_detect` greift nur beim Booten.** Nach dem Anstecken der
-  Kamera ist ein Reboot nötig.
+* **Die StreamCam hat zwei Knoten** (`index` 0 = Bilder, 1 = Metadaten), und
+  die Nummer (`/dev/video0`, früher `/dev/video8`) wechselt je nach
+  Steckreihenfolge. `find_uvc_device()` sucht über USB-ID und `index == 0`;
+  keine Knotennummer fest eintragen.
+* **Die Kamera der Werkbank (`dispread serve`) ist außer Betrieb**, bis die
+  StreamCam dort angebunden ist; sie meldet „Kamera der Werkbank ausser
+  Betrieb …". `--simulate` läuft.
+* **Nur ein Prozess kann die StreamCam halten.** Ein zweiter bekommt
+  „nicht zu öffnen (belegt?)".
+* **Die StreamCam übernimmt Regler auch ohne laufenden Stream**, und
+  `UvcSource` setzt sie bei jedem Öffnen neu. Nach einer Aufnahme stehen
+  Autofokus und Automatiken deshalb aus.
+
+*Historisch (IMX500, außer Betrieb):* Ohne angeschlossene Kamera liefert
+`Picamera2.global_camera_info()` `[]`; `dtoverlay -l` meldet `No overlays
+loaded`, obwohl die Kamera läuft; `camera_auto_detect` greift nur beim Booten.
 
 Neue Funktionalität muss über `folder://`, `synthetic://` oder `replay://`
-testbar sein — `picamera2` wird nur in den beiden Kameramodulen importiert, und
-zwar lazy in der Factory. Das ist die Voraussetzung dafür, dass Tests ohne
-Kamera laufen.
+testbar sein. `cv2` wird für `v4l2://` erst in der Factory importiert, und
+`UvcSource` nimmt Capture-Objekt und Regler-Funktionen injiziert entgegen.
+`picamera2` wird nirgends mehr importiert. Das ist die Voraussetzung dafür,
+dass Tests ohne Kamera laufen.
 
 ## Hardware-Fakten, die man leicht falsch annimmt
 
@@ -112,14 +155,19 @@ Kamera laufen.
   `ttyAMA10` und ist der **3-Pin-Debug-Header**, nicht der Nutzdatenport.
 * Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden werden
   ([OQ-09](docs/open-questions.md)).
-* Die 23 `.rpk` unter `/usr/share/imx500-models/` sind **COCO-/ImageNet-Modelle**
-  (`person`, `bicycle`, `tv`). Für Messverstärker-Displays taugen sie nicht —
-  deshalb ist die bestätigte manuelle ROI der Primärpfad.
-* IMX500-Warmlauf beim ersten `.rpk`-Upload: **6,8 s** gemessen. Der
-  *Converter* für eigene Modelle fehlt auf dem Pi, nur der *Packager* ist da.
-* `SensorTimestamp` liegt in der **CLOCK_BOOTTIME**-Domäne (gemessen). Die
-  *Semantik* — Belichtungsbeginn oder Auslese-Ende — ist noch offen (Messung M2
-  in [docs/TIMING.md](docs/TIMING.md)).
+* **StreamCam:** 1920×1080 nur in YUYV an einem **USB3-Port** (blau); an USB2
+  fällt sie auf kleinere Größen zurück, und `UvcSource` bricht ab. Fokus per
+  Software, `focus_absolute` = 48 am GSV-Aufbau am besten; Regler werden
+  über `v4l2-ctl` gesetzt, **Automatik zuerst aus, dann Absolutwert**. In
+  einem gemeinsamen Aufruf schlägt `focus_absolute` bei noch aktivem
+  Autofokus mit EIO fehl. Keine Treiber-Bildnummer (`CAP_PROP_POS_FRAMES` =
+  -1), Aussetzer zeigt `frame_gaps` in `session.json`. `BOOTTIME −
+  MONOTONIC` liegt ohne Suspend bei wenigen ns.
+* *Historisch (IMX500):* Die 23 `.rpk` unter `/usr/share/imx500-models/` sind
+  COCO-/ImageNet-Modelle, für Messverstärker-Displays untauglich; Warmlauf
+  beim ersten `.rpk`-Upload 6,8 s; `SensorTimestamp` in CLOCK_BOOTTIME
+  (gemessen, Semantik offen, M2 in [docs/TIMING.md](docs/TIMING.md));
+  Streamstart-Wedge der RP2040-Brücke (OQ-22).
 * **Die Anzeige des GSV-2AS ist über RS232 direkt steuerbar** — und das ist
   der Weg zu Ziffernvielfalt, nicht der Stimulus. `set norm` (16) skaliert
   die Anzeige (`Anzeige = Normierungsfaktor × Messwert`, Bereich

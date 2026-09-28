@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-23
+# TODO — Stand 2026-09-28
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,26 +9,85 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Kein Blocker mehr — die Kamera läuft
+## Zuerst: Dot-Matrix-Messung mit den StreamCam-Aufstellungen
 
-Der Kamerazweig von `scripts/sync-record.py` ist am 2026-09-23 erstmals
-erfolgreich gegen echte Hardware gelaufen (960×720, `create_video_configuration`,
-kein `stream on failed` im Kernel-Log). Regel bleibt trotzdem: **≤ 960×720**,
-kein Kill eines hängenden Kameraprozesses ([OQ-22](docs/open-questions.md)).
+Stand 2026-09-28: Timing-Kalibrierung steht (M = 1225,8 ms, Nutzerentscheidung
+A+B+C), zwei neue scharfe Aufstellungen geerntet und importiert: `sc1` (schräg,
+Profil `sc1b`, 45 Proben) und `sc2` (frontal, 58 Proben). Datensatz 492
+Proben, 404 davon geerntet in 5 Gruppen; Profil-Zuordnung
+`var/diagnostics/dotmatrix-profile-map.json` enthält alle 5. Details:
+VALIDATION.md 2026-09-28.
+
+1. **OQ-42 entscheiden (Nutzer):** Dürfen weiche Aufstellungen (`auf2`) aus
+   dem Training ausgeschlossen werden? Vor dem nächsten `loo`-Lauf festlegen.
+2. `dotmatrix-eval.py loo` mit 5 Gruppen laufen lassen, Ergebnis nach
+   VALIDATION.
+3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
+   solcher erscheint, statt den ganzen Lauf abzubrechen.
+
+Offene Befunde der Sitzung:
+* **M-9 bestätigt:** Der Fokus-Sweep misst nach großen Sprüngen ein veraltetes
+  Pufferbild; die Wahl stimmte trotzdem (Nachmessung). Fix: nach dem Setzen
+  lesen, bis der Pufferzeitstempel nach Setzzeit + `settle_s` liegt.
+* **Glasdetektor (`propose`, `glass`) scheitert an der StreamCam**
+  (Blende/Reflexe); beide Quads mussten von Hand bzw. über die Punktmitten
+  bestimmt werden. Ein Werkzeug für die Punktgitter-Anpassung wäre nützlich.
+* **Raster-Konvention:** `top`/`bottom` umfassen 8 Zeilen (inkl. Cursorzeile).
+  `propose` sollte das prüfen oder ein Overlay mit den Abtastpunkten zeigen
+  (so wie `overlay_sampling.png`, heute von Hand erzeugt).
+* **JPEG-Schreib-Warteschlange** läuft bei 1080p gelegentlich voll (bis
+  1,2 % verworfen). Größere Warteschlange oder schnellere Kodierung prüfen.
+* M-10 (eingefrorene Belichtung bei anderem Licht) ist noch nicht geprüft.
+
+Zurückgestellt aus dem Abschlussreview (bewusst, siehe `final-review.md`):
+Werkbank-Kamera an die StreamCam anbinden (heute außer Betrieb, toter
+Picamera2-Code in `controller.py`), Replay verliert die Zeitbasis (M-6).
+
+## Sicherung für `var/` einrichten
+
+`var/` gibt es nur einmal (gitignored, Worktree per Symlink). Nach der
+Löschung vom 2026-09-25 ist wiederhergestellt, was ging (alle 389 Proben,
+Profile, `devices.json`, Rückstellpunkt; `var/rescue-20260925/NOTES.md`).
+Verloren: Einzelbilder der Ernte-Aufnahmen, die meisten Diagnosebilder.
+`/home/me-systeme/picam-ai/.var_recovered` ist ausgewertet und kann weg.
+Erste Sicherung (gleiche SD-Karte, nur gegen versehentliches Löschen):
+`/home/me-systeme/var-backups/var-20260928-vor-import.tar` (vor den
+StreamCam-Importen). Zu tun: regelmäßige Sicherung von mindestens
+`var/workbench/datasets`, `var/diagnostics/*-profile*`, `var/calibration`
+auf ein **anderes Medium**.
+
+---
+
+## Hintergrund Dot-Matrix-Leser
+
+Leser fertig und geprüft (`rom_check_v2`, `auf3` neu bestätigt). Die vorab
+festgelegte Messung brach bisher im Durchgang „nur weiche Aufstellungen im
+Training" an der Gegenprobe ab; nie ein falscher Wert (VALIDATION.md
+2026-09-25, OQ-42). Seit 2026-09-28 gibt es zwei scharfe StreamCam-
+Aufstellungen dazu, siehe oben.
+
+---
+
+## Historisch (IMX500 außer Betrieb): Streamstarts sparen (OQ-22)
+
+Am 2026-09-24 blockierte die Brücke beim 8. Start eines Boots; nach Neustart
+liefen zwei Starts fehlerfrei. Jede Sitzung so planen, dass sie mit wenigen
+Starts auskommt: Kamera nicht verstellen, ScalerCrop aus **einem** Vollbild,
+Ernte direkt anschliessen.
 
 ---
 
 ## Wo wir stehen
 
 * Sollwertkanal (RS232 ASCII vom GSV-2AS) steht seit 2026-09-22.
-* Kamerazweig läuft seit heute; sechs Aufzeichnungen liegen vor, u. a. mit
-  `--norm-schedule` (Normierungssprünge live aus der offenen Portsitzung).
-* Task B (Versatz Telegramm ↔ Glas) hat erste Zahlen: δ zwischen +80 und
-  +116 ms über drei Aufzeichnungen, konsistent positiv (Glas nach Telegramm).
-  M-Formel liefert je Population 499–695 ms.
-* Zwei neue Befunde brauchen Entscheidungen, bevor geerntet wird: die
-  unterdrückte führende Null auf dem Glas (OQ-41) und ein Prozess-Stau mit
-  verfälschten Zeitstempeln (OQ-40-Nachtrag).
+* Kamera seit 2026-09-25: Logitech StreamCam (IMX500 außer Betrieb).
+  Aufnahme, Profil v3, Fokus per Software und Pflicht-Kalibrierung sind
+  gebaut und an der Hardware geprüft.
+* Task B (Versatz Telegramm ↔ Glas) hatte mit der IMX500 δ zwischen +80 und
+  +116 ms und M 499–695 ms. Für die StreamCam wird beides neu gemessen.
+* Führende Null (OQ-41) und SD-Schreibstau (OQ-40) sind behandelt; die
+  endgültigen Gap-Schwellen bleiben offen, blockieren die erste Ernte aber
+  nicht.
 
 Details: [docs/status.md](docs/status.md), alle Zahlen in
 [docs/VALIDATION.md](docs/VALIDATION.md) (2026-09-23), Herleitung in
@@ -48,7 +107,41 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
   [OQ-41](docs/open-questions.md) bleiben (b), die leere Zelle im Zellenraster
   des Lesers, und (c), negative Werte (ungeprüft).
 
-### 3. OQ-40: Gap-Schwellen festlegen (Stau selbst ist behoben)
+### 3. Erledigt 2026-09-24: Task 6, Fokus, ScalerCrop, Schwelle
+
+* Fokus nachgestellt, ScalerCrop 1920×1440 um die Anzeige → `native_scale = 1,0`.
+* Gemessen: frontal 3,36, „30°" (≈ 20°) 3,34, „45°" (≈ 23°) 2,68 native px
+  je Punktspalte. **`resolution_threshold_px = 2,6`**, vom Nutzer festgelegt
+  (Plan, Entscheidung 7).
+* Profile und Bilder: `var/diagnostics/task6-{frontal,30deg,45deg}-setup/`.
+  Der Ausschnitt gilt nur für die jeweilige Kameralage; nach jedem
+  Verstellen neu bestimmen (10-s-Vollbild, dann Ausschnitt).
+
+### 4. Erledigt 2026-09-24: Task 7, Ernte 1
+
+81 Proben importiert (VALIDATION.md, „Ernte 1"). Profil und Lauf:
+`var/diagnostics/ernte1-profile/`, `var/diagnostics/ernte1-run/`; Sicherung
+des Datensatzes davor: `var/backup-datasets-vor-ernte1-20260924T1159/`.
+
+**Nächste Schritte:**
+* **Stand Abend 2026-09-24:** 389 Proben, 301 geerntet aus 98 Zeichenketten
+  in 3 Aufstellungen, **Ziffernabdeckung vollständig** (VALIDATION.md,
+  „Aufstellung 3"). Vor jeder Ernte die Stichprobe ansehen — so wurde der
+  Zwei-Nullen-Fehler gefunden (OQ-41).
+* **Schärfe vor jeder Ernte prüfen:** die Schwelle 2,6 px lässt unscharfe
+  Aufstellungen durch. Fokus in einer eigenen Sitzung mit Ausschnitt und
+  Schärfemesser, Kamera dabei nicht bewegen.
+* Weitere Aufstellungen (Winkel, Abstand, Licht) für unabhängige Testgruppen;
+  ≤ 7 Starts je Boot, danach Neustart.
+* Weitere Ernten mit anderen `--seed`, um die Ziffernlücken je Zelle zu
+  schliessen (OQ-39-Nachtrag). Solange die Kamera nicht bewegt wird, gilt
+  `ernte1-profile/profile.json` weiter — dann ist jede Ernte **ein** Start.
+* Prüfen, warum nur ≈ 28 statt ≈ 39 Bilder je Schritt gelabelt werden
+  (`telegrammluecke` 1497): nur die Schreibpause oder auch zu knappe 800 ms?
+* Phase 2: Zellen-Klassifikator ist auf dem Feature-Zweig in Tasks 1–7
+  implementiert; echte Stufe-1-Messung und Freigabe stehen noch aus.
+
+### 5. OQ-40: Gap-Schwellen nachmessen (kein Ernte-Blocker)
 
 **Erledigt 2026-09-23:**
 * Ursache gemessen: Beim Zurückschreiben auf die SD-Karte blockieren die
@@ -60,21 +153,14 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 Zahlen: `docs/VALIDATION.md`, Eintrag „Stillstand beim Aufzeichnen".
 
-**Offen:** Werte für `--min-gap-ms` und `--max-gap-ms`. Beide Argumente
-haben bewusst keinen Vorgabewert. Datenlage unter Kameralast: alle Abstände
-529–536 ms, auch unter erzwungener Schreiblast. Es fehlt eine
-Stundenaufzeichnung. Danach die Schwellen aus der Verteilung ableiten und
-**vor** der Ernte im Plan festschreiben.
+**Offen:** Endgültige Werte für `--min-gap-ms` und `--max-gap-ms`. Laut
+Ernte-Phase-1-Plan wird die Stundenaufzeichnung bewusst nicht vorgezogen:
+die erste Ernte benutzt 300/800 ms und markiert
+`gap_thresholds_provisional: true`. Die Stundenmessung folgt separat.
 
 → [OQ-40](docs/open-questions.md).
 
-### 4. Dann erst: Ernte-Skript für Ziffernvielfalt
-
-`sync-record.py --norm-schedule` liefert den Mechanismus bereits. Beim Bauen
-beachten: jeder Schreibzyklus pausiert den Strom ~1,8 s (STOP → `set norm` →
-`set dpoint` → START) — das gehört in die Zeitplanung der Sitzung.
-
-### 5. Externer Loader lehnt Export-Schema 2 ab
+### 6. Externer Loader lehnt Export-Schema 2 ab
 
 `picam-ai-auto-seven-segment/src/dispread/experimental/evaluation.py:50`
 akzeptiert nur `schema_version` 1. Ein einzeiliger Relax auf `{1, 2}` würde
@@ -82,7 +168,7 @@ reichen. **Der Nutzer ist unentschieden (2026-09-23), deshalb bleibt es
 unverändert**, weil es ein anderes Repo ist. Bis dahin ist
 `test_real_export_is_accepted_by_the_actual_experiment_loader` `xfail(strict=True)`.
 
-### 6. Kleinere offene Punkte
+### 7. Kleinere offene Punkte
 
 * **Vorzeichenstelle unverifiziert** (Firmware 1.3.07, negative Normierung
   erst ab 1.5.06) — muss bei jeder Benchmarkzahl mitgenannt werden.
@@ -98,8 +184,8 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
    Toleranz, kein Runden. (Die OQ-41-Abbildung ist eine Vorschrift, keine
    Toleranz — Festlegung bleibt bestehen.)
 2. **Bilder im Schutzfenster bekommen keinen geratenen Wert.**
-3. **M fällt aus der Formel**, es wird nicht ausgesucht — aber welche
-   Population/Kombination gilt, ist noch offen zu entscheiden (Aufgabe 1).
+3. **M fällt aus der Formel**, es wird nicht ausgesucht. Die vorab
+   entschiedene konservative Kombination ergibt **695 ms**.
 4. **`independence_group` je Aufnahmesitzung**, nicht je Bild.
 5. **Jede Benchmarkzahl nennt die Herkunftsmischung** (`manual` vs.
    `serial_ascii`) und die unbelegte Vorzeichenstelle.
@@ -115,8 +201,9 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
   `RGB888`, gesetzter `FrameRate`, `queue=False`.
 * **Ein Normierungsschreibzyklus pausiert den Strom ~1,8 s** (STOP/CLEAR →
   schreiben → START) — sichtbar in `commands.jsonl` als `non_telegram`.
-* **`frame_sequence` in `sync-record.py` ist ein Skriptzähler**, kein
-  Sensorzähler — zeigt Staus/Lücken nicht an (siehe OQ-40).
+* **`frame_sequence` in `sync-record.py` ist ein Skriptzähler**; für
+  Sensorlücken das zusätzlich aufgezeichnete `sensor_sequence` verwenden
+  (siehe OQ-40).
 * **Das Telegramm hat eine führende Null, das Glas nicht** — Rohübernahme
   des Telegramms als Label ist ab Wert ≥ 1 falsch (OQ-41).
 
@@ -130,7 +217,7 @@ Vorab festgelegt, damit nichts nachträglich an ein Ergebnis angepasst wird
 | Plan mit Tasks A–H, Vorab-Festlegungen | `docs/superpowers/plans/2026-09-22-auto-labeling-seriell.md` |
 | Alle Messzahlen | `docs/VALIDATION.md` (Einträge 2026-09-23 am Ende) |
 | Aufbau, Deutung, Irrwege | `docs/lab_journal.md` (letzter Eintrag) |
-| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamera, jetzt grösstenteils erledigt), OQ-38 (Zeitkopplung), OQ-40 (Lücke/Stau), OQ-41 (führende Null, neu) |
+| Offene Fragen | `docs/open-questions.md` — OQ-22 (Kamerabrücke, seit 2026-09-24 wieder funktionsfähig), OQ-38 (Zeitkopplung), OQ-40 (Gap-Schwellen), OQ-41 (führende Null) |
 | Dot-Matrix-Leser, nicht bestandenes Gate | `docs/superpowers/plans/2026-09-22-dotmatrix-backend.md` |
 
 ### Werkzeuge

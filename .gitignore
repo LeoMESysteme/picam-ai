@@ -23,7 +23,6 @@ node_modules/
 /.repowise/
 /.vscode/
 /.codex/
-/.codegraph/
 /.mcp.json
 /.claude/
 # Doku-Seite (Zensical-Prototyp)

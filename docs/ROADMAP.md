@@ -9,14 +9,14 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
 | --- | --- | --- | --- | --- | --- |
 | **P0** | Grundgerüst, Trennstellen, Diagnose, Doku, Beispiele | nein | nein | `pytest` + `ruff` grün; Beispiel 16 erzeugt `values.jsonl` + Telegramme auf der Leitung | ✅ **erreicht** 2026-09-07 |
-| **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — Kamera läuft, Zeitbasis-Domäne geklärt, `replay://` implementiert (Task 1 dieser Sitzung); Messung M2 (Zeitstempel-Semantik) offen |
+| **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — seit 2026-09-25 StreamCam statt IMX500; `camera-commissioning.sh` Exit 0 (2026-09-28), Zeitbasis MONOTONIC → BOOTTIME über gemessenen Versatz, `replay://` implementiert; Zeitstempel-Semantik offen (OQ-43, für die Ernte durch die Timing-Kalibrierung abgedeckt) |
 | **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | offen — Werkzeug jetzt da (Clipaufnahme, Task 2 dieser Sitzung), Datensatz nicht: 4 reale Clips unter `var/workbench/clips/`, aber weiterhin nur **eine** Geräteinstanz (`device_id="RND Lab"`) |
 | **P3** | Werterkennung an realen Anzeigen, Freigabeschwellen kalibrieren | ja | nein | Trefferquote **pro Fehlerklasse** aufgeschlüsselt | offen |
 | **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | blockiert durch OQ-01, OQ-06 |
 | **P5** | Zeitbezug vollständig: §6 von Prosa in Zahlen | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | offen |
 | **P6** | Robustheit und Dauerbetrieb (§10 Ph. 3) | ja | teilw. | 72-h-Dauerlauf mit provozierten Störungen; **kein unmarkierter Altwert**; Speicher stabil | offen |
 | **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | offen |
-| **P8** | *optional:* eigenes Modell, Lokalisierung auf den IMX500 | ja | nein | belegter Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante | offen |
+| **P8** | *optional:* eigenes Modell, Lokalisierung auf den IMX500 | ja | nein | belegter Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante | ruht — IMX500 außer Betrieb seit 2026-09-25 |
 
 ## P0 — was tatsächlich steht
 
@@ -36,8 +36,9 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
   Testanzahl ist kein aktueller Projektstatus)
 - [x] Doku-Set inkl. `status.md`, `project_history.md`, `open-questions.md`
 - [x] `replay://` — implementiert (Clips mit einem Label je Clip)
-- [ ] `folder://`, `video://`, `picamera2://`, `imx500://` — Registry vorhanden;
-  die dazugehörigen Quellmodule sind im aktuellen Stand nicht vorhanden.
+- [x] `v4l2://` — `UvcSource` für die Logitech StreamCam (seit 2026-09-25 aktive Kamera): Regler setzen und zurücklesen, Zeitbasis `v4l2_monotonic` mit Umrechnung über `records.to_boottime_ns`, Hardwaretest `tests/test_uvc_hardware.py`
+- [ ] `folder://`, `video://` — Registry vorhanden, Implementierungen noch nicht
+- `picamera2://`, `imx500://` — **außer Betrieb** seit 2026-09-25 (IMX500 durch StreamCam ersetzt, `docs/project_history.md`); `open_source()` meldet das gezielt
 - [ ] Tesseract-Vergleichsbackend — `dispread.ocr.tesseract_cli` ist gebaut
   und Ende-zu-Ende verdrahtet (Profil/Controller/UI); [OQ-15](open-questions.md)
   selbst ist geklärt (Binary installiert). Offen ist die Erkennungsgüte:
@@ -48,7 +49,7 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
   `pyproject.toml`-Einsprungpunkt `dispread` zeigt inzwischen auf die separate,
   bereits implementierte Workbench-CLI (`dispread.workbench.cli:main`), nicht
   auf diese. Kamera-Diagnose: `scripts/camera-commissioning.sh`
-- [ ] `contour_heuristic`- und `imx500_detector`-Lokalisierung, `RegionTracker`
+- [ ] `contour_heuristic`-Lokalisierung, `RegionTracker` (`imx500_detector` ruht mit der IMX500)
 - [ ] Geräteprofile: `config/profiles/` samt JSON-Schema und `ProfileStore`
 - [ ] `install.sh`, systemd-Units, udev-Regel, pre-commit-Hook
 - [ ] `docs`-Konsistenztest (`tests/test_docs.py`): OQ-Nummern lückenlos, keine toten Verweise, `status.md` mit Datum

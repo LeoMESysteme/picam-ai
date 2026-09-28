@@ -1367,3 +1367,358 @@ der schreibende Prozess. Nach der Entkopplung bleibt der serielle Zeitstempel
 auch unter erzwungener Last exakt. Bilder können weiterhin verloren gehen,
 wenn die Bild-Warteschlange (60) länger als ≈ 4 s nicht abfliesst. Jeder
 Verlust ist aber gezählt, protokolliert und an `sensor_sequence` erkennbar.
+
+## 2026-09-23 — OQ-22 trotz frischem Boot beim zweiten Kameralauf
+
+**Zeitbasis:** Kernel-Journal des aktuellen Boots, Europe/Berlin.
+Bootzeit 14:24:31.
+
+| Zeit | Lauf | Ergebnis |
+| --- | --- | --- |
+| 15:55 | `camera-commissioning.sh`, 640×480 | Testaufnahme erfolgreich, 86 606 Byte; kein `stream on failed` |
+| 15:57 | temporärer Fokuslauf, 960×720, 15 fps, `queue=False` | 0 Bilder; `imx500_power_on: failed to get led gpio`; 6 × `stream on failed in subdev`; Prozess in `futex_wait_queue` |
+
+Zwei `Using a link rate`-Zeilen gehören zur erfolgreichen Commissioning-
+Sitzung (15:55:27/15:55:29), weitere sechs zum fehlgeschlagenen Fokusstart.
+Der Fokuslauf erreichte sein Bedienersignal nicht; es gab keine mechanische
+Änderung und keinen Schärfewert. Ein weiches Ctrl+C beendete den hängenden
+Prozess nicht. Kein weiterer Kameraversuch; Reboot nötig. Damit ist ein
+Streambudget von 15 zwar weiter eine obere Schutzgrenze, aber **keine Garantie
+für 15 erfolgreiche Sitzungen nach jedem Warmstart**.
+
+**Nachtrag, zweiter Boot um 16:13:22 (Europe/Berlin):** Boot-ID
+`6c6abda2-d316-40da-b557-1124431ade30`. Der erste Kamerastart dieses
+Boots um 16:17:35 (960×720, 15 fps) lieferte **0 Bilder**. Vor
+`stream on failed in subdev` (6 ×) stehen RP2040-Bridge-Fehler,
+darunter `rp2040_gbdg_wait_until_free failed`, und
+`setup of GPIO led failed: -121`. Der Fokuswert bleibt unbekannt. Die
+Grenze „20–25 Starts je Boot“ erklärt diesen Fehlschlag nicht; ein
+Warmreboot garantiert keine funktionierende erste Sitzung.
+
+## 2026-09-24 — Task 6: Kamera nach Neustart, ScalerCrop, Winkel, Auflösungsschwelle
+
+**Zeitbasis:** Kernel-Journal und `session.json` der Läufe, Europe/Berlin.
+Boot-ID `b973b67f-69a7-488a-9870-9e8daea714b8`, Start gegen 09:57 nach
+nächtlicher Abschaltung des Pi (ob die Versorgung dabei ganz getrennt war,
+ist nicht belegt). Probe von `imx500` und `rp2040-gpio-bridge` (fw 15)
+ohne Fehler.
+
+| Lauf | Ausschnitt angefordert → tatsächlich | Dauer | Bilder | verworfen | `sensor_sequence` | max. Schleife |
+| --- | --- | --- | --- | --- | --- | --- |
+| `task6-100540` | keiner → 2,0,4052,3040 | 1200 s | 17 978 | 8 (Warteschlange voll, t ≈ 13,5 min) | sonst lückenlos | 1,40 s |
+| `task6-crop-102651` | 1214,547,1920,1440 → 1214,546,1920,1440 | 900 s | 13 487 | 0 | lückenlos | 1,18 s |
+| `task6-frontal-full` / `-crop` | keiner / 1113,614,… → 1112,614,1920,1440 | 10 / 30 s | 133 / 434 | 0 | lückenlos | — |
+| `task6-45deg-full` / `-crop` | keiner / 1438,631,… → 1438,630,1920,1440 | 10 / 30 s | 134 / 434 | 0 | lückenlos | — |
+
+Alle sechs Streamstarts dieses Boots ohne `stream on failed` und ohne
+RP2040-Fehler. Sensormodus jeweils 2028×1520 (2×2-gebinnt); ein
+ScalerCrop von 1920×1440 Sensorkoordinaten ergibt damit bei 960×720
+`native_scale = 1,0`. Enger zuschneiden bringt keine neue Information.
+
+**Auflösung je Stellung** (`harvest-setup.py propose --session-json`):
+
+| Stellung (benannt) | Stellung (geschätzt) | `min_native_dot_column_px` | Quad |
+| --- | --- | --- | --- |
+| frontal | 0° (Bezug) | 3,359 | von Hand; automatisch 2,539, weil die Spiegelung links oben die Glaserkennung abschneidet |
+| 30° | ≈ 20° | 3,338 | automatisch |
+| 45° | ≈ 23° | 2,677 | von Hand; automatisch 2,869, gleiche Ursache |
+
+Schätzung aus dem Seitenverhältnis des Glases (Breite/Höhe, frontal 4,69),
+Neigung nach oben nicht herausgerechnet. „30°" und „45°" liegen also näher
+beieinander als benannt.
+
+**Deutung:** Entzerrt (`var/diagnostics/task6-rectified-alle.png`, lokal)
+sind die Punkte in allen drei Stellungen einzeln erkennbar, frontal am
+weichsten, obwohl dort die meisten Pixel liegen — die Schärfe bestimmt die
+Trennung stärker als die Pixelzahl. Der Nutzer hat die Schwelle auf
+**2,6 px** gelegt (Plan `2026-09-23-ernte-phase1.md`, Entscheidung 7).
+Fokus: Laplace-Varianz im Glas stieg nach Nachstellen von ≈ 36 auf ≈ 75
+(Vollbild vs. Ausschnitt nicht vergleichbar); höhere Einzelwerte stammten
+von verschobener Rahmung, nicht von Schärfe.
+
+**Nachtrag 11:11 (gleicher Boot):** Der 7. Start (`ernte1-full`, 10 s
+Vollbild, 133 Bilder) lief normal, der 8. (`ernte1-crop`, ScalerCrop
+880,1015,1920,1440 angefordert) lieferte 0 Bilder mit RP2040-Bridge-Fehler
+und 6 × `stream on failed` (OQ-22-Nachtrag). Kein hängender Prozess.
+
+## 2026-09-24 — Ernte 1: erste echte Ernte mit Import (Task 7)
+
+**Zeitbasis:** `SensorTimestamp` (CLOCK_BOOTTIME) und serielle Zeitstempel
+derselben Domäne; Boot `18ba46e9-02ed-40ac-8bf9-139a2fbbc136` (Neustart
+durch den Nutzer nach der Blockade um 11:11). Zwei Streamstarts in diesem
+Boot, beide ohne Fehler.
+
+**Einrichtung:** ScalerCrop 880,1015,1920,1440 (tatsächlich 880,1014,…),
+Quad automatisch (`glass`-Detektor, keine Spiegelung mehr), Raster vom
+Bediener `left=19.5, pitch=22.9, top=44, bottom=120` (400×160 entzerrt),
+`min_native_dot_column_px = 3,461` ≥ Schwelle 2,6 → `resolution_ok=True`.
+Profil: `var/diagnostics/ernte1-profile/profile.json` (lokal).
+
+**Lauf:** `harvest.py --n-steps 30 --hold-s 4.0 --seed 20260924`,
+`--guard-margin-ms 695 --min-gap-ms 300 --max-gap-ms 800`
+(`gap_thresholds_provisional: true`). Registerstand danach verifiziert
+zurückgesetzt (`norm` [80, 27, 228], `dpoint` [1]).
+
+| Grösse | Wert |
+| --- | --- |
+| Bilder gesamt | 2835, 0 verworfen |
+| gelabelt (`gate-label`) | 837 |
+| abgelehnt `telegrammluecke` | 1497 |
+| abgelehnt `wertwechsel_im_fenster` | 487 |
+| abgelehnt `ausserhalb_telegrammbereich` | 14 |
+| verschiedene Zeichenketten | 31 (25 × 12, 6 × 13 Zeichen) |
+| ausgewählt (≤ 3 je Plateau) | 101 |
+| abgelehnt beim Import | 14 `bildguete`, 6 `zellen_inkonsistent` |
+| **importiert** | **81** (Datensatz 88 → 169) |
+
+Herkunft der neuen Proben: 100 % `serial_ascii`. Vorzeichenstelle
+**ungeprüft** (nur `+`, Firmware 1.3.07). Dezimalpunkt in Zelle 2, 3, 4
+oder 5. Ziffernabdeckung je Zelle (Zelle 0 = Vorzeichen, Zelle 1 = Leerzelle
+bei unterdrückter Null):
+
+| Zelle | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Ziffern | 01234589 | 0134789 | 012345679 | 013456789 | 013456789 | 0123456789 | 46789 |
+
+**Stichprobe:** 12 zufällige gelabelte Bilder entzerrt gegen ihr Label
+geprüft (`var/diagnostics/ernte1-run/stichprobe*.png`, lokal) — alle 12
+stimmen Zeichen für Zeichen. Zellsoll mit Leerzelle für die unterdrückte
+Null (`cell_text`, z. B. `+ 909.09 mV/V`) stimmt mit dem Glas überein.
+
+**Auffällig:** `telegrammluecke` verwirft mehr als erwartet. Der Plan
+rechnete mit ≈ 39 labelbaren Bildern je Schritt, erreicht sind ≈ 28. Der
+Hauptteil der Lücken entspricht der ≈ 1,8-s-Pause je Normierungswechsel;
+ob die 800-ms-Schwelle zusätzlich gute Plateaus beschneidet, ist nicht
+untersucht.
+
+## 2026-09-24 — Ernte 2 und Aufstellung 2, Analyse der Telegrammlücken
+
+**Ernte 2** (gleiche Aufstellung und gleiches Profil wie Ernte 1, Seed
+20260925, 1 Streamstart): 2835 Bilder, 845 gelabelt, 28 Zeichenketten,
+88 ausgewählt, 13 `bildguete`, 4 `zellen_inkonsistent`, **71 importiert**.
+Stichprobe 8/8 korrekt. Die Proben tragen dieselbe `independence_group`
+und dieselbe `source_id` (`harvest:ernte1`) wie Ernte 1, weil der Import
+Gruppe und Kennung aus dem Profil bildet. Die Gruppe entspricht damit der
+**Aufstellung**, nicht dem einzelnen Lauf — für den Split die konservative
+Richtung; die Läufe sind nur über `stored_at_utc` trennbar.
+
+**Aufstellung 2** (schräg von links, näher, Boot `18ba46e9…`, 3 Starts):
+ScalerCrop 733,344,1920,1440, Quad automatisch, Raster vom Bediener
+`left=7.5, pitch=23.5, top=44, bottom=120`, `min_native_dot_column_px =
+3,294`. Schärfe sichtbar weicher als Aufstellung 1, vom Nutzer bewusst so
+geerntet. Seed 20260926: 2835 Bilder, 830 gelabelt, 31 Zeichenketten, 94
+ausgewählt, 7 `bildguete`, 11 `zellen_inkonsistent`, **76 importiert**.
+Stichprobe 8/8 korrekt.
+
+**Stand danach:** 316 Proben, davon 228 seriell geerntet aus 75
+Zeichenketten in 2 Aufstellungen. Ziffernabdeckung Zellen 3–7 vollständig;
+Zelle 2 (erste Ziffer bei Werten ≥ 1) ohne `6` — log-gleichverteilte
+Faktoren erzeugen Benford-verteilte Führungsziffern (`6` ≈ 7 %). Zelle 1
+trägt bei Werten ≥ 1 immer die Leerzelle.
+
+**Telegrammlücken (Ernte 1, Offline-Analyse):** Alle 1497
+`telegrammluecke`-Ablehnungen stammen aus den 29 Schreibpausen der
+Normierungswechsel: 772 Bilder in der Telegrammstille selbst (≈ 2,3 s je
+Pause), 425 im Schutzfenster davor, 300 danach. Die seriellen Abstände sind
+bimodal — 237 × ≤ 536 ms, 29 × 2305–2313 ms, dazwischen keiner —, die
+800-ms-Schwelle trennt also sicher. Saubere Schritte liefern 32–33 Bilder;
+der Mittelwert ≈ 28 kommt von Schritten, in denen die letzte Ziffer bei
+grossem Faktor vom Messrauschen springt (`wertwechsel_im_fenster`). Die
+Gate-Regel arbeitet wie festgelegt; da höchstens 3 Bilder je Plateau
+importiert werden, begrenzt die Ausbeute den Datensatz nicht.
+
+## 2026-09-24 — Aufstellung 3 und volle Ziffernabdeckung
+
+**Aufstellung 3** (frontal, weiter weg, Boot `25aaeb7e-4305-486c-a8c3-cdf77dae34fe`,
+6 Starts): Beim ersten Versuch war das Glas im Vollbild nur ≈ 100 px breit
+(geschätzt 2,2 native px je Punktspalte, unter der Schwelle) — Kamera näher
+gerückt. Danach 2,74 px, aber stark unscharf; die Schwelle hätte das
+durchgelassen (Entscheidung 7 prüft keine Schärfe). Nachfokussiert in einer
+10-min-Sitzung mit Ausschnitt; Laplace-Varianz im Glas ≈ 55 → ≈ 98, dabei
+verschob sich die Kamera, das Quad wurde auf den letzten ruhigen ≈ 40 s neu
+bestimmt. Raster `left=17.5, pitch=22.8, top=44, bottom=120`,
+`min_native_dot_column_px = 2,760`.
+
+Ernte mit Seed 20261160 (gewählt, weil der Plan 7 Anzeigewerte mit
+führender 6 enthält — Stimulusauswahl, keine Auswertungsentscheidung):
+2834 Bilder, 584 gelabelt (882 `wertwechsel_im_fenster`, viele Werte mit
+springender letzter Ziffer), 30 Zeichenketten, 97 ausgewählt, 4 `bildguete`,
+20 `zellen_inkonsistent`, **73 importiert**. Die Stichprobe fand den Fehler
+mit zwei führenden Nullen (`+00988.5`, OQ-41-Nachtrag); die Ernte wurde mit
+Regel v2 offline neu gelabelt (`proposal-v1.json` bleibt daneben) und erst
+dann importiert. Die drei importierten `+988.5`-Proben tragen
+`cell_text = "+  988.5 mV/V"`.
+
+**Stand:** 389 Proben, davon 301 seriell geerntet aus **98 Zeichenketten**
+in 3 Aufstellungen (`ernte1` 152, `auf2` 76, `auf3` 73). **Ziffernabdeckung
+vollständig:** Zelle 2 hat 1–9 (eine 0 ist dort durch die Unterdrückung
+ausgeschlossen), Zellen 3–7 alle zehn Ziffern. Vorzeichen weiter nur `+`.
+
+## 2026-09-24 — Dot-Matrix-Entwicklungsmessung, vor dem ROM-Gate gestoppt
+
+**Datenbasis:** 301 seriell gelabelte Proben aus drei Aufstellungen:
+`ernte1` 152, `auf2` 76, `auf3` 73. Herkunft 100 % `serial_ascii`;
+Vorzeichen nur `+` und daher nicht geprüft. Die Zahlen stammen aus dem
+Claude-Sitzungsprotokoll und dem lokalen Task-7-Bericht
+`.superpowers/sdd/2026-09-24-dotmatrix-reader/task-7-report.md`.
+Es liegt kein vollständiger Stufe-1-Bericht vor.
+
+| Gegenprobe | Ergebnis |
+| --- | --- |
+| `dotmatrix-eval.py loo`, alle drei Gruppen | Exit 3 im ersten Fold (Testgruppe `auf2`, Training `auf3` + `ernte1`); 8 Zeichen weichen vom HD44780-ROM A00 ab; kein `report.json` |
+| Diagnose `ernte1` | gelernte Muster stimmen mit ROM überein |
+| Diagnose `auf3` | Kamera zwischen Profilbestätigung und Ernte um ungefähr `dx=0,3`, `dy=4,6` Quellpixel verschoben; Profilraster für diese Bilder nicht mehr gültig |
+| `loo` ohne `auf3` | Fold mit Training nur auf `auf2` scheitert: 4 Zeichen mit je 1 abweichendem Punkt; `auf2` war die weichere Aufstellung |
+
+**Keine Abnahmerate ableitbar:** Das ROM-Gate stoppte vor der Auswertung.
+Es gibt deshalb weder eine belegte Quote falsch freigegebener Werte noch
+eine Ablehnungsquote oder eine Clopper-Pearson-Grenze für echte Plateaus.
+Die ROM-Regel und die Vorlagen wurden nicht nachträglich angepasst.
+Die Ursache der Ein-Punkt-Abweichungen bei `auf2` und das weitere Vorgehen
+stehen in [OQ-42](open-questions.md#oq-42).
+
+**Zusätzlicher, nicht als Realdaten-Abnahme verwendeter Test aus der
+Abschlussprüfung:** 1500 synthetische gültige Werte mit Rasterversatz
+±1,5 px, Unschärfe 0–2, Rauschen bis σ=12 und multiplikativem
+Helligkeitsverlauf bis 0,6: 419 richtig, 1081 abgelehnt, 0 falsch
+freigegeben. Das war ein Ad-hoc-Sweep ohne versioniertes Testartefakt;
+er ersetzt weder Stufe 1 noch Stufe 2.
+
+## 2026-09-25 — Dot-Matrix-Leser: Entwicklungsmessung nach auf3-Neubestätigung und rom_check_v2
+
+**Stand der Daten:** 301 seriell geerntete Proben, `ernte1` 152, `auf2` 76,
+`auf3` 73 (Herkunft 100 % `serial_ascii`, Vorzeichen ungeprüft, nur `+`).
+`auf3` mit neu bestätigtem Profil (Umriss auf Erntebild `frame_001400`
+bestimmt, ≈ 4,3 px tiefer als vorher, Raster unverändert, 2,765 native px;
+`var/diagnostics/auf3b-profile/`, alte Zuordnung `dotmatrix-profile-map.v1.json`).
+Gegenprobe `rom_check_v2` (höchstens 1 abweichender Punkt je Zeichen,
+Spec-Änderung vom 2026-09-25, **vor** diesem Lauf festgelegt).
+
+**Vorab festgelegte Messung (`dotmatrix-eval.py loo`):** bricht im Durchgang
+„Training `auf2`+`auf3`, Test `ernte1`" ab — die gelernte `4` weicht in 3
+Punkten ab, alle direkt neben der Diagonale (die beiden weichen
+Aufstellungen lassen die Schräge zulaufen). Kein Bericht; die Regel wurde
+nicht nachträglich gelockert.
+
+**Diagnose (nicht die vorab festgelegte Messung, gleiche Formel und
+Schwellenregel, Trainings-/Testgruppen getrennt):**
+
+| Training | Test | richtig | abgelehnt | falsch | Plateaus richtig |
+| --- | --- | --- | --- | --- | --- |
+| `ernte1` | `auf2` | 0 | 76 (`zelle_unbekannt`) | **0** | 0/26 |
+| `ernte1` | `auf3` | 0 | 73 (`zelle_unbekannt`) | **0** | 0/26 |
+| `ernte1`+`auf2` | `auf3` | 67 (91,8 %) | 6 (3 unbekannt, 3 mehrdeutig) | **0** | 25/26 |
+| `ernte1`+`auf3` | `auf2` | 0 | 76 (`zelle_unbekannt`) | **0** | 0/26 |
+| `auf2`+`auf3` | `ernte1` | — ROM-Gegenprobe gescheitert (`4`, 3 Punkte) | | | |
+
+Schwellen: nur `ernte1` `d_max` 1,54 / `margin_min` 1,10; `ernte1`+`auf2`
+2,52 / 0,60; `ernte1`+`auf3` 2,17 / 0,82.
+
+**Deutung:** Kein einziger falsch freigegebener Wert. Wo Training und Test
+ähnlich scharf sind, erreicht der Leser das Ziel (0 falsch, 8 % Ablehnung,
+Obergrenze bei 0 von 26 Plateaus ≈ 11 %). Vorlagen aus einer scharfen
+Aufstellung übertragen sich nicht auf weiche, und `auf2` wird auch mit `auf3`
+im Training vollständig abgelehnt — `auf2` unterscheidet sich systematisch
+(weicher Fokus, heller linker Glasrand). Diese Zahlen sind Entwicklungs-
+diagnose mit 3 Aufstellungen, keine Abnahme (Stufe 2 braucht neue, nie
+gesehene Aufstellungen).
+
+## 2026-09-28 — StreamCam: Inbetriebnahme, Hardwaretest, Probeaufnahme
+
+**Aufbau:** Logitech StreamCam (`046d:0893`) an USB3 (`speed` 5000), Knoten
+`/dev/video0`, GSV-Sensor am Messplatz wie bei den bisherigen Ernten,
+`/dev/ttyUSB0` nur gelesen. Code-Stand `feat/task-b-versatz-normierung` ab
+`44d1bb6` bzw. `9192050`.
+
+| Lauf | Ergebnis |
+| --- | --- |
+| `camera-commissioning.sh`, erster Lauf (`714d57c`) | 2 FEHLER, beide im Skript: YUYV-Suche mit `grep -A 40` zu kurz (7 Bildraten je Größe); `focus_absolute` im selben `v4l2-ctl`-Aufruf wie `focus_automatic_continuous=0` → `Input/output error` |
+| `camera-commissioning.sh` nach Fix (`44d1bb6`, `9192050`) | Exit 0, 6/6 OK; Testbild 1920×1080, Anzeige „+0.46761 mV/V" gut lesbar, GSV nimmt ≈ 1/5 der Bildbreite ein |
+| `pytest --mode=real tests/test_uvc_hardware.py` | grün: 30 Bilder, Zeitstempel streng monoton, alle 11 Regler (Automatiken, feste Werte, 4 Profilwerte) zurückgelesen = angefordert |
+| `sync-record.py --source camera --frame-rate 15 --duration 10` (vor Fix, `9ed3edf`) | 97 Bilder, Abstände 68–100 ms, `frame_gaps.count = 0`, kein Drop |
+| dasselbe nach Fix (`9192050`, Ausdünnen nach Zeitplan) | 137 Bilder, Abstände überwiegend 64/68 ms (89 × 68, 38 × 64, 4 × 100, 5 × 32–36 ms), `frame_gaps.count = 0`, kein Drop |
+
+Weitere Werte der Probeaufnahme: `clock_offset_boottime_minus_monotonic_ns`
+= −9 (Beginn) / +10 (Ende), also Abtastrauschen ohne Suspend; kein
+`acquisition_error`, keine USB-Warnung. 19 Telegrammzeilen in 10 s. Kamera-
+Regler für die Probe: `exposure_time_absolute` 250,
+`white_balance_temperature` 5690, `gain` 11, `focus_absolute` 48 (vom
+Stand der Kamera übernommen, **kein** bestätigtes Profil).
+
+**Noch nicht gemessen:** Zeitversatz Telegramm ↔ Glas und M für die StreamCam
+(Messsitzung). Die Probeaufnahme lief ohne `--norm-schedule` und ist keine
+Kalibrieraufnahme.
+
+## 2026-09-28 — StreamCam: Timing-Kalibrierung und erste zwei Ernten (`sc1`, `sc2`)
+
+**Aufbau:** Logitech StreamCam an USB3, GSV-2AS mit Punktraster-Anzeige
+(Displaytech 161A), `/dev/ttyUSB0` 38400 8N1. Aufnahmen mit 15 fps (aus 30 fps
+nach Zeitstempel ausgedünnt), JPEG. Code-Stand `c1b75d1` (Task 8) und `e92a30e` (Task 9).
+
+### Aufstellungen
+
+| Aufstellung | Blick | Glasbreite | Fokus | Belichtung / WB / Gain | Quad | Raster (400×160) | px je Punktspalte |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `sc1` → Profil `sc1b` | schräg (linke Kante näher, ≈ 4° gekippt) | ≈ 430 px | 52 | 100 / 5785 K / 25 | Homographie aus den Punktmitten (Rest 0,23 px), das Glasquad lag auf der Blende | left 0, pitch 25, top 17,78, bottom 160,0 | 3,617 |
+| `sc2` | frontal, Reflex abgeschattet | ≈ 510 px | 58 | 100 / 5904 K / 27 | Glaskanten gemessen (Glasdetektor und Punktanpassung scheiterten) | left 16,7, pitch 23,88, top 36,3, bottom 111,0 | 4,792 |
+
+Beide Profile hat der Nutzer bestätigt (Schwelle 2,6 px). **Korrektur `sc1` →
+`sc1b`:** `dotmatrix_sampling` teilt `top`…`bottom` in **8** Zeilen (7 Zeichen-
+zeilen + Cursorzeile). Das zuerst bestätigte `sc1`-Raster deckte nur die 7
+Zeichenzeilen ab (bottom 142,2). `sc1b` hat dasselbe Quad und bottom 160,0.
+Die Zuordnung `dotmatrix-profile-map.json` führt `sc1` → `sc1b`, Stand davor
+in `dotmatrix-profile-map.v2.json`.
+
+**Fokus-Sweep (`harvest-setup focus`), Befund M-9 bestätigt:** Der erste
+Feinschritt nach dem Rücksprung von 248 misst ein veraltetes Pufferbild (in
+`sc1` 50 → 14,2, in `sc2` 58 → 14,0 bzw. 20,1). Nachmessung mit 1 s Wartezeit,
+10 verworfenen Bildern und 3 gemittelten: Maxima eindeutig, beide
+Anfahrrichtungen gleich (keine Hysterese des Fokusmotors, Unterschiede
+liegen in der Streuung durch die flackernde letzte Ziffer). In einer ersten,
+näheren `sc2`-Stellung lag der Sweep bei 64, die Nachmessung bei 66.
+
+### Timing-Kalibrierung (`display-offset.py --profile`, Profil `sc1`)
+
+| Aufnahme | Dauer | Bilder | Wechselart | messbar | δ | σ_δ | d_misch | M |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `sc1-cal-a` (Ruhe) | 180 s | 2687 | klein | 25/35 | +51 ms | 108 ms | 378 ms | 792 ms |
+| `sc1-cal-b` (24 Normierungssprünge, Seed 20260928, 7 s) | 250 s | 3737 | groß | 6/25 | +58 ms | 193 ms | 550 ms | 1226 ms |
+| `sc1-cal-b` | | | klein | 12/19 | +78 ms | 225 ms | 357 ms | 1151 ms |
+| `sc1-cal-c` (Stimulus von Hand) | 180 s | 2687 | groß | 9/10 | +86 ms | 15 ms | 277 ms | 448 ms |
+
+Alle drei ohne Bildlücke. In `sc1-cal-b` antworteten alle 50 Schreibbefehle
+mit `3B A0`, Vorprüfung und Rückstellung gegen den Rückstellpunkt bestanden.
+δ ist in allen Wechselarten positiv (+51 … +86 ms, IMX500: +80 … +116 ms).
+Normierungsbefehl → Glas (informativ): `set norm` δ = +15 ms (σ 59),
+`set dpoint` δ = −155 ms (σ 210).
+
+`display-offset.py --hint-box` lehnte alle Aufnahmen ab: Die
+Sättigungssuche grenzte das Glas nicht von Blende und Reflexen ab (Spanne
+0,025–0,054 bei einer Grenze von 0,01). Deshalb gibt es jetzt `--profile`
+(Task 8).
+
+**Nutzerentscheidung:** Kalibrierung aus A + B + C, also
+**M = 1225,8 ms** (Maximum, aus „B groß“), Anzeigeversatz 57,5 ms,
+`var/calibration/timing-streamcam.json`. „B groß“ gilt seit dem 2026-09-23
+als methodisch fragwürdig (der Wiederanlauf setzt das Referenzereignis);
+bewusst konservativ übernommen, weil „B klein“ allein 1151 ms ergibt.
+
+### Ernten (`harvest.py --n-steps 30 --hold-s 6`)
+
+| Grösse | `sc1` (Seed 2026092801) | `sc2` (Seed 2026092802) |
+| --- | --- | --- |
+| Bilder | 3729, 8 verworfen (Warteschlange voll) | 3691, 46 verworfen |
+| Bildlücken (`frame_gaps`) | 0 | 0 |
+| gelabelt | 954 | 971 |
+| abgelehnt `telegrammluecke` / `wertwechsel_im_fenster` | 1859 / 877 | 1949 / 736 |
+| verschiedene Zeichenketten | 24 | 25 |
+| ausgewählt (≤ 3 je Plateau) | 72 | 75 |
+| abgelehnt beim Import `bildguete` / `zellen_inkonsistent` | 14 / 13 | 17 / 0 |
+| **importiert** | **45** | **58** |
+
+Rückstellung jeweils per Rücklesen bestätigt. Datensatz 389 → 492 Proben;
+der Dot-Matrix-Lader löst alle 404 geernteten Proben mit Profil auf
+(`ernte1` 152, `auf2` 76, `auf3` 73, `sc2` 58, `sc1` 45). Der Import brach
+zunächst an den Drop-Zeilen ab (`KeyError`, behoben in Task 9).
+**Befund:** Die JPEG-Schreib-Warteschlange (60) läuft bei 1080p gelegentlich
+voll (0,2 % bzw. 1,2 % der Bilder).

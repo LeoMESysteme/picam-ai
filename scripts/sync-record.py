@@ -12,6 +12,7 @@ Aufruf mit echter Kamera + echtem Port (NICHT von hier aus ausgefuehrt -
 siehe unten):
 
     ./.venv/bin/python scripts/sync-record.py --duration 60 --source camera \\
+        --camera-settings var/calibration/streamcam-settings.json \\
         --port /dev/ttyUSB0 --baudrate 38400
 
 Zweck: um den Ende-zu-Ende-Versatz zwischen dem seriellen Telegramm des
@@ -32,18 +33,18 @@ Kommando. `SerialSink` (`src/dispread/sink/serial_out.py`) ist die einzige
 Stelle im Repo, die auf diesen Port schreiben darf, und das ist nicht dieses
 Skript.
 
-Fuer die Bild-Zeitstempelfelder ist `Controller._capture`
-(`src/dispread/workbench/controller.py`) der verbindliche Bezug: dieselben
-Feldnamen, dieselbe Behandlung (`timestamp_semantics: "unknown"`,
-`uncertainty_ns: None`, `TimeBaseKind.SENSOR_BOOTTIME`, `SensorTimestamp`
-unveraendert). Ein Zeitstempel ohne benannte Zeitbasis ist nach AGENTS.md
-keine verwertbare Angabe.
+Kamera: Logitech StreamCam ueber `UvcSource` (seit 2026-09-25, IMX500 ausser
+Betrieb, siehe docs/project_history.md). Frames tragen ihren Zeitstempel roh
+in `TimeBaseKind.V4L2_MONOTONIC` (CLOCK_MONOTONIC-Domaene der uvcvideo-
+Puffer) - die Umrechnung nach CLOCK_BOOTTIME laeuft ausschliesslich ueber
+`dispread.records.to_boottime_ns` mit dem in `session.json` gemessenen
+Versatz (`clock_offset_boottime_minus_monotonic_ns`, Median aus mehreren eng
+geklammerten Messungen, siehe `measure_clock_offset_ns`), nie hier direkt.
+Ein Zeitstempel ohne benannte Zeitbasis ist nach AGENTS.md keine verwertbare
+Angabe.
 
-Betriebshinweis (`--source camera`): Die Kamera kann nur EIN Prozess halten.
-Vor dem Start pruefen, ob ein `dispread serve` laeuft, und die
-RP2040-Wedge-/Sperrgefahr aus OQ-22 (docs/open-questions.md) im Blick
-behalten - dieser Zweig wird bewusst nicht von der Entwicklungsumgebung aus
-ausgefuehrt, nur geschrieben und per `--source synthetic` getestet.
+Betriebshinweis (`--source camera`): Die Kamera kann nur EIN Prozess halten -
+vor dem Start pruefen, ob ein `dispread serve` laeuft.
 
 Robustheit:
   - Serielles Lesen laeuft in einem eigenen Thread, damit eine 66-ms-Bildauf-
@@ -111,8 +112,11 @@ from typing import Any
 
 import cv2
 
+from dispread.camera_settings import CameraSettings, load_camera_settings
 from dispread.frames import open_source
-from dispread.records import TimeBaseKind, Timestamp, TimestampSemantics
+from dispread.frames.uvc_source import UvcError, UvcSource
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_OUTPUT_ROOT = Path("var/diagnostics")
 DEFAULT_PORT = "/dev/ttyUSB0"
@@ -135,6 +139,21 @@ DEFAULT_FRAME_QUEUE_SIZE = 60
 #: Ende-Signal (`_QUEUE_DONE`) der Erzeugerseite selbst aufgibt.
 WRITER_DRAIN_JOIN_TIMEOUT_S = 30.0
 
+#: Bewusst grosszuegig: ein einzelner `capture.read()`-Fehlschlag der
+#: StreamCam darf keinen Abbruch ausloesen, siehe `UvcSource.frames()`
+#: (`READ_FAIL_TIMEOUT_S`) - dieser Guard deckt nur das ERSTE Bild ab, das
+#: `_camera_startup_guard` mit einer eigenen Zeitschranke abwartet.
+STARTUP_TIMEOUT_S = 5.0
+
+#: Exitcode, wenn der Kamerazweig ohne ein einziges Bild endet (Timeout beim
+#: ersten Bild, ein `UvcError` beim Oeffnen oder frames_recorded == 0 am
+#: Ende) - ungleich 0, damit ein Aufrufer (z.B. harvest.py) das nicht mit
+#: einem erfolgreichen Lauf verwechselt.
+EXIT_NO_FRAMES_ACQUIRED = 4
+
+#: Anzahl Einzelmessungen fuer `measure_clock_offset_ns` (Median).
+CLOCK_OFFSET_SAMPLES = 5
+
 #: Sentinel: die Erzeugerseite (Kamera-/Serial-Thread) ist fertig, keine
 #: weiteren Eintraege kommen mehr - der Schreiberthread leert die
 #: Warteschlange bis hierher und beendet sich dann selbst. Eine eigene
@@ -142,7 +161,6 @@ WRITER_DRAIN_JOIN_TIMEOUT_S = 30.0
 #: (leeren) Nutzlast-Eintrag verwechseln laesst.
 _QUEUE_DONE = object()
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESTORE_POINT = REPO_ROOT / "var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json"
 
 #: Erlaubter Normierungsbereich des GSV-2AS, siehe CLAUDE.md ("Hardware-Fakten") -
@@ -199,7 +217,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--frame-rate",
         type=float,
         default=15.0,
-        help="Zieltakt der Bildaufnahme in Hz (0 = so schnell wie moeglich)",
+        help=(
+            "Zieltakt der GESCHRIEBENEN Bilder in Hz (0 = alle schreiben). Bei "
+            "--source synthetic bremst dieser Wert die Erzeugung selbst (einzige "
+            "Bremse dort). Bei --source camera laeuft das Lesen UNGEDROSSELT mit "
+            "dem Takt aus --camera-settings (settings.fps); --frame-rate duennt "
+            "danach nur aus, welche gelesenen Bilder in frames.jsonl landen - "
+            "muss deshalb <= settings.fps sein, sonst Abbruch (final-review.md I-1)."
+        ),
     )
     parser.add_argument("--port", default=DEFAULT_PORT, help="Serieller Port, nur gelesen")
     parser.add_argument("--baudrate", type=int, default=DEFAULT_BAUDRATE)
@@ -217,34 +242,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--camera-size",
-        # 960x720 ist NICHT beliebig gewaehlt, sondern die in OQ-22
-        # festgehaltene Betriebsgroesse. Jede dort protokollierte Sitzung mit
-        # einem grossen Sensormodus (2028x1520, 4056x3040) war die letzte des
-        # Boots - danach setzt der Sensor keinen Stream mehr auf und nur ein
-        # Reboot hilft. Am 2026-09-22 mit der Vorgabe 2028x1520 erneut
-        # ausgeloest. 960x720 hebt das Problem nicht auf, verzoegert es aber
-        # nachweislich; mehr Ziffernhoehe kommt ueber ScalerCrop, nicht ueber
-        # den Sensormodus.
-        default="960x720",
-        help="Nur --source camera: Aufloesung BxH. Vorgabe 960x720 - "
-             "groessere Sensormodi blockieren den Sensor bis zum Reboot (OQ-22)",
-    )
-    parser.add_argument(
-        "--allow-large-sensor-mode",
-        action="store_true",
-        help="Sperre gegen grosse Sensormodi aufheben. Nur bewusst setzen - "
-             "siehe OQ-22, Folge ist im Zweifel ein Reboot des Labor-Pi",
-    )
-    parser.add_argument(
-        "--scaler-crop",
+        "--camera-settings",
+        type=Path,
         default=None,
         help=(
-            "Sensor-Ausschnitt 'X,Y,W,H' in Sensorkoordinaten (ganzzahlig), nur "
-            "--source camera. Mehr Ziffernhoehe ueber Zoom, nie ueber einen "
-            "groesseren Sensormodus (OQ-22, CLAUDE.md-Entscheidung 4 aus "
-            "docs/superpowers/plans/2026-09-23-ernte-phase1.md). Ohne diese "
-            "Option wird kein ScalerCrop gesetzt (Sensor-Vorgabe bleibt aktiv)."
+            "Nur --source camera, dann Pflicht: Pfad zu einer JSON-Datei mit "
+            "Top-Level-Schluessel 'camera' (Profil oder Ausgabe von "
+            "harvest-setup focus), siehe dispread.camera_settings."
+            "load_camera_settings. Legt fest, was UvcSource an der StreamCam "
+            "einstellt (Aufloesung, FourCC, fps, Regler)."
+        ),
+    )
+    parser.add_argument(
+        "--camera-device",
+        type=Path,
+        default=None,
+        help=(
+            "Nur --source camera: '/dev/videoN' direkt vorgeben statt ueber die "
+            "USB-ID (settings.usb_id) zu suchen (UvcSource.open())."
         ),
     )
     parser.add_argument(
@@ -279,7 +294,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     args = parser.parse_args(argv)
-    _check_camera_size(parser, args)
+    if args.source == "camera" and args.camera_settings is None:
+        parser.error("--camera-settings ist bei --source camera Pflicht")
     if args.frame_queue_size < 1:
         parser.error("--frame-queue-size muss mindestens 1 sein")
     if args.ignore_restore_point_mismatch and not args.norm_schedule:
@@ -287,11 +303,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.norm_schedule is not None:
         try:
             args.norm_schedule = _parse_norm_schedule(args.norm_schedule)
-        except ValueError as exc:
-            parser.error(str(exc))
-    if args.scaler_crop is not None:
-        try:
-            args.scaler_crop = _parse_scaler_crop(args.scaler_crop)
         except ValueError as exc:
             parser.error(str(exc))
     return args
@@ -325,24 +336,6 @@ def _parse_norm_schedule(raw: str) -> list[tuple[float, float]]:
     return schedule
 
 
-def _parse_scaler_crop(raw: str) -> tuple[int, int, int, int]:
-    """'1000,800,1600,1200' -> (1000, 800, 1600, 1200) - X,Y,W,H in
-    Sensorkoordinaten, wie picamera2 sie fuer das `ScalerCrop`-Control
-    erwartet (siehe `_camera_frames`)."""
-    parts = raw.split(",")
-    if len(parts) != 4:
-        raise ValueError(f"--scaler-crop muss genau vier Werte X,Y,W,H haben, nicht {raw!r}")
-    try:
-        values = tuple(int(p) for p in parts)
-    except ValueError as exc:
-        raise ValueError(f"--scaler-crop-Werte muessen ganzzahlig sein: {raw!r}") from exc
-    if any(v <= 0 for v in values):
-        raise ValueError(
-            f"--scaler-crop-Werte muessen alle positiv sein (kein negativer oder Null-Wert): {raw!r}"
-        )
-    return values  # type: ignore[return-value]
-
-
 def _encode_norm(norm: float) -> tuple[tuple[int, int, int], int]:
     """Portiert aus `norm_sweep.py::encode_norm` (Vorschrift aus der GSV-2-
     Anleitung, 'set norm', Befehl 16) - byteidentisch uebernommen, nicht neu
@@ -374,37 +367,6 @@ def _read_exact(ser, count: int, timeout_s: float = 1.0) -> bytes:
         if chunk:
             buf += chunk
     return buf
-
-
-#: Ab dieser Pixelzahl gilt ein Modus als "gross" im Sinne von OQ-22.
-#: 960x720 = 691 200 liegt darunter, 2028x1520 = 3 082 560 darueber.
-LARGE_SENSOR_MODE_PIXELS = 1_000_000
-
-
-def _check_camera_size(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
-    """Grosse Sensormodi abweisen, solange OQ-22 offen ist.
-
-    Das ist bewusst ein harter Abbruch und keine Warnung: die Folge eines
-    grossen Modus ist ein Sensor, der bis zum Reboot keinen Stream mehr
-    aufsetzt. Auf einem Laborrechner ist das teuer genug, um es nicht von
-    einer uebersehenen Zeile auf stderr abhaengen zu lassen. Am 2026-09-22
-    genau so passiert.
-    """
-    if args.source != "camera" or args.allow_large_sensor_mode:
-        return
-    width, _, height = args.camera_size.partition("x")
-    try:
-        pixels = int(width) * int(height)
-    except ValueError:
-        parser.error(f"--camera-size muss die Form BxH haben, nicht {args.camera_size!r}")
-    if pixels > LARGE_SENSOR_MODE_PIXELS:
-        parser.error(
-            f"--camera-size {args.camera_size} ist ein grosser Sensormodus. Laut OQ-22 "
-            "(docs/open-questions.md) war jede protokollierte Sitzung mit einem solchen "
-            "Modus die letzte des Boots - danach setzt der Sensor keinen Stream mehr auf "
-            "und nur ein Reboot hilft. Nimm 960x720 (mehr Ziffernhoehe ueber ScalerCrop) "
-            "oder setze --allow-large-sensor-mode, wenn du das bewusst in Kauf nimmst."
-        )
 
 
 # --- Norm-Schedule: Schreiben INNERHALB der bereits offenen seriellen Sitzung --
@@ -708,133 +670,153 @@ def _serial_writer_worker(
 # --- Bildstrom ---------------------------------------------------------------
 
 
+def measure_clock_offset_ns(samples: int = CLOCK_OFFSET_SAMPLES, clock=time.clock_gettime_ns) -> int:
+    """Median aus `samples` Einzelmessungen des Versatzes CLOCK_BOOTTIME
+    minus CLOCK_MONOTONIC - die einzige Groesse, die `to_boottime_ns`
+    (dispread.records) braucht, um einen `v4l2_monotonic`-Zeitstempel der
+    StreamCam nach CLOCK_BOOTTIME umzurechnen.
+
+    Jede Einzelmessung ist eng geklammert (MONOTONIC vor und nach der
+    BOOTTIME-Messung, Mittelwert der beiden als Bezugspunkt) - so faellt der
+    durch die drei Aufrufe selbst eingebrachte Fehler klein aus. Der Median
+    (statt des Mittelwerts) filtert einen einzelnen Ausreisser heraus (z.B.
+    ein Scheduler-Aussetzer zwischen den drei Aufrufen)."""
+    offsets: list[int] = []
+    for _ in range(samples):
+        m1 = clock(time.CLOCK_MONOTONIC)
+        b = clock(time.CLOCK_BOOTTIME)
+        m2 = clock(time.CLOCK_MONOTONIC)
+        offsets.append(b - (m1 + m2) // 2)
+    offsets.sort()
+    return offsets[len(offsets) // 2]
+
+
+def count_frame_gaps(timestamps_ns: list[int], fps: float) -> dict[str, Any]:
+    """Zaehlt Luecken in einer aufsteigenden Liste von `value_ns`-
+    Zeitstempeln: eine Luecke ist ein Abstand > 1,5 * (1e9 / fps) ns
+    (Schwelle aus den globalen Vorgaben). Reine Funktion, kein I/O.
+
+    Rueckgabe: `{"threshold_ns", "count", "max_gap_ns", "gaps": [{"after_value_ns",
+    "gap_ns"}, ...]}` - `gaps` traegt je Luecke den Zeitstempel DAVOR, damit
+    sie sich in `frames.jsonl` wiederfinden laesst."""
+    threshold_ns = 1.5 * 1e9 / fps
+    gaps: list[dict[str, int]] = []
+    for prev, cur in zip(timestamps_ns, timestamps_ns[1:], strict=False):
+        gap_ns = cur - prev
+        if gap_ns > threshold_ns:
+            gaps.append({"after_value_ns": prev, "gap_ns": gap_ns})
+    return {
+        "threshold_ns": threshold_ns,
+        "count": len(gaps),
+        "max_gap_ns": max((g["gap_ns"] for g in gaps), default=0),
+        "gaps": gaps,
+    }
+
+
 def _synthetic_frames(uri: str):
     """`Frame`-Objekte aus `dispread.frames.open_source`, roh durchgereicht.
 
     Liefert ein drittes Element `sensor_sequence=None` - es gibt bei
     `synthetic://` keine Sensor-/libcamera-Sequenznummer, das Feld existiert
-    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag). Das
-    vierte Element `scaler_crop_actual` ist aus demselben Grund immer
-    `None` - `ScalerCrop` ist ein Kamera-Control, `synthetic://` hat keine
-    Kamera (Task 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md)."""
+    trotzdem in jedem Eintrag, nur eben leer (siehe OQ-40-Nachtrag)."""
     source = open_source(uri)
     source.open()
     try:
         for frame in source.frames():
-            yield frame.image, frame.capture_timestamp.to_dict(), None, None
+            yield frame.image, frame.capture_timestamp.to_dict(), None
     finally:
         source.close()
 
 
-def _camera_frames(size: tuple[int, int], fps: float, scaler_crop: tuple[int, int, int, int] | None = None):
-    """Echte Kamera - lazy Import, siehe CLAUDE.md.
+def _uvc_frames(settings: CameraSettings, device: str | None, state: dict[str, Any]):
+    """Echte Kamera: Logitech StreamCam ueber `UvcSource`
+    (src/dispread/frames/uvc_source.py). `UvcSource` ist am Modulanfang
+    importiert (kein Hardwarebedarf beim reinen Import, das eigentliche
+    `cv2` steckt lazy in `UvcSource.open()`) statt hier lokal - so kann ein
+    Test `module.UvcSource` durch eine Fake-Klasse ersetzen.
 
-    Feldbehandlung ist `Controller._capture` nachgebildet (controller.py
-    ~Zeile 1515), **und die Konfiguration ebenfalls** (~Zeile 1638). Das ist
-    kein Schoenheitsdetail:
+    Liefert dasselbe Tripel wie `_synthetic_frames`, `sensor_sequence` immer
+    `None` - die StreamCam hat keine Sensor-/libcamera-Sequenznummer wie das
+    IMX500.
 
-    Die erste Fassung nahm `create_still_configuration`. Am echten IMX500
-    liefert das ueber zwei Minuten **kein einziges Bild** - der Standbildpfad
-    ist auf Einzelaufnahmen ausgelegt, nicht auf einen Dauerlauf, und der
-    Sensor laeuft bei voller Aufloesung mit 10 fps. Gemessen am 2026-09-22:
-    serieller Strom lief, `frames.jsonl` blieb leer.
-
-    `create_video_configuration` ist der im Repo erprobte Streaming-Pfad; mit
-    ihm sind die 88 Bestandsproben aufgenommen worden. `format="RGB888"` und
-    die gesetzte `FrameRate` gehoeren dazu - ohne das Format liefert
-    `make_array("main")` eine andere Kanalanordnung als der Rest der Kette
-    erwartet. `queue=False` verhindert, dass ein gepuffertes altes Bild
-    ausgeliefert wird; fuer eine Zeitversatzmessung waere genau das fatal.
-
-    Zusaetzlich zur `SensorTimestamp`-basierten `Timestamp` liefert jedes
-    Bild die Sensor-/libcamera-Sequenznummer (drittes Element im Tupel,
-    `sensor_sequence`) - das eigentliche Gegenmittel zum OQ-40-Nachtrag: der
-    Skript-eigene Zaehler `frame_sequence` in `run()` zaehlt nur, wie oft
-    dieses Skript geschrieben hat, und haette die 2,60s-Luecke vom
-    2026-09-23 NICHT gezeigt, weil `queue=False` das verpasste Bild
-    stillschweigend ausliess. `request.request` ist das zugrundeliegende
-    `libcamera.Request`-Objekt (siehe
-    `/usr/lib/python3/dist-packages/picamera2/request.py:90`,
-    `self.request = request` im `CompletedRequest.__init__`); dessen
-    `.sequence`-Attribut stammt aus der kompilierten `_libcamera`-Erweiterung,
-    reexportiert ueber `/usr/lib/python3/dist-packages/libcamera/__init__.py:4`
-    (`from ._libcamera import *`) - `dir(libcamera.Request)` listet
-    `sequence` dort auf. Muss VOR `request.release()` gelesen werden, wie
-    `make_array`/`get_metadata` auch.
-
-    `scaler_crop` (Task 2, docs/superpowers/plans/2026-09-23-ernte-phase1.md,
-    Entscheidung 4 - mehr Pixel je Punkt ueber `ScalerCrop`, nie ueber einen
-    groesseren Sensormodus, OQ-22) geht als `ScalerCrop`-Eintrag in die
-    `controls`-Dict von `create_video_configuration`, NICHT ueber
-    `camera.set_controls(...)` nach dem Start:
-    `Picamera2.configure_()` uebernimmt `camera_config['controls']`
-    unveraendert in `self.controls`
-    (`/usr/lib/python3/dist-packages/picamera2/picamera2.py:1292`,
-    `self.controls = Controls(self, controls=self.camera_config['controls'])`),
-    und `Picamera2.start_()` wendet genau diese Controls beim eigentlichen
-    Systemstart an (`picamera2.py:1338`, `self.camera.start(controls)`). Ein
-    `set_controls` nach `camera.start()` wird laut Docstring dort "delivered
-    with the next request that gets submitted" (`picamera2.py:1428`) - der
-    allererste Request koennte den Crop also noch nicht sehen. Der
-    Konfigurationsweg ist deshalb der einzige, der den Crop schon im ersten
-    Bild garantiert.
-
-    Der tatsaechlich wirksame Ausschnitt kommt aus den Metadaten des ersten
-    Bildes zurueck (`request.get_metadata()["ScalerCrop"]`,
-    `CompletedRequest.get_metadata` in
-    `/usr/lib/python3/dist-packages/picamera2/request.py:161`) - dort wird
-    jeder libcamera-`Rectangle`-Wert ueber `convert_from_libcamera_type`
-    (`/usr/lib/python3/dist-packages/picamera2/utils.py:6-13`) zu einem
-    reinen `(x, y, w, h)`-Tupel. Weil dieses Tupel kein `str`/`bool`/`int`/
-    `float` ist, faellt es durch den bestehenden JSON-Metadatenfilter unten
-    und wird deshalb VORHER separat ausgelesen.
-    """
-    from picamera2 import Picamera2
-
-    camera = Picamera2()
+    `describe()` landet IMMER in `state["camera"]` - auch wenn `open()` mit
+    `UvcError` scheitert (dann mit den bis dahin bekannten Feldern, z.B.
+    `device=None`, wenn nicht einmal `find_uvc_device` durchlief) oder wenn
+    kein einziges Bild ankam. Nur so kann `run()` das reale Kameraprofil
+    dieser Sitzung dokumentieren, unabhaengig vom Ausgang."""
+    source = UvcSource(settings, device=device)
     try:
-        controls: dict[str, Any] = {"FrameRate": fps} if fps > 0 else {}
-        if scaler_crop is not None:
-            controls["ScalerCrop"] = scaler_crop
-        config = camera.create_video_configuration(
-            main={"size": size, "format": "RGB888"},
-            controls=controls,
-            queue=False,
-        )
-        camera.configure(config)
-        camera.start(show_preview=False)
-        while True:
-            request = camera.capture_request(wait=2.0)
-            try:
-                image = request.make_array("main").copy()
-                raw_metadata = request.get_metadata()
-                try:
-                    sensor_sequence = request.request.sequence
-                except AttributeError:
-                    sensor_sequence = None
-                scaler_crop_actual = raw_metadata.get("ScalerCrop")
-            finally:
-                request.release()
-            # Nur JSON-faehige echte Metadaten; SensorTimestamp unveraendert -
-            # deckungsgleich mit Controller._capture.
-            metadata = {k: v for k, v in raw_metadata.items() if isinstance(v, (str, bool, int, float))}
-            timestamp = Timestamp(
-                value_ns=int(metadata.get("SensorTimestamp", 0)),
-                base=TimeBaseKind.SENSOR_BOOTTIME,
-                semantics=TimestampSemantics.UNKNOWN,
-                uncertainty_ns=None,
-            )
-            yield image, timestamp.to_dict(), sensor_sequence, scaler_crop_actual
+        source.open()
+        for frame in source.frames():
+            yield frame.image, frame.capture_timestamp.to_dict(), None
     finally:
-        camera.stop()
+        source.close()
+        state["camera"] = source.describe()
 
 
-def _frame_generator(args: argparse.Namespace):
+def _frame_generator(args: argparse.Namespace, state: dict[str, Any], camera_settings: CameraSettings | None = None,
+                      camera_device: str | None = None):
+    """Liefert Tripel `(image, timestamp_dict, sensor_sequence)` - siehe
+    `_synthetic_frames`/`_uvc_frames`. `camera_settings`/`camera_device`
+    werden nur im Kamerazweig gebraucht (dort von `run()` schon geladen,
+    damit `settings.fps` auch fuer `count_frame_gaps` zur Verfuegung steht,
+    ohne die Profildatei ein zweites Mal zu lesen)."""
     if args.source == "synthetic":
+        state["camera"] = None
         yield from _synthetic_frames(args.synthetic_uri)
     else:
-        w, _, h = args.camera_size.partition("x")
-        yield from _camera_frames((int(w), int(h)), args.frame_rate, scaler_crop=args.scaler_crop)
+        assert camera_settings is not None
+        yield from _uvc_frames(camera_settings, camera_device, state)
+
+
+class _CameraStartupTimeout(Exception):
+    """Kein Bild innerhalb von `STARTUP_TIMEOUT_S` nach Kamerastart (Bug 1)."""
+
+
+def _no_frames_message(detail: str) -> str:
+    """Einheitlicher Wortlaut fuer jeden Fall, in dem der Kamerazweig ohne
+    Bild endet (Timeout, Ausnahme, oder frames_recorded == 0 am Ende)."""
+    return f"Kamera liefert keine Bilder - Prozess NICHT hart beenden. {detail}"
+
+
+def _camera_startup_guard(gen, timeout_s: float):
+    """Wrapper-Generator: das ERSTE Element von `gen` wird mit einer
+    Zeitschranke `timeout_s` geholt, alle weiteren unveraendert durchgereicht.
+
+    Grund: eine haengende Kamera laesst `UvcSource.frames()`/`open()` unter
+    Umstaenden lange haengen. Das darf nicht als stiller Leerlauf enden
+    (Bug 1, Orchestrator 2026-09-23).
+
+    Das erste `next(gen)` laeuft dafuer in einem eigenen Daemon-Thread. Bei
+    Zeitueberschreitung wird dieser Thread NICHT abgebrochen - Python kann
+    einen blockierten Aufruf nicht sicher unterbrechen. Der Thread stirbt mit
+    dem Prozess (daemon=True); der reguläre Abbruchpfad (`close()` im
+    `finally` von `_uvc_frames`) laeuft nur, wenn der blockierte Aufruf
+    irgendwann doch noch zurueckkehrt oder wirft."""
+    result: dict[str, Any] = {}
+    done = threading.Event()
+
+    def _fetch_first() -> None:
+        try:
+            result["item"] = next(gen)
+        except StopIteration:
+            result["stopped"] = True
+        except Exception as exc:  # noqa: BLE001 - an den Aufrufer weiterreichen
+            result["exception"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=_fetch_first, daemon=True, name="camera-startup-guard")
+    thread.start()
+    if not done.wait(timeout=timeout_s):
+        raise _CameraStartupTimeout(
+            f"Kein Bild innerhalb von {timeout_s:.0f}s nach Kamerastart erhalten"
+        )
+    if "exception" in result:
+        raise result["exception"]
+    if not result.get("stopped"):
+        yield result["item"]
+    yield from gen
 
 
 def _frame_acquisition_worker(
@@ -843,6 +825,9 @@ def _frame_acquisition_worker(
     frame_drop_queue: queue.Queue[Any],
     stop_event: threading.Event,
     state: dict[str, Any],
+    *,
+    camera_settings: CameraSettings | None = None,
+    camera_device: str | None = None,
 ) -> None:
     """Zieht Bilder aus `_frame_generator` und legt sie in `frame_queue` ab -
     kodiert und schreibt NICHTS (siehe Moduldocstring, Abschnitt "Erzeugen
@@ -851,14 +836,48 @@ def _frame_acquisition_worker(
     unter Kernel-Dirty-Page-Writeback (bis 130 MB) - ein I/O-loser
     Herzschlagprozess zeigte im selben Zeitraum KEINE Luecke.
 
-    Die Taktung (`--frame-rate`) bleibt bewusst HIER, nicht im
-    Schreiberthread: sie regelt, wie schnell dieser Thread den naechsten
-    Generator-`next()` aufruft - fuer `synthetic://` ist das die einzige
-    Bremse ueberhaupt (Erzeugung ist praktisch sofort), fuer `--source
-    camera` taktet die Hardware selbst schon (`FrameRate`-Control) und diese
-    Sleep bleibt zusaetzlich wirksam, exakt wie vor dieser Aufteilung -
-    reines Verschieben der Zustaendigkeit, keine Verhaltensaenderung an der
-    Taktung selbst.
+    Taktung (`--frame-rate`), final-review.md I-1: **nur** `synthetic://`
+    wird ueber ein Sleep vor dem naechsten Generator-`next()` gebremst (dort
+    die einzige Bremse ueberhaupt, Erzeugung ist praktisch sofort). Im
+    Kamerazweig gibt es KEIN Sleep mehr - jedes Bild wird sofort gelesen,
+    sonst haelt die StreamCam volle V4L2-Puffer (Standard 4 bei OpenCV), und
+    aufeinanderfolgende GELIEFERTE Bilder liegen dann rund
+    Puffertiefe/camera_settings.fps statt 1/frame_rate auseinander - genau
+    der Review-Befund. Stattdessen wird im Kamerazweig nach dem Lesen jedes
+    Bildes anhand des Zeitstempels ausgeduennt.
+
+    Fix-Runde 1 (Task 7): eine erste Fassung verglich nur gegen das zuletzt
+    weitergegebene Bild ("`value_ns - letztes_geschriebenes >= 1/frame_rate`").
+    Eine echte 10s-Aufnahme (30 fps, --frame-rate 15) zeigte damit nur ~97
+    statt ~150 Bilder (effektiv 10-12 statt 15 fps): Zeitstempel-Jitter laesst
+    das Bild zwei Kameraperioden spaeter gelegentlich eine Bruchteils-ms VOR
+    der Schwelle ankommen, es wird uebersprungen, und erst das naechste (eine
+    volle Kameraperiode spaeter) wird geschrieben - die Ausduennung "driftet"
+    sich damit selbst auf einen groeberen Takt.
+
+    Fix: ein Soll-Zeitplan (`next_due_ns`) statt eines Abstands zum letzten
+    Bild. Das erste Bild wird geschrieben und setzt
+    `next_due_ns = value_ns + frame_period_ns`. Ein Bild wird geschrieben,
+    wenn `value_ns >= next_due_ns - tolerance_ns`
+    (`tolerance_ns = camera_period_ns // 2`, `camera_period_ns` aus
+    `camera_settings.fps`) - toleriert also bis zu einer halben Kameraperiode
+    Jitter, ohne den Soll-Takt zu verschieben. Nach dem Schreiben ruecken wir
+    `next_due_ns` um `frame_period_ns` weiter; ist die Kamera weiter zurueck
+    als eine volle `frame_period_ns` (`value_ns - next_due_ns >
+    frame_period_ns`, z.B. nach einem echten Aussetzer), wird auf
+    `value_ns + frame_period_ns` resynchronisiert statt mit mehreren
+    Bildern in Folge aufzuholen (kein Burst nach einer Luecke).
+
+    Nicht weitergegebene Bilder sind KEIN Drop (die zaehlen nur bei voller
+    `frame_queue`, siehe unten) - sie werden einfach nicht geschrieben.
+
+    `sensor_timestamp_interval_ns` (Feld je `frames.jsonl`-Zeile) bezieht
+    sich deshalb im Kamerazweig auf das vorige WEITERGEGEBENE Bild, nicht auf
+    das vorige GELESENE - so wird es aktuell nirgends konsumiert (nur roh
+    durchgereicht, kein Auswerter verlangt heute etwas anderes), aber es ist
+    die Groesse, die zur tatsaechlich geschriebenen Folge passt. Im
+    synthetic-Zweig ist das ohnehin dieselbe Folge (dort wird nichts
+    ausgeduennt), also keine Verhaltensaenderung dort.
 
     Ist `frame_queue` voll (Schreiber kommt nicht hinterher), wird das Bild
     NICHT geschrieben und NICHT still verworfen: es zaehlt in
@@ -867,34 +886,69 @@ def _frame_acquisition_worker(
     als eigener `frames.jsonl`-Eintrag sichtbar wird. `frame_queue.put(...)`
     selbst blockiert dafuer NIE.
 
-    `scaler_crop_actual` (Task 2) wird nur vom ERSTEN Bild in `state`
-    uebernommen - `session.json["scaler_crop_actual"]" soll den Wert aus den
-    Metadaten des ersten Bildes tragen, nicht den letzten gesehenen."""
+    `frame_gaps` (nur Kamerazweig): ALLE gelesenen `value_ns` werden
+    gesammelt (auch ausgeduennte, nicht geschriebene) und am Ende ueber
+    `count_frame_gaps(..., camera_settings.fps)` ausgewertet - Luecken sind
+    hier am aussagekraeftigsten, weil sie die roh von der Kamera gelieferten,
+    UNGEDROSSELTEN Zeitstempel betreffen, nicht erst die Ausduennung.
+
+    Stall-Erkennung (`iter_duration_s > 3 * stall_period_s`): im Kamerazweig
+    bezieht sich `stall_period_s` auf den Kamera-Bildabstand
+    (`1/camera_settings.fps`), NICHT auf `--frame-rate` - ohne Sleep im
+    Kamerazweig waere `frame_rate` sonst der falsche Massstab dafuer, wie
+    schnell aufeinanderfolgende `next()`-Aufrufe normalerweise sind."""
+    is_camera = args.source == "camera"
     frame_period_s = 1.0 / args.frame_rate if args.frame_rate > 0 else 0.0
+    # Ganzzahlig statt `frame_period_s * 1e9`: bei kommensurablen Werten
+    # (z.B. genau 2x Kamera-Intervall) fuehrt die Fliesskomma-Rundung von
+    # `1.0/args.frame_rate` sonst dazu, dass der doppelte Kamera-Abstand die
+    # Schwelle knapp NICHT erreicht (66666666 ns < 66666666.667 ns) und jedes
+    # dritte statt jedes zweite Bild geschrieben wird - beobachtet in
+    # test_kamera_30fps_frame_rate_15_liefert_keine_luecken_und_duennt_aus.
+    frame_period_ns = int(1e9 // args.frame_rate) if args.frame_rate > 0 else 0
+    # Fix-Runde 1 (Task 7): `camera_period_ns`/`tolerance_ns` fuer den
+    # Soll-Zeitplan der Ausduennung (`next_due_value_ns` unten) - siehe
+    # Docstring oben. Eine halbe Kameraperiode Toleranz ist grosszuegig
+    # gegenueber dem beobachteten Jitter (Bruchteils-ms) und trotzdem klein
+    # genug, um zwei echt aufeinanderfolgende Sollzeitpunkte nicht zu
+    # verwechseln.
+    camera_period_ns = (
+        int(1e9 // camera_settings.fps)
+        if is_camera and camera_settings is not None and camera_settings.fps > 0
+        else 0
+    )
+    tolerance_ns = camera_period_ns // 2
+    stall_period_s = (
+        (1.0 / camera_settings.fps)
+        if is_camera and camera_settings is not None and camera_settings.fps > 0
+        else frame_period_s
+    )
     start_mono = time.monotonic()
     next_due = start_mono
     max_loop_iteration_s = 0.0
     stall_iterations: list[dict[str, Any]] = []
     prev_loop_end_mono = start_mono
-    prev_sensor_timestamp_ns: int | None = None
+    prev_written_value_ns: int | None = None
+    next_due_value_ns: int | None = None
     max_frame_queue_depth = 0
     frames_acquired = 0
     frames_dropped = 0
-    scaler_crop_actual_captured = False
+    camera_value_ns: list[int] = []
 
-    gen = _frame_generator(args)
+    gen = _frame_generator(args, state, camera_settings, camera_device)
+    if is_camera:
+        # Bug 1: nur der Kamerazweig kann haengen bleiben - synthetic:// ist
+        # ein reiner Generator ohne Hardware-I/O.
+        gen = _camera_startup_guard(gen, STARTUP_TIMEOUT_S)
     try:
-        for image, timestamp_dict, sensor_sequence, scaler_crop_actual in gen:
+        for image, timestamp_dict, sensor_sequence in gen:
             if stop_event.is_set():
                 break
-            if not scaler_crop_actual_captured:
-                state["scaler_crop_actual"] = scaler_crop_actual
-                scaler_crop_actual_captured = True
             now = time.monotonic()
             iter_duration_s = now - prev_loop_end_mono
             if iter_duration_s > max_loop_iteration_s:
                 max_loop_iteration_s = iter_duration_s
-            if frame_period_s > 0 and iter_duration_s > 3 * frame_period_s:
+            if stall_period_s > 0 and iter_duration_s > 3 * stall_period_s:
                 stall_iterations.append({
                     "t_boot": time.clock_gettime(time.CLOCK_BOOTTIME),
                     "duration_s": iter_duration_s,
@@ -904,11 +958,39 @@ def _frame_acquisition_worker(
             frames_acquired += 1
 
             value_ns = timestamp_dict.get("value_ns")
+            if is_camera and value_ns is not None:
+                # Ungedrosselt, VOR der Ausduennung - siehe Docstring
+                # "frame_gaps".
+                camera_value_ns.append(value_ns)
+
+            if (
+                is_camera
+                and frame_period_ns > 0
+                and value_ns is not None
+                and next_due_value_ns is not None
+                and value_ns < next_due_value_ns - tolerance_ns
+            ):
+                # Ausgeduennt: gelesen, aber nicht weitergegeben - kein Drop.
+                # Soll-Zeitplan bleibt unveraendert (siehe Docstring
+                # "Fix-Runde 1") - nur ueberspringen, nicht nachziehen.
+                prev_loop_end_mono = time.monotonic()
+                continue
+
+            if is_camera and frame_period_ns > 0 and value_ns is not None:
+                if next_due_value_ns is None or value_ns - next_due_value_ns > frame_period_ns:
+                    # Erstes Bild ueberhaupt, oder die Kamera liegt mehr als
+                    # eine volle Sollperiode zurueck (echter Aussetzer) -
+                    # auf den aktuellen Zeitstempel resynchronisieren statt
+                    # mit mehreren Bildern in Folge aufzuholen (kein Burst).
+                    next_due_value_ns = value_ns + frame_period_ns
+                else:
+                    next_due_value_ns += frame_period_ns
+
             sensor_timestamp_interval_ns = None
-            if prev_sensor_timestamp_ns is not None and value_ns is not None:
-                sensor_timestamp_interval_ns = value_ns - prev_sensor_timestamp_ns
+            if prev_written_value_ns is not None and value_ns is not None:
+                sensor_timestamp_interval_ns = value_ns - prev_written_value_ns
             if value_ns is not None:
-                prev_sensor_timestamp_ns = value_ns
+                prev_written_value_ns = value_ns
 
             try:
                 frame_queue.put_nowait({
@@ -927,22 +1009,71 @@ def _frame_acquisition_worker(
                 })
             max_frame_queue_depth = max(max_frame_queue_depth, frame_queue.qsize())
 
-            if frame_period_s > 0:
+            if not is_camera and frame_period_s > 0:
                 next_due += frame_period_s
                 sleep_for = next_due - time.monotonic()
                 if sleep_for > 0:
                     time.sleep(sleep_for)
             prev_loop_end_mono = time.monotonic()
+    except _CameraStartupTimeout as exc:
+        # Bug 1: laut ablehnen statt still 0 Bilder zu hinterlassen, inkl.
+        # Hinweis, den Prozess NICHT hart zu beenden (siehe
+        # _camera_startup_guard-Docstring).
+        state["acquisition_error"] = _no_frames_message(f"{exc}.")
+    except UvcError as exc:
+        # StreamCam liess sich nicht wie im Profil verlangt einrichten
+        # (`UvcSource.open()`, z.B. Aufloesung oder ein Regler-Ist-Wert
+        # weicht ab) - dasselbe "keine Bilder"-Ergebnis wie der Startup-
+        # Timeout, nur mit dem `UvcError`-Text als Detail. `UvcError` kann
+        # nur aus `_uvc_frames` stammen, also immer im Kamerazweig - kein
+        # `args.source`-Fallunterschied noetig.
+        if frames_acquired == 0:
+            state["acquisition_error"] = _no_frames_message(f"UvcError: {exc}")
+        else:
+            state["acquisition_error"] = f"UvcError: {exc}"
     except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
-        state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
+        if args.source == "camera" and frames_acquired == 0:
+            # Jede Ausnahme im Kamerazweig OHNE EIN EINZIGES BILD ist derselbe
+            # Befund wie der Startup-Timeout (Bug 1) - z.B. ein Lesefehler
+            # ohne jedes Bild. Kam schon mindestens ein Bild an, ist es ein
+            # anderer Fehler (die Kamera lief ja) - dafuer waere "keine
+            # Bilder" falsch, siehe generischer Zweig unten.
+            state["acquisition_error"] = _no_frames_message(f"{type(exc).__name__}: {exc}")
+        else:
+            state["acquisition_error"] = f"{type(exc).__name__}: {exc}"
     finally:
         gen.close()
-        state.setdefault("scaler_crop_actual", None)
+        state.setdefault("camera", None)
         state["frames_acquired"] = frames_acquired
         state["frames_dropped_queue_full"] = frames_dropped
         state["max_loop_iteration_s"] = max_loop_iteration_s
         state["stall_iterations"] = stall_iterations
         state["max_frame_queue_depth"] = max_frame_queue_depth
+        state["frame_gaps"] = (
+            count_frame_gaps(camera_value_ns, camera_settings.fps)
+            if args.source == "camera" and camera_settings is not None
+            else None
+        )
+        # Kameraausfall MITTEN in der Aufnahme (Review-Fund, Fix-Runde 1):
+        # `UvcSource.frames()` wirft bei einem Lesefehler NICHT - sie setzt
+        # `read_error` und beendet den Generator regulaer (siehe
+        # `UvcSource.frames()`/READ_FAIL_TIMEOUT_S). Ohne Ausnahme durchlaeuft
+        # die `for`-Schleife oben keinen `except`-Zweig, `acquisition_error`
+        # bliebe also unbemerkt `None`, obwohl schon Bilder aufgezeichnet
+        # wurden. Nur relevant, wenn schon mindestens ein Bild ankam (kam gar
+        # keins an, greift stattdessen der no-frames-Pfad in `run()`, der
+        # `frames_recorded == 0` prueft und Exit 4 ausloest) und noch kein
+        # anderer Zweig oben schon einen Grund gesetzt hat.
+        if (
+            args.source == "camera"
+            and frames_acquired > 0
+            and state.get("acquisition_error") is None
+            and state.get("camera") is not None
+            and state["camera"].get("read_error")
+        ):
+            state["acquisition_error"] = (
+                f"Kameraausfall waehrend der Aufnahme: {state['camera']['read_error']}"
+            )
         frame_queue.put(_QUEUE_DONE)
         frame_drop_queue.put(_QUEUE_DONE)
 
@@ -968,7 +1099,20 @@ def _frame_writer_worker(
     davon, wie lange dabei der GIL gehalten wird, darf ein langsamer
     Schreibvorgang nie die naechste Bildaufnahme verzoegern. `cv2` ist am
     Modulanfang importiert (kein Hardwarebedarf, siehe dort) - kein
-    zusaetzlicher lokaler Import noetig."""
+    zusaetzlicher lokaler Import noetig.
+
+    Bildzaehler-Fix (Review Focus 2): `state["frames_recorded"]` wird nach
+    JEDEM geschriebenen Bild aktualisiert, nicht erst am Ende der Schleife.
+    Vorher stand dort nur der allerletzte Stand nach Schleifenende - haengt
+    der Aufnahmethread (kommt also nie `_QUEUE_DONE` auf `frame_queue` an),
+    lief diese Schleife nie zu Ende und `frames_recorded` blieb beim
+    Default `0` stehen, obwohl der Schreiber laengst Bilder auf die Platte
+    geschrieben hatte. `run()` liest `frames_recorded` nach dem (ggf. per
+    Timeout beendeten) `frame_writer_thread.join(...)` - der laufend
+    aktualisierte Stand ist deshalb auch dann ehrlich, wenn der Join-Timeout
+    zuschlaegt. `writer_finished` markiert zusaetzlich, ob die Schleife
+    tatsaechlich regulaer zu Ende kam (beide `_QUEUE_DONE`-Sentinel
+    angekommen) oder ob der Thread beim Prozessende noch lief."""
     frames_written = 0
     frame_done = False
     drop_done = False
@@ -994,6 +1138,7 @@ def _frame_writer_worker(
                     }
                     f_frames.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     f_frames.flush()
+                    state["frames_recorded"] = frames_written
             while True:
                 try:
                     drop_item = frame_drop_queue.get_nowait()
@@ -1005,6 +1150,7 @@ def _frame_writer_worker(
                     f_frames.write(json.dumps(drop_item, ensure_ascii=False) + "\n")
                     f_frames.flush()
     state["frames_recorded"] = frames_written
+    state["writer_finished"] = True
 
 
 # --- Hauptablauf --------------------------------------------------------------
@@ -1033,6 +1179,34 @@ def _install_sigterm_handler() -> None:
 def run(args: argparse.Namespace) -> int:
     _install_sigterm_handler()
 
+    # Kameraprofil VOR jedem Kamerazugriff laden - liest nur die JSON-Datei,
+    # oeffnet weder Kamera noch Port. `--camera-settings` ist bei --source
+    # camera bereits in parse_args als Pflicht erzwungen.
+    camera_settings: CameraSettings | None = None
+    camera_device: str | None = None
+    if args.source == "camera":
+        try:
+            camera_settings = load_camera_settings(args.camera_settings)
+        except (OSError, ValueError) as exc:
+            print(f"Fehler: --camera-settings {args.camera_settings} konnte nicht geladen werden: {exc}", file=sys.stderr)
+            return 1
+        camera_device = str(args.camera_device) if args.camera_device is not None else None
+        # I-1 final-review.md: mit gedrosseltem LESEN (Sleep im Aufnahme-
+        # thread) waeren --frame-rate > camera_settings.fps wirkungslos
+        # gewesen (die Kamera taktet ohnehin nicht schneller). Mit Ausduennung
+        # nach Zeitstempel waere so ein Wert dagegen NIE ausduennend (jedes
+        # gelieferte Bild landet in der Warteschlange) - der Bediener erwartet
+        # aber eine Drosselung, wenn er --frame-rate explizit angibt. Deshalb
+        # klare Ablehnung statt eines stillschweigend wirkungslosen Werts.
+        if args.frame_rate > camera_settings.fps:
+            print(
+                f"Fehler: --frame-rate {args.frame_rate} ist groesser als die Kamera-fps "
+                f"{camera_settings.fps} aus --camera-settings {args.camera_settings} - "
+                "die Ausduennung waere wirkungslos.",
+                file=sys.stderr,
+            )
+            return 2
+
     output_dir = args.output or (DEFAULT_OUTPUT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S"))
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -1055,6 +1229,13 @@ def run(args: argparse.Namespace) -> int:
 
     started_at_utc = datetime.now(UTC).isoformat()
     started_at_boottime_ns = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+    # Versatz CLOCK_BOOTTIME-CLOCK_MONOTONIC direkt vor dem Start der
+    # Aufnahme-Threads messen (siehe `measure_clock_offset_ns`) - noetig, um
+    # spaeter `v4l2_monotonic`-Zeitstempel der StreamCam ueberhaupt nach
+    # CLOCK_BOOTTIME umrechnen zu koennen (`dispread.records.to_boottime_ns`).
+    # Wird IMMER gemessen, auch bei --source synthetic - die Umrechnung ist
+    # zeitbasisabhaengig, nicht quellenabhaengig.
+    clock_offset_start_ns = measure_clock_offset_ns()
 
     stop_event = threading.Event()
     ready_event = threading.Event()
@@ -1121,6 +1302,7 @@ def run(args: argparse.Namespace) -> int:
     frame_acq_thread = threading.Thread(
         target=_frame_acquisition_worker,
         args=(args, frame_queue, frame_drop_queue, stop_event, frame_acq_state),
+        kwargs={"camera_settings": camera_settings, "camera_device": camera_device},
         name="frame-acquisition",
         daemon=True,
     )
@@ -1173,8 +1355,22 @@ def run(args: argparse.Namespace) -> int:
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
 
+        # Zweite Versatzmessung nach dem Join - die Differenz zu
+        # `clock_offset_start_ns` zeigt einen Suspend waehrend der Aufnahme
+        # an (SUSPEND_TOLERANCE_NS in dispread.records.to_boottime_ns).
+        clock_offset_end_ns = measure_clock_offset_ns()
+
         frames_recorded = frame_writer_state.get("frames_recorded", 0)
         serial_lines_recorded = serial_writer_state.get("count", 0)
+
+        acquisition_error = frame_acq_state.get("acquisition_error")
+        if args.source == "camera" and frames_recorded == 0 and not acquisition_error:
+            # Bug 1, zweiter Fall: der Kamerazweig lieferte zwar irgendwann
+            # eine Antwort (kein Timeout, keine Ausnahme), aber am Ende steht
+            # trotzdem 0 aufgezeichnete Bilder da - auch das ist ein Befund,
+            # kein stiller Leerlauf.
+            acquisition_error = _no_frames_message("Kamerazweig endete mit 0 aufgezeichneten Bildern.")
+
         session = {
             "started_at_utc": started_at_utc,
             "started_at_boottime_ns": started_at_boottime_ns,
@@ -1214,24 +1410,46 @@ def run(args: argparse.Namespace) -> int:
             "frames_dropped_queue_full": frame_acq_state.get("frames_dropped_queue_full", 0),
             "max_frame_queue_depth": frame_acq_state.get("max_frame_queue_depth", 0),
             "max_serial_queue_depth": serial_state.get("max_serial_queue_depth", 0),
-            "acquisition_error": frame_acq_state.get("acquisition_error"),
-            # Task 2 (docs/superpowers/plans/2026-09-23-ernte-phase1.md):
-            # angefordert = das geparste --scaler-crop-Argument, tatsaechlich =
-            # der Wert aus den Metadaten des ersten Bildes ("ScalerCrop") -
-            # nur im Kamerazweig ueberhaupt gesetzt, siehe _camera_frames.
-            "scaler_crop_requested": list(args.scaler_crop) if args.scaler_crop is not None else None,
-            "scaler_crop_actual": (
-                list(frame_acq_state["scaler_crop_actual"])
-                if frame_acq_state.get("scaler_crop_actual") is not None
+            "acquisition_error": acquisition_error,
+            # Kamera: `UvcSource.describe()` (oder `None` bei --source
+            # synthetic) - siehe `_uvc_frames`. Wird auch bei einem
+            # `UvcError` beim Oeffnen oder 0 aufgezeichneten Bildern gesetzt.
+            "camera": frame_acq_state.get("camera"),
+            # Versatz CLOCK_BOOTTIME-CLOCK_MONOTONIC, IMMER gesetzt (auch bei
+            # --source synthetic) - siehe `measure_clock_offset_ns` und
+            # `dispread.records.to_boottime_ns`.
+            "clock_offset_boottime_minus_monotonic_ns": {
+                "start": clock_offset_start_ns,
+                "end": clock_offset_end_ns,
+            },
+            # Luecken in den roh gelieferten Kamera-Zeitstempeln - nur im
+            # Kamerazweig gesetzt, siehe `count_frame_gaps`.
+            "frame_gaps": frame_acq_state.get("frame_gaps"),
+            # Nur im Kamerazweig relevant: < 5000 Mbps heisst kein USB3, was
+            # bei hoher Aufloesung/fps zum limitierenden Faktor werden kann.
+            "usb_speed_warning": (
+                (
+                    f"USB-Verbindung der StreamCam laeuft mit "
+                    f"{frame_acq_state['camera']['usb_speed_mbps']} Mbps (< 5000 = USB3)."
+                )
+                if frame_acq_state.get("camera") is not None
+                and frame_acq_state["camera"].get("usb_speed_mbps") is not None
+                and frame_acq_state["camera"]["usb_speed_mbps"] < 5000
                 else None
             ),
+            # Bildzaehler-Fix (Review Focus 2): ob der Schreiberthread
+            # regulaer zu Ende kam (beide `_QUEUE_DONE`-Sentinel angekommen)
+            # oder beim Prozessende noch lief (z.B. haengender
+            # Aufnahmethread) - `frames_recorded` bleibt in beiden Faellen
+            # ehrlich, siehe `_frame_writer_worker`.
+            "frame_writer_finished": frame_writer_state.get("writer_finished", False),
         }
         session_json.write_text(json.dumps(session, indent=2, ensure_ascii=False, default=_json_default))
 
     if serial_state.get("read_error"):
         print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
-    if frame_acq_state.get("acquisition_error"):
-        print(f"Warnung: Bildaufnahme beendet mit Fehler: {frame_acq_state['acquisition_error']}", file=sys.stderr)
+    if acquisition_error:
+        print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=sys.stderr)
 
     if serial_writer_state.get("count", 0) == 0:
         print(
@@ -1247,11 +1465,26 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    # Bug 1: Exit 4 (und das "FEHLER"-Wort statt "vollstaendig") ist speziell
+    # der "keine Bilder"-Befund - ein Fehler NACH bereits aufgezeichneten
+    # Bildern bleibt beim bisherigen Verhalten (Warnung, Exit 0), das ist ein
+    # anderer Fall als der hier behandelte stille Leerlauf.
+    no_frames_acquired = args.source == "camera" and frames_recorded == 0 and bool(acquisition_error)
+    if aborted:
+        status_word = "ABGEBROCHEN"
+    elif no_frames_acquired:
+        # Dieses Wort darf hier nie stehen, wenn keine Bilder angekommen
+        # sind - "vollstaendig" hiesse stillschweigend erfolgreich.
+        status_word = "FEHLER (keine Bilder, siehe acquisition_error)"
+    else:
+        status_word = "vollstaendig"
     print(
         f"Fertig: {frame_writer_state.get('frames_recorded', 0)} Bilder, "
         f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
-        f"{'ABGEBROCHEN' if aborted else 'vollstaendig'} -> {output_dir}"
+        f"{status_word} -> {output_dir}"
     )
+    if no_frames_acquired:
+        return EXIT_NO_FRAMES_ACQUIRED
     return 0
 
 

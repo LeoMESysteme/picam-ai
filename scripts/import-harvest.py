@@ -86,6 +86,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dispread.frame_alignment import estimate_quad_shift
 from dispread.rectify import rectify
 from dispread.session_profile import SessionProfile
 from dispread.workbench.datasets import DatasetError, DatasetStore
@@ -100,6 +101,26 @@ REASON_NICHT_PRUEFBAR = "nicht_pruefbar"
 REASON_LAENGE = "laenge_passt_nicht"
 REASON_STORE = "store_abgelehnt"
 REASON_BILD_FEHLT = "bild_nicht_ladbar"
+#: OQ-41-Nachtrag 2026-09-24, dieselbe Erweiterung wie in
+#: `gate_label.REASON_LEADING_ZEROS_UNVERIFIED` - 3 oder mehr unterdrueckte
+#: fuehrende Nullen sind auf dem Glas nicht belegt. `gate-label.py` filtert
+#: solche Bilder normalerweise schon vor dem Import aus, aber diese Pruefung
+#: ist eine zweite, unabhaengige Verteidigungslinie (defensiv), falls je ein
+#: `proposal.json` mit einer aelteren gate-label-Version oder von Hand
+#: erstellt hier ankommt (AGENTS.md: Unlesbares/Unbekanntes wird abgelehnt,
+#: nicht geraten).
+REASON_LEADING_ZEROS_UNVERIFIED = "fuehrende_nullen_ungeprueft"
+
+#: Task 10 (Ausrichtungspruefung Ernte <-> Profilbild): die StreamCam wurde
+#: waehrend/zwischen Aufnahmen mechanisch bewegt (Tisch/Halterung) - das
+#: eingebettete `profile_quad` liegt dann nicht mehr auf den Zeichen, auch
+#: wenn Bildguete/Zellenkonsistenz (die nur INNERHALB der Ernte vergleichen)
+#: das nicht bemerken. Siehe `dispread.frame_alignment`.
+REASON_AUSSCHNITT_VERSCHOBEN = "ausschnitt_verschoben"
+#: Die Verschiebungsschaetzung selbst war nicht zuverlaessig genug (siehe
+#: `dispread.frame_alignment.AlignmentEstimate.reason`) - ablehnen statt
+#: raten (AGENTS.md), nicht als "verschoben" werten.
+REASON_AUSSCHNITT_UNPRUEFBAR = "ausschnitt_unpruefbar"
 
 _ALL_REASONS = (
     REASON_BILDGUETE,
@@ -108,36 +129,73 @@ _ALL_REASONS = (
     REASON_LAENGE,
     REASON_STORE,
     REASON_BILD_FEHLT,
+    REASON_LEADING_ZEROS_UNVERIFIED,
+    REASON_AUSSCHNITT_VERSCHOBEN,
+    REASON_AUSSCHNITT_UNPRUEFBAR,
 )
+
+#: Gleicher Schwellwert wie `gate_label.MAX_VERIFIED_SUPPRESSED_ZEROS` -
+#: absichtlich dupliziert (die beiden Skripte teilen keine gemeinsame
+#: Regel-Implementierung, siehe Moduldocstring "Regel 5").
+MAX_VERIFIED_SUPPRESSED_ZEROS = 2
 
 #: Nur informativ, taucht im Bericht auf - kein Ablehnungsgrund fuer sich.
 COUNTER_ZEICHEN_ZU_SELTEN = "zeichen_zu_selten_fuer_pruefung"
 
 
-def _cell_text_for_telegram(telegram_text: str) -> str:
+def _count_leading_zeros_to_suppress(rest: str) -> int:
+    """Wie `gate_label._count_leading_zeros_to_suppress` - absichtlich
+    dupliziert, siehe Moduldocstring "Regel 5"/OQ-41-Nachtrag."""
+    int_len = 0
+    while int_len < len(rest) and rest[int_len].isdigit():
+        int_len += 1
+    if int_len <= 1:
+        return 0
+    zeros = 0
+    while zeros < int_len - 1 and rest[zeros] == "0":
+        zeros += 1
+    return zeros
+
+
+def _cell_text_for_telegram(telegram_text: str) -> str | None:
     """Erwarteter Zellinhalt je Position 0..len-1 (siehe Modul-Docstring,
     Regel 5). Gleiche Regel wie `gate_label.telegram_to_display_text()`
-    (Vorzeichen ueberspringen, genau eine fuehrende '0' vor einer weiteren
-    Ziffer betroffen) - ABER die betroffene Null wird durch ein Leerzeichen
-    ERSETZT statt entfernt, damit Position i weiterhin exakt Zelle i
-    entspricht (belegt an zwei Bildern, s. o.). NICHT auf `n_cells` aufgefuellt
-    - das macht `_padded_cell_text`."""
+    (Vorzeichen ueberspringen, fuehrende Nullen vor der letzten Ziffer des
+    Ganzzahlteils betroffen, OQ-41-Nachtrag 2026-09-24) - ABER jede
+    betroffene Null wird durch ein Leerzeichen ERSETZT statt entfernt, damit
+    Position i weiterhin exakt Zelle i entspricht (belegt an zwei Bildern,
+    s. o., und am Zweifach-Fall "+00988.5 mV/V" -> "+  988.5 mV/V" aus
+    var/diagnostics/auf3-run). NICHT auf `n_cells` aufgefuellt - das macht
+    `_padded_cell_text`.
+
+    Liefert `None`, wenn mehr als `MAX_VERIFIED_SUPPRESSED_ZEROS` fuehrende
+    Nullen unterdrueckt wuerden - dafuer fehlt jeder Beleg auf dem Glas
+    (siehe `gate_label.telegram_to_display_text`-Docstring). Aufrufer
+    muessen das als Ablehnung behandeln (`REASON_LEADING_ZEROS_UNVERIFIED`)."""
     if not telegram_text:
         return telegram_text
     if telegram_text[0] in "+-":
         sign, rest = telegram_text[0], telegram_text[1:]
     else:
         sign, rest = "", telegram_text
-    if len(rest) >= 2 and rest[0] == "0" and rest[1].isdigit():
-        rest = " " + rest[1:]
+    zeros = _count_leading_zeros_to_suppress(rest)
+    if zeros > MAX_VERIFIED_SUPPRESSED_ZEROS:
+        return None
+    if zeros:
+        rest = (" " * zeros) + rest[zeros:]
     return sign + rest
 
 
-def _padded_cell_text(telegram_text: str, n_cells: int) -> str:
+def _padded_cell_text(telegram_text: str, n_cells: int) -> str | None:
     """`_cell_text_for_telegram` rechtsseitig mit Leerzeichen auf `n_cells`
     aufgefuellt - das ist der Zellen-fuer-Zellen-Sollwert, wie ihn Phase 2
-    (Zellen-Klassifikator) braucht, siehe `label_origin_detail["cell_text"]`."""
-    return _cell_text_for_telegram(telegram_text).ljust(n_cells)
+    (Zellen-Klassifikator) braucht, siehe `label_origin_detail["cell_text"]`.
+    Gibt `None` weiter, wenn `_cell_text_for_telegram` bereits `None`
+    liefert (siehe dort)."""
+    cell_text = _cell_text_for_telegram(telegram_text)
+    if cell_text is None:
+        return None
+    return cell_text.ljust(n_cells)
 
 
 def _expected_text_and_unit(label_text: str) -> tuple[str, str]:
@@ -158,6 +216,29 @@ def _expected_text_and_unit(label_text: str) -> tuple[str, str]:
     signed, _, unit = label_text.partition(" ")
     numeric = signed[1:] if signed.startswith("+") else signed
     return numeric, unit
+
+
+def _profile_sha256(profile_path: Path) -> str:
+    """SHA-256 der Profildatei selbst (Bytes, nicht des geparsten Inhalts) -
+    Nachverfolgbarkeit (Task 6): welches genaue `profile.json` stand hinter
+    dieser Probe."""
+    return hashlib.sha256(profile_path.read_bytes()).hexdigest()
+
+
+def _profile_quad_json(quad: list[list[float]]) -> str:
+    """Die vier Quad-Ecken als JSON-String, auf 2 Nachkommastellen gerundet
+    (Task 6) - `label_origin_detail` erlaubt nur Skalare, kein verschachteltes
+    Array (`_validate_label_origin_detail`), deshalb als Text."""
+    return json.dumps([[round(x, 2), round(y, 2)] for x, y in quad])
+
+
+def _profile_grid_json(profile: SessionProfile) -> str:
+    """`CharGrid.to_dict()` plus `target_size` als JSON-String (Task 6) -
+    aus denselben Gruenden wie `_profile_quad_json` als Text statt
+    verschachteltem Objekt."""
+    grid_dict = profile.grid.to_dict()
+    grid_dict["target_size"] = list(profile.target_size)
+    return json.dumps(grid_dict)
 
 
 def _axis_aligned_bbox(quad: list[list[float]]) -> list[float]:
@@ -181,6 +262,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--per-plateau", type=int, default=3, help="Hoechstens so viele Bilder je Plateau")
     parser.add_argument("--audit", type=int, default=0, help="Groesse der Stichprobenliste (audit.json)")
     parser.add_argument("--dry-run", action="store_true", help="Nichts im DatasetStore anlegen, nur zaehlen")
+    parser.add_argument(
+        "--max-shift-dot-columns",
+        type=float,
+        default=0.5,
+        help=(
+            "Schwelle der Ausrichtungspruefung gegen das Profilbild (reference_frame), als "
+            "Vielfaches von min_source_dot_column_px (Punktspaltenbreite des Profils im "
+            "Quellbild): eine Zeichenzelle wird an genau einer Punktspaltenbreite abgetastet, "
+            "die Verschiebung soll den Abtastpunkt innerhalb des physischen Punkts halten. "
+            "Vorgabe 0.5 (halbe Punktspalte)."
+        ),
+    )
+    parser.add_argument(
+        "--no-alignment-check",
+        action="store_true",
+        help=(
+            "Ausrichtungspruefung gegen das Profilbild abschalten (z. B. fuer ein Profil ohne "
+            "reference_frame aus der Zeit vor Task 10) - wird als 'alignment_check: false' in "
+            "import.json vermerkt, kein stilles Uebernehmen."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -201,18 +303,39 @@ class _Candidate:
     sharpness: float | None = None
 
 
-def _load_frames_map(recording_dir: Path) -> dict[str, dict]:
+def _load_frames_map(recording_dir: Path) -> tuple[dict[str, dict], int]:
+    """`frames.jsonl` als `{Dateiname: Zeile}` laden. Liefert zusaetzlich die
+    Zahl uebersprungener Drop-Zeilen fuer den Bericht in `run()`.
+
+    Eine wegen voller Schreib-Warteschlange verworfene Zeile
+    (`"dropped": true`) traegt kein `file` und wird uebersprungen - siehe
+    dasselbe Muster in `display-offset.py`/`gate-label.py` (Task 7). Eine
+    Zeile ohne `file` und OHNE `dropped: true` ist dagegen ein Fehler (kein
+    Raten, AGENTS.md) und wird mit Zeilennummer abgelehnt.
+    """
     frames_path = recording_dir / "frames.jsonl"
     out: dict[str, dict] = {}
     if not frames_path.is_file():
-        return out
-    for line in frames_path.read_text(encoding="utf-8").splitlines():
+        return out, 0
+    skipped_dropped = 0
+    for lineno, line in enumerate(frames_path.read_text(encoding="utf-8").splitlines(), start=1):
         line = line.strip()
         if not line:
             continue
         obj = json.loads(line)
+        if "file" not in obj:
+            if obj.get("dropped"):
+                # final-review.md, "Nicht bewertet": eine wegen voller
+                # frame_queue verworfene Zeile traegt kein Bild - nicht mit
+                # KeyError abbrechen.
+                skipped_dropped += 1
+                continue
+            raise ValueError(
+                f"Fehler: {frames_path}, Zeile {lineno}: Feld 'file' fehlt und "
+                "'dropped: true' ist nicht gesetzt - keine Annahme moeglich."
+            )
         out[str(obj["file"])] = obj
-    return out
+    return out, skipped_dropped
 
 
 def _resolve_image_path(harvest_dir: Path, image_path: str) -> Path:
@@ -297,6 +420,52 @@ def run(args: argparse.Namespace) -> int:
         )
         return 3
 
+    # -- Task 10: Ausrichtungspruefung Ernte <-> Profilbild ------------------
+    # Vor allen uebrigen Pruefungen entschieden (kein stilles Uebernehmen):
+    # ohne reference_frame und ohne --no-alignment-check gibt es keinen
+    # verlaesslichen Bezug, gegen den die Ernte ausgerichtet werden koennte.
+    alignment_check_enabled = not args.no_alignment_check
+    reference_image = None
+    max_shift_px: float | None = None
+    if alignment_check_enabled:
+        if profile.reference_frame is None:
+            print(
+                f"Fehler: Sitzungsprofil {args.profile} hat kein reference_frame (Profil von vor "
+                "Task 10?) - die Ausrichtungspruefung gegen das Profilbild kann nicht laufen. "
+                "--no-alignment-check setzen, um trotzdem zu importieren (wird in import.json "
+                "vermerkt).",
+                file=sys.stderr,
+            )
+            return 1
+        reference_path = Path(profile.reference_frame["path"])
+        if not reference_path.is_file():
+            print(
+                f"Fehler: Profilbild {reference_path} (reference_frame) fehlt - kein Import ohne "
+                "Ausrichtungspruefung.",
+                file=sys.stderr,
+            )
+            return 1
+        # Fix-Runde 1 (task-10-report.md): ein Profilbild, das sich seit
+        # `confirm` geaendert hat, macht die ganze Ausrichtungspruefung
+        # bedeutungslos - dann gegen das FALSCHE Bild ausgerichtet. Ablehnen
+        # statt raten (AGENTS.md), derselbe Abbruch wie bei einem fehlenden
+        # reference_frame.
+        actual_sha256 = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+        expected_sha256 = profile.reference_frame["sha256"]
+        if actual_sha256 != expected_sha256:
+            print(
+                f"Fehler: Profilbild {reference_path} hat sich seit harvest-setup.py confirm "
+                f"geaendert (sha256 {actual_sha256} != {expected_sha256} im Sitzungsprofil) - "
+                "kein Import gegen ein moeglicherweise falsches Profilbild.",
+                file=sys.stderr,
+            )
+            return 1
+        reference_image = cv2.imread(str(reference_path))
+        if reference_image is None:
+            print(f"Fehler: Profilbild {reference_path} nicht lesbar.", file=sys.stderr)
+            return 1
+        max_shift_px = args.max_shift_dot_columns * profile.min_source_dot_column_px
+
     proposal_path = harvest_dir / "proposal.json"
     if not proposal_path.is_file():
         print(f"Fehler: {proposal_path} fehlt.", file=sys.stderr)
@@ -304,18 +473,27 @@ def run(args: argparse.Namespace) -> int:
     proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
     images: list[dict] = proposal.get("images", [])
 
-    frames_map = _load_frames_map(harvest_dir / "recording")
+    frames_map, frames_jsonl_dropped_skipped = _load_frames_map(harvest_dir / "recording")
 
     selected_raw = _select_per_plateau(images, args.per_plateau)
 
     reject_counts: dict[str, int] = {r: 0 for r in _ALL_REASONS}
     counters = {COUNTER_ZEICHEN_ZU_SELTEN: 0}
+    alignment_shifts_px: list[float] = []
 
     candidates: list[_Candidate] = []
     for entry in selected_raw:
         detail = entry["label_origin_detail"]
         key = (int(detail["plateau_start_ns"]), int(detail["plateau_end_ns"]))
         telegram_text = entry["telegram_text"]
+        cell_text = _padded_cell_text(telegram_text, profile.grid.n_cells)
+        if cell_text is None:
+            # 3+ unterdrueckte fuehrende Nullen - siehe
+            # `_cell_text_for_telegram`-Docstring/OQ-41-Nachtrag. Zweite,
+            # unabhaengige Verteidigungslinie: `gate-label.py` sollte solche
+            # Bilder schon vorher ausgefiltert haben.
+            reject_counts[REASON_LEADING_ZEROS_UNVERIFIED] += 1
+            continue
         image_path = _resolve_image_path(harvest_dir, entry["image_path"])
         frame_meta = frames_map.get(image_path.name)
         cand = _Candidate(
@@ -327,12 +505,27 @@ def run(args: argparse.Namespace) -> int:
             plateau_key=key,
             capture_timestamp=frame_meta.get("capture_timestamp") if frame_meta else None,
             frame_sequence=frame_meta.get("frame_sequence") if frame_meta else None,
-            cell_text=_padded_cell_text(telegram_text, profile.grid.n_cells),
+            cell_text=cell_text,
         )
         raw = cv2.imread(str(image_path))
         if raw is None:
             reject_counts[REASON_BILD_FEHLT] += 1
             continue
+
+        # Task 10, vor allen uebrigen Pruefungen (Auftrag): eine Verschiebung
+        # gegenueber dem Profilbild wuerde ein `profile_quad` liefern, das
+        # nicht mehr auf den Zeichen liegt - Bildguete/Zellenkonsistenz
+        # pruefen nur INNERHALB der Ernte und wuerden das nicht bemerken.
+        if alignment_check_enabled:
+            estimate = estimate_quad_shift(reference_image, raw, profile.quad)
+            if not estimate.reliable:
+                reject_counts[REASON_AUSSCHNITT_UNPRUEFBAR] += 1
+                continue
+            alignment_shifts_px.append(estimate.max_corner_shift_px)
+            if estimate.max_corner_shift_px > max_shift_px:
+                reject_counts[REASON_AUSSCHNITT_VERSCHOBEN] += 1
+                continue
+
         cand.raw_image = raw
         crop = rectify(raw, tuple(tuple(p) for p in profile.quad), target_size=profile.target_size)
         rect_img = crop.image
@@ -456,6 +649,12 @@ def run(args: argparse.Namespace) -> int:
         note = f"Ernte-Sitzung {profile.session_id} (automatischer Import, Plan 2026-09-23-ernte-phase1)"
         group_id = _resolve_or_create_group(store, device_id, note)
         bbox = _axis_aligned_bbox(profile.quad)
+        # Task 6 (Nachverfolgbarkeit): fuer alle Proben dieses Laufs gleich -
+        # einmal berechnen statt je Probe neu.
+        profile_sha256 = _profile_sha256(args.profile)
+        profile_quad_json = _profile_quad_json(profile.quad)
+        profile_grid_json = _profile_grid_json(profile)
+        harvest_run = Path(args.harvest).name
 
         for cand in consistent:
             token = hashlib.sha256(f"{profile.session_id}:{cand.image_path}".encode()).hexdigest()
@@ -484,6 +683,10 @@ def run(args: argparse.Namespace) -> int:
                     "display_text": cand.label_text,
                     "cell_text": cand.cell_text,
                     "unit_text": unit_text,
+                    "profile_sha256": profile_sha256,
+                    "profile_quad": profile_quad_json,
+                    "profile_grid": profile_grid_json,
+                    "harvest_run": harvest_run,
                 }
             )
             annotation = {
@@ -517,6 +720,15 @@ def run(args: argparse.Namespace) -> int:
                     continue
             created_ids.append(sample["id"])
 
+    alignment_max_corner_shift_px = None
+    if alignment_shifts_px:
+        alignment_max_corner_shift_px = {
+            "min": min(alignment_shifts_px),
+            "median": statistics.median(alignment_shifts_px),
+            "max": max(alignment_shifts_px),
+            "n": len(alignment_shifts_px),
+        }
+
     total = len(images)
     result = {
         "harvest": str(harvest_dir),
@@ -525,18 +737,35 @@ def run(args: argparse.Namespace) -> int:
         "dry_run": bool(args.dry_run),
         "per_plateau": args.per_plateau,
         "frames_total": total,
+        "frames_jsonl_dropped_skipped": frames_jsonl_dropped_skipped,
         "selected": len(selected_raw),
         "imported": len(created_ids),
         "sample_ids": created_ids,
         "rejected_by_reason": reject_counts,
         "counters": counters,
         "gap_thresholds_provisional": True,
+        "alignment_check": alignment_check_enabled,
+        "alignment_max_corner_shift_px": alignment_max_corner_shift_px,
     }
     (harvest_dir / "import.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print("=== import-harvest: Bericht ===")
     print(f"Ernte: {harvest_dir}")
+    if frames_jsonl_dropped_skipped:
+        print(
+            f"Hinweis: {frames_jsonl_dropped_skipped} Zeile(n) in "
+            f"{harvest_dir / 'recording' / 'frames.jsonl'} uebersprungen "
+            "(dropped=true, volle Warteschlange beim Aufnehmen)."
+        )
     print(f"Bilder im Vorschlag: {total}  Ausgewaehlt (je Plateau <= {args.per_plateau}): {len(selected_raw)}")
+    if not alignment_check_enabled:
+        print("Ausrichtungspruefung gegen das Profilbild: AUS (--no-alignment-check)")
+    elif alignment_max_corner_shift_px:
+        s = alignment_max_corner_shift_px
+        print(
+            f"Ausrichtungspruefung: max. Eckverschiebung min={s['min']:.2f}px "
+            f"median={s['median']:.2f}px max={s['max']:.2f}px (n={s['n']}, Schwelle={max_shift_px:.2f}px)"
+        )
     print(f"Importiert: {len(created_ids)}")
     print("Abgelehnt je Grund:")
     for reason in _ALL_REASONS:
