@@ -60,6 +60,7 @@ dann ab dieser Zeile lesen.
 | OQ-40 | offen | Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen |
 | OQ-41 | teilweise geklärt 2026-09-23 | Telegramm und Anzeige unterscheiden sich in der führenden Null |
 | OQ-42 | offen | Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar? |
+| OQ-43 | offen | Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang? |
 
 <!-- OQ-INDEX:END -->
 
@@ -402,7 +403,7 @@ dann ab dieser Zeile lesen.
 
 ## OQ-22 — Sensor setzt nach Streamwechsel keinen Stream mehr auf
 
-* **Status:** offen · erkannt 2026-09-08 bei der Fokusdiagnose
+* **Status:** offen, für den Betrieb gegenstandslos (IMX500 außer Betrieb seit 2026-09-25) · erkannt 2026-09-08 bei der Fokusdiagnose
 * **Befund:** Nach einer Messreihe, die im selben Prozess erst 960×720 und dann
   2028×1520 streamte (`configure` → `start` → `stop` → `configure` → `start`),
   liefert der Sensor **überhaupt keine Bilder mehr**. Jeder weitere Startversuch
@@ -746,6 +747,15 @@ dann ab dieser Zeile lesen.
   Streamdauer des Boots vorher ≈ 36 min. Damit liegt die Grenze hier weit
   unter 20–25 Starts; das Budget von 15 schützt nicht. Kernel-Auszug:
   `var/diagnostics/ernte1-crop/kernel-11-10.txt` (lokal).
+
+* **Nachtrag 2026-09-25 — für den Betrieb gegenstandslos.** Am 2026-09-25
+  fiel die Kamera zusätzlich **mitten in einem laufenden Stream** aus
+  (I2C `-121`, „Camera frontend has timed out"), nachdem sie mechanisch
+  bewegt worden war. Nutzerentscheidung am selben Tag: offizieller Wechsel
+  auf die Logitech StreamCam (USB/UVC), die IMX500 ist außer Betrieb
+  ([project_history.md](project_history.md), 2026-09-25). Die Frage bleibt
+  offen, falls die IMX500 zurückkommt; der Testplan mit dem
+  Kernel-Maintainer (raspberrypi/linux#7613) wird nicht weiter verfolgt.
 
 * **Antwort landet in:** `docs/lab_journal.md`, `docs/HARDWARE_PROFILE.md`,
   gegebenenfalls `scripts/camera-commissioning.sh` und `docs/ROADMAP.md`.
@@ -1892,3 +1902,29 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).
+
+---
+
+## OQ-43 — Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang?
+
+* **Status:** offen · erkannt 2026-09-25 beim Wechsel auf die Logitech
+  StreamCam · **Zuständig:** Entwicklung
+* **Befund:** OpenCV liefert je Bild `CAP_PROP_POS_MSEC` = den
+  V4L2-Pufferzeitstempel (uvcvideo `clock=CLOCK_MONOTONIC`, Auflösung µs),
+  im Test rund 35–40 ms vor Ankunft im Programm. Ob er den
+  Belichtungsbeginn, das Belichtungsende oder den Empfang des letzten
+  USB-Pakets markiert, ist nicht dokumentiert und nicht gemessen. Bei der
+  IMX500 lag `SensorTimestamp` in BOOTTIME (gemessen), die Semantik war
+  ebenfalls offen (Messung M2 in [TIMING.md](TIMING.md)).
+* **Warum es zählt:** Der Versatz Telegramm ↔ Glas und damit das
+  Schutzfenster M beim Gate-Labeling hängen davon ab. Eine Annahme würde M
+  verfälschen.
+* **Umgang bis zur Klärung:** empirisch abgedeckt. `display-offset.py`
+  misst den Gesamtversatz aus Aufnahmen mit wechselnder Normierung, und
+  `timing-calibration.py` schreibt M nach
+  `var/calibration/timing-streamcam.json`. Ohne diese Datei startet
+  `harvest.py` nicht. Der Zeitstempel trägt `semantics=UNKNOWN`.
+* **Klärung:** optional über Hardware-Zeitstempel (`uvcvideo hwtimestamps`)
+  oder eine LED-Messung mit bekanntem Schaltzeitpunkt. Solange die
+  Kalibrierung trägt, nicht nötig.
+* **Antwort landet in:** [TIMING.md](TIMING.md), [VALIDATION.md](VALIDATION.md).

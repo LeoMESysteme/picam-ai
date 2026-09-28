@@ -109,6 +109,15 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   nach 100 ms durch. Gemessen 2026-09-28, 10 s mit `--frame-rate 15`:
   vorher 97 Bilder (68–100 ms Abstand), nachher 137 Bilder (überwiegend
   64/68 ms), jeweils `frame_gaps.count = 0` und kein Drop.
+- **Doku:** Entscheidung mit verworfenen Alternativen in
+  `docs/project_history.md`. Abweichungsvermerk in `Konzept.md` (§1, §5).
+  `CLAUDE.md` beschreibt die StreamCam als aktive Kamera; die IMX500-Fakten
+  sind als historisch markiert. OQ-22 hat einen Nachtrag („für den Betrieb
+  gegenstandslos"), neu ist OQ-43 (Semantik des UVC-Zeitstempels).
+  Hardwarebefunde vom 2026-09-28 in `VALIDATION.md`. `status.md`,
+  `ROADMAP.md` und `TODO.md` sind auf dem neuen Stand;
+  `CAMERA_COMMISSIONING.md`, `HARDWARE_PROFILE.md` und `TIMING.md` tragen
+  einen Hinweis zur StreamCam.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

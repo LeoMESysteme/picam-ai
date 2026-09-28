@@ -1622,3 +1622,29 @@ im Training vollständig abgelehnt — `auf2` unterscheidet sich systematisch
 (weicher Fokus, heller linker Glasrand). Diese Zahlen sind Entwicklungs-
 diagnose mit 3 Aufstellungen, keine Abnahme (Stufe 2 braucht neue, nie
 gesehene Aufstellungen).
+
+## 2026-09-28 — StreamCam: Inbetriebnahme, Hardwaretest, Probeaufnahme
+
+**Aufbau:** Logitech StreamCam (`046d:0893`) an USB3 (`speed` 5000), Knoten
+`/dev/video0`, GSV-Sensor am Messplatz wie bei den bisherigen Ernten,
+`/dev/ttyUSB0` nur gelesen. Code-Stand `feat/task-b-versatz-normierung` ab
+`44d1bb6` bzw. `9192050`.
+
+| Lauf | Ergebnis |
+| --- | --- |
+| `camera-commissioning.sh`, erster Lauf (`714d57c`) | 2 FEHLER, beide im Skript: YUYV-Suche mit `grep -A 40` zu kurz (7 Bildraten je Größe); `focus_absolute` im selben `v4l2-ctl`-Aufruf wie `focus_automatic_continuous=0` → `Input/output error` |
+| `camera-commissioning.sh` nach Fix (`44d1bb6`, `9192050`) | Exit 0, 6/6 OK; Testbild 1920×1080, Anzeige „+0.46761 mV/V" gut lesbar, GSV nimmt ≈ 1/5 der Bildbreite ein |
+| `pytest --mode=real tests/test_uvc_hardware.py` | grün: 30 Bilder, Zeitstempel streng monoton, alle 11 Regler (Automatiken, feste Werte, 4 Profilwerte) zurückgelesen = angefordert |
+| `sync-record.py --source camera --frame-rate 15 --duration 10` (vor Fix, `9ed3edf`) | 97 Bilder, Abstände 68–100 ms, `frame_gaps.count = 0`, kein Drop |
+| dasselbe nach Fix (`9192050`, Ausdünnen nach Zeitplan) | 137 Bilder, Abstände überwiegend 64/68 ms (89 × 68, 38 × 64, 4 × 100, 5 × 32–36 ms), `frame_gaps.count = 0`, kein Drop |
+
+Weitere Werte der Probeaufnahme: `clock_offset_boottime_minus_monotonic_ns`
+= −9 (Beginn) / +10 (Ende), also Abtastrauschen ohne Suspend; kein
+`acquisition_error`, keine USB-Warnung. 19 Telegrammzeilen in 10 s. Kamera-
+Regler für die Probe: `exposure_time_absolute` 250,
+`white_balance_temperature` 5690, `gain` 11, `focus_absolute` 48 (vom
+Stand der Kamera übernommen, **kein** bestätigtes Profil).
+
+**Noch nicht gemessen:** Zeitversatz Telegramm ↔ Glas und M für die StreamCam
+(Messsitzung). Die Probeaufnahme lief ohne `--norm-schedule` und ist keine
+Kalibrieraufnahme.

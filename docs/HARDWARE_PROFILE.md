@@ -1,5 +1,9 @@
 # Hardware-Profil
 
+> **Kamera seit 2026-09-25:** Logitech StreamCam (USB 3, UVC, `046d:0893`)
+> statt Raspberry Pi AI Camera; die Kameraangaben unten beschreiben die
+> IMX500 und sind historisch (`docs/project_history.md`, 2026-09-25).
+
 Stand 2026-09-07, Gerät `raspi06`.
 
 ## Rechner

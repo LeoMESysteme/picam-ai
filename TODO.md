@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-25 (Wiedereinstieg Montag 2026-09-28)
+# TODO — Stand 2026-09-28
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,40 +9,44 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst (Montag): Kamerawechsel IMX500 → Logitech StreamCam fertigstellen
+## Zuerst: Messsitzung StreamCam (Timing-Kalibrierung) — mit dem Nutzer
 
-Nutzerentscheidung 2026-09-25: offiziell StreamCam (USB 046d:0893, UVC)
-statt IMX500. Spec `docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`,
-Plan `docs/superpowers/plans/2026-09-25-streamcam-switch.md`, Fortschritt im
-SDD-Ledger `.superpowers/sdd/2026-09-25-streamcam-switch/progress.md`
-(Controller-Regeln, Rulings, zurückgestellte Kleinigkeiten).
+Der Kamerawechsel IMX500 → Logitech StreamCam ist gebaut, reviewt und an
+der Hardware geprüft (2026-09-28: `camera-commissioning.sh` Exit 0,
+Hardwaretest grün, Probeaufnahme ohne Lücken; VALIDATION.md 2026-09-28).
+Spec/Plan: `docs/superpowers/specs|plans/2026-09-25-streamcam-switch*.md`,
+Ledger `.superpowers/sdd/2026-09-25-streamcam-switch/progress.md`.
 
-* Erledigt und reviewt: Task 1 (Zeitbasis `v4l2_monotonic`,
-  `to_boottime_ns`), Task 2 (`CameraSettings`, `UvcSource`, `v4l2://`),
-  Task 3 (`sync-record` über StreamCam, Budget/ScalerCrop raus,
-  Bildzähler-Fix), Task 4 (Profil v3, `harvest-setup focus`), Task 5
-  (Timing-Kalibrierung Pflicht, `harvest.py`), bis `cf8be28`.
-* Offen: Task 6 (Werkbank-Kamera deaktivieren, `camera-commissioning.sh`
-  neu, Hardwaretest), danach Abschlussreview, Doku (project_history,
-  Konzept-Abweichung, CLAUDE.md, OQ-22-Nachtrag, neue OQ, status, ROADMAP,
-  VALIDATION), `camera-commissioning.sh` an der echten Kamera, dann
-  Messsitzung: `harvest-setup focus` → `sync-record --norm-schedule` →
-  `display-offset.py` → `timing-calibration.py` → Ernten.
+Ohne Timing-Kalibrierung startet keine Ernte. Ablauf (Kamera vorher so
+ausrichten, dass das GSV-Glas mehr als das bisherige Fünftel der
+Bildbreite füllt):
+1. `harvest-setup.py focus` → Fokus + eingefrorene Belichtung/Weißabgleich,
+   dann `propose` / `confirm` → Profil v3.
+2. `sync-record.py --source camera --camera-settings <profil> --norm-schedule …`
+   (Normierungssprünge; Rückstellpunkt-Datei ist wieder da).
+3. `display-offset.py` auf die Aufnahme(n) → `offset-analyse.json`.
+4. `timing-calibration.py` → `var/calibration/timing-streamcam.json` (M).
+5. Nebenbei prüfen: ändern sich die von `focus` zurückgelesenen
+   Belichtungswerte bei anderem Licht (Befund M-10 des Abschlussreviews)?
+   Wenn nicht, liefert die Kamera im Automatikmodus veraltete Werte.
 
-## Zuerst (Montag): `var/` zusammenführen
+Danach zwei scharf fokussierte Ernten (`harvest.py`), siehe nächster
+Abschnitt.
 
-`/home/me-systeme/picam-ai/var` wurde am 2026-09-25 12:06 versehentlich
-gelöscht (einzige Kopie, gitignored; `picam-ai-ernte/var` ist ein Symlink).
-* Per Carving wiederhergestellt (`var/rescue-20260925/carve.py`): alle 389
-  Proben (sha256 geprüft), `devices.json`, 4 Profile, Profil-Zuordnungen.
-* Der Nutzer hat zusätzlich eine Wiederherstellung nach
-  `/home/me-systeme/picam-ai/.var_recovered` gelegt (Upload lief bei
-  Sitzungsende noch). Enthält u. a. den fehlenden Rückstellpunkt
-  `diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json` (ohne ihn
-  fallen 2 Tests in `tests/test_sync_record.py`) und Ernte-Aufnahmen.
-  **Zu tun:** nach Upload-Ende vergleichen (Proben per sha256 gegen
-  `var/workbench/datasets`), Fehlendes nach `var/` übernehmen, nichts
-  überschreiben ohne Abgleich; danach Sicherung für `var/` einrichten.
+Zurückgestellt aus dem Abschlussreview (bewusst, siehe `final-review.md`):
+Werkbank-Kamera an die StreamCam anbinden (heute außer Betrieb, toter
+Picamera2-Code in `controller.py`), Fokus-Sweep verlässt sich auf 4
+OpenCV-Puffer (M-9), Replay verliert die Zeitbasis (M-6).
+
+## Sicherung für `var/` einrichten
+
+`var/` gibt es nur einmal (gitignored, Worktree per Symlink). Nach der
+Löschung vom 2026-09-25 ist wiederhergestellt, was ging (alle 389 Proben,
+Profile, `devices.json`, Rückstellpunkt; `var/rescue-20260925/NOTES.md`).
+Verloren: Einzelbilder der Ernte-Aufnahmen, die meisten Diagnosebilder.
+`/home/me-systeme/picam-ai/.var_recovered` ist ausgewertet und kann weg.
+Zu tun: regelmäßige Sicherung von mindestens `var/workbench/datasets`,
+`var/diagnostics/*-profile`, `var/calibration` auf ein anderes Medium.
 
 ---
 
@@ -74,11 +78,11 @@ Ernte direkt anschliessen.
 ## Wo wir stehen
 
 * Sollwertkanal (RS232 ASCII vom GSV-2AS) steht seit 2026-09-22.
-* Kamerazweig läuft seit heute; sechs Aufzeichnungen liegen vor, u. a. mit
-  `--norm-schedule` (Normierungssprünge live aus der offenen Portsitzung).
-* Task B (Versatz Telegramm ↔ Glas) hat erste Zahlen: δ zwischen +80 und
-  +116 ms über drei Aufzeichnungen, konsistent positiv (Glas nach Telegramm).
-  M-Formel liefert je Population 499–695 ms.
+* Kamera seit 2026-09-25: Logitech StreamCam (IMX500 außer Betrieb).
+  Aufnahme, Profil v3, Fokus per Software und Pflicht-Kalibrierung sind
+  gebaut und an der Hardware geprüft.
+* Task B (Versatz Telegramm ↔ Glas) hatte mit der IMX500 δ zwischen +80 und
+  +116 ms und M 499–695 ms. Für die StreamCam wird beides neu gemessen.
 * Führende Null (OQ-41) und SD-Schreibstau (OQ-40) sind behandelt; die
   endgültigen Gap-Schwellen bleiben offen, blockieren die erste Ernte aber
   nicht.

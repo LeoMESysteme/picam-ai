@@ -575,3 +575,77 @@ Freigaberegeln zu berühren: `ValueRecord`, `ReleaseGate` und
 gemeinsamer Schreiblogik — vertretbar, weil beide unterschiedliche
 Garantien geben (ein Clip ist ein konstanter Wert über die Zeit, eine
 Sample-Probe ein Einzelbild mit Zielbox).
+
+---
+
+# 2026-09-25 — Logitech StreamCam statt Raspberry Pi AI Camera (IMX500)
+
+## Problem
+
+Die IMX500 war über Wochen der Engpass jeder Kamerasitzung. Die
+RP2040-Brücke zwischen Pi und Sensor blieb beim Streamstart hängen (OQ-22):
+zuerst nach 20–25 Starts je Boot, am 2026-09-24 schon beim 8. Start, und
+nach einem Warmreboot war nicht einmal der erste Start sicher. Jede Sitzung
+musste deshalb mit einem Streambudget und wenigen Starts geplant werden. Ein
+Wedge kostete einen Reboot. Am 2026-09-25 fiel die Kamera zusätzlich
+**mitten in einem laufenden Stream** aus (I2C-Fehler `-121`,
+„Camera frontend has timed out"), nachdem sie mechanisch bewegt worden war.
+Der Fokus ließ sich nur mechanisch am Objektiv einstellen, und die
+AI-Funktionen des Sensors nutzte das Projekt nicht (die mitgelieferten
+Modelle taugen nicht für Messverstärker-Displays, der Primärpfad ist die
+bestätigte manuelle ROI).
+
+## Entscheidung
+
+Nutzerentscheidung 2026-09-25: offizieller Wechsel auf die **Logitech
+StreamCam** (USB 3, UVC, USB-ID `046d:0893`), angebunden über V4L2
+(`v4l2://`, `UvcSource`). Die IMX500-Pfade (`picamera2://`, `imx500://`,
+Streamstart-Budget, ScalerCrop) sind außer Betrieb. Doku und Verweise auf
+die IMX500 bleiben für eine mögliche Rückumstellung erhalten, sind aber als
+historisch gekennzeichnet. Spec
+`docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`, Plan
+`docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
+
+## Begründung
+
+Ein Test am 2026-09-25 zeigte, dass die StreamCam alles liefert, was die
+Ernte braucht: 1920×1080 YUYV mit 25–30 fps, Fokus per Software
+(`focus_absolute` = 48 am besten bei abgeschaltetem Autofokus), etwa
+3,6 px je Punktspalte des GSV-Sensor-Glases (Schwelle 2,6 px) und je Bild
+einen V4L2-Pufferzeitstempel in CLOCK_MONOTONIC. Es gibt keinen
+Streamstart-Wedge und kein Startbudget, und der Fokus lässt sich
+reproduzierbar im Profil speichern.
+
+## Alternativen
+
+* **IMX500 behalten und OQ-22 weiter verfolgen** (Testplan mit dem
+  Kernel-Maintainer: Standard-cmdline, dann Kernel-Zweig
+  `naushir/linux#imx500_tests`). Verworfen: offener Ausgang, jeder Versuch
+  kostet Reboots, und der Ausfall mitten im Stream wäre damit nicht
+  erklärt.
+* **Kameradienst**, der die IMX500 einmal beim Boot öffnet und Bilder
+  verteilt (vorgemerkte Idee vom 2026-09-25). Verworfen: umgeht nur den
+  Wedge beim Start, nicht den Ausfall im Stream, und hätte 3–4 Tage Arbeit
+  gekostet.
+* **Fokus der IMX500 mechanisch nachstellen**, sonst alles lassen.
+  Verworfen: löst weder Wedge noch Ausfall.
+
+## Konsequenz
+
+* Kamerazeitstempel liegen jetzt in CLOCK_MONOTONIC statt BOOTTIME
+  (`TimeBaseKind.V4L2_MONOTONIC`). Jede Aufnahme misst den Versatz
+  BOOTTIME − MONOTONIC zu Beginn und Ende (`session.json`), und alle
+  Auswerter rechnen über `records.to_boottime_ns` um. Fehlt der Versatz oder
+  lag ein Suspend dazwischen, wird abgelehnt.
+* Die Semantik des UVC-Zeitstempels (Belichtung oder Pufferempfang) ist
+  offen (OQ-43). Deshalb ist vor der ersten StreamCam-Ernte eine
+  **Timing-Kalibrierung Pflicht** (`timing-calibration.py`,
+  `var/calibration/timing-streamcam.json`). Das Schutzfenster M = 695 ms der
+  IMX500 gilt nicht mehr.
+* Profile haben Schema 3 mit einem `camera`-Block (Fokus, Belichtung,
+  Weißabgleich, Verstärkung). IMX500-Profile (Schema 2) bleiben für Import
+  und Datensatz lesbar, `harvest.py` lehnt sie für neue Ernten ab.
+* Die Kamera der Werkbank (`dispread serve`) ist außer Betrieb, bis die
+  StreamCam dort angebunden ist; `--simulate` läuft weiter.
+* Es gibt keine Treiber-Bildnummer mehr (`sensor_sequence` fehlt).
+  Aussetzer erkennt `frame_gaps` in `session.json` über die Zeitstempel.
