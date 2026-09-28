@@ -17,6 +17,7 @@ mitmachen).
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -164,10 +165,23 @@ def _write_camera_settings(tmp_path: Path, *, size: tuple[int, int] = CANVAS_SIZ
     return path
 
 
-def _dummy_proposal(tmp_path: Path, *, grid_source: str, min_px: float = 4.0, with_camera: bool = True) -> dict:
+def _dummy_proposal(
+    tmp_path: Path,
+    *,
+    grid_source: str,
+    min_px: float = 4.0,
+    with_camera: bool = True,
+    write_frame: bool = True,
+) -> dict:
     grid = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=0.0, bottom=160.0)
+    frame_path = tmp_path / "frame.png"
+    if write_frame:
+        # Task 10 (reference_frame): `confirm` liest jetzt das Bild hinter
+        # `proposal["frame"]`, um seinen SHA-256 zu schreiben - ein reiner
+        # Pfad ohne Datei reicht fuer die uebrigen confirm-Tests nicht mehr.
+        cv2.imwrite(str(frame_path), _build_synthetic_scene())
     proposal = {
-        "frame": str(tmp_path / "frame.png"),
+        "frame": str(frame_path),
         "device_id": "gsv2as-01",
         "session_id": "s1",
         "quad": QUAD_GT,
@@ -477,6 +491,61 @@ def test_confirm_rejects_unconfirmed_default_grid(tmp_path):
     )
     assert rc_accepted == 0
     assert out_path.exists()
+
+
+def test_confirm_writes_reference_frame(tmp_path):
+    """Task 10: `confirm` schreibt `reference_frame = {path, sha256}` ins
+    Profil - der Vertrag fuer `import-harvest.py`s Ausrichtungspruefung."""
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0)
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main(
+        [
+            "confirm",
+            "--proposal",
+            str(proposal_path),
+            "--resolution-threshold-px",
+            "3.5",
+            "--confirmed-by",
+            "bediener",
+            "--out",
+            str(out_path),
+        ]
+    )
+    assert rc == 0
+    profile = SessionProfile.load(out_path)
+    frame_path = Path(proposal["frame"])
+    assert profile.reference_frame == {
+        "path": str(frame_path),
+        "sha256": hashlib.sha256(frame_path.read_bytes()).hexdigest(),
+    }
+
+
+def test_confirm_rejects_missing_reference_frame_file(tmp_path):
+    """Fehlt die im Vorschlag genannte Bilddatei, gibt es keinen SHA-256 zu
+    schreiben - Abbruch statt eines Profils ohne verlaesslichen Bildbeleg."""
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0, write_frame=False)
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main(
+        [
+            "confirm",
+            "--proposal",
+            str(proposal_path),
+            "--resolution-threshold-px",
+            "3.5",
+            "--confirmed-by",
+            "bediener",
+            "--out",
+            str(out_path),
+        ]
+    )
+    assert rc == 2
+    assert not out_path.exists()
 
 
 def test_confirm_rejects_proposal_without_camera(tmp_path):

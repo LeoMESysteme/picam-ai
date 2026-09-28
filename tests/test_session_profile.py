@@ -60,6 +60,44 @@ def test_v3_to_dict_has_camera_key():
     assert d["camera"] == _CAMERA.to_dict()
 
 
+# --- reference_frame (Task 10, Ausrichtungspruefung) -----------------------
+
+_REFERENCE_FRAME = {"path": "var/diagnostics/sc2-still/frames/frame_000014.png", "sha256": "a" * 64}
+
+
+def test_reference_frame_roundtrip(tmp_path):
+    p = tmp_path / "profile.json"
+    profile = dataclasses.replace(_profile(), reference_frame=_REFERENCE_FRAME)
+    profile.save(p)
+    loaded = SessionProfile.load(p)
+    assert loaded.reference_frame == _REFERENCE_FRAME
+    assert loaded == profile
+
+
+def test_reference_frame_defaults_to_none():
+    assert _profile().reference_frame is None
+
+
+def test_to_dict_has_no_reference_frame_key_when_none():
+    d = _profile().to_dict()
+    assert "reference_frame" not in d
+
+
+def test_to_dict_has_reference_frame_key_when_set():
+    profile = dataclasses.replace(_profile(), reference_frame=_REFERENCE_FRAME)
+    d = profile.to_dict()
+    assert d["reference_frame"] == _REFERENCE_FRAME
+
+
+def test_v2_profile_without_reference_frame_still_loads(tmp_path):
+    """v2-Profile kennen das Feld nicht - muss weiterhin ohne Migration
+    ladbar bleiben, `reference_frame` dann `None` (wie `camera` bei v2)."""
+    p = tmp_path / "profile.json"
+    _profile_v2().save(p)
+    loaded = SessionProfile.load(p)
+    assert loaded.reference_frame is None
+
+
 def test_load_rejects_unknown_schema(tmp_path):
     p = tmp_path / "profile.json"
     _profile().save(p)

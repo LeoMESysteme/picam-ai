@@ -140,6 +140,19 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   Proben (Datensatz 492). Befund: `top`…`bottom` des Rasters umfasst
   8 Zeilen einschließlich Cursorzeile, deshalb wurde `sc1` zu `sc1b`
   korrigiert. `TODO.md` und `status.md` sind auf dem neuen Stand.
+- **Task 10 — Ausrichtungsprüfung Ernte ↔ Profilbild:** `harvest-setup.py
+  confirm` speichert das Profilbild als `reference_frame` (Pfad und
+  sha256) im Profil. `import-harvest.py` schätzt für jedes ausgewählte Bild
+  per ORB und RANSAC-Ähnlichkeitstransformation die Verschiebung gegenüber
+  dem Profilbild (`src/dispread/frame_alignment.py`). Wandern die Quad-Ecken
+  um mehr als `--max-shift-dot-columns` (0,5 Punktspalten), wird das Bild
+  als `ausschnitt_verschoben` abgelehnt, ist die Schätzung unzuverlässig,
+  als `ausschnitt_unpruefbar`. Ohne `reference_frame` oder bei geänderter
+  Prüfsumme bricht der Import ab (`--no-alignment-check` schaltet die
+  Prüfung ab und vermerkt das in `import.json`). Anlass: Die Ernten `sc1`
+  und `sc2` vom 2026-09-28 waren durch Bewegung der Kamera verschoben
+  (≈ 105 px bzw. +7 → −11 px). Ihre 103 Proben wurden trotzdem importiert
+  und dann wieder aus dem Datensatz genommen (`var/removed-20260928-sc/`).
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

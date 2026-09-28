@@ -99,6 +99,16 @@ class SessionProfile:
     #: hinterlegt" - `to_dict()` laesst den Schluessel dann ganz weg, damit
     #: sich das Re-Speichern/Hashen bestehender v2-Profile nicht aendert.
     camera: CameraSettings | None = None
+    #: Task 10 (Ausrichtungspruefung Ernte <-> Profilbild, StreamCam-Umstieg):
+    #: `{"path": str, "sha256": str}` - das Bild, das `propose`/`confirm`
+    #: zugrunde lag (`proposal["frame"]`). Optionales Feld, KEINE
+    #: Schemaversion-Erhoehung: v2 und bestehende v3-Profile ohne dieses Feld
+    #: bleiben unveraendert ladbar (`reference_frame is None`), genau wie
+    #: `camera` beim Uebergang v2->v3. `import-harvest.py` verlangt es fuer
+    #: die Ausrichtungspruefung (Abbruch ohne `--no-alignment-check`), aber
+    #: `SessionProfile`/`load()` selbst erzwingen es nicht - ein fehlendes
+    #: Profilbild ist eine Frage des Imports, nicht des Profilformats.
+    reference_frame: dict | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -119,12 +129,15 @@ class SessionProfile:
         }
         if self.camera is not None:
             d["camera"] = self.camera.to_dict()
+        if self.reference_frame is not None:
+            d["reference_frame"] = dict(self.reference_frame)
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> SessionProfile:
         scaler_crop = d["scaler_crop"]
         camera = d.get("camera")
+        reference_frame = d.get("reference_frame")
         return cls(
             schema_version=d["schema_version"],
             device_id=d["device_id"],
@@ -141,6 +154,7 @@ class SessionProfile:
             confirmed_by=d["confirmed_by"],
             confirmed_at_utc=d["confirmed_at_utc"],
             camera=CameraSettings.from_dict(camera) if camera is not None else None,
+            reference_frame=dict(reference_frame) if reference_frame is not None else None,
         )
 
     def save(self, path: Path) -> None:

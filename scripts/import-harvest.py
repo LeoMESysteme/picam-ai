@@ -86,6 +86,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dispread.frame_alignment import estimate_quad_shift
 from dispread.rectify import rectify
 from dispread.session_profile import SessionProfile
 from dispread.workbench.datasets import DatasetError, DatasetStore
@@ -110,6 +111,17 @@ REASON_BILD_FEHLT = "bild_nicht_ladbar"
 #: nicht geraten).
 REASON_LEADING_ZEROS_UNVERIFIED = "fuehrende_nullen_ungeprueft"
 
+#: Task 10 (Ausrichtungspruefung Ernte <-> Profilbild): die StreamCam wurde
+#: waehrend/zwischen Aufnahmen mechanisch bewegt (Tisch/Halterung) - das
+#: eingebettete `profile_quad` liegt dann nicht mehr auf den Zeichen, auch
+#: wenn Bildguete/Zellenkonsistenz (die nur INNERHALB der Ernte vergleichen)
+#: das nicht bemerken. Siehe `dispread.frame_alignment`.
+REASON_AUSSCHNITT_VERSCHOBEN = "ausschnitt_verschoben"
+#: Die Verschiebungsschaetzung selbst war nicht zuverlaessig genug (siehe
+#: `dispread.frame_alignment.AlignmentEstimate.reason`) - ablehnen statt
+#: raten (AGENTS.md), nicht als "verschoben" werten.
+REASON_AUSSCHNITT_UNPRUEFBAR = "ausschnitt_unpruefbar"
+
 _ALL_REASONS = (
     REASON_BILDGUETE,
     REASON_ZELLEN_INKONSISTENT,
@@ -118,6 +130,8 @@ _ALL_REASONS = (
     REASON_STORE,
     REASON_BILD_FEHLT,
     REASON_LEADING_ZEROS_UNVERIFIED,
+    REASON_AUSSCHNITT_VERSCHOBEN,
+    REASON_AUSSCHNITT_UNPRUEFBAR,
 )
 
 #: Gleicher Schwellwert wie `gate_label.MAX_VERIFIED_SUPPRESSED_ZEROS` -
@@ -248,6 +262,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--per-plateau", type=int, default=3, help="Hoechstens so viele Bilder je Plateau")
     parser.add_argument("--audit", type=int, default=0, help="Groesse der Stichprobenliste (audit.json)")
     parser.add_argument("--dry-run", action="store_true", help="Nichts im DatasetStore anlegen, nur zaehlen")
+    parser.add_argument(
+        "--max-shift-dot-columns",
+        type=float,
+        default=0.5,
+        help=(
+            "Schwelle der Ausrichtungspruefung gegen das Profilbild (reference_frame), als "
+            "Vielfaches von min_source_dot_column_px (Punktspaltenbreite des Profils im "
+            "Quellbild): eine Zeichenzelle wird an genau einer Punktspaltenbreite abgetastet, "
+            "die Verschiebung soll den Abtastpunkt innerhalb des physischen Punkts halten. "
+            "Vorgabe 0.5 (halbe Punktspalte)."
+        ),
+    )
+    parser.add_argument(
+        "--no-alignment-check",
+        action="store_true",
+        help=(
+            "Ausrichtungspruefung gegen das Profilbild abschalten (z. B. fuer ein Profil ohne "
+            "reference_frame aus der Zeit vor Task 10) - wird als 'alignment_check: false' in "
+            "import.json vermerkt, kein stilles Uebernehmen."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -385,6 +420,52 @@ def run(args: argparse.Namespace) -> int:
         )
         return 3
 
+    # -- Task 10: Ausrichtungspruefung Ernte <-> Profilbild ------------------
+    # Vor allen uebrigen Pruefungen entschieden (kein stilles Uebernehmen):
+    # ohne reference_frame und ohne --no-alignment-check gibt es keinen
+    # verlaesslichen Bezug, gegen den die Ernte ausgerichtet werden koennte.
+    alignment_check_enabled = not args.no_alignment_check
+    reference_image = None
+    max_shift_px: float | None = None
+    if alignment_check_enabled:
+        if profile.reference_frame is None:
+            print(
+                f"Fehler: Sitzungsprofil {args.profile} hat kein reference_frame (Profil von vor "
+                "Task 10?) - die Ausrichtungspruefung gegen das Profilbild kann nicht laufen. "
+                "--no-alignment-check setzen, um trotzdem zu importieren (wird in import.json "
+                "vermerkt).",
+                file=sys.stderr,
+            )
+            return 1
+        reference_path = Path(profile.reference_frame["path"])
+        if not reference_path.is_file():
+            print(
+                f"Fehler: Profilbild {reference_path} (reference_frame) fehlt - kein Import ohne "
+                "Ausrichtungspruefung.",
+                file=sys.stderr,
+            )
+            return 1
+        # Fix-Runde 1 (task-10-report.md): ein Profilbild, das sich seit
+        # `confirm` geaendert hat, macht die ganze Ausrichtungspruefung
+        # bedeutungslos - dann gegen das FALSCHE Bild ausgerichtet. Ablehnen
+        # statt raten (AGENTS.md), derselbe Abbruch wie bei einem fehlenden
+        # reference_frame.
+        actual_sha256 = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+        expected_sha256 = profile.reference_frame["sha256"]
+        if actual_sha256 != expected_sha256:
+            print(
+                f"Fehler: Profilbild {reference_path} hat sich seit harvest-setup.py confirm "
+                f"geaendert (sha256 {actual_sha256} != {expected_sha256} im Sitzungsprofil) - "
+                "kein Import gegen ein moeglicherweise falsches Profilbild.",
+                file=sys.stderr,
+            )
+            return 1
+        reference_image = cv2.imread(str(reference_path))
+        if reference_image is None:
+            print(f"Fehler: Profilbild {reference_path} nicht lesbar.", file=sys.stderr)
+            return 1
+        max_shift_px = args.max_shift_dot_columns * profile.min_source_dot_column_px
+
     proposal_path = harvest_dir / "proposal.json"
     if not proposal_path.is_file():
         print(f"Fehler: {proposal_path} fehlt.", file=sys.stderr)
@@ -398,6 +479,7 @@ def run(args: argparse.Namespace) -> int:
 
     reject_counts: dict[str, int] = {r: 0 for r in _ALL_REASONS}
     counters = {COUNTER_ZEICHEN_ZU_SELTEN: 0}
+    alignment_shifts_px: list[float] = []
 
     candidates: list[_Candidate] = []
     for entry in selected_raw:
@@ -429,6 +511,21 @@ def run(args: argparse.Namespace) -> int:
         if raw is None:
             reject_counts[REASON_BILD_FEHLT] += 1
             continue
+
+        # Task 10, vor allen uebrigen Pruefungen (Auftrag): eine Verschiebung
+        # gegenueber dem Profilbild wuerde ein `profile_quad` liefern, das
+        # nicht mehr auf den Zeichen liegt - Bildguete/Zellenkonsistenz
+        # pruefen nur INNERHALB der Ernte und wuerden das nicht bemerken.
+        if alignment_check_enabled:
+            estimate = estimate_quad_shift(reference_image, raw, profile.quad)
+            if not estimate.reliable:
+                reject_counts[REASON_AUSSCHNITT_UNPRUEFBAR] += 1
+                continue
+            alignment_shifts_px.append(estimate.max_corner_shift_px)
+            if estimate.max_corner_shift_px > max_shift_px:
+                reject_counts[REASON_AUSSCHNITT_VERSCHOBEN] += 1
+                continue
+
         cand.raw_image = raw
         crop = rectify(raw, tuple(tuple(p) for p in profile.quad), target_size=profile.target_size)
         rect_img = crop.image
@@ -623,6 +720,15 @@ def run(args: argparse.Namespace) -> int:
                     continue
             created_ids.append(sample["id"])
 
+    alignment_max_corner_shift_px = None
+    if alignment_shifts_px:
+        alignment_max_corner_shift_px = {
+            "min": min(alignment_shifts_px),
+            "median": statistics.median(alignment_shifts_px),
+            "max": max(alignment_shifts_px),
+            "n": len(alignment_shifts_px),
+        }
+
     total = len(images)
     result = {
         "harvest": str(harvest_dir),
@@ -638,6 +744,8 @@ def run(args: argparse.Namespace) -> int:
         "rejected_by_reason": reject_counts,
         "counters": counters,
         "gap_thresholds_provisional": True,
+        "alignment_check": alignment_check_enabled,
+        "alignment_max_corner_shift_px": alignment_max_corner_shift_px,
     }
     (harvest_dir / "import.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -650,6 +758,14 @@ def run(args: argparse.Namespace) -> int:
             "(dropped=true, volle Warteschlange beim Aufnehmen)."
         )
     print(f"Bilder im Vorschlag: {total}  Ausgewaehlt (je Plateau <= {args.per_plateau}): {len(selected_raw)}")
+    if not alignment_check_enabled:
+        print("Ausrichtungspruefung gegen das Profilbild: AUS (--no-alignment-check)")
+    elif alignment_max_corner_shift_px:
+        s = alignment_max_corner_shift_px
+        print(
+            f"Ausrichtungspruefung: max. Eckverschiebung min={s['min']:.2f}px "
+            f"median={s['median']:.2f}px max={s['max']:.2f}px (n={s['n']}, Schwelle={max_shift_px:.2f}px)"
+        )
     print(f"Importiert: {len(created_ids)}")
     print("Abgelehnt je Grund:")
     for reason in _ALL_REASONS:

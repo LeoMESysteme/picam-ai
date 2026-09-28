@@ -13,6 +13,7 @@ Zellenkonsistenz, Store-Anlage) zu beruehren.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -302,7 +303,15 @@ def test_resolution_not_ok_aborts_before_store_access(tmp_path):
     harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 1, None)])
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 3
@@ -322,6 +331,7 @@ def test_dry_run_creates_nothing(tmp_path):
             "--dataset-root",
             str(dataset_root),
             "--dry-run",
+            "--no-alignment-check",
         ]
     )
     rc = import_harvest.run(args)
@@ -341,7 +351,15 @@ def test_successful_import_creates_samples_in_one_group(tmp_path):
     harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3)
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -380,7 +398,15 @@ def test_successful_import_with_v3_profile(tmp_path):
     harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3)
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -403,7 +429,15 @@ def test_v4l2_monotonic_capture_timestamp_landet_unveraendert_in_der_probe(tmp_p
     harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3, time_base="v4l2_monotonic")
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -426,7 +460,15 @@ def test_bildguete_rejects_black_image(tmp_path):
     )
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -448,7 +490,15 @@ def test_zellen_inkonsistent_rejects_mislabeled_cell(tmp_path):
     )
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -540,6 +590,7 @@ def test_dry_run_skips_dropped_frame_lines_and_still_imports(tmp_path):
             "--dataset-root",
             str(dataset_root),
             "--dry-run",
+            "--no-alignment-check",
         ]
     )
     rc = import_harvest.run(args)
@@ -557,7 +608,15 @@ def test_store_error_is_counted_not_swallowed(tmp_path):
     harvest_dir = _build_harvest(tmp_path, plateaus=[("A.BCD", 4, None)] * 3)
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -674,7 +733,15 @@ def test_realistic_label_imported_with_numeric_expected_text_and_cell_text(tmp_p
 
     dataset_root = tmp_path / "dataset"
     args = import_harvest.parse_args(
-        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
     )
     rc = import_harvest.run(args)
     assert rc == 0
@@ -697,3 +764,334 @@ def test_realistic_label_imported_with_numeric_expected_text_and_cell_text(tmp_p
     grid_dict = json.loads(detail["profile_grid"])
     assert grid_dict["pitch"] == grid.pitch
     assert grid_dict["target_size"] == list(size)
+
+
+# --- Task 10: Ausrichtungspruefung Ernte <-> Profilbild ---------------------
+#
+# Die `_render()`-Bilder oben (Auswahl/Bildguete/Zellenkonsistenz) sind fuer
+# eine merkmalsbasierte Registrierung zu strukturarm (siehe
+# dispread.frame_alignment-Moduldocstring) - ihre Tests laufen deshalb mit
+# `--no-alignment-check` (oben ergaenzt). Die Ausrichtungspruefung selbst
+# braucht ein texturiertes Bild wie in tests/test_frame_alignment.py.
+
+ALIGN_CANVAS = (400, 300)  # (Breite, Hoehe)
+ALIGN_QUAD = [[100.0, 100.0], [300.0, 100.0], [300.0, 200.0], [100.0, 200.0]]
+
+
+def _textured_canvas(seed: int) -> np.ndarray:
+    width, height = ALIGN_CANVAS
+    rng = np.random.default_rng(seed)
+    gray = np.full((height, width), 200, dtype=np.uint8)
+    for _ in range(80):
+        x0, y0 = rng.integers(0, width - 30), rng.integers(0, height - 30)
+        w, h = rng.integers(10, 40), rng.integers(10, 40)
+        color = int(rng.integers(0, 180))
+        cv2.rectangle(gray, (x0, y0), (x0 + w, y0 + h), color, -1)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+
+def _translated(image: np.ndarray, dx: float, dy: float) -> np.ndarray:
+    matrix = np.float32([[1, 0, dx], [0, 1, dy]])
+    return cv2.warpAffine(image, matrix, (image.shape[1], image.shape[0]), borderMode=cv2.BORDER_REFLECT)
+
+
+def _alignment_profile(tmp_path: Path, reference_image: np.ndarray, *, name: str = "align-profile.json") -> Path:
+    """Profil mit `reference_frame` fuer die Ausrichtungspruefung -
+    `min_source_dot_column_px=20.0` ergibt mit der CLI-Vorgabe
+    `--max-shift-dot-columns 0.5` eine Schwelle von 10 px."""
+    ref_path = tmp_path / f"{name}.reference.png"
+    cv2.imwrite(str(ref_path), reference_image)
+    reference_frame = {"path": str(ref_path), "sha256": hashlib.sha256(ref_path.read_bytes()).hexdigest()}
+    profile = SessionProfile(
+        schema_version=2,
+        device_id="gsv2as-align",
+        session_id="align-1",
+        quad=ALIGN_QUAD,
+        target_size=TARGET_SIZE,
+        grid=_grid(),
+        scaler_crop=None,
+        min_source_dot_column_px=20.0,
+        native_scale=1.0,
+        min_native_dot_column_px=20.0,
+        resolution_threshold_px=2.0,
+        resolution_ok=True,
+        confirmed_by="tester",
+        confirmed_at_utc="2026-09-28T12:00:00+00:00",
+        reference_frame=reference_frame,
+    )
+    path = tmp_path / name
+    profile.save(path)
+    return path
+
+
+def _build_alignment_harvest(tmp_path: Path, images: list[np.ndarray]) -> Path:
+    """Minimale Ernte fuer die Ausrichtungspruefung - ein Bild je Plateau,
+    Telegramminhalt beliebig (die Pruefung selbst interessiert sich nicht
+    dafuer, ob das Bild danach noch als Probe durchkommt)."""
+    harvest_dir = tmp_path / "align-harvest"
+    frames_dir = harvest_dir / "recording" / "frames"
+    frames_dir.mkdir(parents=True)
+    frames_jsonl = []
+    proposal_images = []
+    t_ns = 1_000_000_000
+    for i, image in enumerate(images, start=1):
+        fname = f"frame_{i:06d}.jpg"
+        cv2.imwrite(str(frames_dir / fname), image)
+        frames_jsonl.append(
+            {
+                "file": fname,
+                "frame_sequence": i,
+                "capture_timestamp": {
+                    "value_ns": t_ns,
+                    "base": "sensor_boottime",
+                    "semantics": "unknown",
+                    "uncertainty_ns": None,
+                },
+            }
+        )
+        proposal_images.append(
+            {
+                "image_path": str(frames_dir / fname),
+                "telegram_text": "1.234",
+                "label_text": "1.234",
+                "label_normalization": "gsv2as_leading_zero_v1",
+                "numeric_text": "1.234",
+                "label_origin_detail": _detail(t_ns, t_ns + 2000),
+            }
+        )
+        t_ns += 500_000_000
+    (harvest_dir / "recording" / "frames.jsonl").write_text(
+        "\n".join(json.dumps(f) for f in frames_jsonl) + "\n", encoding="utf-8"
+    )
+    (harvest_dir / "proposal.json").write_text(
+        json.dumps({"images": proposal_images}, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return harvest_dir
+
+
+def test_profile_without_reference_frame_aborts_without_flag(tmp_path):
+    """Anlass (task-10-brief.md): kein stilles Uebernehmen eines Profils
+    ohne `reference_frame` - klarer Abbruch, kein `import.json`."""
+    profile_path = _profile(tmp_path)  # kein reference_frame
+    harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 1, None)])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+    )
+    rc = import_harvest.run(args)
+    assert rc != 0
+    assert not dataset_root.exists()
+    assert not (harvest_dir / "import.json").exists()
+
+
+def test_no_alignment_check_flag_runs_and_is_noted(tmp_path):
+    profile_path = _profile(tmp_path)  # kein reference_frame
+    harvest_dir = _build_harvest(tmp_path, plateaus=[("1.234", 4, None)] * 3)
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--no-alignment-check",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["alignment_check"] is False
+    assert result["alignment_max_corner_shift_px"] is None
+
+
+def test_alignment_check_rejects_shifted_image(tmp_path):
+    reference = _textured_canvas(seed=1)
+    shifted = _translated(reference, dx=40, dy=25)  # ~47 px, deutlich > 10 px Schwelle
+    profile_path = _alignment_profile(tmp_path, reference)
+    harvest_dir = _build_alignment_harvest(tmp_path, [shifted])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--dry-run",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["rejected_by_reason"]["ausschnitt_verschoben"] == 1
+    assert result["imported"] == 0
+    stats = result["alignment_max_corner_shift_px"]
+    assert stats["n"] == 1
+    assert stats["max"] > 10.0
+
+
+def test_alignment_check_accepts_shift_below_threshold(tmp_path):
+    reference = _textured_canvas(seed=2)
+    small_shift = _translated(reference, dx=3, dy=-2)  # ~3.6 px, klar < 10 px Schwelle
+    profile_path = _alignment_profile(tmp_path, reference)
+    harvest_dir = _build_alignment_harvest(tmp_path, [small_shift])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--dry-run",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["rejected_by_reason"]["ausschnitt_verschoben"] == 0
+    assert result["rejected_by_reason"]["ausschnitt_unpruefbar"] == 0
+    stats = result["alignment_max_corner_shift_px"]
+    assert stats["max"] < 10.0
+
+
+def test_alignment_check_rejects_structureless_image_as_unpruefbar(tmp_path):
+    reference = _textured_canvas(seed=3)
+    blank = np.full_like(reference, 128)
+    profile_path = _alignment_profile(tmp_path, reference)
+    harvest_dir = _build_alignment_harvest(tmp_path, [blank])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--dry-run",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["rejected_by_reason"]["ausschnitt_unpruefbar"] == 1
+    assert result["imported"] == 0
+    assert result["alignment_max_corner_shift_px"] is None
+
+
+def test_max_shift_dot_columns_cli_widens_threshold(tmp_path):
+    """`--max-shift-dot-columns` skaliert die Schwelle mit
+    `min_source_dot_column_px` (hier 20 px) - 2.0 statt der Vorgabe 0.5 hebt
+    die Schwelle von 10 px auf 40 px und laesst dieselbe ~18-px-Verschiebung
+    durch, die mit der Vorgabe abgelehnt wird."""
+    reference = _textured_canvas(seed=4)
+    shifted = _translated(reference, dx=15, dy=10)  # ~18 px
+    profile_path = _alignment_profile(tmp_path, reference)
+    harvest_dir = _build_alignment_harvest(tmp_path, [shifted])
+
+    dataset_root_default = harvest_dir.parent / "dataset-default"
+    args_default = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root_default),
+            "--dry-run",
+        ]
+    )
+    assert import_harvest.run(args_default) == 0
+    result_default = json.loads((harvest_dir / "import.json").read_text())
+    assert result_default["rejected_by_reason"]["ausschnitt_verschoben"] == 1
+
+    dataset_root_wide = harvest_dir.parent / "dataset-wide"
+    args_wide = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root_wide),
+            "--dry-run",
+            "--max-shift-dot-columns",
+            "2.0",
+        ]
+    )
+    assert import_harvest.run(args_wide) == 0
+    result_wide = json.loads((harvest_dir / "import.json").read_text())
+    assert result_wide["rejected_by_reason"]["ausschnitt_verschoben"] == 0
+
+
+def test_missing_reference_frame_file_aborts(tmp_path):
+    """Das Profilbild selbst kann nach `confirm` verschwinden (verschobenes/
+    geloeschtes `var/`-Verzeichnis) - auch das ist kein stilles
+    Uebernehmen, sondern ein Abbruch."""
+    reference = _textured_canvas(seed=5)
+    profile_path = _alignment_profile(tmp_path, reference)
+    Path(SessionProfile.load(profile_path).reference_frame["path"]).unlink()
+    harvest_dir = _build_alignment_harvest(tmp_path, [reference])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+    )
+    rc = import_harvest.run(args)
+    assert rc != 0
+    assert not dataset_root.exists()
+
+
+def test_changed_reference_frame_file_aborts(tmp_path):
+    """Fix-Runde 1 (task-10-report.md): das Profilbild kann sich seit
+    `confirm` INHALTLICH geaendert haben (Datei ueberschrieben, aber noch
+    vorhanden) - der im Profil hinterlegte SHA-256 stimmt dann nicht mehr,
+    und die ganze Ausrichtungspruefung waere gegen das falsche Bild
+    bedeutungslos. Kein stilles Uebernehmen, derselbe Abbruch wie bei einem
+    fehlenden reference_frame."""
+    reference = _textured_canvas(seed=6)
+    profile_path = _alignment_profile(tmp_path, reference)
+    reference_path = Path(SessionProfile.load(profile_path).reference_frame["path"])
+    # Datei bleibt vorhanden, Inhalt aendert sich (anderer Seed).
+    cv2.imwrite(str(reference_path), _textured_canvas(seed=7))
+    harvest_dir = _build_alignment_harvest(tmp_path, [reference])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        ["--harvest", str(harvest_dir), "--profile", str(profile_path), "--dataset-root", str(dataset_root)]
+    )
+    rc = import_harvest.run(args)
+    assert rc != 0
+    assert not dataset_root.exists()
+    assert not (harvest_dir / "import.json").exists()
+
+
+def test_no_alignment_check_flag_skips_reference_frame_hash_check(tmp_path):
+    """`--no-alignment-check` deckt auch die Hash-Pruefung ab - keine
+    Ausrichtungspruefung heisst keine Pruefung des Profilbilds ueberhaupt,
+    das wird in import.json vermerkt (alignment_check: false)."""
+    reference = _textured_canvas(seed=8)
+    profile_path = _alignment_profile(tmp_path, reference)
+    reference_path = Path(SessionProfile.load(profile_path).reference_frame["path"])
+    cv2.imwrite(str(reference_path), _textured_canvas(seed=9))
+    harvest_dir = _build_alignment_harvest(tmp_path, [reference])
+    dataset_root = tmp_path / "dataset"
+    args = import_harvest.parse_args(
+        [
+            "--harvest",
+            str(harvest_dir),
+            "--profile",
+            str(profile_path),
+            "--dataset-root",
+            str(dataset_root),
+            "--dry-run",
+            "--no-alignment-check",
+        ]
+    )
+    rc = import_harvest.run(args)
+    assert rc == 0
+    result = json.loads((harvest_dir / "import.json").read_text())
+    assert result["alignment_check"] is False

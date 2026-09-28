@@ -70,6 +70,7 @@ einzige Unterbefehl hier, der das tut.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -369,6 +370,24 @@ def run_confirm(args: argparse.Namespace) -> int:
         return 2
     camera_settings = CameraSettings.from_dict(proposal["camera"])
 
+    # Task 10 (Ausrichtungspruefung Ernte <-> Profilbild): das Profilbild
+    # selbst muss vorhanden sein, sonst kann kein SHA-256 geschrieben werden
+    # und import-harvest.py haette spaeter nichts, wogegen es die Ernte
+    # ausrichten koennte - kein Profil ohne diesen Beleg (kein stilles
+    # Uebernehmen, AGENTS.md).
+    frame_path = Path(proposal["frame"])
+    if not frame_path.is_file():
+        print(
+            f"Vorschlag verweist auf ein fehlendes Bild ({frame_path}) - reference_frame kann "
+            "nicht geschrieben werden (Task 10, Ausrichtungspruefung).",
+            file=sys.stderr,
+        )
+        return 2
+    reference_frame = {
+        "path": str(frame_path),
+        "sha256": hashlib.sha256(frame_path.read_bytes()).hexdigest(),
+    }
+
     grid = CharGrid.from_dict(proposal["grid"])
     target_size = tuple(proposal["target_size"])
     min_px = float(proposal["min_source_dot_column_px"])
@@ -396,6 +415,7 @@ def run_confirm(args: argparse.Namespace) -> int:
         confirmed_by=args.confirmed_by,
         confirmed_at_utc=datetime.now(UTC).isoformat(),
         camera=camera_settings,
+        reference_frame=reference_frame,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     profile.save(args.out)
