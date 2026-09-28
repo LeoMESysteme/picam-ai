@@ -86,9 +86,23 @@ fi
 sec "4. Format YUYV 1920x1080"
 if [ -n "$DEVICE" ]; then
     formats=$(v4l2-ctl -d "$DEVICE" --list-formats-ext 2>&1)
-    # Diagnostischer Blockscan, kein autoritativer Parser: alle Zeilen ab dem
-    # 'YUYV'-Eintrag bis zu (max.) 40 Folgezeilen, darin nach 1920x1080 suchen.
-    if printf '%s\n' "$formats" | grep -A 40 "'YUYV'" | grep -q '1920x1080'; then
+    # Ganzer YUYV-Block, keine feste Zeilenzahl: von der 'YUYV'-Kopfzeile bis
+    # zur naechsten Format-Kopfzeile ("]: '...") oder EOF. Eine feste
+    # Zeilengrenze (fruehere Fassung: 40 Zeilen) reicht nicht - die StreamCam
+    # listet 7 Intervalle je Groesse (allein 640x480 braucht ~8 Zeilen) und
+    # vor 1920x1080 stehen mehrere kleinere Groessen (gemessen an der echten
+    # Kamera, Fix Runde 1). q kommt ueber -v, damit das Apostroph nicht im
+    # awk-Programmtext selbst steht (der sonst die umschliessenden
+    # Shell-Quotes sprengen wuerde).
+    yuyv_block=$(printf '%s\n' "$formats" | awk -v q="'" '
+        {
+            is_header = index($0, "]: " q) > 0
+            if (is_header && index($0, q "YUYV" q) > 0) { armed = 1; next }
+            if (is_header && armed) { armed = 0 }
+            if (armed) print
+        }
+    ')
+    if printf '%s\n' "$yuyv_block" | grep -q 'Size: Discrete 1920x1080'; then
         ok "YUYV 1920x1080 in --list-formats-ext vorhanden"
     else
         bad "YUYV 1920x1080 nicht in --list-formats-ext gefunden"
@@ -105,30 +119,45 @@ if [ -n "$DEVICE" ]; then
     original_focus_abs=$(v4l2-ctl -d "$DEVICE" --get-ctrl=focus_absolute 2>/dev/null \
         | grep -oE '[0-9]+' | head -1)
 
-    set_err=$(v4l2-ctl -d "$DEVICE" \
-        --set-ctrl=focus_automatic_continuous=0 \
-        --set-ctrl=focus_absolute=${FOCUS_ABSOLUTE_TEST} 2>&1)
-    set_rc=$?
-    if [ "$set_rc" -ne 0 ]; then
-        bad "v4l2-ctl --set-ctrl fehlgeschlagen: $(echo "$set_err" | tr '\n' ' ')"
+    # Zwei getrennte v4l2-ctl-Aufrufe, in dieser Reihenfolge: erst die
+    # Automatik aus, dann der Absolutwert. In einem gemeinsamen Aufruf
+    # schreibt der Treiber focus_absolute, waehrend die Autofokus-Automatik
+    # noch an ist - gemessen an der echten StreamCam:
+    # "focus_absolute: Input/output error VIDIOC_S_EXT_CTRLS: failed" (Fix
+    # Runde 1). Das ist dieselbe Reihenfolge, die die globalen Vorgaben fuer
+    # CameraSettings.ordered_controls() verlangen (erst die Automatik-
+    # Controls, danach alles uebrige).
+    set_auto_err=$(v4l2-ctl -d "$DEVICE" --set-ctrl=focus_automatic_continuous=0 2>&1)
+    set_auto_rc=$?
+    if [ "$set_auto_rc" -ne 0 ]; then
+        bad "v4l2-ctl --set-ctrl=focus_automatic_continuous=0 fehlgeschlagen: $(echo "$set_auto_err" | tr '\n' ' ')"
     else
-        readback_auto=$(v4l2-ctl -d "$DEVICE" --get-ctrl=focus_automatic_continuous 2>/dev/null \
-            | grep -oE '[0-9]+' | head -1)
-        readback_abs=$(v4l2-ctl -d "$DEVICE" --get-ctrl=focus_absolute 2>/dev/null \
-            | grep -oE '[0-9]+' | head -1)
-        if [ "${readback_auto:-}" = "0" ] && [ "${readback_abs:-}" = "${FOCUS_ABSOLUTE_TEST}" ]; then
-            ok "focus_automatic_continuous=0, focus_absolute=${FOCUS_ABSOLUTE_TEST} gesetzt und bestaetigt"
+        set_abs_err=$(v4l2-ctl -d "$DEVICE" --set-ctrl=focus_absolute=${FOCUS_ABSOLUTE_TEST} 2>&1)
+        set_abs_rc=$?
+        if [ "$set_abs_rc" -ne 0 ]; then
+            bad "v4l2-ctl --set-ctrl=focus_absolute=${FOCUS_ABSOLUTE_TEST} fehlgeschlagen: $(echo "$set_abs_err" | tr '\n' ' ')"
         else
-            bad "Ruecklesen weicht ab: focus_automatic_continuous=${readback_auto:-?}, focus_absolute=${readback_abs:-?}"
+            readback_auto=$(v4l2-ctl -d "$DEVICE" --get-ctrl=focus_automatic_continuous 2>/dev/null \
+                | grep -oE '[0-9]+' | head -1)
+            readback_abs=$(v4l2-ctl -d "$DEVICE" --get-ctrl=focus_absolute 2>/dev/null \
+                | grep -oE '[0-9]+' | head -1)
+            if [ "${readback_auto:-}" = "0" ] && [ "${readback_abs:-}" = "${FOCUS_ABSOLUTE_TEST}" ]; then
+                ok "focus_automatic_continuous=0, focus_absolute=${FOCUS_ABSOLUTE_TEST} gesetzt und bestaetigt"
+            else
+                bad "Ruecklesen weicht ab: focus_automatic_continuous=${readback_auto:-?}, focus_absolute=${readback_abs:-?}"
+            fi
         fi
     fi
 
-    # Unveraendert lassen: auf den vor diesem Lauf gelesenen Stand zurueck-
-    # setzen. Ohne bekannten Ausgangswert wird nichts geraten (nur gewarnt).
+    # Wiederherstellung, ebenfalls zwei getrennte Aufrufe und in dieser
+    # Reihenfolge: erst focus_absolute (die Automatik steht zu diesem
+    # Zeitpunkt noch auf 0, also schreibbar), dann
+    # focus_automatic_continuous - war der Ausgangswert 1, geht die
+    # Automatik damit als letzter Schritt wieder an. Ohne bekannten
+    # Ausgangswert wird nichts geraten (nur gewarnt).
     if [ -n "${original_focus_auto:-}" ] && [ -n "${original_focus_abs:-}" ]; then
-        v4l2-ctl -d "$DEVICE" \
-            --set-ctrl=focus_absolute="$original_focus_abs" \
-            --set-ctrl=focus_automatic_continuous="$original_focus_auto" >/dev/null 2>&1
+        v4l2-ctl -d "$DEVICE" --set-ctrl=focus_absolute="$original_focus_abs" >/dev/null 2>&1
+        v4l2-ctl -d "$DEVICE" --set-ctrl=focus_automatic_continuous="$original_focus_auto" >/dev/null 2>&1
         info "Ausgangswerte wiederhergestellt (focus_automatic_continuous=${original_focus_auto}, focus_absolute=${original_focus_abs})"
     else
         warn "Ausgangswerte vor dem Test nicht lesbar - keine Wiederherstellung moeglich"

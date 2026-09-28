@@ -14,6 +14,8 @@ entspricht.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 
 from dispread.camera_settings import (
@@ -56,9 +58,7 @@ def test_streamcam_liefert_monotone_zeitstempel_und_controls_readback():
                 break
 
         assert len(timestamps) == FRAME_COUNT
-        assert all(b > a for a, b in zip(timestamps, timestamps[1:], strict=True)), (
-            "Zeitstempel nicht streng monoton"
-        )
+        assert all(b > a for a, b in pairwise(timestamps)), "Zeitstempel nicht streng monoton"
 
         described = source.describe()
         assert described["controls_readback"] == controls

@@ -76,6 +76,15 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   `var/diagnostics/camera-commissioning/test.png`. Neuer Hardwaretest
   `tests/test_uvc_hardware.py` (nur `--mode=real`): 30 Bilder, streng
   monotone Zeitstempel, Controls-Rücklesung.
+- **Task 6, Nachbesserung nach dem ersten Lauf an der echten StreamCam:**
+  `camera-commissioning.sh` durchsucht den YUYV-Block jetzt vollständig
+  (die StreamCam listet sieben Bildraten je Größe, das feste
+  `grep -A 40` fand 1920x1080 nicht) und setzt `focus_automatic_continuous`
+  und `focus_absolute` in getrennten Aufrufen. Im selben Aufruf schlug
+  `focus_absolute` bei noch aktivem Autofokus mit EIO fehl. Hardwaretest:
+  `itertools.pairwise` statt `zip(..., strict=True)`. Gemessen 2026-09-28:
+  Skript Exit 0 (6/6 OK, USB3), `pytest --mode=real tests/test_uvc_hardware.py`
+  grün.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,
