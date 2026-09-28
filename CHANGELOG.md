@@ -118,6 +118,15 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   `ROADMAP.md` und `TODO.md` sind auf dem neuen Stand;
   `CAMERA_COMMISSIONING.md`, `HARDWARE_PROFILE.md` und `TIMING.md` tragen
   einen Hinweis zur StreamCam.
+- **Task 8 — `display-offset.py --profile`:** Neu ist die Option
+  `--profile`. Sie nimmt das Quad aus einem bestätigten Sitzungsprofil,
+  statt es über die Sättigungssuche zu bestimmen (schließt sich mit
+  `--hint-box` aus, eine der beiden ist Pflicht). Anlass: An der
+  StreamCam-Aufstellung `sc1` (2026-09-28) grenzte die Sättigungssuche das
+  Glas nicht von Blende und Reflexen ab, die Spanne lag bei 0,025–0,054 bei
+  einer Grenze von 0,01. Die Stabilitätsgrenze bleibt unverändert. Bei
+  v3-Profilen muss `camera.size` zur Bildgröße passen. Der Bericht vermerkt
+  `quad_source` mit Profilpfad und sha256.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

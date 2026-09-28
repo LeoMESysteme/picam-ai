@@ -653,3 +653,188 @@ def test_cli_ohne_hint_box_schlaegt_mit_klarer_fehlermeldung_fehl(synthetic_reco
     )
     assert result.returncode != 0
     assert "hint-box" in result.stderr or "hint_box" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Task 8: `--profile` - bestaetigtes Quad statt Saettigungssuche
+# ---------------------------------------------------------------------------
+
+
+def _write_session_profile(
+    path: Path,
+    *,
+    quad: list[list[float]],
+    camera_size: tuple[int, int] | None,
+    schema_version: int = 3,
+) -> None:
+    """Minimales, aber schemakonformes SessionProfile-JSON fuer Tests -
+    Feldnamen wie in src/dispread/session_profile.py::_REQUIRED_FIELDS und
+    der reale Bestand unter var/diagnostics/sc1-profile."""
+    doc: dict = {
+        "schema_version": schema_version,
+        "device_id": "gsv-sensor-161a",
+        "session_id": "test-profile",
+        "quad": quad,
+        "target_size": [400, 160],
+        "grid": {
+            "n_cells": 16,
+            "left": 0.0,
+            "pitch": 25.0,
+            "top": 17.78,
+            "bottom": 142.22,
+            "dot_columns": 5,
+            "gap_columns": 1,
+        },
+        "scaler_crop": None,
+        "min_source_dot_column_px": 3.6,
+        "native_scale": 1.0,
+        "min_native_dot_column_px": 3.6,
+        "resolution_threshold_px": 2.6,
+        "resolution_ok": True,
+        "confirmed_by": "Test",
+        "confirmed_at_utc": "2026-09-28T08:48:34.743266+00:00",
+    }
+    if camera_size is not None:
+        doc["camera"] = {
+            "model": "logitech_streamcam",
+            "usb_id": "046d:0893",
+            "size": list(camera_size),
+            "fourcc": "YUYV",
+            "fps": 30,
+            "controls": {
+                "focus_absolute": 52,
+                "exposure_time_absolute": 100,
+                "white_balance_temperature": 5785,
+                "gain": 25,
+            },
+            "device": "/dev/video0",
+        }
+    path.write_text(json.dumps(doc))
+
+
+def _profile_run_args(session_dir: Path, out_dir: Path, profile_path: Path):
+    parser = mod.build_arg_parser()
+    return parser.parse_args(
+        [
+            str(session_dir),
+            "--profile",
+            str(profile_path),
+            "--out",
+            str(out_dir),
+            "--half-window-s",
+            str(HALF_WINDOW_S),
+            "--guard-s",
+            "0.01",
+        ]
+    )
+
+
+def test_profile_und_hint_box_schliessen_sich_aus(synthetic_recording, tmp_path):
+    session_dir, _e, _c = synthetic_recording
+    profile_path = tmp_path / "profile.json"
+    _write_session_profile(profile_path, quad=[[0, 0], [59, 0], [59, 39], [0, 39]], camera_size=(60, 40))
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(session_dir),
+            "--hint-box",
+            "0.05,0.05,0.9,0.9",
+            "--profile",
+            str(profile_path),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "not allowed with argument" in result.stderr or "nicht zusammen mit" in result.stderr
+
+
+def test_profile_verwendet_profil_quad_und_ruft_locate_quad_nicht_auf(synthetic_recording, tmp_path, monkeypatch):
+    session_dir, _e, _c = synthetic_recording
+    profile_path = tmp_path / "profile.json"
+    # w=60, h=40 (image_size in _write_synthetic_recording) - Quad deckt fast
+    # das ganze Bild ab, wie die hint-box-Faelle oben.
+    _write_session_profile(profile_path, quad=[[0, 0], [59, 0], [59, 39], [0, 39]], camera_size=(60, 40))
+    out_dir = tmp_path / "out"
+
+    def _fail_if_called(*_a, **_kw):
+        raise AssertionError("locate_quad haette mit --profile nicht aufgerufen werden duerfen")
+
+    monkeypatch.setattr(mod, "locate_quad", _fail_if_called)
+
+    args = _profile_run_args(session_dir, out_dir, profile_path)
+    result = mod.run(args)
+
+    assert result["quad_source"]["type"] == "profile"
+    assert result["quad_source"]["profile_path"] == str(profile_path)
+    assert result["quad_source"]["sha256"] == mod._sha256_of_file(profile_path)
+    assert result["quad"]["pixel"] == [[0.0, 0.0], [59.0, 0.0], [59.0, 39.0], [0.0, 39.0]]
+
+
+def test_profile_lehnt_ab_bei_abweichender_kameragroesse(synthetic_recording, tmp_path):
+    session_dir, _e, _c = synthetic_recording
+    profile_path = tmp_path / "profile.json"
+    # Bild ist tatsaechlich 60x40 (image_size in _write_synthetic_recording) -
+    # das Profil behauptet eine andere Kamerabildgroesse.
+    _write_session_profile(profile_path, quad=[[0, 0], [59, 0], [59, 39], [0, 39]], camera_size=(1920, 1080))
+    out_dir = tmp_path / "out"
+    args = _profile_run_args(session_dir, out_dir, profile_path)
+    with pytest.raises(RuntimeError, match="Kamera-Bildgroesse"):
+        mod.run(args)
+
+
+def test_profile_v2_ohne_camera_wird_ohne_groessenpruefung_akzeptiert(synthetic_recording, tmp_path, monkeypatch):
+    session_dir, _e, _c = synthetic_recording
+    profile_path = tmp_path / "profile.json"
+    _write_session_profile(
+        profile_path,
+        quad=[[0, 0], [59, 0], [59, 39], [0, 39]],
+        camera_size=None,
+        schema_version=2,
+    )
+    out_dir = tmp_path / "out"
+
+    monkeypatch.setattr(
+        mod, "locate_quad", lambda *_a, **_kw: (_ for _ in ()).throw(AssertionError("locate_quad nicht erwartet"))
+    )
+
+    args = _profile_run_args(session_dir, out_dir, profile_path)
+    result = mod.run(args)
+    assert result["quad_source"]["type"] == "profile"
+
+
+def test_cli_mit_profile_laeuft_end_to_end_und_traegt_quad_source(synthetic_recording, tmp_path):
+    session_dir, _e, _c = synthetic_recording
+    profile_path = tmp_path / "profile.json"
+    _write_session_profile(profile_path, quad=[[0, 0], [59, 0], [59, 39], [0, 39]], camera_size=(60, 40))
+    out_dir = tmp_path / "out"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(session_dir),
+            "--profile",
+            str(profile_path),
+            "--out",
+            str(out_dir),
+            "--half-window-s",
+            str(HALF_WINDOW_S),
+            "--guard-s",
+            "0.01",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((out_dir / "offset-analyse.json").read_text())
+    assert payload["quad_source"]["type"] == "profile"
+    assert payload["quad_source"]["profile_path"] == str(profile_path)
+    assert payload["quad"] == {
+        "pixel": [[0.0, 0.0], [59.0, 0.0], [59.0, 39.0], [0.0, 39.0]],
+        "source": "profile",
+    }
