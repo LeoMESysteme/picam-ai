@@ -336,13 +336,27 @@ def load_frames(path: Path, session: dict[str, Any] | None) -> list[tuple[str, i
     der Frame urspruenglich `v4l2_monotonic` trug (dann braucht es `session`
     mit `clock_offset_boottime_minus_monotonic_ns`, sonst ValueError)."""
     frames: list[tuple[str, int]] = []
+    skipped_dropped = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
         obj = json.loads(line)
+        if obj.get("dropped"):
+            # final-review.md, "Nicht bewertet": eine wegen voller
+            # frame_queue verworfene Zeile hat kein 'file' und darf hier
+            # nicht mit KeyError abbrechen - sie traegt kein Bild, es gibt
+            # nichts zu labeln.
+            skipped_dropped += 1
+            continue
         t_ns = to_boottime_ns(obj["capture_timestamp"], session)
         frames.append((str(obj["file"]), t_ns))
+    if skipped_dropped:
+        print(
+            f"Hinweis: {skipped_dropped} Zeile(n) in {path} uebersprungen "
+            "(dropped=true, volle Warteschlange beim Aufnehmen).",
+            file=sys.stderr,
+        )
     return frames
 
 

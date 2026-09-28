@@ -61,6 +61,10 @@ def test_streamcam_liefert_monotone_zeitstempel_und_controls_readback():
         assert all(b > a for a, b in pairwise(timestamps)), "Zeitstempel nicht streng monoton"
 
         described = source.describe()
-        assert described["controls_readback"] == controls
+        # I-2 final-review.md: controls_readback deckt jetzt ALLE gesetzten
+        # Regler ab (Automatiken + feste Werte + die vier aus `controls`),
+        # nicht mehr nur die vier SETTABLE_CONTROLS - Vergleich deshalb gegen
+        # `settings.ordered_controls()`, nicht gegen `controls` allein.
+        assert described["controls_readback"] == dict(settings.ordered_controls())
     finally:
         source.close()

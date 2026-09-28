@@ -1200,3 +1200,154 @@ def test_synthetic_traegt_versatz_und_keine_kamera(tmp_path):
     assert set(session["clock_offset_boottime_minus_monotonic_ns"]) == {"start", "end"}
     assert "scaler_crop_actual" not in session
     assert "stream_budget" not in session
+
+
+# --- I-1: gedrosseltes Lesen im Kamerazweig (final-review.md) ---------------
+
+
+def test_kamera_30fps_frame_rate_15_liefert_keine_luecken_und_duennt_aus(monkeypatch, tmp_path):
+    """Kamera liefert lueckenlos 30 fps, --frame-rate 15: `frame_gaps` muss
+    ueber die UNGEDROSSELTE Folge gerechnet werden (count == 0, weil 30 fps
+    keine Luecke gegen die 30-fps-Schwelle hat) und ungefaehr die Haelfte der
+    18 gelieferten Bilder muss geschrieben werden (Ausduennung nach
+    Zeitstempel, kein Sleep mehr im Kamerazweig, siehe final-review.md I-1)."""
+    module = _load_sync_record_module()
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSource(
+            settings, device=device, frame_count=18, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-ausduennen"
+    args = module.parse_args(
+        [
+            "--duration",
+            "5.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0, "returncode war " + str(returncode)
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] == 0
+    frames_recorded = session["frames_recorded"]
+    # 18 gelieferte Bilder bei 30fps, geschrieben etwa jedes zweite -> ~9.
+    assert 7 <= frames_recorded <= 10, frames_recorded
+    assert session["frames_dropped_queue_full"] == 0
+
+
+def test_kamera_echte_luecke_wird_trotz_ausduennung_gezaehlt(monkeypatch, tmp_path):
+    """Eine echte Aussetzer-Luecke in der rohen Kamerafolge muss weiterhin
+    als Luecke gezaehlt werden, unabhaengig von der Ausduennung fuers
+    Schreiben."""
+    module = _load_sync_record_module()
+
+    class _FakeUvcSourceMitLuecke(_FakeUvcSource):
+        def frames(self):
+            value_ns = 0
+            for i in range(10):
+                if i == 5:
+                    value_ns += 200_000_000  # echte Luecke, weit ueber Schwelle
+                else:
+                    value_ns += self._interval_ns
+                self._sequence += 1
+                yield Frame(
+                    frame_sequence=self._sequence,
+                    image=np.zeros((4, 4, 3), dtype=np.uint8),
+                    capture_timestamp=Timestamp(
+                        value_ns=value_ns,
+                        base=TimeBaseKind.V4L2_MONOTONIC,
+                        semantics=TimestampSemantics.UNKNOWN,
+                        uncertainty_ns=None,
+                    ),
+                    source_id=f"v4l2:{self.device}",
+                )
+
+    monkeypatch.setattr(
+        module,
+        "UvcSource",
+        lambda settings, *, device=None: _FakeUvcSourceMitLuecke(
+            settings, device=device, interval_ns=33_333_333
+        ),
+    )
+
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=30)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kamera-echte-luecke"
+    args = module.parse_args(
+        [
+            "--duration",
+            "5.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "15",
+            "--port",
+            os.ttyname(slave),
+            "--baudrate",
+            "9600",
+        ]
+    )
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == 0
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frame_gaps"]["count"] >= 1
+
+
+def test_frame_rate_ueber_kamera_fps_wird_abgelehnt(tmp_path):
+    """--frame-rate darf im Kamerazweig nicht groesser als camera_settings.fps
+    sein - sonst waere die Ausduennung wirkungslos (jedes Bild wuerde
+    geschrieben, aber der Bediener erwartet eine Drosselung)."""
+    settings_path = _write_camera_settings(tmp_path / "camera-settings.json", fps=15)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--duration",
+            "1.0",
+            "--output",
+            str(tmp_path / "lauf-frame-rate-zu-hoch"),
+            "--source",
+            "camera",
+            "--camera-settings",
+            str(settings_path),
+            "--frame-rate",
+            "30",
+            "--port",
+            "/dev/null",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 2
+    assert "--frame-rate" in completed.stderr

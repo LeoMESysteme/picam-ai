@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from dispread.camera_settings import SETTABLE_CONTROLS, CameraSettings
+from dispread.camera_settings import CameraSettings
 from dispread.frames.types import Capability, Frame
 from dispread.records import TimeBaseKind, Timestamp, TimestampSemantics
 
@@ -71,6 +71,27 @@ def find_uvc_device(usb_id: str, sysfs_root: Path = Path("/sys/class/video4linux
             "gefunden (erwartet genau 1)"
         )
     return matches[0]
+
+
+def device_usb_id(device: str, sysfs_root: Path = Path("/sys/class/video4linux")) -> str | None:
+    """USB-ID ('idVendor:idProduct') des Knotens `device`, `None` wenn nicht
+    ermittelbar (kein Symlink, keine lesbaren sysfs-Dateien). Kehrseite von
+    `find_uvc_device`: dort wird die USB-ID gesucht, hier zu einem bereits
+    bekannten Geraeteknoten geprueft (M-1 final-review.md: `device=`/
+    `--camera-device` wird sonst blind uebernommen, ohne Abgleich mit
+    `settings.usb_id`)."""
+    entry = sysfs_root / Path(device).name
+    try:
+        iface = (entry / "device").resolve(strict=True)
+    except OSError:
+        return None
+    usb_dir = iface.parent
+    try:
+        vendor = (usb_dir / "idVendor").read_text().strip()
+        product = (usb_dir / "idProduct").read_text().strip()
+    except OSError:
+        return None
+    return f"{vendor}:{product}"
 
 
 def usb_speed_mbps(device: str, sysfs_root: Path = Path("/sys/class/video4linux")) -> int | None:
@@ -179,15 +200,32 @@ class UvcSource:
             "pos_msec": cv2.CAP_PROP_POS_MSEC,
         }
 
-        self.device = self._device_arg or find_uvc_device(
-            self.settings.usb_id, sysfs_root=self._sysfs_root
-        )
+        if self._device_arg is not None:
+            # M-1 final-review.md: ein explizit vorgegebenes Geraet (`device=`,
+            # `sync-record.py --camera-device`) wird gegen die sysfs-USB-ID
+            # geprueft statt blind uebernommen zu werden - sonst koennte ein
+            # falsch angegebener Knoten unbemerkt eine andere Kamera oeffnen.
+            actual_usb_id = device_usb_id(self._device_arg, sysfs_root=self._sysfs_root)
+            if actual_usb_id != self.settings.usb_id:
+                raise UvcError(
+                    f"--camera-device {self._device_arg}: USB-ID ist "
+                    f"{actual_usb_id!r}, Profil verlangt {self.settings.usb_id!r}"
+                )
+            self.device = self._device_arg
+        else:
+            self.device = find_uvc_device(self.settings.usb_id, sysfs_root=self._sysfs_root)
         factory = self._capture_factory or (
             lambda d: cv2.VideoCapture(d, cv2.CAP_V4L2)
         )
         capture = factory(self.device)
         self._capture = capture
         try:
+            # M-2 final-review.md (Ledger #3): ein belegtes oder nicht
+            # vorhandenes Geraet klar melden, statt es erst spaeter als
+            # "Aufloesung: soll 1920x1080, ist 0x0" erscheinen zu lassen -
+            # das legt USB2/Format nahe, ist hier aber der falsche Befund.
+            if not capture.isOpened():
+                raise UvcError(f"{self.device}: Kamera nicht zu oeffnen (belegt?)")
             fourcc_code = cv2.VideoWriter_fourcc(*self.settings.fourcc)
             capture.set(self._props["fourcc"], fourcc_code)
             width, height = self.settings.size
@@ -202,13 +240,21 @@ class UvcSource:
                     f"Aufloesung: soll {width}x{height}, ist {actual_width}x{actual_height}"
                 )
 
-            self._set_controls(self.device, self.settings.ordered_controls())
+            ordered_controls = self.settings.ordered_controls()
+            self._set_controls(self.device, ordered_controls)
 
-            names = list(SETTABLE_CONTROLS)
+            # I-2 final-review.md: ALLE gesetzten Regler zurueckgelesen und
+            # geprueft - Automatiken (MODE_CONTROLS) und feste Werte
+            # (FIXED_CONTROLS), nicht nur die vier SETTABLE_CONTROLS aus dem
+            # Profil. Ein `--set-ctrl` mit Exit 0, das der Treiber trotzdem
+            # klemmt oder ignoriert (z.B. Autofokus bleibt an, Zoom != 100),
+            # blieb vorher unbemerkt.
+            expected = dict(ordered_controls)
+            names = list(expected)
             readback = self._get_controls(self.device, names)
             self._controls_readback = dict(readback)
             for name in names:
-                soll = self.settings.controls[name]
+                soll = expected[name]
                 ist = readback.get(name)
                 if ist != soll:
                     raise UvcError(f"{name}: soll {soll}, ist {ist}")

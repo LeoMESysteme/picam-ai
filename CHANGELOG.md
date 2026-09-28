@@ -85,6 +85,23 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   `itertools.pairwise` statt `zip(..., strict=True)`. Gemessen 2026-09-28:
   Skript Exit 0 (6/6 OK, USB3), `pytest --mode=real tests/test_uvc_hardware.py`
   grün.
+- **Task 7 — Befunde des Abschlussreviews:** Der Kamerazweig von
+  `sync-record.py` liest jetzt jedes Bild und dünnt erst beim Schreiben
+  nach Zeitstempel auf `--frame-rate` aus. Vorher drosselte ein Sleep das
+  Lesen, die StreamCam verwarf Bilder und `frame_gaps` zählte fast jedes
+  Bild als Lücke. `--frame-rate` über der Kamera-fps wird abgelehnt.
+  `UvcSource.open()` liest alle gesetzten Regler zurück (auch Automatiken,
+  Zoom/Pan/Tilt, Netzfrequenz), prüft ein explizit angegebenes Gerät gegen
+  seine USB-ID und meldet eine belegte Kamera klar statt als „0x0".
+  `timing-calibration.py` prüft die Kamera-Herkunft jedes Versatzberichts
+  über `session.json` (`camera.usb_id`); ein IMX500-Bericht wird
+  abgelehnt. Profile: v3 ohne bzw. mit `camera: null` und v2 mit
+  `camera`-Feld werden abgelehnt. `harvest.py` hasht die Kalibrierung aus
+  denselben Bytes, aus denen es sie liest; Lesefehler der Kalibrierung
+  enden als Meldung statt Traceback. `gate-label.py` und
+  `display-offset.py` überspringen `frames.jsonl`-Zeilen mit
+  `dropped: true` statt mit `KeyError` abzubrechen (Fehler seit
+  2026-09-23). `camera-commissioning.sh` prüft die Größe des Testbilds.
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

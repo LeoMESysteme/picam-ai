@@ -170,11 +170,25 @@ class SessionProfile:
         for field_name in _REQUIRED_FIELDS:
             if field_name not in d:
                 raise ValueError(f"Feld '{field_name}' fehlt im Sitzungsprofil {path}")
+        if schema_version == 2 and "camera" in d:
+            # Ledger #8 final-review.md: ein v2-Dokument mit einem (fremden)
+            # 'camera'-Schluessel kaeme sonst an harvests Waechter
+            # `camera is None` vorbei - nur per Handbearbeitung erreichbar,
+            # aber die Invariante "v2 = IMX500 = abgewiesen" gilt strikt.
+            raise ValueError(
+                f"Sitzungsprofil {path}: schema_version 2 (IMX500) darf kein "
+                "'camera'-Feld tragen - das gibt es erst ab Profil v3 (StreamCam)."
+            )
         if schema_version == 3:
-            if "camera" not in d:
+            # M-3 final-review.md: `d.get(...) is None` statt `not in d` -
+            # sonst laedt ein v3-Profil mit "camera": null still mit
+            # `camera=None` durch, und harvest.py meldet danach faelschlich
+            # "IMX500-Profil (schema_version 2)".
+            if d.get("camera") is None:
                 raise ValueError(
-                    f"Feld 'camera' fehlt im Sitzungsprofil {path} - Profil v3 "
-                    "verlangt die Kameraeinstellungen der Sitzung (StreamCam-Umstieg)."
+                    f"Feld 'camera' fehlt oder ist null im Sitzungsprofil {path} - "
+                    "Profil v3 verlangt die Kameraeinstellungen der Sitzung "
+                    "(StreamCam-Umstieg)."
                 )
             if d.get("scaler_crop") is not None:
                 raise ValueError(

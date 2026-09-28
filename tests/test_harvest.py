@@ -257,6 +257,69 @@ def test_run_rejects_too_short_hold(tmp_path):
         mock_run.assert_not_called()
 
 
+def test_run_rejects_camera_fps_below_fixed_frame_rate(tmp_path):
+    """final-review.md I-1 (Ledger #9): --frame-rate 15 bleibt in harvest.py
+    fest, aber eine Kamera mit weniger als 15 fps macht die Ausduennung in
+    sync-record.py sinnlos (dort jetzt hart abgelehnt, siehe
+    test_frame_rate_ueber_kamera_fps_wird_abgelehnt) - harvest.py muss das
+    VOR jedem Subprozessaufruf selbst abfangen."""
+    profile_path = tmp_path / "profile.json"
+    _profile(camera=dataclasses.replace(_CAMERA, fps=10)).save(profile_path)
+    calibration_path = _write_calibration(tmp_path)
+    with patch.object(harvest.subprocess, "run") as mock_run:
+        with pytest.raises(harvest.HarvestError, match="fps"):
+            harvest.run(
+                profile_path=profile_path,
+                out_dir=tmp_path / "out",
+                n_steps=3,
+                hold_s=4.0,
+                seed=1,
+                port="/dev/ttyUSB0",
+                calibration_path=calibration_path,
+            )
+        mock_run.assert_not_called()
+
+
+def test_run_hashes_calibration_bytes_read_at_load_time(tmp_path):
+    """M-4 final-review.md: `calibration_sha256` muss zu den Bytes passen,
+    die tatsaechlich geparst wurden (VOR jedem Subprozessaufruf gelesen) -
+    nicht zu dem, was zufaellig am Ende noch auf der Platte steht. Simuliert
+    eine Aenderung der Datei WAEHREND des Laufs (z.B. eine neue Kalibrierung
+    wird parallel geschrieben)."""
+    import hashlib
+
+    profile_path = tmp_path / "profile.json"
+    _profile().save(profile_path)
+    calibration_path = _write_calibration(tmp_path)
+    original_bytes = calibration_path.read_bytes()
+    out_dir = tmp_path / "out"
+
+    def _fake_run(cmd, **kwargs):
+        # Waehrend des (gemockten) sync-record-Laufs aendert sich die Datei.
+        calibration_path.write_bytes(original_bytes + b" ")
+        if "sync-record.py" in cmd[1]:
+            (out_dir / "recording").mkdir(parents=True, exist_ok=True)
+            return _ok_result(0)
+        if "gate-label.py" in cmd[1]:
+            proposal = {"summary": {}}
+            (out_dir / "proposal.json").write_text(json.dumps(proposal))
+            return _ok_result(0)
+        raise AssertionError(f"unerwarteter Aufruf: {cmd}")
+
+    with patch.object(harvest.subprocess, "run", side_effect=_fake_run):
+        result = harvest.run(
+            profile_path=profile_path,
+            out_dir=out_dir,
+            n_steps=3,
+            hold_s=4.0,
+            seed=1,
+            port="/dev/ttyUSB0",
+            calibration_path=calibration_path,
+        )
+
+    assert result["calibration_sha256"] == hashlib.sha256(original_bytes).hexdigest()
+
+
 def test_run_sets_exact_subprocess_arguments(tmp_path):
     profile_path = tmp_path / "profile.json"
     _profile().save(profile_path)

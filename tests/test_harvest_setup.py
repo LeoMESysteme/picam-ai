@@ -33,6 +33,27 @@ from dispread.session_profile import SessionProfile
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "harvest-setup.py"
 
+#: M-1 final-review.md: `UvcSource.open()` prueft ein explizit vorgegebenes
+#: `device` gegen die sysfs-USB-ID. `_make_fake_camera_io` gibt "/dev/video0"
+#: nur als Platzhalter vor (kein echter Geraeteknoten) - der Kontrollschritt
+#: in `run_focus` bekommt deshalb einen passenden Fake-sysfs-Baum injiziert
+#: statt gegen echtes `/sys` zu pruefen.
+
+
+def _write_fake_sysfs_video_node(tmp_path: Path, *, name: str, usb_id: str) -> Path:
+    vendor, _, product = usb_id.partition(":")
+    v4l_root = tmp_path / "v4l"
+    usb = tmp_path / "usb" / name
+    iface = usb / f"{name}:1.0"
+    iface.mkdir(parents=True)
+    (usb / "idVendor").write_text(vendor + "\n")
+    (usb / "idProduct").write_text(product + "\n")
+    d = v4l_root / name
+    d.mkdir(parents=True)
+    (d / "index").write_text("0\n")
+    (d / "device").symlink_to(iface)
+    return v4l_root
+
 _spec = importlib.util.spec_from_file_location("harvest_setup", SCRIPT)
 harvest_setup = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = harvest_setup  # dataclasses braucht das Modul in sys.modules
@@ -513,6 +534,11 @@ class _FakeCapture:
         self._height = height
         self._pos_msec = 0.0
 
+    def isOpened(self):
+        # M-2 final-review.md (Ledger #3): `UvcSource.open()` prueft das seit
+        # Task 7 - der Kontrollschritt in `run_focus` nutzt dieselbe Attrappe.
+        return True
+
     def set(self, prop, value):  # noqa: ARG002 - Breite/Hoehe kommen aus dem Konstruktor
         pass
 
@@ -533,7 +559,7 @@ class _FakeCapture:
         pass
 
 
-def _make_fake_camera_io():
+def _make_fake_camera_io(tmp_path: Path):
     state = {
         "focus_absolute": 0,
         "exposure_time_absolute": 157,
@@ -549,17 +575,20 @@ def _make_fake_camera_io():
     def fake_get_controls(device, names):  # noqa: ARG001
         return {name: state[name] for name in names}
 
+    sysfs_root = _write_fake_sysfs_video_node(tmp_path, name="video0", usb_id=STREAMCAM_USB_ID)
+
     return SimpleNamespace(
         device="/dev/video0",
         capture=capture,
         capture_factory=lambda d: capture,  # noqa: ARG005 - dieselbe Aufnahme, kein zweites Oeffnen
         set_controls=fake_set_controls,
         get_controls=fake_get_controls,
+        sysfs_root=sysfs_root,
     ), state
 
 
 def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
-    fake_io, state = _make_fake_camera_io()
+    fake_io, state = _make_fake_camera_io(tmp_path)
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda device: fake_io)
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda seconds: None)
 

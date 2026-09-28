@@ -74,6 +74,49 @@ def test_load_frames_rechnet_nanosekunden_korrekt_in_sekunden_um(tmp_path):
     assert rows[0]["file"] == "frames/frame_000001.jpg"
 
 
+def test_load_frames_ueberspringt_drop_zeilen_statt_keyerror(tmp_path):
+    """final-review.md, Abschnitt 'Nicht bewertet': eine Zeile mit
+    `"dropped": true` (volle frame_queue, kein 'file'-Feld) darf `load_frames`
+    nicht mit KeyError abbrechen lassen."""
+    session = tmp_path / "session"
+    (session / "frames").mkdir(parents=True)
+    with open(session / "frames.jsonl", "w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "file": "frame_000001.jpg",
+                    "frame_sequence": 1,
+                    "capture_timestamp": {
+                        "value_ns": 63749692983000,
+                        "base": "sensor_boottime",
+                        "semantics": "unknown",
+                        "uncertainty_ns": None,
+                    },
+                }
+            )
+            + "\n"
+        )
+        f.write(
+            json.dumps(
+                {
+                    "dropped": True,
+                    "sensor_sequence": None,
+                    "capture_timestamp": {
+                        "value_ns": 63749692984000,
+                        "base": "sensor_boottime",
+                        "semantics": "unknown",
+                        "uncertainty_ns": None,
+                    },
+                    "t_boot": 63749.692984,
+                }
+            )
+            + "\n"
+        )
+    rows = mod.load_frames(session)
+    assert len(rows) == 1
+    assert rows[0]["file"] == "frames/frame_000001.jpg"
+
+
 def test_load_frames_v4l2_monotonic_wird_mit_versatz_umgerechnet(tmp_path):
     session = tmp_path / "session"
     (session / "frames").mkdir(parents=True)

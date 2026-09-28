@@ -218,11 +218,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=15.0,
         help=(
-            "Zieltakt der Bildaufnahme in Hz (0 = so schnell wie moeglich). Nur "
-            "--source synthetic wird davon tatsaechlich gebremst; bei --source "
-            "camera laeuft die StreamCam mit dem Takt aus --camera-settings "
-            "(settings.fps) - dieser Wert drosselt dort nur, wie viele der "
-            "gelieferten Bilder geschrieben werden."
+            "Zieltakt der GESCHRIEBENEN Bilder in Hz (0 = alle schreiben). Bei "
+            "--source synthetic bremst dieser Wert die Erzeugung selbst (einzige "
+            "Bremse dort). Bei --source camera laeuft das Lesen UNGEDROSSELT mit "
+            "dem Takt aus --camera-settings (settings.fps); --frame-rate duennt "
+            "danach nur aus, welche gelesenen Bilder in frames.jsonl landen - "
+            "muss deshalb <= settings.fps sein, sonst Abbruch (final-review.md I-1)."
         ),
     )
     parser.add_argument("--port", default=DEFAULT_PORT, help="Serieller Port, nur gelesen")
@@ -835,13 +836,27 @@ def _frame_acquisition_worker(
     unter Kernel-Dirty-Page-Writeback (bis 130 MB) - ein I/O-loser
     Herzschlagprozess zeigte im selben Zeitraum KEINE Luecke.
 
-    Die Taktung (`--frame-rate`) bleibt bewusst HIER, nicht im
-    Schreiberthread: sie regelt, wie schnell dieser Thread den naechsten
-    Generator-`next()` aufruft - fuer `synthetic://` ist das die einzige
-    Bremse ueberhaupt (Erzeugung ist praktisch sofort), fuer `--source
-    camera` taktet die Hardware selbst schon (`settings.fps`) und diese
-    Sleep bleibt zusaetzlich wirksam, reines Verschieben der Zustaendigkeit,
-    keine Verhaltensaenderung an der Taktung selbst.
+    Taktung (`--frame-rate`), final-review.md I-1: **nur** `synthetic://`
+    wird ueber ein Sleep vor dem naechsten Generator-`next()` gebremst (dort
+    die einzige Bremse ueberhaupt, Erzeugung ist praktisch sofort). Im
+    Kamerazweig gibt es KEIN Sleep mehr - jedes Bild wird sofort gelesen,
+    sonst haelt die StreamCam volle V4L2-Puffer (Standard 4 bei OpenCV), und
+    aufeinanderfolgende GELIEFERTE Bilder liegen dann rund
+    Puffertiefe/camera_settings.fps statt 1/frame_rate auseinander - genau
+    der Review-Befund. Stattdessen wird im Kamerazweig nach dem Lesen jedes
+    Bildes anhand des Zeitstempels ausgeduennt: weitergegeben (in
+    `frame_queue` gelegt) wird ein Bild, wenn es das erste ist oder der
+    Abstand zum zuletzt weitergegebenen Bild >= 1/frame_rate ist. Nicht
+    weitergegebene Bilder sind KEIN Drop (die zaehlen nur bei voller
+    `frame_queue`, siehe unten) - sie werden einfach nicht geschrieben.
+
+    `sensor_timestamp_interval_ns` (Feld je `frames.jsonl`-Zeile) bezieht
+    sich deshalb im Kamerazweig auf das vorige WEITERGEGEBENE Bild, nicht auf
+    das vorige GELESENE - so wird es aktuell nirgends konsumiert (nur roh
+    durchgereicht, kein Auswerter verlangt heute etwas anderes), aber es ist
+    die Groesse, die zur tatsaechlich geschriebenen Folge passt. Im
+    synthetic-Zweig ist das ohnehin dieselbe Folge (dort wird nichts
+    ausgeduennt), also keine Verhaltensaenderung dort.
 
     Ist `frame_queue` voll (Schreiber kommt nicht hinterher), wird das Bild
     NICHT geschrieben und NICHT still verworfen: es zaehlt in
@@ -850,25 +865,44 @@ def _frame_acquisition_worker(
     als eigener `frames.jsonl`-Eintrag sichtbar wird. `frame_queue.put(...)`
     selbst blockiert dafuer NIE.
 
-    `frame_gaps` (nur Kamerazweig): alle gelieferten `value_ns` werden
-    gesammelt und am Ende ueber `count_frame_gaps(..., camera_settings.fps)`
-    ausgewertet - Luecken sind hier am aussagekraeftigsten, weil sie die roh
-    von der Kamera gelieferten Zeitstempel betreffen, nicht erst die
-    Skript-eigene Taktung."""
+    `frame_gaps` (nur Kamerazweig): ALLE gelesenen `value_ns` werden
+    gesammelt (auch ausgeduennte, nicht geschriebene) und am Ende ueber
+    `count_frame_gaps(..., camera_settings.fps)` ausgewertet - Luecken sind
+    hier am aussagekraeftigsten, weil sie die roh von der Kamera gelieferten,
+    UNGEDROSSELTEN Zeitstempel betreffen, nicht erst die Ausduennung.
+
+    Stall-Erkennung (`iter_duration_s > 3 * stall_period_s`): im Kamerazweig
+    bezieht sich `stall_period_s` auf den Kamera-Bildabstand
+    (`1/camera_settings.fps`), NICHT auf `--frame-rate` - ohne Sleep im
+    Kamerazweig waere `frame_rate` sonst der falsche Massstab dafuer, wie
+    schnell aufeinanderfolgende `next()`-Aufrufe normalerweise sind."""
+    is_camera = args.source == "camera"
     frame_period_s = 1.0 / args.frame_rate if args.frame_rate > 0 else 0.0
+    # Ganzzahlig statt `frame_period_s * 1e9`: bei kommensurablen Werten
+    # (z.B. genau 2x Kamera-Intervall) fuehrt die Fliesskomma-Rundung von
+    # `1.0/args.frame_rate` sonst dazu, dass der doppelte Kamera-Abstand die
+    # Schwelle knapp NICHT erreicht (66666666 ns < 66666666.667 ns) und jedes
+    # dritte statt jedes zweite Bild geschrieben wird - beobachtet in
+    # test_kamera_30fps_frame_rate_15_liefert_keine_luecken_und_duennt_aus.
+    frame_period_ns = int(1e9 // args.frame_rate) if args.frame_rate > 0 else 0
+    stall_period_s = (
+        (1.0 / camera_settings.fps)
+        if is_camera and camera_settings is not None and camera_settings.fps > 0
+        else frame_period_s
+    )
     start_mono = time.monotonic()
     next_due = start_mono
     max_loop_iteration_s = 0.0
     stall_iterations: list[dict[str, Any]] = []
     prev_loop_end_mono = start_mono
-    prev_sensor_timestamp_ns: int | None = None
+    prev_written_value_ns: int | None = None
     max_frame_queue_depth = 0
     frames_acquired = 0
     frames_dropped = 0
     camera_value_ns: list[int] = []
 
     gen = _frame_generator(args, state, camera_settings, camera_device)
-    if args.source == "camera":
+    if is_camera:
         # Bug 1: nur der Kamerazweig kann haengen bleiben - synthetic:// ist
         # ein reiner Generator ohne Hardware-I/O.
         gen = _camera_startup_guard(gen, STARTUP_TIMEOUT_S)
@@ -880,7 +914,7 @@ def _frame_acquisition_worker(
             iter_duration_s = now - prev_loop_end_mono
             if iter_duration_s > max_loop_iteration_s:
                 max_loop_iteration_s = iter_duration_s
-            if frame_period_s > 0 and iter_duration_s > 3 * frame_period_s:
+            if stall_period_s > 0 and iter_duration_s > 3 * stall_period_s:
                 stall_iterations.append({
                     "t_boot": time.clock_gettime(time.CLOCK_BOOTTIME),
                     "duration_s": iter_duration_s,
@@ -890,13 +924,27 @@ def _frame_acquisition_worker(
             frames_acquired += 1
 
             value_ns = timestamp_dict.get("value_ns")
+            if is_camera and value_ns is not None:
+                # Ungedrosselt, VOR der Ausduennung - siehe Docstring
+                # "frame_gaps".
+                camera_value_ns.append(value_ns)
+
+            if (
+                is_camera
+                and frame_period_s > 0
+                and prev_written_value_ns is not None
+                and value_ns is not None
+                and (value_ns - prev_written_value_ns) < frame_period_ns
+            ):
+                # Ausgeduennt: gelesen, aber nicht weitergegeben - kein Drop.
+                prev_loop_end_mono = time.monotonic()
+                continue
+
             sensor_timestamp_interval_ns = None
-            if prev_sensor_timestamp_ns is not None and value_ns is not None:
-                sensor_timestamp_interval_ns = value_ns - prev_sensor_timestamp_ns
+            if prev_written_value_ns is not None and value_ns is not None:
+                sensor_timestamp_interval_ns = value_ns - prev_written_value_ns
             if value_ns is not None:
-                prev_sensor_timestamp_ns = value_ns
-                if args.source == "camera":
-                    camera_value_ns.append(value_ns)
+                prev_written_value_ns = value_ns
 
             try:
                 frame_queue.put_nowait({
@@ -915,7 +963,7 @@ def _frame_acquisition_worker(
                 })
             max_frame_queue_depth = max(max_frame_queue_depth, frame_queue.qsize())
 
-            if frame_period_s > 0:
+            if not is_camera and frame_period_s > 0:
                 next_due += frame_period_s
                 sleep_for = next_due - time.monotonic()
                 if sleep_for > 0:
@@ -1097,6 +1145,21 @@ def run(args: argparse.Namespace) -> int:
             print(f"Fehler: --camera-settings {args.camera_settings} konnte nicht geladen werden: {exc}", file=sys.stderr)
             return 1
         camera_device = str(args.camera_device) if args.camera_device is not None else None
+        # I-1 final-review.md: mit gedrosseltem LESEN (Sleep im Aufnahme-
+        # thread) waeren --frame-rate > camera_settings.fps wirkungslos
+        # gewesen (die Kamera taktet ohnehin nicht schneller). Mit Ausduennung
+        # nach Zeitstempel waere so ein Wert dagegen NIE ausduennend (jedes
+        # gelieferte Bild landet in der Warteschlange) - der Bediener erwartet
+        # aber eine Drosselung, wenn er --frame-rate explizit angibt. Deshalb
+        # klare Ablehnung statt eines stillschweigend wirkungslosen Werts.
+        if args.frame_rate > camera_settings.fps:
+            print(
+                f"Fehler: --frame-rate {args.frame_rate} ist groesser als die Kamera-fps "
+                f"{camera_settings.fps} aus --camera-settings {args.camera_settings} - "
+                "die Ausduennung waere wirkungslos.",
+                file=sys.stderr,
+            )
+            return 2
 
     output_dir = args.output or (DEFAULT_OUTPUT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S"))
     frames_dir = output_dir / "frames"

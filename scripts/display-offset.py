@@ -128,6 +128,7 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
     session_path = session_dir / "session.json"
     session = json.loads(session_path.read_text(encoding="utf-8")) if session_path.is_file() else None
     rows = []
+    skipped_dropped = 0
     path = session_dir / "frames.jsonl"
     with path.open() as fh:
         for line in fh:
@@ -135,6 +136,12 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
             if not line:
                 continue
             obj = json.loads(line)
+            if obj.get("dropped"):
+                # final-review.md, "Nicht bewertet": eine wegen voller
+                # frame_queue verworfene Zeile hat kein 'file' und darf hier
+                # nicht mit KeyError abbrechen - sie traegt kein Bild.
+                skipped_dropped += 1
+                continue
             ts = obj["capture_timestamp"]
             # `frames.jsonl` traegt nur den Dateinamen, das Bild liegt unter
             # <session_dir>/frames/ (sync-record.py: frames_dir = output_dir
@@ -147,6 +154,12 @@ def load_frames(session_dir: Path) -> list[dict[str, Any]]:
                     "timestamp_base": ts.get("base"),
                 }
             )
+    if skipped_dropped:
+        print(
+            f"Hinweis: {skipped_dropped} Zeile(n) in {path} uebersprungen "
+            "(dropped=true, volle Warteschlange beim Aufnehmen).",
+            file=sys.stderr,
+        )
     rows.sort(key=lambda r: r["t"])
     return rows
 

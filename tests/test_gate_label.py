@@ -391,6 +391,41 @@ def test_summary_zaehlt_alle_grundschluessel_auch_mit_null(tmp_path):
     assert summary["distinct_label_texts"] == 1
 
 
+def test_drop_zeilen_in_frames_jsonl_werden_uebersprungen_statt_keyerror(tmp_path):
+    """final-review.md, Abschnitt 'Nicht bewertet': `frames.jsonl`-Zeilen mit
+    `"dropped": true` (voller `frame_queue`, ohne `file`-Feld) duerfen
+    `load_frames` nicht mit `KeyError` abbrechen lassen - sie werden
+    uebersprungen, alle anderen Zeilen ganz normal ausgewertet."""
+    telegrams = [(i * 500 * MS, "+0.46776 mV/V") for i in range(20)]
+    t_mid = telegrams[10][0]
+    frames = [("frame_000001.png", t_mid)]
+    recording = _write_recording(tmp_path, telegrams=telegrams, frames=frames)
+
+    drop_entry = {
+        "dropped": True,
+        "sensor_sequence": None,
+        "capture_timestamp": {
+            "value_ns": t_mid + 1,
+            "base": "sensor_boottime",
+            "semantics": "unknown",
+            "uncertainty_ns": None,
+        },
+        "t_boot": t_mid / 1e9,
+    }
+    with open(recording / "frames.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(drop_entry) + "\n")
+
+    output = tmp_path / "proposal.json"
+    result = _run_cli(recording, output, guard_margin_ms=100, max_gap_ms=1000)
+    assert result.returncode == 0, result.stderr
+
+    proposal = json.loads(output.read_text())
+    assert proposal["summary"]["frames_total"] == 1
+    by_file = _labeled_by_file(proposal)
+    key = _image_path(recording, "frame_000001.png")
+    assert key in by_file
+
+
 def test_summary_stdout_bleibt_unveraendert(tmp_path):
     """Die stdout-Zaehlung (Bericht) und proposal.json['summary'] muessen
     uebereinstimmen - dieselbe Quelle (reject_counts/text_counts)."""

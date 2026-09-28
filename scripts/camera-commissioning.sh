@@ -11,7 +11,9 @@
 #
 # Ausgabe: je Pruefzeile OK/FEHLER/WARNUNG. Exit 0 nur ohne FEHLER.
 #
-# Bezug: docs/superpowers/sdd/2026-09-25-streamcam-switch/task-6-brief.md.
+# Bezug: docs/superpowers/specs/2026-09-25-streamcam-switch-design.md
+# (M-8 final-review.md: der vorherige Verweis auf einen Brief unter
+# .superpowers/sdd/ war tot - Briefs liegen ungetrackt, nicht unter docs/).
 
 set -uo pipefail
 
@@ -196,6 +198,18 @@ try:
     if not ok:
         print("read() lieferte False", file=sys.stderr)
         sys.exit(1)
+    # M-7 final-review.md: ein USB2-Rueckfall auf eine kleinere Aufloesung
+    # ginge sonst mit OK durch - shape ist (Zeilen, Spalten) = (Hoehe, Breite).
+    actual_shape = image.shape[:2]
+    expected_shape = (1080, 1920)
+    if actual_shape != expected_shape:
+        print(
+            f"Aufloesung des gelieferten Bildes ist {actual_shape} "
+            f"(Hoehe, Breite), erwartet {expected_shape} - moeglicher "
+            "USB2-Rueckfall (siehe Schritt 3).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if not cv2.imwrite(out_path, image):
         print(f"imwrite({out_path!r}) fehlgeschlagen", file=sys.stderr)
         sys.exit(1)
@@ -205,7 +219,7 @@ PYEOF
 )
     capture_rc=$?
     if [ "$capture_rc" -eq 0 ] && [ -s "$TEST_IMAGE" ]; then
-        ok "Testbild gespeichert: $TEST_IMAGE ($(stat -c%s "$TEST_IMAGE") Bytes)"
+        ok "Testbild gespeichert: $TEST_IMAGE ($(stat -c%s "$TEST_IMAGE") Bytes), Aufloesung 1920x1080 bestaetigt"
     else
         bad "Testbild fehlgeschlagen (rc=$capture_rc): $(echo "$capture_err" | tail -3 | tr '\n' ' ')"
     fi

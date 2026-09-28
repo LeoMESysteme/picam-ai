@@ -34,7 +34,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from dispread.session_profile import SessionProfile  # noqa: E402
-from dispread.timing_calibration import DEFAULT_CALIBRATION_PATH, load_calibration  # noqa: E402
+from dispread.timing_calibration import (  # noqa: E402
+    DEFAULT_CALIBRATION_PATH,
+    load_calibration_from_bytes,
+)
 
 #: Geraetebereich des Normierungsfaktors am GSV-2AS (CLAUDE.md, gemessen
 #: gegen scripts/sync-record.py::NORM_MIN/NORM_MAX). Nur zur Validierung,
@@ -49,6 +52,13 @@ _MIN_STEP_RATIO = 1.3
 _DEFAULT_MIN_GAP_MS = 300.0
 _DEFAULT_MAX_GAP_MS = 800.0
 _DEFAULT_HOLD_S = 4.0
+
+#: sync-record.py --frame-rate, final-review.md I-1 (Ledger #9): fest, nicht
+#: an profile.camera.fps gekoppelt - Zielrate fuers Labeln, unabhaengig von
+#: der Kamera-fps (die duennt sync-record.py jetzt selbst aus, siehe dort).
+#: `run()` lehnt vorher ab, wenn profile.camera.fps kleiner als dieser Wert
+#: ist (die Ausduennung waere sonst wirkungslos).
+_SYNC_RECORD_FRAME_RATE = 15.0
 
 _SYNC_RECORD_SCRIPT = Path(__file__).parent / "sync-record.py"
 _GATE_LABEL_SCRIPT = Path(__file__).parent / "gate-label.py"
@@ -154,8 +164,17 @@ def run(
         )
 
     calibration_path = Path(calibration_path)
+    # M-4 final-review.md: Bytes EINMAL lesen, daraus parsen UND hashen -
+    # `calibration_sha256` weiter unten wird aus `calibration_bytes`
+    # berechnet, nicht durch ein zweites `.read_bytes()` am Ende. Sonst
+    # koennte sich die Datei waehrend der minutenlangen Ernte aendern und
+    # Hash/verwendetes M passten nicht mehr zusammen.
     try:
-        calibration = load_calibration(calibration_path)
+        calibration_bytes = calibration_path.read_bytes()
+    except OSError as exc:
+        raise HarvestError(f"Timing-Kalibrierung {calibration_path} nicht lesbar: {exc}") from exc
+    try:
+        calibration = load_calibration_from_bytes(calibration_bytes, source=str(calibration_path))
     except ValueError as exc:
         raise HarvestError(
             f"Timing-Kalibrierung {calibration_path} konnte nicht geladen "
@@ -169,6 +188,23 @@ def run(
             "Kamera dieser Sitzung."
         )
     guard_margin_ms = calibration.guard_margin_ms
+
+    # final-review.md I-1 (Ledger #9): sync-record.py duennt im Kamerazweig
+    # jetzt nach Zeitstempel aus (kein Sleep mehr) und lehnt selbst ab, wenn
+    # --frame-rate > camera_settings.fps ist - die Ausduennung waere sonst
+    # wirkungslos. `_SYNC_RECORD_FRAME_RATE` bleibt hier trotzdem fest
+    # (nicht an profile.camera.fps gekoppelt): 15 Hz ist die Zielrate fuers
+    # Labeln/gate-label, unabhaengig davon, wie schnell die jeweilige Kamera
+    # tatsaechlich liefert - eine schnellere Kamera duennt einfach mehr aus.
+    # Nur der Sonderfall "Kamera liefert langsamer als die Zielrate" muss VOR
+    # dem Subprozessaufruf abgefangen werden, sonst bricht sync-record.py erst
+    # nach dem Start (Exit 2) ab.
+    if _SYNC_RECORD_FRAME_RATE > profile.camera.fps:
+        raise HarvestError(
+            f"Sitzungsprofil {profile_path} hat camera.fps={profile.camera.fps}, "
+            f"kleiner als die feste sync-record.py-Ziel-fps {_SYNC_RECORD_FRAME_RATE} "
+            "- die Ausduennung dort waere wirkungslos (final-review.md I-1)."
+        )
 
     min_hold_s = 2 * guard_margin_ms / 1000.0 + 1.0
     if hold_s < min_hold_s:
@@ -193,7 +229,7 @@ def run(
         "--source",
         "camera",
         "--frame-rate",
-        "15",
+        _format_num(_SYNC_RECORD_FRAME_RATE),
         "--image-format",
         "jpg",
         "--norm-schedule",
@@ -262,7 +298,7 @@ def run(
         "gap_thresholds_provisional": True,
         "camera": profile.camera.to_dict(),
         "calibration_path": str(calibration_path),
-        "calibration_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest(),
+        "calibration_sha256": hashlib.sha256(calibration_bytes).hexdigest(),
         "sync_record_exit_code": sync_result.returncode,
         "gate_label_exit_code": gate_result.returncode,
         "summary": summary,

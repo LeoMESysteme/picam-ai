@@ -433,6 +433,11 @@ class _CameraIO:
     capture_factory: Any
     set_controls: Any
     get_controls: Any
+    #: M-1 final-review.md: der abschliessende `UvcSource`-Kontrollschritt in
+    #: `run_focus` prueft `device` jetzt gegen die sysfs-USB-ID - hier
+    #: injizierbar, damit Tests keine echte Hardware/kein echtes `/sys`
+    #: brauchen (`device` ist in Tests nur ein Platzhalterstring).
+    sysfs_root: Path = Path("/sys/class/video4linux")
 
 
 def _open_camera_io(device: str | None) -> _CameraIO:
@@ -532,6 +537,7 @@ def run_focus(args: argparse.Namespace) -> int:
         capture_factory=io.capture_factory,
         set_controls=io.set_controls,
         get_controls=io.get_controls,
+        sysfs_root=io.sysfs_root,
     )
     source.open()
     try:

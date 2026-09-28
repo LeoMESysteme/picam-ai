@@ -115,6 +115,31 @@ def test_v3_requires_camera_field(tmp_path):
         SessionProfile.load(p)
 
 
+def test_v3_rejects_camera_null(tmp_path):
+    """M-3 final-review.md: `"camera": null` ist vom fehlenden Schluessel
+    nicht zu unterscheiden - beides muss abgelehnt werden, sonst laedt
+    `camera=None` still durch und harvest.py meldet faelschlich
+    'IMX500-Profil (schema_version 2)'."""
+    p = tmp_path / "profile.json"
+    d = _profile().to_dict()
+    d["camera"] = None
+    p.write_text(json.dumps(d))
+    with pytest.raises(ValueError, match="camera"):
+        SessionProfile.load(p)
+
+
+def test_v2_rejects_foreign_camera_key(tmp_path):
+    """Ledger #8 final-review.md: ein v2-Dokument mit einem (fremden)
+    'camera'-Schluessel darf nicht an harvests Waechter `camera is None`
+    vorbeikommen - sonst wuerde scaler_crop des v2-Profils still ignoriert."""
+    p = tmp_path / "profile.json"
+    d = _profile_v2().to_dict()
+    d["camera"] = _CAMERA.to_dict()
+    p.write_text(json.dumps(d))
+    with pytest.raises(ValueError, match="camera"):
+        SessionProfile.load(p)
+
+
 def test_v3_rejects_non_none_scaler_crop(tmp_path):
     p = tmp_path / "profile.json"
     d = _profile().to_dict()
