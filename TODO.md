@@ -9,12 +9,12 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: weitere feste Aufstellungen, dann `loo` erneut
+## Zuerst: Kontrastgefälle in `sc3` (Normierung), weitere Aufstellungen
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
-Gegenprobe je Zeichen 0 Abweichungen. Datensatz 514 Proben, Dot-Matrix 426 in 5
-Gruppen (`ernte1` 152, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 46). Die Aufnahmen `sc1`/`sc2`
+Gegenprobe je Zeichen 0 Abweichungen. Datensatz 629 Proben, Dot-Matrix 541 in 6
+Gruppen (`ernte1` 152, `sc5` 114, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 47 mit Profil `sc3b`). Die Aufnahmen `sc1`/`sc2`
 waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2026-09-28/29).
 
@@ -31,17 +31,22 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    rom_per_group`), `loo` ist gelaufen. Ergebnis: nie ein falscher Wert,
    `sc4` 79/79 richtig, `ernte1` 91/152, `sc3` 0/46 (Zellen 5–7 über d_max),
    `auf2`/`auf3` alle abgelehnt (VALIDATION.md 2026-09-29).
-4. **Nächster Schritt:** weitere feste Aufstellungen (anderer Winkel,
-   Abstand, Licht) ernten, damit d_max die Streuung zwischen Aufstellungen
-   abdeckt, dann `loo` mit derselben Regel erneut laufen lassen. Schwellen
-   nicht an der Auswertung nachstellen.
+4. `sc5` erledigt am 2026-09-29 (114 Proben, ROM 0), `sc3` mit korrigiertem
+   Profil `sc3b` neu importiert (47). `loo` (c): nie falsch, `sc4` 79/79,
+   `sc5` 114/114, `ernte1` 133/152, `sc3` 0/47 (VALIDATION.md 2026-09-29).
+5. **Nächster Schritt, Entscheidung Nutzer:** `sc3` scheitert an einem
+   Kontrastgefälle über das Glas (An-Punkte 0,99 links bis 0,68 rechts).
+   `normalized()` misst den Tintenpegel global. Vorschlag: Tintenpegel je
+   Zelle als versionierte Spezifikationsänderung festhalten, Tests schreiben,
+   dann `loo` auf allen Gruppen. Alternativ weitere Aufstellungen ernten.
+   Schwellen nicht an der Auswertung nachstellen.
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
   Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
   auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
 * **Verworfene Bilder trotz freier Karte:** `sc3-cal-c` 16 %, `sc4-run` 19 %
-  (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
+  und `sc5-run` 22 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
   (≤ 3 je Plateau), für Timing-Aufnahmen weniger Ereignisse. Möglich: größere
   Warteschlange oder weniger JPEG-Qualität. Erst messen.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas

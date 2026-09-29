@@ -1996,6 +1996,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   auf `ernte1`+`sc4` vollständig abgelehnt. Offen bleibt, wie viele
   Aufstellungen das Training braucht ([VALIDATION.md](VALIDATION.md),
   2026-09-29).
+  Mit `sc5` (vier zugelassene Aufstellungen) lesen `sc4` und `sc5`
+  vollständig richtig. `sc3` scheitert weiter, Ursache ist ein
+  Kontrastgefälle über das Glas, keine Profillage.
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

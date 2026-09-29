@@ -1869,3 +1869,69 @@ Schatten, und sie verschiebt sich nach rechts im Zahlenblock zunehmend.
 Nach den Regeln des Projekts ist das eine Ablehnung, kein Fehler. Schwellen
 werden daraufhin nicht nachgestellt. Weiter hilft nur mehr Vielfalt im
 Training, also weitere feste Aufstellungen.
+
+## 2026-09-29 — Aufstellung `sc5`, Profilkorrektur `sc3b`, `loo` mit vier scharfen Aufstellungen
+
+**Aufstellung `sc5`.** Die Kamera blickt leicht von oben und schräg von
+rechts, mit geringem Abstand. Zwei Zwischenstände wurden verworfen:
+* Steiler Winkel von rechts: ein dunkler Fleck auf dem Glas und flaue,
+  doppelt konturierte Zeichen links. Das ist der LCD-Schatten bei zu
+  schrägem Blick.
+* Kamera unterhalb des Displays: Punktkontrast 8,3, also blass.
+
+Endstand: Fokus 56, Belichtung 300, Gain 2, Punktkontrast 41,3 (`sc3` 34,6,
+`sc4` 27,5), 4,24 px je Punktspalte. Punktraster-Anpassung: 159/162 Punkte
+zugeordnet, Restfehler 0,10 Punktspalten / 0,14 Zeilen. Die Kamera war
+stabil (0,05–0,06 px), das Profil hat Leonhard Hentschke bestätigt. Ernte
+`sc5-run` (30 × 6 s, Seed 2026092905): 3059 Bilder, 678 verworfen wegen
+voller Schreib-Warteschlange, keine Bildlücke, 1676 gelabelt, 114
+ausgewählt, **114 importiert**, keine Ablehnung. Die Ausrichtung ist
+höchstens 0,25 px verschoben. Die ROM-Gegenprobe ergibt 0 Abweichungen bei
+allen 13 Zeichen.
+
+**`loo` mit `sc5`** (`var/diagnostics/dotmatrix-loo-2026-09-29b.json`,
+dieselbe Regel `rom_per_group`): Zugelassen sind ernte1, sc3, sc4 und sc5.
+`sc5` 114/114 und `sc4` 79/79 werden richtig gelesen, `ernte1` 129/152
+(vorher 91), `sc3` 0/46, `auf2`/`auf3` alle abgelehnt. Kein falscher Wert.
+
+**Profilkorrektur `sc3b`** (Nutzerentscheidung, nachträglich nach der
+Auswertung). Das `sc3`-Quad stammt noch aus der isotropen Punkterkennung, die
+jeden Punkt doppelt findet. Neu angepasst auf demselben Profilbild: 197/198
+Punkte, Restfehler 0,13/0,17. Das alte Quad tastete um 0,18–0,24 Punktzeilen
+zu hoch und bis 0,3 Punktspalten seitlich versetzt ab. Die 46 alten Proben
+liegen in `var/removed-20260929-sc3a/`, die alte Zuordnung in
+`dotmatrix-profile-map.v3.json`. Neu importiert mit `sc3b-profile`: 47
+Proben, 3 wegen Zellinkonsistenz abgelehnt, 0 Abweichungen vom ROM.
+
+**`loo` danach** (`dotmatrix-loo-2026-09-29c.json`):
+
+| Testgruppe | Training | d_max | Proben richtig / abgelehnt / falsch | Plateaus richtig / abgelehnt |
+| --- | --- | --- | --- | --- |
+| `auf2` | ernte1, sc3, sc4, sc5 | 2,26 | 0 / 76 / 0 | 0 / 26 |
+| `auf3` | ernte1, sc3, sc4, sc5 | 2,26 | 0 / 73 / 0 | 0 / 26 |
+| `ernte1` | sc3, sc4, sc5 | 2,20 | 133 / 19 / 0 | 52 / 4 |
+| `sc3` | ernte1, sc4, sc5 | 1,62 | 0 / 47 / 0 | 0 / 17 |
+| `sc4` | ernte1, sc3, sc5 | 2,25 | **79 / 0 / 0** | 27 / 0 |
+| `sc5` | ernte1, sc3, sc4 | 2,12 | **114 / 0 / 0** | 38 / 0 |
+
+Die Profilkorrektur ändert an `sc3` nichts. **Ursache: ein Kontrastgefälle
+über das Glas.** Gemessen ist der mittlere normierte Pegel der An-Punkte je
+Zelle 0–7 (Variante am nächsten zum ROM):
+
+| Gruppe | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ernte1` | 0,88 | 0,72 | 0,85 | 0,85 | 0,87 | 0,89 | 0,91 | 0,91 |
+| `sc3` | 0,99 | 0,91 | 0,88 | 0,87 | 0,82 | 0,76 | 0,69 | 0,68 |
+| `sc4` | 0,88 | – | 0,89 | 0,92 | 0,88 | 0,92 | 0,92 | 0,87 |
+| `sc5` | 0,84 | 0,79 | 0,86 | 0,88 | 0,87 | 0,89 | 0,91 | 0,91 |
+
+Bei `sc3` hängt die Punktschwärze vom Ort auf dem Glas ab, vermutlich weil
+sich der Blickwinkel auf das LCD über die Zeile ändert. `normalized()`
+gleicht den Hintergrund je Zelle multiplikativ aus. Den Tintenpegel misst es
+aber einmal global. Die Ränder fallen deshalb aus der Verteilung der
+Vorlagen: Zelle 0 ist zu dunkel, die Zellen 5–7 sind zu blass. Die
+Ablehnungen liegen genau dort, in Zelle 0 (46), 5 (17), 6 (38) und 7 (47).
+Ein möglicher Ansatz ist ein Tintenpegel je Zelle oder ein Verlauf über die
+Zeile. Das wäre eine Änderung der Spezifikation. Sie müsste vorab
+festgehalten und auf allen Gruppen gegengeprüft werden, und die Schwellen
+dürften nicht an dieser Auswertung nachgestellt werden.
