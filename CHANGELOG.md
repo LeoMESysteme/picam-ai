@@ -30,15 +30,21 @@ abgelehnt (0/47), mit Ablehnungen in Zelle 0 und den Zellen 5–7.
 
 **Änderung:** `src/dispread/ocr/dotmatrix_sampling.py`: Die relative
 Punkttiefe wird je Zelle gemessen (zweitdunkelster Punkt gegen den
-Hintergrund der Zelle) und über die Zellen mit Zeichen als Gerade über die
-Zellposition angepasst, mit Begrenzung. Bei weniger als zwei Zellen mit
-Zeichen gilt der globale Pegel. `normalized(s, ink=...)` bleibt der globale
+Hintergrund der Zelle). Zellen mit Zeichen (mindestens halbe globale Tiefe
+und mindestens `MIN_CONTRAST`) bekommen die Tiefe einer Geraden über die
+Zellposition, mit Begrenzung. Zellen ohne Zeichen behalten die globale
+Tiefe. Bei weniger als drei Zellen mit Zeichen gilt der globale Pegel.
+Nachgebessert nach unabhängigem Review: In der ersten Fassung (`021f8ab`)
+konnte die Gerade bei kleinem globalem Pegel Leerzellen auf eine Tiefe
+nahe null extrapolieren und Rauschen bis 1,0 verstärken. Das hätte eine
+führende Leerzelle zur Scheinziffer machen können. `normalized(s, ink=...)` bleibt der globale
 Weg für die Leerzellenprüfung. Kennung `NORMALIZATION = "ink_per_cell_v1"`.
 Vorlagendateien tragen sie (`format_version` 3), `load_templates` lehnt eine
 abweichende oder fehlende Kennung ab. `BACKEND_VERSION` des Lesers steigt
 auf 2. Spec Abschnitt 2, Punkt 3 ergänzt. Tests:
 `tests/test_dotmatrix_sampling.py` (Tintenverlauf über die Zeile, Rückfall,
-Leerzelle unter Verlauf, Default gegenüber globalem Weg),
+Leerzelle unter Verlauf, Default gegenüber globalem Weg, zwei Randfälle aus
+dem Review),
 `tests/test_dotmatrix_templates.py` (Kennung in der Vorlage).
 
 **Konsequenz:** Die Vektoren aller Proben ändern sich. `loo` wird mit

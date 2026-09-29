@@ -117,10 +117,10 @@ def test_normalized_per_cell_ink_follows_ink_gradient_across_row():
     assert per_cell[7][on7].mean() - global_[7][on7].mean() > 0.1
 
 
-def test_normalized_per_cell_falls_back_to_global_with_fewer_than_two_inked_cells():
-    img = render("+        ")
-    s = sample_image(img, GRID, range(9))
-    assert np.allclose(normalized(s), normalized(s, ink=s.ink))
+def test_normalized_per_cell_falls_back_to_global_with_too_few_inked_cells():
+    for text in ("+        ", "+0       "):
+        s = sample_image(render(text), GRID, range(9))
+        assert np.allclose(normalized(s), normalized(s, ink=s.ink)), text
 
 
 def test_normalized_per_cell_blank_cells_stay_blank_under_gradient():
@@ -143,3 +143,57 @@ def test_normalized_survives_multiplicative_illumination_gradient():
     zero = SHIFTS.index((0, 0))
     for i, ch in enumerate(text):
         assert np.abs(n[i, zero] - rom_vector(ch)).max() < 0.35
+
+
+def _synthetic_sampled(depths: list[float], seed: int = 0, n_dark: int = 20):
+    """SampledImage mit Hintergrund 200 je Zelle; `depths[i] > 0` setzt in
+    Zelle i `n_dark` Punkte auf 200 * (1 - depth), der Rest ist Hintergrund
+    plus Rauschen (1 Grauwert). Reviewbefund 2026-09-29."""
+    from dispread.ocr.dotmatrix_sampling import SampledImage
+
+    rng = np.random.default_rng(seed)
+    n = len(depths)
+    raw = 200.0 + rng.normal(0, 1.0, (n, len(SHIFTS), 40))
+    for i, d in enumerate(depths):
+        if d > 0:
+            raw[i, :, :n_dark] = 200.0 * (1 - d) + rng.normal(0, 1.0, (len(SHIFTS), n_dark))
+    raw = raw.astype(np.float32)
+    zero = SHIFTS.index((0, 0))
+    background = np.percentile(raw[:, zero, :], 80.0, axis=1).astype(np.float32)
+    ink = float(np.percentile(raw[:, zero, :], 3.0))
+    ref = float(np.median(background))
+    return SampledImage(raw, background, ink, (ref - ink) / ref, 0.0)
+
+
+def test_normalized_per_cell_two_inked_cells_do_not_amplify_noise_in_blank_cells():
+    """Zwei nah beieinander liegende Zellen mit Zeichen duerfen keine Gerade
+    aufspannen, die Leerzellen auf eine winzige Tiefe extrapoliert (vor dem
+    Fix: Tiefe 0,003, Rauschen bis 1,0 verstaerkt). Mit nur 5 dunklen
+    Punkten je Zelle liegt der globale Pegel fast am Hintergrund - solche
+    Bilder lehnt der Leser schon ueber `MIN_CONTRAST` ab; die Normierung
+    darf dann nicht schlechter sein als der globale Weg."""
+    s = _synthetic_sampled([0.5, 0.25, 0, 0, 0, 0, 0, 0, 0], n_dark=5)
+    assert s.contrast < MIN_CONTRAST
+    assert np.allclose(normalized(s), normalized(s, ink=s.ink))
+
+
+def test_normalized_per_cell_blank_cells_between_inked_cells_stay_blank():
+    """Genug Kontrast, Zeichen in drei Zellen, dazwischen und dahinter
+    Leerzellen: die Leerzellen bleiben leer."""
+    s = _synthetic_sampled([0.5, 0.45, 0, 0.3, 0, 0, 0, 0, 0], n_dark=20)
+    assert s.contrast >= MIN_CONTRAST
+    zero = SHIFTS.index((0, 0))
+    n = normalized(s)
+    for i in (2, 4, 5, 6, 7, 8):
+        assert n[i, zero].max() < 0.35, (i, n[i, zero].max())
+
+
+def test_normalized_per_cell_blank_cells_keep_global_depth_even_with_steep_fit():
+    """Auch mit genug Zellen fuer eine Anpassung: Zellen ohne eigenes Zeichen
+    (fuehrende Leerzellen, Zelle 8) bekommen den globalen Pegel, keine
+    extrapolierte Tiefe."""
+    s = _synthetic_sampled([0.6, 0, 0, 0.5, 0.4, 0.3, 0.2, 0.15, 0], n_dark=5)
+    zero = SHIFTS.index((0, 0))
+    n = normalized(s)
+    for i in (1, 2, 8):
+        assert n[i, zero].max() < 0.35, (i, n[i, zero].max())

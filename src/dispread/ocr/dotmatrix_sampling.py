@@ -42,9 +42,13 @@ _INK_PERCENTILE = 3.0
 #: fuer die Normierung, mit der sie gelernt wurden).
 NORMALIZATION = "ink_per_cell_v1"
 #: Eine Zelle zaehlt fuer den Tiefenverlauf, wenn ihre eigene relative Tiefe
-#: mindestens diesen Anteil der globalen erreicht (Zellen mit Zeichen, keine
-#: Leerzellen).
+#: mindestens diesen Anteil der globalen erreicht UND mindestens
+#: `MIN_CONTRAST` betraegt (Zellen mit Zeichen, keine Leerzellen - die
+#: absolute Untergrenze verhindert, dass bei kleinem globalem Pegel reine
+#: Rauschzellen mitzaehlen, Reviewbefund 2026-09-29).
 _INKED_CELL_FRACTION = 0.5
+#: Mindestzahl Zellen mit Zeichen fuer die Anpassung, sonst globaler Pegel.
+_MIN_INKED_CELLS = 3
 #: Rang des dunkelsten Punkts, der als Punktpegel der Zelle gilt (0 = der
 #: dunkelste; 1 = der zweitdunkelste, robust gegen ein einzelnes Rauschpixel).
 _CELL_INK_RANK = 1
@@ -105,15 +109,18 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
 
 
 def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
-    """Relative Punkttiefe je Zelle als Gerade ueber die Zellposition, oder
-    `None`, wenn weniger als zwei Zellen mit Zeichen vorliegen (dann gilt der
-    globale Pegel).
+    """Relative Punkttiefe je Zelle, oder `None`, wenn weniger als
+    `_MIN_INKED_CELLS` Zellen mit Zeichen vorliegen (dann gilt der globale
+    Pegel fuer alle Zellen).
 
     Je Zelle: Tiefe = (Hintergrund - zweitdunkelster Punkt) / Hintergrund bei
-    Verschiebung (0, 0). Nur Zellen mit mindestens `_INKED_CELL_FRACTION` der
-    globalen Tiefe gehen in die Anpassung ein. Die Gerade wird auf den
-    Bereich [0,5 x kleinste, 1,5 x groesste gemessene Tiefe] begrenzt, damit
-    Randzellen ohne Zeichen keinen unsinnigen Wert erhalten.
+    Verschiebung (0, 0). Zellen mit Zeichen (mindestens
+    `_INKED_CELL_FRACTION` der globalen Tiefe und mindestens `MIN_CONTRAST`)
+    bekommen die Tiefe einer Geraden ueber die Zellposition, angepasst nur an
+    diesen Zellen und begrenzt auf [0,5 x kleinste, min(1, 1,5 x groesste)]
+    gemessene Tiefe. Zellen ohne Zeichen behalten die globale Tiefe - keine
+    Extrapolation auf Leerzellen, damit Rauschen dort nie zu einem
+    Punktmuster verstaerkt wird (Reviewbefund 2026-09-29).
     """
     zero = SHIFTS.index((0, 0))
     bg = s.background.astype(np.float64)
@@ -127,23 +134,25 @@ def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
     with np.errstate(divide="ignore", invalid="ignore"):
         depth = np.where(bg > 0, (bg - dark) / bg, 0.0)
     idx = np.arange(len(bg), dtype=np.float64)
-    inked = depth >= _INKED_CELL_FRACTION * global_depth
-    if int(inked.sum()) < 2:
+    inked = (depth >= _INKED_CELL_FRACTION * global_depth) & (depth >= MIN_CONTRAST)
+    if int(inked.sum()) < _MIN_INKED_CELLS:
         return None
     slope, intercept = np.polyfit(idx[inked], depth[inked], 1)
-    fitted = intercept + slope * idx
     lo = 0.5 * float(depth[inked].min())
     hi = min(1.0, 1.5 * float(depth[inked].max()))
-    return np.clip(fitted, lo, hi)
+    fitted = np.clip(intercept + slope * idx, lo, hi)
+    return np.where(inked, fitted, global_depth)
 
 
 def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
     """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an).
 
-    Ohne `ink` (Vorgabe, `ink_per_cell_v1`): Die Punkttiefe jeder Zelle
-    kommt aus dem Tiefenverlauf ueber die Zeile (`_relative_depth_per_cell`),
-    multipliziert mit dem Hintergrund der Zelle. Gibt es weniger als zwei
-    Zellen mit Zeichen, gilt der globale Pegel wie mit `ink`.
+    Ohne `ink` (Vorgabe, `ink_per_cell_v1`): Die Punkttiefe jeder Zelle mit
+    Zeichen kommt aus dem Tiefenverlauf ueber die Zeile
+    (`_relative_depth_per_cell`), multipliziert mit dem Hintergrund der
+    Zelle; Zellen ohne Zeichen behalten die globale Tiefe. Gibt es weniger
+    als `_MIN_INKED_CELLS` Zellen mit Zeichen, gilt der globale Pegel wie mit
+    `ink`.
 
     Mit `ink` (globaler Pegel): Der Tintenpegel wird je Zelle mit dem
     Verhaeltnis ihres Hintergrunds zum Median-Hintergrund skaliert. Das
