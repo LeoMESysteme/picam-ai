@@ -40,8 +40,8 @@ umgesetzt und reviewt. Ledger:
 * **Dot-Matrix-Leser, Stufe 1 (`loo`)** mit Normierung `ink_per_cell_v1`
   (Punkttiefe je Zelle, 2026-09-29): nie ein falscher Wert. `ernte1`,
   `sc3`, `sc4` und `sc5` werden vollständig gelesen, `auf3` 61/73, `auf2`
-  wird abgelehnt. Als Nächstes Stufe 2: einfrieren, dann zwei neue
-  Aufstellungen.
+  wird abgelehnt. **Stufe 2 eingefroren** (Code `47b8902`, Vorlagen
+  sha256 `4524d6a1…`). Als Nächstes zwei Abnahme-Aufstellungen `ab1`/`ab2`.
 * **SD-Karte** lief am 2026-09-28 voll (Aufnahmen 1,3–1,8 GB); Einzelbilder
   der verworfenen Aufnahmen gelöscht, nach dem Löschen der Einzelbilder 2026-09-29 9,1 GB frei. Lokale Sicherungen unter
   `/home/me-systeme/var-backups/`, keine auf einem anderen Medium.
@@ -63,7 +63,7 @@ Forgejo-Lauf nach Veröffentlichung steht noch aus.
 
 ## Nächste Schritte
 
-1. Stufe 2 des Dot-Matrix-Lesers: Code und Vorlagen einfrieren, dann zwei neue Aufstellungen ernten und einmal auswerten.
+1. Abnahme-Ernten `ab1`, `ab2`, dann einmal `dotmatrix-eval.py abnahme` mit den eingefrorenen Vorlagen.
 2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
    Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
 3. Sicherung von `var/` auf ein anderes Medium.

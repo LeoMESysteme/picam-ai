@@ -1976,3 +1976,41 @@ Einordnung: Das ist Stufe 1, eine Entwicklungsmessung auf Daten, an denen
 die Normierung verbessert wurde. Die Zahlen sind keine Abnahme. Stufe 2
 verlangt nach Spec Abschnitt 3 eingefrorenen Code und eingefrorene Vorlagen
 **vor** mindestens zwei neuen Aufstellungen, die nichts davon gesehen haben.
+
+## 2026-09-29 — Dot-Matrix-Leser: Stufe 2 eingefroren (vor neuen Daten)
+
+Festlegung nach Spec Abschnitt 3, Stufe 2 Punkt 1. Sie ist eingetragen,
+**bevor** die Abnahme-Aufstellungen geerntet werden.
+
+| Größe | Wert |
+| --- | --- |
+| Code-Commit | `47b8902` (Leser, Normierung, `abnahme`) |
+| Vorlagen | `var/dotmatrix/templates-stufe2-2026-09-29.json` (schreibgeschützt, Kopie in `/home/me-systeme/var-backups/`) |
+| sha256 der Vorlagen | `4524d6a145a478b0106c013f5408e85e3fce4ddd3f5fa1fae5625431c5f79326` |
+| Formate | `format_version` 3, `normalization` `ink_per_cell_v1`, `threshold_formula` `thresholds_v1`, `rom_check` `rom_check_v2` |
+| Trainingsgruppen | `auf2`, `ernte1`, `sc3` (Profil `sc3b`), `sc4`, `sc5` (Regel `rom_per_group`; `auf3` nicht zugelassen) |
+| Schwellen | d_max 2,6651, margin_min 0,7032 |
+| ROM-Abweichung der Vorlagen | 0 Punkte bei allen 13 Zeichen |
+| Profil-Zuordnung | `var/diagnostics/dotmatrix-profile-map.json`, sha256 `e83fc386a2917f5efc4fa3a050ea09e6a012042acec1b18bef38e94d0731a25c` |
+
+**Abnahme-Ablauf.** Zwei neue Aufstellungen `ab1` und `ab2` mit anderem
+Winkel oder anderem Licht als die Trainingsgruppen. Einrichten, Ernten und
+Importieren laufen wie bei `sc4`/`sc5`: Fokus-Sweep, Punktraster-Anpassung,
+Bestätigung durch den Nutzer, 30 × 6 s, `import-harvest` mit
+Ausrichtungsprüfung. Danach ein einziger Lauf:
+
+```
+dotmatrix-eval.py abnahme --templates var/dotmatrix/templates-stufe2-2026-09-29.json \
+  --templates-sha256 4524d6a145a478b0106c013f5408e85e3fce4ddd3f5fa1fae5625431c5f79326 \
+  --groups ab1,ab2 …
+```
+
+**Bestanden** bei 0 falsch freigegebenen Proben und höchstens 20 %
+abgelehnten Bildern, berichtet mit der oberen 95-%-Grenze über Plateaus.
+**Nicht bestanden:** Keine Nachbesserung an `ab1`/`ab2`. Sie gehen ins
+Training, und eine neue Abnahme braucht neue Aufstellungen.
+
+Vorab-Stichprobe auf vorhandenen Daten, nur Entwicklung (Vorlagen ohne
+`sc3`, voller Leser): `sc3` 47/47 richtig. `auf3` wird zu 100 % abgelehnt,
+71 davon als `format`, weil die Leerzellenprüfung am verschobenen Raster
+anschlägt. Kein falscher Wert.

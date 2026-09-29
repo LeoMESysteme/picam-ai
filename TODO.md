@@ -9,7 +9,7 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Stufe 2 (Abnahme) des Dot-Matrix-Lesers vorbereiten
+## Zuerst: Abnahme-Ernten `ab1`, `ab2` (Stufe 2 ist eingefroren)
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
@@ -38,16 +38,12 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    `021f8ab`, `8908fe4` nach Review). `loo` (e): nie falsch, `ernte1` 152/152, `sc3` 47/47, `sc4`
    79/79, `sc5` 114/114, `auf3` 61/73 (Rest mehrdeutig), `auf2` abgelehnt
    (VALIDATION.md 2026-09-29).
-6. **Nächster Schritt: Stufe 2 (Abnahme) vorbereiten**, Spec Abschnitt 3.
-   Code-Commit, `templates.json` (trainiert auf allen zugelassenen Gruppen)
-   mit Prüfsumme und Formelversion einfrieren und in VALIDATION.md eintragen,
-   **bevor** die nächsten Aufstellungen geerntet werden. Dann mindestens
-   2 neue Aufstellungen (anderer Winkel, anderes Licht) ernten und den Leser
-   einmal darüber laufen lassen. Bestanden bei 0 falsch freigegebenen Werten
-   und ≤ 20 % abgelehnten Bildern. Nicht bestanden: keine Nachbesserung an
-   denselben Aufstellungen.
-7. Nach der nächsten Ernte die Einzelbilder von `sc3-run` und `sc5-run`
-   löschen (Nutzer-OK vom 2026-09-29).
+6. ~~Stufe 2 einfrieren~~ erledigt am 2026-09-29 (Code `47b8902`, Vorlagen
+   sha256 `4524d6a1…`, VALIDATION.md „Stufe 2 eingefroren“).
+7. **Nächster Schritt: Abnahme-Ernten `ab1`, `ab2`** (anderer Winkel oder
+   anderes Licht), wie `sc4`/`sc5` einrichten und ernten, dann **einmal**
+   `dotmatrix-eval.py abnahme` mit der eingefrorenen Prüfsumme. Nicht
+   bestanden: keine Nachbesserung an `ab1`/`ab2`.
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
