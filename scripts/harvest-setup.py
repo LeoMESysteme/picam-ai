@@ -3,7 +3,15 @@
 docs/superpowers/plans/2026-09-23-ernte-phase1.md, `focus` aus dem
 StreamCam-Umstieg (Task 4, 2026-09-25).
 
-Aufruf (drei Unterbefehle):
+Aufruf: `assist` fuehrt Fokus-Sweep, frisches Standbild, automatische
+Punktraster-Anpassung, Qualitaetspruefungen und Stabilitaetsbild aus. Danach
+die Overlays ansehen und den Vorschlag mit `confirm` bestaetigen. `propose`
+und `focus` bleiben fuer einzelne Einrichtungsschritte verfuegbar.
+
+Aufruf:
+
+    ./.venv/bin/python scripts/harvest-setup.py assist \\
+        --out setup --device-id gsv2as-01 --session-id lauf1
 
     ./.venv/bin/python scripts/harvest-setup.py focus \\
         --out var/diagnostics/lauf1/setup
@@ -72,6 +80,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 import time
 from dataclasses import dataclass
@@ -89,6 +98,7 @@ from dispread.camera_settings import (
     load_camera_settings,
 )
 from dispread.charcells import CharGrid, source_dot_column_px
+from dispread.dotlattice import fit_lattice
 from dispread.focus_sweep import sharpness, sweep_focus
 from dispread.frames.uvc_source import (
     UvcError,
@@ -100,6 +110,9 @@ from dispread.frames.uvc_source import (
 from dispread.glassquad import glass_quad_in_region
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
+from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup
+from dispread.setup_hint import find_green_hint_box
+from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.vision import lcd_quad_in_region
 
 #: Fixe Wartezeit nach dem Umschalten auf automatische Belichtung/Weiss-
@@ -131,6 +144,13 @@ def _parse_float_list(value: str, count: int, name: str) -> list[float]:
 def _parse_quad(value: str) -> list[list[float]]:
     values = _parse_float_list(value, 8, "--quad")
     return [[values[i], values[i + 1]] for i in range(0, 8, 2)]
+
+
+def _parse_hint_box(value: str) -> tuple[float, float, float, float]:
+    x, y, w, h = _parse_float_list(value, 4, "--hint-box")
+    if not all(math.isfinite(v) for v in (x, y, w, h)) or x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1.000001 or y + h > 1.000001:
+        raise SetupError("--hint-box muss eine endliche normierte Box x,y,w,h innerhalb des Bildes sein")
+    return x, y, w, h
 
 
 def _parse_grid(value: str, target_size: tuple[int, int]) -> CharGrid:
@@ -176,6 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--session-id", required=True)
     propose.add_argument("--out", type=Path, required=True, help="Zielverzeichnis fuer proposal.json und Overlays")
     propose.add_argument("--quad", default=None, help="x1,y1,x2,y2,x3,y3,x4,y4 in Quellbildpixeln, ersetzt die Suche")
+    propose.add_argument("--auto-quad", action="store_true", help="Quad ueber das Punktraster automatisch bestimmen")
     propose.add_argument("--grid", default=None, help="left,pitch,top,bottom im entzerrten Bild, ersetzt den Default")
     propose.add_argument("--target-size", default="400x160", help="Groesse des entzerrten Bildes, Vorgabe 400x160")
     propose.add_argument(
@@ -211,6 +232,10 @@ def build_parser() -> argparse.ArgumentParser:
     confirm.add_argument("--confirmed-by", required=True)
     confirm.add_argument("--out", type=Path, required=True)
     confirm.add_argument(
+        "--override-reason",
+        help="begruendete Uebersteuerung bei FEHLER in den Einrichtungspruefungen",
+    )
+    confirm.add_argument(
         "--accept-default-grid",
         action="store_true",
         help="erlaubt, ein ungeprueftes Default-Raster (grid_source=default_even_split) zu bestaetigen",
@@ -226,6 +251,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     focus.add_argument("--device", default=None, help="/dev/videoN - Vorgabe: Erkennung ueber die USB-ID")
     focus.add_argument("--settle-s", type=float, default=1.0, help="Wartezeit nach jedem Fokuswert vor der Messung")
+
+    assist = sub.add_parser("assist", help="Fokus, Standbilder, Punktraster und Qualitaetspruefungen in einem Lauf")
+    assist.add_argument("--out", type=Path, required=True, help="Zielverzeichnis fuer Bilder, Vorschlag und Overlays")
+    assist.add_argument("--device-id", required=True)
+    assist.add_argument("--session-id", required=True)
+    assist.add_argument("--hint-box", help="normierte Box x,y,w,h; ohne Angabe wird gruenes Glas gesucht")
+    assist.add_argument("--stability-s", type=float, default=30.0, help="Abstand der zwei Standbilder in Sekunden, mindestens 30")
+    assist.add_argument("--device", default=None, help="Kamerageraet fuer focus und Standbilder")
 
     return parser
 
@@ -251,13 +284,25 @@ def run_propose(args: argparse.Namespace) -> int:
         )
         return 2
 
+    fit = None
     try:
         target_size = _parse_target_size(args.target_size)
 
-        if args.quad:
+        if args.auto_quad:
+            if args.quad or args.grid or target_size != DEFAULT_TARGET_SIZE:
+                raise SetupError("--auto-quad verlangt das feste 400x160-Raster und ist nicht mit --quad/--grid kombinierbar")
+            hint_box = _parse_hint_box(args.hint_box)
+            fit = getattr(args, "precomputed_fit", None)
+            if fit is None:
+                fit = fit_lattice(image, hint_box)
+            if isinstance(fit, str):
+                print(f"Punktraster abgelehnt: {fit}", file=sys.stderr)
+                return 2
+            quad = fit.quad
+        elif args.quad:
             quad = _parse_quad(args.quad)
         else:
-            hint_box = tuple(_parse_float_list(args.hint_box, 4, "--hint-box"))
+            hint_box = _parse_hint_box(args.hint_box)
             if args.detector == "glass":
                 # Quellbildpixel direkt (siehe dispread.glassquad).
                 found = glass_quad_in_region(image, hint_box)
@@ -277,7 +322,10 @@ def run_propose(args: argparse.Namespace) -> int:
                 )
                 return 2
 
-        if args.grid:
+        if fit is not None:
+            grid = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
+            grid_source = "dot_lattice"
+        elif args.grid:
             grid = _parse_grid(args.grid, target_size)
             grid_source = "operator_provided"
         else:
@@ -307,6 +355,15 @@ def run_propose(args: argparse.Namespace) -> int:
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    checks = None
+    if fit is not None:
+        stability_image = getattr(args, "stability_image_bgr", None)
+        checks = check_setup(
+            image, fit,
+            stability_image_bgr=stability_image,
+            stability_elapsed_s=getattr(args, "stability_elapsed_s", None),
+        )
+
     proposal = {
         "frame": str(args.frame),
         "device_id": args.device_id,
@@ -321,14 +378,22 @@ def run_propose(args: argparse.Namespace) -> int:
         "min_native_dot_column_px": min_native_dot_column_px,
         "camera": camera_settings.to_dict(),
     }
+    if checks is not None:
+        proposal["setup_checks"] = checks.to_dict()
     (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    overlay_source = image.copy()
-    quad_pts = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
-    cv2.polylines(overlay_source, [quad_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+    if fit is not None:
+        overlay_source = draw_source_overlay(image, fit, checks.overall)
+    else:
+        overlay_source = image.copy()
+        quad_pts = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
+        cv2.polylines(overlay_source, [quad_pts], isClosed=True, color=(0, 0, 255), thickness=2)
     cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
 
     crop = rectify(image, quad, target_size=target_size)
+    if fit is not None:
+        edge_cells = tuple(checks.checks["kanten"].cells)
+        cv2.imwrite(str(out_dir / "overlay_sampling.png"), draw_sampling_overlay(crop.image, edge_cells=edge_cells))
     overlay_rectified = crop.image
     if overlay_rectified.ndim == 2:
         overlay_rectified = cv2.cvtColor(overlay_rectified, cv2.COLOR_GRAY2BGR)
@@ -352,6 +417,49 @@ def run_propose(args: argparse.Namespace) -> int:
 
 def run_confirm(args: argparse.Namespace) -> int:
     proposal = json.loads(args.proposal.read_text(encoding="utf-8"))
+
+    override_reason = args.override_reason
+    if override_reason is not None:
+        override_reason = override_reason.strip()
+        if not override_reason:
+            print("--override-reason muss einen nichtleeren Grund enthalten.", file=sys.stderr)
+            return 2
+
+    setup_checks = proposal.get("setup_checks")
+    if "setup_checks" in proposal:
+        if (
+            not isinstance(setup_checks, dict)
+            or not isinstance(setup_checks.get("overall"), str)
+            or setup_checks["overall"] not in {"OK", "WARNUNG", "FEHLER"}
+        ):
+            print("setup_checks im Vorschlag sind ungueltig (overall fehlt oder ist unbekannt).", file=sys.stderr)
+            return 2
+        named_checks = setup_checks.get("checks")
+        if not isinstance(named_checks, dict) or any(
+            not isinstance(check, dict)
+            or (
+                not (isinstance(check.get("status"), str) and check["status"] in {"OK", "WARNUNG", "FEHLER"})
+                and not (name == "stabilitaet" and "status" in check and check["status"] is None)
+            )
+            for name, check in named_checks.items()
+        ):
+            print("setup_checks im Vorschlag enthalten ungueltige Einzelpruefungen.", file=sys.stderr)
+            return 2
+        failing_checks = [name for name, check in named_checks.items() if check["status"] == "FEHLER"]
+        if (setup_checks["overall"] == "FEHLER" or failing_checks) and override_reason is None:
+            names = ", ".join(failing_checks) if failing_checks else "Gesamturteil"
+            print(
+                f"Einrichtungspruefungen mit FEHLER: {names}. "
+                "Nur mit --override-reason und ausdruecklicher Begruendung bestaetigen.",
+                file=sys.stderr,
+            )
+            return 2
+        setup_checks = dict(setup_checks)
+        if override_reason is not None:
+            setup_checks["override_reason"] = override_reason
+    elif override_reason is not None:
+        print("--override-reason verlangt setup_checks im Vorschlag.", file=sys.stderr)
+        return 2
 
     if proposal.get("grid_source") == "default_even_split" and not args.accept_default_grid:
         print(
@@ -416,6 +524,7 @@ def run_confirm(args: argparse.Namespace) -> int:
         confirmed_at_utc=datetime.now(UTC).isoformat(),
         camera=camera_settings,
         reference_frame=reference_frame,
+        setup_checks=setup_checks,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     profile.save(args.out)
@@ -496,9 +605,12 @@ def _measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, floa
 
 
 def run_focus(args: argparse.Namespace) -> int:
-    hint_box = tuple(_parse_float_list(args.hint_box, 4, "--hint-box")) if args.hint_box else None
+    try:
+        hint_box = _parse_hint_box(args.hint_box) if args.hint_box else None
+    except SetupError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     io = _open_camera_io(args.device)
-    io.set_controls(io.device, [("focus_automatic_continuous", 0)])
 
     def measure(focus: int) -> float:
         io.set_controls(io.device, [("focus_absolute", focus)])
@@ -511,14 +623,16 @@ def run_focus(args: argparse.Namespace) -> int:
         gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         return sharpness(_measurement_roi(gray, hint_box))
 
-    best_focus, sweep_log = sweep_focus(measure)
-
-    io.set_controls(io.device, [("auto_exposure", 3), ("white_balance_automatic", 1)])
-    time.sleep(WHITE_BALANCE_SETTLE_S)
-    readback = io.get_controls(
-        io.device, ["exposure_time_absolute", "white_balance_temperature", "gain"]
-    )
-    io.capture.release()
+    try:
+        io.set_controls(io.device, [("focus_automatic_continuous", 0)])
+        best_focus, sweep_log = sweep_focus(measure)
+        io.set_controls(io.device, [("auto_exposure", 3), ("white_balance_automatic", 1)])
+        time.sleep(WHITE_BALANCE_SETTLE_S)
+        readback = io.get_controls(
+            io.device, ["exposure_time_absolute", "white_balance_temperature", "gain"]
+        )
+    finally:
+        io.capture.release()
 
     settings = CameraSettings(
         model=STREAMCAM_MODEL,
@@ -572,6 +686,106 @@ def run_focus(args: argparse.Namespace) -> int:
     return 0
 
 
+def _capture_fresh_still(io: _CameraIO, *, discard: int = 10) -> np.ndarray:
+    """Gepufferte Bilder verwerfen; danach genau ein neues Bild uebernehmen."""
+    for _ in range(discard):
+        ok, _image = io.capture.read()
+        if not ok:
+            raise UvcError(f"kein Bild von {io.device} beim Leeren des Kamerapuffers")
+    ok, image = io.capture.read()
+    if not ok or image is None:
+        raise UvcError(f"kein frisches Standbild von {io.device}")
+    return image
+
+
+def run_assist(args: argparse.Namespace) -> int:
+    if not math.isfinite(args.stability_s) or args.stability_s < 30.0:
+        print("--stability-s muss endlich und mindestens 30 Sekunden betragen", file=sys.stderr)
+        return 2
+    if args.hint_box is not None:
+        try:
+            hint_box = _parse_hint_box(args.hint_box)
+        except SetupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    else:
+        hint_box = None
+
+    focus_args = argparse.Namespace(out=args.out, hint_box=args.hint_box, device=args.device, settle_s=1.0)
+    try:
+        focus_rc = run_focus(focus_args)
+    except (OSError, ValueError, UvcError, cv2.error) as exc:
+        print(f"Fokus-Sweep abgebrochen: {exc}", file=sys.stderr)
+        return 2
+    if focus_rc != 0:
+        return focus_rc
+    try:
+        settings = load_camera_settings(args.out / "camera-settings.json")
+        io = _open_camera_io(args.device)
+        try:
+            if hasattr(io.capture, "isOpened") and not io.capture.isOpened():
+                raise UvcError(f"{io.device}: Kamera nicht zu oeffnen")
+            io.set_controls(io.device, settings.ordered_controls())
+            first = _capture_fresh_still(io)
+            if first.shape[:2] != (settings.size[1], settings.size[0]):
+                raise SetupError("Standbild passt nicht zur Kameraaufloesung")
+            args.out.mkdir(parents=True, exist_ok=True)
+            if not cv2.imwrite(str(args.out / "still.png"), first):
+                raise SetupError("still.png konnte nicht geschrieben werden")
+            if hint_box is None:
+                hint_box = find_green_hint_box(first)
+                if hint_box is None:
+                    raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
+            fit = fit_lattice(first, hint_box)
+            if isinstance(fit, str):
+                raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
+            check_setup(first, fit)  # Vorabpruefungen vor dem Stabilitaetsintervall.
+            time.sleep(args.stability_s)
+            second = _capture_fresh_still(io)
+            if second.shape != first.shape:
+                raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
+            if not cv2.imwrite(str(args.out / "stability.png"), second):
+                raise SetupError("stability.png konnte nicht geschrieben werden")
+        finally:
+            io.capture.release()
+    except (OSError, ValueError, UvcError, SetupError) as exc:
+        print(f"Einrichtungsassistent abgebrochen: {exc}", file=sys.stderr)
+        return 2
+
+    propose_args = argparse.Namespace(
+        frame=args.out / "still.png",
+        hint_box=",".join(f"{value:.8f}" for value in hint_box),
+        camera_settings=args.out / "camera-settings.json",
+        device_id=args.device_id,
+        session_id=args.session_id,
+        out=args.out,
+        quad=None,
+        auto_quad=True,
+        grid=None,
+        target_size="400x160",
+        detector="glass",
+        precomputed_fit=fit,
+        stability_image_bgr=second,
+        stability_elapsed_s=args.stability_s,
+    )
+    rc = run_propose(propose_args)
+    if rc != 0:
+        return rc
+    checks = json.loads((args.out / "proposal.json").read_text(encoding="utf-8"))["setup_checks"]
+    print("Einrichtungspruefungen:")
+    for name, result in checks["checks"].items():
+        print(f"  {name}: {result['status'] or 'nicht geprueft'} — {result['metrics']}")
+    print(f"Gesamturteil: {checks['overall']}")
+    print(f"Standbilder: {args.out / 'still.png'}, {args.out / 'stability.png'}")
+    print(f"Overlays: {args.out / 'overlay_source.png'}, {args.out / 'overlay_sampling.png'}")
+    print(
+        "Nach Sichtpruefung bestaetigen: ./.venv/bin/python scripts/harvest-setup.py confirm "
+        f"--proposal {args.out / 'proposal.json'} --resolution-threshold-px {RESOLUTION_ERROR_PX} "
+        f"--confirmed-by BEDIENER --out {args.out / 'profile.json'}"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -581,6 +795,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_confirm(args)
     if args.command == "focus":
         return run_focus(args)
+    if args.command == "assist":
+        return run_assist(args)
     raise AssertionError(f"unbekanntes Kommando {args.command!r}")  # von argparse ausgeschlossen
 
 

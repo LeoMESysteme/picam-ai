@@ -1588,3 +1588,47 @@ vollständig abgelehnt. Zahlen in VALIDATION.md.
 * Im echten Offline-Ablauf liefert er auf `sc6` und `ab5` Vorschläge nahe
   am Profil. Bei schrägen Aufstellungen findet er noch keine Startlage.
 * Vor dem Merge fehlt noch Nacharbeit 4 (Plan).
+
+## 2026-09-29 — Einrichtungsassistent: Offline-Prüfung vorhandener Standbilder
+
+**Aufbau:** Ausschließlich die gespeicherten Bilder
+`var/diagnostics/{sc3,sc4,sc5,ab1,ab2}-still/frames/frame_000017.png`
+wurden gelesen; die bestätigten Quads stammen aus den gleichnamigen
+`-profile`-Dateien, für `sc3` aus `sc3b-profile`. Kamera und `var/` wurden
+nicht verändert. Der neue Prüfer berechnete auf diesen Bildern das
+99. Perzentil von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` im Profil-Quad,
+den Kontrast des bestehenden Punktlesers, den Hintergrundkantenwert je Zelle
+und die Punktspaltenbreite. Die Kantenprüfung wurde zusätzlich mit einer
+synthetischen Helligkeitsstufe in einer belegten und einer leeren Zelle
+kontrolliert.
+
+**Beobachtung:** Die Kante in der Leerzelle 8 von `ab2` liefert Stufe 14
+und `WARNUNG`. `sc5` (Zelle 8: 8), `ab1` (4), `sc3` (5) und `sc4` (9)
+melden keine Kante. Das definierte Kontrastmaß auf genau Frame 17 ergibt
+`sc3=35`, `sc4=25`, `sc5=19`, `ab1=43`, `ab2=19`. Für `sc5` und `ab2`
+liegen diese Werte unter den früheren Aufstellungswerten 41,3 und 31,2;
+die Bilder oder Auswertebereiche jener Handmessung sind hier nicht
+festgelegt. Deshalb werden die neuen Werte mit Bild und Methode getrennt
+berichtet, die Schwellen bleiben Vorabwerte.
+
+**Geometrie:** Die automatische Anpassung ohne Stützpunkte auf den fünf
+Frame-17-Bildern (Hinweisbox: bestätigtes Quad plus 10 % Rand) weicht an
+der schlechtesten Ecke um 0,25 px (`sc3`) ab; die übrigen Maxima sind
+`sc4=0,05`, `sc5=0,05`, `ab1=0,08`, `ab2=0,21` px. Zugeordnet wurden
+193/195, 153/153, 159/162, 190/193 und 176/184 Punktkandidaten. Ohne
+zweites Standbild bleibt die Stabilitätsampel unbewertet. `sc5` und `ab2`
+erhalten mit den Vorabschwellen `WARNUNG` (Kontrast, bei `ab2` zusätzlich
+Kante); die übrigen drei erhalten `OK`.
+Ein zweiter Offline-Lauf verwendete die automatische Hinweisbox aus dem
+grünen Punktbereich: Alle fünf Quads blieben innerhalb 0,25 px ihrer
+Bestätigung. Der kleinste Fehler war 0,07 px (`sc4`), der größte 0,25 px
+(`ab2`). Die Box wurde vertikal auf den inneren Punktbereich begrenzt,
+weil die grüne Glasfläche ober- und unterhalb der Zeichenzeile weiterläuft.
+
+**Deutung:** Der Kantenbefund von `ab2` entspricht der beobachteten
+Leserablehnung in dieser Aufstellung. Die synthetische Stufe in einer
+belegten Zelle wird ebenfalls erkannt; ein weicher Helligkeitsverlauf
+bleibt ohne Kantenbefund. Dies prüft nur vorhandene Bilder und künstliche
+Störungen. Ein echter Lauf von `assist`, seine Dauer und das Verhalten bei
+anderen Reflexen sind damit noch nicht belegt. Zahlen und Ampeln stehen
+in [VALIDATION.md](VALIDATION.md).

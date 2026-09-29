@@ -1071,3 +1071,31 @@ bleibt bei 15 fps.
 * Ist nicht genug frei, lehnt `sync-record.py` vor dem Start ab.
 * Das Kopieren nach der Aufnahme dauert einige Minuten.
 * Der Nachweis an der Kamera steht aus (TODO.md).
+
+
+## 2026-09-29 — Einrichtungsassistent für Ernte-Aufstellungen
+
+### Entscheidung
+
+Das Quad einer neuen Dot-Matrix-Aufstellung wird aus dem sichtbaren
+Punktraster geschätzt. Die feste Anzeigegeometrie (16 Zellen, 5×7 Punkte
+plus Cursorzeile) verankert die Homographie; mehrere mögliche Startlagen
+werden geprüft und eine unklare Lage abgelehnt. Qualitätsprüfungen und
+Overlays gehen in einen Vorschlag, den weiterhin ein Mensch bestätigt.
+Ein `FEHLER` kann nur mit dokumentierter Begründung übersteuert werden.
+
+### Verworfene Alternativen
+
+* Der bisherige Glasdetektor allein: Er traf bei den gespeicherten
+  StreamCam-Aufstellungen teils die Blende oder Reflexe statt des Glases.
+* Vier von Hand abgelesene Stützpunkte: Sie lieferten die Referenzquads,
+  waren aber der zeitaufwendigste Einrichtungsschritt.
+* Isotrope Glättung im entzerrten Bild: Die vertikale Streckung erzeugte
+  doppelte Punktkandidaten zwischen den tatsächlichen Zeilen.
+
+### Konsequenz
+
+Der Assistent verwendet benannte Vorabschwellen und speichert Kennzahlen
+neben der Ampel. Die fünf vorhandenen Standbilder prüfen die Geometrie
+offline; Kamerazugriff und tatsächliche Einrichtungsdauer sind noch nicht
+auf echter Hardware mit dem Nutzer geprüft.

@@ -109,6 +109,9 @@ class SessionProfile:
     #: `SessionProfile`/`load()` selbst erzwingen es nicht - ein fehlendes
     #: Profilbild ist eine Frage des Imports, nicht des Profilformats.
     reference_frame: dict | None = None
+    #: Optionaler Befund des Einrichtungsassistenten. Ein fehlendes Feld wird
+    #: beim Re-Speichern ausgelassen, damit Bestandsprofile bytegleich bleiben.
+    setup_checks: dict | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -131,6 +134,8 @@ class SessionProfile:
             d["camera"] = self.camera.to_dict()
         if self.reference_frame is not None:
             d["reference_frame"] = dict(self.reference_frame)
+        if self.setup_checks is not None:
+            d["setup_checks"] = dict(self.setup_checks)
         return d
 
     @classmethod
@@ -138,6 +143,7 @@ class SessionProfile:
         scaler_crop = d["scaler_crop"]
         camera = d.get("camera")
         reference_frame = d.get("reference_frame")
+        setup_checks = d.get("setup_checks")
         return cls(
             schema_version=d["schema_version"],
             device_id=d["device_id"],
@@ -155,6 +161,7 @@ class SessionProfile:
             confirmed_at_utc=d["confirmed_at_utc"],
             camera=CameraSettings.from_dict(camera) if camera is not None else None,
             reference_frame=dict(reference_frame) if reference_frame is not None else None,
+            setup_checks=dict(setup_checks) if setup_checks is not None else None,
         )
 
     def save(self, path: Path) -> None:

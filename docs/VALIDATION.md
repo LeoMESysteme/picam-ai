@@ -2201,7 +2201,6 @@ Training würden die Schwellen lockern.
 Vorab-Analyse (ROM-Muster als Referenz, Prototyp, nicht der Leser): Der
 höchste Wert eines Aus-Punkts in Leerzellen sinkt in `ab2` von 0,88 auf
 0,33, in `ernte1` von 1,00 auf 0,11, in den übrigen Gruppen auf 0,07–0,19.
-
 ## 2026-09-29 — Dot-Matrix-Leser: Stufe 2 erneut eingefroren (`bg_closing_v1`, vor Abnahme 2)
 
 Eingetragen, **bevor** die Abnahme-Aufstellungen `ab3`/`ab4` entstehen
@@ -2693,3 +2692,44 @@ einseitig, 95 %) über 85 entschiedene Plateaus liegt bei 3,5 %.
   bestanden haben.
 * Es gibt nur ein Gerät (`gsv-sensor-161a`), eine Firmware (keine negativen
   Werte) und eine Einheit (`mV/V`).
+
+## 2026-09-29 — Einrichtungsassistent: Regression auf echten Standbildern
+
+**Aufbau:** Offline-Auswertung von genau
+`var/diagnostics/{sc3,sc4,sc5,ab1,ab2}-still/frames/frame_000017.png`.
+Die Hinweisbox war jeweils die Bounding Box des bestätigten Profil-Quads
+mit 10 % Rand; `sc3` wurde gegen `sc3b-profile` verglichen. Die automatische
+Punktraster-Anpassung bekam keine Stützpunkte. Eckkoordinaten sind
+Quellbildpixel in der Reihenfolge TL/TR/BR/BL. `Δ` ist die größte
+euklidische Abweichung einer Ecke zum bestätigten Quad. Die Kennzahlen
+stammen aus `check_setup` auf dem automatisch angepassten Quad; die
+Stabilitätsprüfung benötigt ein zweites Standbild im Abstand von mindestens
+30 s und wurde hier nicht bewertet. Aufbau und Deutung:
+[Laborjournal](lab_journal.md), „Einrichtungsassistent: Offline-Prüfung“.
+
+| Aufstellung | automatisch TL / TR / BR / BL | bestätigt TL / TR / BR / BL | max. Δ px | Punkte zugeordnet | RMS Sp./Z. | Punkt-/Leserkontrast | Kante Zelle 8 (Befund) | px/Sp. | Ampel |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| `sc3` | (727,6;628,3) / (1158,8;615,3) / (1157,1;666,0) / (728,1;681,4) | (727,6;628,3) / (1159,0;615,3) / (1157,1;666,0) / (728,2;681,3) | 0,25 | 193/195 | 0,12/0,17 | 35 / 0,502 | 5 (keine) | 4,28 | OK |
+| `sc4` | (803,6;576,7) / (1173,0;633,1) / (1170,8;685,7) / (803,1;623,0) | (803,6;576,7) / (1173,0;633,1) / (1170,8;685,7) / (803,1;623,0) | 0,05 | 153/153 | 0,11/0,14 | 25 / 0,514 | 9 (keine) | 3,43 | OK |
+| `sc5` | (741,0;540,5) / (1221,7;615,8) / (1216,3;685,6) / (741,1;599,3) | (741,0;540,5) / (1221,7;615,8) / (1216,3;685,6) / (741,1;599,3) | 0,05 | 159/162 | 0,10/0,14 | 19 / 0,282 | 8 (keine) | 4,25 | WARNUNG (Kontrast) |
+| `ab1` | (779,6;548,6) / (1204,1;539,0) / (1201,1;588,2) / (781,4;598,6) | (779,6;548,6) / (1204,0;539,0) / (1201,0;588,2) / (781,5;598,6) | 0,08 | 190/193 | 0,11/0,17 | 43 / 0,562 | 5 (keine) | 4,32 | OK |
+| `ab2` | (609,6;573,9) / (1010,5;498,2) / (1009,7;552,5) / (612,7;641,9) | (609,7;573,8) / (1010,6;498,2) / (1009,7;552,6) / (612,9;641,9) | 0,21 | 176/184 | 0,10/0,16 | 19 / 0,445 | 13,5 (Zelle 8) | 3,39 | WARNUNG (Kontrast, Kante) |
+
+Die Anforderung von höchstens 1,5 px Eckabweichung ist auf diesen fünf
+gespeicherten Bildern erfüllt; der größte Wert beträgt 0,25 px. In allen
+fünf Bildern ist der gesättigte Pixelanteil im Glas 0,0 % und die
+Rasterprüfung `OK`. Die Kantenprüfung meldet nur bei `ab2` die Leerzelle 8;
+`sc5` und `ab1` bleiben ohne Kantenbefund. Die Kontrastschwellen sind
+**Vorabwerte**. Das hier exakt definierte Maß ergibt auf Frame 17 für
+`sc5` und `ab2` je 19, während die früheren Aufstellungswerte 41,3 und
+31,2 lauten. Die früheren Bilder bzw. Auswertebereiche sind nicht
+festgelegt; deshalb werden diese Werte nicht gleichgesetzt. Es gab keinen
+neuen Kameralauf und keine Messung der Einrichtungsdauer.
+
+Ein zusätzlicher read-only Lauf verwendete statt der Profil-Hinweisbox die
+automatisch aus der grünen Punktfläche bestimmte Box. Auch damit traf die
+Anpassung alle fünf bestätigten Quads: größte Eckabweichung `sc3=0,18`,
+`sc4=0,07`, `sc5=0,17`, `ab1=0,12`, `ab2=0,25` px. Das belegt den
+bildbasierten Hinweisbox-Pfad auf diesen vorhandenen Bildern, aber noch
+keinen echten `assist`-Kameralauf.
+

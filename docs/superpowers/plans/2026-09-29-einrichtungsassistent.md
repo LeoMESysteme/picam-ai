@@ -393,6 +393,37 @@ Bericht, die Ampel ist nur die Lesart.
 3. **Kein Kamerazugriff in Tests**, kein Schreiben in `var/`.
 4. **Profil-Rückwärtskompatibilität** (Prüfsummen bestehender Profile).
 
+## Stand der Umsetzung — 2026-09-29
+
+`assist`, `propose --auto-quad`, Punktraster-Anpassung, Qualitätsprüfungen,
+Overlays und die FEHLER-Sperre in `confirm` sind implementiert. Tests öffnen
+keine Kamera; `var/` wurde nur gelesen. Fünf gespeicherte Standbilder treffen
+ohne Stützpunkte das bestätigte Quad mit höchstens 0,25 px Eckabweichung;
+auch die automatisch aus dem grünen Punktbereich gebildeten Hinweisboxen
+treffen alle fünf Quads mit höchstens 0,25 px. `ab2` meldet die Spiegelkante
+in Leerzelle 8, `sc5` und `ab1` keine Kante. Die Profilserialisierung ohne
+neues Prüffeld ist bytegleich geprüft. Die Messwerte stehen in
+`docs/VALIDATION.md`, Aufbau und Deutung in `docs/lab_journal.md`.
+
+Die Ampelschwellen sind **Vorabwerte aus den Aufstellungen vom 2026-09-29**:
+Punktkontrast <15/25 (FEHLER/WARNUNG), Hintergrundkante in Leerzellen
+>20/10 und belegten Zellen >20/16, Sättigung >2 % oder zusammenhängender
+heller Fleck ab 100 px über den linken Zellen, Auflösung <2,6/3,2 px je Punktspalte,
+Raster-RMS >0,25 Spalten oder >0,3 Zeilen beziehungsweise <80 % Zuordnung,
+Bias >0,08, Stabilitätsversatz >0,5/0,2 px (unzuverlässige Schätzung:
+WARNUNG). Die `ab2`-Kante liegt auf
+Frame 17 bei 13,5; `sc5` und `ab1` liegen bei 8 und 5. Das exakt
+definierte Kontrastmaß auf Frame 17 ergibt bei `sc5` und `ab2` je 19 statt
+der älteren Aufstellungswerte 41,3/31,2; Bild und Auswertebereich jener
+Handwerte sind nicht belegt. Die Schwellen sind daher noch nicht allgemein
+kalibriert.
+
+Offen für den ersten **gemeinsamen Lauf mit dem Nutzer an echter Hardware**:
+Kameraablauf, Bildpuffer und V4L2-Regler prüfen, Overlays ansehen,
+Stabilitätsmessung bestätigen und die tatsächliche Einrichtungsdauer
+erfassen. Ein Profil wird weiterhin erst nach menschlicher Sichtprüfung
+bestätigt. Der Branch wird nicht nach `master` gemergt; Claude prüft ihn
+vor der Übernahme.
 ## Nacharbeit 1 (Review Claude, 2026-09-29, Branch-Stand `9a71d35`)
 
 **Urteil:** zurück an Codex, noch kein Merge. Das Grundgerüst ist brauchbar:

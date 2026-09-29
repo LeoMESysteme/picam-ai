@@ -573,6 +573,164 @@ def test_confirm_rejects_proposal_without_camera(tmp_path):
     assert not out_path.exists()
 
 
+def test_confirm_rejects_failing_setup_checks_and_names_them(tmp_path, capsys):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "WARNUNG",
+        "checks": {
+            "kontrast": {"status": "FEHLER", "metrics": {"contrast": 8.3}},
+            "stabilitaet": {"status": "FEHLER", "metrics": {"drift": 0.5}},
+            "reflexion": {"status": "OK", "metrics": {}},
+        },
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+    error = capsys.readouterr().err
+    assert "kontrast" in error
+    assert "stabilitaet" in error
+    assert "--override-reason" in error
+
+
+def test_confirm_rejects_blank_override_reason(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "FEHLER",
+        "checks": {"kontrast": {"status": "FEHLER", "metrics": {"contrast": 8.3}}},
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path), "--override-reason", "   ",
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+
+
+def test_confirm_override_saves_reason_and_checks(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    checks = {
+        "overall": "FEHLER",
+        "checks": {"kontrast": {"status": "FEHLER", "metrics": {"contrast": 8.3}}},
+    }
+    proposal["setup_checks"] = checks
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path), "--override-reason", "Manuell kontrolliert",
+    ])
+
+    assert rc == 0
+    assert SessionProfile.load(out_path).setup_checks == {
+        **checks, "override_reason": "Manuell kontrolliert",
+    }
+
+
+def test_confirm_rejects_overall_error_without_named_error(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "FEHLER",
+        "checks": {"kontrast": {"status": "OK", "metrics": {"contrast": 8.3}}},
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+
+
+def test_confirm_accepts_not_run_stability_check(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    checks = {
+        "overall": "OK",
+        "checks": {
+            "kontrast": {"status": "OK", "metrics": {"contrast": 41.3}},
+            "stabilitaet": {"status": None, "metrics": {}},
+        },
+    }
+    proposal["setup_checks"] = checks
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ])
+
+    assert rc == 0
+    assert SessionProfile.load(out_path).setup_checks == checks
+
+
+def test_confirm_rejects_stability_check_without_status(tmp_path):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "OK",
+        "checks": {"stabilitaet": {"metrics": {}}},
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+
+
+@pytest.mark.parametrize("bad_field", ["overall", "status"])
+def test_confirm_rejects_malformed_check_status(tmp_path, bad_field):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    checks = {"overall": "OK", "checks": {"kontrast": {"status": "OK", "metrics": {}}}}
+    if bad_field == "overall":
+        checks["overall"] = ["FEHLER"]
+    else:
+        checks["checks"]["kontrast"]["status"] = ["FEHLER"]
+    proposal["setup_checks"] = checks
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+
+
 # --- focus ------------------------------------------------------------
 
 

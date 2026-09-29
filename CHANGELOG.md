@@ -188,6 +188,30 @@ Abnahmen gab es nur verstreut in VALIDATION.md.
 `./.venv/bin/python scripts/docs-progress-data.py`. Der automatische
 Doku-Pflegelauf darf sie nicht ändern (`allowed_path`).
 
+## 0.1.0.dev0 — 2026-09-29 (Einrichtungsassistent für Ernte-Aufstellungen)
+
+**Problem:** Neue Aufstellungen erforderten manuelle Stützpunkte für die
+Punktraster-Homographie, getrennte Kontrast- und Spiegelungsprüfungen sowie
+eine Kontrolle der Kamerastabilität. Der Glasdetektor konnte Blende oder
+Reflexe statt des Displays erfassen. Bei einem Fehler im Fokus-Sweep blieb
+die Kamera unter Umständen geöffnet.
+
+**Änderung:** `harvest-setup.py assist` verbindet Fokus-Sweep, zwei frische
+Standbilder im Abstand von mindestens 30 s, automatische Rasteranpassung,
+Qualitätsprüfungen, `proposal.json` und Kontroll-Overlays. `propose
+--auto-quad` stellt denselben bildbasierten Weg für vorhandene Aufnahmen
+bereit. Die Prüfungen melden Kontrast, Hintergrundkanten, Glanz, Auflösung,
+Rastergüte und Stabilität mit Kennzahlen und Ampel. `confirm` sperrt einen
+Vorschlag mit `FEHLER`, bis ein nichtleerer Übersteuerungsgrund angegeben
+wird; das optionale Prüfergebnis steht danach im Profil. Der Fokus-Sweep
+gibt die Kamera auch nach Fehlern frei.
+
+**Konsequenz:** Ein Bediener kann ungeeignete Aufstellungen vor einer Ernte
+erkennen und anhand der Overlays prüfen. Die Schwellen sind Vorabwerte aus
+den Aufstellungen vom 2026-09-29; der erste echte Kameralauf und die
+Zeitersparnis sind noch nicht gemessen. Bestehende Profile bleiben beim
+Laden und Speichern bytegleich.
+
 ## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Hintergrund je Punkt, Normierung `bg_closing_v1`)
 
 **Problem:** Abnahme 1 von Stufe 2 ist nicht bestanden. In `ab2` wurden

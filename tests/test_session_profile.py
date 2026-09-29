@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 
@@ -87,6 +88,32 @@ def test_to_dict_has_reference_frame_key_when_set():
     profile = dataclasses.replace(_profile(), reference_frame=_REFERENCE_FRAME)
     d = profile.to_dict()
     assert d["reference_frame"] == _REFERENCE_FRAME
+
+
+def test_setup_checks_roundtrip(tmp_path):
+    checks = {
+        "overall": "FEHLER",
+        "checks": {
+            "reflection": {"status": "FEHLER", "metrics": {"contrast": 8.3}, "cells": [8]},
+        },
+        "override_reason": "Aufstellung wurde separat geprueft",
+    }
+    profile = dataclasses.replace(_profile(), setup_checks=checks)
+    path = tmp_path / "profile.json"
+    profile.save(path)
+    assert SessionProfile.load(path).setup_checks == checks
+    assert json.loads(path.read_text())["setup_checks"] == checks
+
+
+def test_existing_profile_resaves_byte_identically_without_setup_checks(tmp_path):
+    source = Path(__file__).parents[1] / "var/diagnostics/ernte1-profile/profile.json"
+    if not source.exists():
+        pytest.skip("Bestandsprofil ist nicht vorhanden")
+    profile = SessionProfile.load(source)
+    assert profile.setup_checks is None
+    target = tmp_path / "profile.json"
+    profile.save(target)
+    assert target.read_bytes() == source.read_bytes()
 
 
 def test_v2_profile_without_reference_frame_still_loads(tmp_path):
