@@ -27,8 +27,8 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    var/diagnostics/sc3-profile` auf `sc3-cal-a/b/c` und
    `timing-calibration.py` → neue `var/calibration/timing-streamcam.json`.
    Die jetzige (M = 1225,8 ms) stammt aus verschobenen Aufnahmen und ist
-   vorläufig. A und B sind schon aufgenommen, siehe die Auswertungen
-   `var/diagnostics/sc3-cal-{a,b}.offset.log`. In A/B wurden viele Bilder
+   vorläufig. A und B sind schon aufgenommen und ausgewertet: δ +99/+97 ms,
+   σ 6/2 ms, M 289/271 ms (VALIDATION.md 2026-09-28/29). In A/B wurden viele Bilder
    wegen voller SD-Karte verworfen; bei Bedarf A/B wiederholen.
 2. Mit neuem M ggf. `gate-label` für `sc3-run` neu laufen lassen (nur, wenn M
    deutlich kleiner wird: mehr Ausbeute; größeres M → neu labeln Pflicht).
