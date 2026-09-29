@@ -1,0 +1,948 @@
+{
+ "abnahmen": [
+  {
+   "abgelehnt_anteil": 0.45604395604395603,
+   "bestanden": false,
+   "file": "abnahme-stufe2-2026-09-29.json",
+   "groups": {
+    "ab1": {
+     "abgelehnt": 0,
+     "falsch": 0,
+     "richtig": 99
+    },
+    "ab2": {
+     "abgelehnt": 83,
+     "falsch": 0,
+     "richtig": 0
+    }
+   },
+   "label": "Abnahme 1 (ink_per_cell_v1)",
+   "templates_sha256": "4524d6a145a478b0106c013f5408e85e3fce4ddd3f5fa1fae5625431c5f79326"
+  }
+ ],
+ "dataset": {
+  "groups": [
+   {
+    "group": "ab1",
+    "in_profile_map": true,
+    "role": "abnahme",
+    "samples": 99
+   },
+   {
+    "group": "ab2",
+    "in_profile_map": true,
+    "role": "abnahme",
+    "samples": 83
+   },
+   {
+    "group": "ab3",
+    "in_profile_map": false,
+    "role": "abnahme",
+    "samples": null
+   },
+   {
+    "group": "auf2",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 76
+   },
+   {
+    "group": "auf3",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 73
+   },
+   {
+    "group": "ernte1",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 152
+   },
+   {
+    "group": "sc1",
+    "in_profile_map": false,
+    "role": "verworfen",
+    "samples": 0
+   },
+   {
+    "group": "sc2",
+    "in_profile_map": false,
+    "role": "verworfen",
+    "samples": 0
+   },
+   {
+    "group": "sc3",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 47
+   },
+   {
+    "group": "sc4",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 79
+   },
+   {
+    "group": "sc5",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 114
+   },
+   {
+    "group": "sc6",
+    "in_profile_map": true,
+    "role": "training",
+    "samples": 219
+   }
+  ],
+  "total_samples": 942
+ },
+ "generated_at": "2026-09-29T14:18:32+00:00",
+ "harvests": [
+  {
+   "distinct_values": 24,
+   "drop_fraction": 0.0021,
+   "frames_dropped": 8,
+   "frames_recorded": 3729,
+   "group": "sc1",
+   "import_rejected": 27,
+   "imported": 45,
+   "labeled": 954,
+   "role": "verworfen",
+   "run": "sc1-run",
+   "setup": "sc1",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-28T09:23:01.659920+00:00"
+  },
+  {
+   "distinct_values": 25,
+   "drop_fraction": 0.0123,
+   "frames_dropped": 46,
+   "frames_recorded": 3691,
+   "group": "sc2",
+   "import_rejected": 17,
+   "imported": 58,
+   "labeled": 971,
+   "role": "verworfen",
+   "run": "sc2-run",
+   "setup": "sc2",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-28T09:57:54.419123+00:00"
+  },
+  {
+   "distinct_values": 18,
+   "drop_fraction": 0.1081,
+   "frames_dropped": 404,
+   "frames_recorded": 3333,
+   "group": "sc3",
+   "import_rejected": 3,
+   "imported": 47,
+   "labeled": 571,
+   "role": "training",
+   "run": "sc3-run",
+   "setup": "sc3",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-28T14:16:09.179868+00:00"
+  },
+  {
+   "distinct_values": 30,
+   "drop_fraction": 0.1606,
+   "frames_dropped": 600,
+   "frames_recorded": 3137,
+   "group": "sc4",
+   "import_rejected": 32,
+   "imported": 79,
+   "labeled": 1503,
+   "role": "training",
+   "run": "sc4-run",
+   "setup": "sc4",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-29T07:52:14.630911+00:00"
+  },
+  {
+   "distinct_values": 31,
+   "drop_fraction": 0.1814,
+   "frames_dropped": 678,
+   "frames_recorded": 3059,
+   "group": "sc5",
+   "import_rejected": 0,
+   "imported": 114,
+   "labeled": 1676,
+   "role": "training",
+   "run": "sc5-run",
+   "setup": "sc5",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-29T08:38:51.985590+00:00"
+  },
+  {
+   "distinct_values": 28,
+   "drop_fraction": 0.3032,
+   "frames_dropped": 1133,
+   "frames_recorded": 2604,
+   "group": "ab1",
+   "import_rejected": 3,
+   "imported": 99,
+   "labeled": 1371,
+   "role": "abnahme",
+   "run": "ab1-run",
+   "setup": "ab1",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-29T10:00:18.459082+00:00"
+  },
+  {
+   "distinct_values": 28,
+   "drop_fraction": 0.1509,
+   "frames_dropped": 564,
+   "frames_recorded": 3173,
+   "group": "ab2",
+   "import_rejected": 13,
+   "imported": 83,
+   "labeled": 1677,
+   "role": "abnahme",
+   "run": "ab2-run",
+   "setup": "ab2",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-29T10:25:58.389859+00:00"
+  },
+  {
+   "distinct_values": 25,
+   "drop_fraction": 0.3396,
+   "frames_dropped": 1269,
+   "frames_recorded": 2468,
+   "group": "sc6",
+   "import_rejected": 1,
+   "imported": 88,
+   "labeled": 1254,
+   "role": "training",
+   "run": "sc6-run",
+   "setup": "sc6",
+   "staging_ram": false,
+   "started_at_utc": "2026-09-29T11:25:13.564559+00:00"
+  },
+  {
+   "distinct_values": 39,
+   "drop_fraction": 0.0,
+   "frames_dropped": 0,
+   "frames_recorded": 3737,
+   "group": "sc6",
+   "import_rejected": 10,
+   "imported": 131,
+   "labeled": 2096,
+   "role": "training",
+   "run": "sc6b-run",
+   "setup": "sc6b",
+   "staging_ram": true,
+   "started_at_utc": "2026-09-29T12:23:20.442514+00:00"
+  },
+  {
+   "distinct_values": 39,
+   "drop_fraction": 0.0,
+   "frames_dropped": 0,
+   "frames_recorded": 3736,
+   "group": "ab3",
+   "import_rejected": null,
+   "imported": null,
+   "labeled": 1946,
+   "role": "abnahme",
+   "run": "ab3-run",
+   "setup": "ab3",
+   "staging_ram": true,
+   "started_at_utc": "2026-09-29T13:55:28.875778+00:00"
+  },
+  {
+   "distinct_values": null,
+   "drop_fraction": null,
+   "frames_dropped": null,
+   "frames_recorded": null,
+   "group": "auf2",
+   "import_rejected": null,
+   "imported": null,
+   "labeled": null,
+   "role": "training",
+   "run": "auf2-run",
+   "setup": "auf2",
+   "staging_ram": null,
+   "started_at_utc": null
+  },
+  {
+   "distinct_values": null,
+   "drop_fraction": null,
+   "frames_dropped": null,
+   "frames_recorded": null,
+   "group": "auf3",
+   "import_rejected": null,
+   "imported": null,
+   "labeled": null,
+   "role": "training",
+   "run": "auf3-run",
+   "setup": "auf3",
+   "staging_ram": null,
+   "started_at_utc": null
+  },
+  {
+   "distinct_values": null,
+   "drop_fraction": null,
+   "frames_dropped": null,
+   "frames_recorded": null,
+   "group": "ernte1",
+   "import_rejected": null,
+   "imported": null,
+   "labeled": null,
+   "role": "training",
+   "run": "ernte1-run",
+   "setup": "ernte1",
+   "staging_ram": null,
+   "started_at_utc": null
+  },
+  {
+   "distinct_values": null,
+   "drop_fraction": null,
+   "frames_dropped": null,
+   "frames_recorded": null,
+   "group": "ernte1",
+   "import_rejected": null,
+   "imported": null,
+   "labeled": null,
+   "role": "training",
+   "run": "ernte2-run",
+   "setup": "ernte2",
+   "staging_ram": null,
+   "started_at_utc": null
+  }
+ ],
+ "loo_runs": [
+  {
+   "code_commit": "0d18d0a",
+   "file": "dotmatrix-loo-2026-09-29.json",
+   "groups": {
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 2.117960140109062,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "auf3": {
+     "abgelehnt": 73,
+     "d_max": 2.117960140109062,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 61,
+     "d_max": 1.8710771232843368,
+     "falsch": 0,
+     "plateaus_abgelehnt": 19,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 37,
+     "richtig": 91,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 46,
+     "d_max": 1.6674710035324123,
+     "falsch": 0,
+     "plateaus_abgelehnt": 17,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.1617497719824326,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    }
+   },
+   "label": "loo (a)",
+   "normalization": "ink_global_v0",
+   "order": 1
+  },
+  {
+   "code_commit": "20d7403",
+   "file": "dotmatrix-loo-2026-09-29b.json",
+   "groups": {
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 2.200548411905764,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "auf3": {
+     "abgelehnt": 73,
+     "d_max": 2.200548411905764,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 23,
+     "d_max": 2.2159507125616074,
+     "falsch": 0,
+     "plateaus_abgelehnt": 5,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 51,
+     "richtig": 129,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 46,
+     "d_max": 1.6171415448188784,
+     "falsch": 0,
+     "plateaus_abgelehnt": 17,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.2405123561620726,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 2.117960140109062,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    }
+   },
+   "label": "loo (b)",
+   "normalization": "ink_global_v0",
+   "order": 2
+  },
+  {
+   "code_commit": "20d7403",
+   "file": "dotmatrix-loo-2026-09-29c.json",
+   "groups": {
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 2.262513168156139,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "auf3": {
+     "abgelehnt": 73,
+     "d_max": 2.262513168156139,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 19,
+     "d_max": 2.1994433417916297,
+     "falsch": 0,
+     "plateaus_abgelehnt": 4,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 52,
+     "richtig": 133,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 47,
+     "d_max": 1.6171415448188784,
+     "falsch": 0,
+     "plateaus_abgelehnt": 17,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.251476097106934,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 2.122640799731013,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    }
+   },
+   "label": "loo (c)",
+   "normalization": "ink_global_v0",
+   "order": 3
+  },
+  {
+   "code_commit": "021f8ab",
+   "file": "dotmatrix-loo-2026-09-29d.json",
+   "groups": {
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 1.591592726111411,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "auf3": {
+     "abgelehnt": 13,
+     "d_max": 2.6650826320052134,
+     "falsch": 0,
+     "plateaus_abgelehnt": 2,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 24,
+     "richtig": 60,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 0,
+     "d_max": 2.5294670104980446,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 56,
+     "richtig": 152,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 2.5894090652465818,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.5511518120765686,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 2.4617888592183577,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    }
+   },
+   "label": "loo (d)",
+   "normalization": "ink_per_cell_v1",
+   "order": 4
+  },
+  {
+   "code_commit": "8908fe4",
+   "file": "dotmatrix-loo-2026-09-29e.json",
+   "groups": {
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 1.5951111942529674,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "auf3": {
+     "abgelehnt": 12,
+     "d_max": 2.6650826320052134,
+     "falsch": 0,
+     "plateaus_abgelehnt": 2,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 24,
+     "richtig": 61,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 0,
+     "d_max": 2.5294670104980446,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 56,
+     "richtig": 152,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 2.5894090652465818,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.5511518120765686,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 2.4617888592183577,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    }
+   },
+   "label": "loo (e)",
+   "normalization": "ink_per_cell_v1",
+   "order": 5
+  },
+  {
+   "code_commit": "48c31b3",
+   "file": "dotmatrix-loo-2026-09-29-mit-sc6.json",
+   "groups": {
+    "ab1": {
+     "abgelehnt": 0,
+     "d_max": 3.097526952624321,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 34,
+     "richtig": 99,
+     "training_eligible": true
+    },
+    "ab2": {
+     "abgelehnt": 83,
+     "d_max": 2.8000649780035003,
+     "falsch": 0,
+     "plateaus_abgelehnt": 28,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "auf2": {
+     "abgelehnt": 33,
+     "d_max": 3.1269193604588508,
+     "falsch": 0,
+     "plateaus_abgelehnt": 11,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 15,
+     "richtig": 43,
+     "training_eligible": true
+    },
+    "auf3": {
+     "abgelehnt": 4,
+     "d_max": 3.2470142260193837,
+     "falsch": 0,
+     "plateaus_abgelehnt": 1,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 25,
+     "richtig": 69,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 0,
+     "d_max": 3.018594469130042,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 56,
+     "richtig": 152,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 3.2180865645408607,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 3.1546036303043365,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 3.0687289834022535,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    },
+    "sc6": {
+     "abgelehnt": 0,
+     "d_max": 3.099406103789807,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 30,
+     "richtig": 88,
+     "training_eligible": true
+    }
+   },
+   "label": "loo 9 Gruppen",
+   "normalization": "ink_per_cell_v1",
+   "order": 6
+  },
+  {
+   "code_commit": "dc8af22",
+   "file": "dotmatrix-loo-2026-09-29-basis-ink_per_cell_v1.json",
+   "groups": {
+    "ab1": {
+     "abgelehnt": 0,
+     "d_max": 3.3239317357540124,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 34,
+     "richtig": 99,
+     "training_eligible": true
+    },
+    "ab2": {
+     "abgelehnt": 83,
+     "d_max": 2.857146798074246,
+     "falsch": 0,
+     "plateaus_abgelehnt": 28,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "auf2": {
+     "abgelehnt": 13,
+     "d_max": 3.361976432800293,
+     "falsch": 0,
+     "plateaus_abgelehnt": 4,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 22,
+     "richtig": 63,
+     "training_eligible": true
+    },
+    "auf3": {
+     "abgelehnt": 6,
+     "d_max": 3.4681529998779275,
+     "falsch": 0,
+     "plateaus_abgelehnt": 2,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 24,
+     "richtig": 67,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 0,
+     "d_max": 3.2496924102306357,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 56,
+     "richtig": 152,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 3.436396110057831,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 3.385218858718872,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 3.3073130548000336,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    },
+    "sc6": {
+     "abgelehnt": 0,
+     "d_max": 3.099406103789807,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 75,
+     "richtig": 219,
+     "training_eligible": true
+    }
+   },
+   "label": "loo 942 Proben alt",
+   "normalization": "ink_per_cell_v1",
+   "order": 7
+  },
+  {
+   "code_commit": "50d68d6",
+   "file": "dotmatrix-loo-2026-09-29-bg_closing_v1.json",
+   "groups": {
+    "ab1": {
+     "abgelehnt": 0,
+     "d_max": 2.568184733390803,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 34,
+     "richtig": 99,
+     "training_eligible": true
+    },
+    "ab2": {
+     "abgelehnt": 0,
+     "d_max": 2.634621191024784,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 28,
+     "richtig": 83,
+     "training_eligible": true
+    },
+    "auf2": {
+     "abgelehnt": 76,
+     "d_max": 1.7733352124691004,
+     "falsch": 0,
+     "plateaus_abgelehnt": 26,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 0,
+     "richtig": 0,
+     "training_eligible": true
+    },
+    "auf3": {
+     "abgelehnt": 8,
+     "d_max": 2.59784910082817,
+     "falsch": 0,
+     "plateaus_abgelehnt": 2,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 24,
+     "richtig": 65,
+     "training_eligible": false
+    },
+    "ernte1": {
+     "abgelehnt": 0,
+     "d_max": 2.6006195843219744,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 56,
+     "richtig": 152,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 2.5745685458183325,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 2.5718054160475727,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 2.512138527631759,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    },
+    "sc6": {
+     "abgelehnt": 0,
+     "d_max": 2.437097061425448,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 75,
+     "richtig": 219,
+     "training_eligible": true
+    }
+   },
+   "label": "loo 942 Proben neu",
+   "normalization": "bg_closing_v1",
+   "order": 8
+  }
+ ],
+ "schema": "fortschritt_v1"
+}

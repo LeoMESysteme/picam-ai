@@ -15,8 +15,8 @@ site_url = "https://picam-docs.pages.dev/"
 use_directory_urls = false
 repo_url = "https://ds1515.me-systeme.de/l.hentschke/picam-ai"
 repo_name = "picam-ai"
-extra_css = ["assets/docs-interactive.css"]
-extra_javascript = ["assets/docs-interactive.js"]
+extra_css = ["assets/docs-interactive.css", "assets/fortschritt.css"]
+extra_javascript = ["assets/docs-interactive.js", "assets/fortschritt.js"]
 
 nav = [
   { "Start" = "index.md" },
@@ -55,6 +55,7 @@ nav = [
     { "Doku-Hosting" = "docs/HOSTING.md" },
   ] },
   { "Messungen" = [
+    { "Fortschritt Ernten/Training" = "docs/FORTSCHRITT.md" },
     { "Validierung (Zahlen)" = "docs/VALIDATION.md" },
     { "Zeitverhalten" = "docs/TIMING.md" },
     { "Laborjournal" = "docs/lab_journal.md" },

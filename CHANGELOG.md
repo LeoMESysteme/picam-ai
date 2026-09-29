@@ -3,6 +3,37 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-29 (Doku: interaktive Fortschrittsseite für Ernten und Training)
+
+**Problem:** Den Stand von Ernten, Datensatz, Leser-Entwicklung und
+Abnahmen gab es nur verstreut in VALIDATION.md.
+
+**Änderung:**
+* **`scripts/docs-progress-data.py`** liest nur aus `var/`: Ernte-Runs
+  (`harvest.json`, `session.json`, `import.json`), den Datensatz-Store
+  (Proben je Gruppe, gezählt wie `dotmatrix-dataset.py`), die
+  `loo`-Berichte und die Abnahmeberichte. Es schreibt
+  `docs-site/assets/data/fortschritt.json` (Schema `fortschritt_v1`).
+  * Rollen, Gruppenzuordnung (`sc6b` → `sc6`, `ernte2` → `ernte1`) und die
+    Normierung je `loo`-Bericht stehen als Tabellen im Skript.
+  * Fehlende Angaben werden `null`, nie geschätzt.
+* **Seite `docs/FORTSCHRITT.md`** (Navigation „Messungen“) mit
+  `docs-site/assets/fortschritt.js`/`.css`: vier SVG-Diagramme ohne
+  Fremdbibliotheken, mit Tooltip, ausblendbarer Legende, Hell- und
+  Dunkelmodus und Handybreite.
+  * Datensatz je Gruppe,
+  * Ernten mit Bildverlust und RAM-Zwischenablage,
+  * `loo`-Heatmap (falsch > 0 rot),
+  * Abnahmen gegen die 20-%-Grenze.
+* **Tests:** `tests/test_docs_progress_data.py` und sieben
+  Playwright-Tests in `tests/docs-site.spec.ts` mit der Fixture
+  `tests/fixtures/fortschritt-beispiel.json`.
+
+**Konsequenz:** Die JSON wird versioniert, weil der Cloudflare-Build kein
+`var/` hat. Nach jeder Ernte, `loo` oder Abnahme von Hand neu erzeugen:
+`./.venv/bin/python scripts/docs-progress-data.py`. Der automatische
+Doku-Pflegelauf darf sie nicht ändern (`allowed_path`).
+
 ## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Hintergrund je Punkt, Normierung `bg_closing_v1`)
 
 **Problem:** Abnahme 1 von Stufe 2 ist nicht bestanden. In `ab2` wurden

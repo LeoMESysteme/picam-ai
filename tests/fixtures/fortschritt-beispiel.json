@@ -1,0 +1,63 @@
+{
+  "schema": "fortschritt_v1",
+  "generated_at": "2026-09-29T14:05:00Z",
+  "harvests": [
+    {"run": "ab1-run", "setup": "ab1", "group": "ab1", "role": "abnahme",
+     "started_at_utc": "2026-09-26T09:12:00Z", "frames_recorded": 1480, "frames_dropped": 212,
+     "drop_fraction": 0.1253, "labeled": 99, "distinct_values": 99,
+     "staging_ram": false, "imported": 99, "import_rejected": 0},
+    {"run": "auf2-run", "setup": "auf2", "group": "auf2", "role": "training",
+     "started_at_utc": "2026-09-27T13:40:00Z", "frames_recorded": 1650, "frames_dropped": 402,
+     "drop_fraction": 0.1959, "labeled": 76, "distinct_values": 76,
+     "staging_ram": false, "imported": 76, "import_rejected": null},
+    {"run": "sc6-run", "setup": "sc6", "group": "sc6", "role": "training",
+     "started_at_utc": "2026-09-28T08:30:00Z", "frames_recorded": 2468, "frames_dropped": 1269,
+     "drop_fraction": 0.3396, "labeled": 1254, "distinct_values": 219,
+     "staging_ram": false, "imported": 219, "import_rejected": 3},
+    {"run": "sc6b-run", "setup": "sc6", "group": "sc6b", "role": "verworfen",
+     "started_at_utc": "2026-09-29T07:55:00Z", "frames_recorded": 3737, "frames_dropped": 0,
+     "drop_fraction": 0.0, "labeled": 2096, "distinct_values": 180,
+     "staging_ram": true, "imported": 0, "import_rejected": 0},
+    {"run": "ohne-zeit-run", "setup": "x1", "group": "x1", "role": "training",
+     "started_at_utc": null, "frames_recorded": 120, "frames_dropped": null,
+     "drop_fraction": null, "labeled": null, "distinct_values": null,
+     "staging_ram": false, "imported": null, "import_rejected": null}
+  ],
+  "dataset": {
+    "groups": [
+      {"group": "sc6", "role": "training", "samples": 219, "in_profile_map": true},
+      {"group": "auf2", "role": "training", "samples": 76, "in_profile_map": true},
+      {"group": "ab1", "role": "abnahme", "samples": 99, "in_profile_map": true},
+      {"group": "ab2", "role": "abnahme", "samples": 83, "in_profile_map": true},
+      {"group": "sc6b", "role": "verworfen", "samples": 180, "in_profile_map": false},
+      {"group": "test_rot", "role": "training", "samples": null, "in_profile_map": false}
+    ],
+    "total_samples": 657
+  },
+  "loo_runs": [
+    {"file": "loo-2026-09-27-ink.json", "label": "loo (d)", "normalization": "ink_per_cell_v1",
+     "code_commit": "1a2b3c4", "order": 4,
+     "groups": {
+       "sc6": {"richtig": 219, "abgelehnt": 0, "falsch": 0, "plateaus_richtig": 30, "plateaus_abgelehnt": 0, "plateaus_falsch": 0, "d_max": 0.41, "training_eligible": true},
+       "auf2": {"richtig": 63, "abgelehnt": 13, "falsch": 0, "plateaus_richtig": 9, "plateaus_abgelehnt": 2, "plateaus_falsch": 0, "d_max": 0.62, "training_eligible": true},
+       "ab2": {"richtig": 0, "abgelehnt": 83, "falsch": 0, "plateaus_richtig": 0, "plateaus_abgelehnt": 11, "plateaus_falsch": 0, "d_max": null, "training_eligible": false}
+     }},
+    {"file": "loo-2026-09-29-bg-closing.json", "label": "loo (e)", "normalization": "bg_closing_v1",
+     "code_commit": "50d68d6", "order": 5,
+     "groups": {
+       "sc6": {"richtig": 219, "abgelehnt": 0, "falsch": 0, "plateaus_richtig": 30, "plateaus_abgelehnt": 0, "plateaus_falsch": 0, "d_max": 0.38, "training_eligible": true},
+       "auf2": {"richtig": 0, "abgelehnt": 76, "falsch": 0, "plateaus_richtig": 0, "plateaus_abgelehnt": 10, "plateaus_falsch": 0, "d_max": 0.71, "training_eligible": true},
+       "ab2": {"richtig": 83, "abgelehnt": 0, "falsch": 0, "plateaus_richtig": 11, "plateaus_abgelehnt": 0, "plateaus_falsch": 0, "d_max": 0.44, "training_eligible": false},
+       "test_rot": {"richtig": 10, "abgelehnt": 2, "falsch": 1, "plateaus_richtig": 2, "plateaus_abgelehnt": 1, "plateaus_falsch": 1, "d_max": 0.93, "training_eligible": true}
+     }}
+  ],
+  "abnahmen": [
+    {"file": "abnahme-2026-09-28-stufe2.json", "label": "Abnahme 1 (ink_per_cell_v1)",
+     "templates_sha256": "3e7a0c1d9b2f4e6a8c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+     "groups": {
+       "ab1": {"richtig": 99, "abgelehnt": 0, "falsch": 0},
+       "ab2": {"richtig": 0, "abgelehnt": 83, "falsch": 0}
+     },
+     "abgelehnt_anteil": 0.456, "bestanden": false}
+  ]
+}

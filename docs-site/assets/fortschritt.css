@@ -1,0 +1,187 @@
+/* Diagramme der Seite "Fortschritt Ernten und Training" (fortschritt.js).
+ * Eigene Farben je Theme; Text, Raster und Flächen nutzen die Theme-Variablen. */
+:root {
+  --fs-training: #2f6db3;
+  --fs-abnahme: #c26a12;
+  --fs-verworfen: #9b9b9b;
+  --fs-other: #7b5ea7;
+  --fs-labeled: #2f8a4f;
+  --fs-unlabeled: #a9c9e8;
+  --fs-dropped: #c9453f;
+  --fs-line: #1f1f1f;
+  --fs-correct: #3f9e5d;
+  --fs-rejected: #d6d6d6;
+  --fs-cell-text: #141414;
+  --fs-wrong: #d32f2f;
+  --fs-wrong-stroke: #8e0000;
+  --fs-wrong-text: #ffffff;
+  --fs-ram: #6a3fb0;
+  --fs-limit: #b3261e;
+  --fs-pass-bg: #ddf3df;
+  --fs-pass-fg: #205629;
+  --fs-fail-bg: #ffe0df;
+  --fs-fail-fg: #842c28;
+  --fs-pending-bg: #fff2d0;
+  --fs-pending-fg: #654700;
+}
+
+[data-md-color-scheme="slate"] {
+  --fs-training: #6ea8ea;
+  --fs-abnahme: #e8a254;
+  --fs-verworfen: #7a7a7a;
+  --fs-other: #b39ddb;
+  --fs-labeled: #4fbf75;
+  --fs-unlabeled: #4d6e8f;
+  --fs-dropped: #ef6b64;
+  --fs-line: #f0f0f0;
+  --fs-correct: #2f8b4f;
+  --fs-rejected: #4a4a4a;
+  --fs-cell-text: #f4f4f4;
+  --fs-wrong: #c62828;
+  --fs-wrong-stroke: #ff8a80;
+  --fs-wrong-text: #ffffff;
+  --fs-ram: #b39ddb;
+  --fs-limit: #ff8a80;
+  --fs-pass-bg: #1c4028;
+  --fs-pass-fg: #c2ebc8;
+  --fs-fail-bg: #502827;
+  --fs-fail-fg: #ffd1ce;
+  --fs-pending-bg: #443816;
+  --fs-pending-fg: #ffe4a0;
+}
+
+.fs-status {
+  border-left: .2rem solid var(--md-default-fg-color--lighter);
+  color: var(--md-default-fg-color--light);
+  margin: 1rem 0;
+  padding: .1rem .8rem;
+}
+.fs-status p { margin: .4rem 0; }
+.fs-status[data-state="error"] { border-left-color: var(--fs-wrong); color: var(--md-default-fg-color); }
+.fs-status[data-state="warning"] { border-left-color: var(--fs-abnahme); }
+
+.fs-chart { margin: .6rem 0 1.6rem; min-width: 0; }
+.fs-headline { font-weight: 700; margin: .3rem 0 .5rem; }
+.fs-plot { max-width: 100%; min-width: 0; }
+.fs-plot--scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fs-note, .fs-empty { color: var(--md-default-fg-color--light); font-size: .85em; margin: .4rem 0; }
+
+.fs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem .4rem;
+  margin: .3rem 0 .6rem;
+}
+.fs-legend-item,
+.fs-legend-key {
+  align-items: center;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .3rem;
+  color: var(--md-default-fg-color);
+  display: inline-flex;
+  font: inherit;
+  font-size: .8rem;
+  gap: .4rem;
+  padding: .15rem .5rem;
+}
+.fs-legend-item { background: transparent; cursor: pointer; }
+.fs-legend-item[aria-pressed="false"] { color: var(--md-default-fg-color--light); text-decoration: line-through; }
+.fs-legend-item[aria-pressed="false"] .fs-swatch { opacity: .25; }
+.fs-legend-item:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 1px; }
+.fs-legend-key { border-style: dashed; }
+
+.fs-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+  height: .8rem;
+  width: .8rem;
+}
+.fs-swatch.fs-fill--training { background: var(--fs-training); }
+.fs-swatch.fs-fill--abnahme { background: var(--fs-abnahme); }
+.fs-swatch.fs-fill--verworfen { background: var(--fs-verworfen); }
+.fs-swatch.fs-fill--other { background: var(--fs-other); }
+.fs-swatch.fs-fill--labeled { background: var(--fs-labeled); }
+.fs-swatch.fs-fill--unlabeled { background: var(--fs-unlabeled); }
+.fs-swatch.fs-fill--dropped { background: var(--fs-dropped); }
+.fs-swatch.fs-fill--correct { background: var(--fs-correct); }
+.fs-swatch.fs-fill--rejected,
+.fs-swatch.fs-fill--rejected-bar { background: var(--fs-rejected); }
+.fs-swatch.fs-fill--wrong { background: var(--fs-wrong); box-shadow: inset 0 0 0 2px var(--fs-wrong-stroke); }
+.fs-swatch--line { background: var(--fs-line); border-radius: 1rem; height: .2rem; }
+.fs-swatch--ram { background: var(--fs-ram); border-radius: 1rem; }
+.fs-swatch--limit { background: var(--fs-limit); height: .9rem; width: .15rem; }
+
+.fs-svg { display: block; font-family: inherit; overflow: visible; }
+.fs-svg text { font-size: 13px; pointer-events: none; }
+.fs-label { fill: var(--md-default-fg-color); }
+.fs-label--strong { font-weight: 700; }
+.fs-axis, .fs-value { fill: var(--md-default-fg-color--light); font-size: 12px !important; }
+.fs-grid { stroke: var(--md-default-fg-color--lightest); stroke-width: 1; }
+
+.fs-fill--training { fill: var(--fs-training); }
+.fs-fill--abnahme { fill: var(--fs-abnahme); }
+.fs-fill--verworfen { fill: var(--fs-verworfen); }
+.fs-fill--other { fill: var(--fs-other); }
+.fs-fill--labeled { fill: var(--fs-labeled); }
+.fs-fill--unlabeled { fill: var(--fs-unlabeled); }
+.fs-fill--dropped { fill: var(--fs-dropped); }
+.fs-fill--correct { fill: var(--fs-correct); }
+.fs-fill--rejected { fill: var(--fs-rejected); }
+.fs-fill--rejected-bar { fill: var(--md-default-fg-color--light); }
+.fs-fill--rejected-bar.fs-over { fill: var(--fs-abnahme); }
+.fs-missing { opacity: .4; }
+
+.fs-hit { cursor: pointer; fill: transparent; }
+.fs-hit:focus { outline: none; }
+.fs-hit.fs-active,
+.fs-hit:focus-visible { fill: var(--md-default-fg-color--lightest); stroke: var(--md-accent-fg-color); stroke-width: 1.5; }
+.fs-bar { transition: opacity .15s; }
+
+.fs-line { fill: none; stroke: var(--fs-line); stroke-width: 2; }
+.fs-dot { fill: var(--md-default-bg-color); stroke: var(--fs-line); stroke-width: 2; }
+.fs-axis--drop { fill: var(--md-default-fg-color); }
+.fs-ram { fill: var(--fs-ram); }
+.fs-ram-text { fill: var(--md-default-bg-color); font-size: 10px !important; font-weight: 700; }
+
+.fs-cell { cursor: pointer; }
+.fs-cell--none { fill: transparent; stroke: var(--md-default-fg-color--lighter); stroke-dasharray: 3 3; }
+.fs-cell--falsch { fill: var(--fs-wrong); stroke: var(--fs-wrong-stroke); stroke-width: 3; }
+.fs-cell.fs-active,
+.fs-cell:focus-visible { outline: none; stroke: var(--md-accent-fg-color); stroke-width: 2.5; }
+.fs-cell--falsch.fs-active { stroke-width: 4; }
+.fs-cell-text { fill: var(--fs-cell-text); font-weight: 600; }
+.fs-cell-text--falsch { fill: var(--fs-wrong-text); font-weight: 800; }
+
+.fs-track { fill: var(--md-default-fg-color--lightest); }
+.fs-track--pending { fill: transparent; stroke: var(--md-default-fg-color--lighter); stroke-dasharray: 4 3; }
+.fs-limit { stroke: var(--fs-limit); stroke-dasharray: 4 2; stroke-width: 2.5; }
+.fs-wrong-text { fill: var(--fs-wrong); font-weight: 700; }
+[data-md-color-scheme="slate"] .fs-wrong-text { fill: var(--fs-wrong-stroke); }
+.fs-badge--pass { fill: var(--fs-pass-bg); }
+.fs-badge--fail { fill: var(--fs-fail-bg); }
+.fs-badge--pending,
+.fs-badge--unknown { fill: var(--fs-pending-bg); }
+.fs-badge-text { font-size: 12px !important; font-weight: 700; }
+.fs-badge-text--pass { fill: var(--fs-pass-fg); }
+.fs-badge-text--fail { fill: var(--fs-fail-fg); }
+.fs-badge-text--pending,
+.fs-badge-text--unknown { fill: var(--fs-pending-fg); }
+
+.fs-tooltip {
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .3rem;
+  box-shadow: var(--md-shadow-z2, 0 2px 8px rgba(0, 0, 0, .25));
+  color: var(--md-default-fg-color);
+  font-size: .75rem;
+  line-height: 1.4;
+  max-width: min(22rem, calc(100vw - 16px));
+  padding: .4rem .6rem;
+  pointer-events: none;
+  position: fixed;
+  z-index: 10;
+}
+.fs-tooltip[hidden] { display: none; }
+.fs-tooltip strong,
+.fs-tooltip span { display: block; overflow-wrap: anywhere; }

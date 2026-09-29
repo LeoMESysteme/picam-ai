@@ -30,6 +30,7 @@
 | Dokument | Inhalt |
 | --- | --- |
 | [TIMING.md](TIMING.md) | Zeitbezug: Messprogramm M1–M8, gemessene Werte, Unsicherheitsbudget. Enthält den Grundsatz „Latenz ist nicht Zeitunsicherheit" |
+| [FORTSCHRITT.md](FORTSCHRITT.md) | Interaktive Diagramme: Proben je Gruppe, Ernten, `loo`-Entwicklung, Abnahmen. Daten aus `docs-site/assets/data/fortschritt.json` |
 | [VALIDATION.md](VALIDATION.md) | Fehlerklassen, Messreihen, Nachweise gegen die stillen Fehlermodi aus Konzept §7, Abnahmekriterien |
 
 ## Hardware und Aufbau

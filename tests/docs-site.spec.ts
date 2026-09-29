@@ -1,4 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
 
 test('OQ-Fokus, Filter und Suche bleiben mit den Einträgen verlinkt', async ({ page }) => {
   await page.goto('/docs/open-questions.html');
@@ -199,4 +201,101 @@ test('API-Verweise erklären Klasse und Funktion kurz', async ({ page }) => {
   const methodPopup = page.locator('.md-tooltip2--active').last();
   await expect(methodPopup).toContainText('JSONL-Log');
   expect((await methodPopup.innerText()).length).toBeLessThan(250);
+});
+
+const progressFixture = readFileSync(join(__dirname, 'fixtures', 'fortschritt-beispiel.json'), 'utf-8');
+
+async function openProgress(page: Page) {
+  await page.route('**/assets/data/fortschritt.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: progressFixture }),
+  );
+  await page.goto('/docs/FORTSCHRITT.html');
+}
+
+test('Fortschrittsseite rendert alle vier Diagramme aus den Daten', async ({ page }) => {
+  await openProgress(page);
+  for (const chart of ['dataset', 'harvests', 'loo', 'abnahmen']) {
+    const container = page.locator(`[data-fs-chart="${chart}"]`);
+    await expect(container).toHaveAttribute('data-fs-ready', 'true');
+    await expect(container.locator('svg')).toHaveCount(1);
+  }
+  await expect(page.locator('[data-fs-chart="dataset"] .fs-headline')).toContainText('Summe: 657 Proben');
+  await expect(page.locator('[data-fs-chart="harvests"] [data-ram]')).toHaveCount(1);
+  await expect(page.locator('[data-fs-chart="harvests"]')).toContainText('RAM-Zwischenablage seit 2026-09-29');
+  const abnahmen = page.locator('[data-fs-chart="abnahmen"]');
+  await expect(abnahmen.locator('.fs-abnahme--fail')).toHaveCount(1);
+  await expect(abnahmen.locator('.fs-abnahme--pending')).toContainText('Abnahme 2 (bg_closing_v1)');
+  await expect(abnahmen.locator('.fs-limit')).toHaveCount(2);
+});
+
+test('Fortschrittsdiagramm zeigt beim Überfahren einen Tooltip', async ({ page }) => {
+  await openProgress(page);
+  const tooltip = page.locator('.fs-tooltip');
+  await page.locator('[data-fs-chart="harvests"] .fs-hit[data-run="sc6-run"]').hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('sc6-run');
+  await expect(tooltip).toContainText('Aufgenommen: 2.468 Bilder');
+  await page.locator('[data-fs-chart="loo"] g[data-group="auf2"][data-run="loo (e)"] .fs-cell').hover();
+  await expect(tooltip).toContainText('richtig 0 · abgelehnt 76 · falsch 0');
+  await expect(tooltip).toContainText('d_max');
+});
+
+test('Legende blendet eine Rolle im Datensatz aus und wieder ein', async ({ page }) => {
+  await openProgress(page);
+  const chart = page.locator('[data-fs-chart="dataset"]');
+  await expect(chart.locator('[data-role="abnahme"]')).toHaveCount(2);
+  const toggle = chart.getByRole('button', { name: 'Abnahme' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(chart.locator('[data-role="abnahme"]')).toHaveCount(0);
+  await expect(chart.locator('[data-role="training"]')).toHaveCount(3);
+  await toggle.click();
+  await expect(chart.locator('[data-role="abnahme"]')).toHaveCount(2);
+});
+
+test('loo-Zelle mit falscher Lesung ist rot hervorgehoben', async ({ page }) => {
+  await openProgress(page);
+  const wrong = page.locator('[data-fs-chart="loo"] .fs-cell--falsch');
+  await expect(wrong).toHaveCount(1);
+  await expect(page.locator('[data-fs-chart="loo"] g.fs-cell-group--falsch')).toHaveAttribute('data-group', 'test_rot');
+  const [red, green, blue] = await wrong.evaluate((cell) =>
+    getComputedStyle(cell).fill.match(/\d+/g)!.slice(0, 3).map(Number),
+  );
+  expect(red).toBeGreaterThan(150);
+  expect(green).toBeLessThan(90);
+  expect(blue).toBeLessThan(90);
+  await expect(page.locator('[data-fs-chart="loo"] .fs-headline')).toContainText('1 Zelle mit falschen Lesungen');
+});
+
+test('fehlende Fortschrittsdaten ergeben eine lesbare Meldung', async ({ page }) => {
+  await page.route('**/assets/data/fortschritt.json', (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.goto('/docs/FORTSCHRITT.html');
+  const status = page.locator('[data-fs-status]');
+  await expect(status).toHaveAttribute('data-state', 'error');
+  await expect(status).toContainText('Die Fortschrittsdaten fehlen noch');
+  await expect(page.locator('[data-fs-chart="dataset"]')).toContainText('Keine Daten.');
+});
+
+test('Fortschrittsseite bleibt auf dem Handy ohne horizontales Seiten-Scrollen', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 800 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  await page.route('**/assets/data/fortschritt.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: progressFixture }),
+  );
+  await page.goto('http://127.0.0.1:8766/docs/FORTSCHRITT.html');
+  await expect(page.locator('[data-fs-chart="loo"]')).toHaveAttribute('data-fs-ready', 'true');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.locator('[data-fs-chart="abnahmen"] .fs-hit').first().tap();
+  await expect(page.locator('.fs-tooltip')).toBeVisible();
+  await context.close();
+});
+
+test('Sofortnavigation zeichnet die Fortschrittsdiagramme erneut', async ({ page }) => {
+  await page.route('**/assets/data/fortschritt.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: progressFixture }),
+  );
+  await page.goto('/docs/TIMING.html');
+  await page.getByRole('link', { name: 'Fortschritt Ernten/Training' }).first().click();
+  await expect(page.locator('[data-fs-chart="abnahmen"]')).toHaveAttribute('data-fs-ready', 'true');
+  await expect(page.locator('[data-fs-chart="loo"] .fs-cell--falsch')).toHaveCount(1);
 });
