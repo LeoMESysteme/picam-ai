@@ -13,8 +13,8 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
-Gegenprobe je Zeichen 0 Abweichungen. Datensatz 629 Proben, Dot-Matrix 541 in 6
-Gruppen (`ernte1` 152, `sc5` 114, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 47 mit Profil `sc3b`). Die Aufnahmen `sc1`/`sc2`
+Gegenprobe je Zeichen 0 Abweichungen. Dot-Matrix 811 Proben in 9
+Gruppen (`ernte1` 152, `sc5` 114, `ab1` 99, `sc6` 88, `ab2` 83, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 47 mit Profil `sc3b`). Die Aufnahmen `sc1`/`sc2`
 waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2026-09-28/29).
 
@@ -57,13 +57,18 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
     schreiben. Während jeder Aufnahme liegt
     `var/RECORDING_IN_PROGRESS` (von Claude angelegt und entfernt), dann
     lässt Codex die volle Testsuite ruhen. Claude reviewt und merged.
+11. `sc6` erledigt am 2026-09-29 (88 Proben, ROM 0, Stufe 2 liest 88/88).
+    `loo` mit 9 Gruppen: 0 falsch in 811 Proben, alle scharfen Gruppen
+    vollständig richtig, `ab2` weiter 0/83 (VALIDATION.md „Aufstellung
+    `sc6`“). Weitere Trainingsaufstellungen sind möglich, der Engpass
+    bleibt aber Punkt 8.
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
   Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
   auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
 * **Verworfene Bilder trotz freier Karte:** `sc3-cal-c` 16 %, `sc4-run` 19 %
-  `sc5-run` 22 %, `ab1-run` 30 %, `ab2-run` 18 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
+  `sc5-run` 22 %, `ab1-run` 30 %, `ab2-run` 18 %, `sc6-run` 34 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
   (≤ 3 je Plateau), für Timing-Aufnahmen weniger Ereignisse. Möglich: größere
   Warteschlange oder weniger JPEG-Qualität. Erst messen.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas

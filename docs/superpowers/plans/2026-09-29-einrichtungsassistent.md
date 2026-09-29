@@ -151,9 +151,12 @@ print("quad",quad.round(1).tolist()); json.dump(quad.tolist(),open(out,"w"))
 | `sc5` | 41,3 | 2 | 4,24 | 159/162, 0,10 / 0,14 | gut |
 | `ab1` | 42,2 | 1 | 4,32 | 190/193, 0,11 / 0,17 | gut |
 | `ab2` | 31,2 | 4 | 3,39 | 175/183, 0,10 / 0,16 | **Spiegelkante durch Leerzelle 8 → Leser lehnt 100 % ab** |
+| `sc6` | 20,8 (links 11–13, rechts 22–24) | – | 7,00 | 197/209, 0,13 / 0,14 | gut; Schrift zur Bildecke hin weicher |
 | verworfen: Kamera von unten | 8,3 / 8,9 / 9,3 | 9–17 | – | – | blass, Lichtschleier |
 | verworfen: Glanzfleck Deckenleuchte | – | – | – | – | weißes Rechteck über den Ziffern |
 | verworfen: Spiegelung Monitor | – | – | – | – | dunkler Keil über Zellen 13–15 |
+| verworfen: `sc6` erster Stand | – | – | – | – | Glanzfleck, 74–86 % gesättigt über Zellen 10–15 |
+| verworfen: `sc6` zweiter Stand | 27,0 | – | 5,59 | 261/453, 0,17 / 0,22 | **Fensterrahmen verdeckt letzte Punktspalte von Zelle 15** (Helligkeit 44 statt 94) → Leser lehnt 100 % ab (`format`) |
 
 \* Punktkontrast = 99. Perzentil von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)`
 im Graubild über dem Textbereich, in Quellpixeln. Das ist Claudes Handmaß,
@@ -161,7 +164,8 @@ nicht `SampledImage.contrast` des Lesers. Beide sollen im Bericht stehen.
 
 Stillbilder mit Profil liegen unter
 `/home/me-systeme/picam-ai/var/diagnostics/<name>-still/frames/frame_000017.png`
-für `sc3`, `sc4`, `sc5`, `ab1`, `ab2` (nur lesen). Die zugehörigen
+für `sc3`, `sc4`, `sc5`, `ab1`, `ab2` (nur lesen). Bei `sc6` heißt das Bild
+`frame_000015.png`. Die zugehörigen
 bestätigten Quads stehen in `var/diagnostics/<name>-profile` (bei `sc3`:
 `sc3b-profile`). Die Bilder der verworfenen Zwischenstände existieren nicht
 mehr.
@@ -225,6 +229,18 @@ def fit_lattice(image_bgr, hint_box, *, seeds=None) -> LatticeFit | str
 - [ ] **1c Absicherung der Zuordnung:** Die Zelle 0 muss Punkte haben, denn
   das Vorzeichen `+` ist immer da. Die Zeilen 0–6 müssen belegt sein, die
   Cursorzeile 7 muss leer bleiben. Fällt eine Bedingung, wird abgelehnt.
+  **Nachtrag 2026-09-29 (`sc6`):** Zusätzlich dürfen die Leerzellen des
+  Formats `gsv2as_v1` keine zugeordneten Punkte haben: Zelle 8 (zwischen
+  Zahlenblock und Einheit) und die Zellen 13–15. Ein kleiner Restfehler
+  beweist **nicht**, dass das Raster stimmt. Bei `sc6` lag eine Anpassung
+  aus handgelesenen Stützpunkten gut zwei Punktspalten daneben und war
+  geschert, trotzdem betrug der Restfehler nur 0,17 / 0,21. Das einzige
+  Warnzeichen waren Punkte in Leerzelle 8. Regressionsfall: dieselbe
+  Anpassung mit den Stützpunkten
+  `527.5,515.6:0,3 558,543:7,6 1005,613.7:76,0 974.4,654.4:74,6` gilt für
+  den verworfenen zweiten Stand, dessen Bild nicht mehr existiert.
+  Deshalb synthetisch nachbauen: ein Raster um zwei Spalten verschoben
+  → Ablehnung.
 - [ ] **1d Regression auf echten Standbildern (nur lesen):** Ein Test mit
   Marker `@pytest.mark.skipif(not path.exists())` läuft über die fünf
   Standbilder `sc3`, `sc4`, `sc5`, `ab1`, `ab2`, als Hinweisbox die Bounding
@@ -268,6 +284,21 @@ Bericht, die Ampel ist nur die Lesart.
   `frame_alignment.estimate_quad_shift`. FEHLER über 0,5 px, WARNUNG über
   0,2 px oder bei einer unzuverlässigen Schätzung. Gemessen wurden bei festen
   Aufstellungen 0,01–0,13 px, bei bewegter Kamera 45–190 px.
+- [ ] **2h Rahmen verdeckt Randzellen (Nachtrag `sc6`):** Die äußeren
+  Punktspalten (Zelle 0 Spalte 0, Zelle 15 Spalte 4) mit dem Median der
+  Nachbarspalten derselben Zelle vergleichen, dazu die Zeilen 0 und 6
+  gegen die Innenzeilen. FEHLER, wenn eine Randspalte oder Randzeile in
+  einer Leerzelle deutlich dunkler ist (Vorschlag: unter 70 % der
+  Nachbarn). Bei `sc6` (zweiter Stand) waren es 44 gegen 94. Synthetisch
+  testen, dazu ein Fall mit sauberem Rand (keine Meldung).
+- [ ] **2i Gegenlesen mit dem eingefrorenen Leser (Nachtrag `sc6`):** Wenn
+  eine Vorlagendatei samt sha256 übergeben wird, liest `assist` die
+  Standbilder mit `DotMatrixReader` und meldet Lesequote und
+  Ablehnungsgründe. Die Anzeige wird dabei nicht mit einem Sollwert
+  verglichen, der Assistent kennt ihn nicht. WARNUNG, wenn mehr als die
+  Hälfte der Bilder mit `format` oder `zelle_unbekannt` abgelehnt wird.
+  Nur Diagnose, kein FEHLER: eine neue Aufstellung soll ja gerade Neues
+  zeigen. Der Leser bleibt unverändert, nur importieren.
 - [ ] **2g Gesamturteil:** FEHLER, sobald eine Prüfung FEHLER meldet, sonst
   WARNUNG, sobald eine WARNUNG meldet, sonst OK. Ausgabe als dataclass und
   `to_dict()` für JSON.

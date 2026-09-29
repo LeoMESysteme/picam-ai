@@ -2060,3 +2060,65 @@ Teil erscheint als Tinte. Der Leser lehnt das ab, statt ein Zeichen zu raten.
 Ein Ansatz für die nächste Entwicklungsrunde wäre eine Hintergrundschätzung,
 die gegen Helligkeitskanten innerhalb einer Zelle robust ist. `ab2` darf
 dafür jetzt als Entwicklungsdaten dienen.
+
+## 2026-09-29 — Aufstellung `sc6` (Trainingsgruppe) und `loo` mit neun Gruppen
+
+**Aufstellung `sc6`:** Kamera von oben auf den Sensor, Anzeige fast gerade
+in der unteren linken Bildecke, Fokus 56. Zwei Zwischenstände wurden vor
+der Bestätigung verworfen:
+* Ein Glanzfleck (74–86 % gesättigte Pixel) lag über den Zellen 10–15.
+* Beim zweiten Stand verdeckte der erhöhte rechte Fensterrahmen bei schrägem
+  Blick von links die letzte Punktspalte von Zelle 15. Sie war dunkel
+  (Helligkeit 44 statt 94), und der Leser lehnte jedes Bild mit `format`
+  ab (Zellen 13–15 nicht leer).
+
+Werte der bestätigten Aufstellung (Profil `var/diagnostics/sc6-profile`,
+bestätigt von Leonhard Hentschke):
+* Hintergrund 83–87, keine gesättigten Pixel.
+* Punktkontrast 20,8 gesamt, nach links abfallend: 11–13 bei `+0.` gegen
+  22–24 bei `mV/V`. Vermutlich bildet das Objektiv in der Bildecke
+  unschärfer ab.
+* Kleinste Punktspalte 7,0 px.
+* Rasteranpassung mit Restfehler 0,13 / 0,14 Punktabständen.
+* Stabilität 0,06 px.
+
+Ernte: 30 Schritte à 6 s, 2468 Bilder aufgenommen, 1269 wegen voller
+Schreib-Warteschlange verworfen (34 %), keine Zeitlücke. 1254 Bilder
+beschriftet, 88 Proben importiert (1 wegen Zellinkonsistenz abgelehnt),
+Ausrichtung max. 0,19 px. Eintrag in der Profilzuordnung, Vorstand als
+`dotmatrix-profile-map.v4.json`.
+
+**Befund Rasteranpassung:** Die erste Anpassung mit handgelesenen
+Stützpunkten lag gut zwei Punktspalten daneben und war geschert. Der
+Restfehler war trotzdem klein (0,17 / 0,21), weil die Punkte sich einem
+verschobenen Raster ebenso zuordnen lassen. Aufgefallen ist es erst beim
+Gegenlesen des Standbilds mit dem Leser. Ein Warnzeichen wäre die Leerzelle
+8 gewesen, die Punkte zugeordnet bekam. Beide Prüfungen, Leerzellen leer
+und Gegenlesen mit dem Leser, gehören in den Einrichtungsassistenten.
+
+**Stufe 2 auf `sc6`** (`dotmatrix-eval.py abnahme --groups sc6`, nur
+Diagnose, keine Abnahme; `var/diagnostics/sc6-stufe2-diagnose.json`):
+88 richtig, 0 falsch, 0 abgelehnt.
+
+**`loo`** (`--train-eligibility rom_per_group`, Code `48c31b3`,
+`var/diagnostics/dotmatrix-loo-2026-09-29-mit-sc6.json`, 811 Proben).
+`ab1`/`ab2` sind nach der nicht bestandenen Abnahme Trainingsgruppen. Zum
+Training zugelassen sind alle Gruppen außer `auf3`. `auf2` hat mit
+`ink_per_cell_v1` nur noch je eine Punktabweichung bei `3`, `4` und `7`
+und ist damit zugelassen.
+
+| Testgruppe | d_max | Proben richtig / abgelehnt / falsch | Plateaus richtig / abgelehnt / falsch |
+| --- | --- | --- | --- |
+| `ab1` | 3,098 | 99 / 0 / 0 | 34 / 0 / 0 |
+| `ab2` | 2,800 | 0 / 83 / 0 | 0 / 28 / 0 |
+| `auf2` | 3,127 | 43 / 33 / 0 | 15 / 11 / 0 |
+| `auf3` | 3,247 | 69 / 4 / 0 | 25 / 1 / 0 |
+| `ernte1` | 3,019 | 152 / 0 / 0 | 56 / 0 / 0 |
+| `sc3` | 3,218 | 47 / 0 / 0 | 17 / 0 / 0 |
+| `sc4` | 3,155 | 79 / 0 / 0 | 27 / 0 / 0 |
+| `sc5` | 3,069 | 114 / 0 / 0 | 38 / 0 / 0 |
+| `sc6` | 3,099 | 88 / 0 / 0 | 30 / 0 / 0 |
+
+0 falsch in 811 Proben. `ab2` bleibt vollständig abgelehnt (Spiegelkante in
+Zelle 8, siehe Abnahme). `auf2` (43 statt 0 richtig) und `auf3` (69 statt
+61) profitieren davon, dass mehr Gruppen im Training sind.
