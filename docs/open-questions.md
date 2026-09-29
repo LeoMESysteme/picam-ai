@@ -1985,6 +1985,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Aufstellungen fürs Training; ob die festgelegte Messung Aufstellungen
   unterhalb einer Schärfegrenze aus dem **Training** ausschliessen darf,
   braucht eine Entscheidung vor dem nächsten Lauf.
+* **Nachtrag 2026-09-29 (Entscheidung Nutzer):** Die Zulassung zum Training
+  wird vor dem Lauf je Gruppe festgestellt: Eine Gruppe trainiert nur, wenn
+  sie **für sich allein** alle Klassen enthält und `rom_check_v2` besteht.
+  Nicht zugelassene Gruppen bleiben Testgruppe. Umgesetzt als
+  `dotmatrix-eval.py loo --train-eligibility rom_per_group`. Toleranz und
+  Schwellen bleiben unverändert. Stand vor dem Lauf, je Gruppe gegen das ROM:
+  `ernte1`, `sc3`, `sc4` 0 Punkte, `auf2` max. 2, `auf3` max. 5.
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

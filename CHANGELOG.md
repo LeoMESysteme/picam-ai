@@ -3,6 +3,27 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Trainingszulassung je Gruppe, OQ-42)
+
+**Problem:** Die festgelegte Messung `dotmatrix-eval.py loo` trainiert jeden
+Durchgang auf allen übrigen Gruppen. Weiche oder verschobene Aufstellungen
+(`auf2` max. 2, `auf3` max. 5 Punkte neben dem ROM) lassen damit jeden
+Durchgang, in dem sie trainieren, an der ROM-Gegenprobe scheitern (Exit 3).
+OQ-42 verlangte eine Entscheidung vor dem nächsten Lauf.
+
+**Änderung:** `loo --train-eligibility rom_per_group` (Nutzerentscheidung
+2026-09-29). Ins Training kommen nur Gruppen, die für sich allein alle
+Klassen enthalten und `rom_check_v2` bestehen. Die Zulassung rechnet nur auf
+den Proben der Gruppe selbst, vor jedem Durchgang. Nicht zugelassene Gruppen
+bleiben Testgruppe. Fehlt einem Durchgang jede zugelassene Trainingsgruppe:
+Exit 2, kein Bericht. Der Bericht führt `training_eligibility` (Regel, je
+Gruppe zugelassen, ROM-Abweichungen bzw. fehlende Klassen). Vorgabe bleibt
+`all`, damit sich frühere Läufe nachvollziehen lassen. Tests:
+`tests/test_dotmatrix_train_eval.py` (5 neue).
+
+**Konsequenz:** Die festgelegte Messung läuft mit `rom_per_group`. Die
+ROM-Toleranz und die Schwellen bleiben unverändert.
+
 ## 0.1.0.dev0 — 2026-09-25 (Kamerawechsel: Logitech StreamCam statt IMX500)
 
 **Problem:** Die IMX500 (AI Camera) blieb beim Streamstart hängen

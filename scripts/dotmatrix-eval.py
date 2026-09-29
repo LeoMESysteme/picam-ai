@@ -21,6 +21,15 @@ sitzendem Profil (z. B. Kamera zwischen Bestaetigung und Ernte verschoben).
 Ausgeschlossene Gruppen erscheinen in keinem Durchgang und werden im
 Bericht unter `excluded_groups` mit ihrem Grund aufgefuehrt.
 
+`--train-eligibility rom_per_group` (OQ-42, Entscheidung 2026-09-29): ins
+Training kommen nur Gruppen, die **fuer sich allein** die ROM-Gegenprobe
+(`rom_check_v2`) bestehen und alle Klassen enthalten. Die Zulassung haengt
+nur von den Proben der Gruppe selbst ab, nie von einer Testgruppe, und wird
+vor jedem Durchgang einmal festgestellt. Nicht zugelassene Gruppen bleiben
+Testgruppe. Bleibt fuer einen Durchgang keine zugelassene Trainingsgruppe
+uebrig, wird abgebrochen (Exit 2, kein Bericht). Vorgabe `all`: alle
+Gruppen trainieren wie bisher.
+
 `reader-check` belegt, dass der volle Leser (`DotMatrixReader.read`, mit
 Kontrast-/Saettigungspruefung) und diese Messung (`evaluate`, ohne beide)
 auf denselben echten Proben dieselbe Entscheidung treffen - abgesehen von
@@ -40,13 +49,16 @@ from pathlib import Path
 
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
+from dispread.ocr.dotmatrix_font import CLASSES
 from dispread.ocr.dotmatrix_sampling import normalized, sample_image
 from dispread.ocr.dotmatrix_templates import (
     ROM_CHECK,
     THRESHOLD_FORMULA,
     Templates,
     classify,
+    fit_templates,
     load_templates,
+    rom_check,
     rom_deviations,
 )
 
@@ -139,6 +151,22 @@ def evaluate(samples, t: Templates) -> dict:
     return {"summary": summary, "confusion": confusion, "plateaus": plateaus}
 
 
+def _group_eligibility(samples, train_mod) -> dict:
+    """Zulassung einer Gruppe zum Training nach `rom_per_group`: alle
+    Klassen vorhanden und `rom_check` leer, gerechnet nur auf den Proben
+    dieser einen Gruppe."""
+    samples_by_char = train_mod.build_samples_by_char(samples)
+    missing = [c for c in CLASSES if not samples_by_char.get(c)]
+    if missing:
+        return {"eligible": False, "missing_classes": missing}
+    mean, _std = fit_templates(samples_by_char, ())
+    devs = rom_deviations(mean)
+    return {
+        "eligible": not rom_check(mean),
+        "rom_deviations": {ch: n for ch, n in devs.items() if n >= 1},
+    }
+
+
 def _cmd_loo(args: argparse.Namespace) -> int:
     dataset = _load_dataset_module()
     train_mod = _load_train_module()
@@ -154,13 +182,32 @@ def _cmd_loo(args: argparse.Namespace) -> int:
     all_samples = [s for s in all_samples if s.group not in exclude_groups]
     groups = sorted({s.group for s in all_samples})
 
+    eligibility: dict = {"rule": args.train_eligibility}
+    trainable = set(groups)
+    if args.train_eligibility == "rom_per_group":
+        eligibility["rom_check"] = ROM_CHECK
+        eligibility["groups"] = {
+            g: _group_eligibility([s for s in all_samples if s.group == g], train_mod) for g in groups
+        }
+        trainable = {g for g, e in eligibility["groups"].items() if e["eligible"]}
+        for g in groups:
+            state = "zugelassen" if g in trainable else "nicht zugelassen"
+            print(f"Training: Gruppe {g!r} {state} ({ROM_CHECK} je Gruppe)")
+        for held_out in groups:
+            if not trainable - {held_out}:
+                print(
+                    f"Durchgang mit Testgruppe {held_out!r}: keine zugelassene Trainingsgruppe - kein Bericht geschrieben.",
+                    file=sys.stderr,
+                )
+                return 2
+
     herkunft: dict[str, int] = {}
     for s in all_samples:
         herkunft[s.label_origin] = herkunft.get(s.label_origin, 0) + 1
 
     durchgaenge = []
     for held_out in groups:
-        train_samples = [s for s in all_samples if s.group != held_out]
+        train_samples = [s for s in all_samples if s.group != held_out and s.group in trainable]
         test_samples = [s for s in all_samples if s.group == held_out]
         train_groups = tuple(sorted({s.group for s in train_samples}))
 
@@ -188,6 +235,7 @@ def _cmd_loo(args: argparse.Namespace) -> int:
         "groups": groups,
         "durchgaenge": durchgaenge,
         "excluded_groups": [{"group": g, "reason": args.exclude_reason} for g in sorted(exclude_groups)],
+        "training_eligibility": eligibility,
         "lade_zaehler": stats,
         "herkunft": herkunft,
         "hinweis": (
@@ -286,6 +334,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     loo.add_argument(
         "--exclude-reason", default=None, help="Begruendung fuer --exclude-groups, steht im Bericht (Pflicht, wenn gesetzt)."
+    )
+    loo.add_argument(
+        "--train-eligibility",
+        choices=("all", "rom_per_group"),
+        default="all",
+        help="Welche Gruppen ins Training duerfen: 'all' (Vorgabe) oder 'rom_per_group' - nur Gruppen, "
+        "die fuer sich allein die ROM-Gegenprobe bestehen und alle Klassen enthalten (OQ-42). "
+        "Nicht zugelassene Gruppen bleiben Testgruppe.",
     )
     loo.set_defaults(func=_cmd_loo)
 

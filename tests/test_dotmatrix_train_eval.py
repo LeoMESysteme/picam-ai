@@ -613,3 +613,102 @@ def test_loo_exclude_groups_requires_reason(tmp_path):
 
     assert rc == 2
     assert not out.exists()
+
+
+# --- OQ-42 (Entscheidung 2026-09-29): Trainingszulassung je Gruppe ----------
+
+
+def _mislabel_sevens_as_ones(dataset_root: Path, group: str) -> None:
+    """Alle '7'-Proben von `group`: Bild zeigt '1', Label bleibt '7' - die
+    Gruppe fuer sich scheitert damit an der ROM-Gegenprobe."""
+    for sample_dir in sorted((dataset_root / "samples").glob(f"{group}-*")):
+        sample = json.loads((sample_dir / "sample.json").read_text(encoding="utf-8"))
+        label_text = sample["label_origin_detail"]["cell_text"][:9]
+        if "7" not in label_text:
+            continue
+        bad = label_text.replace("7", "1")
+        cv2.imwrite(str(sample_dir / "image.png"), _full_frame(bad, np.random.default_rng(99)))
+
+
+def _loo(dataset_root: Path, map_path: Path, out: Path, *extra: str) -> int:
+    return eval_mod.main(
+        ["loo", "--dataset-root", str(dataset_root), "--profile-map", str(map_path), "--out", str(out), *extra]
+    )
+
+
+def test_loo_rom_per_group_keeps_failing_group_out_of_training_but_tests_it(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    _mislabel_sevens_as_ones(dataset_root, "g3")
+    out = tmp_path / "report.json"
+
+    rc = _loo(dataset_root, map_path, out, "--train-eligibility", "rom_per_group")
+
+    assert rc == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["groups"] == ["g1", "g2", "g3"]
+    elig = report["training_eligibility"]
+    assert elig["rule"] == "rom_per_group"
+    assert elig["rom_check"] == "rom_check_v2"
+    assert elig["groups"]["g1"]["eligible"] is True
+    assert elig["groups"]["g2"]["eligible"] is True
+    assert elig["groups"]["g3"]["eligible"] is False
+    assert elig["groups"]["g3"]["rom_deviations"]["7"] > 1
+    assert [d["test_group"] for d in report["durchgaenge"]] == ["g1", "g2", "g3"]
+    for durchgang in report["durchgaenge"]:
+        assert "g3" not in durchgang["train_groups"]
+        assert durchgang["test_group"] not in durchgang["train_groups"]
+    by_test = {d["test_group"]: d for d in report["durchgaenge"]}
+    assert by_test["g3"]["train_groups"] == ["g1", "g2"]
+    assert by_test["g1"]["train_groups"] == ["g2"]
+
+
+def test_loo_default_trains_on_all_groups_and_fails_rom_check(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    _mislabel_sevens_as_ones(dataset_root, "g3")
+    out = tmp_path / "report.json"
+
+    rc = _loo(dataset_root, map_path, out)
+
+    assert rc == 3
+    assert not out.exists()
+
+
+def test_loo_rom_per_group_group_missing_a_class_is_not_eligible(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    # g3 ohne jede Probe mit '7' - fuer sich nicht pruefbar.
+    for sample_dir in sorted((dataset_root / "samples").glob("g3-*")):
+        sample = json.loads((sample_dir / "sample.json").read_text(encoding="utf-8"))
+        if "7" in sample["label_origin_detail"]["cell_text"][:9]:
+            for f in sample_dir.iterdir():
+                f.unlink()
+            sample_dir.rmdir()
+    out = tmp_path / "report.json"
+
+    rc = _loo(dataset_root, map_path, out, "--train-eligibility", "rom_per_group")
+
+    assert rc == 0
+    elig = json.loads(out.read_text(encoding="utf-8"))["training_eligibility"]["groups"]["g3"]
+    assert elig["eligible"] is False
+    assert "7" in elig["missing_classes"]
+
+
+def test_loo_rom_per_group_rejects_fold_without_eligible_training_group(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    _mislabel_sevens_as_ones(dataset_root, "g2")
+    _mislabel_sevens_as_ones(dataset_root, "g3")
+    out = tmp_path / "report.json"
+
+    # Nur g1 zulaessig: der Durchgang mit Testgruppe g1 haette kein Training.
+    rc = _loo(dataset_root, map_path, out, "--train-eligibility", "rom_per_group")
+
+    assert rc == 2
+    assert not out.exists()
+
+
+def test_loo_report_without_flag_records_rule_all(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    out = tmp_path / "report.json"
+
+    assert _loo(dataset_root, map_path, out) == 0
+    elig = json.loads(out.read_text(encoding="utf-8"))["training_eligibility"]
+    assert elig == {"rule": "all"}
