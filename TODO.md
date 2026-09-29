@@ -9,12 +9,12 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst (2026-09-29): zweite Aufstellung, dann `loo`
+## Zuerst: weitere feste Aufstellungen, dann `loo` erneut
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
-Gegenprobe je Zeichen 0 Abweichungen. Datensatz 435 Proben, geerntet in 4
-Gruppen (`ernte1` 152, `auf2` 76, `auf3` 73, `sc3` 46). Die Aufnahmen `sc1`/`sc2`
+Gegenprobe je Zeichen 0 Abweichungen. Datensatz 514 Proben, Dot-Matrix 426 in 5
+Gruppen (`ernte1` 152, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 46). Die Aufnahmen `sc1`/`sc2`
 waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2026-09-28/29).
 
@@ -26,14 +26,24 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2. Optional `gate-label` für `sc3-run` mit dem neuen M neu laufen lassen und
    neu importieren. Das bringt mehr Ausbeute. Die jetzigen Labels (mit altem,
    größerem M) bleiben gültig.
-3. Eine zweite feste Aufstellung (anderer Winkel/Abstand) ernten, damit zwei
-   scharfe Gruppen vorliegen. Reflexe erst in voller Auflösung prüfen.
-4. **OQ-42 entscheiden** (Nutzer), dann `dotmatrix-eval.py loo`.
+3. ~~Zweite feste Aufstellung~~ `sc4` erledigt am 2026-09-29 (79 Proben, 0
+   Abweichungen vom ROM). ~~OQ-42~~ ist entschieden (`--train-eligibility
+   rom_per_group`), `loo` ist gelaufen. Ergebnis: nie ein falscher Wert,
+   `sc4` 79/79 richtig, `ernte1` 91/152, `sc3` 0/46 (Zellen 5–7 über d_max),
+   `auf2`/`auf3` alle abgelehnt (VALIDATION.md 2026-09-29).
+4. **Nächster Schritt:** weitere feste Aufstellungen (anderer Winkel,
+   Abstand, Licht) ernten, damit d_max die Streuung zwischen Aufstellungen
+   abdeckt, dann `loo` mit derselben Regel erneut laufen lassen. Schwellen
+   nicht an der Auswertung nachstellen.
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
   Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
   auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
+* **Verworfene Bilder trotz freier Karte:** `sc3-cal-c` 16 %, `sc4-run` 19 %
+  (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
+  (≤ 3 je Plateau), für Timing-Aufnahmen weniger Ereignisse. Möglich: größere
+  Warteschlange oder weniger JPEG-Qualität. Erst messen.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas
   (Blende, Drehung); das Quad kam aus einer Punktgitter-Homographie (Skript-
   Schnipsel im Sitzungsverlauf). Werkzeug dafür in `harvest-setup` einbauen,

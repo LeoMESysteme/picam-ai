@@ -28,15 +28,19 @@ umgesetzt und reviewt. Ledger:
   gegen das Profilbild (`ausschnitt_verschoben`).
 * **Aufstellung `sc3`** (Kamera fest auf dem Tisch, Reflexe durch Drehen des
   Displays vermieden): 46 Proben importiert, Ausrichtung max. 0,08 px,
-  ROM-Gegenprobe je Zeichen 0 Abweichungen. Datensatz 435 Proben.
+  ROM-Gegenprobe je Zeichen 0 Abweichungen.
+* **Aufstellung `sc4`** (2026-09-29, flacher und schräg von links): 79
+  Proben, 0 Abweichungen vom ROM. Datensatz 514 Proben (Dot-Matrix 426).
 * **Timing-Kalibrierung neu** (2026-09-29, `sc3-cal-a/b/c`, Kamera fest):
   M = 325,9 ms, Anzeigeversatz 89,6 ms, σ_δ 2–26 ms. Ersetzt die vorläufige
   Datei aus den verschobenen Aufnahmen (M = 1225,8 ms).
-* **Dot-Matrix-Leser:** fertig und geprüft, nie ein falscher Wert. Die
-  festgelegte Messung (`loo`) wartet auf eine zweite scharfe Aufstellung und
-  die Entscheidung zu [OQ-42](open-questions.md).
+* **Dot-Matrix-Leser, festgelegte Messung** (`loo`, 2026-09-29, Training nur
+  mit Gruppen, die für sich die ROM-Gegenprobe bestehen, OQ-42): nie ein
+  falscher Wert. `sc4` 79/79 richtig, `ernte1` 91/152, `sc3` 0/46, `auf2`/`auf3`
+  abgelehnt. Mit zwei Aufstellungen im Training ist d_max zu eng für eine
+  dritte; es braucht mehr Aufstellungen.
 * **SD-Karte** lief am 2026-09-28 voll (Aufnahmen 1,3–1,8 GB); Einzelbilder
-  der verworfenen Aufnahmen gelöscht, 7,6 GB frei. Lokale Sicherungen unter
+  der verworfenen Aufnahmen gelöscht, nach dem Löschen der Einzelbilder 2026-09-29 9,1 GB frei. Lokale Sicherungen unter
   `/home/me-systeme/var-backups/`, keine auf einem anderen Medium.
 
 ## Zensical-Doku und Pflege
@@ -49,7 +53,7 @@ Build, Vorschau-Ankern und Browsertests vor jedem Push. Details:
 
 ## Nächste Schritte
 
-1. Zweite feste Aufstellung ernten, OQ-42 entscheiden, `dotmatrix-eval.py loo`.
+1. Weitere feste Aufstellungen ernten, dann `loo` mit derselben Regel erneut.
 2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
    Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
 3. Sicherung von `var/` auf ein anderes Medium.

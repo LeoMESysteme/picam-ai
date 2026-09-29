@@ -1799,3 +1799,73 @@ ersetzt `var/calibration/timing-streamcam.json` (vorher M = 1225,8 ms, als
 `timing-streamcam.v-sc1-20260928.json` aufbewahrt). Die `sc3`-Ernte wurde mit
 dem alten, größeren M gelabelt. Das ist strenger und bleibt gültig. Neu
 labeln bringt nur mehr Ausbeute.
+
+## 2026-09-29 — StreamCam: Aufstellung `sc4` und festgelegte Messung `loo`
+
+**Aufstellung `sc4`.** Die Kamera steht flacher als bei `sc3` und blickt
+schräg von links. Der Fokus-Sweep hat eine klare Spitze bei 48, eingefroren
+sind Belichtung 200 und Gain 13. Die Anzeige ist kleiner im Bild,
+3,43 px je Punktspalte statt 4,22 bei `sc3`. Das Quad kommt aus der
+Punktraster-Homographie: Alle 153 Punkte sind zugeordnet, der Restfehler
+beträgt 0,11 Punktspalten und 0,14 Zeilen, ohne systematischen Fehler je
+Zeile oder Zelle. Die Punkterkennung muss dabei richtungsabhängig glätten,
+weil das entzerrte Bild senkrecht etwa vierfach gestreckt ist. Mit
+isotroper Glättung erscheint jeder Punkt doppelt, bei halben Zeilen. Die
+Kamera war stabil: Gegen das Profilbild verschob sie sich nach rund
+10 Minuten um 0,11–0,13 px. Das Profil hat Leonhard Hentschke bestätigt.
+
+**Ernte `sc4-run`** (30 × 6 s, Seed 2026092904, M = 325,9 ms):
+
+| Größe | Wert |
+| --- | --- |
+| Bilder gesamt | 3137 |
+| verworfen, Schreib-Warteschlange voll | 600 |
+| Bildlücken | 0 |
+| gelabelt | 1503 |
+| Wertwechsel im Fenster | 317 |
+| Telegrammlücke | 1282 |
+| unterscheidbare Texte | 30 |
+| ausgewählt (≤ 3 je Plateau) | 111 |
+| abgelehnt: `bildguete` | 2 |
+| abgelehnt: `zellen_inkonsistent` | 30 |
+| Ausrichtung (max. Eckverschiebung) | ≤ 0,15 px |
+| importiert | **79** |
+
+Die ROM-Gegenprobe je Zeichen für `sc4` allein ergibt **0 Abweichungen bei
+allen 13 Zeichen**. Der Datensatz hat jetzt 514 Proben, davon 426 aus dem
+Dot-Matrix-Gerät. Die Einzelbilder von `sc4-run` und `sc3-cal-a/b/c` sind
+nach dem Import gelöscht, auf Anweisung des Nutzers.
+
+**Festgelegte Messung** (`dotmatrix-eval.py loo --train-eligibility
+rom_per_group`, OQ-42-Entscheidung, Commit `0d18d0a`,
+`var/diagnostics/dotmatrix-loo-2026-09-29.json`). Zum Training zugelassen
+sind `ernte1`, `sc3` und `sc4`. Nicht zugelassen sind `auf2` (max. 2 Punkte
+neben dem ROM) und `auf3` (max. 5).
+
+| Testgruppe | Training | d_max | Proben richtig / abgelehnt / falsch | Plateaus richtig / abgelehnt / falsch |
+| --- | --- | --- | --- | --- |
+| `auf2` | ernte1, sc3, sc4 | 2,12 | 0 / 76 / 0 | 0 / 26 / 0 |
+| `auf3` | ernte1, sc3, sc4 | 2,12 | 0 / 73 / 0 | 0 / 26 / 0 |
+| `ernte1` | sc3, sc4 | 1,87 | 91 / 61 / 0 | 37 / 19 / 0 |
+| `sc3` | ernte1, sc4 | 1,67 | 0 / 46 / 0 | 0 / 17 / 0 |
+| `sc4` | ernte1, sc3 | 2,16 | **79 / 0 / 0** | **27 / 0 / 0** |
+
+**Kein falscher Wert in allen Durchgängen.** Alle Ablehnungen tragen den
+Grund `zelle_unbekannt`: Der nächste Abstand liegt über d_max. Die
+entschiedenen Zellen sind ausnahmslos richtig.
+
+Diagnose, nachträglich und ohne Einfluss auf Regeln oder Schwellen:
+* `sc3`: Die Ablehnungen liegen in Zelle 5 (16), 6 (40) und 7 (44), also
+  rechts im Zahlenblock. Der Median von d_best beträgt 1,25, das
+  90-%-Quantil 2,09, d_max 1,67.
+* `ernte1`: Die Ablehnungen liegen vor allem in den Zellen 5–7, am
+  häufigsten bei den Zeichen `3` und `8`.
+* `auf2`: `+` und Zelle 2 werden immer abgelehnt. Das passt zur bekannten
+  Unschärfe.
+
+Lesart: Mit zwei Aufstellungen im Training ist d_max zu eng für eine dritte.
+Jede Aufstellung hat ihre eigene Abbildung, geprägt von Perspektive und
+Schatten, und sie verschiebt sich nach rechts im Zahlenblock zunehmend.
+Nach den Regeln des Projekts ist das eine Ablehnung, kein Fehler. Schwellen
+werden daraufhin nicht nachgestellt. Weiter hilft nur mehr Vielfalt im
+Training, also weitere feste Aufstellungen.

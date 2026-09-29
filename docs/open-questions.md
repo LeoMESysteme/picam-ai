@@ -1992,6 +1992,10 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `dotmatrix-eval.py loo --train-eligibility rom_per_group`. Toleranz und
   Schwellen bleiben unverändert. Stand vor dem Lauf, je Gruppe gegen das ROM:
   `ernte1`, `sc3`, `sc4` 0 Punkte, `auf2` max. 2, `auf3` max. 5.
+  Ergebnis des Laufs: nie ein falscher Wert, aber `sc3` wird mit Training
+  auf `ernte1`+`sc4` vollständig abgelehnt. Offen bleibt, wie viele
+  Aufstellungen das Training braucht ([VALIDATION.md](VALIDATION.md),
+  2026-09-29).
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).
