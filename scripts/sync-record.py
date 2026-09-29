@@ -92,6 +92,31 @@ ueber `queue.Queue`:
     Warteschlangen vollstaendig GELEERT, bevor `session.json` geschrieben
     wird - kein Bild/Telegramm, das schon in der Warteschlange steht, geht
     beim Abbruch verloren.
+
+## Zwischenablage im RAM (`--staging-root`, seit 2026-09-29)
+
+Messung 2026-09-29 (Ernte `sc6`, TODO.md "Verworfene Bilder"): die Trennung
+oben reicht nicht, wenn die SD-Karte sekundenlang GAR NICHT schreibt. In
+`sc6` stand der Bildschreiber 14-mal laenger als 0,5 s, bis ~42 s am Stueck;
+selbst 200-Byte-Zeilen in `commands.jsonl` hingen 12-23 s. Die Warteschlange
+(60 Bilder, ~4 s) lief ueber, 34 % der Bilder wurden verworfen. Die
+Kodierung ist nicht der Engpass (JPEG q95 ~13 ms/Bild).
+
+Mit `--staging-root DIR` (vorgesehen: `/dev/shm`, tmpfs) schreibt die
+Aufnahme alle Dateien zuerst in ein eigenes Unterverzeichnis dort und
+kopiert sie erst NACH dem Leeren aller Schreiber nach `--output` (mit
+fsync), dann erst `session.json`. Vorher wird der Platzbedarf geschaetzt
+(`_estimate_staging_need`) und gegen freien Platz und - bei tmpfs - gegen
+`MemAvailable` geprueft; reicht er nicht, bricht die Aufnahme VOR jedem
+Kamera-/Portzugriff laut ab statt waehrenddessen voll zu laufen. Scheitert
+das Kopieren, bleibt die Zwischenablage stehen, ihr Pfad steht in
+`session.json` und auf stderr, Exitcode `EXIT_STAGING_COPY_FAILED`.
+
+`commands.jsonl` (`--norm-schedule`) schreibt seitdem ein eigener
+Schreiberthread (`_QueuedLineFile`). Vorher schrieb der serielle Thread
+selbst, waehrend der GSV-Strom fuer ein Kommando angehalten war - jeder
+Schreibstau verlaengerte so die Sendepause (in `sc6` Telegrammluecken bis
+~40 s).
 """
 
 from __future__ import annotations
@@ -100,9 +125,12 @@ import argparse
 import importlib.util
 import json
 import math
+import os
 import queue
+import shutil
 import signal
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -150,6 +178,29 @@ STARTUP_TIMEOUT_S = 5.0
 #: Ende) - ungleich 0, damit ein Aufrufer (z.B. harvest.py) das nicht mit
 #: einem erfolgreichen Lauf verwechselt.
 EXIT_NO_FRAMES_ACQUIRED = 4
+
+#: Exitcode, wenn die Aufnahme in der Zwischenablage (`--staging-root`)
+#: vollstaendig ist, das Kopieren nach `--output` aber scheiterte - die
+#: Zwischenablage bleibt dann stehen (Pfad in session.json/stderr).
+EXIT_STAGING_COPY_FAILED = 5
+
+#: Geschaetzte Bytes je Bildpixel fuer den Platzbedarf der Zwischenablage.
+#: Gemessen 2026-09-29 an echten 1920x1080-Bildern der StreamCam: JPEG q95
+#: (cv2-Vorgabe) 389-395 KB = 0,19 B/px, PNG (Kompressionsstufe 3, Vorgabe)
+#: 2,1-2,3 MB = 1,0-1,1 B/px. Aufgerundet, weil detailreichere Szenen
+#: groesser kodieren.
+STAGING_BYTES_PER_PIXEL = {"jpg": 0.25, "png": 1.3}
+#: Zuschlag auf die Schaetzung (JSONL-Dateien, Streuung der Bildgroesse).
+STAGING_SAFETY_FACTOR = 1.25
+#: Bei tmpfs belegt die Zwischenablage Arbeitsspeicher - so viel soll
+#: danach fuer den Rest des Systems frei bleiben.
+STAGING_RAM_RESERVE_BYTES = 1 << 30
+#: Bildgroesse fuer die Schaetzung ohne Kameraprofil (--source synthetic):
+#: bewusst die volle StreamCam-Groesse, damit die Schaetzung nie zu klein ist.
+STAGING_FALLBACK_SIZE = (1920, 1080)
+#: Bildrate fuer die Schaetzung, wenn --frame-rate 0 ("alle schreiben") ohne
+#: Kameraprofil gesetzt ist.
+STAGING_FALLBACK_FPS = 30.0
 
 #: Anzahl Einzelmessungen fuer `measure_clock_offset_ns` (Median).
 CLOCK_OFFSET_SAMPLES = 5
@@ -242,6 +293,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--staging-root",
+        type=Path,
+        default=None,
+        help=(
+            "Alle Dateien zuerst in ein Unterverzeichnis hier schreiben (vorgesehen: "
+            "/dev/shm) und erst nach Aufnahmeende nach --output kopieren - gegen "
+            "Schreibhaenger der SD-Karte, siehe Moduldocstring 'Zwischenablage im "
+            "RAM'. Platzbedarf wird vorab geprueft. Vorgabe: direkt nach --output."
+        ),
+    )
+    parser.add_argument(
         "--camera-settings",
         type=Path,
         default=None,
@@ -298,6 +360,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--camera-settings ist bei --source camera Pflicht")
     if args.frame_queue_size < 1:
         parser.error("--frame-queue-size muss mindestens 1 sein")
+    if args.staging_root is not None and not args.staging_root.is_dir():
+        parser.error(f"--staging-root {args.staging_root} ist kein vorhandenes Verzeichnis")
     if args.ignore_restore_point_mismatch and not args.norm_schedule:
         parser.error("--ignore-restore-point-mismatch ergibt nur mit --norm-schedule einen Sinn")
     if args.norm_schedule is not None:
@@ -375,6 +439,51 @@ def _read_exact(ser, count: int, timeout_s: float = 1.0) -> bytes:
 # Lesethreads gereicht und werden auch nur von dort aufgerufen - es gibt nie
 # eine zweite Verbindung zum Port, und nie einen zweiten Thread, der
 # gleichzeitig liest/schreibt.
+
+
+class _QueuedLineFile:
+    """Textdatei-Ersatz fuer `commands.jsonl`: `write()` legt die Zeile nur
+    auf eine unbegrenzte Warteschlange, ein eigener Thread schreibt und
+    flusht sie. So wartet der serielle Thread - der waehrend eines Kommandos
+    den GSV-Strom angehalten hat - nie auf das Dateisystem (siehe
+    Moduldocstring 'Zwischenablage im RAM'). `close()` leert die
+    Warteschlange vollstaendig und schliesst die Datei; Reihenfolge bleibt
+    erhalten (ein Schreiber, FIFO). `flush()` ist ein No-op, weil der
+    Schreiber nach jeder Zeile selbst flusht."""
+
+    def __init__(self, f) -> None:
+        self._f = f
+        self._queue: queue.Queue[Any] = queue.Queue()
+        self.error: str | None = None
+        self._thread = threading.Thread(target=self._run, name="commands-writer", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while True:
+            item = self._queue.get()
+            if item is _QUEUE_DONE:
+                break
+            if self.error is not None:
+                continue
+            try:
+                self._f.write(item)
+                self._f.flush()
+            except OSError as exc:
+                self.error = f"{type(exc).__name__}: {exc}"
+
+    def write(self, text: str) -> None:
+        self._queue.put(text)
+
+    def flush(self) -> None:
+        pass
+
+    def close(self, timeout: float = WRITER_DRAIN_JOIN_TIMEOUT_S) -> None:
+        self._queue.put(_QUEUE_DONE)
+        self._thread.join(timeout=timeout)
+        if self._thread.is_alive():
+            self.error = self.error or f"Schreiber nach {timeout}s nicht fertig"
+            return
+        self._f.close()
 
 
 def _log_event(f_cmd, state: dict[str, Any], event: dict[str, Any]) -> None:
@@ -542,7 +651,7 @@ def _serial_worker(
 
         if norm_schedule is not None:
             assert commands_path is not None and restore_point is not None
-            f_cmd = open(commands_path, "a", encoding="utf-8")
+            f_cmd = _QueuedLineFile(open(commands_path, "a", encoding="utf-8"))
 
             # Precheck: Registerstand mit dem Rueckstellpunkt vergleichen, BEVOR
             # auch nur ein Schreibbefehl geschickt wird. Der Strom wird dafuer
@@ -635,6 +744,8 @@ def _serial_worker(
                 state["restore_verification"] = {"error": f"{type(exc).__name__}: {exc}"}
         if f_cmd is not None:
             f_cmd.close()
+            if f_cmd.error is not None:
+                state["commands_write_error"] = f_cmd.error
         if ser is not None:
             try:
                 ser.close()
@@ -1126,9 +1237,23 @@ def _frame_writer_worker(
                 if item is _QUEUE_DONE:
                     frame_done = True
                 else:
+                    filename = f"frame_{frames_written + 1:06d}.{ext}"
+                    if not cv2.imwrite(str(frames_dir / filename), item["image"]):
+                        # cv2 meldet einen Schreibfehler (z.B. volle
+                        # Zwischenablage) nur ueber den Rueckgabewert - als
+                        # verworfenes Bild zaehlen, nie still eine
+                        # frames.jsonl-Zeile ohne Datei hinterlassen.
+                        (frames_dir / filename).unlink(missing_ok=True)
+                        state["frames_dropped_write_failed"] = state.get("frames_dropped_write_failed", 0) + 1
+                        f_frames.write(json.dumps({
+                            "dropped": True,
+                            "reason": "write_failed",
+                            "sensor_sequence": item["sensor_sequence"],
+                            "capture_timestamp": item["capture_timestamp"],
+                        }, ensure_ascii=False) + "\n")
+                        f_frames.flush()
+                        continue
                     frames_written += 1
-                    filename = f"frame_{frames_written:06d}.{ext}"
-                    cv2.imwrite(str(frames_dir / filename), item["image"])
                     entry = {
                         "file": filename,
                         "frame_sequence": frames_written,
@@ -1167,6 +1292,131 @@ def _json_default(value: Any) -> Any:
 #: KeyboardInterrupt) lief durch den sauberen Abbruchpfad. SIGTERM wird hier
 #: bewusst auf denselben Pfad umgelenkt statt einen eigenen zu bauen.
 _SIGTERM_MARKER = "SIGTERM"
+
+
+def _estimate_staging_need(args: argparse.Namespace, camera_settings: CameraSettings | None) -> dict[str, Any]:
+    """Grobe, bewusst grosszuegige Schaetzung des Platzbedarfs der
+    Zwischenablage (Dateien) und des RAM-Bedarfs der vollen Bildwarteschlange
+    (BGR-Bilder), siehe `STAGING_BYTES_PER_PIXEL`."""
+    width, height = camera_settings.size if camera_settings is not None else STAGING_FALLBACK_SIZE
+    if args.frame_rate > 0:
+        fps = float(args.frame_rate)
+    elif camera_settings is not None:
+        fps = float(camera_settings.fps)
+    else:
+        fps = STAGING_FALLBACK_FPS
+    frame_bytes = width * height * STAGING_BYTES_PER_PIXEL[args.image_format]
+    return {
+        "files_bytes": int(args.duration * fps * frame_bytes * STAGING_SAFETY_FACTOR),
+        "frame_queue_bytes": int(args.frame_queue_size * width * height * 3),
+        "fps": fps,
+        "frame_size": [width, height],
+    }
+
+
+def _filesystem_type(path: Path, mounts_path: Path = Path("/proc/mounts")) -> str | None:
+    """Dateisystemtyp des Einhaengepunkts, unter dem `path` liegt (laengster
+    passender Praefix in /proc/mounts), oder None, wenn nicht lesbar."""
+    try:
+        lines = mounts_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    resolved = str(path.resolve())
+    best: tuple[int, str] | None = None
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        mount_point, fs_type = parts[1], parts[2]
+        if resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"):
+            if best is None or len(mount_point) > best[0]:
+                best = (len(mount_point), fs_type)
+    return best[1] if best is not None else None
+
+
+def _mem_available_bytes(meminfo_path: Path = Path("/proc/meminfo")) -> int | None:
+    try:
+        for line in meminfo_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _check_staging_capacity(root: Path, need: dict[str, Any]) -> str | None:
+    """Fehlermeldung, wenn die Zwischenablage nicht reicht, sonst None. Bei
+    tmpfs belegen die Dateien Arbeitsspeicher - dann zusaetzlich gegen
+    `MemAvailable` minus Bildwarteschlange und `STAGING_RAM_RESERVE_BYTES`."""
+    mib = 1 << 20
+    free = shutil.disk_usage(root).free
+    if need["files_bytes"] > free:
+        return (
+            f"--staging-root {root}: geschaetzt {need['files_bytes'] // mib} MiB noetig, "
+            f"nur {free // mib} MiB frei."
+        )
+    if _filesystem_type(root) == "tmpfs":
+        available = _mem_available_bytes()
+        if available is not None:
+            total = need["files_bytes"] + need["frame_queue_bytes"] + STAGING_RAM_RESERVE_BYTES
+            if total > available:
+                return (
+                    f"--staging-root {root} ist tmpfs (RAM): geschaetzt {need['files_bytes'] // mib} MiB "
+                    f"Dateien + {need['frame_queue_bytes'] // mib} MiB Bildwarteschlange + "
+                    f"{STAGING_RAM_RESERVE_BYTES // mib} MiB Reserve, aber nur "
+                    f"{available // mib} MiB MemAvailable."
+                )
+    return None
+
+
+def _copy_staging(work_dir: Path, output_dir: Path) -> dict[str, Any]:
+    """Kopiert alle Dateien aus der Zwischenablage nach `output_dir`
+    (Unterverzeichnisse erhalten) und fsynct jede Datei und jedes
+    Verzeichnis, bevor die Zwischenablage geloescht werden darf. Wirft
+    OSError bei jedem Fehler."""
+    start = time.monotonic()
+    files = 0
+    copied_bytes = 0
+    dirs = {output_dir}
+    for src in sorted(work_dir.rglob("*")):
+        dst = output_dir / src.relative_to(work_dir)
+        if src.is_dir():
+            dst.mkdir(parents=True, exist_ok=True)
+            dirs.add(dst)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+        fd = os.open(dst, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        files += 1
+        copied_bytes += src.stat().st_size
+    for directory in dirs:
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    return {"copied_files": files, "copied_bytes": copied_bytes, "copy_s": time.monotonic() - start}
+
+
+def _finish_staging(work_dir: Path, output_dir: Path, staging: dict[str, Any]) -> None:
+    """Kopieren + Aufraeumen; traegt das Ergebnis in `staging` ein. Bei
+    einem Fehler bleibt die Zwischenablage stehen (`kept_work_dir`)."""
+    try:
+        staging.update(_copy_staging(work_dir, output_dir))
+    except (OSError, KeyboardInterrupt) as exc:
+        # KeyboardInterrupt: Ctrl-C/SIGTERM (siehe `_install_sigterm_handler`)
+        # mitten im Kopieren - die Zwischenablage ist dann die einzige
+        # vollstaendige Fassung und bleibt stehen.
+        staging["error"] = f"{type(exc).__name__}: {exc}"
+        staging["kept_work_dir"] = str(work_dir)
+        return
+    shutil.rmtree(work_dir, ignore_errors=True)
+    staging["error"] = None
+    staging["kept_work_dir"] = None
 
 
 def _install_sigterm_handler() -> None:
@@ -1208,24 +1458,61 @@ def run(args: argparse.Namespace) -> int:
             return 2
 
     output_dir = args.output or (DEFAULT_OUTPUT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S"))
-    frames_dir = output_dir / "frames"
+
+    # Zwischenablage (siehe Moduldocstring 'Zwischenablage im RAM'): alles
+    # VOR jedem Kamera-/Portzugriff pruefen. Ein nicht leeres --output wird
+    # abgelehnt, weil die Kopie am Ende vorhandene JSONL-Dateien ersetzen
+    # statt (wie beim direkten Schreiben) anhaengen wuerde.
+    staging: dict[str, Any] | None = None
+    work_dir = output_dir
+    if args.staging_root is not None:
+        if output_dir.exists() and any(output_dir.iterdir()):
+            print(f"Fehler: --output {output_dir} ist nicht leer - mit --staging-root nur in ein leeres Ziel.",
+                  file=sys.stderr)
+            return 1
+        need = _estimate_staging_need(args, camera_settings)
+        capacity_error = _check_staging_capacity(args.staging_root, need)
+        if capacity_error is not None:
+            print(f"Fehler: {capacity_error} Keine Aufnahme gestartet.", file=sys.stderr)
+            return 1
+        work_dir = Path(tempfile.mkdtemp(prefix="sync-record-", dir=args.staging_root))
+        staging = {
+            "root": str(args.staging_root),
+            "work_dir": str(work_dir),
+            "estimated_files_bytes": need["files_bytes"],
+            "estimated_frame_queue_bytes": need["frame_queue_bytes"],
+        }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = work_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
-    serial_jsonl = output_dir / "serial.jsonl"
-    frames_jsonl = output_dir / "frames.jsonl"
+    serial_jsonl = work_dir / "serial.jsonl"
+    frames_jsonl = work_dir / "frames.jsonl"
     session_json = output_dir / "session.json"
+
+    def _abort_before_recording() -> int:
+        # Fruehe Abbrueche (Port, Precheck): was schon geschrieben ist (z.B.
+        # die Precheck-Ereignisse in commands.jsonl), landet trotzdem in
+        # --output, wie beim direkten Schreiben.
+        if staging is not None:
+            _finish_staging(work_dir, output_dir, staging)
+            if staging["error"] is not None:
+                print(f"FEHLER: Kopieren aus der Zwischenablage: {staging['error']} "
+                      f"(liegt noch unter {work_dir})", file=sys.stderr)
+        return 1
 
     commands_jsonl: Path | None = None
     restore_point: dict | None = None
     if args.norm_schedule is not None:
         if not args.restore_point.is_file():
             print(f"Fehler: Rueckstellpunkt-Datei nicht gefunden: {args.restore_point}", file=sys.stderr)
-            return 1
+            return _abort_before_recording()
         try:
             restore_point = json.loads(args.restore_point.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             print(f"Fehler: Rueckstellpunkt-Datei {args.restore_point} ist kein gueltiges JSON: {exc}", file=sys.stderr)
-            return 1
-        commands_jsonl = output_dir / "commands.jsonl"
+            return _abort_before_recording()
+        commands_jsonl = work_dir / "commands.jsonl"
 
     started_at_utc = datetime.now(UTC).isoformat()
     started_at_boottime_ns = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
@@ -1274,7 +1561,7 @@ def run(args: argparse.Namespace) -> int:
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
-        return 1
+        return _abort_before_recording()
     if serial_state["open_error"]:
         print(
             f"Fehler: serieller Port {args.port!r} konnte nicht geoeffnet werden: "
@@ -1284,13 +1571,13 @@ def run(args: argparse.Namespace) -> int:
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
-        return 1
+        return _abort_before_recording()
     if serial_state.get("schedule_error"):
         print(f"Fehler: {serial_state['schedule_error']}", file=sys.stderr)
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
-        return 1
+        return _abort_before_recording()
 
     ext = "png" if args.image_format == "png" else "jpg"
 
@@ -1371,6 +1658,11 @@ def run(args: argparse.Namespace) -> int:
             # kein stiller Leerlauf.
             acquisition_error = _no_frames_message("Kamerazweig endete mit 0 aufgezeichneten Bildern.")
 
+        # Erst jetzt (alle Schreiber geleert) aus der Zwischenablage nach
+        # --output kopieren; session.json kommt danach direkt nach --output.
+        if staging is not None:
+            _finish_staging(work_dir, output_dir, staging)
+
         session = {
             "started_at_utc": started_at_utc,
             "started_at_boottime_ns": started_at_boottime_ns,
@@ -1443,8 +1735,24 @@ def run(args: argparse.Namespace) -> int:
             # Aufnahmethread) - `frames_recorded` bleibt in beiden Faellen
             # ehrlich, siehe `_frame_writer_worker`.
             "frame_writer_finished": frame_writer_state.get("writer_finished", False),
+            # cv2.imwrite meldete einen Fehler - Bild verworfen, siehe
+            # `_frame_writer_worker` (frames.jsonl: reason "write_failed").
+            "frames_dropped_write_failed": frame_writer_state.get("frames_dropped_write_failed", 0),
+            "commands_write_error": serial_state.get("commands_write_error"),
+            # Zwischenablage (`--staging-root`), None bei direktem Schreiben.
+            "staging": staging,
         }
-        session_json.write_text(json.dumps(session, indent=2, ensure_ascii=False, default=_json_default))
+        session_text = json.dumps(session, indent=2, ensure_ascii=False, default=_json_default)
+        if staging is not None and staging.get("error") is not None:
+            # Die zurueckgelassene Zwischenablage soll fuer sich vollstaendig
+            # sein; das Ziel ist ggf. gar nicht beschreibbar.
+            (work_dir / "session.json").write_text(session_text)
+            try:
+                session_json.write_text(session_text)
+            except OSError:
+                pass
+        else:
+            session_json.write_text(session_text)
 
     if serial_state.get("read_error"):
         print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
@@ -1462,6 +1770,23 @@ def run(args: argparse.Namespace) -> int:
         print(
             f"WARNUNG: {frame_acq_state['frames_dropped_queue_full']} Bild(er) verworfen, weil die "
             f"Schreiber-Warteschlange voll war (--frame-queue-size {args.frame_queue_size}).",
+            file=sys.stderr,
+        )
+    if frame_writer_state.get("frames_dropped_write_failed", 0) > 0:
+        print(
+            f"WARNUNG: {frame_writer_state['frames_dropped_write_failed']} Bild(er) verworfen, weil "
+            "das Schreiben der Bilddatei fehlschlug (Ziel voll?).",
+            file=sys.stderr,
+        )
+    if serial_state.get("commands_write_error"):
+        print(f"WARNUNG: commands.jsonl unvollstaendig: {serial_state['commands_write_error']}", file=sys.stderr)
+    staging_error = staging.get("error") if staging is not None else None
+    staging_failed = staging_error is not None
+    if staging_failed:
+        print(
+            f"FEHLER: Kopieren aus der Zwischenablage nach {output_dir} fehlgeschlagen: "
+            f"{staging_error}. Die Aufnahme liegt vollstaendig unter {work_dir} - "
+            "vor einem Neustart des Pi sichern.",
             file=sys.stderr,
         )
 
@@ -1483,6 +1808,8 @@ def run(args: argparse.Namespace) -> int:
         f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
         f"{status_word} -> {output_dir}"
     )
+    if staging_failed:
+        return EXIT_STAGING_COPY_FAILED
     if no_frames_acquired:
         return EXIT_NO_FRAMES_ACQUIRED
     return 0

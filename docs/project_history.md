@@ -921,3 +921,54 @@ reproduzierbar im Profil speichern.
   StreamCam dort angebunden ist; `--simulate` läuft weiter.
 * Es gibt keine Treiber-Bildnummer mehr (`sensor_sequence` fehlt).
   Aussetzer erkennt `frame_gaps` in `session.json` über die Zeitstempel.
+
+# 2026-09-29 — Aufnahme zuerst in den RAM, dann auf die SD-Karte
+
+## Problem
+
+Bei den StreamCam-Ernten stieg der Anteil verworfener Bilder von 0–1 % am
+2026-09-28 auf 16–34 % am 2026-09-29. Ein Subagent hat das gemessen:
+* Die SD-Karte, ein No-Name-Modell, schafft mit fsync 7,1 MB/s. Die
+  Aufnahme braucht 5,9 MB/s.
+* Zeitweise schreibt die Karte sekundenlang gar nicht. In `sc6` gab es 14
+  Stillstände über 0,5 s, bis etwa 42 s am Stück.
+* Die Kodierung (JPEG q95, 13 ms je Bild, GIL frei) und die CPU sind nicht
+  der Engpass.
+* Ein Nebeneffekt: Weil der serielle Thread `commands.jsonl` selbst schrieb,
+  verlängerten die Hänger die GSV-Sendepausen. Daraus entstanden lange
+  `telegrammluecke`-Ablehnungen.
+
+## Entscheidung
+
+`sync-record.py --staging-root /dev/shm` für Ernten. Die Aufnahme läuft
+vollständig in tmpfs, erst danach wird mit fsync auf die Karte kopiert.
+`commands.jsonl` bekommt einen eigenen Schreiber. Der Platz wird vorab
+geprüft, ein Kopierfehler lässt die Zwischenablage stehen. Die Bildrate
+bleibt bei 15 fps.
+
+## Alternativen
+
+* **Größere Warteschlange:** Um 42 s zu überbrücken, wären etwa 630 Bilder
+  nötig, also 3,9 GB BGR. Zudem lag die mittlere Schreibrate von 3,8 MB/s
+  unter dem Bedarf. Verworfen.
+* **Mehrere Schreiber-Threads:** Die Kodierung ist nicht der Engpass.
+  Verworfen.
+* **Niedrigere JPEG-Qualität:** Das würde die Eingangsbilder des
+  Dot-Matrix-Lesers unbemerkt verschlechtern. Nur mit eigener `loo`-Prüfung
+  denkbar, vorerst verworfen.
+* **Ernte mit 5 fps:** Der Import wählt ohnehin höchstens 3 Bilder je
+  Plateau. Das bleibt eine Option, falls der RAM knapp wird. Zurückgestellt,
+  bis eine echte Aufnahme mit Zwischenablage vorliegt.
+* **Nur den Ausschnitt um das Quad speichern:** verlustfrei und klein, aber
+  ein größerer Umbau (Koordinaten in Import, Profil und Referenzbild).
+  Später.
+* **Schnellere Karte oder USB3-SSD für `var/`:** empfohlen, aber
+  Hardware. Die Softwaremaßnahme hilft unabhängig davon.
+
+## Konsequenz
+
+* Eine Ernte belegt während der Aufnahme bis zu etwa 2,3 GB RAM (geschätzt).
+* Ist nicht genug frei, lehnt `sync-record.py` vor dem Start ab.
+* Das Kopieren nach der Aufnahme dauert einige Minuten.
+* Der Nachweis an der Kamera steht aus (TODO.md).
+

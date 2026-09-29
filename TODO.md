@@ -79,6 +79,11 @@ Offene Befunde:
   am 2026-09-29 gelöscht (dazu Caches, 14 GB frei). Karte ist No-Name
   (`SD16G`, meldet 50 GiB) → Kapazität unklar, `var/` dringend auf ein
   anderes Medium sichern. Danach `sudo fstrim -v /`.
+  **Umgesetzt 2026-09-29:** (A) `sync-record.py --staging-root`, von
+  `harvest.py` mit `/dev/shm` genutzt, und (C) `commands.jsonl` über einen
+  eigenen Schreiber (CHANGELOG). `fstrim` gelaufen, 14 GB frei.
+  **Offen:** Probeernte an der Kamera. Prüfen: `frames_dropped_queue_full` = 0,
+  weniger `telegrammluecke`, Kopierdauer. Ist der RAM knapp: Ernte mit 5 fps.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas
   (Blende, Drehung); das Quad kam aus einer Punktgitter-Homographie (Skript-
   Schnipsel im Sitzungsverlauf). Werkzeug dafür in `harvest-setup` einbauen,

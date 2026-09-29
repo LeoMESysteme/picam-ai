@@ -1478,3 +1478,332 @@ def test_frame_rate_ueber_kamera_fps_wird_abgelehnt(tmp_path):
     )
     assert completed.returncode == 2
     assert "--frame-rate" in completed.stderr
+
+
+# --- Zwischenablage (--staging-root) und commands.jsonl-Schreiber (2026-09-29) --
+
+
+def _synthetic_args(module, output_dir: Path, port: str, *extra: str):
+    return module.parse_args(
+        [
+            "--duration",
+            "1.0",
+            "--output",
+            str(output_dir),
+            "--source",
+            "synthetic",
+            "--synthetic-uri",
+            "synthetic://seven-seg?digits=4&decimals=2&count=200",
+            "--frame-rate",
+            "20",
+            "--port",
+            port,
+            "--baudrate",
+            "9600",
+            *extra,
+        ]
+    )
+
+
+def test_staging_root_kopiert_nach_output_und_raeumt_auf(tmp_path):
+    """Mit --staging-root landet am Ende alles in --output (gleiches Format
+    wie beim direkten Schreiben), session.json meldet die Kopie, und die
+    Zwischenablage ist wieder leer."""
+    staging_root = tmp_path / "shm"
+    staging_root.mkdir()
+    master, slave = os.openpty()
+    stop_feed = threading.Event()
+    feeder = threading.Thread(
+        target=_feed_pty,
+        args=(master, [b"+0.46776 mV/V\r\n"]),
+        kwargs={"interval_s": 0.05, "stop_after": stop_feed},
+        daemon=True,
+    )
+    feeder.start()
+    output_dir = tmp_path / "lauf-staging"
+    try:
+        completed = _run_cli(
+            duration=1.0, output=output_dir, port=os.ttyname(slave),
+            extra_args=["--staging-root", str(staging_root)],
+        )
+    finally:
+        stop_feed.set()
+        feeder.join(timeout=2.0)
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    frame_files = sorted((output_dir / "frames").iterdir())
+    frame_lines = (output_dir / "frames.jsonl").read_text().splitlines()
+    assert frame_files and len(frame_lines) == len(frame_files)
+    assert (output_dir / "serial.jsonl").read_text().splitlines()
+    session = json.loads((output_dir / "session.json").read_text())
+    staging = session["staging"]
+    assert staging["root"] == str(staging_root)
+    assert staging["error"] is None
+    assert staging["kept_work_dir"] is None
+    # frames/*, frames.jsonl, serial.jsonl
+    assert staging["copied_files"] == len(frame_files) + 2
+    assert staging["copied_bytes"] > 0
+    assert session["frames_recorded"] == len(frame_files)
+    assert list(staging_root.iterdir()) == []
+
+
+def test_ohne_staging_root_ist_staging_none(tmp_path):
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-direkt"
+    try:
+        completed = _run_cli(duration=0.5, output=output_dir, port=os.ttyname(slave))
+    finally:
+        os.close(master)
+        os.close(slave)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert json.loads((output_dir / "session.json").read_text())["staging"] is None
+
+
+def test_staging_root_zu_wenig_platz_lehnt_vor_der_aufnahme_ab(monkeypatch, tmp_path, capsys):
+    """Reicht die Zwischenablage nicht, bricht die Aufnahme ab, BEVOR Port
+    oder Kamera geoeffnet werden (hier: ein nicht existierender Port - ein
+    Portfehler waere eine andere Meldung) und bevor --output angelegt wird."""
+    module = _load_sync_record_module()
+    staging_root = tmp_path / "shm"
+    staging_root.mkdir()
+    monkeypatch.setattr(module.shutil, "disk_usage", lambda _p: type("U", (), {"free": 1000})())
+    output_dir = tmp_path / "lauf-zu-klein"
+    args = _synthetic_args(module, output_dir, "/dev/gibt-es-nicht", "--staging-root", str(staging_root))
+
+    assert module.run(args) == 1
+    err = capsys.readouterr().err
+    assert "--staging-root" in err and "Keine Aufnahme gestartet" in err
+    assert not output_dir.exists()
+    assert list(staging_root.iterdir()) == []
+
+
+def test_staging_root_lehnt_nicht_leeres_output_ab(tmp_path, capsys):
+    module = _load_sync_record_module()
+    staging_root = tmp_path / "shm"
+    staging_root.mkdir()
+    output_dir = tmp_path / "belegt"
+    output_dir.mkdir()
+    (output_dir / "serial.jsonl").write_text("alt\n")
+    args = _synthetic_args(module, output_dir, "/dev/gibt-es-nicht", "--staging-root", str(staging_root))
+
+    assert module.run(args) == 1
+    assert "nicht leer" in capsys.readouterr().err
+    assert (output_dir / "serial.jsonl").read_text() == "alt\n"
+
+
+def test_staging_root_muss_existieren(tmp_path):
+    module = _load_sync_record_module()
+    with pytest.raises(SystemExit):
+        _synthetic_args(module, tmp_path / "x", "/dev/null", "--staging-root", str(tmp_path / "fehlt"))
+
+
+def test_staging_kapazitaet_bei_tmpfs_gegen_memavailable(monkeypatch, tmp_path):
+    """tmpfs belegt RAM: Dateien + volle Bildwarteschlange + Reserve muessen
+    in MemAvailable passen, auch wenn tmpfs selbst genug 'frei' meldet."""
+    module = _load_sync_record_module()
+    need = {"files_bytes": 500 << 20, "frame_queue_bytes": 300 << 20}
+    monkeypatch.setattr(module.shutil, "disk_usage", lambda _p: type("U", (), {"free": 4 << 30})())
+    monkeypatch.setattr(module, "_filesystem_type", lambda _p: "tmpfs")
+
+    monkeypatch.setattr(module, "_mem_available_bytes", lambda: (500 + 300) << 20)
+    message = module._check_staging_capacity(tmp_path, need)
+    assert message is not None and "MemAvailable" in message
+
+    monkeypatch.setattr(module, "_mem_available_bytes", lambda: (500 + 300 + 1024 + 1) << 20)
+    assert module._check_staging_capacity(tmp_path, need) is None
+
+    # Kein tmpfs: MemAvailable spielt keine Rolle.
+    monkeypatch.setattr(module, "_filesystem_type", lambda _p: "ext4")
+    monkeypatch.setattr(module, "_mem_available_bytes", lambda: 1)
+    assert module._check_staging_capacity(tmp_path, need) is None
+
+
+def test_staging_bedarf_skaliert_mit_dauer_rate_und_format():
+    module = _load_sync_record_module()
+    settings = type("S", (), {"size": (1920, 1080), "fps": 30})()
+    args = type("A", (), {"duration": 100.0, "frame_rate": 15.0, "image_format": "jpg", "frame_queue_size": 60})()
+    need = module._estimate_staging_need(args, settings)
+    expected = int(100 * 15 * 1920 * 1080 * module.STAGING_BYTES_PER_PIXEL["jpg"] * module.STAGING_SAFETY_FACTOR)
+    assert need["files_bytes"] == expected
+    assert need["frame_queue_bytes"] == 60 * 1920 * 1080 * 3
+    args.image_format = "png"
+    assert module._estimate_staging_need(args, settings)["files_bytes"] > expected
+    args.frame_rate = 0
+    assert module._estimate_staging_need(args, settings)["fps"] == 30.0
+
+
+def test_filesystem_type_nimmt_laengsten_einhaengepunkt(tmp_path):
+    module = _load_sync_record_module()
+    mounts = tmp_path / "mounts"
+    mounts.write_text(
+        "/dev/root / ext4 rw 0 0\n"
+        "tmpfs /dev/shm tmpfs rw 0 0\n"
+        "tmpfs /dev/shmx tmpfs rw 0 0\n"
+    )
+    assert module._filesystem_type(Path("/dev/shm/abc"), mounts) == "tmpfs"
+    assert module._filesystem_type(Path("/dev/shm"), mounts) == "tmpfs"
+    assert module._filesystem_type(Path("/home/x"), mounts) == "ext4"
+    assert module._filesystem_type(Path("/x"), tmp_path / "fehlt") is None
+
+
+def test_kopierfehler_behaelt_zwischenablage_und_meldet_exit_5(monkeypatch, tmp_path, capsys):
+    """Scheitert das Kopieren, darf nichts verloren gehen: die Zwischenablage
+    bleibt samt eigener session.json stehen, Exitcode 5, Pfad auf stderr."""
+    module = _load_sync_record_module()
+    staging_root = tmp_path / "shm"
+    staging_root.mkdir()
+
+    def _broken_copy(_work_dir, _output_dir):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(module, "_copy_staging", _broken_copy)
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-kopierfehler"
+    args = _synthetic_args(module, output_dir, os.ttyname(slave), "--staging-root", str(staging_root))
+    try:
+        returncode = module.run(args)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    assert returncode == module.EXIT_STAGING_COPY_FAILED
+    kept = list(staging_root.iterdir())
+    assert len(kept) == 1
+    kept_session = json.loads((kept[0] / "session.json").read_text())
+    assert kept_session["staging"]["kept_work_dir"] == str(kept[0])
+    assert "No space left" in kept_session["staging"]["error"]
+    assert sorted(p.name for p in (kept[0] / "frames").iterdir())
+    assert str(kept[0]) in capsys.readouterr().err
+
+
+def test_fehlgeschlagenes_imwrite_wird_als_verworfen_gezaehlt(monkeypatch, tmp_path):
+    """`cv2.imwrite` meldet Fehler nur ueber den Rueckgabewert. Ein
+    fehlgeschlagenes Bild darf keine frames.jsonl-Zeile mit `file` ohne
+    Datei hinterlassen, sondern wird als `dropped` mit Grund gezaehlt."""
+    module = _load_sync_record_module()
+    real_imwrite = module.cv2.imwrite
+    calls = {"n": 0}
+
+    class _FlakyCv2:
+        @staticmethod
+        def imwrite(path, image):
+            calls["n"] += 1
+            if calls["n"] % 2 == 0:
+                Path(path).write_bytes(b"halb")  # Rest eines abgebrochenen Schreibens
+                return False
+            return real_imwrite(path, image)
+
+    monkeypatch.setattr(module, "cv2", _FlakyCv2())
+    master, slave = os.openpty()
+    output_dir = tmp_path / "lauf-imwrite"
+    args = _synthetic_args(module, output_dir, os.ttyname(slave))
+    try:
+        assert module.run(args) == 0
+    finally:
+        os.close(master)
+        os.close(slave)
+
+    lines = [json.loads(line) for line in (output_dir / "frames.jsonl").read_text().splitlines()]
+    failed = [e for e in lines if e.get("reason") == "write_failed"]
+    written = [e for e in lines if "file" in e]
+    assert failed and written
+    for entry in failed:
+        assert entry["dropped"] is True and "file" not in entry
+    files = sorted(p.name for p in (output_dir / "frames").iterdir())
+    assert files == [e["file"] for e in written]
+    assert [e["frame_sequence"] for e in written] == list(range(1, len(written) + 1))
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["frames_dropped_write_failed"] == len(failed)
+    assert session["frames_recorded"] == len(written)
+
+
+def test_queued_line_file_blockiert_nicht_und_behaelt_reihenfolge():
+    """Der serielle Thread darf beim Loggen nicht auf das Dateisystem warten
+    (der GSV-Strom ist dabei angehalten): `write()` kehrt sofort zurueck,
+    auch wenn das Schreiben selbst haengt; `close()` schreibt alles in
+    Reihenfolge ab."""
+    module = _load_sync_record_module()
+
+    class _SlowFile:
+        def __init__(self):
+            self.lines: list[str] = []
+            self.closed = False
+
+        def write(self, text):
+            time.sleep(0.3)
+            self.lines.append(text)
+
+        def flush(self):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    slow = _SlowFile()
+    f_cmd = module._QueuedLineFile(slow)
+    start = time.monotonic()
+    for i in range(5):
+        f_cmd.write(f"{i}\n")
+        f_cmd.flush()
+    assert time.monotonic() - start < 0.1
+    f_cmd.close()
+    assert slow.lines == [f"{i}\n" for i in range(5)]
+    assert slow.closed and f_cmd.error is None
+
+
+def test_queued_line_file_meldet_schreibfehler():
+    module = _load_sync_record_module()
+
+    class _BrokenFile:
+        def write(self, text):
+            raise OSError(28, "No space left on device")
+
+        def flush(self):
+            pass
+
+        def close(self):
+            pass
+
+    f_cmd = module._QueuedLineFile(_BrokenFile())
+    f_cmd.write("x\n")
+    f_cmd.close()
+    assert f_cmd.error is not None and "No space left" in f_cmd.error
+
+
+def test_norm_schedule_mit_staging_root_landet_commands_jsonl_in_output(tmp_path):
+    """commands.jsonl laeuft mit --staging-root ebenfalls ueber die
+    Zwischenablage und landet vollstaendig in --output."""
+    staging_root = tmp_path / "shm"
+    staging_root.mkdir()
+    master, slave = os.openpty()
+    device = _FakeGsvDevice(master)
+    device.start()
+    output_dir = tmp_path / "lauf-schedule-staging"
+    restore_point_path = _write_restore_point(tmp_path)
+    try:
+        completed = _run_cli(
+            duration=2.0,
+            output=output_dir,
+            port=os.ttyname(slave),
+            extra_args=[
+                "--norm-schedule", "2.0:0.5,1.0:0.5",
+                "--restore-point", str(restore_point_path),
+                "--staging-root", str(staging_root),
+            ],
+        )
+    finally:
+        device.stop()
+        os.close(master)
+        os.close(slave)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    events = [json.loads(line) for line in (output_dir / "commands.jsonl").read_text().splitlines()]
+    labels = [e.get("label") for e in events]
+    assert labels[0] == "precheck" and labels[-1] == "restore_verify"
+    session = json.loads((output_dir / "session.json").read_text())
+    assert session["commands_jsonl_event_count"] == len(events)
+    assert session["commands_write_error"] is None
+    assert session["restore_verification"]["matches_restore_point"] is True
+    assert list(staging_root.iterdir()) == []

@@ -381,6 +381,7 @@ def test_run_sets_exact_subprocess_arguments(tmp_path):
     assert "--norm-schedule" in sync_cmd
     assert "--duration" in sync_cmd
     assert "--output" in sync_cmd and sync_cmd[sync_cmd.index("--output") + 1] == str(out_dir / "recording")
+    assert "--staging-root" in sync_cmd and sync_cmd[sync_cmd.index("--staging-root") + 1] == "/dev/shm"
     assert "--port" in sync_cmd and sync_cmd[sync_cmd.index("--port") + 1] == "/dev/ttyUSB0"
     assert "--camera-settings" in sync_cmd
     assert sync_cmd[sync_cmd.index("--camera-settings") + 1] == str(profile_path)

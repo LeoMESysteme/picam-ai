@@ -60,6 +60,13 @@ _DEFAULT_HOLD_S = 4.0
 #: ist (die Ausduennung waere sonst wirkungslos).
 _SYNC_RECORD_FRAME_RATE = 15.0
 
+#: sync-record.py --staging-root: die Aufnahme laeuft zuerst in tmpfs (RAM)
+#: und wird erst danach auf die SD-Karte kopiert - gegen die am 2026-09-29
+#: gemessenen Schreibhaenger der Karte (Ernte sc6: 34 % verworfene Bilder,
+#: Telegrammluecken bis ~40 s), siehe sync-record.py 'Zwischenablage im RAM'.
+#: Reicht der Platz nicht, lehnt sync-record.py vor der Aufnahme ab.
+_SYNC_RECORD_STAGING_ROOT = Path("/dev/shm")
+
 _SYNC_RECORD_SCRIPT = Path(__file__).parent / "sync-record.py"
 _GATE_LABEL_SCRIPT = Path(__file__).parent / "gate-label.py"
 
@@ -238,6 +245,8 @@ def run(
         str(duration),
         "--output",
         str(recording_dir),
+        "--staging-root",
+        str(_SYNC_RECORD_STAGING_ROOT),
         "--port",
         port,
         "--camera-settings",

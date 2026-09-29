@@ -3,6 +3,51 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-29 (Aufnahme: Zwischenablage im RAM gegen Schreibhänger der SD-Karte)
+
+**Problem:** Bei den Ernten gingen zunehmend Bilder verloren, zuletzt 34 %
+in `sc6`. Die Analyse vom 2026-09-29 ergab:
+* Die Kodierung ist nicht der Engpass. JPEG q95 braucht rund 13 ms je Bild.
+* Die SD-Karte schreibt zeitweise sekundenlang gar nicht. In `sc6` gab es
+  14 Stillstände über 0,5 s, bis etwa 42 s am Stück.
+* Die Warteschlange mit 60 Bildern (etwa 4 s) lief über.
+* Auch `commands.jsonl` hing 12–23 s. Weil der serielle Thread diese Datei
+  selbst schrieb, während der GSV-Strom für ein Kommando angehalten war,
+  verlängerte jeder Hänger die Sendepause. Das ergab Telegrammlücken bis
+  etwa 40 s.
+* Außerdem wertete `cv2.imwrite` seinen Rückgabewert nicht aus. Ein
+  fehlgeschlagenes Schreiben hätte eine `frames.jsonl`-Zeile ohne Datei
+  hinterlassen.
+
+**Änderung:**
+* **`scripts/sync-record.py --staging-root DIR`:** Alle Dateien gehen
+  zuerst in ein Unterverzeichnis dort. Erst nach dem Leeren aller Schreiber
+  werden sie mit fsync nach `--output` kopiert, dann erst wird
+  `session.json` geschrieben.
+  * Vor jedem Kamera- und Portzugriff wird der Platzbedarf geschätzt und
+    geprüft, bei tmpfs zusätzlich gegen `MemAvailable` samt voller
+    Bildwarteschlange und 1 GiB Reserve. Reicht er nicht, wird abgelehnt.
+  * Ein nicht leeres `--output` wird abgelehnt.
+  * Scheitert das Kopieren, bleibt die Zwischenablage mit eigener
+    `session.json` stehen, Exitcode 5.
+  * `session.json` bekommt den Block `staging`.
+* **`commands.jsonl`** schreibt jetzt ein eigener Thread (`_QueuedLineFile`).
+  Ein Schreibfehler landet in `session.json` unter `commands_write_error`.
+* **Ein fehlgeschlagenes `cv2.imwrite`** zählt als verworfenes Bild: ein
+  `frames.jsonl`-Eintrag mit `dropped: true` und `reason: "write_failed"`,
+  dazu `frames_dropped_write_failed` in `session.json`.
+* **`scripts/harvest.py`** ruft `sync-record.py` mit
+  `--staging-root /dev/shm` auf.
+
+**Konsequenz:**
+* Eine Ernte (etwa 250 s, 15 fps) belegt während der Aufnahme geschätzt bis
+  zu 2,3 GB RAM in `/dev/shm`. Nach dem Ende dauert das Kopieren auf die
+  Karte einige Minuten.
+* Ist der RAM knapp, lehnt die Ernte vor dem Start ab.
+* Direktes Schreiben ohne `--staging-root` verhält sich unverändert.
+* Ob Verluste und Telegrammlücken tatsächlich verschwinden, zeigt erst eine
+  echte Aufnahme (TODO.md).
+
 ## 0.1.0.dev0 — 2026-09-29 (Geplanten Zensical-Pflegelauf entsperren)
 
 **Problem:** Forgejo legte die täglichen Läufe vom 25. bis 29. September an,
