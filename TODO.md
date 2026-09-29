@@ -50,6 +50,13 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    allen Gruppen). Danach neu einfrieren und zwei **neue**
    Abnahme-Aufstellungen ernten (`ab3`, `ab4`).
 9. ~~Einzelbilder `ab1-run`/`ab2-run`~~ gelöscht am 2026-09-29 (Nutzer-OK).
+10. **Einrichtungsassistent** baut Codex parallel nach
+    [Plan](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md) im
+    Worktree `/home/me-systeme/picam-ai-assist`, Branch
+    `feat/einrichtungsassistent`, ohne Kamerazugriff und ohne in `var/` zu
+    schreiben. Während jeder Aufnahme liegt
+    `var/RECORDING_IN_PROGRESS` (von Claude angelegt und entfernt), dann
+    lässt Codex die volle Testsuite ruhen. Claude reviewt und merged.
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
