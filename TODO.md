@@ -67,10 +67,18 @@ Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
   Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
   auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
-* **Verworfene Bilder trotz freier Karte:** `sc3-cal-c` 16 %, `sc4-run` 19 %
-  `sc5-run` 22 %, `ab1-run` 30 %, `ab2-run` 18 %, `sc6-run` 34 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
-  (≤ 3 je Plateau), für Timing-Aufnahmen weniger Ereignisse. Möglich: größere
-  Warteschlange oder weniger JPEG-Qualität. Erst messen.
+* **Verworfene Bilder (analysiert 2026-09-29):** Ursache sind Schreibhänger
+  der SD-Karte (in `sc6` 14 Stillstände > 0,5 s, bis ~42 s; auch 200-Byte-
+  Zeilen in `commands.jsonl` hingen 12–23 s), nicht die Kodierung (JPEG q95
+  13 ms/Bild, GIL frei). Karte 7,1 MB/s mit fsync gegen 5,9 MB/s Bedarf.
+  Nebenwirkung: `_log_event` im seriellen Thread verlängert GSV-Sendepausen
+  → lange `telegrammluecke`. Vorschlag: (A) Aufnahme nach `/dev/shm`, danach
+  kopieren; (C) `_log_event` über Writer-Queue; optional (B) Ernte mit 5 fps.
+  Mitursache vermutlich Codex: 31 liegen gebliebene Kopien des
+  repowise-Marketplace (je ~185 MB) in `~/.codex/.tmp/marketplaces/.staging`,
+  am 2026-09-29 gelöscht (dazu Caches, 14 GB frei). Karte ist No-Name
+  (`SD16G`, meldet 50 GiB) → Kapazität unklar, `var/` dringend auf ein
+  anderes Medium sichern. Danach `sudo fstrim -v /`.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas
   (Blende, Drehung); das Quad kam aus einer Punktgitter-Homographie (Skript-
   Schnipsel im Sitzungsverlauf). Werkzeug dafür in `harvest-setup` einbauen,
