@@ -18,6 +18,17 @@ In der Aufstellung `sc3` faellt die Punktschwaerze eines LCD mit dem
 Blickwinkel ueber die Zeile ab (normierte An-Punkte 0,99 links bis 0,68
 rechts, VALIDATION.md 2026-09-29). Das wirkt nicht multiplikativ mit dem
 Hintergrund und wurde vom globalen Pegel nicht ausgeglichen.
+
+Seit `bg_closing_v1` (2026-09-29) gibt es den Hintergrund zusaetzlich je
+Punkt: eine Grauwert-Schliessung (erst Maximum-, dann Minimumfilter) des
+geglaetteten Bildes mit einem Rechteck von +-1,5 Punktspalten und
++-1,5 Punktzeilen entfernt Punkte und Striche (hoechstens 2 Punkte breit)
+und laesst Helligkeitsverlaeufe stehen, die groesser sind. Anlass: In der
+Abnahme-Aufstellung `ab2` lief der weiche Rand einer Glasspiegelung durch
+die Leerzelle 8; der Hintergrund je Zelle kam aus dem hellen Teil, der
+dunkle Teil las sich als Punktmuster (bis 0,88, VALIDATION.md 2026-09-29).
+Die relative Punkttiefe je Zelle (`ink_per_cell_v1`) bleibt, sie wird nur
+mit dem Hintergrund des einzelnen Punkts statt der Zelle multipliziert.
 """
 
 from __future__ import annotations
@@ -40,7 +51,13 @@ _BACKGROUND_PERCENTILE = 80.0
 _INK_PERCENTILE = 3.0
 #: Kennung der Normierung, steht in jeder Vorlagendatei (Vorlagen gelten nur
 #: fuer die Normierung, mit der sie gelernt wurden).
-NORMALIZATION = "ink_per_cell_v1"
+NORMALIZATION = "bg_closing_v1"
+#: Halbe Kantenlaenge des Rechtecks der Hintergrund-Schliessung, in
+#: Punktspalten bzw. Punktzeilen. Groesser als ein 2 Punkte breiter Strich
+#: (der Dezimalpunkt ist 2 x 2), kleiner als ein Spiegelungskeil ueber mehrere
+#: Punkte.
+_BG_CLOSING_HALF_COLS = 1.5
+_BG_CLOSING_HALF_ROWS = 1.5
 #: Eine Zelle zaehlt fuer den Tiefenverlauf, wenn ihre eigene relative Tiefe
 #: mindestens diesen Anteil der globalen erreicht UND mindestens
 #: `MIN_CONTRAST` betraegt (Zellen mit Zeichen, keine Leerzellen - die
@@ -71,6 +88,9 @@ class SampledImage:
     ink: float
     contrast: float
     saturated_fraction: float
+    #: Hintergrund je Punkt und Verschiebung, Form wie `raw`
+    #: (`bg_closing_v1`); `None` heisst: Hintergrund je Zelle (`background`).
+    background_dots: np.ndarray | None = None
 
 
 def _bilinear(img: np.ndarray, pts: np.ndarray) -> np.ndarray:
@@ -91,10 +111,19 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
     img = gray.astype(np.float32)
     col_w = grid.pitch / (grid.dot_columns + grid.gap_columns)
     smooth = cv2.GaussianBlur(img, (0, 0), max(0.5, _SIGMA_FRACTION * col_w))
+    row_h = (grid.bottom - grid.top) / ROWS
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT,
+        (2 * int(round(_BG_CLOSING_HALF_COLS * col_w)) + 1, 2 * int(round(_BG_CLOSING_HALF_ROWS * row_h)) + 1),
+    )
+    closed = cv2.erode(cv2.dilate(smooth, kernel), kernel)
     raw = np.empty((len(cells), len(SHIFTS), N_DOTS), dtype=np.float32)
+    background_dots = np.empty_like(raw)
     for i, cell in enumerate(cells):
         for j, shift in enumerate(SHIFTS):
-            raw[i, j] = _bilinear(smooth, dot_centers(grid, cell, shift))
+            centers = dot_centers(grid, cell, shift)
+            raw[i, j] = _bilinear(smooth, centers)
+            background_dots[i, j] = _bilinear(closed, centers)
     zero = SHIFTS.index((0, 0))
     background = np.percentile(raw[:, zero, :], _BACKGROUND_PERCENTILE, axis=1)
     ink = float(np.percentile(raw[:, zero, :], _INK_PERCENTILE))
@@ -105,7 +134,9 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
     x1 = int(min(img.shape[1], grid.left + grid.n_cells * grid.pitch))
     region = gray[y0:y1, x0:x1]
     saturated = float((region >= 250).mean()) if region.size else 0.0
-    return SampledImage(raw, background.astype(np.float32), ink, float(max(contrast, 0.0)), saturated)
+    return SampledImage(
+        raw, background.astype(np.float32), ink, float(max(contrast, 0.0)), saturated, background_dots
+    )
 
 
 def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
@@ -161,17 +192,20 @@ def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
     dieser Teilmenge waere ihr eigener Pegel ~= Hintergrund, `depth` liefe
     auf den Bodenwert 1e-3 und verstaerkte Rauschen zu einem Scheinmuster.
     """
+    if s.background_dots is not None:
+        bg = s.background_dots
+    else:
+        bg = np.broadcast_to(s.background[:, None, None], s.raw.shape)
     rel = None if ink is not None else _relative_depth_per_cell(s)
     if rel is not None:
-        depth = s.background * rel.astype(np.float32)
+        depth = bg * rel.astype(np.float32)[:, None, None]
     else:
         ink_level = s.ink if ink is None else ink
         median_bg = float(np.median(s.background))
         if median_bg > 0:
-            ink_cell = ink_level * s.background / median_bg
+            depth = bg * (1.0 - ink_level / median_bg)
         else:
-            ink_cell = np.full_like(s.background, ink_level)
-        depth = s.background - ink_cell
+            depth = bg - ink_level
     depth = np.where(depth > 1e-3, depth, 1e-3)
-    out = (s.background[:, None, None] - s.raw) / depth[:, None, None]
+    out = (bg - s.raw) / depth
     return np.clip(out, 0.0, 1.0).astype(np.float32)

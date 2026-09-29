@@ -336,7 +336,13 @@ def _templates_from_texts(rng: np.random.Generator):
 
 
 def _cell_sample(sample_id, group, plateau, render_text, label_text):
-    img = render(render_text)
+    # Gleiche Bildverteilung wie `_templates_from_texts` (Unschaerfe +
+    # Rauschen): seit `bg_closing_v1` folgt der Hintergrund je Punkt dem
+    # Rauschen etwas, ein rauschfreies Testbild laege sonst knapp ausserhalb
+    # der sehr engen synthetischen Schwellen - auch bei Leerzellen.
+    rng = np.random.default_rng(sum(map(ord, sample_id)))  # deterministisch, anders als hash()
+    img = render(render_text, blur=0.5)
+    img = np.clip(img.astype(np.float32) + rng.normal(0, 3, img.shape), 0, 255).astype(np.uint8)
     n = normalized(sample_image(img, GRID, range(9)))
     return dataset_mod.CellSample(sample_id, group, plateau, label_text, n)
 

@@ -197,3 +197,72 @@ def test_normalized_per_cell_blank_cells_keep_global_depth_even_with_steep_fit()
     n = normalized(s)
     for i in (1, 2, 8):
         assert n[i, zero].max() < 0.35, (i, n[i, zero].max())
+
+
+# --- bg_closing_v1: Hintergrund je Punkt (2026-09-29, Abnahmebefund ab2) -------
+
+
+def _wedge_image(text: str, *, darkening: float = 0.22, center_x: float = 222.0) -> np.ndarray:
+    """Wie Aufstellung `ab2`: schwacher Punktkontrast (Tiefe 0,3) und ein
+    weicher dunkler Keil (Glasspiegelung) von oben rechts in die Leerzelle 8
+    (x 202-226 bei `GRID`) und weiter nach rechts - multiplikativ, Staerke
+    `darkening` im Keil, weicher Uebergang ueber ~2 Punktspalten."""
+    img = render(text, bg=200, ink=140).astype(np.float32)
+    h, w = img.shape
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    # Keilkante: diagonal, oben weiter links als unten
+    edge = (xs - center_x) / 4.0 + (70.0 - ys) / 10.0
+    gain = 1.0 - darkening / (1.0 + np.exp(-edge))
+    return np.clip(img * gain, 0, 255).astype(np.uint8)
+
+
+def test_bg_closing_blank_cell_under_reflection_wedge_stays_blank():
+    """Abnahmebefund `ab2` (VALIDATION.md 2026-09-29): Ein Hintergrund je
+    Zelle kam aus dem hellen Teil, der dunkle Keil las sich als Punktmuster
+    (bis 0,88). Mit Hintergrund je Punkt bleibt die Leerzelle leer."""
+    text = "+0.60972 "
+    s = sample_image(_wedge_image(text), GRID, range(9))
+    zero = SHIFTS.index((0, 0))
+    n = normalized(s)
+    assert n[8, zero].max() < 0.35, n[8, zero].reshape(8, 5).round(2)
+    for i, ch in enumerate(text[:8]):
+        assert np.abs(n[i, zero] - rom_vector(ch)).max() < 0.35, (i, ch)
+
+
+def test_bg_closing_counterexample_cell_background_reads_wedge_as_ink():
+    """Gegenprobe zum Test oben: mit dem alten Hintergrund je Zelle (ein
+    Wert, `background_dots=None`) erscheint derselbe Keil als Tinte - der
+    Testaufbau bildet den Befund also wirklich ab."""
+    from dataclasses import replace
+
+    s = sample_image(_wedge_image("+0.60972 "), GRID, range(9))
+    zero = SHIFTS.index((0, 0))
+    old = normalized(replace(s, background_dots=None))
+    assert old[8, zero].max() > 0.5
+
+
+def test_bg_closing_vertical_gradient_keeps_top_row_of_blank_cell_clean():
+    """Auch in guten Aufstellungen ist Zeile 0 oft dunkler (Schatten der
+    Blende); mit einem Hintergrund je Zelle stand sie in Leerzellen bei
+    0,07-0,16. Hintergrund je Punkt gleicht das aus."""
+    text = "+0.60972 "
+    img = render(text, bg=200, ink=140).astype(np.float32)
+    h = img.shape[0]
+    gain = np.linspace(0.85, 1.0, h, dtype=np.float32)[:, None]
+    s = sample_image(np.clip(img * gain, 0, 255).astype(np.uint8), GRID, range(9))
+    zero = SHIFTS.index((0, 0))
+    assert normalized(s)[8, zero].max() < 0.15
+
+
+def test_bg_closing_background_dots_shape_and_uniform_image():
+    img = np.full((160, 400), 180, np.uint8)
+    s = sample_image(img, GRID, range(9))
+    assert s.background_dots is not None
+    assert s.background_dots.shape == s.raw.shape
+    assert np.allclose(s.background_dots, 180.0, atol=0.5)
+
+
+def test_bg_closing_is_the_recorded_normalization():
+    from dispread.ocr.dotmatrix_sampling import NORMALIZATION
+
+    assert NORMALIZATION == "bg_closing_v1"

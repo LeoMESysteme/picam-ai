@@ -3,6 +3,34 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Hintergrund je Punkt, Normierung `bg_closing_v1`)
+
+**Problem:** Abnahme 1 von Stufe 2 ist nicht bestanden. In `ab2` wurden
+alle 83 Proben abgelehnt. Der weiche Rand einer Glasspiegelung lief durch
+die Leerzelle 8. Der Hintergrund war ein Wert je Zelle (80. Perzentil der
+40 Punkte) und kam aus dem hellen Teil, der dunkle Teil las sich als
+Punktmuster (bis 0,88). Auch in guten Aufstellungen war Zeile 0 von
+Leerzellen durch den Schatten der Blende auf 0,07–0,16 angehoben.
+
+**Änderung:**
+* **`dotmatrix_sampling.sample_image`** bildet eine Grauwert-Schließung des
+  geglätteten Bildes (Rechteck ±1,5 Punktspalten × ±1,5 Punktzeilen) und
+  tastet sie an jeder verschobenen Punktmitte ab. Das Ergebnis steht im
+  neuen Feld `SampledImage.background_dots`.
+* **`normalized`** rechnet mit diesem Hintergrund je Punkt, sowohl über die
+  relative Tiefe je Zelle als auch im globalen Weg (`ink=`).
+* `NORMALIZATION = "bg_closing_v1"` und `dotmatrix.BACKEND_VERSION = "3"`.
+  Vorlagen mit `ink_per_cell_v1`, darunter die eingefrorenen von Stufe 2,
+  lädt der Leser nicht mehr.
+* Spec §2 Punkt 3 ergänzt, mit vorab festgelegtem Kriterium für `loo`.
+* **Tests:** Leerzelle unter einem Spiegelungskeil, dazu eine Gegenprobe
+  mit dem alten Hintergrund je Zelle, sowie ein senkrechter Verlauf. Die
+  synthetischen Testbilder in `test_dotmatrix_train_eval` bekommen dieselbe
+  Unschärfe und dasselbe Rauschen wie die Trainingsbilder.
+
+**Konsequenz:** Neue Vorlagen und eine neue `loo`-Messung sind nötig
+(VALIDATION.md). Eine neue Abnahme braucht neue Aufstellungen.
+
 ## 0.1.0.dev0 — 2026-09-29 (Aufnahme: Zwischenablage im RAM gegen Schreibhänger der SD-Karte)
 
 **Problem:** Bei den Ernten gingen zunehmend Bilder verloren, zuletzt 34 %

@@ -66,6 +66,27 @@ leer. Verletzt das Gelesene die Regel, wird der ganze Wert abgelehnt.
    schwärze des LCD in der Aufstellung `sc3` (VALIDATION.md 2026-09-29).
    Vorlagendateien tragen die Normierung (`normalization`) und werden bei
    Abweichung abgelehnt. Schwellenformel und ROM-Regel bleiben unverändert.
+   *Änderung 2026-09-29 (`bg_closing_v1`, nach nicht bestandener Abnahme 1):*
+   Hintergrund **je Punkt** statt je Zelle. Das geglättete Bild wird mit einem
+   Rechteck von ±1,5 Punktspalten × ±1,5 Punktzeilen grauwert-geschlossen
+   (Maximum-, dann Minimumfilter). Das entfernt Punkte und Striche bis 2
+   Punkte Breite und lässt größere Helligkeitsverläufe stehen. Der Wert des
+   geschlossenen Bildes an jeder (verschobenen) Punktmitte ist der
+   Hintergrund dieses Punkts. Die relative Punkttiefe je Zelle
+   (`ink_per_cell_v1`) bleibt, sie wird mit dem Hintergrund des Punkts
+   multipliziert. Punktwert = (Hintergrund − Punkt) / Tiefe. Ebenso im
+   globalen Weg der Leerzellenprüfung. Kontrast, Sättigung und der
+   Hintergrund je Zelle für die Tiefenmessung bleiben wie bisher.
+   Anlass: In `ab2` lief der weiche Rand einer Glasspiegelung durch die
+   Leerzelle 8, der Hintergrund je Zelle kam aus dem hellen Teil, der
+   dunkle Teil las sich als Punktmuster (bis 0,88). Alle 83 Proben wurden
+   abgelehnt (VALIDATION.md 2026-09-29).
+   Vorab festgelegtes Kriterium: `loo` auf allen Gruppen mit 0 falsch
+   freigegebenen Werten, keine scharfe Gruppe (`ernte1`, `sc3`–`sc6`,
+   `ab1`) schlechter als unter `ink_per_cell_v1`, und `ab2` nicht mehr
+   vollständig abgelehnt. `ab1`/`ab2` sind seit der nicht bestandenen
+   Abnahme Entwicklungsdaten. Die nächste Abnahme braucht neue
+   Aufstellungen (`ab3`, `ab4`).
 4. **Verschiebungssuche:** je Zelle ±1 natives Pixel (umgerechnet in
    entzerrte Pixel über `native_scale`), gleich für alle Klassen.
 5. **Abstand:** zu jeder Vorlage, je Punkt mit der gelernten Streuung

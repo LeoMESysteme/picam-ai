@@ -310,7 +310,7 @@ def test_load_templates_rejects_missing_counts(tmp_path, samples):
 
 def test_templates_record_normalization_and_reject_other(tmp_path, samples):
     """Vorlagen gelten nur fuer die Normierung, mit der sie gelernt wurden
-    (`ink_per_cell_v1` seit 2026-09-29) - eine abweichende oder fehlende
+    (`bg_closing_v1` seit 2026-09-29) - eine abweichende oder fehlende
     Angabe wird abgelehnt, nicht still weiterbenutzt."""
     from dispread.ocr.dotmatrix_sampling import NORMALIZATION
 
@@ -318,7 +318,7 @@ def test_templates_record_normalization_and_reject_other(tmp_path, samples):
     path = tmp_path / "templates.json"
     save_templates(t, path)
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["normalization"] == NORMALIZATION == "ink_per_cell_v1"
+    assert data["normalization"] == NORMALIZATION == "bg_closing_v1"
     load_templates(path)
 
     for bad in ("global_ink_v0", None):
