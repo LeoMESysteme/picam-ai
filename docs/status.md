@@ -54,11 +54,12 @@ Codex-Pflegelauf über den Runner `picam-codex-docs` mit OQ-Index, strengem
 Build, Vorschau-Ankern und Browsertests vor jedem Push. Details:
 [HOSTING.md](HOSTING.md), [project_history.md](project_history.md) 2026-09-23.
 
-Prüfung am 2026-09-29: Der Pflegeworkflow startet täglich um 06:00 Uhr
-(Europe/Berlin) oder manuell, aber nicht bei Pushes auf `master`. Der
-Codex-Runner nahm den geplanten Lauf um 06:00:41 Uhr an. Die späteren
-Commits auf `master` lösen daher keinen eigenen Pflegelauf aus; der nächste
-geplante Lauf prüft den dann aktuellen Stand.
+Prüfung am 2026-09-29: Der Pflegeworkflow hat keinen Push-Trigger. Die
+geplanten Läufe vom 25. bis 29. September wurden zwar um 06:00 Uhr
+(Europe/Berlin) angelegt, aber der Job `maintain` wurde jeweils sofort als
+`skipped` beendet. Die Job-Bedingung auf `github.ref` entfällt; der Checkout
+holt ausdrücklich den aktuellen `master`. Ein erfolgreicher
+Forgejo-Lauf nach Veröffentlichung steht noch aus.
 
 ## Nächste Schritte
 

@@ -20,12 +20,12 @@ on:
 
 jobs:
   maintain:
-    if: github.ref == 'refs/heads/master'
     runs-on: picam-codex-docs
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: master
           fetch-depth: 0
           persist-credentials: false
 
