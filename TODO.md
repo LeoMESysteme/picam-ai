@@ -9,7 +9,7 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst (2026-09-29): Kalibrierung C, dann `loo`
+## Zuerst (2026-09-29): zweite Aufstellung, dann `loo`
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
@@ -18,20 +18,14 @@ Gruppen (`ernte1` 152, `auf2` 76, `auf3` 73, `sc3` 46). Die Aufnahmen `sc1`/`sc2
 waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2026-09-28/29).
 
-1. **Kalibrieraufnahme C mit dem Nutzer** (Stimulus von Hand, 180 s) in `sc3`,
-   **ohne Kamera oder Tisch zu berühren**:
-   `sync-record.py --source camera --camera-settings var/diagnostics/sc3-profile
-   --frame-rate 15 --image-format jpg --duration 180 --output var/diagnostics/sc3-cal-c`.
-   Vorher mit `import-harvest`-Ausrichtung oder ORB prüfen, dass die Kamera
-   noch zum `sc3`-Profilbild passt. Dann `display-offset.py --profile
-   var/diagnostics/sc3-profile` auf `sc3-cal-a/b/c` und
-   `timing-calibration.py` → neue `var/calibration/timing-streamcam.json`.
-   Die jetzige (M = 1225,8 ms) stammt aus verschobenen Aufnahmen und ist
-   vorläufig. A und B sind schon aufgenommen und ausgewertet: δ +99/+97 ms,
-   σ 6/2 ms, M 289/271 ms (VALIDATION.md 2026-09-28/29). In A/B wurden viele Bilder
-   wegen voller SD-Karte verworfen; bei Bedarf A/B wiederholen.
-2. Mit neuem M ggf. `gate-label` für `sc3-run` neu laufen lassen (nur, wenn M
-   deutlich kleiner wird: mehr Ausbeute; größeres M → neu labeln Pflicht).
+1. ~~Kalibrieraufnahme C~~ erledigt am 2026-09-29. Die neue
+   `var/calibration/timing-streamcam.json` hat M = 325,9 ms und einen
+   Anzeigeversatz von 89,6 ms, aus `sc3-cal-a/b/c` (VALIDATION.md
+   2026-09-28/29). Die alte Datei (M = 1225,8 ms) liegt daneben als
+   `.v-sc1-20260928.json`.
+2. Optional `gate-label` für `sc3-run` mit dem neuen M neu laufen lassen und
+   neu importieren. Das bringt mehr Ausbeute. Die jetzigen Labels (mit altem,
+   größerem M) bleiben gültig.
 3. Eine zweite feste Aufstellung (anderer Winkel/Abstand) ernten, damit zwei
    scharfe Gruppen vorliegen. Reflexe erst in voller Auflösung prüfen.
 4. **OQ-42 entscheiden** (Nutzer), dann `dotmatrix-eval.py loo`.

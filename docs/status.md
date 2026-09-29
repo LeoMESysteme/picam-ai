@@ -29,9 +29,9 @@ umgesetzt und reviewt. Ledger:
 * **Aufstellung `sc3`** (Kamera fest auf dem Tisch, Reflexe durch Drehen des
   Displays vermieden): 46 Proben importiert, Ausrichtung max. 0,08 px,
   ROM-Gegenprobe je Zeichen 0 Abweichungen. Datensatz 435 Proben.
-* **Timing-Kalibrierung vorläufig:** `var/calibration/timing-streamcam.json`
-  (M = 1225,8 ms) stammt aus verschobenen Aufnahmen. Neu messen in `sc3`
-  (A/B aufgenommen, C mit dem Nutzer ausstehend).
+* **Timing-Kalibrierung neu** (2026-09-29, `sc3-cal-a/b/c`, Kamera fest):
+  M = 325,9 ms, Anzeigeversatz 89,6 ms, σ_δ 2–26 ms. Ersetzt die vorläufige
+  Datei aus den verschobenen Aufnahmen (M = 1225,8 ms).
 * **Dot-Matrix-Leser:** fertig und geprüft, nie ein falscher Wert. Die
   festgelegte Messung (`loo`) wartet auf eine zweite scharfe Aufstellung und
   die Entscheidung zu [OQ-42](open-questions.md).
@@ -49,10 +49,9 @@ Build, Vorschau-Ankern und Browsertests vor jedem Push. Details:
 
 ## Nächste Schritte
 
-1. Kalibrieraufnahme C in `sc3` mit dem Nutzer, dann neue Kalibrierung.
-2. Zweite feste Aufstellung ernten, OQ-42 entscheiden, `dotmatrix-eval.py loo`.
-3. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
+1. Zweite feste Aufstellung ernten, OQ-42 entscheiden, `dotmatrix-eval.py loo`.
+2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
    Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
-4. Sicherung von `var/` auf ein anderes Medium.
+3. Sicherung von `var/` auf ein anderes Medium.
 
 Das GSVmulti-Telegramm bleibt OQ-07.

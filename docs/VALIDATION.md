@@ -1780,8 +1780,22 @@ Zeichen** (so sauber wie `ernte1`). `loo` mit `sc3` ist noch nicht gelaufen.
 | `sc3-cal-a` (Ruhe) | klein | 36/47 | +99 ms | 6 ms | 133 ms | 289 ms |
 | `sc3-cal-b` (Normierung) | klein | 20/25 | +97 ms | 2 ms | 127 ms | 271 ms |
 | `sc3-cal-b` | groß | 1/20 | – | – | – | nicht erkannt (wie erwartet) |
+| `sc3-cal-c` (Stimulus von Hand, 2026-09-29) | groß | 8/11 | +97 ms | 7 ms | 119 ms | 276 ms |
+| `sc3-cal-c` | klein | 6/8 | +90 ms | 26 ms | 119 ms | 326 ms |
 
 Mit ortsfester Kamera ist die Streuung um eine Größenordnung kleiner als in
 `sc1` (σ 108/225 ms). Die hohen M-Werte vom Vormittag kamen aus der
-Kamerabewegung. Die Kalibrierdatei ist **noch nicht** ersetzt: Aufnahme C
-(Stimulus, große Wechsel) fehlt, siehe TODO.md.
+Kamerabewegung.
+
+**Neue Kalibrierung (2026-09-29).** Aufnahme C: 180 s, 2255 Bilder, 432
+wegen voller Schreib-Warteschlange verworfen, keine Bildlücke, 290 verdeckte
+Bilder (Hand) ausgeschlossen. Nachträglich an 13 Bildern gegen das
+`sc3`-Profilbild geprüft: Verschiebung 0,3–1,7 px, zuverlässig geschätzt,
+unter der Import-Grenze (0,5 Punktspalten ≈ 2,2 px). Die Vorabprüfung vor der
+Aufnahme wurde ausgelassen. Beide Populationen stimmen bis auf 8 ms überein.
+`timing-calibration.py` über A, B und C ergibt als Maximum (Regel 1 vom
+2026-09-28) **M = 325,9 ms** (aus „C klein“), Anzeigeversatz 89,6 ms. Das
+ersetzt `var/calibration/timing-streamcam.json` (vorher M = 1225,8 ms, als
+`timing-streamcam.v-sc1-20260928.json` aufbewahrt). Die `sc3`-Ernte wurde mit
+dem alten, größeren M gelabelt. Das ist strenger und bleibt gültig. Neu
+labeln bringt nur mehr Ausbeute.
