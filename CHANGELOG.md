@@ -159,6 +159,13 @@ Plan: `docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
   durchgehen lassen, das wurde vorher mit einem Schachbrettmuster
   nachgestellt. Die Merkmale des Profilbilds werden einmal je Import
   berechnet. Die Schwellen sind unverändert.
+- **Doku 2026-09-28/29:** Die Aufstellungen `sc1` und `sc2` waren durch
+  Bewegung der Kamera verschoben. Ihre 103 Proben wurden wieder aus dem
+  Datensatz genommen, der Korrekturvermerk steht in `VALIDATION.md`, die
+  Kalibrierung gilt als vorläufig. Neue feste Aufstellung `sc3`: 46 Proben,
+  ROM-Gegenprobe je Zeichen 0 Abweichungen, Datensatz 435. `TODO.md` und
+  `status.md` sind für den Wiedereinstieg aktualisiert (Kalibrieraufnahme
+  C, zweite Aufstellung, OQ-42, Speicherplatz).
 <!-- streamcam-bullets -->
 
 **Konsequenz:** IMX500-Pfade (`picamera2://`, `imx500://`, Streamstart-Budget,

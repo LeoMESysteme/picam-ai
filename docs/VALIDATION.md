@@ -1651,6 +1651,17 @@ Kalibrieraufnahme.
 
 ## 2026-09-28 — StreamCam: Timing-Kalibrierung und erste zwei Ernten (`sc1`, `sc2`)
 
+> **Korrektur (2026-09-28 nachmittags):** Die Kamera war in diesen
+> Aufnahmen **nicht ortsfest**. Gemessen per ORB-Ähnlichkeitstransformation
+> gegen das jeweilige Profilbild: `sc1`-Profilbild → A/B/C 45–70 px (A–C
+> springen zwischen zwei Lagen), → Ernte `sc1` ≈ 105–190 px und 2 %
+> Maßstab, Ernte `sc2` springt mitten im Lauf von +7 auf −11 px. Die 103
+> importierten Proben lagen deshalb geometrisch falsch (Dot-Matrix-Lader:
+> 10–22 von 40 Punkten je Zeichen neben dem ROM) und wurden wieder aus dem
+> Datensatz genommen (`var/removed-20260928-sc/`, Datensatz zurück auf 389).
+> Die Kalibrierung unten (M = 1225,8 ms) stammt aus solchen Aufnahmen und
+> gilt als **vorläufig**. Siehe den folgenden Abschnitt.
+
 **Aufbau:** Logitech StreamCam an USB3, GSV-2AS mit Punktraster-Anzeige
 (Displaytech 161A), `/dev/ttyUSB0` 38400 8N1. Aufnahmen mit 15 fps (aus 30 fps
 nach Zeitstempel ausgedünnt), JPEG. Code-Stand `c1b75d1` (Task 8) und `e92a30e` (Task 9).
@@ -1722,3 +1733,42 @@ der Dot-Matrix-Lader löst alle 404 geernteten Proben mit Profil auf
 zunächst an den Drop-Zeilen ab (`KeyError`, behoben in Task 9).
 **Befund:** Die JPEG-Schreib-Warteschlange (60) läuft bei 1080p gelegentlich
 voll (0,2 % bzw. 1,2 % der Bilder).
+
+## 2026-09-28/29 — StreamCam: Kamerabewegung erkannt, Aufstellung `sc3`, Ausrichtungsprüfung
+
+**Befund Kamerabewegung.** `dotmatrix-eval.py loo` (5 Gruppen, vorab
+festgelegt) brach an der ROM-Gegenprobe ab. Diagnose je Gruppe: `ernte1` 0,
+`auf2`/`auf3` ≤ 5, `sc1`/`sc2` 10–22 abweichende Punkte je Zeichen. Ursache:
+Die Kamera wurde zwischen und während der Aufnahmen bewegt (Zahlen im
+Korrekturvermerk oben). Eine erste Vermutung „automatische Bildausrichtung
+der Kamera" war falsch: In Logitech Capture ist Auto-Framing aus, und eine
+90-s-Ruheprobe ist stabil (Drift ≈ 1 px, Maßstab ±0,1 %). Konsequenz:
+Task 10, `import-harvest.py` prüft jedes Bild gegen das Profilbild.
+
+**Aufstellung `sc3`.** Kamera fest auf dem Tisch, leicht von oben; das
+Display wurde zweimal leicht gedreht, bis weder Spiegelung (dunkles Rechteck
+bei frontalem Blick) noch Glanzpunkt der Deckenleuchte auf dem Glas lagen.
+Fokus 50 (Sweep und Nachmessung aus beiden Richtungen), Belichtung 300,
+WB 4884 K, Gain 5. Quad per Punktgitter-Homographie, Raster left 0, pitch 25,
+top 17,78, bottom 160,0 (8 Zeilen, Zeilenmitten gegen gemessene
+Zeichenzeilen ≤ 0,6 px), 4,222 px je Punktspalte. Profil vom Nutzer
+bestätigt, mit `reference_frame`.
+
+| Aufnahme | Bilder | verworfen (Warteschlange) | `frame_gaps` |
+| --- | --- | --- | --- |
+| `sc3-cal-a` (Ruhe, 180 s) | 2262 | 425 | 0 |
+| `sc3-cal-b` (24 Normierungssprünge, Seed 2026092811, 7 s) | 3255 | 481 | 0 |
+| Ernte `sc3-run` (30 × 6 s, Seed 2026092803) | 3333 | 404 | 0 |
+
+Die vielen verworfenen Bilder: Die SD-Karte lief voll (am Ende 134 MB frei,
+morgens 16 GB), dazu kam in A die Schreiblast eines parallel angelegten
+git-Worktrees. Danach wurden die Einzelbilder der verworfenen
+`sc1`/`sc2`-Aufnahmen gelöscht (7,7 GB; Metadaten, Auswertungen und
+Kalibrierung bleiben).
+
+**Ernte `sc3`:** 571 gelabelt, 18 Zeichenketten, 50 ausgewählt;
+Ausrichtung gegen das Profilbild max. 0,08 px (median 0,05). Import:
+`ausschnitt_verschoben` 0, `ausschnitt_unpruefbar` 0, `bildguete` 1,
+`zellen_inkonsistent` 3 → **46 importiert**, Datensatz 389 → 435.
+**ROM-Gegenprobe je Zeichen für `sc3` allein: 0 Abweichungen bei allen 13
+Zeichen** (so sauber wie `ernte1`). `loo` mit `sc3` ist noch nicht gelaufen.
