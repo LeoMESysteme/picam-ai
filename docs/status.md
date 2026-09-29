@@ -61,10 +61,12 @@ geplanten Läufe vom 25. bis 29. September wurden zwar um 06:00 Uhr
 (Europe/Berlin) angelegt, aber der Job `maintain` wurde jeweils sofort als
 `skipped` beendet. Die Job-Bedingung auf `github.ref` entfällt; der Checkout
 holt ausdrücklich den aktuellen `master`. Manueller Vorschaulauf 67 am
-2026-09-29: Job ausgeführt, aber Codex bricht bei der Workspace-Routing-Abfrage
-mit HTTP 401 ab. Die geschützte Anmeldedatei des Runner-Benutzers muss durch
-die vorhandene lokale Codex-Anmeldung ersetzt und der Vorschaulauf wiederholt
-werden; ein erfolgreicher Forgejo-Lauf steht noch aus.
+2026-09-29: Job ausgeführt, aber Codex brach bei der Workspace-Routing-Abfrage
+mit HTTP 401 ab. Nach Übernahme der vorhandenen lokalen Codex-Anmeldung in
+das geschützte Runner-Konto lief die manuelle Vorschau
+[72](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/72)
+am selben Tag erfolgreich durch (10:43–10:47 UTC). Der nächste geplante
+Publish-Lauf steht noch aus.
 
 ## Nächste Schritte
 
