@@ -105,10 +105,15 @@ def test_setup_checks_roundtrip(tmp_path):
     assert json.loads(path.read_text())["setup_checks"] == checks
 
 
-def test_existing_profile_resaves_byte_identically_without_setup_checks(tmp_path):
-    source = Path(__file__).parents[1] / "var/diagnostics/ernte1-profile/profile.json"
-    if not source.exists():
-        pytest.skip("Bestandsprofil ist nicht vorhanden")
+_DIAGNOSTICS = Path(__file__).parents[1] / "var/diagnostics"
+_EXISTING_PROFILES = sorted(
+    path for path in [*_DIAGNOSTICS.glob("*-profile"), *_DIAGNOSTICS.glob("*-profile/profile.json")]
+    if path.is_file()
+)
+
+
+@pytest.mark.parametrize("source", _EXISTING_PROFILES, ids=lambda path: str(path.relative_to(_DIAGNOSTICS)))
+def test_existing_profile_resaves_byte_identically_without_setup_checks(tmp_path, source):
     profile = SessionProfile.load(source)
     assert profile.setup_checks is None
     target = tmp_path / "profile.json"

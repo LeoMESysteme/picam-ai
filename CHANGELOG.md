@@ -157,6 +157,27 @@ Werkzeugrecherche grenzen historische IMX500-Aussagen ein.
 Startseiten-Link fehlt. Der automatische Audit kann lesende Subagents nutzen;
 Sessiondateien bleiben im geschützten Runner-Verzeichnis.
 
+## 0.1.0.dev0 — 2026-09-29 (Einrichtungsassistent: Nacharbeit 1, pausierter Zwischenstand)
+
+**Problem:** Die erste Review fand falsch akzeptierte Rasterlagen, feste
+Pixeltoleranzen bei größerem Punktabstand, Kantenfehlalarme und fehlende
+Prüfungen für verdeckte Randpunkte und den eingefrorenen Leser. Bei `sc6`
+scheiterte die automatische Rasteranpassung.
+
+**Änderung:** Leerzellen und Raster-Bias begrenzen die Anpassung; der
+Plusnachweis und Suchfenster berücksichtigen den Punktabstand. Kantenwerte
+werden zellintern verglichen, Punktkontrast in Float berechnet. Rahmen- und
+optionale Leserdiagnose sind ergänzt. `assist` meldet einen Vorfehler vor
+der Stabilitätswartezeit, misst den tatsächlichen Bildabstand und übergibt
+die endgültige Ampel an Vorschlag und Overlay. Gezielte Regressionen
+decken `sc6`, Format-Leerzellen, Randverdeckung und die echte CLI-Kette mit
+injizierter Kamera ab.
+
+**Konsequenz:** Der Stand ist für die Nutzerpause gesichert, aber noch nicht
+abgenommen. Die volle Testsuite, die endgültige Offline-Tabelle mit sechs
+Aufstellungen und die Doku-Prüfungen stehen aus. Die Kamera wurde nicht
+geöffnet; `var/` wurde nur gelesen.
+
 ## 0.1.0.dev0 — 2026-09-29 (Doku: interaktive Fortschrittsseite für Ernten und Training)
 
 **Problem:** Den Stand von Ernten, Datensatz, Leser-Entwicklung und

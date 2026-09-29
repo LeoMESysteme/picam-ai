@@ -6,7 +6,9 @@ damit der Befund bei spaeterer Kalibrierung erneut bewertet werden kann.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -14,16 +16,18 @@ import numpy as np
 
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.frame_alignment import estimate_quad_shift
-from dispread.ocr.dotmatrix_sampling import sample_image
+from dispread.layout import CharLayout
+from dispread.ocr.dotmatrix import DotMatrixReader
+from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, sample_image
 from dispread.rectify import rectify
 
 # Vorabwerte, aus den Aufstellungen vom 2026-09-29.
 TARGET_SIZE = (400, 160)
 GRID = CharGrid(16, 0.0, 25.0, 160.0 / 9.0, 160.0)
 POINT_CONTRAST_ERROR = 15.0
-POINT_CONTRAST_WARNING = 25.0
-EDGE_WARNING = 10.0
-EDGE_ERROR = 20.0
+POINT_CONTRAST_WARNING = 17.0
+EDGE_WARNING = 6.0
+EDGE_ERROR = 8.0
 EDGE_OCCUPIED_WARNING = 16.0
 EDGE_OCCUPIED_ERROR = 20.0
 EDGE_BACKGROUND_PERCENTILE = 99.0
@@ -41,6 +45,8 @@ BIAS_WARNING = 0.08
 STABILITY_MIN_ELAPSED_S = 30.0
 STABILITY_ERROR_PX = 0.5
 STABILITY_WARNING_PX = 0.2
+BORDER_DARK_RATIO_ERROR = 0.7
+BLANK_CELLS = (8, 13, 14, 15)
 
 
 @dataclass(frozen=True)
@@ -80,8 +86,9 @@ def _gray(image_bgr: np.ndarray) -> np.ndarray:
 
 def _point_contrast(gray: np.ndarray, quad: np.ndarray) -> float:
     # Claudes Handmass: Quellbildpixel und Isotropie in Quellbildkoordinaten.
-    signal = cv2.GaussianBlur(gray, (0, 0), 6).astype(np.float32)
-    signal -= cv2.GaussianBlur(gray, (0, 0), 0.8)
+    floating = gray.astype(np.float32)
+    signal = cv2.GaussianBlur(floating, (0, 0), 6)
+    signal -= cv2.GaussianBlur(floating, (0, 0), 0.8)
     mask = np.zeros(gray.shape, np.uint8)
     cv2.fillConvexPoly(mask, np.round(quad).astype(np.int32), 255)
     values = signal[mask > 0]
@@ -102,7 +109,9 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     horizontal_step = np.abs(background[25:140, 8:] - background[25:140, :-8])
     scores = []
     for k in range(16):
-        region = horizontal_step[:, max(0, 25 * k - 4):min(horizontal_step.shape[1], 25 * (k + 1))]
+        # Beide Werte eines Paares liegen mit 2 px Abstand zum Zellrand.
+        # Sonst fliesst die Nachbarglyphe in die Leerzellenpruefung ein.
+        region = horizontal_step[:, 25 * k + 2:25 * (k + 1) - 10]
         scores.append(float(np.max(np.percentile(region, 75, axis=0))))
     # Fuer belegte Zellen: obere Helligkeitshuelse entlang der Punktzeilen.
     # Die Addition des Hochpasses hebt dunkle Glyphen an; eine breite
@@ -113,8 +122,7 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     step = np.abs(envelope[8:] - envelope[:-8])
     occupied_scores = []
     for k in range(16):
-        # x und x+8 werden dem Mittelpunkt x+4 zugeordnet.
-        values = step[max(0, k * 25 - 4):min(len(step), (k + 1) * 25 - 4)]
+        values = step[k * 25 + 2:(k + 1) * 25 - 10]
         occupied_scores.append(float(np.max(values)))
     flagged = tuple(k for k in range(16) if (
         scores[k] > EDGE_WARNING if peak[k] < blank_limit
@@ -127,6 +135,61 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
                                 'cell_highpass': peak, 'blank_limit': blank_limit,
                                 'max_blank_step': max((scores[k] for k in flagged if peak[k] < blank_limit), default=0.0)},
                        flagged)
+
+
+def _border_check(sampled: SampledImage) -> CheckResult:
+    """Sucht dunkle, vom Rahmen verdeckte aeussere Punktreihen in Leerzellen."""
+    raw = sampled.raw[:, SHIFTS.index((0, 0)), :].reshape(16, 8, 5)
+    ratios: dict[int, dict[str, float]] = {}
+    flagged: list[int] = []
+    # Zelle 0 traegt normalerweise das Plus. Dessen Querstrich betrifft nur
+    # eine Zeile; der Median der Randspalte kann dennoch geprueft werden.
+    # Die Randzeilen vergleichen wir dort nur, wenn die Zelle innen leer ist.
+    first_inner = raw[0, 1:7, 1:5]
+    first_blank = np.percentile(first_inner, 10) >= 0.9 * np.median(first_inner)
+    for cell in (0, *BLANK_CELLS):
+        dots = raw[cell]
+        interior = max(1.0, float(np.median(dots[1:6, :])))
+        measures = {} if cell == 0 and not first_blank else {
+            'row_0': float(np.median(dots[0, :])) / interior,
+            'row_6': float(np.median(dots[6, :])) / interior,
+        }
+        if cell == 0:
+            measures['column_0'] = float(np.median(dots[:, 0])) / max(
+                1.0, float(np.median(dots[:, 1:3])))
+        if cell == 15:
+            measures['column_4'] = float(np.median(dots[:, 4])) / max(
+                1.0, float(np.median(dots[:, 2:4])))
+        ratios[cell] = measures
+        if min(measures.values()) < BORDER_DARK_RATIO_ERROR:
+            flagged.append(cell)
+    minimum = min(value for measures in ratios.values() for value in measures.values())
+    return CheckResult('FEHLER' if flagged else 'OK',
+                       {'minimum_border_ratio': minimum, 'border_ratios': ratios}, tuple(flagged))
+
+
+def diagnose_reader(frames: Sequence[np.ndarray], quad: list[list[float]],
+                    template_path: Path, template_sha256: str) -> CheckResult:
+    """Liest Standbilder mit geprueften Vorlagen; nutzt keinen Sollwert."""
+    if not frames:
+        raise ValueError('Mindestens ein Standbild ist fuer das Gegenlesen erforderlich')
+    reader = DotMatrixReader.from_file(Path(template_path), template_sha256)
+    layout = CharLayout(grid=GRID, unit='')
+    reasons: dict[str, int] = {}
+    read_count = 0
+    for frame in frames:
+        crop = rectify(frame, quad, target_size=TARGET_SIZE).image
+        result = reader.read(crop, layout)
+        if result.value is not None:
+            read_count += 1
+        else:
+            reason = str(result.diagnostics.get('reject_reason') or 'unbekannt')
+            reasons[reason] = reasons.get(reason, 0) + 1
+    count = len(frames)
+    severe_rejections = reasons.get('format', 0) + reasons.get('zelle_unbekannt', 0)
+    return CheckResult('WARNUNG' if severe_rejections > count / 2 else 'OK',
+                       {'frames': count, 'read_count': read_count,
+                        'read_rate': read_count / count, 'rejection_reasons': reasons})
 
 
 def _glare_check(warped_gray: np.ndarray) -> CheckResult:
@@ -202,6 +265,7 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
         'kontrast': CheckResult(contrast_status, {'punktkontrast': contrast,
                                                  'leser_kontrast': sampled.contrast}),
         'kanten': _edge_check(warped_gray),
+        'rahmen': _border_check(sampled),
         'glanz': _glare_check(warped_gray),
         'aufloesung': CheckResult(resolution_status, {'min_source_dot_column_px': resolution}),
         'raster': _raster_check(lattice_fit),

@@ -17,6 +17,7 @@ from dispread.setup_hint import find_green_hint_box
 
 GRID = CharGrid(n_cells=16, left=0, pitch=25, top=160 / 9, bottom=160)
 DIAGNOSTICS = Path("/home/me-systeme/picam-ai/var/diagnostics")
+EMPTY_CELLS = (8, 13, 14, 15)
 
 
 def _box(quad: np.ndarray, shape: tuple[int, int], margin: float = 0.1):
@@ -85,6 +86,62 @@ def test_shifted_column_seed_cannot_relabel_plus_as_valid():
     assert isinstance(fit_lattice(image, _box(quad, image.shape[:2]), seeds=shifted), str)
 
 
+def test_two_column_seed_shift_is_rejected():
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, h = _synthetic(quad, "+1234567 9012   ")
+    assert isinstance(
+        fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                    empty_cells=EMPTY_CELLS), LatticeFit,
+    )
+    shifted = [(xy, (cr[0] + 2, cr[1])) for xy, cr in _seeds(h)]
+    assert isinstance(fit_lattice(image, _box(quad, image.shape[:2]), seeds=shifted,
+                                  empty_cells=EMPTY_CELLS), str)
+
+
+def test_minus_sign_has_specific_rejection_reason():
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, _ = _synthetic(quad, "-1234567 9012   ")
+    assert fit_lattice(image, _box(quad, image.shape[:2]),
+                       empty_cells=EMPTY_CELLS) == "vorzeichen_kein_plus"
+
+
+@pytest.mark.parametrize("column", (2, 5))
+def test_candidate_in_format_empty_cell_is_rejected(column):
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, h = _synthetic(quad, "+1234567 9012   ")
+    target = np.float32([[[8 * 25 + (column + 0.5) * 25 / 6,
+                           160 / 9 + 3.5 * 160 / 9]]])
+    x, y = cv2.perspectiveTransform(target, h)[0, 0]
+    cv2.circle(image, (round(float(x)), round(float(y))), 2, (10, 10, 10), -1)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
+
+
+def test_cell_bias_over_limit_rejects_locally_displaced_dots():
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    display = render("+1234567 9012   ", GRID, bg=210, ink=30)
+    left, right = 4 * 25, 5 * 25
+    display[:, left:right] = cv2.warpAffine(
+        display[:, left:right], np.float32([[1, 0, 1.5], [0, 1, 0]]),
+        (right - left, display.shape[0]), borderValue=210,
+    )
+    h = cv2.getPerspectiveTransform(
+        np.float32([[0, 0], [400, 0], [400, 160], [0, 160]]), quad,
+    )
+    gray = cv2.warpPerspective(display, h, (1920, 1080), borderValue=120)
+    image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "bias_zu_gross"
+
+
+def test_automatic_start_recovers_seven_pixel_pitch():
+    quad = np.float32([[600, 480], [1272, 480], [1272, 650], [600, 650]])
+    image, _ = _synthetic(quad, "+1234567 9012   ")
+    result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
+
+
 def test_cursor_row_point_is_rejected():
     quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
     image, h = _synthetic(quad)
@@ -139,20 +196,22 @@ def test_clear_best_end_lattice_is_selected():
         pytest.param(
             name,
             marks=pytest.mark.skipif(
-                not (DIAGNOSTICS / f"{name}-still/frames/frame_000017.png").exists()
+                not (DIAGNOSTICS / f"{name}-still/frames/"
+                     f"frame_{'000015' if name == 'sc6' else '000017'}.png").exists()
                 or not (DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile").exists(),
                 reason="Standbild oder bestaetigtes Profil fehlt",
             ),
         )
-        for name in ("sc3", "sc4", "sc5", "ab1", "ab2")
+        for name in ("sc3", "sc4", "sc5", "ab1", "ab2", "sc6")
     ],
 )
 def test_real_still_matches_confirmed_quad(name):
-    still = DIAGNOSTICS / f"{name}-still/frames/frame_000017.png"
+    frame = "frame_000015.png" if name == "sc6" else "frame_000017.png"
+    still = DIAGNOSTICS / f"{name}-still/frames/{frame}"
     profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
     image = cv2.imread(str(still))
     quad = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
-    result = fit_lattice(image, _box(quad, image.shape[:2]))
+    result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
     assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
 
@@ -167,6 +226,6 @@ def test_green_hint_still_finds_ab2_lattice():
     quad = np.asarray(json.loads((DIAGNOSTICS / "ab2-profile").read_text())["quad"], np.float32)
     hint = find_green_hint_box(image)
     assert hint is not None
-    result = fit_lattice(image, hint)
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
     assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5

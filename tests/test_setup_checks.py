@@ -91,7 +91,10 @@ def test_stability_requires_elapsed_time_and_warns_if_unreliable():
     assert unreliable.checks['stabilitaet'].metrics['max_corner_shift_px'] is None
 
 
-@pytest.mark.parametrize('name,expected,step_cell_8', [('sc5', [], 8.0), ('ab1', [], 4.0), ('ab2', [8], 14.0)])
+@pytest.mark.parametrize('name,expected,step_cell_8', [
+    ('sc3', [], 4.0), ('sc4', [], 1.0), ('sc5', [], 2.0),
+    ('ab1', [], 2.5), ('ab2', [8], 9.0), ('sc6', [], 2.0),
+])
 def test_real_still_edge_regression(name, expected, step_cell_8):
     frame = ROOT / f'{name}-still/frames/frame_000017.png'
     profile = ROOT / f'{name}-profile'
@@ -106,6 +109,105 @@ def test_real_still_edge_regression(name, expected, step_cell_8):
         assert cell in cells
     if not expected:
         assert cells == ()
+    else:
+        assert result.checks['kanten'].status == 'FEHLER'
+
+
+@pytest.mark.parametrize('name', ('sc5', 'sc6'))
+def test_real_still_good_point_contrast_is_ok(name):
+    frame = ROOT / f'{name}-still/frames/frame_000017.png'
+    profile = ROOT / f'{name}-profile'
+    if not frame.exists() or not profile.exists():
+        pytest.skip('diagnostic still unavailable')
+    image = cv2.imread(str(frame))
+    quad = json.loads(profile.read_text())['quad']
+    result = check_setup(image, fit(quad=quad)).checks['kontrast']
+    assert 17 < result.metrics['punktkontrast'] < 22
+    assert result.status == 'OK'
+
+
+def test_dark_outer_column_in_blank_cell_fails_but_clean_border_passes():
+    clean = np.full((160, 400, 3), 100, np.uint8)
+    assert check_setup(clean, fit()).checks['rahmen'].status == 'OK'
+    covered = clean.copy()
+    covered[20:160, 391:400] = 44
+    check = check_setup(covered, fit()).checks['rahmen']
+    assert check.status == 'FEHLER'
+    assert 15 in check.cells
+    assert check.metrics['minimum_border_ratio'] < 0.7
+
+
+def test_dark_outer_row_in_blank_cell_fails():
+    image = np.full((160, 400, 3), 100, np.uint8)
+    image[24:31, 200:225] = 45
+    check = check_setup(image, fit()).checks['rahmen']
+    assert check.status == 'FEHLER'
+    assert 8 in check.cells
+
+
+def test_dark_left_column_in_blank_first_cell_fails():
+    image = np.full((160, 400, 3), 100, np.uint8)
+    image[20:160, :5] = 44
+    check = check_setup(image, fit()).checks['rahmen']
+    assert check.status == 'FEHLER'
+    assert 0 in check.cells
+
+
+def test_dark_left_column_with_plus_in_first_cell_fails():
+    clean = np.full((160, 400, 3), 100, np.uint8)
+    for row in range(7):
+        for column in range(5):
+            if row == 3 or column == 2 and 1 <= row <= 5:
+                x = round((column + .5) * 25 / 6)
+                y = round(160 / 9 + (row + .5) * (160 * 7 / 9) / 7)
+                cv2.circle(clean, (x, y), 2, (45, 45, 45), -1)
+    assert check_setup(clean, fit()).checks['rahmen'].status == 'OK'
+    covered = clean.copy()
+    covered[20:160, :5] = np.minimum(covered[20:160, :5], 44)
+    check = check_setup(covered, fit()).checks['rahmen']
+    assert check.status == 'FEHLER'
+    assert 0 in check.cells
+
+
+def test_reader_diagnostic_warns_only_on_majority_format_or_unknown(monkeypatch, tmp_path):
+    from dispread import setup_checks
+    from dispread.ocr import ReadResult
+    from dispread.setup_checks import diagnose_reader
+
+    reasons = iter(('format', 'zelle_unbekannt', None))
+
+    class Reader:
+        def read(self, crop, layout):
+            reason = next(reasons)
+            return ReadResult('', None if reason else 1.0, False, True, False, None,
+                              layout.unit, frozenset(), (), 'dotmatrix', '3',
+                              {'reject_reason': reason})
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file',
+                        lambda path, sha: Reader())
+    result = diagnose_reader([display()] * 3, QUAD, tmp_path / 'templates.json', 'a' * 64)
+    assert result.status == 'WARNUNG'
+    assert result.metrics == {'frames': 3, 'read_count': 1, 'read_rate': pytest.approx(1 / 3),
+                              'rejection_reasons': {'format': 1, 'zelle_unbekannt': 1}}
+
+
+def test_reader_diagnostic_other_rejections_do_not_warn(monkeypatch, tmp_path):
+    from dispread import setup_checks
+    from dispread.ocr import ReadResult
+    from dispread.setup_checks import diagnose_reader
+
+    class Reader:
+        def read(self, crop, layout):
+            return ReadResult('', None, False, True, False, None, layout.unit,
+                              frozenset(), (), 'dotmatrix', '3',
+                              {'reject_reason': 'kontrast'})
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file',
+                        lambda path, sha: Reader())
+    result = diagnose_reader([display()] * 3, QUAD, tmp_path / 'templates.json', 'a' * 64)
+    assert result.status == 'OK'
+    assert result.metrics['read_rate'] == 0.0
+    assert result.metrics['rejection_reasons'] == {'kontrast': 3}
 
 
 def test_bright_connected_glare_without_saturation_fails():

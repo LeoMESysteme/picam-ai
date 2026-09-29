@@ -1632,3 +1632,28 @@ bleibt ohne Kantenbefund. Dies prüft nur vorhandene Bilder und künstliche
 Störungen. Ein echter Lauf von `assist`, seine Dauer und das Verhalten bei
 anderen Reflexen sind damit noch nicht belegt. Zahlen und Ampeln stehen
 in [VALIDATION.md](VALIDATION.md).
+
+### 2026-09-29 — Nacharbeit 1, Zwischenstand vor der Pause
+
+**Aufbau:** Der überarbeitete Prüfer wurde offline auf die vorhandenen
+Frame-17-Bilder von `sc3`, `sc4`, `sc5`, `ab1`, `ab2` und Frame 15 von
+`sc6` mit den jeweils bestätigten Quads angewandt. `var/` wurde nur
+gelesen; eine Kamera wurde nicht geöffnet. Der Punktekontrast wird vor der
+Perzentilbildung in Float berechnet. Für die Kantenprüfung liegen beide
+Abtastwerte eines Paars jetzt innerhalb derselben Zelle. Die neue
+Rahmenprüfung wurde zusätzlich an synthetisch verdunkelten äußeren
+Punktspalten und an einem sauberen Plus geprüft.
+
+**Beobachtung:** Der zellinterne Kantenwert der Leerzelle 8 beträgt bei
+`ab2` 9,0 und ergibt FEHLER; die fünf anderen Aufstellungen liegen bei
+1,0–4,0 und bleiben OK. Die Rahmenprüfung meldet auf allen sechs
+bestätigten Aufstellungen OK. Der Punktkontrast liegt bei `sc5` 19,10,
+bei `sc6` 19,73; beide sind mit der Vorabschwelle 17 OK. Zahlen je
+Aufstellung stehen in [VALIDATION.md](VALIDATION.md).
+
+**Deutung und Grenze:** Die bestätigte `sc6`-Aufstellung zeigt keine
+verdeckte Randspalte. Der im Plan genannte Wert 44 gegen 94 gehört zu
+einem verworfenen Zwischenstand, dessen Bild hier nicht vorliegt; die
+synthetische Gegenprobe belegt nur die Empfindlichkeit des neuen Checks.
+Die Geometrie- und Gesamtampel-Tabelle muss mit dem finalen Code neu
+berechnet werden. Es gab keinen echten `assist`-Lauf oder Zeitmessung.

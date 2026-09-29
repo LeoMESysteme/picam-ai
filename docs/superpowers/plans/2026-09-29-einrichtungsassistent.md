@@ -578,6 +578,47 @@ korrigiert damit bestehende Profile.
 Belege liegen unter `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist/`
 (`perturb.log`, `exp1.log`).
 
+## Pausenstand Nacharbeit 1 — 2026-09-29
+
+Der Nutzer hat die Arbeit vor der Abschlussprüfung pausiert. Der isolierte
+Worktree bleibt `/home/me-systeme/picam-ai-assist` auf
+`feat/einrichtungsassistent`. Auftrag 0 ist erledigt: Rebase auf
+`origin/master` bei `ef5cedf`, Konflikte in den fünf Dokumentationsdateien
+als Anhänge zusammengeführt. `/home/me-systeme/picam-ai` und
+`/home/me-systeme/picam-ai-ernte` wurden nicht bearbeitet; Kamera und
+`/dev/video*` blieben geschlossen, `var/` wurde nur gelesen.
+
+**Implementiert, noch nicht vollständig abgenommen:** Nacharbeit 1 Punkte
+1–9: explizite Format-Leerzellen, Plus-/Minusprüfung, Bias-Grenze,
+skalierte Punktsuche und schnellere Rasteranpassung einschließlich `sc6`;
+zellinterne Kante, Float-Kontrast, Rahmenprüfung, optionale Diagnose mit
+eingefrorenem Leser; frühes FEHLER-Gate, tatsächlicher Bildabstand,
+Profil-Bytegleichheit und `assist`-Kettentest mit injizierter Kamera.
+Die Review-Lücken bei Plus-Randspalte und Overlay-Gesamtampel wurden per
+Regressionstest behoben und erneut geprüft. Keine Änderung unter
+`src/dispread/ocr/`.
+
+**Letzte gezielte Belege:** `tests/test_dotlattice.py`: 26 bestanden in
+58,11 s. `tests/test_setup_checks.py`: 29 bestanden. Schneller
+CLI-/Profil-Satz: 32 bestanden, ein echter Kettentest zunächst abgewählt;
+dieser bestand mit der finalen synthetischen Punktform anschließend separat
+in 2,98 s. Der abschließende `ruff check src tests examples scripts` war
+sauber. Die volle Suite ist
+seit der Nacharbeit **nicht** gelaufen. Es laufen keine Tests/Agenten mehr.
+
+**Morgen fortsetzen:** Zuerst gezielte Tests inklusive des Kettentests
+gemeinsam und `ruff check src tests examples scripts`; danach sechs
+Standbilder mit finaler `fit_lattice(..., empty_cells=(8,13,14,15))` und
+`check_setup` neu auswerten. Die alte Tabelle in `docs/VALIDATION.md` und
+die Geometrie-Zahlen im Laborjournal durch die Endwerte ersetzen,
+einschließlich `sc6`, `leser_kontrast`, Eckabweichungen und Ampeln. Dann
+Gesamtsuite nur ohne `var/RECORDING_IN_PROGRESS`, Doku-Build und
+Playwright, Gesamt-Review, Commit/Push prüfen. Der erste echte
+Kameralauf bleibt dem gemeinsamen Termin mit dem Nutzer vorbehalten.
+
+`TODO.md`, `docs/status.md` und `docs/open-questions.md` bleiben gemäß
+Aufgabe 5 dieses Plans unberührt; Claudes Merge-Schritt pflegt sie.
+
 ## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
 
 **Urteil: zurück an Codex.**

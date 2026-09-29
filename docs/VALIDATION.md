@@ -2733,3 +2733,28 @@ Anpassung alle fünf bestätigten Quads: größte Eckabweichung `sc3=0,18`,
 bildbasierten Hinweisbox-Pfad auf diesen vorhandenen Bildern, aber noch
 keinen echten `assist`-Kameralauf.
 
+### Nacharbeit 1 — Zwischenmessung vor der Pause
+
+Die Tabelle oben stammt aus dem Stand vor Claudes Review und ist **keine
+Abschlussmessung** der Nacharbeit. Für die folgenden Teilwerte wurde der
+aktuelle Prüfer auf vorhandene Standbilder mit den *bestätigten* Profil-Quads
+angewandt: `frame_000017.png` für `sc3`, `sc4`, `sc5`, `ab1`, `ab2` sowie
+`frame_000015.png` für `sc6`. Kein Kameralauf und kein Schreiben unter
+`var/`. Punktkontrast ist nun das 99. Perzentil der Differenz zweier
+Float-Gaußglättungen; Kantenpaare liegen vollständig im Zellinneren.
+
+| Aufstellung | Punktkontrast | Kantenwert Zelle 8 | Kantenampel | Rahmenampel |
+| --- | ---: | ---: | --- | --- |
+| `sc3` | 35,49 | 4,0 | OK | OK |
+| `sc4` | 24,67 | 1,0 | OK | OK |
+| `sc5` | 19,10 | 2,0 | OK | OK |
+| `ab1` | 42,65 | 2,5 | OK | OK |
+| `ab2` | 18,83 | 9,0 | FEHLER (Zelle 8) | OK |
+| `sc6` | 19,73 | 2,0 | OK | OK |
+
+Die Grenzwerte >6 (WARNUNG) und >8 (FEHLER) für die Hintergrundkante
+sowie <17 (WARNUNG) und <15 (FEHLER) für Punktkontrast sind Vorabwerte.
+Die vollständige Auswertung mit **automatisch** angepasstem Quad,
+`leser_kontrast`, Zuordnung, Eckabweichung und Gesamtampel steht nach
+Abschluss der Codeprüfung noch aus; sie ersetzt dann die ältere Tabelle.
+

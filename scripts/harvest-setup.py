@@ -7,6 +7,8 @@ Aufruf: `assist` fuehrt Fokus-Sweep, frisches Standbild, automatische
 Punktraster-Anpassung, Qualitaetspruefungen und Stabilitaetsbild aus. Danach
 die Overlays ansehen und den Vorschlag mit `confirm` bestaetigen. `propose`
 und `focus` bleiben fuer einzelne Einrichtungsschritte verfuegbar.
+Mit `--templates` und `--templates-sha256` meldet `assist` zusaetzlich die
+Lesequote und Ablehnungsgruende des eingefrorenen Dot-Matrix-Lesers.
 
 Aufruf:
 
@@ -110,7 +112,7 @@ from dispread.frames.uvc_source import (
 from dispread.glassquad import glass_quad_in_region
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
-from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup
+from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_reader
 from dispread.setup_hint import find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.vision import lcd_quad_in_region
@@ -125,6 +127,8 @@ WHITE_BALANCE_SETTLE_S = 3.0
 #: CLI-Regler - die Geometrie des angeschlossenen Geraets ist keine freie Wahl.
 N_CELLS = 16
 DEFAULT_TARGET_SIZE = (400, 160)
+# `gsv2as_v1`: Trennzelle und drei Abschlusszellen sind immer leer.
+GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 
 
 class SetupError(ValueError):
@@ -259,6 +263,8 @@ def build_parser() -> argparse.ArgumentParser:
     assist.add_argument("--hint-box", help="normierte Box x,y,w,h; ohne Angabe wird gruenes Glas gesucht")
     assist.add_argument("--stability-s", type=float, default=30.0, help="Abstand der zwei Standbilder in Sekunden, mindestens 30")
     assist.add_argument("--device", default=None, help="Kamerageraet fuer focus und Standbilder")
+    assist.add_argument("--templates", type=Path, help="eingefrorene Vorlagendatei fuer optionales Gegenlesen")
+    assist.add_argument("--templates-sha256", help="erwartete SHA-256-Pruefsumme der Vorlagendatei")
 
     return parser
 
@@ -294,7 +300,7 @@ def run_propose(args: argparse.Namespace) -> int:
             hint_box = _parse_hint_box(args.hint_box)
             fit = getattr(args, "precomputed_fit", None)
             if fit is None:
-                fit = fit_lattice(image, hint_box)
+                fit = fit_lattice(image, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
             if isinstance(fit, str):
                 print(f"Punktraster abgelehnt: {fit}", file=sys.stderr)
                 return 2
@@ -379,11 +385,17 @@ def run_propose(args: argparse.Namespace) -> int:
         "camera": camera_settings.to_dict(),
     }
     if checks is not None:
-        proposal["setup_checks"] = checks.to_dict()
+        checks_dict = checks.to_dict()
+        reader_check = getattr(args, "reader_check", None)
+        if reader_check is not None:
+            checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
+            if reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
+                checks_dict["overall"] = "WARNUNG"
+        proposal["setup_checks"] = checks_dict
     (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
 
     if fit is not None:
-        overlay_source = draw_source_overlay(image, fit, checks.overall)
+        overlay_source = draw_source_overlay(image, fit, proposal["setup_checks"]["overall"])
     else:
         overlay_source = image.copy()
         quad_pts = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
@@ -698,9 +710,19 @@ def _capture_fresh_still(io: _CameraIO, *, discard: int = 10) -> np.ndarray:
     return image
 
 
+def _print_setup_checks(checks: dict[str, Any]) -> None:
+    print("Einrichtungspruefungen:")
+    for name, result in checks["checks"].items():
+        print(f"  {name}: {result['status'] or 'nicht geprueft'} — {result['metrics']}")
+    print(f"Gesamturteil: {checks['overall']}")
+
+
 def run_assist(args: argparse.Namespace) -> int:
     if not math.isfinite(args.stability_s) or args.stability_s < 30.0:
         print("--stability-s muss endlich und mindestens 30 Sekunden betragen", file=sys.stderr)
+        return 2
+    if (args.templates is None) != (args.templates_sha256 is None):
+        print("--templates und --templates-sha256 muessen zusammen angegeben werden", file=sys.stderr)
         return 2
     if args.hint_box is not None:
         try:
@@ -727,6 +749,7 @@ def run_assist(args: argparse.Namespace) -> int:
                 raise UvcError(f"{io.device}: Kamera nicht zu oeffnen")
             io.set_controls(io.device, settings.ordered_controls())
             first = _capture_fresh_still(io)
+            first_captured_at = time.monotonic()
             if first.shape[:2] != (settings.size[1], settings.size[0]):
                 raise SetupError("Standbild passt nicht zur Kameraaufloesung")
             args.out.mkdir(parents=True, exist_ok=True)
@@ -736,16 +759,25 @@ def run_assist(args: argparse.Namespace) -> int:
                 hint_box = find_green_hint_box(first)
                 if hint_box is None:
                     raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
-            fit = fit_lattice(first, hint_box)
+            fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
             if isinstance(fit, str):
                 raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
-            check_setup(first, fit)  # Vorabpruefungen vor dem Stabilitaetsintervall.
+            prechecks = check_setup(first, fit)
+            _print_setup_checks(prechecks.to_dict())
+            if prechecks.overall == "FEHLER":
+                raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
             time.sleep(args.stability_s)
             second = _capture_fresh_still(io)
+            stability_elapsed_s = time.monotonic() - first_captured_at
             if second.shape != first.shape:
                 raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
             if not cv2.imwrite(str(args.out / "stability.png"), second):
                 raise SetupError("stability.png konnte nicht geschrieben werden")
+            reader_check = None
+            if args.templates is not None:
+                reader_check = diagnose_reader(
+                    (first, second), fit.quad, args.templates, args.templates_sha256,
+                )
         finally:
             io.capture.release()
     except (OSError, ValueError, UvcError, SetupError) as exc:
@@ -766,16 +798,14 @@ def run_assist(args: argparse.Namespace) -> int:
         detector="glass",
         precomputed_fit=fit,
         stability_image_bgr=second,
-        stability_elapsed_s=args.stability_s,
+        stability_elapsed_s=stability_elapsed_s,
+        reader_check=reader_check,
     )
     rc = run_propose(propose_args)
     if rc != 0:
         return rc
     checks = json.loads((args.out / "proposal.json").read_text(encoding="utf-8"))["setup_checks"]
-    print("Einrichtungspruefungen:")
-    for name, result in checks["checks"].items():
-        print(f"  {name}: {result['status'] or 'nicht geprueft'} — {result['metrics']}")
-    print(f"Gesamturteil: {checks['overall']}")
+    _print_setup_checks(checks)
     print(f"Standbilder: {args.out / 'still.png'}, {args.out / 'stability.png'}")
     print(f"Overlays: {args.out / 'overlay_source.png'}, {args.out / 'overlay_sampling.png'}")
     print(
