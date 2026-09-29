@@ -1772,3 +1772,16 @@ Ausrichtung gegen das Profilbild max. 0,08 px (median 0,05). Import:
 `zellen_inkonsistent` 3 → **46 importiert**, Datensatz 389 → 435.
 **ROM-Gegenprobe je Zeichen für `sc3` allein: 0 Abweichungen bei allen 13
 Zeichen** (so sauber wie `ernte1`). `loo` mit `sc3` ist noch nicht gelaufen.
+
+**Timing mit fester Kamera (`display-offset.py --profile var/diagnostics/sc3-profile`):**
+
+| Aufnahme | Wechselart | messbar | δ | σ_δ | d_misch | M |
+| --- | --- | --- | --- | --- | --- | --- |
+| `sc3-cal-a` (Ruhe) | klein | 36/47 | +99 ms | 6 ms | 133 ms | 289 ms |
+| `sc3-cal-b` (Normierung) | klein | 20/25 | +97 ms | 2 ms | 127 ms | 271 ms |
+| `sc3-cal-b` | groß | 1/20 | – | – | – | nicht erkannt (wie erwartet) |
+
+Mit ortsfester Kamera ist die Streuung um eine Größenordnung kleiner als in
+`sc1` (σ 108/225 ms). Die hohen M-Werte vom Vormittag kamen aus der
+Kamerabewegung. Die Kalibrierdatei ist **noch nicht** ersetzt: Aufnahme C
+(Stimulus, große Wechsel) fehlt, siehe TODO.md.
