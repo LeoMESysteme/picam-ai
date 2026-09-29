@@ -392,3 +392,77 @@ Bericht, die Ampel ist nur die Lesart.
    geraten. Weiche Verläufe (wie bei `sc3`) dürfen nicht als Kante gelten.
 3. **Kein Kamerazugriff in Tests**, kein Schreiben in `var/`.
 4. **Profil-Rückwärtskompatibilität** (Prüfsummen bestehender Profile).
+
+## Nacharbeit 1 (Review Claude, 2026-09-29, Branch-Stand `9a71d35`)
+
+**Urteil:** zurück an Codex, noch kein Merge. Das Grundgerüst ist brauchbar:
+`confirm`-Sperre, Profilfeld (alle 14 vorhandenen Profile bleiben
+bytegleich), Overlays, Ablauf von `assist`, kein Kamerazugriff in Tests.
+Verschobene Stützpunkte (±1/±2 Spalten, ±1 Zelle, ±1 Zeile, geschert)
+werden sicher abgelehnt.
+
+**Messbasis korrigiert:** Die Punktkontrast-Werte 41,3 (`sc5`) und 31,2
+(`ab2`) in der Tabelle oben lassen sich nicht nachstellen. Das exakt
+definierte Maß ergibt auf allen Standbildern von `sc5` 18,9–19,2 und bei
+`ab2` ähnlich. `sc3`, `ab1` und `sc6` passen (34,6 / 42,2 / 20,8). Die
+Tabelle war Claudes Handmaß auf einem anderen Bereich. Maßgeblich ist das
+exakt definierte Maß.
+
+**Aufträge**, in dieser Reihenfolge:
+
+0. **Zuerst auf das aktuelle `master` rebasen.** Damit kommen die
+   Nachträge 1c/2h/2i, `bg_closing_v1` (Leser-Normierung, ändert
+   `leser_kontrast`) und `--staging-root` dazu. Die Konflikte in CHANGELOG,
+   VALIDATION und project_history sind reine Anhänge.
+1. **1c Leerzellen:** In `refine` ablehnen, wenn Zelle 8 oder 13–15
+   zugeordnete Punkte oder Quellkandidaten hat. Die Leerzellen als Parameter
+   übergeben (Format `gsv2as_v1`), nicht fest verdrahten. Heute nimmt
+   `fit_lattice` mit `-` statt `+` in Zelle 0 ein Raster 17,6 px neben jeder
+   ganzzahligen Lage an (RMS 0,14 / 0,04, Punkte in Zelle 8)
+   (`dotlattice.py:254-256`).
+   Tests:
+   * Raster synthetisch um 2 Spalten verschoben → Ablehnung.
+   * `-` in Zelle 0 → Ablehnung mit eigenem Grund (`vorzeichen_kein_plus`).
+2. **Zellen-Bias:** In `refine` ablehnen, wenn |`cell_bias`| oder
+   |`row_bias`| über 0,15 liegt. Echte Bilder liegen bei höchstens 0,051.
+   Heute wird Inhalt, der um 2 Spalten gegen die Hinweislage versetzt ist,
+   angenommen: rechte Ecken 9–12 px daneben, `cell_bias` 0,26, nur WARNUNG
+   (`dotlattice.py:257-275`, `setup_checks.py:150`). Test dazu.
+3. **Pixelkonstanten skalieren:** alle festen Toleranzen aus dem geschätzten
+   Punktabstand ableiten (`dotlattice.py:84, 95-100, 338, 362-367, 428,
+   438`). Heute scheitert `sc6` (7 px je Spalte) mit `keine_startlage`.
+   `sc6` (`var/diagnostics/sc6-still/frames/frame_000015.png`,
+   `sc6-profile`) kommt in die Regression 1d (≤ 1,5 px), dazu synthetisch
+   7 px je Spalte.
+4. **Kantenprüfung:** nur Wertepaare im Zellinneren auswerten, heute läuft
+   das Fenster in die Nachbarglyphe (`setup_checks.py:104-106`). Das `m` in
+   Zelle 9 ergibt bei `sc6` einen Fehlalarm von 11,0. Im Zellinneren:
+   `ab2` 9, `sc5` 5–6, `sc3` 2–3, `sc4` 1–2, `ab1` 2–2,5, `sc6` 2. Die
+   Schwellen so setzen, dass `ab2` FEHLER ergibt und `sc3`–`sc6` sowie `ab1`
+   OK (Vorschlag FEHLER > 8, WARNUNG > 6, als Vorabwert gekennzeichnet).
+   Messwerte je Aufstellung im Test festhalten.
+5. **Kontrast:** in float rechnen, weil `GaussianBlur` auf uint8 rundet
+   (`sc4` kippt bei 25,0 bzw. 24,7). WARNUNG auf 17 senken, belegt durch
+   `sc5` = 19 und `sc6` = 20, beide gut. FEHLER bleibt bei 15.
+6. **2h und 2i** nach dem Plan oben umsetzen, mit synthetischen Tests.
+7. **`run_assist`:**
+   * das Ergebnis von `check_setup(first, fit)` ausgeben und bei FEHLER vor
+     der Stabilitätswartezeit abbrechen,
+   * `stability_elapsed_s` messen statt `args.stability_s` einzutragen.
+8. **Laufzeit:** `fit_lattice` dauert auf dem Pi 40–78 s, die Suite 14,5
+   statt 3,5 min. Die Kandidatensuche beschleunigen (`dotlattice.py:353-380`,
+   `_optimize_quad`) oder die langsamen Tests markieren. Ziel: Suite wieder
+   etwa 3,5 min.
+9. **Tests:**
+   * den Bytegleich-Test über alle vorhandenen Profile parametrisieren,
+   * einen `assist`-Test mit echter `fit_lattice`/`check_setup`-Kette auf
+     einem synthetischen Bild ergänzen.
+10. **Doku neu rechnen:** VALIDATION und lab_journal mit dem finalen Code,
+    einschließlich `sc6`. Die heutigen Zahlen stammen aus einem Zwischenstand
+    (z. B. `sc3` 193/195 Δ 0,25 statt 196/198 Δ 0,06).
+
+Kleinigkeiten:
+* Ablehnungsgründe genauer benennen (`plus_nicht_gefunden` statt
+  `startlage_mehrdeutig`, wenn Stützpunkte vorgegeben sind).
+* Die Prüfung der Cursorzeile lehnt schon bei einem einzigen Kandidaten ab.
+  Das ist sicher, aber anfällig für Staub.
