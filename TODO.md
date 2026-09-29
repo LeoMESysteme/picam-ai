@@ -49,8 +49,7 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    (Spec-Änderung wie `ink_per_cell_v1`, vorab festhalten, Tests, `loo` auf
    allen Gruppen). Danach neu einfrieren und zwei **neue**
    Abnahme-Aufstellungen ernten (`ab3`, `ab4`).
-9. Einzelbilder `ab1-run`/`ab2-run` löschen, wenn nicht mehr gebraucht
-   (Nutzer fragen).
+9. ~~Einzelbilder `ab1-run`/`ab2-run`~~ gelöscht am 2026-09-29 (Nutzer-OK).
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
