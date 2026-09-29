@@ -2195,3 +2195,26 @@ Training würden die Schwellen lockern.
 Vorab-Analyse (ROM-Muster als Referenz, Prototyp, nicht der Leser): Der
 höchste Wert eines Aus-Punkts in Leerzellen sinkt in `ab2` von 0,88 auf
 0,33, in `ernte1` von 1,00 auf 0,11, in den übrigen Gruppen auf 0,07–0,19.
+
+## 2026-09-29 — Dot-Matrix-Leser: Stufe 2 erneut eingefroren (`bg_closing_v1`, vor Abnahme 2)
+
+Eingetragen, **bevor** die Abnahme-Aufstellungen `ab3`/`ab4` entstehen
+(Spec Abschnitt 3, Stufe 2 Punkt 1).
+
+| Größe | Wert |
+| --- | --- |
+| Code-Commit | `ef5cedf` (Leser mit `bg_closing_v1` seit `50d68d6`) |
+| Vorlagen | `var/dotmatrix/templates-stufe2b-2026-09-29.json` (schreibgeschützt, Kopie in `/home/me-systeme/var-backups/`) |
+| sha256 der Vorlagen | `fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e` |
+| Formate | `format_version` 3, `normalization` `bg_closing_v1`, `threshold_formula` `thresholds_v1`, `rom_check` `rom_check_v2` |
+| Trainingsgruppen | `ab1`, `ab2`, `auf2`, `ernte1`, `sc3` (Profil `sc3b`), `sc4`, `sc5`, `sc6` (mit `sc6b`), 942 Proben geladen; `auf3` nicht zugelassen |
+| Schwellen | d_max 2,5978, margin_min 0,8168 |
+| ROM-Abweichung der Vorlagen | 0 Punkte bei allen 13 Zeichen |
+| Profil-Zuordnung | `var/diagnostics/dotmatrix-profile-map.json`, sha256 `77a7b678c3f74d58a426f66b8ad1bc37a513db767de9c428d8e36eb3d2f33a47` (Kopie in `var-backups`) |
+
+Ablauf und Kriterium wie bei Abnahme 1: zwei **neue** Aufstellungen
+`ab3`, `ab4`, einmaliger Lauf `dotmatrix-eval.py abnahme --templates
+var/dotmatrix/templates-stufe2b-2026-09-29.json --templates-sha256 fc3b44bd…
+--groups ab3,ab4`. Bestanden bei 0 falsch und höchstens 20 % abgelehnt.
+Erwartung aus `loo`: Unscharfe Aufstellungen werden eher abgelehnt
+(`auf2`).

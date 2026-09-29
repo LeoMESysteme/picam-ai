@@ -49,9 +49,9 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    Grauwert-Schließung. `loo` mit 942 Proben: 0 falsch, `ab2` 83/83, alle
    scharfen Gruppen vollständig richtig. `auf2` (unscharf) wird jetzt
    vollständig abgelehnt (vorher 63/76), VALIDATION.md.
-   **Nächster Schritt:** Stufe 2 neu einfrieren (Vorlagen auf allen
-   zugelassenen Gruppen), dann zwei **neue** Abnahme-Aufstellungen ernten
-   (`ab3`, `ab4`).
+   Stufe 2 neu eingefroren (Vorlagen `templates-stufe2b-2026-09-29.json`,
+   sha256 `fc3b44bd…`, VALIDATION.md). **Nächster Schritt:** zwei **neue**
+   Abnahme-Aufstellungen ernten (`ab3`, `ab4`), dann einmal `abnahme`.
 9. ~~Einzelbilder `ab1-run`/`ab2-run`~~ gelöscht am 2026-09-29 (Nutzer-OK).
 10. **Einrichtungsassistent** baut Codex parallel nach
     [Plan](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md) im
