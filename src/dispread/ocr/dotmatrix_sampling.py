@@ -10,6 +10,14 @@ Helligkeitsverlauf ueber das Glas aus, der wie eine ungleichmaessige
 Hintergrundbeleuchtung multiplikativ wirkt, nicht additiv (in allen drei
 Ernte-Aufstellungen war das rechte Drittel dunkler, VALIDATION.md
 2026-09-24).
+
+Seit `ink_per_cell_v1` (2026-09-29) ist auch die Punkttiefe nicht mehr
+global: Die relative Tiefe `(Hintergrund - Punkt) / Hintergrund` wird je
+Zelle gemessen und als Gerade ueber die Zellposition angepasst. Anlass:
+In der Aufstellung `sc3` faellt die Punktschwaerze eines LCD mit dem
+Blickwinkel ueber die Zeile ab (normierte An-Punkte 0,99 links bis 0,68
+rechts, VALIDATION.md 2026-09-29). Das wirkt nicht multiplikativ mit dem
+Hintergrund und wurde vom globalen Pegel nicht ausgeglichen.
 """
 
 from __future__ import annotations
@@ -30,6 +38,16 @@ _SIGMA_FRACTION = 0.3
 #: Anteil der hellsten Punkte einer Zelle, der als Hintergrund gilt.
 _BACKGROUND_PERCENTILE = 80.0
 _INK_PERCENTILE = 3.0
+#: Kennung der Normierung, steht in jeder Vorlagendatei (Vorlagen gelten nur
+#: fuer die Normierung, mit der sie gelernt wurden).
+NORMALIZATION = "ink_per_cell_v1"
+#: Eine Zelle zaehlt fuer den Tiefenverlauf, wenn ihre eigene relative Tiefe
+#: mindestens diesen Anteil der globalen erreicht (Zellen mit Zeichen, keine
+#: Leerzellen).
+_INKED_CELL_FRACTION = 0.5
+#: Rang des dunkelsten Punkts, der als Punktpegel der Zelle gilt (0 = der
+#: dunkelste; 1 = der zweitdunkelste, robust gegen ein einzelnes Rauschpixel).
+_CELL_INK_RANK = 1
 
 
 def dot_centers(grid: CharGrid, cell: int, shift: tuple[int, int] = (0, 0)) -> np.ndarray:
@@ -86,31 +104,65 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
     return SampledImage(raw, background.astype(np.float32), ink, float(max(contrast, 0.0)), saturated)
 
 
+def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
+    """Relative Punkttiefe je Zelle als Gerade ueber die Zellposition, oder
+    `None`, wenn weniger als zwei Zellen mit Zeichen vorliegen (dann gilt der
+    globale Pegel).
+
+    Je Zelle: Tiefe = (Hintergrund - zweitdunkelster Punkt) / Hintergrund bei
+    Verschiebung (0, 0). Nur Zellen mit mindestens `_INKED_CELL_FRACTION` der
+    globalen Tiefe gehen in die Anpassung ein. Die Gerade wird auf den
+    Bereich [0,5 x kleinste, 1,5 x groesste gemessene Tiefe] begrenzt, damit
+    Randzellen ohne Zeichen keinen unsinnigen Wert erhalten.
+    """
+    zero = SHIFTS.index((0, 0))
+    bg = s.background.astype(np.float64)
+    median_bg = float(np.median(bg))
+    if median_bg <= 0:
+        return None
+    global_depth = (median_bg - s.ink) / median_bg
+    if global_depth <= 0:
+        return None
+    dark = np.sort(s.raw[:, zero, :], axis=1)[:, _CELL_INK_RANK].astype(np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        depth = np.where(bg > 0, (bg - dark) / bg, 0.0)
+    idx = np.arange(len(bg), dtype=np.float64)
+    inked = depth >= _INKED_CELL_FRACTION * global_depth
+    if int(inked.sum()) < 2:
+        return None
+    slope, intercept = np.polyfit(idx[inked], depth[inked], 1)
+    fitted = intercept + slope * idx
+    lo = 0.5 * float(depth[inked].min())
+    hi = min(1.0, 1.5 * float(depth[inked].max()))
+    return np.clip(fitted, lo, hi)
+
+
 def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
     """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an).
 
-    Die Beleuchtung ueber das Glas wirkt multiplikativ (eine dunklere Stelle
-    daempft Hintergrund und Tinte im gleichen Verhaeltnis), deshalb wird der
-    global gemessene Tintenpegel (`s.ink`, oder das ueberschriebene `ink`) je
-    Zelle mit dem Verhaeltnis ihres Hintergrunds zum Median-Hintergrund
-    skaliert, statt ihn unveraendert (additiv) abzuziehen.
+    Ohne `ink` (Vorgabe, `ink_per_cell_v1`): Die Punkttiefe jeder Zelle
+    kommt aus dem Tiefenverlauf ueber die Zeile (`_relative_depth_per_cell`),
+    multipliziert mit dem Hintergrund der Zelle. Gibt es weniger als zwei
+    Zellen mit Zeichen, gilt der globale Pegel wie mit `ink`.
 
-    `ink` erlaubt, den global gemessenen Tintenpegel EINER anderen Abtastung
-    zu uebernehmen (Final-Fix 3: die "Rest leer"-Pruefung tastet Zellen 13-15
-    fuer sich ab; ohne Ziffern in dieser Teilmenge waere ihr eigener
-    Tintenpegel ~= Hintergrund, `depth` liefe auf den Bodenwert 1e-3 und
-    verstaerkte Rauschen zu einem Scheinmuster statt einer sauberen
-    Leerzelle. Der Tintenpegel der Zellen 0-8 ist stabil, weil dort echte
-    Ziffern vorkommen, und aendert das Ergebnis fuer 0-8 selbst nicht, wenn
-    `ink=None` bleibt).
+    Mit `ink` (globaler Pegel): Der Tintenpegel wird je Zelle mit dem
+    Verhaeltnis ihres Hintergrunds zum Median-Hintergrund skaliert. Das
+    nutzt die Leerzellenpruefung (Final-Fix 3): Die Zellen 13-15 werden fuer
+    sich abgetastet und bekommen den Pegel der Zellen 0-8. Ohne Ziffern in
+    dieser Teilmenge waere ihr eigener Pegel ~= Hintergrund, `depth` liefe
+    auf den Bodenwert 1e-3 und verstaerkte Rauschen zu einem Scheinmuster.
     """
-    ink_level = s.ink if ink is None else ink
-    median_bg = float(np.median(s.background))
-    if median_bg > 0:
-        ink_cell = ink_level * s.background / median_bg
+    rel = None if ink is not None else _relative_depth_per_cell(s)
+    if rel is not None:
+        depth = s.background * rel.astype(np.float32)
     else:
-        ink_cell = np.full_like(s.background, ink_level)
-    depth = s.background - ink_cell
+        ink_level = s.ink if ink is None else ink
+        median_bg = float(np.median(s.background))
+        if median_bg > 0:
+            ink_cell = ink_level * s.background / median_bg
+        else:
+            ink_cell = np.full_like(s.background, ink_level)
+        depth = s.background - ink_cell
     depth = np.where(depth > 1e-3, depth, 1e-3)
     out = (s.background[:, None, None] - s.raw) / depth[:, None, None]
     return np.clip(out, 0.0, 1.0).astype(np.float32)

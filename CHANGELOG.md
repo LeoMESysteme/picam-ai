@@ -3,6 +3,48 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-29 (Geplanten Zensical-Pflegelauf entsperren)
+
+**Problem:** Forgejo legte die täglichen Läufe vom 25. bis 29. September an,
+markierte den Job `maintain` aber jeweils sofort als `skipped`. Die
+Job-Bedingung `github.ref == 'refs/heads/master'` war bei diesen
+Schedule-Ereignissen nicht erfüllt. Die Läufe verwiesen zudem weiterhin auf
+den Commit vom 24. September statt auf den aktuellen Stand von `master`.
+
+**Änderung:** Die Job-Bedingung entfällt. `actions/checkout` holt ausdrücklich
+`master`, damit der Audit beim Start den aktuellen Stand prüft. P8 trägt in
+der Roadmap wieder das erforderliche Statuswort `offen`; der Hinweis auf die
+ruhende IMX500-Arbeit bleibt bestehen.
+
+**Konsequenz:** Ein geplanter Lauf kann auf den Runner warten und dort den
+aktuellen `master` prüfen. Die tatsächliche Ausführung nach dieser Änderung
+ist erst mit einem neuen Forgejo-Lauf nach Veröffentlichung belegbar.
+
+## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Punkttiefe je Zelle, `ink_per_cell_v1`)
+
+**Problem:** In der Aufstellung `sc3` fällt die Punktschwärze des LCD über
+die Zeile ab (normierte An-Punkte 0,99 in Zelle 0 bis 0,68 in Zelle 7), ein
+Blickwinkeleffekt. `normalized()` glich nur den Hintergrund je Zelle aus und
+maß den Punktpegel global. `sc3` wurde deshalb in `loo` vollständig
+abgelehnt (0/47), mit Ablehnungen in Zelle 0 und den Zellen 5–7.
+
+**Änderung:** `src/dispread/ocr/dotmatrix_sampling.py`: Die relative
+Punkttiefe wird je Zelle gemessen (zweitdunkelster Punkt gegen den
+Hintergrund der Zelle) und über die Zellen mit Zeichen als Gerade über die
+Zellposition angepasst, mit Begrenzung. Bei weniger als zwei Zellen mit
+Zeichen gilt der globale Pegel. `normalized(s, ink=...)` bleibt der globale
+Weg für die Leerzellenprüfung. Kennung `NORMALIZATION = "ink_per_cell_v1"`.
+Vorlagendateien tragen sie (`format_version` 3), `load_templates` lehnt eine
+abweichende oder fehlende Kennung ab. `BACKEND_VERSION` des Lesers steigt
+auf 2. Spec Abschnitt 2, Punkt 3 ergänzt. Tests:
+`tests/test_dotmatrix_sampling.py` (Tintenverlauf über die Zeile, Rückfall,
+Leerzelle unter Verlauf, Default gegenüber globalem Weg),
+`tests/test_dotmatrix_templates.py` (Kennung in der Vorlage).
+
+**Konsequenz:** Die Vektoren aller Proben ändern sich. `loo` wird mit
+derselben Regel (`rom_per_group`) neu gerechnet. Schwellenformel und
+ROM-Toleranz bleiben unverändert.
+
 ## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Trainingszulassung je Gruppe, OQ-42)
 
 **Problem:** Die festgelegte Messung `dotmatrix-eval.py loo` trainiert jeden

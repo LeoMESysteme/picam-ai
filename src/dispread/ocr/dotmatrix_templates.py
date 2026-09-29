@@ -17,8 +17,9 @@ from pathlib import Path
 import numpy as np
 
 from dispread.ocr.dotmatrix_font import CLASSES, COLS, N_DOTS, ROWS, rom_vector
+from dispread.ocr.dotmatrix_sampling import NORMALIZATION
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 THRESHOLD_FORMULA = "thresholds_v1"
 SIGMA_FLOOR = 0.05
 ROM_CHECK = "rom_check_v2"
@@ -156,6 +157,7 @@ def build_templates(samples, groups: tuple[str, ...]) -> Templates:
 def save_templates(t: Templates, path: Path) -> str:
     data = {
         "format_version": FORMAT_VERSION,
+        "normalization": NORMALIZATION,
         "threshold_formula": THRESHOLD_FORMULA,
         "rom_check": ROM_CHECK,
         "rom_deviations": rom_deviations(t.mean),
@@ -186,6 +188,8 @@ def load_templates(path: Path, expected_sha256: str | None = None) -> Templates:
     data = json.loads(blob)
     if data.get("format_version") != FORMAT_VERSION:
         raise ValueError(f"format_version {data.get('format_version')!r} statt {FORMAT_VERSION}")
+    if data.get("normalization") != NORMALIZATION:
+        raise ValueError(f"normalization {data.get('normalization')!r} statt {NORMALIZATION}")
     if data.get("threshold_formula") != THRESHOLD_FORMULA:
         raise ValueError(f"threshold_formula {data.get('threshold_formula')!r} statt {THRESHOLD_FORMULA}")
     if data.get("rom_check") != ROM_CHECK:

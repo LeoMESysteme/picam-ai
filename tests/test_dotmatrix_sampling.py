@@ -74,14 +74,62 @@ def test_normalized_ink_override_prevents_noise_amplification_on_blank_subset():
     assert shared[:, zero].max() < 0.35  # uebernommener Tintenpegel: sauber leer
 
 
-def test_normalized_default_ink_unchanged_for_classified_cells():
-    """`normalized(s)` ohne `ink`-Argument bleibt fuer die Zellen 0-8 exakt
-    das bisherige Verhalten - die neue `ink`-Uebernahme ist ein Opt-in, kein
-    Default-Wechsel (Final-Fix 3)."""
+def test_normalized_default_is_per_cell_ink_and_override_is_global():
+    """Seit `ink_per_cell_v1` (2026-09-29) misst `normalized(s)` den
+    Punktpegel je Zelle (Verlauf ueber die Zeile). Mit `ink=` bleibt das
+    globale Verhalten fuer die Leerzellenpruefung erhalten."""
     img = render("+0.60972 ")
     s = sample_image(img, GRID, range(9))
-    assert np.array_equal(normalized(s), normalized(s, ink=s.ink))
     assert np.array_equal(normalized(s), normalized(s, ink=None))
+    zero = SHIFTS.index((0, 0))
+    # gleichmaessige Tinte: beide Wege liefern dasselbe Muster
+    assert np.abs(normalized(s)[:, zero] - normalized(s, ink=s.ink)[:, zero]).max() < 0.1
+
+
+def _ink_gradient_image(text: str, left_ink: float, right_ink: float) -> np.ndarray:
+    """Hintergrund konstant, Punktschwaerze faellt ueber die Zeile ab - wie
+    beim LCD unter wechselndem Blickwinkel (Aufstellung `sc3`), NICHT
+    multiplikativ mit dem Hintergrund."""
+    bg = 200.0
+    img = render(text, bg=255, ink=0).astype(np.float32) / 255.0  # 1 = Hintergrund, 0 = Punkt
+    w = img.shape[1]
+    ink = np.linspace(left_ink, right_ink, w, dtype=np.float32)[None, :]
+    out = bg * img + ink * (1.0 - img)
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def test_normalized_per_cell_ink_follows_ink_gradient_across_row():
+    text = "+0.60972 "
+    img = _ink_gradient_image(text, left_ink=40.0, right_ink=140.0)
+    s = sample_image(img, GRID, range(9))
+    zero = SHIFTS.index((0, 0))
+
+    per_cell = normalized(s)[:, zero]
+    global_ = normalized(s, ink=s.ink)[:, zero]
+    for i, ch in enumerate(text):
+        on = rom_vector(ch) >= 0.5
+        if on.any():
+            assert per_cell[i][on].mean() > 0.8, (i, ch, per_cell[i][on].mean())
+        assert np.abs(per_cell[i] - rom_vector(ch)).max() < 0.35, (i, ch)
+    # Gegenprobe: der globale Pegel laesst die blassen Zellen rechts absinken
+    on7 = rom_vector("2") >= 0.5
+    assert global_[7][on7].mean() < 0.8
+    assert per_cell[7][on7].mean() - global_[7][on7].mean() > 0.1
+
+
+def test_normalized_per_cell_falls_back_to_global_with_fewer_than_two_inked_cells():
+    img = render("+        ")
+    s = sample_image(img, GRID, range(9))
+    assert np.allclose(normalized(s), normalized(s, ink=s.ink))
+
+
+def test_normalized_per_cell_blank_cells_stay_blank_under_gradient():
+    text = "+0.60972 "
+    img = _ink_gradient_image(text, left_ink=40.0, right_ink=140.0)
+    img = np.clip(img.astype(np.float32) + np.random.default_rng(1).normal(0, 3, img.shape), 0, 255).astype(np.uint8)
+    s = sample_image(img, GRID, range(9))
+    zero = SHIFTS.index((0, 0))
+    assert normalized(s)[8, zero].max() < 0.35  # Zelle 8 ist ' '
 
 
 def test_normalized_survives_multiplicative_illumination_gradient():

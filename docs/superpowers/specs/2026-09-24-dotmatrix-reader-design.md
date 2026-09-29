@@ -53,6 +53,17 @@ leer. Verletzt das Gelesene die Regel, wird der ganze Wert abgelehnt.
    Anteil der Spaltenbreite, fest im Code).
 3. **Normierung je Bild:** Hintergrund- und Punktpegel robust aus allen
    Zellen des Bildes; Punktwert 0 = Hintergrund, 1 = voll dunkel.
+   *Änderung 2026-09-29 (`ink_per_cell_v1`, Stufe-1-Nachbesserung):*
+   Hintergrund je Zelle. Die relative Punkttiefe (Hintergrund − zweit-
+   dunkelster Punkt) / Hintergrund wird je Zelle gemessen und über die
+   Zellen mit Zeichen (mindestens halbe globale Tiefe) als Gerade über die
+   Zellposition angepasst, begrenzt auf [0,5 × kleinste, 1,5 × größte
+   gemessene Tiefe]. Bei weniger als zwei Zellen mit Zeichen gilt der
+   globale Pegel. Die Leerzellenprüfung (Zellen 13–15) nutzt weiter den
+   globalen Pegel der Zellen 0–8. Anlass: Blickwinkelabhängige Punkt-
+   schwärze des LCD in der Aufstellung `sc3` (VALIDATION.md 2026-09-29).
+   Vorlagendateien tragen die Normierung (`normalization`) und werden bei
+   Abweichung abgelehnt. Schwellenformel und ROM-Regel bleiben unverändert.
 4. **Verschiebungssuche:** je Zelle ±1 natives Pixel (umgerechnet in
    entzerrte Pixel über `native_scale`), gleich für alle Klassen.
 5. **Abstand:** zu jeder Vorlage, je Punkt mit der gelernten Streuung

@@ -306,3 +306,26 @@ def test_load_templates_rejects_missing_counts(tmp_path, samples):
     p.write_text(json.dumps(data))
     with pytest.raises(ValueError, match="counts"):
         load_templates(p)
+
+
+def test_templates_record_normalization_and_reject_other(tmp_path, samples):
+    """Vorlagen gelten nur fuer die Normierung, mit der sie gelernt wurden
+    (`ink_per_cell_v1` seit 2026-09-29) - eine abweichende oder fehlende
+    Angabe wird abgelehnt, nicht still weiterbenutzt."""
+    from dispread.ocr.dotmatrix_sampling import NORMALIZATION
+
+    t = build_templates(samples, ("g1",))
+    path = tmp_path / "templates.json"
+    save_templates(t, path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["normalization"] == NORMALIZATION == "ink_per_cell_v1"
+    load_templates(path)
+
+    for bad in ("global_ink_v0", None):
+        if bad is None:
+            data.pop("normalization", None)
+        else:
+            data["normalization"] = bad
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(ValueError):
+            load_templates(path)
