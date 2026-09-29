@@ -712,3 +712,98 @@ def test_loo_report_without_flag_records_rule_all(tmp_path):
     assert _loo(dataset_root, map_path, out) == 0
     elig = json.loads(out.read_text(encoding="utf-8"))["training_eligibility"]
     assert elig == {"rule": "all"}
+
+
+# --- Stufe 2 (Abnahme, Spec Abschnitt 3): `abnahme` -----------------------
+
+
+def _train_templates(tmp_path: Path, dataset_root: Path, map_path: Path, groups: str) -> Path:
+    templates_path = tmp_path / "templates.json"
+    rc = train_mod.main(
+        ["--dataset-root", str(dataset_root), "--profile-map", str(map_path), "--groups", groups, "--out", str(templates_path)]
+    )
+    assert rc == 0
+    return templates_path
+
+
+def _abnahme(dataset_root, map_path, templates_path, groups, out, sha=None) -> int:
+    return eval_mod.main(
+        [
+            "abnahme",
+            "--dataset-root", str(dataset_root),
+            "--profile-map", str(map_path),
+            "--templates", str(templates_path),
+            "--templates-sha256", sha or _sha256(templates_path),
+            "--groups", groups,
+            "--out", str(out),
+        ]
+    )
+
+
+def test_abnahme_reports_verdict_per_group_and_overall(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = _train_templates(tmp_path, dataset_root, map_path, "g1,g2")
+    out = tmp_path / "abnahme.json"
+
+    rc = _abnahme(dataset_root, map_path, templates_path, "g3", out)
+
+    assert rc == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["test_groups"] == ["g3"]
+    assert report["templates_groups"] == ["g1", "g2"]
+    assert report["templates_sha256"] == _sha256(templates_path)
+    assert report["kriterium"] == {"falsch_max": 0, "abgelehnt_anteil_max": 0.2}
+    g3 = report["gruppen"]["g3"]
+    assert g3["proben"]["gesamt"] == 12
+    assert g3["proben"]["falsch"] == 0
+    assert set(g3["plateaus"]) >= {"gesamt", "richtig", "falsch", "abgelehnt"}
+    gesamt = report["gesamt"]
+    assert gesamt["proben"]["gesamt"] == 12
+    assert 0.0 < gesamt["fehlerrate_obergrenze_95"] <= 1.0
+    assert report["bestanden"] is (gesamt["proben"]["falsch"] == 0 and gesamt["abgelehnt_anteil"] <= 0.2)
+
+
+def test_abnahme_marks_mislabeled_sample_falsch_and_fails(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = _train_templates(tmp_path, dataset_root, map_path, "g1,g2")
+    # g3: Label '7', Bild zeigt '1' -> der Leser liest '1', das Label sagt '7'
+    _mislabel_sevens_as_ones(dataset_root, "g3")
+    out = tmp_path / "abnahme.json"
+
+    assert _abnahme(dataset_root, map_path, templates_path, "g3", out) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["gesamt"]["proben"]["falsch"] >= 1
+    assert report["bestanden"] is False
+
+
+def test_abnahme_refuses_test_group_that_trained_the_templates(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = _train_templates(tmp_path, dataset_root, map_path, "g1,g2")
+    out = tmp_path / "abnahme.json"
+
+    assert _abnahme(dataset_root, map_path, templates_path, "g2,g3", out) == 2
+    assert not out.exists()
+
+
+def test_abnahme_refuses_wrong_templates_checksum(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = _train_templates(tmp_path, dataset_root, map_path, "g1,g2")
+    out = tmp_path / "abnahme.json"
+
+    assert _abnahme(dataset_root, map_path, templates_path, "g3", out, sha="0" * 64) == 2
+    assert not out.exists()
+
+
+def test_abnahme_refuses_group_without_samples(tmp_path):
+    dataset_root, map_path = _build_three_group_dataset(tmp_path)
+    templates_path = _train_templates(tmp_path, dataset_root, map_path, "g1,g2")
+    out = tmp_path / "abnahme.json"
+
+    assert _abnahme(dataset_root, map_path, templates_path, "g3,g9", out) == 2
+    assert not out.exists()
+
+
+def test_clopper_pearson_upper_bound():
+    assert abs(eval_mod.clopper_pearson_upper(0, 30) - (1 - 0.05 ** (1 / 30))) < 1e-9
+    assert eval_mod.clopper_pearson_upper(0, 0) == 1.0
+    assert 0.0 < eval_mod.clopper_pearson_upper(1, 30) < 1.0

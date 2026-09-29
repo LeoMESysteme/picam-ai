@@ -20,6 +20,25 @@ ruhende IMX500-Arbeit bleibt bestehen.
 aktuellen `master` prüfen. Die tatsächliche Ausführung nach dieser Änderung
 ist erst mit einem neuen Forgejo-Lauf nach Veröffentlichung belegbar.
 
+## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Abnahmebefehl für Stufe 2)
+
+**Problem:** Stufe 2 der Spec (Abschnitt 3) verlangt, den Leser mit
+eingefrorenen Vorlagen einmal über neue Aufstellungen laufen zu lassen.
+Dafür gab es keinen Befehl: `loo` trainiert selbst, und `reader-check`
+vergleicht nur Leser und Messung.
+
+**Änderung:** `scripts/dotmatrix-eval.py abnahme --templates …
+--templates-sha256 … --groups …`. Der volle `DotMatrixReader.read` (mit
+Kontrast-, Sättigungs- und Leerzellenprüfung) läuft über die Testgruppen.
+Gezählt werden Proben und Plateaus je Gruppe und gesamt, dazu Anteil
+abgelehnter Bilder und obere 95-%-Grenze der Fehlerrate über entschiedene
+Plateaus (Clopper-Pearson). Urteil `bestanden` bei 0 falsch und höchstens
+20 % abgelehnt. Abbruch mit Exit 2 ohne Bericht, wenn eine Testgruppe in den
+Vorlagen steckt, eine Gruppe keine Proben hat oder die Prüfsumme der
+Vorlagen abweicht. Tests: `tests/test_dotmatrix_train_eval.py` (6 neue).
+
+**Konsequenz:** Code und Vorlagen können für Stufe 2 eingefroren werden.
+
 ## 0.1.0.dev0 — 2026-09-29 (Dot-Matrix: Punkttiefe je Zelle, `ink_per_cell_v1`)
 
 **Problem:** In der Aufstellung `sc3` fällt die Punktschwärze des LCD über

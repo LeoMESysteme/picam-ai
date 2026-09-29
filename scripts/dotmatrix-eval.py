@@ -30,6 +30,13 @@ Testgruppe. Bleibt fuer einen Durchgang keine zugelassene Trainingsgruppe
 uebrig, wird abgebrochen (Exit 2, kein Bericht). Vorgabe `all`: alle
 Gruppen trainieren wie bisher.
 
+`abnahme` ist Stufe 2 (Spec Abschnitt 3): der volle Leser mit
+eingefrorenen Vorlagen (Pruefsumme Pflicht) einmal ueber neue Gruppen, die
+keine Vorlage gesehen hat. Bestanden bei 0 falsch freigegebenen Proben und
+hoechstens 20 % abgelehnten Bildern; dazu die obere 95-%-Grenze der
+Fehlerrate ueber Plateaus (Clopper-Pearson). Eine Testgruppe, die in den
+Vorlagen steckt, oder eine Gruppe ohne Proben fuehrt zum Abbruch (Exit 2).
+
 `reader-check` belegt, dass der volle Leser (`DotMatrixReader.read`, mit
 Kontrast-/Saettigungspruefung) und diese Messung (`evaluate`, ohne beide)
 auf denselben echten Proben dieselbe Entscheidung treffen - abgesehen von
@@ -50,7 +57,7 @@ from pathlib import Path
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
 from dispread.ocr.dotmatrix_font import CLASSES
-from dispread.ocr.dotmatrix_sampling import normalized, sample_image
+from dispread.ocr.dotmatrix_sampling import NORMALIZATION, normalized, sample_image
 from dispread.ocr.dotmatrix_templates import (
     ROM_CHECK,
     THRESHOLD_FORMULA,
@@ -317,6 +324,125 @@ def _cmd_reader_check(args: argparse.Namespace) -> int:
     return 0 if not uneinig else 1
 
 
+#: Abnahmekriterium, Spec Abschnitt 3, Stufe 2 Punkt 4.
+ABNAHME_FALSCH_MAX = 0
+ABNAHME_ABGELEHNT_ANTEIL_MAX = 0.2
+
+
+def clopper_pearson_upper(k: int, n: int, alpha: float = 0.05) -> float:
+    """Obere einseitige (1 - alpha)-Grenze der Fehlerrate bei `k` Fehlern in
+    `n` Versuchen (Clopper-Pearson, exakt). `n == 0` -> 1.0 (keine
+    Aussage)."""
+    if n <= 0:
+        return 1.0
+    if k >= n:
+        return 1.0
+    from scipy.stats import beta
+
+    return float(beta.ppf(1 - alpha, k + 1, n - k))
+
+
+def _plateau_counts(outcomes: dict[tuple[int, int], list[str]]) -> dict[str, int]:
+    counts = {"gesamt": len(outcomes), "richtig": 0, "falsch": 0, "abgelehnt": 0}
+    for results in outcomes.values():
+        if "falsch" in results:
+            counts["falsch"] += 1
+        elif "richtig" in results:
+            counts["richtig"] += 1
+        else:
+            counts["abgelehnt"] += 1
+    return counts
+
+
+def _sample_counts(results: list[str]) -> dict:
+    gesamt = len(results)
+    richtig = results.count("richtig")
+    falsch = results.count("falsch")
+    abgelehnt = gesamt - richtig - falsch
+    gruende: dict[str, int] = {}
+    for r in results:
+        if r.startswith("abgelehnt:"):
+            gruende[r] = gruende.get(r, 0) + 1
+    return {"gesamt": gesamt, "richtig": richtig, "falsch": falsch, "abgelehnt": abgelehnt, "gruende": gruende}
+
+
+def _cmd_abnahme(args: argparse.Namespace) -> int:
+    dataset = _load_dataset_module()
+    groups = [g.strip() for g in args.groups.split(",") if g.strip()]
+    try:
+        templates = load_templates(args.templates, args.templates_sha256)
+    except ValueError as exc:
+        print(f"Vorlagen nicht ladbar: {exc}", file=sys.stderr)
+        return 2
+    leaked = sorted(set(groups) & set(templates.groups))
+    if leaked:
+        print(f"Testgruppe(n) {leaked} stecken in den Vorlagen - keine Abnahme.", file=sys.stderr)
+        return 2
+
+    profile_map = dataset.read_profile_map(args.profile_map)
+    stats: dict[str, int] = {}
+    records = [
+        r for r in dataset.load_resolved_records(args.dataset_root, profile_map, stats=stats) if r.group in groups
+    ]
+    missing = sorted(set(groups) - {r.group for r in records})
+    if missing:
+        print(f"Keine Proben fuer Gruppe(n) {missing} - keine Abnahme.", file=sys.stderr)
+        return 2
+
+    reader = DotMatrixReader(templates)
+    results_by_group: dict[str, list[str]] = {g: [] for g in groups}
+    plateaus_by_group: dict[str, dict[tuple[int, int], list[str]]] = {g: {} for g in groups}
+    for rec in records:
+        result = reader.read(rec.crop_gray, CharLayout(grid=rec.grid, unit=UNIT))
+        outcome, _raw = _reader_outcome(result, rec.cell_text)
+        results_by_group[rec.group].append(outcome)
+        plateaus_by_group[rec.group].setdefault(rec.plateau, []).append(outcome)
+
+    def block(results: list[str], plateaus: dict) -> dict:
+        proben = _sample_counts(results)
+        pl = _plateau_counts(plateaus)
+        return {
+            "proben": proben,
+            "plateaus": pl,
+            "abgelehnt_anteil": proben["abgelehnt"] / proben["gesamt"] if proben["gesamt"] else 1.0,
+            "fehlerrate_obergrenze_95": clopper_pearson_upper(pl["falsch"], pl["richtig"] + pl["falsch"]),
+        }
+
+    gruppen = {g: block(results_by_group[g], plateaus_by_group[g]) for g in groups}
+    all_results = [r for g in groups for r in results_by_group[g]]
+    all_plateaus = {(g, k): v for g in groups for k, v in plateaus_by_group[g].items()}
+    gesamt = block(all_results, all_plateaus)
+    bestanden = (
+        gesamt["proben"]["falsch"] <= ABNAHME_FALSCH_MAX
+        and gesamt["abgelehnt_anteil"] <= ABNAHME_ABGELEHNT_ANTEIL_MAX
+    )
+    report = {
+        "test_groups": groups,
+        "templates": str(args.templates),
+        "templates_sha256": args.templates_sha256,
+        "templates_groups": list(templates.groups),
+        "normalization": NORMALIZATION,
+        "threshold_formula": THRESHOLD_FORMULA,
+        "rom_check": ROM_CHECK,
+        "kriterium": {"falsch_max": ABNAHME_FALSCH_MAX, "abgelehnt_anteil_max": ABNAHME_ABGELEHNT_ANTEIL_MAX},
+        "gruppen": gruppen,
+        "gesamt": gesamt,
+        "bestanden": bestanden,
+        "hinweis": "fehlerrate_obergrenze_95 ueber entschiedene Plateaus (richtig + falsch), Clopper-Pearson einseitig.",
+        "lade_zaehler": stats,
+        "git_commit": _git_commit(),
+    }
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    p = gesamt["proben"]
+    print(
+        f"Abnahme {groups}: {p['richtig']} richtig, {p['falsch']} falsch, {p['abgelehnt']} abgelehnt "
+        f"({gesamt['abgelehnt_anteil']:.1%}) -> {'BESTANDEN' if bestanden else 'NICHT BESTANDEN'}"
+    )
+    print(f"Bericht geschrieben: {args.out}")
+    return 0
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Entwicklungsmessung und Leser-Gegenprobe des Dot-Matrix-Lesers.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -344,6 +470,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Nicht zugelassene Gruppen bleiben Testgruppe.",
     )
     loo.set_defaults(func=_cmd_loo)
+
+    abnahme = sub.add_parser("abnahme", help="Stufe 2: eingefrorene Vorlagen einmal ueber neue Gruppen.")
+    abnahme.add_argument("--dataset-root", type=Path, required=True)
+    abnahme.add_argument("--profile-map", type=Path, required=True)
+    abnahme.add_argument("--templates", type=Path, required=True)
+    abnahme.add_argument("--templates-sha256", required=True, help="Eingefrorene Pruefsumme von --templates (Pflicht)")
+    abnahme.add_argument("--groups", required=True, help="Kommagetrennte Testgruppen (nie in den Vorlagen)")
+    abnahme.add_argument("--out", type=Path, required=True)
+    abnahme.set_defaults(func=_cmd_abnahme)
 
     reader_check = sub.add_parser("reader-check", help="Volle Leser-Ausgabe gegen evaluate() vergleichen.")
     reader_check.add_argument("--dataset-root", type=Path, required=True)
