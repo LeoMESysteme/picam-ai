@@ -40,8 +40,10 @@ umgesetzt und reviewt. Ledger:
 * **Dot-Matrix-Leser, Stufe 1 (`loo`)** mit Normierung `ink_per_cell_v1`
   (Punkttiefe je Zelle, 2026-09-29): nie ein falscher Wert. `ernte1`,
   `sc3`, `sc4` und `sc5` werden vollständig gelesen, `auf3` 61/73, `auf2`
-  wird abgelehnt. **Stufe 2 eingefroren** (Code `47b8902`, Vorlagen
-  sha256 `4524d6a1…`). Als Nächstes zwei Abnahme-Aufstellungen `ab1`/`ab2`.
+  wird abgelehnt. **Abnahme Stufe 2** (eingefroren: Code `47b8902`,
+  Vorlagen `4524d6a1…`): **nicht bestanden, 0 falsch**. `ab1` 99/99
+  richtig, `ab2` 0/83 abgelehnt (Kante einer Glasspiegelung in der Leerzelle
+  8), gesamt 45,6 % abgelehnt, erlaubt sind 20 %.
 * **SD-Karte** lief am 2026-09-28 voll (Aufnahmen 1,3–1,8 GB); Einzelbilder
   der verworfenen Aufnahmen gelöscht, nach dem Löschen der Einzelbilder 2026-09-29 9,1 GB frei. Lokale Sicherungen unter
   `/home/me-systeme/var-backups/`, keine auf einem anderen Medium.
@@ -58,12 +60,15 @@ Prüfung am 2026-09-29: Der Pflegeworkflow hat keinen Push-Trigger. Die
 geplanten Läufe vom 25. bis 29. September wurden zwar um 06:00 Uhr
 (Europe/Berlin) angelegt, aber der Job `maintain` wurde jeweils sofort als
 `skipped` beendet. Die Job-Bedingung auf `github.ref` entfällt; der Checkout
-holt ausdrücklich den aktuellen `master`. Ein erfolgreicher
-Forgejo-Lauf nach Veröffentlichung steht noch aus.
+holt ausdrücklich den aktuellen `master`. Manueller Vorschaulauf 67 am
+2026-09-29: Job ausgeführt, aber Codex bricht bei der Workspace-Routing-Abfrage
+mit HTTP 401 ab. Die geschützte Anmeldedatei des Runner-Benutzers muss durch
+die vorhandene lokale Codex-Anmeldung ersetzt und der Vorschaulauf wiederholt
+werden; ein erfolgreicher Forgejo-Lauf steht noch aus.
 
 ## Nächste Schritte
 
-1. Abnahme-Ernten `ab1`, `ab2`, dann einmal `dotmatrix-eval.py abnahme` mit den eingefrorenen Vorlagen.
+1. Entwicklungsrunde: Hintergrund je Zelle robust gegen Helligkeitskanten (`ab2` jetzt Entwicklungsdaten), dann neu einfrieren und neue Abnahme-Aufstellungen `ab3`/`ab4`.
 2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
    Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
 3. Sicherung von `var/` auf ein anderes Medium.

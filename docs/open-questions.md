@@ -2001,8 +2001,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Kontrastgefälle über das Glas, keine Profillage.
   Mit der Normierung `ink_per_cell_v1` (Punkttiefe je Zelle) werden alle vier
   scharfen Aufstellungen vollständig gelesen, ohne falschen Wert. Die Frage
-  der Trainingszulassung ist damit beantwortet. Die Abnahme (Stufe 2) steht
-  noch aus.
+  der Trainingszulassung ist damit beantwortet. Abnahme Stufe 2 am
+  2026-09-29: nicht bestanden, 0 falsch (`ab1` 99/99, `ab2` abgelehnt wegen
+  einer Spiegelkante in Leerzelle 8).
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

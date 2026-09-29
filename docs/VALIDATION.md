@@ -2014,3 +2014,49 @@ Vorab-Stichprobe auf vorhandenen Daten, nur Entwicklung (Vorlagen ohne
 `sc3`, voller Leser): `sc3` 47/47 richtig. `auf3` wird zu 100 % abgelehnt,
 71 davon als `format`, weil die Leerzellenprüfung am verschobenen Raster
 anschlägt. Kein falscher Wert.
+
+## 2026-09-29 — Dot-Matrix-Leser: Abnahme Stufe 2, nicht bestanden (0 falsch)
+
+Einziger Abnahmelauf mit dem eingefrorenen Stand: Code `47b8902`, zur Laufzeit
+`HEAD` `246148d` (danach nur Doku geändert, `src/` und `scripts/`
+unverändert), Vorlagen sha256 `4524d6a1…`. Die Profil-Zuordnung wurde nur um
+`ab1`/`ab2` ergänzt. Ohne diese beiden Einträge stimmt ihre Prüfsumme mit
+der eingefrorenen überein (`e83fc386…`). Bericht:
+`var/dotmatrix/abnahme-stufe2-2026-09-29.json`.
+
+**Abnahme-Aufstellungen:**
+* `ab1`: frontal und deutlich von oben, größerer Abstand, Punktkontrast
+  42,2, Gain 1. 99 Proben (102 ausgewählt, 3 wegen Bildgüte abgelehnt).
+  Beim Aufnehmen wurden 30 % der Bilder verworfen, weil die
+  Schreib-Warteschlange voll lief.
+* `ab2`: schräg von links und leicht von oben, die Zeile deutlich gedreht,
+  Punktkontrast 31,2, Gain 4, Helligkeitsverlauf über das Glas. 83 Proben
+  (96 ausgewählt, 13 wegen Zellinkonsistenz abgelehnt).
+
+Mehrere Zwischenstände wurden vor der Profilbestätigung verworfen: zu flach
+bzw. von unten (Kontrast 8,9–9,3), Spiegelungen von Fenster und Monitoren,
+ein Glanzfleck der Deckenleuchte. Die Kriterien waren dieselben wie beim
+Einrichten jeder Trainingsaufstellung, ohne Leserauswertung.
+
+| Gruppe | Proben richtig / abgelehnt / falsch | Plateaus richtig / abgelehnt / falsch | abgelehnt | obere 95-%-Grenze (Plateaus) |
+| --- | --- | --- | --- | --- |
+| `ab1` | 99 / 0 / 0 | 34 / 0 / 0 | 0 % | 8,4 % |
+| `ab2` | 0 / 83 / 0 | 0 / 28 / 0 | 100 % | – |
+| **gesamt** | 99 / 83 / **0** | 34 / 28 / **0** | **45,6 %** | 8,4 % |
+
+**Urteil: nicht bestanden.** Die Bedingung „0 falsch freigegeben“ ist
+erfüllt, die Bedingung „höchstens 20 % abgelehnt“ nicht. Nach Spec gibt es
+keine Nachbesserung an `ab1`/`ab2`. Beide gehen ins Training, und eine neue
+Abnahme braucht neue Aufstellungen.
+
+**Diagnose** (nachträglich, ohne Änderung): In `ab2` scheitert
+ausschließlich Zelle 8, die Leerstelle zwischen Zahl und `mV/V`, in allen 83
+Proben. Die Zellen 0–7 liegen im Rahmen: Median von d_best 0,79, d_max 2,67.
+Das mittlere Punktmuster der Leerzelle zeigt einen diagonalen dunklen Keil
+oben rechts, Werte bis 0,85. Dort verläuft die Kante des dunkleren
+Glasbereichs, den das Glas ab `mV/V` spiegelt, mitten durch die Zelle. Der
+Hintergrund der Zelle (80. Perzentil) kommt aus dem hellen Teil, der dunkle
+Teil erscheint als Tinte. Der Leser lehnt das ab, statt ein Zeichen zu raten.
+Ein Ansatz für die nächste Entwicklungsrunde wäre eine Hintergrundschätzung,
+die gegen Helligkeitskanten innerhalb einer Zelle robust ist. `ab2` darf
+dafür jetzt als Entwicklungsdaten dienen.

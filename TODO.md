@@ -9,7 +9,7 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Abnahme-Ernten `ab1`, `ab2` (Stufe 2 ist eingefroren)
+## Zuerst: Abnahme 1 nicht bestanden (0 falsch) — Leerzelle unter Spiegelkante
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
@@ -40,17 +40,24 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    (VALIDATION.md 2026-09-29).
 6. ~~Stufe 2 einfrieren~~ erledigt am 2026-09-29 (Code `47b8902`, Vorlagen
    sha256 `4524d6a1…`, VALIDATION.md „Stufe 2 eingefroren“).
-7. **Nächster Schritt: Abnahme-Ernten `ab1`, `ab2`** (anderer Winkel oder
-   anderes Licht), wie `sc4`/`sc5` einrichten und ernten, dann **einmal**
-   `dotmatrix-eval.py abnahme` mit der eingefrorenen Prüfsumme. Nicht
-   bestanden: keine Nachbesserung an `ab1`/`ab2`.
+7. ~~Abnahme `ab1`/`ab2`~~ am 2026-09-29: **nicht bestanden**, 0 falsch.
+   `ab1` 99/99 richtig, `ab2` 0/83 (alle Ablehnungen in Zelle 8: Kante
+   einer Glasspiegelung läuft durch die Leerzelle), gesamt 45,6 % abgelehnt
+   (VALIDATION.md). `ab1`/`ab2` gehen ins Training.
+8. **Nächster Schritt:** Entwicklungsrunde mit `ab2` als Trainings- bzw.
+   Diagnosedaten: Hintergrund je Zelle robust gegen Helligkeitskanten
+   (Spec-Änderung wie `ink_per_cell_v1`, vorab festhalten, Tests, `loo` auf
+   allen Gruppen). Danach neu einfrieren und zwei **neue**
+   Abnahme-Aufstellungen ernten (`ab3`, `ab4`).
+9. Einzelbilder `ab1-run`/`ab2-run` löschen, wenn nicht mehr gebraucht
+   (Nutzer fragen).
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
   Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
   auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
 * **Verworfene Bilder trotz freier Karte:** `sc3-cal-c` 16 %, `sc4-run` 19 %
-  und `sc5-run` 22 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
+  `sc5-run` 22 %, `ab1-run` 30 %, `ab2-run` 18 % (Schreib-Warteschlange 60, JPEG, 15 fps). Für `loo`-Proben unkritisch
   (≤ 3 je Plateau), für Timing-Aufnahmen weniger Ereignisse. Möglich: größere
   Warteschlange oder weniger JPEG-Qualität. Erst messen.
 * **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas
