@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-28
+# TODO — Stand 2026-09-29
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,39 +9,48 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Dot-Matrix-Messung mit den StreamCam-Aufstellungen
+## Zuerst (2026-09-29): Kalibrierung C, dann `loo`
 
-Stand 2026-09-28: Timing-Kalibrierung steht (M = 1225,8 ms, Nutzerentscheidung
-A+B+C), zwei neue scharfe Aufstellungen geerntet und importiert: `sc1` (schräg,
-Profil `sc1b`, 45 Proben) und `sc2` (frontal, 58 Proben). Datensatz 492
-Proben, 404 davon geerntet in 5 Gruppen; Profil-Zuordnung
-`var/diagnostics/dotmatrix-profile-map.json` enthält alle 5. Details:
-VALIDATION.md 2026-09-28.
+Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
+(Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
+Gegenprobe je Zeichen 0 Abweichungen. Datensatz 435 Proben, geerntet in 4
+Gruppen (`ernte1` 152, `auf2` 76, `auf3` 73, `sc3` 46). Die Aufnahmen `sc1`/`sc2`
+waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
+2026-09-28/29).
 
-1. **OQ-42 entscheiden (Nutzer):** Dürfen weiche Aufstellungen (`auf2`) aus
-   dem Training ausgeschlossen werden? Vor dem nächsten `loo`-Lauf festlegen.
-2. `dotmatrix-eval.py loo` mit 5 Gruppen laufen lassen, Ergebnis nach
-   VALIDATION.
-3. `loo` so erweitern, dass ein Durchgang mit ROM-Abbruch im Bericht als
-   solcher erscheint, statt den ganzen Lauf abzubrechen.
+1. **Kalibrieraufnahme C mit dem Nutzer** (Stimulus von Hand, 180 s) in `sc3`,
+   **ohne Kamera oder Tisch zu berühren**:
+   `sync-record.py --source camera --camera-settings var/diagnostics/sc3-profile
+   --frame-rate 15 --image-format jpg --duration 180 --output var/diagnostics/sc3-cal-c`.
+   Vorher mit `import-harvest`-Ausrichtung oder ORB prüfen, dass die Kamera
+   noch zum `sc3`-Profilbild passt. Dann `display-offset.py --profile
+   var/diagnostics/sc3-profile` auf `sc3-cal-a/b/c` und
+   `timing-calibration.py` → neue `var/calibration/timing-streamcam.json`.
+   Die jetzige (M = 1225,8 ms) stammt aus verschobenen Aufnahmen und ist
+   vorläufig. A und B sind schon aufgenommen, siehe die Auswertungen
+   `var/diagnostics/sc3-cal-{a,b}.offset.log`. In A/B wurden viele Bilder
+   wegen voller SD-Karte verworfen; bei Bedarf A/B wiederholen.
+2. Mit neuem M ggf. `gate-label` für `sc3-run` neu laufen lassen (nur, wenn M
+   deutlich kleiner wird: mehr Ausbeute; größeres M → neu labeln Pflicht).
+3. Eine zweite feste Aufstellung (anderer Winkel/Abstand) ernten, damit zwei
+   scharfe Gruppen vorliegen. Reflexe erst in voller Auflösung prüfen.
+4. **OQ-42 entscheiden** (Nutzer), dann `dotmatrix-eval.py loo`.
 
-Offene Befunde der Sitzung:
-* **M-9 bestätigt:** Der Fokus-Sweep misst nach großen Sprüngen ein veraltetes
-  Pufferbild; die Wahl stimmte trotzdem (Nachmessung). Fix: nach dem Setzen
-  lesen, bis der Pufferzeitstempel nach Setzzeit + `settle_s` liegt.
-* **Glasdetektor (`propose`, `glass`) scheitert an der StreamCam**
-  (Blende/Reflexe); beide Quads mussten von Hand bzw. über die Punktmitten
-  bestimmt werden. Ein Werkzeug für die Punktgitter-Anpassung wäre nützlich.
-* **Raster-Konvention:** `top`/`bottom` umfassen 8 Zeilen (inkl. Cursorzeile).
-  `propose` sollte das prüfen oder ein Overlay mit den Abtastpunkten zeigen
-  (so wie `overlay_sampling.png`, heute von Hand erzeugt).
-* **JPEG-Schreib-Warteschlange** läuft bei 1080p gelegentlich voll (bis
-  1,2 % verworfen). Größere Warteschlange oder schnellere Kodierung prüfen.
-* M-10 (eingefrorene Belichtung bei anderem Licht) ist noch nicht geprüft.
+Offene Befunde:
+* **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder
+  Sitzung `df -h /` prüfen; alte Einzelbilder nach dem Import löschen oder
+  auslagern. Keine Schreiblast (git worktree, Tests, tar) während Aufnahmen.
+* **Glasdetektor (`propose`)** trifft an der StreamCam oft nicht das Glas
+  (Blende, Drehung); das Quad kam aus einer Punktgitter-Homographie (Skript-
+  Schnipsel im Sitzungsverlauf). Werkzeug dafür in `harvest-setup` einbauen,
+  dazu ein Overlay der Abtastpunkte und eine Prüfung der 8-Zeilen-Konvention.
+* **M-9 bestätigt:** Fokus-Sweep misst nach großen Sprüngen ein veraltetes
+  Pufferbild; Nachmessung (1 s warten, 10 Bilder verwerfen) war jedes Mal
+  nötig. Fix in `focus_sweep`.
+* M-10 (eingefrorene Belichtung bei anderem Licht) ist ungeprüft.
 
-Zurückgestellt aus dem Abschlussreview (bewusst, siehe `final-review.md`):
-Werkbank-Kamera an die StreamCam anbinden (heute außer Betrieb, toter
-Picamera2-Code in `controller.py`), Replay verliert die Zeitbasis (M-6).
+Zurückgestellt: Werkbank-Kamera an die StreamCam anbinden (heute außer
+Betrieb), Replay verliert die Zeitbasis (M-6).
 
 ## Sicherung für `var/` einrichten
 
@@ -50,9 +59,9 @@ Löschung vom 2026-09-25 ist wiederhergestellt, was ging (alle 389 Proben,
 Profile, `devices.json`, Rückstellpunkt; `var/rescue-20260925/NOTES.md`).
 Verloren: Einzelbilder der Ernte-Aufnahmen, die meisten Diagnosebilder.
 `/home/me-systeme/picam-ai/.var_recovered` ist ausgewertet und kann weg.
-Erste Sicherung (gleiche SD-Karte, nur gegen versehentliches Löschen):
-`/home/me-systeme/var-backups/var-20260928-vor-import.tar` (vor den
-StreamCam-Importen). Zu tun: regelmäßige Sicherung von mindestens
+Lokale Sicherungen (gleiche SD-Karte, nur gegen versehentliches Löschen):
+`/home/me-systeme/var-backups/var-20260929-vor-sc3.tar` (Datensatz 389,
+Profile, Kalibrierung) und `var-20260928-vor-import.tar`. Zu tun: regelmäßige Sicherung von mindestens
 `var/workbench/datasets`, `var/diagnostics/*-profile*`, `var/calibration`
 auf ein **anderes Medium**.
 

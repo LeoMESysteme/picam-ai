@@ -86,7 +86,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from dispread.frame_alignment import estimate_quad_shift
+from dispread.frame_alignment import estimate_quad_shift, prepare_reference
 from dispread.rectify import rectify
 from dispread.session_profile import SessionProfile
 from dispread.workbench.datasets import DatasetError, DatasetStore
@@ -425,7 +425,7 @@ def run(args: argparse.Namespace) -> int:
     # ohne reference_frame und ohne --no-alignment-check gibt es keinen
     # verlaesslichen Bezug, gegen den die Ernte ausgerichtet werden koennte.
     alignment_check_enabled = not args.no_alignment_check
-    reference_image = None
+    reference_features = None
     max_shift_px: float | None = None
     if alignment_check_enabled:
         if profile.reference_frame is None:
@@ -464,6 +464,11 @@ def run(args: argparse.Namespace) -> int:
         if reference_image is None:
             print(f"Fehler: Profilbild {reference_path} nicht lesbar.", file=sys.stderr)
             return 1
+        # Fix-Runde 2 (task-10-report.md, Review Minor): die ORB-Merkmale
+        # des Referenz-Ausschnitts sind fuer die ganze Ernte gleich - einmal
+        # berechnen statt bei jedem Kandidaten neu (`estimate_quad_shift`
+        # nimmt weiterhin auch ein rohes Bild entgegen, siehe dort).
+        reference_features = prepare_reference(reference_image, profile.quad)
         max_shift_px = args.max_shift_dot_columns * profile.min_source_dot_column_px
 
     proposal_path = harvest_dir / "proposal.json"
@@ -517,7 +522,7 @@ def run(args: argparse.Namespace) -> int:
         # nicht mehr auf den Zeichen liegt - Bildguete/Zellenkonsistenz
         # pruefen nur INNERHALB der Ernte und wuerden das nicht bemerken.
         if alignment_check_enabled:
-            estimate = estimate_quad_shift(reference_image, raw, profile.quad)
+            estimate = estimate_quad_shift(reference_features, raw, profile.quad)
             if not estimate.reliable:
                 reject_counts[REASON_AUSSCHNITT_UNPRUEFBAR] += 1
                 continue
