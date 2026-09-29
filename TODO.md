@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-29
+# TODO — Stand 2026-09-29 (abends)
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,7 +9,56 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Abnahme 1 nicht bestanden (0 falsch) — Leerzelle unter Spiegelkante
+## Morgen weiter: Abnahme 2 abschließen (`ab4` ernten, dann einmal auswerten)
+
+Stand 2026-09-29 abends: Stufe 2 ist mit `bg_closing_v1` eingefroren
+(Vorlagen `var/dotmatrix/templates-stufe2b-2026-09-29.json`, sha256
+`fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e`).
+`ab3` (frontal, nah) ist geerntet und importiert und steht in der
+Profilzuordnung. **`ab4` fehlt.**
+
+1. **`ab4` aufbauen:** Kamera schräg von rechts (30–40° seitlich, leicht von
+   oben), anderes Licht als `ab3` (z. B. Lampe seitlich oder Decke aus). Nichts
+   Helles hinter der Kamera, Anzeige mittig, grüner Rand neben dem Text frei,
+   normal scharf.
+2. **Einrichten wie `ab3`**, Ablauf in VALIDATION.md:
+   * `harvest-setup.py focus` erst ohne, dann mit `--hint-box`,
+   * Standbild 3 s PNG (`sync-record.py … --duration 3`),
+   * Punktraster mit 4 Stützpunkten: `python var/diagnostics/latfit.py
+     FRAME OUT.json x,y:spalte,zeile …` (Punktmitten, Spalte 0–95 über alle
+     Zellen, Zeile 0–6). Wird mit dem Einrichtungsassistenten überflüssig.
+     **Danach prüfen:** Leerzellen 8/13–15 ohne zugeordnete Punkte. Ein
+     kleiner Restfehler allein beweist nichts (Befund `sc6`).
+   * `propose --grid 0,25,17.78,160`,
+   * Leerzellen 8/13–15 leer? Rand frei? Stabilität?
+   * **Keinen Lesertest** (Abnahme-Aufstellung).
+   * Bestätigen mit `--confirmed-by "Leonhard Hentschke"`.
+3. **Ernten:** `touch var/RECORDING_IN_PROGRESS`, dann
+   `harvest.py --profile var/diagnostics/ab4-profile --out-dir var/diagnostics/ab4-run --n-steps 30 --hold-s 6 --seed 2026093001`,
+   danach `rm var/RECORDING_IN_PROGRESS`. Vorher `grep MemAvailable
+   /proc/meminfo` (≥ 3,6 GB).
+4. **Sichern und importieren:** tar nach `var-backups`, dann
+   `import-harvest.py --harvest var/diagnostics/ab4-run --profile var/diagnostics/ab4-profile --dataset-root var/workbench/datasets`,
+   `ab4` mit sha256 in `var/diagnostics/dotmatrix-profile-map.json`
+   eintragen (Vorstand sichern als `.vN.json`).
+5. **Einmal auswerten:**
+   `dotmatrix-eval.py abnahme --dataset-root var/workbench/datasets --profile-map var/diagnostics/dotmatrix-profile-map.json --templates var/dotmatrix/templates-stufe2b-2026-09-29.json --templates-sha256 fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e --groups ab3,ab4 --out var/dotmatrix/abnahme-stufe2b-<datum>.json`.
+   Bestanden bei 0 falsch und ≤ 20 % abgelehnt. **Keine Nachbesserung an
+   `ab3`/`ab4`**, bei Nichtbestehen gehen sie ins Training.
+6. Einzelbilder von `ab3-run` (und `ab4-run`) erst nach Rückfrage löschen.
+7. Nach Import und Abnahme die Fortschrittsseite aktualisieren:
+   `./.venv/bin/python scripts/docs-progress-data.py`, dann
+   `docs-site/assets/data/fortschritt.json` mitcommitten
+   ([FORTSCHRITT.md](docs/FORTSCHRITT.md)).
+
+Parallel: Codex setzt „Nacharbeit 1“ im
+[Plan Einrichtungsassistent](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md)
+um. Danach reviewt Claude und merged.
+
+---
+
+## Verlauf 2026-09-28/29 (erledigt, zum Nachlesen)
+
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-

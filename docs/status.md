@@ -1,78 +1,76 @@
-# Status — Stand 2026-09-29
+# Status — Stand 2026-09-29 (Sessionende)
 
 Diese Datei wird zum Sessionende überschrieben. Historie: `CHANGELOG.md` und
 `docs/project_history.md`. Arbeitsliste: [../TODO.md](../TODO.md).
 
 ## Zweig und Zustand
 
-`feat/task-b-versatz-normierung` (Kamerawechsel, Dot-Matrix-Leser, Ernten)
-ist am 2026-09-29 nach `master` gemergt. `var/` gibt es nur einmal, unter
-`/home/me-systeme/picam-ai/var` (gitignored); der Worktree
-`/home/me-systeme/picam-ai-ernte` verlinkt es per Symlink.
+Alles liegt auf `master` und ist gepusht. `var/` gibt es nur einmal, unter
+`/home/me-systeme/picam-ai/var` (gitignored). Der Worktree
+`/home/me-systeme/picam-ai-ernte` verlinkt es per Symlink. Codex arbeitet im
+Worktree `/home/me-systeme/picam-ai-assist` (Branch
+`feat/einrichtungsassistent`) am Einrichtungsassistenten. Der Branch ist
+**nicht gemergt**, siehe unten.
 
-**Kamera:** Logitech StreamCam (USB 3, UVC, `046d:0893`) seit 2026-09-25,
-die IMX500 ist außer Betrieb ([project_history.md](project_history.md),
-2026-09-25). Umstellung nach
-[Spec](superpowers/specs/2026-09-25-streamcam-switch-design.md) und
-[Plan](superpowers/plans/2026-09-25-streamcam-switch.md), Tasks 1–10
-umgesetzt und reviewt. Ledger:
-`.superpowers/sdd/2026-09-25-streamcam-switch/progress.md` (ignoriert).
+**Kamera:** Logitech StreamCam (USB 3, UVC, `046d:0893`) seit 2026-09-25.
+Die IMX500 ist außer Betrieb ([project_history.md](project_history.md),
+2026-09-25).
 
-## Letzter Befund
+## Wo wir stehen: Abnahme 2 des Dot-Matrix-Lesers läuft
 
-* **StreamCam an der Hardware geprüft** (2026-09-28): Inbetriebnahme Exit 0,
-  Hardwaretest grün, Aufnahmen ohne Bildlücke ([VALIDATION.md](VALIDATION.md)).
-* **Kamera muss fest stehen.** Die ersten Aufstellungen `sc1`/`sc2` waren
-  durch Bewegung der Kamera verschoben; ihre 103 Proben wurden wieder aus
-  dem Datensatz genommen. Seit Task 10 prüft `import-harvest.py` jedes Bild
-  gegen das Profilbild (`ausschnitt_verschoben`).
-* **Aufstellung `sc3`** (Kamera fest auf dem Tisch, Reflexe durch Drehen des
-  Displays vermieden): 46 Proben importiert, Ausrichtung max. 0,08 px,
-  ROM-Gegenprobe je Zeichen 0 Abweichungen.
-* **Aufstellung `sc4`** (2026-09-29, flacher und schräg von links): 79
-  Proben, 0 Abweichungen vom ROM. Datensatz 514 Proben (Dot-Matrix 426).
-* **Timing-Kalibrierung neu** (2026-09-29, `sc3-cal-a/b/c`, Kamera fest):
-  M = 325,9 ms, Anzeigeversatz 89,6 ms, σ_δ 2–26 ms. Ersetzt die vorläufige
-  Datei aus den verschobenen Aufnahmen (M = 1225,8 ms).
-* **Aufstellung `sc5`** (2026-09-29, leicht von oben, schräg von rechts,
-  Punktkontrast 41): 114 Proben, ROM 0. `sc3` mit korrigiertem Profil `sc3b`
-  neu importiert (47). Datensatz 629 Proben, davon 541 aus dem Dot-Matrix-Gerät.
-* **Dot-Matrix-Leser, Stufe 1 (`loo`)** mit Normierung `ink_per_cell_v1`
-  (Punkttiefe je Zelle, 2026-09-29): nie ein falscher Wert. `ernte1`,
-  `sc3`, `sc4` und `sc5` werden vollständig gelesen, `auf3` 61/73, `auf2`
-  wird abgelehnt. **Abnahme Stufe 2** (eingefroren: Code `47b8902`,
-  Vorlagen `4524d6a1…`): **nicht bestanden, 0 falsch**. `ab1` 99/99
-  richtig, `ab2` 0/83 abgelehnt (Kante einer Glasspiegelung in der Leerzelle
-  8), gesamt 45,6 % abgelehnt, erlaubt sind 20 %.
-* **SD-Karte** lief am 2026-09-28 voll (Aufnahmen 1,3–1,8 GB); Einzelbilder
-  der verworfenen Aufnahmen gelöscht, nach dem Löschen der Einzelbilder 2026-09-29 9,1 GB frei. Lokale Sicherungen unter
-  `/home/me-systeme/var-backups/`, keine auf einem anderen Medium.
+* **Abnahme 1** (Stufe 2, `ink_per_cell_v1`): nicht bestanden, 0 falsch.
+  `ab2` wurde an einer Spiegelkante in der Leerzelle 8 zu 100 % abgelehnt.
+* **Entwicklungsrunde erledigt:** Normierung `bg_closing_v1`, also
+  Hintergrund je Punkt per Grauwert-Schließung (Commit `50d68d6`, Spec §2
+  Punkt 3 mit vorab festgelegtem Kriterium). `loo` mit 942 Proben:
+  * 0 falsch,
+  * `ab2` 83/83,
+  * alle scharfen Gruppen vollständig richtig,
+  * die unscharfe Gruppe `auf2` wird jetzt vollständig abgelehnt (vorher
+    63/76). VALIDATION.md.
+* **Stufe 2 erneut eingefroren:** Vorlagen
+  `var/dotmatrix/templates-stufe2b-2026-09-29.json`, sha256
+  `fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e`, Code
+  `ef5cedf`.
+* **Abnahme 2:**
+  * `ab3` (frontal, nah, 10,9 px je Punktspalte) ist geerntet und
+    importiert.
+  * `ab4` (schräg von rechts, anderes Licht) fehlt noch.
+  * Danach **ein einziger** `abnahme`-Lauf über `ab3,ab4`.
+  * Den Leser beim Einrichten von Abnahme-Aufstellungen nicht gegenlesen
+    (Auswahlverzerrung).
+
+## Weitere Befunde des Tages
+
+* **Bildverluste behoben:** Die SD-Karte blieb sekundenlang stehen, bis
+  34 % Verlust. Seit `dc8af22` nimmt `harvest.py` über
+  `sync-record.py --staging-root /dev/shm` zuerst in den RAM auf. Die
+  Probeernte `sc6b` und `ab3` hatten 0 Verluste und keine langen
+  Telegrammlücken mehr. Eine Ernte braucht bis etwa 3,6 GB `MemAvailable`,
+  sonst lehnt sie vor dem Start ab.
+* **SD-Karte:** No-Name `SD16G`, meldet 50 GiB, echte Kapazität unklar.
+  Aufgeräumt (Codex-Plugin-Kopien, Caches), `fstrim` gelaufen. `var/` ist
+  **nicht** auf einem anderen Medium gesichert, nur lokal unter
+  `/home/me-systeme/var-backups/`.
+* **Einrichtungsassistent (Codex):** Das Review ergab: zurück an Codex.
+  Es gibt zwei Fälle, in denen er ein falsches Raster annimmt, und `sc6`
+  scheitert ganz (feste Pixelkonstanten). Der Auftrag steht als
+  „Nacharbeit 1“ im
+  [Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md).
 
 ## Zensical-Doku und Pflege
 
-Aus `master` übernommen (Stand 2026-09-24): Doku-Site mit Zensical,
-Hosting auf Cloudflare Pages mit Forgejo-Anmeldung, täglicher
-Codex-Pflegelauf über den Runner `picam-codex-docs` mit OQ-Index, strengem
-Build, Vorschau-Ankern und Browsertests vor jedem Push. Details:
-[HOSTING.md](HOSTING.md), [project_history.md](project_history.md) 2026-09-23.
-
-Prüfung am 2026-09-29: Der Pflegeworkflow hat keinen Push-Trigger. Die
-geplanten Läufe vom 25. bis 29. September wurden zwar um 06:00 Uhr
-(Europe/Berlin) angelegt, aber der Job `maintain` wurde jeweils sofort als
-`skipped` beendet. Die Job-Bedingung auf `github.ref` entfällt; der Checkout
-holt ausdrücklich den aktuellen `master`. Manueller Vorschaulauf 67 am
-2026-09-29: Job ausgeführt, aber Codex brach bei der Workspace-Routing-Abfrage
-mit HTTP 401 ab. Nach Übernahme der vorhandenen lokalen Codex-Anmeldung in
-das geschützte Runner-Konto lief die manuelle Vorschau
-[72](https://ds1515.me-systeme.de/l.hentschke/picam-ai/actions/runs/72)
-am selben Tag erfolgreich durch (10:43–10:47 UTC). Der nächste geplante
-Publish-Lauf steht noch aus.
+Doku-Site mit Zensical, Hosting auf Cloudflare Pages mit Forgejo-Anmeldung,
+täglicher Codex-Pflegelauf über den Runner `picam-codex-docs`. Die
+Job-Bedingung, die geplante Läufe übersprang, ist entfernt. Die manuelle
+Vorschau 72 lief am 2026-09-29 durch. Der nächste geplante Publish-Lauf
+steht noch aus. Details: [HOSTING.md](HOSTING.md).
 
 ## Nächste Schritte
 
-1. Entwicklungsrunde: Hintergrund je Zelle robust gegen Helligkeitskanten (`ab2` jetzt Entwicklungsdaten), dann neu einfrieren und neue Abnahme-Aufstellungen `ab3`/`ab4`.
-2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
-   Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
-3. Sicherung von `var/` auf ein anderes Medium.
+1. `ab4` aufbauen und ernten, dann `dotmatrix-eval.py abnahme` über
+   `ab3,ab4` (Befehl in TODO.md).
+2. Codex' Nacharbeit am Einrichtungsassistenten reviewen und mergen.
+3. `var/` auf ein anderes Medium sichern, die Kapazität der Karte prüfen.
 
 Das GSVmulti-Telegramm bleibt OQ-07.
