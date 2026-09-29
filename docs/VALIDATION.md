@@ -2218,3 +2218,31 @@ var/dotmatrix/templates-stufe2b-2026-09-29.json --templates-sha256 fc3b44bd…
 --groups ab3,ab4`. Bestanden bei 0 falsch und höchstens 20 % abgelehnt.
 Erwartung aus `loo`: Unscharfe Aufstellungen werden eher abgelehnt
 (`auf2`).
+
+## 2026-09-29 — Abnahme 2: Aufstellung `ab3` geerntet
+
+Abnahme-Aufstellung, eingerichtet **ohne** Lesertest (Auswahlverzerrung),
+Vorlagen vorher eingefroren (`templates-stufe2b-2026-09-29.json`).
+Kamera frontal, leicht von oben und nah. Die Anzeige füllt etwa zwei
+Drittel der Bildbreite. Fokus 78, Profil `var/diagnostics/ab3-profile`,
+bestätigt von Leonhard Hentschke.
+* Punktkontrast 29,0, kleinste Punktspalte 10,9 px, kein Glanz.
+* Hintergrund weich von links 137 nach rechts 166.
+* Ein dunkler Spiegelfleck liegt unterhalb der Cursorzeile, außerhalb der
+  Punkte.
+* Schwache Punktschatten unter den Zeichen (Blick von oben).
+* Rasteranpassung: Restfehler 0,18 / 0,23, Leerzellen 8 und 13–15 leer,
+  Zelle 15 frei.
+* Stabilität: Zittern ±0,4 px waagerecht, keine Drift.
+
+Ernte (Zwischenablage im RAM, Seed 2026092910): 3736 Bilder, 0 verworfen,
+höchste Füllung der Warteschlange 1, eine Bildlücke > 50 ms. 1946 Bilder
+beschriftet, 39 Werte. Kopieren 112 s. Import: 162 Proben, 0 abgelehnt,
+Ausrichtung Median 0,83 px, höchstens 1,26 px (Schwelle 5,47 px, skaliert
+mit der Auflösung).
+
+In die Profilzuordnung eingetragen, Vorstand als
+`dotmatrix-profile-map.v5.json`. Die Zuordnung weicht damit von der beim
+Einfrieren festgehaltenen Prüfsumme (`77a7b678…`) nur um den Eintrag
+`ab3` ab. Die Trainingsgruppen sind unverändert. `ab4` steht noch aus,
+ausgewertet wird erst danach, einmal über `ab3,ab4`.

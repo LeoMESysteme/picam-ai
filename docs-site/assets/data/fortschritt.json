@@ -36,9 +36,9 @@
    },
    {
     "group": "ab3",
-    "in_profile_map": false,
+    "in_profile_map": true,
     "role": "abnahme",
-    "samples": null
+    "samples": 162
    },
    {
     "group": "auf2",
@@ -95,9 +95,9 @@
     "samples": 219
    }
   ],
-  "total_samples": 942
+  "total_samples": 1104
  },
- "generated_at": "2026-09-29T14:18:32+00:00",
+ "generated_at": "2026-09-29T14:27:54+00:00",
  "harvests": [
   {
    "distinct_values": 24,
@@ -240,8 +240,8 @@
    "frames_dropped": 0,
    "frames_recorded": 3736,
    "group": "ab3",
-   "import_rejected": null,
-   "imported": null,
+   "import_rejected": 0,
+   "imported": 162,
    "labeled": 1946,
    "role": "abnahme",
    "run": "ab3-run",
