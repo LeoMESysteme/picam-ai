@@ -1504,3 +1504,30 @@ abgelehnt), die anderen lehnen alles ab. Schluss: Das Training braucht mehr
 Aufstellungen mit ähnlicher, guter Schärfe; weiche Aufstellungen eignen sich
 als Testmaterial für Ablehnung, nicht als alleinige Vorlagenquelle. Zahlen:
 VALIDATION.md, 2026-09-25.
+
+## 2026-09-29 — Bildverluste behoben, Spiegelkante im Leser behoben
+
+**Bildverluste:** Ein Subagent hat die steigenden Verluste (bis 34 % in
+`sc6`) untersucht. Die SD-Karte, ein No-Name-Modell `SD16G` mit gemeldeten
+50 GiB, blieb bei der Aufnahme sekundenlang stehen. Selbst kleine
+Protokollzeilen hingen bis 23 s. Die Kodierung war nie der Engpass.
+Nebenbei fanden sich 31 liegengebliebene Kopien eines Codex-Plugins
+(5,5 GB) in `~/.codex/.tmp`. Sie sind gelöscht, ebenso Caches, danach lief
+`fstrim`. Jetzt sind 14 GB frei.
+
+Die Aufnahme läuft jetzt zuerst in `/dev/shm` und wird danach kopiert
+(`--staging-root`). Die Probeernte `sc6b` an unveränderter Kamera hatte
+keinen Verlust und keine langen Telegrammlücken mehr. Sie brachte 67 % mehr
+beschriftete Bilder. Das Kopieren von 1,5 GB dauerte 77 s. Offen bleibt,
+ob die Karte ihre Kapazität tatsächlich hat, und eine Sicherung von `var/`
+auf ein anderes Medium.
+
+**Spiegelkante:** Die Analyse von `ab2` Zelle 8 zeigte einen weichen
+dunklen Keil von oben rechts (76 statt 98 Grauwerte), den auch die
+Spaltenlücken zeigen. Eine Schätzung aus den Lücken schied aus, weil
+leuchtende Nachbarpunkte die Lücken um 0,10–0,49 der Punkttiefe abdunkeln.
+Eine Grauwert-Schließung mit ±1,5 Punkten entfernt die Zeichen und behält
+den Verlauf. Umgesetzt als `bg_closing_v1`, das Kriterium stand vorab in der
+Spec. `loo`: `ab2` jetzt 83/83, alle scharfen Gruppen unverändert, 0
+falsch. Die Kehrseite: `auf2` (unscharf) wird ohne eigenes Training
+vollständig abgelehnt. Zahlen in VALIDATION.md.

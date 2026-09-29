@@ -2122,3 +2122,76 @@ und ist damit zugelassen.
 0 falsch in 811 Proben. `ab2` bleibt vollständig abgelehnt (Spiegelkante in
 Zelle 8, siehe Abnahme). `auf2` (43 statt 0 richtig) und `auf3` (69 statt
 61) profitieren davon, dass mehr Gruppen im Training sind.
+
+## 2026-09-29 — Probeernte `sc6b` mit Zwischenablage im RAM
+
+Gleiche Aufstellung und gleiches Profil wie `sc6`, Kamera unverändert.
+`harvest.py` mit `sync-record.py --staging-root /dev/shm` (Commit
+`dc8af22`), 30 Schritte à 6 s, Seed 2026092909.
+`var/diagnostics/sc6b-run/recording/session.json`.
+
+| | `sc6` (direkt auf die SD-Karte) | `sc6b` (Zwischenablage im RAM) |
+| --- | --- | --- |
+| aufgenommene Bilder | 2468 | 3737 (Soll 250 s × 15 fps) |
+| verworfen, Warteschlange voll | 1269 (34 %) | 0 |
+| höchste Füllung der Warteschlange | 60 | 3 |
+| Bildlücken > 50 ms | 0 | 1 (68 ms) |
+| Telegramme | 284 | 380 |
+| längste Telegrammlücke | 39,9 s | 2,3 s |
+| Sendepause je Kommando, Mittel / Maximum | 4,48 / 30,54 s | 1,78 / 1,82 s |
+| beschriftete Bilder | 1254 | 2096 |
+| verschiedene Werte | 25 | 39 |
+
+Kopieren nach der Aufnahme: 3740 Dateien, 1,51 GB in 77 s. Geschätzt waren
+2,43 GB, die Schätzung liegt also rund 60 % über dem Bedarf. Die
+verbleibenden 1254 Ablehnungen wegen `telegrammluecke` fallen in die
+geplanten Sendepausen der Normierungswechsel von 2,3 s.
+
+Import: 131 Proben (10 wegen Zellinkonsistenz abgelehnt), Ausrichtung
+höchstens 0,33 px. `sc6` hat damit 219 Proben, der Datensatz für Dot-Matrix
+942.
+
+## 2026-09-29 — Normierung `bg_closing_v1`: `loo` alt gegen neu
+
+Vorab festgelegtes Kriterium (Spec §2 Punkt 3, Commit `50d68d6`): 0 falsch
+freigegeben, keine scharfe Gruppe schlechter als unter `ink_per_cell_v1`,
+`ab2` nicht mehr vollständig abgelehnt. Beide Läufe auf demselben
+Datensatz (942 Proben), `--train-eligibility rom_per_group`:
+* alt: Code `dc8af22`,
+  `var/diagnostics/dotmatrix-loo-2026-09-29-basis-ink_per_cell_v1.json`
+* neu: Code `50d68d6`,
+  `var/diagnostics/dotmatrix-loo-2026-09-29-bg_closing_v1.json`
+
+Zum Training zugelassen sind in beiden Läufen alle Gruppen außer `auf3`.
+
+| Testgruppe | alt: Proben r/a/f | alt: Plateaus r/a/f | neu: Proben r/a/f | neu: Plateaus r/a/f | d_max alt → neu |
+| --- | --- | --- | --- | --- | --- |
+| `ab1` | 99/0/0 | 34/0/0 | 99/0/0 | 34/0/0 | 3,32 → 2,57 |
+| `ab2` | 0/83/0 | 0/28/0 | **83/0/0** | **28/0/0** | 2,86 → 2,63 |
+| `auf2` | 63/13/0 | 22/4/0 | **0/76/0** | **0/26/0** | 3,36 → 1,77 |
+| `auf3` | 67/6/0 | 24/2/0 | 65/8/0 | 24/2/0 | 3,47 → 2,60 |
+| `ernte1` | 152/0/0 | 56/0/0 | 152/0/0 | 56/0/0 | 3,25 → 2,60 |
+| `sc3` | 47/0/0 | 17/0/0 | 47/0/0 | 17/0/0 | 3,44 → 2,57 |
+| `sc4` | 79/0/0 | 27/0/0 | 79/0/0 | 27/0/0 | 3,39 → 2,57 |
+| `sc5` | 114/0/0 | 38/0/0 | 114/0/0 | 38/0/0 | 3,31 → 2,51 |
+| `sc6` | 219/0/0 | 75/0/0 | 219/0/0 | 75/0/0 | 3,10 → 2,44 |
+
+`margin_min` steigt in allen Durchgängen leicht, von 0,74–0,91 auf
+0,79–0,92.
+
+**Urteil nach Kriterium: erfüllt.** 0 falsch, alle scharfen Gruppen
+unverändert vollständig richtig, `ab2` vollständig richtig.
+
+**Befund `auf2`:** Die unscharfe Aufstellung wird vollständig abgelehnt,
+keine Probe falsch. Fehlt sie im Training, liegen die aus den übrigen
+Gruppen gelernten Schwellen wegen der konsistenteren Punktwerte eng
+(`D_max` 1,77 statt 3,36), und ihre weichen Zeichen fallen durch
+(`zelle_unbekannt`). Die neue Normierung ist robuster gegen Spiegelungen
+und Helligkeitsverläufe, lehnt aber unscharfe Aufstellungen eher ab. Für
+die nächste Abnahme heißt das: Eine weiche Aufstellung würde voraussichtlich
+abgelehnt, nicht falsch gelesen. Mehr Aufstellungen mit mäßiger Schärfe im
+Training würden die Schwellen lockern.
+
+Vorab-Analyse (ROM-Muster als Referenz, Prototyp, nicht der Leser): Der
+höchste Wert eines Aus-Punkts in Leerzellen sinkt in `ab2` von 0,88 auf
+0,33, in `ernte1` von 1,00 auf 0,11, in den übrigen Gruppen auf 0,07–0,19.

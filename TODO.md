@@ -13,8 +13,8 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
-Gegenprobe je Zeichen 0 Abweichungen. Dot-Matrix 811 Proben in 9
-Gruppen (`ernte1` 152, `sc5` 114, `ab1` 99, `sc6` 88, `ab2` 83, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 47 mit Profil `sc3b`). Die Aufnahmen `sc1`/`sc2`
+Gegenprobe je Zeichen 0 Abweichungen. Dot-Matrix 942 Proben in 9
+Gruppen (`sc6` 219 mit `sc6b`, `ernte1` 152, `sc5` 114, `ab1` 99, `ab2` 83, `sc4` 79, `auf2` 76, `auf3` 73, `sc3` 47 mit Profil `sc3b`). Die Aufnahmen `sc1`/`sc2`
 waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 2026-09-28/29).
 
@@ -44,11 +44,14 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
    `ab1` 99/99 richtig, `ab2` 0/83 (alle Ablehnungen in Zelle 8: Kante
    einer Glasspiegelung läuft durch die Leerzelle), gesamt 45,6 % abgelehnt
    (VALIDATION.md). `ab1`/`ab2` gehen ins Training.
-8. **Nächster Schritt:** Entwicklungsrunde mit `ab2` als Trainings- bzw.
-   Diagnosedaten: Hintergrund je Zelle robust gegen Helligkeitskanten
-   (Spec-Änderung wie `ink_per_cell_v1`, vorab festhalten, Tests, `loo` auf
-   allen Gruppen). Danach neu einfrieren und zwei **neue**
-   Abnahme-Aufstellungen ernten (`ab3`, `ab4`).
+8. ~~Entwicklungsrunde Spiegelkante~~ erledigt am 2026-09-29: Normierung
+   `bg_closing_v1` (Commit `50d68d6`), Hintergrund je Punkt per
+   Grauwert-Schließung. `loo` mit 942 Proben: 0 falsch, `ab2` 83/83, alle
+   scharfen Gruppen vollständig richtig. `auf2` (unscharf) wird jetzt
+   vollständig abgelehnt (vorher 63/76), VALIDATION.md.
+   **Nächster Schritt:** Stufe 2 neu einfrieren (Vorlagen auf allen
+   zugelassenen Gruppen), dann zwei **neue** Abnahme-Aufstellungen ernten
+   (`ab3`, `ab4`).
 9. ~~Einzelbilder `ab1-run`/`ab2-run`~~ gelöscht am 2026-09-29 (Nutzer-OK).
 10. **Einrichtungsassistent** baut Codex parallel nach
     [Plan](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md) im
