@@ -1999,6 +1999,10 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Mit `sc5` (vier zugelassene Aufstellungen) lesen `sc4` und `sc5`
   vollständig richtig. `sc3` scheitert weiter, Ursache ist ein
   Kontrastgefälle über das Glas, keine Profillage.
+  Mit der Normierung `ink_per_cell_v1` (Punkttiefe je Zelle) werden alle vier
+  scharfen Aufstellungen vollständig gelesen, ohne falschen Wert. Die Frage
+  der Trainingszulassung ist damit beantwortet. Die Abnahme (Stufe 2) steht
+  noch aus.
 * **Antwort landet in:**
   [Dot-Matrix-Spec](superpowers/specs/2026-09-24-dotmatrix-reader-design.md),
   [VALIDATION.md](VALIDATION.md), [lab_journal.md](lab_journal.md).

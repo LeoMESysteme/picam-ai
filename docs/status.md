@@ -37,11 +37,11 @@ umgesetzt und reviewt. Ledger:
 * **Aufstellung `sc5`** (2026-09-29, leicht von oben, schräg von rechts,
   Punktkontrast 41): 114 Proben, ROM 0. `sc3` mit korrigiertem Profil `sc3b`
   neu importiert (47). Datensatz 629 Proben, davon 541 aus dem Dot-Matrix-Gerät.
-* **Dot-Matrix-Leser, festgelegte Messung** (`loo`, Regel `rom_per_group`,
-  OQ-42): nie ein falscher Wert. `sc4` 79/79, `sc5` 114/114, `ernte1` 133/152
-  richtig. `sc3` 0/47: Die Punktschwärze fällt dort über das Glas von links
-  nach rechts ab (Blickwinkel), und `normalized()` misst den Tintenpegel nur
-  global. `auf2`/`auf3` abgelehnt.
+* **Dot-Matrix-Leser, Stufe 1 (`loo`)** mit Normierung `ink_per_cell_v1`
+  (Punkttiefe je Zelle, 2026-09-29): nie ein falscher Wert. `ernte1`,
+  `sc3`, `sc4` und `sc5` werden vollständig gelesen, `auf3` 61/73, `auf2`
+  wird abgelehnt. Als Nächstes Stufe 2: einfrieren, dann zwei neue
+  Aufstellungen.
 * **SD-Karte** lief am 2026-09-28 voll (Aufnahmen 1,3–1,8 GB); Einzelbilder
   der verworfenen Aufnahmen gelöscht, nach dem Löschen der Einzelbilder 2026-09-29 9,1 GB frei. Lokale Sicherungen unter
   `/home/me-systeme/var-backups/`, keine auf einem anderen Medium.
@@ -63,7 +63,7 @@ Forgejo-Lauf nach Veröffentlichung steht noch aus.
 
 ## Nächste Schritte
 
-1. Entscheidung: Tintenpegel je Zelle als Spezifikationsänderung (wegen `sc3`) oder weitere Aufstellungen; danach `loo` erneut.
+1. Stufe 2 des Dot-Matrix-Lesers: Code und Vorlagen einfrieren, dann zwei neue Aufstellungen ernten und einmal auswerten.
 2. Werkzeug für die Punktgitter-Anpassung in `harvest-setup`, Fix für den
    Fokus-Sweep (M-9), Speicherplatz vor Aufnahmen prüfen.
 3. Sicherung von `var/` auf ein anderes Medium.

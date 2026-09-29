@@ -9,7 +9,7 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Zuerst: Kontrastgefälle in `sc3` (Normierung), weitere Aufstellungen
+## Zuerst: Stufe 2 (Abnahme) des Dot-Matrix-Lesers vorbereiten
 
 Stand: Kamerawechsel fertig und nach `master` gemergt. Aufstellung `sc3`
 (Kamera fest auf dem Tisch) ist geerntet und importiert: 46 Proben, ROM-
@@ -34,12 +34,20 @@ waren durch Kamerabewegung verschoben und sind verworfen (VALIDATION.md
 4. `sc5` erledigt am 2026-09-29 (114 Proben, ROM 0), `sc3` mit korrigiertem
    Profil `sc3b` neu importiert (47). `loo` (c): nie falsch, `sc4` 79/79,
    `sc5` 114/114, `ernte1` 133/152, `sc3` 0/47 (VALIDATION.md 2026-09-29).
-5. **Nächster Schritt, Entscheidung Nutzer:** `sc3` scheitert an einem
-   Kontrastgefälle über das Glas (An-Punkte 0,99 links bis 0,68 rechts).
-   `normalized()` misst den Tintenpegel global. Vorschlag: Tintenpegel je
-   Zelle als versionierte Spezifikationsänderung festhalten, Tests schreiben,
-   dann `loo` auf allen Gruppen. Alternativ weitere Aufstellungen ernten.
-   Schwellen nicht an der Auswertung nachstellen.
+5. ~~Kontrastgefälle `sc3`~~: Normierung `ink_per_cell_v1` (Commits
+   `021f8ab`, `8908fe4` nach Review). `loo` (e): nie falsch, `ernte1` 152/152, `sc3` 47/47, `sc4`
+   79/79, `sc5` 114/114, `auf3` 61/73 (Rest mehrdeutig), `auf2` abgelehnt
+   (VALIDATION.md 2026-09-29).
+6. **Nächster Schritt: Stufe 2 (Abnahme) vorbereiten**, Spec Abschnitt 3.
+   Code-Commit, `templates.json` (trainiert auf allen zugelassenen Gruppen)
+   mit Prüfsumme und Formelversion einfrieren und in VALIDATION.md eintragen,
+   **bevor** die nächsten Aufstellungen geerntet werden. Dann mindestens
+   2 neue Aufstellungen (anderer Winkel, anderes Licht) ernten und den Leser
+   einmal darüber laufen lassen. Bestanden bei 0 falsch freigegebenen Werten
+   und ≤ 20 % abgelehnten Bildern. Nicht bestanden: keine Nachbesserung an
+   denselben Aufstellungen.
+7. Nach der nächsten Ernte die Einzelbilder von `sc3-run` und `sc5-run`
+   löschen (Nutzer-OK vom 2026-09-29).
 
 Offene Befunde:
 * **SD-Karte:** Eine Aufnahme mit 15 fps belegt 1,3–1,8 GB. Vor jeder

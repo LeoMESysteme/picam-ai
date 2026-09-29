@@ -1935,3 +1935,44 @@ Ein möglicher Ansatz ist ein Tintenpegel je Zelle oder ein Verlauf über die
 Zeile. Das wäre eine Änderung der Spezifikation. Sie müsste vorab
 festgehalten und auf allen Gruppen gegengeprüft werden, und die Schwellen
 dürften nicht an dieser Auswertung nachgestellt werden.
+
+## 2026-09-29 — Normierung `ink_per_cell_v1`: `loo` mit Punkttiefe je Zelle
+
+Änderung der Normierung als Stufe-1-Nachbesserung nach Spec Abschnitt 3.
+Die relative Punkttiefe wird je Zelle gemessen und als Gerade über die
+Zellposition angepasst (Commit `021f8ab`, nach unabhängigem Review
+nachgebessert in `8908fe4`, Spec Abschnitt 2, Punkt 3). Der Reviewbefund:
+Bei kleinem globalem Pegel konnte die Gerade Leerzellen auf eine Tiefe nahe
+null extrapolieren und Rauschen zu einem Punktmuster verstärken. Jetzt
+behalten Leerzellen die globale Tiefe, eine Zelle mit Zeichen braucht
+mindestens `MIN_CONTRAST`, und die Anpassung braucht mindestens drei
+solche Zellen.
+Schwellenformel `thresholds_v1`, ROM-Regel `rom_check_v2` und die
+Zulassungsregel `rom_per_group` bleiben unverändert. Bericht:
+`var/diagnostics/dotmatrix-loo-2026-09-29e.json` (mit `8908fe4`; der Lauf
+mit `021f8ab`, `…-29d.json`, unterschied sich nur bei `auf3`: 60 statt 61
+richtig).
+
+Zugelassen sind jetzt auch `auf2` (max. 1 Punkt neben dem ROM, vorher 2)
+sowie `ernte1`, `sc3`, `sc4` und `sc5`. Nicht zugelassen ist `auf3` (max. 8).
+
+| Testgruppe | Training | d_max | Proben richtig / abgelehnt / falsch | Plateaus richtig / abgelehnt / falsch |
+| --- | --- | --- | --- | --- |
+| `auf2` | ernte1, sc3, sc4, sc5 | 1,60 | 0 / 76 / 0 | 0 / 26 / 0 |
+| `auf3` | auf2, ernte1, sc3, sc4, sc5 | 2,67 | 61 / 12 (mehrdeutig) / 0 | 24 / 2 / 0 |
+| `ernte1` | auf2, sc3, sc4, sc5 | 2,53 | **152 / 0 / 0** | 56 / 0 / 0 |
+| `sc3` | auf2, ernte1, sc4, sc5 | 2,59 | **47 / 0 / 0** | 17 / 0 / 0 |
+| `sc4` | auf2, ernte1, sc3, sc5 | 2,55 | **79 / 0 / 0** | 27 / 0 / 0 |
+| `sc5` | auf2, ernte1, sc3, sc4 | 2,46 | **114 / 0 / 0** | 38 / 0 / 0 |
+
+**Kein falscher Wert.** Alle vier scharfen Aufstellungen werden vollständig
+gelesen, `sc3` mit 47/47 statt 0/47. `auf3`, verschoben und nicht zum
+Training zugelassen, erreicht 61/73. Die 12 übrigen Proben sind als
+mehrdeutig abgelehnt. `auf2` wird als Testgruppe vollständig abgelehnt:
+Ohne diese weiche Aufstellung im Training ist d_max mit 1,59 eng, und
+`auf2` ist sichtbar unscharf. Das ist die erwartete Ablehnung (d_max 1,60).
+
+Einordnung: Das ist Stufe 1, eine Entwicklungsmessung auf Daten, an denen
+die Normierung verbessert wurde. Die Zahlen sind keine Abnahme. Stufe 2
+verlangt nach Spec Abschnitt 3 eingefrorenen Code und eingefrorene Vorlagen
+**vor** mindestens zwei neuen Aufstellungen, die nichts davon gesehen haben.
