@@ -466,3 +466,44 @@ Kleinigkeiten:
   `startlage_mehrdeutig`, wenn Stützpunkte vorgegeben sind).
 * Die Prüfung der Cursorzeile lehnt schon bei einem einzigen Kandidaten ab.
   Das ist sicher, aber anfällig für Staub.
+
+## Nacharbeit 2 (Claude, 2026-09-30): Rasterversatz als Pflichtprüfung
+
+Befund (VALIDATION.md 2026-09-30, Rasterversatz): Die von Hand angepassten
+Raster von `ab3`/`ab4` (auch `ernte1`, `auf2`, `auf3`) lagen 0,4–0,9
+Punktspalten neben den Punktmitten, geschert oder mit falschem
+Punktabstand. Das Restmaß der Anpassung (0,17 / 0,26), die Leerzellen und
+der Zellen-Bias waren trotzdem unauffällig. Abnahme 2 hat damit falsche
+Profile geprüft. Ursache: Die Anpassung sucht Helligkeitsminima, bei
+scharfen Bildern sind das oft die Punktränder.
+
+Seit `217dc77` misst `dispread.lattice_offsets` den Versatz mit einem vom
+Raster unabhängigen Maß: bekannter Text, Korrelation mit dem ROM-Muster je
+Zelle und Halbzelle, Abtastung im Quellbild. `scripts/profile-regrid.py`
+korrigiert damit bestehende Profile.
+
+**Auftrag:**
+1. **2j Rasterversatz** in `setup_checks.py`, aufbauend auf
+   `dispread.lattice_offsets` (nicht neu schreiben).
+   * Eingabe: Standbilder aus der Stabilitätsprüfung und der Zellentext aus
+     dem seriellen Strom (die Anzeige steht während der Einrichtung).
+   * Maß: der größte Betrag des Median-Versatzes, waagerecht je Halbzelle
+     (`HALVES`), senkrecht je ganzer Zelle (`FULL`).
+   * Schwellen, als Vorabwert gekennzeichnet:
+     * FEHLER über 0,25 Punktspalten (mehr als die Verschiebungssuche des
+       Lesers abdeckt) oder über 0,25 Punktzeilen,
+     * WARNUNG über 0,15.
+   * Messwerte echter Aufstellungen (je 20 Proben):
+     * `sc5` 0,09, `sc6` 0,05, `sc4` 0,13, `sc3` 0,15, `ab1` 0,17,
+       `ab2` 0,18 (waagerecht);
+     * falsch: `ab4` 0,90, `auf3` 0,83, `auf2` 0,74, `ab3` 0,48,
+       `ernte1` 0,39;
+     * nach der Korrektur 0,02–0,09.
+2. **Automatisch nachführen:** Nach `fit_lattice` einmal
+   `lattice_offsets.refine_quad` über die Standbilder laufen lassen und das
+   Ergebnis übernehmen, wenn die Prüfung an zurückgehaltenen Bildern besser
+   ist. Danach 2j erneut prüfen.
+3. **Tests:** synthetisch geschertes Raster (FEHLER), zu kleiner
+   Punktabstand (FEHLER), richtiges Raster (OK). Echte Profile: `ab4-profile`
+   gegen `ab4-profile-regrid1.json` (nur lesen, ohne Kamera).
+4. `run_assist` gibt 2j im Bericht aus. Bei FEHLER entsteht kein Vorschlag.
