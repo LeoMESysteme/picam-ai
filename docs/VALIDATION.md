@@ -2483,3 +2483,73 @@ das die dunklen Ränder der LCD-Punkte statt ihrer Mitten.
   Rasterfehler und keine Unschärfe.
 * Die Einrichtungsprüfungen (Leerzellen leer, Restmaß, Zellen-Bias) haben
   den Fehler nicht gefunden.
+
+## 2026-09-30 — Punktraster korrigiert (`profile-regrid.py`) und `loo` neu
+
+**Korrektur** mit `scripts/profile-regrid.py refine` (Code `217dc77`):
+Anpassung an der einen Hälfte der Proben, Prüfung an der anderen.
+Größter Median-Versatz vorher → nachher, waagerecht in Punktspalten je
+Halbzelle, senkrecht in Punktzeilen je Zelle:
+
+| Gruppe | vorher | nachher | Profil | Status |
+| --- | --- | --- | --- | --- |
+| `ab4` | 0,90 / 0,08 | 0,03 / 0,03 | `ab4-profile-regrid1.json` | bestätigt |
+| `ab3` | 0,48 / 0,10 | 0,02 / 0,03 | `ab3-profile-regrid1.json` | bestätigt |
+| `auf2` | 0,74 / 0,36 | 0,09 / 0,05 | `auf2-profile-regrid1.json` | bestätigt |
+| `ernte1` | 0,39 / 0,16 | 0,04 / 0,08 | `ernte1-profile-regrid1.json` | **nicht bestätigt** |
+| `auf3` | 0,83 / 0,08 | 0,04 / 0,03 | `auf3-profile-regrid1.json` | **nicht bestätigt** |
+
+* Die Profile hat Leonhard Hentschke nach Sichtprüfung der Kontrollbilder
+  bestätigt.
+* `ernte1` und `auf3` sind noch offen. Die Punkte sitzen zwar, aber die
+  Bilder sind sehr unscharf und leicht schief.
+* Die übrigen Gruppen blieben unverändert, gemessen je 20 Proben
+  (waagerecht, Halbzellen): `sc3` 0,15, `sc4` 0,13, `sc5` 0,09,
+  `sc6` 0,05, `ab1` 0,17, `ab2` 0,18.
+* Profilzuordnung: `ab3`/`ab4` mit `replaces` (Prüfsumme des eingebetteten
+  alten Profils), `auf2` über den Map-Weg. Der Vorstand liegt als
+  `dotmatrix-profile-map.v7.json` daneben.
+
+**`loo`**, Entwicklungslauf, `--train-eligibility rom_per_group`, 1223
+Proben, Code `0db2b11`:
+`var/diagnostics/dotmatrix-loo-2026-09-30-regrid1.json`. Die Basis ist
+derselbe Datensatz mit den alten Profilen
+(`dotmatrix-loo-2026-09-30-basis-bg_closing_v1.json`). Zum Training
+zugelassen sind jetzt alle Gruppen außer `auf3`; `ab4` besteht die
+ROM-Gegenprobe erstmals.
+
+| Testgruppe | Basis r/a/f | neu r/a/f | d_max Basis → neu |
+| --- | --- | --- | --- |
+| `ab1` | 99/0/0 | 99/0/0 | 2,62 → 1,89 |
+| `ab2` | 83/0/0 | 83/0/0 | 2,70 → 1,92 |
+| `ab3` | 40/122/0 | **150/12/0** | 2,60 → 1,85 |
+| `ab4` | 0/119/0 | **119/0/0** | 2,65 → 1,86 |
+| `auf2` | 0/76/0 | **70/6/0** | 2,04 → 1,84 |
+| `auf3` (altes Profil) | 63/10/0 | 0/73/0 | 2,65 → 1,90 |
+| `ernte1` (altes Profil) | 152/0/0 | 149/3/0 | 2,68 → 1,91 |
+| `sc3` | 47/0/0 | 47/0/0 | 2,64 → 1,90 |
+| `sc4` | 79/0/0 | 79/0/0 | 2,63 → 1,91 |
+| `sc5` | 114/0/0 | 114/0/0 | 2,57 → 1,88 |
+| `sc6` | 219/0/0 | 219/0/0 | 2,52 → 1,85 |
+
+**Befund:**
+* Mit korrekten Rastern liest der Leser `ab4` vollständig, `ab3` zu 93 %
+  und die unscharfe Aufstellung `auf2` zu 92 %. In keinem Durchgang wurde
+  falsch gelesen.
+* Die Schwelle `d_max` sinkt überall um etwa 0,7. Die Vorlagen sind
+  konsistenter, weil `ab3`/`ab4`/`auf2` nicht mehr mit verschobenen
+  Punkten ins Training gehen.
+* Die beiden Gruppen mit altem, verschobenem Raster werden jetzt eher
+  abgelehnt:
+  * `auf3` vollständig, statt vorher 63 Proben zu lesen,
+  * `ernte1` mit 3 Proben.
+  
+  Das ist die erwünschte Richtung: Ein falsches Raster führt zur
+  Ablehnung, nicht zu einem Wert.
+* „Unscharf“ als Erklärung für `auf2` (VALIDATION.md 2026-09-29) war
+  demnach zum größten Teil Rasterversatz.
+
+Offen: `ernte1` und `auf3` mit korrigiertem Profil oder ohne diese Gruppen.
+Stufe 2 bleibt eingefroren (`templates-stufe2b-2026-09-29.json`), bis neu
+gelernt und neu eingefroren wird. Die nächste Abnahme braucht neue
+Aufstellungen, eingerichtet mit der Prüfung des Rasterversatzes.
