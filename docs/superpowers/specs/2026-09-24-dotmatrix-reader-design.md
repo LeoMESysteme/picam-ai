@@ -87,6 +87,44 @@ leer. Verletzt das Gelesene die Regel, wird der ganze Wert abgelehnt.
    vollständig abgelehnt. `ab1`/`ab2` sind seit der nicht bestandenen
    Abnahme Entwicklungsdaten. Die nächste Abnahme braucht neue
    Aufstellungen (`ab3`, `ab4`).
+   *Änderung 2026-09-30 (`bg_closing_shadow_v1`, nach nicht bestandener
+   Abnahme 2):* Punktschatten werden nach der Normierung je Bild
+   herausgerechnet. Anlass: Ein Aus-Punkt wird dunkler, wenn sein Nachbar
+   auf einer bestimmten Seite an ist. Die Seite hängt vom Blickwinkel ab
+   (Schatten des Punkts auf der Rückschicht der LCD). Normierter Wert solcher
+   Aus-Punkte: `ab4` 0,34 bei An-Nachbar links, `ab3` 0,22 oben und links,
+   `ab1` höchstens 0,09. Folge: 241 von 281 Proben abgelehnt
+   (VALIDATION.md 2026-09-30).
+   Verfahren, ohne Labels, nur aus dem Bild:
+   * **Muster schätzen:** Punkte mit Wert ≥ 0,5 in der unverschobenen
+     Abtastung der klassifizierten Zellen (0–8) gelten als an.
+   * **Schattenanteil schätzen:** Für die 8 Nachbarrichtungen innerhalb der
+     5×7-Zelle wird über alle Aus-Punkte des Bildes eine lineare Regression
+     angepasst: Wert = c + Σ α_d · [Nachbar in Richtung d ist an].
+     * α_d wird auf [0; 0,5] begrenzt.
+     * Eine Richtung mit weniger als 10 Aus-Punkten mit solchem Nachbarn
+       bekommt α_d = 0.
+   * **Abziehen:** In jeder Verschiebung wird von jedem Aus-Punkt
+     (Wert < 0,5 in dieser Verschiebung) Σ α_d über seine An-Nachbarn
+     derselben Verschiebung abgezogen, nach unten bei 0 begrenzt.
+     * An-Punkte bleiben unverändert, auf einem dunklen Punkt ist kein
+       Schatten sichtbar.
+     * Der globale Weg der Leerzellenprüfung (Zellen 13–15, ohne An-Punkte)
+       bleibt ohne Abzug.
+   Vorlagen werden neu gelernt, die Schwellenformel und die ROM-Regel
+   bleiben unverändert.
+   **Vorab festgelegtes Kriterium** (vor dem ersten Lauf der neuen
+   Normierung festgelegt und committet). `loo` mit
+   `--train-eligibility rom_per_group` auf demselben Datensatz wie der
+   Basislauf mit `bg_closing_v1` (alle Gruppen einschließlich `ab3` und
+   `ab4`, 1223 Proben):
+   * 0 falsch freigegebene Werte in allen Durchgängen;
+   * keine scharfe Gruppe (`ernte1`, `sc3`–`sc6`, `ab1`, `ab2`) mit weniger
+     richtigen Proben als im Basislauf;
+   * `ab3` und `ab4` als Testgruppe jeweils mit höchstens 20 % abgelehnten
+     Proben.
+   `ab3`/`ab4` sind seit der nicht bestandenen Abnahme 2 Entwicklungsdaten.
+   Die nächste Abnahme braucht neue Aufstellungen.
 4. **Verschiebungssuche:** je Zelle ±1 natives Pixel (umgerechnet in
    entzerrte Pixel über `native_scale`), gleich für alle Klassen.
 5. **Abstand:** zu jeder Vorlage, je Punkt mit der gelernten Streuung
