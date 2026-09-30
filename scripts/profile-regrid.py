@@ -12,6 +12,12 @@ einer Gruppe (Bild plus serielles Label) und passt das Quad neu an
              pruefen; schreibt ein NEUES, unbestaetigtes Profil, einen
              Bericht (`<out>.regrid.json`) und ein Kontrollbild
     confirm  korrigiertes Profil nach Sichtpruefung bestaetigen
+    still    beim Einrichten, vor der Ernte: Versatz auf den Standbildern
+             einer Aufnahme messen (Quad aus Vorschlag oder Profil, Text von
+             Hand, `?` fuer wechselnde Zellen); mit `--out-quad` zusaetzlich
+             korrigieren (Anpassung an geraden, Pruefung an ungeraden
+             Bildern) und das Quad fuer `harvest-setup.py propose --quad`
+             ausgeben
 
 Ein korrigiertes Profil gilt erst nach `confirm`. In die Profilzuordnung
 kommt es mit `replaces` = Pruefsumme des abgeloesten Profils (siehe
@@ -243,6 +249,72 @@ def _cmd_confirm(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_quad_source(path: Path):
+    """Quad, Raster und Zielgroesse aus einem Vorschlag (`proposal.json`)
+    oder Sitzungsprofil."""
+    from dispread.charcells import CharGrid
+
+    d = json.loads(path.read_text(encoding="utf-8"))
+    return np.asarray(d["quad"], np.float32), CharGrid.from_dict(d["grid"]), tuple(d["target_size"])
+
+
+def _still_text(text: str) -> str:
+    """Zellentext der Zellen 0-8; `?` (wechselnde Ziffer) wird zur Leerzelle
+    und damit bei der Messung uebersprungen."""
+    if len(text) < CELL_COUNT:
+        text = text.ljust(CELL_COUNT)
+    return text[:CELL_COUNT].replace("?", " ")
+
+
+def _cmd_still(args: argparse.Namespace) -> int:
+    quad, grid, target_size = _load_quad_source(args.quad_from)
+    text = _still_text(args.text)
+    paths = sorted(args.frames.glob("*.png"))
+    if len(paths) > args.n:
+        paths = [paths[i] for i in np.linspace(0, len(paths) - 1, args.n).round().astype(int)]
+    frames = _load_frames([(p, text) for p in paths])
+    if len(frames) < 2:
+        print(f"Zu wenige Bilder in {args.frames}.", file=sys.stderr)
+        return 2
+
+    def worst(q, fr) -> tuple[dict, float, float]:
+        halves = median_offsets([measure_offsets(img, q, grid, target_size, t) for img, t in fr])
+        full = median_offsets([measure_offsets(img, q, grid, target_size, t, row_sets=FULL) for img, t in fr])
+        return halves, max_abs_offset(halves)[0], max_abs_offset(full)[1]
+
+    if args.out_quad is None:
+        meds, dx, dy = worst(quad, frames)
+        ok = dx <= args.limit and dy <= args.limit
+        print(f"{len(frames)} Bilder, Text {text!r}: groesster Versatz {dx:.2f} (Halbzellen, x) / {dy:.2f} (Zellen, y)")
+        print("  " + _fmt(meds))
+        print("OK" if ok else f"FEHLER: ueber {args.limit} - Raster korrigieren (--out-quad)")
+        return 0 if ok else 3
+
+    fit, check = frames[0::2], frames[1::2]
+    before, bdx, bdy = worst(quad, check)
+    new_quad, _history = refine_quad(fit, quad, grid, target_size)
+    after, adx, ady = worst(new_quad, check)
+    print(f"Anpassung an {len(fit)} Bildern, Pruefung an {len(check)}, Text {text!r}")
+    print(f"  vorher  {bdx:.2f} / {bdy:.2f}:  " + _fmt(before))
+    print(f"  nachher {adx:.2f} / {ady:.2f}:  " + _fmt(after))
+    if adx > MAX_OFFSET_COLS or ady > MAX_OFFSET_ROWS:
+        print("Ziel verfehlt - kein Quad geschrieben.", file=sys.stderr)
+        return 3
+    quad_str = ",".join(f"{v:.1f}" for v in new_quad.ravel())
+    args.out_quad.write_text(json.dumps(new_quad.tolist()) + "\n", encoding="utf-8")
+    overlay = Path(str(args.out_quad) + ".overlay.png")
+
+    class _P:  # Minimalform fuer `_overlay`
+        pass
+
+    prof = _P()
+    prof.grid, prof.target_size = grid, target_size
+    cv2.imwrite(str(overlay), _overlay(check[0][0], [(quad, (0, 0, 255)), (new_quad, (0, 200, 0))], prof))
+    print(f"Quad: {args.out_quad}  Kontrollbild (rot alt, gruen neu): {overlay}")
+    print(f'Fuer propose: --quad "{quad_str}"')
+    return 0
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -255,6 +327,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         s.set_defaults(func=func)
         if name == "refine":
             s.add_argument("--out", type=Path, required=True, help="neue Profildatei (darf nicht existieren)")
+    st = sub.add_parser("still")
+    st.add_argument("--quad-from", type=Path, required=True, help="proposal.json oder Sitzungsprofil")
+    st.add_argument("--frames", type=Path, required=True, help="Bildordner einer Standbildaufnahme")
+    st.add_argument("--text", required=True, help="angezeigte Zellen 0-8, z. B. '+0.4678? ' (? = wechselt)")
+    st.add_argument("--n", type=int, default=16, help="hoechstens so viele Bilder")
+    st.add_argument("--limit", type=float, default=0.15, help="Grenze fuer die reine Messung")
+    st.add_argument("--out-quad", type=Path, default=None, help="korrigieren und Quad hierhin schreiben")
+    st.set_defaults(func=_cmd_still)
     c = sub.add_parser("confirm")
     c.add_argument("--profile", type=Path, required=True)
     c.add_argument("--confirmed-by", required=True)

@@ -27,12 +27,14 @@ Stand 2026-09-30 mittags:
 2. **Zwei neue Aufstellungen** (`ab5`, `ab6`), möglichst unterschiedlich:
    * eine frontal-nah, eine schräg,
    * wenn möglich anderes Licht.
-   * Einrichten wie bisher, **zusätzlich** die Prüfung des Rasterversatzes:
+   * Einrichten wie bisher, **zusätzlich** vor dem Bestätigen den
+     Rasterversatz auf dem Standbild prüfen:
      ```
-     profile-regrid.py measure --profile <profil> --group <gruppe>
+     profile-regrid.py still --quad-from <X-proposal>/proposal.json --frames <X-still>/frames --text "+0.4678? "
      ```
-     geht erst nach Ernte und Import. Vor der Ernte stattdessen auf dem
-     Standbild mit bekanntem Text messen (Einrichtungsassistent 2j).
+     `?` steht für eine wechselnde Ziffer. Bei FEHLER korrigiert
+     `--out-quad <datei>`. Danach `propose` erneut mit der ausgegebenen
+     `--quad`-Zeile aufrufen.
    * Grenze: 0,15. Kein Lesertest.
 3. Ernten, sichern, importieren, in die Profilzuordnung eintragen.
 4. Einmal auswerten:

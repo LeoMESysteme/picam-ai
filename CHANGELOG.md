@@ -3,6 +3,27 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (`profile-regrid.py still`: Rasterversatz vor der Ernte prüfen)
+
+**Problem:** `profile-regrid.py` misst den Versatz nur an importierten
+Proben, also erst nach der Ernte. Beim Einrichten muss er vorher geprüft
+werden. Der Einrichtungsassistent kann das noch nicht, Codex setzt es als
+Nacharbeit 2 um.
+
+**Änderung:** Neuer Befehl `still`. Er liest das Quad aus einem Vorschlag
+oder einem Profil und misst den Versatz auf den Bildern einer
+Standbildaufnahme. Den Text gibt man von Hand an, `?` markiert eine
+wechselnde Ziffer, die dann übersprungen wird. Liegt der Versatz über
+`--limit` (Vorgabe 0,15), endet der Befehl mit Exit 3. Mit `--out-quad`
+korrigiert er zusätzlich: Anpassung an den geraden, Prüfung an den
+ungeraden Bildern. Er schreibt dann das Quad, ein Kontrollbild und die
+Zeile für `harvest-setup.py propose --quad`. 3 Tests.
+
+**Konsequenz:** Aufstellungen für Abnahme 3 lassen sich schon vor der Ernte
+auf Rasterversatz prüfen. Am Standbild von `ab4` misst der Befehl mit dem
+alten Vorschlag 0,93 und mit der Korrektur 0,03, das Quad stimmt mit
+`ab4-profile-regrid1.json` auf 0,5 px überein.
+
 ## 0.1.0.dev0 — 2026-09-30 (Punktraster prüfen und korrigieren: `profile-regrid.py`)
 
 **Problem:** Die Punktraster der Profile `ab3`, `ab4`, `ernte1`, `auf2` und
