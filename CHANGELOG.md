@@ -3,6 +3,38 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Punktraster prüfen und korrigieren: `profile-regrid.py`)
+
+**Problem:** Die Punktraster der Profile `ab3`, `ab4`, `ernte1`, `auf2` und
+`auf3` tasten 0,4–0,9 Punktspalten neben den Punktmitten ab (geschert,
+Punktabstand falsch). Die Verschiebungssuche des Lesers deckt nur ±0,24 ab.
+Das kleine Restmaß der Rasteranpassung und die Einrichtungsprüfungen haben
+den Fehler nicht gezeigt. Abnahme 2 hat damit falsche Profile geprüft
+(VALIDATION.md 2026-09-30).
+
+**Änderung:**
+* **`dispread.lattice_offsets`** misst bei bekanntem Text je Zelle und
+  Halbzelle den Versatz, bei dem die Abtastung im Quellbild am besten mit dem
+  ROM-Muster korreliert. Abgetastet wird über eine Blende von ±0,3 Punkt, in
+  der Feinsuche zählt die Mitte des Plateaus. Aus den Medianen passt das
+  Modul die Homographie neu an und wiederholt das bis zur Konvergenz.
+* **`scripts/profile-regrid.py`** hat drei Befehle:
+  * `measure` misst den Versatz.
+  * `refine` passt an der einen Hälfte der Proben an und prüft an der
+    anderen. Ziel: waagerecht höchstens 0,1 Punktspalten je Halbzelle,
+    senkrecht höchstens 0,15 Punktzeilen je Zelle. Es schreibt ein neues,
+    unbestätigtes Profil, einen Bericht `.regrid.json` und ein Kontrollbild.
+  * `confirm` bestätigt das Profil nach der Sichtprüfung.
+* **`dotmatrix-dataset.py`:** Ein Eintrag der Profilzuordnung mit
+  `replaces` (Prüfsummen) ersetzt das in Proben eingebettete Profil, aber nur
+  für genau diese Prüfsummen.
+* Tests: 6 synthetische für die Messung und die Korrektur (geschert, zu
+  kleiner Punktabstand) und 3 für `replaces`.
+
+**Konsequenz:** Korrigierte Profile gelten erst nach Bestätigung und stehen
+dann mit `replaces` in der Profilzuordnung. Die Messung ist als Prüfung beim
+Einrichten vorgesehen.
+
 ## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten-Abzug zurückgenommen, wieder `bg_closing_v1`)
 
 **Problem:** Der Punktschatten-Abzug (`bg_closing_shadow_v1`, `fc44b47`)

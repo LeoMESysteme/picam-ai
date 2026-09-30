@@ -386,3 +386,53 @@ def test_load_cell_samples_treats_map_entry_without_sha256_as_unresolved(tmp_pat
     assert samples == []
     assert stats["ohne_profil"] == 1
     assert stats["profil_pruefsumme_abweichend"] == 0
+
+
+def _embedded_detail(profile_path: Path, quad: list[list[float]]) -> dict:
+    detail = _base_detail("sessB")
+    detail["profile_quad"] = json.dumps(quad)
+    detail["profile_grid"] = json.dumps({**GRID.to_dict(), "target_size": list(TARGET_SIZE)})
+    detail["profile_sha256"] = "a" * 64
+    return detail
+
+
+def _wrong_quad() -> list[list[float]]:
+    return [[float(x) + 7.0, float(y)] for x, y in _quad()]
+
+
+def test_map_entry_with_replaces_supersedes_embedded_profile(tmp_path):
+    """Befund Rasterversatz (2026-09-30): Ein korrigiertes Profil in der Map
+    ersetzt das eingebettete Profil, wenn dessen Pruefsumme in `replaces`
+    steht."""
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+    profile_path = _save_profile(tmp_path)
+    detail = _embedded_detail(profile_path, _wrong_quad())
+    _write_sample(dataset_root, "sample-r", detail)
+    sha = dotmatrix_dataset._profile_sha256(profile_path)
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": sha, "replaces": ["a" * 64]}}
+    recs = list(dotmatrix_dataset.load_resolved_records(dataset_root, profile_map, stats={}))
+    assert len(recs) == 1
+    from dispread.rectify import rectify
+
+    expected = cv2.cvtColor(rectify(_full_frame(), _quad(), target_size=TARGET_SIZE).image, cv2.COLOR_BGR2GRAY)
+    assert np.array_equal(recs[0].crop_gray, expected)
+
+
+def test_map_entry_replaces_other_sha_keeps_embedded_profile(tmp_path):
+    dataset_root = tmp_path / "dataset"
+    _write_devices(dataset_root)
+    profile_path = _save_profile(tmp_path)
+    wrong = _wrong_quad()
+    _write_sample(dataset_root, "sample-k", _embedded_detail(profile_path, wrong))
+    sha = dotmatrix_dataset._profile_sha256(profile_path)
+    profile_map = {"sessB": {"path": str(profile_path), "sha256": sha, "replaces": ["b" * 64]}}
+    embedded = list(dotmatrix_dataset.load_resolved_records(dataset_root, profile_map, stats={}))
+    plain = list(dotmatrix_dataset.load_resolved_records(dataset_root, {}, stats={}))
+    assert np.array_equal(embedded[0].crop_gray, plain[0].crop_gray)
+
+
+def test_read_profile_map_keeps_replaces(tmp_path):
+    path = tmp_path / "map.json"
+    path.write_text(json.dumps({"s": {"path": "/x/p.json", "sha256": "c" * 64, "replaces": ["d" * 64]}}))
+    assert dotmatrix_dataset.read_profile_map(path)["s"]["replaces"] == ["d" * 64]

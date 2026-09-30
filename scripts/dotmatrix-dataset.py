@@ -189,7 +189,15 @@ def _resolve_profile(
     """
     quad_json = detail.get("profile_quad")
     grid_json = detail.get("profile_grid")
-    if isinstance(quad_json, str) and isinstance(grid_json, str):
+    # Korrigiertes Profil (Befund Rasterversatz 2026-09-30): Ein Map-Eintrag
+    # mit `replaces` ersetzt das in der Probe eingebettete Profil - aber nur,
+    # wenn dessen Pruefsumme ausdruecklich in `replaces` steht. So bleibt
+    # nachvollziehbar, welches Profil welches abloest, und ein spaeter
+    # neu bestaetigtes Profil wird nie stillschweigend ersetzt.
+    entry = profile_map.get(session_id) if session_id else None
+    replaces = (entry or {}).get("replaces") or []
+    superseded = bool(replaces) and detail.get("profile_sha256") in replaces
+    if isinstance(quad_json, str) and isinstance(grid_json, str) and not superseded:
         quad = _quad_from_json(quad_json)
         grid_and_size = _grid_from_json(grid_json)
         if quad is not None and grid_and_size is not None:
@@ -363,6 +371,8 @@ def read_profile_map(path: Path) -> dict[str, dict[str, str]]:
         if not p.is_absolute():
             p = _REPO_ROOT / p
         out[session_id] = {"path": str(p), "sha256": entry.get("sha256", "")}
+        if entry.get("replaces"):
+            out[session_id]["replaces"] = list(entry["replaces"])
     return out
 
 
