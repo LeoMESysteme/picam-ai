@@ -226,33 +226,39 @@ def test_mit_kamera() -> None:
     ...
 ```
 
-## 11 — Ein Einzelbild von der Kamera (braucht Hardware)
+## 11 — Ein Einzelbild von der StreamCam (braucht Hardware)
+
+Zuerst die [Kameradiagnose](../CAMERA_COMMISSIONING.md) ausführen und ein
+bestätigtes `camera.json`-Profil bereitstellen
+([Geräteprofile](04-geraeteprofile.md), [Bildquellen-API](../../api/frames.md)).
+`/pfad/zur/camera.json` im Beispiel durch den eigenen Profilpfad ersetzen.
 
 ```bash
-./scripts/camera-commissioning.sh          # erst Diagnose, Exit 0 erwarten
-rpicam-still -o var/diagnostics/probe.jpg --immediate
+./scripts/camera-commissioning.sh
 ```
-
-In Python, mit Metadaten aus derselben Aufnahme:
 
 ```python
-from picamera2 import Picamera2
+from pathlib import Path
+import cv2
+from dispread.frames import open_source
 
-picam2 = Picamera2()
-picam2.configure(picam2.create_still_configuration(main={"size": (2028, 1520)}))
-picam2.start()
-request = picam2.capture_request()
+ziel = Path("var/diagnostics/probe.jpg")
+ziel.parent.mkdir(parents=True, exist_ok=True)
+quelle = open_source("v4l2://?settings=/pfad/zur/camera.json")
+quelle.open()
 try:
-    bild = request.make_array("main")
-    md = request.get_metadata()
+    bild = next(quelle.frames())
+    if not cv2.imwrite(str(ziel), bild.image):
+        raise RuntimeError(f"Bild konnte nicht geschrieben werden: {ziel}")
+    print(bild.capture_timestamp)
 finally:
-    request.release()          # PFLICHT
-picam2.stop()
-print(md["SensorTimestamp"], md.get("ExposureTime"), md.get("AnalogueGain"))
+    quelle.close()
 ```
 
-Ohne Kamera: `global_camera_info()` ist `[]` — erwarteter Zustand, kein Bug.
-`camera_auto_detect` greift nur beim Booten.
+Der Zeitstempel dieses Frames trägt die Basis `v4l2_monotonic`; seine
+Ereignissemantik ist noch offen
+([Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)). Ein einzelnes
+Bild belegt weder Latenz noch Erkennungsqualität.
 
 ## 12 — Wohin darf geschrieben werden
 

@@ -45,6 +45,11 @@ nav = [
     { "Rezepte" = "docs/anleitung/rezepte.md" },
     { "Glossar" = "docs/anleitung/glossar.md" },
   ] },
+  { "Vertiefung" = [
+    { "Messpfad und Freigabe" = "docs/uebersicht/messpfad.md" },
+    { "Zeitstempel richtig lesen" = "docs/uebersicht/zeitstempel.md" },
+    { "Daten und Abnahme" = "docs/uebersicht/daten-und-abnahme.md" },
+  ] },
   { "Betrieb und Hardware" = [
     { "Kamera-Inbetriebnahme" = "docs/CAMERA_COMMISSIONING.md" },
     { "Hardwareprofil" = "docs/HARDWARE_PROFILE.md" },

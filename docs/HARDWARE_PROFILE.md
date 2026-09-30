@@ -212,6 +212,12 @@ Drift-Historie**. Für Messung M1 wird `chrony` gebraucht
 
 ## Konfigurationsschlüssel
 
+Die folgende Tabelle ist der **historische IMX500-Planungsstand**. Insbesondere
+`CAMERA_MODEL=imx500` ist kein aktueller Default der StreamCam. Der aktive
+`v4l2://`-Pfad verlangt eine `camera.json` nach dem
+[CameraSettings-Vertrag](../api/frames.md) mit USB-ID `046d:0893`, Bildformat,
+Bildrate und den vier bestätigten UVC-Reglern.
+
 Betriebliche Werte gehören nach `/etc/dispread/hardware.conf`. Regel wie bei
 MEhub: **fehlende Datei oder fehlender Schlüssel ⇒ dokumentierter Default**,
 kein Fehler.

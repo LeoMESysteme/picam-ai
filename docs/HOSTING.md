@@ -148,6 +148,24 @@ Token-Nutzung, keine Anmelde- oder Bot-Tokens. Bei Problemen bleiben die private
 auf dem Runner unter `CODEX_HOME`; bei fehlgeschlagenem Gate gibt es keinen
 Push.
 
+Seit 2026-09-30 führt jeder Audit die Startseite, Navigation,
+Dokumentationsübersicht und den Status ausdrücklich als Prüfpunkte mit.
+Zuvor wurden vor allem die rotierenden Anleitungsseiten bearbeitet; dadurch
+blieb die IMX500 auf der Startseite als aktuelle Kamera stehen, obwohl der
+Kamerwechsel im Projektstatus dokumentiert war. Das Startkommando setzt
+`agents.enabled=true` und höchstens zwei Subagent-Threads. Es verwendet kein
+`--ephemeral`, weil dieser Schalter beim lokalen Probelauf den Spawn mit
+„no thread with id“ abbrechen ließ. Ohne ihn wurde ein Kind-Thread angelegt.
+Die Sessiondateien bleiben im geschützten `CODEX_HOME` des Runners. Da
+`--ignore-user-config` die Projektrolle im lokalen Probelauf nicht automatisch
+bereitstellte, nennt das Startkommando die Datei
+`.codex/agents/docs_reader.toml` als Rollen-Konfiguration ausdrücklich.
+Ein Probelauf konnte sie so als `agent_type=docs_reader` starten. Die Rolle
+ist lesend; der Prompt
+erlaubt ihre Nutzung bei mindestens vier unabhängigen Bereichen oder einem
+größeren Erstaudit. Die Konfiguration erlaubt Subagents, erzwingt ihren
+tatsächlichen Einsatz aber nicht.
+
 * **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
   OQ-Index-Check, Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion
   aktualisiert.

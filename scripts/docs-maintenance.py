@@ -284,6 +284,7 @@ def probe(repo: Path, state_file: Path) -> None:
         "weekly": weekly,
         "initial": initial,
         "guide_pages": guide_pages if initial or weekly else [],
+        "review_pages": ["README.md", "zensical.toml", "docs/status.md", "docs/README.md"],
         "next_guide_cursor": next_cursor,
         "changed_files": files,
         "run": run,
@@ -295,6 +296,21 @@ def probe(repo: Path, state_file: Path) -> None:
 
 def _run_checked(command: list[str], repo: Path, env: dict[str, str] | None = None) -> None:
     subprocess.run(command, cwd=repo, env=env, check=True)
+
+
+def codex_command(codex_bin: str, repo: Path) -> list[str]:
+    """Keep Codex session state so its collaboration tools can spawn children."""
+    role_file = repo.resolve() / ".codex" / "agents" / "docs_reader.toml"
+    return [
+        codex_bin, "exec", "--ignore-user-config", "--json", "--sandbox", "workspace-write",
+        "-m", "gpt-6-luna", "-c", 'approval_policy="never"',
+        "-c", "agents.max_concurrent_threads_per_session=2",
+        "-c", "agents.enabled=true",
+        "-c", f"agents.docs_reader.config_file={json.dumps(str(role_file))}",
+        "-c", 'agents.docs_reader.description="Liest gezielt Code und Doku."',
+        "-c", 'agents.default_subagent_model="gpt-6-luna"',
+        "-c", 'agents.default_subagent_reasoning_effort="low"', "-",
+    ]
 
 
 def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool) -> None:
@@ -309,17 +325,11 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
     prompt = (repo / "scripts" / "docs-maintenance-prompt.md").read_text(encoding="utf-8")
     prompt += "\n\n## Auftrag für diesen Lauf\n"
     prompt += json.dumps(
-        {key: info[key] for key in ("diff_base", "base", "weekly", "initial", "guide_pages", "changed_files")},
+        {key: info[key] for key in ("diff_base", "base", "weekly", "initial", "guide_pages", "review_pages", "changed_files")},
         ensure_ascii=False,
         indent=2,
     )
-    command = [
-        codex_bin, "exec", "--ignore-user-config", "--ephemeral", "--json", "--sandbox", "workspace-write",
-        "-m", "gpt-6-luna", "-c", 'approval_policy="never"',
-        "-c", "agents.max_concurrent_threads_per_session=2",
-        "-c", 'agents.default_subagent_model="gpt-6-luna"',
-        "-c", 'agents.default_subagent_reasoning_effort="low"', "-",
-    ]
+    command = codex_command(codex_bin, repo)
     state_file.parent.mkdir(parents=True, exist_ok=True)
     log_file = state_file.parent / "last-codex-run.jsonl"
     with log_file.open("w", encoding="utf-8") as output:

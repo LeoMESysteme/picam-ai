@@ -4,6 +4,11 @@ Erzeugt beim Bauen der Seite direkt aus den Docstrings in `src/dispread`, ohne K
 Was hier steht, steht so im Code. Die Reihenfolge folgt der Verarbeitungskette
 aus Konzept.md §3:
 
+Für die fachliche Einordnung der Signaturen siehe
+[Messpfad und Freigabe](../docs/uebersicht/messpfad.md),
+[Zeitstempel richtig lesen](../docs/uebersicht/zeitstempel.md) und
+[Daten und Abnahme](../docs/uebersicht/daten-und-abnahme.md).
+
 ```mermaid
 flowchart LR
     F[frames<br>Bildquelle] --> D[detect<br>Anzeige finden] --> T[track<br>Nachführen]

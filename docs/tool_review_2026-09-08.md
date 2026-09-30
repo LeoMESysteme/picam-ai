@@ -1,5 +1,11 @@
 # Tool-Review zur Displayauslesung — 2026-09-08
 
+> **Historischer Entscheidungsstand.** Die Kameraempfehlungen unten stammen
+> vom 2026-09-08 und beziehen sich auf die inzwischen außer Betrieb genommene
+> IMX500. Seit 2026-09-25 ist die Logitech StreamCam über UVC aktiv.
+> Maßgeblich sind das [Hardwareprofil](HARDWARE_PROFILE.md) und die
+> [Entscheidung zum Kamerwechsel](project_history.md).
+
 Recherche und Empfehlung, **keine beschlossene Migration und kein Benchmark**.
 Geprüft: Konzept, Projekt-Historie, Status, offene Fragen, Validierung,
 Timing-Dokument, pyproject.toml und vorhandene Leser-/Pipeline-/Freigabemodule.

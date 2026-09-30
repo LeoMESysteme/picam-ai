@@ -12,7 +12,10 @@
 
 Checkliste plus Fehlerbaum. Werkzeug ist
 [`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh) —
-rein lesend, Exit 0 = einsatzbereit.
+für die StreamCam aktuell: Fokus-Regler werden testweise gesetzt,
+zurückgelesen und wiederhergestellt; ein Testbild wird abgelegt.
+Exit 0 bedeutet, dass die geprüften Inbetriebnahmeschritte bestanden sind.
+Der folgende Fehlerbaum bleibt als **historischer IMX500-Fall** erhalten.
 
 ## Der Fall, der am 2026-09-07 zutraf
 

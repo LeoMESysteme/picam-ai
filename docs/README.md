@@ -1,5 +1,10 @@
 # Dokumentationsübersicht
 
+Die [Startseite](../index.md) verlinkt jede veröffentlichte Seite direkt.
+Für komplexere Fragen sind [Messpfad und Freigabe](uebersicht/messpfad.md),
+[Zeitstempel richtig lesen](uebersicht/zeitstempel.md) und
+[Daten und Abnahme](uebersicht/daten-und-abnahme.md) die thematischen Einstiege.
+
 ## Selbst programmieren
 
 | Dokument | Inhalt |

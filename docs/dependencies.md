@@ -1,5 +1,11 @@
 # Abhängigkeiten
 
+Die aktive Kamera ist seit 2026-09-25 die Logitech StreamCam über UVC
+([Hardwareprofil](HARDWARE_PROFILE.md)). `picamera2`, `libcamera` und die
+IMX500-Pakete in den Bestandslisten unten stammen vom früheren Aufbau; die
+aktuelle Bildquelle `v4l2://` nutzt OpenCV und V4L2. Die Regel für die
+Projekt-venv mit Debian-Systempaketen gilt weiterhin.
+
 ## Zensical-Pflege auf dem Forgejo-Runner
 
 Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
@@ -49,13 +55,13 @@ System-pip, nicht das venv.
 
 | Paket | Version | Zweck |
 | --- | --- | --- |
-| `python3-picamera2` | 0.3.37 | Kamerazugriff, IMX500-Helfer |
-| `python3-libcamera` | 0.7.2 | libcamera-Bindings |
+| `python3-picamera2` | 0.3.37 | historischer IMX500-Kamerazugriff; zur Laufzeit nicht mehr benötigt |
+| `python3-libcamera` | 0.7.2 | historische IMX500-Bindings; zur Laufzeit nicht mehr benötigt |
 | `python3-opencv` | 4.10.0 | Entzerrung, Bildaufbereitung |
 | `python3-numpy` | 2.2.4 | Arrays |
 | `python3-serial` | 3.5 | serielle Ausgabe |
-| `rpicam-apps` | 1.13.0 | Inbetriebnahme, inkl. IMX500-Postprocessing |
-| `imx500-all`, `-firmware`, `-models`, `-tools` | — | Sensorfirmware, 23 Fertigmodelle, Packager |
+| `rpicam-apps` | 1.13.0 | historische IMX500-Inbetriebnahme und Postprocessing |
+| `imx500-all`, `-firmware`, `-models`, `-tools` | — | historische Sensorfirmware, Modelle und Packager |
 | `v4l-utils`, `ffmpeg`, `i2c-tools`, `git` | — | Diagnose, Videokonvertierung |
 | `tesseract-ocr` | 5.5.0 | OCR-Vergleichsbasis. Konzept §5 nennt Tesseract als Kandidaten — ihn unbewertet stehen zu lassen wäre die schlechtere Option. Angebunden per **CLI über `subprocess`**, nicht über `pytesseract`: das spart eine Abhängigkeit, und `python3-pytesseract` existiert in Debian 13 ohnehin nicht |
 | `tesseract-ocr-eng` | — | Ohne Traineddata startet Tesseract nicht |
@@ -77,7 +83,7 @@ Spezialisierte Traineddata (`ssd`, `letsgodigital`) sind nicht in Debian, siehe
 
 | Paket | Entscheidung | Begründung |
 | --- | --- | --- |
-| `torch`, `torchvision` | **nein, gar nicht auf dem Pi** | 2–3 GB von 34 GB frei. Zielort für Inferenz ist der IMX500, nicht die Pi-CPU — und die Konvertierungskette dorthin läuft ohnehin off-Pi ([OQ-11](open-questions.md)). Torch auf dem Pi würde Training ermöglichen, das dort nicht stattfinden soll |
+| `torch`, `torchvision` | **nein, gar nicht auf dem Pi** | 2–3 GB von 34 GB frei; Training ist off-Pi vorgesehen. Die frühere Begründung mit Inferenz auf der IMX500 ist seit dem Kamerwechsel historisch ([OQ-11](open-questions.md)). |
 | `onnxruntime` | zurückgestellt, aber **bevorzugte Option**, falls je CPU-Inferenz nötig wird | ~50 MB statt 2 GB, reine Inferenz. Erst installieren, wenn ein konkretes `.onnx` existiert |
 | `tensorflow`, `tflite-runtime` | nein | wie torch, kein Bedarf ohne eigenes Modell |
 | `paddleocr`, `paddlepaddle` | nein | arm64/Python-3.13-Wheels unzuverlässig, große Modell-Downloads. Konzept §5 nennt es als Kandidaten — hier als „geprüft, verworfen für jetzt" festgehalten, nicht stillschweigend weggelassen |
@@ -89,9 +95,9 @@ Spezialisierte Traineddata (`ssd`, `letsgodigital`) sind nicht in Debian, siehe
 ## Was das Projekt selbst zur Laufzeit braucht
 
 Nichts über die Systempakete hinaus. Die Kette läuft mit `numpy`, `cv2` und
-`pyserial`; `picamera2` wird ausschließlich in den beiden Kameramodulen
-importiert, und zwar lazy in der Factory. Deshalb laufen Tests und Beispiele
-auch ohne Kamera.
+`pyserial`. Die aktive UVC-Bildquelle öffnet OpenCV erst beim Öffnen der
+Kamera. `picamera2` wird von ihr nicht importiert; Tests und Beispiele ohne
+Kamera bleiben ausführbar ([Bildquellen-API](../api/frames.md)).
 
 ## Kamera-Workbench (2026-09-08)
 

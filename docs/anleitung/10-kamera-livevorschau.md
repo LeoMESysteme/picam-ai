@@ -1,5 +1,13 @@
 # Kamera-Workbench: HTTPS, Einstelltabelle und Shell
 
+> **Kamerastand beachten:** Der Abschnitt „Kamera einstellen“ dokumentiert
+> Picamera2-Controls und mechanischen Fokus der früheren IMX500. Die aktive
+> Kamera ist seit 2026-09-25 die Logitech StreamCam mit UVC-Reglern
+> ([Hardwareprofil](../HARDWARE_PROFILE.md),
+> [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)). Vor dem Einstellen
+> die in der laufenden Workbench tatsächlich angebotenen Regler prüfen;
+> die alten Control-Namen unten sind keine StreamCam-Anleitung.
+
 Eine Terminaloberfläche mit Kamerabild, Log und echten Bash-Tabs. Alle Zugriffe
 sind mit dem Linux-Passwort von `me-systeme` geschützt. Vorschau und geometrische
 Display-Vorschläge starten mit dem Server. Es findet keine OCR oder
@@ -127,10 +135,14 @@ regelt selbst. Auf `aus` umstellen übernimmt die aktuellen Ist-Werte als
 Startpunkt und entsperrt `ExposureTime` (µs) und `AnalogueGain`. `Contrast` beeinflusst die
 Bildaufbereitung. Auflösung oder Bildrate starten den Stream neu.
 
-Die AI Camera hat **mechanischen Fokus**. Fokusassistenz `an` vergrößert die
+**Historischer IMX500-Stand:** Die AI Camera hat mechanischen Fokus.
+Fokusassistenz `an` vergrößert die
 bestätigte ROI im Vorschaufenster; die Tabelle zeigt daneben einen relativen
 Schärfewert. Am kleinen Objektiv mit dem Fokuswerkzeug einstellen; keine
-motorische Autofokusfunktion vortäuschen. Reflexionen zuerst durch Position,
+motorische Autofokusfunktion vortäuschen. Die StreamCam hat dagegen
+`focus_automatic_continuous` und `focus_absolute`; für reproduzierbare
+Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
+liest den festen Fokuswert zurück. Reflexionen zuerst durch Position,
 Abschirmung und kontrolliertes Licht verringern: [Optischer Aufbau](../OPTICAL_SETUP.md).
 
 Tabelle und CLI melden Sollwerte und die beobachtete Belichtung getrennt. Die interne

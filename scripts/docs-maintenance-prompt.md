@@ -17,6 +17,13 @@ die betroffenen Code- und Dokumentationsstellen. Die genannten `guide_pages`
 werden auch ohne Codeänderung geprüft: anfangs in Dreierpaketen, danach
 wöchentlich eine Seite. Beim ersten Paket: prüfe zusätzlich die Navigation
 und finde die wichtigsten fehlenden Kontextverweise der Anleitung.
+Prüfe die `review_pages` bei **jedem** Lauf: Die Startseite muss die aktive
+Kamera und den aktuellen Integrationsstand korrekt nennen und einen Weg zu
+allen Navigationszielen bieten. Gleiche dazu `README.md` mit
+`docs/status.md`, `docs/HARDWARE_PROFILE.md`, `docs/project_history.md` und
+`zensical.toml` ab. Veraltete Aussagen auf der Startseite haben Vorrang vor
+stilistischen Änderungen in den Anleitungsseiten. `docs/README.md` dient als
+Inhaltskontrolle, darf aber vom automatischen Lauf nicht geändert werden.
 Bevorzuge eine gezielte Änderung an höchstens fünf Seiten pro Lauf.
 
 1. Prüfe Fakten gegen `src/`, `examples/`, `scripts/`, `tests/` und die

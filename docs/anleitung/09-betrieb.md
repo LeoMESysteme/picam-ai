@@ -1,5 +1,13 @@
 # 9 — Betrieb: Installation, Dienst, Dauerlauf
 
+> **Baukapitel, kein installierbarer Dienst.** Die unten gezeigte
+> systemd-Unit mit `picamera2://` ist ein historischer Entwurf aus der
+> IMX500-Zeit. Die aktive Kamera nutzt
+> [UVC/StreamCam](../../api/frames.md); `dispread run`, `install.sh`
+> und die Unit sind weiterhin offen ([Status](../status.md),
+> [Roadmap](../ROADMAP.md)). Den Beispielblock nicht als aktuellen
+> Startbefehl übernehmen.
+
 **Ziel:** Die Kette läuft als systemd-Dienst, überlebt Neustarts und
 Störungen, und ein 72-Stunden-Dauerlauf belegt: **kein unmarkierter Altwert,
 stabiler Speicher.** Dazu ein Doku-Konsistenztest, der die Projektdokumentation

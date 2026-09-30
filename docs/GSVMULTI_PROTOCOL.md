@@ -1,5 +1,9 @@
 # GSVmulti-Anbindung
 
+Für die Trennung von erkanntem Wert, Zeitstempel und Transportbeleg siehe
+[Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
+und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
+
 ## Stand: das Format ist unbekannt
 
 Die Telegrammspezifikation der eingesetzten GSVmulti-Version liegt **nicht**

@@ -1,5 +1,9 @@
 # Zeitbezug — Messplan und Messwerte
 
+Zum Einordnen einzelner Record-Felder und Zeitbasen zuerst
+[Zeitstempel richtig lesen](uebersicht/zeitstempel.md). Für den Weg vom
+Kamerabild zur Freigabe siehe [Messpfad und Freigabe](uebersicht/messpfad.md).
+
 > **Seit 2026-09-25 (StreamCam):** Kamerabilder tragen den
 > V4L2-Pufferzeitstempel in CLOCK_MONOTONIC (`v4l2_monotonic`), nicht mehr
 > `SensorTimestamp` in BOOTTIME. Umgerechnet wird über den je Aufnahme

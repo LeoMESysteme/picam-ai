@@ -161,10 +161,12 @@ prüfen, sondern **„lehnt das Unlesbare ab"**.
 * `ModuleNotFoundError: No module named 'dispread.frames.folder_source'` heißt:
   Registry-Eintrag existiert, Implementierung nicht. Genau das baust du in
   [Kapitel 3](03-erste-bildquelle-folder.md).
-* Kamera weg? `Picamera2.global_camera_info() == []` und
-  `RuntimeError: IMX500: Requested camera dev-node not found` sind erwartete
-  Zustände ohne Kamera. `camera_auto_detect` greift **nur beim Booten** — nach
-  dem Anstecken ist ein Reboot nötig.
+* Kamera weg? Für die aktive StreamCam zuerst
+  [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md) und die USB-ID
+  `046d:0893` prüfen. `Picamera2.global_camera_info() == []` und
+  `RuntimeError: IMX500: Requested camera dev-node not found` beschreiben
+  nur den historischen IMX500-Pfad; dessen `camera_auto_detect` griff erst
+  nach einem Booten.
 * Sonst: [../CAMERA_COMMISSIONING.md](../CAMERA_COMMISSIONING.md) hat einen
   Fehlerbaum, und [../../CLAUDE.md](../../CLAUDE.md) einen Abschnitt
   „Erwartete Zustände, die keine Bugs sind".

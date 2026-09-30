@@ -106,6 +106,14 @@ def test_codex_usage_is_summarized_without_logging_agent_text(tmp_path: Path):
     assert maintenance.token_usage(log) == (50, 20, 7)
 
 
+def test_codex_command_keeps_a_session_for_subagents(tmp_path: Path):
+    command = maintenance.codex_command("/usr/bin/codex", tmp_path)
+    assert "--ephemeral" not in command
+    assert "agents.enabled=true" in command
+    assert "agents.max_concurrent_threads_per_session=2" in command
+    assert f'agents.docs_reader.config_file="{tmp_path}/.codex/agents/docs_reader.toml"' in command
+
+
 def test_codex_audit_rejects_sandbox_failure_even_if_turn_completed(tmp_path: Path):
     log = tmp_path / "codex.jsonl"
     log.write_text(
@@ -217,6 +225,9 @@ def test_probe_keeps_all_changed_files_and_diff_boundaries(tmp_path: Path):
     assert info["base"] == new
     assert len(info["changed_files"]) == 70
     assert "docs/anleitung/page-69.md" in info["changed_files"]
+    assert "README.md" in info["review_pages"]
+    assert "zensical.toml" in info["review_pages"]
+    assert "docs/status.md" in info["review_pages"]
 
 
 def test_no_edit_audit_does_not_mark_broken_site_as_current(tmp_path: Path):

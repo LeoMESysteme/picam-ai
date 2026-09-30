@@ -2,6 +2,18 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+test('Startseite verlinkt alle Navigationsziele im Inhalt', async ({ page }) => {
+  await page.goto('/');
+  const targets = await page.locator('.md-nav--primary a[href]').evaluateAll((links) =>
+    [...new Set(links.map((link) => new URL((link as HTMLAnchorElement).href).pathname))]
+      .filter((path) => path.endsWith('.html') && path !== '/index.html'),
+  );
+  const homeLinks = await page.locator('.md-content__inner a[href]').evaluateAll((links) =>
+    [...new Set(links.map((link) => new URL((link as HTMLAnchorElement).href).pathname))],
+  );
+  for (const target of targets) expect(homeLinks.includes(target), `fehlender Startseiten-Link: ${target}`).toBe(true);
+});
+
 test('OQ-Fokus, Filter und Suche bleiben mit den Einträgen verlinkt', async ({ page }) => {
   await page.goto('/docs/open-questions.html');
   const index = page.locator('#oq-index');

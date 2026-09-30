@@ -9,6 +9,46 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-30 — Startseite als vollständiger Doku-Wegweiser
+
+## Problem
+
+Die Zensical-Startseite zeigte noch die außer Betrieb genommene IMX500 als
+aktive Kamera und verlinkte nur wenige Dokumente. Die tägliche Pflege prüfte
+rotierende Anleitungsseiten, aber die Startseite nicht bei jedem Lauf.
+
+## Entscheidung
+
+Die Startseite enthält direkte Links auf alle Navigationsziele und Wege nach
+Aufgabe. Drei thematische Vertiefungen erklären Messpfad, Zeitstempel sowie
+Daten und Abnahme, jeweils mit Verweisen auf maßgebliche Anforderungen, Code
+und Messprotokolle. Der Pflege-Audit prüft Startseite und Navigation bei jedem
+Lauf. Der Codex-Aufruf behält Sessionzustand, damit lesende Subagents starten
+können.
+
+## Begründung und Alternativen
+
+Nur zusätzliche Links in der Seitenleiste hätten die erste Seite nicht zu
+einem verlässlichen Einstieg gemacht. Alle Spezialthemen in ein einziges
+langes Handbuch zu setzen, hätte die bestehenden Zielseiten und stabilen
+Abschnittsanker doppelt erklärt. Die drei kurzen Vertiefungen verbinden
+stattdessen bestehende Quellen. Für Subagents wurde `--ephemeral` verworfen:
+ein lokaler Probelauf zeigte beim Spawn „no thread with id“; ohne den Schalter
+legte Codex einen Kind-Thread an.
+Mit `--ignore-user-config` war die projektspezifische Rolle `docs_reader`
+zunächst unbekannt; die explizite `agents.docs_reader.config_file`-Angabe
+stellte sie in einem zweiten Probelauf bereit, ohne die übrige
+Benutzerkonfiguration zu laden.
+
+## Konsequenz
+
+Neue Navigationsseiten brauchen einen direkten Startseiten-Link. Ein
+Browsertest prüft das. Sessiondateien des automatischen Codex-Laufs liegen im
+geschützten `CODEX_HOME` des Runner-Benutzers; das Publish-Gate bleibt
+unverändert.
+
+---
+
 # 2026-09-24 — Keine automatische URL-Nachfuehrung in Zensical
 
 ## Problem
@@ -971,4 +1011,3 @@ bleibt bei 15 fps.
 * Ist nicht genug frei, lehnt `sync-record.py` vor dem Start ab.
 * Das Kopieren nach der Aufnahme dauert einige Minuten.
 * Der Nachweis an der Kamera steht aus (TODO.md).
-

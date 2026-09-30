@@ -1,11 +1,22 @@
 # 6 — Kamera, Aufnahme, `replay://`
 
+> **Historischer Bauentwurf für die IMX500 (2026-09-07).** Die folgenden
+> Picamera2-Schritte, CAM/DISP0-Voraussetzungen und Sensor-Messwerte beschreiben
+> die außer Betrieb genommene AI Camera. Aktuell ist die Logitech StreamCam:
+> [UVC-Bildquelle](../../api/frames.md),
+> [Kameraeinstellungen](../HARDWARE_PROFILE.md) und
+> [Zeitstempel](../uebersicht/zeitstempel.md). `replay://` ist inzwischen
+> implementiert; `dispread record` als Pipeline-CLI ist weiterhin geplant
+> ([Status](../status.md)). Die Checklisten unten sind der damalige
+> Implementierungsentwurf, kein aktueller Inbetriebnahmebefehl.
+
 **Ziel:** Drei Module: `picamera2://` liefert Live-Frames mit echtem
 Sensorzeitstempel, `dispread record` schreibt eine Aufnahmesession mit
 Manifest, `replay://` spielt sie mit den **originalen** Zeitstempeln wieder ab.
 
-**Warum jetzt:** Ab hier hat das Projekt reale Daten. Bisher stammen alle
-Zahlen aus synthetischem Material, und Konzept §9 ist eindeutig, dass das kein
+**Warum damals:** Mit diesem Schritt sollte das Projekt reale Daten bekommen.
+Beim ursprünglichen Entwurf stammten die Erkennungszahlen aus synthetischem
+Material, und Konzept §9 ist eindeutig, dass das kein
 Nachweis ist ([OQ-04](../open-questions.md),
 [OQ-14](../open-questions.md)). `replay://` macht die Kette gegen echtes
 Material **regressionsfähig** — das ist der eigentliche Gewinn dieses
@@ -13,16 +24,17 @@ Kapitels, nicht das Livebild. Schließt P1 ab und öffnet P2/P3.
 
 **Vorbedingungen:** [Kapitel 3](03-erste-bildquelle-folder.md),
 [Kapitel 4](04-geraeteprofile.md), [Kapitel 5](05-cli.md).
-Hardware: Kamera an CAM/DISP0, `./scripts/camera-commissioning.sh` mit Exit 0.
+Historische Hardware: IMX500 an CAM/DISP0. Das heutige
+`./scripts/camera-commissioning.sh` prüft dagegen die StreamCam.
 Lesen: [../CAMERA_COMMISSIONING.md](../CAMERA_COMMISSIONING.md),
 [../TIMING.md](../TIMING.md), [../OPTICAL_SETUP.md](../OPTICAL_SETUP.md).
 
 ## Reihenfolge: erst der Aufbau, dann Code
 
 Der optische Aufbau ist hier **Voraussetzung, nicht Feinarbeit**. Gemessen
-entstehen die stillen Fehlablesungen bei Glanz (2 von 40, siehe
-[../VALIDATION.md](../VALIDATION.md)), und der Fokus der Kamera ist derzeit
-verstellt. Kein Softwareaufwand ersetzt eine Abschirmung. Halte deshalb
+entstanden in der synthetischen Messreihe stille Fehlablesungen bei Glanz
+(2 von 40, siehe [../VALIDATION.md](../VALIDATION.md)). Der Fokus der damaligen
+IMX500 war anfangs verstellt. Kein Softwareaufwand ersetzt eine Abschirmung. Halte deshalb
 zuerst [../OPTICAL_SETUP.md](../OPTICAL_SETUP.md) her: Abstand, Ziffernhöhe in
 Pixeln, Beleuchtung, keine Spiegelung im Sichtfeld — und dokumentiere den
 Aufbau im [../lab_journal.md](../lab_journal.md), bevor du Frames sammelst.

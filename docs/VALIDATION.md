@@ -1,5 +1,10 @@
 # Validierung — Messwerte und Abnahmekriterien
 
+Wie Entwicklungsdaten, Sperrgeräte und Abnahmeläufe voneinander getrennt
+werden, erklärt [Daten und Abnahme](uebersicht/daten-und-abnahme.md).
+Die Entscheidungsstellen der Erkennung stehen in
+[Messpfad und Freigabe](uebersicht/messpfad.md).
+
 Jede Zahl hier trägt Datum, Datensatz und Verweis auf den Lauf. Aufbau und
 Deutung von Experimenten gehören nach [lab_journal.md](lab_journal.md).
 
@@ -130,7 +135,8 @@ steht jetzt fest, damit später nur Zahlen eingesetzt werden:
   mit Nachweis pro Einzelbeitrag.
 * Alle Tests gegen die stillen Fehlermodi bestanden.
 * Einrichtungsdauer je Gerätewechsel ≤ *Z*, gemessen mit echten Laboranten.
-  Zu berücksichtigen: 6,8 s IMX500-Warmlauf kommen hinzu.
+  Das Startverhalten der aktiven StreamCam ist dabei zu messen; die früher
+  gemessenen 6,8 s IMX500-Warmlauf sind nur historisch.
 * 72-h-Dauerlauf ohne unmarkierten Altwert und ohne Speicherwachstum.
 
 ## 2026-09-08 — Technischer Kamerastream-Smoke-Test

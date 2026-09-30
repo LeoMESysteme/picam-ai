@@ -149,8 +149,10 @@ bezieht: Belichtungsbeginn, -mitte, Auslese-Ende, Host-Abholung. Steht auf
 `UNKNOWN`, bis Messung M2 es belegt.
 
 **Zeitbasis** (`TimeBaseKind`) — Herkunft und Belastbarkeit:
-`SENSOR_BOOTTIME` und `REPLAY_RECORDED` tragen eine Zeitaussage,
+`V4L2_MONOTONIC`, `SENSOR_BOOTTIME` und `REPLAY_RECORDED` tragen eine Zeitaussage,
 `SYNTHETIC` und `FILE_MTIME` nicht (`carries_time_information`).
+Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe
+[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
 
 **Unsicherheit** (`uncertainty_ns`) — `None`, solange ungemessen. **Nie 0**;
 das wäre eine Falschaussage.
@@ -158,8 +160,8 @@ das wäre eine Falschaussage.
 ## Schnittstellen und Hardware
 
 **IMX500** — Sony-Sensor der Raspberry Pi AI Camera, mit
-On-Sensor-Inferenz. Gemessen: 6,8 s Warmlauf beim ersten `.rpk`-Upload, 15,0
-Inferenzen/s.
+On-Sensor-Inferenz. Seit 2026-09-25 außer Betrieb. Historisch gemessen:
+6,8 s Warmlauf beim ersten `.rpk`-Upload, 15,0 Inferenzen/s.
 
 **`.rpk`** — gepacktes Modell für den IMX500. Die 23 mitgelieferten sind
 COCO-/ImageNet-Modelle und für Displays unbrauchbar. Der **Packager** ist auf

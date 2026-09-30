@@ -3,6 +3,29 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Zensical-Einstieg und Doku-Pflege)
+
+**Problem:** Die Startseite nannte noch die außer Betrieb genommene IMX500 als
+aktive Kamera und führte nur zu wenigen Seiten. Der tägliche Pflege-Audit
+prüfte sie nicht regelmäßig. Im lokalen Codex-Probelauf scheiterte ein
+Subagent-Spawn mit `--ephemeral` an „no thread with id“.
+
+**Änderung:** Die Startseite nennt die StreamCam und verlinkt alle
+Navigationsziele. Drei Vertiefungsseiten erklären Messpfad, Zeitstempel sowie
+Daten und Abnahme mit Querverweisen. `scripts/docs-maintenance.py` führt
+Startseite, Navigation und Status als feste Prüfpunkte, aktiviert Subagents
+explizit und startet Codex ohne `--ephemeral`. Prompt, Hosting-Anleitung und
+Tests wurden angepasst. Die Projektrolle `docs_reader` wird bei
+`--ignore-user-config` über ihren Konfigurationspfad ausdrücklich geladen.
+Ältere IMX500-Anleitungen und Messwerte sind als historisch gekennzeichnet;
+die Bildquellen-API beschreibt jetzt auch das aktuelle UVC-Kameraprofil.
+Das kopierbare Kamerarezept verwendet `v4l2://`; Abhängigkeitsseite und
+Werkzeugrecherche grenzen historische IMX500-Aussagen ein.
+
+**Konsequenz:** Neue Navigationsziele fallen im Browsertest auf, wenn der
+Startseiten-Link fehlt. Der automatische Audit kann lesende Subagents nutzen;
+Sessiondateien bleiben im geschützten Runner-Verzeichnis.
+
 ## 0.1.0.dev0 — 2026-09-29 (Doku: interaktive Fortschrittsseite für Ernten und Training)
 
 **Problem:** Den Stand von Ernten, Datensatz, Leser-Entwicklung und

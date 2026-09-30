@@ -1,6 +1,12 @@
 # Optischer Aufbau
 
 Setzt Konzept.md §9 um. Kurzfassung: **auch KI braucht lesbare Bilder.**
+Die Zahlen zur Ziffernhöhe und zum Objektiv in den Abschnitten „Halterung“ und
+„Ziffernhöhe im Bild“ stammen vom historischen IMX500-Aufbau 2026-09-08.
+Für die aktive Logitech StreamCam Entfernung, Fokus und Pixelhöhe neu am
+konkreten Aufbau prüfen
+([Kamera-Inbetriebnahme](CAMERA_COMMISSIONING.md),
+[Hardwareprofil](HARDWARE_PROFILE.md)).
 
 ## Warum das kein Nebenthema ist
 
@@ -27,11 +33,12 @@ Voraussetzung, nicht Feinarbeit.
 * Reproduzierbar: wiederkehrende Geräte sollen ohne Neuausrichtung wieder
   passen. Der Bildausschnitt wird trotzdem jedes Mal neu bestätigt
   (Konzept §4).
-* Der Arbeitsabstand muss zum **manuellen Fokus** der AI Camera passen. Bei der
+* **Historischer IMX500-Befund:** Der Arbeitsabstand musste zum manuellen
+  Fokus der AI Camera passen. Bei der
   ersten Aufnahme am 2026-09-07 war der Fokus deutlich verstellt — das
   Fokuswerkzeug liegt dem Modul bei. Unter etwa 20 cm kann das Objektiv nicht
   scharfstellen, egal wie weit man dreht (Herstellerangabe 20 cm – ∞).
-* **Stand 2026-09-08: Fokus eingestellt, aber nicht gesichert.** Schärfe 216,6
+* **Historisch 2026-09-08: IMX500-Fokus eingestellt, aber nicht gesichert.** Schärfe 216,6
   gegenüber 11,53 in der Ausgangslage; am Testgerät 37 px Ziffernhöhe. Objektiv
   gegen Verdrehen sichern (Konterring, sonst ein Tropfen Schraubensicherung) und
   die Halterung starr ausführen — sonst ist die Einstellung beim nächsten
@@ -41,7 +48,7 @@ Voraussetzung, nicht Feinarbeit.
 
 Zielmarke: **≥ 30 px Ziffernhöhe** im verwendeten Stream.
 
-Am 2026-09-08 gemessen: **960×720 erreicht diese Marke** am Testgerät mit
+Am 2026-09-08 mit der IMX500 gemessen: **960×720 erreicht diese Marke** am Testgerät mit
 ≈ 37 px, ohne `ScalerCrop` und ohne den höher auflösenden Modus. Damit ist die
 Vorschaugröße für die Auslesung brauchbar — was wichtig ist, weil die großen
 Sensormodi im Verdacht stehen, den Treiberfehler aus
@@ -54,7 +61,7 @@ einem Fenster von ±6 % der Zellenbreite ab. Bei deutlich kleineren Ziffern
 fallen benachbarte Segmente in dasselbe Fenster, und der Kontrast zwischen
 aktiv und inaktiv bricht zusammen.
 
-Sensormodi: 2028×1520 bei 30 fps oder 4056×3040 bei 10 fps. Der höher
+Historische IMX500-Sensormodi: 2028×1520 bei 30 fps oder 4056×3040 bei 10 fps. Der höher
 auflösende Modus bringt Ziffernhöhe, kostet aber Bildrate — was nur dann
 relevant ist, wenn die Anzeige selbst schneller aktualisiert (Konzept §6: ein
 höherer Takt liefert keine zusätzlichen unabhängigen Messwerte, wenn die
