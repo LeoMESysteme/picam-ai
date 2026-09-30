@@ -212,11 +212,12 @@ def _raster_check(fit: Any, offset_check: CheckResult | None = None) -> CheckRes
     metrics = {'n_dots': fit.n_dots, 'n_assigned': fit.n_assigned, 'assigned_fraction': assigned,
                'rms_cols': fit.rms_cols, 'rms_rows': fit.rms_rows, 'cells': list(fit.cells),
                'row_bias': list(fit.row_bias), 'cell_bias': list(fit.cell_bias), 'max_abs_bias': max_bias}
-    if (fit.rms_cols > RMS_COLS_ERROR or fit.rms_rows > RMS_ROWS_ERROR
-            or assigned < ASSIGNED_FRACTION_ERROR
-            and (offset_check is None or offset_check.status not in ('OK', 'WARNUNG'))):
+    proxy_bad = (fit.rms_cols > RMS_COLS_ERROR or fit.rms_rows > RMS_ROWS_ERROR
+                 or assigned < ASSIGNED_FRACTION_ERROR)
+    independent_offset_ok = offset_check is not None and offset_check.status in ('OK', 'WARNUNG')
+    if proxy_bad and not independent_offset_ok:
         status = 'FEHLER'
-    elif max_bias > BIAS_WARNING or assigned < ASSIGNED_FRACTION_ERROR:
+    elif proxy_bad or max_bias > BIAS_WARNING:
         status = 'WARNUNG'
     else:
         status = 'OK'

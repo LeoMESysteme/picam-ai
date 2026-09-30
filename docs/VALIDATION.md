@@ -2787,8 +2787,10 @@ Vorzeichen, Ziffern, Punkt und Leerzeichen. `m`, `V` und `/` sind darin
 nicht enthalten. Daher prüft 2j unmittelbar nur die belegten Zellen 0–7;
 die Geometrie der Einheit in Zellen 9–12 folgt aus der Homographie. In
 Claudes lesender `sc6`-Gegenprobe wichen Profil- und nachgeführtes Quad
-dort um bis zu 0,25 Punktspalten ab. Das ist eine Grenze der räumlichen
-Prüfung, kein direkt gemessener Versatz der Einheitszeichen.
+dort um bis zu 0,40 Punktspalten ab, mit `?`-maskiertem Text bis zu 0,49.
+Das ist eine Grenze der räumlichen Prüfung, kein direkt gemessener Versatz
+der Einheitszeichen (Review Nacharbeit 4,
+`/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist3/`).
 
 ## 2026-09-30 — Nacharbeit 3: kompletter Offline-Ablauf auf Standbildern
 
@@ -2818,3 +2820,28 @@ dieses Bild ablehnt. Das bestätigte `ab6`-Profil ergibt 0,138/0,075
 (OK). Diese Fälle zeigen eine Verfügbarkeitsgrenze der automatischen
 Startsuche; ein Profil-Quad ersetzt den fehlenden sicheren Startfit
 nicht stillschweigend.
+
+## 2026-09-30 — Nacharbeit 4: bestätigte Quads im textgestützten Vorschlag
+
+**Aufbau:** `propose --quad … --cell-text …` las vier vorhandene
+1920×1080-Standbilder und die bestätigten Profil-Quads, ohne Kamera oder
+seriellen Port. `ab4` nutzte Frame 16 und `ab4-profile-regrid1.json`,
+`ab5` Frame 7, `ab6` Frame 20 und `sc6` Frame 15 mit den jeweiligen
+Profilen. Kameraeinstellungen kamen aus den Profilen; Vorschläge und
+Overlays wurden ausschließlich in `pytest`-Temporärverzeichnisse
+geschrieben. Die Texte waren `+0.46780 `, `+0.46788 `, `+0.46789 ` und
+`+0.46786 `. Der Test prüfte den vollständigen `propose`-Pfad mit
+`evaluate_quad`, 2j und `check_setup`; es gab keine Stabilitätsmessung.
+
+| Aufstellung | 2j x/y [Punktabstände] | Raster-RMS Sp./Z. | max. Bias | Raster | Gesamt |
+| --- | ---: | ---: | ---: | --- | --- |
+| `ab4` | 0,047/0,046 | 0,180/0,264 | 0,067 | OK | OK |
+| `ab5` | 0,043/0,056 | 0,192/0,241 | 0,098 | WARNUNG | WARNUNG |
+| `ab6` | 0,135/0,075 | 0,173/0,269 | 0,253 | WARNUNG | WARNUNG |
+| `sc6` | 0,080/0,120 | 0,142/0,144 | 0,181 | WARNUNG | WARNUNG |
+
+Alle vier Vorschläge enthalten einen 2j-Befund OK. `ab6` Frame 22
+meldet hingegen einen Kanten-FEHLER; für diese Regression wurde Frame
+20 verwendet. Die bestätigten Quads belegen den manuellen Weg, nicht
+eine verbesserte automatische Startsuche für `ab4` oder `ab6`. Die
+Einheitszeichen in Zellen 9–12 bleiben außerhalb der direkten 2j-Messung.

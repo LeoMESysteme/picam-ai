@@ -9,6 +9,43 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-30 — Feste Quads an 2j statt an Raster-Ersatzmaßen messen
+
+## Problem
+
+Die RMS- und Bias-Grenzen der automatischen Punktsuche lehnten drei von
+vier bestätigten Profil-Quads ab, obwohl die unabhängige Prüfung 2j OK
+meldete. Ein nachgeführtes, am zweiten Standbild besseres Quad konnte
+deshalb verworfen werden; `assist` schrieb dann ohne Meldung einen
+Vorschlag mit dem schlechteren Start-Quad.
+
+## Entscheidung
+
+Die automatische Startsuche behält ihre strengen RMS- und Bias-Grenzen.
+Für ein vorgegebenes oder nachgeführtes Quad liefert `evaluate_quad`
+diese Kennzahlen ohne Veto. Liegt ein bestandener 2j-Befund vor, führt
+ein überschrittenes Ersatzmaß in `check_setup` zu WARNUNG. Die
+weiteren Prüfungen und die 2j-FEHLER-Sperre bleiben wirksam. Wird ein
+verbessertes Quad dennoch abgelehnt, beendet `assist` den Lauf mit
+konkretem Grund.
+
+## Begründung und Alternativen
+
+2j misst die Lage bekannter ROM-Punkte unabhängig von der Suchroutine.
+Die RMS- und Bias-Werte hängen auch von zusätzlichen Kandidaten und
+Punktform ab. Eine Lockerung der automatischen Startsuche wurde
+verworfen, weil sie falsche Startlagen ermöglichen könnte. Ein stiller
+Rückfall auf das Start-Quad wurde ebenfalls verworfen: Er kann einen
+bekannt größeren Versatz als Vorschlag ausgeben.
+
+## Konsequenz
+
+Bei festen Quads bleiben die Ersatzmaße im Befund sichtbar. Fehlt ein
+bestandener 2j-Befund, bleibt ein überschrittenes RMS oder eine geringe
+Zuordnung ein FEHLER. `confirm` kennzeichnet fehlende Prüfungen
+ausdrücklich als `NICHT_GEPRUEFT` und verlangt einen gespeicherten
+Übersteuerungsgrund.
+
 # 2026-09-30 — Rasterversatz unabhängig vom Leser messen, als Pflichtprüfung vor jeder Ernte
 
 ## Problem
@@ -84,8 +121,9 @@ gelangen.
 entzerrten Verfahren; die geometrischen Kennzahlen werden für das
 endgültige Quad erneut berechnet. Besteht die unabhängige Prüfung 2j,
 führt eine geringe Zuordnungsquote noch zu WARNUNG, nicht allein zu
-FEHLER. Die RMS-Grenzen und alle weiteren Prüfungen gelten weiter. Ohne
-2j bleibt die geringe Quote ein FEHLER. `confirm` verlangt für jeden
+FEHLER. Die RMS-Grenzen galten in dieser Runde weiter; die obige
+Nacharbeit 4 hat sie für feste Quads mit bestandener 2j-Prüfung
+herabgestuft. Ohne 2j bleibt die geringe Quote ein FEHLER. `confirm` verlangt für jeden
 Vorschlag einen 2j-Befund mit OK oder WARNUNG oder eine ausdrückliche,
 gespeicherte Begründung für die Übersteuerung.
 

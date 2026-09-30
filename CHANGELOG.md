@@ -3,6 +3,26 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 4)
+
+**Problem:** Ein nachgeführtes, laut 2j besseres Quad konnte wegen der
+RMS- oder Bias-Ersatzmaße abgelehnt werden. `assist` fiel dann still auf
+das schlechtere Start-Quad zurück. `confirm` bezeichnete Vorschläge ohne
+Einrichtungsprüfungen fälschlich als WARNUNG.
+
+**Änderung:** Die strengen Ersatzmaß-Grenzen bleiben bei der automatischen
+Startsuche; bei festen Quads liefert `evaluate_quad` ihre Messwerte ohne
+Veto. Bei bestandener unabhängiger 2j-Prüfung meldet die Rasterprüfung
+überhöhte RMS, Bias oder geringe Zuordnung als WARNUNG. Wird ein am
+zweiten Bild verbessertes Quad aus einem anderen Grund abgelehnt,
+bricht `assist` mit dem Grund ab. `confirm` speichert fehlende Prüfungen
+als `NICHT_GEPRUEFT` zusammen mit der verlangten Übersteuerungsbegründung.
+
+**Konsequenz:** Die vier bestätigten Profil-Quads von `ab4`, `ab5`,
+`ab6` und `sc6` bestehen den textgestützten Offline-`propose`-Weg mit
+OK oder WARNUNG. Ein schlechteres Start-Quad wird nach gescheiterter
+Nachführung nicht als Vorschlag ausgegeben.
+
 ## 0.1.0.dev0 — 2026-09-30 (Fortschrittsseite: neue loo-Läufe, Punktraster, Abnahme 3)
 
 **Problem:** Die Fortschrittsseite zeigte die `loo`-Läufe vom 2026-09-30

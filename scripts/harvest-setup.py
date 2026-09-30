@@ -550,7 +550,7 @@ def run_confirm(args: argparse.Namespace) -> int:
         if (
             not isinstance(setup_checks, dict)
             or not isinstance(setup_checks.get("overall"), str)
-            or setup_checks["overall"] not in {"OK", "WARNUNG", "FEHLER"}
+            or setup_checks["overall"] not in {"OK", "WARNUNG", "FEHLER", "NICHT_GEPRUEFT"}
         ):
             print("setup_checks im Vorschlag sind ungueltig (overall fehlt oder ist unbekannt).", file=sys.stderr)
             return 2
@@ -565,6 +565,9 @@ def run_confirm(args: argparse.Namespace) -> int:
         ):
             print("setup_checks im Vorschlag enthalten ungueltige Einzelpruefungen.", file=sys.stderr)
             return 2
+        if setup_checks["overall"] == "NICHT_GEPRUEFT" and named_checks:
+            print("NICHT_GEPRUEFT darf keine durchgefuehrten Einzelpruefungen enthalten.", file=sys.stderr)
+            return 2
         failing_checks = [name for name, check in named_checks.items() if check["status"] == "FEHLER"]
         if (setup_checks["overall"] == "FEHLER" or failing_checks) and override_reason is None:
             names = ", ".join(failing_checks) if failing_checks else "Gesamturteil"
@@ -575,10 +578,8 @@ def run_confirm(args: argparse.Namespace) -> int:
             )
             return 2
         setup_checks = dict(setup_checks)
-        if override_reason is not None:
-            setup_checks["override_reason"] = override_reason
     else:
-        setup_checks = {"overall": "WARNUNG", "checks": {}}
+        setup_checks = {"overall": "NICHT_GEPRUEFT", "checks": {}}
 
     raster_check = setup_checks["checks"].get("rasterversatz")
     if (raster_check is None or raster_check["status"] not in {"OK", "WARNUNG"}) and override_reason is None:
@@ -941,9 +942,12 @@ def run_assist(args: argparse.Namespace) -> int:
                 new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
                 if _heldout_improves(old_heldout, new_heldout):
                     revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
-                    if not isinstance(revised, str):
-                        fit = revised
-                        print("Raster-Quad nachgefuehrt: zurueckgehaltenes Standbild verbessert")
+                    if isinstance(revised, str):
+                        raise SetupError(f"Verbessertes Raster-Quad abgelehnt: {revised}; kein Vorschlag")
+                    fit = revised
+                    print("Raster-Quad nachgefuehrt: zurueckgehaltenes Standbild verbessert")
+            except SetupError:
+                raise
             except (ValueError, cv2.error) as exc:
                 print(f"Raster-Quad nicht nachgefuehrt: {exc}")
             offset_check = raster_offset_check(frame_texts, fit.quad)

@@ -324,8 +324,9 @@ def _evaluate_fit(
     quad: np.ndarray,
     *,
     empty_cells: tuple[int, ...],
+    enforce_proxy_limits: bool = True,
 ) -> LatticeFit | str:
-    """Prueft Punktzuordnung und Freigabekriterien an einer festen Lage."""
+    """Prueft Rasterbelege; Ersatzmass-Grenzen gelten nur bei der Startsuche."""
     ok, c, r = _assignment(src, h)
     if np.count_nonzero(ok) < _MIN_ASSIGNED:
         return "zu_wenige_punkte"
@@ -367,11 +368,11 @@ def _evaluate_fit(
     d = _warp_points(src[ok], h) - _lat(c[ok], r[ok])
     rms_cols = float(np.sqrt(np.mean(d[:, 0] ** 2)) / _PH)
     rms_rows = float(np.sqrt(np.mean(d[:, 1] ** 2)) / _PV)
-    if rms_cols > _MAX_RMS_COLS or rms_rows > _MAX_RMS_ROWS:
+    if enforce_proxy_limits and (rms_cols > _MAX_RMS_COLS or rms_rows > _MAX_RMS_ROWS):
         return "restfehler_zu_gross"
     row_bias = tuple(float(np.mean(d[r[ok] == i, 1]) / _PV) for i in range(7))
     cell_bias = tuple(float(np.mean(d[(c[ok] // 6) == i, 0]) / _PH) for i in cells)
-    if max(map(abs, (*row_bias, *cell_bias))) > 0.15:
+    if enforce_proxy_limits and max(map(abs, (*row_bias, *cell_bias))) > 0.15:
         return "bias_zu_gross"
     if not np.isfinite(quad).all():
         return "anpassung_divergiert"
@@ -409,7 +410,13 @@ def evaluate_quad(
     if not np.isfinite(h).all() or abs(np.linalg.det(h)) < 1e-12:
         return "keine_startlage"
     src = _lattice_candidates(image_bgr, q)
-    return _evaluate_fit(image_bgr, h, src, q, empty_cells=empty_cells)
+    # Die CLI prueft ein vorgegebenes Quad anschliessend gegen bekannten
+    # Zellentext (Pruefung 2j) und check_setup. RMS/Bias sind nur Ersatzmasse
+    # der textlosen automatischen Startsuche und koennen korrekte Profile
+    # ablehnen; ihre Messwerte bleiben im LatticeFit erhalten.
+    return _evaluate_fit(
+        image_bgr, h, src, q, empty_cells=empty_cells, enforce_proxy_limits=False,
+    )
 
 
 def fit_lattice(

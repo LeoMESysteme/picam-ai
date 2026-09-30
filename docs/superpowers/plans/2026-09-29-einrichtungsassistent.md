@@ -888,3 +888,37 @@ schreibgeschützt.
 
 Belege: `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist3/`
 (`assist_runs.jsonl`, `pert_*.log`, `pytest.log`).
+
+### Stand Nacharbeit 4 — 2026-09-30
+
+Der Feature-Branch wurde auf `master` mit dem Review-Nachtrag 4
+rebasiert. Die Doku-Konflikte in diesem Plan und `docs/VALIDATION.md`
+wurden als getrennte historische Abschnitte zusammengeführt; die
+Abnahme 3 des Nutzers blieb erhalten. Der Haupt-Checkout und seine
+uncommittete Änderung in `PLANNED_FEATURES.md` blieben unberührt.
+
+F1: `evaluate_quad` liefert für feste Quads die RMS- und Bias-Werte
+ohne Veto; die automatische Startsuche behält ihre Grenzen. Bei
+bestandenem 2j-Befund stuft `check_setup` überschrittene Raster-
+Ersatzmaße auf WARNUNG. Ein am zweiten Standbild besseres, aber aus
+anderem Grund abgelehntes Quad beendet `assist` mit dem konkreten
+Grund; der schlechtere Startfit wird nicht vorgeschlagen. Die vier
+bestätigten Profil-Quads (`ab4-regrid1`, `ab5`, `ab6`, `sc6`) bestehen
+`propose --quad … --cell-text …` im Offline-Test mit OK oder WARNUNG;
+die Zahlen stehen in `docs/VALIDATION.md`.
+
+F2: `confirm` speichert bei fehlenden Einrichtungsprüfungen
+`NICHT_GEPRUEFT` und verlangt einen neuen, nichtleeren
+`--override-reason`. Die zuvor erfundene WARNUNG entfällt. Der
+Reviewwert zur rechts extrapolierten Rasterlage ist in VALIDATION und
+Laborjournal auf 0,40 beziehungsweise 0,49 Punktspalten mit `?`-Text
+korrigiert.
+
+Gezielt bestanden 155 Integrations- und Lattice-Tests. Die
+vollständige Python-Suite bestand mit 995 Tests, 3 Übersprüngen und
+1 erwartetem Fehlschlag. Ruff und `git diff --check` waren sauber.
+Der Zensical-Build meldete keine Probleme, alle 21 Playwright-
+Dokutests bestanden. Eine abschließende Code-Review fand keinen
+blockierenden Befund.
+Kamera und serieller Port wurden nicht geöffnet; `var/` wurde nur
+gelesen. Der erste echte Kameralauf und der Merge stehen aus.

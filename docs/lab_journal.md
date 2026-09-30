@@ -1674,8 +1674,9 @@ bleibt für den nächsten gemeinsamen Kameratermin offen.
 **Räumliche Grenze (Review Nacharbeit 3):** Der 2j-Abgleich kann mangels
 ROM-Mustern für `m`, `V` und `/` die belegten Zellen 0–7 messen, nicht die
 Einheit in Zellen 9–12. Für `sc6` meldete die lesende Gegenprobe dort
-zwischen Profil- und nachgeführtem Quad bis zu 0,25 Punktspalten
-Geometrieunterschied. Die Nachführung extrapoliert den rechten Bereich;
+zwischen Profil- und nachgeführtem Quad bis zu 0,40 Punktspalten
+Geometrieunterschied, mit `?`-maskiertem Text bis zu 0,49 (Review
+Nacharbeit 4, 2026-09-30). Die Nachführung extrapoliert den rechten Bereich;
 ein direkter Nachweis der dortigen Punktmitten steht damit aus.
 
 ## 2026-09-30 — Einrichtungsassistent: Nacharbeit 3 offline gegengeprüft
@@ -1708,3 +1709,29 @@ hinreichender Grund mehr für FEHLER; sie bleibt als WARNUNG sichtbar.
 Für `ab4` und `ab6` braucht die Startsuche weitere belegte Anker oder
 eine gesonderte sichere Bedienerführung, bevor sie automatische
 Vorschläge liefern kann. Ein echter Lauf an der Kamera steht weiter aus.
+
+## 2026-09-30 — Einrichtungsassistent: Nacharbeit 4, feste Quads
+
+**Aufbau:** Vier bereits bestätigte Profil-Quads wurden über den
+vollständigen Offline-`propose`-Befehl mit bekanntem Zellentext geprüft.
+Verwendet wurden `ab4` Frame 16, `ab5` Frame 7, `ab6` Frame 20 und
+`sc6` Frame 15. Die zugehörigen Profile und Diagnosebilder wurden unter
+`var/` nur gelesen; Vorschläge und Overlays gingen nach `tmp_path`.
+Kamera und serieller Port blieben geschlossen. Die genauen 2j-, RMS-
+und Bias-Werte sowie die Ampeln stehen in [VALIDATION.md](VALIDATION.md).
+
+**Beobachtung:** Alle vier textgestützten Vorschläge bestanden 2j und
+die Gesamtprüfung mit OK oder WARNUNG. `ab6` Frame 22 wurde nicht als
+Regression für den manuellen Vorschlag gewählt, weil die gesonderte
+Kantenprüfung dort FEHLER meldet; Frame 20 ist hierfür geeignet.
+Ein eigener synthetischer Test reproduzierte den früheren stillen
+Rückfall auf das schlechtere Start-Quad bei abgelehnter Nachführung.
+Nach der Änderung bricht dieser Pfad mit dem Ablehnungsgrund ab.
+
+**Deutung:** RMS, Bias und Zuordnungsquote sind bei festem Quad
+Hilfswerte für die Rasterlage; die unabhängige 2j-Messung entscheidet
+über den bekannten Textbereich. Die automatische Startsuche behält ihre
+strengeren Grenzen. Die rechte Einheit bleibt geometrisch extrapoliert,
+und für `ab4`/`ab6` existiert weiterhin keine automatische Startlage.
+Es gab weder einen neuen Hardwarelauf noch eine Messung der
+Einrichtungsdauer oder eines realen 30-s-Stabilitätsintervalls.

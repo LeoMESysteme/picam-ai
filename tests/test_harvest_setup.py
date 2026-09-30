@@ -727,7 +727,57 @@ def test_confirm_requires_reason_when_setup_checks_absent(tmp_path, capsys):
     assert harvest_setup.main(argv) == 2
     assert "rasterversatz" in capsys.readouterr().err
     assert harvest_setup.main(argv + ["--override-reason", "Historisches Profil"]) == 0
-    assert SessionProfile.load(out_path).setup_checks["override_reason"] == "Historisches Profil"
+    assert SessionProfile.load(out_path).setup_checks == {
+        "overall": "NICHT_GEPRUEFT",
+        "checks": {},
+        "override_reason": "Historisches Profil",
+    }
+
+
+def test_confirm_requires_fresh_reason_for_explicitly_unchecked_proposal(tmp_path, capsys):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "NICHT_GEPRUEFT",
+        "checks": {},
+        "override_reason": "Alter Grund im Vorschlag",
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+    argv = [
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ]
+
+    assert harvest_setup.main(argv) == 2
+    assert not out_path.exists()
+    assert "--override-reason" in capsys.readouterr().err
+    assert harvest_setup.main(argv + ["--override-reason", "  Jetzt manuell geprueft  "]) == 0
+    assert SessionProfile.load(out_path).setup_checks == {
+        "overall": "NICHT_GEPRUEFT",
+        "checks": {},
+        "override_reason": "Jetzt manuell geprueft",
+    }
+
+
+def test_confirm_rejects_unchecked_overall_with_measured_checks(tmp_path, capsys):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal["setup_checks"] = {
+        "overall": "NICHT_GEPRUEFT",
+        "checks": {"rasterversatz": {"status": "OK", "metrics": {}}},
+    }
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    assert harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path), "--override-reason", "Manuell geprueft",
+    ]) == 2
+    assert not out_path.exists()
+    assert "NICHT_GEPRUEFT" in capsys.readouterr().err
 
 
 def test_confirm_rejects_stability_check_without_status(tmp_path):

@@ -165,6 +165,39 @@ def test_propose_fixed_quad_runs_offset_and_setup_checks(tmp_path, monkeypatch, 
     assert [entry[0] for entry in seen] == ["evaluate", "offset", "checks"]
 
 
+@pytest.mark.parametrize(("scene", "profile_name", "frame_number", "cell_text"), [
+    ("ab4", "ab4-profile-regrid1.json", 16, "+0.46780 "),
+    ("ab5", "ab5-profile", 7, "+0.46788 "),
+    ("ab6", "ab6-profile", 20, "+0.46789 "),
+    ("sc6", "sc6-profile", 15, "+0.46786 "),
+])
+def test_propose_accepts_validated_profile_quad_with_cell_text(
+    tmp_path, scene, profile_name, frame_number, cell_text,
+):
+    diagnostics = Path(__file__).parents[1] / "var" / "diagnostics"
+    profile_path = diagnostics / profile_name
+    frame_path = diagnostics / f"{scene}-still" / "frames" / f"frame_{frame_number:06d}.png"
+    if not profile_path.is_file() or not frame_path.is_file():
+        pytest.skip(f"local diagnostic inputs missing for {scene}")
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"camera": profile["camera"]}), encoding="utf-8")
+    quad_arg = ",".join(str(value) for point in profile["quad"] for value in point)
+    out = tmp_path / "proposal"
+
+    rc = harvest_setup.main([
+        "propose", "--frame", str(frame_path), "--hint-box", "0,0,1,1",
+        "--camera-settings", str(settings), "--device-id", profile["device_id"],
+        "--session-id", profile["session_id"], "--quad", quad_arg,
+        "--cell-text", cell_text, "--out", str(out),
+    ])
+    assert rc == 0
+    proposal = json.loads((out / "proposal.json").read_text(encoding="utf-8"))
+    assert proposal["quad"] == profile["quad"]
+    assert proposal["setup_checks"]["overall"] in {"OK", "WARNUNG"}
+    assert proposal["setup_checks"]["checks"]["rasterversatz"]["status"] in {"OK", "WARNUNG"}
+
+
 @pytest.mark.parametrize("route", ["quad", "glass"])
 def test_propose_fixed_quad_rejects_bad_offset(tmp_path, monkeypatch, route):
     frame = tmp_path / "frame.png"
@@ -325,6 +358,51 @@ def test_assist_adopts_refined_quad_only_with_better_heldout_offset(tmp_path, mo
     ])
     assert rc == 0
     assert np.allclose(json.loads((out / "proposal.json").read_text())["quad"], better_quad)
+
+
+def test_assist_reports_rejected_improved_quad_instead_of_using_start_quad(tmp_path, monkeypatch, capsys):
+    out = tmp_path / "assist"
+    better_quad = np.asarray(QUAD, dtype=float) + (2.0, 0.0)
+
+    def fake_focus(args):
+        args.out.mkdir(parents=True)
+        (args.out / "camera-settings.json").write_text(json.dumps({"camera": _settings().to_dict()}))
+        return 0
+
+    class FakeCapture:
+        def read(self):
+            return True, np.full((360, 640, 3), 120, dtype=np.uint8)
+
+        def release(self):
+            pass
+
+    def fake_offset(_frames, quad):
+        improved = np.allclose(quad, better_quad)
+        return CheckResult("OK" if improved else "WARNUNG", {
+            "max_abs_dx_cols": 0.05 if improved else 0.22,
+            "max_abs_dy_rows": 0.05,
+        })
+
+    monkeypatch.setattr(harvest_setup, "run_focus", fake_focus)
+    monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
+        device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
+    ))
+    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(harvest_setup, "raster_offset_check", fake_offset)
+    monkeypatch.setattr(harvest_setup, "refine_quad", lambda *_args, **_kw: (better_quad, []))
+    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: "restfehler_zu_gross")
+    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
+    monotonic = iter((100.0, 131.0))
+    monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
+
+    rc = harvest_setup.main([
+        "assist", "--out", str(out), "--device-id", "d", "--session-id", "s",
+        "--hint-box", "0.1,0.1,0.8,0.5", "--cell-text", "+12.3456 ",
+    ])
+    assert rc == 2
+    assert "restfehler_zu_gross" in capsys.readouterr().err
+    assert not (out / "proposal.json").exists()
 
 
 def test_offline_cell_text_file_and_serial_telegram(tmp_path):

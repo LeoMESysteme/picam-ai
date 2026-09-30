@@ -40,13 +40,30 @@ nichts verloren.
 * Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
 * `var/` hat keine Sicherung auf einem anderen Medium.
 
-**Einrichtungsassistent (Codex, Branch `feat/einrichtungsassistent`):**
-* Drei Reviews am 2026-09-30.
-* Die Prüfung des Rasterversatzes 2j ist drin und nicht umgehbar.
-* Vorschläge auf `sc6`/`ab5` liegen nahe am Profil.
-* Bei schrägen Aufstellungen findet er keine Startlage.
-* Vor dem Merge fehlt Nacharbeit 4
-  ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
+**Einrichtungsassistent (Branch `feat/einrichtungsassistent`):**
+Nacharbeit 1–4 sind umgesetzt. Bei festen oder nachgeführten Quads
+entscheiden der bekannte Zellentext, die unabhängige 2j-Prüfung und
+`check_setup` über den Vorschlag. RMS, Bias und Zuordnungsquote bleiben
+bei bestandenem 2j als WARNUNG sichtbar; die automatische Startsuche
+behält ihre strengeren Grenzen. Wird ein am zweiten Standbild besseres
+Quad aus anderem Grund abgelehnt, bricht `assist` mit dem Grund ab.
+`confirm` speichert fehlende Prüfungen als `NICHT_GEPRUEFT` und verlangt
+eine neue Begründung.
+
+Die vier bestätigten Profil-Quads von `ab4`, `ab5`, `ab6` und `sc6`
+bestehen den textgestützten Offline-Befehl `propose --quad` mit OK oder
+WARNUNG; 2j ist in allen vier Fällen OK. `ab4` und `ab6` haben noch
+keine sichere automatische Startlage. Die Einheitszeichen rechts werden
+geometrisch extrapoliert. Es gab keinen echten Assist-Kamera- oder
+seriellen Lauf; `var/` wurde nur gelesen. Zahlen und Grenzen stehen in
+[VALIDATION.md](VALIDATION.md) und im
+[Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md).
+
+**Branch-Prüfung:** 995 Python-Tests bestanden, 3 übersprungen,
+1 erwarteter Fehlschlag; 155 gezielte Tests bestanden. Ruff und
+`git diff --check` waren sauber. Der Zensical-Build meldete keine
+Probleme, alle 21 Playwright-Dokutests bestanden. Eine abschließende
+Code-Review fand keinen blockierenden Befund.
 
 ## Software und Anleitung
 
@@ -86,9 +103,10 @@ Sessionlogs waren für diese Sitzung nicht lesbar
 
 ## Nächste Schritte
 
-1. Nacharbeit 4 des Einrichtungsassistenten nachprüfen: Rückfall auf ein
-   schlechteres Raster, erfundenes Urteil in `confirm`, Rebase. Danach
-   mergen.
+1. Den Feature-Branch nach Review durch Claude integrieren. Der erste
+   echte Assist-Lauf und die Einrichtungsdauer gehören zum gemeinsamen
+   Kameratermin. Die optionale Nacharbeit N1–N3 und die Startsuche für
+   schräge Aufstellungen stehen im Plan.
 2. Die Importprüfung `zellen_inkonsistent` für schrägen Blick verbessern
    (Vergleich je Position), danach `ab6` gegebenenfalls neu importieren.
    Dafür die Einzelbilder von `ab6-run` behalten.

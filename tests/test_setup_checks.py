@@ -10,7 +10,7 @@ import pytest
 
 from dispread.dotlattice import LatticeFit
 from dispread.ocr.dotmatrix_font import COLS, ROWS, rom_vector
-from dispread.setup_checks import check_setup, raster_offset_check
+from dispread.setup_checks import CheckResult, check_setup, raster_offset_check
 
 ROOT = Path('/home/me-systeme/picam-ai/var/diagnostics')
 QUAD = [[0, 0], [400, 0], [400, 160], [0, 160]]
@@ -200,6 +200,17 @@ def test_bad_lattice_fails_and_bias_warns():
     assert check_setup(image, fit(rms_cols=.26)).checks['raster'].status == 'FEHLER'
     assert check_setup(image, fit(n_assigned=150)).checks['raster'].status == 'FEHLER'
     assert check_setup(image, fit(row_bias=(.09,) + (0,) * 6)).checks['raster'].status == 'WARNUNG'
+
+
+def test_independent_offset_demotes_rms_proxy_to_warning():
+    image = display()
+    lattice = fit(rms_cols=.31, rms_rows=.35)
+    offset = CheckResult('OK', {'max_abs_dx_cols': .05, 'max_abs_dy_rows': .06})
+    result = check_setup(image, lattice, offset_check=offset)
+    assert result.checks['raster'].status == 'WARNUNG'
+    assert result.checks['raster'].metrics['rms_cols'] == .31
+    assert result.overall in ('OK', 'WARNUNG')
+    assert check_setup(image, lattice).checks['raster'].status == 'FEHLER'
 
 
 def test_independent_offset_check_prevents_low_assignment_from_failing_setup():

@@ -237,6 +237,42 @@ def test_evaluate_quad_preserves_supplied_pixel_center_quad():
     assert result.n_assigned >= 70
 
 
+def test_evaluate_quad_still_rejects_wrong_plus_location():
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, _ = _synthetic(quad, "+1234567 9012   ")
+    wrong_quad = quad + np.float32([10, 0])
+    assert dotlattice.evaluate_quad(
+        image, _box(quad, image.shape[:2]), wrong_quad, empty_cells=EMPTY_CELLS,
+    ) == "plus_nicht_gefunden"
+
+
+@pytest.mark.parametrize("name,profile,frame,proxy", [
+    ("ab4", "ab4-profile-regrid1.json", 16, "rms"),
+    ("ab5", "ab5-profile", 7, None),
+    ("ab6", "ab6-profile", 22, "rms"),
+    ("sc6", "sc6-profile", 15, "bias"),
+])
+def test_evaluate_quad_reports_validated_profile_despite_proxy_limit(name, profile, frame, proxy):
+    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
+    profile_path = DIAGNOSTICS / profile
+    if not still.exists() or not profile_path.exists():
+        pytest.skip("Standbild oder bestaetigtes Profil fehlt")
+    image = cv2.imread(str(still))
+    assert image is not None
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    quad = json.loads(profile_path.read_text())["quad"]
+    # Hier wird absichtlich das gespeicherte Quad unveraendert uebergeben,
+    # genau wie bei `propose --quad`. Der 2j-Textabgleich folgt im Aufrufer.
+    result = dotlattice.evaluate_quad(image, hint, quad, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    np.testing.assert_allclose(result.quad, quad, atol=1e-4)
+    if proxy == "rms":
+        assert result.rms_cols > dotlattice._MAX_RMS_COLS or result.rms_rows > dotlattice._MAX_RMS_ROWS
+    elif proxy == "bias":
+        assert max(map(abs, (*result.row_bias, *result.cell_bias))) > 0.15
+
+
 @pytest.mark.parametrize(
     "name",
     [
