@@ -121,18 +121,17 @@ Plusanker. Bei ausbleibendem Fit erweitert sie die Kandidatensuche gezielt;
 eine breite Hinweisbox erhält einen skalierten zweiten Punktabstandsversuch.
 Die Qualitätsprüfungen aus dem gesicherten Zwischenstand wurden auf sechs
 gespeicherten Aufstellungen erneut ausgewertet und dokumentiert; die
-CLI-Kette wurde mit injizierter Kamera synthetisch geprüft. Nach dem
-Rebase auf den geänderten Leser prüft `assist` übergebene Vorlagen und
-Prüfsumme vor dem Kamerastart.
+CLI-Kette wurde mit injizierter Kamera synthetisch geprüft. `assist`
+prüft übergebene Vorlagen und Prüfsumme vor dem Kamerastart.
 
 **Konsequenz:** Mit Profil-Hinweisbox liegen alle sechs automatisch
 angepassten Quads innerhalb 0,48 px der Bestätigung, mit grüner
 Hinweisbox innerhalb 0,57 px. `ab2` meldet die Kante in Zelle 8 als
 FEHLER. Die volle Python-Suite, der Doku-Build und die Browsertests sind
 grün. Die Schwellen sind weiterhin Vorabwerte; ein echter Kameralauf und
-die Einrichtungsdauer stehen aus. Die alte Stufe-2b-Vorlage mit
-`bg_closing_v1` ist zum aktuellen Leser inkompatibel und wird früh
-abgelehnt; das optionale Gegenlesen braucht eine passende neue Vorlage.
+die Einrichtungsdauer stehen aus. Der Vorlagencheck lehnt inkompatible
+Dateien früh ab; nach dem Revert des Lesers auf `bg_closing_v1` ist die
+eingefrorene Stufe-2b-Vorlage wieder kompatibel.
 
 ## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten abziehen, Normierung `bg_closing_shadow_v1`)
 

@@ -621,7 +621,7 @@ Aufgabe 5 dieses Plans unberührt; Claudes Merge-Schritt pflegt sie.
 
 ## Stand Nacharbeit 1 — 2026-09-30
 
-Der Branch wurde erneut auf das heutige `origin/master` (`7367ea6`)
+Der Branch wurde erneut auf das heutige `origin/master` (`e301628`)
 rebasiert. Die Codepunkte 1–9 sind umgesetzt; eine abschließende
 Gesamt-Review fand keinen belegten mergekritischen Codefehler. Ein
 synthetischer Fall mit zwei Anzeigen und einem schwächer erkannten
@@ -630,12 +630,10 @@ Score-7-Hypothese aus der Review ließ sich in drei konkreten
 Zwei-Punkt-Gegenproben nicht als stille Fehlannahme reproduzieren; die
 probeweise Lockerung wurde zurückgenommen.
 
-Seit diesem Rebase verlangt `DotMatrixReader` Vorlagen mit
-`bg_closing_shadow_v1`. Die vorhandene eingefrorene Stufe-2b-Vorlage trägt
-`bg_closing_v1` und ist für das optionale Gegenlesen inkompatibel. Der
-Assistent prüft übergebene Vorlagen vor dem Kamerastart; das Gegenlesen
-braucht eine zum aktuellen Leser passende, geprüfte Vorlagendatei. Der
-Assistent ändert weder Lesercode noch Vorlagen.
+Nach dem Revert `e301628` verlangt `DotMatrixReader` wieder Vorlagen
+mit `bg_closing_v1`; die eingefrorene Stufe-2b-Vorlage ist damit
+kompatibel. Der Assistent prüft übergebene Vorlagen und Prüfsumme vor
+dem Kamerastart. Er ändert weder Lesercode noch Vorlagen.
 
 Die sechs gespeicherten Standbilder treffen mit Profil-Hinweisbox das
 bestätigte Quad auf höchstens **0,48 px**, mit automatisch erkannter
@@ -644,6 +642,15 @@ Kantenwert **8,5 als FEHLER**; `sc3`, `sc4`, `sc5`, `ab1` und `sc6`
 bleiben ohne Kantenbefund. Rahmen und Glanz sind auf allen sechs
 bestätigten Aufstellungen OK. Alle Zahlen und die Bildbasis stehen in
 `docs/VALIDATION.md`, Aufbau und Grenzen in `docs/lab_journal.md`.
+
+Der nachträgliche Master-Befund zu falschen Profilrastern bei `ab3` und
+`ab4` wurde mit den gespeicherten Profil-Referenzframes geprüft. Die
+Nacharbeit lehnt beide ab: `ab3` mit grüner Hinweisbox bei 48,1 %
+zugeordneten Punkten, `ab4` bei 67,8 % (Grenze 80 %); mit der groben
+Profil-Box scheitert `ab3` schon am Plus, `ab4` bei 73,2 % Zuordnung.
+Die alten Profilquads sind kein gültiger Sollwert für eine neue
+Geometrie. Ein korrektes neues Raster für diese Aufstellungen und eine
+allgemeine Absicherung gegen solche Verschiebungen bleiben Folgearbeit.
 
 **Maßgebliche Vorabschwellen nach Nacharbeit 1:** Punktkontrast FEHLER
 <15, WARNUNG <17; zellinterne Hintergrundkante in Leerzellen FEHLER >8,

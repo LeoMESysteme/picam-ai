@@ -2726,7 +2726,7 @@ jeweils 0,0 %. `ab2` ist der einzige Kantenbefund und mit dem
 Kantenwerte liegen bei 1–3. Punktkontrast wird in Float als 99. Perzentil
 von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` über dem angepassten Quad
 berechnet (FEHLER <15, WARNUNG <17); `leser_kontrast` stammt aus
-`sample_image` vor der Normierung und dem Schattenabzug. Frühere
+`sample_image` vor der Normierung. Frühere
 Handwerte 41,3 (`sc5`) und 31,2 (`ab2`) beruhten auf einem nicht belegten
 Bildbereich und werden nicht mit diesem definierten Maß gleichgesetzt.
 
@@ -2737,8 +2737,24 @@ ausgeführt. Es gab keinen neuen Kameralauf und keine Messung der
 tatsächlichen Einrichtungsdauer. Aufbau und Deutung stehen im
 [Laborjournal](lab_journal.md).
 
-Nach dem Rebase auf `7367ea6` verlangt der aktuelle Leser Vorlagen mit
-`bg_closing_shadow_v1`. Die vorhandene eingefrorene Stufe-2b-Vorlage mit
-`bg_closing_v1` wird deshalb bei `--templates` als inkompatibel abgelehnt;
-eine passende neue Vorlage liegt noch nicht vor. Die obigen
-`sample_image`-Kontrastwerte sind davon unabhängig.
+Der spätere Revert `e301628` stellt den Leser auf `bg_closing_v1`
+zurück. Die eingefrorene Stufe-2b-Vorlage trägt dieselbe Kennung und
+ist wieder kompatibel; das optionale Gegenlesen selbst wurde auf den
+Standbildern hier nicht gemessen. Die obigen `sample_image`-Kontrastwerte
+sind von der Änderung unabhängig.
+
+**Zusätzliche Gegenprobe nach dem Befund zum Rasterversatz:** Aus
+`ab3-still/frames/frame_000015.png` und
+`ab4-still/frames/frame_000016.png` wurden die zum jeweiligen Profil
+gehörenden Referenzframes gelesen (SHA-256 stimmt mit `reference_frame`
+überein). Mit Format-Leerzellen 8 und 13–15 verwirft `fit_lattice` bei
+`ab3` die Profil-Bounding-Box plus 10 % als `vorzeichen_kein_plus`;
+mit grüner Hinweisbox ordnet der Fit nur 504/1047 Punkte zu (48,1 %)
+und `check_setup` meldet Raster-FEHLER. Bei `ab4` sind es 353/482
+(73,2 %) mit Profil-Box und 327/482 (67,8 %) mit grüner Box, jeweils
+Raster-FEHLER. Die Vorabschwelle ist 80 %; die übrigen Prüfungen melden
+auf diesen Bildern OK, Stabilität wurde nicht gemessen. Die alten
+bestätigten Quads gelten laut obigem Befund selbst als fehlerhaft.
+Diese Gegenprobe zeigt eine Ablehnung der beiden gespeicherten Fälle,
+aber noch kein korrektes neues Quad und keine allgemeine Garantie gegen
+Rasterversatz.

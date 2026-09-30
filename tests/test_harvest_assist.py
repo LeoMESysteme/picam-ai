@@ -400,11 +400,12 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     (False, "normalization"),
     (True, "Pruefsumme"),
 ])
-def test_assist_rejects_bad_templates_before_camera(tmp_path, monkeypatch, capsys,
-                                                    bad_checksum, expected_error):
-    legacy_templates = tmp_path / "templates.json"
-    blob = json.dumps({"format_version": 3, "normalization": "bg_closing_v1"}).encode()
-    legacy_templates.write_bytes(blob)
+def test_assist_rejects_incompatible_or_wrong_checksum_templates_before_camera(
+    tmp_path, monkeypatch, capsys, bad_checksum, expected_error,
+):
+    incompatible_templates = tmp_path / "templates.json"
+    blob = json.dumps({"format_version": 3, "normalization": "bg_closing_shadow_v1"}).encode()
+    incompatible_templates.write_bytes(blob)
     checksum = "0" * 64 if bad_checksum else hashlib.sha256(blob).hexdigest()
     monkeypatch.setattr(harvest_setup, "run_focus", lambda _args: pytest.fail("Fokus wurde gestartet"))
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: pytest.fail("Kamera wurde geoeffnet"))
@@ -413,7 +414,7 @@ def test_assist_rejects_bad_templates_before_camera(tmp_path, monkeypatch, capsy
 
     rc = harvest_setup.main([
         "assist", "--out", str(out), "--device-id", "d", "--session-id", "s",
-        "--templates", str(legacy_templates), "--templates-sha256", checksum,
+        "--templates", str(incompatible_templates), "--templates-sha256", checksum,
     ])
     assert rc == 2
     assert expected_error in capsys.readouterr().err

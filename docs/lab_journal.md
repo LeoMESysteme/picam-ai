@@ -1630,3 +1630,16 @@ für die Spiegelkante, auch wenn die eingefrorene Stufe-2-Normierung
 `bg_closing_v1` die gespeicherten `ab2`-Proben inzwischen liest. Weder
 die Stabilitätsampel noch der reale Kameraablauf oder die tatsächlich
 benötigte Einrichtungszeit sind durch diese Offline-Auswertung belegt.
+
+**Gegenprobe nach dem neuen Rasterversatz-Befund auf `master`:** Die
+Profil-Referenzframes `ab3` Frame 15 und `ab4` Frame 16 wurden
+schreibgeschützt gelesen; ihre SHA-256 stimmen mit den Profilen überein.
+Die automatische grüne Hinweisbox führt bei `ab3` zu 504/1047
+zugeordneten Punkten (48,1 %), bei `ab4` zu 327/482 (67,8 %).
+Beides liegt unter der Vorabgrenze 80 % und ergibt Raster-FEHLER.
+Mit der Profil-Bounding-Box plus 10 % scheitert `ab3` bereits an
+`vorzeichen_kein_plus`; `ab4` ergibt 353/482 (73,2 %) und FEHLER.
+Die alten Profilquads sind durch den neuen Befund selbst als falsch
+erkannt. Deshalb wird hier keine Eckabweichung als Qualitätsnachweis
+verwendet. Die Nacharbeit lehnt diese beiden gespeicherten Fälle ab;
+eine korrekte Neuanpassung des verschobenen Rasters ist offen.
