@@ -2553,3 +2553,25 @@ Offen: `ernte1` und `auf3` mit korrigiertem Profil oder ohne diese Gruppen.
 Stufe 2 bleibt eingefroren (`templates-stufe2b-2026-09-29.json`), bis neu
 gelernt und neu eingefroren wird. Die nächste Abnahme braucht neue
 Aufstellungen, eingerichtet mit der Prüfung des Rasterversatzes.
+
+**Variante ohne `ernte1` und `auf3`**
+(`dotmatrix-loo-2026-09-30-regrid1-ohne-ernte1-auf3.json`,
+`--exclude-groups ernte1,auf3`, 998 Proben). Begründung: Beide Raster
+sind nachweislich verschoben, und die korrigierten Profile sind wegen
+starker Unschärfe nicht bestätigt.
+
+| Testgruppe | mit `ernte1` (altes Profil) r/a/f | ohne r/a/f |
+| --- | --- | --- |
+| `ab1` | 99/0/0 | 99/0/0 |
+| `ab2` | 83/0/0 | 82/1/0 |
+| `ab3` | 150/12/0 | 153/9/0 |
+| `ab4` | 119/0/0 | 119/0/0 |
+| `auf2` | 70/6/0 | **53/23/0** |
+| `sc3`–`sc6` | alle richtig | alle richtig |
+
+* Auch hier gab es 0 falsche Werte.
+* `d_max` und `margin_min` ändern sich kaum (±0,06).
+* `ernte1` hilft vor allem der zweiten weichen Aufstellung `auf2`. Ohne
+  `ernte1` fehlt dem Training die Spannweite weicher Bilder, und `auf2` wird
+  zu 30 % abgelehnt statt zu 8 %.
+* Für die scharfen Gruppen ist es gleich, ob `ernte1` im Training ist.
