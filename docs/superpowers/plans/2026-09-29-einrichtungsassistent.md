@@ -507,3 +507,42 @@ korrigiert damit bestehende Profile.
    Punktabstand (FEHLER), richtiges Raster (OK). Echte Profile: `ab4-profile`
    gegen `ab4-profile-regrid1.json` (nur lesen, ohne Kamera).
 4. `run_assist` gibt 2j im Bericht aus. Bei FEHLER entsteht kein Vorschlag.
+
+### Review 2026-09-30 (Branch-Stand `815c35e`)
+
+**Urteil: zurück an Codex.**
+* Nacharbeit 1 ist im Wesentlichen erfüllt.
+  * 151 Tests grün, ruff sauber.
+  * `fit_lattice` braucht auf dem Pi jetzt 2–16 s.
+  * Ganzzahlige Rasterverschiebungen werden sicher abgelehnt.
+* **Nacharbeit 2 fehlt vollständig:** keine Prüfung 2j, kein `refine_quad`,
+  kein serieller Zellentext in `assist`.
+
+**Warum das blockiert:**
+* Auf dem scharfen `ab4`-Standbild nimmt `refine` Startlagen an, die
+  +0,3/+0,4 Spalten daneben liegen (RMS 0,164, Ecken 10,6 px neben
+  `ab4-profile-regrid1.json`). Gebremst hat das nur die Zuordnungsquote in
+  `check_setup`.
+* Die automatische Anpassung liegt bei `ab4` 0,12–0,14 Spalten daneben und
+  wird über die Zuordnung abgelehnt, also aus dem falschen Grund. Ein Fit
+  mit 81 % Zuordnung ginge ungeprüft durch.
+
+**Zusätzlich zu Nacharbeit 2, Punkte 1–4:**
+* **Eckkonvention vereinheitlichen:**
+  * `dotlattice` rechnet mit 400/160 (`_CORNERS`, `dotlattice.py:18`),
+    `rectify` und `lattice_offsets` mit 399/159.
+  * Das ist ein Maßstabsfehler von 0,25 %, bis 0,24 Spalten an Zelle 15.
+  * Die synthetischen Tests rendern ebenfalls mit 400/160 und sehen den
+    Fehler deshalb nicht.
+* **`ab3`:** `fit_lattice` meldet `vorzeichen_kein_plus`, obwohl `+` angezeigt
+  wird. `_has_minus_sign` (`dotlattice.py:141-172`) ist zu locker, und der
+  Bediener bekommt damit die falsche Anweisung.
+* **Offline-Fall:** Ein Parameter oder eine Datei für den Zellentext, damit
+  2j auch ohne seriellen Port prüfbar ist (Test `ab4-profile` gegen
+  `-regrid1`).
+* **Kleinigkeiten:**
+  * `propose --auto-quad` soll auch `overlay_sampling.png` nennen.
+  * Der Bytegleich-Test soll auch `*-profile-regrid1.json` erfassen.
+
+Belege liegen unter `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist/`
+(`perturb.log`, `exp1.log`).
