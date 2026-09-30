@@ -315,6 +315,22 @@ def _serial_cell_text(port: Any) -> str:
         raise SetupError(f"GSV-2AS-Zellentext aus seriellem Strom unlesbar: {exc}") from exc
 
 
+def _mask_changed_cells(before: str, after: str) -> tuple[str, str]:
+    """Only cells unchanged in both observations may inform geometry."""
+    if len(before) != len(after):
+        raise SetupError("Serieller Zellentext hat unterschiedliche Laenge")
+    shared = "".join(left if left == right else "?" for left, right in zip(before, after, strict=True))
+    return shared, shared
+
+
+def _capture_with_serial_text(capture: Any, port: Any) -> tuple[np.ndarray, str]:
+    """Bracket one still with fresh telegrams and mask changes during capture."""
+    before = _serial_cell_text(port)
+    image = capture()
+    after = _serial_cell_text(port)
+    return image, _mask_changed_cells(before, after)[0]
+
+
 def _heldout_improves(old_check: Any, new_check: Any) -> bool:
     """Require a strictly smaller worst measured offset on the held-out still."""
     keys = ("max_abs_dx_cols", "max_abs_dy_rows")
@@ -322,7 +338,7 @@ def _heldout_improves(old_check: Any, new_check: Any) -> bool:
     new = [new_check.metrics.get(key) for key in keys]
     if any(value is None or not math.isfinite(value) for value in (*old, *new)):
         return False
-    return max(new) < max(old) - 1e-3 and all(after <= before + 0.01 for before, after in zip(old, new, strict=True))
+    return max(new) < max(old) - 0.02 and all(after <= before + 0.01 for before, after in zip(old, new, strict=True))
 
 
 def run_propose(args: argparse.Namespace) -> int:
@@ -356,6 +372,8 @@ def run_propose(args: argparse.Namespace) -> int:
     fit = None
     try:
         target_size = _parse_target_size(args.target_size)
+        if cell_text is not None and (target_size != DEFAULT_TARGET_SIZE or args.grid):
+            raise SetupError("Rasterversatz 2j verlangt 400x160 und das feste Punktraster ohne --grid")
 
         if args.auto_quad:
             if args.quad or args.grid or target_size != DEFAULT_TARGET_SIZE:
@@ -390,6 +408,12 @@ def run_propose(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
+
+        if fit is None and cell_text is not None:
+            hint_box = _parse_hint_box(args.hint_box)
+            fit = evaluate_quad(image, hint_box, quad, empty_cells=GSV2AS_EMPTY_CELLS)
+            if isinstance(fit, str):
+                raise SetupError(f"Vorgegebenes Quad abgelehnt: {fit}")
 
         if fit is not None:
             grid = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
@@ -429,7 +453,7 @@ def run_propose(args: argparse.Namespace) -> int:
         stability_image = getattr(args, "stability_image_bgr", None)
         offset_check = getattr(args, "offset_check", None)
         if offset_check is None:
-            offset_check = raster_offset_check([(image, cell_text)], fit.quad)
+            offset_check = raster_offset_check([(image, cell_text)], quad)
         if offset_check.status == "FEHLER":
             print(f"Rasterversatz 2j: FEHLER — {offset_check.reason or offset_check.metrics}", file=sys.stderr)
             return 2
@@ -441,6 +465,9 @@ def run_propose(args: argparse.Namespace) -> int:
                 stability_elapsed_s=getattr(args, "stability_elapsed_s", None),
                 offset_check=offset_check,
             )
+        if checks.overall == "FEHLER":
+            print("Einrichtungspruefung meldet FEHLER; kein Vorschlag", file=sys.stderr)
+            return 2
 
     proposal = {
         "frame": str(args.frame),
@@ -458,6 +485,12 @@ def run_propose(args: argparse.Namespace) -> int:
     }
     if checks is not None:
         checks_dict = checks.to_dict()
+        raster_result = checks_dict.get("checks", {}).get("rasterversatz")
+        if (cell_text is not None or getattr(args, "offset_check", None) is not None) and (
+            not isinstance(raster_result, dict) or raster_result.get("status") not in {"OK", "WARNUNG"}
+        ):
+            print("Einrichtungspruefung ohne gueltigen rasterversatz; kein Vorschlag", file=sys.stderr)
+            return 2
         reader_check = getattr(args, "reader_check", None)
         if reader_check is not None:
             checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
@@ -544,9 +577,15 @@ def run_confirm(args: argparse.Namespace) -> int:
         setup_checks = dict(setup_checks)
         if override_reason is not None:
             setup_checks["override_reason"] = override_reason
-    elif override_reason is not None:
-        print("--override-reason verlangt setup_checks im Vorschlag.", file=sys.stderr)
+    else:
+        setup_checks = {"overall": "WARNUNG", "checks": {}}
+
+    raster_check = setup_checks["checks"].get("rasterversatz")
+    if (raster_check is None or raster_check["status"] not in {"OK", "WARNUNG"}) and override_reason is None:
+        print("rasterversatz muss OK oder WARNUNG sein; sonst --override-reason angeben.", file=sys.stderr)
         return 2
+    if override_reason is not None:
+        setup_checks["override_reason"] = override_reason
 
     if proposal.get("grid_source") == "default_even_split" and not args.accept_default_grid:
         print(
@@ -850,9 +889,12 @@ def run_assist(args: argparse.Namespace) -> int:
             if hasattr(io.capture, "isOpened") and not io.capture.isOpened():
                 raise UvcError(f"{io.device}: Kamera nicht zu oeffnen")
             io.set_controls(io.device, settings.ordered_controls())
-            first = _capture_fresh_still(io)
+            if serial_port is None:
+                first = _capture_fresh_still(io)
+                first_text = offline_text
+            else:
+                first, first_text = _capture_with_serial_text(lambda: _capture_fresh_still(io), serial_port)
             first_captured_at = time.monotonic()
-            first_text = offline_text if offline_text is not None else _serial_cell_text(serial_port)
             if first.shape[:2] != (settings.size[1], settings.size[0]):
                 raise SetupError("Standbild passt nicht zur Kameraaufloesung")
             args.out.mkdir(parents=True, exist_ok=True)
@@ -872,11 +914,13 @@ def run_assist(args: argparse.Namespace) -> int:
             if precheck_failures:
                 raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
             time.sleep(args.stability_s)
-            second = _capture_fresh_still(io)
+            if serial_port is None:
+                second = _capture_fresh_still(io)
+                second_text = offline_text
+            else:
+                second, second_text = _capture_with_serial_text(lambda: _capture_fresh_still(io), serial_port)
             stability_elapsed_s = time.monotonic() - first_captured_at
-            second_text = offline_text if offline_text is not None else _serial_cell_text(serial_port)
-            if first_text != second_text:
-                raise SetupError("Anzeigetext hat zwischen den Standbildern gewechselt")
+            first_text, second_text = _mask_changed_cells(first_text, second_text)
             if second.shape != first.shape:
                 raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
             if not cv2.imwrite(str(args.out / "stability.png"), second):
@@ -884,8 +928,12 @@ def run_assist(args: argparse.Namespace) -> int:
             frame_texts = [(first, first_text), (second, second_text)]
             original_quad = fit.quad
             try:
+                # refine_quad liest ROM-Glyphen direkt; maskierte Zellen haben
+                # keine bekannte Glyphe und duerfen den Fit nicht beeinflussen.
+                # Fuer 2j unten bleibt der maskierte Text unveraendert.
+                refinement_text = first_text.replace("?", " ")
                 candidate_quad, _history = refine_quad(
-                    [(first, first_text)], original_quad,
+                    [(first, refinement_text)], original_quad,
                     CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0),
                     DEFAULT_TARGET_SIZE,
                 )
@@ -936,6 +984,7 @@ def run_assist(args: argparse.Namespace) -> int:
         grid=None,
         target_size="400x160",
         detector="glass",
+        cell_text=offline_text,
         precomputed_fit=fit,
         stability_image_bgr=second,
         stability_elapsed_s=stability_elapsed_s,

@@ -789,6 +789,46 @@ Belege (Protokolle und Skripte):
 `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist2/` (`exp2.log`,
 `perturb3.log`, `propose.log`, `evalq.py`).
 
+### Stand Nacharbeit 3 — 2026-09-30
+
+Die blockierenden Punkte B1 und B2 sind im isolierten Feature-Worktree
+bearbeitet. Fit und feste Quad-Bewertung erkennen Kandidaten mit
+demselben entzerrten Verfahren; `sc6` liefert für dasselbe Quad in
+beiden Wegen 196/208 Punkte. Die unabhängige 2j-Prüfung entscheidet
+über den Rasterversatz; eine niedrige Zuordnungsquote bleibt bei 2j OK
+oder WARNUNG sichtbar, blockiert den Vorschlag aber nicht allein.
+Handgesetzte und vom Glasdetektor gefundene Quads mit bekanntem Text
+durchlaufen 2j und die Einrichtungsprüfungen. `confirm` verlangt 2j OK
+oder WARNUNG oder eine begründete Übersteuerung. Die serielle Aufnahme
+wird von Telegrammen eingerahmt; wechselnde Zellen werden auch bei der
+Nachführung ausgelassen. Die Nullunterdrückungsregel wird gemeinsam
+genutzt, ein syntaktisch gültiger Fall mit drei unterdrückten Nullen
+bleibt abgelehnt.
+
+Der echte Offline-Test mit injizierter Kamera nutzt je zwei verschiedene
+gespeicherte Frames von `sc6` und `ab5`, prüft die Verbesserung am
+zweiten Bild und den geschriebenen Vorschlag. Die finale lesende
+Wiederholung ergab 2j 0,043/0,070 (`sc6`) und 0,033/0,061 (`ab5`),
+jeweils Schlussurteil WARNUNG. `ab4` bleibt bei mehrdeutiger Startlage,
+`ab6` ohne Startlage sicher abgelehnt; eine gelockerte Ankerwahl für
+`ab4` ergab ein um 9,14 px falsches Quad und wurde verworfen. Der
+direkte Messbereich von 2j endet vor den Einheitszeichen rechts.
+
+Die Echtbildtests lesen die vorhandenen Diagnoseframes unter `var/` und
+überspringen sich auf einem Checkout ohne diese lokalen Daten. Ein
+synthetischer Kettentest ist stets ausführbar; die Bilddaten werden
+gemäß „Parallelarbeit“ nicht in den Branch kopiert. Ein echter Kamera-
+oder serieller Hardwarelauf und der Merge stehen weiter aus.
+
+**Abschlussprüfung dieser Runde:** 982 Python-Tests bestanden, 3
+übersprungen, 1 erwarteter Fehlschlag; Ruff und `git diff --check`
+sauber. Der Zensical-Build meldete keine Probleme, 21 Playwright-
+Dokutests bestanden. Die Gesamt-Review fand einen Absturz bei
+wechselndem seriellem Text vor der Nachführung; nach einem
+fehlgeschlagenen Regressionstest wurde er behoben und gezielt erneut
+geprüft. Kamera und serieller Port wurden nicht geöffnet, `var/` blieb
+schreibgeschützt.
+
 ## Nacharbeit 4 (Review Claude, 2026-09-30, Branch-Stand `5f992cb`) – klein, dann Merge
 
 **Urteil: Merge nach kleinen Fixes.**

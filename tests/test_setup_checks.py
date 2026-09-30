@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import pytest
 
+from dispread.dotlattice import LatticeFit
 from dispread.ocr.dotmatrix_font import COLS, ROWS, rom_vector
 from dispread.setup_checks import check_setup, raster_offset_check
 
@@ -48,6 +49,21 @@ def test_raster_offset_accepts_aligned_dots_and_serializes_without_text():
     assert report['metrics']['source']['kind'] == 'known_cell_text'
     assert OFFSET_TEXT not in json.dumps(report)
     json.dumps(report, allow_nan=False)
+
+
+def test_raster_offset_skips_changing_cell_and_keeps_reliable_coverage():
+    result = raster_offset_check([(offset_image(), '+0.4?781 ')], OFFSET_QUAD)
+    assert result.status == 'OK'
+    assert result.metrics['max_abs_dx_cols'] < .15
+    assert all(row['full_cells'] >= 3 for row in result.metrics['frame_coverage'])
+    assert 4 not in {row['cell'] for row in result.metrics['full_offsets']}
+
+
+def test_raster_offset_rejects_changing_cells_when_coverage_is_too_sparse():
+    result = raster_offset_check([(offset_image(), '+0???????')], OFFSET_QUAD)
+    assert result.status == 'FEHLER'
+    assert result.reason == 'zu_wenige_belastbare_zellen_im_bild'
+    assert result.metrics['max_abs_dx_cols'] is None
 
 
 def test_raster_offset_detects_sheared_quad():
@@ -184,6 +200,27 @@ def test_bad_lattice_fails_and_bias_warns():
     assert check_setup(image, fit(rms_cols=.26)).checks['raster'].status == 'FEHLER'
     assert check_setup(image, fit(n_assigned=150)).checks['raster'].status == 'FEHLER'
     assert check_setup(image, fit(row_bias=(.09,) + (0,) * 6)).checks['raster'].status == 'WARNUNG'
+
+
+def test_independent_offset_check_prevents_low_assignment_from_failing_setup():
+    image = cv2.cvtColor(offset_image(), cv2.COLOR_GRAY2BGR)
+    lattice = LatticeFit(OFFSET_QUAD.tolist(), 454, 315, .1, .15,
+                         tuple(range(16)), (0.,) * 7, (0.,) * 16)
+    offset = raster_offset_check([(image, OFFSET_TEXT)], OFFSET_QUAD)
+    assert offset.status == 'OK'
+    result = check_setup(image, lattice, offset_check=offset)
+    assert result.checks['raster'].metrics['assigned_fraction'] == pytest.approx(315 / 454)
+    assert result.checks['raster'].status in ('OK', 'WARNUNG')
+    assert result.overall in ('OK', 'WARNUNG')
+
+
+def test_low_assignment_without_independent_offset_still_fails_setup():
+    image = cv2.cvtColor(offset_image(), cv2.COLOR_GRAY2BGR)
+    lattice = LatticeFit(OFFSET_QUAD.tolist(), 454, 315, .1, .15,
+                         tuple(range(16)), (0.,) * 7, (0.,) * 16)
+    result = check_setup(image, lattice)
+    assert result.checks['raster'].status == 'FEHLER'
+    assert result.overall == 'FEHLER'
 
 
 def test_stability_requires_elapsed_time_and_warns_if_unreliable():

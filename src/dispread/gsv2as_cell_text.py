@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from dispread.leading_zeros import map_suppressed_leading_zeros
+
 _TELEGRAM = re.compile(r"\+([0-9.]{7}) mV/V\Z", re.ASCII)
 _OFFLINE = re.compile(r"\+[ 0-9.]{7} ", re.ASCII)
 
@@ -32,14 +34,10 @@ def cell_text_from_telegram(raw: bytes | str) -> str:
     if number.count(".") != 1 or sum(ch.isdigit() for ch in number) != 6:
         raise ValueError("numeric block must contain six digits and one decimal point")
 
-    integer = number.split(".", 1)[0]
-    zeros = min(len(integer) - 1, len(integer) - len(integer.lstrip("0")))
-    if zeros > 2:
+    mapped = map_suppressed_leading_zeros("+" + number, blank_cells=True)
+    if mapped is None:
         raise ValueError("three or more suppressed leading zeros are unverified")
-    if zeros:
-        number = " " * zeros + number[zeros:]
-
-    return ("+" + number + " mV/V")[:9]
+    return (mapped + " mV/V")[:9]
 
 
 def validate_offline_cell_text(text: str) -> str:

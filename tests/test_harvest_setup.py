@@ -388,6 +388,7 @@ def test_propose_fails_without_guessing_when_no_quad_found(tmp_path):
 
 def test_confirm_below_threshold_ok_above_threshold_rejected(tmp_path):
     proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0)
+    proposal["setup_checks"] = {"overall": "OK", "checks": {"rasterversatz": {"status": "OK", "metrics": {}}}}
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
 
@@ -455,6 +456,7 @@ def test_confirm_without_threshold_fails_argparse(tmp_path):
 
 def test_confirm_rejects_unconfirmed_default_grid(tmp_path):
     proposal = _dummy_proposal(tmp_path, grid_source="default_even_split")
+    proposal["setup_checks"] = {"overall": "OK", "checks": {"rasterversatz": {"status": "OK", "metrics": {}}}}
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
     out_path = tmp_path / "profile.json"
@@ -497,6 +499,7 @@ def test_confirm_writes_reference_frame(tmp_path):
     """Task 10: `confirm` schreibt `reference_frame = {path, sha256}` ins
     Profil - der Vertrag fuer `import-harvest.py`s Ausrichtungspruefung."""
     proposal = _dummy_proposal(tmp_path, grid_source="operator_provided", min_px=4.0)
+    proposal["setup_checks"] = {"overall": "OK", "checks": {"rasterversatz": {"status": "OK", "metrics": {}}}}
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
     out_path = tmp_path / "profile.json"
@@ -671,6 +674,7 @@ def test_confirm_accepts_not_run_stability_check(tmp_path):
         "checks": {
             "kontrast": {"status": "OK", "metrics": {"contrast": 41.3}},
             "stabilitaet": {"status": None, "metrics": {}},
+            "rasterversatz": {"status": "OK", "metrics": {}},
         },
     }
     proposal["setup_checks"] = checks
@@ -686,6 +690,44 @@ def test_confirm_accepts_not_run_stability_check(tmp_path):
 
     assert rc == 0
     assert SessionProfile.load(out_path).setup_checks == checks
+
+
+@pytest.mark.parametrize("raster_status", [None, "FEHLER"])
+def test_confirm_requires_acceptable_raster_offset_or_reason(tmp_path, capsys, raster_status):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    checks = {"overall": "OK", "checks": {}}
+    if raster_status is not None:
+        checks["checks"]["rasterversatz"] = {"status": raster_status, "metrics": {}}
+    proposal["setup_checks"] = checks
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+    argv = [
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ]
+    assert harvest_setup.main(argv) == 2
+    assert "rasterversatz" in capsys.readouterr().err
+    assert not out_path.exists()
+    assert harvest_setup.main(argv + ["--override-reason", "Manuell geprueft"]) == 0
+    assert SessionProfile.load(out_path).setup_checks["override_reason"] == "Manuell geprueft"
+
+
+def test_confirm_requires_reason_when_setup_checks_absent(tmp_path, capsys):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+    argv = [
+        "confirm", "--proposal", str(proposal_path),
+        "--resolution-threshold-px", "2.0", "--confirmed-by", "bediener",
+        "--out", str(out_path),
+    ]
+    assert harvest_setup.main(argv) == 2
+    assert "rasterversatz" in capsys.readouterr().err
+    assert harvest_setup.main(argv + ["--override-reason", "Historisches Profil"]) == 0
+    assert SessionProfile.load(out_path).setup_checks["override_reason"] == "Historisches Profil"
 
 
 def test_confirm_rejects_stability_check_without_status(tmp_path):

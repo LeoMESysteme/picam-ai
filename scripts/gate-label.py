@@ -106,6 +106,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from dispread.leading_zeros import map_suppressed_leading_zeros  # noqa: E402
 from dispread.records import to_boottime_ns  # noqa: E402
 
 MS_TO_NS = 1_000_000
@@ -176,35 +177,9 @@ _NUMBER_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?")
 #: unterscheidet die Proben.
 LABEL_NORMALIZATION = "gsv2as_leading_zero_v2"
 
-#: Ab wie vielen unterdrueckten fuehrenden Nullen die Regel als unbelegt gilt
-#: (OQ-41-Nachtrag 2026-09-24). Gemessen sind 0 ("+0.60965"), 1 ("+01.8290")
-#: und 2 ("+00988.5") unterdrueckte Nullen. Fuer 3 oder mehr fehlt jeder
-#: Beleg auf dem Glas - AGENTS.md verbietet hier zu raten, solche Telegramme
-#: werden daher abgelehnt (`REASON_LEADING_ZEROS_UNVERIFIED`), nicht gelabelt.
-MAX_VERIFIED_SUPPRESSED_ZEROS = 2
-
-
-def _count_leading_zeros_to_suppress(rest: str) -> int:
-    """Anzahl fuehrender Nullen im Ganzzahlteil von `rest` (Telegrammtext
-    OHNE das Vorzeichenzeichen), die laut Regel unterdrueckt werden.
-
-    Der Ganzzahlteil ist die laengste Ziffernfolge ab Position 0 (endet am
-    Dezimalpunkt oder am Stringende). Die LETZTE Ziffer dieses Ganzzahlteils
-    wird NIE mitgezaehlt - Nutzerentscheidung, belegt an "+0.60965": dort ist
-    die einzige Ziffer vor dem Punkt zugleich die letzte und bleibt stehen,
-    obwohl sie '0' ist. Alle fuehrenden Nullen DAVOR (bei einem Ganzzahlteil
-    mit mehr als einer Ziffer) zaehlen mit, siehe `telegram_to_display_text`."""
-    int_len = 0
-    while int_len < len(rest) and rest[int_len].isdigit():
-        int_len += 1
-    if int_len <= 1:
-        return 0
-    zeros = 0
-    while zeros < int_len - 1 and rest[zeros] == "0":
-        zeros += 1
-    return zeros
-
-
+#: Der Grenzwert fuer belegte fuehrende Nullen liegt gemeinsam in
+#: `dispread.leading_zeros`. Gemessen sind 0, 1 und 2 unterdrueckte Nullen;
+#: bei 3 oder mehr wird `REASON_LEADING_ZEROS_UNVERIFIED` verwendet.
 def telegram_to_display_text(telegram: str) -> str | None:
     """Bildet den ASCII-Telegrammtext des GSV-2AS auf den Text ab, den das
     Anzeigeglas tatsaechlich zeigt (OQ-41, siehe docs/VALIDATION.md
@@ -229,7 +204,8 @@ def telegram_to_display_text(telegram: str) -> str | None:
     fuer den Textvergleich/Label relevanten Zeicheninhalt ab, nicht die
     Zellengeometrie.
 
-    Sind es MEHR als `MAX_VERIFIED_SUPPRESSED_ZEROS` (aktuell 2) fuehrende
+    Sind es MEHR als `dispread.leading_zeros.MAX_VERIFIED_SUPPRESSED_ZEROS`
+    (aktuell 2) fuehrende
     Nullen, liefert diese Funktion `None` statt zu raten, ob das Glas
     weiterhin alle bis auf die letzte unterdrueckt - dafuer fehlt jeder
     Beleg. Aufrufer muessen `None` als Ablehnung behandeln
@@ -254,16 +230,7 @@ def telegram_to_display_text(telegram: str) -> str | None:
     dafuer gelesen werden, dass negative Telegramme korrekt behandelt
     werden.
     """
-    if not telegram:
-        return telegram
-    if telegram[0] in "+-":
-        sign, rest = telegram[0], telegram[1:]
-    else:
-        sign, rest = "", telegram
-    zeros = _count_leading_zeros_to_suppress(rest)
-    if zeros > MAX_VERIFIED_SUPPRESSED_ZEROS:
-        return None
-    return sign + rest[zeros:]
+    return map_suppressed_leading_zeros(telegram, blank_cells=False)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

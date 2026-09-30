@@ -38,6 +38,31 @@ Normierung nicht selbst. Außerdem fehlten weitere Mängel:
 Normierung. Die Spalte `raster` muss für neue Läufe bei Bedarf von Hand in
 `LOO_RUNS` stehen.
 
+## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 3)
+
+**Problem:** Die abschließende Quad-Bewertung fand andere Punktkandidaten
+als der Fit und lehnte dadurch nachgeführte, laut 2j korrekte Raster ab.
+Handgesetzte und vom Glasdetektor gefundene Quads konnten 2j umgehen;
+ein Vorschlag ohne Rasterbefund ließ sich ohne Begründung bestätigen.
+
+**Änderung:** `refine` und `evaluate_quad` nutzen dieselbe entzerrte
+Punktsuche. Eine geringe Zuordnungsquote wird bei bestandener unabhängiger
+2j-Prüfung als WARNUNG eingestuft; RMS- und sonstige Fehlergrenzen gelten
+weiter. `propose` prüft auch vorgegebene bzw. erkannte Quads mit 2j und
+den Einrichtungsprüfungen, wenn Zellentext vorliegt. `confirm` verlangt
+einen bestandenen 2j-Befund oder `--override-reason`. Der serielle Text
+wird vor und nach jedem Standbild gelesen; wechselnde Zellen werden
+ausgeblendet. Die Nachführung braucht mindestens 0,02 Punktspalten
+Verbesserung am zweiten Bild. Die belegte Regel für unterdrückte führende
+Nullen liegt in einem gemeinsamen Modul und lehnt drei oder mehr weiterhin
+ab.
+
+**Konsequenz:** Die echten Offline-Abläufe für `sc6` und `ab5` erreichen
+einen überprüften Vorschlag. Ein nicht geprüfter Rasterbefund erfordert
+bei der Bestätigung eine begründete Übersteuerung. `ab4` und `ab6`
+bleiben bei mehrdeutiger bzw. fehlender automatischer Startlage sicher
+abgelehnt; die 2j-Messung deckt die Einheitszeichen rechts nicht direkt ab.
+
 ## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 2 Rasterversatz)
 
 **Problem:** Eine geringe Raster-RMS und unauffällige Leerzellen konnten ein

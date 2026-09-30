@@ -206,15 +206,17 @@ def _glare_check(warped_gray: np.ndarray) -> CheckResult:
     return CheckResult(status, {'saturated_fraction': saturated, 'bright_blob_area_px': blob_area})
 
 
-def _raster_check(fit: Any) -> CheckResult:
+def _raster_check(fit: Any, offset_check: CheckResult | None = None) -> CheckResult:
     assigned = fit.n_assigned / fit.n_dots if fit.n_dots else 0.0
     max_bias = max((abs(float(v)) for v in (*fit.row_bias, *fit.cell_bias)), default=0.0)
     metrics = {'n_dots': fit.n_dots, 'n_assigned': fit.n_assigned, 'assigned_fraction': assigned,
                'rms_cols': fit.rms_cols, 'rms_rows': fit.rms_rows, 'cells': list(fit.cells),
                'row_bias': list(fit.row_bias), 'cell_bias': list(fit.cell_bias), 'max_abs_bias': max_bias}
-    if fit.rms_cols > RMS_COLS_ERROR or fit.rms_rows > RMS_ROWS_ERROR or assigned < ASSIGNED_FRACTION_ERROR:
+    if (fit.rms_cols > RMS_COLS_ERROR or fit.rms_rows > RMS_ROWS_ERROR
+            or assigned < ASSIGNED_FRACTION_ERROR
+            and (offset_check is None or offset_check.status not in ('OK', 'WARNUNG'))):
         status = 'FEHLER'
-    elif max_bias > BIAS_WARNING:
+    elif max_bias > BIAS_WARNING or assigned < ASSIGNED_FRACTION_ERROR:
         status = 'WARNUNG'
     else:
         status = 'OK'
@@ -249,8 +251,9 @@ def raster_offset_check(frames: Sequence[tuple[np.ndarray, str]], quad, *,
             _gray(image)
             if not isinstance(cell_text, str) or not 1 <= len(cell_text) <= grid.n_cells:
                 return CheckResult('FEHLER', metrics, reason='ungueltiger_zellentext')
-            halves.append(measure_offsets(image, q, grid, target_size, cell_text, HALVES))
-            full.append(measure_offsets(image, q, grid, target_size, cell_text, FULL))
+            known_text = cell_text.replace('?', ' ')
+            halves.append(measure_offsets(image, q, grid, target_size, known_text, HALVES))
+            full.append(measure_offsets(image, q, grid, target_size, known_text, FULL))
     except (TypeError, ValueError, cv2.error, KeyError) as exc:
         return CheckResult('FEHLER', metrics, reason=f'messung_unmoeglich:{type(exc).__name__}')
 
@@ -344,7 +347,7 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
         'rahmen': _border_check(sampled),
         'glanz': _glare_check(warped_gray),
         'aufloesung': CheckResult(resolution_status, {'min_source_dot_column_px': resolution}),
-        'raster': _raster_check(lattice_fit),
+        'raster': _raster_check(lattice_fit, offset_check),
         'stabilitaet': _stability_check(image_bgr, stability_image_bgr,
                                       stability_elapsed_s, lattice_fit.quad),
     }

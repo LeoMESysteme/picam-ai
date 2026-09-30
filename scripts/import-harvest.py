@@ -87,6 +87,7 @@ import cv2
 import numpy as np
 
 from dispread.frame_alignment import estimate_quad_shift, prepare_reference
+from dispread.leading_zeros import map_suppressed_leading_zeros
 from dispread.rectify import rectify
 from dispread.session_profile import SessionProfile
 from dispread.workbench.datasets import DatasetError, DatasetStore
@@ -134,27 +135,8 @@ _ALL_REASONS = (
     REASON_AUSSCHNITT_UNPRUEFBAR,
 )
 
-#: Gleicher Schwellwert wie `gate_label.MAX_VERIFIED_SUPPRESSED_ZEROS` -
-#: absichtlich dupliziert (die beiden Skripte teilen keine gemeinsame
-#: Regel-Implementierung, siehe Moduldocstring "Regel 5").
-MAX_VERIFIED_SUPPRESSED_ZEROS = 2
-
 #: Nur informativ, taucht im Bericht auf - kein Ablehnungsgrund fuer sich.
 COUNTER_ZEICHEN_ZU_SELTEN = "zeichen_zu_selten_fuer_pruefung"
-
-
-def _count_leading_zeros_to_suppress(rest: str) -> int:
-    """Wie `gate_label._count_leading_zeros_to_suppress` - absichtlich
-    dupliziert, siehe Moduldocstring "Regel 5"/OQ-41-Nachtrag."""
-    int_len = 0
-    while int_len < len(rest) and rest[int_len].isdigit():
-        int_len += 1
-    if int_len <= 1:
-        return 0
-    zeros = 0
-    while zeros < int_len - 1 and rest[zeros] == "0":
-        zeros += 1
-    return zeros
 
 
 def _cell_text_for_telegram(telegram_text: str) -> str | None:
@@ -168,22 +150,12 @@ def _cell_text_for_telegram(telegram_text: str) -> str | None:
     var/diagnostics/auf3-run). NICHT auf `n_cells` aufgefuellt - das macht
     `_padded_cell_text`.
 
-    Liefert `None`, wenn mehr als `MAX_VERIFIED_SUPPRESSED_ZEROS` fuehrende
+    Liefert `None`, wenn mehr als
+    `dispread.leading_zeros.MAX_VERIFIED_SUPPRESSED_ZEROS` fuehrende
     Nullen unterdrueckt wuerden - dafuer fehlt jeder Beleg auf dem Glas
     (siehe `gate_label.telegram_to_display_text`-Docstring). Aufrufer
     muessen das als Ablehnung behandeln (`REASON_LEADING_ZEROS_UNVERIFIED`)."""
-    if not telegram_text:
-        return telegram_text
-    if telegram_text[0] in "+-":
-        sign, rest = telegram_text[0], telegram_text[1:]
-    else:
-        sign, rest = "", telegram_text
-    zeros = _count_leading_zeros_to_suppress(rest)
-    if zeros > MAX_VERIFIED_SUPPRESSED_ZEROS:
-        return None
-    if zeros:
-        rest = (" " * zeros) + rest[zeros:]
-    return sign + rest
+    return map_suppressed_leading_zeros(telegram_text, blank_cells=True)
 
 
 def _padded_cell_text(telegram_text: str, n_cells: int) -> str | None:

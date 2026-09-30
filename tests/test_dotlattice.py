@@ -13,6 +13,7 @@ from dotmatrix_helpers import render
 from dispread import dotlattice
 from dispread.charcells import CharGrid
 from dispread.dotlattice import LatticeFit, fit_lattice
+from dispread.setup_checks import check_setup
 from dispread.setup_hint import find_green_hint_box
 
 GRID = CharGrid(n_cells=16, left=0, pitch=25, top=160 / 9, bottom=160)
@@ -304,3 +305,34 @@ def test_green_hint_still_matches_confirmed_quad(name, frame):
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
     assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
+
+
+@pytest.mark.skipif(
+    not (DIAGNOSTICS / "sc6-still/frames/frame_000015.png").exists(),
+    reason="Standbild fehlt",
+)
+def test_evaluate_quad_agrees_with_fit_on_sc6_still():
+    image = cv2.imread(str(DIAGNOSTICS / "sc6-still/frames/frame_000015.png"))
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    fit = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(fit, LatticeFit), fit
+    evaluated = dotlattice.evaluate_quad(image, hint, fit.quad, empty_cells=EMPTY_CELLS)
+    assert isinstance(evaluated, LatticeFit), evaluated
+    assert abs(evaluated.n_dots - fit.n_dots) <= 15
+    assert abs(evaluated.n_assigned - fit.n_assigned) <= 5
+    assert check_setup(image, evaluated).to_dict()["overall"] in {"OK", "WARNUNG"}
+
+
+@pytest.mark.parametrize("name,frame,reason", [
+    ("ab4", 16, "startlage_mehrdeutig"),
+    ("ab6", 22, "keine_startlage"),
+])
+def test_uncertain_real_still_start_is_rejected(name, frame, reason):
+    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
+    if not still.exists():
+        pytest.skip("Standbild fehlt")
+    image = cv2.imread(str(still))
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    assert fit_lattice(image, hint, empty_cells=EMPTY_CELLS) == reason

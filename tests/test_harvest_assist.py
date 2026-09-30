@@ -60,7 +60,10 @@ def _checks():
         checks={"kanten": SimpleNamespace(cells=(8,))},
         to_dict=lambda: {
             "overall": "WARNUNG",
-            "checks": {"kanten": {"status": "WARNUNG", "metrics": {}, "cells": [8]}},
+            "checks": {
+                "kanten": {"status": "WARNUNG", "metrics": {}, "cells": [8]},
+                "rasterversatz": {"status": "OK", "metrics": {}},
+            },
         },
     )
 
@@ -116,6 +119,115 @@ def test_propose_auto_quad_writes_checks_and_sampling_overlay(tmp_path, monkeypa
     assert (out / "overlay_source.png").is_file()
     assert (out / "overlay_sampling.png").is_file()
     assert "overlay_sampling.png" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("route", ["quad", "glass"])
+def test_propose_fixed_quad_runs_offset_and_setup_checks(tmp_path, monkeypatch, route):
+    frame = tmp_path / "frame.png"
+    cv2.imwrite(str(frame), np.full((360, 640, 3), 120, np.uint8))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"camera": _settings().to_dict()}))
+    seen = []
+
+    def evaluate(_image, _hint, quad, **_kwargs):
+        seen.append(("evaluate", quad))
+        return _fit()
+
+    def offset(frames, quad):
+        seen.append(("offset", frames[0][1], quad))
+        return CheckResult("WARNUNG", {"max_abs_dx_cols": 0.16, "max_abs_dy_rows": 0.06})
+
+    def check(*_args, **kwargs):
+        seen.append(("checks", kwargs["offset_check"].status))
+        return SimpleNamespace(
+            overall="WARNUNG", checks={"kanten": SimpleNamespace(cells=())},
+            to_dict=lambda: {"overall": "WARNUNG", "checks": {
+                "kanten": {"status": "OK", "metrics": {}, "cells": []},
+                "rasterversatz": kwargs["offset_check"].to_dict(),
+            }},
+        )
+
+    monkeypatch.setattr(harvest_setup, "evaluate_quad", evaluate)
+    monkeypatch.setattr(harvest_setup, "raster_offset_check", offset)
+    monkeypatch.setattr(harvest_setup, "check_setup", check)
+    monkeypatch.setattr(harvest_setup, "glass_quad_in_region", lambda *_args: QUAD)
+    out = tmp_path / "proposal"
+    argv = [
+        "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
+        "--camera-settings", str(settings), "--device-id", "d", "--session-id", "s",
+        "--cell-text", "+12.3456 ", "--out", str(out),
+    ]
+    if route == "quad":
+        argv += ["--quad", ",".join(str(value) for pair in QUAD for value in pair)]
+    assert harvest_setup.main(argv) == 0
+    proposal = json.loads((out / "proposal.json").read_text())
+    assert proposal["setup_checks"]["checks"]["rasterversatz"]["status"] == "WARNUNG"
+    assert [entry[0] for entry in seen] == ["evaluate", "offset", "checks"]
+
+
+@pytest.mark.parametrize("route", ["quad", "glass"])
+def test_propose_fixed_quad_rejects_bad_offset(tmp_path, monkeypatch, route):
+    frame = tmp_path / "frame.png"
+    cv2.imwrite(str(frame), np.full((360, 640, 3), 120, np.uint8))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"camera": _settings().to_dict()}))
+    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("FEHLER", {}))
+    monkeypatch.setattr(harvest_setup, "glass_quad_in_region", lambda *_args: QUAD)
+    out = tmp_path / "proposal"
+    argv = [
+        "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
+        "--camera-settings", str(settings), "--device-id", "d", "--session-id", "s",
+        "--cell-text", "+12.3456 ", "--out", str(out),
+    ]
+    if route == "quad":
+        argv += ["--quad", ",".join(str(value) for pair in QUAD for value in pair)]
+    assert harvest_setup.main(argv) == 2
+    assert not (out / "proposal.json").exists()
+
+
+def test_propose_with_cell_text_rejects_missing_raster_check(tmp_path, monkeypatch):
+    frame = tmp_path / "frame.png"
+    cv2.imwrite(str(frame), np.full((360, 640, 3), 120, np.uint8))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"camera": _settings().to_dict()}))
+    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
+    missing_raster = SimpleNamespace(
+        overall="OK", checks={"kanten": SimpleNamespace(cells=())},
+        to_dict=lambda: {"overall": "OK", "checks": {"kanten": {"status": "OK", "metrics": {}}}},
+    )
+    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: missing_raster)
+    out = tmp_path / "proposal"
+    assert harvest_setup.main([
+        "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
+        "--camera-settings", str(settings), "--device-id", "d", "--session-id", "s",
+        "--cell-text", "+12.3456 ", "--out", str(out),
+        "--quad", ",".join(str(value) for pair in QUAD for value in pair),
+    ]) == 2
+    assert not (out / "proposal.json").exists()
+
+
+@pytest.mark.parametrize("geometry_args", [
+    ["--target-size", "320x160"],
+    ["--grid", "0,20,10,150"],
+])
+def test_propose_with_cell_text_rejects_incompatible_geometry(tmp_path, monkeypatch, geometry_args):
+    frame = tmp_path / "frame.png"
+    cv2.imwrite(str(frame), np.full((360, 640, 3), 120, np.uint8))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"camera": _settings().to_dict()}))
+    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
+    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    out = tmp_path / "proposal"
+    assert harvest_setup.main([
+        "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
+        "--camera-settings", str(settings), "--device-id", "d", "--session-id", "s",
+        "--cell-text", "+12.3456 ", "--out", str(out),
+        "--quad", ",".join(str(value) for pair in QUAD for value in pair), *geometry_args,
+    ]) == 2
+    assert not (out / "proposal.json").exists()
 
 
 def test_assist_rejects_invalid_offline_text_before_camera(tmp_path, monkeypatch, capsys):
@@ -232,6 +344,65 @@ def test_offline_cell_text_file_and_serial_telegram(tmp_path):
     port = FakePort()
     assert harvest_setup._serial_cell_text(port) == "+ 1.2193 "
     assert port.cleared
+
+
+def test_serial_capture_masks_cells_changing_during_and_between_stills():
+    class Port:
+        def __init__(self):
+            self.lines = iter((
+                b"+01.2193 mV/V\r\n", b"+01.2194 mV/V\r\n",
+                b"+01.2294 mV/V\r\n", b"+01.2295 mV/V\r\n",
+            ))
+            self.clears = 0
+
+        def reset_input_buffer(self):
+            self.clears += 1
+
+        def readline(self):
+            return next(self.lines)
+
+    port = Port()
+    captures = []
+
+    def capture():
+        captures.append(True)
+        return np.zeros((1, 1, 3), np.uint8)
+
+    first, first_text = harvest_setup._capture_with_serial_text(capture, port)
+    second, second_text = harvest_setup._capture_with_serial_text(capture, port)
+    first_text, second_text = harvest_setup._mask_changed_cells(first_text, second_text)
+    assert first.shape == second.shape
+    assert captures == [True, True]
+    assert port.clears == 4
+    assert first_text == second_text == "+ 1.2?9? "
+
+
+def test_masked_serial_text_reaches_real_offset_check_without_unknown_glyph():
+    class Port:
+        def __init__(self):
+            self.lines = iter((b"+01.2193 mV/V\r\n", b"+01.2194 mV/V\r\n"))
+
+        def reset_input_buffer(self):
+            pass
+
+        def readline(self):
+            return next(self.lines)
+
+    image, text = harvest_setup._capture_with_serial_text(
+        lambda: np.full((360, 640, 3), 120, np.uint8), Port(),
+    )
+    assert "?" in text
+    check = harvest_setup.raster_offset_check([(image, text)], QUAD)
+    assert isinstance(check, CheckResult)
+    assert check.reason != "messung_unmoeglich:KeyError"
+
+
+def test_heldout_requires_meaningful_improvement():
+    def offset(value):
+        return CheckResult("OK", {"max_abs_dx_cols": value, "max_abs_dy_rows": 0.04})
+
+    assert not harvest_setup._heldout_improves(offset(0.10), offset(0.09))
+    assert harvest_setup._heldout_improves(offset(0.10), offset(0.07))
 
 
 def test_propose_auto_quad_rejects_uncertain_start(tmp_path, monkeypatch, capsys):
@@ -400,7 +571,8 @@ def test_assist_records_measured_stability_elapsed(tmp_path, monkeypatch, mocked
     assert proposed_elapsed == [31.25]
 
 
-def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, monkeypatch):
+@pytest.mark.parametrize("serial_change", [None, "one", "many"])
+def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, monkeypatch, serial_change):
     """Die CLI-Datenkette nutzt echte Rasteranpassung und echte Pruefungen."""
     out = tmp_path / "assist"
     settings = CameraSettings(
@@ -452,18 +624,115 @@ def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, mon
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
 
-    rc = harvest_setup.main([
-        "assist", "--out", str(out), "--device-id", "d", "--session-id", "s", "--cell-text", "+12.3456 ",
-        "--hint-box", hint_box,
-    ])
-    assert rc == 0
+    serial_port = None
+    if serial_change is not None:
+        class FakeSerial:
+            reads = 0
+            closed = False
+
+            def reset_input_buffer(self):
+                pass
+
+            def readline(self):
+                self.reads += 1
+                if self.reads % 2:
+                    return b"+12.3456 mV/V\r\n"
+                return b"+12.3457 mV/V\r\n" if serial_change == "one" else b"+98.7654 mV/V\r\n"
+
+            def close(self):
+                self.closed = True
+
+        serial_port = FakeSerial()
+        monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *_args, **_kw: serial_port))
+
+    argv = ["assist", "--out", str(out), "--device-id", "d", "--session-id", "s", "--hint-box", hint_box]
+    if serial_change is None:
+        argv += ["--cell-text", "+12.3456 "]
+    rc = harvest_setup.main(argv)
+    assert rc == (2 if serial_change == "many" else 0)
+    if serial_port is not None:
+        assert serial_port.reads == 4
+        assert serial_port.closed
     assert capture.released
     assert capture.reads >= 22
+    if serial_change == "many":
+        assert not (out / "proposal.json").exists()
+        return
     proposal = json.loads((out / "proposal.json").read_text())
     assert proposal["grid_source"] == "dot_lattice"
     assert np.max(np.linalg.norm(np.asarray(proposal["quad"]) - quad, axis=1)) <= 1.5
     assert proposal["setup_checks"]["checks"]["stabilitaet"]["metrics"]["elapsed_s"] == 31.0
     assert (out / "overlay_source.png").is_file()
+    assert (out / "overlay_sampling.png").is_file()
+
+
+@pytest.mark.parametrize(("scene", "frame_number", "cell_text", "hint_box"), [
+    ("sc6", 15, "+0.46786 ", "0.034443,0.689981,0.443562,0.088000"),
+    ("ab5", 7, "+0.46788 ", "0.122188,0.330565,0.385625,0.254333"),
+])
+def test_assist_real_still_completes_fit_refine_and_checks(
+    tmp_path, monkeypatch, scene, frame_number, cell_text, hint_box,
+):
+    frame_dir = Path(__file__).parents[1] / "var" / "diagnostics" / f"{scene}-still" / "frames"
+    first_path = frame_dir / f"frame_{frame_number:06d}.png"
+    second_path = frame_dir / "frame_000030.png"
+    if not first_path.is_file() or not second_path.is_file():
+        pytest.skip(f"diagnostic still missing in {frame_dir}")
+    first_image = cv2.imread(str(first_path))
+    second_image = cv2.imread(str(second_path))
+    assert first_image is not None and second_image is not None
+    assert first_image.shape == second_image.shape
+    height, width = first_image.shape[:2]
+    settings = CameraSettings(
+        model=STREAMCAM_MODEL, usb_id=STREAMCAM_USB_ID, size=(width, height),
+        fourcc="YUYV", fps=30, controls=_settings().controls,
+    )
+    out = tmp_path / scene
+
+    def fake_focus(args):
+        args.out.mkdir(parents=True)
+        (args.out / "camera-settings.json").write_text(json.dumps({"camera": settings.to_dict()}))
+        return 0
+
+    class StillCapture:
+        released = False
+        reads = 0
+
+        def read(self):
+            self.reads += 1
+            return True, first_image if self.reads <= 11 else second_image
+
+        def release(self):
+            self.released = True
+
+    capture = StillCapture()
+    monkeypatch.setattr(harvest_setup, "run_focus", fake_focus)
+    monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
+        device="injected", capture=capture, set_controls=lambda *_args: None,
+    ))
+    monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
+    monotonic = iter((100.0, 131.0))
+    monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
+
+    assert harvest_setup.main([
+        "assist", "--out", str(out), "--device-id", "offline", "--session-id", scene,
+        "--hint-box", hint_box, "--cell-text", cell_text,
+    ]) == 0
+    assert capture.released
+    assert capture.reads == 22
+    assert np.any(first_image != second_image)
+    proposal = json.loads((out / "proposal.json").read_text())
+    assert proposal["setup_checks"]["overall"] in {"OK", "WARNUNG"}
+    assert proposal["setup_checks"]["checks"]["rasterversatz"]["status"] in {"OK", "WARNUNG"}
+    initial_fit = harvest_setup.fit_lattice(
+        first_image, harvest_setup._parse_hint_box(hint_box),
+        empty_cells=harvest_setup.GSV2AS_EMPTY_CELLS,
+    )
+    assert not isinstance(initial_fit, str)
+    initial_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], initial_fit.quad)
+    final_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], proposal["quad"])
+    assert not np.allclose(proposal["quad"], initial_fit.quad, atol=0.1)
+    assert harvest_setup._heldout_improves(initial_holdout, final_holdout)
     assert (out / "overlay_sampling.png").is_file()
 
 
@@ -501,6 +770,7 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
         checks={"kanten": SimpleNamespace(cells=())},
         to_dict=lambda: {"overall": "OK", "checks": {
             "kanten": {"status": "OK", "metrics": {}, "cells": []},
+            "rasterversatz": {"status": "OK", "metrics": {}},
         }},
     )
     monkeypatch.setattr(harvest_setup, "run_focus", fake_focus)

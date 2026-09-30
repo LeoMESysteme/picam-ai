@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 from dispread.gsv2as_cell_text import (
@@ -22,7 +24,6 @@ def test_telegram_maps_first_nine_positions_without_shifting(raw, expected):
 @pytest.mark.parametrize(
     "raw",
     [
-        "+000988.5 mV/V",  # three suppressed zeros are unverified
         "-0.60972 mV/V",
         "+0.60972mV/V",
         "+0.60x72 mV/V",
@@ -33,6 +34,24 @@ def test_telegram_maps_first_nine_positions_without_shifting(raw, expected):
 def test_telegram_rejects_unverified_or_malformed_input(raw):
     with pytest.raises(ValueError):
         cell_text_from_telegram(raw)
+
+
+def test_valid_telegram_with_three_suppressed_zeros_is_unverified():
+    # Six digits plus one point: syntax is valid, so this reaches the evidence limit.
+    with pytest.raises(ValueError, match="three or more suppressed leading zeros"):
+        cell_text_from_telegram("+0009.09 mV/V")
+
+
+def test_shared_leading_zero_mapping_preserves_positions_or_removes_zeros():
+    leading_zeros = importlib.import_module("dispread.leading_zeros")
+    assert leading_zeros.map_suppressed_leading_zeros("+00988.5 mV/V", blank_cells=True) == "+  988.5 mV/V"
+    assert leading_zeros.map_suppressed_leading_zeros("+00988.5 mV/V", blank_cells=False) == "+988.5 mV/V"
+
+
+def test_shared_leading_zero_mapping_rejects_three_suppressed_zeros():
+    leading_zeros = importlib.import_module("dispread.leading_zeros")
+    assert leading_zeros.map_suppressed_leading_zeros("+0009.09 mV/V", blank_cells=True) is None
+    assert leading_zeros.map_suppressed_leading_zeros("+0009.09 mV/V", blank_cells=False) is None
 
 
 def test_offline_text_preserves_positions_and_blanks_question_marks():

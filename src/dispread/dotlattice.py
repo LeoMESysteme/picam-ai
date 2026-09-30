@@ -260,6 +260,30 @@ def _source_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
     return np.column_stack((xx + x0, yy + y0)).astype(np.float32)
 
 
+def _lattice_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
+    """Erkennt LCD-Punkte im entzerrten Bild und gibt Quellkoordinaten zurueck."""
+    scale = 2
+    w, hh = 400 * scale, 160 * scale
+    hr = cv2.getPerspectiveTransform(
+        quad.astype(np.float32),
+        np.float32([[0, 0], [w - 1, 0], [w - 1, hh - 1], [0, hh - 1]]),
+    )
+    gray = cv2.cvtColor(
+        cv2.warpPerspective(image_bgr, hr, (w, hh), flags=cv2.INTER_CUBIC),
+        cv2.COLOR_BGR2GRAY,
+    ).astype(np.float32)
+    sx = (w - 1) / np.linalg.norm(quad[1] - quad[0])
+    sy = (hh - 1) / np.linalg.norm(quad[3] - quad[0])
+    if not (0.5 < sx < 30 and 0.5 < sy < 30):
+        return np.empty((0, 2), np.float32)
+    blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=0.7 * sx, sigmaY=0.7 * sy)
+    depth = cv2.GaussianBlur(gray, (0, 0), sigmaX=6 * sx, sigmaY=6 * sy) - blurred
+    kernel = np.ones((int(2 * round(1.2 * sy) + 1), int(2 * round(1.2 * sx) + 1)), np.uint8)
+    minimum = cv2.erode(blurred, kernel)
+    yy, xx = np.where((blurred == minimum) & (depth > 8))
+    return _warp_points(np.column_stack((xx, yy)).astype(np.float32), np.linalg.inv(hr))
+
+
 def refine(
     image_bgr: np.ndarray,
     h_init: np.ndarray,
@@ -275,22 +299,9 @@ def refine(
         quad = _warp_points(_CORNERS[0], np.linalg.inv(h))
         if not np.isfinite(quad).all():
             return "anpassung_divergiert"
-        scale = 2
-        w, hh = 400 * scale, 160 * scale
-        hr = cv2.getPerspectiveTransform(quad.astype(np.float32), np.float32([[0, 0], [w - 1, 0], [w - 1, hh - 1], [0, hh - 1]]))
-        gray = cv2.cvtColor(cv2.warpPerspective(image_bgr, hr, (w, hh), flags=cv2.INTER_CUBIC), cv2.COLOR_BGR2GRAY).astype(np.float32)
-        sx = (w - 1) / np.linalg.norm(quad[1] - quad[0])
-        sy = (hh - 1) / np.linalg.norm(quad[3] - quad[0])
-        if not (0.5 < sx < 30 and 0.5 < sy < 30):
-            return "anpassung_divergiert"
-        blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=0.7 * sx, sigmaY=0.7 * sy)
-        depth = cv2.GaussianBlur(gray, (0, 0), sigmaX=6 * sx, sigmaY=6 * sy) - blurred
-        kernel = np.ones((int(2 * round(1.2 * sy) + 1), int(2 * round(1.2 * sx) + 1)), np.uint8)
-        minimum = cv2.erode(blurred, kernel)
-        yy, xx = np.where((blurred == minimum) & (depth > 8))
-        if len(xx) < _MIN_ASSIGNED:
+        src = _lattice_candidates(image_bgr, quad)
+        if len(src) < _MIN_ASSIGNED:
             return "zu_wenige_punkte"
-        src = _warp_points(np.column_stack((xx, yy)).astype(np.float32), np.linalg.inv(hr))
         ok, c, r = _assignment(src, h)
         if np.count_nonzero(ok) < _MIN_ASSIGNED:
             return "zu_wenige_punkte"
@@ -301,6 +312,8 @@ def refine(
         h = h_new
         if delta < 0.005:
             break
+    quad = _warp_points(_CORNERS[0], np.linalg.inv(h))
+    src = _lattice_candidates(image_bgr, quad)
     return _evaluate_fit(image_bgr, h, src, quad, empty_cells=empty_cells)
 
 
@@ -395,7 +408,7 @@ def evaluate_quad(
     h = cv2.getPerspectiveTransform(q, _CORNERS[0])
     if not np.isfinite(h).all() or abs(np.linalg.det(h)) < 1e-12:
         return "keine_startlage"
-    src = _source_candidates(image_bgr, q)
+    src = _lattice_candidates(image_bgr, q)
     return _evaluate_fit(image_bgr, h, src, q, empty_cells=empty_cells)
 
 

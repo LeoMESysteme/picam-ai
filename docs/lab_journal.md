@@ -1670,3 +1670,41 @@ zweiter Kameraframe im Mindestabstand von 30 Sekunden wurde nicht
 gemessen. Die automatische Nachführung wird im Code an einem
 zurückgehaltenen zweiten Standbild gegengeprüft; die Hardwarewirkung
 bleibt für den nächsten gemeinsamen Kameratermin offen.
+
+**Räumliche Grenze (Review Nacharbeit 3):** Der 2j-Abgleich kann mangels
+ROM-Mustern für `m`, `V` und `/` die belegten Zellen 0–7 messen, nicht die
+Einheit in Zellen 9–12. Für `sc6` meldete die lesende Gegenprobe dort
+zwischen Profil- und nachgeführtem Quad bis zu 0,25 Punktspalten
+Geometrieunterschied. Die Nachführung extrapoliert den rechten Bereich;
+ein direkter Nachweis der dortigen Punktmitten steht damit aus.
+
+## 2026-09-30 — Einrichtungsassistent: Nacharbeit 3 offline gegengeprüft
+
+**Aufbau:** Die gespeicherten, voneinander verschiedenen Frames
+`sc6` 15/30 und `ab5` 7/30 wurden mit dem finalen Fit, der
+Nachführung auf dem ersten und der 2j-Gegenprobe auf dem zweiten Bild
+gelesen. `ab4` 16/30 und `ab6` 22/30 dienten als sichere
+Startlagen-Gegenproben. Die Texte `+0.46786 `, `+0.46788 `,
+`+0.46780 ` und `+0.46789 ` stammen aus der Offline-Review; kein
+serieller Port wurde geöffnet. Die CLI-Tests injizierten Kameraobjekte
+und schrieben nur in temporäre Testverzeichnisse. Die gespeicherten
+Frames belegen keinen 30-s-Abstand; die im Softwaretest eingesetzten
+31 s sind ein Testparameter, keine Messung der Aufstellung.
+
+**Beobachtung:** `sc6` lieferte 196/208 Startpunkte; das nachgeführte
+Quad bestand 2j mit 0,043/0,070 Punktspalten/-zeilen und die
+Schlussprüfung mit WARNUNG. Bei `ab5` fiel der waagerechte 2j-Versatz
+von 0,324 auf 0,033, der senkrechte betrug zuletzt 0,061. Trotz nur
+314/456 zugeordneten Kandidaten blieb 2j OK und die Schlussprüfung
+WARNUNG. Beide echten Offline-Abläufe schrieben einen Vorschlag.
+`ab4` blieb als `startlage_mehrdeutig`, `ab6` als `keine_startlage`
+abgelehnt. Eine versuchsweise lockerere Ankerwahl bei `ab4` lieferte
+eine um 9,14 px falsche Lage und wurde verworfen.
+
+**Deutung:** Die gemeinsame entzerrte Punktsuche beseitigt den
+Kandidatenbruch zwischen Fit und Schlussbewertung. Die von 2j
+unabhängige Zuordnungsquote ist bei scharfen Punkträndern kein
+hinreichender Grund mehr für FEHLER; sie bleibt als WARNUNG sichtbar.
+Für `ab4` und `ab6` braucht die Startsuche weitere belegte Anker oder
+eine gesonderte sichere Bedienerführung, bevor sie automatische
+Vorschläge liefern kann. Ein echter Lauf an der Kamera steht weiter aus.

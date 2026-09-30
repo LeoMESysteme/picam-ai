@@ -2781,3 +2781,40 @@ gespeicherten Bild. Sie belegt keinen neuen Kameralauf und keine
 Stabilitätsmessung. Synthetische Regressionen prüfen Scherung, zu kleinen
 Punktabstand und das richtige Raster; der CLI-Test nutzt injizierte
 Kameraobjekte und verlangt bei 2j-FEHLER das Fehlen eines Vorschlags.
+
+**Messbereich der Prüfung 2j:** Das vorhandene ROM-Muster umfasst das
+Vorzeichen, Ziffern, Punkt und Leerzeichen. `m`, `V` und `/` sind darin
+nicht enthalten. Daher prüft 2j unmittelbar nur die belegten Zellen 0–7;
+die Geometrie der Einheit in Zellen 9–12 folgt aus der Homographie. In
+Claudes lesender `sc6`-Gegenprobe wichen Profil- und nachgeführtes Quad
+dort um bis zu 0,25 Punktspalten ab. Das ist eine Grenze der räumlichen
+Prüfung, kein direkt gemessener Versatz der Einheitszeichen.
+
+## 2026-09-30 — Nacharbeit 3: kompletter Offline-Ablauf auf Standbildern
+
+**Aufbau:** Lesende Wiederholung auf den gespeicherten Standbildern
+`sc6` 15/30, `ab5` 7/30, `ab4` 16/30 und `ab6` 22/30 mit der grünen
+Hinweisbox. Der erste Frame wurde angepasst, auf ihm wurde das Quad mit
+2j nachgeführt und am zweiten Frame der Versatz verglichen. Danach
+folgten `evaluate_quad`, 2j auf beiden Bildern und `check_setup` mit dem
+Code dieser Nacharbeit. Für die reine Softwareprobe wurde der
+Stabilitätsprüfung ein Abstand von 31 s übergeben; das ist **keine**
+gemessene Zeitbasis der gespeicherten Frames. Kamera und serieller Port
+blieben geschlossen, `var/` wurde nur gelesen. Der CLI-Regressionstest
+verwendet dieselben verschiedenen Bildpaare, eine injizierte Kamera und
+Offline-Zellentext; er prüft den geschriebenen Vorschlag.
+
+| Aufstellung | Startfit zugeordnet/Kandidaten | 2j Startfit x/y | 2j nach Nachführung x/y | Schlussprüfung | Ergebnis |
+| --- | ---: | ---: | ---: | --- | --- |
+| `sc6` | 196/208 | 0,107/0,097 | 0,043/0,070 | WARNUNG (Raster-Bias) | Vorschlag im Offline-Test |
+| `ab5` | 282/456 | 0,324/0,140 | 0,033/0,061 | WARNUNG (Zuordnungsquote) | Vorschlag im Offline-Test |
+| `ab4` | — | — | — | — | `startlage_mehrdeutig` |
+| `ab6` | — | — | — | — | `keine_startlage` |
+
+Werte für x sind Punktspalten, für y Punktzeilen. Das korrigierte
+`ab4-profile-regrid1.json` ergibt als getrennte 2j-Gegenprobe auf
+beiden Frames 0,049/0,047 (OK), obwohl die automatische Startsuche
+dieses Bild ablehnt. Das bestätigte `ab6`-Profil ergibt 0,138/0,075
+(OK). Diese Fälle zeigen eine Verfügbarkeitsgrenze der automatischen
+Startsuche; ein Profil-Quad ersetzt den fehlenden sicheren Startfit
+nicht stillschweigend.

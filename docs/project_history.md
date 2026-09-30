@@ -67,6 +67,49 @@ falschem Punktabstand. Unauffällig blieben trotzdem:
 * `latfit.py` lag auch bei `ab5`/`ab6` wieder 0,22 bzw. 0,36 daneben. Die
   Prüfung ist also nötig, nicht nur vorsichtig.
 
+# 2026-09-30 — Unabhängiger Versatz entscheidet über die Rasterlage
+
+## Problem
+
+Die Kandidatensuche der abschließenden Quad-Bewertung zählte andere
+Helligkeitsminima als der ursprüngliche Fit. Bei `sc6` wurden für dasselbe
+Quad 193/206 statt 192/301 Punkten zugeordnet. Bei `ab5` blieb die
+Zuordnungsquote auch nach erfolgreicher 2j-Nachführung unter 80 %.
+Gleichzeitig konnten handgesetzte Quads ohne 2j bis zur Bestätigung
+gelangen.
+
+## Entscheidung
+
+`refine` und `evaluate_quad` erkennen die Punktkandidaten mit demselben
+entzerrten Verfahren; die geometrischen Kennzahlen werden für das
+endgültige Quad erneut berechnet. Besteht die unabhängige Prüfung 2j,
+führt eine geringe Zuordnungsquote noch zu WARNUNG, nicht allein zu
+FEHLER. Die RMS-Grenzen und alle weiteren Prüfungen gelten weiter. Ohne
+2j bleibt die geringe Quote ein FEHLER. `confirm` verlangt für jeden
+Vorschlag einen 2j-Befund mit OK oder WARNUNG oder eine ausdrückliche,
+gespeicherte Begründung für die Übersteuerung.
+
+## Begründung und Alternativen
+
+Die Zuordnungsquote war ein Ersatzmaß für die Rasterlage und hängt stark
+von der Bildschärfe und den detektierten Punkträndern ab. Die
+ROM-Korrelation von 2j misst die Lage unabhängig davon. Ein pauschales
+Abschalten der Quote auch ohne 2j wurde verworfen, weil dann ein
+ungeprüftes Raster still passieren könnte. Die automatische Startsuche
+für `ab4`/`ab6` wurde nicht durch bloßes Lockern der Ankerwahl
+erweitert: Eine probeweise Lockerung lieferte für `ab4` ein um 9,14 px
+falsches Quad.
+
+## Konsequenz
+
+Ein textgestützter Vorschlag führt 2j und die Einrichtungsprüfungen auch
+für ein vorgegebenes oder erkanntes Quad aus. Vorschläge ohne bekannten
+Zellentext bleiben als vorläufige Artefakte möglich, können aber nur mit
+begründeter Übersteuerung bestätigt werden. `ab4` und `ab6` können bei
+unklarer automatischer Startlage weiterhin abgelehnt werden.
+
+---
+
 # 2026-09-30 — Bekannter DUT-Zellentext als unabhängige Rasterprüfung
 
 ## Problem
