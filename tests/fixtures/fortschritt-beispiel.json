@@ -42,7 +42,7 @@
        "auf2": {"richtig": 63, "abgelehnt": 13, "falsch": 0, "plateaus_richtig": 9, "plateaus_abgelehnt": 2, "plateaus_falsch": 0, "d_max": 0.62, "training_eligible": true},
        "ab2": {"richtig": 0, "abgelehnt": 83, "falsch": 0, "plateaus_richtig": 0, "plateaus_abgelehnt": 11, "plateaus_falsch": 0, "d_max": null, "training_eligible": false}
      }},
-    {"file": "loo-2026-09-29-bg-closing.json", "label": "loo (e)", "normalization": "bg_closing_v1",
+    {"file": "loo-2026-09-29-bg-closing.json", "label": "loo (e)", "normalization": "bg_closing_v1", "raster": "korrigiert (ab3/ab4)",
      "code_commit": "50d68d6", "order": 5,
      "groups": {
        "sc6": {"richtig": 219, "abgelehnt": 0, "falsch": 0, "plateaus_richtig": 30, "plateaus_abgelehnt": 0, "plateaus_falsch": 0, "d_max": 0.38, "training_eligible": true},

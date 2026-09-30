@@ -16,12 +16,9 @@
 
   // Geplante Abnahmen, für die es noch keine Ergebnisdatei gibt. Sie erscheinen
   // als "ausstehend", solange kein Eintrag in `abnahmen` zum Muster passt.
-  // Fest eingetragen: Abnahme 2 mit der Normierung bg_closing_v1 ist geplant
-  // (Stufe 2 am 2026-09-29 erneut eingefroren, siehe docs/status.md). Den
-  // Eintrag entfernen, wenn weitere Abnahmen nicht mehr von Hand stehen sollen.
-  const PENDING_ABNAHMEN = [
-    { pattern: /abnahme[\s_-]*2(?!\d)/i, label: "Abnahme 2 (bg_closing_v1)" },
-  ];
+  // Beispiel: { pattern: /abnahme[\s_-]*4(?!\d)/i, label: "Abnahme 4" }.
+  // Zurzeit keine: Abnahme 1-3 haben Ergebnisdateien (Stand 2026-09-30).
+  const PENDING_ABNAHMEN = [];
   const REJECT_LIMIT = 0.2;
   const ROLE_ORDER = ["training", "abnahme", "verworfen", "other"];
   const ROLE_LABELS = { training: "Training", abnahme: "Abnahme", verworfen: "verworfen", other: "ohne Rolle" };
@@ -331,7 +328,9 @@
 
   function harvestTime(run) {
     const time = typeof run.started_at_utc === "string" ? Date.parse(run.started_at_utc) : NaN;
-    return Number.isNaN(time) ? Infinity : time;
+    // Ernten ohne Aufnahmedaten (ernte1/2, auf2/3) sind die ältesten, vor
+    // Einführung von session.json-Zeitstempeln; sie stehen daher vorn.
+    return Number.isNaN(time) ? -Infinity : time;
   }
 
   function chartHarvests(container, data) {
@@ -471,8 +470,8 @@
         const rows = present.filter((name) => !hidden.has(role(name)));
         if (!rows.length) { plot.append(make("p", "fs-empty", "Alle Gruppen ausgeblendet.")); return; }
         const labelW = Math.min(140, Math.max(...rows.map((name) => name.length)) * 8 + 16);
-        const colW = Math.max(84, Math.min(140, (width - labelW) / runs.length));
-        const headH = 44, rowH = 34;
+        const colW = Math.max(104, Math.min(150, (width - labelW) / runs.length));
+        const headH = 60, rowH = 34;
         const svgWidth = Math.max(width, labelW + runs.length * colW);
         const height = headH + rows.length * rowH + 4;
         const root = svg("svg", { width: svgWidth, height, viewBox: `0 0 ${svgWidth} ${height}`, class: "fs-svg",
@@ -484,8 +483,13 @@
             fit(str(run.label, `Lauf ${col + 1}`), colW - 6, 13));
           svg("text", { x: cx, y: 33, class: "fs-axis", "text-anchor": "middle" }, head,
             fit(str(run.normalization, "k. A."), colW - 6, 12));
+          const raster = str(run.raster, "");
+          svg("text", { x: cx, y: 49, class: raster.startsWith("korrigiert") ? "fs-axis fs-axis--strong" : "fs-axis",
+            "text-anchor": "middle" }, head,
+            raster ? fit(raster.startsWith("korrigiert") ? "Raster korr." : `Raster ${raster}`, colW - 6, 12) : "");
           const hit = svg("rect", { x: labelW + col * colW, y: 0, width: colW, height: headH, class: "fs-hit" }, head);
           setTip(hit, [str(run.label, `Lauf ${col + 1}`), `Normierung: ${str(run.normalization, "k. A.")}`,
+            `Punktraster: ${str(run.raster, "k. A.")}`,
             `Reihenfolge: ${fmtInt(run.order)}`, `Code: ${str(run.code_commit, "k. A.")}`, `Datei: ${str(run.file, "k. A.")}`]);
         });
         rows.forEach((name, rowIndex) => {

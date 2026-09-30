@@ -416,6 +416,7 @@ def test_loo_report_has_required_fields(tmp_path):
 
     assert report["vorzeichen"] == "ungeprueft (nur +)"
     assert report["threshold_formula"] == "thresholds_v1"
+    assert report["normalization"] == "bg_closing_v1"  # seit 2026-09-30 im Bericht (Fortschrittsseite)
     assert len(report["git_commit"]) == 40
     assert report["lade_zaehler"]["geladen"] == 36
     # Final-Fix 5: `herkunft` zaehlt `label_origin` ueber die geladenen

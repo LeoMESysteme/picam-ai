@@ -35,7 +35,7 @@
      "richtig": 0
     }
    },
-   "label": "Abnahme (bg_closing_v1)",
+   "label": "Abnahme 2 (bg_closing_v1)",
    "templates_sha256": "fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e"
   },
   {
@@ -54,7 +54,7 @@
      "richtig": 73
     }
    },
-   "label": "Abnahme (bg_closing_v1)",
+   "label": "Abnahme 3 (bg_closing_v1)",
    "templates_sha256": "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
   }
  ],
@@ -87,13 +87,13 @@
    {
     "group": "ab5",
     "in_profile_map": true,
-    "role": null,
+    "role": "abnahme",
     "samples": 142
    },
    {
     "group": "ab6",
     "in_profile_map": true,
-    "role": null,
+    "role": "abnahme",
     "samples": 73
    },
    {
@@ -153,7 +153,7 @@
   ],
   "total_samples": 1438
  },
- "generated_at": "2026-09-30T11:59:01+00:00",
+ "generated_at": "2026-09-30T14:16:07+00:00",
  "harvests": [
   {
    "distinct_values": 24,
@@ -329,7 +329,7 @@
    "import_rejected": 2,
    "imported": 142,
    "labeled": 2134,
-   "role": null,
+   "role": "abnahme",
    "run": "ab5-run",
    "setup": "ab5",
    "staging_ram": true,
@@ -344,7 +344,7 @@
    "import_rejected": 62,
    "imported": 73,
    "labeled": 2107,
-   "role": null,
+   "role": "abnahme",
    "run": "ab6-run",
    "setup": "ab6",
    "staging_ram": true,
@@ -469,7 +469,8 @@
    },
    "label": "loo (a)",
    "normalization": "ink_global_v0",
-   "order": 1
+   "order": 1,
+   "raster": "alt"
   },
   {
    "code_commit": "20d7403",
@@ -538,7 +539,8 @@
    },
    "label": "loo (b)",
    "normalization": "ink_global_v0",
-   "order": 2
+   "order": 2,
+   "raster": "alt"
   },
   {
    "code_commit": "20d7403",
@@ -607,7 +609,8 @@
    },
    "label": "loo (c)",
    "normalization": "ink_global_v0",
-   "order": 3
+   "order": 3,
+   "raster": "alt"
   },
   {
    "code_commit": "021f8ab",
@@ -676,7 +679,8 @@
    },
    "label": "loo (d)",
    "normalization": "ink_per_cell_v1",
-   "order": 4
+   "order": 4,
+   "raster": "alt"
   },
   {
    "code_commit": "8908fe4",
@@ -745,7 +749,8 @@
    },
    "label": "loo (e)",
    "normalization": "ink_per_cell_v1",
-   "order": 5
+   "order": 5,
+   "raster": "alt"
   },
   {
    "code_commit": "48c31b3",
@@ -842,9 +847,10 @@
      "training_eligible": true
     }
    },
-   "label": "loo 9 Gruppen",
+   "label": "9 Gruppen",
    "normalization": "ink_per_cell_v1",
-   "order": 6
+   "order": 6,
+   "raster": "alt"
   },
   {
    "code_commit": "dc8af22",
@@ -941,9 +947,10 @@
      "training_eligible": true
     }
    },
-   "label": "loo 942 Proben alt",
+   "label": "942 alt",
    "normalization": "ink_per_cell_v1",
-   "order": 7
+   "order": 7,
+   "raster": "alt"
   },
   {
    "code_commit": "50d68d6",
@@ -1040,9 +1047,10 @@
      "training_eligible": true
     }
    },
-   "label": "loo 942 Proben neu",
+   "label": "942 neu",
    "normalization": "bg_closing_v1",
-   "order": 8
+   "order": 8,
+   "raster": "alt"
   },
   {
    "code_commit": "e9cba83",
@@ -1159,9 +1167,10 @@
      "training_eligible": true
     }
    },
-   "label": "dotmatrix-loo-2026-09-30-basis-bg_closing_v1",
-   "normalization": null,
-   "order": 9
+   "label": "1223 Basis",
+   "normalization": "bg_closing_v1",
+   "order": 9,
+   "raster": "alt"
   },
   {
    "code_commit": "fc44b47",
@@ -1278,108 +1287,10 @@
      "training_eligible": true
     }
    },
-   "label": "dotmatrix-loo-2026-09-30-bg_closing_shadow_v1",
-   "normalization": null,
-   "order": 10
-  },
-  {
-   "code_commit": "4f9371f",
-   "file": "dotmatrix-loo-2026-09-30-regrid1-ohne-ernte1-auf3.json",
-   "groups": {
-    "ab1": {
-     "abgelehnt": 0,
-     "d_max": 1.9108516871929173,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 34,
-     "richtig": 99,
-     "training_eligible": true
-    },
-    "ab2": {
-     "abgelehnt": 1,
-     "d_max": 1.9782487541437141,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 28,
-     "richtig": 82,
-     "training_eligible": true
-    },
-    "ab3": {
-     "abgelehnt": 9,
-     "d_max": 1.8766786649823204,
-     "falsch": 0,
-     "plateaus_abgelehnt": 1,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 53,
-     "richtig": 153,
-     "training_eligible": true
-    },
-    "ab4": {
-     "abgelehnt": 0,
-     "d_max": 1.8615202233195303,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 40,
-     "richtig": 119,
-     "training_eligible": true
-    },
-    "auf2": {
-     "abgelehnt": 23,
-     "d_max": 1.8179636038839813,
-     "falsch": 0,
-     "plateaus_abgelehnt": 6,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 20,
-     "richtig": 53,
-     "training_eligible": true
-    },
-    "sc3": {
-     "abgelehnt": 0,
-     "d_max": 1.9112521111965144,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 17,
-     "richtig": 47,
-     "training_eligible": true
-    },
-    "sc4": {
-     "abgelehnt": 0,
-     "d_max": 1.9298604130744932,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 27,
-     "richtig": 79,
-     "training_eligible": true
-    },
-    "sc5": {
-     "abgelehnt": 0,
-     "d_max": 1.9079898968338993,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 38,
-     "richtig": 114,
-     "training_eligible": true
-    },
-    "sc6": {
-     "abgelehnt": 0,
-     "d_max": 1.8796659782528877,
-     "falsch": 0,
-     "plateaus_abgelehnt": 0,
-     "plateaus_falsch": 0,
-     "plateaus_richtig": 75,
-     "richtig": 219,
-     "training_eligible": true
-    }
-   },
-   "label": "dotmatrix-loo-2026-09-30-regrid1-ohne-ernte1-auf3",
-   "normalization": null,
-   "order": 11
+   "label": "Schatten ✗",
+   "normalization": "bg_closing_shadow_v1",
+   "order": 10,
+   "raster": "alt"
   },
   {
    "code_commit": "0db2b11",
@@ -1496,9 +1407,110 @@
      "training_eligible": true
     }
    },
-   "label": "dotmatrix-loo-2026-09-30-regrid1",
-   "normalization": null,
-   "order": 12
+   "label": "Raster 1",
+   "normalization": "bg_closing_v1",
+   "order": 11,
+   "raster": "korrigiert (ab3/ab4/auf2)"
+  },
+  {
+   "code_commit": "4f9371f",
+   "file": "dotmatrix-loo-2026-09-30-regrid1-ohne-ernte1-auf3.json",
+   "groups": {
+    "ab1": {
+     "abgelehnt": 0,
+     "d_max": 1.9108516871929173,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 34,
+     "richtig": 99,
+     "training_eligible": true
+    },
+    "ab2": {
+     "abgelehnt": 1,
+     "d_max": 1.9782487541437141,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 28,
+     "richtig": 82,
+     "training_eligible": true
+    },
+    "ab3": {
+     "abgelehnt": 9,
+     "d_max": 1.8766786649823204,
+     "falsch": 0,
+     "plateaus_abgelehnt": 1,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 53,
+     "richtig": 153,
+     "training_eligible": true
+    },
+    "ab4": {
+     "abgelehnt": 0,
+     "d_max": 1.8615202233195303,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 40,
+     "richtig": 119,
+     "training_eligible": true
+    },
+    "auf2": {
+     "abgelehnt": 23,
+     "d_max": 1.8179636038839813,
+     "falsch": 0,
+     "plateaus_abgelehnt": 6,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 20,
+     "richtig": 53,
+     "training_eligible": true
+    },
+    "sc3": {
+     "abgelehnt": 0,
+     "d_max": 1.9112521111965144,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 17,
+     "richtig": 47,
+     "training_eligible": true
+    },
+    "sc4": {
+     "abgelehnt": 0,
+     "d_max": 1.9298604130744932,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 27,
+     "richtig": 79,
+     "training_eligible": true
+    },
+    "sc5": {
+     "abgelehnt": 0,
+     "d_max": 1.9079898968338993,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 38,
+     "richtig": 114,
+     "training_eligible": true
+    },
+    "sc6": {
+     "abgelehnt": 0,
+     "d_max": 1.8796659782528877,
+     "falsch": 0,
+     "plateaus_abgelehnt": 0,
+     "plateaus_falsch": 0,
+     "plateaus_richtig": 75,
+     "richtig": 219,
+     "training_eligible": true
+    }
+   },
+   "label": "ohne ernte1",
+   "normalization": "bg_closing_v1",
+   "order": 12,
+   "raster": "korrigiert (ab3/ab4/auf2), ohne ernte1/auf3"
   },
   {
    "code_commit": "f3f6d2f",
@@ -1615,9 +1627,10 @@
      "training_eligible": true
     }
    },
-   "label": "dotmatrix-loo-2026-09-30-regrid2",
-   "normalization": null,
-   "order": 13
+   "label": "Raster 2",
+   "normalization": "bg_closing_v1",
+   "order": 13,
+   "raster": "korrigiert (+ ernte1)"
   }
  ],
  "schema": "fortschritt_v1"

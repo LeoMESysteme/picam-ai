@@ -185,3 +185,5 @@
 .fs-tooltip[hidden] { display: none; }
 .fs-tooltip strong,
 .fs-tooltip span { display: block; overflow-wrap: anywhere; }
+
+.fs-svg .fs-axis--strong { font-weight: 600; fill: var(--fs-correct, currentColor); }

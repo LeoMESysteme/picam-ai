@@ -3,6 +3,41 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Fortschrittsseite: neue loo-Läufe, Punktraster, Abnahme 3)
+
+**Problem:** Die Fortschrittsseite zeigte die `loo`-Läufe vom 2026-09-30
+mit dem Dateinamen als Beschriftung und ohne Normierung („k. A.“). Die
+feste Tabelle im Generator kannte sie nicht, und die Berichte tragen die
+Normierung nicht selbst. Außerdem fehlten weitere Mängel:
+* Abnahme 2 und 3 hießen beide „Abnahme (bg_closing_v1)“.
+* Ein veralteter Platzhalter „Abnahme 2 ausstehend“ stand noch da.
+* `ab5`/`ab6` hatten keine Rolle.
+* Ernten ohne Aufnahmedaten standen am Ende statt vorn.
+* Welche Läufe mit korrigierten Punktrastern liefen, war nicht zu sehen.
+
+**Änderung:**
+* **`dotmatrix-eval.py loo`** schreibt `normalization` in den Bericht.
+* **`docs-progress-data.py`:**
+  * Die `loo`-Tabelle bekommt kurze Beschriftungen und die Spalte `raster`
+    (alt/korrigiert). Die Läufe vom 2026-09-30 sind eingetragen, der
+    Schattenlauf ist als verworfen markiert („Schatten ✗“).
+  * Die Normierung kommt bevorzugt aus dem Bericht. Unbekannte Dateien
+    bekommen den Namen ohne `dotmatrix-loo-`.
+  * Abnahmen sind nummeriert (1–3, unbekannte fortlaufend).
+  * `ab5`/`ab6` haben die Rolle `abnahme`.
+* **`fortschritt.js`:**
+  * Dritte Kopfzeile „Raster alt/korr.“ und Tooltip „Punktraster“.
+  * Die Spalten sind breiter (104–150 px), dafür gibt es horizontale
+    Scrollbarkeit.
+  * Ernten ohne Datum stehen vorn.
+  * Keine fest eingetragenen ausstehenden Abnahmen mehr.
+* Tests: 2 neue Tests für den Generator, Playwright-Spec und Fixture
+  angepasst.
+
+**Konsequenz:** Künftige `loo`-Läufe erscheinen ohne Handeintrag mit ihrer
+Normierung. Die Spalte `raster` muss für neue Läufe bei Bedarf von Hand in
+`LOO_RUNS` stehen.
+
 ## 0.1.0.dev0 — 2026-09-30 (`profile-regrid.py still`: Rasterversatz vor der Ernte prüfen)
 
 **Problem:** `profile-regrid.py` misst den Versatz nur an importierten

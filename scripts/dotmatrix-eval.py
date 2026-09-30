@@ -250,6 +250,7 @@ def _cmd_loo(args: argparse.Namespace) -> int:
             "die gespeicherten 9-Zellen-Vektoren, keine Zellen 13-15 (Final-Fix 3)."
         ),
         "vorzeichen": "ungeprueft (nur +)",
+        "normalization": NORMALIZATION,
         "threshold_formula": THRESHOLD_FORMULA,
         "git_commit": _git_commit(),
     }

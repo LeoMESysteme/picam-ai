@@ -236,8 +236,9 @@ test('Fortschrittsseite rendert alle vier Diagramme aus den Daten', async ({ pag
   await expect(page.locator('[data-fs-chart="harvests"]')).toContainText('RAM-Zwischenablage seit 2026-09-29');
   const abnahmen = page.locator('[data-fs-chart="abnahmen"]');
   await expect(abnahmen.locator('.fs-abnahme--fail')).toHaveCount(1);
-  await expect(abnahmen.locator('.fs-abnahme--pending')).toContainText('Abnahme 2 (bg_closing_v1)');
-  await expect(abnahmen.locator('.fs-limit')).toHaveCount(2);
+  await expect(abnahmen.locator('.fs-abnahme--pending')).toHaveCount(0);
+  await expect(abnahmen.locator('.fs-limit')).toHaveCount(1);
+  await expect(page.locator('[data-fs-chart="loo"] .fs-colhead')).toContainText(['Raster korr.']);
 });
 
 test('Fortschrittsdiagramm zeigt beim Überfahren einen Tooltip', async ({ page }) => {

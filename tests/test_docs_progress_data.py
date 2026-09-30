@@ -136,9 +136,9 @@ def test_schema_and_values(var: Path):
     assert data["dataset"]["total_samples"] == 219 + 152
 
     (loo,) = data["loo_runs"]
-    assert set(loo) == {"file", "label", "normalization", "code_commit", "order", "groups"}
-    assert (loo["label"], loo["normalization"], loo["code_commit"], loo["order"]) == (
-        "loo (e)", "ink_per_cell_v1", "0123456", 5)
+    assert set(loo) == {"file", "label", "normalization", "raster", "code_commit", "order", "groups"}
+    assert (loo["label"], loo["normalization"], loo["raster"], loo["code_commit"], loo["order"]) == (
+        "loo (e)", "ink_per_cell_v1", "alt", "0123456", 5)
     assert loo["groups"]["sc6"] == {
         "richtig": 80, "abgelehnt": 8, "falsch": 0, "plateaus_richtig": 2,
         "plateaus_abgelehnt": 1, "plateaus_falsch": 0, "d_max": 2.5, "training_eligible": True}
@@ -210,3 +210,22 @@ def test_output_is_deterministic(var: Path, tmp_path: Path):
 def test_refuses_output_under_var(var: Path):
     with pytest.raises(SystemExit):
         progress.main(["--var-root", str(var), "--out", str(var / "x.json")])
+
+
+def test_loo_normalization_from_report_and_short_label_for_unknown_file(tmp_path):
+    """Neue loo-Berichte tragen `normalization` selbst (seit 2026-09-30);
+    unbekannte Dateien bekommen den Namen ohne `dotmatrix-loo-`."""
+    diag = tmp_path / "diagnostics"
+    diag.mkdir()
+    (diag / "dotmatrix-loo-2026-10-01-neu.json").write_text(json.dumps(
+        {"durchgaenge": [], "normalization": "bg_closing_v1", "git_commit": "f" * 40}))
+    (run,) = progress.collect_loo(diag)
+    assert (run["label"], run["normalization"], run["raster"]) == ("2026-10-01-neu", "bg_closing_v1", None)
+
+
+def test_unknown_acceptance_file_gets_next_number(tmp_path):
+    dm = tmp_path / "dotmatrix"
+    dm.mkdir()
+    (dm / "abnahme-stufe3-2026-10-02.json").write_text(json.dumps({"normalization": "x", "gruppen": {}}))
+    (entry,) = progress.collect_abnahmen(dm)
+    assert entry["label"] == f"Abnahme {len(progress.ABNAHME_LABELS) + 1} (x)"

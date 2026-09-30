@@ -27,8 +27,8 @@ SCHEMA = "fortschritt_v1"
 # Rolle je Aufstellung (setup = Verzeichnisname ohne "-run").
 # * training:  Trainingsaufstellungen. sc6b ist die zweite Ernte der
 #              Aufstellung sc6 und gehört zur Gruppe sc6.
-# * abnahme:   ab1, ab2 = Abnahme 1 (danach ins Training übernommen),
-#              ab3, ab4 = Abnahme 2.
+# * abnahme:   ab1, ab2 = Abnahme 1, ab3, ab4 = Abnahme 2 (beide danach ins
+#              Training übernommen), ab5, ab6 = Abnahme 3.
 # * verworfen: sc1, sc2 — Kamera während der Ernte bewegt, Proben entfernt.
 ROLES: dict[str, str] = {
     "ernte1": "training",
@@ -44,6 +44,8 @@ ROLES: dict[str, str] = {
     "ab2": "abnahme",
     "ab3": "abnahme",
     "ab4": "abnahme",
+    "ab5": "abnahme",
+    "ab6": "abnahme",
     "sc1": "verworfen",
     "sc2": "verworfen",
 }
@@ -53,29 +55,42 @@ ROLES: dict[str, str] = {
 # Abschnitt 3: "ernte1 (152, enthaelt Ernte 2, gleiche Aufstellung)").
 GROUP_FALLBACK: dict[str, str] = {"sc6b": "sc6", "ernte2": "ernte1"}
 
-# Leave-one-out-Berichte: Die Normierung steht nicht im Bericht, daher fest.
+# Leave-one-out-Berichte: Aeltere Berichte tragen die Normierung nicht,
+# daher fest. Seit 2026-09-30 schreibt `dotmatrix-eval.py loo` sie selbst in
+# den Bericht (`normalization`); fuer neue Dateien gilt dann dieser Wert.
 # Reihenfolge = zeitliche Reihenfolge (Code-Commits 0d18d0a, 20d7403 (b, c),
-# 021f8ab, 8908fe4, 48c31b3, dc8af22, 50d68d6). Abgeglichen mit
-# docs/VALIDATION.md: loo (d) lief mit 021f8ab, dem ersten Commit von
-# ink_per_cell_v1 ("der Lauf mit 021f8ab, …-29d.json, unterschied sich nur
-# bei auf3"), ist also ink_per_cell_v1 und nicht ink_global_v0.
-# "ink_global_v0" ist ein Doku-Name: vor 021f8ab trug die Normierung im Code
-# keinen Namen (ein globaler Tintenpegel).
-LOO_RUNS: list[tuple[str, str, str]] = [
-    ("dotmatrix-loo-2026-09-29.json", "loo (a)", "ink_global_v0"),
-    ("dotmatrix-loo-2026-09-29b.json", "loo (b)", "ink_global_v0"),
-    ("dotmatrix-loo-2026-09-29c.json", "loo (c)", "ink_global_v0"),
-    ("dotmatrix-loo-2026-09-29d.json", "loo (d)", "ink_per_cell_v1"),
-    ("dotmatrix-loo-2026-09-29e.json", "loo (e)", "ink_per_cell_v1"),
-    ("dotmatrix-loo-2026-09-29-mit-sc6.json", "loo 9 Gruppen", "ink_per_cell_v1"),
-    ("dotmatrix-loo-2026-09-29-basis-ink_per_cell_v1.json", "loo 942 Proben alt", "ink_per_cell_v1"),
-    ("dotmatrix-loo-2026-09-29-bg_closing_v1.json", "loo 942 Proben neu", "bg_closing_v1"),
+# 021f8ab, 8908fe4, 48c31b3, dc8af22, 50d68d6, dann die Laeufe vom 2026-09-30).
+# Abgeglichen mit docs/VALIDATION.md: loo (d) lief mit 021f8ab, dem ersten
+# Commit von ink_per_cell_v1 ("der Lauf mit 021f8ab, …-29d.json,
+# unterschied sich nur bei auf3"), ist also ink_per_cell_v1 und nicht
+# ink_global_v0. "ink_global_v0" ist ein Doku-Name: vor 021f8ab trug die
+# Normierung im Code keinen Namen (ein globaler Tintenpegel).
+# Spalte 4 `raster`: welche Punktraster galten (VALIDATION.md 2026-09-30,
+# Befund Rasterversatz). "alt" = handangepasste Profile, bei ab3/ab4/ernte1/
+# auf2/auf3 0,4-0,9 Punktspalten daneben; "korrigiert" = *-profile-regrid1.
+LOO_RUNS: list[tuple[str, str, str, str]] = [
+    ("dotmatrix-loo-2026-09-29.json", "loo (a)", "ink_global_v0", "alt"),
+    ("dotmatrix-loo-2026-09-29b.json", "loo (b)", "ink_global_v0", "alt"),
+    ("dotmatrix-loo-2026-09-29c.json", "loo (c)", "ink_global_v0", "alt"),
+    ("dotmatrix-loo-2026-09-29d.json", "loo (d)", "ink_per_cell_v1", "alt"),
+    ("dotmatrix-loo-2026-09-29e.json", "loo (e)", "ink_per_cell_v1", "alt"),
+    ("dotmatrix-loo-2026-09-29-mit-sc6.json", "9 Gruppen", "ink_per_cell_v1", "alt"),
+    ("dotmatrix-loo-2026-09-29-basis-ink_per_cell_v1.json", "942 alt", "ink_per_cell_v1", "alt"),
+    ("dotmatrix-loo-2026-09-29-bg_closing_v1.json", "942 neu", "bg_closing_v1", "alt"),
+    ("dotmatrix-loo-2026-09-30-basis-bg_closing_v1.json", "1223 Basis", "bg_closing_v1", "alt"),
+    ("dotmatrix-loo-2026-09-30-bg_closing_shadow_v1.json", "Schatten ✗", "bg_closing_shadow_v1", "alt"),
+    ("dotmatrix-loo-2026-09-30-regrid1.json", "Raster 1", "bg_closing_v1", "korrigiert (ab3/ab4/auf2)"),
+    ("dotmatrix-loo-2026-09-30-regrid1-ohne-ernte1-auf3.json", "ohne ernte1", "bg_closing_v1",
+     "korrigiert (ab3/ab4/auf2), ohne ernte1/auf3"),
+    ("dotmatrix-loo-2026-09-30-regrid2.json", "Raster 2", "bg_closing_v1", "korrigiert (+ ernte1)"),
 ]
 
-# Abnahmeberichte unter var/dotmatrix/: Nummer der Abnahme je Datei.
+# Abnahmeberichte unter var/dotmatrix/: Nummer der Abnahme je Datei. Unbekannte
+# Dateien bekommen die naechste Nummer in Dateinamen-Reihenfolge.
 ABNAHME_LABELS: dict[str, str] = {
     "abnahme-stufe2-2026-09-29.json": "Abnahme 1",
-    "abnahme-stufe2b-2026-09-29.json": "Abnahme 2",
+    "abnahme-stufe2b-2026-09-30.json": "Abnahme 2",
+    "abnahme-stufe2c-2026-09-30.json": "Abnahme 3",
 }
 
 
@@ -289,13 +304,15 @@ def loo_groups(report: dict) -> dict:
 
 
 def collect_loo(diag: Path) -> list[dict]:
-    known = {name for name, _, _ in LOO_RUNS}
+    known = {row[0] for row in LOO_RUNS}
     extra = sorted(
         p.name for p in diag.glob("dotmatrix-loo-*.json") if p.name not in known
     ) if diag.is_dir() else []
-    table = list(LOO_RUNS) + [(name, Path(name).stem, None) for name in extra]
+    table = list(LOO_RUNS) + [
+        (name, Path(name).stem.removeprefix("dotmatrix-loo-"), None, None) for name in extra
+    ]
     out = []
-    for order, (name, label, normalization) in enumerate(table, start=1):
+    for order, (name, label, normalization, raster) in enumerate(table, start=1):
         report = load_json(diag / name)
         if not isinstance(report, dict):
             continue
@@ -303,7 +320,8 @@ def collect_loo(diag: Path) -> list[dict]:
         out.append({
             "file": name,
             "label": label,
-            "normalization": normalization,
+            "normalization": _str(report.get("normalization")) or normalization,
+            "raster": raster,
             "code_commit": commit[:7] if commit else None,
             "order": order,
             "groups": loo_groups(report),
@@ -315,12 +333,16 @@ def collect_abnahmen(dotmatrix: Path) -> list[dict]:
     if not dotmatrix.is_dir():
         return []
     out = []
+    next_number = len(ABNAHME_LABELS) + 1
     for path in sorted(dotmatrix.glob("abnahme-*.json")):
         report = load_json(path)
         if not isinstance(report, dict):
             continue
         normalization = _str(report.get("normalization"))
-        base = ABNAHME_LABELS.get(path.name, "Abnahme")
+        base = ABNAHME_LABELS.get(path.name)
+        if base is None:
+            base = f"Abnahme {next_number}"
+            next_number += 1
         label = f"{base} ({normalization})" if normalization else base
         groups = {}
         for name, entry in sorted(_dict(report.get("gruppen")).items()):
