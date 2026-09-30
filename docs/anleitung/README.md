@@ -54,6 +54,11 @@ die ersten fünf brauchen **keine Hardware**.
 | 8 | [Weitere OCR-Backends](08-ocr-backends.md) | zweites Backend gegen das Segmentverfahren messen | – (Daten: ja) | 2–3 Tage | P3 |
 | 9 | [Betrieb: Installation, Dienst, Dauerlauf](09-betrieb.md) | Dienst starten, 72 h laufen lassen, Doku-Test | Kamera + UART | 2–3 Tage | P6 |
 
+Zwei fertige Workbench-Prototypen ergänzen den Lernpfad: [Kapitel 10](10-kamera-livevorschau.md)
+zeigt die Livevorschau samt Setup-Oberfläche; [Kapitel 11](11-datensatz-sammeln.md)
+führt durch das Sammeln und Prüfen realer Bilder. Sie sind keine Vorbedingungen
+für die Baukapitel 3–5.
+
 **Nachschlagen statt lesen:**
 [Rezepte](rezepte.md) — Codeschnipsel zum Kopieren ·
 [Glossar](glossar.md) — jeder Fachbegriff des Projekts in zwei Sätzen.
@@ -90,7 +95,9 @@ Dazu die Zeitregel: **jeder Zeitstempel trägt seine Zeitbasis.** Aus
 Kein Cloud-Dienst, kein Sprachmodell, kein Trainingscluster. Der laufende
 Messpfad ist eine klassische CV-/OCR-Kette mit Regelprüfung — bewusst so,
 siehe [../../CLAUDE.md](../../CLAUDE.md), Abschnitt „Was dieses Projekt ist".
-Alles in den Kapiteln 0–5 läuft auf dem Pi ohne angeschlossene Kamera.
+Kapitel 0–5 benötigt für die Übungen keine angeschlossene Kamera. Kapitel 3–5
+beschreiben teilweise noch offene Bauaufgaben; die aktuelle Aufteilung steht
+in den jeweiligen Kapiteln.
 
 ## Fortschritt festhalten
 
