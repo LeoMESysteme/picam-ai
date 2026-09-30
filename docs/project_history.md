@@ -67,6 +67,45 @@ falschem Punktabstand. Unauffällig blieben trotzdem:
 * `latfit.py` lag auch bei `ab5`/`ab6` wieder 0,22 bzw. 0,36 daneben. Die
   Prüfung ist also nötig, nicht nur vorsichtig.
 
+# 2026-09-30 — Bekannter DUT-Zellentext als unabhängige Rasterprüfung
+
+## Problem
+
+Das Restmaß der geometrischen Punktanpassung erkannte um bis zu 0,9
+Punktspalten verschobene Raster nicht. Eine Nachführung nur anhand dieser
+Punktkandidaten würde denselben Fehler wiederholen.
+
+## Entscheidung
+
+Prüfung 2j nutzt den bekannten Anzeigetext aus dem eingehenden GSV-2AS-
+Telegramm oder einer ausdrücklichen Offline-Angabe. Sie misst den
+ROM-Korrelationsversatz je Halbzelle waagerecht und je ganzer Zelle
+senkrecht. Die automatische Quad-Nachführung wird erst übernommen, wenn
+das zurückgehaltene zweite Standbild einen kleineren maximalen Versatz
+zeigt und die geometrischen Prüfwerte für das neue Quad neu berechnet
+werden. Randpixelmitten 399/159 gelten in Anpassung, Entzerrung und
+Versatzmessung einheitlich.
+
+## Begründung und Alternativen
+
+Das Punktraster aus Helligkeitsminima allein wurde verworfen, weil scharfe
+Punktränder falsche Minima erzeugen. Den Text aus dem Dot-Matrix-Leser
+abzuleiten wäre zirkulär; der Eingangsstream liefert ihn unabhängig.
+Ein Quad allein auszutauschen und die alten RMS-/Zuordnungswerte zu
+behalten wurde verworfen, weil dann die Prüfung veraltete Zahlen zum
+neuen Quad anzeigen würde. Für Offline-Arbeit ist der exakt neunstellige
+Zellentext ein expliziter Parameter oder eine Datei; unerkannte Zeichen
+werden abgelehnt. Die Schwellen 0,15/0,25 sind Vorabwerte.
+
+## Konsequenz
+
+Ein Rasterversatz-FEHLER oder verbleibender Gesamt-FEHLER erzeugt keinen
+automatischen Vorschlag. Jedes Standbild braucht genügend belastbare
+Zeichenpunkte; ein unlesbares zweites Bild wird nicht vom ersten verdeckt. Eine
+frühere Raster-FEHLER-Vorprüfung darf die zweite Aufnahme noch zulassen,
+damit die Nachführung diesen Fehler beheben kann. Andere harte
+Vorprüfungen beenden den Lauf weiterhin vor der Wartezeit.
+
 ---
 
 # 2026-09-30 — Startseite als vollständiger Doku-Wegweiser

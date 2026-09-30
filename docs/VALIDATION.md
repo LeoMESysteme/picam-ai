@@ -2759,3 +2759,25 @@ Diese Gegenprobe zeigt eine Ablehnung der beiden gespeicherten Fälle.
 Die später mit `profile-regrid.py` bestätigten neuen Profile (Abschnitt
 oben) sind eine getrennte Korrektur; eine automatische Versatzprüfung
 und Nachführung im Assistenten gehört zu Nacharbeit 2.
+
+## 2026-09-30 — Nacharbeit 2: Rasterversatz vor dem Vorschlag
+
+**Aufbau:** Lesende Gegenprobe auf
+`var/diagnostics/ab4-still/frames/frame_000016.png` mit dem unabhängig
+im seriellen Protokoll aufgezeichneten Zellentext `+0.46780 ` (erste neun
+Anzeigepositionen). Beide Quads stammen aus gespeicherten Profilen;
+Kamera und serieller Port wurden nicht geöffnet, unter `var/` wurde
+nichts geschrieben. `raster_offset_check` nutzte horizontale Halbzellen
+und vertikale Ganzzellen bei 400×160 Zielpixeln.
+
+| Quad | max. horizontaler Medianversatz [Punktspalten] | max. vertikaler Medianversatz [Punktzeilen] | 2j |
+| --- | ---: | ---: | --- |
+| `ab4-profile` | 0,935 | 0,105 | FEHLER |
+| `ab4-profile-regrid1.json` | 0,047 | 0,046 | OK |
+
+Die Vorabschwellen sind WARNUNG >0,15 und FEHLER >0,25. Die Probe zeigt
+die Trennung der bekannten falschen und korrigierten Quadlage an einem
+gespeicherten Bild. Sie belegt keinen neuen Kameralauf und keine
+Stabilitätsmessung. Synthetische Regressionen prüfen Scherung, zu kleinen
+Punktabstand und das richtige Raster; der CLI-Test nutzt injizierte
+Kameraobjekte und verlangt bei 2j-FEHLER das Fehlen eines Vorschlags.

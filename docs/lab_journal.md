@@ -1645,3 +1645,28 @@ verwendet. Die Nacharbeit lehnt diese beiden gespeicherten Fälle ab.
 Die danach mit `profile-regrid.py` bestätigten Profile korrigieren den
 Versatz getrennt; eine automatische Prüfung und Nachführung im
 Assistenten gehört zu Nacharbeit 2.
+
+## 2026-09-30 — Einrichtungsassistent: Rasterversatz 2j offline geprüft
+
+**Aufbau:** Das gespeicherte `ab4`-Standbild `frame_000016.png` wurde mit
+dem gleichzeitigen Text `+0.46780 mV/V` aus `serial.jsonl` ausgewertet.
+Die beiden Profilquads (`ab4-profile`, `ab4-profile-regrid1.json`)
+wurden nur gelesen. Der Check korrelierte die bekannten ROM-Zeichen
+waagerecht in Halbzellen und senkrecht in ganzen Zellen; maßgeblich war
+jeweils der größte Betrag des Medianversatzes. Keine Kamera, kein
+serieller Port und keine Änderung unter `var/`.
+
+**Beobachtung:** Das alte Quad meldete horizontal 0,935 Punktspalten und
+vertikal 0,105 Punktzeilen, also FEHLER. Das korrigierte Quad meldete
+0,047 bzw. 0,046 und OK. Die synthetischen Tests enthalten ein
+geschertes, ein zu enges und ein korrektes Punktraster. Ein injizierter
+Kameralauf verifiziert, dass der Assistent bei 2j-FEHLER kein
+`proposal.json` schreibt.
+
+**Deutung:** Die 2j-Messung unterscheidet im belegten Fall die alte von
+der korrigierten Geometrie, obwohl die alte Raster-RMS allein den Fehler
+nicht sicher gezeigt hatte. Die Schwellen sind vorläufig und ein echter
+zweiter Kameraframe im Mindestabstand von 30 Sekunden wurde nicht
+gemessen. Die automatische Nachführung wird im Code an einem
+zurückgehaltenen zweiten Standbild gegengeprüft; die Hardwarewirkung
+bleibt für den nächsten gemeinsamen Kameratermin offen.

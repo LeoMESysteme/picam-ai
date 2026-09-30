@@ -107,7 +107,8 @@ def test_setup_checks_roundtrip(tmp_path):
 
 _DIAGNOSTICS = Path(__file__).parents[1] / "var/diagnostics"
 _EXISTING_PROFILES = sorted(
-    path for path in [*_DIAGNOSTICS.glob("*-profile"), *_DIAGNOSTICS.glob("*-profile/profile.json")]
+    path for path in [*_DIAGNOSTICS.glob("*-profile"), *_DIAGNOSTICS.glob("*-profile/profile.json"),
+                      *_DIAGNOSTICS.glob("*-profile-regrid1.json")]
     if path.is_file()
 )
 

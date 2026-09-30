@@ -38,6 +38,32 @@ Normierung nicht selbst. Außerdem fehlten weitere Mängel:
 Normierung. Die Spalte `raster` muss für neue Läufe bei Bedarf von Hand in
 `LOO_RUNS` stehen.
 
+## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 2 Rasterversatz)
+
+**Problem:** Eine geringe Raster-RMS und unauffällige Leerzellen konnten ein
+um mehrere Zehntel Punktspalten versetztes Punktraster nicht ausschließen.
+Außerdem verwendete die automatische Anpassung andere Zielecken als die
+Entzerrung; der Assistent hatte keinen bekannten Zellentext für eine
+unabhängige Prüfung.
+
+**Änderung:** Prüfung 2j korreliert bekannte ROM-Zeichen mit den Punkten
+in Quellbildpixeln, waagerecht je Halbzelle und senkrecht je ganzer Zelle.
+Über 0,15 Punktabständen gilt vorläufig WARNUNG, über 0,25 FEHLER; jedes
+Standbild muss einzeln genügend belastbare Zellen liefern. Der
+Assistent liest den Eingangstext seriell oder aus `--cell-text` bzw.
+`--cell-text-file`, passt das Quad anhand des ersten Standbilds nach und
+übernimmt es nur bei besserem Versatz am zurückgehaltenen zweiten Bild.
+Ein Rasterversatz- oder verbleibender Gesamt-FEHLER verhindert
+`proposal.json`; `propose --auto-quad`
+verlangt ebenfalls Zellentext. Die Rastergeometrie verwendet durchgängig
+die Randpixelmitten 399/159; eine irreführende Minus-Meldung bei `ab3`
+wurde korrigiert. `propose` nennt nun auch `overlay_sampling.png`.
+
+**Konsequenz:** Eine Aufstellung mit unbelegtem oder zu großem Versatz
+gelangt nicht mehr als automatischer Vorschlag zur Bestätigung. Der
+bekannte Zellentext dient nur zur Lokalisierung der Punkte und wird nicht
+als Messwertkorrektur verwendet. Die Schwellen sind Vorabwerte.
+
 ## 0.1.0.dev0 — 2026-09-30 (`profile-regrid.py still`: Rasterversatz vor der Ernte prüfen)
 
 **Problem:** `profile-regrid.py` misst den Versatz nur an importierten

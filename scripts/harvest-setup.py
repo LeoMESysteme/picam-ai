@@ -40,12 +40,19 @@ zwingend braucht (`--camera-settings`) und die im bestaetigten Profil landet
 (Version 3: Bildpixel = native Pixel, StreamCam ohne ScalerCrop/Binning,
 Zoom fest 100).
 
+`assist` liest den neunstelligen Zellentext aus dem GSV-2AS-Eingang
+(`/dev/ttyUSB0`, 38400 Baud), oder mit `--cell-text` bzw.
+`--cell-text-file` aus einer Offline-Vorgabe. Die Rasterversatzpruefung
+braucht diesen Text; ein FEHLER verhindert den Vorschlag.
+
 `propose` schlaegt Quad und Zeichenzellenraster vor (Quad ueber
 `glass_quad_in_region`, sofern nicht `--quad` gesetzt ist - ein Fehlschlag ist
 ein Fehler, kein Rateversuch) und misst die Punktspaltenbreite im Quellbild
 (`source_dot_column_px`, Aufloesungs-Gate, Entscheidung 3 des Plans). Es
-schreibt einen maschinenlesbaren Vorschlag (`proposal.json`) und zwei
-Bediener-Overlays (`overlay_source.png`, `overlay_rectified.png`).
+schreibt einen maschinenlesbaren Vorschlag (`proposal.json`) und
+Bediener-Overlays (`overlay_source.png`, `overlay_rectified.png`, bei
+`--auto-quad` auch `overlay_sampling.png`). `--auto-quad` verlangt ebenfalls
+einen Offline-Zellentext fuer die Rasterversatzpruefung.
 
 ## Quaderkennung: `glass_quad_in_region` statt `lcd_quad_in_region`
 
@@ -72,9 +79,9 @@ solche Profile ab.
 
 Reiner Einrichtungscode, Stil an `gate-label.py` angelehnt. `propose` und
 `confirm` oeffnen weder Kamera noch seriellen Port - sie lesen nur ein
-bereits aufgenommenes Bild bzw. den `focus`-Vorschlag. `focus` oeffnet die
-Kamera direkt (`_open_camera_io`, per Monkeypatch ersetzbar) - das ist der
-einzige Unterbefehl hier, der das tut.
+bereits aufgenommenes Bild bzw. den `focus`-Vorschlag. `focus` und `assist`
+oeffnen die Kamera direkt (`_open_camera_io`, per Monkeypatch ersetzbar);
+`assist` liest ohne Offline-Vorgabe auch den seriellen Eingang.
 """
 
 from __future__ import annotations
@@ -100,7 +107,7 @@ from dispread.camera_settings import (
     load_camera_settings,
 )
 from dispread.charcells import CharGrid, source_dot_column_px
-from dispread.dotlattice import fit_lattice
+from dispread.dotlattice import evaluate_quad, fit_lattice
 from dispread.focus_sweep import sharpness, sweep_focus
 from dispread.frames.uvc_source import (
     UvcError,
@@ -110,10 +117,12 @@ from dispread.frames.uvc_source import (
     v4l2_set_controls,
 )
 from dispread.glassquad import glass_quad_in_region
+from dispread.gsv2as_cell_text import cell_text_from_telegram, validate_offline_cell_text
+from dispread.lattice_offsets import refine_quad
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
-from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_reader
+from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_reader, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.vision import lcd_quad_in_region
@@ -202,6 +211,8 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--out", type=Path, required=True, help="Zielverzeichnis fuer proposal.json und Overlays")
     propose.add_argument("--quad", default=None, help="x1,y1,x2,y2,x3,y3,x4,y4 in Quellbildpixeln, ersetzt die Suche")
     propose.add_argument("--auto-quad", action="store_true", help="Quad ueber das Punktraster automatisch bestimmen")
+    propose.add_argument("--cell-text", help="bekannter Text der ersten neun Anzeigezellen fuer die Rasterversatzpruefung")
+    propose.add_argument("--cell-text-file", type=Path, help="UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
     propose.add_argument("--grid", default=None, help="left,pitch,top,bottom im entzerrten Bild, ersetzt den Default")
     propose.add_argument("--target-size", default="400x160", help="Groesse des entzerrten Bildes, Vorgabe 400x160")
     propose.add_argument(
@@ -266,11 +277,62 @@ def build_parser() -> argparse.ArgumentParser:
     assist.add_argument("--device", default=None, help="Kamerageraet fuer focus und Standbilder")
     assist.add_argument("--templates", type=Path, help="eingefrorene Vorlagendatei fuer optionales Gegenlesen")
     assist.add_argument("--templates-sha256", help="erwartete SHA-256-Pruefsumme der Vorlagendatei")
+    assist.add_argument("--cell-text", help="Offline: bekannter Text der ersten neun Anzeigezellen")
+    assist.add_argument("--cell-text-file", type=Path, help="Offline: UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
+    assist.add_argument("--serial-port", default="/dev/ttyUSB0", help="serieller GSV-2AS-Eingang, Vorgabe /dev/ttyUSB0")
+    assist.add_argument("--baudrate", type=int, default=38400, help="Baudrate des GSV-2AS-Eingangs, Vorgabe 38400")
 
     return parser
 
 
+def _offline_cell_text(args: argparse.Namespace) -> str | None:
+    """Resolve one explicit offline source before opening hardware."""
+    direct = getattr(args, "cell_text", None)
+    path = getattr(args, "cell_text_file", None)
+    if direct is not None and path is not None:
+        raise SetupError("--cell-text und --cell-text-file sind nicht kombinierbar")
+    if path is not None:
+        try:
+            direct = path.read_text(encoding="utf-8").rstrip("\r\n")
+        except (OSError, UnicodeError) as exc:
+            raise SetupError(f"Zellentext-Datei {path}: {exc}") from exc
+    if direct is None:
+        return None
+    try:
+        return validate_offline_cell_text(direct)
+    except ValueError as exc:
+        raise SetupError(f"Zellentext: {exc}") from exc
+
+
+def _serial_cell_text(port: Any) -> str:
+    """Read a fresh incoming DUT telegram, then map it to physical cells."""
+    if hasattr(port, "reset_input_buffer"):
+        port.reset_input_buffer()
+    line = port.readline().rstrip(b"\r\n")
+    try:
+        return cell_text_from_telegram(line)
+    except ValueError as exc:
+        raise SetupError(f"GSV-2AS-Zellentext aus seriellem Strom unlesbar: {exc}") from exc
+
+
+def _heldout_improves(old_check: Any, new_check: Any) -> bool:
+    """Require a strictly smaller worst measured offset on the held-out still."""
+    keys = ("max_abs_dx_cols", "max_abs_dy_rows")
+    old = [old_check.metrics.get(key) for key in keys]
+    new = [new_check.metrics.get(key) for key in keys]
+    if any(value is None or not math.isfinite(value) for value in (*old, *new)):
+        return False
+    return max(new) < max(old) - 1e-3 and all(after <= before + 0.01 for before, after in zip(old, new, strict=True))
+
+
 def run_propose(args: argparse.Namespace) -> int:
+    try:
+        cell_text = _offline_cell_text(args)
+        if args.auto_quad and cell_text is None and getattr(args, "offset_check", None) is None:
+            raise SetupError("--auto-quad verlangt --cell-text oder --cell-text-file fuer Rasterversatz 2j")
+    except SetupError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     try:
         camera_settings = load_camera_settings(args.camera_settings)
     except (OSError, ValueError) as exc:
@@ -365,11 +427,20 @@ def run_propose(args: argparse.Namespace) -> int:
     checks = None
     if fit is not None:
         stability_image = getattr(args, "stability_image_bgr", None)
-        checks = check_setup(
-            image, fit,
-            stability_image_bgr=stability_image,
-            stability_elapsed_s=getattr(args, "stability_elapsed_s", None),
-        )
+        offset_check = getattr(args, "offset_check", None)
+        if offset_check is None:
+            offset_check = raster_offset_check([(image, cell_text)], fit.quad)
+        if offset_check.status == "FEHLER":
+            print(f"Rasterversatz 2j: FEHLER — {offset_check.reason or offset_check.metrics}", file=sys.stderr)
+            return 2
+        checks = getattr(args, "precomputed_checks", None)
+        if checks is None:
+            checks = check_setup(
+                image, fit,
+                stability_image_bgr=stability_image,
+                stability_elapsed_s=getattr(args, "stability_elapsed_s", None),
+                offset_check=offset_check,
+            )
 
     proposal = {
         "frame": str(args.frame),
@@ -424,7 +495,10 @@ def run_propose(args: argparse.Namespace) -> int:
     print(f"Raster: {grid_source} ({grid.n_cells} Zellen, pitch={grid.pitch:.2f}px)")
     print(f"min_source_dot_column_px: {min_px:.3f}  (native_scale=1.0, StreamCam ohne ScalerCrop/Binning)")
     print(f"Vorschlag geschrieben: {out_dir / 'proposal.json'}")
-    print(f"Overlays: {out_dir / 'overlay_source.png'}, {out_dir / 'overlay_rectified.png'}")
+    overlays = [out_dir / 'overlay_source.png', out_dir / 'overlay_rectified.png']
+    if fit is not None:
+        overlays.append(out_dir / 'overlay_sampling.png')
+    print(f"Overlays: {', '.join(map(str, overlays))}")
     return 0
 
 
@@ -747,6 +821,14 @@ def run_assist(args: argparse.Namespace) -> int:
             return 2
     else:
         hint_box = None
+    try:
+        offline_text = _offline_cell_text(args)
+    except SetupError as exc:
+        print(f"Einrichtungsassistent abgebrochen: {exc}", file=sys.stderr)
+        return 2
+    if offline_text is None and (not args.serial_port or args.baudrate <= 0):
+        print("Serieller GSV-2AS-Port und positive Baudrate erforderlich", file=sys.stderr)
+        return 2
 
     focus_args = argparse.Namespace(out=args.out, hint_box=args.hint_box, device=args.device, settle_s=1.0)
     try:
@@ -756,7 +838,12 @@ def run_assist(args: argparse.Namespace) -> int:
         return 2
     if focus_rc != 0:
         return focus_rc
+    serial_port = None
     try:
+        if offline_text is None:
+            import serial
+
+            serial_port = serial.Serial(args.serial_port, args.baudrate, timeout=2.0)
         settings = load_camera_settings(args.out / "camera-settings.json")
         io = _open_camera_io(args.device)
         try:
@@ -765,6 +852,7 @@ def run_assist(args: argparse.Namespace) -> int:
             io.set_controls(io.device, settings.ordered_controls())
             first = _capture_fresh_still(io)
             first_captured_at = time.monotonic()
+            first_text = offline_text if offline_text is not None else _serial_cell_text(serial_port)
             if first.shape[:2] != (settings.size[1], settings.size[0]):
                 raise SetupError("Standbild passt nicht zur Kameraaufloesung")
             args.out.mkdir(parents=True, exist_ok=True)
@@ -779,15 +867,49 @@ def run_assist(args: argparse.Namespace) -> int:
                 raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
             prechecks = check_setup(first, fit)
             _print_setup_checks(prechecks.to_dict())
-            if prechecks.overall == "FEHLER":
+            precheck_failures = [name for name, result in prechecks.checks.items()
+                                 if getattr(result, "status", None) == "FEHLER" and name != "raster"]
+            if precheck_failures:
                 raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
             time.sleep(args.stability_s)
             second = _capture_fresh_still(io)
             stability_elapsed_s = time.monotonic() - first_captured_at
+            second_text = offline_text if offline_text is not None else _serial_cell_text(serial_port)
+            if first_text != second_text:
+                raise SetupError("Anzeigetext hat zwischen den Standbildern gewechselt")
             if second.shape != first.shape:
                 raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
             if not cv2.imwrite(str(args.out / "stability.png"), second):
                 raise SetupError("stability.png konnte nicht geschrieben werden")
+            frame_texts = [(first, first_text), (second, second_text)]
+            original_quad = fit.quad
+            try:
+                candidate_quad, _history = refine_quad(
+                    [(first, first_text)], original_quad,
+                    CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0),
+                    DEFAULT_TARGET_SIZE,
+                )
+                old_heldout = raster_offset_check([(second, second_text)], original_quad)
+                new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
+                if _heldout_improves(old_heldout, new_heldout):
+                    revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
+                    if not isinstance(revised, str):
+                        fit = revised
+                        print("Raster-Quad nachgefuehrt: zurueckgehaltenes Standbild verbessert")
+            except (ValueError, cv2.error) as exc:
+                print(f"Raster-Quad nicht nachgefuehrt: {exc}")
+            offset_check = raster_offset_check(frame_texts, fit.quad)
+            _print_setup_checks({"overall": offset_check.status,
+                                 "checks": {"rasterversatz": offset_check.to_dict()}})
+            if offset_check.status == "FEHLER":
+                raise SetupError("Rasterversatz 2j meldet FEHLER; kein Vorschlag")
+            final_checks = check_setup(
+                first, fit, stability_image_bgr=second,
+                stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+            )
+            if final_checks.overall == "FEHLER":
+                _print_setup_checks(final_checks.to_dict())
+                raise SetupError("Abschliessende Einrichtungspruefung meldet FEHLER; kein Vorschlag")
             reader_check = None
             if args.templates is not None:
                 reader_check = diagnose_reader(
@@ -795,9 +917,12 @@ def run_assist(args: argparse.Namespace) -> int:
                 )
         finally:
             io.capture.release()
-    except (OSError, ValueError, UvcError, SetupError) as exc:
+    except (OSError, ValueError, UvcError, SetupError, ImportError) as exc:
         print(f"Einrichtungsassistent abgebrochen: {exc}", file=sys.stderr)
         return 2
+    finally:
+        if serial_port is not None:
+            serial_port.close()
 
     propose_args = argparse.Namespace(
         frame=args.out / "still.png",
@@ -815,6 +940,8 @@ def run_assist(args: argparse.Namespace) -> int:
         stability_image_bgr=second,
         stability_elapsed_s=stability_elapsed_s,
         reader_check=reader_check,
+        offset_check=offset_check,
+        precomputed_checks=final_checks,
     )
     rc = run_propose(propose_args)
     if rc != 0:

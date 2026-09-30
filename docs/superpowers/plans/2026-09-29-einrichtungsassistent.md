@@ -678,6 +678,32 @@ auf der endgültigen Basis `4f9371f` bestand mit **915 Tests,
 Der erste echte `assist`-Lauf samt Einrichtungsdauer bleibt dem
 gemeinsamen Hardwaretermin mit dem Nutzer vorbehalten.
 
+## Stand Nacharbeit 2 — 2026-09-30
+
+Die Prüfung 2j, der strenge GSV-2AS-Zellentext aus serieller oder
+Offline-Quelle und die Nachführung mit zurückgehaltenem zweitem
+Standbild sind umgesetzt. FEHLER in 2j oder in der abschließenden
+Gesamtprüfung erzeugen keinen Vorschlag. Jedes Bild muss für sich
+mindestens drei belastbare Zellen in beiden Halbzellen und über die
+ganze Zelle liefern. Die Eckkonvention 399/159, die `ab3`-Fehlmeldung,
+der Overlay-Name und die Bytegleich-Probe der regrid-Profile sind
+abgedeckt. Der Leser unter `src/dispread/ocr/` blieb unberührt.
+
+Die lesende `ab4`-Gegenprobe auf Frame 16 ergibt mit dem alten Quad
+0,935 Punktspalten / 0,105 Punktzeilen (FEHLER) und mit
+`ab4-profile-regrid1.json` 0,047 / 0,046 (OK). Testaufbau und Deutung
+stehen in `docs/VALIDATION.md` und `docs/lab_journal.md`. Kamera und
+serieller Port wurden nicht geöffnet; `var/` blieb schreibgeschützt.
+
+Die gezielten Integrationsprüfungen nach dem Review bestehen (124
+Tests), Ruff und `git diff --check` sind sauber. Der vollständige Lauf
+vor den zwei Reviewkorrekturen bestand mit 954 Tests, 3 übersprungenen
+und 1 erwartetem Fehlschlag. Zensical meldete keine Probleme, die 21
+Playwright-Dokutests bestanden. Der abschließende Gesamtlauf nach den
+Reviewkorrekturen wartet gemäß „Parallelarbeit“, bis
+`var/RECORDING_IN_PROGRESS` verschwindet. Ein echter Hardwarelauf ist
+weiterhin nicht erfolgt.
+
 ## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
 
 **Urteil: zurück an Codex.**

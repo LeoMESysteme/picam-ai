@@ -16,6 +16,7 @@ import numpy as np
 
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.frame_alignment import estimate_quad_shift
+from dispread.lattice_offsets import FULL, HALVES, max_abs_offset, measure_offsets, median_offsets
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, sample_image
@@ -42,6 +43,9 @@ RMS_COLS_ERROR = 0.25
 RMS_ROWS_ERROR = 0.3
 ASSIGNED_FRACTION_ERROR = 0.8
 BIAS_WARNING = 0.08
+OFFSET_WARNING = 0.15  # Vorabwert: Punktspalten bzw. Punktzeilen.
+OFFSET_ERROR = 0.25  # Vorabwert: Punktspalten bzw. Punktzeilen.
+OFFSET_MIN_CELLS = 3
 STABILITY_MIN_ELAPSED_S = 30.0
 STABILITY_ERROR_PX = 0.5
 STABILITY_WARNING_PX = 0.2
@@ -217,6 +221,77 @@ def _raster_check(fit: Any) -> CheckResult:
     return CheckResult(status, metrics)
 
 
+def raster_offset_check(frames: Sequence[tuple[np.ndarray, str]], quad, *,
+                        grid: CharGrid = GRID,
+                        target_size: tuple[int, int] = TARGET_SIZE) -> CheckResult:
+    """Prueft den Versatz von ROM-Punkten zu einem Quad anhand bekannter Zellentexte.
+
+    Die Texte dienen nur zur Lokalisierung der Punkte. Weder Text noch daraus
+    abgeleitete Messwerte werden als aktueller DUT-Wert ausgegeben.
+    """
+    source = {'kind': 'known_cell_text', 'frame_count': len(frames), 'text_included': False}
+    metrics: dict[str, Any] = {
+        'source': source, 'max_abs_dx_cols': None, 'max_abs_dy_rows': None,
+        'half_cell_count': 0, 'full_cell_count': 0,
+        'half_offsets': [], 'full_offsets': [], 'frame_coverage': [],
+        'warning_above': OFFSET_WARNING, 'error_above': OFFSET_ERROR,
+        'threshold_kind': 'Vorabwerte',
+    }
+    if not frames:
+        return CheckResult('FEHLER', metrics, reason='keine_bilder')
+    q = np.asarray(quad, dtype=np.float32)
+    if q.shape != (4, 2) or not np.isfinite(q).all():
+        return CheckResult('FEHLER', metrics, reason='ungueltiges_quad')
+    halves = []
+    full = []
+    try:
+        for image, cell_text in frames:
+            _gray(image)
+            if not isinstance(cell_text, str) or not 1 <= len(cell_text) <= grid.n_cells:
+                return CheckResult('FEHLER', metrics, reason='ungueltiger_zellentext')
+            halves.append(measure_offsets(image, q, grid, target_size, cell_text, HALVES))
+            full.append(measure_offsets(image, q, grid, target_size, cell_text, FULL))
+    except (TypeError, ValueError, cv2.error, KeyError) as exc:
+        return CheckResult('FEHLER', metrics, reason=f'messung_unmoeglich:{type(exc).__name__}')
+
+    # Ein lesbares Bild darf ein unlesbares zweites nicht durch das gepoolte
+    # Median verdecken. Beide Standbilder muessen fuer sich belastbar sein.
+    for per_half, per_full in zip(halves, full, strict=True):
+        reliable_half = median_offsets([per_half])
+        reliable_full = median_offsets([per_full])
+        half_counts = [len({cell for cell, half in reliable_half if half == part})
+                       for part in range(len(HALVES))]
+        full_count = len({cell for cell, _ in reliable_full})
+        metrics['frame_coverage'].append({'half_cells': half_counts, 'full_cells': full_count})
+        if min(*half_counts, full_count) < OFFSET_MIN_CELLS:
+            return CheckResult('FEHLER', metrics, reason='zu_wenige_belastbare_zellen_im_bild')
+
+    half_medians = median_offsets(halves)
+    full_medians = median_offsets(full)
+    metrics['half_offsets'] = [
+        {'cell': int(cell), 'half': int(half), 'dx_cols': dx, 'dy_rows': dy, 'count': count}
+        for (cell, half), (dx, dy, count) in half_medians.items()
+    ]
+    metrics['full_offsets'] = [
+        {'cell': int(cell), 'dx_cols': dx, 'dy_rows': dy, 'count': count}
+        for (cell, _), (dx, dy, count) in full_medians.items()
+    ]
+    metrics['half_cell_count'] = len(half_medians)
+    metrics['full_cell_count'] = len(full_medians)
+    if (any(len({cell for cell, half in half_medians if half == part}) < OFFSET_MIN_CELLS
+            for part in range(len(HALVES)))
+            or len({cell for cell, _ in full_medians}) < OFFSET_MIN_CELLS):
+        return CheckResult('FEHLER', metrics, reason='zu_wenige_belastbare_zellen')
+
+    max_dx, _ = max_abs_offset(half_medians)
+    _, max_dy = max_abs_offset(full_medians)
+    metrics['max_abs_dx_cols'] = max_dx
+    metrics['max_abs_dy_rows'] = max_dy
+    status = ('FEHLER' if max_dx > OFFSET_ERROR or max_dy > OFFSET_ERROR else
+              'WARNUNG' if max_dx > OFFSET_WARNING or max_dy > OFFSET_WARNING else 'OK')
+    return CheckResult(status, metrics)
+
+
 def _stability_check(image_bgr: np.ndarray, second: np.ndarray | None,
                      elapsed_s: float | None, quad: list[list[float]]) -> CheckResult:
     if second is None:
@@ -236,7 +311,8 @@ def _stability_check(image_bgr: np.ndarray, second: np.ndarray | None,
 
 def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
                 stability_image_bgr: np.ndarray | None = None,
-                stability_elapsed_s: float | None = None) -> SetupChecks:
+                stability_elapsed_s: float | None = None,
+                offset_check: CheckResult | None = None) -> SetupChecks:
     """Prueft eine Aufstellung; Stabilitaet bleibt optional bis zum zweiten Bild.
 
     `lattice_fit` folgt dem `LatticeFit`-Vertrag aus `dispread.dotlattice`.
@@ -272,6 +348,8 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
         'stabilitaet': _stability_check(image_bgr, stability_image_bgr,
                                       stability_elapsed_s, lattice_fit.quad),
     }
+    if offset_check is not None:
+        checks['rasterversatz'] = offset_check
     statuses = {check.status for check in checks.values()}
     overall = 'FEHLER' if 'FEHLER' in statuses else 'WARNUNG' if 'WARNUNG' in statuses else 'OK'
     return SetupChecks(overall, checks)

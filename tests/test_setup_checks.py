@@ -8,10 +8,114 @@ import cv2
 import numpy as np
 import pytest
 
-from dispread.setup_checks import check_setup
+from dispread.ocr.dotmatrix_font import COLS, ROWS, rom_vector
+from dispread.setup_checks import check_setup, raster_offset_check
 
 ROOT = Path('/home/me-systeme/picam-ai/var/diagnostics')
 QUAD = [[0, 0], [400, 0], [400, 160], [0, 160]]
+OFFSET_QUAD = np.array([[120., 150.], [760., 120.], [770., 215.], [110., 240.]], np.float32)
+OFFSET_TEXT = '+0.46781 '
+
+
+def offset_image(text=OFFSET_TEXT):
+    """Render ROM dots at the nominal grid, then project into a source still."""
+    scale = 4
+    width, height = 400 * scale, 160 * scale
+    high = np.full((height, width), 200, np.uint8)
+    sx, sy = (width - 1) / 399, (height - 1) / 159
+    col_width = 25 / 6 * sx
+    row_height = (160 - 160 / 9) / ROWS * sy
+    for cell, char in enumerate(text):
+        dots = rom_vector(char).reshape(ROWS, COLS)
+        for row, column in zip(*np.nonzero(dots), strict=True):
+            x = cell * 25 * sx + (column + .5) * col_width
+            y = 160 / 9 * sy + (row + .5) * row_height
+            cv2.rectangle(high, (int(x - .4 * col_width), int(y - .4 * row_height)),
+                          (int(x + .4 * col_width), int(y + .4 * row_height)), 60, -1)
+    source = np.array([[0, 0], [399, 0], [399, 159], [0, 159]], np.float32)
+    hom = cv2.getPerspectiveTransform(source, OFFSET_QUAD) @ np.diag([1 / sx, 1 / sy, 1.])
+    return cv2.warpPerspective(high, hom, (900, 420), flags=cv2.INTER_AREA, borderValue=200)
+
+
+def test_raster_offset_accepts_aligned_dots_and_serializes_without_text():
+    result = raster_offset_check([(offset_image(), OFFSET_TEXT)], OFFSET_QUAD)
+    report = result.to_dict()
+    assert report['status'] == 'OK'
+    assert report['metrics']['max_abs_dx_cols'] < .15
+    assert report['metrics']['max_abs_dy_rows'] < .15
+    assert report['metrics']['half_cell_count'] >= 3
+    assert report['metrics']['full_cell_count'] >= 3
+    assert report['metrics']['source']['kind'] == 'known_cell_text'
+    assert OFFSET_TEXT not in json.dumps(report)
+    json.dumps(report, allow_nan=False)
+
+
+def test_raster_offset_detects_sheared_quad():
+    wrong = OFFSET_QUAD.copy()
+    wrong[3, 0] -= 8
+    result = raster_offset_check([(offset_image(), OFFSET_TEXT)], wrong)
+    assert result.status == 'FEHLER'
+    assert result.metrics['max_abs_dx_cols'] > .25
+
+
+def test_raster_offset_detects_too_small_pitch():
+    wrong = OFFSET_QUAD.copy()
+    wrong[1, 0] -= 12
+    wrong[2, 0] -= 12
+    result = raster_offset_check([(offset_image(), OFFSET_TEXT)], wrong)
+    assert result.status == 'FEHLER'
+    assert result.metrics['max_abs_dx_cols'] > .25
+
+
+@pytest.mark.parametrize('frames', [[], [(np.full((420, 900), 200, np.uint8), OFFSET_TEXT)],
+                                     [(offset_image('+' + ' ' * 15), '+' + ' ' * 15)]])
+def test_raster_offset_rejects_missing_unreliable_or_sparse_data(frames):
+    result = raster_offset_check(frames, OFFSET_QUAD)
+    assert result.status == 'FEHLER'
+    assert result.reason is not None
+    assert result.metrics['max_abs_dx_cols'] is None
+    assert result.metrics['max_abs_dy_rows'] is None
+    json.dumps(result.to_dict(), allow_nan=False)
+
+
+def test_raster_offset_requires_reliable_cells_in_each_still():
+    valid = offset_image()
+    unreadable = np.full_like(valid, 200)
+    result = raster_offset_check([(valid, OFFSET_TEXT), (unreadable, OFFSET_TEXT)], OFFSET_QUAD)
+    assert result.status == 'FEHLER'
+    assert result.reason == 'zu_wenige_belastbare_zellen_im_bild'
+    assert result.metrics['max_abs_dx_cols'] is None
+    assert result.metrics['max_abs_dy_rows'] is None
+
+
+def test_optional_offset_result_participates_in_setup_total():
+    image = display()
+    baseline = check_setup(image, fit())
+    from dispread.setup_checks import CheckResult
+    warning = CheckResult('WARNUNG', {'max_abs_dx_cols': .2})
+    with_offset = check_setup(image, fit(), offset_check=warning)
+    assert 'rasterversatz' not in baseline.checks
+    assert with_offset.checks['rasterversatz'] is warning
+    assert with_offset.overall == ('FEHLER' if baseline.overall == 'FEHLER' else 'WARNUNG')
+
+
+def test_ab4_regridded_profile_clears_real_still_offset():
+    frame = ROOT / 'ab4-still/frames/frame_000016.png'
+    old = ROOT / 'ab4-profile'
+    regridded = ROOT / 'ab4-profile-regrid1.json'
+    if not all(path.exists() for path in (frame, old, regridded)):
+        pytest.skip('read-only ab4 diagnostic still unavailable')
+    image = cv2.imread(str(frame))
+    assert image is not None
+    # Display text was independently recorded in ab4-still/serial.jsonl.
+    observations = [(image, '+0.46780 ')]
+    old_check = raster_offset_check(observations, json.loads(old.read_text())['quad'])
+    new_check = raster_offset_check(observations, json.loads(regridded.read_text())['quad'])
+    assert old_check.status == 'FEHLER'
+    assert old_check.metrics['max_abs_dx_cols'] > .25
+    assert new_check.status == 'OK'
+    assert new_check.metrics['max_abs_dx_cols'] < .15
+    assert new_check.metrics['max_abs_dy_rows'] < .15
 
 
 def fit(**updates):

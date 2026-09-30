@@ -15,7 +15,9 @@ _PITCH = 25.0
 _PH = _PITCH / 6.0
 _TOP = 160.0 / 9.0
 _PV = 160.0 / 9.0
-_CORNERS = np.float32([[[0, 0], [400, 0], [400, 160], [0, 160]]])
+# Quadecken bezeichnen wie in rectify die Mittelpunkte der Randpixel.
+# CharGrid-Grenzen und Punktabstaende bleiben kontinuierlich bei 400/160.
+_CORNERS = np.float32([[[0, 0], [399, 0], [399, 159], [0, 159]]])
 _MIN_ASSIGNED = 70  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MAX_RMS_COLS = 0.2  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MAX_RMS_ROWS = 0.25  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
@@ -141,8 +143,13 @@ def _plus_anchors(
 def _has_minus_sign(src: np.ndarray, left: float, width: float) -> bool:
     """Erkennt einen linken Querbalken ohne senkrechte Plus-Punkte."""
     pitch = width / (1.2 * 96)
+    sign_left = left + width / 12
+    sign_dots = src[(src[:, 0] >= sign_left) & (src[:, 0] <= sign_left + 5 * pitch)]
+    if len(sign_dots) < 5:
+        return False
+    sign_middle = float(np.median(sign_dots[:, 1]))
     possible = src[src[:, 0] < left + 0.17 * width]
-    lines: list[tuple[float, np.ndarray, float]] = []
+    lines: list[tuple[np.ndarray, float]] = []
     for start in possible:
         delta = src - start
         ends = delta[
@@ -156,20 +163,25 @@ def _has_minus_sign(src: np.ndarray, left: float, width: float) -> bool:
                 continue
             row = start + np.arange(5)[:, None] * step
             hits = np.min(np.sum((row[:, None] - src[None]) ** 2, axis=2), axis=1)
-            if np.count_nonzero(hits <= max(1.8, 0.38 * pitch) ** 2) >= 4:
-                lines.append((float(start[0]), start + 2 * step, float(step[0])))
+            center = start + 2 * step
+            # Nur die Vorzeichenzelle ist beweiskraeftig. Waagerechte
+            # Punktreihen spaeterer Ziffern duerfen kein Minus belegen.
+            if (np.count_nonzero(hits <= max(1.8, 0.38 * pitch) ** 2) == 5
+                    and center[0] < left + 0.13 * width
+                    and abs(center[1] - sign_middle) <= 2 * pitch):
+                lines.append((center, float(step[0])))
     if not lines:
         return False
-    for _, center, step in lines:
+    for center, step in lines:
         delta = src - center
         stem = (
             (np.abs(delta[:, 0]) <= 0.6 * step)
             & (np.abs(delta[:, 1]) >= 0.7 * step)
             & (np.abs(delta[:, 1]) <= 4 * step)
         )
-        if not np.any(stem):
-            return True
-    return False
+        if np.any(stem):
+            return False
+    return True
 
 
 def _quad_score(src: np.ndarray, quad: np.ndarray) -> float:
@@ -265,10 +277,10 @@ def refine(
             return "anpassung_divergiert"
         scale = 2
         w, hh = 400 * scale, 160 * scale
-        hr = cv2.getPerspectiveTransform(quad.astype(np.float32), np.float32([[0, 0], [w, 0], [w, hh], [0, hh]]))
+        hr = cv2.getPerspectiveTransform(quad.astype(np.float32), np.float32([[0, 0], [w - 1, 0], [w - 1, hh - 1], [0, hh - 1]]))
         gray = cv2.cvtColor(cv2.warpPerspective(image_bgr, hr, (w, hh), flags=cv2.INTER_CUBIC), cv2.COLOR_BGR2GRAY).astype(np.float32)
-        sx = w / np.linalg.norm(quad[1] - quad[0])
-        sy = hh / np.linalg.norm(quad[3] - quad[0])
+        sx = (w - 1) / np.linalg.norm(quad[1] - quad[0])
+        sy = (hh - 1) / np.linalg.norm(quad[3] - quad[0])
         if not (0.5 < sx < 30 and 0.5 < sy < 30):
             return "anpassung_divergiert"
         blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=0.7 * sx, sigmaY=0.7 * sy)
@@ -289,6 +301,18 @@ def refine(
         h = h_new
         if delta < 0.005:
             break
+    return _evaluate_fit(image_bgr, h, src, quad, empty_cells=empty_cells)
+
+
+def _evaluate_fit(
+    image_bgr: np.ndarray,
+    h: np.ndarray,
+    src: np.ndarray,
+    quad: np.ndarray,
+    *,
+    empty_cells: tuple[int, ...],
+) -> LatticeFit | str:
+    """Prueft Punktzuordnung und Freigabekriterien an einer festen Lage."""
     ok, c, r = _assignment(src, h)
     if np.count_nonzero(ok) < _MIN_ASSIGNED:
         return "zu_wenige_punkte"
@@ -350,6 +374,29 @@ def refine(
         assigned_points=tuple(map(tuple, src[ok].astype(float).tolist())),
         rejected_points=tuple(map(tuple, src[~ok].astype(float).tolist())),
     )
+
+
+def evaluate_quad(
+    image_bgr: np.ndarray,
+    hint_box: tuple[float, float, float, float],
+    quad: np.ndarray | list[list[float]],
+    *,
+    empty_cells: tuple[int, ...] = (),
+) -> LatticeFit | str:
+    """Prueft ein vorgegebenes Quad, ohne dessen Ecken zu verschieben."""
+    if image_bgr is None or image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
+        return "ungueltiges_bild"
+    _, _, w, hh = hint_box
+    if not all(np.isfinite(v) for v in hint_box) or w <= 0 or hh <= 0:
+        return "ungueltige_hinweisbox"
+    q = np.asarray(quad, dtype=np.float32)
+    if q.shape != (4, 2) or not np.isfinite(q).all() or not cv2.isContourConvex(q):
+        return "keine_startlage"
+    h = cv2.getPerspectiveTransform(q, _CORNERS[0])
+    if not np.isfinite(h).all() or abs(np.linalg.det(h)) < 1e-12:
+        return "keine_startlage"
+    src = _source_candidates(image_bgr, q)
+    return _evaluate_fit(image_bgr, h, src, q, empty_cells=empty_cells)
 
 
 def fit_lattice(
@@ -421,7 +468,9 @@ def _auto_fit(
         anchors = _plus_anchors(src, x0, x1 - x0, pitch_scale=0.95)
     if not anchors:
         return "vorzeichen_kein_plus" if _has_minus_sign(src, x0, x1 - x0) else "keine_startlage"
-    best_anchors = [item for item in anchors if item[0] == anchors[0][0]]
+    best_anchors = [anchors[0]] + [
+        item for item in anchors[1:] if item[0] >= max(8, anchors[0][0] - 1)
+    ]
     if any(
         abs(item[1][1] - best_anchors[0][1][1]) > 0.3 * (y1 - y0)
         or abs(item[1][0] - best_anchors[0][1][0]) > 0.3 * (x1 - x0)

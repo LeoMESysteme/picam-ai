@@ -29,10 +29,18 @@ def _box(quad: np.ndarray, shape: tuple[int, int], margin: float = 0.1):
     return x0 / w, y0 / h, (x1 - x0) / w, (y1 - y0) / h
 
 
+def _profile_pixel_centers(quad: np.ndarray) -> np.ndarray:
+    """Historische 400/160-Randkoordinaten in 399/159-Pixelmitten umrechnen."""
+    old = np.float32([[0, 0], [400, 0], [400, 160], [0, 160]])
+    centers = np.float32([[0, 0], [399, 0], [399, 159], [0, 159]])
+    h = cv2.getPerspectiveTransform(old, quad)
+    return cv2.perspectiveTransform(centers[None], h)[0]
+
+
 def _synthetic(quad: np.ndarray, text: str = "+123456789012345"):
     display = render(text, GRID, bg=210, ink=30)
     h = cv2.getPerspectiveTransform(
-        np.float32([[0, 0], [400, 0], [400, 160], [0, 160]]), quad.astype(np.float32)
+        np.float32([[0, 0], [399, 0], [399, 159], [0, 159]]), quad.astype(np.float32)
     )
     image = cv2.warpPerspective(display, h, (1920, 1080), borderValue=120)
     rng = np.random.default_rng(73)
@@ -105,6 +113,18 @@ def test_minus_sign_has_specific_rejection_reason():
                        empty_cells=EMPTY_CELLS) == "vorzeichen_kein_plus"
 
 
+@pytest.mark.skipif(
+    not (DIAGNOSTICS / "ab3-still/frames/frame_000015.png").exists()
+    or not (DIAGNOSTICS / "ab3-profile").exists(),
+    reason="Standbild oder bestaetigtes Profil fehlt",
+)
+def test_ab3_plus_is_not_reported_as_proven_minus():
+    image = cv2.imread(str(DIAGNOSTICS / "ab3-still/frames/frame_000015.png"))
+    quad = np.asarray(json.loads((DIAGNOSTICS / "ab3-profile").read_text())["quad"], np.float32)
+    result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
+    assert result != "vorzeichen_kein_plus"
+
+
 @pytest.mark.parametrize("column", (2, 5))
 def test_candidate_in_format_empty_cell_is_rejected(column):
     quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
@@ -126,7 +146,7 @@ def test_cell_bias_over_limit_rejects_locally_displaced_dots():
         (right - left, display.shape[0]), borderValue=210,
     )
     h = cv2.getPerspectiveTransform(
-        np.float32([[0, 0], [400, 0], [400, 160], [0, 160]]), quad,
+        np.float32([[0, 0], [399, 0], [399, 159], [0, 159]]), quad,
     )
     gray = cv2.warpPerspective(display, h, (1920, 1080), borderValue=120)
     image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
@@ -206,6 +226,16 @@ def test_clear_best_end_lattice_is_selected():
     assert dotlattice._select_unambiguous_fit([best, duplicate, distant_weaker]) is best
 
 
+def test_evaluate_quad_preserves_supplied_pixel_center_quad():
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, _ = _synthetic(quad, "+1234567 9012   ")
+    result = dotlattice.evaluate_quad(image, _box(quad, image.shape[:2]), quad,
+                                      empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    np.testing.assert_allclose(result.quad, quad, atol=1e-5)
+    assert result.n_assigned >= 70
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -229,7 +259,7 @@ def test_real_still_matches_confirmed_quad(name):
     quad = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
     result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
-    assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
 
 
 @pytest.mark.skipif(
@@ -244,7 +274,7 @@ def test_green_hint_still_finds_ab2_lattice():
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
-    assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
 
 
 @pytest.mark.parametrize("name,frame", [
@@ -273,4 +303,4 @@ def test_green_hint_still_matches_confirmed_quad(name, frame):
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
-    assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
