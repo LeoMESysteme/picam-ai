@@ -2726,8 +2726,8 @@ jeweils 0,0 %. `ab2` ist der einzige Kantenbefund und mit dem
 Kantenwerte liegen bei 1–3. Punktkontrast wird in Float als 99. Perzentil
 von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` über dem angepassten Quad
 berechnet (FEHLER <15, WARNUNG <17); `leser_kontrast` stammt aus
-`sample_image` vor der Normierung. Frühere
-Handwerte 41,3 (`sc5`) und 31,2 (`ab2`) beruhten auf einem nicht belegten
+`sample_image` vor der Normierung. Frühere Handwerte 41,3 (`sc5`) und
+31,2 (`ab2`) beruhten auf einem nicht belegten
 Bildbereich und werden nicht mit diesem definierten Maß gleichgesetzt.
 
 Die Stabilitätsprüfung benötigt zwei Standbilder im Abstand von
@@ -2755,6 +2755,7 @@ und `check_setup` meldet Raster-FEHLER. Bei `ab4` sind es 353/482
 Raster-FEHLER. Die Vorabschwelle ist 80 %; die übrigen Prüfungen melden
 auf diesen Bildern OK, Stabilität wurde nicht gemessen. Die alten
 bestätigten Quads gelten laut obigem Befund selbst als fehlerhaft.
-Diese Gegenprobe zeigt eine Ablehnung der beiden gespeicherten Fälle,
-aber noch kein korrektes neues Quad und keine allgemeine Garantie gegen
-Rasterversatz.
+Diese Gegenprobe zeigt eine Ablehnung der beiden gespeicherten Fälle.
+Die später mit `profile-regrid.py` bestätigten neuen Profile (Abschnitt
+oben) sind eine getrennte Korrektur; eine automatische Versatzprüfung
+und Nachführung im Assistenten gehört zu Nacharbeit 2.

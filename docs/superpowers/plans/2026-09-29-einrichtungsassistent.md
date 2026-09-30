@@ -621,7 +621,7 @@ Aufgabe 5 dieses Plans unberührt; Claudes Merge-Schritt pflegt sie.
 
 ## Stand Nacharbeit 1 — 2026-09-30
 
-Der Branch wurde erneut auf das heutige `origin/master` (`e301628`)
+Der Branch wurde erneut auf das heutige `origin/master` (`4f9371f`)
 rebasiert. Die Codepunkte 1–9 sind umgesetzt; eine abschließende
 Gesamt-Review fand keinen belegten mergekritischen Codefehler. Ein
 synthetischer Fall mit zwei Anzeigen und einem schwächer erkannten
@@ -649,8 +649,9 @@ Nacharbeit lehnt beide ab: `ab3` mit grüner Hinweisbox bei 48,1 %
 zugeordneten Punkten, `ab4` bei 67,8 % (Grenze 80 %); mit der groben
 Profil-Box scheitert `ab3` schon am Plus, `ab4` bei 73,2 % Zuordnung.
 Die alten Profilquads sind kein gültiger Sollwert für eine neue
-Geometrie. Ein korrektes neues Raster für diese Aufstellungen und eine
-allgemeine Absicherung gegen solche Verschiebungen bleiben Folgearbeit.
+Geometrie. Korrigierte Profile für `ab3` und `ab4` liegen inzwischen
+durch `profile-regrid.py` vor; die automatische Versatzprüfung und
+Nachführung im Assistenten sind als **Nacharbeit 2** oben beauftragt.
 
 **Maßgebliche Vorabschwellen nach Nacharbeit 1:** Punktkontrast FEHLER
 <15, WARNUNG <17; zellinterne Hintergrundkante in Leerzellen FEHLER >8,
@@ -665,12 +666,13 @@ Stabilität FEHLER >0,5 und WARNUNG >0,2 px bei mindestens 30 s. Die
 2026-09-29“ sind **historisch und durch diese Messung ersetzt**. Die
 Vorabwerte sind noch nicht allgemein kalibriert.
 
-Der gezielte `test_harvest_assist.py`-Satz bestand nach dem letzten
-Rebase mit **20 Tests in 3,09 s**. Ein erster Gesamtlauf hatte einen
+Der gezielte `test_harvest_assist.py`-Satz bestand nach dem Leser-Revert
+mit **20 Tests in 3,09 s**. Ein früherer Gesamtlauf hatte einen
 einmaligen 10-s-Zeitüberschreiter bei `tesseract --version`; derselbe
 Test bestand isoliert in 0,18 s. Der vollständige Wiederholungslauf
-bestand mit **906 Tests, 3 übersprungenen und 1 erwarteten Fehlschlag
-in 326,37 s**. Ruff und `git diff --check` sind sauber.
+auf der endgültigen Basis `4f9371f` bestand mit **915 Tests,
+3 übersprungenen und 1 erwarteten Fehlschlag in 369,82 s**. Ruff und
+`git diff --check` sind sauber.
 `./scripts/docs-site.sh build -s` meldete keine Probleme, und die
 **21 Playwright-Dokutests** bestanden.
 Der erste echte `assist`-Lauf samt Einrichtungsdauer bleibt dem

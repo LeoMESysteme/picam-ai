@@ -1641,5 +1641,7 @@ Mit der Profil-Bounding-Box plus 10 % scheitert `ab3` bereits an
 `vorzeichen_kein_plus`; `ab4` ergibt 353/482 (73,2 %) und FEHLER.
 Die alten Profilquads sind durch den neuen Befund selbst als falsch
 erkannt. Deshalb wird hier keine Eckabweichung als Qualitätsnachweis
-verwendet. Die Nacharbeit lehnt diese beiden gespeicherten Fälle ab;
-eine korrekte Neuanpassung des verschobenen Rasters ist offen.
+verwendet. Die Nacharbeit lehnt diese beiden gespeicherten Fälle ab.
+Die danach mit `profile-regrid.py` bestätigten Profile korrigieren den
+Versatz getrennt; eine automatische Prüfung und Nachführung im
+Assistenten gehört zu Nacharbeit 2.
