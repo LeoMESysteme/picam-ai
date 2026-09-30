@@ -9,6 +9,66 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-09-30 — Rasterversatz unabhängig vom Leser messen, als Pflichtprüfung vor jeder Ernte
+
+## Problem
+
+Abnahme 2 des Dot-Matrix-Lesers ergab 0 falsch, aber 85,8 % abgelehnt.
+Ursache waren die Punktraster der Profile, nicht der Leser. Die von Hand
+mit `latfit.py` angepassten Raster von `ab3`/`ab4` (auch `ernte1`, `auf2`,
+`auf3`) lagen 0,4–0,9 Punktspalten neben den Punktmitten, geschert oder mit
+falschem Punktabstand. Unauffällig blieben trotzdem:
+* das Restmaß der Anpassung (0,17 / 0,26),
+* die Leerzellenprüfung,
+* der Zellen-Bias,
+* die Import-Ausrichtung.
+
+## Entscheidung
+
+* **Eigenes Maß** (`dispread.lattice_offsets`): Bei bekanntem Text
+  korreliert es die Abtastung im Quellbild je Zelle und Halbzelle mit dem
+  ROM-Muster, über eine Blende von ±0,3 Punkt. Die Feinsuche nimmt die Mitte
+  des Plateaus. Waagerecht zählt die Halbzelle (zeigt Scherung), senkrecht
+  die ganze Zelle (beim `+` messen die Halbzellen entgegengesetzt).
+* **Werkzeug** `scripts/profile-regrid.py`:
+  * misst an Proben (`measure`) oder an Standbildern (`still`),
+  * korrigiert das Quad (`refine`, `still --out-quad`), angepasst an der
+    einen Hälfte der Bilder und geprüft an der anderen,
+  * bestätigt nach Sichtprüfung (`confirm`).
+* **Profilzuordnung:** Ein korrigiertes Profil ersetzt ein in Proben
+  eingebettetes Profil nur über `replaces`, also mit ausdrücklich genannter
+  Prüfsumme des alten.
+* **Grenze vor jeder Ernte:** 0,15 Punktspalten. Im Einrichtungsassistenten
+  ist das die Prüfung 2j: FEHLER über 0,25, WARNUNG über 0,15.
+
+## Begründung und Alternativen
+
+* **Punktschatten-Abzug** (`bg_closing_shadow_v1`): verworfen und
+  zurückgenommen. Er behandelte das Symptom, verfehlte das vorab
+  festgelegte Kriterium (`ab4` weiter 0/119) und verschlechterte `auf3`
+  von 63 auf 1 richtige Probe.
+* **Verschiebungssuche des Lesers vergrößern:** verworfen. Die Suche deckt
+  ±0,24 Punktspalten ab. Eine größere Suche würde bei korrekten Rastern
+  benachbarte Zeichen näher an die Vorlagen bringen und die Trennschärfe
+  kosten.
+* **Restmaß oder Zuordnungsquote der Anpassung als Kriterium:** verworfen.
+  Falsches und richtiges Raster ergaben dasselbe Restmaß.
+* **Profile direkt überschreiben:** verworfen. Die Proben tragen die
+  Prüfsumme ihres Profils, eine stille Ersetzung wäre nicht
+  nachvollziehbar.
+
+## Konsequenz
+
+* Abnahme 2 hat falsche Profile geprüft. Ihr Ergebnis bleibt stehen, sagt
+  aber nichts über den Leser aus.
+* Mit korrigierten Rastern sank die Schwelle `d_max` von 2,6 auf 1,9.
+  Abnahme 3 über zwei neue, mit der Prüfung eingerichtete Aufstellungen ist
+  bestanden: 215/215, 0 falsch.
+* `latfit.py` lag auch bei `ab5`/`ab6` wieder 0,22 bzw. 0,36 daneben. Die
+  Prüfung ist also nötig, nicht nur vorsichtig.
+
+---
+
 # 2026-09-30 — Startseite als vollständiger Doku-Wegweiser
 
 ## Problem

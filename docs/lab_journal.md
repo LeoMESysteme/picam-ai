@@ -1531,3 +1531,60 @@ den Verlauf. Umgesetzt als `bg_closing_v1`, das Kriterium stand vorab in der
 Spec. `loo`: `ab2` jetzt 83/83, alle scharfen Gruppen unverändert, 0
 falsch. Die Kehrseite: `auf2` (unscharf) wird ohne eigenes Training
 vollständig abgelehnt. Zahlen in VALIDATION.md.
+
+## 2026-09-30 — Abnahme 2 an falschen Rastern gescheitert, Abnahme 3 bestanden
+
+**`ab4` und Abnahme 2:**
+* Die Kamera stand schräg von rechts. Die ersten beiden Stände waren zu
+  nah: Die geringe Schärfentiefe machte links alles weich (Kontrast 6–9).
+  Erst der etwa 1,5-fache Abstand brachte 32,7.
+* Abnahme 2 über `ab3`/`ab4` ergab 0 falsch, aber 85,8 % abgelehnt.
+* Meine erste Deutung war „Punktschatten“: Aus-Punkte waren einseitig
+  dunkel neben An-Punkten. Der daraus gebaute Schattenabzug verfehlte das
+  vorab festgelegte Kriterium und wurde zurückgenommen.
+* Den entscheidenden Hinweis gab der Nutzer: Im entzerrten Bild von `ab4`
+  standen die Zeichen schräg und ragten aus ihren Zellen. Das Raster war
+  geschert.
+* Die Messung gegen das ROM-Muster zeigte: Auch `ab3`, `ernte1`, `auf2` und
+  `auf3` lagen 0,4–0,9 Punktspalten daneben.
+* Ursache: Die Rasteranpassung mit `latfit.py` findet oft die dunklen
+  Punktränder statt der Mitten. Ihr Restmaß bleibt dabei klein.
+
+**Korrektur:**
+* `profile-regrid.py` korrigierte die Raster. Die korrigierten Profile hat
+  der Nutzer nach Sichtprüfung bestätigt, `auf3` bleibt offen.
+* `loo` danach: `ab4` 119/119, `ab3` 152/162, 0 falsch. Die Schwelle
+  `d_max` sank von 2,6 auf 1,9.
+* Neu gelernt und eingefroren als `stufe2c`.
+* Auffällig: Die verschobenen `ernte1`-Proben hatten zuvor die Streuung
+  künstlich verbreitert. Davon profitierte die weiche Gruppe `auf2`; mit
+  korrektem Raster liest sie 49/76 statt 70/76.
+
+**Abnahme 3 mit `ab5` und `ab6`:**
+* `ab5` steht frontal und gedreht. Der erste Stand zeigte ein Spiegelbild
+  der Kamera über den Zellen 5–11 und wurde verworfen.
+* `ab6` steht schräg von links.
+* Bei beiden lag `latfit.py` wieder 0,22 bzw. 0,36 daneben.
+  `profile-regrid.py still` fing das vor der Ernte ab.
+* Der erste Start der `ab6`-Ernte scheiterte an der Speicherprüfung, weil
+  parallel ein Import und Codex-Tests liefen. Dabei ging nichts verloren.
+* Die Abnahme ergab 215/215 richtig, 0 falsch, 0 abgelehnt.
+* Einschränkung: Beim Import von `ab6` verwarf `zellen_inkonsistent` 42 %.
+  Die Prüfung vergleicht Zellen über alle Positionen, und bei schrägem Blick
+  unterscheiden die sich stärker.
+
+**Betrieb:**
+* Die SD-Karte lief zweimal fast voll. Ursache war ein Leck von Codex:
+  Kopien des repowise-Plugin-Marktplatzes in
+  `~/.codex/.tmp/marketplaces/.staging`, etwa 1 GB pro Stunde.
+* Dazu kamen alte VS-Code-Server und Codex-Versionen sowie volle
+  tar-Sicherungen je Aufstellung.
+* Das Kopieren aus dem RAM auf die Karte dauert inzwischen etwa 435 s statt
+  77–200 s. Die Karte wird also langsamer.
+
+**Einrichtungsassistent (Codex):** Es gab drei Reviews.
+* Die Prüfung des Rasterversatzes 2j ist jetzt eingebaut und nicht mehr
+  umgehbar.
+* Im echten Offline-Ablauf liefert er auf `sc6` und `ab5` Vorschläge nahe
+  am Profil. Bei schrägen Aufstellungen findet er noch keine Startlage.
+* Vor dem Merge fehlt noch Nacharbeit 4 (Plan).
