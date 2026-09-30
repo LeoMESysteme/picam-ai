@@ -696,13 +696,12 @@ stehen in `docs/VALIDATION.md` und `docs/lab_journal.md`. Kamera und
 serieller Port wurden nicht geöffnet; `var/` blieb schreibgeschützt.
 
 Die gezielten Integrationsprüfungen nach dem Review bestehen (124
-Tests), Ruff und `git diff --check` sind sauber. Der vollständige Lauf
-vor den zwei Reviewkorrekturen bestand mit 954 Tests, 3 übersprungenen
-und 1 erwartetem Fehlschlag. Zensical meldete keine Probleme, die 21
-Playwright-Dokutests bestanden. Der abschließende Gesamtlauf nach den
-Reviewkorrekturen wartet gemäß „Parallelarbeit“, bis
-`var/RECORDING_IN_PROGRESS` verschwindet. Ein echter Hardwarelauf ist
-weiterhin nicht erfolgt.
+Tests), Ruff und `git diff --check` sind sauber. Nach Ende der Aufnahme
+bestand auch der abschließende Gesamtlauf mit **956 Tests, 3
+übersprungenen und 1 erwartetem Fehlschlag in 452,92 s**. Zensical
+meldete nach diesem Plan-Nachtrag keine Probleme, die 21
+Playwright-Dokutests bestanden. Ein echter Hardwarelauf ist weiterhin
+nicht erfolgt.
 
 ## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
 
