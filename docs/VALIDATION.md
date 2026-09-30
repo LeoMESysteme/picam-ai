@@ -2365,3 +2365,72 @@ voller Punkt):
 `ab3` liegen trotz 10,9 px je Punktspalte tief unter `d_max`. Nötig ist eine
 Entwicklungsrunde gegen Punktschatten. Der Ansatz und sein Kriterium werden
 vorab in der Spec festgelegt, `ab3`/`ab4` gehen ins Training.
+
+## 2026-09-30 — Normierung `bg_closing_shadow_v1`: `loo` gegen `bg_closing_v1` (Kriterium nicht erfüllt)
+
+Vorab festgelegtes Kriterium (Spec §2 Punkt 3, Commit `581c340`, vor dem
+Lauf committet):
+* 0 falsch;
+* keine scharfe Gruppe (`ernte1`, `sc3`–`sc6`, `ab1`, `ab2`) mit weniger
+  richtigen Proben als im Basislauf;
+* `ab3` und `ab4` als Testgruppe jeweils mit höchstens 20 % abgelehnten
+  Proben.
+
+Beide Läufe auf demselben Datensatz (1223 Proben),
+`--train-eligibility rom_per_group`:
+* Basis: Code `581c340` (Lesercode wie `ef5cedf`),
+  `var/diagnostics/dotmatrix-loo-2026-09-30-basis-bg_closing_v1.json`
+* neu: Code `fc44b47`,
+  `var/diagnostics/dotmatrix-loo-2026-09-30-bg_closing_shadow_v1.json`
+
+Zum Training zugelassen sind in beiden Läufen alle Gruppen außer `ab4` und
+`auf3` (ROM-Gegenprobe je Gruppe).
+
+| Testgruppe | Basis: Proben r/a/f | neu: Proben r/a/f | neu: Plateaus r/a/f | d_max Basis → neu |
+| --- | --- | --- | --- | --- |
+| `ab1` | 99/0/0 | 99/0/0 | 34/0/0 | 2,62 → 2,86 |
+| `ab2` | 83/0/0 | 83/0/0 | 28/0/0 | 2,70 → 2,93 |
+| `ab3` | 40/122/0 | **130/32/0** (19,8 %) | 49/5/0 | 2,60 → 2,87 |
+| `ab4` | 0/119/0 | **0/119/0** | 0/40/0 | 2,65 → 2,90 |
+| `auf2` | 0/76/0 | 0/76/0 | 0/26/0 | 2,04 → 1,87 |
+| `auf3` | 63/10/0 | **1/72/0** | 1/25/0 | 2,65 → 2,90 |
+| `ernte1` | 152/0/0 | 152/0/0 | 56/0/0 | 2,68 → 2,89 |
+| `sc3` | 47/0/0 | 47/0/0 | 17/0/0 | 2,64 → 2,88 |
+| `sc4` | 79/0/0 | 79/0/0 | 27/0/0 | 2,63 → 2,88 |
+| `sc5` | 114/0/0 | 114/0/0 | 38/0/0 | 2,57 → 2,84 |
+| `sc6` | 219/0/0 | 219/0/0 | 75/0/0 | 2,52 → 2,86 |
+
+**Urteil nach Kriterium: nicht erfüllt.**
+* 0 falsch ist erfüllt.
+* Die scharfen Gruppen sind unverändert vollständig richtig.
+* `ab3` erfüllt die 20-%-Grenze mit 19,8 % knapp.
+* `ab4` wird weiterhin vollständig abgelehnt.
+
+Nicht im Kriterium, aber ein deutlicher Rückschritt: `auf3` fällt von 63 auf
+1 richtige Probe.
+
+**Warum `ab4` nicht reicht.** Werte in der unverschobenen Abtastung, ohne
+und mit Abzug (Skript `var/diagnostics/abnahme2-schatten-vorher-nachher.py`):
+
+| Gruppe | An-Punkte | Aus neben An links | Aus neben An oben | geschätztes α links |
+| --- | --- | --- | --- | --- |
+| `sc6` | 0,89 → 0,89 | 0,18 → 0,04 | 0,15 → 0,04 | 0,11 |
+| `ab3` | 0,83 → 0,83 | 0,43 → 0,23 | 0,28 → 0,12 | 0,25 |
+| `ab4` | 0,73 → 0,71 | 0,47 → 0,38 | 0,25 → 0,17 | 0,12 |
+| `auf3` | 0,65 → 0,57 | 0,11 → 0,03 | 0,28 → 0,20 | 0,23 |
+
+* Bei `ab4` liegen die Schattenpunkte (0,47) fast so dunkel wie die
+  An-Punkte (0,73). Die Schwelle 0,5 trennt beide nicht mehr sicher: Viele
+  Schattenpunkte gelten als „an“, sie fehlen in der Regression und werden
+  nicht abgezogen. Deshalb bleibt α links mit 0,12 zu klein.
+* Die schwachen An-Punkte (0,73) erklärt der Schattenabzug ohnehin nicht.
+  Möglich sind zusätzlich Unschärfe oder ein Versatz der Abtastung um einen
+  Bruchteil eines Punkts. Die Verschiebungssuche (±1 Pixel) gleicht das nur
+  teilweise aus.
+* `auf3` hat ein anderes Muster: Aus-Punkte mit An-Nachbar **rechts**
+  liegen bei 0,58, also Versatz oder Schatten nach links. Dort verschlechtert
+  der Abzug die An-Punkte (0,65 → 0,57).
+
+Die Änderung liegt auf `master` (`fc44b47`). Ob sie bleibt, zurückgenommen
+oder in einer zweiten Fassung verbessert wird, ist offen. Stufe 2 bleibt
+mit `templates-stufe2b-2026-09-29.json` und Code `ef5cedf` eingefroren.
