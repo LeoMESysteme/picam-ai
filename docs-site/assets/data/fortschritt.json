@@ -37,6 +37,25 @@
    },
    "label": "Abnahme (bg_closing_v1)",
    "templates_sha256": "fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e"
+  },
+  {
+   "abgelehnt_anteil": 0.0,
+   "bestanden": true,
+   "file": "abnahme-stufe2c-2026-09-30.json",
+   "groups": {
+    "ab5": {
+     "abgelehnt": 0,
+     "falsch": 0,
+     "richtig": 142
+    },
+    "ab6": {
+     "abgelehnt": 0,
+     "falsch": 0,
+     "richtig": 73
+    }
+   },
+   "label": "Abnahme (bg_closing_v1)",
+   "templates_sha256": "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
   }
  ],
  "dataset": {
@@ -64,6 +83,18 @@
     "in_profile_map": true,
     "role": "abnahme",
     "samples": 119
+   },
+   {
+    "group": "ab5",
+    "in_profile_map": true,
+    "role": null,
+    "samples": 142
+   },
+   {
+    "group": "ab6",
+    "in_profile_map": true,
+    "role": null,
+    "samples": 73
    },
    {
     "group": "auf2",
@@ -120,9 +151,9 @@
     "samples": 219
    }
   ],
-  "total_samples": 1223
+  "total_samples": 1438
  },
- "generated_at": "2026-09-30T10:26:19+00:00",
+ "generated_at": "2026-09-30T11:59:01+00:00",
  "harvests": [
   {
    "distinct_values": 24,
@@ -288,6 +319,36 @@
    "setup": "ab4",
    "staging_ram": true,
    "started_at_utc": "2026-09-30T08:04:08.777380+00:00"
+  },
+  {
+   "distinct_values": 39,
+   "drop_fraction": 0.0,
+   "frames_dropped": 0,
+   "frames_recorded": 3737,
+   "group": "ab5",
+   "import_rejected": 2,
+   "imported": 142,
+   "labeled": 2134,
+   "role": null,
+   "run": "ab5-run",
+   "setup": "ab5",
+   "staging_ram": true,
+   "started_at_utc": "2026-09-30T10:54:20.822593+00:00"
+  },
+  {
+   "distinct_values": 34,
+   "drop_fraction": 0.0,
+   "frames_dropped": 0,
+   "frames_recorded": 3732,
+   "group": "ab6",
+   "import_rejected": 62,
+   "imported": 73,
+   "labeled": 2107,
+   "role": null,
+   "run": "ab6-run",
+   "setup": "ab6",
+   "staging_ram": true,
+   "started_at_utc": "2026-09-30T11:32:05.780798+00:00"
   },
   {
    "distinct_values": null,

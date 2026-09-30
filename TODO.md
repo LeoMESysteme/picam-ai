@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-30
+# TODO — Stand 2026-09-30 (nachmittags)
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,42 +9,36 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Jetzt: Abnahme 3 vorbereiten (zwei neue Aufstellungen)
+## Stand 2026-09-30 nachmittags: Abnahme 3 bestanden
 
-Stand 2026-09-30 mittags:
-* Abnahme 2 ist an **falschen Punktrastern** gescheitert, nicht am Leser.
-  Die Raster von `ab3`/`ab4` (auch `ernte1`, `auf2`, `auf3`) lagen 0,4–0,9
-  Punktspalten daneben.
-* Neu: `scripts/profile-regrid.py` misst und korrigiert Raster, die
-  korrigierten Profile sind bestätigt.
-* `loo` danach: 0 falsch, `ab4` 119/119, `ab3` 152/162.
-* **Stufe 2 ist neu eingefroren**: `templates-stufe2c-2026-09-30.json`,
-  sha256 `6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a`.
-* Details: VALIDATION.md 2026-09-30.
+Der Dot-Matrix-Leser, Stufe 2 `templates-stufe2c-2026-09-30.json`
+(`6f20dec4…`), hat Abnahme 3 über die neuen Aufstellungen `ab5` (frontal,
+gedreht) und `ab6` (schräg von links) **bestanden**:
+* 215/215 Proben richtig, 0 falsch, 0 abgelehnt,
+* Obergrenze der Fehlerrate 3,5 % (85 Plateaus).
 
-1. Den Einrichtungsassistenten reviewen (Codex hat Nacharbeit 1 und 2
-   geliefert) und bei Erfolg mergen. Damit einrichten.
-2. **Zwei neue Aufstellungen** (`ab5`, `ab6`), möglichst unterschiedlich:
-   * eine frontal-nah, eine schräg,
-   * wenn möglich anderes Licht.
-   * Einrichten wie bisher, **zusätzlich** vor dem Bestätigen den
-     Rasterversatz auf dem Standbild prüfen:
-     ```
-     profile-regrid.py still --quad-from <X-proposal>/proposal.json --frames <X-still>/frames --text "+0.4678? "
-     ```
-     `?` steht für eine wechselnde Ziffer. Bei FEHLER korrigiert
-     `--out-quad <datei>`. Danach `propose` erneut mit der ausgegebenen
-     `--quad`-Zeile aufrufen.
-   * Grenze: 0,15. Kein Lesertest.
-3. Ernten, sichern, importieren, in die Profilzuordnung eintragen.
-4. Einmal auswerten:
-   ```
-   dotmatrix-eval.py abnahme --templates var/dotmatrix/templates-stufe2c-2026-09-30.json --templates-sha256 6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a --groups ab5,ab6
-   ```
-5. `auf3` ist offen: Das korrigierte Profil ist nicht bestätigt (sehr
-   unscharf). Die Gruppe ist nie trainierbar gewesen und hat niedrige
-   Priorität.
-6. Die Einzelbilder von `ab4-run` (1,6 GB) erst nach Rückfrage löschen.
+Details und Einschränkungen: VALIDATION.md 2026-09-30.
+
+Offen:
+1. **Einrichtungsassistent:** Codex setzt Nacharbeit 2 um (Prüfung des
+   Rasterversatzes 2j, Eckkonvention, `ab3`-Vorzeichen). Danach Review und
+   Merge. Bis dahin von Hand einrichten, mit `profile-regrid.py still`.
+2. **Import bei schrägem Blick:** `zellen_inkonsistent` verwirft viel
+   (`ab6` 42 %). Die Importprüfung vergleicht über alle Positionen hinweg.
+   Prüfen, ob ein Vergleich je Position oder Halbzeile die Ausbeute hebt,
+   ohne falsche Labels durchzulassen.
+3. **Punktraster-Anpassung `latfit.py`:** lag bei jeder neuen Aufstellung
+   0,2–0,4 Punktspalten daneben, `profile-regrid.py still` korrigiert das.
+   Ersetzt wird sie mit dem Einrichtungsassistenten.
+4. **Andere Lichtquelle** und weitere Geräte bzw. Einheiten sind nicht
+   geprüft.
+5. `auf3`: Das korrigierte Profil ist nicht bestätigt, niedrige Priorität.
+6. **SD-Karte:** Das Codex-Leck in `~/.codex/.tmp/marketplaces/.staging`
+   füllt die Karte (etwa 1 GB/h). Das repowise-Plugin in Codex abschalten
+   oder eine Aufräumaufgabe einrichten. `var/` hat weiterhin keine
+   Sicherung auf einem anderen Medium.
+7. Die Einzelbilder von `ab5-run`/`ab6-run` (je 1,6 GB) erst nach Rückfrage
+   löschen.
 
 ---
 

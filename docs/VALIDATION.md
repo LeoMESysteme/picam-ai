@@ -2626,3 +2626,70 @@ Abschnitt 3, Stufe 2 Punkt 1).
 Erwartung aus `loo`: Scharfe Aufstellungen werden vollständig gelesen,
 schräge ebenfalls (`ab4` 119/119). Weiche Aufstellungen werden teilweise
 abgelehnt (`auf2` 36 %).
+
+## 2026-09-30 — Abnahme 3: `ab5`/`ab6` (bestanden, 215/215, 0 falsch, 0 abgelehnt)
+
+Stufe 2 wie oben eingefroren: `templates-stufe2c-2026-09-30.json`
+(`6f20dec4…`), Lesercode wie `ef5cedf`, Bericht-Commit `3ed9c6a`. Zwei neue
+Aufstellungen, eingerichtet **ohne** Lesertest und **mit** der Prüfung des
+Rasterversatzes vor der Ernte (`profile-regrid.py still`). Das Licht war in
+beiden Fällen das übliche Raumlicht, andere Lichtquellen gab es nicht.
+
+**`ab5`:** fast frontal von oben, um etwa 10° um die Blickachse gedreht,
+Anzeige etwa ein Drittel der Bildbreite.
+* Der erste Stand zeigte einen dunklen Spiegelfleck über den Zellen 5–11
+  (die Kamera spiegelte sich selbst). Er wurde verworfen, die Kamera steht
+  jetzt steiler.
+* Fokus 44, Kontrast 28,5 (links 21–22), 6,3 px je Punktspalte.
+* Leerzellen leer, Rand frei, Stabilität 0,06 px.
+* Rasterversatz auf dem Standbild: nach `latfit.py` **0,22**, nach der
+  Korrektur 0,03 / 0,05.
+* Gegenprüfung an 20 importierten Proben: 0,03 Punktspalten.
+* Ernte: Seed 2026093002, 3737 Bilder, 0 verworfen, längste
+  Telegrammlücke 2,36 s, Kopieren 434 s.
+* Import: 144 ausgewählt, **142 importiert**, 2 `bildguete`.
+
+**`ab6`:** schräg von links, etwa 25–30°, gespiegelt zu `ab4`.
+* Fokus 50, Kontrast 28,7 (rechts, also hinten, 19–23), 5,7 px je
+  Punktspalte.
+* Leerzellen leer, Rand frei, Stabilität 0,04 px.
+* Rasterversatz auf dem Standbild, gemessen an den Zellen 0–5 (die letzten
+  Ziffern wechselten): nach `latfit.py` **0,36**, nach der Korrektur
+  0,05 / 0,08.
+* Gegenprüfung an 20 importierten Proben: höchstens 0,14, in den Zellen
+  6–7, die beim Einrichten nicht messbar waren.
+* Ernte: Seed 2026093003, 3732 Bilder, 0 verworfen, eine Bildlücke,
+  längste Telegrammlücke 2,31 s, Kopieren 438 s.
+  * Der erste Start wurde von der Speicherprüfung abgelehnt (3,2 GB
+    `MemAvailable`, weil parallel der Import von `ab5` und Codex-Tests
+    liefen). Es gab keine Aufnahme. Nach dem Import wurde dieselbe
+    bestätigte Aufstellung gestartet.
+* Import: 135 ausgewählt, **73 importiert**, 5 `bildguete`,
+  **57 `zellen_inkonsistent`**.
+
+**Auswertung**, einmal, wie festgelegt. Bericht:
+`var/dotmatrix/abnahme-stufe2c-2026-09-30.json`.
+
+| Gruppe | Proben r/a/f | Plateaus r/a/f | Fehlerrate-Obergrenze 95 % |
+| --- | --- | --- | --- |
+| `ab5` | 142/0/0 | 48/0/0 | 6,1 % |
+| `ab6` | 73/0/0 | 37/0/0 | 7,8 % |
+| gesamt | **215/0/0** | **85/0/0** | **3,5 %** |
+
+**Bestanden** nach dem Kriterium (0 falsch, höchstens 20 % abgelehnt):
+0 falsch, 0 abgelehnt. Die Obergrenze der Fehlerrate (Clopper-Pearson
+einseitig, 95 %) über 85 entschiedene Plateaus liegt bei 3,5 %.
+
+**Einschränkungen, die zum Ergebnis gehören:**
+* **Licht:** beide Aufstellungen im Raumlicht wie alle Trainingsgruppen.
+  Eine andere Lichtquelle ist nicht geprüft.
+* **Import von `ab6`:** 42 % der ausgewählten Bilder wurden als
+  `zellen_inkonsistent` verworfen. Diese Prüfung vergleicht jede Zelle mit
+  dem Medoid ihres Zeichens über alle Positionen, ohne Leser und ohne
+  Vorlagen. Bei schrägem Blick unterscheiden sich die Positionen stärker.
+  Die Abnahme bewertet also nur die Bilder, die diese Prüfung bestanden
+  haben. Wie der Leser die verworfenen Bilder liest, ist offen. Sie sind
+  keine Abnahmedaten, weil sie das festgelegte Importverfahren nicht
+  bestanden haben.
+* Es gibt nur ein Gerät (`gsv-sensor-161a`), eine Firmware (keine negativen
+  Werte) und eine Einheit (`mV/V`).
