@@ -632,3 +632,63 @@ Belege liegen unter `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist/`
 Belege (Protokolle und Skripte):
 `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist2/` (`exp2.log`,
 `perturb3.log`, `propose.log`, `evalq.py`).
+
+## Nacharbeit 4 (Review Claude, 2026-09-30, Branch-Stand `5f992cb`) – klein, dann Merge
+
+**Urteil: Merge nach kleinen Fixes.**
+* Kein falsches Raster kam mit OK durch, weder bei 17 gestörten Startlagen
+  je Standbild (ab5, sc6, ab4) noch bei der Umgehung über `propose --quad`.
+* sc6 und ab5 liefern im echten Offline-Ablauf einen Vorschlag:
+  * ab5 liegt 0,23 px neben dem validierten Profil.
+  * sc6 liegt in den Zellen 0–7 0,13 Spalten daneben. Gegengelesen mit
+    `stufe2c` sind die Werte identisch.
+* ab4 und ab6 lehnen sauber ab (`startlage_mehrdeutig` bzw.
+  `keine_startlage`).
+* 292 gezielte Tests grün, ruff sauber, nichts unter `var/` geschrieben.
+
+**Vor dem Merge:**
+1. **F1:** Ein verbessertes Quad, das `evaluate_quad` ablehnt, wird ohne
+   Meldung verworfen (`harvest-setup.py:941-947`).
+   * Die RMS- und Bias-Grenzen in `_evaluate_fit` lehnen 3 von 4
+     validierten Profil-Quads ab, obwohl 2j OK meldet:
+     * `ab4-profile-regrid1`: `restfehler_zu_gross`,
+     * `ab6-profile`: `restfehler_zu_gross`,
+     * `sc6-profile`: `bias_zu_gross`.
+   * Szenario ab4, Scherung 0,02:
+     * Die Nachführung korrigiert auf 0,05 Spalten, aber `evaluate_quad`
+       lehnt ab.
+     * `assist` schreibt dann einen WARNUNG-Vorschlag mit dem Start-Quad,
+       das 0,22 Spalten daneben liegt.
+   * **Auftrag:**
+     * Den Kandidaten übernehmen und 2j plus `check_setup` entscheiden
+       lassen, ohne Veto durch RMS oder Bias.
+     * Oder den ganzen Lauf mit Meldung ablehnen.
+     * Nie still auf das schlechtere Quad zurückfallen.
+     * Dieselbe Ursache macht `propose --quad` für korrekte Quads von ab4,
+       ab6 und sc6 unbrauchbar. RMS und Bias sind Ersatzmaße, maßgeblich
+       ist 2j.
+     * Regressionstest: Die vier validierten Profil-Quads (ab4-regrid1,
+       ab5, ab6, sc6) bestehen `propose --quad … --cell-text …` mit OK oder
+       WARNUNG.
+2. **F2:** `confirm` erfindet `{"overall": "WARNUNG"}`, wenn `setup_checks`
+   fehlen (`:581`). Stattdessen ausdrücklich „nicht geprüft“ eintragen
+   und den Übersteuerungsgrund speichern.
+3. **Rebase auf master.**
+   * Nur Doku-Konflikte in `docs/VALIDATION.md` und diesem Plan. Beide
+     Seiten übernehmen.
+   * Die Zahl in „Messbereich der Prüfung 2j“ korrigieren: Die Zellen
+     9–12 weichen bis 0,40 Spalten ab (0,49 mit `?`-Text), nicht 0,25.
+
+**Kann später kommen:**
+* **N1:** Die erste Zeile nach `reset_input_buffer` verwerfen, sie kann ein
+  Bruchstück sein (`:310`).
+* **N2:** Der Echtbild-Test prüft auch den Abstand zum validierten Profil
+  und nutzt die grüne Hinweisbox.
+* **N3:** Nicht über die 30-s-Pause maskieren, nur je Standbild.
+* **Startlage schräger Aufstellungen** (ab4, ab6): Die Regression hält die
+  Ablehnung fest, die Suche selbst ist nicht verbessert. Solche
+  Aufstellungen richtet man vorerst von Hand mit
+  `profile-regrid.py still` ein.
+
+Belege: `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist3/`
+(`assist_runs.jsonl`, `pert_*.log`, `pytest.log`).
