@@ -2304,3 +2304,58 @@ Fehlerrate (95 %) über die 17 entschiedenen Plateaus ist 16,2 %.
 Wie vorab festgelegt, wird an `ab3`/`ab4` nichts nachgebessert. Beide gehen
 ins Training, und die nächste Abnahme braucht neue Aufstellungen. Die
 Analyse der Ablehnungen folgt im nächsten Abschnitt.
+
+## 2026-09-30 — Abnahme 2: Analyse der Ablehnungen (Befund: Punktschatten)
+
+Reine Auswertung mit den eingefrorenen Vorlagen. Die Gruppen und der Leser
+bleiben unverändert. Skripte: `var/diagnostics/abnahme2-ablehnungen.py` und
+`abnahme2-schatten.py` (nicht im Git).
+
+**Abstand je Zellposition** (Median `d_best`, Anteil über `d_max` = 2,60):
+
+| Pos. | `sc5`* | `sc6`* | `ab3` | `ab4` |
+| --- | --- | --- | --- | --- |
+| 0 (`+`) | 0,78 | 0,75 | 0,63 | 2,07 |
+| 2–4 | 0,74–0,78 | 0,76–0,98 | 1,08–1,33 (0 %) | 2,87–2,98 (92–95 %) |
+| 5–7 | 0,67–0,72 | 0,68–0,73 | 2,23–2,52 (27–44 %) | 2,61–2,87 (51–90 %) |
+| 8 (Leerzelle) | 0,41 | 0,42 | 2,51 (23 %) | 0,49 |
+
+\* Trainingsgruppen, also im Training enthalten und nur als Maßstab.
+
+* **`ab3`:** Die Zellen sind links sauber und werden nach rechts
+  schlechter.
+* **`ab4`:** Außer `+` und Leerzellen liegt fast jede Zelle knapp über
+  `d_max`.
+* Der Leser hat nie falsch gelesen. `best` war in nur 9 Zellen falsch
+  (`9` → `8`, `ab4`), und auch die wurden abgelehnt.
+
+**Ursache: Punktschatten.** Normierter Wert der **Aus**-Punkte, getrennt
+danach, auf welcher Seite ein **An**-Punkt liegt (0 = Hintergrund, 1 =
+voller Punkt):
+
+| Gruppe | An-Punkte | An-Nachbar oben | unten | links | rechts | ohne An-Nachbar |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ab1` | 0,90 | 0,07 | 0,09 | 0,09 | 0,09 | 0,01 |
+| `sc6` | 0,89 | 0,15 | 0,11 | 0,17 | 0,15 | 0,04 |
+| `ab3` | 0,94 | **0,22** | 0,10 | **0,22** | 0,10 | 0,06 |
+| `ab4` | **0,78** | 0,17 | 0,18 | **0,34** | 0,18 | 0,05 |
+
+* Ein Aus-Punkt wird dunkel, wenn sein Nachbar auf **einer bestimmten
+  Seite** an ist. Die Schattenrichtung hängt vom Blickwinkel ab:
+  * bei `ab3` von oben links nach rechts unten,
+  * bei `ab4` von links nach rechts.
+* Das passt zum Aufbau der LCD. Jeder Punkt wirft einen Schatten auf die
+  Rückschicht hinter dem Glas. Schräg betrachtet erscheint der Schatten
+  versetzt, und zwar umso weiter, je schräger der Blick.
+* Bei `ab3` (nah, weitwinklig) wird der Blick nach rechts hin schräger. Das
+  erklärt, warum die Zellen nach rechts schlechter werden. Schon beim
+  Einrichten waren „schwache Punktschatten unter den Zeichen“ notiert.
+* Bei `ab4` sind zusätzlich die An-Punkte schwächer (0,78).
+* Die Trainingsgruppen haben entweder kaum Schatten (`ab1`) oder schwächere
+  Schatten in anderer Richtung (`sc6`). Die Vorlagen kennen dieses Muster
+  deshalb nicht.
+
+**Folgerung:** Die Zeichengröße ist nicht die Ursache. Die linken Zellen von
+`ab3` liegen trotz 10,9 px je Punktspalte tief unter `d_max`. Nötig ist eine
+Entwicklungsrunde gegen Punktschatten. Der Ansatz und sein Kriterium werden
+vorab in der Spec festgelegt, `ab3`/`ab4` gehen ins Training.
