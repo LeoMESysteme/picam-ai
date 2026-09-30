@@ -665,13 +665,14 @@ Stabilität FEHLER >0,5 und WARNUNG >0,2 px bei mindestens 30 s. Die
 2026-09-29“ sind **historisch und durch diese Messung ersetzt**. Die
 Vorabwerte sind noch nicht allgemein kalibriert.
 
-Die gemeinsame gezielte Auswahl (`test_dotlattice`, `test_setup_checks`,
-`test_harvest_assist`, `test_session_profile`) bestand nach dem Rebase
-mit **118 Tests in 74,12 s**; danach kamen zwei Vorlagen-Regressionen
-hinzu. Nach Ende der Aufnahme bestand die volle Suite mit **913
-bestandenen, 3 übersprungenen und 1 erwarteten Fehlschlag in 371,86 s**.
-Ruff und `git diff --check` sind sauber. `./scripts/docs-site.sh build -s`
-meldete keine Probleme, und die **21 Playwright-Dokutests** bestanden.
+Der gezielte `test_harvest_assist.py`-Satz bestand nach dem letzten
+Rebase mit **20 Tests in 3,09 s**. Ein erster Gesamtlauf hatte einen
+einmaligen 10-s-Zeitüberschreiter bei `tesseract --version`; derselbe
+Test bestand isoliert in 0,18 s. Der vollständige Wiederholungslauf
+bestand mit **906 Tests, 3 übersprungenen und 1 erwarteten Fehlschlag
+in 326,37 s**. Ruff und `git diff --check` sind sauber.
+`./scripts/docs-site.sh build -s` meldete keine Probleme, und die
+**21 Playwright-Dokutests** bestanden.
 Der erste echte `assist`-Lauf samt Einrichtungsdauer bleibt dem
 gemeinsamen Hardwaretermin mit dem Nutzer vorbehalten.
 
