@@ -318,7 +318,7 @@ def test_templates_record_normalization_and_reject_other(tmp_path, samples):
     path = tmp_path / "templates.json"
     save_templates(t, path)
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["normalization"] == NORMALIZATION == "bg_closing_shadow_v1"
+    assert data["normalization"] == NORMALIZATION == "bg_closing_v1"
     load_templates(path)
 
     for bad in ("global_ink_v0", None):

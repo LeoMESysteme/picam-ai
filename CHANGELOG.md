@@ -3,6 +3,25 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten-Abzug zurückgenommen, wieder `bg_closing_v1`)
+
+**Problem:** Der Punktschatten-Abzug (`bg_closing_shadow_v1`, `fc44b47`)
+beruhte auf einer falschen Diagnose. Die Punktraster der Profile `ab3` und
+`ab4` sitzen daneben: `ab4` ist geschert, bei `ab3` ist der Punktabstand zu
+klein. Der Versatz beträgt bis 0,54 Punktspalten, und die
+Verschiebungssuche deckt nur ±0,24 ab. Was nach einseitigem Schatten
+aussah, war dieser Versatz (VALIDATION.md 2026-09-30, Befund
+Rasterversatz). Im `loo` erfüllte der Abzug das Kriterium nicht und
+verschlechterte `auf3` von 63 auf 1 richtige Probe.
+
+**Änderung:** `fc44b47` zurückgenommen. Normierung wieder `bg_closing_v1`,
+`BACKEND_VERSION` wieder 3, die Schattentests sind entfernt. In der Spec
+ist die Änderung als zurückgenommen markiert.
+
+**Konsequenz:** Der Lesercode entspricht wieder dem eingefrorenen Stand
+`ef5cedf`, die Vorlagen `templates-stufe2b-2026-09-29.json` laden wieder.
+Als Nächstes werden die Raster korrigiert.
+
 ## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten abziehen, Normierung `bg_closing_shadow_v1`)
 
 **Problem:** Abnahme 2 war nicht bestanden: 0 falsch, aber 85,8 % der Proben

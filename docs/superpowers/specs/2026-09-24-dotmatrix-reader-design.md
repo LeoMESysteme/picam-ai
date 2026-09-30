@@ -88,7 +88,10 @@ leer. Verletzt das Gelesene die Regel, wird der ganze Wert abgelehnt.
    Abnahme Entwicklungsdaten. Die nächste Abnahme braucht neue
    Aufstellungen (`ab3`, `ab4`).
    *Änderung 2026-09-30 (`bg_closing_shadow_v1`, nach nicht bestandener
-   Abnahme 2):* Punktschatten werden nach der Normierung je Bild
+   Abnahme 2) — **zurückgenommen am 2026-09-30**:* Das Kriterium wurde nicht
+   erfüllt, und die Diagnose war falsch. Die Abnahme-Profile `ab3`/`ab4`
+   hatten einen Rasterversatz bis 0,54 Punktspalten, kein Schattenproblem
+   (VALIDATION.md 2026-09-30). Der Text bleibt als Beleg stehen. Punktschatten werden nach der Normierung je Bild
    herausgerechnet. Anlass: Ein Aus-Punkt wird dunkler, wenn sein Nachbar
    auf einer bestimmten Seite an ist. Die Seite hängt vom Blickwinkel ab
    (Schatten des Punkts auf der Rückschicht der LCD). Normierter Wert solcher

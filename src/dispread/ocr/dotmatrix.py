@@ -21,7 +21,7 @@ from dispread.ocr.dotmatrix_sampling import MIN_CONTRAST, normalized, sample_ima
 from dispread.ocr.dotmatrix_templates import Templates, classify, load_templates
 
 BACKEND_ID = "dotmatrix"
-BACKEND_VERSION = "4"
+BACKEND_VERSION = "3"
 MAX_SATURATED = 0.02
 
 # Zellen 1-7: 0-2 Leerzellen, dann 6 Ziffern mit genau einem Punkt, die Ziffer
