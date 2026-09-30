@@ -29,6 +29,15 @@ die Leerzelle 8; der Hintergrund je Zelle kam aus dem hellen Teil, der
 dunkle Teil las sich als Punktmuster (bis 0,88, VALIDATION.md 2026-09-29).
 Die relative Punkttiefe je Zelle (`ink_per_cell_v1`) bleibt, sie wird nur
 mit dem Hintergrund des einzelnen Punkts statt der Zelle multipliziert.
+
+Seit `bg_closing_shadow_v1` (2026-09-30) werden danach Punktschatten
+abgezogen. Schraeg betrachtet wirft jeder An-Punkt einen versetzten
+Schatten auf die Rueckschicht der LCD, und der Aus-Punkt daneben wird
+dunkler (Abnahme 2: `ab4` 0,34 bei An-Nachbar links, `ab3` 0,22 oben und
+links, VALIDATION.md 2026-09-30). Je Bild und ohne Labels wird der Anteil
+je Nachbarrichtung geschaetzt (`shadow_coefficients`) und von den
+Aus-Punkten abgezogen. An-Punkte und der globale Weg der
+Leerzellenpruefung bleiben unveraendert.
 """
 
 from __future__ import annotations
@@ -51,13 +60,25 @@ _BACKGROUND_PERCENTILE = 80.0
 _INK_PERCENTILE = 3.0
 #: Kennung der Normierung, steht in jeder Vorlagendatei (Vorlagen gelten nur
 #: fuer die Normierung, mit der sie gelernt wurden).
-NORMALIZATION = "bg_closing_v1"
+NORMALIZATION = "bg_closing_shadow_v1"
 #: Halbe Kantenlaenge des Rechtecks der Hintergrund-Schliessung, in
 #: Punktspalten bzw. Punktzeilen. Groesser als ein 2 Punkte breiter Strich
 #: (der Dezimalpunkt ist 2 x 2), kleiner als ein Spiegelungskeil ueber mehrere
 #: Punkte.
 _BG_CLOSING_HALF_COLS = 1.5
 _BG_CLOSING_HALF_ROWS = 1.5
+#: Punktschatten (`bg_closing_shadow_v1`): Ab diesem normierten Wert gilt ein
+#: Punkt als an. Schatten liegen gemessen bei hoechstens 0,34 (`ab4`).
+_SHADOW_ON_LEVEL = 0.5
+#: Obergrenze je Schattenrichtung - ein Schatten dunkler als ein halber Punkt
+#: waere von einem An-Punkt nicht mehr zu trennen.
+_SHADOW_MAX_ALPHA = 0.5
+#: Mindestzahl Aus-Punkte mit An-Nachbar je Richtung, sonst kein Abzug.
+_SHADOW_MIN_SAMPLES = 10
+#: Die 8 Nachbarrichtungen (dy, dx) in der 5x7-Zelle.
+SHADOW_DIRECTIONS: tuple[tuple[int, int], ...] = tuple(
+    (dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)
+)
 #: Eine Zelle zaehlt fuer den Tiefenverlauf, wenn ihre eigene relative Tiefe
 #: mindestens diesen Anteil der globalen erreicht UND mindestens
 #: `MIN_CONTRAST` betraegt (Zellen mit Zeichen, keine Leerzellen - die
@@ -175,7 +196,58 @@ def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
     return np.where(inked, fitted, global_depth)
 
 
-def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
+def _on_neighbors(on: np.ndarray) -> np.ndarray:
+    """`on` Form (..., 40) als Bool. Ergebnis Form (..., 8, 40): Ist der
+    Nachbar in Richtung `SHADOW_DIRECTIONS[k]` innerhalb der 5x7-Zelle an?
+    Die leere Cursorzeile 8 zaehlt nicht mit."""
+    grid = on.reshape(*on.shape[:-1], ROWS, COLS).copy()
+    grid[..., 7:, :] = False
+    out = np.zeros((*on.shape[:-1], len(SHADOW_DIRECTIONS), ROWS, COLS), dtype=bool)
+    for k, (dy, dx) in enumerate(SHADOW_DIRECTIONS):
+        ys = slice(max(0, -dy), ROWS - max(0, dy))
+        xs = slice(max(0, -dx), COLS - max(0, dx))
+        yn = slice(max(0, dy), ROWS - max(0, -dy))
+        xn = slice(max(0, dx), COLS - max(0, -dx))
+        out[..., k, ys, xs] = grid[..., yn, xn]
+    out[..., 7:, :] = False
+    return out.reshape(*on.shape[:-1], len(SHADOW_DIRECTIONS), N_DOTS)
+
+
+def shadow_coefficients(norm_zero: np.ndarray) -> dict[tuple[int, int], float]:
+    """Schattenanteil je Nachbarrichtung aus der unverschobenen Abtastung
+    `norm_zero` (Form (Zellen, 40)), ohne Labels: lineare Regression ueber
+    alle Aus-Punkte, Wert = c + sum(alpha_d * [Nachbar d an])."""
+    on = norm_zero >= _SHADOW_ON_LEVEL
+    nb = _on_neighbors(on)
+    off = ~on
+    off[:, 7 * COLS :] = False
+    y = norm_zero[off].astype(np.float64)
+    x = np.moveaxis(nb, -2, -1)[off].astype(np.float64)
+    usable = [k for k in range(len(SHADOW_DIRECTIONS)) if x[:, k].sum() >= _SHADOW_MIN_SAMPLES]
+    alphas = {d: 0.0 for d in SHADOW_DIRECTIONS}
+    if not usable or y.size <= len(usable) + 1:
+        return alphas
+    design = np.column_stack([np.ones(len(y)), x[:, usable]])
+    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
+    for k, a in zip(usable, coef[1:], strict=True):
+        alphas[SHADOW_DIRECTIONS[k]] = float(np.clip(a, 0.0, _SHADOW_MAX_ALPHA))
+    return alphas
+
+
+def _remove_shadow(norm: np.ndarray) -> np.ndarray:
+    """Zieht den geschaetzten Schatten von allen Aus-Punkten jeder
+    Verschiebung ab (`bg_closing_shadow_v1`). An-Punkte bleiben."""
+    zero = SHIFTS.index((0, 0))
+    alphas = shadow_coefficients(norm[:, zero])
+    weights = np.array([alphas[d] for d in SHADOW_DIRECTIONS], dtype=np.float32)
+    if not weights.any():
+        return norm
+    on = norm >= _SHADOW_ON_LEVEL
+    shade = np.einsum("...kn,k->...n", _on_neighbors(on).astype(np.float32), weights)
+    return np.where(on, norm, np.clip(norm - shade, 0.0, 1.0)).astype(np.float32)
+
+
+def normalized(s: SampledImage, ink: float | None = None, remove_shadow: bool = True) -> np.ndarray:
     """Rohhelligkeiten auf [0, 1] normiert, 1 = voll dunkel (Punkt an).
 
     Ohne `ink` (Vorgabe, `ink_per_cell_v1`): Die Punkttiefe jeder Zelle mit
@@ -207,5 +279,7 @@ def normalized(s: SampledImage, ink: float | None = None) -> np.ndarray:
         else:
             depth = bg - ink_level
     depth = np.where(depth > 1e-3, depth, 1e-3)
-    out = (bg - s.raw) / depth
-    return np.clip(out, 0.0, 1.0).astype(np.float32)
+    out = np.clip((bg - s.raw) / depth, 0.0, 1.0).astype(np.float32)
+    if remove_shadow and ink is None:
+        out = _remove_shadow(out)
+    return out

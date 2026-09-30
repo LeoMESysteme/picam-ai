@@ -3,6 +3,30 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten abziehen, Normierung `bg_closing_shadow_v1`)
+
+**Problem:** Abnahme 2 war nicht bestanden: 0 falsch, aber 85,8 % der Proben
+abgelehnt. Schräg betrachtet wirft jeder An-Punkt der LCD einen versetzten
+Schatten auf die Rückschicht, und der Aus-Punkt daneben wird dunkler
+(`ab4` 0,34 bei An-Nachbar links, `ab3` 0,22 oben und links).
+Die Vorlagen kannten dieses Muster nicht (VALIDATION.md 2026-09-30).
+
+**Änderung:** `normalized()` zieht die Punktschatten nach der Normierung je
+Bild ab. `shadow_coefficients` schätzt ohne Labels den Schattenanteil je
+Nachbarrichtung: 8 Richtungen, lineare Regression über alle Aus-Punkte, auf
+[0; 0,5] begrenzt, mindestens 10 Punkte je Richtung. Der Anteil wird nur von
+Aus-Punkten abgezogen. An-Punkte und der globale Weg der Leerzellenprüfung
+bleiben unverändert. `remove_shadow=False` schaltet den Abzug für Tests und
+Vergleiche ab. Die Normierung heißt jetzt `bg_closing_shadow_v1`,
+`BACKEND_VERSION` ist 4. Die Spec bekommt §2 Punkt 3 mit einem vorab
+festgelegten `loo`-Kriterium. Dazu 7 synthetische Tests: Gegenprobe,
+Schatten nach rechts, Schatten schräg, ohne Schatten unverändert, An-Punkte
+unverändert, zu wenige Punkte je Richtung, globaler Weg.
+
+**Konsequenz:** Vorlagen mit `bg_closing_v1` werden abgelehnt und müssen neu
+gelernt werden. Ob der Abzug wirkt, entscheidet der `loo`-Lauf nach dem
+vorab festgelegten Kriterium.
+
 ## 0.1.0.dev0 — 2026-09-30 (Zensical-Einstieg und Doku-Pflege)
 
 **Problem:** Die Startseite nannte noch die außer Betrieb genommene IMX500 als
