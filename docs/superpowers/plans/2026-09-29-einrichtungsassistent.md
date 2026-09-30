@@ -546,3 +546,89 @@ korrigiert damit bestehende Profile.
 
 Belege liegen unter `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist/`
 (`perturb.log`, `exp1.log`).
+
+## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
+
+**Urteil: zurück an Codex.**
+* Die Prüfung 2j ist gut:
+  * Sie baut auf `lattice_offsets` auf und blockiert bei FEHLER.
+  * Sie fing jede Rasterstörung ab: ±0,3–0,5 Spalten, ±1 Spalte oder Zeile,
+    Scherung 0,05, Punktabstand 0,98–1,02. Bei ab4 misst sie +0,3/+0,4
+    Spalten als FEHLER 0,34/0,44.
+* Die Punkte 1 und 3–8 aus Nacharbeit 2 sind erfüllt. 198 gezielte Tests
+  sind grün, ruff ist sauber.
+* **Aber:** Auf keinem der vier echten Standbilder (ab4, ab5, ab6, sc6)
+  liefert `assist` einen Vorschlag, auch nicht auf dem validierten sc6.
+
+**Blockierend:**
+1. **B1 – `evaluate_quad` sucht andere Punktkandidaten als `refine`/`fit_lattice`.**
+   * Ort: `dotlattice.py:398`. `evaluate_quad` nimmt alle 3×3-Minima im
+     Quellbild (`_source_candidates`), `refine` erkennt Punkte im
+     entzerrten 2×-Bild mit einem Erosionskern in Punktgröße.
+   * Beleg, von Claude nachgeprüft: Dasselbe sc6-Quad ergibt über
+     `fit_lattice` 193/206 (0,94, OK), über `evaluate_quad` 192/301 (0,64,
+     FEHLER).
+   * Folge: Jedes nachgeführte Quad scheitert an der Zuordnungsquote,
+     obwohl 2j OK ist. Bei sc6 steht 2j auf 0,043, trotzdem kein
+     Vorschlag. Bei ab5 korrigiert die Nachführung von 0,32 auf 0,033
+     Spalten, trotzdem ergibt sich 346/1905 und FEHLER.
+   * `_heldout_improves` übernimmt schon bei einer Verbesserung von 0,001,
+     deshalb landet fast jeder Lauf in diesem Pfad.
+   * Der Test `test_assist_adopts_refined_quad_only_with_better_heldout_offset`
+     ersetzt `evaluate_quad`, `raster_offset_check` und `check_setup` durch
+     Attrappen und sieht den Fehler deshalb nicht.
+   * **Auftrag:**
+     * Eine gemeinsame Kandidatenerkennung für `refine`, `fit_lattice` und
+       `evaluate_quad`.
+     * Regressionstest mit echtem Standbild:
+       * `evaluate_quad(fit.quad)` gibt `n_dots`/`n_assigned` des Fits
+         ungefähr wieder.
+       * Ein nachgeführtes sc6-Quad ergibt als Gesamturteil OK oder
+         WARNUNG.
+     * Einen **echten** Assist-Ablauf (Fit → Nachführung → Schlussprüfung)
+       ohne Attrappen auf den Standbildern von sc6 und ab5 als Test
+       aufnehmen, offline mit `--cell-text`.
+     * Die Übernahme erst ab einer spürbaren Verbesserung, z. B. 0,02
+       Spalten.
+   * Überlegen, ob die Zuordnungsquote neben 2j überhaupt noch
+     entscheiden soll. Sie war nur ein Ersatzmaß für den Rasterversatz.
+     Mindestens darf sie ein Quad, das 2j besteht, nicht wegen anderer
+     Kandidaten verwerfen.
+2. **B2 – 2j lässt sich umgehen.**
+   * `propose --quad …` und der Glas-Detektor setzen kein `fit`, deshalb
+     laufen weder 2j noch `setup_checks` (`harvest-setup.py:371-392`).
+   * `run_confirm` (`:515-549`) bestätigt auch Vorschläge ohne
+     `rasterversatz`.
+   * Genau über handgesetzte Quads sind die falschen Profile ab3 und ab4
+     entstanden.
+   * **Auftrag:**
+     * `propose --quad` führt mit `--cell-text` 2j und `setup_checks` aus.
+     * `confirm` verlangt `rasterversatz` mit OK oder WARNUNG, sonst
+       `--override-reason`.
+
+**In derselben Runde:**
+3. **Serieller Zellentext klammert das Standbild nicht ein**
+   (`harvest-setup.py:307-315`, `:855`, `:877`).
+   * Der Text kommt aus dem ersten Telegramm nach der Aufnahme. Bei ab6 und
+     sc6 wechseln die letzten Ziffern innerhalb von 3 s. Ein falscher Text
+     macht aus WARNUNG 0,16 einen FEHLER 0,27. Das ist sicher, kostet aber
+     Verfügbarkeit.
+   * **Auftrag:** Telegramme vor und nach jedem Standbild lesen und Zellen,
+     die in diesem Fenster wechseln, als `?` ausblenden, statt abzubrechen.
+4. **`fit_lattice` findet auf echten Standbildern keine Startlage:**
+   * ab4 meldet `startlage_mehrdeutig` (grüne und Profil-Hinweisbox),
+   * ab6 meldet `keine_startlage` nach 19–37 s.
+   * Das ist sicher, aber damit kommen schräge Aufstellungen gar nicht bis
+     zur Nachführung. Die Standbilder als Regression aufnehmen.
+5. **Test für „3 unterdrückte Nullen“:** `"+000988.5 mV/V"` scheitert schon am
+   Regex (8-stelliger Zahlenblock), der Zweig `zeros > 2` in
+   `gsv2as_cell_text.py` bleibt ungetestet. Die Zuordnungsregel ist aus
+   `import-harvest`/`gate-label` dupliziert; den Kern besser gemeinsam
+   nutzen.
+6. **Grenze dokumentieren:** 2j misst nur die Zellen 0–7, weil das ROM
+   `m`/`V`/`/` nicht kennt. Die Zellen 9–12 werden extrapoliert: sc6-Profil
+   und nachgeführtes Quad weichen dort bis 0,25 Spalten voneinander ab.
+
+Belege (Protokolle und Skripte):
+`/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist2/` (`exp2.log`,
+`perturb3.log`, `propose.log`, `evalq.py`).
