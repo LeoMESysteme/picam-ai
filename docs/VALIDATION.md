@@ -2246,3 +2246,61 @@ In die Profilzuordnung eingetragen, Vorstand als
 Einfrieren festgehaltenen Prüfsumme (`77a7b678…`) nur um den Eintrag
 `ab3` ab. Die Trainingsgruppen sind unverändert. `ab4` steht noch aus,
 ausgewertet wird erst danach, einmal über `ab3,ab4`.
+
+## 2026-09-30 — Abnahme 2: Aufstellung `ab4` und Auswertung (nicht bestanden, 0 falsch)
+
+**`ab4`** ist eine Abnahme-Aufstellung, eingerichtet **ohne** Lesertest. Die
+Vorlagen sind unverändert `templates-stufe2b-2026-09-29.json` (sha256
+`fc3b44bd…`), der Lesercode ist gegenüber `ef5cedf` unverändert
+(`git diff ef5cedf HEAD -- src` leer).
+
+Kamera schräg von rechts oben, etwa 25–30° seitlich. **Licht wie bei `ab3`**
+(Raumlicht, eine andere Lichtquelle war nicht verfügbar). `ab4` unterscheidet
+sich von `ab3` also nur in Winkel und Abstand. Fokus 52, Profil
+`var/diagnostics/ab4-profile` (sha256 `802c781e…`), bestätigt von Leonhard
+Hentschke.
+
+Zwei Zwischenstände wurden verworfen:
+* **Erster Stand:** Kamera zu schräg und zu nah, links unscharf.
+* **Zweiter Stand:** flacher, aber immer noch nah. Punktkontrast
+  insgesamt 14,0, Zellen 0–3 nur 6–9. Das `+` war so weich, dass die
+  Rasteranpassung dort keinen Punkt fand. Ursache: zu geringe Schärfentiefe.
+  Abhilfe war der etwa 1,5-fache Abstand.
+
+Endgültiger Stand:
+* Punktkontrast 32,7 (Zellen 0–2 22–26, Zellen 9–12 34–36), kleinste
+  Punktspalte 6,5 px, keine Sättigung.
+* Rasteranpassung 0,17 / 0,26, höchster Zellen-Bias 0,06. Punkte nur in den
+  Zellen 0–7 und 9–12; Leerzellen 8 und 13–15 leer (Kontrast 1,7–2,8).
+  Zelle 15 frei (so hell wie 13/14).
+* Stabilität über 2 s höchstens 0,04 px.
+
+**Ernte** (Zwischenablage im RAM, Seed 2026093001): 3737 Bilder, 0
+verworfen, keine Bildlücke > 50 ms, längste Telegrammlücke 2,3 s. Kopieren
+1,6 GB in 198 s.
+
+**Import:** 153 ausgewählt, **119 importiert**, 34 `zellen_inkonsistent`.
+Ausrichtung Median 0,05 px, höchstens 0,17 px. Die Importprüfung vergleicht
+jede Zelle mit dem Medoid ihres Zeichens über **alle** Positionen. Bei
+schrägem Blick sieht dasselbe Zeichen links und rechts verschieden aus. Das
+erklärt vermutlich den höheren Anteil; geprüft ist es nicht. Die Prüfung
+wurde nicht geändert. Profilzuordnung um `ab4` ergänzt, der Vorstand liegt
+als `dotmatrix-profile-map.v6.json` daneben.
+
+**Auswertung**, einmal, wie festgelegt. Bericht:
+`var/dotmatrix/abnahme-stufe2b-2026-09-30.json`.
+
+| Gruppe | Proben | richtig | falsch | abgelehnt | Plateaus richtig / abgelehnt |
+| --- | --- | --- | --- | --- | --- |
+| `ab3` | 162 | 40 | 0 | 122 (75,3 %) | 17 / 37 |
+| `ab4` | 119 | 0 | 0 | 119 (100 %) | 0 / 40 |
+| gesamt | 281 | 40 | **0** | 241 (**85,8 %**) | 17 / 77 |
+
+Alle Ablehnungen haben den Grund `zelle_unbekannt`: Mindestens eine Zelle lag
+weiter als `d_max` von allen Vorlagen. **Nicht bestanden**, weil mehr als
+20 % abgelehnt wurden. Die Sicherheit hält (0 falsch). Die Obergrenze der
+Fehlerrate (95 %) über die 17 entschiedenen Plateaus ist 16,2 %.
+
+Wie vorab festgelegt, wird an `ab3`/`ab4` nichts nachgebessert. Beide gehen
+ins Training, und die nächste Abnahme braucht neue Aufstellungen. Die
+Analyse der Ablehnungen folgt im nächsten Abschnitt.

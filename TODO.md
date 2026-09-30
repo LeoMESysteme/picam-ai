@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-29 (abends)
+# TODO — Stand 2026-09-30
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -9,7 +9,27 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Morgen weiter: Abnahme 2 abschließen (`ab4` ernten, dann einmal auswerten)
+## Jetzt: Ablehnungen von Abnahme 2 verstehen, dann nächste Entwicklungsrunde
+
+Abnahme 2 ist am 2026-09-30 **nicht bestanden**: 0 falsch, aber 85,8 %
+abgelehnt (`ab3` 75 %, `ab4` 100 %, alle `zelle_unbekannt`). Die Details
+stehen in VALIDATION.md 2026-09-30. `ab3`/`ab4` werden nicht nachgebessert,
+sie gehen ins Training.
+
+1. Die Ablehnungen analysieren: Abstand je Zelle und Zeichen zu den Vorlagen
+   gegen `d_max`, getrennt nach `ab3`/`ab4`, und die Ursache benennen
+   (Zeichengröße, Perspektive, Normierung?). Das ist eine reine Auswertung,
+   ohne Änderung an den Gruppen.
+2. Aus dem Befund die nächste Entwicklungsrunde ableiten. Das
+   Erfolgskriterium wird vorab in der Spec festgelegt, dann `loo` mit
+   `ab3`/`ab4` als Trainingsgruppen.
+3. Für Abnahme 3 sind zwei **neue** Aufstellungen nötig, möglichst eine davon
+   mit anderem Licht.
+4. Die Einzelbilder von `ab4-run` (1,6 GB) erst nach Rückfrage löschen.
+
+---
+
+## Erledigt 2026-09-30: Abnahme 2 abgeschlossen (`ab4` geerntet, einmal ausgewertet)
 
 Stand 2026-09-29 abends: Stufe 2 ist mit `bg_closing_v1` eingefroren
 (Vorlagen `var/dotmatrix/templates-stufe2b-2026-09-29.json`, sha256

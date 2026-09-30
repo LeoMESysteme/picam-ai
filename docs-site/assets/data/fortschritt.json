@@ -18,6 +18,25 @@
    },
    "label": "Abnahme 1 (ink_per_cell_v1)",
    "templates_sha256": "4524d6a145a478b0106c013f5408e85e3fce4ddd3f5fa1fae5625431c5f79326"
+  },
+  {
+   "abgelehnt_anteil": 0.8576512455516014,
+   "bestanden": false,
+   "file": "abnahme-stufe2b-2026-09-30.json",
+   "groups": {
+    "ab3": {
+     "abgelehnt": 122,
+     "falsch": 0,
+     "richtig": 40
+    },
+    "ab4": {
+     "abgelehnt": 119,
+     "falsch": 0,
+     "richtig": 0
+    }
+   },
+   "label": "Abnahme (bg_closing_v1)",
+   "templates_sha256": "fc3b44bdc880372a600168218560a3926fa307fe533b2592f7c4c244a89aa75e"
   }
  ],
  "dataset": {
@@ -39,6 +58,12 @@
     "in_profile_map": true,
     "role": "abnahme",
     "samples": 162
+   },
+   {
+    "group": "ab4",
+    "in_profile_map": true,
+    "role": "abnahme",
+    "samples": 119
    },
    {
     "group": "auf2",
@@ -95,9 +120,9 @@
     "samples": 219
    }
   ],
-  "total_samples": 1104
+  "total_samples": 1223
  },
- "generated_at": "2026-09-29T14:27:54+00:00",
+ "generated_at": "2026-09-30T08:31:38+00:00",
  "harvests": [
   {
    "distinct_values": 24,
@@ -248,6 +273,21 @@
    "setup": "ab3",
    "staging_ram": true,
    "started_at_utc": "2026-09-29T13:55:28.875778+00:00"
+  },
+  {
+   "distinct_values": 38,
+   "drop_fraction": 0.0,
+   "frames_dropped": 0,
+   "frames_recorded": 3737,
+   "group": "ab4",
+   "import_rejected": 34,
+   "imported": 119,
+   "labeled": 2070,
+   "role": "abnahme",
+   "run": "ab4-run",
+   "setup": "ab4",
+   "staging_ram": true,
+   "started_at_utc": "2026-09-30T08:04:08.777380+00:00"
   },
   {
    "distinct_values": null,
