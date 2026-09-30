@@ -59,7 +59,7 @@ seriellen Lauf; `var/` wurde nur gelesen. Zahlen und Grenzen stehen in
 [VALIDATION.md](VALIDATION.md) und im
 [Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md).
 
-**Branch-Prüfung:** 995 Python-Tests bestanden, 3 übersprungen,
+**Branch-Prüfung:** 997 Python-Tests bestanden, 3 übersprungen,
 1 erwarteter Fehlschlag; 155 gezielte Tests bestanden. Ruff und
 `git diff --check` waren sauber. Der Zensical-Build meldete keine
 Probleme, alle 21 Playwright-Dokutests bestanden. Eine abschließende

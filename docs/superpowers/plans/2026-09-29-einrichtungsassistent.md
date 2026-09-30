@@ -891,11 +891,12 @@ Belege: `/home/me-systeme/.claude/jobs/5e3104b9/tmp/review-assist3/`
 
 ### Stand Nacharbeit 4 — 2026-09-30
 
-Der Feature-Branch wurde auf `master` mit dem Review-Nachtrag 4
-rebasiert. Die Doku-Konflikte in diesem Plan und `docs/VALIDATION.md`
-wurden als getrennte historische Abschnitte zusammengeführt; die
-Abnahme 3 des Nutzers blieb erhalten. Der Haupt-Checkout und seine
-uncommittete Änderung in `PLANNED_FEATURES.md` blieben unberührt.
+Der Feature-Branch wurde auf den aktuellen `master`-Stand `e98bc70`
+mit dem Review-Nachtrag 4 rebasiert. Die Doku-Konflikte wurden als
+getrennte historische Abschnitte zusammengeführt; die Abnahme 3 und
+die Fortschrittsseiten-Änderungen des Nutzers blieben erhalten. Der
+Haupt-Checkout und seine uncommittete Änderung in
+`PLANNED_FEATURES.md` blieben unberührt.
 
 F1: `evaluate_quad` liefert für feste Quads die RMS- und Bias-Werte
 ohne Veto; die automatische Startsuche behält ihre Grenzen. Bei
@@ -915,7 +916,7 @@ Laborjournal auf 0,40 beziehungsweise 0,49 Punktspalten mit `?`-Text
 korrigiert.
 
 Gezielt bestanden 155 Integrations- und Lattice-Tests. Die
-vollständige Python-Suite bestand mit 995 Tests, 3 Übersprüngen und
+vollständige Python-Suite bestand mit 997 Tests, 3 Übersprüngen und
 1 erwartetem Fehlschlag. Ruff und `git diff --check` waren sauber.
 Der Zensical-Build meldete keine Probleme, alle 21 Playwright-
 Dokutests bestanden. Eine abschließende Code-Review fand keinen
