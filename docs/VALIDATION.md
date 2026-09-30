@@ -2575,3 +2575,54 @@ starker Unschärfe nicht bestätigt.
   `ernte1` fehlt dem Training die Spannweite weicher Bilder, und `auf2` wird
   zu 30 % abgelehnt statt zu 8 %.
 * Für die scharfen Gruppen ist es gleich, ob `ernte1` im Training ist.
+
+**`loo` mit korrigiertem `ernte1`** (Entscheidung des Nutzers: `ernte1`
+behalten, korrigiertes Profil `ernte1-profile-regrid1.json`, bestätigt;
+`dotmatrix-loo-2026-09-30-regrid2.json`). Gegenüber dem Lauf mit altem
+`ernte1`-Profil:
+
+| Testgruppe | altes `ernte1`-Profil r/a/f | korrigiert r/a/f |
+| --- | --- | --- |
+| `ernte1` | 149/3/0 | **152/0/0** |
+| `ab3` | 150/12/0 | 152/10/0 |
+| `auf2` | 70/6/0 | **49/27/0** |
+| `auf3` (altes Profil, nicht trainierbar) | 0/73/0 | 0/73/0 |
+| übrige | alle richtig | alle richtig |
+
+* Auch hier gab es 0 falsche Werte.
+* `auf2` profitierte vorher offenbar von den **verschobenen**
+  `ernte1`-Proben: Sie verbreiterten die gelernte Streuung. Mit korrektem
+  Raster fällt dieser Effekt weg, und `auf2` wird zu 36 % abgelehnt. Das
+  entspricht der Variante ohne `ernte1`.
+
+## 2026-09-30 — Dot-Matrix-Leser: Stufe 2 neu gelernt und eingefroren (korrigierte Raster, vor Abnahme 3)
+
+Eingetragen, **bevor** die Aufstellungen für Abnahme 3 entstehen (Spec
+Abschnitt 3, Stufe 2 Punkt 1).
+
+| Größe | Wert |
+| --- | --- |
+| Code-Commit | `f3f6d2f` (Lesercode unverändert gegenüber `ef5cedf`, Normierung `bg_closing_v1`) |
+| Vorlagen | `var/dotmatrix/templates-stufe2c-2026-09-30.json` (schreibgeschützt, Kopie in `/home/me-systeme/var-backups/`) |
+| sha256 der Vorlagen | `6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a` |
+| Formate | `format_version` 3, `normalization` `bg_closing_v1`, `threshold_formula` `thresholds_v1`, `rom_check` `rom_check_v2` |
+| Trainingsgruppen | `ab1`, `ab2`, `ab3`, `ab4`, `auf2`, `ernte1`, `sc3`, `sc4`, `sc5`, `sc6`; `auf3` nicht trainiert |
+| Korrigierte Profile | `ab3`, `ab4`, `auf2`, `ernte1` (`*-profile-regrid1.json`, bestätigt von Leonhard Hentschke) |
+| Schwellen | d_max 1,9154, margin_min 0,9304 (vorher 2,5978 / 0,8168) |
+| ROM-Abweichung der Vorlagen | 0 Punkte bei allen 13 Zeichen |
+| Profil-Zuordnung | `var/diagnostics/dotmatrix-profile-map.json`, sha256 `59a7766dec7224e0c72323590e45220b3fbca77cb8824ddb649c2b4ccc804599` (Kopie `dotmatrix-profile-map-stufe2c-2026-09-30.json` in `var-backups`) |
+
+**Ablauf für Abnahme 3:**
+* Zwei **neue** Aufstellungen, eingerichtet mit der Prüfung des
+  Rasterversatzes. Waagerecht je Halbzelle und senkrecht je Zelle höchstens
+  0,15, sonst neu anpassen (`profile-regrid.py` oder
+  Einrichtungsassistent).
+* Kein Lesertest.
+* Einmaliger Lauf `dotmatrix-eval.py abnahme --templates
+  var/dotmatrix/templates-stufe2c-2026-09-30.json --templates-sha256
+  6f20dec4… --groups <neu1>,<neu2>`.
+* Bestanden bei 0 falsch und höchstens 20 % abgelehnt.
+
+Erwartung aus `loo`: Scharfe Aufstellungen werden vollständig gelesen,
+schräge ebenfalls (`ab4` 119/119). Weiche Aufstellungen werden teilweise
+abgelehnt (`auf2` 36 %).

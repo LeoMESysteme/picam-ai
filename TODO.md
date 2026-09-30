@@ -9,23 +9,40 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 
 ---
 
-## Jetzt: Ablehnungen von Abnahme 2 verstehen, dann nächste Entwicklungsrunde
+## Jetzt: Abnahme 3 vorbereiten (zwei neue Aufstellungen)
 
-Abnahme 2 ist am 2026-09-30 **nicht bestanden**: 0 falsch, aber 85,8 %
-abgelehnt (`ab3` 75 %, `ab4` 100 %, alle `zelle_unbekannt`). Die Details
-stehen in VALIDATION.md 2026-09-30. `ab3`/`ab4` werden nicht nachgebessert,
-sie gehen ins Training.
+Stand 2026-09-30 mittags:
+* Abnahme 2 ist an **falschen Punktrastern** gescheitert, nicht am Leser.
+  Die Raster von `ab3`/`ab4` (auch `ernte1`, `auf2`, `auf3`) lagen 0,4–0,9
+  Punktspalten daneben.
+* Neu: `scripts/profile-regrid.py` misst und korrigiert Raster, die
+  korrigierten Profile sind bestätigt.
+* `loo` danach: 0 falsch, `ab4` 119/119, `ab3` 152/162.
+* **Stufe 2 ist neu eingefroren**: `templates-stufe2c-2026-09-30.json`,
+  sha256 `6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a`.
+* Details: VALIDATION.md 2026-09-30.
 
-1. Die Ablehnungen analysieren: Abstand je Zelle und Zeichen zu den Vorlagen
-   gegen `d_max`, getrennt nach `ab3`/`ab4`, und die Ursache benennen
-   (Zeichengröße, Perspektive, Normierung?). Das ist eine reine Auswertung,
-   ohne Änderung an den Gruppen.
-2. Aus dem Befund die nächste Entwicklungsrunde ableiten. Das
-   Erfolgskriterium wird vorab in der Spec festgelegt, dann `loo` mit
-   `ab3`/`ab4` als Trainingsgruppen.
-3. Für Abnahme 3 sind zwei **neue** Aufstellungen nötig, möglichst eine davon
-   mit anderem Licht.
-4. Die Einzelbilder von `ab4-run` (1,6 GB) erst nach Rückfrage löschen.
+1. Den Einrichtungsassistenten reviewen (Codex hat Nacharbeit 1 und 2
+   geliefert) und bei Erfolg mergen. Damit einrichten.
+2. **Zwei neue Aufstellungen** (`ab5`, `ab6`), möglichst unterschiedlich:
+   * eine frontal-nah, eine schräg,
+   * wenn möglich anderes Licht.
+   * Einrichten wie bisher, **zusätzlich** die Prüfung des Rasterversatzes:
+     ```
+     profile-regrid.py measure --profile <profil> --group <gruppe>
+     ```
+     geht erst nach Ernte und Import. Vor der Ernte stattdessen auf dem
+     Standbild mit bekanntem Text messen (Einrichtungsassistent 2j).
+   * Grenze: 0,15. Kein Lesertest.
+3. Ernten, sichern, importieren, in die Profilzuordnung eintragen.
+4. Einmal auswerten:
+   ```
+   dotmatrix-eval.py abnahme --templates var/dotmatrix/templates-stufe2c-2026-09-30.json --templates-sha256 6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a --groups ab5,ab6
+   ```
+5. `auf3` ist offen: Das korrigierte Profil ist nicht bestätigt (sehr
+   unscharf). Die Gruppe ist nie trainierbar gewesen und hat niedrige
+   Priorität.
+6. Die Einzelbilder von `ab4-run` (1,6 GB) erst nach Rückfrage löschen.
 
 ---
 
