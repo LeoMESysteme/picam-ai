@@ -621,7 +621,7 @@ Aufgabe 5 dieses Plans unberührt; Claudes Merge-Schritt pflegt sie.
 
 ## Stand Nacharbeit 1 — 2026-09-30
 
-Der Branch wurde erneut auf das heutige `origin/master` (`3596ddf`)
+Der Branch wurde erneut auf das heutige `origin/master` (`7367ea6`)
 rebasiert. Die Codepunkte 1–9 sind umgesetzt; eine abschließende
 Gesamt-Review fand keinen belegten mergekritischen Codefehler. Ein
 synthetischer Fall mit zwei Anzeigen und einem schwächer erkannten
@@ -629,6 +629,13 @@ Plusanker wird als `startlage_mehrdeutig` abgelehnt. Eine weitere
 Score-7-Hypothese aus der Review ließ sich in drei konkreten
 Zwei-Punkt-Gegenproben nicht als stille Fehlannahme reproduzieren; die
 probeweise Lockerung wurde zurückgenommen.
+
+Seit diesem Rebase verlangt `DotMatrixReader` Vorlagen mit
+`bg_closing_shadow_v1`. Die vorhandene eingefrorene Stufe-2b-Vorlage trägt
+`bg_closing_v1` und ist für das optionale Gegenlesen inkompatibel. Der
+Assistent prüft übergebene Vorlagen vor dem Kamerastart; das Gegenlesen
+braucht eine zum aktuellen Leser passende, geprüfte Vorlagendatei. Der
+Assistent ändert weder Lesercode noch Vorlagen.
 
 Die sechs gespeicherten Standbilder treffen mit Profil-Hinweisbox das
 bestätigte Quad auf höchstens **0,48 px**, mit automatisch erkannter
@@ -652,14 +659,14 @@ Stabilität FEHLER >0,5 und WARNUNG >0,2 px bei mindestens 30 s. Die
 Vorabwerte sind noch nicht allgemein kalibriert.
 
 Die gemeinsame gezielte Auswahl (`test_dotlattice`, `test_setup_checks`,
-`test_harvest_assist`, `test_session_profile`) bestand nach dem Rasterfix
-mit **117 Tests in 90,96 s**; danach kamen `sc6`-Regressionen auf Frame 15
-hinzu. Nach Ende der Aufnahme bestand die volle Suite mit **903 bestanden,
-3 übersprungen, 1 erwarteten Fehlschlag in 320,96 s**. Ruff und
-`git diff --check` sind sauber. `./scripts/docs-site.sh build -s` meldete
-keine Probleme, und die **20 Playwright-Dokutests** bestanden. Der erste
-echte `assist`-Lauf samt Einrichtungsdauer bleibt dem gemeinsamen
-Hardwaretermin mit dem Nutzer vorbehalten.
+`test_harvest_assist`, `test_session_profile`) bestand nach dem Rebase
+mit **118 Tests in 74,12 s**; danach kamen zwei Vorlagen-Regressionen
+hinzu. Nach Ende der Aufnahme bestand die volle Suite mit **913
+bestandenen, 3 übersprungenen und 1 erwarteten Fehlschlag in 371,86 s**.
+Ruff und `git diff --check` sind sauber. `./scripts/docs-site.sh build -s`
+meldete keine Probleme, und die **21 Playwright-Dokutests** bestanden.
+Der erste echte `assist`-Lauf samt Einrichtungsdauer bleibt dem
+gemeinsamen Hardwaretermin mit dem Nutzer vorbehalten.
 
 ## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
 

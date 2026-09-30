@@ -110,6 +110,7 @@ from dispread.frames.uvc_source import (
     v4l2_set_controls,
 )
 from dispread.glassquad import glass_quad_in_region
+from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_reader
@@ -717,6 +718,14 @@ def _print_setup_checks(checks: dict[str, Any]) -> None:
     print(f"Gesamturteil: {checks['overall']}")
 
 
+def _validate_reader_templates(path: Path, expected_sha256: str) -> None:
+    """Pruefsumme und Leserkompatibilitaet vor dem Kamerastart pruefen."""
+    try:
+        DotMatrixReader.from_file(path, expected_sha256)
+    except (OSError, ValueError) as exc:
+        raise SetupError(f"Vorlagendatei {path} kann der Leser nicht verwenden: {exc}") from exc
+
+
 def run_assist(args: argparse.Namespace) -> int:
     if not math.isfinite(args.stability_s) or args.stability_s < 30.0:
         print("--stability-s muss endlich und mindestens 30 Sekunden betragen", file=sys.stderr)
@@ -724,6 +733,12 @@ def run_assist(args: argparse.Namespace) -> int:
     if (args.templates is None) != (args.templates_sha256 is None):
         print("--templates und --templates-sha256 muessen zusammen angegeben werden", file=sys.stderr)
         return 2
+    if args.templates is not None:
+        try:
+            _validate_reader_templates(args.templates, args.templates_sha256)
+        except SetupError as exc:
+            print(f"Einrichtungsassistent abgebrochen: {exc}", file=sys.stderr)
+            return 2
     if args.hint_box is not None:
         try:
             hint_box = _parse_hint_box(args.hint_box)

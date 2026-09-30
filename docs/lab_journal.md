@@ -1617,15 +1617,16 @@ geprüft, damit zwei Anzeigen in einer Hinweisbox nicht geraten werden.
 von `ab2` den Wert 8,5 und FEHLER; die anderen fünf Aufstellungen liegen
 bei 1–3 und bleiben OK. Float-Punktkontrast ist `sc5=19,101` und
 `sc6=19,726`, mit der vorläufigen WARNUNG-Schwelle 17 beide OK. Der
-Leserkontrast nach `bg_closing_v1` liegt für diese beiden bei 0,283 und
-0,339. Rahmen und Glanz melden auf allen bestätigten Aufstellungen OK.
+Leserkontrast aus `sample_image` vor der Normierung liegt für diese
+beiden bei 0,283 und 0,339. Rahmen und Glanz melden auf allen
+bestätigten Aufstellungen OK.
 Die synthetische Gegenprobe verdunkelt äußere Punktspalten und erkennt
 auch die linke Spalte eines echten Plus. Die im Plan genannten 44 gegen
 94 Grauwerte für `sc6` gehören zu einem verworfenen Zwischenstand;
 dessen Bild liegt nicht mehr vor und kann hier nicht nachgerechnet werden.
 
 **Deutung:** Die Kantenampel von `ab2` bleibt ein konservativer Vorabwert
-für die Spiegelkante, auch wenn die spätere Lesernormierung
+für die Spiegelkante, auch wenn die eingefrorene Stufe-2-Normierung
 `bg_closing_v1` die gespeicherten `ab2`-Proben inzwischen liest. Weder
 die Stabilitätsampel noch der reale Kameraablauf oder die tatsächlich
 benötigte Einrichtungszeit sind durch diese Offline-Auswertung belegt.

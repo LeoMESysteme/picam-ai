@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -16,6 +17,8 @@ from dotmatrix_helpers import render
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
 from dispread.frames.uvc_source import UvcError
+from dispread.ocr.dotmatrix_font import CLASSES, rom_vector
+from dispread.ocr.dotmatrix_templates import Templates, save_templates
 from dispread.setup_checks import CheckResult
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "harvest-setup.py"
@@ -372,7 +375,12 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     monotonic = iter((100.0, 131.0))
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
     templates = tmp_path / "templates.json"
-    sha256 = "a" * 64
+    sha256 = save_templates(Templates(
+        mean={ch: rom_vector(ch) for ch in CLASSES},
+        std={ch: np.full(40, 0.1, np.float32) for ch in CLASSES},
+        d_max=1.0, margin_min=0.2, groups=("synthetisch",),
+        counts={ch: 1 for ch in CLASSES},
+    ), templates)
 
     rc = harvest_setup.main([
         "assist", "--out", str(out), "--device-id", "d", "--session-id", "s",
@@ -386,6 +394,30 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     assert checks["checks"]["gegenlesen"]["metrics"]["rejection_reasons"] == {"format": 2}
     assert overlay_statuses == ["WARNUNG"]
     assert "gegenlesen: WARNUNG" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("bad_checksum", "expected_error"), [
+    (False, "normalization"),
+    (True, "Pruefsumme"),
+])
+def test_assist_rejects_bad_templates_before_camera(tmp_path, monkeypatch, capsys,
+                                                    bad_checksum, expected_error):
+    legacy_templates = tmp_path / "templates.json"
+    blob = json.dumps({"format_version": 3, "normalization": "bg_closing_v1"}).encode()
+    legacy_templates.write_bytes(blob)
+    checksum = "0" * 64 if bad_checksum else hashlib.sha256(blob).hexdigest()
+    monkeypatch.setattr(harvest_setup, "run_focus", lambda _args: pytest.fail("Fokus wurde gestartet"))
+    monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: pytest.fail("Kamera wurde geoeffnet"))
+    monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: pytest.fail("Wartezeit begonnen"))
+    out = tmp_path / "assist"
+
+    rc = harvest_setup.main([
+        "assist", "--out", str(out), "--device-id", "d", "--session-id", "s",
+        "--templates", str(legacy_templates), "--templates-sha256", checksum,
+    ])
+    assert rc == 2
+    assert expected_error in capsys.readouterr().err
+    assert not out.exists()
 
 
 @pytest.mark.parametrize("flag", ["--templates", "--templates-sha256"])

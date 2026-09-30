@@ -2726,9 +2726,9 @@ jeweils 0,0 %. `ab2` ist der einzige Kantenbefund und mit dem
 Kantenwerte liegen bei 1–3. Punktkontrast wird in Float als 99. Perzentil
 von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` über dem angepassten Quad
 berechnet (FEHLER <15, WARNUNG <17); `leser_kontrast` stammt aus
-`sample_image` mit `bg_closing_v1`. Frühere Handwerte 41,3 (`sc5`) und
-31,2 (`ab2`) beruhten auf einem nicht belegten Bildbereich und werden
-nicht mit diesem definierten Maß gleichgesetzt.
+`sample_image` vor der Normierung und dem Schattenabzug. Frühere
+Handwerte 41,3 (`sc5`) und 31,2 (`ab2`) beruhten auf einem nicht belegten
+Bildbereich und werden nicht mit diesem definierten Maß gleichgesetzt.
 
 Die Stabilitätsprüfung benötigt zwei Standbilder im Abstand von
 mindestens 30 s und wurde hier nicht bewertet. Die optionale Diagnose
@@ -2736,3 +2736,9 @@ mit eingefrorenen Leservorlagen wurde ohne übergebene Vorlage nicht
 ausgeführt. Es gab keinen neuen Kameralauf und keine Messung der
 tatsächlichen Einrichtungsdauer. Aufbau und Deutung stehen im
 [Laborjournal](lab_journal.md).
+
+Nach dem Rebase auf `7367ea6` verlangt der aktuelle Leser Vorlagen mit
+`bg_closing_shadow_v1`. Die vorhandene eingefrorene Stufe-2b-Vorlage mit
+`bg_closing_v1` wird deshalb bei `--templates` als inkompatibel abgelehnt;
+eine passende neue Vorlage liegt noch nicht vor. Die obigen
+`sample_image`-Kontrastwerte sind davon unabhängig.
