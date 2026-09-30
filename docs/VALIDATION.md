@@ -2693,68 +2693,46 @@ einseitig, 95 %) über 85 entschiedene Plateaus liegt bei 3,5 %.
 * Es gibt nur ein Gerät (`gsv-sensor-161a`), eine Firmware (keine negativen
   Werte) und eine Einheit (`mV/V`).
 
-## 2026-09-29 — Einrichtungsassistent: Regression auf echten Standbildern
+## 2026-09-30 — Einrichtungsassistent: Regression nach Nacharbeit 1
 
-**Aufbau:** Offline-Auswertung von genau
-`var/diagnostics/{sc3,sc4,sc5,ab1,ab2}-still/frames/frame_000017.png`.
-Die Hinweisbox war jeweils die Bounding Box des bestätigten Profil-Quads
-mit 10 % Rand; `sc3` wurde gegen `sc3b-profile` verglichen. Die automatische
-Punktraster-Anpassung bekam keine Stützpunkte. Eckkoordinaten sind
-Quellbildpixel in der Reihenfolge TL/TR/BR/BL. `Δ` ist die größte
-euklidische Abweichung einer Ecke zum bestätigten Quad. Die Kennzahlen
-stammen aus `check_setup` auf dem automatisch angepassten Quad; die
-Stabilitätsprüfung benötigt ein zweites Standbild im Abstand von mindestens
-30 s und wurde hier nicht bewertet. Aufbau und Deutung:
-[Laborjournal](lab_journal.md), „Einrichtungsassistent: Offline-Prüfung“.
+**Aufbau:** Offline-Auswertung vorhandener 1920×1080-Standbilder, ohne
+Kamerazugriff und ohne Schreiben unter `var/`. Für `sc3`, `sc4`, `sc5`,
+`ab1` und `ab2` wurde `frame_000017.png` verwendet, für `sc6`
+`frame_000015.png`. Die bestätigten Quads stammen aus den gleichnamigen
+Profilen, bei `sc3` aus `sc3b-profile`. `fit_lattice` bekam keine
+Stützpunkte, sondern die Bounding Box des bestätigten Quads plus 10 % Rand
+als grobe Hinweisbox und die Format-Leerzellen `(8,13,14,15)`. Das
+bestätigte Quad ging **nicht** als Stützpunkt in die Anpassung ein.
+Alle Ecken sind Quellbildpixel in der Reihenfolge TL/TR/BR/BL; `Δ` ist
+die größte euklidische Eckabweichung. „Grün-Δ“ wiederholt den Fit mit
+`find_green_hint_box` statt der Profil-Hinweisbox.
 
-| Aufstellung | automatisch TL / TR / BR / BL | bestätigt TL / TR / BR / BL | max. Δ px | Punkte zugeordnet | RMS Sp./Z. | Punkt-/Leserkontrast | Kante Zelle 8 (Befund) | px/Sp. | Ampel |
+| Aufstellung | automatisch TL / TR / BR / BL | bestätigt TL / TR / BR / BL | max. Δ px / Grün-Δ px | zugeordnet | RMS Sp./Z. | Punkt-/Leserkontrast | Kante Zelle 8 | px/Sp. | Gesamt |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
-| `sc3` | (727,6;628,3) / (1158,8;615,3) / (1157,1;666,0) / (728,1;681,4) | (727,6;628,3) / (1159,0;615,3) / (1157,1;666,0) / (728,2;681,3) | 0,25 | 193/195 | 0,12/0,17 | 35 / 0,502 | 5 (keine) | 4,28 | OK |
-| `sc4` | (803,6;576,7) / (1173,0;633,1) / (1170,8;685,7) / (803,1;623,0) | (803,6;576,7) / (1173,0;633,1) / (1170,8;685,7) / (803,1;623,0) | 0,05 | 153/153 | 0,11/0,14 | 25 / 0,514 | 9 (keine) | 3,43 | OK |
-| `sc5` | (741,0;540,5) / (1221,7;615,8) / (1216,3;685,6) / (741,1;599,3) | (741,0;540,5) / (1221,7;615,8) / (1216,3;685,6) / (741,1;599,3) | 0,05 | 159/162 | 0,10/0,14 | 19 / 0,282 | 8 (keine) | 4,25 | WARNUNG (Kontrast) |
-| `ab1` | (779,6;548,6) / (1204,1;539,0) / (1201,1;588,2) / (781,4;598,6) | (779,6;548,6) / (1204,0;539,0) / (1201,0;588,2) / (781,5;598,6) | 0,08 | 190/193 | 0,11/0,17 | 43 / 0,562 | 5 (keine) | 4,32 | OK |
-| `ab2` | (609,6;573,9) / (1010,5;498,2) / (1009,7;552,5) / (612,7;641,9) | (609,7;573,8) / (1010,6;498,2) / (1009,7;552,6) / (612,9;641,9) | 0,21 | 176/184 | 0,10/0,16 | 19 / 0,445 | 13,5 (Zelle 8) | 3,39 | WARNUNG (Kontrast, Kante) |
+| `sc3` | (727,6;628,3) / (1158,6;615,4) / (1157,1;666,0) / (728,1;681,4) | (727,6;628,3) / (1159,0;615,3) / (1157,1;666,0) / (728,2;681,3) | 0,43 / 0,20 | 195/195 | 0,132/0,168 | 35,389 / 0,501 | 3,0 (OK) | 4,283 | OK |
+| `sc4` | (803,5;576,7) / (1173,1;633,1) / (1170,7;685,7) / (803,1;623,0) | (803,6;576,7) / (1173,0;633,1) / (1170,8;685,7) / (803,1;623,0) | 0,10 / 0,19 | 155/155 | 0,111/0,146 | 24,666 / 0,514 | 1,0 (OK) | 3,433 | OK |
+| `sc5` | (741,1;540,5) / (1221,8;615,7) / (1216,8;685,7) / (741,1;599,4) | (741,0;540,5) / (1221,7;615,8) / (1216,3;685,6) / (741,1;599,3) | 0,48 / 0,23 | 157/159 | 0,104/0,137 | 19,101 / 0,283 | 2,0 (OK) | 4,248 | OK |
+| `ab1` | (779,5;548,6) / (1203,9;539,0) / (1200,9;588,2) / (781,3;598,6) | (779,6;548,6) / (1204,0;539,0) / (1201,0;588,2) / (781,5;598,6) | 0,17 / 0,20 | 191/192 | 0,117/0,169 | 42,651 / 0,564 | 2,0 (OK) | 4,314 | OK |
+| `ab2` | (609,7;573,8) / (1010,5;498,2) / (1009,6;552,7) / (612,7;642,0) | (609,7;573,8) / (1010,6;498,2) / (1009,7;552,6) / (612,9;641,9) | 0,28 / 0,18 | 173/181 | 0,094/0,162 | 18,835 / 0,445 | 8,5 (FEHLER) | 3,388 | FEHLER |
+| `sc6` | (164,6;753,9) / (847,1;753,3) / (839,8;832,4) / (136,9;830,3) | (164,5;753,8) / (846,8;753,1) / (839,8;832,3) / (137,1;830,4) | 0,36 / 0,57 | 197/209 | 0,139/0,143 | 19,726 / 0,339 | 2,0 (OK) | 7,001 | OK |
 
-Die Anforderung von höchstens 1,5 px Eckabweichung ist auf diesen fünf
-gespeicherten Bildern erfüllt; der größte Wert beträgt 0,25 px. In allen
-fünf Bildern ist der gesättigte Pixelanteil im Glas 0,0 % und die
-Rasterprüfung `OK`. Die Kantenprüfung meldet nur bei `ab2` die Leerzelle 8;
-`sc5` und `ab1` bleiben ohne Kantenbefund. Die Kontrastschwellen sind
-**Vorabwerte**. Das hier exakt definierte Maß ergibt auf Frame 17 für
-`sc5` und `ab2` je 19, während die früheren Aufstellungswerte 41,3 und
-31,2 lauten. Die früheren Bilder bzw. Auswertebereiche sind nicht
-festgelegt; deshalb werden diese Werte nicht gleichgesetzt. Es gab keinen
-neuen Kameralauf und keine Messung der Einrichtungsdauer.
+Auf allen sechs Profil-Hinweisboxen liegen die Ecken höchstens 0,48 px
+neben dem bestätigten Quad, bei automatisch erkannter grüner Hinweisbox
+höchstens 0,57 px. Der größte Betrag eines Zeilen- oder Zellen-Bias ist
+0,055, also unter der Ablehnungsgrenze 0,15. Rahmen- und Glanzprüfung
+melden überall OK; der gesättigte Pixelanteil im entzerrten Glas ist
+jeweils 0,0 %. `ab2` ist der einzige Kantenbefund und mit dem
+**Vorabwert** FEHLER >8 in Zelle 8 ein Gesamt-FEHLER. Die übrigen
+Kantenwerte liegen bei 1–3. Punktkontrast wird in Float als 99. Perzentil
+von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` über dem angepassten Quad
+berechnet (FEHLER <15, WARNUNG <17); `leser_kontrast` stammt aus
+`sample_image` mit `bg_closing_v1`. Frühere Handwerte 41,3 (`sc5`) und
+31,2 (`ab2`) beruhten auf einem nicht belegten Bildbereich und werden
+nicht mit diesem definierten Maß gleichgesetzt.
 
-Ein zusätzlicher read-only Lauf verwendete statt der Profil-Hinweisbox die
-automatisch aus der grünen Punktfläche bestimmte Box. Auch damit traf die
-Anpassung alle fünf bestätigten Quads: größte Eckabweichung `sc3=0,18`,
-`sc4=0,07`, `sc5=0,17`, `ab1=0,12`, `ab2=0,25` px. Das belegt den
-bildbasierten Hinweisbox-Pfad auf diesen vorhandenen Bildern, aber noch
-keinen echten `assist`-Kameralauf.
-
-### Nacharbeit 1 — Zwischenmessung vor der Pause
-
-Die Tabelle oben stammt aus dem Stand vor Claudes Review und ist **keine
-Abschlussmessung** der Nacharbeit. Für die folgenden Teilwerte wurde der
-aktuelle Prüfer auf vorhandene Standbilder mit den *bestätigten* Profil-Quads
-angewandt: `frame_000017.png` für `sc3`, `sc4`, `sc5`, `ab1`, `ab2` sowie
-`frame_000015.png` für `sc6`. Kein Kameralauf und kein Schreiben unter
-`var/`. Punktkontrast ist nun das 99. Perzentil der Differenz zweier
-Float-Gaußglättungen; Kantenpaare liegen vollständig im Zellinneren.
-
-| Aufstellung | Punktkontrast | Kantenwert Zelle 8 | Kantenampel | Rahmenampel |
-| --- | ---: | ---: | --- | --- |
-| `sc3` | 35,49 | 4,0 | OK | OK |
-| `sc4` | 24,67 | 1,0 | OK | OK |
-| `sc5` | 19,10 | 2,0 | OK | OK |
-| `ab1` | 42,65 | 2,5 | OK | OK |
-| `ab2` | 18,83 | 9,0 | FEHLER (Zelle 8) | OK |
-| `sc6` | 19,73 | 2,0 | OK | OK |
-
-Die Grenzwerte >6 (WARNUNG) und >8 (FEHLER) für die Hintergrundkante
-sowie <17 (WARNUNG) und <15 (FEHLER) für Punktkontrast sind Vorabwerte.
-Die vollständige Auswertung mit **automatisch** angepasstem Quad,
-`leser_kontrast`, Zuordnung, Eckabweichung und Gesamtampel steht nach
-Abschluss der Codeprüfung noch aus; sie ersetzt dann die ältere Tabelle.
-
+Die Stabilitätsprüfung benötigt zwei Standbilder im Abstand von
+mindestens 30 s und wurde hier nicht bewertet. Die optionale Diagnose
+mit eingefrorenen Leservorlagen wurde ohne übergebene Vorlage nicht
+ausgeführt. Es gab keinen neuen Kameralauf und keine Messung der
+tatsächlichen Einrichtungsdauer. Aufbau und Deutung stehen im
+[Laborjournal](lab_journal.md).

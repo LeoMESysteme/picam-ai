@@ -163,6 +163,22 @@ def test_two_equally_clear_displays_have_ambiguous_start():
     assert fit_lattice(image, hint) == "startlage_mehrdeutig"
 
 
+def test_two_displays_with_unequal_plus_strength_have_ambiguous_start():
+    upper = np.float32([[450, 450], [930, 525], [923, 595], [448, 510]])
+    lower = upper + np.float32([0, 200])
+    image, _ = _synthetic(upper)
+    second, h = _synthetic(lower)
+    dot = cv2.perspectiveTransform(
+        np.float32([[[2.5 * 25 / 6, 160 / 9 + 1.5 * 160 / 9]]]), h,
+    )[0, 0]
+    cv2.circle(second, tuple(np.rint(dot).astype(int)), 3, (210, 210, 210), -1)
+    mask = np.zeros(image.shape[:2], np.uint8)
+    cv2.fillConvexPoly(mask, lower.astype(np.int32), 1)
+    image[mask != 0] = second[mask != 0]
+    hint = _box(np.concatenate((upper, lower)), image.shape[:2])
+    assert fit_lattice(image, hint) == "startlage_mehrdeutig"
+
+
 def _fit_at(x: float, n_assigned: int) -> LatticeFit:
     return LatticeFit(
         quad=[[x, 0], [x + 400, 0], [x + 400, 160], [x, 160]],
@@ -224,6 +240,35 @@ def test_real_still_matches_confirmed_quad(name):
 def test_green_hint_still_finds_ab2_lattice():
     image = cv2.imread(str(DIAGNOSTICS / "ab2-still/frames/frame_000017.png"))
     quad = np.asarray(json.loads((DIAGNOSTICS / "ab2-profile").read_text())["quad"], np.float32)
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - quad, axis=1)) <= 1.5
+
+
+@pytest.mark.parametrize("name,frame", [
+    pytest.param(
+        name, frame,
+        marks=pytest.mark.skipif(
+            not (DIAGNOSTICS / f"{name}-still/frames/{frame}").exists()
+            or not (DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile").exists(),
+            reason="Standbild oder bestaetigtes Profil fehlt",
+        ),
+    )
+    for name, frame in [
+        ("sc3", "frame_000017.png"),
+        ("sc4", "frame_000017.png"),
+        ("sc5", "frame_000017.png"),
+        ("ab1", "frame_000017.png"),
+        ("sc6", "frame_000015.png"),
+    ]
+])
+def test_green_hint_still_matches_confirmed_quad(name, frame):
+    still = DIAGNOSTICS / f"{name}-still/frames/{frame}"
+    profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
+    image = cv2.imread(str(still))
+    quad = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
     hint = find_green_hint_box(image)
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)

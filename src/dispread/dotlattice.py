@@ -76,10 +76,12 @@ def _plus_shape(ok: np.ndarray, c: np.ndarray, r: np.ndarray) -> bool:
     ) and vertical >= 3
 
 
-def _plus_anchors(src: np.ndarray, left: float, width: float) -> list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]:
+def _plus_anchors(
+    src: np.ndarray, left: float, width: float, *, pitch_scale: float = 1.0,
+) -> list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]:
     """Sucht Plus-Mitte und lokale Punktperioden direkt im Quellbild."""
     anchors = []
-    approximate_pitch = width / (1.2 * 96)
+    approximate_pitch = pitch_scale * width / (1.2 * 96)
     row_tolerance2 = max(1.8, 0.38 * approximate_pitch) ** 2
     stem_tolerance2 = max(2.5, 0.5 * approximate_pitch) ** 2
     possible = src[src[:, 0] < left + 0.17 * width]
@@ -414,6 +416,10 @@ def _auto_fit(
         return "zu_wenige_punkte"
     anchors = _plus_anchors(src, x0, x1 - x0)
     if not anchors:
+        # Die Gruenflaeche kann breiter als das Punktraster sein. Die linke
+        # Suchregion bleibt gleich, nur die angenommene Punktperiode sinkt.
+        anchors = _plus_anchors(src, x0, x1 - x0, pitch_scale=0.95)
+    if not anchors:
         return "vorzeichen_kein_plus" if _has_minus_sign(src, x0, x1 - x0) else "keine_startlage"
     best_anchors = [item for item in anchors if item[0] == anchors[0][0]]
     if any(
@@ -423,6 +429,17 @@ def _auto_fit(
     ):
         return "startlage_mehrdeutig"
     anchor = min(best_anchors, key=lambda item: item[1][0])
+    # Ein Plus mit einem fehlenden Quellbildpunkt darf eine zweite gueltige
+    # Displaylage nicht schon vor der Rasterpruefung ausschliessen.
+    candidate_anchors = [anchor]
+    for item in anchors:
+        if item[0] < anchor[0] - 1:
+            break
+        if all(
+            np.linalg.norm(item[1] - old[1]) > max(6 * point_pitch, 0.1 * min(x1 - x0, y1 - y0))
+            for old in candidate_anchors
+        ):
+            candidate_anchors.append(item)
     # Hinweisbox und Kantenrichtung liefern nur die Grobgeometrie. Die
     # Projektionen der Punktkandidaten bestimmen Zeilen- und Spaltenphase.
     bx0 = x0 + (x1 - x0) / 12
@@ -430,13 +447,13 @@ def _auto_fit(
     by0 = y0 + (y1 - y0) / 12
     by1 = y1 - (y1 - y0) / 12
     span = bx1 - bx0
-    candidates: list[tuple[float, np.ndarray]] = []
+    candidates: list[tuple[float, np.ndarray, int]] = []
     # Das Plus verankert Spalte und Zeile absolut. Die lokale waagerechte
     # und senkrechte Punktperiode begrenzt die linke Kante des Quads.
     average_pitch = (bx1 - bx0) / 96
     top_slopes = [top + dt for dt in (-0.01, 0.0, 0.01)] if top is not None else np.arange(-0.18, 0.081, 0.02)
-    for anchor_score, p, hv, vv in (anchor,):
-        if not 0.75 * average_pitch <= hv[0] <= 1.55 * average_pitch:
+    for anchor_index, (anchor_score, p, hv, vv) in enumerate(candidate_anchors):
+        if not 0.7 * average_pitch <= hv[0] <= 1.55 * average_pitch:
             continue
         for vertical_scale in (0.9, 1.0, 1.1):
             anchor_tl = p - 2.5 * hv - 4.5 * vertical_scale * vv
@@ -463,7 +480,7 @@ def _auto_fit(
                                     h = cv2.getPerspectiveTransform(q, _CORNERS[0])
                                     ok, c, r = _assignment(src, h)
                                     plus = _plus_coverage(ok, c, r)
-                                    candidates.append((int(ok.sum()) + 8 * plus + 30 * anchor_score, h))
+                                    candidates.append((int(ok.sum()) + 8 * plus + 30 * anchor_score, h, anchor_index))
     # Ohne tragfaehigen Plus-Anker wird eine breitere Phasensuche genutzt.
     if not candidates:
         if top is None:
@@ -502,31 +519,39 @@ def _auto_fit(
                         if plus < 5:
                             continue
                         score = n + 8 * plus + (20 if _plus_shape(ok, c, r) else 0)
-                        candidates.append((score, np.array([[1, 0, dx * _PH], [0, 1, dy * _PV], [0, 0, 1]]) @ h))
+                        candidates.append((score, np.array([[1, 0, dx * _PH], [0, 1, dy * _PV], [0, 0, 1]]) @ h, 0))
     if not candidates:
         return "vorzeichen_kein_plus" if _has_minus_sign(src, x0, x1 - x0) else "keine_startlage"
     candidates.sort(key=lambda item: item[0], reverse=True)
-    attempted = 0
+    attempted_per_anchor = [0] * len(candidate_anchors)
     attempted_quads: list[np.ndarray] = []
     viable: list[LatticeFit] = []
-    for _, h in candidates:
-        q = _warp_points(_CORNERS[0], np.linalg.inv(h))
-        if any(np.max(np.linalg.norm(q - old, axis=1)) < 3 * pixel_scale for old in attempted_quads):
-            continue
-        attempted_quads.append(q)
-        attempted += 1
-        optimized = _optimize_quad(src, q)
-        result = refine(
-            image_bgr, cv2.getPerspectiveTransform(optimized, _CORNERS[0]),
-            empty_cells=empty_cells,
-        )
-        if isinstance(result, LatticeFit):
-            fitted_h = cv2.getPerspectiveTransform(np.asarray(result.quad, np.float32), _CORNERS[0])
-            ok, c, r = _assignment(src, fitted_h)
-            if _plus_coverage(ok, c, r) >= 6 and _plus_shape(ok, c, r):
-                if candidates and np.linalg.norm(np.asarray(result.quad)[0] - anchor[1] + 2.5 * anchor[2] + 4.5 * anchor[3]) < 9 * pixel_scale:
-                    viable.append(result)
-        if attempted >= 8:
+    for limit in (8, 16):
+        for _, h, anchor_index in candidates:
+            if attempted_per_anchor[anchor_index] >= limit:
+                continue
+            q = _warp_points(_CORNERS[0], np.linalg.inv(h))
+            if any(np.max(np.linalg.norm(q - old, axis=1)) < 3 * pixel_scale for old in attempted_quads):
+                continue
+            attempted_quads.append(q)
+            attempted_per_anchor[anchor_index] += 1
+            optimized = _optimize_quad(src, q)
+            result = refine(
+                image_bgr, cv2.getPerspectiveTransform(optimized, _CORNERS[0]),
+                empty_cells=empty_cells,
+            )
+            if isinstance(result, LatticeFit):
+                fitted_h = cv2.getPerspectiveTransform(np.asarray(result.quad, np.float32), _CORNERS[0])
+                ok, c, r = _assignment(src, fitted_h)
+                if _plus_coverage(ok, c, r) >= 6 and _plus_shape(ok, c, r):
+                    anchor = candidate_anchors[anchor_index]
+                    if np.linalg.norm(np.asarray(result.quad)[0] - anchor[1] + 2.5 * anchor[2] + 4.5 * anchor[3]) < 9 * pixel_scale:
+                        viable.append(result)
+            if all(count >= limit for count in attempted_per_anchor):
+                break
+        if _select_unambiguous_fit(viable, same_quad_px=_SAME_QUAD_PX * pixel_scale) == "startlage_mehrdeutig":
+            break
+        if viable and len(candidate_anchors) == 1:
             break
     selected = _select_unambiguous_fit(viable, same_quad_px=_SAME_QUAD_PX * pixel_scale)
     if selected == "keine_startlage" and _has_minus_sign(src, x0, x1 - x0):

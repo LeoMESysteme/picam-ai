@@ -91,12 +91,12 @@ def test_stability_requires_elapsed_time_and_warns_if_unreliable():
     assert unreliable.checks['stabilitaet'].metrics['max_corner_shift_px'] is None
 
 
-@pytest.mark.parametrize('name,expected,step_cell_8', [
-    ('sc3', [], 4.0), ('sc4', [], 1.0), ('sc5', [], 2.0),
-    ('ab1', [], 2.5), ('ab2', [8], 9.0), ('sc6', [], 2.0),
+@pytest.mark.parametrize('name,frame_number,expected,step_cell_8', [
+    ('sc3', 17, [], 4.0), ('sc4', 17, [], 1.0), ('sc5', 17, [], 2.0),
+    ('ab1', 17, [], 2.5), ('ab2', 17, [8], 9.0), ('sc6', 15, [], 2.0),
 ])
-def test_real_still_edge_regression(name, expected, step_cell_8):
-    frame = ROOT / f'{name}-still/frames/frame_000017.png'
+def test_real_still_edge_regression(name, frame_number, expected, step_cell_8):
+    frame = ROOT / f'{name}-still/frames/frame_{frame_number:06d}.png'
     profile = ROOT / f'{name}-profile'
     if not frame.exists() or not profile.exists():
         pytest.skip('diagnostic still unavailable')
@@ -109,21 +109,38 @@ def test_real_still_edge_regression(name, expected, step_cell_8):
         assert cell in cells
     if not expected:
         assert cells == ()
+        assert result.checks['kanten'].status == 'OK'
     else:
         assert result.checks['kanten'].status == 'FEHLER'
 
 
-@pytest.mark.parametrize('name', ('sc5', 'sc6'))
-def test_real_still_good_point_contrast_is_ok(name):
-    frame = ROOT / f'{name}-still/frames/frame_000017.png'
+@pytest.mark.parametrize('name,frame_number,point_contrast,reader_contrast', [
+    ('sc5', 17, 19.1, 0.284), ('sc6', 15, 19.7, 0.338),
+])
+def test_real_still_good_point_contrast_is_ok(name, frame_number, point_contrast, reader_contrast):
+    frame = ROOT / f'{name}-still/frames/frame_{frame_number:06d}.png'
     profile = ROOT / f'{name}-profile'
     if not frame.exists() or not profile.exists():
         pytest.skip('diagnostic still unavailable')
     image = cv2.imread(str(frame))
     quad = json.loads(profile.read_text())['quad']
     result = check_setup(image, fit(quad=quad)).checks['kontrast']
-    assert 17 < result.metrics['punktkontrast'] < 22
+    assert result.metrics['punktkontrast'] == pytest.approx(point_contrast, abs=0.1)
+    assert result.metrics['leser_kontrast'] == pytest.approx(reader_contrast, abs=0.01)
     assert result.status == 'OK'
+
+
+def test_sc6_validated_still_has_clear_border():
+    frame = ROOT / 'sc6-still/frames/frame_000015.png'
+    profile = ROOT / 'sc6-profile'
+    if not frame.exists() or not profile.exists():
+        pytest.skip('diagnostic still unavailable')
+    image = cv2.imread(str(frame))
+    quad = json.loads(profile.read_text())['quad']
+    border = check_setup(image, fit(quad=quad)).checks['rahmen']
+    assert border.status == 'OK'
+    assert border.cells == ()
+    assert border.metrics['minimum_border_ratio'] == pytest.approx(0.959, abs=0.02)
 
 
 def test_dark_outer_column_in_blank_cell_fails_but_clean_border_passes():

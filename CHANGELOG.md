@@ -110,6 +110,26 @@ ist die Änderung als zurückgenommen markiert.
 `ef5cedf`, die Vorlagen `templates-stufe2b-2026-09-29.json` laden wieder.
 Als Nächstes werden die Raster korrigiert.
 
+## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 1 offline geprüft)
+
+**Problem:** Die automatische grüne Hinweisbox führte bei `sc5` und `sc6`
+noch zu einer Rasterablehnung. Außerdem konnte eine zweite gültige Anzeige
+mit einem schwächeren Plusanker bei der Mehrdeutigkeitsprüfung fehlen.
+
+**Änderung:** Die Rasteranpassung prüft räumlich getrennte plausible
+Plusanker. Bei ausbleibendem Fit erweitert sie die Kandidatensuche gezielt;
+eine breite Hinweisbox erhält einen skalierten zweiten Punktabstandsversuch.
+Die Qualitätsprüfungen aus dem gesicherten Zwischenstand wurden auf sechs
+gespeicherten Aufstellungen erneut ausgewertet und dokumentiert; die
+CLI-Kette wurde mit injizierter Kamera synthetisch geprüft.
+
+**Konsequenz:** Mit Profil-Hinweisbox liegen alle sechs automatisch
+angepassten Quads innerhalb 0,48 px der Bestätigung, mit grüner
+Hinweisbox innerhalb 0,57 px. `ab2` meldet die Kante in Zelle 8 als
+FEHLER. Die volle Python-Suite, der Doku-Build und die Browsertests sind
+grün. Die Schwellen sind weiterhin Vorabwerte; ein echter Kameralauf und
+die Einrichtungsdauer stehen aus.
+
 ## 0.1.0.dev0 — 2026-09-30 (Dot-Matrix: Punktschatten abziehen, Normierung `bg_closing_shadow_v1`)
 
 **Problem:** Abnahme 2 war nicht bestanden: 0 falsch, aber 85,8 % der Proben

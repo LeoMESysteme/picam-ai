@@ -1589,71 +1589,43 @@ vollständig abgelehnt. Zahlen in VALIDATION.md.
   am Profil. Bei schrägen Aufstellungen findet er noch keine Startlage.
 * Vor dem Merge fehlt noch Nacharbeit 4 (Plan).
 
-## 2026-09-29 — Einrichtungsassistent: Offline-Prüfung vorhandener Standbilder
 
-**Aufbau:** Ausschließlich die gespeicherten Bilder
-`var/diagnostics/{sc3,sc4,sc5,ab1,ab2}-still/frames/frame_000017.png`
-wurden gelesen; die bestätigten Quads stammen aus den gleichnamigen
-`-profile`-Dateien, für `sc3` aus `sc3b-profile`. Kamera und `var/` wurden
-nicht verändert. Der neue Prüfer berechnete auf diesen Bildern das
-99. Perzentil von `GaussianBlur(σ=6) − GaussianBlur(σ=0,8)` im Profil-Quad,
-den Kontrast des bestehenden Punktlesers, den Hintergrundkantenwert je Zelle
-und die Punktspaltenbreite. Die Kantenprüfung wurde zusätzlich mit einer
-synthetischen Helligkeitsstufe in einer belegten und einer leeren Zelle
-kontrolliert.
+## 2026-09-30 — Einrichtungsassistent: Nacharbeit 1 offline geprüft
 
-**Beobachtung:** Die Kante in der Leerzelle 8 von `ab2` liefert Stufe 14
-und `WARNUNG`. `sc5` (Zelle 8: 8), `ab1` (4), `sc3` (5) und `sc4` (9)
-melden keine Kante. Das definierte Kontrastmaß auf genau Frame 17 ergibt
-`sc3=35`, `sc4=25`, `sc5=19`, `ab1=43`, `ab2=19`. Für `sc5` und `ab2`
-liegen diese Werte unter den früheren Aufstellungswerten 41,3 und 31,2;
-die Bilder oder Auswertebereiche jener Handmessung sind hier nicht
-festgelegt. Deshalb werden die neuen Werte mit Bild und Methode getrennt
-berichtet, die Schwellen bleiben Vorabwerte.
+**Aufbau:** Nur gespeicherte Standbilder und bestätigte Profile wurden
+gelesen: Frame 17 von `sc3`, `sc4`, `sc5`, `ab1`, `ab2` und Frame 15 von
+`sc6`; für `sc3` gilt `sc3b-profile`. Die Profil-Bounding-Box plus 10 %
+Rand diente als grobe Hinweisbox, die grünen Hinweisboxen wurden separat
+aus dem Bild erkannt. Beide Wege nutzten `fit_lattice` ohne Stützpunkte
+mit den Format-Leerzellen 8 und 13–15. `check_setup` wertete die
+angepassten Quads aus. Es wurde keine Kamera geöffnet und unter `var/`
+nichts geschrieben. Einzelzahlen stehen in [VALIDATION.md](VALIDATION.md).
 
-**Geometrie:** Die automatische Anpassung ohne Stützpunkte auf den fünf
-Frame-17-Bildern (Hinweisbox: bestätigtes Quad plus 10 % Rand) weicht an
-der schlechtesten Ecke um 0,25 px (`sc3`) ab; die übrigen Maxima sind
-`sc4=0,05`, `sc5=0,05`, `ab1=0,08`, `ab2=0,21` px. Zugeordnet wurden
-193/195, 153/153, 159/162, 190/193 und 176/184 Punktkandidaten. Ohne
-zweites Standbild bleibt die Stabilitätsampel unbewertet. `sc5` und `ab2`
-erhalten mit den Vorabschwellen `WARNUNG` (Kontrast, bei `ab2` zusätzlich
-Kante); die übrigen drei erhalten `OK`.
-Ein zweiter Offline-Lauf verwendete die automatische Hinweisbox aus dem
-grünen Punktbereich: Alle fünf Quads blieben innerhalb 0,25 px ihrer
-Bestätigung. Der kleinste Fehler war 0,07 px (`sc4`), der größte 0,25 px
-(`ab2`). Die Box wurde vertikal auf den inneren Punktbereich begrenzt,
-weil die grüne Glasfläche ober- und unterhalb der Zeichenzeile weiterläuft.
+**Beobachtung:** Alle sechs Profil-Hinweisboxen treffen die bestätigten
+Quads mit höchstens 0,48 px Eckabweichung; alle sechs automatisch aus dem
+grünen Punktbereich gewonnenen Boxen mit höchstens 0,57 px. `sc6` mit
+etwa 7 px je Punktspalte wird nun ebenfalls erkannt. Die Quellminima
+seines Pluszeichens enthalten nicht jeden äußeren Punkt; deshalb muss
+die Plusprüfung den inneren rechten Arm zulassen. Breite grüne Boxen
+verschieben die Schätzung des Punktabstands und die Rangfolge der
+Startquads; eine zweite, nur bei Bedarf genutzte Suchrunde und ein
+skalierter Pitch-Versuch beheben die beobachteten Ablehnungen von `sc5`
+und `sc6`. Getrennte Plusanker werden auf konkurrierende ganze Raster
+geprüft, damit zwei Anzeigen in einer Hinweisbox nicht geraten werden.
 
-**Deutung:** Der Kantenbefund von `ab2` entspricht der beobachteten
-Leserablehnung in dieser Aufstellung. Die synthetische Stufe in einer
-belegten Zelle wird ebenfalls erkannt; ein weicher Helligkeitsverlauf
-bleibt ohne Kantenbefund. Dies prüft nur vorhandene Bilder und künstliche
-Störungen. Ein echter Lauf von `assist`, seine Dauer und das Verhalten bei
-anderen Reflexen sind damit noch nicht belegt. Zahlen und Ampeln stehen
-in [VALIDATION.md](VALIDATION.md).
+**Prüfungen:** Zellinterne Hintergrundpaare ergeben in der Leerzelle 8
+von `ab2` den Wert 8,5 und FEHLER; die anderen fünf Aufstellungen liegen
+bei 1–3 und bleiben OK. Float-Punktkontrast ist `sc5=19,101` und
+`sc6=19,726`, mit der vorläufigen WARNUNG-Schwelle 17 beide OK. Der
+Leserkontrast nach `bg_closing_v1` liegt für diese beiden bei 0,283 und
+0,339. Rahmen und Glanz melden auf allen bestätigten Aufstellungen OK.
+Die synthetische Gegenprobe verdunkelt äußere Punktspalten und erkennt
+auch die linke Spalte eines echten Plus. Die im Plan genannten 44 gegen
+94 Grauwerte für `sc6` gehören zu einem verworfenen Zwischenstand;
+dessen Bild liegt nicht mehr vor und kann hier nicht nachgerechnet werden.
 
-### 2026-09-29 — Nacharbeit 1, Zwischenstand vor der Pause
-
-**Aufbau:** Der überarbeitete Prüfer wurde offline auf die vorhandenen
-Frame-17-Bilder von `sc3`, `sc4`, `sc5`, `ab1`, `ab2` und Frame 15 von
-`sc6` mit den jeweils bestätigten Quads angewandt. `var/` wurde nur
-gelesen; eine Kamera wurde nicht geöffnet. Der Punktekontrast wird vor der
-Perzentilbildung in Float berechnet. Für die Kantenprüfung liegen beide
-Abtastwerte eines Paars jetzt innerhalb derselben Zelle. Die neue
-Rahmenprüfung wurde zusätzlich an synthetisch verdunkelten äußeren
-Punktspalten und an einem sauberen Plus geprüft.
-
-**Beobachtung:** Der zellinterne Kantenwert der Leerzelle 8 beträgt bei
-`ab2` 9,0 und ergibt FEHLER; die fünf anderen Aufstellungen liegen bei
-1,0–4,0 und bleiben OK. Die Rahmenprüfung meldet auf allen sechs
-bestätigten Aufstellungen OK. Der Punktkontrast liegt bei `sc5` 19,10,
-bei `sc6` 19,73; beide sind mit der Vorabschwelle 17 OK. Zahlen je
-Aufstellung stehen in [VALIDATION.md](VALIDATION.md).
-
-**Deutung und Grenze:** Die bestätigte `sc6`-Aufstellung zeigt keine
-verdeckte Randspalte. Der im Plan genannte Wert 44 gegen 94 gehört zu
-einem verworfenen Zwischenstand, dessen Bild hier nicht vorliegt; die
-synthetische Gegenprobe belegt nur die Empfindlichkeit des neuen Checks.
-Die Geometrie- und Gesamtampel-Tabelle muss mit dem finalen Code neu
-berechnet werden. Es gab keinen echten `assist`-Lauf oder Zeitmessung.
+**Deutung:** Die Kantenampel von `ab2` bleibt ein konservativer Vorabwert
+für die Spiegelkante, auch wenn die spätere Lesernormierung
+`bg_closing_v1` die gespeicherten `ab2`-Proben inzwischen liest. Weder
+die Stabilitätsampel noch der reale Kameraablauf oder die tatsächlich
+benötigte Einrichtungszeit sind durch diese Offline-Auswertung belegt.

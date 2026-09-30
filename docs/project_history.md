@@ -1096,6 +1096,35 @@ Ein `FEHLER` kann nur mit dokumentierter Begründung übersteuert werden.
 ### Konsequenz
 
 Der Assistent verwendet benannte Vorabschwellen und speichert Kennzahlen
-neben der Ampel. Die fünf vorhandenen Standbilder prüfen die Geometrie
+neben der Ampel. Sechs vorhandene Standbilder prüfen die Geometrie
 offline; Kamerazugriff und tatsächliche Einrichtungsdauer sind noch nicht
 auf echter Hardware mit dem Nutzer geprüft.
+
+## 2026-09-30 — Mehrdeutige Plusanker und breite Hinweisboxen
+
+### Entscheidung
+
+Die automatische Rasteranpassung prüft räumlich getrennte plausible
+Plusanker. Konkurrierende gültige Raster mit ähnlich vielen Punkten
+werden abgelehnt. Liefern die ersten acht Startlagen keinen Fit, wird
+eine zweite begrenzte Runde geprüft. Bei einer breiten grünen Hinweisbox
+wird ein kleinerer geschätzter Punktabstand als zusätzlicher Startversuch
+genutzt. Die aus dem Format bekannten Leerzellen und der Zeilen- und
+Zellen-Bias begrenzen weiterhin die Annahme eines Rasters.
+
+### Verworfene Alternativen
+
+* **Nur der stärkste Plusanker:** Ein zweites vollständiges Display mit
+  einem einzigen schlechter erkannten Pluspunkt würde nicht geprüft.
+* **Unbegrenzte Startlagensuche:** Sie hätte die ohnehin hohen Laufzeiten
+  auf dem Raspberry Pi ohne begründeten Sicherheitsgewinn vergrößert.
+* **Aus der grünen Box direkt ein Quad ableiten:** Die Glasfläche ist
+  größer als die Zeichenzeile; ihre Grenzen sind keine Punktkoordinaten.
+
+### Konsequenz
+
+Auf sechs gespeicherten Aufstellungen trifft der Fit mit automatisch
+erkannter grüner Hinweisbox die bestätigten Ecken auf höchstens 0,57 px.
+Ein synthetischer Fall mit zwei fast gleich gut erkannten Anzeigen wird
+als mehrdeutig abgelehnt. Echte Mehrfachanzeigen und andere Glasformen
+bleiben für den ersten gemeinsamen Kameralauf offen.

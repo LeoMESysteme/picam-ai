@@ -619,6 +619,48 @@ Kameralauf bleibt dem gemeinsamen Termin mit dem Nutzer vorbehalten.
 `TODO.md`, `docs/status.md` und `docs/open-questions.md` bleiben gemäß
 Aufgabe 5 dieses Plans unberührt; Claudes Merge-Schritt pflegt sie.
 
+## Stand Nacharbeit 1 — 2026-09-30
+
+Der Branch wurde erneut auf das heutige `origin/master` (`3596ddf`)
+rebasiert. Die Codepunkte 1–9 sind umgesetzt; eine abschließende
+Gesamt-Review fand keinen belegten mergekritischen Codefehler. Ein
+synthetischer Fall mit zwei Anzeigen und einem schwächer erkannten
+Plusanker wird als `startlage_mehrdeutig` abgelehnt. Eine weitere
+Score-7-Hypothese aus der Review ließ sich in drei konkreten
+Zwei-Punkt-Gegenproben nicht als stille Fehlannahme reproduzieren; die
+probeweise Lockerung wurde zurückgenommen.
+
+Die sechs gespeicherten Standbilder treffen mit Profil-Hinweisbox das
+bestätigte Quad auf höchstens **0,48 px**, mit automatisch erkannter
+grüner Hinweisbox auf höchstens **0,57 px**. `ab2` meldet Zelle 8 mit
+Kantenwert **8,5 als FEHLER**; `sc3`, `sc4`, `sc5`, `ab1` und `sc6`
+bleiben ohne Kantenbefund. Rahmen und Glanz sind auf allen sechs
+bestätigten Aufstellungen OK. Alle Zahlen und die Bildbasis stehen in
+`docs/VALIDATION.md`, Aufbau und Grenzen in `docs/lab_journal.md`.
+
+**Maßgebliche Vorabschwellen nach Nacharbeit 1:** Punktkontrast FEHLER
+<15, WARNUNG <17; zellinterne Hintergrundkante in Leerzellen FEHLER >8,
+WARNUNG >6, in belegten Zellen FEHLER >20, WARNUNG >16;
+Randpunktverdeckung unter 70 % der Nachbarpunkte in Leerzellen und an
+der linken Spalte des Pluszeichens; Auflösung FEHLER <2,6 und WARNUNG
+<3,2 px je Punktspalte;
+Raster-RMS FEHLER >0,25 Spalten oder >0,3 Zeilen beziehungsweise <80 %
+Zuordnung, Raster-Bias bereits beim Fit ab Betrag >0,15 abgelehnt;
+Stabilität FEHLER >0,5 und WARNUNG >0,2 px bei mindestens 30 s. Die
+älteren Schwellen und Kantenwerte im Abschnitt „Stand der Umsetzung —
+2026-09-29“ sind **historisch und durch diese Messung ersetzt**. Die
+Vorabwerte sind noch nicht allgemein kalibriert.
+
+Die gemeinsame gezielte Auswahl (`test_dotlattice`, `test_setup_checks`,
+`test_harvest_assist`, `test_session_profile`) bestand nach dem Rasterfix
+mit **117 Tests in 90,96 s**; danach kamen `sc6`-Regressionen auf Frame 15
+hinzu. Nach Ende der Aufnahme bestand die volle Suite mit **903 bestanden,
+3 übersprungen, 1 erwarteten Fehlschlag in 320,96 s**. Ruff und
+`git diff --check` sind sauber. `./scripts/docs-site.sh build -s` meldete
+keine Probleme, und die **20 Playwright-Dokutests** bestanden. Der erste
+echte `assist`-Lauf samt Einrichtungsdauer bleibt dem gemeinsamen
+Hardwaretermin mit dem Nutzer vorbehalten.
+
 ## Nacharbeit 3 (Review Claude, 2026-09-30, Branch-Stand `c233d0b`)
 
 **Urteil: zurück an Codex.**
