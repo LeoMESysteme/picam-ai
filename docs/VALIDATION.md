@@ -2434,3 +2434,52 @@ und mit Abzug (Skript `var/diagnostics/abnahme2-schatten-vorher-nachher.py`):
 Die Änderung liegt auf `master` (`fc44b47`). Ob sie bleibt, zurückgenommen
 oder in einer zweiten Fassung verbessert wird, ist offen. Stufe 2 bleibt
 mit `templates-stufe2b-2026-09-29.json` und Code `ef5cedf` eingefroren.
+
+## 2026-09-30 — Befund: Punktraster von `ab3`/`ab4` (und `ernte1`, `auf2`, `auf3`) sitzt daneben
+
+Hinweis des Nutzers: Im `overlay_rectified.png` von `ab4` stehen die
+Zeichen schräg und ragen aus ihren Zellen heraus. Das Profil-Quad ist
+geschert.
+
+**Messung** (Skript `var/diagnostics/raster-versatz.py`): Je Zelle wird der
+Versatz gesucht, bei dem die Abtastung am besten zum ROM-Muster des
+bekannten Zeichens passt. Suchbereich ±3 entzerrte Pixel in Schritten von
+0,25, Bild mit σ = 1 geglättet, 12–20 Proben je Gruppe. Mittlerer Versatz
+in Punktspalten (x):
+
+| Gruppe | Zelle 0 | Zellen 2–4 | Zellen 5–7 |
+| --- | --- | --- | --- |
+| `sc3`, `sc4`, `sc5`, `sc6`, `ab1`, `ab2` | −0,12 … +0,02 | −0,15 … +0,09 | −0,17 … +0,02 |
+| `ernte1` | −0,01 | −0,25 … −0,37 | −0,33 … −0,39 |
+| `auf2` | +0,09 | −0,23 … −0,55 | −0,65 … −0,71 |
+| `auf3` | +0,07 | −0,41 … −0,71 | −0,65 … −0,76 |
+| `ab3` | +0,16 | +0,40 … +0,44 | +0,34 … +0,43 |
+| `ab4` | +0,19 | +0,38 … +0,54 | +0,40 … +0,53 |
+
+Die Verschiebungssuche des Lesers deckt ±1 entzerrtes Pixel ab, das sind
+±0,24 Punktspalten. Die Zeichnung der Punktmitten auf den Standbildern
+bestätigt den Befund:
+* **`ab4`:** geschert, in Zeile 6 etwa eine Punktspalte zu weit links.
+* **`ab3`:** Punktabstand zu klein und insgesamt zu weit links.
+
+Mit Stützpunkten an senkrechten Strichen ergibt `latfit.py` für `ab4` ein
+aufrechtes Raster. Die untere linke Ecke rückt dabei von x = 369,5 auf
+383,9. Das Restmaß (0,17 / 0,26) ist für beide Raster gleich. `latfit.py`
+kann ein falsches Raster also nicht von einem richtigen unterscheiden.
+Vermutlich sucht es die dunkelsten Stellen, und bei scharfen Bildern sind
+das die dunklen Ränder der LCD-Punkte statt ihrer Mitten.
+
+**Folgen:**
+* **Abnahme 2** hat ein falsches Profil geprüft, nicht den Leser. Das
+  Ergebnis „nicht bestanden, 0 falsch“ bleibt stehen. Als Aussage über den
+  Leser taugt es nicht.
+* Die Diagnose **„Punktschatten“** (Analyse oben) war falsch. Das Muster
+  „Aus-Punkt dunkel neben An-Punkt auf einer Seite“ und die schwachen
+  An-Punkte entstehen durch den Rasterversatz. `bg_closing_shadow_v1`
+  (`fc44b47`) behandelt also ein Symptom.
+* **Auch Trainingsdaten sind betroffen:** `ernte1` weicht bis 0,39
+  Punktspalten ab, `auf2` bis 0,71. Vermutlich sind die Vollablehnung von
+  `auf2` und die gescheiterte ROM-Gegenprobe von `auf3` ebenfalls
+  Rasterfehler und keine Unschärfe.
+* Die Einrichtungsprüfungen (Leerzellen leer, Restmaß, Zellen-Bias) haben
+  den Fehler nicht gefunden.
