@@ -35,17 +35,33 @@ Offen:
    `keine_startlage`), die richtet man weiter von Hand mit
    `profile-regrid.py still` ein. Spätere Kleinigkeiten N1–N3 stehen im
    Plan unter Nacharbeit 4.
-2. **Import bei schrägem Blick:** `zellen_inkonsistent` verwirft viel
+2. **ALS NÄCHSTES, sobald Nacharbeit 5 gemergt ist: Anbindung an den
+   Messpfad** (Entscheidung des Nutzers am 2026-10-01, Variante B).
+   * Der Dot-Matrix-Leser gilt für den GSV-Sensor (Displaytech 161A) als
+     ausreichend validiert:
+     * Abnahme 3 mit 215/0/0,
+     * `sc7` mit 111/111.
+   * Statt weiterer Trainings- und Abnahmerunden (Variante A: `stufe2d`,
+     Abnahme 4) kommt jetzt die Werkbank bzw. `dispread serve` mit der
+     StreamCam an die Reihe. Die Kamera der Werkbank ist bisher außer
+     Betrieb.
+   * Danach führt der Dot-Matrix-Leser im laufenden Pfad, mit Ausgabe an
+     GSVmulti (`serial_out`; das GSV-Protokoll bleibt offen, OQ-07).
+   * **Einschränkung bei der Freigabe ausdrücklich nennen:** Andere
+     Lichtquellen und weitere Geräte bzw. Einheiten sind nicht geprüft
+     (Punkt 5).
+   * Zuerst einen Plan schreiben (Konzept.md lesen, Messpfad).
+3. **Import bei schrägem Blick:** `zellen_inkonsistent` verwirft viel
    (`ab6` 42 %). Die Importprüfung vergleicht über alle Positionen hinweg.
    Prüfen, ob ein Vergleich je Position oder Halbzeile die Ausbeute hebt,
    ohne falsche Labels durchzulassen.
-3. **Punktraster-Anpassung `latfit.py`:** lag bei jeder neuen Aufstellung
+4. **Punktraster-Anpassung `latfit.py`:** lag bei jeder neuen Aufstellung
    0,2–0,4 Punktspalten daneben, `profile-regrid.py still` korrigiert das.
    Der Einrichtungsassistent (seit 2026-10-01 gemergt) prüft das mit 2j.
-4. **Andere Lichtquelle** und weitere Geräte bzw. Einheiten sind nicht
+5. **Andere Lichtquelle** und weitere Geräte bzw. Einheiten sind nicht
    geprüft.
-5. `auf3`: Das korrigierte Profil ist nicht bestätigt, niedrige Priorität.
-6. **SD-Karte:** Das Codex-Leck in `~/.codex/.tmp/marketplaces/.staging`
+6. `auf3`: Das korrigierte Profil ist nicht bestätigt, niedrige Priorität.
+7. **SD-Karte:** Das Codex-Leck in `~/.codex/.tmp/marketplaces/.staging`
    füllt die Karte (etwa 1 GB/h). Das repowise-Plugin in Codex abschalten
    oder eine Aufräumaufgabe einrichten. `var/` hat weiterhin keine
    Sicherung auf einem anderen Medium.
