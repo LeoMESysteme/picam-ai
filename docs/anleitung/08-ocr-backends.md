@@ -1,5 +1,15 @@
 # 8 — Weitere OCR-Backends
 
+> **Bauentwurf mit inzwischen implementierten Lesern.** Neben
+> `SevenSegmentReader` gibt es `DotMatrixReader` und `TesseractReader`.
+> Der Dot-Matrix-Leser hat einen eigenen Trainings- und Evaluationsablauf;
+> der Vergleichsharnisch und die hier beschriebene Gegenüberstellung sind
+> weiterhin Aufgaben. Aktuelle Messwerte und Grenzen stehen in
+> [Validierung](../VALIDATION.md) und [Status](../status.md); die
+> Leser-Verträge in der [OCR-API](../../api/ocr.md). Die Abschnitte unten
+> beschreiben daher Entwurf und Prüfkriterien, nicht den vollständigen
+> aktuellen Implementierungsstand.
+
 **Ziel:** Ein zweites Backend hinter `ValueReader`, und ein Vergleichsharnisch,
 der es **pro Fehlerklasse** gegen den Segmentleser stellt.
 

@@ -67,9 +67,13 @@ Code-Review fand keinen blockierenden Befund.
 
 ## Software und Anleitung
 
-Die ersten Baukapitel beschreiben teils noch geplante Komponenten:
-folder:// ist registriert, aber FolderSource fehlt; Geräteprofile und
-die Pipeline-CLI für dispread run fehlen ebenfalls. Der bestehende
+Die Baukapitel 3–9 beschreiben teils noch geplante Komponenten:
+folder:// ist registriert, aber FolderSource fehlt; automatische
+contour_heuristic-Lokalisierung und RegionTracker aus Kapitel 7 fehlen
+(vorhanden sind ManualRoiLocator und QuadTracker). Kapitel 8 ist ein
+Bauentwurf: SevenSegmentReader, DotMatrixReader und TesseractReader sind
+implementiert, der beschriebene Vergleichsharnisch bleibt offen.
+Geräteprofile und die Pipeline-CLI für dispread run fehlen ebenfalls. Der bestehende
 dispread-Einsprungpunkt führt zur separaten Workbench-CLI
 ([Lernpfad](anleitung/README.md), [Roadmap](ROADMAP.md)).
 Livevorschau und Datensatz-Sammelmodus haben eigene
