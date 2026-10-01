@@ -3,6 +3,24 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-01 (Einrichtungsassistent: Nacharbeit 5)
+
+**Problem:** Beim ersten echten Kameralauf erkannte `sc7a` trotz passender
+Rasterlage schwache Schatten unter der letzten Punktreihe als belegte
+Cursorzeile. Dadurch scheiterten sowohl `propose --quad` als auch alle
+Startlagen der automatischen Suche.
+
+**Änderung:** Die Cursorprüfung vergleicht die Tiefe eines Kandidaten mit
+dem Median der zugeordneten LCD-Punkte. Schwache Schatten reichen allein
+nicht mehr für `cursorzeile_belegt`. Tests mit gespeicherten `sc7a`- und
+`sc7`-Standbildern sowie synthetischen echten Cursorpunkten sichern beide
+Seiten der Entscheidung ab. Die Startheuristik blieb unverändert, weil sie
+nach Beseitigung der falschen Cursorablehnung eine Startlage findet.
+
+**Konsequenz:** Der textgestützte Offline-Vorschlag für den gespeicherten
+`sc7a`-Quad passiert die Rasterprüfung 2j. Ein tatsächlich belegter
+Cursor wird weiter abgelehnt.
+
 ## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 4)
 
 **Problem:** Ein nachgeführtes, laut 2j besseres Quad konnte wegen der

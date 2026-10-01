@@ -23,6 +23,7 @@ _MAX_RMS_COLS = 0.2  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MAX_RMS_ROWS = 0.25  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _SAME_QUAD_PX = 3.0  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MIN_ASSIGNMENT_MARGIN = 5  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
+_MIN_CURSOR_DEPTH_FRACTION = 0.6  # Vorabwert, aus sc7a vom 2026-10-01.
 
 
 @dataclass(frozen=True)
@@ -361,7 +362,23 @@ def _evaluate_fit(
         & ((cursor_c % 6) != 5)
     )
     if np.any(cursor):
-        return "cursorzeile_belegt"
+        # Die flachen Schatten direkt unter den untersten LCD-Punkten koennen
+        # die absolute Kandidatengrenze (>8) ueberschreiten. Ein echter
+        # Cursorpunkt muss auch relativ zu den zugeordneten Rasterpunkten
+        # ausreichend dunkel sein. Die 20-px-Randzone deckt die 6-px-
+        # Hintergrundglaettung an den aeussersten Kandidaten ab.
+        x0 = max(0, int(np.min(source_dots[:, 0])) - 20)
+        y0 = max(0, int(np.min(source_dots[:, 1])) - 20)
+        x1 = min(image_bgr.shape[1], int(np.max(source_dots[:, 0])) + 21)
+        y1 = min(image_bgr.shape[0], int(np.max(source_dots[:, 1])) + 21)
+        gray = cv2.cvtColor(image_bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32)
+        smooth = cv2.GaussianBlur(gray, (0, 0), 0.7)
+        depth = cv2.GaussianBlur(gray, (0, 0), 6) - smooth
+        xy = source_dots.astype(int)
+        candidate_depth = depth[xy[:, 1] - y0, xy[:, 0] - x0]
+        typical_depth = float(np.median(candidate_depth[source_ok]))
+        if np.any(cursor & (candidate_depth >= _MIN_CURSOR_DEPTH_FRACTION * typical_depth)):
+            return "cursorzeile_belegt"
     cells = tuple(sorted(set((c[ok] // 6).tolist())))
     if 0 not in cells or set(r[ok]) != set(range(7)):
         return "raster_unvollstaendig"

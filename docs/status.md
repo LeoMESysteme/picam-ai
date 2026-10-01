@@ -47,24 +47,32 @@ nichts verloren.
 * Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
 * `var/` hat keine Sicherung auf einem anderen Medium.
 
-**Einrichtungsassistent:** am 2026-10-01 in `master` gemergt
-(Nacharbeit 1–4).
-* Der erste echte Kameralauf mit seriellem Text richtete `sc7` ohne
-  Hilfe ein:
-  * 2j mit 0,04 Spalten und 0,07 Zeilen, unabhängig mit
-    `profile-regrid.py still` bestätigt,
-  * Gegenlesen 2/2,
-  * Gesamturteil WARNUNG nur wegen des Bias-Ersatzmaßes.
-* Der Versuch davor (`sc7a`, Kamera leicht von oben) brachte zwei falsche
-  Ablehnungen:
-  * Die Startsuche fand aus der Nähe keine Startlage.
-  * Punktschatten wurden als belegte Cursorzeile gezählt.
-* Diese beiden Punkte setzt Codex gerade als **Nacharbeit 5** um
-  ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
-* Bis dahin die Kamera senkrecht auf Höhe der Displaymitte stellen.
-* Schräge Aufstellungen wie `ab4` oder `ab6` richtet man weiter von Hand
-  mit `profile-regrid.py still` ein.
-* Nach dem Merge liefen in `master` 997 Tests grün, ruff ist sauber.
+**Einrichtungsassistent:** Nacharbeit 1–4 ist seit 2026-10-01 in `master`.
+Der erste echte Kameralauf mit seriellem Text richtete `sc7` ohne Hilfe
+ein: 2j 0,04/0,07 Punktabstände, unabhängig mit `profile-regrid.py still`
+bestätigt, Gegenlesen 2/2, Gesamturteil WARNUNG nur wegen des
+Bias-Ersatzmaßes. Das Profil wurde nach Sichtprüfung bestätigt.
+
+**Nacharbeit 5 im Branch `feat/einrichtungsassistent`:** Der Versuch davor
+(`sc7a`, Kamera leicht von oben) wurde durch schwache Punktschatten in der
+Cursorzeile abgelehnt. Die Cursorprüfung verlangt nun eine Kandidatentiefe
+von mindestens 60 % des Medians der zugeordneten Glyphenpunkte. Mit dem
+gespeicherten Quad bestehen alle 32 `sc7a`-Stillframes offline; ein
+synthetisch belegter Cursor bleibt abgelehnt. `propose --quad` auf Frame 16
+liefert 2j OK (0,041/0,057) und Gesamt-WARNUNG. Die unveränderte
+Startsuche findet auf den Assist-Bildern `sc7` und `sc7a` eine Lage
+(196 und 318 zugeordnete Punkte). Das `sc7a`-Startquad liegt bis zu
+6,46 px vom Referenzquad entfernt; 2j und Bedienerprüfung bleiben nötig.
+Es gab keinen weiteren Kamera- oder seriellen Lauf; `var/` blieb
+unverändert. Schräge Aufstellungen wie `ab4`/`ab6` richtet man weiter
+von Hand mit `profile-regrid.py still` ein.
+
+**Abschlussprüfung im Feature-Worktree:** 1007 Python-Tests bestanden,
+3 übersprungen, 1 erwarteter Fehlschlag. Ruff und `git diff --check`
+sind sauber; der Zensical-Build meldet keine Probleme, alle 21
+Playwright-Dokutests bestehen. Ein früherer Gesamtlauf traf zwei
+Zeitüberschreitungen in unveränderten Subprozess-/Terminaltests; beide
+bestanden isoliert und der abschließende Gesamtlauf war grün.
 
 ## Software und Anleitung
 
