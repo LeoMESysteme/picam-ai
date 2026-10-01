@@ -2845,3 +2845,47 @@ meldet hingegen einen Kanten-FEHLER; für diese Regression wurde Frame
 20 verwendet. Die bestätigten Quads belegen den manuellen Weg, nicht
 eine verbesserte automatische Startsuche für `ab4` oder `ab6`. Die
 Einheitszeichen in Zellen 9–12 bleiben außerhalb der direkten 2j-Messung.
+
+## 2026-10-01 — Aufstellung `sc7`: erster echter Lauf des Einrichtungsassistenten, Lesetest mit `stufe2c`
+
+**Aufstellung:** Kamera frontal und nah, senkrecht auf Höhe der Displaymitte.
+Das grüne Glas ist etwa 900 px breit, das ist die bisher größte Abbildung
+(`sc6` 682 px, `ab5` 597 px). Punktspalte im Quellbild 9,2 px.
+
+**Einrichtung:** vollautomatisch mit `harvest-setup.py assist`, mit Text vom
+GSV-2AS über `/dev/ttyUSB0`.
+* 2j: 0,04 Spalten und 0,07 Zeilen.
+* Unabhängige Gegenprüfung mit `profile-regrid.py still` an 16 Standbildern:
+  dasselbe Ergebnis.
+* Stabilität: Ecken über 33 s um 0,03 px verschoben.
+* Gegenlesen 2/2.
+* Gesamturteil WARNUNG, nur wegen des Bias-Ersatzmaßes (0,135).
+* Profil `var/diagnostics/sc7-profile` (`55e98a82…`), vom Nutzer nach
+  Sichtprüfung bestätigt.
+
+**Erster Versuch `sc7a`:** Kamera etwa gleich nah, aber leicht von oben.
+Er scheiterte, beide Ablehnungen waren sicher, aber unnötig:
+* Die Startsuche fand keine Startlage.
+* Das von Hand korrigierte Raster wurde wegen Punktschatten in der
+  Cursorzeile abgelehnt.
+
+Details und Belege: Plan Einrichtungsassistent, Nacharbeit 5.
+
+**Ernte und Import:**
+* Ernte mit 25 Schritten zu 6 s. Wegen des knappen Arbeitsspeichers für die
+  RAM-Zwischenablage waren es nicht 30 Schritte.
+* 2926 Bilder, keines verworfen, 1507 gelabelt.
+* Import: 111 Proben, 9 abgelehnt wegen `zellen_inkonsistent` (7,5 %; `ab6`
+  42 %). Ausrichtung höchstens 0,35 px.
+* Stichprobe von 12 entzerrten Proben: alle Labels richtig.
+
+**Lesetest:** Eingefrorene Vorlagen `stufe2c` (`6f20dec4…`), Code
+unverändert seit `ef5cedf`. `sc7` ist in den Vorlagen nicht enthalten.
+* Ergebnis: **111/111 richtig, 0 falsch, 0 abgelehnt** über 37 Plateaus.
+* Obergrenze der Fehlerrate 7,8 % (Clopper-Pearson, einseitig 95 %).
+* Bericht: `var/diagnostics/dotmatrix-lesetest-sc7-stufe2c-2026-10-01.json`.
+
+Das ist **keine formale Abnahme**. Es war kein Abnahme-Lauf angekündigt, und
+der Bericht liegt absichtlich nicht als `abnahme-*.json` in `var/dotmatrix/`.
+Er belegt aber, dass der Leser auch die bisher größte Abbildung ohne Fehler
+liest.

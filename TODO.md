@@ -1,4 +1,4 @@
-# TODO — Stand 2026-09-30 (nachmittags)
+# TODO — Stand 2026-10-01
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -19,11 +19,18 @@ gedreht) und `ab6` (schräg von links) **bestanden**:
 
 Details und Einschränkungen: VALIDATION.md 2026-09-30.
 
+**2026-10-01:** Der Einrichtungsassistent ist gemergt und lief bei `sc7`
+(frontal, nah) im ersten echten Kameralauf ohne Hilfe durch.
+* `stufe2c` liest `sc7` mit 111/111 richtig, 0 falsch, 0 abgelehnt.
+* Das ist kein formaler Abnahme-Lauf (VALIDATION.md 2026-10-01).
+* Der erste Versuch `sc7a` (von oben) scheiterte an zwei falschen
+  Ablehnungen. Sie stehen als Nacharbeit 5 im Plan und gehen an Codex.
+
 Offen:
-1. **Einrichtungsassistent:** am 2026-10-01 nach Review von Nacharbeit 4
-   in `master` gemergt (`harvest-setup.py assist`). Offen: der **erste
-   echte Kameralauf** bei der nächsten Aufstellung, dabei das Ergebnis mit
-   `profile-regrid.py still` gegenprüfen. Schräge Aufstellungen (wie
+1. **Einrichtungsassistent:** am 2026-10-01 gemergt; der erste echte
+   Kameralauf (`sc7`) bestand. Offen ist **Nacharbeit 5** (Codex): die
+   Startsuche aus der Nähe und Punktschatten in der Cursorzeile. Bis dahin
+   die Kamera senkrecht auf Höhe der Displaymitte stellen. Schräge Aufstellungen (wie
    `ab4`/`ab6`) lehnt `assist` noch ab (`startlage_mehrdeutig`/
    `keine_startlage`), die richtet man weiter von Hand mit
    `profile-regrid.py still` ein. Spätere Kleinigkeiten N1–N3 stehen im
