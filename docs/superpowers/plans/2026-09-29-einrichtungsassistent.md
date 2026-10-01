@@ -941,3 +941,59 @@ gelesen. Der erste echte Kameralauf und der Merge stehen aus.
 * **Offen:** der erste echte Kameralauf; N1–N3 und die Startlage schräger
   Aufstellungen wie oben unter „Kann später kommen“.
 
+
+## Nacharbeit 5 (erster echter Kameralauf, Claude, 2026-10-01)
+
+**Ergebnis:** In der Aufstellung `sc7` lief `assist` am 2026-10-01 ohne Hilfe
+durch.
+* Die Aufstellung ist frontal und nah, das Glas ist etwa 900 px breit.
+* 2j meldet OK mit 0,04 Spalten und 0,07 Zeilen.
+* Unabhängig gegengeprüft mit `profile-regrid.py still` an 16 Standbildern
+  (`var/diagnostics/sc7-still`): 0,04 / 0,07.
+* Gegenlesen mit `stufe2c` 2/2, Gesamturteil WARNUNG nur wegen des Bias-
+  Ersatzmaßes (0,135).
+* Profil `var/diagnostics/sc7-profile`, vom Nutzer nach Sichtprüfung
+  bestätigt.
+
+**Vorher scheiterte der erste Versuch `sc7a`.** Dort stand die Kamera etwa
+gleich nah, schaute aber leicht von oben. Das ergab zwei Befunde, beide
+falsche Ablehnungen, also sicher, aber unnötig.
+
+1. **Startsuche findet aus der Nähe keine Startlage** (`keine_startlage`).
+   Eingangsbild ist `var/diagnostics/sc7a-assist/still.png`; das Glas ist
+   etwa 820 px breit, Hinweisbox automatisch oder `0.268,0.37,0.427,0.144`.
+   * `_plus_anchors` findet 8 Anker, aber mit schräger Punktperiode, z. B.
+     `hv` = (7,7; 1,7), obwohl die Zeile waagerecht liegt.
+   * Alle 16 `refine`-Versuche enden mit `leerzelle_belegt` oder
+     `cursorzeile_belegt`.
+   * Vermutung: Die Quellbild-Minima (`smooth` mit Sigma 0,7, Erosion 3×3,
+     unabhängig von der Punktgröße) liefern bei etwa 7,7 px Punktabstand
+     mehrere Kandidaten je Punkt. Auch ein Verkleinern auf 0,65 hilft
+     nicht, die Ursache ist also nicht nur der Maßstab. Bitte mit dem Bild
+     nachvollziehen, bevor etwas geändert wird.
+   * Von Hand lag die richtige Lage mit `latfit.py` 0,88 Spalten daneben;
+     `profile-regrid.py still` korrigierte auf 0,04 / 0,05. Die richtige
+     Lage steht in `var/diagnostics/sc7a-quad.json`.
+2. **Punktschatten lösen `cursorzeile_belegt` aus.**
+   * `propose --quad <sc7a-quad> --cell-text '+0.4679? '` lehnt die
+     richtige Lage ab.
+   * Ursache: Unter jedem Punkt der untersten Zeile liegt etwa eine Zeile
+     tiefer ein schwacher Schatten, z. B. bei x ≈ 985, 1016, 1046 und 1139,
+     y ≈ 517 in `sc7a-still/frames/frame_000016.png`. Licht und Blick
+     kommen von oben.
+   * Diese Schatten erfüllen `depth > 8` und zählen als Punkt in der
+     Cursorzeile.
+   * Vorschlag zum Prüfen: In der Cursorzeile nur Kandidaten zählen, deren
+     Tiefe mit echten Punkten vergleichbar ist, z. B. mindestens die Hälfte
+     des Medians der zugeordneten Punkte. Oder einen Kandidaten direkt
+     unter einem Punkt der Zeile 6 als Schatten werten.
+   * Wichtig: Eine echte belegte Cursorzeile muss weiter abgelehnt werden.
+     Dafür einen Regressionstest mit synthetischem Cursor schreiben.
+
+**Regressionen:**
+* `sc7a` (richtige Lage aus `sc7a-quad.json`) soll `propose --quad`
+  bestehen.
+* `sc7` soll mit dem gespeicherten Standbild weiter eine Startlage finden.
+
+**Bedienung bis dahin:** Die Kamera senkrecht auf Höhe der Displaymitte
+stellen, nicht von oben, dann treten die Schatten nicht auf.
