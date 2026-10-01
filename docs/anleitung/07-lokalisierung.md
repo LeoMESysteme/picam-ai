@@ -1,5 +1,13 @@
 # 7 — Lokalisierung ohne Bediener
 
+> **Bauentwurf, kein aktueller Bedienpfad.** Der Code enthält heute
+> `ManualRoiLocator` und einen `QuadTracker`; die automatische
+> `contour_heuristic` und der hier skizzierte `RegionTracker` sind nicht
+> implementiert. Der laufende Messpfad verwendet die bestätigte ROI
+> ([Messpfad](../uebersicht/messpfad.md)); Kandidaten lassen sich in der
+> [Livevorschau](10-kamera-livevorschau.md) prüfen. Die folgenden Schritte
+> sind Vorschläge für eine mögliche Erweiterung, keine verfügbaren Befehle.
+
 **Ziel:** `contour_heuristic` findet den Anzeigebereich im Bild selbst, ein
 `RegionTracker` verfolgt ihn über Frames — und wenn er verloren geht, wird der
 Wert ungültig statt weiterzulaufen.
