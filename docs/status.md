@@ -1,4 +1,4 @@
-# Status — Stand 2026-09-30 (Sessionende)
+# Status — Stand 2026-10-01 (Sessionende)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und
@@ -24,6 +24,13 @@ bleibt wegen der fehlenden Telegrammspezifikation offen
 * Abnahme 2 war zuvor an **falsch sitzenden Punktrastern** gescheitert,
   nicht am Leser. Seitdem wird der Rasterversatz vor jeder Ernte gemessen
   (`scripts/profile-regrid.py still`, Grenze 0,15 Punktspalten).
+* **2026-10-01, Lesetest `sc7`:** frontal und nah, bisher größte
+  Abbildung mit etwa 900 px Glasbreite, nicht in den Vorlagen.
+  111/111 richtig, 0 falsch, 0 abgelehnt. Kein formaler Abnahme-Lauf.
+* **Entscheidung 2026-10-01 (Variante B):** Der Leser gilt für den
+  GSV-Sensor als ausreichend validiert. Als Nächstes kommt die Anbindung an
+  den Messpfad (TODO.md Punkt 2). Andere Lichtquellen und weitere Geräte
+  bleiben als Einschränkung genannt.
 * Zahlen: [VALIDATION.md](VALIDATION.md), [Fortschritt](FORTSCHRITT.md),
   [Laborjournal](lab_journal.md). Entscheidung:
   [project_history.md](project_history.md).
@@ -40,30 +47,24 @@ nichts verloren.
 * Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
 * `var/` hat keine Sicherung auf einem anderen Medium.
 
-**Einrichtungsassistent (Branch `feat/einrichtungsassistent`):**
-Nacharbeit 1–4 sind umgesetzt. Bei festen oder nachgeführten Quads
-entscheiden der bekannte Zellentext, die unabhängige 2j-Prüfung und
-`check_setup` über den Vorschlag. RMS, Bias und Zuordnungsquote bleiben
-bei bestandenem 2j als WARNUNG sichtbar; die automatische Startsuche
-behält ihre strengeren Grenzen. Wird ein am zweiten Standbild besseres
-Quad aus anderem Grund abgelehnt, bricht `assist` mit dem Grund ab.
-`confirm` speichert fehlende Prüfungen als `NICHT_GEPRUEFT` und verlangt
-eine neue Begründung.
-
-Die vier bestätigten Profil-Quads von `ab4`, `ab5`, `ab6` und `sc6`
-bestehen den textgestützten Offline-Befehl `propose --quad` mit OK oder
-WARNUNG; 2j ist in allen vier Fällen OK. `ab4` und `ab6` haben noch
-keine sichere automatische Startlage. Die Einheitszeichen rechts werden
-geometrisch extrapoliert. Es gab keinen echten Assist-Kamera- oder
-seriellen Lauf; `var/` wurde nur gelesen. Zahlen und Grenzen stehen in
-[VALIDATION.md](VALIDATION.md) und im
-[Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md).
-
-**Branch-Prüfung:** 997 Python-Tests bestanden, 3 übersprungen,
-1 erwarteter Fehlschlag; 155 gezielte Tests bestanden. Ruff und
-`git diff --check` waren sauber. Der Zensical-Build meldete keine
-Probleme, alle 21 Playwright-Dokutests bestanden. Eine abschließende
-Code-Review fand keinen blockierenden Befund.
+**Einrichtungsassistent:** am 2026-10-01 in `master` gemergt
+(Nacharbeit 1–4).
+* Der erste echte Kameralauf mit seriellem Text richtete `sc7` ohne
+  Hilfe ein:
+  * 2j mit 0,04 Spalten und 0,07 Zeilen, unabhängig mit
+    `profile-regrid.py still` bestätigt,
+  * Gegenlesen 2/2,
+  * Gesamturteil WARNUNG nur wegen des Bias-Ersatzmaßes.
+* Der Versuch davor (`sc7a`, Kamera leicht von oben) brachte zwei falsche
+  Ablehnungen:
+  * Die Startsuche fand aus der Nähe keine Startlage.
+  * Punktschatten wurden als belegte Cursorzeile gezählt.
+* Diese beiden Punkte setzt Codex gerade als **Nacharbeit 5** um
+  ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
+* Bis dahin die Kamera senkrecht auf Höhe der Displaymitte stellen.
+* Schräge Aufstellungen wie `ab4` oder `ab6` richtet man weiter von Hand
+  mit `profile-regrid.py still` ein.
+* Nach dem Merge liefen in `master` 997 Tests grün, ruff ist sauber.
 
 ## Software und Anleitung
 
@@ -107,14 +108,19 @@ Sessionlogs waren für diese Sitzung nicht lesbar
 
 ## Nächste Schritte
 
-1. Den Feature-Branch nach Review durch Claude integrieren. Der erste
-   echte Assist-Lauf und die Einrichtungsdauer gehören zum gemeinsamen
-   Kameratermin. Die optionale Nacharbeit N1–N3 und die Startsuche für
-   schräge Aufstellungen stehen im Plan.
-2. Die Importprüfung `zellen_inkonsistent` für schrägen Blick verbessern
-   (Vergleich je Position), danach `ab6` gegebenenfalls neu importieren.
-   Dafür die Einzelbilder von `ab6-run` behalten.
-3. Das Codex-Leck dauerhaft abstellen (repowise-Plugin in Codex) und `var/`
-   auf ein anderes Medium sichern. Alte tar-Sicherungen erst nach
-   Rückfrage löschen.
-4. Weitere Abnahmebedingungen: anderes Licht, weitere Geräte und Einheiten.
+1. Nacharbeit 5 von Codex reviewen und mergen. Danach eine Aufstellung
+   leicht von oben, wie bei `sc7a`, mit `assist` gegenprüfen.
+2. **Anbindung an den Messpfad** (Variante B, TODO.md Punkt 2).
+   * Zuerst einen Plan schreiben.
+   * Dann die StreamCam an der Werkbank bzw. in `dispread serve` in
+     Betrieb nehmen.
+   * Dann den Dot-Matrix-Leser im laufenden Pfad einsetzen, mit Ausgabe an
+     GSVmulti (das GSV-Protokoll ist offen, OQ-07).
+3. Die Importprüfung `zellen_inkonsistent` für schrägen Blick verbessern.
+   Die Einzelbilder von `ab6-run` dafür behalten.
+4. **SD-Karte:**
+   * Die Löschung von `vor-ab6.tar`, der Einzelbilder `sc6-run` und der
+     Einzelbilder `sc7-run` (etwa 4,8 GB) ist vorgeschlagen; die Freigabe
+     durch den Nutzer steht aus.
+   * Das Codex-Leck dauerhaft abstellen.
+   * `var/` auf ein anderes Medium sichern.

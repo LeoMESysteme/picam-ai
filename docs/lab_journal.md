@@ -1735,3 +1735,34 @@ strengeren Grenzen. Die rechte Einheit bleibt geometrisch extrapoliert,
 und für `ab4`/`ab6` existiert weiterhin keine automatische Startlage.
 Es gab weder einen neuen Hardwarelauf noch eine Messung der
 Einrichtungsdauer oder eines realen 30-s-Stabilitätsintervalls.
+
+## 2026-10-01 — Aufstellung `sc7`: erster echter Lauf des Einrichtungsassistenten
+
+**Aufbau:** Die StreamCam stand frontal und nah vor dem GSV-Sensor, das Glas
+war etwa 900 px breit. Der Text kam seriell vom GSV-2AS über
+`/dev/ttyUSB0`. Der erste Versuch `sc7a` lief mit etwa 820 px Glasbreite
+und leicht von oben.
+
+**Beobachtung `sc7a`:**
+* `assist` brach mit `keine_startlage` ab. Die Plus-Anker kamen mit
+  schräger Punktperiode heraus.
+* Von Hand mit Saatpunkten: `latfit.py` lag 0,88 Punktspalten daneben,
+  `profile-regrid.py still` korrigierte auf 0,04 / 0,05.
+* `propose` mit dieser richtigen Lage lehnte trotzdem ab, mit
+  `cursorzeile_belegt`. Unter jedem Punkt der untersten Zeile lag etwa
+  eine Zeile tiefer ein schwacher Schatten.
+
+**Beobachtung `sc7`:** Die Kamera stand tiefer, senkrecht auf Höhe der
+Displaymitte. Die Schatten waren kaum noch zu sehen.
+* `assist` lief ohne Hilfe durch: Fokus 68, 2j 0,04 / 0,07, Stabilität
+  0,03 px über 33 s, Gegenlesen 2/2, Gesamturteil WARNUNG (Bias 0,135).
+* `profile-regrid.py still` an 16 eigenen Standbildern: 0,04 / 0,07.
+* Ernte mit 25 Schritten, da der Arbeitsspeicher für 30 nicht reichte:
+  2926 Bilder, 0 verworfen, 1507 gelabelt.
+* Import: 111 Proben, 9 abgelehnt wegen `zellen_inkonsistent`.
+* Lesetest `stufe2c`: 111/111 richtig, 0 falsch, 0 abgelehnt.
+
+**Deutung:** Bei frontalem Blick funktioniert der Assistent auch in einer
+neuen Größe. Bei Blick von oben entstehen aus der Nähe Punktschatten. Diese
+und die Startsuche sind Nacharbeit 5. Der Leser verkraftet die größere
+Abbildung ohne Fehler. Zahlen: [VALIDATION.md](VALIDATION.md) 2026-10-01.

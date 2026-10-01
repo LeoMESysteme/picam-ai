@@ -1248,3 +1248,29 @@ erkannter grüner Hinweisbox die bestätigten Ecken auf höchstens 0,57 px.
 Ein synthetischer Fall mit zwei fast gleich gut erkannten Anzeigen wird
 als mehrdeutig abgelehnt. Echte Mehrfachanzeigen und andere Glasformen
 bleiben für den ersten gemeinsamen Kameralauf offen.
+
+## 2026-10-01 — Leser genügt für den GSV-Sensor, weiter mit dem Messpfad
+
+### Entscheidung
+
+Der Nutzer hat Variante B gewählt. Der Dot-Matrix-Leser (`stufe2c`) gilt
+für den GSV-Sensor (Displaytech 161A) als ausreichend validiert:
+* Abnahme 3: 215/0/0 an `ab5` und `ab6`.
+* Lesetest `sc7`: 111/111.
+
+Als Nächstes wird er in den Messpfad eingebunden: Werkbank bzw.
+`dispread serve` mit StreamCam, Ausgabe an GSVmulti. Das beginnt, sobald
+Nacharbeit 5 am Einrichtungsassistenten gemergt ist.
+
+### Verworfene Alternativen
+
+* **Variante A:** weitere Aufstellungen ins Training, neu einfrieren als
+  `stufe2d`, dann Abnahme 4. Das verbessert die Abdeckung, schiebt aber das
+  eigentliche Ziel, die Messwertübertragung, weiter hinaus. Der Leser hat
+  in drei Läufen auf neuen Aufstellungen keinen falschen Wert geliefert.
+
+### Konsequenz
+
+Die Freigabe nennt die Grenzen ausdrücklich: nur Raumlicht, ein Gerät, eine
+Einheit, keine anderen Lichtquellen. Neue Trainings- oder Abnahmerunden gibt
+es nur noch, wenn sich daran etwas ändert.
