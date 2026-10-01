@@ -20,16 +20,21 @@ gedreht) und `ab6` (schräg von links) **bestanden**:
 Details und Einschränkungen: VALIDATION.md 2026-09-30.
 
 Offen:
-1. **Einrichtungsassistent:** Codex setzt Nacharbeit 2 um (Prüfung des
-   Rasterversatzes 2j, Eckkonvention, `ab3`-Vorzeichen). Danach Review und
-   Merge. Bis dahin von Hand einrichten, mit `profile-regrid.py still`.
+1. **Einrichtungsassistent:** am 2026-10-01 nach Review von Nacharbeit 4
+   in `master` gemergt (`harvest-setup.py assist`). Offen: der **erste
+   echte Kameralauf** bei der nächsten Aufstellung, dabei das Ergebnis mit
+   `profile-regrid.py still` gegenprüfen. Schräge Aufstellungen (wie
+   `ab4`/`ab6`) lehnt `assist` noch ab (`startlage_mehrdeutig`/
+   `keine_startlage`), die richtet man weiter von Hand mit
+   `profile-regrid.py still` ein. Spätere Kleinigkeiten N1–N3 stehen im
+   Plan unter Nacharbeit 4.
 2. **Import bei schrägem Blick:** `zellen_inkonsistent` verwirft viel
    (`ab6` 42 %). Die Importprüfung vergleicht über alle Positionen hinweg.
    Prüfen, ob ein Vergleich je Position oder Halbzeile die Ausbeute hebt,
    ohne falsche Labels durchzulassen.
 3. **Punktraster-Anpassung `latfit.py`:** lag bei jeder neuen Aufstellung
    0,2–0,4 Punktspalten daneben, `profile-regrid.py still` korrigiert das.
-   Ersetzt wird sie mit dem Einrichtungsassistenten.
+   Der Einrichtungsassistent (seit 2026-10-01 gemergt) prüft das mit 2j.
 4. **Andere Lichtquelle** und weitere Geräte bzw. Einheiten sind nicht
    geprüft.
 5. `auf3`: Das korrigierte Profil ist nicht bestätigt, niedrige Priorität.
@@ -84,9 +89,8 @@ Profilzuordnung. **`ab4` fehlt.**
    `docs-site/assets/data/fortschritt.json` mitcommitten
    ([FORTSCHRITT.md](docs/FORTSCHRITT.md)).
 
-Parallel: Codex setzt „Nacharbeit 1“ im
-[Plan Einrichtungsassistent](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md)
-um. Danach reviewt Claude und merged.
+Der [Plan Einrichtungsassistent](docs/superpowers/plans/2026-09-29-einrichtungsassistent.md)
+ist mit dem Merge am 2026-10-01 abgeschlossen.
 
 ---
 

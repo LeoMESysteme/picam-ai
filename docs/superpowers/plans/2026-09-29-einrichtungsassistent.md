@@ -923,3 +923,21 @@ Dokutests bestanden. Eine abschließende Code-Review fand keinen
 blockierenden Befund.
 Kamera und serieller Port wurden nicht geöffnet; `var/` wurde nur
 gelesen. Der erste echte Kameralauf und der Merge stehen aus.
+
+### Review Nacharbeit 4 und Merge — 2026-10-01 (Claude)
+
+**Urteil: gemergt** (Fast-Forward von `c51afa6` auf `master`).
+* **F1 erledigt:** `evaluate_quad` hat für feste Quads kein Veto mehr
+  durch RMS oder Bias. Die textlose Startsuche (`fit_lattice`) behält ihre
+  Grenzen. Ohne bestandenes 2j bleibt ein überschrittenes Ersatzmaß FEHLER.
+  Ein abgelehntes, besseres Quad beendet `assist` mit Grund, kein stiller
+  Rückfall. Ein falsches `+`-Quad wird weiter abgelehnt (neuer Test).
+* **F2 erledigt:** `NICHT_GEPRUEFT` statt erfundener WARNUNG, Begründung
+  wird verlangt und gespeichert.
+* Im Worktree 164 gezielte Tests grün, ohne Übersprung, also mit den
+  Echtbild-Regressionen auf `ab4`, `ab5`, `ab6` und `sc6`. Nach dem Merge
+  in `master` 997 Tests grün (3 übersprungen, 1 erwarteter Fehlschlag),
+  ruff sauber.
+* **Offen:** der erste echte Kameralauf; N1–N3 und die Startlage schräger
+  Aufstellungen wie oben unter „Kann später kommen“.
+
