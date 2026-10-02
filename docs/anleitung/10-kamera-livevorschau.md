@@ -158,6 +158,29 @@ werden anschließend wiederhergestellt; erst `y` übernimmt den Vorschlag.
 Bei ungeeignetem Bild gibt es keinen Vorschlag. Die Suche beweist keine
 vollständige Abbildung multiplexender Segmente ([OQ-20](../open-questions.md)).
 
+### Ernte-Aufstellung mit `harvest-setup.py`
+
+Für ein Ernteprofil gibt es zusätzlich einen geführten Kommandozeilenlauf;
+er ist unabhängig vom Auto-Setup dieser Workbench. `assist` führt den
+Fokus-Sweep aus, nimmt zwei Standbilder mit mindestens 30 Sekunden Abstand,
+passt das Punktraster an und prüft unter anderem dessen Versatz. Dazu braucht
+er standardmäßig den seriellen GSV-2AS-Eingang (`/dev/ttyUSB0`, 38400 Baud).
+Offline lassen sich die ersten neun Anzeigezellen mit `--cell-text` oder
+`--cell-text-file` vorgeben:
+
+```bash
+./.venv/bin/python scripts/harvest-setup.py assist \
+    --out var/diagnostics/setup-lauf1 --device-id gsv2as-01 --session-id lauf1
+```
+
+Ein erfolgreicher Lauf schreibt Standbilder, `proposal.json` und Overlays.
+Sieh dir die Overlays und die Prüfungen an; erst danach bestätigt `confirm`
+den Vorschlag als Profil. Ein Fehler bei der Rasterversatzprüfung erzeugt
+keinen Vorschlag. Optionales Gegenlesen braucht eine Vorlagendatei samt
+erwartetem SHA-256. Das Verfahren ist eine Einrichtungshilfe, kein Nachweis
+für andere Geräte oder Lichtverhältnisse. Details zu Ernte und Prüfbildern:
+[Datensatz-Sammelmodus](11-datensatz-sammeln.md).
+
 ## Box bearbeiten und Annotationen sammeln
 
 **Stand 2026-09-10, zweistufiger Ablauf** (löst den früheren, rein

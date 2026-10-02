@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-01 (Sessionende)
+# Status — Stand 2026-10-02 (Dokumentationssnapshot)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und
@@ -47,8 +47,11 @@ nichts verloren.
 * Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
 * `var/` hat keine Sicherung auf einem anderen Medium.
 
-**Einrichtungsassistent:** am 2026-10-01 in `master` gemergt
-(Nacharbeit 1–4).
+**Einrichtungsassistent:** `harvest-setup.py assist` ist im aktuellen
+`master`-Stand vorhanden. Der Lauf erstellt nach Fokus-Sweep und zwei
+Standbildern ein Punktraster-Profil mit Prüfbericht und Overlays; ein
+GSV-2AS-Zellentext kommt standardmäßig seriell oder kann offline vorgegeben
+werden. Vorhandene Messungen:
 * Der erste echte Kameralauf mit seriellem Text richtete `sc7` ohne
   Hilfe ein:
   * 2j mit 0,04 Spalten und 0,07 Zeilen, unabhängig mit
@@ -59,11 +62,12 @@ nichts verloren.
   Ablehnungen:
   * Die Startsuche fand aus der Nähe keine Startlage.
   * Punktschatten wurden als belegte Cursorzeile gezählt.
-* Diese beiden Punkte setzt Codex gerade als **Nacharbeit 5** um
-  ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
-* Bis dahin die Kamera senkrecht auf Höhe der Displaymitte stellen.
-* Schräge Aufstellungen wie `ab4` oder `ab6` richtet man weiter von Hand
-  mit `profile-regrid.py still` ein.
+* Im Plan dokumentierte Nacharbeit 5 betrifft Startsuche aus der Nähe und
+  Punktschatten in der Cursorzeile ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
+  Der aktuelle Code enthält die Nacharbeit; ein neuer echter Lauf mit
+  schräger Aufstellung ist in den vorliegenden Messbelegen nicht dokumentiert.
+* Schräge Aufstellungen wie `ab4` oder `ab6` deshalb bis zu diesem Gegencheck
+  weiter mit `profile-regrid.py still` einrichten.
 * Nach dem Merge liefen in `master` 997 Tests grün, ruff ist sauber.
 
 ## Software und Anleitung
@@ -108,8 +112,8 @@ Sessionlogs waren für diese Sitzung nicht lesbar
 
 ## Nächste Schritte
 
-1. Nacharbeit 5 von Codex reviewen und mergen. Danach eine Aufstellung
-   leicht von oben, wie bei `sc7a`, mit `assist` gegenprüfen.
+1. Den aktuellen Stand von Nacharbeit 5 mit einer Aufstellung leicht von
+   oben, wie bei `sc7a`, mit `assist` gegenprüfen.
 2. **Anbindung an den Messpfad** (Variante B, TODO.md Punkt 2).
    * Zuerst einen Plan schreiben.
    * Dann die StreamCam an der Werkbank bzw. in `dispread serve` in
