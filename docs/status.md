@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-02 (Dokumentationssnapshot)
+# Status — Stand 2026-10-03 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und

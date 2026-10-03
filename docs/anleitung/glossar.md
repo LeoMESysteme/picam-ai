@@ -125,9 +125,11 @@ Format, Retries. Bewusst getrennt vom `ValueRecord`.
 
 ## Zeit
 
-**CLOCK_BOOTTIME** — Zeit seit dem Booten, inklusive Suspend. Domäne des
-`SensorTimestamp` auf diesem Pi (gemessen 2026-09-07). Vergleiche über
-Reboot-Grenzen hinweg sind sinnlos — deshalb `boot_id` ins Session-Manifest.
+**CLOCK_BOOTTIME** — Zeit seit dem Booten, inklusive Suspend. Das war die
+Zeitbasis des `SensorTimestamp` der inzwischen außer Betrieb genommenen
+IMX500 (Messung 2026-09-07). Vergleiche über Reboot-Grenzen hinweg sind
+sinnlos — deshalb `boot_id` ins Session-Manifest. Für die aktive StreamCam
+siehe [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
 
 **CLOCK_MONOTONIC** — monoton steigende Zeit ohne Sprünge. Domäne aller
 Verarbeitungsmarken im `PipelineTrace`.
