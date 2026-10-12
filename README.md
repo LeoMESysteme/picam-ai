@@ -20,7 +20,7 @@ wegen der fehlenden Telegrammspezifikation offen
 | --- | --- | --- |
 | Projektstand verstehen | [Status](docs/status.md) | [Roadmap](docs/ROADMAP.md), [Arbeitsliste](TODO.md) |
 | Messpfad verstehen oder erweitern | [Lernpfad](docs/anleitung/README.md) | [Messpfad](docs/uebersicht/messpfad.md), [Verträge](docs/anleitung/02-vertraege.md) |
-| Kamera und Anzeige einrichten | [Livevorschau](docs/anleitung/10-kamera-livevorschau.md) | [Kamera-Inbetriebnahme](docs/CAMERA_COMMISSIONING.md), [Optik](docs/OPTICAL_SETUP.md) |
+| Kamera und Anzeige einrichten | [Kamera-Inbetriebnahme](docs/CAMERA_COMMISSIONING.md) | [Workbench-Vorschau (Simulation)](docs/anleitung/10-kamera-livevorschau.md), [Optik](docs/OPTICAL_SETUP.md) |
 | Daten sammeln und Ergebnisse bewerten | [Sammelmodus](docs/anleitung/11-datensatz-sammeln.md) | [Daten und Abnahme](docs/uebersicht/daten-und-abnahme.md), [Validierung](docs/VALIDATION.md) |
 | Zeitstempel und Latenz einordnen | [Zeitstempel](docs/uebersicht/zeitstempel.md) | [Zeitmessungen](docs/TIMING.md) |
 | Eine unbekannte Frage klären | [Offene Punkte](docs/open-questions.md) | [Laborjournal](docs/lab_journal.md), [Projektgeschichte](docs/project_history.md) |

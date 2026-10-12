@@ -9,6 +9,40 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-01 — Cursorpunkte gegen schwache Schatten absichern
+
+## Problem
+
+Bei `sc7a` sah die Kamera leicht von oben auf das LCD. Unter echten Punkten
+der letzten Glyphenzeile erschienen schwache Schatten genau in der
+geometrischen Cursorzeile. Die absolute Quellbildgrenze `depth > 8`
+klassifizierte sie als Punkte und lehnte selbst den gespeicherten richtigen
+Quad ab. Auch die automatische Startsuche endete deshalb ohne Lage.
+
+## Entscheidung
+
+Ein Kandidat in der Cursorzeile muss neben der geometrischen Zuordnung
+eine Tiefe von mindestens 60 % des Medians der zugeordneten
+Glyphenpunkte erreichen. Ein synthetisch belegter Cursor bleibt eine
+Ablehnung. Die Startheuristik wird nicht geändert.
+
+## Begründung und Alternativen
+
+Die absolute Kandidatengrenze ist für die Suche empfindlich genug, um
+schwache optische Schatten mitzunehmen. Der Vergleich mit Punkten im
+selben Bild berücksichtigt Helligkeit und Belichtung der Aufstellung.
+Ein pauschales Abschalten der Cursorprüfung würde echte Cursorinhalte
+durchlassen. Die vermuteten doppelten Quellbild-Minima waren für den
+fehlenden Start hier nicht ausschlaggebend: Ohne die falsche
+Cursorablehnung fand die vorhandene Suche eine Lage.
+
+## Konsequenz
+
+Der feste `sc7a`-Quad passiert `propose` mit 2j OK und Gesamt-WARNUNG.
+Die relative Grenze ist ein Vorabwert für die Einrichtung und kein
+allgemeiner Beleg für alle Lichtlagen; unlesbare oder tatsächlich belegte
+Cursorzeilen bleiben gesperrt.
+
 # 2026-09-30 — Feste Quads an 2j statt an Raster-Ersatzmaßen messen
 
 ## Problem

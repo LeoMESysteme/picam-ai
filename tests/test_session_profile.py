@@ -114,9 +114,10 @@ _EXISTING_PROFILES = sorted(
 
 
 @pytest.mark.parametrize("source", _EXISTING_PROFILES, ids=lambda path: str(path.relative_to(_DIAGNOSTICS)))
-def test_existing_profile_resaves_byte_identically_without_setup_checks(tmp_path, source):
+def test_existing_profile_resaves_byte_identically(tmp_path, source):
     profile = SessionProfile.load(source)
-    assert profile.setup_checks is None
+    original = json.loads(source.read_text())
+    assert (profile.setup_checks is not None) == ("setup_checks" in original)
     target = tmp_path / "profile.json"
     profile.save(target)
     assert target.read_bytes() == source.read_bytes()

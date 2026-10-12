@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-01 (Sessionende)
+# Status — Stand 2026-10-12 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und
@@ -47,24 +47,26 @@ nichts verloren.
 * Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
 * `var/` hat keine Sicherung auf einem anderen Medium.
 
-**Einrichtungsassistent:** am 2026-10-01 in `master` gemergt
-(Nacharbeit 1–4).
-* Der erste echte Kameralauf mit seriellem Text richtete `sc7` ohne
-  Hilfe ein:
-  * 2j mit 0,04 Spalten und 0,07 Zeilen, unabhängig mit
-    `profile-regrid.py still` bestätigt,
-  * Gegenlesen 2/2,
-  * Gesamturteil WARNUNG nur wegen des Bias-Ersatzmaßes.
-* Der Versuch davor (`sc7a`, Kamera leicht von oben) brachte zwei falsche
-  Ablehnungen:
-  * Die Startsuche fand aus der Nähe keine Startlage.
-  * Punktschatten wurden als belegte Cursorzeile gezählt.
-* Diese beiden Punkte setzt Codex gerade als **Nacharbeit 5** um
-  ([Plan](superpowers/plans/2026-09-29-einrichtungsassistent.md)).
-* Bis dahin die Kamera senkrecht auf Höhe der Displaymitte stellen.
-* Schräge Aufstellungen wie `ab4` oder `ab6` richtet man weiter von Hand
-  mit `profile-regrid.py still` ein.
-* Nach dem Merge liefen in `master` 997 Tests grün, ruff ist sauber.
+**Einrichtungsassistent:** Nacharbeit 1–4 ist seit 2026-10-01 in `master`,
+Nacharbeit 5 seit dem Merge am 2026-10-12. Der erste echte Kameralauf mit
+seriellem Text richtete `sc7` ohne Hilfe ein: 2j 0,04/0,07 Punktabstände,
+unabhängig mit `profile-regrid.py still` bestätigt, Gegenlesen 2/2,
+Gesamturteil WARNUNG nur wegen des Bias-Ersatzmaßes. Das Profil wurde nach
+Sichtprüfung bestätigt.
+
+**Nacharbeit 5:** Der Versuch davor
+(`sc7a`, Kamera leicht von oben) wurde durch schwache Punktschatten in der
+Cursorzeile abgelehnt. Die Cursorprüfung verlangt nun eine Kandidatentiefe
+von mindestens 60 % des Medians der zugeordneten Glyphenpunkte. Mit dem
+gespeicherten Quad bestehen alle 32 `sc7a`-Stillframes offline; ein
+synthetisch belegter Cursor bleibt abgelehnt. `propose --quad` auf Frame 16
+liefert 2j OK (0,041/0,057) und Gesamt-WARNUNG. Die unveränderte
+Startsuche findet auf den Assist-Bildern `sc7` und `sc7a` eine Lage
+(196 und 318 zugeordnete Punkte). Das `sc7a`-Startquad liegt bis zu
+6,46 px vom Referenzquad entfernt; 2j und Bedienerprüfung bleiben nötig.
+Es gab keinen weiteren Kamera- oder seriellen Lauf; ein neuer echter Lauf
+mit schräger Aufstellung steht aus. Schräge Aufstellungen wie `ab4`/`ab6`
+richtet man weiter von Hand mit `profile-regrid.py still` ein.
 
 ## Software und Anleitung
 
@@ -80,6 +82,9 @@ dispread-Einsprungpunkt führt zur separaten Workbench-CLI
 Livevorschau und Datensatz-Sammelmodus haben eigene
 [Bedienseiten](anleitung/10-kamera-livevorschau.md) und
 [Dokumentation zum Sammeln](anleitung/11-datensatz-sammeln.md).
+Die Kameravorschau in der Workbench ist derzeit nur mit `--simulate` nutzbar;
+die StreamCam ist dort noch nicht angebunden. Die separate UVC-Bildquelle und
+das Kamera-Inbetriebnahmeskript unterstützen die StreamCam bereits.
 
 ## Zensical-Dokumentation und Runner
 
@@ -108,8 +113,8 @@ Sessionlogs waren für diese Sitzung nicht lesbar
 
 ## Nächste Schritte
 
-1. Nacharbeit 5 von Codex reviewen und mergen. Danach eine Aufstellung
-   leicht von oben, wie bei `sc7a`, mit `assist` gegenprüfen.
+1. Den aktuellen Stand von Nacharbeit 5 mit einer Aufstellung leicht von
+   oben, wie bei `sc7a`, mit `assist` gegenprüfen.
 2. **Anbindung an den Messpfad** (Variante B, TODO.md Punkt 2).
    * Zuerst einen Plan schreiben.
    * Dann die StreamCam an der Werkbank bzw. in `dispread serve` in

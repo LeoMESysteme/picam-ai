@@ -136,9 +136,13 @@ for stufe in ("locate", "rectify", "read", "gate", "build", "total"):
         print(f"{stufe:8s} p50={werte[len(werte)//2]:9.1f}  p95={werte[int(len(werte)*0.95)]:9.1f}  max={werte[-1]:9.1f}")
 ```
 
-**Nur** deuten, wenn `capture_timestamp.base.carries_time_information` wahr
-ist. Bei `synthetic://` und `folder://` sind das reine Rechenzeiten der
-Software.
+Die Stufendauern im `PipelineTrace` werden mit `CLOCK_MONOTONIC` gemessen;
+du kannst sie daher auch bei `synthetic://` und `folder://` als reine
+Rechenzeiten der Software auswerten. Die Zeitbasis des Aufnahmezeitstempels
+entscheidet dagegen, ob sich Aufnahme- und Verarbeitungszeit sinnvoll
+zueinander in Beziehung setzen lassen. `SYNTHETIC` und `FILE_MTIME` erlauben
+keine Latenzaussage; Details stehen unter
+[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
 
 ## 8 — Segmentmessungen eines Ausschnitts sichtbar machen
 
