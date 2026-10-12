@@ -351,9 +351,14 @@ test('Projekt-Tour: Kapitelwahl, Schrittpunkte und Tastatur', async ({ browser }
   await page.getByRole('button', { name: 'Weiter', exact: true }).press('ArrowRight');
   await expect(page).toHaveURL(/#erkennung-raster$/);
 
-  await page.getByRole('button', { name: 'Zeit (geplant)' }).click();
-  await expect(page).toHaveURL(/#zeit$/);
-  await expect(page.locator('.tour-caption')).toContainText('Geplant');
+  // Ein Klick ins Inhaltsfeld auf einen Anker eines anderen Kapitels springt dorthin.
+  await page.getByRole('button', { name: 'Training', exact: true }).click();
+  await expect(page).toHaveURL(/#training-vorlagen$/);
+  await page.getByRole('button', { name: /^Schritt 3:/ }).click();
+  await page.locator('.tour-caption a[href$="#zeit-anzeige"]').click();
+  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'zeit-anzeige');
+  // Kein Kapitel ist mehr nur geplant.
+  await expect(page.locator('.tour-chapter-button--planned')).toHaveCount(0);
   await context.close();
 });
 
@@ -364,11 +369,11 @@ test('Projekt-Tour spielt ohne reduzierte Bewegung selbst weiter', async ({ page
   await page.locator('.tour-ui').scrollIntoViewIfNeeded();
   await page.clock.runFor(30000);
   await expect(page).not.toHaveURL(/#ueberblick-weg$/);
-  // Vor einem geplanten Kapitel hält die Tour an.
-  await page.goto(`${TOUR}#erkennung-ausgabe`);
+  // Am Ende der Tour hält sie an.
+  await page.goto(`${TOUR}#regeln-grenzen`);
   await page.locator('.tour-ui').scrollIntoViewIfNeeded();
   await page.clock.runFor(30000);
-  await expect(page).toHaveURL(/#erkennung-ausgabe$/);
+  await expect(page).toHaveURL(/#regeln-grenzen$/);
   await expect(page.getByRole('button', { name: /^Automatisch weiter/ })).toHaveAttribute('aria-pressed', 'false');
 });
 

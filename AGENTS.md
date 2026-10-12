@@ -57,8 +57,9 @@ Zwei harte Sätze:
   API-Links mit kurzem Markdown-Linktitel erklären; generierte API-Seiten
   nicht pauschal als Vorschau-Ziele aufnehmen.
 * Die [Projekt-Tour](docs/uebersicht/projekt-tour.md) zeigt den Messpfad als
-  Animation. Ihre Texte stehen im Markdown, die Szenen in
-  `docs-site/assets/tour.js` unter derselben h3-ID. Ändert sich Verhalten,
+  Animation. Ihre Texte stehen im Markdown, die Szenen unter derselben
+  h3-ID in `docs-site/assets/tour.js` (Überblick, Erkennung) bzw.
+  `tour-<kapitel>.js`. Ändert sich Verhalten,
   das eine Szene zeigt (Kette, Freigaberegeln, Zeitbasis, Ausgabe, OQ-07),
   Text **und** Szene im selben Commit anpassen und das Stand-Datum der Seite
   setzen. Geplantes bleibt auf der Bühne bernsteinfarben und gestrichelt.

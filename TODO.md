@@ -69,10 +69,9 @@ Offen:
    Sicherung auf einem anderen Medium.
 8. Die Einzelbilder von `ab5-run`/`ab6-run` (je 1,6 GB) erst nach Rückfrage
    löschen.
-8. **Projekt-Tour** (Doku, 2026-10-12, niedrige Priorität): Überblick und
-   Erkennung sind fertig. Die Kapitel Zeit, Training, Bedienung und Regeln
-   stehen in `docs/uebersicht/projekt-tour.md` als „geplant“; ihre Szenen
-   kommen in `docs-site/assets/tour.js` unter der jeweiligen h3-ID dazu.
+8. **Projekt-Tour** (Doku): seit 2026-10-12 alle sechs Kapitel fertig.
+   Pflege: Ändert sich gezeigtes Verhalten, Text und Szene
+   (`docs-site/assets/tour*.js`) zusammen anpassen (AGENTS.md).
 
 ---
 

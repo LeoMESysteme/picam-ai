@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
+
+**Problem:** Vier der sechs Kapitel der Projekt-Tour waren nur als „geplant“
+angelegt.
+
+**Änderung:** Kapitel **Zeit** (5 Schritte), **Training** (5), **Bedienung**
+(5) und **Regeln** (6) gebaut, je in einer eigenen Datei
+`docs-site/assets/tour-<kapitel>.js`. `tour.js` stellt dafür seine Helfer und
+`register()` über `window.dispreadTour` bereit. Die Aussagen sind an Code,
+Tests und VALIDATION.md belegt; Offenes (OQ-02, OQ-03, OQ-07, OQ-14, OQ-43,
+Werkbank-Kamera, Messpfad-Anbindung) ist bernsteinfarben gekennzeichnet.
+Tests an das Ende der Planungsphase angepasst.
+
+**Konsequenz:** Die Tour hat 34 Schritte. Ändert sich Verhalten, das eine
+Szene zeigt, gilt weiter die Pflegeregel in `AGENTS.md`; die Szene liegt in
+der Datei ihres Kapitels.
+
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour als Animation)
 
 **Problem:** Die Doku erklärt das Projekt in Tabellen und Fließtext. Einen

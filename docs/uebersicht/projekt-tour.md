@@ -14,8 +14,8 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-12. Fertig sind **Überblick** und **Erkennung**; die
-übrigen Kapitel sind angelegt und beschreiben, was sie zeigen werden.
+Stand der Tour: 2026-10-12. Alle sechs Kapitel sind fertig: Überblick,
+Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
 
@@ -77,8 +77,10 @@ Mehr dazu: [Messpfad und Freigabe](messpfad.md) ·
 ### Kapitel wählen {#ueberblick-kapitel}
 
 **Erkennung** verfolgt ein Kamerabild Schritt für Schritt bis zum fertigen
-Datensatz. Die Kapitel **Zeit**, **Training**, **Bedienung** und **Regeln**
-sind geplant; ihre Karten zeigen, was sie enthalten werden.
+Datensatz. **Zeit** erklärt die Uhren und warum Latenz keine Unsicherheit
+ist. **Training** zeigt, wie das Gerät seine eigenen Labels liefert und wie
+der Leser geprüft wird. **Bedienung** führt durch Aufstellen und Einrichten.
+**Regeln** sammelt, was das System bewusst nicht tut.
 
 Mehr dazu: [Lernpfad](../anleitung/README.md) · [Roadmap](../ROADMAP.md)
 { .tour-more }
@@ -551,7 +553,8 @@ Timing-Kalibrierung; ohne passende Kalibrierung startet die Ernte nicht.
 Auch Lücken im Telegrammstrom und das offene Ende des letzten Werts werden
 verworfen.
 
-Mehr dazu: [Zeitverhalten](../TIMING.md) ·
+Mehr dazu: [Kapitel Zeit: Telegramm und Anzeige](#zeit-anzeige) ·
+[Zeitverhalten](../TIMING.md) ·
 [Zeitstempel richtig lesen](zeitstempel.md)
 { .tour-more }
 
@@ -849,8 +852,8 @@ Laborplatz auffallen.
 Darum wirft der Platzhalter für das echte GSVmulti-Format
 (`GsvAsciiFormatter`) absichtlich einen Fehler und verweist auf OQ-07. Zum
 Testen der Kette gibt es nur ein CSV-Format, das sichtbar als vorläufig
-markiert ist (`provisional = True`). Diese Markierung gehört in jedes
-Laufergebnis. Belastbar wäre ein Mitschnitt: ein echtes GSV-Gerät an
+markiert ist (`provisional = True`). Nach der Projektregel in `AGENTS.md`
+gehört diese Markierung in jedes Laufergebnis. Belastbar wäre ein Mitschnitt: ein echtes GSV-Gerät an
 GSVmulti anschließen und den Datenstrom aufzeichnen.
 
 Mehr dazu: [GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md) ·
