@@ -5,7 +5,83 @@ Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Projektgeschichte](project_history.md); Aufgaben:
 [TODO.md](../TODO.md).
 
-## Ergebnis dieser Session — Projektcockpit Version 2
+## Übergabeprüfung für 2026-10-13
+
+Der lokale Stand ist für den Wiedereinstieg dokumentiert, aber noch nicht
+vollständig in Git gesichert oder mit `origin/master` synchronisiert.
+Nach `git fetch origin` am 2026-10-12 steht `master` auf `9d6994a` und
+`origin/master` auf `ef76811`: je ein eigener Commit seit `812bb59`.
+Lokal dokumentiert `9d6994a` das Cockpit; der Remote-Commit ergänzt
+codebasierte Fakten für die Projekt-Tour.
+
+Noch offen im Hauptcheckout: die neue Fokuswarnungs-Idee in
+`PLANNED_FEATURES.md`, dieser Snapshot sowie Konzeptillustration und Prompt
+unter `docs/illustrations/`. Im separaten Worktree
+`.claude/worktrees/feat-messpfad-live` steht Branch
+`worktree-feat-messpfad-live` auf `71320bf`; die Spezifikation ist geändert
+und `docs/superpowers/plans/2026-10-12-messpfad-live.md` liegt unversioniert
+vor. Dort beginnt der nächste Implementierungsschritt mit Task 1 des Plans.
+Spezifikation und Plan vor der Umsetzung gemeinsam prüfen und sichern.
+Meilenstein 1 umfasst Browser-Einrichtung, Live-Lesen und JSONL-Audit;
+serielle Ausgabe an GSVmulti folgt separat (OQ-07).
+
+Zusätzlich ist die Playwright-CI lokal korrigiert. Die Korrektur wird in
+dieser Session mit der zugehörigen Doku gesichert und nach dem Abgleich
+mit `origin/master` gepusht: `playwright.yml` verlangt nun `picam-docs` statt
+`ubuntu-latest`, lädt nur Chromium ohne Systempaketinstallation und nutzt
+den Forgejo-Artefaktupload. `playwright.config.ts` grenzt Browsertests auf
+`.spec.ts` ein; Node-Harnische mit Pytest-Fixtures werden nicht mehr von
+Playwright geladen. Changelog, Hosting-Doku, Projektgeschichte und der
+Runner-Kommentar in `docs.yml` sind angepasst. Runner-Label und YAML/
+Shell-Schritte sind geprüft; 2 Chromium-Beispieltests und 5 Python-Tests
+für die Node-Harnische bestehen. Strikter Doku-Build bestanden, neue
+Doku-Browserprüfung mit allen 26 Tests bestanden. Ein echter Forgejo-Lauf nach Übernahme
+steht aus; alte wartende Läufe behalten die alte Workflow-Version.
+
+Weitere ungesicherte Arbeit liegt im alten Worktree
+`/home/me-systeme/picam-ai-assist`: vorgemerkte Änderungen an README,
+Bedien-/Glossar-/Rezept-Doku und Status, ein geänderter Cursor-Test sowie
+unversionierte `.venv`-, `node_modules`- und `var`-Verknüpfungen zum
+Hauptcheckout. Auch `var` im Worktree `/home/me-systeme/picam-ai-ernte`
+ist eine solche Verknüpfung, keine zusätzliche Datenkopie.
+Bei der Nachprüfung waren Livevorschau-, Glossar- und Rezept-Doku bereits
+identisch mit dem Hauptcheckout; README und Cursor-Test wichen noch ab.
+Diese Worktrees vor einer Bereinigung auf benötigte Änderungen prüfen.
+Das eigenständige Cockpit-Repository `sites/picam-ai-cockpit` war bei der
+ersten Prüfung auf `126c59e` sauber. Bei der Nachprüfung läuft dort
+inzwischen die parallele Erweiterung: `lib/codebase-model.mjs` ist
+geändert; `lib/activity-model.mjs`, `lib/code-analysis.mjs` sowie
+`tests/activity-model.test.mjs` und `tests/code-analysis.test.mjs` sind
+neu und unversioniert. Diese laufende Arbeit ist von den oben genannten
+Prüfergebnissen nicht abgedeckt.
+
+Frische Prüfungen: Ruff für `src`, `tests`, `scripts`, `examples` bestanden;
+OQ-Index aktuell; `git diff --check` bestanden. Der Workbench-Browsertest
+mit seiner von Pytest erzeugten Fixture besteht (3 Python-Tests).
+Der strikte Doku-Build besteht, ebenso alle 26 Doku-Browsertests.
+Die vollständige Mock-Testsuite (`./.venv/bin/pytest --mode=mock -q`)
+besteht: **1007 bestanden, 3 übersprungen, 1 erwarteter Fehlschlag**,
+Laufzeit 440,37 s. Die Workbench-Browserregressionen brauchen die von
+Pytest erzeugte Fixture.
+
+Die Projekt-venv nutzt `include-system-site-packages = true`. Kein
+`var/RECORDING_IN_PROGRESS`-Marker lag bei der Prüfung vor; keine Kamera
+oder serielle Hardware wurde bedient. Auf `/` waren 4,4 GB frei bei
+91 % Belegung, `/dev/shm` hatte 4,0 GB frei. Vor neuen Aufnahmen Platz und
+Arbeitsspeicher erneut prüfen; eine externe Sicherung von `var/` bleibt offen.
+
+## Projektcockpit — angefragte Erweiterung vom 2026-10-12
+
+Der Nutzer wünscht Commit-Statistiken und weitere Größenkennzahlen,
+insbesondere Codezeilen, sowie begründete Verbesserungsvorschläge.
+Die vorhandenen Datenpfade und GitHub-Ressourcen wurden lesend geprüft.
+Ein kurzer Entwurf mit Commit-Aktivität, getrennten Größenangaben,
+Commit-bezogener Quelltextzeilenanalyse, größten Quelldateien und direktem
+Handlungsbedarf liegt zur Freigabe vor. Die neue Umsetzung hat noch nicht
+begonnen; private Sites-Version 2 bleibt der veröffentlichte Stand.
+Andere parallele Sessionergebnisse bleiben unten erhalten.
+
+## Projektcockpit Version 2 — bisheriger Stand vom 2026-10-12
 
 Das private [picam-ai Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
 ist aktualisiert und als Version 2 veröffentlicht. Die Roadmap zeigt P0–P8
@@ -50,6 +126,17 @@ Beim Browserabruf am 2026-10-12: Commit
 Dies ist ein Abrufsnapshot; das Cockpit aktualisiert den Stand weiter.
 Keine picam-ai-Python-Tests oder Betriebsmessungen wurden ausgeführt und
 keine Hardware bedient. Die Betriebsangaben unten bleiben frühere Belege.
+
+## Projekt-Tour — alle sechs Kapitel vorhanden
+
+Die [Projekt-Tour](uebersicht/projekt-tour.md) steht seit `812bb59` mit
+allen sechs Kapiteln in `master`: Überblick, Erkennung, Zeit, Training,
+Bedienung und Regeln. Sie zeigt eine animierte SVG-Bühne mit lokalen
+anime.js-Dateien, Kapitelwahl und Links in die Doku. Der frühere
+Zwischenstand „nur Überblick und Erkennung fertig“ ist überholt.
+Der noch nicht lokal integrierte Remote-Commit `ef76811` bezieht die
+Tour-Fakten aus dem Code. Änderungen am gezeigten Verhalten brauchen
+weiterhin Text und Szene zusammen (AGENTS.md).
 
 ## Betrieb und Messstand
 
@@ -162,11 +249,13 @@ Sessionlogs waren für diese Sitzung nicht lesbar
 1. Den aktuellen Stand von Nacharbeit 5 mit einer Aufstellung leicht von
    oben, wie bei `sc7a`, mit `assist` gegenprüfen.
 2. **Anbindung an den Messpfad** (Variante B, TODO.md Punkt 2).
-   * Zuerst einen Plan schreiben.
-   * Dann die StreamCam an der Werkbank bzw. in `dispread serve` in
-     Betrieb nehmen.
-   * Dann den Dot-Matrix-Leser im laufenden Pfad einsetzen, mit Ausgabe an
-     GSVmulti (das GSV-Protokoll ist offen, OQ-07).
+   * Im Worktree `.claude/worktrees/feat-messpfad-live` liegen die
+     abgestimmte Spezifikation und ein neuer Implementierungsplan.
+     Den uncommitteten Stand prüfen und sichern, dann mit Task 1 beginnen.
+   * Meilenstein 1: StreamCam, Browser-Einrichtung, Dot-Matrix-Leser und
+     JSONL-Audit in der Werkbank bzw. `dispread serve` verbinden.
+   * Serielle Ausgabe an GSVmulti ist ein eigener Folgeschritt;
+     das GSV-Protokoll bleibt offen (OQ-07).
 3. Die Importprüfung `zellen_inkonsistent` für schrägen Blick verbessern.
    Die Einzelbilder von `ab6-run` dafür behalten.
 4. **SD-Karte:**

@@ -3,6 +3,21 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (CI: Playwright auf Forgejo-Host-Runner)
+
+**Problem:** `playwright.yml` verlangte das nicht vorhandene Runner-Label
+`ubuntu-latest`; der Lauf blieb vor dem ersten Schritt stehen.
+
+**Änderung:** Job auf `picam-docs` umgestellt, Node 22 und Chromium mit einem
+Worker festgelegt, Installation von Systempaketen entfernt. Strenger
+Doku-Build, manuell startbarer Lauf und Forgejo-kompatibler Berichtsupload.
+Die allgemeine Playwright-Suche lädt nur `.spec.ts`-Dateien; die
+Node-Testharnische mit Pytest-Fixtures werden nicht als Browsertests geladen.
+
+**Konsequenz:** Neue Läufe passen zum vorhandenen Runner und benötigen keine
+privilegierte Paketinstallation. Alte wartende Läufe verwenden weiterhin
+ihre ursprüngliche Workflow-Version.
+
 ## 0.1.0.dev0 — 2026-10-12 (Sites: grafische Roadmap und Codebase-Statistik)
 
 **Problem:** Die Cockpit-Roadmap war eine Kartenliste; Codebase-Zahlen und

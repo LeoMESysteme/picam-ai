@@ -65,6 +65,28 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Playwright-Prüfung auf dem vorhandenen Runner
+
+`.github/workflows/playwright.yml` läuft bei Pushes und Pull Requests nach
+`main`/`master` sowie manuell auf `picam-docs`, dem vorhandenen Host-Runner.
+`ubuntu-latest` war ein Überbleibsel der GitHub-Vorlage und passte zu keinem
+hier konfigurierten Runner-Label; deshalb blieben die Jobs in der Warteschlange.
+
+Der Workflow verwendet Node 22 und Chromium mit einem Worker, baut die Doku
+streng und prüft anschließend ihre interaktiven Funktionen. Browserdateien
+liegen unter `/var/lib/forgejo-runner/playwright-browsers`. Die Installation
+verwendet `playwright install --only-shell chromium` ohne `--with-deps`;
+Systembibliotheken müssen auf dem Pi bereits installiert sein. Der Job
+bekommt keine Rechte für `apt` oder Zugriff auf Messhardware. Berichte lädt
+die Forgejo-Version von `upload-artifact@v4` hoch.
+Die allgemeine Playwright-Konfiguration sucht nur `.spec.ts`-Dateien;
+`*.test.mjs`-Harnische laufen separat über Pytest mit ihren benötigten Fixtures.
+
+Das Runner-Label bleibt `picam-docs:host`; `ubuntu-latest` wird nicht als
+allgemeines Alias ergänzt. Bereits wartende Läufe mit der alten
+Workflow-Version müssen beendet und nach Übernahme der Korrektur neu
+gestartet werden.
+
 ### Automatische Zensical-Pflege einrichten
 
 Der bisherige Claude-`@reboot`-Eintrag ist deaktiviert. Forgejo startet

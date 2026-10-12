@@ -13,6 +13,8 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  // Node-Regressionsharnische (*.test.mjs) werden von pytest mit Fixtures gestartet.
+  testMatch: '**/*.spec.ts',
   testIgnore: ['docs-site.spec.ts'],
   /* Run tests in files in parallel */
   fullyParallel: true,

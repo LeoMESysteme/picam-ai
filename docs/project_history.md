@@ -9,6 +9,32 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-12 — Playwright auf dem bestehenden Forgejo-Doku-Runner
+
+## Problem
+
+Die GitHub-Workflow-Vorlage verlangte `ubuntu-latest`, während der
+vorhandene Host-Runner nur `picam-docs` anbietet. Zusätzlich war eine
+privilegierte Browser-Systempaketinstallation vorgesehen.
+
+## Entscheidung und Alternativen
+
+Playwright läuft auf `picam-docs` mit Chromium und einem Worker, ohne
+Systempakete zu installieren. Der Runner behält sein spezifisches Label
+und seine systemd-Abschottung. Ein zusätzliches `ubuntu-latest`-Host-Label
+wird verworfen: Es würde unpassende generische Ubuntu-Jobs auf das
+Messgerät ziehen. Ein separater Container-Runner wäre möglich, ist für
+die bestehenden Chromium-Doku-Tests aber nicht erforderlich.
+
+## Konsequenz
+
+Doku-Build und Browserprüfung teilen sich die Runner-Kapazität 1.
+Firefox und WebKit bleiben in der lokalen Playwright-Konfiguration
+verfügbar, sind nicht Teil dieses Host-Jobs. Systembibliotheken bleiben
+Aufgabe der Pi-Einrichtung; der Job lädt nur die passenden Browserdateien.
+
+---
+
 # 2026-10-01 — Cursorpunkte gegen schwache Schatten absichern
 
 ## Problem
