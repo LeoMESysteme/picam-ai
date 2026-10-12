@@ -16,7 +16,10 @@ use_directory_urls = false
 repo_url = "https://ds1515.me-systeme.de/l.hentschke/picam-ai"
 repo_name = "picam-ai"
 extra_css = ["assets/docs-interactive.css", "assets/fortschritt.css", "assets/tour.css"]
-extra_javascript = ["assets/docs-interactive.js", "assets/fortschritt.js", "assets/tour.js"]
+extra_javascript = [
+  "assets/docs-interactive.js", "assets/fortschritt.js", "assets/tour.js",
+  "assets/tour-zeit.js", "assets/tour-training.js", "assets/tour-bedienung.js", "assets/tour-regeln.js",
+]
 
 nav = [
   { "Start" = "index.md" },

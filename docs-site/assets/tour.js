@@ -1191,6 +1191,27 @@
     regeln: "Was das System nicht tut",
   };
 
+  // ------------------------------------------------- Schnittstelle Kapitel --
+  // Kapitel in eigenen Dateien (tour-zeit.js, tour-training.js, ...) melden
+  // ihre Szenen über window.dispreadTour.register(id, fn) an und benutzen die
+  // Helfer unten. Eine Szene bekommt ctx = { tl, A, layer, tour } und baut
+  // ihren Endzustand vollständig selbst auf (Direktlinks springen mitten in
+  // ein Kapitel). Die Kapiteldateien laden nach tour.js; die Szenen werden
+  // erst beim Anzeigen aufgerufen.
+  const API = window.dispreadTour || (window.dispreadTour = { scenes: {}, blurbs: {} });
+  API.scenes = API.scenes || {};
+  API.blurbs = API.blurbs || {};
+  API.register = (id, fn) => { API.scenes[id] = fn; };
+  Object.assign(API, {
+    W, H, NS, svg, group, label, make, hidden, flat, textWidth, points, clamp, seeded,
+    matrix, apply, matrixAttr, lerpParams,
+    ROM, READER_CLASSES, DISPLAY, LCD_W, LCD_H, LCD_U, LCD_X, LCD_Y, glyphVector, drawLCD, cellBox,
+    chip, badge, panel, arrow, checkMark, streamCam, drawDevice, drawHand,
+    glassCorners, cellCorners, cellPolygon, cellCenter,
+    VIEW_CAMERA, VIEW_RECT, VIEW_HEAD, FRAME, cameraScene, rectifiedScene, benchScene,
+    travel, drawIn, popIn, fadeUp,
+  });
+
   // ----------------------------------------------------------------- Tour --
 
   function readChapters(root) {
@@ -1410,7 +1431,7 @@
       });
       svg("rect", { x, y, width: w, height: h, rx: 14, class: "chapter-card-bg" }, root);
       label(root, x + 20, y + 40, chapter.label, "t-title-sm");
-      label(root, x + 20, y + 68, CHAPTER_BLURB[chapter.id] || "", "t-small");
+      label(root, x + 20, y + 68, API.blurbs[chapter.id] || CHAPTER_BLURB[chapter.id] || "", "t-small");
       const state = chapter.planned ? "geplant" : `${chapter.steps.length} Schritte`;
       badge(root, x + 20 + 55, y + h - 32, state, chapter.planned ? "plan" : "valid", 110);
       if (current) label(root, x + w - 20, y + h - 27, "du bist hier", "t-small", { "text-anchor": "end" });
@@ -1492,8 +1513,9 @@
         },
       });
       this.tl = tl;
-      const scene = SCENES[step.id] || (chapter.planned ? scenePlanned : scenePlaceholder);
-      this.stage.dataset.scene = SCENES[step.id] || chapter.planned ? step.id : "fehlt";
+      const own = API.scenes[step.id] || SCENES[step.id];
+      const scene = own || (chapter.planned ? scenePlanned : scenePlaceholder);
+      this.stage.dataset.scene = own || chapter.planned ? step.id : "fehlt";
       scene({ tl, A: this.A, layer: this.layer, tour: this }, step, chapter);
       tl.add({ duration: 1 });
 
