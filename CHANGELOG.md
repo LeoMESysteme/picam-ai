@@ -3,6 +3,34 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour als Animation)
+
+**Problem:** Die Doku erklärt das Projekt in Tabellen und Fließtext. Einen
+schnellen, anschaulichen Einstieg in Aufbau und Erkennungskette gab es
+nicht.
+
+**Änderung:** Neue Seite `docs/uebersicht/projekt-tour.md` mit einer
+animierten SVG-Bühne in Kapiteln (`docs-site/assets/tour.js`, `tour.css`,
+anime.js 4.5.0 als lokale Kopie). Fertig sind **Überblick** (Aufbau, Weg
+eines Werts, Kapitelwahl) und **Erkennung** in zehn Schritten: Bild und
+Zeitstempel, bestätigte Anzeige, Nachführen, Entzerren, Zellraster, eine
+Zelle lesen, Formatregel, Freigabe (gültig/Übergang), unlesbar/veraltet
+sowie Datensatz und Ausgabe. Zeit, Training, Bedienung und Regeln sind als
+geplante Kapitel angelegt. Die Seite ist ein eigener Navigationspunkt direkt
+nach „Start“. Sie blendet Navigation und Inhaltsverzeichnis aus, und die
+Bühne füllt das Fenster: in breiten Fenstern mit einer Textspalte daneben,
+dazu ein Vollbild-Knopf. Kästen mit „↗“ auf der Bühne und eine Zeile
+„Mehr dazu“ je Schritt führen zu den Doku-Seiten. Jeder Schritt beginnt mit
+einem Satz „Kurz:“. Die Texte stehen im Markdown und bleiben ohne
+JavaScript lesbar. Jeder Schritt ist per Anker direkt verlinkbar. Bei
+reduzierter Bewegung zeigt die Bühne Standbilder. Sechs neue
+Playwright-Tests in `tests/docs-site.spec.ts`.
+
+**Konsequenz:** Die Tour zeigt Verhalten aus dem Code, zum Beispiel
+`confirm_frames` = 1 ab Werk, die Grenzen des Trackers und die Einheit aus
+dem Profil. Ändert sich dieses Verhalten, müssen Text und Szene mitgezogen
+werden (Pflegeregel in `AGENTS.md`).
+
 ## 0.1.0.dev0 — 2026-10-12 (Doku-Build: pymdown-extensions gepinnt)
 
 **Problem:** Der Doku-Runner scheiterte seit dem 2026-10-10 bei jedem Lauf

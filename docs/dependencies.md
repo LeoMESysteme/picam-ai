@@ -144,3 +144,13 @@ Ports, GPIO und `/home` (`systemd/forgejo-runner.service`). Einrichtung:
 `sudo ./scripts/forgejo-runner-install.sh`. Mermaid lädt die Seite zur
 Laufzeit von `unpkg.com`. Ohne Internet fehlen deshalb die Diagramme, der
 Rest der Seite funktioniert.
+
+**anime.js 4.5.0** (MIT, 2026-10-12) treibt die Animation der
+[Projekt-Tour](uebersicht/projekt-tour.md). Es liegt als lokale Kopie unter
+`docs-site/assets/vendor/anime-4.5.0.umd.min.js` (SHA-256
+`8d5b3a58a1f64023a04a4cedeef135a2263b18da04b35177ac13438a0bad033b`, aus
+`npm pack animejs@4.5.0`, Lizenz daneben in `anime-LICENSE.txt`). Es gibt
+also keinen CDN-Abruf und keinen npm-Build-Schritt. `tour.js` lädt die Datei
+nur auf der Tour-Seite nach. Für ein Update die Datei samt Versionsnummer im
+Namen tauschen, `ANIME_FILE` in `tour.js` anpassen und die Docs-Tests laufen
+lassen.

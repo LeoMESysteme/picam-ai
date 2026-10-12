@@ -7,7 +7,9 @@ Freigabestatus und Begründung dokumentiert. Die echte GSVmulti-Anbindung ist
 wegen der fehlenden Telegrammspezifikation offen
 ([OQ-07](docs/open-questions.md#oq-07)).
 
-**Neu hier?** [Aktueller Stand](docs/status.md) →
+**Neu hier?** Am schnellsten geht es mit der
+[Projekt-Tour](docs/uebersicht/projekt-tour.md): das Projekt als Animation,
+von dort führen Links in die Doku. Danach: [Aktueller Stand](docs/status.md) →
 [Verarbeitungskette](docs/anleitung/01-kette-verstehen.md) →
 [Messpfad und Freigabe](docs/uebersicht/messpfad.md).
 [Konzept.md](Konzept.md) ist für Anforderungen maßgeblich. Die
@@ -64,6 +66,7 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 | [Datensatz sammeln](docs/anleitung/11-datensatz-sammeln.md) | geführter Sammelmodus |
 | [Rezepte](docs/anleitung/rezepte.md) | kurze ausführbare Beispiele |
 | [Glossar](docs/anleitung/glossar.md) | Fachbegriffe |
+| [Projekt-Tour](docs/uebersicht/projekt-tour.md) | Projekt als Animation in Kapiteln |
 | [Messpfad und Freigabe](docs/uebersicht/messpfad.md) | Entscheidungen je Frame |
 | [Zeitstempel lesen](docs/uebersicht/zeitstempel.md) | Zeitbasen und zulässige Schlüsse |
 | [Daten und Abnahme](docs/uebersicht/daten-und-abnahme.md) | Splits, Evidenz und Kennzahlen |

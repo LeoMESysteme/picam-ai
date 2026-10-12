@@ -1,0 +1,612 @@
+/* Projekt-Tour (docs/uebersicht/projekt-tour.md, tour.js).
+ * Farbsprache wie die Konzeptillustration: türkis = Bild- und Datenfluss,
+ * grün = gültig, bernstein = Übergang oder geplant, rot = abgelehnt/veraltet.
+ * Teile mit "tp-" sind Gegenstände (Gerät, LCD, Kamerabild) und behalten ihre
+ * Farbe in beiden Themes. */
+
+.tour {
+  --tour-flow: #0b7f8a;
+  --tour-flow-soft: rgba(11, 127, 138, .14);
+  --tour-valid: #1d7336;
+  --tour-valid-bg: #ddf3df;
+  --tour-plan: #9a5b00;
+  --tour-plan-bg: #fff0cf;
+  --tour-bad: #b3261e;
+  --tour-bad-bg: #ffe0de;
+  --tour-ink: var(--md-default-fg-color);
+  --tour-muted: var(--md-default-fg-color--light);
+  --tour-line: var(--md-default-fg-color--lighter);
+  --tour-faint: var(--md-default-fg-color--lightest);
+  --tour-panel: var(--md-default-bg-color);
+  --tour-stage: #f3f5f7;
+  --tour-stage-grid: rgba(0, 0, 0, .045);
+}
+
+[data-md-color-scheme="slate"] .tour {
+  --tour-flow: #4cc9d3;
+  --tour-flow-soft: rgba(76, 201, 211, .16);
+  --tour-valid: #6fd38a;
+  --tour-valid-bg: #1c4028;
+  --tour-plan: #f2b34c;
+  --tour-plan-bg: #46361a;
+  --tour-bad: #ff8a80;
+  --tour-bad-bg: #4f2423;
+  --tour-stage: #1a1e24;
+  --tour-stage-grid: rgba(255, 255, 255, .04);
+}
+
+/* ---------------------------------------------------------- Rahmen ---- */
+
+.tour--ready > .tour-chapter {
+  display: none;
+}
+
+.tour-ui {
+  margin: 1.2rem 0 1.6rem;
+}
+
+.tour-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-bottom: .6rem;
+}
+
+.tour-chapter-button,
+.tour-control,
+.tour-dot {
+  font: inherit;
+  cursor: pointer;
+}
+
+.tour-chapter-button {
+  background: transparent;
+  border: 1px solid var(--tour-line);
+  border-radius: 999px;
+  color: var(--tour-ink);
+  padding: .25rem .8rem;
+  transition: background-color .2s, border-color .2s, color .2s;
+}
+
+.tour-chapter-button:hover {
+  border-color: var(--tour-flow);
+}
+
+.tour-chapter-button--planned {
+  border-style: dashed;
+  color: var(--tour-muted);
+}
+
+.tour-chapter-button--planned::after {
+  content: " · geplant";
+  font-size: .85em;
+}
+
+.tour-chapter-button[aria-current="step"] {
+  background: var(--tour-flow);
+  border-color: var(--tour-flow);
+  color: var(--md-default-bg-color);
+}
+
+.tour-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--tour-faint);
+  border-radius: .6rem;
+  overflow: hidden;
+  background-color: var(--tour-stage);
+  background-image:
+    linear-gradient(var(--tour-stage-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tour-stage-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.tour-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tour-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+}
+
+.tour-progress span {
+  display: block;
+  height: 100%;
+  background: var(--tour-flow);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.tour-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin-top: .6rem;
+}
+
+.tour-controls {
+  display: flex;
+  gap: .3rem;
+}
+
+.tour-control {
+  min-width: 2.2rem;
+  height: 2.2rem;
+  background: transparent;
+  border: 1px solid var(--tour-line);
+  border-radius: .4rem;
+  color: var(--tour-ink);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.tour-control:hover:not(:disabled) {
+  border-color: var(--tour-flow);
+  color: var(--tour-flow);
+}
+
+.tour-control:disabled {
+  cursor: default;
+  opacity: .35;
+}
+
+.tour-control[aria-pressed="true"] {
+  background: var(--tour-flow-soft);
+  border-color: var(--tour-flow);
+}
+
+.tour-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  flex: 1 1 auto;
+}
+
+.tour-dot {
+  width: .8rem;
+  height: .8rem;
+  padding: 0;
+  border: 1.5px solid var(--tour-line);
+  border-radius: 50%;
+  background: transparent;
+  transition: transform .2s, background-color .2s;
+}
+
+.tour-dot--seen {
+  background: var(--tour-line);
+}
+
+.tour-dot[aria-current="step"] {
+  background: var(--tour-flow);
+  border-color: var(--tour-flow);
+  transform: scale(1.3);
+}
+
+.tour-count {
+  color: var(--tour-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tour-caption {
+  margin-top: .4rem;
+  min-height: 8rem;
+}
+
+.tour-caption-title {
+  font-weight: 700;
+  margin-bottom: .2rem;
+}
+
+.tour-caption-chapter {
+  color: var(--tour-flow);
+  margin-right: .5rem;
+}
+
+.tour-caption-chapter::after {
+  content: " ·";
+}
+
+.tour-error {
+  color: var(--tour-bad);
+}
+
+.tour-ui :focus-visible {
+  outline: 2px solid var(--tour-flow);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------- SVG-Bühne -- */
+
+.tour-svg text {
+  font-family: var(--md-text-font-family, sans-serif);
+  fill: var(--tour-ink);
+}
+
+.tour-svg g,
+.tour-svg rect,
+.tour-svg polygon,
+.tour-svg circle,
+.tour-svg path {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* Per Attribut positionierte Gruppen (translate, matrix) behalten den
+ * SVG-Ursprung; sonst würde transform-origin auch deren Abbildung verschieben. */
+.tour-svg [transform] {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+.t-title { font-size: 30px; font-weight: 800; letter-spacing: -.01em; }
+.t-title-sm { font-size: 20px; font-weight: 700; }
+.t-subtitle { font-size: 16px; fill: var(--tour-muted) !important; }
+.t-label { font-size: 15px; }
+.t-strong { font-weight: 700; }
+.t-small { font-size: 12.5px; fill: var(--tour-muted) !important; }
+.t-small.t-strong { fill: var(--tour-ink) !important; }
+.t-tiny { font-size: 11px; fill: var(--tour-muted) !important; font-style: italic; }
+.t-mono { font-family: var(--md-code-font-family, monospace) !important; font-size: 15px; }
+.t-mono-sm { font-size: 13.5px; }
+.t-valid-text { fill: var(--tour-valid) !important; font-weight: 700; }
+.t-plan-text { fill: var(--tour-plan) !important; font-weight: 700; }
+.t-bad-text { fill: var(--tour-bad) !important; font-weight: 700; }
+.t-muted-text { fill: var(--tour-muted) !important; }
+.t-on-dark { fill: var(--tour-muted) !important; }
+
+.t-panel {
+  fill: var(--tour-panel);
+  stroke: var(--tour-line);
+  stroke-width: 1.2;
+}
+
+.t-flow-box { stroke: var(--tour-flow); stroke-width: 2; }
+.t-record { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .12)); }
+.t-planned-box { stroke: var(--tour-plan); stroke-width: 2; stroke-dasharray: 7 5; fill: var(--tour-panel); }
+.t-window { fill: var(--tour-panel); stroke: var(--tour-line); stroke-width: 1.2; }
+.t-window-bar { fill: var(--tour-faint); }
+.t-window-dot { fill: var(--tour-line); }
+.t-button-ok { fill: #1d7336; }
+.t-button-text { fill: #fff !important; font-size: 13px; font-weight: 700; }
+
+.t-ground { stroke: var(--tour-line); stroke-width: 2; fill: none; }
+.t-stand { stroke: #8b939b; stroke-width: 5; stroke-linecap: round; fill: none; }
+.t-cable { stroke: #3b4148; stroke-width: 4; fill: none; stroke-linecap: round; }
+[data-md-color-scheme="slate"] .t-cable { stroke: #9aa3ad; }
+.t-cone { fill: var(--tour-flow-soft); stroke: var(--tour-flow); stroke-width: 1; stroke-dasharray: 3 4; }
+
+.t-flow-line { stroke: var(--tour-flow); stroke-width: 3; fill: none; stroke-linecap: round; }
+.t-flow-dash { stroke: var(--tour-flow); stroke-width: 2; fill: none; stroke-dasharray: 6 6; }
+.t-plan-line { stroke: var(--tour-plan); stroke-width: 3; fill: none; stroke-dasharray: 8 6; }
+.t-bad-line { stroke: var(--tour-bad); stroke-width: 2.5; fill: none; stroke-dasharray: 6 5; }
+.t-muted-line { stroke: var(--tour-line); stroke-width: 2.5; fill: none; }
+.t-link-line { stroke: var(--tour-line); stroke-width: 2; fill: none; stroke-dasharray: 2 5; stroke-linecap: round; }
+.t-path-ghost { stroke: var(--tour-flow); stroke-opacity: .28; stroke-width: 3; fill: none; stroke-dasharray: 3 6; }
+.t-path-none { fill: none; stroke: none; }
+.t-axis { stroke: var(--tour-line); stroke-width: 2; fill: none; }
+.t-row-line { stroke: var(--tour-faint); stroke-width: 1; }
+.t-value-line { stroke: var(--tour-flow); stroke-width: 4; fill: none; stroke-linejoin: round; }
+
+.t-arrow-head { fill: var(--tour-flow); }
+.t-arrow-head--plan { fill: var(--tour-plan); }
+.t-arrow-head--bad { fill: var(--tour-bad); }
+
+.t-pulse {
+  fill: var(--tour-flow);
+  filter: drop-shadow(0 0 6px var(--tour-flow));
+}
+
+.t-pulse--plan {
+  fill: var(--tour-plan);
+  filter: drop-shadow(0 0 6px var(--tour-plan));
+}
+
+.t-plan-fill { fill: var(--tour-plan-bg); stroke: var(--tour-plan); stroke-width: 2; }
+
+.quad {
+  fill: rgba(76, 201, 211, .08);
+  stroke: var(--tour-flow);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.quad--thin { stroke-width: 1.5; fill: none; }
+
+.quad-handle {
+  fill: var(--tour-flow);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+/* Chips, Plaketten, Etiketten. */
+.chip-bg { fill: var(--tour-panel); stroke: var(--tour-line); }
+.chip-text { font-size: 12.5px; fill: var(--tour-ink); }
+.chip--dark .chip-bg { fill: rgba(10, 14, 18, .72); stroke: rgba(255, 255, 255, .18); }
+.chip--dark .chip-text { fill: #f1f4f6 !important; font-family: var(--md-code-font-family, monospace); }
+.chip--flow .chip-bg { fill: var(--tour-flow-soft); stroke: var(--tour-flow); }
+.chip--line .chip-bg { fill: var(--tour-panel); stroke: var(--tour-line); }
+.chip--valid .chip-bg { fill: var(--tour-valid-bg); stroke: var(--tour-valid); }
+.chip--bad .chip-bg { fill: var(--tour-bad-bg); stroke: var(--tour-bad); }
+.chip--bad .chip-text { fill: var(--tour-bad) !important; font-weight: 700; }
+
+.badge rect { stroke-width: 1.5; }
+.badge-text { font-size: 13px; font-weight: 700; }
+.badge--valid rect { fill: var(--tour-valid-bg); stroke: var(--tour-valid); }
+.badge--valid .badge-text { fill: var(--tour-valid) !important; }
+.badge--plan rect { fill: var(--tour-plan-bg); stroke: var(--tour-plan); }
+.badge--plan .badge-text { fill: var(--tour-plan) !important; }
+.badge--bad rect { fill: var(--tour-bad-bg); stroke: var(--tour-bad); }
+.badge--bad .badge-text { fill: var(--tour-bad) !important; }
+
+.mark circle { stroke-width: 1.5; }
+.mark--ok circle { fill: var(--tour-valid-bg); stroke: var(--tour-valid); }
+.mark--bad circle { fill: var(--tour-bad-bg); stroke: var(--tour-bad); }
+.mark-stroke { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.mark--ok .mark-stroke { stroke: var(--tour-valid); }
+.mark--bad .mark-stroke { stroke: var(--tour-bad); }
+
+.hotspot,
+.chapter-card {
+  cursor: pointer;
+  outline: none;
+}
+
+.hotspot rect {
+  fill: var(--tour-flow);
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .18));
+  transition: transform .2s;
+}
+
+.hotspot-text { font-size: 13px; font-weight: 700; fill: var(--md-default-bg-color) !important; }
+.hotspot--planned rect { fill: var(--tour-plan-bg); stroke: var(--tour-plan); stroke-dasharray: 5 4; stroke-width: 1.5; }
+.hotspot--planned .hotspot-text { fill: var(--tour-plan) !important; }
+.hotspot:hover rect,
+.hotspot:focus-visible rect { transform: scale(1.08); }
+.hotspot:focus-visible rect,
+.chapter-card:focus-visible .chapter-card-bg { stroke: var(--tour-ink); stroke-width: 2.5; }
+
+.chapter-card-bg {
+  fill: var(--tour-panel);
+  stroke: var(--tour-flow);
+  stroke-width: 2;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .1));
+  transition: transform .25s;
+}
+
+.chapter-card--planned .chapter-card-bg { stroke: var(--tour-plan); stroke-dasharray: 8 6; }
+.chapter-card--current .chapter-card-bg { fill: var(--tour-flow-soft); }
+.chapter-card:hover .chapter-card-bg { transform: translateY(-3px); }
+
+/* Zellraster, Lesen und Format. */
+.cell-box { fill: none; stroke-width: 2.2; }
+.cell-box--sign,
+.cell-box--num { stroke: var(--tour-flow); fill: rgba(76, 201, 211, .1); }
+.cell-box--blank { stroke: var(--tour-flow); stroke-dasharray: 4 3; }
+.cell-box--unit { stroke: var(--tour-line); stroke-dasharray: 2 4; }
+.cell-box--focus { stroke: var(--tour-flow); fill: rgba(76, 201, 211, .22); }
+.brace-line { fill: none; stroke: var(--tour-flow); stroke-width: 2; }
+.brace--muted .brace-line { stroke: var(--tour-line); }
+.brace-line--valid { stroke: var(--tour-valid); }
+.brace-line--bad { stroke: var(--tour-bad); }
+
+.big-dot { fill: #1f2b10; opacity: 1; fill-opacity: var(--ink, 0); }
+.tour-svg .dist-bar { fill: var(--tour-line); transform-origin: 0 50%; }
+.tour-svg .dist-bar--best { fill: var(--tour-valid); }
+
+.token-box { fill: var(--tour-panel); stroke: var(--tour-flow); stroke-width: 2; }
+.token-box--muted { stroke: var(--tour-line); }
+.token-box--bad { fill: var(--tour-bad-bg); stroke: var(--tour-bad); }
+.token-text { font-family: var(--md-code-font-family, monospace) !important; font-size: 30px; font-weight: 700; }
+.token-small { font-family: var(--md-code-font-family, monospace) !important; font-size: 16px; }
+.tick { fill: var(--tour-panel); stroke: var(--tour-line); stroke-width: 1.5; }
+
+/* ------------------------------------------------- Gegenstände (fest) -- */
+
+.tp-frame { fill: #2b3036; }
+.tp-frame-mini { fill: #2b3036; }
+.tp-table { fill: #3a3f45; }
+.tp-flash { fill: #fff; pointer-events: none; }
+.tp-body { fill: #cfd3d7; stroke: #9aa1a8; stroke-width: 1.5; }
+.tp-body-shade { fill: #b7bcc2; }
+.tour-svg .tp-body-text { font-size: 18px; font-weight: 800; fill: #2f353b; }
+.tour-svg .tp-small { font-size: 13px; }
+.tp-key { fill: #e8eaec; stroke: #99a0a7; }
+.tour-svg .tp-key-text { font-size: 10.5px; font-weight: 700; fill: #3d444b; }
+.tp-led { fill: #7d858c; }
+.tp-led-on { fill: #47c26b; }
+.tp-bezel { fill: #23282d; }
+.tp-lcd { fill: #a6c94a; }
+.tp-dot-off { fill: rgba(31, 43, 16, .1); }
+.tp-dot-on { fill: #1f2b10; }
+.tp-cam { fill: #f2f3f4; stroke: #a7adb3; stroke-width: 1.5; }
+.tp-cam-ring { fill: #3a4047; }
+.tp-lens { fill: #11161b; }
+.tp-lens-glint { fill: #8fd3ff; opacity: .8; }
+.tp-pcb { fill: #2f8a4b; stroke: #1f6535; }
+.tp-chip-ic { fill: #c4c9ce; }
+.tp-port { fill: #9aa1a8; }
+.tp-card { fill: rgba(10, 14, 18, .74); stroke: rgba(255, 255, 255, .2); }
+.tour-svg .tp-card-title { font-size: 14px; font-weight: 700; fill: #6fe0e8; }
+.tour-svg .tp-card-text { font-size: 12.5px; fill: #e9edf0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-dot,
+  .chapter-card-bg,
+  .hotspot rect {
+    transition: none;
+  }
+}
+
+.status-dot { stroke-width: 2; }
+.status-dot--valid { fill: var(--tour-valid-bg); stroke: var(--tour-valid); }
+.status-dot--plan { fill: var(--tour-plan-bg); stroke: var(--tour-plan); }
+
+@media (max-width: 30em) {
+  .tour-chapter-button {
+    padding: .15rem .6rem;
+    font-size: .85em;
+  }
+}
+
+/* --------------------------------------------- Vollseite (tour-page) -- */
+/* tour.js setzt body.tour-page, die Seite blendet per Front Matter
+ * Navigation und Inhaltsverzeichnis aus. Die Bühne nutzt dann die ganze
+ * Breite; in breiten Fenstern (ab 4:3) steht rechts eine Spalte mit
+ * Kapiteln, Steuerung und Text, und die Tour füllt die Fensterhöhe. In hohen
+ * Fenstern steht der Text unter der Bühne. */
+
+.tour-page .md-main__inner.md-grid {
+  max-width: 120rem;
+}
+
+.tour-page .md-content__inner {
+  margin-left: 1rem;
+  margin-right: 1rem;
+  padding-top: .4rem;
+}
+
+/* Der Seitentitel bleibt für Suche und Screenreader, sichtbar ist die Tour. */
+.tour-page .md-content__inner > h1 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Einleitung und Stand stehen unter der Tour. */
+.tour-page .md-content__inner {
+  display: flex;
+  flex-direction: column;
+}
+
+.tour-page .md-content__inner > .tour {
+  order: -1;
+}
+
+.tour-page .tour-ui {
+  margin-top: 0;
+}
+
+.tour-more {
+  font-size: .9em;
+  padding: .45rem .7rem;
+  border-left: 3px solid var(--tour-flow);
+  background: var(--tour-flow-soft);
+  border-radius: 0 .3rem .3rem 0;
+}
+
+@media (min-width: 60em) and (min-aspect-ratio: 4/3) {
+  .tour-page .tour-ui {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(19rem, 26vw, 25rem);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "stage nav"
+      "stage bar"
+      "stage caption";
+    gap: .7rem 1.2rem;
+    height: calc(100vh - 4.2rem);
+    min-height: 28rem;
+  }
+
+  .tour-page .tour-stage {
+    grid-area: stage;
+    aspect-ratio: auto;
+    height: 100%;
+  }
+
+  .tour-page .tour-chapters {
+    grid-area: nav;
+    margin: 0;
+  }
+
+  .tour-page .tour-bar {
+    grid-area: bar;
+    margin: 0;
+  }
+
+  .tour-page .tour-caption {
+    grid-area: caption;
+    overflow-y: auto;
+    margin: 0;
+    padding-right: .4rem;
+    min-height: 0;
+  }
+
+  .tour-page .tour-caption p {
+    margin: 0 0 .7em;
+  }
+}
+
+/* Vollbild (Fullscreen-API): ganze Fläche, eigene Hintergrundfarbe. */
+.tour-ui:fullscreen {
+  box-sizing: border-box;
+  height: 100vh;
+  margin: 0;
+  padding: 1rem 1.2rem;
+  overflow: auto;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+}
+
+@media (min-width: 60em) and (min-aspect-ratio: 4/3) {
+  .tour-page .tour-ui:fullscreen {
+    height: 100vh;
+  }
+}
+
+/* Bühnenteile, die auf eine Doku-Seite führen. */
+.doc-link {
+  cursor: pointer;
+  outline: none;
+}
+
+.doc-link > rect:first-of-type,
+.doc-link .badge rect {
+  transition: stroke-width .2s, filter .2s;
+}
+
+.doc-link:hover > rect:first-of-type,
+.doc-link:focus-visible > rect:first-of-type,
+.doc-link:hover .badge rect {
+  stroke: var(--tour-flow);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px var(--tour-flow-soft));
+}
+
+.tour-svg .doc-mark {
+  font-size: 15px;
+  font-weight: 800;
+  fill: var(--tour-flow) !important;
+}
+
+.tour-svg .tp-card + .doc-mark,
+.tour-svg .roi-card .doc-mark,
+.tour-svg .ref-thumb .doc-mark {
+  fill: #6fe0e8 !important;
+}
+
+.tp-hand { fill: #d8bfa3; stroke: #a88b6c; stroke-width: 1.5; }
+.t-strike { stroke: var(--tour-bad); stroke-width: 3; fill: none; }
+
+.tour-ui {
+  scroll-margin-top: 3.2rem;
+}
+
+/* In der Vollseite füllt die Bühne ihre Spalte; das SVG sitzt mittig darin. */
+@media (min-width: 60em) and (min-aspect-ratio: 4/3) {
+  .tour-page .tour-stage .tour-svg {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+  }
+}

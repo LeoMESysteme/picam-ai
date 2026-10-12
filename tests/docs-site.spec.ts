@@ -312,3 +312,101 @@ test('Sofortnavigation zeichnet die Fortschrittsdiagramme erneut', async ({ page
   await expect(page.locator('[data-fs-chart="abnahmen"]')).toHaveAttribute('data-fs-ready', 'true');
   await expect(page.locator('[data-fs-chart="loo"] .fs-cell--falsch')).toHaveCount(1);
 });
+
+const TOUR = '/docs/uebersicht/projekt-tour.html';
+
+test('Projekt-Tour hat zu jedem Schritt eine Szene und blättert per Direktlink', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(`http://127.0.0.1:8766${TOUR}`);
+  const stage = page.locator('.tour-stage');
+  await expect(stage).toHaveAttribute('data-scene', 'ueberblick-aufbau');
+  const ids = await page.locator('.tour-step h3').evaluateAll((headings) => headings.map((h) => h.id));
+  expect(ids.length).toBeGreaterThan(10);
+  for (const id of ids) {
+    await page.evaluate((target) => { location.hash = target; }, id);
+    await expect(stage).toHaveAttribute('data-scene', id);
+  }
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('Projekt-Tour: Kapitelwahl, Schrittpunkte und Tastatur', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await page.goto(`http://127.0.0.1:8766${TOUR}#erkennung-zelle`);
+  await expect(page.locator('.tour-caption')).toContainText('Eine Zelle lesen');
+  await expect(page.locator('.tour-count')).toHaveText('6 / 10');
+  // Im Endzustand (reduzierte Bewegung) ist das Ergebnis sichtbar.
+  await expect(page.locator('.scene .result')).toHaveCSS('opacity', '1');
+
+  await page.getByRole('button', { name: 'Überblick', exact: true }).click();
+  await expect(page).toHaveURL(/#ueberblick-aufbau$/);
+  await page.getByRole('button', { name: 'Kapitel Erkennung' }).click();
+  await expect(page).toHaveURL(/#erkennung-bild$/);
+  await page.getByRole('button', { name: /^Schritt 4:/ }).click();
+  await expect(page).toHaveURL(/#erkennung-entzerren$/);
+  await page.getByRole('button', { name: 'Weiter', exact: true }).press('ArrowRight');
+  await expect(page).toHaveURL(/#erkennung-raster$/);
+
+  await page.getByRole('button', { name: 'Zeit (geplant)' }).click();
+  await expect(page).toHaveURL(/#zeit$/);
+  await expect(page.locator('.tour-caption')).toContainText('Geplant');
+  await context.close();
+});
+
+test('Projekt-Tour spielt ohne reduzierte Bewegung selbst weiter', async ({ page }) => {
+  await page.clock.install();
+  await page.goto(`${TOUR}#ueberblick-weg`);
+  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await page.locator('.tour-ui').scrollIntoViewIfNeeded();
+  await page.clock.runFor(30000);
+  await expect(page).not.toHaveURL(/#ueberblick-weg$/);
+  // Vor einem geplanten Kapitel hält die Tour an.
+  await page.goto(`${TOUR}#erkennung-ausgabe`);
+  await page.locator('.tour-ui').scrollIntoViewIfNeeded();
+  await page.clock.runFor(30000);
+  await expect(page).toHaveURL(/#erkennung-ausgabe$/);
+  await expect(page.getByRole('button', { name: /^Automatisch weiter/ })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('Projekt-Tour bleibt ohne JavaScript als Text lesbar und auf dem Handy ohne Querscrollen', async ({ browser }) => {
+  const noJs = await browser.newContext({ javaScriptEnabled: false });
+  const page = await noJs.newPage();
+  await page.goto(`http://127.0.0.1:8766${TOUR}`);
+  await expect(page.locator('#erkennung-zelle')).toBeVisible();
+  await expect(page.locator('.tour-step').first()).toContainText('GSV-2AS');
+  await noJs.close();
+
+  const mobile = await browser.newContext({ viewport: { width: 375, height: 800 }, reducedMotion: 'reduce' });
+  const phone = await mobile.newPage();
+  await phone.goto(`http://127.0.0.1:8766${TOUR}#erkennung-freigabe`);
+  await expect(phone.locator('.tour-stage')).toHaveAttribute('data-scene', 'erkennung-freigabe');
+  expect(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await mobile.close();
+});
+
+test('Sofortnavigation baut die Projekt-Tour als Vollseite auf, Bühnenlinks führen in die Doku', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/docs/uebersicht/messpfad.html');
+  await page.getByRole('link', { name: 'Projekt-Tour', exact: true }).first().click();
+  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-aufbau');
+  await expect(page.locator('body')).toHaveClass(/tour-page/);
+  // Ohne Seitenleisten füllt die Tour die Breite, die Bühne die Höhe.
+  await expect(page.locator('.md-sidebar--primary')).toBeHidden();
+  const box = await page.locator('.tour-stage').boundingBox();
+  expect(box!.width).toBeGreaterThan(900);
+  expect(box!.height).toBeGreaterThan(700);
+
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await page.getByRole('link', { name: 'Ausgabe-API öffnen' }).click();
+  await expect(page).toHaveURL(/\/api\/sink\.html$/);
+  await expect(page.locator('body')).not.toHaveClass(/tour-page/);
+  await page.goBack();
+  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await expect(page.locator('.tour-ui')).toHaveCount(1);
+});
