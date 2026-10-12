@@ -330,20 +330,147 @@ Mehr dazu: [Verträge (API)](../../api/vertraege.md) ·
 
 </section>
 
-<section class="tour-chapter" data-chapter="zeit" data-label="Zeit" data-state="geplant" markdown="1">
+<section class="tour-chapter" data-chapter="zeit" data-label="Zeit" markdown="1">
 
 ## Zeit {#zeit}
 
 <div class="tour-step" markdown="1">
 
-### Geplant: drei Uhren {#zeit-geplant}
+### Drei Uhren {#zeit-uhren}
 
-Das Kapitel wird die Zeitbasen nebeneinanderstellen: Kamerabilder in
-CLOCK_MONOTONIC, serielle Telegramme in BOOTTIME, den gemessenen Versatz aus
-der Timing-Kalibrierung und die Regel „ohne Versatz keine Zuordnung“.
+**Kurz:** Kamera, Messverstärker und Referenz liefern ihre Daten mit
+verschiedenen Uhren, und ein Zeitpunkt ist nur zusammen mit seiner Uhr
+auswertbar.
 
-Bis dahin: [Zeitstempel richtig lesen](zeitstempel.md) ·
-[Zeitverhalten](../TIMING.md)
+Die StreamCam-Bilder tragen den Zeitstempel, den der Kameratreiber vergibt.
+Er kommt aus der Uhr CLOCK_MONOTONIC des Pi; im Datensatz steht dazu die
+Zeitbasis `v4l2_monotonic`. Die seriellen Telegramme des Messverstärkers
+stempelt der Pi beim Empfang mit CLOCK_BOOTTIME. Beide Uhren zählen ab dem
+Start des Pi. MONOTONIC hält aber im Ruhezustand (Suspend) an, BOOTTIME
+läuft weiter.
+
+Die Kalibrierreferenz hat eine dritte, eigene Uhr. Ob sie einen Trigger oder
+einen Zeitstempel liefern kann, ist noch offen (OQ-03).
+
+Warum so genau? Zwei Zeitpunkte aus verschiedenen Uhren darf man nicht
+einfach voneinander abziehen. Deshalb trägt jeder Zeitstempel seine
+Zeitbasis mit. Basen wie `synthetic` oder `file_mtime` gelten ausdrücklich
+als „ohne Zeitaussage“.
+
+Mehr dazu: [Zeitstempel richtig lesen](zeitstempel.md) ·
+[Zeitverhalten](../TIMING.md) · [OQ-03](../open-questions.md#oq-03)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Kamerazeit umrechnen {#zeit-versatz}
+
+**Kurz:** Bevor Kamerabild und Telegramm verglichen werden, rechnet das
+System die Kamerazeit mit einem gemessenen Versatz in BOOTTIME um. Fehlt
+der Versatz, wird abgelehnt.
+
+Zu Beginn und am Ende jeder Aufnahme misst das Aufnahmeprogramm den Abstand
+BOOTTIME − MONOTONIC. Es nimmt jeweils den Median aus mehreren, eng
+geklammerten Einzelmessungen und schreibt beide Werte in `session.json`.
+Umgerechnet wird nur an einer Stelle, in `records.to_boottime_ns`: Bildzeit
+plus Startversatz.
+
+Diese Funktion rät nicht. Fehlt der Versatz, lehnt sie ab. Weichen Start
+und Ende um mehr als 1 ms voneinander ab, war der Pi vermutlich im
+Ruhezustand, und sie lehnt ebenfalls ab. Ohne Suspend liegt der Versatz bei
+wenigen Nanosekunden; die Bühne zeichnet ihn zur Verdeutlichung groß.
+
+Mehr dazu: [Zeitstempel richtig lesen](zeitstempel.md) ·
+[Verträge (API)](../../api/vertraege.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Telegramm und Anzeige {#zeit-anzeige}
+
+**Kurz:** Zwischen dem Telegramm des Geräts und dem neuen Wert auf dem
+Display vergeht Zeit. Wie viel, wird je Kamera gemessen und nicht
+angenommen.
+
+Fürs Ernten von Trainingsbildern sendet der GSV-2AS seinen Wert als
+Telegramm, und die Kamera filmt dabei das Display. `display-offset.py` misst
+nur, **wann** sich das Glas ändert, ohne zu lesen, was dort steht: Jedes
+Bild bekommt einen Anteil p zwischen „ganz alter Wert“ (0) und „ganz neuer
+Wert“ (1). Der Zeitpunkt bei p = 0,5 abzüglich der Telegrammzeit ist der
+Anzeigeversatz δ.
+
+`timing-calibration.py` schreibt δ und den Schutzabstand M nach
+`var/calibration/timing-streamcam.json`, zusammen mit der USB-ID der Kamera
+und den Quelldateien samt Prüfsumme. M ist der größte gemessene Wert. Beim
+Ernten bekommen alle Bilder im Fenster ±M um einen Telegrammwechsel kein
+Label. Ohne passende Datei startet `harvest.py` nicht.
+
+Warum messen statt rechnen? Was der Kamera-Zeitstempel genau markiert
+(Belichtung oder Pufferempfang), ist nicht geklärt (OQ-43). Die Messung
+deckt das empirisch ab.
+
+Mehr dazu: [Zeitverhalten](../TIMING.md) ·
+[OQ-43](../open-questions.md#oq-43) ·
+[Daten und Abnahme](daten-und-abnahme.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Latenz ist nicht Unsicherheit {#zeit-latenz}
+
+**Kurz:** Eine feste Verzögerung lässt sich herausrechnen, eine schwankende
+nicht. Deshalb zählt die Streuung, nicht der Mittelwert.
+
+Der Datensatz trägt die **Aufnahmezeit** (`capture_timestamp`). Wie lange
+Lesen und Freigabe danach rechnen, verschiebt sie nicht; diese Rechenzeit
+steht getrennt im `PipelineTrace`, die Fertigstellung in
+`result_timestamp`. Wartet die Freigabe auf mehrere gleiche Bilder, steht
+diese Wartezeit eigens in `confirmation_span_ns`. Die Felder werden nie zu
+einem einzigen „Zeitstempel“ zusammengelegt.
+
+Das Beispiel aus TIMING.md rechts: Konstante 200 ms verschieben den
+Zeitbezug, verschlechtern ihn aber nicht. 50 ms ± 40 ms sind trotz kleinerem
+Mittelwert schlechter, weil die Streuung ins Unsicherheitsbudget eingeht.
+Jeder Bericht weist deshalb Mittelwert und Streuung getrennt aus.
+
+Mehr dazu: [TIMING: Grundsatz](../TIMING.md#grundsatz-latenz-ist-nicht-zeitunsicherheit) ·
+[Pipeline (API)](../../api/pipeline.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Prüfling und Referenz zuordnen {#zeit-zuordnung}
+
+**Kurz:** Am Ende sollen Prüfling und Referenz über ihre Zeitstempel
+zusammengeführt werden. Mehrere Bausteine dafür sind noch offen.
+
+Die Werte des Prüflings liegen mit Aufnahmezeit im JSONL-Audit. Die
+Referenz misst mit ihrer eigenen Uhr. Die Zuordnung geschieht nachträglich
+und außerhalb der Erkennung. Die Erkennung bekommt den Referenzwert nie zu
+sehen.
+
+Belastbar ist die Zuordnung erst, wenn geklärt ist,
+
+* wie die Referenz zu einem Zeitstempel kommt (OQ-03),
+* welche Abweichung zulässig ist (OQ-02),
+* was der Kamera-Zeitstempel bedeutet (OQ-43),
+* ob GSVmulti die gelieferte Aufnahmezeit überhaupt verwendet (Versuch M8,
+  blockiert durch OQ-07).
+
+Der größte Einzelbeitrag ist vermutlich die Displayaktualisierung des
+Prüflings (M5). Sie ist noch nicht gemessen, und keine Software macht sie
+kleiner.
+
+Mehr dazu: [Messprogramm](../TIMING.md#messprogramm) ·
+[OQ-02](../open-questions.md#oq-02) · [OQ-07](../open-questions.md#oq-07)
 { .tour-more }
 
 </div>
