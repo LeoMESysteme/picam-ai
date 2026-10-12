@@ -1274,3 +1274,23 @@ Nacharbeit 5 am Einrichtungsassistenten gemergt ist.
 Die Freigabe nennt die Grenzen ausdrücklich: nur Raumlicht, ein Gerät, eine
 Einheit, keine anderen Lichtquellen. Neue Trainings- oder Abnahmerunden gibt
 es nur noch, wenn sich daran etwas ändert.
+
+## 2026-10-12 — Live-Cockpit als neue Sites-Website
+
+Der Nutzer hat ein zunächst privates, deutsches Live-Cockpit mit den
+Hauptbereichen „In Arbeit“, „Als Nächstes“ und „Projektzustand“ bestätigt.
+Die schriftliche Spezifikation steht in
+[Projektcockpit](superpowers/specs/2026-10-12-projektcockpit-design.md);
+ihre Prüfung und die Umsetzung stehen noch aus.
+
+GitHub-Prüfungen und Statusdokumente erhalten Quellen-, Datum- und
+Commit-Bezug. Historische grüne Prüfungen gelten nicht als aktueller
+Nachweis; widersprüchliche Dokumente bleiben sichtbar. Die Datenanbindung
+ist über den für Sites zugelassenen, ausschließlich lesenden
+GitHub-Connector vorgesehen.
+
+Ein periodisch erzeugter Snapshot wurde wegen seiner geringeren
+Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte
+die gewünschte eigenständige Übersicht weniger direkt erfüllt. Eine
+pauschale Codequalitätsnote würde die unterschiedlichen Prüf- und
+Validierungsbelege zu stark vereinfachen.
