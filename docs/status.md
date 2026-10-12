@@ -1,9 +1,55 @@
-# Status — Stand 2026-10-12 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
+# Status — Stand 2026-10-12 (Sessionende)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und
 [Projektgeschichte](project_history.md); Aufgaben:
 [TODO.md](../TODO.md).
+
+## Ergebnis dieser Session — Projektcockpit Version 2
+
+Das private [picam-ai Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
+ist aktualisiert und als Version 2 veröffentlicht. Die Roadmap zeigt P0–P8
+als verbundene grafische Phasenfolge, mobil vertikal. Meilensteine öffnen
+Exit-Kriterien, Voraussetzungen und Originalbelege. Es werden keine
+unbelegten Terminpläne eingeführt.
+
+„Codebase & Prüfungen“ ergänzt Dateizahlen, Quellcode- und Testdateien,
+eigenes Codevolumen, Sprachanteile und die neun größten Repository-Bereiche.
+Der vollständige GitHub-Dateibaum wird an denselben Commit wie die übrigen
+Daten gebunden. Fremdbibliotheken zählen nicht zum eigenen Code;
+Daten-Fixtures zählen zum Gesamtvolumen, aber nicht zum Sprachvolumen.
+Dateigröße wird ausdrücklich von Codezeilen, Coverage und ausgeführten
+Tests unterschieden. Unvollständige Dateibäume werden abgelehnt; bei
+Abruffehlern bleibt ein alter Datensatz mit seinem Commit als veraltet sichtbar.
+
+Dunkelgrüne Navigation, satterer Hintergrund und stärkere Beschriftungen
+verbessern den Kontrast. Ansichtswechsel, Karten, Diagrammbalken und
+Meilensteine sind animiert; reduzierte Bewegung wird berücksichtigt.
+Zahlen bleiben auch während Übergängen exakt.
+
+**Prüfungen der Website:** 33 fachliche Node-Tests, TypeScript und
+Sites-Build bestanden. Lokale Browserprüfung mit echten nativen GitHub-Daten
+bestand für Statistik, Timeline-Details und Filter, Desktop/Mobilbreite,
+reduzierte Bewegung sowie veraltete Statistiken. Keine Browserfehler.
+Nach unabhängiger Prüfung wurden Textkontrast, Screenreader-Status und
+Diagramm-Erläuterungen verbessert. Gemessener Mindestkontrast der geprüften
+kleinen Statistiktexte: 5,99:1; Belegdatum auf Timeline-Karten: 5,41:1.
+
+**Veröffentlichung:** Sites meldet Erfolg. Site-ID:
+`appgprj_6accdd4468948191be0d5301888c835f`; Quellcommit im eigenständigen
+Site-Repository `sites/picam-ai-cockpit`:
+`126c59edc4b315505fe294dbc62a50a1c271bf3d`.
+Die freigegebene [Spezifikation](superpowers/specs/2026-10-12-projektcockpit-design.md)
+und der [Plan](superpowers/plans/2026-10-12-projektcockpit.md) bleiben gültig.
+Die Besucheranmeldung und GitHub-Einwilligung im Hosting wurden weiterhin
+nicht unabhängig verifiziert; die Live-Vorschau nutzt echte native Lesezugriffe.
+
+Beim Browserabruf am 2026-10-12: Commit
+`6868d858a1d843f79b470dbefc752912e99715fe`, 263 versionierte Dateien,
+64 Code-Dateien unter src/, 59 Testdateien, 2.075.962 Byte eigener Code.
+Dies ist ein Abrufsnapshot; das Cockpit aktualisiert den Stand weiter.
+Keine picam-ai-Python-Tests oder Betriebsmessungen wurden ausgeführt und
+keine Hardware bedient. Die Betriebsangaben unten bleiben frühere Belege.
 
 ## Betrieb und Messstand
 

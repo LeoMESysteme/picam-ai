@@ -1333,3 +1333,15 @@ Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte
 die gewünschte eigenständige Übersicht weniger direkt erfüllt. Eine
 pauschale Codequalitätsnote würde die unterschiedlichen Prüf- und
 Validierungsbelege zu stark vereinfachen.
+
+## 2026-10-12 — Cockpit: Timeline und Codebase-Auswertung
+
+Der Nutzer hat die Überarbeitung mit grafischer P0–P8-Phasenfolge, dunklerer
+Navigation, Codebase-Zahlen und dezenten Animationen freigegeben. Die
+Timeline verwendet die vorhandenen Phasen und Exit-Kriterien statt eines
+unbelegten Kalenderplans. Die Sprachverteilung beruht auf Dateiendungen
+und Dateigrößen des vollständigen, Commit-gebundenen GitHub-Dateibaums.
+Codezeilen wurden als Alternative zurückgestellt: Sie verlangen zusätzliche
+Dateiabrufe und wären ohne getrennte Definition von Leerzeilen und Kommentaren
+missverständlich. Eine Qualitätsnote wird weiterhin nicht abgeleitet.
+Die Site bleibt privat; keine neue Abhängigkeit wurde eingeführt.

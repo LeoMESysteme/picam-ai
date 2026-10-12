@@ -3,6 +3,19 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Sites: grafische Roadmap und Codebase-Statistik)
+
+**Problem:** Die Cockpit-Roadmap war eine Kartenliste; Codebase-Zahlen und
+kräftigere Kontraste fehlten.
+
+**Änderung:** Private Sites-Version 2 mit P0–P8-Timeline, aufklappbaren
+Belegen, Commit-bezogenen Datei-/Sprach-/Volumenstatistiken, kontrastreicherer
+Gestaltung und Animationen mit reduzierter Bewegung. Die eigene Site-Quelle
+ist separat versioniert; 33 Node-Tests, TypeScript, Build und Browser-QA bestehen.
+
+**Konsequenz:** Übersicht und Tiefe sind verbunden; Statistiken tragen
+Quellenbezug und Veralterungskennzeichnung und ersetzen keinen Qualitätsnachweis.
+
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
 
 **Problem:** Vier der sechs Kapitel der Projekt-Tour waren nur als „geplant“
