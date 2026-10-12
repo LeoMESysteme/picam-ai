@@ -1,31 +1,33 @@
 # picam-ai Projektcockpit
 
-Stand: 2026-10-12. Der Nutzer hat den beschriebenen Live-Cockpit-Entwurf bestätigt. Diese Spezifikation konkretisiert ihn zur schriftlichen Prüfung.
+Stand: 2026-10-12. Freigegebenes Live-Cockpit mit den bestätigten Erweiterungen für Timeline, Codebase- und Commit-Statistiken. Forgejo ist das Hauptrepository; GitHub dient als Mirror.
 
 ## Zweck und Erfolgskriterien
 
 Eine neue, zunächst private Sites-Website zeigt auf einen Blick, welche Arbeit belegt ist, welche Aufgaben als Nächstes folgen und wie belastbar der aktuelle Projektstand ist. Details bleiben auf derselben Website zugänglich. Die Oberfläche ist deutsch, für Desktop und Mobilgeräte nutzbar und verlinkt jeden fachlichen Befund mit seiner Quelle.
 
-Der Stand stammt aus dem GitHub-Repository [LeoMESysteme/picam-ai](https://github.com/LeoMESysteme/picam-ai). Lokale, unveröffentlichte Dateien und laufende Codex-Chats sind über diese Quelle nicht sichtbar. Ein aktiver Pull Request oder eine ausdrücklich als laufend bezeichnete Aufgabe belegt Arbeit; eine offene Aufgabe allein belegt keine laufende Bearbeitung.
+Der Stand stammt aus dem privaten Forgejo-Hauptrepository [l.hentschke/picam-ai](https://ds1515.me-systeme.de/l.hentschke/picam-ai). [GitHub](https://github.com/LeoMESysteme/picam-ai) ist ein Mirror; seine Actions begründen keinen Prüfstand des Hauptprojekts. Lokale, unveröffentlichte Dateien und laufende Codex-Chats sind über die Repository-Daten nicht sichtbar. Ein aktiver Pull Request oder eine ausdrücklich als laufend bezeichnete Aufgabe belegt Arbeit; eine offene Aufgabe allein belegt keine laufende Bearbeitung.
 
 ## Übersicht und Vertiefung
 
 Oben stehen drei Hauptbereiche:
 
 - **In Arbeit:** aktive Pull Requests und im Status ausdrücklich laufende Aufgaben, einschließlich Herkunft und Aktualität.
+
 - **Als Nächstes:** die aktive Aufgabenliste in ihrer dokumentierten Reihenfolge, Voraussetzungen und Blocker. Historische Aufgabenabschnitte werden nicht als aktuelles Backlog ausgegeben.
+
 - **Projektzustand:** Prüfungen am aktuellen Standardbranch-Commit, offene Integrations- und Abnahmegrenzen sowie Alter der Belege.
 
-Darunter folgen durchsuchbare und aufklappbare Ansichten für Prüfdetails, Roadmap P0–P8 mit Exit-Kriterien, offene Fragen, Validierung und jüngste Änderungen. Filter unterscheiden offen, in Arbeit, blockiert und erledigt. Ein Klick führt zum jeweiligen Originalbeleg oder Prüflauf.
+Darunter folgen durchsuchbare und aufklappbare Ansichten für Prüfdetails, Roadmap P0–P8 mit Exit-Kriterien, offene Fragen, Validierung und jüngste Änderungen. Filter unterscheiden offen, in Arbeit, blockiert und erledigt. Ein Klick führt zum jeweiligen Originalbeleg oder Prüflauf. Die Roadmap ist eine grafische P0–P8-Timeline, mobil vertikal. Die Statistikansicht zeigt Dateizahlen, Sprachverteilung, Dateivolumen und separat die Forgejo-Größenangabe. Commit-Aktivität ist für 7/30/90 Tage sichtbar. Eine pro Commit geladene Zeilenanalyse trennt Produktionscode, Tests und Hilfscode; Kommentare zählen als Quelltext, Leerzeilen separat, Fremdbibliotheken und generierte Verzeichnisse nicht. Größte eigene Quelldateien und direkter Handlungsbedarf ergänzen die Übersicht.
 
-Die Gestaltung verwendet einen hellen Hintergrund, klare Typografie, gut lesbare Karten und sparsame Statusfarben. Farben werden immer durch Text ergänzt. Navigation, Filter und Details funktionieren per Tastatur; schmale Displays ordnen die Hauptbereiche untereinander an.
+Die Gestaltung verwendet dunkelgrüne Navigation, einen satteren graugrünen Hintergrund, kontrastreiche Karten und sparsame Statusfarben. Farben werden immer durch Text ergänzt. Navigation, Filter und Details funktionieren per Tastatur; schmale Displays ordnen die Hauptbereiche untereinander an. Dezente Animationen unterstützen Übergänge; reduzierte Bewegung wird respektiert.
 
 ## Datenquellen und Bedeutung
 
 | Quelle | Zweck |
 | --- | --- |
 | Repository-Metadaten und Standardbranch | Branch und aktueller Commit |
-| GitHub Check Runs und Actions-Läufe | Prüfstatus, Laufzeitpunkt, Ergebnis und Link |
+| Forgejo Commit-Status und Actions-Läufe | Prüfstatus, Laufzeitpunkt, Ergebnis und Link |
 | Offene Pull Requests | belegte Entwicklungsarbeit und Reviews |
 | TODO.md | aktive Arbeitsreihenfolge und Voraussetzungen |
 | docs/status.md | Betriebsstand und dokumentierte nächste Schritte |
@@ -46,32 +48,36 @@ Codequalität wird über nachvollziehbare Einzelbefunde beschrieben: aktuelle Pr
 
 ## Architektur und Aktualisierung
 
-Die Website besitzt eine Sites-Anwendung mit einer Oberfläche, serverseitigen Lesezugriffen und einer getrennten Normalisierungsschicht. Sie nutzt den für Sites zugelassenen GitHub-Connector ausschließlich lesend, mit der Verbindung des angemeldeten Besuchers. Repository und erlaubte Leseaktionen sind serverseitig festgelegt; ein beliebiger Proxy und Schreibaktionen sind nicht vorgesehen.
+Die Website besitzt eine Sites-Anwendung mit einer Oberfläche, serverseitigen Lesezugriffen und einer getrennten Normalisierungsschicht. Sie liest ausschließlich per GET aus der festgelegten Forgejo-Repository-API. Ein Read-only-Token liegt als geschütztes Sites-Geheimnis unter FORGEJO_ACCESS_TOKEN und gelangt nicht in Browsercode oder Quellrepository. Die Website bleibt für den bisherigen privaten Empfängerkreis zugänglich. Redirects werden nicht verfolgt; ein beliebiger Proxy und Schreibaktionen sind ausgeschlossen. GitHub bleibt als Mirror verlinkt und liefert keine Prüfaussagen.
 
-Die Seite lädt beim Öffnen, nach einer ausdrücklich ausgelösten Aktualisierung und alle fünf Minuten während sichtbarer Nutzung. Sie pausiert automatische Abrufe im Hintergrund. Ein sichtbarer Hinweis nennt den letzten erfolgreichen Abruf und den ausgewählten Commit. GitHub-Änderungen erscheinen nach erfolgreichem nächsten Abruf, ohne die Website neu zu veröffentlichen.
+Die Seite lädt beim Öffnen, nach einer ausdrücklich ausgelösten Aktualisierung und alle fünf Minuten während sichtbarer Nutzung. Sie pausiert automatische Abrufe im Hintergrund. Ein sichtbarer Hinweis nennt den letzten erfolgreichen Abruf und den ausgewählten Commit. Forgejo-Änderungen erscheinen nach erfolgreichem nächsten Abruf, ohne die Website neu zu veröffentlichen.
 
 Daten werden nicht zwischen Besuchern zwischengespeichert. Nach einem fehlgeschlagenen Abruf dürfen vorherige Daten in der aktuellen Sitzung sichtbar bleiben, erhalten aber unmittelbar den Hinweis „veraltet“ und den Fehler. Teilquellen scheitern unabhängig: Eine nicht erreichbare Validierungsdatei entfernt nicht die verfügbaren Prüfungen. Zeitlimits, begrenzte Ergebnismengen und vom Anbieter vorgegebene Wartezeiten verhindern unbegrenzte Abrufe.
 
 Die neue Website wird nach der Prüfung privat veröffentlicht. Eine öffentliche Freigabe ist eine gesonderte Änderung der Zielgruppe.
 
-## Beobachteter Ausgangsstand
+## Historischer Ausgangsstand im GitHub Mirror
 
-Am 2026-10-12 wurde GitHub-Commit a8376d7fc67ad8bfc4de583be6576632814f87bf geprüft:
+Am 2026-10-12 wurde GitHub-Commit a8376d7fc67ad8bfc4de583be6576632814f87bf geprüft: Dieser Mirror-Snapshot wird als historische Beobachtung erhalten und ist kein Prüfnachweis für das Hauptrepository.
 
 - Der [Playwright-Lauf](https://github.com/LeoMESysteme/picam-ai/actions/runs/38245332243) ist fehlgeschlagen; der Schritt „Run Playwright tests“ scheiterte, die anschließenden Doku-Prüfungen wurden übersprungen.
+
 - Der [Doku-Lauf](https://github.com/LeoMESysteme/picam-ai/actions/runs/38245332413) wartet.
+
 - Die offenen Pull Requests waren beim Abruf leer. Das beweist keine Inaktivität außerhalb von GitHub.
+
 - TODO.md bezeichnet Nacharbeit 5 als offen. Der Status desselben Commits beschreibt den Code als vorhanden und den erneuten realen Gegencheck als nicht dokumentiert.
+
 - Die Aussage „997 Tests grün, ruff sauber“ ist ein historischer Dokumentationsbeleg und kein aktueller CI-Nachweis.
 
 Diese Ausgangsdaten werden nicht als unveränderliche Dashboard-Inhalte eingebaut.
 
 ## Prüfung vor Veröffentlichung
 
-Sinnvolle automatisierte Tests prüfen die Normalisierung aktiver und historischer Aufgaben, Roadmap- und OQ-Status, widersprüchliche Dokumente, Commit-Zuordnung, fehlende Checks und veraltete Daten nach Abruffehlern. Die Oberfläche wird mit echten GitHub-Lesezugriffen auf Erstladen und Aktualisierung geprüft. Login-Rückkehr und der gehostete Connector-Zugriff werden getrennt von lokalen Tests bewertet.
+Sinnvolle automatisierte Tests prüfen die Normalisierung aktiver und historischer Aufgaben, Roadmap- und OQ-Status, widersprüchliche Dokumente, Commit-Zuordnung, fehlende Checks und veraltete Daten nach Abruffehlern. Zusätzliche Tests sichern Commit-Paginierung, Archivvollständigkeit, Blob-Zuordnung, speichersparende Zeilenzählung, Token-Zielbindung und Zeitlimits ab. Die Oberfläche wird mit echten Forgejo-Lesezugriffen auf Erstladen, Aktualisierung, Statistiken und Fehlerfälle geprüft. Gehostete Datenabfragen und Besucheranmeldung werden getrennt von lokalen Tests bewertet.
 
 Build und Paket müssen erfolgreich erstellt werden. Responsive Darstellung, Tastaturbedienung und die wichtigsten Filter werden geprüft, soweit die verfügbare Vorschau dies zulässt. Jede verbleibende Prüfgrenze wird bei der Übergabe genannt.
 
 ## Abgrenzung
 
-Das Cockpit führt keine Projekt-Tests auf dem Raspberry Pi aus, bedient keine Hardware, ändert keine Aufgaben und schreibt nicht nach GitHub. Laufende Codex-Chats, lokale Ressourcen und Forgejo-Prüfungen benötigen eigene Datenquellen; sie werden ohne solche Belege nicht als Livezustand dargestellt.
+Das Cockpit führt keine Projekt-Tests auf dem Raspberry Pi aus, bedient keine Hardware, ändert keine Aufgaben und schreibt nicht in das Hauptrepository oder den Mirror. Laufende Codex-Chats und lokale Ressourcen benötigen eigene Datenquellen; sie werden ohne solche Belege nicht als Livezustand dargestellt.

@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Sites: Forgejo als Hauptquelle und vertiefte Statistiken)
+
+**Problem:** GitHub ist nur Mirror; dessen Actions bildeten den echten
+Prüfstand nicht ab. Commit-Aktivität und Quelltextzeilen fehlten.
+
+**Änderung:** Private Sites-Version 3 liest Forgejo per GET mit geschütztem
+Read-only-Token. Neue Commit-Diagramme für 7/30/90 Tage, getrennte
+Repository-/Dateigrößen, Blob-geprüfte Gesamt-/Nichtleer-Zeilen,
+Produktions-/Test-/Hilfscode und größte Quelldateien. Handlungsbedarf führt
+direkt zu Fehlern und Blockaden. Token fehlt in Quell- und Build-Dateien;
+51 Website-Tests, TypeScript, Build sowie lokale und gehostete Datenabrufe
+bestehen. Spezifikation und Plan behalten ihre Library-Identitäten.
+
+**Konsequenz:** Aktuelle Prüfaussagen stammen aus dem Hauptrepository.
+Fehlende pytest-/ruff-Nachweise bleiben offen; Statistik ersetzt keine
+Codequalitätsnote. Die Seite bleibt privat.
+
 ## 0.1.0.dev0 — 2026-10-12 (CI: Playwright auf Forgejo-Host-Runner)
 
 **Problem:** `playwright.yml` verlangte das nicht vorhandene Runner-Label

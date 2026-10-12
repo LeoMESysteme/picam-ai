@@ -1371,3 +1371,27 @@ Codezeilen wurden als Alternative zurückgestellt: Sie verlangen zusätzliche
 Dateiabrufe und wären ohne getrennte Definition von Leerzeilen und Kommentaren
 missverständlich. Eine Qualitätsnote wird weiterhin nicht abgeleitet.
 Die Site bleibt privat; keine neue Abhängigkeit wurde eingeführt.
+
+## 2026-10-12 — Forgejo ist das Hauptrepository des Cockpits
+
+Der Nutzer hat klargestellt, dass GitHub nur Mirror ist, und den Wechsel
+auf das private Forgejo-Repository `l.hentschke/picam-ai` autorisiert.
+Die Forgejo-Läufe bestanden am aktuellen Commit, während der Mirror ältere
+oder ungeeignete Prüfläufe zeigte. GitHub-Prüfungen als Hauptnachweis wurden
+deshalb verworfen; ein stiller Fallback auf den Mirror würde den falschen
+Prüfstand erneut einführen. GitHub bleibt nur als Mirror verlinkt.
+
+Ein passender Forgejo-Connector wurde bei der Plugin-Suche nicht gefunden.
+Die vorhandenen Datenflüsse verwenden stattdessen feste, serverseitige
+Forgejo-GET-Aufrufe. Der vom Nutzer gelieferte Read-only-Token liegt als
+Sites-Geheimnis außerhalb von Quellcode, Browser und Veröffentlichungspaket.
+Die Site bleibt für denselben privaten Empfängerkreis zugänglich.
+
+Die Zeilenanalyse nutzt das authentifiziert geladene Archiv des gewählten
+Commits und prüft die gezählten Dateien gegen ihre Git-Blobs. Einzelne
+Dateiabrufe wurden zugunsten des begrenzten Archivs zurückgestellt.
+Paginierung und ein gemeinsames Zeitlimit begrenzen API-Arbeit; Zeilen
+werden ohne pro Zeile angelegte Arrays gezählt. Quelltext mit Kommentaren
+und Leerzeilen wird nicht mit ausführbaren Codezeilen oder Qualität
+verwechselt. Spezifikation und Plan wurden unter bestehenden Identitäten
+im Repository und der Library korrigiert.

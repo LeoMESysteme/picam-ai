@@ -5,6 +5,61 @@ Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Projektgeschichte](project_history.md); Aufgaben:
 [TODO.md](../TODO.md).
 
+## Aktuelle Session — Projektcockpit Version 3 mit Forgejo
+
+Das private [Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
+ist als Version 3 veröffentlicht. Der Nutzer hat Forgejo als maßgebliches
+Repository bestätigt: [l.hentschke/picam-ai](https://ds1515.me-systeme.de/l.hentschke/picam-ai).
+GitHub ist ein Mirror und liefert keine Prüfaussagen mehr für das Cockpit.
+Die Seite liest ausschließlich per GET aus der festen Forgejo-API. Der
+Read-only-Token ist als geschütztes Sites-Runtime-Geheimnis
+`FORGEJO_ACCESS_TOKEN` hinterlegt. Er fehlt in Quell- und Build-Dateien;
+private Site-Zielgruppe unverändert, ein zugelassener Nutzer.
+
+Neue Statistiken: Commit-Aktivität für 7/30/90 Tage, aktive Tage,
+Merge-Commits und jüngste verlinkte Änderungen. Dateivolumen am Commit
+und Forgejo-Repository-Größe werden getrennt ausgewiesen. Die bei Bedarf
+geladene Zeilenanalyse prüft alle eigenen Code-Dateien gegen ihre Git-Blobs,
+zählt physische und nichtleere Quelltextzeilen einschließlich Kommentaren
+und trennt Produktionscode, Tests und Hilfscode. Fremdbibliotheken und
+generierte Verzeichnisse zählen nicht mit. Die acht größten eigenen
+Quelldateien und direkter Handlungsbedarf ergänzen die Übersicht.
+
+Paginierung, Gesamtzeitlimit, Speichergrenzen und Veralterung bleiben
+sichtbar abgesichert. Unvollständige Historien ergeben Mindeststände;
+fehlende oder unlesbare Quelldateien verhindern vollständige Zeilenwerte.
+Alte Ergebnisse behalten ihre ursprüngliche SHA und die Veraltet-Markierung.
+Die bestehende kontrastreiche Gestaltung und reduzierte Bewegung bleiben
+wirksam. Direkte Sprunglinks führen von der Übersicht zu den Prüfungen.
+
+**Verifikation:** 51 Website-Node-Tests und TypeScript bestanden;
+Sites-Build erfolgreich. Browser-QA mit echten privaten Forgejo-Daten
+bestand für Erstabruf, Zeiträume, Zeilenwerte, Commit-Cache, Desktop/Mobil,
+reduzierte Bewegung, Origin-/SHA-Prüfung, initialen Abruffehler und alte
+Ergebnisse nach Quellenfehler. Unabhängige Prüfung ohne blockierende
+Restbefunde. Strenger Doku-Build sowie 27 Doku-Browsertests bestanden.
+Keine Python-Suite oder Betriebsmessung für diesen Cockpit-Auftrag gestartet.
+
+**Gehosteter Abruf:** Mit bestehendem technischen Zugriff auf die private
+Site bestanden Projekt-, Aktivitäts- und Zeilen-Endpunkte, ohne Quellenfehler.
+Besucher-Anmeldung wurde nicht separat nachgestellt. GitHub-Einwilligung
+ist für die neue Datenquelle nicht nötig (`requires_byop=false`).
+Abgerufen am 2026-10-12: Forgejo-Commit
+`f06f7b46856d3708c85e74816e3d4b589e5233e0`, 270 versionierte Dateien,
+262 vollständig geladene Commits, 173 eigene Code-Dateien,
+51.760 Quelltextzeilen, 44.569 nichtleer, 7.191 Leerzeilen.
+Aktuelle Playwright- und Doku-Läufe bestanden; älterer Wartungslauf veraltet,
+pytest-/ruff-CI-Nachweise fehlend. Diese Beobachtung bleibt ein Snapshot.
+
+**Site-Quelle:** Separates Repository `sites/picam-ai-cockpit`,
+Quellcommit `c8449c22b5bc710f75d2d7c44e38e82ed7480e25`;
+Site-ID `appgprj_6accdd4468948191be0d5301888c835f`.
+[Spezifikation](superpowers/specs/2026-10-12-projektcockpit-design.md) und
+[Plan](superpowers/plans/2026-10-12-projektcockpit.md) sind im Repo und
+unter ihren bisherigen Library-Identitäten auf Forgejo korrigiert.
+Keine Hardware bedient und keine neue Abhängigkeit eingeführt.
+Die parallelen Sessionergebnisse darunter bleiben erhalten.
+
 ## Übergabeprüfung für 2026-10-13
 
 Die Playwright-Korrektur ist als `881b411` committet. Der lokale
