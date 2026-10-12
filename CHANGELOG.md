@@ -3,6 +3,20 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Doku-Build: pymdown-extensions gepinnt)
+
+**Problem:** Der Doku-Runner scheiterte seit dem 2026-10-10 bei jedem Lauf
+mit `Highlight.__init__() missing 1 required positional argument: 'md'`.
+`pymdown-extensions` kam nur transitiv und ungepinnt; Version 12.2 hat die
+Signatur geändert, mkdocstrings 1.0.6 übergibt `md` nicht.
+
+**Änderung:** `pymdown-extensions==12.1` in `requirements-docs.txt`
+gepinnt, in `docs/dependencies.md` eingetragen.
+
+**Konsequenz:** Frische `.venv-docs` baut wieder („No issues found"),
+gegengeprüft: mit 12.2 derselbe Fehler wie im Runner. Anheben erst, wenn
+mkdocstrings die neue Signatur unterstützt.
+
 ## 0.1.0.dev0 — 2026-10-12 (Sites: Live-Projektcockpit)
 
 **Problem:** Arbeitsprioritäten, Prüfungen und Validierungsgrenzen lagen in

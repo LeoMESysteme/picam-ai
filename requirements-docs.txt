@@ -4,3 +4,6 @@ zensical==0.0.64
 mkdocstrings==1.0.6
 mkdocstrings-python==2.0.9
 griffelib==2.3.0
+# Transitiv, aber gepinnt: pymdown-extensions 12.2 (2026-10-10) verlangt in
+# Highlight.__init__ das Argument md, das mkdocstrings 1.0.6 nicht uebergibt.
+pymdown-extensions==12.1

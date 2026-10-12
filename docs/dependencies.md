@@ -136,6 +136,7 @@ unberührt. Einrichtung und Bauen: Kopf von `scripts/docs-site.sh`.
 | `zensical` | 0.0.64 | Statische Doku-Seite aus `docs/` und den Wurzel-Markdowns |
 | `mkdocstrings`, `mkdocstrings-python` | 1.0.6, 2.0.9 | API-Referenz aus den Docstrings |
 | `griffelib` | 2.3.0 | Liest den Quelltext statisch, importiert nichts |
+| `pymdown-extensions` | 12.1 | Transitiv (Zensical/mkdocstrings), seit 2026-10-12 gepinnt: 12.2 verlangt in `Highlight.__init__` das Argument `md`, das mkdocstrings 1.0.6 nicht übergibt, und bricht den Build |
 | `forgejo-runner` | 13.2.0 (arm64, SHA-256 gepinnt) | Führt `.github/workflows/docs.yml` auf dem Pi aus |
 
 Der Runner läuft als eigener Systemnutzer ohne Zugriff auf Kamera, serielle
