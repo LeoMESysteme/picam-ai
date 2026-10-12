@@ -997,3 +997,14 @@ falsche Ablehnungen, also sicher, aber unnötig.
 
 **Bedienung bis dahin:** Die Kamera senkrecht auf Höhe der Displaymitte
 stellen, nicht von oben, dann treten die Schatten nicht auf.
+
+**Umsetzung (Codex, 2026-10-01):** Die Cursorprüfung vergleicht die
+Kandidatentiefe mit mindestens 60 % des Medians der zugeordneten echten
+Punkte. `sc7a` bestand damit offline mit dem gespeicherten Quad in allen
+32 Stillframes; ein synthetisch belegter Cursor bleibt abgelehnt.
+`propose --quad` auf Frame 16 besteht 2j mit 0,041/0,057 und Gesamt-WARNUNG.
+Die unveränderte Startsuche findet auf den gespeicherten Assist-Stills
+für `sc7` 196 und für `sc7a` 318 zugeordnete Punkte. Die vermutete
+Quellbild-Minima-Änderung war hier nicht nötig. Es gab keinen weiteren
+Hardwarelauf; Details und Grenzen stehen in `docs/VALIDATION.md` und
+`docs/lab_journal.md`. Review und Merge des Feature-Branches stehen aus.

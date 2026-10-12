@@ -2889,3 +2889,30 @@ Das ist **keine formale Abnahme**. Es war kein Abnahme-Lauf angekündigt, und
 der Bericht liegt absichtlich nicht als `abnahme-*.json` in `var/dotmatrix/`.
 Er belegt aber, dass der Leser auch die bisher größte Abbildung ohne Fehler
 liest.
+
+## 2026-10-01 — Nacharbeit 5: `sc7a`-Punktschatten offline
+
+**Aufbau:** Gespeichertes `sc7a-assist/still.png` und
+`sc7a-still/frames/frame_000016.png`, Referenzquad aus
+`sc7a-quad.json`. Die Bilddateien unter `var/` wurden nur gelesen;
+`propose --quad` schrieb ausschließlich in ein temporäres Verzeichnis.
+`PYTHONPATH=src` stellte den Code dieses Worktrees bereit. Keine neue
+Kamera- oder serielle Messung.
+
+| Bild | falsche Cursor-Kandidaten vor Korrektur | deren Tiefe | Median zugeordneter echter Punkte | Ergebnis danach |
+| --- | ---: | ---: | ---: | --- |
+| `sc7a-assist/still.png` | 8 | 8,1–13,8 | 28,7 | Quad akzeptiert |
+| `sc7a-still/frame_000016.png` | 4 | 8,4–12,0 | 27,4 | Quad akzeptiert |
+
+Die relative Cursorgrenze beträgt 0,6 mal den Median der zugeordneten
+Glyphenpunkte. Auf Frame 16 liefert `propose --quad` mit
+`--cell-text '+0.4679? '` 2j OK (0,041 Punktspalten / 0,057 Punktzeilen),
+Raster WARNUNG bei 310/450 zugeordneten Punkten (68,9 %) und Gesamt
+WARNUNG. Ein synthetischer Cursor mit fünf dunklen Punkten wird weiter
+als `cursorzeile_belegt` abgelehnt. Mit dem korrigierten Quad bestanden
+alle 32 gespeicherten `sc7a`-Stillframes die Cursorprüfung; die drei
+Grenzfälle Frames 7, 14 und 23 sind eigene Regressionen. Die automatische
+Startsuche fand auf den gespeicherten Assist-Stills 196 zugeordnete Punkte
+bei `sc7` (RMS 0,092/0,126) und 318 bei `sc7a` (RMS 0,150/0,241).
+Das `sc7a`-Startquad lag maximal 6,46 px vom gespeicherten Referenzquad
+entfernt; der nachfolgende textgestützte 2j-Abgleich bleibt erforderlich.

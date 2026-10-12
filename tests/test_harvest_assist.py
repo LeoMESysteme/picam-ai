@@ -198,6 +198,28 @@ def test_propose_accepts_validated_profile_quad_with_cell_text(
     assert proposal["setup_checks"]["checks"]["rasterversatz"]["status"] in {"OK", "WARNUNG"}
 
 
+def test_propose_accepts_sc7a_quad_despite_dot_shadows(tmp_path):
+    diagnostics = Path(__file__).parents[1] / "var" / "diagnostics"
+    frame = diagnostics / "sc7a-still/frames/frame_000016.png"
+    quad_file = diagnostics / "sc7a-quad.json"
+    settings = diagnostics / "sc7a-assist/camera-settings.json"
+    if not all(path.is_file() for path in (frame, quad_file, settings)):
+        pytest.skip("sc7a-Diagnosebilder fehlen")
+    quad = json.loads(quad_file.read_text(encoding="utf-8"))
+    out = tmp_path / "proposal"
+    rc = harvest_setup.main([
+        "propose", "--frame", str(frame), "--hint-box", "0.268,0.37,0.427,0.144",
+        "--camera-settings", str(settings), "--device-id", "gsv-sensor-161a",
+        "--session-id", "sc7a", "--quad",
+        ",".join(str(value) for point in quad for value in point),
+        "--cell-text", "+0.4679? ", "--out", str(out),
+    ])
+    assert rc == 0
+    proposal = json.loads((out / "proposal.json").read_text(encoding="utf-8"))
+    assert proposal["setup_checks"]["overall"] in {"OK", "WARNUNG"}
+    assert proposal["setup_checks"]["checks"]["rasterversatz"]["status"] == "OK"
+
+
 @pytest.mark.parametrize("route", ["quad", "glass"])
 def test_propose_fixed_quad_rejects_bad_offset(tmp_path, monkeypatch, route):
     frame = tmp_path / "frame.png"

@@ -24,18 +24,20 @@ Details und Einschränkungen: VALIDATION.md 2026-09-30.
 * `stufe2c` liest `sc7` mit 111/111 richtig, 0 falsch, 0 abgelehnt.
 * Das ist kein formaler Abnahme-Lauf (VALIDATION.md 2026-10-01).
 * Der erste Versuch `sc7a` (von oben) scheiterte an zwei falschen
-  Ablehnungen. Sie stehen als Nacharbeit 5 im Plan und gehen an Codex.
+  Ablehnungen. Nacharbeit 5 behebt sie und ist seit 2026-10-12 in
+  `master`.
 
 Offen:
 1. **Einrichtungsassistent:** am 2026-10-01 gemergt; der erste echte
-   Kameralauf (`sc7`) bestand. Offen ist **Nacharbeit 5** (Codex): die
-   Startsuche aus der Nähe und Punktschatten in der Cursorzeile. Bis dahin
-   die Kamera senkrecht auf Höhe der Displaymitte stellen. Schräge Aufstellungen (wie
-   `ab4`/`ab6`) lehnt `assist` noch ab (`startlage_mehrdeutig`/
-   `keine_startlage`), die richtet man weiter von Hand mit
-   `profile-regrid.py still` ein. Spätere Kleinigkeiten N1–N3 stehen im
-   Plan unter Nacharbeit 4.
-2. **ALS NÄCHSTES, sobald Nacharbeit 5 gemergt ist: Anbindung an den
+   Kameralauf (`sc7`) bestand. **Nacharbeit 5** ist am
+   2026-10-12 nach `master` gemergt (offline geprüft): `sc7a`
+   findet eine Startlage, schwache Punktschatten zählen nicht mehr als
+   Cursor. Offen: eine Aufstellung leicht von oben
+   mit `assist` gegenprüfen. Schräge Aufstellungen (wie `ab4`/`ab6`)
+   lehnt `assist` noch ab (`startlage_mehrdeutig`/`keine_startlage`), die
+   richtet man weiter von Hand mit `profile-regrid.py still` ein.
+   Spätere Kleinigkeiten N1–N3 stehen im Plan unter Nacharbeit 4.
+2. **ALS NÄCHSTES: Anbindung an den
    Messpfad** (Entscheidung des Nutzers am 2026-10-01, Variante B).
    * Der Dot-Matrix-Leser gilt für den GSV-Sensor (Displaytech 161A) als
      ausreichend validiert:
@@ -65,7 +67,7 @@ Offen:
    füllt die Karte (etwa 1 GB/h). Das repowise-Plugin in Codex abschalten
    oder eine Aufräumaufgabe einrichten. `var/` hat weiterhin keine
    Sicherung auf einem anderen Medium.
-7. Die Einzelbilder von `ab5-run`/`ab6-run` (je 1,6 GB) erst nach Rückfrage
+8. Die Einzelbilder von `ab5-run`/`ab6-run` (je 1,6 GB) erst nach Rückfrage
    löschen.
 
 ---

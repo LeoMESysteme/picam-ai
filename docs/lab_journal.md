@@ -1766,3 +1766,31 @@ Displaymitte. Die Schatten waren kaum noch zu sehen.
 neuen Größe. Bei Blick von oben entstehen aus der Nähe Punktschatten. Diese
 und die Startsuche sind Nacharbeit 5. Der Leser verkraftet die größere
 Abbildung ohne Fehler. Zahlen: [VALIDATION.md](VALIDATION.md) 2026-10-01.
+
+## 2026-10-01 — Einrichtungsassistent: Nacharbeit 5 an `sc7a`-Standbildern
+
+**Ziel:** Die falsche Ablehnung bei leichtem Blick von oben beheben,
+ohne echte Cursorpunkte durchzulassen.
+
+**Aufbau:** Nur gespeicherte Bilder `sc7a-assist/still.png`,
+`sc7a-still/frames/frame_000016.png`, `sc7-assist/still.png` und das
+gespeicherte `sc7a-quad.json`. Diagnosebilder unter `var/` blieben
+unverändert. Tests und `propose` schrieben ausschließlich temporäre
+Artefakte. Kamera und serielle Schnittstelle wurden nicht geöffnet.
+
+**Beobachtung:** Die schwachen Schatten unter Zeile 6 überschritten die
+absolute Kandidatengrenze von 8. Ihre Tiefen waren 8,1–13,8 und 8,4–12,0,
+während echte zugeordnete Punkte im selben Bild Medianwerte von 28,7 und
+27,4 hatten. Ohne die falsche Cursorablehnung fand die bestehende
+Startsuche für `sc7a` bereits eine Lage; die vermutete Änderung der
+Quellbild-Minima war nicht erforderlich. Mit dem relativen Grenzwert
+bestanden alle 32 gespeicherten `sc7a`-Frames die Cursorprüfung; drei
+Grenzfälle wurden als Regressionen aufgenommen. Der feste Referenzquad bestand
+den vollständigen Offline-Vorschlag mit 2j OK (0,041/0,057) und
+Gesamt-WARNUNG. Zahlen und Pfade stehen in [VALIDATION.md](VALIDATION.md).
+
+**Deutung:** Eine relative Tiefengrenze unterscheidet in diesen Bildern
+schwache optische Schatten von echten LCD-Punkten. Ein synthetischer
+belegter Cursor bleibt eine Ablehnung. Für neue Blickwinkel und
+Lichtverhältnisse braucht es weiterhin Bild- und Bedienerprüfung; hier
+fand kein weiterer echter Kameralauf statt.
