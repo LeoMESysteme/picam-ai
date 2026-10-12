@@ -739,21 +739,151 @@ Mehr dazu: [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md) ·
 
 </section>
 
-<section class="tour-chapter" data-chapter="regeln" data-label="Regeln" data-state="geplant" markdown="1">
+<section class="tour-chapter" data-chapter="regeln" data-label="Regeln" markdown="1">
 
 ## Regeln {#regeln}
 
 <div class="tour-step" markdown="1">
 
-### Geplant: was das System nicht tut {#regeln-geplant}
+### Kein Altwert ohne Markierung {#regeln-altwert}
 
-Das Kapitel wird die nicht verhandelbaren Regeln zeigen: keine unmarkierten
-Altwerte, keine Korrektur mit dem Referenzwert, keine Glättung echter Sprünge,
-Konfidenz ist keine Fehlerwahrscheinlichkeit. Dazu kommen die offenen Grenzen:
-weitere Geräte, andere Lichtquellen und das GSVmulti-Protokoll.
+**Kurz:** Ein alter Wert darf nie so aussehen, als sei er aktuell.
 
-Bis dahin: [Messpfad und Freigabe](messpfad.md) ·
-[Offene Punkte](../open-questions.md)
+Was könnte passieren? Die Kamera verliert die Anzeige, und die Ausgabe
+wiederholt einfach den letzten Wert. In den Daten sähe das aus wie eine
+ruhige, gültige Messung, obwohl in Wahrheit niemand mehr hinschaut.
+
+Darum ist es zweimal gesperrt. Die Freigabe stellt nach `stale_after` ohne
+gültigen Wert zwingend auf **veraltet**. Und ein Datensatz mit dem Status
+„veraltet“ oder „unlesbar“ **und** einer Zahl lässt sich gar nicht erst
+anlegen: Der Konstruktor von `ValueRecord` bricht dann mit einem Fehler ab.
+Beides prüfen eigene Tests.
+
+Mehr dazu: [Nicht verhandelbar (AGENTS.md)](../../AGENTS.md#nicht-verhandelbar-konzeptmd-7) ·
+[Verträge (API)](../../api/vertraege.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Die Referenz korrigiert nie den Prüfling {#regeln-referenz}
+
+**Kurz:** Der Wert der Kalibrieranlage kommt an Leser und Freigabe gar nicht
+heran.
+
+Was könnte passieren? Liest das System „0.4?761“ und kennt den
+Referenzwert 0.46761, wäre es verlockend, die Lücke passend zu füllen. Dann
+würde die Kalibrierung den Prüfling mit sich selbst vergleichen und immer
+bestehen.
+
+Darum hat der Leser nur Bild und Layout als Eingang (`read(crop, layout)`),
+die Freigabe nur das Leseergebnis und die Aufnahmezeit
+(`evaluate(read, capture_ns)`). Ein Test prüft genau diese Signaturen. Ein
+zweiter Test lässt dieselbe Kette zweimal laufen, einmal mit einem um 20 %
+verfälschten Referenzwert in den Bilddaten. Die Datensätze müssen gleich
+sein, und sie sind es.
+
+Mehr dazu: [Freigabe (API)](../../api/validate.md) ·
+[Konzept §7](../../Konzept.md#7-erkennungssicherheit-und-fehlerbehandlung)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Echte Sprünge bleiben Sprünge {#regeln-spruenge}
+
+**Kurz:** Springt der Messwert, springt auch die Ausgabe, ohne Mittelung und
+ohne Begrenzung.
+
+Was könnte passieren? Eine „Plausibilitätsregel“ hält einen Sprung von 1 auf
+500 für einen Lesefehler und glättet ihn weg. Dann verschwindet genau das
+Ereignis, das man im Labor sehen will, etwa eine Lastspitze.
+
+Darum gibt es keinen Glättungsfilter. Die einzige erlaubte Verzögerung ist
+die Mehrbildbestätigung (`confirm_frames`), und ihre Dauer steht im Datensatz
+(`confirmation_span_ns`). Ein Test schickt die Folge 1, 1, 500, 500, −500, 0
+durch die Freigabe und verlangt sie unverändert zurück.
+
+Mehr dazu: [Freigabe (API)](../../api/validate.md) ·
+[Messpfad und Freigabe](messpfad.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Konfidenz ist keine Fehlerwahrscheinlichkeit {#regeln-konfidenz}
+
+**Kurz:** Eine Konfidenz von 0,31 heißt **nicht** „31 % Risiko“ und auch
+nicht „69 % sicher“.
+
+Was könnte passieren? Jemand liest die Konfidenz als Wahrscheinlichkeit und
+verlässt sich auf eine Fehlerquote, die nie gemessen wurde.
+
+Darum ist sie ausdrücklich nur eine Qualitätskennzahl. Beim
+Punktraster-Leser ist sie der knappste Abstand zu einer Schwelle, gemessen in
+Einheiten der Vorlagen. Jeder Leser meldet
+`declares_confidence_calibrated = False`, und Tests halten das fest. Auf
+True darf das erst wechseln, wenn eine Kalibriermessung in der Validierung
+steht.
+
+Mehr dazu: [OCR (API)](../../api/ocr.md) ·
+[Validierung](../VALIDATION.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Kein erfundenes Protokoll {#regeln-protokoll}
+
+**Kurz:** Solange niemand weiß, welches Telegramm GSVmulti erwartet, wird
+keines geraten.
+
+Was könnte passieren? Ein ausgedachtes Format würde in Tests grün
+erscheinen, in Berichten als „Ausgabe funktioniert“ stehen und erst am
+Laborplatz auffallen.
+
+Darum wirft der Platzhalter für das echte GSVmulti-Format
+(`GsvAsciiFormatter`) absichtlich einen Fehler und verweist auf OQ-07. Zum
+Testen der Kette gibt es nur ein CSV-Format, das sichtbar als vorläufig
+markiert ist (`provisional = True`). Diese Markierung gehört in jedes
+Laufergebnis. Belastbar wäre ein Mitschnitt: ein echtes GSV-Gerät an
+GSVmulti anschließen und den Datenstrom aufzeichnen.
+
+Mehr dazu: [GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md) ·
+[OQ-07](../open-questions.md#oq-07)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Was noch nicht geprüft ist {#regeln-grenzen}
+
+**Kurz:** Der Leser ist für ein Gerät belegt. Alles darüber hinaus ist offen
+und wird auch so genannt.
+
+Belegt ist der Punktraster-Leser am GSV-2AS mit dem Display Displaytech 161A.
+Abnahme 3 ergab 215 von 215 Proben richtig, 0 falsch und 0 abgelehnt; die
+Obergrenze der Fehlerrate liegt bei 3,5 %.
+
+Offen sind:
+
+* weitere Messverstärker (GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI, AST-Geräte),
+* andere Lichtquellen,
+* das Minuszeichen: Dieses Gerät zeigt nie negative Werte, deshalb kennt der
+  Leser nur „+“,
+* Freigabeschwellen an realen Geräten (OQ-14),
+* das GSVmulti-Format (OQ-07).
+
+Wer die Werte freigibt, nennt diese Grenzen mit.
+
+Mehr dazu: [Validierung](../VALIDATION.md) ·
+[Offene Punkte](../open-questions.md) ·
+[Fortschritt Ernten/Training](../FORTSCHRITT.md)
 { .tour-more }
 
 </div>
