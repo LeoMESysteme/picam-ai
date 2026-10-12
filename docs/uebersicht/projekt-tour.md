@@ -617,20 +617,122 @@ Mehr dazu: [Validierung](../VALIDATION.md) ·
 
 </section>
 
-<section class="tour-chapter" data-chapter="bedienung" data-label="Bedienung" data-state="geplant" markdown="1">
+<section class="tour-chapter" data-chapter="bedienung" data-label="Bedienung" markdown="1">
 
 ## Bedienung {#bedienung}
 
 <div class="tour-step" markdown="1">
 
-### Geplant: einrichten und lesen {#bedienung-geplant}
+### Kamera aufstellen {#bedienung-kamera}
 
-Das Kapitel wird die Einrichtung zeigen: Kamera am USB3-Port, Fokus,
-Inbetriebnahme-Skript, Einrichtungsassistent, Bestätigen von Viereck und
-Profil, dann Lesen mit Status.
+**Kurz:** Die Kamera steht möglichst gerade vor der Anzeige und hängt an
+einem blauen USB3-Anschluss des Pi.
 
-Bis dahin: [Kamera-Livevorschau](../anleitung/10-kamera-livevorschau.md) ·
-[Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)
+Die StreamCam liefert die volle Auflösung von 1920 × 1080 Punkten nur im
+Format YUYV und nur über USB3. An einem USB2-Anschluss fällt sie auf
+kleinere Bilder zurück, und die Bildquelle bricht dann ab. Den Fokus stellt
+die Software ein, nicht die Hand: Erst wird der Autofokus ausgeschaltet,
+dann ein fester Wert gesetzt. Am GSV-Aufbau war 48 der beste Wert.
+
+Warum gerade davor? Der Einrichtungsassistent findet das Punktraster bei
+einer frontalen Aufstellung selbst. Schräge Aufstellungen lehnt er bisher ab;
+die richtet man noch von Hand ein.
+
+Mehr dazu: [Hardwareprofil](../HARDWARE_PROFILE.md) ·
+[Optischer Aufbau](../OPTICAL_SETUP.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Inbetriebnahme prüfen {#bedienung-inbetriebnahme}
+
+**Kurz:** Ein Prüfskript sagt in einer Minute, ob die Kamera einsatzbereit
+ist.
+
+`./scripts/camera-commissioning.sh` geht sechs Punkte durch: Ist das
+Werkzeug `v4l2-ctl` da? Ist die StreamCam angeschlossen? Läuft sie über USB3?
+Bietet sie YUYV in 1920 × 1080 an? Lassen sich Autofokus und Fokuswert
+setzen und zurücklesen? Kommt ein Testbild in voller Größe an?
+
+Jede Zeile endet mit OK, WARNUNG oder FEHLER. Einsatzbereit (Exit 0) ist
+die Kamera nur ohne FEHLER. Ein USB2-Anschluss ist dort nur eine Warnung,
+für die volle Auflösung aber trotzdem zu wenig. Die geänderten Regler stellt
+das Skript am Ende wieder zurück.
+
+Mehr dazu: [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Der Einrichtungsassistent {#bedienung-assistent}
+
+**Kurz:** Ein Befehl erledigt Fokus, Standbilder, Punktraster und alle
+Prüfungen und macht daraus einen Vorschlag.
+
+`harvest-setup.py assist` sucht zuerst den schärfsten Fokuswert. Dann nimmt
+er zwei Standbilder im Abstand von mindestens 30 Sekunden auf: So fällt auf,
+wenn sich Kamera oder Gerät bewegt haben. Danach legt er das Punktraster über
+die Anzeige. Damit er weiß, was die Anzeige gerade zeigen sollte, liest er
+den Wert über die serielle Schnittstelle des GSV-2AS mit.
+
+Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Auflösung, Raster,
+Stabilität und den Versatz des Rasters. Jede Prüfung meldet OK, WARNUNG oder
+FEHLER. Am Ende stehen ein Vorschlag (`proposal.json`) und Kontrollbilder,
+auf denen man das Raster sieht.
+
+Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
+[Kamera-Workbench](../anleitung/10-kamera-livevorschau.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Der Mensch bestätigt {#bedienung-bestaetigen}
+
+**Kurz:** Erst wenn ein Mensch die Kontrollbilder angesehen und bestätigt
+hat, wird aus dem Vorschlag ein gültiges Profil.
+
+Mit `harvest-setup.py confirm` wird der Vorschlag zum Profil der Sitzung.
+Darin stehen das Viereck, das Raster, die Kameraeinstellungen und wer
+bestätigt hat. Steht bei einer Prüfung FEHLER, geht das nur mit einer
+ausdrücklichen Begründung (`--override-reason`), und die Begründung wird im
+Profil gespeichert. Gibt es gar keine Prüfungen, steht im Profil ehrlich
+„NICHT_GEPRUEFT“.
+
+Findet der Assistent bei einer schrägen Aufstellung keine eindeutige
+Startlage, richtet man das Raster von Hand mit `profile-regrid.py still`
+ein und bestätigt danach genauso.
+
+Mehr dazu: [Geräteprofile](../anleitung/04-geraeteprofile.md) ·
+[Datensatz sammeln](../anleitung/11-datensatz-sammeln.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Werkbank und Betrieb {#bedienung-werkbank}
+
+**Kurz:** Die Werkbank im Browser ist zum Einrichten da. Das laufende Lesen
+mit der StreamCam ist der nächste Bauschritt.
+
+`dispread serve` startet die Werkbank: eine geschützte Weboberfläche mit
+Kamerabild, Einstelltabelle, Log und echten Shells. Sie liest absichtlich
+keine Werte und gibt nichts frei. Ihre eigene Kamera-Anbindung stammt noch
+aus der Zeit der IMX500. Die StreamCam ist dort noch nicht angeschlossen, und
+bis dahin läuft die Werkbank nur im Simulationsmodus (`--simulate`).
+
+Die Kette zum Lesen ist gebaut und ohne Hardware geprüft. Als Nächstes
+kommt sie mit der StreamCam in den laufenden Betrieb. Die Ausgabe an GSVmulti
+bleibt offen, bis das Telegrammformat feststeht (OQ-07).
+
+Mehr dazu: [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md) ·
+[Arbeitsliste](../../TODO.md) · [Betrieb](../anleitung/09-betrieb.md)
 { .tour-more }
 
 </div>
