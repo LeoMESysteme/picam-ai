@@ -477,22 +477,140 @@ Mehr dazu: [Messprogramm](../TIMING.md#messprogramm) ·
 
 </section>
 
-<section class="tour-chapter" data-chapter="training" data-label="Training" data-state="geplant" markdown="1">
+<section class="tour-chapter" data-chapter="training" data-label="Training" markdown="1">
 
 ## Training {#training}
 
 <div class="tour-step" markdown="1">
 
-### Geplant: vom Gerät zum Label {#training-geplant}
+### Warum Daten nötig sind {#training-vorlagen}
 
-Das Kapitel wird zeigen, wie der GSV-2AS über RS232 (`set norm`) gezielt
-andere Werte anzeigt und sein ASCII-Strom das Label liefert. Danach kommen
-Ernteplan, Zuordnung mit Sicherheitsabstand, Vorlagen je Zeichen, die
-ROM-Gegenprobe und die Abnahme.
+**Kurz:** Der Leser vergleicht jedes Kästchen mit einer gelernten Vorlage je
+Zeichen. Diese Vorlagen entstehen aus echten Kamerabildern.
 
-Bis dahin: [Daten und Abnahme](daten-und-abnahme.md) ·
-[Fortschritt Ernten/Training](../FORTSCHRITT.md) ·
-[Datensatz sammeln](../anleitung/11-datensatz-sammeln.md)
+Das Datenblatt des Displays zeigt jedes Zeichen als ideales Punktmuster
+(links). Die Kamera sieht es nie so: Das Bild ist etwas unscharf, schräg oder
+ungleich beleuchtet (Mitte). Deshalb lernt das System für jedes Zeichen, wie
+es auf echten Bildern aussieht, und bildet daraus eine Vorlage (rechts).
+
+Der Leser kennt 13 Zeichen: die Ziffern 0 bis 9, Punkt, Plus und das leere
+Kästchen. Für jedes braucht es genug echte Beispiele mit dem richtigen
+Label.
+
+Mehr dazu: [OCR-Backends](../anleitung/08-ocr-backends.md) ·
+[Daten und Abnahme](daten-und-abnahme.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Das Gerät als Lehrer {#training-lehrer}
+
+**Kurz:** Der Messverstärker sagt über seine serielle Schnittstelle selbst,
+welchen Wert er gerade anzeigt. Damit beschriftet sich jedes Bild fast von
+allein.
+
+Das Ernte-Skript schickt dem GSV-2AS über RS232 den Befehl `set norm`. Er
+ändert den Normierungsfaktor, und die Anzeige springt auf einen neuen Wert
+(Anzeige = Faktor × Messwert). So entstehen viele verschiedene Ziffern, ohne
+dass jemand am Aufbau etwas verstellt. Die Anzeige zeigt dabei immer sechs
+Ziffern, nur der Punkt wandert.
+
+Zugleich sendet das Gerät seinen Wert als ASCII-Text. Dieser Text wird zum
+Label der Kamerabilder aus derselben Zeit.
+
+Das gilt **nur für das Sammeln von Trainingsdaten**. Im Messbetrieb bekommt
+der Leser keinen Wert über die Leitung. Er liest ausschließlich das Bild.
+
+Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
+[Fortschritt Ernten/Training](../FORTSCHRITT.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Ernte: nur sichere Bilder {#training-ernte}
+
+**Kurz:** Ein Bild bekommt nur dann ein Label, wenn es sicher mitten in
+einem stabilen Anzeigewert liegt. Alles am Rand eines Wechsels wird
+verworfen.
+
+Eine Ernte folgt einem festen Plan (`scripts/harvest.py`). Die Anzeige hält
+jeden Wert einige Sekunden (Vorgabe 4 s). Aufeinanderfolgende Faktoren
+liegen mindestens um das 1,3-Fache auseinander, damit jeder Schritt ein
+deutlicher Wechsel ist. `sync-record.py` zeichnet Kamerabilder und
+Telegramme gemeinsam auf.
+
+Danach entscheidet `gate-label.py`: Bilder kurz vor und nach einem Wechsel
+bekommen kein Label. Sie liegen innerhalb des Sicherheitsabstands **M**
+(roter Bereich), denn dort könnte die Anzeige schon oder noch den anderen
+Wert zeigen. M wird für jede Kamera gemessen und steht in ihrer
+Timing-Kalibrierung; ohne passende Kalibrierung startet die Ernte nicht.
+Auch Lücken im Telegrammstrom und das offene Ende des letzten Werts werden
+verworfen.
+
+Mehr dazu: [Zeitverhalten](../TIMING.md) ·
+[Zeitstempel richtig lesen](zeitstempel.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Vorlagen lernen und gegenprüfen {#training-lernen}
+
+**Kurz:** Aus vielen beschrifteten Kästchen entsteht je Zeichen eine
+Vorlage. Sie muss zum Zeichensatz aus dem Datenblatt passen, sonst wird gar
+nichts gespeichert.
+
+Der Import schneidet aus jedem beschrifteten Bild die 16 Kästchen aus. Bilder
+mit schlechter Bildgüte oder mit Kästchen, die nicht zu den anderen passen,
+fliegen raus. Aus den übrigen Kästchen eines Zeichens berechnet das Training
+die Vorlage.
+
+Dann folgt die **ROM-Gegenprobe**: Die Vorlage wird mit dem Muster aus dem
+Datenblatt des Displaycontrollers (HD44780) verglichen. Weicht sie in mehr
+als einem Punkt ab, schreibt `dotmatrix-train.py` keine Vorlagen (Exit 3).
+Eine solche Abweichung deutet auf falsche Labels oder ein verschobenes
+Raster hin. Die Schwellen werden dann nicht nachgebessert.
+
+Zum Schluss legt das Training die beiden Schwellen des Lesers fest
+(`D_max` und `margin_min`, Formel `thresholds_v1`). Die fertigen Vorlagen
+werden mit Prüfsumme eingefroren.
+
+Mehr dazu: [OCR (API)](../../api/ocr.md) ·
+[Validierung](../VALIDATION.md)
+{ .tour-more }
+
+</div>
+
+<div class="tour-step" markdown="1">
+
+### Unabhängig prüfen {#training-abnahme}
+
+**Kurz:** Ob der Leser taugt, zeigt erst ein Test an Aufstellungen, die das
+Training nie gesehen hat, mit einem vorher festgelegten Kriterium.
+
+Während der Entwicklung misst `loo` (leave one group out): Jede Aufstellung
+wird einmal zurückgehalten, die Vorlagen werden nur aus den übrigen gelernt
+und an der zurückgehaltenen geprüft.
+
+Für Abnahme 3 (2026-09-30) wurden die Vorlagen zuerst eingefroren. Danach
+entstanden zwei neue Aufstellungen: `ab5` fast frontal und gedreht, `ab6`
+schräg von links. Das Kriterium stand vorher fest: 0 falsch, höchstens 20 %
+abgelehnt. Ergebnis: **215 Proben richtig, 0 falsch, 0 abgelehnt** über 85
+Anzeigewerte (Plateaus). Die statistische Obergrenze der Fehlerrate liegt
+bei 3,5 % (95 %).
+
+Die Grenzen gehören zum Ergebnis: Es gibt nur ein Gerät, nur Raumlicht, nur
+die Einheit mV/V und keine negativen Werte. Die neuen Aufstellungen stammen
+vom selben Gerät; ein zweites Gerät fehlt noch.
+
+Mehr dazu: [Validierung](../VALIDATION.md) ·
+[Daten und Abnahme](daten-und-abnahme.md) ·
+[Fortschritt Ernten/Training](../FORTSCHRITT.md)
 { .tour-more }
 
 </div>
