@@ -65,6 +65,12 @@ Quellen zum Verlinken, keine automatisch umzuschreibenden Texte. Halte
 keine unmarkierten veralteten Werte, keine aus synthetischer Zeit
 abgeleiteten Latenzen, keine Konfidenz als Fehlerwahrscheinlichkeit.
 
+In `docs/uebersicht/projekt-tour.md` binden die h3-IDs die animierten
+Szenen; benenne sie nicht um. Meldet der Build eine Abweichung von
+`scripts/tour-facts.py`, ändere nichts dafür: Szenen und `tour-facts.json`
+sind nicht freigegeben. Nenne die gemeldeten Tour-Schritte in der
+Zusammenfassung.
+
 Der Lauf ist absichtlich klein. Arbeite allein, wenn die Änderung überschaubar
 ist. Nur bei mindestens vier voneinander unabhängigen betroffenen Bereichen
 oder einem größeren Erst-Audit darfst du **höchstens zwei** Instanzen des

@@ -146,7 +146,7 @@
     const a2 = T.arrow(layer, "M660 230H736");
 
     const classes = T.group(layer, "classes");
-    T.label(classes, 480, 384, "13 Zeichen, die der Leser kennt · je eine Vorlage", "t-label t-strong", { "text-anchor": "middle" });
+    T.label(classes, 480, 384, `${T.READER_CLASSES.length} Zeichen, die der Leser kennt · je eine Vorlage`, "t-label t-strong", { "text-anchor": "middle" });
     const chips = T.READER_CLASSES.map((ch, i) => {
       const x = 480 + (i - 6) * 56;
       const g = T.group(classes, "class-chip");
@@ -240,7 +240,7 @@
   T.register("training-ernte", (ctx) => {
     const { tl, A, layer, tour } = ctx;
     T.label(layer, 40, 44, "Welche Bilder bekommen ein Label?", "t-label t-strong");
-    T.label(layer, 40, 64, "Schematisch: 3 Anzeigewerte, je etwa 4 s gehalten · M = Sicherheitsabstand", "t-small");
+    T.label(layer, 40, 64, `Schematisch: 3 Anzeigewerte, je etwa ${T.num(T.fact("harvest.hold_s", 4))} s gehalten · M = Sicherheitsabstand`, "t-small");
 
     const X0 = 110;
     const X1 = 900;
@@ -291,7 +291,7 @@
 
     const facts = T.group(layer, "facts");
     T.panel(facts, 40, 420, 880, 96, "t-panel");
-    T.label(facts, 60, 448, "harvest.py: fester Faktorplan, jeder Sprung mindestens ×1,3 · sync-record.py: Bilder und Telegramme gemeinsam", "t-small t-strong");
+    T.label(facts, 60, 448, `harvest.py: fester Faktorplan, jeder Sprung mindestens ×${T.num(T.fact("harvest.min_step_ratio", 1.3))} · sync-record.py: Bilder und Telegramme gemeinsam`, "t-small t-strong");
     T.label(facts, 60, 472, "gate-label.py: verwirft ±M um jeden Wechsel, Telegrammlücken und das offene Ende des letzten Werts", "t-small t-strong");
     T.label(facts, 60, 496, "M wird je Kamera gemessen (Timing-Kalibrierung); ohne passende Kalibrierung keine Ernte", "t-small t-strong");
     tour.docLink(facts, "docs/TIMING.html", "Zeitverhalten öffnen", [904, 438]);
@@ -433,7 +433,8 @@
     T.panel(frozen, 400, 152, 170, 100, "t-panel t-flow-box");
     lock(frozen, 485, 178);
     T.label(frozen, 485, 216, "Vorlagen eingefroren", "t-small t-strong", { "text-anchor": "middle" });
-    T.label(frozen, 485, 236, "sha256 6f20dec4…", "t-mono t-mono-sm", { "text-anchor": "middle" });
+    const acceptance = T.fact("abnahme.stufe2c", null);
+    T.label(frozen, 485, 236, `sha256 ${acceptance ? acceptance.templates_sha256_prefix : "6f20dec4"}…`, "t-mono t-mono-sm", { "text-anchor": "middle" });
     const toTest = T.arrow(layer, "M574 202H626");
 
     const test = T.group(layer, "test-groups");
@@ -450,11 +451,16 @@
 
     const result = T.group(layer, "result-table");
     T.panel(result, 40, 334, 530, 150, "t-panel t-record");
+    // Zählungen aus den Abnahmedateien (abnahme.stufe2c); die Plateaus und die
+    // Obergrenze stehen nur in VALIDATION.md.
+    const count = (g) => `${g.richtig} / ${g.abgelehnt} / ${g.falsch}`;
+    const accGroups = acceptance ? acceptance.groups : { ab5: { richtig: 142, abgelehnt: 0, falsch: 0 }, ab6: { richtig: 73, abgelehnt: 0, falsch: 0 } };
+    const total = acceptance ? acceptance.gesamt : { richtig: 215, abgelehnt: 0, falsch: 0 };
     const rows = [
       ["Gruppe", "richtig / abgelehnt / falsch", "Plateaus"],
-      ["ab5", "142 / 0 / 0", "48"],
-      ["ab6", "73 / 0 / 0", "37"],
-      ["gesamt", "215 / 0 / 0", "85"],
+      ["ab5", count(accGroups.ab5), "48"],
+      ["ab6", count(accGroups.ab6), "37"],
+      ["gesamt", count(total), "85"],
     ];
     const rowEls = rows.map((row, i) => {
       const g = T.group(result, "result-row");

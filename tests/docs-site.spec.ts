@@ -415,3 +415,32 @@ test('Sofortnavigation baut die Projekt-Tour als Vollseite auf, Bühnenlinks fü
   await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
   await expect(page.locator('.tour-ui')).toHaveCount(1);
 });
+
+test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', async ({ browser }) => {
+  const facts = JSON.parse(readFileSync(join(process.cwd(), 'site/assets/data/tour-facts.json'), 'utf8'));
+  facts.facts['gate.stale_after_ns'].value = 250_000_000;
+  facts.facts['record.fields'].value = [...facts.facts['record.fields'].value, 'neues_feld'];
+  facts.facts['camera.focus_absolute'].value = 51;
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await page.route('**/assets/data/tour-facts.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(facts) }),
+  );
+  await page.goto(`http://127.0.0.1:8766${TOUR}#erkennung-veraltet`);
+  const stage = page.locator('.tour-stage');
+  await expect(stage).toContainText('stale_after = 0,25 s');
+  await expect(stage).toContainText('Grenze 0,25 s');
+  await page.evaluate(() => { location.hash = 'erkennung-ausgabe'; });
+  await expect(stage).toContainText('neues_feld');
+  await expect(stage).toContainText('10 Felder');
+  await page.evaluate(() => { location.hash = 'bedienung-kamera'; });
+  await expect(stage).toContainText('fester Wert (51)');
+  await context.close();
+
+  const missing = await browser.newContext({ reducedMotion: 'reduce' });
+  const fallback = await missing.newPage();
+  await fallback.route('**/assets/data/tour-facts.json', (route) => route.fulfill({ status: 404, body: '' }));
+  await fallback.goto(`http://127.0.0.1:8766${TOUR}#erkennung-veraltet`);
+  await expect(fallback.locator('.tour-stage')).toContainText('Grenze 0,5 s');
+  await missing.close();
+});

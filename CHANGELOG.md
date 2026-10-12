@@ -31,6 +31,29 @@ ist separat versioniert; 33 Node-Tests, TypeScript, Build und Browser-QA bestehe
 **Konsequenz:** Übersicht und Tiefe sind verbunden; Statistiken tragen
 Quellenbezug und Veralterungskennzeichnung und ersetzen keinen Qualitätsnachweis.
 
+## 0.1.0.dev0 — 2026-10-12 (Projekt-Tour: Werte aus dem Code)
+
+**Problem:** Die Szenen der Projekt-Tour trugen Werte aus dem Code fest ein
+(Felder des ValueRecord, `confirm_frames`, `stale_after`, Tracker-Grenzen,
+Zeichensatz, Kamera- und Ernteparameter, Testnamen). Nach einer Codeänderung
+hätte die automatische Doku-Pflege den Text angepasst, die Grafik aber
+weiter den alten Stand gezeigt.
+
+**Änderung:** `scripts/tour-facts.py` liest 27 solche Werte statisch aus dem
+Quelltext (ast, ohne Import) und aus `fortschritt.json` und schreibt
+`docs-site/assets/data/tour-facts.json`, je Wert mit Quelle und den
+Tour-Schritten, die ihn zeigen. Die Szenen zeichnen mit diesen Werten
+(`fact(id, fallback)`); fehlt die Datei, zeigen sie den Stand ihres
+Entwurfs. `--check` läuft vor jedem Doku-Build und in
+`tests/test_tour_facts.py`; ein Playwright-Test prüft, dass geänderte
+Werte auf der Bühne ankommen. Der Prompt der Doku-Pflege verbietet,
+Schritt-IDs umzubenennen, und verlangt, Abweichungen zu melden.
+
+**Konsequenz:** Ändert sich ein gezeigter Wert, bricht der Doku-Build ab und
+nennt die Schritte, die zu prüfen sind; Übernahme mit
+`./scripts/tour-facts.py --write`. Viele Werte zieht die Bühne danach von
+selbst nach (z. B. neue ValueRecord-Felder, `stale_after`, Fokuswert).
+
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
 
 **Problem:** Vier der sechs Kapitel der Projekt-Tour waren nur als „geplant“

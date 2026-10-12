@@ -7,15 +7,15 @@ Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 
 ## Übergabeprüfung für 2026-10-13
 
-Der lokale Stand ist für den Wiedereinstieg dokumentiert, aber noch nicht
-vollständig in Git gesichert oder mit `origin/master` synchronisiert.
-Nach `git fetch origin` am 2026-10-12 steht `master` auf `9d6994a` und
-`origin/master` auf `ef76811`: je ein eigener Commit seit `812bb59`.
-Lokal dokumentiert `9d6994a` das Cockpit; der Remote-Commit ergänzt
-codebasierte Fakten für die Projekt-Tour.
+Die Playwright-Korrektur ist als `881b411` committet. Der lokale
+Cockpit-Doku-Commit `9d6994a` und Remote-Commit `ef76811` (Tour-Fakten aus
+dem Code) sind im zusammengeführten Stand enthalten. Der einzige Konflikt lag in
+den neuen Changelog-Abschnitten; beide Änderungen bleiben erhalten.
+Auftrag dieser Abschlusssession ist Commit und Push nach `origin/master`.
+Die übrigen lokalen Arbeiten bleiben separat offen.
 
 Noch offen im Hauptcheckout: die neue Fokuswarnungs-Idee in
-`PLANNED_FEATURES.md`, dieser Snapshot sowie Konzeptillustration und Prompt
+`PLANNED_FEATURES.md` sowie Konzeptillustration und Prompt
 unter `docs/illustrations/`. Im separaten Worktree
 `.claude/worktrees/feat-messpfad-live` steht Branch
 `worktree-feat-messpfad-live` auf `71320bf`; die Spezifikation ist geändert
@@ -25,9 +25,7 @@ Spezifikation und Plan vor der Umsetzung gemeinsam prüfen und sichern.
 Meilenstein 1 umfasst Browser-Einrichtung, Live-Lesen und JSONL-Audit;
 serielle Ausgabe an GSVmulti folgt separat (OQ-07).
 
-Zusätzlich ist die Playwright-CI lokal korrigiert. Die Korrektur wird in
-dieser Session mit der zugehörigen Doku gesichert und nach dem Abgleich
-mit `origin/master` gepusht: `playwright.yml` verlangt nun `picam-docs` statt
+Die Playwright-CI ist korrigiert: `playwright.yml` verlangt nun `picam-docs` statt
 `ubuntu-latest`, lädt nur Chromium ohne Systempaketinstallation und nutzt
 den Forgejo-Artefaktupload. `playwright.config.ts` grenzt Browsertests auf
 `.spec.ts` ein; Node-Harnische mit Pytest-Fixtures werden nicht mehr von
@@ -35,8 +33,14 @@ Playwright geladen. Changelog, Hosting-Doku, Projektgeschichte und der
 Runner-Kommentar in `docs.yml` sind angepasst. Runner-Label und YAML/
 Shell-Schritte sind geprüft; 2 Chromium-Beispieltests und 5 Python-Tests
 für die Node-Harnische bestehen. Strikter Doku-Build bestanden, neue
-Doku-Browserprüfung mit allen 26 Tests bestanden. Ein echter Forgejo-Lauf nach Übernahme
-steht aus; alte wartende Läufe behalten die alte Workflow-Version.
+Doku-Browserprüfung mit allen 26 Tests bestanden, vor dem Merge.
+Auch der zusammengeführte Stand ist geprüft: strikter Doku-Build,
+**27 Doku-Browsertests** und **53 betroffene Python-Tests** bestanden.
+Ruff für Tour-Fakten-Skript und zugehörige Tests, Runner-Label, YAML/
+Shell-Schritte sowie Diff-Prüfung bestanden. Die vollständige Python-Suite
+wurde nach dem Merge nicht erneut ausgeführt; ihr Lauf unten gehört zur
+vorherigen Übergabeprüfung. Ein echter Forgejo-Lauf ist in dieser Sitzung
+nicht abgenommen; alte wartende Läufe behalten die alte Workflow-Version.
 
 Weitere ungesicherte Arbeit liegt im alten Worktree
 `/home/me-systeme/picam-ai-assist`: vorgemerkte Änderungen an README,
@@ -134,8 +138,8 @@ allen sechs Kapiteln in `master`: Überblick, Erkennung, Zeit, Training,
 Bedienung und Regeln. Sie zeigt eine animierte SVG-Bühne mit lokalen
 anime.js-Dateien, Kapitelwahl und Links in die Doku. Der frühere
 Zwischenstand „nur Überblick und Erkennung fertig“ ist überholt.
-Der noch nicht lokal integrierte Remote-Commit `ef76811` bezieht die
-Tour-Fakten aus dem Code. Änderungen am gezeigten Verhalten brauchen
+Der integrierte Remote-Commit `ef76811` bezieht die Tour-Fakten aus dem
+Code. Änderungen am gezeigten Verhalten brauchen
 weiterhin Text und Szene zusammen (AGENTS.md).
 
 ## Betrieb und Messstand

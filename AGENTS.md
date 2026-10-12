@@ -63,6 +63,13 @@ Zwei harte Sätze:
   das eine Szene zeigt (Kette, Freigaberegeln, Zeitbasis, Ausgabe, OQ-07),
   Text **und** Szene im selben Commit anpassen und das Stand-Datum der Seite
   setzen. Geplantes bleibt auf der Bühne bernsteinfarben und gestrichelt.
+  Werte aus dem Code (Felder, Vorgaben, Grenzen, Zeichensatz, Testnamen)
+  liest die Tour aus `docs-site/assets/data/tour-facts.json`, erzeugt von
+  `scripts/tour-facts.py`. Ändert sich einer, schlagen `docs-site.sh build`
+  und `tests/test_tour_facts.py` fehl und nennen die betroffenen Schritte:
+  diese prüfen, dann `./scripts/tour-facts.py --write`. Zeigt eine Szene einen
+  neuen Wert aus dem Code, ihn dort als Fakt aufnehmen statt ihn
+  einzutragen.
 * Vor dem Merge von Doku-Änderungen `./scripts/docs-site.sh build -s` und
   `npx playwright test -c playwright.docs.config.ts` ausführen. Der Build
   bricht bei einem veralteten OQ-Index ab; die Browsertests prüfen Filter,
