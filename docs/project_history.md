@@ -1281,13 +1281,18 @@ Der Nutzer hat ein zunächst privates, deutsches Live-Cockpit mit den
 Hauptbereichen „In Arbeit“, „Als Nächstes“ und „Projektzustand“ bestätigt.
 Die schriftliche Spezifikation steht in
 [Projektcockpit](superpowers/specs/2026-10-12-projektcockpit-design.md);
-ihre Prüfung und die Umsetzung stehen noch aus.
+Spezifikation und Umsetzungsplan wurden freigegeben. Die Website ist
+[privat veröffentlicht](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site).
 
 GitHub-Prüfungen und Statusdokumente erhalten Quellen-, Datum- und
 Commit-Bezug. Historische grüne Prüfungen gelten nicht als aktueller
 Nachweis; widersprüchliche Dokumente bleiben sichtbar. Die Datenanbindung
 ist über den für Sites zugelassenen, ausschließlich lesenden
-GitHub-Connector vorgesehen.
+GitHub-Connector umgesetzt. Die Site besitzt ein eigenständiges
+Quellrepository unter `sites/picam-ai-cockpit`. 27 fachliche Tests,
+TypeScript, Build und lokale Browserprüfungen bestehen. Der gehostete
+Live-Zugriff mit Besucheranmeldung ist noch nicht bestätigt; ein
+technischer Site-Zugriff liefert keine Besucher-Connector-Berechtigung.
 
 Ein periodisch erzeugter Snapshot wurde wegen seiner geringeren
 Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte

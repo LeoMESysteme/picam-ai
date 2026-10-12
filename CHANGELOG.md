@@ -3,6 +3,23 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Sites: Live-Projektcockpit)
+
+**Problem:** Arbeitsprioritäten, Prüfungen und Validierungsgrenzen lagen in
+getrennten Quellen; historische grüne Tests und widersprüchliche Aufgaben
+konnten als aktueller Stand erscheinen.
+
+**Änderung:** Neue private [Sites-Website](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
+mit Übersicht, Arbeitsplan, Prüfungen, Roadmap, OQs, Nachweisen und
+Änderungen. Lesende GitHub-Anbindung mit Commit-Bezug und Aktualisierung
+bei sichtbarer Nutzung. Eigenständiges Site-Quellrepository; Spezifikation
+und Umsetzungsplan stehen unter `docs/superpowers/` und in der Library.
+
+**Konsequenz:** Fehlende Prüfungen, historische Belege und Quellenkonflikte
+bleiben sichtbar. 27 fachliche Tests, TypeScript, Build und lokale
+Browserprüfungen bestehen. Der gehostete Live-Zugriff mit Besucheranmeldung
+bleibt unbestätigt; Veröffentlichung und gehosteter HTML-Abruf sind belegt.
+
 ## 0.1.0.dev0 — 2026-09-30 (Einrichtungsassistent: Nacharbeit 4)
 
 **Problem:** Ein nachgeführtes, laut 2j besseres Quad konnte wegen der
