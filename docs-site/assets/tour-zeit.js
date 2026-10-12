@@ -186,7 +186,7 @@
     T.checkMark(rules, 452, 418, "bad");
     T.label(rules, 472, 423, "Versatz fehlt → abgelehnt", "t-label");
     T.checkMark(rules, 452, 450, "bad");
-    T.label(rules, 472, 455, "Start und Ende > 1 ms auseinander (Suspend?) → abgelehnt", "t-label");
+    T.label(rules, 472, 455, `Start und Ende > ${T.num(T.fact("record.suspend_tolerance_ns", 1e6) / 1e6)} ms auseinander (Suspend?) → abgelehnt`, "t-label");
     T.checkMark(rules, 452, 482, "ok");
     T.label(rules, 472, 487, "sonst: umgerechnet, nie geraten", "t-label");
     tour.docLink(rules, "api/vertraege.html", "Verträge (records) öffnen", [884, 380]);

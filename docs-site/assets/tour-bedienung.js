@@ -61,7 +61,7 @@
 
     const chips = T.group(layer, "side-chips");
     T.chip(chips, 40, 430, "1920 × 1080 · YUYV · nur über USB3", "chip--flow");
-    T.chip(chips, 40, 466, "Fokus per Software: Autofokus aus → fester Wert (48)", "chip--line");
+    T.chip(chips, 40, 466, `Fokus per Software: Autofokus aus → fester Wert (${T.fact("camera.focus_absolute", 48)})`, "chip--line");
 
     // Draufsicht: frontal gelingt der Assistent, schräg noch von Hand.
     const top = T.group(layer, "top");
@@ -114,10 +114,10 @@
     const prompt = T.label(term, 64, 104, "", "t-mono");
     const rows = [
       ["1. v4l2-ctl vorhanden", "OK"],
-      ["2. StreamCam 046d:0893 gefunden", "OK"],
+      [`2. StreamCam ${T.fact("camera.usb_id", "046d:0893")} gefunden`, "OK"],
       ["3. USB-Geschwindigkeit 5000 (USB3)", "OK"],
       ["4. Format YUYV 1920x1080 angeboten", "OK"],
-      ["5. Autofokus aus, Fokus 48, zurückgelesen", "OK"],
+      [`5. Autofokus aus, Fokus ${T.fact("camera.focus_absolute", 48)}, zurückgelesen`, "OK"],
       ["6. Testbild 1920x1080 aufgenommen", "OK"],
     ];
     const rowEls = rows.map(([text, status], i) => {
@@ -180,12 +180,13 @@
     T.svg("path", { d: "M52 186C80 184 96 176 112 150C122 128 132 118 140 118C150 118 160 132 170 152C184 178 196 184 206 186", class: "t-flow-line", style: "stroke-width: 2.5" }, c1);
     T.svg("circle", { cx: 140, cy: 118, r: 5, style: "fill: var(--tour-valid)" }, c1);
     // 2 Zwei Standbilder.
-    const c2 = card(262, "2 Standbilder", "mindestens 30 s Abstand");
+    const stability = T.num(T.fact("setup.stability_s", 30));
+    const c2 = card(262, "2 Standbilder", `mindestens ${stability} s Abstand`);
     T.svg("rect", { x: 290, y: 116, width: 56, height: 38, rx: 4, class: "tp-frame-mini" }, c2);
     T.svg("rect", { x: 372, y: 116, width: 56, height: 38, rx: 4, class: "tp-frame-mini" }, c2);
     T.svg("rect", { x: 300, y: 130, width: 36, height: 10, rx: 2, class: "tp-lcd" }, c2);
     T.svg("rect", { x: 382, y: 130, width: 36, height: 10, rx: 2, class: "tp-lcd" }, c2);
-    T.label(c2, 360, 178, "≥ 30 s", "t-small t-strong", { "text-anchor": "middle" });
+    T.label(c2, 360, 178, `≥ ${stability} s`, "t-small t-strong", { "text-anchor": "middle" });
     T.svg("path", { d: "M348 135H368", class: "t-flow-dash", "marker-end": "url(#tour-arrow)" }, c2);
     // 3 Punktraster.
     const c3 = card(494, "Punktraster", "über die Anzeige legen");

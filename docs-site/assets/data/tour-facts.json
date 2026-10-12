@@ -1,0 +1,444 @@
+{
+  "facts": {
+    "abnahme.stufe2c": {
+      "source": "docs-site/assets/data/fortschritt.json (Abnahme 3, aus den Abnahmedateien)",
+      "used_by": [
+        "training-abnahme",
+        "regeln-grenzen"
+      ],
+      "value": {
+        "bestanden": true,
+        "gesamt": {
+          "abgelehnt": 0,
+          "falsch": 0,
+          "richtig": 215
+        },
+        "groups": {
+          "ab5": {
+            "abgelehnt": 0,
+            "falsch": 0,
+            "richtig": 142
+          },
+          "ab6": {
+            "abgelehnt": 0,
+            "falsch": 0,
+            "richtig": 73
+          }
+        },
+        "label": "Abnahme 3 (bg_closing_v1)",
+        "templates_sha256_prefix": "6f20dec4"
+      }
+    },
+    "camera.focus_absolute": {
+      "source": "scripts/camera-commissioning.sh:FOCUS_ABSOLUTE_TEST",
+      "used_by": [
+        "bedienung-kamera",
+        "bedienung-inbetriebnahme"
+      ],
+      "value": 48
+    },
+    "camera.usb_id": {
+      "source": "scripts/camera-commissioning.sh:USB_ID",
+      "used_by": [
+        "bedienung-inbetriebnahme"
+      ],
+      "value": "046d:0893"
+    },
+    "gate.confirm_frames": {
+      "source": "src/dispread/validate.py:GateConfig.confirm_frames",
+      "used_by": [
+        "erkennung-freigabe",
+        "regeln-spruenge"
+      ],
+      "value": 1
+    },
+    "gate.evaluate_params": {
+      "source": "src/dispread/validate.py:ReleaseGate.evaluate",
+      "used_by": [
+        "regeln-referenz",
+        "erkennung-freigabe"
+      ],
+      "value": [
+        "read",
+        "capture_ns"
+      ]
+    },
+    "gate.stale_after_ns": {
+      "source": "src/dispread/validate.py:GateConfig.stale_after_ns",
+      "used_by": [
+        "erkennung-veraltet",
+        "regeln-altwert"
+      ],
+      "value": 500000000
+    },
+    "harvest.hold_s": {
+      "source": "scripts/harvest.py:_DEFAULT_HOLD_S",
+      "used_by": [
+        "training-ernte"
+      ],
+      "value": 4.0
+    },
+    "harvest.min_step_ratio": {
+      "source": "scripts/harvest.py:_MIN_STEP_RATIO",
+      "used_by": [
+        "training-ernte"
+      ],
+      "value": 1.3
+    },
+    "ocr.classes": {
+      "source": "src/dispread/ocr/dotmatrix_font.py:CLASSES",
+      "used_by": [
+        "erkennung-zelle",
+        "training-vorlagen"
+      ],
+      "value": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        ".",
+        "+",
+        " "
+      ]
+    },
+    "ocr.confidence_calibrated": {
+      "source": "src/dispread/ocr/{dotmatrix,sevenseg,tesseract_cli}.py:declares_confidence_calibrated",
+      "used_by": [
+        "regeln-konfidenz"
+      ],
+      "value": {
+        "dotmatrix.py": false,
+        "sevenseg.py": false,
+        "tesseract_cli.py": false
+      }
+    },
+    "ocr.max_saturated": {
+      "source": "src/dispread/ocr/dotmatrix.py:MAX_SATURATED",
+      "used_by": [
+        "erkennung-format"
+      ],
+      "value": 0.02
+    },
+    "ocr.number_pattern": {
+      "source": "src/dispread/ocr/dotmatrix.py:_NUMBER (Formatregel gsv2as_v1, Zellen 1-7)",
+      "used_by": [
+        "erkennung-raster",
+        "erkennung-format"
+      ],
+      "value": "^( {0,2})(\\d[\\d.]*)$"
+    },
+    "ocr.rom_a00": {
+      "source": "src/dispread/ocr/dotmatrix_font.py:ROM_A00",
+      "used_by": [
+        "erkennung-zelle",
+        "training-lernen"
+      ],
+      "value": {
+        " ": [
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "00000"
+        ],
+        "+": [
+          "00000",
+          "00100",
+          "00100",
+          "11111",
+          "00100",
+          "00100",
+          "00000",
+          "00000"
+        ],
+        "-": [
+          "00000",
+          "00000",
+          "00000",
+          "11111",
+          "00000",
+          "00000",
+          "00000",
+          "00000"
+        ],
+        ".": [
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "00000",
+          "01100",
+          "01100",
+          "00000"
+        ],
+        "0": [
+          "01110",
+          "10001",
+          "10011",
+          "10101",
+          "11001",
+          "10001",
+          "01110",
+          "00000"
+        ],
+        "1": [
+          "00100",
+          "01100",
+          "00100",
+          "00100",
+          "00100",
+          "00100",
+          "01110",
+          "00000"
+        ],
+        "2": [
+          "01110",
+          "10001",
+          "00001",
+          "00010",
+          "00100",
+          "01000",
+          "11111",
+          "00000"
+        ],
+        "3": [
+          "11111",
+          "00010",
+          "00100",
+          "00010",
+          "00001",
+          "10001",
+          "01110",
+          "00000"
+        ],
+        "4": [
+          "00010",
+          "00110",
+          "01010",
+          "10010",
+          "11111",
+          "00010",
+          "00010",
+          "00000"
+        ],
+        "5": [
+          "11111",
+          "10000",
+          "11110",
+          "00001",
+          "00001",
+          "10001",
+          "01110",
+          "00000"
+        ],
+        "6": [
+          "00110",
+          "01000",
+          "10000",
+          "11110",
+          "10001",
+          "10001",
+          "01110",
+          "00000"
+        ],
+        "7": [
+          "11111",
+          "00001",
+          "00010",
+          "00100",
+          "01000",
+          "01000",
+          "01000",
+          "00000"
+        ],
+        "8": [
+          "01110",
+          "10001",
+          "10001",
+          "01110",
+          "10001",
+          "10001",
+          "01110",
+          "00000"
+        ],
+        "9": [
+          "01110",
+          "10001",
+          "10001",
+          "01111",
+          "00001",
+          "00010",
+          "01100",
+          "00000"
+        ],
+        "°": [
+          "01100",
+          "10010",
+          "10010",
+          "01100",
+          "00000",
+          "00000",
+          "00000",
+          "00000"
+        ]
+      }
+    },
+    "ocr.rom_tolerance_dots": {
+      "source": "src/dispread/ocr/dotmatrix_templates.py:ROM_TOLERANCE_DOTS",
+      "used_by": [
+        "training-lernen"
+      ],
+      "value": 1
+    },
+    "ocr.thresholds": {
+      "source": "src/dispread/ocr/dotmatrix_templates.py:compute_thresholds",
+      "used_by": [
+        "training-lernen",
+        "erkennung-zelle"
+      ],
+      "value": {
+        "d_max": "d_max = 1.25 * float(np.percentile(correct_d, 99.5))",
+        "margin_min": "margin_min = max(0.2 * float(np.median(correct_gap)), 1.25 * max(wrong_gap, default=0.0))"
+      }
+    },
+    "protocol.ascii_csv_provisional": {
+      "source": "src/dispread/sink/protocol/ascii_csv.py (provisional=)",
+      "used_by": [
+        "regeln-protokoll"
+      ],
+      "value": true
+    },
+    "protocol.gsv_ascii_raises": {
+      "source": "src/dispread/sink/protocol/gsv_ascii.py:GsvAsciiFormatter.format",
+      "used_by": [
+        "regeln-protokoll",
+        "erkennung-ausgabe"
+      ],
+      "value": true
+    },
+    "reader.read_params": {
+      "source": "src/dispread/ocr/__init__.py:ValueReader.read",
+      "used_by": [
+        "regeln-referenz"
+      ],
+      "value": [
+        "crop",
+        "layout"
+      ]
+    },
+    "record.fields": {
+      "source": "src/dispread/records.py:ValueRecord (die neun Pflichtfelder aus Konzept §8)",
+      "used_by": [
+        "erkennung-ausgabe"
+      ],
+      "value": [
+        "frame_sequence",
+        "capture_timestamp",
+        "value",
+        "unit",
+        "status",
+        "confidence",
+        "profile_id",
+        "trigger_sequence",
+        "result_timestamp"
+      ]
+    },
+    "record.status": {
+      "source": "src/dispread/records.py:ValueStatus",
+      "used_by": [
+        "erkennung-freigabe",
+        "erkennung-veraltet",
+        "erkennung-ausgabe",
+        "regeln-altwert"
+      ],
+      "value": {
+        "STALE": "stale",
+        "TRANSITION": "transition",
+        "UNREADABLE": "unreadable",
+        "VALID": "valid"
+      }
+    },
+    "record.suspend_tolerance_ns": {
+      "source": "src/dispread/records.py:SUSPEND_TOLERANCE_NS",
+      "used_by": [
+        "zeit-versatz"
+      ],
+      "value": 1000000
+    },
+    "setup.checks": {
+      "source": "src/dispread/setup_checks.py:evaluate_setup (checks)",
+      "used_by": [
+        "bedienung-assistent"
+      ],
+      "value": [
+        "kontrast",
+        "kanten",
+        "rahmen",
+        "glanz",
+        "aufloesung",
+        "raster",
+        "stabilitaet",
+        "rasterversatz"
+      ]
+    },
+    "setup.serial": {
+      "source": "scripts/harvest-setup.py assist --serial-port/--baudrate",
+      "used_by": [
+        "bedienung-assistent"
+      ],
+      "value": {
+        "baudrate": 38400,
+        "port": "/dev/ttyUSB0"
+      }
+    },
+    "setup.stability_s": {
+      "source": "scripts/harvest-setup.py assist --stability-s",
+      "used_by": [
+        "bedienung-assistent"
+      ],
+      "value": 30.0
+    },
+    "tests.regeln": {
+      "source": "tests/ (Tests, die die Regeln erzwingen)",
+      "used_by": [
+        "regeln-altwert",
+        "regeln-referenz",
+        "regeln-spruenge",
+        "regeln-konfidenz"
+      ],
+      "value": {
+        "test_declares_confidence_calibrated_ist_false": "tests/test_tesseract_reader.py",
+        "test_echte_spruenge_werden_nicht_geglaettet": "tests/test_gate_und_referenz.py",
+        "test_leser_bekommt_den_referenzwert_nicht_als_parameter": "tests/test_gate_und_referenz.py",
+        "test_mehrbildbestaetigung_meldet_ihre_zeitspanne": "tests/test_gate_und_referenz.py",
+        "test_nach_verlust_wird_der_wert_veraltet_nicht_weitergefuehrt": "tests/test_gate_und_referenz.py",
+        "test_referenzwert_kann_die_erkennung_nicht_beeinflussen": "tests/test_gate_und_referenz.py",
+        "test_stale_darf_keinen_zahlenwert_fuehren": "tests/test_records.py"
+      }
+    },
+    "track.max_rotation_deg": {
+      "source": "src/dispread/track.py:TrackConfig.max_rotation_deg",
+      "used_by": [
+        "erkennung-nachfuehrung"
+      ],
+      "value": 3.0
+    },
+    "track.max_shift": {
+      "source": "src/dispread/track.py:TrackConfig.max_shift",
+      "used_by": [
+        "erkennung-nachfuehrung"
+      ],
+      "value": 0.1
+    }
+  },
+  "schema": "tour_facts_v1"
+}
