@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-03 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
+# Status — Stand 2026-10-12 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Changelog](../CHANGELOG.md) und
@@ -84,6 +84,9 @@ dispread-Einsprungpunkt führt zur separaten Workbench-CLI
 Livevorschau und Datensatz-Sammelmodus haben eigene
 [Bedienseiten](anleitung/10-kamera-livevorschau.md) und
 [Dokumentation zum Sammeln](anleitung/11-datensatz-sammeln.md).
+Die Kameravorschau in der Workbench ist derzeit nur mit `--simulate` nutzbar;
+die StreamCam ist dort noch nicht angebunden. Die separate UVC-Bildquelle und
+das Kamera-Inbetriebnahmeskript unterstützen die StreamCam bereits.
 
 ## Zensical-Dokumentation und Runner
 
