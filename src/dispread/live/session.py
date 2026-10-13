@@ -49,6 +49,10 @@ class CameraLost(RuntimeError):
     """Die Kamera liefert keine Bilder mehr."""
 
 
+class AuditFailed(RuntimeError):
+    """Ein Datensatz konnte nicht sicher ins Audit geschrieben werden."""
+
+
 @dataclass(frozen=True)
 class LiveConfig:
     templates: Path = DEFAULT_TEMPLATES
@@ -89,6 +93,7 @@ class LiveSession:
         self.session_path = self._out_dir / "session.json"
         self.records_path = self._out_dir / "records.jsonl"
         self.latest: ValueRecord | None = None
+        self.latest_monotonic: float | None = None
         self.end_reason: str | None = None
         self.summary: dict = {}
         self._pipeline: Pipeline | None = None
@@ -98,6 +103,10 @@ class LiveSession:
         self._by_status: dict[str, int] = {}
         self._frames_read = 0
         self._frames_skipped = 0
+        self._frame_gaps_start = 0
+        self._audit_errors = 0
+        self._stop_lock = threading.Lock()
+        self._stopped = False
         self._last_clock = 0.0
 
     # -- Start ---------------------------------------------------------------
@@ -141,8 +150,8 @@ class LiveSession:
             ),
         )
         self._out_dir.mkdir(parents=True, exist_ok=True)
-        self._sink = JsonlSink(self.records_path)
-        self._sink.open()
+        owner_status = self._owner.status()
+        self._frame_gaps_start = owner_status.get("gaps", 0)
         self._meta = {
             "schema": SCHEMA,
             "session_id": profile.session_id,
@@ -157,7 +166,7 @@ class LiveSession:
                 "applied": False,
             },
             "gate": {"backend": "dotmatrix", "confirm_frames": cfg.confirm_frames, "expected_unit": cfg.unit},
-            "camera": self._owner.status().get("source", {}),
+            "camera": owner_status.get("source", {}),
             "release_notice": RELEASE_NOTICE,
             "started_at_utc": self._wall().isoformat(),
         }
@@ -166,10 +175,13 @@ class LiveSession:
         self._clock.sample()
         self._last_clock = self._monotonic()
         self._write_session(ended=False)
+        self._sink = JsonlSink(self.records_path)
+        self._sink.open()
 
     # -- Lesen ---------------------------------------------------------------
     def step(self, timeout: float = 0.5) -> ValueRecord | None:
-        assert self._pipeline is not None and self._sink is not None, "start() zuerst"
+        if self._pipeline is None or self._sink is None:
+            raise RuntimeError("start() zuerst")
         got = self._owner.wait_newer(self._seen, timeout)
         if got is None:
             status = self._owner.status()
@@ -177,37 +189,57 @@ class LiveSession:
                 raise CameraLost(status.get("error") or "Kamera gestoppt")
             return None
         sequence, frame = got
-        skipped = max(0, sequence - self._seen - 1) if self._seen else 0
+        skipped = max(0, sequence - self._seen - 1)
         self._seen = sequence
         self._frames_skipped += skipped
         record = self._pipeline.process(frame, dropped_frames=skipped)
-        self._sink.emit(record)
+        receipt = self._sink.emit(record)
+        health = self._sink.health()
+        if receipt.t_complete_ns is None or health.errors:
+            self._audit_errors += 1
+            raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
         self._frames_read += 1
         self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
         self.latest = record
+        self.latest_monotonic = self._monotonic()
         if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
             self._clock.sample()
             self._last_clock = self._monotonic()
             self._write_session(ended=False)
         return record
 
+    def latest_age_s(self) -> float | None:
+        """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
+        latest_monotonic = self.latest_monotonic
+        if latest_monotonic is None:
+            return None
+        return self._monotonic() - latest_monotonic
+
     def run(self, stop: threading.Event) -> None:
-        """Lesen, bis `stop` gesetzt ist oder die Kamera ausfaellt."""
+        """Lesen, bis `stop` gesetzt ist oder ein Fehler die Sitzung beendet."""
         try:
             while not stop.is_set():
                 self.step()
         except CameraLost as exc:
             self.end_reason = f"kamera: {exc}"
+        except AuditFailed as exc:
+            self.end_reason = f"audit: {exc}"
+        except Exception as exc:
+            self.end_reason = f"fehler: {type(exc).__name__}: {exc}"
 
     # -- Ende ----------------------------------------------------------------
     def stop(self, reason: str = "bediener") -> dict:
-        if self.end_reason is None:
-            self.end_reason = reason
-        self._clock.sample()
-        if self._sink is not None:
-            self._sink.close()
-        self._write_session(ended=True)
-        return self.summary
+        with self._stop_lock:
+            if self._stopped:
+                return self.summary
+            if self.end_reason is None:
+                self.end_reason = reason
+            self._clock.sample()
+            if self._sink is not None:
+                self._sink.close()
+            self._write_session(ended=True)
+            self._stopped = True
+            return self.summary
 
     def _write_session(self, *, ended: bool) -> None:
         owner_status = self._owner.status()
@@ -215,7 +247,9 @@ class LiveSession:
             "by_status": dict(self._by_status),
             "frames_read": self._frames_read,
             "frames_skipped": self._frames_skipped,
-            "frame_gaps": owner_status.get("gaps", 0),
+            "frame_gaps": owner_status.get("gaps", 0) - self._frame_gaps_start,
+            "frame_gaps_owner_total": owner_status.get("gaps", 0),
+            "audit_errors": self._audit_errors,
             "camera_error": owner_status.get("error"),
             "end_reason": self.end_reason if ended else None,
         }

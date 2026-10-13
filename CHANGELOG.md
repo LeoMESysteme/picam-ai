@@ -32,7 +32,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Einrichtung Teil 3: Vorschlag (`propose_with_fit`, `write_overlays`) und Bestätigung (`confirm_proposal`, verlangt jetzt einen nichtleeren Namen) liegen in `dispread.live.setup`.
 
-* `LiveSession`: bestätigtes Profil → nachgeführtes Quad → Dot-Matrix-Leser → Freigabe (`confirm_frames=2`) → `records.jsonl`; `session.json` mit Versatz BOOTTIME−MONOTONIC, aufgezeichneter (nicht angewandter) Timing-Kalibrierung und Freigabehinweis. Start wird abgelehnt ohne Kalibrierung, bei falscher Vorlagenprüfsumme oder verändertem Referenzbild.
+* `LiveSession`: bestätigtes Profil → nachgeführtes Quad → Dot-Matrix-Leser → Freigabe (`confirm_frames=2`) → `records.jsonl`; `session.json` mit Versatz BOOTTIME−MONOTONIC, aufgezeichneter (nicht angewandter) Timing-Kalibrierung und Freigabehinweis. Start wird abgelehnt ohne Kalibrierung, bei falscher Vorlagenprüfsumme oder verändertem Referenzbild. Auditfehler und Abstürze beenden die Sitzung mit einem Grund.
 
 * `LiveService`: Zustandsautomat der Live-Seite (Einrichtung im Hintergrund mit Fortschritt, Bestätigung nur ohne FEHLER und mit Kenntnisnahme bei WARNUNG, Lauf starten/stoppen, Kameraausfall wird angezeigt).
 

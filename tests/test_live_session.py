@@ -217,3 +217,130 @@ def test_start_refused_for_calibration_of_another_camera(tmp_path):
     with pytest.raises(StartRefused, match="Timing-Kalibrierung gilt fuer"):
         session.start()
     assert not session.session_path.exists()
+
+
+def _fail_audit(session, monkeypatch):
+    def fail_rotation():
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(session._sink, "_rotate_if_needed", fail_rotation)
+
+
+def test_audit_write_error_raises_and_is_counted(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed("+ 1.2345 ")])
+    session.start()
+    _fail_audit(session, monkeypatch)
+    try:
+        with pytest.raises(RuntimeError, match="Audit.*Platte voll") as caught:
+            session.step()
+        assert type(caught.value).__name__ == "AuditFailed"
+        assert session.latest is None
+    finally:
+        summary = session.stop()
+    assert summary["audit_errors"] == 1
+
+
+def test_run_returns_normally_on_audit_failure(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 2)
+    session.start()
+    _fail_audit(session, monkeypatch)
+    session._owner.running = False
+    session.run(threading.Event())
+    summary = session.stop("bediener")
+    assert summary["end_reason"].startswith("audit: ")
+    assert "Platte voll" in summary["end_reason"]
+    assert summary["audit_errors"] == 1
+    assert session._seen == 1
+
+
+def test_run_returns_normally_on_reader_crash(tmp_path, monkeypatch):
+    reader = synthetic_reader()
+
+    def fail_read(*args, **kwargs):
+        raise ValueError("Leser defekt")
+
+    monkeypatch.setattr(reader, "read", fail_read)
+    session = _session(tmp_path, [embed("+ 1.2345 ")])
+    session._reader_factory = lambda _p, _s: reader
+    session.start()
+    try:
+        session.run(threading.Event())
+    finally:
+        summary = session.stop("bediener")
+    assert summary["end_reason"] == "fehler: ValueError: Leser defekt"
+    assert session.records_path.read_text() == ""
+
+
+def test_frame_gaps_count_only_this_session(tmp_path, monkeypatch):
+    session = _session(tmp_path, [])
+    status = session._owner.status()
+    status["gaps"] = 7
+    monkeypatch.setattr(session._owner, "status", lambda: dict(status))
+    session.start()
+    assert session.summary["frame_gaps"] == 0
+    status["gaps"] = 10
+    summary = session.stop()
+    assert summary["frame_gaps"] == 3
+    assert summary["frame_gaps_owner_total"] == 10
+
+
+def test_stop_twice_preserves_end_sample_and_session_file(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    first = session.stop("kamera")
+    contents = session.session_path.read_bytes()
+    mtime = session.session_path.stat().st_mtime_ns
+    second = session.stop("bediener")
+    assert second is first
+    assert second["end_reason"] == "kamera"
+    assert session.session_path.read_bytes() == contents
+    assert session.session_path.stat().st_mtime_ns == mtime
+    offsets = session._clock.to_session(ended=True)
+    assert offsets["end"] == 1001
+    assert len(offsets["samples"]) == 2
+
+
+def test_step_before_start_raises_runtime_error(tmp_path):
+    session = _session(tmp_path, [])
+    with pytest.raises(RuntimeError, match=r"start\(\)"):
+        session.step()
+
+
+def test_latest_age_uses_monotonic_and_keeps_record_on_timeout(tmp_path):
+    now = [10.0]
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 2, monotonic=lambda: now[0])
+    assert session.latest_age_s() is None
+    session.start()
+    session.step()
+    now[0] = 10.25
+    latest = session.step()
+    assert latest.status is ValueStatus.VALID
+    assert session.latest_monotonic == 10.25
+    assert session.latest_age_s() == 0.0
+    now[0] = 10.875
+    assert session.step(timeout=0.01) is None
+    assert session.latest_age_s() == 0.625
+    assert session.latest is latest
+    assert session.stop()["frames_read"] == 2
+
+
+def test_skips_before_first_frame_are_counted(tmp_path):
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 4)
+    session._owner.items = session._owner.items[3:]
+    session.start()
+    record = session.step()
+    summary = session.stop()
+    assert record.trace.dropped_frames == 3
+    assert summary["frames_skipped"] == 3
+
+
+def test_failed_start_never_leaves_open_audit_sink(tmp_path, monkeypatch):
+    session = _session(tmp_path, [])
+
+    def fail_write(*, ended):
+        raise OSError("Metadaten nicht schreibbar")
+
+    monkeypatch.setattr(session, "_write_session", fail_write)
+    with pytest.raises(OSError, match="Metadaten"):
+        session.start()
+    assert session._sink is None or not session._sink.health().open
