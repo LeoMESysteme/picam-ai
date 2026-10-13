@@ -72,6 +72,9 @@ Offen:
 8. **Projekt-Tour** (Doku): seit 2026-10-12 alle sechs Kapitel fertig.
    Pflege: Ändert sich gezeigtes Verhalten, Text und Szene
    (`docs-site/assets/tour*.js`) zusammen anpassen (AGENTS.md).
+   Seit 2026-10-13 stehen 13 Szenen auch als Abbildung in Verträge,
+   Messpfad, Zeitstempel sowie Daten und Abnahme. Weitere Kandidaten:
+   Glossar und Anleitungskapitel (z. B. 04-geraeteprofile, 07-lokalisierung).
 
 ---
 

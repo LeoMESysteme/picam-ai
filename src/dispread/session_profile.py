@@ -1,8 +1,8 @@
-"""Sitzungsprofil fuer die automatische Ernte (Ernte Phase 1, Task 1).
+"""Sitzungsprofil für die automatische Ernte (Ernte Phase 1, Task 1).
 
-Ein `SessionProfile` haelt fest, was der Bediener einmal je Aufnahmesitzung
-bestaetigt hat: Quad, Zeichenzellenraster, Kameraeinstellungen (ab Version 3)
-und den Befund des Aufloesungs-Gates (Entscheidung 3 in
+Ein `SessionProfile` hält fest, was der Bediener einmal je Aufnahmesitzung
+bestätigt hat: Quad, Zeichenzellenraster, Kameraeinstellungen (ab Version 3)
+und den Befund des Auflösungs-Gates (Entscheidung 3 in
 docs/superpowers/plans/2026-09-23-ernte-phase1.md). Es wird als JSON
 gespeichert und ist der Vertrag zwischen `harvest-setup.py`, `harvest.py` und
 `import-harvest.py`.
@@ -11,7 +11,7 @@ Version 3 (StreamCam-Umstieg 2026-09-25): Bildpixel = native Pixel (StreamCam,
 Zoom fest 100) - `scaler_crop` und ein `native_scale != 1.0` gibt es an dieser
 Kamera nicht mehr, `camera` (`dispread.camera_settings.CameraSettings`) ist
 stattdessen Pflicht. `scaler_crop`/`native_scale` bleiben als Felder erhalten,
-damit Version 2 unveraendert ladbar bleibt (`camera is None`).
+damit Version 2 unverändert ladbar bleibt (`camera is None`).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 from dispread.camera_settings import CameraSettings
 from dispread.charcells import CharGrid
 
-#: Aktuelle Schemaversion. Erhoehen bei jeder inkompatiblen Aenderung des
+#: Aktuelle Schemaversion. Erhöhen bei jeder inkompatiblen Änderung des
 #: JSON-Formats. `load` akzeptiert alle Versionen in `SUPPORTED_SCHEMA_VERSIONS`,
 #: alles andere ist ein harter Abbruch (kein Rateversuch an einer Migration).
 #:
@@ -33,23 +33,23 @@ from dispread.charcells import CharGrid
 #: Sensormodus, skaliert der ISP hoch, das Gate war damit zu optimistisch.
 #: Neu: `native_scale` und `min_native_dot_column_px` (Pixel je Punktspalte
 #: in NATIVEN, unbeschnittenen Sensorpixeln). Version 1 hatte noch keine
-#: bestaetigten Profile im Umlauf, deshalb keine Migration - `load` weist
+#: bestätigten Profile im Umlauf, deshalb keine Migration - `load` weist
 #: Version 1 ab.
 #:
-#: 3 (StreamCam-Umstieg 2026-09-25): IMX500/Picamera2 sind ausser Betrieb, die
+#: 3 (StreamCam-Umstieg 2026-09-25): IMX500/Picamera2 sind außer Betrieb, die
 #: Logitech StreamCam (USB/UVC) kennt weder ScalerCrop noch Sensor-Binning -
 #: Bildpixel = native Pixel (StreamCam, Zoom fest 100). Neues Pflichtfeld
 #: `camera` (`CameraSettings`, siehe `dispread.camera_settings`): was die
 #: Sitzung an der Kamera eingestellt hatte, muss die Ernte reproduzieren
-#: koennen. `scaler_crop` bleibt als Feld erhalten (v2-Kompatibilitaet), ist
+#: können. `scaler_crop` bleibt als Feld erhalten (v2-Kompatibilität), ist
 #: bei v3 aber immer `None`, und `native_scale` immer `1.0` - beides wird
-#: beim Laden geprueft, kein stillschweigendes Ignorieren eines v2-Feldes,
-#: das die StreamCam nicht mehr kennt. Echte v2-Profile bleiben ungeaendert
+#: beim Laden geprüft, kein stillschweigendes Ignorieren eines v2-Feldes,
+#: das die StreamCam nicht mehr kennt. Echte v2-Profile bleiben ungeändert
 #: ladbar (`camera is None`), es gibt keine Migration v2 -> v3 (die Kamera
 #: hat komplett gewechselt, es gibt nichts zu migrieren).
 PROFILE_SCHEMA_VERSION = 3
 
-#: Von `load` akzeptierte Schemaversionen. Alles ausserhalb -> `ValueError`.
+#: Von `load` akzeptierte Schemaversionen. Alles außerhalb -> `ValueError`.
 SUPPORTED_SCHEMA_VERSIONS = (2, 3)
 
 _REQUIRED_FIELDS = (
@@ -72,7 +72,7 @@ _REQUIRED_FIELDS = (
 
 @dataclass(frozen=True, slots=True)
 class SessionProfile:
-    """Vom Bediener bestaetigtes Sitzungsprofil."""
+    """Vom Bediener bestätigtes Sitzungsprofil."""
 
     schema_version: int
     device_id: str
@@ -82,30 +82,30 @@ class SessionProfile:
     grid: CharGrid
     scaler_crop: tuple[int, int, int, int] | None
     min_source_dot_column_px: float
-    #: Bug 2: Verhaeltnis native (unbeschnittene, unbinned) Sensorpixel je
+    #: Bug 2: Verhältnis native (unbeschnittene, unbinned) Sensorpixel je
     #: Output-Pixel entlang des Punktspalten-Gates, `min(1, ...)` (nie > 1 -
     #: bei fehlendem/breitem Crop skaliert der ISP nur herunter, nie hoch).
     native_scale: float
     #: `min_source_dot_column_px * native_scale` - das ist der Wert, gegen
-    #: den das Aufloesungs-Gate tatsaechlich prueft (Entscheidung 3), nicht
+    #: den das Auflösungs-Gate tatsächlich prüft (Entscheidung 3), nicht
     #: `min_source_dot_column_px`.
     min_native_dot_column_px: float
     resolution_threshold_px: float
     resolution_ok: bool
     confirmed_by: str
     confirmed_at_utc: str
-    #: Neu in Version 3, letztes Feld (Default `None` fuer v2-Kompatibilitaet
-    #: im Konstruktor). `None` heisst "v2-Profil, keine Kameraeinstellungen
-    #: hinterlegt" - `to_dict()` laesst den Schluessel dann ganz weg, damit
-    #: sich das Re-Speichern/Hashen bestehender v2-Profile nicht aendert.
+    #: Neu in Version 3, letztes Feld (Default `None` für v2-Kompatibilität
+    #: im Konstruktor). `None` heißt "v2-Profil, keine Kameraeinstellungen
+    #: hinterlegt" - `to_dict()` lässt den Schlüssel dann ganz weg, damit
+    #: sich das Re-Speichern/Hashen bestehender v2-Profile nicht ändert.
     camera: CameraSettings | None = None
-    #: Task 10 (Ausrichtungspruefung Ernte <-> Profilbild, StreamCam-Umstieg):
+    #: Task 10 (Ausrichtungsprüfung Ernte <-> Profilbild, StreamCam-Umstieg):
     #: `{"path": str, "sha256": str}` - das Bild, das `propose`/`confirm`
     #: zugrunde lag (`proposal["frame"]`). Optionales Feld, KEINE
-    #: Schemaversion-Erhoehung: v2 und bestehende v3-Profile ohne dieses Feld
-    #: bleiben unveraendert ladbar (`reference_frame is None`), genau wie
-    #: `camera` beim Uebergang v2->v3. `import-harvest.py` verlangt es fuer
-    #: die Ausrichtungspruefung (Abbruch ohne `--no-alignment-check`), aber
+    #: Schemaversion-Erhöhung: v2 und bestehende v3-Profile ohne dieses Feld
+    #: bleiben unverändert ladbar (`reference_frame is None`), genau wie
+    #: `camera` beim Übergang v2->v3. `import-harvest.py` verlangt es für
+    #: die Ausrichtungsprüfung (Abbruch ohne `--no-alignment-check`), aber
     #: `SessionProfile`/`load()` selbst erzwingen es nicht - ein fehlendes
     #: Profilbild ist eine Frage des Imports, nicht des Profilformats.
     reference_frame: dict | None = None
@@ -173,13 +173,13 @@ class SessionProfile:
 
     @classmethod
     def load(cls, path: Path) -> SessionProfile:
-        """Laedt ein Profil. Wirft `ValueError` bei unbekannter Schemaversion,
+        """Lädt ein Profil. Wirft `ValueError` bei unbekannter Schemaversion,
         fehlendem Feld, einem v3-Profil ohne `camera` oder einem v3-Profil mit
         einem `scaler_crop`/`native_scale`, das die StreamCam nicht kennt."""
         d = json.loads(Path(path).read_text())
-        # Versionsabgleich VOR der Feldpruefung: ein Dokument einer alten
+        # Versionsabgleich VOR der Feldprüfung: ein Dokument einer alten
         # (oder zu neuen) Schemaversion soll an der Version scheitern ("neu
-        # einrichten"), nicht an einem verwirrenden "Feld fehlt" fuer ein
+        # einrichten"), nicht an einem verwirrenden "Feld fehlt" für ein
         # Feld, das diese Version nie kannte (Bug 2, schema_version 1 -> 2).
         schema_version = d.get("schema_version")
         if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
@@ -193,7 +193,7 @@ class SessionProfile:
                 raise ValueError(f"Feld '{field_name}' fehlt im Sitzungsprofil {path}")
         if schema_version == 2 and "camera" in d:
             # Ledger #8 final-review.md: ein v2-Dokument mit einem (fremden)
-            # 'camera'-Schluessel kaeme sonst an harvests Waechter
+            # 'camera'-Schlüssel käme sonst an harvests Wächter
             # `camera is None` vorbei - nur per Handbearbeitung erreichbar,
             # aber die Invariante "v2 = IMX500 = abgewiesen" gilt strikt.
             raise ValueError(
@@ -202,8 +202,8 @@ class SessionProfile:
             )
         if schema_version == 3:
             # M-3 final-review.md: `d.get(...) is None` statt `not in d` -
-            # sonst laedt ein v3-Profil mit "camera": null still mit
-            # `camera=None` durch, und harvest.py meldet danach faelschlich
+            # sonst lädt ein v3-Profil mit "camera": null still mit
+            # `camera=None` durch, und harvest.py meldet danach fälschlich
             # "IMX500-Profil (schema_version 2)".
             if d.get("camera") is None:
                 raise ValueError(

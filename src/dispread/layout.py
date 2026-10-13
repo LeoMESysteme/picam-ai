@@ -1,13 +1,13 @@
 """Geometrie einer 7-Segment-Anzeige.
 
-Das Layout kommt im Betrieb aus dem bestaetigten Geraeteprofil - der Bediener
-bestaetigt laut Konzept.md §4 einmalig Anzeige, Einheit und Zahlenformat. Der
+Das Layout kommt im Betrieb aus dem bestätigten Geräteprofil - der Bediener
+bestätigt laut Konzept.md §4 einmalig Anzeige, Einheit und Zahlenformat. Der
 Dekoder liest also nicht "irgendwie", sondern gegen ein bekanntes Raster.
 
 Dasselbe Layout benutzt der synthetische Generator zum Zeichnen. Das macht die
-synthetischen Saetze zu einer brauchbaren Testvorrichtung - aber ausdruecklich
-nicht zu einem Nachweis der Genauigkeit an echten Geraeten (Konzept.md §9:
-synthetische Daten ergaenzen, sie ersetzen kein reales Testset).
+synthetischen Sätze zu einer brauchbaren Testvorrichtung - aber ausdrücklich
+nicht zu einem Nachweis der Genauigkeit an echten Geräten (Konzept.md §9:
+synthetische Daten ergänzen, sie ersetzen kein reales Testset).
 """
 
 from __future__ import annotations
@@ -42,11 +42,11 @@ DIGIT_SEGMENTS: dict[str, frozenset[str]] = {
     "9": frozenset("abcdfg"),
 }
 
-#: Umkehrung fuer den Dekoder: Segmentmuster -> Ziffer.
+#: Umkehrung für den Dekoder: Segmentmuster -> Ziffer.
 SEGMENTS_TO_DIGIT: dict[frozenset[str], str] = {v: k for k, v in DIGIT_SEGMENTS.items()}
 
 #: Relative Abtastpunkte je Segment innerhalb einer Ziffernzelle, als Anteil
-#: von (Breite, Hoehe). Der Dekoder misst hier die Helligkeit.
+#: von (Breite, Höhe). Der Dekoder misst hier die Helligkeit.
 SEGMENT_SAMPLE_POINTS: dict[str, tuple[float, float]] = {
     "a": (0.50, 0.08),
     "b": (0.88, 0.28),
@@ -62,8 +62,8 @@ SEGMENT_SAMPLE_POINTS: dict[str, tuple[float, float]] = {
 class DisplayLayout:
     """Zahlenformat und Raster einer Anzeige.
 
-    `digits` zaehlt nur die Ziffernstellen. Die Vorzeichenstelle ist separat,
-    weil sie eigenstaendig geprueft und eigenstaendig abgelehnt werden muss
+    `digits` zählt nur die Ziffernstellen. Die Vorzeichenstelle ist separat,
+    weil sie eigenständig geprüft und eigenständig abgelehnt werden muss
     (Konzept.md §7: fehlendes Minuszeichen ist ein kritischer Fehler).
     """
 
@@ -80,20 +80,20 @@ class DisplayLayout:
     inset_ratio: float = 0.10
     #: Zwischenraum vor jeder Ziffernstelle (und vor der ersten, falls
     #: Vorzeichenstelle vorhanden) als Anteil einer Ziffernzelle. Default 0.0
-    #: reproduziert das bisherige luecklose Raster. Reale Anzeigen haben
-    #: oft einen sichtbaren Abstand zwischen den Stellen, den ein lueckenloses
+    #: reproduziert das bisherige lückenlose Raster. Reale Anzeigen haben
+    #: oft einen sichtbaren Abstand zwischen den Stellen, den ein lückenloses
     #: Raster nicht abbildet - die festen relativen Segment-Abtastpunkte
     #: landen dann teils im Zwischenraum statt auf dem Segment (OQ-23).
     digit_gap_ratio: float = 0.0
-    #: Anzeigepolaritaet. "bright_on_dark" (Default, LED: helle Segmente auf
+    #: Anzeigepolarität. "bright_on_dark" (Default, LED: helle Segmente auf
     #: dunklem Grund) oder "dark_on_bright" (LCD: dunkle Segmente auf hellem
-    #: Grund). Kommt aus dem bestaetigten Profil, wird nicht geraten
+    #: Grund). Kommt aus dem bestätigten Profil, wird nicht geraten
     #: (OQ-13 Fall 2).
     polarity: str = "bright_on_dark"
 
     @property
     def n_cells(self) -> float:
-        """Zellenbreiten insgesamt, Vorzeichenstelle und Zwischenraeume anteilig."""
+        """Zellenbreiten insgesamt, Vorzeichenstelle und Zwischenräume anteilig."""
         gaps = (self.digits - 1) + (1 if self.has_sign else 0)
         return self.digits + (self.sign_cell_ratio if self.has_sign else 0.0) + gaps * self.digit_gap_ratio
 
@@ -130,7 +130,7 @@ class DisplayLayout:
         return self.digits - self.decimals - 1
 
     def format_value(self, value: float) -> str:
-        """Wert so darstellen, wie die Anzeige ihn zeigen wuerde."""
+        """Wert so darstellen, wie die Anzeige ihn zeigen würde."""
         decimals = self.decimals if self.decimals is not None else 0
         text = f"{abs(value):.{decimals}f}".replace(".", "")
         text = text[-self.digits :].rjust(self.digits, "0")
@@ -157,9 +157,9 @@ class DisplayLayout:
 
 @dataclass(frozen=True, slots=True)
 class CharLayout:
-    """Bestaetigtes Profil einer Punktraster-Anzeige fuer `DotMatrixReader`.
+    """Bestätigtes Profil einer Punktraster-Anzeige für `DotMatrixReader`.
 
-    `grid` stammt aus dem vom Bediener bestaetigten `SessionProfile`
+    `grid` stammt aus dem vom Bediener bestätigten `SessionProfile`
     (Ernte Phase 1, Entscheidung 2), `unit` aus dem Profil - gelesen wird sie
     nicht (OQ-17). `classified_cells` = Vorzeichen + Zahlenblock + Trennzelle.
     """
@@ -168,17 +168,17 @@ class CharLayout:
     unit: str
     format_id: str = "gsv2as_v1"
     classified_cells: int = 9
-    #: Zellen, die immer leer sein muessen ("Rest", Zellen 9-15 abzueglich der
+    #: Zellen, die immer leer sein müssen ("Rest", Zellen 9-15 abzüglich der
     #: nicht gelesenen Einheit 9-12) - siehe `DotMatrixReader.read`.
     blank_cells: tuple[int, ...] = (13, 14, 15)
 
     @classmethod
     def from_profile(cls, profile: SessionProfile, unit: str) -> CharLayout:
-        """Baut ein `CharLayout` aus einem bestaetigten `SessionProfile`.
+        """Baut ein `CharLayout` aus einem bestätigten `SessionProfile`.
 
-        Wirft `ValueError`, wenn das Profil das Aufloesungs-Gate nicht
-        bestanden hat (`resolution_ok` False) oder nicht bestaetigt wurde
-        (`confirmed_by` leer) - ein unbestaetigtes Profil darf nie fuer den
+        Wirft `ValueError`, wenn das Profil das Auflösungs-Gate nicht
+        bestanden hat (`resolution_ok` False) oder nicht bestätigt wurde
+        (`confirmed_by` leer) - ein unbestätigtes Profil darf nie für den
         Leser verwendet werden (Konzept.md §4, Ernte Phase 1 Entscheidung 2)."""
         if not profile.resolution_ok:
             raise ValueError("Profil nicht bestaetigt: resolution_ok ist False")

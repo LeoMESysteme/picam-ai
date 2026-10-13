@@ -4,7 +4,8 @@
  * Teile mit "tp-" sind Gegenstände (Gerät, LCD, Kamerabild) und behalten ihre
  * Farbe in beiden Themes. */
 
-.tour {
+.tour,
+.tour-figure {
   --tour-flow: #0b7f8a;
   --tour-flow-soft: rgba(11, 127, 138, .14);
   --tour-valid: #1d7336;
@@ -22,7 +23,8 @@
   --tour-stage-grid: rgba(0, 0, 0, .045);
 }
 
-[data-md-color-scheme="slate"] .tour {
+[data-md-color-scheme="slate"] .tour,
+[data-md-color-scheme="slate"] .tour-figure {
   --tour-flow: #4cc9d3;
   --tour-flow-soft: rgba(76, 201, 211, .16);
   --tour-valid: #6fd38a;
@@ -217,7 +219,8 @@
   color: var(--tour-bad);
 }
 
-.tour-ui :focus-visible {
+.tour-ui :focus-visible,
+.tour-figure-ui :focus-visible {
   outline: 2px solid var(--tour-flow);
   outline-offset: 2px;
 }
@@ -609,4 +612,44 @@
     inset: 0;
     height: 100%;
   }
+}
+
+/* ------------------------------------------- Abbildung (tour-figure) -- */
+/* Eine Tour-Szene in einer normalen Doku-Seite (tour.js, Klasse Figure).
+ * Zensical stellt figure zentriert und schmal; die Bühne braucht die volle
+ * Breite der Textspalte. */
+
+.md-typeset .tour-figure {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  margin: 1.4em 0 1.6em;
+}
+
+.tour-figure-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem 1rem;
+  margin-top: .45rem;
+}
+
+.md-typeset .tour-figure-replay {
+  height: 1.8rem;
+  padding: 0 .7rem;
+  font-size: .72rem;
+  cursor: pointer;
+}
+
+.md-typeset .tour-figure-link {
+  font-size: .72rem;
+}
+
+.md-typeset .tour-figure figcaption {
+  max-width: none;
+  margin: .5em 0 0;
+  text-align: left;
+  font-style: normal;
+  color: var(--md-default-fg-color--light);
 }

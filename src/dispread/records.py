@@ -1,11 +1,11 @@
 """Der interne Datensatz aus Konzept.md §8 und die Zeitstempel-Semantik aus §6.
 
 Dies ist der stabile Vertrag zwischen den Verarbeitungsstufen. Alle Datenklassen
-sind frozen: ein einmal erzeugter ValueRecord ist Beweismittel dafuer, was das
-System erkannt hat, und wird nachtraeglich von niemandem veraendert - vom
+sind frozen: ein einmal erzeugter ValueRecord ist Beweismittel dafür, was das
+System erkannt hat, und wird nachträglich von niemandem verändert - vom
 Ausgabeadapter am allerwenigsten.
 
-Bilddaten reisen ausschliesslich im Frame (siehe frames/types.py), nie hier.
+Bilddaten reisen ausschließlich im Frame (siehe frames/types.py), nie hier.
 """
 
 from __future__ import annotations
@@ -21,24 +21,24 @@ SCHEMA_VERSION = 1
 class TimeBaseKind(StrEnum):
     """Herkunft und damit Belastbarkeit eines Aufnahmezeitstempels.
 
-    Pflichtfeld in jedem Frame und jedem ValueRecord. Es wird nie geschoent:
-    eine synthetische Quelle darf keine Sensorqualitaet behaupten. Damit ist im
-    Datenstrom immer erkennbar, ob ein Zeitstempel eine Zeitaussage traegt -
+    Pflichtfeld in jedem Frame und jedem ValueRecord. Es wird nie geschönt:
+    eine synthetische Quelle darf keine Sensorqualität behaupten. Damit ist im
+    Datenstrom immer erkennbar, ob ein Zeitstempel eine Zeitaussage trägt -
     Konzept.md §6 strukturell durchgesetzt statt nur dokumentarisch.
     """
 
-    #: libcamera SensorTimestamp. Auf diesem Pi 5 in der CLOCK_BOOTTIME-Domaene
+    #: libcamera SensorTimestamp. Auf diesem Pi 5 in der CLOCK_BOOTTIME-Domäne
     #: (gemessen 2026-09-07, siehe docs/TIMING.md).
     SENSOR_BOOTTIME = "sensor_boottime"
-    #: Aus einer Aufnahmesession zurueckgelesener, originaler SensorTimestamp.
-    #: Traegt die Zeitaussage der Aufnahme, aber nicht die des Abspielzeitpunkts.
+    #: Aus einer Aufnahmesession zurückgelesener, originaler SensorTimestamp.
+    #: Trägt die Zeitaussage der Aufnahme, aber nicht die des Abspielzeitpunkts.
     REPLAY_RECORDED = "replay_recorded"
-    #: Generiert. Traegt KEINE Zeitaussage.
+    #: Generiert. Trägt KEINE Zeitaussage.
     SYNTHETIC = "synthetic"
-    #: Aus der Dateizeit abgeleitet. Traegt praktisch keine Zeitaussage.
+    #: Aus der Dateizeit abgeleitet. Trägt praktisch keine Zeitaussage.
     FILE_MTIME = "file_mtime"
     #: V4L2-Pufferzeitstempel der UVC-Kamera (uvcvideo, clock=CLOCK_MONOTONIC,
-    #: gemessen 2026-09-25). Roh gespeichert; nach CLOCK_BOOTTIME nur ueber
+    #: gemessen 2026-09-25). Roh gespeichert; nach CLOCK_BOOTTIME nur über
     #: `to_boottime_ns` mit dem in session.json gemessenen Versatz.
     V4L2_MONOTONIC = "v4l2_monotonic"
 
@@ -52,8 +52,8 @@ class TimeBaseKind(StrEnum):
         )
 
 
-#: Weichen die bei Start und Ende gemessenen Versaetze BOOTTIME-MONOTONIC
-#: staerker ab, lag ein Suspend dazwischen - Umrechnung wird abgelehnt.
+#: Weichen die bei Start und Ende gemessenen Versätze BOOTTIME-MONOTONIC
+#: stärker ab, lag ein Suspend dazwischen - Umrechnung wird abgelehnt.
 SUSPEND_TOLERANCE_NS = 1_000_000
 
 
@@ -61,7 +61,7 @@ def to_boottime_ns(timestamp: dict[str, Any], session: dict[str, Any] | None) ->
     """Aufnahmezeitstempel (Timestamp.to_dict()-Form) nach CLOCK_BOOTTIME.
 
     Einzige Umrechnungsstelle (Spec 2026-09-25, Abschnitt 2). Lehnt ab statt
-    zu raten: fehlender Versatz, Suspend waehrend der Aufnahme oder eine
+    zu raten: fehlender Versatz, Suspend während der Aufnahme oder eine
     Zeitbasis ohne BOOTTIME-Bezug -> ValueError.
     """
     base = timestamp.get("base")
@@ -89,9 +89,9 @@ def to_boottime_ns(timestamp: dict[str, Any], session: dict[str, Any] | None) ->
 class TimestampSemantics(StrEnum):
     """Worauf sich ein Zeitstempel physikalisch bezieht.
 
-    Platzhalter fuer Messung M2 (docs/TIMING.md). Vor der Messung steht hier
-    UNKNOWN, danach der belegte Wert. Ohne dieses Feld muesste die halbe
-    Pipeline angefasst werden, sobald die Semantik geklaert ist.
+    Platzhalter für Messung M2 (docs/TIMING.md). Vor der Messung steht hier
+    UNKNOWN, danach der belegte Wert. Ohne dieses Feld müsste die halbe
+    Pipeline angefasst werden, sobald die Semantik geklärt ist.
     """
 
     UNKNOWN = "unknown"
@@ -104,8 +104,8 @@ class TimestampSemantics(StrEnum):
 class ValueStatus(StrEnum):
     """Zustandslogik aus Konzept.md §7.
 
-    TRANSITION und UNREADABLE sind ausdruecklich keine Fehler des Systems,
-    sondern Aussagen ueber die Anzeige. STALE bedeutet: es gibt keinen
+    TRANSITION und UNREADABLE sind ausdrücklich keine Fehler des Systems,
+    sondern Aussagen über die Anzeige. STALE bedeutet: es gibt keinen
     aktuellen Wert - der letzte bekannte darf nicht als aktueller gelten.
     """
 
@@ -119,9 +119,9 @@ class ValueStatus(StrEnum):
 class Timestamp:
     """Zeitpunkt mit dokumentierter Zeitbasis, Bedeutung und Unsicherheit.
 
-    Konzept.md §6 verlangt, Bedeutung und Genauigkeit getrennt zu fuehren.
+    Konzept.md §6 verlangt, Bedeutung und Genauigkeit getrennt zu führen.
     `uncertainty_ns` ist None, solange sie nicht gemessen wurde - nicht 0.
-    Eine unbekannte Unsicherheit als 0 auszugeben waere eine Falschaussage.
+    Eine unbekannte Unsicherheit als 0 auszugeben wäre eine Falschaussage.
     """
 
     value_ns: int
@@ -131,7 +131,7 @@ class Timestamp:
 
     @classmethod
     def now_monotonic(cls) -> Timestamp:
-        """Jetzt, in der monotonen Domaene - fuer Verarbeitungsmarken."""
+        """Jetzt, in der monotonen Domäne - für Verarbeitungsmarken."""
         return cls(
             value_ns=time.monotonic_ns(),
             base=TimeBaseKind.SENSOR_BOOTTIME,
@@ -151,9 +151,9 @@ class Timestamp:
 class PipelineTrace:
     """Verarbeitungsmarken je Frame, alle in CLOCK_MONOTONIC.
 
-    Ab Tag 1 mitgefuehrt, weil sich diese Instrumentierung nachtraeglich nicht
-    ohne Umbau einziehen laesst (Messung M4 in docs/TIMING.md). Die Umrechnung
-    nach UTC passiert ausschliesslich in timebase.py, nie hier.
+    Ab Tag 1 mitgeführt, weil sich diese Instrumentierung nachträglich nicht
+    ohne Umbau einziehen lässt (Messung M4 in docs/TIMING.md). Die Umrechnung
+    nach UTC passiert ausschließlich in timebase.py, nie hier.
     """
 
     t_dequeue_ns: int
@@ -163,7 +163,7 @@ class PipelineTrace:
     t_gate_done_ns: int | None = None
     t_record_built_ns: int | None = None
     queue_depth: int = 0
-    #: Verworfene Frames werden gezaehlt, nicht stillschweigend ignoriert.
+    #: Verworfene Frames werden gezählt, nicht stillschweigend ignoriert.
     dropped_frames: int = 0
 
     def stage_durations_us(self) -> dict[str, float]:
@@ -191,27 +191,25 @@ class PipelineTrace:
 class ValueRecord:
     """Der interne Datensatz aus Konzept.md §8, plus Nachvollziehbarkeit.
 
-    Die neun Pflichtfelder des Konzepts stehen zuerst. Die uebrigen Felder sind
+    Die neun Pflichtfelder des Konzepts stehen zuerst. Die übrigen Felder sind
     eine bewusste Erweiterung: ohne sie ist im Nachhinein nicht rekonstruierbar,
     warum ein Wert freigegeben oder abgelehnt wurde.
 
     Erzeuger und Schreibrechte (siehe docs/project_history.md):
 
-    ==========================  =========================  ====================
-    Feld                        Erzeuger                   darf aendern
-    ==========================  =========================  ====================
-    frame_sequence              FrameSource                niemand
-    capture_timestamp           FrameSource + TimeBase     niemand, nie Adapter
-    value, unit, raw_text       ValueReader                niemand
-    status, confidence, ...     ReleaseGate                niemand
-    profile_id                  Session / ProfileStore     niemand
-    trigger_sequence            FrameSource / Trigger      niemand
-    result_timestamp            Pipeline beim Abschluss    niemand
-    ==========================  =========================  ====================
+    | Feld | Erzeuger | darf ändern |
+    |---|---|---|
+    | `frame_sequence` | FrameSource | niemand |
+    | `capture_timestamp` | FrameSource + TimeBase | niemand, nie ein Adapter |
+    | `value`, `unit`, `raw_text` | ValueReader | niemand |
+    | `status`, `confidence`, ... | ReleaseGate | niemand |
+    | `profile_id` | Session / ProfileStore | niemand |
+    | `trigger_sequence` | FrameSource / Trigger | niemand |
+    | `result_timestamp` | Pipeline beim Abschluss | niemand |
 
-    Adapterzustand (Kanal, Sendezeit, Telegrammtext, Retries) gehoert
-    ausdruecklich NICHT hierher, sondern in TxReceipt. Der Datensatz belegt,
-    was das System erkannt hat; der Receipt, was ueber die Leitung ging.
+    Adapterzustand (Kanal, Sendezeit, Telegrammtext, Retries) gehört
+    ausdrücklich NICHT hierher, sondern in TxReceipt. Der Datensatz belegt,
+    was das System erkannt hat; der Receipt, was über die Leitung ging.
     Vermischt sind beide als Nachweis unbrauchbar.
     """
 
@@ -230,12 +228,12 @@ class ValueRecord:
     schema_version: int = SCHEMA_VERSION
     #: Exakt wie gelesen, inklusive Vorzeichen und Dezimalzeichen.
     raw_text: str | None = None
-    #: Maschinenlesbare Ablehnungsgruende. Bei status != VALID nie leer.
+    #: Maschinenlesbare Ablehnungsgründe. Bei status != VALID nie leer.
     reject_reasons: tuple[str, ...] = ()
-    #: Anzahl Frames der Mehrbildbestaetigung ...
+    #: Anzahl Frames der Mehrbildbestätigung ...
     frames_confirmed: int = 1
     #: ... und die Zeitspanne, die sie gekostet hat. Konzept.md §7 verlangt,
-    #: diese Verzoegerung zu dokumentieren und im Zeitbezug zu beruecksichtigen.
+    #: diese Verzögerung zu dokumentieren und im Zeitbezug zu berücksichtigen.
     confirmation_span_ns: int = 0
     trace: PipelineTrace | None = None
     component_versions: dict[str, str] = field(default_factory=dict)
@@ -245,7 +243,7 @@ class ValueRecord:
         if self.status is not ValueStatus.VALID and not self.reject_reasons:
             raise ValueError(f"status={self.status.value} ohne reject_reasons - Grund ist Pflicht")
         # Invariante aus Konzept.md §7: ein veralteter oder unlesbarer Zustand
-        # darf keinen Zahlenwert als aktuellen gueltigen Wert mitfuehren.
+        # darf keinen Zahlenwert als aktuellen gültigen Wert mitführen.
         if self.status in (ValueStatus.STALE, ValueStatus.UNREADABLE) and self.value is not None:
             raise ValueError(
                 f"status={self.status.value} mit value={self.value!r}: ein veralteter oder "
@@ -253,7 +251,7 @@ class ValueRecord:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        """Flache, JSON-serialisierbare Abbildung fuer das JSONL-Log."""
+        """Flache, JSON-serialisierbare Abbildung für das JSONL-Log."""
         return {
             "schema_version": self.schema_version,
             "frame_sequence": self.frame_sequence,
@@ -311,10 +309,10 @@ class ValueRecord:
 
 
 class InvalidValuePolicy(StrEnum):
-    """Wie ungueltige Werte nach aussen abgebildet werden.
+    """Wie ungültige Werte nach außen abgebildet werden.
 
     Konzept.md §11 Frage 6 ist offen (OQ-06): welche Variante GSVmulti und die
-    Kalibrierauswertung tatsaechlich brauchen, ist unbekannt. Deshalb ist das
+    Kalibrierauswertung tatsächlich brauchen, ist unbekannt. Deshalb ist das
     ein austauschbarer Adapterparameter und keine harte Entscheidung im Code.
     """
 
@@ -328,10 +326,10 @@ class InvalidValuePolicy(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TxReceipt:
-    """Was tatsaechlich ueber die Leitung ging - adapterlokal.
+    """Was tatsächlich über die Leitung ging - adapterlokal.
 
     Absichtlich getrennt vom ValueRecord: hier steht der Sendezeitpunkt, dort
-    der Aufnahmezeitpunkt. Wer beides in einem Objekt fuehrt, kann spaeter
+    der Aufnahmezeitpunkt. Wer beides in einem Objekt führt, kann später
     nicht mehr belegen, welche Zeit welche war.
     """
 

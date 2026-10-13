@@ -70,6 +70,12 @@ Zwei harte Sätze:
   diese prüfen, dann `./scripts/tour-facts.py --write`. Zeigt eine Szene einen
   neuen Wert aus dem Code, ihn dort als Fakt aufnehmen statt ihn
   einzutragen.
+  Einzelne Szenen stehen als Abbildung auch in anderen Seiten
+  (`<figure class="tour-figure" data-scene="<h3-ID>">`, z. B. in
+  `docs/uebersicht/` und `docs-site/api/vertraege.md`). Bildunterschriften
+  beschreiben nur, Zahlen zeigt die Bühne aus den Fakten. Eine Szenenänderung
+  wirkt deshalb auch dort; `grep -rn 'data-scene="<ID>"' docs docs-site/api`
+  zeigt, wo. Der Docs-Test lässt nur IDs zu, die es als Tour-Schritt gibt.
 * Vor dem Merge von Doku-Änderungen `./scripts/docs-site.sh build -s` und
   `npx playwright test -c playwright.docs.config.ts` ausführen. Der Build
   bricht bei einem veralteten OQ-Index ab; die Browsertests prüfen Filter,

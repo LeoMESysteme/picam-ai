@@ -19,6 +19,10 @@ Kette an einem synthetischen Beispiel.
 | Freigeben | ReadResult und Aufnahmezeit → GateDecision | ReleaseGate | [Freigabe-API](../../api/validate.md) |
 | Dokumentieren | Entscheidung → ValueRecord → Ausgaben | Pipeline und ValueSink | [Datensatz](../../api/vertraege.md), [Ausgabe](../../api/sink.md) |
 
+<figure class="tour-figure" data-scene="ueberblick-weg" markdown="1">
+<figcaption markdown="span">Der Weg eines Werts von der Anzeige bis zum Datensatz. Die Kalibrierreferenz läuft getrennt darunter und wird erst nachträglich über die Zeitstempel zugeordnet.</figcaption>
+</figure>
+
 Der bevorzugte Betrieb bestätigt die ROI einmalig
 ([Konzept §4](../../Konzept.md#4-bedienkonzept-fur-wechselnde-gerate)).
 Ein Fundkandidat ist damit noch keine bestätigte Geometrie. Die
@@ -37,6 +41,10 @@ Profil, muss ihre Herkunft in den Diagnosen erkennbar sein
 ([Kapitel 1](../anleitung/01-kette-verstehen.md),
 [OQ-17](../open-questions.md#oq-17)).
 
+<figure class="tour-figure" data-scene="erkennung-format" markdown="1">
+<figcaption markdown="span">Erst wenn jedes Kästchen sicher erkannt ist und die Zeichenfolge zur Formatregel des Geräts passt, gilt der Wert als gelesen. Ein einziges unsicheres Kästchen verwirft den ganzen Wert.</figcaption>
+</figure>
+
 Der Leser kennt **keinen Referenzwert**. Die Signaturen von
 <code>ValueReader.read</code> und <code>ReleaseGate.evaluate</code> lassen ihn
 nicht zu. Ein Vergleich mit der Kalibrierreferenz findet erst außerhalb des
@@ -44,6 +52,10 @@ Erkennungspfads statt. Das verhindert, dass eine vermeintlich plausible
 Referenz den DUT-Wert still korrigiert
 ([Konzept §7](../../Konzept.md#7-erkennungssicherheit-und-fehlerbehandlung),
 [Nachweistabelle](../VALIDATION.md#nachweise-gegen-die-stillen-fehlermodi-aus-konzept-7)).
+
+<figure class="tour-figure" data-scene="regeln-referenz" markdown="1">
+<figcaption markdown="span">Leser und Freigabe bekommen den Referenzwert gar nicht übergeben; ihre Signaturen lassen ihn nicht zu.</figcaption>
+</figure>
 
 ## Wie das Gate entscheidet
 
@@ -56,6 +68,10 @@ automatisch vergleichbare Margen: Der Dot-Matrix-Leser verwendet eigene
 Schwellen; die Bedeutung seiner Marge ist in der
 [Freigabe-API](../../api/validate.md) dokumentiert. [Kapitel 8](../anleitung/08-ocr-backends.md)
 erklärt, welche Evidenz ein neuer Leser liefern muss.
+
+<figure class="tour-figure" data-scene="erkennung-freigabe" markdown="1">
+<figcaption markdown="span">Gültig oder Übergang: Verlangt die Freigabe mehrere gleiche Bilder hintereinander, heißt der Wert bis dahin Übergang. Ein echter Sprung wird danach übernommen, nicht geglättet.</figcaption>
+</figure>
 
 | Situation | Status oder Reaktion | Was im Nachweis steht |
 | --- | --- | --- |
@@ -71,6 +87,10 @@ Ablehnungen entscheidet das Gate anhand der Aufnahmezeit, ob
 <code>unreadable</code> oder <code>stale</code> vorliegt. Diese Unterscheidung
 steht im [Pipeline-Code](../../api/pipeline.md) und in der
 [Freigabe-API](../../api/validate.md).
+
+<figure class="tour-figure" data-scene="erkennung-veraltet" markdown="1">
+<figcaption markdown="span">Unlesbar und veraltet: Ist die Anzeige verdeckt, gibt es keinen Zahlenwert, auch nicht den letzten gültigen. Hält der Zustand länger an als <code>stale_after</code>, wird aus „unlesbar“ „veraltet“.</figcaption>
+</figure>
 
 Eine Mehrbildbestätigung kann die Ausgabe verzögern. Ihr
 <code>confirmation_span_ns</code> gehört in den

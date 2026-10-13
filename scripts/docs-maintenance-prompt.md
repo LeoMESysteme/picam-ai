@@ -79,6 +79,10 @@ Tourtext stammen aus `scripts/tour-facts.py`; der Gate prüft sie vor deinem
 Start. Meldet der Build trotzdem eine Abweichung, ändere nichts dafür, denn
 Szenen und `tour-facts.json` sind nicht freigegeben. Nenne die gemeldeten
 Tour-Schritte in der Zusammenfassung.
+Abbildungen der Form `<figure class="tour-figure" data-scene="...">` in
+anderen Seiten zeigen dieselben Szenen: `data-scene` nicht ändern und keine
+neuen Szenennamen erfinden. Die Bildunterschrift darfst du anpassen, schreibe
+aber keine Zahlen hinein.
 
 Der Lauf ist absichtlich klein. Arbeite allein, wenn die Änderung überschaubar
 ist. Nur bei mindestens vier voneinander unabhängigen betroffenen Bereichen

@@ -3,6 +3,30 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Szenen als Abbildungen, Verträge-Seite lesbar)
+
+**Problem:** Die Seite „Verträge und Datensätze“ zeigte die Tabelle der
+Schreibrechte im `ValueRecord`-Docstring als rohe `=====`-Zeilen, und die
+Docstrings von `records`, `layout`, `charcells` und `session_profile`
+schrieben Umlaute als „ae/oe/ue“ („dafuer“). Eine Erklärung der neun Felder
+fehlte. Die Animationen der Projekt-Tour gab es nur auf der Tour-Seite.
+
+**Änderung:** Tabelle als Markdown, Umlaute in Docstrings und Kommentaren
+dieser vier Module (der Code ist unverändert, AST-Vergleich ohne
+Docstrings). `tour.js` kann einzelne Szenen als Abbildung in jede Doku-Seite
+setzen (`<figure class="tour-figure" data-scene="…">`): Sie spielt, sobald
+sie zur Hälfte sichtbar ist, hat einen Knopf zum Wiederholen und einen Link
+auf den Schritt in der Tour. Die Verträge-Seite beginnt mit Abbildung und
+einer handgeschriebenen Erklärung der neun Pflichtfelder; Messpfad,
+Zeitstempel sowie Daten und Abnahme haben 12 weitere Abbildungen. Zwei neue
+Browsertests prüfen, dass jede Abbildung eine existierende Tour-Szene zeigt
+und dass Abspielen, Wiederholen und der Tour-Link funktionieren.
+
+**Konsequenz:** Ändert sich eine Szene, ändert sie sich auch in den Seiten,
+die sie einbetten (AGENTS.md nennt die Suche danach). Bildunterschriften
+enthalten keine Zahlen; die kommen weiter aus `tour-facts.json`. Die übrigen
+`#:`-Kommentare an Attributen erscheinen auf der API-Seite weiterhin nicht,
+weil mkdocstrings sie nicht auswertet.
 ## 0.1.0.dev0 — 2026-10-13 (Codex-Doku-Pflege: Korrekturrunden und Vorabprüfung)
 
 **Problem:** Ein vom Gate abgelehnter Codex-Stand war verloren: kein Patch,
