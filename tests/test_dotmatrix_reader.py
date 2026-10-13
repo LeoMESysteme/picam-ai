@@ -3,30 +3,18 @@ import time
 
 import numpy as np
 import pytest
-from dotmatrix_helpers import GRID, render
+from dotmatrix_helpers import GRID, render, synthetic_reader
 
 from dispread.layout import CharLayout
 from dispread.ocr import ValueReader
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
-from dispread.ocr.dotmatrix_font import CLASSES
-from dispread.ocr.dotmatrix_sampling import normalized, sample_image
-from dispread.ocr.dotmatrix_templates import build_templates
 
 LAYOUT = CharLayout(grid=GRID, unit="mV/V")
-TRAIN_TEXTS = ["+0.60972 ", "+ 1.2345 ", "+ 67.890 ", "+  988.5 ", "+ 3456.7 ", "+0.11111 "]
 
 
 @pytest.fixture(scope="module")
 def reader():
-    rng = np.random.default_rng(7)
-    samples = {c: [] for c in CLASSES}
-    for text in TRAIN_TEXTS * 6:
-        img = render(text, blur=rng.uniform(0.3, 1.0))
-        img = np.clip(img + rng.normal(0, 4, img.shape), 0, 255).astype(np.uint8)
-        n = normalized(sample_image(img, GRID, range(9)))
-        for i, ch in enumerate(text):
-            samples[ch].append(n[i])
-    return DotMatrixReader(build_templates(samples, ("synthetisch",)))
+    return synthetic_reader()
 
 
 @pytest.mark.parametrize("cells,expected", [
