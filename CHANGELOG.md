@@ -3,6 +3,46 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-13 (Codex-Doku-Pflege: Korrekturrunden und Vorabprüfung)
+
+**Problem:** Ein vom Gate abgelehnter Codex-Stand war verloren: kein Patch,
+keine zweite Chance, die Antwort von Codex nur im privaten Log. Eine
+Abweichung der Tour-Fakten ließ Codex täglich laufen und erst im Build
+scheitern. Die Browsertests liefen im Gate mit mehreren Workern auf dem
+CPU-begrenzten Runner.
+
+**Änderung:** `scripts/docs-maintenance.py` prüft OQ-Index und Tour-Fakten
+in `probe`, vor Codex. Gate-Ablehnungen gehen als Meldung an dieselbe
+Session zurück (`codex exec resume`, höchstens zwei Runden à 8 min, Sandbox
+ausdrücklich `workspace-write`). Nach der letzten Ablehnung wird der Stand
+als `docs-maintenance.patch` gesichert und hochgeladen. Gate-Ausgaben,
+Token-Summe aller Runden und die letzte Antwort von Codex stehen im
+Job-Log. Playwright läuft mit `--workers=1`. Workflow-Limit 60 min. Der
+Prompt schützt die Tour-Struktur (Hüllen, Schrittzahl) und kündigt die
+Korrekturrunden an. Tests in `tests/test_docs_maintenance.py`.
+
+**Konsequenz:** Kleine Fehler am eigenen Stand behebt der Lauf selbst;
+Code, Szenen und Tests bleiben außerhalb seiner Reichweite. Eine
+Korrekturrunde sendet den Verlauf erneut (überwiegend Cache).
+
+## 0.1.0.dev0 — 2026-10-13 (Codex-Doku-Pflege: Log-Leser für den Runner)
+
+**Problem:** Ob der tägliche Codex-Pflegelauf etwas geändert hat oder warum
+nicht, war von der Entwickler-Session aus nicht feststellbar. Codex' Antwort
+und der Pflegezustand liegen nur im geschützten `CODEX_HOME` des Runners,
+und Forgejo 15 gibt Schritt-Logs nicht per API-Token heraus.
+
+**Änderung:** `scripts/picam-codex-logs` liest als root-eigene, per sudoers
+freigegebene Kopie den Pflegezustand und fasst `last-codex-run.jsonl`
+zusammen (Token, Dateiänderungen, fehlgeschlagene Kommandos, letzte
+Antwort). Es nimmt keine Argumente, läuft nach dem Start als
+`picam-codex-runner`, folgt keinen Symlinks und entfernt Steuerzeichen.
+Einrichtung in `docs/HOSTING.md`; Tests in `tests/test_picam_codex_logs.py`.
+
+**Konsequenz:** Ergebnis und Begründung eines Pflegelaufs sind ohne
+Browser prüfbar; Lauf-Status kommt per Read-only-Token aus der Forgejo-API.
+Die Gate-Ausgaben selbst bleiben nur auf der Actions-Seite sichtbar.
+
 ## 0.1.0.dev0 — 2026-10-12 (Sites: Forgejo als Hauptquelle und vertiefte Statistiken)
 
 **Problem:** GitHub ist nur Mirror; dessen Actions bildeten den echten

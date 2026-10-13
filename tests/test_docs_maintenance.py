@@ -253,20 +253,17 @@ def test_no_edit_audit_does_not_mark_broken_site_as_current(tmp_path: Path):
     _git(repo, "commit", "-m", "initial")
     _git(repo, "remote", "add", "origin", str(remote))
     _git(repo, "push", "origin", "master")
-    codex = tmp_path / "fake-codex"
-    codex.write_text(
-        '#!/bin/sh\n'
-        'printf "%s\\n" \'{"type":"item.completed","item":{"type":"command_execution",'
-        '"status":"completed","exit_code":0}}\'\n'
-        'printf "%s\\n" \'{"type":"turn.completed","usage":{}}\'\n'
-    )
-    codex.chmod(0o755)
+    calls = tmp_path / "calls.txt"
+    codex = _fake_codex(tmp_path, calls)
     state = tmp_path / "state.json"
     maintenance.probe(repo, state)
 
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(maintenance.GateRejected, match="docs-site.sh build"):
         maintenance.audit(repo, state, str(codex), publish_requested=True)
     assert not state.exists()
+    invocations = calls.read_text().splitlines()
+    assert len(invocations) == 1 + maintenance.MAX_REPAIR_ROUNDS
+    assert all(" resume " in line and "thread-1" in line for line in invocations[1:])
 
 
 def test_successful_audit_and_publish_advances_state_only_after_push(tmp_path: Path, monkeypatch):
@@ -314,3 +311,117 @@ def test_successful_audit_and_publish_advances_state_only_after_push(tmp_path: P
 
     assert _git(remote, "rev-parse", "refs/heads/master") == candidate
     assert maintenance.load_json(state)["last_audited"] == candidate
+
+
+def _fake_codex(tmp_path: Path, calls: Path, on_first: str = "", on_resume: str = "") -> Path:
+    """Shell stand-in for `codex exec`: logs its argv, runs a hook, emits JSONL."""
+    codex = tmp_path / "fake-codex"
+    codex.write_text(
+        '#!/bin/sh\n'
+        f'echo "$*" >> {calls}\n'
+        f'case "$*" in *" resume "*) {on_resume or ":"} ;; *) {on_first or ":"} ;; esac\n'
+        'printf "%s\\n" \'{"type":"thread.started","thread_id":"thread-1"}\'\n'
+        'printf "%s\\n" \'{"type":"item.completed","item":{"type":"command_execution",'
+        '"status":"completed","exit_code":0}}\'\n'
+        'printf "%s\\n" \'{"type":"item.completed","item":{"type":"agent_message","text":"fertig"}}\'\n'
+        'printf "%s\\n" \'{"type":"turn.completed","usage":{"input_tokens":2}}\'\n'
+    )
+    codex.chmod(0o755)
+    return codex
+
+
+def _repo_with_remote(tmp_path: Path, files: dict[str, str]) -> Path:
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    _git(remote, "init", "--bare", "--initial-branch=master")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--initial-branch=master")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    for name, content in files.items():
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        if name.endswith((".sh", ".py")):
+            path.chmod(0o755)
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    _git(repo, "remote", "add", "origin", str(remote))
+    _git(repo, "push", "origin", "master")
+    return repo
+
+
+_BASE_FILES = {
+    "docs/anleitung/README.md": "guide\n",
+    "docs/status.md": "before\n",
+    "scripts/docs-maintenance-prompt.md": "Review the docs.\n",
+}
+
+
+def test_resume_command_keeps_the_write_sandbox_and_session(tmp_path: Path):
+    command = maintenance.codex_resume_command("/usr/bin/codex", tmp_path, "thread-1")
+    assert command[:3] == ["/usr/bin/codex", "exec", "resume"]
+    assert 'sandbox_mode="workspace-write"' in command  # resume alone would fall back to read-only
+    assert command[-2:] == ["thread-1", "-"]
+    assert "agents.enabled=true" in command
+    assert "--ephemeral" not in command
+
+
+def test_codex_usage_adds_up_all_rounds(tmp_path: Path):
+    log = tmp_path / "codex.jsonl"
+    log.write_text(
+        '{"type":"thread.started","thread_id":"abc"}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":50,"cached_input_tokens":20,"output_tokens":7}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":5,"cached_input_tokens":2,"output_tokens":1}}\n',
+        encoding="utf-8",
+    )
+    assert maintenance.token_usage(log) == (55, 22, 8)
+    assert maintenance.codex_thread_id(log) == "abc"
+
+
+def test_gate_feedback_lets_codex_repair_its_edit(tmp_path: Path, monkeypatch):
+    repo = _repo_with_remote(tmp_path, _BASE_FILES)
+    calls = tmp_path / "calls.txt"
+    # First turn edits status.md but also touches code; the repair turn reverts it.
+    codex = _fake_codex(
+        tmp_path, calls,
+        on_first='printf "after\\n" > docs/status.md; mkdir -p src; echo x > src/hack.py',
+        on_resume="rm -rf src",
+    )
+    monkeypatch.setattr(maintenance, "_run_checked", lambda *args, **kwargs: None)
+    state = tmp_path / "state.json"
+    maintenance.probe(repo, state)
+
+    maintenance.audit(repo, state, str(codex), publish_requested=True)
+
+    assert _git(repo, "show", "--name-only", "--format=", "HEAD") == "docs/status.md"
+    assert len(calls.read_text().splitlines()) == 2
+
+
+def test_rejected_edit_is_kept_as_patch_after_last_repair(tmp_path: Path, monkeypatch):
+    repo = _repo_with_remote(tmp_path, _BASE_FILES)
+    codex = _fake_codex(tmp_path, tmp_path / "calls.txt", on_first='printf "after\\n" > docs/status.md')
+
+    def failing_build(command, repo, env=None):
+        if "build" in command:
+            raise maintenance.GateRejected("docs-site.sh build -s endete mit Exit 1")
+
+    monkeypatch.setattr(maintenance, "_run_checked", failing_build)
+    state = tmp_path / "state.json"
+    maintenance.probe(repo, state)
+
+    with pytest.raises(maintenance.GateRejected):
+        maintenance.audit(repo, state, str(codex), publish_requested=True)
+    patch = (repo / maintenance.FAILED_PATCH).read_text()
+    assert "docs/status.md" in patch and "+after" in patch
+
+
+def test_probe_stops_before_codex_when_tour_facts_are_stale(tmp_path: Path):
+    files = dict(_BASE_FILES)
+    files["scripts/tour-facts.py"] = "import sys\nprint('erkennung-zelle: Wert geaendert')\nsys.exit(1)\n"
+    repo = _repo_with_remote(tmp_path, files)
+
+    with pytest.raises(ValueError, match="erkennung-zelle"):
+        maintenance.probe(repo, tmp_path / "state.json")
+    assert not maintenance.metadata_path(repo).exists()

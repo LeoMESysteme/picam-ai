@@ -1395,3 +1395,34 @@ werden ohne pro Zeile angelegte Arrays gezählt. Quelltext mit Kommentaren
 und Leerzeilen wird nicht mit ausführbaren Codezeilen oder Qualität
 verwechselt. Spezifikation und Plan wurden unter bestehenden Identitäten
 im Repository und der Library korrigiert.
+
+## 2026-10-13 — Doku-Pflege: Korrekturrunden statt Einmal-Lauf
+
+### Entscheidung
+
+Der Codex-Doku-Lauf bekommt Ablehnungen des Gates zurück und darf sie in
+höchstens zwei fortgesetzten Runden derselben Session beheben
+(`codex exec resume`). Die Pfadgrenzen bleiben unverändert: Korrigiert wird
+nur innerhalb der Doku-Dateien, die der Gate ohnehin zulässt. Generierte
+Prüfungen, die Codex nicht beheben darf (OQ-Index, Tour-Fakten), stoppen
+den Job schon vor dem Codex-Aufruf.
+
+### Verworfene Alternativen
+
+* **Neue Session pro Korrektur:** verliert den Kontext des ersten Laufs und
+  müsste Repo und Auftrag erneut lesen; teurer und ohne Wissen, welche
+  Änderung abgelehnt wurde.
+* **Unbegrenzte Runden:** keine Kostengrenze, und ein im Doku-Rahmen
+  unlösbarer Fehler (etwa in einer Szene) würde den Lauf bis zum Timeout
+  ziehen.
+* **Codex darf auch Code, Szenen oder Tests anpassen:** der Job pusht ohne
+  Review direkt nach `master`, und das Gate prüft nur Doku (keine pytest-
+  oder Hardwareprüfung). Ein Code-Fix bräuchte einen eigenen Ablauf mit
+  Pull Request und menschlicher Abnahme.
+
+### Konsequenz
+
+Kleine eigene Fehler (Anker, Codeblock-Links, fehlender Status) behebt der
+Lauf selbst; abgelehnte Stände bleiben als Patch-Artefakt prüfbar. Eine
+Korrekturrunde kostet etwa so viel Eingabe-Token wie der bisherige Verlauf.
+
