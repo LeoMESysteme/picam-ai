@@ -167,6 +167,7 @@ class UvcSource:
         set_controls: Any = v4l2_set_controls,
         get_controls: Any = v4l2_get_controls,
         sysfs_root: Path = Path("/sys/class/video4linux"),
+        apply_controls: bool = True,
     ) -> None:
         self.settings = settings
         self._device_arg = device
@@ -175,6 +176,7 @@ class UvcSource:
         self._set_controls = set_controls
         self._get_controls = get_controls
         self._sysfs_root = sysfs_root
+        self._apply_controls = apply_controls
         self._capture: Any = None
         self._props: dict[str, int] = {}
         self.rejected_timestamps = 0
@@ -240,28 +242,40 @@ class UvcSource:
                     f"Aufloesung: soll {width}x{height}, ist {actual_width}x{actual_height}"
                 )
 
-            ordered_controls = self.settings.ordered_controls()
-            self._set_controls(self.device, ordered_controls)
+            if self._apply_controls:
+                ordered_controls = self.settings.ordered_controls()
+                self._set_controls(self.device, ordered_controls)
 
-            # I-2 final-review.md: ALLE gesetzten Regler zurueckgelesen und
-            # geprueft - Automatiken (MODE_CONTROLS) und feste Werte
-            # (FIXED_CONTROLS), nicht nur die vier SETTABLE_CONTROLS aus dem
-            # Profil. Ein `--set-ctrl` mit Exit 0, das der Treiber trotzdem
-            # klemmt oder ignoriert (z.B. Autofokus bleibt an, Zoom != 100),
-            # blieb vorher unbemerkt.
-            expected = dict(ordered_controls)
-            names = list(expected)
-            readback = self._get_controls(self.device, names)
-            self._controls_readback = dict(readback)
-            for name in names:
-                soll = expected[name]
-                ist = readback.get(name)
-                if ist != soll:
-                    raise UvcError(f"{name}: soll {soll}, ist {ist}")
+                # I-2 final-review.md: ALLE gesetzten Regler zurueckgelesen und
+                # geprueft - Automatiken (MODE_CONTROLS) und feste Werte
+                # (FIXED_CONTROLS), nicht nur die vier SETTABLE_CONTROLS aus dem
+                # Profil. Ein `--set-ctrl` mit Exit 0, das der Treiber trotzdem
+                # klemmt oder ignoriert (z.B. Autofokus bleibt an, Zoom != 100),
+                # blieb vorher unbemerkt.
+                expected = dict(ordered_controls)
+                names = list(expected)
+                readback = self._get_controls(self.device, names)
+                self._controls_readback = dict(readback)
+                for name in names:
+                    soll = expected[name]
+                    ist = readback.get(name)
+                    if ist != soll:
+                        raise UvcError(f"{name}: soll {soll}, ist {ist}")
         except Exception:
             capture.release()
             self._capture = None
             raise
+
+    def set_controls(self, controls: list[tuple[str, int]]) -> None:
+        """Regler am geoeffneten Geraet setzen (Fokus-Sweep der Einrichtung)."""
+        if self.device is None or self._capture is None:
+            raise UvcError("Kamera nicht geoeffnet - Regler koennen nicht gesetzt werden")
+        self._set_controls(self.device, list(controls))
+
+    def get_controls(self, names: list[str]) -> dict[str, int]:
+        if self.device is None or self._capture is None:
+            raise UvcError("Kamera nicht geoeffnet - Regler koennen nicht gelesen werden")
+        return dict(self._get_controls(self.device, list(names)))
 
     def close(self) -> None:
         if self._capture is not None:

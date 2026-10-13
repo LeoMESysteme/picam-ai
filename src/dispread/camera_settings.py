@@ -131,6 +131,19 @@ class CameraSettings:
         )
 
 
+def preview_settings() -> CameraSettings:
+    """Nur Format (1920x1080 YUYV, 30 fps), keine Reglerwerte.
+
+    Fuer die Vorschau vor dem Fokus-Sweep, wenn es noch kein bestaetigtes
+    Profil gibt. Nur zusammen mit `UvcSource(..., apply_controls=False)`
+    verwenden: `ordered_controls()` waere hier ein KeyError. So wird kein
+    Reglerwert erfunden (Modul-Docstring).
+    """
+    return CameraSettings(
+        model=STREAMCAM_MODEL, usb_id=STREAMCAM_USB_ID, size=(1920, 1080), fourcc="YUYV", fps=30, controls={}
+    )
+
+
 def load_camera_settings(path: Path) -> CameraSettings:
     """Liest eine JSON-Datei mit Top-Level-Schluessel "camera" (Profil v3 oder
     Ausgabe von harvest-setup focus). ValueError, wenn "camera" fehlt."""

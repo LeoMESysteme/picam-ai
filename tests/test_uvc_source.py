@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import pytest
 
-from dispread.camera_settings import CameraSettings
+from dispread.camera_settings import CameraSettings, preview_settings
 from dispread.frames import uvc_source
 from dispread.frames.uvc_source import UvcError, UvcSource, find_uvc_device, v4l2_get_controls
 from dispread.records import TimeBaseKind
@@ -236,3 +236,28 @@ def test_frames_endet_nach_read_fail_timeout(monkeypatch):
     frames = list(src.frames())
     assert frames == []
     assert src.describe()["read_error"] is not None
+
+
+def test_vorschau_setzt_keine_regler():
+    calls = []
+    src = UvcSource(preview_settings(), device="/dev/video8", capture_factory=lambda d: FakeCapture([1.0]),
+                    set_controls=lambda dev, c: calls.append(c), get_controls=lambda dev, n: {},
+                    sysfs_root=_DEFAULT_SYSFS_ROOT, apply_controls=False)
+    src.open()
+    assert calls == []
+    assert [f.frame_sequence for f in src.frames()] == [1]
+
+
+def test_regler_lassen_sich_im_betrieb_setzen_und_lesen():
+    src, calls = make_source(FakeCapture([1.0]))
+    src.open()
+    calls.clear()
+    src.set_controls([("focus_absolute", 40)])
+    assert calls == [("focus_absolute", 40)]
+    assert src.get_controls(["gain"]) == {"gain": 11}
+
+
+def test_regler_vor_dem_oeffnen_abgelehnt():
+    src, _ = make_source(FakeCapture([]))
+    with pytest.raises(UvcError, match="nicht geoeffnet"):
+        src.set_controls([("focus_absolute", 40)])

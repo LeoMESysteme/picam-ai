@@ -17,6 +17,10 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
   führt `dropped_frames` im Trace; `TrackedQuadLocator` führt das bestätigte
   Quad mit `QuadTracker` nach.
 
+* `UvcSource` kann ohne Regler öffnen (`apply_controls=False`,
+  `preview_settings()`) und Regler im Betrieb setzen/lesen; `CameraOwner`
+  ist der einzige Kamerahalter, zählt Lücken und meldet Ausfälle.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
