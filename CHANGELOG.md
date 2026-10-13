@@ -3,6 +3,27 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-13 (MEM-5: pytest im Worktree und temporäre Dateien)
+
+**Problem:** Die gemeinsame venv lud `dispread` aus dem Hauptcheckout,
+auch bei Tests im Worktree. Erfolgreiche pytest-Läufe hinterließen große
+temporäre Verzeichnisse auf der RAM-Disk `/tmp`.
+
+**Änderung:** pytest stellt das lokale `src/` vor den installierten
+Importpfad. Ein Regressionstest prüft den Ursprung von `dispread` gegen
+den Checkout neben dem Testverzeichnis. Temporäre Testdaten bleiben nur
+bei Fehlern erhalten, mit Aufbewahrungszahl 1.
+OQ-Tests starten Unterprozesse mit dem laufenden venv-Interpreter statt
+einer vorausgesetzten Worktree-venv. Der Workbench-Shutdown-Test nutzt
+einen relativen Unix-Socket im Testverzeichnis, sodass lange Worktree-Pfade
+die AF_UNIX-Pfadgrenze nicht überschreiten.
+
+**Konsequenz:** Worktree-Tests brauchen kein manuelles `PYTHONPATH=src`.
+Erfolgreiche Läufe räumen ihre pytest-Temporärdaten auf. Auf dem Pi wird
+weiterhin `TMPDIR=$PWD/var/tmp` gesetzt, damit auch während des Laufs keine
+Testdaten die RAM-Disk füllen. Kein festes `--basetemp`: pytest vergibt
+weiter getrennte, gegen paralleles Aufräumen gesperrte Laufverzeichnisse.
+
 ## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Abbildungen in der Anleitung)
 
 **Problem:** Die Anleitungskapitel erklärten Raster, Statuslogik,

@@ -9,6 +9,33 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-13 — pytest-Importpfad und Aufbewahrung im Worktree (MEM-5)
+
+## Problem
+
+Die gemeinsame Projekt-venv verweist auf `src/` im Hauptcheckout. Tests
+in einem Worktree konnten dadurch fremden Code prüfen. Erfolgreiche
+Testläufe behielten zudem große temporäre Verzeichnisse in `/tmp`.
+
+## Entscheidung und Alternativen
+
+`pythonpath = ["src"]` in der pytest-Konfiguration priorisiert den
+jeweiligen Checkout; ein Test sichert den tatsächlichen Paketursprung ab.
+`tmp_path_retention_policy = "failed"` mit Aufbewahrungszahl 1 entfernt
+erfolgreiche temporäre Testdaten und begrenzt zurückbehaltene Fehlerdaten.
+Ein festes `--basetemp` in `addopts` wird verworfen: pytest löscht diesen
+Pfad beim Start, sodass parallele Sitzungen einander Daten nehmen könnten.
+Die automatisch nummerierten und gesperrten Laufverzeichnisse bleiben.
+
+## Konsequenz
+
+Die gemeinsame venv bleibt nutzbar, ohne `PYTHONPATH` manuell zu setzen.
+Auf dem Pi weiterhin `TMPDIR=$PWD/var/tmp` vor Tests setzen: Aufbewahrung
+steuert das Aufräumen, nicht den Speicherort während eines Testlaufs.
+Vorhandene Daten außerhalb des Aufgaben-Worktrees werden nicht gelöscht.
+
+---
+
 # 2026-10-12 — Playwright auf dem bestehenden Forgejo-Doku-Runner
 
 ## Problem
