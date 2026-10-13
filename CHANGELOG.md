@@ -22,6 +22,9 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
   ist der einzige Kamerahalter, zählt Lücken und meldet Ausfälle.
   Stop meldet einen noch blockierten Leser; Neustart wird dann abgelehnt.
 
+* `measure_clock_offset_ns` liegt jetzt in `dispread.live.clock` (von
+  `sync-record.py` importiert); `ClockLog` liefert den Versatz für `session.json`.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)

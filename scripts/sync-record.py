@@ -143,6 +143,7 @@ import cv2
 from dispread.camera_settings import CameraSettings, load_camera_settings
 from dispread.frames import open_source
 from dispread.frames.uvc_source import UvcError, UvcSource
+from dispread.live.clock import CLOCK_OFFSET_SAMPLES, measure_clock_offset_ns  # noqa: F401 -- Reexport
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -201,9 +202,6 @@ STAGING_FALLBACK_SIZE = (1920, 1080)
 #: Bildrate fuer die Schaetzung, wenn --frame-rate 0 ("alle schreiben") ohne
 #: Kameraprofil gesetzt ist.
 STAGING_FALLBACK_FPS = 30.0
-
-#: Anzahl Einzelmessungen fuer `measure_clock_offset_ns` (Median).
-CLOCK_OFFSET_SAMPLES = 5
 
 #: Sentinel: die Erzeugerseite (Kamera-/Serial-Thread) ist fertig, keine
 #: weiteren Eintraege kommen mehr - der Schreiberthread leert die
@@ -779,27 +777,6 @@ def _serial_writer_worker(
 
 
 # --- Bildstrom ---------------------------------------------------------------
-
-
-def measure_clock_offset_ns(samples: int = CLOCK_OFFSET_SAMPLES, clock=time.clock_gettime_ns) -> int:
-    """Median aus `samples` Einzelmessungen des Versatzes CLOCK_BOOTTIME
-    minus CLOCK_MONOTONIC - die einzige Groesse, die `to_boottime_ns`
-    (dispread.records) braucht, um einen `v4l2_monotonic`-Zeitstempel der
-    StreamCam nach CLOCK_BOOTTIME umzurechnen.
-
-    Jede Einzelmessung ist eng geklammert (MONOTONIC vor und nach der
-    BOOTTIME-Messung, Mittelwert der beiden als Bezugspunkt) - so faellt der
-    durch die drei Aufrufe selbst eingebrachte Fehler klein aus. Der Median
-    (statt des Mittelwerts) filtert einen einzelnen Ausreisser heraus (z.B.
-    ein Scheduler-Aussetzer zwischen den drei Aufrufen)."""
-    offsets: list[int] = []
-    for _ in range(samples):
-        m1 = clock(time.CLOCK_MONOTONIC)
-        b = clock(time.CLOCK_BOOTTIME)
-        m2 = clock(time.CLOCK_MONOTONIC)
-        offsets.append(b - (m1 + m2) // 2)
-    offsets.sort()
-    return offsets[len(offsets) // 2]
 
 
 def count_frame_gaps(timestamps_ns: list[int], fps: float) -> dict[str, Any]:
