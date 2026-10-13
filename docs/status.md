@@ -5,6 +5,28 @@ Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
 [Projektgeschichte](project_history.md); Aufgaben:
 [TODO.md](../TODO.md).
 
+## Aktuelle Session — Projektcockpit: lesbare Codebase-Kennzahlen
+
+Das private [Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
+ist als Version 4 veröffentlicht. Eine zu breite CSS-Regel erfasste auch
+die verschachtelten Zahlen und verkleinerte sie auf 8–9 Pixel. Die Regel
+betrifft jetzt nur die Beschriftungen; Zahlen erscheinen mit 32–36 Pixeln,
+Beschriftungen mit 12–13 Pixeln und hellerem Kontrast. Unter 380 Pixeln
+stehen die Kennzahlen in einzelnen Zeilen.
+
+**Verifikation:** Browserprüfung bei 320, 390, 600, 993 und 1440 Pixeln,
+keine horizontalen Überläufe oder JavaScript-Fehler; Screenshots geprüft.
+Sites-Build erfolgreich, Veröffentlichung bestätigt. Die Browserprüfung
+verwendete einen bestehenden Datensnapshot zur Layoutprüfung; keine
+neue Aussage über den aktuellen Forgejo-Prüfstand. Site-Quellcommit:
+`3a6c89423f6f0822cd3f9044c195636626a056e0`.
+
+Der Nutzer wünscht anschließend automatische Zeilenanalyse und eine
+Ansicht für historisches Codebase-Wachstum. Diese Erweiterung wird zunächst
+anhand der vorhandenen Statistik-Anbindung entworfen; noch nicht umgesetzt.
+Keine Hardware bedient, keine neue Abhängigkeit eingeführt.
+Die übrigen Sessionstände bleiben als Kontext erhalten.
+
 ## Aktuelle Session — Projektcockpit Version 3 mit Forgejo
 
 Das private [Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
