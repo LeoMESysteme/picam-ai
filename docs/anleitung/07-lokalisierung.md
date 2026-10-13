@@ -118,6 +118,10 @@ IoU unter 0,7 fällt. Diese Zahl gehört in
 
 ## Teil B — `RegionTracker`
 
+<figure class="tour-figure" data-scene="erkennung-nachfuehrung" markdown="1">
+<figcaption markdown="span">Gebaut ist bisher nur der <code>QuadTracker</code>: Er führt ein bestätigtes Viereck per ECC gegen das Bestätigungsbild nach und lehnt bei einem zu großen Ruck ab. Der <code>RegionTracker</code> dieses Kapitels wäre die Erweiterung für automatisch gefundene Anzeigen.</figcaption>
+</figure>
+
 `TrackResult` ist schon definiert (`detect/__init__.py`):
 
 ```python

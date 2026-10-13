@@ -145,6 +145,10 @@ Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
 liest den festen Fokuswert zurück. Reflexionen zuerst durch Position,
 Abschirmung und kontrolliertes Licht verringern: [Optischer Aufbau](../OPTICAL_SETUP.md).
 
+<figure class="tour-figure" data-scene="bedienung-kamera" markdown="1">
+<figcaption markdown="span">Die StreamCam am GSV-Aufbau: USB3-Anschluss, YUYV in voller Auflösung, Autofokus aus und ein fester Fokuswert.</figcaption>
+</figure>
+
 Tabelle und CLI melden Sollwerte und die beobachtete Belichtung getrennt. Die interne
 Revision `applied_revision` bedeutet gesetzte Controls mit eingeschwungener
 manueller Belichtung (Toleranzen: 3 % ExposureTime, 8 % Gain); Kontrast wird von
@@ -180,6 +184,10 @@ keinen Vorschlag. Optionales Gegenlesen braucht eine Vorlagendatei samt
 erwartetem SHA-256. Das Verfahren ist eine Einrichtungshilfe, kein Nachweis
 für andere Geräte oder Lichtverhältnisse. Details zu Ernte und Prüfbildern:
 [Datensatz-Sammelmodus](11-datensatz-sammeln.md).
+
+<figure class="tour-figure" data-scene="bedienung-assistent" markdown="1">
+<figcaption markdown="span">Der Ablauf von <code>harvest-setup.py assist</code>: Fokus, zwei Standbilder, Punktraster, Prüfungen und am Ende ein Vorschlag mit Kontrollbildern, den erst ein Mensch bestätigt.</figcaption>
+</figure>
 
 ## Box bearbeiten und Annotationen sammeln
 

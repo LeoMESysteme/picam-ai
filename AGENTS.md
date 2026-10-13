@@ -72,7 +72,7 @@ Zwei harte Sätze:
   einzutragen.
   Einzelne Szenen stehen als Abbildung auch in anderen Seiten
   (`<figure class="tour-figure" data-scene="<h3-ID>">`, z. B. in
-  `docs/uebersicht/` und `docs-site/api/vertraege.md`). Bildunterschriften
+  `docs/uebersicht/`, `docs/anleitung/` und `docs-site/api/vertraege.md`). Bildunterschriften
   beschreiben nur, Zahlen zeigt die Bühne aus den Fakten. Eine Szenenänderung
   wirkt deshalb auch dort; `grep -rn 'data-scene="<ID>"' docs docs-site/api`
   zeigt, wo. Der Docs-Test lässt nur IDs zu, die es als Tour-Schritt gibt.

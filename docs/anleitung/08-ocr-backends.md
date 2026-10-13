@@ -44,6 +44,10 @@ Merksatz: **ein Backend, das keine Evidenz liefert, bekommt keine Freigabe.**
 Nicht weil es schlechter ist, sondern weil das Gate nichts zu prüfen hat
 ([OQ-19](../open-questions.md)).
 
+<figure class="tour-figure" data-scene="erkennung-zelle" markdown="1">
+<figcaption markdown="span">So liefert der Punktraster-Leser seine Evidenz: je Kästchen den Abstand zur besten Vorlage und den Vorsprung vor der zweitbesten. Gewinnt kein Zeichen klar, wird die Zelle abgelehnt.</figcaption>
+</figure>
+
 ## Teil A — Der Vergleichsharnisch (zuerst)
 
 `examples/08_backend_vergleich.py`, im Stil von `examples/16` (Docstring-Kopf:

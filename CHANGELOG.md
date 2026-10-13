@@ -3,6 +3,24 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Abbildungen in der Anleitung)
+
+**Problem:** Die Anleitungskapitel erklärten Raster, Statuslogik,
+Nachführung, Zellenleser und Einrichtung nur in Text und ASCII-Skizzen,
+obwohl die Projekt-Tour dieselben Abläufe animiert zeigt.
+
+**Änderung:** Acht Tour-Szenen als Abbildung in den Kapiteln 01 (Weg eines
+Werts), 02 (Zellraster, unlesbar und veraltet), 04 (bestätigtes
+Sitzungsprofil), 07 (Nachführen), 08 (Zelle lesen) und 10 (Kamera
+aufstellen, Einrichtungsassistent). Die Bildunterschriften grenzen ab, wo
+Szene und Kapitel auseinandergehen: Kapitel 01 übt an einer synthetischen
+Siebensegmentanzeige, Kapitel 04 beschreibt einen noch fehlenden
+`ProfileStore`, Kapitel 07 einen noch fehlenden `RegionTracker`.
+
+**Konsequenz:** 21 Abbildungen in 10 Seiten. Das Glossar bleibt ohne, weil
+seine Einträge als Vorschau auf anderen Seiten erscheinen. Der bestehende
+Browsertest prüft auch die neuen Abbildungen.
+
 ## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Szenen als Abbildungen, Verträge-Seite lesbar)
 
 **Problem:** Die Seite „Verträge und Datensätze“ zeigte die Tabelle der
