@@ -398,21 +398,21 @@ test('Sofortnavigation baut die Projekt-Tour als Vollseite auf, Bühnenlinks fü
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/docs/uebersicht/messpfad.html');
   await page.getByRole('link', { name: 'Projekt-Tour', exact: true }).first().click();
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-aufbau');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-aufbau');
   await expect(page.locator('body')).toHaveClass(/tour-page/);
   // Ohne Seitenleisten füllt die Tour die Breite, die Bühne die Höhe.
   await expect(page.locator('.md-sidebar--primary')).toBeHidden();
-  const box = await page.locator('.tour-stage').boundingBox();
+  const box = await page.locator('.tour-ui .tour-stage').boundingBox();
   expect(box!.width).toBeGreaterThan(900);
   expect(box!.height).toBeGreaterThan(700);
 
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
   await page.getByRole('link', { name: 'Ausgabe-API öffnen' }).click();
   await expect(page).toHaveURL(/\/api\/sink\.html$/);
   await expect(page.locator('body')).not.toHaveClass(/tour-page/);
   await page.goBack();
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
   await expect(page.locator('.tour-ui')).toHaveCount(1);
 });
 
@@ -514,5 +514,7 @@ test('Abbildung spielt beim Sichtbarwerden, wiederholt per Knopf und führt in d
 
   await figure.getByRole('link', { name: /In der Projekt-Tour ansehen/ }).click();
   await expect(page).toHaveURL(/projekt-tour\.html#erkennung-veraltet$/);
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'erkennung-veraltet');
+  // Die Sofortnavigation setzt die Adresse vor dem Austausch des Inhalts;
+  // nur die Bühne der Tour zählt, nicht die Abbildungen der alten Seite.
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'erkennung-veraltet');
 });
