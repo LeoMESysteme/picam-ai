@@ -20,6 +20,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 * `UvcSource` kann ohne Regler öffnen (`apply_controls=False`,
   `preview_settings()`) und Regler im Betrieb setzen/lesen; `CameraOwner`
   ist der einzige Kamerahalter, zählt Lücken und meldet Ausfälle.
+  Stop meldet einen noch blockierten Leser; Neustart wird dann abgelehnt.
 
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 

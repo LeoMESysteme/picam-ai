@@ -351,7 +351,7 @@ class UvcSource:
             "size": self.settings.size,
             "fourcc": self.settings.fourcc,
             "fps": self.settings.fps,
-            "controls_requested": dict(self.settings.ordered_controls()),
+            "controls_requested": dict(self.settings.ordered_controls()) if self._apply_controls else {},
             "controls_readback": dict(self._controls_readback),
             "rejected_timestamps": self.rejected_timestamps,
             "read_error": self.read_error,
