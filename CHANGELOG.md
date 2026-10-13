@@ -13,6 +13,9 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Laufzeitmessung der Lesekette (`live/benchmark.py`,
   `scripts/live-reader-benchmark.py`); Ergebnis im Laborjournal.
+* `Pipeline` nimmt `CharLayout`, übernimmt den Ablehnungsgrund des Locators und
+  führt `dropped_frames` im Trace; `TrackedQuadLocator` führt das bestätigte
+  Quad mit `QuadTracker` nach.
 
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 

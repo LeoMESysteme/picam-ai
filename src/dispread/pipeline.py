@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from dispread import __version__
 from dispread.detect import DisplayLocator
 from dispread.frames import Frame, FrameSource
-from dispread.layout import DisplayLayout
+from dispread.layout import CharLayout, DisplayLayout
 from dispread.ocr import ValueReader
 from dispread.records import (
     PipelineTrace,
@@ -38,7 +38,7 @@ from dispread.validate import ReleaseGate
 @dataclass
 class PipelineConfig:
     profile_id: str
-    layout: DisplayLayout
+    layout: DisplayLayout | CharLayout
     target_size: tuple[int, int] = (400, 160)
     #: Nur jeden n-ten Frame neu lokalisieren. Konzept.md §3: Lokalisierung und
     #: OCR muessen nicht mit derselben Frequenz arbeiten.
@@ -84,8 +84,12 @@ class Pipeline:
             "source": self.source.source_id,
         }
 
-    def process(self, frame: Frame) -> ValueRecord:
-        """Einen Frame verarbeiten und den Datensatz erzeugen."""
+    def process(self, frame: Frame, *, dropped_frames: int = 0) -> ValueRecord:
+        """Einen Frame verarbeiten und den Datensatz erzeugen.
+
+        `dropped_frames`: seit dem vorigen gelesenen Bild uebersprungene Bilder
+        (Live-Sitzung liest immer das neueste Bild, Spec 2026-10-12 §2).
+        """
         t_dequeue = time.monotonic_ns()
 
         # --- Lokalisierung (nicht in jedem Frame) ---------------------------
@@ -100,6 +104,7 @@ class Pipeline:
         if self._candidate is None:
             # Anzeige nicht gefunden. Der Wert wird ungueltig - der letzte
             # bekannte laeuft nicht weiter (Konzept.md §4).
+            reason = getattr(self.locator, "last_reason", None) or "display_not_located"
             return self._build_record(
                 frame,
                 value=None,
@@ -107,10 +112,10 @@ class Pipeline:
                 raw_text=None,
                 status=ValueStatus.UNREADABLE,
                 confidence=0.0,
-                reasons=("display_not_located",),
+                reasons=(reason,),
                 frames_confirmed=0,
                 confirmation_span_ns=0,
-                trace=PipelineTrace(t_dequeue_ns=t_dequeue, t_locate_done_ns=t_locate),
+                trace=PipelineTrace(t_dequeue_ns=t_dequeue, t_locate_done_ns=t_locate, dropped_frames=dropped_frames),
             )
 
         # --- Entzerrung ------------------------------------------------------
@@ -147,6 +152,7 @@ class Pipeline:
                 t_rectify_done_ns=t_rectify,
                 t_read_done_ns=t_read,
                 t_gate_done_ns=t_gate,
+                dropped_frames=dropped_frames,
             ),
         )
 
@@ -172,6 +178,8 @@ class Pipeline:
             t_read_done_ns=trace.t_read_done_ns,
             t_gate_done_ns=trace.t_gate_done_ns,
             t_record_built_ns=built,
+            queue_depth=trace.queue_depth,
+            dropped_frames=trace.dropped_frames,
         )
         return ValueRecord(
             frame_sequence=frame.frame_sequence,
