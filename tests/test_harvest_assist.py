@@ -91,10 +91,11 @@ def _raster_error_checks():
 
 @pytest.fixture
 def mocked_offsets(monkeypatch):
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args, **_kw: CheckResult(
-        "OK", {"max_abs_dx_cols": 0.05, "max_abs_dy_rows": 0.05},
-    ))
-    monkeypatch.setattr(harvest_setup, "refine_quad", lambda _frames, quad, *_args, **_kw: (np.asarray(quad), []))
+    for module in (harvest_setup, live_setup):
+        monkeypatch.setattr(module, "raster_offset_check", lambda *_args, **_kw: CheckResult(
+            "OK", {"max_abs_dx_cols": 0.05, "max_abs_dy_rows": 0.05},
+        ))
+    monkeypatch.setattr(live_setup, "refine_quad", lambda _frames, quad, *_args, **_kw: (np.asarray(quad), []))
 
 
 def test_propose_auto_quad_writes_checks_and_sampling_overlay(tmp_path, monkeypatch, capsys, mocked_offsets):
@@ -316,15 +317,15 @@ def test_assist_final_error_writes_no_proposal(tmp_path, monkeypatch, capsys, fa
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: (
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: (
         _raster_error_checks() if failure == "raster" else _checks()
     ))
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args, **_kw: CheckResult(
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *_args, **_kw: CheckResult(
         "FEHLER" if failure == "offset" else "OK",
         {"max_abs_dx_cols": 0.4 if failure == "offset" else 0.05, "max_abs_dy_rows": 0.1},
     ), raising=False)
-    monkeypatch.setattr(harvest_setup, "refine_quad", lambda *_args, **_kw: (np.asarray(QUAD), []), raising=False)
+    monkeypatch.setattr(live_setup, "refine_quad", lambda *_args, **_kw: (np.asarray(QUAD), []), raising=False)
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monotonic = iter((100.0, 131.0))
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
@@ -365,13 +366,13 @@ def test_assist_adopts_refined_quad_only_with_better_heldout_offset(tmp_path, mo
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", fake_offset)
-    monkeypatch.setattr(harvest_setup, "refine_quad", lambda *_args, **_kw: (better_quad, []))
-    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: SimpleNamespace(
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "raster_offset_check", fake_offset)
+    monkeypatch.setattr(live_setup, "refine_quad", lambda *_args, **_kw: (better_quad, []))
+    monkeypatch.setattr(live_setup, "evaluate_quad", lambda *_args, **_kw: SimpleNamespace(
         **{**vars(_fit()), "quad": better_quad.tolist()},
     ))
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks())
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monotonic = iter((100.0, 131.0))
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
@@ -410,11 +411,11 @@ def test_assist_reports_rejected_improved_quad_instead_of_using_start_quad(tmp_p
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", fake_offset)
-    monkeypatch.setattr(harvest_setup, "refine_quad", lambda *_args, **_kw: (better_quad, []))
-    monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: "restfehler_zu_gross")
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "raster_offset_check", fake_offset)
+    monkeypatch.setattr(live_setup, "refine_quad", lambda *_args, **_kw: (better_quad, []))
+    monkeypatch.setattr(live_setup, "evaluate_quad", lambda *_args, **_kw: "restfehler_zu_gross")
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks())
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monotonic = iter((100.0, 131.0))
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))
@@ -569,8 +570,8 @@ def test_assist_uses_injected_camera_and_writes_two_stills(tmp_path, monkeypatch
         events.append(("fit", None))
         return _fit()
 
-    monkeypatch.setattr(harvest_setup, "fit_lattice", fake_fit, raising=False)
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks(), raising=False)
+    monkeypatch.setattr(live_setup, "fit_lattice", fake_fit, raising=False)
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks(), raising=False)
 
     rc = harvest_setup.main([
         "assist", "--out", str(out), "--device-id", "d", "--session-id", "s", "--cell-text", "+12.3456 ",
@@ -615,8 +616,8 @@ def test_assist_reports_precheck_error_without_stability_wait(tmp_path, monkeypa
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=capture, set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _error_checks())
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _error_checks())
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: pytest.fail("Stabilitaetswartezeit begonnen"))
 
     rc = harvest_setup.main([
@@ -651,8 +652,8 @@ def test_assist_records_measured_stability_elapsed(tmp_path, monkeypatch, mocked
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks())
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(timestamps))
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     proposed_elapsed = []
@@ -878,9 +879,9 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=FakeCapture(), set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: ok_checks)
-    monkeypatch.setattr(harvest_setup, "diagnose_reader", fake_diagnose)
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: ok_checks)
+    monkeypatch.setattr(live_setup, "diagnose_reader", fake_diagnose)
     monkeypatch.setattr(harvest_setup, "draw_source_overlay", fake_source_overlay)
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monotonic = iter((100.0, 131.0))
@@ -1002,7 +1003,7 @@ def test_assist_rejects_bad_lattice_before_stability_wait(tmp_path, monkeypatch)
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda _device: SimpleNamespace(
         device="fake", capture=capture, set_controls=lambda *_args: None,
     ))
-    monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: "startlage_mehrdeutig")
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: "startlage_mehrdeutig")
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: pytest.fail("Stabilitaetswartezeit begonnen"))
 
     rc = harvest_setup.main([

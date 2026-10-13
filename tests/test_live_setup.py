@@ -43,3 +43,20 @@ def test_offline_text_source_returns_capture_and_text():
 def test_mask_changed_cells_rejects_length_mismatch():
     with pytest.raises(live_setup.SetupError, match="Laenge"):
         live_setup.mask_changed_cells("ab", "abc")
+
+
+def test_assist_rejects_short_stability(tmp_path):
+    cam = FakeSetupCamera(np.zeros((1080, 1920, 3), np.uint8))
+    with pytest.raises(live_setup.SetupError, match="30"):
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source("x"), expected_size=(1920, 1080),
+            out_dir=tmp_path, stability_s=5.0,
+        )
+
+
+def test_assist_rejects_wrong_still_size(tmp_path):
+    cam = FakeSetupCamera(np.zeros((720, 1280, 3), np.uint8))
+    with pytest.raises(live_setup.SetupError, match="Kameraaufloesung"):
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source("x"), expected_size=(1920, 1080), out_dir=tmp_path,
+        )

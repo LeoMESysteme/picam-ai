@@ -116,7 +116,6 @@ from dispread.frames.uvc_source import (
 )
 from dispread.glassquad import glass_quad_in_region
 from dispread.gsv2as_cell_text import validate_offline_cell_text
-from dispread.lattice_offsets import refine_quad
 from dispread.live import setup as live_setup
 from dispread.live.setup import (
     DEFAULT_TARGET_SIZE,
@@ -127,8 +126,7 @@ from dispread.live.setup import (
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
-from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_reader, raster_offset_check
-from dispread.setup_hint import find_green_hint_box
+from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, raster_offset_check
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.vision import lcd_quad_in_region
 
@@ -812,83 +810,25 @@ def run_assist(args: argparse.Namespace) -> int:
             if hasattr(io.capture, "isOpened") and not io.capture.isOpened():
                 raise UvcError(f"{io.device}: Kamera nicht zu oeffnen")
             io.set_controls(io.device, settings.ordered_controls())
-            if serial_port is None:
-                first = _capture_fresh_still(io)
-                first_text = offline_text
-            else:
-                first, first_text = live_setup.capture_with_text(lambda: _capture_fresh_still(io), serial_port)
-            first_captured_at = time.monotonic()
-            if first.shape[:2] != (settings.size[1], settings.size[0]):
-                raise SetupError("Standbild passt nicht zur Kameraaufloesung")
-            args.out.mkdir(parents=True, exist_ok=True)
-            if not cv2.imwrite(str(args.out / "still.png"), first):
-                raise SetupError("still.png konnte nicht geschrieben werden")
-            if hint_box is None:
-                hint_box = find_green_hint_box(first)
-                if hint_box is None:
-                    raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
-            fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
-            if isinstance(fit, str):
-                raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
-            prechecks = check_setup(first, fit)
-            _print_setup_checks(prechecks.to_dict())
-            precheck_failures = [name for name, result in prechecks.checks.items()
-                                 if getattr(result, "status", None) == "FEHLER" and name != "raster"]
-            if precheck_failures:
-                raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
-            time.sleep(args.stability_s)
-            if serial_port is None:
-                second = _capture_fresh_still(io)
-                second_text = offline_text
-            else:
-                second, second_text = live_setup.capture_with_text(lambda: _capture_fresh_still(io), serial_port)
-            stability_elapsed_s = time.monotonic() - first_captured_at
-            first_text, second_text = live_setup.mask_changed_cells(first_text, second_text)
-            if second.shape != first.shape:
-                raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
-            if not cv2.imwrite(str(args.out / "stability.png"), second):
-                raise SetupError("stability.png konnte nicht geschrieben werden")
-            frame_texts = [(first, first_text), (second, second_text)]
-            original_quad = fit.quad
-            try:
-                # refine_quad liest ROM-Glyphen direkt; maskierte Zellen haben
-                # keine bekannte Glyphe und duerfen den Fit nicht beeinflussen.
-                # Fuer 2j unten bleibt der maskierte Text unveraendert.
-                refinement_text = first_text.replace("?", " ")
-                candidate_quad, _history = refine_quad(
-                    [(first, refinement_text)], original_quad,
-                    CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0),
-                    DEFAULT_TARGET_SIZE,
-                )
-                old_heldout = raster_offset_check([(second, second_text)], original_quad)
-                new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
-                if live_setup.heldout_improves(old_heldout, new_heldout):
-                    revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
-                    if isinstance(revised, str):
-                        raise SetupError(f"Verbessertes Raster-Quad abgelehnt: {revised}; kein Vorschlag")
-                    fit = revised
-                    print("Raster-Quad nachgefuehrt: zurueckgehaltenes Standbild verbessert")
-            except SetupError:
-                raise
-            except (ValueError, cv2.error) as exc:
-                print(f"Raster-Quad nicht nachgefuehrt: {exc}")
-            offset_check = raster_offset_check(frame_texts, fit.quad)
-            _print_setup_checks({"overall": offset_check.status,
-                                 "checks": {"rasterversatz": offset_check.to_dict()}})
-            if offset_check.status == "FEHLER":
-                raise SetupError("Rasterversatz 2j meldet FEHLER; kein Vorschlag")
-            final_checks = check_setup(
-                first, fit, stability_image_bgr=second,
-                stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+            text_source = (
+                live_setup.offline_text_source(offline_text)
+                if serial_port is None
+                else live_setup.serial_text_source(serial_port)
             )
-            if final_checks.overall == "FEHLER":
-                _print_setup_checks(final_checks.to_dict())
-                raise SetupError("Abschliessende Einrichtungspruefung meldet FEHLER; kein Vorschlag")
-            reader_check = None
-            if args.templates is not None:
-                reader_check = diagnose_reader(
-                    (first, second), fit.quad, args.templates, args.templates_sha256,
-                )
+            result = live_setup.assist_measure(
+                _IoSetupCamera(io),
+                cell_text=text_source,
+                expected_size=settings.size,
+                out_dir=args.out,
+                hint_box=hint_box,
+                stability_s=args.stability_s,
+                templates=args.templates,
+                templates_sha256=args.templates_sha256,
+                report=_print_setup_checks,
+                info=print,
+                sleep=time.sleep,
+                monotonic=time.monotonic,
+            )
         finally:
             io.capture.release()
     except (OSError, ValueError, UvcError, SetupError, ImportError) as exc:
@@ -900,7 +840,7 @@ def run_assist(args: argparse.Namespace) -> int:
 
     propose_args = argparse.Namespace(
         frame=args.out / "still.png",
-        hint_box=",".join(f"{value:.8f}" for value in hint_box),
+        hint_box=",".join(f"{value:.8f}" for value in result.hint_box),
         camera_settings=args.out / "camera-settings.json",
         device_id=args.device_id,
         session_id=args.session_id,
@@ -911,12 +851,12 @@ def run_assist(args: argparse.Namespace) -> int:
         target_size="400x160",
         detector="glass",
         cell_text=offline_text,
-        precomputed_fit=fit,
-        stability_image_bgr=second,
-        stability_elapsed_s=stability_elapsed_s,
-        reader_check=reader_check,
-        offset_check=offset_check,
-        precomputed_checks=final_checks,
+        precomputed_fit=result.fit,
+        stability_image_bgr=result.second,
+        stability_elapsed_s=result.stability_elapsed_s,
+        reader_check=result.reader_check,
+        offset_check=result.offset_check,
+        precomputed_checks=result.final_checks,
     )
     rc = run_propose(propose_args)
     if rc != 0:

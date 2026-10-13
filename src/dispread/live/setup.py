@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 import cv2
@@ -19,9 +21,13 @@ import numpy as np
 
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
+from dispread.dotlattice import evaluate_quad, fit_lattice
 from dispread.focus_sweep import sharpness, sweep_focus
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
+from dispread.lattice_offsets import refine_quad
+from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
+from dispread.setup_hint import find_green_hint_box
 
 GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 N_CELLS = 16
@@ -152,3 +158,111 @@ def focus_camera(
         device=cam.device,
     )
     return settings, sweep_log
+
+
+@dataclass
+class AssistResult:
+    first: np.ndarray
+    second: np.ndarray
+    first_text: str
+    second_text: str
+    hint_box: HintBox
+    fit: Any
+    offset_check: Any
+    final_checks: Any
+    reader_check: Any | None
+    stability_elapsed_s: float
+
+
+def assist_measure(
+    cam: SetupCamera,
+    *,
+    cell_text: CellTextSource,
+    expected_size: tuple[int, int],
+    out_dir: Path,
+    hint_box: HintBox | None = None,
+    stability_s: float = MIN_STABILITY_S,
+    templates: Path | None = None,
+    templates_sha256: str | None = None,
+    report: Callable[[dict], None] = lambda _checks: None,
+    info: Callable[[str], None] = lambda _message: None,
+    sleep: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
+) -> AssistResult:
+    """Zwei Standbilder mit Zellentext, Punktraster, 2j und Setup-Pruefungen.
+
+    Wirft `SetupError` mit Bedienertext, sobald ein Schritt FEHLER meldet."""
+    sleep = sleep or time.sleep
+    monotonic = monotonic or time.monotonic
+    if not math.isfinite(stability_s) or stability_s < MIN_STABILITY_S:
+        raise SetupError(f"Stabilitaetsmessung muss mindestens {MIN_STABILITY_S:.0f} Sekunden dauern")
+    first, first_text = cell_text(cam.fresh_still)
+    first_captured_at = monotonic()
+    if first.shape[:2] != (expected_size[1], expected_size[0]):
+        raise SetupError("Standbild passt nicht zur Kameraaufloesung")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(out_dir / "still.png"), first):
+        raise SetupError("still.png konnte nicht geschrieben werden")
+    if hint_box is None:
+        hint_box = find_green_hint_box(first)
+        if hint_box is None:
+            raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
+    fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
+    if isinstance(fit, str):
+        raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
+    prechecks = check_setup(first, fit)
+    report(prechecks.to_dict())
+    precheck_failures = [
+        name for name, result in prechecks.checks.items()
+        if getattr(result, "status", None) == "FEHLER" and name != "raster"
+    ]
+    if precheck_failures:
+        raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
+    sleep(stability_s)
+    second, second_text = cell_text(cam.fresh_still)
+    stability_elapsed_s = monotonic() - first_captured_at
+    first_text, second_text = mask_changed_cells(first_text, second_text)
+    if second.shape != first.shape:
+        raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
+    if not cv2.imwrite(str(out_dir / "stability.png"), second):
+        raise SetupError("stability.png konnte nicht geschrieben werden")
+    frame_texts = [(first, first_text), (second, second_text)]
+    original_quad = fit.quad
+    try:
+        # refine_quad liest ROM-Glyphen direkt; maskierte Zellen haben keine
+        # bekannte Glyphe und duerfen den Fit nicht beeinflussen.
+        refinement_text = first_text.replace("?", " ")
+        candidate_quad, _history = refine_quad(
+            [(first, refinement_text)], original_quad, LATTICE_GRID, DEFAULT_TARGET_SIZE,
+        )
+        old_heldout = raster_offset_check([(second, second_text)], original_quad)
+        new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
+        if heldout_improves(old_heldout, new_heldout):
+            revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
+            if isinstance(revised, str):
+                raise SetupError(f"Verbessertes Raster-Quad abgelehnt: {revised}; kein Vorschlag")
+            fit = revised
+            info("Raster-Quad nachgefuehrt: zurueckgehaltenes Standbild verbessert")
+    except SetupError:
+        raise
+    except (ValueError, cv2.error) as exc:
+        info(f"Raster-Quad nicht nachgefuehrt: {exc}")
+    offset_check = raster_offset_check(frame_texts, fit.quad)
+    report({"overall": offset_check.status, "checks": {"rasterversatz": offset_check.to_dict()}})
+    if offset_check.status == "FEHLER":
+        raise SetupError("Rasterversatz 2j meldet FEHLER; kein Vorschlag")
+    final_checks = check_setup(
+        first, fit, stability_image_bgr=second,
+        stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+    )
+    if final_checks.overall == "FEHLER":
+        report(final_checks.to_dict())
+        raise SetupError("Abschliessende Einrichtungspruefung meldet FEHLER; kein Vorschlag")
+    reader_check = None
+    if templates is not None:
+        reader_check = diagnose_reader((first, second), fit.quad, templates, templates_sha256)
+    return AssistResult(
+        first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
+        fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,
+        stability_elapsed_s=stability_elapsed_s,
+    )
