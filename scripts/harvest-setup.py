@@ -101,14 +101,12 @@ import cv2
 import numpy as np
 
 from dispread.camera_settings import (
-    STREAMCAM_MODEL,
     STREAMCAM_USB_ID,
     CameraSettings,
     load_camera_settings,
 )
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.dotlattice import evaluate_quad, fit_lattice
-from dispread.focus_sweep import sharpness, sweep_focus
 from dispread.frames.uvc_source import (
     UvcError,
     UvcSource,
@@ -117,8 +115,15 @@ from dispread.frames.uvc_source import (
     v4l2_set_controls,
 )
 from dispread.glassquad import glass_quad_in_region
-from dispread.gsv2as_cell_text import cell_text_from_telegram, validate_offline_cell_text
+from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.lattice_offsets import refine_quad
+from dispread.live import setup as live_setup
+from dispread.live.setup import (
+    DEFAULT_TARGET_SIZE,
+    GSV2AS_EMPTY_CELLS,
+    N_CELLS,
+    SetupError,
+)
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
@@ -126,23 +131,6 @@ from dispread.setup_checks import RESOLUTION_ERROR_PX, check_setup, diagnose_rea
 from dispread.setup_hint import find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.vision import lcd_quad_in_region
-
-#: Fixe Wartezeit nach dem Umschalten auf automatische Belichtung/Weiss-
-#: abgleich (`focus`), bevor die Werte zurueckgelesen werden - kein Regler,
-#: die Automatik braucht eine Sekundenbruchteile bis Sekunden dauernde
-#: Einschwingzeit (Auftrag).
-WHITE_BALANCE_SETTLE_S = 3.0
-
-#: Anzahl Zeichenzellen des GSV-2AS-Displays (HD44780, 16 x 1). Kein
-#: CLI-Regler - die Geometrie des angeschlossenen Geraets ist keine freie Wahl.
-N_CELLS = 16
-DEFAULT_TARGET_SIZE = (400, 160)
-# `gsv2as_v1`: Trennzelle und drei Abschlusszellen sind immer leer.
-GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
-
-
-class SetupError(ValueError):
-    """Fehlerhafte Eingabe (CLI-Werte, Datei-Inhalt) - fuehrt zu Exit 2."""
 
 
 def _parse_float_list(value: str, count: int, name: str) -> list[float]:
@@ -302,43 +290,6 @@ def _offline_cell_text(args: argparse.Namespace) -> str | None:
         return validate_offline_cell_text(direct)
     except ValueError as exc:
         raise SetupError(f"Zellentext: {exc}") from exc
-
-
-def _serial_cell_text(port: Any) -> str:
-    """Read a fresh incoming DUT telegram, then map it to physical cells."""
-    if hasattr(port, "reset_input_buffer"):
-        port.reset_input_buffer()
-    line = port.readline().rstrip(b"\r\n")
-    try:
-        return cell_text_from_telegram(line)
-    except ValueError as exc:
-        raise SetupError(f"GSV-2AS-Zellentext aus seriellem Strom unlesbar: {exc}") from exc
-
-
-def _mask_changed_cells(before: str, after: str) -> tuple[str, str]:
-    """Only cells unchanged in both observations may inform geometry."""
-    if len(before) != len(after):
-        raise SetupError("Serieller Zellentext hat unterschiedliche Laenge")
-    shared = "".join(left if left == right else "?" for left, right in zip(before, after, strict=True))
-    return shared, shared
-
-
-def _capture_with_serial_text(capture: Any, port: Any) -> tuple[np.ndarray, str]:
-    """Bracket one still with fresh telegrams and mask changes during capture."""
-    before = _serial_cell_text(port)
-    image = capture()
-    after = _serial_cell_text(port)
-    return image, _mask_changed_cells(before, after)[0]
-
-
-def _heldout_improves(old_check: Any, new_check: Any) -> bool:
-    """Require a strictly smaller worst measured offset on the held-out still."""
-    keys = ("max_abs_dx_cols", "max_abs_dy_rows")
-    old = [old_check.metrics.get(key) for key in keys]
-    new = [new_check.metrics.get(key) for key in keys]
-    if any(value is None or not math.isfinite(value) for value in (*old, *new)):
-        return False
-    return max(new) < max(old) - 0.02 and all(after <= before + 0.01 for before, after in zip(old, new, strict=True))
 
 
 def run_propose(args: argparse.Namespace) -> int:
@@ -717,18 +668,21 @@ def _open_camera_io(device: str | None) -> _CameraIO:
     )
 
 
-def _measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float] | None) -> np.ndarray:
-    """ROI fuer die Schaerfemessung: `hint_box` (normiert x,y,w,h) oder, ohne
-    Angabe, das mittlere Drittel in beiden Achsen."""
-    height, width = gray.shape[:2]
-    if hint_box is None:
-        x0, x1 = width // 3, 2 * width // 3
-        y0, y1 = height // 3, 2 * height // 3
-    else:
-        bx, by, bw, bh = hint_box
-        x0, y0 = int(round(bx * width)), int(round(by * height))
-        x1, y1 = int(round((bx + bw) * width)), int(round((by + bh) * height))
-    return gray[y0:y1, x0:x1]
+class _IoSetupCamera:
+    """`SetupCamera` ueber die direkt geoeffnete Aufnahme der Kommandozeile."""
+
+    def __init__(self, io: _CameraIO) -> None:
+        self._io = io
+        self.device = io.device
+
+    def set_controls(self, controls):
+        self._io.set_controls(self._io.device, list(controls))
+
+    def get_controls(self, names):
+        return self._io.get_controls(self._io.device, list(names))
+
+    def fresh_still(self, discard: int = 10):
+        return _capture_fresh_still(self._io, discard=discard)
 
 
 def run_focus(args: argparse.Namespace) -> int:
@@ -738,43 +692,11 @@ def run_focus(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 2
     io = _open_camera_io(args.device)
-
-    def measure(focus: int) -> float:
-        io.set_controls(io.device, [("focus_absolute", focus)])
-        time.sleep(args.settle_s)
-        for _ in range(3):
-            io.capture.read()
-        ok, frame = io.capture.read()
-        if not ok:
-            raise UvcError(f"kein Bild von {io.device} (Fokus-Sweep)")
-        gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return sharpness(_measurement_roi(gray, hint_box))
-
     try:
-        io.set_controls(io.device, [("focus_automatic_continuous", 0)])
-        best_focus, sweep_log = sweep_focus(measure)
-        io.set_controls(io.device, [("auto_exposure", 3), ("white_balance_automatic", 1)])
-        time.sleep(WHITE_BALANCE_SETTLE_S)
-        readback = io.get_controls(
-            io.device, ["exposure_time_absolute", "white_balance_temperature", "gain"]
-        )
+        settings, sweep_log = live_setup.focus_camera(_IoSetupCamera(io), hint_box, settle_s=args.settle_s)
     finally:
         io.capture.release()
-
-    settings = CameraSettings(
-        model=STREAMCAM_MODEL,
-        usb_id=STREAMCAM_USB_ID,
-        size=(1920, 1080),
-        fourcc="YUYV",
-        fps=30,
-        controls={
-            "focus_absolute": best_focus,
-            "exposure_time_absolute": readback["exposure_time_absolute"],
-            "white_balance_temperature": readback["white_balance_temperature"],
-            "gain": readback["gain"],
-        },
-        device=io.device,
-    )
+    best_focus = settings.controls["focus_absolute"]
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -894,7 +816,7 @@ def run_assist(args: argparse.Namespace) -> int:
                 first = _capture_fresh_still(io)
                 first_text = offline_text
             else:
-                first, first_text = _capture_with_serial_text(lambda: _capture_fresh_still(io), serial_port)
+                first, first_text = live_setup.capture_with_text(lambda: _capture_fresh_still(io), serial_port)
             first_captured_at = time.monotonic()
             if first.shape[:2] != (settings.size[1], settings.size[0]):
                 raise SetupError("Standbild passt nicht zur Kameraaufloesung")
@@ -919,9 +841,9 @@ def run_assist(args: argparse.Namespace) -> int:
                 second = _capture_fresh_still(io)
                 second_text = offline_text
             else:
-                second, second_text = _capture_with_serial_text(lambda: _capture_fresh_still(io), serial_port)
+                second, second_text = live_setup.capture_with_text(lambda: _capture_fresh_still(io), serial_port)
             stability_elapsed_s = time.monotonic() - first_captured_at
-            first_text, second_text = _mask_changed_cells(first_text, second_text)
+            first_text, second_text = live_setup.mask_changed_cells(first_text, second_text)
             if second.shape != first.shape:
                 raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
             if not cv2.imwrite(str(args.out / "stability.png"), second):
@@ -940,7 +862,7 @@ def run_assist(args: argparse.Namespace) -> int:
                 )
                 old_heldout = raster_offset_check([(second, second_text)], original_quad)
                 new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
-                if _heldout_improves(old_heldout, new_heldout):
+                if live_setup.heldout_improves(old_heldout, new_heldout):
                     revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
                     if isinstance(revised, str):
                         raise SetupError(f"Verbessertes Raster-Quad abgelehnt: {revised}; kein Vorschlag")

@@ -16,6 +16,7 @@ import pytest
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
 from dispread.frames.uvc_source import UvcError
+from dispread.live import setup as live_setup
 from dispread.ocr.dotmatrix_font import CLASSES, rom_vector
 from dispread.ocr.dotmatrix_sampling import dot_centers
 from dispread.ocr.dotmatrix_templates import Templates, save_templates
@@ -442,7 +443,7 @@ def test_offline_cell_text_file_and_serial_telegram(tmp_path):
             return b"+01.2193 mV/V\r\n"
 
     port = FakePort()
-    assert harvest_setup._serial_cell_text(port) == "+ 1.2193 "
+    assert live_setup.serial_cell_text(port) == "+ 1.2193 "
     assert port.cleared
 
 
@@ -468,9 +469,9 @@ def test_serial_capture_masks_cells_changing_during_and_between_stills():
         captures.append(True)
         return np.zeros((1, 1, 3), np.uint8)
 
-    first, first_text = harvest_setup._capture_with_serial_text(capture, port)
-    second, second_text = harvest_setup._capture_with_serial_text(capture, port)
-    first_text, second_text = harvest_setup._mask_changed_cells(first_text, second_text)
+    first, first_text = live_setup.capture_with_text(capture, port)
+    second, second_text = live_setup.capture_with_text(capture, port)
+    first_text, second_text = live_setup.mask_changed_cells(first_text, second_text)
     assert first.shape == second.shape
     assert captures == [True, True]
     assert port.clears == 4
@@ -488,7 +489,7 @@ def test_masked_serial_text_reaches_real_offset_check_without_unknown_glyph():
         def readline(self):
             return next(self.lines)
 
-    image, text = harvest_setup._capture_with_serial_text(
+    image, text = live_setup.capture_with_text(
         lambda: np.full((360, 640, 3), 120, np.uint8), Port(),
     )
     assert "?" in text
@@ -501,8 +502,8 @@ def test_heldout_requires_meaningful_improvement():
     def offset(value):
         return CheckResult("OK", {"max_abs_dx_cols": value, "max_abs_dy_rows": 0.04})
 
-    assert not harvest_setup._heldout_improves(offset(0.10), offset(0.09))
-    assert harvest_setup._heldout_improves(offset(0.10), offset(0.07))
+    assert not live_setup.heldout_improves(offset(0.10), offset(0.09))
+    assert live_setup.heldout_improves(offset(0.10), offset(0.07))
 
 
 def test_propose_auto_quad_rejects_uncertain_start(tmp_path, monkeypatch, capsys):
@@ -832,7 +833,7 @@ def test_assist_real_still_completes_fit_refine_and_checks(
     initial_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], initial_fit.quad)
     final_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], proposal["quad"])
     assert not np.allclose(proposal["quad"], initial_fit.quad, atol=0.1)
-    assert harvest_setup._heldout_improves(initial_holdout, final_holdout)
+    assert live_setup.heldout_improves(initial_holdout, final_holdout)
     assert (out / "overlay_sampling.png").is_file()
 
 
@@ -971,7 +972,7 @@ def test_focus_releases_camera_when_sweep_capture_fails(tmp_path, monkeypatch):
             set_controls=lambda *_args: None,
         ),
     )
-    monkeypatch.setattr(harvest_setup, "sweep_focus", lambda measure: measure(48))
+    monkeypatch.setattr(live_setup, "sweep_focus", lambda measure: measure(48))
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     args = SimpleNamespace(hint_box=None, device=None, settle_s=1.0, out=tmp_path)
     with pytest.raises(UvcError, match="kein Bild"):

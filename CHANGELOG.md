@@ -25,6 +25,9 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 * `measure_clock_offset_ns` liegt jetzt in `dispread.live.clock` (von
   `sync-record.py` importiert); `ClockLog` liefert den Versatz für `session.json`.
 
+* Einrichtung Teil 1: Fokus-Sweep und Zellentext-Helfer liegen in
+  `dispread.live.setup`; `harvest-setup.py focus` nutzt sie unverändert.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
