@@ -30,6 +30,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Einrichtung Teil 2: Standbilder, Punktraster, 2j und Setup-Prüfungen (`assist_measure`) liegen in `dispread.live.setup`; `harvest-setup.py assist` liefert unverändert dieselben Ergebnisse.
 
+* Einrichtung Teil 3: Vorschlag (`propose_with_fit`, `write_overlays`) und Bestätigung (`confirm_proposal`, verlangt jetzt einen nichtleeren Namen) liegen in `dispread.live.setup`.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)

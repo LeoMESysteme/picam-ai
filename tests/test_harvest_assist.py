@@ -15,6 +15,7 @@ import pytest
 
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
+from dispread.dotlattice import LatticeFit
 from dispread.frames.uvc_source import UvcError
 from dispread.live import setup as live_setup
 from dispread.ocr.dotmatrix_font import CLASSES, rom_vector
@@ -48,8 +49,9 @@ def _settings() -> CameraSettings:
 
 
 def _fit():
-    return SimpleNamespace(
-        quad=QUAD,
+    return LatticeFit(
+        quad=QUAD, n_dots=1, n_assigned=1, rms_cols=0.0, rms_rows=0.0,
+        cells=(0,), row_bias=(), cell_bias=(),
         assigned_points=((100.0, 100.0),),
         rejected_points=((200.0, 100.0),),
     )
@@ -91,10 +93,9 @@ def _raster_error_checks():
 
 @pytest.fixture
 def mocked_offsets(monkeypatch):
-    for module in (harvest_setup, live_setup):
-        monkeypatch.setattr(module, "raster_offset_check", lambda *_args, **_kw: CheckResult(
-            "OK", {"max_abs_dx_cols": 0.05, "max_abs_dy_rows": 0.05},
-        ))
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *_args, **_kw: CheckResult(
+        "OK", {"max_abs_dx_cols": 0.05, "max_abs_dy_rows": 0.05},
+    ))
     monkeypatch.setattr(live_setup, "refine_quad", lambda _frames, quad, *_args, **_kw: (np.asarray(quad), []))
 
 
@@ -105,7 +106,7 @@ def test_propose_auto_quad_writes_checks_and_sampling_overlay(tmp_path, monkeypa
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"camera": _settings().to_dict()}))
     monkeypatch.setattr(harvest_setup, "fit_lattice", lambda *_args, **_kw: _fit(), raising=False)
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks(), raising=False)
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks(), raising=False)
 
     out = tmp_path / "proposal"
     rc = harvest_setup.main([
@@ -150,8 +151,8 @@ def test_propose_fixed_quad_runs_offset_and_setup_checks(tmp_path, monkeypatch, 
         )
 
     monkeypatch.setattr(harvest_setup, "evaluate_quad", evaluate)
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", offset)
-    monkeypatch.setattr(harvest_setup, "check_setup", check)
+    monkeypatch.setattr(live_setup, "raster_offset_check", offset)
+    monkeypatch.setattr(live_setup, "check_setup", check)
     monkeypatch.setattr(harvest_setup, "glass_quad_in_region", lambda *_args: QUAD)
     out = tmp_path / "proposal"
     argv = [
@@ -229,7 +230,7 @@ def test_propose_fixed_quad_rejects_bad_offset(tmp_path, monkeypatch, route):
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"camera": _settings().to_dict()}))
     monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("FEHLER", {}))
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *_args: CheckResult("FEHLER", {}))
     monkeypatch.setattr(harvest_setup, "glass_quad_in_region", lambda *_args: QUAD)
     out = tmp_path / "proposal"
     argv = [
@@ -249,12 +250,12 @@ def test_propose_with_cell_text_rejects_missing_raster_check(tmp_path, monkeypat
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"camera": _settings().to_dict()}))
     monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
     missing_raster = SimpleNamespace(
         overall="OK", checks={"kanten": SimpleNamespace(cells=())},
         to_dict=lambda: {"overall": "OK", "checks": {"kanten": {"status": "OK", "metrics": {}}}},
     )
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: missing_raster)
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: missing_raster)
     out = tmp_path / "proposal"
     assert harvest_setup.main([
         "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
@@ -275,8 +276,8 @@ def test_propose_with_cell_text_rejects_incompatible_geometry(tmp_path, monkeypa
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"camera": _settings().to_dict()}))
     monkeypatch.setattr(harvest_setup, "evaluate_quad", lambda *_args, **_kw: _fit())
-    monkeypatch.setattr(harvest_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
-    monkeypatch.setattr(harvest_setup, "check_setup", lambda *_args, **_kw: _checks())
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *_args: CheckResult("OK", {}))
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: _checks())
     out = tmp_path / "proposal"
     assert harvest_setup.main([
         "propose", "--frame", str(frame), "--hint-box", "0.1,0.1,0.8,0.5",
@@ -494,7 +495,7 @@ def test_masked_serial_text_reaches_real_offset_check_without_unknown_glyph():
         lambda: np.full((360, 640, 3), 120, np.uint8), Port(),
     )
     assert "?" in text
-    check = harvest_setup.raster_offset_check([(image, text)], QUAD)
+    check = live_setup.raster_offset_check([(image, text)], QUAD)
     assert isinstance(check, CheckResult)
     assert check.reason != "messung_unmoeglich:KeyError"
 
@@ -831,8 +832,8 @@ def test_assist_real_still_completes_fit_refine_and_checks(
         empty_cells=harvest_setup.GSV2AS_EMPTY_CELLS,
     )
     assert not isinstance(initial_fit, str)
-    initial_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], initial_fit.quad)
-    final_holdout = harvest_setup.raster_offset_check([(second_image, cell_text)], proposal["quad"])
+    initial_holdout = live_setup.raster_offset_check([(second_image, cell_text)], initial_fit.quad)
+    final_holdout = live_setup.raster_offset_check([(second_image, cell_text)], proposal["quad"])
     assert not np.allclose(proposal["quad"], initial_fit.quad, atol=0.1)
     assert live_setup.heldout_improves(initial_holdout, final_holdout)
     assert (out / "overlay_sampling.png").is_file()
@@ -882,7 +883,7 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     monkeypatch.setattr(live_setup, "fit_lattice", lambda *_args, **_kw: _fit())
     monkeypatch.setattr(live_setup, "check_setup", lambda *_args, **_kw: ok_checks)
     monkeypatch.setattr(live_setup, "diagnose_reader", fake_diagnose)
-    monkeypatch.setattr(harvest_setup, "draw_source_overlay", fake_source_overlay)
+    monkeypatch.setattr(live_setup, "draw_source_overlay", fake_source_overlay)
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     monotonic = iter((100.0, 131.0))
     monkeypatch.setattr(harvest_setup.time, "monotonic", lambda: next(monotonic))

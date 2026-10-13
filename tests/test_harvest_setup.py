@@ -931,3 +931,22 @@ def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
     # auf die festen Werte aus `settings.controls`/MODE_CONTROLS).
     assert state["focus_automatic_continuous"] == 0
     assert state["white_balance_automatic"] == 0
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_confirm_rejects_empty_name_without_writing_profile(tmp_path, capsys, name):
+    proposal = _dummy_proposal(tmp_path, grid_source="operator_provided")
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    out_path = tmp_path / "profile.json"
+
+    rc = harvest_setup.main([
+        "confirm", "--proposal", str(proposal_path), "--confirmed-by", name,
+        "--resolution-threshold-px", "2.6", "--out", str(out_path),
+    ])
+
+    assert rc == 2
+    assert not out_path.exists()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == "Name des Bestaetigenden fehlt\n"

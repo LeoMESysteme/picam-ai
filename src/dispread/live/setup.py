@@ -9,10 +9,13 @@ Werkbank mit `CameraOwner` erfuellt.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -20,14 +23,17 @@ import cv2
 import numpy as np
 
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
-from dispread.charcells import CharGrid
+from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.dotlattice import evaluate_quad, fit_lattice
 from dispread.focus_sweep import sharpness, sweep_focus
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
+from dispread.rectify import rectify
+from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
+from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 
 GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 N_CELLS = 16
@@ -266,3 +272,229 @@ def assist_measure(
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,
         stability_elapsed_s=stability_elapsed_s,
     )
+
+
+def write_overlays(
+    image: np.ndarray,
+    quad,
+    grid: CharGrid,
+    out_dir: Path,
+    *,
+    target_size: tuple[int, int] = DEFAULT_TARGET_SIZE,
+    fit: Any = None,
+    overall: str | None = None,
+    edge_cells: tuple[int, ...] | None = None,
+) -> list[Path]:
+    """overlay_source.png, overlay_rectified.png und (mit Fit) overlay_sampling.png."""
+    written: list[Path] = []
+    if fit is not None:
+        overlay_source = draw_source_overlay(image, fit, overall)
+    else:
+        overlay_source = image.copy()
+        points = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
+        cv2.polylines(overlay_source, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+    cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
+    written.append(out_dir / "overlay_source.png")
+    crop = rectify(image, quad, target_size=target_size)
+    if fit is not None and edge_cells is not None:
+        cv2.imwrite(str(out_dir / "overlay_sampling.png"), draw_sampling_overlay(crop.image, edge_cells=edge_cells))
+        written.append(out_dir / "overlay_sampling.png")
+    rectified = crop.image
+    rectified = cv2.cvtColor(rectified, cv2.COLOR_GRAY2BGR) if rectified.ndim == 2 else rectified.copy()
+    for i, (x, y, w, h) in enumerate(grid.cell_boxes()):
+        cv2.rectangle(rectified, (x, y), (x + w, y + h), (0, 255, 0), 1)
+        cv2.putText(rectified, str(i), (x + 1, max(y + 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1)
+    cv2.imwrite(str(out_dir / "overlay_rectified.png"), rectified)
+    written.append(out_dir / "overlay_rectified.png")
+    return written
+
+
+def propose_with_fit(
+    image: np.ndarray,
+    *,
+    fit: Any,
+    frame_path: Path,
+    camera_settings: CameraSettings,
+    device_id: str,
+    session_id: str,
+    out_dir: Path,
+    cell_text: str | None = None,
+    offset_check: Any = None,
+    final_checks: Any = None,
+    stability_image_bgr: np.ndarray | None = None,
+    stability_elapsed_s: float | None = None,
+    reader_check: Any = None,
+) -> dict:
+    """Vorschlag aus einem Punktraster-Fit (bisher `run_propose` mit Fit)."""
+    height, width = image.shape[:2]
+    if (width, height) != tuple(camera_settings.size):
+        sw, sh = camera_settings.size
+        raise SetupError(
+            f"Bild ist {width}x{height}, camera-settings.json verlangt aber {sw}x{sh} - "
+            "Bild passt nicht zu den Kameraeinstellungen dieser Sitzung."
+        )
+    if offset_check is None and cell_text is None:
+        raise SetupError("Rasterversatz 2j verlangt einen Zellentext")
+    quad = fit.quad
+    grid = LATTICE_GRID
+    min_px = source_dot_column_px(grid, quad, DEFAULT_TARGET_SIZE)
+    if offset_check is None:
+        offset_check = raster_offset_check([(image, cell_text)], quad)
+    if offset_check.status == "FEHLER":
+        raise SetupError(f"Rasterversatz 2j: FEHLER — {offset_check.reason or offset_check.metrics}")
+    checks = final_checks
+    if checks is None:
+        checks = check_setup(
+            image, fit, stability_image_bgr=stability_image_bgr,
+            stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+        )
+    if checks.overall == "FEHLER":
+        raise SetupError("Einrichtungspruefung meldet FEHLER; kein Vorschlag")
+    checks_dict = checks.to_dict()
+    raster_result = checks_dict.get("checks", {}).get("rasterversatz")
+    if not isinstance(raster_result, dict) or raster_result.get("status") not in {"OK", "WARNUNG"}:
+        raise SetupError("Einrichtungspruefung ohne gueltigen rasterversatz; kein Vorschlag")
+    if reader_check is not None:
+        checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
+        if reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
+            checks_dict["overall"] = "WARNUNG"
+    proposal = {
+        "frame": str(frame_path),
+        "device_id": device_id,
+        "session_id": session_id,
+        "quad": quad,
+        "target_size": list(DEFAULT_TARGET_SIZE),
+        "grid": grid.to_dict(),
+        "grid_source": "dot_lattice",
+        "scaler_crop": None,
+        "min_source_dot_column_px": min_px,
+        "native_scale": 1.0,
+        "min_native_dot_column_px": min_px,
+        "camera": camera_settings.to_dict(),
+        "setup_checks": checks_dict,
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_overlays(
+        image, quad, grid, out_dir, fit=fit, overall=checks_dict["overall"],
+        edge_cells=tuple(checks.checks["kanten"].cells),
+    )
+    return proposal
+
+
+def confirm_proposal(
+    proposal: dict,
+    *,
+    confirmed_by: str,
+    resolution_threshold_px: float,
+    override_reason: str | None = None,
+    accept_default_grid: bool = False,
+    now: Callable[[], datetime] | None = None,
+) -> SessionProfile:
+    """Vorschlag pruefen und ein bestaetigtes Sitzungsprofil bauen."""
+    if not confirmed_by or not confirmed_by.strip():
+        raise SetupError("Name des Bestaetigenden fehlt")
+    now = now or (lambda: datetime.now(UTC))
+
+    if override_reason is not None:
+        override_reason = override_reason.strip()
+        if not override_reason:
+            raise SetupError("--override-reason muss einen nichtleeren Grund enthalten.")
+
+    setup_checks = proposal.get("setup_checks")
+    if "setup_checks" in proposal:
+        if (
+            not isinstance(setup_checks, dict)
+            or not isinstance(setup_checks.get("overall"), str)
+            or setup_checks["overall"] not in {"OK", "WARNUNG", "FEHLER", "NICHT_GEPRUEFT"}
+        ):
+            raise SetupError("setup_checks im Vorschlag sind ungueltig (overall fehlt oder ist unbekannt).")
+        named_checks = setup_checks.get("checks")
+        if not isinstance(named_checks, dict) or any(
+            not isinstance(check, dict)
+            or (
+                not (isinstance(check.get("status"), str) and check["status"] in {"OK", "WARNUNG", "FEHLER"})
+                and not (name == "stabilitaet" and "status" in check and check["status"] is None)
+            )
+            for name, check in named_checks.items()
+        ):
+            raise SetupError("setup_checks im Vorschlag enthalten ungueltige Einzelpruefungen.")
+        if setup_checks["overall"] == "NICHT_GEPRUEFT" and named_checks:
+            raise SetupError("NICHT_GEPRUEFT darf keine durchgefuehrten Einzelpruefungen enthalten.")
+        failing_checks = [name for name, check in named_checks.items() if check["status"] == "FEHLER"]
+        if (setup_checks["overall"] == "FEHLER" or failing_checks) and override_reason is None:
+            names = ", ".join(failing_checks) if failing_checks else "Gesamturteil"
+            raise SetupError(
+                f"Einrichtungspruefungen mit FEHLER: {names}. "
+                "Nur mit --override-reason und ausdruecklicher Begruendung bestaetigen."
+            )
+        setup_checks = dict(setup_checks)
+    else:
+        setup_checks = {"overall": "NICHT_GEPRUEFT", "checks": {}}
+
+    raster_check = setup_checks["checks"].get("rasterversatz")
+    if (raster_check is None or raster_check["status"] not in {"OK", "WARNUNG"}) and override_reason is None:
+        raise SetupError("rasterversatz muss OK oder WARNUNG sein; sonst --override-reason angeben.")
+    if override_reason is not None:
+        setup_checks["override_reason"] = override_reason
+
+    if proposal.get("grid_source") == "default_even_split" and not accept_default_grid:
+        raise SetupError(
+            "Raster ist der ungeprueft uebernommene Default-Split (grid_source=default_even_split). "
+            "--accept-default-grid setzen, um ihn trotzdem zu bestaetigen (Task 3, confirm)."
+        )
+
+    if "camera" not in proposal:
+        raise SetupError(
+            "Vorschlag ohne Kameraeinstellungen (IMX500-Vorschlag?) - propose mit "
+            "--camera-settings neu ausfuehren"
+        )
+    camera_settings = CameraSettings.from_dict(proposal["camera"])
+
+    # Task 10 (Ausrichtungspruefung Ernte <-> Profilbild): das Profilbild
+    # selbst muss vorhanden sein, sonst kann kein SHA-256 geschrieben werden
+    # und import-harvest.py haette spaeter nichts, wogegen es die Ernte
+    # ausrichten koennte - kein Profil ohne diesen Beleg (kein stilles
+    # Uebernehmen, AGENTS.md).
+    frame_path = Path(proposal["frame"])
+    if not frame_path.is_file():
+        raise SetupError(
+            f"Vorschlag verweist auf ein fehlendes Bild ({frame_path}) - reference_frame kann "
+            "nicht geschrieben werden (Task 10, Ausrichtungspruefung)."
+        )
+    reference_frame = {
+        "path": str(frame_path),
+        "sha256": hashlib.sha256(frame_path.read_bytes()).hexdigest(),
+    }
+
+    grid = CharGrid.from_dict(proposal["grid"])
+    target_size = tuple(proposal["target_size"])
+    min_px = float(proposal["min_source_dot_column_px"])
+
+    # StreamCam (Profil v3): kein ScalerCrop, native_scale immer 1.0 - propose
+    # schreibt beide Felder schon so, hier nur noch uebernehmen.
+    native_scale = float(proposal["native_scale"])
+    min_native_px = float(proposal["min_native_dot_column_px"])
+
+    resolution_ok = min_native_px >= resolution_threshold_px
+
+    profile = SessionProfile(
+        schema_version=PROFILE_SCHEMA_VERSION,
+        device_id=proposal["device_id"],
+        session_id=proposal["session_id"],
+        quad=[list(p) for p in proposal["quad"]],
+        target_size=target_size,
+        grid=grid,
+        scaler_crop=None,
+        min_source_dot_column_px=min_px,
+        native_scale=native_scale,
+        min_native_dot_column_px=min_native_px,
+        resolution_threshold_px=resolution_threshold_px,
+        resolution_ok=resolution_ok,
+        confirmed_by=confirmed_by,
+        confirmed_at_utc=now().isoformat(),
+        camera=camera_settings,
+        reference_frame=reference_frame,
+        setup_checks=setup_checks,
+    )
+    return profile

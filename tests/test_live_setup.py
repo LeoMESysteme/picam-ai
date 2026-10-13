@@ -1,6 +1,9 @@
+from datetime import UTC, datetime
+
 import numpy as np
 import pytest
 
+from dispread.camera_settings import CameraSettings
 from dispread.live import setup as live_setup
 
 
@@ -60,3 +63,41 @@ def test_assist_rejects_wrong_still_size(tmp_path):
         live_setup.assist_measure(
             cam, cell_text=live_setup.offline_text_source("x"), expected_size=(1920, 1080), out_dir=tmp_path,
         )
+
+
+_CAMERA = CameraSettings(model="logitech_streamcam", usb_id="046d:0893", size=(1920, 1080), fourcc="YUYV",
+                         fps=30, controls={"focus_absolute": 48, "exposure_time_absolute": 156,
+                                           "white_balance_temperature": 4600, "gain": 10})
+
+
+def _proposal(tmp_path, overall="OK", raster="OK"):
+    frame = tmp_path / "still.png"
+    frame.write_bytes(b"png")
+    return {
+        "frame": str(frame), "device_id": "gsv-sensor-161a", "session_id": "live-test",
+        "quad": [[0, 0], [400, 0], [400, 160], [0, 160]], "target_size": [400, 160],
+        "grid": live_setup.LATTICE_GRID.to_dict(), "grid_source": "dot_lattice", "scaler_crop": None,
+        "min_source_dot_column_px": 5.0, "native_scale": 1.0, "min_native_dot_column_px": 5.0,
+        "camera": _CAMERA.to_dict(),
+        "setup_checks": {"overall": overall, "checks": {"rasterversatz": {"status": raster}}},
+    }
+
+
+def test_confirm_builds_confirmed_profile(tmp_path):
+    timestamp = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
+    profile = live_setup.confirm_proposal(_proposal(tmp_path), confirmed_by="Leonhard Hentschke",
+                                          resolution_threshold_px=2.6, now=lambda: timestamp)
+    assert profile.confirmed_by == "Leonhard Hentschke" and profile.resolution_ok
+    assert profile.camera == _CAMERA and profile.reference_frame["path"].endswith("still.png")
+    assert profile.confirmed_at_utc == timestamp.isoformat()
+
+
+def test_confirm_refuses_fehler_without_override(tmp_path):
+    with pytest.raises(live_setup.SetupError, match="FEHLER"):
+        live_setup.confirm_proposal(_proposal(tmp_path, overall="FEHLER"), confirmed_by="x",
+                                    resolution_threshold_px=2.6)
+
+
+def test_confirm_refuses_empty_name(tmp_path):
+    with pytest.raises(live_setup.SetupError, match="Name"):
+        live_setup.confirm_proposal(_proposal(tmp_path), confirmed_by="  ", resolution_threshold_px=2.6)
