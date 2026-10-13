@@ -32,6 +32,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Einrichtung Teil 3: Vorschlag (`propose_with_fit`, `write_overlays`) und Bestätigung (`confirm_proposal`, verlangt jetzt einen nichtleeren Namen) liegen in `dispread.live.setup`.
 
+* `LiveSession`: bestätigtes Profil → nachgeführtes Quad → Dot-Matrix-Leser → Freigabe (`confirm_frames=2`) → `records.jsonl`; `session.json` mit Versatz BOOTTIME−MONOTONIC, aufgezeichneter (nicht angewandter) Timing-Kalibrierung und Freigabehinweis. Start wird abgelehnt ohne Kalibrierung, bei falscher Vorlagenprüfsumme oder verändertem Referenzbild.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
