@@ -123,8 +123,12 @@ Regeln:
    die erreichbare Leserate.
 3. **Kette:** Quad nachführen (Verlust → `UNREADABLE`, Hinweis „neu
    einrichten") → entzerren auf 400×160 → `DotMatrixReader` →
-   `ReleaseGate(default_gate_config("dotmatrix"))`. Es gelten die
-   eingefrorenen Schwellen des Lesers, nicht die 7-Segment-Werte.
+   `ReleaseGate(default_gate_config("dotmatrix", confirm_frames=2))`. Es
+   gelten die eingefrorenen Schwellen des Lesers, nicht die
+   7-Segment-Werte. **Mehrbildbestätigung `confirm_frames = 2`:** ein neuer
+   Wert ist für ein gelesenes Bild `TRANSITION`, erst das zweite gleiche
+   Bild gibt ihn frei. Mit dem Vorgabewert 1 gäbe es nie `TRANSITION`.
+   Die Verzögerung steht in `confirmation_span_ns`.
 4. **Datensatz:** `ValueRecord` mit allen neun Pflichtfeldern.
    `capture_timestamp` ist die Aufnahmezeit des gelesenen Bilds, nicht die
    Verarbeitungszeit; `result_timestamp` aus derselben Uhr;
@@ -156,8 +160,10 @@ in `session.json` (Anzahl je Status, übersprungene Bilder, Lücken).
 
 Konzept §4: Eine Person bestätigt Anzeige, Einheit und Dezimalformat.
 
-1. **Kameraprüfung:** USB3, 1920×1080 YUYV, Regler gesetzt und
-   zurückgelesen. Sonst Abbruch mit Grund („USB2-Port", „Kamera belegt").
+1. **Kameraprüfung:** USB3, 1920×1080 YUYV. Vor dem Fokus läuft die
+   Vorschau nur mit Format, ohne Reglerwerte (`UvcSource(…,
+   apply_controls=False)`, kein Erfinden von Vorgabewerten); nach dem Fokus
+   werden alle Regler gesetzt und zurückgelesen. Sonst Abbruch mit Grund („USB2-Port", „Kamera belegt").
 2. **Fokus:** Sweep über `focus_absolute` mit Vorschlag und Live-Vorschau;
    der Bediener kann nachstellen.
 3. **Zwei Standbilder mit Zellentext:** der Text kommt vom GSV-2AS über
@@ -201,17 +207,27 @@ andere Lichtquellen und Geräte nicht geprüft."
 
 ## 5. Stilllegung in der Werkbank
 
-* Aus `workbench/controller.py` entfallen der Picamera2-Worker (`_worker`,
-  `_capture`, `_settle`, `_automatic`), der Lesepfad (`_read`,
-  `_reader_for`, `_draw_cells`) und die Meldung „außer Betrieb"; dazu die
-  libcamera-Regler in `profiles.py` und `fields.py`.
+* Aus `workbench/controller.py` entfallen der Picamera2-Worker und seine
+  Helfer (`_capture`, `_settle`, `_automatic`, `_guarded`,
+  `CameraWedgedError`) und die Meldung „außer Betrieb". Der Controller
+  bekommt seine Bilder gedrosselt (höchstens 5 je Sekunde) von
+  `CameraOwner`; Vorschau, Clips und Datensatzaufnahme der alten Seite
+  laufen damit weiter.
+* **Nachtrag 2026-10-12 (Planung):** Der 7-Segment-Lesepfad der alten Seite
+  (`_read`, `_reader_for`, `_draw_cells` samt ROI-, Layout- und
+  Autofit-Abläufen) bleibt vorerst unverändert. Er erzeugt keine
+  Datensätze, und rund 15 Tests des Kalibrierablaufs der alten Seite hängen
+  an ihm. Seine Entfernung ist ein eigener Aufräumschritt.
+* Die Kamerabefehle der alten Seite (`camera.set`, `camera.set_many`,
+  `focus`, `auto.start`) lehnen mit Verweis auf `/live` ab. Die
+  libcamera-Regler in `profiles.py`/`fields.py` bleiben bis zum
+  Aufräumschritt als unbenutzte Konfiguration stehen.
 * Es bleiben Datensätze (`datasets.py`, `dataset.js`), `vision.py`,
   Server, Anmeldung und Terminals.
-* Datensatzaufnahme und Clips aus der Kamera bekommen ihre Bilder von
-  `CameraOwner`. Hängt das zu eng am Controller, wird die Kameraaufnahme
-  für Datensätze in Meilenstein 1 abgeschaltet und später nachgezogen.
 * `dispread serve --simulate` bleibt: `CameraOwner` bekommt dann
-  `synthetic://` oder `replay://` statt der StreamCam.
+  `synthetic://` (gedrosselt). Die Live-Seite zeigt die Vorschau; die
+  Einrichtung meldet „braucht die StreamCam", weil die synthetische Quelle
+  keine Punktraster-Anzeige liefert.
 
 ## 6. Tests
 
@@ -227,8 +243,11 @@ Alle ohne Hardware (CLAUDE.md):
   Kommandozeile liefert unverändert dieselben Ergebnisse.
 * **Echte Standbilder:** `sc7`/`sc7a` aus `var/diagnostics` (Tests
   überspringen, wenn `var/` fehlt, wie bisher).
-* **API und Seite:** Servertests für `/live/*`, ein Playwright-Test für
-  Einrichtung → Bestätigen → Live-Anzeige mit `--simulate`.
+* **API und Seite:** Servertests (aiohttp) für `/live/*` und ein
+  node-Test für die Statusanzeige der Seite (`statusView`). Ein
+  Playwright-Durchlauf mit `--simulate` entfällt, weil die Simulation die
+  Einrichtung nicht fahren kann; die Bedienung wird im echten Lauf
+  (Phase 5) geprüft.
 * **Hardware (`--mode=real`):** ein echter Lauf mit StreamCam und GSV-2AS,
   dokumentiert in VALIDATION.md, kein formaler Abnahme-Lauf.
 
