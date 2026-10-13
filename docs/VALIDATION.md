@@ -19,6 +19,30 @@ Konzept.md §9 ist ausdrücklich: synthetische Daten ergänzen, sie zählen **ni
 zum Testset. Technische Kamerastream-Tests sind gesondert gekennzeichnet und
 belegen keine Erkennungszuverlässigkeit im Realbetrieb.
 
+## Leserlaufzeit 2026-10-13 — Messpfad live, Task 1
+
+Raspberry Pi 5; `./.venv/bin/python scripts/live-reader-benchmark.py` mit
+Defaults, `PYTHONPATH="$PWD/src"`; kein `var/RECORDING_IN_PROGRESS`.
+Datensatz: Standbild `var/diagnostics/sc7-assist/still.png`, Quad/Raster
+`var/diagnostics/sc7-assist/proposal.json`; Vorlagen Stufe 2c mit SHA-256
+`6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a`.
+
+| Kennzahl | Ergebnis |
+| --- | --- |
+| Wiederholungen | 200 |
+| Median | 44,27291 ms |
+| p95 | 68,504584 ms |
+| Maximum | 118,582498 ms |
+| Abgeleitete Leserate (`1000 / p95_ms`) | 14,59756 Bilder/s |
+| Letzter Wert | 0,46792 mV/V |
+| Letzte Ablehnung | keine (`null`) |
+
+Gemessen: Entzerren auf 400×160 und Dot-Matrix-Lesen mit
+`time.perf_counter_ns` (monotone Verarbeitungsuhr). Keine Live-Rate,
+Aufnahme-/DUT-Latenz oder neue Erkennungsabnahme; Nachführung, Freigabe
+und Audit-Ausgabe sind nicht enthalten. Aufbau und Deutung:
+[Laborjournal](lab_journal.md#2026-10-12-leserlaufzeit-pi-5-messpfad-live-task-1).
+
 ## Fehlerklassen — getrennt zu zählen
 
 Eine hohe Zeichenquote genügt nach Konzept.md §10 nicht. Maßgeblich ist der

@@ -3,6 +3,19 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
+
+**Problem:** Die Werkbank konnte mit der StreamCam weder einrichten noch
+lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
+
+**Änderung:** Neuer Kern `dispread.live` (Plan
+`docs/superpowers/plans/2026-10-12-messpfad-live.md`):
+
+* Laufzeitmessung der Lesekette (`live/benchmark.py`,
+  `scripts/live-reader-benchmark.py`); Ergebnis im Laborjournal.
+
+**Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
+
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
 
 **Problem:** Vier der sechs Kapitel der Projekt-Tour waren nur als „geplant“

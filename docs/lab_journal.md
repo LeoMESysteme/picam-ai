@@ -7,6 +7,34 @@ Schluss. Zahlen gehören zusätzlich nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-12 — Leserlaufzeit Pi 5 (Messpfad live, Task 1)
+
+**Messdatum:** 2026-10-13; Abschnittsdatum gemäß Task-Brief.
+
+**Ziel:** Laufzeit von Entzerren (400×160) und Dot-Matrix-Lesen bestimmen.
+
+**Aufbau:** Raspberry Pi 5, gespeichertes Standbild
+`var/diagnostics/sc7-assist/still.png`, Quad und Raster aus
+`var/diagnostics/sc7-assist/proposal.json`, Einheit mV/V. Eingefrorene
+Vorlagen `var/dotmatrix/templates-stufe2c-2026-09-30.json`, SHA-256
+`6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a`.
+Keine Kamera geöffnet, `var/RECORDING_IN_PROGRESS` fehlte; Daten nur gelesen.
+Aufruf: `./.venv/bin/python scripts/live-reader-benchmark.py` mit Defaults
+und `PYTHONPATH="$PWD/src"` für den Worktree statt des Hauptcheckouts.
+
+**Messergebnis:** 200 Wiederholungen, Median **44,27291 ms**, p95
+**68,504584 ms**, Maximum **118,582498 ms**. Letzter Wert **0,46792 mV/V**,
+`last_reject: null`. Laufzeit mit `time.perf_counter_ns` gemessen
+(monotone Verarbeitungsuhr); keine Zeitangabe aus dem Standbild abgeleitet.
+
+**Schluss:** `1000 / p95_ms` ergibt **14,59756 Bilder/s** für diese
+Lesekette. Dies ist eine Laufzeitschätzung am wiederholten Standbild,
+keine gemessene Live-Rate und keine Aufnahme- oder DUT-Latenz. Nachführung,
+Freigabe und Audit-Ausgabe sind hier nicht enthalten. Zahlen zusätzlich
+in [VALIDATION.md](VALIDATION.md#leserlaufzeit-2026-10-13-messpfad-live-task-1).
+
+---
+
 ## 2026-09-07 — Inbetriebnahme der AI Camera
 
 **Ziel:** Kamera erkennen und erste Aufnahme.
