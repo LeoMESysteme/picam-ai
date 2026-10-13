@@ -101,3 +101,26 @@ def test_confirm_refuses_fehler_without_override(tmp_path):
 def test_confirm_refuses_empty_name(tmp_path):
     with pytest.raises(live_setup.SetupError, match="Name"):
         live_setup.confirm_proposal(_proposal(tmp_path), confirmed_by="  ", resolution_threshold_px=2.6)
+
+
+def test_propose_with_fit_refuses_image_size_different_from_camera_settings(tmp_path):
+    from types import SimpleNamespace
+
+    fit = SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]])
+    with pytest.raises(live_setup.SetupError, match="Bild ist"):
+        live_setup.propose_with_fit(
+            np.zeros((720, 1280, 3), np.uint8), fit=fit, frame_path=tmp_path / "still.png",
+            camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
+        )
+
+
+def test_propose_with_fit_refuses_missing_offset_check_and_cell_text(tmp_path):
+    from types import SimpleNamespace
+
+    fit = SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]])
+    with pytest.raises(live_setup.SetupError, match="Zellentext"):
+        live_setup.propose_with_fit(
+            np.zeros((1080, 1920, 3), np.uint8), fit=fit, frame_path=tmp_path / "still.png",
+            camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
+            offset_check=None, cell_text=None,
+        )
