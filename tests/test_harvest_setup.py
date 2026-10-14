@@ -923,6 +923,9 @@ def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
     assert data["camera"]["model"] == STREAMCAM_MODEL
     assert data["camera"]["size"] == [1920, 1080]
     assert len(data["focus_sweep"]) > 0
+    assert len(data["focus_sweep"]) <= 10
+    assert data["focus_sweep"][0][0] == 48
+    assert data["focus_method"] == "climb"
     assert "created_at_utc" in data
     assert (out_dir / "control.png").exists()
     # Nach `focus` steht die Automatik wieder auf manuell (`auto_exposure=3`

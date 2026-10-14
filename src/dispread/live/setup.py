@@ -25,7 +25,7 @@ import numpy as np
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.dotlattice import evaluate_quad, fit_lattice
-from dispread.focus_sweep import sharpness, sweep_focus
+from dispread.focus_sweep import climb_focus, sharpness
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
@@ -127,10 +127,11 @@ def focus_camera(
     cam: SetupCamera,
     hint_box: HintBox | None,
     *,
+    start_focus: int = 48,
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
 ) -> tuple[CameraSettings, list[tuple[int, float]]]:
-    """Fokus-Sweep, danach Automatiken kurz einschwingen lassen und deren
+    """Fokus-Bergsteigen, danach Automatiken kurz einschwingen lassen und deren
     Werte als feste Regler uebernehmen (wie bisher `run_focus`)."""
     sleep = sleep or time.sleep
 
@@ -145,7 +146,7 @@ def focus_camera(
         return sharpness(measurement_roi(gray, hint_box))
 
     cam.set_controls([("focus_automatic_continuous", 0)])
-    best_focus, sweep_log = sweep_focus(measure)
+    best_focus, sweep_log = climb_focus(measure, start=start_focus)
     cam.set_controls([("auto_exposure", 3), ("white_balance_automatic", 1)])
     sleep(WHITE_BALANCE_SETTLE_S)
     readback = cam.get_controls(["exposure_time_absolute", "white_balance_temperature", "gain"])

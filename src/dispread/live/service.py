@@ -107,6 +107,7 @@ class LiveService:
         self._proposal: dict | None = None
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
+        self._last_confirmed_focus: int = 48
         self._profile_info: dict | None = None
         self._run_dir: Path | None = None
         self._session: LiveSession | None = None
@@ -246,9 +247,12 @@ class LiveService:
         setup_dir = session_dir / "setup"
         setup_dir.mkdir(parents=True, exist_ok=True)
         report("fokus")
-        settings, sweep = live_setup.focus_camera(OwnerSetupCamera(self._owner), None)
+        with self._lock:
+            start_focus = self._last_confirmed_focus
+        settings, sweep = live_setup.focus_camera(OwnerSetupCamera(self._owner), None, start_focus=start_focus)
         (setup_dir / "camera-settings.json").write_text(
             json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
+                        "focus_method": sweep.focus_method,
                         "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -332,6 +336,7 @@ class LiveService:
             )
             with self._lock:
                 self._profile_path, self._profile_camera = path, profile.camera
+                self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
                                       "confirmed_at_utc": profile.confirmed_at_utc,
                                       "warning_acknowledged": overall == "WARNUNG"}

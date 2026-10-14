@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import pytest
 
-from dispread.focus_sweep import sharpness, sweep_focus
+from dispread.focus_sweep import climb_focus, sharpness, sweep_focus
 
 
 def test_sweep_findet_maximum_grob_dann_fein():
@@ -48,3 +49,100 @@ def test_sharpness_scharf_groesser_als_weichgezeichnet():
     sharp = _checkerboard()
     blurred = cv2.GaussianBlur(sharp, (9, 9), 0)
     assert sharpness(sharp) > sharpness(blurred)
+
+
+@pytest.mark.parametrize("peak,limit", [(46, 10), (68, 12), (12, 15), (250, 35)])
+def test_climb_findet_gipfel_ohne_vollsweep(peak, limit):
+    calls = []
+
+    def measure(focus):
+        calls.append(focus)
+        return float(1000 * np.exp(-((focus - peak) / 30) ** 2))
+
+    best, measured = climb_focus(measure)
+    assert abs(best - peak) <= 2
+    assert len(calls) <= limit
+    assert len(calls) == len(set(calls))
+    assert [f for f, _ in measured] == calls
+    assert measured.focus_method == "climb"
+
+
+def test_climb_flacher_rand_faellt_auf_sweep_zurueck_ohne_doppelmessung():
+    calls = []
+
+    def measure(focus):
+        calls.append(focus)
+        return max(10.0, 1000.0 - (focus - 50) ** 2)
+
+    best, measured = climb_focus(measure, start=200)
+    assert abs(best - 50) <= 2
+    assert calls[:3] == [200, 208, 192]
+    assert len(calls) == len(set(calls))
+    assert [f for f, _ in measured] == calls
+    assert measured.focus_method == "sweep"
+
+
+@pytest.mark.parametrize("start", [48, 68])
+def test_climb_reale_interpolierte_kurve(start):
+    calls = []
+
+    def measure(focus):
+        calls.append(focus)
+        return float(np.interp(focus, [0, 32, 40, 48, 56, 64, 80, 255],
+                               [11, 79.6, 264.3, 431.6, 135.6, 55.3, 16, 11]))
+
+    best, measured = climb_focus(measure, start=start)
+    assert abs(best - 48) <= 2
+    assert len(calls) <= 12
+    assert len(calls) == len(set(calls)) == len(measured)
+
+
+def test_climb_leichtes_rauschen_bleibt_innerhalb_eines_feinschritts():
+    def curve(focus):
+        return 10 + 1000 * np.exp(-((focus - 46) / 10) ** 2)
+
+    clean, _ = climb_focus(curve)
+    for seed in range(10):
+        noise = np.random.default_rng(seed).uniform(-0.02, 0.02, 256)
+        best, _ = climb_focus(lambda f, noise=noise: curve(f) * (1 + noise[f]))
+        assert abs(best - clean) <= 2
+
+
+@pytest.mark.parametrize("start,peak", [(0, 0), (255, 255), (0, 12), (255, 250)])
+def test_climb_begrenzt_nachbarn_und_misst_grenzen_nur_einmal(start, peak):
+    calls = []
+
+    def measure(focus):
+        assert 0 <= focus <= 255
+        calls.append(focus)
+        return 1000 - abs(focus - peak)
+
+    best, _ = climb_focus(measure, start=start, flat_tolerance=0)
+    assert abs(best - peak) <= 2
+    assert len(calls) == len(set(calls))
+
+
+def test_climb_geht_ueber_plateau_bis_zum_abfall():
+    scores = {48: 100, 56: 110, 64: 108, 72: 150, 80: 50}
+    calls = []
+
+    def measure(focus):
+        calls.append(focus)
+        return scores.get(focus, 90)
+
+    best, _ = climb_focus(measure)
+    assert best == 72
+    assert calls[:5] == [48, 56, 64, 72, 80]
+    assert 88 not in calls
+
+
+def test_climb_feinsuche_bricht_pro_richtung_beim_ersten_abfall_ab():
+    best, measured = climb_focus(lambda f: 1000 - (f - 48) ** 2)
+    assert best == 48
+    assert [f for f, _ in measured] == [48, 56, 40, 50, 46]
+
+
+def test_climb_feinabstand_bleibt_bei_nichtteilbaren_schritten_begrenzt():
+    best, measured = climb_focus(lambda f: 50 if f in (38, 58) else 100, step=10, fine_step=4)
+    assert best == 48
+    assert [f for f, _ in measured] == [48, 58, 38, 52, 44]

@@ -2,8 +2,8 @@
 
 Die StreamCam hat keine Autofokus-Logik, die fuer den Messpfad reproduzierbar
 waere - `focus_absolute` (0..255) wird deshalb einmal je Sitzung von
-`scripts/harvest-setup.py focus` per Software-Sweep bestimmt: grob ueber den
-ganzen Bereich, dann fein um das gefundene Maximum. `measure()` selbst (eine
+`scripts/harvest-setup.py focus` per Bergsteigen bestimmt; bei flachem Start
+bleibt der Vollsweep als Rueckfall. `measure()` selbst (eine
 Kamera anfahren, warten, ein Bild lesen, `sharpness()` darauf anwenden) bleibt
 Sache des Aufrufers - dieses Modul kennt weder Kamera noch Datei-I/O, das ist
 die Voraussetzung dafuer, dass `sweep_focus` ohne Hardware testbar ist.
@@ -15,6 +15,85 @@ from collections.abc import Callable, Sequence
 
 import cv2
 import numpy as np
+
+
+class FocusMeasurements(list[tuple[int, float]]):
+    """Messungen in Reihenfolge, mit der tatsaechlich verwendeten Suchmethode."""
+
+    def __init__(self, focus_method: str = "climb") -> None:
+        super().__init__()
+        self.focus_method = focus_method
+
+
+def climb_focus(
+    measure: Callable[[int], float],
+    start: int = 48,
+    step: int = 8,
+    fine_step: int = 2,
+    lo: int = 0,
+    hi: int = 255,
+    flat_tolerance: float = 0.05,
+) -> tuple[int, list[tuple[int, float]]]:
+    """Bergsteigen: ab `start` in Schritten `step` in die Richtung, in der die
+    Schaerfe steigt; faellt sie nach einem Anstieg, ist der Gipfel ueberschritten.
+    Dann dasselbe mit `fine_step` um den besten Wert. Ein Fokuswert wird nie
+    zweimal gemessen. Kein Anstieg in beiden Richtungen (flach, Unterschied
+    < `flat_tolerance` relativ) -> Rueckfall auf `sweep_focus` mit denselben
+    Messungen als Startbestand (keine Wiederholung schon gemessener Werte).
+    Rueckgabe wie `sweep_focus`: (bester Fokus, Messungen in Reihenfolge).
+    """
+    measured = FocusMeasurements()
+    seen: dict[int, float] = {}
+
+    def sample(focus: int) -> float:
+        if focus not in seen:
+            seen[focus] = measure(focus)
+            measured.append((focus, seen[focus]))
+        return seen[focus]
+
+    start = max(lo, min(hi, start))
+    initial = sample(start)
+    threshold = abs(initial) * flat_tolerance
+    right, left = min(hi, start + step), max(lo, start - step)
+    right_score = sample(right)
+    direction = 0
+    best, best_score = start, initial
+    if right_score > initial + threshold:
+        direction, best, best_score = 1, right, right_score
+    else:
+        left_score = sample(left)
+        if left_score > initial + threshold:
+            direction, best, best_score = -1, left, left_score
+        elif abs(right_score - initial) <= threshold and abs(left_score - initial) <= threshold:
+            measured.focus_method = "sweep"
+            sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=step,
+                        fine_step=fine_step, lo=lo, hi=hi)
+            return max(measured, key=lambda pair: pair[1])[0], measured
+
+    position = best
+    while direction:
+        following = max(lo, min(hi, position + direction * step))
+        if following == position:
+            break
+        score = sample(following)
+        if score < best_score - abs(best_score) * flat_tolerance:
+            break
+        if score > best_score:
+            best, best_score = following, score
+        position = following
+
+    coarse_best = best
+    for direction in (1, -1):
+        previous = sample(coarse_best)
+        for distance in range(fine_step, step - fine_step + 1, fine_step):
+            focus = coarse_best + direction * distance
+            if not lo <= focus <= hi:
+                break
+            score = sample(focus)
+            if score < previous:
+                break
+            previous = score
+    return max(measured, key=lambda pair: pair[1])[0], measured
 
 
 def sharpness(gray_roi: np.ndarray) -> float:

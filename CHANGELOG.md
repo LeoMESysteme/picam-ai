@@ -11,6 +11,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):
 
+* Fokus per Bergsteigen statt Vollsweep: grob zum Gipfel, dann fein; bei flachem Start bleibt der Sweep ohne doppelte Messungen als Rückfall. Die Werkbank startet beim zuletzt in dieser Sitzung bestätigten Fokus (sonst 48); Werkbank und `harvest-setup.py focus` protokollieren `focus_method` in `camera-settings.json`.
+
 * Review-Nacharbeit: Trackingverlust unterbricht die Mehrbildbestätigung bei erhaltener STALE-Zeitbasis; Live-Läufe protokollieren ECC-Qualität und Bedienbestätigung, die Seite zeigt passende Einrichtungshinweise, und abgeschlossene Läufe bleiben bei späten Leseschritten unverändert.
 
 * Laufzeitmessung der Lesekette (`live/benchmark.py`,

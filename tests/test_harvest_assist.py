@@ -974,7 +974,6 @@ def test_focus_releases_camera_when_sweep_capture_fails(tmp_path, monkeypatch):
             set_controls=lambda *_args: None,
         ),
     )
-    monkeypatch.setattr(live_setup, "sweep_focus", lambda measure: measure(48))
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda _seconds: None)
     args = SimpleNamespace(hint_box=None, device=None, settle_s=1.0, out=tmp_path)
     with pytest.raises(UvcError, match="kein Bild"):

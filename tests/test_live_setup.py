@@ -26,12 +26,12 @@ class FakeSetupCamera:
 
 
 def test_focus_camera_turns_autofocus_off_first_and_reads_back(monkeypatch):
-    monkeypatch.setattr(live_setup, "sweep_focus", lambda measure: (48, [(48, measure(48))]))
     cam = FakeSetupCamera(np.full((1080, 1920, 3), 128, np.uint8))
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: 1000 - (cam.controls[-1][0][1] - 48) ** 2)
     settings, sweep = live_setup.focus_camera(cam, None, settle_s=0, sleep=lambda _s: None)
     assert cam.controls[0] == [("focus_automatic_continuous", 0)]
     assert cam.controls[1] == [("focus_absolute", 48)]
-    assert cam.controls[2] == [("auto_exposure", 3), ("white_balance_automatic", 1)]
+    assert cam.controls[-1] == [("auto_exposure", 3), ("white_balance_automatic", 1)]
     assert settings.controls == {
         "focus_absolute": 48, "exposure_time_absolute": 156, "white_balance_temperature": 4600, "gain": 10,
     }
@@ -124,3 +124,24 @@ def test_propose_with_fit_refuses_missing_offset_check_and_cell_text(tmp_path):
             camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
             offset_check=None, cell_text=None,
         )
+
+
+@pytest.mark.parametrize("start,flat,method", [(48, False, "climb"), (68, False, "climb"),
+                                              (200, True, "sweep")])
+def test_focus_camera_sucht_ab_start_und_protokolliert_rueckfall(monkeypatch, start, flat, method):
+    cam = FakeSetupCamera(np.zeros((12, 12), np.uint8))
+
+    def score(_roi):
+        focus = cam.controls[-1][0][1]
+        if flat:
+            return max(10.0, 1000.0 - (focus - 50) ** 2)
+        return float(np.interp(focus, [0, 32, 40, 48, 56, 64, 80, 255],
+                               [11, 79.6, 264.3, 431.6, 135.6, 55.3, 16, 11]))
+
+    monkeypatch.setattr(live_setup, "sharpness", score)
+    settings, measured = live_setup.focus_camera(cam, None, start_focus=start, sleep=lambda _s: None)
+    assert measured[0][0] == start
+    assert measured.focus_method == method
+    assert abs(settings.controls["focus_absolute"] - (50 if flat else 48)) <= 2
+    if not flat:
+        assert len(measured) <= 12

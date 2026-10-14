@@ -30,7 +30,7 @@ Aufruf:
         --resolution-threshold-px 2.0 --confirmed-by bediener \\
         --out var/diagnostics/lauf1/setup/profile.json
 
-`focus` faehrt einen Software-Fokus-Sweep (`dispread.focus_sweep.sweep_focus`)
+`focus` sucht per Bergsteigen (`dispread.focus_sweep.climb_focus`, Vollsweep bei flachem Start)
 direkt ueber `cv2.VideoCapture` (1920x1080, YUYV, 30 fps - noch ohne
 bestaetigten `CameraSettings`-Vertrag, den ermittelt dieser Schritt erst),
 friert danach Belichtung und Weissabgleich ein und schreibt die gefundenen
@@ -545,6 +545,7 @@ def run_focus(args: argparse.Namespace) -> int:
     data = {
         "camera": settings.to_dict(),
         "focus_sweep": [[f, s] for f, s in sweep_log],
+        "focus_method": sweep_log.focus_method,
         "created_at_utc": datetime.now(UTC).isoformat(),
     }
     (out_dir / "camera-settings.json").write_text(

@@ -2,6 +2,7 @@ import time
 
 import pytest
 
+from dispread.focus_sweep import FocusMeasurements
 from dispread.live.service import LiveError, LiveService
 
 
@@ -294,7 +295,7 @@ def test_real_setup_camera_restart_failure_becomes_setup_failed(tmp_path, propos
             raise RuntimeError("Lesethread noch nicht beendet")
 
     camera = CameraSettings.from_dict(proposal["camera"])
-    monkeypatch.setattr(live_setup, "focus_camera", lambda *args: (camera, [(48, 1.0)]))
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *args, **kwargs: (camera, FocusMeasurements()))
     service = LiveService(BlockedOwner(), tmp_path)
     service.start_setup()
     assert _wait_state(service, {"setup_failed"}) == "setup_failed"
@@ -369,10 +370,13 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("serial_opened")
         return port
 
-    def focus(cam, hint):
+    def focus(cam, hint, *, start_focus):
         assert hint is None
+        assert start_focus == 48
         events.append("focus")
-        return camera, [(48, 1.0)]
+        measured = FocusMeasurements()
+        measured.append((48, 1.0))
+        return camera, measured
 
     def assist(cam, **kwargs):
         assert kwargs["expected_size"] == camera.size
@@ -410,6 +414,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         assert events[2:] == ["assist", "proposal"]
     settings = tmp_path / service.status()["session_id"] / "setup" / "camera-settings.json"
     assert json.loads(settings.read_text())["camera"] == camera.to_dict()
+    assert json.loads(settings.read_text())["focus_method"] == "climb"
     if fail:
         assert service.status()["error"] == "Standbild abgelehnt"
     else:
@@ -679,3 +684,40 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
         "warning_acknowledged": acknowledged, "setup_overall": overall,
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
+
+
+def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch):
+    import json
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    proposal["camera"]["controls"]["focus_absolute"] = 68
+    service = ready_service(tmp_path, proposal)
+    starts = []
+
+    def focus(cam, hint, *, start_focus):
+        starts.append(start_focus)
+        measured = FocusMeasurements("sweep")
+        measured.append((100, 1.0))
+        return CameraSettings.from_dict(proposal["camera"]), measured
+
+    def fail_after_focus(*args, **kwargs):
+        raise live_setup.SetupError("Standbild abgelehnt")
+
+    monkeypatch.setattr(live_setup, "focus_camera", focus)
+    monkeypatch.setattr(live_setup, "assist_measure", fail_after_focus)
+    service._setup_runner = service._run_setup
+    # Ein unbestaetigter Vorschlag darf keinen Startwert vorgeben.
+    service.start_setup(cell_text="+ 1.2345 ")
+    assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+    assert starts == [48]
+    # Dieselbe Service-Instanz bestaetigt nun das Profil mit Fokus 68.
+    service._proposal, service._state = proposal, "setup_ready"
+    service.confirm(confirmed_by="Test", format_checked=True)
+    for _ in range(2):
+        service.start_setup(cell_text="+ 1.2345 ")
+        assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+    assert starts == [48, 68, 68]
+    path = tmp_path / service.status()["session_id"] / "setup" / "camera-settings.json"
+    assert json.loads(path.read_text())["focus_method"] == "sweep"
