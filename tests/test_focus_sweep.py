@@ -57,7 +57,7 @@ def test_climb_findet_gipfel_ohne_vollsweep(peak, limit):
 
     def measure(focus):
         calls.append(focus)
-        return float(1000 * np.exp(-((focus - peak) / 30) ** 2))
+        return float(1000 * np.exp(-((focus - peak) / 10) ** 2))
 
     best, measured = climb_focus(measure)
     assert abs(best - peak) <= 2
@@ -95,6 +95,27 @@ def test_climb_reale_interpolierte_kurve(start):
     assert abs(best - 48) <= 2
     assert len(calls) <= 12
     assert len(calls) == len(set(calls)) == len(measured)
+
+
+@pytest.mark.parametrize("start", [100, 150, 200, 240])
+@pytest.mark.parametrize("noise_level", [0.05, 0.10])
+@pytest.mark.parametrize("seed", range(20))
+def test_climb_rauschender_flacher_rand_findet_realen_gipfel(start, noise_level, seed):
+    noise = np.random.default_rng(seed).uniform(-noise_level, noise_level, 256)
+    calls = []
+
+    def measure(focus):
+        calls.append(focus)
+        score = np.interp(focus, [0, 32, 40, 48, 56, 64, 80, 255],
+                          [11, 79.6, 264.3, 431.6, 135.6, 55.3, 16, 11])
+        return float(score * (1 + noise[focus]))
+
+    best, measured = climb_focus(measure, start=start)
+    assert abs(best - 48) <= 2
+    if measured.focus_method == "climb":
+        assert max(s for _, s in measured) >= 2 * min(s for _, s in measured)
+    assert len(calls) == len(set(calls)) == len(measured)
+    assert [f for f, _ in measured] == calls
 
 
 def test_climb_leichtes_rauschen_bleibt_innerhalb_eines_feinschritts():
@@ -137,12 +158,17 @@ def test_climb_geht_ueber_plateau_bis_zum_abfall():
 
 
 def test_climb_feinsuche_bricht_pro_richtung_beim_ersten_abfall_ab():
-    best, measured = climb_focus(lambda f: 1000 - (f - 48) ** 2)
+    best, measured = climb_focus(lambda f: 100 - (f - 48) ** 2)
     assert best == 48
     assert [f for f, _ in measured] == [48, 56, 40, 50, 46]
 
 
-def test_climb_feinabstand_bleibt_bei_nichtteilbaren_schritten_begrenzt():
-    best, measured = climb_focus(lambda f: 50 if f in (38, 58) else 100, step=10, fine_step=4)
+@pytest.mark.parametrize("peak_ratio,method", [(2.0, "climb"), (2.01, "sweep")])
+def test_climb_feinabstand_und_plausibilitaetsgrenze(peak_ratio, method):
+    best, measured = climb_focus(lambda f: 50 if f in (38, 58) else 100,
+                                 step=10, fine_step=4, peak_ratio=peak_ratio)
     assert best == 48
-    assert [f for f, _ in measured] == [48, 58, 38, 52, 44]
+    assert measured.focus_method == method
+    assert [f for f, _ in measured][:5] == [48, 58, 38, 52, 44]
+    if method == "climb":
+        assert len(measured) == 5

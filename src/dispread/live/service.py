@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from dispread.camera_settings import CameraSettings
+from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
@@ -107,7 +108,7 @@ class LiveService:
         self._proposal: dict | None = None
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
-        self._last_confirmed_focus: int = 48
+        self._last_confirmed_focus: int = DEFAULT_FOCUS_START
         self._profile_info: dict | None = None
         self._run_dir: Path | None = None
         self._session: LiveSession | None = None
@@ -252,7 +253,7 @@ class LiveService:
         settings, sweep = live_setup.focus_camera(OwnerSetupCamera(self._owner), None, start_focus=start_focus)
         (setup_dir / "camera-settings.json").write_text(
             json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
-                        "focus_method": sweep.focus_method,
+                        "focus_method": getattr(sweep, "focus_method", "sweep"),
                         "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )

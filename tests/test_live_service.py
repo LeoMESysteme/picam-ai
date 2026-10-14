@@ -686,7 +686,8 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
 
-def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch):
+@pytest.mark.parametrize("plain_list", [False, True])
+def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch, plain_list):
     import json
 
     from dispread.camera_settings import CameraSettings
@@ -700,7 +701,7 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
         starts.append(start_focus)
         measured = FocusMeasurements("sweep")
         measured.append((100, 1.0))
-        return CameraSettings.from_dict(proposal["camera"]), measured
+        return CameraSettings.from_dict(proposal["camera"]), list(measured) if plain_list else measured
 
     def fail_after_focus(*args, **kwargs):
         raise live_setup.SetupError("Standbild abgelehnt")

@@ -13,7 +13,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Einrichtung mittelt auf Wunsch aufeinanderfolgende Standbilder und wiederholt bei abgelehnter Startsuche die Aufnahme samt Zellentext und Hinweisbox. Referenz und Prüfungen nutzen das erfolgreiche Mittelbild; 2j, Gegenlesen und Freigabegrenzen bleiben unverändert. Die CLI behält Einzelbilder und einen Versuch als Standard.
 
-* Fokus per Bergsteigen statt Vollsweep: grob zum Gipfel, dann fein; bei flachem Start bleibt der Sweep ohne doppelte Messungen als Rückfall. Die Werkbank startet beim zuletzt in dieser Sitzung bestätigten Fokus (sonst 48); Werkbank und `harvest-setup.py focus` protokollieren `focus_method` in `camera-settings.json`.
+* Fokus per Bergsteigen statt Vollsweep: grob zum Gipfel, dann fein; bei flachem Start bleibt der Sweep ohne doppelte Messungen als Rückfall. Die Werkbank startet beim zuletzt in dieser Sitzung bestätigten Fokus (sonst 48); Werkbank und `harvest-setup.py focus` protokollieren `focus_method` in `camera-settings.json`; unplausible Rauschgipfel lösen ebenfalls den Sweep aus.
 
 * Review-Nacharbeit: Trackingverlust unterbricht die Mehrbildbestätigung bei erhaltener STALE-Zeitbasis; Live-Läufe protokollieren ECC-Qualität und Bedienbestätigung, die Seite zeigt passende Einrichtungshinweise, und abgeschlossene Läufe bleiben bei späten Leseschritten unverändert.
 

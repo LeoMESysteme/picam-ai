@@ -25,7 +25,7 @@ import numpy as np
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.dotlattice import evaluate_quad, fit_lattice
-from dispread.focus_sweep import climb_focus, sharpness
+from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_focus, sharpness
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
@@ -140,10 +140,10 @@ def focus_camera(
     cam: SetupCamera,
     hint_box: HintBox | None,
     *,
-    start_focus: int = 48,
+    start_focus: int = DEFAULT_FOCUS_START,
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
-) -> tuple[CameraSettings, list[tuple[int, float]]]:
+) -> tuple[CameraSettings, FocusMeasurements]:
     """Fokus-Bergsteigen, danach Automatiken kurz einschwingen lassen und deren
     Werte als feste Regler uebernehmen (wie bisher `run_focus`)."""
     sleep = sleep or time.sleep

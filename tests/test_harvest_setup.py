@@ -906,10 +906,19 @@ def _make_fake_camera_io(tmp_path: Path):
     ), state
 
 
-def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
+@pytest.mark.parametrize("plain_list", [False, True])
+def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch, plain_list):
     fake_io, state = _make_fake_camera_io(tmp_path)
     monkeypatch.setattr(harvest_setup, "_open_camera_io", lambda device: fake_io)
     monkeypatch.setattr(harvest_setup.time, "sleep", lambda seconds: None)
+    if plain_list:
+        focus_camera = harvest_setup.live_setup.focus_camera
+
+        def focus_with_plain_list(*args, **kwargs):
+            settings, measured = focus_camera(*args, **kwargs)
+            return settings, list(measured)
+
+        monkeypatch.setattr(harvest_setup.live_setup, "focus_camera", focus_with_plain_list)
 
     out_dir = tmp_path / "focus"
     rc = harvest_setup.main(["focus", "--out", str(out_dir), "--settle-s", "0"])
@@ -925,7 +934,7 @@ def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch):
     assert len(data["focus_sweep"]) > 0
     assert len(data["focus_sweep"]) <= 10
     assert data["focus_sweep"][0][0] == 48
-    assert data["focus_method"] == "climb"
+    assert data["focus_method"] == ("sweep" if plain_list else "climb")
     assert "created_at_utc" in data
     assert (out_dir / "control.png").exists()
     # Nach `focus` steht die Automatik wieder auf manuell (`auto_exposure=3`

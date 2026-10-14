@@ -16,6 +16,8 @@ from collections.abc import Callable, Sequence
 import cv2
 import numpy as np
 
+DEFAULT_FOCUS_START = 48
+
 
 class FocusMeasurements(list[tuple[int, float]]):
     """Messungen in Reihenfolge, mit der tatsaechlich verwendeten Suchmethode."""
@@ -27,19 +29,22 @@ class FocusMeasurements(list[tuple[int, float]]):
 
 def climb_focus(
     measure: Callable[[int], float],
-    start: int = 48,
+    start: int = DEFAULT_FOCUS_START,
     step: int = 8,
     fine_step: int = 2,
     lo: int = 0,
     hi: int = 255,
     flat_tolerance: float = 0.05,
-) -> tuple[int, list[tuple[int, float]]]:
+    peak_ratio: float = 2.0,
+) -> tuple[int, FocusMeasurements]:
     """Bergsteigen: ab `start` in Schritten `step` in die Richtung, in der die
     Schaerfe steigt; faellt sie nach einem Anstieg, ist der Gipfel ueberschritten.
     Dann dasselbe mit `fine_step` um den besten Wert. Ein Fokuswert wird nie
     zweimal gemessen. Kein Anstieg in beiden Richtungen (flach, Unterschied
     < `flat_tolerance` relativ) -> Rueckfall auf `sweep_focus` mit denselben
     Messungen als Startbestand (keine Wiederholung schon gemessener Werte).
+    Nach Grob- und Feinlauf muss der Gipfel mindestens `peak_ratio` mal so
+    hoch wie die kleinste gemessene Schaerfe sein, sonst ebenfalls Rueckfall.
     Rueckgabe wie `sweep_focus`: (bester Fokus, Messungen in Reihenfolge).
     """
     measured = FocusMeasurements()
@@ -50,6 +55,12 @@ def climb_focus(
             seen[focus] = measure(focus)
             measured.append((focus, seen[focus]))
         return seen[focus]
+
+    def fallback() -> tuple[int, FocusMeasurements]:
+        measured.focus_method = "sweep"
+        sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=step,
+                    fine_step=fine_step, lo=lo, hi=hi)
+        return max(measured, key=lambda pair: pair[1])[0], measured
 
     start = max(lo, min(hi, start))
     initial = sample(start)
@@ -65,10 +76,7 @@ def climb_focus(
         if left_score > initial + threshold:
             direction, best, best_score = -1, left, left_score
         elif abs(right_score - initial) <= threshold and abs(left_score - initial) <= threshold:
-            measured.focus_method = "sweep"
-            sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=step,
-                        fine_step=fine_step, lo=lo, hi=hi)
-            return max(measured, key=lambda pair: pair[1])[0], measured
+            return fallback()
 
     position = best
     while direction:
@@ -93,7 +101,10 @@ def climb_focus(
             if score < previous:
                 break
             previous = score
-    return max(measured, key=lambda pair: pair[1])[0], measured
+    best, best_score = max(measured, key=lambda pair: pair[1])
+    if best_score < peak_ratio * min(seen.values()):
+        return fallback()
+    return best, measured
 
 
 def sharpness(gray_roi: np.ndarray) -> float:

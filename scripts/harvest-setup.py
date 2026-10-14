@@ -545,7 +545,7 @@ def run_focus(args: argparse.Namespace) -> int:
     data = {
         "camera": settings.to_dict(),
         "focus_sweep": [[f, s] for f, s in sweep_log],
-        "focus_method": sweep_log.focus_method,
+        "focus_method": getattr(sweep_log, "focus_method", "sweep"),
         "created_at_utc": datetime.now(UTC).isoformat(),
     }
     (out_dir / "camera-settings.json").write_text(
