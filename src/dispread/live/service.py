@@ -145,6 +145,25 @@ class LiveService:
                 "run": run,
             }
 
+    def preview_jpeg(self, width: int = 960) -> bytes | None:
+        """Neuestes Bild verkleinert als JPEG; mit Lauf das nachgefuehrte Quad."""
+        import cv2
+
+        latest = self._owner.latest()
+        if latest is None:
+            return None
+        image = latest[1].image
+        scale = width / image.shape[1]
+        small = cv2.resize(image, (width, round(image.shape[0] * scale)))
+        session = self._session
+        locator = getattr(getattr(session, "_pipeline", None), "locator", None)
+        track = getattr(locator, "last_track", None)
+        if track is not None and track.quad is not None:
+            points = np.array([[x * scale, y * scale] for x, y in track.quad], dtype=np.int32)
+            cv2.polylines(small, [points], True, (0, 220, 0), 2)
+        ok, encoded = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return encoded.tobytes() if ok else None
+
     def setup_file(self, name: str) -> Path | None:
         if name not in OVERLAYS or self._session_dir is None:
             return None

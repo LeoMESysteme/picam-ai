@@ -36,6 +36,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * `LiveService`: Zustandsautomat der Live-Seite (Einrichtung im Hintergrund mit Fortschritt, Bestätigung nur ohne FEHLER und mit Kenntnisnahme bei WARNUNG, Lauf starten/stoppen, Kameraausfall wird angezeigt); ein Verzeichnis pro Lauf und serialisierte Bedienoperationen.
 
+* Live-Seite `/live` in `dispread serve`: Vorschau, Einrichtung mit Overlays, Bestätigung, Lauf mit Wert und Status, dauerhafter Freigabehinweis; `CameraOwner` öffnet die StreamCam ohne Regler bis zur Einrichtung.
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)

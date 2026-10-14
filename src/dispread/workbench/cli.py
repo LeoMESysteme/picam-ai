@@ -74,6 +74,7 @@ def parser():
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("--camera", type=int, default=0)
     serve.add_argument("--data", default="var/workbench")
+    serve.add_argument("--live-data", default="var/live")
     serve.add_argument("--socket", default=default_socket())
     serve.add_argument("--cert", default="var/workbench/tls/cert.pem")
     serve.add_argument("--key", default="var/workbench/tls/key.pem")

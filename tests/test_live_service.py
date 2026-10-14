@@ -599,3 +599,28 @@ def test_status_exposes_latest_age(tmp_path, monkeypatch):
         assert service.status()["run"]["latest_age_s"] == 1.25
     finally:
         service.close()
+
+
+def test_preview_without_frame_is_unavailable(tmp_path):
+    service = LiveService(FakeOwner(), tmp_path)
+    assert service.preview_jpeg() is None
+
+
+def test_preview_resizes_and_draws_quad_without_changing_camera_image(tmp_path):
+    from types import SimpleNamespace
+
+    import cv2
+    import numpy as np
+
+    image = np.zeros((100, 200, 3), dtype=np.uint8)
+    owner = FakeOwner()
+    owner.latest = lambda: (1, SimpleNamespace(image=image))
+    service = LiveService(owner, tmp_path)
+    service._session = SimpleNamespace(_pipeline=SimpleNamespace(locator=SimpleNamespace(
+        last_track=SimpleNamespace(quad=((20, 20), (180, 20), (180, 80), (20, 80)))
+    )))
+    jpeg = service.preview_jpeg(width=100)
+    preview = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert preview.shape == (50, 100, 3)
+    assert preview[10, 50, 1] > 150
+    assert not image.any()

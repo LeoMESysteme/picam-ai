@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>picam / live</title>
+<style>
+body{font:15px system-ui,sans-serif;margin:0;background:#111;color:#eee}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.notice{background:#4a3b00;color:#ffe9a6;padding:8px 12px;border-radius:6px}
+.value{font:600 56px ui-monospace,monospace}
+.valid{color:#7ee787}.transition{color:#ffd33d}.unreadable,.stale,.error{color:#ff7b72}
+section{background:#1c1c1c;border-radius:8px;padding:12px}
+img{max-width:100%;border-radius:6px}
+button{font:inherit;padding:6px 12px;margin:4px 4px 0 0}
+input[type=text]{font:inherit;width:22ch}
+#overlays img{max-width:48%}
+</style>
+</head>
+<body>
+<main>
+  <div class="notice" id="notice"></div>
+  <section>
+    <div class="value" id="headline">—</div>
+    <div id="detail"></div>
+  </section>
+  <section>
+    <img id="preview" alt="Kameravorschau">
+    <div id="camera"></div>
+    <button id="camera-start">Kamera neu verbinden</button>
+  </section>
+  <section>
+    <h2>Einrichtung</h2>
+    <label>Zellentext Zellen 0–8, z. B. „+0.60972 " (leer = vom GSV-2AS lesen): <input type="text" id="cell-text" maxlength="9"></label>
+    <button id="setup">Einrichtung starten</button>
+    <div id="setup-state"></div>
+    <div id="overlays"></div>
+    <div id="confirm-box" hidden>
+      <label>Name: <input type="text" id="confirmed-by"></label>
+      <label><input type="checkbox" id="format-checked"> Einheit mV/V und Format geprüft</label>
+      <label id="ack-label" hidden><input type="checkbox" id="ack"> WARNUNG zur Kenntnis genommen</label>
+      <button id="confirm">Bestätigen</button>
+    </div>
+  </section>
+  <section>
+    <button id="run-start">Lauf starten</button>
+    <button id="run-stop">Lauf stoppen</button>
+    <div id="error" class="error"></div>
+  </section>
+</main>
+<script type="module" src="/static/live.js"></script>
+</body>
+</html>

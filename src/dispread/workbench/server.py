@@ -15,10 +15,18 @@ from pathlib import Path
 import cv2
 from aiohttp import WSMsgType, web
 
+from dispread.camera_settings import preview_settings
+from dispread.frames import open_source
+from dispread.frames.uvc_source import UvcSource
+from dispread.live import LIVE_DATA_DIR
+from dispread.live.camera import CameraOwner
+from dispread.live.service import LiveService
+
 from .auth import Sessions, authenticate
 from .controller import Controller
 from .datasets import zip_export
 from .fields import actions, rows
+from .live_api import add_live_routes
 from .terminals import Terminals
 
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -31,7 +39,7 @@ def same_origin(request):
     return request.headers.get("Origin") == f"https://{request.host}"
 
 
-def make_app(controller, terminals, verifier=authenticate):
+def make_app(controller, terminals, verifier=authenticate, live=None):
     sessions = Sessions()
 
     @web.middleware
@@ -239,6 +247,8 @@ def make_app(controller, terminals, verifier=authenticate):
     app.router.add_delete("/terminals/{id}", close_terminal)
     app.router.add_get("/terminals/{id}/ws", websocket)
     app.router.add_static("/static", STATIC)
+    if live is not None:
+        add_live_routes(app, live, csrf_of=lambda request: sessions.get(request.cookies.get(COOKIE))["csrf"])
     return app
 
 
@@ -265,6 +275,11 @@ async def serve(args):
         raise ValueError("Workbench laeuft bereits") from error
     socket_path = Path(args.socket)
     socket_path.unlink(missing_ok=True)
+    if args.simulate:
+        owner = CameraOwner(lambda: open_source("synthetic://seven-seg"), max_fps=10)
+    else:
+        owner = CameraOwner(lambda: UvcSource(preview_settings(), apply_controls=False))
+    live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)), simulate=args.simulate)
     controller = Controller(args.data, args.camera, args.simulate)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):
@@ -276,7 +291,7 @@ async def serve(args):
     if data != controller.config:
         controller._change(data)
     terminals = Terminals(Path.cwd(), socket_path)
-    runner = web.AppRunner(make_app(controller, terminals), access_log=None)
+    runner = web.AppRunner(make_app(controller, terminals, live=live), access_log=None)
     local = web.Application()
 
     async def control(request):
@@ -312,6 +327,10 @@ async def serve(args):
         os.chmod(socket_path, 0o600)
         await web.TCPSite(runner, args.host, args.port, ssl_context=context).start()
         controller.start()
+        try:
+            owner.start()
+        except Exception as error:  # noqa: BLE001 - Server laeuft weiter, Seite zeigt den Fehler
+            controller.log("error", f"Kamera: {error}")
         watcher = asyncio.create_task(watch())
         print(f"Workbench: https://{args.host}:{args.port} | Anmeldung: me-systeme", flush=True)
         await stop.wait()
@@ -337,5 +356,7 @@ async def serve(args):
         await unix.cleanup()
         await terminals.close()
         await asyncio.to_thread(controller.close)
+        await asyncio.to_thread(live.close)
+        await asyncio.to_thread(owner.stop)
         socket_path.unlink(missing_ok=True)
         lockfile.close()
