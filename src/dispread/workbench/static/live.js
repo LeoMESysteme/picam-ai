@@ -25,7 +25,7 @@ export function statusView(status) {
     setup_ready: 'Vorschlag prüfen und bestätigen', setup_failed: 'Einrichtung abgebrochen',
     confirmed: 'Bestätigt – Lauf starten', running: 'Lauf startet …', stopped: 'Lauf beendet',
   };
-  return {headline: labels[status.state] || status.state, cls: status.error ? 'error' : '', detail: status.error || ''};
+  return {headline: labels[status.state] || status.state, cls: status.error ? 'error' : '', detail: status.error || setup.message || ''};
 }
 
 export function connectionView(status, lastOkMs, nowMs, httpStatus) {

@@ -105,6 +105,8 @@ class LiveService:
         self._setup_started_at: float | None = None
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
+        self._setup_message: str | None = None
+        self._diagnostics_error: str | None = None
         self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
         self._state = "idle"
@@ -136,6 +138,10 @@ class LiveService:
             if self._setup_started_at is not None:
                 setup = setup or {}
                 setup["step"] = self._setup_step
+                if self._setup_message is not None:
+                    setup["message"] = self._setup_message
+                if self._diagnostics_error is not None:
+                    setup["diagnostics_error"] = self._diagnostics_error
                 setup["elapsed_s"] = (
                     self._monotonic() - self._setup_started_at
                     if self._state == "setup_running" else self._setup_elapsed_s
@@ -232,6 +238,7 @@ class LiveService:
                 self._setup_started_at = self._monotonic()
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
+                self._setup_message = self._diagnostics_error = None
                 self._session_dir, self._proposal = session_dir, None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._session = None
@@ -243,23 +250,33 @@ class LiveService:
     def _report(self, step: str) -> None:
         with self._lock:
             self._step = self._setup_step = step
+            self._setup_message = None
+
+    def _setup_progress(self, message: str) -> None:
+        with self._lock:
+            self._setup_message = message
+
+    def _write_setup_diagnostic(self, path: Path, data: Any) -> None:
+        """Diagnosefehler duerfen den Einrichtungsausgang nicht veraendern."""
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except (OSError, TypeError, ValueError) as exc:
+            with self._lock:
+                self._diagnostics_error = f"{path.name}: {type(exc).__name__}: {str(exc)[:160]}"
 
     def _setup_worker(self, session_dir: Path, text: str | None) -> None:
         try:
             proposal = self._setup_runner(session_dir=session_dir, cell_text=text, report=self._report)
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
-            setup_dir = session_dir / "setup"
-            setup_dir.mkdir(parents=True, exist_ok=True)
             with self._lock:
                 step = self._setup_step
-            (setup_dir / "failure.json").write_text(
-                json.dumps({"step": step, "reason": str(exc),
-                            "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            with self._lock:
                 self._setup_elapsed_s = self._monotonic() - self._setup_started_at
                 self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
+            self._write_setup_diagnostic(
+                session_dir / "setup" / "failure.json",
+                {"step": step, "reason": str(exc), "created_at_utc": self._wall().isoformat()},
+            )
             return
         with self._lock:
             self._setup_elapsed_s = self._monotonic() - self._setup_started_at
@@ -275,7 +292,7 @@ class LiveService:
         """Echter Ablauf: Fokus -> Kamera mit festen Reglern -> Standbilder -> Vorschlag."""
         setup_dir = session_dir / "setup"
         setup_dir.mkdir(parents=True, exist_ok=True)
-        (setup_dir / "cell-text.json").write_text("[]", encoding="utf-8")
+        self._write_setup_diagnostic(setup_dir / "cell-text.json", [])
         cell_texts: list[dict] = []
         raw_texts: list[str] = []
 
@@ -286,13 +303,11 @@ class LiveService:
                 cell_texts.append({**entry, "source": "seriell" if cell_text is None else "eingabe",
                                    "unmasked": list(raw_texts)})
             else:
-                previous["masked"] = entry["masked"]
-            (setup_dir / "cell-text.json").write_text(
-                json.dumps(cell_texts, indent=2, ensure_ascii=False), encoding="utf-8",
-            )
+                previous.update(entry)
+            self._write_setup_diagnostic(setup_dir / "cell-text.json", cell_texts)
 
-        def save_raw(before: str, after: str) -> None:
-            raw_texts[:] = [before, after]
+        def save_raw(before: str | None, after: str | None) -> None:
+            raw_texts[:] = [value for value in (before, after) if value is not None]
 
         report("fokus")
         with self._lock:
@@ -309,7 +324,7 @@ class LiveService:
         port = None
         try:
             if cell_text is None:
-                report("seriell")
+                self._setup_progress("Serielle Verbindung oeffnen")
                 try:
                     port = self._serial_opener()
                 except Exception as exc:  # noqa: BLE001
@@ -334,7 +349,7 @@ class LiveService:
                 on_attempt=save_attempt,
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
-                info=lambda message: report(message),
+                info=self._setup_progress,
             )
         finally:
             if port is not None:

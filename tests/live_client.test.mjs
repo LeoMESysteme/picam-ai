@@ -137,3 +137,12 @@ test('action error survives running polls until an accepted setup start', async 
     }
   }
 });
+
+test('setup progress displays the separate message alongside the phase', () => {
+  const view = statusView({state: 'setup_running',
+    setup: {step: 'standbilder', elapsed_s: 12.34, message: 'Startsuche Versuch 2'}});
+  assert.match(view.headline, /standbilder/);
+  assert.equal(view.detail, 'Startsuche Versuch 2');
+  assert.equal(statusView({state: 'setup_failed', error: 'original failure',
+    setup: {message: 'Startsuche Versuch 2'}}).detail, 'original failure');
+});

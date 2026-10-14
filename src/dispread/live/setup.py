@@ -119,14 +119,17 @@ def mask_changed_cells(before: str, after: str) -> tuple[str, str]:
 
 
 def capture_with_text(
-    capture: Any, port: Any, *, on_text: Callable[[str, str], None] | None = None,
+    capture: Any, port: Any, *, on_text: Callable[[str | None, str | None], None] | None = None,
 ) -> tuple[np.ndarray, str]:
-    """Bracket one still with fresh telegrams and mask changes during capture."""
-    before = serial_cell_text(port)
-    image = capture()
-    after = serial_cell_text(port)
-    if on_text is not None:
-        on_text(before, after)
+    """Bracket one still and mask changes; on_text gets None for failed reads."""
+    before = after = None
+    try:
+        before = serial_cell_text(port)
+        image = capture()
+        after = serial_cell_text(port)
+    finally:
+        if on_text is not None:
+            on_text(before, after)
     return image, mask_changed_cells(before, after)[0]
 
 
@@ -222,6 +225,7 @@ def assist_measure(
     Wirft `SetupError` mit Bedienertext, sobald ein Schritt FEHLER meldet.
     `on_attempt` erhaelt attempt (ab 1), still (still/stability) und masked
     direkt nach der Aufnahme und erneut nach der bilduebergreifenden Maske.
+    Bei Aufnahmefehlern: masked=None und error mit dem Abbruchgrund.
     """
     sleep = sleep or time.sleep
     monotonic = monotonic or time.monotonic
@@ -233,11 +237,19 @@ def assist_measure(
     def capture() -> np.ndarray:
         return mean_still(cam, stack_frames)
 
+    def capture_text(attempt: int, still: str) -> tuple[np.ndarray, str]:
+        try:
+            return cell_text(capture)
+        except Exception as exc:  # noqa: BLE001 - abgebrochene Aufnahme fuer Diagnose sichern
+            if on_attempt is not None:
+                on_attempt({"attempt": attempt, "still": still, "masked": None, "error": str(exc)})
+            raise
+
     explicit_hint_box = hint_box
     for attempt in range(1, fit_attempts + 1):
         if stack_frames != 1 or fit_attempts != 1:
             info(f"Punktraster-Startsuche: Versuch {attempt}/{fit_attempts} ({stack_frames} Bilder)")
-        first, first_text = cell_text(capture)
+        first, first_text = capture_text(attempt, "still")
         first_captured_at = monotonic()
         if on_attempt is not None:
             on_attempt({"attempt": attempt, "still": "still", "masked": first_text})
@@ -265,7 +277,7 @@ def assist_measure(
     if precheck_failures:
         raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
     sleep(stability_s)
-    second, second_text = cell_text(capture)
+    second, second_text = capture_text(attempt, "stability")
     stability_elapsed_s = monotonic() - first_captured_at
     if on_attempt is not None:
         on_attempt({"attempt": attempt, "still": "stability", "masked": second_text})

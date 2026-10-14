@@ -779,7 +779,7 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
     assert service.status()["state"] == "setup_failed"
     failure = json.loads((tmp_path / service.status()["session_id"] / "setup" / "failure.json").read_text())
     assert json.loads((tmp_path / service.status()["session_id"] / "setup" / "cell-text.json").read_text()) == []
-    assert failure["step"] == failed_step
+    assert failure["step"] == ("kamera" if failed_step == "seriell" else failed_step)
     assert "early failure" in failure["reason"]
     assert datetime.fromisoformat(failure["created_at_utc"]).tzinfo is not None
 
@@ -826,6 +826,8 @@ def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeyp
             assert entry["masked"] == "+ 1.2345 "
     failure = json.loads((setup_dir / "failure.json").read_text())
     assert "Kein gruener Bereich" in failure["reason"]
+    assert failure["step"] == service.status()["setup"]["step"] == "standbilder"
+    assert "Versuch 3/3" in service.status()["setup"]["message"]
     if source == "seriell":
         assert port.closed
 
@@ -876,3 +878,105 @@ def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, pr
         assert "Rasterversatz 2j meldet FEHLER" in json.loads((setup_dir / "failure.json").read_text())["reason"]
     else:
         assert not (setup_dir / "failure.json").exists()
+
+
+@pytest.mark.parametrize("error_type", [OSError, TypeError, ValueError])
+def test_failure_diagnostic_write_keeps_original_outcome(tmp_path, monkeypatch, error_type):
+    from pathlib import Path
+
+    write_text = Path.write_text
+
+    def write(path, *args, **kwargs):
+        if path.name == "failure.json":
+            raise error_type("diagnostic blocked")
+        return write_text(path, *args, **kwargs)
+
+    def runner(*, report, **kwargs):
+        report("standbilder")
+        raise ValueError("original setup failure")
+
+    monkeypatch.setattr(Path, "write_text", write)
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    service._setup_thread.join(2)
+    status = service.status()
+    assert status["state"] == "setup_failed"
+    assert status["error"] == "original setup failure"
+    assert "failure.json" in status["setup"]["diagnostics_error"]
+
+
+@pytest.mark.parametrize("failed_write", [1, 2])
+@pytest.mark.parametrize("error_type", [OSError, TypeError, ValueError])
+def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypatch, failed_write, error_type):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    write_text = Path.write_text
+    writes = []
+
+    def write(path, *args, **kwargs):
+        if path.name == "cell-text.json":
+            writes.append(path)
+            if len(writes) == failed_write:
+                raise error_type("diagnostic blocked")
+        return write_text(path, *args, **kwargs)
+
+    def assist(*args, **kwargs):
+        kwargs["info"]("Startsuche Versuch 1")
+        assert service.status()["setup"]["step"] == "standbilder"
+        assert service.status()["setup"]["message"] == "Startsuche Versuch 1"
+        kwargs["on_attempt"]({"attempt": 1, "still": "still", "masked": "+ 1.2345 "})
+        return SimpleNamespace(first=None, second=None, fit=None, offset_check=None,
+                               final_checks=None, stability_elapsed_s=15, reader_check=None)
+
+    camera = CameraSettings.from_dict(proposal["camera"])
+    monkeypatch.setattr(Path, "write_text", write)
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (camera, FocusMeasurements()))
+    monkeypatch.setattr(live_setup, "assist_measure", assist)
+    monkeypatch.setattr(live_setup, "propose_with_fit", lambda *a, **kw: proposal)
+    service = LiveService(FakeOwner(), tmp_path)
+    service.start_setup(cell_text="+ 1.2345 ")
+    service._setup_thread.join(2)
+    assert service.status()["state"] == "setup_ready"
+    assert "cell-text.json" in service.status()["setup"]["diagnostics_error"]
+
+
+@pytest.mark.parametrize("failure", ["length", "read_before", "read_after"])
+def test_setup_records_text_when_serial_capture_fails(tmp_path, proposal, monkeypatch, failure):
+    import json
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    camera = CameraSettings.from_dict(proposal["camera"])
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (camera, FocusMeasurements()))
+    monkeypatch.setattr("dispread.live.service.OwnerSetupCamera.fresh_still",
+                        lambda *a, **kw: np.zeros((2, 3, 3), np.uint8))
+    texts = iter([OSError("serial read failed")] if failure == "read_before" else
+                 ["abc", OSError("serial read failed") if failure == "read_after" else "abcd"])
+
+    def read(port):
+        value = next(texts)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.setattr(live_setup, "serial_cell_text", read)
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: SimpleNamespace(close=lambda: None))
+    service.start_setup()
+    service._setup_thread.join(2)
+    assert service.status()["state"] == "setup_failed"
+    setup_dir = tmp_path / service.status()["session_id"] / "setup"
+    entries = json.loads((setup_dir / "cell-text.json").read_text())
+    assert len(entries) == 1
+    assert entries[0]["unmasked"] == ([] if failure == "read_before" else
+                                      ["abc"] if failure == "read_after" else ["abc", "abcd"])
+    assert entries[0]["masked"] is None
+    assert entries[0]["error"] == service.status()["error"]
+    assert json.loads((setup_dir / "failure.json").read_text())["step"] == "standbilder"
