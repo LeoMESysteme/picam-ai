@@ -92,3 +92,48 @@ test('tracking loss gives an operator hint and keeps the reason', () => {
   assert.equal(view.headline, 'UNREADABLE');
   assert.equal(view.detail, 'Anzeige verloren — Kamera bewegt? Neu einrichten (tracking_lost:low_score)');
 });
+
+test('setup progress uses nested step and monotonic elapsed seconds', () => {
+  const view = statusView({state: 'setup_running', step: 'old',
+    setup: {step: 'punktraster', elapsed_s: 12.34}});
+  assert.match(view.headline, /punktraster/);
+  assert.match(view.headline, /12\.3 s/);
+  assert.ok(!view.headline.includes('old'));
+});
+
+test('action error survives running polls until an accepted setup start', async () => {
+  const elements = new Map();
+  const timers = [];
+  const originals = {document: globalThis.document, fetch: globalThis.fetch,
+    setInterval: globalThis.setInterval, setTimeout: globalThis.setTimeout};
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, {textContent: '', value: '', replaceChildren() {}});
+    return elements.get(id);
+  };
+  const status = {state: 'setup_running', csrf: 'test',
+    setup: {step: 'fokus', elapsed_s: 1.2}};
+  let acceptSetup = false;
+  globalThis.document = {getElementById: element};
+  globalThis.setInterval = () => 0;
+  globalThis.setTimeout = (callback) => { timers.push(callback); return 0; };
+  globalThis.fetch = async (_path, options) => options
+    ? {ok: acceptSetup, json: async () => ({error: 'Einrichtung laeuft bereits'})}
+    : {ok: true, status: 200, json: async () => status};
+  try {
+    await import('../src/dispread/workbench/static/live.js?error-persistence-test');
+    // tick() laeuft beim Modulstart; seine Fortsetzung bis zur naechsten Runde abwarten.
+    await new Promise(setImmediate);
+    await element('setup').onclick();
+    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
+    await timers.shift()();
+    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
+    acceptSetup = true;
+    await element('setup').onclick();
+    assert.equal(element('error').textContent, '');
+  } finally {
+    for (const [name, value] of Object.entries(originals)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+  }
+});

@@ -17,8 +17,11 @@ export function statusView(status) {
     }
     return {headline: cls.toUpperCase(), cls, detail: status.error || reasons};
   }
+  const setup = status.setup || {};
+  const elapsed = typeof setup.elapsed_s === 'number' && Number.isFinite(setup.elapsed_s)
+    ? ` (${setup.elapsed_s.toFixed(1)} s)` : '';
   const labels = {
-    idle: 'Bereit zur Einrichtung', setup_running: `Einrichtung läuft: ${status.step || ''}`,
+    idle: 'Bereit zur Einrichtung', setup_running: `Einrichtung läuft: ${setup.step || ''}${elapsed}`,
     setup_ready: 'Vorschlag prüfen und bestätigen', setup_failed: 'Einrichtung abgebrochen',
     confirmed: 'Bestätigt – Lauf starten', running: 'Lauf startet …', stopped: 'Lauf beendet',
   };
@@ -44,7 +47,8 @@ if (typeof document !== 'undefined') {
     const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json',
       'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})});
     const data = await response.json().catch(() => ({}));
-    $('error').textContent = response.ok ? '' : (data.error || response.statusText);
+    if (!response.ok) $('error').textContent = data.error || response.statusText;
+    else if (path === '/live/setup') $('error').textContent = '';
   };
   const renderView = (view) => {
     $('headline').textContent = view.headline;
@@ -60,8 +64,11 @@ if (typeof document !== 'undefined') {
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;
-    $('setup-state').textContent = s.setup ? `Gesamturteil: ${s.setup.overall}` : '';
-    $('overlays').replaceChildren(...(s.setup ? s.setup.overlays : []).map((name) => {
+    if (s.state === 'setup_running' && lastStatus?.state !== 'setup_running') {
+      $('error').textContent = '';
+    } else if (s.error) $('error').textContent = s.error;
+    $('setup-state').textContent = s.setup?.overall ? `Gesamturteil: ${s.setup.overall}` : '';
+    $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
       const img = document.createElement('img');
       img.src = `/live/setup/${name}.png?${s.session_id}`;
       img.alt = name;

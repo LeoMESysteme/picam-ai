@@ -11,6 +11,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):
 
+* `/live` führt ohne Anmeldung zum Login und danach sicher zum lokalen Ziel zurück; API-Routen behalten 401. Die Live-Seite zeigt Einrichtungsschritt und Sekunden, hält Fehler bis zum nächsten Start sichtbar und ist mit einem isolierten HTTPS-Testserver per Playwright prüfbar.
+
 * Werkbank-Einrichtung wartet 15 statt 30 Sekunden auf Stabilität, mittelt acht Bilder und sucht bis zu dreimal; die CLI bleibt bei 30 Sekunden. `setup/cell-text.json` sichert je Versuch ursprüngliche und maskierte Zellentexte samt Quelle, `failure.json` den Abbruchschritt, Grund und UTC-Zeit auch bei Fokus-, Kamera- und seriellen Fehlern. Der Status zeigt Schritt und monotone Laufzeit, am Ende eingefroren. Fehlende grüne Hinweisboxen werden mit frischen Bildern erneut gesucht.
 
 * Einrichtung mittelt auf Wunsch aufeinanderfolgende Standbilder und wiederholt bei abgelehnter Startsuche die Aufnahme samt Zellentext und Hinweisbox. Referenz und Prüfungen nutzen das erfolgreiche Mittelbild; 2j, Gegenlesen und Freigabegrenzen bleiben unverändert. Die CLI behält Einzelbilder und einen Versuch als Standard.

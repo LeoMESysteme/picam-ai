@@ -47,6 +47,8 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
         public = request.path in ("/login", "/static/login.css", "/static/login.js")
         session = sessions.get(request.cookies.get(COOKIE))
         if not public and not session:
+            if request.method == "GET" and request.path == "/live":
+                raise web.HTTPFound("/login?next=/live")
             if request.path == "/":
                 raise web.HTTPFound("/login")
             raise web.HTTPUnauthorized()
@@ -85,7 +87,11 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
         if not valid:
             raise web.HTTPUnauthorized(text="Anmeldung fehlgeschlagen")
         token = sessions.create()
-        response = web.json_response({"ok": True})
+        target = request.query.get("next", "/")
+        if (not target.startswith("/") or target.startswith("//")
+                or "\\" in target or any(ord(char) <= 32 or ord(char) == 127 for char in target)):
+            target = "/"
+        response = web.json_response({"ok": True, "next": target})
         response.set_cookie(COOKIE, token, secure=True, httponly=True, samesite="Strict", max_age=8 * 3600)
         return response
 

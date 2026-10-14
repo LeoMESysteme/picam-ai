@@ -1,5 +1,6 @@
 import asyncio
 
+import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
@@ -77,7 +78,6 @@ def test_routes_without_socket(tmp_path, monkeypatch):
     import json
     from unittest.mock import AsyncMock
 
-    import pytest
     from aiohttp.test_utils import make_mocked_request
 
     async def direct(fn, *args, **kwargs):
@@ -139,8 +139,15 @@ def test_routes_without_socket(tmp_path, monkeypatch):
     asyncio.run(check())
 
 
-def test_live_routes_share_auth_and_csrf_guard(monkeypatch):
-    import pytest
+@pytest.mark.parametrize(("target", "expected"), [
+    ("/live", "/live"), ("/live?view=setup", "/live?view=setup"),
+    ("//evil.invalid", "/"), ("https://evil.invalid", "/"),
+    ("live", "/"), ("/\\evil.invalid", "/"), ("/\nevil.invalid", "/"),
+])
+def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
+    import json
+    from urllib.parse import quote
+
     from aiohttp.test_utils import make_mocked_request
 
     from dispread.workbench.server import make_app
@@ -164,16 +171,22 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch):
             request._match_info = match
             return await guard(request, match.handler)
 
-        for path in ("/live", "/live/status", "/static/live.js"):
+        with pytest.raises(web.HTTPFound) as redirect:
+            await handle("GET", "/live")
+        assert redirect.value.location == "/login?next=/live"
+        for path in ("/live/status", "/live/preview.jpg", "/static/live.js"):
             with pytest.raises(web.HTTPUnauthorized):
                 await handle("GET", path)
         response = await handle("POST", "/login", {"Host": "localhost", "Origin": "https://localhost"},
                                 {"password": "test"})
+        assert json.loads(response.text)["next"] == "/"
+        login = await handle("POST", "/login?next=" + quote(target, safe=""),
+                             {"Host": "localhost", "Origin": "https://localhost"},
+                             {"password": "test"})
+        assert json.loads(login.text)["next"] == expected
         token = response.cookies["dispread_session"].value
         headers = {"Host": "localhost", "Cookie": f"dispread_session={token}"}
         response = await handle("GET", "/live/status", headers)
-        import json
-
         csrf = json.loads(response.text)["csrf"]
         assert response.headers["Cache-Control"] == "no-store"
         with pytest.raises(web.HTTPForbidden):
