@@ -86,6 +86,13 @@ def parser():
     sub.add_parser("tui")
     sub.add_parser("status")
     sub.add_parser("stop", help="laufenden Dienst ueber den lokalen Socket sauber beenden")
+    live = sub.add_parser("live", help="Live-Einrichtung lokal steuern; Bestaetigung und Laufstart auf /live")
+    live_sub = live.add_subparsers(dest="action", required=True)
+    live_sub.add_parser("status")
+    live_setup = live_sub.add_parser("setup")
+    live_setup.add_argument("--cell-text")
+    live_sub.add_parser("stop")
+    live_sub.add_parser("camera")
     mode = sub.add_parser("mode")
     mode.add_argument("value", choices=["setup", "run", "annotate"])
     profile = sub.add_parser("profile")
@@ -118,7 +125,11 @@ def main(argv=None):
             WorkbenchTUI().run()
             return 0
         op, values = ("server.stop" if args.command == "stop" else args.command), {}
-        if args.command == "mode":
+        if args.command == "live":
+            op = "live." + args.action
+            if args.action == "setup" and args.cell_text is not None:
+                values = {"cell_text": args.cell_text}
+        elif args.command == "mode":
             values = {"value": args.value}
         elif args.command == "profile":
             op = "profile." + args.action

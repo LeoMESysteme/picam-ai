@@ -20,7 +20,7 @@ from dispread.frames import open_source
 from dispread.frames.uvc_source import UvcSource
 from dispread.live import LIVE_DATA_DIR
 from dispread.live.camera import CameraOwner
-from dispread.live.service import LiveService
+from dispread.live.service import LiveError, LiveService
 
 from .auth import Sessions, authenticate
 from .controller import Controller
@@ -258,6 +258,31 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
     return app
 
 
+async def handle_local_op(op, args, controller, live):
+    """Lokale Live-Steuerung; Bestaetigung und Laufstart bleiben auf /live."""
+    try:
+        if not op.startswith("live."):
+            return web.json_response(controller.command(op, args))
+        if op == "live.status":
+            return web.json_response(await asyncio.to_thread(live.status))
+        if op == "live.setup":
+            await asyncio.to_thread(live.start_setup, cell_text=(args or {}).get("cell_text"))
+        elif op == "live.stop":
+            await asyncio.to_thread(live.stop_run)
+        elif op == "live.camera":
+            await asyncio.to_thread(live.start_camera)
+        else:
+            return web.json_response(
+                {"error": "Live-Operation lokal nicht erlaubt; Bestaetigung und Laufstart auf der Seite /live."},
+                status=400,
+            )
+        return web.json_response({"ok": True})
+    except LiveError as error:
+        return web.json_response({"error": str(error)}, status=409)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+
+
 async def serve(args):
     if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != "me-systeme":
         raise ValueError("Workbench als me-systeme starten, nicht mit sudo")
@@ -306,7 +331,7 @@ async def serve(args):
             if data["op"] == "server.stop":
                 stop.set()
                 return web.json_response({"stopping": True})
-            return web.json_response(controller.command(data["op"], data.get("args")))
+            return await handle_local_op(data["op"], data.get("args"), controller, live)
         except (ValueError, KeyError, TypeError, OSError) as error:
             return web.json_response({"error": str(error)}, status=400)
 

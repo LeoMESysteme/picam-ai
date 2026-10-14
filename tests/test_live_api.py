@@ -210,6 +210,117 @@ def test_serve_cli_live_data_default_and_override():
     assert parser().parse_args(["serve", "--live-data", "custom/live"]).live_data == "custom/live"
 
 
+@pytest.mark.parametrize(("op", "args", "method", "kwargs"), [
+    ("live.status", None, "status", {}),
+    ("live.setup", None, "start_setup", {"cell_text": None}),
+    ("live.setup", {"cell_text": "+0.60972 "}, "start_setup", {"cell_text": "+0.60972 "}),
+    ("live.stop", {}, "stop_run", {}),
+    ("live.camera", {}, "start_camera", {}),
+])
+def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, kwargs):
+    import json
+    from unittest.mock import AsyncMock, Mock
+
+    from dispread.workbench.server import handle_local_op
+
+    controller, service = Mock(), Mock()
+
+    async def direct(fn, **values):
+        return fn(**values)
+
+    to_thread = AsyncMock(side_effect=direct)
+    monkeypatch.setattr(asyncio, "to_thread", to_thread)
+    getattr(service, method).return_value = {"state": "idle"} if method == "status" else None
+    response = asyncio.run(handle_local_op(op, args, controller, service))
+    assert response.status == 200
+    assert json.loads(response.text) == ({"state": "idle"} if method == "status" else {"ok": True})
+    to_thread.assert_awaited_once_with(getattr(service, method), **kwargs)
+    assert service.method_calls == [(method, (), kwargs)]
+    controller.command.assert_not_called()
+
+
+@pytest.mark.parametrize("op", ["live.status", "live.setup", "live.stop", "live.camera"])
+def test_local_live_errors_are_409(monkeypatch, op):
+    import json
+    from unittest.mock import Mock
+
+    from dispread.workbench.server import handle_local_op
+
+    async def direct(fn, **values):
+        return fn(**values)
+
+    monkeypatch.setattr(asyncio, "to_thread", direct)
+    service = Mock()
+    for name in ("status", "start_setup", "stop_run", "start_camera"):
+        getattr(service, name).side_effect = LiveError("Kamera belegt")
+    response = asyncio.run(handle_local_op(op, {}, Mock(), service))
+    assert response.status == 409
+    assert json.loads(response.text) == {"error": "Kamera belegt"}
+
+
+@pytest.mark.parametrize("op", ["live.confirm", "live.run", "live.run.start", "live.unknown"])
+def test_local_live_refuses_ui_operations_and_unknown_ops(op):
+    import json
+    from unittest.mock import Mock
+
+    from dispread.workbench.server import handle_local_op
+
+    controller, service = Mock(), Mock()
+    response = asyncio.run(handle_local_op(op, {"confirmed_by": "Operator"}, controller, service))
+    assert response.status == 400
+    assert "/live" in json.loads(response.text)["error"]
+    assert not service.method_calls
+    controller.command.assert_not_called()
+
+
+def test_local_legacy_command_still_uses_controller():
+    import json
+    from unittest.mock import Mock
+
+    from dispread.workbench.server import handle_local_op
+
+    controller, service = Mock(), Mock()
+    controller.command.return_value = {"mode": "setup"}
+    response = asyncio.run(handle_local_op("mode", {"value": "setup"}, controller, service))
+    assert response.status == 200 and json.loads(response.text) == {"mode": "setup"}
+    controller.command.assert_called_once_with("mode", {"value": "setup"})
+    assert not service.method_calls
+
+
+@pytest.mark.parametrize(("argv", "op", "args"), [
+    (["live", "status"], "live.status", {}),
+    (["live", "setup"], "live.setup", {}),
+    (["live", "setup", "--cell-text", "+0.60972 "], "live.setup", {"cell_text": "+0.60972 "}),
+    (["live", "stop"], "live.stop", {}),
+    (["live", "camera"], "live.camera", {}),
+])
+def test_live_cli_requests_local_op_and_prints_json(monkeypatch, capsys, argv, op, args):
+    import json
+
+    from dispread.workbench import cli
+
+    calls = []
+
+    async def request(operation, values):
+        calls.append((operation, values))
+        return {"state": "idle"}
+
+    monkeypatch.setattr(cli, "request", request)
+    assert cli.main(argv) == 0
+    assert calls == [(op, args)]
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {"state": "idle"} and output.err == ""
+
+
+@pytest.mark.parametrize("action", ["confirm", "run"])
+def test_live_cli_has_no_confirmation_or_run_start(action):
+    from dispread.workbench.cli import parser
+
+    with pytest.raises(SystemExit) as error:
+        parser().parse_args(["live", action])
+    assert error.value.code == 2
+
+
 def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
