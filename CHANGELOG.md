@@ -8,6 +8,8 @@ was ist die Konsequenz.
 **Problem:** Die Werkbank konnte mit der StreamCam weder einrichten noch
 lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
+* Final-Review-Fixes: Bestätigung bindet Name und Prüfhaken an die angezeigte Sitzung; lokales Ersetzen eines Vorschlags verlangt `live setup --force`. Einrichtungsdiagnosen behalten Fit-Gründe und der Vorschlag den erfolgreichen Versuch; Pluszeichen-Hinweis, serieller Zeilenanfang, Stabilitätsminimum, Fokusfortschritt und gleichzeitige Seiten-/Bedienfehler sind korrigiert.
+
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):
 

@@ -45,6 +45,8 @@ def _setup_error_for_page(message: str) -> str:
     message = " ".join(message.split())
     if "startlage_mehrdeutig" in message or "keine_startlage" in message:
         message += " — Kamera senkrecht auf Displaymitte stellen und neu einrichten"
+    if "vorzeichen_kein_plus" in message:
+        message += " — Anzeige zeigt kein Plus — Wert positiv einstellen und neu einrichten"
     return message
 
 
@@ -312,7 +314,9 @@ class LiveService:
         report("fokus")
         with self._lock:
             start_focus = self._last_confirmed_focus
-        settings, sweep = live_setup.focus_camera(OwnerSetupCamera(self._owner), None, start_focus=start_focus)
+        settings, sweep = live_setup.focus_camera(
+            OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
+        )
         (setup_dir / "camera-settings.json").write_text(
             json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
                         "focus_method": getattr(sweep, "focus_method", "sweep"),
@@ -367,14 +371,18 @@ class LiveService:
             final_checks=result.final_checks,
             stability_image_bgr=result.second,
             stability_elapsed_s=result.stability_elapsed_s,
+            stability_min_elapsed_s=15.0,
+            setup_attempt=result.setup_attempt,
             reader_check=result.reader_check,
         )
 
-    def confirm(self, *, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False) -> None:
+    def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False) -> None:
         with self._operation_lock:
             with self._lock:
                 if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
                     raise LiveError("Kein Vorschlag zum Bestaetigen")
+                if session_id != self._session_dir.name:
+                    raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
                 proposal, session_dir = self._proposal, self._session_dir
             if not format_checked:
                 raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")

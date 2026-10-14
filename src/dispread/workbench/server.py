@@ -266,6 +266,9 @@ async def handle_local_op(op, args, controller, live):
         if op == "live.status":
             return web.json_response(await asyncio.to_thread(live.status))
         if op == "live.setup":
+            status = await asyncio.to_thread(live.status)
+            if status["state"] in {"setup_ready", "confirmed"} and not (args or {}).get("force"):
+                raise LiveError("Vorschlag vorhanden - auf /live pruefen oder live setup --force verwenden")
             await asyncio.to_thread(live.start_setup, cell_text=(args or {}).get("cell_text"))
         elif op == "live.stop":
             await asyncio.to_thread(live.stop_run)

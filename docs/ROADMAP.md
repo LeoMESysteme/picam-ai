@@ -23,7 +23,7 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 - [x] Live-Messpfad mit `CameraOwner`, Browser-Einrichtung und namentlicher
   Bestätigung auf `/live`, Dot-Matrix-Leser und JSONL-Audit pro Lauf:
   **gebaut, Einrichtung am Aufbau geprüft, Messlauf offen** (2026-10-14).
-  Nach N7 3/3 Vorschläge mit Gesamt-WARNUNG in 47/55/49 s; Bestätigung und
+  Nach N7 4/4 Vorschläge mit Gesamt-WARNUNG in 47/55/49/45 s; Bestätigung und
   Messlauf mit Wertwechseln warten auf die bedienende Person
   ([VALIDATION.md](VALIDATION.md#messpfad-live-einrichtung-2026-10-14)).
   Keine serielle Ausgabe an GSVmulti; diese bleibt P4 / OQ-07.

@@ -45,7 +45,7 @@ if (typeof document !== 'undefined') {
   let httpStatus = null;
   const $ = (id) => document.getElementById(id);
   const renderError = (status = lastStatus) => {
-    $('error').textContent = status?.error || actionError;
+    $('error').textContent = [status?.error, actionError].filter(Boolean).join('\n');
   };
   const post = async (path, body) => {
     const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json',
@@ -62,6 +62,11 @@ if (typeof document !== 'undefined') {
   const renderConnection = () => renderView(connectionView(lastStatus, lastOkMs,
     performance.now(), httpStatus));
   const render = (s) => {
+    if (s.session_id !== lastStatus?.session_id) {
+      $('confirmed-by').value = '';
+      $('format-checked').checked = false;
+      $('ack').checked = false;
+    }
     csrf = s.csrf;
     $('notice').textContent = s.release_notice;
     renderView(statusView(s));
@@ -100,7 +105,7 @@ if (typeof document !== 'undefined') {
     }
   };
   $('setup').onclick = () => post('/live/setup', {cell_text: $('cell-text').value || null});
-  $('confirm').onclick = () => post('/live/confirm', {confirmed_by: $('confirmed-by').value,
+  $('confirm').onclick = () => post('/live/confirm', {session_id: lastStatus?.session_id, confirmed_by: $('confirmed-by').value,
     format_checked: $('format-checked').checked, acknowledge_warning: $('ack').checked});
   $('run-start').onclick = () => post('/live/run/start');
   $('run-stop').onclick = () => post('/live/run/stop');

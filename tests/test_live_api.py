@@ -120,9 +120,9 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         confirmed = []
         service.confirm = lambda **kwargs: confirmed.append(kwargs)
         assert (await call("POST", "/live/confirm", {
-            "confirmed_by": "Operator", "format_checked": True, "acknowledge_warning": True,
+            "session_id": "reviewed", "confirmed_by": "Operator", "format_checked": True, "acknowledge_warning": True,
         })).status == 200
-        assert confirmed == [{"confirmed_by": "Operator", "format_checked": True,
+        assert confirmed == [{"session_id": "reviewed", "confirmed_by": "Operator", "format_checked": True,
                               "acknowledge_warning": True}]
         with pytest.raises(web.HTTPNotFound):
             await call("GET", "/live/setup/etc-passwd.png")
@@ -224,6 +224,7 @@ def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, 
     from dispread.workbench.server import handle_local_op
 
     controller, service = Mock(), Mock()
+    service.status.return_value = {"state": "idle"}
 
     async def direct(fn, **values):
         return fn(**values)
@@ -234,8 +235,9 @@ def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, 
     response = asyncio.run(handle_local_op(op, args, controller, service))
     assert response.status == 200
     assert json.loads(response.text) == ({"state": "idle"} if method == "status" else {"ok": True})
-    to_thread.assert_awaited_once_with(getattr(service, method), **kwargs)
-    assert service.method_calls == [(method, (), kwargs)]
+    assert to_thread.await_args_list[-1].args == (getattr(service, method),)
+    assert to_thread.await_args_list[-1].kwargs == kwargs
+    assert service.method_calls == ([("status", (), {})] if op == "live.setup" else []) + [(method, (), kwargs)]
     controller.command.assert_not_called()
 
 
@@ -290,6 +292,7 @@ def test_local_legacy_command_still_uses_controller():
 @pytest.mark.parametrize(("argv", "op", "args"), [
     (["live", "status"], "live.status", {}),
     (["live", "setup"], "live.setup", {}),
+    (["live", "setup", "--force"], "live.setup", {"force": True}),
     (["live", "setup", "--cell-text", "+0.60972 "], "live.setup", {"cell_text": "+0.60972 "}),
     (["live", "stop"], "live.stop", {}),
     (["live", "camera"], "live.camera", {}),
@@ -419,3 +422,26 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
     for simulate in (True, False):
         for close_error in (False, True):
             asyncio.run(check(simulate, close_error))
+
+
+@pytest.mark.parametrize("state", ["setup_ready", "confirmed"])
+@pytest.mark.parametrize("force", [False, True])
+def test_local_setup_requires_force_to_replace_reviewed_proposal(monkeypatch, state, force):
+    import json
+    from unittest.mock import Mock
+
+    from dispread.workbench.server import handle_local_op
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", direct)
+    service = Mock()
+    service.status.return_value = {"state": state}
+    response = asyncio.run(handle_local_op("live.setup", {"force": force}, Mock(), service))
+    assert response.status == (200 if force else 409)
+    if force:
+        service.start_setup.assert_called_once_with(cell_text=None)
+    else:
+        assert "--force" in json.loads(response.text)["error"]
+        service.start_setup.assert_not_called()

@@ -471,12 +471,13 @@ def fit_lattice(
         return refine(image_bgr, h, empty_cells=empty_cells)
     # Nur "keine_startlage" (kein einziges tragfaehiges Raster) fuehrt zum
     # naechsten Durchgang; Mehrdeutigkeit bleibt immer sichtbar. Andere
-    # Fallback-Ablehnungen erhalten den Einrichtungshinweis der ersten Suche.
+    # Fallback-Ablehnungen erhalten den Einrichtungshinweis der ersten Suche;
+    # ein erkanntes Minus behaelt den Hinweis auf den fehlenden Pluswert.
     result: LatticeFit | str = "keine_startlage"
     for pass_index, fraction in enumerate(_START_SIGMA_FRACTIONS):
         result = _auto_fit(image_bgr, hint_box, empty_cells=empty_cells, sigma_fraction=fraction)
         if result != "keine_startlage":
-            if pass_index > 0 and isinstance(result, str) and result != "startlage_mehrdeutig":
+            if pass_index > 0 and isinstance(result, str) and result not in {"startlage_mehrdeutig", "vorzeichen_kein_plus"}:
                 return "keine_startlage"
             return result
     return result

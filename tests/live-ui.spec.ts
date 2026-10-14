@@ -59,6 +59,17 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'WARNUNG zur Kenntnis genommen' })).toBeVisible();
 
+  await page.locator('#confirmed-by').fill('Operator');
+  await page.locator('#format-checked').check();
+  await page.locator('#ack').check();
+  const confirmRequest = page.waitForRequest('**/live/confirm');
+  await page.locator('#confirm').click();
+  expect((await confirmRequest).postDataJSON()).toEqual({
+    session_id: 'test-session', confirmed_by: 'Operator',
+    format_checked: true, acknowledge_warning: true,
+  });
+  await expect(headline).toHaveText('Bestätigt – Lauf starten');
+
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
     unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2 };
   await setState({ state: 'running', run });

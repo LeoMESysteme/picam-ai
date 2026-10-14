@@ -103,6 +103,7 @@ def serial_cell_text(port: Any) -> str:
     """Read a fresh incoming DUT telegram, then map it to physical cells."""
     if hasattr(port, "reset_input_buffer"):
         port.reset_input_buffer()
+        port.readline()  # Moeglicherweise unvollstaendige erste Zeile verwerfen.
     line = port.readline().rstrip(b"\r\n")
     try:
         return cell_text_from_telegram(line)
@@ -148,6 +149,7 @@ def focus_camera(
     hint_box: HintBox | None,
     *,
     start_focus: int = DEFAULT_FOCUS_START,
+    info: Callable[[str], None] | None = None,
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
 ) -> tuple[CameraSettings, FocusMeasurements]:
@@ -166,7 +168,12 @@ def focus_camera(
         return sharpness(measurement_roi(gray, hint_box))
 
     cam.set_controls([("focus_automatic_continuous", 0)])
-    best_focus, sweep_log = climb_focus(measure, start=start_focus)
+    if info is not None:
+        info("Fokus: Bergsteigen")
+    best_focus, sweep_log = climb_focus(
+        measure, start=start_focus,
+        on_fallback=(lambda: info("Fokus: Vollsweep (Rueckfall)")) if info is not None else None,
+    )
     cam.set_controls([("auto_exposure", 3), ("white_balance_automatic", 1)])
     sleep(WHITE_BALANCE_SETTLE_S)
     readback = cam.get_controls(["exposure_time_absolute", "white_balance_temperature", "gain"])
@@ -199,6 +206,7 @@ class AssistResult:
     final_checks: Any
     reader_check: Any | None
     stability_elapsed_s: float
+    setup_attempt: int
 
 
 def assist_measure(
@@ -225,6 +233,8 @@ def assist_measure(
     Wirft `SetupError` mit Bedienertext, sobald ein Schritt FEHLER meldet.
     `on_attempt` erhaelt attempt (ab 1), still (still/stability) und masked
     direkt nach der Aufnahme und erneut nach der bilduebergreifenden Maske.
+    Nach der Startsuche folgt fit (Ablehnungsgrund oder "ok"); spaetere
+    Maskenupdates erhalten diesen Eintrag in der Diagnose.
     Bei Aufnahmefehlern: masked=None und error mit dem Abbruchgrund.
     """
     sleep = sleep or time.sleep
@@ -264,6 +274,9 @@ def assist_measure(
                 continue
             raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
         fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
+        if on_attempt is not None:
+            on_attempt({"attempt": attempt, "still": "still", "masked": first_text,
+                        "fit": fit if isinstance(fit, str) else "ok"})
         if not isinstance(fit, str):
             break
         if attempt == fit_attempts:
@@ -328,7 +341,7 @@ def assist_measure(
     return AssistResult(
         first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,
-        stability_elapsed_s=stability_elapsed_s,
+        stability_elapsed_s=stability_elapsed_s, setup_attempt=attempt,
     )
 
 
@@ -381,6 +394,8 @@ def propose_with_fit(
     final_checks: Any = None,
     stability_image_bgr: np.ndarray | None = None,
     stability_elapsed_s: float | None = None,
+    stability_min_elapsed_s: float = MIN_STABILITY_S,
+    setup_attempt: int | None = None,
     reader_check: Any = None,
 ) -> dict:
     """Vorschlag aus einem Punktraster-Fit (bisher `run_propose` mit Fit)."""
@@ -405,6 +420,7 @@ def propose_with_fit(
         checks = check_setup(
             image, fit, stability_image_bgr=stability_image_bgr,
             stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+            stability_min_elapsed_s=stability_min_elapsed_s,
         )
     if checks.overall == "FEHLER":
         raise SetupError("Einrichtungspruefung meldet FEHLER; kein Vorschlag")
@@ -431,6 +447,8 @@ def propose_with_fit(
         "camera": camera_settings.to_dict(),
         "setup_checks": checks_dict,
     }
+    if setup_attempt is not None:
+        proposal["setup_attempt"] = setup_attempt
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "proposal.json").write_text(json.dumps(proposal, indent=2, ensure_ascii=False), encoding="utf-8")
     write_overlays(

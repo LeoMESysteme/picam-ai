@@ -91,6 +91,7 @@ def parser():
     live_sub.add_parser("status")
     live_setup = live_sub.add_parser("setup")
     live_setup.add_argument("--cell-text")
+    live_setup.add_argument("--force", action="store_true")
     live_sub.add_parser("stop")
     live_sub.add_parser("camera")
     mode = sub.add_parser("mode")
@@ -129,6 +130,8 @@ def main(argv=None):
             op = "live." + args.action
             if args.action == "setup" and args.cell_text is not None:
                 values = {"cell_text": args.cell_text}
+            if args.action == "setup" and args.force:
+                values["force"] = True
         elif args.command == "mode":
             values = {"value": args.value}
         elif args.command == "profile":

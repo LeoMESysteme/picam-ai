@@ -36,6 +36,7 @@ def climb_focus(
     hi: int = 255,
     flat_tolerance: float = 0.05,
     peak_ratio: float = 2.0,
+    on_fallback: Callable[[], None] | None = None,
 ) -> tuple[int, FocusMeasurements]:
     """Bergsteigen: ab `start` in Schritten `step` in die Richtung, in der die
     Schaerfe steigt; faellt sie nach einem Anstieg, ist der Gipfel ueberschritten.
@@ -57,6 +58,8 @@ def climb_focus(
         return seen[focus]
 
     def fallback() -> tuple[int, FocusMeasurements]:
+        if on_fallback is not None:
+            on_fallback()
         measured.focus_method = "sweep"
         sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=step,
                     fine_step=fine_step, lo=lo, hi=hi)

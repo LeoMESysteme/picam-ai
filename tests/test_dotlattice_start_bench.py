@@ -129,7 +129,7 @@ def test_fallback_rejection_preserves_missing_start_hint(monkeypatch, pass_index
 
     monkeypatch.setattr(dotlattice, "_auto_fit", search)
     image = np.full((160, 400, 3), 200, np.uint8)
-    expected = "startlage_mehrdeutig" if rejection == "startlage_mehrdeutig" else "keine_startlage"
+    expected = rejection if rejection in {"startlage_mehrdeutig", "vorzeichen_kein_plus"} else "keine_startlage"
     assert fit_lattice(image, (0, 0, 1, 1)) == expected
     assert calls == list(dotlattice._START_SIGMA_FRACTIONS[:pass_index + 1])
 

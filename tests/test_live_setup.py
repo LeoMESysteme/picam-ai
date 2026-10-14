@@ -126,6 +126,7 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     np.testing.assert_array_equal(cv2.imread(str(tmp_path / "still.png")), result.first)
     np.testing.assert_array_equal(cv2.imread(str(tmp_path / "stability.png")), result.second)
     assert result.first_text == result.second_text == "new"
+    assert result.setup_attempt == 2
     assert checked[0][0] is result.first and checked[0][1] is fit
     assert checked[-1][2]["stability_image_bgr"] is result.second
     assert checked[-1][2]["stability_elapsed_s"] == result.stability_elapsed_s == stability_s
@@ -136,7 +137,9 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     assert checked[-1][2]["stability_min_elapsed_s"] == stability_s
     assert attempts == [
         {"attempt": 1, "still": "still", "masked": "old"},
+        {"attempt": 1, "still": "still", "masked": "old", "fit": "keine_startlage"},
         {"attempt": 2, "still": "still", "masked": "new"},
+        {"attempt": 2, "still": "still", "masked": "new", "fit": "ok"},
         {"attempt": 2, "still": "stability", "masked": "new"},
         {"attempt": 2, "still": "still", "masked": "new"},
         {"attempt": 2, "still": "stability", "masked": "new"},
@@ -281,7 +284,9 @@ def test_focus_camera_sucht_ab_start_und_protokolliert_rueckfall(monkeypatch, st
                                [11, 79.6, 264.3, 431.6, 135.6, 55.3, 16, 11]))
 
     monkeypatch.setattr(live_setup, "sharpness", score)
-    settings, measured = live_setup.focus_camera(cam, None, start_focus=start, sleep=lambda _s: None)
+    messages = []
+    settings, measured = live_setup.focus_camera(cam, None, start_focus=start, sleep=lambda _s: None, info=messages.append)
+    assert messages == ["Fokus: Bergsteigen"] + (["Fokus: Vollsweep (Rueckfall)"] if flat else [])
     assert measured[0][0] == start
     assert measured.focus_method == method
     assert abs(settings.controls["focus_absolute"] - (50 if flat else 48)) <= 2
@@ -307,3 +312,43 @@ def test_assist_retries_missing_hint_with_fresh_mean(monkeypatch, tmp_path, miss
             out_dir=tmp_path, stack_frames=2, fit_attempts=3,
         )
     assert seen == [11, 21, 31]
+
+
+def test_serial_cell_text_discards_partial_line_after_reset(monkeypatch):
+    events = []
+    lines = iter([b"partial\r\n", b"telegram\r\n"])
+
+    class Port:
+        def reset_input_buffer(self):
+            events.append("reset")
+
+        def readline(self):
+            events.append("read")
+            return next(lines)
+
+    parsed = []
+    monkeypatch.setattr(live_setup, "cell_text_from_telegram", lambda line: parsed.append(line) or "cells")
+    assert live_setup.serial_cell_text(Port()) == "cells"
+    assert parsed == [b"telegram"]
+    assert events == ["reset", "read", "read"]
+
+
+@pytest.mark.parametrize("minimum", [15.0, 30.0])
+def test_propose_forwards_stability_minimum_without_final_checks(monkeypatch, tmp_path, minimum):
+    called = []
+    checks = SimpleNamespace(overall="OK", checks={"kanten": SimpleNamespace(cells=[])},
+                             to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}})
+    monkeypatch.setattr(live_setup, "check_setup", lambda *a, **kw: called.append(kw) or checks)
+    monkeypatch.setattr(live_setup, "write_overlays", lambda *a, **kw: [])
+    fit = SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]])
+    kwargs = {"stability_min_elapsed_s": minimum} if minimum == 15.0 else {}
+    proposal = live_setup.propose_with_fit(
+        np.zeros((1080, 1920, 3), np.uint8), fit=fit, frame_path=tmp_path / "still.png",
+        camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
+        offset_check=SimpleNamespace(status="OK"), stability_elapsed_s=minimum, setup_attempt=2, **kwargs,
+    )
+    assert called[0]["stability_min_elapsed_s"] == minimum
+    assert proposal["setup_attempt"] == 2
+    import json
+
+    assert json.loads((tmp_path / "proposal.json").read_text())["setup_attempt"] == 2

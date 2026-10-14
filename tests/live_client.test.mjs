@@ -115,9 +115,13 @@ async function withLivePage(check) {
   globalThis.document = {getElementById: element};
   globalThis.setInterval = () => 0;
   globalThis.setTimeout = (callback) => { timers.push(callback); return 0; };
-  globalThis.fetch = async (_path, options) => options
+  page.posts = [];
+  globalThis.fetch = async (_path, options) => {
+    if (options) page.posts.push({path: _path, body: JSON.parse(options.body)});
+    return options
     ? {ok: !page.actionError, json: async () => ({error: page.actionError})}
     : {ok: true, status: 200, json: async () => page.status};
+  };
   try {
     await import(`../src/dispread/workbench/static/live.js?dom-test=${domTestNumber++}`);
     // tick() laeuft beim Modulstart; seine Fortsetzung bis zur naechsten Runde abwarten.
@@ -183,7 +187,7 @@ test('setup failure stays authoritative across camera reconnect', async () => {
     await poll();
     page.actionError = 'Kamera nicht gestartet';
     await element('camera-start').onclick();
-    assert.equal(element('error').textContent, 'Punktraster abgelehnt');
+    assert.equal(element('error').textContent, 'Punktraster abgelehnt\nKamera nicht gestartet');
     page.actionError = '';
     await element('camera-start').onclick();
     assert.equal(element('error').textContent, 'Punktraster abgelehnt');
@@ -199,4 +203,41 @@ test('setup progress displays the separate message alongside the phase', () => {
   assert.equal(view.detail, 'Startsuche Versuch 2');
   assert.equal(statusView({state: 'setup_failed', error: 'original failure',
     setup: {message: 'Startsuche Versuch 2'}}).detail, 'original failure');
+});
+
+
+test('session change clears review form and confirmation carries rendered session', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'first'};
+    await poll();
+    element('confirmed-by').value = 'Operator';
+    element('format-checked').checked = true;
+    element('ack').checked = true;
+    await poll();
+    assert.equal(element('confirmed-by').value, 'Operator');
+    await element('confirm').onclick();
+    assert.equal(page.posts.at(-1).body.session_id, 'first');
+    page.status = {state: 'setup_ready', session_id: 'second'};
+    await poll();
+    assert.equal(element('confirmed-by').value, '');
+    assert.equal(element('format-checked').checked, false);
+    assert.equal(element('ack').checked, false);
+    await element('confirm').onclick();
+    assert.equal(page.posts.at(-1).body.session_id, 'second');
+  });
+});
+
+test('new setup session clears all review fields before the next proposal', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'reviewed'};
+    await poll();
+    element('confirmed-by').value = 'Operator';
+    element('format-checked').checked = true;
+    element('ack').checked = true;
+    page.status = {state: 'setup_running', session_id: 'replacement'};
+    await poll();
+    assert.equal(element('confirmed-by').value, '');
+    assert.equal(element('format-checked').checked, false);
+    assert.equal(element('ack').checked, false);
+  });
 });

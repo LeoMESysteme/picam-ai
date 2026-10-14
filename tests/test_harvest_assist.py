@@ -453,8 +453,10 @@ def test_serial_capture_masks_cells_changing_during_and_between_stills():
     class Port:
         def __init__(self):
             self.lines = iter((
-                b"+01.2193 mV/V\r\n", b"+01.2194 mV/V\r\n",
-                b"+01.2294 mV/V\r\n", b"+01.2295 mV/V\r\n",
+                b"partial\r\n", b"+01.2193 mV/V\r\n",
+                b"partial\r\n", b"+01.2194 mV/V\r\n",
+                b"partial\r\n", b"+01.2294 mV/V\r\n",
+                b"partial\r\n", b"+01.2295 mV/V\r\n",
             ))
             self.clears = 0
 
@@ -483,7 +485,8 @@ def test_serial_capture_masks_cells_changing_during_and_between_stills():
 def test_masked_serial_text_reaches_real_offset_check_without_unknown_glyph():
     class Port:
         def __init__(self):
-            self.lines = iter((b"+01.2193 mV/V\r\n", b"+01.2194 mV/V\r\n"))
+            self.lines = iter((b"partial\r\n", b"+01.2193 mV/V\r\n",
+                               b"partial\r\n", b"+01.2194 mV/V\r\n"))
 
         def reset_input_buffer(self):
             pass
@@ -739,6 +742,8 @@ def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, mon
             def readline(self):
                 self.reads += 1
                 if self.reads % 2:
+                    return b"partial\r\n"
+                if (self.reads // 2) % 2:
                     return b"+12.3456 mV/V\r\n"
                 return b"+12.3457 mV/V\r\n" if serial_change == "one" else b"+98.7654 mV/V\r\n"
 
@@ -754,7 +759,7 @@ def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, mon
     rc = harvest_setup.main(argv)
     assert rc == (2 if serial_change == "many" else 0)
     if serial_port is not None:
-        assert serial_port.reads == 4
+        assert serial_port.reads == 8
         assert serial_port.closed
     assert capture.released
     assert capture.reads >= 22

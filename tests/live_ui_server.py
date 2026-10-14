@@ -54,7 +54,11 @@ class FakeLiveService:
     def start_setup(self, *, cell_text=None):
         self.set_state({"state": "setup_running", "setup": {"step": "fokus", "elapsed_s": 0.0}})
 
-    def confirm(self, **kwargs):
+    def confirm(self, *, session_id, **kwargs):
+        if session_id != self.status()["session_id"]:
+            from dispread.live.service import LiveError
+
+            raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
         self.set_state({"state": "confirmed"})
 
     def start_run(self):

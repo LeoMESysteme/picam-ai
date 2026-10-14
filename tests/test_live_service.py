@@ -60,9 +60,9 @@ def test_setup_runner_result_leads_to_ready_then_confirm_rules(tmp_path):
     service.start_setup()
     assert _wait_state(service, {"setup_ready"}) == "setup_ready"
     with pytest.raises(LiveError, match="Format"):
-        service.confirm(confirmed_by="Leonhard Hentschke", format_checked=False)
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=False)
     with pytest.raises(LiveError, match="WARNUNG"):
-        service.confirm(confirmed_by="Leonhard Hentschke", format_checked=True)
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True)
 
 
 def test_setup_failure_is_reported(tmp_path):
@@ -188,7 +188,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
         "overall": overall, "checks": {"rasterversatz": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": service.status()["setup"]["elapsed_s"],
     }
-    service.confirm(confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
     status = service.status()
     profile = SessionProfile.load(tmp_path / status["session_id"] / "profile.json")
     assert profile.resolution_ok and profile.confirmed_by == "Leonhard Hentschke"
@@ -215,7 +215,7 @@ def test_confirmation_refuses_before_cli_confirmation(tmp_path, proposal, monkey
 
     monkeypatch.setattr(live_setup, "confirm_proposal", forbidden)
     with pytest.raises(LiveError, match=message) as error:
-        service.confirm(confirmed_by="x", format_checked=format_checked, acknowledge_warning=True)
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="x", format_checked=format_checked, acknowledge_warning=True)
     assert "--" not in str(error.value)
     assert service.status()["state"] == "setup_ready"
 
@@ -226,7 +226,7 @@ def test_confirmation_refuses_missing_name_and_insufficient_resolution(tmp_path,
     proposal["min_native_dot_column_px"] = min_px
     service = ready_service(tmp_path, proposal)
     with pytest.raises(LiveError, match=message):
-        service.confirm(confirmed_by=name, format_checked=True)
+        service.confirm(session_id=service.status()["session_id"], confirmed_by=name, format_checked=True)
     assert service.status()["state"] == "setup_ready"
     assert not (tmp_path / service.status()["session_id"] / "profile.json").exists()
 
@@ -237,7 +237,7 @@ def test_start_run_reports_blocked_camera_restart(tmp_path, proposal):
             raise RuntimeError("Kamera-Neustart abgelehnt: Lesethread noch nicht beendet")
 
     service = ready_service(tmp_path, proposal)
-    service.confirm(confirmed_by="x", format_checked=True)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="x", format_checked=True)
     service._owner = BlockedOwner()
     with pytest.raises(LiveError, match="Kamera.*nicht.*gestartet"):
         service.start_run()
@@ -354,7 +354,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     camera = CameraSettings.from_dict(proposal["camera"])
     image = np.zeros((2, 2, 3), np.uint8)
     result = SimpleNamespace(first=image, second=image, fit=object(), offset_check=object(),
-                             final_checks=object(), stability_elapsed_s=30.0, reader_check=object())
+                             final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2)
 
     class Owner(FakeOwner):
         def restart(self, factory=None):
@@ -371,7 +371,8 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("serial_opened")
         return port
 
-    def focus(cam, hint, *, start_focus):
+    def focus(cam, hint, *, start_focus, info):
+        assert info == service._setup_progress
         assert hint is None
         assert start_focus == 48
         events.append("focus")
@@ -398,6 +399,8 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         assert kwargs["offset_check"] is result.offset_check
         assert kwargs["final_checks"] is result.final_checks
         assert kwargs["stability_elapsed_s"] == 30.0
+        assert kwargs["stability_min_elapsed_s"] == 15.0
+        assert kwargs["setup_attempt"] == 2
         assert kwargs["device_id"] == "gsv-sensor-161a"
         events.append("proposal")
         return proposal
@@ -677,7 +680,7 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
 
     proposal["setup_checks"]["overall"] = overall
     service = ready_service(tmp_path, proposal)
-    service.confirm(confirmed_by="Tester", format_checked=True, acknowledge_warning=acknowledged)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Tester", format_checked=True, acknowledge_warning=acknowledged)
     directory = tmp_path / service.status()["session_id"]
     confirmation = json.loads((directory / "confirmation.json").read_text())
     profile = json.loads((directory / "profile.json").read_text())
@@ -700,7 +703,8 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
     service = ready_service(tmp_path, proposal)
     starts = []
 
-    def focus(cam, hint, *, start_focus):
+    def focus(cam, hint, *, start_focus, info):
+        assert info == service._setup_progress
         starts.append(start_focus)
         measured = FocusMeasurements("sweep")
         measured.append((100, 1.0))
@@ -718,7 +722,7 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
     assert starts == [48]
     # Dieselbe Service-Instanz bestaetigt nun das Profil mit Fokus 68.
     service._proposal, service._state = proposal, "setup_ready"
-    service.confirm(confirmed_by="Test", format_checked=True)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Test", format_checked=True)
     for _ in range(2):
         service.start_setup(cell_text="+ 1.2345 ")
         assert _wait_state(service, {"setup_failed"}) == "setup_failed"
@@ -785,7 +789,8 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
 
 
 @pytest.mark.parametrize("source", ["seriell", "eingabe"])
-def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeypatch, source):
+@pytest.mark.parametrize("fit_rejected", [False, True])
+def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeypatch, source, fit_rejected):
     import json
 
     import numpy as np
@@ -798,6 +803,10 @@ def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeyp
     monkeypatch.setattr("dispread.live.service.OwnerSetupCamera.fresh_still",
                         lambda *a, **kw: np.zeros((1080, 1920, 3), np.uint8))
     monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: None)
+    if fit_rejected:
+        monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: (0, 0, 1, 1))
+        reasons = iter(["keine_startlage", "startlage_mehrdeutig", "vorzeichen_kein_plus"])
+        monkeypatch.setattr(live_setup, "fit_lattice", lambda *a, **kw: next(reasons))
     texts = iter(["+ 1.2345 ", "+ 1.2346 ", "+ 2.2345 ", "+ 2.2346 ", "+ 3.2345 ", "+ 3.2346 "])
     monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
 
@@ -818,6 +827,8 @@ def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeyp
     for attempt, entry in enumerate(entries, 1):
         assert entry["attempt"] == attempt and entry["source"] == source
         assert entry["still"] == "still"
+        if fit_rejected:
+            assert entry["fit"] == ["keine_startlage", "startlage_mehrdeutig", "vorzeichen_kein_plus"][attempt - 1]
         if source == "seriell":
             assert entry["unmasked"] == [f"+ {attempt}.2345 ", f"+ {attempt}.2346 "]
             assert entry["masked"] == f"+ {attempt}.234? "
@@ -825,7 +836,7 @@ def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeyp
             assert entry["unmasked"] == ["+ 1.2345 "]
             assert entry["masked"] == "+ 1.2345 "
     failure = json.loads((setup_dir / "failure.json").read_text())
-    assert "Kein gruener Bereich" in failure["reason"]
+    assert ("vorzeichen_kein_plus" if fit_rejected else "Kein gruener Bereich") in failure["reason"]
     assert failure["step"] == service.status()["setup"]["step"] == "standbilder"
     assert "Versuch 3/3" in service.status()["setup"]["message"]
     if source == "seriell":
@@ -870,8 +881,8 @@ def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, pr
     assert service.status()["state"] == ("setup_failed" if offset_status == "FEHLER" else "setup_ready")
     setup_dir = tmp_path / service.status()["session_id"] / "setup"
     assert json.loads((setup_dir / "cell-text.json").read_text()) == [
-        {"attempt": 1, "still": "still", "source": "seriell", "unmasked": ["abc", "abc"], "masked": "abc"},
-        {"attempt": 2, "still": "still", "source": "seriell", "unmasked": ["ab1", "ab2"], "masked": "a??"},
+        {"attempt": 1, "still": "still", "source": "seriell", "unmasked": ["abc", "abc"], "masked": "abc", "fit": "retry"},
+        {"attempt": 2, "still": "still", "source": "seriell", "unmasked": ["ab1", "ab2"], "masked": "a??", "fit": "ok"},
         {"attempt": 2, "still": "stability", "source": "seriell", "unmasked": ["ac1", "ac1"], "masked": "a??"},
     ]
     if offset_status == "FEHLER":
@@ -930,7 +941,7 @@ def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypat
         assert service.status()["setup"]["message"] == "Startsuche Versuch 1"
         kwargs["on_attempt"]({"attempt": 1, "still": "still", "masked": "+ 1.2345 "})
         return SimpleNamespace(first=None, second=None, fit=None, offset_check=None,
-                               final_checks=None, stability_elapsed_s=15, reader_check=None)
+                               final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=1)
 
     camera = CameraSettings.from_dict(proposal["camera"])
     monkeypatch.setattr(Path, "write_text", write)
@@ -980,3 +991,21 @@ def test_setup_records_text_when_serial_capture_fails(tmp_path, proposal, monkey
     assert entries[0]["masked"] is None
     assert entries[0]["error"] == service.status()["error"]
     assert json.loads((setup_dir / "failure.json").read_text())["step"] == "standbilder"
+
+
+@pytest.mark.parametrize("session_id", ["old-session", "", None])
+def test_confirmation_refuses_unseen_session(tmp_path, proposal, session_id):
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match="Vorschlag hat sich geaendert"):
+        service.confirm(session_id=session_id, confirmed_by="Operator", format_checked=True)
+    assert service.status()["state"] == "setup_ready"
+    assert not (tmp_path / service.status()["session_id"] / "profile.json").exists()
+
+
+def test_minus_sign_failure_has_positive_value_hint():
+    from dispread.live.service import _setup_error_for_page
+
+    assert _setup_error_for_page("Punktraster abgelehnt: vorzeichen_kein_plus") == (
+        "Punktraster abgelehnt: vorzeichen_kein_plus — "
+        "Anzeige zeigt kein Plus — Wert positiv einstellen und neu einrichten"
+    )

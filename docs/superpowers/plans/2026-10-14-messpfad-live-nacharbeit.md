@@ -9,7 +9,7 @@
 ## Befund 2026-10-14 (erster echter Einrichtungsversuch, Werkbank auf Port 8081)
 
 * Versuch 1: Kamera sehr nah (Glas ≈ 990 px breit) → `keine_startlage`.
-* Versuch 2 (Glas ≈ 360 px, frontal): Startsuche ok, aber „Rasterversatz 2j meldet FEHLER“. Offline mit dem angezeigten Text `+0.46801 ` ist 2j nach der Nachkorrektur **OK** (0,04/0,05) — der serielle Zellentext des Live-Laufs ist nicht gespeichert, Ursache dort ungeklärt (vermutlich maskierte Zellen durch wackelnde letzte Stelle).
+* Versuch 2 (Glas ≈ 720 px (1920-px-Bild), frontal): Startsuche ok, aber „Rasterversatz 2j meldet FEHLER“. Offline mit dem angezeigten Text `+0.46801 ` ist 2j nach der Nachkorrektur **OK** (0,04/0,05) — der serielle Zellentext des Live-Laufs ist nicht gespeichert, Ursache dort ungeklärt (vermutlich maskierte Zellen durch wackelnde letzte Stelle).
 * Versuch 3 (gleiche Aufstellung, Zellentext eingegeben): `keine_startlage`.
 * **Ursache:** `fit_lattice` (Startsuche) ist rauschempfindlich. Auf derselben Aufstellung: heute 1 von 3 Einzelbildern ok; `sc7`-Ernte 5/6 Einzelbilder, **6/6 bei Mittel aus 8 Bildern**.
 * Fokus-Sweep misst 38 Stellungen (32 grob + fein) mit je ~1 s Einschwingen ≈ 45 s; die Kurven sind eingipflig (Maximum heute bei 46–68).

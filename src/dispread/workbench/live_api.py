@@ -37,6 +37,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         data = await request.json()
         return await _call(
             service.confirm,
+            session_id=data.get("session_id", ""),
             confirmed_by=str(data.get("confirmed_by", "")),
             format_checked=bool(data.get("format_checked")),
             acknowledge_warning=bool(data.get("acknowledge_warning")),
