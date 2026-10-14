@@ -56,11 +56,10 @@ def test_simulated_worker_stops(tmp_path):
     assert not c.thread.is_alive()
 
 
-def test_non_simulation_camera_is_ausser_betrieb_without_importing_picamera2(tmp_path, monkeypatch):
+def test_non_simulation_camera_without_feed_reports_live_page_without_importing_picamera2(tmp_path, monkeypatch):
     # sys.modules-Waechter: ein "import picamera2" wuerde jetzt ImportError
-    # werfen. Der Controller darf trotzdem nicht abstuerzen - die Werkbank-
-    # Kamera (IMX500) ist seit 2026-09-25 ausser Betrieb, StreamCam-Anbindung
-    # des Kamerathreads folgt erst noch.
+    # werfen. Ohne Bilder-Feed verweist der Controller auf die Live-Seite
+    # und importiert keine eigene Picamera2-Kamera.
     monkeypatch.setitem(sys.modules, "picamera2", None)
     c = Controller(tmp_path, simulate=False)
     c.start()
@@ -69,7 +68,7 @@ def test_non_simulation_camera_is_ausser_betrieb_without_importing_picamera2(tmp
         time.sleep(0.02)
     status = c.snapshot()
     assert status["error"] is not None
-    assert "ausser Betrieb" in status["error"]
+    assert "Live-Seite" in status["error"]
     assert not status["live"]
     c.close()
     assert not c.thread.is_alive()

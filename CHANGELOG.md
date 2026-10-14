@@ -38,6 +38,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Live-Seite `/live` in `dispread serve`: Vorschau, Einrichtung mit Overlays, Bestätigung, Lauf mit Wert und Status, dauerhafter Freigabehinweis; Verbindungsverlust markiert Werte als STALE, Live-Stoppfehler lassen die Bereinigung weiterlaufen; `CameraOwner` öffnet die StreamCam ohne Regler bis zur Einrichtung.
 
+* Alte Werkbank: Picamera2-Worker und seine Helfer entfernt; der Controller bekommt Bilder gedrosselt vom `CameraOwner` und verweist Kameraregler auf `/live`. Der 7-Segment-Lesepfad der alten Seite bleibt vorerst (eigener Aufräumschritt).
+
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)

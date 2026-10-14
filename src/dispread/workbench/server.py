@@ -280,7 +280,7 @@ async def serve(args):
     else:
         owner = CameraOwner(lambda: UvcSource(preview_settings(), apply_controls=False))
     live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)), simulate=args.simulate)
-    controller = Controller(args.data, args.camera, args.simulate)
+    controller = Controller(args.data, args.camera, args.simulate, owner=owner)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):
         if getattr(args, name, None) is not None:

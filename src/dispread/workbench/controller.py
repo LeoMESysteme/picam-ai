@@ -1,4 +1,4 @@
-"""Ein Kamerabesitzer; Profil- und UI-Zustand unabhaengig vom Webtransport."""
+"""Werkbank mit Bilder-Feed; Profil- und UI-Zustand unabhaengig vom Webtransport."""
 
 from __future__ import annotations
 
@@ -36,12 +36,7 @@ from .vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_q
 #: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
 CROP_SIZE = (400, 160)
 
-#: Jeder Stream-Neuaufbau ist ein Power-Zyklus des RP2040-Bridge-Chips auf
-#: der AI-Camera; nach ~20-25 Zyklen in einer Bootsitzung antwortet er nicht
-#: mehr auf I2C (OQ-22). Mehrere Aenderungen in kurzer Folge - z. B. Breite
-#: und Hoehe als getrennte "camera.set"-Befehle - werden deshalb zu einem
-#: einzigen Neuaufbau gebuendelt statt je Befehl einen auszuloesen.
-GEOMETRY_DEBOUNCE_S = 0.25
+FEED_INTERVAL_S = 0.2
 
 #: Harte Obergrenze fuer Geometrie-Neuaufbauten je Bootsitzung. Beobachtet:
 #: der RP2040-Bridge-Chip antwortet nach rund 20-25 Power-Zyklen nicht mehr
@@ -52,12 +47,6 @@ GEOMETRY_DEBOUNCE_S = 0.25
 #: `dispread` (mit anschliessendem Host-Reboot) wird dann verlangt, statt
 #: dass die Kamera mitten in einer Messreihe unvorhersehbar haengt.
 MAX_GEOMETRY_CYCLES = 15
-
-#: Wachhund fuer blockierende Kamera-Ioctls. Eine haengende Operation laesst
-#: sich aus Python nicht abbrechen (der Treiber-Thread bleibt in einem
-#: ioctl haengen), aber ohne Wachhund wuerde der Worker fuer immer schweigend
-#: einfrieren statt die RP2040-Sperre (OQ-22) sichtbar zu melden.
-CAMERA_OP_TIMEOUT_S = 6.0
 
 #: Die Vorschau bleibt fluessig, waehrend die deutlich langsamere
 #: Werterkennung mit eigener, fuer die Einrichtung ausreichender Rate laeuft.
@@ -99,23 +88,7 @@ CLIP_QUEUE_DEPTH = 24
 CLIP_MAX_SECONDS = 120
 
 
-class CameraWedgedError(RuntimeError):
-    """Eine Kamera-Ioctl kehrte nicht innerhalb von CAMERA_OP_TIMEOUT_S zurueck.
-
-    Bekanntes Symptom des RP2040-Bridge-Fehlers (OQ-22): nur ein Reboot hilft,
-    ein erneuter Zugriff auf dasselbe Kameraobjekt haengt ebenfalls.
-    """
-
-
-#: Werkbank-Kamera ausser Betrieb (StreamCam-Umstieg 2026-09-25,
-#: docs/project_history.md): IMX500/Picamera2 wird im Nicht-Simulationsmodus
-#: nicht mehr importiert oder angefasst - die StreamCam-Anbindung des
-#: Kamerathreads folgt erst noch. Bis dahin ist `--simulate` der einzige
-#: lauffaehige Pfad; dieser Text ist der einzige sichtbare Fehlerzustand.
-CAMERA_AUSSER_BETRIEB_MSG = (
-    "Kamera der Werkbank ausser Betrieb (IMX500 abgeloest durch StreamCam, 2026-09-25) - "
-    "StreamCam-Anbindung folgt; Simulationsmodus (--simulate) nutzen"
-)
+KEINE_KAMERA_MSG = "Die Kamera der Werkbank laeuft ueber die Live-Seite (/live); dieser Controller hat keinen Bilder-Feed bekommen."
 
 
 def roi_box(image, roi):
@@ -217,8 +190,9 @@ def quality(image, roi):
 
 
 class Controller:
-    def __init__(self, root, camera_index=0, simulate=False):
+    def __init__(self, root, camera_index=0, simulate=False, owner=None):
         self.root = Path(root)
+        self.owner = owner
         self.camera_index, self.simulate = camera_index, simulate
         self.lock = threading.RLock()
         self.config = copy.deepcopy(DEFAULT)
@@ -518,6 +492,8 @@ class Controller:
             )
 
     def command(self, op, args=None):
+        if self.owner is not None and op in ("camera.set", "camera.set_many", "focus", "auto.start"):
+            raise ValueError("Kameraregler der StreamCam stehen auf der Live-Seite (/live)")
         args = args or {}
         if op == "ocr.suggest":
             # Eigener, absichtlich VOR dem Controller-Lock behandelter Befehl:
@@ -1494,246 +1470,73 @@ class Controller:
             if self.thread.is_alive():
                 self.log("error", "Kamerathread hat nicht rechtzeitig beendet")
 
-    def _guarded(self, action, func, timeout_s=CAMERA_OP_TIMEOUT_S):
-        """Fuehrt eine blockierende Kamera-Operation mit Wachhund aus.
-
-        Ein transienter Stau (z. B. `capture_request(wait=2.0)` bei kurzem
-        Rueckstand) laeuft in der eigenen Frist ab und wird normal
-        durchgereicht. Kehrt der Aufruf gar nicht zurueck, ist das nach
-        OQ-22 die RP2040-Sperre - das wird als `CameraWedgedError` sichtbar,
-        statt den Worker fuer immer schweigend haengen zu lassen. Der
-        blockierte Thread selbst laesst sich aus Python nicht abbrechen und
-        bleibt bewusst haengen; die aufrufende Seite darf `camera` danach
-        nicht mehr anfassen.
-        """
-        outcome = {}
-
-        def run():
-            try:
-                outcome["value"] = func()
-            except Exception as error:  # noqa: BLE001 - an den Aufrufer weiterreichen
-                outcome["error"] = error
-
-        thread = threading.Thread(target=run, name=f"camera-{action}", daemon=True)
-        thread.start()
-        thread.join(timeout_s)
-        if thread.is_alive():
-            raise CameraWedgedError(
-                f"Kamera reagiert nicht ({action}); vermutlich RP2040-Sperre (OQ-22), Reboot noetig"
-            )
-        if "error" in outcome:
-            raise outcome["error"]
-        return outcome["value"]
-
-    def _capture(self, camera):
-        request = self._guarded("capture", lambda: camera.capture_request(wait=2.0))
-        try:
-            image = request.make_array("main").copy()
-            metadata = request.get_metadata()
-            # Nur JSON-faehige echte Metadaten; SensorTimestamp unveraendert.
-            metadata = {k: v for k, v in metadata.items() if isinstance(v, (str, bool, int, float))}
-            metadata["timebase"] = TimeBaseKind.SENSOR_BOOTTIME.value
-            metadata["timestamp_semantics"] = "unknown"
-            metadata["uncertainty_ns"] = None
-            return image, metadata
-        finally:
-            request.release()
-
-    def _settle(self, camera, controls):
-        """Warte auf Istwerte manueller Belichtung, nicht nur set_controls()."""
-        for index in range(20):
-            _image, metadata = self._capture(camera)
-            matched = True
-            if controls.get("AeEnable") is False:
-                for name, tolerance in (("ExposureTime", 0.03), ("AnalogueGain", 0.08)):
-                    if name in controls:
-                        actual = metadata.get(name)
-                        matched &= actual is not None and abs(actual - controls[name]) <= max(
-                            1e-6, abs(controls[name]) * tolerance
-                        )
-            if index >= 3 and matched:
-                return metadata
-        raise ValueError("Manuelle Belichtung nicht in Kamerametadaten bestaetigt")
-
-    def _automatic(self, camera):
-        with self.lock:
-            original = copy.deepcopy(self.config)
-            self.auto_requested = False
-            self.auto = {"state": "running"}
-        self.log("info", "Auto-Setup sucht Vorschlag; keine Lesegarantie")
-        try:
-            camera.set_controls({"AeEnable": True})
-            for _ in range(20):
-                image, md = self._capture(camera)
-                self.publish(image, md)
-                if self.cancel_auto.is_set() or self.stop.is_set():
-                    raise InterruptedError("Auto-Setup abgebrochen")
-            baseline = (md["ExposureTime"], md["AnalogueGain"])
-            candidates = []
-            for exp_factor in (0.5, 1.0, 2.0):
-                for gain_factor in (0.75, 1.0, 1.5):
-                    controls = dict(original["camera"]["controls"], AeEnable=False)
-                    for name, value in zip(
-                        ("ExposureTime", "AnalogueGain"),
-                        (baseline[0] * exp_factor, baseline[1] * gain_factor),
-                        strict=True,
-                    ):
-                        low, high = self.capabilities[name][:2]
-                        controls[name] = max(low, min(high, value))
-                    controls["ExposureTime"] = int(controls["ExposureTime"])
-                    camera.set_controls(controls)
-                    self._settle(camera, controls)
-                    samples = []
-                    for index in range(10):
-                        if self.cancel_auto.is_set() or self.stop.is_set():
-                            raise InterruptedError("Auto-Setup abgebrochen")
-                        image, md = self._capture(camera)
-                        self.publish(image, md)
-                        if index >= 4:
-                            samples.append(quality(image, original["roi"]))
-                    glare = max(s["saturated_fraction"] for s in samples)
-                    contrast = min(s["contrast"] for s in samples)
-                    variation = float(np.std([s["brightness"] for s in samples]))
-                    if glare < 0.02 and contrast > 0.05 and variation < 0.05:
-                        candidates.append((contrast - variation - 5 * glare, controls))
-            with self.lock:
-                self.auto = (
-                    {"state": "proposal", "controls": max(candidates, key=lambda v: v[0])[1]}
-                    if candidates
-                    else {"state": "failed", "reason": "Kein brauchbarer Vorschlag"}
-                )
-            self.log("info", "Auto-Setup beendet: " + self.auto["state"] + "; Originaleinstellungen wiederhergestellt")
-        except InterruptedError:
-            self.auto = {"state": "cancelled"}
-            self.log("warn", "Auto-Setup abgebrochen; Original wiederhergestellt")
-        finally:
-            camera.set_controls(original["camera"]["controls"])
-            with self.lock:
-                self.applied = -1
-
     def _worker(self):
-        camera = None
-        wedged = False
         try:
-            if self.simulate:
-                self.capabilities = {
-                    "AeEnable": [False, True, True],
-                    "ExposureTime": [100, 100000, 10000],
-                    "AnalogueGain": [1.0, 16.0, 1.0],
-                    "Contrast": [0.1, 4.0, 1.0],
-                }
+            if self.owner is not None:
+                self._feed_from_owner()
+            elif self.simulate:
+                self._simulate_frames()
             else:
-                # IMX500/Picamera2 ausser Betrieb (StreamCam-Umstieg
-                # 2026-09-25) - kein Import, keine Instanziierung. Der
-                # Fehlerzustand nutzt denselben Kanal wie jeder andere
-                # Kamerafehler (self.error, siehe snapshot()); der Worker
-                # bleibt am Leben, bis stop gesetzt wird, statt Bilder zu
-                # erfinden.
                 with self.lock:
-                    self.error = CAMERA_AUSSER_BETRIEB_MSG
-                self.log("error", CAMERA_AUSSER_BETRIEB_MSG)
+                    self.error = KEINE_KAMERA_MSG
+                self.log("error", KEINE_KAMERA_MSG)
                 while not self.stop.is_set():
                     self.stop.wait(0.2)
-                return
-            previous = None
-            pending_geometry, pending_since = None, 0.0
-            while not self.stop.is_set():
-                with self.lock:
-                    data, revision = copy.deepcopy(self.config), self.revision
-                cam = data["camera"]
-                geometry = (cam["width"], cam["height"], cam["fps"])
-                if camera:
-                    if geometry != pending_geometry:
-                        pending_geometry, pending_since = geometry, time.monotonic()
-                    stable = time.monotonic() - pending_since >= GEOMETRY_DEBOUNCE_S
-                else:
-                    # Simulation fasst keine Hardware an, keine Entprellung noetig.
-                    stable = True
-                if previous != geometry and stable:
-                    if camera:
-                        if previous:
-                            self._guarded("stop", camera.stop)
-                        self._guarded(
-                            "configure",
-                            lambda geometry=geometry, cam=cam: camera.configure(
-                                camera.create_video_configuration(
-                                    main={"size": geometry[:2], "format": "RGB888"},
-                                    controls={"FrameRate": cam["fps"]},
-                                    queue=False,
-                                )
-                            ),
-                        )
-                        self.capabilities = {
-                            k: list(v)
-                            for k, v in camera.camera_controls.items()
-                            if k in ("AeEnable", "ExposureTime", "AnalogueGain", "Contrast")
-                        }
-                        self._guarded("start", lambda: camera.start(show_preview=False))
-                        with self.lock:
-                            self.geometry_cycles += 1
-                            self._save_geometry_cycles()
-                    previous = geometry
-                    self.applied = -1
-                    self.log("info", f"Kamerastream {geometry}; Fokus mechanisch")
-                if camera and previous is None:
-                    # Entprellfrist fuer die allererste Konfiguration laeuft noch;
-                    # es gibt noch keinen aktiven Stream zum Auslesen.
-                    self.stop.wait(0.05)
-                    continue
-                if revision != self.applied:
-                    validate(data, self.capabilities)
-                    if camera:
-                        camera.set_controls(cam["controls"])
-                        self._settle(camera, cam["controls"])
-                    with self.lock:
-                        self.applied = revision
-                    self.log("info", f"Controls r{revision} gesetzt; Ist-Belichtung separat in Metadaten")
-                if self.auto_requested:
-                    if camera:
-                        self._automatic(camera)
-                    else:
-                        self.auto_requested = False
-                        self.auto = {"state": "failed", "reason": "Auto-Setup braucht echte Kamera"}
-                if camera:
-                    image, metadata = self._capture(camera)
-                else:
-                    image = np.zeros((cam["height"], cam["width"], 3), np.uint8)
-                    cv2.rectangle(
-                        image,
-                        (int(cam["width"] * 0.2), int(cam["height"] * 0.3)),
-                        (int(cam["width"] * 0.8), int(cam["height"] * 0.6)),
-                        (160, 160, 160),
-                        -1,
-                    )
-                    cv2.putText(
-                        image,
-                        "012.50",
-                        (int(cam["width"] * 0.25), int(cam["height"] * 0.52)),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        2,
-                        (0, 0, 0),
-                        3,
-                    )
-                    metadata = {"timebase": TimeBaseKind.SYNTHETIC.value, "uncertainty_ns": None}
-                    self.stop.wait(1 / cam["fps"])
-                self.publish(image, metadata)
         except Exception as error:
             with self.lock:
                 self.error, self.jpeg = str(error), None
             self.log("error", f"Kamera gestoppt: {error}")
-            wedged = isinstance(error, CameraWedgedError)
-            if isinstance(error, TimeoutError) and camera:
-                camera.cancel_all_and_flush()
-        finally:
-            # Bei einer erkannten RP2040-Sperre haengt bereits ein Thread in
-            # der Kamera fest (siehe _guarded); ein weiterer stop()/close()
-            # auf demselben Objekt wuerde nur denselben Zustand erneut treffen.
-            if camera and not wedged:
-                for action, operation in (("stop", camera.stop), ("close", camera.close)):
-                    try:
-                        self._guarded(action, operation, timeout_s=3.0)
-                    except CameraWedgedError as error:
-                        self.log("error", f"Kameraabschluss abgebrochen: {error}")
-                        break
-                    except Exception as error:  # noqa: BLE001 - Shutdown darf den Prozess nicht festhalten
-                        self.log("warn", f"Kameraabschluss {action}: {error}")
+
+    def _feed_from_owner(self):
+        """Bilder vom CameraOwner, gedrosselt: die 7-Segment-Vorschau ist teuer
+        und darf das Live-Lesen nicht ausbremsen (Spec 2026-10-12 §5)."""
+        seen = 0
+        while not self.stop.is_set():
+            got = self.owner.wait_newer(seen, 0.5)
+            if got is None:
+                status = self.owner.status()
+                if not status["running"]:
+                    with self.lock:
+                        self.error = status["error"] or "Kamera aus"
+                    self.stop.wait(0.2)
+                continue
+            seen, frame = got
+            with self.lock:
+                self.error = None
+            stamp = frame.capture_timestamp
+            self.publish(frame.image, {"timebase": stamp.base.value, "uncertainty_ns": stamp.uncertainty_ns})
+            self.stop.wait(FEED_INTERVAL_S)
+
+    def _simulate_frames(self):
+        self.capabilities = {
+            "AeEnable": [False, True, True],
+            "ExposureTime": [100, 100000, 10000],
+            "AnalogueGain": [1.0, 16.0, 1.0],
+            "Contrast": [0.1, 4.0, 1.0],
+        }
+        while not self.stop.is_set():
+            with self.lock:
+                data, revision = copy.deepcopy(self.config), self.revision
+            cam = data["camera"]
+            if revision != self.applied:
+                validate(data, self.capabilities)
+                with self.lock:
+                    self.applied = revision
+                self.log("info", f"Controls r{revision} gesetzt; Ist-Belichtung separat in Metadaten")
+            if self.auto_requested:
+                self.auto_requested = False
+                self.auto = {"state": "failed", "reason": "Auto-Setup braucht echte Kamera"}
+            image = np.zeros((cam["height"], cam["width"], 3), np.uint8)
+            cv2.rectangle(
+                image,
+                (int(cam["width"] * 0.2), int(cam["height"] * 0.3)),
+                (int(cam["width"] * 0.8), int(cam["height"] * 0.6)),
+                (160, 160, 160),
+                -1,
+            )
+            cv2.putText(
+                image, "012.50", (int(cam["width"] * 0.25), int(cam["height"] * 0.52)),
+                cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 3,
+            )
+            self.publish(image, {"timebase": TimeBaseKind.SYNTHETIC.value, "uncertainty_ns": None})
+            self.stop.wait(1 / cam["fps"])

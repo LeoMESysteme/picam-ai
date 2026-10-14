@@ -761,56 +761,6 @@ def test_tui_uses_choices_and_reports_blocked_actions(tmp_path, monkeypatch):
     asyncio.run(check())
 
 
-def test_capture_request_release_on_failure(tmp_path):
-    c = Controller(tmp_path)
-
-    class Request:
-        released = False
-
-        def make_array(self, _):
-            raise RuntimeError("failed")
-
-        def release(self):
-            self.released = True
-
-    class Camera:
-        request = Request()
-
-        def capture_request(self, **_):
-            return self.request
-
-    camera = Camera()
-    with pytest.raises(RuntimeError):
-        c._capture(camera)
-    assert camera.request.released
-
-
-def test_auto_cancel_restores_original_controls(tmp_path, monkeypatch):
-    c = Controller(tmp_path)
-    c.config["roi"] = [0, 0, 1, 1]
-    c.config["confirmed"] = True
-    c.cancel_auto.set()
-    calls = []
-
-    class Camera:
-        def set_controls(self, controls):
-            calls.append(copy.deepcopy(controls))
-
-    monkeypatch.setattr(c, "_capture", lambda _: (np.zeros((30, 60, 3), np.uint8), {"timebase": "synthetic"}))
-    c._automatic(Camera())
-    assert c.auto["state"] == "cancelled"
-    assert calls[-1] == c.config["camera"]["controls"]
-    assert c.applied == -1
-
-
-def test_control_settle_requires_real_metadata(tmp_path, monkeypatch):
-    c = Controller(tmp_path)
-    monkeypatch.setattr(c, "_capture", lambda _: (None, {"ExposureTime": 100, "AnalogueGain": 1.0}))
-    with pytest.raises(ValueError):
-        c._settle(None, {"AeEnable": False, "ExposureTime": 20000, "AnalogueGain": 1.0})
-    assert c._settle(None, {"AeEnable": False, "ExposureTime": 100, "AnalogueGain": 1.0})["ExposureTime"] == 100
-
-
 def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
     import ssl
     import subprocess
@@ -2402,3 +2352,48 @@ def test_gedrosselte_ablesung_bleibt_ohne_nachfuehrungsverlust_unveraendert(tmp_
     assert "tracking_lost" not in controller.reading["status_flags"]
     assert controller.reading["value"] == vorher["value"]
     assert controller.reading["gate_status"] == vorher["gate_status"]
+
+
+def test_controller_is_fed_by_camera_owner_and_refuses_camera_ops(tmp_path):
+    import numpy as np
+
+    from dispread.frames import Frame
+    from dispread.records import TimeBaseKind, Timestamp
+
+    class FakeOwner:
+        def __init__(self):
+            self.seq = 0
+
+        def wait_newer(self, after, timeout):
+            time.sleep(0.01)
+            self.seq += 1
+            ts = Timestamp(value_ns=self.seq * 33_333_333, base=TimeBaseKind.V4L2_MONOTONIC)
+            image = np.zeros((480, 640, 3), np.uint8)
+            return self.seq, Frame(frame_sequence=self.seq, image=image, capture_timestamp=ts, source_id="fake")
+
+        def status(self):
+            return {"running": True, "error": None, "frames": self.seq, "gaps": 0, "source": {}}
+
+    c = Controller(tmp_path / "data", simulate=False, owner=FakeOwner())
+    c.start()
+    try:
+        deadline = time.monotonic() + 3
+        while c.snapshot()["live"] is False and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert c.snapshot()["live"] is True and c.snapshot()["error"] is None
+        with pytest.raises(ValueError, match="/live"):
+            c.command("camera.set", {"key": "ExposureTime", "value": 1000})
+    finally:
+        c.close()
+
+
+def test_controller_without_owner_and_without_simulation_reports_missing_camera(tmp_path):
+    c = Controller(tmp_path / "data", simulate=False)
+    c.start()
+    try:
+        deadline = time.monotonic() + 2
+        while not c.snapshot()["error"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert "Live-Seite" in c.snapshot()["error"]
+    finally:
+        c.close()
