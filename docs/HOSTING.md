@@ -65,6 +65,51 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Pi-Hauswart (MEM-6)
+
+`scripts/pi-housekeeping.py` erstellt einen Textbericht, mit `--json` einen
+maschinenlesbaren Bericht. `--home` ist unabhängig von der Umgebungsvariable
+`HOME` (Standard `/home/me-systeme`); `--repo` bezeichnet den Checkout
+(Standard: Checkout des Skripts). Die tägliche Routine wird separat eingerichtet.
+
+```bash
+/home/me-systeme/picam-ai/.venv/bin/python scripts/pi-housekeeping.py --json --home /home/me-systeme --repo /home/me-systeme/picam-ai
+/home/me-systeme/picam-ai/.venv/bin/python scripts/pi-housekeeping.py --dry-run --home /home/me-systeme --repo /home/me-systeme/picam-ai
+```
+
+Der Bericht zeigt Karte (`/`), RAM, Swap, `/tmp` samt Dateisystem, die zehn
+größten direkten Posten in Home und `var/` sowie geschützte Pfade.
+Größen sind allokierte Bytes ohne Verfolgung von Symlinks; unvollständige
+Baummessungen sind markiert. Ein dezimales GB sind 1.000.000.000 Bytes.
+Unter 5 GB frei auf `/` oder über 50 % belegtes `/tmp` erzeugt `warnings`.
+Exit-Code 0 bedeutet erfolgreicher Bericht, auch mit Speicherwarnung;
+Exit-Code 1 bedeutet Berichts- oder Bereinigungsfehler. Das trennt
+Speicherengpässe von technischen Fehlern für die tägliche Routine.
+
+`--dry-run` verändert nichts, auch zusammen mit `--clean`. Nur `--clean`
+löscht: alte `/tmp/pytest-of-<Benutzer>/pytest-*`, npm `_cacache`, inaktive
+`_npx`-Einträge ohne `paperclipai`, inaktive VS-Code-`Stable-*`-Server,
+inaktive Codex-Releases unter `standalone` und `app-server-daemon`, alte
+Codex-`.tmp/git-*` und `playwright-report/` im angegebenen Repo.
+Für pytest und git gilt: jüngste mtime im gesamten Baum älter als eine Stunde.
+`pytest-current` und die Codex-`current`-Ziele bleiben stehen.
+Ein laufender pytest-Prozess sperrt pytest-Bereinigung. Die Prozessprüfung
+liest `/proc/*/exe`, `cmdline` und zusätzlich `cwd`. Bei `PermissionError`
+auf `exe` oder `cwd` wird unabhängig von der UID nur die lesbare `cmdline`
+ausgewertet; das gilt auch für eigene, nicht dumpable Prozesse.
+Nicht lesbares `stat`/`cmdline`, andere `OSError` bei den Links sowie fehlende
+Links bei noch existierenden Prozessen machen die Prüfung unvollständig:
+alle prozessabhängigen Kandidaten bleiben stehen.
+Symlink-Pfade und erkannte Mountpoints werden nicht bereinigt.
+Sperren und Prozessreferenzen werden vor jeder Löschung erneut geprüft;
+dies ersetzt keine gemeinsame Sperre mit neu startenden Prozessen.
+
+`var/RECORDING_IN_PROGRESS` erlaubt den Bericht und blockiert jede Löschung.
+`var/`, `~/var-backups/`, Codex-Marketplaces/Plugins/Sitzungen,
+`/tmp/claude-*`, `/tmp/picam-ai-n5-*` und `~/.cache/ms-playwright` werden
+nur gemeldet. Der erste echte Pi-Probelauf mit `--dry-run` ist Aufgabe
+des Chief of Staff, ebenso Review und Freigabe des Betriebs.
+
 ### Playwright-Prüfung auf dem vorhandenen Runner
 
 `.github/workflows/playwright.yml` läuft bei Pushes und Pull Requests nach

@@ -3,6 +3,30 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-14 (MEM-6: Pi-Hauswart)
+
+**Problem:** Speicherengpässe auf Karte und RAM-Disk brauchen einen Bericht
+und eine begrenzte, nachvollziehbare Cache-Bereinigung.
+
+**Änderung:** `scripts/pi-housekeeping.py` berichtet Karte, RAM, Swap,
+`/tmp`, größte Home-/var-Posten und geschützte Pfade als Text oder JSON.
+`--dry-run` zeigt Kandidaten mit allokierter Größe; `--clean` bearbeitet
+nur die feste Liste aus MEM-6. Altersprüfung, `pytest-current`, Codex-`current`,
+Prozessreferenzen und Paperclip-Pakete schützen aktive Dateien.
+Prozesse werden über `exe`, `cmdline` und `cwd` geprüft. Bei `PermissionError`
+auf `exe`/`cwd` zählt unabhängig von der UID nur die lesbare `cmdline`.
+Nicht lesbares `stat`/`cmdline`, andere Linkfehler und fehlende Links bei
+noch existierenden Prozessen sperren prozessabhängige Kandidaten weiter.
+Symlink-Pfade, Mountpoints und unvollständig prüfbare Kandidaten bleiben
+stehen. `var/RECORDING_IN_PROGRESS` sperrt sämtliche Löschungen.
+
+**Konsequenz:** Speicherwarnungen stehen in `warnings` (unter 5 dezimalen GB
+frei auf `/`, über 50 % belegtes `/tmp`); Exit-Code 1 bedeutet einen
+Berichts- oder Bereinigungsfehler. Home und Repo sind explizit wählbar,
+Standard-Home ist `/home/me-systeme`. Messdaten, Sicherungen, Sitzungen und
+Browserinstallation werden nur gemeldet. Der echte Pi-Probelauf bleibt
+beim Chief of Staff; die Regressionen nutzen ausschließlich künstliche Bäume.
+
 ## 0.1.0.dev0 — 2026-10-14 (MEM-8: Playwright-Beispieltest entfernt)
 
 **Problem:** `tests/example.spec.ts` war der Beispieltest aus der
