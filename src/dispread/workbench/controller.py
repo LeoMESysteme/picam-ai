@@ -1503,6 +1503,8 @@ class Controller:
             seen, frame = got
             with self.lock:
                 self.error = None
+                self.applied = self.revision
+                # run behaelt die AeEnable-Sperre; das Live-Lesen erfolgt auf /live.
             stamp = frame.capture_timestamp
             self.publish(frame.image, {"timebase": stamp.base.value, "uncertainty_ns": stamp.uncertainty_ns})
             self.stop.wait(FEED_INTERVAL_S)

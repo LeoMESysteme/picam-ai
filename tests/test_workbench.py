@@ -2354,7 +2354,7 @@ def test_gedrosselte_ablesung_bleibt_ohne_nachfuehrungsverlust_unveraendert(tmp_
     assert controller.reading["gate_status"] == vorher["gate_status"]
 
 
-def test_controller_is_fed_by_camera_owner_and_refuses_camera_ops(tmp_path):
+def test_controller_is_fed_by_camera_owner_and_can_save_profile(tmp_path):
     import numpy as np
 
     from dispread.frames import Frame
@@ -2381,10 +2381,55 @@ def test_controller_is_fed_by_camera_owner_and_refuses_camera_ops(tmp_path):
         while c.snapshot()["live"] is False and time.monotonic() < deadline:
             time.sleep(0.05)
         assert c.snapshot()["live"] is True and c.snapshot()["error"] is None
-        with pytest.raises(ValueError, match="/live"):
-            c.command("camera.set", {"key": "ExposureTime", "value": 1000})
+        c.command("profile.save", {"name": "gsv-2asd"})
+        saved = json.loads((tmp_path / "data" / "profiles" / "gsv-2asd.json").read_text())
+        assert saved["roi"] == c.config["roi"]
+        assert saved["layout"] == c.config["layout"]
     finally:
         c.close()
+
+
+@pytest.mark.parametrize(
+    "op,args",
+    [
+        ("camera.set", {"key": "ExposureTime", "value": 1000}),
+        ("camera.set_many", {"values": {"ExposureTime": 1000}}),
+        ("focus", {"value": True}),
+        ("auto.start", {}),
+    ],
+)
+def test_controller_with_owner_refuses_camera_ops(tmp_path, op, args):
+    c = Controller(tmp_path / "data", owner=object())
+    with pytest.raises(ValueError, match=r"Kameraregler der StreamCam stehen auf der Live-Seite \(/live\)"):
+        c.command(op, args)
+
+
+def test_controller_stopped_owner_backs_off_and_closes_promptly(tmp_path):
+    class StoppedOwner:
+        def __init__(self):
+            self.calls = 0
+            self.called = threading.Event()
+
+        def wait_newer(self, after, timeout):
+            self.calls += 1
+            self.called.set()
+            return None
+
+        def status(self):
+            return {"running": False, "error": None}
+
+    owner = StoppedOwner()
+    c = Controller(tmp_path / "data", owner=owner)
+    c.start()
+    try:
+        assert owner.called.wait(2)
+        time.sleep(0.5)
+        assert 1 <= owner.calls <= 5
+        assert c.snapshot()["error"] == "Kamera aus"
+    finally:
+        started = time.monotonic()
+        c.close()
+        assert time.monotonic() - started < 2
 
 
 def test_controller_without_owner_and_without_simulation_reports_missing_camera(tmp_path):
