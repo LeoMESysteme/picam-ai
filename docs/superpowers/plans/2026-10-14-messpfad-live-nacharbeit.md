@@ -99,3 +99,14 @@ Tests (synthetische Kurven, Zähler für Messungen): Gipfel bei 46 von Start 48 
 ### Task N5: Echter Durchlauf am Aufbau (mit dem Nutzer)
 
 Werkbank mit dem neuen Stand neu starten (Port 8081), Einrichtung über `/live` an derselben frontalen Aufstellung **dreimal hintereinander**; erwartet: jedes Mal Vorschlag (OK/WARNUNG), Fokus < 15 s, gesamte Einrichtung < 60 s. Danach Plan-Task 12 des Vorgängerplans (Lauf, Werte über `set norm`, Auswertung, Doku).
+
+### Task N6: Lokale Steuerung der Live-Einrichtung (für Tests am Aufbau ohne Browser)
+
+**Warum:** Die Einrichtung braucht keinen Handgriff am Aufbau. Über den vorhandenen lokalen Steuer-Socket (`server.py` `control`, Unix-Socket mit Modus 0600) soll sie sich ohne Browser-Anmeldung auslösen und beobachten lassen, damit Robustheit und Dauer an der echten Kamera wiederholt gemessen werden können.
+
+**Files:** `src/dispread/workbench/server.py` (`control`), `src/dispread/workbench/cli.py`, Tests in `tests/test_live_api.py` oder `tests/test_workbench.py`.
+
+* Neue Operationen am lokalen Socket: `live.status` (→ `LiveService.status()`), `live.setup` (Argument `cell_text` optional → `start_setup`), `live.stop` (→ `stop_run`), `live.camera` (→ `start_camera`). **Keine** Bestätigung und **kein** Laufstart über den Socket: Konzept §4 verlangt eine namentlich bestätigende Person in der Oberfläche.
+* `LiveError` → Antwort `{"error": ...}` mit Status 409 wie bei HTTP.
+* CLI: `dispread live status|setup [--cell-text TEXT]|stop|camera` (über `request(op, args)`), Ausgabe als JSON.
+* Tests ohne Sockets wo möglich (Handler direkt mit Fake-Service aufrufen); der Socket-Weg selbst wird vom Controller außerhalb der Sandbox geprüft.
