@@ -130,9 +130,11 @@ Zentrale Verträge in [src/dispread/records.py](src/dispread/records.py):
   die Nummer (`/dev/video0`, früher `/dev/video8`) wechselt je nach
   Steckreihenfolge. `find_uvc_device()` sucht über USB-ID und `index == 0`;
   keine Knotennummer fest eintragen.
-* **Die Kamera der Werkbank (`dispread serve`) ist außer Betrieb**, bis die
-  StreamCam dort angebunden ist; sie meldet „Kamera der Werkbank ausser
-  Betrieb …". `--simulate` läuft.
+* **Die Kamera der Werkbank (`dispread serve`) läuft über `/live`**:
+  `CameraOwner` hält die StreamCam für die gesamte Serverlaufzeit. Die alte
+  Seite bekommt gedrosselte Bilder; Kamerabedienung nur auf `/live`.
+  Harvest-Skripte bekommen währenddessen „belegt“. `--simulate` zeigt
+  weiterhin eine Vorschau.
 * **Nur ein Prozess kann die StreamCam halten.** Ein zweiter bekommt
   „nicht zu öffnen (belegt?)".
 * **Die StreamCam übernimmt Regler auch ohne laufenden Stream**, und

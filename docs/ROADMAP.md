@@ -20,6 +20,14 @@ warten. Jede offene Frage hat einen Vorabdefault, mit dem gearbeitet wird.
 
 ## P0 — was tatsächlich steht
 
+- [x] Live-Messpfad mit `CameraOwner`, Browser-Einrichtung und namentlicher
+  Bestätigung auf `/live`, Dot-Matrix-Leser und JSONL-Audit pro Lauf:
+  **gebaut, Einrichtung am Aufbau geprüft, Messlauf offen** (2026-10-14).
+  Nach N7 3/3 Vorschläge mit Gesamt-WARNUNG in 47/55/49 s; Bestätigung und
+  Messlauf mit Wertwechseln warten auf die bedienende Person
+  ([VALIDATION.md](VALIDATION.md#messpfad-live-einrichtung-2026-10-14)).
+  Keine serielle Ausgabe an GSVmulti; diese bleibt P4 / OQ-07.
+
 - [x] Repo-Grundgerüst nach MEhub-Konventionen, Importpaket `dispread`
 - [x] Projekt-venv mit `--system-site-packages`, Paket mit `--no-deps`
 - [x] `ValueRecord` mit genau den neun Feldern aus Konzept §8, verlustfrei serialisierbar

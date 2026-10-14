@@ -2940,3 +2940,53 @@ Startsuche fand auf den gespeicherten Assist-Stills 196 zugeordnete Punkte
 bei `sc7` (RMS 0,092/0,126) und 318 bei `sc7a` (RMS 0,150/0,241).
 Das `sc7a`-Startquad lag maximal 6,46 px vom gespeicherten Referenzquad
 entfernt; der nachfolgende textgestützte 2j-Abgleich bleibt erforderlich.
+
+## 2026-10-14 — Messpfad live: Einrichtung an der StreamCam { #messpfad-live-einrichtung-2026-10-14 }
+
+**Aufbau:** StreamCam frontal auf dem GSV-2AS / Displaytech 161A,
+Glas etwa 720 px breit, Raumlicht, Zellentext über die serielle Schnittstelle.
+`dispread serve --port 8081` (8080 ist auf diesem Pi durch MEhub belegt).
+Die Versuche und Zahlen stammen vom Controller; diese Doku-Aufgabe führte
+keine neue Aufnahme durch.
+
+| Stand | Vorschläge / Einrichtungen | Befund | Dauer |
+| --- | --- | --- | --- |
+| Vor N7 | 0/4 | `keine_startlage`; einmal falsches Raster, durch 2j FEHLER abgefangen | nicht hier beziffert |
+| Nach N7 | 3/3 | Gesamt-WARNUNG, Raster-Ersatzmaß WARNUNG wie bei `sc7`, Rasterversatz OK, Gegenlesen OK | 47/55/49 s |
+
+Fokus per Bergsteigen brauchte am Aufbau 5 statt 38 Messungen. Die Werkbank
+mittelt acht Bilder je Standbild und versucht die Suche bis zu dreimal;
+Stabilitätsfenster 15 s, Harvest-CLI unverändert 30 s. Diagnoseartefakte:
+`var/live/<sitzung>/setup/cell-text.json` und `setup/failure.json`.
+
+**Ursache und N7:** Auf den Standbildern vom 2026-10-14 erzeugte feste
+0,7-px-Glättung 1–4 zufällige Minima pro scharfem Punkt. Ein Raster lag
+eine Zeile falsch und wurde erst durch 2j abgelehnt. N7 glättet in
+Punktgröße, senkt `_MAX_RMS_ROWS` von 0,25 auf 0,15 und staffelt die
+Startsuche; die nachgelagerten Freigabeprüfungen bleiben bestehen.
+
+**Einordnung:** kein formaler Abnahme-Lauf. Die drei erfolgreichen
+Einrichtungen endeten beim Vorschlag, ohne Bestätigung durch eine benannte
+Person und ohne Messlauf. `set norm`-Wertwechsel und eine Messung des
+ECC-Trackingverlusts dabei stehen aus (R13); geplant mit der bedienenden
+Person am 2026-10-16. Noch keine Aussage zu Live-Trefferquote,
+Bestätigungsverzögerung oder Trackingqualität bei Wertwechseln.
+
+**Freigabehinweis** (wörtlich aus `src/dispread/live/__init__.py`):
+
+> Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
+
+Nur ein Gerät und eine Einheit wurden geprüft; keine serielle Ausgabe an
+GSVmulti (OQ-07). Nach Bestätigung liegen Profil und `confirmation.json`
+in `var/live/<sitzung>/`; erst ein gestarteter Lauf schreibt
+`records.jsonl` und `session.json` unter `run-NN/`. Bei dessen Auswertung
+`tracking_lost` und `track_score` prüfen, 0,0 bei `ecc_diverged` gesondert
+zählen. `raw_text` ist die geparste Zahl, nicht der Text aller 16 Zellen.
+Streamstillstand beendet erst nach OpenCV-Select-Timeout, nicht nach 2 s;
+STALE in der Oberfläche schützt zuvor vor einer aktuellen Wertanzeige.
+Rotation würde nach etwa 7 h alte Auditgenerationen verwerfen.
+
+Belege: SDD-Ledger
+`.superpowers/sdd/2026-10-14-messpfad-live-nacharbeit/progress.md`
+(Bench check, N7-Re-Test) und
+`.superpowers/sdd/2026-10-12-messpfad-live/progress.md` (Final-Review, R13).

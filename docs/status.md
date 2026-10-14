@@ -1,131 +1,75 @@
-# Status — Stand 2026-10-12 (Dokumentationssnapshot; Sachbelege bis 2026-10-02)
+# Status — Stand 2026-10-14
 
 Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
-[Changelog](../CHANGELOG.md) und
-[Projektgeschichte](project_history.md); Aufgaben:
-[TODO.md](../TODO.md).
+[Changelog](../CHANGELOG.md) und [Projektgeschichte](project_history.md);
+Arbeitsliste: [TODO.md](../TODO.md).
 
-## Betrieb und Messstand
+## Messpfad live
 
-Die aktive Kamera ist die Logitech StreamCam über UVC (046d:0893). Die
-IMX500 ist seit 2026-09-25 außer Betrieb
-([Hardwareprofil](HARDWARE_PROFILE.md)). Die echte Anbindung an GSVmulti
-bleibt wegen der fehlenden Telegrammspezifikation offen
-([OQ-07](open-questions.md#oq-07)).
+Auf `feat/messpfad-live` sind Tasks 1–11 samt Final-Review-Korrekturen
+gebaut. `dispread serve` hält die Logitech StreamCam über `CameraOwner`
+für seine gesamte Laufzeit. `/live` führt durch Einrichtung, namentliche
+Bestätigung und Messlauf mit Dot-Matrix-Leser; der Wert trägt
+VALID, TRANSITION, UNREADABLE oder STALE. Die alte Werkbank bekommt
+gedrosselte Bilder vom selben Owner; Kamerabedienung erfolgt nur über `/live`.
+Andere Kameraprozesse, etwa Harvest-Skripte, bekommen währenddessen „belegt“.
+Port 8080 ist auf diesem Pi durch MEhub belegt; die Werkbank lief mit
+`dispread serve --port 8081`.
 
-**Dot-Matrix-Leser: Abnahme 3 bestanden (2026-09-30).**
-* Stufe 2 ist eingefroren als `templates-stufe2c-2026-09-30.json`
-  (`6f20dec4…`), Lesercode wie `ef5cedf`, Normierung `bg_closing_v1`.
-* Neue Aufstellungen `ab5` (frontal, gedreht) und `ab6` (schräg von links):
-  215/215 richtig, 0 falsch, 0 abgelehnt, Obergrenze der Fehlerrate 3,5 %.
-* Einschränkungen:
-  * nur Raumlicht, ein Gerät, eine Einheit,
-  * bei `ab6` verwarf der Import 42 % als `zellen_inkonsistent`.
-* Abnahme 2 war zuvor an **falsch sitzenden Punktrastern** gescheitert,
-  nicht am Leser. Seitdem wird der Rasterversatz vor jeder Ernte gemessen
-  (`scripts/profile-regrid.py still`, Grenze 0,15 Punktspalten).
-* **2026-10-01, Lesetest `sc7`:** frontal und nah, bisher größte
-  Abbildung mit etwa 900 px Glasbreite, nicht in den Vorlagen.
-  111/111 richtig, 0 falsch, 0 abgelehnt. Kein formaler Abnahme-Lauf.
-* **Entscheidung 2026-10-01 (Variante B):** Der Leser gilt für den
-  GSV-Sensor als ausreichend validiert. Als Nächstes kommt die Anbindung an
-  den Messpfad (TODO.md Punkt 2). Andere Lichtquellen und weitere Geräte
-  bleiben als Einschränkung genannt.
-* Zahlen: [VALIDATION.md](VALIDATION.md), [Fortschritt](FORTSCHRITT.md),
-  [Laborjournal](lab_journal.md). Entscheidung:
-  [project_history.md](project_history.md).
+Einrichtung und Profil liegen unter `var/live/<sitzung>/`, einschließlich
+`profile.json` und `confirmation.json` nach Bestätigung. Jeder Lauf schreibt
+`records.jsonl` und `session.json` unter `var/live/<sitzung>/run-NN/`.
+Lokal stehen `dispread live status|setup|stop|camera` zur Verfügung;
+Bestätigung und Laufstart bleiben in der angemeldeten Oberfläche (Konzept §4).
+Ohne Anmeldung führt `/live` zu `/login?next=/live` und danach zurück.
 
-**Aufnahme:** Ernten laufen mit RAM-Zwischenablage; 0 Bildverluste in allen
-Ernten seit `sc6b`. Das Kopieren auf die SD-Karte dauert inzwischen etwa
-435 s. Eine Ernte braucht etwa 3,7 GB `MemAvailable`. Parallel laufende
-Importe oder Tests können zur Ablehnung vor dem Start führen. Dabei geht
-nichts verloren.
+## Einrichtung am Aufbau, 2026-10-14
 
-**SD-Karte:** knapp.
-* Das Codex-Leck (`~/.codex/.tmp/marketplaces/.staging`, etwa 1 GB/h)
-  füllt sie, solange Codex läuft.
-* Volle tar-Sicherungen je Aufstellung liegen in `~/var-backups`.
-* `var/` hat keine Sicherung auf einem anderen Medium.
+StreamCam frontal auf dem GSV-2AS / Displaytech 161A, Glas etwa 720 px breit,
+Raumlicht, Zellentext seriell gelesen. Vor N7: **0/4** Einrichtungen,
+`keine_startlage` sowie einmal 2j FEHLER auf einem falschen Raster.
+Nach N7: **3/3** Vorschläge, Dauer **47/55/49 s**, jeweils Gesamt-WARNUNG:
+Raster-Ersatzmaß WARNUNG wie bei `sc7`, Rasterversatz OK, Gegenlesen OK.
+Das ist **kein formaler Abnahme-Lauf** und noch kein Messlauf.
 
-**Einrichtungsassistent:** Nacharbeit 1–4 ist seit 2026-10-01 in `master`,
-Nacharbeit 5 seit dem Merge am 2026-10-12. Der erste echte Kameralauf mit
-seriellem Text richtete `sc7` ohne Hilfe ein: 2j 0,04/0,07 Punktabstände,
-unabhängig mit `profile-regrid.py still` bestätigt, Gegenlesen 2/2,
-Gesamturteil WARNUNG nur wegen des Bias-Ersatzmaßes. Das Profil wurde nach
-Sichtprüfung bestätigt.
+Die Nacharbeit vom 2026-10-14 umfasst Fokus per Bergsteigen (5 statt 38
+Messungen am Aufbau), Mittelung von acht Bildern je Standbild und bis zu
+drei Suchversuche. Die Werkbank prüft Stabilität über 15 s; die Harvest-CLI
+bleibt bei 30 s. `setup/cell-text.json` und `setup/failure.json` sichern
+Zellentext und Fehlerdiagnose. Die Live-Oberfläche hat eine Playwright-Prüfung
+(`npx playwright test -c playwright.live.config.ts`; vom Controller geprüft).
 
-**Nacharbeit 5:** Der Versuch davor
-(`sc7a`, Kamera leicht von oben) wurde durch schwache Punktschatten in der
-Cursorzeile abgelehnt. Die Cursorprüfung verlangt nun eine Kandidatentiefe
-von mindestens 60 % des Medians der zugeordneten Glyphenpunkte. Mit dem
-gespeicherten Quad bestehen alle 32 `sc7a`-Stillframes offline; ein
-synthetisch belegter Cursor bleibt abgelehnt. `propose --quad` auf Frame 16
-liefert 2j OK (0,041/0,057) und Gesamt-WARNUNG. Die unveränderte
-Startsuche findet auf den Assist-Bildern `sc7` und `sc7a` eine Lage
-(196 und 318 zugeordnete Punkte). Das `sc7a`-Startquad liegt bis zu
-6,46 px vom Referenzquad entfernt; 2j und Bedienerprüfung bleiben nötig.
-Es gab keinen weiteren Kamera- oder seriellen Lauf; ein neuer echter Lauf
-mit schräger Aufstellung steht aus. Schräge Aufstellungen wie `ab4`/`ab6`
-richtet man weiter von Hand mit `profile-regrid.py still` ein.
+N7 behebt die an den Standbildern vom 2026-10-14 gefundene Ursache: Feste
+0,7-px-Glättung erzeugte 1–4 zufällige Minima je scharfem LCD-Punkt;
+ein um eine Zeile falsches Raster wurde angenommen und erst von 2j abgefangen.
+Punkterkennung glättet nun in Punktgröße, `_MAX_RMS_ROWS` sinkt von 0,25
+auf 0,15, die Startsuche ist gestuft. 2j und Gegenlesen bleiben maßgeblich.
+Belege: [VALIDATION.md](VALIDATION.md#messpfad-live-einrichtung-2026-10-14),
+[Live-Plan](superpowers/plans/2026-10-12-messpfad-live.md) und
+[Nacharbeitsplan](superpowers/plans/2026-10-14-messpfad-live-nacharbeit.md)
+mit den jeweiligen SDD-Ledgern (Final-Review/R13 und Bench-Re-Test).
 
-## Software und Anleitung
+## Grenzen und nächster Schritt
 
-Die Baukapitel 3–9 beschreiben teils noch geplante Komponenten:
-folder:// ist registriert, aber FolderSource fehlt; automatische
-contour_heuristic-Lokalisierung und RegionTracker aus Kapitel 7 fehlen
-(vorhanden sind ManualRoiLocator und QuadTracker). Kapitel 8 ist ein
-Bauentwurf: SevenSegmentReader, DotMatrixReader und TesseractReader sind
-implementiert, der beschriebene Vergleichsharnisch bleibt offen.
-Geräteprofile und die Pipeline-CLI für dispread run fehlen ebenfalls. Der bestehende
-dispread-Einsprungpunkt führt zur separaten Workbench-CLI
-([Lernpfad](anleitung/README.md), [Roadmap](ROADMAP.md)).
-Livevorschau und Datensatz-Sammelmodus haben eigene
-[Bedienseiten](anleitung/10-kamera-livevorschau.md) und
-[Dokumentation zum Sammeln](anleitung/11-datensatz-sammeln.md).
-Die Kameravorschau in der Workbench ist derzeit nur mit `--simulate` nutzbar;
-die StreamCam ist dort noch nicht angebunden. Die separate UVC-Bildquelle und
-das Kamera-Inbetriebnahmeskript unterstützen die StreamCam bereits.
+Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
+Die Leser-Abnahme 3 vom 2026-09-30 (215/215 richtig) und der `sc7`-Lesetest
+(111/111 richtig) bleiben frühere Belege; sie ersetzen den Live-Messlauf nicht.
+Serielle Ausgabe an GSVmulti fehlt weiterhin
+([OQ-07](open-questions.md#oq-07)). ECC-Tracking bei Wertwechseln ist ungemessen.
+`raw_text` enthält die geparste Zahl, nicht die 16 Displayzellen.
+Ein stillstehender Stream beendet die Sitzung erst nach dem OpenCV-Select-
+Timeout (etwa 10–20 s), nicht nach 2 s; die Wertanzeige wird zuvor STALE.
+Die `JsonlSink`-Rotation würde nach etwa 7 h alte Auditgenerationen verwerfen.
 
-## Zensical-Dokumentation und Runner
+Bestätigung durch die bedienende Person, Messlauf ≥ 10 min, Wertwechsel mit
+`set norm` und 2 s Abdeckung stehen aus; vorgesehen für **2026-10-16**.
+Danach Statuszählungen, Soll-/Lesewerte, Bildlücken und Leserate auswerten,
+insbesondere `tracking_lost` und `track_score` bei Wertwechseln (R13).
+`track_score` 0,0 bei `ecc_diverged` gesondert als Divergenz zählen.
+Erst die Aufbauzahlen entscheiden über eine vom Anzeigewert unabhängige
+Trackerregion. Ergebnis in VALIDATION und Laborjournal eintragen.
 
-Die [Startseite](../index.md) nennt jetzt die StreamCam und verlinkt
-alle Navigationsziele direkt. Die Vertiefungen zu
-[Messpfad](uebersicht/messpfad.md),
-[Zeitstempeln](uebersicht/zeitstempel.md) und
-[Daten/Abnahme](uebersicht/daten-und-abnahme.md) verbinden Anforderungen,
-API und Nachweise. Frühere IMX500-Baukapitel und Kameramesswerte sind als
-historisch gekennzeichnet; das [Kamerarezept](anleitung/rezepte.md)
-verwendet `v4l2://`, die aktiven UVC-Profile stehen in der
-[Bildquellen-API](../api/frames.md).
-
-Der Forgejo-Runner nahm am 2026-09-30 um 06:00 einen Auftrag an und
-veröffentlichte um 06:04 einen Doku-Commit. Sein rotierender Audit hatte
-die Startseite nicht als festen Prüfschritt. Der Audit-Auftrag enthält sie
-nun bei jedem Lauf. Ein lokaler Codex-Probelauf mit der installierten CLI
-zeigte: Mit --ephemeral scheiterte der Spawn an „no thread with id“;
-ohne diesen Schalter wurde ein Kind-Thread angelegt. Das aktualisierte
-Startkommando enthält die explizite `docs_reader`-Rollenangabe, nachdem die CLI sie
-mit `--ignore-user-config` nicht automatisch geladen hatte. Der lokale
-Rollen-Probelauf war erfolgreich. Der Dienst-Runner selbst war bei der
-Prüfung aktiv; seine geschützte Anmeldung und
-Sessionlogs waren für diese Sitzung nicht lesbar
-([Hosting und Pflege](HOSTING.md)).
-
-## Nächste Schritte
-
-1. Den aktuellen Stand von Nacharbeit 5 mit einer Aufstellung leicht von
-   oben, wie bei `sc7a`, mit `assist` gegenprüfen.
-2. **Anbindung an den Messpfad** (Variante B, TODO.md Punkt 2).
-   * Zuerst einen Plan schreiben.
-   * Dann die StreamCam an der Werkbank bzw. in `dispread serve` in
-     Betrieb nehmen.
-   * Dann den Dot-Matrix-Leser im laufenden Pfad einsetzen, mit Ausgabe an
-     GSVmulti (das GSV-Protokoll ist offen, OQ-07).
-3. Die Importprüfung `zellen_inkonsistent` für schrägen Blick verbessern.
-   Die Einzelbilder von `ab6-run` dafür behalten.
-4. **SD-Karte:**
-   * Die Löschung von `vor-ab6.tar`, der Einzelbilder `sc6-run` und der
-     Einzelbilder `sc7-run` (etwa 4,8 GB) ist vorgeschlagen; die Freigabe
-     durch den Nutzer steht aus.
-   * Das Codex-Leck dauerhaft abstellen.
-   * `var/` auf ein anderes Medium sichern.
+Weitere Aufgaben bleiben die 7-Segment-Bereinigung der alten Seite,
+Audit-Aufbewahrung, andere Lichtquellen/Geräte/Einheiten und die Importprüfung
+bei schrägem Blick. `var/` braucht weiterhin eine Sicherung auf anderem Medium;
+ältere Hinweise zur knappen SD-Karte stehen in TODO und Laborjournal.

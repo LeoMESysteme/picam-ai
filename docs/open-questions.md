@@ -7,6 +7,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
+| [OQ-07](#oq-07) | Jetzt | offen | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-01](#oq-01) | — | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
@@ -14,7 +15,6 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-04](#oq-04) | — | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
 | [OQ-05](#oq-05) | — | offen | Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen? |
 | [OQ-06](#oq-06) | — | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
-| [OQ-07](#oq-07) | — | offen | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-09](#oq-09) | — | offen | RS-232-/RS-485-Transceiver und galvanische Trennung |
 | [OQ-10](#oq-10) | — | offen | Spezialisierte 7-Segment-Traineddata für Tesseract |
 | [OQ-11](#oq-11) | — | offen | Workstation für die IMX500-Modellkonvertierung |

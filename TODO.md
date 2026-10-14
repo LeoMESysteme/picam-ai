@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-01
+# TODO — Stand 2026-10-14
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -37,22 +37,44 @@ Offen:
    lehnt `assist` noch ab (`startlage_mehrdeutig`/`keine_startlage`), die
    richtet man weiter von Hand mit `profile-regrid.py still` ein.
    Spätere Kleinigkeiten N1–N3 stehen im Plan unter Nacharbeit 4.
-2. **ALS NÄCHSTES: Anbindung an den
-   Messpfad** (Entscheidung des Nutzers am 2026-10-01, Variante B).
-   * Der Dot-Matrix-Leser gilt für den GSV-Sensor (Displaytech 161A) als
-     ausreichend validiert:
-     * Abnahme 3 mit 215/0/0,
-     * `sc7` mit 111/111.
-   * Statt weiterer Trainings- und Abnahmerunden (Variante A: `stufe2d`,
-     Abnahme 4) kommt jetzt die Werkbank bzw. `dispread serve` mit der
-     StreamCam an die Reihe. Die Kamera der Werkbank ist bisher außer
-     Betrieb.
-   * Danach führt der Dot-Matrix-Leser im laufenden Pfad, mit Ausgabe an
-     GSVmulti (`serial_out`; das GSV-Protokoll bleibt offen, OQ-07).
-   * **Einschränkung bei der Freigabe ausdrücklich nennen:** Andere
-     Lichtquellen und weitere Geräte bzw. Einheiten sind nicht geprüft
-     (Punkt 5).
-   * Zuerst einen Plan schreiben (Konzept.md lesen, Messpfad).
+2. **IN ARBEIT: Anbindung an den Messpfad** (Variante B).
+   Tasks 1–11 und Final-Review-Korrekturen sind gebaut: StreamCam über
+   `CameraOwner`, Einrichtung und Dot-Matrix-Lesen auf `/live`, JSONL-Audit
+   je Lauf. Am 2026-10-14 nach N7 3/3 Vorschläge in 47/55/49 s,
+   Gesamt-WARNUNG nur wegen des Raster-Ersatzmaßes; Rasterversatz und
+   Gegenlesen OK. Kein formaler Abnahme-Lauf, noch kein Messlauf.
+   * **Mit der bedienenden Person, geplant 2026-10-16:** Overlays und Format
+     prüfen, mit Namen bestätigen und WARNUNG ausdrücklich zur Kenntnis
+     nehmen. Lauf ≥ 10 min; fünf verschiedene Werte mit `set norm`
+     einstellen, TRANSITION → VALID beobachten, Display einmal 2 s
+     abdecken (UNREADABLE, danach wieder VALID), Lauf stoppen.
+   * `run-NN/records.jsonl` und `run-NN/session.json` auswerten:
+     Statuszählung, eingestellte/gelesene Werte, Bildlücken, übersprungene
+     Bilder, Leserate und Zeitbasis; besonders `tracking_lost` und
+     `track_score` bei Wertwechseln (Final-Review, R13). 0,0 bei
+     `ecc_diverged` gesondert als Divergenz zählen. Danach Eintrag in
+     `docs/VALIDATION.md` und Aufbau/Deutung in `docs/lab_journal.md`.
+   * **Folgeschritte:** serielle Ausgabe an GSVmulti (OQ-07), alten
+     7-Segment-Lesepfad samt ungenutzter Geometriehelfer entfernen und
+     dessen CPU-Last im Messlauf erfassen. Trackerregion unabhängig vom
+     Anzeigewert erst dann bauen, wenn die Aufbauzahlen Trackingverlust
+     bei Wertwechseln zeigen (R13).
+   * `JsonlSink`-Rotation für Live-Audits klären: 64 MB, fünf Generationen
+     würden nach etwa 7 h alte Belege verwerfen; dauerhafte Aufbewahrung
+     vor längeren Läufen lösen.
+   * **Zurückgestellte Bedienpunkte:** Vorschau kann auf dem letzten Bild
+     einfrieren; Streamstillstand beendet erst nach OpenCV-Select-Timeout
+     (etwa 10–20 s) statt 2 s. Kamera-Neuverbindung nach Einrichtung behält
+     Setup-Regler; Laufstopp lässt die Kamera für Vorschau an. Ein
+     `tracking_lost`-Hinweis kann den Endfehler auf der Seite verdecken
+     (in `session.json` erhalten). Bei tatsächlich hängendem Leser kann
+     Laufstopp blockieren; dann Serverneustart nötig. Kamerastatus kann
+     nach einem fehlgeschlagenen Neustart noch alte Quelldaten zeigen.
+     Fehler beim Schreiben von `confirmation.json` lassen den Vorschlag
+     zur erneuten Bestätigung stehen; diese Rückmeldung verbessern.
+   * Freigabe bleibt auf GSV-2AS / Displaytech 161A, Raumlicht und mV/V
+     begrenzt. `raw_text` enthält die geparste Zahl, nicht 16 Zellen.
+     `serve` hält die StreamCam bis zum Serverende (Harvest meldet „belegt“).
 3. **Import bei schrägem Blick:** `zellen_inkonsistent` verwirft viel
    (`ab6` 42 %). Die Importprüfung vergleicht über alle Positionen hinweg.
    Prüfen, ob ein Vergleich je Position oder Halbzeile die Ausbeute hebt,
@@ -266,6 +288,12 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 ---
 
 ## Die Aufgaben, in Reihenfolge
+
+### 2. In Arbeit: Messpfad live
+
+Die aktuellen Bedienschritte und Folgeschritte stehen oben unter Punkt 2.
+Bestätigung und Messlauf warten auf die bedienende Person (2026-10-16).
+Anschließend serielle Ausgabe an GSVmulti (OQ-07) vorbereiten.
 
 ### 1.–2. Erledigt 2026-09-23: M und führende Null
 

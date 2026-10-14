@@ -54,7 +54,15 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Alte Werkbank: Picamera2-Worker und seine Helfer entfernt; der Controller bekommt Bilder gedrosselt vom `CameraOwner` und verweist Kameraregler auf `/live`; Profilspeichern ist nach Owner-Bildempfang wieder möglich. Der 7-Segment-Lesepfad der alten Seite bleibt vorerst (eigener Aufräumschritt).
 
-**Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
+**Konsequenz:** Die StreamCam lässt sich auf `/live` im Browser einrichten;
+eine benannte Person bestätigt das Profil vor dem Lauf mit Statusanzeige
+und JSONL-Audit je Lauf. Am Aufbau lieferten nach N7 drei von drei
+Einrichtungen einen Vorschlag mit Gesamt-WARNUNG in 47/55/49 s;
+Bestätigung, Messlauf und Trackingprüfung bei Wertwechseln stehen aus.
+Die Freigabe bleibt auf GSV-2AS / Displaytech 161A, Raumlicht und mV/V
+begrenzt; serielle Ausgabe an GSVmulti fehlt weiterhin (OQ-07).
+`dispread serve` hält die Kamera bis zum Serverende, die alte Werkbank
+bekommt gedrosselte Bilder und die Kamerabedienung erfolgt auf `/live`.
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
 

@@ -8,10 +8,14 @@
 > die in der laufenden Workbench tatsächlich angebotenen Regler prüfen;
 > die alten Control-Namen unten sind keine StreamCam-Anleitung.
 
-Eine Terminaloberfläche mit Kamerabild, Log und echten Bash-Tabs. Alle Zugriffe
-sind mit dem Linux-Passwort von `me-systeme` geschützt. Vorschau und geometrische
-Display-Vorschläge starten mit dem Server. Es findet keine OCR oder
-Messwertfreigabe statt; `run` bezeichnet hier den Betrieb mit festen Einstellungen.
+Die Werkbank bietet Kamerabild, Log und echte Bash-Tabs. Alle Zugriffe
+sind mit dem Linux-Passwort von `me-systeme` geschützt. Seit dem Messpfad live
+richtet `/live` die StreamCam ein und liest mit dem Dot-Matrix-Leser.
+Die alte Werkbankseite bekommt gedrosselte Bilder vom `CameraOwner`;
+Kamerabedienung erfolgt nur auf `/live`. Das alte `run` bezeichnet dort
+weiterhin den Betrieb mit festen Einstellungen, ohne Messwertfreigabe.
+Die nachfolgenden alten Einstelltabellen und Kamerakommandos beschreiben
+den früheren Ablauf; für die StreamCam gilt der Abschnitt „Live-Seite `/live`“.
 
 ## Start
 
@@ -33,6 +37,9 @@ Default ist die zuvor vom Nutzer eingestellte interne Adresse:
 https://100.122.154.35:8080
 ```
 
+Auf diesem Pi nutzt MEhub Port 8080. Die Werkbank lief am 2026-10-14 mit
+`--port 8081`; dafür `https://100.122.154.35:8081/live` öffnen.
+
 **Es ist jetzt HTTPS, nicht mehr HTTP.** Alten Vorschauprozess vorher mit
 `Ctrl+C` beenden. Der kompatible Einstieg bleibt:
 
@@ -44,6 +51,128 @@ Die gesamte Oberfläche verlangt das normale Linux-/SSH-Passwort von
 `me-systeme`, nicht das separate root-Passwort. Passwörter werden weder
 protokolliert noch gespeichert. Nach acht Stunden ist eine erneute Anmeldung
 nötig. Fünf Anmeldeversuche pro Minute und Client sind möglich.
+
+## Live-Seite `/live`
+
+Stand 2026-10-14: gebaut und Einrichtung am Aufbau geprüft, Messlauf offen.
+Im Projektverzeichnis `dispread serve [--port 8081]` starten; die eckigen
+Klammern bezeichnen die optionale Portwahl. Auf diesem Pi ist sie wegen
+MEhub auf 8080 nötig:
+
+```bash
+PYTHONPATH=src ./.venv/bin/dispread serve --port 8081
+```
+
+`https://<host>:8081/live` öffnen. Ohne Anmeldung führt die Seite zu
+`/login?next=/live`; nach Anmeldung mit dem Linux-Passwort von `me-systeme`
+geht es zurück auf `/live`. API-Aufrufe bleiben ohne Anmeldung bei 401.
+`CameraOwner` hält die StreamCam für die gesamte Serverlaufzeit; ein
+Harvest-Skript erhält währenddessen „belegt“. Ein Laufstopp gibt die
+Kamera nicht frei, damit die Vorschau weiterlaufen kann.
+
+### Einrichten, prüfen und bestätigen
+
+1. StreamCam an USB3, GSV-2AS seriell angeschlossen, Kamera senkrecht auf
+   Displaymitte stellen. Reflexionen vermeiden. Vorlagen und gültige
+   Timing-Kalibrierung müssen vorhanden sein; fehlende oder veränderte
+   Dateien sperren den Laufstart.
+2. Zellentext leer lassen, um ihn seriell vom GSV-2AS zu lesen. Alternativ
+   die neun Zeichen der Zellen 0–8 einschließlich Leerzeichen eingeben,
+   etwa `+0.60972 `. Es ist kein Textfeld für alle 16 Zellen.
+3. **Einrichtung starten**. Die Seite zeigt Schritt und vergangene
+   Sekunden: Fokus, Kamera, Standbilder, Vorschlag. Fokus per Bergsteigen,
+   acht Bilder je gemitteltem Standbild und bis zu drei Suchversuche;
+   Stabilitätsprüfung in der Werkbank 15 s, Harvest-CLI weiterhin 30 s.
+   Nach einem Abbruch bleiben Grund und Einrichtungshinweis sichtbar.
+4. Overlays und Prüfungen ansehen: Lage der Anzeige, Zellenraster,
+   Rasterversatz und Gegenlesen. **FEHLER** sperrt die Bestätigung.
+   Bei **WARNUNG** muss die bedienende Person den Befund prüfen und
+   ausdrücklich „WARNUNG zur Kenntnis genommen“ abhaken.
+5. Namen eintragen, „Einheit mV/V und Format geprüft“ abhaken und
+   **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
+   das Profil und die Bedienbestätigung (Konzept §4).
+
+Am 2026-10-14 lieferten nach N7 drei Einrichtungen Vorschläge mit
+Gesamt-WARNUNG (Raster-Ersatzmaß wie `sc7`), Rasterversatz OK und
+Gegenlesen OK in 47/55/49 s. Bestätigung und Messlauf stehen noch aus;
+das war kein formaler Abnahme-Lauf.
+
+### Lauf und Wertstatus
+
+Nach Bestätigung **Lauf starten**. Ein frischer freigegebener Wert erscheint
+grün mit Einheit und Bildnummer. Andere Zustände zeigen den Status und
+Ablehnungsgrund statt gültiger Ziffern:
+
+| Status | Bedeutung |
+| --- | --- |
+| VALID | Frischer, freigegebener Wert; Live-Freigabe verlangt zwei bestätigende Bilder. |
+| TRANSITION | Noch nicht über die erforderlichen Bilder bestätigt. Echte Sprünge werden nicht geglättet. |
+| UNREADABLE | Bild, Tracking oder Ablesung abgelehnt; Ablehnungsgrund prüfen. |
+| STALE | Kein aktueller gültiger Wert: Ablesung älter als 0,5 s, Lauf beendet oder Verbindung/Anmeldung verloren. |
+
+Verbindungsfehler oder abgelaufene Anmeldung setzen die Anzeige auf STALE;
+auch wenn länger als 1,5 s kein erfolgreicher Statusabruf kam. Polling und
+Verbindungsfenster können die sichtbare Umschaltung verzögern (schlimmstenfalls
+etwa 2 s). Ein stillstehender Kamerastream beendet den Lauf erst nach dem
+OpenCV-Select-Timeout (etwa 10–20 s), nicht nach 2 s. Die Vorschau kann auf
+dem letzten Bild stehen bleiben; sie allein beweist keine aktuelle Messung.
+**Lauf stoppen** beendet den Lauf, die Kamera läuft für Vorschau weiter.
+
+Der Freigabehinweis bleibt sichtbar:
+
+> Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
+
+Es gibt noch keine serielle Ausgabe an GSVmulti (OQ-07). ECC-Tracking bei
+Wertwechseln ist noch ungemessen. Der geplante Bedienerlauf umfasst ≥ 10 min,
+fünf Werte über `set norm` und einmal 2 s Displayabdeckung; danach
+`tracking_lost` und `track_score` auswerten (R13, siehe [TODO](../../TODO.md)).
+
+### Dateien und lokale Bedienung
+
+| Ablage | Inhalt |
+| --- | --- |
+| `var/live/<sitzung>/setup/` | Einrichtungsbilder, Bericht und Overlays; `cell-text.json` mit ursprünglichem/maskiertem Text und Quelle, `failure.json` mit Abbruchschritt, Grund und UTC-Zeit bei Fehlern. |
+| `var/live/<sitzung>/profile.json` und `confirmation.json` | Bestätigtes Profil und namentliche Bedienbestätigung. |
+| `var/live/<sitzung>/run-NN/records.jsonl` | ValueRecords des einzelnen Laufs; `raw_text` enthält die geparste Zahl, nicht 16 Zellen. |
+| `var/live/<sitzung>/run-NN/session.json` | Laufmetadaten, Zeitbasis/Versatz BOOTTIME−MONOTONIC, aufgezeichnete Timing-Kalibrierung, Freigabehinweis, Bedienbestätigung, Zusammenfassung und Endgrund. |
+
+Die Timing-Kalibrierung wird aufgezeichnet, nicht auf den Live-Wert angewandt.
+Zeitstempel tragen ihre Zeitbasis; unbekannte Unsicherheit ist `None`.
+Die derzeitige `JsonlSink`-Rotation würde nach etwa 7 h alte
+Auditgenerationen verwerfen; dauerhafte Aufbewahrung ist ein Folgeschritt.
+
+Lokale Befehle über den privaten Steuer-Socket:
+
+```bash
+dispread live status
+dispread live setup
+dispread live setup --cell-text '+0.60972 '
+dispread live camera
+dispread live stop
+```
+
+`status` zeigt den Zustand, `setup` startet die Einrichtung, `camera`
+verbindet die Kamera neu, `stop` stoppt den Messlauf. Kameraneuverbindung
+nach Einrichtung behält die Setup-Regler. Über den Socket gibt es weder
+Bestätigung noch Laufstart; beides verlangt die angemeldete Oberfläche.
+`dispread stop` beendet dagegen den Werkbankserver.
+
+### Typische Fehler
+
+| Meldung / Befund | Nächster Schritt |
+| --- | --- |
+| `keine_startlage`, `startlage_mehrdeutig`, Rasterversatz 2j FEHLER | „Kamera senkrecht auf Displaymitte stellen und neu einrichten“; Lage, Schärfe und Reflexionen prüfen. FEHLER nicht bestätigen. |
+| Auflösung unter der Schwelle | Kamera näher stellen und neu einrichten. |
+| `tracking_lost:…` / „Anzeige verloren — Kamera bewegt? Neu einrichten“ | Kameralage prüfen und neu einrichten; bei Wertwechseln Trackingbefunde für die Auswertung sichern. |
+| „Erst einrichten und bestaetigen“ | Vorschlag prüfen und mit Namen bestätigen, dann Lauf starten. |
+| „Einrichtung meldet WARNUNG“ | Warnbefund prüfen und ausdrücklich zur Kenntnis nehmen. |
+| Timing-Kalibrierung fehlt/ungültig, Vorlagenprüfsumme falsch, Referenzbild verändert | Richtige Dateien bereitstellen; bei verändertem Referenzbild neu einrichten. |
+| Kamera nicht gestartet / „belegt“ | Anderen Kameraprozess beenden; gegebenenfalls Kamera neu verbinden. |
+| „Anmeldung abgelaufen“ / „Verbindung zur Werkbank verloren“ | Neu anmelden bzw. Serververbindung prüfen; angezeigtes STALE bleibt ungültig. |
+
+Ein `tracking_lost`-Hinweis kann einen Endfehler auf der Seite verdecken;
+bei auffälligem Stopp `session.json` prüfen. Ein tatsächlich hängender
+Leser kann Laufstopp blockieren und einen Serverneustart erfordern.
 
 ## Zertifikat auf Windows
 
@@ -358,7 +487,25 @@ reales Gerät geprüft.
 
 Dieser Prototyp folgt nicht dem Kapitelraster aus der
 [Lernpfad-Übersicht](README.md) (kein `Vertrag`, keine `Fallen`-Liste) — diese
-Liste bleibt bewusst kurz und prüft nur, was hier tatsächlich gebaut wurde.
+Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
+
+* [ ] `/live` führt ohne Anmeldung zum Login und danach zurück; bei Portkonflikt
+  startet die Werkbank mit `--port 8081`.
+* [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;
+  FEHLER sperrt, WARNUNG verlangt Kenntnisnahme, Bestätigung einen Namen.
+* [ ] Ein bestätigter Lauf zeigt VALID/TRANSITION/UNREADABLE/STALE;
+  Altwerte und Verbindungsverlust erscheinen nie als aktuelle gültige Ziffern.
+* [ ] Bedienerlauf ≥ 10 min mit `set norm`-Wertwechseln und 2 s Abdeckung
+  ausgewertet, einschließlich `tracking_lost`/`track_score`; Zahlen in
+  VALIDATION und Aufbau/Deutung im Laborjournal dokumentiert (noch offen).
+* [ ] Profil und `confirmation.json` liegen im Sitzungsordner, Audit und
+  Laufmetadaten je in `run-NN/`; Freigabehinweis bleibt sichtbar.
+* [ ] `dispread live status|setup|stop|camera` funktioniert lokal;
+  Bestätigung und Laufstart erfolgen in der Oberfläche.
+* [ ] `npx playwright test -c playwright.live.config.ts` prüft Login,
+  Einrichtung, Fehler, frischen Wert und STALE ohne reale Kamera.
+
+Die folgenden Punkte betreffen die alte Werkbankseite:
 
 * [ ] `./.venv/bin/pytest -q` und `./.venv/bin/ruff check src tests examples scripts`
   laufen beide fehlerfrei durch.
