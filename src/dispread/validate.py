@@ -108,6 +108,10 @@ class ReleaseGate:
         self._candidate = None
         self._last_valid_ns = None
 
+    def interrupt(self) -> None:
+        """Bestaetigung unterbrechen; letzte Freigabe fuer STALE behalten."""
+        self._candidate = None
+
     def evaluate(self, read: ReadResult, capture_ns: int) -> GateDecision:
         cfg = self.config
         reasons: list[str] = []

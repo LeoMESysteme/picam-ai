@@ -34,6 +34,18 @@ class LiveError(ValueError):
     """Bedienfehler oder abgelehnter Schritt; Meldung fuer die Seite."""
 
 
+def _setup_error_for_page(message: str) -> str:
+    """CLI-Hinweise durch Bedienschritte der Live-Seite ersetzen."""
+    for wording in ("bitte --hint-box angeben", "Hinweisbox pruefen oder --hint-box angeben"):
+        message = message.replace(wording, "Anzeige mittig ins Bild bringen")
+    for option in ("--override-reason", "--accept-default-grid"):
+        message = message.replace(option, "")
+    message = " ".join(message.split())
+    if "startlage_mehrdeutig" in message or "keine_startlage" in message:
+        message += " — Kamera senkrecht auf Displaymitte stellen und neu einrichten"
+    return message
+
+
 class OwnerSetupCamera:
     """`SetupCamera` ueber den CameraOwner (Bilder aus dem laufenden Strom)."""
 
@@ -188,6 +200,11 @@ class LiveService:
                     raise LiveError("Lauf zuerst beenden")
                 if self._state == "setup_running":
                     raise LiveError("Einrichtung laeuft bereits")
+            camera_status = self._owner.status()
+            if not camera_status["running"]:
+                raise LiveError(
+                    f"Kamera laeuft nicht: {camera_status.get('error')} — 'Kamera neu verbinden'"
+                )
             text = None
             if cell_text is not None and cell_text != "":
                 try:
@@ -214,7 +231,7 @@ class LiveService:
             proposal = self._setup_runner(session_dir=session_dir, cell_text=text, report=self._report)
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
             with self._lock:
-                self._state, self._error = "setup_failed", str(exc)
+                self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
             return
         with self._lock:
             self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
@@ -301,6 +318,18 @@ class LiveService:
                 raise LiveError("Aufloesung unter der Schwelle - Kamera naeher stellen und neu einrichten")
             path = session_dir / "profile.json"
             profile.save(path)
+            confirmation = {
+                "confirmed_by": profile.confirmed_by,
+                "confirmed_at_utc": profile.confirmed_at_utc,
+                "unit": "mV/V",
+                "format_id": "gsv2as_v1",
+                "format_checked": True,
+                "warning_acknowledged": bool(acknowledge_warning),
+                "setup_overall": overall,
+            }
+            (session_dir / "confirmation.json").write_text(
+                json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
+            )
             with self._lock:
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._profile_info = {"confirmed_by": profile.confirmed_by,

@@ -41,3 +41,50 @@ def test_dropped_frames_reach_the_trace():
     pipeline = _pipeline(TrackedQuadLocator(embed("+ 1.2345 "), QUAD))
     record = pipeline.process(_frame(1, embed("+ 1.2345 ")), dropped_frames=3)
     assert record.trace.dropped_frames == 3
+
+
+def _interrupted_pipeline(lost_sequences):
+    from dispread.detect.manual_roi import ManualRoiLocator
+
+    class Locator(ManualRoiLocator):
+        last_reason = "tracking_lost:test"
+
+        def locate(self, frame):
+            if frame.frame_sequence in lost_sequences:
+                return ()
+            return super().locate(frame)
+
+    pipeline = _pipeline(Locator(QUAD))
+    pipeline.gate = ReleaseGate(default_gate_config("dotmatrix", confirm_frames=2, expected_unit="mV/V"))
+    return pipeline
+
+
+def _second_frame(seq, image):
+    return Frame(frame_sequence=seq, image=image, source_id="test",
+                 capture_timestamp=Timestamp(value_ns=seq * 1_000_000_000,
+                                             base=TimeBaseKind.V4L2_MONOTONIC))
+
+
+def test_tracking_loss_interrupts_confirmation():
+    pipeline = _interrupted_pipeline({2, 3, 4})
+    image = embed("+ 1.2345 ")
+    assert pipeline.process(_second_frame(1, image)).status is ValueStatus.TRANSITION
+    for seq in (2, 3, 4):
+        assert pipeline.process(_second_frame(seq, image)).status is ValueStatus.UNREADABLE
+    resumed = pipeline.process(_second_frame(5, image))
+    assert resumed.status is ValueStatus.TRANSITION
+    assert resumed.frames_confirmed == 1 and resumed.confirmation_span_ns == 0
+    confirmed = pipeline.process(_second_frame(6, image))
+    assert confirmed.status is ValueStatus.VALID
+    assert confirmed.frames_confirmed == 2 and confirmed.confirmation_span_ns == 1_000_000_000
+
+
+def test_tracking_loss_preserves_last_valid_time_for_stale_rejection():
+    pipeline = _interrupted_pipeline({3, 4, 5})
+    image = embed("+ 1.2345 ")
+    pipeline.process(_second_frame(1, image))
+    assert pipeline.process(_second_frame(2, image)).status is ValueStatus.VALID
+    for seq in (3, 4, 5):
+        assert pipeline.process(_second_frame(seq, image)).status is ValueStatus.UNREADABLE
+    rejected = pipeline.process(_second_frame(6, image * 0 + 200))
+    assert rejected.status is ValueStatus.STALE and rejected.value is None

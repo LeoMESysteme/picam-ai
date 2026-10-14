@@ -10,7 +10,7 @@ from dispread.camera_settings import CameraSettings
 from dispread.detect.manual_roi import ManualRoiLocator
 from dispread.frames import Frame
 from dispread.live.clock import ClockLog
-from dispread.live.session import CameraLost, LiveConfig, LiveSession, StartRefused
+from dispread.live.session import AuditFailed, CameraLost, LiveConfig, LiveSession, StartRefused
 from dispread.records import TimeBaseKind, Timestamp, ValueStatus
 from dispread.session_profile import SessionProfile
 
@@ -344,3 +344,136 @@ def test_failed_start_never_leaves_open_audit_sink(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="Metadaten"):
         session.start()
     assert session._sink is None or not session._sink.health().open
+
+
+def test_tracking_quality_is_saved_for_successful_and_lost_tracks(tmp_path):
+    from types import SimpleNamespace
+
+    class Locator(ManualRoiLocator):
+        last_track = None
+        last_reason = "tracking_lost:test"
+
+        def locate(self, frame):
+            self.last_track = SimpleNamespace(score={1: 0.9, 2: 0.2, 3: 0.7}[frame.frame_sequence])
+            return () if frame.frame_sequence == 2 else super().locate(frame)
+
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 3)
+    session._locator_factory = lambda ref, quad: Locator(quad)
+    session.start()
+    try:
+        for _ in range(3):
+            session.step()
+    finally:
+        summary = session.stop()
+    assert summary["tracking_lost"] == 1
+    assert summary["track_score"] == {"min": 0.2, "median": 0.7, "max": 0.9, "n": 3}
+    assert json.loads(session.session_path.read_text())["summary"] == summary
+
+
+def test_locator_without_track_has_empty_quality_stats(tmp_path):
+    session = _session(tmp_path, [embed("+ 1.2345 ")])
+    session.start()
+    session.step()
+    summary = session.stop()
+    assert summary["tracking_lost"] == 0
+    assert summary["track_score"] == {"min": None, "median": None, "max": None, "n": 0}
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_session_copies_confirmation_from_profile_directory(tmp_path, exists):
+    session = _session(tmp_path, [])
+    confirmation = {
+        "confirmed_by": "tester", "confirmed_at_utc": "2026-10-12T12:00:00+00:00",
+        "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
+        "warning_acknowledged": False, "setup_overall": "OK",
+    }
+    if exists:
+        (tmp_path / "confirmation.json").write_text(json.dumps(confirmation))
+    session.start()
+    started = json.loads(session.session_path.read_text())
+    session.stop()
+    ended = json.loads(session.session_path.read_text())
+    for data in (started, ended):
+        if exists:
+            assert data["confirmation"] == confirmation
+        else:
+            assert "confirmation" not in data
+
+
+def test_late_step_after_stop_leaves_records_latest_and_session_untouched(tmp_path):
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 2)
+    session.start()
+    session.step()
+    session.stop("fertig")
+    latest, summary = session.latest, dict(session.summary)
+    before = {p: (p.read_bytes(), p.stat().st_mtime_ns)
+              for p in (session.session_path, session.records_path)}
+    assert session.step() is None
+    assert session.latest is latest
+    assert session.end_reason == "fertig" and session.summary == summary
+    assert {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before} == before
+
+
+def test_periodic_session_write_after_stop_preserves_final_artifact(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    session.stop("fertig")
+    before = session.session_path.read_bytes(), session.session_path.stat().st_mtime_ns
+    session._write_session(ended=False)
+    assert (session.session_path.read_bytes(), session.session_path.stat().st_mtime_ns) == before
+    assert session.summary["end_reason"] == "fertig"
+
+
+@pytest.mark.parametrize("error", [CameraLost("spaet"), AuditFailed("spaet"), RuntimeError("spaet")])
+def test_run_preserves_stop_reason_when_pending_step_raises(tmp_path, monkeypatch, error):
+    session = _session(tmp_path, [])
+    session.start()
+
+    def step():
+        session.stop("fertig")
+        raise error
+
+    monkeypatch.setattr(session, "step", step)
+    session.run(threading.Event())
+    assert session.end_reason == "fertig"
+    assert json.loads(session.session_path.read_text())["summary"]["end_reason"] == "fertig"
+
+
+def test_step_waiting_for_frame_observes_completed_stop(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed("+ 1.2345 ")])
+    session.start()
+    wait_newer = session._owner.wait_newer
+
+    def wait(after, timeout):
+        session.stop("fertig")
+        return wait_newer(after, timeout)
+
+    monkeypatch.setattr(session._owner, "wait_newer", wait)
+    assert session.step() is None
+    assert session.latest is None
+    assert session.summary["frames_read"] == 0
+    assert session.records_path.read_text() == ""
+
+
+def test_track_scores_keep_bounded_memory_and_all_time_extrema(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    image = embed("+ 1.2345 ")
+    session = _session(tmp_path, [image], monotonic=lambda: 0.0)
+    session.start()
+    template = session.step()
+
+    def process(frame, **kwargs):
+        session._pipeline.locator.last_track = SimpleNamespace(score=0.1 if frame.frame_sequence == 2 else 0.9)
+        return replace(template, frame_sequence=frame.frame_sequence, capture_timestamp=frame.capture_timestamp)
+
+    monkeypatch.setattr(session._pipeline, "process", process)
+    try:
+        for sequence in range(2, 10_003):
+            session._owner.items = [(sequence, image)]
+            session.step()
+        assert len(session._track_scores) <= 10_000
+    finally:
+        summary = session.stop()
+    assert summary["track_score"] == {"min": 0.1, "median": 0.9, "max": 0.9, "n": 10_001}

@@ -85,3 +85,10 @@ test('fresh successful status uses normal statusView including the 1.5 second bo
 test('no successful render yet is STALE', () => {
   assert.equal(connectionView(running, null, 1000, 200).headline, 'STALE');
 });
+
+test('tracking loss gives an operator hint and keeps the reason', () => {
+  const view = statusView({state: 'running', run: {latest: latest({status: 'unreadable',
+    reject_reasons: ['tracking_lost:low_score']}), latest_age_s: 0.2}});
+  assert.equal(view.headline, 'UNREADABLE');
+  assert.equal(view.detail, 'Anzeige verloren — Kamera bewegt? Neu einrichten (tracking_lost:low_score)');
+});

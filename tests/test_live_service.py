@@ -624,3 +624,58 @@ def test_preview_resizes_and_draws_quad_without_changing_camera_image(tmp_path):
     assert preview.shape == (50, 100, 3)
     assert preview[10, 50, 1] > 150
     assert not image.any()
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Punktraster: startlage_mehrdeutig; bitte --hint-box angeben",
+     "Punktraster: startlage_mehrdeutig; Anzeige mittig ins Bild bringen — "
+     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+    ("Punktraster: keine_startlage",
+     "Punktraster: keine_startlage — Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+    ("Punktraster abgelehnt: keine_startlage; Hinweisbox pruefen oder --hint-box angeben",
+     "Punktraster abgelehnt: keine_startlage; Anzeige mittig ins Bild bringen — "
+     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+    ("Pruefung: --override-reason oder --accept-default-grid", "Pruefung: oder"),
+    ("Standbild abgelehnt", "Standbild abgelehnt"),
+])
+def test_setup_errors_use_browser_wording(tmp_path, message, expected):
+    from dispread.live.setup import SetupError
+
+    def runner(**kwargs):
+        raise SetupError(message)
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+    assert service.status()["error"] == expected
+
+
+def test_setup_refuses_stopped_camera_before_starting_worker(tmp_path):
+    owner = FakeOwner()
+    owner.status = lambda: {"running": False, "error": "USB-Verbindung verloren"}
+    service = LiveService(owner, tmp_path)
+    with pytest.raises(LiveError) as error:
+        service.start_setup()
+    assert str(error.value) == "Kamera laeuft nicht: USB-Verbindung verloren — 'Kamera neu verbinden'"
+    assert service.status()["state"] == "idle"
+    assert service._setup_thread is None
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("overall,acknowledged", [("OK", False), ("OK", True), ("WARNUNG", True)])
+def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, acknowledged):
+    import json
+    from datetime import datetime
+
+    proposal["setup_checks"]["overall"] = overall
+    service = ready_service(tmp_path, proposal)
+    service.confirm(confirmed_by="Tester", format_checked=True, acknowledge_warning=acknowledged)
+    directory = tmp_path / service.status()["session_id"]
+    confirmation = json.loads((directory / "confirmation.json").read_text())
+    profile = json.loads((directory / "profile.json").read_text())
+    assert confirmation == {
+        "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
+        "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
+        "warning_acknowledged": acknowledged, "setup_overall": overall,
+    }
+    assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0

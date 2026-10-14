@@ -13,10 +13,12 @@ import json
 import os
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 import cv2
@@ -105,6 +107,11 @@ class LiveSession:
         self._frames_skipped = 0
         self._frame_gaps_start = 0
         self._audit_errors = 0
+        self._tracking_lost = 0
+        self._track_scores: deque[float] = deque(maxlen=10_000)
+        self._track_score_n = 0
+        self._track_score_min: float | None = None
+        self._track_score_max: float | None = None
         self._stop_lock = threading.Lock()
         self._stopped = False
         self._last_clock = 0.0
@@ -170,6 +177,9 @@ class LiveSession:
             "release_notice": RELEASE_NOTICE,
             "started_at_utc": self._wall().isoformat(),
         }
+        confirmation_path = self._profile_path.parent / "confirmation.json"
+        if confirmation_path.exists():
+            self._meta["confirmation"] = json.loads(confirmation_path.read_text(encoding="utf-8"))
         latest = self._owner.latest() if hasattr(self._owner, "latest") else None
         self._seen = latest[0] if latest else 0
         self._clock.sample()
@@ -180,33 +190,48 @@ class LiveSession:
 
     # -- Lesen ---------------------------------------------------------------
     def step(self, timeout: float = 0.5) -> ValueRecord | None:
+        if self._stopped:
+            return None
         if self._pipeline is None or self._sink is None:
             raise RuntimeError("start() zuerst")
         got = self._owner.wait_newer(self._seen, timeout)
-        if got is None:
-            status = self._owner.status()
-            if not status["running"]:
-                raise CameraLost(status.get("error") or "Kamera gestoppt")
-            return None
-        sequence, frame = got
-        skipped = max(0, sequence - self._seen - 1)
-        self._seen = sequence
-        self._frames_skipped += skipped
-        record = self._pipeline.process(frame, dropped_frames=skipped)
-        receipt = self._sink.emit(record)
-        health = self._sink.health()
-        if receipt.t_complete_ns is None or health.errors:
-            self._audit_errors += 1
-            raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
-        self._frames_read += 1
-        self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
-        self.latest = record
-        self.latest_monotonic = self._monotonic()
-        if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
-            self._clock.sample()
-            self._last_clock = self._monotonic()
-            self._write_session(ended=False)
-        return record
+        # Warten haelt den Stop nicht auf; Verarbeitung und Abschluss sind serialisiert.
+        with self._stop_lock:
+            if self._stopped:
+                return None
+            if got is None:
+                status = self._owner.status()
+                if not status["running"]:
+                    raise CameraLost(status.get("error") or "Kamera gestoppt")
+                return None
+            sequence, frame = got
+            skipped = max(0, sequence - self._seen - 1)
+            self._seen = sequence
+            self._frames_skipped += skipped
+            record = self._pipeline.process(frame, dropped_frames=skipped)
+            if record.reject_reasons and record.reject_reasons[0].startswith("tracking_lost:"):
+                self._tracking_lost += 1
+            track = getattr(self._pipeline.locator, "last_track", None)
+            if track is not None:
+                score = float(track.score)
+                self._track_scores.append(score)
+                self._track_score_n += 1
+                self._track_score_min = score if self._track_score_min is None else min(self._track_score_min, score)
+                self._track_score_max = score if self._track_score_max is None else max(self._track_score_max, score)
+            receipt = self._sink.emit(record)
+            health = self._sink.health()
+            if receipt.t_complete_ns is None or health.errors:
+                self._audit_errors += 1
+                raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
+            self._frames_read += 1
+            self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
+            self.latest = record
+            self.latest_monotonic = self._monotonic()
+            if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
+                self._clock.sample()
+                self._last_clock = self._monotonic()
+                self._write_session(ended=False)
+            return record
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
@@ -217,15 +242,20 @@ class LiveSession:
 
     def run(self, stop: threading.Event) -> None:
         """Lesen, bis `stop` gesetzt ist oder ein Fehler die Sitzung beendet."""
+        reason = None
         try:
-            while not stop.is_set():
+            while not stop.is_set() and not self._stopped:
                 self.step()
         except CameraLost as exc:
-            self.end_reason = f"kamera: {exc}"
+            reason = f"kamera: {exc}"
         except AuditFailed as exc:
-            self.end_reason = f"audit: {exc}"
+            reason = f"audit: {exc}"
         except Exception as exc:
-            self.end_reason = f"fehler: {type(exc).__name__}: {exc}"
+            reason = f"fehler: {type(exc).__name__}: {exc}"
+        if reason is not None:
+            with self._stop_lock:
+                if self.end_reason is None:
+                    self.end_reason = reason
 
     # -- Ende ----------------------------------------------------------------
     def stop(self, reason: str = "bediener") -> dict:
@@ -242,6 +272,8 @@ class LiveSession:
             return self.summary
 
     def _write_session(self, *, ended: bool) -> None:
+        if self._stopped and not ended:
+            return
         owner_status = self._owner.status()
         self.summary = {
             "by_status": dict(self._by_status),
@@ -250,6 +282,14 @@ class LiveSession:
             "frame_gaps": owner_status.get("gaps", 0) - self._frame_gaps_start,
             "frame_gaps_owner_total": owner_status.get("gaps", 0),
             "audit_errors": self._audit_errors,
+            "tracking_lost": self._tracking_lost,
+            "track_score": {
+                "min": self._track_score_min,
+                # Median der letzten hoechstens 10 000 Tracks; Extremwerte und n ueber alle.
+                "median": median(self._track_scores) if self._track_scores else None,
+                "max": self._track_score_max,
+                "n": self._track_score_n,
+            },
             "camera_error": owner_status.get("error"),
             "end_reason": self.end_reason if ended else None,
         }

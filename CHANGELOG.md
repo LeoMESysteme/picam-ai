@@ -11,6 +11,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):
 
+* Review-Nacharbeit: Trackingverlust unterbricht die Mehrbildbestätigung bei erhaltener STALE-Zeitbasis; Live-Läufe protokollieren ECC-Qualität und Bedienbestätigung, die Seite zeigt passende Einrichtungshinweise, und abgeschlossene Läufe bleiben bei späten Leseschritten unverändert.
+
 * Laufzeitmessung der Lesekette (`live/benchmark.py`,
   `scripts/live-reader-benchmark.py`); Ergebnis im Laborjournal.
 * `Pipeline` nimmt `CharLayout`, übernimmt den Ablehnungsgrund des Locators und

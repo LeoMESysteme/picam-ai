@@ -11,6 +11,10 @@ export function statusView(status) {
       return {headline: `${run.raw_text} ${run.unit}`, cls: 'valid', detail: `Bild ${run.frame_sequence}`};
     }
     const cls = !fresh || run.status === 'valid' ? 'stale' : run.status;
+    if (run.reject_reasons[0]?.startsWith('tracking_lost:')) {
+      return {headline: cls.toUpperCase(), cls,
+        detail: `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
+    }
     return {headline: cls.toUpperCase(), cls, detail: status.error || reasons};
   }
   const labels = {

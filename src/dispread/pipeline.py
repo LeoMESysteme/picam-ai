@@ -102,6 +102,7 @@ class Pipeline:
         t_locate = time.monotonic_ns()
 
         if self._candidate is None:
+            self.gate.interrupt()
             # Anzeige nicht gefunden. Der Wert wird ungueltig - der letzte
             # bekannte laeuft nicht weiter (Konzept.md §4).
             reason = getattr(self.locator, "last_reason", None) or "display_not_located"
