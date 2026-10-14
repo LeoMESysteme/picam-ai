@@ -39,16 +39,20 @@ export function connectionView(status, lastOkMs, nowMs, httpStatus) {
 
 if (typeof document !== 'undefined') {
   let csrf = '';
+  let actionError = '';
   let lastStatus = null;
   let lastOkMs = null;
   let httpStatus = null;
   const $ = (id) => document.getElementById(id);
+  const renderError = (status = lastStatus) => {
+    $('error').textContent = status?.error || actionError;
+  };
   const post = async (path, body) => {
     const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json',
       'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})});
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) $('error').textContent = data.error || response.statusText;
-    else if (path === '/live/setup') $('error').textContent = '';
+    actionError = response.ok ? '' : data.error || response.statusText;
+    renderError();
   };
   const renderView = (view) => {
     $('headline').textContent = view.headline;
@@ -64,9 +68,7 @@ if (typeof document !== 'undefined') {
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;
-    if (s.state === 'setup_running' && lastStatus?.state !== 'setup_running') {
-      $('error').textContent = '';
-    } else if (s.error) $('error').textContent = s.error;
+    renderError(s);
     $('setup-state').textContent = s.setup?.overall ? `Gesamturteil: ${s.setup.overall}` : '';
     $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
       const img = document.createElement('img');

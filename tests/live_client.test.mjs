@@ -101,7 +101,7 @@ test('setup progress uses nested step and monotonic elapsed seconds', () => {
   assert.ok(!view.headline.includes('old'));
 });
 
-test('action error survives running polls until an accepted setup start', async () => {
+async function withLivePage(check) {
   const elements = new Map();
   const timers = [];
   const originals = {document: globalThis.document, fetch: globalThis.fetch,
@@ -110,32 +110,86 @@ test('action error survives running polls until an accepted setup start', async 
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', replaceChildren() {}});
     return elements.get(id);
   };
-  const status = {state: 'setup_running', csrf: 'test',
-    setup: {step: 'fokus', elapsed_s: 1.2}};
-  let acceptSetup = false;
+  const page = {status: {state: 'setup_running', csrf: 'test',
+    setup: {step: 'fokus', elapsed_s: 1.2}}, actionError: 'Einrichtung laeuft bereits'};
   globalThis.document = {getElementById: element};
   globalThis.setInterval = () => 0;
   globalThis.setTimeout = (callback) => { timers.push(callback); return 0; };
   globalThis.fetch = async (_path, options) => options
-    ? {ok: acceptSetup, json: async () => ({error: 'Einrichtung laeuft bereits'})}
-    : {ok: true, status: 200, json: async () => status};
+    ? {ok: !page.actionError, json: async () => ({error: page.actionError})}
+    : {ok: true, status: 200, json: async () => page.status};
   try {
-    await import('../src/dispread/workbench/static/live.js?error-persistence-test');
+    await import(`../src/dispread/workbench/static/live.js?dom-test=${domTestNumber++}`);
     // tick() laeuft beim Modulstart; seine Fortsetzung bis zur naechsten Runde abwarten.
     await new Promise(setImmediate);
-    await element('setup').onclick();
-    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
-    await timers.shift()();
-    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
-    acceptSetup = true;
-    await element('setup').onclick();
-    assert.equal(element('error').textContent, '');
+    await check(page, element, () => timers.shift()());
   } finally {
     for (const [name, value] of Object.entries(originals)) {
       if (value === undefined) delete globalThis[name];
       else globalThis[name] = value;
     }
   }
+}
+let domTestNumber = 0;
+
+test('action error survives running polls until an accepted setup start', async () => {
+  await withLivePage(async (page, element, poll) => {
+    await element('setup').onclick();
+    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
+    await poll();
+    assert.equal(element('error').textContent, 'Einrichtung laeuft bereits');
+    page.actionError = '';
+    await element('setup').onclick();
+    assert.equal(element('error').textContent, '');
+  });
+});
+
+test('successful confirm clears action error through a new run', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', error: null};
+    await poll();
+    page.actionError = 'Name fehlt';
+    await element('confirm').onclick();
+    assert.equal(element('error').textContent, 'Name fehlt');
+    await poll();
+    assert.equal(element('error').textContent, 'Name fehlt');
+    page.actionError = '';
+    element('confirmed-by').value = 'Operator';
+    await element('confirm').onclick();
+    assert.equal(element('error').textContent, '');
+    await element('run-start').onclick();
+    page.status = {...running, error: null};
+    await poll();
+    assert.equal(element('headline').className, 'value valid');
+    assert.equal(element('error').textContent, '');
+  });
+});
+
+test('cleared server error disappears on the next status poll', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'stopped', error: 'Kamera verloren'};
+    await poll();
+    assert.equal(element('error').textContent, 'Kamera verloren');
+    page.status = {...running, error: null};
+    await poll();
+    assert.equal(element('error').textContent, '');
+    assert.equal(element('headline').className, 'value valid');
+  });
+});
+
+test('setup failure stays authoritative across camera reconnect', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_failed', error: 'Punktraster abgelehnt'};
+    await poll();
+    page.actionError = 'Kamera nicht gestartet';
+    await element('camera-start').onclick();
+    assert.equal(element('error').textContent, 'Punktraster abgelehnt');
+    page.actionError = '';
+    await element('camera-start').onclick();
+    assert.equal(element('error').textContent, 'Punktraster abgelehnt');
+    await poll();
+    assert.equal(element('error').textContent, 'Punktraster abgelehnt');
+  });
 });
 
 test('setup progress displays the separate message alongside the phase', () => {

@@ -47,7 +47,7 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
         public = request.path in ("/login", "/static/login.css", "/static/login.js")
         session = sessions.get(request.cookies.get(COOKIE))
         if not public and not session:
-            if request.method == "GET" and request.path == "/live":
+            if request.method in ("GET", "HEAD") and request.path == "/live":
                 raise web.HTTPFound("/login?next=/live")
             if request.path == "/":
                 raise web.HTTPFound("/login")

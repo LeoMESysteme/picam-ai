@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', async ({ page }) => {
-  const errors = [];
+  const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/live');
   await expect(page).toHaveURL(/\/login\?next=\/live$/);
