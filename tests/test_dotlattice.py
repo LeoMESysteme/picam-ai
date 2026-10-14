@@ -374,3 +374,18 @@ def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, str), result
     assert result in reason
+
+
+@pytest.mark.parametrize("name,frame", [("sc3", 17), ("sc4", 17), ("sc6", 18), ("ab1", 17)])
+def test_refine_rejects_confirmed_quad_tilted_by_one_dot_row(name, frame):
+    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
+    profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
+    if not still.exists() or not profile.exists():
+        pytest.skip("Standbild oder bestaetigtes Profil fehlt")
+    image = cv2.imread(str(still))
+    assert image is not None
+    q = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
+    rv = (q[3] - q[0]) / 9
+    tilted = q + np.asarray([[0, 0], rv, rv, [0, 0]], np.float32)
+    h = cv2.getPerspectiveTransform(tilted, dotlattice._CORNERS[0])
+    assert dotlattice.refine(image, h, empty_cells=EMPTY_CELLS) == "restfehler_zu_gross"

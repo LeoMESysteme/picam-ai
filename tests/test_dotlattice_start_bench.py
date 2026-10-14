@@ -54,7 +54,7 @@ def test_one_row_skewed_bench_quad_exceeds_row_limit_and_fails_offset():
     assert np.any(ok)
     residuals = dotlattice._warp_points(points[ok], h) - dotlattice._lat(columns[ok], rows[ok])
     rms_rows = float(np.sqrt(np.mean(residuals[:, 1] ** 2)) / dotlattice._PV)
-    assert rms_rows > 0.15
+    assert rms_rows > dotlattice._MAX_RMS_ROWS
     assert raster_offset_check([(image, STILLS[0][1])], quad).status == "FEHLER"
 
 
@@ -114,3 +114,31 @@ def test_start_search_retries_only_missing_start_with_measured_smoothing(monkeyp
     image = np.full((160, 400, 3), 200, np.uint8)
     assert fit_lattice(image, (0, 0, 1, 1)) == expected
     assert list(results) == []
+
+
+@pytest.mark.parametrize("pass_index", [1, 2])
+@pytest.mark.parametrize("rejection", ["zu_wenige_punkte", "vorzeichen_kein_plus",
+                                      "restfehler_zu_gross", "startlage_mehrdeutig"])
+def test_fallback_rejection_preserves_missing_start_hint(monkeypatch, pass_index, rejection):
+    outcomes = ["keine_startlage"] * pass_index + [rejection]
+    calls = []
+
+    def search(*args, sigma_fraction=None, **kwargs):
+        calls.append(sigma_fraction)
+        return outcomes[len(calls) - 1]
+
+    monkeypatch.setattr(dotlattice, "_auto_fit", search)
+    image = np.full((160, 400, 3), 200, np.uint8)
+    expected = "startlage_mehrdeutig" if rejection == "startlage_mehrdeutig" else "keine_startlage"
+    assert fit_lattice(image, (0, 0, 1, 1)) == expected
+    assert calls == list(dotlattice._START_SIGMA_FRACTIONS[:pass_index + 1])
+
+
+@pytest.mark.parametrize("pass_index", [0, 1, 2])
+def test_start_search_returns_accepted_fit_unchanged(monkeypatch, pass_index):
+    accepted = object()
+    outcomes = iter(["keine_startlage"] * pass_index + [accepted])
+    monkeypatch.setattr(dotlattice, "_auto_fit", lambda *args, **kwargs: next(outcomes))
+    image = np.full((160, 400, 3), 200, np.uint8)
+    assert fit_lattice(image, (0, 0, 1, 1)) is accepted
+    assert list(outcomes) == []

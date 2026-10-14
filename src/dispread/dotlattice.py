@@ -470,11 +470,14 @@ def fit_lattice(
         h = cv2.getPerspectiveTransform(src, _lat(c_r[:, 0], c_r[:, 1]))
         return refine(image_bgr, h, empty_cells=empty_cells)
     # Nur "keine_startlage" (kein einziges tragfaehiges Raster) fuehrt zum
-    # naechsten Durchgang; Mehrdeutigkeit und Minus bleiben endgueltig.
+    # naechsten Durchgang; Mehrdeutigkeit bleibt immer sichtbar. Andere
+    # Fallback-Ablehnungen erhalten den Einrichtungshinweis der ersten Suche.
     result: LatticeFit | str = "keine_startlage"
-    for fraction in _START_SIGMA_FRACTIONS:
+    for pass_index, fraction in enumerate(_START_SIGMA_FRACTIONS):
         result = _auto_fit(image_bgr, hint_box, empty_cells=empty_cells, sigma_fraction=fraction)
         if result != "keine_startlage":
+            if pass_index > 0 and isinstance(result, str) and result != "startlage_mehrdeutig":
+                return "keine_startlage"
             return result
     return result
 
@@ -512,7 +515,8 @@ def _auto_fit(
     bottom_lines = [entry for entry in spans if entry[2] > (y1 - y0) * 0.55]
     bottom = max(bottom_lines)[1] if bottom_lines else top
     # Quellbild-Minima mit Tiefe relativ zum lokalen LCD-Hintergrund.
-    # Die Hinweisbox ist etwa 10 % breiter als das Raster (Faktor 0,9).
+    # point_pitch enthaelt bereits den Faktor 1/1,2 fuer die breitere Box.
+    # Mit 0,9 wirken 0,15/0,18 effektiv als ca. 0,125/0,15 der echten Punktweite.
     sigma = 0.7 if sigma_fraction is None else max(0.7, sigma_fraction * 0.9 * point_pitch)
     smooth = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), sigma)
     depth = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), 6) - smooth
