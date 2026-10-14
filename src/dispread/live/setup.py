@@ -62,6 +62,19 @@ class SetupCamera(Protocol):
     def fresh_still(self, discard: int = 10) -> np.ndarray: ...
 
 
+def mean_still(cam: SetupCamera, frames: int = 8, discard: int = 10) -> np.ndarray:
+    """Frische aufeinanderfolgende Standbilder in float32 mitteln."""
+    if frames < 1:
+        raise SetupError("Standbildmittelung braucht mindestens ein Bild")
+    first = cam.fresh_still(discard=discard)
+    if frames == 1:
+        return first
+    total = first.astype(np.float32)
+    for _ in range(frames - 1):
+        total += cam.fresh_still(discard=0)
+    return np.rint(total / frames).astype(np.uint8)
+
+
 def offline_text_source(text: str) -> CellTextSource:
     """Zellentext vom Bediener: fuer jedes Standbild derselbe Text."""
     return lambda capture: (capture(), text)
@@ -189,6 +202,8 @@ def assist_measure(
     out_dir: Path,
     hint_box: HintBox | None = None,
     stability_s: float = MIN_STABILITY_S,
+    stack_frames: int = 1,
+    fit_attempts: int = 1,
     templates: Path | None = None,
     templates_sha256: str | None = None,
     report: Callable[[dict], None] = lambda _checks: None,
@@ -203,20 +218,31 @@ def assist_measure(
     monotonic = monotonic or time.monotonic
     if not math.isfinite(stability_s) or stability_s < MIN_STABILITY_S:
         raise SetupError(f"Stabilitaetsmessung muss mindestens {MIN_STABILITY_S:.0f} Sekunden dauern")
-    first, first_text = cell_text(cam.fresh_still)
-    first_captured_at = monotonic()
-    if first.shape[:2] != (expected_size[1], expected_size[0]):
-        raise SetupError("Standbild passt nicht zur Kameraaufloesung")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    if not cv2.imwrite(str(out_dir / "still.png"), first):
-        raise SetupError("still.png konnte nicht geschrieben werden")
-    if hint_box is None:
-        hint_box = find_green_hint_box(first)
+    if fit_attempts < 1:
+        raise SetupError("Startsuche braucht mindestens einen Versuch")
+
+    def capture() -> np.ndarray:
+        return mean_still(cam, stack_frames)
+
+    explicit_hint_box = hint_box
+    for attempt in range(1, fit_attempts + 1):
+        if stack_frames != 1 or fit_attempts != 1:
+            info(f"Punktraster-Startsuche: Versuch {attempt}/{fit_attempts} ({stack_frames} Bilder)")
+        first, first_text = cell_text(capture)
+        first_captured_at = monotonic()
+        if first.shape[:2] != (expected_size[1], expected_size[0]):
+            raise SetupError("Standbild passt nicht zur Kameraaufloesung")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(out_dir / "still.png"), first):
+            raise SetupError("still.png konnte nicht geschrieben werden")
+        hint_box = explicit_hint_box if explicit_hint_box is not None else find_green_hint_box(first)
         if hint_box is None:
             raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
-    fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
-    if isinstance(fit, str):
-        raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
+        fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
+        if not isinstance(fit, str):
+            break
+        if attempt == fit_attempts:
+            raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
     prechecks = check_setup(first, fit)
     report(prechecks.to_dict())
     precheck_failures = [
@@ -226,7 +252,7 @@ def assist_measure(
     if precheck_failures:
         raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
     sleep(stability_s)
-    second, second_text = cell_text(cam.fresh_still)
+    second, second_text = cell_text(capture)
     stability_elapsed_s = monotonic() - first_captured_at
     first_text, second_text = mask_changed_cells(first_text, second_text)
     if second.shape != first.shape:
