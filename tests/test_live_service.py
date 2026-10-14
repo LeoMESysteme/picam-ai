@@ -86,6 +86,9 @@ def test_run_rules_double_start_stop_without_run_and_setup_while_running(tmp_pat
             self.latest, self.summary, self.end_reason = None, {}, None
             self.session_path = tmp_path / "s.json"
 
+        def latest_age_s(self):
+            return None
+
         def start(self):
             pass
 
@@ -119,6 +122,9 @@ def test_camera_loss_during_run_is_shown(tmp_path, monkeypatch):
         def __init__(self, *a, **kw):
             self.latest, self.summary, self.end_reason = None, {}, None
             self.session_path = tmp_path / "s.json"
+
+        def latest_age_s(self):
+            return None
 
         def start(self):
             pass
@@ -417,3 +423,179 @@ def test_start_camera_wraps_failure(tmp_path):
 
     with pytest.raises(LiveError, match="Kamera nicht gestartet: belegt"):
         LiveService(Owner(), tmp_path).start_camera()
+
+
+class MarkerSession:
+    def __init__(self, owner, profile_path, config, out_dir):
+        self.latest, self.summary, self.end_reason = None, {}, None
+        self.session_path = out_dir / "session.json"
+        self.records_path = out_dir / "records.jsonl"
+        self.profile_path = profile_path
+
+    def start(self):
+        self.session_path.parent.mkdir(parents=True, exist_ok=True)
+        self.session_path.write_text(self.session_path.parent.name)
+        with self.records_path.open("a") as stream:
+            stream.write("record\n")
+
+    def run(self, stop):
+        stop.wait()
+
+    def stop(self, reason="bediener"):
+        self.end_reason = reason
+
+    def latest_age_s(self):
+        return 1.25
+
+
+def _confirmed_service(tmp_path, monkeypatch, session_class=MarkerSession):
+    monkeypatch.setattr("dispread.live.service.LiveSession", session_class)
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=lambda **kw: {})
+    service._state, service._profile_path = "confirmed", tmp_path / "profile.json"
+    service._profile_path.write_text("confirmed profile")
+    return service
+
+
+@pytest.mark.parametrize("existing, first_name, second_name", [
+    (False, "run-01", "run-02"), (True, "run-02", "run-03"),
+])
+def test_each_run_preserves_previous_artifacts(tmp_path, monkeypatch, existing, first_name, second_name):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    # Bereits vorhandene Laufnummern werden nicht wiederverwendet.
+    if existing:
+        (tmp_path / "run-01").mkdir()
+    try:
+        service.start_run()
+        assert service.status()["run"]["dir"] == first_name
+        service.stop_run()
+        first = tmp_path / first_name
+        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in first.iterdir()}
+        service.start_run()
+        assert service.status()["run"]["dir"] == second_name
+        service.stop_run()
+        assert {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in first.iterdir()} == before
+        assert (tmp_path / second_name / "records.jsonl").read_text() == "record\n"
+        assert (tmp_path / "profile.json").read_text() == "confirmed profile"
+    finally:
+        service.close()
+
+
+def test_concurrent_setup_starts_only_one_worker(tmp_path):
+    import threading
+    from datetime import UTC, datetime
+
+    in_wall, release_wall, release_runner = threading.Event(), threading.Event(), threading.Event()
+    second_wall = threading.Event()
+    calls, errors = [], []
+
+    def wall():
+        if in_wall.is_set():
+            second_wall.set()
+        in_wall.set()
+        assert release_wall.wait(2)
+        return datetime(2026, 10, 13, tzinfo=UTC)
+
+    def runner(**kw):
+        calls.append(kw)
+        assert release_runner.wait(2)
+        return {}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, wall=wall)
+
+    def start():
+        try:
+            service.start_setup()
+        except LiveError as exc:
+            errors.append(str(exc))
+
+    first, second = threading.Thread(target=start), threading.Thread(target=start)
+    try:
+        first.start()
+        assert in_wall.wait(1)
+        second.start()
+        # Der zweite Aufruf trifft auf die noch laufende erste Operation.
+        second_wall.wait(0.1)
+        assert service.status()["state"] == "idle"
+        release_wall.set()
+        first.join(1)
+        second.join(1)
+        assert not first.is_alive() and not second.is_alive()
+        assert errors == ["Einrichtung laeuft bereits"]
+    finally:
+        release_wall.set()
+        release_runner.set()
+        first.join(1)
+        second.join(1)
+        if service._setup_thread is not None:
+            service._setup_thread.join(1)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_stop_failure_leaves_stopped_and_allows_setup(tmp_path, monkeypatch, background):
+    class FailingStopSession(MarkerSession):
+        def run(self, stop):
+            if background:
+                self.end_reason = "kamera: kein Bild"
+            else:
+                stop.wait()
+
+        def stop(self, reason="bediener"):
+            raise OSError("Audit nicht geschlossen")
+
+    service = _confirmed_service(tmp_path, monkeypatch, FailingStopSession)
+    service.start_run()
+    if background:
+        assert _wait_state(service, {"stopped"}) == "stopped"
+        service._run_thread.join(1)
+    else:
+        with pytest.raises(LiveError, match="Lauf nicht beendet.*Audit nicht geschlossen"):
+            service.stop_run()
+    assert service.status()["state"] == "stopped"
+    assert "Audit nicht geschlossen" in service.status()["error"]
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready"}) == "setup_ready"
+    service._setup_thread.join(1)
+
+
+@pytest.mark.parametrize("stage", ["constructor", "start"])
+def test_start_run_converts_unexpected_session_errors(tmp_path, monkeypatch, stage):
+    class FailingStartSession(MarkerSession):
+        def __init__(self, *args):
+            if stage == "constructor":
+                raise OSError("Datei nicht schreibbar")
+            super().__init__(*args)
+
+        def start(self):
+            raise OSError("Datei nicht schreibbar")
+
+    service = _confirmed_service(tmp_path, monkeypatch, FailingStartSession)
+    with pytest.raises(LiveError, match="Lauf nicht gestartet.*Datei nicht schreibbar"):
+        service.start_run()
+    assert service.status()["state"] == "confirmed"
+
+
+def test_stop_timeout_is_reported(tmp_path, monkeypatch):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service.start_run()
+    thread = service._run_thread
+    thread.join(0.01)
+    joins = []
+    monkeypatch.setattr(thread, "join", lambda timeout: joins.append(timeout))
+    monkeypatch.setattr(thread, "is_alive", lambda: True)
+    service.stop_run()
+    assert joins == [3.0]
+    assert service.status()["state"] == "stopped"
+    assert service.status()["error"] == "Lesethread haengt"
+    # Den echten Worker nach dem simulierten Timeout aufraeumen.
+    import threading
+    threading.Thread.join(thread, 1)
+
+
+def test_status_exposes_latest_age(tmp_path, monkeypatch):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    try:
+        service.start_run()
+        assert service.status()["run"]["latest_age_s"] == 1.25
+    finally:
+        service.close()

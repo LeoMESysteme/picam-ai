@@ -22,7 +22,7 @@ from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
-from dispread.live.session import LiveConfig, LiveSession, StartRefused
+from dispread.live.session import LiveConfig, LiveSession
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
 
@@ -86,6 +86,7 @@ class LiveService:
         self._serial_opener = serial_opener or self._open_serial
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
+        self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
         self._state = "idle"
         self._step: str | None = None
@@ -95,6 +96,7 @@ class LiveService:
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
         self._profile_info: dict | None = None
+        self._run_dir: Path | None = None
         self._session: LiveSession | None = None
         self._run_stop: threading.Event | None = None
         self._run_thread: threading.Thread | None = None
@@ -127,6 +129,8 @@ class LiveService:
                         "capture_timestamp": latest.capture_timestamp.to_dict(),
                     },
                     "summary": dict(self._session.summary),
+                    "dir": self._run_dir.name,
+                    "latest_age_s": self._session.latest_age_s(),
                 }
             return {
                 "state": self._state,
@@ -149,36 +153,38 @@ class LiveService:
 
     # -- Kamera --------------------------------------------------------------
     def start_camera(self) -> None:
-        try:
-            self._owner.start()
-        except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
-            raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
+        with self._operation_lock:
+            try:
+                self._owner.start()
+            except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
+                raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
 
     # -- Einrichtung ---------------------------------------------------------
     def start_setup(self, *, cell_text: str | None = None) -> None:
-        if self._simulate:
-            raise LiveError("Einrichtung braucht die StreamCam (Simulation zeigt nur die Vorschau)")
-        with self._lock:
-            if self._state == "running":
-                raise LiveError("Lauf zuerst beenden")
-            if self._state == "setup_running":
-                raise LiveError("Einrichtung laeuft bereits")
-        text = None
-        if cell_text is not None and cell_text != "":
-            try:
-                text = validate_offline_cell_text(cell_text)
-            except ValueError as exc:
-                raise LiveError(f"Zellentext: {exc}") from exc
-        session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
-        with self._lock:
-            self._state, self._step, self._error = "setup_running", "start", None
-            self._session_dir, self._proposal = session_dir, None
-            self._profile_path = self._profile_camera = self._profile_info = None
-            self._session = None
-        self._setup_thread = threading.Thread(
-            target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
-        )
-        self._setup_thread.start()
+        with self._operation_lock:
+            if self._simulate:
+                raise LiveError("Einrichtung braucht die StreamCam (Simulation zeigt nur die Vorschau)")
+            with self._lock:
+                if self._state == "running":
+                    raise LiveError("Lauf zuerst beenden")
+                if self._state == "setup_running":
+                    raise LiveError("Einrichtung laeuft bereits")
+            text = None
+            if cell_text is not None and cell_text != "":
+                try:
+                    text = validate_offline_cell_text(cell_text)
+                except ValueError as exc:
+                    raise LiveError(f"Zellentext: {exc}") from exc
+            session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
+            with self._lock:
+                self._state, self._step, self._error = "setup_running", "start", None
+                self._session_dir, self._proposal = session_dir, None
+                self._profile_path = self._profile_camera = self._profile_info = None
+                self._session = None
+            self._setup_thread = threading.Thread(
+                target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
+            )
+            self._setup_thread.start()
 
     def _report(self, step: str) -> None:
         with self._lock:
@@ -254,79 +260,112 @@ class LiveService:
         )
 
     def confirm(self, *, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False) -> None:
-        with self._lock:
-            if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
-                raise LiveError("Kein Vorschlag zum Bestaetigen")
-            proposal, session_dir = self._proposal, self._session_dir
-        if not format_checked:
-            raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")
-        overall = proposal.get("setup_checks", {}).get("overall")
-        if overall == "FEHLER":
-            raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
-        if overall == "WARNUNG" and not acknowledge_warning:
-            raise LiveError("Einrichtung meldet WARNUNG - ausdruecklich zur Kenntnis nehmen")
-        try:
-            profile: SessionProfile = live_setup.confirm_proposal(
-                proposal, confirmed_by=confirmed_by, resolution_threshold_px=RESOLUTION_ERROR_PX,
-            )
-        except live_setup.SetupError as exc:
-            raise LiveError(str(exc)) from exc
-        if not profile.resolution_ok:
-            raise LiveError("Aufloesung unter der Schwelle - Kamera naeher stellen und neu einrichten")
-        path = session_dir / "profile.json"
-        profile.save(path)
-        with self._lock:
-            self._profile_path, self._profile_camera = path, profile.camera
-            self._profile_info = {"confirmed_by": profile.confirmed_by,
-                                  "confirmed_at_utc": profile.confirmed_at_utc,
-                                  "warning_acknowledged": overall == "WARNUNG"}
-            self._state = "confirmed"
+        with self._operation_lock:
+            with self._lock:
+                if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
+                    raise LiveError("Kein Vorschlag zum Bestaetigen")
+                proposal, session_dir = self._proposal, self._session_dir
+            if not format_checked:
+                raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")
+            overall = proposal.get("setup_checks", {}).get("overall")
+            if overall == "FEHLER":
+                raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
+            if overall == "WARNUNG" and not acknowledge_warning:
+                raise LiveError("Einrichtung meldet WARNUNG - ausdruecklich zur Kenntnis nehmen")
+            try:
+                profile: SessionProfile = live_setup.confirm_proposal(
+                    proposal, confirmed_by=confirmed_by, resolution_threshold_px=RESOLUTION_ERROR_PX,
+                )
+            except live_setup.SetupError as exc:
+                raise LiveError(str(exc)) from exc
+            if not profile.resolution_ok:
+                raise LiveError("Aufloesung unter der Schwelle - Kamera naeher stellen und neu einrichten")
+            path = session_dir / "profile.json"
+            profile.save(path)
+            with self._lock:
+                self._profile_path, self._profile_camera = path, profile.camera
+                self._profile_info = {"confirmed_by": profile.confirmed_by,
+                                      "confirmed_at_utc": profile.confirmed_at_utc,
+                                      "warning_acknowledged": overall == "WARNUNG"}
+                self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
     def start_run(self) -> None:
-        with self._lock:
-            if self._state == "running":
-                raise LiveError("Lauf laeuft bereits")
-            if self._state not in ("confirmed", "stopped") or self._profile_path is None:
-                raise LiveError("Erst einrichten und bestaetigen")
-            profile_path, camera = self._profile_path, self._profile_camera
-            out_dir = profile_path.parent
-        if camera is not None:
+        with self._operation_lock:
+            with self._lock:
+                if self._state == "running":
+                    raise LiveError("Lauf laeuft bereits")
+                if self._state not in ("confirmed", "stopped") or self._profile_path is None:
+                    raise LiveError("Erst einrichten und bestaetigen")
+                profile_path, camera = self._profile_path, self._profile_camera
+            number = 1
+            while True:
+                out_dir = profile_path.parent / f"run-{number:02d}"
+                try:
+                    out_dir.mkdir(parents=True)
+                    break
+                except FileExistsError:
+                    number += 1
+            if camera is not None:
+                try:
+                    self._owner.restart(lambda: self._source_for(camera))
+                except RuntimeError as exc:
+                    raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
-                self._owner.restart(lambda: self._source_for(camera))
-            except RuntimeError as exc:
-                raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
-        session = LiveSession(self._owner, profile_path, self._config, out_dir)
-        try:
-            session.start()
-        except StartRefused as exc:
-            raise LiveError(str(exc)) from exc
-        stop = threading.Event()
-        with self._lock:
-            self._session, self._run_stop, self._state, self._error = session, stop, "running", None
-        self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
-                                            daemon=True)
-        self._run_thread.start()
+                session = LiveSession(self._owner, profile_path, self._config, out_dir)
+                session.start()
+            except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
+                raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
+            stop = threading.Event()
+            with self._lock:
+                self._session, self._run_stop, self._state, self._error = session, stop, "running", None
+                self._run_dir = out_dir
+            self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
+                                                daemon=True)
+            self._run_thread.start()
 
     def _run_worker(self, session: LiveSession, stop: threading.Event) -> None:
         session.run(stop)
         if not stop.is_set():  # Kamera ausgefallen, nicht vom Bediener beendet
-            session.stop(session.end_reason or "kamera")
-            with self._lock:
-                self._state, self._error = "stopped", session.end_reason
+            error = session.end_reason
+            try:
+                session.stop(session.end_reason or "kamera")
+            except Exception as exc:  # noqa: BLE001 - auch Audit-Abschluss kann scheitern
+                error = f"Lauf nicht beendet: {exc}"
+            finally:
+                with self._lock:
+                    if self._session is session and not stop.is_set():
+                        self._state, self._error = "stopped", error
 
     def stop_run(self) -> None:
+        with self._operation_lock:
+            self._stop_run()
+
+    def _stop_run(self) -> None:
         with self._lock:
             if self._state != "running" or self._run_stop is None or self._session is None:
                 raise LiveError("kein Lauf aktiv")
             stop, session, thread = self._run_stop, self._session, self._run_thread
         stop.set()
-        if thread is not None:
-            thread.join(3.0)
-        session.stop("bediener")
-        with self._lock:
-            self._state = "stopped"
+        error = None
+        try:
+            if thread is not None:
+                thread.join(3.0)
+                if thread.is_alive():
+                    error = "Lesethread haengt"
+            try:
+                session.stop("bediener")
+            except Exception as exc:  # noqa: BLE001 - Zustand auch bei Abschlussfehler freigeben
+                message = f"Lauf nicht beendet: {exc}"
+                error = message if error is None else f"{error}; {message}"
+                raise LiveError(error) from exc
+        finally:
+            with self._lock:
+                self._state, self._error = "stopped", error
 
     def close(self) -> None:
-        if self._state == "running":
-            self.stop_run()
+        with self._operation_lock:
+            with self._lock:
+                running = self._state == "running"
+            if running:
+                self._stop_run()

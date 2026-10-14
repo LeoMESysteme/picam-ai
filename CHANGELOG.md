@@ -34,7 +34,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * `LiveSession`: bestätigtes Profil → nachgeführtes Quad → Dot-Matrix-Leser → Freigabe (`confirm_frames=2`) → `records.jsonl`; `session.json` mit Versatz BOOTTIME−MONOTONIC, aufgezeichneter (nicht angewandter) Timing-Kalibrierung und Freigabehinweis. Start wird abgelehnt ohne Kalibrierung, bei falscher Vorlagenprüfsumme oder verändertem Referenzbild. Auditfehler und Abstürze beenden die Sitzung mit einem Grund.
 
-* `LiveService`: Zustandsautomat der Live-Seite (Einrichtung im Hintergrund mit Fortschritt, Bestätigung nur ohne FEHLER und mit Kenntnisnahme bei WARNUNG, Lauf starten/stoppen, Kameraausfall wird angezeigt).
+* `LiveService`: Zustandsautomat der Live-Seite (Einrichtung im Hintergrund mit Fortschritt, Bestätigung nur ohne FEHLER und mit Kenntnisnahme bei WARNUNG, Lauf starten/stoppen, Kameraausfall wird angezeigt); ein Verzeichnis pro Lauf und serialisierte Bedienoperationen.
 
 **Konsequenz:** wird mit den folgenden Aufgaben ergänzt.
 
