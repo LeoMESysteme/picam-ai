@@ -3,6 +3,24 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 0.1.0.dev0 — 2026-10-14 (MEM-8: Playwright-Beispieltest entfernt)
+
+**Problem:** `tests/example.spec.ts` war der Beispieltest aus der
+Playwright-Vorlage. Er prüfte `playwright.dev`, nichts aus diesem Projekt,
+und lief in der CI trotzdem als eigener Schritt mit Netzzugriff.
+
+**Änderung:** Beispieltest gelöscht. Der CI-Schritt `npx playwright test
+--project=chromium` in `playwright.yml` entfällt, die Browserinstallation
+bleibt für den Doku-Test. `playwright.config.ts` reicht nur noch
+`playwright.docs.config.ts` durch, statt die Vorlage mit drei Browsern
+mitzuführen; `docs/HOSTING.md` beschreibt das.
+
+**Konsequenz:** Einzige Playwright-Suite ist `tests/docs-site.spec.ts`.
+Ein schlichtes `npx playwright test` läuft dieselbe Suite wie
+`-c playwright.docs.config.ts` (gebaute Seite unter `site/` vorausgesetzt)
+und endet nicht mit „No tests found". Ohne Konfigurationsdatei hätte
+Playwright mit seinem Standardmuster die `*.test.mjs`-Harnische geladen.
+
 ## 0.1.0.dev0 — 2026-10-13 (MEM-5: pytest im Worktree und temporäre Dateien)
 
 **Problem:** Die gemeinsame venv lud `dispread` aus dem Hauptcheckout,

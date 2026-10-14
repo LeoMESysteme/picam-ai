@@ -23,8 +23,6 @@ jobs:
       run: npm ci --no-audit --no-fund
     - name: Install Playwright Browsers
       run: npx playwright install --only-shell chromium
-    - name: Run Playwright tests
-      run: npx playwright test --project=chromium
     - name: Doku-Werkzeuge installieren
       run: |
         python3 -m venv .venv-docs

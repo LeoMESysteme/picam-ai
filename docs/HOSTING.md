@@ -79,8 +79,9 @@ verwendet `playwright install --only-shell chromium` ohne `--with-deps`;
 Systembibliotheken müssen auf dem Pi bereits installiert sein. Der Job
 bekommt keine Rechte für `apt` oder Zugriff auf Messhardware. Berichte lädt
 die Forgejo-Version von `upload-artifact@v4` hoch.
-Die allgemeine Playwright-Konfiguration sucht nur `.spec.ts`-Dateien;
-`*.test.mjs`-Harnische laufen separat über Pytest mit ihren benötigten Fixtures.
+Einzige Playwright-Suite ist `tests/docs-site.spec.ts`; `playwright.config.ts`
+reicht nur `playwright.docs.config.ts` durch. `*.test.mjs`-Harnische laufen
+separat über Pytest mit ihren benötigten Fixtures.
 
 Das Runner-Label bleibt `picam-docs:host`; `ubuntu-latest` wird nicht als
 allgemeines Alias ergänzt. Bereits wartende Läufe mit der alten
