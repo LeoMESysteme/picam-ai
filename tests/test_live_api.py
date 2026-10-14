@@ -204,8 +204,10 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
     from dispread.workbench import server
     from dispread.workbench.cli import parser
 
-    async def check(simulate):
-        runtime = tmp_path / ("simulate" if simulate else "camera")
+    original_open = server.Path.open
+
+    async def check(simulate, close_error):
+        runtime = tmp_path / f"{simulate}-{close_error}"
         runtime.mkdir(mode=0o700)
         args = parser().parse_args(["serve", "--socket", str(runtime / "control.sock"),
                                     "--live-data", str(tmp_path / "live")]
@@ -226,6 +228,20 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         owner_factory = Mock(return_value=owner)
         monkeypatch.setattr(server, "CameraOwner", owner_factory)
         live = Mock()
+        shutdown = Mock()
+        shutdown.attach_mock(live.close, "live_close")
+        shutdown.attach_mock(owner.stop, "owner_stop")
+        if close_error:
+            live.close.side_effect = LiveError("x")
+        lockfiles = []
+
+        def track_open(path, *args, **kwargs):
+            handle = original_open(path, *args, **kwargs)
+            if path.name == "workbench.lock":
+                lockfiles.append(handle)
+            return handle
+
+        monkeypatch.setattr(server.Path, "open", track_open)
         live_factory = Mock(return_value=live)
         monkeypatch.setattr(server, "LiveService", live_factory)
         terminals = Mock(close=AsyncMock())
@@ -261,7 +277,7 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         else:
             assert owner_factory.call_args.kwargs == {}
             uvc.assert_called_once_with(preview_settings(), apply_controls=False)
-            controller.log.assert_called_once_with("error", "Kamera: Kamera belegt / USB2")
+            controller.log.assert_any_call("error", "Kamera: Kamera belegt / USB2")
         live_factory.assert_called_once_with(owner, tmp_path / "live", simulate=simulate)
         controller_factory.assert_called_once_with(args.data, args.camera, args.simulate)
         app_factory.assert_called_once_with(controller, terminals, live=live)
@@ -269,7 +285,12 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         controller.close.assert_called_once_with()
         live.close.assert_called_once_with()
         owner.stop.assert_called_once_with()
+        assert [call[0] for call in shutdown.mock_calls] == ["live_close", "owner_stop"]
+        assert len(lockfiles) == 1 and lockfiles[0].closed
+        if close_error:
+            controller.log.assert_any_call("error", "Live: x")
         assert not runtime.joinpath("control.sock").exists()
 
     for simulate in (True, False):
-        asyncio.run(check(simulate))
+        for close_error in (False, True):
+            asyncio.run(check(simulate, close_error))

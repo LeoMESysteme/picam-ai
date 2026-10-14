@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {statusView} from '../src/dispread/workbench/static/live.js';
+import {statusView, connectionView} from '../src/dispread/workbench/static/live.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
   reject_reasons: [], ...over});
@@ -53,4 +53,35 @@ test('fresh rejected record shows its own status without digits', () => {
     reject_reasons: ['confirmation_pending']}), latest_age_s: 0.2}});
   assert.equal(view.headline, 'TRANSITION');
   assert.equal(view.detail, 'confirmation_pending');
+});
+
+const running = {state: 'running', run: {latest: latest(), latest_age_s: 0.2}};
+
+for (const httpStatus of [null, 400, 404, 500, 503]) {
+  test(`failed poll (${httpStatus}) replaces fresh digits with STALE`, () => {
+    const view = connectionView(running, 1000, 1100, httpStatus);
+    assert.deepEqual(view, {headline: 'STALE', cls: 'stale',
+      detail: 'Verbindung zur Werkbank verloren'});
+  });
+}
+
+test('expired login shows STALE and explains authentication failure', () => {
+  assert.deepEqual(connectionView(running, 1000, 1100, 401),
+    {headline: 'STALE', cls: 'stale', detail: 'Anmeldung abgelaufen'});
+});
+
+test('successful render older than 1.5 seconds is STALE even during a pending poll', () => {
+  const view = connectionView(running, 1000, 2501, 200);
+  assert.equal(view.headline, 'STALE');
+  assert.equal(view.cls, 'stale');
+});
+
+test('fresh successful status uses normal statusView including the 1.5 second boundary', () => {
+  for (const nowMs of [1000, 1100, 2500]) {
+    assert.deepEqual(connectionView(running, 1000, nowMs, 200), statusView(running));
+  }
+});
+
+test('no successful render yet is STALE', () => {
+  assert.equal(connectionView(running, null, 1000, 200).headline, 'STALE');
 });

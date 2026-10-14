@@ -356,7 +356,10 @@ async def serve(args):
         await unix.cleanup()
         await terminals.close()
         await asyncio.to_thread(controller.close)
-        await asyncio.to_thread(live.close)
+        try:
+            await asyncio.to_thread(live.close)
+        except Exception as error:  # noqa: BLE001 - Kamera und Socket trotzdem freigeben
+            controller.log("error", f"Live: {error}")
         await asyncio.to_thread(owner.stop)
         socket_path.unlink(missing_ok=True)
         lockfile.close()

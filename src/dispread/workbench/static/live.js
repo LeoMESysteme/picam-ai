@@ -21,8 +21,20 @@ export function statusView(status) {
   return {headline: labels[status.state] || status.state, cls: status.error ? 'error' : '', detail: status.error || ''};
 }
 
+export function connectionView(status, lastOkMs, nowMs, httpStatus) {
+  if (httpStatus === null || httpStatus < 200 || httpStatus >= 300 ||
+      lastOkMs === null || nowMs - lastOkMs > 1500) {
+    return {headline: 'STALE', cls: 'stale', detail: httpStatus === 401
+      ? 'Anmeldung abgelaufen' : 'Verbindung zur Werkbank verloren'};
+  }
+  return statusView(status);
+}
+
 if (typeof document !== 'undefined') {
   let csrf = '';
+  let lastStatus = null;
+  let lastOkMs = null;
+  let httpStatus = null;
   const $ = (id) => document.getElementById(id);
   const post = async (path, body) => {
     const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json',
@@ -30,13 +42,17 @@ if (typeof document !== 'undefined') {
     const data = await response.json().catch(() => ({}));
     $('error').textContent = response.ok ? '' : (data.error || response.statusText);
   };
-  const render = (s) => {
-    csrf = s.csrf;
-    $('notice').textContent = s.release_notice;
-    const view = statusView(s);
+  const renderView = (view) => {
     $('headline').textContent = view.headline;
     $('headline').className = `value ${view.cls}`;
     $('detail').textContent = view.detail;
+  };
+  const renderConnection = () => renderView(connectionView(lastStatus, lastOkMs,
+    performance.now(), httpStatus));
+  const render = (s) => {
+    csrf = s.csrf;
+    $('notice').textContent = s.release_notice;
+    renderView(statusView(s));
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;
@@ -53,7 +69,18 @@ if (typeof document !== 'undefined') {
   const tick = async () => {
     try {
       const response = await fetch('/live/status');
-      if (response.ok) render(await response.json());
+      httpStatus = response.status;
+      if (response.ok) {
+        const status = await response.json();
+        render(status);
+        lastStatus = status;
+        lastOkMs = performance.now();
+      } else {
+        renderConnection();
+      }
+    } catch {
+      httpStatus = null;
+      renderConnection();
     } finally {
       $('preview').src = `/live/preview.jpg?${Date.now()}`;
       setTimeout(tick, 500);
@@ -65,5 +92,6 @@ if (typeof document !== 'undefined') {
   $('run-start').onclick = () => post('/live/run/start');
   $('run-stop').onclick = () => post('/live/run/stop');
   $('camera-start').onclick = () => post('/live/camera/start');
+  setInterval(renderConnection, 500);
   tick();
 }
