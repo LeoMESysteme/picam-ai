@@ -430,3 +430,15 @@ def test_dark_monitor_reflection_on_right_blank_cells_is_reported():
     assert check.status == 'FEHLER'
     assert 13 in check.cells
     assert 14 in check.cells
+
+
+def test_workbench_stability_minimum_keeps_cli_default():
+    image = np.full((160, 400), 180, np.uint8)
+    default = check_setup(image, fit(), stability_image_bgr=image, stability_elapsed_s=15)
+    assert default.checks['stabilitaet'].reason == 'abstand_zu_kurz'
+    bench = check_setup(image, fit(), stability_image_bgr=image, stability_elapsed_s=15,
+                        stability_min_elapsed_s=15)
+    assert bench.checks['stabilitaet'].status != 'FEHLER'
+    short = check_setup(image, fit(), stability_image_bgr=image, stability_elapsed_s=14.9,
+                        stability_min_elapsed_s=15)
+    assert short.checks['stabilitaet'].reason == 'abstand_zu_kurz'

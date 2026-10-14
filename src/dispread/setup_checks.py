@@ -297,10 +297,11 @@ def raster_offset_check(frames: Sequence[tuple[np.ndarray, str]], quad, *,
 
 
 def _stability_check(image_bgr: np.ndarray, second: np.ndarray | None,
-                     elapsed_s: float | None, quad: list[list[float]]) -> CheckResult:
+                     elapsed_s: float | None, quad: list[list[float]],
+                     min_elapsed_s: float) -> CheckResult:
     if second is None:
         return CheckResult(None, {'elapsed_s': None, 'max_corner_shift_px': None}, reason='nicht_durchgefuehrt')
-    if elapsed_s is None or elapsed_s < STABILITY_MIN_ELAPSED_S:
+    if elapsed_s is None or elapsed_s < min_elapsed_s:
         return CheckResult('FEHLER', {'elapsed_s': elapsed_s, 'max_corner_shift_px': None},
                            reason='abstand_zu_kurz')
     _gray(second)
@@ -316,7 +317,8 @@ def _stability_check(image_bgr: np.ndarray, second: np.ndarray | None,
 def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
                 stability_image_bgr: np.ndarray | None = None,
                 stability_elapsed_s: float | None = None,
-                offset_check: CheckResult | None = None) -> SetupChecks:
+                offset_check: CheckResult | None = None,
+                stability_min_elapsed_s: float = STABILITY_MIN_ELAPSED_S) -> SetupChecks:
     """Prueft eine Aufstellung; Stabilitaet bleibt optional bis zum zweiten Bild.
 
     `lattice_fit` folgt dem `LatticeFit`-Vertrag aus `dispread.dotlattice`.
@@ -350,7 +352,7 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
         'aufloesung': CheckResult(resolution_status, {'min_source_dot_column_px': resolution}),
         'raster': _raster_check(lattice_fit, offset_check),
         'stabilitaet': _stability_check(image_bgr, stability_image_bgr,
-                                      stability_elapsed_s, lattice_fit.quad),
+                                      stability_elapsed_s, lattice_fit.quad, stability_min_elapsed_s),
     }
     if offset_check is not None:
         checks['rasterversatz'] = offset_check

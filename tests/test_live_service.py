@@ -186,6 +186,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     service = ready_service(tmp_path, proposal)
     assert service.status()["setup"] == {
         "overall": overall, "checks": {"rasterversatz": "OK"}, "overlays": ["overlay_source"],
+        "step": "vorschlag", "elapsed_s": service.status()["setup"]["elapsed_s"],
     }
     service.confirm(confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
     status = service.status()
@@ -379,6 +380,8 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         return camera, measured
 
     def assist(cam, **kwargs):
+        assert kwargs["stability_s"] == kwargs["min_stability_s"] == 15.0
+        assert kwargs["stack_frames"] == 8 and kwargs["fit_attempts"] == 3
         assert kwargs["expected_size"] == camera.size
         assert kwargs["templates"] == service._config.templates
         assert kwargs["templates_sha256"] == service._config.templates_sha256
@@ -722,3 +725,154 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
     assert starts == [48, 68, 68]
     path = tmp_path / service.status()["session_id"] / "setup" / "camera-settings.json"
     assert json.loads(path.read_text())["focus_method"] == "sweep"
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_setup_elapsed_uses_monotonic_and_freezes(tmp_path, fail):
+    import threading
+
+    entered, finish = threading.Event(), threading.Event()
+    clock = [100.0]
+
+    def runner(*, report, **kwargs):
+        report("standbilder")
+        entered.set()
+        assert finish.wait(2)
+        if fail:
+            raise ValueError("test failure")
+        return {"setup_checks": {"overall": "OK", "checks": {}}}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, monotonic=lambda: clock[0])
+    try:
+        service.start_setup()
+        assert entered.wait(1)
+        clock[0] = 107.5
+        assert service.status()["setup"]["step"] == "standbilder"
+        assert service.status()["setup"]["elapsed_s"] == 7.5
+    finally:
+        finish.set()
+        service._setup_thread.join(2)
+    clock[0] = 200.0
+    assert service.status()["setup"]["elapsed_s"] == 7.5
+
+
+@pytest.mark.parametrize("failed_step", ["fokus", "kamera", "seriell"])
+def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, failed_step):
+    import json
+    from datetime import datetime
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    def fail():
+        raise RuntimeError("early failure")
+
+    camera = CameraSettings.from_dict(proposal["camera"])
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw:
+                        fail() if failed_step == "fokus" else (camera, FocusMeasurements()))
+    owner = FakeOwner()
+    if failed_step == "kamera":
+        owner.restart = lambda *a: fail()
+    service = LiveService(owner, tmp_path, serial_opener=fail)
+    service.start_setup()
+    service._setup_thread.join(2)
+    assert service.status()["state"] == "setup_failed"
+    failure = json.loads((tmp_path / service.status()["session_id"] / "setup" / "failure.json").read_text())
+    assert json.loads((tmp_path / service.status()["session_id"] / "setup" / "cell-text.json").read_text()) == []
+    assert failure["step"] == failed_step
+    assert "early failure" in failure["reason"]
+    assert datetime.fromisoformat(failure["created_at_utc"]).tzinfo is not None
+
+
+@pytest.mark.parametrize("source", ["seriell", "eingabe"])
+def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeypatch, source):
+    import json
+
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    camera = CameraSettings.from_dict(proposal["camera"])
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (camera, FocusMeasurements()))
+    monkeypatch.setattr("dispread.live.service.OwnerSetupCamera.fresh_still",
+                        lambda *a, **kw: np.zeros((1080, 1920, 3), np.uint8))
+    monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: None)
+    texts = iter(["+ 1.2345 ", "+ 1.2346 ", "+ 2.2345 ", "+ 2.2346 ", "+ 3.2345 ", "+ 3.2346 "])
+    monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
+
+    class Port:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    port = Port()
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: port)
+    service.start_setup(cell_text="+ 1.2345 " if source == "eingabe" else None)
+    service._setup_thread.join(2)
+    assert service.status()["state"] == "setup_failed"
+    setup_dir = tmp_path / service.status()["session_id"] / "setup"
+    entries = json.loads((setup_dir / "cell-text.json").read_text())
+    assert len(entries) == 3
+    for attempt, entry in enumerate(entries, 1):
+        assert entry["attempt"] == attempt and entry["source"] == source
+        assert entry["still"] == "still"
+        if source == "seriell":
+            assert entry["unmasked"] == [f"+ {attempt}.2345 ", f"+ {attempt}.2346 "]
+            assert entry["masked"] == f"+ {attempt}.234? "
+        else:
+            assert entry["unmasked"] == ["+ 1.2345 "]
+            assert entry["masked"] == "+ 1.2345 "
+    failure = json.loads((setup_dir / "failure.json").read_text())
+    assert "Kein gruener Bereich" in failure["reason"]
+    if source == "seriell":
+        assert port.closed
+
+
+@pytest.mark.parametrize("offset_status", ["FEHLER", "OK"])
+def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, proposal, monkeypatch, offset_status):
+    import json
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    camera = replace(CameraSettings.from_dict(proposal["camera"]), size=(3, 2))
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (camera, FocusMeasurements()))
+    monkeypatch.setattr("dispread.live.service.OwnerSetupCamera.fresh_still",
+                        lambda *a, **kw: np.zeros((2, 3, 3), np.uint8))
+    monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: (0, 0, 1, 1))
+    fit = SimpleNamespace(quad=[[0, 0], [3, 0], [3, 2], [0, 2]])
+    fits = iter(["retry", fit])
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *a, **kw: next(fits))
+    checks = SimpleNamespace(overall="OK", checks={}, to_dict=lambda: {})
+    monkeypatch.setattr(live_setup, "check_setup", lambda *a, **kw: checks)
+
+    def refine(*a):
+        raise ValueError("kein Feinschliff")
+
+    monkeypatch.setattr(live_setup, "refine_quad", refine)
+    offset = SimpleNamespace(status=offset_status, to_dict=lambda: {"status": offset_status})
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *a: offset)
+    monkeypatch.setattr(live_setup, "propose_with_fit", lambda *a, **kw: proposal)
+    monkeypatch.setattr(live_setup.time, "sleep", lambda s: None)
+    texts = iter(["abc", "abc", "ab1", "ab2", "ac1", "ac1"])
+    monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: SimpleNamespace(close=lambda: None))
+    service.start_setup()
+    service._setup_thread.join(2)
+    assert service.status()["state"] == ("setup_failed" if offset_status == "FEHLER" else "setup_ready")
+    setup_dir = tmp_path / service.status()["session_id"] / "setup"
+    assert json.loads((setup_dir / "cell-text.json").read_text()) == [
+        {"attempt": 1, "still": "still", "source": "seriell", "unmasked": ["abc", "abc"], "masked": "abc"},
+        {"attempt": 2, "still": "still", "source": "seriell", "unmasked": ["ab1", "ab2"], "masked": "a??"},
+        {"attempt": 2, "still": "stability", "source": "seriell", "unmasked": ["ac1", "ac1"], "masked": "a??"},
+    ]
+    if offset_status == "FEHLER":
+        assert "Rasterversatz 2j meldet FEHLER" in json.loads((setup_dir / "failure.json").read_text())["reason"]
+    else:
+        assert not (setup_dir / "failure.json").exists()

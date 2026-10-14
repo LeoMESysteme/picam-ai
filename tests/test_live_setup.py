@@ -53,8 +53,9 @@ def test_mean_still_one_frame_preserves_original():
     assert live_setup.mean_still(cam, frames=1) is image
 
 
+@pytest.mark.parametrize("stability_s", [30.0, 15.0])
 @pytest.mark.parametrize("explicit_hint", [None, (0.1, 0.2, 0.3, 0.4)])
-def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, tmp_path, explicit_hint):
+def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, tmp_path, explicit_hint, stability_s):
     cam = SequenceSetupCamera([10, 12, 30, 34, 32, 32])
     texts = iter(["old", "new", "new"])
     brackets = []
@@ -104,12 +105,14 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     monkeypatch.setattr(live_setup, "check_setup", check)
     monkeypatch.setattr(live_setup, "refine_quad", refine)
     monkeypatch.setattr(live_setup, "raster_offset_check", raster)
-    timestamps = iter([100.0, 110.0, 141.0])
+    timestamps = iter([100.0, 110.0, 110.0 + stability_s])
+    attempts = []
     messages, sleeps = [], []
     result = live_setup.assist_measure(
         cam, cell_text=cell_text, expected_size=(3, 2), out_dir=tmp_path, hint_box=explicit_hint,
         stack_frames=2, fit_attempts=3, info=messages.append, sleep=sleeps.append,
-        monotonic=lambda: next(timestamps),
+        monotonic=lambda: next(timestamps), stability_s=stability_s, min_stability_s=stability_s,
+        on_attempt=attempts.append,
     )
     assert brackets == [(0, 2), (2, 4), (4, 6)]
     assert cam.discards == [10, 0, 10, 0, 10, 0]
@@ -125,11 +128,19 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     assert result.first_text == result.second_text == "new"
     assert checked[0][0] is result.first and checked[0][1] is fit
     assert checked[-1][2]["stability_image_bgr"] is result.second
-    assert checked[-1][2]["stability_elapsed_s"] == result.stability_elapsed_s == 31.0
+    assert checked[-1][2]["stability_elapsed_s"] == result.stability_elapsed_s == stability_s
     assert refinement[0][0] is result.first and refinement[0][1] == "new"
     assert offsets[-1][0][0] is result.first and offsets[-1][0][1] == "new"
     assert offsets[-1][1][0] is result.second and offsets[-1][1][1] == "new"
-    assert sleeps == [30.0]
+    assert sleeps == [stability_s]
+    assert checked[-1][2]["stability_min_elapsed_s"] == stability_s
+    assert attempts == [
+        {"attempt": 1, "still": "still", "masked": "old"},
+        {"attempt": 2, "still": "still", "masked": "new"},
+        {"attempt": 2, "still": "stability", "masked": "new"},
+        {"attempt": 2, "still": "still", "masked": "new"},
+        {"attempt": 2, "still": "stability", "masked": "new"},
+    ]
     assert len(messages) == 2
     assert "1/3" in messages[0] and "2/3" in messages[1]
 
@@ -276,3 +287,23 @@ def test_focus_camera_sucht_ab_start_und_protokolliert_rueckfall(monkeypatch, st
     assert abs(settings.controls["focus_absolute"] - (50 if flat else 48)) <= 2
     if not flat:
         assert len(measured) <= 12
+
+
+@pytest.mark.parametrize("missing", [1, 3])
+def test_assist_retries_missing_hint_with_fresh_mean(monkeypatch, tmp_path, missing):
+    cam = SequenceSetupCamera([10, 12, 20, 22, 30, 32])
+    seen = []
+
+    def hint(image):
+        seen.append(int(image[0, 0, 0]))
+        return None if len(seen) <= missing else (0, 0, 1, 1)
+
+    monkeypatch.setattr(live_setup, "find_green_hint_box", hint)
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_a, **_kw: "last_fit")
+    reason = "Kein gruener Bereich" if missing == 3 else "last_fit"
+    with pytest.raises(live_setup.SetupError, match=reason):
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source("text"), expected_size=(3, 2),
+            out_dir=tmp_path, stack_frames=2, fit_attempts=3,
+        )
+    assert seen == [11, 21, 31]

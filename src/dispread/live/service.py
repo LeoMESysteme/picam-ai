@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -90,6 +91,7 @@ class LiveService:
         serial_opener: Callable[[], Any] | None = None,
         setup_runner: Callable[..., dict] | None = None,
         wall: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         self._owner = owner
         self._data_dir = Path(data_dir)
@@ -99,6 +101,10 @@ class LiveService:
         self._serial_opener = serial_opener or self._open_serial
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
+        self._monotonic = monotonic or time.monotonic
+        self._setup_started_at: float | None = None
+        self._setup_elapsed_s: float | None = None
+        self._setup_step: str | None = None
         self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
         self._state = "idle"
@@ -127,6 +133,13 @@ class LiveService:
                     "checks": {n: c.get("status") for n, c in checks.get("checks", {}).items()},
                     "overlays": [n for n in OVERLAYS if self.setup_file(n) is not None],
                 }
+            if self._setup_started_at is not None:
+                setup = setup or {}
+                setup["step"] = self._setup_step
+                setup["elapsed_s"] = (
+                    self._monotonic() - self._setup_started_at
+                    if self._state == "setup_running" else self._setup_elapsed_s
+                )
             run = None
             if self._session is not None:
                 latest = self._session.latest
@@ -216,6 +229,9 @@ class LiveService:
             session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
             with self._lock:
                 self._state, self._step, self._error = "setup_running", "start", None
+                self._setup_started_at = self._monotonic()
+                self._setup_elapsed_s = None
+                self._setup_step = "start"
                 self._session_dir, self._proposal = session_dir, None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._session = None
@@ -226,16 +242,28 @@ class LiveService:
 
     def _report(self, step: str) -> None:
         with self._lock:
-            self._step = step
+            self._step = self._setup_step = step
 
     def _setup_worker(self, session_dir: Path, text: str | None) -> None:
         try:
             proposal = self._setup_runner(session_dir=session_dir, cell_text=text, report=self._report)
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
+            setup_dir = session_dir / "setup"
+            setup_dir.mkdir(parents=True, exist_ok=True)
             with self._lock:
+                step = self._setup_step
+            (setup_dir / "failure.json").write_text(
+                json.dumps({"step": step, "reason": str(exc),
+                            "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with self._lock:
+                self._setup_elapsed_s = self._monotonic() - self._setup_started_at
                 self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
             return
         with self._lock:
+            self._setup_elapsed_s = self._monotonic() - self._setup_started_at
+            self._setup_step = "vorschlag"
             self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
 
     def _open_serial(self) -> Any:
@@ -247,6 +275,25 @@ class LiveService:
         """Echter Ablauf: Fokus -> Kamera mit festen Reglern -> Standbilder -> Vorschlag."""
         setup_dir = session_dir / "setup"
         setup_dir.mkdir(parents=True, exist_ok=True)
+        (setup_dir / "cell-text.json").write_text("[]", encoding="utf-8")
+        cell_texts: list[dict] = []
+        raw_texts: list[str] = []
+
+        def save_attempt(entry: dict) -> None:
+            previous = next((item for item in cell_texts
+                             if (item["attempt"], item["still"]) == (entry["attempt"], entry["still"])), None)
+            if previous is None:
+                cell_texts.append({**entry, "source": "seriell" if cell_text is None else "eingabe",
+                                   "unmasked": list(raw_texts)})
+            else:
+                previous["masked"] = entry["masked"]
+            (setup_dir / "cell-text.json").write_text(
+                json.dumps(cell_texts, indent=2, ensure_ascii=False), encoding="utf-8",
+            )
+
+        def save_raw(before: str, after: str) -> None:
+            raw_texts[:] = [before, after]
+
         report("fokus")
         with self._lock:
             start_focus = self._last_confirmed_focus
@@ -262,14 +309,17 @@ class LiveService:
         port = None
         try:
             if cell_text is None:
+                report("seriell")
                 try:
                     port = self._serial_opener()
                 except Exception as exc:  # noqa: BLE001
                     raise live_setup.SetupError(
                         f"kein GSV-2AS an {live_setup.SERIAL_PORT} ({exc}) - Zellentext eingeben"
                     ) from exc
-                text_source = live_setup.serial_text_source(port)
+                def text_source(capture):
+                    return live_setup.capture_with_text(capture, port, on_text=save_raw)
             else:
+                raw_texts[:] = [cell_text]
                 text_source = live_setup.offline_text_source(cell_text)
             report("standbilder")
             result = live_setup.assist_measure(
@@ -277,6 +327,11 @@ class LiveService:
                 cell_text=text_source,
                 expected_size=settings.size,
                 out_dir=setup_dir,
+                stability_s=15.0,
+                min_stability_s=15.0,
+                stack_frames=8,
+                fit_attempts=3,
+                on_attempt=save_attempt,
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
                 info=lambda message: report(message),

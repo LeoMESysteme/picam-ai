@@ -118,11 +118,15 @@ def mask_changed_cells(before: str, after: str) -> tuple[str, str]:
     return shared, shared
 
 
-def capture_with_text(capture: Any, port: Any) -> tuple[np.ndarray, str]:
+def capture_with_text(
+    capture: Any, port: Any, *, on_text: Callable[[str, str], None] | None = None,
+) -> tuple[np.ndarray, str]:
     """Bracket one still with fresh telegrams and mask changes during capture."""
     before = serial_cell_text(port)
     image = capture()
     after = serial_cell_text(port)
+    if on_text is not None:
+        on_text(before, after)
     return image, mask_changed_cells(before, after)[0]
 
 
@@ -202,8 +206,10 @@ def assist_measure(
     out_dir: Path,
     hint_box: HintBox | None = None,
     stability_s: float = MIN_STABILITY_S,
+    min_stability_s: float = MIN_STABILITY_S,
     stack_frames: int = 1,
     fit_attempts: int = 1,
+    on_attempt: Callable[[dict], None] | None = None,
     templates: Path | None = None,
     templates_sha256: str | None = None,
     report: Callable[[dict], None] = lambda _checks: None,
@@ -213,11 +219,14 @@ def assist_measure(
 ) -> AssistResult:
     """Zwei Standbilder mit Zellentext, Punktraster, 2j und Setup-Pruefungen.
 
-    Wirft `SetupError` mit Bedienertext, sobald ein Schritt FEHLER meldet."""
+    Wirft `SetupError` mit Bedienertext, sobald ein Schritt FEHLER meldet.
+    `on_attempt` erhaelt attempt (ab 1), still (still/stability) und masked
+    direkt nach der Aufnahme und erneut nach der bilduebergreifenden Maske.
+    """
     sleep = sleep or time.sleep
     monotonic = monotonic or time.monotonic
-    if not math.isfinite(stability_s) or stability_s < MIN_STABILITY_S:
-        raise SetupError(f"Stabilitaetsmessung muss mindestens {MIN_STABILITY_S:.0f} Sekunden dauern")
+    if not math.isfinite(stability_s) or stability_s < min_stability_s:
+        raise SetupError(f"Stabilitaetsmessung muss mindestens {min_stability_s:.0f} Sekunden dauern")
     if fit_attempts < 1:
         raise SetupError("Startsuche braucht mindestens einen Versuch")
 
@@ -230,6 +239,8 @@ def assist_measure(
             info(f"Punktraster-Startsuche: Versuch {attempt}/{fit_attempts} ({stack_frames} Bilder)")
         first, first_text = cell_text(capture)
         first_captured_at = monotonic()
+        if on_attempt is not None:
+            on_attempt({"attempt": attempt, "still": "still", "masked": first_text})
         if first.shape[:2] != (expected_size[1], expected_size[0]):
             raise SetupError("Standbild passt nicht zur Kameraaufloesung")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -237,6 +248,8 @@ def assist_measure(
             raise SetupError("still.png konnte nicht geschrieben werden")
         hint_box = explicit_hint_box if explicit_hint_box is not None else find_green_hint_box(first)
         if hint_box is None:
+            if attempt < fit_attempts:
+                continue
             raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
         fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
         if not isinstance(fit, str):
@@ -254,7 +267,12 @@ def assist_measure(
     sleep(stability_s)
     second, second_text = cell_text(capture)
     stability_elapsed_s = monotonic() - first_captured_at
+    if on_attempt is not None:
+        on_attempt({"attempt": attempt, "still": "stability", "masked": second_text})
     first_text, second_text = mask_changed_cells(first_text, second_text)
+    if on_attempt is not None:
+        on_attempt({"attempt": attempt, "still": "still", "masked": first_text})
+        on_attempt({"attempt": attempt, "still": "stability", "masked": second_text})
     if second.shape != first.shape:
         raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
     if not cv2.imwrite(str(out_dir / "stability.png"), second):
@@ -287,6 +305,7 @@ def assist_measure(
     final_checks = check_setup(
         first, fit, stability_image_bgr=second,
         stability_elapsed_s=stability_elapsed_s, offset_check=offset_check,
+        stability_min_elapsed_s=min_stability_s,
     )
     if final_checks.overall == "FEHLER":
         report(final_checks.to_dict())
