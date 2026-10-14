@@ -28,8 +28,10 @@ Ohne Anmeldung führt `/live` zu `/login?next=/live` und danach zurück.
 StreamCam frontal auf dem GSV-2AS / Displaytech 161A, Glas etwa 720 px breit,
 Raumlicht, Zellentext seriell gelesen. Vor N7: **0/4** Einrichtungen,
 `keine_startlage` sowie einmal 2j FEHLER auf einem falschen Raster.
-Nach N7: **3/3** Vorschläge, Dauer **47/55/49 s**, jeweils Gesamt-WARNUNG:
-Raster-Ersatzmaß WARNUNG wie bei `sc7`, Rasterversatz OK, Gegenlesen OK.
+Nach N7: **4/4** Vorschläge, Dauer **47/55/49/45 s**, jeweils Gesamt-WARNUNG:
+Bei den ersten drei Versuchen `raster` WARNUNG wie bei `sc7`; beim vierten
+`kanten` WARNUNG und `raster` OK. Rasterversatz und Gegenlesen jeweils OK.
+Der vierte Versuch lief am Abend nach Werkbank-Neustart mit `2303cdf`.
 Das ist **kein formaler Abnahme-Lauf** und noch kein Messlauf.
 
 Die Nacharbeit vom 2026-10-14 umfasst Fokus per Bergsteigen (5 statt 38
@@ -45,9 +47,9 @@ ein um eine Zeile falsches Raster wurde angenommen und erst von 2j abgefangen.
 Punkterkennung glättet nun in Punktgröße, `_MAX_RMS_ROWS` sinkt von 0,25
 auf 0,15, die Startsuche ist gestuft. 2j und Gegenlesen bleiben maßgeblich.
 Belege: [VALIDATION.md](VALIDATION.md#messpfad-live-einrichtung-2026-10-14),
-[Live-Plan](superpowers/plans/2026-10-12-messpfad-live.md) und
-[Nacharbeitsplan](superpowers/plans/2026-10-14-messpfad-live-nacharbeit.md)
-mit den jeweiligen SDD-Ledgern (Final-Review/R13 und Bench-Re-Test).
+[Laborjournal](lab_journal.md#messpfad-live-einrichtung-nach-n7-2026-10-14)
+und Einrichtungsdateien der Werkbank unter `var/live/<sitzung>/setup/`
+(lokale Daten, nicht in Git).
 
 ## Grenzen und nächster Schritt
 

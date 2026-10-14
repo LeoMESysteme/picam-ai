@@ -56,8 +56,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 **Konsequenz:** Die StreamCam lässt sich auf `/live` im Browser einrichten;
 eine benannte Person bestätigt das Profil vor dem Lauf mit Statusanzeige
-und JSONL-Audit je Lauf. Am Aufbau lieferten nach N7 drei von drei
-Einrichtungen einen Vorschlag mit Gesamt-WARNUNG in 47/55/49 s;
+und JSONL-Audit je Lauf. Am Aufbau lieferten nach N7 vier von vier
+Einrichtungen einen Vorschlag mit Gesamt-WARNUNG in 47/55/49/45 s;
 Bestätigung, Messlauf und Trackingprüfung bei Wertwechseln stehen aus.
 Die Freigabe bleibt auf GSV-2AS / Displaytech 161A, Raumlicht und mV/V
 begrenzt; serielle Ausgabe an GSVmulti fehlt weiterhin (OQ-07).

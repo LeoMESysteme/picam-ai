@@ -24,21 +24,23 @@ Im Projektverzeichnis:
 ```bash
 bash scripts/install-workbench.sh
 ./.venv/bin/dispread init-tls
-./.venv/bin/dispread serve
+./.venv/bin/dispread serve --port 8081
 ```
 
 `init-tls` nur einmal ausführen. Bereits vorhandene Schlüssel werden nicht
 überschrieben. In dieser Implementierungssession wurde das Zertifikat bereits
-unter `var/workbench/tls/` erzeugt; du kannst direkt `dispread serve` starten.
+unter `var/workbench/tls/` erzeugt; du kannst direkt
+`./.venv/bin/dispread serve --port 8081` starten.
 
-Default ist die zuvor vom Nutzer eingestellte interne Adresse:
+Mit diesem Startbefehl ist die Werkbank unter der zuvor vom Nutzer
+eingestellten internen Adresse und Port 8081 erreichbar:
 
 ```text
-https://100.122.154.35:8080
+https://100.122.154.35:8081
 ```
 
-Auf diesem Pi nutzt MEhub Port 8080. Die Werkbank lief am 2026-10-14 mit
-`--port 8081`; dafür `https://100.122.154.35:8081/live` öffnen.
+Auf diesem Pi belegt MEhub den Port 8080, deshalb `--port 8081`.
+Dafür `https://100.122.154.35:8081/live` öffnen.
 
 **Es ist jetzt HTTPS, nicht mehr HTTP.** Alten Vorschauprozess vorher mit
 `Ctrl+C` beenden. Der kompatible Einstieg bleibt:
@@ -55,13 +57,15 @@ nötig. Fünf Anmeldeversuche pro Minute und Client sind möglich.
 ## Live-Seite `/live`
 
 Stand 2026-10-14: gebaut und Einrichtung am Aufbau geprüft, Messlauf offen.
-Im Projektverzeichnis `dispread serve [--port 8081]` starten; die eckigen
-Klammern bezeichnen die optionale Portwahl. Auf diesem Pi ist sie wegen
-MEhub auf 8080 nötig:
+Im Projektverzeichnis starten:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/dispread serve --port 8081
+./.venv/bin/dispread serve --port 8081
 ```
+
+Beim Start aus einem Git-Worktree `PYTHONPATH=src` vor den Befehl setzen,
+damit dessen Quellen statt eines anderen editierbar installierten Checkouts
+geladen werden.
 
 `https://<host>:8081/live` öffnen. Ohne Anmeldung führt die Seite zu
 `/login?next=/live`; nach Anmeldung mit dem Linux-Passwort von `me-systeme`
@@ -92,9 +96,11 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
    **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
    das Profil und die Bedienbestätigung (Konzept §4).
 
-Am 2026-10-14 lieferten nach N7 drei Einrichtungen Vorschläge mit
-Gesamt-WARNUNG (Raster-Ersatzmaß wie `sc7`), Rasterversatz OK und
-Gegenlesen OK in 47/55/49 s. Bestätigung und Messlauf stehen noch aus;
+Am 2026-10-14 lieferten nach N7 vier Einrichtungen Vorschläge mit
+Gesamt-WARNUNG wegen einer Proxy-Prüfung: zunächst `raster` WARNUNG wie
+bei `sc7`, beim vierten Versuch `kanten` WARNUNG und `raster` OK.
+Die Einrichtungen dauerten 47/55/49/45 s; Rasterversatz und Gegenlesen
+waren jeweils OK. Bestätigung und Messlauf stehen noch aus;
 das war kein formaler Abnahme-Lauf.
 
 ### Lauf und Wertstatus

@@ -1846,3 +1846,27 @@ Anteilen 0,15 und 0,18 folgen ausschließlich auf `keine_startlage`.
 Mehrdeutigkeit und Minus bleiben endgültig; 2j und Gegenlesen bleiben scharf.
 Regressionen lesen die Standbilder nur und überspringen fehlende Dateien.
 Aus den Standbildern wird keine Aufnahmezeit oder Latenz abgeleitet.
+
+## 2026-10-14 — Messpfad live: Einrichtung an der StreamCam nach N7 { #messpfad-live-einrichtung-nach-n7-2026-10-14 }
+
+**Ziel:** Einrichtung am echten Aufbau nach der N7-Korrektur erneut prüfen.
+
+**Aufbau:** StreamCam frontal auf GSV-2AS / Displaytech 161A, Glas etwa
+720 px breit, Raumlicht, Zellentext seriell gelesen. Werkbank auf Port 8081,
+Einrichtung über `dispread live setup` ausgelöst. Der vierte Versuch lief
+am Abend nach Werkbank-Neustart mit Code-Stand `2303cdf`. Die Befunde
+stammen vom Controller; diese Dokumentationskorrektur öffnete keine Hardware.
+
+**Beobachtung:** Vor N7 **0/4** Einrichtungen, darunter ein falsches Raster,
+das erst 2j abfing. Nach N7 **4/4** Vorschläge in **47/55/49/45 s**
+(45–55 s), jeweils Gesamt-WARNUNG wegen einer Proxy-Prüfung: zuerst
+`raster` WARNUNG, beim vierten Versuch `kanten` WARNUNG und `raster` OK.
+Rasterversatz und Gegenlesen waren jeweils OK. Einrichtungsdateien liegen
+unter `var/live/<sitzung>/setup/` (lokale Daten, nicht in Git); die Zahlen
+stehen auch in [VALIDATION](VALIDATION.md#messpfad-live-einrichtung-2026-10-14).
+
+**Deutung und offen:** Die Einrichtung gelingt am geprüften Aufbau; dies
+ist kein formaler Abnahme-Lauf. Bestätigung durch die bedienende Person,
+Messlauf, Wertwechsel über `set norm` und Trackingmessung bei diesen
+Wertwechseln stehen weiterhin aus. Daraus folgt noch keine Aussage zur
+Live-Trefferquote oder Trackingqualität.

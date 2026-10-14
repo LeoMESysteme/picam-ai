@@ -40,13 +40,18 @@ Offen:
 2. **IN ARBEIT: Anbindung an den Messpfad** (Variante B).
    Tasks 1–11 und Final-Review-Korrekturen sind gebaut: StreamCam über
    `CameraOwner`, Einrichtung und Dot-Matrix-Lesen auf `/live`, JSONL-Audit
-   je Lauf. Am 2026-10-14 nach N7 3/3 Vorschläge in 47/55/49 s,
-   Gesamt-WARNUNG nur wegen des Raster-Ersatzmaßes; Rasterversatz und
-   Gegenlesen OK. Kein formaler Abnahme-Lauf, noch kein Messlauf.
-   * **Mit der bedienenden Person, geplant 2026-10-16:** Overlays und Format
-     prüfen, mit Namen bestätigen und WARNUNG ausdrücklich zur Kenntnis
-     nehmen. Lauf ≥ 10 min; fünf verschiedene Werte mit `set norm`
-     einstellen, TRANSITION → VALID beobachten, Display einmal 2 s
+   je Lauf. Am 2026-10-14 nach N7 4/4 Vorschläge in 47/55/49/45 s,
+   jeweils Gesamt-WARNUNG wegen einer Proxy-Prüfung (`raster`, beim vierten
+   Versuch `kanten` bei `raster` OK); Rasterversatz und Gegenlesen OK.
+   Kein formaler Abnahme-Lauf, noch kein Messlauf.
+   * **Mit der bedienenden Person, geplant 2026-10-16:**
+     `./.venv/bin/dispread serve --port 8081` starten, prüfen, dass
+     `var/calibration/timing-streamcam.json` vorhanden ist, `/live` öffnen
+     und die Einrichtung starten. Dann Overlays und Format prüfen, mit
+     Namen bestätigen und WARNUNG ausdrücklich zur Kenntnis
+     nehmen. Lauf ≥ 10 min; fünf verschiedene Werte über
+     `scripts/gsv-registers.py` mit `set norm` einstellen, TRANSITION → VALID
+     beobachten, Display einmal 2 s
      abdecken (UNREADABLE, danach wieder VALID), Lauf stoppen.
    * `run-NN/records.jsonl` und `run-NN/session.json` auswerten:
      Statuszählung, eingestellte/gelesene Werte, Bildlücken, übersprungene
@@ -289,7 +294,7 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 ## Die Aufgaben, in Reihenfolge
 
-### 2. In Arbeit: Messpfad live
+### Messpfad live (aktiv)
 
 Die aktuellen Bedienschritte und Folgeschritte stehen oben unter Punkt 2.
 Bestätigung und Messlauf warten auf die bedienende Person (2026-10-16).
