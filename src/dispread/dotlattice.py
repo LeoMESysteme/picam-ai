@@ -20,10 +20,17 @@ _PV = 160.0 / 9.0
 _CORNERS = np.float32([[[0, 0], [399, 0], [399, 159], [0, 159]]])
 _MIN_ASSIGNED = 70  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MAX_RMS_COLS = 0.2  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
-_MAX_RMS_ROWS = 0.25  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
+# Mit punktgrosser Glaettung liegen korrekte Raster bei <= 0,09, um eine
+# Zeile verkippte Raster bei >= 0,19 (Standbilder vom 2026-10-14, sc3-sc7, ab1-ab6).
+_MAX_RMS_ROWS = 0.15  # Vorabwert, aus den Aufstellungen vom 2026-10-14.
 _SAME_QUAD_PX = 3.0  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MIN_ASSIGNMENT_MARGIN = 5  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MIN_CURSOR_DEPTH_FRACTION = 0.6  # Vorabwert, aus sc7a vom 2026-10-01.
+# Scharfe LCD-Punkte haben einen flachen Boden; ohne Glaettung in Punktgroesse
+# liefert jeder Punkt mehrere zufaellig liegende Minima.
+_DOT_SIGMA_FRACTION = 0.2  # Vorabwert, aus den Standbildern vom 2026-10-14.
+# Startsuche: zuerst wie bisher (feste 0,7 px), dann punktgross geglaettet.
+_START_SIGMA_FRACTIONS = (None, 0.15, 0.18)  # Vorabwerte, 2026-10-14.
 
 
 @dataclass(frozen=True)
@@ -277,11 +284,17 @@ def _lattice_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
     sy = (hh - 1) / np.linalg.norm(quad[3] - quad[0])
     if not (0.5 < sx < 30 and 0.5 < sy < 30):
         return np.empty((0, 2), np.float32)
-    blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=0.7 * sx, sigmaY=0.7 * sy)
+    col_pitch = float(np.linalg.norm(quad[1] - quad[0])) / 96
+    row_pitch = float(np.linalg.norm(quad[3] - quad[0])) / 9
+    sigma_x = max(0.7, _DOT_SIGMA_FRACTION * col_pitch)
+    sigma_y = max(0.7, _DOT_SIGMA_FRACTION * row_pitch)
+    blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=sigma_x * sx, sigmaY=sigma_y * sy)
     depth = cv2.GaussianBlur(gray, (0, 0), sigmaX=6 * sx, sigmaY=6 * sy) - blurred
     kernel = np.ones((int(2 * round(1.2 * sy) + 1), int(2 * round(1.2 * sx) + 1)), np.uint8)
     minimum = cv2.erode(blurred, kernel)
     yy, xx = np.where((blurred == minimum) & (depth > 8))
+    if len(xx) == 0:
+        return np.empty((0, 2), np.float32)
     return _warp_points(np.column_stack((xx, yy)).astype(np.float32), np.linalg.inv(hr))
 
 
@@ -456,7 +469,14 @@ def fit_lattice(
         c_r = np.float32([item[1] for item in seeds])
         h = cv2.getPerspectiveTransform(src, _lat(c_r[:, 0], c_r[:, 1]))
         return refine(image_bgr, h, empty_cells=empty_cells)
-    return _auto_fit(image_bgr, hint_box, empty_cells=empty_cells)
+    # Nur "keine_startlage" (kein einziges tragfaehiges Raster) fuehrt zum
+    # naechsten Durchgang; Mehrdeutigkeit und Minus bleiben endgueltig.
+    result: LatticeFit | str = "keine_startlage"
+    for fraction in _START_SIGMA_FRACTIONS:
+        result = _auto_fit(image_bgr, hint_box, empty_cells=empty_cells, sigma_fraction=fraction)
+        if result != "keine_startlage":
+            return result
+    return result
 
 
 def _auto_fit(
@@ -464,6 +484,7 @@ def _auto_fit(
     hint_box: tuple[float, float, float, float],
     *,
     empty_cells: tuple[int, ...] = (),
+    sigma_fraction: float | None = None,
 ) -> LatticeFit | str:
     height, width = image_bgr.shape[:2]
     x, y, w, hh = hint_box
@@ -491,7 +512,9 @@ def _auto_fit(
     bottom_lines = [entry for entry in spans if entry[2] > (y1 - y0) * 0.55]
     bottom = max(bottom_lines)[1] if bottom_lines else top
     # Quellbild-Minima mit Tiefe relativ zum lokalen LCD-Hintergrund.
-    smooth = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), 0.7)
+    # Die Hinweisbox ist etwa 10 % breiter als das Raster (Faktor 0,9).
+    sigma = 0.7 if sigma_fraction is None else max(0.7, sigma_fraction * 0.9 * point_pitch)
+    smooth = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), sigma)
     depth = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), 6) - smooth
     minimum = cv2.erode(smooth, np.ones((3, 3), np.uint8))
     yy, xx = np.where((smooth == minimum) & (depth > 8))

@@ -1822,3 +1822,27 @@ Freigabe und Audit-Ausgabe sind hier nicht enthalten. Zahlen zusätzlich
 in [VALIDATION.md](VALIDATION.md#leserlaufzeit-2026-10-13-messpfad-live-task-1).
 
 ---
+
+## 2026-10-14 — Werkbank-Startsuche in Punktgröße (Task N7)
+
+**Aufbau und Befund:** Ursachenanalyse an gespeicherten, scharfen und frontalen
+Werkbank-Standbildern vom 2026-10-14; keine Hardwareänderung in dieser Task.
+Die flachen Böden der etwa 6,7 × 8,4 px großen LCD-Punkte erzeugten bei fester
+0,7-px-Glättung je Punkt 1–4 zufällige Minima. Ein um eine Punktzeile verkipptes
+Raster wurde angenommen und erst durch 2j abgelehnt.
+
+**Gemessene Vorher/Nachher-Zahlen aus dem Task-Brief und Controller-Befund:**
+Vier aktuelle Standbilder: **0/4 → 4/4 korrekt**; gestörte Varianten:
+**18/18 korrekt, 0 falsch**, zuvor **9 falsch**. Ältere Aufstellungen bleiben
+innerhalb **1 px**. Korrekte Raster liegen mit punktgroßer Glättung bei
+rms_rows **0,05–0,09**, falsche bei **0,19–0,23**; zuvor lag der verrauschte
+Zeilenrestfehler bei **0,22** mit Grenze **0,25**. Diese Angaben stammen aus
+der vorausgehenden Ursachenanalyse, nicht aus einer neuen Live-Messung.
+
+**Deutung und Umsetzung:** Glättung je Achse mit max(0,7 px, 0,2 × Punktabstand)
+und rms_rows-Grenze **0,15** trennen die beobachteten richtigen und falschen
+Raster. Startdurchläufe mit fester 0,7-px-Glättung, danach den gemessenen
+Anteilen 0,15 und 0,18 folgen ausschließlich auf `keine_startlage`.
+Mehrdeutigkeit und Minus bleiben endgültig; 2j und Gegenlesen bleiben scharf.
+Regressionen lesen die Standbilder nur und überspringen fehlende Dateien.
+Aus den Standbildern wird keine Aufnahmezeit oder Latenz abgeleitet.

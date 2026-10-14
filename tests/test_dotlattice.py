@@ -247,12 +247,12 @@ def test_evaluate_quad_still_rejects_wrong_plus_location():
 
 
 @pytest.mark.parametrize("name,profile,frame,proxy", [
-    ("ab4", "ab4-profile-regrid1.json", 16, "rms"),
+    ("ab4", "ab4-profile-regrid1.json", 16, None),
     ("ab5", "ab5-profile", 7, None),
-    ("ab6", "ab6-profile", 22, "rms"),
+    ("ab6", "ab6-profile", 22, None),
     ("sc6", "sc6-profile", 15, "bias"),
 ])
-def test_evaluate_quad_reports_validated_profile_despite_proxy_limit(name, profile, frame, proxy):
+def test_evaluate_quad_reports_validated_profile_within_rms_limits(name, profile, frame, proxy):
     still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
     profile_path = DIAGNOSTICS / profile
     if not still.exists() or not profile_path.exists():
@@ -267,9 +267,9 @@ def test_evaluate_quad_reports_validated_profile_despite_proxy_limit(name, profi
     result = dotlattice.evaluate_quad(image, hint, quad, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
     np.testing.assert_allclose(result.quad, quad, atol=1e-4)
-    if proxy == "rms":
-        assert result.rms_cols > dotlattice._MAX_RMS_COLS or result.rms_rows > dotlattice._MAX_RMS_ROWS
-    elif proxy == "bias":
+    assert result.rms_cols <= dotlattice._MAX_RMS_COLS
+    assert result.rms_rows <= dotlattice._MAX_RMS_ROWS
+    if proxy == "bias":
         assert max(map(abs, (*result.row_bias, *result.cell_bias))) > 0.15
 
 
@@ -361,8 +361,8 @@ def test_evaluate_quad_agrees_with_fit_on_sc6_still():
 
 
 @pytest.mark.parametrize("name,frame,reason", [
-    ("ab4", 16, "startlage_mehrdeutig"),
-    ("ab6", 22, "keine_startlage"),
+    ("ab4", 16, {"startlage_mehrdeutig"}),
+    ("ab6", 22, {"keine_startlage", "startlage_mehrdeutig"}),
 ])
 def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
@@ -371,4 +371,6 @@ def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     image = cv2.imread(str(still))
     hint = find_green_hint_box(image)
     assert hint is not None
-    assert fit_lattice(image, hint, empty_cells=EMPTY_CELLS) == reason
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, str), result
+    assert result in reason

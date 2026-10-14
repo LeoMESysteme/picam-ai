@@ -11,6 +11,8 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):
 
+* Punkterkennung glättet in Punktgröße; die Startsuche wiederholt nur `keine_startlage` mit gestufter Glättung. Die Grenze rms_rows sinkt von 0,25 → 0,15, damit um eine Punktzeile verkippte Raster trotz scharfer LCD-Punkte abgelehnt bleiben; 2j und Gegenlesen bleiben unverändert.
+
 * Lokaler Steuer-Socket und `dispread live status|setup [--cell-text TEXT]|stop|camera` steuern und beobachten die Live-Einrichtung ohne Browser-Anmeldung; Live-Bedienfehler liefern 409. Bestätigung und Laufstart bleiben auf der Seite `/live`.
 
 * `/live` führt ohne Anmeldung zum Login und danach sicher zum lokalen Ziel zurück; API-Routen behalten 401. Die Live-Seite zeigt Einrichtungsschritt und Sekunden, hält Fehler bis zum nächsten Start sichtbar und ist mit einem isolierten HTTPS-Testserver per Playwright prüfbar; erfolgreiche Bedienschritte löschen Bedienfehler, Serverfehler bleiben maßgeblich.
