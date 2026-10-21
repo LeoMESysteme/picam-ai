@@ -35,6 +35,14 @@ LAYOUT_UNITS = (None, "N", "kN", "V", "mV", "A", "mA", "mV/V")
 # TrackResult.reason); siehe _reading_rows.
 REASONS = {
     "low_score": "Bild passt nicht mehr zur Referenz",
+    "bildgroesse_abweichend": "bildgroesse weicht von der Referenz ab",
+    "vorschlag_ungeeignet": "rahmenvorschlag ungeeignet",
+    "zu_wenig_rahmenbereiche": "zu wenige geeignete Rahmenbereiche",
+    "rahmenbereiche_einseitig": "rahmenbereiche nicht ausreichend verteilt",
+    "zu_wenig_rahmenmerkmale": "zu wenige Rahmenmerkmale wiedergefunden",
+    "rahmen_mehrdeutig": "rahmenmerkmale nicht eindeutig zugeordnet",
+    "rahmen_unstimmig": "rahmenbewegungen passen nicht zusammen",
+    "lcd_rand_fehlt": "lcd-rand nicht ausreichend bestaetigt",
     "shift_out_of_bounds": "zu weit verschoben",
     "rotation_out_of_bounds": "zu stark gedreht",
     "ecc_diverged": "Anzeige nicht wiedergefunden",
