@@ -57,6 +57,12 @@ input[type=text]{font:inherit;width:22ch}
       <summary>Testmodus (nur zu Testzwecken)</summary>
       <label><input type="checkbox" id="test-override"> Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden</label>
     </details>
+    <label><input type="checkbox" id="reference-enabled" checked> Referenz vom GSV-2AS mitschreiben</label>
+    <label>Werteplan (set norm), z. B. 1:20,2:20,0.5:20
+      <input id="norm-schedule" type="text" placeholder="optional: Faktor:Sekunden">
+    </label>
+    <p>schreibt in den RAM des GSV-2AS (laut Messung 2026-10 EEnow = 0 an diesem Gerät, kein EEPROM-Verschleiss; nicht live geprüft)</p>
+    <p id="reference-status" role="status"></p>
     <button id="run-start">Lauf starten</button>
     <button id="run-stop">Lauf stoppen</button>
     <div id="error" class="error" role="alert"></div>

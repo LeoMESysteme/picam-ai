@@ -24,6 +24,7 @@ from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
+from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
@@ -215,6 +216,9 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "reference": (self._session.reference_status()
+                              if self._session is not None and hasattr(self._session, "reference_status")
+                              else {"enabled": False, "reason": "kein Referenzlauf"}),
             }
 
     def preview_jpeg(self, width: int = 960) -> bytes | None:
@@ -491,7 +495,13 @@ class LiveService:
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
-    def start_run(self, *, test_override: bool = False) -> None:
+    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None) -> None:
+        try:
+            schedule = parse_norm_schedule(norm_schedule)
+            if schedule is not None and not reference:
+                raise ValueError("Werteplan braucht Referenzaufzeichnung")
+        except (TypeError, ValueError) as exc:
+            raise LiveError(str(exc)) from exc
         with self._operation_lock:
             with self._lock:
                 if self._state == "running":
@@ -528,10 +538,13 @@ class LiveService:
                 except RuntimeError as exc:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
+                recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
+                                              norm_schedule=schedule) if reference else None)
                 session = LiveSession(
                     self._owner, profile_path, self._config, out_dir, test_run=test_run,
                     reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                     reader_tolerance=self._reader_tolerance,
+                    reference_recorder=recorder,
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
@@ -551,6 +564,8 @@ class LiveService:
             error = session.end_reason
             try:
                 session.stop(session.end_reason or "kamera")
+                if hasattr(session, "reference_status"):
+                    error = session.reference_status().get("error") or error
             except Exception as exc:  # noqa: BLE001 - auch Audit-Abschluss kann scheitern
                 error = f"Lauf nicht beendet: {exc}"
             finally:
@@ -568,14 +583,20 @@ class LiveService:
                 raise LiveError("kein Lauf aktiv")
             stop, session, thread = self._run_stop, self._session, self._run_thread
         stop.set()
+        if hasattr(session, "request_reference_stop"):
+            session.request_reference_stop()
         error = None
         try:
             if thread is not None:
                 thread.join(3.0)
                 if thread.is_alive():
-                    error = "Lesethread haengt"
+                    reference_status = session.reference_status() if hasattr(session, "reference_status") else {}
+                    if not reference_status.get("restoring"):
+                        error = "Lesethread haengt"
             try:
                 session.stop("bediener")
+                if hasattr(session, "reference_status"):
+                    error = session.reference_status().get("error") or error
             except Exception as exc:  # noqa: BLE001 - Zustand auch bei Abschlussfehler freigeben
                 message = f"Lauf nicht beendet: {exc}"
                 error = message if error is None else f"{error}; {message}"

@@ -167,6 +167,116 @@ OpenCV-Select-Timeout (etwa 10–20 s), nicht nach 2 s. Die Vorschau kann auf
 dem letzten Bild stehen bleiben; sie allein beweist keine aktuelle Messung.
 **Lauf stoppen** beendet den Lauf, die Kamera läuft für Vorschau weiter.
 
+### Referenzaufzeichnung und Abgleich
+
+Vor **Lauf starten** ist „Referenz vom GSV-2AS mitschreiben“ eingeschaltet.
+Der Lauf hält den Port nur während der Aufzeichnung. Fehlt das Gerät oder
+antwortet es innerhalb von zwei Sekunden nicht mit lesbaren Telegrammen,
+startet die Bildlesung **ohne Referenz**; Seite und `session.json` nennen den
+Grund. Einrichtung und Lauf dürfen den Port nicht gleichzeitig verwenden.
+Die Referenz schreibt ausschließlich ein separates Audit und korrigiert
+niemals Leser, Freigabe oder Messwertdatensätze.
+
+Optional erzeugt „Werteplan (set norm)“ Sprünge, etwa `1:20,2:20,0.5:20`
+(Faktor:Sekunden; Faktoren 0,15 bis 1 580 000, positive endliche Haltezeit).
+Erst die zusätzliche Bestätigungsfrage erlaubt den Plan. Dieser
+schreibt in den RAM des GSV-2AS (laut Messung 2026-10 EEnow = 0 an diesem Gerät, kein EEPROM-Verschleiss; nicht live geprüft).
+Ohne Werteplan werden **keine** Befehle an den Port geschrieben.
+
+Ein Plan verwendet denselben gespeicherten Rückstellpunkt wie
+`sync-record.py`: `var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`.
+Normierung und Dezimalpunkt müssen vor dem ersten Schreibschritt passen;
+eine Abweichung verhindert den Plan. Die Referenzaufzeichnung läuft dabei
+rein lesend weiter; `schedule_aborted` nennt den Grund in Status und
+`session.json`. Ein fehlender oder ungültiger Rückstellpunkt verweigert den
+Laufstart. Es gibt auf der Seite keine Übersteuerung.
+Beim Stoppen werden zuerst weitere Planschritte gesperrt und dann die
+Ausgangswerte zurückgeschrieben und gelesen. Währenddessen steht
+„Werte werden zurückgestellt …“ auf der Seite. Gerät verbunden lassen.
+Die bewährten Wartezeiten bleiben erhalten; der Abschluss wartet bis zu
+20 Sekunden. Bei Zeitüberschreitung oder fehlender Bestätigung steht in
+Status und `session.json`: „Rückstellung nicht bestätigt – Gerät prüfen (gsv-registers.py)“.
+Die reine Leseaufzeichnung beendet sich innerhalb von zwei Sekunden.
+Auch das reguläre Herunterfahren des Servers stellt einen aktiven Plan zurück.
+
+**Nach `kill -9` oder Stromausfall findet keine Rückstellung statt.** Vor dem
+nächsten Lauf den Server beenden und das Gerät manuell auf die gespeicherten
+Norm-/Dezimalpunktbytes zurückstellen. Den ursprünglichen Rückstellpunkt aus
+`scripts/gsv-registers.py` verwenden und nicht mit dem veränderten Zustand
+überschreiben. Im Projektverzeichnis mit verbundenem Gerät:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python - <<'PY_RESTORE'
+import json
+from pathlib import Path
+import serial
+from dispread.gsv2as_serial import DEFAULT_RESTORE_POINT, _apply_norm_dpoint, _check_restore_point
+
+point = json.loads(DEFAULT_RESTORE_POINT.read_text(encoding="utf-8"))
+reg = point["register"]
+# Protokoll in eine neue Datei schreiben; vorhandene Aufzeichnungen behalten.
+with Path("var/diagnostics/manuelle-rueckstellung.jsonl").open("x") as log:
+    with serial.Serial("/dev/ttyUSB0", 38400, timeout=0.2) as port:
+        ok = _apply_norm_dpoint(port, reg["norm"]["daten"], reg["dpoint"]["daten"][0],
+                                log, {}, label="manual_restore")
+        matches, detail = _check_restore_point(port, point, log, {}, label="manual_verify")
+        if not ok or not matches:
+            raise SystemExit(f"Rueckstellung nicht bestaetigt: {detail}")
+print("Normierung und Dezimalpunkt zurueckgestellt und geprueft.")
+PY_RESTORE
+```
+
+Den Protokolldateinamen bei wiederholter Rückstellung neu wählen. Anschließend
+mit `PYTHONPATH=src ./.venv/bin/python scripts/gsv-registers.py --out
+var/diagnostics/gsv-register-nach-rueckstellung.json` einen separaten Iststand
+sichern und mit dem ursprünglichen Rückstellpunkt vergleichen. Dieses Skript
+liest Register; es stellt sie selbst nicht zurück.
+
+Pro Lauf entstehen `reference.jsonl` mit BOOTTIME-Zeit, Rohtelegramm,
+Zellentext und Zahlenwert (abgelehnte Zeilen mit `cell_text: null`,
+`value: null` und `error`) sowie bei einem Plan `commands.jsonl` mit jedem
+Befehlsbyte und seiner BOOTTIME-Zeit. `session.json` enthält den Plan,
+Zeilenzahl, Parsefehler, Lücken über einer Sekunde, verworfene Queue-Einträge
+und die Rückstellprüfung. Ein Leserthread und ein Dateischreiber mit
+begrenzter Warteschlange verhindern, dass eine langsame Platte den Portleser
+aufhält; bei Überlauf wird der älteste Eintrag verworfen und gezählt.
+
+Nach dem Stoppen im Projektverzeichnis:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python scripts/live-reference-eval.py PFAD/ZUM/run-01
+PYTHONPATH=src ./.venv/bin/python scripts/live-reference-eval.py PFAD/ZUM/run-01 --json
+```
+
+Der Abgleich rechnet Aufnahmezeiten mit `to_boottime_ns` und dem gemessenen
+BOOTTIME–MONOTONIC-Versatz aus `session.json` um. Fehlender Versatz,
+Suspend oder eine künstliche Zeitbasis werden abgelehnt (Exit 2). Auch
+Queue-Verluste oder eine unvollständige Referenzdatei verhindern einen
+Referenznachweis. Ein Parsefehler sperrt das Fenster vom vorherigen Telegramm
+bis zum nächsten gültigen Telegramm plus 695 ms, nicht den gesamten Lauf.
+Die 695 ms aus `gate-label.py` schützen nach jedem Telegrammwechsel;
+VALID darin zählt als **unentschieden**. Der Anzeigeversatz wird nicht ein
+zweites Mal abgezogen. Vor dem ersten und nach dem letzten Telegramm sowie
+an Lücken über einer Sekunde wird kein Referenzwert extrapoliert. VALID im
+Schutzintervall (`undecided_valid`) und VALID ohne Referenzdeckung
+(`uncovered_valid`) werden getrennt gezählt.
+Ein Wechsel, dessen erstes neues Telegramm eine solche Lücke beendet, zählt
+als `changes_after_gap`: „Wechsel nach Telegrammluecke (Werteplan):
+Verzoegerung nicht messbar“. Er geht weder in die Wechselanteile noch in die
+Verzögerung ein. Die nach einer Pause gebündelt gelesenen Telegramme sind zu
+spät gestempelt, um den Wechselzeitpunkt festzulegen. Nur Wechsel innerhalb
+kontinuierlicher Telegrammdeckung liefern Wechselanteile und Verzögerungen.
+
+Die Ausgabe zeigt Fehllesungen (Exit 1, Ziel 0), VALID-Anteile je
+Anzeigezustand und getrennt nach stabil/Wechsel, Median und p90 bis zum
+ersten VALID des neuen Wertes sowie TRANSITION-/UNREADABLE-Anteile während
+Wechseln. `tolerance_frames` kommt aus der Sitzungszusammenfassung;
+Fehllesungen in Läufen mit angepasster Toleranz werden separat ausgewiesen.
+Das bisherige Recordformat markiert einzelne Bilder oberhalb der alten
+Schwelle nicht: Diese Fehlerzahl gilt für den **gesamten Toleranzlauf**.
+Unentschiedene Bilder sind kein Nachweis korrekter Werte. Ein Testlauf mit
+übergangener Lesesperre wird als Referenznachweis abgelehnt.
+
 Der Freigabehinweis bleibt sichtbar:
 
 > Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
@@ -577,6 +687,12 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
   FEHLER sperrt, WARNUNG verlangt Kenntnisnahme, Bestätigung einen Namen.
 * [ ] Ein bestätigter Lauf zeigt VALID/TRANSITION/UNREADABLE/STALE;
   Altwerte und Verbindungsverlust erscheinen nie als aktuelle gültige Ziffern.
+* [ ] Optionale Referenzaufzeichnung schreibt `reference.jsonl`; Status und
+  `session.json` zeigen Parsefehler, Verluste und gegebenenfalls den abgebrochenen
+  Werteplan. Plan-Stop und reguläres Serverende bestätigen die Rückstellung.
+* [ ] `scripts/live-reference-eval.py` wertet den Lauf aus: Fehllesungen,
+  unentschiedene/ungedeckte VALID und Wechsel nach Telegrammlücken prüfen;
+  Latenz und Wechselanteile nur bei kontinuierlicher Referenzdeckung bewerten.
 * [ ] Bedienerlauf ≥ 10 min mit `set norm`-Wertwechseln und 2 s Abdeckung
   ausgewertet, einschließlich `tracking_lost`/`track_score`; Zahlen in
   VALIDATION und Aufbau/Deutung im Laborjournal dokumentiert (noch offen).

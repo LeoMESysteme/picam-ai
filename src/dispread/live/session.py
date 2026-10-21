@@ -78,6 +78,7 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
+        reference_recorder: Any = None,
         reader_d_max_factor: float = 1.0,
         reader_tolerance: dict | None = None,
         reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
@@ -86,6 +87,8 @@ class LiveSession:
         monotonic: Callable[[], float] = time.monotonic,
         wall: Callable[[], datetime] | None = None,
     ) -> None:
+        self._reference_recorder = reference_recorder
+        self._reference_error = None
         self._test_run = test_run
         # Lockerung und ihre Markierung in session.json muessen zusammenpassen.
         expected_factor = 1.0 if reader_tolerance is None else reader_tolerance.get("factor")
@@ -204,6 +207,13 @@ class LiveSession:
         self._write_session(ended=False)
         self._sink = JsonlSink(self.records_path)
         self._sink.open()
+        if self._reference_recorder is not None:
+            try:
+                self._reference_recorder.start()
+            except Exception:
+                self.stop(reason="start_failed")
+                raise
+        self._write_session(ended=False)
 
     # -- Lesen ---------------------------------------------------------------
     def step(self, timeout: float = 0.5) -> ValueRecord | None:
@@ -304,12 +314,32 @@ class LiveSession:
                 return self.summary
             if self.end_reason is None:
                 self.end_reason = reason
-            self._clock.sample()
-            if self._sink is not None:
-                self._sink.close()
-            self._write_session(ended=True)
-            self._stopped = True
+            try:
+                if self._reference_recorder is not None:
+                    self._reference_recorder.stop()
+            except Exception as exc:  # noqa: BLE001 - Abschluss bleibt erhalten
+                self._reference_error = str(exc)
+            finally:
+                self._clock.sample()
+                try:
+                    if self._sink is not None:
+                        self._sink.close()
+                finally:
+                    self._write_session(ended=True)
+                    self._stopped = True
             return self.summary
+
+    def request_reference_stop(self) -> None:
+        if self._reference_recorder is not None:
+            self._reference_recorder.request_stop()
+
+    def reference_status(self) -> dict:
+        if self._reference_recorder is None:
+            return {"enabled": False, "reason": "vom Bediener deaktiviert"}
+        status = self._reference_recorder.status()
+        if self._reference_error is not None:
+            status['error'] = self._reference_error
+        return status
 
     def _write_session(self, *, ended: bool) -> None:
         if self._stopped and not ended:
@@ -336,6 +366,7 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
+        data["reference"] = self.reference_status()
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
         if self._test_run is not None:

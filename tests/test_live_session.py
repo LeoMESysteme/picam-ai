@@ -596,3 +596,92 @@ def test_serve_limits_opencv_threads_before_any_camera_thread():
     source = inspect.getsource(serve)
     assert "cv2.setNumThreads(LIVE_CV_THREADS)" in source
     assert source.index("cv2.setNumThreads(LIVE_CV_THREADS)") < source.index("CameraOwner(")
+
+
+def test_reference_audit_leaves_records_byte_identical(tmp_path, monkeypatch):
+    from test_live_reference import FakePort
+
+    from dispread.live.reference import ReferenceRecorder
+
+    # Laufzeitdiagnosen auf dieselben Werte festlegen; keine Referenz gelangt ins Gate.
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    images = [embed('+ 1.2345 '), embed('+ 1.2345 ')]
+    plain = _session(tmp_path, images)
+    plain.start()
+    plain.step()
+    plain.step()
+    plain.stop()
+    expected = plain.records_path.read_bytes()
+    port = FakePort([b'partial\n', b'+09.8765 mV/V\n'])
+    recorder = ReferenceRecorder(lambda: port, tmp_path / 'with-reference' / 'reference.jsonl')
+    recorded = _session(tmp_path, images, reference_recorder=recorder)
+    recorded._out_dir = tmp_path / 'with-reference'
+    recorded.session_path = recorded._out_dir / 'session.json'
+    recorded.records_path = recorded._out_dir / 'records.jsonl'
+    recorded.start()
+    recorded.step()
+    recorded.step()
+    recorded.stop()
+    assert recorded.records_path.read_bytes() == expected
+    meta = json.loads(recorded.session_path.read_text())
+    assert meta['reference']['enabled'] and meta['reference']['lines'] == 1
+    assert port.closed and not port.writes
+
+
+def test_restore_timeout_is_saved_in_session_json(tmp_path, monkeypatch):
+    from test_live_reference import RegisterPort, _wait_for
+
+    from dispread.live.reference import RESTORE_ERROR, ReferenceRecorder
+
+    release = threading.Event()
+    port = RegisterPort()
+    recorder = None
+    ticks = [0.0]
+    def sleep(seconds):
+        ticks[0] += seconds
+        if recorder.status()['restoring']:
+            release.wait(1)
+    monkeypatch.setattr('dispread.gsv2as_serial._sleep', sleep)
+    monkeypatch.setattr('dispread.live.reference.JOIN_TIMEOUT_S', 0.05)
+    point = {'register': {'norm': {'daten': [80, 27, 228]}, 'dpoint': {'daten': [1]}}}
+    recorder = ReferenceRecorder(lambda: port, tmp_path / 'run' / 'reference.jsonl',
+                                 norm_schedule=[(2, 20)], restore_point=point,
+                                 monotonic=lambda: ticks[0])
+    session = _session(tmp_path, [], reference_recorder=recorder)
+    session.start()
+    _wait_for(lambda: any(b[0] == 16 for b in port.writes))
+    try:
+        session.stop()
+        meta = json.loads(session.session_path.read_text())
+        assert meta['reference']['error'] == RESTORE_ERROR
+        assert not meta['reference']['restoring']
+        assert port.closed
+    finally:
+        release.set()
+        recorder._reader.join(1)
+        recorder._writer.join(1)
+
+
+def test_reference_stop_failure_still_closes_sink_and_finalizes_metadata(tmp_path, monkeypatch):
+    class Recorder:
+        def start(self):
+            pass
+        def stop(self):
+            raise OSError('recorder stop failed')
+        def status(self):
+            return {'enabled': True}
+    session = _session(tmp_path, [], reference_recorder=Recorder())
+    session.start()
+    closed = []
+    original_close = session._sink.close
+    def close():
+        original_close()
+        closed.append(True)
+    monkeypatch.setattr(session._sink, 'close', close)
+    session.stop()
+    assert closed == [True]
+    meta = json.loads(session.session_path.read_text())
+    assert meta['reference']['error'] == 'recorder stop failed'
+    assert meta['ended_at_utc']
+    assert meta['summary']['end_reason'] == 'bediener'

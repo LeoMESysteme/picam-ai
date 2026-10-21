@@ -2,6 +2,9 @@
 // Entscheidungen fallen im Server (dispread.live), nie hier.
 
 export function statusView(status) {
+  if (status.reference?.restoring) {
+    return {headline: 'Werte werden zurückgestellt …', cls: 'transition', detail: 'Gerät verbunden lassen.'};
+  }
   const view = recordView(status);
   if (status.reader_tolerance && view.cls === 'valid') {
     view.detail = `erweiterte Toleranz ×${status.reader_tolerance.factor} – nicht validiert · ${view.detail}`;
@@ -118,6 +121,10 @@ if (typeof document !== 'undefined') {
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;
+    $('reference-status').textContent = s.reference?.restoring ? 'Werte werden zurückgestellt …'
+      : s.reference?.error ? s.reference.error
+      : s.reference?.enabled ? `Referenz: ${s.reference.lines} Telegramme`
+      : `ohne Referenz: ${s.reference?.reason || 'nicht gestartet'}`;
     renderError(s);
     $('setup-state').textContent = s.setup?.overall ? `Gesamturteil: ${s.setup.overall}` : '';
     $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
@@ -162,7 +169,15 @@ if (typeof document !== 'undefined') {
     if (override && !window.confirm('TESTLAUF starten?\n\nDie Lesesperre wird übergangen. Angezeigte Vermutungen und Werte sind nicht freigegeben und dürfen nicht für Messungen verwendet werden. Der Lauf wird als Testlauf gekennzeichnet (TESTLAUF.json).')) return;
     // Jeder Testlauf braucht einen neuen Haken.
     if (override) $('test-override').checked = false;
-    return post('/live/run/start', {test_override: override});
+    const schedule = $('norm-schedule').value.trim();
+    if (schedule && !$('reference-enabled').checked) {
+      actionError = 'Werteplan braucht Referenzaufzeichnung';
+      renderError();
+      return;
+    }
+    if (schedule && !window.confirm('Werteplan anwenden? Der Plan schreibt in den RAM des GSV-2AS. Beim Stoppen werden die Ausgangswerte zurückgestellt und geprüft. Gerät verbunden lassen.')) return;
+    return post('/live/run/start', {test_override: override,
+      reference: $('reference-enabled').checked, norm_schedule: schedule || null});
   };
   $('run-stop').onclick = () => post('/live/run/stop');
   $('camera-start').onclick = () => post('/live/camera/start');

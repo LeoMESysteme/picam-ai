@@ -21,7 +21,7 @@ class FakeService:
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self, *, test_override=False):
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
         self.calls.append(("run", test_override))
 
     def stop_run(self):
@@ -124,6 +124,14 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         def blocked(**kwargs):
             raise LiveError("Lauf gesperrt: Gegenlesen WARNUNG")
 
+        forwarded = []
+        service.start_run = lambda **kwargs: forwarded.append(kwargs)
+        assert (await call("POST", "/live/run/start", {"reference": False})).status == 200
+        assert forwarded[-1] == {"test_override": False, "reference": False, "norm_schedule": None}
+        assert (await call("POST", "/live/run/start", {
+            "reference": True, "norm_schedule": "1:20,2:20",
+        })).status == 200
+        assert forwarded[-1] == {"test_override": False, "reference": True, "norm_schedule": "1:20,2:20"}
         service.start_run = blocked
         response = await call("POST", "/live/run/start")
         assert response.status == 409

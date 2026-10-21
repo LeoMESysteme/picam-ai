@@ -1453,3 +1453,23 @@ Kleine eigene Fehler (Anker, Codeblock-Links, fehlender Status) behebt der
 Lauf selbst; abgelehnte Stände bleiben als Patch-Artefakt prüfbar. Eine
 Korrekturrunde kostet etwa so viel Eingabe-Token wie der bisherige Verlauf.
 
+
+## 2026-10-21 — Referenz im Live-Lauf getrennt aufzeichnen
+
+**Entscheidung (Task 5):** Der serielle Referenzstrom bleibt ein separates
+Audit mit einem Portleser und einem Dateischreiber, begrenzter Warteschlange
+und Verlustzähler. Die bewährten GSV-2AS-Helfer liegen gemeinsam in
+`dispread.gsv2as_serial`; Live-Recorder, `sync-record.py` und
+`gsv-registers.py` verwenden dieselbe Kodierung und dieselben Wartezeiten.
+Eine zweite Portverbindung für den Werteplan würde Antwortbytes stehlen;
+kopierte Helfer würden bei Protokollkorrekturen auseinanderlaufen. Beide
+Alternativen sind deshalb verworfen. Die Referenz als Eingabe für Pipeline
+oder Gate widerspräche Konzept §7 und bleibt strukturell ausgeschlossen.
+
+Der Controller hat den Zielkonflikt beim Stoppen ausdrücklich aufgelöst:
+rein lesend höchstens zwei Sekunden, mit Werteplan erst Rückstellung und
+Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
+„gestoppt“ vor abgeschlossener Rückstellung sind verworfen. Es gibt keine
+Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
+bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
+in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).

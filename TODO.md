@@ -320,9 +320,11 @@ bietet bei Gegenlesen WARNUNG eine Toleranz bis ×2,0 an (1,25 × gemessener
 Abstand, nur mit seriellem Referenzwert, Werte als „nicht validiert“
 markiert). Belegt ist bisher nur: Einrichtungsstandbilder stimmen mit der
 Referenz, synthetischer Sweep mit ×2,0 ohne falschen Wert. Es fehlt ein
-Lauf mit paralleler Aufzeichnung des seriellen GSV-2AS-Stroms und ein
-Abgleich VALID-Werte gegen Referenz (Fehllesungen, `tolerance_frames` in
-`session.json`). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
+Lauf mit der optionalen Referenzaufzeichnung auf `/live` (gegebenenfalls mit
+bestätigtem Werteplan) und ein Abgleich mit
+`PYTHONPATH=src ./.venv/bin/python scripts/live-reference-eval.py <run-dir>`
+(Fehllesungen, Wechselanteile, Verzögerung und `tolerance_frames` in
+`session.json`; siehe [Anleitung Kapitel 10](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich)). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
 
 ### 1.–2. Erledigt 2026-09-23: M und führende Null
 

@@ -449,7 +449,7 @@ def test_start_camera_wraps_failure(tmp_path):
 
 
 class MarkerSession:
-    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None):
+    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None, reference_recorder=None):
         self.latest, self.summary, self.end_reason = None, {}, None
         self.session_path = out_dir / "session.json"
         self.records_path = out_dir / "records.jsonl"
@@ -1209,3 +1209,150 @@ def test_cannot_choose_tolerance_without_verified_proposal(tmp_path, proposal):
         service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
                         use_tolerance=True)
     assert service.status()['state'] == 'setup_ready'
+
+
+@pytest.mark.parametrize('missing', [False, True])
+def test_reference_start_falls_back_and_metadata_matches_status(tmp_path, monkeypatch, missing):
+    import json
+
+    from dotmatrix_helpers import embed
+    from test_live_reference import FakePort
+    from test_live_session import _session
+
+    port = FakePort([b'partial\n', b'+01.2345 mV/V\n'])
+    def opener():
+        if missing:
+            raise OSError('kein GSV-2AS')
+        return port
+    def factory(owner, profile, config, out_dir, **kw):
+        session = _session(tmp_path, [embed('+ 1.2345 ')], **kw)
+        session._out_dir = out_dir
+        session.session_path = out_dir / 'session.json'
+        session.records_path = out_dir / 'records.jsonl'
+        return session
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=opener)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    service.start_run()
+    status = service.status()
+    assert status['state'] == 'running'
+    assert status['reference']['enabled'] is (not missing)
+    if missing:
+        assert 'kein GSV-2AS' in status['reference']['reason']
+    service.stop_run()
+    metadata = json.loads(service._session.session_path.read_text())
+    assert metadata['reference'] == service.status()['reference']
+    if not missing:
+        assert port.closed and not port.writes
+
+
+def test_stop_run_waits_for_restoration_and_reports_error(tmp_path, monkeypatch):
+    import threading
+    entered, finished = threading.Event(), threading.Event()
+    class RestoringSession(MarkerSession):
+        restoring = False
+        def reference_status(self):
+            return {'enabled': True, 'restoring': self.restoring,
+                    'error': None if self.restoring else 'Rückstellung nicht bestätigt – Gerät prüfen (gsv-registers.py)'}
+        def stop(self, reason='bediener'):
+            self.restoring = True
+            entered.set()
+            finished.wait(1)
+            self.restoring = False
+    service = _confirmed_service(tmp_path, monkeypatch, RestoringSession)
+    service.start_run()
+    stopper = threading.Thread(target=service.stop_run)
+    stopper.start()
+    assert entered.wait(1)
+    assert service.status()['state'] == 'running'
+    assert service.status()['reference']['restoring']
+    finished.set()
+    stopper.join(1)
+    assert service.status()['state'] == 'stopped'
+    assert service.status()['error'] == 'Rückstellung nicht bestätigt – Gerät prüfen (gsv-registers.py)'
+
+
+def test_reference_stop_requested_before_waiting_for_camera_thread(tmp_path, monkeypatch):
+    called = []
+    class Session(MarkerSession):
+        def request_reference_stop(self):
+            called.append('reference')
+        def stop(self, reason='bediener'):
+            called.append('session')
+    class Thread:
+        def join(self, timeout):
+            assert called == ['reference']
+        def is_alive(self):
+            return False
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    service.start_run()
+    thread = service._run_thread
+    service._run_stop.set()
+    thread.join(1)
+    service._run_thread = Thread()
+    service.stop_run()
+    assert called == ['reference', 'session']
+
+
+@pytest.mark.parametrize('schedule,reference', [('0.1:2', True), ('1:2', False)])
+def test_invalid_reference_schedule_creates_no_run_directory(tmp_path, monkeypatch, schedule, reference):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    with pytest.raises(LiveError):
+        service.start_run(norm_schedule=schedule, reference=reference)
+    assert list(tmp_path.glob('run-*')) == []
+
+
+@pytest.mark.parametrize('point_text', [None, '{broken', '{}', 'null'])
+def test_missing_or_invalid_restore_point_is_live_error(tmp_path, monkeypatch, point_text):
+    from test_live_session import _session
+
+    point = tmp_path / 'restore.json'
+    if point_text is not None:
+        point.write_text(point_text)
+    monkeypatch.setattr('dispread.live.reference.DEFAULT_RESTORE_POINT', point)
+    def factory(owner, profile, config, out_dir, **kw):
+        return _session(tmp_path, [], **kw)
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: pytest.fail('Port opened'))
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    with pytest.raises(LiveError, match='Lauf nicht gestartet'):
+        service.start_run(norm_schedule='2:20')
+    assert service.status()['state'] == 'confirmed'
+
+
+@pytest.mark.parametrize('mismatch', [False, True])
+def test_server_close_restores_active_schedule_or_retains_read_only_abort(tmp_path, monkeypatch, mismatch):
+    import json
+
+    from test_live_reference import RegisterPort, _wait_for
+    from test_live_session import _session
+
+    port = RegisterPort()
+    if mismatch:
+        port.dp = 2
+    point = tmp_path / 'restore.json'
+    point.write_text(json.dumps({'register': {'norm': {'daten': [80, 27, 228]}, 'dpoint': {'daten': [1]}}}))
+    monkeypatch.setattr('dispread.live.reference.DEFAULT_RESTORE_POINT', point)
+    monkeypatch.setattr('dispread.gsv2as_serial._sleep', lambda _s: None)
+    def factory(owner, profile, config, out_dir, **kw):
+        return _session(tmp_path, [], **kw)
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: port)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    try:
+        service.start_run(norm_schedule='2:20')
+        if mismatch:
+            _wait_for(lambda: bool(service.status()['reference'].get('schedule_aborted')))
+            assert service.status()['reference']['enabled'] and not port.closed
+        else:
+            _wait_for(lambda: port.norm != [80, 27, 228])
+    finally:
+        service.close()
+    assert port.closed
+    meta = json.loads(service._session.session_path.read_text())
+    if mismatch:
+        assert 'Rueckstellpunkt' in meta['reference']['schedule_aborted']
+        assert not any(b[0] in (16, 17) for b in port.writes)
+    else:
+        assert port.norm == [80, 27, 228] and port.dp == 1
+        assert meta['reference']['restore_verification']['matches_restore_point']

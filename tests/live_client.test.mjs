@@ -118,7 +118,8 @@ async function withLivePage(check) {
   const originals = {document: globalThis.document, fetch: globalThis.fetch,
     setInterval: globalThis.setInterval, setTimeout: globalThis.setTimeout};
   const element = (id) => {
-    if (!elements.has(id)) elements.set(id, {textContent: '', value: '', replaceChildren() {}});
+    if (!elements.has(id)) elements.set(id, {textContent: '', value: '',
+      checked: id === 'reference-enabled', replaceChildren() {}});
     return elements.get(id);
   };
   const page = {status: {state: 'setup_running', csrf: 'test',
@@ -300,7 +301,7 @@ test('override requires explicit dialog approval and resets with session', async
       assert.equal(page.posts.length, 0);
       globalThis.window.confirm = () => true;
       await element('run-start').onclick();
-      assert.deepEqual(page.posts.at(-1).body, {test_override: true});
+      assert.deepEqual(page.posts.at(-1).body, {test_override: true, reference: true, norm_schedule: null});
       assert.equal(element('test-override').checked, false);
       page.status = {...page.status, session_id: 'new'};
       await poll();
@@ -342,4 +343,32 @@ test('proposal hint and tolerance selection are shown, posted and cleared', asyn
     assert.equal(element('tolerance-banner').hidden, true);
     assert.equal(element('proposal-hint').hidden, true);
   });
+});
+
+test('restoration is shown until service finishes stopping', () => {
+  const status = {...running, reference: {enabled: true, restoring: true}};
+  assert.equal(statusView(status).headline, 'Werte werden zurückgestellt …');
+});
+
+test('norm plan needs confirmation and is sent with explicit reference selection', async () => {
+  const oldWindow = globalThis.window;
+  let confirmations = 0;
+  globalThis.window = {confirm: () => { confirmations += 1; return false; }};
+  try {
+    await withLivePage(async (page, element) => {
+      element('norm-schedule').value = '1:20,2:20';
+      await element('run-start').onclick();
+      assert.equal(confirmations, 1);
+      assert.equal(page.posts.length, 0);
+      globalThis.window.confirm = () => true;
+      await element('run-start').onclick();
+      assert.deepEqual(page.posts.at(-1).body, {test_override: false, reference: true, norm_schedule: '1:20,2:20'});
+      element('reference-enabled').checked = false;
+      await element('run-start').onclick();
+      assert.equal(page.posts.length, 1);
+    });
+  } finally {
+    if (oldWindow === undefined) delete globalThis.window;
+    else globalThis.window = oldWindow;
+  }
 });

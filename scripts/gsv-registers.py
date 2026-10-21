@@ -32,26 +32,17 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-SEMICOLON = 0x3B
+from dispread.gsv2as_serial import (
+    CMD_CLEAR,
+    CMD_START,
+    CMD_STOP,
+    READ_COMMANDS,
+    SEMICOLON,
+    _read_exact,
+    read_register,
+)
 
-CMD_STOP = 0x23
-CMD_START = 0x24
-CMD_CLEAR = 0x25
-
-#: Name -> (Befehlsbyte, Anzahl DATEN-Bytes laut Anleitung)
-READ_COMMANDS: dict[str, tuple[int, int]] = {
-    "norm": (0x1A, 3),
-    "unit": (0x1B, 1),
-    "dpoint": (0x1C, 1),
-    "mode": (0x27, 1),
-    "digits": (0x3E, 1),
-    "range": (0x33, 1),
-    "firmware": (0x2B, 2),
-    "options": (0x36, 3),
-    "bridge_type": (0x31, 1),
-    "device_type": (0x45, 1),
-    "last_error": (0x42, 1),
-}
+__all__ = ["READ_COMMANDS", "SEMICOLON", "_read_exact", "read_register"]
 
 #: Einheitencodes, soweit in der Anleitung tabelliert (Auszug).
 UNIT_NAMES = {0: "mV/V", 1: "kg", 2: "g", 3: "N", 31: "Pa", 32: "hPa", 33: "MPa", 34: "N/mm2"}
@@ -77,32 +68,6 @@ def decode_norm(raw: list[int], dpoint: int | None) -> dict:
         norm = scaled * (10 ** (dpoint - 1))
         out["norm_abgeleitet"] = -norm if negative else norm
     return out
-
-
-def _read_exact(ser, count: int, timeout_s: float = 1.0) -> bytes:
-    deadline = time.monotonic() + timeout_s
-    buf = b""
-    while len(buf) < count and time.monotonic() < deadline:
-        chunk = ser.read(count - len(buf))
-        if chunk:
-            buf += chunk
-    return buf
-
-
-def read_register(ser, name: str, command: int, data_len: int) -> dict:
-    ser.reset_input_buffer()
-    ser.write(bytes([command]))
-    ser.flush()
-    raw = _read_exact(ser, 1 + data_len)
-    entry: dict = {"command": command, "expected_data_bytes": data_len, "rohantwort": list(raw)}
-    if len(raw) != 1 + data_len:
-        entry["fehler"] = f"nur {len(raw)} von {1 + data_len} Bytes erhalten"
-        return entry
-    if raw[0] != SEMICOLON:
-        entry["fehler"] = f"erwartetes Semikolon-Praefix 0x3B fehlt, erstes Byte war 0x{raw[0]:02X}"
-        return entry
-    entry["daten"] = list(raw[1:])
-    return entry
 
 
 def main() -> int:

@@ -122,9 +122,7 @@ Schreibstau verlaengerte so die Sendepause (in `sc6` Telegrammluecken bis
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
-import math
 import os
 import queue
 import shutil
@@ -140,9 +138,28 @@ from typing import Any
 
 import cv2
 
+from dispread import gsv2as_serial as _gsv_registers  # noqa: F401 -- bestehende Skript-API
 from dispread.camera_settings import CameraSettings, load_camera_settings
 from dispread.frames import open_source
 from dispread.frames.uvc_source import UvcError, UvcSource
+from dispread.gsv2as_serial import (  # noqa: F401 -- bestehende Skript-API
+    DEFAULT_RESTORE_POINT,
+    LAST_ERR_CMD,
+    NORM_MAX,
+    NORM_MIN,
+    OK_ERROR_CODE,
+    SET_DPOINT_CMD,
+    SET_NORM_CMD,
+    _apply_norm_dpoint,
+    _check_restore_point,
+    _encode_norm,
+    _log_event,
+    _parse_norm_schedule,
+    _pause_read_registers_resume,
+    _read_exact,
+    _read_norm_dpoint,
+    _send,
+)
 from dispread.live.clock import CLOCK_OFFSET_SAMPLES, measure_clock_offset_ns  # noqa: F401 -- Reexport
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -209,36 +226,6 @@ STAGING_FALLBACK_FPS = 30.0
 #: Objektidentitaet statt z.B. `None`, damit sie sich nie mit einem echten
 #: (leeren) Nutzlast-Eintrag verwechseln laesst.
 _QUEUE_DONE = object()
-
-DEFAULT_RESTORE_POINT = REPO_ROOT / "var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json"
-
-#: Erlaubter Normierungsbereich des GSV-2AS, siehe CLAUDE.md ("Hardware-Fakten") -
-#: 0,15...1 580 000. Nur zur Validierung von --norm-schedule, keine eigene Messung.
-NORM_MIN, NORM_MAX = 0.15, 1_580_000.0
-
-
-def _load_gsv_registers_module():
-    """`scripts/gsv-registers.py` als Modul laden statt seine Byte-Kodierung
-    neu zu schreiben (Registerkonstanten, Semikolon-Praefix-Pruefung,
-    `read_register`). Reiner Funktions-/Konstantenimport - die Datei fuehrt
-    beim Laden keinen I/O aus, nur unter `if __name__ == "__main__"`."""
-    path = Path(__file__).resolve().with_name("gsv-registers.py")
-    spec = importlib.util.spec_from_file_location("_dispread_gsv_registers", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-_gsv_registers = _load_gsv_registers_module()
-
-#: `set norm` (16) / `set dpoint` (17) aus der GSV-2-Anleitung, siehe
-#: CLAUDE.md. `_gsv_registers` liefert nur die Lesebefehle; STOP/CLEAR/START
-#: und LAST_ERR kommen von dort (identische Werte in norm_sweep.py).
-SET_NORM_CMD = 0x10
-SET_DPOINT_CMD = 0x11
-LAST_ERR_CMD = _gsv_registers.READ_COMMANDS["last_error"][0]
-OK_ERROR_CODE = 0xA0
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -338,10 +325,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--restore-point",
         type=Path,
-        default=DEFAULT_RESTORE_POINT,
+        default=REPO_ROOT / DEFAULT_RESTORE_POINT,
         help=(
             "Rueckstellpunkt-JSON (siehe scripts/gsv-registers.py --out), nur mit "
-            f"--norm-schedule relevant. Vorgabe: {DEFAULT_RESTORE_POINT}"
+            f"--norm-schedule relevant. Vorgabe: {REPO_ROOT / DEFAULT_RESTORE_POINT}"
         ),
     )
     parser.add_argument(
@@ -368,67 +355,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         except ValueError as exc:
             parser.error(str(exc))
     return args
-
-
-def _parse_norm_schedule(raw: str) -> list[tuple[float, float]]:
-    """'1.0:5,2.0:5,1.0:5' -> [(1.0, 5.0), (2.0, 5.0), (1.0, 5.0)]."""
-    schedule: list[tuple[float, float]] = []
-    for segment in raw.split(","):
-        segment = segment.strip()
-        if not segment:
-            continue
-        factor_str, sep, hold_str = segment.partition(":")
-        if not sep:
-            raise ValueError(f"--norm-schedule-Segment {segment!r} hat nicht die Form Faktor:Sekunden")
-        try:
-            factor = float(factor_str)
-            hold_s = float(hold_str)
-        except ValueError as exc:
-            raise ValueError(f"--norm-schedule-Segment {segment!r} ist nicht numerisch: {exc}") from exc
-        if not (NORM_MIN <= factor <= NORM_MAX):
-            raise ValueError(
-                f"--norm-schedule-Segment {segment!r}: Normierungsfaktor {factor} ausserhalb des "
-                f"dokumentierten Bereichs {NORM_MIN}..{NORM_MAX} (CLAUDE.md)"
-            )
-        if hold_s <= 0:
-            raise ValueError(f"--norm-schedule-Segment {segment!r}: Haltezeit muss > 0 Sekunden sein")
-        schedule.append((factor, hold_s))
-    if not schedule:
-        raise ValueError("--norm-schedule ergab keine Eintraege")
-    return schedule
-
-
-def _encode_norm(norm: float) -> tuple[tuple[int, int, int], int]:
-    """Portiert aus `norm_sweep.py::encode_norm` (Vorschrift aus der GSV-2-
-    Anleitung, 'set norm', Befehl 16) - byteidentisch uebernommen, nicht neu
-    hergeleitet."""
-    dp = math.floor(math.log10(norm))
-    scaled = norm / 10**dp
-    if scaled > 1.6666 / 1.05:
-        scaled /= 10
-        dp += 1
-    mant = round(scaled * 5250020)
-    return (mant >> 16 & 0xFF, mant >> 8 & 0xFF, mant & 0xFF), dp + 1
-
-
-def _send(ser, byte: int, sleep_s: float) -> None:
-    """Ein einzelnes Kommandobyte schreiben, flushen, warten - wie die
-    `ser.write(...); ser.flush(); time.sleep(...)`-Zeilen in norm_sweep.py,
-    nur ohne die dort verwendeten Semikolon-Mehrfachanweisungen."""
-    ser.write(bytes([byte]))
-    ser.flush()
-    time.sleep(sleep_s)
-
-
-def _read_exact(ser, count: int, timeout_s: float = 1.0) -> bytes:
-    """Wie `gsv-registers.py::_read_exact` / `norm_sweep.py::read_exact`."""
-    deadline = time.monotonic() + timeout_s
-    buf = b""
-    while len(buf) < count and time.monotonic() < deadline:
-        chunk = ser.read(count - len(buf))
-        if chunk:
-            buf += chunk
-    return buf
 
 
 # --- Norm-Schedule: Schreiben INNERHALB der bereits offenen seriellen Sitzung --
@@ -482,115 +408,6 @@ class _QueuedLineFile:
             self.error = self.error or f"Schreiber nach {timeout}s nicht fertig"
             return
         self._f.close()
-
-
-def _log_event(f_cmd, state: dict[str, Any], event: dict[str, Any]) -> None:
-    event.setdefault("t_boot", time.clock_gettime(time.CLOCK_BOOTTIME))
-    f_cmd.write(json.dumps(event, ensure_ascii=False) + "\n")
-    f_cmd.flush()
-    state["command_event_count"] = state.get("command_event_count", 0) + 1
-
-
-def _read_norm_dpoint(ser, f_cmd, state, *, label: str) -> tuple[dict, dict]:
-    """Liest die Register `norm` (0x1A) und `dpoint` (0x1C) ueber
-    `gsv-registers.py::read_register` (prueft das Semikolon-Praefix). Beide
-    Antworten sind keine Telegramme und werden nur hier geloggt, nie nach
-    serial.jsonl geschrieben."""
-    norm_cmd, norm_len = _gsv_registers.READ_COMMANDS["norm"]
-    dpoint_cmd, dpoint_len = _gsv_registers.READ_COMMANDS["dpoint"]
-    norm_entry = _gsv_registers.read_register(ser, "norm", norm_cmd, norm_len)
-    _log_event(f_cmd, state, {"event": "register_read", "label": label, "register": "norm",
-                               "response_tag": "non_telegram", **norm_entry})
-    dpoint_entry = _gsv_registers.read_register(ser, "dpoint", dpoint_cmd, dpoint_len)
-    _log_event(f_cmd, state, {"event": "register_read", "label": label, "register": "dpoint",
-                               "response_tag": "non_telegram", **dpoint_entry})
-    return norm_entry, dpoint_entry
-
-
-def _pause_read_registers_resume(ser, f_cmd, state, *, label: str) -> tuple[dict, dict]:
-    """Strom anhalten (STOP+CLEAR, wie `gsv-registers.py`), Register lesen,
-    Strom wieder anwerfen (START). Pause- und Resume-Zeitpunkt werden je als
-    eigenes Ereignis geloggt - das ist die einzige Stelle, an der der Strom
-    fuer eine reine Lesekontrolle (Precheck, Rueckstellungspruefung)
-    angehalten wird."""
-    t_pause = time.clock_gettime(time.CLOCK_BOOTTIME)
-    _send(ser, _gsv_registers.CMD_STOP, 0.3)
-    _send(ser, _gsv_registers.CMD_CLEAR, 0.2)
-    ser.reset_input_buffer()
-    _log_event(f_cmd, state, {"event": "pause_transmission", "label": label, "t_boot": t_pause})
-
-    norm_entry, dpoint_entry = _read_norm_dpoint(ser, f_cmd, state, label=label)
-
-    _send(ser, _gsv_registers.CMD_START, 0.8)
-    t_resume = time.clock_gettime(time.CLOCK_BOOTTIME)
-    _log_event(f_cmd, state, {"event": "resume_transmission", "label": label, "t_boot": t_resume})
-    return norm_entry, dpoint_entry
-
-
-def _check_restore_point(ser, restore_point: dict, f_cmd, state, *, label: str) -> tuple[bool, dict]:
-    norm_entry, dpoint_entry = _pause_read_registers_resume(ser, f_cmd, state, label=label)
-    expected_norm = restore_point.get("register", {}).get("norm", {}).get("daten")
-    expected_dpoint = restore_point.get("register", {}).get("dpoint", {}).get("daten")
-    actual_norm = norm_entry.get("daten")
-    actual_dpoint = dpoint_entry.get("daten")
-    matches = actual_norm == expected_norm and actual_dpoint == expected_dpoint
-    detail = {
-        "matches_restore_point": matches,
-        "expected_norm": expected_norm,
-        "actual_norm": actual_norm,
-        "expected_dpoint": expected_dpoint,
-        "actual_dpoint": actual_dpoint,
-    }
-    return matches, detail
-
-
-def _apply_norm_dpoint(ser, norm_bytes, dpoint_byte: int, f_cmd, state, *, label: str) -> bool:
-    """Setzt Normierung + Dezimalpunkt. Reihenfolge byteidentisch zu
-    `apply_cfg` in norm_sweep.py: Strom anhalten+leeren, `set norm` (0x10)
-    schreiben, per `last error` (0x42) pruefen, `set dpoint` (0x11)
-    schreiben, wieder pruefen, Strom neu starten. Jede Kommandoantwort ist
-    keine Telegrammzeile - sie kommt aus einem direkten `ser.read()`, nie aus
-    der `readline()`-Schleife, und wird deshalb nur nach commands.jsonl
-    geschrieben, mit `response_tag: non_telegram`."""
-    t_pause = time.clock_gettime(time.CLOCK_BOOTTIME)
-    _send(ser, _gsv_registers.CMD_STOP, 0.25)
-    _send(ser, _gsv_registers.CMD_CLEAR, 0.15)
-    ser.reset_input_buffer()
-    _log_event(f_cmd, state, {"event": "pause_transmission", "label": label, "t_boot": t_pause})
-
-    ser.write(bytes([SET_NORM_CMD, *norm_bytes]))
-    ser.flush()
-    time.sleep(0.35)
-    ser.reset_input_buffer()
-    ser.write(bytes([LAST_ERR_CMD]))
-    ser.flush()
-    resp_norm = _read_exact(ser, 2)
-    _log_event(f_cmd, state, {
-        "event": "command", "label": label, "command_name": "set_norm",
-        "command_bytes": [SET_NORM_CMD, *norm_bytes],
-        "response_bytes": list(resp_norm), "response_tag": "non_telegram",
-    })
-
-    ser.write(bytes([SET_DPOINT_CMD, dpoint_byte]))
-    ser.flush()
-    time.sleep(0.35)
-    ser.reset_input_buffer()
-    ser.write(bytes([LAST_ERR_CMD]))
-    ser.flush()
-    resp_dpoint = _read_exact(ser, 2)
-    _log_event(f_cmd, state, {
-        "event": "command", "label": label, "command_name": "set_dpoint",
-        "command_bytes": [SET_DPOINT_CMD, dpoint_byte],
-        "response_bytes": list(resp_dpoint), "response_tag": "non_telegram",
-    })
-
-    _send(ser, _gsv_registers.CMD_START, 0.7)
-    t_resume = time.clock_gettime(time.CLOCK_BOOTTIME)
-    _log_event(f_cmd, state, {"event": "resume_transmission", "label": label, "t_boot": t_resume})
-
-    ok_norm = len(resp_norm) == 2 and resp_norm[1] == OK_ERROR_CODE
-    ok_dpoint = len(resp_dpoint) == 2 and resp_dpoint[1] == OK_ERROR_CODE
-    return ok_norm and ok_dpoint
 
 
 # --- Serieller Strom, eigener Thread, nur lesen -----------------------------
