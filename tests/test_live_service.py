@@ -397,6 +397,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         assert kwargs["expected_size"] == camera.size
         assert kwargs["templates"] == service._config.templates
         assert kwargs["templates_sha256"] == service._config.templates_sha256
+        assert kwargs["reference_kind"] == ("seriell" if cell_text is None else "eingabe")
         if cell_text is not None:
             assert kwargs["cell_text"](lambda: image)[1] == cell_text
         events.append("assist")
@@ -448,7 +449,7 @@ def test_start_camera_wraps_failure(tmp_path):
 
 
 class MarkerSession:
-    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None):
+    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None):
         self.latest, self.summary, self.end_reason = None, {}, None
         self.session_path = out_dir / "session.json"
         self.records_path = out_dir / "records.jsonl"
@@ -698,7 +699,7 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
     assert confirmation == {
         "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
         "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
-        "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None,
+        "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None, "reader_tolerance": None,
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
@@ -1136,3 +1137,75 @@ def test_setup_pads_manual_cell_text_and_keeps_mask(tmp_path):
     service._setup_thread.join(2)
     assert service.status()["state"] == "setup_ready"
     assert observed == ["+0.4678? "]
+
+
+@pytest.mark.parametrize('use_tolerance', [False, True])
+def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, monkeypatch, use_tolerance):
+    import json
+
+    metrics = {'hinweis': 'Schatten entfernen.', 'tolerance': {
+        'possible': True, 'factor': 1.44, 'd_max': 1.92, 'max_d_best': 2.2}}
+    proposal['setup_checks'].update(overall='WARNUNG')
+    proposal['setup_checks']['checks']['gegenlesen'] = {'status': 'WARNUNG', 'metrics': metrics}
+    service = ready_service(tmp_path, proposal)
+    assert 'Schatten entfernen.' in service.status()['run_block']
+    assert service.status()['setup']['gegenlesen']['metrics'] == metrics
+    kwargs = dict(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
+                  use_tolerance=use_tolerance)
+    with pytest.raises(LiveError, match='WARNUNG'):
+        service.confirm(**kwargs)
+    service.confirm(**kwargs, acknowledge_warning=True)
+    status = service.status()
+    confirmation = json.loads((tmp_path / status['session_id'] / 'confirmation.json').read_text())
+    assert confirmation['reader_tolerance'] == status['reader_tolerance']
+    if use_tolerance:
+        tolerance = status['reader_tolerance']
+        assert tolerance['factor'] == 1.44
+        assert tolerance['d_max_templates'] == 1.92
+        assert tolerance['d_max_run'] == 1.92 * 1.44
+        assert tolerance['max_d_best'] == 2.2
+        assert 'nicht validiert' in tolerance['hinweis']
+        assert status['run_block'] is None
+        captured = []
+
+        class Session(MarkerSession):
+            def __init__(self, *a, **kw):
+                captured.append(kw)
+                super().__init__(*a, **kw)
+        monkeypatch.setattr('dispread.live.service.LiveSession', Session)
+        try:
+            service.start_run()
+            assert captured[0]['reader_d_max_factor'] == 1.44
+            assert captured[0]['reader_tolerance'] == tolerance
+            assert captured[0]['test_run'] is None
+        finally:
+            service.close()
+    else:
+        assert status['reader_tolerance'] is None
+        assert status['run_block']
+        captured = []
+
+        class Session(MarkerSession):
+            def __init__(self, *a, **kw):
+                captured.append(kw)
+                super().__init__(*a, **kw)
+        monkeypatch.setattr('dispread.live.service.LiveSession', Session)
+        try:
+            # Ohne Toleranz nur als Testlauf - und dann mit dem strengen Leser.
+            service.start_run(test_override=True)
+            assert captured[0]['reader_d_max_factor'] == 1.0
+            assert captured[0]['reader_tolerance'] is None
+            assert captured[0]['test_run'] is not None
+        finally:
+            service.close()
+    service.start_setup()
+    assert service.status()['reader_tolerance'] is None
+    service.close()
+
+
+def test_cannot_choose_tolerance_without_verified_proposal(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match='Angepasste Toleranz fuer diesen Vorschlag nicht moeglich'):
+        service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
+                        use_tolerance=True)
+    assert service.status()['state'] == 'setup_ready'

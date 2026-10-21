@@ -300,6 +300,15 @@ Die aktuellen Bedienschritte und Folgeschritte stehen oben unter Punkt 2.
 Bestätigung und Messlauf warten auf die bedienende Person (2026-10-16).
 Anschließend serielle Ausgabe an GSVmulti (OQ-07) vorbereiten.
 
+**Offen seit 2026-10-21: angepasste Lesetoleranz validieren.** Die Werkbank
+bietet bei Gegenlesen WARNUNG eine Toleranz bis ×2,0 an (1,25 × gemessener
+Abstand, nur mit seriellem Referenzwert, Werte als „nicht validiert“
+markiert). Belegt ist bisher nur: Einrichtungsstandbilder stimmen mit der
+Referenz, synthetischer Sweep mit ×2,0 ohne falschen Wert. Es fehlt ein
+Lauf mit paralleler Aufzeichnung des seriellen GSV-2AS-Stroms und ein
+Abgleich VALID-Werte gegen Referenz (Fehllesungen, `tolerance_frames` in
+`session.json`). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
+
 ### 1.–2. Erledigt 2026-09-23: M und führende Null
 
 * **M = 695 ms**, der grösste Wert über die Populationen. Das hat der Nutzer

@@ -862,7 +862,8 @@ def test_assist_reader_diagnostic_is_persisted_and_reported(tmp_path, monkeypatc
     diagnostic_calls = []
     overlay_statuses = []
 
-    def fake_diagnose(frames, quad, path, sha256):
+    def fake_diagnose(frames, quad, path, sha256, *, reference_kind):
+        assert reference_kind == "eingabe"
         diagnostic_calls.append((len(frames), quad, path, sha256))
         return CheckResult("WARNUNG", {
             "frames": 2, "read_count": 0, "read_rate": 0.0,

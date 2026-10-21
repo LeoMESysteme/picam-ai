@@ -21,6 +21,7 @@ input[type=text]{font:inherit;width:22ch}
 <body>
 <main>
   <div id="test-banner" hidden>TESTLAUF — Lesesperre übergangen. Werte nicht freigegeben, nicht für Messungen verwenden.</div>
+  <div class="notice" id="tolerance-banner" hidden></div>
   <div class="notice" id="notice"></div>
   <section>
     <div class="value" id="headline">—</div>
@@ -38,10 +39,12 @@ input[type=text]{font:inherit;width:22ch}
     <div id="setup-state"></div>
     <div id="overlays"></div>
     <p id="proposal-block" class="error" hidden>Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.</p>
+    <p id="proposal-hint" hidden></p>
     <div id="confirm-box" hidden>
       <label>Name: <input type="text" id="confirmed-by"></label>
       <label><input type="checkbox" id="format-checked"> Einheit mV/V und Format geprüft</label>
       <label id="ack-label" hidden><input type="checkbox" id="ack"> WARNUNG zur Kenntnis genommen</label>
+      <label id="tolerance-label" hidden><input type="checkbox" id="use-tolerance"> <span id="tolerance-text"></span></label>
       <button id="confirm">Bestätigen</button>
     </div>
   </section>

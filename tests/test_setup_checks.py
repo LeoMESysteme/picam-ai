@@ -483,3 +483,83 @@ def test_reader_diagnostic_real_reader_mask_keeps_blank_check(monkeypatch, tmp_p
     )
     assert result.status == expected
     assert result.metrics['read_count'] == (1 if expected == 'OK' else 0)
+
+
+@pytest.mark.parametrize('depths,edge', [([.4] * 4 + [.68] * 4 + [0], [3, 4]),
+                                        ([.7] * 8 + [0], None)])
+def test_lighting_hint_is_informational(monkeypatch, tmp_path, depths, edge):
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    diag = {'reject_reason': None, 'blank_cells_ok': True,
+            'cells': [{'text': ch} for ch in '+0.60972 ']}
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file',
+                        lambda *_: SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=diag)))
+    monkeypatch.setattr(setup_checks, 'raw_cell_depths', lambda _: np.array(depths))
+    result = setup_checks.diagnose_reader([(display(), '+0.60972 ')], QUAD, tmp_path / 't', 'sha')
+    assert result.status == 'OK'
+    if edge:
+        assert result.metrics['lighting']['edge_between'] == edge
+        assert result.metrics['lighting']['max_ratio'] == pytest.approx(1.7)
+        assert 'Zelle 3 und 4' in result.metrics['hinweis']
+    else:
+        assert 'hinweis' not in result.metrics
+
+
+def test_raw_cell_depths_uses_second_darkest_zero_shift():
+    from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, raw_cell_depths
+
+    raw = np.full((9, len(SHIFTS), 40), 100, np.float32)
+    raw[:, SHIFTS.index((0, 0)), :2] = [1, 60]
+    sampled = SampledImage(raw, np.full(9, 100), 1, .99, 0)
+    assert raw_cell_depths(sampled) == pytest.approx([.4] * 9)
+
+
+@pytest.mark.parametrize('kind,best,gap,distance,blank,possible,reason', [
+    ('seriell', '2', 1.3, 2.2, True, True, None),
+    ('eingabe', '2', 1.3, 2.2, True, False, 'nur_mit_seriellem_referenzwert'),
+    ('seriell', '3', 1.3, 2.2, True, False, 'beste_vermutung_widerspricht_referenz'),
+    ('seriell', '2', .5, 2.2, True, False, 'abstand_zur_zweitbesten_zu_klein'),
+    ('seriell', '2', 1.3, 3.2, True, False, 'faktor_ueber_2'),
+    ('seriell', '2', 1.3, 2.2, False, False, 'gegenprobe_nicht_gelesen'),
+])
+def test_tolerance_requires_serial_correct_candidates_and_verified_reread(
+        monkeypatch, tmp_path, kind, best, gap, distance, blank, possible, reason):
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    factors = []
+
+    def factory(*args, d_max_factor=1.0):
+        factors.append(d_max_factor)
+        read_count = 0
+
+        def read(*_):
+            nonlocal read_count
+            read_count += 1
+            cells = [{'text': ch, 'best': ch, 'd_best': .5, 'd_second': 2, 'reason': None}
+                     for ch in '+0.60972 ']
+            cells[7].update(text=None if d_max_factor == 1 else best, best=best,
+                            d_best=distance, d_second=distance + gap,
+                            reason='zelle_unbekannt' if d_max_factor == 1 else None)
+            # Maskierte Zelle darf weder Kandidatenvergleich noch Maximum beeinflussen.
+            cells[6].update(best='8', d_best=99, d_second=99.01)
+            diag = {'cells': cells, 'blank_cells_ok': blank if d_max_factor != 1 and read_count == 2 else True,
+                    'reject_reason': 'zelle_unbekannt' if d_max_factor == 1 else None}
+            return SimpleNamespace(diagnostics=diag)
+        return SimpleNamespace(read=read, _t=SimpleNamespace(d_max=1.92, margin_min=.93))
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', factory)
+    result = setup_checks.diagnose_reader([(display(), '+0.609?2 ')] * 2, QUAD, tmp_path / 't', 'sha',
+                                         reference_kind=kind)
+    assert result.status == 'WARNUNG'
+    tolerance = result.metrics['tolerance']
+    assert tolerance['possible'] is possible
+    assert tolerance['reason'] == reason
+    if possible:
+        assert tolerance['factor'] == 1.44
+        assert tolerance['max_d_best'] == 2.2
+        assert factors == [1, 1.44]
+        assert 'Toleranz x1.44' in result.metrics['hinweis']

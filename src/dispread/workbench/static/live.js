@@ -3,6 +3,9 @@
 
 export function statusView(status) {
   const view = recordView(status);
+  if (status.reader_tolerance && view.cls === 'valid') {
+    view.detail = `erweiterte Toleranz ×${status.reader_tolerance.factor} – nicht validiert · ${view.detail}`;
+  }
   if (status.test_run && status.state === 'running') {
     view.headline = `TESTLAUF · ${view.headline}`;
     // Vermutung nur zum aktuellen, verworfenen Bild: nie neben STALE oder VALID.
@@ -83,13 +86,28 @@ if (typeof document !== 'undefined') {
       $('confirmed-by').value = '';
       $('format-checked').checked = false;
       $('ack').checked = false;
+      $('use-tolerance').checked = false;
       $('test-override').checked = false;
     }
     $('run-block').hidden = !s.run_block;
     $('run-block-reason').textContent = s.run_block || '';
     $('test-override-box').hidden = !s.run_block;
     $('test-banner').hidden = !s.test_run;
+    $('tolerance-banner').hidden = !s.reader_tolerance;
+    $('tolerance-banner').textContent = s.reader_tolerance
+      ? `Angepasste Lesetoleranz ×${s.reader_tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft, nicht validiert.` : '';
+    const metrics = s.setup?.gegenlesen?.metrics || {};
+    const tolerance = metrics.tolerance;
+    $('proposal-hint').hidden = !(s.state === 'setup_ready' && metrics.hinweis);
+    $('proposal-hint').textContent = metrics.hinweis ? `Hinweis: ${metrics.hinweis}` : '';
+    $('tolerance-label').hidden = !tolerance?.possible;
+    $('tolerance-text').textContent = tolerance?.possible
+      ? `Angepasste Toleranz ×${tolerance.factor} verwenden – Lesung nur in dieser Aufstellung gegen den Referenzwert geprüft, nicht validiert` : '';
+    if (!tolerance?.possible) $('use-tolerance').checked = false;
     $('proposal-block').hidden = !(s.run_block && s.state === 'setup_ready');
+    $('proposal-block').textContent = tolerance?.possible
+      ? 'Achtung: Der strikte Lauf ist gesperrt. Angepasste Toleranz kann ausdrücklich gewählt werden; sonst ist nur ein Testlauf möglich.'
+      : 'Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.';
     $('run-start').disabled = Boolean(s.run_block && !$('test-override').checked);
     csrf = s.csrf;
     $('notice').textContent = s.release_notice;
@@ -130,7 +148,8 @@ if (typeof document !== 'undefined') {
   };
   $('setup').onclick = () => post('/live/setup', {cell_text: $('cell-text').value || null});
   $('confirm').onclick = () => post('/live/confirm', {session_id: lastStatus?.session_id, confirmed_by: $('confirmed-by').value,
-    format_checked: $('format-checked').checked, acknowledge_warning: $('ack').checked});
+    format_checked: $('format-checked').checked, acknowledge_warning: $('ack').checked,
+    use_tolerance: $('use-tolerance').checked});
   $('test-override').onchange = () => {
     $('run-start').disabled = Boolean(lastStatus?.run_block && !$('test-override').checked);
   };

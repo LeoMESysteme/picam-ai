@@ -66,7 +66,7 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     offsets = iter(range(1000, 2000))
     return LiveSession(
         FakeOwner(images), profile_path, config, tmp_path / "run",
-        reader_factory=lambda _p, _s: synthetic_reader(),
+        reader_factory=lambda _p, _s, **kw: synthetic_reader(),
         locator_factory=lambda _ref, quad: ManualRoiLocator(tuple(tuple(p) for p in quad)),
         clock=ClockLog(measure=lambda: next(offsets), monotonic_ns=lambda: 0),
         **kw,
@@ -95,6 +95,8 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert data["timing_calibration"]["guard_margin_ms"] == 325.9
     assert data["timing_calibration"]["sha256"] == hashlib.sha256((tmp_path / "timing.json").read_bytes()).hexdigest()
     assert data["release_notice"].startswith("Validiert nur:")
+    assert data["reader_tolerance"] is None
+    assert summary["tolerance_frames"] == 0
 
 
 def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
@@ -261,7 +263,7 @@ def test_run_returns_normally_on_reader_crash(tmp_path, monkeypatch):
 
     monkeypatch.setattr(reader, "read", fail_read)
     session = _session(tmp_path, [embed("+ 1.2345 ")])
-    session._reader_factory = lambda _p, _s: reader
+    session._reader_factory = lambda _p, _s, **kw: reader
     session.start()
     try:
         session.run(threading.Event())
@@ -529,3 +531,47 @@ def test_test_run_ignores_missing_or_non_dotmatrix_diagnostics(tmp_path, monkeyp
     session.stop()
     assert session.latest_guess is None
     assert json.loads(session.session_path.read_text())["guesses"] == {"frames": 0, "top": []}
+
+
+@pytest.mark.parametrize('factor,tolerance', [
+    (1.44, None), (1.0, {'factor': 1.44}), (1.2, {'factor': 1.44}),
+])
+def test_reader_factor_must_match_recorded_tolerance(tmp_path, factor, tolerance):
+    # Eine Lockerung ohne passende Markierung in session.json darf es nicht geben.
+    with pytest.raises(ValueError, match='reader_tolerance'):
+        _session(tmp_path, [embed('+ 1.2345 ')], reader_d_max_factor=factor, reader_tolerance=tolerance)
+
+
+@pytest.mark.parametrize('needs_tolerance', [False, True])
+def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, needs_tolerance):
+    from dataclasses import replace
+
+    from dotmatrix_helpers import LAYOUT, render
+
+    from dispread.ocr.dotmatrix import DotMatrixReader
+
+    base = synthetic_reader()
+    maximum = max(c['d_best'] for c in base.read(render('+ 1.2345 '), LAYOUT).diagnostics['cells'])
+    templates = replace(base._t, d_max=maximum / 1.4) if needs_tolerance else base._t
+    tolerance = {'factor': 1.44, 'd_max_templates': templates.d_max, 'd_max_run': templates.d_max * 1.44,
+                 'max_d_best': maximum, 'hinweis': 'nicht validiert'}
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2,
+                       reader_d_max_factor=1.44, reader_tolerance=tolerance)
+    factors = []
+
+    def factory(path, sha, *, d_max_factor):
+        factors.append(d_max_factor)
+        return DotMatrixReader(templates, d_max_factor=d_max_factor)
+
+    session._reader_factory = factory
+    session.start()
+    first, second = session.step(), session.step()
+    assert first.status is ValueStatus.TRANSITION
+    assert second.status is ValueStatus.VALID
+    summary = session.stop()
+    assert factors == [1.44]
+    assert summary['tolerance_frames'] == int(needs_tolerance)
+    data = json.loads(session.session_path.read_text())
+    assert data['reader_tolerance'] == tolerance
+    assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
+        first.to_dict(), second.to_dict()]

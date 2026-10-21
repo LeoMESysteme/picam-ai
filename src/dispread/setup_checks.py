@@ -6,6 +6,7 @@ damit der Befund bei spaeterer Kalibrierung erneut bewertet werden kann.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +20,7 @@ from dispread.frame_alignment import estimate_quad_shift
 from dispread.lattice_offsets import FULL, HALVES, max_abs_offset, measure_offsets, median_offsets
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
-from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, sample_image
+from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, raw_cell_depths, sample_image
 from dispread.rectify import rectify
 
 # Vorabwerte, aus den Aufstellungen vom 2026-09-29.
@@ -172,8 +173,41 @@ def _border_check(sampled: SampledImage) -> CheckResult:
                        {'minimum_border_ratio': minimum, 'border_ratios': ratios}, tuple(flagged))
 
 
+def _reader_frame_reason(diag: dict, reference: str, frame_index: int) -> tuple[str | None, list[dict]]:
+    """Gleiche Zell-, Masken- und Restpruefung fuer strikte Lesung und Gegenprobe."""
+    cells = diag.get('cells', [])
+    masked = [i for i, ch in enumerate(reference) if ch == '?']
+    cell_reasons = {'zelle_unbekannt', 'zelle_mehrdeutig'}
+    frame_contradictions = [
+        {'frame': frame_index, 'cell': i, 'read': cells[i]['text'], 'reference': ch}
+        for i, ch in enumerate(reference)
+        if ch != '?' and i < len(cells) and cells[i].get('text') is not None and cells[i]['text'] != ch
+    ]
+    reason = diag.get('reject_reason')
+    unaccepted = [i for i, ch in enumerate(reference)
+                  if ch != '?' and (i >= len(cells) or cells[i].get('text') is None)]
+    if frame_contradictions:
+        reason = 'zelle_widerspricht_referenz'
+    elif sum(ch != '?' for ch in reference[1:8]) < 5:
+        reason = 'zu_wenige_vergleichbare_zellen'
+    elif diag.get('blank_cells_ok') is False:
+        reason = 'format'
+    elif reason is None or reason in cell_reasons or (reason == 'format' and any(
+            i < len(cells) and not (cells[i].get('text') or '').isdigit() for i in masked)):
+        # Ein Formatfehler zaehlt nur, wenn er von einer maskierten Zelle
+        # kommen kann: ungelesen oder als Nicht-Ziffer gelesen (Mischziffer
+        # als ' ' oder '.'). Sonst bleibt das Standbild ungelesen.
+        if not unaccepted and diag.get('blank_cells_ok') is True:
+            reason = None
+        else:
+            reason = next((cells[i].get('reason') for i in unaccepted
+                           if i < len(cells) and cells[i].get('reason')), reason or 'unbekannt')
+    return reason, frame_contradictions
+
+
 def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
-                    template_path: Path, template_sha256: str) -> CheckResult:
+                    template_path: Path, template_sha256: str, *,
+                    reference_kind: str = 'eingabe') -> CheckResult:
     """Vergleicht Zellentscheidungen mit dem Solltext, ohne Lesewerte zu korrigieren."""
     if not frames:
         raise ValueError('Mindestens ein Standbild ist fuer das Gegenlesen erforderlich')
@@ -183,7 +217,8 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
     masked_cells: list[list[int]] = []
     contradictions: list[dict] = []
     read_count = 0
-    cell_reasons = {'zelle_unbekannt', 'zelle_mehrdeutig'}
+    observations = []
+    depths = []
     for frame_index, (frame, reference) in enumerate(frames):
         if len(reference) != 9:
             raise ValueError('Gegenlesen braucht neun Referenzzellen')
@@ -192,41 +227,97 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         crop = rectify(frame, quad, target_size=TARGET_SIZE).image
         result = reader.read(crop, layout)
         diag = result.diagnostics
-        cells = diag.get('cells', [])
-        frame_contradictions = [
-            {'frame': frame_index, 'cell': i, 'read': cells[i]['text'], 'reference': ch}
-            for i, ch in enumerate(reference)
-            if ch != '?' and i < len(cells) and cells[i].get('text') is not None and cells[i]['text'] != ch
-        ]
+        reason, frame_contradictions = _reader_frame_reason(diag, reference, frame_index)
         contradictions.extend(frame_contradictions)
-        reason = diag.get('reject_reason')
-        unaccepted = [i for i, ch in enumerate(reference)
-                      if ch != '?' and (i >= len(cells) or cells[i].get('text') is None)]
-        if frame_contradictions:
-            reason = 'zelle_widerspricht_referenz'
-        elif sum(ch != '?' for ch in reference[1:8]) < 5:
-            reason = 'zu_wenige_vergleichbare_zellen'
-        elif diag.get('blank_cells_ok') is False:
-            reason = 'format'
-        elif reason is None or reason in cell_reasons or (reason == 'format' and any(
-                i < len(cells) and not (cells[i].get('text') or '').isdigit() for i in masked)):
-            # Ein Formatfehler zaehlt nur, wenn er von einer maskierten Zelle
-            # kommen kann: ungelesen oder als Nicht-Ziffer gelesen (Mischziffer
-            # als ' ' oder '.'). Sonst bleibt das Standbild ungelesen.
-            if not unaccepted and diag.get('blank_cells_ok') is True:
-                reason = None
-            else:
-                reason = next((cells[i].get('reason') for i in unaccepted
-                               if i < len(cells) and cells[i].get('reason')), reason or 'unbekannt')
+        observations.append((crop, reference, diag, reason))
+        depths.append(raw_cell_depths(sample_image(_gray(crop), GRID, range(9))).tolist())
         if reason is None:
             read_count += 1
         else:
             reasons[reason] = reasons.get(reason, 0) + 1
     count = len(frames)
     status = 'FEHLER' if contradictions else ('OK' if read_count == count else 'WARNUNG')
-    return CheckResult(status, {'frames': count, 'read_count': read_count,
-                               'read_rate': read_count / count, 'rejection_reasons': reasons,
-                               'masked_cells': masked_cells, 'contradictions': contradictions})
+    metrics = {'frames': count, 'read_count': read_count,
+               'read_rate': read_count / count, 'rejection_reasons': reasons,
+               'masked_cells': masked_cells, 'contradictions': contradictions}
+    lighting = _lighting_finding(depths)
+    if lighting is not None:
+        metrics['lighting'] = lighting
+        i, j = lighting['edge_between']
+        metrics['hinweis'] = (
+            f'Ungleichmaessige Beleuchtung auf dem Display (Kontrastsprung zwischen Zelle {i} und {j}, '
+            'vermutlich Schatten). Display gleichmaessig abschatten oder Schatten entfernen und neu einrichten.'
+        )
+    if status == 'WARNUNG':
+        tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)
+        metrics['tolerance'] = tolerance
+        if tolerance['possible']:
+            hint = (f"Mit angepasster Toleranz x{tolerance['factor']} liest der Leser alle Standbilder "
+                    'in Uebereinstimmung mit der Referenz.')
+            metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), hint)))
+    return CheckResult(status, metrics)
+
+
+def _lighting_finding(depths: list[list[float]]) -> dict | None:
+    worst = None
+    for values in depths:
+        inked = [v for v in values if v >= 0.2]
+        if len(inked) < 2:
+            continue
+        ratio = max(inked) / min(inked)
+        # Paare benachbarter Zellen MIT Zeichen; Leer- oder blasse Zellen dazwischen
+        # werden uebersprungen, damit die genannte Kante stimmt.
+        inked_idx = [i for i, v in enumerate(values) if v >= 0.2]
+        pairs = list(zip(inked_idx, inked_idx[1:], strict=False))
+        if ratio <= 1.3 or not pairs:
+            continue
+        edge = max(pairs, key=lambda pair: max(values[i] for i in pair) / min(values[i] for i in pair))
+        if worst is None or ratio > worst['max_ratio']:
+            worst = {'depths': depths, 'max_ratio': ratio, 'edge_between': list(edge)}
+    return worst
+
+
+def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind) -> dict:
+    tolerance = {'possible': False, 'factor': None, 'max_d_best': None, 'd_max': None, 'reason': None}
+
+    def reject(reason):
+        tolerance['reason'] = reason
+        return tolerance
+
+    if reference_kind != 'seriell':
+        return reject('nur_mit_seriellem_referenzwert')
+    if any(reason not in (None, 'zelle_unbekannt') for _, _, _, reason in observations):
+        return reject('keine_reine_zellablehnung')
+    t = reader._t
+    tolerance['d_max'] = t.d_max
+    distances = []
+    for _, reference, diag, _ in observations:
+        cells = diag.get('cells', [])
+        for i, ch in enumerate(reference):
+            if ch == '?':
+                continue
+            if i >= len(cells) or any(key not in cells[i] for key in ('best', 'd_best', 'd_second')):
+                return reject('zelldiagnose_fehlt')
+            cell = cells[i]
+            if cell['best'] != ch:
+                return reject('beste_vermutung_widerspricht_referenz')
+            if not math.isfinite(cell['d_best']) or not math.isfinite(cell['d_second']):
+                return reject('zelldiagnose_ungueltig')
+            if cell['d_second'] - cell['d_best'] < t.margin_min:
+                return reject('abstand_zur_zweitbesten_zu_klein')
+            distances.append(cell['d_best'])
+    maximum = max(distances)
+    tolerance['max_d_best'] = maximum
+    factor = max(1.0, math.ceil(round(1.25 * maximum / t.d_max * 100, 9)) / 100)
+    if factor > 2.0:
+        return reject('faktor_ueber_2')
+    adaptive = DotMatrixReader.from_file(Path(path), sha, d_max_factor=factor)
+    for index, (crop, reference, _, _) in enumerate(observations):
+        reason, contradictions = _reader_frame_reason(adaptive.read(crop, layout).diagnostics, reference, index)
+        if reason is not None or contradictions:
+            return reject('gegenprobe_nicht_gelesen')
+    tolerance.update(possible=True, factor=factor)
+    return tolerance
 
 
 def _glare_check(warped_gray: np.ndarray) -> CheckResult:

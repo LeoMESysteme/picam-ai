@@ -41,7 +41,7 @@ class FakeLiveService:
     def set_state(self, state):
         with self._lock:
             self._status = {
-                "state": "idle", "error": None, "setup": None, "run": None,
+                "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
                 "camera": {"running": True, "frames": 1, "gaps": 0},
                 **copy.deepcopy(state),

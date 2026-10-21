@@ -234,6 +234,7 @@ def assist_measure(
     on_attempt: Callable[[dict], None] | None = None,
     templates: Path | None = None,
     templates_sha256: str | None = None,
+    reference_kind: str = "eingabe",
     report: Callable[[dict], None] = lambda _checks: None,
     info: Callable[[str], None] = lambda _message: None,
     sleep: Callable[[float], None] | None = None,
@@ -357,7 +358,8 @@ def assist_measure(
         raise SetupError("Abschliessende Einrichtungspruefung meldet FEHLER; kein Vorschlag")
     reader_check = None
     if templates is not None:
-        reader_check = diagnose_reader(reader_frame_texts, fit.quad, templates, templates_sha256)
+        reader_check = diagnose_reader(reader_frame_texts, fit.quad, templates, templates_sha256,
+                                       reference_kind=reference_kind)
     return AssistResult(
         first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,

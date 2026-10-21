@@ -508,6 +508,30 @@ ableiten. Statusalter/Verarbeitungsrate verwenden CLOCK_MONOTONIC, Logzeiten UTC
 Aufnahmezeitstempel realer Bilder bleiben in SENSOR_BOOTTIME mit unbekannter
 Semantik und Unsicherheit `None` erhalten.
 
+### Schatten und angepasste Toleranz
+
+„Ungleichmaessige Beleuchtung“ weist auf einen Kontrastsprung zwischen
+benachbarten Zellen hin, etwa durch den Kameraschatten. Entferne den Schatten
+oder schatte das ganze Display gleichmäßig ab und richte neu ein. Der Hinweis
+allein ändert das Urteil des Gegenlesens nicht.
+
+Scheitert nur die strikte Zellschwelle, kann die Einrichtung mit einem seriell
+vom GSV-2AS erfassten Referenzwert eine **angepasste Toleranz** anbieten. Sie
+berechnet den Faktor aus beiden Standbildern und liest beide erneut gegen.
+Manuell eingegebener Zellentext reicht hierfür nicht aus. Wähle den Haken
+„Angepasste Toleranz ×… verwenden“ ausdrücklich und bestätige auch die WARNUNG.
+Ohne Auswahl bleibt die Lesesperre bestehen; ein Testlauf ist weiterhin separat
+möglich.
+
+Die Gegenprobe belegt nur die Übereinstimmung in dieser Aufstellung und ist
+**keine Validierung** gegen eine Referenzaufzeichnung. Die Referenz korrigiert
+keine Lesung; Abstand zur zweitbesten Klasse, zwei bestätigende Bilder und
+STALE-Regeln gelten weiter. Ein Toleranzlauf trägt ein gelbes Banner und bei
+VALID den Detailtext „erweiterte Toleranz ×… – nicht validiert“.
+`confirmation.json` und `session.json` halten den Faktor als `reader_tolerance`
+fest; `summary.tolerance_frames` zählt gültige Datensätze, bei denen mindestens
+eine Zelle die ursprüngliche Vorlagenschwelle überschritt.
+
 ## Prüfstand dieser Implementierung
 
 63 automatische Tests einschließlich TLS-Login mit Testauthentifizierung,

@@ -45,18 +45,19 @@ def run_block_reason(proposal: dict | None) -> str | None:
     if status == "OK":
         return None
     metrics = check.get("metrics", {})
+    hint = f" {metrics['hinweis']}" if metrics.get("hinweis") else ""
     if metrics.get("rejection_reasons", {}).get("zelle_widerspricht_referenz") and metrics.get("contradictions"):
         first = metrics["contradictions"][0]
         return (
             "Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert des GSV-2AS "
-            f"(Zelle {first['cell']}: gelesen '{first['read']}', Referenz '{first['reference']}'). Neu einrichten."
+            f"(Zelle {first['cell']}: gelesen '{first['read']}', Referenz '{first['reference']}'). Neu einrichten.{hint}"
         )
     reasons = ", ".join(f"{name} x{count}" for name, count in metrics.get("rejection_reasons", {}).items()) or "-"
     return (
         f"Lauf gesperrt: Der Leser hat bei der Einrichtung {metrics.get('read_count', 0)} von "
         f"{metrics.get('frames', 0)} Standbildern gelesen (Gegenlesen {status}: {reasons}). "
         "Mit dieser Aufstellung liefert der Lauf nur UNREADABLE. Kamera senkrecht auf die "
-        "Displaymitte ausrichten und neu einrichten."
+        f"Displaymitte ausrichten und neu einrichten.{hint}"
     )
 
 
@@ -142,6 +143,7 @@ class LiveService:
         self._proposal: dict | None = None
         self._run_block: str | None = None
         self._test_run: dict | None = None
+        self._reader_tolerance: dict | None = None
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
         self._last_confirmed_focus: int = DEFAULT_FOCUS_START
@@ -163,6 +165,11 @@ class LiveService:
                     "checks": {n: c.get("status") for n, c in checks.get("checks", {}).items()},
                     "overlays": [n for n in OVERLAYS if self.setup_file(n) is not None],
                 }
+                gegenlesen = checks.get("checks", {}).get("gegenlesen", {})
+                metrics = gegenlesen.get("metrics", {})
+                if metrics.get("hinweis") or "tolerance" in metrics:
+                    setup["gegenlesen"] = {"status": gegenlesen.get("status"), "metrics": {
+                        key: metrics[key] for key in ("hinweis", "tolerance") if key in metrics}}
             if self._setup_started_at is not None:
                 setup = setup or {}
                 setup["step"] = self._setup_step
@@ -206,6 +213,7 @@ class LiveService:
                 "profile": self._profile_info,
                 "run_block": self._run_block,
                 "test_run": self._test_run,
+                "reader_tolerance": self._reader_tolerance,
                 "run": run,
             }
 
@@ -271,7 +279,7 @@ class LiveService:
                 self._setup_step = "start"
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
                 self._session_dir, self._proposal = session_dir, None
-                self._run_block = self._test_run = None
+                self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._session = None
             self._setup_thread = threading.Thread(
@@ -395,6 +403,7 @@ class LiveService:
                 on_attempt=save_attempt,
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
+                reference_kind="seriell" if cell_text is None else "eingabe",
                 info=self._setup_progress,
             )
         finally:
@@ -418,7 +427,8 @@ class LiveService:
             reader_check=result.reader_check,
         )
 
-    def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False) -> None:
+    def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False,
+                use_tolerance: bool = False) -> None:
         with self._operation_lock:
             with self._lock:
                 if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
@@ -433,6 +443,19 @@ class LiveService:
                 raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
             if overall == "WARNUNG" and not acknowledge_warning:
                 raise LiveError("Einrichtung meldet WARNUNG - ausdruecklich zur Kenntnis nehmen")
+            reader_tolerance = None
+            if use_tolerance:
+                tolerance = proposal.get("setup_checks", {}).get("checks", {}).get("gegenlesen", {}).get(
+                    "metrics", {}).get("tolerance", {})
+                if tolerance.get("possible") is not True:
+                    raise LiveError("Angepasste Toleranz fuer diesen Vorschlag nicht moeglich")
+                reader_tolerance = {
+                    "factor": tolerance["factor"], "d_max_templates": tolerance["d_max"],
+                    "d_max_run": tolerance["d_max"] * tolerance["factor"],
+                    "max_d_best": tolerance["max_d_best"],
+                    "hinweis": "Angepasste Lesetoleranz: Lesung nur in dieser Aufstellung gegen den "
+                               "Referenzwert geprueft, nicht validiert.",
+                }
             try:
                 profile: SessionProfile = live_setup.confirm_proposal(
                     proposal, confirmed_by=confirmed_by, resolution_threshold_px=RESOLUTION_ERROR_PX,
@@ -451,7 +474,8 @@ class LiveService:
                 "format_checked": True,
                 "warning_acknowledged": bool(acknowledge_warning),
                 "setup_overall": overall,
-                "run_block": run_block_reason(proposal),
+                "run_block": None if reader_tolerance else run_block_reason(proposal),
+                "reader_tolerance": reader_tolerance,
             }
             (session_dir / "confirmation.json").write_text(
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
@@ -463,6 +487,7 @@ class LiveService:
                                       "confirmed_at_utc": profile.confirmed_at_utc,
                                       "warning_acknowledged": overall == "WARNUNG"}
                 self._run_block = confirmation["run_block"]
+                self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
@@ -503,7 +528,11 @@ class LiveService:
                 except RuntimeError as exc:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
-                session = LiveSession(self._owner, profile_path, self._config, out_dir, test_run=test_run)
+                session = LiveSession(
+                    self._owner, profile_path, self._config, out_dir, test_run=test_run,
+                    reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
+                    reader_tolerance=self._reader_tolerance,
+                )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Lauf nicht gestartet: {exc}") from exc

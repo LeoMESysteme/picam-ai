@@ -34,7 +34,7 @@ from dispread.live.clock import ClockLog
 from dispread.live.tracking import TrackedQuadLocator
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
-from dispread.records import ValueRecord
+from dispread.records import ValueRecord, ValueStatus
 from dispread.session_profile import SessionProfile
 from dispread.sink.jsonl import JsonlSink
 from dispread.timing_calibration import load_calibration
@@ -78,13 +78,22 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
-        reader_factory: Callable[[Path, str], Any] = DotMatrixReader.from_file,
+        reader_d_max_factor: float = 1.0,
+        reader_tolerance: dict | None = None,
+        reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
         locator_factory: Callable[[Any, list], Any] = TrackedQuadLocator,
         clock: ClockLog | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         wall: Callable[[], datetime] | None = None,
     ) -> None:
         self._test_run = test_run
+        # Lockerung und ihre Markierung in session.json muessen zusammenpassen.
+        expected_factor = 1.0 if reader_tolerance is None else reader_tolerance.get("factor")
+        if reader_d_max_factor != expected_factor:
+            raise ValueError("reader_d_max_factor passt nicht zu reader_tolerance")
+        self._reader_d_max_factor = reader_d_max_factor
+        self._reader_tolerance = reader_tolerance
+        self._tolerance_frames = 0
         self.latest_guess: dict | None = None
         self._guesses: Counter[str] = Counter()
         self._owner = owner
@@ -129,7 +138,7 @@ class LiveSession:
         except (OSError, ValueError, KeyError) as exc:
             raise StartRefused(f"Profil {self._profile_path}: {exc}") from exc
         try:
-            reader = self._reader_factory(cfg.templates, cfg.templates_sha256)
+            reader = self._reader_factory(cfg.templates, cfg.templates_sha256, d_max_factor=self._reader_d_max_factor)
         except (OSError, ValueError) as exc:
             raise StartRefused(f"Vorlagen {cfg.templates}: {exc}") from exc
         try:
@@ -165,6 +174,7 @@ class LiveSession:
         self._frame_gaps_start = owner_status.get("gaps", 0)
         self._meta = {
             "schema": SCHEMA,
+            "reader_tolerance": self._reader_tolerance,
             "session_id": profile.session_id,
             "device_id": profile.device_id,
             "profile": {"path": str(self._profile_path), "sha256": _sha256(self._profile_path)},
@@ -229,6 +239,12 @@ class LiveSession:
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             self._frames_read += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
+            if self._reader_tolerance is not None and record.status is ValueStatus.VALID:
+                read = self._pipeline.last_read
+                cells = read.diagnostics.get("cells", []) if read is not None else []
+                if any(isinstance(c, dict) and isinstance(c.get("d_best"), (int, float))
+                       and c["d_best"] > self._reader_tolerance["d_max_templates"] for c in cells):
+                    self._tolerance_frames += 1
             # Erst nach geschriebenem Record: Vermutungen zaehlen nur Bilder mit Audit.
             if self._test_run is not None:
                 read = self._pipeline.last_read
@@ -297,6 +313,7 @@ class LiveSession:
         self.summary = {
             "by_status": dict(self._by_status),
             "frames_read": self._frames_read,
+            "tolerance_frames": self._tolerance_frames,
             "frames_skipped": self._frames_skipped,
             "frame_gaps": owner_status.get("gaps", 0) - self._frame_gaps_start,
             "frame_gaps_owner_total": owner_status.get("gaps", 0),

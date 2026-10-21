@@ -45,15 +45,18 @@ def parse_gsv2as(cells: str) -> tuple[str, float] | None:
 
 
 class DotMatrixReader:
-    def __init__(self, templates: Templates) -> None:
+    def __init__(self, templates: Templates, d_max_factor: float = 1.0) -> None:
+        if not 1.0 <= d_max_factor <= 2.0:
+            raise ValueError("d_max_factor muss zwischen 1.0 und 2.0 liegen")
         self._t = templates
+        self._d_max_factor = d_max_factor
 
     @classmethod
-    def from_file(cls, path: Path, expected_sha256: str) -> DotMatrixReader:
+    def from_file(cls, path: Path, expected_sha256: str, d_max_factor: float = 1.0) -> DotMatrixReader:
         """Laedt Vorlagen von `path`. `expected_sha256` ist Pflicht (keine
         Default) - ein Betrieb ohne geprueften Bezug auf eine bekannte
         Vorlagendatei waere fail-open (Final-Fix 1)."""
-        return cls(load_templates(path, expected_sha256))
+        return cls(load_templates(path, expected_sha256), d_max_factor=d_max_factor)
 
     @property
     def backend_id(self) -> str:
@@ -70,6 +73,8 @@ class DotMatrixReader:
         cells = range(layout.classified_cells)
         sampled = sample_image(gray, layout.grid, cells)
         diag: dict = {
+            "d_max": self._t.d_max * self._d_max_factor,
+            "d_max_factor": self._d_max_factor,
             "contrast": sampled.contrast,
             "saturated_fraction": sampled.saturated_fraction,
             "templates_groups": list(self._t.groups),
@@ -81,7 +86,7 @@ class DotMatrixReader:
             return self._reject("kontrast", diag, layout)
 
         norm = normalized(sampled)
-        decisions = [classify(norm[i], self._t) for i in range(len(cells))]
+        decisions = [classify(norm[i], self._t, d_max_factor=self._d_max_factor) for i in range(len(cells))]
         diag["cells"] = [
             {
                 "text": d.text, "reason": d.reason,
@@ -140,7 +145,7 @@ class DotMatrixReader:
             return True
         sampled = sample_image(gray, layout.grid, layout.blank_cells)
         norm = normalized(sampled, ink=ink)
-        decisions = [classify(norm[i], self._t) for i in range(len(layout.blank_cells))]
+        decisions = [classify(norm[i], self._t, d_max_factor=self._d_max_factor) for i in range(len(layout.blank_cells))]
         return all(d.text == " " for d in decisions)
 
     def _reject(self, reason, diag, layout, glyphs=(), sign_readable=True) -> ReadResult:

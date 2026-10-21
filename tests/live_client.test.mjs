@@ -301,3 +301,34 @@ test('override requires explicit dialog approval and resets with session', async
     else globalThis.window = originalWindow;
   }
 });
+
+test('tolerance marks valid detail but STALE still wins', () => {
+  const status = {...running, reader_tolerance: {factor: 1.44}};
+  assert.equal(statusView(status).headline, '+1.2345 mV/V');
+  assert.match(statusView(status).detail, /^erweiterte Toleranz ×1.44 – nicht validiert/);
+  assert.equal(statusView({...status, run: {...status.run, latest_age_s: .9}}).headline, 'STALE');
+  assert.doesNotMatch(statusView({...status, run: {...status.run, latest_age_s: .9}}).detail, /erweiterte Toleranz/);
+});
+
+test('proposal hint and tolerance selection are shown, posted and cleared', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'first', setup: {gegenlesen: {
+      metrics: {hinweis: 'Schatten entfernen.', tolerance: {possible: true, factor: 1.44}}}}};
+    await poll();
+    assert.equal(element('proposal-hint').textContent, 'Hinweis: Schatten entfernen.');
+    assert.equal(element('tolerance-label').hidden, false);
+    assert.match(element('tolerance-text').textContent, /×1.44/);
+    element('use-tolerance').checked = true;
+    await element('confirm').onclick();
+    assert.equal(page.posts.at(-1).body.use_tolerance, true);
+    page.status = {state: 'confirmed', session_id: 'first', reader_tolerance: {factor: 1.44}};
+    await poll();
+    assert.equal(element('tolerance-banner').hidden, false);
+    assert.match(element('tolerance-banner').textContent, /×1.44.*nicht validiert/);
+    page.status = {state: 'setup_running', session_id: 'second'};
+    await poll();
+    assert.equal(element('use-tolerance').checked, false);
+    assert.equal(element('tolerance-banner').hidden, true);
+    assert.equal(element('proposal-hint').hidden, true);
+  });
+});

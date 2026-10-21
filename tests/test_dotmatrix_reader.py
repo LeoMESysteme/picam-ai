@@ -145,16 +145,13 @@ def _random_gsv2as_case(rng: np.random.Generator) -> tuple[str, str, float]:
     return text, "+" + body, float(body)
 
 
-def test_sweep_richtig_oder_abgelehnt_nie_falsch(reader):
-    """300 zufaellige gueltige gsv2as-Zeichenketten, gerendert mit
-    Rasterversatz +-1.5 px, Unschaerfe 0-2, Rauschen sigma<=12 und
-    multiplikativem Helligkeitsverlauf bis 0.6: der Leser darf nie einen
-    falschen Wert freigeben - nur den wahren Wert oder gar keinen (Final-Fix
-    4, Konzept.md §7)."""
-    rng = np.random.default_rng(20260924)
-    start = time.monotonic()
+def _sweep_never_wrong(reader, cases: int, seed: int) -> int:
+    """Zufaellige gueltige gsv2as-Zeichenketten mit Stoerungen lesen; der Leser
+    darf nur den wahren Wert oder gar keinen freigeben. Gibt die Zahl der
+    freigegebenen Werte zurueck."""
+    rng = np.random.default_rng(seed)
     n_released = 0
-    for _ in range(300):
+    for _ in range(cases):
         text, raw_expected, value_expected = _random_gsv2as_case(rng)
         dx = float(rng.uniform(-1.5, 1.5))
         dy = float(rng.uniform(-1.5, 1.5))
@@ -177,10 +174,31 @@ def test_sweep_richtig_oder_abgelehnt_nie_falsch(reader):
         if r.value is not None:
             n_released += 1
             assert r.raw_text == raw_expected
+    return n_released
 
-    elapsed = time.monotonic() - start
-    assert elapsed < 30.0
+
+def test_sweep_richtig_oder_abgelehnt_nie_falsch(reader):
+    """300 zufaellige gueltige gsv2as-Zeichenketten, gerendert mit
+    Rasterversatz +-1.5 px, Unschaerfe 0-2, Rauschen sigma<=12 und
+    multiplikativem Helligkeitsverlauf bis 0.6: der Leser darf nie einen
+    falschen Wert freigeben - nur den wahren Wert oder gar keinen (Final-Fix
+    4, Konzept.md §7)."""
+    start = time.monotonic()
+    n_released = _sweep_never_wrong(reader, 300, 20260924)
+    assert time.monotonic() - start < 30.0
     assert n_released > 0  # Test waere sonst leer bewiesen
+
+
+def test_sweep_mit_hoechster_toleranz_nie_falsch(reader):
+    """Angepasste Lesetoleranz (L3): auch bei d_max x 2,0, der hoechsten
+    erlaubten Lockerung, gibt der Leser unter denselben Stoerungen nie einen
+    falschen Wert frei; margin_min bleibt die Sperre gegen Verwechslungen."""
+    from dispread.ocr.dotmatrix import DotMatrixReader
+
+    loose = DotMatrixReader(reader._t, d_max_factor=2.0)
+    strict_released = _sweep_never_wrong(reader, 150, 20261021)
+    loose_released = _sweep_never_wrong(loose, 150, 20261021)
+    assert loose_released >= strict_released > 0
 
 
 def test_cell_diagnostics_expose_decision_and_blank_check_on_rejection(reader):
@@ -190,3 +208,42 @@ def test_cell_diagnostics_expose_decision_and_blank_check_on_rejection(reader):
     assert cells[5]["text"] is None
     assert cells[5]["reason"] in ("zelle_unbekannt", "zelle_mehrdeutig")
     assert r.diagnostics["blank_cells_ok"] is True
+
+
+@pytest.mark.parametrize('factor', [0.99, 2.01, float('nan'), float('inf')])
+def test_tolerance_factor_rejects_invalid_values(reader, factor):
+    with pytest.raises(ValueError, match='d_max_factor'):
+        DotMatrixReader(reader._t, d_max_factor=factor)
+
+
+def test_tolerance_default_preserves_decisions_and_margin_rule(reader, tmp_path):
+    from dispread.ocr.dotmatrix_templates import classify, save_templates
+
+    crop = render('+ 1.2345 ')
+    strict = reader.read(crop, LAYOUT)
+    explicit = DotMatrixReader(reader._t, d_max_factor=1.0).read(crop, LAYOUT)
+    assert strict == explicit
+    path = tmp_path / 'templates.json'
+    sha = save_templates(reader._t, path)
+    adaptive = DotMatrixReader.from_file(path, sha, d_max_factor=1.5)
+    diag = adaptive.read(crop, LAYOUT).diagnostics
+    assert diag['d_max'] == reader._t.d_max * 1.5
+    assert diag['d_max_factor'] == 1.5
+    # Gleiche Kandidaten bleiben mehrdeutig, auch mit erweitertem Abstand.
+    t = dataclasses.replace(reader._t, mean={'0': reader._t.mean['0'], '1': reader._t.mean['0']},
+                            std={'0': reader._t.std['0'], '1': reader._t.std['0']})
+    vectors = np.tile(t.mean['0'], (9, 1))
+    assert classify(vectors, t, d_max_factor=2).reason == 'zelle_mehrdeutig'
+
+
+def test_tolerance_recovers_distance_reject_without_changing_candidate(reader):
+    crop = render('+ 1.2345 ')
+    observed = reader.read(crop, LAYOUT)
+    max_distance = max(cell['d_best'] for cell in observed.diagnostics['cells'])
+    templates = dataclasses.replace(reader._t, d_max=max_distance / 1.4)
+    strict = DotMatrixReader(templates).read(crop, LAYOUT)
+    adaptive = DotMatrixReader(templates, d_max_factor=1.5).read(crop, LAYOUT)
+    assert strict.diagnostics['reject_reason'] == 'zelle_unbekannt'
+    assert adaptive.value == 1.2345
+    assert [cell['best'] for cell in strict.diagnostics['cells']] == [
+        cell['text'] for cell in adaptive.diagnostics['cells']]

@@ -134,7 +134,9 @@ def test_routes_without_socket(tmp_path, monkeypatch):
             "session_id": "reviewed", "confirmed_by": "Operator", "format_checked": True, "acknowledge_warning": True,
         })).status == 200
         assert confirmed == [{"session_id": "reviewed", "confirmed_by": "Operator", "format_checked": True,
-                              "acknowledge_warning": True}]
+                              "acknowledge_warning": True, "use_tolerance": False}]
+        assert (await call("POST", "/live/confirm", {"use_tolerance": True})).status == 200
+        assert confirmed[-1]['use_tolerance'] is True
         with pytest.raises(web.HTTPNotFound):
             await call("GET", "/live/setup/etc-passwd.png")
         with pytest.raises(web.HTTPServiceUnavailable):

@@ -374,7 +374,8 @@ def test_proposal_merges_reader_status(monkeypatch, tmp_path, reader_status):
             live_setup.confirm_proposal(proposal, confirmed_by="x", resolution_threshold_px=2.6)
 
 
-def test_assist_reader_gets_per_still_masks(monkeypatch, tmp_path):
+@pytest.mark.parametrize("reference_kind", ["eingabe", "seriell"])
+def test_assist_reader_gets_per_still_masks(monkeypatch, tmp_path, reference_kind):
     from dispread.setup_checks import CheckResult
 
     cam = SequenceSetupCamera([10, 20])
@@ -386,10 +387,15 @@ def test_assist_reader_gets_per_still_masks(monkeypatch, tmp_path):
     monkeypatch.setattr(live_setup, "refine_quad", lambda *a: (fit.quad, []))
     monkeypatch.setattr(live_setup, "raster_offset_check", lambda *a: CheckResult("OK", {}))
     observed = []
-    monkeypatch.setattr(live_setup, "diagnose_reader", lambda frames, *a: observed.extend(frames))
+
+    def diagnose(frames, *args, **kwargs):
+        assert kwargs["reference_kind"] == reference_kind
+        observed.extend(frames)
+
+    monkeypatch.setattr(live_setup, "diagnose_reader", diagnose)
     result = live_setup.assist_measure(
         cam, cell_text=lambda capture: (capture(), next(texts)), expected_size=(3, 2),
-        out_dir=tmp_path, hint_box=(0, 0, 1, 1), sleep=lambda _: None, templates=tmp_path / 't.json',
+        out_dir=tmp_path, hint_box=(0, 0, 1, 1), sleep=lambda _: None, templates=tmp_path / 't.json', reference_kind=reference_kind,
     )
     assert [text for _, text in observed] == ["+0.60972 ", "+0.6097? "]
     assert result.first_text == result.second_text == "+0.6097? "

@@ -82,8 +82,8 @@ def _decide(vectors, mean, std, d_max, margin_min) -> CellDecision:
     return CellDecision(None if reason else best, best, second, d_best, d_second, j, reason, float(margin))
 
 
-def classify(vectors: np.ndarray, t: Templates) -> CellDecision:
-    return _decide(vectors, t.mean, t.std, t.d_max, t.margin_min)
+def classify(vectors: np.ndarray, t: Templates, d_max_factor: float = 1.0) -> CellDecision:
+    return _decide(vectors, t.mean, t.std, t.d_max * d_max_factor, t.margin_min)
 
 
 def _require_classes(keys) -> None:

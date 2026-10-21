@@ -66,7 +66,7 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await page.locator('#confirm').click();
   expect((await confirmRequest).postDataJSON()).toEqual({
     session_id: 'test-session', confirmed_by: 'Operator',
-    format_checked: true, acknowledge_warning: true,
+    format_checked: true, acknowledge_warning: true, use_tolerance: false,
   });
   await expect(headline).toHaveText('Bestätigt – Lauf starten');
 

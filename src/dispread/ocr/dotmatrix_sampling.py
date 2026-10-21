@@ -139,6 +139,16 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
     )
 
 
+def raw_cell_depths(s: SampledImage) -> np.ndarray:
+    """Punkttiefe vor der Geradenanpassung, bei Verschiebung (0, 0)."""
+    zero = SHIFTS.index((0, 0))
+    bg = s.background.astype(np.float64)
+    dark = np.sort(s.raw[:, zero, :], axis=1)[:, _CELL_INK_RANK].astype(np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        depth = np.where(bg > 0, (bg - dark) / bg, 0.0)
+    return depth
+
+
 def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
     """Relative Punkttiefe je Zelle, oder `None`, wenn weniger als
     `_MIN_INKED_CELLS` Zellen mit Zeichen vorliegen (dann gilt der globale
@@ -153,7 +163,6 @@ def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
     Extrapolation auf Leerzellen, damit Rauschen dort nie zu einem
     Punktmuster verstaerkt wird (Reviewbefund 2026-09-29).
     """
-    zero = SHIFTS.index((0, 0))
     bg = s.background.astype(np.float64)
     median_bg = float(np.median(bg))
     if median_bg <= 0:
@@ -161,9 +170,7 @@ def _relative_depth_per_cell(s: SampledImage) -> np.ndarray | None:
     global_depth = (median_bg - s.ink) / median_bg
     if global_depth <= 0:
         return None
-    dark = np.sort(s.raw[:, zero, :], axis=1)[:, _CELL_INK_RANK].astype(np.float64)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        depth = np.where(bg > 0, (bg - dark) / bg, 0.0)
+    depth = raw_cell_depths(s)
     idx = np.arange(len(bg), dtype=np.float64)
     inked = (depth >= _INKED_CELL_FRACTION * global_depth) & (depth >= MIN_CONTRAST)
     if int(inked.sum()) < _MIN_INKED_CELLS:

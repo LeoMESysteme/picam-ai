@@ -41,6 +41,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             confirmed_by=str(data.get("confirmed_by", "")),
             format_checked=bool(data.get("format_checked")),
             acknowledge_warning=bool(data.get("acknowledge_warning")),
+            use_tolerance=bool(data.get("use_tolerance", False)),
         )
 
     async def run_start(request):
