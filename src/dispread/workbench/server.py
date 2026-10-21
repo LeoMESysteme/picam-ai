@@ -272,6 +272,8 @@ async def handle_local_op(op, args, controller, live):
             await asyncio.to_thread(live.start_setup, cell_text=(args or {}).get("cell_text"))
         elif op == "live.stop":
             await asyncio.to_thread(live.stop_run)
+        elif op == 'live.mark':
+            await asyncio.to_thread(live.mark, text=(args or {}).get('text'))
         elif op == "live.camera":
             await asyncio.to_thread(live.start_camera)
         else:

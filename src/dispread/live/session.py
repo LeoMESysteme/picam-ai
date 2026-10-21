@@ -31,6 +31,7 @@ from dispread.live import (
     RELEASE_NOTICE,
 )
 from dispread.live.clock import ClockLog
+from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -80,6 +81,8 @@ class LiveSession:
         *,
         test_run: dict | None = None,
         reference_recorder: Any = None,
+        diagnostics: bool = False,
+        diagnostic_staging_root: Path = Path('/dev/shm'),
         reader_d_max_factor: float = 1.0,
         reader_tolerance: dict | None = None,
         reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
@@ -104,6 +107,10 @@ class LiveSession:
         self._profile_path = Path(profile_path)
         self._config = config
         self._out_dir = Path(out_dir)
+        self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
+                                               staging_root=diagnostic_staging_root, monotonic=monotonic)
+        self._marks = 0
+        self.last_mark: dict | None = None
         self._reader_factory = reader_factory
         self._locator_factory = locator_factory
         self._clock = clock or ClockLog()
@@ -238,7 +245,13 @@ class LiveSession:
             except Exception:
                 self.stop(reason="start_failed")
                 raise
-        self._write_session(ended=False)
+        self._diagnostics.start(profile_sha256=self._meta['profile']['sha256'],
+                                reference_sha256=reference['sha256'])
+        try:
+            self._write_session(ended=False)
+        except Exception:
+            self.stop(reason='start_failed')
+            raise
 
     # -- Lesen ---------------------------------------------------------------
     def step(self, timeout: float = 0.5) -> ValueRecord | None:
@@ -303,6 +316,7 @@ class LiveSession:
                     self._guesses[text] += 1
             self.latest = record
             self.latest_monotonic = self._monotonic()
+            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
@@ -334,6 +348,44 @@ class LiveSession:
                     self.end_reason = reason
 
     # -- Ende ----------------------------------------------------------------
+    def mark(self, text: str) -> None:
+        # Host-Eingang vor dem Warten auf einen laufenden Leseschritt festhalten.
+        received = {'zeit': 'meldezeit_bediener', 't_boottime_ns': time.clock_gettime_ns(time.CLOCK_BOOTTIME),
+                    'received_at_utc': datetime.now(UTC).isoformat()}
+        if not isinstance(text, str) or not text.strip() or len(text) > 200:
+            raise ValueError('Ereignismarke braucht 1 bis 200 Zeichen')
+        with self._stop_lock:
+            if self._stopped or self._sink is None:
+                raise ValueError('kein Lauf aktiv')
+            entry = {**received, 'text': text, 'number': self._marks + 1}
+            with (self._out_dir / 'marks.jsonl').open('a', encoding='utf-8') as stream:
+                stream.write(json.dumps(entry, ensure_ascii=False) + '\n')
+            self._marks += 1
+            self.last_mark = entry
+            number = self._marks
+        # Der Rohbild-Snapshot braucht den Pipeline-/Stop-Lock nicht.
+        self._diagnostics.mark(number)
+        with self._stop_lock:
+            if not self._stopped:
+                self._write_session(ended=False)
+
+    def diagnostics_status(self) -> dict:
+        return self._diagnostics.status()
+
+    @property
+    def diagnose_kopie(self) -> bool:
+        return self._diagnostics.copying
+
+    def wait_diagnostics(self, timeout: float) -> bool:
+        return self._diagnostics.wait(timeout)
+
+    def _diagnostics_done(self) -> None:
+        with self._stop_lock:
+            # Nur Diagnose ergaenzen: Kamera/Clock koennen bereits zum Folgelauf gehoeren.
+            data = json.loads(self.session_path.read_text(encoding='utf-8'))
+            data['diagnostics'] = self.diagnostics_status()
+            self._save_session(data)
+
     def stop(self, reason: str = "bediener") -> dict:
         with self._stop_lock:
             if self._stopped:
@@ -351,8 +403,16 @@ class LiveSession:
                     if self._sink is not None:
                         self._sink.close()
                 finally:
-                    self._write_session(ended=True)
-                    self._stopped = True
+                    try:
+                        self._write_session(ended=True)
+                    finally:
+                        self._stopped = True
+                        self._diagnostics.stop(on_done=self._diagnostics_done)
+                        if not self._diagnostics.copying and self.diagnostics_status()['write_errors']:
+                            # Auch ein fehlgeschlagener Finisher-Start muss im Artefakt stehen.
+                            data = json.loads(self.session_path.read_text(encoding='utf-8'))
+                            data['diagnostics'] = self.diagnostics_status()
+                            self._save_session(data)
             return self.summary
 
     def request_reference_stop(self) -> None:
@@ -372,6 +432,7 @@ class LiveSession:
             return
         owner_status = self._owner.status()
         self.summary = {
+            "marks": self._marks,
             "by_status": dict(self._by_status),
             "transition_display_changing": self._display_changing,
             "frames_read": self._frames_read,
@@ -394,6 +455,8 @@ class LiveSession:
         }
         data = dict(self._meta)
         data["reference"] = self.reference_status()
+        data['diagnostics'] = self.diagnostics_status()
+        data['last_mark'] = self.last_mark
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
         if self._test_run is not None:
@@ -401,6 +464,9 @@ class LiveSession:
             data["guesses"] = {"frames": self._guesses.total(), "top": self._guesses.most_common(10)}
         if ended:
             data["ended_at_utc"] = self._wall().isoformat()
+        self._save_session(data)
+
+    def _save_session(self, data: dict) -> None:
         tmp = self.session_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, self.session_path)

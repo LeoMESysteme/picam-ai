@@ -132,6 +132,21 @@ if (typeof document !== 'undefined') {
       : s.reference?.error ? s.reference.error
       : s.reference?.enabled ? `Referenz: ${s.reference.lines} Telegramme`
       : `ohne Referenz: ${s.reference?.reason || 'nicht gestartet'}`;
+    const diag = s.diagnostics;
+    $('diagnostics-enabled').disabled = s.state === 'running';
+    $('diagnostics-status').textContent = (diag?.enabled
+      ? `Diagnose: ${diag.saved} Bilder, ${(diag.bytes / 1e6).toFixed(1)} MB; Queue verworfen: ${diag.dropped_queue}, ` +
+        `Limit verworfen: ${diag.dropped_limit}, RAM verworfen: ${diag.dropped_memory ?? 0}, ` +
+        `Markenbilder verworfen: ${diag.dropped_mark_rate ?? 0}, Schreibfehler: ${diag.write_errors}`
+      : `Diagnose aus: ${diag?.reason || 'nicht gestartet'}`) +
+      (s.diagnose_kopie ? ' · Diagnose wird kopiert …' : '') +
+      (diag?.first_error ? ` · ${diag.first_error} · RAM-Ablage: ${diag.staging || '—'}` : '') +
+      (diag?.copied ? ' · Kopie gesichert' : '') +
+      (s.diagnostic_leftovers || []).map(item => ` · Verbliebene RAM-Ablage: ${item.path} (` +
+        `${item.bytes == null ? 'Größe unbekannt' : (item.bytes / 1e6).toFixed(1) + ' MB'})`).join('');
+    $('mark-box').hidden = s.state !== 'running';
+    $('last-mark').textContent = s.last_mark
+      ? `Letzte Marke (Meldezeit): ${s.last_mark.received_at_utc} · ${s.last_mark.text}` : '';
     renderError(s);
     $('setup-state').textContent = s.setup?.overall ? `Gesamturteil: ${s.setup.overall}` : '';
     $('setup-checks').textContent = Object.entries(s.setup?.checks || {}).map(([name, status]) => {
@@ -197,9 +212,11 @@ if (typeof document !== 'undefined') {
     }
     if (schedule && !window.confirm('Werteplan anwenden? Der Plan schreibt in den RAM des GSV-2AS. Beim Stoppen werden die Ausgangswerte zurückgestellt und geprüft. Gerät verbunden lassen.')) return;
     return post('/live/run/start', {test_override: override,
-      reference: $('reference-enabled').checked, norm_schedule: schedule || null});
+      reference: $('reference-enabled').checked, norm_schedule: schedule || null,
+      diagnostics: $('diagnostics-enabled').checked});
   };
   $('run-stop').onclick = () => post('/live/run/stop');
+  $('run-mark').onclick = () => post('/live/run/mark', {text: $('mark-text').value});
   $('camera-start').onclick = () => post('/live/camera/start');
   setInterval(renderConnection, 500);
   tick();

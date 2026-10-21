@@ -12,6 +12,8 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(headline).toHaveText('Bereit zur Einrichtung');
   await expect(page.locator('#notice')).toContainText('Validiert nur:');
   await expect(page.locator('#confirm-box')).toBeHidden();
+  await expect(page.locator('#diagnostics-enabled')).not.toBeChecked();
+  await expect(page.locator('#mark-box')).toBeHidden();
 
   const setState = async (state) => {
     const statusResponse = await page.request.get('/live/status');
@@ -80,7 +82,20 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
 
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
     unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2 };
-  await setState({ state: 'running', run });
+  await setState({ state: 'running', run, diagnostics: {enabled: true, saved: 4, bytes: 12_500_000,
+    dropped_queue: 0, dropped_limit: 0, dropped_memory: 2, dropped_mark_rate: 3, write_errors: 0},
+    diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}] });
+  await expect(page.locator('#diagnostics-status')).toContainText('12.5 MB');
+  await expect(page.locator('#diagnostics-status')).toContainText('RAM verworfen: 2');
+  await expect(page.locator('#diagnostics-status')).toContainText('Markenbilder verworfen: 3');
+  await expect(page.locator('#diagnostics-status')).toContainText('/test/dispread-diagnose-old (2.5 MB)');
+  await expect(page.locator('#mark-box')).toBeVisible();
+  await page.locator('#mark-text').fill('Display abgedeckt');
+  const markRequest = page.waitForRequest('**/live/run/mark');
+  await page.getByRole('button', { name: 'Ereignis markieren', exact: true }).click();
+  expect((await markRequest).postDataJSON()).toEqual({text: 'Display abgedeckt'});
+  await expect(page.locator('#last-mark')).toContainText('Meldezeit');
+  await expect(page.locator('#last-mark')).toContainText('Display abgedeckt');
   await expect(headline).toHaveText('+1.2345 mV/V');
   await expect(headline).toHaveClass('value valid');
   await expect(headline).toHaveCSS('color', 'rgb(126, 231, 135)');

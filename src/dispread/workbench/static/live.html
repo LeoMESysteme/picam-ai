@@ -61,6 +61,7 @@ input[type=text]{font:inherit;width:22ch}
       <label><input type="checkbox" id="test-override"> Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden</label>
     </details>
     <label><input type="checkbox" id="reference-enabled" checked> Referenz vom GSV-2AS mitschreiben</label>
+    <label><input type="checkbox" id="diagnostics-enabled"> Diagnosebilder aufzeichnen (für Fehlersuche, belegt RAM)</label>
     <label>Werteplan (set norm), z. B. 1:20,2:20,0.5:20
       <input id="norm-schedule" type="text" placeholder="optional: Faktor:Sekunden">
     </label>
@@ -68,6 +69,12 @@ input[type=text]{font:inherit;width:22ch}
     <p id="reference-status" role="status"></p>
     <button id="run-start">Lauf starten</button>
     <button id="run-stop">Lauf stoppen</button>
+    <p id="diagnostics-status" role="status"></p>
+    <div id="mark-box" hidden>
+      <label>Ereignis (Meldezeit des Bedieners): <input id="mark-text" type="text" maxlength="200"></label>
+      <button id="run-mark">Ereignis markieren</button>
+    </div>
+    <p id="last-mark" role="status"></p>
     <div id="error" class="error" role="alert"></div>
   </section>
 </main>

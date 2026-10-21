@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -48,7 +49,17 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     async def run_start(request):
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_run, test_override=bool(data.get("test_override")),
-                           reference=bool(data.get("reference", True)), norm_schedule=data.get("norm_schedule"))
+                           reference=bool(data.get("reference", True)), norm_schedule=data.get("norm_schedule"),
+                           diagnostics=bool(data.get('diagnostics', False)))
+
+    async def run_mark(request):
+        try:
+            data = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = None
+        if not isinstance(data, dict):
+            return web.json_response({'error': 'Ereignismarke braucht ein JSON-Objekt mit Text'}, status=400)
+        return await _call(service.mark, text=data.get('text'))
 
     async def run_stop(_request):
         return await _call(service.stop_run)
@@ -74,6 +85,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_post("/live/confirm", confirm)
     app.router.add_post("/live/run/start", run_start)
     app.router.add_post("/live/run/stop", run_stop)
+    app.router.add_post('/live/run/mark', run_mark)
     app.router.add_post("/live/camera/start", camera_start)
     app.router.add_get("/live/setup/{name}.png", setup_image)
     app.router.add_get("/live/preview.jpg", preview)

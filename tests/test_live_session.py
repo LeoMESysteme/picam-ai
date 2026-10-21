@@ -19,6 +19,11 @@ _CAMERA = CameraSettings(model="logitech_streamcam", usb_id="046d:0893", size=(8
                                    "white_balance_temperature": 4600, "gain": 10})
 
 
+@pytest.fixture(autouse=True)
+def diagnostic_memory_available(monkeypatch):
+    monkeypatch.setattr('dispread.live.diagnostics.read_mem_available', lambda: 2_000_000_000)
+
+
 class FakeOwner:
     source_id = "fake"
 
@@ -65,7 +70,7 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     profile_path, config = _files(tmp_path, reference_ok=reference_ok)
     offsets = iter(range(1000, 2000))
     return LiveSession(
-        FakeOwner(images), profile_path, config, tmp_path / "run",
+        FakeOwner(images), profile_path, config, kw.pop("out_dir", tmp_path / "run"),
         reader_factory=lambda _p, _s, **kw: synthetic_reader(),
         locator_factory=lambda _ref, quad: ManualRoiLocator(tuple(tuple(p) for p in quad)),
         clock=ClockLog(measure=lambda: next(offsets), monotonic_ns=lambda: 0),
@@ -630,6 +635,101 @@ def test_reference_audit_leaves_records_byte_identical(tmp_path, monkeypatch):
     assert port.closed and not port.writes
 
 
+def test_diagnostics_and_marks_leave_records_byte_identical(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(free=2_000_000_000))
+    images = [embed('+ 1.2345 '), embed('+ 1.2345 ')]
+    plain = _session(tmp_path, images)
+    plain.start()
+    plain.step()
+    plain.step()
+    plain.stop()
+    expected = plain.records_path.read_bytes()
+    recorded = _session(tmp_path, images, diagnostics=True, diagnostic_staging_root=tmp_path,
+                        out_dir=tmp_path / "with-diagnostics", monotonic=lambda: 0.0)
+    recorded.start()
+    recorded.mark('vor erstem Bild')
+    recorded.step()
+    recorded.mark('Abdeckung')
+    recorded.mark('Ende')
+    recorded.step()
+    assert recorded.stop()['marks'] == 3
+    assert recorded._diagnostics.wait(3)
+    assert recorded.records_path.read_bytes() == expected
+    marks = [json.loads(line) for line in (recorded._out_dir / 'marks.jsonl').read_text().splitlines()]
+    assert [m['text'] for m in marks] == ['vor erstem Bild', 'Abdeckung', 'Ende']
+    assert all(m['zeit'] == 'meldezeit_bediener' and m['t_boottime_ns'] == 123456789
+               and m['received_at_utc'].endswith('+00:00') for m in marks)
+    meta = json.loads(recorded.session_path.read_text())
+    assert meta['diagnostics']['saved'] == 1 and meta['diagnostics']['copied']
+    assert meta['diagnostics']['dropped_mark_rate'] == 2
+    assert meta['summary']['marks'] == 3 and recorded.last_mark == marks[-1]
+    entries = [json.loads(line) for line in (recorded._out_dir / 'diagnose' / 'images.jsonl').read_text().splitlines()]
+    assert [e['mark'] for e in entries] == [1]
+    assert all(e['trigger'] == 'operator_mark' for e in entries)
+
+
+@pytest.mark.parametrize('text', ['', ' ', 'x' * 201, None, 42])
+def test_mark_rejects_invalid_text(tmp_path, text):
+    session = _session(tmp_path, [])
+    session.start()
+    with pytest.raises(ValueError, match='1 bis 200'):
+        session.mark(text)
+    assert session.stop()['marks'] == 0
+
+
+def test_marks_without_diagnostics_and_refusal_after_stop(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    session.mark('x' * 200)
+    assert session.stop()['marks'] == 1
+    assert not json.loads(session.session_path.read_text())['diagnostics']['enabled']
+    with pytest.raises(ValueError, match='kein Lauf'):
+        session.mark('zu spaet')
+
+
+def test_diagnostic_copy_does_not_hold_session_stop_and_updates_final_metadata(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(free=2_000_000_000))
+    entered, release = threading.Event(), threading.Event()
+    copy = diagnostics.shutil.copyfile
+
+    def slow(src, dst):
+        entered.set()
+        assert release.wait(3)
+        return copy(src, dst)
+
+    monkeypatch.setattr(diagnostics.shutil, 'copyfile', slow)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    session.mark('Kopie')
+    try:
+        session.stop()
+        assert entered.wait(1)
+        assert session.diagnose_kopie
+        meta = json.loads(session.session_path.read_text())
+        assert meta['ended_at_utc'] and not meta['diagnostics']['copied']
+        assert session.step() is None
+        # Die Kamera kann vor Kopierende schon fuer den naechsten Lauf arbeiten.
+        monkeypatch.setattr(session._owner, 'status', lambda: {'gaps': 999, 'error': 'neuer Lauf'})
+    finally:
+        release.set()
+    assert session._diagnostics.wait(3)
+    final = json.loads(session.session_path.read_text())
+    assert final['ended_at_utc'] == meta['ended_at_utc']
+    assert final['summary'] == meta['summary']
+    assert final['diagnostics']['copied'] and not session.diagnose_kopie
+
+
 def test_restore_timeout_is_saved_in_session_json(tmp_path, monkeypatch):
     from test_live_reference import RegisterPort, _wait_for
 
@@ -887,3 +987,120 @@ def test_region_run_guards_injected_non_dict_profile_block(tmp_path, monkeypatch
     with pytest.raises(StartRefused) as error:
         session.start()
     assert str(error.value) == "Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten"
+
+
+@pytest.mark.parametrize('resource,reason', [('space', 'Platz'), ('memory', 'MemAvailable')])
+def test_insufficient_diagnostic_ram_still_starts_and_records_reason(tmp_path, monkeypatch, resource, reason):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(
+        free=100 if resource == 'space' else 2_000_000_000))
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 1_099_999_999)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    assert session.step() is not None
+    session.stop()
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status == session.diagnostics_status()
+    assert not status['enabled'] and reason in status['reason']
+    assert status['saved'] == 0 and status['staging'] is None
+
+
+def test_mark_snapshot_does_not_hold_pipeline_stop_lock(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    entered, release = threading.Event(), threading.Event()
+    original = session._diagnostics._enqueue
+    def delayed_snapshot(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(session._diagnostics, '_enqueue', delayed_snapshot)
+    thread = threading.Thread(target=session.mark, args=('Marke',))
+    thread.start()
+    try:
+        assert entered.wait(1)
+        acquired = session._stop_lock.acquire(timeout=0.1)
+        if acquired:
+            session._stop_lock.release()
+        assert acquired, 'mark snapshot held the pipeline stop lock'
+    finally:
+        release.set()
+        thread.join(3)
+        session.stop()
+        assert session._diagnostics.wait(3)
+
+
+def test_loss_and_periodic_diagnostics_leave_records_byte_identical(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    monkeypatch.setattr(diagnostics, 'PERIODIC_INTERVAL_S', 0.25)
+    images = [embed('+ 1.2345 ')] * 5
+    outputs = []
+    for enabled in (False, True):
+        now = [0.0]
+        session = _session(tmp_path, images, diagnostics=enabled, diagnostic_staging_root=tmp_path,
+                           monotonic=lambda now=now: now[0], out_dir=tmp_path / str(enabled))
+        session.start()
+        locator = session._pipeline.locator
+        original_locate = locator.locate
+        def locate(frame, original=original_locate, locator=locator):
+            locator.last_reason = 'tracking_lost:abdeckung' if frame.frame_sequence in (2, 3) else None
+            return () if locator.last_reason else original(frame)
+        monkeypatch.setattr(locator, 'locate', locate)
+        for step in range(5):
+            now[0] = (step + 1) * 0.5
+            session.step()
+        session.stop()
+        assert session._diagnostics.wait(3)
+        outputs.append(session.records_path.read_bytes())
+    assert outputs[0] == outputs[1]
+    entries = [json.loads(line) for line in (session._out_dir / 'diagnose' / 'images.jsonl').read_text().splitlines()]
+    assert [e['trigger'] for e in entries] == ['periodic', 'tracking_loss', 'tracking_recovered', 'periodic']
+    assert [e['frame_sequence'] for e in entries] == [1, 2, 4, 5]
+
+
+def test_memory_drops_are_saved_in_session_diagnostics(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    available, now = [2_000_000_000], [0.0]
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: available[0])
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True,
+                       diagnostic_staging_root=tmp_path, monotonic=lambda: now[0])
+    session.start()
+    session.step()
+    available[0], now[0] = 499_999_999, 1.0
+    session.mark('RAM knapp')
+    session.stop()
+    assert session.wait_diagnostics(3)
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status['saved'] == 0 and status['dropped_memory'] == 1
+    assert status == session.diagnostics_status()
+
+
+def test_finisher_start_error_is_saved_and_session_stop_still_succeeds(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    session.mark('Threadmangel')
+    start = threading.Thread.start
+    def fail_copy(thread):
+        if thread.name == 'diagnose-copy':
+            raise RuntimeError('kein Thread verfuegbar')
+        return start(thread)
+    monkeypatch.setattr(threading.Thread, 'start', fail_copy)
+    assert session.stop()['marks'] == 1
+    session._diagnostics._worker.join(3)
+    assert not session.diagnose_kopie
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status['first_error'] == 'RuntimeError: kein Thread verfuegbar'
+    assert not status['copied'] and session._diagnostics.staging.exists()

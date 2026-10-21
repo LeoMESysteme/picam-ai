@@ -345,6 +345,57 @@ weiteren Freigabeläufen überarbeitet und erneut geprüft werden.
 Ein Toleranzlauf ≥ 10 min mit Werteplan bleibt separat offen
 ([TODO](../../TODO.md)).
 
+### Diagnosebilder und Ereignismarken
+
+Für die Fehlersuche bei verlorener Nachführung vor dem Lauf
+**„Diagnosebilder aufzeichnen (für Fehlersuche, belegt RAM)“** einschalten.
+Die Vorgabe ist aus. Gespeichert werden unveränderte Vollbilder als verlustfreie
+PNG (schnelle Kompressionsstufe 1), mit Trackingbefund, Aufnahmezeit samt
+Zeitbasis, Sequenzen, Recordstatus und Profil-/Referenzbildhash in `images.jsonl`.
+Bei der StreamCam ist `camera_sequence` dabei `null`: `UvcSource` liefert keine
+Treibersequenz. Frame- und Owner-Sequenz bleiben zur Zuordnung verfügbar.
+Verlustbeginn und erste Wiederkehr lösen sofort ein Bild aus; während eines
+Verlusts höchstens eines je Sekunde, bei guter Nachführung alle 30 Sekunden.
+
+Die Diagnose belegt höchstens **300 Bilder und 600 MB je Lauf** in
+`/dev/shm/dispread-diagnose-<sitzung>-<run>/`. Beim Start müssen zusätzlich
+200 MB auf dem tmpfs frei bleiben und `MemAvailable` aus `/proc/meminfo`
+mindestens 1100 MB betragen (600 MB Budget plus 500 MB Hauptspeicherreserve).
+Sonst startet der Lauf mit sichtbarem Grund ohne Diagnose. tmpfs kann in den
+Swap auf der SD-Karte ausgelagert werden; sein freier Platz allein reicht nicht.
+Während des Laufs wird `MemAvailable` höchstens einmal pro Sekunde geprüft:
+Unter 500 MB werden neue Bilder als `dropped_memory` gezählt und verworfen.
+Eine volle Warteschlange verwirft das neue Diagnosebild; Status und `session.json`
+zeigen gespeicherte Bilder, Bytes, verworfene Bilder und Schreibfehler; die Seite
+zeigt den Speicherverbrauch in MB (dezimal).
+Tracking, Leser und Freigabe hängen nicht von der Diagnose ab.
+
+Nach dem Stoppen werden die Bilder im Hintergrund nach
+`var/live/<sitzung>/run-NN/diagnose/` kopiert. Solange zeigt der Status
+`diagnose_kopie: true`. Beim Dienstende wartet der Server insgesamt höchstens
+60 Sekunden auf ausstehende Diagnosekopien und protokolliert ein Zeitlimit.
+Erst nach geprüften Dateigrößen wird die RAM-Ablage entfernt; bei Kopierfehlern
+bleibt sie zur Rettung erhalten und ihr Pfad wird angezeigt. RAM-Daten überleben
+einen Neustart des Rechners nicht. Beim nächsten Serverstart werden verbliebene
+`dispread-diagnose-*`-Verzeichnisse mit Pfad und Größe protokolliert und unter
+`diagnostic_leftovers` im Status sowie auf der Seite angezeigt. Diese Ablagen
+werden nicht automatisch gelöscht: vor dem Entfernen nötige Daten retten.
+
+Während eines Laufs können kurze Texte (1–200 Zeichen) mit
+**„Ereignis markieren“** oder lokal mit
+`dispread live mark "Display abgedeckt"` festgehalten werden, auch ohne Diagnose.
+Jede Marke steht in `run-NN/marks.jsonl`; die Zusammenfassung zählt sie,
+der Status zeigt die letzte Marke. Bei aktiver Diagnose löst höchstens eine Marke
+je zwei Sekunden ein Bild des
+zuletzt verarbeiteten Frames aus (vor dem ersten Frame dessen nächstes Bild),
+vorbehaltlich der Speicher- und Queue-Grenzen.
+Zusätzliche Marken bleiben vollständig in `marks.jsonl`, ihre ausgelassenen
+Bilder werden als `dropped_mark_rate` gezählt.
+**Die Zeit der Marke ist die Meldezeit des Bedieners am Host**, mit
+CLOCK_BOOTTIME in ns und UTC, ausdrücklich `zeit: meldezeit_bediener`.
+Sie ist kein genauer physischer Ereigniszeitpunkt. Auch die Aufnahmezeit
+des zugeordneten Bilds ist eine eigene Angabe mit ihrer eigenen Zeitbasis.
+
 ### Dateien und lokale Bedienung
 
 | Ablage | Inhalt |

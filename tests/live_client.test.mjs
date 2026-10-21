@@ -305,7 +305,7 @@ test('override requires explicit dialog approval and resets with session', async
       assert.equal(page.posts.length, 0);
       globalThis.window.confirm = () => true;
       await element('run-start').onclick();
-      assert.deepEqual(page.posts.at(-1).body, {test_override: true, reference: true, norm_schedule: null});
+      assert.deepEqual(page.posts.at(-1).body, {test_override: true, reference: true, norm_schedule: null, diagnostics: false});
       assert.equal(element('test-override').checked, false);
       page.status = {...page.status, session_id: 'new'};
       await poll();
@@ -366,7 +366,7 @@ test('norm plan needs confirmation and is sent with explicit reference selection
       assert.equal(page.posts.length, 0);
       globalThis.window.confirm = () => true;
       await element('run-start').onclick();
-      assert.deepEqual(page.posts.at(-1).body, {test_override: false, reference: true, norm_schedule: '1:20,2:20'});
+      assert.deepEqual(page.posts.at(-1).body, {test_override: false, reference: true, norm_schedule: '1:20,2:20', diagnostics: false});
       element('reference-enabled').checked = false;
       await element('run-start').onclick();
       assert.equal(page.posts.length, 1);
@@ -467,4 +467,37 @@ test('failed full status is retried until the first successful response', async 
     assert.deepEqual(page.gets, ['/live/status?full=1', '/live/status?full=1', '/live/status']);
     assert.match(element('headline').textContent, /Einrichtung läuft/);
   }, {httpStatus: 500});
+});
+
+
+test('diagnostics default off, explicit opt-in and operator marks', async () => {
+  await withLivePage(async (page, element, poll) => {
+    await element('run-start').onclick();
+    assert.equal(page.posts.at(-1).body.diagnostics, false);
+    element('diagnostics-enabled').checked = true;
+    await element('run-start').onclick();
+    assert.equal(page.posts.at(-1).body.diagnostics, true);
+    page.status = {state: 'running', diagnostics: {enabled: true, saved: 4, dropped_queue: 2,
+      dropped_limit: 1, dropped_memory: 2, dropped_mark_rate: 3,
+      write_errors: 1, first_error: 'Platte voll', bytes: 12_500_000},
+      diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}],
+      diagnose_kopie: true, last_mark: {text: '<Abdeckung>', received_at_utc: '2026-10-21T10:00:00Z'}};
+    await poll();
+    assert.equal(element('mark-box').hidden, false);
+    assert.match(element('diagnostics-status').textContent, /4/);
+    assert.match(element('diagnostics-status').textContent, /12[.,]5 MB/);
+    assert.match(element('diagnostics-status').textContent, /RAM verworfen: 2/);
+    assert.match(element('diagnostics-status').textContent, /Markenbilder verworfen: 3/);
+    assert.match(element('diagnostics-status').textContent, /\/test\/dispread-diagnose-old.*2[.,]5 MB/);
+    assert.match(element('diagnostics-status').textContent, /Platte voll/);
+    assert.match(element('diagnostics-status').textContent, /kopiert/);
+    assert.match(element('last-mark').textContent, /Meldezeit.*<Abdeckung>/);
+    element('mark-text').value = 'Abdeckung';
+    await element('run-mark').onclick();
+    assert.equal(page.posts.at(-1).path, '/live/run/mark');
+    assert.equal(page.posts.at(-1).body.text, 'Abdeckung');
+    page.status = {state: 'stopped'};
+    await poll();
+    assert.equal(element('mark-box').hidden, true);
+  });
 });

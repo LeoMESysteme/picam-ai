@@ -8,6 +8,7 @@ oder tiefer (Spec 2026-10-12 §1/§3).
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
+from dispread.live.diagnostics import staging_leftovers
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.session_profile import SessionProfile
@@ -32,6 +34,8 @@ from dispread.workbench.fields import REASONS
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 DEVICE_ID = "gsv-sensor-161a"
+DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
+_LOG = logging.getLogger(__name__)
 
 
 class LiveError(ValueError):
@@ -121,6 +125,7 @@ class LiveService:
         setup_runner: Callable[..., dict] | None = None,
         wall: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
+        diagnostic_staging_root: Path = Path('/dev/shm'),
     ) -> None:
         self._owner = owner
         self._data_dir = Path(data_dir)
@@ -131,6 +136,10 @@ class LiveService:
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
         self._monotonic = monotonic or time.monotonic
+        self._diagnostic_staging_root = diagnostic_staging_root
+        self._diagnostic_copies: list[LiveSession] = []
+        for leftover in staging_leftovers(self._diagnostic_staging_root):
+            _LOG.warning('Verbliebene Diagnose-Ablage: %s (%s Bytes)', leftover['path'], leftover['bytes'])
         self._setup_started_at: float | None = None
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
@@ -227,6 +236,18 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "diagnostics": (self._session.diagnostics_status()
+                                if self._session is not None and hasattr(self._session, 'diagnostics_status')
+                                else {'enabled': False, 'reason': 'kein Diagnoselauf'}),
+                "diagnose_kopie": any(getattr(s, 'diagnose_kopie', False)
+                                      for s in [*self._diagnostic_copies, self._session]),
+                "diagnostic_leftovers": staging_leftovers(self._diagnostic_staging_root, exclude={
+                    s.diagnostics_status().get('staging')
+                    for s in [*self._diagnostic_copies, self._session]
+                    if s is not None and hasattr(s, 'diagnostics_status')
+                    and (getattr(s, 'diagnose_kopie', False) or (s is self._session and self._state == 'running'))
+                }),
+                "last_mark": getattr(self._session, 'last_mark', None),
                 "reference": (self._session.reference_status()
                               if self._session is not None and hasattr(self._session, "reference_status")
                               else {"enabled": False, "reason": "kein Referenzlauf"}),
@@ -296,6 +317,8 @@ class LiveService:
                 self._session_dir, self._proposal = session_dir, None
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
+                self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
+                                           if getattr(s, 'diagnose_kopie', False)]
                 self._session = None
             self._setup_thread = threading.Thread(
                 target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
@@ -511,7 +534,8 @@ class LiveService:
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
-    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None) -> None:
+    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None,
+                  diagnostics: bool = False) -> None:
         try:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
@@ -561,12 +585,15 @@ class LiveService:
                     reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
+                    diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
             stop = threading.Event()
             with self._lock:
+                self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
+                                           if getattr(s, 'diagnose_kopie', False)]
                 self._session, self._run_stop, self._state, self._error = session, stop, "running", None
                 self._run_dir = out_dir
                 self._test_run = test_run
@@ -592,6 +619,16 @@ class LiveService:
     def stop_run(self) -> None:
         with self._operation_lock:
             self._stop_run()
+
+    def mark(self, text: str) -> None:
+        with self._lock:
+            if self._state != 'running' or self._session is None:
+                raise LiveError('kein Lauf aktiv')
+            session = self._session
+        try:
+            session.mark(text)
+        except (ValueError, OSError) as exc:
+            raise LiveError(str(exc)) from exc
 
     def _stop_run(self) -> None:
         with self._lock:
@@ -622,8 +659,17 @@ class LiveService:
                 self._state, self._error = "stopped", error
 
     def close(self) -> None:
+        deadline = time.monotonic() + min(DIAGNOSTIC_CLOSE_TIMEOUT_S, 60.0)
         with self._operation_lock:
             with self._lock:
                 running = self._state == "running"
-            if running:
-                self._stop_run()
+            try:
+                if running:
+                    self._stop_run()
+            finally:
+                # Gemeinsames Zeitbudget fuer alte Kopien und den aktuellen Lauf.
+                for session in [*self._diagnostic_copies, self._session]:
+                    if session is None or not hasattr(session, 'wait_diagnostics'):
+                        continue
+                    if not session.wait_diagnostics(max(0.0, deadline - time.monotonic())):
+                        _LOG.warning('Diagnosekopie: Zeitlimit beim Dienstende; RAM-Ablage zur Rettung behalten')

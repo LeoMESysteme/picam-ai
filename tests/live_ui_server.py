@@ -44,7 +44,7 @@ class FakeLiveService:
             self._status = {
                 "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
-                "camera": {"running": True, "frames": 1, "gaps": 0},
+                "camera": {"running": True, "frames": 1, "gaps": 0}, "diagnostic_leftovers": [],
                 **copy.deepcopy(state),
             }
 
@@ -65,8 +65,15 @@ class FakeLiveService:
             raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
         self.set_state({"state": "confirmed"})
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
-        self.set_state({"state": "running"})
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False):
+        self.set_state({"state": "running", "diagnostics": {"enabled": diagnostics, "saved": 0,
+                        "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
+                        "dropped_mark_rate": 0, "write_errors": 0}})
+
+    def mark(self, text):
+        with self._lock:
+            self._status['last_mark'] = {'text': text, 'zeit': 'meldezeit_bediener',
+                                         'received_at_utc': '2026-10-21T10:00:00Z'}
 
     def stop_run(self):
         self.set_state({"state": "stopped"})

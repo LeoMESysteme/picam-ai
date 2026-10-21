@@ -450,7 +450,7 @@ def test_start_camera_wraps_failure(tmp_path):
 
 
 class MarkerSession:
-    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None, reference_recorder=None):
+    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None, reference_recorder=None, diagnostics=False, diagnostic_staging_root=None):
         self.latest, self.summary, self.end_reason = None, {}, None
         self.session_path = out_dir / "session.json"
         self.records_path = out_dir / "records.jsonl"
@@ -1440,3 +1440,135 @@ def test_tracking_reasons_only_in_explicit_full_status(tmp_path):
     assert "tracking_reasons" not in service.status()
     assert service.status(full=True)["tracking_reasons"] == REASONS
     assert "tracking_reasons" not in service.status()
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_diagnostics_option_and_mark_status(tmp_path, monkeypatch, enabled):
+    class Session(MarkerSession):
+        def __init__(self, *args, diagnostics=False, **kw):
+            super().__init__(*args, **kw)
+            self.enabled = diagnostics
+            self.last_mark = None
+            self.diagnose_kopie = False
+
+        def mark(self, text):
+            self.last_mark = {'text': text, 'zeit': 'meldezeit_bediener'}
+
+        def diagnostics_status(self):
+            return {'enabled': self.enabled, 'saved': 3}
+
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    with pytest.raises(LiveError, match='kein Lauf'):
+        service.mark('zu frueh')
+    service.start_run(reference=False, diagnostics=enabled)
+    try:
+        service.mark('Abdeckung')
+        status = service.status()
+        assert status['diagnostics'] == {'enabled': enabled, 'saved': 3}
+        assert status['last_mark'] == {'text': 'Abdeckung', 'zeit': 'meldezeit_bediener'}
+        assert status['diagnose_kopie'] is False
+        service._session.diagnose_kopie = True
+        assert service.status()['diagnose_kopie'] is True
+    finally:
+        service.stop_run()
+    with pytest.raises(LiveError, match='kein Lauf'):
+        service.mark('zu spaet')
+
+
+def test_diagnostic_copy_stays_visible_during_new_setup(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=lambda **kw: {})
+    previous = SimpleNamespace(diagnose_kopie=True)
+    service._session = previous
+    service.start_setup()
+    assert service.status()['diagnose_kopie'] is True
+    previous.diagnose_kopie = False
+    assert service.status()['diagnose_kopie'] is False
+
+
+def test_leftover_diagnostics_are_reported_on_start_and_in_status(tmp_path, caplog):
+    staging = tmp_path / 'shm'
+    abandoned = staging / 'dispread-diagnose-old-run-01'
+    abandoned.mkdir(parents=True)
+    (abandoned / '0001.png').write_bytes(b'png')
+    (abandoned / 'images.jsonl').write_bytes(b'index')
+    service = LiveService(FakeOwner(), tmp_path / 'live', diagnostic_staging_root=staging)
+    assert str(abandoned) in caplog.text and '8' in caplog.text
+    assert service.status()['diagnostic_leftovers'] == [{'path': str(abandoned), 'bytes': 8}]
+    (abandoned / '0002.png').write_bytes(b'next')
+    assert service.status()['diagnostic_leftovers'][0]['bytes'] == 12
+    service.close()
+    assert abandoned.is_dir()
+
+
+def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkeypatch):
+    import threading
+
+    from test_live_session import _session, embed
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    entered, release = threading.Event(), threading.Event()
+    original_copy = diagnostics.shutil.copyfile
+    def delayed_copy(src, dst):
+        entered.set()
+        assert release.wait(3)
+        return original_copy(src, dst)
+    monkeypatch.setattr(diagnostics.shutil, 'copyfile', delayed_copy)
+    sessions = []
+    for n in range(2):
+        root = tmp_path / str(n)
+        root.mkdir()
+        session = _session(root, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=root)
+        session.start()
+        session.step()
+        session.mark('Test')
+        if n == 0:
+            session.stop()
+        sessions.append(session)
+    service = LiveService(FakeOwner(), tmp_path, diagnostic_staging_root=tmp_path)
+    service._diagnostic_copies, service._session = sessions[:1], sessions[1]
+    service._state, service._run_stop = 'running', threading.Event()
+    closed = threading.Event()
+    def close():
+        try:
+            service.close()
+        finally:
+            closed.set()
+    thread = threading.Thread(target=close)
+    try:
+        assert entered.wait(1)
+        thread.start()
+        assert not closed.wait(0.05)
+    finally:
+        release.set()
+        thread.join(3)
+    assert closed.is_set()
+    for session in sessions:
+        assert session._diagnostics.wait(3)
+        assert session.diagnostics_status()['copied']
+        assert not session._diagnostics.staging.exists()
+
+
+def test_close_uses_one_bounded_copy_deadline_and_logs_timeout(tmp_path, monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    from dispread.live import service as module
+
+    monkeypatch.setattr(module, 'DIAGNOSTIC_CLOSE_TIMEOUT_S', 0.05, raising=False)
+    waits = []
+    def stalled(timeout):
+        waits.append(timeout)
+        time.sleep(timeout)
+        return False
+    service = LiveService(FakeOwner(), tmp_path, diagnostic_staging_root=tmp_path)
+    first = SimpleNamespace(diagnose_kopie=True, wait_diagnostics=stalled)
+    second = SimpleNamespace(diagnose_kopie=True, wait_diagnostics=stalled)
+    service._diagnostic_copies, service._session = [first], second
+    start = time.monotonic()
+    service.close()
+    assert waits and sum(waits) <= 0.05
+    assert time.monotonic() - start < 0.3
+    assert 'Diagnose' in caplog.text and 'Zeitlimit' in caplog.text

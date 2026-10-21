@@ -24,11 +24,14 @@ class FakeService:
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False):
         self.calls.append(("run", test_override))
 
     def stop_run(self):
         raise LiveError("kein Lauf aktiv")
+
+    def mark(self, text):
+        self.calls.append(('mark', text))
 
     def start_camera(self):
         self.calls.append(("camera",))
@@ -156,6 +159,10 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         assert service.calls[-1] == ("run", True)
         assert (await call("POST", "/live/camera/start")).status == 200
         assert service.calls[-2:] == [("run", True), ("camera",)]
+        marks = []
+        service.mark = lambda **kw: marks.append(kw)
+        assert (await call("POST", "/live/run/mark", {"text": "Abdeckung"})).status == 200
+        assert marks == [{"text": "Abdeckung"}]
         for path in ("/live/confirm", "/live/run/stop"):
             response = await call("POST", path)
             assert response.status == 409
@@ -167,11 +174,11 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         forwarded = []
         service.start_run = lambda **kwargs: forwarded.append(kwargs)
         assert (await call("POST", "/live/run/start", {"reference": False})).status == 200
-        assert forwarded[-1] == {"test_override": False, "reference": False, "norm_schedule": None}
+        assert forwarded[-1] == {"test_override": False, "reference": False, "norm_schedule": None, "diagnostics": False}
         assert (await call("POST", "/live/run/start", {
-            "reference": True, "norm_schedule": "1:20,2:20",
+            "reference": True, "norm_schedule": "1:20,2:20", "diagnostics": True,
         })).status == 200
-        assert forwarded[-1] == {"test_override": False, "reference": True, "norm_schedule": "1:20,2:20"}
+        assert forwarded[-1] == {"test_override": False, "reference": True, "norm_schedule": "1:20,2:20", "diagnostics": True}
         service.start_run = blocked
         response = await call("POST", "/live/run/start")
         assert response.status == 409
@@ -253,14 +260,18 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         response = await handle("GET", "/live/status", headers)
         csrf = json.loads(response.text)["csrf"]
         assert response.headers["Cache-Control"] == "no-store"
-        with pytest.raises(web.HTTPForbidden):
-            await handle("POST", "/live/run/start", headers)
+        for path in ('/live/run/start', '/live/run/mark'):
+            with pytest.raises(web.HTTPForbidden):
+                await handle('POST', path, headers)
         headers["Origin"] = "https://localhost"
-        with pytest.raises(web.HTTPForbidden):
-            await handle("POST", "/live/run/start", headers)
+        for path in ('/live/run/start', '/live/run/mark'):
+            with pytest.raises(web.HTTPForbidden):
+                await handle('POST', path, headers)
         headers["X-CSRF-Token"] = csrf
         assert (await handle("POST", "/live/run/start", headers)).status == 200
         assert service.calls == [("run", False)]
+        assert (await handle('POST', '/live/run/mark', headers, {'text': 'Abdeckung'})).status == 200
+        assert service.calls[-1] == ('mark', 'Abdeckung')
         assert (await handle("POST", "/live/run/stop", headers)).status == 409
 
     asyncio.run(check())
@@ -278,6 +289,7 @@ def test_serve_cli_live_data_default_and_override():
     ("live.setup", None, "start_setup", {"cell_text": None}),
     ("live.setup", {"cell_text": "+0.60972 "}, "start_setup", {"cell_text": "+0.60972 "}),
     ("live.stop", {}, "stop_run", {}),
+    ("live.mark", {"text": "Abdeckung"}, "mark", {"text": "Abdeckung"}),
     ("live.camera", {}, "start_camera", {}),
 ])
 def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, kwargs):
@@ -304,7 +316,7 @@ def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, 
     controller.command.assert_not_called()
 
 
-@pytest.mark.parametrize("op", ["live.status", "live.setup", "live.stop", "live.camera"])
+@pytest.mark.parametrize("op", ["live.status", "live.setup", "live.stop", "live.camera", "live.mark"])
 def test_local_live_errors_are_409(monkeypatch, op):
     import json
     from unittest.mock import Mock
@@ -316,7 +328,7 @@ def test_local_live_errors_are_409(monkeypatch, op):
 
     monkeypatch.setattr(asyncio, "to_thread", direct)
     service = Mock()
-    for name in ("status", "start_setup", "stop_run", "start_camera"):
+    for name in ("status", "start_setup", "stop_run", "start_camera", "mark"):
         getattr(service, name).side_effect = LiveError("Kamera belegt")
     response = asyncio.run(handle_local_op(op, {}, Mock(), service))
     assert response.status == 409
@@ -358,6 +370,7 @@ def test_local_legacy_command_still_uses_controller():
     (["live", "setup", "--force"], "live.setup", {"force": True}),
     (["live", "setup", "--cell-text", "+0.60972 "], "live.setup", {"cell_text": "+0.60972 "}),
     (["live", "stop"], "live.stop", {}),
+    (["live", "mark", "Abdeckung"], "live.mark", {"text": "Abdeckung"}),
     (["live", "camera"], "live.camera", {}),
 ])
 def test_live_cli_requests_local_op_and_prints_json(monkeypatch, capsys, argv, op, args):
@@ -508,3 +521,24 @@ def test_local_setup_requires_force_to_replace_reviewed_proposal(monkeypatch, st
     else:
         assert "--force" in json.loads(response.text)["error"]
         service.start_setup.assert_not_called()
+
+
+@pytest.mark.parametrize('body', ['', 'null', '[]', '42', '"text"', '{broken'])
+def test_mark_malformed_body_is_german_400(body):
+    import json
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+
+    async def check():
+        service = FakeService()
+        service.mark = lambda **kw: pytest.fail('invalid mark reached service')
+        app = web.Application()
+        add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+        request = make_mocked_request('POST', '/live/run/mark', app=app)
+        request.json = AsyncMock(side_effect=lambda: json.loads(body))
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 400
+        assert 'JSON-Objekt' in json.loads(response.text)['error']
+    asyncio.run(check())
