@@ -3068,3 +3068,30 @@ prüft zusätzlich alle 34 lesbaren Setup-Bilder (17 Vorschläge), beide
 Zellengruppen und die Toleranzfaktoren 1,0 / 1,41 / 2,0 gegen den bisherigen
 Float32-Rechenweg. Dauerlast über 60 s, Prozess-CPU ≤ 150 %, Temperatur
 < 75 °C und Drosselbits `0x0` bleiben durch den Controller am Aufbau zu prüfen.
+
+
+## 2026-10-21 — Messpfad live: erster Lauf mit Referenzaufzeichnung { #messpfad-live-referenzlauf-2026-10-21 }
+
+Bedienerlauf `var/live/live-20261021T135204Z/run-01` (lokale Daten, nicht im
+Repository), 44,5 s, streng ohne Toleranz, StreamCam am GSV-2AS, Werte von
+Hand am Sensor geändert, Hand kurz vor der Anzeige. Ausgewertet mit
+`scripts/live-reference-eval.py` gegen den mitgeschriebenen seriellen Strom
+(`reference.jsonl`, 84 Telegramme, keine Parsefehler, keine Lücken).
+**Kein formaler Abnahme-Lauf** (zu kurz, ein Gerät, Raumlicht).
+
+| Kennzahl | Wert |
+| --- | --- |
+| Gelesene Bilder/s | 27,2 (vorher 14,7, Lauf 11:41); übersprungen 135 von 1348 |
+| Lesezeit je Bild | Median 8,1 ms (vorher 53 ms), gesamt 24,7 ms |
+| Fehllesungen gegen Referenz | **0 von 715** entschiedenen VALID |
+| VALID im Schutzintervall (unentschieden) / ohne Referenz | 296 / 8 |
+| Wertwechsel | 26, alle mit VALID erreicht; Verzögerung Median 277 ms, p90 342 ms |
+| Bilder im Wechsel | 65 % VALID, 29 % TRANSITION, 6 % UNREADABLE |
+| `anzeige_wechselt` | 106 Bilder TRANSITION statt UNREADABLE |
+| Nachführung | 58 × verloren (Hand), `track_score` Median 0,96 |
+
+Während des Laufs blockierte die SD-Karte zeitweise (Wächter: 56 s Stillstand
+15:55–15:56); Ursache war eine von Codex alle ~15 min neu angelegte
+Marktplatz-Kopie (~200 MB), seit 16:05 abgestellt. Die Bildrate des Laufs ist
+deshalb eher eine Untergrenze. Die Vorschau der Seite aktualisiert weiterhin
+nur alle 0,5 s; das kommt mit der UI-Überarbeitung.

@@ -1939,3 +1939,25 @@ liegt unter 15 ms. Das belegt weder Dauerlast noch Live-Durchsatz auf dem
 ruhigen Pi. Der Controller misst 60 s am Aufbau mit CPU, Temperatur und
 Drosselbits; diese Sandbox-Messung ersetzt keine Abnahme. `var/` blieb
 unverändert, kein Kamera- oder serieller Zugriff.
+
+
+## 2026-10-21 — Erster Live-Lauf mit Referenzaufzeichnung { #messpfad-live-referenzlauf-2026-10-21 }
+
+**Ziel:** Tempo und Übergangsstatus am Aufbau prüfen und erstmals gegen den
+seriellen GSV-2AS-Strom abgleichen.
+
+**Aufbau:** StreamCam am GSV-2AS, Raumlicht, strenger Leser, Referenz
+mitgeschrieben, Werte von Hand geändert, kurz die Hand vor der Anzeige.
+
+**Beobachtung:** 27,2 gelesene Bilder/s statt 14,7; 0 Fehllesungen bei 715
+entschiedenen VALID; 26 Wechsel, Verzögerung Median 277 ms; Wechsel jetzt
+überwiegend als „Wert wechselt“ (TRANSITION). Die Seite wirkte nicht schneller,
+weil Vorschau und Status nur alle 0,5 s abgeholt werden. SSH-Abbrüche und
+kurze Hänger: Codex-App-Server (per SSH von der Desktop-App gestartet) legte
+wegen `[marketplaces.repowise]` alle ~15 min eine ~200-MB-Kopie an; der
+Wächter zeigte 56 s Stillstand genau beim Anlegen einer Kopie. Eintrag mit
+Nutzerfreigabe entfernt, Kopien gelöscht. Der Absturz um 14:08 hatte sehr
+wahrscheinlich dieselbe Ursache (nicht belegbar, kein persistentes Journal).
+
+**Offen:** längerer Referenzlauf (≥ 10 min, mit Werteplan), Toleranzlauf mit
+Referenz, Vorschau schneller (UI-Überarbeitung).
