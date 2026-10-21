@@ -231,6 +231,10 @@ stillschweigend ignoriert.
 Im Betrieb kommt das Layout aus dem bestätigten Geräteprofil
 ([Kapitel 4](04-geraeteprofile.md)), nicht aus Vermutungen im Code.
 
+<figure class="tour-figure" data-scene="erkennung-raster" markdown="1">
+<figcaption markdown="span">Ein bestätigtes Raster am Punktraster-Display des GSV-2AS: Das System weiß vorher, wo jedes Zeichen liegt und welche Kästchen gelesen werden.</figcaption>
+</figure>
+
 ## Statuslogik in einem Bild
 
 ```
@@ -247,6 +251,10 @@ Im Betrieb kommt das Layout aus dem bestätigten Geräteprofil
 `TRANSITION` und `UNREADABLE` sind **Aussagen über die Anzeige**, keine Fehler
 des Systems. `STALE` heißt: es gibt keinen aktuellen Wert — und ein
 `STALE`-Datensatz trägt deshalb keinen Zahlenwert.
+
+<figure class="tour-figure" data-scene="erkennung-veraltet" markdown="1">
+<figcaption markdown="span">Dieselbe Statuslogik als Ablauf: Eine verdeckte Anzeige liefert „unlesbar“ ohne Zahlenwert, und hält das an, wird daraus „veraltet“.</figcaption>
+</figure>
 
 ## Checkliste für jedes neue Modul
 

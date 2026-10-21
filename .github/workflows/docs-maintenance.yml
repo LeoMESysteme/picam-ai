@@ -21,7 +21,8 @@ on:
 jobs:
   maintain:
     runs-on: picam-codex-docs
-    timeout-minutes: 45
+    # Erstlauf bis 20 min, bis zu zwei Korrekturrunden je 8 min, dazu Gate-Laeufe.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +78,14 @@ jobs:
           if [[ '${{ steps.intent.outputs.publish }}' == true ]]; then args+=(--publish-requested); fi
           ./.venv/bin/python scripts/docs-maintenance.py audit \
             --codex-bin /opt/picam-codex/node_modules/.bin/codex "${args[@]}"
+
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        if: failure() && steps.audit.outcome == 'failure'
+        with:
+          name: zensical-doku-abgelehnt
+          path: docs-maintenance.patch
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Geprueften Commit nach master pushen
         if: steps.audit.outputs.changed == 'true' && steps.intent.outputs.publish == 'true'

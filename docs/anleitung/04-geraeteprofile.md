@@ -41,5 +41,9 @@ benötigt eine explizite `camera.json` mit Geräteeinstellungen. Die
 Workbench-Ablauf samt Boxen und Annotationen. Sie ist kein `ProfileStore`-
 Ersatz und erzeugt nicht automatisch ein freigegebenes Geräteprofil.
 
+<figure class="tour-figure" data-scene="bedienung-bestaetigen" markdown="1">
+<figcaption markdown="span">Was es heute schon gibt: ein bestätigtes Profil für eine Aufnahmesitzung (<code>SessionProfile</code> aus <code>harvest-setup.py confirm</code>). Es ist kein dauerhaftes Geräteprofil; den <code>ProfileStore</code> beschreibt die Bauaufgabe oben.</figcaption>
+</figure>
+
 Wenn du diese Bauaufgabe umsetzt, ergänze den CHANGELOG im selben Commit und
 aktualisiere den Roadmap- und Status-Snapshot nach den Projektregeln.

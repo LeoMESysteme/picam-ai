@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -398,20 +398,123 @@ test('Sofortnavigation baut die Projekt-Tour als Vollseite auf, Bühnenlinks fü
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/docs/uebersicht/messpfad.html');
   await page.getByRole('link', { name: 'Projekt-Tour', exact: true }).first().click();
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-aufbau');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-aufbau');
   await expect(page.locator('body')).toHaveClass(/tour-page/);
   // Ohne Seitenleisten füllt die Tour die Breite, die Bühne die Höhe.
   await expect(page.locator('.md-sidebar--primary')).toBeHidden();
-  const box = await page.locator('.tour-stage').boundingBox();
+  const box = await page.locator('.tour-ui .tour-stage').boundingBox();
   expect(box!.width).toBeGreaterThan(900);
   expect(box!.height).toBeGreaterThan(700);
 
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
   await page.getByRole('link', { name: 'Ausgabe-API öffnen' }).click();
   await expect(page).toHaveURL(/\/api\/sink\.html$/);
   await expect(page.locator('body')).not.toHaveClass(/tour-page/);
   await page.goBack();
-  await expect(page.locator('.tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'ueberblick-weg');
   await expect(page.locator('.tour-ui')).toHaveCount(1);
+});
+
+test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', async ({ browser }) => {
+  const facts = JSON.parse(readFileSync(join(process.cwd(), 'site/assets/data/tour-facts.json'), 'utf8'));
+  facts.facts['gate.stale_after_ns'].value = 250_000_000;
+  facts.facts['record.fields'].value = [...facts.facts['record.fields'].value, 'neues_feld'];
+  facts.facts['camera.focus_absolute'].value = 51;
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await page.route('**/assets/data/tour-facts.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(facts) }),
+  );
+  await page.goto(`http://127.0.0.1:8766${TOUR}#erkennung-veraltet`);
+  const stage = page.locator('.tour-stage');
+  await expect(stage).toContainText('stale_after = 0,25 s');
+  await expect(stage).toContainText('Grenze 0,25 s');
+  await page.evaluate(() => { location.hash = 'erkennung-ausgabe'; });
+  await expect(stage).toContainText('neues_feld');
+  await expect(stage).toContainText('10 Felder');
+  await page.evaluate(() => { location.hash = 'bedienung-kamera'; });
+  await expect(stage).toContainText('fester Wert (51)');
+  await context.close();
+
+  const missing = await browser.newContext({ reducedMotion: 'reduce' });
+  const fallback = await missing.newPage();
+  await fallback.route('**/assets/data/tour-facts.json', (route) => route.fulfill({ status: 404, body: '' }));
+  await fallback.goto(`http://127.0.0.1:8766${TOUR}#erkennung-veraltet`);
+  await expect(fallback.locator('.tour-stage')).toContainText('Grenze 0,5 s');
+  await missing.close();
+});
+
+// Tour-Szenen als Abbildung in normalen Doku-Seiten (tour.js, Klasse Figure).
+function builtPages(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return builtPages(path);
+    return entry.name.endsWith('.html') ? [path] : [];
+  });
+}
+
+test('Abbildungen zeigen nur Szenen, die es als Tour-Schritt gibt', async ({ browser }) => {
+  const site = join(process.cwd(), 'site');
+  const tour = readFileSync(join(site, 'docs/uebersicht/projekt-tour.html'), 'utf8');
+  const steps = new Set([...tour.matchAll(/<h3 id="([^"]+)"/g)].map((m) => m[1]));
+  const figures = new Map<string, string[]>();
+  for (const file of builtPages(site)) {
+    const scenes = [...readFileSync(file, 'utf8').matchAll(/<figure class="tour-figure" data-scene="([^"]*)"/g)].map((m) => m[1]);
+    if (scenes.length) figures.set(file.slice(site.length), scenes);
+  }
+  const all = [...figures.values()].flat();
+  expect(all.length).toBeGreaterThanOrEqual(13);
+  expect(all.filter((scene) => !steps.has(scene))).toEqual([]);
+
+  // Jede Abbildung findet ihre Szene und zeichnet etwas.
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  for (const [path, scenes] of figures) {
+    await page.goto(`http://127.0.0.1:8766${path}`);
+    const stages = page.locator('.tour-figure .tour-stage');
+    await expect(stages).toHaveCount(scenes.length);
+    for (let i = 0; i < scenes.length; i++) {
+      await stages.nth(i).scrollIntoViewIfNeeded();
+      await expect(stages.nth(i)).toHaveAttribute('data-scene', scenes[i]);
+      await expect(stages.nth(i).locator('.scene > *').first()).toBeAttached();
+    }
+  }
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('Abbildung spielt beim Sichtbarwerden, wiederholt per Knopf und führt in die Tour', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/docs/uebersicht/messpfad.html');
+  const figure = page.locator('.tour-figure[data-scene="erkennung-veraltet"]');
+  await expect(figure).toHaveAttribute('data-figure-ready', 'true');
+  // Weit unten auf der Seite: noch nicht aufgebaut.
+  await expect(figure.locator('.scene')).toHaveCount(0);
+  await figure.scrollIntoViewIfNeeded();
+  await expect(figure.locator('.scene')).toHaveCount(1);
+  await page.clock.runFor(15000);
+  // Die Klammer „… ohne gültigen Wert“ erscheint erst gegen Ende der Szene;
+  // ausgeblendet wird sie über ihre Gruppe, deshalb zählt die Deckkraft aller Ebenen.
+  const late = figure.locator('.scene text', { hasText: 'ohne gültigen Wert' });
+  const opacity = () => late.evaluate((el) => {
+    let value = 1;
+    for (let node: Element | null = el; node && node.tagName !== 'svg'; node = node.parentElement) value *= Number(getComputedStyle(node).opacity);
+    return value;
+  });
+  await expect.poll(opacity).toBe(1);
+
+  await figure.getByRole('button', { name: /Nochmal/ }).click();
+  await expect(figure.locator('.scene')).toHaveCount(1);
+  await expect.poll(opacity).toBe(0);
+  await page.clock.runFor(15000);
+  await expect.poll(opacity).toBe(1);
+
+  await figure.getByRole('link', { name: /In der Projekt-Tour ansehen/ }).click();
+  await expect(page).toHaveURL(/projekt-tour\.html#erkennung-veraltet$/);
+  // Die Sofortnavigation setzt die Adresse vor dem Austausch des Inhalts;
+  // nur die Bühne der Tour zählt, nicht die Abbildungen der alten Seite.
+  await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'erkennung-veraltet');
 });

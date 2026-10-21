@@ -65,6 +65,29 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Playwright-Prüfung auf dem vorhandenen Runner
+
+`.github/workflows/playwright.yml` läuft bei Pushes und Pull Requests nach
+`main`/`master` sowie manuell auf `picam-docs`, dem vorhandenen Host-Runner.
+`ubuntu-latest` war ein Überbleibsel der GitHub-Vorlage und passte zu keinem
+hier konfigurierten Runner-Label; deshalb blieben die Jobs in der Warteschlange.
+
+Der Workflow verwendet Node 22 und Chromium mit einem Worker, baut die Doku
+streng und prüft anschließend ihre interaktiven Funktionen. Browserdateien
+liegen unter `/var/lib/forgejo-runner/playwright-browsers`. Die Installation
+verwendet `playwright install --only-shell chromium` ohne `--with-deps`;
+Systembibliotheken müssen auf dem Pi bereits installiert sein. Der Job
+bekommt keine Rechte für `apt` oder Zugriff auf Messhardware. Berichte lädt
+die Forgejo-Version von `upload-artifact@v4` hoch.
+Einzige Playwright-Suite ist `tests/docs-site.spec.ts`; `playwright.config.ts`
+reicht nur `playwright.docs.config.ts` durch. `*.test.mjs`-Harnische laufen
+separat über Pytest mit ihren benötigten Fixtures.
+
+Das Runner-Label bleibt `picam-docs:host`; `ubuntu-latest` wird nicht als
+allgemeines Alias ergänzt. Bereits wartende Läufe mit der alten
+Workflow-Version müssen beendet und nach Übernahme der Korrektur neu
+gestartet werden.
+
 ### Automatische Zensical-Pflege einrichten
 
 Der bisherige Claude-`@reboot`-Eintrag ist deaktiviert. Forgejo startet
@@ -141,12 +164,36 @@ nennt sämtliche geänderten Dateien und beide Diff-Grenzen; falls der letzte
 Audit-Commit nicht mehr erreichbar ist, erhält Codex eine vollständige
 Dateiliste für einen neuen Ausgangspunkt. Das Modell
 ist standardmäßig `gpt-6-luna`; höchstens zwei lesende Subagents helfen bei unabhängigen
-Bereichen. Der Codex-Lauf ist auf 20 Minuten und der Workflow auf 45 Minuten
-begrenzt. ChatGPT-Anmeldung hat keine technisch durchsetzbare
-10-USD-API-Kostengrenze; die Forgejo-Logs enthalten nur Status und
-Token-Nutzung, keine Anmelde- oder Bot-Tokens. Bei Problemen bleiben die privaten Codex-JSONL-Logs
-auf dem Runner unter `CODEX_HOME`; bei fehlgeschlagenem Gate gibt es keinen
-Push.
+Bereichen. Der erste Codex-Lauf ist auf 20 Minuten begrenzt, der Workflow
+auf 60 Minuten. ChatGPT-Anmeldung hat keine technisch durchsetzbare
+10-USD-API-Kostengrenze; die Forgejo-Logs enthalten Status, Token-Nutzung,
+Gate-Ausgaben und die letzte Antwort von Codex, keine Anmelde- oder
+Bot-Tokens. Das vollständige Codex-JSONL bleibt privat auf dem Runner unter
+`CODEX_HOME`; bei fehlgeschlagenem Gate gibt es keinen Push.
+
+Seit 2026-10-13 gilt außerdem:
+
+* **Vorabprüfung:** `probe` führt `oq-index.py --check` und
+  `tour-facts.py --check` aus, bevor Codex startet. Weicht eines davon ab,
+  bricht der Job ohne Codex-Aufruf ab; die Meldung nennt die betroffenen
+  Tour-Schritte. Beides darf Codex nicht beheben, ein Lauf würde nur Token
+  verbrauchen und im Build scheitern.
+* **Korrekturrunden:** Lehnt das Gate den Stand ab (Pfad außerhalb des
+  Rahmens, Link im Codeblock, geänderter OQ-Eintrag, fehlender Status,
+  Build, Vorschauziele, Browsertests), setzt es dieselbe Codex-Session mit
+  `codex exec resume <thread-id>` und der Gate-Meldung fort. Höchstens zwei
+  Runden zu je 8 Minuten, danach scheitert der Job. `exec resume` hat
+  keinen `--sandbox`-Schalter und übernimmt die Sandbox des ersten Laufs
+  nicht; ohne `-c sandbox_mode="workspace-write"` läuft die Runde read-only
+  (geprüft mit codex-cli 0.156.1). Jede Runde sendet den bisherigen Verlauf
+  erneut, überwiegend aus dem Cache. Codex bleibt auf die Doku-Pfade
+  beschränkt; Code, Szenen und Tests ändert es auch in einer Korrekturrunde
+  nicht.
+* **Abgelehnte Änderungen** landen als `docs-maintenance.patch` im Artefakt
+  `zensical-doku-abgelehnt` (7 Tage).
+* **Browsertests im Gate** laufen mit einem Worker, wie in
+  `playwright.yml`, weil der Runner CPU-begrenzt ist und die Tour-Tests
+  vom Animationstakt abhängen.
 
 Seit 2026-09-30 führt jeder Audit die Startseite, Navigation,
 Dokumentationsübersicht und den Status ausdrücklich als Prüfpunkte mit.
@@ -165,6 +212,32 @@ ist lesend; der Prompt
 erlaubt ihre Nutzung bei mindestens vier unabhängigen Bereichen oder einem
 größeren Erstaudit. Die Konfiguration erlaubt Subagents, erzwingt ihren
 tatsächlichen Einsatz aber nicht.
+
+#### Läufe und Codex-Log einsehen
+
+Zwei Quellen, beide ohne Zugriff auf `auth.json`:
+
+* **Status je Lauf aus Forgejo:** ein Read-only-PAT (`read:repository`, nur
+  dieses Repo) in `~/.config/picam-forgejo-read-token` (Modus `0600`) reicht
+  für `GET /api/v1/repos/l.hentschke/picam-ai/actions/tasks` und
+  `…/actions/runs`. Die **Schritt-Logs** liefert Forgejo 15.0.6 nicht per
+  Token: Die API hat keinen Log-Endpunkt, und die Weboberfläche
+  (`/actions/runs/<n>/jobs/0/logs`) nimmt keine Token-Anmeldung an
+  (geprüft 2026-10-13). Für Gate-Ausgaben bleibt die Actions-Seite im Browser.
+* **Privates Codex-Log auf dem Runner:** `scripts/picam-codex-logs` zeigt
+  den Pflegezustand (`last_audited`, `last_week`, `guide_cursor`), Token-
+  Nutzung, Dateiänderungen, fehlgeschlagene Kommandos und die letzte
+  Antwort von Codex aus `last-codex-run.jsonl`. Einmalig einrichten:
+  ```bash
+  sudo install -m 755 -o root -g root scripts/picam-codex-logs /usr/local/bin/picam-codex-logs
+  sudo visudo -f /etc/sudoers.d/picam-codex-logs
+  #   me-systeme ALL=(root) NOPASSWD: /usr/local/bin/picam-codex-logs ""
+  ```
+  Aufruf: `sudo /usr/local/bin/picam-codex-logs`. Das Skript nimmt keine
+  Argumente, gibt sofort die root-Rechte an `picam-codex-runner` ab, folgt
+  keinen Symlinks und behandelt den Dateiinhalt als unvertrauenswürdig
+  (Steuerzeichen entfernt, Zustand nur mit geprüften Feldern). Nach einer
+  Änderung am Skript die installierte Kopie mit demselben `install` erneuern.
 
 * **Aktualisierung:** Änderungen nach `master` pushen. Erst nach erfolgreichem
   OQ-Index-Check, Build, Auth-Test, Prüfstand-Deploy und Schutzprüfung wird Produktion

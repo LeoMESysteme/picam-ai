@@ -1,33 +1,37 @@
 name: Playwright Tests
+# Forgejo nutzt den vorhandenen Host-Runner auf dem Pi. Browserbibliotheken
+# kommen aus dem System; dieser Job installiert keine Systempakete.
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 jobs:
   test:
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    runs-on: picam-docs
+    env:
+      CI: 'true'
+      PLAYWRIGHT_BROWSERS_PATH: /var/lib/forgejo-runner/playwright-browsers
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
-        node-version: lts/*
+        node-version: 22
     - name: Install dependencies
-      run: npm ci
+      run: npm ci --no-audit --no-fund
     - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
-    - name: Run Playwright tests
-      run: npx playwright test
+      run: npx playwright install --only-shell chromium
     - name: Doku-Werkzeuge installieren
       run: |
         python3 -m venv .venv-docs
         .venv-docs/bin/pip install -r requirements-docs.txt
     - name: Interaktive Doku prüfen
       run: |
-        ./scripts/docs-site.sh build
-        npx playwright test -c playwright.docs.config.ts
-    - uses: actions/upload-artifact@v4
+        ./scripts/docs-site.sh build -s
+        npx playwright test -c playwright.docs.config.ts --workers=1 --reporter=html
+    - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
         name: playwright-report

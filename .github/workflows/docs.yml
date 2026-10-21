@@ -2,9 +2,8 @@
 # (docs/HOSTING.md).
 #
 # Läuft auf dem Runner mit dem Label `picam-docs` (Host-Modus auf dem Pi,
-# siehe systemd/forgejo-runner.service). Bewusst NICHT `ubuntu-latest`:
-# dieser Runner soll keine fremden Jobs wie den Playwright-Lauf übernehmen,
-# der per apt Systempakete installieren würde.
+# siehe systemd/forgejo-runner.service). Auch playwright.yml nutzt diesen
+# Runner, ohne Systempakete zu installieren. Kein allgemeines Ubuntu-Label.
 #
 # Liegt in .github/workflows/, weil Forgejo diesen Ordner nur liest, solange
 # es kein .forgejo/workflows/ gibt — sonst wäre playwright.yml abgeschaltet.

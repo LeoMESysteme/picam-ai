@@ -20,6 +20,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BOT_NAME = "picam docs bot"
 BOT_EMAIL = "picam-docs-bot@users.noreply.local"
 EXPECTED_REMOTE = "https://ds1515.me-systeme.de/l.hentschke/picam-ai.git"
+CODEX_MODEL = "gpt-6-luna"
+FIRST_RUN_TIMEOUT = 20 * 60
+REPAIR_TIMEOUT = 8 * 60
+MAX_REPAIR_ROUNDS = 2
+FEEDBACK_LIMIT = 6000
+FAILED_PATCH = "docs-maintenance.patch"
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+class GateRejected(ValueError):
+    """The gate refused the working tree; Codex may get a bounded repair turn."""
 
 
 def git(repo: Path, *args: str, env: dict[str, str] | None = None) -> str:
@@ -219,8 +230,36 @@ def token_usage(log_file: Path) -> tuple[int, int, int]:
                 continue
             if event.get("type") == "turn.completed":
                 details = event.get("usage", {})
-                usage = tuple(int(details.get(key, 0)) for key in ("input_tokens", "cached_input_tokens", "output_tokens"))
+                turn = (int(details.get(key, 0)) for key in ("input_tokens", "cached_input_tokens", "output_tokens"))
+                usage = tuple(total + value for total, value in zip(usage, turn, strict=True))
     return usage
+
+
+def _log_events(log_file: Path):
+    with log_file.open(encoding="utf-8") as log:
+        for line in log:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict):
+                yield event
+
+
+def codex_thread_id(log_file: Path) -> str:
+    for event in _log_events(log_file):
+        if event.get("type") == "thread.started" and isinstance(event.get("thread_id"), str):
+            return event["thread_id"]
+    raise ValueError("Codex reported no thread id; a repair turn is impossible")
+
+
+def last_agent_message(log_file: Path) -> str:
+    message = ""
+    for event in _log_events(log_file):
+        item = event.get("item")
+        if event.get("type") == "item.completed" and isinstance(item, dict) and item.get("type") == "agent_message":
+            message = str(item.get("text", ""))
+    return message
 
 
 def ensure_codex_inspected_repo(log_file: Path) -> None:
@@ -254,11 +293,29 @@ def guide_batch(pages: list[str], cursor: int, week: str) -> tuple[list[str], in
     return [pages[week_number % len(pages)]], cursor
 
 
+def ensure_generated_docs_current(repo: Path) -> None:
+    """Fail before Codex runs: a stale OQ index or tour facts block every build.
+
+    Codex may not edit either source (scenes and tour-facts.json need a human
+    review), so a run would only burn tokens and fail in the gate.
+    """
+    for script in ("scripts/oq-index.py", "scripts/tour-facts.py"):
+        if not (repo / script).exists():
+            continue
+        result = subprocess.run(
+            [sys.executable, script, "--check"], cwd=repo, text=True, capture_output=True, check=False
+        )
+        if result.returncode:
+            output = (result.stdout + result.stderr).strip()
+            raise ValueError(f"{script} --check fails on master; fix it by hand before the next audit:\n{output}")
+
+
 def probe(repo: Path, state_file: Path) -> None:
     if git(repo, "status", "--porcelain"):
         raise ValueError("checkout must be clean before documentation maintenance")
     base = git(repo, "rev-parse", "HEAD")
     ensure_master_unchanged(repo, base)
+    ensure_generated_docs_current(repo)
     state = load_json(state_file)
     week = week_key()
     pages = [path.relative_to(repo).as_posix() for path in sorted((repo / "docs" / "anleitung").glob("*.md"))]
@@ -295,22 +352,150 @@ def probe(repo: Path, state_file: Path) -> None:
 
 
 def _run_checked(command: list[str], repo: Path, env: dict[str, str] | None = None) -> None:
-    subprocess.run(command, cwd=repo, env=env, check=True)
+    """Run one gate check; mirror its output to the job log and keep it for Codex."""
+    result = subprocess.run(
+        command, cwd=repo, env=env, text=True, capture_output=True, check=False, stdin=subprocess.DEVNULL
+    )
+    output = _ANSI.sub("", (result.stdout or "") + (result.stderr or "")).strip()
+    if output:
+        print(output)
+    if result.returncode:
+        raise GateRejected(f"{' '.join(command)} endete mit Exit {result.returncode}:\n{output[-FEEDBACK_LIMIT:]}")
 
 
-def codex_command(codex_bin: str, repo: Path) -> list[str]:
-    """Keep Codex session state so its collaboration tools can spawn children."""
+def _codex_options(repo: Path) -> list[str]:
     role_file = repo.resolve() / ".codex" / "agents" / "docs_reader.toml"
     return [
-        codex_bin, "exec", "--ignore-user-config", "--json", "--sandbox", "workspace-write",
-        "-m", "gpt-6-luna", "-c", 'approval_policy="never"',
+        "--ignore-user-config", "--json", "-m", CODEX_MODEL, "-c", 'approval_policy="never"',
         "-c", "agents.max_concurrent_threads_per_session=2",
         "-c", "agents.enabled=true",
         "-c", f"agents.docs_reader.config_file={json.dumps(str(role_file))}",
         "-c", 'agents.docs_reader.description="Liest gezielt Code und Doku."',
-        "-c", 'agents.default_subagent_model="gpt-6-luna"',
-        "-c", 'agents.default_subagent_reasoning_effort="low"', "-",
+        "-c", f'agents.default_subagent_model="{CODEX_MODEL}"',
+        "-c", 'agents.default_subagent_reasoning_effort="low"',
     ]
+
+
+def codex_command(codex_bin: str, repo: Path) -> list[str]:
+    """Keep Codex session state so subagents can spawn and repair turns can resume."""
+    return [codex_bin, "exec", *_codex_options(repo), "--sandbox", "workspace-write", "-"]
+
+
+def codex_resume_command(codex_bin: str, repo: Path, thread_id: str) -> list[str]:
+    # `exec resume` has no --sandbox flag and does not keep the first turn's
+    # policy: without this override the repair turn runs read-only (checked
+    # 2026-10-13 with codex-cli 0.156.1).
+    return [
+        codex_bin, "exec", "resume", *_codex_options(repo),
+        "-c", 'sandbox_mode="workspace-write"', thread_id, "-",
+    ]
+
+
+def repair_prompt(error: GateRejected) -> str:
+    message = _ANSI.sub("", str(error))[-FEEDBACK_LIMIT:]
+    return (
+        "## Korrekturrunde\n\n"
+        "Der Gate-Prozess hat den aktuellen Stand abgelehnt. Seine Meldung:\n\n"
+        f"````text\n{message}\n````\n\n"
+        "Behebe nur diese Ablehnung. Es gelten alle Grenzen und Regeln des ersten Auftrags; "
+        "bearbeite nur die dort erlaubten Pfade. Lässt sich die Ursache dort nicht belegbar "
+        "beheben, nimm die betroffenen eigenen Änderungen zurück (`git checkout -- <pfad>`, "
+        "neue Dateien löschen). Führe danach `./scripts/docs-site.sh build -s` aus. "
+        "Kein Commit, kein Push. Antworte mit einer kurzen deutschen Zusammenfassung."
+    )
+
+
+def _run_codex(command: list[str], prompt: str, repo: Path, log_file: Path, timeout: int) -> None:
+    with log_file.open("a", encoding="utf-8") as output:
+        try:
+            result = subprocess.run(
+                command, cwd=repo, env=codex_environment(dict(os.environ)), input=prompt,
+                stdout=output, stderr=subprocess.DEVNULL, text=True, timeout=timeout, check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(f"Codex exceeded the {timeout // 60} minute limit") from exc
+    if result.returncode:
+        raise ValueError(f"Codex failed with exit code {result.returncode}; private log: {log_file}")
+
+
+def gate_edit(repo: Path, base: str) -> list[str]:
+    """Check Codex' working tree and return the changed paths.
+
+    Every refusal that Codex can address inside its allowed paths raises
+    GateRejected; the caller may hand the message back for a repair turn.
+    """
+    try:
+        paths = changed_paths(repo)
+        validate_paths(repo, paths)
+        for path in paths:
+            if path.endswith(".md"):
+                validate_markdown_links((repo / path).read_text(encoding="utf-8"), path)
+        if "docs/open-questions.md" in paths:
+            original = git(repo, "show", f"{base}:docs/open-questions.md")
+            _run_checked([str(repo / ".venv" / "bin" / "python"), "scripts/oq-index.py"], repo)
+            ensure_existing_oq_unchanged(original, (repo / "docs/open-questions.md").read_text(encoding="utf-8"))
+        _run_checked([str(repo / ".venv" / "bin" / "python"), "scripts/oq-index.py", "--check"], repo)
+        paths = changed_paths(repo)
+        validate_paths(repo, paths)
+        if not paths:
+            _run_checked(["./scripts/docs-site.sh", "build", "-s"], repo)
+            validate_preview_targets(repo / "site")
+            return []
+        if "docs/status.md" not in paths:
+            raise ValueError("docs/status.md must be rewritten before an automated commit")
+        _run_checked(["git", "diff", "--check"], repo)
+        _run_checked(["./scripts/docs-site.sh", "build", "-s"], repo)
+        validate_preview_targets(repo / "site")
+        # One worker like playwright.yml: the runner is CPU-limited and the
+        # tour tests depend on animation timing.
+        _run_checked(
+            ["npx", "playwright", "test", "-c", "playwright.docs.config.ts", "--workers=1", "--reporter=line"], repo
+        )
+        paths = changed_paths(repo)
+        validate_paths(repo, paths)
+        return paths
+    except GateRejected:
+        raise
+    except (ValueError, OSError) as exc:
+        raise GateRejected(str(exc)) from exc
+
+
+def _gate_with_repairs(repo: Path, base: str, codex_bin: str, log_file: Path) -> list[str]:
+    for repair in range(MAX_REPAIR_ROUNDS + 1):
+        ensure_codex_inspected_repo(log_file)
+        if git(repo, "rev-parse", "HEAD") != base:
+            raise ValueError("Codex created a commit; only the gate may commit")
+        try:
+            return gate_edit(repo, base)
+        except GateRejected as exc:
+            if repair == MAX_REPAIR_ROUNDS:
+                raise
+            first_line = str(exc).splitlines()[0] if str(exc) else "ohne Meldung"
+            print(f"Gate lehnt ab, Codex-Korrekturrunde {repair + 1}/{MAX_REPAIR_ROUNDS}: {first_line}")
+            command = codex_resume_command(codex_bin, repo, codex_thread_id(log_file))
+            _run_codex(command, repair_prompt(exc), repo, log_file, REPAIR_TIMEOUT)
+    raise AssertionError("unreachable")
+
+
+def save_failed_patch(repo: Path) -> None:
+    """Keep a rejected Codex edit reviewable; the workflow uploads the file."""
+    try:
+        paths = changed_paths(repo)
+        if not paths:
+            return
+        git(repo, "add", "-A", "--", *paths)
+        patch = git(repo, "diff", "--cached", "--binary", "HEAD")
+        (repo / FAILED_PATCH).write_text(patch + "\n", encoding="utf-8")
+        print(f"Abgelehnte Änderung als {FAILED_PATCH} gesichert ({len(paths)} Dateien)")
+    except (ValueError, OSError) as exc:
+        print(f"Patch der abgelehnten Änderung nicht gesichert: {exc}", file=sys.stderr)
+
+
+def _report_codex(log_file: Path) -> None:
+    input_tokens, cached_tokens, output_tokens = token_usage(log_file)
+    print(f"Codex-Nutzung: {input_tokens} Eingabe, {cached_tokens} davon Cache, {output_tokens} Ausgabe")
+    message = _ANSI.sub("", last_agent_message(log_file)).strip()
+    print("Letzte Antwort von Codex:\n" + (message or "(keine)"))
 
 
 def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool) -> None:
@@ -329,40 +514,19 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
         ensure_ascii=False,
         indent=2,
     )
-    command = codex_command(codex_bin, repo)
     state_file.parent.mkdir(parents=True, exist_ok=True)
     log_file = state_file.parent / "last-codex-run.jsonl"
-    with log_file.open("w", encoding="utf-8") as output:
-        try:
-            result = subprocess.run(
-                command, cwd=repo, env=codex_environment(dict(os.environ)), input=prompt,
-                stdout=output, stderr=subprocess.DEVNULL, text=True, timeout=20 * 60, check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ValueError("Codex exceeded the 20 minute limit") from exc
+    log_file.write_text("", encoding="utf-8")
     log_file.chmod(0o600)
-    if result.returncode:
-        raise ValueError(f"Codex failed with exit code {result.returncode}; private log: {log_file}")
-    input_tokens, cached_tokens, output_tokens = token_usage(log_file)
-    print(f"Codex-Nutzung: {input_tokens} Eingabe, {cached_tokens} davon Cache, {output_tokens} Ausgabe")
-    ensure_codex_inspected_repo(log_file)
-    if git(repo, "rev-parse", "HEAD") != base:
-        raise ValueError("Codex created a commit; only the gate may commit")
-    paths = changed_paths(repo)
-    validate_paths(repo, paths)
-    for path in paths:
-        if path.endswith(".md"):
-            validate_markdown_links((repo / path).read_text(encoding="utf-8"), path)
-    if "docs/open-questions.md" in paths:
-        original = git(repo, "show", f"{base}:docs/open-questions.md")
-        _run_checked([str(repo / ".venv" / "bin" / "python"), "scripts/oq-index.py"], repo)
-        ensure_existing_oq_unchanged(original, (repo / "docs/open-questions.md").read_text(encoding="utf-8"))
-    _run_checked([str(repo / ".venv" / "bin" / "python"), "scripts/oq-index.py", "--check"], repo)
-    paths = changed_paths(repo)
-    validate_paths(repo, paths)
+    try:
+        _run_codex(codex_command(codex_bin, repo), prompt, repo, log_file, FIRST_RUN_TIMEOUT)
+        paths = _gate_with_repairs(repo, base, codex_bin, log_file)
+    except ValueError:
+        save_failed_patch(repo)
+        raise
+    finally:
+        _report_codex(log_file)
     if not paths:
-        _run_checked(["./scripts/docs-site.sh", "build", "-s"], repo)
-        validate_preview_targets(repo / "site")
         if publish_requested:
             save_json(state_file, {"last_audited": base, "last_week": info["week"], "guide_cursor": info["next_guide_cursor"]})
         info.update(ready=False, changed=False)
@@ -370,14 +534,6 @@ def audit(repo: Path, state_file: Path, codex_bin: str, publish_requested: bool)
         github_output(changed="false")
         print("Keine belegte Doku-Änderung erforderlich")
         return
-    if "docs/status.md" not in paths:
-        raise ValueError("docs/status.md must be rewritten before an automated commit")
-    _run_checked(["git", "diff", "--check"], repo)
-    _run_checked(["./scripts/docs-site.sh", "build", "-s"], repo)
-    validate_preview_targets(repo / "site")
-    _run_checked(["npx", "playwright", "test", "-c", "playwright.docs.config.ts"], repo)
-    paths = changed_paths(repo)
-    validate_paths(repo, paths)
     git(repo, "add", "--", *paths)
     git(repo, "-c", "core.hooksPath=/dev/null", "-c", f"user.name={BOT_NAME}", "-c", f"user.email={BOT_EMAIL}", "commit", "-m", "docs: aktualisiere Zensical-Erklärungen und Vorschauen")
     candidate = git(repo, "rev-parse", "HEAD")

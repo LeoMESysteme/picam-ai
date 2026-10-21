@@ -1,0 +1,209 @@
+#!/usr/bin/python3 -I
+"""Letzten Codex-Doku-Pflegelauf lesbar machen, ohne den Runner zu öffnen.
+
+Installiert als root-eigene Kopie und per sudoers freigegeben:
+
+    sudo install -m 755 -o root -g root scripts/picam-codex-logs /usr/local/bin/picam-codex-logs
+    # /etc/sudoers.d/picam-codex-logs:
+    #   me-systeme ALL=(root) NOPASSWD: /usr/local/bin/picam-codex-logs ""
+
+Das Skript nimmt keine Argumente und liest nur zwei feste Dateien unter
+CODEX_HOME des Runners: den Pflegezustand und das JSONL des letzten
+Codex-Laufs. `auth.json` wird nie geöffnet. Vor dem Lesen gibt es die
+root-Rechte an `picam-codex-runner` ab; die Dateien gehören diesem Nutzer und
+damit dem Code, den der Job ausführt. Ihr Inhalt gilt deshalb als
+unvertrauenswürdig: Symlinks werden nicht verfolgt, aus dem Zustand werden
+nur geprüfte Felder gezeigt, Steuerzeichen werden entfernt und lange Texte
+gekürzt.
+
+Die Schritt-Logs des Gates liegen nur in Forgejo (Actions-Seite des Laufs);
+Forgejo 15 liefert sie nicht per API-Token aus.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pwd
+import re
+import stat
+import sys
+from datetime import datetime
+from pathlib import Path
+
+RUNNER_USER = "picam-codex-runner"
+CODEX_HOME = Path("/var/lib/picam-codex-runner/.codex")
+STATE_FILE = CODEX_HOME / "maintenance-state.json"
+LOG_FILE = CODEX_HOME / "last-codex-run.jsonl"
+MAX_FILE_BYTES = 64 * 1024 * 1024
+MAX_MESSAGE = 6000
+MAX_COMMAND = 240
+MAX_OUTPUT_TAIL = 1200
+
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+_STATE_FIELDS = {
+    "last_audited": re.compile(r"[0-9a-f]{7,64}"),
+    "last_week": re.compile(r"\d{4}-W\d{2}"),
+    "guide_cursor": re.compile(r"\d{1,4}"),
+}
+
+
+def clean(text: object, limit: int, tail: bool = False) -> str:
+    """Steuerzeichen (auch ANSI-Escapes) entfernen und auf `limit` kürzen."""
+    value = _CONTROL.sub("", str(text))
+    if len(value) <= limit:
+        return value
+    return "…" + value[-limit:] if tail else value[:limit] + "…"
+
+
+def drop_privileges() -> None:
+    if os.geteuid() != 0:
+        return
+    entry = pwd.getpwnam(RUNNER_USER)
+    os.setgroups([])
+    os.setgid(entry.pw_gid)
+    os.setuid(entry.pw_uid)
+
+
+def read_regular(path: Path) -> tuple[str, os.stat_result] | None:
+    """Datei ohne Symlink-Folge lesen; None, wenn sie fehlt."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"{path.name} ist keine reguläre Datei")
+        if info.st_size > MAX_FILE_BYTES:
+            raise ValueError(f"{path.name} ist größer als {MAX_FILE_BYTES} Bytes")
+        with os.fdopen(fd, encoding="utf-8", errors="replace") as file:
+            fd = -1
+            return file.read(), info
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def stamp(info: os.stat_result) -> str:
+    return datetime.fromtimestamp(info.st_mtime).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def summarize_state(text: str) -> list[str]:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return ["  (kein gültiges JSON)"]
+    if not isinstance(data, dict):
+        return ["  (unerwartetes Format)"]
+    lines = []
+    for key, pattern in _STATE_FIELDS.items():
+        value = data.get(key)
+        shown = str(value) if value is not None and pattern.fullmatch(str(value)) else "(fehlt oder ungültig)"
+        lines.append(f"  {key}: {shown}")
+    return lines
+
+
+def summarize_log(text: str) -> list[str]:
+    commands: list[tuple[int | None, str, str]] = []
+    changes: list[str] = []
+    errors: list[str] = []
+    message = ""
+    usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+    turns = 0
+    for raw in text.splitlines():
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        item = event.get("item") if isinstance(event.get("item"), dict) else {}
+        if kind == "turn.completed" and isinstance(event.get("usage"), dict):
+            turns += 1  # erster Lauf plus jede Korrekturrunde des Gates
+            for key in usage:
+                value = event["usage"].get(key, 0)
+                usage[key] += value if isinstance(value, int) else 0
+        elif kind in {"turn.failed", "error"}:
+            detail = event.get("error", event.get("message", ""))
+            if isinstance(detail, dict):
+                detail = detail.get("message", "")
+            errors.append(clean(detail, MAX_COMMAND))
+        elif kind == "item.completed":
+            item_type = item.get("type")
+            if item_type == "agent_message":
+                message = str(item.get("text", ""))
+            elif item_type == "command_execution":
+                exit_code = item.get("exit_code")
+                commands.append((
+                    exit_code if isinstance(exit_code, int) else None,
+                    clean(item.get("command", ""), MAX_COMMAND),
+                    clean(item.get("aggregated_output", ""), MAX_OUTPUT_TAIL, tail=True),
+                ))
+            elif item_type == "file_change":
+                for change in item.get("changes", []) or []:
+                    if isinstance(change, dict):
+                        changes.append(f"{clean(change.get('kind', '?'), 20)} {clean(change.get('path', '?'), MAX_COMMAND)}")
+            elif item_type == "error":
+                errors.append(clean(item.get("message", ""), MAX_COMMAND))
+
+    lines = []
+    if turns:
+        lines.append(f"  Runden: {turns} (1 = ohne Korrekturrunde)")
+        lines.append(
+            f"  Token: {usage['input_tokens']} Eingabe, davon {usage['cached_input_tokens']} Cache, "
+            f"{usage['output_tokens']} Ausgabe"
+        )
+    else:
+        lines.append("  Token: kein turn.completed (Lauf abgebrochen?)")
+    failed = [entry for entry in commands if entry[0] not in (0, None)]
+    lines.append(f"  Kommandos: {len(commands)}, davon {len(failed)} mit Exit != 0")
+    lines.append(f"  Dateiänderungen: {len(changes)}")
+    lines.extend(f"    {change}" for change in changes[-30:])
+    if errors:
+        lines.append("  Fehler:")
+        lines.extend(f"    {error}" for error in errors[-10:])
+    if failed:
+        lines.append("  Fehlgeschlagene Kommandos (letzte 5):")
+        for exit_code, command, output in failed[-5:]:
+            lines.append(f"    [exit {exit_code}] {command}")
+            lines.extend(f"      | {line}" for line in output.splitlines()[-12:])
+    if commands:
+        lines.append("  Letzte Kommandos:")
+        lines.extend(f"    [exit {code}] {command}" for code, command, _ in commands[-8:])
+    lines.append("")
+    lines.append("Letzte Antwort von Codex:")
+    lines.append(clean(message, MAX_MESSAGE) if message else "  (keine)")
+    return lines
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) > 1:
+        print("picam-codex-logs nimmt keine Argumente.", file=sys.stderr)
+        return 2
+    try:
+        drop_privileges()
+        print(f"Pflegezustand ({STATE_FILE}):")
+        state = read_regular(STATE_FILE)
+        if state is None:
+            print("  (fehlt — noch kein veröffentlichter Lauf)")
+        else:
+            print(f"  geändert: {stamp(state[1])}")
+            print("\n".join(summarize_state(state[0])))
+        print()
+        print(f"Letzter Codex-Lauf ({LOG_FILE}):")
+        log = read_regular(LOG_FILE)
+        if log is None:
+            print("  (fehlt — Codex lief noch nie)")
+            return 0
+        print(f"  geändert: {stamp(log[1])}, {log[1].st_size} Bytes")
+        print("\n".join(summarize_log(log[0])))
+    except (OSError, KeyError, ValueError) as exc:
+        print(f"picam-codex-logs: {clean(exc, MAX_COMMAND)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

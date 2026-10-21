@@ -68,6 +68,194 @@ Die Freigabe bleibt auf GSV-2AS / Displaytech 161A, Raumlicht und mV/V
 begrenzt; serielle Ausgabe an GSVmulti fehlt weiterhin (OQ-07).
 `dispread serve` hält die Kamera bis zum Serverende, die alte Werkbank
 bekommt gedrosselte Bilder und die Kamerabedienung erfolgt auf `/live`.
+## 0.1.0.dev0 — 2026-10-14 (MEM-8: Playwright-Beispieltest entfernt)
+
+**Problem:** `tests/example.spec.ts` war der Beispieltest aus der
+Playwright-Vorlage. Er prüfte `playwright.dev`, nichts aus diesem Projekt,
+und lief in der CI trotzdem als eigener Schritt mit Netzzugriff.
+
+**Änderung:** Beispieltest gelöscht. Der CI-Schritt `npx playwright test
+--project=chromium` in `playwright.yml` entfällt, die Browserinstallation
+bleibt für den Doku-Test. `playwright.config.ts` reicht nur noch
+`playwright.docs.config.ts` durch, statt die Vorlage mit drei Browsern
+mitzuführen; `docs/HOSTING.md` beschreibt das.
+
+**Konsequenz:** Einzige Playwright-Suite ist `tests/docs-site.spec.ts`.
+Ein schlichtes `npx playwright test` läuft dieselbe Suite wie
+`-c playwright.docs.config.ts` (gebaute Seite unter `site/` vorausgesetzt)
+und endet nicht mit „No tests found". Ohne Konfigurationsdatei hätte
+Playwright mit seinem Standardmuster die `*.test.mjs`-Harnische geladen.
+
+## 0.1.0.dev0 — 2026-10-13 (MEM-5: pytest im Worktree und temporäre Dateien)
+
+**Problem:** Die gemeinsame venv lud `dispread` aus dem Hauptcheckout,
+auch bei Tests im Worktree. Erfolgreiche pytest-Läufe hinterließen große
+temporäre Verzeichnisse auf der RAM-Disk `/tmp`.
+
+**Änderung:** pytest stellt das lokale `src/` vor den installierten
+Importpfad. Ein Regressionstest prüft den Ursprung von `dispread` gegen
+den Checkout neben dem Testverzeichnis. Temporäre Testdaten bleiben nur
+bei Fehlern erhalten, mit Aufbewahrungszahl 1.
+OQ-Tests starten Unterprozesse mit dem laufenden venv-Interpreter statt
+einer vorausgesetzten Worktree-venv. Der Workbench-Shutdown-Test nutzt
+einen relativen Unix-Socket im Testverzeichnis, sodass lange Worktree-Pfade
+die AF_UNIX-Pfadgrenze nicht überschreiten.
+
+**Konsequenz:** Worktree-Tests brauchen kein manuelles `PYTHONPATH=src`.
+Erfolgreiche Läufe räumen ihre pytest-Temporärdaten auf. Auf dem Pi wird
+weiterhin `TMPDIR=$PWD/var/tmp` gesetzt, damit auch während des Laufs keine
+Testdaten die RAM-Disk füllen. Kein festes `--basetemp`: pytest vergibt
+weiter getrennte, gegen paralleles Aufräumen gesperrte Laufverzeichnisse.
+
+## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Abbildungen in der Anleitung)
+
+**Problem:** Die Anleitungskapitel erklärten Raster, Statuslogik,
+Nachführung, Zellenleser und Einrichtung nur in Text und ASCII-Skizzen,
+obwohl die Projekt-Tour dieselben Abläufe animiert zeigt.
+
+**Änderung:** Acht Tour-Szenen als Abbildung in den Kapiteln 01 (Weg eines
+Werts), 02 (Zellraster, unlesbar und veraltet), 04 (bestätigtes
+Sitzungsprofil), 07 (Nachführen), 08 (Zelle lesen) und 10 (Kamera
+aufstellen, Einrichtungsassistent). Die Bildunterschriften grenzen ab, wo
+Szene und Kapitel auseinandergehen: Kapitel 01 übt an einer synthetischen
+Siebensegmentanzeige, Kapitel 04 beschreibt einen noch fehlenden
+`ProfileStore`, Kapitel 07 einen noch fehlenden `RegionTracker`.
+
+**Konsequenz:** 21 Abbildungen in 10 Seiten. Das Glossar bleibt ohne, weil
+seine Einträge als Vorschau auf anderen Seiten erscheinen. Der bestehende
+Browsertest prüft auch die neuen Abbildungen.
+
+## 0.1.0.dev0 — 2026-10-13 (Doku: Tour-Szenen als Abbildungen, Verträge-Seite lesbar)
+
+**Problem:** Die Seite „Verträge und Datensätze“ zeigte die Tabelle der
+Schreibrechte im `ValueRecord`-Docstring als rohe `=====`-Zeilen, und die
+Docstrings von `records`, `layout`, `charcells` und `session_profile`
+schrieben Umlaute als „ae/oe/ue“ („dafuer“). Eine Erklärung der neun Felder
+fehlte. Die Animationen der Projekt-Tour gab es nur auf der Tour-Seite.
+
+**Änderung:** Tabelle als Markdown, Umlaute in Docstrings und Kommentaren
+dieser vier Module (der Code ist unverändert, AST-Vergleich ohne
+Docstrings). `tour.js` kann einzelne Szenen als Abbildung in jede Doku-Seite
+setzen (`<figure class="tour-figure" data-scene="…">`): Sie spielt, sobald
+sie zur Hälfte sichtbar ist, hat einen Knopf zum Wiederholen und einen Link
+auf den Schritt in der Tour. Die Verträge-Seite beginnt mit Abbildung und
+einer handgeschriebenen Erklärung der neun Pflichtfelder; Messpfad,
+Zeitstempel sowie Daten und Abnahme haben 12 weitere Abbildungen. Zwei neue
+Browsertests prüfen, dass jede Abbildung eine existierende Tour-Szene zeigt
+und dass Abspielen, Wiederholen und der Tour-Link funktionieren.
+
+**Konsequenz:** Ändert sich eine Szene, ändert sie sich auch in den Seiten,
+die sie einbetten (AGENTS.md nennt die Suche danach). Bildunterschriften
+enthalten keine Zahlen; die kommen weiter aus `tour-facts.json`. Die übrigen
+`#:`-Kommentare an Attributen erscheinen auf der API-Seite weiterhin nicht,
+weil mkdocstrings sie nicht auswertet.
+## 0.1.0.dev0 — 2026-10-13 (Codex-Doku-Pflege: Korrekturrunden und Vorabprüfung)
+
+**Problem:** Ein vom Gate abgelehnter Codex-Stand war verloren: kein Patch,
+keine zweite Chance, die Antwort von Codex nur im privaten Log. Eine
+Abweichung der Tour-Fakten ließ Codex täglich laufen und erst im Build
+scheitern. Die Browsertests liefen im Gate mit mehreren Workern auf dem
+CPU-begrenzten Runner.
+
+**Änderung:** `scripts/docs-maintenance.py` prüft OQ-Index und Tour-Fakten
+in `probe`, vor Codex. Gate-Ablehnungen gehen als Meldung an dieselbe
+Session zurück (`codex exec resume`, höchstens zwei Runden à 8 min, Sandbox
+ausdrücklich `workspace-write`). Nach der letzten Ablehnung wird der Stand
+als `docs-maintenance.patch` gesichert und hochgeladen. Gate-Ausgaben,
+Token-Summe aller Runden und die letzte Antwort von Codex stehen im
+Job-Log. Playwright läuft mit `--workers=1`. Workflow-Limit 60 min. Der
+Prompt schützt die Tour-Struktur (Hüllen, Schrittzahl) und kündigt die
+Korrekturrunden an. Tests in `tests/test_docs_maintenance.py`.
+
+**Konsequenz:** Kleine Fehler am eigenen Stand behebt der Lauf selbst;
+Code, Szenen und Tests bleiben außerhalb seiner Reichweite. Eine
+Korrekturrunde sendet den Verlauf erneut (überwiegend Cache).
+
+## 0.1.0.dev0 — 2026-10-13 (Codex-Doku-Pflege: Log-Leser für den Runner)
+
+**Problem:** Ob der tägliche Codex-Pflegelauf etwas geändert hat oder warum
+nicht, war von der Entwickler-Session aus nicht feststellbar. Codex' Antwort
+und der Pflegezustand liegen nur im geschützten `CODEX_HOME` des Runners,
+und Forgejo 15 gibt Schritt-Logs nicht per API-Token heraus.
+
+**Änderung:** `scripts/picam-codex-logs` liest als root-eigene, per sudoers
+freigegebene Kopie den Pflegezustand und fasst `last-codex-run.jsonl`
+zusammen (Token, Dateiänderungen, fehlgeschlagene Kommandos, letzte
+Antwort). Es nimmt keine Argumente, läuft nach dem Start als
+`picam-codex-runner`, folgt keinen Symlinks und entfernt Steuerzeichen.
+Einrichtung in `docs/HOSTING.md`; Tests in `tests/test_picam_codex_logs.py`.
+
+**Konsequenz:** Ergebnis und Begründung eines Pflegelaufs sind ohne
+Browser prüfbar; Lauf-Status kommt per Read-only-Token aus der Forgejo-API.
+Die Gate-Ausgaben selbst bleiben nur auf der Actions-Seite sichtbar.
+
+## 0.1.0.dev0 — 2026-10-12 (Sites: Forgejo als Hauptquelle und vertiefte Statistiken)
+
+**Problem:** GitHub ist nur Mirror; dessen Actions bildeten den echten
+Prüfstand nicht ab. Commit-Aktivität und Quelltextzeilen fehlten.
+
+**Änderung:** Private Sites-Version 3 liest Forgejo per GET mit geschütztem
+Read-only-Token. Neue Commit-Diagramme für 7/30/90 Tage, getrennte
+Repository-/Dateigrößen, Blob-geprüfte Gesamt-/Nichtleer-Zeilen,
+Produktions-/Test-/Hilfscode und größte Quelldateien. Handlungsbedarf führt
+direkt zu Fehlern und Blockaden. Token fehlt in Quell- und Build-Dateien;
+51 Website-Tests, TypeScript, Build sowie lokale und gehostete Datenabrufe
+bestehen. Spezifikation und Plan behalten ihre Library-Identitäten.
+
+**Konsequenz:** Aktuelle Prüfaussagen stammen aus dem Hauptrepository.
+Fehlende pytest-/ruff-Nachweise bleiben offen; Statistik ersetzt keine
+Codequalitätsnote. Die Seite bleibt privat.
+
+## 0.1.0.dev0 — 2026-10-12 (CI: Playwright auf Forgejo-Host-Runner)
+
+**Problem:** `playwright.yml` verlangte das nicht vorhandene Runner-Label
+`ubuntu-latest`; der Lauf blieb vor dem ersten Schritt stehen.
+
+**Änderung:** Job auf `picam-docs` umgestellt, Node 22 und Chromium mit einem
+Worker festgelegt, Installation von Systempaketen entfernt. Strenger
+Doku-Build, manuell startbarer Lauf und Forgejo-kompatibler Berichtsupload.
+Die allgemeine Playwright-Suche lädt nur `.spec.ts`-Dateien; die
+Node-Testharnische mit Pytest-Fixtures werden nicht als Browsertests geladen.
+
+**Konsequenz:** Neue Läufe passen zum vorhandenen Runner und benötigen keine
+privilegierte Paketinstallation. Alte wartende Läufe verwenden weiterhin
+ihre ursprüngliche Workflow-Version.
+
+## 0.1.0.dev0 — 2026-10-12 (Sites: grafische Roadmap und Codebase-Statistik)
+
+**Problem:** Die Cockpit-Roadmap war eine Kartenliste; Codebase-Zahlen und
+kräftigere Kontraste fehlten.
+
+**Änderung:** Private Sites-Version 2 mit P0–P8-Timeline, aufklappbaren
+Belegen, Commit-bezogenen Datei-/Sprach-/Volumenstatistiken, kontrastreicherer
+Gestaltung und Animationen mit reduzierter Bewegung. Die eigene Site-Quelle
+ist separat versioniert; 33 Node-Tests, TypeScript, Build und Browser-QA bestehen.
+
+**Konsequenz:** Übersicht und Tiefe sind verbunden; Statistiken tragen
+Quellenbezug und Veralterungskennzeichnung und ersetzen keinen Qualitätsnachweis.
+
+## 0.1.0.dev0 — 2026-10-12 (Projekt-Tour: Werte aus dem Code)
+
+**Problem:** Die Szenen der Projekt-Tour trugen Werte aus dem Code fest ein
+(Felder des ValueRecord, `confirm_frames`, `stale_after`, Tracker-Grenzen,
+Zeichensatz, Kamera- und Ernteparameter, Testnamen). Nach einer Codeänderung
+hätte die automatische Doku-Pflege den Text angepasst, die Grafik aber
+weiter den alten Stand gezeigt.
+
+**Änderung:** `scripts/tour-facts.py` liest 27 solche Werte statisch aus dem
+Quelltext (ast, ohne Import) und aus `fortschritt.json` und schreibt
+`docs-site/assets/data/tour-facts.json`, je Wert mit Quelle und den
+Tour-Schritten, die ihn zeigen. Die Szenen zeichnen mit diesen Werten
+(`fact(id, fallback)`); fehlt die Datei, zeigen sie den Stand ihres
+Entwurfs. `--check` läuft vor jedem Doku-Build und in
+`tests/test_tour_facts.py`; ein Playwright-Test prüft, dass geänderte
+Werte auf der Bühne ankommen. Der Prompt der Doku-Pflege verbietet,
+Schritt-IDs umzubenennen, und verlangt, Abweichungen zu melden.
+
+**Konsequenz:** Ändert sich ein gezeigter Wert, bricht der Doku-Build ab und
+nennt die Schritte, die zu prüfen sind; Übernahme mit
+`./scripts/tour-facts.py --write`. Viele Werte zieht die Bühne danach von
+selbst nach (z. B. neue ValueRecord-Felder, `stale_after`, Fokuswert).
 
 ## 0.1.0.dev0 — 2026-10-12 (Doku: Projekt-Tour vollständig)
 

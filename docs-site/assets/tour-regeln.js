@@ -130,7 +130,7 @@
     const fnRead = T.group(layer, "regeln-fn");
     T.panel(fnRead, 400, 100, 300, 64, "t-panel t-flow-box");
     T.label(fnRead, 416, 126, "ValueReader.read", "t-mono t-mono-sm t-strong");
-    ["crop", "layout"].forEach((name, i) => {
+    T.fact("reader.read_params", ["crop", "layout"]).forEach((name, i) => {
       T.svg("rect", { x: 416 + i * 90, y: 136, width: 80, height: 20, rx: 10, class: "token-box" }, fnRead);
       T.label(fnRead, 456 + i * 90, 151, name, "t-small", { "text-anchor": "middle" });
     });
@@ -139,7 +139,7 @@
     const fnGate = T.group(layer, "regeln-fn");
     T.panel(fnGate, 400, 180, 300, 64, "t-panel t-flow-box");
     T.label(fnGate, 416, 206, "ReleaseGate.evaluate", "t-mono t-mono-sm t-strong");
-    ["read", "capture_ns"].forEach((name, i) => {
+    T.fact("gate.evaluate_params", ["read", "capture_ns"]).forEach((name, i) => {
       T.svg("rect", { x: 416 + i * 90, y: 216, width: 80, height: 20, rx: 10, class: "token-box" }, fnGate);
       T.label(fnGate, 456 + i * 90, 231, name, "t-small", { "text-anchor": "middle" });
     });
@@ -370,12 +370,14 @@
     const head = heading(layer, "Was noch nicht geprüft ist", "Belegt ist ein Gerät. Alles darüber hinaus ist offen und wird so genannt.");
 
     const proven = board(layer, 40, 92, 380, 300, "valid", "Belegt");
+    // Zählungen aus den Abnahmedateien (abnahme.stufe2c), die Obergrenze aus VALIDATION.md.
+    const total = T.fact("abnahme.stufe2c", { gesamt: { richtig: 215, falsch: 0, abgelehnt: 0 } }).gesamt;
     const provenLines = [
       ["Punktraster-Leser", "t-label t-strong"],
       ["am GSV-2AS · Displaytech 161A", "t-label"],
       ["Abnahme 3:", "t-label t-strong"],
-      ["215 von 215 richtig", "t-label"],
-      ["0 falsch · 0 abgelehnt", "t-label"],
+      [`${total.richtig} von ${total.richtig + total.falsch + total.abgelehnt} richtig`, "t-label"],
+      [`${total.falsch} falsch · ${total.abgelehnt} abgelehnt`, "t-label"],
       ["Obergrenze Fehlerrate 3,5 %", "t-label"],
     ].map(([text, cls], i) => T.label(proven, 62, 150 + i * 32, text, cls));
     const provenMark = T.checkMark(proven, 392, 120, "ok");

@@ -9,6 +9,59 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-13 — pytest-Importpfad und Aufbewahrung im Worktree (MEM-5)
+
+## Problem
+
+Die gemeinsame Projekt-venv verweist auf `src/` im Hauptcheckout. Tests
+in einem Worktree konnten dadurch fremden Code prüfen. Erfolgreiche
+Testläufe behielten zudem große temporäre Verzeichnisse in `/tmp`.
+
+## Entscheidung und Alternativen
+
+`pythonpath = ["src"]` in der pytest-Konfiguration priorisiert den
+jeweiligen Checkout; ein Test sichert den tatsächlichen Paketursprung ab.
+`tmp_path_retention_policy = "failed"` mit Aufbewahrungszahl 1 entfernt
+erfolgreiche temporäre Testdaten und begrenzt zurückbehaltene Fehlerdaten.
+Ein festes `--basetemp` in `addopts` wird verworfen: pytest löscht diesen
+Pfad beim Start, sodass parallele Sitzungen einander Daten nehmen könnten.
+Die automatisch nummerierten und gesperrten Laufverzeichnisse bleiben.
+
+## Konsequenz
+
+Die gemeinsame venv bleibt nutzbar, ohne `PYTHONPATH` manuell zu setzen.
+Auf dem Pi weiterhin `TMPDIR=$PWD/var/tmp` vor Tests setzen: Aufbewahrung
+steuert das Aufräumen, nicht den Speicherort während eines Testlaufs.
+Vorhandene Daten außerhalb des Aufgaben-Worktrees werden nicht gelöscht.
+
+---
+
+# 2026-10-12 — Playwright auf dem bestehenden Forgejo-Doku-Runner
+
+## Problem
+
+Die GitHub-Workflow-Vorlage verlangte `ubuntu-latest`, während der
+vorhandene Host-Runner nur `picam-docs` anbietet. Zusätzlich war eine
+privilegierte Browser-Systempaketinstallation vorgesehen.
+
+## Entscheidung und Alternativen
+
+Playwright läuft auf `picam-docs` mit Chromium und einem Worker, ohne
+Systempakete zu installieren. Der Runner behält sein spezifisches Label
+und seine systemd-Abschottung. Ein zusätzliches `ubuntu-latest`-Host-Label
+wird verworfen: Es würde unpassende generische Ubuntu-Jobs auf das
+Messgerät ziehen. Ein separater Container-Runner wäre möglich, ist für
+die bestehenden Chromium-Doku-Tests aber nicht erforderlich.
+
+## Konsequenz
+
+Doku-Build und Browserprüfung teilen sich die Runner-Kapazität 1.
+Firefox und WebKit bleiben in der lokalen Playwright-Konfiguration
+verfügbar, sind nicht Teil dieses Host-Jobs. Systembibliotheken bleiben
+Aufgabe der Pi-Einrichtung; der Job lädt nur die passenden Browserdateien.
+
+---
+
 # 2026-10-01 — Cursorpunkte gegen schwache Schatten absichern
 
 ## Problem
@@ -1333,3 +1386,70 @@ Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte
 die gewünschte eigenständige Übersicht weniger direkt erfüllt. Eine
 pauschale Codequalitätsnote würde die unterschiedlichen Prüf- und
 Validierungsbelege zu stark vereinfachen.
+
+## 2026-10-12 — Cockpit: Timeline und Codebase-Auswertung
+
+Der Nutzer hat die Überarbeitung mit grafischer P0–P8-Phasenfolge, dunklerer
+Navigation, Codebase-Zahlen und dezenten Animationen freigegeben. Die
+Timeline verwendet die vorhandenen Phasen und Exit-Kriterien statt eines
+unbelegten Kalenderplans. Die Sprachverteilung beruht auf Dateiendungen
+und Dateigrößen des vollständigen, Commit-gebundenen GitHub-Dateibaums.
+Codezeilen wurden als Alternative zurückgestellt: Sie verlangen zusätzliche
+Dateiabrufe und wären ohne getrennte Definition von Leerzeilen und Kommentaren
+missverständlich. Eine Qualitätsnote wird weiterhin nicht abgeleitet.
+Die Site bleibt privat; keine neue Abhängigkeit wurde eingeführt.
+
+## 2026-10-12 — Forgejo ist das Hauptrepository des Cockpits
+
+Der Nutzer hat klargestellt, dass GitHub nur Mirror ist, und den Wechsel
+auf das private Forgejo-Repository `l.hentschke/picam-ai` autorisiert.
+Die Forgejo-Läufe bestanden am aktuellen Commit, während der Mirror ältere
+oder ungeeignete Prüfläufe zeigte. GitHub-Prüfungen als Hauptnachweis wurden
+deshalb verworfen; ein stiller Fallback auf den Mirror würde den falschen
+Prüfstand erneut einführen. GitHub bleibt nur als Mirror verlinkt.
+
+Ein passender Forgejo-Connector wurde bei der Plugin-Suche nicht gefunden.
+Die vorhandenen Datenflüsse verwenden stattdessen feste, serverseitige
+Forgejo-GET-Aufrufe. Der vom Nutzer gelieferte Read-only-Token liegt als
+Sites-Geheimnis außerhalb von Quellcode, Browser und Veröffentlichungspaket.
+Die Site bleibt für denselben privaten Empfängerkreis zugänglich.
+
+Die Zeilenanalyse nutzt das authentifiziert geladene Archiv des gewählten
+Commits und prüft die gezählten Dateien gegen ihre Git-Blobs. Einzelne
+Dateiabrufe wurden zugunsten des begrenzten Archivs zurückgestellt.
+Paginierung und ein gemeinsames Zeitlimit begrenzen API-Arbeit; Zeilen
+werden ohne pro Zeile angelegte Arrays gezählt. Quelltext mit Kommentaren
+und Leerzeilen wird nicht mit ausführbaren Codezeilen oder Qualität
+verwechselt. Spezifikation und Plan wurden unter bestehenden Identitäten
+im Repository und der Library korrigiert.
+
+## 2026-10-13 — Doku-Pflege: Korrekturrunden statt Einmal-Lauf
+
+### Entscheidung
+
+Der Codex-Doku-Lauf bekommt Ablehnungen des Gates zurück und darf sie in
+höchstens zwei fortgesetzten Runden derselben Session beheben
+(`codex exec resume`). Die Pfadgrenzen bleiben unverändert: Korrigiert wird
+nur innerhalb der Doku-Dateien, die der Gate ohnehin zulässt. Generierte
+Prüfungen, die Codex nicht beheben darf (OQ-Index, Tour-Fakten), stoppen
+den Job schon vor dem Codex-Aufruf.
+
+### Verworfene Alternativen
+
+* **Neue Session pro Korrektur:** verliert den Kontext des ersten Laufs und
+  müsste Repo und Auftrag erneut lesen; teurer und ohne Wissen, welche
+  Änderung abgelehnt wurde.
+* **Unbegrenzte Runden:** keine Kostengrenze, und ein im Doku-Rahmen
+  unlösbarer Fehler (etwa in einer Szene) würde den Lauf bis zum Timeout
+  ziehen.
+* **Codex darf auch Code, Szenen oder Tests anpassen:** der Job pusht ohne
+  Review direkt nach `master`, und das Gate prüft nur Doku (keine pytest-
+  oder Hardwareprüfung). Ein Code-Fix bräuchte einen eigenen Ablauf mit
+  Pull Request und menschlicher Abnahme.
+
+### Konsequenz
+
+Kleine eigene Fehler (Anker, Codeblock-Links, fehlender Status) behebt der
+Lauf selbst; abgelehnte Stände bleiben als Patch-Artefakt prüfbar. Eine
+Korrekturrunde kostet etwa so viel Eingabe-Token wie der bisherige Verlauf.
+

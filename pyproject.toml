@@ -41,6 +41,9 @@ ignore = ["E501", "B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
+tmp_path_retention_policy = "failed"
+tmp_path_retention_count = 1
 markers = [
     "hardware: braucht eine angeschlossene Kamera",
     "serial: braucht UART oder Transceiver",

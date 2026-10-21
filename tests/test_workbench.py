@@ -895,7 +895,10 @@ def test_serve_stops_accepting_connections_before_closing_terminals(tmp_path, mo
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    control_socket = tmp_path / "control.sock"
+    # AF_UNIX begrenzt den Pfad auf ca. 108 Bytes. Der Worktree-TMPDIR
+    # kann schon länger sein; relativ bleibt der Socket im selben tmp_path.
+    monkeypatch.chdir(tmp_path)
+    control_socket = Path("control.sock")
 
     order = []
     original_terminals_close = Terminals.close

@@ -6,6 +6,10 @@ Seite erklärt die Datensätze; Messverfahren und Zahlen stehen in
 [TIMING.md](../TIMING.md). Die Anforderung kommt aus
 [Konzept §6](../../Konzept.md#6-synchronitat-und-zeitliche-grenzen).
 
+<figure class="tour-figure" data-scene="zeit-uhren" markdown="1">
+<figcaption markdown="span">Kamera, Messverstärker und Kalibrierreferenz zählen mit verschiedenen Uhren. Zwei Zeitpunkte aus verschiedenen Uhren dürfen nicht einfach voneinander abgezogen werden.</figcaption>
+</figure>
+
 ## Drei Fragen vor jeder Rechnung
 
 1. **Welche Uhr?** Das Feld <code>capture_timestamp.base</code> nennt die
@@ -44,6 +48,10 @@ abgelehnt. Die physikalische Bedeutung des V4L2-Stempels bleibt
 steht in [TIMING.md](../TIMING.md). Die frühere IMX500-Messreihe dort ist
 historisch und gilt nicht automatisch für UVC.
 
+<figure class="tour-figure" data-scene="zeit-versatz" markdown="1">
+<figcaption markdown="span">Die Kamerazeit wird nur an einer Stelle nach BOOTTIME umgerechnet, mit dem zu Beginn und am Ende der Aufnahme gemessenen Versatz. Fehlt er oder hat er sich verändert, wird abgelehnt.</figcaption>
+</figure>
+
 ## Latenz und Unsicherheit auseinanderhalten
 
 Ein Verarbeitungs-Trace misst, wie lange Lokalisierung, Entzerrung, Lesen
@@ -63,6 +71,10 @@ Ein konstanter Versatz kann korrigierbar sein; die Streuung und der
 unbekannte Rest bleiben im Budget. Der zulässige Grenzwert ist
 [OQ-02](../open-questions.md#oq-02).
 
+<figure class="tour-figure" data-scene="zeit-latenz" markdown="1">
+<figcaption markdown="span">Eine feste Verzögerung lässt sich herausrechnen, eine schwankende nicht. Ins Unsicherheitsbudget geht deshalb die Streuung ein, nicht der Mittelwert.</figcaption>
+</figure>
+
 ## Von Aufnahme bis GSVmulti
 
 <code>ValueRecord.capture_timestamp</code> behält die Zeitbasis der Quelle;
@@ -78,6 +90,10 @@ Die Telegrammspezifikation und das Verhalten bei ungültigen Werten sind offen
 ([GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md),
 [OQ-07](../open-questions.md#oq-07)). Ein gleichmäßiger serieller
 Datenstrom belegt daher keine Synchronität zur Referenz.
+
+<figure class="tour-figure" data-scene="zeit-zuordnung" markdown="1">
+<figcaption markdown="span">Prüfling und Referenz werden nachträglich über ihre Zeitstempel zusammengeführt. Belastbar ist das erst, wenn die offenen Punkte unten auf der Bühne geklärt sind.</figcaption>
+</figure>
 
 ## Ein Bericht mit belastbarer Zeitangabe
 

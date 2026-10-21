@@ -59,6 +59,10 @@ erste Zeile — das ist ein vollständiger [ValueRecord](glossar.md#value-record
 Die [Pipeline](../../api/pipeline.md "Die Pipeline verbindet alle Stufen und protokolliert Zwischenergebnisse.") verdrahtet die Stufen und baut aus
 `ReadResult` und `GateDecision` den `ValueRecord`.
 
+<figure class="tour-figure" data-scene="ueberblick-weg" markdown="1">
+<figcaption markdown="span">Dieselbe Kette am realen Aufbau mit Punktraster-Anzeige. Die Übung „Ein Frame zu Fuß“ unten nutzt dagegen eine synthetische Siebensegmentanzeige, damit sie ohne Kamera läuft.</figcaption>
+</figure>
+
 **Lesereihenfolge des Codes** (so ist es am schnellsten verständlich):
 
 1. `src/dispread/records.py` — `Timestamp`, `ValueStatus`, `ValueRecord`. Der

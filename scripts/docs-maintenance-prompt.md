@@ -52,7 +52,11 @@ Bevorzuge eine gezielte Änderung an höchstens fünf Seiten pro Lauf.
 
 Nach allen Doku-Aenderungen einmal selbst `./scripts/docs-site.sh build -s` ausfuehren.
 Repariere dabei gemeldete Links und Anker anhand der tatsaechlichen IDs in
-`site/`, bevor du den Lauf beendest. Der Gate wiederholt den Build unabhaengig.
+`site/`, bevor du den Lauf beendest. Der Gate wiederholt den Build unabhaengig
+und fuehrt danach die Browsertests (`tests/docs-site.spec.ts`) aus; die laufen
+nur im Gate, nicht in deiner Sandbox. Lehnt der Gate ab, setzt er diese
+Session mit seiner Meldung fort (hoechstens zweimal). Dann nur diese Meldung
+beheben, oder die betroffene eigene Aenderung zuruecknehmen.
 
 ## Grenzen
 
@@ -64,6 +68,21 @@ Quellen zum Verlinken, keine automatisch umzuschreibenden Texte. Halte
 `AGENTS.md` und `Konzept.md` ein: keine erfundenen GSVmulti-Telegramme,
 keine unmarkierten veralteten Werte, keine aus synthetischer Zeit
 abgeleiteten Latenzen, keine Konfidenz als Fehlerwahrscheinlichkeit.
+
+`docs/uebersicht/projekt-tour.md` ist an animierte Szenen
+(`docs-site/assets/tour*.js`) gebunden. Ändere dort nur Fließtext innerhalb
+bestehender Schritte. Die h3-IDs, die Hüllen `<section class="tour-chapter"
+data-chapter=… data-label=…>` und `<div class="tour-step" markdown="1">`
+sowie Zahl und Reihenfolge der Kapitel und Schritte bleiben unverändert; die
+Browsertests prüfen je Schritt eine Szene und die Schrittzahl. Zahlen im
+Tourtext stammen aus `scripts/tour-facts.py`; der Gate prüft sie vor deinem
+Start. Meldet der Build trotzdem eine Abweichung, ändere nichts dafür, denn
+Szenen und `tour-facts.json` sind nicht freigegeben. Nenne die gemeldeten
+Tour-Schritte in der Zusammenfassung.
+Abbildungen der Form `<figure class="tour-figure" data-scene="...">` in
+anderen Seiten zeigen dieselben Szenen: `data-scene` nicht ändern und keine
+neuen Szenennamen erfinden. Die Bildunterschrift darfst du anpassen, schreibe
+aber keine Zahlen hinein.
 
 Der Lauf ist absichtlich klein. Arbeite allein, wenn die Änderung überschaubar
 ist. Nur bei mindestens vier voneinander unabhängigen betroffenen Bereichen

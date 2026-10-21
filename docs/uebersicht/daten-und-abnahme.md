@@ -41,6 +41,10 @@ Zahlen die datierte [Validierung](../VALIDATION.md) und den
 ([OQ-04](../open-questions.md#oq-04)); LED/VFD-Entwicklungsdaten allein
 belegen diese Zielhardware nicht.
 
+<figure class="tour-figure" data-scene="regeln-grenzen" markdown="1">
+<figcaption markdown="span">Was der Leser bisher belegt und was nicht: Belegt ist ein Gerät mit einem Display. Weitere Messverstärker, andere Lichtquellen und das Minuszeichen sind offen und werden mit jedem Ergebnis genannt.</figcaption>
+</figure>
+
 ## Welche Fehler einzeln zählen?
 
 Die vollständige Freigabeentscheidung ist wichtiger als eine
@@ -66,6 +70,10 @@ nicht als Zusage für beliebige Geräte
 Konfidenzwerte des Lesers sind ohne reale Kalibrierung keine
 Fehlerwahrscheinlichkeiten ([OQ-14](../open-questions.md#oq-14)).
 
+<figure class="tour-figure" data-scene="regeln-konfidenz" markdown="1">
+<figcaption markdown="span">Die Konfidenz ist eine Qualitätskennzahl des Lesers, keine Wahrscheinlichkeit. Jeder Leser meldet, dass sie nicht kalibriert ist.</figcaption>
+</figure>
+
 ## Vor einem Abnahmelauf festhalten
 
 1. Benenne Geräteumfang und Sperrgeräte vor Entwicklung
@@ -81,6 +89,10 @@ Fehlerwahrscheinlichkeiten ([OQ-14](../open-questions.md#oq-14)).
 5. Prüfe den Zeitbezug separat. Ein synthetischer oder aus Dateizeit
    abgeleiteter Stempel darf keine Latenzbehauptung stützen
    ([Zeitstempel](zeitstempel.md), [TIMING.md](../TIMING.md)).
+
+<figure class="tour-figure" data-scene="training-abnahme" markdown="1">
+<figcaption markdown="span">Abnahme 3 als Beispiel: Vorlagen vorher eingefroren, Kriterium vorher festgelegt, neue Aufstellungen. Diese stammen aber vom selben Gerät; die P7-Abnahme auf Sperrgeräten ersetzt sie deshalb nicht.</figcaption>
+</figure>
 
 Die P7-Abnahme ist erst erreicht, wenn der Lauf auf gesperrten Geräten
 gegen diese vorher festgelegten Kriterien ausgewertet wurde

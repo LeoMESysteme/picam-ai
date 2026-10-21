@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "oq-index.py"
@@ -14,7 +15,7 @@ def run_index(tmp_path: Path, questions: str, todo: str, *extra: str) -> tuple[s
     questions_path.write_text(questions, encoding="utf-8")
     todo_path.write_text(todo, encoding="utf-8")
     result = subprocess.run(
-        [str(Path(__file__).parents[1] / ".venv/bin/python"), str(SCRIPT),
+        [sys.executable, str(SCRIPT),
          "--path", str(questions_path), "--todo", str(todo_path), *extra],
         capture_output=True, text=True, check=False,
     )
@@ -126,7 +127,7 @@ Abgeschlossen.
 
 def test_real_oq_index_is_current() -> None:
     result = subprocess.run(
-        [str(Path(__file__).parents[1] / ".venv/bin/python"), str(SCRIPT), "--check"],
+        [sys.executable, str(SCRIPT), "--check"],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr

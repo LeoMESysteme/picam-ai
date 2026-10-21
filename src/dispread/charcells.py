@@ -1,11 +1,11 @@
-"""Zeichenzellenraster fuer Punktmatrix-Anzeigen (Konzept.md §4, Ernte Phase 1).
+"""Zeichenzellenraster für Punktmatrix-Anzeigen (Konzept.md §4, Ernte Phase 1).
 
 `CharGrid` beschreibt die Zeichenzellen eines Punktmatrix-Displays (HD44780,
-16 x 1, 5 x 8 Punkte) auf dem **entzerrten** Bild. Der Bediener bestaetigt das
+16 x 1, 5 x 8 Punkte) auf dem **entzerrten** Bild. Der Bediener bestätigt das
 Raster einmal je Sitzung, so wie die manuelle ROI - siehe
-docs/superpowers/plans/2026-09-23-ernte-phase1.md, Entscheidung 2. Zusaetzlich
+docs/superpowers/plans/2026-09-23-ernte-phase1.md, Entscheidung 2. Zusätzlich
 misst `source_dot_column_px` die Punktspaltenbreite im **Quellbild**, denn das
-Aufloesungs-Gate (Entscheidung 3) prueft dort, nicht im hochgerechneten
+Auflösungs-Gate (Entscheidung 3) prüft dort, nicht im hochgerechneten
 entzerrten Bild.
 """
 
@@ -23,10 +23,10 @@ from dispread.rectify import _order_quad
 
 @dataclass(frozen=True, slots=True)
 class CharGrid:
-    """Regelmaessiges Zeichenzellenraster im entzerrten Bild.
+    """Regelmäßiges Zeichenzellenraster im entzerrten Bild.
 
-    Zelle i ueberdeckt horizontal `[left + i*pitch, left + (i+1)*pitch)` und
-    vertikal `[top, bottom)`. Alle Laengen sind Pixel des entzerrten Bildes.
+    Zelle i überdeckt horizontal `[left + i*pitch, left + (i+1)*pitch)` und
+    vertikal `[top, bottom)`. Alle Längen sind Pixel des entzerrten Bildes.
     """
 
     n_cells: int
@@ -91,13 +91,13 @@ class CharGrid:
 
 
 def source_dot_column_px(grid: CharGrid, quad: Quad, target_size: tuple[int, int]) -> float:
-    """Punktspaltenbreite im Quellbild, Minimum ueber alle Zellen.
+    """Punktspaltenbreite im Quellbild, Minimum über alle Zellen.
 
-    Die Zellecken werden ueber die inverse Homographie (dieselbe Eckordnung
+    Die Zellecken werden über die inverse Homographie (dieselbe Eckordnung
     wie `dispread.rectify._order_quad`) ins Quellbild abgebildet. Die
     Zellbreite im Quellbild ist die euklidische Distanz der abgebildeten
-    Punkte `(x_links, y_mitte)` und `(x_rechts, y_mitte)`. Zurueckgegeben wird
-    das Minimum ueber alle Zellen von
+    Punkte `(x_links, y_mitte)` und `(x_rechts, y_mitte)`. Zurückgegeben wird
+    das Minimum über alle Zellen von
     `(Zellbreite im Quellbild) / (dot_columns + gap_columns)`.
     """
     width, height = target_size

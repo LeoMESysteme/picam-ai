@@ -9,11 +9,21 @@
  *
  * anime.js 4.5.0 liegt als lokale Kopie unter assets/vendor/ (die Doku liegt
  * hinter einer Anmeldung und lädt keine fremden Skripte) und wird nur auf
- * dieser Seite nachgeladen. Farben kommen aus CSS-Klassen (tour.css), damit
- * der Wechsel zwischen hellem und dunklem Theme ohne Neuzeichnen greift.
+ * Seiten mit Tour oder Abbildung nachgeladen. Farben kommen aus CSS-Klassen
+ * (tour.css), damit der Wechsel zwischen hellem und dunklem Theme ohne
+ * Neuzeichnen greift.
  *
  * Inhaltliche Regel: Die Bühne zeigt nur, was der Code tut. Geplantes ist
- * bernsteinfarben und gestrichelt, Zahlen sind als Beispiel gekennzeichnet. */
+ * bernsteinfarben und gestrichelt, Zahlen sind als Beispiel gekennzeichnet.
+ *
+ * Einzelne Szenen lassen sich als Abbildung in andere Doku-Seiten setzen:
+ *
+ *   <figure class="tour-figure" data-scene="erkennung-ausgabe" markdown="1">
+ *   <figcaption markdown="span">Text unter der Abbildung</figcaption>
+ *   </figure>
+ *
+ * `data-scene` ist die h3-ID eines Tour-Schritts. Die Abbildung spielt, sobald
+ * sie zur Hälfte sichtbar ist, einmal ab und bleibt dann im Endzustand. */
 (function () {
   "use strict";
 
@@ -27,7 +37,40 @@
   const H = 540;
 
   let animePromise = null;
+  let factsPromise = null;
   let active = null;
+  let figures = [];
+  // Werte aus dem Code, erzeugt von scripts/tour-facts.py. Die Szenen lesen
+  // sie über fact(id, fallback); der Fallback ist der Stand beim Schreiben der
+  // Szene und greift nur, wenn die Datei nicht geladen werden kann.
+  let facts = {};
+
+  function fact(id, fallback) {
+    const entry = facts[id];
+    return entry && entry.value !== undefined ? entry.value : fallback;
+  }
+
+  function loadFacts() {
+    if (!factsPromise) {
+      const url = new URL("data/tour-facts.json", SCRIPT_SRC || document.baseURI).href;
+      factsPromise = fetch(url, { cache: "no-cache" })
+        .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
+        .then((data) => {
+          facts = (data && data.facts) || {};
+          applyFacts();
+        })
+        .catch((error) => {
+          factsPromise = null;
+          console.warn(`Projekt-Tour: Faktendatei nicht geladen (${error.message}), Szenen zeigen den Stand ihres Entwurfs.`);
+        });
+    }
+    return factsPromise;
+  }
+
+  // Deutsche Zahl mit Komma, ohne überflüssige Nachkommastellen.
+  function num(value, digits) {
+    return Number(value).toLocaleString("de-DE", { maximumFractionDigits: digits === undefined ? 3 : digits });
+  }
 
   function loadAnime() {
     if (window.anime && window.anime.createTimeline) return Promise.resolve(window.anime);
@@ -177,6 +220,15 @@
   };
   // Die Klassen, die der Dot-Matrix-Leser kennt (dotmatrix_font.CLASSES).
   const READER_CLASSES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "+", " "];
+
+  // Zeichensatz und Klassen kommen aus dem Code (ocr.rom_a00, ocr.classes);
+  // die Einheitszeichen m, V und / bleiben Ergänzungen der Darstellung.
+  function applyFacts() {
+    const rom = fact("ocr.rom_a00", null);
+    if (rom) Object.assign(ROM, rom);
+    const classes = fact("ocr.classes", null);
+    if (Array.isArray(classes)) READER_CLASSES.splice(0, READER_CLASSES.length, ...classes);
+  }
   const DISPLAY = "+0.46761 mV/V   ";
   const LCD_PAD_X = 2;
   const LCD_PAD_Y = 2.5;
@@ -845,7 +897,7 @@
     const m = r.matrix();
     const text = DISPLAY.slice(0, 9);
     const pre = group(layer, "pre-checks");
-    chip(pre, 120, 150, "Belichtung: ≤ 2 % gesättigt", "chip--valid");
+    chip(pre, 120, 150, `Belichtung: ≤ ${num(fact("ocr.max_saturated", 0.02) * 100)} % gesättigt`, "chip--valid");
     chip(pre, 360, 150, "Kontrast ausreichend", "chip--valid");
     const tokens = [];
     const TX = 480 - (9 * 62) / 2;
@@ -905,7 +957,10 @@
   function sceneErkennungFreigabe(ctx) {
     const { tl, A, layer, tour } = ctx;
     label(layer, 40, 50, "Fünf Bilder nacheinander · Beispiel mit confirm_frames = 2", "t-label t-strong");
-    label(layer, 40, 72, "Grundeinstellung ist 1: dann ist schon das erste Bild gültig.", "t-small");
+    const confirmDefault = fact("gate.confirm_frames", 1);
+    label(layer, 40, 72, confirmDefault === 1
+      ? "Grundeinstellung ist 1: dann ist schon das erste Bild gültig."
+      : `Grundeinstellung ist ${confirmDefault}.`, "t-small");
     const frames = [
       { v: "0.46761", s: "Übergang", k: "plan", y: 200, why: "erst 1 von 2" },
       { v: "0.46761", s: "gültig", k: "valid", y: 200, why: "2 gleiche" },
@@ -973,7 +1028,12 @@
   function sceneErkennungVeraltet(ctx) {
     const { tl, A, layer, tour } = ctx;
     label(layer, 40, 44, "Was passiert, wenn die Anzeige verdeckt ist?", "t-label t-strong");
-    label(layer, 40, 64, "Beispiel: 30 Bilder pro Sekunde · stale_after = 0,5 s (vorläufig)", "t-small");
+    const staleMs = fact("gate.stale_after_ns", 500e6) / 1e6;
+    const staleText = `${num(staleMs / 1000, 2)} s`;
+    const frameMs = 1000 / 30;
+    const at = (n) => `${Math.round(n * frameMs)} ms`;
+    const lastBefore = Math.floor(staleMs / frameMs);
+    label(layer, 40, 64, `Beispiel: 30 Bilder pro Sekunde · stale_after = ${staleText} (vorläufig)`, "t-small");
 
     // Kleine Anzeige mit Hand davor.
     const lcd = group(layer, "mini-lcd");
@@ -984,12 +1044,12 @@
 
     const cols = [
       { x: 170, t: "0 ms", read: "0.51230", s: "gültig", k: "valid", out: "0.51230", covered: false },
-      { x: 290, t: "33 ms", read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
-      { x: 410, t: "67 ms", read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
+      { x: 290, t: at(1), read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
+      { x: 410, t: at(2), read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
       { gap: true, x: 510 },
-      { x: 610, t: "467 ms", read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
-      { x: 730, t: "533 ms", read: "?", s: "veraltet", k: "stale", out: "keine Zahl", covered: true },
-      { x: 850, t: "567 ms", read: "?", s: "veraltet", k: "stale", out: "keine Zahl", covered: true },
+      { x: 610, t: at(lastBefore), read: "?", s: "unlesbar", k: "bad", out: "keine Zahl", covered: true },
+      { x: 730, t: at(lastBefore + 1), read: "?", s: "veraltet", k: "stale", out: "keine Zahl", covered: true },
+      { x: 850, t: at(lastBefore + 2), read: "?", s: "veraltet", k: "stale", out: "keine Zahl", covered: true },
     ];
     const rowsY = { frame: 186, time: 226, read: 262, status: 300, out: 340 };
     const heads = group(layer, "row-heads");
@@ -1020,11 +1080,11 @@
 
     const brace = group(layer, "stale-brace");
     svg("path", { d: `M170 392v8H670v-8`, class: "brace-line brace-line--bad" }, brace);
-    label(brace, 420, 420, "0,5 s ohne gültigen Wert (stale_after)", "t-small t-strong", { "text-anchor": "middle" });
+    label(brace, 420, 420, `${staleText} ohne gültigen Wert (stale_after)`, "t-small t-strong", { "text-anchor": "middle" });
     // Senkrechte Grenze bei 0,5 s: rechts davon gilt "veraltet".
     const turn = group(layer, "stale-limit");
     svg("path", { d: "M670 172V400", class: "t-bad-line" }, turn);
-    label(turn, 678, 398, "Grenze 0,5 s", "t-small t-bad-text");
+    label(turn, 678, 398, `Grenze ${staleText}`, "t-small t-bad-text");
 
     const defs = group(layer, "definitions");
     panel(defs, 60, 444, 410, 72, "t-panel");
@@ -1062,20 +1122,25 @@
     const card = group(layer, "record");
     panel(card, 50, 40, 420, 464, "t-panel t-record");
     label(card, 72, 74, "ValueRecord", "t-title-sm");
-    label(card, 452, 74, "Konzept §8 · 9 Felder", "t-small", { "text-anchor": "end" });
-    const fields = [
-      ["frame_sequence", "1842", ""],
-      ["capture_timestamp", "Zeit + Zeitbasis", ""],
-      ["value", "0.46761", ""],
-      ["unit", "mV/V", ""],
-      ["status", "VALID", "valid"],
-      ["confidence", "Kennzahl, keine Fehlerwahrsch.", "muted"],
-      ["profile_id", "bestätigtes Profil", ""],
-      ["trigger_sequence", "— (optional)", "muted"],
-      ["result_timestamp", "Abschluss der Kette", ""],
-    ];
+    // Feldnamen und Reihenfolge aus dem Code (record.fields); neue Felder
+    // erscheinen ohne Beispielwert, bis die Szene einen bekommt.
+    const examples = {
+      frame_sequence: ["1842", ""],
+      capture_timestamp: ["Zeit + Zeitbasis", ""],
+      value: ["0.46761", ""],
+      unit: ["mV/V", ""],
+      status: ["VALID", "valid"],
+      confidence: ["Kennzahl, keine Fehlerwahrsch.", "muted"],
+      profile_id: ["bestätigtes Profil", ""],
+      trigger_sequence: ["— (optional)", "muted"],
+      result_timestamp: ["Abschluss der Kette", ""],
+    };
+    const fieldNames = fact("record.fields", Object.keys(examples));
+    const fields = fieldNames.map((name) => [name, ...(examples[name] || ["—", "muted"])]);
+    label(card, 452, 74, `Konzept §8 · ${fields.length} Felder`, "t-small", { "text-anchor": "end" });
+    const rowGap = Math.min(42, 378 / Math.max(fields.length, 1));
     const rows = fields.map(([name, value, kind], i) => {
-      const y = 112 + i * 42;
+      const y = 112 + i * rowGap;
       const row = group(card, "record-row");
       svg("path", { d: `M72 ${y + 16}H448`, class: "t-row-line" }, row);
       label(row, 72, y + 4, name, "t-mono t-mono-sm");
@@ -1209,7 +1274,7 @@
     chip, badge, panel, arrow, checkMark, streamCam, drawDevice, drawHand,
     glassCorners, cellCorners, cellPolygon, cellCenter,
     VIEW_CAMERA, VIEW_RECT, VIEW_HEAD, FRAME, cameraScene, rectifiedScene, benchScene,
-    travel, drawIn, popIn, fadeUp,
+    travel, drawIn, popIn, fadeUp, fact, num,
   });
 
   // ----------------------------------------------------------------- Tour --
@@ -1232,8 +1297,60 @@
     }).filter((chapter) => chapter.steps.length);
   }
 
-  class Tour {
+  // Bühne mit SVG und den Pfeilspitzen, auf die die Szenen per url(#...)
+  // verweisen. Mehrere Bühnen auf einer Seite haben gleiche Marker-IDs; das
+  // ist unschädlich, weil die Marker identisch sind.
+  function buildStage(ariaLabel) {
+    const stage = make("div", "tour-stage");
+    const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": ariaLabel, class: "tour-svg" });
+    const defs = svg("defs", {}, root);
+    for (const [id, cls] of [["tour-arrow", "t-arrow-head"], ["tour-arrow-plan", "t-arrow-head t-arrow-head--plan"], ["tour-arrow-bad", "t-arrow-head t-arrow-head--bad"]]) {
+      const marker = svg("marker", { id, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+      svg("path", { d: "M0 0L10 5L0 10z", class: cls }, marker);
+    }
+    stage.appendChild(root);
+    return [stage, root];
+  }
+
+  // Was Tour und Abbildung gemeinsam haben: Links von der Bühne in die Doku.
+  // Erwartet this.ui als Container für den unsichtbaren Hilfslink.
+  class StageHost {
+    // Macht einen Bühnenteil zum Link auf eine Doku-Seite (Pfad ab der
+    // Wurzel der Seite). `mark` setzt ein "↗" an diese Stelle.
+    docLink(element, path, title, mark) {
+      element.classList.add("doc-link");
+      element.setAttribute("role", "link");
+      element.setAttribute("tabindex", "0");
+      element.setAttribute("aria-label", title);
+      element.dataset.href = path;
+      svg("title", {}, element).textContent = title;
+      if (mark) label(element, mark[0], mark[1], "↗", "doc-mark", { "text-anchor": "middle" });
+      const open = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.navigate(path);
+      };
+      element.addEventListener("click", open);
+      element.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") open(event);
+      });
+      return element;
+    }
+
+    // Über einen echten Link, damit die Sofortnavigation von Zensical greift.
+    navigate(path) {
+      const link = make("a");
+      link.href = new URL(path, SITE_ROOT).href;
+      link.hidden = true;
+      this.ui.appendChild(link);
+      link.click();
+      link.remove();
+    }
+  }
+
+  class Tour extends StageHost {
     constructor(root, A) {
+      super();
       this.root = root;
       this.A = A;
       this.chapters = readChapters(root);
@@ -1301,14 +1418,7 @@
         return button;
       });
 
-      this.stage = make("div", "tour-stage");
-      this.svg = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Projekt-Tour", class: "tour-svg" });
-      const defs = svg("defs", {}, this.svg);
-      for (const [id, cls] of [["tour-arrow", "t-arrow-head"], ["tour-arrow-plan", "t-arrow-head t-arrow-head--plan"], ["tour-arrow-bad", "t-arrow-head t-arrow-head--bad"]]) {
-        const marker = svg("marker", { id, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
-        svg("path", { d: "M0 0L10 5L0 10z", class: cls }, marker);
-      }
-      this.stage.appendChild(this.svg);
+      [this.stage, this.svg] = buildStage("Projekt-Tour");
       this.progress = make("div", "tour-progress");
       this.progressBar = make("span");
       this.progress.appendChild(this.progressBar);
@@ -1365,38 +1475,6 @@
     toggleFullscreen() {
       if (document.fullscreenElement) document.exitFullscreen();
       else this.ui.requestFullscreen().catch(() => {});
-    }
-
-    // Macht einen Bühnenteil zum Link auf eine Doku-Seite (Pfad ab der
-    // Wurzel der Seite). `mark` setzt ein "↗" an diese Stelle.
-    docLink(element, path, title, mark) {
-      element.classList.add("doc-link");
-      element.setAttribute("role", "link");
-      element.setAttribute("tabindex", "0");
-      element.setAttribute("aria-label", title);
-      element.dataset.href = path;
-      svg("title", {}, element).textContent = title;
-      if (mark) label(element, mark[0], mark[1], "↗", "doc-mark", { "text-anchor": "middle" });
-      const open = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.navigate(path);
-      };
-      element.addEventListener("click", open);
-      element.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") open(event);
-      });
-      return element;
-    }
-
-    // Über einen echten Link, damit die Sofortnavigation von Zensical greift.
-    navigate(path) {
-      const link = make("a");
-      link.href = new URL(path, SITE_ROOT).href;
-      link.hidden = true;
-      this.ui.appendChild(link);
-      link.click();
-      link.remove();
     }
 
     // Anklickbares Etikett auf der Bühne, öffnet ein Kapitel.
@@ -1667,22 +1745,129 @@
     }
   }
 
+  // ------------------------------------------------------------ Abbildung --
+  // Eine Tour-Szene als Abbildung in einer normalen Doku-Seite. Ohne Kapitel:
+  // Hotspots und Kapitelkarten, die in die Tour führen, bleiben leer.
+
+  const TOUR_PAGE = "docs/uebersicht/projekt-tour.html";
+
+  class Figure extends StageHost {
+    constructor(root, A) {
+      super();
+      this.root = root;
+      this.A = A;
+      this.id = root.dataset.scene;
+      this.chapters = [];
+      this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      this.tl = null;
+      this.played = false;
+      this.visible = false;
+      this.build();
+      this.observer = "IntersectionObserver" in window ? new IntersectionObserver((entries) => {
+        for (const entry of entries) this.setVisible(entry.isIntersecting);
+      }, { threshold: 0.5 }) : null;
+      if (this.observer) this.observer.observe(this.stage);
+      else this.play();
+      root.dataset.figureReady = "true";
+    }
+
+    build() {
+      const ui = make("div", "tour-figure-ui");
+      const caption = this.root.querySelector("figcaption");
+      const title = caption ? caption.textContent.trim() : this.id;
+      [this.stage, this.svg] = buildStage(title);
+      this.stage.dataset.scene = API.scenes[this.id] || SCENES[this.id] ? this.id : "fehlt";
+      const bar = make("div", "tour-figure-bar");
+      const replay = make("button", "tour-control tour-figure-replay", "↺ Nochmal");
+      replay.type = "button";
+      replay.title = "Abbildung nochmal abspielen";
+      replay.addEventListener("click", () => this.play());
+      const link = make("a", "tour-figure-link", "In der Projekt-Tour ansehen ›");
+      link.href = new URL(`${TOUR_PAGE}#${this.id}`, SITE_ROOT).href;
+      bar.append(replay, link);
+      ui.append(this.stage, bar);
+      this.root.prepend(ui);
+      this.ui = ui;
+    }
+
+    hotspot(parent) {
+      return group(parent, "hotspot-missing");
+    }
+
+    chapterCard(parent) {
+      return group(parent, "chapter-card-missing");
+    }
+
+    setVisible(visible) {
+      this.visible = visible;
+      if (visible && !this.played) this.play();
+      else if (this.tl && !this.done) {
+        if (visible) this.tl.resume();
+        else this.tl.pause();
+      }
+    }
+
+    // Baut die Szene neu und spielt sie ab (bei reduzierter Bewegung: sofort
+    // der Endzustand).
+    play() {
+      this.stop();
+      this.played = true;
+      this.done = false;
+      if (this.layer) this.layer.remove();
+      this.layer = group(this.svg, `scene scene--${this.id}`);
+      const tl = this.A.createTimeline({
+        autoplay: false,
+        defaults: { ease: "outExpo", duration: 700 },
+        onComplete: () => { if (tl === this.tl) this.done = true; },
+      });
+      this.tl = tl;
+      const scene = API.scenes[this.id] || SCENES[this.id] || scenePlaceholder;
+      scene({ tl, A: this.A, layer: this.layer, tour: this }, { id: this.id, title: "" }, null);
+      tl.add({ duration: 1 });
+      if (this.reduced) {
+        tl.seek(tl.duration);
+        this.done = true;
+      } else {
+        tl.play();
+      }
+    }
+
+    stop() {
+      if (this.tl) {
+        this.tl.pause();
+        this.tl.cancel();
+        this.tl = null;
+      }
+    }
+
+    destroy() {
+      this.stop();
+      if (this.observer) this.observer.disconnect();
+    }
+  }
+
   function init() {
     if (active) {
       active.destroy();
       active = null;
     }
+    for (const figure of figures) figure.destroy();
+    figures = [];
     const root = document.querySelector("[data-tour]");
     // Die Seitenklasse schaltet das Vollseiten-Layout (tour.css); bei der
     // Sofortnavigation bleibt body erhalten und muss zurückgesetzt werden.
     document.body.classList.toggle("tour-page", Boolean(root));
-    if (!root || root.dataset.tourReady) return;
-    loadAnime().then((A) => {
-      if (!root.isConnected || root.dataset.tourReady) return;
-      active = new Tour(root, A);
+    const tourRoot = root && !root.dataset.tourReady ? root : null;
+    const figureRoots = Array.from(document.querySelectorAll(".tour-figure[data-scene]:not([data-figure-ready])"));
+    if (!tourRoot && !figureRoots.length) return;
+    Promise.all([loadAnime(), loadFacts()]).then(([A]) => {
+      if (tourRoot && tourRoot.isConnected && !tourRoot.dataset.tourReady) active = new Tour(tourRoot, A);
+      for (const el of figureRoots) {
+        if (el.isConnected && !el.dataset.figureReady) figures.push(new Figure(el, A));
+      }
     }).catch((error) => {
-      const note = make("p", "tour-error", `Die Animation ist nicht verfügbar (${error.message}). Alle Schritte stehen unten als Text.`);
-      root.prepend(note);
+      if (tourRoot) tourRoot.prepend(make("p", "tour-error", `Die Animation ist nicht verfügbar (${error.message}). Alle Schritte stehen unten als Text.`));
+      for (const el of figureRoots) el.prepend(make("p", "tour-error", `Die Animation ist nicht verfügbar (${error.message}).`));
     });
   }
 
