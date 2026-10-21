@@ -69,6 +69,8 @@ Abnahme-Läufe**; die Toleranz ist **nicht validiert**.
   ×1,8 `live-20261021T143419Z` (5,6 min) 0/6630 Fehllesungen, 29,7 Bilder/s,
   Verzögerung nach Wechsel Median 193 ms. Erster Beleg der Toleranz gegen die
   Referenz, noch keine Validierung (Werteplan-Lauf ≥ 10 min fehlt).
+  Langer strenger Lauf `live-20261021T144605Z` (12 min, 716 Wechsel):
+  0/8979 Fehllesungen, 29,8 Bilder/s, Median 232 ms, Pi ohne Aussetzer.
 
 Zahlen und Deutung: [VALIDATION.md](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21),
 [Laborjournal](lab_journal.md#messpfad-live-bedienerlaeufe-2026-10-21).

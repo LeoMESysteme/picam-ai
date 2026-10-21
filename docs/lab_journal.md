@@ -1981,3 +1981,21 @@ blieb ohne Aussetzer, CI und Codex-Kopien liefen nicht mit.
 
 **Offen:** Lauf ≥ 10 min mit Werteplan, zweite Aufstellung, Name statt
 „test“ bei der Bestätigung.
+
+
+## 2026-10-21 — Langer strenger Lauf mit Referenz (12 min) { #messpfad-live-langlauf-2026-10-21 }
+
+**Ziel:** Dauerbetrieb über 10 min gegen den seriellen GSV-2AS-Strom.
+
+**Aufbau:** StreamCam am GSV-2AS, Raumlicht, streng ohne Toleranz,
+bestätigt mit Namen, Referenz mitgeschrieben, kein Werteplan.
+
+**Beobachtung:** 0 Fehllesungen bei 8979 entschiedenen VALID, die 9064 VALID
+kurz nach Wechseln alle mit altem oder neuem Wert. 716 Wechsel, 715 mit VALID
+erreicht, Median 232 ms. 29,8 Bilder/s über 12 min, keine Kameralücke, keine
+verlorene Nachführung. 7 STALE-Bilder, als die letzte Ziffer schnell zwischen
+zwei Werten zitterte und eine Zelle 0,65 s im Umschalten hing; das ist die
+gewollte Markierung, keine Störung der Verbindung. Pi ohne Aussetzer.
+
+**Offen:** Toleranzlauf über 10 min, Lauf mit Werteplan (große Sprünge über
+den ganzen Bereich), zweite Aufstellung oder anderes Licht.

@@ -3127,3 +3127,34 @@ Der Pi blieb ruhig (Wächter: kein Aussetzer über 6 s, Last ≤ 2,3,
 Temperatur ≤ 55,6 °C, keine Unterspannung). Das ist der erste Beleg der
 Toleranz gegen einen unabhängigen Referenzwert; **validiert ist sie damit
 nicht**: ein längerer Lauf mit Werteplan und eine zweite Aufstellung fehlen.
+
+
+## 2026-10-21 — Messpfad live: langer strenger Lauf mit Referenz (12 min) { #messpfad-live-langlauf-2026-10-21 }
+
+Bedienerlauf `var/live/live-20261021T144605Z/run-01` (lokale Daten, nicht im
+Repository), 717 s, **streng ohne Toleranz**, bestätigt von Leonhard
+Hentschke (Gegenlesen WARNUNG), StreamCam am GSV-2AS, Raumlicht, ohne
+Werteplan, Werte am Sensor geändert. Referenz: 1344 Telegramme, Abstand
+529–538 ms, alle mV/V, keine Parsefehler, keine Lücken, nichts verworfen;
+716 Wertwechsel über 502 verschiedene Werte (der Wert lief fast ständig).
+**Kein formaler Abnahme-Lauf** (ein Gerät, eine Aufstellung, Raumlicht, kein
+Werteplan).
+
+| Kennzahl | Wert |
+| --- | --- |
+| Gelesene Bilder/s | 29,8; übersprungen 124 von 21 448, Kameralücken 0 |
+| Zeit je Bild | Leser Median 6,0 ms, gesamt Median 15,5 ms (p90 34,1 ms) |
+| Fehllesungen gegen Referenz | **0 von 8979** entschiedenen VALID |
+| VALID im Schutzintervall (unentschieden) | 9064; nachgeprüft: alle zeigen den alten oder neuen Referenzwert |
+| VALID ohne Referenzdeckung | 10 |
+| Ruhige Anzeige | 99,7 % VALID, 0,3 % TRANSITION, kein UNREADABLE |
+| Bilder im Wechsel | 74 % VALID, 24 % TRANSITION, 2 % UNREADABLE, 7 STALE |
+| Wertwechsel | 715 mit VALID erreicht, Verzögerung Median 232 ms, p90 258 ms; 1 ohne VALID (Wert stand nur ein Bild lang an, Bestätigung braucht zwei) |
+| `anzeige_wechselt` | 2267 Bilder TRANSITION statt UNREADABLE |
+| STALE | 7 Bilder (0,23 s) bei 651,7 s: letzte Ziffer zitterte 0,61608/0,61609, eine Zelle blieb 0,65 s unlesbar, Gate meldet nach 0,5 s ohne VALID richtig STALE; Verarbeitung dabei normal (13–32 ms) |
+| Nachführung | 0 × verloren, `track_score` Median 0,82, min 0,62 |
+
+Pi ruhig (Wächter: kein Aussetzer über 6 s, Last ≤ 2,1, Temperatur
+≤ 55,6 °C, keine Unterspannung). Erster Lauf über 10 min am Aufbau. Der
+strenge Leser bleibt damit auch bei Dauerbetrieb ohne Fehllesung; für die
+Toleranz zählt dieser Lauf nicht (`tolerance_frames` 0).
