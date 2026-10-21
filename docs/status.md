@@ -4,6 +4,23 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
+## Wiedereinstieg: R13 am 2026-10-23
+
+Der [Plan zur strukturstabilen Nachführung](superpowers/plans/2026-10-21-r13-strukturstabile-nachfuehrung.md)
+ist am 2026-10-21 freigegeben und gespeichert, im ersten R13-Punkt von
+TODO referenziert. Auf Wunsch der Person beginnt die Umsetzung erst
+übermorgen, am **2026-10-23**. Diagnoseaufzeichnung und Tracker-Fix sind
+noch nicht implementiert; in dieser Runde wurden nur Plan und Verweise
+gespeichert.
+
+Mit Abschnitt 1 des Plans beginnen: vorhandenen `CameraOwner` um eine
+begrenzte Diagnose ergänzen, Fehler an echten Bildern reproduzieren und
+die Eignung fester Rahmenstrukturen prüfen. Erst danach Hauptintegration.
+Zuerst GSV-2AS an zwei Aufstellungen; automatische Bereichsvorschläge mit
+manueller Auswahl als Fallback. Geplante Abnahme: 0 Fehllesungen,
+mindestens 99 % VALID je stabilem Faktorfenster und mindestens 27 Bilder/s.
+OQ-26 bleibt offen, OQ-44/OQ-45 bleiben eigene Aufgaben.
+
 ## Wiki-Abgleich
 
 Alle 52 Zensical-Navigationsseiten und die 34 Tour-Schritte sind geprüft.
