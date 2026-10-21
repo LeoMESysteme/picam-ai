@@ -21,6 +21,7 @@
 - Python-Texte deutsch ohne Umlaute, HTML/JS mit Umlauten. Immer `PYTHONPATH=src`. Codex committet nicht; der Controller committet nach Review.
 - Tests vor dem Commit: nur die betroffenen Tests plus Node plus Playwright. Die volle Suite läuft danach im Hintergrund, vor jedem Merge nach `master` einmal vollständig.
 - `var/` nie verändern (nur lesen).
+- Nach dem Hänger am 2026-10-21 um 14:08 (Watchdog-Neustart während der vollen Suite; Ursache unbekannt, kein persistentes Journal) laufen volle Suiten nur noch abgeschottet: `systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=0 -p CPUQuota=300%` mit `nice -n 10`. Dazu protokolliert `~/pi-monitor.log` Last, Speicher, Swap und Temperatur alle 5 s.
 
 ## Review Focus
 
@@ -149,8 +150,68 @@ def test_vectorized_classification_matches_reference_on_real_and_synthetic_cells
 - [ ] **Step 5:** `live.js`: TRANSITION mit erstem Grund `anzeige_wechselt` → Überschrift „TRANSITION“, Detail „Wert wechselt“. Dazu ein Node-Test.
 - [ ] **Step 6:** CHANGELOG-Punkt; Anleitung Kapitel 10, Satz zu TRANSITION; Commit.
 
-### Task 5: Abschluss des Tages
+### Task 5: Referenzaufzeichnung im Live-Lauf und Abgleich
+
+Zweck: Mit dem GSV-2AS als Wahrheit belegen, ob VALID-Werte stimmen. Daraus folgen die Validierung der angepassten Toleranz (TODO.md), der VALID-Anteil, die Verzögerung je Wertwechsel und der Anteil TRANSITION/UNREADABLE. Es ist **kein Training**: Der Leser bleibt unverändert. Beschriftete Bilder für späteres Nachlernen sind ein eigener, späterer Schritt.
+
+**Files:**
+- Create: `src/dispread/live/reference.py`: Leser des seriellen GSV-2AS-Stroms für die Laufzeit einer Sitzung.
+- Modify: `src/dispread/live/session.py`, `src/dispread/live/service.py`, `src/dispread/workbench/live_api.py`, `static/live.html` + `live.js`
+- Create: `scripts/live-reference-eval.py`: Abgleich `records.jsonl` gegen `reference.jsonl`.
+- Test: `tests/test_live_reference.py`, `tests/test_live_reference_eval.py`, Erweiterungen in `tests/test_live_service.py`, `tests/test_live_session.py`, `tests/test_live_api.py`, `tests/live_client.test.mjs`
+
+**Interfaces:**
+- Consumes:
+  - aus `scripts/sync-record.py` und `scripts/gsv-registers.py`: Zeilenlesen, Telegramm-Parsing und `set norm`/`set dpoint`-Kodierung. Das gemeinsame Stück wird nach `src/dispread/gsv2as_serial.py` verschoben, nicht kopiert; beide Skripte importieren es danach.
+  - `cell_text_from_telegram`, `records.to_boottime_ns`, die Zeitkalibrierung aus `session.json`.
+  - aus `scripts/gate-label.py`: Schutzintervall M = 695 ms (Festlegung 2026-09-23) und `telegram_to_display_text`.
+- Produces:
+  - `ReferenceRecorder(port_opener, out_path, *, clock=time.clock_gettime_ns(CLOCK_BOOTTIME))` mit `start()`, `stop() -> dict` (Zeilen, Parsefehler, Lücken > 1 s) und `latest() -> dict | None`.
+  - `reference.jsonl` je Zeile: `{"t_boottime_ns", "raw", "cell_text", "value"}`.
+
+- [ ] **Step 1: Failing Tests für `ReferenceRecorder`** mit einem Fake-Port:
+  - Zeilen werden mit BOOTTIME-Stempel geschrieben.
+  - Eine Teilzeile am Anfang wird verworfen.
+  - Ein Parsefehler zählt, beendet aber nicht.
+  - `stop()` schließt den Port und liefert die Zählung.
+  - **Schreibt nie** auf den Port, außer im Normplan aus Step 3. Der Test prüft, dass `write` sonst nie aufgerufen wird.
+- [ ] **Step 2:** Implementieren:
+  - Eigener Thread mit Lese- und Schreibtrennung wie in `sync-record.py`, damit `readline` nie auf das Dateisystem wartet.
+  - Der Port wird nur während eines Laufs gehalten. Die Einrichtung öffnet ihn wie bisher selbst, Einrichtung und Lauf schließen sich ohnehin aus.
+- [ ] **Step 3: Optionaler Normplan** (`norm_schedule=[(faktor, sekunden), …]`):
+  - Derselbe Prozess stellt die Werte über `set norm` um. Ein zweiter Prozess auf demselben Port würde Bytes stehlen.
+  - Jeder Befehl wird mit BOOTTIME-Stempel in `commands.jsonl` protokolliert.
+  - Danach wird der Ausgangswert zurückgestellt: Wiederherstellungspunkt wie in `sync-record.py`, Prüfung von `EEnow = 0`.
+  - Faktorbereich 0,15…1 580 000.
+  - Test mit Fake-Port: Byte-Folge gleich der aus `sync-record.py`, Rückstellung auch bei Abbruch.
+  - Nur nach ausdrücklicher Bedienerwahl auf der Seite. Konzept und AGENTS: kein Erfinden von Protokollen; nur die belegten Befehle 16/17.
+- [ ] **Step 4: Service, API und Seite.**
+  - `start_run(..., reference=True|False, norm_schedule=None)`. Vorgabe ist `reference=True`, wenn ein GSV-2AS am Port antwortet; sonst läuft der Lauf ohne Referenz und meldet „ohne Referenz“.
+  - `session.json` bekommt `reference`: Pfad, Zeilen, Parsefehler, Lücken, Normplan.
+  - Auf der Seite: Häkchen „Referenz vom GSV-2AS mitschreiben“ (Vorgabe an) und ein optionales Feld „Werteplan (set norm), z. B. 1:20,2:20,0.5:20“ mit Hinweis „schreibt auf das Gerät (RAM, nicht EEPROM)“.
+  - Beim Normplan startet der Lauf erst nach einer Bestätigungsfrage.
+- [ ] **Step 5: `scripts/live-reference-eval.py <run-dir>`.**
+  - Für jedes VALID-Record wird der Aufnahmezeitpunkt per `to_boottime_ns` mit dem Versatz aus `session.json` umgerechnet. Danach wird der Referenzwert gesucht, der in `[t − M, t]` gültig war.
+  - Gültig bedeutet: Der letzte Telegrammwechsel liegt mindestens M vor t. Wechsel innerhalb des Schutzintervalls zählen als „unentschieden“, nicht als Fehler.
+  - Ausgabe als Text und `--json`:
+    - **Fehllesungen**: VALID ≠ Referenz, außerhalb des Schutzintervalls. Muss 0 sein, sonst Exit 1.
+    - VALID-Anteil je Zustand der Anzeige, getrennt nach stabil und im Wechsel.
+    - Verzögerung vom Referenzwechsel bis zum ersten VALID des neuen Werts, als Median und p90.
+    - Anteil TRANSITION und UNREADABLE an Wechseln.
+    - `tolerance_frames` und Fehllesungen unter Toleranz getrennt ausgewiesen.
+  - Tests mit synthetischen `records.jsonl` und `reference.jsonl`: korrekter Lauf ergibt 0 Fehler; eine eingebaute Fehllesung ergibt Exit 1; ein Wechsel im Schutzintervall ergibt „unentschieden“; fehlender Versatz in `session.json` führt zur Ablehnung (CLAUDE.md: ohne Versatz wird abgelehnt).
+- [ ] **Step 6:** Doku:
+  - Anleitung Kapitel 10 mit Abschnitt „Referenzaufzeichnung und Abgleich“.
+  - TODO-Punkt zur Toleranz-Validierung auf diese Werkzeuge verweisen.
+  - CHANGELOG.
+  - Commit.
+
+### Task 6: Abschluss des Tages
 
 - [ ] **Step 1:** Die volle Suite auf dem Stand nach Task 3 und 4 laufen lassen.
-- [ ] **Step 2:** Messung am Aufbau aus Task 3, Step 8, mit Nutzerlauf: Bilder/s, Anteil TRANSITION gegen UNREADABLE bei Wechseln.
+- [ ] **Step 2:** Messung am Aufbau aus Task 3, Step 8, mit Nutzerlauf **mit Referenzaufzeichnung** (Task 5):
+  - Bilder/s;
+  - Anteil TRANSITION gegen UNREADABLE bei Wechseln;
+  - `live-reference-eval.py`: 0 Fehllesungen.
+  - Einmal streng und einmal mit Toleranz. Das Toleranz-Ergebnis geht in VALIDATION ein.
 - [ ] **Step 3:** Zweiter Merge nach `master` (Fast-Forward-Push), Ledger, `docs/status.md`.
