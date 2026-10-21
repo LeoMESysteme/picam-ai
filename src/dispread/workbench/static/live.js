@@ -32,6 +32,9 @@ function recordView(status) {
       return {headline: cls.toUpperCase(), cls,
         detail: `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
     }
+    if (cls === 'transition' && run.reject_reasons[0] === 'anzeige_wechselt') {
+      return {headline: 'TRANSITION', cls, detail: `Wert wechselt (${reasons})`};
+    }
     return {headline: cls.toUpperCase(), cls, detail: status.error || reasons};
   }
   if (status.run_block && ['setup_ready', 'confirmed', 'stopped'].includes(status.state)) {

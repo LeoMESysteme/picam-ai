@@ -93,6 +93,17 @@ test('tracking loss gives an operator hint and keeps the reason', () => {
   assert.equal(view.detail, 'Anzeige verloren — Kamera bewegt? Neu einrichten (tracking_lost:low_score)');
 });
 
+test('display change is shown as TRANSITION "Wert wechselt", STALE still wins', () => {
+  const status = {state: 'running', run: {latest: latest({status: 'transition', raw_text: null,
+    reject_reasons: ['anzeige_wechselt', 'unreadable_cells:1']}), latest_age_s: 0.2}};
+  const view = statusView(status);
+  assert.equal(view.headline, 'TRANSITION');
+  assert.equal(view.cls, 'transition');
+  assert.equal(view.detail, 'Wert wechselt (anzeige_wechselt, unreadable_cells:1)');
+  status.run.latest_age_s = 0.9;
+  assert.equal(statusView(status).headline, 'STALE');
+});
+
 test('setup progress uses nested step and monotonic elapsed seconds', () => {
   const view = statusView({state: 'setup_running', step: 'old',
     setup: {step: 'punktraster', elapsed_s: 12.34}});

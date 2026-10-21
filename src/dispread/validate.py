@@ -54,6 +54,11 @@ class GateConfig:
     confirm_frames: int = 1
     #: Ohne Freigabe innerhalb dieser Zeit gilt der letzte Wert als veraltet.
     stale_after_ns: int = 500_000_000
+    #: Uebergang statt unlesbar (Konzept.md §7, Anzeigewechsel): hoechstens so
+    #: viele unlesbare Zellen, alle lesbaren gleich dem letzten freigegebenen
+    #: Zellentext, und dieser hoechstens `transition_window_ns` alt.
+    transition_max_cells: int = 3
+    transition_window_ns: int = 1_000_000_000
     #: Betriebszustaende, die einen Zahlenwert ausschliessen.
     blocking_flags: frozenset[str] = field(
         default_factory=lambda: frozenset({"overflow", "menu", "hold", "glare", "tracking_lost"})
@@ -89,6 +94,23 @@ def default_gate_config(backend_id: str, **overrides: object) -> GateConfig:
     return GateConfig(**overrides)
 
 
+#: Ablehnungsgruende, die bei einem Ziffernwechsel entstehen. Alles andere
+#: (Kontrast, Betriebszustand, Einheit, Nachfuehrung) ist nie ein Uebergang.
+_TRANSITION_REASONS = frozenset({
+    "low_segment_margin", "decimal_point_unknown", "sign_region_unreadable", "no_value",
+})
+
+
+def _cell_texts(read: ReadResult) -> tuple[str, ...] | None:
+    cells = read.diagnostics.get("cells")
+    if not isinstance(cells, list) or not cells:
+        return None
+    texts = [c.get("text") if isinstance(c, dict) else None for c in cells]
+    if not all(isinstance(t, str) for t in texts):
+        return None
+    return tuple(texts)
+
+
 @dataclass
 class _Candidate:
     value: float
@@ -103,14 +125,22 @@ class ReleaseGate:
         self.config = config or GateConfig()
         self._candidate: _Candidate | None = None
         self._last_valid_ns: int | None = None
+        #: Zellentext der letzten Freigabe (nur Leser mit Zelldiagnosen).
+        self._last_valid_cells: tuple[str, ...] | None = None
 
     def reset(self) -> None:
         self._candidate = None
         self._last_valid_ns = None
+        self._last_valid_cells = None
 
     def interrupt(self) -> None:
-        """Bestaetigung unterbrechen; letzte Freigabe fuer STALE behalten."""
+        """Bestaetigung unterbrechen; letzte Freigabe fuer STALE behalten.
+
+        Nach einer Unterbrechung (z. B. Nachfuehrung verloren) ist ein
+        Uebergang nicht mehr belegbar - die Zellen der letzten Freigabe
+        verfallen."""
         self._candidate = None
+        self._last_valid_cells = None
 
     def evaluate(self, read: ReadResult, capture_ns: int) -> GateDecision:
         cfg = self.config
@@ -153,6 +183,11 @@ class ReleaseGate:
         if reasons:
             self._candidate = None
             status = self._stale_or_unreadable(capture_ns, blocking)
+            if status is ValueStatus.UNREADABLE and self._is_transition(read, reasons, capture_ns):
+                # Kein Wert, nur eine ehrlichere Kennzeichnung: die Anzeige
+                # wechselt gerade (Mischziffern), sie ist nicht verdeckt.
+                status = ValueStatus.TRANSITION
+                reasons.insert(0, "anzeige_wechselt")
             return GateDecision(
                 status=status,
                 confidence=0.0,
@@ -182,6 +217,7 @@ class ReleaseGate:
             )
 
         self._last_valid_ns = capture_ns
+        self._last_valid_cells = _cell_texts(read)
         return GateDecision(
             status=ValueStatus.VALID,
             confidence=min(1.0, min_margin),
@@ -189,6 +225,24 @@ class ReleaseGate:
             frames_confirmed=self._candidate.count,
             confirmation_span_ns=span,
         )
+
+    def _is_transition(self, read: ReadResult, reasons: list[str], capture_ns: int) -> bool:
+        cfg = self.config
+        last = self._last_valid_cells
+        if last is None or self._last_valid_ns is None:
+            return False
+        if capture_ns - self._last_valid_ns > cfg.transition_window_ns:
+            return False
+        if not all(r.startswith("unreadable_cells:") or r in _TRANSITION_REASONS for r in reasons):
+            return False
+        cells = read.diagnostics.get("cells")
+        if not isinstance(cells, list) or len(cells) != len(last):
+            return False
+        texts = [c.get("text") if isinstance(c, dict) else None for c in cells]
+        unreadable = sum(t is None for t in texts)
+        if not 1 <= unreadable <= cfg.transition_max_cells:
+            return False
+        return all(t is None or t == old for t, old in zip(texts, last, strict=True))
 
     def _stale_or_unreadable(self, capture_ns: int, blocking: frozenset[str]) -> ValueStatus:
         """UNREADABLE, solange die Ablehnung frisch ist - danach STALE.

@@ -285,3 +285,121 @@ def test_ausgelassener_datensatz_wird_als_ausgelassen_belegt():
     finally:
         os.close(master)
         os.close(slave)
+
+
+# --- Uebergangsstatus bei Wertwechseln (Plan 2026-10-21, Task 4) ----------
+
+
+def _dm_read(cell_texts, **overrides):
+    """Dot-Matrix-artiges Leseergebnis: None-Zellen gelten als unlesbar."""
+    unreadable = sum(t is None for t in cell_texts)
+    cells = [{"text": t, "reason": None if t is not None else "zelle_unbekannt"} for t in cell_texts]
+    value = None
+    if not unreadable:
+        value = float("".join(cell_texts).strip().replace("+", ""))
+    base = dict(
+        raw_text="".join(t or "?" for t in cell_texts),
+        value=value,
+        sign_detected=True,
+        sign_region_readable=True,
+        decimal_point_detected=not unreadable,
+        decimal_point_index=2,
+        unit_text="mV/V",
+        status_flags=frozenset(),
+        glyphs=(),
+        backend_id="dotmatrix",
+        backend_version="1",
+        diagnostics={"contrast": 0.6, "min_margin": -0.5 if unreadable else 0.9,
+                     "unreadable_cells": unreadable, "cells": cells},
+    )
+    base.update(overrides)
+    return ReadResult(**base)  # type: ignore[arg-type]
+
+
+OLD = list("+0.60997 ")
+MS = 1_000_000
+
+
+def _valid_gate(**cfg):
+    gate = ReleaseGate(GateConfig(confirm_frames=1, min_margin=0.0, min_contrast=0.0, **cfg))
+    assert gate.evaluate(_dm_read(OLD), capture_ns=0).status is ValueStatus.VALID
+    return gate
+
+
+def test_wechsel_einer_ziffer_ist_uebergang_ohne_wert():
+    gate = _valid_gate()
+    cells = OLD[:7] + [None, " "]
+    decision = gate.evaluate(_dm_read(cells), capture_ns=100 * MS)
+    assert decision.status is ValueStatus.TRANSITION
+    assert decision.reject_reasons[0] == "anzeige_wechselt"
+    assert "unreadable_cells:1" in decision.reject_reasons
+    assert decision.frames_confirmed == 0
+
+
+def test_viele_unlesbare_zellen_bleiben_unlesbar():
+    gate = _valid_gate()
+    cells = OLD[:3] + [None, None, None, None, None, " "]
+    decision = gate.evaluate(_dm_read(cells), capture_ns=100 * MS)
+    assert decision.status is ValueStatus.UNREADABLE
+    assert "anzeige_wechselt" not in decision.reject_reasons
+
+
+def test_abweichende_lesbare_zelle_ist_kein_uebergang():
+    gate = _valid_gate()
+    cells = OLD[:5] + ["8", "9", None, " "]
+    decision = gate.evaluate(_dm_read(cells), capture_ns=100 * MS)
+    assert decision.status is ValueStatus.UNREADABLE
+
+
+def test_uebergang_nur_kurz_nach_dem_letzten_gueltigen_wert():
+    gate = _valid_gate(stale_after_ns=5_000 * MS, transition_window_ns=1_000 * MS)
+    cells = OLD[:7] + [None, " "]
+    assert gate.evaluate(_dm_read(cells), capture_ns=900 * MS).status is ValueStatus.TRANSITION
+    assert gate.evaluate(_dm_read(cells), capture_ns=1_100 * MS).status is ValueStatus.UNREADABLE
+    assert gate.evaluate(_dm_read(cells), capture_ns=6_000 * MS).status is ValueStatus.STALE
+
+
+def test_uebergang_endet_mit_stale_auch_innerhalb_des_fensters():
+    gate = _valid_gate(stale_after_ns=500 * MS, transition_window_ns=1_000 * MS)
+    cells = OLD[:7] + [None, " "]
+    assert gate.evaluate(_dm_read(cells), capture_ns=600 * MS).status is ValueStatus.STALE
+
+
+def test_nach_unterbrechung_kein_uebergang():
+    gate = _valid_gate()
+    gate.interrupt()
+    cells = OLD[:7] + [None, " "]
+    assert gate.evaluate(_dm_read(cells), capture_ns=100 * MS).status is ValueStatus.UNREADABLE
+
+
+def test_betriebszustand_und_kontrast_sind_nie_uebergang():
+    gate = _valid_gate()
+    cells = OLD[:7] + [None, " "]
+    blocked = gate.evaluate(_dm_read(cells, status_flags=frozenset({"glare"})), capture_ns=100 * MS)
+    assert blocked.status is ValueStatus.UNREADABLE
+    gate = ReleaseGate(GateConfig(confirm_frames=1, min_margin=0.0, min_contrast=0.5))
+    gate.evaluate(_dm_read(OLD, diagnostics={"contrast": 0.6, "min_margin": 0.9, "unreadable_cells": 0,
+                                             "cells": [{"text": t, "reason": None} for t in OLD]}), capture_ns=0)
+    dark = _dm_read(cells)
+    dark.diagnostics["contrast"] = 0.1
+    assert gate.evaluate(dark, capture_ns=100 * MS).status is ValueStatus.UNREADABLE
+
+
+def test_ohne_zelldiagnosen_altes_verhalten():
+    gate = ReleaseGate(GateConfig(confirm_frames=1))
+    assert gate.evaluate(_read_result(12.5), capture_ns=0).status is ValueStatus.VALID
+    decision = gate.evaluate(_read_result(None, diagnostics={"contrast": 0.4, "min_margin": 0.0,
+                                                             "unreadable_cells": 1}), capture_ns=100 * MS)
+    assert decision.status is ValueStatus.UNREADABLE
+    assert "anzeige_wechselt" not in decision.reject_reasons
+
+
+def test_uebergang_gibt_nie_einen_wert_frei_und_bestaetigt_neu():
+    gate = ReleaseGate(GateConfig(confirm_frames=2, min_margin=0.0, min_contrast=0.0))
+    gate.evaluate(_dm_read(OLD), capture_ns=0)
+    assert gate.evaluate(_dm_read(OLD), capture_ns=33 * MS).status is ValueStatus.VALID
+    assert gate.evaluate(_dm_read(OLD[:7] + [None, " "]), capture_ns=66 * MS).status is ValueStatus.TRANSITION
+    new = OLD[:7] + ["8", " "]
+    first = gate.evaluate(_dm_read(new), capture_ns=99 * MS)
+    assert first.status is ValueStatus.TRANSITION and first.reject_reasons == ("awaiting_confirmation",)
+    assert gate.evaluate(_dm_read(new), capture_ns=132 * MS).status is ValueStatus.VALID
