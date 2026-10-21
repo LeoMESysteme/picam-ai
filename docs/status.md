@@ -39,6 +39,18 @@ Bestätigung und Laufstart bleiben in der angemeldeten Oberfläche (Konzept §4)
   bei der Bestätigung anzukreuzen. Lauf und Werte tragen „nicht validiert“,
   `tolerance_frames` steht in `session.json`. Synthetischer Sweep mit
   `d_max` × 2,0: kein falscher Wert.
+* **Wertwechsel als TRANSITION (`7ef04cc`).** Mischziffern während des
+  Umschaltens tragen „Wert wechselt“ (`anzeige_wechselt`) statt UNREADABLE:
+  höchstens 3 unlesbare Zellen, die übrigen gleich dem letzten freigegebenen
+  Text, höchstens 0,5 s; nie ein Wert.
+* **Leser ~6× schneller (`c5b30ac`).** Vektorisiert, Entscheidungen
+  unverändert; OpenCV in `serve` auf zwei Threads. Am Aufbau ~30 gelesene
+  Bilder/s, Leser Median 6 ms/Bild.
+* **Referenzaufzeichnung (`6ebaf68`).** Ein Live-Lauf schreibt auf Wunsch den
+  seriellen GSV-2AS-Strom als `reference.jsonl` mit, optional mit Werteplan
+  (`set norm`, Rückstellung danach). `scripts/live-reference-eval.py`
+  vergleicht nachträglich; die Referenz beeinflusst nie Leser, Gate oder
+  `records.jsonl`.
 
 ## Bedienerläufe am Aufbau, 2026-10-21
 
@@ -83,18 +95,19 @@ Lichtquellen und Geräte nicht geprüft. Die Leser-Abnahme 3 vom 2026-09-30
 (215/215 richtig) und der `sc7`-Lesetest (111/111 richtig) bleiben frühere
 Belege; sie ersetzen den Live-Messlauf nicht.
 
-Plan [Tempo, Übergangsstatus und Abschluss](superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md):
+Der Plan [Tempo, Übergangsstatus und Abschluss](superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)
+ist erledigt und in `master`. Nächste Schritte (Reihenfolge und Kontext in
+[TODO.md](../TODO.md)):
 
-1. Leser auf 30 Bilder/s mit Pi-Schutz (CPU, Temperatur, Drosselung).
-2. TRANSITION statt UNREADABLE bei Wertwechseln; Hand vor der Anzeige bleibt
-   UNREADABLE.
-3. Merge nach `master` und Worktree-Aufräumen.
+1. Toleranzlauf ≥ 10 min mit Werteplan, danach Entscheidung über die
+   Toleranz für diese Aufstellung.
+2. Serielle Ausgabe an GSVmulti ([OQ-07](open-questions.md#oq-07)); wartet
+   auf die Protokollbeschreibung.
+3. UI/UX-Überarbeitung der Werkbank, einschließlich schnellerer Vorschau
+   (Seite holt Bild und Status nur alle 0,5 s).
 
-Später: Referenzaufzeichnung zur Validierung der Toleranz (serieller Strom
-parallel, Abgleich der VALID-Werte), Referenzlauf, serielle Ausgabe an
-GSVmulti ([OQ-07](open-questions.md#oq-07), Protokoll fehlt) und eine
-UI/UX-Überarbeitung der Werkbank (nicht prod-ready; erst wenn der Messpfad
-weitgehend fertig ist).
+Für Messläufe: Die Forgejo-CI läuft auf demselben Pi; ein Push nach `master`
+während eines Laufs gibt Stillstände bis 44 s und kurzes STALE.
 
 Weiterhin offen: `raw_text` enthält die geparste Zahl, nicht die 16
 Displayzellen. Ein stillstehender Stream beendet die Sitzung erst nach dem

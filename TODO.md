@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-14
+# TODO — Stand 2026-10-21
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -37,28 +37,12 @@ Offen:
    lehnt `assist` noch ab (`startlage_mehrdeutig`/`keine_startlage`), die
    richtet man weiter von Hand mit `profile-regrid.py still` ein.
    Spätere Kleinigkeiten N1–N3 stehen im Plan unter Nacharbeit 4.
-2. **IN ARBEIT: Anbindung an den Messpfad** (Variante B).
-   Tasks 1–11 und Final-Review-Korrekturen sind gebaut: StreamCam über
-   `CameraOwner`, Einrichtung und Dot-Matrix-Lesen auf `/live`, JSONL-Audit
-   je Lauf. Am 2026-10-14 nach N7 4/4 Vorschläge in 47/55/49/45 s,
-   jeweils Gesamt-WARNUNG wegen einer Proxy-Prüfung (`raster`, beim vierten
-   Versuch `kanten` bei `raster` OK); Rasterversatz und Gegenlesen OK.
-   Kein formaler Abnahme-Lauf, noch kein Messlauf.
-   * **Mit der bedienenden Person, geplant 2026-10-16:**
-     `./.venv/bin/dispread serve --port 8081` starten, prüfen, dass
-     `var/calibration/timing-streamcam.json` vorhanden ist, `/live` öffnen
-     und die Einrichtung starten. Dann Overlays und Format prüfen, mit
-     Namen bestätigen und WARNUNG ausdrücklich zur Kenntnis
-     nehmen. Lauf ≥ 10 min; fünf verschiedene Werte über
-     `scripts/gsv-registers.py` mit `set norm` einstellen, TRANSITION → VALID
-     beobachten, Display einmal 2 s
-     abdecken (UNREADABLE, danach wieder VALID), Lauf stoppen.
-   * `run-NN/records.jsonl` und `run-NN/session.json` auswerten:
-     Statuszählung, eingestellte/gelesene Werte, Bildlücken, übersprungene
-     Bilder, Leserate und Zeitbasis; besonders `tracking_lost` und
-     `track_score` bei Wertwechseln (Final-Review, R13). 0,0 bei
-     `ecc_diverged` gesondert als Divergenz zählen. Danach Eintrag in
-     `docs/VALIDATION.md` und Aufbau/Deutung in `docs/lab_journal.md`.
+2. **Anbindung an den Messpfad** (Variante B): gebaut und am 2026-10-21 am
+   Aufbau gelaufen (StreamCam über `CameraOwner`, Einrichtung, Bestätigung
+   und Lauf auf `/live`, JSONL-Audit je Lauf, optionale serielle Referenz).
+   Stand und nächste Schritte unter „Messpfad live (aktiv)“ unten; Zahlen
+   in [VALIDATION](docs/VALIDATION.md#messpfad-live-langlauf-2026-10-21).
+   Kein formaler Abnahme-Lauf. Weiter offen:
    * **Folgeschritte:** serielle Ausgabe an GSVmulti (OQ-07), alten
      7-Segment-Lesepfad samt ungenutzter Geometriehelfer entfernen und
      dessen CPU-Last im Messlauf erfassen. Trackerregion unabhängig vom
@@ -91,12 +75,14 @@ Offen:
    geprüft.
 6. `auf3`: Das korrigierte Profil ist nicht bestätigt, niedrige Priorität.
 7. **SD-Karte:** Das Codex-Leck in `~/.codex/.tmp/marketplaces/.staging`
-   füllt die Karte (etwa 1 GB/h). Das repowise-Plugin in Codex abschalten
-   oder eine Aufräumaufgabe einrichten. `var/` hat weiterhin keine
-   Sicherung auf einem anderen Medium.
+   (etwa 200 MB alle 15 min, dazu I/O-Stillstände) ist seit 2026-10-21
+   abgestellt: Ursache war der Block `[marketplaces.repowise]` in
+   `~/.codex/config.toml` (entfernt, Sicherung `config.toml.bak-2026-10-21`).
+   Tauchen wieder Kopien auf, prüfen, ob der Block zurück ist. `var/` hat
+   weiterhin keine Sicherung auf einem anderen Medium.
 8. Die Einzelbilder von `ab5-run`/`ab6-run` (je 1,6 GB) erst nach Rückfrage
    löschen.
-8. **Projekt-Tour** (Doku): seit 2026-10-12 alle sechs Kapitel fertig.
+9. **Projekt-Tour** (Doku): seit 2026-10-12 alle sechs Kapitel fertig.
    Pflege: Ändert sich gezeigtes Verhalten, Text und Szene
    (`docs-site/assets/tour*.js`) zusammen anpassen (AGENTS.md).
    Seit 2026-10-13 stehen 21 Szenen auch als Abbildung in Doku-Seiten:
@@ -300,20 +286,55 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 ### Messpfad live (aktiv)
 
-Die aktuellen Bedienschritte und Folgeschritte stehen oben unter Punkt 2.
-Bestätigung und Messlauf warten auf die bedienende Person (2026-10-16).
-Anschließend serielle Ausgabe an GSVmulti (OQ-07) vorbereiten.
+**Stand 2026-10-21 abends:** Der Messpfad läuft am Aufbau. Lesesperre,
+schwankende Ziffern, Licht-Hinweis/Toleranz, Leser mit ~30 Bildern/s,
+TRANSITION bei Wertwechseln und Referenzaufzeichnung sind gebaut und in
+`master` (Plan
+[2026-10-21 Tempo und Abschluss](docs/superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)
+erledigt). Drei Läufe mit serieller Referenz, alle **0 Fehllesungen**:
+streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
+29,8 Bilder/s, Wechsel im Median nach 232 ms); siehe
+[VALIDATION](docs/VALIDATION.md#messpfad-live-langlauf-2026-10-21).
 
-**In Arbeit seit 2026-10-21: Tempo und Übergangsstatus** (Plan
-[docs/superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md](docs/superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)).
-Der strenge Lauf verarbeitete 14,7 von 30 Bildern/s (Leser 53 ms/Bild).
-Der Leser soll auf 30 Bilder/s, mit Pi-Schutz (CPU, Temperatur, Drosselung),
-und Bilder während eines Wertwechsels sollen TRANSITION statt UNREADABLE
-tragen (nie VALID; Hand vor der Anzeige bleibt UNREADABLE). Danach Merge nach
-`master` und Worktree-Aufräumen.
+**Nächste Schritte, in Reihenfolge:**
 
-**Später: UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), erst wenn
-der Messpfad weitgehend fertig ist.
+1. **Toleranzlauf ≥ 10 min mit Werteplan** (siehe unten), mit der
+   bedienenden Person; der Werteplan schreibt `set norm` und stellt danach
+   zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
+   diese Aufstellung).
+2. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md)):
+   wartet auf eine Protokollbeschreibung von GSVmulti; `protocol/gsv_ascii`
+   wirft bis dahin absichtlich. Kein Protokoll erfinden.
+3. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
+   schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
+   zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.
+4. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen,
+   `JsonlSink`-Rotation für lange Läufe klären (Punkt 2 unter „Offen“).
+5. **Reste aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`
+   wird relativ zum Arbeitsverzeichnis aufgelöst; das Snippet in Anleitung
+   Kapitel 10 hat `/dev/ttyUSB0`/38400 fest eingetragen.
+
+**Pi-Betrieb (für ruhige Messläufe):**
+
+* Die Forgejo-CI läuft auf demselben Pi. Jeder Push nach `master` startet
+  Build und Playwright mit headless Chrome; am 2026-10-21 16:13–16:22 gab
+  das 20–44 s Stillstand, SSH-Abbrüche, kurzes STALE auf `/live` und zwei
+  Playwright-Zeitüberschreitungen (lokal danach 29/29 grün). **Nicht während
+  eines Messlaufs nach `master` pushen.** Mittelfristig CI auf einen anderen
+  Rechner oder während Läufen pausieren (Entscheidung der Person).
+* Nächtlicher Lauf `maintain` scheitert seit 2026-10-19 04:00, nicht
+  untersucht.
+* Kein persistentes Journal; der Hänger 2026-10-21 14:08 ist deshalb nicht
+  belegbar. Aktivieren:
+  `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`.
+* Haupt-Checkout `~/picam-ai`: WIP der Person auf
+  `wip/haupt-checkout-2026-10-21` (`a55ab1f`), später mergen (Konflikte in
+  CHANGELOG/status erwartbar); `master` dort per `git pull --ff-only`
+  nachziehen.
+* Vier gemergte Remote-Branches können weg (`feat/einrichtungsassistent`,
+  `feat/task-b-versatz-normierung`, `fix/docs-pin-pymdown`,
+  `ocr-selbstkalibrierung`); MEM-6 (Pi-Hauswart, auf origin, nicht gemergt)
+  entscheiden.
 
 **Offen seit 2026-10-21: angepasste Lesetoleranz validieren.** Die Werkbank
 bietet bei Gegenlesen WARNUNG eine Toleranz bis ×2,0 an (1,25 × gemessener
