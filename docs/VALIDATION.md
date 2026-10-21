@@ -3095,3 +3095,35 @@ Während des Laufs blockierte die SD-Karte zeitweise (Wächter: 56 s Stillstand
 Marktplatz-Kopie (~200 MB), seit 16:05 abgestellt. Die Bildrate des Laufs ist
 deshalb eher eine Untergrenze. Die Vorschau der Seite aktualisiert weiterhin
 nur alle 0,5 s; das kommt mit der UI-Überarbeitung.
+
+
+## 2026-10-21 — Messpfad live: Toleranzlauf ×1,8 mit Referenzaufzeichnung { #messpfad-live-toleranzlauf-2026-10-21 }
+
+Bedienerlauf `var/live/live-20261021T143419Z/run-01` (lokale Daten, nicht im
+Repository), 338 s, **angepasste Lesetoleranz ×1,8** (größter `d_best` 2,75 bei
+`d_max` 1,92; Gegenlesen WARNUNG, Haken gesetzt), StreamCam am GSV-2AS,
+Raumlicht, ohne Werteplan, Werte von Hand am Sensor geändert. Ausgewertet mit
+`scripts/live-reference-eval.py` gegen den mitgeschriebenen seriellen Strom
+(`reference.jsonl`, 635 Telegramme, Abstand 529–537 ms, alle mV/V, keine
+Parsefehler, keine Lücken, nichts verworfen). Bestätigt unter dem Namen
+„test“. **Kein formaler Abnahme-Lauf** (ein Gerät, eine Aufstellung,
+Raumlicht, kein Werteplan).
+
+| Kennzahl | Wert |
+| --- | --- |
+| Gelesene Bilder/s | 29,7; übersprungen 72 von 10 132, Kameralücken 0 |
+| Zeit je Bild | Leser Median 5,9 ms, gesamt Median 15,8 ms (p90 23,4 ms) |
+| Fehllesungen gegen Referenz | **0 von 6630** entschiedenen VALID |
+| VALID im Schutzintervall (unentschieden) | 2762; nachgeprüft: alle zeigen den alten oder neuen Referenzwert (Fenster −1,4 s … +0,1 s) |
+| VALID ohne Referenzdeckung | 9 |
+| Bilder unter Toleranz (`tolerance_frames`) | 8978, darunter 0 Fehllesungen |
+| Ruhige Anzeige | 100 % VALID |
+| Bilder im Wechsel | 81 % VALID, 14 % TRANSITION, 6 % UNREADABLE |
+| Wertwechsel | 190 (35 Werte, +0,46797 … +1,05000, viel Zittern der letzten Stelle), alle mit VALID erreicht; Verzögerung Median 193 ms, p90 239 ms |
+| `anzeige_wechselt` | 273 Bilder TRANSITION statt UNREADABLE |
+| Nachführung | 0 × verloren, `track_score` Median 0,89, min 0,85 |
+
+Der Pi blieb ruhig (Wächter: kein Aussetzer über 6 s, Last ≤ 2,3,
+Temperatur ≤ 55,6 °C, keine Unterspannung). Das ist der erste Beleg der
+Toleranz gegen einen unabhängigen Referenzwert; **validiert ist sie damit
+nicht**: ein längerer Lauf mit Werteplan und eine zweite Aufstellung fehlen.

@@ -62,7 +62,13 @@ Abnahme-Läufe**; die Toleranz ist **nicht validiert**.
   (LCD-Umschaltung etwa 200–300 ms plus 1 Bestätigungsbild). Die Hand
   bedingte 1,4 s UNREADABLE, `tracking_lost` 33.
 * **Tempo:** 14,7 verarbeitete Bilder/s von 30; Leser median 53 ms/Bild,
-  gesamt 64 ms. Jedes zweite Bild entfällt.
+  gesamt 64 ms. Jedes zweite Bild entfällt
+  (seither behoben, Leser etwa 6× schneller).
+* **Mit Referenzaufzeichnung (nachmittags):** strenger Lauf
+  `live-20261021T135204Z` 0/715 Fehllesungen bei 27,2 Bildern/s; Toleranzlauf
+  ×1,8 `live-20261021T143419Z` (5,6 min) 0/6630 Fehllesungen, 29,7 Bilder/s,
+  Verzögerung nach Wechsel Median 193 ms. Erster Beleg der Toleranz gegen die
+  Referenz, noch keine Validierung (Werteplan-Lauf ≥ 10 min fehlt).
 
 Zahlen und Deutung: [VALIDATION.md](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21),
 [Laborjournal](lab_journal.md#messpfad-live-bedienerlaeufe-2026-10-21).

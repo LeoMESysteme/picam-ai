@@ -1961,3 +1961,23 @@ wahrscheinlich dieselbe Ursache (nicht belegbar, kein persistentes Journal).
 
 **Offen:** längerer Referenzlauf (≥ 10 min, mit Werteplan), Toleranzlauf mit
 Referenz, Vorschau schneller (UI-Überarbeitung).
+
+
+## 2026-10-21 — Toleranzlauf ×1,8 mit Referenzaufzeichnung { #messpfad-live-toleranzlauf-2026-10-21 }
+
+**Ziel:** Die angepasste Lesetoleranz erstmals gegen den seriellen
+GSV-2AS-Strom prüfen.
+
+**Aufbau:** StreamCam am GSV-2AS, Raumlicht, Gegenlesen WARNUNG, Toleranz
+×1,8 bestätigt, Referenz mitgeschrieben, kein Werteplan, Werte von Hand
+geändert; 5,6 min.
+
+**Beobachtung:** 0 Fehllesungen bei 6630 entschiedenen VALID; die 2762 VALID
+kurz nach einem Wechsel zeigen alle den alten oder neuen Wert. 8978 Bilder
+liefen unter der Toleranz. 29,7 gelesene Bilder/s, Verzögerung nach Wechsel
+Median 193 ms. Ruhige Anzeige durchgehend VALID; UNREADABLE nur mitten im
+Umschalten. Serieller Strom ohne Fehler (635 Telegramme, alle 533 ms). Der Pi
+blieb ohne Aussetzer, CI und Codex-Kopien liefen nicht mit.
+
+**Offen:** Lauf ≥ 10 min mit Werteplan, zweite Aufstellung, Name statt
+„test“ bei der Bestätigung.

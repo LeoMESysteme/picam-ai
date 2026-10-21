@@ -318,10 +318,12 @@ der Messpfad weitgehend fertig ist.
 **Offen seit 2026-10-21: angepasste Lesetoleranz validieren.** Die Werkbank
 bietet bei Gegenlesen WARNUNG eine Toleranz bis ×2,0 an (1,25 × gemessener
 Abstand, nur mit seriellem Referenzwert, Werte als „nicht validiert“
-markiert). Belegt ist bisher nur: Einrichtungsstandbilder stimmen mit der
-Referenz, synthetischer Sweep mit ×2,0 ohne falschen Wert. Es fehlt ein
-Lauf mit der optionalen Referenzaufzeichnung auf `/live` (gegebenenfalls mit
-bestätigtem Werteplan) und ein Abgleich mit
+markiert). Belegt: Einrichtungsstandbilder stimmen mit der Referenz,
+synthetischer Sweep mit ×2,0 ohne falschen Wert, und ein erster Live-Lauf
+×1,8 mit Referenz (`live-20261021T143419Z`, 5,6 min, 0 Fehllesungen bei 6630
+entschiedenen VALID, 8978 Toleranzbilder; [VALIDATION](docs/VALIDATION.md#messpfad-live-toleranzlauf-2026-10-21)).
+Es fehlen ein Lauf ≥ 10 min mit bestätigtem Werteplan, eine zweite
+Aufstellung und jeweils ein Abgleich mit
 `PYTHONPATH=src ./.venv/bin/python scripts/live-reference-eval.py <run-dir>`
 (Fehllesungen, Wechselanteile, Verzögerung und `tolerance_frames` in
 `session.json`; siehe [Anleitung Kapitel 10](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich)). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
