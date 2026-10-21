@@ -14,10 +14,13 @@ img{max-width:100%;border-radius:6px}
 button{font:inherit;padding:6px 12px;margin:4px 4px 0 0}
 input[type=text]{font:inherit;width:22ch}
 #overlays img{max-width:48%}
+#run-block,#test-banner{border:2px solid #ff7b72;padding:12px;color:#ff7b72}
+#detail{white-space:pre-line}
 </style>
 </head>
 <body>
 <main>
+  <div id="test-banner" hidden>TESTLAUF — Lesesperre übergangen. Werte nicht freigegeben, nicht für Messungen verwenden.</div>
   <div class="notice" id="notice"></div>
   <section>
     <div class="value" id="headline">—</div>
@@ -34,6 +37,7 @@ input[type=text]{font:inherit;width:22ch}
     <button id="setup">Einrichtung starten</button>
     <div id="setup-state"></div>
     <div id="overlays"></div>
+    <p id="proposal-block" class="error" hidden>Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.</p>
     <div id="confirm-box" hidden>
       <label>Name: <input type="text" id="confirmed-by"></label>
       <label><input type="checkbox" id="format-checked"> Einheit mV/V und Format geprüft</label>
@@ -42,6 +46,14 @@ input[type=text]{font:inherit;width:22ch}
     </div>
   </section>
   <section>
+    <div id="run-block" role="alert" hidden>
+      <strong>Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen</strong>
+      <p id="run-block-reason"></p>
+    </div>
+    <details id="test-override-box" hidden>
+      <summary>Testmodus (nur zu Testzwecken)</summary>
+      <label><input type="checkbox" id="test-override"> Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden</label>
+    </details>
     <button id="run-start">Lauf starten</button>
     <button id="run-stop">Lauf stoppen</button>
     <div id="error" class="error" role="alert"></div>

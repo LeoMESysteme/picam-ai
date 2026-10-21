@@ -36,6 +36,24 @@ class LiveError(ValueError):
     """Bedienfehler oder abgelehnter Schritt; Meldung fuer die Seite."""
 
 
+def run_block_reason(proposal: dict | None) -> str | None:
+    """Nur erfolgreiches Gegenlesen erlaubt einen normalen Lauf."""
+    check = (proposal or {}).get("setup_checks", {}).get("checks", {}).get("gegenlesen")
+    if not isinstance(check, dict):
+        return "Lauf gesperrt: Einrichtung ohne Gegenlesen. Neu einrichten."
+    status = check.get("status")
+    if status == "OK":
+        return None
+    metrics = check.get("metrics", {})
+    reasons = ", ".join(f"{name} x{count}" for name, count in metrics.get("rejection_reasons", {}).items()) or "-"
+    return (
+        f"Lauf gesperrt: Der Leser hat bei der Einrichtung {metrics.get('read_count', 0)} von "
+        f"{metrics.get('frames', 0)} Standbildern gelesen (Gegenlesen {status}: {reasons}). "
+        "Mit dieser Aufstellung liefert der Lauf nur UNREADABLE. Kamera senkrecht auf die "
+        "Displaymitte ausrichten und neu einrichten."
+    )
+
+
 def _setup_error_for_page(message: str) -> str:
     """CLI-Hinweise durch Bedienschritte der Live-Seite ersetzen."""
     for wording in ("bitte --hint-box angeben", "Hinweisbox pruefen oder --hint-box angeben"):
@@ -116,6 +134,8 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        self._run_block: str | None = None
+        self._test_run: dict | None = None
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
         self._last_confirmed_focus: int = DEFAULT_FOCUS_START
@@ -166,6 +186,7 @@ class LiveService:
                     "summary": dict(self._session.summary),
                     "dir": self._run_dir.name,
                     "latest_age_s": self._session.latest_age_s(),
+                    "guess": self._session.latest_guess if self._test_run is not None else None,
                 }
             return {
                 "state": self._state,
@@ -177,6 +198,8 @@ class LiveService:
                 "session_id": None if self._session_dir is None else self._session_dir.name,
                 "setup": setup,
                 "profile": self._profile_info,
+                "run_block": self._run_block,
+                "test_run": self._test_run,
                 "run": run,
             }
 
@@ -242,6 +265,7 @@ class LiveService:
                 self._setup_step = "start"
                 self._setup_message = self._diagnostics_error = None
                 self._session_dir, self._proposal = session_dir, None
+                self._run_block = self._test_run = None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._session = None
             self._setup_thread = threading.Thread(
@@ -284,6 +308,7 @@ class LiveService:
             self._setup_elapsed_s = self._monotonic() - self._setup_started_at
             self._setup_step = "vorschlag"
             self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
+            self._run_block = run_block_reason(proposal)
 
     def _open_serial(self) -> Any:
         import serial
@@ -409,6 +434,7 @@ class LiveService:
                 "format_checked": True,
                 "warning_acknowledged": bool(acknowledge_warning),
                 "setup_overall": overall,
+                "run_block": run_block_reason(proposal),
             }
             (session_dir / "confirmation.json").write_text(
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
@@ -419,10 +445,11 @@ class LiveService:
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
                                       "confirmed_at_utc": profile.confirmed_at_utc,
                                       "warning_acknowledged": overall == "WARNUNG"}
+                self._run_block = confirmation["run_block"]
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
-    def start_run(self) -> None:
+    def start_run(self, *, test_override: bool = False) -> None:
         with self._operation_lock:
             with self._lock:
                 if self._state == "running":
@@ -430,6 +457,10 @@ class LiveService:
                 if self._state not in ("confirmed", "stopped") or self._profile_path is None:
                     raise LiveError("Erst einrichten und bestaetigen")
                 profile_path, camera = self._profile_path, self._profile_camera
+                block = self._run_block
+                confirmed_by = (self._profile_info or {}).get("confirmed_by")
+                if block is not None and not test_override:
+                    raise LiveError(block)
             number = 1
             while True:
                 out_dir = profile_path.parent / f"run-{number:02d}"
@@ -438,13 +469,24 @@ class LiveService:
                     break
                 except FileExistsError:
                     number += 1
+            test_run = None
+            if block is not None:
+                test_run = {
+                    "testlauf": True, "run_block": block,
+                    "confirmed_by": confirmed_by,
+                    "started_at_utc": self._wall().isoformat(),
+                    "hinweis": "Lesesperre uebergangen. Werte nicht freigegeben, nicht fuer Messungen verwenden.",
+                }
+                (out_dir / "TESTLAUF.json").write_text(
+                    json.dumps(test_run, indent=2, ensure_ascii=False), encoding="utf-8",
+                )
             if camera is not None:
                 try:
                     self._owner.restart(lambda: self._source_for(camera))
                 except RuntimeError as exc:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
-                session = LiveSession(self._owner, profile_path, self._config, out_dir)
+                session = LiveSession(self._owner, profile_path, self._config, out_dir, test_run=test_run)
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
@@ -452,6 +494,7 @@ class LiveService:
             with self._lock:
                 self._session, self._run_stop, self._state, self._error = session, stop, "running", None
                 self._run_dir = out_dir
+                self._test_run = test_run
             self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
                                                 daemon=True)
             self._run_thread.start()

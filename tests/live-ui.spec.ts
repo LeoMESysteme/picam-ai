@@ -35,15 +35,15 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
     setup: { step: 'punktraster', elapsed_s: 12.3 } });
   await expect(headline).toHaveText('Einrichtung abgebrochen');
   await expect(page.locator('#detail')).toContainText('keine_startlage');
-  await expect(page.getByRole('alert')).toHaveText(failure);
+  await expect(page.locator('#error')).toHaveText(failure);
   // Ein erfolgreicher anderer Bedienschritt darf den Fehler nicht wegwischen.
   const cameraResponse = page.waitForResponse('**/live/camera/start');
   await page.getByRole('button', { name: 'Kamera neu verbinden' }).click();
   expect((await cameraResponse).ok()).toBe(true);
-  await expect(page.getByRole('alert')).toHaveText(failure);
+  await expect(page.locator('#error')).toHaveText(failure);
   await page.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
   await expect(headline).toContainText('fokus');
-  await expect(page.getByRole('alert')).toBeEmpty();
+  await expect(page.locator('#error')).toBeEmpty();
 
   await setState({ state: 'setup_ready', setup: { overall: 'WARNUNG',
     overlays: ['still', 'checks'], step: 'vorschlag', elapsed_s: 15.0 } });
@@ -69,6 +69,14 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
     format_checked: true, acknowledge_warning: true,
   });
   await expect(headline).toHaveText('Bestätigt – Lauf starten');
+
+  await setState({ state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG' });
+  await expect(headline).toHaveText('Lauf gesperrt');
+  await expect(page.locator('#run-block')).toBeVisible();
+  await expect(page.locator('#run-start')).toBeDisabled();
+  await page.locator('#test-override-box summary').click();
+  await page.locator('#test-override').check();
+  await expect(page.locator('#run-start')).toBeEnabled();
 
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
     unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2 };

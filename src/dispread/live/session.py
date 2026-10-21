@@ -13,7 +13,7 @@ import json
 import os
 import threading
 import time
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -77,12 +77,16 @@ class LiveSession:
         config: LiveConfig,
         out_dir: Path,
         *,
+        test_run: dict | None = None,
         reader_factory: Callable[[Path, str], Any] = DotMatrixReader.from_file,
         locator_factory: Callable[[Any, list], Any] = TrackedQuadLocator,
         clock: ClockLog | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         wall: Callable[[], datetime] | None = None,
     ) -> None:
+        self._test_run = test_run
+        self.latest_guess: dict | None = None
+        self._guesses: Counter[str] = Counter()
         self._owner = owner
         self._profile_path = Path(profile_path)
         self._config = config
@@ -225,6 +229,21 @@ class LiveSession:
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             self._frames_read += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
+            # Erst nach geschriebenem Record: Vermutungen zaehlen nur Bilder mit Audit.
+            if self._test_run is not None:
+                read = self._pipeline.last_read
+                diag = read.diagnostics if read is not None and read.backend_id == "dotmatrix" else {}
+                cells = diag.get("cells")
+                self.latest_guess = None
+                if (isinstance(cells, list) and cells
+                        and all(isinstance(c, dict) and isinstance(c.get("best"), str)
+                                and isinstance(c.get("margin"), (int, float)) for c in cells)):
+                    text = "".join(c["best"] for c in cells)
+                    self.latest_guess = {
+                        "text": text, "uncertain": [i for i, c in enumerate(cells) if c["margin"] < 0],
+                        "reject_reason": diag.get("reject_reason"),
+                    }
+                    self._guesses[text] += 1
             self.latest = record
             self.latest_monotonic = self._monotonic()
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
@@ -296,6 +315,9 @@ class LiveSession:
         data = dict(self._meta)
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
+        if self._test_run is not None:
+            data["test_run"] = self._test_run
+            data["guesses"] = {"frames": self._guesses.total(), "top": self._guesses.most_common(10)}
         if ended:
             data["ended_at_utc"] = self._wall().isoformat()
         tmp = self.session_path.with_suffix(".json.tmp")

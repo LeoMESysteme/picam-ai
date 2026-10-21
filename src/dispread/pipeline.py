@@ -21,7 +21,7 @@ from dispread import __version__
 from dispread.detect import DisplayLocator
 from dispread.frames import Frame, FrameSource
 from dispread.layout import CharLayout, DisplayLayout
-from dispread.ocr import ValueReader
+from dispread.ocr import ReadResult, ValueReader
 from dispread.records import (
     PipelineTrace,
     Timestamp,
@@ -72,6 +72,7 @@ class Pipeline:
         self.sinks = sinks
         self.config = config
         self.stats = PipelineStats()
+        self.last_read: ReadResult | None = None
         self._candidate = None
         self._frames_since_locate = 0
 
@@ -90,6 +91,7 @@ class Pipeline:
         `dropped_frames`: seit dem vorigen gelesenen Bild uebersprungene Bilder
         (Live-Sitzung liest immer das neueste Bild, Spec 2026-10-12 §2).
         """
+        self.last_read = None
         t_dequeue = time.monotonic_ns()
 
         # --- Lokalisierung (nicht in jedem Frame) ---------------------------
@@ -125,6 +127,7 @@ class Pipeline:
 
         # --- Werterkennung ---------------------------------------------------
         read = self.reader.read(crop.image, self.config.layout)
+        self.last_read = read
         t_read = time.monotonic_ns()
 
         # --- Freigabe --------------------------------------------------------

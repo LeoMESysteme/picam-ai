@@ -162,7 +162,7 @@ def proposal(tmp_path):
         "grid": live_setup.LATTICE_GRID.to_dict(), "grid_source": "dot_lattice",
         "scaler_crop": None, "min_source_dot_column_px": 5.0, "native_scale": 1.0,
         "min_native_dot_column_px": 5.0, "camera": camera.to_dict(),
-        "setup_checks": {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}},
+        "setup_checks": {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}, "gegenlesen": {"status": "OK"}}},
     }
 
 
@@ -185,7 +185,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     proposal["setup_checks"]["overall"] = overall
     service = ready_service(tmp_path, proposal)
     assert service.status()["setup"] == {
-        "overall": overall, "checks": {"rasterversatz": "OK"}, "overlays": ["overlay_source"],
+        "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": service.status()["setup"]["elapsed_s"],
     }
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
@@ -249,7 +249,7 @@ def test_run_start_refused_is_operator_error(tmp_path, monkeypatch):
     from dispread.live.session import StartRefused
 
     class RefusingSession:
-        def __init__(self, *args):
+        def __init__(self, *args, **kwargs):
             pass
 
         def start(self):
@@ -437,7 +437,7 @@ def test_start_camera_wraps_failure(tmp_path):
 
 
 class MarkerSession:
-    def __init__(self, owner, profile_path, config, out_dir):
+    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None):
         self.latest, self.summary, self.end_reason = None, {}, None
         self.session_path = out_dir / "session.json"
         self.records_path = out_dir / "records.jsonl"
@@ -572,10 +572,10 @@ def test_stop_failure_leaves_stopped_and_allows_setup(tmp_path, monkeypatch, bac
 @pytest.mark.parametrize("stage", ["constructor", "start"])
 def test_start_run_converts_unexpected_session_errors(tmp_path, monkeypatch, stage):
     class FailingStartSession(MarkerSession):
-        def __init__(self, *args):
+        def __init__(self, *args, **kwargs):
             if stage == "constructor":
                 raise OSError("Datei nicht schreibbar")
-            super().__init__(*args)
+            super().__init__(*args, **kwargs)
 
         def start(self):
             raise OSError("Datei nicht schreibbar")
@@ -687,7 +687,7 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
     assert confirmation == {
         "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
         "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
-        "warning_acknowledged": acknowledged, "setup_overall": overall,
+        "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None,
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
@@ -1009,3 +1009,74 @@ def test_minus_sign_failure_has_positive_value_hint():
         "Punktraster abgelehnt: vorzeichen_kein_plus — "
         "Anzeige zeigt kein Plus — Wert positiv einstellen und neu einrichten"
     )
+
+
+@pytest.mark.parametrize("reader_status", ["OK", "WARNUNG", "FEHLER", None])
+def test_run_block_reason_only_depends_on_reader(reader_status):
+    from dispread.live.service import run_block_reason
+
+    checks = {} if reader_status is None else {"gegenlesen": {
+        "status": reader_status,
+        "metrics": {"frames": 2, "read_count": 0, "rejection_reasons": {"zelle_unbekannt": 2}},
+    }}
+    reason = run_block_reason({"setup_checks": {"overall": "WARNUNG", "checks": checks}})
+    if reader_status == "OK":
+        assert reason is None
+    elif reader_status is None:
+        assert reason == "Lauf gesperrt: Einrichtung ohne Gegenlesen. Neu einrichten."
+    else:
+        assert f"0 von 2 Standbildern gelesen (Gegenlesen {reader_status}: zelle_unbekannt x2)" in reason
+
+
+def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal, monkeypatch):
+    import json
+    from unittest.mock import Mock
+
+    proposal["setup_checks"]["checks"]["gegenlesen"] = {
+        "status": "WARNUNG", "metrics": {"frames": 2, "read_count": 0, "rejection_reasons": {}},
+    }
+    service = ready_service(tmp_path, proposal)
+    reason = service.status()["run_block"]
+    assert "Gegenlesen WARNUNG: -" in reason
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
+    session_dir = tmp_path / service.status()["session_id"]
+    assert json.loads((session_dir / "confirmation.json").read_text())["run_block"] == reason
+    with pytest.raises(LiveError, match="Lauf gesperrt"):
+        service.start_run()
+    assert not list(session_dir.glob("run-*"))
+    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"})
+    session.latest_age_s.return_value = None
+    session.run.side_effect = lambda stop: stop.wait()
+    factory = Mock(return_value=session)
+    monkeypatch.setattr("dispread.live.service.LiveSession", factory)
+    service.start_run(test_override=True)
+    try:
+        marker = json.loads((session_dir / "run-01" / "TESTLAUF.json").read_text())
+        assert marker["testlauf"] is True and marker["run_block"] == reason
+        assert marker["confirmed_by"] == "Operator"
+        assert factory.call_args.kwargs["test_run"] == marker
+        assert service.status()["test_run"] == marker
+        assert service.status()["run"]["guess"] == {"text": "guess"}
+    finally:
+        service.stop_run()
+    assert service.status()["run_block"] == reason
+    assert service.status()["test_run"] == marker
+
+
+def test_override_without_block_stays_normal_and_new_setup_clears_markers(tmp_path, monkeypatch):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._test_run = {"testlauf": True}
+    service.start_run(test_override=True)
+    try:
+        assert service.status()["test_run"] is None
+        assert service.status()["run"]["guess"] is None
+        assert not list(tmp_path.glob("run-*/TESTLAUF.json"))
+    finally:
+        service.stop_run()
+    service._run_block = "old block"
+    service._test_run = {"testlauf": True}
+    service.start_setup()
+    service._setup_thread.join(2)
+    assert service.status()["test_run"] is None
+    assert service.status()["run_block"] != "old block"
+    assert service.status()["run"] is None

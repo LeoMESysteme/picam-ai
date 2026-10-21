@@ -2,6 +2,20 @@
 // Entscheidungen fallen im Server (dispread.live), nie hier.
 
 export function statusView(status) {
+  const view = recordView(status);
+  if (status.test_run && status.state === 'running') {
+    view.headline = `TESTLAUF · ${view.headline}`;
+    // Vermutung nur zum aktuellen, verworfenen Bild: nie neben STALE oder VALID.
+    const guess = status.run?.guess;
+    if (guess && view.cls !== 'stale' && view.cls !== 'valid') {
+      view.detail += `\nLeser-Vermutung (verworfen, nicht freigegeben): ${guess.text}` +
+        `\nunsichere Zellen: ${guess.uncertain.length ? guess.uncertain.join(', ') : 'keine'}`;
+    }
+  }
+  return view;
+}
+
+function recordView(status) {
   const run = status.run && status.run.latest;
   if (run) {
     const age = status.run.latest_age_s;
@@ -16,6 +30,9 @@ export function statusView(status) {
         detail: `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
     }
     return {headline: cls.toUpperCase(), cls, detail: status.error || reasons};
+  }
+  if (status.run_block && ['setup_ready', 'confirmed', 'stopped'].includes(status.state)) {
+    return {headline: 'Lauf gesperrt', cls: 'error', detail: status.run_block};
   }
   const setup = status.setup || {};
   const elapsed = typeof setup.elapsed_s === 'number' && Number.isFinite(setup.elapsed_s)
@@ -66,7 +83,14 @@ if (typeof document !== 'undefined') {
       $('confirmed-by').value = '';
       $('format-checked').checked = false;
       $('ack').checked = false;
+      $('test-override').checked = false;
     }
+    $('run-block').hidden = !s.run_block;
+    $('run-block-reason').textContent = s.run_block || '';
+    $('test-override-box').hidden = !s.run_block;
+    $('test-banner').hidden = !s.test_run;
+    $('proposal-block').hidden = !(s.run_block && s.state === 'setup_ready');
+    $('run-start').disabled = Boolean(s.run_block && !$('test-override').checked);
     csrf = s.csrf;
     $('notice').textContent = s.release_notice;
     renderView(statusView(s));
@@ -107,7 +131,17 @@ if (typeof document !== 'undefined') {
   $('setup').onclick = () => post('/live/setup', {cell_text: $('cell-text').value || null});
   $('confirm').onclick = () => post('/live/confirm', {session_id: lastStatus?.session_id, confirmed_by: $('confirmed-by').value,
     format_checked: $('format-checked').checked, acknowledge_warning: $('ack').checked});
-  $('run-start').onclick = () => post('/live/run/start');
+  $('test-override').onchange = () => {
+    $('run-start').disabled = Boolean(lastStatus?.run_block && !$('test-override').checked);
+  };
+  $('run-start').onclick = () => {
+    const override = Boolean(lastStatus?.run_block && $('test-override').checked);
+    if (lastStatus?.run_block && !override) return;
+    if (override && !window.confirm('TESTLAUF starten?\n\nDie Lesesperre wird übergangen. Angezeigte Vermutungen und Werte sind nicht freigegeben und dürfen nicht für Messungen verwendet werden. Der Lauf wird als Testlauf gekennzeichnet (TESTLAUF.json).')) return;
+    // Jeder Testlauf braucht einen neuen Haken.
+    if (override) $('test-override').checked = false;
+    return post('/live/run/start', {test_override: override});
+  };
   $('run-stop').onclick = () => post('/live/run/stop');
   $('camera-start').onclick = () => post('/live/camera/start');
   setInterval(renderConnection, 500);

@@ -43,8 +43,9 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             acknowledge_warning=bool(data.get("acknowledge_warning")),
         )
 
-    async def run_start(_request):
-        return await _call(service.start_run)
+    async def run_start(request):
+        data = await request.json() if request.can_read_body else {}
+        return await _call(service.start_run, test_override=bool(data.get("test_override")))
 
     async def run_stop(_request):
         return await _call(service.stop_run)

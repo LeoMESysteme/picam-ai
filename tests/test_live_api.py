@@ -21,8 +21,8 @@ class FakeService:
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self):
-        self.calls.append(("run",))
+    def start_run(self, *, test_override=False):
+        self.calls.append(("run", test_override))
 
     def stop_run(self):
         raise LiveError("kein Lauf aktiv")
@@ -111,12 +111,23 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         assert (await call("POST", "/live/setup")).status == 200
         assert service.calls[-1] == ("setup", None)
         assert (await call("POST", "/live/run/start")).status == 200
+        assert service.calls[-1] == ("run", False)
+        assert (await call("POST", "/live/run/start", {"test_override": True})).status == 200
+        assert service.calls[-1] == ("run", True)
         assert (await call("POST", "/live/camera/start")).status == 200
-        assert service.calls[-2:] == [("run",), ("camera",)]
+        assert service.calls[-2:] == [("run", True), ("camera",)]
         for path in ("/live/confirm", "/live/run/stop"):
             response = await call("POST", path)
             assert response.status == 409
             assert "error" in json.loads(response.text)
+
+        def blocked(**kwargs):
+            raise LiveError("Lauf gesperrt: Gegenlesen WARNUNG")
+
+        service.start_run = blocked
+        response = await call("POST", "/live/run/start")
+        assert response.status == 409
+        assert json.loads(response.text)["error"] == "Lauf gesperrt: Gegenlesen WARNUNG"
         confirmed = []
         service.confirm = lambda **kwargs: confirmed.append(kwargs)
         assert (await call("POST", "/live/confirm", {
@@ -197,7 +208,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
             await handle("POST", "/live/run/start", headers)
         headers["X-CSRF-Token"] = csrf
         assert (await handle("POST", "/live/run/start", headers)).status == 200
-        assert service.calls == [("run",)]
+        assert service.calls == [("run", False)]
         assert (await handle("POST", "/live/run/stop", headers)).status == 409
 
     asyncio.run(check())

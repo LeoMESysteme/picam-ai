@@ -477,3 +477,55 @@ def test_track_scores_keep_bounded_memory_and_all_time_extrema(tmp_path, monkeyp
     finally:
         summary = session.stop()
     assert summary["track_score"] == {"min": 0.1, "median": 0.9, "max": 0.9, "n": 10_001}
+
+
+@pytest.mark.parametrize("test_mode", [False, True])
+def test_guesses_are_diagnostic_only_and_cleared_when_not_located(tmp_path, monkeypatch, test_mode):
+    from dataclasses import replace
+
+    marker = {"testlauf": True} if test_mode else None
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 3, test_run=marker)
+    session.start()
+    base = session._pipeline.reader.read(embed("+ 1.2345 ")[:160, :400], session._pipeline.config.layout)
+    read = replace(base, raw_text=None, value=None, diagnostics={
+        "cells": [{"best": "9", "margin": -1}, {"best": "8", "margin": 1}],
+        "reject_reason": "zelle_unbekannt",
+    })
+    monkeypatch.setattr(session._pipeline.reader, "read", lambda *args: read)
+    records = [session.step(), session.step()]
+    assert session._pipeline.last_read is read
+    assert session.latest_guess == ({"text": "98", "uncertain": [0], "reject_reason": "zelle_unbekannt"}
+                                    if test_mode else None)
+    monkeypatch.setattr(session._pipeline.locator, "locate", lambda *args: [])
+    records.append(session.step())
+    assert session._pipeline.last_read is None
+    assert session.latest_guess is None
+    session.stop()
+    contents = session.records_path.read_text()
+    assert [json.loads(line) for line in contents.splitlines()] == [r.to_dict() for r in records]
+    assert all(r.value is None and r.raw_text is None and r.status is ValueStatus.UNREADABLE for r in records)
+    assert '"98"' not in contents and '"guess"' not in contents
+    meta = json.loads(session.session_path.read_text())
+    if test_mode:
+        assert meta["test_run"] == marker
+        assert meta["guesses"] == {"frames": 2, "top": [["98", 2]]}
+    else:
+        assert "guesses" not in meta
+
+
+@pytest.mark.parametrize("diagnostics,backend", [({}, "dotmatrix"),
+    ({"cells": [{"best": "9", "margin": -1}]}, "other"),
+    ({"cells": [{"best": "9"}]}, "dotmatrix"),
+])
+def test_test_run_ignores_missing_or_non_dotmatrix_diagnostics(tmp_path, monkeypatch, diagnostics, backend):
+    from dataclasses import replace
+
+    session = _session(tmp_path, [embed("+ 1.2345 ")], test_run={"testlauf": True})
+    session.start()
+    reader = session._pipeline.reader
+    read = reader.read(embed("+ 1.2345 ")[:160, :400], session._pipeline.config.layout)
+    monkeypatch.setattr(reader, "read", lambda *args: replace(read, diagnostics=diagnostics, backend_id=backend))
+    session.step()
+    session.stop()
+    assert session.latest_guess is None
+    assert json.loads(session.session_path.read_text())["guesses"] == {"frames": 0, "top": []}

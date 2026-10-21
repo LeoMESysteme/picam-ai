@@ -103,6 +103,28 @@ Die Einrichtungen dauerten 47/55/49/45 s; Rasterversatz und Gegenlesen
 waren jeweils OK. Bestätigung und Messlauf stehen noch aus;
 das war kein formaler Abnahme-Lauf.
 
+### Lauf gesperrt / Testlauf
+
+„Lauf gesperrt“ bedeutet: Der Leser konnte die Einrichtungsbilder beim
+Gegenlesen nicht erfolgreich lesen oder das Gegenlesen fehlt. Bestätigen ist
+weiter möglich, ein normaler Lauf bleibt gesperrt. Kamera senkrecht auf die
+Displaymitte ausrichten und neu einrichten; das Zellentextfeld dabei leer
+lassen, damit der Text vom GSV-2AS kommt. Andere Warnungen, etwa zu Raster
+oder Kanten, werden wie bisher bei der Bestätigung quittiert.
+
+Unter „Testmodus (nur zu Testzwecken)“ lässt sich die Lesesperre ausdrücklich
+übergehen. Haken setzen und den zusätzlichen Dialog bestätigen. Der Testlauf
+zeigt, welche Zeichen der Leser vermutet hätte; unsichere Zellen sind benannt.
+Diese Vermutungen sind verworfen und erscheinen nie als Messwert im JSONL-Audit.
+Alle Werte des Testlaufs sind nicht freigegeben und dürfen nicht für Messungen
+verwendet werden. Das rote Banner kennzeichnet auch den beendeten Testlauf.
+`var/live/<sitzung>/run-NN/TESTLAUF.json` hält Sperrgrund, Bedienperson und
+Startzeit fest; `session.json` enthält die Testmarkierung und die zehn
+häufigsten Vermutungen. Die einzelnen Records in `records.jsonl` tragen keine
+eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
+und nicht ausgewertet wie ein regulärer Lauf. Für einen regulären Lauf neu und
+erfolgreich einrichten.
+
 ### Lauf und Wertstatus
 
 Nach Bestätigung **Lauf starten**. Ein frischer freigegebener Wert erscheint
@@ -495,6 +517,7 @@ Dieser Prototyp folgt nicht dem Kapitelraster aus der
 [Lernpfad-Übersicht](README.md) (kein `Vertrag`, keine `Fallen`-Liste) — diese
 Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
 
+* [ ] Ein fehlgeschlagenes Gegenlesen sperrt den Lauf; ein ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
 * [ ] `/live` führt ohne Anmeldung zum Login und danach zurück; bei Portkonflikt
   startet die Werkbank mit `--port 8081`.
 * [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;

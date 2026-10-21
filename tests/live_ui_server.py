@@ -61,7 +61,7 @@ class FakeLiveService:
             raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
         self.set_state({"state": "confirmed"})
 
-    def start_run(self):
+    def start_run(self, *, test_override=False):
         self.set_state({"state": "running"})
 
     def stop_run(self):

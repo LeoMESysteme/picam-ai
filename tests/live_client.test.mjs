@@ -241,3 +241,63 @@ test('new setup session clears all review fields before the next proposal', asyn
     assert.equal(element('ack').checked, false);
   });
 });
+
+test('blocked confirmed proposal explains why run cannot start', () => {
+  assert.deepEqual(statusView({state: 'confirmed', run_block: 'Leser abgelehnt'}),
+    {headline: 'Lauf gesperrt', cls: 'error', detail: 'Leser abgelehnt'});
+});
+
+test('test run labels rejected guess separately and keeps STALE authoritative', () => {
+  const status = {state: 'running', test_run: {testlauf: true}, run: {
+    latest: latest({status: 'unreadable', raw_text: null, reject_reasons: ['zelle_unbekannt']}),
+    latest_age_s: 0.2, guess: {text: '+0.12345 ', uncertain: [4, 5, 6, 7]},
+  }};
+  const view = statusView(status);
+  assert.equal(view.headline, 'TESTLAUF · UNREADABLE');
+  assert.match(view.detail, /Leser-Vermutung \(verworfen, nicht freigegeben\): \+0.12345 /);
+  assert.match(view.detail, /unsichere Zellen: 4, 5, 6, 7/);
+  status.run.guess = {text: '+0.12345 ', uncertain: []};
+  assert.match(statusView(status).detail, /unsichere Zellen: keine/);
+  status.run.latest = latest();
+  assert.equal(statusView(status).headline, 'TESTLAUF · +1.2345 mV/V');
+  assert.doesNotMatch(statusView(status).detail, /Leser-Vermutung/);
+  status.run.latest_age_s = 0.9;
+  assert.equal(statusView(status).headline, 'TESTLAUF · STALE');
+  assert.equal(statusView(status).cls, 'stale');
+  status.run.latest = latest({status: 'unreadable', raw_text: null, reject_reasons: ['zelle_unbekannt']});
+  assert.equal(statusView(status).cls, 'stale');
+  assert.doesNotMatch(statusView(status).detail, /Leser-Vermutung/);
+});
+
+test('override requires explicit dialog approval and resets with session', async () => {
+  const originalWindow = globalThis.window;
+  try {
+    await withLivePage(async (page, element, poll) => {
+      page.status = {state: 'confirmed', session_id: 'blocked', run_block: 'Leser abgelehnt'};
+      await poll();
+      assert.equal(element('run-start').disabled, true);
+      assert.equal(element('run-block').hidden, false);
+      await element('run-start').onclick();
+      assert.equal(page.posts.length, 0);
+      element('test-override').checked = true;
+      element('test-override').onchange();
+      assert.equal(element('run-start').disabled, false);
+      let dialog;
+      globalThis.window = {confirm: (text) => { dialog = text; return false; }};
+      await element('run-start').onclick();
+      assert.match(dialog, /TESTLAUF.json/);
+      assert.equal(page.posts.length, 0);
+      globalThis.window.confirm = () => true;
+      await element('run-start').onclick();
+      assert.deepEqual(page.posts.at(-1).body, {test_override: true});
+      assert.equal(element('test-override').checked, false);
+      page.status = {...page.status, session_id: 'new'};
+      await poll();
+      assert.equal(element('test-override').checked, false);
+      assert.equal(element('run-start').disabled, true);
+    });
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
