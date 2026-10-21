@@ -55,6 +55,7 @@ er ist nur informativ und keine Fehlerwahrscheinlichkeit.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, fields
 from hashlib import sha256
 from itertools import combinations
@@ -100,6 +101,19 @@ class FrameTrackingConfig:
     edge_position_tolerance_px: float = 1.0
     edge_required_share: float = 0.8
     edge_required_sides: int = 4
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> FrameTrackingConfig:
+        # Keine fehlenden Grenzen still mit heutigen Defaults auffuellen.
+        if not isinstance(data, dict) or set(data) != {field.name for field in fields(cls)}:
+            raise ValueError("Unvollstaendige oder unbekannte Rahmenkonfiguration")
+        for field in fields(cls):
+            if type(data[field.name]) is not type(field.default):
+                raise ValueError(f"Ungueltiger Typ fuer Rahmenkonfiguration: {field.name}")
+        return cls(**data)
 
     def __post_init__(self):
         if not all(np.isfinite(getattr(self, field.name)) for field in fields(self)):
@@ -158,6 +172,25 @@ class RegionProposal:
     normalised_quad: Quad
     reference_shape: tuple[int, int]
     reference_sha256: str
+
+    def to_dict(self) -> dict:
+        """Verlustfrei in reine JSON-Typen ueberfuehren, ohne Rundung."""
+        return json.loads(json.dumps(asdict(self), allow_nan=False))
+
+    @classmethod
+    def from_dict(cls, data: dict) -> RegionProposal:
+        if set(data) != {field.name for field in fields(cls)}:
+            raise ValueError("Unvollstaendiger oder unbekannter Rahmenvorschlag")
+        data = dict(data)
+        FrameTrackingConfig.from_dict(data["config"])
+        data["regions"] = tuple(FrameRegion(tuple(r["centre"]), r["size"]) for r in data["regions"])
+        data["edges"] = tuple(LcdEdge(**{**edge, "point": tuple(edge["point"]),
+                                       "normal": tuple(edge["normal"])}) for edge in data["edges"])
+        for name in ("character_zone", "outer_limit", "normalised_quad"):
+            data[name] = tuple(tuple(point) for point in data[name])
+        data["reference_shape"] = tuple(data["reference_shape"])
+        data["reasons"] = tuple(data["reasons"])
+        return cls(**data)
 
 
 def _gray(image):

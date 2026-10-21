@@ -31,7 +31,8 @@ from dispread.live import (
     RELEASE_NOTICE,
 )
 from dispread.live.clock import ClockLog
-from dispread.live.tracking import TrackedQuadLocator
+from dispread.live.frame_tracking import FrameTrackingConfig
+from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus
@@ -82,7 +83,7 @@ class LiveSession:
         reader_d_max_factor: float = 1.0,
         reader_tolerance: dict | None = None,
         reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
-        locator_factory: Callable[[Any, list], Any] = TrackedQuadLocator,
+        locator_factory: Callable[[Any, list], Any] | None = None,
         clock: ClockLog | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         wall: Callable[[], datetime] | None = None,
@@ -114,6 +115,7 @@ class LiveSession:
         self.latest_monotonic: float | None = None
         self.end_reason: str | None = None
         self.summary: dict = {}
+        self.tracking: dict = {"mode": "ecc_alt", "version": None, "regions": None}
         self._pipeline: Pipeline | None = None
         self._sink: JsonlSink | None = None
         self._meta: dict = {}
@@ -127,6 +129,7 @@ class LiveSession:
         self._frame_gaps_start = 0
         self._audit_errors = 0
         self._tracking_lost = 0
+        self._tracking_lost_reasons: Counter[str] = Counter()
         self._track_scores: deque[float] = deque(maxlen=10_000)
         self._track_score_n = 0
         self._track_score_min: float | None = None
@@ -162,12 +165,33 @@ class LiveSession:
         image = cv2.imread(str(ref_path))
         if image is None:
             raise StartRefused(f"Referenzbild {ref_path} nicht lesbar - neu einrichten")
+        block = profile.live_tracking
+        if block is not None:
+            if (not isinstance(block, dict) or block.get("version") != 1 or block.get("method") != "rahmenbereiche"
+                    or block.get("frame_sha256") != reference["sha256"]
+                    or block.get("config") != FrameTrackingConfig().to_dict()):
+                raise StartRefused("Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten")
+            try:
+                locator = ConfirmedRegionLocator(image, profile.quad, block)
+            except (ValueError, KeyError, TypeError) as exc:
+                raise StartRefused(f"Rahmenbereiche ungueltig: {exc} - neu einrichten") from exc
+            self.tracking = {"mode": "rahmenbereiche", "version": 1,
+                             "regions": len(block["proposal"]["regions"])}
+        else:
+            locator = None
+        # Die bisherige Zwei-Argument-Factory bleibt fuer injizierte Locators erhalten.
+        if self._locator_factory is not None:
+            locator = self._locator_factory(image, profile.quad)
+            self.tracking = {"mode": "injiziert", "profile_mode": self.tracking["mode"],
+                             "version": None, "regions": None}
+        elif locator is None:
+            locator = TrackedQuadLocator(image, profile.quad)
         gate = ReleaseGate(
             default_gate_config("dotmatrix", confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit)
         )
         self._pipeline = Pipeline(
             source=self._owner,
-            locator=self._locator_factory(image, profile.quad),
+            locator=locator,
             reader=reader,
             gate=gate,
             sinks=[],
@@ -180,6 +204,7 @@ class LiveSession:
         self._frame_gaps_start = owner_status.get("gaps", 0)
         self._meta = {
             "schema": SCHEMA,
+            "tracking": dict(self.tracking),
             "reader_tolerance": self._reader_tolerance,
             "session_id": profile.session_id,
             "device_id": profile.device_id,
@@ -238,6 +263,7 @@ class LiveSession:
             record = self._pipeline.process(frame, dropped_frames=skipped)
             if record.reject_reasons and record.reject_reasons[0].startswith("tracking_lost:"):
                 self._tracking_lost += 1
+                self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
             track = getattr(self._pipeline.locator, "last_track", None)
             if track is not None:
                 score = float(track.score)
@@ -355,6 +381,7 @@ class LiveSession:
             "frame_gaps_owner_total": owner_status.get("gaps", 0),
             "audit_errors": self._audit_errors,
             "tracking_lost": self._tracking_lost,
+            "tracking_lost_reasons": dict(self._tracking_lost_reasons),
             "track_score": {
                 "min": self._track_score_min,
                 # Median der letzten hoechstens 10 000 Tracks; Extremwerte und n ueber alle.

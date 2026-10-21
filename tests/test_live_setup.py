@@ -1,9 +1,11 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
+from frame_tracking_helpers import reference_scene
 
 from dispread.camera_settings import CameraSettings
 from dispread.live import setup as live_setup
@@ -340,11 +342,13 @@ def test_propose_forwards_stability_minimum_without_final_checks(monkeypatch, tm
                              to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}})
     monkeypatch.setattr(live_setup, "check_setup", lambda *a, **kw: called.append(kw) or checks)
     monkeypatch.setattr(live_setup, "write_overlays", lambda *a, **kw: [])
-    fit = SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]])
+    image, quad = reference_scene()
+    fit = SimpleNamespace(quad=quad)
+    cv2.imwrite(str(tmp_path / "still.png"), image)
     kwargs = {"stability_min_elapsed_s": minimum} if minimum == 15.0 else {}
     proposal = live_setup.propose_with_fit(
-        np.zeros((1080, 1920, 3), np.uint8), fit=fit, frame_path=tmp_path / "still.png",
-        camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
+        image, fit=fit, frame_path=tmp_path / "still.png",
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id="test", session_id="test", out_dir=tmp_path,
         offset_check=SimpleNamespace(status="OK"), stability_elapsed_s=minimum, setup_attempt=2, **kwargs,
     )
     assert called[0]["stability_min_elapsed_s"] == minimum
@@ -361,10 +365,12 @@ def test_proposal_merges_reader_status(monkeypatch, tmp_path, reader_status):
     checks = SimpleNamespace(overall="OK", checks={"kanten": SimpleNamespace(cells=[])},
                              to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}})
     monkeypatch.setattr(live_setup, "write_overlays", lambda *a, **kw: [])
+    image, quad = reference_scene()
+    cv2.imwrite(str(tmp_path / "still.png"), image)
     proposal = live_setup.propose_with_fit(
-        np.zeros((1080, 1920, 3), np.uint8),
-        fit=SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]]),
-        frame_path=tmp_path / "still.png", camera_settings=_CAMERA, device_id="test", session_id="test",
+        image, fit=SimpleNamespace(quad=quad),
+        frame_path=tmp_path / "still.png", camera_settings=replace(_CAMERA, size=image.shape[1::-1]),
+        device_id="test", session_id="test",
         out_dir=tmp_path, final_checks=checks, offset_check=CheckResult("OK", {}),
         reader_check=CheckResult(reader_status, {}),
     )

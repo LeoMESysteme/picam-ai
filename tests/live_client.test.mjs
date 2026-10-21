@@ -112,7 +112,7 @@ test('setup progress uses nested step and monotonic elapsed seconds', () => {
   assert.ok(!view.headline.includes('old'));
 });
 
-async function withLivePage(check) {
+async function withLivePage(check, initial = {}) {
   const elements = new Map();
   const timers = [];
   const originals = {document: globalThis.document, fetch: globalThis.fetch,
@@ -123,16 +123,20 @@ async function withLivePage(check) {
     return elements.get(id);
   };
   const page = {status: {state: 'setup_running', csrf: 'test',
-    setup: {step: 'fokus', elapsed_s: 1.2}}, actionError: 'Einrichtung laeuft bereits'};
+    setup: {step: 'fokus', elapsed_s: 1.2}}, actionError: 'Einrichtung laeuft bereits',
+    httpStatus: 200, ...initial};
   globalThis.document = {getElementById: element};
   globalThis.setInterval = () => 0;
   globalThis.setTimeout = (callback) => { timers.push(callback); return 0; };
   page.posts = [];
+  page.gets = [];
   globalThis.fetch = async (_path, options) => {
+    if (!options) page.gets.push(_path);
     if (options) page.posts.push({path: _path, body: JSON.parse(options.body)});
     return options
     ? {ok: !page.actionError, json: async () => ({error: page.actionError})}
-    : {ok: true, status: 200, json: async () => page.status};
+    : {ok: page.httpStatus >= 200 && page.httpStatus < 300,
+      status: page.httpStatus, json: async () => page.status};
   };
   try {
     await import(`../src/dispread/workbench/static/live.js?dom-test=${domTestNumber++}`);
@@ -371,4 +375,96 @@ test('norm plan needs confirmation and is sent with explicit reference selection
     if (oldWindow === undefined) delete globalThis.window;
     else globalThis.window = oldWindow;
   }
+});
+
+test('tracking check, German reason and mode are visible', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', setup: {
+      checks: {nachfuehrung: 'FEHLER'}, check_reasons: {nachfuehrung: 'zu wenige geeignete Rahmenbereiche'},
+      proposal_revision: 'v1',
+    }};
+    await poll();
+    assert.match(element('setup-checks').textContent, /Nachführung: FEHLER.*zu wenige geeignete Rahmenbereiche/);
+    page.status = {...running, run: {...running.run, tracking: {mode: 'rahmenbereiche'}}};
+    await poll();
+    assert.equal(element('tracking-mode').textContent, 'Nachführung: Rahmenbereiche');
+    page.status.run.tracking.mode = 'ecc_alt';
+    await poll();
+    assert.equal(element('tracking-mode').textContent, 'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen');
+  });
+});
+
+test('same session with new proposal revision clears review and posts current revision', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'same', setup: {proposal_revision: 'v1'}};
+    await poll();
+    element('confirmed-by').value = 'Operator';
+    element('format-checked').checked = true;
+    await element('confirm').onclick();
+    assert.equal(page.posts.at(-1).body.proposal_revision, 'v1');
+    page.status = {...page.status, setup: {proposal_revision: 'v2'}};
+    await poll();
+    assert.equal(element('confirmed-by').value, '');
+    assert.equal(element('format-checked').checked, false);
+    await element('confirm').onclick();
+    assert.equal(page.posts.at(-1).body.proposal_revision, 'v2');
+  });
+});
+
+test('tracking loss translates the specific reason supplied by fields.py', () => {
+  const view = statusView({state: 'running', tracking_reasons: {lcd_rand_fehlt: 'LCD-Rand nicht ausreichend bestaetigt'},
+    run: {latest: latest({status: 'unreadable', reject_reasons: ['tracking_lost:lcd_rand_fehlt']}), latest_age_s: 0.2}});
+  assert.match(view.detail, /LCD-Rand nicht ausreichend bestaetigt/);
+});
+
+
+test('confirmed profile shows the upcoming tracking mode before a run', async () => {
+  await withLivePage(async (page, element, poll) => {
+    for (const [mode, text] of [
+      ['rahmenbereiche', 'Nachführung: Rahmenbereiche'],
+      ['ecc_alt', 'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen'],
+    ]) {
+      page.status = {state: 'confirmed', profile: {tracking_mode: mode}, run: null};
+      await poll();
+      assert.equal(element('tracking-mode').textContent, text);
+    }
+    page.status = {state: 'setup_running', profile: null};
+    await poll();
+    assert.equal(element('tracking-mode').textContent, '');
+  });
+});
+
+test('page requests full status once and keeps German reasons across small polls', async () => {
+  await withLivePage(async (page, element, poll) => {
+    assert.equal(page.gets[0], '/live/status?full=1');
+    page.status = {state: 'running', run: {latest: latest({status: 'unreadable',
+      reject_reasons: ['tracking_lost:lcd_rand_fehlt']}), latest_age_s: 0.2}};
+    await poll();
+    assert.equal(page.gets.at(-1), '/live/status');
+    assert.match(element('detail').textContent, /LCD-Rand nicht ausreichend bestaetigt/);
+    await poll();
+    assert.equal(page.gets.filter(path => path.includes('full=1')).length, 1);
+  }, {status: {...running, tracking_reasons: {lcd_rand_fehlt: 'LCD-Rand nicht ausreichend bestaetigt'}}});
+});
+
+test('successful full status without a reasons table switches to small polls', async () => {
+  await withLivePage(async (page, element, poll) => {
+    assert.equal(page.gets[0], '/live/status?full=1');
+    page.status = {...running};
+    await poll();
+    await poll();
+    assert.deepEqual(page.gets, ['/live/status?full=1', '/live/status', '/live/status']);
+    assert.equal(element('headline').textContent, '+1.2345 mV/V');
+  });
+});
+
+test('failed full status is retried until the first successful response', async () => {
+  await withLivePage(async (page, element, poll) => {
+    assert.equal(element('detail').textContent, 'Verbindung zur Werkbank verloren');
+    page.httpStatus = 200;
+    await poll();
+    await poll();
+    assert.deepEqual(page.gets, ['/live/status?full=1', '/live/status?full=1', '/live/status']);
+    assert.match(element('headline').textContent, /Einrichtung läuft/);
+  }, {httpStatus: 500});
 });

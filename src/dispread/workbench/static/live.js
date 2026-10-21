@@ -26,7 +26,11 @@ function recordView(status) {
   if (run) {
     const age = status.run.latest_age_s;
     const fresh = typeof age === 'number' && Number.isFinite(age) && age <= 0.5;
-    const reasons = run.reject_reasons.join(', ');
+    const reasons = run.reject_reasons.map((reason) => {
+      const key = reason.startsWith('tracking_lost:') ? reason.slice('tracking_lost:'.length) : reason;
+      const label = status.tracking_reasons?.[key];
+      return label ? `${label} (${reason})` : reason;
+    }).join(', ');
     if (status.state === 'running' && run.status === 'valid' && fresh) {
       return {headline: `${run.raw_text} ${run.unit}`, cls: 'valid', detail: `Bild ${run.frame_sequence}`};
     }
@@ -65,6 +69,8 @@ export function connectionView(status, lastOkMs, nowMs, httpStatus) {
 
 if (typeof document !== 'undefined') {
   let csrf = '';
+  let trackingReasons = null;
+  let fullStatusReceived = false;
   let actionError = '';
   let lastStatus = null;
   let lastOkMs = null;
@@ -88,7 +94,8 @@ if (typeof document !== 'undefined') {
   const renderConnection = () => renderView(connectionView(lastStatus, lastOkMs,
     performance.now(), httpStatus));
   const render = (s) => {
-    if (s.session_id !== lastStatus?.session_id) {
+    if (s.session_id !== lastStatus?.session_id ||
+        s.setup?.proposal_revision !== lastStatus?.setup?.proposal_revision) {
       $('confirmed-by').value = '';
       $('format-checked').checked = false;
       $('ack').checked = false;
@@ -127,9 +134,18 @@ if (typeof document !== 'undefined') {
       : `ohne Referenz: ${s.reference?.reason || 'nicht gestartet'}`;
     renderError(s);
     $('setup-state').textContent = s.setup?.overall ? `Gesamturteil: ${s.setup.overall}` : '';
+    $('setup-checks').textContent = Object.entries(s.setup?.checks || {}).map(([name, status]) => {
+      const label = name === 'nachfuehrung' ? 'Nachführung' : name;
+      const reason = s.setup?.check_reasons?.[name];
+      return `${label}: ${status ?? 'nicht geprüft'}${reason ? ` – ${reason}` : ''}`;
+    }).join('\n');
+    const mode = s.run?.tracking?.mode ?? s.profile?.tracking_mode;
+    $('tracking-mode').textContent = mode === 'rahmenbereiche' ? 'Nachführung: Rahmenbereiche'
+      : mode === 'ecc_alt' ? 'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen'
+      : mode === 'injiziert' ? 'Nachführung: injiziert' : '';
     $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
       const img = document.createElement('img');
-      img.src = `/live/setup/${name}.png?${s.session_id}`;
+      img.src = `/live/setup/${name}.png?${s.session_id}&${s.setup?.proposal_revision ?? ''}`;
       img.alt = name;
       return img;
     }));
@@ -138,10 +154,13 @@ if (typeof document !== 'undefined') {
   };
   const tick = async () => {
     try {
-      const response = await fetch('/live/status');
+      const response = await fetch(fullStatusReceived ? '/live/status' : '/live/status?full=1');
       httpStatus = response.status;
       if (response.ok) {
         const status = await response.json();
+        fullStatusReceived = true;
+        if (status.tracking_reasons) trackingReasons = status.tracking_reasons;
+        status.tracking_reasons = trackingReasons;
         render(status);
         lastStatus = status;
         lastOkMs = performance.now();
@@ -159,7 +178,8 @@ if (typeof document !== 'undefined') {
   $('setup').onclick = () => post('/live/setup', {cell_text: $('cell-text').value || null});
   $('confirm').onclick = () => post('/live/confirm', {session_id: lastStatus?.session_id, confirmed_by: $('confirmed-by').value,
     format_checked: $('format-checked').checked, acknowledge_warning: $('ack').checked,
-    use_tolerance: $('use-tolerance').checked});
+    use_tolerance: $('use-tolerance').checked,
+    ...(lastStatus?.setup?.proposal_revision != null ? {proposal_revision: lastStatus.setup.proposal_revision} : {})});
   $('test-override').onchange = () => {
     $('run-start').disabled = Boolean(lastStatus?.run_block && !$('test-override').checked);
   };

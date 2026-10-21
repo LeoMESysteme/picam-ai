@@ -98,12 +98,41 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
    Stabilitätsprüfung in der Werkbank 15 s, Harvest-CLI weiterhin 30 s.
    Nach einem Abbruch bleiben Grund und Einrichtungshinweis sichtbar.
 4. Overlays und Prüfungen ansehen: Lage der Anzeige, Zellenraster,
-   Rasterversatz und Gegenlesen. **FEHLER** sperrt die Bestätigung.
+   Rasterversatz, Gegenlesen und **Nachführung**. **FEHLER** sperrt die Bestätigung.
    Bei **WARNUNG** muss die bedienende Person den Befund prüfen und
    ausdrücklich „WARNUNG zur Kenntnis genommen“ abhaken.
 5. Namen eintragen, „Einheit mV/V und Format geprüft“ abhaken und
    **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
    das Profil und die Bedienbestätigung (Konzept §4).
+
+Harvest-Einrichtungen bleiben unverändert; dort gibt es keine Prüfung `nachfuehrung`.
+
+Die Prüfung **Nachführung** verlangt geeignete, räumlich verteilte
+Rahmenbereiche und einen erkennbaren LCD-Rand im eingefrorenen Einrichtungsbild.
+Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
+Suchfenster einschließlich Interpolationsrand blau und die LCD-Randpunkte
+orange markiert; die Legende steht im Bild. Prüfe, dass diese Fenster auf
+festen Strukturen des Displayrahmens liegen und weder Ziffern noch Tisch,
+Kabel oder Hintergrund erfassen. Die Randpunkte müssen auf dem LCD-Rand
+liegen. Bei fehlender Struktur Kamera und Gerät neu ausrichten und erneut
+einrichten. Das Prüfurteil ist keine allgemeine Gerätevalidierung.
+
+Die Bestätigung bindet genau diese Bereiche an das Einrichtungsbild und die
+angezeigte Vorschlagsrevision. Ein erneuter Vorschlag verlangt erneutes Prüfen;
+während eines Laufs sind Einrichtung und Bestätigung gesperrt. Beim Laufstart
+werden die Bereiche aus dem Profil übernommen. Bei verändertem Referenzbild
+oder geänderten Prüfparametern ist eine neue Einrichtung nötig.
+
+Nach der Bestätigung zeigt die Seite bereits vor dem Lauf den Modus des
+Profils: **Nachführung: Rahmenbereiche** oder den alten ECC-Modus mit
+**neu einrichten empfohlen**. Der Lauf zeigt denselben Modus; `session.json` hält Modus,
+Version und Bereichszahl sowie die Trackingverluste je Grund fest. Bestandsprofile
+ohne bestätigte Rahmenbereiche bleiben nutzbar und zeigen ausdrücklich
+**Nachführung: alt (ECC, inhaltsabhängig)**. Diese Profile sollten neu
+eingerichtet werden, weil der alte Vergleich bei großen Ziffernwechseln die
+Anzeige verlieren kann. Sichtbare Rahmenstruktur bestätigt nur die Geometrie.
+Ob Ziffern lesbar sind, entscheiden weiterhin Leser und Gate; erfolgreiches
+Tracking gibt keinen Zahlenwert frei.
 
 Am 2026-10-14 lieferten nach N7 vier Einrichtungen Vorschläge mit
 Gesamt-WARNUNG wegen einer Proxy-Prüfung: zunächst `raster` WARNUNG wie
@@ -733,6 +762,9 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
   startet die Werkbank mit `--port 8081`.
 * [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;
   FEHLER sperrt, WARNUNG verlangt Kenntnisnahme, Bestätigung einen Namen.
+* [ ] **Nachführung** ist OK; Rahmenbereiche, gesamte Suchfenster und
+  LCD-Randpunkte im Quellbild-Overlay sind geprüft. Der Lauf zeigt seinen
+  Trackingmodus; alte ECC-Profile sind als solche markiert und neu einzurichten.
 * [ ] Ein bestätigter Lauf zeigt VALID/TRANSITION/UNREADABLE/STALE;
   Altwerte und Verbindungsverlust erscheinen nie als aktuelle gültige Ziffern.
 * [ ] Optionale Referenzaufzeichnung schreibt `reference.jsonl`; Status und

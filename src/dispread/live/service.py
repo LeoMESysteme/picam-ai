@@ -28,6 +28,7 @@ from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
+from dispread.workbench.fields import REASONS
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 DEVICE_ID = "gsv-sensor-161a"
@@ -156,7 +157,7 @@ class LiveService:
         self._setup_thread: threading.Thread | None = None
 
     # -- Anzeige -------------------------------------------------------------
-    def status(self) -> dict:
+    def status(self, *, full: bool = False) -> dict:
         with self._lock:
             setup = None
             if self._proposal is not None:
@@ -166,6 +167,14 @@ class LiveService:
                     "checks": {n: c.get("status") for n, c in checks.get("checks", {}).items()},
                     "overlays": [n for n in OVERLAYS if self.setup_file(n) is not None],
                 }
+                block = self._proposal.get("live_tracking")
+                if block is not None:
+                    setup["proposal_revision"] = block.get("proposal_revision")
+                check_reasons = {
+                    name: check["reason"] for name, check in checks.get("checks", {}).items() if check.get("reason")
+                }
+                if check_reasons:
+                    setup["check_reasons"] = check_reasons
                 gegenlesen = checks.get("checks", {}).get("gegenlesen", {})
                 metrics = gegenlesen.get("metrics", {})
                 if metrics.get("hinweis") or "tolerance" in metrics:
@@ -201,9 +210,11 @@ class LiveService:
                     "dir": self._run_dir.name,
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
+                    "tracking": dict(getattr(self._session, "tracking", {})),
                 }
             return {
                 "state": self._state,
+                **({"tracking_reasons": REASONS} if full else {}),
                 "step": self._step,
                 "error": self._error,
                 "simulate": self._simulate,
@@ -429,16 +440,20 @@ class LiveService:
             stability_min_elapsed_s=15.0,
             setup_attempt=result.setup_attempt,
             reader_check=result.reader_check,
+            live_tracking=True,
         )
 
     def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False,
-                use_tolerance: bool = False) -> None:
+                use_tolerance: bool = False, proposal_revision: str | int | None = None) -> None:
         with self._operation_lock:
             with self._lock:
                 if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
                     raise LiveError("Kein Vorschlag zum Bestaetigen")
                 if session_id != self._session_dir.name:
                     raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
+                block = self._proposal.get("live_tracking")
+                if block is not None and (proposal_revision is None or proposal_revision != block.get("proposal_revision")):
+                    raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
                 proposal, session_dir = self._proposal, self._session_dir
             if not format_checked:
                 raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")
@@ -489,7 +504,8 @@ class LiveService:
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
                                       "confirmed_at_utc": profile.confirmed_at_utc,
-                                      "warning_acknowledged": overall == "WARNUNG"}
+                                      "warning_acknowledged": overall == "WARNUNG",
+                                      "tracking_mode": "rahmenbereiche" if profile.live_tracking is not None else "ecc_alt"}
                 self._run_block = confirmation["run_block"]
                 self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"

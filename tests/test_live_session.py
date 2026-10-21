@@ -368,6 +368,7 @@ def test_tracking_quality_is_saved_for_successful_and_lost_tracks(tmp_path):
     finally:
         summary = session.stop()
     assert summary["tracking_lost"] == 1
+    assert summary["tracking_lost_reasons"] == {"test": 1}
     assert summary["track_score"] == {"min": 0.2, "median": 0.7, "max": 0.9, "n": 3}
     assert json.loads(session.session_path.read_text())["summary"] == summary
 
@@ -685,3 +686,204 @@ def test_reference_stop_failure_still_closes_sink_and_finalizes_metadata(tmp_pat
     assert meta['reference']['error'] == 'recorder stop failed'
     assert meta['ended_at_utc']
     assert meta['summary']['end_reason'] == 'bediener'
+
+
+def _region_session(tmp_path, images=None, **kwargs):
+    from frame_tracking_helpers import reference_scene, tracking_block
+
+    image, quad = reference_scene()
+    path, config = _files(tmp_path)
+    still = tmp_path / "still.png"
+    cv2.imwrite(str(still), image)
+    data = json.loads(path.read_text())
+    data["quad"] = quad
+    data["camera"]["size"] = list(image.shape[1::-1])
+    data["reference_frame"]["sha256"] = hashlib.sha256(still.read_bytes()).hexdigest()
+    data["live_tracking"] = tracking_block(image, quad, still)
+    path.write_text(json.dumps(data))
+    session = LiveSession(
+        FakeOwner(images if images is not None else [image]), path, config, tmp_path / "run",
+        reader_factory=lambda *args, **kw: synthetic_reader(), **kwargs,
+    )
+    return session, data
+
+
+def test_region_run_uses_confirmed_locator_and_marks_artifact(tmp_path):
+    from dispread.live.tracking import ConfirmedRegionLocator
+
+    session, data = _region_session(tmp_path)
+    session.start()
+    try:
+        assert isinstance(session._pipeline.locator, ConfirmedRegionLocator)
+        assert session._pipeline.locator._tracker.proposal.to_dict() == data["live_tracking"]["proposal"]
+        assert session.tracking == {"mode": "rahmenbereiche", "version": 1,
+                                    "regions": len(data["live_tracking"]["proposal"]["regions"])}
+    finally:
+        session.stop()
+    artifact = json.loads(session.session_path.read_text())
+    assert artifact["tracking"] == session.tracking
+    assert artifact["summary"]["tracking_lost_reasons"] == {}
+
+
+@pytest.mark.parametrize("tamper", ["frame_sha256", "config", "version", "method", "proposal_config", "gray_hash"])
+def test_region_run_refuses_wrong_reference_config_or_version(tmp_path, tamper):
+    session, data = _region_session(tmp_path)
+    block = data["live_tracking"]
+    if tamper == "config":
+        block["config"]["min_peak"] = 0.99
+    elif tamper == "proposal_config":
+        block["proposal"]["config"]["min_peak"] = 0.99
+    elif tamper == "gray_hash":
+        block["proposal"]["reference_sha256"] = "0" * 64
+    else:
+        block[tamper] = "wrong"
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+def test_region_run_compares_against_current_defaults(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from dispread.live import session as session_module
+    from dispread.live.frame_tracking import FrameTrackingConfig
+
+    session, _ = _region_session(tmp_path)
+    monkeypatch.setattr(session_module, "FrameTrackingConfig", lambda: replace(FrameTrackingConfig(), min_peak=0.99))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+
+
+def test_confirmed_profile_honours_injected_two_argument_locator_factory(tmp_path):
+    calls = []
+
+    def locator(reference, quad):
+        calls.append((reference, quad))
+        return ManualRoiLocator(quad)
+
+    session, data = _region_session(tmp_path, locator_factory=locator)
+    session.start()
+    try:
+        assert len(calls) == 1 and calls[0][1] == data["quad"]
+        assert isinstance(session._pipeline.locator, ManualRoiLocator)
+        assert session.tracking == {"mode": "injiziert", "profile_mode": "rahmenbereiche",
+                                    "version": None, "regions": None}
+        assert json.loads(session.session_path.read_text())["tracking"] == session.tracking
+    finally:
+        session.stop()
+
+
+def test_old_profile_uses_ecc_and_marks_old_mode(tmp_path):
+    from dispread.live.tracking import TrackedQuadLocator
+
+    path, config = _files(tmp_path)
+    session = LiveSession(FakeOwner([]), path, config, tmp_path / "run",
+                          reader_factory=lambda *args, **kw: synthetic_reader())
+    session.start()
+    try:
+        assert isinstance(session._pipeline.locator, TrackedQuadLocator)
+    finally:
+        session.stop()
+    assert json.loads(session.session_path.read_text())["tracking"] == {
+        "mode": "ecc_alt", "version": None, "regions": None,
+    }
+
+
+def test_visible_frame_with_hidden_digits_never_releases_value(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    from dispread.ocr import ReadResult
+
+    reference, _ = reference_scene()
+    session, data = _region_session(tmp_path)
+    hidden = reference.copy()
+    cv2.fillConvexPoly(hidden, np.rint(data["live_tracking"]["proposal"]["character_zone"]).astype(np.int32),
+                       (120, 120, 120))
+    session._owner = FakeOwner([hidden] * 3)
+    reads = []
+    unreadable = ReadResult(
+        raw_text="", value=None, glyphs=(), sign_detected=False, sign_region_readable=False,
+        decimal_point_detected=False, decimal_point_index=None, unit_text=None, status_flags=frozenset(),
+        backend_id="dotmatrix", backend_version="test",
+    )
+
+    class Reader:
+        backend_id = "dotmatrix"
+
+        def read(self, crop, layout):
+            reads.append(crop.copy())
+            return unreadable
+
+    session._reader_factory = lambda *args, **kwargs: Reader()
+    session.start()
+    try:
+        for _ in range(3):
+            record = session.step()
+            assert session._pipeline.locator.last_track.quad is not None
+            assert record.status is not ValueStatus.VALID and record.value is None
+    finally:
+        summary = session.stop()
+    assert len(reads) == 3
+    assert summary["tracking_lost"] == 0
+    assert summary["tracking_lost_reasons"] == {}
+
+
+def test_region_tracking_counts_each_loss_reason(tmp_path):
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    session, _ = _region_session(tmp_path, images=[image * 0, image[:100, :100], image * 0])
+    session.start()
+    try:
+        reasons = [session.step().reject_reasons[0].split(":", 1)[1] for _ in range(3)]
+    finally:
+        summary = session.stop()
+    assert reasons == ["zu_wenig_rahmenmerkmale", "bildgroesse_abweichend", "zu_wenig_rahmenmerkmale"]
+    assert summary["tracking_lost"] == 3
+    assert summary["tracking_lost_reasons"] == {"zu_wenig_rahmenmerkmale": 2, "bildgroesse_abweichend": 1}
+
+
+@pytest.mark.parametrize("value", [15.0, True])
+@pytest.mark.parametrize("config_path", ["block", "proposal"])
+def test_region_run_refuses_hand_edited_config_types(tmp_path, value, config_path):
+    session, data = _region_session(tmp_path)
+    key = "patch_size" if type(value) is float else "interpolation_guard_px"
+    block = data["live_tracking"]
+    config = block["config"] if config_path == "block" else block["proposal"]["config"]
+    config[key] = value
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+@pytest.mark.parametrize("block", [[], "rahmenbereiche", 1, True])
+def test_region_run_refuses_non_dict_tracking_block(tmp_path, block):
+    session, data = _region_session(tmp_path)
+    data["live_tracking"] = block
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+def test_region_run_reports_reconfigure_instruction_once(tmp_path):
+    session, data = _region_session(tmp_path)
+    data["live_tracking"]["proposal"]["ok"] = False
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused) as error:
+        session.start()
+    assert str(error.value) == "Rahmenbereiche ungueltig: Rahmenvorschlag ungeeignet - neu einrichten"
+
+
+def test_region_run_guards_injected_non_dict_profile_block(tmp_path, monkeypatch):
+    session, _ = _region_session(tmp_path)
+    profile = SessionProfile.load(session._profile_path)
+    from dataclasses import replace
+
+    monkeypatch.setattr(SessionProfile, "load", lambda path: replace(profile, live_tracking=[]))
+    with pytest.raises(StartRefused) as error:
+        session.start()
+    assert str(error.value) == "Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten"

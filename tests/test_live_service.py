@@ -413,6 +413,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         assert kwargs["stability_elapsed_s"] == 30.0
         assert kwargs["stability_min_elapsed_s"] == 15.0
         assert kwargs["setup_attempt"] == 2
+        assert kwargs["live_tracking"] is True
         assert kwargs["device_id"] == "gsv-sensor-161a"
         events.append("proposal")
         return proposal
@@ -1064,7 +1065,8 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     with pytest.raises(LiveError, match="Lauf gesperrt"):
         service.start_run()
     assert not list(session_dir.glob("run-*"))
-    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"})
+    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"},
+                   tracking={"mode": "ecc_alt", "version": None, "regions": None})
     session.latest_age_s.return_value = None
     session.run.side_effect = lambda stop: stop.wait()
     factory = Mock(return_value=session)
@@ -1356,3 +1358,85 @@ def test_server_close_restores_active_schedule_or_retains_read_only_abort(tmp_pa
     else:
         assert port.norm == [80, 27, 228] and port.dp == 1
         assert meta['reference']['restore_verification']['matches_restore_point']
+
+
+def test_confirmation_refuses_outdated_revision_in_same_session(tmp_path, proposal):
+    # Ein neuer Versuch kann dieselbe Sitzungs-ID tragen.
+    proposal["live_tracking"] = {"proposal_revision": "current"}
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["proposal_revision"] == "current"
+    for revision in ("previous", None):
+        with pytest.raises(LiveError, match="geaendert"):
+            service.confirm(session_id=status["session_id"], proposal_revision=revision,
+                            confirmed_by="Operator", format_checked=True)
+    assert service.status()["state"] == "setup_ready"
+    assert not (tmp_path / status["session_id"] / "profile.json").exists()
+
+
+def test_confirmation_refused_while_running_even_with_current_proposal(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    service._state = "running"
+    with pytest.raises(LiveError):
+        service.confirm(session_id=status["session_id"], confirmed_by="Operator", format_checked=True)
+    with pytest.raises(LiveError, match="Lauf zuerst beenden"):
+        service.start_setup()
+    assert service.status()["state"] == "running"
+    assert not (tmp_path / status["session_id"] / "profile.json").exists()
+
+
+def test_current_revision_confirms_and_tracking_status_reaches_page(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["checks"]["nachfuehrung"] == "OK"
+    assert service.status(full=True)["tracking_reasons"]["rahmen_mehrdeutig"] == "rahmenmerkmale nicht eindeutig zugeordnet"
+    service.confirm(session_id=status["session_id"], proposal_revision=status["setup"]["proposal_revision"],
+                    confirmed_by="Operator", format_checked=True)
+    assert service.status()["state"] == "confirmed"
+    assert service.status()["run"] is None
+    assert service.status()["profile"]["tracking_mode"] == "rahmenbereiche"
+    from dispread.session_profile import SessionProfile
+
+    profile = SessionProfile.load(tmp_path / status["session_id"] / "profile.json")
+    assert profile.live_tracking == proposal["live_tracking"]
+
+    from types import SimpleNamespace
+
+    tracking = {"mode": "rahmenbereiche", "version": 1,
+                "regions": len(profile.live_tracking["proposal"]["regions"])}
+    service._session = SimpleNamespace(latest=None, summary={}, tracking=tracking, latest_age_s=lambda: None)
+    service._run_dir = tmp_path / "run-01"
+    assert service.status()["run"]["tracking"] == tracking
+
+
+def test_tracking_failure_reason_reaches_setup_status(tmp_path, proposal):
+    proposal["setup_checks"]["checks"]["nachfuehrung"] = {
+        "status": "FEHLER", "reason": "zu wenige geeignete Rahmenbereiche",
+    }
+    proposal["setup_checks"]["overall"] = "FEHLER"
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["check_reasons"]["nachfuehrung"] == "zu wenige geeignete Rahmenbereiche"
+    with pytest.raises(LiveError, match="FEHLER"):
+        service.confirm(session_id=status["session_id"], confirmed_by="Operator", format_checked=True)
+
+
+def test_old_confirmed_profile_exposes_tracking_mode_before_run(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
+    status = service.status()
+    assert status["run"] is None
+    assert status["profile"]["tracking_mode"] == "ecc_alt"
+
+
+def test_tracking_reasons_only_in_explicit_full_status(tmp_path):
+    from dispread.workbench.fields import REASONS
+
+    service = LiveService(FakeOwner(), tmp_path)
+    assert "tracking_reasons" not in service.status()
+    assert service.status(full=True)["tracking_reasons"] == REASONS
+    assert "tracking_reasons" not in service.status()

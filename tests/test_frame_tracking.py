@@ -468,3 +468,34 @@ def test_vorschlag_erkennt_fehlenden_lcd_rand(scene):
     assert not proposal.ok
     assert "lcd_rand_fehlt" in proposal.reasons
     assert len(proposal.regions) >= config.min_regions
+
+
+def test_proposal_json_roundtrip_preserves_fixture_results(scene):
+    from dispread.live.frame_tracking import RegionProposal
+
+    reference, quad, config, proposal, tracker = scene
+    encoded = json.dumps(proposal.to_dict(), allow_nan=False)
+    restored = RegionProposal.from_dict(json.loads(encoded))
+    assert restored == proposal
+    restored_config = FrameTrackingConfig.from_dict(json.loads(json.dumps(config.to_dict())))
+    assert restored_config == config
+    replay = FrameTracker(reference, quad, restored, restored_config)
+    for path in sorted(FIXTURES.glob("*.jpg")):
+        image = cv2.imread(str(path))
+        assert replay.update(image) == tracker.update(image), path
+    assert replay.update(reference * 0) == tracker.update(reference * 0)
+
+
+@pytest.mark.parametrize("name,default", FrameTrackingConfig().to_dict().items())
+def test_config_json_rejects_wrong_field_types(name, default):
+    data = FrameTrackingConfig().to_dict()
+    data[name] = float(default) if type(default) is int else int(default)
+    with pytest.raises(ValueError, match="Typ"):
+        FrameTrackingConfig.from_dict(data)
+
+
+def test_config_json_rejects_bool_as_integer():
+    data = FrameTrackingConfig().to_dict()
+    data["interpolation_guard_px"] = True  # True == 1 must not pass.
+    with pytest.raises(ValueError, match="Typ"):
+        FrameTrackingConfig.from_dict(data)

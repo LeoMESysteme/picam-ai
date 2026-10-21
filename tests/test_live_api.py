@@ -12,8 +12,11 @@ class FakeService:
     def __init__(self):
         self.calls = []
 
-    def status(self):
-        return {"state": "idle", "release_notice": "Validiert nur: …"}
+    def status(self, *, full=False):
+        data = {"state": "idle", "release_notice": "Validiert nur: …"}
+        if full:
+            data["tracking_reasons"] = {"lcd_rand_fehlt": "LCD-Rand nicht ausreichend bestaetigt"}
+        return data
 
     def start_setup(self, *, cell_text=None):
         self.calls.append(("setup", cell_text))
@@ -73,6 +76,39 @@ def test_unknown_overlay_is_404():
     _run(check)
 
 
+@pytest.mark.parametrize("full", [False, True])
+def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
+    import json
+
+    from aiohttp.test_utils import make_mocked_request
+    from live_ui_server import FakeLiveService
+
+    async def direct(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", direct)
+    service = FakeLiveService(tmp_path / "overlay.png")
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: "tok")
+    path = "/live/status?full=1" if full else "/live/status"
+    request = make_mocked_request("GET", path, app=app)
+
+    async def check():
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 200
+        data = json.loads(response.text)
+        assert data["state"] == "idle"
+        assert data["csrf"] == "tok"
+        if full:
+            assert data["tracking_reasons"]["lcd_rand_fehlt"] == "lcd-rand nicht ausreichend bestaetigt"
+        else:
+            assert "tracking_reasons" not in data
+        assert "tracking_reasons" not in service.status()
+
+    asyncio.run(check())
+
+
 def test_routes_without_socket(tmp_path, monkeypatch):
     """Handler direkt pruefen; Socket-Integration bleibt oben separat."""
     import json
@@ -106,6 +142,10 @@ def test_routes_without_socket(tmp_path, monkeypatch):
         assert (await call("GET", "/live")).status == 200
         data = json.loads((await call("GET", "/live/status")).text)
         assert data["csrf"] == "tok" and data["release_notice"].startswith("Validiert nur")
+        assert "tracking_reasons" not in data
+        full = json.loads((await call("GET", "/live/status?full=1")).text)
+        assert full["tracking_reasons"] == {"lcd_rand_fehlt": "LCD-Rand nicht ausreichend bestaetigt"}
+        assert "tracking_reasons" not in json.loads((await call("GET", "/live/status")).text)
         assert (await call("POST", "/live/setup", {"cell_text": "+0.60972 "})).status == 200
         assert service.calls == [("setup", "+0.60972 ")]
         assert (await call("POST", "/live/setup")).status == 200
@@ -145,6 +185,8 @@ def test_routes_without_socket(tmp_path, monkeypatch):
                               "acknowledge_warning": True, "use_tolerance": False}]
         assert (await call("POST", "/live/confirm", {"use_tolerance": True})).status == 200
         assert confirmed[-1]['use_tolerance'] is True
+        assert (await call('POST', '/live/confirm', {'proposal_revision': 'review-2'})).status == 200
+        assert confirmed[-1]['proposal_revision'] == 'review-2'
         with pytest.raises(web.HTTPNotFound):
             await call("GET", "/live/setup/etc-passwd.png")
         with pytest.raises(web.HTTPServiceUnavailable):

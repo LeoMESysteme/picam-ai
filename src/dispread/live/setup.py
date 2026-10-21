@@ -13,7 +13,9 @@ import hashlib
 import json
 import math
 import time
+import uuid
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,11 +31,13 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_f
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
+from dispread.live.frame_tracking import RegionProposal, propose_regions
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
+from dispread.workbench.fields import REASONS
 
 GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 N_CELLS = 16
@@ -377,6 +381,7 @@ def write_overlays(
     fit: Any = None,
     overall: str | None = None,
     edge_cells: tuple[int, ...] | None = None,
+    tracking_proposal: RegionProposal | None = None,
 ) -> list[Path]:
     """overlay_source.png, overlay_rectified.png und (mit Fit) overlay_sampling.png."""
     written: list[Path] = []
@@ -386,6 +391,26 @@ def write_overlays(
         overlay_source = image.copy()
         points = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
         cv2.polylines(overlay_source, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+    if tracking_proposal is not None:
+        if overlay_source.ndim == 2:
+            overlay_source = cv2.cvtColor(overlay_source, cv2.COLOR_GRAY2BGR)
+        config = tracking_proposal.config
+        for region in tracking_proposal.regions:
+            x, y = region.centre
+            h = region.size // 2
+            r = h + config["search_radius_px"] + config["interpolation_guard_px"]
+            cv2.rectangle(overlay_source, (x-r, y-r), (x+r, y+r), (255, 180, 0), 1)
+            cv2.rectangle(overlay_source, (x-h, y-h), (x+h, y+h), (255, 0, 255), 1)
+        for edge in tracking_proposal.edges:
+            point = tuple(np.rint(edge.point).astype(int))
+            cv2.circle(overlay_source, point, 2, (0, 160, 255), -1)
+        for row, (label, color) in enumerate((
+            ("Rahmenbereiche", (255, 0, 255)),
+            ("Suchfenster inkl. Interpolation", (255, 180, 0)),
+            ("LCD-Randpunkte", (0, 160, 255)),
+        )):
+            cv2.putText(overlay_source, label, (8, 42 + row*20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
     cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
     written.append(out_dir / "overlay_source.png")
     crop = rectify(image, quad, target_size=target_size)
@@ -419,8 +444,9 @@ def propose_with_fit(
     stability_min_elapsed_s: float = MIN_STABILITY_S,
     setup_attempt: int | None = None,
     reader_check: Any = None,
+    live_tracking: bool = False,
 ) -> dict:
-    """Vorschlag aus einem Punktraster-Fit (bisher `run_propose` mit Fit)."""
+    """Punktraster-Vorschlag; Rahmenpruefung nur bei ausdruecklichem Live-Opt-in."""
     height, width = image.shape[:2]
     if (width, height) != tuple(camera_settings.size):
         sw, sh = camera_settings.size
@@ -456,6 +482,16 @@ def propose_with_fit(
             checks_dict["overall"] = "FEHLER"
         elif reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
+    tracking_proposal = None
+    if live_tracking:
+        tracking_proposal = propose_regions(image, quad)
+        checks_dict["checks"]["nachfuehrung"] = {
+            "status": "OK" if tracking_proposal.ok else "FEHLER",
+            "reason": "; ".join(REASONS[reason] for reason in tracking_proposal.reasons) or None,
+            "metrics": tracking_proposal.metrics,
+        }
+        if not tracking_proposal.ok:
+            checks_dict["overall"] = "FEHLER"
     proposal = {
         "frame": str(frame_path),
         "device_id": device_id,
@@ -471,6 +507,13 @@ def propose_with_fit(
         "camera": camera_settings.to_dict(),
         "setup_checks": checks_dict,
     }
+    if tracking_proposal is not None:
+        proposal["live_tracking"] = {
+            "version": 1, "method": "rahmenbereiche", "config": tracking_proposal.config,
+            "proposal": tracking_proposal.to_dict(),
+            "frame_sha256": hashlib.sha256(Path(frame_path).read_bytes()).hexdigest(),
+            "proposal_revision": uuid.uuid4().hex,
+        }
     if setup_attempt is not None:
         proposal["setup_attempt"] = setup_attempt
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -478,6 +521,7 @@ def propose_with_fit(
     write_overlays(
         image, quad, grid, out_dir, fit=fit, overall=checks_dict["overall"],
         edge_cells=tuple(checks.checks["kanten"].cells),
+        **({"tracking_proposal": tracking_proposal} if tracking_proposal is not None else {}),
     )
     return proposal
 
@@ -566,6 +610,17 @@ def confirm_proposal(
         "path": str(frame_path),
         "sha256": hashlib.sha256(frame_path.read_bytes()).hexdigest(),
     }
+    live_tracking = proposal.get("live_tracking")
+    if live_tracking is not None:
+        if (not isinstance(live_tracking, dict) or live_tracking.get("version") != 1
+                or live_tracking.get("method") != "rahmenbereiche"
+                or live_tracking.get("frame_sha256") != reference_frame["sha256"]):
+            raise SetupError("Rahmenbereiche passen nicht zum Einrichtungsbild - neu einrichten")
+        tracking_check = setup_checks["checks"].get("nachfuehrung", {})
+        if override_reason is not None and tracking_check.get("status") == "FEHLER":
+            live_tracking = None
+        else:
+            live_tracking = deepcopy(live_tracking)
 
     grid = CharGrid.from_dict(proposal["grid"])
     target_size = tuple(proposal["target_size"])
@@ -596,5 +651,6 @@ def confirm_proposal(
         camera=camera_settings,
         reference_frame=reference_frame,
         setup_checks=setup_checks,
+        live_tracking=live_tracking,
     )
     return profile

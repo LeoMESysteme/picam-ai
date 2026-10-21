@@ -18,7 +18,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         return web.FileResponse(STATIC / "live.html")
 
     async def status(request):
-        data = await asyncio.to_thread(service.status)
+        data = await asyncio.to_thread(service.status, **({"full": True} if request.query.get("full") == "1" else {}))
         data["csrf"] = csrf_of(request)
         return web.json_response(data)
 
@@ -42,6 +42,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             format_checked=bool(data.get("format_checked")),
             acknowledge_warning=bool(data.get("acknowledge_warning")),
             use_tolerance=bool(data.get("use_tolerance", False)),
+            **({"proposal_revision": data["proposal_revision"]} if "proposal_revision" in data else {}),
         )
 
     async def run_start(request):

@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-21: R13-2-Review: Der Playwright-Live-Service unterstützt
+  vollständige Statusabfragen mit Trackinggründen. Nach der ersten
+  erfolgreichen vollständigen Antwort fragt die Live-Seite auch ohne
+  Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
+  werden weiterhin wiederholt.
+
 * 2026-10-21: Zensical-Wiki seitenweise gegen Code und Projektkriterien
   abgeglichen. Anleitungen, Roadmap, API-Übersicht und Projekt-Tour nennen
   den gebauten Dot-Matrix-Livepfad, seine begrenzten Belege und die noch
@@ -28,6 +34,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 * 2026-10-21: Live-Läufe zeichnen den seriellen GSV-2AS-Strom optional getrennt als Referenz auf, bei fehlendem Gerät weiter ohne Referenz. Ausdrücklich bestätigter Werteplan nutzt gemeinsame belegte Serial-Helfer, protokolliert Befehle und stellt Normierung/Dezimalpunkt mit Prüfung zurück (Status währenddessen sichtbar, höchstens 20 s; rein lesend 2 s). Nachträglicher Abgleich mit 695-ms-Schutzintervall zeigt Fehllesungen, Zustandsanteile, Wechselverzögerung und Toleranzlaufzahlen; Referenz beeinflusst weder Leser noch Gate noch `records.jsonl`.
 * 2026-10-21: Referenzabgleich trennt Wechsel nach Telegrammlücken von messbaren Wechseln und unentschiedene von ungedeckten VALID. Parsefehler werden als abgelehnte Zeilen auditiert und sperren nur ihr Vergleichsfenster; Queue-Verlust bleibt ein Abbruchgrund. Wertepläne prüfen den Rückstellpunkt vor dem Start, bei Precheck-Abweichung läuft die Leseaufzeichnung weiter. Recorder-Stopfehler verhindern weder Sink-Abschluss noch finale Laufmetadaten; gemeinsame Serial-Helfer haben isoliert ersetzbare Wartezeiten. Anleitung ergänzt Referenzabnahme und manuelle Rückstellung nach hartem Prozessende.
 * 2026-10-21: R13-Rahmenbereich-Tracker mit begrenzten Rohbildfenstern, robuster starrer Bewegung, drei Inliern je Achsenseite, Leave-one-out-Stabilität und unabhängiger subpixelgenauer LCD-Randprüfung (höchstens 1 px Abweichung); Offline-Auswertung und Regressionen für inhaltsabhängige ECC-Verluste. Der Live-Pfad verwendet ihn noch nicht.
+* 2026-10-21: R13-2 bindet Rahmenbereiche an Einrichtungsbild, Vorschlagsrevision und Profil: neue Prüfung „Nachführung“ samt sichtbaren Rahmenfenstern, Suchbereichen und LCD-Randpunkten. Live-Läufe verwenden ausschließlich die bestätigten Bereiche und verweigern veränderte Referenzen oder Prüfparameter; Bestandsprofile bleiben bytegleich und laufen im markierten alten ECC-Modus. Status und Laufartefakt nennen den Modus, Trackingverluste werden je Grund gezählt. Harvest-Einrichtungen bleiben unverändert und erhalten keine Prüfung `nachfuehrung`. Leser und Freigabe bleiben unabhängig; sichtbarer Rahmen bei verdeckten Ziffern gibt keinen Wert frei.
 
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):

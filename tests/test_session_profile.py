@@ -249,3 +249,18 @@ def test_char_layout_from_profile_rejects_empty_confirmed_by():
     profile = dataclasses.replace(_profile(), confirmed_by="")
     with pytest.raises(ValueError, match="confirmed_by"):
         CharLayout.from_profile(profile, unit="mV/V")
+
+
+def test_live_tracking_optional_roundtrip_and_old_dict_byte_identity(tmp_path):
+    original = _profile().to_dict()
+    assert "live_tracking" not in original
+    encoded = json.dumps(original, indent=2, ensure_ascii=False).encode()
+    path = tmp_path / "old.json"
+    path.write_bytes(encoded)
+    profile = SessionProfile.load(path)
+    assert profile.live_tracking is None
+    profile.save(path)
+    assert path.read_bytes() == encoded
+    block = {"version": 1, "method": "rahmenbereiche", "proposal": {"regions": []}}
+    dataclasses.replace(profile, live_tracking=block).save(path)
+    assert SessionProfile.load(path).live_tracking == block

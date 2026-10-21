@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 from aiohttp import web
 
+from dispread.workbench.fields import REASONS
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -47,9 +48,12 @@ class FakeLiveService:
                 **copy.deepcopy(state),
             }
 
-    def status(self):
+    def status(self, *, full=False):
         with self._lock:
-            return copy.deepcopy(self._status)
+            data = copy.deepcopy(self._status)
+            if full:
+                data["tracking_reasons"] = REASONS.copy()
+            return data
 
     def start_setup(self, *, cell_text=None):
         self.set_state({"state": "setup_running", "setup": {"step": "fokus", "elapsed_s": 0.0}})

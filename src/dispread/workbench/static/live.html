@@ -16,6 +16,7 @@ input[type=text]{font:inherit;width:22ch}
 #overlays img{max-width:48%}
 #run-block,#test-banner{border:2px solid #ff7b72;padding:12px;color:#ff7b72}
 #detail{white-space:pre-line}
+#setup-checks{white-space:pre-line}
 </style>
 </head>
 <body>
@@ -26,9 +27,10 @@ input[type=text]{font:inherit;width:22ch}
   <section>
     <div class="value" id="headline">—</div>
     <div id="detail"></div>
+    <div id="tracking-mode"></div>
   </section>
   <section>
-    <img id="preview" alt="Kameravorschau">
+    <img id="preview" src="/live/preview.jpg" alt="Kameravorschau">
     <div id="camera"></div>
     <button id="camera-start">Kamera neu verbinden</button>
   </section>
@@ -37,6 +39,7 @@ input[type=text]{font:inherit;width:22ch}
     <label>Zellentext Zellen 0–8 – empfohlen: leer lassen (dann liest die Werkbank den Wert vom GSV-2AS). Bei Eingabe schwankende Ziffern mit ? markieren, z. B. „+0.4678?“ <input type="text" id="cell-text" maxlength="9"></label>
     <button id="setup">Einrichtung starten</button>
     <div id="setup-state"></div>
+    <div id="setup-checks"></div>
     <div id="overlays"></div>
     <p id="proposal-block" class="error" hidden>Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.</p>
     <p id="proposal-hint" hidden></p>
