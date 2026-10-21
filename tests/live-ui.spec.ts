@@ -114,3 +114,61 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#detail')).toHaveText('Verbindung zur Werkbank verloren');
   expect(errors).toEqual([]);
 });
+
+test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue Bestätigung', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/live');
+  await page.getByLabel('Linux-Passwort').fill('test-only');
+  await page.getByRole('button', { name: 'enter', exact: true }).click();
+  await expect(page).toHaveURL(/\/live$/);
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const stateResponse = await page.request.post('/__test__/state', {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
+    data: {state: 'setup_ready', setup: {overall: 'OK', proposal_revision: 'regions-v1',
+      auswahl: 'automatisch', overlays: ['overlay_source'], checks: {nachfuehrung: 'OK'},
+      regions: [{centre: [10, 10], size: 5}]}},
+  });
+  expect(stateResponse.ok()).toBe(true);
+  await expect(page.locator('#region-editor')).toBeVisible();
+  await page.locator('#confirmed-by').fill('Operator');
+  await page.locator('#format-checked').check();
+  await page.getByLabel('Quellbild-Koordinaten x,y').fill('30,12');
+  const added = page.waitForRequest('**/live/setup/regions');
+  await page.getByRole('button', {name: 'Bereich hinzufügen', exact: true}).click();
+  expect((await added).postDataJSON()).toEqual({proposal_revision: 'regions-v1', add: [[30, 12]], remove: []});
+  await expect(page.locator('#region-list li')).toHaveCount(2);
+  await expect(page.locator('#region-results')).toContainText('30,12 (verwendet: 30,12): geeignet');
+  await expect(page.locator('#confirmed-by')).toHaveValue('');
+  await expect(page.locator('#format-checked')).not.toBeChecked();
+  await expect(page.locator('#region-selection')).toHaveText('Auswahl: manuell');
+  await page.getByRole('checkbox', {name: 'Rahmenbereiche bearbeiten', exact: true}).check();
+  const image = page.locator('img[alt="overlay_source"]');
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+  const box = await image.boundingBox();
+  const removed = page.waitForRequest('**/live/setup/regions');
+  await image.click({position: {x: box!.width * 10 / 48, y: box!.height * 10 / 24}});
+  const body = (await removed).postDataJSON();
+  expect(body.remove).toEqual([0]);
+  expect(body.add).toEqual([]);
+  expect(body.proposal_revision).not.toBe('regions-v1');
+  await expect(page.locator('#region-list li')).toHaveCount(1);
+  await page.getByRole('button', {name: /Bereich 1 entfernen/}).click();
+  await expect(page.locator('#region-list li')).toHaveCount(0);
+  await expect(page.locator('#setup-checks')).toContainText('Nachführung: FEHLER');
+  const revision = (await (await page.request.get('/live/status')).json()).setup.proposal_revision;
+  for (const edit of [{add: [[1e300, 12]], remove: []}, {add: [], remove: ['0']}]) {
+    const rejected = await page.request.post('/live/setup/regions', {
+      headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
+      data: {proposal_revision: revision, ...edit},
+    });
+    expect(rejected.status()).toBe(400);
+  }
+  expect((await (await page.request.get('/live/status')).json()).setup.proposal_revision).toBe(revision);
+  const scaled = (await image.boundingBox())!;
+  const fractional = page.waitForRequest('**/live/setup/regions');
+  await image.click({position: {x: scaled.width * 35.8 / 48, y: scaled.height * 12.8 / 24}});
+  expect((await fractional).postDataJSON()).toEqual({proposal_revision: revision, add: [[35, 12]], remove: []});
+  await expect(page.locator('#region-list li')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

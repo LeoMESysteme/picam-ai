@@ -14,6 +14,9 @@ img{max-width:100%;border-radius:6px}
 button{font:inherit;padding:6px 12px;margin:4px 4px 0 0}
 input[type=text]{font:inherit;width:22ch}
 #overlays img{max-width:48%}
+#overlays img.region-editing{max-width:100%;cursor:crosshair}
+#region-results{white-space:pre-line}
+#region-list{padding-left:24px}
 #run-block,#test-banner{border:2px solid #ff7b72;padding:12px;color:#ff7b72}
 #detail{white-space:pre-line}
 #setup-checks{white-space:pre-line}
@@ -41,6 +44,18 @@ input[type=text]{font:inherit;width:22ch}
     <div id="setup-state"></div>
     <div id="setup-checks"></div>
     <div id="overlays"></div>
+    <p>Das Abtastbild (overlay_sampling) zeigt das feste Punktraster und hängt nicht von den Rahmenbereichen ab.</p>
+    <fieldset id="region-editor" hidden>
+      <legend>Rahmenbereiche</legend>
+      <label><input type="checkbox" id="edit-regions"> Rahmenbereiche bearbeiten</label>
+      <p>Im Quellbild freie Stelle anklicken zum Hinzufügen, magentafarbenen Bereich zum Entfernen.
+        Nur feste Rahmenstruktur auswählen, nie Zeichen, Kabel, Tisch oder Hintergrund.</p>
+      <label>Quellbild-Koordinaten x,y <input type="text" id="region-coordinates" placeholder="z. B. 320,240"></label>
+      <button id="region-add" type="button">Bereich hinzufügen</button>
+      <p id="region-selection"></p>
+      <ul id="region-list"></ul>
+      <div id="region-results" role="status" aria-live="polite"></div>
+    </fieldset>
     <p id="proposal-block" class="error" hidden>Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.</p>
     <p id="proposal-hint" hidden></p>
     <div id="confirm-box" hidden>

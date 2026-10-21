@@ -499,3 +499,173 @@ def test_config_json_rejects_bool_as_integer():
     data["interpolation_guard_px"] = True  # True == 1 must not pass.
     with pytest.raises(ValueError, match="Typ"):
         FrameTrackingConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(('name', 'digest'), [
+    ('reference.jpg', '89ee28614ea6e22c629c7041184392090becb8976b4e0d531b13cdf4d0c185fe'),
+    ('faktor-2_0.jpg', '03f4e560be0b4629709a4b75a308c83717ecf82155b9cbe6c081281288ae5c1f'),
+    ('faktor-5_0.jpg', 'f3c66e496dc3645ac614a7a1cde67146caab51b0d83e6e1f72d57193498a11a0'),
+])
+def test_automatic_proposal_is_unchanged(name, digest):
+    from hashlib import sha256
+
+    quad = json.loads((FIXTURES / 'r13-fixtures.json').read_text())['quad']
+    proposal = propose_regions(cv2.imread(str(FIXTURES / name)), quad)
+    assert sha256(json.dumps(proposal.to_dict(), sort_keys=True).encode()).hexdigest() == digest
+
+
+def test_manual_regions_preserve_automatic_checks_and_edge_model(scene):
+    from dispread.live import frame_tracking
+
+    image, quad, config, automatic, _ = scene
+    centres = [region.centre for region in automatic.regions]
+    manual = frame_tracking.proposal_from_regions(image, quad, centres, config)
+    assert manual.regions == automatic.regions
+    assert manual.edges == automatic.edges
+    assert manual.ok and manual.reasons == automatic.reasons
+    assert manual.reference_sha256 == automatic.reference_sha256
+    assert all(result['ok'] for result in manual.metrics['centre_results'])
+    fewer = frame_tracking.proposal_from_regions(image, quad, centres[:2], config)
+    assert fewer.reasons == ('zu_wenig_rahmenbereiche', 'rahmenbereiche_einseitig')
+
+
+@pytest.mark.parametrize('distance', [1, 2, 3])
+@pytest.mark.parametrize('direction', [(1, 0), (-1, 0), (0, 1), (0, -1)])
+def test_manual_regions_snap_to_real_corner(scene, distance, direction):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad, config, automatic, _ = scene
+    x, y = automatic.regions[0].centre
+    neighbour = (x + distance * direction[0], y + distance * direction[1])
+    proposal = proposal_from_regions(image, quad, [neighbour], config)
+    assert proposal.regions == automatic.regions[:1]
+    assert proposal.metrics['centre_results'] == [
+        {'requested_centre': list(neighbour), 'centre': [x, y], 'used_centre': [x, y], 'ok': True, 'reason': None},
+    ]
+
+
+def test_manual_snapping_chooses_strongest_not_nearest_local_maximum(scene):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad, config, automatic, _ = scene
+    # Fixture has a weaker local maximum at (296,249), closer to this click.
+    strength = cv2.cornerMinEigenVal(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 3, 3)
+    assert strength[249, 296] == cv2.dilate(strength, np.ones((3, 3), np.uint8))[249, 296]
+    assert strength[249, 296] < strength[247, 292]
+    proposal = proposal_from_regions(image, quad, [(294, 249)], config)
+    assert proposal.regions == automatic.regions[:1]
+    assert proposal.metrics['centre_results'][0]['used_centre'] == [292, 247]
+
+
+@pytest.mark.parametrize('kept', [(314, 248), (524, 464)])
+def test_kept_centres_are_checked_exactly_while_new_centres_snap(scene, kept):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad, config, _, _ = scene
+    proposal = proposal_from_regions(image, quad, [(899, 434)], config, kept_centres=[kept])
+    assert [region.centre for region in proposal.regions] == [kept, (900, 434)]
+    assert proposal.metrics['centre_results'] == [
+        {'requested_centre': list(kept), 'centre': list(kept), 'used_centre': list(kept), 'ok': True, 'reason': None},
+        {'requested_centre': [899, 434], 'centre': [900, 434], 'used_centre': [900, 434], 'ok': True, 'reason': None},
+    ]
+
+
+@pytest.mark.parametrize('offset', [(-4, 0), (-5, 0), (-6, 0), (-3, -3)])
+def test_manual_regions_do_not_snap_beyond_radius_on_uniform_frame(offset):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image = np.full((400, 800), 100, dtype=np.uint8)
+    quad = ((200, 170), (600, 170), (600, 230), (200, 230))
+    cv2.rectangle(image, (250, 140), (256, 146), 220, -1)
+    assert proposal_from_regions(image, quad, [(250, 140)]).regions
+    result = proposal_from_regions(image, quad, [(250+offset[0], 140+offset[1])])
+    assert not result.regions
+    assert result.metrics['centre_results'][0]['reason'] == 'zu_wenig_struktur'
+    assert result.metrics['centre_results'][0]['used_centre'] is None
+
+
+@pytest.mark.parametrize('corner_y', [142, 162])
+def test_manual_snapping_rechecks_character_mask_on_used_centre(corner_y):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image = np.full((400, 800), 100, dtype=np.uint8)
+    quad = ((200, 170), (600, 170), (600, 230), (200, 230))
+    # y=142: footprint enters the excluded zone; y=162: centre itself does.
+    # The requested centre is outside the character polygon in both cases.
+    cv2.rectangle(image, (400, corner_y), (406, corner_y+6), 220, -1)
+    proposal = proposal_from_regions(image, quad, [(400, corner_y-2)])
+    assert not proposal.regions
+    assert proposal.metrics['centre_results'] == [
+        {'requested_centre': [400, corner_y-2], 'centre': [400, corner_y], 'used_centre': [400, corner_y],
+         'ok': False, 'reason': 'im_zeichenbereich'},
+    ]
+
+
+def test_manual_regions_report_each_rejection(scene):
+    from dispread.live import frame_tracking
+
+    image, quad, _, automatic, _ = scene
+    image = image.copy()
+    good = automatic.regions[0].centre
+    centres = [good, good, tuple(np.rint(quad.mean(axis=0)).astype(int)), (1, 1), (100, 100)]
+    for x, y in centres[2:]:
+        image[max(0, y-5):y+12, max(0, x-5):x+12] = 100
+        cv2.rectangle(image, (int(x), int(y)), (int(x)+6, int(y)+6), (220, 220, 220), -1)
+    proposal = frame_tracking.proposal_from_regions(image, quad, centres)
+    assert proposal.regions == automatic.regions[:1]
+    assert [r['reason'] for r in proposal.metrics['centre_results']] == [
+        None, 'zu_nah', 'im_zeichenbereich', 'am_bildrand', 'ausserhalb_rahmenband',
+    ]
+
+
+@pytest.mark.parametrize('repeated', [False, True])
+def test_manual_regions_reject_flat_edges_and_repetition(repeated):
+    from dispread.live import frame_tracking
+
+    yy, xx = np.indices((400, 800))
+    image = (((xx // 4 + yy // 4) % 2) * 200).astype(np.uint8) if repeated else np.full((400, 800), 100, np.uint8)
+    # (251, 140) is a 3x3 local maximum in the repeated checkerboard.
+    proposal = frame_tracking.proposal_from_regions(image, ((200, 170), (600, 170), (600, 230), (200, 230)), [(251, 140)])
+    assert proposal.metrics['centre_results'][0]['reason'] == ('mehrdeutig' if repeated else 'zu_wenig_struktur')
+    assert not proposal.ok and not proposal.regions
+
+
+def test_manual_masks_include_search_and_interpolation_pixel():
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image = np.full((400, 800), 100, dtype=np.uint8)
+    quad = ((200, 170), (600, 170), (600, 230), (200, 230))
+    # Radius 7 + 12 + 1: der Mittelpunkt liegt im Band ausserhalb der
+    # Zeichen; auch der letzte Interpolationspixel muss sicher bleiben.
+    for centre, reason in [((400, 142), 'im_zeichenbereich'), ((400, 129), 'ausserhalb_rahmenband')]:
+        image[:] = 100
+        x, y = centre
+        cv2.rectangle(image, (x, y), (x+6, y+6), 220, -1)
+        proposal = proposal_from_regions(image, quad, [centre])
+        assert proposal.metrics['centre_results'][0]['reason'] == reason
+        assert not proposal.regions
+    for centre in [(400, 141), (400, 130)]:
+        image[:] = 100
+        x, y = centre
+        cv2.rectangle(image, (x, y), (x+6, y+6), 220, -1)  # Actual corner at the exact mask boundary.
+        proposal = proposal_from_regions(image, quad, [centre])
+        assert proposal.metrics['centre_results'][0]['ok']
+
+
+def test_manual_spacing_is_not_relaxed_and_one_dimensional_edges_fail():
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    quad = ((200, 170), (600, 170), (600, 230), (200, 230))
+    image = np.full((400, 800), 100, dtype=np.uint8)
+    cv2.rectangle(image, (250, 140), (256, 146), 220, -1)
+    cv2.rectangle(image, (277, 140), (283, 146), 220, -1)
+    too_close = proposal_from_regions(image, quad, [(250, 140), (277, 140)])
+    assert too_close.metrics['centre_results'][1]['reason'] == 'zu_nah'
+    image[:, 270:] = 100
+    cv2.rectangle(image, (278, 140), (284, 146), 220, -1)
+    boundary = proposal_from_regions(image, quad, [(250, 140), (278, 140)])
+    assert len(boundary.regions) == 2
+    image[:] = 0
+    image[:, 250:] = 255
+    line = proposal_from_regions(image, quad, [(250, 140)])
+    assert line.metrics['centre_results'][0]['reason'] == 'zu_wenig_struktur'

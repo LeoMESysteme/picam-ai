@@ -117,6 +117,32 @@ Kabel oder Hintergrund erfassen. Die Randpunkte müssen auf dem LCD-Rand
 liegen. Bei fehlender Struktur Kamera und Gerät neu ausrichten und erneut
 einrichten. Das Prüfurteil ist keine allgemeine Gerätevalidierung.
 
+Korrigiere die Auswahl vor der Bestätigung mit **Rahmenbereiche bearbeiten**:
+Ein Klick auf eine freie Stelle im Quellbild fügt einen Bereich hinzu, ein
+Klick auf einen magentafarbenen Bereich entfernt ihn. Alternativ gib die
+Koordinaten `x,y` in Pixeln des Originalbilds ein und wähle **Bereich hinzufügen**;
+jeder Eintrag in der Bereichsliste hat außerdem eine Entfernen-Schaltfläche.
+Die Bildansicht rechnet verkleinerte Bildschirmkoordinaten in Originalpixel um.
+Manuelle Eingaben rasten am stärksten lokalen Strukturmaximum innerhalb von 3 Originalpixeln ein; die Rückmeldung zeigt angeforderte Koordinaten und „verwendet: x,y“, und alle Prüfungen gelten am verwendeten Punkt.
+Nach jeder Änderung werden Overlay, Nachführungsprüfung und Gesamturteil
+aktualisiert. Im Quellbild bleiben das gelbe Quad und die zugeordneten bzw.
+verworfenen Rasterpunkte erhalten. Das Abtastbild (`overlay_sampling.png`)
+zeigt das feste Punktraster; es hängt nicht von den Rahmenbereichen ab und
+bleibt bei deren Bearbeitung unverändert.
+Rückmeldungen nennen für jeden geprüften Mittelpunkt die Eignung
+oder den Ablehnungsgrund. Manuelle Bereiche durchlaufen dieselben Prüfungen
+für Zeichenabstand, Rahmenband, Bildrand, zweidimensionale Struktur,
+Eindeutigkeit und Mindestabstand. Ungeeignete Punkte werden nicht übernommen.
+Prüfe mit deinem Namen die gesamte Auswahl: alle Suchfenster liegen auf
+fester Rahmenstruktur, niemals auf Zeichen, Kabel, Tisch oder Hintergrund;
+auch die LCD-Randpunkte müssen stimmen. Es sind höchstens 24 Bereiche und
+50 einzelne Hinzufüge-/Entfernen-Versuche je Vorschlag erlaubt, danach neu
+einrichten. Jede Änderung leert die Bestätigungsfelder. Erst die neue
+Revision prüfen und erneut mit Namen, Einheit und Format bestätigen.
+Das Profil speichert `live_tracking.auswahl` (`automatisch` oder `manuell`)
+und die Änderungsliste mit UTC-Zeit; `session.json` zeigt die Auswahl unter
+`tracking.auswahl`. Während eines Laufs sind Änderungen gesperrt.
+
 Die Bestätigung bindet genau diese Bereiche an das Einrichtungsbild und die
 angezeigte Vorschlagsrevision. Ein erneuter Vorschlag verlangt erneutes Prüfen;
 während eines Laufs sind Einrichtung und Bestätigung gesperrt. Beim Laufstart

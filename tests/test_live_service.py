@@ -1572,3 +1572,98 @@ def test_close_uses_one_bounded_copy_deadline_and_logs_timeout(tmp_path, monkeyp
     assert waits and sum(waits) <= 0.05
     assert time.monotonic() - start < 0.3
     assert 'Diagnose' in caplog.text and 'Zeitlimit' in caplog.text
+
+
+def test_edit_regions_revises_checks_overlays_and_confirmed_profile(tmp_path):
+    import json
+
+    import cv2
+    import numpy as np
+    from test_live_setup_tracking import _propose
+
+    from dispread.session_profile import SessionProfile
+
+    image, quad, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    revision = status['setup']['proposal_revision']
+    regions = proposal['live_tracking']['proposal']['regions']
+    centres = [r['centre'] for r in regions]
+    source = tmp_path / status['session_id'] / 'setup' / 'overlay_source.png'
+    original = source.read_bytes()
+    # Alle Bereiche entfernen: echtes FEHLER-Urteil samt neuem Overlay.
+    result = service.edit_regions(proposal_revision=revision, add=[], remove=list(range(len(regions))))
+    status = service.status()
+    assert status['setup']['checks']['nachfuehrung'] == status['setup']['overall'] == 'FEHLER'
+    assert source.read_bytes() != original
+    assert result['proposal_revision'] == status['setup']['proposal_revision'] != revision
+    assert status['setup']['regions'] == []
+    assert result['centre_results'] == []
+    with pytest.raises(LiveError, match='geaendert'):
+        service.edit_regions(proposal_revision=revision, add=centres, remove=[])
+    # Dasselbe Standbild reparieren, strukturfreien Zeichenpunkt ablehnen.
+    middle = list(np.rint(np.asarray(quad).mean(axis=0)).astype(int).tolist())
+    result = service.edit_regions(proposal_revision=result['proposal_revision'], add=centres + [middle], remove=[])
+    assert result['centre_results'][-1]['reason'] == 'zu_wenig_struktur'
+    assert service.status()['setup']['overall'] == 'OK'
+    assert service.status()['setup']['regions'] == regions
+    assert service.status()['setup']['centre_results'] == result['centre_results']
+    saved = json.loads((source.parent / 'proposal.json').read_text())
+    assert saved['live_tracking']['auswahl'] == 'manuell'
+    assert len(saved['live_tracking']['edits']) == 2 * len(regions) + 1
+    assert all(edit['at_utc'].endswith('+00:00') for edit in saved['live_tracking']['edits'])
+    assert saved['live_tracking']['frame_sha256'] == proposal['live_tracking']['frame_sha256']
+    service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True)
+    profile = SessionProfile.load(source.parent.parent / 'profile.json')
+    assert profile.live_tracking == saved['live_tracking']
+    assert cv2.imread(str(tmp_path / 'still.png')).shape == image.shape
+
+
+@pytest.mark.parametrize('state', ['idle', 'running', 'setup_running', 'setup_failed'])
+def test_edit_regions_refuses_missing_or_busy_proposal(tmp_path, state):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state = state
+    with pytest.raises(LiveError):
+        service.edit_regions(proposal_revision='old', add=[[1, 2]], remove=[])
+
+
+@pytest.mark.parametrize(('add', 'remove'), [
+    ([[1, 2]] * 25, []), ([[1, 2]] * 51, []), ([], [999]), ([], [-1]), ([], [True]),
+    ([], [0, 0]), ([[float('nan'), 2]], []), ([[True, 2]], []), ([[1]], []), ('bad', []), ([], 'bad'), ([], []),
+])
+def test_edit_regions_refuses_invalid_edits_without_revision_change(tmp_path, add, remove):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    before = service.status()
+    with pytest.raises(LiveError):
+        service.edit_regions(proposal_revision=before['setup']['proposal_revision'], add=add, remove=remove)
+    assert service.status()['setup']['proposal_revision'] == before['setup']['proposal_revision']
+
+
+def test_edit_regions_enforces_cumulative_edit_limit_and_still_hash(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    block = proposal['live_tracking']
+    block['edits'] = [{'action': 'add'}] * 50
+    with pytest.raises(LiveError, match='50'):
+        service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
+    block['edits'] = []
+    (tmp_path / 'still.png').write_bytes(b'changed')
+    with pytest.raises(LiveError, match='Einrichtungsbild'):
+        service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
+
+
+def test_region_edits_require_current_tracking_proposal_and_are_blocked_during_run(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match='Rahmenvorschlag'):
+        service.edit_regions(proposal_revision='missing', add=[[1, 2]], remove=[])
+    proposal['live_tracking'] = {'proposal_revision': 'current'}
+    service._state = 'running'
+    with pytest.raises(LiveError, match='Lauf zuerst beenden'):
+        service.edit_regions(proposal_revision='current', add=[[1, 2]], remove=[])
+    assert service._proposal == proposal

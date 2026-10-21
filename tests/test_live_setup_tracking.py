@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -13,15 +14,15 @@ from dispread.live import setup as live_setup
 from dispread.live.frame_tracking import RegionProposal, propose_regions
 
 
-def _propose(tmp_path, *, blank=False, live_tracking=True):
+def _propose(tmp_path, *, blank=False, live_tracking=True, assigned_points=(), rejected_points=(), edge_cells=()):
     image, quad = reference_scene()
     if blank:
         image[:] = 120
     frame = tmp_path / "still.png"
     cv2.imwrite(str(frame), image)
-    fit = SimpleNamespace(quad=quad, assigned_points=[], rejected_points=[])
+    fit = SimpleNamespace(quad=quad, assigned_points=assigned_points, rejected_points=rejected_points)
     checks = SimpleNamespace(
-        overall="OK", checks={"kanten": SimpleNamespace(cells=[])},
+        overall="OK", checks={"kanten": SimpleNamespace(cells=edge_cells)},
         to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}},
     )
     proposal = live_setup.propose_with_fit(
@@ -30,6 +31,36 @@ def _propose(tmp_path, *, blank=False, live_tracking=True):
         offset_check=SimpleNamespace(status="OK"), final_checks=checks, setup_attempt=2, live_tracking=live_tracking,
     )
     return image, quad, proposal
+
+
+def test_region_edits_preserve_lattice_evidence_after_proposal_reload(tmp_path):
+    assigned = [[500, 375], [600, 410], [700, 445]]
+    rejected = [[550, 390], [650, 425]]
+    _, _, proposal = _propose(tmp_path, assigned_points=assigned, rejected_points=rejected, edge_cells=(2, 7))
+    original = cv2.imread(str(tmp_path / 'overlay_source.png'))
+    sampling = tmp_path / 'overlay_sampling.png'
+    sampling_bytes, sampling_mtime = sampling.read_bytes(), sampling.stat().st_mtime_ns
+    # Editing must also work from the serialized proposal, without the original fit object.
+    proposal = json.loads((tmp_path / 'proposal.json').read_text())
+    unchanged = np.ones(original.shape[:2], dtype=bool)
+    block = proposal['live_tracking']
+    for region in block['proposal']['regions']:
+        x, y = region['centre']
+        radius = region['size'] // 2 + block['config']['search_radius_px'] + block['config']['interpolation_guard_px']
+        unchanged[y-radius:y+radius+1, x-radius:x+radius+1] = False
+    for index in (0, 1):
+        proposal = live_setup.edit_regions(proposal, add=[], remove=[index], out_dir=tmp_path,
+                                           at_utc='2026-10-21T10:00:00+00:00')
+        edited = cv2.imread(str(tmp_path / 'overlay_source.png'))
+        assert proposal['setup_checks']['overall'] == 'OK'
+        for x, y in assigned + rejected:
+            np.testing.assert_array_equal(edited[y-3:y+4, x-3:x+4], original[y-3:y+4, x-3:x+4])
+        np.testing.assert_array_equal(edited[:26, :150], original[:26, :150])  # Verdict label.
+        # Outside the original region windows, every pixel (including the yellow quad) is preserved.
+        np.testing.assert_array_equal(edited[unchanged], original[unchanged])
+        assert not np.array_equal(edited, original)  # Removed regions really disappear.
+        assert sampling.read_bytes() == sampling_bytes
+        assert sampling.stat().st_mtime_ns == sampling_mtime
 
 
 @pytest.mark.parametrize("blank", [False, True])
@@ -142,3 +173,145 @@ def test_harvest_proposal_keeps_checks_confirmation_and_overlay_bytes(tmp_path, 
     assert overlays
     for overlay in overlays:
         assert (tmp_path / overlay.name).read_bytes() == overlay.read_bytes()
+
+
+def test_automatic_regions_record_selection_origin(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    assert proposal['live_tracking']['auswahl'] == 'automatisch'
+    assert proposal['live_tracking']['edits'] == []
+
+
+def test_region_edit_without_overlay_evidence_requires_new_setup_without_writes(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    del proposal['overlay_evidence']
+    original = copy.deepcopy(proposal)
+    artifacts = {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    with pytest.raises(live_setup.SetupError, match='Vorschlag ohne Overlay-Belege - neu einrichten'):
+        live_setup.edit_regions(proposal, add=[], remove=[0], out_dir=tmp_path, at_utc='2026-10-21T10:00:00+00:00')
+    assert proposal == original
+    assert {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()} == artifacts
+
+
+def test_region_edit_persists_requested_and_snapped_centres(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    centre = proposal['live_tracking']['proposal']['regions'][0]['centre']
+    requested = [centre[0]-1, centre[1]]
+    updated = live_setup.edit_regions(proposal, add=[requested], remove=[0], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:00+00:00')
+    persisted = json.loads((tmp_path / 'proposal.json').read_text())
+    for result in (updated['live_tracking']['edits'][-1],
+                   persisted['live_tracking']['proposal']['metrics']['centre_results'][-1]):
+        assert result['requested_centre'] == requested
+        assert result['used_centre'] == centre
+        assert result['centre'] == centre
+        assert result['ok']
+
+
+@pytest.mark.parametrize(('requested', 'centre', 'initial_remove'), [
+    ([314, 251], [314, 248], [0]),  # Snapping again would move this to (312,247).
+    ([524, 467], [524, 464], []),  # Snapping again would reject (526,464) as ambiguous.
+])
+def test_kept_manual_centre_stays_exact_through_unrelated_remove_and_add(tmp_path, requested, centre, initial_remove):
+    _, _, proposal = _propose(tmp_path)
+    proposal = live_setup.edit_regions(proposal, add=[requested], remove=initial_remove, out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:00+00:00')
+    regions = proposal['live_tracking']['proposal']['regions']
+    assert regions[-1]['centre'] == centre
+    assert proposal['live_tracking']['edits'][-1]['ok']
+    removed = regions[0]['centre']
+    expected = [region['centre'] for region in regions[1:]]
+
+    # Reload between edits, as another request does: no in-memory provenance is needed.
+    proposal = json.loads((tmp_path / 'proposal.json').read_text())
+    proposal = live_setup.edit_regions(proposal, add=[], remove=[0], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:01+00:00')
+    assert [region['centre'] for region in proposal['live_tracking']['proposal']['regions']] == expected
+    assert proposal['live_tracking']['proposal']['metrics']['centre_results'][-1] == {
+        'requested_centre': centre, 'centre': centre, 'used_centre': centre, 'ok': True, 'reason': None,
+    }
+
+    proposal = json.loads((tmp_path / 'proposal.json').read_text())
+    proposal = live_setup.edit_regions(proposal, add=[[removed[0]-1, removed[1]]], remove=[], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:02+00:00')
+    assert proposal['live_tracking']['edits'][-1]['ok']
+    assert [region['centre'] for region in proposal['live_tracking']['proposal']['regions']] == expected + [removed]
+    persisted = json.loads((tmp_path / 'proposal.json').read_text())
+    assert persisted['live_tracking']['proposal'] == proposal['live_tracking']['proposal']
+
+
+def test_kept_automatic_centres_stay_exact_through_remove_and_add(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    original = proposal['live_tracking']['proposal']['regions']
+    removed = original[0]['centre']
+    for add, remove, expected in (([], [0], original[1:]), ([removed], [], original[1:] + original[:1])):
+        proposal = live_setup.edit_regions(proposal, add=add, remove=remove, out_dir=tmp_path,
+                                           at_utc='2026-10-21T10:00:00+00:00')
+        assert proposal['live_tracking']['proposal']['regions'] == expected
+        assert all(result['ok'] and result['requested_centre'] == result['used_centre']
+                   for result in proposal['live_tracking']['proposal']['metrics']['centre_results'])
+
+
+@pytest.mark.parametrize(('centre', 'reason'), [([1, 1], 'am_bildrand'), ([291, 247], 'zu_wenig_struktur')])
+def test_failed_kept_centre_is_reported_without_moving_or_writing(tmp_path, centre, reason):
+    _, _, proposal = _propose(tmp_path)
+    # Simulate inconsistent stored evidence: a kept centre must fail explicitly,
+    # even when a nearby snapped centre would pass on the same image.
+    proposal['live_tracking']['proposal']['regions'][0]['centre'] = centre
+    original = copy.deepcopy(proposal)
+    artifacts = {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    with pytest.raises(live_setup.SetupError, match=rf'Beibehaltener Rahmenbereich 0.*{reason}') as error:
+        live_setup.edit_regions(proposal, add=[], remove=[1], out_dir=tmp_path, at_utc='2026-10-21T10:00:00+00:00')
+    assert str(centre) in str(error.value)
+    assert proposal == original
+    assert {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()} == artifacts
+
+
+@pytest.mark.parametrize('other_status', ['WARNUNG', 'FEHLER'])
+def test_region_edits_preserve_other_failed_or_warning_checks(tmp_path, other_status):
+    _, _, proposal = _propose(tmp_path)
+    proposal['setup_checks']['checks']['gegenlesen'] = {'status': other_status}
+    proposal['setup_checks']['overall'] = other_status
+    updated = live_setup.edit_regions(proposal, add=[], remove=[0], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:00+00:00')
+    assert updated['setup_checks']['overall'] == other_status
+    assert updated['setup_checks']['checks']['gegenlesen']['status'] == other_status
+    assert proposal['live_tracking']['auswahl'] == 'automatisch'
+    assert proposal['live_tracking']['edits'] == []  # Eingabe bleibt unveraendert.
+
+
+def test_region_edit_limit_includes_rejected_attempts_and_accepts_50th(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    proposal['live_tracking']['edits'] = [{'action': 'add'}] * 49
+    updated = live_setup.edit_regions(proposal, add=[[1, 1]], remove=[], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:00+00:00')
+    assert len(updated['live_tracking']['edits']) == 50
+    assert updated['live_tracking']['edits'][-1]['reason'] == 'zu_wenig_struktur'
+    with pytest.raises(live_setup.SetupError, match='50'):
+        live_setup.edit_regions(updated, add=[], remove=[0], out_dir=tmp_path, at_utc='2026-10-21T10:00:01+00:00')
+
+
+def test_region_count_limit_accepts_24_requested_centres_but_refuses_25(tmp_path):
+    _, _, proposal = _propose(tmp_path)
+    assert len(proposal['live_tracking']['proposal']['regions']) == 12
+    updated = live_setup.edit_regions(proposal, add=[[1, 1]] * 12, remove=[], out_dir=tmp_path,
+                                       at_utc='2026-10-21T10:00:00+00:00')
+    assert len(updated['live_tracking']['proposal']['metrics']['centre_results']) == 24
+    with pytest.raises(live_setup.SetupError, match='24'):
+        live_setup.edit_regions(proposal, add=[[1, 1]] * 13, remove=[], out_dir=tmp_path,
+                                at_utc='2026-10-21T10:00:00+00:00')
+
+
+@pytest.mark.parametrize('point', [
+    [-1, 100], [-0.1, 100], [100, -1], [100, -0.1],
+    [1280, 100], [100, 780], [1e300, 100], [100, 1e300], [-1e300, 100], [100, -1e300],
+])
+def test_region_edits_reject_outside_source_before_storing_anything(tmp_path, point):
+    _, _, proposal = _propose(tmp_path)
+    original = copy.deepcopy(proposal)
+    files = {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    # A valid first point must not be stored either when any point is invalid.
+    with pytest.raises(live_setup.SetupError, match='ausserhalb.*Quellbild'):
+        live_setup.edit_regions(proposal, add=[[1, 1], point], remove=[], out_dir=tmp_path,
+                                at_utc='2026-10-21T10:00:00+00:00')
+    assert proposal == original
+    assert {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()} == files

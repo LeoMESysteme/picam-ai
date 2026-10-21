@@ -9,7 +9,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from dispread.live.service import LiveError
+from dispread.live.service import LiveError, LiveInputError
 
 STATIC = Path(__file__).parent / "static"
 
@@ -33,6 +33,24 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     async def setup(request):
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_setup, cell_text=data.get("cell_text"))
+
+    async def regions(request):
+        try:
+            data = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = None
+        if not isinstance(data, dict):
+            return web.json_response({"error": "Bereichsaenderung braucht ein JSON-Objekt"}, status=400)
+        try:
+            result = await asyncio.to_thread(
+                service.edit_regions, proposal_revision=data.get("proposal_revision"),
+                add=data.get("add", []), remove=data.get("remove", []),
+            )
+        except LiveInputError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except LiveError as exc:
+            return web.json_response({"error": str(exc)}, status=409)
+        return web.json_response({"ok": True, **result})
 
     async def confirm(request):
         data = await request.json()
@@ -82,6 +100,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_get("/live", page)
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
+    app.router.add_post("/live/setup/regions", regions)
     app.router.add_post("/live/confirm", confirm)
     app.router.add_post("/live/run/start", run_start)
     app.router.add_post("/live/run/stop", run_stop)

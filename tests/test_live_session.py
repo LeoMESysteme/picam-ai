@@ -817,7 +817,7 @@ def test_region_run_uses_confirmed_locator_and_marks_artifact(tmp_path):
         assert isinstance(session._pipeline.locator, ConfirmedRegionLocator)
         assert session._pipeline.locator._tracker.proposal.to_dict() == data["live_tracking"]["proposal"]
         assert session.tracking == {"mode": "rahmenbereiche", "version": 1,
-                                    "regions": len(data["live_tracking"]["proposal"]["regions"])}
+                                    "regions": len(data["live_tracking"]["proposal"]["regions"]), "auswahl": "automatisch"}
     finally:
         session.stop()
     artifact = json.loads(session.session_path.read_text())
@@ -1104,3 +1104,15 @@ def test_finisher_start_error_is_saved_and_session_stop_still_succeeds(tmp_path,
     status = json.loads(session.session_path.read_text())['diagnostics']
     assert status['first_error'] == 'RuntimeError: kein Thread verfuegbar'
     assert not status['copied'] and session._diagnostics.staging.exists()
+
+
+@pytest.mark.parametrize('selection', ['automatisch', 'manuell'])
+def test_region_selection_origin_is_in_session_artifact(tmp_path, selection):
+    session, data = _region_session(tmp_path)
+    data['live_tracking']['auswahl'] = selection
+    data['live_tracking']['edits'] = []
+    session._profile_path.write_text(json.dumps(data))
+    session.start()
+    session.stop()
+    artifact = json.loads(session.session_path.read_text())
+    assert artifact['tracking']['auswahl'] == selection

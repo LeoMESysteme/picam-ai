@@ -119,13 +119,15 @@ async function withLivePage(check, initial = {}) {
     setInterval: globalThis.setInterval, setTimeout: globalThis.setTimeout};
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '',
-      checked: id === 'reference-enabled', replaceChildren() {}});
+      checked: id === 'reference-enabled', children: [],
+      replaceChildren(...nodes) { this.children = nodes; }, append(...nodes) { this.children.push(...nodes); }});
     return elements.get(id);
   };
   const page = {status: {state: 'setup_running', csrf: 'test',
     setup: {step: 'fokus', elapsed_s: 1.2}}, actionError: 'Einrichtung laeuft bereits',
     httpStatus: 200, ...initial};
-  globalThis.document = {getElementById: element};
+  let created = 0;
+  globalThis.document = {getElementById: element, createElement: (tag) => element(`${tag}-${created++}`)};
   globalThis.setInterval = () => 0;
   globalThis.setTimeout = (callback) => { timers.push(callback); return 0; };
   page.posts = [];
@@ -499,5 +501,93 @@ test('diagnostics default off, explicit opt-in and operator marks', async () => 
     page.status = {state: 'stopped'};
     await poll();
     assert.equal(element('mark-box').hidden, true);
+  });
+});
+
+
+test('region editor converts natural pixels, removes patches and clears confirmation on revision', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'same', setup: {proposal_revision: 'v1',
+      regions: [{centre: [100, 80], size: 15}], overlays: ['overlay_source'], auswahl: 'automatisch'}};
+    page.actionError = '';
+    await poll();
+    assert.equal(element('region-editor').hidden, false);
+    element('edit-regions').checked = true;
+    element('edit-regions').onchange();
+    const img = element('overlays').children[0];
+    img.naturalWidth = 1000; img.naturalHeight = 500;
+    img.getBoundingClientRect = () => ({left: 10, top: 20, width: 500, height: 250});
+    await img.onclick({clientX: 60, clientY: 60});
+    assert.deepEqual(page.posts.at(-1), {path: '/live/setup/regions',
+      body: {proposal_revision: 'v1', add: [], remove: [0]}});
+    await img.onclick({clientX: 160, clientY: 120});
+    assert.deepEqual(page.posts.at(-1).body, {proposal_revision: 'v1', add: [[300, 200]], remove: []});
+    element('confirmed-by').value = 'Operator';
+    element('format-checked').checked = true;
+    page.status = {...page.status, setup: {...page.status.setup, proposal_revision: 'v2', auswahl: 'manuell',
+      checks: {nachfuehrung: 'FEHLER'}, centre_results: [{centre: [300, 200], ok: false, reason: 'im_zeichenbereich'}]}};
+    await poll();
+    assert.equal(element('confirmed-by').value, '');
+    assert.equal(element('format-checked').checked, false);
+    assert.match(element('region-results').textContent, /300.*200.*Zeichenbereich/);
+    assert.match(element('overlays').children[0].src, /v2/);
+    assert.match(element('setup-checks').textContent, /Nachführung: FEHLER/);
+    assert.equal(element('edit-regions').checked, true);
+  });
+});
+
+test('region editor shows requested and used centres including rejected snapped points', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', setup: {proposal_revision: 'snap', centre_results: [
+      {requested_centre: [290, 247], centre: [292, 247], used_centre: [292, 247], ok: true, reason: null},
+      {requested_centre: [400, 140], centre: [400, 142], used_centre: [400, 142], ok: false, reason: 'im_zeichenbereich'},
+      {requested_centre: [100, 100], centre: [100, 100], used_centre: null, ok: false, reason: 'zu_wenig_struktur'},
+    ]}};
+    await poll();
+    const lines = element('region-results').textContent.split('\n');
+    assert.match(lines[0], /290,247.*verwendet: 292,247.*geeignet/);
+    assert.match(lines[1], /400,140.*verwendet: 400,142.*Zeichenbereich/);
+    assert.match(lines[2], /100,100.*verwendet:.*kein.*Struktur/);
+  });
+});
+
+test('region editor has keyboard add/remove and rejects malformed coordinates locally', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', setup: {proposal_revision: 'v1',
+      regions: [{centre: [100, 80], size: 15}]}};
+    page.actionError = '';
+    await poll();
+    element('region-coordinates').value = '123,456';
+    await element('region-add').onclick();
+    assert.deepEqual(page.posts.at(-1).body, {proposal_revision: 'v1', add: [[123, 456]], remove: []});
+    const removeButton = element('region-list').children[0].children[0];
+    await removeButton.onclick();
+    assert.deepEqual(page.posts.at(-1).body, {proposal_revision: 'v1', add: [], remove: [0]});
+    element('region-coordinates').value = '123,';
+    const count = page.posts.length;
+    await element('region-add').onclick();
+    assert.equal(page.posts.length, count);
+    assert.match(element('error').textContent, /x,y/);
+    page.status = {state: 'running', setup: page.status.setup};
+    await poll();
+    assert.equal(element('region-editor').hidden, true);
+    await element('region-add').onclick();
+    assert.equal(page.posts.length, count);
+  });
+});
+
+test('region image clicks select the containing source pixel, including the last pixel', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', session_id: 'same', setup: {proposal_revision: 'v1',
+      regions: [], overlays: ['overlay_source']}};
+    await poll();
+    element('edit-regions').checked = true;
+    const img = element('overlays').children[0];
+    img.naturalWidth = 1000; img.naturalHeight = 500;
+    img.getBoundingClientRect = () => ({left: 10, top: 20, width: 500, height: 250});
+    await img.onclick({clientX: 160.4, clientY: 120.4});
+    assert.deepEqual(page.posts.at(-1).body.add, [[300, 200]]);
+    await img.onclick({clientX: 509.9, clientY: 269.9});
+    assert.deepEqual(page.posts.at(-1).body.add, [[999, 499]]);
   });
 });

@@ -260,11 +260,11 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         response = await handle("GET", "/live/status", headers)
         csrf = json.loads(response.text)["csrf"]
         assert response.headers["Cache-Control"] == "no-store"
-        for path in ('/live/run/start', '/live/run/mark'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["Origin"] = "https://localhost"
-        for path in ('/live/run/start', '/live/run/mark'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["X-CSRF-Token"] = csrf
@@ -541,4 +541,159 @@ def test_mark_malformed_body_is_german_400(body):
         response = await match.handler(request)
         assert response.status == 400
         assert 'JSON-Objekt' in json.loads(response.text)['error']
+    asyncio.run(check())
+
+
+def test_region_edit_route_without_socket(monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+
+    async def check():
+        service = FakeService()
+        app = web.Application()
+        add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+
+        async def call(body):
+            request = make_mocked_request('POST', '/live/setup/regions', app=app)
+            request.json = AsyncMock(return_value=body)
+            match = await app.router.resolve(request)
+            return await match.handler(request)
+
+        forwarded = []
+
+        def edit(**kwargs):
+            forwarded.append(kwargs)
+            return {'proposal_revision': 'new', 'centre_results': [{'ok': False, 'reason': 'zu_nah'}]}
+
+        service.edit_regions = edit
+        response = await call({'proposal_revision': 'old', 'add': [[123, 456]], 'remove': [0]})
+        assert response.status == 200
+        assert json.loads(response.text) == {'ok': True, 'proposal_revision': 'new',
+                                             'centre_results': [{'ok': False, 'reason': 'zu_nah'}]}
+        assert forwarded == [{'proposal_revision': 'old', 'add': [[123, 456]], 'remove': [0]}]
+
+        def blocked(**kwargs):
+            raise LiveError('Vorschlag hat sich geaendert')
+
+        service.edit_regions = blocked
+        response = await call({'proposal_revision': 'old', 'add': [], 'remove': [1]})
+        assert response.status == 409 and 'geaendert' in json.loads(response.text)['error']
+        assert (await call([])).status == 400
+        assert (await call(None)).status == 400
+
+    asyncio.run(check())
+
+
+def test_playwright_fake_region_edit_contract(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_state({'state': 'setup_ready', 'setup': {
+        'proposal_revision': 'v1', 'regions': [{'centre': [10, 10], 'size': 5}],
+        'checks': {'nachfuehrung': 'OK'}, 'overall': 'OK',
+    }})
+    result = service.edit_regions(proposal_revision='v1', add=[[30, 12]], remove=[])
+    assert result['proposal_revision'] != 'v1'
+    assert result['centre_results'][-1] == {
+        'requested_centre': [30, 12], 'centre': [30, 12], 'used_centre': [30, 12], 'ok': True, 'reason': None,
+    }
+    assert service.status()['setup']['auswahl'] == 'manuell'
+    with pytest.raises(LiveError, match='geaendert'):
+        service.edit_regions(proposal_revision='v1', add=[], remove=[0])
+    service.edit_regions(proposal_revision=result['proposal_revision'], add=[], remove=[0, 1])
+    assert service.status()['setup']['overall'] == 'FEHLER'
+
+
+@pytest.mark.parametrize('fake', [False, True], ids=['real_service', 'playwright_fake'])
+@pytest.mark.parametrize(('add', 'remove'), [
+    (None, []), ('bad', []), ({}, []), ([[1]], []), ([[True, 2]], []), ([[1, '2']], []),
+    ([[1, None]], []), ([[float('inf'), 2]], []), ([[float('nan'), 2]], []),
+    ([[1e300, 2]], []), ([[-0.1, 2]], []), ([[1280, 2]], []), ([[2, 780]], []),
+    pytest.param([[10**400, 2]], [], id='huge_integer'),
+    ([], None), ([], 'bad'), ([], [True]), ([], [[0]]), ([], [999]), ([], [0, 0]), ([], []),
+])
+def test_region_edit_input_errors_are_400_without_mutation(tmp_path, monkeypatch, add, remove, fake):
+    import copy
+    import json
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+    from live_ui_server import FakeLiveService
+    from test_live_service import ready_service
+    from test_live_setup_tracking import _propose
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    if fake:
+        service = FakeLiveService(tmp_path / 'overlay.png')
+        service.set_state({'state': 'setup_ready', 'setup': {
+            'proposal_revision': 'v1', 'regions': [{'centre': [10, 10], 'size': 5}],
+            'checks': {'nachfuehrung': 'OK'}, 'overall': 'OK',
+        }})
+    else:
+        _, _, proposal = _propose(tmp_path)
+        service = ready_service(tmp_path, proposal)
+    original = copy.deepcopy(service._status if fake else service._proposal)
+    revision = service.status()['setup']['proposal_revision']
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+
+    async def check():
+        request = make_mocked_request('POST', '/live/setup/regions', app=app)
+        request.json = AsyncMock(return_value={'proposal_revision': revision, 'add': add, 'remove': remove})
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 400, response.text
+        assert json.loads(response.text)['error']
+
+    asyncio.run(check())
+    assert (service._status if fake else service._proposal) == original
+    assert service.status()['setup']['proposal_revision'] == revision
+
+
+@pytest.mark.parametrize('conflict', ['running', 'no_proposal', 'outdated_revision', 'no_overlay_evidence'])
+def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, conflict):
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+    from test_live_service import ready_service
+    from test_live_setup_tracking import _propose
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    revision = proposal['live_tracking']['proposal_revision']
+    if conflict == 'running':
+        service._state = 'running'
+    elif conflict == 'no_proposal':
+        service._proposal = None
+    elif conflict == 'no_overlay_evidence':
+        del service._proposal['overlay_evidence']
+    else:
+        revision = 'outdated'
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+
+    async def check():
+        request = make_mocked_request('POST', '/live/setup/regions', app=app)
+        request.json = AsyncMock(return_value={'proposal_revision': revision, 'add': [[1, 1]], 'remove': []})
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 409
+        if conflict == 'no_overlay_evidence':
+            assert 'Vorschlag ohne Overlay-Belege - neu einrichten' in response.text
+            assert service._proposal['live_tracking']['proposal_revision'] == revision
+
     asyncio.run(check())

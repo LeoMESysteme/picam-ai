@@ -5,6 +5,15 @@ getrennten Abnahme eingefroren. Kleine rohe Fenster vermeiden Zeicheninhalt;
 Eindeutigkeit, verteilte Inlier und der unabhaengige helle LCD-Rand bleiben
 harte Regeln. Keine automatische Abschwaechung bei fehlender Struktur.
 
+Bedienregel fuer neu hinzugefuegte Mittelpunkte: vor der Pruefung auf das staerkste
+3x3-lokale Shi-Tomasi-Maximum oberhalb derselben Strukturschwelle im
+euklidischen Radius MANUAL_SNAP_RADIUS_PX = 3 Rohpixel einrasten. Bei
+gleicher Staerke gewinnt der naechste Punkt, danach die Bildreihenfolge.
+Dies erleichtert die Eingabe und ist keine Akzeptanzregel: alle bestehenden
+Pruefungen laufen anschliessend am verwendeten Mittelpunkt unveraendert.
+Beibehaltene Bereiche werden ohne erneutes Einrasten am gespeicherten
+Mittelpunkt geprueft, unabhaengig von ihrer automatischen/manuellen Herkunft.
+
 Aussengrenze: Quad um Faktor 3 um seinen Mittelpunkt skalieren, zusaetzlich
 an beiden Enden auf 100 Rohpixel Abstand begrenzen. Das schmale Band erfasst
 die Glasecken, aber nicht Kabel oberhalb oder Tisch jenseits des Rahmens.
@@ -65,6 +74,8 @@ import numpy as np
 
 from dispread.detect import Quad
 from dispread.track import TrackResult
+
+MANUAL_SNAP_RADIUS_PX = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +378,86 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig()) -> Regi
             if row < len(group):
                 ordered.append(group[row])
     regions = tuple(ordered[:config.max_regions])
+    return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config)
+
+
+def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingConfig(), *, kept_centres=()) -> RegionProposal:
+    """Manuelle Mittelpunkte mit denselben Masken und Qualitaetsgrenzen pruefen.
+
+    centre_results in metrics enthaelt zuerst kept_centres, dann centres,
+    jeweils in Eingabereihenfolge; abgelehnte Punkte werden nie als
+    Trackingbereich verwendet. kept_centres werden ohne Snapping geprueft.
+    Fuer neue centres nach Rundung auf Rohpixel
+    gilt die Snapping-Bedienregel im Modultext; requested_centre erhaelt die
+    Eingabe, centre/used_centre den geprueften Punkt (used_centre=None ohne
+    Maximum). Masken werden erst am gefundenen Punkt geprueft.
+    """
+    gray = _gray(reference_image)
+    quad = _normalise_quad(quad)
+    zone, outer, mask = _geometry(gray.shape, quad, config)
+    character = np.zeros(gray.shape, np.uint8)
+    outside = np.zeros(gray.shape, np.uint8)
+    cv2.fillConvexPoly(character, np.rint(zone).astype(np.int32), 255)
+    cv2.fillConvexPoly(outside, np.rint(outer).astype(np.int32), 255)
+    # Shi-Tomasi: dieselbe 2-D-Struktur und relative Schwelle wie
+    # goodFeaturesToTrack(blockSize=3, qualityLevel=corner_quality, mask=mask).
+    strength = cv2.cornerMinEigenVal(gray, blockSize=3, ksize=3)
+    threshold = float(strength[mask != 0].max()) * config.corner_quality if np.any(mask) else 0.0
+    local_maximum = cv2.dilate(strength, np.ones((3, 3), np.uint8))
+    regions, results = [], []
+    ambiguous_count = 0
+    h, r = config.patch_size // 2, config.search_radius_px
+    radius = h + r + config.interpolation_guard_px
+    for index, centre in enumerate([*kept_centres, *centres]):
+        point = np.asarray(centre)
+        if point.shape != (2,) or point.dtype.kind not in 'iuf' or not np.isfinite(point).all():
+            raise ValueError("Bereich braucht zwei endliche Pixelkoordinaten")
+        x, y = map(int, np.rint(point))
+        used = [x, y]
+        if index >= len(kept_centres):
+            snap_radius = MANUAL_SNAP_RADIUS_PX
+            left, top = max(0, x-snap_radius), max(0, y-snap_radius)
+            right, bottom = min(gray.shape[1], x+snap_radius+1), min(gray.shape[0], y+snap_radius+1)
+            candidates = []
+            for cy in range(top, bottom):
+                for cx in range(left, right):
+                    distance_squared = (cx-x)**2 + (cy-y)**2
+                    if (distance_squared <= snap_radius**2 and strength[cy, cx] > threshold
+                            and strength[cy, cx] == local_maximum[cy, cx]):
+                        candidates.append((-float(strength[cy, cx]), distance_squared, cy, cx))
+            used = None
+            if candidates:
+                _, _, y, x = min(candidates)
+                used = [x, y]
+        reason = None
+        if used is None:
+            reason = "zu_wenig_struktur"
+        elif _window(gray, (x, y), radius) is None:
+            reason = "am_bildrand"
+        elif np.any(_window(character, (x, y), radius)):
+            reason = "im_zeichenbereich"
+        elif not np.all(_window(outside, (x, y), radius)):
+            reason = "ausserhalb_rahmenband"
+        elif strength[y, x] <= threshold or strength[y, x] != local_maximum[y, x]:
+            reason = "zu_wenig_struktur"
+        else:
+            patch, search = _window(gray, (x, y), h), _window(gray, (x, y), h+r)
+            _, peak, ambiguous = _peak(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config)
+            if ambiguous or peak < config.min_peak:
+                ambiguous_count += 1
+                reason = "mehrdeutig"
+            elif any(np.linalg.norm(np.asarray(region.centre) - (x, y)) < config.min_spacing_px for region in regions):
+                reason = "zu_nah"
+        results.append({"requested_centre": point.tolist(), "centre": [x, y], "used_centre": used,
+                        "ok": reason is None, "reason": reason})
+        if reason is None:
+            regions.append(FrameRegion((x, y), config.patch_size))
+    proposal = _region_proposal(gray, quad, zone, outer, tuple(regions), ambiguous_count, config)
+    proposal.metrics["centre_results"] = results
+    return proposal
+
+
+def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config):
     edges = _edge_model(gray, quad, config)
     counts = [sum(edge.side == side for edge in edges) for side in range(4)]
     centres = [region.centre for region in regions]

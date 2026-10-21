@@ -117,7 +117,7 @@ def build_live_pipeline(
         except (ValueError, KeyError, TypeError) as exc:
             raise StartRefused(f"Rahmenbereiche ungueltig: {exc} - neu einrichten") from exc
         tracking = {"mode": "rahmenbereiche", "version": 1,
-                    "regions": len(block["proposal"]["regions"])}
+                    "regions": len(block["proposal"]["regions"]), "auswahl": block.get("auswahl", "automatisch")}
     else:
         locator = None
     # Die bisherige Zwei-Argument-Factory bleibt fuer injizierte Locators erhalten.

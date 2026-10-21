@@ -69,6 +69,8 @@ export function connectionView(status, lastOkMs, nowMs, httpStatus) {
 
 if (typeof document !== 'undefined') {
   let csrf = '';
+  let regionBusy = false;
+  let refreshSequence = 0;
   let trackingReasons = null;
   let fullStatusReceived = false;
   let actionError = '';
@@ -85,6 +87,7 @@ if (typeof document !== 'undefined') {
     const data = await response.json().catch(() => ({}));
     actionError = response.ok ? '' : data.error || response.statusText;
     renderError();
+    return response.ok;
   };
   const renderView = (view) => {
     $('headline').textContent = view.headline;
@@ -158,21 +161,67 @@ if (typeof document !== 'undefined') {
     $('tracking-mode').textContent = mode === 'rahmenbereiche' ? 'Nachführung: Rahmenbereiche'
       : mode === 'ecc_alt' ? 'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen'
       : mode === 'injiziert' ? 'Nachführung: injiziert' : '';
-    $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
-      const img = document.createElement('img');
-      img.src = `/live/setup/${name}.png?${s.session_id}&${s.setup?.proposal_revision ?? ''}`;
-      img.alt = name;
-      return img;
-    }));
+    const editable = s.state === 'setup_ready' && s.setup?.proposal_revision != null;
+    $('region-editor').hidden = !editable;
+    $('region-add').disabled = !editable || regionBusy;
+    $('confirm').disabled = regionBusy;
+    if (s.session_id !== lastStatus?.session_id || !editable) $('edit-regions').checked = false;
+    $('region-selection').textContent = `Auswahl: ${s.setup?.auswahl || 'automatisch'}`;
+    const regions = s.setup?.regions || [];
+    if (s.setup?.proposal_revision !== lastStatus?.setup?.proposal_revision || s.state !== lastStatus?.state) {
+      $('region-list').replaceChildren(...regions.map((region, index) => {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = `Bereich ${index + 1} entfernen (${region.centre.join(', ')})`;
+        button.disabled = !editable;
+        button.onclick = () => editRegions([], [index], s.setup.proposal_revision);
+        item.append(button);
+        return item;
+      }));
+    }
+    const reasons = {im_zeichenbereich: 'im Zeichenbereich', ausserhalb_rahmenband: 'außerhalb des Rahmenbands',
+      am_bildrand: 'am Bildrand', zu_wenig_struktur: 'zu wenig zweidimensionale Struktur',
+      mehrdeutig: 'mehrdeutige Struktur', zu_nah: 'zu nah an einem anderen Bereich'};
+    $('region-results').textContent = (s.setup?.centre_results || []).map(result => {
+      const requested = result.requested_centre || result.centre;
+      const used = result.used_centre === undefined ? result.centre : result.used_centre;
+      return `${requested.join(',')} (verwendet: ${used ? used.join(',') : 'kein Mittelpunkt'}): ` +
+        `${result.ok ? 'geeignet' : reasons[result.reason] || result.reason}`;
+    }).join('\n');
+    // Bilder und fokussierte Entfernen-Schaltflaechen zwischen Statuspolls erhalten.
+    if (s.session_id !== lastStatus?.session_id || s.setup?.proposal_revision !== lastStatus?.setup?.proposal_revision ||
+        JSON.stringify(s.setup?.overlays) !== JSON.stringify(lastStatus?.setup?.overlays)) {
+      $('overlays').replaceChildren(...(s.setup?.overlays || []).map((name) => {
+        const img = document.createElement('img');
+        img.src = `/live/setup/${name}.png?${s.session_id}&${s.setup?.proposal_revision ?? ''}`;
+        img.alt = name;
+        if (name === 'overlay_source') {
+          img.className = $('edit-regions').checked ? 'region-editing' : '';
+          img.onclick = (event) => {
+            if (!$('edit-regions').checked || !img.naturalWidth || !img.naturalHeight) return;
+            const box = img.getBoundingClientRect();
+            const x = Math.floor((event.clientX - box.left) * img.naturalWidth / box.width);
+            const y = Math.floor((event.clientY - box.top) * img.naturalHeight / box.height);
+            const index = regions.findIndex(region => Math.abs(x - region.centre[0]) <= region.size / 2 &&
+              Math.abs(y - region.centre[1]) <= region.size / 2);
+            return editRegions(index < 0 ? [[x, y]] : [], index < 0 ? [] : [index], s.setup.proposal_revision);
+          };
+        }
+        return img;
+      }));
+    }
     $('confirm-box').hidden = s.state !== 'setup_ready';
     $('ack-label').hidden = !(s.setup && s.setup.overall === 'WARNUNG');
   };
-  const tick = async () => {
+  const refresh = async () => {
+    const sequence = ++refreshSequence;
     try {
       const response = await fetch(fullStatusReceived ? '/live/status' : '/live/status?full=1');
       httpStatus = response.status;
       if (response.ok) {
         const status = await response.json();
+        if (sequence !== refreshSequence) return;
         fullStatusReceived = true;
         if (status.tracking_reasons) trackingReasons = status.tracking_reasons;
         status.tracking_reasons = trackingReasons;
@@ -185,10 +234,43 @@ if (typeof document !== 'undefined') {
     } catch {
       httpStatus = null;
       renderConnection();
-    } finally {
+    }
+  };
+  const tick = async () => {
+    try { await refresh(); } finally {
       $('preview').src = `/live/preview.jpg?${Date.now()}`;
       setTimeout(tick, 500);
     }
+  };
+  const editRegions = async (add, remove, revision) => {
+    if (regionBusy || lastStatus?.state !== 'setup_ready') return;
+    regionBusy = true;
+    $('region-add').disabled = true;
+    $('confirm').disabled = true;
+    try {
+      if (await post('/live/setup/regions', {proposal_revision: revision, add, remove})) await refresh();
+    } catch {
+      actionError = 'Bereichsänderung nicht bestätigt – Verbindung prüfen und erneut versuchen.';
+      renderError();
+    } finally {
+      regionBusy = false;
+      $('region-add').disabled = lastStatus?.state !== 'setup_ready';
+      $('confirm').disabled = false;
+    }
+  };
+  $('edit-regions').onchange = () => {
+    for (const img of $('overlays').children) {
+      if (img.alt === 'overlay_source') img.className = $('edit-regions').checked ? 'region-editing' : '';
+    }
+  };
+  $('region-add').onclick = () => {
+    const text = $('region-coordinates').value.trim();
+    if (!/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(text)) {
+      actionError = 'Koordinaten als x,y eingeben, zum Beispiel 320,240.';
+      renderError();
+      return;
+    }
+    return editRegions([text.split(',').map(Number)], [], lastStatus?.setup?.proposal_revision);
   };
   $('setup').onclick = () => post('/live/setup', {cell_text: $('cell-text').value || null});
   $('confirm').onclick = () => post('/live/confirm', {session_id: lastStatus?.session_id, confirmed_by: $('confirmed-by').value,

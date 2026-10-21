@@ -42,6 +42,10 @@ class LiveError(ValueError):
     """Bedienfehler oder abgelehnter Schritt; Meldung fuer die Seite."""
 
 
+class LiveInputError(LiveError):
+    """Ungueltige Anfrage; HTTP 400 statt eines Zustandskonflikts."""
+
+
 def run_block_reason(proposal: dict | None) -> str | None:
     """Nur erfolgreiches Gegenlesen erlaubt einen normalen Lauf."""
     check = (proposal or {}).get("setup_checks", {}).get("checks", {}).get("gegenlesen")
@@ -179,6 +183,9 @@ class LiveService:
                 block = self._proposal.get("live_tracking")
                 if block is not None:
                     setup["proposal_revision"] = block.get("proposal_revision")
+                    setup["regions"] = block.get("proposal", {}).get("regions", [])
+                    setup["auswahl"] = block.get("auswahl", "automatisch")
+                    setup["centre_results"] = block.get("proposal", {}).get("metrics", {}).get("centre_results", [])
                 check_reasons = {
                     name: check["reason"] for name, check in checks.get("checks", {}).items() if check.get("reason")
                 }
@@ -465,6 +472,35 @@ class LiveService:
             reader_check=result.reader_check,
             live_tracking=True,
         )
+
+    def edit_regions(self, *, proposal_revision, add, remove) -> dict:
+        """Nur den aktuellen Vorschlag bearbeiten, nie waehrend eines Laufs."""
+        with self._operation_lock:
+            with self._lock:
+                if self._state == "running":
+                    raise LiveError("Lauf zuerst beenden - Rahmenbereiche nicht bearbeitbar")
+                if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
+                    raise LiveError("Kein aktueller Vorschlag zum Bearbeiten")
+                block = self._proposal.get("live_tracking")
+                if block is None:
+                    raise LiveError("Kein aktueller Rahmenvorschlag - neu einrichten")
+                if proposal_revision is None or proposal_revision != block.get("proposal_revision"):
+                    raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
+                proposal, session_dir = self._proposal, self._session_dir
+            try:
+                updated = live_setup.edit_regions(
+                    proposal, add=add, remove=remove, out_dir=session_dir / "setup",
+                    at_utc=self._wall().astimezone(UTC).isoformat(),
+                )
+            except live_setup.SetupInputError as exc:
+                raise LiveInputError(str(exc)) from exc
+            except (live_setup.SetupError, ValueError, OSError) as exc:
+                raise LiveError(str(exc)) from exc
+            with self._lock:
+                self._proposal = updated
+                self._run_block = run_block_reason(updated)
+            return {"proposal_revision": updated["live_tracking"]["proposal_revision"],
+                    "centre_results": updated["live_tracking"]["proposal"]["metrics"]["centre_results"]}
 
     def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False,
                 use_tolerance: bool = False, proposal_revision: str | int | None = None) -> None:

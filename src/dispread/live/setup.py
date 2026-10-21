@@ -19,6 +19,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Protocol
 
 import cv2
@@ -31,7 +32,7 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_f
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
-from dispread.live.frame_tracking import RegionProposal, propose_regions
+from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, proposal_from_regions, propose_regions
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
@@ -54,6 +55,10 @@ CellTextSource = Callable[[Callable[[], np.ndarray]], tuple[np.ndarray, str]]
 
 class SetupError(ValueError):
     """Einrichtung abgebrochen; die Meldung ist fuer den Bediener."""
+
+
+class SetupInputError(SetupError):
+    """Ungueltige Eingabe statt eines Konflikts mit dem Einrichtungszustand."""
 
 
 class SetupCamera(Protocol):
@@ -382,6 +387,7 @@ def write_overlays(
     overall: str | None = None,
     edge_cells: tuple[int, ...] | None = None,
     tracking_proposal: RegionProposal | None = None,
+    write_sampling: bool = True,
 ) -> list[Path]:
     """overlay_source.png, overlay_rectified.png und (mit Fit) overlay_sampling.png."""
     written: list[Path] = []
@@ -414,7 +420,7 @@ def write_overlays(
     cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
     written.append(out_dir / "overlay_source.png")
     crop = rectify(image, quad, target_size=target_size)
-    if fit is not None and edge_cells is not None:
+    if write_sampling and fit is not None and edge_cells is not None:
         cv2.imwrite(str(out_dir / "overlay_sampling.png"), draw_sampling_overlay(crop.image, edge_cells=edge_cells))
         written.append(out_dir / "overlay_sampling.png")
     rectified = crop.image
@@ -508,11 +514,16 @@ def propose_with_fit(
         "setup_checks": checks_dict,
     }
     if tracking_proposal is not None:
+        proposal["overlay_evidence"] = {
+            "quad": quad, "assigned_points": fit.assigned_points, "rejected_points": fit.rejected_points,
+            "edge_cells": list(checks.checks["kanten"].cells), "overall": checks_dict["overall"],
+        }
         proposal["live_tracking"] = {
             "version": 1, "method": "rahmenbereiche", "config": tracking_proposal.config,
             "proposal": tracking_proposal.to_dict(),
             "frame_sha256": hashlib.sha256(Path(frame_path).read_bytes()).hexdigest(),
             "proposal_revision": uuid.uuid4().hex,
+            "auswahl": "automatisch", "edits": [],
         }
     if setup_attempt is not None:
         proposal["setup_attempt"] = setup_attempt
@@ -524,6 +535,73 @@ def propose_with_fit(
         **({"tracking_proposal": tracking_proposal} if tracking_proposal is not None else {}),
     )
     return proposal
+
+
+def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str) -> dict:
+    """Auswahl am unveraenderten Standbild pruefen und neu versionieren."""
+    if "overlay_evidence" not in proposal:
+        raise SetupError("Vorschlag ohne Overlay-Belege - neu einrichten")
+    block = proposal["live_tracking"]
+    current = block["proposal"]["regions"]
+    if not isinstance(add, list) or not isinstance(remove, list) or not (add or remove):
+        raise SetupInputError("Bereichsaenderung braucht Listen add und remove mit mindestens einer Aenderung")
+    if (any(type(index) is not int or not 0 <= index < len(current) for index in remove)
+            or len(set(remove)) != len(remove)):
+        raise SetupInputError("Ungueltiger oder doppelter Bereichsindex")
+    if len(current) - len(remove) + len(add) > 24:
+        raise SetupInputError("Hoechstens 24 Rahmenbereiche erlaubt")
+    if len(block.get("edits", [])) + len(add) + len(remove) > 50:
+        raise SetupError("Hoechstens 50 Bereichsaenderungen je Vorschlag erlaubt - neu einrichten")
+    for point in add:
+        if (not isinstance(point, list) or len(point) != 2
+                or any(type(value) not in (int, float) or (type(value) is float and not math.isfinite(value))
+                       for value in point)):
+            raise SetupInputError("Bereich braucht zwei endliche Pixelkoordinaten")
+    frame = Path(proposal["frame"])
+    if not frame.is_file() or hashlib.sha256(frame.read_bytes()).hexdigest() != block["frame_sha256"]:
+        raise SetupError("Einrichtungsbild fehlt oder wurde geaendert - neu einrichten")
+    image = cv2.imread(str(frame))
+    if image is None:
+        raise SetupError("Einrichtungsbild nicht lesbar - neu einrichten")
+    height, width = image.shape[:2]
+    if any(not (0 <= x < width and 0 <= y < height) for x, y in add):
+        raise SetupInputError("Bereichskoordinaten liegen ausserhalb des Quellbilds")
+    kept = [(index, region["centre"]) for index, region in enumerate(current) if index not in remove]
+    tracking = proposal_from_regions(image, proposal["quad"], add, FrameTrackingConfig.from_dict(block["config"]),
+                                     kept_centres=[centre for _, centre in kept])
+    results = tracking.metrics["centre_results"]
+    for (index, centre), result in zip(kept, results[:len(kept)], strict=True):
+        if not result["ok"]:
+            raise SetupError(
+                f"Beibehaltener Rahmenbereich {index} am Mittelpunkt {centre} "
+                f"abgelehnt ({result['reason']}) - neu einrichten"
+            )
+    updated = deepcopy(proposal)
+    new_block = updated["live_tracking"]
+    new_block.update(proposal=tracking.to_dict(), proposal_revision=uuid.uuid4().hex, auswahl="manuell")
+    edits = [{"action": "remove", "index": index, "centre": current[index]["centre"],
+              "requested_centre": current[index]["centre"], "used_centre": current[index]["centre"], "at_utc": at_utc}
+             for index in remove]
+    edits.extend({"action": "add", "requested_centre": point, "at_utc": at_utc, **result}
+                 for point, result in zip(add, results[len(kept):], strict=True))
+    new_block["edits"] = block.get("edits", []) + edits
+    checks = updated["setup_checks"]["checks"]
+    checks["nachfuehrung"] = {
+        "status": "OK" if tracking.ok else "FEHLER",
+        "reason": "; ".join(REASONS[reason] for reason in tracking.reasons) or None,
+        "metrics": tracking.metrics,
+    }
+    updated["setup_checks"]["overall"] = max(
+        (check["status"] for check in checks.values()), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__,
+    )
+    evidence = updated["overlay_evidence"]
+    evidence["overall"] = updated["setup_checks"]["overall"]
+    write_overlays(image, updated["quad"], CharGrid.from_dict(updated["grid"]), out_dir,
+                   target_size=tuple(updated["target_size"]), fit=SimpleNamespace(**evidence),
+                   overall=evidence["overall"], edge_cells=tuple(evidence["edge_cells"]),
+                   tracking_proposal=tracking, write_sampling=False)
+    (out_dir / "proposal.json").write_text(json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8")
+    return updated
 
 
 def confirm_proposal(
