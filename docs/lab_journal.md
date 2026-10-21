@@ -2138,3 +2138,27 @@ Verarbeitung in der Sandbox bei geteilter CPU.
 **Belege:** [Zahlen und Artefakte](VALIDATION.md#r13-replay-2026-10-21),
 Skript `scripts/r13-replay.py`. Keine Hardware angefasst, kein Dienststart,
 keine Schreibzugriffe unter `var/`.
+
+## 2026-10-21 — R13: Trackingverlust reproduziert, Rahmen-Tracker, Nacht { #r13-entwicklung-2026-10-21 }
+
+**Ziel:** Den inhaltsabhängigen Trackingverlust des Werteplan-Laufs an echten
+Bildern belegen und eine Nachführung bauen, die nur feste Rahmenstrukturen nutzt.
+
+**Aufbau:** Werkbank um 18:12 beendet, damit die Kamera frei ist; Aufstellung
+unverändert. `sync-record.py` mit Werteplan 1/2/0,5/5/10 und geprüfter
+Rückstellung, Raumlicht noch an (Bildmittel 153 gegen 155 im Einrichtungsbild).
+Um 22:00 dieselbe Aufnahme ohne Werteplan bei ausgeschaltetem Licht.
+
+**Beobachtung:** Der alte Tracker verliert bei Faktor 2 und 5 fast alle Bilder,
+obwohl sich nichts bewegt; bei Faktor 2 verschiebt die Anzeige zusätzlich
+den Zahlenblock (`+ 1.2114`). Der neue Tracker hält alle Bilder. Im Dunkeln
+verschwinden Rahmen und Gehäuse vollständig; nur das LCD-Fenster leuchtet.
+Der neue Tracker lehnt dann ab, der Leser könnte das LCD noch lesen.
+
+**Deutung:** Der Fehler lag in der Nachführung, nicht im Leser und nicht in
+der Geometrie. Für den Betrieb ohne Raumlicht wäre eine eigene Nachführung an
+den LCD-Fensterecken nötig; das ist bewusst nicht als Rückfallpfad eingebaut.
+
+**Offen:** getrennte Abnahme-Aufnahmen 2026-10-22 (eingefrorener Stand),
+Live-Läufe mit neuer Einrichtung an zwei Aufstellungen mit der Person,
+Bewegung und Abdeckung. Zahlen: [VALIDATION](VALIDATION.md#r13-entwicklung-2026-10-21).

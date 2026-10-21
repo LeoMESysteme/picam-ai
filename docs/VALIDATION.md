@@ -3314,3 +3314,49 @@ Ende-zu-Ende-Latenz. Die 1-s-Telegrammlückengrenze bleibt Vorabwert (OQ-40).
 **Artefakte:** `.superpowers/sdd/2026-10-21-r13/r5-dev-ecc.json`,
 `r5-dev-frame.json` und `task-R5-report.md` am selben Ort; Aufnahmedaten
 unverändert. Aufbau und Deutung im [Laborjournal](lab_journal.md#r13-replay-2026-10-21).
+
+## 2026-10-21 — R13: Rahmen-Tracker, Entwicklung, Nachtaufnahme und Freeze { #r13-entwicklung-2026-10-21 }
+
+**Entwicklungsdatensatz** `var/diagnostics/r13-werteplan-20261021` (lokale Daten):
+`sync-record.py` an der unbewegten Aufstellung der Sitzung
+`live-20261021T151835Z`, Raumlicht, 18:15 MESZ, 568 PNG mit 3 Hz, Werteplan
+`1:25,2:35,0.5:25,5:35,10:25,1:15`, Rückstellung geprüft (alle Register gleich
+dem Rückstellpunkt). Aufgenommen und ausgewertet ohne Person, mit deren
+vorheriger Freigabe für Kamera und `set norm`.
+
+| Settled-Bilder je Faktor | 1 | 2 | 0,5 | 5 | 10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Alter ECC-Tracker gehalten | 169/172 | 3/106 | 74/77 | 5/106 | 76/77 |
+| Rahmen-Tracker gehalten | 172/172 | 106/106 | 77/77 | 106/106 | 77/77 |
+
+Damit ist der Befund des Werteplan-Laufs reproduziert: Bei Faktor 2 und 5
+verliert ECC fast jedes Bild (`low_score`, Score 0,53/0,60), während ECC selbst
+höchstens 0,9 px Verschiebung und 0,17° Drehung schätzt — die Geometrie stimmt,
+der Score hängt vom Anzeigeinhalt ab. Der Rahmen-Tracker (begrenzte Fenster auf
+Rahmen und LCD-Fensterecken, starre Bewegung, unabhängige LCD-Randprüfung)
+hält alle Bilder, Eckabweichung höchstens 0,60 px (dieselbe systematische
+Abweichung zeigt ECC), 4,4 ms je Bild. Durch die ganze Lesekette
+(Offline-Replay, [R13-5](#r13-replay-2026-10-21)): stabile Fenster 429/429
+VALID, 0 Fehllesungen.
+
+**Nachtaufnahme** `var/diagnostics/r13-licht-aus-nacht-20261021`, 22:00 MESZ,
+Raumlicht aus, 39 Bilder ohne `set norm`, Bildmittel 0,9/255: nur das
+hinterleuchtete LCD sichtbar. Der Leser liest es (Replay mit ECC: 0/26
+Fehllesungen, weil gerade derselbe Wert wie im Einrichtungsbild steht). Der
+Rahmen-Tracker lehnt alle 39 Bilder ab (`rahmen_mehrdeutig`): sicher, aber
+**ohne Raumlicht nicht verfügbar**. Die Freigabe gilt ohnehin nur für Raumlicht.
+
+**Freeze** (Commit `52a64a7`, vor den Abnahme-Aufnahmen 2026-10-22):
+Randpunkte nur mit Stufe ≥ 36 Graustufen; schwache Seiten werden nicht geprüft,
+verlangt sind drei starke Seiten, je Achse eine (an dieser Aufstellung ist die
+Unterkante schwach). Begründung aus Prinzip, nicht aus Abnahmedaten. Reviews mit
+gezielten Angriffen (637 Bewegungen, 300 zufällige Teilverdeckungen,
+übereinstimmend falsche Rahmenbewegung): kein angenommener Quad über 2,0 px;
+den Grenzfall von 2,0 px erreicht nur eine von allen zwölf Bereichen
+gleichzeitig gemeldete falsche Bewegung bei ruhendem Glas. Helligkeit ×0,6,
+5×5-Unschärfe und Rauschen σ 5 werden gehalten, ab ×0,5 abgelehnt.
+Prüfsumme `frame_tracking.py` `7400f4ff…`.
+
+**Kein Abnahme-Lauf:** eine Aufstellung, unbewegt, 3 Hz statt 30 Hz, keine
+Bewegung oder Abdeckung durch eine Person. Live-Läufe mit dem neuen Tracker
+brauchen eine neue Einrichtung mit namentlicher Bestätigung der Rahmenbereiche.
