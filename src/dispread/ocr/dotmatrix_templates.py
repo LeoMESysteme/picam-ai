@@ -57,21 +57,49 @@ def distance(x: np.ndarray, mean: np.ndarray, std: np.ndarray) -> float:
     return float(np.sqrt(np.mean(((x - mean) / np.maximum(std, SIGMA_FLOOR)) ** 2)))
 
 
+@dataclass(frozen=True)
+class StackedTemplates:
+    classes: tuple[str, ...]
+    mean: np.ndarray
+    inv_std: np.ndarray
+    # Division wie bisher: Multiplikation mit dem Kehrwert kann an einer
+    # Freigabegrenze die Entscheidung durch Float32-Rundung veraendern.
+    std: np.ndarray
+    d_max: float
+    margin_min: float
+
+
+def _stack(mean, std, d_max=0.0, margin_min=0.0) -> StackedTemplates:
+    classes = tuple(mean)
+    means = np.stack([mean[c] for c in classes]).astype(np.float32)
+    scales = np.maximum(np.stack([std[c] for c in classes]).astype(np.float32), SIGMA_FLOOR)
+    return StackedTemplates(classes, means, 1 / scales, scales, d_max, margin_min)
+
+
+def stack_templates(t: Templates) -> StackedTemplates:
+    """Vorlagen einmal in ihrer stabilen Klassenreihenfolge stapeln."""
+    return _stack(t.mean, t.std, t.d_max, t.margin_min)
+
+
+def _distances(vectors: np.ndarray, t: StackedTemplates) -> tuple[np.ndarray, np.ndarray]:
+    distances = np.sqrt(np.mean(((vectors[None, :, :] - t.mean[:, None, :]) / t.std[:, None, :]) ** 2, axis=2))
+    shifts = np.argmin(distances, axis=1)
+    return distances[np.arange(len(t.classes)), shifts], shifts
+
+
 def _best_per_class(vectors: np.ndarray, mean, std) -> dict[str, tuple[float, int]]:
-    out = {}
-    for ch in mean:
-        ds = [distance(v, mean[ch], std[ch]) for v in vectors]
-        j = int(np.argmin(ds))
-        out[ch] = (ds[j], j)
-    return out
+    t = _stack(mean, std)
+    distances, shifts = _distances(vectors, t)
+    return {c: (float(distances[i]), int(shifts[i])) for i, c in enumerate(t.classes)}
 
 
-def _decide(vectors, mean, std, d_max, margin_min) -> CellDecision:
-    per = _best_per_class(vectors, mean, std)
-    order = sorted(per, key=lambda c: per[c][0])
-    best, second = order[0], order[1]
-    d_best, j = per[best]
-    d_second = per[second][0]
+def _decide(vectors, t: StackedTemplates, d_max, margin_min) -> CellDecision:
+    distances, shifts = _distances(vectors, t)
+    order = np.argsort(distances, kind="stable")
+    first, runner_up = order[:2]
+    best, second = t.classes[first], t.classes[runner_up]
+    d_best, j = float(distances[first]), int(shifts[first])
+    d_second = float(distances[runner_up])
     gap = d_second - d_best
     margin = min(d_max - d_best, gap - margin_min)
     reason = None
@@ -82,8 +110,9 @@ def _decide(vectors, mean, std, d_max, margin_min) -> CellDecision:
     return CellDecision(None if reason else best, best, second, d_best, d_second, j, reason, float(margin))
 
 
-def classify(vectors: np.ndarray, t: Templates, d_max_factor: float = 1.0) -> CellDecision:
-    return _decide(vectors, t.mean, t.std, t.d_max * d_max_factor, t.margin_min)
+def classify(vectors: np.ndarray, t: Templates | StackedTemplates, d_max_factor: float = 1.0) -> CellDecision:
+    stacked = stack_templates(t) if isinstance(t, Templates) else t
+    return _decide(vectors, stacked, t.d_max * d_max_factor, t.margin_min)
 
 
 def _require_classes(keys) -> None:

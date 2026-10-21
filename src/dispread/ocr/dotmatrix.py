@@ -18,7 +18,7 @@ import numpy as np
 from dispread.layout import CharLayout
 from dispread.ocr import GlyphEvidence, ReadResult
 from dispread.ocr.dotmatrix_sampling import MIN_CONTRAST, normalized, sample_image
-from dispread.ocr.dotmatrix_templates import Templates, classify, load_templates
+from dispread.ocr.dotmatrix_templates import Templates, classify, load_templates, stack_templates
 
 BACKEND_ID = "dotmatrix"
 BACKEND_VERSION = "3"
@@ -49,6 +49,7 @@ class DotMatrixReader:
         if not 1.0 <= d_max_factor <= 2.0:
             raise ValueError("d_max_factor muss zwischen 1.0 und 2.0 liegen")
         self._t = templates
+        self._stacked = stack_templates(templates)
         self._d_max_factor = d_max_factor
 
     @classmethod
@@ -86,7 +87,7 @@ class DotMatrixReader:
             return self._reject("kontrast", diag, layout)
 
         norm = normalized(sampled)
-        decisions = [classify(norm[i], self._t, d_max_factor=self._d_max_factor) for i in range(len(cells))]
+        decisions = [classify(norm[i], self._stacked, d_max_factor=self._d_max_factor) for i in range(len(cells))]
         diag["cells"] = [
             {
                 "text": d.text, "reason": d.reason,
@@ -145,7 +146,7 @@ class DotMatrixReader:
             return True
         sampled = sample_image(gray, layout.grid, layout.blank_cells)
         norm = normalized(sampled, ink=ink)
-        decisions = [classify(norm[i], self._t, d_max_factor=self._d_max_factor) for i in range(len(layout.blank_cells))]
+        decisions = [classify(norm[i], self._stacked, d_max_factor=self._d_max_factor) for i in range(len(layout.blank_cells))]
         return all(d.text == " " for d in decisions)
 
     def _reject(self, reason, diag, layout, glyphs=(), sign_readable=True) -> ReadResult:

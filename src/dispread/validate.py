@@ -56,7 +56,8 @@ class GateConfig:
     stale_after_ns: int = 500_000_000
     #: Uebergang statt unlesbar (Konzept.md §7, Anzeigewechsel): hoechstens so
     #: viele unlesbare Zellen, alle lesbaren gleich dem letzten freigegebenen
-    #: Zellentext, und dieser hoechstens `transition_window_ns` alt.
+    #: Zellentext, und dieser hoechstens `transition_window_ns` alt. Wirksam ist
+    #: min(transition_window_ns, stale_after_ns): STALE geht immer vor (live 0,5 s).
     transition_max_cells: int = 3
     transition_window_ns: int = 1_000_000_000
     #: Betriebszustaende, die einen Zahlenwert ausschliessen.

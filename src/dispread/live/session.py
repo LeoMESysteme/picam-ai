@@ -116,6 +116,9 @@ class LiveSession:
         self._meta: dict = {}
         self._seen = 0
         self._by_status: dict[str, int] = {}
+        #: TRANSITION wegen Ziffernwechsel (Grund anzeige_wechselt), getrennt
+        #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
+        self._display_changing = 0
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -239,6 +242,8 @@ class LiveSession:
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             self._frames_read += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
+            if record.reject_reasons and record.reject_reasons[0] == "anzeige_wechselt":
+                self._display_changing += 1
             if self._reader_tolerance is not None and record.status is ValueStatus.VALID:
                 read = self._pipeline.last_read
                 cells = read.diagnostics.get("cells", []) if read is not None else []
@@ -312,6 +317,7 @@ class LiveSession:
         owner_status = self._owner.status()
         self.summary = {
             "by_status": dict(self._by_status),
+            "transition_display_changing": self._display_changing,
             "frames_read": self._frames_read,
             "tolerance_frames": self._tolerance_frames,
             "frames_skipped": self._frames_skipped,

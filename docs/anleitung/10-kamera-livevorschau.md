@@ -155,7 +155,7 @@ Ablehnungsgrund statt gültiger Ziffern:
 | Status | Bedeutung |
 | --- | --- |
 | VALID | Frischer, freigegebener Wert; Live-Freigabe verlangt zwei bestätigende Bilder. |
-| TRANSITION | Noch nicht über die erforderlichen Bilder bestätigt. Echte Sprünge werden nicht geglättet. |
+| TRANSITION | Noch nicht über die erforderlichen Bilder bestätigt (`awaiting_confirmation`), oder die Anzeige wechselt gerade („Wert wechselt“, `anzeige_wechselt`): höchstens 3 Zellen sind Mischziffern, alle lesbaren Zellen gleichen dem letzten freigegebenen Wert, und dieser ist höchstens 0,5 s alt. Kein Wert wird freigegeben; echte Sprünge werden nicht geglättet. Ein Finger über 1–3 Zellen kann kurz ebenfalls als „Wert wechselt“ erscheinen, danach STALE. |
 | UNREADABLE | Bild, Tracking oder Ablesung abgelehnt; Ablehnungsgrund prüfen. |
 | STALE | Kein aktueller gültiger Wert: Ablesung älter als 0,5 s, Lauf beendet oder Verbindung/Anmeldung verloren. |
 

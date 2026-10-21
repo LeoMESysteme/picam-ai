@@ -3047,3 +3047,24 @@ Fehllesungen bei angepasster Toleranz.
 
 Deutung und Beobachtungen:
 [Laborjournal](lab_journal.md#messpfad-live-bedienerlaeufe-2026-10-21).
+
+
+## 2026-10-21 — Leser-Vektorisierung: Sandbox-Laufzeit {#leser-vektorisierung-sandbox-2026-10-21}
+
+Indikativer Softwarevergleich mit geteilter, begrenzter CPU, keine Messung
+am Prüfstand und kein Nachweis für 30 Bilder/s oder die Pi-Schutzgrenzen.
+Je Bild fünf Aufwärmlesungen, danach 50 Aufrufe von `reader.read`,
+Zeitdifferenzen mit `time.perf_counter_ns` (monotone Prozessmessung).
+Entzerren und Vorlagenaufbau außerhalb des Messfensters.
+
+| 400 × 160 Crop | Median vorher | Median nachher | p90 vorher | p90 nachher |
+| --- | --- | --- | --- | --- |
+| Synthetisch `render("+0.60972 ")`, synthetische Vorlagen | 46,81 ms | 4,42 ms | 59,46 ms | 4,64 ms |
+| `live-20261021T114122Z/setup/still.png`, eingefrorene Stufe-2c-Vorlagen | 45,50 ms | 5,15 ms | 56,65 ms | 5,30 ms |
+
+Echtes Standbild mit Quad/Raster aus der zugehörigen `proposal.json`
+entzerrt; alle Daten unter `var/` ausschließlich gelesen. Der Vergleichstest
+prüft zusätzlich alle 34 lesbaren Setup-Bilder (17 Vorschläge), beide
+Zellengruppen und die Toleranzfaktoren 1,0 / 1,41 / 2,0 gegen den bisherigen
+Float32-Rechenweg. Dauerlast über 60 s, Prozess-CPU ≤ 150 %, Temperatur
+< 75 °C und Drosselbits `0x0` bleiben durch den Controller am Aufbau zu prüfen.

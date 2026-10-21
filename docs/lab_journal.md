@@ -1917,3 +1917,25 @@ validiert. Offen: Leser auf 30 Bilder/s mit Pi-Schutz, TRANSITION statt
 UNREADABLE bei Wertwechseln, Referenzaufzeichnung zur Toleranzvalidierung,
 Referenzlauf, Ausgabe an GSVmulti (OQ-07, Protokoll fehlt), später
 UI/UX-Überarbeitung der Werkbank.
+
+
+## 2026-10-21 — Leser-Vektorisierung in der Sandbox
+
+**Aufbau:** Softwaremessung, keine Hardwareänderung. Synthetischer
+400 × 160 Crop `+0.60972 ` mit synthetischen Vorlagen und gespeichertes
+Standbild `var/live/live-20261021T114122Z/setup/still.png` mit Quad/Raster
+aus `proposal.json`, Stufe-2c-Vorlagen. Fünf Aufwärmlesungen und 50
+Zeitdifferenzen je Variante mit monotonem `time.perf_counter_ns`; Entzerren
+vor der Zeitmessung. CPU währenddessen geteilt und begrenzt.
+
+**Beobachtung:** Median synthetisch 46,81 → 4,42 ms, echtes Standbild
+45,50 → 5,15 ms. Zahlen und p90 stehen in [VALIDATION](VALIDATION.md#leser-vektorisierung-sandbox-2026-10-21).
+Klassen und Verschiebungen werden gemeinsam verglichen, Punktmitten und
+Abtastung für alle Zellen gemeinsam berechnet. Division in Float32 bleibt
+erhalten, damit Rundung an Freigabegrenzen keine Entscheidung ändert.
+
+**Deutung:** Die Schleifen waren der wesentliche Engpass; die Indikation
+liegt unter 15 ms. Das belegt weder Dauerlast noch Live-Durchsatz auf dem
+ruhigen Pi. Der Controller misst 60 s am Aufbau mit CPU, Temperatur und
+Drosselbits; diese Sandbox-Messung ersetzt keine Abnahme. `var/` blieb
+unverändert, kein Kamera- oder serieller Zugriff.

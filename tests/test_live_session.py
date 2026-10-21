@@ -575,3 +575,24 @@ def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, n
     assert data['reader_tolerance'] == tolerance
     assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
         first.to_dict(), second.to_dict()]
+
+
+def test_session_never_switches_opencv_threads(tmp_path, monkeypatch):
+    # Umschalten waehrend laufender Kamera-Threads kann OpenCV abstuerzen
+    # lassen; die Grenze setzt `dispread serve` einmal beim Start.
+    calls = []
+    monkeypatch.setattr(cv2, "setNumThreads", calls.append)
+    session = _session(tmp_path, [])
+    session.start()
+    session.stop()
+    assert calls == []
+
+
+def test_serve_limits_opencv_threads_before_any_camera_thread():
+    import inspect
+
+    from dispread.workbench.server import serve
+
+    source = inspect.getsource(serve)
+    assert "cv2.setNumThreads(LIVE_CV_THREADS)" in source
+    assert source.index("cv2.setNumThreads(LIVE_CV_THREADS)") < source.index("CameraOwner(")

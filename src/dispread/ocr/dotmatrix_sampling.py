@@ -73,12 +73,23 @@ _CELL_INK_RANK = 1
 
 def dot_centers(grid: CharGrid, cell: int, shift: tuple[int, int] = (0, 0)) -> np.ndarray:
     """Punktmitten einer Zelle im entzerrten Bild, Form (40, 2) als (x, y)."""
+    return _dot_centers(grid, np.asarray(cell), np.asarray(shift))
+
+
+def _dot_centers(grid: CharGrid, cells: np.ndarray, shifts: np.ndarray) -> np.ndarray:
+    """Punktmitten mit beliebigen fuehrenden Zell-/Verschiebungsachsen."""
     col_w = grid.pitch / (grid.dot_columns + grid.gap_columns)
     row_h = (grid.bottom - grid.top) / ROWS
-    x0 = grid.left + cell * grid.pitch + shift[0]
-    y0 = grid.top + shift[1]
-    pts = [(x0 + (c + 0.5) * col_w, y0 + (r + 0.5) * row_h) for r in range(ROWS) for c in range(COLS)]
-    return np.asarray(pts, dtype=np.float32)
+    # Erst in float64 wie die bisherige Python-Schleife rechnen, am Ende
+    # auf float32 runden; Bruchteile des Rasters bleiben so identisch.
+    x0 = grid.left + cells * grid.pitch + shifts[..., 0]
+    y0 = grid.top + shifts[..., 1]
+    cols = np.tile(np.arange(COLS, dtype=np.float64), ROWS)
+    rows = np.repeat(np.arange(ROWS, dtype=np.float64), COLS)
+    x = x0[..., None] + (cols + 0.5) * col_w
+    y = y0[..., None] + (rows + 0.5) * row_h
+    x, y = np.broadcast_arrays(x, y)
+    return np.stack((x, y), axis=-1).astype(np.float32)
 
 
 @dataclass(frozen=True)
@@ -117,13 +128,11 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
         (2 * int(round(_BG_CLOSING_HALF_COLS * col_w)) + 1, 2 * int(round(_BG_CLOSING_HALF_ROWS * row_h)) + 1),
     )
     closed = cv2.erode(cv2.dilate(smooth, kernel), kernel)
-    raw = np.empty((len(cells), len(SHIFTS), N_DOTS), dtype=np.float32)
-    background_dots = np.empty_like(raw)
-    for i, cell in enumerate(cells):
-        for j, shift in enumerate(SHIFTS):
-            centers = dot_centers(grid, cell, shift)
-            raw[i, j] = _bilinear(smooth, centers)
-            background_dots[i, j] = _bilinear(closed, centers)
+    centers = _dot_centers(grid, np.asarray(cells, dtype=np.float64)[:, None], np.asarray(SHIFTS))
+    shape = (len(cells), len(SHIFTS), N_DOTS)
+    points = centers.reshape(-1, 2)
+    raw = _bilinear(smooth, points).reshape(shape).astype(np.float32)
+    background_dots = _bilinear(closed, points).reshape(shape).astype(np.float32)
     zero = SHIFTS.index((0, 0))
     background = np.percentile(raw[:, zero, :], _BACKGROUND_PERCENTILE, axis=1)
     ink = float(np.percentile(raw[:, zero, :], _INK_PERCENTILE))

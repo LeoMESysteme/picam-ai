@@ -18,7 +18,7 @@ from aiohttp import WSMsgType, web
 from dispread.camera_settings import preview_settings
 from dispread.frames import open_source
 from dispread.frames.uvc_source import UvcSource
-from dispread.live import LIVE_DATA_DIR
+from dispread.live import LIVE_CV_THREADS, LIVE_DATA_DIR
 from dispread.live.camera import CameraOwner
 from dispread.live.service import LiveError, LiveService
 
@@ -309,6 +309,10 @@ async def serve(args):
         raise ValueError("Workbench laeuft bereits") from error
     socket_path = Path(args.socket)
     socket_path.unlink(missing_ok=True)
+    # Einmal vor jedem Kamera-/Lesethread: OpenCV-Threads begrenzen, damit
+    # der Pi bedienbar bleibt. Nie waehrend laufender OpenCV-Threads
+    # umschalten (Thread-Pool wird dabei neu aufgebaut).
+    cv2.setNumThreads(LIVE_CV_THREADS)
     if args.simulate:
         owner = CameraOwner(lambda: open_source("synthetic://seven-seg"), max_fps=10)
     else:

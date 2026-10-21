@@ -174,7 +174,8 @@ gelesen zu sein.
 Bekannte Gründe heute: `state:<flag>`, `low_contrast`,
 `unreadable_cells:<n>`, `low_segment_margin`, `sign_region_unreadable`,
 `decimal_point_unknown`, `unit_mismatch:<gelesen>`, `no_value`,
-`awaiting_confirmation`, `display_not_located`. Neue Gründe sind
+`awaiting_confirmation`, `anzeige_wechselt` (TRANSITION bei Ziffernwechsel,
+steht dann an erster Stelle vor den Lesbarkeitsgründen), `display_not_located`. Neue Gründe sind
 maschinenlesbare Kurzstrings im selben Stil — sie werden ausgewertet, nicht
 gelesen.
 
