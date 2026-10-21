@@ -304,6 +304,17 @@ Die aktuellen Bedienschritte und Folgeschritte stehen oben unter Punkt 2.
 Bestätigung und Messlauf warten auf die bedienende Person (2026-10-16).
 Anschließend serielle Ausgabe an GSVmulti (OQ-07) vorbereiten.
 
+**In Arbeit seit 2026-10-21: Tempo und Übergangsstatus** (Plan
+[docs/superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md](docs/superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)).
+Der strenge Lauf verarbeitete 14,7 von 30 Bildern/s (Leser 53 ms/Bild).
+Der Leser soll auf 30 Bilder/s, mit Pi-Schutz (CPU, Temperatur, Drosselung),
+und Bilder während eines Wertwechsels sollen TRANSITION statt UNREADABLE
+tragen (nie VALID; Hand vor der Anzeige bleibt UNREADABLE). Danach Merge nach
+`master` und Worktree-Aufräumen.
+
+**Später: UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), erst wenn
+der Messpfad weitgehend fertig ist.
+
 **Offen seit 2026-10-21: angepasste Lesetoleranz validieren.** Die Werkbank
 bietet bei Gegenlesen WARNUNG eine Toleranz bis ×2,0 an (1,25 × gemessener
 Abstand, nur mit seriellem Referenzwert, Werte als „nicht validiert“

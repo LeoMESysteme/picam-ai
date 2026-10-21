@@ -2993,3 +2993,57 @@ Belege: Die Werkbank schreibt die Einrichtungsdateien unter
 `var/live/<sitzung>/setup/` (lokale Daten, nicht in Git). Aufbau, Beobachtung
 und offene Schritte stehen im versionierten
 [Laborjournal](lab_journal.md#messpfad-live-einrichtung-nach-n7-2026-10-14).
+
+## 2026-10-21 — Messpfad live: Bedienerläufe am Aufbau { #messpfad-live-bedienerlaeufe-2026-10-21 }
+
+**Aufbau:** StreamCam auf GSV-2AS / Displaytech 161A, Raumlicht und
+Tageslicht, serieller GSV-2AS-Strom als Referenz bei der Einrichtung. Die
+Läufe machte die bedienende Person über `/live`; Zahlen aus
+`var/live/<sitzung>/run-NN/` (lokale Daten, nicht versioniert).
+
+**Einordnung:** **kein formaler Abnahme-Lauf.** Die angepasste Lesetoleranz
+ist **nicht validiert** (Toleranz nicht validiert): Es gibt keine parallele Aufzeichnung des
+seriellen Stroms und keinen Abgleich der VALID-Werte gegen die Referenz
+(TODO.md).
+
+**Einrichtung am Morgen (Kamera schräg, Kameraschatten auf der Anzeige):**
+
+| Messgröße | Wert |
+| --- | --- |
+| Punkttiefe außerhalb des Schattens | 0,39–0,41 |
+| Punkttiefe im Schatten | 0,67–0,69 |
+| `d_best` an Zellen auf der Schattenkante | bis 2,30 × `d_max` |
+| Einrichtungsstandbilder mit Vorschlag | 28, beste Vermutung in allen 28 gleich der Referenz |
+| Abstand zur zweitbesten Klasse | ≥ 1,27 |
+
+Ein manueller Zellentext mit schwankender letzter Ziffer erzeugte ein
+irreführendes 2j FEHLER; behoben mit L2 (`7f71422`).
+
+**Läufe:**
+
+| Lauf | Dauer | Datensätze | VALID | TRANSITION | UNREADABLE | STALE |
+| --- | --- | --- | --- | --- | --- | --- |
+| Testlauf `live-20261021T100128Z` | nicht erfasst | Testlauf gibt nie einen Wert frei | – | – | – | – |
+| Toleranz ×1,41 `live-20261021T113859Z` | 25 s | 318 | 304 | 11 | 3 | 0 |
+| Streng `live-20261021T114122Z` | 79 s | 1168 | 911 | 68 | 188 | 1 |
+
+* Testlauf: Vermutungen nach Angabe der Person richtig, `tracking_lost` 0,
+  `track_score` mindestens 0,86 bei Wertwechseln.
+* Toleranzlauf: Nachführung ohne Verlust.
+* Strenger Lauf: viele Wertwechsel, kurz eine Hand vor der Anzeige.
+  Alle 67 Wertwechsel erfasst. Je Wechsel 270–340 ms ohne VALID
+  (LCD-Umschaltung etwa 200–300 ms plus 1 Bestätigungsbild). Hand: 1,4 s
+  UNREADABLE, `tracking_lost` 33.
+
+**Tempo (strenger Lauf):** 14,7 verarbeitete Bilder/s bei 30 Bildern/s der
+Kamera; Leser median 53 ms/Bild, gesamt 64 ms. Jedes zweite Bild entfällt;
+das verlängert die Bestätigung (`confirm_frames=2`).
+
+**Offen:** Validierung der Toleranz gegen eine Referenzaufzeichnung,
+Referenzlauf, Leser auf 30 Bilder/s, TRANSITION statt UNREADABLE bei
+Wertwechseln (Plan 2026-10-21). Über den synthetischen Sweep
+(`d_max` × 2,0: kein falscher Wert) hinaus gibt es keine Aussage zu
+Fehllesungen bei angepasster Toleranz.
+
+Deutung und Beobachtungen:
+[Laborjournal](lab_journal.md#messpfad-live-bedienerlaeufe-2026-10-21).

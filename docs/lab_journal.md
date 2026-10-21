@@ -1870,3 +1870,50 @@ ist kein formaler Abnahme-Lauf. Bestätigung durch die bedienende Person,
 Messlauf, Wertwechsel über `set norm` und Trackingmessung bei diesen
 Wertwechseln stehen weiterhin aus. Daraus folgt noch keine Aussage zur
 Live-Trefferquote oder Trackingqualität.
+
+## 2026-10-21 — Messpfad live: Bedienerläufe am Aufbau { #messpfad-live-bedienerlaeufe-2026-10-21 }
+
+**Ziel:** Den Live-Messpfad mit der bedienenden Person am echten Aufbau
+benutzen: Einrichtung, Bestätigung, Läufe. Dabei auf Licht, Schräglage und
+Wertwechsel achten.
+
+**Aufbau:** StreamCam auf GSV-2AS / Displaytech 161A, Raumlicht und
+Tageslicht, serieller Zellentext als Referenz. `dispread serve --port 8081`,
+Läufe über `/live`. Diese Dokumentation öffnete keine Hardware; Befunde
+stammen vom Controller und der bedienenden Person. Zahlen:
+[VALIDATION](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21).
+
+**Beobachtungen:**
+
+* **Schatten und Schräglage (Morgen).** Die Kamera stand schräg, ihr Schatten
+  lag auf der Anzeige. Die Punkttiefe war außerhalb des Schattens 0,39–0,41,
+  im Schatten 0,67–0,69. Zellen an der Schattenkante überschritten `d_max`
+  (`d_best` bis 2,30 × `d_max`). Die beste Vermutung stimmte dennoch in allen
+  28 Standbildern mit Vorschlag mit der Referenz überein, mit Abstand
+  ≥ 1,27 zur zweitbesten Klasse. Folge: Licht-Hinweis (Kontrastsprung
+  zwischen Zellen) und angepasste Toleranz (L3).
+* **Schwankende letzte Ziffer.** Mit manuellem Zellentext und einer
+  wechselnden letzten Ziffer meldete die Einrichtung ein irreführendes
+  2j FEHLER. Folge: Maskierung, Neuaufnahme bis zu fünfmal, 8 Zeichen und `?`
+  im Zellentext (L2).
+* **Lesesperre.** Nach Bestätigung eines Vorschlags mit Gegenlesen WARNUNG
+  waren am Prüfstand 1202/1202 Datensätze UNREADABLE. Folge: Lesesperre und
+  ausdrücklicher Testlauf (L1).
+* **Testlauf** `live-20261021T100128Z`: Die Vermutungen stimmten nach
+  Angabe der Person mit der Anzeige überein; `tracking_lost` 0,
+  `track_score` mindestens 0,86 bei Wertwechseln.
+* **Toleranzlauf ×1,41** (25 s): 304 von 318 VALID, Nachführung ohne Verlust.
+* **Strenger Lauf** (79 s, viele Wertwechsel, kurz eine Hand davor): 911 von
+  1168 VALID, 188 UNREADABLE. Alle 67 Wertwechsel erfasst. Je Wechsel
+  270–340 ms ohne VALID; das passt zur LCD-Umschaltung (etwa 200–300 ms) plus
+  einem Bestätigungsbild. Die Hand ergab 1,4 s UNREADABLE und
+  `tracking_lost` 33, wie gewollt.
+* **Bildrate.** Verarbeitet wurden 14,7 Bilder/s von 30; der Leser braucht
+  median 53 ms/Bild, die Kette 64 ms. Jedes zweite Bild entfällt.
+
+**Deutung und offen:** Der Messpfad liest am Aufbau brauchbar, aber das ist
+kein formaler Abnahme-Lauf, und die angepasste Toleranz ist nicht
+validiert. Offen: Leser auf 30 Bilder/s mit Pi-Schutz, TRANSITION statt
+UNREADABLE bei Wertwechseln, Referenzaufzeichnung zur Toleranzvalidierung,
+Referenzlauf, Ausgabe an GSVmulti (OQ-07, Protokoll fehlt), später
+UI/UX-Überarbeitung der Werkbank.

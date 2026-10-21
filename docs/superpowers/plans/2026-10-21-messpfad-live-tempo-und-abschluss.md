@@ -1,0 +1,156 @@
+# Messpfad live: Tempo, Übergangsstatus und Abschluss — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Den bisherigen Stand von `feat/messpfad-live` heute dokumentiert nach `master` bringen und die Worktrees aufräumen. Dann den Live-Leser auf die volle Kamerarate (30 Bilder/s) bringen, ohne den Pi zu überlasten, und Bilder während eines Wertwechsels als TRANSITION statt UNREADABLE kennzeichnen.
+
+**Architecture:** Der Dot-Matrix-Leser verbringt laut Profil (2026-10-21, echter Crop) ≈ 60 % der Zeit im Zeichenvergleich, einer Python-Schleife über Zeichen × Verschiebungen, und ≈ 35 % in der punktweisen Abtastung. Beides wird vektorisiert, die Entscheidungen bleiben identisch. Der Übergangsstatus entsteht im `ReleaseGate`, nur aus Leser-Diagnosen und dem letzten freigegebenen Zellentext; ein Wert wird dabei nie freigegeben.
+
+**Tech Stack:** Python 3.13, numpy, OpenCV, pytest, Node (live.js), Playwright.
+
+**Spec:** `docs/superpowers/specs/2026-10-12-messpfad-live-design.md`, `Konzept.md` §7 (Zustände gültig/Übergang/unlesbar/veraltet; „nachvollziehbares Verhalten während eines Anzeigewechsels“; „Ziffernwechsel können unvollständige oder überlagerte Zeichen erzeugen“). Befunde und Entscheidungen: `.superpowers/sdd/2026-10-21-lesesperre/progress.md` (lokal).
+
+## Global Constraints
+
+- Konzept §7: Unlesbares ablehnen statt raten. Ein Wert wird nur VALID, wenn der Leser ihn selbst annimmt und das Gate ihn bestätigt (`confirm_frames=2`).
+- Leserentscheidungen (`best`, `text`, `reason`, `d_best`, `d_second`, `margin`) bleiben nach der Beschleunigung **identisch**. Toleranz für Abstände: 1e-5 relativ. Bei Gleichstand muss dieselbe Zeichenreihenfolge herauskommen wie in `CLASSES`.
+- Pi-Schutz (Nutzervorgabe 2026-10-21: „auf keinen Fall hängen oder crashen“):
+  - Die Live-Sitzung liest weiter immer nur das neueste Bild, es entsteht keine Warteschlange.
+  - OpenCV-Threads im Live-Lauf begrenzen.
+  - Abnahme: Prozess-CPU ≤ 150 % (von 400 %), SoC-Temperatur < 75 °C, `vcgencmd get_throttled` = `0x0` über 60 s.
+- Python-Texte deutsch ohne Umlaute, HTML/JS mit Umlauten. Immer `PYTHONPATH=src`. Codex committet nicht; der Controller committet nach Review.
+- Tests vor dem Commit: nur die betroffenen Tests plus Node plus Playwright. Die volle Suite läuft danach im Hintergrund, vor jedem Merge nach `master` einmal vollständig.
+- `var/` nie verändern (nur lesen).
+
+## Review Focus
+
+1. **Gleichstände im Zeichenvergleich:** Zwei Zeichen mit (fast) gleichem Abstand dürfen nach der Vektorisierung nicht die Rangfolge tauschen. Test: synthetischer Gleichstand, und Äquivalenz auf allen echten Setup-Crops unter `var/live/*/setup`.
+2. **Dauerlast:** 60 s Live-Lesen bei 30 Bilder/s ohne steigende Latenz und ohne Drosselung. Test: Benchmark-Skript mit CPU-, Temperatur- und Drosselmessung (Task 3).
+3. **Hand vor der Anzeige:** muss UNREADABLE bleiben, nicht TRANSITION. Test: viele unlesbare Zellen oder verlorene Nachführung bleiben UNREADABLE (Task 4).
+4. **Langer Übergang:** Nach mehr als 1 s ohne VALID darf nicht mehr TRANSITION gemeldet werden, sondern UNREADABLE und später STALE. Test in Task 4.
+5. **Anderer Leser:** Der 7-Segment-Leser ohne Zelldiagnosen behält das alte Verhalten. Test in Task 4.
+
+---
+
+### Task 1: Doku zum Stand 2026-10-21 (vor dem Merge)
+
+**Files:**
+- Modify: `docs/status.md`, `docs/VALIDATION.md`, `docs/lab_journal.md`, `TODO.md`
+
+- [ ] **Step 1:** `docs/status.md` auf den Stand 2026-10-21 bringen. Inhalt:
+  - Lesesperre und Testlauf (L1), schwankende Ziffern (L2), Licht-Hinweis und angepasste Toleranz (L3).
+  - Bedienerläufe heute:
+    - Testlauf: Vermutungen richtig, `tracking_lost` 0.
+    - Toleranzlauf ×1,41: 304/318 VALID.
+    - Strenger Lauf 79 s: 911/1168 VALID, 67 Wertwechsel alle erfasst, 14,7 gelesene Bilder/s, Leser 53 ms/Bild.
+  - Offen: Toleranz-Validierung gegen Referenzaufzeichnung, Referenzlauf, GSVmulti (OQ-07), UI-Überarbeitung.
+- [ ] **Step 2:** `docs/VALIDATION.md` bekommt einen Eintrag „2026-10-21 — Messpfad live: Bedienerläufe am Aufbau“ mit den Zahlen aus Step 1. Ausdrücklich dazu: kein formaler Abnahme-Lauf, Toleranz nicht validiert.
+- [ ] **Step 3:** `docs/lab_journal.md`: Eintrag am Ende anhängen. Inhalt: Ziel, Aufbau, Beobachtungen (Schattenkante der Kamera, Punkttiefe 0,39–0,41 gegen 0,67–0,69; schräge Kamera; schwankende letzte Ziffer), was offen ist.
+- [ ] **Step 4:** `TODO.md`, Block „Messpfad live (aktiv)“: Punkt „UI/UX-Überarbeitung der Werkbank (nicht prod-ready), erst wenn der Messpfad weitgehend fertig ist“ ergänzen.
+- [ ] **Step 5:** `./.venv/bin/python scripts/oq-index.py --check` muss Exit 0 liefern. Den Doku-Build führt der Controller aus (`mkdocs build --strict`, falls vorhanden; sonst Doku-Tests).
+- [ ] **Step 6:** Commit „Doku: Stand Messpfad live 2026-10-21“.
+
+### Task 2: Merge nach `master` und Worktree-Aufräumen (Controller)
+
+- [ ] **Step 1:** `git fetch origin`; `git log --oneline HEAD..origin/master` prüfen. Ist `master` weiter, `origin/master` in den Branch mergen, Konflikte lösen und die betroffenen Tests laufen lassen.
+- [ ] **Step 2:** Die volle Suite muss auf dem Merge-Stand grün sein. Zuletzt grün bei `b0d6f1a`: 1489 passed. Erneut laufen lassen, wenn sich seit `b0d6f1a` Code geändert hat.
+- [ ] **Step 3:** `git push origin HEAD:master`, nur als Fast-Forward, kein Force. Danach den Docs-Runner bzw. CI-Status prüfen.
+- [ ] **Step 4:** Bestandsaufnahme mit `git worktree list`. Je Worktree erfassen:
+  - Branch;
+  - in `origin/master` enthalten (`git merge-base --is-ancestor`)?
+  - uncommittete Änderungen (`git -C <wt> status --porcelain`)?
+  - letzter Commit.
+- [ ] **Step 5:** Nur Worktrees entfernen, die vollständig gemergt und sauber sind: `git worktree remove <pfad>`, danach den gemergten lokalen Branch löschen (`git branch -d`). `git worktree prune`. Alles andere wird mit Begründung dem Nutzer gemeldet.
+  - Nie entfernen: den Haupt-Checkout, Worktrees mit Änderungen, ungemergte Branches.
+  - Den Haupt-Checkout (`~/picam-ai`, hinter `origin/master`, mit uncommitteter Tour-Arbeit) nicht anfassen; nur melden.
+- [ ] **Step 6:** Ergebnis im Ledger festhalten.
+
+### Task 3: Leser auf 30 Bilder/s
+
+**Files:**
+- Modify: `src/dispread/ocr/dotmatrix_templates.py` (`distance`, `_best_per_class`, `_decide`, `classify`; vorberechnete gestapelte Vorlagen)
+- Modify: `src/dispread/ocr/dotmatrix_sampling.py` (`dot_centers`, `sample_image`: alle Zellen × Verschiebungen in einem `_bilinear`-Aufruf)
+- Modify: `src/dispread/ocr/dotmatrix.py` (gestapelte Vorlagen einmal im Konstruktor bauen)
+- Modify: `src/dispread/live/session.py` (OpenCV-Threads für den Lauf begrenzen, siehe Step 6)
+- Modify: `scripts/live-reader-benchmark.py` (CPU-, Temperatur- und Drosselmessung, Zielrate)
+- Test: `tests/test_dotmatrix_reader.py`, `tests/test_dotmatrix_templates*.py` (per grep finden), `tests/test_live_session.py`, `tests/test_live_benchmark*.py` (per grep finden)
+
+**Interfaces:**
+- Produces: `classify(vectors, t, d_max_factor=1.0) -> CellDecision` mit unveränderter Signatur und Rückgabe. Neu: `stack_templates(t: Templates) -> StackedTemplates`, ein Dataclass mit `classes: tuple[str, ...]`, `mean: np.ndarray (C, 40)` und `inv_std: np.ndarray (C, 40)`. `DotMatrixReader` hält es als `self._stacked`.
+- `sample_image(gray, grid, cells) -> SampledImage` bleibt unverändert, Werte gleich bis 1e-4.
+
+- [ ] **Step 1: Äquivalenztest schreiben** (failing, weil `stack_templates` fehlt). Die alte Implementierung wird als Referenz in den Test kopiert:
+
+```python
+def _reference_best_per_class(vectors, mean, std):
+    out = {}
+    for ch in mean:
+        ds = [float(np.sqrt(np.mean(((v - mean[ch]) / np.maximum(std[ch], SIGMA_FLOOR)) ** 2))) for v in vectors]
+        j = int(np.argmin(ds))
+        out[ch] = (ds[j], j)
+    return out
+
+def test_vectorized_classification_matches_reference_on_real_and_synthetic_cells(reader):
+    rng = np.random.default_rng(1)
+    t = reader._t
+    for _ in range(200):
+        vectors = rng.uniform(0, 1, (len(SHIFTS), 40)).astype(np.float32)
+        ref = _reference_best_per_class(vectors, t.mean, t.std)
+        new = classify(vectors, t)
+        order = sorted(ref, key=lambda c: ref[c][0])
+        assert new.best == order[0] and new.second == order[1]
+        assert new.d_best == pytest.approx(ref[order[0]][0], rel=1e-5)
+        assert new.shift_index == ref[order[0]][1]
+```
+
+  Dazu ein Test mit echten Crops, übersprungen, falls `var/live` fehlt: Über alle `var/live/*/setup/{still,stability}.png` mit `proposal.json` liest der Leser alt und neu, und die Zellentscheidungen sind identisch. Den Vergleich mit der alten Implementierung macht der Test per Monkeypatch; vom alten Code bleibt nur die Referenzkopie im Test.
+
+- [ ] **Step 2:** Test laufen lassen und das erwartete FAIL sehen.
+- [ ] **Step 3: Zeichenvergleich vektorisieren.** `stack_templates` baut `mean (C,40)` und `inv_std = 1/np.maximum(std, SIGMA_FLOOR)` in der Reihenfolge von `t.mean`. In `_decide` dann: `d = np.sqrt(np.mean(((vectors[None,:,:] - mean[:,None,:]) * inv_std[:,None,:])**2, axis=2))` mit Form (C, S). Je Klasse `argmin` über S. Die Reihenfolge der Klassen ergibt sich aus einem stabilen Sortieren (`np.argsort(kind="stable")`) nach Abstand, damit Gleichstände dieselbe Reihenfolge wie bisher behalten (`sorted` über dict-Reihenfolge ist ebenfalls stabil). Rechengenauigkeit: float32 wie bisher.
+- [ ] **Step 4: Abtastung vektorisieren.** `dot_centers` für alle Zellen und `SHIFTS` als ein Array der Form (cells, S, 40, 2) aufbauen, dann je ein `_bilinear` auf `smooth` und `closed` aufrufen und auf (cells, S, 40) zurückformen. Test: Gleichheit mit der alten Schleife bis 1e-4 auf einem echten Crop und auf einem synthetischen Bild.
+- [ ] **Step 5:** Die bestehenden Sicherheitstests müssen unverändert grün sein: `test_sweep_richtig_oder_abgelehnt_nie_falsch`, `test_sweep_mit_hoechster_toleranz_nie_falsch` und alle Lesertests.
+- [ ] **Step 6: Pi-Schutz.** `LiveSession.start()` setzt `cv2.setNumThreads(LIVE_CV_THREADS)` mit `LIVE_CV_THREADS = 2` als Konstante in `dispread/live/__init__.py`; `stop()` stellt den vorherigen Wert wieder her. Test mit einem Fake für `cv2.setNumThreads` und `getNumThreads`.
+- [ ] **Step 7: Benchmark.** `scripts/live-reader-benchmark.py` ergänzen:
+  - Messung über die Laufzeit: Prozess-CPU in % (aus `/proc/self/stat` bzw. `os.times`), SoC-Temperatur (`/sys/class/thermal/thermal_zone0/temp`) und `vcgencmd get_throttled`, falls vorhanden.
+  - Ausgabe: gelesene Bilder/s, Median und p90 der Lesezeit.
+  - Exit ≠ 0, wenn die Grenzen aus den Global Constraints verletzt sind.
+  - Test für die Auswertungsfunktion mit fiktiven Messwerten.
+- [ ] **Step 8:** Am Aufbau misst der Controller oder der Nutzer, nicht Codex. Bei laufender Werkbank 60 s Live-Lesen über die lokale Steuerung, oder das Benchmark-Skript auf gespeicherten Frames. Ziel: ≥ 28 gelesene Bilder/s, `dropped_frames` im Median 0, Grenzen eingehalten.
+- [ ] **Step 9:** CHANGELOG-Punkt mit den Zahlen vorher und nachher; Commit.
+
+### Task 4: Übergangsstatus bei Wertwechseln
+
+**Files:**
+- Modify: `src/dispread/validate.py` (`GateConfig`, `ReleaseGate.evaluate`)
+- Modify: `src/dispread/workbench/static/live.js` (TRANSITION mit Grund `anzeige_wechselt` → „Wert wechselt“)
+- Test: `tests/test_gate_und_referenz.py` (bzw. die vorhandene Gate-Testdatei), `tests/live_client.test.mjs`
+
+**Interfaces:**
+- Consumes: `ReadResult.diagnostics["cells"]`, je Zelle `text` (angenommenes Zeichen oder None) und `reason` (L2).
+- Produces: `GateConfig.transition_max_cells: int = 3`, `GateConfig.transition_window_ns: int = 1_000_000_000`. Reject-Grund `"anzeige_wechselt"` als ERSTER Grund, die bisherigen Gründe dahinter.
+
+- [ ] **Step 1: Failing Tests:**
+  1. Nach einem VALID-Wert `+0.60997` liefert ein Bild mit nur Zelle 7 unlesbar und den Zellen 0–6 gleich dem letzten gültigen Zellentext → `TRANSITION` mit Gründen `("anzeige_wechselt", "unreadable_cells:1", …)`, `value` None.
+  2. Mehr als 3 unlesbare Zellen → `UNREADABLE`, wie bei der Hand.
+  3. Eine lesbare Zelle weicht vom letzten gültigen Zellentext ab (ein Wechsel in mehreren Stellen, eine nur teilweise erkannt) → `TRANSITION` nur, wenn alle *lesbaren* Zellen entweder gleich dem alten Zellentext sind oder genau in den unlesbaren Positionen liegen. Sonst UNREADABLE. Konkrete Regel: jede lesbare Zelle muss gleich der alten sein.
+  4. Letzter VALID-Wert älter als 1 s → `UNREADABLE`, nach `stale_after_ns` → `STALE`.
+  5. Nach `interrupt()` (Nachführung verloren) und bei Gründen wie `tracking_lost:*`, `low_contrast`, `state:*`, `unit_mismatch:*` → nie TRANSITION.
+  6. Ohne `cells` in den Diagnosen (7-Segment) bleibt das alte Verhalten.
+- [ ] **Step 2:** Tests laufen lassen und das erwartete FAIL sehen.
+- [ ] **Step 3: Implementieren.**
+  - Das Gate merkt sich bei jedem VALID den Zellentext der lesbaren Zellen (`[c["text"] for c in cells]`) als `_last_valid_cells`; `interrupt()` und `reset()` löschen ihn.
+  - Im Ablehnungszweig gilt TRANSITION nur, wenn alle der folgenden Bedingungen erfüllt sind:
+    - Alle Gründe stammen aus der Menge `{unreadable_cells:*, low_segment_margin, decimal_point_unknown, sign_region_unreadable, no_value}`.
+    - `cells` sind vorhanden, und es gibt höchstens `transition_max_cells` Zellen mit `text is None`.
+    - Jede lesbare Zelle ist gleich `_last_valid_cells` an derselben Position.
+    - `capture_ns - _last_valid_ns <= transition_window_ns`.
+  - Dann: `status=TRANSITION`, Gründe `("anzeige_wechselt", *reasons)`; `_candidate` wird verworfen wie bisher; `_last_valid_ns` bleibt unverändert.
+- [ ] **Step 4:** Die Gate-, Session- und Live-Tests sowie der Sweep müssen grün sein.
+- [ ] **Step 5:** `live.js`: TRANSITION mit erstem Grund `anzeige_wechselt` → Überschrift „TRANSITION“, Detail „Wert wechselt“. Dazu ein Node-Test.
+- [ ] **Step 6:** CHANGELOG-Punkt; Anleitung Kapitel 10, Satz zu TRANSITION; Commit.
+
+### Task 5: Abschluss des Tages
+
+- [ ] **Step 1:** Die volle Suite auf dem Stand nach Task 3 und 4 laufen lassen.
+- [ ] **Step 2:** Messung am Aufbau aus Task 3, Step 8, mit Nutzerlauf: Bilder/s, Anteil TRANSITION gegen UNREADABLE bei Wechseln.
+- [ ] **Step 3:** Zweiter Merge nach `master` (Fast-Forward-Push), Ledger, `docs/status.md`.
