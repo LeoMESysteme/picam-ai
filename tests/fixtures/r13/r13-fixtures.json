@@ -1,0 +1,101 @@
+{
+  "quelle": "var/diagnostics/r13-werteplan-20261021 (sync-record, StreamCam am GSV-2AS, Raumlicht, 2026-10-21 18:15 MESZ, Aufstellung der Sitzung live-20261021T151835Z, unbewegt)",
+  "referenz": "var/live/live-20261021T151835Z/setup/still.png",
+  "ausschnitt_vollbild_xyxy": [
+    160,
+    260,
+    1440,
+    1040
+  ],
+  "quad": [
+    [
+      313.955810546875,
+      279.71539306640625
+    ],
+    [
+      870.3516845703125,
+      462.7227783203125
+    ],
+    [
+      847.9735107421875,
+      532.3994140625
+    ],
+    [
+      285.7507629394531,
+      344.6572265625
+    ]
+  ],
+  "hinweis": "JPEG q95; Referenz und Bilder gleich kodiert. Geometrie unveraendert, nur Anzeigewert gewechselt.",
+  "frames": [
+    {
+      "file": "faktor-1_0.jpg",
+      "source_frame": "frame_000483.png",
+      "factor": 1.0,
+      "serial": "+0.60572 mV/V",
+      "ecc_full_frame": {
+        "score": 0.9601,
+        "reason": null
+      },
+      "ecc_fixture": {
+        "score": 0.9598,
+        "reason": null
+      }
+    },
+    {
+      "file": "faktor-2_0.jpg",
+      "source_frame": "frame_000142.png",
+      "factor": 2.0,
+      "serial": "+01.2114 mV/V",
+      "ecc_full_frame": {
+        "score": 0.5223,
+        "reason": "low_score"
+      },
+      "ecc_fixture": {
+        "score": 0.5217,
+        "reason": "low_score"
+      }
+    },
+    {
+      "file": "faktor-0_5.jpg",
+      "source_frame": "frame_000238.png",
+      "factor": 0.5,
+      "serial": "+0.30286 mV/V",
+      "ecc_full_frame": {
+        "score": 0.7854,
+        "reason": null
+      },
+      "ecc_fixture": {
+        "score": 0.7853,
+        "reason": null
+      }
+    },
+    {
+      "file": "faktor-5_0.jpg",
+      "source_frame": "frame_000334.png",
+      "factor": 5.0,
+      "serial": "+03.0286 mV/V",
+      "ecc_full_frame": {
+        "score": 0.5927,
+        "reason": "low_score"
+      },
+      "ecc_fixture": {
+        "score": 0.5924,
+        "reason": "low_score"
+      }
+    },
+    {
+      "file": "faktor-10_0.jpg",
+      "source_frame": "frame_000430.png",
+      "factor": 10.0,
+      "serial": "+06.0572 mV/V",
+      "ecc_full_frame": {
+        "score": 0.7192,
+        "reason": null
+      },
+      "ecc_fixture": {
+        "score": 0.7188,
+        "reason": null
+      }
+    }
+  ]
+}
