@@ -71,6 +71,78 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def build_live_pipeline(
+    source: Any,
+    profile_path: Path,
+    cfg: LiveConfig,
+    *,
+    reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
+    locator_factory: Callable[[Any, list], Any] | None = None,
+    reader_d_max_factor: float = 1.0,
+) -> tuple[Pipeline, SessionProfile, Any, dict]:
+    """Identischer, schreibfreier Aufbau fuer Live-Sitzung und Offline-Replay."""
+    tracking = {"mode": "ecc_alt", "version": None, "regions": None}
+    try:
+        profile = SessionProfile.load(profile_path)
+        layout = CharLayout.from_profile(profile, cfg.unit)
+    except (OSError, ValueError, KeyError) as exc:
+        raise StartRefused(f"Profil {profile_path}: {exc}") from exc
+    try:
+        reader = reader_factory(cfg.templates, cfg.templates_sha256, d_max_factor=reader_d_max_factor)
+    except (OSError, ValueError) as exc:
+        raise StartRefused(f"Vorlagen {cfg.templates}: {exc}") from exc
+    try:
+        calibration = load_calibration(cfg.calibration)
+    except ValueError as exc:
+        raise StartRefused(f"Timing-Kalibrierung fehlt oder ist ungueltig: {exc}") from exc
+    if profile.camera is not None and calibration.camera_usb_id != profile.camera.usb_id:
+        raise StartRefused(
+            f"Timing-Kalibrierung gilt fuer {calibration.camera_usb_id}, Profil nutzt {profile.camera.usb_id}"
+        )
+    reference = profile.reference_frame or {}
+    ref_path = Path(reference.get("path", ""))
+    if not ref_path.is_file() or _sha256(ref_path) != reference.get("sha256"):
+        raise StartRefused(f"Referenzbild {ref_path} fehlt oder wurde veraendert - neu einrichten")
+    image = cv2.imread(str(ref_path))
+    if image is None:
+        raise StartRefused(f"Referenzbild {ref_path} nicht lesbar - neu einrichten")
+    block = profile.live_tracking
+    if block is not None:
+        if (not isinstance(block, dict) or block.get("version") != 1 or block.get("method") != "rahmenbereiche"
+                or block.get("frame_sha256") != reference["sha256"]
+                or block.get("config") != FrameTrackingConfig().to_dict()):
+            raise StartRefused("Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten")
+        try:
+            locator = ConfirmedRegionLocator(image, profile.quad, block)
+        except (ValueError, KeyError, TypeError) as exc:
+            raise StartRefused(f"Rahmenbereiche ungueltig: {exc} - neu einrichten") from exc
+        tracking = {"mode": "rahmenbereiche", "version": 1,
+                    "regions": len(block["proposal"]["regions"])}
+    else:
+        locator = None
+    # Die bisherige Zwei-Argument-Factory bleibt fuer injizierte Locators erhalten.
+    if locator_factory is not None:
+        locator = locator_factory(image, profile.quad)
+        tracking = {"mode": "injiziert", "profile_mode": tracking["mode"],
+                    "version": None, "regions": None}
+    elif locator is None:
+        locator = TrackedQuadLocator(image, profile.quad)
+    gate = ReleaseGate(
+        default_gate_config("dotmatrix", confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit)
+    )
+    pipeline = Pipeline(
+        source=source,
+        locator=locator,
+        reader=reader,
+        gate=gate,
+        sinks=[],
+        config=PipelineConfig(
+            profile_id=f"{profile.device_id}/{profile.session_id}", layout=layout, locate_every=0
+        ),
+    )
+    return pipeline, profile, calibration, tracking
+
+
 class LiveSession:
     def __init__(
         self,
@@ -148,64 +220,12 @@ class LiveSession:
     # -- Start ---------------------------------------------------------------
     def start(self) -> None:
         cfg = self._config
-        try:
-            profile = SessionProfile.load(self._profile_path)
-            layout = CharLayout.from_profile(profile, cfg.unit)
-        except (OSError, ValueError, KeyError) as exc:
-            raise StartRefused(f"Profil {self._profile_path}: {exc}") from exc
-        try:
-            reader = self._reader_factory(cfg.templates, cfg.templates_sha256, d_max_factor=self._reader_d_max_factor)
-        except (OSError, ValueError) as exc:
-            raise StartRefused(f"Vorlagen {cfg.templates}: {exc}") from exc
-        try:
-            calibration = load_calibration(cfg.calibration)
-        except ValueError as exc:
-            raise StartRefused(f"Timing-Kalibrierung fehlt oder ist ungueltig: {exc}") from exc
-        if profile.camera is not None and calibration.camera_usb_id != profile.camera.usb_id:
-            raise StartRefused(
-                f"Timing-Kalibrierung gilt fuer {calibration.camera_usb_id}, Profil nutzt {profile.camera.usb_id}"
-            )
-        reference = profile.reference_frame or {}
-        ref_path = Path(reference.get("path", ""))
-        if not ref_path.is_file() or _sha256(ref_path) != reference.get("sha256"):
-            raise StartRefused(f"Referenzbild {ref_path} fehlt oder wurde veraendert - neu einrichten")
-        image = cv2.imread(str(ref_path))
-        if image is None:
-            raise StartRefused(f"Referenzbild {ref_path} nicht lesbar - neu einrichten")
-        block = profile.live_tracking
-        if block is not None:
-            if (not isinstance(block, dict) or block.get("version") != 1 or block.get("method") != "rahmenbereiche"
-                    or block.get("frame_sha256") != reference["sha256"]
-                    or block.get("config") != FrameTrackingConfig().to_dict()):
-                raise StartRefused("Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten")
-            try:
-                locator = ConfirmedRegionLocator(image, profile.quad, block)
-            except (ValueError, KeyError, TypeError) as exc:
-                raise StartRefused(f"Rahmenbereiche ungueltig: {exc} - neu einrichten") from exc
-            self.tracking = {"mode": "rahmenbereiche", "version": 1,
-                             "regions": len(block["proposal"]["regions"])}
-        else:
-            locator = None
-        # Die bisherige Zwei-Argument-Factory bleibt fuer injizierte Locators erhalten.
-        if self._locator_factory is not None:
-            locator = self._locator_factory(image, profile.quad)
-            self.tracking = {"mode": "injiziert", "profile_mode": self.tracking["mode"],
-                             "version": None, "regions": None}
-        elif locator is None:
-            locator = TrackedQuadLocator(image, profile.quad)
-        gate = ReleaseGate(
-            default_gate_config("dotmatrix", confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit)
+        self._pipeline, profile, calibration, self.tracking = build_live_pipeline(
+            self._owner, self._profile_path, cfg,
+            reader_factory=self._reader_factory, locator_factory=self._locator_factory,
+            reader_d_max_factor=self._reader_d_max_factor,
         )
-        self._pipeline = Pipeline(
-            source=self._owner,
-            locator=locator,
-            reader=reader,
-            gate=gate,
-            sinks=[],
-            config=PipelineConfig(
-                profile_id=f"{profile.device_id}/{profile.session_id}", layout=layout, locate_every=0
-            ),
-        )
+        reference = profile.reference_frame
         self._out_dir.mkdir(parents=True, exist_ok=True)
         owner_status = self._owner.status()
         self._frame_gaps_start = owner_status.get("gaps", 0)

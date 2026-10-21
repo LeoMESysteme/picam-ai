@@ -3266,3 +3266,51 @@ Planschritte. Kein gesonderter Nachweis der Reaktion auf diese Abdeckung.
 **Artefakte:** `session.json`, `records.jsonl`, `reference.jsonl`,
 `commands.jsonl`, `reference-eval.json`, `werteplan-auswertung.json` und die
 beiden Diagnoseschnappschüsse im Laufverzeichnis (lokale Daten, nicht in Git).
+
+## 2026-10-21 — R13-5: Offline-Replay der Lesekette { #r13-replay-2026-10-21 }
+
+Aufnahme `var/diagnostics/r13-werteplan-20261021`, bestätigtes Profil
+`var/live/live-20261021T151835Z/profile.json`, 568 PNG-Vollbilder mit originalen
+Aufnahmezeiten, effektiv 3,0002 Bilder/s. Gemeinsamer Live-Pipeline-Aufbau,
+eingefrorene Vorlagen Stufe 2c, strenger Leser (`d_max_factor=1.0`),
+`confirm_frames=2`, STALE nach 500 ms; Referenzschutzintervall 695 ms.
+Das alte Profil enthält keine Rahmenbereiche: ausschließlich im Offline-Replay
+erzeugter Vorschlag, `regions_source=offline_vorschlag`.
+
+| Befund | ECC | Rahmenbereiche |
+| --- | ---: | ---: |
+| VALID / TRANSITION / UNREADABLE / STALE (alle Bilder) | 277 / 61 / 221 / 9 | 487 / 67 / 3 / 11 |
+| VALID-Anteil gesamt | 48,77 % | 85,74 % |
+| Stabile Referenzfenster: VALID / Bilder | 231 / 429 | 429 / 429 |
+| Fehllesungen / verglichene VALID | 0 / 231 | 0 / 429 |
+| VALID im Schutzintervall / ohne Referenzdeckung | 25 / 21 | 27 / 31 |
+| Trackingverluste | 220 (219 `low_score`, 1 `rotation_out_of_bounds`) | 0 |
+| Verarbeitung inklusive Bildlesen (Bilder/s) | 15,90 | 17,56 |
+| Nur `Pipeline.process`: Median / p90 (ms) | 14,08 / 31,89 | 12,82 / 13,73 |
+
+Stabile Referenzfenster je Faktor: 1 → 115 Bilder, 2 → 99, 0,5 → 69,
+5 → 99, 10 → 47. ECC ist bei 2 und 5 durchgehend UNREADABLE
+(`low_score`), bei den übrigen Faktoren durchgehend VALID. Der Rahmen-Tracker
+liefert in allen diesen Fenstern durchgehend VALID, ohne Fehllesung.
+
+**Grenzen:** Offline-Vorprüfung, keine neue Hardwaremessung und keine
+30-Hz-Abnahme. Zwei bestätigende Bilder liegen hier ungefähr 333 ms statt
+33 ms auseinander. Diese Zweibildbestätigung über rund 333 ms filtert
+kurzlebige Fehllesungen heraus, etwa beim Verblassen von LCD-Segmenten.
+Bei 30 Hz können solche Fehllesungen in zwei benachbarten Bildern auftreten
+und bestätigt werden. „0 Fehllesungen“ hier sagt deshalb nichts über
+Fehllesungen bei 30 Hz aus. Die Bewegung zwischen den Bildern ist etwa
+zehnmal größer, und das Tracking wird seltener aktualisiert; beides kann
+Trackingverluste gegenüber Live erzeugen oder verbergen.
+Der Replay prüft Trackingverfügbarkeit und Leserkorrektheit je Standbild;
+er ersetzt keinen 30-Hz-Livelauf.
+
+STALE bleibt eine Grenze in Aufnahmezeit und wird erst
+am nächsten verarbeiteten Bild sichtbar; Trackingverlust bleibt gemäß
+unveränderter Pipeline UNREADABLE. Ungedeckte VALID sind nicht als korrekt
+nachgewiesen. Laufzeiten aus der Sandbox bei geteilter CPU, keine
+Ende-zu-Ende-Latenz. Die 1-s-Telegrammlückengrenze bleibt Vorabwert (OQ-40).
+
+**Artefakte:** `.superpowers/sdd/2026-10-21-r13/r5-dev-ecc.json`,
+`r5-dev-frame.json` und `task-R5-report.md` am selben Ort; Aufnahmedaten
+unverändert. Aufbau und Deutung im [Laborjournal](lab_journal.md#r13-replay-2026-10-21).

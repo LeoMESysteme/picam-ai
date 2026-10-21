@@ -87,6 +87,16 @@ def test_dropped_reference_audit_is_not_a_validation(tmp_path):
         _module().evaluate(tmp_path)
 
 
+@pytest.mark.parametrize('session,reason', [
+    ({'test_run': {'testlauf': True}, 'reference': {'dropped_oldest': 1}}, 'Testlauf'),
+    ({'reference': {'dropped_oldest': 1}}, 'Queue-Ueberlauf'),
+])
+def test_session_rejection_precedes_missing_reference(tmp_path, capsys, session, reason):
+    (tmp_path / 'session.json').write_text(json.dumps(session))
+    assert _module().main([str(tmp_path)]) == 2
+    assert reason in capsys.readouterr().err
+
+
 def _write_rows(path, rows):
     path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
 

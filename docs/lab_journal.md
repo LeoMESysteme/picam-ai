@@ -2096,3 +2096,45 @@ Robustheits- oder Toleranznachweis.
 **Belege:** `reference-eval.json` und `werteplan-auswertung.json` neben den
 unveränderten Lauf-Audits. Keine Änderung am Messpfad, kein Push und kein
 Serverneustart für die Auswertung.
+
+## 2026-10-21 — R13-5: Gespeicherte Bilder durch die Live-Lesekette { #r13-replay-2026-10-21 }
+
+**Aufbau:** Rein offline, kein Kamera- oder Serialzugriff. Vorhandene
+sync-record-Aufnahme `var/diagnostics/r13-werteplan-20261021` und bestätigtes
+Profil `var/live/live-20261021T151835Z/profile.json`. Referenzbild über den
+Profilpfad und SHA-256 geprüft; derselbe Builder wie `LiveSession.start`
+prüft Vorlagen und Timing-Kalibrierung und erzeugt Leser, Gate und Pipeline.
+Alle 568 gespeicherten BGR-Bilder laufen in Dateireihenfolge mit ihren
+Aufnahmezeiten durch `Pipeline.process`. Der Rahmenvergleich verwendet
+mangels `live_tracking` im alten Profil einen ausdrücklich als
+`offline_vorschlag` markierten neuen Vorschlag. Das Profil wird nicht geändert.
+
+**Beobachtung und Deutung:** ECC verliert 220 Bilder, überwiegend wegen
+`low_score`; Rahmenbereiche verlieren keines. Die 99 stabilen Referenzbilder
+bei Faktor 2 und die 99 bei Faktor 5 sind mit ECC vollständig UNREADABLE,
+mit Rahmenbereichen vollständig VALID. Insgesamt 0/231 bzw. 0/429
+Fehllesungen bei den entscheidbaren VALID. Dies stützt die inhaltsunabhängige
+Nachführung im gespeicherten Werteplan. Es ersetzt weder eine persönliche
+Bestätigung neuer Live-Bereiche noch die Robustheitsabnahme (OQ-26).
+Die übrigen VALID im Schutzintervall oder ohne Referenzdeckung bleiben
+ausdrücklich unentschieden beziehungsweise ungeprüft.
+
+**Zeitbezug:** Die Aufnahme liefert etwa 3 Hz, nicht die 30 Hz der Kamera.
+Zweibildbestätigung braucht deshalb typischerweise rund 333 ms statt 33 ms.
+Die Bestätigung über rund 333 ms filtert kurzlebige Fehllesungen heraus,
+etwa beim Verblassen von LCD-Segmenten. Bei 30 Hz können diese in zwei
+benachbarten Bildern auftreten und bestätigt werden. „0 Fehllesungen“ hier
+sagt deshalb nichts über Fehllesungen bei 30 Hz aus. Die Bewegung zwischen
+den Bildern ist etwa zehnmal größer, und das Tracking wird seltener
+aktualisiert; das kann Trackingverluste gegenüber Live erzeugen oder
+verbergen. Der Replay prüft Trackingverfügbarkeit und Leserkorrektheit je
+Standbild; er ersetzt keinen 30-Hz-Livelauf.
+
+Die 500-ms-STALE-Grenze bleibt unverändert; ihr Auftreten ist auf gespeicherte
+Bilder gerastert. Keine Hochrechnung einer Live-Latenz aus dem Replay;
+Wallclock-Durchsatz und Pipeline-Laufzeiten beschreiben nur die Offline-
+Verarbeitung in der Sandbox bei geteilter CPU.
+
+**Belege:** [Zahlen und Artefakte](VALIDATION.md#r13-replay-2026-10-21),
+Skript `scripts/r13-replay.py`. Keine Hardware angefasst, kein Dienststart,
+keine Schreibzugriffe unter `var/`.
