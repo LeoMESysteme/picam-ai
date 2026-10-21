@@ -36,14 +36,23 @@ Intern TL, TR, BR, BL wie rectify._order_quad, Ausgabe in Eingabereihenfolge.
 LCD-Modell: je Seite 18 Normalprofile zwischen 10 und 90 Prozent der
 Seitenlaenge, Suche 14..90 px nach aussen. Helligkeitsdifferenz bei +/-1 px,
 parabolische Subpixelposition am staerksten Hell-Dunkel-Gradienten, gleiche
-Lokalisierung in Referenz und aktuellem Bild. Nur Schritte >=18 Graustufen
-bleiben; alle vier Seiten brauchen mindestens sechs Punkte. Im aktuellen
-Bild wird innerhalb +/-4 px entlang der mitgedrehten Normalen lokalisiert;
+Lokalisierung in Referenz und aktuellem Bild. Nur starke Referenzschritte
+>=2 * edge_min_step (36 Graustufen) bleiben. Eine Seite mit weniger als sechs
+starken Punkten ist schwach, steht in den Vorschlagsmetriken und wird im
+aktuellen Bild nicht geprueft. Mindestens drei starke Seiten und mindestens
+eine aus jedem Paar oben/unten und links/rechts sind erforderlich, sonst
+lcd_rand_fehlt. Seitenindizes: 0 oben, 1 rechts, 2 unten, 3 links.
+Im aktuellen Bild wird innerhalb +/-4 px entlang der mitgedrehten Normalen lokalisiert;
 die gefundene Position muss hoechstens 1.0 px von der Vorhersage abweichen.
-Alle vier Seiten brauchen mindestens 80 Prozent solcher Nachweise mit
+JEDE starke Seite braucht mindestens 80 Prozent solcher Nachweise mit
 gleicher Polaritaet und mindestens halber Referenzstaerke (weiterhin >=18).
 Das ersetzt die zu breite 6-px-Schrittprobe: falsche 1.5-px-Bewegung und
-0.3-Grad-Drehung werden auf der Referenz abgelehnt. Keine Grenzlockerung.
+0.3-Grad-Drehung werden auf der Referenz abgelehnt. Die schwache Unterseite
+des DEV-Aufbaus (18.7..34.7 Graustufen bei harter Grenze 18) liefert keine
+belastbare Positionsinformation und verursachte allein falsche Ablehnungen
+bei Helligkeit x0.8 oder 3x3-Gaussfilter. Der Ausschluss folgt dieser
+grundsaetzlichen Verfuegbarkeitsentscheidung, keiner Abnahme-Anpassung.
+eingefroren am 2026-10-21 vor den Abnahme-Aufnahmen r13-abnahme-a/b-20261022.
 
 15-px-Patches und 12-px-Suchradius lassen kleine Rohbildbewegungen zu;
 Peak >=0.75 und Zweitpeak/Peak <=0.95 ausserhalb +/-3 px verlangen erkennbare
@@ -111,7 +120,7 @@ class FrameTrackingConfig:
     edge_search_radius_px: int = 4
     edge_position_tolerance_px: float = 1.0
     edge_required_share: float = 0.8
-    edge_required_sides: int = 4
+    edge_required_sides: int = 3
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -340,7 +349,7 @@ def _edge_model(gray, quad, config):
         normals = np.broadcast_to(normal, bases.shape)
         offsets, magnitudes, valid = _locate_edges(gray, bases, normals, distances, config)
         for base, offset, magnitude, usable in zip(bases, offsets, magnitudes, valid, strict=True):
-            if usable and magnitude >= config.edge_min_step:
+            if usable and magnitude >= 2 * config.edge_min_step:
                 point = base + offset * normal
                 edges.append(LcdEdge(tuple(point), float(offset), tuple(normal), 1, float(magnitude), side))
     return tuple(edges)
@@ -460,6 +469,8 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
 def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config):
     edges = _edge_model(gray, quad, config)
     counts = [sum(edge.side == side for edge in edges) for side in range(4)]
+    strong_sides = [side for side, count in enumerate(counts) if count >= config.edge_min_points_per_side]
+    weak_sides = [side for side in range(4) if side not in strong_sides]
     centres = [region.centre for region in regions]
     spread = _spread(centres, quad, config)
     local = (np.asarray(centres).reshape(-1, 2) - quad.mean(axis=0)) @ _axes(quad).T
@@ -468,11 +479,14 @@ def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config):
         reasons.append("zu_wenig_rahmenbereiche")
     if not spread:
         reasons.append("rahmenbereiche_einseitig")
-    if min(counts) < config.edge_min_points_per_side:
+    if (len(strong_sides) < max(3, config.edge_required_sides)
+            or not any(side in strong_sides for side in (0, 2))
+            or not any(side in strong_sides for side in (1, 3))):
         reasons.append("lcd_rand_fehlt")
     return RegionProposal(regions, edges, _polygon(zone), _polygon(outer), not reasons, tuple(reasons),
                           {"regions": len(regions), "spread_ok": spread, "ambiguous_candidates": ambiguous_count,
                            "edge_points_per_side": counts,
+                           "edge_sides_strong": strong_sides, "edge_sides_weak": weak_sides,
                            "local_min_px": local.min(axis=0).tolist() if len(local) else None,
                            "local_max_px": local.max(axis=0).tolist() if len(local) else None},
                           asdict(config), _polygon(quad), gray.shape, sha256(gray.tobytes()).hexdigest())
@@ -538,11 +552,15 @@ class FrameTracker:
             patches.append(patch.copy() if safe is not None and region.size == config.patch_size else None)
         self.patches = tuple(patches)
         self.sources = np.asarray([region.centre for region in proposal.regions], dtype=float).reshape(-1, 2)
-        self.edge_points = np.asarray([edge.point for edge in proposal.edges]).reshape(-1, 2)
-        self.edge_normals = np.asarray([edge.normal for edge in proposal.edges]).reshape(-1, 2)
+        counts = [sum(edge.side == side for edge in proposal.edges) for side in range(4)]
+        self.edges = tuple(edge for edge in proposal.edges if counts[edge.side] >= config.edge_min_points_per_side)
+        self.edge_points = np.asarray([edge.point for edge in self.edges]).reshape(-1, 2)
+        self.edge_normals = np.asarray([edge.normal for edge in self.edges]).reshape(-1, 2)
 
     def _edges_visible(self, gray, rotation, translation):
         config = self.config
+        if not self.edges:
+            return False
         points = self.edge_points @ rotation.T + translation
         normals = self.edge_normals @ rotation.T
         distances = np.arange(-config.edge_search_radius_px, config.edge_search_radius_px+1)
@@ -555,13 +573,12 @@ class FrameTracker:
             return False
         roi = gray[lo[1]:hi[1], lo[0]:hi[0]].astype(np.float32)
         offsets, steps, valid = _locate_edges(roi, points-lo, normals, distances, config)
-        magnitudes = np.array([edge.magnitude for edge in self.proposal.edges])
-        polarity = np.array([edge.polarity for edge in self.proposal.edges])
+        magnitudes = np.array([edge.magnitude for edge in self.edges])
+        polarity = np.array([edge.polarity for edge in self.edges])
         good = (valid & (np.abs(offsets) <= config.edge_position_tolerance_px)
                 & (steps * polarity >= np.maximum(config.edge_min_step, magnitudes * config.edge_magnitude_fraction)))
-        sides = np.array([edge.side for edge in self.proposal.edges])
-        return sum(bool(np.any(sides == side)) and float(good[sides == side].mean()) >= config.edge_required_share
-                   for side in range(4)) >= config.edge_required_sides
+        sides = np.array([edge.side for edge in self.edges])
+        return all(float(good[sides == side].mean()) >= config.edge_required_share for side in np.unique(sides))
 
     def update(self, image) -> TrackResult:
         config = self.config

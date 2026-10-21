@@ -45,6 +45,69 @@ def test_faktorwechsel_bleibt_geometrisch_stabil(scene, factor):
     close_quad(tracker.update(cv2.imread(str(FIXTURES / f"faktor-{factor}.jpg"))), quad)
 
 
+@pytest.mark.parametrize("factor", ["1_0", "2_0", "0_5", "5_0", "10_0"])
+@pytest.mark.parametrize("change", ["brightness_0.8", "brightness_0.7", "blur_3x3"])
+def test_freeze_licht_und_schaerfe(scene, factor, change):
+    _, quad, _, _, tracker = scene
+    image = cv2.imread(str(FIXTURES / f"faktor-{factor}.jpg"))
+    if change == "blur_3x3":
+        image = cv2.GaussianBlur(image, (3, 3), 0)
+    else:
+        image = (image.astype(float) * float(change.split("_")[1])).astype(np.uint8)
+    close_quad(tracker.update(image), quad)
+
+
+def _freeze_lcd(strong_sides):
+    # 20 Graustufen sind oberhalb der harten 18er-Grenze, aber nicht stark.
+    image = np.full((400, 600), 80, np.uint8)
+    image[100:300, 100:500] = 100
+    if 0 in strong_sides:
+        image[:100] = 20
+    if 1 in strong_sides:
+        image[:, 500:] = 20
+    if 2 in strong_sides:
+        image[300:] = 20
+    if 3 in strong_sides:
+        image[:, :100] = 20
+    quad = np.array([[130, 130], [470, 130], [470, 270], [130, 270]], dtype=float)
+    return image, quad
+
+
+@pytest.mark.parametrize("strong_sides", [[], [0, 2]])
+def test_freeze_schwache_oder_nur_parallele_seiten_ungeeignet(strong_sides):
+    image, quad = _freeze_lcd(strong_sides)
+    proposal = propose_regions(image, quad)
+    assert not proposal.ok
+    assert "lcd_rand_fehlt" in proposal.reasons
+    assert proposal.metrics["edge_sides_strong"] == strong_sides
+    assert proposal.metrics["edge_sides_weak"] == [side for side in range(4) if side not in strong_sides]
+    assert proposal.metrics["edge_points_per_side"] == [18 if side in strong_sides else 0 for side in range(4)]
+    assert all(edge.magnitude >= 36 for edge in proposal.edges)
+
+
+def test_freeze_schwache_seite_mit_einzelnen_starken_punkten_ignoriert():
+    image, quad = _freeze_lcd([0, 1, 3])
+    image[300:, 210:250] = 20
+    proposal = propose_regions(image, quad)
+    assert proposal.metrics["edge_sides_strong"] == [0, 1, 3]
+    assert proposal.metrics["edge_sides_weak"] == [2]
+    assert 0 < proposal.metrics["edge_points_per_side"][2] < 6
+    tracker = FrameTracker(image, quad, proposal)
+    changed = image.copy()
+    changed[300:, 210:250] = 80
+    assert tracker._edges_visible(changed, np.eye(2), np.zeros(2))
+
+
+def test_freeze_alle_starken_seiten_bleiben_pflicht():
+    image, quad = _freeze_lcd([0, 1, 2, 3])
+    proposal = propose_regions(image, quad)
+    assert proposal.metrics["edge_sides_strong"] == [0, 1, 2, 3]
+    tracker = FrameTracker(image, quad, proposal)
+    changed = image.copy()
+    changed[290:310, 100:500] = 100
+    assert not tracker._edges_visible(changed, np.eye(2), np.zeros(2))
+
+
 @pytest.mark.parametrize("factor", ["2_0", "5_0"])
 def test_ecc_reproduziert_inhaltsabhaengigen_verlust(scene, factor):
     reference, quad, *_ = scene
@@ -502,15 +565,17 @@ def test_config_json_rejects_bool_as_integer():
 
 
 @pytest.mark.parametrize(('name', 'digest'), [
-    ('reference.jpg', '89ee28614ea6e22c629c7041184392090becb8976b4e0d531b13cdf4d0c185fe'),
-    ('faktor-2_0.jpg', '03f4e560be0b4629709a4b75a308c83717ecf82155b9cbe6c081281288ae5c1f'),
-    ('faktor-5_0.jpg', 'f3c66e496dc3645ac614a7a1cde67146caab51b0d83e6e1f72d57193498a11a0'),
+    ('reference.jpg', 'fa4d26fdb07a902bb4d1218e9be0eb779a19fc06ca291fba9226e228b56fb2e6'),
+    ('faktor-2_0.jpg', '36f647c4e1619681f728cec6854eba94dd316de0ba2166bb72ac48fc0c4956a3'),
+    ('faktor-5_0.jpg', '0c3faefdb3ffba6231131d049481314b5aa3323b46ebf76d8e300c1309241e76'),
 ])
 def test_automatic_proposal_is_unchanged(name, digest):
     from hashlib import sha256
 
     quad = json.loads((FIXTURES / 'r13-fixtures.json').read_text())['quad']
     proposal = propose_regions(cv2.imread(str(FIXTURES / name)), quad)
+    # Freeze 2026-10-21: nur LCD-Modell, LCD-Metriken und Seitenminimum geaendert;
+    # Rahmenregionen und alle anderen Vorschlagsdaten gegen HEAD verglichen.
     assert sha256(json.dumps(proposal.to_dict(), sort_keys=True).encode()).hexdigest() == digest
 
 
