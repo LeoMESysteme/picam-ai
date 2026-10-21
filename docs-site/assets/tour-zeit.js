@@ -310,6 +310,8 @@
     T.label(msg, 60, 384, "Der Datensatz trägt die Aufnahmezeit. Schwankt die", "t-small t-strong");
     T.label(msg, 60, 402, "Rechenzeit, verschiebt das die Aufnahmezeit nicht.", "t-small t-strong");
     T.label(msg, 60, 420, "Die Wartezeit der Mehrbildbestätigung steht extra.", "t-small t-strong");
+    T.label(msg, 60, 500, "Ergebniszeitbasis außerhalb V4L2 fehlerhaft · OQ-45", "t-small t-plan-text");
+    T.label(msg, 60, 522, "Rechenzeiten aus den Trace-Marken bestimmen.", "t-small");
     tour.docLink(msg, "docs/uebersicht/zeitstempel.html", "Zeitstempel richtig lesen");
 
     // Rechts: zwei Verteilungen aus dem Beispiel in TIMING.md.
@@ -389,7 +391,8 @@
       T.label(pairs, (near + x) / 2 + 8, (dutY + refY) / 2 + 4, "?", "t-small t-plan-text");
     });
     const audit = T.group(layer, "audit");
-    T.chip(audit, 640, 96, "Quelle Prüfling: JSONL-Audit", "chip--flow");
+    T.chip(audit, 560, 96, "Prüfling: Audit + optionaler serieller GSV-Strom", "chip--flow");
+    T.label(audit, 480, 330, "Live-Gegenprobe: reference.jsonl · gleiches Gerät, keine Kalibrierreferenz", "t-small", { "text-anchor": "middle" });
 
     const open = T.group(layer, "open");
     T.label(open, 60, 352, "Offen, bevor die Zuordnung belastbar ist:", "t-label t-strong");
@@ -408,7 +411,7 @@
     });
     const m5 = T.group(layer, "m5");
     T.label(m5, 60, 476, "Größter Einzelbeitrag ist vermutlich die Displayaktualisierung des Prüflings (M5).", "t-small t-strong");
-    T.label(m5, 60, 494, "Sie ist noch nicht gemessen, und keine Software macht sie kleiner.", "t-small");
+    T.label(m5, 60, 494, "Anzeigeversatz gemessen; M5 ist noch nicht isoliert bestimmt.", "t-small");
 
     T.hidden(head, lines, dut.children, ref.children, pairs, audit, open.firstChild, pills, m5);
     T.fadeUp(tl, head, {}, 100);

@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-12. Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-10-21. Alle sechs Kapitel sind fertig: Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -122,8 +122,9 @@ Mehr dazu: [Zeitstempel richtig lesen](zeitstempel.md) ·
 **Kurz:** Ein Mensch zeigt dem System einmal, wo die Anzeige ist und wie sie
 aufgebaut ist.
 
-Bei der Einrichtung legt der Bediener ein Viereck um das Display (die vier
-türkisen Punkte). Dazu bestätigt er ein Profil: wie viele Zeichen das Display
+Bei der Live-Einrichtung schlägt der Assistent das Viereck und Punktraster
+vor; der Bediener prüft die Kontrollbilder (die vier türkisen Punkte) und
+bestätigt ein Profil: wie viele Zeichen das Display
 hat, welches Zahlenformat gilt und welche Einheit angezeigt wird. Danach
 sucht das System die Anzeige nicht mehr selbst.
 
@@ -153,7 +154,11 @@ vorigen Bild. Sonst würden sich kleine Messfehler über Stunden aufsummieren.
 
 Die Korrektur hat Grenzen: höchstens 10 % Verschiebung und 3° Drehung
 (vorläufige Werte). Bei einem größeren Ruck wird nicht korrigiert. Das Bild
-gilt dann als unlesbar, und der Grund steht im Datensatz.
+gilt dann als unlesbar, und der Grund steht im Datensatz. Auch eine zu
+geringe Bildähnlichkeit führt zu `tracking_lost`. Beim Werteplan am
+2026-10-21 trat das nach einem großen Wertwechsel auf; die Nachführung
+benutzt noch den Zifferninhalt. Wertunabhängiges Tracking ist offen
+([OQ-26](../open-questions.md#oq-26)).
 
 Mehr dazu: [Lokalisierung und Nachführung](../anleitung/07-lokalisierung.md) ·
 [Geometrie (API)](../../api/geometrie.md)
@@ -187,11 +192,12 @@ Mehr dazu: [Geometrie (API)](../../api/geometrie.md) ·
 System weiß vorher, wo jedes Kästchen liegt.
 
 Die Anzeige des GSV-2AS ist ein Displaytech 161A: 16 Zeichen in einer Zeile.
-Gelesen werden nur die ersten neun Kästchen: das Vorzeichen, sieben
+Klassifiziert werden die ersten neun Kästchen: das Vorzeichen, sieben
 Kästchen für die Zahl samt Punkt und ein Kästchen, das leer sein muss.
 
-Die Einheit (mV/V) wird nicht gelesen, sie steht im bestätigten Profil. So
-kann keine falsch gelesene Einheit entstehen.
+Zusätzlich müssen die Restkästchen 13–15 leer sein. Die Einheit (mV/V)
+wird nicht gelesen; sie steht im bestätigten Profil. Der Bediener muss
+deshalb prüfen, dass sie zur sichtbaren Anzeige passt.
 
 Mehr dazu: [Geräteprofile](../anleitung/04-geraeteprofile.md) ·
 [OCR-Backends](../anleitung/08-ocr-backends.md)
@@ -237,7 +243,8 @@ gültige Zahl ergeben, gilt der Wert als gelesen.
 Zuerst prüft der Leser, ob das Bild überhaupt brauchbar ist. Höchstens 2 %
 der Bildpunkte dürfen übersteuert sein, und der Kontrast muss reichen.
 Danach muss die Zeichenfolge zur Formatregel des Geräts passen: Plus vorn,
-genau ein Punkt, sechs Ziffern, Kästchen 8 leer.
+genau ein Punkt, sechs Plätze für Ziffern oder führende Leerzeichen,
+Kästchen 8 leer. Auch die Restkästchen müssen leer sein.
 
 Ist auch nur ein Kästchen unsicher (unten das „?“), wird der **ganze** Wert
 verworfen. Ein halber Wert wie „0.4?761“ wäre gefährlicher als gar keiner.
@@ -255,11 +262,18 @@ Mehr dazu: [Messpfad: was die Lesung belegen muss](messpfad.md#was-die-lesung-be
 **Kurz:** Ein gelesener Wert wird erst ausgegeben, wenn die Freigabe ihn für
 gültig erklärt.
 
-Jedes Bild liefert einen gelesenen Wert. Die Freigabe kann verlangen, dass
-mehrere Bilder hintereinander denselben Wert zeigen (`confirm_frames`).
-Solange das nicht erreicht ist, heißt der Wert **Übergang**: Die Anzeige
-wechselt vielleicht gerade. In der Grundeinstellung genügt ein Bild; die
-Bühne zeigt zur Verdeutlichung zwei.
+Jedes ausgewertete Bild liefert ein Leseergebnis. Die Live-Freigabe verlangt
+zwei gleiche Bilder hintereinander (`LiveConfig.confirm_frames`); der
+allgemeine `GateConfig`-Default ist ein Bild. Bis zur Bestätigung heißt der
+Status **Übergang** mit Grund `awaiting_confirmation`.
+
+Auch Mischziffern beim LCD-Umschalten können **Übergang** heißen
+(`anzeige_wechselt`): Höchstens drei Zellen sind unlesbar, alle übrigen
+stimmen mit der letzten Freigabe überein und diese liegt höchstens im
+effektiven Übergangsfenster zurück. Im aktuellen Live-Pfad endet es nach
+0,5 s, weil STALE Vorrang hat. Kontrast-, Zustands-, Einheiten- oder
+Trackingfehler werden so nicht umgedeutet. Beide Übergangsarten geben
+keinen Zahlenwert frei.
 
 Springt der Messwert wirklich, folgt die Ausgabe dem Sprung, sobald er
 bestätigt ist. Gemittelt oder geglättet wird nichts.
@@ -289,7 +303,8 @@ lehnt diese Bilder ab, statt zu raten. Jedes solche Bild bekommt den Status
 Der letzte gültige Wert (0.51230) wird **nicht** einfach weiter ausgegeben.
 Niemand weiß, ob er hinter der Hand noch stimmt.
 
-Hält der Zustand an, wird aus „unlesbar“ **veraltet**. Das geschieht, sobald
+Bei einer anhaltenden Leseablehnung ohne blockierendes Statusflag wird aus
+„unlesbar“ **veraltet**. Das geschieht, sobald
 seit dem letzten gültigen Wert mehr als `stale_after` vergangen ist
 (vorläufig 0,5 s; bei 30 Bildern pro Sekunde wären das etwa 15 Bilder).
 
@@ -297,7 +312,10 @@ seit dem letzten gültigen Wert mehr als `stale_after` vergangen ist
 * **Veraltet** heißt: Schon länger gibt es keinen aktuellen Wert mehr.
 
 Wer die Daten auswertet, sieht so, ob nur einzelne Bilder fehlten oder ob die
-Messung eine echte Lücke hat.
+Messung eine echte Lücke hat. Trackingverlust läuft außerhalb des Gates:
+Er bleibt im Audit `UNREADABLE`, ebenso blockierende Zustandsflags im Gate.
+Bleibt dagegen ein neues Bild ganz aus, zeigt die Oberfläche den letzten
+Datensatz als STALE; ohne neues Bild entsteht kein zusätzlicher Record.
 
 Mehr dazu: [Freigabe (API)](../../api/validate.md) ·
 [Konzept §7](../../Konzept.md#7-erkennungssicherheit-und-fehlerbehandlung)
@@ -318,8 +336,9 @@ Qualitätskennzahl. Sie sagt **nicht**, wie wahrscheinlich der Wert falsch
 ist.
 
 Jeder Datensatz geht als eine JSON-Zeile in das Audit-Protokoll. Die
-serielle Ausgabe für GSVmulti ist gebaut. Welches Telegrammformat GSVmulti
-erwartet, ist aber noch nicht geklärt (OQ-07). Was tatsächlich über die
+serielle Senke als Baustein ist gebaut; der aktuelle Live-Lauf schreibt
+ausschließlich das JSONL-Audit. Die Anbindung an GSVmulti ist noch offen,
+weil dessen Telegrammformat nicht geklärt ist (OQ-07). Was tatsächlich über die
 Leitung ging, hält ein eigener `TxReceipt` fest, getrennt vom Datensatz.
 
 Mehr dazu: [Verträge (API)](../../api/vertraege.md) ·
@@ -434,7 +453,11 @@ Lesen und Freigabe danach rechnen, verschiebt sie nicht; diese Rechenzeit
 steht getrennt im `PipelineTrace`, die Fertigstellung in
 `result_timestamp`. Wartet die Freigabe auf mehrere gleiche Bilder, steht
 diese Wartezeit eigens in `confirmation_span_ns`. Die Felder werden nie zu
-einem einzigen „Zeitstempel“ zusammengelegt.
+einem einzigen „Zeitstempel“ zusammengelegt. Die aktuelle Kennzeichnung
+der Ergebniszeit übernimmt noch die Basis des Frames, obwohl die Uhr
+MONOTONIC ist. Außerhalb des V4L2-Pfads ist sie deshalb nicht zuverlässig;
+Rechenzeit nur aus den gleichbasigen Trace-Marken bestimmen
+([OQ-45](../open-questions.md#oq-45)).
 
 Das Beispiel aus TIMING.md rechts: Konstante 200 ms verschieben den
 Zeitbezug, verschlechtern ihn aber nicht. 50 ms ± 40 ms sind trotz kleinerem
@@ -468,8 +491,15 @@ Belastbar ist die Zuordnung erst, wenn geklärt ist,
   blockiert durch OQ-07).
 
 Der größte Einzelbeitrag ist vermutlich die Displayaktualisierung des
-Prüflings (M5). Sie ist noch nicht gemessen, und keine Software macht sie
-kleiner.
+Prüflings (M5). Der gemessene Anzeigeversatz und die Live-Wechselzeiten
+enthalten mehrere Beiträge; M5 ist damit noch nicht isoliert bestimmt.
+Software beseitigt die physikalische Verzögerung der Anzeige nicht.
+
+Die optionale `reference.jsonl` des Live-Laufs zeichnet bereits den
+seriellen GSV-2AS-Strom in BOOTTIME auf. Das ist eine Gegenprobe zum
+optischen Wert desselben Geräts, noch keine angebundene Kalibrierreferenz.
+`scripts/live-reference-eval.py` vergleicht sie nachträglich. Die
+Timing-Kalibrierung wird im Lauf dokumentiert, nicht auf den Wert angewandt.
 
 Mehr dazu: [Messprogramm](../TIMING.md#messprogramm) ·
 [OQ-02](../open-questions.md#oq-02) · [OQ-07](../open-questions.md#oq-07)
@@ -516,14 +546,16 @@ allein.
 Das Ernte-Skript schickt dem GSV-2AS über RS232 den Befehl `set norm`. Er
 ändert den Normierungsfaktor, und die Anzeige springt auf einen neuen Wert
 (Anzeige = Faktor × Messwert). So entstehen viele verschiedene Ziffern, ohne
-dass jemand am Aufbau etwas verstellt. Die Anzeige zeigt dabei immer sechs
-Ziffern, nur der Punkt wandert.
+dass jemand am Aufbau etwas verstellt. Das Zahlenfeld umfasst sechs Plätze für Ziffern und führende Leerzeichen;
+auch der Punkt kann wandern.
 
 Zugleich sendet das Gerät seinen Wert als ASCII-Text. Dieser Text wird zum
 Label der Kamerabilder aus derselben Zeit.
 
-Das gilt **nur für das Sammeln von Trainingsdaten**. Im Messbetrieb bekommt
-der Leser keinen Wert über die Leitung. Er liest ausschließlich das Bild.
+So entstehen Labels für Trainingsdaten. Im Live-Betrieb kann derselbe
+serielle Strom getrennt als Referenz-Audit mitgeschrieben werden, auch mit
+einem Werteplan. Er liefert dort keine Labels an den Leser und korrigiert
+keinen gelesenen Wert: Der Leser bekommt ausschließlich das Bild und Layout.
 
 Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
 [Fortschritt Ernten/Training](../FORTSCHRITT.md)
@@ -673,7 +705,7 @@ Mehr dazu: [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)
 
 ### Der Einrichtungsassistent {#bedienung-assistent}
 
-**Kurz:** Ein Befehl erledigt Fokus, Standbilder, Punktraster und alle
+**Kurz:** Der Assistent erledigt Fokus, Standbilder, Punktraster und
 Prüfungen und macht daraus einen Vorschlag.
 
 `harvest-setup.py assist` sucht zuerst den schärfsten Fokuswert. Dann nimmt
@@ -686,6 +718,11 @@ Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Auflösung, Raster,
 Stabilität und den Versatz des Rasters. Jede Prüfung meldet OK, WARNUNG oder
 FEHLER. Am Ende stehen ein Vorschlag (`proposal.json`) und Kontrollbilder,
 auf denen man das Raster sieht.
+
+Im Live-Browser unter `/live` nutzt die Einrichtung dieselben Messbausteine
+über den gemeinsamen `CameraOwner`. Dort prüft zusätzlich `gegenlesen` den
+Leser am Standbild; schwankende Zellen können maskiert werden. Für einen
+normalen Lauf muss diese Lesesperre aufgehoben sein.
 
 Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
 [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md)
@@ -711,6 +748,13 @@ Findet der Assistent bei einer schrägen Aufstellung keine eindeutige
 Startlage, richtet man das Raster von Hand mit `profile-regrid.py still`
 ein und bestätigt danach genauso.
 
+Die Live-Oberfläche bestätigt getrennt mit Namen sowie geprüfter Einheit
+und Format. FEHLER der Einrichtung lassen sich dort nicht übergehen;
+WARNUNG verlangt eine ausdrückliche Kenntnisnahme. Eine angebotene
+angepasste Lesetoleranz setzt eine serielle Gegenprobe und ein eigenes
+Häkchen voraus. Sie ist nur für diese Aufstellung geprüft und bleibt als
+**nicht validiert** in Oberfläche und Laufmetadaten gekennzeichnet.
+
 Mehr dazu: [Geräteprofile](../anleitung/04-geraeteprofile.md) ·
 [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md)
 { .tour-more }
@@ -721,18 +765,34 @@ Mehr dazu: [Geräteprofile](../anleitung/04-geraeteprofile.md) ·
 
 ### Werkbank und Betrieb {#bedienung-werkbank}
 
-**Kurz:** Die Werkbank im Browser ist zum Einrichten da. Das laufende Lesen
-mit der StreamCam ist der nächste Bauschritt.
+**Kurz:** `/live` führt von der Einrichtung über die namentliche Bestätigung
+zum laufenden Dot-Matrix-Lesen mit der StreamCam und einem Audit je Lauf.
 
-`dispread serve` startet die Werkbank: eine geschützte Weboberfläche mit
-Kamerabild, Einstelltabelle, Log und echten Shells. Sie liest absichtlich
-keine Werte und gibt nichts frei. Ihre eigene Kamera-Anbindung stammt noch
-aus der Zeit der IMX500. Die StreamCam ist dort noch nicht angeschlossen, und
-bis dahin läuft die Werkbank nur im Simulationsmodus (`--simulate`).
+`dispread serve` hält die StreamCam über einen gemeinsamen `CameraOwner`.
+Die geschützte Live-Seite steuert Einrichtung, Bestätigung, Laufstart und
+Stopp. Die ältere Werkbank erhält gedrosselte Bilder desselben Owners;
+Kamerabedienung erfolgt über `/live`. Andere Kameraprozesse bekommen während
+der Serverlaufzeit „belegt“.
 
-Die Kette zum Lesen ist gebaut und ohne Hardware geprüft. Als Nächstes
-kommt sie mit der StreamCam in den laufenden Betrieb. Die Ausgabe an GSVmulti
-bleibt offen, bis das Telegrammformat feststeht (OQ-07).
+Jeder Lauf schreibt `records.jsonl` und `session.json` unter
+`var/live/<sitzung>/run-NN/`. Optional kommt der getrennte serielle
+GSV-2AS-Strom als `reference.jsonl` hinzu. Ein Werteplan mit `set norm` und
+anschließender Rückstellung dient kontrollierten Gegenproben; das Planende
+stoppt den Lauf nicht automatisch.
+
+Bei Lesesperre ist nur ein ausdrücklich markierter Testlauf möglich
+(`TESTLAUF.json`, Banner). Vermutungen zu abgelehnten Bildern sind als nicht freigegeben beschriftet.
+Audit und Oberfläche können weiterhin `VALID`-Pipelineentscheidungen
+enthalten;
+Datensätze eines solchen Laufs müssen mit seiner Testlaufmarkierung
+zusammen ausgewertet werden. Auch ein `VALID`-Status ist dann keine
+Messfreigabe. Die technische Erzwingung dieser Sperre ist offen
+([OQ-44](../open-questions.md#oq-44)).
+
+Der Live-Pfad ist am Aufbau gelaufen, aber noch nicht umfassend abgenommen:
+Große Wertwechsel können die Nachführung verlieren lassen (OQ-26), die
+angepasste Toleranz bleibt nicht validiert. Die Ausgabe an GSVmulti bleibt
+offen, bis das Telegrammformat feststeht (OQ-07).
 
 Mehr dazu: [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md) ·
 [Arbeitsliste](../../TODO.md) · [Betrieb](../anleitung/09-betrieb.md)
@@ -756,11 +816,14 @@ Was könnte passieren? Die Kamera verliert die Anzeige, und die Ausgabe
 wiederholt einfach den letzten Wert. In den Daten sähe das aus wie eine
 ruhige, gültige Messung, obwohl in Wahrheit niemand mehr hinschaut.
 
-Darum ist es zweimal gesperrt. Die Freigabe stellt nach `stale_after` ohne
-gültigen Wert zwingend auf **veraltet**. Und ein Datensatz mit dem Status
+Darum ist es zweimal gesperrt. Bei einer fortgesetzten Leseablehnung ohne
+blockierendes Statusflag stellt die Freigabe nach `stale_after` auf
+**veraltet**. Und ein Datensatz mit dem Status
 „veraltet“ oder „unlesbar“ **und** einer Zahl lässt sich gar nicht erst
 anlegen: Der Konstruktor von `ValueRecord` bricht dann mit einem Fehler ab.
-Beides prüfen eigene Tests.
+Beides prüfen eigene Tests. Bei Trackingverlust entsteht unmittelbar
+`UNREADABLE`; ohne neue Kamerabilder kennzeichnet die Oberfläche das Alter
+als STALE, ohne einen weiteren Bilddatensatz zu erfinden.
 
 Mehr dazu: [Nicht verhandelbar (AGENTS.md)](../../AGENTS.md#nicht-verhandelbar-konzeptmd-7) ·
 [Verträge (API)](../../api/vertraege.md)
@@ -807,7 +870,9 @@ Ereignis, das man im Labor sehen will, etwa eine Lastspitze.
 Darum gibt es keinen Glättungsfilter. Die einzige erlaubte Verzögerung ist
 die Mehrbildbestätigung (`confirm_frames`), und ihre Dauer steht im Datensatz
 (`confirmation_span_ns`). Ein Test schickt die Folge 1, 1, 500, 500, −500, 0
-durch die Freigabe und verlangt sie unverändert zurück.
+durch die Freigabe und verlangt sie unverändert zurück. Das belegt die
+Freigabelogik. Im gesamten Live-Pfad kann die Nachführung bei großen
+Wertwechseln noch ausfallen (OQ-26); dann gibt es eine markierte Messlücke.
 
 Mehr dazu: [Freigabe (API)](../../api/validate.md) ·
 [Messpfad und Freigabe](messpfad.md)
@@ -880,7 +945,10 @@ Offen sind:
 * das Minuszeichen: Dieses Gerät zeigt nie negative Werte, deshalb kennt der
   Leser nur „+“,
 * Freigabeschwellen an realen Geräten (OQ-14),
-* das GSVmulti-Format (OQ-07).
+* das GSVmulti-Format (OQ-07),
+* die Nachführung bei großen Wertwechseln (OQ-26) und die vollständige
+  Live-Abnahme,
+* eine belastbare Validierung der angepassten Lesetoleranz.
 
 Wer die Werte freigibt, nennt diese Grenzen mit.
 

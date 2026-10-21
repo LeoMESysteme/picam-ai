@@ -13,8 +13,11 @@ Die Workbench hat eigene Abläufe für Kamera-Vorschau und Datensammlung. Lies
 für einen direkten Einstieg [Kapitel 10 — Kamera-Livevorschau](10-kamera-livevorschau.md)
 und [Kapitel 11 — Datensatz sammeln](11-datensatz-sammeln.md). Für
 Kameradiagnose existiert außerdem `scripts/camera-commissioning.sh` samt
-[Checkliste](../CAMERA_COMMISSIONING.md). Diese Befehle konfigurieren keinen
-Messlauf über Pipeline, Geräteprofil und Senken.
+[Checkliste](../CAMERA_COMMISSIONING.md). Auf `/live` gibt es inzwischen einen bestätigten Dot-Matrix-Messlauf mit
+`records.jsonl` und `session.json`; lokal steuern `dispread live
+status|setup|stop|camera` Einrichtung und Zustand. Bestätigung und Laufstart
+verlangen die angemeldete Oberfläche. Die frei kombinierbare Pipeline-CLI
+mit Quelle, Geräteprofil und Senken bleibt die Bauaufgabe dieses Kapitels.
 
 ## Bauaufgabe
 
@@ -36,4 +39,5 @@ provisorischen Status eines Formatters kenntlich machen.
 Erst wenn die Pipeline-CLI implementiert und durch Tests belegt ist, kann die
 Roadmap-Zeile geschlossen werden. Ergänze dann CHANGELOG und
 `docs/status.md` gemäß den Projektregeln. Bis dahin sind die Workbench-
-Kommandos der vorhandene Einstieg, aber kein `dispread run`.
+Kommandos einschließlich `/live` der vorhandene Einstieg; `dispread run`
+ist weiterhin kein verfügbarer Unterbefehl.

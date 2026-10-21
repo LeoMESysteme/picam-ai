@@ -5,7 +5,8 @@ und veröffentlicht sie unter **https://picam-docs.pages.dev**. Ein Offline-ZIP
 wird nicht mehr erzeugt. Lesen darf die Seite nur, wer sich über
 Forgejo anmeldet **und das Repo `l.hentschke/picam-ai` lesen darf**.
 
-Ein Push auf `master` baut und veröffentlicht die Seite automatisch. Ein
+Ein Push auf `master` baut und veröffentlicht die Seite automatisch, sofern
+`CLOUDFLARE_PAGES_PROJECT` gesetzt ist. Ein
 manuell gestarteter Lauf darf Build, Tests und den Prüfstand ausführen, aber
 nie das produktive Deployment überschreiben; ebenso wenig ein Feature-Branch.
 
@@ -43,10 +44,11 @@ Tests: `node --test cloudflare/test/middleware.test.js`. Sie decken ab:
 * offene Weiterleitungen
 * den erfolgreichen Durchlauf
 
-Warum kein Cloudflare Access: Zero Trust verlangt eine hinterlegte Kreditkarte,
-auch im kostenlosen Plan. Die Pages Function ist im kostenlosen
-Workers-Kontingent enthalten (100 000 Anfragen pro Tag) und prüft sogar genauer,
-nämlich die Repo-Rechte statt einer E-Mail-Regel. Die abgewogenen Alternativen
+Historische Entscheidung vom 2026-09-23: Die Einrichtung von Cloudflare
+Access verlangte damals eine hinterlegte Kreditkarte; gewählt wurde deshalb
+eine Pages Function mit Forgejo-Repo-Prüfung. Damals wurde das kostenlose
+Workers-Kontingent mit 100 000 Anfragen pro Tag zugrunde gelegt. Das ist
+keine Prüfung heutiger Cloudflare-Tarife. Die abgewogenen Alternativen
 stehen in [project_history.md](project_history.md), Eintrag vom 2026-09-23.
 
 ## Was eingerichtet ist (2026-09-23)
@@ -101,6 +103,11 @@ Der Patch-Upload verwendet die Forgejo-Version von `upload-artifact@v4`.
 `navigation.tracking` bleibt deaktiviert, weil es beim mobilen Seitenwechsel
 gelegentlich den Abschnittsanker des Ausgangstextes in die Ziel-URL schrieb.
 Sofortnavigation und Hover-Vorschauen bleiben aktiviert.
+
+Der Runner und die Messung teilen denselben Pi. Trotz CPU-/I/O-Grenzen
+wurden am 2026-10-21 bei einem CI-Lauf Stillstände bis 44 s und STALE
+beobachtet ([Status](status.md)). Builds, Browsertests und Pushes, die CI
+auslösen, deshalb außerhalb laufender Messungen einplanen.
 
 Einmalige Einrichtung auf dem Pi:
 
@@ -157,6 +164,12 @@ Einmalige Einrichtung auf dem Pi:
    `docs.yml`-Lauf, geschütztes Cloudflare-Deployment und Hover-Vorschau.
 
 Der Job nutzt einen frischen Checkout und berührt keine lokalen Worktrees.
+Die automatische Schreibfreigabe in `scripts/docs-maintenance.py` umfasst
+`README.md`, `zensical.toml`, Status, Roadmap, neue OQs sowie Markdown unter
+`docs/anleitung/` und `docs/uebersicht/`. `docs/README.md` ist zwar ein
+Prüfziel, gehört aber derzeit nicht zu den erlaubten Schreibpfaden;
+Korrekturen dort und auf den übrigen Fachseiten brauchen einen gesonderten
+Doku-Auftrag.
 Er prüft anfangs täglich drei Anleitungsseiten, bis die erste Runde fertig
 ist. Danach ruft er Codex nur bei Änderungen seit dem letzten erfolgreichen
 Audit oder für eine wöchentlich wechselnde Anleitungsseite auf. Der Auftrag

@@ -4,7 +4,7 @@
  *
  * Quellen: scripts/camera-commissioning.sh, scripts/harvest-setup.py,
  * src/dispread/setup_checks.py, src/dispread/session_profile.py,
- * src/dispread/workbench/controller.py (Werkbank-Kamera außer Betrieb),
+ * src/dispread/live/{camera,service,session}.py (gemeinsamer Kamera-Owner),
  * docs/anleitung/10-kamera-livevorschau.md, TODO.md. Weboberfläche und
  * Terminal sind schematisch. */
 (function () {
@@ -231,8 +231,9 @@
     T.label(out, 801, 420, "noch kein Profil", "t-small t-plan-text", { "text-anchor": "middle" });
     tour.docLink(out, "docs/anleitung/11-datensatz-sammeln.html", "Datensatz sammeln öffnen", [910, 302]);
     const outArrow = T.svg("path", { d: "M640 370H672", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
+    const liveCheck = T.label(layer, 480, 532, "Live zusätzlich: Gegenlesen am Standbild · schwankende Zellen maskiert · Lesesperre bis OK", "t-small t-strong", { "text-anchor": "middle" });
 
-    T.hidden(cards, arrows.children, serial, serialArrow, serialNote, checks, checkEls, out, outArrow);
+    T.hidden(cards, arrows.children, serial, serialArrow, serialNote, checks, checkEls, out, outArrow, liveCheck);
     cards.forEach((g, i) => {
       T.fadeUp(tl, g, {}, i === 0 ? 100 : "+=150");
       if (i > 0) tl.add(arrows.children[i - 1], { opacity: [0, 1], duration: 300 }, "<<");
@@ -245,6 +246,7 @@
     tl.add(checkEls, { opacity: [0, 1], translateY: [10, 0], delay: A.stagger(110), duration: 420, ease: "outBack(1.6)" }, "<<+=100");
     tl.add(outArrow, { opacity: [0, 1], duration: 300 }, "+=150");
     T.popIn(tl, A, [out], { scale: [0.85, 1] }, "<<");
+    T.fadeUp(tl, liveCheck, {}, "+=100");
   }
 
   // -------------------------------------------------- 4. Der Mensch bestätigt --
@@ -284,13 +286,14 @@
       T.label(g, x + 20, 436, b, "t-label");
       return g;
     };
-    const r1 = rule(30, "bad", "FEHLER", "nur mit --override-reason,", "die Begründung bleibt im Profil");
+    const r1 = rule(30, "bad", "FEHLER", "CLI: --override-reason", "Live: nicht bestätigbar");
     const r2 = rule(337, "plan", "NICHT_GEPRUEFT", "ohne Prüfungen steht das", "ehrlich so im Profil");
     const r3 = rule(644, "plan", "schräg", "Raster von Hand:", "profile-regrid.py still");
-    T.label(layer, 480, 310, "Was nicht einfach durchgeht", "t-label t-strong", { "text-anchor": "middle" });
+    T.label(layer, 480, 310, "Bestätigung mit Namen · Live zusätzlich: Einheit und Format geprüft", "t-label t-strong", { "text-anchor": "middle" });
     const rulesHead = layer.lastChild;
+    const tolerance = T.label(layer, 480, 516, "Angepasste Toleranz: serielle Gegenprobe + eigenes Häkchen · weiterhin nicht validiert", "t-small t-plan-text", { "text-anchor": "middle" });
 
-    T.hidden(proposal, look, grid.children, who, confirm, profile, r1, r2, r3, rulesHead);
+    T.hidden(proposal, look, grid.children, who, confirm, profile, r1, r2, r3, rulesHead, tolerance);
     T.fadeUp(tl, proposal, {}, 100);
     T.fadeUp(tl, look, {}, "+=150");
     tl.add(grid.children, { opacity: [0, 1], delay: A.stagger(60), duration: 300 }, "+=50");
@@ -300,6 +303,7 @@
     T.popIn(tl, A, [profile], { scale: [0.85, 1], ease: "outElastic(1, .7)", duration: 900 }, "<<+=200");
     tl.add(rulesHead, { opacity: [0, 1], duration: 300 }, "+=200");
     T.fadeUp(tl, [r1, r2, r3], { delay: A.stagger(200) }, "<<");
+    T.fadeUp(tl, tolerance, {}, "+=100");
   }
 
   // ---------------------------------------------------- 5. Werkbank und Betrieb --
@@ -312,12 +316,12 @@
     [0, 1, 2].forEach((i) => T.svg("circle", { cx: 48 + i * 14, cy: 54, r: 4, class: "t-window-dot" }, browser));
     T.label(browser, 100, 59, "Werkbank · HTTPS, Anmeldung · schematisch", "t-small");
     tour.docLink(browser, "docs/anleitung/10-kamera-livevorschau.html", "Kamera-Workbench öffnen", [514, 59]);
-    // Kamerabereich: StreamCam noch nicht angebunden.
+    // Schematische Live-Seite: Kamera und Freigabe sind angeschlossen.
     const camArea = T.group(browser, "cam-area");
-    T.panel(camArea, 48, 84, 290, 170, "t-planned-box");
+    T.panel(camArea, 48, 84, 290, 170, "t-panel t-flow-box");
     T.label(camArea, 193, 150, "Kamerabild", "t-label t-strong", { "text-anchor": "middle" });
-    T.label(camArea, 193, 176, "StreamCam-Anbindung folgt", "t-small t-plan-text", { "text-anchor": "middle" });
-    T.label(camArea, 193, 198, "heute nur --simulate", "t-small t-plan-text", { "text-anchor": "middle", style: MONO });
+    T.label(camArea, 193, 176, "StreamCam · gemeinsamer CameraOwner", "t-small", { "text-anchor": "middle" });
+    T.label(camArea, 193, 198, "/live · Einrichtung → Lauf", "t-small", { "text-anchor": "middle", style: MONO });
     // Log rechts, Shell-Tabs unten.
     const log = T.group(browser, "log");
     T.panel(log, 352, 84, 160, 170, "t-panel");
@@ -328,9 +332,13 @@
     T.svg("rect", { x: 48, y: 268, width: 72, height: 24, rx: 6, style: "fill: var(--tour-flow-soft); stroke: var(--tour-flow)" }, shell);
     T.label(shell, 84, 285, "setup", "t-small t-strong", { "text-anchor": "middle" });
     T.label(shell, 132, 285, "+", "t-small t-strong");
-    T.label(shell, 64, 322, "$ echte Shell, z. B. harvest-setup.py assist …", "t-small", { style: MONO });
+    T.label(shell, 64, 322, "Einrichten → bestätigen → starten → stoppen", "t-small", { style: MONO });
     const role = T.group(layer, "role");
-    T.chip(role, 30, 400, "Werkbank: einrichten · keine OCR, keine Freigabe", "chip--line");
+    T.chip(role, 30, 400, "Live: einrichten · bestätigen · lesen · Audit", "chip--flow");
+    T.label(role, 30, 454, "TESTLAUF: markiert, keine Messnutzung", "t-small t-plan-text");
+    T.label(role, 30, 476, "Kann dennoch VALID anzeigen / protokollieren · OQ-44", "t-small");
+    tour.docLink(role, "docs/open-questions.html#oq-44", "OQ-44: Testlauf-Freigabe öffnen", [500, 474]);
+    T.label(role, 30, 510, "Toleranz erhöht: weiterhin nicht validiert", "t-small t-plan-text");
 
     // Rechts: Lesen im Betrieb.
     const run = T.group(layer, "run");
@@ -343,17 +351,20 @@
       return g;
     };
     const bCam = box(620, 70, 230, "StreamCam", "v4l2:// · Bildquelle fertig", "t-panel");
-    const bRead = box(620, 186, 230, "Lesen · Freigabe", "Kette gebaut, ohne Hardware geprüft", "t-panel t-flow-box");
-    const bLog = box(560, 300, 160, "JSONL-Audit", "gebaut", "t-panel t-flow-box");
+    const bRead = box(620, 186, 230, "Lesen · Freigabe", "Dot-Matrix · am Aufbau gelaufen", "t-panel t-flow-box");
+    const bLog = box(560, 300, 160, "JSONL-Audit", "je Lauf", "t-panel t-flow-box");
     const bGsv = box(750, 300, 170, "GSVmulti", "Format offen · OQ-07", "t-planned-box");
     tour.docLink(bGsv, "docs/open-questions.html#oq-07", "OQ-07 öffnen", [904, 314]);
     const links = T.group(layer, "run-links");
-    T.svg("path", { d: "M735 128V182", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, links);
-    T.label(links, 745, 160, "im Betrieb noch nicht verbunden", "t-small t-plan-text");
+    T.svg("path", { d: "M735 128V182", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);
+    T.label(links, 745, 160, "laufendes Lesen", "t-small");
     T.svg("path", { d: "M690 244L650 296", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);
     T.svg("path", { d: "M780 244L825 296", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, links);
     const next = T.group(layer, "next");
-    T.badge(next, 740, 410, "Nächster Schritt: Anbindung an den Messpfad", "plan", 360);
+    T.badge(next, 740, 410, "Offen: große Wertwechsel · Live-Abnahme", "plan", 360);
+    T.label(next, 740, 460, "reference.jsonl optional · Gegenprobe nachträglich", "t-small", { "text-anchor": "middle" });
+    T.label(next, 740, 486, "GSV-2AS-Strom ≠ Kalibrierreferenz", "t-small", { "text-anchor": "middle" });
+    T.label(next, 740, 512, "Planende stoppt den Lauf nicht automatisch", "t-small", { "text-anchor": "middle" });
     tour.docLink(next, "TODO.html", "Arbeitsliste öffnen", [928, 404]);
 
     T.hidden(browser, camArea, log, shell, role, run.children, links.children, next);

@@ -7,6 +7,9 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
+| [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
+| [OQ-44](#oq-44) | Jetzt | offen | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
+| [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-07](#oq-07) | Jetzt | offen | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-01](#oq-01) | — | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
@@ -29,7 +32,6 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-23](#oq-23) | — | offen | Festes Segmentraster passt nicht zur realen BK-5491B-VFD-Schrift |
 | [OQ-24](#oq-24) | — | in Arbeit | Browserreaktion und Shutdown nach ROI-Bestätigung real abnehmen |
 | [OQ-25](#oq-25) | — | offen | Vorschlagsqualität von `fit_quad_in_region`/`fit_ocr_box` an realen Geräten |
-| [OQ-26](#oq-26) | — | offen | Grenzen der Nachführung an realen Geräten validieren |
 | [OQ-27](#oq-27) | — | offen | Rasterfeinschliff je Bild bewusst nicht gebaut |
 | [OQ-28](#oq-28) | — | offen | Eindeutigkeit der Autofit-Geometrie |
 | [OQ-29](#oq-29) | — | offen | Zeitpunkt von `calibrated_on`/`calibrated_on_frame_sequence` |
@@ -399,6 +401,14 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 * **Befund:** `ReleaseGate.evaluate` verlangt `contrast` und `min_margin`
   aus der Segmentanalyse. Ein neuer OCR-Leser ohne diese Diagnosen wird
   abgelehnt. Ein neuronaler Score ist kein Ersatz für einen Segmentabstand.
+* **Update 2026-10-21:** Der ursprüngliche Befund beschreibt den
+  7-Segment-Pfad. `default_gate_config("dotmatrix")` lässt den
+  Dot-Matrix-Leser seine eingefrorenen Vorlagenschwellen selbst anwenden;
+  Kontrast und Abstand stammen aus dessen Diagnosen. Dieser Backend-Pfad
+  ist gebaut und durch die begrenzte Leser-Abnahme vom 2026-09-30 belegt.
+  Beliebige weitere beziehungsweise neuronale Backends sind dadurch
+  nicht freigegeben. Konfidenz bleibt eine Qualitätskennzahl ohne
+  kalibrierte Fehlerwahrscheinlichkeit.
 * **Klärung:** Gemeinsame optische Qualitätsprüfung und je Backend validierte
   Evidenzregeln definieren, ohne fehlende Diagnosen mit erfundenen Werten zu füllen.
 * **Antwort landet in:** `docs/tool_review_2026-09-08.md`, später
@@ -1171,6 +1181,30 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Schwellen echte Fehlausrichtung zuverlässig fangen, ohne bei normaler
   Vibration `tracking_lost` fälschlich auszulösen oder umgekehrt eine echte
   Verschiebung durchzulassen.
+* **Update 2026-10-21 (R13):** Der strenge Live-Werteplan-Lauf
+  `live-20261021T151835Z/run-01` zeigt ab dem Sprung auf Faktor 2
+  `tracking_lost:low_score`; beim folgenden Faktor 0,5 kehrt VALID ohne
+  Eingriff zurück. Der Tracker registriert auch wechselnde Ziffern gegen
+  das Einrichtungsbild. Das ist reale Evidenz für einen vom Anzeigeinhalt
+  abhängigen Fehler, noch kein unabhängiger Ausschluss mechanischer
+  Bewegung und kein abgeschlossener Belastungstest. Diagnose und
+  Zwischenzahlen stehen in
+  [VALIDATION](VALIDATION.md#messlauf-vorbereitung-2026-10-21) und im
+  [Laborjournal](lab_journal.md). Die bisherige Zurückstellung „erst bei
+  realem Befund untersuchen“ ist damit überholt. Strukturstabile
+  Nachführung und eine Wiederholungsprüfung großer Sprünge bleiben offen.
+  Der Lauf ist inzwischen mit Grund `bediener` beendet; Rückstellung
+  erfolgreich laut `session.json`. Die vollständige Referenzauswertung
+  folgt im Abschlussbefund unten.
+* **Abschluss 2026-10-21:** 806 s Laufzeit, 0/11 137 Fehllesungen bei
+  prüfbaren VALID, aber 8074 Trackingverluste. In stabilen Referenzfenstern
+  sind Faktor 2 und 5 zu 100 % UNREADABLE; Faktor 1, 0,5 und 10 nahezu
+  durchgehend VALID. Die Person bestätigt unveränderten Aufbau und ca.
+  2 s Abdeckung ungefähr nach 6 min; diese ist zeitlich im Audit nicht
+  eindeutig isolierbar. Keine Schwellenänderung während des Laufs,
+  Rückstellung bestätigt. Die Frage bleibt offen; strukturstabile
+  Nachführung muss erst entwickelt und geprüft werden.
+  [Zahlen](VALIDATION.md#messpfad-live-werteplan-2026-10-21).
 * **Antwort landet in:** `docs/VALIDATION.md`.
 
 <span id="oq-27"></span>
@@ -2035,3 +2069,61 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   oder eine LED-Messung mit bekanntem Schaltzeitpunkt. Solange die
   Kalibrierung trägt, nicht nötig.
 * **Antwort landet in:** [TIMING.md](TIMING.md), [VALIDATION.md](VALIDATION.md).
+
+---
+
+<span id="oq-44"></span>
+
+## OQ-44 — Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen?
+
+* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Befund:** `LiveService.start_run` kennzeichnet das Übergehen der
+  Lesesperre mit `TESTLAUF.json` und `test_run` in `session.json`.
+  `LiveSession.step` schreibt jedoch den unveränderten Pipeline-Datensatz
+  nach `records.jsonl`, bevor es Leser-Vermutungen ergänzt. Werden spätere
+  Bilder lesbar, ist daher auch `VALID` möglich. Die Oberfläche ergänzt
+  den Testlauf-Hinweis, unterdrückt einen frischen gültigen Datensatz aber
+  nicht. Eine technisch erzwungene Aussage „Testlauf gibt nie Werte frei“
+  ist damit nicht belegt.
+* **Umgang bis zur Klärung:** Testlaufdaten nicht für Messungen oder als
+  Freigabenachweis verwenden. `records.jsonl` immer zusammen mit den
+  Laufmarkierungen lesen; ein einzelner `VALID`-Datensatz hebt die
+  Lesesperre der Einrichtung nicht auf. Keine Verhaltensänderung während
+  des parallel laufenden Hardwareversuchs.
+* **Klärung:** Festlegen, ob ein Testlauf bereits vor dem Audit jeden
+  gültigen Wert verwerfen muss oder einen eigenen, auch beim Export
+  erhaltenen Datensatzstatus braucht; anschließend die gewählte Sicherung
+  mit einem Testlauf aus erst unlesbaren und später lesbaren Bildern
+  prüfen. Kein neuer Status ohne Prüfung der bestehenden Verträge.
+* **Antwort landet in:** `src/dispread/live/session.py`,
+  `src/dispread/live/service.py`, zugehörigen Live-Tests und
+  [Live-Anleitung](anleitung/10-kamera-livevorschau.md).
+
+---
+
+<span id="oq-45"></span>
+
+## OQ-45 — Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet?
+
+* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Befund:** `Timestamp.now_monotonic()` in `src/dispread/records.py`
+  liest `time.monotonic_ns()`, setzt aber `base=SENSOR_BOOTTIME`.
+  MONOTONIC und BOOTTIME dürfen nicht ungeprüft gleichgesetzt werden;
+  insbesondere nach Suspend unterscheiden sie sich. Außerdem liest
+  `Pipeline._build_record()` MONOTONIC, übernimmt für `result_timestamp.base`
+  aber ungeprüft die Zeitbasis der Aufnahme. Das passt bei aktuellen
+  V4L2-Livebildern, nicht allgemein bei Replay, synthetischen Bildern
+  oder BOOTTIME-Aufnahmen. Das sind Bezeichnungslücken im Code, keine
+  neu gemessenen Abweichungen eines Hardwarelaufs.
+* **Umgang bis zur Klärung:** Aus diesen Marken keinen belegten
+  BOOTTIME-Zeitbezug ableiten. Insbesondere bleiben synthetische
+  Aufnahmezeiten ungeeignet für Latenz- und Synchronitätsaussagen.
+  Der Live-Vergleich von V4L2-Aufnahmezeiten mit seriellen Referenzzeiten
+  benötigt weiterhin den explizit gemessenen Versatz aus `session.json`.
+* **Klärung:** Aufrufer und Zeitdomänen getrennt erfassen, eine passende
+  Bezeichnung beziehungsweise explizite Umrechnung wählen und den
+  Unterschied nach einem simulierten Suspend absichern. Das bestehende
+  Verhalten nicht allein durch Umetikettieren der Dokumentation freigeben.
+* **Antwort landet in:** `src/dispread/records.py`,
+  `src/dispread/pipeline.py`, zugehörigen Zeitbasis- und Pipeline-Tests
+  sowie [TIMING.md](TIMING.md).

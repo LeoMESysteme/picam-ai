@@ -45,6 +45,26 @@ belegen diese Zielhardware nicht.
 <figcaption markdown="span">Was der Leser bisher belegt und was nicht: Belegt ist ein Gerät mit einem Display. Weitere Messverstärker, andere Lichtquellen und das Minuszeichen sind offen und werden mit jedem Ergebnis genannt.</figcaption>
 </figure>
 
+## Live-Läufe einordnen
+
+Seit 2026-10-21 liegen zusätzlich Bedienerläufe mit Dot-Matrix-Leser,
+StreamCam und teils serieller Gegenprobe vor
+([Live-Messungen](../VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21)).
+Sie ersetzen weder die Abnahme auf gesperrten Geräten noch den gesonderten
+Nachweis für angepasste Lesetoleranz. Die Gegenprobe kommt vom seriellen
+Ausgang desselben GSV-2AS, nicht von einer unabhängigen Kalibrierreferenz.
+Bei großen Wertwechseln ist ein Nachführverlust belegt
+([OQ-26](../open-questions.md#oq-26)); Ausbeute und Fehlablesungsrate müssen
+deshalb getrennt ausgewertet werden.
+
+Ein Lauf mit <code>TESTLAUF.json</code> liefert keine freigegebenen
+Messwerte. Seine <code>records.jsonl</code> enthält Pipelineentscheidungen;
+die Laufmarkierung in <code>session.json</code> ist zwingend mit auszuwerten,
+auch bei einzelnen <code>valid</code>-Records oder einer VALID-Anzeige
+in der Oberfläche ([OQ-44](../open-questions.md#oq-44)). Läufe mit angepasster Toleranz
+tragen <code>reader_tolerance</code> und bleiben als nicht validiert markiert.
+Diese Gruppen getrennt von strengen Läufen berichten.
+
 ## Welche Fehler einzeln zählen?
 
 Die vollständige Freigabeentscheidung ist wichtiger als eine

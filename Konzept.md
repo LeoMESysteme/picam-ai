@@ -2,7 +2,7 @@
 
 ## 1. Ziel und Ausgangslage
 
-An einem Raspberry Pi 5 ist eine Raspberry Pi AI Camera angeschlossen. Das System soll die Anzeigen wechselnder Messverstärker optisch erfassen und die erkannten Werte kontinuierlich über eine serielle Schnittstelle an GSVmulti übertragen.
+An einem Raspberry Pi 5 ist seit 2026-09-25 eine Logitech StreamCam angeschlossen (USB 3, UVC/V4L2; zuvor Raspberry Pi AI Camera). Das System soll die Anzeigen wechselnder Messverstärker optisch erfassen und die erkannten Werte kontinuierlich über eine serielle Schnittstelle an GSVmulti übertragen.
 
 Beispielgeräte sind GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI sowie Messverstärker von AST aus Dresden. Die konkreten Anzeigearten und Schnittstellen der jeweiligen Gerätevarianten sind noch zu prüfen.
 
@@ -10,7 +10,14 @@ Der Einsatz erfolgt im Kalibrierlabor. Prüfling (Device under Test, DUT) und Re
 
 **Empfehlung:** Ein KI-gestütztes, bedienergeführtes System mit automatischer Displaylokalisierung, spezialisierter Zeichenerkennung, Qualitätsprüfung und zeitgestempeltem Datenstrom entwickeln.
 
-Dieses Dokument fasst die bisherige Konzeptdiskussion zusammen. Leistungswerte und Kompatibilität sind noch nicht durch einen Prototyp nachgewiesen.
+Dieses Dokument legt die Anforderungen fest. **Implementierungsstand
+2026-10-21:** Der bedienergeführte Live-Messpfad mit Dot-Matrix-Leser und
+JSONL-Audit ist gebaut; die begrenzten realen Leser- und Live-Belege stehen
+in [VALIDATION.md](docs/VALIDATION.md). Die GSVmulti-Kompatibilität ist
+weiterhin nicht nachgewiesen ([OQ-07](docs/open-questions.md#oq-07)).
+Die folgenden KI- und IMX500-Ansätze beschreiben mögliche beziehungsweise
+historische Entwicklungswege; der aktuelle Leser arbeitet mit Vorlagen.
+Eine allgemeine Gerätefreigabe folgt daraus nicht.
 
 ## 2. Warum KI sinnvoll ist
 

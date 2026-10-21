@@ -74,7 +74,9 @@ Genau das war am 2026-09-08 der Fall, nachdem das Repo von
 noch zwei Konsolenskripte (`dispread-doctor`, `dispread-replay`) in
 `.venv/bin/` herum, deren Module es nie gab — entfernt. Wenn du in
 [Kapitel 5](05-cli.md) Einsprungpunkte anlegst, entstehen sie neu, und zwar
-erst nach einem erneuten `pip install --no-deps -e .`.
+erst nach einem erneuten `./.venv/bin/pip install --no-deps -e .`. Der
+aktuelle Einsprungpunkt `dispread` gehört zur Workbench, nicht zu den
+geplanten Pipeline-Unterbefehlen aus Kapitel 5.
 
 ## Tests: mock und real
 
@@ -103,7 +105,7 @@ Nützliche Schalter beim Entwickeln:
 ./.venv/bin/pytest -x -q                   # beim ersten Fehler anhalten
 ./.venv/bin/pytest --lf -q                 # nur die letzten Fehlschläge
 ./.venv/bin/pytest -q -s                   # print() durchlassen
-./.venv/bin/pytest tests/test_sevenseg.py::test_liest_negativen_wert -q
+./.venv/bin/pytest tests/test_sevenseg.py::test_vorzeichen_wird_getrennt_gefuehrt -q
 ```
 
 ## Stil, den `ruff` erzwingt

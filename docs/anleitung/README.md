@@ -10,9 +10,11 @@ Fachlich autoritativ bleibt [../../Konzept.md](../../Konzept.md). Die
 Daueranweisungen in [../../AGENTS.md](../../AGENTS.md) gelten für jede Zeile,
 die du schreibst.
 
-**Direkt ausprobieren:** [Kamera-Livevorschau über SSH](10-kamera-livevorschau.md)
-zeigt das echte Kamerabild mit unbestätigten Display-Kandidaten im
-Windows-Browser. Dieser kleine Prototyp läuft unabhängig vom Lernpfad.
+**Direkt ausprobieren:** [Kamera-Workbench und Messpfad live](10-kamera-livevorschau.md)
+beschreibt die StreamCam-Vorschau und `/live`: Einrichtung, namentliche
+Bestätigung, Dot-Matrix-Lesung und Audit je Lauf. Der reale Messpfad ist auf
+den dokumentierten GSV-2AS-Aufbau begrenzt; die abschließende Live-Abnahme
+steht aus. Diese Bedienwege laufen unabhängig vom Lernpfad.
 [Datensatz-Sammelmodus](11-datensatz-sammeln.md) beschreibt den geführten
 Ablauf, mit dem reale Prüfbilder ohne Kalibrierung gesammelt werden — ebenso
 ein fertiger Prototyp, keine Bauaufgabe.
@@ -55,7 +57,7 @@ die ersten fünf brauchen **keine Hardware**.
 | 9 | [Betrieb: Installation, Dienst, Dauerlauf](09-betrieb.md) | Dienst starten, 72 h laufen lassen, Doku-Test | Kamera + UART | 2–3 Tage | P6 |
 
 Zwei fertige Workbench-Prototypen ergänzen den Lernpfad: [Kapitel 10](10-kamera-livevorschau.md)
-zeigt die Livevorschau samt Setup-Oberfläche; [Kapitel 11](11-datensatz-sammeln.md)
+beschreibt Vorschau, Einrichtung und Live-Messlauf; [Kapitel 11](11-datensatz-sammeln.md)
 führt durch das Sammeln und Prüfen realer Bilder. Sie sind keine Vorbedingungen
 für die Baukapitel 3–5.
 

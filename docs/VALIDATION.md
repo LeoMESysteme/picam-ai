@@ -8,16 +8,19 @@ Die Entscheidungsstellen der Erkennung stehen in
 Jede Zahl hier trägt Datum, Datensatz und Verweis auf den Lauf. Aufbau und
 Deutung von Experimenten gehören nach [lab_journal.md](lab_journal.md).
 
-⚠️ **Die Erkennungskennzahlen stammen bisher überwiegend von synthetischem
-Material.** Seit 2026-09-21 existiert ein realer Proben-Bestand aus dem
-Sammelmodus (73 lesbare Proben, 2 Geräte, siehe unten „2026-09-21 —
-Dataset-Benchmark"), aber **beide Geräte stehen auf `split=development`,
-keines auf `heldout`** — nach Konzept.md §9 ist damit weiterhin **kein**
-Testergebnis erreichbar, nur eine Entwicklungsmessung. Ein Datensatz mit
-breiterer Gerätevielfalt bleibt offen ([OQ-04](open-questions.md)).
-Konzept.md §9 ist ausdrücklich: synthetische Daten ergänzen, sie zählen **nie**
-zum Testset. Technische Kamerastream-Tests sind gesondert gekennzeichnet und
-belegen keine Erkennungszuverlässigkeit im Realbetrieb.
+**Stand 2026-10-21:** Reale Dot-Matrix-Belege umfassen die Leser-Abnahme 3
+vom 2026-09-30 (215/215 richtig in zwei neuen Aufstellungen) und die unten
+dokumentierten [Live-Läufe mit Referenz](#messpfad-live-langlauf-2026-10-21).
+Die Live-Läufe sind keine formale Abnahme; der
+[Werteplan-Versuch](#messlauf-vorbereitung-2026-10-21) zeigt
+Nachführungsverluste bei großen Wertwechseln. Die erhöhte Lesetoleranz ist
+nicht validiert. Der frühere Bestand von 73 Proben auf zwei
+Entwicklungsgeräten und die synthetischen Messreihen bleiben historische
+Entwicklungsbelege. Neue Aufstellungen desselben GSV-2AS ersetzen keinen
+Test an vollständig zurückgehaltenen anderen Geräten nach Konzept §9;
+breitere Gerätevielfalt bleibt offen ([OQ-04](open-questions.md#oq-04)).
+Synthetische Daten ergänzen, sie zählen nie zum realen Testset.
+Technische Kamerastream-Tests belegen keine Erkennungszuverlässigkeit.
 
 ## Leserlaufzeit 2026-10-13 — Messpfad live, Task 1
 
@@ -3158,3 +3161,108 @@ Pi ruhig (Wächter: kein Aussetzer über 6 s, Last ≤ 2,1, Temperatur
 ≤ 55,6 °C, keine Unterspannung). Erster Lauf über 10 min am Aufbau. Der
 strenge Leser bleibt damit auch bei Dauerbetrieb ohne Fehllesung; für die
 Toleranz zählt dieser Lauf nicht (`tolerance_frames` 0).
+
+## 2026-10-21 — Einrichtung vor dem Werteplan-Lauf { #messlauf-vorbereitung-2026-10-21 }
+
+**Nur Einrichtung und Vorbereitung, noch kein Messlauf.** Sitzung
+`live-20261021T151835Z`, StreamCam am GSV-2AS / Displaytech 161A.
+Die Person hat einen strengen Lauf ohne erhöhte Toleranz gewählt.
+
+| Einrichtungsprüfung | Ergebnis |
+| --- | --- |
+| Gesamturteil | Alle 9 Prüfungen OK |
+| Gegenlesen | 2/2 Standbilder gelesen, keine Widersprüche, keine maskierten Zellen |
+| Auflösung | mindestens 5,93 Quellbildpixel je Punktspalte |
+| Rasterzuordnung | 151/152 Punkte, 99,34 % |
+| Rasterversatz | maximal 0,062 Spalten und 0,052 Zeilen |
+| Stabilität | maximal 0,025 px Eckpunktverschiebung zwischen den Prüfstandbildern |
+
+Die Einrichtungswerte stammen aus `setup/proposal.json`, nicht aus einem
+Live-Lauf. Vorlagenprüfsumme und Timing-Kalibrierung erfolgreich geprüft;
+Registerstand stimmt mit dem gespeicherten Rückstellpunkt überein.
+Vorbereitet: fünf Faktoren `1, 2, 0.5, 5, 10`, zusammen 720 s Haltezeit
+plus Befehlspausen, serielle Referenz und einmal etwa 2 s Displayabdeckung.
+Noch keine Aussage zur Live-Fehlerrate, Toleranz oder Wechselverzögerung.
+Diagnose unter `var/diagnostics/messlauf-vorbereitung-20261021/`, Aufbau und
+Bedienablauf im [Laborjournal](lab_journal.md).
+
+**Zwischenbefund aus `run-01`, Lauf noch aktiv:** Nach dem Planschritt
+Faktor 2 ist die serielle Referenz etwa 1,2115 mV/V. Bild 4317 ist VALID
+mit 1,2115; Bild 4318 ist die erste Ablehnung wegen
+`tracking_lost:low_score`. Ein früher Diagnosestand zählt 1008
+Trackingverluste bei 5091 gelesenen Bildern, Kamera-Bildlücken 0,
+Auditfehler 0, Referenz-Parsefehler 0 und Queue-Verluste 0. Der minimale
+Tracking-Score dieses Zwischenstands ist 0,543 gegenüber Schwelle 0,60.
+Die Referenz hat zwei Lücken über 1 s bei den bisherigen Befehlspausen;
+deren Zeitfenster müssen beim abschließenden Abgleich berücksichtigt
+werden. Das sind keine Abschlusszahlen und kein Freigabenachweis.
+
+Beim folgenden Planschritt auf Faktor 0,5 wird ohne Eingriff wieder VALID
+mit 0,30287 mV/V beobachtet (Bild 8835). Der Fehler hängt damit im
+beobachteten Lauf vom Anzeigeinhalt ab; die Nachführung ist für diese
+Wertwechsel noch nicht als belastbar belegt.
+
+**Laufende Diagnose beendet:** `session.json` hält den Abschluss am
+2026-10-21 um 17:36 MESZ fest (`ended_at_utc=2026-10-21T15:36:01.987480+00:00`,
+`end_reason=bediener`). Der Referenzrecorder meldet
+`restore_verification.write_ok=true` und `matches_restore_point=true`.
+Die oben genannten Zwischenzahlen bleiben als Zwischenstand erhalten.
+Die anschließende [Abschlussauswertung](#messpfad-live-werteplan-2026-10-21)
+steht unten; aus dem erfolgreichen Rückstellen folgt keine Leserfreigabe.
+
+
+## 2026-10-21 — Strenger Werteplan-Lauf: Abschluss { #messpfad-live-werteplan-2026-10-21 }
+
+**Lauf:** `var/live/live-20261021T151835Z/run-01`, 17:22:35 bis 17:36:01 MESZ,
+806,14 s einschließlich Abschluss/Rückstellung; Aufnahmezeitspanne 802,19 s.
+StreamCam am GSV-2AS / Displaytech 161A, bestätigt durch Leonhard Hentschke,
+alle neun Einrichtungsprüfungen OK, strenger Leser, keine erhöhte Toleranz.
+Werteplan `1:140,2:140,0.5:140,5:140,10:160`, Referenz mitgeschrieben.
+Die Person bestätigt etwa 2 s Displayabdeckung nach ungefähr 6 min und
+sonst unveränderten Aufbau. Keine Einstellungen im Lauf geändert.
+
+| Kennzahl | Ergebnis |
+| --- | --- |
+| Bilder gelesen / übersprungen | 22 932 / 1074; 28,59 gelesene Bilder/s über die Aufnahmezeitspanne |
+| Status gesamt | 13 932 VALID (60,75 %), 906 TRANSITION, 8076 UNREADABLE (35,22 %), 18 STALE |
+| Fehllesungen gegen Referenz | **0 von 11 137** entschiedenen VALID |
+| Nicht als korrekt nachgewiesene VALID | 2563 im Schutzintervall; 232 ohne Referenzdeckung |
+| Nachführung | 8074 Verluste: 8021 `low_score`, 47 `ecc_diverged`, 5 `shift_out_of_bounds`, 1 `rotation_out_of_bounds` |
+| Kamera / Audit | 0 Bildlücken, 0 Auditfehler |
+| Referenz | 1488 Telegramme, 0 Parsefehler, 0 verworfene Queue-Einträge, 5 Lücken über 1 s bei Befehlspausen |
+| Kleine Referenzwechsel innerhalb kontinuierlicher Deckung | 190 mit passendem VALID, Median 237,7 ms, p90 260,8 ms; 68 ohne passendes VALID |
+| Wechsel nach Referenzlücke | 5; Verzögerung daraus nicht messbar |
+| Rückstellung | Normbytes `[80, 27, 228]`, Dezimalpunkt `[1]`; Schreiben und Rücklesen bestätigt |
+
+Der Referenzabgleich (`scripts/live-reference-eval.py`, Exit 0) verwendet
+695 ms Schutzzeit und die gespeicherten BOOTTIME−MONOTONIC-Versätze
+(Start 19 ns, Ende 9 ns). Die Zeitstempelsemantik der Kamera bleibt offen
+(OQ-43). Die Verzögerungszahlen oben betreffen die 190 beobachteten kleinen
+Wertwechsel mit kontinuierlicher Referenz; sie belegen keine schnelle
+Erfassung der großen Normierungssprünge über Befehlspausen hinweg.
+
+| Faktor | Angezeigter Bereich (mV/V) | VALID in stabilen Referenzfenstern |
+| --- | --- | --- |
+| 1 | 0,60572–0,60574 | 3077/3078 (99,97 %) |
+| 2 | 1,2114–1,2115 | 0/3951 (0 %); alle UNREADABLE |
+| 0,5 | 0,30286–0,30287 | 3107/3107 (100 %) |
+| 5 | 3,0286–3,0287 | 0/2778 (0 %); alle UNREADABLE |
+| 10 | 6,0572–6,0575 | 4953/4953 (100 %) |
+
+**Deutung:** Kein falscher freigegebener Wert im prüfbaren Teil, aber
+unbrauchbare Verfügbarkeit bei zwei Normierungsfaktoren. Das Tracking
+vergleicht auch die wechselnden Ziffern mit dem Einrichtungsbild. Die
+systematischen Ausfälle und Erholung bei anderen Werten trotz laut Person
+unverändertem Aufbau begründen R13: geometrische Nachführung unabhängig
+vom Zifferninhalt entwickeln und erneut prüfen. Schwelle nicht im Lauf
+abgesenkt. Live-Bilder der Ausfallphasen wurden nicht aufgezeichnet; die
+Ursache ist damit noch nicht durch einen unabhängigen Bildvergleich abgesichert.
+
+Die berichtete Abdeckung ist im ungefähren 6-Minuten-Fenster nicht als
+eigener längerer Ausfall isolierbar; längere Ausfälle fallen in andere
+Planschritte. Kein gesonderter Nachweis der Reaktion auf diese Abdeckung.
+**Kein bestandener Robustheits- oder Toleranznachweis, keine formale Abnahme.**
+
+**Artefakte:** `session.json`, `records.jsonl`, `reference.jsonl`,
+`commands.jsonl`, `reference-eval.json`, `werteplan-auswertung.json` und die
+beiden Diagnoseschnappschüsse im Laufverzeichnis (lokale Daten, nicht in Git).

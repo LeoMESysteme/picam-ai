@@ -84,17 +84,19 @@ Trennstelle:
 frames/    Bildquelle      v4l2:// [fertig, StreamCam, UvcSource] ·
                            synthetic:// [fertig] · replay:// [fertig, Clips mit
                            einem Label je Clip] · folder:// video://
-                           [Registry-Eintrag] · picamera2:// imx500://
+                           [Registry-Eintrag, Quellmodule fehlen] · picamera2:// imx500://
                            [außer Betrieb seit 2026-09-25, gezielte Fehlermeldung]
 detect/    Anzeige finden  manual_roi [fertig, PRIMÄRPFAD]
-                           contour_heuristic [TODO] · imx500_detector
+                           contour_heuristic [gebaut, Vorschlagshilfe] · imx500_detector
                            [außer Betrieb mit der IMX500]
 track      Nachführen      QuadTracker, begrenzte ECC-Nachregistrierung eines
                            bestätigten Quads gegen die Bestätigungsreferenz —
                            korrigiert das Quad, bevor damit entzerrt wird
                            [fertig]
 rectify    Entzerren       OpenCV-Vierpunkt + optional CLAHE [fertig]
-ocr/       Wert lesen      sevenseg mit Per-Segment-Evidenz [fertig]
+ocr/       Wert lesen      dotmatrix mit eingefrorenen Vorlagen [LIVE-PRIMÄRPFAD,
+                           GSV-2AS/Displaytech 161A, mV/V, Raumlicht]
+                           sevenseg mit Per-Segment-Evidenz [gebaut, Altpfad]
                            tesseract_cli [gebaut, fuer dot-matrix-/Zeichen-
                            LCDs wie GSV-Sensor; lehnt bisher alle 11 echten
                            GSV-Proben ab (0/11 liefern einen Wert) — nie

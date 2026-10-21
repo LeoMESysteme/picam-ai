@@ -28,8 +28,8 @@ bash scripts/install-workbench.sh
 ```
 
 `init-tls` nur einmal ausführen. Bereits vorhandene Schlüssel werden nicht
-überschrieben. In dieser Implementierungssession wurde das Zertifikat bereits
-unter `var/workbench/tls/` erzeugt; du kannst direkt
+überschrieben. Wenn `cert.pem` und `key.pem` bereits unter
+`var/workbench/tls/` vorhanden sind, kannst du direkt
 `./.venv/bin/dispread serve --port 8081` starten.
 
 Mit diesem Startbefehl ist die Werkbank unter der zuvor vom Nutzer
@@ -46,7 +46,7 @@ Dafür `https://100.122.154.35:8081/live` öffnen.
 `Ctrl+C` beenden. Der kompatible Einstieg bleibt:
 
 ```bash
-./.venv/bin/python examples/17_camera_display_preview.py
+./.venv/bin/python examples/17_camera_display_preview.py --port 8081
 ```
 
 Die gesamte Oberfläche verlangt das normale Linux-/SSH-Passwort von
@@ -56,7 +56,14 @@ nötig. Fünf Anmeldeversuche pro Minute und Client sind möglich.
 
 ## Live-Seite `/live`
 
-Stand 2026-10-14: gebaut und Einrichtung am Aufbau geprüft, Messlauf offen.
+Stand 2026-10-21: gebaut; Einrichtung und mehrere Bedienerläufe mit
+serieller Referenz sind dokumentiert. Eine allgemeine Live-Freigabe folgt
+daraus nicht. Der beendete Werteplan-Versuch zeigt bei großen Wertwechseln
+`tracking_lost:low_score` und später selbstständige Erholung. Bei Faktor 2
+und 5 fehlt VALID in stabilen Referenzfenstern; die Rückstellung ist geprüft.
+Eine unabhängige Ursachenabsicherung steht aus
+([Auswertung](../VALIDATION.md#messpfad-live-werteplan-2026-10-21),
+[OQ-26](../open-questions.md#oq-26)).
 Im Projektverzeichnis starten:
 
 ```bash
@@ -81,8 +88,10 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
    Timing-Kalibrierung müssen vorhanden sein; fehlende oder veränderte
    Dateien sperren den Laufstart.
 2. Zellentext leer lassen, um ihn seriell vom GSV-2AS zu lesen. Alternativ
-   die neun Zeichen der Zellen 0–8 einschließlich Leerzeichen eingeben,
-   etwa `+0.60972 `. Es ist kein Textfeld für alle 16 Zellen.
+   acht Zeichen für Vorzeichen und Zahlenzellen eingeben, etwa
+   `+0.60972`; die neunte, leere Zelle wird ergänzt. Neun Zeichen mit
+   abschließendem Leerzeichen sind ebenfalls zulässig. Bei schwankenden
+   Zellen `?` verwenden. Es ist kein Textfeld für alle 16 Zellen.
 3. **Einrichtung starten**. Die Seite zeigt Schritt und vergangene
    Sekunden: Fokus, Kamera, Standbilder, Vorschlag. Fokus per Bergsteigen,
    acht Bilder je gemitteltem Standbild und bis zu drei Suchversuche;
@@ -100,8 +109,9 @@ Am 2026-10-14 lieferten nach N7 vier Einrichtungen Vorschläge mit
 Gesamt-WARNUNG wegen einer Proxy-Prüfung: zunächst `raster` WARNUNG wie
 bei `sc7`, beim vierten Versuch `kanten` WARNUNG und `raster` OK.
 Die Einrichtungen dauerten 47/55/49/45 s; Rasterversatz und Gegenlesen
-waren jeweils OK. Bestätigung und Messlauf stehen noch aus;
-das war kein formaler Abnahme-Lauf.
+waren jeweils OK. Damals standen Bestätigung und Messlauf noch aus;
+seitdem gibt es die Bedienerläufe vom 2026-10-21. Die Einrichtungen vom
+2026-10-14 waren kein formaler Abnahme-Lauf.
 
 ### Schwankende letzte Ziffer
 
@@ -136,9 +146,13 @@ oder Kanten, werden wie bisher bei der Bestätigung quittiert.
 Unter „Testmodus (nur zu Testzwecken)“ lässt sich die Lesesperre ausdrücklich
 übergehen. Haken setzen und den zusätzlichen Dialog bestätigen. Der Testlauf
 zeigt, welche Zeichen der Leser vermutet hätte; unsichere Zellen sind benannt.
-Diese Vermutungen sind verworfen und erscheinen nie als Messwert im JSONL-Audit.
-Alle Werte des Testlaufs sind nicht freigegeben und dürfen nicht für Messungen
-verwendet werden. Das rote Banner kennzeichnet auch den beendeten Testlauf.
+Die Vermutungsanzeige ist kein freigegebener Messwert. **Die technische
+Sperre im Audit ist jedoch unvollständig:** `LiveSession.step()` schreibt
+den Pipeline-Record unverändert, auch wenn ein späteres Bild `VALID` ergibt
+([OQ-44](../open-questions.md#oq-44)). Deshalb sind alle Records dieses
+Laufordners als Testdaten von Messungen auszuschließen; ein einzelnes
+`status=valid` hebt die Testmarkierung des Laufs nicht auf. Das rote Banner
+kennzeichnet auch den beendeten Testlauf.
 `var/live/<sitzung>/run-NN/TESTLAUF.json` hält Sperrgrund, Bedienperson und
 Startzeit fest; `session.json` enthält die Testmarkierung und die zehn
 häufigsten Vermutungen. Die einzelnen Records in `records.jsonl` tragen keine
@@ -213,10 +227,13 @@ import serial
 from dispread.gsv2as_serial import DEFAULT_RESTORE_POINT, _apply_norm_dpoint, _check_restore_point
 
 point = json.loads(DEFAULT_RESTORE_POINT.read_text(encoding="utf-8"))
+# Anschluss aus dem gespeicherten Rueckstellpunkt, nicht aus einem Default.
+serial_port = point["port"]
+serial_baudrate = int(point["baudrate"])
 reg = point["register"]
 # Protokoll in eine neue Datei schreiben; vorhandene Aufzeichnungen behalten.
 with Path("var/diagnostics/manuelle-rueckstellung.jsonl").open("x") as log:
-    with serial.Serial("/dev/ttyUSB0", 38400, timeout=0.2) as port:
+    with serial.Serial(serial_port, serial_baudrate, timeout=0.2) as port:
         ok = _apply_norm_dpoint(port, reg["norm"]["daten"], reg["dpoint"]["daten"][0],
                                 log, {}, label="manual_restore")
         matches, detail = _check_restore_point(port, point, log, {}, label="manual_verify")
@@ -227,10 +244,14 @@ PY_RESTORE
 ```
 
 Den Protokolldateinamen bei wiederholter Rückstellung neu wählen. Anschließend
-mit `PYTHONPATH=src ./.venv/bin/python scripts/gsv-registers.py --out
-var/diagnostics/gsv-register-nach-rueckstellung.json` einen separaten Iststand
-sichern und mit dem ursprünglichen Rückstellpunkt vergleichen. Dieses Skript
-liest Register; es stellt sie selbst nicht zurück.
+mit `PYTHONPATH=src ./.venv/bin/python scripts/gsv-registers.py
+--port PORT_AUS_RUECKSTELLPUNKT --baudrate BAUDRATE_AUS_RUECKSTELLPUNKT
+--out var/diagnostics/gsv-register-nach-rueckstellung.json` einen separaten
+Iststand sichern und mit dem ursprünglichen Rückstellpunkt vergleichen.
+Die Platzhalter durch `port` und `baudrate` aus dem Rückstellpunkt ersetzen.
+Dieses Skript liest Register; es stellt sie selbst nicht zurück. Es sendet
+STOP/CLEAR/START und unterbricht dabei den Messwertstrom; nur außerhalb
+einer laufenden Referenzaufzeichnung verwenden.
 
 Pro Lauf entstehen `reference.jsonl` mit BOOTTIME-Zeit, Rohtelegramm,
 Zellentext und Zahlenwert (abgelehnte Zeilen mit `cell_text: null`,
@@ -281,10 +302,19 @@ Der Freigabehinweis bleibt sichtbar:
 
 > Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
 
-Es gibt noch keine serielle Ausgabe an GSVmulti (OQ-07). ECC-Tracking bei
-Wertwechseln ist noch ungemessen. Der geplante Bedienerlauf umfasst ≥ 10 min,
-fünf Werte über `set norm` und einmal 2 s Displayabdeckung; danach
-`tracking_lost` und `track_score` auswerten (R13, siehe [TODO](../../TODO.md)).
+Es gibt noch keine serielle Ausgabe an GSVmulti ([OQ-07](../open-questions.md#oq-07)).
+Die Bedienerläufe vom 2026-10-21 liefern erste Trackingbefunde bei
+Wertwechseln ([Validierung](../VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21)).
+Im inzwischen beendeten strengen Werteplan-Versuch wurde nach dem Wechsel auf
+Faktor 2 dauerhaft `tracking_lost:low_score` beobachtet; bei Faktor 0,5
+kehrte VALID ohne Eingriff zurück. Der Einfluss des Zifferninhalts ist
+plausibel, aber noch nicht abschließend abgesichert (R13,
+[OQ-26](../open-questions.md#oq-26)). Die
+[Abschlussauswertung](../VALIDATION.md#messpfad-live-werteplan-2026-10-21)
+und bestätigte Rückstellung sind dokumentiert; die Nachführung muss vor
+weiteren Freigabeläufen überarbeitet und erneut geprüft werden.
+Ein Toleranzlauf ≥ 10 min mit Werteplan bleibt separat offen
+([TODO](../../TODO.md)).
 
 ### Dateien und lokale Bedienung
 
@@ -297,8 +327,9 @@ fünf Werte über `set norm` und einmal 2 s Displayabdeckung; danach
 
 Die Timing-Kalibrierung wird aufgezeichnet, nicht auf den Live-Wert angewandt.
 Zeitstempel tragen ihre Zeitbasis; unbekannte Unsicherheit ist `None`.
-Die derzeitige `JsonlSink`-Rotation würde nach etwa 7 h alte
-Auditgenerationen verwerfen; dauerhafte Aufbewahrung ist ein Folgeschritt.
+Die `JsonlSink` rotiert standardmäßig bei 64 MiB und behält fünf
+Generationen zusätzlich zur aktuellen Datei. Wie lange das reicht, hängt
+von Bildrate und Recordgröße ab; dauerhafte Aufbewahrung ist ein Folgeschritt.
 
 Lokale Befehle über den privaten Steuer-Socket:
 
@@ -540,8 +571,11 @@ Abstimmen in getrennte Entwicklungs- und Testsätze aufgeteilt werden. Die
 Labels bleiben außerhalb von `ValueReader.read` und `ReleaseGate.evaluate`.
 
 Gelbe Rechtecke sind automatische Vorschläge, grüne markieren bestätigte
-Bereiche. Die ROI ist an den bestätigten Aufbau gebunden; es gibt noch keinen
-Tracker. Ein verschobenes Gerät muss neu eingerichtet werden. Kein Modell wird
+Bereiche. Die ROI ist an den bestätigten Aufbau gebunden; der
+`QuadTracker` führt sie begrenzt gegen das Bestätigungsbild nach. Auf
+`/live` passiert das bei jedem gelesenen Bild. Bei überschrittenen Grenzen
+oder verlorenem Tracking muss die Einrichtung geprüft und gegebenenfalls
+neu bestätigt werden ([OQ-26](../open-questions.md#oq-26)). Kein Modell wird
 beim Verschieben oder Speichern trainiert.
 
 Eine automatische Live-Ermittlung des Ziffernrahmens ist grundsätzlich
@@ -574,15 +608,23 @@ Ausschnittqualität. Auch ein Status `valid` ist hier nur eine Vorschau:
 seriell ausgegeben. Die Modell-/Segmentkonfidenz ist nicht als
 Fehlerwahrscheinlichkeit kalibriert.
 
-Der aktuelle Leser unterstützt helle LED/VFD-Segmente auf dunklem Grund.
-Inverse LCD-Anzeigen bleiben [OQ-13](../open-questions.md), die sichtbare
-Prüfung des Dezimalpunkts und der Einheit [OQ-17](../open-questions.md).
+Die alte Werkbankvorschau verwendet `SevenSegmentReader`; er unterstützt
+`bright_on_dark` und `dark_on_bright`. Der Fall „alle Stellen zeigen 8“
+bleibt [OQ-13](../open-questions.md#oq-13), die optische Punktprüfung dieses
+Segmentlesers und das Lesen der Einheit [OQ-17](../open-questions.md#oq-17).
+Auf `/live` liest dagegen `DotMatrixReader` den Punkt als Zeichen und
+übernimmt die bestätigte Einheit mV/V aus dem Profil.
 Statusanzeigen wie `DC` werden in diesem Schritt ebenfalls nicht gelesen.
 Vorschauänderungen werden nicht automatisch gespeichert. Gültige externe
 Dateiänderungen werden nach kurzem Entprellen übernommen. Bei ungültigem JSON
 bleibt die letzte Konfiguration aktiv; bei gleichzeitig ungespeicherten lokalen
 Änderungen erscheint ein Konflikt. `resolve local` behält die Vorschau, ein
 anschließendes `save` überschreibt die Datei bewusst.
+
+Der folgende Block dokumentiert den älteren Controller. Im laufenden
+Server mit `CameraOwner` werden `camera.set`, Fokus und Auto-Setup dort
+abgewiesen und auf `/live` verwiesen. `mode run` ist weiterhin lediglich
+der alte Vorschauzustand, kein Live-Laufstart.
 
 ```bash
 dispread status
@@ -623,8 +665,8 @@ Für Entwicklung ohne Kamera:
 
 Simulierte Bilder tragen die Zeitbasis `synthetic`; daraus keine reale Latenz
 ableiten. Statusalter/Verarbeitungsrate verwenden CLOCK_MONOTONIC, Logzeiten UTC.
-Aufnahmezeitstempel realer Bilder bleiben in SENSOR_BOOTTIME mit unbekannter
-Semantik und Unsicherheit `None` erhalten.
+Reale StreamCam-Bilder tragen `V4L2_MONOTONIC`, unbekannte Semantik und
+Unsicherheit `None`; `SENSOR_BOOTTIME` gehört zum historischen IMX500-Pfad.
 
 ### Schatten und angepasste Toleranz
 
@@ -652,7 +694,8 @@ eine Zelle die ursprüngliche Vorlagenschwelle überschritt.
 
 ## Prüfstand dieser Implementierung
 
-63 automatische Tests einschließlich TLS-Login mit Testauthentifizierung,
+**Historischer Prüfstand vom 2026-09-08:** 63 automatische Tests einschließlich
+TLS-Login mit Testauthentifizierung,
 WebSocket-Shell, Wiederverbindung/Logout, Profilkonflikten, exakter Bildzuordnung
 von Annotationen, Tastaturbedienung der TUI sowie der Prüfung, dass **jede
 angebotene Auswahl vom Controller auch angenommen wird**, sind erfolgreich. Echter Kamera-
@@ -664,7 +707,10 @@ Prüfpunkten über eine `file://`-Seite mit eingespielter echter `/status`-Antwo
 (Auswahlfelder, gesperrte Zeilen mit Grund, Tastenkürzel, Namensabfrage). Ein vollständiger HTTPS-Durchlauf in
 dieser lokalen Chromium-Headless-Umgebung bleibt bei der Navigation hängen;
 Python/curl und der TLS/WSS-Integrationstest funktionieren. Dieser Befund ist
-[OQ-21](../open-questions.md). Windows-Zertifikatsvertrauen, Anmeldung mit deinem
+[OQ-21](../open-questions.md). Diese historische lokale Headless-Störung ist
+kein pauschaler Befund für heutige Playwright-Läufe; der Live-Pfad besitzt
+inzwischen `tests/live-ui.spec.ts` mit simuliertem Dienst.
+Windows-Zertifikatsvertrauen, Anmeldung mit deinem
 wirklichen Linux-Passwort und der gemeinsame Betrieb im Windows-Browser sind
 noch manuell abzunehmen. Es gibt keinen Testpasswort-Modus im Produkt.
 
@@ -680,7 +726,9 @@ Dieser Prototyp folgt nicht dem Kapitelraster aus der
 [Lernpfad-Übersicht](README.md) (kein `Vertrag`, keine `Fallen`-Liste) — diese
 Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
 
-* [ ] Ein fehlgeschlagenes Gegenlesen sperrt den Lauf; ein ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
+* [ ] Ein fehlgeschlagenes Gegenlesen sperrt den normalen Lauf; ein
+  ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
+  Der Schutz gegen `VALID` im Test-Audit bleibt [OQ-44](../open-questions.md#oq-44).
 * [ ] `/live` führt ohne Anmeldung zum Login und danach zurück; bei Portkonflikt
   startet die Werkbank mit `--port 8081`.
 * [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;

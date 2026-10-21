@@ -11,8 +11,8 @@ vor. Ein Mensch muss sie intern beschaffen ([OQ-07](open-questions.md)).
 
 **Präzisierung 2026-09-22.** Die frühere Aussage „`me-systeme.de` blockt
 automatische Abrufe mit HTTP 403" galt pauschal und ist so falsch: **PDFs unter
-`/produkte/.../anleitungen/` sind abrufbar (HTTP 200)**, nur die
-HTML-Produktseiten antworten mit 403. Beschafft und lokal abgelegt sind
+`/produkte/.../anleitungen/` waren bei der Prüfung am 2026-09-22 abrufbar
+(HTTP 200)**; die geprüften HTML-Produktseiten antworteten mit 403. Beschafft und lokal abgelegt sind
 seither:
 
 * `var/datenblaetter/gsv2-bedienungsanleitung.pdf` — Bedienungsanleitung
@@ -26,8 +26,10 @@ seither:
   Bedienung der Oberfläche. Gesucht ist ausserdem v2.6.
 
 **`var/` ist gitignored** — beide PDFs liegen nur lokal und überleben keinen
-frischen Clone. Dauerhaft sind allein die Quell-URLs; wer sie erneut braucht,
-lädt sie unter denselben Pfaden wieder herunter.
+frischen Clone. Die [GSV-2-Anleitung](https://www.me-systeme.de/produkte/elektronik/gsv-2/anleitungen/gsv2-bedienungsanleitung.pdf)
+ist als Quell-URL dokumentiert. Weitere Recherche-Ausgangspunkte stehen in
+[Konzept §12](../Konzept.md#12-quellen-aus-der-bisherigen-diskussion); der
+lokale Dateiname allein ist keine dauerhaft verfügbare Quelle.
 
 Damit ist geklärt, *warum* die Spezifikation fehlt: sie steht nicht in den
 öffentlichen Anleitungen, nicht dass sie unerreichbar wäre. **An der
@@ -83,8 +85,10 @@ braucht es einen anderen Weg:
 3. Anpassung der Integration oder des Auswerteverfahrens.
 
 Deshalb trägt jeder Formatter die Fähigkeit `carries_capture_timestamp`, und
-die Pipeline vermerkt im Runartefakt, wenn sie `False` ist — statt es zu
-verschweigen.
+der jeweilige Lauf muss diese Fähigkeit zusammen mit `provisional` im
+Runartefakt dokumentieren. Beispiel 16 schreibt beide Angaben in
+`report.json`; `Pipeline` selbst erzeugt keinen allgemeinen Laufbericht.
+Der aktuelle `/live`-Pfad schreibt JSONL und hat keinen seriellen Formatter.
 
 ## Die Naht im Code
 
@@ -103,9 +107,10 @@ seriell).
 ## Der Platzhalter — ausdrücklich nicht das GSVmulti-Format
 
 `AsciiCsvFormatter` dient dazu, die Kette Wert → Telegramm → Leitung →
-Gegenstelle vollständig zu testen. Alle Achsen, die Konzept §8 als
-klärungsbedürftig nennt, sind konfigurierbar, damit das echte Format später nur
-eine andere Parametrierung ist:
+Gegenstelle vollständig zu testen. Trennzeichen, Zahlendarstellung,
+Zeitstempel und Fehlerbehandlung sind für gezielte Transporttests
+konfigurierbar. Ob das echte Format mit anderer Parametrierung darstellbar
+ist oder einen neuen Formatter braucht, bleibt bis zur Spezifikation offen:
 
 ```
 1;1;-12.500;N;valid;492076801394;synthetic
@@ -137,15 +142,19 @@ getestet:
 | --- | --- | --- |
 | `omit_record` | Datensatz entfällt vollständig | `TxReceipt.omitted = True`, damit die Lücke nicht als Übertragungsfehler gedeutet wird |
 | `send_nan` | `NaN` als Wert | Telegramm enthält `NaN` |
-| `status_flag` | Wertfeld leer, Statusfeld gesetzt | z. B. `1;7;;;unreadable;...` |
+| `status_flag` | Bei abgelehnten Datensätzen (`value=None`) Wertfeld leer, Statusfeld gesetzt | z. B. `1;7;;;unreadable;...` |
 
 ## Elektrische Ebene
 
 Siehe [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md) und
-[OQ-09](open-questions.md). Kurz: Datenport ist `/dev/ttyAMA0`, nicht
-`/dev/serial0`. Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden
-werden. Ein Transceiver fehlt noch, ebenso die Bewertung der galvanischen
-Trennung.
+[OQ-09](open-questions.md). Für die **geplante Ausgabe nach GSVmulti** ist `/dev/ttyAMA0`
+vorgesehen, nicht `/dev/serial0`. Pi-GPIO-Pegel dürfen **nicht** direkt mit
+RS-232 verbunden werden. Der Transceiver für diesen Ausgang und die
+Bewertung der galvanischen Trennung fehlen weiterhin.
+
+Die **eingehende Referenz** des GSV-2AS wird dagegen bereits über einen
+PL2303-USB-RS232-Adapter (`/dev/ttyUSB0`, 38400 8N1) aufgezeichnet. Dieser
+Aufbau belegt weder den GPIO-Ausgang noch die GSVmulti-Kompatibilität.
 
 `sink/serial_out.py` enthält `required_baudrate()` für die Durchsatzrechnung.
 Konzept §6 warnt dabei: ein höherer Sendetakt liefert keine zusätzlichen

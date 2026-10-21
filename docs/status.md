@@ -1,152 +1,138 @@
 # Status — Stand 2026-10-21
 
-Dieser Snapshot wird zum Sessionende überschrieben. Verlauf:
-[Changelog](../CHANGELOG.md) und [Projektgeschichte](project_history.md);
-Arbeitsliste: [TODO.md](../TODO.md).
+Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
+[TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
+[Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
-## Messpfad live
+## Wiki-Abgleich
 
-Auf `worktree-feat-messpfad-live` ist der Messpfad gebaut: `dispread serve`
-hält die Logitech StreamCam über `CameraOwner` für seine gesamte Laufzeit.
-`/live` führt durch Einrichtung, namentliche Bestätigung und Messlauf mit
-Dot-Matrix-Leser; der Wert trägt VALID, TRANSITION, UNREADABLE oder STALE.
-Die alte Werkbank bekommt gedrosselte Bilder vom selben Owner;
-Kamerabedienung erfolgt nur über `/live`. Andere Kameraprozesse, etwa
-Harvest-Skripte, bekommen währenddessen „belegt“. Port 8080 ist auf diesem Pi
-durch MEhub belegt; die Werkbank läuft mit `dispread serve --port 8081`.
+Alle 52 Zensical-Navigationsseiten und die 34 Tour-Schritte sind geprüft.
+Drei Subagents bearbeiteten Anleitungen, Projekt/Betrieb und Tour/API;
+ein weiterer Agent prüfte die Änderungen unabhängig. Das
+[Seitenprotokoll](wiki-audit-2026-10-21.md) nennt Ergebnisse und offene
+Befunde. Veraltete Live-/IMX500-Aussagen, Installationsblocker, Freigabe-
+und Zeitversprechen sind korrigiert. Anime.js-Timelines und Szenentexte
+sind gemeinsam aktualisiert; 32 Tour-Fakten werden aus Code/Belegen erzeugt.
 
-Einrichtung und Profil liegen unter `var/live/<sitzung>/`, einschließlich
-`profile.json` und `confirmation.json` nach Bestätigung. Jeder Lauf schreibt
-`records.jsonl` und `session.json` unter `var/live/<sitzung>/run-NN/`.
-Lokal stehen `dispread live status|setup|stop|camera` zur Verfügung;
-Bestätigung und Laufstart bleiben in der angemeldeten Oberfläche (Konzept §4).
+Neu erkannt und sofort erfasst:
 
-## Neu am 2026-10-21
+* [OQ-44](open-questions.md#oq-44): Testlaufmarkierung und Banner verhindern
+  technisch weder VALID im Audit noch dessen Anzeige. Solche Daten bleiben
+  für Messungen gesperrt; eine erzwungene Freigabesicherung fehlt.
+* [OQ-45](open-questions.md#oq-45): MONOTONIC-Verarbeitungsmarken werden
+  teilweise mit einer unpassenden Zeitbasis bezeichnet. Der aktuelle
+  V4L2-Livepfad passt; andere Aufnahmezeitbasen brauchen eine Korrektur.
 
-* **Lesesperre und Testlauf (L1, `5620ff0`).** Der Laufstart wird mit
-  Erklärung abgelehnt, solange die Einrichtungsprüfung `gegenlesen` nicht OK
-  ist. Ein ausdrücklicher Testlauf (`TESTLAUF.json`, Banner) zeigt die
-  Vermutungen des Lesers, gibt aber nie einen Wert frei.
-* **Schwankende Ziffern (L2, `7f71422`).** Gegenlesen ignoriert maskierte
-  Zellen und vergleicht den Rest mit der seriellen GSV-2AS-Referenz; ein
-  Widerspruch ist FEHLER. Standbilder werden bis zu fünfmal neu
-  aufgenommen, bis der serielle Wert ruhig ist. Der manuelle Zellentext
-  nimmt 8 Zeichen und `?` an.
-* **Licht-Hinweis und angepasste Toleranz (L3, `b0d6f1a`).** Ungleiches Licht
-  (Schatten) wird als Kontrastsprung zwischen Zellen benannt. Eine angepasste
-  Lesetoleranz gibt es nur mit serieller Referenz: Faktor = 1,25 × größter
-  gemessener `d_best` / `d_max`, höchstens 2,0, durch erneutes Lesen geprüft,
-  bei der Bestätigung anzukreuzen. Lauf und Werte tragen „nicht validiert“,
-  `tolerance_frames` steht in `session.json`. Synthetischer Sweep mit
-  `d_max` × 2,0: kein falscher Wert.
-* **Wertwechsel als TRANSITION (`7ef04cc`).** Mischziffern während des
-  Umschaltens tragen „Wert wechselt“ (`anzeige_wechselt`) statt UNREADABLE:
-  höchstens 3 unlesbare Zellen, die übrigen gleich dem letzten freigegebenen
-  Text, höchstens 0,5 s; nie ein Wert.
-* **Leser ~6× schneller (`c5b30ac`).** Vektorisiert, Entscheidungen
-  unverändert; OpenCV in `serve` auf zwei Threads. Am Aufbau ~30 gelesene
-  Bilder/s, Leser Median 6 ms/Bild.
-* **Referenzaufzeichnung (`6ebaf68`).** Ein Live-Lauf schreibt auf Wunsch den
-  seriellen GSV-2AS-Strom als `reference.jsonl` mit, optional mit Werteplan
-  (`set norm`, Rückstellung danach). `scripts/live-reference-eval.py`
-  vergleicht nachträglich; die Referenz beeinflusst nie Leser, Gate oder
-  `records.jsonl`.
+Produktionscode wurde in dieser Doku-Runde nicht geändert. Vorbestehende
+Messdokumente und deren neue Abschlussbelege sind erhalten. Für den
+autorisierten gemeinsamen Doku-/Wiki-Commit auf `master` wird der Stand
+nochmals geprüft; der Messlauf ist beendet und die Rückstellung bestätigt.
+OQ-/Tour-Faktentests: **13 erfolgreich**, Browserprüfung: **29 erfolgreich**.
+Strenger Website-Build, Lint, Generator- und Diff-Prüfungen bestanden.
+Alle 52 Navigationsseiten laden mit HTTP 200 ohne JavaScript-Fehler;
+geänderte Tour-Szenen und 375-Pixel-Ansicht gesichtet. Eine vom Kopierknopf
+verdeckte Code-Anmerkung ist durch eine mehrzeilige Signatur behoben.
 
-## Bedienerläufe am Aufbau, 2026-10-21
+## Gebauter Messpfad
 
-StreamCam am GSV-2AS, Raumlicht und Tageslicht. Das sind **keine formalen
-Abnahme-Läufe**; die Toleranz ist **nicht validiert**.
+Auf `master` hält `dispread serve` die Logitech StreamCam über
+`CameraOwner` für seine gesamte Laufzeit. `/live` führt durch Einrichtung,
+namentliche Bestätigung und Messlauf mit Dot-Matrix-Leser. Die alte
+Werkbank erhält gedrosselte Bilder desselben Owners. Kamerabedienung nur
+über `/live`; andere Aufnahmeprozesse bekommen währenddessen „belegt“.
 
-* **Morgens:** Kamera schräg und mit Kameraschatten auf der Anzeige. Punkttiefe
-  außerhalb des Schattens 0,39–0,41, im Schatten 0,67–0,69. Zellen an der
-  Schattenkante überschritten `d_max` (`d_best` bis 2,30 × `d_max`), doch die
-  beste Vermutung stimmte in allen 28 Einrichtungsstandbildern mit Vorschlag
-  mit der Referenz überein (Abstand zur zweitbesten Klasse ≥ 1,27).
-* **Manueller Zellentext** mit schwankender letzter Ziffer erzeugte ein
-  irreführendes 2j FEHLER (mit L2 behoben).
-* **Testlauf** `live-20261021T100128Z`: Vermutungen nach Angabe der Person
-  richtig, `tracking_lost` 0, `track_score` mindestens 0,86 bei Wertwechseln.
-* **Toleranzlauf ×1,41** `live-20261021T113859Z` (25 s): 304/318 VALID,
-  11 TRANSITION, 3 UNREADABLE, Nachführung ohne Verlust.
-* **Strenger Lauf** `live-20261021T114122Z` (79 s, viele Wertwechsel, kurz
-  Hand vor der Anzeige): 911/1168 VALID, 188 UNREADABLE, 68 TRANSITION,
-  1 STALE. Alle 67 Wertwechsel erfasst; je Wechsel 270–340 ms ohne VALID
-  (LCD-Umschaltung etwa 200–300 ms plus 1 Bestätigungsbild). Die Hand
-  bedingte 1,4 s UNREADABLE, `tracking_lost` 33.
-* **Tempo:** 14,7 verarbeitete Bilder/s von 30; Leser median 53 ms/Bild,
-  gesamt 64 ms. Jedes zweite Bild entfällt
-  (seither behoben, Leser etwa 6× schneller).
-* **Mit Referenzaufzeichnung (nachmittags):** strenger Lauf
-  `live-20261021T135204Z` 0/715 Fehllesungen bei 27,2 Bildern/s; Toleranzlauf
-  ×1,8 `live-20261021T143419Z` (5,6 min) 0/6630 Fehllesungen, 29,7 Bilder/s,
-  Verzögerung nach Wechsel Median 193 ms. Erster Beleg der Toleranz gegen die
-  Referenz, noch keine Validierung (Werteplan-Lauf ≥ 10 min fehlt).
-  Langer strenger Lauf `live-20261021T144605Z` (12 min, 716 Wechsel):
-  0/8979 Fehllesungen, 29,8 Bilder/s, Median 232 ms, Pi ohne Aussetzer.
+Profile und Bestätigung: `var/live/<sitzung>/profile.json` und
+`confirmation.json`. Je Lauf: `run-NN/records.jsonl`, `session.json` und
+optional getrennt `reference.jsonl`. Lokale Kommandos:
+`dispread live status|setup|stop|camera`; Bestätigung und Laufstart bleiben
+auf der angemeldeten Seite.
 
-Zahlen und Deutung: [VALIDATION.md](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21),
-[Laborjournal](lab_journal.md#messpfad-live-bedienerlaeufe-2026-10-21).
-Laufdaten unter `var/live/<sitzung>/` (lokale Daten, nicht in Git).
+Am 2026-10-21 gebaut und in `master`: Lesesperre bei nicht erfolgreichem
+Gegenlesen, markierter Testlauf, maskierte schwankende Zellen,
+Schattenhinweis, ausdrücklich zu bestätigende und **nicht validierte**
+erhöhte Lesetoleranz mit serieller Einrichtungsgegenprobe, vektorisierter
+Leser, TRANSITION bei Mischziffern sowie getrennte Referenzaufzeichnung
+mit optionalem Werteplan und Rückstellung. Die Referenz korrigiert keine
+DUT-Werte und wird Leser/Gate nicht als Parameter übergeben.
+Der [Plan Tempo und Abschluss](superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)
+ist erledigt. Testlauf-Vermutungen bleiben Diagnosen; OQ-44 begrenzt die
+bisherige Behauptung einer vollständigen technischen Freigabesicherung.
 
-## Grenzen und nächster Schritt
+## Reale Belege und Grenzen
 
-Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere
-Lichtquellen und Geräte nicht geprüft. Die Leser-Abnahme 3 vom 2026-09-30
-(215/215 richtig) und der `sc7`-Lesetest (111/111 richtig) bleiben frühere
-Belege; sie ersetzen den Live-Messlauf nicht.
+Die Leser-Abnahme 3 vom 2026-09-30 ergab 215/215 richtige Proben, der
+Einrichtungslesetest `sc7` 111/111. Sie betreffen denselben begrenzten
+GSV-2AS-/Displaytech-161A-Pfad in mV/V unter Raumlicht, keine allgemeine
+Gerätefreigabe und keine vollständige Systemabnahme.
 
-Der Plan [Tempo, Übergangsstatus und Abschluss](superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)
-ist erledigt und in `master`. Nächste Schritte (Reihenfolge und Kontext in
-[TODO.md](../TODO.md)):
+Bedienerläufe vom 2026-10-21: streng 0/715 Fehllesungen; Toleranz ×1,8
+über 5,6 min 0/6630; streng über 12 min 0/8979 bei 29,8 gelesenen
+Bildern/s. Die Toleranz ist damit weiterhin nicht validiert. Frühere
+Schatten-, Handabdeckungs- und Laufzeitbefunde bleiben in
+[VALIDATION](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) und im
+Laborjournal erhalten.
 
-1. Toleranzlauf ≥ 10 min mit Werteplan, danach Entscheidung über die
-   Toleranz für diese Aufstellung.
-2. Serielle Ausgabe an GSVmulti ([OQ-07](open-questions.md#oq-07)); wartet
-   auf die Protokollbeschreibung.
-3. UI/UX-Überarbeitung der Werkbank, einschließlich schnellerer Vorschau
-   (Seite holt Bild und Status nur alle 0,5 s).
+Der **strenge Werteplan-Lauf** `live-20261021T151835Z/run-01` ist seit
+17:36 MESZ beendet (Start 17:22 MESZ, 806 s einschließlich Rückstellung).
+Die parallel dokumentierte
+[Abschlussauswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21)
+ergibt 0/11 137 Fehllesungen bei prüfbaren VALID, 2563 VALID im
+Schutzintervall und 232 ohne Referenzdeckung. 8074 Trackingverluste;
+bei Faktor 2 und 5 **kein VALID in stabilen Referenzfenstern**, bei
+Faktor 1, 0,5 und 10 nahezu durchgehend VALID. Kamera ohne Bildlücke,
+Audit ohne Fehler, Referenz ohne Queue-Verlust. Normierung und
+Dezimalpunkt durch Schreiben und Rücklesen erfolgreich zurückgestellt.
 
-Für Messläufe: Die Forgejo-CI läuft auf demselben Pi; ein Push nach `master`
-während eines Laufs gibt Stillstände bis 44 s und kurzes STALE.
+Die systematischen Ausfälle lösen R13 aus
+([OQ-26](open-questions.md#oq-26)). Der Tracker berücksichtigt den
+Zifferninhalt; ein unabhängiger Bildnachweis der Ursache fehlt, weil keine
+Live-Bilder der Ausfallphasen gespeichert wurden. Die Person bestätigt
+unveränderten Aufbau und etwa 2 s Abdeckung nach ungefähr 6 min; deren
+Zeitfenster ist im Audit nicht eindeutig isolierbar. Kein gesonderter
+Abdecknachweis, kein Robustheits-/Toleranznachweis und keine formale Abnahme.
+Verzögerungen der großen Plansprünge sind wegen Referenzlücken während
+der Befehlspausen nicht messbar.
 
-Weiterhin offen: `raw_text` enthält die geparste Zahl, nicht die 16
-Displayzellen. Ein stillstehender Stream beendet die Sitzung erst nach dem
-OpenCV-Select-Timeout (etwa 10–20 s), die Wertanzeige wird zuvor STALE. Die
-`JsonlSink`-Rotation würde nach etwa 7 h alte Auditgenerationen verwerfen.
-Außerdem die 7-Segment-Bereinigung der alten Seite, Audit-Aufbewahrung,
-andere Lichtquellen/Geräte/Einheiten und die Importprüfung bei schrägem
-Blick. `var/` braucht weiterhin eine Sicherung auf anderem Medium; ältere
-Hinweise zur knappen SD-Karte stehen in TODO und Laborjournal.
+## Laufumgebung und nächste Schritte
 
-## Aus `origin/master` übernommen (Stand 2026-10-12)
+Werkbank in tmux `picam-messlauf-20261021`,
+`https://100.122.154.35:8081/live`; zuletzt `stopped`, Kamera für Vorschau
+aktiv. Port 8080 ist auf diesem Pi durch MEhub belegt. Vorbereitung und
+Register-Sicherung: `var/diagnostics/messlauf-vorbereitung-20261021/`.
+Aufstellung: Fokus 42, Belichtung 300, Gain 14, Weißabgleich 4717 K;
+sitzungsbezogene Einstellungen in `setup/camera-settings.json`.
+Keine Hardwareänderung oder neuer Messlauf durch den Wiki-Abgleich.
 
-* **Projektcockpit** (privat, Sites):
-  [picam-ai Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site),
-  Version 4. Quelle: eigenes Repository `sites/picam-ai-cockpit`, Site-ID
-  `appgprj_6accdd4468948191be0d5301888c835f`. Forgejo
-  ([l.hentschke/picam-ai](https://ds1515.me-systeme.de/l.hentschke/picam-ai))
-  ist das maßgebliche Repository, GitHub nur Mirror. Das Cockpit liest per GET
-  mit einem Read-only-Token (`FORGEJO_ACCESS_TOKEN`, Sites-Runtime-Geheimnis).
-  Es zeigt Roadmap P0–P8, Commit-Aktivität, Dateivolumen und eine
-  Zeilenanalyse eigener Code-Dateien; Abrufstand 2026-10-12: 173 eigene
-  Code-Dateien, 51.760 Quelltextzeilen. Offen: automatische Zeilenanalyse
-  und Ansicht für historisches Wachstum (nur entworfen).
-  [Spezifikation](superpowers/specs/2026-10-12-projektcockpit-design.md),
-  [Plan](superpowers/plans/2026-10-12-projektcockpit.md).
-* **Projekt-Tour:** alle sechs Kapitel vorhanden
-  ([Tour](uebersicht/projekt-tour.md)), Tour-Fakten aus dem Code
-  (`scripts/tour-facts.py`); Verhaltensänderungen brauchen Text und Szene
-  zusammen (AGENTS.md).
-* **Startseite:** [Startseite](../index.md) nennt die StreamCam und verlinkt
-  alle Navigationsziele; Vertiefungen zu [Messpfad](uebersicht/messpfad.md),
-  [Zeitstempeln](uebersicht/zeitstempel.md) und
-  [Daten/Abnahme](uebersicht/daten-und-abnahme.md). IMX500-Baukapitel sind als
-  historisch gekennzeichnet.
-* **Forgejo-Runner (Docs/Codex):** Der Runner nahm am 2026-09-30 einen
-  Auftrag an und veröffentlichte einen Doku-Commit. Der rotierende Audit
-  prüft die Startseite bei jedem Lauf. Das Startkommando nennt die Rolle
-  `docs_reader` ausdrücklich (`--ignore-user-config` lädt sie nicht
-  selbst; `--ephemeral` scheiterte am Spawn). Die geschützte Anmeldung und
-  Sessionlogs sind nicht lesbar ([Hosting und Pflege](HOSTING.md)).
-  Playwright-CI: `playwright.yml` verlangt das Label `picam-docs`, lädt nur
-  Chromium und nutzt den Forgejo-Artefaktupload.
+Nächste Aufgaben gemäß TODO:
+
+1. Nachführung unabhängig vom Zifferninhalt untersuchen und große
+   Wertwechsel erneut prüfen (R13/OQ-26).
+2. Testlauf-Sicherung und Zeitbasis-Bezeichnung klären (OQ-44/OQ-45).
+3. Toleranzlauf ≥ 10 min mit Werteplan und weitere Aufstellung erst nach
+   Bearbeitung der Trackinggrenze; andere Lichtquellen/Geräte bleiben offen.
+4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
+   Danach Bedienoberfläche und Aufräumarbeiten gemäß TODO.
+
+Weiter offen: `raw_text` enthält die geparste Zahl statt 16 Displayzellen;
+Streamstillstand beendet erst nach OpenCV-Timeout (etwa 10–20 s), die
+Oberfläche markiert zuvor STALE; Auditrotation kann nach etwa 7 h alte
+Generationen verwerfen. Import bei schrägem Blick und Aufräumen des alten
+7-Segment-Pfads bleiben Aufgaben. `var/` braucht eine Sicherung auf anderem
+Medium. Das frühere Codex-Staging-Leck wurde am 2026-10-21 abgestellt
+(Details/Sicherung in TODO). Nachtpflegefehler seit 2026-10-19 ungeklärt.
+
+Forgejo-CI und Messpfad teilen denselben Pi. Während Messläufen keine
+Builds, Browsertests oder Pushes nach `master`: früher bis 44 s Stillstand.
+Die Website-Prüfung dieser Runde wurde erst nach dem Laufende begonnen.
+
+## Weitere gepflegte Teile
+
+Projekt-Tour mit allen sechs Kapiteln und eingebetteten Abbildungen;
+Fakten aus `scripts/tour-facts.py`. Forgejo ist das maßgebliche Repository,
+GitHub ein Mirror. Der geschützte Doku-Runner und Hostingablauf sind in
+[HOSTING.md](HOSTING.md) dokumentiert.
+
+Das private [Projektcockpit](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site)
+(Version 4, eigenes Repository `sites/picam-ai-cockpit`) liest Forgejo mit
+Read-only-Zugriff. Automatische Zeilenanalyse und historisches Wachstum
+bleiben offen; Details im [Plan](superpowers/plans/2026-10-12-projektcockpit.md).

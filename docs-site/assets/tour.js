@@ -677,7 +677,7 @@
     const s = cameraScene(layer);
     const card = group(layer, "roi-card");
     panel(card, 590, 76, 234, 86, "tp-card");
-    label(card, 606, 100, "vom Bediener bestätigt", "tp-card-title");
+    label(card, 606, 100, "Vorschlag geprüft · bestätigt", "tp-card-title");
     label(card, 606, 122, "Raster · Format gsv2as_v1", "tp-card-text");
     label(card, 606, 142, "Einheit mV/V (aus dem Profil)", "tp-card-text");
     ctx.tour.docLink(card, "docs/anleitung/04-geraeteprofile.html", "Geräteprofile öffnen", [810, 98]);
@@ -703,7 +703,9 @@
     const link = svg("path", { d: "M540 226C590 214 610 170 636 140", class: "t-flow-dash", "marker-end": "url(#tour-arrow)" }, layer);
     const note = chip(layer, 120, 479, "ECC gegen die Referenz, nie gegen das Vorbild", "chip--flow");
     const bound = chip(layer, 500, 479, "Zu großer Ruck → keine Korrektur, unlesbar", "chip--bad");
-    hidden(ref, link, note, bound);
+    const risk = label(layer, 480, 522, "Auch große Wertwechsel können tracking_lost auslösen · OQ-26", "t-small t-plan-text", { "text-anchor": "middle" });
+    ctx.tour.docLink(risk, "docs/open-questions.html#oq-26", "OQ-26: Grenzen der Nachführung öffnen");
+    hidden(ref, link, note, bound, risk);
 
     fadeUp(tl, ref, {}, 100);
     drawIn(tl, A, link, { duration: 600 }, "-=300");
@@ -725,6 +727,7 @@
     tl.add(s.quad, { stroke: ["var(--tour-flow)", "var(--tour-bad)"], duration: 200 }, "<");
     tl.add(s.handleDots, { fill: ["var(--tour-flow)", "var(--tour-bad)"], duration: 200 }, "<<");
     fadeUp(tl, bound, {}, "<<");
+    fadeUp(tl, risk, {}, "<<");
     tl.add(s.state.device, { tx: VIEW_CAMERA.tx, rot: VIEW_CAMERA.rot, duration: 700, ease: "inOutQuad", onUpdate: s.render }, "+=1200");
     tl.add(s.quad, { stroke: "var(--tour-flow)", duration: 300 }, "<");
     tl.add(s.handleDots, { fill: "var(--tour-flow)", duration: 300 }, "<<");
@@ -755,10 +758,10 @@
     const r = rectifiedScene(layer, VIEW_RECT);
     const m = r.matrix();
     const boxes = group(layer, "cell-boxes");
-    const kinds = [];
-    for (let i = 0; i < 16; i++) {
-      const kind = i === 0 ? "sign" : i <= 7 ? "num" : i === 8 ? "blank" : "unit";
-      kinds.push(kind);
+    const classified = fact("layout.classified_cells", 9);
+    const blankCells = fact("layout.blank_cells", [13, 14, 15]);
+    for (let i = 0; i < r.device.display.cells.length; i++) {
+      const kind = i === 0 ? "sign" : i < classified - 1 ? "num" : i === classified - 1 || blankCells.includes(i) ? "blank" : "unit";
       svg("polygon", { points: cellPolygon(m, i), class: `cell-box cell-box--${kind}` }, boxes);
     }
     const head = group(layer, "raster-head");
@@ -776,17 +779,20 @@
     };
     const parts = [
       brace(0, 0, "Vorzeichen", "brace--flow"),
-      brace(1, 7, "Zahl mit Punkt · Zellen 1–7", "brace--flow"),
-      brace(8, 8, "leer", "brace--flow"),
-      brace(9, 15, "Einheit: aus dem Profil", "brace--muted", "wird nicht gelesen"),
+      brace(1, classified - 2, `Zahl mit Punkt · Zellen 1–${classified - 2}`, "brace--flow"),
+      brace(classified - 1, classified - 1, "leer", "brace--flow"),
+      brace(classified, blankCells[0] - 1, "Einheit", "brace--muted", "aus dem Profil"),
+      brace(blankCells[0], blankCells.at(-1), "Rest leer", "brace--flow", "wird geprüft"),
     ];
     const cellBoxes = Array.from(boxes.children);
-    hidden(cellBoxes, head, parts);
+    const profileNote = label(layer, 480, 520, "Die Einheit muss bei der Bestätigung zur sichtbaren Anzeige passen.", "t-small", { "text-anchor": "middle" });
+    hidden(cellBoxes, head, parts, profileNote);
     fadeUp(tl, head, {}, 100);
     tl.add(cellBoxes, { opacity: [0, 1], scaleY: [0.2, 1], delay: A.stagger(55), duration: 500, ease: "outBack(1.7)" }, "-=300");
     // Gelesene Zellen kurz aufleuchten lassen.
-    tl.add(r.device.display.cells.slice(0, 9), { opacity: [1, 0.35, 1], delay: A.stagger(70), duration: 420, ease: "inOutSine" }, "+=100");
+    tl.add(r.device.display.cells.filter((cell, i) => i < classified || blankCells.includes(i)), { opacity: [1, 0.35, 1], delay: A.stagger(70), duration: 420, ease: "inOutSine" }, "+=100");
     fadeUp(tl, parts, { delay: A.stagger(160) }, "-=200");
+    fadeUp(tl, profileNote, {}, "+=100");
   }
 
   function sampledCell(ch) {
@@ -913,7 +919,7 @@
     const rules = [
       "Vorzeichen +",
       "genau ein Punkt",
-      "sechs Ziffern",
+      "Zahl / führende Leerplätze",
       "Zelle 8 leer",
       "Leerzellen wirklich leer",
     ];
@@ -956,11 +962,15 @@
 
   function sceneErkennungFreigabe(ctx) {
     const { tl, A, layer, tour } = ctx;
-    label(layer, 40, 50, "Fünf Bilder nacheinander · Beispiel mit confirm_frames = 2", "t-label t-strong");
+    label(layer, 40, 50, "Fünf Bilder nacheinander · Beispiel mit zwei Bestätigungsbildern", "t-label t-strong");
     const confirmDefault = fact("gate.confirm_frames", 1);
-    label(layer, 40, 72, confirmDefault === 1
-      ? "Grundeinstellung ist 1: dann ist schon das erste Bild gültig."
-      : `Grundeinstellung ist ${confirmDefault}.`, "t-small");
+    const liveConfirm = fact("live.confirm_frames", 2);
+    label(layer, 40, 72, `Live-Grundeinstellung: ${liveConfirm} Bilder · allgemeiner Gate-Default: ${confirmDefault}`, "t-small");
+    const transitionCells = fact("gate.transition_max_cells", 3);
+    const transitionSeconds = Math.min(fact("gate.transition_window_ns", 1e9), fact("gate.stale_after_ns", 500e6)) / 1e9;
+    const transitionNote = group(layer, "transition-note");
+    label(transitionNote, 40, 424, `Mischziffern: bis ${transitionCells} unlesbare Zellen, Rest wie letzte Freigabe · höchstens ${num(transitionSeconds)} s`, "t-small");
+    label(transitionNote, 40, 444, "anzeige_wechselt → TRANSITION ohne Zahl · Zustands- und Trackingfehler bleiben Ablehnungen", "t-small");
     const frames = [
       { v: "0.46761", s: "Übergang", k: "plan", y: 200, why: "erst 1 von 2" },
       { v: "0.46761", s: "gültig", k: "valid", y: 200, why: "2 gleiche" },
@@ -999,7 +1009,7 @@
     svg("path", { d: "M596 484H386", class: "t-bad-line", "marker-end": "url(#tour-arrow-bad)" }, noLink);
     checkMark(noLink, 491, 484, "bad");
 
-    hidden(axis, per, plot, dots, dots.children, jump, ref, gate, noLink);
+    hidden(axis, per, plot, dots, dots.children, jump, ref, gate, noLink, transitionNote);
     tl.add(axis, { opacity: [0, 1], duration: 400 }, 100);
     const plotDraw = A.svg.createDrawable(plot);
     const reach = [0.01, 0.224, 0.448, 0.776, 1];
@@ -1010,6 +1020,7 @@
       tl.add(plotDraw, { draw: i === 0 ? ["0 0", `0 ${reach[0]}`] : `0 ${reach[i]}`, duration: 320 }, "<<");
       if (i === 3) fadeUp(tl, jump, {}, "<<");
     });
+    fadeUp(tl, transitionNote, {}, "+=100");
     fadeUp(tl, [gate, ref], { delay: A.stagger(150) }, "+=300");
     tl.add(noLink, { opacity: [0, 1], duration: 300 }, "+=100");
     tl.add(noLink.querySelector(".mark"), { scale: [0.3, 1.25, 1], duration: 600, ease: "outBack(2)" }, "<<");
@@ -1033,7 +1044,8 @@
     const frameMs = 1000 / 30;
     const at = (n) => `${Math.round(n * frameMs)} ms`;
     const lastBefore = Math.floor(staleMs / frameMs);
-    label(layer, 40, 64, `Beispiel: 30 Bilder pro Sekunde · stale_after = ${staleText} (vorläufig)`, "t-small");
+    label(layer, 40, 64, `Beispiel: Leseablehnung ohne Statusflag · stale_after = ${staleText} (vorläufig)`, "t-small");
+    label(layer, 40, 534, "Trackingverlust bleibt im Audit UNREADABLE; ohne neue Bilder markiert die Oberfläche STALE.", "t-small");
 
     // Kleine Anzeige mit Hand davor.
     const lcd = group(layer, "mini-lcd");
@@ -1158,11 +1170,11 @@
     const toLog = svg("path", { d: "M470 190C540 190 540 105 606 105", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
 
     const serial = group(layer, "out-serial");
-    panel(serial, 610, 230, 140, 64, "t-panel t-flow-box");
+    panel(serial, 610, 230, 140, 64, "t-panel t-planned-box");
     label(serial, 680, 258, "serial_out", "t-mono", { "text-anchor": "middle" });
-    label(serial, 680, 278, "/dev/ttyAMA0", "t-small", { "text-anchor": "middle" });
+    label(serial, 680, 278, "Live: noch offen", "t-small t-plan-text", { "text-anchor": "middle" });
     ctx.tour.docLink(serial, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [740, 246]);
-    const toSerial = svg("path", { d: "M470 262H606", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
+    const toSerial = svg("path", { d: "M470 262H606", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
 
     const gsv = group(layer, "out-gsv");
     panel(gsv, 800, 230, 120, 64, "t-panel t-planned-box");
@@ -1176,7 +1188,7 @@
     const receipt = group(layer, "receipt");
     panel(receipt, 610, 390, 290, 70, "t-panel");
     label(receipt, 755, 420, "TxReceipt", "t-mono", { "text-anchor": "middle" });
-    label(receipt, 755, 442, "was über die Leitung ging · getrennt", "t-small", { "text-anchor": "middle" });
+    label(receipt, 755, 442, "Senkenbeleg · getrennt vom ValueRecord", "t-small", { "text-anchor": "middle" });
     const toReceipt = svg("path", { d: "M680 294V386", class: "t-muted-line", "marker-end": "url(#tour-arrow)" }, layer);
 
     const d1 = svg("circle", { r: 7, class: "t-pulse" }, layer);

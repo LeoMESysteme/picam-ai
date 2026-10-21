@@ -114,7 +114,10 @@ kein Nachweis mehr:
 Provozierte Störungen, jede einzeln und protokolliert:
 
 1. Kabel der Gegenstelle ziehen ⇒ Sink-Fehler gezählt, Messbetrieb läuft weiter.
-2. Licht ausschalten ⇒ `low_contrast`, danach `STALE`. **Kein** letzter Wert.
+2. Licht ausschalten ⇒ Ablehnungsgrund prüfen (z. B. `low_contrast`,
+   `state:glare` oder `tracking_lost:<grund>`); die sichtbare Live-Ausgabe
+   muss ungültig werden. **Kein** letzter Wert. Blockierende Flags und
+   Trackingverlust bleiben im Audit `UNREADABLE`, auch nach der STALE-Frist.
 3. Anzeige abdecken ⇒ `display_not_located` bzw. `display_lost`.
 4. Gerät ins Menü schalten ⇒ `state:menu`, kein Zahlenwert.
 5. Überlauf erzeugen ⇒ `state:overflow`.
@@ -184,9 +187,10 @@ einen Zielort nennen; `CHANGELOG.md` muss die aktuelle `VERSION` enthalten;
 
 ## Fallen
 
-* **`sudo` verlangt seit dem Reboot ein Passwort** ([OQ-15](../open-questions.md)).
-  Alles, was `sudo` braucht, sammle in **einem** Block und lass es von einem
-  Menschen ausführen, statt es über die Session zu verteilen.
+* **Systempakete getrennt vom Projekt installieren.** Die in
+  [OQ-15](../open-questions.md#oq-15) genannten Pakete sind seit 2026-09-21
+  installiert; der damalige `sudo`-Befund ist kein aktueller Blocker. Prüfe
+  Voraussetzungen auf einem neuen Zielsystem ausdrücklich.
 * **Absolute Pfade in der Unit.** Zeigen sie auf ein umbenanntes Repo, startet
   der Dienst nicht — dieselbe Falle wie bei der venv
   ([Kapitel 0](00-werkzeuge.md)).
@@ -194,8 +198,8 @@ einen Zielort nennen; `CHANGELOG.md` muss die aktuelle `VERSION` enthalten;
   setzen — aber setze einen.
 * **Watchdog ohne `sd_notify`** killt den Dienst im Takt. Erst senden, dann
   aktivieren.
-* **34 GB frei.** Ein Dauerlauf mit Diagnosebildern füllt das schneller als
-  erwartet. Ringpuffer mit harter Obergrenze, und den Verbrauch im Lauf
+* **Freien Speicher vor dem Lauf prüfen.** Die früher dokumentierten 34 GB
+  sind eine Momentaufnahme, kein aktueller Freiplatznachweis. Ringpuffer mit harter Obergrenze, und den Verbrauch im Lauf
   beobachten.
 * **Kein `Restart=always` mit stiller Wiederaufnahme des letzten Werts.**
   Neustart heißt: keine Historie.

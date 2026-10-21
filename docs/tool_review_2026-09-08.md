@@ -4,13 +4,19 @@
 > vom 2026-09-08 und beziehen sich auf die inzwischen außer Betrieb genommene
 > IMX500. Seit 2026-09-25 ist die Logitech StreamCam über UVC aktiv.
 > Maßgeblich sind das [Hardwareprofil](HARDWARE_PROFILE.md) und die
-> [Entscheidung zum Kamerwechsel](project_history.md).
+> [Entscheidung zum Kamerawechsel](project_history.md).
+> Auch Leser- und Datensatzbefunde unten sind der damalige Recherchestand:
+> heute ist der Dot-Matrix-Leser für GSV-2AS / Displaytech 161A gebaut.
+> Seine begrenzten Nachweise stehen in [VALIDATION.md](VALIDATION.md), die
+> aktuelle Arbeitsreihenfolge in [TODO.md](../TODO.md). Modellversionen,
+> Paketverfügbarkeit und externe Empfehlungen wurden bei diesem
+> Doku-Abgleich nicht erneut recherchiert.
 
 Recherche und Empfehlung, **keine beschlossene Migration und kein Benchmark**.
 Geprüft: Konzept, Projekt-Historie, Status, offene Fragen, Validierung,
 Timing-Dokument, pyproject.toml und vorhandene Leser-/Pipeline-/Freigabemodule.
 
-## Empfehlung
+## Historische Empfehlung
 
 Picamera2/libcamera, OpenCV/NumPy, eine bestätigte ROI mit Positionsüberwachung,
 den eigenen Segmentleser für freigegebene 7-Segment-Profile und einen kleinen
@@ -35,8 +41,10 @@ sollte die Wahl des besten OCR-Lesers aber nicht vorwegnehmen.
   brauchen Bildnachweise oder einen nachgewiesenen festen Gerätezustand.
 * Das Gate verlangt Segment-Kontrast und Segmentabstand. Weitere Leser
   brauchen passende Freigabeevidenz (OQ-19), keine erfundenen Segmentdiagnosen.
-* Mehrere referenzierte Dateien fehlen lokal (OQ-16). Frühere Hardware- und
-  Testresultate wurden in dieser Session nicht erneut verifiziert.
+* Mehrere referenzierte Dateien fehlten damals lokal. [OQ-16](open-questions.md#oq-16)
+  wurde am 2026-09-08 geklärt; diese frühere Lücke ist kein aktueller Blocker.
+  Frühere Hardware- und Testresultate wurden in der Recherche-Session nicht
+  erneut verifiziert.
 
 ## Werkzeugvergleich
 
@@ -107,7 +115,7 @@ Zusatzbeschleuniger oder Kameratausch sind durch die bisherigen Daten nicht
 begründet. Erst messen, ob Rechenleistung, Optik oder Displayaktualisierung
 den Betrieb begrenzen.
 
-## Nächster Vergleich
+## Damals vorgeschlagener nächster Vergleich
 
 1. Fehlende Planungsdateien abgleichen, Optik einrichten und echte Aufnahmen
    mehrerer Geräte sammeln: Vorzeichen, Punktpositionen, LCD/LED, Menüs,

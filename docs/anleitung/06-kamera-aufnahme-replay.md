@@ -44,7 +44,7 @@ Aufnahmen aus einem unbekannten Aufbau sind später nicht deutbar.
 
 Registry-Signatur (schon vorhanden): `Picamera2Source(size=(2028, 1520), fps=None)`.
 
-Der Sensor kann 2028×1520 @ 30,02 fps und 4056×3040 @ 10,00 fps
+Die damalige IMX500 lieferte 2028×1520 @ 30,02 fps und 4056×3040 @ 10,00 fps
 ([../HARDWARE_PROFILE.md](../HARDWARE_PROFILE.md)). Nimm den ersten Modus.
 
 Muster, an dem alles hängt — **Bild und Metadaten aus derselben Aufnahme**
@@ -164,6 +164,17 @@ Weitere Entscheidungen:
 
 ## Teil C — `ReplaySource`
 
+**Heute implementiert:** `ReplaySource` lädt `clip.json` (Schema 1) mit
+Frame-Dateien und deren `capture_timestamp`, nicht das historische
+`manifest.json`/`metadata.jsonl`-Schema aus Teil B. Sie erhält Bildnummer,
+Zeitwert, Semantik und Unsicherheit; nur zeittragende Quellen werden
+`REPLAY_RECORDED`. `SYNTHETIC` und `FILE_MTIME` bleiben auch im Replay
+nicht zeittragend. Der Durchlauf erfolgt ohne Taktpause. `describe()` nennt
+unter anderem Clip, Gerät, Bildzahl, verworfene Bilder und Profil. Geprüft
+in `tests/test_replay_source.py`.
+
+**Historischer Entwurf für eine erweiterte Aufnahmesession:**
+
 Registry-Signatur: `ReplaySource(session_dir=…)`.
 
 Der Kern ist eine Zeile Haltung: der Zeitstempel kommt aus
@@ -214,9 +225,12 @@ Wenn die Kamera schon läuft, sind zwei Messungen billig — und beide sind für
 das Projekt wichtiger als weitere Software:
 
 * **M2** (Semantik von `SensorTimestamp`): LED per GPIO zu bekannten
-  Monotonic-Zeitpunkten pulsen, Belichtungszeit systematisch variieren. Wandert
-  der Zeitstempel mit der Belichtungszeit, bezieht er sich auf das Auslese-Ende.
-  Danach darf `TimestampSemantics` einen belegten Wert bekommen.
+  Zeitpunkten in einer dokumentierten gemeinsamen Zeitbasis pulsen und die
+  Belichtungszeit systematisch variieren. Eine Verschiebung allein beweist
+  noch keine bestimmte Semantik: Belichtungsfenster, Zeilenauslesung und
+  beobachtetes LED-Signal gemeinsam auswerten. Erst danach darf
+  `TimestampSemantics` einen belegten Wert bekommen. Für die StreamCam
+  bleibt die UVC-Stempelsemantik [OQ-43](../open-questions.md#oq-43).
 * **M5** (Displayaktualisierung und Haltezeit): mit hoher Wahrscheinlichkeit
   der **dominierende** Term im Zeitbudget — und von keiner Softwareoptimierung
   kleiner. Sprunganregung, ≥ 30 Wiederholungen je Gerätetyp.

@@ -2,9 +2,11 @@
 
 > **Bauentwurf mit inzwischen implementierten Lesern.** Neben
 > `SevenSegmentReader` gibt es `DotMatrixReader` und `TesseractReader`.
-> Der Dot-Matrix-Leser hat einen eigenen Trainings- und Evaluationsablauf;
-> der Vergleichsharnisch und die hier beschriebene Gegenüberstellung sind
-> weiterhin Aufgaben. Aktuelle Messwerte und Grenzen stehen in
+> Der Dot-Matrix-Leser hat einen eigenen Trainings- und Evaluationsablauf
+> und ist der Leser auf `/live` am GSV-2AS. Vergleichswerkzeuge bestehen in
+> `scripts/ocr-benchmark.py` und `scripts/dataset-benchmark.py`; der unten
+> skizzierte gemeinsame Vergleich als `examples/08_backend_vergleich.py`
+> bleibt eine Bauaufgabe. Aktuelle Messwerte und Grenzen stehen in
 > [Validierung](../VALIDATION.md) und [Status](../status.md); die
 > Leser-Verträge in der [OCR-API](../../api/ocr.md). Die Abschnitte unten
 > beschreiben daher Entwurf und Prüfkriterien, nicht den vollständigen
@@ -13,10 +15,11 @@
 **Ziel:** Ein zweites Backend hinter `ValueReader`, und ein Vergleichsharnisch,
 der es **pro Fehlerklasse** gegen den Segmentleser stellt.
 
-**Warum jetzt:** Der Segmentleser ist Primärpfad, weil er erklärbare Evidenz
-liefert. Ob ein anderes Verfahren auf **realen** Anzeigen besser trägt, ist
-offen ([OQ-18](../open-questions.md)) — und ohne Vergleich auf echten Daten
-bleibt es offen. Wichtig ist die Reihenfolge: **erst der Harnisch, dann das
+**Einordnung:** Der Segmentleser liefert erklärbare Evidenz für
+Siebensegmentanzeigen und die synthetischen Übungen. Am realen GSV-2AS
+liest heute `DotMatrixReader` die Punktraster-Zellen gegen eingefrorene
+Vorlagen. Welche weiteren Verfahren auf anderen **realen** Anzeigen tragen,
+bleibt offen ([OQ-18](../open-questions.md)). Wichtig ist die Reihenfolge: **erst der Harnisch, dann das
 Backend.** Ein Backend ohne Vergleichszahlen ist eine Meinung.
 
 **Vorbedingungen:** [Kapitel 6](06-kamera-aufnahme-replay.md) — reale Frames
@@ -85,17 +88,13 @@ Konzept §9 der klassische Selbstbetrug.
 
 ## Teil B — `tesseract_cli`
 
-**Blockiert durch [OQ-15](../open-questions.md):** `tesseract-ocr` ist nicht
-installiert, und `sudo` verlangt seit dem Reboot ein Passwort. Ein Mensch mit
-`sudo` muss einmal:
-
-```bash
-sudo apt install -y tesseract-ocr tesseract-ocr-eng socat chrony
-```
-
-(`socat` für serielle Gegenstellen, `chrony` für Messung M1 — dieselbe
-Gelegenheit nutzen.) Danach `docs/dependencies.md` ergänzen und OQ-15 auf
-`geklärt` setzen, **nicht** löschen.
+`TesseractReader` ist implementiert; `tesseract-ocr`, `socat` und `chrony`
+sind seit 2026-09-21 installiert ([OQ-15](../open-questions.md#oq-15),
+[Abhängigkeiten](../dependencies.md)). Es gibt keinen Installationsblocker
+mehr. `tests/test_tesseract_reader.py` prüft den Leser. Er liefert derzeit
+keine mit dem Segment-Gate vergleichbaren `contrast`-/`min_margin`-
+Diagnosen; Standard-Gates lehnen entsprechend ab. Die folgende Skizze
+erläutert den Unterprozessansatz, nicht eine noch fehlende Implementierung.
 
 Umsetzung als Unterprozess, nicht über eine Python-Bindung:
 
@@ -150,8 +149,9 @@ Lücken im vorhandenen:
   abgelehnt. Falschablehnung ist die erlaubte Richtung, aber im Betrieb
   störend. Lösungsansatz: Polarität und erwartetes Helligkeitsniveau aus dem
   Profil, statt die Schwelle nur aus dem Bild zu ziehen.
-* **[OQ-17](../open-questions.md) — Dezimalpunkt optisch messen.** Heute kommt
-  er aus dem Profil. Der Punkt ist ein kleiner heller Fleck an bekannter
+* **[OQ-17](../open-questions.md) — Dezimalpunkt beim Segmentleser optisch messen.**
+  Dort kommt er aus dem Profil; der Dot-Matrix-Leser klassifiziert den Punkt
+  bereits als Zeichen. Der Punkt ist ein kleiner heller Fleck an bekannter
   relativer Position; das ist mit denselben Abtastmitteln machbar wie ein
   Segment — und macht `decimal_point_detected` erst zu einer echten Aussage.
 * **Einheit lesen statt bestätigen.** `unit_source` steht bereit; die
@@ -162,7 +162,8 @@ Lücken im vorhandenen:
   ähnlichen Ziffer?
 
 Jede dieser vier Aufgaben ist kleiner als ein neues Backend und verbessert den
-Pfad, der ohnehin produktiv ist.
+Segmentpfad der Übungen und ergänzenden Tests. Eine allgemeine
+Produktivfreigabe folgt daraus nicht.
 
 ## Fallen
 

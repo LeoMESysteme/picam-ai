@@ -35,13 +35,13 @@ wird von keiner Softwareoptimierung kleiner.
 
 | ID | Messgröße | Verfahren | Status |
 | --- | --- | --- | --- |
-| **M1** | Zeitbasen-Offsets BOOTTIME/MONOTONIC/REALTIME, NTP-Qualität | `chrony` installieren, `chronyc tracking` über 24 h protokollieren | **offen** — chrony fehlt ([OQ-15](open-questions.md)); derzeit läuft `systemd-timesyncd`, das keine Offset-Historie liefert |
-| **M2** | Semantik von `SensorTimestamp` (Belichtungsbeginn? Auslese-Ende?) | GPIO-getriggerte LED mit bekannten Monotonic-Zeitpunkten, Belichtungszeit systematisch variieren. Wandert der Zeitstempel mit steigender Belichtungszeit mit → Bezug auf Auslese-Ende; wenn nicht → Belichtungsbeginn | **teilweise** — Domäne geklärt (siehe unten), Semantik offen |
+| **M1** | Zeitbasen-Offsets BOOTTIME/MONOTONIC/REALTIME, NTP-Qualität | BOOTTIME − MONOTONIC je Aufnahme protokollieren; `chronyc tracking` über 24 h aufzeichnen | **teilweise** — chrony ist installiert ([OQ-15](open-questions.md#oq-15)); UVC-Aufnahmen und Live-Sitzungen protokollieren den BOOTTIME/MONOTONIC-Versatz. NTP-Langzeitbeleg und Referenzbezug fehlen |
+| **M2** | Physikalische Semantik des Kamerazeitstempels (Belichtungsbeginn? Auslese-Ende? Pufferempfang?) | GPIO-getriggerte LED mit bekannten Monotonic-Zeitpunkten, Belichtungszeit systematisch variieren. Wandert der Zeitstempel mit steigender Belichtungszeit mit → Bezug auf Auslese-Ende; wenn nicht → Belichtungsbeginn | **teilweise** — aktive StreamCam: CLOCK_MONOTONIC, physikalische Semantik offen ([OQ-43](open-questions.md#oq-43)); historisch IMX500: BOOTTIME, Semantik ebenfalls offen |
 | **M3** | Rolling-Shutter-Zeilenversatz | dieselbe LED-Anordnung, Puls kürzer als ein Frame; Zeilenposition des Streifens gegen Pulszeitpunkt | offen |
-| **M4** | Pipeline-Latenzverteilung je Stufe | eingebaute Instrumentierung (`PipelineTrace`), p50/p95/max je Stufe | **teilweise** — auf synthetischem Material gemessen (siehe unten) |
-| **M5** | **Displayaktualisierung und Haltezeit je Gerätetyp** | Sprunganregung, gleichzeitig Highspeed-Aufnahme und elektrischer Sprungzeitpunkt über GPIO, ≥ 30 Wiederholungen je Typ | offen — braucht Kamera **und** reale Geräte |
+| **M4** | Pipeline-Latenzverteilung je Stufe | eingebaute Instrumentierung (`PipelineTrace`), p50/p95/max je Stufe | **teilweise** — synthetische Stufen-Rechenzeiten unten; reale Dot-Matrix-/Live-Rechenzeiten und Durchsatz in [VALIDATION.md](VALIDATION.md#messpfad-live-langlauf-2026-10-21). Vollständige Verteilung über den freizugebenden Umfang fehlt |
+| **M5** | **Displayaktualisierung und Haltezeit je Gerätetyp** | Sprunganregung, gleichzeitig Highspeed-Aufnahme und elektrischer Sprungzeitpunkt über GPIO, ≥ 30 Wiederholungen je Typ | **teilweise** — serielle Anzeigezuordnung und Mischzeit am GSV-2AS für die Ernte kalibriert (2026-09-29, siehe unten); interne DUT-Verzögerung und andere Geräte fehlen |
 | **M6** | Pi gegen Referenz: Offset und Drift | abhängig von [OQ-03](open-questions.md). Bester Fall gemeinsame Zeitquelle, schlechtester Fall gemeinsames Ereignis und Kreuzkorrelation | offen |
-| **M7** | Serielle Strecke | Loopback bei Zielbaudrate, `write()` bis Empfang, Backpressure bei voller Leitung | **teilweise** — gegen pty geprüft, nicht elektrisch ([OQ-09](open-questions.md)) |
+| **M7** | Serielle Strecke | Loopback bei Zielbaudrate, `write()` bis Empfang, Backpressure bei voller Leitung | **teilweise** — ausgehende Strecke gegen pty geprüft, GPIO-Ausgang nicht elektrisch ([OQ-09](open-questions.md#oq-09)). Eingehende USB-RS232-Referenzaufzeichnung am GSV-2AS ist ein getrennter Beleg |
 | **M8** | **Nutzt GSVmulti den gelieferten Aufnahmezeitstempel?** | Datenstrom mit absichtlich um z. B. 5 s vordatiertem Aufnahmezeitstempel einspeisen und prüfen, welche Zeit GSVmulti anzeigt bzw. speichert | offen — blockiert durch [OQ-07](open-questions.md) |
 
 **M8 ist der wichtigste Einzelversuch des Projekts** und kostet nach Vorliegen
@@ -52,6 +52,38 @@ Zuordnung über das JSONL-Audit-Log oder eine konstant gehaltene
 Sendeverzögerung mit dokumentiertem Korrekturwert.
 
 ## Messwerte
+
+### Aktiver StreamCam-Pfad — Stand 2026-10-21
+
+`UvcSource` speichert den V4L2-Zeitstempel unverändert als
+`v4l2_monotonic`, mit `semantics=unknown`. `records.to_boottime_ns`
+verlangt die Start-/Endversätze aus `session.json` und lehnt eine Änderung
+über 1 ms (Suspend-Verdacht) ab. Der Live-Pfad protokolliert mit `ClockLog`
+zusätzlich periodische Versatzmessungen. Das klärt die Domänenumrechnung,
+keine physikalische Kamerasemantik und keine Synchronität zur Referenz der
+Kalibriermaschine.
+
+Die StreamCam-Kalibrierung aus den Aufnahmen `sc3-cal-a/b/c` ergibt seit
+2026-09-29 **Schutzintervall M = 325,9 ms**, Anzeigeversatz **89,6 ms**.
+M wird aus dem Gesamtversatz Telegramm ↔ Glas, Mischzeit und Streuung
+bestimmt. Es schützt die seriellen Auto-Labels; es ist kein ausgefülltes
+Unsicherheitsbudget der internen DUT-Messung. Zahlen und Aufbau:
+[VALIDATION.md](VALIDATION.md), „Neue Kalibrierung (2026-09-29)“.
+
+Ein Live-Lauf verlangt diese Kalibrierdatei und dokumentiert deren Prüfsumme
+und Werte in `session.json` mit `applied=false`: Aufnahmezeiten werden
+nicht um diesen Versatz korrigiert. Die nachträgliche Referenzauswertung
+berücksichtigt das Schutzintervall und trennt entschiedene Vergleiche,
+Wechselfenster und fehlende Referenzdeckung. Ihre gemessene Reaktionszeit
+ist keine Aussage über die interne DUT-Messzeit.
+
+**Offener Codebefund:** `Timestamp.now_monotonic()` liest MONOTONIC,
+deklariert aber `SENSOR_BOOTTIME`; `Pipeline._build_record` übernimmt für die
+Ergebniszeit die Zeitbasis der Aufnahme trotz MONOTONIC-Uhr. Daraus darf
+keine allgemeine Übereinstimmung der Domänen abgeleitet werden
+([OQ-45](open-questions.md#oq-45)). Die gegenwärtigen V4L2-Live-Aufnahmen
+tragen selbst MONOTONIC; Replay-, Sensor- und synthetische Fälle brauchen
+getrennte Prüfung.
 
 ### Zeitbasis von `SensorTimestamp` — 2026-09-07
 
@@ -92,9 +124,9 @@ Zwei Befunde, die Erwartungen korrigieren:
   `CnnOutputTensor`, `CnnOutputTensorInfo` und `CnnKpiInfo`. Wer den
   Eingangstensor braucht, muss ihn explizit aktivieren.
 
-Die 6,8 s Warmlauf sind für den Betrieb relevant: nach jedem Start der
-Anwendung liefert die Kamera in dieser Zeit keine Inferenz. Bei einem
-Gerätewechsel im Labor kommt das zur Einrichtungsdauer hinzu.
+Die 6,8 s Warmlauf waren für diesen historischen IMX500-Modellstart
+relevant. Sie sind keine Startzeit der aktiven StreamCam oder des heutigen
+Dot-Matrix-Lesers.
 
 ### Verarbeitungslatenz je Stufe — 2026-09-07
 
@@ -116,9 +148,11 @@ Ausschnitt 400×160, 5 Stellen, 40 Frames:
 | **total** | **4 229 µs** | **10 604 µs** | **30 304 µs** |
 
 Auffällig ist die Streuung: p95 ist das 2,5-Fache von p50, das Maximum das
-7-Fache. Genau diese Streuung — nicht der Mittelwert — geht in das
-Unsicherheitsbudget ein. Ursache ist noch nicht untersucht (Verdacht:
-Speicherallokation in `warpPerspective`, Scheduling).
+7-Fache. Das ist Rechenzeitstreuung, keine gemessene Unsicherheit des
+Aufnahmezeitpunkts. Ihr Beitrag zur zeitlichen Zuordnung hängt unter anderem
+davon ab, ob der Empfänger die Aufnahmezeit verwendet (M8). Die Ursache
+der Streuung wurde in dieser historischen Reihe nicht untersucht
+(Verdacht: Speicherallokation in `warpPerspective`, Scheduling).
 
 ## Unsicherheitsbudget (Vorlage)
 
@@ -130,9 +164,9 @@ sinnvoll beantwortbar — und genau deshalb blockiert OQ-02 den Baubeginn nicht.
 | --- | --- | --- | --- |
 | Interne DUT-Messung und Filterung | Datenblatt / M5 | ? | ? |
 | Displayaktualisierung und Haltezeit | **M5** | ? | ? |
-| Belichtung (Mitte der Belichtung) | M2 | Belichtungszeit / 2 ≈ 10,5 ms | ? |
+| Belichtung und Bezugspunkt | M2 | ? — abhängig von der noch unbekannten Zeitstempelsemantik; 10,5 ms war nur die halbe historische IMX500-Belichtung | ? |
 | Zeilenweise Auslesung | M3 | Zeilenposition × µs/Zeile | ? |
 | Kamerazeitstempel-Unsicherheit | M2 | ? | ? |
 | Pi-Uhr gegen Referenz | M1, M6 | Offset | Drift-Rest |
-| Mehrbildbestätigung | `confirmation_span_ns` im Datensatz | Spanne / 2 | Spannbreite |
+| Mehrbildbestätigung | `confirmation_span_ns` im Datensatz | dokumentierte Bestätigungsverzögerung; keine pauschale Halbierung oder Änderung der Aufnahmezeit | Beitrag je Zuordnungsverfahren noch zu bestimmen |
 | Verarbeitung und serielle Übertragung | M4, M7 | nur relevant falls M8 negativ | siehe oben |

@@ -3,7 +3,11 @@
 Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Die aktive
 Kamera ist seit 2026-09-25 eine **Logitech StreamCam (UVC)**. Die zuvor
 verwendete IMX500 ist außer Betrieb. Erkannte Werte werden mit Zeitbasis,
-Freigabestatus und Begründung dokumentiert. Die echte GSVmulti-Anbindung ist
+Freigabestatus und Begründung dokumentiert. Der Live-Messpfad ist über
+`dispread serve --port 8081` und `/live` gebaut: Einrichtung, namentliche
+Bestätigung, Messlauf und JSONL-Audit. Seine reale Prüfung ist auf
+GSV-2AS / Displaytech 161A, Raumlicht und mV/V begrenzt; die
+[offenen Grenzen](docs/status.md) gehören zur Bewertung. Die echte GSVmulti-Anbindung ist
 wegen der fehlenden Telegrammspezifikation offen
 ([OQ-07](docs/open-questions.md#oq-07)).
 
@@ -57,7 +61,7 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 | [2 · Verträge](docs/anleitung/02-vertraege.md) | Schnittstellen und Datenklassen |
 | [3 · Bildquelle](docs/anleitung/03-erste-bildquelle-folder.md) | eigene Bildquelle bauen |
 | [4 · Geräteprofile](docs/anleitung/04-geraeteprofile.md) | Layout und ROI |
-| [5 · CLI](docs/anleitung/05-cli.md) | geplanter Pipeline-Aufruf |
+| [5 · CLI](docs/anleitung/05-cli.md) | Workbench-CLI und geplanter Pipeline-Aufruf |
 | [6 · Aufnahme und Replay](docs/anleitung/06-kamera-aufnahme-replay.md) | Frames aufzeichnen und wiedergeben |
 | [7 · Lokalisierung](docs/anleitung/07-lokalisierung.md) | Anzeige finden und verfolgen |
 | [8 · OCR-Backends](docs/anleitung/08-ocr-backends.md) | Leser vergleichen |

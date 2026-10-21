@@ -51,7 +51,7 @@ for m in (cv2, numpy, serial, picamera2, libcamera): print(m.__name__, m.__file_
 Projekt, und PEP 668 (`externally-managed-environment`) betrifft nur das
 System-pip, nicht das venv.
 
-## Bereits vorhanden (Systempakete, nichts zu tun)
+## Dokumentierter Systempaketbestand
 
 | Paket | Version | Zweck |
 | --- | --- | --- |
@@ -66,10 +66,10 @@ System-pip, nicht das venv.
 | `tesseract-ocr` | 5.5.0 | OCR-Vergleichsbasis. Konzept §5 nennt Tesseract als Kandidaten — ihn unbewertet stehen zu lassen wäre die schlechtere Option. Angebunden per **CLI über `subprocess`**, nicht über `pytesseract`: das spart eine Abhängigkeit, und `python3-pytesseract` existiert in Debian 13 ohnehin nicht |
 | `tesseract-ocr-eng` | — | Ohne Traineddata startet Tesseract nicht |
 | `socat` | — | pty-Paare mit stabilen Symlinks für interaktive Serial-Tests. **Für die Unit-Tests nicht nötig** — die nutzen `os.openpty()` aus der stdlib, damit `pytest` auch ohne socat läuft |
-| `chrony` | 4.6.1-3 | Ersetzt `systemd-timesyncd`. Nur chrony liefert eine protokollierbare Offset- und Drift-Historie (`chronyc tracking`). Ohne dieses Log ist die Aussage „Pi-Zeit gegen Referenz" nicht belegbar — Messung M1 in [TIMING.md](TIMING.md) |
+| `chrony` | 4.6.1-3 | Ersetzt `systemd-timesyncd`. `chronyc tracking` kann für eine protokollierbare Offset- und Drift-Historie aufgezeichnet werden. Damit ist noch keine Synchronität zur Kalibrierreferenz belegt — Messungen M1 und M6 in [TIMING.md](TIMING.md) |
 
-Alle fünf waren zwischenzeitlich installiert, ohne dass dieser Eintrag
-nachgezogen wurde — bestätigt am 2026-09-21 per `which`/`dpkg -l`
+Die Tesseract-Pakete sowie `socat` und `chrony` waren zwischenzeitlich
+installiert, ohne dass dieser Eintrag nachgezogen wurde — bestätigt am 2026-09-21 per `which`/`dpkg -l`
 ([OQ-15](open-questions.md), geklärt).
 
 **Einschränkung, die dokumentiert bleiben muss:** `tesseract-ocr-eng` ist auf
@@ -83,26 +83,27 @@ Spezialisierte Traineddata (`ssd`, `letsgodigital`) sind nicht in Debian, siehe
 
 | Paket | Entscheidung | Begründung |
 | --- | --- | --- |
-| `torch`, `torchvision` | **nein, gar nicht auf dem Pi** | 2–3 GB von 34 GB frei; Training ist off-Pi vorgesehen. Die frühere Begründung mit Inferenz auf der IMX500 ist seit dem Kamerwechsel historisch ([OQ-11](open-questions.md)). |
+| `torch`, `torchvision` | **nein, gar nicht auf dem Pi** | Großer Speicherbedarf; Training ist off-Pi vorgesehen. Die frühere Angabe zum freien Speicher war ein historischer Snapshot, kein aktueller Ressourcenstand. Die frühere Begründung mit Inferenz auf der IMX500 ist seit dem Kamerawechsel historisch ([OQ-11](open-questions.md)). |
 | `onnxruntime` | zurückgestellt, aber **bevorzugte Option**, falls je CPU-Inferenz nötig wird | ~50 MB statt 2 GB, reine Inferenz. Erst installieren, wenn ein konkretes `.onnx` existiert |
 | `tensorflow`, `tflite-runtime` | nein | wie torch, kein Bedarf ohne eigenes Modell |
 | `paddleocr`, `paddlepaddle` | nein | arm64/Python-3.13-Wheels unzuverlässig, große Modell-Downloads. Konzept §5 nennt es als Kandidaten — hier als „geprüft, verworfen für jetzt" festgehalten, nicht stillschweigend weggelassen |
 | `easyocr` | nein | zieht torch |
 | `pytesseract` | nein | CLI genügt, und das Debian-Paket existiert nicht |
 | `imx500-converter`, `model_compression_toolkit` | **off-Pi** | Auf dem Pi nicht verfügbar. Vorhanden sind nur die Packager-Endstufen `imx500-package`, `fpk2rpk` und `PostConverter.jar` unter `/usr/lib/imx500-tools/` |
-| `nginx`, `flask` | nein | keine Weboberfläche im Umfang |
+| `nginx`, `flask` | nein | Die Weboberfläche nutzt `aiohttp`; ein zusätzlicher Webserver oder Flask ist für den vorhandenen Betrieb nicht nötig |
 
 ## Was das Projekt selbst zur Laufzeit braucht
 
-Nichts über die Systempakete hinaus. Die Kette läuft mit `numpy`, `cv2` und
-`pyserial`. Die aktive UVC-Bildquelle öffnet OpenCV erst beim Öffnen der
-Kamera. `picamera2` wird von ihr nicht importiert; Tests und Beispiele ohne
+Nichts über die dokumentierten Systempakete hinaus. Der Messkern nutzt
+`numpy`, `cv2` und `pyserial`. Für die Workbench kommen `aiohttp` und PAM
+hinzu; die optionale TUI nutzt `textual` (Pakete siehe unten). Die aktive
+UVC-Bildquelle öffnet OpenCV erst beim Öffnen der Kamera. `picamera2` wird von ihr nicht importiert; Tests und Beispiele ohne
 Kamera bleiben ausführbar ([Bildquellen-API](../api/frames.md)).
 
 ## Kamera-Workbench (2026-09-08)
 
 Installation: `bash scripts/install-workbench.sh`. Weiterhin nur die Projekt-
-venv mit Systempaketen und `pip install --no-deps -e .` verwenden. Der neue
+venv mit Systempaketen und `pip install --no-deps -e .` verwenden. Der
 Konsolenbefehl `dispread` ist in `pyproject.toml` registriert.
 
 | Paket | Installierte Version bei Implementierung | Zweck |
@@ -151,6 +152,6 @@ Rest der Seite funktioniert.
 `8d5b3a58a1f64023a04a4cedeef135a2263b18da04b35177ac13438a0bad033b`, aus
 `npm pack animejs@4.5.0`, Lizenz daneben in `anime-LICENSE.txt`). Es gibt
 also keinen CDN-Abruf und keinen npm-Build-Schritt. `tour.js` lädt die Datei
-nur auf der Tour-Seite nach. Für ein Update die Datei samt Versionsnummer im
-Namen tauschen, `ANIME_FILE` in `tour.js` anpassen und die Docs-Tests laufen
+auf der Tour-Seite und auf Seiten mit eingebetteten Tour-Abbildungen nach.
+Für ein Update die Datei samt Versionsnummer im Namen tauschen, `ANIME_FILE` in `tour.js` anpassen und die Docs-Tests laufen
 lassen.

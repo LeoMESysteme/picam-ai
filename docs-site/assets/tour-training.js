@@ -210,7 +210,7 @@
 
     const warn = T.group(layer, "only-training");
     T.panel(warn, 40, 470, 880, 46, "t-panel t-planned-box");
-    T.label(warn, 480, 499, "Nur zum Sammeln von Trainingsdaten. Im Messbetrieb liest das System ausschließlich das Bild.", "t-label", { "text-anchor": "middle" });
+    T.label(warn, 480, 499, "Labels nur beim Training · Live: serielle Gegenprobe getrennt, der Leser bekommt nur Bild und Layout.", "t-label", { "text-anchor": "middle" });
 
     T.hidden(pi, dev.g, devLabel, cmdPath, ackPath, rs, cmd, ack, pulse, pulse2, cam, cone, pair, pairArrow, warn);
     T.fadeUp(tl, [pi, dev.g], { delay: A.stagger(150) }, 100);

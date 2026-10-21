@@ -3,7 +3,8 @@
 > **Bauentwurf, kein aktueller Bedienpfad.** Der Code enthält heute
 > `ManualRoiLocator` und einen `QuadTracker`; die automatische
 > `contour_heuristic` und der hier skizzierte `RegionTracker` sind nicht
-> implementiert. Der laufende Messpfad verwendet die bestätigte ROI
+> implementiert. Der laufende Messpfad verwendet `TrackedQuadLocator`: Er
+> prüft die mit `QuadTracker` nachgeführte bestätigte ROI bei jedem Bild
 > ([Messpfad](../uebersicht/messpfad.md)); Kandidaten lassen sich in der
 > [Livevorschau](10-kamera-livevorschau.md) prüfen. Die folgenden Schritte
 > sind Vorschläge für eine mögliche Erweiterung, keine verfügbaren Befehle.
@@ -40,10 +41,12 @@ Drei Dinge, die dabei zählen mehr als die Trefferquote:
 1. **Nichts gefunden ist ein gültiges Ergebnis.** Leeres Tupel. Die Pipeline
    macht daraus `UNREADABLE` mit `display_not_located`. Ein „bester Rateversuch"
    wäre der Anfang stiller Fehlablesungen.
-2. **`role_hint` ist Pflicht.** Konzept §7 nennt die Verwechslung von Haupt-
-   und Nebenanzeige als kritischen Fehler. Viele Messverstärker zeigen zwei
-   Zahlen. Wenn du nicht entscheiden kannst, welche die Hauptanzeige ist, ist
-   `None` ehrlicher als eine Vermutung — und das Gate muss es ablehnen.
+2. **Anzeigenrolle ausdrücklich bestimmen.** Konzept §7 nennt die Verwechslung
+   von Haupt- und Nebenanzeige als kritischen Fehler. `DisplayCandidate`
+   erlaubt derzeit `role_hint=None`; die allgemeine Pipeline prüft das nicht
+   selbst, und das Gate bekommt keinen Kandidaten. Die geplante automatische
+   Auswahl braucht daher eine Prüfung vor dem Leser. Im Live-Pfad wählt der
+   Mensch die Geometrie, `TrackedQuadLocator` setzt `role_hint="main"`.
 3. **`score` muss über Frames vergleichbar sein.** Sonst kann der Tracker
    nicht entscheiden, ob eine neue Lokalisierung besser ist als die alte.
    Definiere ihn explizit (z. B. gewichtete Summe aus Fläche-Plausibilität,
@@ -156,7 +159,14 @@ else:
     self._frames_since_locate += 1
 ```
 
-Minimaler Umbau: einen optionalen Tracker in den Konstruktor, und aus
+Die allgemeine Pipeline hat weiterhin keinen eigenen Tracker-Parameter.
+Der vorhandene Live-Pfad kapselt die Nachführung im Locator und setzt
+`locate_every=0`; bei Verlust liefert der Locator `()` und
+`tracking_lost:<grund>`. Die Pipeline unterbricht die Mehrbildbestätigung
+mit `gate.interrupt()` und erzeugt einen Datensatz ohne Zahlenwert.
+
+Für den hier geplanten `RegionTracker` wäre ein möglicher Umbau: einen
+optionalen Tracker in den Konstruktor aufnehmen, und aus
 `lost=True` denselben Weg nehmen, den `self._candidate is None` schon geht —
 `UNREADABLE` mit `display_not_located` (oder einem neuen Grund
 `display_lost`). Achte darauf:

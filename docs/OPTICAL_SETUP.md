@@ -10,7 +10,7 @@ konkreten Aufbau prüfen
 
 ## Warum das kein Nebenthema ist
 
-Die Messreihe vom 2026-09-07 ([VALIDATION.md](VALIDATION.md)) zeigt eine klare
+Die synthetische 7-Segment-Messreihe vom 2026-09-07 ([VALIDATION.md](VALIDATION.md)) zeigt eine klare
 Rangfolge der Störungen:
 
 | Störung | Verhalten des Dekoders |
@@ -20,7 +20,9 @@ Rangfolge der Störungen:
 | Unschärfe σ=12–15 | Ablehnung, **keine** stillen Fehlablesungen |
 | **starker Glanz** | **2 von 40 stillen Fehlablesungen** |
 
-Unschärfe und Rauschen versagen gutartig — das System lehnt ab. **Reflexionen
+In dieser synthetischen Reihe versagen Unschärfe und Rauschen gutartig:
+Der 7-Segment-Leser lehnt ab. Das belegt nicht das Verhalten jedes
+Lesers und jedes realen LCD-Aufbaus. **Reflexionen
 sind der gefährliche Fall**, weil dabei Werte entstehen, die als gültig
 ausgegeben und trotzdem falsch sind. Abschirmung und Beleuchtung sind damit
 Voraussetzung, nicht Feinarbeit.
@@ -28,8 +30,11 @@ Voraussetzung, nicht Feinarbeit.
 ## Halterung
 
 * Verstellbar und **stabil**. Nach der Einrichtung darf sich nichts mehr
-  bewegen — eine Kameraverschiebung während der Messung führt zum Verlust der
-  bestätigten ROI und damit zu ungültigen Werten.
+  bewegen. Der Live-Pfad führt das bestätigte Quad begrenzt nach.
+  Überschreitet die Nachführung ihre Grenzen, wird der Wert ungültig.
+  Auch ein großer Wertwechsel kann derzeit die Bildähnlichkeit unter die
+  Trackingschwelle drücken ([OQ-26](open-questions.md#oq-26)); eine
+  starre Halterung allein schließt Nachführungsverlust nicht aus.
 * Reproduzierbar: wiederkehrende Geräte sollen ohne Neuausrichtung wieder
   passen. Der Bildausschnitt wird trotzdem jedes Mal neu bestätigt
   (Konzept §4).
@@ -46,7 +51,10 @@ Voraussetzung, nicht Feinarbeit.
 
 ## Ziffernhöhe im Bild
 
-Zielmarke: **≥ 30 px Ziffernhöhe** im verwendeten Stream.
+Historische Zielmarke für den 7-Segment-Leser: **≥ 30 px Ziffernhöhe** im
+verwendeten Stream. Das ist keine validierte Mindesthöhe für den aktuellen
+Dot-Matrix-Leser. Dessen Punktraster, Rand, Kontrast und Rasterversatz
+werden bei der Einrichtung geprüft.
 
 Am 2026-09-08 mit der IMX500 gemessen: **960×720 erreicht diese Marke** am Testgerät mit
 ≈ 37 px, ohne `ScalerCrop` und ohne den höher auflösenden Modus. Damit ist die
@@ -54,7 +62,8 @@ Vorschaugröße für die Auslesung brauchbar — was wichtig ist, weil die groß
 Sensormodi im Verdacht stehen, den Treiberfehler aus
 [OQ-22](open-questions.md) häufiger auszulösen. Reicht die Ziffernhöhe an einem
 Gerät nicht, ist `ScalerCrop` der Weg: digitaler Ausschnitt auf die Anzeige bei
-gleicher Ausgabegröße; der Sensormodus bleibt ohnehin 2028×1520.
+gleicher Ausgabegröße; der Sensormodus blieb bei diesem IMX500-Aufbau
+2028×1520. `ScalerCrop` ist kein UVC-Regler der StreamCam.
 
 Begründung: der Dekoder tastet je Ziffernzelle sieben Segmentpositionen mit
 einem Fenster von ±6 % der Zellenbreite ab. Bei deutlich kleineren Ziffern
@@ -76,10 +85,16 @@ Anzeige langsamer ist).
   prüfen ist. LCDs sind selbst polarisiert; ein falsch orientierter Filter kann
   die Anzeige unlesbar machen. Beide Varianten messen und in
   [lab_journal.md](lab_journal.md) festhalten.
-* Der Dekoder meldet den Anteil gesättigter Bildpunkte und setzt ab 2 % das
+* Der Dekoder meldet den Anteil gesättigter Bildpunkte und setzt bei mehr als 2 % das
   Flag `glare`, das die Freigabe blockiert. Das ist eine Rückmeldung über den
   **Aufbau**, kein Ersatz für ihn: ein Aufbau, der das Flag regelmäßig auslöst,
   ist nicht brauchbar, auch wenn nichts Falsches gesendet wird.
+
+Am realen Dot-Matrix-Aufbau wurden außerdem Punktschatten und ungleiches
+Licht beobachtet. Am 2026-10-21 ließ ein Kameraschatten einzelne Zellen über
+`d_max` fallen. Zuerst Licht und Kamerawinkel verbessern; eine erhöhte
+Lesetoleranz bleibt ausdrücklich nicht validiert. Belege und Grenzen:
+[VALIDATION.md](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21).
 
 ## Belichtung fixieren
 
@@ -88,7 +103,8 @@ bleiben** und ins Geräteprofil geschrieben werden. Eine mitlaufende
 Automatik verändert die gemessenen Segmenthelligkeiten und damit genau die
 Evidenz, die die Freigabe bewertet.
 
-Gemessene Startwerte am 2026-09-07 (Automatik, Innenraum): `ExposureTime`
+Historische IMX500-Startwerte am 2026-09-07 (Automatik, Innenraum), keine
+StreamCam-Vorgaben: `ExposureTime`
 21,06 ms, `AnalogueGain` 1,50, `FrameDuration` 33,31 ms.
 
 ## Multiplexing und Flimmern
@@ -109,13 +125,15 @@ sieht ein Segmentmuster, das in keiner Tabelle steht, und lehnt ab.
 
 Konzept §7 nennt die Verwechslung von Haupt- und Nebenanzeige als kritischen
 Fehler. Der Aufbau soll die Hauptanzeige eindeutig und formatfüllend zeigen.
-Im Code trägt jeder Lokalisierungskandidat einen `role_hint` (`main` oder
-`secondary`), damit die Rolle nicht implizit bleibt.
+Im Code trägt jeder Lokalisierungskandidat ein optionales `role_hint` (`main` oder
+`secondary`). Der Live-Pfad setzt für die bestätigte Anzeige `main`; das
+Feld allein erkennt oder verhindert keine Verwechslung.
 
 ## Checkliste vor der ersten Messreihe
 
 - [ ] Halterung fest, Kamera bewegt sich nicht
-- [ ] Ziffernhöhe ≥ 30 px geprüft
+- [ ] Zeichengröße und Raster für den gewählten Leser geprüft; bei
+  7-Segment die historische Zielmarke ≥ 30 px berücksichtigen
 - [ ] Fokus auf den Arbeitsabstand eingestellt
 - [ ] Beleuchtung reproduzierbar, Abschirmung gegen Spiegelungen
 - [ ] `glare`-Flag löst im Normalbetrieb **nicht** aus

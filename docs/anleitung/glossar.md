@@ -62,8 +62,9 @@ Uhrzeigersinn ab oben links.
 **eines** Aufbaus vergleichbar, nie als absolute Güte.
 
 **Segmentevidenz** — die gemessene Helligkeit jedes der sieben Segmente je
-Stelle, plus `margin`. Der Grund, warum der klassische Leser Primärpfad ist:
-das Gate kann daraus begründen, statt zu glauben.
+Stelle, plus `margin`. Sie erklärt Entscheidungen des Siebensegment-Lesers.
+Der Live-Pfad am GSV-2AS verwendet stattdessen Punktraster und Vorlagenabstände
+des `DotMatrixReader`.
 
 ## Kette und Verträge
 
@@ -75,13 +76,17 @@ strukturell keinen Referenzwert.
 
 ### Konfidenz {#konfidenz}
 
-Aggregiertes Qualitätsmaß, hier die Segmentmarge.
-**Ausdrücklich keine Fehlerwahrscheinlichkeit** (Konzept §7).
+Qualitätsmaß des jeweiligen Lesers; das Gate begrenzt `min_margin` nach
+oben auf 1. Beim Segmentleser ist die Marge normiert, beim Dot-Matrix-Leser
+stammt sie aus der Vorlagenskala. Werte verschiedener Leser sind deshalb
+nicht unmittelbar vergleichbar. **Keine Fehlerwahrscheinlichkeit** (Konzept §7).
 
 ### Marge {#marge}
 
-`margin` ist der Abstand der knappsten Segmentmessung zur
-Entscheidungsschwelle, normiert 0..1. Klein = knapp entschieden.
+Beim Segmentleser ist `margin` der Abstand der knappsten Segmentmessung
+zur Entscheidungsschwelle, normiert 0..1. Beim Dot-Matrix-Leser ist sie der
+kleinere verbleibende Abstand zur erlaubten Vorlagendistanz und zur geforderten
+Klassentrennung; diese Skala ist nicht normiert. Klein = knapp entschieden.
 
 ### Mehrbildbestätigung {#mehrbildbestaetigung}
 
@@ -106,8 +111,9 @@ Die Anzeige wechselt bzw. die Bestätigung läuft noch. Aussage
 
 ### Trennstelle {#trennstelle}
 
-Eine der sechs austauschbaren Nahtstellen aus Konzept §3, je
-als `typing.Protocol`. Siehe [Kapitel 2](02-vertraege.md).
+Eine der sechs Nahtstellen aus Konzept §3. Fünf sind `typing.Protocol`;
+die Freigabe setzt die konkrete Klasse `ReleaseGate` um. Siehe
+[Kapitel 2](02-vertraege.md).
 
 ### UNREADABLE {#unreadable}
 
@@ -184,12 +190,14 @@ Ausgabe ohne Hardware.
 es braucht einen Pegelwandler, galvanische Trennung ist zu bewerten
 ([OQ-09](../open-questions.md)).
 
-**`/dev/ttyAMA0`** — der Datenport für GSVmulti. **`/dev/serial0`** zeigt auf
+**`/dev/ttyAMA0`** — vorgesehener UART-Datenport für die noch offene
+GSVmulti-Ausgabe; die elektrische Anbindung ist nicht freigegeben (OQ-09).
+Die serielle GSV-2AS-Referenz nutzt am aktuellen Aufbau `/dev/ttyUSB0`. **`/dev/serial0`** zeigt auf
 `ttyAMA10` und ist der 3-Pin-Debug-Header, **nicht** der Nutzdatenport.
 
 ## Python und Werkzeuge
 
-**Editierbarer Install** (`pip install -e .`) — das Paket wird aus `src/`
+**Editierbarer Install** (`./.venv/bin/pip install --no-deps -e .`) — das Paket wird aus `src/`
 importiert statt kopiert. Trägt einen absoluten Pfad in der `.pth`-Datei; ein
 umbenanntes Projektverzeichnis bricht ihn ([Kapitel 0](00-werkzeuge.md)).
 

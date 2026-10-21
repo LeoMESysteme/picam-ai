@@ -1999,3 +1999,100 @@ gewollte Markierung, keine Störung der Verbindung. Pi ohne Aussetzer.
 
 **Offen:** Toleranzlauf über 10 min, Lauf mit Werteplan (große Sprünge über
 den ganzen Bereich), zweite Aufstellung oder anderes Licht.
+
+## 2026-10-21 — Vorbereitung eines strengen Laufs mit Werteplan
+
+**Ziel:** Bedienergeführten Messlauf mit fünf Normierungsfaktoren und
+serieller Referenz vorbereiten. Noch kein Messlauf und keine Abnahme.
+
+**Aufbau und Eingriff:** Vorhandene StreamCam am GSV-2AS; keine mechanische
+Änderung durch den Agenten. Werkbank aus dem Haupt-Checkout in tmux
+`picam-messlauf-20261021` auf Port 8081 gestartet. Register über das vorhandene
+Leseskript gesichert; Normierung, Dezimalpunkt, Einheit, Modus, Stellenzahl,
+Messbereich, Gerätetyp und Firmware stimmen mit dem Rückstellpunkt vom
+2026-09-22 überein. Der serielle Messwertstrom wurde wieder gestartet.
+Die automatische Einrichtung setzt Fokus 42, Belichtung 300, Gain 14 und
+Weißabgleich 4717 K, Automatiken danach aus; Werte zurückgelesen.
+Sitzungsbezogene Einstellungen stehen in `setup/camera-settings.json`.
+
+**Beobachtung:** Sitzung `live-20261021T151835Z`, alle neun Prüfungen OK,
+Gegenlesen 2/2 ohne Widerspruch oder erhöhte Toleranz. Der Agent hat das
+Sampling-Overlay angesehen; die namentliche Prüfung und Bestätigung durch
+die Person stehen aus. Zahlen: [VALIDATION](VALIDATION.md#messlauf-vorbereitung-2026-10-21).
+
+**Schluss und Ablauf:** Die Person hat ausdrücklich den strengen Lauf am
+aktuellen Aufbau gewählt. Vorbereitet ist
+`1:140,2:140,0.5:140,5:140,10:160` (Faktor:Sekunden), insgesamt 720 s
+Haltezeit zuzüglich Befehlspausen. Referenz mitschreiben, einmal etwa 2 s
+Displayabdeckung mit notiertem Zeitpunkt, nach etwa 13 min stoppen und
+Rückstellung abwarten. Der Plan stoppt den Lauf nicht automatisch. Während
+des Laufs keine Pushes, Builds oder Tests auf dem Pi; Runner unverändert.
+Bestätigung und Laufstart bleiben auf `/live`. Kein Toleranznachweis.
+
+**Belege:** Diagnose, Registerstand, Werteplan und Bedienablauf unter
+`var/diagnostics/messlauf-vorbereitung-20261021/`; Einrichtungsbilder und
+Prüfbericht unter `var/live/live-20261021T151835Z/setup/` (lokale Daten).
+
+**Nachtrag 17:21 MESZ:** Leonhard Hentschke hat die Einrichtung auf `/live`
+bestätigt, Einheit und Format geprüft; `confirmation.json` gespeichert.
+Laufstart und Bestätigung des Werteplans stehen noch aus.
+
+**Laufende Diagnose nach Start um 17:22 MESZ:** Beim Wechsel des Werteplans
+von Faktor 1 auf 2 meldet die Person dauerhaft UNREADABLE. Das Audit nennt
+`tracking_lost:low_score`, die Referenz etwa 1,2115 mV/V. Beide Schreibbefehle
+(`set norm`, `set dpoint`) wurden mit `[59, 160]` bestätigt. Bild 4317 ist
+noch VALID mit 1,2115; ab Bild 4318 scheitert die Nachführung. Kamera ohne
+Bildlücken. Der Tracker registriert das gesamte entzerrte Display gegen
+das Einrichtungsbild, einschließlich der wechselnden Ziffern; dies ist
+ein konkreter Befund zum bisher zurückgestellten R13. Eine Ziffernänderung
+als Ursache ist plausibel, mechanische Einflüsse sind damit nicht unabhängig
+ausgeschlossen. Keine Einstellungsänderung während des Laufs.
+Diagnoseschnappschuss: `run-01/tracking-diagnose.json`. Zahlen stehen in
+[VALIDATION](VALIDATION.md#messlauf-vorbereitung-2026-10-21).
+
+**Erholung ohne Eingriff:** Nach dem nächsten Planschritt auf Faktor 0,5
+liefert der Lauf wieder VALID mit etwa 0,30287 mV/V. Das stärkt die Hypothese
+der wertabhängigen Nachführung; ein unabhängiger Bewegungsnachweis fehlt
+weiter. Kamera und Tracking-Schwellen wurden nicht verändert.
+
+**Abschlussstatus beim Wiki-Abgleich:** Der bereits laufende Versuch wurde
+durch die Bedienung beendet; der Doku-Agent hat nur den lokalen Status und
+die gespeicherte `session.json` gelesen. Ende laut Artefakt am 2026-10-21
+um 17:36 MESZ (`2026-10-21T15:36:01.987480+00:00`), Grund `bediener`.
+Die Rückstellprüfung des Referenzrecorders meldet erfolgreiches Schreiben
+und Übereinstimmung mit dem Rückstellpunkt. Kamera bleibt für die Vorschau
+an. Keine Hardwareänderung durch den Wiki-Abgleich. Die anschließende
+Referenzauswertung folgt unten; eine vom Zifferninhalt unabhängige
+Nachführung bleibt offen. Abschlusszahlen auch in
+[VALIDATION](VALIDATION.md#messpfad-live-werteplan-2026-10-21).
+
+
+## 2026-10-21 — Abschluss des strengen Werteplan-Laufs
+
+**Ziel und Aufbau:** Sitzung `live-20261021T151835Z/run-01`, fünf Faktoren
+1, 2, 0,5, 5 und 10, 17:22:35 bis 17:36:01 MESZ (806 s einschließlich
+Rückstellung). Leonhard Hentschke bestätigt Einrichtung, Format und Einheit,
+ca. 2 s Displayabdeckung ungefähr nach 6 min und sonst unveränderten Aufbau.
+Strenger Leser ohne erhöhte Toleranz; keine Einstellung im Lauf geändert.
+Die Kamera läuft nach dem Lauf für die Vorschau weiter.
+
+**Ergebnis:** Normierung und Dezimalpunkt durch Schreiben und Rücklesen
+zurückgestellt. Referenzabgleich Exit 0: 0/11 137 Fehllesungen; 2563 VALID
+im Schutzintervall und 232 ohne Referenzdeckung sind dadurch nicht als
+korrekt nachgewiesen. 28,59 gelesene Bilder/s, keine Kameralücke, kein
+Auditfehler und kein Referenz-Queue-Verlust. Aber 8074 Trackingverluste:
+bei Faktor 2 und 5 sämtliche stabilen Referenzfenster UNREADABLE, bei
+1, 0,5 und 10 nahezu durchgehend VALID. Die fünf Referenzlücken an
+Befehlspausen verhindern belastbare Verzögerungszahlen für die großen
+Normierungssprünge. [Vollständige Zahlen](VALIDATION.md#messpfad-live-werteplan-2026-10-21).
+
+**Deutung:** R13 ist ausgelöst; Nachführung bei wechselndem Zifferninhalt
+vor weiteren Freigabeläufen bearbeiten ([OQ-26](open-questions.md#oq-26)).
+Ein unabhängiger Bildnachweis der Ursache fehlt mangels gespeicherter
+Live-Bilder. Die berichtete Abdeckung lässt sich zeitlich nicht eindeutig
+isolieren; keine separate Aussage zur Abdeckreaktion. Kein bestandener
+Robustheits- oder Toleranznachweis.
+
+**Belege:** `reference-eval.json` und `werteplan-auswertung.json` neben den
+unveränderten Lauf-Audits. Keine Änderung am Messpfad, kein Push und kein
+Serverneustart für die Auswertung.

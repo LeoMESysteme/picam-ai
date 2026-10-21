@@ -4,7 +4,22 @@
 > statt Raspberry Pi AI Camera; die Kameraangaben unten beschreiben die
 > IMX500 und sind historisch (`docs/project_history.md`, 2026-09-25).
 
-Stand 2026-09-07, Gerät `raspi06`.
+Gerät `raspi06`. Rechner- und IMX500-Bestand unten: Stand 2026-09-07;
+aktuelle StreamCam-Sitzung: 2026-10-21. Speicherplatz- und Paketangaben
+sind datierte Schnappschüsse, keine laufende Zustandsanzeige.
+
+## Aktuelle StreamCam-Sitzung (2026-10-21)
+
+Einrichtung `live-20261021T151835Z` vor dem strengen Werteplan-Lauf:
+USB 3 mit 5000 Mbit/s, 1920×1080 YUYV bei angeforderten 30 Bildern/s.
+Die automatische Einrichtung hat Fokus 42, Belichtung 300 (V4L2-Einheiten),
+Gain 14 und Weißabgleich 4717 K gesetzt und zurückgelesen; Autofokus,
+Belichtungs- und Weißabgleichsautomatik sind danach ausgeschaltet.
+Das sind sitzungsbezogene Einstellungen, keine Vorgaben für andere
+Aufstellungen. Diagnose unter
+`var/diagnostics/messlauf-vorbereitung-20261021/`, Kameraregler unter
+`var/live/live-20261021T151835Z/setup/camera-settings.json`.
+Die nachfolgenden Kameraabschnitte bleiben historischer IMX500-Stand.
 
 ## Rechner
 
@@ -22,7 +37,7 @@ Stand 2026-09-07, Gerät `raspi06`.
 externen Speicher. Im Betrieb Ringpuffer mit harter Obergrenze — der
 `JsonlSink` rotiert bei 64 MB und behält 5 Generationen.
 
-## Kamera
+## Kamera (historisch: IMX500) { #kamera }
 
 | Größe | Wert |
 | --- | --- |
@@ -43,6 +58,12 @@ Gemessene Kenngrößen siehe [TIMING.md](TIMING.md): 6,8 s `.rpk`-Warmlauf,
 CLOCK_BOOTTIME.
 
 ## Serielle Schnittstellen
+
+**Stand 2026-10-21:** Die GSV-2AS-Referenz wird über den bereits am
+2026-09-22 dokumentierten PL2303-USB-RS232-Adapter an `/dev/ttyUSB0`
+mit 38400 Baud, 8N1 gelesen. Sie dient sowohl der Datenernte als auch der
+optionalen Live-Referenzaufzeichnung; sie ist kein GSVmulti-Ausgang.
+Die folgende Portliste ist der frühere Bestand vom 2026-09-07.
 
 | Gerät | Rolle |
 | --- | --- |
@@ -136,9 +157,10 @@ Ein Transceiver erledigt **beides** — Pegelwandlung und Invertierung.
 **Empfohlener Weg: USB-RS232-Adapter** (FTDI-Chipsatz, erscheint als
 `/dev/ttyUSB0`). Gründe: kein Eingriff in die Verdrahtung, und vor allem
 **keine Kollision mit `/dev/ttyAMA0`**, das als ausgehender GSVmulti-Datenport
-belegt ist. `/dev/serial0` scheidet ohnehin aus (Debug-Header). Stand
-2026-09-22 ist **kein** USB-Seriell-Adapter angesteckt (`/dev/ttyUSB*` fehlt);
-der Benutzer ist bereits in `dialout`, Rechtearbeit entfällt. Für stabile
+vorgesehen ist. `/dev/serial0` scheidet ohnehin aus (Debug-Header). Vor dem
+Anschluss am 2026-09-22 fehlte `/dev/ttyUSB*`; anschließend wurde der unten
+dokumentierte PL2303 angeschlossen. Der Benutzer ist bereits in `dialout`.
+Für stabile
 Namen bei mehreren Adaptern eine udev-Regel auf die Seriennummer vorsehen.
 
 Galvanische Trennung ist im Laboraufbau zu bewerten
@@ -199,16 +221,16 @@ früheren Waveshare-Kernel 6.6.23. Für die Kamera unkritisch.
 `me-systeme` ist in `dialout`, `video`, `i2c`, `gpio`, `spi`, `render`, `sudo`.
 Zugriff auf Kamera- und Serienports ist damit gegeben.
 
-**`sudo` verlangt seit dem Reboot am 2026-09-07 ein Passwort.** Automatisierte
-Paketinstallationen sind dadurch nicht möglich — siehe
-[OQ-15](open-questions.md).
+**Historisch, 2026-09-07:** `sudo` verlangte ein Passwort. Die damals
+fehlenden Werkzeuge wurden am 2026-09-21 installiert;
+[OQ-15](open-questions.md#oq-15) ist geklärt.
 
 ## Zeitsynchronisation
 
-Aktuell `systemd-timesyncd`. Das liefert **keine protokollierbare Offset- und
-Drift-Historie**. Für Messung M1 wird `chrony` gebraucht
-([OQ-15](open-questions.md)) — ohne `chronyc tracking`-Log ist die Aussage
-„Pi-Zeit gegen Referenz" nicht belegbar.
+Seit 2026-09-21 ist `chrony` installiert und ersetzt `systemd-timesyncd`
+([Abhängigkeiten](dependencies.md), [OQ-15](open-questions.md#oq-15)). Ein
+24-Stunden-Nachweis für M1 sowie der Zeitvergleich zur Referenz M6 bleiben
+offen; die Installation allein belegt weder Offset noch Drift.
 
 ## Konfigurationsschlüssel
 

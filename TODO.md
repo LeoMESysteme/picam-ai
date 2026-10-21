@@ -5,7 +5,7 @@ weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
 in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
-`docs/status.md` ist die erste Datei. Diese hier ist die Arbeitsliste daneben.
+Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ---
 
@@ -45,9 +45,10 @@ Offen:
    Kein formaler Abnahme-Lauf. Weiter offen:
    * **Folgeschritte:** serielle Ausgabe an GSVmulti (OQ-07), alten
      7-Segment-Lesepfad samt ungenutzter Geometriehelfer entfernen und
-     dessen CPU-Last im Messlauf erfassen. Trackerregion unabhängig vom
-     Anzeigewert erst dann bauen, wenn die Aufbauzahlen Trackingverlust
-     bei Wertwechseln zeigen (R13).
+     dessen CPU-Last im Messlauf erfassen. Der Werteplan-Lauf vom
+     2026-10-21 zeigt nun Trackingverlust bei großen Wertwechseln (R13,
+     [OQ-26](docs/open-questions.md#oq-26)); Abschlussdiagnose und eine
+     vom Zifferninhalt unabhängige Trackerregion sind damit zu bearbeiten.
    * `JsonlSink`-Rotation für Live-Audits klären: 64 MB, fünf Generationen
      würden nach etwa 7 h alte Belege verwerfen; dauerhafte Aufbewahrung
      vor längeren Läufen lösen.
@@ -264,7 +265,11 @@ Ernte direkt anschliessen.
 
 ---
 
-## Wo wir stehen
+## Wo wir standen (2026-09-25)
+
+Dieser Abschnitt hält den früheren Übergang zur StreamCam fest. Der
+aktuelle Stand folgt unter „Messpfad live“; die StreamCam-Kalibrierung
+vom 2026-09-29 ist inzwischen dokumentiert.
 
 * Sollwertkanal (RS232 ASCII vom GSV-2AS) steht seit 2026-09-22.
 * Kamera seit 2026-09-25: Logitech StreamCam (IMX500 außer Betrieb).
@@ -298,21 +303,34 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 
 **Nächste Schritte, in Reihenfolge:**
 
-1. **Toleranzlauf ≥ 10 min mit Werteplan** (siehe unten), mit der
+1. **Nachführung bei großen Wertwechseln bearbeiten (R13)**
+   ([OQ-26](docs/open-questions.md#oq-26)): Strenger Werteplan-Lauf
+   `live-20261021T151835Z/run-01` abgeschlossen: 806 s, 0/11 137 Fehllesungen,
+   aber 8074 Trackingverluste; bei Faktor 2 und 5 in stabilen
+   Referenzfenstern kein VALID. Rückstellung bestätigt. Nachführung
+   unabhängig vom Zifferninhalt untersuchen und große Sprünge erneut
+   prüfen. Die berichtete Abdeckung ist zeitlich nicht eindeutig
+   zuordenbar. [Zahlen](docs/VALIDATION.md#messpfad-live-werteplan-2026-10-21).
+2. **Testlauf-Sicherung und Zeitbasis-Bezeichnung klären:**
+   [OQ-44](docs/open-questions.md#oq-44) dokumentiert, dass Testlaufmarkierung
+   und Banner allein `VALID` im Audit nicht verhindern;
+   [OQ-45](docs/open-questions.md#oq-45) betrifft MONOTONIC-Marken mit
+   unpassender Zeitbasis. Testlaufdaten bleiben für Messungen gesperrt.
+3. **Toleranzlauf ≥ 10 min mit Werteplan** (siehe unten), mit der
    bedienenden Person; der Werteplan schreibt `set norm` und stellt danach
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
-2. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md)):
+4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
    wartet auf eine Protokollbeschreibung von GSVmulti; `protocol/gsv_ascii`
    wirft bis dahin absichtlich. Kein Protokoll erfinden.
-3. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
+5. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
    schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
    zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.
-4. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen,
+6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen,
    `JsonlSink`-Rotation für lange Läufe klären (Punkt 2 unter „Offen“).
-5. **Reste aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`
-   wird relativ zum Arbeitsverzeichnis aufgelöst; das Snippet in Anleitung
-   Kapitel 10 hat `/dev/ttyUSB0`/38400 fest eingetragen.
+7. **Rest aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`
+   wird relativ zum Arbeitsverzeichnis aufgelöst. Das Snippet in Anleitung
+   Kapitel 10 liest Port/Baud seit dem Wiki-Abgleich aus dem Rückstellpunkt.
 
 **Pi-Betrieb (für ruhige Messläufe):**
 
@@ -327,10 +345,10 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 * Kein persistentes Journal; der Hänger 2026-10-21 14:08 ist deshalb nicht
   belegbar. Aktivieren:
   `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`.
-* Haupt-Checkout `~/picam-ai`: WIP der Person auf
-  `wip/haupt-checkout-2026-10-21` (`a55ab1f`), später mergen (Konflikte in
-  CHANGELOG/status erwartbar); `master` dort per `git pull --ff-only`
-  nachziehen.
+* Haupt-Checkout `~/picam-ai`: beim Wiki-Abgleich auf `master`
+  (`339703d`). Der zuvor dokumentierte WIP liegt auf
+  `wip/haupt-checkout-2026-10-21` (`a55ab1f`); dessen Integration gesondert
+  prüfen. Uncommittierte Messdokumente der Person erhalten.
 * Vier gemergte Remote-Branches können weg (`feat/einrichtungsassistent`,
   `feat/task-b-versatz-normierung`, `fix/docs-pin-pymdown`,
   `ocr-selbstkalibrierung`); MEM-6 (Pi-Hauswart, auf origin, nicht gemergt)

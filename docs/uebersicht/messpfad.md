@@ -8,6 +8,11 @@ und in der [API-Referenz](../../api/index.md). Der
 [schrittweise Durchlauf](../anleitung/01-kette-verstehen.md) zeigt dieselbe
 Kette an einem synthetischen Beispiel.
 
+Stand: 2026-10-21. Der aktive Live-Pfad läuft mit StreamCam,
+`CameraOwner`, bestätigtem Profil, `DotMatrixReader` und JSONL-Audit.
+Einrichtungsprüfung, namentliche Bestätigung und Laufsteuerung erfolgen auf
+`/live`. Die ältere Werkbank erhält Vorschau-Bilder desselben Owners.
+
 ## Vom Bild zum Datensatz
 
 | Schritt | Eingang → Ergebnis | Wer entscheidet? | Nachlesen |
@@ -33,9 +38,13 @@ weitergehende Lokalisierung als Bauaufgabe. Der aktive Kamerapfad ist
 
 ## Was die Lesung belegen muss
 
-Das Leseergebnis trennt die sichtbare Zeichenfolge von ihrer numerischen
-Interpretation. Eine führende Null oder ein Minuszeichen bleibt in
-<code>raw_text</code> erhalten, auch wenn der Zahlenwert gleich wäre. Vorzeichen,
+Der Vertrag sieht vor, die sichtbare Zeichenfolge und ihre numerische
+Interpretation getrennt zu halten. Der aktuelle Dot-Matrix-Leser schreibt
+in <code>raw_text</code> jedoch nur die geparste Zahl mit Pluszeichen,
+ohne die führenden Leerstellen und restlichen Displayzellen. Bei Ablehnung
+ist der Text leer. Eine vollständige Abschrift der 16 Zellen fehlt noch
+([Arbeitsliste](../../TODO.md)). Negative Werte sind für diesen Leser nicht
+freigegeben. Vorzeichen,
 Dezimalpunkt und Einheit sind eigene Evidenzen. Stammt die Einheit aus dem
 Profil, muss ihre Herkunft in den Diagnosen erkennbar sein
 ([Kapitel 1](../anleitung/01-kette-verstehen.md),
@@ -76,21 +85,37 @@ erklärt, welche Evidenz ein neuer Leser liefern muss.
 | Situation | Status oder Reaktion | Was im Nachweis steht |
 | --- | --- | --- |
 | Wert vollständig und eindeutig | <code>valid</code> | Wert, Einheit, Lesetext, Zeitbasis, Profil und Versionen |
+| Mischziffern kurz nach Freigabe, übrige Zellen unverändert | <code>transition</code> | Grund <code>anzeige_wechselt</code>, kein Zahlenwert |
 | Mehrbildbestätigung noch offen | <code>transition</code> | Grund <code>awaiting_confirmation</code>, Anzahl und Zeitspanne |
 | Anzeige fehlt oder Zeichen sind unlesbar | <code>unreadable</code> | kein freigegebener Zahlenwert, konkreter Ablehnungsgrund |
 | Nach einer Freigabe kommt lange keine neue gültige Lesung | <code>stale</code> | alter Wert wird nicht als aktueller Wert fortgeführt |
 | Glanz, Menü, Hold oder Überlauf | blockierende Statusflags | keine gültige Zahlenfreigabe |
 
+Im Live-Pfad müssen zwei Bilder denselben Zahlenwert bestätigen; der
+allgemeine <code>GateConfig</code>-Default bleibt ein Bild.
+<code>anzeige_wechselt</code> ist auf höchstens drei unlesbare Zellen und
+das kürzere Fenster aus Übergangsfrist und Veraltungsfrist beschränkt
+(aktuell höchstens 0,5 s). Alle lesbaren Zellen müssen der letzten Freigabe
+entsprechen; andere Fehler werden dadurch nicht zu Übergängen.
+
 **Grenze:** Die Pipeline meldet bei einer nicht gefundenen Anzeige
 <code>unreadable</code> direkt; sie ruft dafür das Gate nicht auf. Für andere
 Ablehnungen entscheidet das Gate anhand der Aufnahmezeit, ob
-<code>unreadable</code> oder <code>stale</code> vorliegt. Diese Unterscheidung
+<code>unreadable</code>, <code>transition</code> oder <code>stale</code>
+vorliegt. Blockierende Zustandsflags bleiben <code>unreadable</code>. Diese Unterscheidung
 steht im [Pipeline-Code](../../api/pipeline.md) und in der
 [Freigabe-API](../../api/validate.md).
 
 <figure class="tour-figure" data-scene="erkennung-veraltet" markdown="1">
-<figcaption markdown="span">Unlesbar und veraltet: Ist die Anzeige verdeckt, gibt es keinen Zahlenwert, auch nicht den letzten gültigen. Hält der Zustand länger an als <code>stale_after</code>, wird aus „unlesbar“ „veraltet“.</figcaption>
+<figcaption markdown="span">Unlesbar und veraltet: Ist die Anzeige verdeckt, gibt es keinen Zahlenwert, auch nicht den letzten gültigen. Bei einer fortgesetzten Leseablehnung ohne blockierendes Statusflag wird nach <code>stale_after</code> aus „unlesbar“ „veraltet“. Trackingverlust bleibt im Audit UNREADABLE.</figcaption>
 </figure>
+
+Fehlen neue Kamerabilder, kennzeichnet die Live-Oberfläche den zuletzt
+gelesenen Datensatz nach der Altersgrenze als STALE; ohne neues Bild
+entsteht kein zusätzlicher Record. Der Streamstillstand beendet den Lauf
+derzeit erst nach dem OpenCV-Timeout. Große Wertwechsel können außerdem
+<code>tracking_lost:low_score</code> auslösen, weil das Tracking noch den
+Zifferninhalt berücksichtigt ([OQ-26](../open-questions.md#oq-26)).
 
 Eine Mehrbildbestätigung kann die Ausgabe verzögern. Ihr
 <code>confirmation_span_ns</code> gehört in den
@@ -107,10 +132,24 @@ Kalibrierung ist nicht belegt
 Bei einer gestörten Leitung darf der Übertragungsfehler nicht als
 Erkennungsfehler erscheinen
 ([Datensatzvertrag](../../api/vertraege.md),
-[Sink-Vertrag](../../api/sink.md)). Das JSONL-Log dient als Auditspur.
+[Sink-Vertrag](../../api/sink.md)). Der aktuelle Live-Lauf nutzt ausschließlich das JSONL-Log als Auditspur.
+Eine serielle GSVmulti-Ausgabe ist dort noch nicht angeschlossen.
 Das serielle ASCII-CSV ist nur ein als <code>provisional=True</code>
 gekennzeichneter Platzhalter; das GSVmulti-Format ist
 [unbekannt](../GSVMULTI_PROTOCOL.md).
+
+Die optionale serielle GSV-2AS-Aufzeichnung steht getrennt in
+<code>reference.jsonl</code>; der Nachvergleich erfolgt mit
+<code>scripts/live-reference-eval.py</code>. Der Referenzwert verändert
+weder Leserentscheidung noch Freigabe. Ein Testlauf bei Lesesperre trägt
+<code>TESTLAUF.json</code> und die Markierung in <code>session.json</code>;
+seine Pipeline-Records sind zusammen mit dieser Markierung auszuwerten,
+auch wenn einzelne Records <code>valid</code> tragen. Die Oberfläche kann
+sie ebenfalls als VALID anzeigen; die Testlaufmarkierung untersagt ihre
+Messnutzung, erzwingt dies aber noch nicht technisch
+([OQ-44](../open-questions.md#oq-44)). Eine angepasste Lesetoleranz setzt eine
+serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus;
+sie bleibt als nicht validiert markiert.
 
 Zur Diagnose zuerst den <code>status</code> und
 <code>reject_reasons</code> im JSONL-Record prüfen, dann

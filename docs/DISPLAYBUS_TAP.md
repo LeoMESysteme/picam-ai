@@ -1,6 +1,8 @@
 # Displaybus-Abgriff als Ground-Truth-Quelle
 
-**Stand: 2026-09-22 — Konzeptskizze, nicht gebaut, nichts gemessen.**
+**Abgleich: 2026-10-21.** Displaybus-Konzept vom 2026-09-22, nicht gebaut
+und nicht vermessen. Der serielle Alternativweg ist inzwischen gebaut und
+vermessen; dessen Belege gelten nicht automatisch für einen Bus-Abgriff.
 
 > **Rückfallebene, nicht Primärweg.** Diese Skizze entstand, solange das Gerät
 > für undokumentiert gehalten wurde. Seit es als **GSV-2AS** identifiziert ist
@@ -15,12 +17,14 @@
 > 1. als **Gegenprobe**, falls sich Inhalt oder Zeitlage von Stream und
 >    Anzeige am realen Gerät doch unterscheiden;
 > 2. für den **einen Zweck, den die Serielle nicht erfüllt**: Code-zu-Glyph-
->    Paare zur Klärung der Zeichensatz-ROM-Variante des Displaycontrollers
->    (`°`/`Ω`/`µ`, siehe CLAUDE.md).
+>    Paare für eine direkte Gegenprobe der Zeichensatz-ROM-Variante des
+>    Displaycontrollers (`°`/`Ω`/`µ`). Die jetzige Leserprüfung und
+>    [Abnahme](VALIDATION.md) betreffen nur `mV/V`.
 >
 > Die Abschnitte „Der kritische Punkt" (optische Einschwingzeit),
-> „Zeitbasis" und „Anbindung an den Sammelmodus" gelten **unverändert auch für
-> den seriellen Weg**.
+> „Zeitbasis" und „Anbindung an den Sammelmodus" beschreiben auch
+> Voraussetzungen für den seriellen Weg; sein heutiger Umsetzungsstand
+> steht in den Nachträgen unten.
 
 Diese Datei beschreibt, *wie* ein passiver Mitleser am Displaybus des GSV
 aussehen würde und *was vorher gemessen sein muss*. Sie ist kein Bauplan und
@@ -29,15 +33,18 @@ keine Freigabe. Die Grenze des Verfahrens steht in
 
 ## Wozu
 
-Der Sammelmodus braucht zu jedem Bild einen Sollwert (`expected_text`). Heute
-tippt ihn ein Mensch ein. Das begrenzt die Datensatzgrösse und ist bei
-zappelnden letzten Stellen nicht zuverlässig durchzuhalten.
+Der Sammelmodus braucht zu jedem lesbaren Bild einen Sollwert
+(`expected_text`). Er kann manuell eingegeben oder inzwischen aus dem
+seriellen GSV-2AS-Strom abgeleitet werden (`sync-record.py`, `gate-label.py`,
+`import-harvest.py`). Der Bus-Abgriff wäre eine zusätzliche Quelle; er ist
+nicht nötig, um das bestehende Auto-Labeling zu nutzen.
 
 Der Displaybus führt genau den Zeichenstring, den der Gerätecontroller in das
 Displayregister schreibt — unabhängig davon, was das Gerät sonst nach aussen
 gibt. Für das GSV-2AS ist diese Unabhängigkeit laut Anleitung nicht nötig
-(ASCII-Ausgabe = Anzeige); für ein Gerät ohne solche Zusage wäre sie das
-entscheidende Argument.
+(ASCII-Ausgabe entspricht dem Anzeigewert; die führende Null wird auf
+dem Glas jedoch unterdrückt, [OQ-41](open-questions.md#oq-41)); für ein
+Gerät ohne solche Zusage wäre sie das entscheidende Argument.
 
 ## Was bekannt ist und was nicht
 
@@ -49,8 +56,8 @@ entscheidende Argument.
 | Busbreite: 4-bit (D4–D7) oder 8-bit (D0–D7) | **ungemessen** |
 | Logikpegel: 5 V oder 3,3 V | **ungemessen** |
 | R/W fest auf Masse (nur Schreibzugriffe) | **ungemessen** |
-| Aktualisierungsrate der Anzeige | **ungemessen** |
-| Optische Einschwingzeit des LCD | **ungemessen** — siehe unten, das ist der kritische Wert |
+| Bus-Aktualisierung und Zeichenadressierung | **ungemessen**; serielle Rate und optische Wechsel sind separat in [VALIDATION.md](VALIDATION.md) vermessen |
+| Optische Einschwingzeit des LCD | Für den seriellen Ernteweg empirisch kalibriert; eigener Busbezug nicht vermessen (siehe unten) |
 
 ## Aufbau
 
@@ -85,10 +92,16 @@ Der HD44780 kennt Kommandos (RS = 0) und Daten (RS = 1), jeweils übernommen
 mit der fallenden Flanke von E. Der Mitleser führt einen **Schattenpuffer**
 von 16 Zeichen:
 
-* `Clear Display` / `Return Home` → Puffer leeren, Cursor auf 0
+* `Clear Display` → Puffer leeren, Cursor auf die Ausgangsposition
+* `Return Home` → Cursor und Anzeigeverschiebung zurücksetzen; vorhandene
+  Zeichen bleiben erhalten
 * `Set DDRAM Address` → Cursorposition setzen
 * Datenschreibvorgang → Zeichen an Cursorposition, Cursor weiterzählen
   (Richtung aus `Entry Mode Set`)
+
+Die Zuordnung der DDRAM-Adressen zu den 16 sichtbaren Zellen muss am
+konkreten Modul geprüft werden. Ein linearer Puffer allein ersetzt diese
+Zuordnung und die Behandlung von Anzeigeverschiebungen nicht.
 
 Ausgegeben wird nicht jeder Schreibvorgang, sondern der **Puffer nach
 Ruhe**: wenn für eine definierte Zeit kein Schreibvorgang mehr kommt, ist die
@@ -121,13 +134,19 @@ wie Wahrheit aussieht. Deshalb gehört zum Verfahren zwingend:
    der Produktionskette und der Regel „Unlesbares ablehnen statt raten"
    ([AGENTS.md](../AGENTS.md)).
 
-Solange diese Zeit nicht gemessen ist, ist das Verfahren nicht abnahmefähig.
+Solange diese Zeit nicht gemessen ist, ist der Busweg nicht abnahmefähig.
+Für den seriellen StreamCam-Ernteweg liegt seit 2026-09-29 eine empirische
+Kalibrierung vor: Schutzintervall M = 325,9 ms und Anzeigeversatz 89,6 ms
+([VALIDATION.md](VALIDATION.md), „Neue Kalibrierung (2026-09-29)“).
+Das ist keine getrennte Messung aller Beiträge des Unsicherheitsbudgets und
+keine Kalibrierung eines noch nicht gebauten Bus-Abgriffs.
 
 ## Zeitbasis
 
-Der RP2040 zählt in seiner eigenen Zeitdomäne, die Kamera liefert
-`SensorTimestamp` in CLOCK_BOOTTIME ([TIMING.md](TIMING.md), Messung M2 zur
-Semantik ist offen). Ein Zeitstempel ohne `TimeBaseKind` ist nach
+Der RP2040 würde in seiner eigenen Zeitdomäne zählen. Die aktive StreamCam
+liefert V4L2-Pufferzeitstempel in CLOCK_MONOTONIC (`v4l2_monotonic`); der
+Versatz nach BOOTTIME wird je Aufnahme gemessen
+([TIMING.md](TIMING.md), [OQ-43](open-questions.md#oq-43)). Ein Zeitstempel ohne `TimeBaseKind` ist nach
 [AGENTS.md](../AGENTS.md) keine verwertbare Angabe, also braucht der Abgriff
 eine eigene, benannte Zeitbasis und eine **gemessene** Umrechnung — nicht die
 stillschweigende Annahme, Ankunftszeit auf dem Pi sei gleich Ereigniszeit.
@@ -142,27 +161,33 @@ dokumentieren. Sauberer, falls nötig: ein gemeinsamer Synchronimpuls.
 `DatasetStore` führt heute `expected_text`, `label_state`, `target_label`,
 `label_history` und `revision` (siehe
 [src/dispread/workbench/datasets.py](../src/dispread/workbench/datasets.py)).
-Ein **Herkunftsmerkmal für das Label gibt es nicht**.
+Seit Schema 2 gibt es außerdem das Pflichtfeld `label_origin`
+(`manual` oder `serial_ascii`) und `label_origin_detail`; Export-Schema 2
+gibt die Herkunft weiter. Für serielle Labels sind Quelle, Schutzintervall,
+Plateaugrenzen und Telegrammzahl Pflicht. `import-harvest.py` nutzt diesen
+Weg bereits.
 
-Das braucht es, bevor automatisch gelabelt wird: von Hand gelabelte und
-buslabelte Proben müssen unterscheidbar bleiben. Sonst wandert ein
-systematischer Fehler des Abgriffs unsichtbar in jede Benchmarkzahl, und der
-Datensatz lässt sich nicht mehr entmischen. Umsetzung offen — entweder ein
-eigenes Feld oder ein verpflichtender Eintrag in `label_history`.
+Ein zukünftiges Buslabel dürfte nicht als `serial_ascii` ausgegeben werden.
+Es bräuchte eine explizite Herkunft samt Zeitbasis und Messbelegen sowie
+eine passende Erweiterung der Schema-Prüfung. Ein solches Busformat ist
+noch nicht implementiert.
 
 Der so gewonnene Sollwert ist Datensatzmaterial. Er erreicht wie jedes andere
 Label **nie** `ValueReader`, `ReleaseGate` oder die Produktionskette.
 
 ## Was dieser Abgriff nicht löst
 
-Er vergrössert die Bilderzahl, nicht die Ziffernabdeckung. Der Brückensimulator
-am GSV ist verklebt, der Anzeigewert steht damit künftig fest — neue Bilder
-zeigen nichts, was die vorhandenen 11 bestätigten Proben nicht schon zeigen
-(drei Cluster: ~`0.0004`, ~`0.948`, `1.05000`). Kein einziger negativer Wert
-ist darunter, Werte ab 10 mV/V fehlen ebenfalls
-([OQ-37](open-questions.md)). Eine hohe Trefferquote auf beliebig vielen
-Bildern derselben Anzeige ist keine Aussage über die Erkennung im Feld. Das
-ist [OQ-39](open-questions.md), und es bleibt offen.
+Ein zusätzlicher Mitleser vergrößert zunächst die Bilderzahl. Er erzeugt
+keine neue Geräte- oder Zeichensatzabdeckung. Die frühere Annahme eines
+unveränderlichen Stimulus ist überholt: bewegliche Stimulatoren und
+`set norm` erlauben inzwischen verschiedene Werte und Punktpositionen.
+Das Format oberhalb 10 wurde am 2026-09-22 geprüft
+([OQ-37](open-questions.md#oq-37)). Negative Werte bleiben am vorhandenen
+Firmwarestand unbelegt ([OQ-39](open-questions.md#oq-39)).
+
+Die Dot-Matrix-Abnahme vom 2026-09-30 umfasst mehrere Aufstellungen,
+aber nur ein GSV-2AS und die Einheit `mV/V`. Beliebig viele weitere Bilder
+desselben Geräts belegen keine Übertragbarkeit auf andere Geräte.
 
 ## Reihenfolge, falls gebaut wird
 
@@ -174,7 +199,9 @@ ist [OQ-39](open-questions.md), und es bleibt offen.
    zeichenweise übereinstimmen, sonst ist die Dekodierung falsch.
 4. Optische Einschwingzeit messen, Schutzintervall festlegen.
 5. Zeitbasis und Transportverzögerung messen.
-6. Erst danach: Herkunftsmerkmal im `DatasetStore`, dann automatisches Labeln.
+6. Erst danach: busbezogene Herkunft und Zeitbasis im `DatasetStore`
+   ergänzen, dann busbasiertes automatisches Labeln. Die serielle
+   Labelherkunft existiert bereits.
 
 Schritte 1, 3, 4 und 5 sind Messungen und gehören nach
 [VALIDATION.md](VALIDATION.md) (Zahlen) und

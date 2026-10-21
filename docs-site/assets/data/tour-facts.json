@@ -71,6 +71,20 @@
       ],
       "value": 500000000
     },
+    "gate.transition_max_cells": {
+      "source": "src/dispread/validate.py:GateConfig.transition_max_cells",
+      "used_by": [
+        "erkennung-freigabe"
+      ],
+      "value": 3
+    },
+    "gate.transition_window_ns": {
+      "source": "src/dispread/validate.py:GateConfig.transition_window_ns",
+      "used_by": [
+        "erkennung-freigabe"
+      ],
+      "value": 1000000000
+    },
     "harvest.hold_s": {
       "source": "scripts/harvest.py:_DEFAULT_HOLD_S",
       "used_by": [
@@ -84,6 +98,33 @@
         "training-ernte"
       ],
       "value": 1.3
+    },
+    "layout.blank_cells": {
+      "source": "src/dispread/layout.py:CharLayout.blank_cells",
+      "used_by": [
+        "erkennung-raster",
+        "erkennung-format"
+      ],
+      "value": [
+        13,
+        14,
+        15
+      ]
+    },
+    "layout.classified_cells": {
+      "source": "src/dispread/layout.py:CharLayout.classified_cells",
+      "used_by": [
+        "erkennung-raster",
+        "erkennung-format"
+      ],
+      "value": 9
+    },
+    "live.confirm_frames": {
+      "source": "src/dispread/live/session.py:LiveConfig.confirm_frames",
+      "used_by": [
+        "erkennung-freigabe"
+      ],
+      "value": 2
     },
     "ocr.classes": {
       "source": "src/dispread/ocr/dotmatrix_font.py:CLASSES",

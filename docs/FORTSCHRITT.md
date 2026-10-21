@@ -9,6 +9,21 @@ aus den Ernte-, `loo`- und Abnahme-Dateien erzeugt. Maßgeblich für jede Zahl
 bleibt [VALIDATION.md](VALIDATION.md); das Laborjournal
 [lab_journal.md](lab_journal.md) erklärt die einzelnen Läufe.
 
+Die versionierten Diagrammdaten haben den Stand **2026-09-30**
+(`generated_at` in der JSON-Datei). Sie werden beim Seitenaufruf nicht aus
+dem Aufbau nachgeladen und enthalten keine aktuellen Live-Läufe. Für deren
+Bau- und Prüfstand siehe [Status](status.md). Nach einem abgeschlossenen
+Import oder einer Auswertung die Daten auf dem Rechner mit den lokalen
+Runartefakten erneuern und mitcommitten:
+
+```bash
+./.venv/bin/python scripts/docs-progress-data.py
+```
+
+Die Leser-Abnahmen verwenden neue Aufstellungen desselben Geräts; sie sind
+keine Systemabnahme auf den gesperrten Geräteinstanzen aus der
+[Roadmap](ROADMAP.md).
+
 Überfahren oder Antippen zeigt die Einzelwerte. Ein Klick auf einen
 Legendeneintrag blendet die Reihe aus oder wieder ein.
 

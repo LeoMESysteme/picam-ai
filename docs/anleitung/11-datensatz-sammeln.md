@@ -3,9 +3,11 @@
 Ein geführter Bedienablauf in der bestehenden Kamera-Workbench, mit dem sich
 reale Prüfbilder unterschiedlicher Messverstärker sammeln lassen — ohne
 Segmentraster, ohne bestätigtes Produktionsprofil. Ergänzt den bestehenden
-Betrieb (ROI/Clip/OCR/Nachführung/Serial), berührt dessen Freigaberegeln aber
-nicht. Kein Ersatz für `docs/anleitung/09-betrieb.md` oder Task 11 aus
-`docs/status.md` — die dortige Sperre bleibt unverändert bestehen.
+Werkbankablauf, berührt dessen Freigaberegeln aber nicht. Der Live-Messpfad
+ist in [Kapitel 10](10-kamera-livevorschau.md#live-seite-live) beschrieben;
+serielle Ausgabe an GSVmulti bleibt offen ([OQ-07](../open-questions.md#oq-07)).
+Der Sammelmodus ist kein Ersatz für den noch geplanten Dauerbetrieb aus
+[Kapitel 9](09-betrieb.md).
 
 > Diese Datei liegt bewusst außerhalb der Nummerierung 0–9 des
 > [Lernpfads](README.md), analog zu
@@ -76,13 +78,13 @@ GSV-2ASD ✓") mit einem „ändern"-Knopf, um ihn erneut zu öffnen.
       nötig, sie wird automatisch Vertreter. Aktuell markiert dieser Knopf
       nur die zuletzt gespeicherte Aufnahme; eine Übersicht/Galerie, um auch
       ältere Proben einer Situation nachträglich zum Vertreter zu machen,
-      ist als nächster Ausbauschritt vorgesehen (siehe `docs/status.md`).
+      ist noch nicht implementiert (`static/dataset.js`).
 4. **„Prüfsatz exportieren"** (feste Zeile am Ende, unabhängig vom
    Schrittstand) erzeugt einen unveränderlichen Export mit Abdeckungsbericht
    (Anzahl Bilder, Geräte, Situationen, fehlende Bedingungen) und einen
    Downloadlink. Ein kleiner Export ist möglich, wird aber deutlich als
-   unzureichend markiert, solange die Sammelziele (siehe `docs/status.md`)
-   nicht erreicht sind.
+   unzureichend markiert, solange die Sammelziele aus
+   [Roadmap P2](../ROADMAP.md) nicht erreicht sind.
 
 Ein Schrittwechsel über „ändern" verwirft eine noch offene, nicht
 gespeicherte Aufnahme automatisch (`dataset.discard`) — gespeicherte Proben
@@ -123,7 +125,8 @@ keine Freigabeschwellen.
 Höchstens zwei gleichzeitig offene (noch nicht gespeicherte) Aufnahmen,
 insgesamt höchstens 64 MiB Rohbildspeicher dafür, Ablauf nach zehn Minuten.
 Eine bereits gespeicherte Aufnahme zählt nicht mehr gegen dieses Limit. Ein
-Klick auf „aufnehmen" während `run` (Produktionslauf) wird mit einer klaren
+Klick auf „aufnehmen" während des alten Workbench-Modus `run`
+(Vorschau mit festen Einstellungen, kein Produktionslauf) wird mit einer klaren
 Fehlermeldung abgelehnt, nicht mit einer stillen Moduswechsel.
 
 ## Exportkompatibilität prüfen
@@ -139,17 +142,26 @@ ausdrücklich als **nicht geprüft**. Mit `--experiment-root
 /pfad/zum/experiment-worktree` startet es zusätzlich dessen eigenen
 `load_manifest()` in einem eigenen Prozess mit dessen eigener venv.
 
+Aktuelle Exporte verwenden Schema 2 mit `label_origin`. Der externe
+Experiment-Loader akzeptiert laut dokumentiertem Stand nur Schema 1;
+`test_real_export_is_accepted_by_the_actual_experiment_loader` ist deshalb
+`xfail(strict=True)`. Ein lokaler Prüferfolg ist kein Nachweis externer
+Kompatibilität. Das Fremdprojekt bleibt bis zur Entscheidung aus
+[TODO](../../TODO.md) unverändert.
+
 ## Fertig, wenn …
 
 - [x] Ein reales, unkalibriertes Gerät lässt sich anlegen und mehrere
   Situationen mit korrekt zugeordnetem Rohbild und Label sammeln.
 - [x] Nach einem Neustart sind Geräte und Proben wieder da; offene Entwürfe
   sind es nicht.
-- [x] Ein vom echten Experiment-Loader akzeptierter, verschiebbarer,
-  unveränderlicher Prüfsatz lässt sich exportieren
+- [x] Ein verschiebbarer, unveränderlicher Prüfsatz lässt sich lokal prüfen
   (`tests/test_dataset_export.py`).
-- [x] Normale ROI-/Clip-/OCR-/Tracking-/Serial-Flüsse laufen unverändert
-  (bestehende Testsuite, `290+ passed`).
+- [ ] Export-Schema 2 wird vom echten Experiment-Loader angenommen; derzeit
+  wegen dessen Schema-1-Prüfung erwarteter Fehlschlag (`xfail(strict=True)`).
+- [x] Der Sammelmodus besitzt eigene Tests für Speicher, Aufnahme, API,
+  Oberfläche und Export. Historische Testzahlen ersetzen keinen aktuellen
+  Prüflauf der gesamten Werkbank.
 - [x] Ein bereits angelegtes Gerät lässt sich aus einer Liste auswählen statt
   es nach jedem Neuladen neu anlegen zu müssen; die drei Schritte
   Gerät/Situation/Aufnahme sind einzeln nachvollziehbar (Nutzerrückmeldung
@@ -163,10 +175,12 @@ ausdrücklich als **nicht geprüft**. Mit `--experiment-root
 - [ ] **Offen:** eine Übersicht/Galerie je Situation, in der auch *ältere*
   (nicht nur die zuletzt gespeicherte) Proben nachträglich als Vertreter
   markiert werden können, inklusive Ansicht Entwicklungs- vs.
-  Abschlusstest-Bestand. Bewusst vertagt, siehe `docs/status.md`.
+  Abschlusstest-Bestand. Im aktuellen Frontend nicht vorhanden.
 - [ ] **Offen:** ein echter interaktiver Klick-Durchlauf im Browser
-  ([OQ-34](../open-questions.md)) — in dieser Entwicklungsumgebung wegen
-  [OQ-21](../open-questions.md) nicht durchführbar.
+  ([OQ-34](../open-questions.md#oq-34)); die historische Headless-Störung
+  [OQ-21](../open-questions.md#oq-21) ersetzt keine aktuelle Browserabnahme.
 - [ ] **Offen:** 30 unabhängige, reale Abschlusstestbilder über mindestens
-  sechs Geräte/drei Familien/LED+LCD (Sammelziel aus `docs/status.md`) — das
-  ist Aufgabe des tatsächlichen Sammelbetriebs, nicht dieser Implementierung.
+  sechs Geräte/drei Familien gemäß [Roadmap P2](../ROADMAP.md). Die
+  Zielhardware sind LCD-Anzeigen ([OQ-04](../open-questions.md#oq-04));
+  zusätzliche LED/VFD-Proben sind Entwicklungsdaten und ersetzen diese
+  Zielhardware nicht. Das bleibt Aufgabe des tatsächlichen Sammelbetriebs.

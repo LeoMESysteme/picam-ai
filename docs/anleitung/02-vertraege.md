@@ -49,7 +49,9 @@ Pipeline macht daraus `UNREADABLE` mit Grund `display_not_located`.
 ### `ValueReader` — `src/dispread/ocr/__init__.py`
 
 ```python
-def read(self, crop: np.ndarray, layout: DisplayLayout) -> ReadResult: ...  # (1)!
+def read(
+    self, crop: np.ndarray, layout: DisplayLayout | CharLayout,
+) -> ReadResult: ...  # (1)!
 @property
 def backend_id(self) -> str: ...
 @property
@@ -60,7 +62,9 @@ def declares_confidence_calibrated(self) -> bool: ...   # False, solange unbeleg
    Bildausschnitt und das bestätigte Layout; die Referenz bleibt außerhalb
    dieses Erkennungspfads.
 
-Bekommt **nur** Bildausschnitt und bestätigtes Profil. Kein Referenzwert, keine
+`DisplayLayout` beschreibt die Siebensegment-Geometrie; `CharLayout` das
+bestätigte Punktraster für `DotMatrixReader`. Der Leser bekommt **nur**
+Bildausschnitt und bestätigtes Layout. Kein Referenzwert, keine
 Historie, kein letzter Wert. Diese Signatur ist der strukturelle Schutz gegen
 die verbotene Korrektur aus Konzept §7.
 
@@ -69,6 +73,7 @@ die verbotene Korrektur aus Konzept §7.
 ```python
 def evaluate(self, read: ReadResult, capture_ns: int) -> GateDecision: ...
 def reset(self) -> None: ...
+def interrupt(self) -> None: ...  # Bestaetigung und Uebergangszellen verwerfen
 ```
 
 Die [Freigabe](glossar.md#freigabe-gate) ist zustandsbehaftet
@@ -109,12 +114,12 @@ Alle Ergebnisobjekte sind `frozen=True, slots=True`. Änderung nur über
 
 | Feld | Bedeutung |
 | --- | --- |
-| `frame_sequence` | lückenlos je Quelle, beginnt bei 1 |
+| `frame_sequence` | UVC zählt gelieferte Quellbilder ab 1; Live-Records können durch übersprungene Bilder Lücken haben, Replay erhält aufgezeichnete Nummern |
 | `image` | BGR (HxWx3) **oder** Graustufen (HxW) |
 | `capture_timestamp` | `Timestamp` mit Zeitbasis |
 | `source_id` | wer hat das erzeugt |
 | `exposure_time_us`, `frame_duration_us`, `analogue_gain` | Kamerawerte oder `None` |
-| `raw_metadata` | Kameramtadaten unverändert; bei `synthetic://` auch `ground_truth` und `digit_area` |
+| `raw_metadata` | Kamerametadaten unverändert; bei `synthetic://` auch `ground_truth` und `digit_area` |
 | `inference` | `InferenceResult` bei On-Sensor-Inferenz, sonst `None` |
 | `trigger_sequence` | externer Trigger, falls vorhanden |
 
@@ -125,18 +130,23 @@ Abgeleitet: `timebase`, `is_time_bearing`, `size` (Breite, Höhe).
 | Feld | Regel |
 | --- | --- |
 | `value_ns` | Nanosekunden, ganzzahlig |
-| `base` | `SENSOR_BOOTTIME` · `REPLAY_RECORDED` · `SYNTHETIC` · `FILE_MTIME` |
+| `base` | `V4L2_MONOTONIC` · `SENSOR_BOOTTIME` · `REPLAY_RECORDED` · `SYNTHETIC` · `FILE_MTIME` |
 | `semantics` | `UNKNOWN` bis Messung M2 geklärt hat, worauf sich der Sensorzeitstempel bezieht |
 | `uncertainty_ns` | `None`, solange nicht gemessen. **Nie 0.** |
 
-`base.carries_time_information` ist die einzige zulässige Prüfung, bevor du aus
-Zeitstempeln eine Latenz berechnest.
+`base.carries_time_information` ist eine notwendige Voraussetzung für eine
+Zeitaussage. Zusätzlich müssen Zeitdomänen, Semantik und Umrechnung passen:
+`to_boottime_ns()` verlangt für UVC den gemessenen BOOTTIME−MONOTONIC-Versatz
+und lehnt fehlende Angaben oder Suspend ab. `REPLAY_RECORDED` trägt die Zeit
+der Aufnahme; sie ist keine neue Aufnahmezeit des Replay-Laufs.
 
 ### `DisplayCandidate` — `detect/__init__.py`
 
 `quad` (4 Punkte, im Uhrzeigersinn ab oben links), `score`, `locator_id`,
-`locator_version`, `role_hint` (`"main"` / `"secondary"` — Pflicht, weil die
-Verwechslung von Haupt- und Nebenanzeige laut Konzept §7 kritisch ist).
+`locator_version`, `role_hint` (`"main"` / `"secondary"` oder `None`).
+Die Rolle muss im bestätigten Ablauf eindeutig sein; der Konstruktor erlaubt
+`None`, und die allgemeine Pipeline prüft die Rolle nicht selbst. Der Live-
+Locator setzt für die bestätigte Anzeige `"main"`.
 
 ### `DisplayCrop` — `rectify.py`
 
@@ -149,7 +159,7 @@ Abgeleitet: `exposure_ok`.
 
 | Feld | Warum eigenständig |
 | --- | --- |
-| `raw_text` | exakt wie gelesen, mit Vorzeichen und Dezimalzeichen |
+| `raw_text` | Textrepräsentation des Lesers; beim Dot-Matrix-Leser die geparste Zahl mit Vorzeichen und Punkt, nicht alle 16 Displayzellen |
 | `value` | Interpretation; `None`, wenn nicht sicher lesbar |
 | `sign_detected` | Minus gesehen? |
 | `sign_region_readable` | War der Bereich überhaupt auswertbar? Getrennt, weil „nicht lesbar" nicht „positiv" bedeutet |
@@ -175,7 +185,9 @@ Bekannte Gründe heute: `state:<flag>`, `low_contrast`,
 `unreadable_cells:<n>`, `low_segment_margin`, `sign_region_unreadable`,
 `decimal_point_unknown`, `unit_mismatch:<gelesen>`, `no_value`,
 `awaiting_confirmation`, `anzeige_wechselt` (TRANSITION bei Ziffernwechsel,
-steht dann an erster Stelle vor den Lesbarkeitsgründen), `display_not_located`. Neue Gründe sind
+steht dann an erster Stelle vor den Lesbarkeitsgründen),
+`display_not_located` oder `tracking_lost:<grund>` bei fehlendem Kandidaten
+der Live-Nachführung. Neue Gründe sind
 maschinenlesbare Kurzstrings im selben Stil — sie werden ausgewertet, nicht
 gelesen.
 
@@ -194,6 +206,14 @@ zeigt die aktuelle Signatur.
 | `profile_id` | Session / ProfileStore | niemand |
 | `trigger_sequence` | `FrameSource` / Trigger | niemand |
 | `result_timestamp` | Pipeline beim Abschluss | niemand |
+
+**Offener Zeitbasisfehler ([OQ-45](../open-questions.md#oq-45)):** Die
+Pipeline setzt `result_timestamp.value_ns` aus `CLOCK_MONOTONIC`, übernimmt
+aber dessen `base` vom Aufnahmezeitstempel. Für den aktiven UVC-Pfad passt
+die Domäne; bei anderen Quellbasen darf daraus keine Differenz zwischen
+Aufnahme und Ergebnis abgeleitet werden. Auch `Timestamp.now_monotonic()`
+kennzeichnet seinen monotonen Wert derzeit als `SENSOR_BOOTTIME`.
+Die Stufenmarken im `PipelineTrace` bleiben separat monoton.
 
 Zwei Invarianten, im Konstruktor erzwungen:
 
@@ -236,6 +256,13 @@ Im Betrieb kommt das Layout aus dem bestätigten Geräteprofil
 <figcaption markdown="span">Ein bestätigtes Raster am Punktraster-Display des GSV-2AS: Das System weiß vorher, wo jedes Zeichen liegt und welche Kästchen gelesen werden.</figcaption>
 </figure>
 
+### `CharLayout` — `layout.py`
+
+`grid`, `unit`, `format_id`, `classified_cells` und `blank_cells` beschreiben
+den Dot-Matrix-Pfad. `CharLayout.from_profile()` verlangt ein bestätigtes
+`SessionProfile` mit bestandenem Auflösungs-Gate. Der Leser klassifiziert die
+Zellen 0–8, prüft 13–15 auf Leerinhalt und übernimmt die Einheit aus dem Profil.
+
 ## Statuslogik in einem Bild
 
 ```
@@ -248,6 +275,12 @@ Im Betrieb kommt das Layout aus dem bestätigten Geräteprofil
                             └── keine Freigabe länger als
                                 stale_after_ns (Default 500 ms) ──► STALE
 ```
+
+Das Schema zeigt den Lesbarkeitszweig des Gates nach einer früheren Freigabe.
+Blockierende Zustände bleiben dort `UNREADABLE`; ein fehlender bzw. verlorener
+Kandidat umgeht `evaluate()` und wird in der Pipeline ebenfalls `UNREADABLE`.
+Die Live-Anzeige prüft zusätzlich das Alter eines freigegebenen Wertes und
+setzt die sichtbare Ausgabe bei Stream- oder Verbindungsverlust auf STALE.
 
 `TRANSITION` und `UNREADABLE` sind **Aussagen über die Anzeige**, keine Fehler
 des Systems. `STALE` heißt: es gibt keinen aktuellen Wert — und ein

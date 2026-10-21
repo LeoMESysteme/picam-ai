@@ -29,6 +29,15 @@ Die zulässige Grundprüfung ist
 Bei einer unzulässigen Basis darf aus dem Zahlenwert in
 <code>value_ns</code> keine reale Latenzaussage entstehen.
 
+**Bekannte Implementierungsgrenze:** <code>Timestamp.now_monotonic()</code>
+liest MONOTONIC, kennzeichnet ihn aber als <code>sensor_boottime</code>.
+Die Pipeline liest die Ergebniszeit ebenfalls aus MONOTONIC und übernimmt
+dafür die Basis des Frames. Das passt aktuell zum V4L2-Live-Pfad, gilt aber
+nicht allgemein für andere Quellen. Eine Differenz aus Aufnahme- und
+Ergebniszeit deshalb nicht ungeprüft als Latenz verwenden; die gleichbasigen
+Marken des <code>PipelineTrace</code> dokumentieren die Rechenzeit.
+Korrektur und Abnahme: [OQ-45](../open-questions.md#oq-45).
+
 ## Welche Zeitbasis begegnet dir?
 
 | Basis | Herkunft | Zulässiger Schluss |
@@ -38,6 +47,11 @@ Bei einer unzulässigen Basis darf aus dem Zahlenwert in
 | <code>replay_recorded</code> | erhaltene Aufnahmezeit eines Replays | zeittragend, wenn die Aufnahmemetadaten belastbar sind |
 | <code>synthetic</code> | Generator | keine reale Aufnahme- oder Synchronitätszeit |
 | <code>file_mtime</code> | Dateisystem | keine belastbare Aufnahmezeit |
+
+Im Live-Lauf misst <code>ClockLog</code> den Uhrenversatz zu Beginn,
+periodisch und beim Abschluss; <code>session.json</code> enthält die Proben.
+Die Timing-Kalibrierung wird mit Prüfsumme dokumentiert, aber nicht auf
+Aufnahmezeit oder Wert angewandt.
 
 Die StreamCam liefert einen Stempel in <code>CLOCK_MONOTONIC</code>.
 <code>records.to_boottime_ns</code> rechnet nur um, wenn die Session
@@ -74,6 +88,13 @@ unbekannte Rest bleiben im Budget. Der zulässige Grenzwert ist
 <figure class="tour-figure" data-scene="zeit-latenz" markdown="1">
 <figcaption markdown="span">Eine feste Verzögerung lässt sich herausrechnen, eine schwankende nicht. Ins Unsicherheitsbudget geht deshalb die Streuung ein, nicht der Mittelwert.</figcaption>
 </figure>
+
+Die optionale <code>reference.jsonl</code> zeichnet schon heute den
+seriellen GSV-2AS-Strom mit Empfangsstempeln in BOOTTIME auf. Das ist eine
+Gegenprobe zum optischen Wert desselben Geräts, keine angebundene
+Kalibrierreferenz. <code>scripts/live-reference-eval.py</code> vergleicht
+nachträglich; die gemeinsame Uhr beweist noch keinen gemeinsamen
+physikalischen Messzeitpunkt.
 
 ## Von Aufnahme bis GSVmulti
 

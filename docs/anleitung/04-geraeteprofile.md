@@ -3,8 +3,9 @@
 Dieses Kapitel ist im aktuellen Checkout noch eine Bauaufgabe. Es gibt weder
 `dispread.profiles.ProfileStore` noch ein `config/profiles/`-Schema. Die
 Roadmap führt Profile als offen. Verwechsle sie nicht mit
-[`SessionProfile`](../../api/workbench.md), das die Workbench-Sitzung
-beschreibt, oder mit den Kameraeinstellungen für `v4l2://`.
+[`SessionProfile`](../../api/workbench.md), das eine bestätigte Ernte- oder
+Live-Aufstellung mit Kamera, Punktraster und Referenzbild beschreibt, oder
+mit den älteren Workbench-Profilen unter `var/workbench/profiles/`.
 
 ## Was ein Geräteprofil festhalten soll
 
@@ -38,11 +39,12 @@ nach Festlegung des Vertrags Schema und Beispielprofil an.
 Für ein sofort nutzbares Kamerabild ist die aktive Quelle `v4l2://`; sie
 benötigt eine explizite `camera.json` mit Geräteeinstellungen. Die
 [Kamera-Livevorschau](10-kamera-livevorschau.md) erklärt den gegenwärtigen
-Workbench-Ablauf samt Boxen und Annotationen. Sie ist kein `ProfileStore`-
-Ersatz und erzeugt nicht automatisch ein freigegebenes Geräteprofil.
+Workbench-Ablauf samt `/live`. Die namentliche Bestätigung dort erzeugt
+`profile.json` und `confirmation.json` für diese Sitzung; daraus entsteht
+kein allgemeiner `ProfileStore` für wiederkehrende Geräte.
 
 <figure class="tour-figure" data-scene="bedienung-bestaetigen" markdown="1">
-<figcaption markdown="span">Was es heute schon gibt: ein bestätigtes Profil für eine Aufnahmesitzung (<code>SessionProfile</code> aus <code>harvest-setup.py confirm</code>). Es ist kein dauerhaftes Geräteprofil; den <code>ProfileStore</code> beschreibt die Bauaufgabe oben.</figcaption>
+<figcaption markdown="span">Was es heute schon gibt: ein bestätigtes Profil für eine Aufnahmesitzung (<code>SessionProfile</code> aus <code>harvest-setup.py confirm</code> oder der Bestätigung auf <code>/live</code>). Es ist kein dauerhaftes Geräteprofil; den <code>ProfileStore</code> beschreibt die Bauaufgabe oben.</figcaption>
 </figure>
 
 Wenn du diese Bauaufgabe umsetzt, ergänze den CHANGELOG im selben Commit und

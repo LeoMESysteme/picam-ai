@@ -99,8 +99,8 @@ print("Zeitbasis:", {r.capture_timestamp.base.value for r in records},
 
 ## 6 — Serielle Gegenstelle ohne Hardware
 
-`socat` ist nicht installiert ([OQ-15](../open-questions.md)) — die stdlib
-genügt:
+`socat` ist seit 2026-09-21 installiert ([OQ-15](../open-questions.md#oq-15)).
+Für dieses Rezept genügt das Pseudoterminal-Paar aus der Standardbibliothek:
 
 ```python
 import os
@@ -142,7 +142,10 @@ Rechenzeiten der Software auswerten. Die Zeitbasis des Aufnahmezeitstempels
 entscheidet dagegen, ob sich Aufnahme- und Verarbeitungszeit sinnvoll
 zueinander in Beziehung setzen lassen. `SYNTHETIC` und `FILE_MTIME` erlauben
 keine Latenzaussage; Details stehen unter
-[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
+[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md). Zusätzlich ist
+`result_timestamp` außerhalb des UVC-Pfads derzeit nicht verlässlich mit
+seiner Basis markiert ([OQ-45](../open-questions.md#oq-45)); reine
+Stufendauern oben verwenden diesen Zeitstempel nicht.
 
 ## 8 — Segmentmessungen eines Ausschnitts sichtbar machen
 
@@ -236,6 +239,9 @@ Zuerst die [Kameradiagnose](../CAMERA_COMMISSIONING.md) ausführen und ein
 bestätigtes `camera.json`-Profil bereitstellen
 ([Geräteprofile](04-geraeteprofile.md), [Bildquellen-API](../../api/frames.md)).
 `/pfad/zur/camera.json` im Beispiel durch den eigenen Profilpfad ersetzen.
+Die StreamCam darf dabei keinem anderen Kameraprozess gehören. Auch ein
+gestoppter Live-Messlauf gibt sie nicht frei, solange `dispread serve` läuft;
+ein aktiver Messlauf darf für dieses Rezept nicht unterbrochen werden.
 
 ```bash
 ./scripts/camera-commissioning.sh
@@ -289,7 +295,7 @@ Tests schreiben **nur** nach `tmp_path` oder in umgebogene Pfade.
 ./.venv/bin/pytest --lf -q                # nur letzte Fehlschlaege
 ./.venv/bin/pytest -q --mode=real         # inkl. Hardware-Tests
 ./.venv/bin/ruff check --fix src tests examples
-./.venv/bin/python -m dispread.cli --help          # ab Kapitel 5
+./.venv/bin/dispread --help                       # vorhandene Workbench-CLI
 git diff --stat && git status --short
 ```
 

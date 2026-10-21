@@ -1,21 +1,46 @@
 # Kamera-Inbetriebnahme
 
-> **Seit 2026-09-25 historisch.** Diese Checkliste und der Fehlerbaum gelten
-> für die Raspberry Pi AI Camera (IMX500), die außer Betrieb ist
-> (`docs/project_history.md`, 2026-09-25). `scripts/camera-commissioning.sh`
-> prüft jetzt die Logitech StreamCam: `v4l2-ctl`, Gerät `046d:0893` mit
-> `index == 0`, USB3, YUYV 1920×1080, Fokus-Regler setzen und zurücklesen,
-> Testbild nach `var/diagnostics/camera-commissioning/test.png` in
-> 1920×1080. Das Skript ist nicht mehr rein lesend: Es setzt
-> `focus_automatic_continuous` und `focus_absolute` und stellt danach die
-> Ausgangswerte wieder her.
+## Aktuell: Logitech StreamCam (UVC)
 
-Checkliste plus Fehlerbaum. Werkzeug ist
-[`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh) —
-für die StreamCam aktuell: Fokus-Regler werden testweise gesetzt,
-zurückgelesen und wiederhergestellt; ein Testbild wird abgelegt.
-Exit 0 bedeutet, dass die geprüften Inbetriebnahmeschritte bestanden sind.
-Der folgende Fehlerbaum bleibt als **historischer IMX500-Fall** erhalten.
+Seit 2026-09-25 ist die StreamCam die aktive Kamera. Das Skript
+[`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh)
+prüft `v4l2-ctl`, USB-ID `046d:0893` mit `index == 0`, USB-Geschwindigkeit,
+YUYV 1920×1080, Fokusregler und ein Testbild.
+
+Die Diagnose gehört in ein Wartungsfenster mit freier Kamera. Sie setzt
+`focus_automatic_continuous` und `focus_absolute` testweise und versucht die
+vorher gelesenen Werte wiederherzustellen. Sie schreibt ein Testbild und
+öffnet die Kamera direkt; deshalb darf sie nicht parallel zu
+`dispread serve`, Harvest oder einer anderen Aufnahme laufen. `CameraOwner` hält die
+Kamera während der gesamten Serverlaufzeit, auch ohne aktiven Messlauf.
+
+1. Vorher den aktuellen Aufbau und die Kamerabelegung anhand von
+   [Status](status.md) und [Hardwareprofil](HARDWARE_PROFILE.md) prüfen.
+2. Bei freier Kamera aus der Projektwurzel ausführen:
+   ```bash
+   ./scripts/camera-commissioning.sh
+   ```
+3. Exit 0 bedeutet: keine FEHLER in den geprüften Schritten. WARNUNGEN
+   können verbleiben, insbesondere bei USB2; sie sind gesondert zu bewerten.
+   Das Testbild liegt unter
+   `var/diagnostics/camera-commissioning/test.png` (1920×1080).
+4. Fokus, Bildausschnitt und Licht am konkreten Gerät einrichten und
+   bestätigen. Für den Live-Pfad dient `/live` im vorhandenen Server;
+   Port 8080 ist auf diesem Pi durch MEhub belegt, verwendet wird 8081.
+5. Aufbau und Diagnose nach [lab_journal.md](lab_journal.md) übernehmen;
+   bei Konfigurationsänderungen [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
+   aktualisieren. Ein Diagnose-Exit 0 ist keine Leser- oder Systemabnahme.
+
+Bei fehlendem Gerät USB-ID und Videoindex prüfen; bei reduzierter Auflösung
+USB3-Verbindung prüfen; bei „belegt“ den vorhandenen Kamerabesitzer klären.
+Zeitstempel stammen aus V4L2/CLOCK_MONOTONIC. Die Umrechnung und die noch
+offene physikalische Semantik stehen in [TIMING.md](TIMING.md).
+
+## Historischer IMX500-Aufbau (außer Betrieb)
+
+Die folgenden Beobachtungen und FPC-/Boot-Schritte betreffen ausschließlich
+die IMX500. Das heutige `camera-commissioning.sh` prüft diese Kamera nicht.
+Die historischen Schritte sind kein Ablauf für die USB-StreamCam.
 
 ## Der Fall, der am 2026-09-07 zutraf
 
@@ -26,12 +51,10 @@ hat es behoben.
 
 Merksatz: **Kamera angesteckt ⇒ Reboot.** Erst danach Fehlersuche.
 
-## Checkliste
+## Historische Checkliste
 
-1. Vorher-Zustand festhalten:
-   ```bash
-   ./scripts/camera-commissioning.sh
-   ```
+1. Vorher-Zustand mit Kameraliste und Kernelmeldungen festhalten. Das
+   damalige IMX500-Diagnoseskript ist durch die UVC-Fassung ersetzt.
 2. `sudo shutdown -h now`, **Netzteil abziehen**. Die Kamera nie unter Spannung
    an- oder abstecken.
 3. Anschluss festlegen: CAM/DISP0 oder CAM/DISP1. Die Wahl gehört nach
@@ -51,7 +74,6 @@ Merksatz: **Kamera angesteckt ⇒ Reboot.** Erst danach Fehlersuche.
    rpicam-hello --list-cameras          # muss imx500 listen
    ls /dev/v4l-subdev*                  # muss existieren
    sudo dmesg | grep -iE 'imx500|rp1-cfe'
-   ./scripts/camera-commissioning.sh    # Exit 0 erwartet
    ```
 7. Testaufnahme:
    ```bash
@@ -76,7 +98,7 @@ Merksatz: **Kamera angesteckt ⇒ Reboot.** Erst danach Fehlersuche.
 | CAM-I2C-Busnummer | nur informativ, die Nummern sind nicht stabil (hier 6 und 10, nicht 4 und 6) |
 | `pispbe-*`, `rpi-hevc-dec` unter V4L2 | ISP und Video-Decoder, existieren auch ohne Kamera |
 
-## Fehlerbaum
+## Historischer Fehlerbaum
 
 ```
 rpicam-hello --list-cameras leer?
@@ -100,7 +122,7 @@ Hält der Zustand nach dem Reboot an, in dieser Reihenfolge weiter:
 3. Gegenprobe am zweiten Port CAM/DISP1, dann `dtoverlay=imx500,cam1`. Das
    trennt einen Port- oder Kabeldefekt von einem Moduldefekt.
 
-## Nach der Inbetriebnahme zu protokollieren
+## Historische IMX500-Messgrößen
 
 Beides ist ohne Hardware nicht bestimmbar und gehört nach
 [TIMING.md](TIMING.md):

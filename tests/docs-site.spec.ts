@@ -421,6 +421,9 @@ test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', a
   facts.facts['gate.stale_after_ns'].value = 250_000_000;
   facts.facts['record.fields'].value = [...facts.facts['record.fields'].value, 'neues_feld'];
   facts.facts['camera.focus_absolute'].value = 51;
+  facts.facts['live.confirm_frames'].value = 3;
+  facts.facts['gate.transition_max_cells'].value = 1;
+  facts.facts['gate.transition_window_ns'].value = 120_000_000;
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
   await page.route('**/assets/data/tour-facts.json', (route) =>
@@ -435,6 +438,16 @@ test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', a
   await expect(stage).toContainText('10 Felder');
   await page.evaluate(() => { location.hash = 'bedienung-kamera'; });
   await expect(stage).toContainText('fester Wert (51)');
+  await page.evaluate(() => { location.hash = 'erkennung-freigabe'; });
+  await expect(stage).toContainText('Live-Grundeinstellung: 3 Bilder');
+  await expect(stage).toContainText('bis 1 unlesbare Zellen');
+  await expect(stage).toContainText('höchstens 0,12 s');
+  await expect(stage).toContainText('anzeige_wechselt');
+  await page.evaluate(() => { location.hash = 'bedienung-werkbank'; });
+  await expect(stage).toContainText('Dot-Matrix · am Aufbau gelaufen');
+  await expect(stage).toContainText('TESTLAUF: markiert, keine Messnutzung');
+  await expect(stage).toContainText('Kann dennoch VALID anzeigen / protokollieren');
+  await expect(stage).not.toContainText('StreamCam-Anbindung folgt');
   await context.close();
 
   const missing = await browser.newContext({ reducedMotion: 'reduce' });

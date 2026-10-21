@@ -213,6 +213,16 @@ FONT = "src/dispread/ocr/dotmatrix_font.py"
 TEMPLATES = "src/dispread/ocr/dotmatrix_templates.py"
 
 FACTS = {
+    "layout.classified_cells": (
+        "src/dispread/layout.py:CharLayout.classified_cells",
+        ["erkennung-raster", "erkennung-format"],
+        lambda: field_default("src/dispread/layout.py", "CharLayout", "classified_cells"),
+    ),
+    "layout.blank_cells": (
+        "src/dispread/layout.py:CharLayout.blank_cells",
+        ["erkennung-raster", "erkennung-format"],
+        lambda: list(field_default("src/dispread/layout.py", "CharLayout", "blank_cells")),
+    ),
     "record.fields": (
         f"{RECORDS}:ValueRecord (die neun Pflichtfelder aus Konzept §8)",
         ["erkennung-ausgabe"],
@@ -232,6 +242,21 @@ FACTS = {
         f"{VALIDATE}:GateConfig.confirm_frames",
         ["erkennung-freigabe", "regeln-spruenge"],
         lambda: field_default(VALIDATE, "GateConfig", "confirm_frames"),
+    ),
+    "live.confirm_frames": (
+        "src/dispread/live/session.py:LiveConfig.confirm_frames",
+        ["erkennung-freigabe"],
+        lambda: field_default("src/dispread/live/session.py", "LiveConfig", "confirm_frames"),
+    ),
+    "gate.transition_max_cells": (
+        f"{VALIDATE}:GateConfig.transition_max_cells",
+        ["erkennung-freigabe"],
+        lambda: field_default(VALIDATE, "GateConfig", "transition_max_cells"),
+    ),
+    "gate.transition_window_ns": (
+        f"{VALIDATE}:GateConfig.transition_window_ns",
+        ["erkennung-freigabe"],
+        lambda: field_default(VALIDATE, "GateConfig", "transition_window_ns"),
     ),
     "gate.stale_after_ns": (
         f"{VALIDATE}:GateConfig.stale_after_ns",

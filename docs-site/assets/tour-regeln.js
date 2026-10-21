@@ -94,13 +94,14 @@
     const hit = stamp(good, 840, 190, "ValueError");
     const ok = codeBox(good, 520, 250, 380, ["ValueRecord(status=STALE,", "            value=None)"]);
     const okMark = T.checkMark(good, 880, 278, "ok");
-    const gateNote = T.label(good, 520, 362, "Freigabe: nach stale_after ohne gültigen Wert → veraltet", "t-small");
+    const gateNote = T.label(good, 520, 362, "Gate: Leseablehnung ohne Statusflag → später STALE", "t-small");
     tour.docLink(good, "api/vertraege.html", "Verträge (ValueRecord) öffnen", [904, 108]);
 
     const tests = T.group(layer, "regeln-tests");
     testChip(tests, 40, 420, "test_stale_darf_keinen_zahlenwert_fuehren");
     testChip(tests, 40, 456, "test_nach_verlust_wird_der_wert_veraltet_nicht_weitergefuehrt");
     T.label(tests, 920, 474, "tests/test_records.py · tests/test_gate_und_referenz.py", "t-tiny", { "text-anchor": "end" });
+    T.label(tests, 40, 510, "Trackingverlust: UNREADABLE · fehlen neue Bilder, zeigt die Oberfläche STALE", "t-small");
 
     T.hidden(head, bad, rows, frozen, good, attempt, hit, ok, okMark, gateNote, tests.children);
     T.fadeUp(tl, head, {}, 0);
@@ -228,11 +229,12 @@
     const kept = T.label(good, 710, 372, "jeder Wert kommt so heraus, wie er gelesen wurde", "t-small t-valid-text", { "text-anchor": "middle" });
     tour.docLink(good, "api/validate.html", "Freigabe-API öffnen", [904, 108]);
 
-    const note = T.chip(layer, 40, 410, "Einzige erlaubte Verzögerung: confirm_frames, Dauer steht als confirmation_span_ns im Datensatz", "chip--flow");
+    const note = T.chip(layer, 40, 410, "Freigabe glättet nicht · confirmation_span_ns dokumentiert die Mehrbildbestätigung", "chip--flow");
     const tests = T.group(layer, "regeln-tests");
     testChip(tests, 40, 450, "test_echte_spruenge_werden_nicht_geglaettet");
     testChip(tests, 40, 486, "test_mehrbildbestaetigung_meldet_ihre_zeitspanne");
     T.label(tests, 920, 504, "tests/test_gate_und_referenz.py", "t-tiny", { "text-anchor": "end" });
+    T.label(tests, 40, 530, "Live-Grenze: Große Wertwechsel können die Nachführung verlieren lassen · OQ-26", "t-small t-plan-text");
 
     T.hidden(head, bad, ghost, smoothPath, lost, good, step, dots, kept, note, tests.children);
     T.fadeUp(tl, head, {}, 0);
@@ -386,7 +388,7 @@
     const open = board(layer, 460, 92, 460, 300, "plan", "Offen");
     const items = [
       ["weitere Messverstärker", "GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI, AST", null],
-      ["andere Lichtquellen", "bisher eine Beleuchtung", null],
+      ["andere Lichtquellen", "Freigabe bisher nur für Raumlicht", null],
       ["Minuszeichen", "Gerät zeigt nie „−“, der Leser kennt nur „+“", null],
       ["Freigabeschwellen", "an realen Geräten validieren · OQ-14", "docs/open-questions.html#oq-14"],
       ["GSVmulti-Format", "Telegramm unbekannt · OQ-07", "docs/open-questions.html#oq-07"],
@@ -401,7 +403,9 @@
       return g;
     });
 
-    const banner = T.chip(layer, 40, 420, "Wer Werte freigibt, nennt diese Grenzen ausdrücklich mit.", "chip--flow");
+    const banner = T.chip(layer, 40, 420, "Wer Werte freigibt, nennt diese Grenzen mit.", "chip--flow");
+    T.label(banner, 40, 490, "Live offen: Nachführung bei großen Wertwechseln · OQ-26", "t-small t-plan-text");
+    T.label(banner, 40, 516, "Angepasste Lesetoleranz nicht validiert · Live-Abnahme steht aus", "t-small t-plan-text");
     const progress = T.group(layer, "regeln-progress");
     T.panel(progress, 600, 412, 320, 52, "t-panel");
     T.label(progress, 760, 443, "Fortschritt Ernten/Training öffnen", "t-label", { "text-anchor": "middle" });

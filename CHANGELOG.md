@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-21: Zensical-Wiki seitenweise gegen Code und Projektkriterien
+  abgeglichen. Anleitungen, Roadmap, API-Übersicht und Projekt-Tour nennen
+  den gebauten Dot-Matrix-Livepfad, seine begrenzten Belege und die noch
+  offenen großen Wertwechsel. Historische IMX500- und Paketangaben sind
+  datiert; unzulässige Glättungs-/Autokorrekturvorschläge entfallen.
+  Tour-Szenen und Texte sind gemeinsam gepflegt; Live-Mehrbildbestätigung
+  und Übergangsgrenzen stammen nun ebenfalls aus `scripts/tour-facts.py`.
+  OQ-44 hält die fehlende technische Freigabesicherung von Testlaufdaten
+  fest, OQ-45 die falsche Bezeichnung einzelner Verarbeitungszeitbasen.
+  Beides bleibt offen; eine Doku-Korrektur behebt diese Code-Lücken nicht.
+
 **Problem:** Die Werkbank konnte mit der StreamCam weder einrichten noch
 lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
