@@ -263,6 +263,17 @@ def test_run_start_refused_is_operator_error(tmp_path, monkeypatch):
     assert service.status()["state"] == "confirmed"
 
 
+def test_retry_note_extends_current_step_message_only(tmp_path):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._setup_progress("Punktraster-Startsuche: Versuch 1/3")
+    service._setup_note("neuer Versuch 2/5")
+    assert service._setup_message == "Punktraster-Startsuche: Versuch 1/3 - neuer Versuch 2/5"
+    service._setup_progress("Fokus: Bergsteigen")
+    service._report("standbilder")
+    service._setup_note("neuer Versuch 2/5")
+    assert service._setup_message == "neuer Versuch 2/5"
+
+
 def test_setup_in_background_reports_progress_and_refuses_second_setup(tmp_path):
     import threading
 
@@ -792,22 +803,24 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
 @pytest.mark.parametrize("fit_rejected", [False, True])
 def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeypatch, source, fit_rejected):
     import json
+    from dataclasses import replace
 
     import numpy as np
 
     from dispread.camera_settings import CameraSettings
     from dispread.live import setup as live_setup
 
-    camera = CameraSettings.from_dict(proposal["camera"])
+    camera = replace(CameraSettings.from_dict(proposal["camera"]), size=(3, 2))
     monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (camera, FocusMeasurements()))
     monkeypatch.setattr("dispread.live.service.OwnerSetupCamera.fresh_still",
-                        lambda *a, **kw: np.zeros((1080, 1920, 3), np.uint8))
+                        lambda *a, **kw: np.zeros((2, 3, 3), np.uint8))
     monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: None)
     if fit_rejected:
         monkeypatch.setattr(live_setup, "find_green_hint_box", lambda image: (0, 0, 1, 1))
         reasons = iter(["keine_startlage", "startlage_mehrdeutig", "vorzeichen_kein_plus"])
         monkeypatch.setattr(live_setup, "fit_lattice", lambda *a, **kw: next(reasons))
-    texts = iter(["+ 1.2345 ", "+ 1.2346 ", "+ 2.2345 ", "+ 2.2346 ", "+ 3.2345 ", "+ 3.2346 "])
+    texts = iter(text for n in range(1, 4) for _ in range(5)
+                 for text in (f"+ {n}.2345 ", f"+ {n}.2346 "))
     monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
 
     class Port:
@@ -832,13 +845,19 @@ def test_failed_search_saves_every_attempt_cell_text(tmp_path, proposal, monkeyp
         if source == "seriell":
             assert entry["unmasked"] == [f"+ {attempt}.2345 ", f"+ {attempt}.2346 "]
             assert entry["masked"] == f"+ {attempt}.234? "
+            assert entry["tries"] == 5
         else:
             assert entry["unmasked"] == ["+ 1.2345 "]
             assert entry["masked"] == "+ 1.2345 "
+            assert entry["tries"] == 1
     failure = json.loads((setup_dir / "failure.json").read_text())
     assert ("vorzeichen_kein_plus" if fit_rejected else "Kein gruener Bereich") in failure["reason"]
     assert failure["step"] == service.status()["setup"]["step"] == "standbilder"
-    assert "Versuch 3/3" in service.status()["setup"]["message"]
+    message = service.status()["setup"]["message"]
+    # Wiederholte Aufnahmen ergaenzen die Meldung, der Suchversuch bleibt sichtbar.
+    assert "Startsuche: Versuch 3/3" in message
+    if source == "seriell":
+        assert "neuer Versuch 5/5" in message
     if source == "seriell":
         assert port.closed
 
@@ -873,7 +892,7 @@ def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, pr
     monkeypatch.setattr(live_setup, "raster_offset_check", lambda *a: offset)
     monkeypatch.setattr(live_setup, "propose_with_fit", lambda *a, **kw: proposal)
     monkeypatch.setattr(live_setup.time, "sleep", lambda s: None)
-    texts = iter(["abc", "abc", "ab1", "ab2", "ac1", "ac1"])
+    texts = iter(["+0.60970 ", "+0.60970 "] + ["+0.60971 ", "+0.60972 "] * 5 + ["+0.61971 ", "+0.61971 "])
     monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
     service = LiveService(FakeOwner(), tmp_path, serial_opener=lambda: SimpleNamespace(close=lambda: None))
     service.start_setup()
@@ -881,9 +900,9 @@ def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, pr
     assert service.status()["state"] == ("setup_failed" if offset_status == "FEHLER" else "setup_ready")
     setup_dir = tmp_path / service.status()["session_id"] / "setup"
     assert json.loads((setup_dir / "cell-text.json").read_text()) == [
-        {"attempt": 1, "still": "still", "source": "seriell", "unmasked": ["abc", "abc"], "masked": "abc", "fit": "retry"},
-        {"attempt": 2, "still": "still", "source": "seriell", "unmasked": ["ab1", "ab2"], "masked": "a??", "fit": "ok"},
-        {"attempt": 2, "still": "stability", "source": "seriell", "unmasked": ["ac1", "ac1"], "masked": "a??"},
+        {"attempt": 1, "still": "still", "source": "seriell", "unmasked": ["+0.60970 ", "+0.60970 "], "masked": "+0.60970 ", "fit": "retry", "tries": 1},
+        {"attempt": 2, "still": "still", "source": "seriell", "unmasked": ["+0.60971 ", "+0.60972 "], "masked": "+0.6?97? ", "fit": "ok", "tries": 5},
+        {"attempt": 2, "still": "stability", "source": "seriell", "unmasked": ["+0.61971 ", "+0.61971 "], "masked": "+0.6?97? ", "tries": 1},
     ]
     if offset_status == "FEHLER":
         assert "Rasterversatz 2j meldet FEHLER" in json.loads((setup_dir / "failure.json").read_text())["reason"]
@@ -1080,3 +1099,40 @@ def test_override_without_block_stays_normal_and_new_setup_clears_markers(tmp_pa
     assert service.status()["test_run"] is None
     assert service.status()["run_block"] != "old block"
     assert service.status()["run"] is None
+
+
+def test_run_block_reason_explains_reference_contradiction():
+    from dispread.live.service import run_block_reason
+
+    reason = run_block_reason({"setup_checks": {"checks": {"gegenlesen": {
+        "status": "FEHLER", "metrics": {
+            "rejection_reasons": {"zelle_widerspricht_referenz": 1},
+            "contradictions": [{"frame": 0, "cell": 7, "read": "3", "reference": "2"}],
+        },
+    }}}})
+    assert reason == ("Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert "
+                      "des GSV-2AS (Zelle 7: gelesen '3', Referenz '2'). Neu einrichten.")
+
+
+def test_reader_contradiction_refuses_confirmation(tmp_path, proposal):
+    proposal["setup_checks"]["overall"] = "FEHLER"
+    proposal["setup_checks"]["checks"]["gegenlesen"] = {"status": "FEHLER"}
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match="Einrichtung meldet FEHLER - nicht bestaetigbar"):
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator",
+                        format_checked=True, acknowledge_warning=True)
+    assert service.status()["state"] == "setup_ready"
+
+
+def test_setup_pads_manual_cell_text_and_keeps_mask(tmp_path):
+    observed = []
+
+    def runner(**kwargs):
+        observed.append(kwargs['cell_text'])
+        return {"setup_checks": {"overall": "WARNUNG", "checks": {}}}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup(cell_text="+0.4678?")
+    service._setup_thread.join(2)
+    assert service.status()["state"] == "setup_ready"
+    assert observed == ["+0.4678? "]

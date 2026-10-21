@@ -54,11 +54,16 @@ def test_shared_leading_zero_mapping_rejects_three_suppressed_zeros():
     assert leading_zeros.map_suppressed_leading_zeros("+0009.09 mV/V", blank_cells=False) is None
 
 
-def test_offline_text_preserves_positions_and_blanks_question_marks():
-    assert validate_offline_cell_text("+?2.45?7 ") == "+ 2.45 7 "
+def test_offline_text_preserves_positions_and_question_marks():
+    assert validate_offline_cell_text("+?2.45?7 ") == "+?2.45?7 "
 
 
-@pytest.mark.parametrize("text", ["+12.34567", "+12.3456?", "+12.34x67", "+12.3456"])
+@pytest.mark.parametrize("text", ["+12.34567", "+12.3456?", "+12.34x67"])
 def test_offline_text_rejects_invalid_length_or_characters(text):
     with pytest.raises(ValueError):
         validate_offline_cell_text(text)
+
+
+@pytest.mark.parametrize("text", ["+12.3456", "+0.4678?", "+0.4678? "])
+def test_offline_text_pads_eight_cells(text):
+    assert validate_offline_cell_text(text) == text.ljust(9)

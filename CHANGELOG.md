@@ -10,6 +10,7 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 
 * Final-Review-Fixes: Bestätigung bindet Name und Prüfhaken an die angezeigte Sitzung; lokales Ersetzen eines Vorschlags verlangt `live setup --force`. Einrichtungsdiagnosen behalten Fit-Gründe und der Vorschlag den erfolgreichen Versuch; Pluszeichen-Hinweis, serieller Zeilenanfang, Stabilitätsminimum, Fokusfortschritt und gleichzeitige Seiten-/Bedienfehler sind korrigiert.
 * 2026-10-21: Lesesperre bei fehlendem oder nicht erfolgreichem Gegenlesen; expliziter Testlauf mit `TESTLAUF.json` und getrennten, verworfenen Leser-Vermutungen. Anlass: Nach Bestätigung eines Vorschlags mit Gegenlesen WARNUNG waren am Prüfstand 1202/1202 Datensätze UNREADABLE. Andere Einrichtungswarnungen bleiben quittierbar; Freigabe und JSONL-Werte bleiben unverändert.
+* 2026-10-21: Schwankende Ziffern in der Einrichtung: Standbilder warten seriell bis zu fünf Versuche auf eine ruhige Anzeige; manuelle Zellentexte erlauben acht Zeichen und behalten `?` als Maske, bei einem nur zum ersten Standbild passenden Text folgt ein gezielter Hinweis. Gegenlesen vergleicht jetzt mit der seriellen Referenz (bei manueller Eingabe mit dem Zellentext), ignoriert nur maskierte Zellen und wertet einen Widerspruch als FEHLER, der Bestätigung und Lauf sperrt.
 
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):

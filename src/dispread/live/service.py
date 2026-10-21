@@ -45,6 +45,12 @@ def run_block_reason(proposal: dict | None) -> str | None:
     if status == "OK":
         return None
     metrics = check.get("metrics", {})
+    if metrics.get("rejection_reasons", {}).get("zelle_widerspricht_referenz") and metrics.get("contradictions"):
+        first = metrics["contradictions"][0]
+        return (
+            "Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert des GSV-2AS "
+            f"(Zelle {first['cell']}: gelesen '{first['read']}', Referenz '{first['reference']}'). Neu einrichten."
+        )
     reasons = ", ".join(f"{name} x{count}" for name, count in metrics.get("rejection_reasons", {}).items()) or "-"
     return (
         f"Lauf gesperrt: Der Leser hat bei der Einrichtung {metrics.get('read_count', 0)} von "
@@ -263,7 +269,7 @@ class LiveService:
                 self._setup_started_at = self._monotonic()
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
-                self._setup_message = self._diagnostics_error = None
+                self._setup_message = self._setup_message_base = self._diagnostics_error = None
                 self._session_dir, self._proposal = session_dir, None
                 self._run_block = self._test_run = None
                 self._profile_path = self._profile_camera = self._profile_info = None
@@ -276,11 +282,17 @@ class LiveService:
     def _report(self, step: str) -> None:
         with self._lock:
             self._step = self._setup_step = step
-            self._setup_message = None
+            self._setup_message = self._setup_message_base = None
 
     def _setup_progress(self, message: str) -> None:
         with self._lock:
-            self._setup_message = message
+            self._setup_message_base = self._setup_message = message
+
+    def _setup_note(self, note: str) -> None:
+        """Zusatz zum laufenden Schritt, ohne dessen Meldung (z. B. Suchversuch) zu verlieren."""
+        with self._lock:
+            base = getattr(self, "_setup_message_base", None)
+            self._setup_message = f"{base} - {note}" if base else note
 
     def _write_setup_diagnostic(self, path: Path, data: Any) -> None:
         """Diagnosefehler duerfen den Einrichtungsausgang nicht veraendern."""
@@ -322,18 +334,21 @@ class LiveService:
         self._write_setup_diagnostic(setup_dir / "cell-text.json", [])
         cell_texts: list[dict] = []
         raw_texts: list[str] = []
+        capture_tries = 1
 
         def save_attempt(entry: dict) -> None:
             previous = next((item for item in cell_texts
                              if (item["attempt"], item["still"]) == (entry["attempt"], entry["still"])), None)
             if previous is None:
                 cell_texts.append({**entry, "source": "seriell" if cell_text is None else "eingabe",
-                                   "unmasked": list(raw_texts)})
+                                   "unmasked": list(raw_texts), "tries": capture_tries})
             else:
                 previous.update(entry)
             self._write_setup_diagnostic(setup_dir / "cell-text.json", cell_texts)
 
-        def save_raw(before: str | None, after: str | None) -> None:
+        def save_raw(before: str | None, after: str | None, tries: int) -> None:
+            nonlocal capture_tries
+            capture_tries = tries
             raw_texts[:] = [value for value in (before, after) if value is not None]
 
         report("fokus")
@@ -361,7 +376,9 @@ class LiveService:
                         f"kein GSV-2AS an {live_setup.SERIAL_PORT} ({exc}) - Zellentext eingeben"
                     ) from exc
                 def text_source(capture):
-                    return live_setup.capture_with_text(capture, port, on_text=save_raw)
+                    return live_setup.capture_with_text(
+                        capture, port, on_text=save_raw, info=self._setup_note,
+                    )
             else:
                 raw_texts[:] = [cell_text]
                 text_source = live_setup.offline_text_source(cell_text)

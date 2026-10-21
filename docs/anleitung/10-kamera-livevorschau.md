@@ -103,12 +103,33 @@ Die Einrichtungen dauerten 47/55/49/45 s; Rasterversatz und Gegenlesen
 waren jeweils OK. Bestätigung und Messlauf stehen noch aus;
 das war kein formaler Abnahme-Lauf.
 
+### Schwankende letzte Ziffer
+
+Das Zellentextfeld am besten leer lassen: Dann liest die Werkbank den
+Referenztext vom GSV-2AS vor und nach jedem Standbild. Ändert er sich
+während der Aufnahme, wiederholt sie diese bis zu fünfmal; bleibt die
+Anzeige unruhig, maskiert sie die wechselnden Zellen mit `?`. Bei manueller
+Eingabe schwankende Ziffern selbst mit `?` markieren, etwa `+0.4678?`;
+acht Zeichen werden um die leere neunte Zelle ergänzt. Passt der Text nur
+zum ersten Standbild, weist die Einrichtung gezielt darauf hin.
+
+Gegenlesen bedeutet jetzt: Alle unmaskierten Zellen müssen in jedem
+Standbild lesbar sein und mit dessen Referenztext übereinstimmen,
+darunter mindestens fünf der sieben Zahlenzellen. Maskierte Zellen
+bleiben beim Vergleich außen vor; Belichtungs-, Kontrast- und
+Leerzellenfehler bleiben wirksam. Ein gelesenes Zeichen, das dem
+Referenztext widerspricht, ist **FEHLER** und sperrt Bestätigung und Lauf.
+Fehlt Lesbarkeit ohne Widerspruch, lautet das Urteil **WARNUNG**;
+der normale Lauf bleibt gesperrt. Der Referenztext korrigiert niemals
+die Messwerte des Lesers.
+
 ### Lauf gesperrt / Testlauf
 
 „Lauf gesperrt“ bedeutet: Der Leser konnte die Einrichtungsbilder beim
-Gegenlesen nicht erfolgreich lesen oder das Gegenlesen fehlt. Bestätigen ist
-weiter möglich, ein normaler Lauf bleibt gesperrt. Kamera senkrecht auf die
-Displaymitte ausrichten und neu einrichten; das Zellentextfeld dabei leer
+Gegenlesen nicht erfolgreich vergleichen oder das Gegenlesen fehlt. Bei
+**WARNUNG** ist Bestätigen weiter möglich, ein normaler Lauf bleibt gesperrt.
+Ein Widerspruch zur Referenz ist **FEHLER** und sperrt auch die Bestätigung.
+Kamera senkrecht auf die Displaymitte ausrichten und neu einrichten; das Zellentextfeld dabei leer
 lassen, damit der Text vom GSV-2AS kommt. Andere Warnungen, etwa zu Raster
 oder Kanten, werden wie bisher bei der Bestätigung quittiert.
 

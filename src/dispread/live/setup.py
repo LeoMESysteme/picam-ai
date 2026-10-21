@@ -120,18 +120,29 @@ def mask_changed_cells(before: str, after: str) -> tuple[str, str]:
 
 
 def capture_with_text(
-    capture: Any, port: Any, *, on_text: Callable[[str | None, str | None], None] | None = None,
+    capture: Any, port: Any, *, on_text: Callable[[str | None, str | None, int], None] | None = None,
+    info: Callable[[str], None] | None = None, max_tries: int = 5,
 ) -> tuple[np.ndarray, str]:
-    """Bracket one still and mask changes; on_text gets None for failed reads."""
+    """Wartet auf eine ruhige Aufnahme; meldet Klammer und Versuchszahl des benutzten Bildes."""
+    if max_tries < 1:
+        raise SetupError("Standbildaufnahme braucht mindestens einen Versuch")
     before = after = None
+    tries = 1
     try:
-        before = serial_cell_text(port)
-        image = capture()
-        after = serial_cell_text(port)
+        for tries in range(1, max_tries + 1):
+            before = after = None
+            before = serial_cell_text(port)
+            image = capture()
+            after = serial_cell_text(port)
+            masked = mask_changed_cells(before, after)[0]
+            if before == after or tries == max_tries:
+                return image, masked
+            if info is not None:
+                info("Standbild: Anzeige hat sich waehrend der Aufnahme geaendert, "
+                     f"neuer Versuch {tries + 1}/{max_tries}")
     finally:
         if on_text is not None:
-            on_text(before, after)
-    return image, mask_changed_cells(before, after)[0]
+            on_text(before, after, tries)
 
 
 def heldout_improves(old_check: Any, new_check: Any) -> bool:
@@ -294,6 +305,7 @@ def assist_measure(
     stability_elapsed_s = monotonic() - first_captured_at
     if on_attempt is not None:
         on_attempt({"attempt": attempt, "still": "stability", "masked": second_text})
+    reader_frame_texts = [(first, first_text), (second, second_text)]
     first_text, second_text = mask_changed_cells(first_text, second_text)
     if on_attempt is not None:
         on_attempt({"attempt": attempt, "still": "still", "masked": first_text})
@@ -326,6 +338,14 @@ def assist_measure(
     offset_check = raster_offset_check(frame_texts, fit.quad)
     report({"overall": offset_check.status, "checks": {"rasterversatz": offset_check.to_dict()}})
     if offset_check.status == "FEHLER":
+        first_offset = raster_offset_check([frame_texts[0]], fit.quad)
+        second_offset = raster_offset_check([frame_texts[1]], fit.quad)
+        if first_offset.status != "FEHLER" and second_offset.status == "FEHLER":
+            raise SetupError(
+                "Anzeige hat sich zwischen den Standbildern geaendert (2j: erstes Standbild passt zum Zellentext, "
+                "zweites nicht). Zellentext-Feld leer lassen - der Wert wird dann vom GSV-2AS gelesen - "
+                "oder schwankende Ziffern mit ? markieren, z. B. +0.4678?"
+            )
         raise SetupError("Rasterversatz 2j meldet FEHLER; kein Vorschlag")
     final_checks = check_setup(
         first, fit, stability_image_bgr=second,
@@ -337,7 +357,7 @@ def assist_measure(
         raise SetupError("Abschliessende Einrichtungspruefung meldet FEHLER; kein Vorschlag")
     reader_check = None
     if templates is not None:
-        reader_check = diagnose_reader((first, second), fit.quad, templates, templates_sha256)
+        reader_check = diagnose_reader(reader_frame_texts, fit.quad, templates, templates_sha256)
     return AssistResult(
         first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,
@@ -430,7 +450,9 @@ def propose_with_fit(
         raise SetupError("Einrichtungspruefung ohne gueltigen rasterversatz; kein Vorschlag")
     if reader_check is not None:
         checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
-        if reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
+        if reader_check.status == "FEHLER":
+            checks_dict["overall"] = "FEHLER"
+        elif reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
     proposal = {
         "frame": str(frame_path),

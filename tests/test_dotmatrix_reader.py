@@ -181,3 +181,12 @@ def test_sweep_richtig_oder_abgelehnt_nie_falsch(reader):
     elapsed = time.monotonic() - start
     assert elapsed < 30.0
     assert n_released > 0  # Test waere sonst leer bewiesen
+
+
+def test_cell_diagnostics_expose_decision_and_blank_check_on_rejection(reader):
+    r = reader.read(render("+ 1.2°45 "), LAYOUT)
+    cells = r.diagnostics["cells"]
+    assert cells[0]["text"] == "+" and cells[0]["reason"] is None
+    assert cells[5]["text"] is None
+    assert cells[5]["reason"] in ("zelle_unbekannt", "zelle_mehrdeutig")
+    assert r.diagnostics["blank_cells_ok"] is True

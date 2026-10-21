@@ -473,8 +473,8 @@ def test_serial_capture_masks_cells_changing_during_and_between_stills():
         captures.append(True)
         return np.zeros((1, 1, 3), np.uint8)
 
-    first, first_text = live_setup.capture_with_text(capture, port)
-    second, second_text = live_setup.capture_with_text(capture, port)
+    first, first_text = live_setup.capture_with_text(capture, port, max_tries=1)
+    second, second_text = live_setup.capture_with_text(capture, port, max_tries=1)
     first_text, second_text = live_setup.mask_changed_cells(first_text, second_text)
     assert first.shape == second.shape
     assert captures == [True, True]
@@ -495,7 +495,7 @@ def test_masked_serial_text_reaches_real_offset_check_without_unknown_glyph():
             return next(self.lines)
 
     image, text = live_setup.capture_with_text(
-        lambda: np.full((360, 640, 3), 120, np.uint8), Port(),
+        lambda: np.full((360, 640, 3), 120, np.uint8), Port(), max_tries=1,
     )
     assert "?" in text
     check = live_setup.raster_offset_check([(image, text)], QUAD)
@@ -759,7 +759,7 @@ def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, mon
     rc = harvest_setup.main(argv)
     assert rc == (2 if serial_change == "many" else 0)
     if serial_port is not None:
-        assert serial_port.reads == 8
+        assert serial_port.reads == 40
         assert serial_port.closed
     assert capture.released
     assert capture.reads >= 22

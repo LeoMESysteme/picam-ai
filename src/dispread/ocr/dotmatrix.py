@@ -84,6 +84,7 @@ class DotMatrixReader:
         decisions = [classify(norm[i], self._t) for i in range(len(cells))]
         diag["cells"] = [
             {
+                "text": d.text, "reason": d.reason,
                 "best": d.best, "second": d.second, "d_best": round(d.d_best, 4),
                 "d_second": round(d.d_second, 4), "margin": round(d.margin, 4),
                 "dots": [round(float(x), 3) for x in norm[i, d.shift_index]],
@@ -102,6 +103,9 @@ class DotMatrixReader:
             )
             for d in decisions
         )
+        # Auch bei Zellablehnung muss die Einrichtung den leeren Rest pruefen koennen.
+        blank_ok = self._blank_cells_ok(gray, layout, sampled.ink)
+        diag["blank_cells_ok"] = blank_ok
         first_reject = next((d.reason for d in decisions if d.reason), None)
         sign_ok = decisions[0].text == "+"
         if not sign_ok:
@@ -111,8 +115,6 @@ class DotMatrixReader:
             return self._reject(first_reject, diag, layout, glyphs)
         cells_text = "".join(d.text for d in decisions)
         parsed = parse_gsv2as(cells_text)
-        blank_ok = self._blank_cells_ok(gray, layout, sampled.ink)
-        diag["blank_cells_ok"] = blank_ok
         if parsed is None or not blank_ok:
             return self._reject("format", diag, layout, glyphs)
         raw, value = parsed

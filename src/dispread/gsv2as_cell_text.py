@@ -41,15 +41,15 @@ def cell_text_from_telegram(raw: bytes | str) -> str:
 
 
 def validate_offline_cell_text(text: str) -> str:
-    """Validate explicit nine-cell operator input; '?' means blank/skip."""
-    if not isinstance(text, str) or len(text) != 9 or not text.isascii():
-        raise ValueError("offline cell text must be exactly nine ASCII characters")
+    """Validate eight/nine-cell operator input; preserve masked cells."""
+    if not isinstance(text, str) or len(text) not in (8, 9) or not text.isascii():
+        raise ValueError("offline cell text must be eight or nine ASCII characters")
+    text = text.ljust(9)
     if text[8] != " ":
         raise ValueError("the ninth cell must be the measured unit separator")
     if "?" in text[8:]:
         raise ValueError("'?' can only mark numeric cells")
-    text = text.replace("?", " ")
-    if _OFFLINE.fullmatch(text) is None:
+    if _OFFLINE.fullmatch(text.replace("?", " ")) is None:
         raise ValueError("offline cell text contains an unsupported character or format")
 
     block = text[1:8]

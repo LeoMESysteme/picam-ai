@@ -172,28 +172,61 @@ def _border_check(sampled: SampledImage) -> CheckResult:
                        {'minimum_border_ratio': minimum, 'border_ratios': ratios}, tuple(flagged))
 
 
-def diagnose_reader(frames: Sequence[np.ndarray], quad: list[list[float]],
+def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
                     template_path: Path, template_sha256: str) -> CheckResult:
-    """Liest Standbilder mit geprueften Vorlagen; nutzt keinen Sollwert."""
+    """Vergleicht Zellentscheidungen mit dem Solltext, ohne Lesewerte zu korrigieren."""
     if not frames:
         raise ValueError('Mindestens ein Standbild ist fuer das Gegenlesen erforderlich')
     reader = DotMatrixReader.from_file(Path(template_path), template_sha256)
     layout = CharLayout(grid=GRID, unit='')
     reasons: dict[str, int] = {}
+    masked_cells: list[list[int]] = []
+    contradictions: list[dict] = []
     read_count = 0
-    for frame in frames:
+    cell_reasons = {'zelle_unbekannt', 'zelle_mehrdeutig'}
+    for frame_index, (frame, reference) in enumerate(frames):
+        if len(reference) != 9:
+            raise ValueError('Gegenlesen braucht neun Referenzzellen')
+        masked = [i for i, ch in enumerate(reference) if ch == '?']
+        masked_cells.append(masked)
         crop = rectify(frame, quad, target_size=TARGET_SIZE).image
         result = reader.read(crop, layout)
-        if result.value is not None:
+        diag = result.diagnostics
+        cells = diag.get('cells', [])
+        frame_contradictions = [
+            {'frame': frame_index, 'cell': i, 'read': cells[i]['text'], 'reference': ch}
+            for i, ch in enumerate(reference)
+            if ch != '?' and i < len(cells) and cells[i].get('text') is not None and cells[i]['text'] != ch
+        ]
+        contradictions.extend(frame_contradictions)
+        reason = diag.get('reject_reason')
+        unaccepted = [i for i, ch in enumerate(reference)
+                      if ch != '?' and (i >= len(cells) or cells[i].get('text') is None)]
+        if frame_contradictions:
+            reason = 'zelle_widerspricht_referenz'
+        elif sum(ch != '?' for ch in reference[1:8]) < 5:
+            reason = 'zu_wenige_vergleichbare_zellen'
+        elif diag.get('blank_cells_ok') is False:
+            reason = 'format'
+        elif reason is None or reason in cell_reasons or (reason == 'format' and any(
+                i < len(cells) and not (cells[i].get('text') or '').isdigit() for i in masked)):
+            # Ein Formatfehler zaehlt nur, wenn er von einer maskierten Zelle
+            # kommen kann: ungelesen oder als Nicht-Ziffer gelesen (Mischziffer
+            # als ' ' oder '.'). Sonst bleibt das Standbild ungelesen.
+            if not unaccepted and diag.get('blank_cells_ok') is True:
+                reason = None
+            else:
+                reason = next((cells[i].get('reason') for i in unaccepted
+                               if i < len(cells) and cells[i].get('reason')), reason or 'unbekannt')
+        if reason is None:
             read_count += 1
         else:
-            reason = str(result.diagnostics.get('reject_reason') or 'unbekannt')
             reasons[reason] = reasons.get(reason, 0) + 1
     count = len(frames)
-    severe_rejections = reasons.get('format', 0) + reasons.get('zelle_unbekannt', 0)
-    return CheckResult('WARNUNG' if severe_rejections > count / 2 else 'OK',
-                       {'frames': count, 'read_count': read_count,
-                        'read_rate': read_count / count, 'rejection_reasons': reasons})
+    status = 'FEHLER' if contradictions else ('OK' if read_count == count else 'WARNUNG')
+    return CheckResult(status, {'frames': count, 'read_count': read_count,
+                               'read_rate': read_count / count, 'rejection_reasons': reasons,
+                               'masked_cells': masked_cells, 'contradictions': contradictions})
 
 
 def _glare_check(warped_gray: np.ndarray) -> CheckResult:

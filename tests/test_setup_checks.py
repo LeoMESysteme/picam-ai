@@ -338,45 +338,66 @@ def test_dark_left_column_with_plus_in_first_cell_fails():
     assert 0 in check.cells
 
 
-def test_reader_diagnostic_warns_only_on_majority_format_or_unknown(monkeypatch, tmp_path):
+@pytest.mark.parametrize('reason,reference,read_text,expected,read_count', [
+    ('zelle_unbekannt', '+0.6097? ', '+0.6097? ', 'OK', 1),
+    ('zelle_mehrdeutig', '+0.6097? ', '+0.6097? ', 'OK', 1),
+    ('zelle_unbekannt', '+0.60972 ', '+0.6097? ', 'WARNUNG', 0),
+    ('kontrast', '+0.6097? ', '+0.6097? ', 'WARNUNG', 0),
+    ('ueberbelichtet', '+0.6097? ', '+0.6097? ', 'WARNUNG', 0),
+    ('format', '+0.6097? ', '+0.60972 ', 'WARNUNG', 0),
+    ('format', '+0.6097? ', '+0.6097? ', 'OK', 1),
+    # Maskierte Mischziffer als ' ' oder '.' gelesen: Formatfehler nur dort.
+    ('format', '+0.6097? ', '+0.6097  ', 'OK', 1),
+    ('format', '+0.6097? ', '+0.6097. ', 'OK', 1),
+    (None,'+0.60972 ', '+0.60973 ', 'FEHLER', 0),
+    ('zelle_unbekannt', '+0.60972 ', '+0.609?3 ', 'FEHLER', 0),
+    (None, '+0.60??? ', '+0.60972 ', 'WARNUNG', 0),
+    (None, '+0.609?? ', '+0.60972 ', 'OK', 1),
+])
+def test_reader_diagnostic_compares_only_unmasked_cells(
+        monkeypatch, tmp_path, reason, reference, read_text, expected, read_count):
+    from types import SimpleNamespace
+
     from dispread import setup_checks
-    from dispread.ocr import ReadResult
-    from dispread.setup_checks import diagnose_reader
 
-    reasons = iter(('format', 'zelle_unbekannt', None))
+    diagnostics = {
+        'reject_reason': reason, 'blank_cells_ok': True,
+        'cells': [{'text': None if ch == '?' else ch,
+                   'reason': 'zelle_unbekannt' if ch == '?' else None} for ch in read_text],
+    }
+    reader = SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=diagnostics))
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', lambda *_: reader)
+    result = setup_checks.diagnose_reader([(display(), reference)], QUAD, tmp_path / 't.json', 'a' * 64)
+    assert result.status == expected
+    assert result.metrics['read_count'] == read_count
+    assert result.metrics['frames'] == 1
+    assert result.metrics['read_rate'] == read_count
+    assert result.metrics['masked_cells'] == [[i for i, ch in enumerate(reference) if ch == '?']]
+    if expected == 'FEHLER':
+        assert result.metrics['contradictions'] == [
+            {'frame': 0, 'cell': 7, 'read': '3', 'reference': '2'}]
+        assert result.metrics['rejection_reasons'] == {'zelle_widerspricht_referenz': 1}
+    elif reference == '+0.60??? ':
+        assert result.metrics['rejection_reasons'] == {'zu_wenige_vergleichbare_zellen': 1}
 
-    class Reader:
-        def read(self, crop, layout):
-            reason = next(reasons)
-            return ReadResult('', None if reason else 1.0, False, True, False, None,
-                              layout.unit, frozenset(), (), 'dotmatrix', '3',
-                              {'reject_reason': reason})
 
-    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file',
-                        lambda path, sha: Reader())
-    result = diagnose_reader([display()] * 3, QUAD, tmp_path / 'templates.json', 'a' * 64)
+def test_reader_diagnostic_requires_every_still_and_checks_blank_cells(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    diags = iter([
+        {'reject_reason': None, 'blank_cells_ok': True,
+         'cells': [{'text': ch, 'reason': None} for ch in '+0.60972 ']},
+        {'reject_reason': 'zelle_unbekannt', 'blank_cells_ok': False,
+         'cells': [{'text': None if ch == '?' else ch, 'reason': None} for ch in '+0.6097? ']},
+    ])
+    reader = SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=next(diags)))
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', lambda *_: reader)
+    result = setup_checks.diagnose_reader([(display(), '+0.6097? ')] * 2, QUAD, tmp_path / 't.json', 'a' * 64)
     assert result.status == 'WARNUNG'
-    assert result.metrics == {'frames': 3, 'read_count': 1, 'read_rate': pytest.approx(1 / 3),
-                              'rejection_reasons': {'format': 1, 'zelle_unbekannt': 1}}
-
-
-def test_reader_diagnostic_other_rejections_do_not_warn(monkeypatch, tmp_path):
-    from dispread import setup_checks
-    from dispread.ocr import ReadResult
-    from dispread.setup_checks import diagnose_reader
-
-    class Reader:
-        def read(self, crop, layout):
-            return ReadResult('', None, False, True, False, None, layout.unit,
-                              frozenset(), (), 'dotmatrix', '3',
-                              {'reject_reason': 'kontrast'})
-
-    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file',
-                        lambda path, sha: Reader())
-    result = diagnose_reader([display()] * 3, QUAD, tmp_path / 'templates.json', 'a' * 64)
-    assert result.status == 'OK'
-    assert result.metrics['read_rate'] == 0.0
-    assert result.metrics['rejection_reasons'] == {'kontrast': 3}
+    assert result.metrics['read_count'] == 1
+    assert result.metrics['rejection_reasons'] == {'format': 1}
 
 
 def test_bright_connected_glare_without_saturation_fails():
@@ -442,3 +463,23 @@ def test_workbench_stability_minimum_keeps_cli_default():
     short = check_setup(image, fit(), stability_image_bgr=image, stability_elapsed_s=14.9,
                         stability_min_elapsed_s=15)
     assert short.checks['stabilitaet'].reason == 'abstand_zu_kurz'
+
+
+@pytest.mark.parametrize('rest_char,expected', [(' ', 'OK'), ('0', 'WARNUNG')])
+def test_reader_diagnostic_real_reader_mask_keeps_blank_check(monkeypatch, tmp_path, rest_char, expected):
+    from dotmatrix_helpers import GRID as test_grid
+    from dotmatrix_helpers import render, synthetic_reader
+
+    from dispread import setup_checks
+
+    reader = synthetic_reader()
+    monkeypatch.setattr(setup_checks, 'GRID', test_grid)
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', lambda *_: reader)
+    chars = list('+0.6097° ' + ' ' * 7)
+    chars[14] = rest_char
+    image = render(''.join(chars), grid=setup_checks.GRID)
+    result = setup_checks.diagnose_reader(
+        [(image, '+0.6097? ')], [[0, 0], [399, 0], [399, 159], [0, 159]], tmp_path / 't.json', 'a' * 64,
+    )
+    assert result.status == expected
+    assert result.metrics['read_count'] == (1 if expected == 'OK' else 0)
