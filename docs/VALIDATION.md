@@ -3388,3 +3388,31 @@ Live-Pfad): Bewegung nur aus den Rändern des hinterleuchteten LCD-Fensters.
 Gehalten (settled): Entwicklung 98,7 %, Nacht 100 %, Dämmerung A 96,6 %,
 Dämmerung B 50,6 %; rund 28 ms je Bild. Vielversprechend für Dunkelheit,
 aber nicht reif (B, Laufzeit) und nicht freigegeben.
+
+## 2026-10-22 — R13: Abnahme bei Raumlicht nicht bestanden { #r13-abnahme-licht-2026-10-22 }
+
+Aufnahmen `var/diagnostics/r13-abnahme-c-hell-20261022` (429 PNG, 2 Hz) und
+`r13-abnahme-d-hell-10hz-20261022` (1341 JPEG, 10 Hz), 12:01–12:21 MESZ,
+Raumlicht an (Bildmittel 182 gegen 155 im Einrichtungsbild), gleiche Werteplane
+wie A/B, Rückstellung geprüft. Einmal ausgewertet mit dem eingefrorenen Stand
+(Prüfsumme geprüft).
+
+| Settled-Bilder C | 1 | 2 | 0,5 | 5 | 10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Rahmen-Tracker (eingefroren) | 5/104 | 10/81 | 13/61 | 0/81 | 0/81 |
+| alter ECC | 102/104 | 1/81 | 60/61 | 10/81 | 79/81 |
+
+**Nicht bestanden** (Ziel ≥ 99 % je Faktor). Abgelehnt fast ausschließlich mit
+`lcd_rand_fehlt`. **Ursache** (Diagnose an C, keine Anpassung): Die
+Rahmenbereiche schätzen die Lage richtig — ihr Quad stimmt auf Faktor-1-Bildern
+mit dem unabhängigen ECC-Quad auf 0,15–0,18 px überein; beide sehen eine echte
+Verschiebung von rund 0,35 px nach oben. Falsch ist die absolute Kantenlage der
+Randprüfung: Die scheinbare Grauwertkante des LCD-Fensters wandert mit dem Licht
+(helle Einfassung um das Glas), gegen das Referenzbild oben +0,6 px, rechts
++0,85 px bei Licht, bei Dämmerung mehrere Pixel. Bei 1,0 px Toleranz führt das
+zu falschen Ablehnungen. Auch der Fenster-Prototyp (Grünsignal) hält auf C
+0/408. Absolute Kantenlagen gegen ein Referenzbild sind damit nicht lichtstabil.
+
+Folge: Die R13-Live-Einbindung wird nicht nach `master` gebracht. Eine
+Änderung der Randprüfung ist eine Designentscheidung und braucht eine neue,
+getrennte Abnahme (C/D sind dafür nicht mehr unabhängig).
