@@ -1,9 +1,11 @@
 """Zustandslose Nachfuehrung aus begrenzten Rahmenfenstern und LCD-Rand.
 
-Parameter festgelegt am Entwicklungsdatensatz r13-werteplan-20261021, vor der
-getrennten Abnahme eingefroren. Kleine rohe Fenster vermeiden Zeicheninhalt;
-Eindeutigkeit, verteilte Inlier und der unabhaengige helle LCD-Rand bleiben
-harte Regeln. Keine automatische Abschwaechung bei fehlender Struktur.
+Kandidat R13-7, festgelegt am Entwicklungsdatensatz; C/D
+(r13-abnahme-c/d-hell-20261022) waren Anlass und gelten nicht als Abnahme;
+neue Abnahme r13-abnahme-e/f-*. Keine Freigabe. Kleine rohe Fenster vermeiden
+Zeicheninhalt; Eindeutigkeit, verteilte Inlier und der unabhaengige helle
+LCD-Rand bleiben harte Regeln. Keine automatische Abschwaechung bei fehlender
+Struktur.
 
 Bedienregel fuer neu hinzugefuegte Mittelpunkte: vor der Pruefung auf das staerkste
 3x3-lokale Shi-Tomasi-Maximum oberhalb derselben Strukturschwelle im
@@ -27,6 +29,18 @@ JEDER Seite BEIDER Achsen, jeweils mindestens 20 px vom Mittelpunkt entfernt
 Jeder Inlier wird einzeln weggelassen und der starre Fit erneut berechnet;
 bewegt sich dadurch eine OCR-Ecke um mehr als 0.5 px, wird abgelehnt.
 Dies schliesst den auf DEV-Fixtures reproduzierten einzelnen Hebelpunkt aus.
+Nach RANSAC, Streuung und Leave-one-out gelten zusaetzlich fuer die euklidischen
+Residuen ALLER Inlier des endgueltigen starren Fits: RMS <= 0.35 px UND
+Maximum <= 0.65 px, sonst rahmen_unstimmig. Genauigkeit wird damit explizit
+ueber die Konsistenz der Rahmenbereiche geprueft. DEV r13-werteplan-20261021:
+568 Fits, 6346 Inlier; Residuen-99.9%-Quantil 0.503581 px, Maximum 0.527865 px;
+RMS-99.9%-Quantil je Bild 0.286432 px, Maximum 0.286613 px. Die Grenzen geben
+0.063568 px RMS- bzw. 0.146419 px Residuen-Marge zum jeweiligen 99.9%-Quantil.
+Die Nachtkopie (39 Bilder) liefert keinen Fit (rahmen_mehrdeutig), also keine
+Residualbelege und keinen Grund zur Lockerung. Ausschliesslich diese beiden
+Entwicklungsaufnahmen bestimmen die neuen Residualgrenzen.
+Konsistenz kann keine gemeinsam falsche Bewegung aller Bereiche erkennen,
+waehrend das Glas stillsteht; dafuer bleibt nur die grobe Randpruefung.
 Shift ist die Verschiebung des Quadmittelpunktes in Rohpixeln. Rotation ist
 der vorwaerts wirkende Winkel, gleiches Vorzeichen wie ECC in track.py:
 positive Werte drehen im Bild (y nach unten) im Uhrzeigersinn; ein positiver
@@ -43,22 +57,25 @@ aktuellen Bild nicht geprueft. Mindestens drei starke Seiten und mindestens
 eine aus jedem Paar oben/unten und links/rechts sind erforderlich, sonst
 lcd_rand_fehlt. Seitenindizes: 0 oben, 1 rechts, 2 unten, 3 links.
 Im aktuellen Bild wird innerhalb +/-4 px entlang der mitgedrehten Normalen lokalisiert;
-die gefundene Position muss hoechstens 1.0 px von der Vorhersage abweichen.
+die gefundene Position muss hoechstens 2.5 px von der Vorhersage abweichen.
+Dies ist eine GROBE Plausibilitaetspruefung gegen Fehlverriegelung um mehrere
+Pixel, kein Subpixel-Genauigkeitsnachweis: die absolute Grauwertkante wandert
+mit dem Licht (gemessen bis etwa 0.9 px bei Raumlicht, mehrere px bei Daemmerung).
 JEDE starke Seite braucht mindestens 80 Prozent solcher Nachweise mit
 gleicher Polaritaet und mindestens halber Referenzstaerke (weiterhin >=18).
-Das ersetzt die zu breite 6-px-Schrittprobe: falsche 1.5-px-Bewegung und
-0.3-Grad-Drehung werden auf der Referenz abgelehnt. Die schwache Unterseite
+Polaritaet, Staerke, Seitenanteile und die Schwachseitenregel bleiben gleich.
+Die schwache Unterseite
 des DEV-Aufbaus (18.7..34.7 Graustufen bei harter Grenze 18) liefert keine
 belastbare Positionsinformation und verursachte allein falsche Ablehnungen
 bei Helligkeit x0.8 oder 3x3-Gaussfilter. Der Ausschluss folgt dieser
-grundsaetzlichen Verfuegbarkeitsentscheidung, keiner Abnahme-Anpassung.
-eingefroren am 2026-10-21 vor den Abnahme-Aufnahmen r13-abnahme-a/b-20261022.
+grundsaetzlichen Verfuegbarkeitsentscheidung.
 
 15-px-Patches und 12-px-Suchradius lassen kleine Rohbildbewegungen zu;
 Peak >=0.75 und Zweitpeak/Peak <=0.95 ausserhalb +/-3 px verlangen erkennbare
 und eindeutige Struktur. Inlier mit <=1.5 px Residuum sichern den starren Fit;
 Bewegungsgrenzen bleiben 20 px / 3 Grad. Numerische Defaults ausschliesslich
-an der benannten Entwicklungsaufnahme und ihren Fixtures festgelegt.
+an der benannten Entwicklungsaufnahme und ihren Fixtures festgelegt;
+ausgenommen die vom Controller vorgegebene grobe Randtoleranz 2.5 px.
 
 Eingaben: ausschliesslich uint8, Graustufen (H,W), BGR (H,W,3) oder BGRA
 (H,W,4), Alpha wird ignoriert. Float-/andere Typen oder Formen fuehren in
@@ -99,6 +116,8 @@ class FrameTrackingConfig:
     min_spread_px: float = 20.0
     min_inliers_per_side: int = 3
     max_leave_one_out_corner_px: float = 0.5
+    max_inlier_rms_px: float = 0.35
+    max_inlier_residual_px: float = 0.65
     min_spacing_px: float = 28.0
     corner_quality: float = 0.02
     max_candidates: int = 200
@@ -118,7 +137,7 @@ class FrameTrackingConfig:
     edge_min_points_per_side: int = 6
     edge_magnitude_fraction: float = 0.5
     edge_search_radius_px: int = 4
-    edge_position_tolerance_px: float = 1.0
+    edge_position_tolerance_px: float = 2.5
     edge_required_share: float = 0.8
     edge_required_sides: int = 3
 
@@ -146,6 +165,7 @@ class FrameTrackingConfig:
             raise ValueError("Ungueltige Bereichszahl oder Streuung")
         if (self.min_inliers_per_side < 2 or 2*self.min_inliers_per_side > self.max_regions
                 or self.max_leave_one_out_corner_px <= 0
+                or self.max_inlier_rms_px <= 0 or self.max_inlier_residual_px <= 0
                 or self.ransac_tolerance_px <= 0 or self.max_shift_px < 0 or self.max_rotation_deg < 0
                 or self.min_spacing_px <= 0 or self.interpolation_guard_px < 1
                 or self.character_margin_px < 0 or self.outer_scale <= 1 or self.outer_end_margin_px <= 0
@@ -629,6 +649,10 @@ class FrameTracker:
         loo_rotation, loo_translation = _rigid(source_sets, target_sets)
         loo_quads = self.quad @ loo_rotation.swapaxes(-1, -2) + loo_translation[:, None, :]
         if np.linalg.norm(loo_quads - predicted, axis=-1).max() > config.max_leave_one_out_corner_px:
+            return reject("rahmen_unstimmig")
+        residuals = np.linalg.norm(stable_source @ rotation.T + translation - stable_target, axis=1)
+        if (np.sqrt(np.mean(residuals**2)) > config.max_inlier_rms_px
+                or residuals.max() > config.max_inlier_residual_px):
             return reject("rahmen_unstimmig")
         centre = self.quad.mean(axis=0)
         shift = float(np.linalg.norm(rotation @ centre + translation - centre))

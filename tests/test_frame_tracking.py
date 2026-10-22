@@ -108,6 +108,14 @@ def test_freeze_alle_starken_seiten_bleiben_pflicht():
     assert not tracker._edges_visible(changed, np.eye(2), np.zeros(2))
 
 
+def test_kandidat_lcd_rand_erlaubt_lichtabhaengige_kantenlage():
+    image, quad = _freeze_lcd([0, 1, 3])
+    tracker = FrameTracker(image, quad, propose_regions(image, quad))
+    # Nur die Grauwertkante wandert; die vorhergesagte Geometrie bleibt gleich.
+    changed = cv2.warpAffine(image, np.float32([[1, 0, 2], [0, 1, 0]]), image.shape[1::-1])
+    assert tracker._edges_visible(changed, np.eye(2), np.zeros(2))
+
+
 @pytest.mark.parametrize("factor", ["2_0", "5_0"])
 def test_ecc_reproduziert_inhaltsabhaengigen_verlust(scene, factor):
     reference, quad, *_ = scene
@@ -358,7 +366,206 @@ def test_jeder_inlier_muss_stabilen_fit_tragen(scene, monkeypatch):
     assert result.reason == "rahmen_unstimmig"
 
 
-@pytest.mark.parametrize("dx,dy,angle", [(1.5, 0, 0), (0, 1.5, 0), (0, 0, 0.3)])
+def _force_region_targets(monkeypatch, tracker, targets):
+    from dispread.live import frame_tracking as ft
+
+    positions = iter(targets - tracker.sources + tracker.config.search_radius_px)
+    monkeypatch.setattr(ft, "_peak", lambda response, config: (next(positions), 1.0, False))
+
+
+@pytest.mark.parametrize("kind", ["rms", "max"])
+def test_kandidat_unstimmige_inlier_trotz_stabilem_fit_ablehnen(scene, monkeypatch, kind):
+    from dispread.live import frame_tracking as ft
+
+    reference, _, config, _, tracker = scene
+    target = tracker.sources.copy()
+    if kind == "rms":
+        target[:, 1] += np.where(np.arange(len(target)) % 2, 0.5, -0.5)
+    else:
+        target[0, 1] += 0.8
+    rotation, translation, inliers = ft._ransac(tracker.sources, target, config)
+    assert inliers.all()
+    residuals = np.linalg.norm(tracker.sources @ rotation.T + translation - target, axis=1)
+    rms, maximum = np.sqrt(np.mean(residuals**2)), residuals.max()
+    assert (rms > 0.35 and maximum < 0.65) if kind == "rms" else (rms < 0.35 and maximum > 0.65)
+    # Streuung und Leave-one-out bestehen: erst die neue Residualregel lehnt ab.
+    expected = tracker.quad @ rotation.T + translation
+    for index in range(len(target)):
+        keep = np.arange(len(target)) != index
+        r, t = ft._rigid(tracker.sources[keep], target[keep])
+        assert np.linalg.norm(tracker.quad @ r.T + t - expected, axis=1).max() < 0.5
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    assert result.quad is None
+    assert result.reason == "rahmen_unstimmig"
+
+
+@pytest.mark.parametrize("dx,dy,angle", [(3.5, 0, 0), (0, 3.5, 0), (0, 0, 1.0)])
+def test_kandidat_einstimmige_falsche_bewegung_direkt_ablehnen(scene, monkeypatch, dx, dy, angle):
+    reference, quad, _, _, tracker = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+    matrix[:, 2] += (dx, dy)
+    target = tracker.sources @ matrix[:, :2].T + matrix[:, 2]
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    assert result.quad is None
+    assert result.reason == "lcd_rand_fehlt"
+
+
+@pytest.mark.parametrize("field", ["max_inlier_rms_px", "max_inlier_residual_px"])
+@pytest.mark.parametrize("value", [0.0, -0.1, float("nan"), float("inf")])
+def test_kandidat_residualgrenzen_muessen_endlich_positiv_sein(field, value):
+    with pytest.raises(ValueError):
+        FrameTrackingConfig(**{field: value})
+
+
+@pytest.mark.parametrize("field", ["max_inlier_rms_px", "max_inlier_residual_px"])
+@pytest.mark.parametrize("margin", [-1e-6, 0.0, 1e-6])
+def test_kandidat_residualgrenzen_sind_inklusiv(scene, monkeypatch, field, margin):
+    from dataclasses import replace
+
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, _, tracker = scene
+    target = tracker.sources.copy()
+    target[:, 1] += np.where(np.arange(len(target)) % 2, 0.5, -0.5)
+    rotation, translation, inliers = ft._ransac(tracker.sources, target, config)
+    assert inliers.all()
+    residuals = np.linalg.norm(tracker.sources @ rotation.T + translation - target, axis=1)
+    threshold = np.sqrt(np.mean(residuals**2)) if field == "max_inlier_rms_px" else residuals.max()
+    config = replace(config, max_inlier_rms_px=1.0, max_inlier_residual_px=1.0)
+    config = replace(config, **{field: float(threshold + margin)})
+    proposal = propose_regions(reference, quad, config)
+    tracker = FrameTracker(reference, quad, proposal, config)
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    if margin < 0:
+        assert result.quad is None
+        assert result.reason == "rahmen_unstimmig"
+    else:
+        close_quad(result, quad)
+
+
+@pytest.mark.slow
+def test_kandidat_zufall_bewegung_teilverdeckung_und_lokaler_bias(scene, record_property):
+    from collections import Counter
+
+    reference, quad, config, proposal, tracker = scene
+    rng = np.random.default_rng(1307)
+    radius = config.patch_size // 2 + config.search_radius_px
+    reasons, errors = Counter(), []
+    for trial in range(400):
+        image = reference.copy()
+        for index in rng.choice(len(proposal.regions), rng.integers(1, 9), replace=False):
+            x, y = proposal.regions[index].centre
+            if rng.random() < 0.5:
+                dx, dy = rng.integers(-8, 9, 2)
+                image[y+dy-6:y+dy+6, x+dx-6:x+dx+6] = int(rng.integers(0, 256))
+            else:
+                direction = rng.uniform(-np.pi, np.pi)
+                bias = rng.uniform(0, 4) * np.array([np.cos(direction), np.sin(direction)])
+                window = reference[y-radius-5:y+radius+6, x-radius-5:x+radius+6]
+                shifted = cv2.warpAffine(window, np.float32([[1, 0, bias[0]], [0, 1, bias[1]]]),
+                                         window.shape[1::-1], borderMode=cv2.BORDER_REPLICATE)
+                image[y-radius:y+radius+1, x-radius:x+radius+1] = shifted[5:-5, 5:-5]
+        matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), float(rng.uniform(-2.5, 2.5)), 1)
+        matrix[:, 2] += rng.uniform(-10, 10, 2)
+        moved = cv2.warpAffine(image, matrix, image.shape[1::-1])
+        expected = quad @ matrix[:, :2].T + matrix[:, 2]
+        result = tracker.update(moved)
+        reasons[result.reason or "ok"] += 1
+        if result.quad is not None:
+            error = float(np.linalg.norm(np.asarray(result.quad) - expected, axis=1).max())
+            assert error <= 1.0, (trial, error, result)
+            errors.append(error)
+    assert errors
+    record_property("safety_sweep", json.dumps({"seed": 1307, "trials": 400, "reasons": dict(reasons),
+                                               "max_accepted_corner_error_px": max(errors)}))
+
+
+def _paste_region_motion(reference, proposal, radius, matrix, indices):
+    moved = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    image = reference.copy()
+    for index in indices:
+        x, y = proposal.regions[index].centre
+        image[y-radius:y+radius+1, x-radius:x+radius+1] = moved[y-radius:y+radius+1, x-radius:x+radius+1]
+    return image
+
+
+@pytest.mark.slow
+def test_kandidat_gemeinsam_falsche_rahmenbewegung_dokumentierte_grenze(scene, record_property):
+    # Physikalisch unplausibler Sonderfall rev9: alle Fenster luegen, Glas steht.
+    reference, quad, config, proposal, tracker = scene
+    radius = config.patch_size // 2 + config.search_radius_px
+    reasons, errors, worst = {}, [], None
+    for angle in np.linspace(-1.2, 1.2, 13):
+        for dx in np.linspace(-4, 4, 17):
+            for dy in np.linspace(-4, 4, 17):
+                matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), float(angle), 1)
+                matrix[:, 2] += (dx, dy)
+                image = _paste_region_motion(reference, proposal, radius, matrix, range(len(proposal.regions)))
+                result = tracker.update(image)
+                reason = result.reason or "ok"
+                reasons[reason] = reasons.get(reason, 0) + 1
+                if result.quad is not None:
+                    error = float(np.linalg.norm(np.asarray(result.quad) - quad, axis=1).max())
+                    if not errors or error > max(errors):
+                        worst = [float(angle), float(dx), float(dy)]
+                    errors.append(error)
+    # Die grobe Randpruefung ist ausdruecklich kein Ein-Pixel-Genauigkeitsbeleg.
+    assert max(errors) > 1.0
+    record_property("all_regions_wrong", json.dumps({"trials": sum(reasons.values()), "reasons": reasons,
+                                                    "max_accepted_corner_error_px": max(errors),
+                                                    "worst_angle_dx_dy": worst}))
+
+
+@pytest.mark.parametrize("direction", ["x+", "x-", "y+", "y-", "angle+", "angle-"])
+def test_kandidat_grobe_randgrenze_bei_direkter_falscher_bewegung(scene, monkeypatch, record_property, direction):
+    reference, quad, _, _, tracker = scene
+    rotation = direction.startswith("angle")
+    sign = 1 if direction.endswith("+") else -1
+    values = np.arange(0, 1.51, 0.01) if rotation else np.arange(0, 6.01, 0.05)
+    kept, rejected = [], []
+    for value in values:
+        angle = sign * value if rotation else 0.0
+        matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), float(angle), 1)
+        if not rotation:
+            matrix[0 if direction.startswith("x") else 1, 2] += sign * value
+        _force_region_targets(monkeypatch, tracker, tracker.sources @ matrix[:, :2].T + matrix[:, 2])
+        result = tracker.update(reference)
+        if result.quad is None:
+            assert result.reason == "lcd_rand_fehlt"
+            rejected.append(float(value))
+        else:
+            kept.append(float(value))
+    assert kept and rejected
+    assert max(kept) < min(rejected)  # Auf diesem Raster keine spaetere Wiederannahme.
+    record_property("direct_wrong_motion", json.dumps({"direction": direction, "unit": "deg" if rotation else "px",
+                                                      "step": 0.01 if rotation else 0.05,
+                                                      "last_kept": max(kept), "rejected_from": min(rejected),
+                                                      "tested_to": float(values[-1])}))
+
+
+@pytest.mark.parametrize("subset", ["right", "bottom"])
+def test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie(scene, subset):
+    # rev6/rev9: Eine ganze Seite meldet eine andere Bewegung als der Rest.
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, proposal, tracker = scene
+    local = (tracker.sources - quad.mean(axis=0)) @ ft._axes(quad).T
+    indices = np.flatnonzero(local[:, 0 if subset == "right" else 1] > 20)
+    radius = config.patch_size // 2 + config.search_radius_px
+    for angle in (-0.4, 0, 0.4):
+        for bias in (0.5, 1.0, 1.5, 2.0, 3.0, 4.0):
+            matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+            matrix[:, 2] += (0, bias)
+            image = _paste_region_motion(reference, proposal, radius, matrix, indices)
+            result = tracker.update(image)
+            if result.quad is not None:
+                close_quad(result, quad)
+
+
+@pytest.mark.parametrize("dx,dy,angle", [(4.0, 0, 0), (0, 4.0, 0), (0, 0, 1.0)])
 def test_lcd_rand_verwirft_falsche_bewegung(scene, dx, dy, angle):
     reference, quad, config, proposal, tracker = scene
     matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
@@ -574,9 +781,13 @@ def test_automatic_proposal_is_unchanged(name, digest):
 
     quad = json.loads((FIXTURES / 'r13-fixtures.json').read_text())['quad']
     proposal = propose_regions(cv2.imread(str(FIXTURES / name)), quad)
-    # Freeze 2026-10-21: nur LCD-Modell, LCD-Metriken und Seitenminimum geaendert;
-    # Rahmenregionen und alle anderen Vorschlagsdaten gegen HEAD verglichen.
-    assert sha256(json.dumps(proposal.to_dict(), sort_keys=True).encode()).hexdigest() == digest
+    # Kandidat aendert nur diese Config-Felder; alle Vorschlagsdaten bleiben
+    # gegen den Freeze 2026-10-21 bytegleich geprueft, inklusive LCD-Modell.
+    frozen = proposal.to_dict()
+    frozen["config"]["edge_position_tolerance_px"] = 1.0
+    del frozen["config"]["max_inlier_rms_px"]
+    del frozen["config"]["max_inlier_residual_px"]
+    assert sha256(json.dumps(frozen, sort_keys=True).encode()).hexdigest() == digest
 
 
 def test_manual_regions_preserve_automatic_checks_and_edge_model(scene):
