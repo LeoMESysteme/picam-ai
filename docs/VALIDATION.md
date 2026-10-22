@@ -3360,3 +3360,31 @@ Prüfsumme `frame_tracking.py` `7400f4ff…`.
 **Kein Abnahme-Lauf:** eine Aufstellung, unbewegt, 3 Hz statt 30 Hz, keine
 Bewegung oder Abdeckung durch eine Person. Live-Läufe mit dem neuen Tracker
 brauchen eine neue Einrichtung mit namentlicher Bestätigung der Rahmenbereiche.
+
+## 2026-10-22 — R13: Abnahme-Aufnahmen bei Dämmerlicht (eingefrorener Stand) { #r13-abnahme-daemmerung-2026-10-22 }
+
+Aufnahmen `var/diagnostics/r13-abnahme-a-20261022` (429 PNG, 2 Hz, Werteplan
+`10:40,5:40,1:30,2:40,0.5:30,1:15`) und `r13-abnahme-b-10hz-20261022`
+(1341 JPEG, 10 Hz, `1:20,2:30,5:30,10:20,0.5:20,1:10`), 08:15–08:29 MESZ,
+Aufstellung unverändert, Rückstellung nach beiden Aufnahmen geprüft. **Das
+Raumlicht war noch aus** (Bildmittel 3–4 gegen 153 bei Licht): nur Dämmerlicht,
+das hinterleuchtete LCD gut sichtbar, Rahmen und Gehäuse kaum. Ausgewertet
+einmal mit dem eingefrorenen Stand (`frame_tracking.py` Prüfsumme `7400f4ff…`
+vorher geprüft), nichts nachgestellt.
+
+| Settled-Bilder gehalten | Rahmen-Tracker (eingefroren) | alter ECC |
+| --- | ---: | ---: |
+| A (2 Hz PNG) | 0/410 (`rahmen_mehrdeutig`) | 329/410 (Faktor 2: 2/81) |
+| B (10 Hz JPEG) | 0/1241 | 940/1241 |
+
+Replay A mit ECC durch die Lesekette: 0/285 Fehllesungen, VALID je Faktor
+78–95 %, Faktor 2: 0 %. **Deutung:** Der Leser liest das hinterleuchtete LCD
+auch bei Dämmerlicht; der Rahmen-Tracker braucht Umgebungslicht auf Rahmen und
+Gehäuse und lehnt ohne es ab (sicher, aber nicht verfügbar). Für den Betrieb
+gilt weiter: nur mit Raumlicht. Die Abnahme bei Raumlicht steht noch aus.
+
+**Prototyp LCD-Fenster-Tracker** (Branch `exp/r13-fenster-tracker`, nicht im
+Live-Pfad): Bewegung nur aus den Rändern des hinterleuchteten LCD-Fensters.
+Gehalten (settled): Entwicklung 98,7 %, Nacht 100 %, Dämmerung A 96,6 %,
+Dämmerung B 50,6 %; rund 28 ms je Bild. Vielversprechend für Dunkelheit,
+aber nicht reif (B, Laufzeit) und nicht freigegeben.
