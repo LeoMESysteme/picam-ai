@@ -1,25 +1,26 @@
-# Status — Stand 2026-10-21
+# Status — Stand 2026-10-22
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
-## Wiedereinstieg: R13 am 2026-10-23
+## R13 Nachführung: gebaut, Abnahme nicht bestanden (2026-10-22)
 
-Der [Plan zur strukturstabilen Nachführung](superpowers/plans/2026-10-21-r13-strukturstabile-nachfuehrung.md)
-ist am 2026-10-21 freigegeben und gespeichert, im ersten R13-Punkt von
-TODO referenziert. Auf Wunsch der Person beginnt die Umsetzung erst
-übermorgen, am **2026-10-23**. Diagnoseaufzeichnung und Tracker-Fix sind
-noch nicht implementiert; in dieser Runde wurden nur Plan und Verweise
-gespeichert.
+Autonom umgesetzt (21.–22.10., Freigabe der Person für Kamera und
+`set norm`), nur auf `feat/messpfad-live`, **nicht in `master`**:
+Rahmen-Tracker, Einbindung in Einrichtung/Profil/Lauf, Diagnosebilder und
+Ereignismarken, manuelle Korrektur der Rahmenbereiche, Offline-Replay. Der
+inhaltsabhängige Trackingverlust ist an echten Bildern reproduziert; auf dem
+Entwicklungsdatensatz hält der neue Tracker 100 % ohne Fehllesung.
 
-Mit Abschnitt 1 des Plans beginnen: vorhandenen `CameraOwner` um eine
-begrenzte Diagnose ergänzen, Fehler an echten Bildern reproduzieren und
-die Eignung fester Rahmenstrukturen prüfen. Erst danach Hauptintegration.
-Zuerst GSV-2AS an zwei Aufstellungen; automatische Bereichsvorschläge mit
-manueller Auswahl als Fallback. Geplante Abnahme: 0 Fehllesungen,
-mindestens 99 % VALID je stabilem Faktorfenster und mindestens 27 Bilder/s.
-OQ-26 bleibt offen, OQ-44/OQ-45 bleiben eigene Aufgaben.
+Die getrennte Abnahme bei Raumlicht ist **nicht bestanden**: Die absolute
+Lage der LCD-Fensterkante wandert mit dem Licht, die unabhängige Randprüfung
+lehnt deshalb fast alles ab, obwohl die Lage selbst richtig gemessen wird.
+Ohne Raumlicht lehnt der Rahmen-Tracker immer ab. Ein Kandidat mit grober
+Randprüfung (`exp/r13-randpruefung-grob`) erreicht 91–100 % bei 0
+Fehllesungen, vergrößert aber den blinden Fleck auf bis zu 5,6 px.
+**Entscheidung der Person nötig** (siehe TODO, Punkt R13). Zahlen:
+[VALIDATION](VALIDATION.md#r13-abnahme-ef-2026-10-22).
 
 ## Wiki-Abgleich
 

@@ -1,7 +1,12 @@
 # R13: Nachführung vom wechselnden Zahleninhalt trennen
 
 **Freigegeben:** 2026-10-21. **Umsetzung vorgesehen:** 2026-10-23.
-**Stand:** Plan gespeichert; Implementierung und neue Messungen noch offen.
+**Stand 2026-10-22:** Abschnitte 1–3 umgesetzt (R13-1 bis R13-5 auf
+`feat/messpfad-live`), Abschnitt 4 offline durchgeführt: Abnahme bei
+Raumlicht **nicht bestanden** (lichtabhängige Kantenlage der Randprüfung),
+Entscheidung der Person offen; siehe
+[VALIDATION](../../VALIDATION.md#r13-abnahme-ef-2026-10-22). Reale
+Live-Abnahme an zwei Aufstellungen mit der Person steht aus.
 Arbeitsliste: [TODO.md](../../../TODO.md),
 offene Frage: [OQ-26](../../open-questions.md#oq-26).
 

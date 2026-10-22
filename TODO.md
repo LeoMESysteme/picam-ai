@@ -305,8 +305,25 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 
 1. **Nachführung bei großen Wertwechseln bearbeiten (R13)**
    — [freigegebener Plan](docs/superpowers/plans/2026-10-21-r13-strukturstabile-nachfuehrung.md),
-   Umsetzung ab **2026-10-23** vorgesehen, noch nicht begonnen.
-   ([OQ-26](docs/open-questions.md#oq-26)): Strenger Werteplan-Lauf
+   **Stand 2026-10-22 mittags: gebaut, Abnahme NICHT bestanden, Entscheidung
+   der Person nötig.** Auf `feat/messpfad-live` (nicht in `master`):
+   Rahmen-Tracker (R13-1, eingefroren `52a64a7`), Einrichtung/Profil/Lauf
+   (R13-2), Diagnosebilder und Ereignismarken (R13-3), manuelle Korrektur der
+   Rahmenbereiche (R13-4), Offline-Replay (R13-5). Entwicklung: 100 %
+   gehalten, 0 Fehllesungen. Abnahme bei Raumlicht (C–F) durchgefallen: die
+   absolute Lage der LCD-Fensterkante wandert mit dem Licht (bis ~0,9 px),
+   die Randprüfung (1,0 px) lehnt deshalb ab, obwohl die Rahmenbereiche die
+   Lage richtig messen (0,15 px zu ECC). Ohne Raumlicht/bei Dämmerung lehnt
+   der Rahmen-Tracker immer ab. Kandidat R13-7 (`exp/r13-randpruefung-grob`,
+   Randprüfung 2,5 px): F 100 %, E Faktor 1/2 92/91 %, 0 Fehllesungen,
+   aber blinder Fleck bis 5,6 px. Prototyp Fenster-Tracker
+   (`exp/r13-fenster-tracker`) gut im Dunkeln, scheitert bei Licht.
+   **Zu entscheiden:** grobe Randprüfung mit größerem blindem Fleck, ein
+   anderer unabhängiger Lagebeleg, oder Betrieb vorerst mit altem ECC
+   (inhaltsabhängig). Zahlen: [VALIDATION](docs/VALIDATION.md#r13-abnahme-ef-2026-10-22),
+   Ledger `.superpowers/sdd/2026-10-21-r13/progress.md`. Die Werkbank-Sitzung
+   `live-20261021T151835Z` hat kein Rahmenprofil; mit R13 neu einrichten.
+   ([OQ-26](docs/open-questions.md#oq-26)) Auslöser: Strenger Werteplan-Lauf
    `live-20261021T151835Z/run-01` abgeschlossen: 806 s, 0/11 137 Fehllesungen,
    aber 8074 Trackingverluste; bei Faktor 2 und 5 in stabilen
    Referenzfenstern kein VALID. Rückstellung bestätigt. Nachführung

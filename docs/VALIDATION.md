@@ -3416,3 +3416,33 @@ zu falschen Ablehnungen. Auch der Fenster-Prototyp (Grünsignal) hält auf C
 Folge: Die R13-Live-Einbindung wird nicht nach `master` gebracht. Eine
 Änderung der Randprüfung ist eine Designentscheidung und braucht eine neue,
 getrennte Abnahme (C/D sind dafür nicht mehr unabhängig).
+
+## 2026-10-22 — R13: unabhängige Abnahme E/F bei Raumlicht { #r13-abnahme-ef-2026-10-22 }
+
+Aufnahmen `var/diagnostics/r13-abnahme-e-hell-20261022` (429 PNG, 2 Hz, Werteplan
+`2:40,1:30,10:40,0.5:30,5:40,1:15`) und `r13-abnahme-f-hell-10hz-20261022`
+(1341 JPEG, 10 Hz, `5:30,0.5:20,2:30,1:20,10:20,1:10`), 12:57–13:18 MESZ,
+Raumlicht (Bildmittel ~182), Rückstellung geprüft. Aufgenommen, bevor der
+Kandidat ausgewertet wurde; einmal ausgewertet, Prüfsummen vorher kontrolliert,
+nichts nachgestellt.
+
+| VALID je stabilem Referenzfenster (Replay) | 1 | 2 | 0,5 | 5 | 10 | Fehllesungen |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| eingefroren (`52a64a7`), E | 0 % | 0 % | 0 % | 0 % | 0 % | – |
+| eingefroren, F | 0 % | 0 % | 0 % | 0 % | 0 % | – |
+| Kandidat R13-7 (`c553d44`), E | 92,1 % | 90,7 % | 100 % | 100 % | 100 % | 0/321 |
+| Kandidat R13-7, F | 100 % | 100 % | 100 % | 100 % | 100 % | 0/900 |
+
+Eingefrorener Stand: alle Bilder `lcd_rand_fehlt` (lichtabhängige Kantenlage,
+siehe [Abnahme C/D](#r13-abnahme-licht-2026-10-22)). Kandidat R13-7 (Randprüfung
+grob 2,5 px, Inlier-Residuen RMS ≤ 0,35 px / Max ≤ 0,65 px, Branch
+`exp/r13-randpruefung-grob`): verfehlt das Ziel ≥ 99 % bei E für Faktor 1 und 2
+(`rahmen_unstimmig` aus der Residuengrenze); sein blinder Fleck bei von allen
+Rahmenbereichen gleich gemeldeter falscher Bewegung wächst auf beobachtete
+5,6 px (eingefroren: ~2,0 px). **Keiner der beiden Stände ist bestanden.**
+Alter ECC auf E/F: Faktor 2 3/82 bzw. 9/306 gehalten (bekanntes Problem).
+
+**Entscheidung offen (Person):** Randprüfung grob und damit größerer blinder
+Fleck gegen Verfügbarkeit, oder ein anderer unabhängiger Lagebeleg. Die
+R13-Live-Einbindung bleibt bis dahin auf `feat/messpfad-live` und geht nicht
+nach `master`.
