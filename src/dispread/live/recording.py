@@ -54,7 +54,12 @@ class SyncRecording:
     steps: list[tuple[float, str]]
 
 
-def load_recording(recording_dir):
+def load_recording(recording_dir, *, allow_no_plan=False):
+    """Fehlende Befehlsdatei optional als Segment ohne_plan zulassen.
+
+    Vorhandene, aber ungueltige Befehlsdateien bleiben Fehler. Die bestehende
+    Integritaets- und Zeitbasispruefung gilt auch ohne Werteplan.
+    """
     recording_dir = Path(recording_dir)
     session = json.loads((recording_dir / "session.json").read_text(encoding="utf-8"))
     if not isinstance(session, dict):
@@ -64,7 +69,9 @@ def load_recording(recording_dir):
             or any(offsets.get(key) is not None and not isinstance(offsets[key], int) for key in ("start", "end"))):
         raise ValueError("Ungueltiger clock_offset_boottime_minus_monotonic_ns")
     frames = _rows(recording_dir / "frames.jsonl")
-    commands = _rows(recording_dir / "commands.jsonl")
+    commands_path = recording_dir / "commands.jsonl"
+    without_plan = allow_no_plan and not commands_path.exists()
+    commands = [] if without_plan else _rows(commands_path)
     serial = _rows(recording_dir / "serial.jsonl")
     for key, entries in (("frames_recorded", frames), ("serial_lines_recorded", serial),
                          ("commands_jsonl_event_count", commands)):
@@ -88,6 +95,9 @@ def load_recording(recording_dir):
             steps.append((_seconds(entry["t_boot"]), factor))
         elif entry.get("event") == "resume_transmission" and label == "restore":
             steps.append((_seconds(entry["t_boot"]), "restore"))
+    if without_plan:
+        first_stamp = frames[0]["capture_timestamp"]
+        steps = [(to_boottime_ns(first_stamp, session) / 1e9, "ohne_plan")]
     if not any(factor != "restore" for _, factor in steps):
         raise ValueError("Keine schedule-Wiederanlaufmarken")
     starts = [step[0] for step in steps]
