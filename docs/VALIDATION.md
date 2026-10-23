@@ -3365,7 +3365,9 @@ brauchen eine neue Einrichtung mit namentlicher Bestätigung der Rahmenbereiche.
 
 Aufnahmen `var/diagnostics/r13-abnahme-a-20261022` (429 PNG, 2 Hz, Werteplan
 `10:40,5:40,1:30,2:40,0.5:30,1:15`) und `r13-abnahme-b-10hz-20261022`
-(1341 JPEG, 10 Hz, `1:20,2:30,5:30,10:20,0.5:20,1:10`), 08:15–08:29 MESZ,
+(1341 JPEG, 10 Hz, `1:20,2:30,5:30,10:20,0.5:20,1:10`; Rohdaten beider
+Aufnahmen am 2026-10-23 aus Platzgründen mit Zustimmung der Person gelöscht,
+die Auswertungen liegen im Ledger `.superpowers/sdd/2026-10-21-r13/`), 08:15–08:29 MESZ,
 Aufstellung unverändert, Rückstellung nach beiden Aufnahmen geprüft. **Das
 Raumlicht war noch aus** (Bildmittel 3–4 gegen 153 bei Licht): nur Dämmerlicht,
 das hinterleuchtete LCD gut sichtbar, Rahmen und Gehäuse kaum. Ausgewertet

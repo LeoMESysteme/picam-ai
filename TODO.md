@@ -334,6 +334,16 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    wird relativ zum Arbeitsverzeichnis aufgelöst. Das Snippet in Anleitung
    Kapitel 10 liest Port/Baud seit dem Wiki-Abgleich aus dem Rückstellpunkt.
 
+**Speicherbudget für den Betrieb (neu 2026-10-23):** Im Unternehmen läuft das
+Werkzeug voraussichtlich auf einem Pi 5 mit 64-GB-SD-Karte, ohne SSD.
+Messläufe deshalb weiter auf der SD-Karte testen. Zu bauen: Aufbewahrung und
+Rotation der Laufdaten (ein 10-min-Lauf ≈ 10 MB `records.jsonl`, mit
+Diagnosebildern bis 0,6 GB), Diagnosebilder standardmäßig aus, eine Platzprüfung
+vor dem Laufstart mit klarer Meldung und die offene `JsonlSink`-Rotation.
+Für die Entwicklung kann eine NVMe-SSD (500 GB, vorhanden) Aufnahmen,
+Datensätze und die fehlende `var/`-Sicherung aufnehmen, aber nicht die
+Messläufe selbst.
+
 **Pi-Betrieb (für ruhige Messläufe):**
 
 * Die Forgejo-CI läuft auf demselben Pi. Jeder Push nach `master` startet
