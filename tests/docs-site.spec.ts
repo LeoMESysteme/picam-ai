@@ -1300,3 +1300,66 @@ test('Glossar ohne JavaScript bleibt lesbar', async ({ browser, baseURL }) => {
     await expect(page.locator('.wiki-glossar-controls')).toHaveCount(0);
   } finally { await context.close(); }
 });
+
+
+test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', async ({ page }) => {
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  const chain = page.locator('.wiki-kette');
+  const nodes = chain.locator('ol.wiki-kette-list > li > a.wiki-kette-node');
+  const ids = ['frames', 'detect', 'track', 'rectify', 'ocr', 'validate', 'sink'];
+  await expect(nodes).toHaveCount(7);
+  expect(await nodes.evaluateAll(elements => elements.map(node => (node as HTMLElement).dataset.stufe))).toEqual(ids);
+  await expect(nodes.locator('.wiki-chip')).toHaveText([
+    'teilweise', 'fertig', 'fertig', 'fertig', 'fertig', 'fertig', 'teilweise',
+  ]);
+  await expect(chain.locator('figcaption')).toHaveText('Verarbeitungskette · Überfahren zeigt Zweck und Anbindung');
+  const ocr = chain.locator('.wiki-kette-node[data-stufe="ocr"]');
+  await expect(ocr).toHaveAttribute('href', /\/api\/ocr\.html$/);
+  await ocr.hover();
+  const popup = page.locator('#wiki-hint[data-open="true"]');
+  await expect(popup).toContainText('Wert lesen · ocr/');
+  await expect(popup).toContainText('Er liest die Wertzellen der Anzeige und prüft Leerzellen und Format.');
+  await expect(popup).toContainText('Einstellung:');
+  await expect(popup).toContainText('Anbindung:');
+  await expect(popup.locator('code')).toHaveText('src/dispread/ocr/');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(chain).not.toHaveClass(/wiki-kette--quer/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await ocr.click();
+  await expect(page).toHaveURL(/\/api\/ocr\.html$/);
+});
+
+test('Verarbeitungskette bleibt ohne Daten beim Text', async ({ page }) => {
+  await page.route('**/kette.json', route => route.abort());
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  await expect(page.locator('.wiki-kette')).toHaveText(
+    'Die Verarbeitungskette als Grafik braucht JavaScript; der Text unten beschreibt jede Stufe.',
+  );
+  await expect(page.locator('.wiki-kette-node')).toHaveCount(0);
+});
+
+test('Verarbeitungskette räumt bei Sofortnavigation auf und bleibt ohne JavaScript lesbar', async ({ page, browser, baseURL }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  await expect(page.locator('.wiki-kette-node')).toHaveCount(7);
+  await page.evaluate(() => { (window as any).__ketteNavigation = true; });
+  await page.locator('.wiki-kette-node[data-stufe="ocr"]').click();
+  await expect(page).toHaveURL(/\/api\/ocr\.html$/);
+  await page.goBack();
+  await expect(page.locator('.wiki-kette-node')).toHaveCount(7);
+  await expect(page.locator('.wiki-kette-figure')).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).__ketteNavigation)).toBe(true);
+  await page.locator('.wiki-kette-node[data-stufe="frames"]').focus();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Bildquelle · frames/');
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  try {
+    const plain = await context.newPage();
+    await plain.goto('/docs/anleitung/01-kette-verstehen.html');
+    await expect(plain.locator('.wiki-kette')).toContainText('Die Verarbeitungskette als Grafik braucht JavaScript');
+    await expect(plain.locator('.wiki-kette-node')).toHaveCount(0);
+    await expect(plain.locator('h2').filter({ hasText: 'Die sechs Stufen und wo sie wohnen' })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

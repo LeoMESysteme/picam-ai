@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -192,6 +193,7 @@ def wiki_tree(tmp_path: Path) -> Path:
         (tmp_path / name).write_text("# Titel\n", encoding="utf-8")
     (tmp_path / "docs/anleitung").mkdir(parents=True)
     (tmp_path / "docs/anleitung/seite.md").write_text("---\nweg: entwickeln\n---\n# Titel\n", encoding="utf-8")
+    write_kette_tree(tmp_path)
     return tmp_path
 
 
@@ -316,3 +318,101 @@ def test_cli_checks_glossary(wiki_tree: Path) -> None:
     result = run_check(wiki_tree)
     assert result.returncode == 1
     assert result.stderr.strip() == "glossar.md:5: ROI: Metazeile fehlt / falsche Form"
+
+
+KETTE_IDS = ('frames', 'detect', 'track', 'rectify', 'ocr', 'validate', 'sink')
+KETTE_TITLES = ('Bildquelle', 'Anzeige finden', 'Nachführen', 'Entzerren', 'Wert lesen', 'Freigabe', 'Ausgabe')
+
+
+def write_kette_tree(root: Path) -> dict:
+    data = {'schema': 'kette_v1', 'stufen': []}
+    for stage_id, title in zip(KETTE_IDS, KETTE_TITLES, strict=True):
+        stage = {
+            'id': stage_id, 'titel': title, 'zustand': 'fertig',
+            'zweck': 'Verarbeitet das Bild.', 'einstellung': 'Bestätigtes Profil.',
+            'anbindung': f'src/dispread/{stage_id}.py',
+            'api': f'api/{stage_id}.html', 'doku': 'docs/anleitung/seite.html',
+        }
+        data['stufen'].append(stage)
+        for source in (stage['anbindung'], f'docs-site/api/{stage_id}.md'):
+            path = root / source
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+    path = root / 'docs-site/assets/data/kette.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding='utf-8')
+    return data
+
+
+def test_kette_valid(wiki_tree: Path) -> None:
+    data = write_kette_tree(wiki_tree)
+    (wiki_tree / 'src/dispread/frames.py').unlink()
+    (wiki_tree / 'src/dispread/frames').mkdir()
+    data['stufen'][0]['anbindung'] = 'src/dispread/frames'
+    for index, state in enumerate(('fertig', 'gebaut', 'teilweise', 'außer Betrieb')):
+        data['stufen'][index]['zustand'] = state
+    assert wiki_check.check_kette(data, wiki_tree) == []
+
+
+def test_kette_order(wiki_tree: Path) -> None:
+    data = write_kette_tree(wiki_tree)
+    data['stufen'].reverse()
+    assert any('Reihenfolge' in error for error in wiki_check.check_kette(data, wiki_tree))
+
+
+def test_kette_missing_module(wiki_tree: Path) -> None:
+    data = write_kette_tree(wiki_tree)
+    (wiki_tree / 'src/dispread/ocr.py').unlink()
+    errors = wiki_check.check_kette(data, wiki_tree)
+    assert len(errors) == 1
+    assert 'src/dispread/ocr.py' in errors[0]
+
+
+@pytest.mark.parametrize('field,value', [
+    ('titel', ''), ('titel', 'Anderer Titel'), ('zweck', 'x' * 161),
+    ('einstellung', None), ('zustand', 'abgenommen'),
+    ('anbindung', 'scripts/wiki-check.py'), ('anbindung', 'src/dispread/../../README.md'),
+    ('api', 'docs/anleitung/seite.html'), ('api', 'api/fehlt.html'),
+    ('api', 'api/../frames.html'), ('api', 'api/frames.md'),
+    ('doku', 'api/frames.html'), ('doku', 'docs/fehlt.html'),
+    ('doku', 'docs/../README.html'),
+])
+def test_kette_rejects_invalid_fields(wiki_tree: Path, field: str, value: object) -> None:
+    data = write_kette_tree(wiki_tree)
+    data['stufen'][0][field] = value
+    assert any(field in error for error in wiki_check.check_kette(data, wiki_tree))
+
+
+@pytest.mark.parametrize('field', ['id', 'titel', 'zustand', 'zweck', 'einstellung', 'anbindung', 'api', 'doku'])
+def test_kette_requires_fields(wiki_tree: Path, field: str) -> None:
+    data = write_kette_tree(wiki_tree)
+    del data['stufen'][0][field]
+    assert any(field in error for error in wiki_check.check_kette(data, wiki_tree))
+
+
+@pytest.mark.parametrize('data', [None, [], {}, {'schema': 'falsch', 'stufen': []},
+                                  {'schema': 'kette_v1', 'stufen': None},
+                                  {'schema': 'kette_v1', 'stufen': [None]}])
+def test_kette_rejects_invalid_schema(wiki_tree: Path, data: object) -> None:
+    assert wiki_check.check_kette(data, wiki_tree)
+
+
+@pytest.mark.parametrize('content', [None, '{', '{"schema": "falsch", "stufen": []}'])
+def test_cli_checks_kette(wiki_tree: Path, content: str | None) -> None:
+    path = wiki_tree / 'docs-site/assets/data/kette.json'
+    if content is None:
+        path.unlink()
+    else:
+        path.write_text(content, encoding='utf-8')
+    result = run_check(wiki_tree)
+    assert result.returncode == 1
+    assert 'kette.json' in result.stderr
+    assert 'Traceback' not in result.stderr
+
+
+def test_kette_repository_data() -> None:
+    data = json.loads((ROOT / 'docs-site/assets/data/kette.json').read_text(encoding='utf-8'))
+    assert wiki_check.check_kette(data, ROOT) == []
+    assert [stage['zustand'] for stage in data['stufen']] == [
+        'teilweise', 'fertig', 'fertig', 'fertig', 'fertig', 'fertig', 'teilweise',
+    ]

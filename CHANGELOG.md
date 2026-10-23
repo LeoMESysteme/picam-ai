@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Interaktive Verarbeitungskette mit sieben geordneten Stufen,
+  belegten Zuständen und API-Verweisen ergänzt. Hinweise erklären Zweck,
+  Einstellung und Anbindung; die Darstellung folgt der Containerbreite.
+  Verbindungslinien zeichnen sich bei Sichtbarkeit gestaffelt, reduzierte
+  Bewegung bleibt statisch. Ohne Daten oder JavaScript bleibt der Ersatztext
+  erhalten. `wiki-check.py --check` prüft Schema, Reihenfolge, Textgrenzen und
+  vorhandene Quellpfade der neuen `kette.json`.
+
 * 2026-10-23: Glossar als filterbarer Begriffsindex mit 50 vollständigen
   Definitionen, festen Metazeilen und erhaltenen Abschnittsankern. A–Z,
   Wegfilter und gruppierte Vorkommen erschließen die Begriffe; Hinweise

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shlex
 import sys
@@ -15,6 +16,10 @@ PATTERNS = {
     "wiki-setting": ("Einstellung", ("Wozu", "Im Hintergrund", "Standard", "Ändern?", "Quelle")),
     "wiki-seam": ("Trennstelle", ("Vertrag", "Darf geändert werden", "Bleibt unverändert", "Tests")),
 }
+KETTE_IDS = ("frames", "detect", "track", "rectify", "ocr", "validate", "sink")
+KETTE_TITLES = ("Bildquelle", "Anzeige finden", "Nachführen", "Entzerren", "Wert lesen", "Freigabe", "Ausgabe")
+KETTE_STATES = ("fertig", "gebaut", "teilweise", "außer Betrieb")
+KETTE_PATH = "docs-site/assets/data/kette.json"
 
 
 def check_front_matter(md_text: str, path: str) -> list[str]:
@@ -149,6 +154,50 @@ def check_glossary(md_text: str) -> list[str]:
     return errors
 
 
+def check_kette(data: object, root: Path) -> list[str]:
+    """Prüft die sieben Stufen samt Textgrenzen und Quellen im Repository."""
+    if not isinstance(data, dict) or data.get("schema") != "kette_v1":
+        return [f"{KETTE_PATH}: Schema muss kette_v1 sein"]
+    stages = data.get("stufen")
+    if not isinstance(stages, list):
+        return [f"{KETTE_PATH}: stufen muss eine Liste sein"]
+    errors = []
+    if [stage.get("id") if isinstance(stage, dict) else None for stage in stages] != list(KETTE_IDS):
+        errors.append(f'{KETTE_PATH}: Reihenfolge muss {", ".join(KETTE_IDS)} sein')
+    fields = ("id", "titel", "zustand", "zweck", "einstellung", "anbindung", "api", "doku")
+    for index, stage in enumerate(stages):
+        prefix = f"{KETTE_PATH}: stufen[{index}]"
+        if not isinstance(stage, dict):
+            errors.append(f"{prefix}: Stufe muss ein Objekt sein")
+            continue
+        for field in fields:
+            value = stage.get(field)
+            if not isinstance(value, str) or not value.strip() or len(value) > 160:
+                errors.append(f"{prefix}: {field} muss 1–160 Zeichen enthalten")
+        if index < len(KETTE_TITLES) and stage.get("titel") != KETTE_TITLES[index]:
+            errors.append(f"{prefix}: titel muss {KETTE_TITLES[index]} sein")
+        if stage.get("zustand") not in KETTE_STATES:
+            errors.append(f'{prefix}: zustand unbekannt (erlaubt: {"|".join(KETTE_STATES)})')
+        for field, directory in (("anbindung", "src/dispread"), ("api", "api"), ("doku", "docs")):
+            value = stage.get(field)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            base = root / ("docs-site/api" if field == "api" else directory)
+            valid = value.startswith(directory + "/") and re.fullmatch(r"[\w./-]+", value)
+            valid = valid and not any(part in ("", ".", "..") for part in value.rstrip("/").split("/"))
+            if field != "anbindung":
+                valid = valid and value.endswith(".html")
+            if valid:
+                source = root / value
+                if field != "anbindung":
+                    source = (root / "docs-site" / value if field == "api" else source).with_suffix(".md")
+                valid = source.resolve().is_relative_to(base.resolve())
+                valid = valid and (source.exists() if field == "anbindung" else source.is_file())
+            if not valid:
+                errors.append(f"{prefix}: {field} ohne vorhandene Quelle unter {base.relative_to(root)}: {value}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", required=True, help="Wiki-Quellen prüfen, ohne sie zu ändern")
@@ -162,6 +211,12 @@ def main() -> int:
     paths = sorted((ROOT / "docs").rglob("*.md"))
     paths += [ROOT / name for name in dict.fromkeys(["README.md", *shlex.split(root_docs[1])])]
     errors = []
+    try:
+        data = json.loads((ROOT / KETTE_PATH).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        errors.append(f"{KETTE_PATH}: nicht lesbar: {error}")
+    else:
+        errors.extend(check_kette(data, ROOT))
     for path in paths:
         text = path.read_text(encoding="utf-8")
         name = path.relative_to(ROOT).as_posix()

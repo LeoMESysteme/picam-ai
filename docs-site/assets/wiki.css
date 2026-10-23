@@ -235,3 +235,53 @@
   .md-typeset .wiki-glossar-filter { flex: 1 0 100%; width: 100%; box-sizing: border-box; }
   .md-typeset .wiki-glossar-controls { width: 100%; }
 }
+
+.md-typeset .wiki-kette { margin: 1.3rem 0; min-width: 0; }
+.md-typeset .wiki-kette-figure { margin: 0; width: 100%; max-width: 100%; text-align: left; }
+.md-typeset .wiki-kette-list {
+  display: flex; flex-direction: column; gap: .75rem;
+  list-style: none; margin: 0; padding: 0;
+}
+.md-typeset .wiki-kette-list > li { position: relative; margin: 0; padding: 0; min-width: 0; }
+.md-typeset a.wiki-kette-node {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .15rem;
+  box-sizing: border-box; width: 100%; height: 100%;
+  padding: .5rem .65rem; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .4rem; background: var(--md-default-bg-color);
+  text-decoration: none; color: var(--md-default-fg-color);
+  overflow-wrap: anywhere;
+}
+.md-typeset a.wiki-kette-node:hover,
+.md-typeset a.wiki-kette-node:focus-visible { border-color: var(--md-accent-fg-color); }
+.md-typeset a.wiki-kette-node:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+.wiki-kette-id {
+  font-family: var(--md-code-font-family, monospace); font-size: .62rem;
+  color: var(--md-default-fg-color--light);
+}
+.wiki-kette-titel { font-size: .74rem; font-weight: 600; }
+.md-typeset .wiki-kette-node .wiki-chip { margin-left: 0; white-space: normal; }
+.md-typeset .wiki-kette-figure > figcaption {
+  margin: .6rem 0 0; max-width: none; text-align: left; font-size: .65rem; font-style: normal;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset .wiki-kette-list > li + li::before {
+  content: ""; position: absolute; top: -.75rem; left: .65rem;
+  width: 1px; height: .75rem;
+  background: var(--md-default-fg-color--lighter);
+  transform: scaleY(var(--wiki-kette-progress, 1)); transform-origin: center top;
+  pointer-events: none;
+}
+.md-typeset .wiki-kette--quer .wiki-kette-list { flex-direction: row; }
+.md-typeset .wiki-kette--quer .wiki-kette-list > li { flex: 1 1 0; }
+.md-typeset .wiki-kette--quer .wiki-kette-list > li + li::before {
+  top: calc(50% - 3px); left: -.75rem; width: .75rem; height: 6px;
+  clip-path: polygon(0 calc(50% - .75px), calc(100% - 4px) calc(50% - .75px),
+    calc(100% - 4px) 0, 100% 50%, calc(100% - 4px) 100%,
+    calc(100% - 4px) calc(50% + .75px), 0 calc(50% + .75px));
+  transform: scaleX(var(--wiki-kette-progress, 1)); transform-origin: left center;
+}
+.md-typeset .wiki-kette[data-variant="kompakt"] .wiki-kette-node { padding: .35rem .5rem; }
+.md-typeset .wiki-kette[data-variant="kompakt"] .wiki-kette-titel { font-size: .7rem; }
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .wiki-kette-list > li + li::before { transform: none; }
+}

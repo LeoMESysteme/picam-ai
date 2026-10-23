@@ -6,6 +6,12 @@ bedeutet. Kein neuer Code, aber Übungen.
 
 **Vorbedingungen:** [Kapitel 0](00-werkzeuge.md).
 
+<div class="wiki-kette" markdown="1">
+
+Die Verarbeitungskette als Grafik braucht JavaScript; der Text unten beschreibt jede Stufe.
+
+</div>
+
 ## Erst laufen lassen
 
 ```bash
