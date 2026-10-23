@@ -148,6 +148,36 @@ Bestätigte Regel zur Darstellung der angezeigten Zahl, die ein wiederverwendbar
 
 ## Bildverarbeitung
 
+### `ambiguous_with`
+
+Feld der `GlyphEvidence` für andere Zeichen, die zur Messung passen könnten. Beim Segmentleser benennt es nahe Kandidaten zu einem unbekannten Segmentmuster; daraus wird keine Ziffer geraten.
+
+*Weg:* Entwickeln · *Quelle:* [Kette verstehen](01-kette-verstehen.md)
+
+### Autofit
+
+Anpassung der Segmentraster-Geometrie an einen einmal eingetippten Anzeigewert auf dem Bestätigungsbild. Gesucht wird ein exakt passender Parametersatz mit hoher Trennschärfe; passt keiner, wird das gemeldet.
+
+*Weg:* Entwickeln · *Quelle:* [OCR-API](../../api/ocr.md)
+
+### `cell_boxes`
+
+Methode für Zellrechtecke im entzerrten Bild als `(x, y, w, h)`. `DisplayLayout` liefert die Ziffernzellen ohne Vorzeichenstelle; `CharGrid` liefert die Zeichenzellen seines bestätigten Rasters.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `CharGrid`
+
+Regelmäßiges Zeichenzellenraster einer Punktmatrix-Anzeige im entzerrten Bild. Es beschreibt unter anderem Zellzahl, linken Rand, Zellabstand und vertikale Grenzen; der Bediener bestätigt es je Sitzung.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `CharLayout`
+
+Bestätigtes Punktraster-Layout für den Dot-Matrix-Leser mit Raster, Einheit und Formatregel. `from_profile()` lehnt unbestätigte Profile und Profile ohne bestandenes Auflösungs-Gate ab.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
 ### CLAHE
 
 *Contrast Limited Adaptive Histogram Equalization*. Lokale
@@ -156,6 +186,42 @@ sie verändert die Helligkeiten, aus denen die Segmentevidenz entsteht.
 
 *Weg:* Konfigurieren · *Auch:* Contrast Limited Adaptive Histogram Equalization · *Quelle:* [Geometrie-API](../../api/geometrie.md)
 
+### `classified_cells`
+
+Feld des `CharLayout`, das die Anzahl der zu klassifizierenden Wertzellen bestimmt. Im dokumentierten Dot-Matrix-Pfad sind dies die Zellen 0–8; die Restleerzellen werden getrennt geprüft.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `digit_gap_ratio`
+
+Layoutschlüssel für den Zwischenraum vor den Ziffernstellen als Anteil einer Zellenbreite. Er lässt reale Abstände zwischen Ziffern im Segmentraster berücksichtigen.
+
+*Weg:* Konfigurieren · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `DisplayLayout`
+
+Zahlenformat und Geometrie einer Siebensegment-Anzeige. Beschreibt unter anderem Ziffernzahl, Nachkommastellen und separate Vorzeichenstelle; im Betrieb stammt es aus dem bestätigten Geräteprofil.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### Displaylokalisierung
+
+Bestimmen des Anzeigebereichs im Kamerabild. Das Konzept sieht automatische Vorschläge vor; im aktiven Live-Pfad wird die vom Menschen bestätigte Geometrie nachgeführt. Ein Fund allein ist keine Bestätigung.
+
+*Weg:* Entwickeln · *Quelle:* [Lokalisierungs-API](../../api/detect.md)
+
+### `DotMatrixReader`
+
+Aktiver Leser für die GSV-2AS-Anzeige mit bestätigtem Punktraster und geprüften Vorlagen. Prüft Wertzellen, Restleerzellen und Zahlenformat; negative Werte und andere Geräte sind damit nicht freigegeben.
+
+*Weg:* Entwickeln · *Quelle:* [OCR-API](../../api/ocr.md)
+
+### ECC
+
+Bildregistrierung für die Nachführung: Jedes neue Bild wird gegen das Bestätigungsbild verglichen, nicht gegen das vorherige Bild. Zu große Bewegung oder geringe Bildähnlichkeit führen zur Ablehnung.
+
+*Weg:* Entwickeln · *Quelle:* [Projekt-Tour](../uebersicht/projekt-tour.md)
+
 ### Entzerren / Rectify
 
 Das Anzeigenviereck auf ein achsparalleles Rechteck
@@ -163,6 +229,18 @@ fester Größe abbilden (`rectify.rectify()`). Feste Zielgröße, weil der
 Segmentleser gegen ein Raster abtastet.
 
 *Weg:* Entwickeln · *Auch:* Entzerren, Rectify · *Quelle:* [Geometrie-API](../../api/geometrie.md)
+
+### `exposure_ok`
+
+Abgeleitete grobe Belichtungsprüfung des `DisplayCrop` aus den Anteilen gesättigter und sehr dunkler Bildpunkte. Ihre Schwellen sind Vorabdefaults, keine allgemeine Freigabe des Aufbaus.
+
+*Weg:* Entwickeln · *Quelle:* [Geometrie-API](../../api/geometrie.md)
+
+### `GlyphEvidence`
+
+Belege für eine einzelne gelesene Stelle: Zeichen, Konfidenz, mögliche Alternativen und Marge. Beim Siebensegment-Leser gehört die gemessene Segmentbelegung dazu; fehlende Evidenz darf nicht durch Gesamtkonfidenz ersetzt werden.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
 
 ### Homographie
 
@@ -179,6 +257,18 @@ dafür, ob eine Lokalisierung getroffen hat.
 
 *Weg:* Entwickeln · *Auch:* Intersection over Union · *Quelle:* [Lokalisierungs-API](../../api/detect.md)
 
+### `ManualRoiLocator`
+
+Locator, der ein vorgegebenes bestätigtes Viereck als Kandidaten zurückliefert. Er wertet das Bild nicht aus und prüft selbst nicht, ob die Anzeige seit der Bestätigung verrutscht ist.
+
+*Weg:* Entwickeln · *Quelle:* [Lokalisierungs-API](../../api/detect.md)
+
+### OCR
+
+Optische Zeichenerkennung zum Lesen von Ziffern, Vorzeichen, Dezimalpunkt, Einheit und Statusanzeigen. Das Projekt trennt dieses Lesen von Lokalisierung und Freigabe; ein erkannter Text allein genügt nicht.
+
+*Weg:* Entwickeln · *Quelle:* [Konzept](../../Konzept.md)
+
 ### Otsu
 
 Schwellwertverfahren, das den Schnitt maximaler
@@ -188,10 +278,22 @@ die gepoolten Segmentmessungen — Begründung im Docstring von
 
 *Weg:* Entwickeln · *Quelle:* [OCR-API](../../api/ocr.md)
 
+### `polarity`
+
+Layoutschlüssel für die Anzeigepolarität: `bright_on_dark` bezeichnet helle Segmente auf dunklem Grund, `dark_on_bright` dunkle auf hellem Grund. Die Auswahl kommt aus dem bestätigten Profil.
+
+*Weg:* Konfigurieren · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
 ### Quad
 
 Vier Eckpunkte einer Anzeige im Bildkoordinatensystem, im
 Uhrzeigersinn ab oben links.
+
+*Weg:* Entwickeln · *Quelle:* [Geometrie-API](../../api/geometrie.md)
+
+### `QuadTracker`
+
+Nachführung eines bestätigten Anzeigenvierecks gegen das Bestätigungsbild. Der aktuelle Tracker berücksichtigt auch den Zifferninhalt; große Wertwechsel können deshalb zum Verlust der Nachführung führen.
 
 *Weg:* Entwickeln · *Quelle:* [Geometrie-API](../../api/geometrie.md)
 
@@ -201,13 +303,6 @@ Uhrzeigersinn ab oben links.
 (vom Bediener, Konzept §4), nicht gefunden.
 
 *Weg:* Bedienen · *Auch:* Region of Interest, Anzeigebereich · *Quelle:* [Konzept §4](../../Konzept.md)
-
-### Sättigung
-
-Anteil der Bildpunkte ≥ 250. Maß für
-Überstrahlung; treibt das `glare`-Flag.
-
-*Weg:* Konfigurieren · *Auch:* saturated_fraction · *Quelle:* [Geometrie-API](../../api/geometrie.md)
 
 ### Schärfe
 
@@ -225,7 +320,122 @@ des `DotMatrixReader`.
 
 *Weg:* Entwickeln · *Quelle:* [OCR-API](../../api/ocr.md)
 
+### `SevenSegmentReader`
+
+Leser für Siebensegment-Anzeigen mit Evidenz je Segment. Teilt den entzerrten Ausschnitt nach dem Profilraster auf und lehnt unbekannte Segmentmuster ab. Im Projekt dient er auch den synthetischen Übungen.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `sign_box`
+
+Methode des `DisplayLayout` für das Rechteck der separaten Vorzeichenstelle. Gibt `None` zurück, wenn das Layout keine Vorzeichenstelle vorsieht; deren Lesbarkeit wird getrennt vom erkannten Minus geprüft.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### Sättigung
+
+Anteil der Bildpunkte ≥ 250. Maß für
+Überstrahlung; treibt das `glare`-Flag.
+
+*Weg:* Konfigurieren · *Auch:* saturated_fraction · *Quelle:* [Geometrie-API](../../api/geometrie.md)
+
+### `TesseractReader`
+
+Implementierter OCR-Leser, der Tesseract als Unterprozess aufruft. Er liefert derzeit keine mit dem Segment-Gate vergleichbaren Kontrast- und Margendiagnosen; die Standard-Gates lehnen entsprechend ab.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `TrackedQuadLocator`
+
+Live-Adapter für die Nachführung der bestätigten Anzeige. Liefert bei Grenzverletzung oder zu geringer Bildähnlichkeit keinen Kandidaten; die Pipeline dokumentiert dann unmittelbar `UNREADABLE`.
+
+*Weg:* Entwickeln · *Quelle:* [Geometrie-API](../../api/geometrie.md)
+
+### `tracking_lost`
+
+Kennzeichnung eines Nachführungsverlusts mit angehängtem Grund. Die Pipeline erzeugt dabei `UNREADABLE` ohne Zahlenwert. `low_score` kann derzeit auch nach großen Wertwechseln auftreten, weil der Tracker den Zifferninhalt nutzt.
+
+*Weg:* Entwickeln · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
 ## Kette und Verträge
+
+### `anzeige_wechselt`
+
+Ablehnungsgrund für kurzzeitige Mischziffern nach einer Freigabe. Nur wenn die lesbaren Zellen zum letzten freigegebenen Wert passen und Anzahl sowie Zeitfenster eingehalten sind, gilt `TRANSITION` ohne Zahlenwert.
+
+*Weg:* Bedienen · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
+### `awaiting_confirmation`
+
+Grund für `TRANSITION`, solange noch nicht genug aufeinanderfolgende Bilder denselben Wert bestätigen. Der Live-Pfad verlangt zwei gleiche Bilder; ein Zahlenwert wird bis dahin nicht freigegeben.
+
+*Weg:* Bedienen · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
+### `contrast`
+
+Lesediagnose für den gemessenen Kontrast, die zusammen mit `min_margin` und `unreadable_cells` zum faktischen Gate-Vertrag gehört. Fehlende messbare Evidenz darf ein Backend nicht durch eine erfundene Qualitätsangabe ersetzen.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `decimal_point_detected`
+
+Eigenes Feld des Leseergebnisses für den Dezimalpunktbefund. Ein optisch erkannter Punkt muss von einer Profilannahme unterscheidbar bleiben; beim Segmentleser ist die optische Prüfung noch offen.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `decimal_point_index`
+
+Eigenes Feld des `ReadResult` für die Position des Dezimalpunkts. `DisplayLayout.decimal_point_index()` liefert die profilseitig festgelegte Position oder `None`, wenn sie erkannt werden muss.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `declares_confidence_calibrated`
+
+Eigenschaft des Leser-Vertrags: Gibt an, ob Konfidenz gegen echte Fehlerraten kalibriert ist. Bleibt `False`, solange keine Kalibriermessung in der Validierungsdokumentation belegt ist.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `display_not_located`
+
+Ablehnungsgrund der allgemeinen Pipeline, wenn kein Anzeigenkandidat vorliegt. Es entsteht `UNREADABLE` ohne Zahlenwert; die Freigabe wird für diesen Fall nicht aufgerufen.
+
+*Weg:* Bedienen · *Quelle:* [Lokalisierung ohne Bediener](07-lokalisierung.md)
+
+### `DisplayCandidate`
+
+Lokalisierungskandidat mit Viereck, Score, Locator-Kennung und optionalem Rollenhinweis. Die allgemeine Pipeline prüft die Rolle nicht selbst; ein Kandidat ist noch keine Bestätigung der richtigen Anzeige.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `DisplayCrop`
+
+Entzerrter Bildausschnitt mit Quellviereck, Homographie und Qualitätsmaßen. Führt Schärfe sowie Anteile gesättigter und sehr dunkler Bildpunkte für die Diagnose mit.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `DisplayLocator`
+
+Schnittstellenvertrag zum Finden von Anzeigenkandidaten in einem `Frame`. Ein leeres Tupel ist zulässig und bedeutet „nicht gefunden“; die Pipeline erzeugt daraus einen ungültigen Datensatz.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `Frame`
+
+Kamerabild mit Sequenznummer, Aufnahmezeitstempel und Quellenkennung. Enthält BGR- oder Graustufenbilddaten sowie verfügbare Kamera- und Rohmetadaten; `is_time_bearing` kennzeichnet die zeitliche Verwertbarkeit.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `frames_confirmed`
+
+Feld der Freigabeentscheidung und des Datensatzes für die Anzahl der Bilder, die einen Wert bestätigt haben. Zusammen mit der Bestätigungszeitspanne macht es die Mehrbildbestätigung nachvollziehbar.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `FrameSource`
+
+Schnittstellenvertrag einer Bildquelle mit Öffnen, Schließen und Frame-Iterator. `source_id`, Fähigkeiten und Beschreibung kennzeichnen Herkunft und Grenzen; die Beschreibung gehört ins Runartefakt.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
 ### Freigabe / Gate {#freigabe-gate}
 
@@ -234,6 +444,18 @@ eigener Historie über `VALID | TRANSITION | UNREADABLE | STALE`. Bekommt
 strukturell keinen Referenzwert.
 
 *Weg:* Konfigurieren · *Auch:* Freigabe, Gate, ReleaseGate · *Quelle:* [Freigabe-API](../../api/validate.md)
+
+### `GateConfig`
+
+Konfiguration der Freigaberegeln, unter anderem für Qualitätsgrenzen und Mehrbildbestätigung. Die Schwellen sind Vorabdefaults; reale Freigabegrenzen bleiben offen. Leser liefern dabei keine automatisch vergleichbaren Margen.
+
+*Weg:* Konfigurieren · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
+### `GateDecision`
+
+Ergebnis der Freigabe mit Status, Qualitätskennzahl, Ablehnungsgründen, bestätigter Bildzahl und Bestätigungszeitspanne. Bei einem anderen Status als `VALID` sind die Ablehnungsgründe nie leer.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
 ### Konfidenz {#konfidenz}
 
@@ -259,6 +481,36 @@ zeigen (`GateConfig.confirm_frames`). Kostet Zeit, die als
 
 *Weg:* Konfigurieren · *Quelle:* [Freigabe-API](../../api/validate.md)
 
+### `min_margin`
+
+Diagnoseschlüssel für die kleinste vom Leser gemeldete Marge. Gehört mit Kontrast und Anzahl unlesbarer Zellen zum Gate-Vertrag; die Segment- und Dot-Matrix-Skalen sind nicht unmittelbar vergleichbar.
+
+*Weg:* Entwickeln · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
+### `Pipeline`
+
+Verdrahtung der Verarbeitung vom Frame über Lokalisierung, Entzerrung, Lesen und Freigabe bis zu Datensatz und Senken. Erhält keinen Referenzwert; ein fehlender Kandidat wird direkt als `UNREADABLE` dokumentiert.
+
+*Weg:* Entwickeln · *Quelle:* [Pipeline-API](../../api/pipeline.md)
+
+### `raw_text`
+
+Textrepräsentation des Lesers, getrennt vom Zahlenwert. Der aktuelle Dot-Matrix-Leser speichert die geparste Zahl mit Pluszeichen, keine vollständige Abschrift aller Displayzellen; bei Ablehnung bleibt der Text leer.
+
+*Weg:* Entwickeln · *Quelle:* [Messpfad und Freigabe](../uebersicht/messpfad.md)
+
+### `ReadResult`
+
+Leseergebnis vor der Freigabeentscheidung. Hält Text und Zahlenwert sowie Vorzeichen-, Dezimalpunkt- und Einheitenbefunde getrennt; enthält Betriebszustände, Belege je Stelle und Lesediagnosen.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `reject_reasons`
+
+Maschinenlesbare Gründe für eine Ablehnung oder einen Übergang. Jeder `ValueRecord` mit Status ungleich `VALID` muss mindestens einen Grund tragen; sie sind der erste Anlaufpunkt bei der Fehlersuche.
+
+*Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
 ### Senke / Sink {#senke-sink}
 
 Ausgabe (`JsonlSink`, `SerialSink`). Zählt Fehler statt zu
@@ -266,12 +518,36 @@ werfen und liefert je Datensatz einen `TxReceipt`.
 
 *Weg:* Entwickeln · *Auch:* Senke, Sink · *Quelle:* [Ausgabe-API](../../api/sink.md)
 
+### `sign_detected`
+
+Minuszeichenbefund des `ReadResult`. Er wird getrennt von der Auswertbarkeit des Vorzeichenbereichs geführt, damit ein unsichtbares Vorzeichen nicht stillschweigend als positiver Wert behandelt wird.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `sign_region_readable`
+
+Feld des `ReadResult`, das angibt, ob der Vorzeichenbereich überhaupt auswertbar war. Ein unlesbarer Bereich muss zur Ablehnung führen und darf nicht als fehlendes Minus interpretiert werden.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
 ### `STALE` {#stale}
 
 Es gibt **keinen** aktuellen Wert mehr (nach
 `stale_after_ns` ohne Freigabe). Trägt keinen Zahlenwert.
 
 *Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `status_flags`
+
+Betriebszustände im Leseergebnis, etwa `overflow`, `menu`, `hold` und `glare`. Blockierende Flags verhindern die gültige Zahlenfreigabe und bleiben im Gate `UNREADABLE`.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `TelegramFormatter`
+
+Schnittstellenvertrag für die Umsetzung eines `ValueRecord` in Bytes. `format()` darf `None` zurückgeben, wenn der Datensatz entfällt. Die Formatfähigkeiten kennzeichnen ungeprüfte Formate als provisorisch.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
 ### `TRANSITION` {#transition}
 
@@ -288,11 +564,48 @@ die Freigabe setzt die konkrete Klasse `ReleaseGate` um. Siehe
 
 *Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
+### `TxReceipt` {#tx-receipt}
+
+Was tatsächlich über die Leitung ging: Sendezeit, Bytes,
+Format, Retries. Bewusst getrennt vom `ValueRecord`.
+
+*Weg:* Entwickeln · *Quelle:* [Ausgabe-API](../../api/sink.md)
+
+### `unit_source`
+
+Diagnose zur Herkunft der Einheit: `read` bedeutet gelesen, `profile` aus dem Profil übernommen. Die Herkunft muss sichtbar bleiben, damit eine bestätigte Einstellung nicht als optische Erkennung erscheint.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `unit_text`
+
+Eigenständiges Einheitenfeld des `ReadResult`. Muss zusammen mit der Herkunftsdiagnose betrachtet werden: Beim Dot-Matrix-Leser stammt die Einheit aus dem bestätigten Profil und wird nicht gelesen.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
 ### `UNREADABLE` {#unreadable}
 
 Gerade nicht lesbar. Trägt keinen Zahlenwert.
 
 *Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `unreadable_cells`
+
+Lesediagnose für die Anzahl unlesbarer Zellen. Gehört zum faktischen Gate-Vertrag; liefert ein Backend keine belastbare Evidenz, darf daraus keine Freigabe durch Raten entstehen.
+
+*Weg:* Entwickeln · *Quelle:* [Weitere OCR-Backends](08-ocr-backends.md)
+
+### `VALID`
+
+Status eines freigegebenen Werts. Er allein hebt eine Testlaufmarkierung nicht auf: Ein Testlauf kann einzelne VALID-Records enthalten, deren Messnutzung durch die Laufkennzeichnung untersagt bleibt.
+
+*Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `ValueReader`
+
+Schnittstellenvertrag zum Lesen eines Ausschnitts mit bestätigtem Layout. Liefert `ReadResult`; die Signatur erlaubt weder Referenzwert noch Historie oder letzten Wert als Eingabe.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
 ### `ValueRecord` {#value-record}
 
@@ -301,12 +614,11 @@ hat. Neun Pflichtfelder, `frozen`, verlustfrei serialisierbar.
 
 *Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
 
-### `TxReceipt` {#tx-receipt}
+### `ValueSink`
 
-Was tatsächlich über die Leitung ging: Sendezeit, Bytes,
-Format, Retries. Bewusst getrennt vom `ValueRecord`.
+Schnittstellenvertrag der Ausgabe mit `emit()` und `health()`. Übertragungsfehler werden gezählt und als fehlgeschlagener `TxReceipt` zurückgegeben, damit sie den Messbetrieb nicht anhalten oder unbemerkt verschwinden.
 
-*Weg:* Entwickeln · *Quelle:* [Ausgabe-API](../../api/sink.md)
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
 
 ## Zeit
 
