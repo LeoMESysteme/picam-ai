@@ -4,13 +4,14 @@ weg: bedienen
 
 # Kamera-Workbench: HTTPS, Einstelltabelle und Shell
 
-> **Kamerastand beachten:** Der Abschnitt „Kamera einstellen“ dokumentiert
-> Picamera2-Controls und mechanischen Fokus der früheren IMX500. Die aktive
+> **Kamerastand beachten:** Der Abschnitt „Kamera einstellen“ zeigt die
+> StreamCam-Regler als Karten; die eingeklappten historischen Blöcke betreffen
+> die Picamera2-Controls und den mechanischen Fokus der früheren IMX500. Die aktive
 > Kamera ist seit 2026-09-25 die Logitech StreamCam mit UVC-Reglern
 > ([Hardwareprofil](../HARDWARE_PROFILE.md),
 > [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)). Vor dem Einstellen
 > die in der laufenden Workbench tatsächlich angebotenen Regler prüfen;
-> die alten Control-Namen unten sind keine StreamCam-Anleitung.
+> die historischen Control-Namen gelten für die frühere IMX500.
 
 Die Werkbank bietet Kamerabild, Log und echte Bash-Tabs. Alle Zugriffe
 sind mit dem Linux-Passwort von `me-systeme` geschützt. Seit dem Messpfad live
@@ -453,10 +454,15 @@ Kamera zu beenden. Direkt über SSH gehen dieselben Befehle mit
 
 ## Kamera einstellen
 
-Die Werkbank bietet die unterstützten Fokus-, Belichtungs- und Bildregler;
-es erscheinen nur unterstützte Controls. Die folgenden Karten zeigen die
-StreamCam-Einstellungen des bestätigten Profils und die im Code festgelegten
-Werte. Die frühere Einstelltabelle ist unten als historisch gekennzeichnet.
+Die folgenden Karten zeigen die StreamCam-Regler, die Profil und Code beim
+Öffnen der Kamera setzen ([Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag"),
+`src/dispread/camera_settings.py`). Welche Regler die laufende
+Werkbank-Oberfläche tatsächlich anbietet, steht in ihrer Einstelltabelle.
+
+Die StreamCam hat dagegen
+`focus_automatic_continuous` und `focus_absolute`; für reproduzierbare
+Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
+liest den festen Fokuswert zurück.
 
 ### Fokus-Automatik
 
@@ -605,7 +611,7 @@ Werte. Die frühere Einstelltabelle ist unten als historisch gekennzeichnet.
 | Einstellung | Neigen |
 | --- | --- |
 | Wozu | Hält die vertikale Ausrichtung zwischen den Sitzungen reproduzierbar. |
-| Im Hintergrund | `tilt_absolute` ist fest gesetzt, damit keine Schwenk-Drift zwischen Sitzungen entsteht. |
+| Im Hintergrund | `tilt_absolute` ist fest gesetzt, damit keine Neige-Drift zwischen Sitzungen entsteht. |
 | Standard | `0` |
 | Ändern? | **Nein** — der Wert ist im Code festgelegt und kommt nicht aus dem Profil. |
 | Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
@@ -641,11 +647,7 @@ Bildaufbereitung. Auflösung oder Bildrate starten den Stream neu.
 Fokusassistenz `an` vergrößert die
 bestätigte ROI im Vorschaufenster; die Tabelle zeigt daneben einen relativen
 Schärfewert. Am kleinen Objektiv mit dem Fokuswerkzeug einstellen; keine
-motorische Autofokusfunktion vortäuschen. Die StreamCam hat dagegen
-`focus_automatic_continuous` und `focus_absolute`; für reproduzierbare
-Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
-liest den festen Fokuswert zurück. Reflexionen zuerst durch Position,
-Abschirmung und kontrolliertes Licht verringern: [Optischer Aufbau](../OPTICAL_SETUP.md).
+motorische Autofokusfunktion vortäuschen.
 
 </details>
 
