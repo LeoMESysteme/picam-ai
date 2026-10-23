@@ -7,6 +7,18 @@
   const callbacks = [];
   const htmlCache = new Map();
   const jsonCache = new Map();
+  const OQ_STATUS = {
+    "offen": "open",
+    "in arbeit": "progress",
+    "teilweise geklärt": "partial",
+    "weitgehend geklärt": "partial",
+    "geklärt": "resolved",
+    "beantwortet": "resolved",
+    "verworfen": "discarded",
+  };
+  const PHASE_STATUS = { erreicht: "resolved", teilweise: "partial", blockiert: "blocked", offen: "open" };
+  let oqIndexPromise;
+  let phasesPromise;
   const NS = "http://www.w3.org/2000/svg";
   const ICONS = {
     bedienen: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM10 8l6 4-6 4z",
@@ -76,6 +88,44 @@
     return loadCached(jsonCache, path, (response) => response.json());
   }
 
+  function loadOqIndex() {
+    if (!oqIndexPromise) {
+      oqIndexPromise = loadHtml("docs/open-questions.html").then((doc) => {
+        const index = new Map();
+        for (const row of doc.querySelector("table")?.querySelectorAll("tbody tr") || []) {
+          if (row.cells.length !== 4) continue;
+          const [id, focus, status, title] = Array.from(row.cells, (cell) => cell.textContent.trim());
+          const number = /^OQ-(\d{2})$/.exec(id)?.[1];
+          const key = status.toLocaleLowerCase("de");
+          if (!number || !Object.hasOwn(OQ_STATUS, key)) continue;
+          index.set(number, { id, title, status, category: OQ_STATUS[key], focus: focus === "Jetzt" });
+        }
+        return index;
+      }).catch(() => new Map());
+    }
+    return oqIndexPromise;
+  }
+
+  function loadPhases() {
+    if (!phasesPromise) {
+      phasesPromise = loadHtml("docs/ROADMAP.html").then((doc) => {
+        const phases = new Map();
+        for (const row of doc.querySelector("table")?.querySelectorAll("tbody tr") || []) {
+          if (row.cells.length !== 6) continue;
+          const id = row.cells[0].textContent.trim();
+          const state = /\b(erreicht|teilweise|blockiert|offen)\b/i.exec(row.cells[5].textContent)?.[0];
+          if (!/^P[0-8]$/.test(id) || !state) continue;
+          phases.set(id, {
+            id, title: row.cells[1].textContent.trim(), state,
+            category: PHASE_STATUS[state.toLocaleLowerCase("de")],
+          });
+        }
+        return phases;
+      }).catch(() => new Map());
+    }
+    return phasesPromise;
+  }
+
   function make(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -99,7 +149,7 @@
     return svg;
   }
 
-  window.wiki = { onPage, siteUrl, loadHtml, loadJson, make, icon };
+  window.wiki = { onPage, siteUrl, loadHtml, loadJson, loadOqIndex, loadPhases, OQ_STATUS, make, icon };
 
   if (typeof document$ !== "undefined") document$.subscribe(buildPage);
   else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", buildPage);

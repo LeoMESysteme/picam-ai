@@ -3,15 +3,7 @@
 (function () {
   "use strict";
 
-  const OQ_STATUS = {
-    "offen": "open",
-    "in arbeit": "progress",
-    "teilweise geklärt": "partial",
-    "weitgehend geklärt": "partial",
-    "geklärt": "resolved",
-    "beantwortet": "resolved",
-    "verworfen": "discarded",
-  };
+  const OQ_STATUS = window.wiki.OQ_STATUS;
 
   function make(tag, className, text) {
     const element = document.createElement(tag);

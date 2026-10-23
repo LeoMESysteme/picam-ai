@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Wiki-Verweise auf offene Punkte und Roadmap-Phasen zeigen
+  Statuschips aus den jeweiligen Quelltabellen. Ein gemeinsamer
+  Hinweis-Baustein ergänzt Titel und Status per Maus, Tastatur und Touch;
+  fehlende Quellen lassen die Links unverändert. Die OQ-Ansicht nutzt
+  dieselbe Statusabbildung. Neue Playwright-Fälle sichern Hinweise,
+  Kontrast und Sofortnavigation ab.
+
 * 2026-10-23: Wiki-Seitenkopf korrigiert: Der Weiter-Link bricht linksbündig
   um, sein Pfeil folgt direkt dem Text. Konventionsabsätze zählen nur an
   ihrer vorgesehenen Stelle mit führendem `strong`. Fehler einzelner

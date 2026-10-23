@@ -2,6 +2,145 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open-questions.html"]')
+  .filter({ hasText: /^OQ-07$/ }).first();
+
+test('OQ-Verweise tragen Statuschip und Pop-up mit Titel', async ({ page }) => {
+  await page.goto('/docs/open-questions.html');
+  const row = page.locator('#oq-index tbody tr').filter({ has: page.locator('a[href$="#oq-07"]') });
+  const status = (await row.locator('td').nth(2).innerText()).trim();
+  const title = (await row.locator('td').nth(3).innerText()).trim();
+  await expect(page.locator('.md-content__inner .wiki-chip')).toHaveCount(0);
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  const link = oq07Link(page);
+  await expect(link).toHaveAttribute('data-hint', 'oq');
+  await expect(link.locator('xpath=following-sibling::*[1]')).toHaveClass(/wiki-chip/);
+  await expect(link.locator('xpath=following-sibling::*[1]')).toHaveText(status);
+  await link.hover();
+  const hint = page.locator('#wiki-hint[data-open="true"]');
+  await expect(hint).toHaveAttribute('role', 'tooltip');
+  await expect(hint).toContainText(`OQ-07 · ${title}`);
+  await expect(hint.locator('.wiki-chip')).toHaveText(status);
+  await expect(hint).toContainText('Im Fokus');
+  await expect(link).toHaveAttribute('aria-describedby', 'wiki-hint');
+  await page.keyboard.press('Escape');
+  await expect(hint).toHaveCount(0);
+  await expect(link).not.toHaveAttribute('aria-describedby');
+});
+
+test('Hinweise funktionieren per Touch', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+    const link = oq07Link(page);
+    await expect(link).toHaveAttribute('data-hint', 'oq');
+    await link.scrollIntoViewIfNeeded();
+    const url = page.url();
+    await link.tap();
+    await expect(page.locator('#wiki-hint[data-open="true"]')).toBeVisible();
+    expect(page.url()).toBe(url);
+    await link.tap();
+    await expect(page).toHaveURL(/\/docs\/open-questions\.html$/);
+    await expect(page.locator('#wiki-hint[data-open="true"]')).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('Sofortnavigation baut Chips genau einmal auf', async ({ page }) => {
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  await expect(oq07Link(page)).toHaveAttribute('data-wiki-chip', '1');
+  await page.evaluate(() => { (window as any).__wikiNavigation = true; });
+  for (let visit = 0; visit < 2; visit += 1) {
+    await page.locator('.md-nav--primary a[href$="/open-questions.html"]').first().click();
+    await expect(page.locator('#oq-index')).toBeVisible();
+    await expect(page.locator('.md-content__inner .wiki-chip')).toHaveCount(0);
+    await page.locator('.md-nav--primary a[href$="/GSVMULTI_PROTOCOL.html"]').first().click();
+    await expect(oq07Link(page)).toHaveAttribute('data-wiki-chip', '1');
+    const counts = await page.locator('a[data-wiki-chip]').evaluateAll((links) => links.map((link) => {
+      let count = 0;
+      for (let next = link.nextElementSibling; next?.matches('.wiki-chip'); next = next.nextElementSibling) count += 1;
+      return count;
+    }));
+    expect(counts.length).toBeGreaterThan(0);
+    expect(counts.every((count) => count === 1)).toBe(true);
+    await expect(page.locator('#wiki-hint')).toHaveCount(1);
+  }
+  expect(await page.evaluate(() => (window as any).__wikiNavigation)).toBe(true);
+});
+
+test('Chips und Pop-ups halten im dunklen Theme Kontrast', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', 'slate');
+  await expect(oq07Link(page)).toHaveAttribute('data-hint', 'oq');
+  await oq07Link(page).hover();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toBeVisible();
+  for (const selector of ['.md-content__inner .wiki-chip', '#wiki-hint .wiki-chip', '#wiki-hint']) {
+    const contrast = await page.locator(selector).first().evaluate((element) => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      const luminance = (color: string) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        const values = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map((value) => {
+          const n = value / 255;
+          return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+        });
+        return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+      };
+      const style = getComputedStyle(element);
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    expect(contrast, selector).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test('Hinweise bleiben überfahrbar, per Tastatur erreichbar und im Viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  const link = oq07Link(page);
+  await expect(link).toHaveAttribute('data-hint', 'oq');
+  await link.focus();
+  const hint = page.locator('#wiki-hint[data-open="true"]');
+  await expect(hint).toBeVisible();
+  const box = await hint.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(8);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(382);
+  expect(box!.y).toBeGreaterThanOrEqual(8);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(836);
+  await page.keyboard.press('Escape');
+  await expect(link).toBeFocused();
+  await expect(hint).toHaveCount(0);
+  await link.hover();
+  await expect(hint).toBeVisible();
+  await hint.hover();
+  await page.waitForTimeout(200);
+  await expect(hint).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(hint).toHaveCount(0);
+  await link.focus();
+  await expect(hint).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+  await expect(hint).toHaveCount(0);
+});
+
+test('Fehlende Hinweisquellen lassen Links unverändert', async ({ page }) => {
+  await page.route('**/docs/open-questions.html', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/docs/ROADMAP.html', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  await page.evaluate(async () => {
+    await Promise.all([(window as any).wiki.loadOqIndex(), (window as any).wiki.loadPhases()]);
+  });
+  await expect(oq07Link(page)).not.toHaveAttribute('data-wiki-chip');
+  await expect(oq07Link(page)).not.toHaveAttribute('data-hint');
+  await expect(page.locator('.md-content__inner .wiki-chip')).toHaveCount(0);
+});
+
 test('Seitenkopf nennt Weg, Lesezeit und Weiter-Link unter der Überschrift', async ({ page }) => {
   await page.goto('/docs/anleitung/index.html');
   const head = page.locator('.md-content__inner h1 + .wiki-pagehead');

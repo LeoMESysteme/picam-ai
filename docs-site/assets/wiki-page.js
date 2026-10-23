@@ -2,7 +2,41 @@
 (function () {
   "use strict";
 
-  const { onPage, siteUrl, make, icon } = window.wiki;
+  const { onPage, siteUrl, make, icon, loadOqIndex, loadPhases, hint } = window.wiki;
+
+  function reference(link) {
+    let url;
+    try { url = new URL(link.href); }
+    catch { return null; }
+    const text = link.textContent.trim();
+    if (url.pathname.endsWith("/docs/open-questions.html")) {
+      const key = /^#oq-(\d{2})$/.exec(url.hash)?.[1] || /^OQ-(\d{2})$/.exec(text)?.[1];
+      if (key) return { kind: "oq", key };
+    }
+    if (url.pathname.endsWith("/docs/ROADMAP.html")) {
+      const key = /^(P[0-8])\b/.exec(text)?.[1];
+      if (key) return { kind: "phase", key };
+    }
+    return null;
+  }
+
+  function chip(record) {
+    return make("span", `wiki-chip wiki-chip--${record.category}`, record.status || record.state);
+  }
+
+  for (const kind of ["oq", "phase"]) {
+    hint.register(kind, async (link) => {
+      const ref = reference(link);
+      if (!ref || ref.kind !== kind) return null;
+      const index = await (kind === "oq" ? loadOqIndex() : loadPhases());
+      const record = index.get(ref.key);
+      if (!record) return null;
+      const content = make("div");
+      content.append(make("strong", "", `${record.id} · ${record.title}`), chip(record));
+      if (record.focus) content.append(make("div", "wiki-hint-meta", "Im Fokus"));
+      return content;
+    });
+  }
 
   function convention(article, label, firstOnly = false) {
     const selector = firstOnly
@@ -54,5 +88,24 @@
     }
     title.after(head);
     head.dataset.ready = "true";
+  });
+
+  onPage((article) => {
+    const path = new URL(window.location.href).pathname;
+    if (path.endsWith("/docs/open-questions.html") || path.endsWith("/docs/ROADMAP.html")) return;
+    let disposed = false;
+    for (const link of article.querySelectorAll("a[href]")) {
+      if (link.dataset.wikiChip || link.closest("h1, h2, h3, h4, h5, h6, nav, .md-sidebar, .roadmap")) continue;
+      const ref = reference(link);
+      if (!ref) continue;
+      (ref.kind === "oq" ? loadOqIndex() : loadPhases()).then((index) => {
+        const record = index.get(ref.key);
+        if (disposed || !record || link.dataset.wikiChip) return;
+        link.after(chip(record));
+        link.dataset.wikiChip = "1";
+        link.dataset.hint = ref.kind;
+      });
+    }
+    return () => { disposed = true; };
   });
 })();

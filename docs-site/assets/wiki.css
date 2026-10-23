@@ -17,3 +17,34 @@
   border-top: 1px solid var(--md-default-fg-color--lightest);
 }
 .md-typeset p.wiki-next a { font-weight: 600; }
+
+.md-typeset .wiki-chip,
+.wiki-hint .wiki-chip {
+  display: inline-block; margin-left: .3em; padding: .05em .5em;
+  border-radius: 1em; font-size: .72em; font-weight: 600; line-height: 1.5;
+  vertical-align: .08em; white-space: nowrap;
+}
+.wiki-chip--open      { background: var(--docs-open-bg);      color: var(--docs-open-fg); }
+.wiki-chip--progress  { background: var(--docs-progress-bg);  color: var(--docs-progress-fg); }
+.wiki-chip--partial   { background: var(--docs-partial-bg);   color: var(--docs-partial-fg); }
+.wiki-chip--resolved  { background: var(--docs-resolved-bg);  color: var(--docs-resolved-fg); }
+.wiki-chip--discarded { background: var(--docs-discarded-bg); color: var(--docs-discarded-fg); }
+.wiki-chip--blocked   { background: var(--docs-blocked-bg);   color: var(--docs-blocked-fg); }
+
+.wiki-hint {
+  position: absolute; z-index: 6; max-width: min(22rem, calc(100vw - 16px));
+  box-sizing: border-box; max-height: calc(100vh - 16px); overflow: auto; overflow-wrap: anywhere;
+  padding: .6rem .75rem; border-radius: .4rem;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  box-shadow: 0 .5rem 1.4rem -.6rem rgb(0 0 0 / .35);
+  font-family: var(--md-text-font-family, inherit);
+  font-size: .68rem; line-height: 1.55;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+  pointer-events: none;
+}
+.wiki-hint[data-open="true"] { opacity: 1; transform: none; pointer-events: auto; }
+.wiki-hint strong { display: block; margin-bottom: .25rem; font-size: .72rem; }
+.wiki-hint .wiki-hint-meta { color: var(--md-default-fg-color--light); margin-top: .3rem; }
+@media (prefers-reduced-motion: reduce) { .wiki-hint { transition: none; transform: none; } }
