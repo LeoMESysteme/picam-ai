@@ -453,6 +453,185 @@ Kamera zu beenden. Direkt über SSH gehen dieselben Befehle mit
 
 ## Kamera einstellen
 
+Die Werkbank bietet die unterstützten Fokus-, Belichtungs- und Bildregler;
+es erscheinen nur unterstützte Controls. Die folgenden Karten zeigen die
+StreamCam-Einstellungen des bestätigten Profils und die im Code festgelegten
+Werte. Die frühere Einstelltabelle ist unten als historisch gekennzeichnet.
+
+### Fokus-Automatik
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Fokus-Automatik |
+| --- | --- |
+| Wozu | Hält den Fokus für reproduzierbare Aufnahmen fest. |
+| Im Hintergrund | `focus_automatic_continuous` wird vor dem festen Fokuswert ausgeschaltet. |
+| Standard | aus (`0`) |
+| Ändern? | **Nein** — für reproduzierbare Aufnahmen bleibt sie aus. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Fester Fokus
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Fester Fokus |
+| --- | --- |
+| Wozu | Stellt die Anzeige am konkreten Arbeitsabstand scharf. |
+| Im Hintergrund | `focus_absolute` kommt aus dem bestätigten Profil und wird zurückgelesen. Automatik zuerst aus, dann Absolutwert: In einem gemeinsamen Aufruf schlägt `focus_absolute` bei noch aktivem Autofokus mit EIO fehl. |
+| Standard | — |
+| Ändern? | **Nur wenn** — Arbeitsabstand oder Aufbau sich ändern; den Fokus anschließend neu bestätigen. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag"); [Reihenfolgeregel](../../CLAUDE.md#hardware-fakten-die-man-leicht-falsch-annimmt) |
+
+</div>
+
+### Belichtungsautomatik
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Belichtungsautomatik |
+| --- | --- |
+| Wozu | Übernimmt nach dem Einrichten eine feste Belichtung für die Aufnahme. |
+| Im Hintergrund | `auto_exposure` wird auf `1` gesetzt; die Belichtungszeit kommt aus dem Profil. |
+| Standard | aus (`1`) |
+| Ändern? | **Nein** — im bestätigten Aufnahmeprofil bleibt die Automatik ausgeschaltet. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Belichtungszeit
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Belichtungszeit |
+| --- | --- |
+| Wozu | Passt die Belichtung an Anzeige und Licht des Aufbaus an. |
+| Im Hintergrund | `exposure_time_absolute` ist ein Pflichtwert des Profils; es gibt keinen stillschweigenden Ersatzwert. |
+| Standard | — |
+| Ändern? | **Nur wenn** — Anzeige oder Beleuchtung eine neue Einrichtung erfordern; Wert im Profil bestätigen. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Verstärkung
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Verstärkung |
+| --- | --- |
+| Wozu | Passt die Verstärkung an die Beleuchtung des Aufbaus an. |
+| Im Hintergrund | `gain` ist ein Pflichtwert des Profils; es gibt keinen stillschweigenden Ersatzwert. |
+| Standard | — |
+| Ändern? | **Nur wenn** — die Beleuchtung eine neue Einrichtung erfordert; Wert im Profil bestätigen. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Weißabgleichsautomatik
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Weißabgleichsautomatik |
+| --- | --- |
+| Wozu | Hält den Weißabgleich während reproduzierbarer Aufnahmen fest. |
+| Im Hintergrund | `white_balance_automatic` wird vor den Profilwerten auf `0` gesetzt. |
+| Standard | aus (`0`) |
+| Ändern? | **Nein** — im bestätigten Aufnahmeprofil bleibt die Automatik ausgeschaltet. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Weißabgleich
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Weißabgleich |
+| --- | --- |
+| Wozu | Passt den festen Weißabgleich an die Beleuchtung an. |
+| Im Hintergrund | `white_balance_temperature` ist ein Pflichtwert des Profils; es gibt keinen stillschweigenden Ersatzwert. |
+| Standard | — |
+| Ändern? | **Nur wenn** — die Beleuchtung eine neue Einrichtung erfordert; Wert im Profil bestätigen. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Netzfrequenz
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Netzfrequenz |
+| --- | --- |
+| Wozu | Hält die Netzfrequenzeinstellung für den Aufbau fest. |
+| Im Hintergrund | `power_line_frequency` wird vor den Profilwerten fest gesetzt. |
+| Standard | `1` |
+| Ändern? | **Nein** — die Einstellung ist im Code festgelegt und kommt nicht aus dem Profil. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Zoom
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Zoom |
+| --- | --- |
+| Wozu | Hält den Bildausschnitt zwischen den Sitzungen reproduzierbar. |
+| Im Hintergrund | `zoom_absolute` ist fest gesetzt, damit keine Zoom-Drift zwischen Sitzungen entsteht. |
+| Standard | `100` |
+| Ändern? | **Nein** — der Wert ist im Code festgelegt und kommt nicht aus dem Profil. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Schwenken
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Schwenken |
+| --- | --- |
+| Wozu | Hält die horizontale Ausrichtung zwischen den Sitzungen reproduzierbar. |
+| Im Hintergrund | `pan_absolute` ist fest gesetzt, damit keine Schwenk-Drift zwischen Sitzungen entsteht. |
+| Standard | `0` |
+| Ändern? | **Nein** — der Wert ist im Code festgelegt und kommt nicht aus dem Profil. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Neigen
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Neigen |
+| --- | --- |
+| Wozu | Hält die vertikale Ausrichtung zwischen den Sitzungen reproduzierbar. |
+| Im Hintergrund | `tilt_absolute` ist fest gesetzt, damit keine Schwenk-Drift zwischen Sitzungen entsteht. |
+| Standard | `0` |
+| Ändern? | **Nein** — der Wert ist im Code festgelegt und kommt nicht aus dem Profil. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag") |
+
+</div>
+
+### Auflösung/Bildrate
+
+<div class="wiki-setting" markdown="1">
+
+| Einstellung | Auflösung/Bildrate |
+| --- | --- |
+| Wozu | Legt Bildgröße und angeforderte Bildrate für die StreamCam fest. |
+| Im Hintergrund | `size`, `fourcc` und `fps` kommen aus dem bestätigten Profil. Die Vorschau vor dem Fokus-Sweep verwendet 1920×1080 YUYV bei 30 Bildern/s ohne Reglerwerte. |
+| Standard | Vorschau: 1920×1080 YUYV, 30 Bilder/s; Aufnahme: bestätigtes Profil |
+| Ändern? | **Nur wenn** — ein neu bestätigtes Profil es erfordert; volle Auflösung braucht USB3. |
+| Quelle | [Kameraeinstellungen](../../api/frames.md#aktuelle-uvc-kameraeinstellungen "UVC-Regler und Profilvertrag"); [Hardwareprofil](../HARDWARE_PROFILE.md#aktuelle-streamcam-sitzung-2026-10-21) |
+
+</div>
+
+Reflexionen zuerst durch Position, Abschirmung und kontrolliertes Licht
+verringern: [Optischer Aufbau](../OPTICAL_SETUP.md).
+
+<details class="wiki-layer wiki-layer--historisch" markdown="1">
+<summary>Historisch: AI Camera (IMX500)</summary>
+
 Es werden nur unterstützte Controls angeboten. Belichtungsautomatik `an`
 regelt selbst. Auf `aus` umstellen übernimmt die aktuellen Ist-Werte als
 Startpunkt und entsperrt `ExposureTime` (µs) und `AnalogueGain`. `Contrast` beeinflusst die
@@ -468,15 +647,22 @@ Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
 liest den festen Fokuswert zurück. Reflexionen zuerst durch Position,
 Abschirmung und kontrolliertes Licht verringern: [Optischer Aufbau](../OPTICAL_SETUP.md).
 
+</details>
+
 <figure class="tour-figure" data-scene="bedienung-kamera" markdown="1">
 <figcaption markdown="span">Die StreamCam am GSV-Aufbau: USB3-Anschluss, YUYV in voller Auflösung, Autofokus aus und ein fester Fokuswert.</figcaption>
 </figure>
+
+<details class="wiki-layer wiki-layer--historisch" markdown="1">
+<summary>Historisch: AI Camera (IMX500)</summary>
 
 Tabelle und CLI melden Sollwerte und die beobachtete Belichtung getrennt. Die interne
 Revision `applied_revision` bedeutet gesetzte Controls mit eingeschwungener
 manueller Belichtung (Toleranzen: 3 % ExposureTime, 8 % Gain); Kontrast wird von
 Picamera2 nicht als gemessener Istwert zurückgemeldet. Bei nicht bestätigbarer
 Übernahme wird ein Fehler angezeigt.
+
+</details>
 
 Auto-Setup verlangt im Modus `setup` einen bestätigten Displaybereich. Es lässt
 zuerst die Belichtungsautomatik einregeln und prüft neun Kombinationen um diese

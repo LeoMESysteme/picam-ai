@@ -337,17 +337,17 @@ test('Fehlende Hinweisquellen lassen Links unverändert', async ({ page }) => {
 });
 
 test('Seitenkopf nennt Weg, Lesezeit und Weiter-Link unter der Überschrift', async ({ page }) => {
-  await page.goto('/docs/anleitung/index.html');
+  await page.goto('/docs/CAMERA_COMMISSIONING.html');
   const head = page.locator('.md-content__inner h1 + .wiki-pagehead');
   await expect(head).toHaveCount(1);
   await expect(head).toHaveAttribute('data-ready', 'true');
-  await expect(head).toContainText('Für: Entwickeln und anbinden');
+  await expect(head).toContainText('Für: Einrichten und bedienen');
   await expect(head).toContainText(/\d+ min Lesezeit/);
-  await expect(head.locator('.wiki-pagehead-weg')).toHaveAttribute('href', /index\.html#weg-entwickeln$/);
-  await expect(head.locator('.wiki-pagehead-weiter')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+  await expect(head.locator('.wiki-pagehead-weg')).toHaveAttribute('href', /index\.html#weg-bedienen$/);
+  await expect(head.locator('.wiki-pagehead-weiter')).toHaveAttribute('href', /10-kamera-livevorschau\.html#kamera-einstellen$/);
   const next = page.locator('.md-content__inner p.wiki-next');
   await expect(next).toHaveCount(1);
-  await expect(next.locator('a')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+  await expect(next.locator('a')).toHaveAttribute('href', /10-kamera-livevorschau\.html#kamera-einstellen$/);
   const target = await next.locator('a').getAttribute('href');
   const headTarget = await head.locator('.wiki-pagehead-weiter').getAttribute('href');
   expect(new URL(headTarget!, page.url()).href).toBe(new URL(target!, page.url()).href);
@@ -394,13 +394,14 @@ test('Seitenkopf entsteht nach Sofortnavigation genau einmal', async ({ page }) 
   expect(await page.evaluate(() => (window as any).__wikiNavigation)).toBe(true);
 });
 
-test.fixme('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ page, browser, baseURL }) => {
-  // In Aufgabe 9 aktivieren, sobald die Beispielseiten die Muster enthalten.
+test('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ page, browser, baseURL }) => {
   await page.goto('/docs/CAMERA_COMMISSIONING.html');
-  const layer = page.locator('details.wiki-layer').filter({
+  await expect(page.locator('details.wiki-layer')).toHaveCount(3);
+  const layer = page.locator('details.wiki-layer--hintergrund').filter({
     has: page.locator('summary', { hasText: /^Was passiert im Hintergrund$/ }),
   }).first();
   await expect(layer).toBeVisible();
+  await expect(layer).toHaveJSProperty('open', false);
   await expect(layer.locator(':scope > summary')).toHaveText('Was passiert im Hintergrund');
   if (await layer.getAttribute('open') === null) await layer.locator(':scope > summary').click();
   await expect(layer).toHaveJSProperty('open', true);
@@ -423,9 +424,33 @@ test.fixme('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ 
     expect(sizes.actual).toBeCloseTo(sizes.root * .62, 2);
   }
 
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  const seam = page.locator('.wiki-seam');
+  await expect(seam).toBeVisible();
+  await expect(seam.locator('thead th').first()).toHaveText('Trennstelle');
+  await expect(seam).toContainText('TelegramFormatter');
+  const seamRows = seam.locator('tbody tr');
+  await expect(seamRows).toHaveCount(4);
+  await expect(seamRows.first()).toContainText('format(self, record: ValueRecord) -> bytes | None');
+  for (const [index, label] of ['Vertrag', 'Darf geändert werden', 'Bleibt unverändert', 'Tests'].entries()) {
+    await expect(seamRows.nth(index).locator('td').first()).toHaveText(label);
+    await expect(seamRows.nth(index).locator('td').nth(1)).toBeVisible();
+  }
+  await expect(seam.locator('a[href$="/test_gate_und_referenz.py"]')).toBeVisible();
+
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
   try {
     const noJs = await context.newPage();
+    await noJs.goto('/docs/CAMERA_COMMISSIONING.html');
+    const plainLayers = noJs.locator('details.wiki-layer');
+    await expect(plainLayers).toHaveCount(3);
+    for (const plainLayer of await plainLayers.all()) {
+      await expect(plainLayer.locator(':scope > summary')).toBeVisible();
+      await expect(plainLayer).not.toHaveAttribute('open');
+      await plainLayer.locator(':scope > summary').click();
+      await expect(plainLayer).toHaveAttribute('open', '');
+      await expect(plainLayer.locator(':scope > :not(summary)').first()).toBeVisible();
+    }
     await noJs.goto('/docs/anleitung/10-kamera-livevorschau.html');
     const plainSettings = noJs.locator('.wiki-setting');
     expect(await plainSettings.count()).toBeGreaterThan(0);
@@ -441,6 +466,17 @@ test.fixme('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ 
       await expect(rows.nth(3).locator('td').nth(1).locator('strong').first()).toHaveText(/^(Nein|Nur wenn|Ja)$/);
       await expect(setting.locator('.wiki-verdict')).toHaveCount(0);
     }
+    await noJs.goto('/docs/GSVMULTI_PROTOCOL.html');
+    const plainSeam = noJs.locator('.wiki-seam');
+    await expect(plainSeam).toBeVisible();
+    await expect(plainSeam.locator('thead th').first()).toHaveText('Trennstelle');
+    const plainSeamRows = plainSeam.locator('tbody tr');
+    await expect(plainSeamRows).toHaveCount(4);
+    await expect(plainSeamRows.first()).toContainText('format(self, record: ValueRecord) -> bytes | None');
+    for (const [index, label] of ['Vertrag', 'Darf geändert werden', 'Bleibt unverändert', 'Tests'].entries()) {
+      await expect(plainSeamRows.nth(index).locator('td').first()).toHaveText(label);
+      await expect(plainSeamRows.nth(index).locator('td').nth(1)).toBeVisible();
+    }
   } finally {
     await context.close();
   }
@@ -450,11 +486,26 @@ test('Seitenkopf ohne JavaScript nennt den Weg', async ({ browser, baseURL }) =>
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
   try {
     const page = await context.newPage();
-    await page.goto('/docs/anleitung/index.html');
+    await page.goto('/docs/CAMERA_COMMISSIONING.html');
     await expect(page.locator('.wiki-pagehead')).toBeVisible();
-    await expect(page.locator('.wiki-pagehead-weg')).toHaveText('Für: Entwickeln und anbinden');
+    await expect(page.locator('.wiki-pagehead-weg')).toHaveText('Für: Einrichten und bedienen');
   } finally {
     await context.close();
+  }
+});
+
+test('Beispielseiten tragen ihren Weg', async ({ page }) => {
+  for (const [path, way, label] of [
+    ['/docs/CAMERA_COMMISSIONING.html', 'bedienen', 'Einrichten und bedienen'],
+    ['/docs/anleitung/10-kamera-livevorschau.html', 'bedienen', 'Einrichten und bedienen'],
+    ['/docs/GSVMULTI_PROTOCOL.html', 'entwickeln', 'Entwickeln und anbinden'],
+  ]) {
+    await page.goto(path);
+    const head = page.locator('.md-content__inner h1 + .wiki-pagehead');
+    await expect(head).toHaveAttribute('data-weg', way);
+    await expect(head).toHaveAttribute('data-ready', 'true');
+    await expect(head.locator('.wiki-pagehead-weg')).toHaveText(`Für: ${label}`);
+    await expect(head.locator(`.wiki-pagehead-weg[href$="/index.html#weg-${way}"]`)).toBeVisible();
   }
 });
 
