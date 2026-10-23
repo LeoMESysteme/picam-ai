@@ -310,7 +310,8 @@
     T.label(msg, 60, 384, "Der Datensatz trägt die Aufnahmezeit. Schwankt die", "t-small t-strong");
     T.label(msg, 60, 402, "Rechenzeit, verschiebt das die Aufnahmezeit nicht.", "t-small t-strong");
     T.label(msg, 60, 420, "Die Wartezeit der Mehrbildbestätigung steht extra.", "t-small t-strong");
-    T.label(msg, 60, 500, "Ergebniszeitbasis außerhalb V4L2 fehlerhaft · OQ-45", "t-small t-plan-text");
+    const resultBase = T.fact("record.host_monotonic", "host_monotonic").toUpperCase();
+    T.label(msg, 60, 500, `Ergebnis: ${resultBase} · OQ-45 geklärt`, "t-small");
     T.label(msg, 60, 522, "Rechenzeiten aus den Trace-Marken bestimmen.", "t-small");
     tour.docLink(msg, "docs/uebersicht/zeitstempel.html", "Zeitstempel richtig lesen");
 

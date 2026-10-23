@@ -5,6 +5,10 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: R13-18 Fix round 1 gleicht Anleitungen, Zeitstempelübersicht, API-Doku, Plan und Aufgabenliste mit der geklärten OQ-45 ab. Tour-Text und Szene nennen gemeinsam HOST_MONOTONIC als Ergebniszeitbasis; das Label liest den Wert aus den erzeugten Tour-Fakten. Der historische Wiki-Audit erhält einen datierten Nachtrag, alte Auditlabels bleiben erhalten.
+
+* 2026-10-23: R13-18 klärt OQ-45: Verarbeitungsmarken aus `time.monotonic_ns()` tragen als `HOST_MONOTONIC` ihre tatsächliche Host-Zeitbasis, unabhängig von der Aufnahmequelle. Aufnahmezeiten bleiben unverändert. Die BOOTTIME-Umrechnung teilt Sessionversatz und Suspend-Ablehnung mit V4L2-MONOTONIC; alte Auditdateien bleiben ohne Migration lesbar. Tests sichern alle bisherigen Aufnahmezeitbasen und die neun Konzept-Pflichtfelder ab.
+
 * 2026-10-23: R13-17 Fix round 1 gleicht Übersichten, API-Doku und Aufgabenliste mit der technischen Testlauf-Sperre ab. Unterdrückte Records behalten Rohtext und Bestätigungsdiagnosen ohne Zahlenwert; `tolerance_frames` zählt anhand der ursprünglichen Gate-Entscheidung. Leser-Vermutungen werden vollständig samt `gate_status` veröffentlicht, und die Detailzeile nutzt die vorhandene deutsche Ursachenerklärung.
 
 * 2026-10-23: R13-17 klärt OQ-44: Testläufe unterdrücken jede Gate-Freigabe vor dem Audit als `UNREADABLE` mit `value=null` und `testlauf_keine_freigabe`. Leser-Vermutung und ursprünglicher Gate-Status bleiben getrennte Diagnosen; die Seite zeigt auch ältere Testlaufdaten niemals als gültig. `session.json` zählt `testlauf_unterdrueckt`; normale Läufe behalten unveränderte Auditbytes. Regressionstests sichern später lesbare Bilder, Ausgabegrenze und Referenzauswertung ab.

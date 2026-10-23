@@ -393,6 +393,13 @@
         "result_timestamp"
       ]
     },
+    "record.host_monotonic": {
+      "source": "src/dispread/records.py:TimeBaseKind.HOST_MONOTONIC",
+      "used_by": [
+        "zeit-latenz"
+      ],
+      "value": "host_monotonic"
+    },
     "record.status": {
       "source": "src/dispread/records.py:ValueStatus",
       "used_by": [

@@ -8,7 +8,6 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
-| [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-07](#oq-07) | Jetzt | offen | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-01](#oq-01) | — | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
@@ -52,6 +51,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-31](#oq-31) | — | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
 | [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
 | [OQ-44](#oq-44) | — | geklärt | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
+| [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 
 <!-- OQ-INDEX:END -->
 
@@ -2125,7 +2125,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-45 — Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet?
 
-* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Status:** geklärt am 2026-10-23 · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
 * **Befund:** `Timestamp.now_monotonic()` in `src/dispread/records.py`
   liest `time.monotonic_ns()`, setzt aber `base=SENSOR_BOOTTIME`.
   MONOTONIC und BOOTTIME dürfen nicht ungeprüft gleichgesetzt werden;
@@ -2135,15 +2135,28 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   V4L2-Livebildern, nicht allgemein bei Replay, synthetischen Bildern
   oder BOOTTIME-Aufnahmen. Das sind Bezeichnungslücken im Code, keine
   neu gemessenen Abweichungen eines Hardwarelaufs.
-* **Umgang bis zur Klärung:** Aus diesen Marken keinen belegten
+* **Umgang bis zur Klärung (historisch):** Aus diesen Marken keinen belegten
   BOOTTIME-Zeitbezug ableiten. Insbesondere bleiben synthetische
   Aufnahmezeiten ungeeignet für Latenz- und Synchronitätsaussagen.
   Der Live-Vergleich von V4L2-Aufnahmezeiten mit seriellen Referenzzeiten
   benötigt weiterhin den explizit gemessenen Versatz aus `session.json`.
-* **Klärung:** Aufrufer und Zeitdomänen getrennt erfassen, eine passende
+* **Klärung (durchgeführt):** Aufrufer und Zeitdomänen getrennt erfassen, eine passende
   Bezeichnung beziehungsweise explizite Umrechnung wählen und den
   Unterschied nach einem simulierten Suspend absichern. Das bestehende
   Verhalten nicht allein durch Umetikettieren der Dokumentation freigeben.
-* **Antwort landet in:** `src/dispread/records.py`,
-  `src/dispread/pipeline.py`, zugehörigen Zeitbasis- und Pipeline-Tests
+* **Antwort (2026-10-23):** `TimeBaseKind.HOST_MONOTONIC = "host_monotonic"`
+  bezeichnet Host-CLOCK_MONOTONIC bei der Verarbeitung, niemals eine
+  Aufnahmezeit. `Timestamp.now_monotonic()` und jede Pipeline-Ergebniszeit
+  verwenden diese Basis; `HOST_DEQUEUE` als Semantik bleibt bestehen.
+  Die Aufnahmezeit wird unverändert übernommen. `carries_time_information`
+  ist für die reale Host-Uhr wahr; daraus folgt keine Latenzaussage über
+  synthetische, Datei- oder Replay-Aufnahmen. `to_boottime_ns` verwendet für
+  HOST_MONOTONIC und V4L2_MONOTONIC denselben Sessionversatz und lehnt
+  fehlende Versätze oder Suspend ab. SENSOR_BOOTTIME bleibt unverändert.
+  Altdateien bleiben ohne Migration mit ihren bisherigen Ergebniszeitbasen
+  lesbar. Kein Verbraucher vergleicht Ergebnis- und Aufnahmezeit direkt;
+  Referenzvergleiche rechnen Aufnahmezeiten explizit nach BOOTTIME um.
+* **Antwort umgesetzt in:** `src/dispread/records.py`,
+  `src/dispread/pipeline.py`, `tests/test_records.py`,
+  `tests/test_live_tracking.py`, `tests/test_live_session.py`
   sowie [TIMING.md](TIMING.md).

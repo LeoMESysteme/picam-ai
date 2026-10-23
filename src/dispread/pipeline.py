@@ -24,6 +24,7 @@ from dispread.layout import CharLayout, DisplayLayout
 from dispread.ocr import ReadResult, ValueReader
 from dispread.records import (
     PipelineTrace,
+    TimeBaseKind,
     Timestamp,
     TimestampSemantics,
     TxReceipt,
@@ -199,7 +200,7 @@ class Pipeline:
             trigger_sequence=frame.trigger_sequence,
             result_timestamp=Timestamp(
                 value_ns=built,
-                base=frame.capture_timestamp.base,
+                base=TimeBaseKind.HOST_MONOTONIC,
                 semantics=TimestampSemantics.HOST_DEQUEUE,
             ),
             raw_text=raw_text,

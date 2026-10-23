@@ -131,7 +131,9 @@ Regeln:
    Die Verzögerung steht in `confirmation_span_ns`.
 4. **Datensatz:** `ValueRecord` mit allen neun Pflichtfeldern.
    `capture_timestamp` ist die Aufnahmezeit des gelesenen Bilds, nicht die
-   Verarbeitungszeit; `result_timestamp` aus derselben Uhr;
+   Verarbeitungszeit; `result_timestamp` immer aus `time.monotonic_ns()`
+   mit `HOST_MONOTONIC`, unabhängig von der Aufnahmezeitbasis
+   ([OQ-45, geklärt 2026-10-23](../../open-questions.md#oq-45));
    `frames_confirmed` und `confirmation_span_ns` dokumentieren die
    Bestätigungsverzögerung; `raw_text` enthält die 16 Zellen; `unit` kommt
    aus dem bestätigten Profil.

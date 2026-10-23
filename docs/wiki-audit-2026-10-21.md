@@ -106,6 +106,11 @@ Wiki zu den aus `docs-site/api/` stammenden Seiten.
 * [OQ-45](open-questions.md#oq-45): MONOTONIC-Verarbeitungsmarken sind
   teilweise mit einer unpassenden Zeitbasis bezeichnet. Keine allgemeine
   Aussage über Aufnahme-/Ergebniszeitdifferenzen daraus ableiten.
+  **Nachtrag 2026-10-23:** `Timestamp.now_monotonic()` und jede
+  Pipeline-Ergebniszeit verwenden `HOST_MONOTONIC` aus
+  `time.monotonic_ns()`; die Aufnahmezeit behält ihre Quellbasis. Nach
+  BOOTTIME führt nur `to_boottime_ns` mit Sessionversatz und
+  Suspend-Prüfung. Alte Auditdateien behalten ihre bisherigen Labels.
 * GSVmulti ([OQ-07](open-questions.md#oq-07)), weitere Geräte/Lichtquellen,
   Toleranzvalidierung und Audit-Aufbewahrung bleiben offen.
 

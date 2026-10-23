@@ -144,7 +144,12 @@ nicht zum Nachziehen der Grenzen am Abnahmedatensatz.
 - [ ] OQ-26 bis zur weitergehenden Gerätevalidierung offen halten.
   OQ-44 und OQ-45 werden als eigene Aufgaben geführt; OQ-44 ist seit
   2026-10-23 durch die Freigabesicherung vor dem Test-Audit geklärt
-  ([Antwort](../../open-questions.md#oq-44)). OQ-45 bleibt offen.
+  ([Antwort](../../open-questions.md#oq-44)). OQ-45 ist seit 2026-10-23
+  geklärt: Ergebniszeiten tragen für jede Quelle `HOST_MONOTONIC` aus
+  `time.monotonic_ns()`, Aufnahmezeiten behalten ihre Basis. Nach BOOTTIME
+  führt nur `to_boottime_ns` mit Sessionversatz und Suspend-Prüfung;
+  alte Auditdateien behalten ihre Labels
+  ([Antwort](../../open-questions.md#oq-45)).
 - [ ] OQ-Index bei TODO-/OQ-Änderungen aktualisieren; vor dem Merge
   `./scripts/docs-site.sh build -s` und
   `npx playwright test -c playwright.docs.config.ts` ausführen.

@@ -205,15 +205,18 @@ zeigt die aktuelle Signatur.
 | `status`, `confidence`, `reject_reasons` | `ReleaseGate` | niemand |
 | `profile_id` | Session / ProfileStore | niemand |
 | `trigger_sequence` | `FrameSource` / Trigger | niemand |
-| `result_timestamp` | Pipeline beim Abschluss | niemand |
+| `result_timestamp` | Pipeline beim Abschluss, `HOST_MONOTONIC` | niemand |
 
-**Offener Zeitbasisfehler ([OQ-45](../open-questions.md#oq-45)):** Die
-Pipeline setzt `result_timestamp.value_ns` aus `CLOCK_MONOTONIC`, übernimmt
-aber dessen `base` vom Aufnahmezeitstempel. Für den aktiven UVC-Pfad passt
-die Domäne; bei anderen Quellbasen darf daraus keine Differenz zwischen
-Aufnahme und Ergebnis abgeleitet werden. Auch `Timestamp.now_monotonic()`
-kennzeichnet seinen monotonen Wert derzeit als `SENSOR_BOOTTIME`.
-Die Stufenmarken im `PipelineTrace` bleiben separat monoton.
+**Verarbeitungszeitbasis (geklärt 2026-10-23,
+[OQ-45](../open-questions.md#oq-45)):** Die Pipeline setzt
+`result_timestamp` für jede Quelle aus `time.monotonic_ns()` mit der Basis
+`HOST_MONOTONIC`; auch `Timestamp.now_monotonic()` verwendet diese Basis.
+`capture_timestamp` behält unverändert die Zeitbasis der Quelle. Nach
+BOOTTIME führt nur `to_boottime_ns` mit dem Versatz der jeweiligen Session
+und bestandener Suspend-Prüfung. Alte Auditdateien behalten ihre bisherigen
+Basenkennzeichnungen. Aufnahme- und Ergebniszeit deshalb nur bei belegtem
+gemeinsamem Uhrbezug vergleichen; reine Rechenzeiten stehen in den
+monotonen Stufenmarken des `PipelineTrace`.
 
 Zwei Invarianten, im Konstruktor erzwungen:
 

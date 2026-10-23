@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from dotmatrix_helpers import LAYOUT, QUAD, embed, synthetic_reader
 
 from dispread.frames import Frame
@@ -28,6 +29,26 @@ def test_tracked_locator_reads_value_through_pipeline():
     record = _pipeline(TrackedQuadLocator(reference, QUAD)).process(_frame(1, embed("+ 1.2345 ")))
     assert record.status is ValueStatus.VALID
     assert record.value == 1.2345 and record.unit == "mV/V"
+
+
+@pytest.mark.parametrize("base", [
+    TimeBaseKind.V4L2_MONOTONIC, TimeBaseKind.SYNTHETIC, TimeBaseKind.REPLAY_RECORDED,
+    TimeBaseKind.FILE_MTIME, TimeBaseKind.SENSOR_BOOTTIME,
+])
+@pytest.mark.parametrize("located", [True, False])
+def test_ergebniszeit_ist_host_monotonic_unabhaengig_von_aufnahme(base, located, monkeypatch):
+    image = embed("+ 1.2345 ")
+    pipeline = _pipeline(TrackedQuadLocator(image, QUAD))
+    capture = Timestamp(123_456, base)
+    frame = Frame(frame_sequence=1, image=image if located else np.zeros_like(image),
+                  capture_timestamp=capture, source_id="fake")
+    monkeypatch.setattr("dispread.pipeline.time.monotonic_ns", lambda: 987_654_321)
+    record = pipeline.process(frame)
+    assert record.status is (ValueStatus.VALID if located else ValueStatus.UNREADABLE)
+    assert record.capture_timestamp is capture
+    assert record.result_timestamp.base.value == "host_monotonic"
+    assert record.result_timestamp.value_ns == 987_654_321
+    assert record.trace.t_record_built_ns == 987_654_321
 
 
 def test_lost_tracking_is_unreadable_with_reason():

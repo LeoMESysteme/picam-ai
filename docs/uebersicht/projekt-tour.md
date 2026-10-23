@@ -453,11 +453,13 @@ Lesen und Freigabe danach rechnen, verschiebt sie nicht; diese Rechenzeit
 steht getrennt im `PipelineTrace`, die Fertigstellung in
 `result_timestamp`. Wartet die Freigabe auf mehrere gleiche Bilder, steht
 diese Wartezeit eigens in `confirmation_span_ns`. Die Felder werden nie zu
-einem einzigen „Zeitstempel“ zusammengelegt. Die aktuelle Kennzeichnung
-der Ergebniszeit übernimmt noch die Basis des Frames, obwohl die Uhr
-MONOTONIC ist. Außerhalb des V4L2-Pfads ist sie deshalb nicht zuverlässig;
-Rechenzeit nur aus den gleichbasigen Trace-Marken bestimmen
-([OQ-45](../open-questions.md#oq-45)).
+einem einzigen „Zeitstempel“ zusammengelegt. `result_timestamp` stammt für
+jede Quelle aus `time.monotonic_ns()` und trägt `HOST_MONOTONIC`;
+`capture_timestamp` behält seine Quellbasis. Nach BOOTTIME führt nur
+`to_boottime_ns` mit dem Versatz der jeweiligen Session und Suspend-Prüfung.
+Alte Auditdateien behalten ihre bisherigen Labels. Rechenzeit aus den
+gleichbasigen Trace-Marken bestimmen
+([OQ-45, geklärt 2026-10-23](../open-questions.md#oq-45)).
 
 Das Beispiel aus TIMING.md rechts: Konstante 200 ms verschieben den
 Zeitbezug, verschlechtern ihn aber nicht. 50 ms ± 40 ms sind trotz kleinerem

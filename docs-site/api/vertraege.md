@@ -30,7 +30,7 @@ Sie stehen im Code zuerst und in dieser Reihenfolge.
 | `confidence` | Qualitätskennzahl der Erkennung | Eine Kennzahl, **keine** Fehlerwahrscheinlichkeit. |
 | `profile_id` | Geräte- und Anzeigeprofil, mit dem gelesen wurde | Belegt, welche Einstellungen für diesen Wert galten. |
 | `trigger_sequence` | Optional zugeordnetes Triggerereignis | Bisher setzt keine Bildquelle einen Trigger; das Feld ist deshalb leer. |
-| `result_timestamp` | Zeitpunkt, an dem die Kette den Datensatz fertig hatte | Ein anderes Ereignis mit eigener Zeitbasis; für Rechenzeit die gleichbasigen Marken im `trace` verwenden. |
+| `result_timestamp` | Zeitpunkt, an dem die Kette den Datensatz fertig hatte, in `HOST_MONOTONIC` | Für jede Quelle aus `time.monotonic_ns()`; für Rechenzeit die gleichbasigen Marken im `trace` verwenden. |
 
 Dahinter folgen Felder zur Nachvollziehbarkeit: der gelesene Rohtext
 (`raw_text`), die Ablehnungsgründe (`reject_reasons`), wie viele Bilder einen
@@ -51,12 +51,15 @@ VALID-Records bleiben für Messungen gesperrt; `TESTLAUF.json` und die
 Markierung in `session.json` sind mit auszuwerten. Die Laufkennzeichnung ist kein
 Feld des einzelnen `ValueRecord`.
 
-Die Basenkennzeichnung der Ergebniszeit ist außerhalb des V4L2-Pfads noch
-nicht zuverlässig: Die Pipeline liest MONOTONIC und übernimmt die Basis
-des Eingangsframes. Auch `Timestamp.now_monotonic()` ist derzeit als
-`sensor_boottime` markiert. Für Rechenzeiten die gleichbasigen Trace-Marken
-verwenden; Aufnahme- und Ergebnisstempel nicht ungeprüft subtrahieren
-([OQ-45](../docs/open-questions.md#oq-45)).
+Die Pipeline kennzeichnet `result_timestamp` für jede Quelle als
+`HOST_MONOTONIC` aus `time.monotonic_ns()`; auch
+`Timestamp.now_monotonic()` verwendet diese Basis.
+`capture_timestamp` behält unverändert die Quellbasis. Nach BOOTTIME führt
+nur `to_boottime_ns` mit dem Versatz der jeweiligen Session und
+Suspend-Prüfung. Alte Auditdateien behalten ihre bisherigen Labels. Für
+Rechenzeiten die gleichbasigen Trace-Marken verwenden; Aufnahme- und
+Ergebnisstempel nur bei belegtem gemeinsamem Uhrbezug vergleichen
+([OQ-45, geklärt 2026-10-23](../docs/open-questions.md#oq-45)).
 
 Was tatsächlich über die Leitung ging, steht **nicht** im Datensatz, sondern
 in einem getrennten `TxReceipt`. So bleibt unterscheidbar, wann ein Wert

@@ -77,13 +77,17 @@ berücksichtigt das Schutzintervall und trennt entschiedene Vergleiche,
 Wechselfenster und fehlende Referenzdeckung. Ihre gemessene Reaktionszeit
 ist keine Aussage über die interne DUT-Messzeit.
 
-**Offener Codebefund:** `Timestamp.now_monotonic()` liest MONOTONIC,
-deklariert aber `SENSOR_BOOTTIME`; `Pipeline._build_record` übernimmt für die
-Ergebniszeit die Zeitbasis der Aufnahme trotz MONOTONIC-Uhr. Daraus darf
-keine allgemeine Übereinstimmung der Domänen abgeleitet werden
-([OQ-45](open-questions.md#oq-45)). Die gegenwärtigen V4L2-Live-Aufnahmen
-tragen selbst MONOTONIC; Replay-, Sensor- und synthetische Fälle brauchen
-getrennte Prüfung.
+**Verarbeitungsmarken (2026-10-23):** `Timestamp.now_monotonic()` und
+`Pipeline._build_record` kennzeichnen die Ergebniszeit aus
+`time.monotonic_ns()` als `HOST_MONOTONIC`. Sie trägt eine reale
+Host-CLOCK_MONOTONIC-Zeitaussage zur Verarbeitung, niemals zur Aufnahme.
+`capture_timestamp` bleibt mit seiner ursprünglichen Zeitbasis unverändert
+([OQ-45](open-questions.md#oq-45)). V4L2-Aufnahmezeiten liegen ebenfalls in
+CLOCK_MONOTONIC; für BOOTTIME ist bei beiden Marken `to_boottime_ns` mit dem
+gemessenen Sessionversatz und der Suspend-Prüfung erforderlich. Replay-,
+synthetische und Dateizeiten werden durch eine reale Ergebniszeit nicht zu
+geeigneten Aufnahmezeiten für Latenzaussagen. Alte Auditdateien behalten beim
+Lesen ihre ursprünglichen Bezeichnungen; sie werden nicht umgeschrieben.
 
 ### Zeitbasis von `SensorTimestamp` — 2026-09-07
 

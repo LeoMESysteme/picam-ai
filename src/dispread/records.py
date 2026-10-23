@@ -19,7 +19,7 @@ SCHEMA_VERSION = 1
 
 
 class TimeBaseKind(StrEnum):
-    """Herkunft und damit Belastbarkeit eines Aufnahmezeitstempels.
+    """Herkunft und damit Belastbarkeit eines Zeitstempels.
 
     Pflichtfeld in jedem Frame und jedem ValueRecord. Es wird nie geschönt:
     eine synthetische Quelle darf keine Sensorqualität behaupten. Damit ist im
@@ -41,6 +41,9 @@ class TimeBaseKind(StrEnum):
     #: gemessen 2026-09-25). Roh gespeichert; nach CLOCK_BOOTTIME nur über
     #: `to_boottime_ns` mit dem in session.json gemessenen Versatz.
     V4L2_MONOTONIC = "v4l2_monotonic"
+    #: Host-CLOCK_MONOTONIC bei der Verarbeitung (time.monotonic_ns()).
+    #: Verarbeitungsmarke, niemals Aufnahmezeit; BOOTTIME nur mit Sessionversatz.
+    HOST_MONOTONIC = "host_monotonic"
 
     @property
     def carries_time_information(self) -> bool:
@@ -49,6 +52,7 @@ class TimeBaseKind(StrEnum):
             TimeBaseKind.SENSOR_BOOTTIME,
             TimeBaseKind.REPLAY_RECORDED,
             TimeBaseKind.V4L2_MONOTONIC,
+            TimeBaseKind.HOST_MONOTONIC,
         )
 
 
@@ -58,7 +62,7 @@ SUSPEND_TOLERANCE_NS = 1_000_000
 
 
 def to_boottime_ns(timestamp: dict[str, Any], session: dict[str, Any] | None) -> int:
-    """Aufnahmezeitstempel (Timestamp.to_dict()-Form) nach CLOCK_BOOTTIME.
+    """Zeitstempel (Timestamp.to_dict()-Form) nach CLOCK_BOOTTIME.
 
     Einzige Umrechnungsstelle (Spec 2026-09-25, Abschnitt 2). Lehnt ab statt
     zu raten: fehlender Versatz, Suspend während der Aufnahme oder eine
@@ -68,11 +72,11 @@ def to_boottime_ns(timestamp: dict[str, Any], session: dict[str, Any] | None) ->
     value_ns = int(timestamp["value_ns"])
     if base == TimeBaseKind.SENSOR_BOOTTIME.value:
         return value_ns
-    if base == TimeBaseKind.V4L2_MONOTONIC.value:
+    if base in (TimeBaseKind.V4L2_MONOTONIC.value, TimeBaseKind.HOST_MONOTONIC.value):
         offsets = (session or {}).get("clock_offset_boottime_minus_monotonic_ns")
         if not offsets or offsets.get("start") is None or offsets.get("end") is None:
             raise ValueError(
-                "v4l2_monotonic-Zeitstempel ohne clock_offset_boottime_minus_monotonic_ns "
+                f"{base}-Zeitstempel ohne clock_offset_boottime_minus_monotonic_ns "
                 "in session.json - Umrechnung nach CLOCK_BOOTTIME nicht moeglich."
             )
         start, end = int(offsets["start"]), int(offsets["end"])
@@ -134,7 +138,7 @@ class Timestamp:
         """Jetzt, in der monotonen Domäne - für Verarbeitungsmarken."""
         return cls(
             value_ns=time.monotonic_ns(),
-            base=TimeBaseKind.SENSOR_BOOTTIME,
+            base=TimeBaseKind.HOST_MONOTONIC,
             semantics=TimestampSemantics.HOST_DEQUEUE,
         )
 
@@ -205,7 +209,7 @@ class ValueRecord:
     | `status`, `confidence`, ... | ReleaseGate | niemand |
     | `profile_id` | Session / ProfileStore | niemand |
     | `trigger_sequence` | FrameSource / Trigger | niemand |
-    | `result_timestamp` | Pipeline beim Abschluss | niemand |
+    | `result_timestamp` | Pipeline beim Abschluss, HOST_MONOTONIC | niemand |
 
     Adapterzustand (Kanal, Sendezeit, Telegrammtext, Retries) gehört
     ausdrücklich NICHT hierher, sondern in TxReceipt. Der Datensatz belegt,

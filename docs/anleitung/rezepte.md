@@ -142,10 +142,13 @@ Rechenzeiten der Software auswerten. Die Zeitbasis des Aufnahmezeitstempels
 entscheidet dagegen, ob sich Aufnahme- und Verarbeitungszeit sinnvoll
 zueinander in Beziehung setzen lassen. `SYNTHETIC` und `FILE_MTIME` erlauben
 keine Latenzaussage; Details stehen unter
-[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md). Zusätzlich ist
-`result_timestamp` außerhalb des UVC-Pfads derzeit nicht verlässlich mit
-seiner Basis markiert ([OQ-45](../open-questions.md#oq-45)); reine
-Stufendauern oben verwenden diesen Zeitstempel nicht.
+[Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
+`result_timestamp` kommt für jede Quelle aus `time.monotonic_ns()` und trägt
+`HOST_MONOTONIC`; `capture_timestamp` behält seine Quellbasis
+([OQ-45, geklärt 2026-10-23](../open-questions.md#oq-45)). Nach BOOTTIME
+führt nur `to_boottime_ns` mit dem Versatz der jeweiligen Session und
+Suspend-Prüfung. Alte Auditdateien behalten ihre bisherigen Labels. Die
+reinen Stufendauern oben verwenden den Ergebniszeitstempel nicht.
 
 ## 8 — Segmentmessungen eines Ausschnitts sichtbar machen
 

@@ -313,11 +313,15 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    unabhängig vom Zifferninhalt untersuchen und große Sprünge erneut
    prüfen. Die berichtete Abdeckung ist zeitlich nicht eindeutig
    zuordenbar. [Zahlen](docs/VALIDATION.md#messpfad-live-werteplan-2026-10-21).
-2. **~~Testlauf-Sicherung~~ (erledigt 2026-10-23) und Zeitbasis-Bezeichnung klären:**
+2. **~~Testlauf-Sicherung und Zeitbasis-Bezeichnung klären~~ (erledigt 2026-10-23):**
    [OQ-44](docs/open-questions.md#oq-44) ist umgesetzt: Gate-Freigaben werden
    vor dem Test-Audit als `UNREADABLE` ohne `value` unterdrückt;
-   [OQ-45](docs/open-questions.md#oq-45) betrifft MONOTONIC-Marken mit
-   unpassender Zeitbasis. Testlaufdaten bleiben für Messungen gesperrt.
+   [OQ-45](docs/open-questions.md#oq-45) ist erledigt 2026-10-23:
+   Ergebniszeiten aus `time.monotonic_ns()` tragen für jede Quelle
+   `HOST_MONOTONIC`, Aufnahmezeitbasen bleiben unverändert. BOOTTIME nur
+   über `to_boottime_ns` mit Sessionversatz und Suspend-Prüfung;
+   alte Auditdateien behalten ihre Labels. Testlaufdaten bleiben für
+   Messungen gesperrt.
 3. **Toleranzlauf ≥ 10 min mit Werteplan** (siehe unten), mit der
    bedienenden Person; der Werteplan schreibt `set norm` und stellt danach
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für

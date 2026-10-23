@@ -105,6 +105,8 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert second.status is ValueStatus.VALID and second.value == 1.2345
     assert second.capture_timestamp.base is TimeBaseKind.V4L2_MONOTONIC
     assert second.capture_timestamp.value_ns == 2 * 33_333_333
+    assert first.result_timestamp.base.value == "host_monotonic"
+    assert second.result_timestamp.base.value == "host_monotonic"
     assert second.frames_confirmed == 2
     assert second.confirmation_span_ns == 33_333_333
     summary = session.stop()
