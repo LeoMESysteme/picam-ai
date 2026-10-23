@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from aiohttp import web
 
-from dispread.workbench.fields import REASONS
+from dispread.workbench.fields import REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -54,6 +54,10 @@ class FakeLiveService:
             data = copy.deepcopy(self._status)
             if full:
                 data["tracking_reasons"] = REASONS.copy()
+            if data.get("run") is not None:
+                window = data["run"].setdefault("rejection_causes",
+                    {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
+                window["causes"] = [live_cause(c) for c in window["causes"]]
             return data
 
     def start_setup(self, *, cell_text=None):

@@ -270,8 +270,9 @@ def _normalize_reason(reason: str | None) -> str | None:
     """`evaluate()` kennt kein eigenes `vorzeichen` - eine falsche oder
     fehlende Vorzeichenzelle verletzt die Formatregel `gsv2as_v1` (Zelle 0 =
     `+`) und wird dort als `format` gezaehlt. Fuer den Vergleich in
-    `reader-check` wird die Leser-Ausgabe auf denselben Namen normiert."""
-    return "format" if reason == "vorzeichen" else reason
+    `reader-check` wird die Leser-Ausgabe auf denselben Namen normiert.
+    `leerzelle_gestoert` ist ebenfalls eine Formatverletzung."""
+    return "format" if reason in {"vorzeichen", "leerzelle_gestoert"} else reason
 
 
 def _reader_outcome(result, true_text: str) -> tuple[str, str | None]:
@@ -280,6 +281,13 @@ def _reader_outcome(result, true_text: str) -> tuple[str, str | None]:
     Bild-only-Erkennung."""
     reason = result.diagnostics.get("reject_reason")
     if reason is not None:
+        # Zelle 8 wird jetzt als gestoerte Leerzelle benannt. evaluate()
+        # arbeitet weiter mit dem alten Zell-/Formatvertrag.
+        if reason == "leerzelle_gestoert" and result.diagnostics.get("reject_cell") == 8:
+            cells = result.diagnostics.get("cells", [])
+            cell_reason = cells[8].get("reason") if len(cells) > 8 else None
+            if cell_reason:
+                return f"abgelehnt:{cell_reason}", reason
         return f"abgelehnt:{_normalize_reason(reason)}", reason
     predicted = "".join(g.text for g in result.glyphs)
     return ("richtig" if predicted == true_text else "falsch"), None

@@ -81,7 +81,9 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#run-start')).toBeEnabled();
 
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
-    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2 };
+    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2,
+    rejection_causes: {window_s: 10, frames: 4, limited: false,
+      causes: [{reason: 'leser:leerzelle_gestoert:14', count: 1, fraction: 0.25}]}};
   await setState({ state: 'running', run, diagnostics: {enabled: true, saved: 4, bytes: 12_500_000,
     dropped_queue: 0, dropped_limit: 0, dropped_memory: 2, dropped_mark_rate: 3, write_errors: 0},
     diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}] });
@@ -89,6 +91,9 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#diagnostics-status')).toContainText('RAM verworfen: 2');
   await expect(page.locator('#diagnostics-status')).toContainText('Markenbilder verworfen: 3');
   await expect(page.locator('#diagnostics-status')).toContainText('/test/dispread-diagnose-old (2.5 MB)');
+  await expect(page.locator('#recent-causes')).toBeVisible();
+  await expect(page.locator('#recent-causes-list')).toContainText('Zelle 14 (rechts der Einheit)');
+  await expect(page.locator('#recent-causes-list')).toContainText('25 % der Bilder');
   await expect(page.locator('#mark-box')).toBeVisible();
   await page.locator('#mark-text').fill('Display abgedeckt');
   const markRequest = page.waitForRequest('**/live/run/mark');

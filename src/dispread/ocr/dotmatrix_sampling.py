@@ -29,6 +29,17 @@ die Leerzelle 8; der Hintergrund je Zelle kam aus dem hellen Teil, der
 dunkle Teil las sich als Punktmuster (bis 0,88, VALIDATION.md 2026-09-29).
 Die relative Punkttiefe je Zelle (`ink_per_cell_v1`) bleibt, sie wird nur
 mit dem Hintergrund des einzelnen Punkts statt der Zelle multipliziert.
+
+R13-8: Vor der Schliessung unterdrueckt eine Grauwert-Oeffnung kleine
+helle Glasdefekte. Ihr Rechteck ist je Achse hoechstens 0,4 Punktabstaende
+gross (auf ungerade Pixel abgerundet). LCD-Punkte sind dunkel: heller als
+das Glas ist nie ein Zeichenpunkt. Nur die Hintergrundschaetzung wird
+geoeffnet; Rohwerte, Zellperzentil, Tinte, Kontrast und Saettigung bleiben
+am Original. Dunkle Flecken behandelt der neue Filter nicht: Sie koennen
+als leer gelesen oder abgelehnt werden, aendern aber keinen Messwert.
+Die Abtastvektoren aendern sich durch die Oeffnung numerisch. Ohne neues
+Training bleibt die Kennung `NORMALIZATION` hier `bg_closing_v1`; das
+naechste Training muss eine neue Kennung verwenden.
 """
 
 from __future__ import annotations
@@ -69,6 +80,19 @@ _MIN_INKED_CELLS = 3
 #: Rang des dunkelsten Punkts, der als Punktpegel der Zelle gilt (0 = der
 #: dunkelste; 1 = der zweitdunkelste, robust gegen ein einzelnes Rauschpixel).
 _CELL_INK_RANK = 1
+
+
+def background_opening(img: np.ndarray, grid: CharGrid) -> np.ndarray:
+    """Kleine helle Defekte entfernen, ohne Rohabtastungen zu veraendern.
+
+    Nach dem Gaussfilter: Rauschen wird nicht als heller Defekt behandelt.
+    Mindestens 1 Pixel (bei unteraufgeloesten Bildern also wirkungslos),
+    sonst ungerade und hoechstens 0,4 Punktabstaende je Achse.
+    """
+    pitches = (grid.pitch / (grid.dot_columns + grid.gap_columns), (grid.bottom - grid.top) / ROWS)
+    size = tuple(max(1, (int(0.4 * pitch) - 1) // 2 * 2 + 1) for pitch in pitches)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, size)
+    return cv2.dilate(cv2.erode(img, kernel), kernel)
 
 
 def dot_centers(grid: CharGrid, cell: int, shift: tuple[int, int] = (0, 0)) -> np.ndarray:
@@ -127,7 +151,8 @@ def sample_image(gray: np.ndarray, grid: CharGrid, cells: range | tuple[int, ...
         cv2.MORPH_RECT,
         (2 * int(round(_BG_CLOSING_HALF_COLS * col_w)) + 1, 2 * int(round(_BG_CLOSING_HALF_ROWS * row_h)) + 1),
     )
-    closed = cv2.erode(cv2.dilate(smooth, kernel), kernel)
+    opened = background_opening(smooth, grid)
+    closed = cv2.erode(cv2.dilate(opened, kernel), kernel)
     centers = _dot_centers(grid, np.asarray(cells, dtype=np.float64)[:, None], np.asarray(SHIFTS))
     shape = (len(cells), len(SHIFTS), N_DOTS)
     points = centers.reshape(-1, 2)

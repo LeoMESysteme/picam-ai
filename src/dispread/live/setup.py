@@ -35,7 +35,7 @@ from dispread.lattice_offsets import refine_quad
 from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, proposal_from_regions, propose_regions
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
-from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
+from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.fields import REASONS
@@ -388,6 +388,7 @@ def write_overlays(
     edge_cells: tuple[int, ...] | None = None,
     tracking_proposal: RegionProposal | None = None,
     write_sampling: bool = True,
+    display_defects: list | tuple = (),
 ) -> list[Path]:
     """overlay_source.png, overlay_rectified.png und (mit Fit) overlay_sampling.png."""
     written: list[Path] = []
@@ -417,9 +418,20 @@ def write_overlays(
         )):
             cv2.putText(overlay_source, label, (8, 42 + row*20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+    crop = rectify(image, quad, target_size=target_size)
+    if display_defects:
+        if overlay_source.ndim == 2:
+            overlay_source = cv2.cvtColor(overlay_source, cv2.COLOR_GRAY2BGR)
+        inverse = np.linalg.inv(np.asarray(crop.homography).reshape(3, 3))
+        points = np.asarray([d['rectified'] for d in display_defects], np.float32).reshape(-1, 1, 2)
+        source_points = cv2.perspectiveTransform(points, inverse).reshape(-1, 2)
+        for defect, point in zip(display_defects, source_points, strict=True):
+            x, y = np.rint(point).astype(int)
+            cv2.circle(overlay_source, (x, y), 5, (0, 180, 255), 1)
+            cv2.putText(overlay_source, f"Z{defect['cell']} {defect['kind']}", (x + 6, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 180, 255), 1)
     cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
     written.append(out_dir / "overlay_source.png")
-    crop = rectify(image, quad, target_size=target_size)
     if write_sampling and fit is not None and edge_cells is not None:
         cv2.imwrite(str(out_dir / "overlay_sampling.png"), draw_sampling_overlay(crop.image, edge_cells=edge_cells))
         written.append(out_dir / "overlay_sampling.png")
@@ -428,6 +440,11 @@ def write_overlays(
     for i, (x, y, w, h) in enumerate(grid.cell_boxes()):
         cv2.rectangle(rectified, (x, y), (x + w, y + h), (0, 255, 0), 1)
         cv2.putText(rectified, str(i), (x + 1, max(y + 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1)
+    for defect in display_defects:
+        x, y = np.rint(defect['rectified']).astype(int)
+        cv2.circle(rectified, (x, y), 4, (0, 180, 255), 1)
+        cv2.putText(rectified, f"Z{defect['cell']} {defect['kind']}", (x + 5, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 180, 255), 1)
     cv2.imwrite(str(out_dir / "overlay_rectified.png"), rectified)
     written.append(out_dir / "overlay_rectified.png")
     return written
@@ -490,6 +507,11 @@ def propose_with_fit(
             checks_dict["overall"] = "WARNUNG"
     tracking_proposal = None
     if live_tracking:
+        stills = [image] if stability_image_bgr is None else [image, stability_image_bgr]
+        defects = display_defect_check(stills, quad, grid=grid, cell_text=cell_text)
+        checks_dict['checks']['displayfehler'] = defects.to_dict()
+        if defects.status == 'WARNUNG' and checks_dict['overall'] == 'OK':
+            checks_dict['overall'] = 'WARNUNG'
         tracking_proposal = propose_regions(image, quad)
         checks_dict["checks"]["nachfuehrung"] = {
             "status": "OK" if tracking_proposal.ok else "FEHLER",
@@ -533,6 +555,7 @@ def propose_with_fit(
         image, quad, grid, out_dir, fit=fit, overall=checks_dict["overall"],
         edge_cells=tuple(checks.checks["kanten"].cells),
         **({"tracking_proposal": tracking_proposal} if tracking_proposal is not None else {}),
+        display_defects=checks_dict['checks'].get('displayfehler', {}).get('metrics', {}).get('defects', []),
     )
     return proposal
 
@@ -599,7 +622,8 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
     write_overlays(image, updated["quad"], CharGrid.from_dict(updated["grid"]), out_dir,
                    target_size=tuple(updated["target_size"]), fit=SimpleNamespace(**evidence),
                    overall=evidence["overall"], edge_cells=tuple(evidence["edge_cells"]),
-                   tracking_proposal=tracking, write_sampling=False)
+                   tracking_proposal=tracking, write_sampling=False,
+                   display_defects=checks.get('displayfehler', {}).get('metrics', {}).get('defects', []))
     (out_dir / "proposal.json").write_text(json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8")
     return updated
 

@@ -100,6 +100,7 @@ def default_gate_config(backend_id: str, **overrides: object) -> GateConfig:
 _TRANSITION_REASONS = frozenset({
     "low_segment_margin", "decimal_point_unknown", "sign_region_unreadable", "no_value",
 })
+_TRANSITION_READER_REASONS = frozenset({"zelle_unbekannt", "zelle_mehrdeutig", "vorzeichen", "format"})
 
 
 def _cell_texts(read: ReadResult) -> tuple[str, ...] | None:
@@ -146,6 +147,10 @@ class ReleaseGate:
     def evaluate(self, read: ReadResult, capture_ns: int) -> GateDecision:
         cfg = self.config
         reasons: list[str] = []
+        reader_reason = read.diagnostics.get("reject_reason") if read.backend_id == "dotmatrix" else None
+        if reader_reason:
+            cell = read.diagnostics.get("reject_cell")
+            reasons.append(f"leser:{reader_reason}" + (f":{cell}" if cell is not None else ""))
 
         contrast = float(read.diagnostics.get("contrast", 0.0))
         min_margin = float(read.diagnostics.get("min_margin", 0.0))
@@ -171,7 +176,7 @@ class ReleaseGate:
             reasons.append("sign_region_unreadable")
 
         # --- Dezimalpunkt: eigenstaendiges Kriterium -------------------------
-        if not read.decimal_point_detected:
+        if not read.decimal_point_detected and not reader_reason:
             reasons.append("decimal_point_unknown")
 
         # --- Einheit: bestaetigt oder abgelehnt ------------------------------
@@ -234,7 +239,9 @@ class ReleaseGate:
             return False
         if capture_ns - self._last_valid_ns > cfg.transition_window_ns:
             return False
-        if not all(r.startswith("unreadable_cells:") or r in _TRANSITION_REASONS for r in reasons):
+        if not all(r.startswith("unreadable_cells:") or r in _TRANSITION_REASONS
+                   or (r.startswith("leser:") and r.split(":")[1] in _TRANSITION_READER_REASONS)
+                   for r in reasons):
             return False
         cells = read.diagnostics.get("cells")
         if not isinstance(cells, list) or len(cells) != len(last):

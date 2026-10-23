@@ -266,3 +266,21 @@ def test_bg_closing_is_the_recorded_normalization():
     from dispread.ocr.dotmatrix_sampling import NORMALIZATION
 
     assert NORMALIZATION == "bg_closing_v1"
+
+
+def test_small_bright_specks_do_not_ink_blank_neighbourhood():
+    """R13-8: heller Defekt auf geneigtem Glas-Helligkeitsverlauf.
+
+    Entzerrtes Setup-Raster: horizontal ~4 px, vertikal ~18 px je Punkt.
+    Die Defektbreiten reichen von einem Pixel bis ~0,6 Punktspalten.
+    """
+    grid = CharGrid(16, 0.0, 25.0, 160.0 / 9.0, 160.0)
+    for width in (1, 2, 3):
+        img = render('+0.60972 ', grid=grid, bg=140, ink=40).astype(np.float32)
+        img += np.arange(160, dtype=np.float32)[:, None] * 0.3
+        img = img.astype(np.uint8)
+        x, y = np.round(dot_centers(grid, 14)[17]).astype(int)
+        img[y:y + width, x:x + width] = 245
+        main = sample_image(img, grid, range(9))
+        blank = normalized(sample_image(img, grid, (14,)), ink=main.ink)
+        assert blank.max() < 0.02, (width, blank.max())

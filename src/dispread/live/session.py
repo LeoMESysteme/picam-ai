@@ -30,6 +30,7 @@ from dispread.live import (
     DEFAULT_TEMPLATES_SHA256,
     RELEASE_NOTICE,
 )
+from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
@@ -203,6 +204,7 @@ class LiveSession:
         #: TRANSITION wegen Ziffernwechsel (Grund anzeige_wechselt), getrennt
         #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
         self._display_changing = 0
+        self._rejection_window = RejectionWindow()
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -336,12 +338,17 @@ class LiveSession:
                     self._guesses[text] += 1
             self.latest = record
             self.latest_monotonic = self._monotonic()
+            self._rejection_window.observe(self.latest_monotonic, record.status, record.reject_reasons)
             self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
                 self._write_session(ended=False)
             return record
+
+    def rejection_causes(self) -> dict:
+        """Hauptursachen aller verarbeiteten Bilder der letzten zehn Sekunden."""
+        return self._rejection_window.snapshot(self._monotonic())
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""

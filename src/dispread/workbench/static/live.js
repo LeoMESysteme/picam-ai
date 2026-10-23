@@ -128,6 +128,14 @@ if (typeof document !== 'undefined') {
     csrf = s.csrf;
     $('notice').textContent = s.release_notice;
     renderView(statusView(s));
+    const causes = s.state === 'running' ? s.run?.rejection_causes : null;
+    $('recent-causes').hidden = !(causes?.frames && causes.causes?.length);
+    $('recent-causes-list').replaceChildren(...(causes?.causes || []).map(cause => {
+      const item = document.createElement('li');
+      item.textContent = `${cause.explanation} · ${Math.round(100 * cause.fraction)} % der Bilder`;
+      return item;
+    }));
+    $('recent-causes-limit').textContent = causes?.limited ? 'Fenster wegen hoher Bildrate begrenzt' : '';
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;

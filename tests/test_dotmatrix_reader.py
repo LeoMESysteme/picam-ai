@@ -107,13 +107,14 @@ def test_blank_cells_13_to_15_do_not_change_value(reader):
     assert r.diagnostics["blank_cells_ok"] is True
 
 
-def test_character_in_cell_14_is_rejected_as_format(reader):
+def test_character_in_cell_14_reports_disturbed_blank(reader):
     chars = list("+ 1.2345 " + " " * 7)
     assert len(chars) == 16
     chars[14] = "0"  # Zeichen statt Leerzelle in Zelle 14 (Rest)
     text = "".join(chars)
     r = reader.read(render(text), LAYOUT)
-    assert r.value is None and r.diagnostics["reject_reason"] == "format"
+    assert r.value is None and r.diagnostics["reject_reason"] == "leerzelle_gestoert"
+    assert r.diagnostics["reject_cell"] == 14
     assert r.diagnostics["blank_cells_ok"] is False
 
 
@@ -247,3 +248,64 @@ def test_tolerance_recovers_distance_reject_without_changing_candidate(reader):
     assert adaptive.value == 1.2345
     assert [cell['best'] for cell in strict.diagnostics['cells']] == [
         cell['text'] for cell in adaptive.diagnostics['cells']]
+
+
+@pytest.mark.parametrize('level', [0, 245])
+@pytest.mark.parametrize('width', [1, 2, 3])
+def test_speck_on_digit_never_changes_value(reader, level, width):
+    from dispread.ocr.dotmatrix_sampling import dot_centers
+
+    for dot in range(40):
+        image = render('+0.60972 ')
+        x, y = np.round(dot_centers(GRID, 5)[dot]).astype(int)
+        image[y:y + width, x:x + width] = level
+        result = reader.read(image, LAYOUT)
+        assert result.value in (None, 0.60972), (level, width, dot, result.raw_text)
+
+
+def test_dark_speck_in_blank_cell_stays_rejected(reader):
+    from dispread.ocr.dotmatrix_sampling import dot_centers
+
+    image = render('+0.60972 ')
+    x, y = np.round(dot_centers(GRID, 14)[17]).astype(int)
+    image[y - 1:y + 2, x - 1:x + 2] = 0
+    result = reader.read(image, LAYOUT)
+    assert result.value is None
+    assert result.diagnostics['blank_cells_ok'] is False
+
+
+@pytest.mark.parametrize('width', [1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize('cell', [8, 13, 14, 15])
+def test_dark_speck_in_blank_cell_may_be_blank_or_rejected_but_never_changes_value(reader, width, cell):
+    from dispread.ocr.dotmatrix_sampling import dot_centers
+
+    for dot in (0, 17, 39):
+        image = render('+0.60972 ')
+        x, y = np.round(dot_centers(GRID, cell)[dot]).astype(int)
+        image[y:y + width, x:x + width] = 0
+        result = reader.read(image, LAYOUT)
+        assert result.value in (None, 0.60972), (cell, width, dot, result.raw_text)
+
+
+def test_reader_reports_first_rejected_cell(reader):
+    result = reader.read(render('+ 1.2°45 '), LAYOUT)
+    assert result.diagnostics['reject_cell'] == 5
+
+
+def test_reader_reports_disturbed_separator_cell(reader):
+    result = reader.read(render('+0.609720'), LAYOUT)
+    assert result.value is None
+    assert result.diagnostics['reject_reason'] == 'leerzelle_gestoert'
+    assert result.diagnostics['reject_cell'] == 8
+
+
+@pytest.mark.parametrize('width', [1, 2, 3])
+def test_small_bright_speck_in_blank_cell_is_read_as_blank(reader, width):
+    from dispread.ocr.dotmatrix_sampling import dot_centers
+
+    image = render('+0.60972 ')
+    x, y = np.round(dot_centers(GRID, 14)[17]).astype(int)
+    image[y:y + width, x:x + width] = 245
+    result = reader.read(image, LAYOUT)
+    assert result.value == 0.60972
+    assert result.diagnostics['blank_cells_ok'] is True

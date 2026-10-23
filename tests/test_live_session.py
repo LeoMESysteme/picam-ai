@@ -1116,3 +1116,16 @@ def test_region_selection_origin_is_in_session_artifact(tmp_path, selection):
     session.stop()
     artifact = json.loads(session.session_path.read_text())
     assert artifact['tracking']['auswahl'] == selection
+
+
+def test_session_counts_every_processed_frame_in_live_causes(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 '), embed('+ 1.2345 ')])
+    session.start()
+    try:
+        session.step()
+        session.step()
+        causes = session.rejection_causes()
+        assert causes['frames'] == 2
+        assert causes['causes'] == [{'reason': 'awaiting_confirmation', 'count': 1, 'fraction': 0.5}]
+    finally:
+        session.stop()

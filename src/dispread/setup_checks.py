@@ -20,7 +20,7 @@ from dispread.frame_alignment import estimate_quad_shift
 from dispread.lattice_offsets import FULL, HALVES, max_abs_offset, measure_offsets, median_offsets
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
-from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, raw_cell_depths, sample_image
+from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, background_opening, raw_cell_depths, sample_image
 from dispread.rectify import rectify
 
 # Vorabwerte, aus den Aufstellungen vom 2026-09-29.
@@ -52,6 +52,104 @@ STABILITY_ERROR_PX = 0.5
 STABILITY_WARNING_PX = 0.2
 BORDER_DARK_RATIO_ERROR = 0.7
 BLANK_CELLS = (8, 13, 14, 15)
+
+
+def _glass_defects(image: np.ndarray, quad, grid: CharGrid, blank_cells: Sequence[int]) -> list[dict]:
+    """Kleine helle/dunkle Residuen ausschliesslich in bekannten Leerzellen.
+
+    Vorabgrenzen in Grauwerten: Oeffnungsresiduum > 4 UND > 8 ueber
+    lokalem Glaspegel (15-px-Median), dunkles Schlussresiduum > 8.
+    Der Median wird innerhalb jeder Leerzelle geschaetzt: dort gibt es
+    keine regulaeren dunklen Punkte, die ihn nach unten ziehen. Belegte
+    Nachbarzellen gehen auch in die Morphologie nicht ein. In belegten
+    Zellen waeren helle Punktzwischenraeume nicht von Kratzern trennbar.
+    Gauss sigma=0,5 unterdrueckt Einzelpixelrauschen.
+    Komponenten von mindestens 3 Pixeln bis 1 Punktflaeche und maximal
+    1,5 Punktabstaenden je Achse; keine langen Rahmen-/Reflexkanten.
+    Die bilduebergreifende Pruefung verlangt zusaetzlich einen ausreichend
+    grossen Anker (0,1 Punktflaechen), um Rauschspitzen auszuschliessen.
+    Das ist ein Hinweis, keine Fehlerdiagnose und keine Lesefreigabe.
+    """
+    gray = _gray(rectify(image, quad, target_size=TARGET_SIZE).image)
+    col = grid.pitch / (grid.dot_columns + grid.gap_columns)
+    row = (grid.bottom - grid.top) / 8
+    kernel = np.ones((2 * int(row / 2) + 1, 2 * int(col / 2) + 1), np.uint8)
+    defects = []
+    for cell in blank_cells:
+        x0 = max(0, int(grid.left + cell * grid.pitch))
+        x1 = min(gray.shape[1], int(grid.left + (cell + 1) * grid.pitch))
+        y0 = max(0, int(grid.top))
+        y1 = min(gray.shape[0], int(grid.bottom))
+        region = gray[y0:y1, x0:x1]
+        if not region.size:
+            continue
+        smooth = cv2.GaussianBlur(region.astype(np.float32), (0, 0), 0.5)
+        glass = cv2.medianBlur(region, 15).astype(np.float32)
+        bright = smooth - background_opening(smooth, grid)
+        dark = cv2.morphologyEx(smooth, cv2.MORPH_CLOSE, kernel) - smooth
+        for kind, signal in (('hell', bright), ('dunkel', dark)):
+            eligible = signal > (4.0 if kind == 'hell' else 8.0)
+            if kind == 'hell':
+                eligible &= smooth - glass > 8.0
+            # Erst nach der Schaetzung die Suchraender ausnehmen; sonst
+            # veraendert die Randfortsetzung den Median neben dem Kratzer.
+            mask = np.zeros(region.shape, np.uint8)
+            interior = np.s_[int(grid.top + 0.25 * row) - y0:int(grid.bottom - 0.25 * row) - y0, 2:-2]
+            mask[interior] = eligible[interior]
+            n, labels, stats, centres = cv2.connectedComponentsWithStats(mask)
+            for label in range(1, n):
+                _, _, width, height, area = stats[label]
+                if not (3 <= area <= col * row
+                        and width <= 1.5 * col and height <= 1.5 * row):
+                    continue
+                x, y = centres[label] + [x0, y0]
+                defects.append({
+                    'cell': cell, 'kind': kind, 'area_px': int(area),
+                    'dot_position': [float((x - grid.left - cell * grid.pitch) / col - 0.5),
+                                     float((y - grid.top) / row - 0.5)],
+                    'rectified': [float(x), float(y)],
+                    'strength': float(signal[labels == label].max()),
+                })
+    return defects
+
+
+def display_defect_check(images: Sequence[np.ndarray], quad, *, grid: CharGrid = GRID,
+                         cell_text: str | None = None) -> CheckResult:
+    """Nur ortsfeste Befunde in ALLEN Standbildern desselben Setup-Versuchs.
+
+    Zuordnung je Art/Zelle innerhalb 0,35 Punktspalten und 0,2 Punktzeilen
+    zu einem festen Anker; kein Wandern durch paarweise Verkettung.
+    Mindestens ein Bild muss einen Anker >= 0,1 Punktflaechen liefern.
+    In jedem weiteren Bild genuegen 3 zusammenhaengende Residualpixel an
+    dieser Stelle: Rauschen darf einen echten Kratzer fragmentieren,
+    fehlende oder wandernde Stoerungen gelten weiter nicht als ortsfest.
+    Beide Arten nur in Pflicht-Leerzellen 8/13-15 und expliziten Leerzeichen
+    des Setup-Zellentexts. Dieser muss fuer alle Standbilder gelten;
+    wechselnde/unbekannte Zellen bleiben '?', niemals Leerzeichen.
+    """
+    from dispread.workbench.fields import DISPLAY_DEFECT_HINT
+
+    if not images:
+        raise ValueError('Displayfehlerpruefung braucht mindestens ein Standbild')
+    blank_cells = tuple(sorted({cell for cell in BLANK_CELLS if cell < grid.n_cells}
+                               | {i for i, ch in enumerate(cell_text or '') if ch == ' ' and i < grid.n_cells}))
+    observations = [_glass_defects(image, quad, grid, blank_cells) for image in images]
+    min_anchor_area = 0.1 * grid.pitch / (grid.dot_columns + grid.gap_columns) * (grid.bottom - grid.top) / 8
+
+    def same_position(a, b):
+        return (a['cell'] == b['cell'] and a['kind'] == b['kind']
+                and abs(a['dot_position'][0] - b['dot_position'][0]) <= 0.35
+                and abs(a['dot_position'][1] - b['dot_position'][1]) <= 0.2)
+
+    fixed = []
+    for defect in (d for frame in observations for d in frame if d['area_px'] >= min_anchor_area):
+        if any(same_position(defect, d) for d in fixed):
+            continue
+        matches = [[d for d in frame if same_position(defect, d)] for frame in observations]
+        if all(matches):
+            fixed.append({**defect, 'strength': min(max(d['strength'] for d in frame) for frame in matches)})
+    return CheckResult('WARNUNG' if fixed else 'OK', {'stills': len(images), 'defects': fixed},
+                       tuple(sorted({d['cell'] for d in fixed})), DISPLAY_DEFECT_HINT if fixed else None)
 
 
 @dataclass(frozen=True)

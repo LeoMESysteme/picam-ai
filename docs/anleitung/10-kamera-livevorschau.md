@@ -98,14 +98,30 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
    Stabilitätsprüfung in der Werkbank 15 s, Harvest-CLI weiterhin 30 s.
    Nach einem Abbruch bleiben Grund und Einrichtungshinweis sichtbar.
 4. Overlays und Prüfungen ansehen: Lage der Anzeige, Zellenraster,
-   Rasterversatz, Gegenlesen und **Nachführung**. **FEHLER** sperrt die Bestätigung.
+   Rasterversatz, Gegenlesen, **Nachführung** und **Displayfehler**. **FEHLER** sperrt die Bestätigung.
    Bei **WARNUNG** muss die bedienende Person den Befund prüfen und
    ausdrücklich „WARNUNG zur Kenntnis genommen“ abhaken.
 5. Namen eintragen, „Einheit mV/V und Format geprüft“ abhaken und
    **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
    das Profil und die Bedienbestätigung (Konzept §4).
 
-Harvest-Einrichtungen bleiben unverändert; dort gibt es keine Prüfung `nachfuehrung`.
+Die Prüfung **Displayfehler** (`displayfehler`) sucht kleine helle und dunkle
+Glasstörungen ausschließlich in Zellen, die bei dieser Einrichtung leer sein
+müssen: Separatorzelle 8, Zellen 13–15 rechts der Einheit und weitere Zellen
+mit einem ausdrücklichen Leerzeichen im abgeglichenen Setup-Zellentext.
+Unbekannte (`?`) oder mit Zeichen belegte Zellen werden nicht durchsucht:
+Dunkle Zeichenpunkte senken dort die Glasschätzung ab, und ihre hellen
+Zwischenräume könnten sonst fälschlich wie Kratzer aussehen.
+Nur Befunde, die in **jedem** Standbild desselben Einrichtungsversuchs an
+derselben Stelle erscheinen, zählen. Reguläre dunkle LCD-Punkte gehören
+nicht zum Befund. Das Ergebnis ist **OK** oder **WARNUNG**, allein niemals
+**FEHLER**. Quellbild und entzerrtes Overlay markieren die Stellen orange
+mit Zellnummer und Art (`hell`/`dunkel`); die Prüfmetriken enthalten auch die
+Punktposition und Stärke. **Kamera leicht verschieben, Glas reinigen oder
+Reflex abschatten** und erneut einrichten. Die Warnung ist eine Suchhilfe,
+keine sichere Unterscheidung zwischen Kratzer, Staub und Reflex.
+
+Harvest-Einrichtungen erhalten weder `nachfuehrung` noch `displayfehler`.
 
 Die Prüfung **Nachführung** verlangt geeignete, räumlich verteilte
 Rahmenbereiche und einen erkennbaren LCD-Rand im eingefrorenen Einrichtungsbild.
@@ -227,6 +243,29 @@ Ablehnungsgrund statt gültiger Ziffern:
 | TRANSITION | Noch nicht über die erforderlichen Bilder bestätigt (`awaiting_confirmation`), oder die Anzeige wechselt gerade („Wert wechselt“, `anzeige_wechselt`): höchstens 3 Zellen sind Mischziffern, alle lesbaren Zellen gleichen dem letzten freigegebenen Wert, und dieser ist höchstens 0,5 s alt. Kein Wert wird freigegeben; echte Sprünge werden nicht geglättet. Ein Finger über 1–3 Zellen kann kurz ebenfalls als „Wert wechselt“ erscheinen, danach STALE. |
 | UNREADABLE | Bild, Tracking oder Ablesung abgelehnt; Ablehnungsgrund prüfen. |
 | STALE | Kein aktueller gültiger Wert: Ablesung älter als 0,5 s, Lauf beendet oder Verbindung/Anmeldung verloren. |
+
+Bei Leserablehnungen benennt der Grund die betroffene Zelle (Zählung 0–15):
+`leser:leerzelle_gestoert:14` bedeutet eine gestörte Leerzelle rechts der
+Einheit; `leser:zelle_unbekannt:5` ein nicht sicher erkanntes Zeichen in
+Zelle 5. `leser:zelle_mehrdeutig:<Zelle>` bedeutet mehrere mögliche Zeichen.
+`leser:format`, `leser:vorzeichen`, `leser:kontrast` und
+`leser:ueberbelichtet` nennen die übrigen Leserbefunde. Ein
+`decimal_point_unknown` bezeichnet weiterhin den ungesicherten Dezimalpunkt
+bei Lesern ohne eigenen Ablehnungsgrund. Eine allein unbekannte Separatorzelle 8
+war früher als `zelle_unbekannt` kurz TRANSITION-fähig; mit
+`leerzelle_gestoert:8` bleibt sie nun UNREADABLE. Dunkle Flecken behandelt der
+neue Filter nicht: Sie können als leer gelesen oder abgelehnt werden, ändern
+aber keinen Messwert. Kleine helle Defekte werden nur aus der
+Hintergrundschätzung entfernt, das abgetastete Bild bleibt erhalten.
+
+Während des Laufs zeigt die Seite die fünf häufigsten Hauptursachen der
+letzten **10 Sekunden Verarbeitungszeit**, etwa „Zelle 14 (rechts der
+Einheit): gestört – Kratzer, Staub oder Reflex?“, „Rahmenbereiche verdeckt
+oder verschoben“ oder „Wert wechselt“. Der Anteil bezieht sich auf **alle
+verarbeiteten Bilder**, einschließlich VALID; pro Bild zählt der erste,
+spezifischste Grund. Übersprungene Kamerabilder zählen nicht. Das Fenster
+läuft auch beim Stillstand aus; bei mehr als 4096 Bildern im Fenster wird
+die Begrenzung sichtbar gemeldet. Diese Hilfe verändert keine Freigabe.
 
 Verbindungsfehler oder abgelaufene Anmeldung setzen die Anzeige auf STALE;
 auch wenn länger als 1,5 s kein erfolgreicher Statusabruf kam. Polling und

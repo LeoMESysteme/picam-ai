@@ -30,7 +30,7 @@ from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
-from dispread.workbench.fields import REASONS
+from dispread.workbench.fields import REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 DEVICE_ID = "gsv-sensor-161a"
@@ -228,6 +228,9 @@ class LiveService:
                     "guess": self._session.latest_guess if self._test_run is not None else None,
                     "tracking": dict(getattr(self._session, "tracking", {})),
                 }
+                if hasattr(self._session, "rejection_causes"):
+                    causes = self._session.rejection_causes()
+                    run["rejection_causes"] = {**causes, "causes": [live_cause(c) for c in causes["causes"]]}
             return {
                 "state": self._state,
                 **({"tracking_reasons": REASONS} if full else {}),
@@ -463,6 +466,7 @@ class LiveService:
             device_id=DEVICE_ID,
             session_id=session_dir.name,
             out_dir=setup_dir,
+            cell_text=result.first_text,
             offset_check=result.offset_check,
             final_checks=result.final_checks,
             stability_image_bgr=result.second,

@@ -5,6 +5,10 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: R13-8 unterdrückt kleine helle Glasdefekte nur in der Hintergrundschätzung des Dot-Matrix-Lesers (Grauwert-Öffnung bis 0,4 Punktabstände vor dem Schließen). Rohsignal, Kontrast, Sättigung und eingefrorene Vorlagen bleiben erhalten. Dunkle Flecken behandelt der neue Filter nicht: Sie können als leer gelesen oder abgelehnt werden, ändern aber keinen Messwert.
+* R13-8 benennt Leserablehnungen mit Zellindex (`leser:leerzelle_gestoert:14`, `leser:zelle_unbekannt:5`) statt eines irreführenden Dezimalpunktfehlers. `/live` zeigt die häufigsten Hauptursachen der letzten zehn Sekunden mit Bedienhilfe und Anteil aller verarbeiteten Bilder. Eine allein unbekannte Separatorzelle 8 war als `zelle_unbekannt` TRANSITION-fähig; als `leerzelle_gestoert:8` bleibt sie nun konservativ UNREADABLE. Die übrigen Anzeigewechsel- und STALE-Regeln bleiben erhalten.
+* R13-8 ergänzt ausschließlich für Live-Einrichtungen die Prüfung `displayfehler`: ortsfeste helle/dunkle Glasstörungen in allen Standbildern des Versuchs ergeben eine WARNUNG mit Zell-/Punktposition und Stärke. Fix round 1 beschränkt beide Defektarten auf Pflicht-Leerzellen 8 und 13–15 sowie ausdrücklich leere Setup-Zellen; die Glasschätzung bleibt innerhalb der jeweiligen Leerzelle. So erzeugen Zeichenpunkte und ihre Zwischenräume keine Fehlalarme. Quellbild und entzerrtes Overlay markieren den Befund; Kamera versetzen, Glas reinigen oder Reflex abschatten. Harvest erhält diese Prüfung nicht.
+
 * 2026-10-21: R13-2-Review: Der Playwright-Live-Service unterstützt
   vollständige Statusabfragen mit Trackinggründen. Nach der ersten
   erfolgreichen vollständigen Antwort fragt die Live-Seite auch ohne

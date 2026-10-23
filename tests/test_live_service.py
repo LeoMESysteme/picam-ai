@@ -364,7 +364,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     events = []
     camera = CameraSettings.from_dict(proposal["camera"])
     image = np.zeros((2, 2, 3), np.uint8)
-    result = SimpleNamespace(first=image, second=image, fit=object(), offset_check=object(),
+    result = SimpleNamespace(first=image, second=image, first_text='+ 1.23?5 ', fit=object(), offset_check=object(),
                              final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2)
 
     class Owner(FakeOwner):
@@ -407,6 +407,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
 
     def propose(first, **kwargs):
         assert first is image
+        assert kwargs['cell_text'] == result.first_text
         assert kwargs["camera_settings"] == camera
         assert kwargs["offset_check"] is result.offset_check
         assert kwargs["final_checks"] is result.final_checks
@@ -961,7 +962,7 @@ def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypat
         assert service.status()["setup"]["step"] == "standbilder"
         assert service.status()["setup"]["message"] == "Startsuche Versuch 1"
         kwargs["on_attempt"]({"attempt": 1, "still": "still", "masked": "+ 1.2345 "})
-        return SimpleNamespace(first=None, second=None, fit=None, offset_check=None,
+        return SimpleNamespace(first=None, second=None, first_text='+ 1.2345 ', fit=None, offset_check=None,
                                final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=1)
 
     camera = CameraSettings.from_dict(proposal["camera"])
@@ -1068,6 +1069,7 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     session = Mock(latest=None, summary={}, latest_guess={"text": "guess"},
                    tracking={"mode": "ecc_alt", "version": None, "regions": None})
     session.latest_age_s.return_value = None
+    session.rejection_causes.return_value = {"frames": 0, "window_s": 10.0, "limited": False, "causes": []}
     session.run.side_effect = lambda stop: stop.wait()
     factory = Mock(return_value=session)
     monkeypatch.setattr("dispread.live.service.LiveSession", factory)
@@ -1667,3 +1669,20 @@ def test_region_edits_require_current_tracking_proposal_and_are_blocked_during_r
     with pytest.raises(LiveError, match='Lauf zuerst beenden'):
         service.edit_regions(proposal_revision='current', add=[[1, 2]], remove=[])
     assert service._proposal == proposal
+
+
+def test_run_status_explains_recent_reader_cause(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'run'
+    service._session = SimpleNamespace(
+        latest=None, summary={}, latest_age_s=lambda: None,
+        rejection_causes=lambda: {'frames': 4, 'window_s': 10.0, 'limited': False,
+                                 'causes': [{'reason': 'leser:leerzelle_gestoert:14', 'count': 1, 'fraction': 0.25}]},
+    )
+    result = service.status()['run']['rejection_causes']
+    assert result['frames'] == 4
+    assert result['causes'][0]['cell'] == 14
+    assert result['causes'][0]['fraction'] == 0.25
+    assert 'Kratzer' in result['causes'][0]['explanation']

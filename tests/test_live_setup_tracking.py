@@ -14,7 +14,8 @@ from dispread.live import setup as live_setup
 from dispread.live.frame_tracking import RegionProposal, propose_regions
 
 
-def _propose(tmp_path, *, blank=False, live_tracking=True, assigned_points=(), rejected_points=(), edge_cells=()):
+def _propose(tmp_path, *, blank=False, live_tracking=True, assigned_points=(), rejected_points=(), edge_cells=(),
+             stability=False, cell_text=None):
     image, quad = reference_scene()
     if blank:
         image[:] = 120
@@ -29,6 +30,8 @@ def _propose(tmp_path, *, blank=False, live_tracking=True, assigned_points=(), r
         image, fit=fit, frame_path=frame, camera_settings=replace(_CAMERA, size=image.shape[1::-1]),
         device_id="gsv", session_id="session", out_dir=tmp_path,
         offset_check=SimpleNamespace(status="OK"), final_checks=checks, setup_attempt=2, live_tracking=live_tracking,
+        stability_image_bgr=image.copy() if stability else None,
+        cell_text=cell_text,
     )
     return image, quad, proposal
 
@@ -315,3 +318,24 @@ def test_region_edits_reject_outside_source_before_storing_anything(tmp_path, po
                                 at_utc='2026-10-21T10:00:00+00:00')
     assert proposal == original
     assert {path: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()} == files
+
+
+def test_displayfehler_only_in_live_proposal_and_uses_all_stills(tmp_path):
+    _, _, live = _propose(tmp_path, stability=True)
+    check = live['setup_checks']['checks']['displayfehler']
+    assert check['status'] == 'OK'
+    assert check['metrics']['stills'] == 2
+    _, _, harvest = _propose(tmp_path, live_tracking=False)
+    assert 'displayfehler' not in harvest['setup_checks']['checks']
+
+
+def test_displayfehler_receives_known_blank_setup_cells(tmp_path, monkeypatch):
+    from dispread.setup_checks import CheckResult
+
+    def check(images, quad, *, grid, cell_text):
+        assert len(images) == 2
+        assert cell_text == '+ 1.23?5 '
+        return CheckResult('OK', {'defects': [], 'stills': len(images)})
+
+    monkeypatch.setattr(live_setup, 'display_defect_check', check)
+    _propose(tmp_path, stability=True, cell_text='+ 1.23?5 ')

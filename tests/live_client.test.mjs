@@ -591,3 +591,18 @@ test('region image clicks select the containing source pixel, including the last
     assert.deepEqual(page.posts.at(-1).body.add, [[999, 499]]);
   });
 });
+
+test('recent causes show the affected cell and percentage and clear after the run', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {...running, run: {...running.run, rejection_causes: {frames: 4, window_s: 10,
+      causes: [{reason: 'leser:leerzelle_gestoert:14', cell: 14, count: 1, fraction: 0.25,
+        explanation: 'Zelle 14 (rechts der Einheit) gestoert - Kratzer, Staub oder Reflex?'}]}}};
+    await poll();
+    assert.equal(element('recent-causes').hidden, false);
+    assert.match(element('recent-causes-list').children[0].textContent, /Zelle 14.*25 % der Bilder/);
+    page.status = {state: 'stopped'};
+    await poll();
+    assert.equal(element('recent-causes').hidden, true);
+    assert.deepEqual(element('recent-causes-list').children, []);
+  });
+});
