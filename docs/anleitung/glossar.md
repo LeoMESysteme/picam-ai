@@ -1221,3 +1221,275 @@ Für den Export ausgewählte Probe einer Situation. Bei genau einer Aufnahme wir
 Grobe rechteckige Markierung der gewünschten Zahlenzeile im Sammelmodus, ohne Segmentraster oder Ziffernzellen. Sie ist Prüfdatenmaterial und gelangt nicht in Leser, Freigabe, Tracker oder serielle Ausgabe.
 
 *Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
+
+## Werkbank und Bedienung
+
+### Auto-Setup
+
+Einstellhilfe der älteren Workbench: Sie bewertet Kamerakombinationen über mehrere Bilder und bietet einen übernehmbaren Vorschlag. Im Server mit gemeinsamem Kamerabesitzer erfolgt die Kamerabedienung über `/live`.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Bedienbestätigung
+
+Namentliche Bestätigung von Einrichtung, Einheit und Format auf `/live`. Erst danach werden Profil und Bestätigung gespeichert; FEHLER sperrt sie, WARNUNG verlangt eine ausdrückliche Kenntnisnahme.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `cell-text.json`
+
+Datei im Live-Einrichtungsordner mit ursprünglichem und maskiertem Zellentext sowie dessen Quelle. Sie macht nachvollziehbar, welche schwankenden Zellen beim Gegenlesen ausgenommen wurden.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `commands.jsonl`
+
+Protokoll eines Live-Werteplans mit jedem Befehlsbyte und seiner BOOTTIME-Zeit. Es entsteht zusätzlich zur getrennten Referenzaufzeichnung und dokumentiert die Eingriffe am GSV-2AS.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `confirmation.json`
+
+Datei der namentlichen Bedienbestätigung neben dem bestätigten Live-Profil. Sie hält unter anderem eine ausdrücklich angenommene angepasste Lesetoleranz fest; diese bleibt nicht validiert.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Datensatz-Sammelmodus
+
+Geführter Werkbankablauf zum Sammeln realer Prüfbilder mit Gerät, Situation, Zielbox und sichtbarem Text. Er benötigt kein Produktionsprofil und ändert keine Freigaberegeln des Messpfads.
+
+*Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
+
+### `dispread live`
+
+Lokale Steuerbefehle für Live-Status, Einrichtung, Kameraneuverbindung und Laufstopp über den privaten Socket. Bestätigung und Laufstart sind darüber nicht möglich; sie verlangen die angemeldete Oberfläche.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `dispread serve`
+
+Startet den Werkbankserver mit geschützter Oberfläche und Live-Seite. Während der Serverlaufzeit hält der gemeinsame Kamerabesitzer die StreamCam auch nach einem Messlaufstopp belegt.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `dispread stop`
+
+Beendet den Werkbankserver über den privaten lokalen Unix-Socket. Der Befehl unterscheidet sich von `dispread live stop`, das nur den Messlauf stoppt; die Web-API bietet keinen Fernabschaltbefehl.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `dispread tui`
+
+Terminalansicht der Workbench-Einstelltabelle, etwa für SSH. Zeilen, Optionen und Aktionen stammen aus derselben Quelle wie im Browser; `q` verlässt die Ansicht, ohne die Kamera zu beenden.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `failure.json`
+
+Fehlerdatei im Live-Einrichtungsordner mit Abbruchschritt, Grund und UTC-Zeit. Sie dokumentiert einen gescheiterten Einrichtungsschritt neben den Bildern und Berichten.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Fokus-Sweep
+
+Suche nach dem schärfsten Fokuswert im geführten Ernte-Assistenten. Sie steht vor den beiden zeitlich getrennten Standbildern und der Anpassung des Punktrasters.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Gegenlesen
+
+Prüfung des Lesers an Einrichtungsstandbildern gegen deren Referenztext. Unmaskierte Zellen müssen lesbar sein und übereinstimmen; ein Widerspruch sperrt Bestätigung und Lauf. Der Referenztext korrigiert keinen Messwert.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `harvest-setup.py`
+
+Geführter Ernte-Assistent: `assist` sucht Fokus und Raster und erzeugt einen Vorschlag mit Kontrollbildern. Erst `confirm` bestätigt diesen als Sitzungsprofil; die Einrichtungshilfe belegt keine allgemeine Gerätefreigabe.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Lesesperre
+
+Sperre des normalen Live-Laufstarts bei fehlendem oder nicht erfolgreichem Gegenlesen. Bei WARNUNG kann die Einrichtung bestätigt werden; ein Widerspruch zur Referenz sperrt auch die Bestätigung.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `/live`
+
+Geschützte Live-Seite der Werkbank für StreamCam-Einrichtung, namentliche Bestätigung und Messlauf. Sie liest mit dem Dot-Matrix-Leser; ein Lauf setzt passende Vorlagen und gültige Timing-Kalibrierung voraus.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `proposal.json`
+
+Vorschlag des Ernte-Assistenten nach Standbildern, Rasteranpassung und Prüfungen. Zusammen mit den Overlays dient er der menschlichen Kontrolle; erst die Bestätigung macht daraus ein Sitzungsprofil.
+
+*Weg:* Bedienen · *Quelle:* [Projekt-Tour](../uebersicht/projekt-tour.md)
+
+### Rückstellpunkt
+
+Gespeicherter Registerzustand des GSV-2AS, gegen den ein Werteplan vor dem Schreiben geprüft wird und zu dem er beim Stoppen zurückkehrt. Nach Stromausfall oder `kill -9` ist eine manuelle Rückstellung nötig.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Testlauf
+
+Ausdrücklich markierter Live-Lauf, der die Lesesperre zu Testzwecken übergeht. Alle Daten des Laufordners sind von Messungen auszuschließen: Auch mögliche VALID-Records heben die Testmarkierung nicht auf; die Auditsperre ist unvollständig.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Werteplan
+
+Zusätzlich bestätigte Folge von Normierungsfaktoren und Haltezeiten für kontrollierte GSV-2AS-Wertwechsel. Er verlangt einen gültigen Rückstellpunkt; beim Stoppen werden die Ausgangswerte zurückgeschrieben und geprüft.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Workbench
+
+Bedienoberfläche mit Kamerabild, Log und Bash-Tabs. `/live` steuert Einrichtung und Messlauf; die ältere Werkbankseite erhält gedrosselte Bilder desselben Kamerabesitzers, ihr Modus `run` bleibt ein Vorschauzustand.
+
+*Weg:* Bedienen · *Auch:* Werkbank · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### Zellentext
+
+Erwarteter Text der ersten neun Anzeigezellen bei der Live-Einrichtung, seriell gelesen oder manuell eingegeben. Acht Zeichen werden um eine leere neunte Zelle ergänzt; `?` maskiert schwankende Zellen beim Gegenlesen.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+## Konfiguration
+
+### `AeEnable`
+
+Historischer IMX500-/Picamera2-Regler für die Belichtungsautomatik der älteren Workbench. Ausschalten übernimmt die aktuellen Istwerte als Startpunkt und entsperrt Belichtungszeit und Verstärkung; kein StreamCam-Control.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `AnalogueGain`
+
+Historischer IMX500-/Picamera2-Regler für die Verstärkung in der älteren Workbench. Bei ausgeschalteter Belichtungsautomatik einstellbar; die aktuelle StreamCam verwendet andere UVC-Control-Namen.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `camera.json`
+
+Explizite Einstellungsdatei für die aktive `v4l2://`-Quelle. Sie beschreibt die StreamCam nach dem CameraSettings-Vertrag mit USB-ID, Bildformat, Bildrate und bestätigten Fokus-, Belichtungs-, Weißabgleich- und Verstärkungsreglern.
+
+*Weg:* Konfigurieren · *Quelle:* [Hardwareprofil](../HARDWARE_PROFILE.md)
+
+### `camera_auto_detect`
+
+Historische Boot-Konfiguration der IMX500-Anbindung. Sie prüft die Kameraanschlüsse nur beim Booten; nachträgliches Anstecken wurde erst durch einen Neustart erkannt. Sie gehört nicht zum aktuellen USB-StreamCam-Ablauf.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Inbetriebnahme](../CAMERA_COMMISSIONING.md)
+
+### `CameraSettings`
+
+Vertrag für die Einstellungen, die die UVC-Quelle an der StreamCam setzt und zurückliest. Die vier aufbauspezifischen Regler sind Pflicht; fehlende oder zusätzliche Regler werden abgelehnt, fehlende Werte nicht geraten.
+
+*Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
+
+### `confirm_frames`
+
+Anzahl übereinstimmender Bilder vor einer Freigabe. Der Live-Pfad verlangt zwei; der allgemeine GateConfig-Default ist eins. Die Mehrbildbestätigung verzögert die Freigabe, glättet aber keine echten Messwertsprünge.
+
+*Weg:* Konfigurieren · *Quelle:* [Projekt-Tour](../uebersicht/projekt-tour.md)
+
+### `decimals`
+
+Zahl der Nachkommastellen im DisplayLayout. `None` bedeutet einen freien, zu erkennenden Dezimalpunkt. In der älteren Segmentleser-Vorschau führt „unbestimmt“ ohne optische Punktprüfung zur Ablehnung statt zur automatischen Erkennung.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+Weitere Bedeutung des Felds: [DisplayLayout-Vertrag](../../api/vertraege.md).
+
+### `digits`
+
+Anzahl der Ziffernstellen im DisplayLayout, ohne die separat behandelte Vorzeichenstelle. Die ältere Workbench bietet dafür 3–8 Stellen; ihr Segmentleser liest gegen dieses konfigurierte Raster.
+
+*Weg:* Konfigurieren · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+Auswahl in der Oberfläche: [Kamera-Workbench](10-kamera-livevorschau.md).
+
+### `expected_unit`
+
+Erwartete Einheit aus dem bestätigten Profil in GateConfig. Sie wird bei der Freigabe geprüft; sie ist keine anhand der Referenz nachträglich korrigierte Einheit.
+
+*Weg:* Konfigurieren · *Quelle:* [Freigabe-API](../../api/validate.md)
+
+### `ExposureTime`
+
+Historischer IMX500-/Picamera2-Regler für die Belichtungszeit in Mikrosekunden. In der älteren Workbench bei aktiver Belichtungsautomatik gesperrt; die aktuelle StreamCam nutzt UVC-Regler.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `exposure_time_absolute`
+
+Aufbauspezifischer UVC-Belichtungsregler der StreamCam. Einer der vier verpflichtenden Regler im CameraSettings-Profil; die Quelle setzt ihn nach dem Abschalten der Automatik und den festen Kamerareglern.
+
+*Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
+
+### `focus_absolute`
+
+Fester UVC-Fokuswert der StreamCam im CameraSettings-Profil. Für reproduzierbare Aufnahmen wird die Fokusautomatik ausgeschaltet und der gesetzte Fokuswert zurückgelesen.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `focus_automatic_continuous`
+
+UVC-Regler für die kontinuierliche Fokusautomatik der StreamCam. CameraSettings schaltet ihn vor den weiteren Reglern aus; der aufbauspezifische Fokus kommt anschließend aus dem Profil.
+
+*Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
+
+### `gain`
+
+Aufbauspezifischer UVC-Verstärkungsregler der StreamCam im CameraSettings-Profil. Er gehört zu den vier verpflichtenden Reglern und wird nach den Automatik- und festen Reglern gesetzt.
+
+*Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
+
+### Geräteprofil
+
+Geplanter dauerhafter Vertrag für bestätigte Displayannahmen wie Layout, Einheit, Bildgröße und ROI. Ein allgemeiner ProfileStore samt config/profiles-Schema fehlt; das vorhandene SessionProfile beschreibt dagegen eine einzelne Aufstellung.
+
+*Weg:* Konfigurieren · *Quelle:* [Geräteprofile](04-geraeteprofile.md)
+
+### `has_sign`
+
+Angabe im DisplayLayout, ob eine eigene Vorzeichenstelle vorhanden ist. Diese wird unabhängig von den Ziffernstellen geprüft; das Layout stammt aus dem bestätigten Profil und wird nicht erraten.
+
+*Weg:* Konfigurieren · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `profile.json`
+
+Datei des bestätigten Profils einer Live-Sitzung, neben confirmation.json im Sitzungsordner. Sie ersetzt keinen allgemeinen ProfileStore für wiederkehrende Geräte; ältere Workbench-Profile liegen getrennt unter var/workbench/profiles/.
+
+*Weg:* Konfigurieren · *Quelle:* [Geräteprofile](04-geraeteprofile.md)
+
+### `reader_tolerance`
+
+Metadaten der ausdrücklich angenommenen angepassten Lesetoleranz in Bestätigung und Lauf. Der Faktor verlangt eine serielle Gegenprobe in dieser Aufstellung und bleibt nicht validiert; er ist keine allgemeine Messfreigabe.
+
+*Weg:* Konfigurieren · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
+
+### `SessionProfile`
+
+Profil einer bestätigten Ernte- oder Live-Aufstellung mit Kamera, Punktraster und Referenzbild. Es entsteht durch Ernte-Bestätigung oder auf `/live` und ist vom noch geplanten dauerhaften Geräteprofil zu unterscheiden.
+
+*Weg:* Konfigurieren · *Quelle:* [Geräteprofile](04-geraeteprofile.md)
+
+### `sign_cell_ratio`
+
+Breite der Vorzeichenstelle als Anteil einer Ziffernzelle im DisplayLayout. Der Parameter beschreibt die Rastergeometrie; die Vorzeichenstelle bleibt getrennt von den Ziffernstellen.
+
+*Weg:* Konfigurieren · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### `stale_after_ns`
+
+Frist ohne neue Freigabe, nach der das Gate einen Wert als STALE behandelt, in Nanosekunden. Der Default beträgt 500 ms. Blockierende Zustandsflags wie Trackingverlust bleiben im Audit unmittelbar UNREADABLE.
+
+*Weg:* Konfigurieren · *Quelle:* [Freigabe-API](../../api/validate.md)
+
+### `white_balance_temperature`
+
+Aufbauspezifischer UVC-Weißabgleichsregler der StreamCam im CameraSettings-Profil. Er ist verpflichtend; die Weißabgleichsautomatik wird vor dem Setzen der Profilregler ausgeschaltet.
+
+*Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
