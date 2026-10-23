@@ -34,6 +34,72 @@ def test_no_front_matter_ok() -> None:
     assert wiki_check.check_front_matter("# Titel\n\n---\nweg: kunde\n---\n", "seite.md") == []
 
 
+START = """<div class="wiki-stand" markdown="1">
+
+* **Kamera:** Stand
+
+</div>
+
+<div class="wiki-wege" markdown="1">
+
+### Einrichten und bedienen
+
+Für Bediener.
+
+### Konfigurieren und verstehen
+
+Für Konfigurierende.
+
+### Entwickeln und anbinden
+
+Für Entwickler.
+
+</div>
+"""
+
+
+def test_start_has_three_ways_in_order() -> None:
+    assert wiki_check.check_start(START) == []
+    reversed_ways = START.replace("### Einrichten und bedienen", "### Platzhalter")
+    reversed_ways = reversed_ways.replace("### Entwickeln und anbinden", "### Einrichten und bedienen")
+    reversed_ways = reversed_ways.replace("### Platzhalter", "### Entwickeln und anbinden")
+    errors = wiki_check.check_start(reversed_ways)
+    assert len(errors) == 1
+    assert "Reihenfolge" in errors[0]
+
+
+def test_start_missing_stand() -> None:
+    text = START[START.index('<div class="wiki-wege"'):]
+    assert wiki_check.check_start(text) == ["README.md: wiki-stand fehlt oder ist nicht geschlossen"]
+
+
+def test_start_missing_wege() -> None:
+    text = START[:START.index('<div class="wiki-wege"')]
+    assert wiki_check.check_start(text) == ["README.md: wiki-wege fehlt oder ist nicht geschlossen"]
+
+
+@pytest.mark.parametrize("heading", ["Einrichten und bedienen", "Konfigurieren und verstehen", "Entwickeln und anbinden"])
+def test_start_requires_exactly_three_ways_inside_wrapper(heading: str) -> None:
+    text = START.replace(f"### {heading}\n", "") + f"\n### {heading}\n"
+    assert len(wiki_check.check_start(text)) == 1
+    assert len(wiki_check.check_start(START.replace("</div>\n", "\n### Weiterer Weg\n\n</div>\n"))) == 1
+
+
+@pytest.mark.parametrize("wrapper", ["wiki-stand", "wiki-wege"])
+def test_start_requires_closed_wrapper(wrapper: str) -> None:
+    opening = f'<div class="{wrapper}" markdown="1">'
+    before, body = START.split(opening)
+    text = before + opening + body.replace("</div>", "", 1)
+    assert wiki_check.check_start(text) == [f"README.md: {wrapper} fehlt oder ist nicht geschlossen"]
+
+
+def test_cli_checks_start(wiki_tree: Path) -> None:
+    (wiki_tree / "README.md").write_text(START[START.index('<div class="wiki-wege"'):], encoding="utf-8")
+    result = run_check(wiki_tree)
+    assert result.returncode == 1
+    assert result.stderr.strip() == "README.md: wiki-stand fehlt oder ist nicht geschlossen"
+
+
 def test_only_front_matter_weg_is_checked() -> None:
     text = "---\ntitle: Beispiel\n---\n\nweg: kunde\n"
     assert wiki_check.check_front_matter(text, "seite.md") == []
@@ -192,6 +258,7 @@ def wiki_tree(tmp_path: Path) -> Path:
     shutil.copy2(ROOT / "scripts/docs-site.sh", scripts / "docs-site.sh")
     for name in ("README.md", "Konzept.md", "CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "TODO.md", "PLANNED_FEATURES.md"):
         (tmp_path / name).write_text("# Titel\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text(START, encoding="utf-8")
     (tmp_path / "docs/anleitung").mkdir(parents=True)
     (tmp_path / "docs/anleitung/seite.md").write_text("---\nweg: entwickeln\n---\n# Titel\n", encoding="utf-8")
     write_kette_tree(tmp_path)
@@ -218,6 +285,8 @@ def test_cli_reports_all_errors_in_docs_readme_and_root_docs(wiki_tree: Path) ->
     ]
     for path in paths:
         (wiki_tree / path).write_text("---\nweg: kunde\n---\n# Titel\n", encoding="utf-8")
+    with (wiki_tree / "README.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n" + START)
     (wiki_tree / "docs/kein-markdown.txt").write_text("---\nweg: kunde\n---\n", encoding="utf-8")
 
     result = run_check(wiki_tree)
@@ -238,6 +307,8 @@ def test_cli_checks_patterns_in_same_sources_as_front_matter(wiki_tree: Path) ->
     text = SETTING.replace("| Quelle | [Quelle](quelle.md) |\n", "")
     for path in paths:
         (wiki_tree / path).write_text(text, encoding="utf-8")
+    with (wiki_tree / "README.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n" + START)
     (wiki_tree / "docs/kein-markdown.txt").write_text(text, encoding="utf-8")
 
     result = run_check(wiki_tree)

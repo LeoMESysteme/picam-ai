@@ -1,3 +1,7 @@
+---
+weg: konfigurieren
+---
+
 # Messpfad und Freigabe im Detail
 
 Diese Seite erklärt, welche Entscheidung aus einem Kamerabild einen

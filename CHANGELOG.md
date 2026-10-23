@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Die Wiki-Startseite führt über drei Wege zu Bedienung,
+  Konfiguration und Entwicklung. Standangaben bleiben mit OQ-Status sichtbar,
+  die kompakte Verarbeitungskette steht darunter. Das vollständige
+  Seitenverzeichnis ist aufklappbar; ohne JavaScript bleibt alles lesbar.
+  Die Quellenprüfung sichert Starthüllen und Wegreihenfolge vor dem Build.
+
 * 2026-10-23: Korrekturrunde 1 der Tabellendiagramme: Innenbeschriftungen
   auf Grün, Gelb und beiden Reihenfarben verwenden dunklen Text. SVG und
   Segmente erhalten Grafikrollen mit eigenen Beschriftungen; Tastaturfokus

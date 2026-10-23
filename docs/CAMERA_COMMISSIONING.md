@@ -1,3 +1,7 @@
+---
+weg: bedienen
+---
+
 # Kamera-Inbetriebnahme
 
 ## Aktuell: Logitech StreamCam (UVC)

@@ -1,3 +1,39 @@
+.md-typeset .wiki-stand-row {
+  display: flex; flex-wrap: wrap; gap: .6rem 2rem;
+  margin: 1.2rem 0 2rem; padding: .75rem 0;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  font-size: .7rem; line-height: 1.55;
+}
+.md-typeset .wiki-stand-item { flex: 1 1 14rem; min-width: 0; }
+.md-typeset .wiki-stand-label { display: block; font-weight: 600; color: var(--md-default-fg-color--light); margin-bottom: .1rem; }
+.md-typeset .wiki-wege { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 1rem 0 1.6rem; }
+.md-typeset .wiki-wege:has(> h3) { display: block; }
+.md-typeset .wiki-weg { padding: .2rem 1.4rem .4rem; min-width: 0; }
+.md-typeset .wiki-weg:first-child { padding-left: 0; }
+.md-typeset .wiki-weg:last-child { padding-right: 0; }
+.md-typeset .wiki-weg + .wiki-weg { border-left: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .wiki-weg h3 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .4rem; font-size: .9rem; }
+.md-typeset .wiki-weg h3 svg { flex: none; }
+.md-typeset .wiki-weg > p { font-size: .7rem; color: var(--md-default-fg-color--light); margin: 0 0 .9rem; }
+.md-typeset ul.wiki-weg-links { list-style: none; margin: 0; padding: 0; }
+.md-typeset ul.wiki-weg-links li { margin: 0 0 .7rem; padding: 0; }
+.md-typeset ul.wiki-weg-links a { font-weight: 600; font-size: .74rem; }
+.md-typeset ul.wiki-weg-links li > a { display: block; }
+.md-typeset .wiki-weg-hint { display: block; font-size: .66rem; color: var(--md-default-fg-color--light); }
+#weg-bedienen h3 svg { color: var(--docs-resolved-fg); }
+#weg-konfigurieren h3 svg { color: var(--docs-progress-fg); }
+#weg-entwickeln h3 svg { color: var(--docs-partial-fg); }
+.md-typeset details.wiki-allpages {
+  border: none; box-shadow: none; background: none;
+}
+.md-typeset details.wiki-allpages > summary { background: none; }
+@media (max-width: 52em) {
+  .md-typeset .wiki-wege { grid-template-columns: 1fr; }
+  .md-typeset .wiki-weg { padding: 1rem 0; }
+  .md-typeset .wiki-weg + .wiki-weg { border-left: 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+}
+
 .wiki-chart {
   --wiki-chart-series: #2a78d6;
   --wiki-chart-good: #0ca30c;

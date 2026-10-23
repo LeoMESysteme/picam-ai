@@ -22,6 +22,24 @@ KETTE_STATES = ("fertig", "gebaut", "teilweise", "außer Betrieb")
 KETTE_PATH = "docs-site/assets/data/kette.json"
 
 
+def check_start(md_text: str) -> list[str]:
+    """Prüft die Starthüllen und die drei Wege innerhalb der Weiche."""
+    errors = []
+    for kind in ("wiki-stand", "wiki-wege"):
+        block = re.search(
+            rf'^<div class="{kind}" markdown="1">\s*\n((?:(?!^<div\b)[\s\S])*?)^</div>\s*$',
+            md_text, re.MULTILINE,
+        )
+        if block is None:
+            errors.append(f"README.md: {kind} fehlt oder ist nicht geschlossen")
+        elif kind == "wiki-wege":
+            headings = re.findall(r"^### (.+)$", block[1], re.MULTILINE)
+            expected = ["Einrichten und bedienen", "Konfigurieren und verstehen", "Entwickeln und anbinden"]
+            if headings != expected:
+                errors.append("README.md: wiki-wege braucht genau drei Wege in der Reihenfolge " + ", ".join(expected))
+    return errors
+
+
 def check_front_matter(md_text: str, path: str) -> list[str]:
     """Meldet unbekannte Wege im einfachen Front-Matter-Block am Dateianfang."""
     lines = md_text.splitlines()
@@ -228,6 +246,8 @@ def main() -> int:
         name = path.relative_to(ROOT).as_posix()
         errors.extend(check_front_matter(text, name))
         errors.extend(check_patterns(text, name))
+        if name == "README.md":
+            errors.extend(check_start(text))
         if name == "docs/anleitung/glossar.md":
             errors.extend(check_glossary(text))
     for error in errors:

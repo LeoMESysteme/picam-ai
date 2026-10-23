@@ -1,3 +1,7 @@
+---
+weg: bedienen
+---
+
 # Kamera-Workbench: HTTPS, Einstelltabelle und Shell
 
 > **Kamerastand beachten:** Der Abschnitt „Kamera einstellen“ dokumentiert
