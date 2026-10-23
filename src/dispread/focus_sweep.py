@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 
 DEFAULT_FOCUS_START = 48
+FOCUS_FINE_RADIUS = 6
 
 
 class FocusMeasurements(list[tuple[int, float]]):
@@ -25,7 +26,7 @@ class FocusMeasurements(list[tuple[int, float]]):
     def __init__(self, focus_method: str = "climb") -> None:
         super().__init__()
         self.focus_method = focus_method
-        self.focus_verify: dict[str, int | float] | None = None
+        self.focus_verify: dict[str, int | float | str] | None = None
 
 
 def climb_focus(
@@ -41,8 +42,10 @@ def climb_focus(
 ) -> tuple[int, FocusMeasurements]:
     """Bergsteigen: ab `start` in Schritten `step` in die Richtung, in der die
     Schaerfe steigt; faellt sie nach einem Anstieg, ist der Gipfel ueberschritten.
-    Dann dasselbe mit `fine_step` um den besten Wert. Ein Fokuswert wird nie
-    zweimal gemessen. Kein Anstieg in beiden Richtungen (flach, Unterschied
+    Danach das ganze Fenster +/-6 um den Grob-Gipfel aufsteigend mit
+    `fine_step` (Vorgabe 2) messen, ohne Abbruch bei einem Abfall; das
+    Fein-Maximum gewinnt. Die Kamera-Anfahrt von unten sichert der Aufrufer.
+    Ein Fokuswert wird nie zweimal gemessen. Kein Anstieg in beiden Richtungen (flach, Unterschied
     < `flat_tolerance` relativ) -> Rueckfall auf `sweep_focus` mit denselben
     Messungen als Startbestand (keine Wiederholung schon gemessener Werte).
     Nach Grob- und Feinlauf muss der Gipfel mindestens `peak_ratio` mal so
@@ -62,7 +65,7 @@ def climb_focus(
         if on_fallback is not None:
             on_fallback()
         measured.focus_method = "sweep"
-        sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=step,
+        sweep_focus(sample, coarse=(*seen, *range(lo, hi + 1, step)), fine_radius=FOCUS_FINE_RADIUS,
                     fine_step=fine_step, lo=lo, hi=hi)
         return max(measured, key=lambda pair: pair[1])[0], measured
 
@@ -94,18 +97,15 @@ def climb_focus(
             best, best_score = following, score
         position = following
 
-    coarse_best = best
-    for direction in (1, -1):
-        previous = sample(coarse_best)
-        for distance in range(fine_step, step - fine_step + 1, fine_step):
-            focus = coarse_best + direction * distance
-            if not lo <= focus <= hi:
-                break
-            score = sample(focus)
-            if score < previous:
-                break
-            previous = score
+    # Die Richtungsschwelle darf ein knapp besseres Grob-Ergebnis nicht als
+    # Mittelpunkt der Feinsuche ausschliessen.
     best, best_score = max(measured, key=lambda pair: pair[1])
+    fine_values = sorted({best, *range(max(lo, best - FOCUS_FINE_RADIUS),
+                                     min(hi, best + FOCUS_FINE_RADIUS) + 1, fine_step)})
+    for focus in fine_values:
+        score = sample(focus)
+        if score > best_score:
+            best, best_score = focus, score
     if best_score < peak_ratio * min(seen.values()):
         return fallback()
     return best, measured

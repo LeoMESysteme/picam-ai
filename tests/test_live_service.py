@@ -389,7 +389,10 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("focus")
         measured = FocusMeasurements()
         measured.append((48, 1.0))
-        measured.focus_verify = {"target": 48, "best_measured": 1.0, "verified": 0.9, "attempts": 1}
+        measured.focus_verify = {
+            "target": 48, "best_measured": 1.0, "verified": 0.9, "attempts": 1,
+            "approach": "from_below", "backlash_margin": 12,
+        }
         return camera, measured
 
     def assist(cam, **kwargs):
@@ -438,6 +441,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     assert json.loads(settings.read_text())["focus_method"] == "climb"
     assert json.loads(settings.read_text())["focus_verify"] == {
         "target": 48, "best_measured": 1.0, "verified": 0.9, "attempts": 1,
+        "approach": "from_below", "backlash_margin": 12,
     }
     if fail:
         assert service.status()["error"] == "Standbild abgelehnt"

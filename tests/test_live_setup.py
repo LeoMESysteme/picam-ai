@@ -177,7 +177,7 @@ def test_focus_camera_turns_autofocus_off_first_and_reads_back(monkeypatch):
     monkeypatch.setattr(live_setup, "sharpness", lambda roi: 1000 - (cam.controls[-1][0][1] - 48) ** 2)
     settings, sweep = live_setup.focus_camera(cam, None, settle_s=0, sleep=lambda _s: None)
     assert cam.controls[0] == [("focus_automatic_continuous", 0)]
-    assert cam.controls[1] == [("focus_absolute", 48)]
+    assert cam.controls[1:3] == [[("focus_absolute", 36)], [("focus_absolute", 48)]]
     assert cam.controls[-1] == [("auto_exposure", 3), ("white_balance_automatic", 1)]
     assert settings.controls == {
         "focus_absolute": 48, "exposure_time_absolute": 156, "white_balance_temperature": 4600, "gain": 10,
@@ -200,6 +200,47 @@ class FocusMotorCamera(FakeSetupCamera):
         return np.full((12, 12), next(self.readings), dtype=float)
 
 
+class HysteresisCamera(FakeSetupCamera):
+    """Abwaerts liegt die effektive Endlage drei Schritte ueber dem Sollwert."""
+
+    def __init__(self, peak):
+        super().__init__(None)
+        self.peak = peak
+        self.focus = 120
+        self.effective = 123
+        self.samples = []
+
+    def set_controls(self, controls):
+        super().set_controls(controls)
+        for name, value in controls:
+            if name == "focus_absolute":
+                assert 0 <= value <= 255
+                if value != self.focus:
+                    self.effective = value + (3 if value < self.focus else 0)
+                self.focus = value
+
+    def fresh_still(self, discard=10):
+        self.samples.append((self.focus, self.effective))
+        # Drei Schritte vom Gipfel kosten rund 40 % Schaerfe.
+        score = 1 + 614 * np.exp(-((self.effective - self.peak) ** 2) / 18)
+        return np.full((12, 12), score, dtype=float)
+
+
+@pytest.mark.parametrize("start,peak", [(42, 52), (100, 63), (200, 52), (48, 1), (48, 255)])
+def test_focus_hysteresis_reproduces_peak_on_first_verification(monkeypatch, start, peak):
+    cam = HysteresisCamera(peak)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+    settings, measured = live_setup.focus_camera(
+        cam, None, start_focus=start, settle_s=0, sleep=lambda _s: None,
+    )
+    assert abs(settings.controls["focus_absolute"] - peak) <= 1
+    assert measured.focus_verify["attempts"] == 1
+    assert measured.focus_verify["verified"] == pytest.approx(max(score for _, score in measured))
+    assert all(focus == effective for focus, effective in cam.samples)
+    assert measured.focus_verify["approach"] == "from_below"
+    assert measured.focus_verify["backlash_margin"] == 12
+
+
 def _focus_motor(monkeypatch, readings, *, target=48, best=100.0, sample=False):
     from dispread.focus_sweep import FocusMeasurements
 
@@ -220,28 +261,43 @@ def test_focus_motor_waits_for_stable_sharpness_and_verifies(monkeypatch):
     cam = _focus_motor(monkeypatch, [10, 30, 60, 100, 105, 90, 94], sample=True)
     messages = []
     settings, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
-    assert cam.captured_at == pytest.approx([1, 1.3, 1.6, 1.9, 2.2, 3.2, 3.5])
+    # Je eine Sekunde am Anfahrpunkt vor Suchmessung und Endpruefung.
+    assert cam.captured_at == pytest.approx([2, 2.3, 2.6, 2.9, 3.2, 5.2, 5.5])
     assert measured == [(48, 105)]
     assert settings.controls["focus_absolute"] == 48
-    assert measured.focus_verify == {"target": 48, "best_measured": 105, "verified": 94, "attempts": 1}
+    assert measured.focus_verify == {
+        "target": 48, "best_measured": 105, "verified": 94, "attempts": 1,
+        "approach": "from_below", "backlash_margin": 12,
+    }
     assert "Fokus geprueft: Schaerfe 94.0 von 105.0" in messages
 
 
 def test_focus_motor_stops_waiting_after_five_seconds(monkeypatch):
     cam = _focus_motor(monkeypatch, [10, 100] * 8 + [100], sample=True)
     _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
-    assert cam.captured_at[14] == pytest.approx(5.0)
+    # Fuenf Sekunden ab Setzen des Ziels, nach einer Sekunde am Anfahrpunkt.
+    assert cam.captured_at[14] == pytest.approx(6.0)
     assert measured == [(48, 10)]
     assert measured.focus_verify["attempts"] == 1
 
 
-@pytest.mark.parametrize("target", [0, 48, 255])
-def test_focus_verification_retries_once_and_records_result(monkeypatch, target):
+@pytest.mark.parametrize("target,below", [(1, 0), (48, 36), (255, 243)])
+def test_focus_verification_retries_once_and_records_result(monkeypatch, target, below):
     cam = _focus_motor(monkeypatch, [80, 80, 85, 85], target=target)
     _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
     moves = [value for controls in cam.controls for name, value in controls if name == "focus_absolute"]
-    assert moves == [target, target + 8 if target <= 247 else target - 8, target]
-    assert measured.focus_verify == {"target": target, "best_measured": 100, "verified": 85, "attempts": 2}
+    assert moves == [below, target, below, target]
+    assert measured.focus_verify == {
+        "target": target, "best_measured": 100, "verified": 85, "attempts": 2,
+        "approach": "from_below", "backlash_margin": 12,
+    }
+
+
+def test_focus_zero_is_rejected_without_a_below_approach(monkeypatch):
+    cam = _focus_motor(monkeypatch, [], target=0)
+    with pytest.raises(live_setup.SetupError, match="nicht von unten erreichbar"):
+        live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    assert cam.controls == [[("focus_automatic_continuous", 0)]]
 
 
 def test_focus_verification_fails_twice_with_restart_message(monkeypatch):
@@ -251,7 +307,10 @@ def test_focus_verification_fails_twice_with_restart_message(monkeypatch):
         "Fokus nicht stabil: Schaerfe 84.0 von 100.0 erreicht - Einrichtung neu starten"
     )):
         live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
-    assert cam.controls[-3:] == [[("focus_absolute", 48)], [("focus_absolute", 56)], [("focus_absolute", 48)]]
+    assert cam.controls[-4:] == [
+        [("focus_absolute", 36)], [("focus_absolute", 48)],
+        [("focus_absolute", 36)], [("focus_absolute", 48)],
+    ]
     assert not any(message.startswith("Fokus geprueft:") for message in messages)
 
 

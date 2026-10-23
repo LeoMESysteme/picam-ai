@@ -939,6 +939,7 @@ def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch, pla
         assert data["focus_verify"] == {
             "target": 48, "best_measured": max(s for _, s in data["focus_sweep"]),
             "verified": max(s for _, s in data["focus_sweep"]), "attempts": 1,
+            "approach": "from_below", "backlash_margin": 12,
         }
     assert "created_at_utc" in data
     assert (out_dir / "control.png").exists()

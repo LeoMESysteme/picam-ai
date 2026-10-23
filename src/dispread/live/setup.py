@@ -51,7 +51,9 @@ FOCUS_SAMPLE_INTERVAL_S = 0.3
 FOCUS_STABILITY_TIMEOUT_S = 5.0
 FOCUS_STABILITY_TOLERANCE = 0.05
 FOCUS_VERIFY_RATIO = 0.85  # Endlage muss mindestens 85 % der besten Suchmessung erreichen.
-FOCUS_RETRY_STEP = 8  # Einmal wegfahren und zur Endlage zurueckkehren.
+# StreamCam: 2-3 Schritte Hysterese (2026-10-23); 12 Schritte Reserve.
+# Unterhalb 12 wird der Anfahrpunkt auf 0 begrenzt; Ziel 0 ist nicht von unten erreichbar.
+FOCUS_BACKLASH_MARGIN = 12
 MIN_STABILITY_S = 30.0
 SERIAL_PORT = "/dev/ttyUSB0"
 SERIAL_BAUDRATE = 38400
@@ -180,12 +182,25 @@ def focus_camera(
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
 ) -> tuple[CameraSettings, FocusMeasurements]:
-    """Fokus-Bergsteigen, danach Automatiken kurz einschwingen lassen und deren
-    Werte als feste Regler uebernehmen (wie bisher `run_focus`)."""
+    """Grob bergsteigen, fein aufsteigend; jede Messung von unten anfahren.
+
+    Nach Endpruefung Automatiken einschwingen lassen und Werte fest uebernehmen.
+    Fokus 0 bleibt ausgeschlossen, weil keine Anfahrt von unten moeglich ist.
+    """
     sleep = sleep or time.sleep
+    last_focus = None
 
     def measure(focus: int) -> float:
+        nonlocal last_focus
+        if focus <= 0:
+            raise SetupError("Fokus 0 ist nicht von unten erreichbar - Einrichtung neu starten")
+        # Auch die erste (unbekannte) Lage und ein erneutes Setzen derselben
+        # Lage normalisieren. So fahren Endpruefung und Retry sicher von unten an.
+        if last_focus is None or focus <= last_focus:
+            cam.set_controls([("focus_absolute", max(0, focus - FOCUS_BACKLASH_MARGIN))])
+            sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
         cam.set_controls([("focus_absolute", focus)])
+        last_focus = focus
         deadline = time.monotonic() + FOCUS_STABILITY_TIMEOUT_S
         sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
         previous = None
@@ -208,16 +223,13 @@ def focus_camera(
     if info is not None:
         info("Fokus: Bergsteigen")
     best_focus, sweep_log = climb_focus(
-        measure, start=start_focus,
+        measure, start=start_focus, lo=1,
         on_fallback=(lambda: info("Fokus: Vollsweep (Rueckfall)")) if info is not None else None,
     )
     best_measured = max(score for _, score in sweep_log)
     verified = measure(best_focus)
     attempts = 1
     if not verified >= FOCUS_VERIFY_RATIO * best_measured:
-        away = best_focus + FOCUS_RETRY_STEP if best_focus <= 255 - FOCUS_RETRY_STEP else best_focus - FOCUS_RETRY_STEP
-        cam.set_controls([("focus_absolute", away)])
-        sleep(settle_s)
         verified = measure(best_focus)
         attempts = 2
     if not verified >= FOCUS_VERIFY_RATIO * best_measured:
@@ -226,6 +238,7 @@ def focus_camera(
         )
     sweep_log.focus_verify = {
         "target": best_focus, "best_measured": best_measured, "verified": verified, "attempts": attempts,
+        "approach": "from_below", "backlash_margin": FOCUS_BACKLASH_MARGIN,
     }
     if info is not None:
         info(f"Fokus geprueft: Schaerfe {verified:.1f} von {best_measured:.1f}")
