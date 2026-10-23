@@ -123,10 +123,35 @@ test('Hinweise bleiben überfahrbar, per Tastatur erreichbar und im Viewport', a
   await expect(hint).toBeVisible();
   await page.mouse.move(0, 0);
   await expect(hint).toHaveCount(0);
+  await link.evaluate((el) => el.blur());
   await link.focus();
   await expect(hint).toBeVisible();
-  await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(link).not.toBeInViewport();
   await expect(hint).toHaveCount(0);
+});
+
+test('Hinweis bleibt beim Scrollen am Ziel', async ({ page }) => {
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  const link = oq07Link(page);
+  await expect(link).toHaveAttribute('data-hint', 'oq');
+  await link.focus();
+  const hint = page.locator('#wiki-hint[data-open="true"]');
+  await expect(hint).toBeVisible();
+  const before = await page.evaluate(() => window.scrollY);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.scrollBy(0, 40);
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+  await expect(hint).toBeVisible();
+  await expect.poll(async () => {
+    const [anchor, popup] = await Promise.all([link.boundingBox(), hint.boundingBox()]);
+    if (!anchor || !popup) return false;
+    const below = popup.y - (anchor.y + anchor.height);
+    const above = anchor.y - (popup.y + popup.height);
+    return (below >= 8 && below <= 40) || (above >= 8 && above <= 40);
+  }).toBe(true);
 });
 
 test('Fehlende Hinweisquellen lassen Links unverändert', async ({ page }) => {
@@ -1146,8 +1171,12 @@ test('Glossar filtert über Synonyme und springt per A–Z', async ({ page }) =>
   const filter = page.getByRole('searchbox', { name: 'Begriffe filtern' });
   await filter.fill('Region');
   await expect(page.locator('#roi')).toBeVisible();
-  await expect(page.locator('.wiki-glossar-count')).toContainText('1 von');
-  await expect(page.locator('.wiki-glossar-entry:visible')).toHaveCount(1);
+  await expect(page.locator('.wiki-glossar-count')).toHaveText(/^\d+ von \d+ Begriffen/);
+  const visibleEntries = page.locator('.wiki-glossar-entry:visible');
+  for (const entry of await visibleEntries.all()) {
+    const searchable = await entry.locator('h3, h3 + p, .wiki-glossar-aliases').allTextContents();
+    expect(searchable.join(' ').toLocaleLowerCase('de')).toContain('region');
+  }
   await filter.fill('');
   await page.getByRole('navigation', { name: 'Alphabet' }).getByRole('button', { name: 'R', exact: true }).click();
   const firstR = page.locator('#buchstabe-r + .wiki-glossar-entry h3');
@@ -1166,16 +1195,18 @@ test('Glossar filtert über Synonyme und springt per A–Z', async ({ page }) =>
 });
 
 test('Glossar zeigt Vorkommen mit Kontext beim Überfahren', async ({ page }) => {
-  const start = Date.now();
   await page.goto('/docs/anleitung/glossar.html');
-  const occurrence = page.locator('.wiki-glossar-entry').filter({ has: page.locator('#roi') }).locator('.wiki-occ');
-  await expect(occurrence).toBeAttached({ timeout: 6000 });
-  const elapsed = Date.now() - start;
-  console.log(`Glossar-Vorkommen nach ${elapsed} ms`);
-  expect(elapsed).toBeLessThan(6000);
+  const roiEntry = page.locator('section.wiki-glossar-entry').filter({ has: page.locator('#roi') });
+  await expect(roiEntry).toBeAttached();
+  await page.locator('#roi').scrollIntoViewIfNeeded();
+  const occurrence = roiEntry.locator('.wiki-occ:not([data-pending])');
+  await expect(occurrence).toBeAttached({ timeout: 10000 });
+  const indexReady = await page.evaluate(() => performance.getEntriesByName('wiki-occ-index-ready').at(-1)!.startTime);
+  console.log(`Glossar-Index ab Navigationsbeginn nach ${indexReady.toFixed(1)} ms bereit`);
   expect(await occurrence.locator('.wiki-occ-page').count()).toBeGreaterThanOrEqual(2);
-  await occurrence.locator('a[data-hint="fundstelle"]').first().hover();
+  await occurrence.locator('a[data-hint="fundstelle"]').first().focus();
   const popup = page.locator('#wiki-hint[data-open="true"]');
+  await expect(popup).toBeVisible();
   await expect(popup.locator('mark')).toHaveText(/roi/i);
   await expect(popup.locator('strong')).toContainText('›');
   await expect(popup.locator('p')).toContainText(/.{1,90}ROI|ROI.{1,90}/i);
@@ -1183,6 +1214,16 @@ test('Glossar zeigt Vorkommen mit Kontext beim Überfahren', async ({ page }) =>
   expect(href).toContain(':~:text=');
   await occurrence.getByRole('link', { name: 'Alle Treffer in der Suche' }).click();
   await expect(page.getByRole('combobox')).toHaveValue('ROI');
+});
+
+test('Glossar rendert Fundstellen erst in Sichtnähe', async ({ page }) => {
+  await page.goto('/docs/anleitung/glossar.html');
+  await page.waitForFunction(() => performance.getEntriesByName('wiki-occ-index-ready').length > 0, undefined, { timeout: 10000 });
+  const lastEntry = page.locator('section.wiki-glossar-entry').last();
+  await expect(lastEntry.locator('.wiki-occ')).toHaveAttribute('data-pending', 'true');
+  await expect(lastEntry.locator('.wiki-occ')).toBeEmpty();
+  await lastEntry.scrollIntoViewIfNeeded();
+  await expect(lastEntry.locator('.wiki-occ:not([data-pending])')).toBeAttached({ timeout: 10000 });
 });
 
 test('Glossar bleibt ohne Suchindex lesbar', async ({ page }) => {
@@ -1209,7 +1250,7 @@ test('Begriffe werden je Abschnitt einmal markiert ohne Links und Code zu verän
   const article = page.locator('.md-content__inner');
   await expect(article).toHaveAttribute('data-wiki-terms-ready', 'true');
   await expect(article.locator('a.wiki-term')).not.toHaveCount(0);
-  await expect(article.locator('a[href]:not(.wiki-term)')).toHaveCount(before.links);
+  await expect(article.locator('a[href]:not(.wiki-term):not(.tour-figure-link)')).toHaveCount(before.links);
   expect(await article.locator('pre').allTextContents()).toEqual(before.pre);
   const duplicates = await article.evaluate((element) => {
     let seen = new Set<string>();

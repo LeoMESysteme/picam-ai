@@ -211,6 +211,7 @@
 .wiki-glossar-controls :is(button, input):focus-visible,
 .wiki-glossar-empty-wrap button:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
 .md-typeset .wiki-glossar-entry h3 { scroll-margin-top: 7rem; }
+.md-typeset :is(.wiki-glossar-group, .wiki-glossar-entry) { overflow-anchor: auto; }
 .md-typeset .wiki-glossar-entry { margin-bottom: 2rem; overflow-wrap: anywhere; }
 .md-typeset .wiki-glossar-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem; font-size: .65rem; }
 .md-typeset .wiki-glossar-meta .wiki-chip--weg {

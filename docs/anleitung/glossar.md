@@ -19,7 +19,7 @@ wird. Sein Wert wird **nie** anhand der Referenz korrigiert.
 
 ### GSVmulti
 
-die Auswertesoftware von ME-Systeme, die die Werte
+Die Auswertesoftware von ME-Systeme, die die Werte
 zeitgestempelt entgegennehmen soll. Das akzeptierte serielle Telegramm ist
 unbekannt ([OQ-01](../open-questions.md), [OQ-07](../open-questions.md)).
 
@@ -27,7 +27,7 @@ unbekannt ([OQ-01](../open-questions.md), [OQ-07](../open-questions.md)).
 
 ### Messverstärker
 
-die Geräteklasse (GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI,
+Die Geräteklasse (GSV-2ASD, GSV-2MSD-DI, GSV-2TSD-DI,
 AST). Beispielgeräte, kein zugesicherter Umfang: welche Typen freigegeben
 werden, ist [OQ-04](../open-questions.md).
 
@@ -44,7 +44,7 @@ gelöscht**, nur auf `geklärt` gesetzt.
 
 ### Referenz
 
-die Kalibriermaschine bzw. das Normal. Zeitlich mit dem DUT
+Die Kalibriermaschine bzw. das Normal. Zeitlich mit dem DUT
 zuzuordnen, aber strikt getrennt vom Erkennungspfad (Konzept §7).
 
 *Weg:* Bedienen · *Quelle:* [Konzept §7](../../Konzept.md)
@@ -68,7 +68,7 @@ sie verändert die Helligkeiten, aus denen die Segmentevidenz entsteht.
 
 ### Entzerren / Rectify
 
-das Anzeigenviereck auf ein achsparalleles Rechteck
+Das Anzeigenviereck auf ein achsparalleles Rechteck
 fester Größe abbilden (`rectify.rectify()`). Feste Zielgröße, weil der
 Segmentleser gegen ein Raster abtastet.
 
@@ -76,7 +76,7 @@ Segmentleser gegen ein Raster abtastet.
 
 ### Homographie
 
-die 3×3-Abbildung zwischen Bildviereck und entzerrtem
+Die 3×3-Abbildung zwischen Bildviereck und entzerrtem
 Ausschnitt. Wird im `DisplayCrop` mitgeführt, damit man einzelne Segmente für
 Diagnosebilder zurückprojizieren kann.
 
@@ -100,7 +100,7 @@ die gepoolten Segmentmessungen — Begründung im Docstring von
 
 ### Quad
 
-vier Eckpunkte einer Anzeige im Bildkoordinatensystem, im
+Vier Eckpunkte einer Anzeige im Bildkoordinatensystem, im
 Uhrzeigersinn ab oben links.
 
 *Weg:* Entwickeln · *Quelle:* [Geometrie-API](../../api/geometrie.md)
@@ -119,8 +119,6 @@ Anteil der Bildpunkte ≥ 250. Maß für
 
 *Weg:* Konfigurieren · *Auch:* saturated_fraction · *Quelle:* [Geometrie-API](../../api/geometrie.md)
 
-(`saturated_fraction`)
-
 ### Schärfe
 
 Varianz des Laplace-Operators. Nur innerhalb
@@ -128,11 +126,9 @@ Varianz des Laplace-Operators. Nur innerhalb
 
 *Weg:* Konfigurieren · *Auch:* sharpness · *Quelle:* [Geometrie-API](../../api/geometrie.md)
 
-(`sharpness`)
-
 ### Segmentevidenz
 
-die gemessene Helligkeit jedes der sieben Segmente je
+Die gemessene Helligkeit jedes der sieben Segmente je
 Stelle, plus `margin`. Sie erklärt Entscheidungen des Siebensegment-Lesers.
 Der Live-Pfad am GSV-2AS verwendet stattdessen Punktraster und Vorlagenabstände
 des `DotMatrixReader`.
@@ -167,7 +163,7 @@ Beim Dot-Matrix-Leser ist sie der kleinere verbleibende Abstand zur erlaubten Vo
 
 ### Mehrbildbestätigung {#mehrbildbestaetigung}
 
-*n* aufeinanderfolgende Frames müssen denselben Wert
+*N* aufeinanderfolgende Frames müssen denselben Wert
 zeigen (`GateConfig.confirm_frames`). Kostet Zeit, die als
 `confirmation_span_ns` dokumentiert wird.
 
@@ -234,7 +230,7 @@ Das war die Zeitbasis des `SensorTimestamp` der inzwischen außer Betrieb genomm
 
 ### `CLOCK_MONOTONIC`
 
-monoton steigende Zeit ohne Sprünge. Domäne aller
+Monoton steigende Zeit ohne Sprünge. Domäne aller
 Verarbeitungsmarken im `PipelineTrace`.
 
 *Weg:* Entwickeln · *Quelle:* [Zeitbezug](../TIMING.md)
@@ -250,7 +246,7 @@ Latenz garantiert keine kleine Unsicherheit. Grundsatz aus
 
 ### M1 … M8
 
-das Messprogramm zum Zeitbezug in
+Das Messprogramm zum Zeitbezug in
 [../TIMING.md](../TIMING.md). Wichtigste: **M8** (nutzt GSVmulti den
 gelieferten Aufnahmezeitstempel?) und **M5** (Displayaktualisierung und
 Haltezeit, vermutlich der dominierende Term).
@@ -265,21 +261,17 @@ Zeitstempel aus den libcamera-Metadaten.
 
 ### Semantik
 
-worauf sich ein Zeitstempel physikalisch
+Worauf sich ein Zeitstempel physikalisch
 bezieht: Belichtungsbeginn, -mitte, Auslese-Ende, Host-Abholung. Steht auf
 `UNKNOWN`, bis Messung M2 es belegt.
 
 *Weg:* Entwickeln · *Auch:* TimestampSemantics · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
-
-(`TimestampSemantics`)
 
 ### Zeitbasis
 
 Herkunft und Belastbarkeit: `V4L2_MONOTONIC`, `SENSOR_BOOTTIME` und `REPLAY_RECORDED` tragen eine Zeitaussage, `SYNTHETIC` und `FILE_MTIME` nicht (`carries_time_information`).
 
 *Weg:* Entwickeln · *Auch:* TimeBaseKind · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
-
-(`TimeBaseKind`)
 
 Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
 
@@ -289,8 +281,6 @@ Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe [Zeits
 das wäre eine Falschaussage.
 
 *Weg:* Entwickeln · *Auch:* uncertainty_ns · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
-
-(`uncertainty_ns`)
 
 ## Schnittstellen und Hardware
 
@@ -304,7 +294,7 @@ On-Sensor-Inferenz. Seit 2026-09-25 außer Betrieb. Historisch gemessen:
 
 ### `.rpk`
 
-gepacktes Modell für den IMX500. Die 23 mitgelieferten sind
+Gepacktes Modell für den IMX500. Die 23 mitgelieferten sind
 COCO-/ImageNet-Modelle und für Displays unbrauchbar. Der **Packager** ist auf
 dem Pi vorhanden, der **Converter** für eigene Modelle nicht
 ([OQ-11](../open-questions.md)).
@@ -313,7 +303,7 @@ dem Pi vorhanden, der **Converter** für eigene Modelle nicht
 
 ### Telegramm
 
-die Bytes eines Datensatzes auf der seriellen Leitung, erzeugt
+Die Bytes eines Datensatzes auf der seriellen Leitung, erzeugt
 von einem `TelegramFormatter`.
 
 *Weg:* Entwickeln · *Quelle:* [Ausgabe-API](../../api/sink.md)
@@ -343,7 +333,7 @@ es braucht einen Pegelwandler, galvanische Trennung ist zu bewerten
 
 ### `/dev/ttyAMA0`
 
-vorgesehener UART-Datenport für die noch offene GSVmulti-Ausgabe; die elektrische Anbindung ist nicht freigegeben (OQ-09).
+Vorgesehener UART-Datenport für die noch offene GSVmulti-Ausgabe; die elektrische Anbindung ist nicht freigegeben (OQ-09).
 
 *Weg:* Konfigurieren · *Quelle:* [Hardwareprofil](../HARDWARE_PROFILE.md)
 
@@ -353,17 +343,17 @@ Die serielle GSV-2AS-Referenz nutzt am aktuellen Aufbau `/dev/ttyUSB0`. **`/dev/
 
 ### Editierbarer Install
 
-das Paket wird aus `src/`
+Das Paket wird aus `src/`
 importiert statt kopiert. Trägt einen absoluten Pfad in der `.pth`-Datei; ein
 umbenanntes Projektverzeichnis bricht ihn ([Kapitel 0](00-werkzeuge.md)).
 
 *Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
 
-(`./.venv/bin/pip install --no-deps -e .`)
+Installation mit: `./.venv/bin/pip install --no-deps -e .`.
 
 ### `frozen` Datenklasse
 
-nach dem Erzeugen unveränderlich. Alle
+Nach dem Erzeugen unveränderlich. Alle
 Ergebnisobjekte hier. Änderung nur als neues Objekt
 (`dataclasses.replace`).
 
@@ -386,7 +376,7 @@ nicht unbenutzbar macht.
 
 ### `Protocol`
 
-strukturelle Typisierung: passende Methoden genügen, kein
+Strukturelle Typisierung: passende Methoden genügen, kein
 Erben nötig. Mit `@runtime_checkable` ist `isinstance()` möglich und wird in
 Tests als Konformitätsprüfung benutzt.
 
@@ -394,7 +384,7 @@ Tests als Konformitätsprüfung benutzt.
 
 ### `slots=True`
 
-feste Attributmenge, weniger Speicher, und ein Tippfehler
+Feste Attributmenge, weniger Speicher, und ein Tippfehler
 bei einer Zuweisung fliegt auf.
 
 *Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
@@ -408,7 +398,7 @@ JSON-Serialisierung über `.value`.
 
 ### `--system-site-packages` / `--no-deps`
 
-die venv-Regel des Projekts:
+Die venv-Regel des Projekts:
 Systempakete sichtbar lassen, keine PyPI-Kopien von `numpy`/`cv2`/`pyserial`
 darüberlegen. Begründung in [../dependencies.md](../dependencies.md).
 

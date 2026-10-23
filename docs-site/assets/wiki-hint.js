@@ -18,6 +18,7 @@
     let touchIntent = null;
     let openTimer;
     let closeTimer;
+    let positionFrame = null;
     let requestId = 0;
 
     function findTarget(node) {
@@ -32,6 +33,8 @@
     function close() {
       clearTimeout(openTimer);
       cancelClose();
+      if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+      positionFrame = null;
       requestId += 1;
       requestedTarget = null;
       if (target) {
@@ -53,6 +56,22 @@
       const top = below + size.height <= window.innerHeight - 8 ? below : rect.top - size.height - 8;
       popup.style.left = `${left + window.scrollX}px`;
       popup.style.top = `${Math.max(8, Math.min(top, window.innerHeight - size.height - 8)) + window.scrollY}px`;
+    }
+
+    function schedulePosition(event) {
+      if (event.target instanceof Node && popup.contains(event.target)) return;
+      if (!target || positionFrame !== null) return;
+      positionFrame = requestAnimationFrame(() => {
+        positionFrame = null;
+        if (!target?.isConnected) { close(); return; }
+        const rect = target.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= window.innerHeight
+          || rect.right <= 0 || rect.left >= window.innerWidth) {
+          close();
+          return;
+        }
+        position(target);
+      });
     }
 
     async function open(element) {
@@ -136,8 +155,8 @@
       }
       touchIntent = null;
     }, true);
-    listen(window, "scroll", close, true);
-    listen(window, "resize", close);
+    listen(window, "scroll", schedulePosition, true);
+    listen(window, "resize", schedulePosition);
 
     return () => {
       close();

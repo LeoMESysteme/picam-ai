@@ -140,6 +140,7 @@
           // Unicode /iu also folds characters such as long s, which lowercasing
           // alone does not map to the same dictionary key.
           if (!entry && index) entry = [...folded].find(([name]) => new RegExp(`^${escape(name)}$`, "iu").test(match[1]))?.[1];
+          if (!entry) continue;
           hits.push({ entry, index: match.index, length: match[1].length, match: match[1] });
         }
       });

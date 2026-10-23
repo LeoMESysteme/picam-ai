@@ -3266,26 +3266,3 @@ Planschritte. Kein gesonderter Nachweis der Reaktion auf diese Abdeckung.
 **Artefakte:** `session.json`, `records.jsonl`, `reference.jsonl`,
 `commands.jsonl`, `reference-eval.json`, `werteplan-auswertung.json` und die
 beiden Diagnoseschnappschüsse im Laufverzeichnis (lokale Daten, nicht in Git).
-
-## Wiki-Vorkommensindex 2026-10-23
-
-Technischer Laufzeittest der Dokumentationsoberfläche auf Raspberry Pi 5
-Model B Rev 1.1 (`aarch64`), Node.js v20.19.2. Zeitbasis:
-`performance.now()` als monotone Prozessuhr, Einheit Millisekunden.
-Befehl: `node .superpowers/sdd/2026-10-23-wiki-geruest/task-4-check.mjs`.
-Eingabe: gebautes `site/search.json`, SHA-256
-`c741879b16b2a1f37531191337f9657c522d4cf585c8e7ff97a30bd633af7dc1`.
-
-| Kennzahl | Ergebnis |
-| --- | --- |
-| Sucheinträge / Glossarbegriffe | 2.319 / 50 |
-| Gefundene Stellen | 3.070 |
-| ROI: Stellen / Seiten | 176 / 34 |
-| Indexaufbau einschließlich Häppchenpausen, zwei Kontrollläufe | 865,7 ms / 548,3 ms |
-| Ziel / Testgrenze | < 3.000 ms / < 6.000 ms |
-| Vergleich mit vollständigem Textscan aller Begriffe | identische Fundstellen |
-
-Die Zeiten umfassen HTML-Textumwandlung, Wortindex und Phrasensuche in
-Häppchen zu 200 Einträgen. Fetch, DOM-Aufbau und Pop-ups sind nicht enthalten;
-die Browserprüfung erfolgt separat. Aufbau und Deutung stehen im
-[Laborjournal](lab_journal.md#2026-10-23-wiki-vorkommensindex).
