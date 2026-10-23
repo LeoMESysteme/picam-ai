@@ -33,6 +33,18 @@ was ist die Konsequenz.
   Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
   werden weiterhin wiederholt.
 
+* 2026-10-23: Roadmap im Zensical-Wiki als frei verschiebbare Karte mit
+  Meilensteinen und eigener innerer Ebene für die Arbeitsschritte.
+  Kartenminiaturen zeigen die enthaltene Struktur; beim Eintritt lösen
+  sich Inhalt und Füllung auf, der Umriss wird zur Bühnenbegrenzung mit
+  dezentem Randlicht und Punktwolke. Klick, Tastatur, Wheel und Pinch
+  teilen den Ebenenwechsel; Quellen, Status und belegte Aktualisierungen
+  stammen aus den Markdown-Tabellen. Quellansicht und Nutzung ohne
+  JavaScript bleiben erhalten. Anime.js wird aus der vorhandenen lokalen
+  Kopie geladen, Kartenpositionen bleiben je Browser gespeichert.
+  Zwei kompakte Schritte stehen bereits in der Hauptkarte an einer
+  verbundenen Linie mit Häkchen und rechtsbündigem Status.
+
 * 2026-10-21: Zensical-Wiki seitenweise gegen Code und Projektkriterien
   abgeglichen. Anleitungen, Roadmap, API-Übersicht und Projekt-Tour nennen
   den gebauten Dot-Matrix-Livepfad, seine begrenzten Belege und die noch

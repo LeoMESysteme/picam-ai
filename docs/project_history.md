@@ -168,6 +168,49 @@ Konfigurationsvergleich am Laufstart abgelehnt und müssen neu eingerichtet
 werden. Die Auswahländerung braucht eine neue Abnahme. Offline-Belege:
 [VALIDATION](VALIDATION.md#r13-r11-2026-10-23).
 
+# 2026-10-23 — Roadmap als räumliche Kartenhierarchie
+
+## Problem
+
+Die Phasen waren als Akkordeon lesbar, ihre untergeordneten Arbeitsschritte
+und der Zusammenhang der Meilensteine blieben aber unsichtbar. Ein
+aufgezoomtes Detailfenster hätte die freie Karte durch einen zweiten
+Darstellungsmodus unterbrochen.
+
+## Entscheidung
+
+Eine frei bewegliche Meilenstein-Karte enthält eine zweite Kartenebene.
+Miniaturen der enthaltenen Schrittkarten zeigen die räumliche Tiefe.
+Beim Hineinzoomen verschwinden Text und Füllung des Meilensteins; sein
+Umriss erreicht die Bühne. Auf der inneren Karte erscheinen die einzelnen
+Schritte. Randlicht und eine feste Punktwolke machen die Begrenzung der
+inneren Ebene sichtbar. Es gibt keinen Detaildialog und keinen
+erklärenden Zoomtext. Herauszoomen kehrt den Übergang um.
+
+Die bestehende Phasentabelle bleibt maßgeblich. Eine zusätzliche
+Markdown-Tabelle enthält stabile Schritt-IDs, Stand, optional belegtes
+Aktualisierungsdatum und Beleglink. Gebautes und Abgenommenes bleiben
+getrennt. Knotenanordnung wird nur lokal im Browser gespeichert.
+
+## Begründung und Alternativen
+
+Das Wiki bleibt eine statische Zensical-Seite. DOM-Karten, SVG-Verbindungen,
+Pointer Events und die bereits lokale Anime.js-Version 4.5.0 reichen für
+die beiden Ebenen; ein zusätzliches Graph-Framework ist nicht nötig.
+Eine getrennte JSON-Datei würde die Dokumentationsinhalte duplizieren.
+Phasenraster und Sternkarte wurden nach den Bildentwürfen verworfen;
+das zentrale Detailpanel wurde ausdrücklich durch die begehbare innere
+Kartenebene ersetzt. Explizite Zoomhinweise weichen der sichtbaren
+Kartenstruktur.
+
+## Konsequenz
+
+Neue Schritte und Belege werden in der Roadmap gepflegt. Die ID bleibt
+auch bei Textkorrekturen stabil. Datenfehler lassen die Tabellen sichtbar;
+fehlende Animation oder gesperrter Browser-Speicher verhindern die Nutzung
+nicht. Quellansicht, Tastatur, mobile Ansicht und Sofortnavigation werden
+mit den Karten zusammen geprüft.
+
 ---
 
 # 2026-10-13 — pytest-Importpfad und Aufbewahrung im Worktree (MEM-5)

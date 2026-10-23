@@ -59,17 +59,331 @@ test('OQ-Fokus, Filter und Suche bleiben mit den Einträgen verlinkt', async ({ 
   await expect(page).toHaveURL(new RegExp(`${hash}$`));
 });
 
-test('Roadmap zeigt Phasen mit Exit-Kriterium und OQ-Link', async ({ page }) => {
+test('Roadmap-Karte öffnet Schritte als innere Kartenebene statt als Dialog', async ({ page }) => {
   await page.goto('/docs/ROADMAP.html');
-  const phases = page.locator('[data-roadmap]');
-  await expect(phases.locator('details')).toHaveCount(9);
+  const roadmap = page.locator('[data-roadmap]');
+  const phases = roadmap.locator('.roadmap-node[data-phase]');
+  await expect(phases).toHaveCount(9);
   await expect(page.locator('#roadmap-phases')).toBeHidden();
-  await expect(phases.locator('details').first().locator('.roadmap-state')).toHaveText('erreicht');
-  await expect(phases.locator('details').nth(1).locator('.roadmap-state')).toHaveText('teilweise');
-  const p4 = phases.locator('details').filter({ hasText: 'P4' });
-  await p4.locator('summary').click();
-  await expect(p4).toContainText('GSVmulti nimmt den Strom an');
-  await expect(p4.getByRole('link', { name: 'OQ-01' })).toHaveAttribute('href', /open-questions\.html#oq-01$/);
+  await expect(phases.first().locator('.roadmap-state')).toHaveText('erreicht');
+  await expect(phases.nth(1).locator('.roadmap-state')).toHaveText('teilweise');
+  await expect(roadmap.locator('.roadmap-nested-preview')).toHaveCount(9);
+  await expect(roadmap).not.toContainText(/hineinzoomen|zum Zoomen|klicken oder/i);
+  await roadmap.locator('[data-phase="P2"] .roadmap-enter').click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(roadmap.locator('.roadmap-step')).toHaveCount(4);
+  await expect(roadmap.locator('.roadmap-step')).toContainText([
+    'Sammelmodus', 'Timing-Kalibrierung', 'Geräteinstanzen sperren', 'Displaytypen',
+  ]);
+  await expect(roadmap.getByRole('dialog')).toHaveCount(0);
+  const viewport = await roadmap.locator('.roadmap-viewport').boundingBox();
+  const frame = await roadmap.locator('.roadmap-portal-frame').boundingBox();
+  for (const step of await roadmap.locator('.roadmap-step').all()) {
+    const box = await step.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(viewport!.x);
+    expect(box!.y).toBeGreaterThanOrEqual(viewport!.y);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.x + viewport!.width);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height);
+  }
+  expect(frame).not.toBeNull();
+  expect(Math.abs(frame!.x - viewport!.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(frame!.y - viewport!.y)).toBeLessThanOrEqual(3);
+  expect(Math.abs(frame!.width - viewport!.width)).toBeLessThanOrEqual(6);
+  expect(Math.abs(frame!.height - viewport!.height)).toBeLessThanOrEqual(6);
+  await expect(roadmap.locator('.roadmap-edge-particles')).toBeVisible();
+  expect(await roadmap.locator('.roadmap-edge-particles circle').count()).toBeGreaterThan(30);
+  await expect(roadmap.locator('.roadmap-phase-context')).toContainText('Manifeste vollständig');
+  await page.getByRole('button', { name: 'Zur Roadmap', exact: true }).click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'overview');
+  await roadmap.locator('[data-phase="P4"] .roadmap-enter').click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(roadmap.locator('.roadmap-phase-context')).toContainText('GSVmulti nimmt den Strom an');
+  await expect(roadmap.getByRole('link', { name: 'OQ-01', exact: true }).first()).toHaveAttribute('href', /open-questions\.html#oq-01$/);
+});
+
+test('Roadmap zeigt belegte Aktualisierungen und erfindet keine Datierungen', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const p2 = page.locator('.roadmap-node[data-phase="P2"]');
+  await expect(p2.locator('.roadmap-checkpoints time')).toHaveCount(0);
+  await expect(p2.locator('.roadmap-checkpoints')).toContainText('Geräteinstanzen sperren');
+  const p3 = page.locator('.roadmap-node[data-phase="P3"]');
+  await expect(p3.locator('.roadmap-checkpoints li').first()).toContainText('Live-Bedienerläufe');
+  await expect(p3.locator('time')).toHaveAttribute('datetime', '2026-10-21');
+});
+
+test('Roadmap zeigt auch bei erreichten Meilensteinen zwei verbundene Schritte mit Status rechts', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const checkpoints = page.locator('.roadmap-node[data-phase="P0"] .roadmap-checkpoints li');
+  await expect(checkpoints).toHaveCount(2);
+  await expect(checkpoints).toContainText(['Repo-Grundgerüst', 'ValueRecord und Trennstellen']);
+  for (const checkpoint of await checkpoints.all()) {
+    await expect(checkpoint.locator('.roadmap-checkpoint-label')).toHaveText('gebaut');
+    const title = await checkpoint.locator('.roadmap-checkpoint-title').boundingBox();
+    const status = await checkpoint.locator('.roadmap-checkpoint-label').boundingBox();
+    expect(status!.x).toBeGreaterThan(title!.x + title!.width);
+    expect(Math.abs(status!.y - title!.y)).toBeLessThan(3);
+  }
+});
+
+test('Roadmap-Mausrad und Tastatur führen durch denselben Ebenenwechsel', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const roadmap = page.locator('[data-roadmap]');
+  const enter = roadmap.locator('[data-phase="P2"] .roadmap-enter');
+  await enter.hover();
+  for (let i = 0; i < 10; i += 1) {
+    if (await roadmap.getAttribute('data-roadmap-view') === 'inside') break;
+    await page.mouse.wheel(0, -220);
+    await page.waitForTimeout(90);
+  }
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  const wheelSteps = await roadmap.locator('.roadmap-step h3').allTextContents();
+  await page.mouse.wheel(0, 1000);
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'overview');
+  await enter.focus();
+  await page.keyboard.press('Enter');
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  expect(await roadmap.locator('.roadmap-step h3').allTextContents()).toEqual(wheelSteps);
+  await page.keyboard.press('Escape');
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'overview');
+  await expect(enter).toBeFocused();
+});
+
+test('Roadmap-Knoten verschieben folgt den Verbindungen und bleibt nach Neuladen erhalten', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const node = page.locator('.roadmap-node[data-phase="P2"]');
+  const originalX = await node.evaluate((el) => (el as HTMLElement).offsetLeft);
+  const line = page.locator('.roadmap-connections path[data-from="P2"]');
+  const originalPath = await line.getAttribute('d');
+  const handle = await node.getByRole('button', { name: 'P2 verschieben', exact: true }).boundingBox();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + handle!.width / 2 + 75, handle!.y + handle!.height / 2 + 24, { steps: 6 });
+  await page.mouse.up();
+  const movedX = await node.evaluate((el) => (el as HTMLElement).offsetLeft);
+  expect(movedX).toBeGreaterThan(originalX + 20);
+  await expect(line).not.toHaveAttribute('d', originalPath!);
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'overview');
+  await page.reload();
+  await expect(node).toBeVisible();
+  expect(await node.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(movedX);
+  await page.getByRole('button', { name: 'Anordnung zurücksetzen', exact: true }).click();
+  expect(await node.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(originalX);
+});
+
+test('Roadmap bleibt bei fehlendem Anime und gesperrtem Speicher bedienbar', async ({ page }) => {
+  await page.route('**/assets/vendor/anime-*.js', (route) => route.abort());
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get: () => { throw new Error('gesperrt'); } });
+  });
+  await page.goto('/docs/ROADMAP.html');
+  const roadmap = page.locator('[data-roadmap]');
+  await roadmap.locator('[data-phase="P2"] .roadmap-enter').click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(roadmap.locator('.roadmap-step')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Zur Roadmap', exact: true }).click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'overview');
+});
+
+test('Roadmap bleibt bei doppelten Schritt-IDs als Quelltext lesbar', async ({ page }) => {
+  await page.route('**/docs/ROADMAP.html', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replaceAll('p2-ernte', 'p2-sammeln');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/docs/ROADMAP.html');
+  await expect(page.locator('.md-content__inner table').first()).toBeVisible();
+  await expect(page.locator('[data-roadmap]')).toHaveCount(0);
+});
+
+test('Roadmap-Tabellenansicht und mobile innere Ebene bleiben zugänglich', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.goto('/docs/ROADMAP.html');
+  const roadmap = page.locator('[data-roadmap]');
+  await page.getByRole('button', { name: 'Tabellenansicht', exact: true }).click();
+  await expect(page.locator('#roadmap-phases')).toBeVisible();
+  await expect(page.locator('.roadmap-steps-source')).toBeVisible();
+  await page.getByRole('button', { name: 'Kartenansicht', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Meilenstein suchen' }).fill('P2');
+  await page.keyboard.press('Enter');
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(roadmap.locator('.roadmap-step')).toHaveCount(4);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Zur Roadmap', exact: true })).toBeVisible();
+});
+
+test('Roadmap reduziert eine laufende Kamerafahrt ohne unsichtbare Schritte', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  await page.waitForFunction(() => Boolean((window as any).anime?.createTimeline));
+  const roadmap = page.locator('[data-roadmap]');
+  await roadmap.locator('[data-phase="P2"] .roadmap-enter').click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'entering');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  for (const content of await roadmap.locator('.roadmap-step-content').all()) {
+    await expect(content).toHaveCSS('opacity', '1');
+  }
+  await page.keyboard.press('Escape');
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'overview');
+});
+
+test('Roadmap löst die Kartenfüllung während des räumlichen Übergangs allmählich auf', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  await page.waitForFunction(() => Boolean((window as any).anime?.createTimeline));
+  const capture = page.evaluate(async () => {
+    const node = document.querySelector('.roadmap-node[data-phase="P2"]')!;
+    const context = document.createElement('canvas').getContext('2d')!;
+    const alphas: number[] = [];
+    const start = performance.now();
+    while (performance.now() - start < 950) {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = getComputedStyle(node).backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      alphas.push(context.getImageData(0, 0, 1, 1).data[3] / 255);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return alphas;
+  });
+  await page.locator('[data-phase="P2"] .roadmap-enter').click();
+  const alphas = await capture;
+  expect(alphas.some((alpha) => alpha > 0.02 && alpha < 0.98)).toBe(true);
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'inside');
+});
+
+test('Roadmap behält verschobene Schrittkarten beim Wechsel zwischen den Ebenen', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/ROADMAP.html');
+  const roadmap = page.locator('[data-roadmap]');
+  const phase = roadmap.locator('[data-phase="P2"] .roadmap-enter');
+  await phase.click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  const step = roadmap.locator('[data-step="p2-sammeln"]');
+  const before = await step.evaluate((el) => (el as HTMLElement).offsetLeft);
+  await step.locator('.roadmap-drag').focus();
+  await page.keyboard.press('Shift+ArrowRight');
+  const moved = await step.evaluate((el) => (el as HTMLElement).offsetLeft);
+  expect(moved).toBeGreaterThan(before);
+  await page.getByRole('button', { name: 'Zur Roadmap', exact: true }).click();
+  await phase.click();
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  expect(await step.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(moved);
+});
+
+test('Roadmap erhält unbesuchte Schrittpositionen beim Speichern nach Neuladen', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/ROADMAP.html');
+  await page.locator('[data-phase="P2"] .roadmap-enter').click();
+  const step = page.locator('[data-step="p2-sammeln"]');
+  await step.locator('.roadmap-drag').focus();
+  await page.keyboard.press('Shift+ArrowRight');
+  const moved = await step.evaluate((el) => (el as HTMLElement).offsetLeft);
+  for (const otherLevel of ['overview', 'steps']) {
+    await page.reload();
+    if (otherLevel === 'steps') await page.locator('[data-phase="P1"] .roadmap-enter').click();
+    const handle = otherLevel === 'overview'
+      ? page.locator('[data-phase="P1"] .roadmap-drag')
+      : page.locator('.roadmap-step .roadmap-drag').first();
+    await handle.focus();
+    await page.keyboard.press('Shift+ArrowRight');
+    if (otherLevel === 'steps') await page.getByRole('button', { name: 'Zur Roadmap', exact: true }).click();
+    await page.locator('[data-phase="P2"] .roadmap-enter').click();
+    expect(await step.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(moved);
+  }
+});
+
+test('Roadmap räumt ihre Kartenansicht bei wiederholter Sofortnavigation auf', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  for (let i = 0; i < 2; i += 1) {
+    await page.getByRole('link', { name: 'Offene Punkte (OQ)' }).first().click();
+    await expect(page.locator('body')).not.toHaveClass(/roadmap-page/);
+    await page.getByRole('link', { name: 'Roadmap', exact: true }).first().click();
+    await expect(page.locator('[data-roadmap]')).toHaveCount(1);
+    await expect(page.locator('.roadmap-node[data-phase]')).toHaveCount(9);
+  }
+});
+
+test('Roadmap-Touchzoom öffnet den Meilenstein ohne die Wiki-Seite zu skalieren', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/docs/ROADMAP.html');
+  const roadmap = page.locator('[data-roadmap]');
+  const node = await roadmap.locator('[data-phase="P1"]').boundingBox();
+  const x = node!.x + node!.width / 2, y = node!.y + node!.height / 2;
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x: x - 30, y }, { id: 2, x: x + 30, y }] });
+  for (let distance = 40; distance <= 125; distance += 10) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 1, x: x - distance, y }, { id: 2, x: x + distance, y }] });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(roadmap.locator('.roadmap-step')).toHaveCount(4);
+  expect(await page.evaluate(() => visualViewport!.scale)).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  await context.close();
+});
+
+test('Roadmap-Schritte führen zu vorhandenen Belegabschnitten', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const links = await page.locator('.roadmap-steps-source a[href]').evaluateAll((anchors) =>
+    [...new Set(anchors.map((anchor) => (anchor as HTMLAnchorElement).href))],
+  );
+  const documents = new Map<string, string>();
+  for (const link of links) {
+    const url = new URL(link);
+    const target = `${url.origin}${url.pathname}`;
+    if (!documents.has(target)) {
+      const response = await page.request.get(target);
+      expect(response.ok(), target).toBe(true);
+      documents.set(target, await response.text());
+    }
+    if (url.hash) {
+      const exists = await page.evaluate(({ html, hash }) =>
+        Boolean(new DOMParser().parseFromString(html, 'text/html').getElementById(decodeURIComponent(hash.slice(1)))),
+      { html: documents.get(target)!, hash: url.hash });
+      expect(exists, link).toBe(true);
+    }
+  }
+});
+
+test('Roadmap macht eine erfolglose Suche erkennbar und lässt sie korrigieren', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  const search = page.getByRole('searchbox', { name: 'Meilenstein suchen' });
+  await search.fill('P99');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status', { name: 'Suchergebnis' })).toContainText('Kein Treffer');
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'overview');
+  await search.fill('P2');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'inside');
+  await expect(search).not.toHaveAttribute('aria-invalid', 'true');
+});
+
+test('Roadmap-Beleglinks haben in beiden Themes ausreichenden Textkontrast', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  await page.locator('[data-phase="P2"] .roadmap-enter').click();
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'inside');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', scheme === 'dark' ? 'slate' : 'default');
+    const contrast = await page.locator('.roadmap-step-evidence a').first().evaluate((link) => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      const luminance = (color: string) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        const values = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map((value) => {
+          const n = value / 255;
+          return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+        });
+        return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+      };
+      const foreground = luminance(getComputedStyle(link).color);
+      const background = luminance(getComputedStyle(link.closest('.roadmap-step')!).backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    expect(contrast, scheme).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test('Sofortnavigation initialisiert die OQ-Ansicht erneut', async ({ page }) => {
@@ -78,7 +392,7 @@ test('Sofortnavigation initialisiert die OQ-Ansicht erneut', async ({ page }) =>
   expect(questionCount).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Geklärt' }).click();
   await page.getByRole('link', { name: 'Roadmap', exact: true }).first().click();
-  await expect(page.locator('[data-roadmap] details')).toHaveCount(9);
+  await expect(page.locator('[data-roadmap] .roadmap-node[data-phase]')).toHaveCount(9);
   await page.getByRole('link', { name: 'Offene Punkte (OQ)' }).first().click();
   await expect(page.getByRole('button', { name: 'Geklärt' })).toBeVisible();
   await expect(page.locator('#oq-index tbody tr:visible')).toHaveCount(questionCount);
