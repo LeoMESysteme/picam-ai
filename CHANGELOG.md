@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Wiki-Diagramme entstehen aus ihren sichtbaren Quelltabellen:
+  horizontale Balken für eine Zahlenreihe, 100-%-Stapel für Statusanteile.
+  Hinweise zeigen die Originalwerte, Tabellen bleiben aufklappbar; ungültige
+  Zahlen lassen die Tabelle unverändert. Zwei Übersichten fassen bestehende
+  Referenzläufe vom 2026-10-21 zusammen. Containerbreite, Tastaturbedienung,
+  reduzierte Bewegung und Aufräumen bei Sofortnavigation sind berücksichtigt.
+
 * 2026-10-23: Korrekturrunde 3 der Verarbeitungskette: Hinweise benennen
   `manual_roi` als Primärpfad, gebaute und stillgelegte Neben-/Altpfade sowie
   das erneute Setzen der Kameraregler durch `UvcSource`. Die kompakte Liste

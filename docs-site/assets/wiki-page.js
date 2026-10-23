@@ -28,7 +28,7 @@
       const match = window.wiki.termMatcher(entries);
       const tasks = [];
       let seen = new Set();
-      const excluded = "a, pre, summary, button, [data-preview], .wiki-hint, .wiki-pagehead, .wiki-chip, .roadmap, nav, .md-typeset__table thead";
+      const excluded = "a, pre, summary, button, svg, .wiki-chart-figure, [data-preview], .wiki-hint, .wiki-pagehead, .wiki-chip, .roadmap, nav, .md-typeset__table thead";
       const walker = document.createTreeWalker(article, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;

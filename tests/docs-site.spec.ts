@@ -5,6 +5,78 @@ import { expect, test, type Page } from '@playwright/test';
 const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open-questions.html"]')
   .filter({ hasText: /^OQ-07$/ }).first();
 
+test('Diagramm entsteht aus der Tabelle und fällt ohne Zahlen auf die Tabelle zurück', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/VALIDATION.html');
+  const first = page.locator('.wiki-chart').nth(0);
+  const second = page.locator('.wiki-chart').nth(1);
+  await expect(first.locator('svg[role="img"]')).toHaveAttribute('aria-label', /Balkendiagramm: .+, 3 Kategorien/);
+  await expect(first.locator('g[data-hint="chart"]')).toHaveCount(3);
+  await expect(second.locator('g[data-hint="chart"]')).toHaveCount(5);
+  expect(await second.locator('g[data-hint="chart"]').evaluateAll(nodes => nodes.every(node =>
+    node.querySelector('.wiki-chart-mark')!.getBoundingClientRect().width > 0))).toBe(true);
+  await expect(first.locator('details.wiki-chart-table table tbody tr')).toHaveCount(3);
+  await expect(second.locator('details.wiki-chart-table table tbody tr')).toHaveCount(2);
+  await expect(page.locator('.wiki-chart-figure .wiki-term')).toHaveCount(0);
+  const bar = first.locator('g[data-hint="chart"]').first();
+  await expect(bar).toHaveAttribute('tabindex', '0');
+  await bar.hover();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Fehllesungen: 0/715');
+  await page.keyboard.press('Escape');
+  await bar.focus();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Bilder/s: 27,2');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect.poll(async () => first.locator('svg').evaluate(node =>
+    Math.abs(node.getBoundingClientRect().width - node.parentElement!.clientWidth))).toBeLessThan(2);
+  await first.locator('summary').click();
+  await expect(first.locator('table')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.route('**/docs/VALIDATION.html', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    const changed = html.replace(/(<div class="wiki-chart"[\s\S]*?<tbody>[\s\S]*?<td[^>]*>[\s\S]*?<\/td>\s*<td[^>]*>)715(<\/td>)/, '$1x$2');
+    expect(changed).not.toBe(html);
+    await route.fulfill({ response, body: changed });
+  });
+  await page.reload();
+  await expect(page.locator('.wiki-chart').nth(1).locator('svg')).toHaveCount(1);
+  await expect(page.locator('.wiki-chart').first().locator('svg, details')).toHaveCount(0);
+  await expect(page.locator('.wiki-chart').first().locator('table')).toBeVisible();
+});
+
+test('Diagrammtabellen bleiben ohne JavaScript lesbar', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false, viewport: { width: 375, height: 812 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/docs/VALIDATION.html');
+    await expect(page.locator('.wiki-chart table')).toHaveCount(2);
+    for (const table of await page.locator('.wiki-chart table').all()) await expect(table).toBeVisible();
+    await expect(page.locator('.wiki-chart svg, .wiki-chart details')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  } finally { await context.close(); }
+});
+
+test('Diagramme räumen bei Sofortnavigation auf und bleiben ohne Anime.js sichtbar', async ({ page }) => {
+  await page.route('**/vendor/anime-4.5.0.umd.min.js', route => route.abort());
+  await page.goto('/docs/VALIDATION.html');
+  await expect(page.locator('.wiki-chart-figure')).toHaveCount(2);
+  await page.locator('.wiki-chart-figure').first().scrollIntoViewIfNeeded();
+  await expect(page.locator('.wiki-chart-mark')).toHaveCount(8);
+  expect(await page.locator('.wiki-chart-growth').evaluateAll(nodes => nodes.every(node =>
+    getComputedStyle(node).transform === 'none'))).toBe(true);
+  await page.evaluate(() => { (window as any).__chartNavigation = true; });
+  await page.locator('.md-content__inner a[href$="/uebersicht/daten-und-abnahme.html"]').first().click();
+  await expect(page).toHaveURL(/\/uebersicht\/daten-und-abnahme\.html$/);
+  await expect(page.locator('.wiki-chart-figure')).toHaveCount(0);
+  await page.goBack();
+  await expect(page.locator('.wiki-chart-figure')).toHaveCount(2);
+  await expect(page.locator('details.wiki-chart-table')).toHaveCount(2);
+  expect(await page.evaluate(() => (window as any).__chartNavigation)).toBe(true);
+  await page.locator('.wiki-chart g[data-hint="chart"]').first().focus();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Fehllesungen: 0/715');
+});
+
 test('OQ-Verweise tragen Statuschip und Pop-up mit Titel', async ({ page }) => {
   await page.goto('/docs/open-questions.html');
   const row = page.locator('#oq-index tbody tr').filter({ has: page.locator('a[href$="#oq-07"]') });

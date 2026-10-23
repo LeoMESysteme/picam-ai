@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -416,3 +417,53 @@ def test_kette_repository_data() -> None:
     assert [stage['zustand'] for stage in data['stufen']] == [
         'teilweise', 'fertig', 'fertig', 'fertig', 'fertig', 'fertig', 'teilweise',
     ]
+
+
+def test_chart_overview_matches_reference_entries() -> None:
+    text = (ROOT / 'docs/VALIDATION.md').read_text(encoding='utf-8')
+    blocks = re.findall(r'<div class="wiki-chart"[^>]*>(.*?)</div>', text, re.S)
+    assert len(blocks) == 2
+    def rows(block: str) -> list[list[str]]:
+        return [
+            [cell.strip() for cell in line.strip().strip('|').split('|')]
+            for line in block.splitlines() if line.startswith('|')
+        ][2:]
+    assert rows(blocks[0]) == [
+        ['Streng 45 s', '715', '0/715', '27,2'],
+        ['Toleranz ×1,8 5,6 min', '6630', '0/6630', '29,7'],
+        ['Streng 12 min', '8979', '0/8979', '29,8'],
+    ]
+    anchors = ['referenzlauf', 'toleranzlauf', 'langlauf']
+    for row, anchor in zip(rows(blocks[0]), anchors, strict=True):
+        target = f'messpfad-live-{anchor}-2026-10-21'
+        section = text.split('{ #' + target + ' }', 1)[1].split('\n## ', 1)[0]
+        assert f'**0 von {row[1]}** entschiedenen VALID' in section
+        assert f'| Gelesene Bilder/s | {row[3]}' in section
+        assert f'](#{target})' in text[:text.index('## Leserlaufzeit 2026-10-13')]
+    assert rows(blocks[1]) == [
+        ['Ruhige Anzeige', '99,7', '0,3', '0'],
+        ['Bilder im Wechsel', '74', '24', '2'],
+    ]
+    source = text.split('{ #messpfad-live-langlauf-2026-10-21 }', 1)[1]
+    assert '| Ruhige Anzeige | 99,7 % VALID, 0,3 % TRANSITION, kein UNREADABLE |' in source
+    assert '| Bilder im Wechsel | 74 % VALID, 24 % TRANSITION, 2 % UNREADABLE, 7 STALE |' in source
+
+
+def test_chart_browser_free_logic() -> None:
+    result = subprocess.run(
+        ['node', '-e', r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const sandbox = { window: { wiki: { onPage() {}, hint: { register() {} } } } };
+const source = fs.readFileSync('docs-site/assets/wiki-chart.js', 'utf8');
+vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.parseNumber = parseNumber;})();'), sandbox);
+assert.equal(sandbox.parseNumber('1.234,5 %'), 1234.5);
+assert.equal(sandbox.parseNumber('1 234'), 1234);
+for (const invalid of ['x', '—', '0/715', '1.2', '', 'Infinity', '-1']) {
+  assert.equal(sandbox.parseNumber(invalid), null, invalid);
+}
+"""],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

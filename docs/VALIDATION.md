@@ -22,6 +22,36 @@ breitere Gerätevielfalt bleibt offen ([OQ-04](open-questions.md#oq-04)).
 Synthetische Daten ergänzen, sie zählen nie zum realen Testset.
 Technische Kamerastream-Tests belegen keine Erkennungszuverlässigkeit.
 
+## Live-Läufe mit Referenz im Überblick
+
+Zusammenfassung der drei Live-Läufe vom 2026-10-21; Einzelheiten und
+Einordnung stehen in den verlinkten Einträgen. Kein formaler Abnahmelauf.
+
+<div class="wiki-chart" data-chart="bar" data-title="Entschiedene VALID je Lauf (Fehllesungen gegen Referenz)" data-unit="Bilder" markdown="1">
+
+| Lauf | Entschiedene VALID | Fehllesungen | Bilder/s |
+| --- | --- | --- | --- |
+| Streng 45 s | 715 | 0/715 | 27,2 |
+| Toleranz ×1,8 5,6 min | 6630 | 0/6630 | 29,7 |
+| Streng 12 min | 8979 | 0/8979 | 29,8 |
+
+</div>
+
+Einzeleinträge: [Streng 45 s](#messpfad-live-referenzlauf-2026-10-21),
+[Toleranz ×1,8 5,6 min](#messpfad-live-toleranzlauf-2026-10-21),
+[Streng 12 min](#messpfad-live-langlauf-2026-10-21).
+
+<div class="wiki-chart" data-chart="stacked" data-title="Lesestatus nach Anzeigezustand (12-min-Lauf)" data-unit="%" markdown="1">
+
+| Anzeige | VALID | TRANSITION | UNREADABLE |
+| --- | --- | --- | --- |
+| Ruhige Anzeige | 99,7 | 0,3 | 0 |
+| Bilder im Wechsel | 74 | 24 | 2 |
+
+</div>
+
+Quelle und Einordnung: [Strenger 12-min-Lauf](#messpfad-live-langlauf-2026-10-21).
+
 ## Leserlaufzeit 2026-10-13 — Messpfad live, Task 1
 
 Raspberry Pi 5; `./.venv/bin/python scripts/live-reader-benchmark.py` mit
