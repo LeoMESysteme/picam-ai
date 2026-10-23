@@ -376,6 +376,19 @@ def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     assert result in reason
 
 
+@pytest.mark.skipif(
+    not (DIAGNOSTICS / "r13-winkel-links10-20261023/frames/frame_000016.jpg").exists(),
+    reason="Winkel-Standbild fehlt",
+)
+def test_moderate_left_view_finds_lattice_beyond_first_sixteen_starts():
+    image = cv2.imread(str(DIAGNOSTICS / "r13-winkel-links10-20261023/frames/frame_000016.jpg"))
+    assert image is not None
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+
+
 @pytest.mark.parametrize("name,frame", [("sc3", 17), ("sc4", 17), ("sc6", 18), ("ab1", 17)])
 def test_refine_rejects_confirmed_quad_tilted_by_one_dot_row(name, frame):
     still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"

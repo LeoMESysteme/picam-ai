@@ -662,12 +662,16 @@ def test_preview_resizes_and_draws_quad_without_changing_camera_image(tmp_path):
 @pytest.mark.parametrize("message,expected", [
     ("Punktraster: startlage_mehrdeutig; bitte --hint-box angeben",
      "Punktraster: startlage_mehrdeutig; Anzeige mittig ins Bild bringen — "
-     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Punktraster: keine_startlage",
-     "Punktraster: keine_startlage — Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Punktraster: keine_startlage — "
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Punktraster abgelehnt: keine_startlage; Hinweisbox pruefen oder --hint-box angeben",
      "Punktraster abgelehnt: keine_startlage; Anzeige mittig ins Bild bringen — "
-     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Pruefung: --override-reason oder --accept-default-grid", "Pruefung: oder"),
     ("Standbild abgelehnt", "Standbild abgelehnt"),
 ])
@@ -681,6 +685,41 @@ def test_setup_errors_use_browser_wording(tmp_path, message, expected):
     service.start_setup()
     assert _wait_state(service, {"setup_failed"}) == "setup_failed"
     assert service.status()["error"] == expected
+
+
+@pytest.mark.parametrize("reason", ["keine_startlage", "startlage_mehrdeutig"])
+def test_exhausted_setup_search_gives_camera_guidance_without_proposal(tmp_path, monkeypatch, reason):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live import setup
+
+    image = np.full((2, 3, 3), 30, np.uint8)
+    cam = SimpleNamespace(fresh_still=lambda **_kwargs: image)
+    monkeypatch.setattr(setup, "fit_lattice", lambda *_args, **_kwargs: reason)
+    attempts = []
+
+    def runner(*, session_dir, **_kwargs):
+        return setup.assist_measure(
+            cam, cell_text=lambda capture: (capture(), "+0.00000 mV/V   "),
+            expected_size=(3, 2), out_dir=session_dir / "setup",
+            hint_box=(0.0, 0.0, 1.0, 1.0), stack_frames=1, fit_attempts=3,
+            on_attempt=attempts.append,
+        )
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    try:
+        service.start_setup()
+        assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+        status = service.status()
+        assert reason in status["error"]
+        assert "Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran" in status["error"]
+        assert "mindestens ein Drittel der Bildbreite" in status["error"]
+        assert "overall" not in status["setup"]
+        assert [event["fit"] for event in attempts if "fit" in event] == [reason] * 3
+    finally:
+        service.close()
 
 
 def test_setup_refuses_stopped_camera_before_starting_worker(tmp_path):

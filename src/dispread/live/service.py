@@ -79,7 +79,10 @@ def _setup_error_for_page(message: str) -> str:
         message = message.replace(option, "")
     message = " ".join(message.split())
     if "startlage_mehrdeutig" in message or "keine_startlage" in message:
-        message += " — Kamera senkrecht auf Displaymitte stellen und neu einrichten"
+        message += (
+            " — Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+            "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."
+        )
     if "vorzeichen_kein_plus" in message:
         message += " — Anzeige zeigt kein Plus — Wert positiv einstellen und neu einrichten"
     return message

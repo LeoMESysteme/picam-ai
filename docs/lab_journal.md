@@ -2281,3 +2281,48 @@ belegt keinen entsprechenden Live-Fehler. Das Werkzeug gibt vor dem Fit
 eine JPEG-Warnung aus. JPEG/PNG bleiben die aufgezeichneten Quellen;
 Einzelbild, nur ein Fitversuch und fehlender Fokusschritt unterscheiden
 die Offline-Adapterpruefung weiterhin von Live.
+
+## 2026-10-23 — R13-13: Startsuche, Bildgate und Softwarekosten
+
+**Ziel:** Die moderate Linksansicht mit mehr verfeinerten Startlagen finden,
+ohne unsichere Raster zuzulassen, und die Kosten erfolgloser Einrichtung
+sichtbar machen.
+
+**Aufbau:** Offline auf dem geteilten Entwicklungsrechner, keine Hardware
+berührt. Die unveränderte Fallauswahl aus der bereitgestellten
+`baseline2.py` umfasst 60 Fälle auf 53 Bildern: originale PNG-Standbilder
+mit grüner oder profilabgeleiteter Hinweisbox sowie die beiden originalen
+Winkel-JPEGs. Keine Neukodierung und keine Schreibzugriffe unter `var/`.
+Vier Prozesse je Bildvergleich; schwere Läufe mit `nice -n 15`, Python über
+Projekt-venv und `PYTHONPATH=src`. Nur die Suchgrenze steigt von `(8, 16)`
+auf `(8, 16, 32)`; Eindeutigkeit und Qualitätsgrenzen bleiben erhalten.
+Die Vorher-Ergebnisse entsprechen vollständig `b2_head.json`, die
+Nachher-Ergebnisse `b2_lim32.json` aus der unabhängigen Diagnose.
+
+**Beobachtung:** Nur links10/16 wird neu gefunden. Alle sieben übrigen
+Ablehnungen bleiben erhalten, einschließlich links18/10 und der drei
+mehrdeutigen Starts ab4/16, ab6/22 und sc7-assist/stability. Kein bisheriger
+Erfolg geht verloren. Größte Eckverschiebung 0,580345 px (112453Z), danach
+0,136015 px (075343Z); übrige 50 Erfolge höchstens 0,01 px, ausgewertet auf
+den wie im Diagnosewerkzeug auf 0,01 px gerundeten Ecken. Das 1-px-Gate
+besteht für alle bisherigen Erfolge.
+
+**Laufzeit:** Nach den parallelen Prüfläufen wurden alter HEAD-Rastercode
+(aus einer Kopie unter `/tmp`) und neuer Rastercode im selben Prozess
+abwechselnd dreimal auf links18/10 ausgeführt. Die grüne Hinweisbox und
+Leerzellen sind identisch. `time.perf_counter` misst nur die Softwaredauer
+des Rasterfits. Median vorher 13.307981 s, nachher 25.544926 s, Faktor
+1.920; alle sechs Fits werden abgelehnt. Einzelwerte stehen in
+[VALIDATION.md](VALIDATION.md#r13-13-startsuche-bildgate-und-softwarelaufzeit-2026-10-23).
+Fokus, Kameraaufnahme, acht gemittelte Bilder und Wartezeiten sind nicht
+gemessen; wechselnde Fremdlast des geteilten Rechners bleibt möglich.
+
+**Deutung:** Mehr Startlagen helfen bei der moderaten Linksansicht, kosten
+bei erfolgloser Suche deutlich Zeit. Ein zu steiler/kleiner Blick wird
+weiter abgelehnt; die Live-Seite empfiehlt nun flacheren Blick, geringeren
+Abstand und mindestens ein Drittel Bildbreite für die Anzeige. Das ändert
+keine Ablehnungsentscheidung. Die einzelnen JPEG-Winkelbilder belegen
+keine entsprechende Live-Qualität mit PNG-/Mehrbild-Einrichtung und keine
+breitere Geräteabnahme. Bericht und vollständige Eck-/Statustabelle:
+`.superpowers/sdd/2026-10-21-r13/task-R13-report.md`. Fokussierte Tests:
+347 bestanden; Ruff sauber. Keine neue Hardwaremessung.

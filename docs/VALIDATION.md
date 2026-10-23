@@ -3608,3 +3608,50 @@ JPEG-Offline-Ergebnisse oben sind nicht repraesentativ fuer Live-Setup:
 Quelle wie aufgezeichnet statt frischer Kamerabilder, ein Einzelbild statt
 8-Bilder-Mittel, ein Fitversuch statt drei und kein Fokusschritt. Das Tool
 warnt jetzt bei ausgewaehlten JPEG-Quellbildern, auch vor einem Fitabbruch.
+
+## R13-13 — Startsuche: Bildgate und Softwarelaufzeit 2026-10-23
+
+Entwicklungsvergleich auf denselben Originalbildern mit `(8, 16)` und
+`(8, 16, 32)` Startlagen je Anker. Auswahl und Hinweisboxen wie in der
+bereitgestellten `baseline2.py`: 60 Fälle auf 53 verschiedenen Bildern
+(58 PNG-Fälle auf 51 PNGs, darunter sieben zusätzliche Profil-Hinweisboxen;
+zwei originale Winkel-JPEGs). Keine PNG-Neukodierung. Vorher und nachher
+stimmen Status und auf 0,01 px gerundete Quads vollständig mit den
+bereitgestellten Diagnosen `b2_head.json` bzw. `b2_lim32.json` überein.
+
+| Kennzahl | Vorher | Nachher |
+| --- | --- | --- |
+| Erfolgreiche Rasterfits | 52 | 53 |
+| `keine_startlage` | 5 | 4 |
+| `startlage_mehrdeutig` | 3 | 3 |
+
+Einzige Statusänderung: `r13-winkel-links10-20261023/frames/frame_000016.jpg`
+von `keine_startlage` zu Fit. Alle sieben anderen Ablehnungen behalten ihren
+Grund; insbesondere ab4/16, ab6/22 und sc7-assist/stability bleiben
+`startlage_mehrdeutig`, links18/10 bleibt `keine_startlage`. Kein bisheriger
+Erfolg geht verloren. Größte Eckverschiebung: 0,580345 px bei 112453Z,
+danach 0,136015 px bei 075343Z; die übrigen 50 bisherigen Erfolge liegen bei
+höchstens 0,01 px. Auswertung auf den auf 0,01 px gerundeten Eckkoordinaten
+wie im Diagnosewerkzeug; alle Ecken bleiben sicher unter dem 1-px-Gate.
+
+Softwarekosten des erfolglosen Rasterfits auf
+`var/diagnostics/r13-winkel-links18-20261023/frames/frame_000010.jpg`:
+drei abwechselnde Vorher-/Nachher-Aufrufe im selben Prozess, nach Abschluss
+der eigenen parallelen Bild-/Testläufe. Zeitbasis: `time.perf_counter`,
+monotone Software-Wanduhr; geteilter Entwicklungsrechner, `nice -n 15`.
+Gemessen ist nur `fit_lattice` mit derselben grünen Hinweisbox und
+Leerzellen `(8, 13, 14, 15)`, ohne Dekodierung, Fokus, Kamera, Mittelung oder
+Stabilitätswartezeit. Keine Aufnahme-/DUT-Latenz und keine Live-Abnahme.
+
+| Wiederholung | Vorher (s) | Nachher (s) | Ergebnis beider Versionen |
+| --- | --- | --- | --- |
+| 1 | 13.307981 | 25.373900 | `keine_startlage` |
+| 2 | 12.935075 | 26.134872 | `keine_startlage` |
+| 3 | 13.377717 | 25.544926 | `keine_startlage` |
+| Median | 13.307981 | 25.544926 | `keine_startlage` |
+
+Medianmehrkosten: 12.236945 s, Faktor 1.920. Alle sechs Aufrufe enden
+unverändert in `keine_startlage`. Die Zahlen sind keine Laufzeitgarantie.
+Befehle, vollständige 60-Fälle-Tabelle mit allen Eckverschiebungen und
+Testbelege: `.superpowers/sdd/2026-10-21-r13/task-R13-report.md`.
+Aufbau und Deutung: [Laborjournal](lab_journal.md#2026-10-23-r13-13-startsuche-bildgate-und-softwarekosten).

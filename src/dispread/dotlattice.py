@@ -645,7 +645,10 @@ def _auto_fit(
     attempted_per_anchor = [0] * len(candidate_anchors)
     attempted_quads: list[np.ndarray] = []
     viable: list[LatticeFit] = []
-    for limit in (8, 16):
+    # Bei ~620 px breiter Linksansicht lagen ~43 px zu breite Starts vorn;
+    # passende Starts rangierten 19..1022. Bis zu 32 statt 16 je Anker
+    # verfeinern; die Eindeutigkeits- und Sicherheitspruefungen bleiben gleich.
+    for limit in (8, 16, 32):
         for _, h, anchor_index in candidates:
             if attempted_per_anchor[anchor_index] >= limit:
                 continue
