@@ -305,7 +305,10 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 
 1. **Nachführung bei großen Wertwechseln bearbeiten (R13)**
    — [freigegebener Plan](docs/superpowers/plans/2026-10-21-r13-strukturstabile-nachfuehrung.md),
-   Umsetzung ab **2026-10-23** vorgesehen, noch nicht begonnen.
+   **gebaut auf `feat/r13-display-haertung`** (R13-1…R13-18, nicht in
+   `master`); Merge entscheidet die Person am 2026-10-28 anhand der
+   [Entscheidungsvorlage](docs/superpowers/plans/2026-10-28-r13-merge-entscheidung.md).
+   Live 23.10.: 0 Fehllesungen, ruhiger Lauf 99,98 % VALID.
    ([OQ-26](docs/open-questions.md#oq-26)): Strenger Werteplan-Lauf
    `live-20261021T151835Z/run-01` abgeschlossen: 806 s, 0/11 137 Fehllesungen,
    aber 8074 Trackingverluste; bei Faktor 2 und 5 in stabilen

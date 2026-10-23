@@ -1,0 +1,100 @@
+# Entscheidungsvorlage R13 → master (für 2026-10-28)
+
+Stand 2026-10-24. Zweig `feat/r13-display-haertung` (Forgejo), 27 Commits
+ohne Merges seit `master` 109d360, 108 Dateien. Volle Testsuite auf
+`b5d1b3b`: **2400 bestanden, 8 übersprungen**; Live- und Doku-Browsertests
+2/2 und 45/45. Nichts davon ist in `master`. Die Entscheidung trifft die
+Person; diese Vorlage bündelt Belege, Grenzen und offene Fragen.
+
+## Was der Zweig enthält
+
+| Schritt | Inhalt |
+| --- | --- |
+| R13-1…R13-5 | Rahmenbereich-Tracker (Nachführung am Gehäuserahmen statt am Zifferninhalt), Einbindung in Einrichtung/Profil/Lauf, begrenzte Diagnosebilder, manuelle Bereichskorrektur, Offline-Replay |
+| R13-7 | Kandidat: grobe LCD-Randprüfung (2,5 px) statt absoluter Kantenlage, Residuengrenzen RMS ≤ 0,35 / max ≤ 0,65 px |
+| R13-8 | Displayhärtung gegen helle Kratzer, ehrliche Gründe `leser:<grund>[:<zelle>]`, Ursachenfenster, Prüfung `displayfehler` |
+| R13-9, R13-12 | Fokus nach dem Setzen prüfen; immer von unten anfahren (Motor-Hysterese 2–3 Stufen) |
+| R13-10, R13-13 | Startsuche bei schrägem Blick (mehr Randkandidaten, bis 32 Startlagen je Anker), klarer Bedienhinweis |
+| R13-11 | Robuster Rahmenvorschlag: Band am dunklen Rahmen mit Formprüfung, Reserve gegen zwei Bereichsausfälle, bis 20 Bereiche |
+| R13-14 | Offline-Einrichtung aus Aufnahmen; Live und Ernte verweigern solche Profile |
+| R13-15 | Hinweis „Anzeige hat sich bewegt – neu einrichten“ nach ≥ 3 s Verlust |
+| R13-16 | Speicherbudget 64-GB-SD: Platzprüfung, Diagnose standardmäßig aus, `dispread live aufraeumen`, Live-Audit je Lauf ohne Rotation |
+| R13-17 | OQ-44: Testlauf gibt technisch nie einen Wert frei |
+| R13-18 | OQ-45: Ergebniszeit trägt immer `HOST_MONOTONIC` |
+
+## Belege
+
+**Live am 2026-10-23** (eine Person, ein Gerät, Raumlicht, kein formaler
+Abnahmelauf; [VALIDATION](../../VALIDATION.md#r13-live-2026-10-23)):
+
+| Lauf | Stand | Fehllesungen | Verfügbarkeit |
+| --- | --- | ---: | --- |
+| `075343Z` 12 min, Störungen | R13-7 | 0 / 9077 | 52,7 % VALID stabil (Kratzer, danach R13-8) |
+| `100613Z` 5,7 min, ruhig | + R13-8 | 0 / 6615 | **99,98 %** VALID stabil, 0 Trackingverluste |
+| `121436Z` 10 min, Störungen | + R13-8 | 0 / 10 316 | Hand/Rahmen verdeckt: Wiederkehr nach 2–3 s; Drehung −2,25° (Ecken ~19–21 px) über Suchradius 12 px → korrekt dauerhaft abgelehnt |
+| `131121Z` 10 Bereiche | + R13-8 | — | dauerndes `rahmen_unstimmig` ohne Bewegung; offline mit R13-11 behoben (146/148, die 2 abgelehnten zeigen die Hand) |
+
+Über alle Live-Läufe: **0 Fehllesungen**. Die Ausfälle bei Faktor 2 und 5
+(`master`, 21.10.: kein VALID in stabilen Fenstern) traten im ruhigen Lauf
+`100613Z` und offline auf DEV/E/F mit dem Rahmen-Tracker nicht mehr auf.
+
+**Offline mit dem Rahmenvorschlag aus R13-11** ([VALIDATION](../../VALIDATION.md#r13-r11-2026-10-23)):
+DEV, E, F je Faktor 100 % gehalten (DEV 568/568, E 429/429, F 1341/1341);
+424 Vergleichsbilder ohne Unterschied im Update-Ergebnis; 27/29 reale
+Einrichtungsbilder ergeben geeignete Vorschläge.
+
+## Bekannte Grenzen (vor dem Merge zu kennen)
+
+1. **Blinder Fleck des Kandidaten R13-7:** Melden alle Rahmenbereiche
+   dieselbe falsche Bewegung, während das LCD still steht, werden bis
+   **4,7 px** (Fixture) bzw. **4,89 px** (reale Aufstellungen, Review)
+   Eckfehler angenommen. Lügt nur eine Hälfte: bis **1,43 px**. Das ist
+   keine allgemeine obere Schranke.
+2. **Kein Betrieb ohne Raumlicht.** Der Rahmen-Tracker braucht Licht auf
+   Rahmen und Gehäuse und lehnt im Dämmerlicht ab (sicher, nicht verfügbar).
+   Der Prototyp LCD-Fenster-Tracker (`exp/r13-fenster-tracker`) ist nicht reif.
+3. **Sehr schräge Ansichten** (etwa 19°) lehnt die Einrichtung ehrlich ab;
+   bis etwa 11,5° gelingt sie.
+4. **Bewegung über 12 px** (zum Beispiel ein Stoß mit Drehung) führt zu
+   dauerhafter Ablehnung mit dem Hinweis „neu einrichten“, nicht zur
+   Nachführung.
+5. **Profile von vor R13-11 müssen neu eingerichtet werden.**
+6. Einrichtungsrelevante Aufnahmen nur als PNG (JPEG verschiebt die
+   Gitteranpassung um bis zu 13 px).
+7. Keine formale Abnahme an zwei Aufstellungen mit dem neuen Vorschlag.
+   Die Aufstellung muss die Person wählen; die Kamera steht seit dem 23.10.
+   an „links etwa 18°“, wo die Einrichtung ablehnt.
+
+## Zu entscheiden
+
+1. **R13 nach `master`?**
+   *a)* jetzt mergen, Abnahme an zwei Aufstellungen danach auf `master`;
+   *b)* erst die formale Abnahme mit der Person, dann mergen;
+   *c)* nur unabhängige Teile übernehmen (OQ-44, OQ-45, Speicherbudget,
+   Fokusanfahrt). Diese hängen allerdings an R13-Code und müssten
+   herausgelöst werden. Empfehlung: **b**, die Abnahme braucht etwa eine
+   Stunde mit der Person und Raumlicht.
+2. **Kandidat R13-7 statt eingefrorenem Stand:** Der eingefrorene Stand
+   (`52a64a7`) fiel bei Raumlicht durch (absolute LCD-Kantenlage wandert mit
+   dem Licht); R13-7 besteht, erkauft das aber mit dem blinden Fleck aus
+   Grenze 1. Bitte ausdrücklich bestätigen oder ablehnen.
+3. **Nachtbetrieb:** entweder festschreiben „nur mit Raumlicht“ oder den
+   Fenster-Tracker weiterverfolgen.
+4. **CI auf dem Mess-Pi:** Builds und Browsertests teilen den Pi mit dem
+   Messpfad (früher bis 44 s Stillstand); auslagern oder während Läufen
+   sperren?
+5. **GSVmulti-Protokoll** ([OQ-07](../../open-questions.md#oq-07)): weiter
+   blockiert, braucht eine Beschreibung von GSVmulti.
+6. **UI/UX-Überarbeitung** der Werkbank: Umfang und Zeitpunkt.
+
+## Bei Zustimmung
+
+Merge durch die Person (Merge-Commit, kein Fast-Forward möglich), danach auf
+`master`: volle Suite, `./scripts/docs-site.sh build -s`, Doku-Playwright,
+Werkbank neu starten und vorhandene Profile neu einrichten. Die
+Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
+
+## Bis Mittwoch noch offen (wird hier nachgetragen)
+
+* Hardwareprüfung der Fokusanfahrt von unten (R13-12), sobald Raumlicht da ist.
+* PNG-Aufnahmen für die weitere Entwicklung.
