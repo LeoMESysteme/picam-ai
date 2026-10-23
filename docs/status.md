@@ -1,10 +1,10 @@
-# Status — Stand 2026-10-23
+# Status — Stand 2026-10-24
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
-## R13 Nachführung und Displayhärtung (Stand 2026-10-23 abends)
+## R13 Nachführung und Displayhärtung (Stand 2026-10-24)
 
 Auf `feat/r13-display-haertung` (nicht in `master`, Entscheidung der Person
 am 2026-10-28): Rahmen-Tracker mit Kandidat R13-7, Einbindung in
@@ -13,10 +13,18 @@ Bereichskorrektur, Offline-Replay und Offline-Einrichtung, Displayhärtung
 gegen helle Kratzer mit Klartext-Ursachen und Prüfung `displayfehler`,
 Fokus von unten angefahren (Motor-Hysterese), robuster Rahmenvorschlag
 (Band am dunklen Rahmen, Reserve), erweiterte Startsuche, Hinweis „Anzeige
-bewegt“, Speicherbudget für 64-GB-SD. Live 2026-10-23: 0 Fehllesungen in
-allen Läufen; ruhiger Kontrolllauf 99,98 % VALID. Offen: Abnahme an zwei
-Aufstellungen mit dem neuen Rahmenvorschlag, sehr schräge Ansichten
-(Startsuche lehnt ehrlich ab), Betrieb ohne Raumlicht. Details:
+bewegt“, Speicherbudget für 64-GB-SD (Platzprüfung, Diagnose standardmäßig
+aus, `dispread live aufraeumen`, Live-Audit je Lauf ohne Rotation).
+Außerdem geklärt: [OQ-44](open-questions.md#oq-44) (ein Testlauf gibt
+technisch nie einen Wert frei, VALID wird vor dem Audit zu `UNREADABLE`
+mit `testlauf_keine_freigabe`) und [OQ-45](open-questions.md#oq-45)
+(Ergebniszeit trägt immer `HOST_MONOTONIC`).
+
+Live 2026-10-23: 0 Fehllesungen in allen Läufen; ruhiger Kontrolllauf
+99,98 % VALID. Profile von vor R13-11 müssen neu eingerichtet werden.
+Offen: Abnahme an zwei Aufstellungen mit dem neuen Rahmenvorschlag,
+Hardwareprüfung der Fokusanfahrt von unten, sehr schräge Ansichten (etwa
+19°, Startsuche lehnt ehrlich ab), Betrieb ohne Raumlicht. Details:
 [VALIDATION](VALIDATION.md#r13-live-2026-10-23), TODO Punkt R13.
 
 ## Aktuelle Arbeit: interaktive Wiki-Roadmap
@@ -69,9 +77,11 @@ Neu erkannt und sofort erfasst:
 * [OQ-44](open-questions.md#oq-44): Testlaufmarkierung und Banner verhindern
   technisch weder VALID im Audit noch dessen Anzeige. Solche Daten bleiben
   für Messungen gesperrt; eine erzwungene Freigabesicherung fehlt.
+  **Nachtrag 2026-10-23:** auf dem R13-Zweig geklärt (siehe oben).
 * [OQ-45](open-questions.md#oq-45): MONOTONIC-Verarbeitungsmarken werden
   teilweise mit einer unpassenden Zeitbasis bezeichnet. Der aktuelle
   V4L2-Livepfad passt; andere Aufnahmezeitbasen brauchen eine Korrektur.
+  **Nachtrag 2026-10-23:** auf dem R13-Zweig geklärt (siehe oben).
 
 Produktionscode wurde bei diesem Abgleich nicht geändert. Vorbestehende
 Messdokumente und deren neue Abschlussbelege sind erhalten. Der damalige
@@ -104,8 +114,9 @@ Leser, TRANSITION bei Mischziffern sowie getrennte Referenzaufzeichnung
 mit optionalem Werteplan und Rückstellung. Die Referenz korrigiert keine
 DUT-Werte und wird Leser/Gate nicht als Parameter übergeben.
 Der [Plan Tempo und Abschluss](superpowers/plans/2026-10-21-messpfad-live-tempo-und-abschluss.md)
-ist erledigt. Testlauf-Vermutungen bleiben Diagnosen; OQ-44 begrenzt die
-bisherige Behauptung einer vollständigen technischen Freigabesicherung.
+ist erledigt. Testlauf-Vermutungen bleiben Diagnosen; auf `master` begrenzt
+OQ-44 die bisherige Behauptung einer vollständigen technischen
+Freigabesicherung, der R13-Zweig erzwingt sie.
 
 ## Reale Belege und Grenzen
 
@@ -144,29 +155,29 @@ der Befehlspausen nicht messbar.
 
 ## Laufumgebung und nächste Schritte
 
-Werkbank in tmux `picam-messlauf-20261021`,
-`https://100.122.154.35:8081/live`; zuletzt `stopped`, Kamera für Vorschau
-aktiv. Port 8080 ist auf diesem Pi durch MEhub belegt. Vorbereitung und
-Register-Sicherung: `var/diagnostics/messlauf-vorbereitung-20261021/`.
-Aufstellung: Fokus 42, Belichtung 300, Gain 14, Weißabgleich 4717 K;
-sitzungsbezogene Einstellungen in `setup/camera-settings.json`.
-Keine Hardwareänderung oder neuer Messlauf durch den Wiki-Abgleich oder
-die Roadmap-Gestaltung; der aktuelle Laufzustand wurde nicht abgefragt.
+Werkbank des R13-Zweigs als systemd-Benutzereinheit
+`dispread-werkbank-r13` (vorübergehend, nach `stop` neu mit `systemd-run`
+anlegen), `https://100.122.154.35:8081/live`. Port 8080 ist auf diesem Pi
+durch MEhub belegt. Die Kamera steht seit 2026-10-23 an der Aufstellung
+„links etwa 18°“, an der die Einrichtung ehrlich ablehnt; für Läufe muss
+die Person eine brauchbare Aufstellung wählen. Einrichtungsrelevante
+Aufnahmen als PNG, nicht JPEG (JPEG verschiebt die Gitteranpassung).
 
 Nächste Aufgaben gemäß TODO:
 
-1. Nachführung unabhängig vom Zifferninhalt untersuchen und große
-   Wertwechsel erneut prüfen (R13/OQ-26).
-2. Testlauf-Sicherung und Zeitbasis-Bezeichnung klären (OQ-44/OQ-45).
-3. Toleranzlauf ≥ 10 min mit Werteplan und weitere Aufstellung erst nach
-   Bearbeitung der Trackinggrenze; andere Lichtquellen/Geräte bleiben offen.
+1. Entscheidung der Person am 2026-10-28: R13-Zweig nach `master`.
+2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26),
+   Fokusanfahrt am Gerät prüfen.
+3. Toleranzlauf ≥ 10 min mit Werteplan; andere Lichtquellen/Geräte
+   bleiben offen.
 4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
    Danach Bedienoberfläche und Aufräumarbeiten gemäß TODO.
 
 Weiter offen: `raw_text` enthält die geparste Zahl statt 16 Displayzellen;
 Streamstillstand beendet erst nach OpenCV-Timeout (etwa 10–20 s), die
-Oberfläche markiert zuvor STALE; Auditrotation kann nach etwa 7 h alte
-Generationen verwerfen. Import bei schrägem Blick und Aufräumen des alten
+Oberfläche markiert zuvor STALE; auf `master` kann die Auditrotation nach
+etwa 7 h alte Generationen verwerfen (R13-Zweig: Live-Audit ohne
+Rotation). Import bei schrägem Blick und Aufräumen des alten
 7-Segment-Pfads bleiben Aufgaben. `var/` braucht eine Sicherung auf anderem
 Medium. Das frühere Codex-Staging-Leck wurde am 2026-10-21 abgestellt
 (Details/Sicherung in TODO). Nachtpflegefehler seit 2026-10-19 ungeklärt.
