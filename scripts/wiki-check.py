@@ -53,19 +53,28 @@ def check_patterns(md_text: str, path: str) -> list[str]:
 
     text = "\n".join(lines)
     errors = []
-    for block in re.finditer(r'<div class="(wiki-setting|wiki-seam)"[^>]*>(.*?)</div>', text, re.DOTALL):
+    for block in re.finditer(r'^[ \t]*<div class="(wiki-setting|wiki-seam)"[^>]*>', text, re.MULTILINE):
         kind = block[1]
         header, required = PATTERNS[kind]
         start = text.count("\n", 0, block.start()) + 1
         prefix = f"{path}:{start}: {kind}"
+        body = text[block.end():]
+        next_div = re.search(r"^[ \t]*<div\b", body, re.MULTILINE)
+        if next_div:
+            body = body[:next_div.start()]
         table = []
-        body_start = text.count("\n", 0, block.start(2)) + 1
-        for offset, line in enumerate(block[2].splitlines()):
+        body_start = text.count("\n", 0, block.end()) + 1
+        table_end = 0
+        for offset, line in enumerate(body.splitlines(keepends=True)):
             if line.strip().startswith("|"):
                 cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
                 table.append((body_start + offset, cells))
-            elif table:
+            elif table or "</div>" in line:
                 break
+            table_end += len(line)
+
+        if "</div>" not in body[table_end:]:
+            errors.append(f"{prefix} ohne schließendes </div>")
 
         if not table or table[0][1][0] != header:
             errors.append(f'{prefix} Kopfzeile muss mit "{header}" beginnen')

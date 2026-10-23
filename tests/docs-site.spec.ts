@@ -218,6 +218,14 @@ test.fixme('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ 
     const verdict = setting.locator('.wiki-verdict');
     await expect(verdict).toBeVisible();
     await expect(verdict).toHaveClass(/\bwiki-verdict--(nein|nurwenn|ja)\b/);
+    const suffix = /\bwiki-verdict--(nein|nurwenn|ja)\b/.exec(await verdict.getAttribute('class') || '')![1];
+    const labels: Record<string, string> = { nein: 'Nein', nurwenn: 'Nur wenn', ja: 'Ja' };
+    expect(await verdict.textContent()).toBe(labels[suffix]);
+    const sizes = await verdict.evaluate((element) => ({
+      actual: parseFloat(getComputedStyle(element).fontSize),
+      root: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    }));
+    expect(sizes.actual).toBeCloseTo(sizes.root * .62, 2);
   }
 
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });

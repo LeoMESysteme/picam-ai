@@ -152,6 +152,36 @@ def test_patterns_ignore_fenced_examples_and_unrelated_tables() -> None:
     assert wiki_check.check_patterns(text, "seite.md") == []
 
 
+@pytest.mark.parametrize("text,kind", [(SETTING, "wiki-setting"), (SEAM, "wiki-seam")])
+@pytest.mark.parametrize("following", ["", SETTING, '<div class="fremd">\nFremder Inhalt\n</div>\n'])
+def test_pattern_missing_closing_div(text: str, kind: str, following: str) -> None:
+    text = "# Titel\n\n" + text.replace("</div>\n", "") + "\n" + following
+    assert wiki_check.check_patterns(text, "docs/seite.md") == [
+        f"docs/seite.md:3: {kind} ohne schließendes </div>"
+    ]
+
+
+@pytest.mark.parametrize("kind", ["wiki-setting", "wiki-seam"])
+@pytest.mark.parametrize("ticks", ["`", "``"])
+def test_pattern_opener_in_inline_code_ignored(kind: str, ticks: str) -> None:
+    text = f'Die Hülle {ticks}<div class="{kind}" markdown="1">{ticks} ist ein Beispiel.\n\n</div>\n'
+    assert wiki_check.check_patterns(text, "seite.md") == []
+
+
+@pytest.mark.parametrize("text", [SETTING, SEAM], ids=["setting", "seam"])
+def test_pattern_indented_opener_valid(text: str) -> None:
+    assert wiki_check.check_patterns("  " + text, "seite.md") == []
+
+
+@pytest.mark.parametrize("closed", [True, False])
+def test_pattern_closing_div_in_table_is_not_block_end(closed: bool) -> None:
+    text = SETTING.replace("| Wozu | Beschreibung |", "| Wozu | Literal `</div>` |")
+    if not closed:
+        text = text.removesuffix("</div>\n")
+    expected = [] if closed else ["seite.md:1: wiki-setting ohne schließendes </div>"]
+    assert wiki_check.check_patterns(text, "seite.md") == expected
+
+
 @pytest.fixture
 def wiki_tree(tmp_path: Path) -> Path:
     scripts = tmp_path / "scripts"

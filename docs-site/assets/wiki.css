@@ -132,7 +132,7 @@
 .md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) tbody tr {
   background: none; box-shadow: none; transition: none;
 }
-.md-typeset .wiki-verdict { margin-left: 0; }
+.md-typeset .wiki-verdict { margin-left: 0; font-size: .62rem; }
 .wiki-verdict--nein { background: var(--docs-blocked-bg); color: var(--docs-blocked-fg); }
 .wiki-verdict--nurwenn { background: var(--docs-open-bg); color: var(--docs-open-fg); }
 .wiki-verdict--ja { background: var(--docs-resolved-bg); color: var(--docs-resolved-fg); }

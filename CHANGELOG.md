@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Korrekturrunde 1 der Wiki-Seitenmuster: `wiki-check.py`
+  erkennt Musteröffner nur am Zeilenanfang außerhalb umzäunten Codes und
+  meldet fehlende schließende `</div>` nach der Tabelle, bevor eine fremde
+  Hülle beginnt. Urteilschips verwenden ausdrücklich `Nein`, `Nur wenn`
+  oder `Ja` als Text und eine feste Schriftgröße von `.62rem`.
+
 * 2026-10-23: Wiki-Grundlage für Hintergrund-, Entwickler- und historische
   Schichten sowie Einstellungs- und Anbindungstabellen ergänzt. Die Schichten
   überschreiben die Admonition-Gestaltung des Themes; Tabellen bleiben ohne

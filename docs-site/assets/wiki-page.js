@@ -53,14 +53,16 @@
   }
 
   onPage((article) => {
-    const verdicts = { Nein: "nein", "Nur wenn": "nurwenn", Ja: "ja" };
+    const verdicts = { nein: "Nein", nurwenn: "Nur wenn", ja: "Ja" };
     for (const row of article.querySelectorAll(".wiki-setting tbody tr")) {
       if (row.cells[0]?.textContent.trim() !== "Ändern?") continue;
       const cell = row.cells[1];
       const word = cell?.querySelector("strong");
       const label = word?.textContent.trim();
-      if (!Object.hasOwn(verdicts, label) || cell.querySelector(".wiki-verdict")) continue;
-      word.replaceWith(make("span", `wiki-verdict wiki-verdict--${verdicts[label]}`, label));
+      const verdict = Object.entries(verdicts).find(([, text]) => text === label);
+      if (!verdict || cell.querySelector(".wiki-verdict")) continue;
+      const [suffix, text] = verdict;
+      word.replaceWith(make("span", `wiki-verdict wiki-verdict--${suffix}`, text));
     }
   });
 
