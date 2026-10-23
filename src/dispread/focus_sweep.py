@@ -25,6 +25,7 @@ class FocusMeasurements(list[tuple[int, float]]):
     def __init__(self, focus_method: str = "climb") -> None:
         super().__init__()
         self.focus_method = focus_method
+        self.focus_verify: dict[str, int | float] | None = None
 
 
 def climb_focus(

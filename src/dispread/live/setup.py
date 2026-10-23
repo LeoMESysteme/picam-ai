@@ -45,6 +45,13 @@ N_CELLS = 16
 DEFAULT_TARGET_SIZE = (400, 160)
 LATTICE_GRID = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
 WHITE_BALANCE_SETTLE_S = 3.0
+# Fokus: alle 0.3 s pruefen, hoechstens 5 s ab Setzen (inklusive Einschwingen).
+# Zwei aufeinanderfolgende Schaerfen duerfen relativ zum Vorgaenger um 5 % abweichen.
+FOCUS_SAMPLE_INTERVAL_S = 0.3
+FOCUS_STABILITY_TIMEOUT_S = 5.0
+FOCUS_STABILITY_TOLERANCE = 0.05
+FOCUS_VERIFY_RATIO = 0.85  # Endlage muss mindestens 85 % der besten Suchmessung erreichen.
+FOCUS_RETRY_STEP = 8  # Einmal wegfahren und zur Endlage zurueckkehren.
 MIN_STABILITY_S = 30.0
 SERIAL_PORT = "/dev/ttyUSB0"
 SERIAL_BAUDRATE = 38400
@@ -179,13 +186,23 @@ def focus_camera(
 
     def measure(focus: int) -> float:
         cam.set_controls([("focus_absolute", focus)])
-        sleep(settle_s)
-        try:
-            frame = cam.fresh_still(discard=3)
-        except UvcError as exc:
-            raise UvcError(f"kein Bild von {cam.device} (Fokus-Sweep)") from exc
-        gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return sharpness(measurement_roi(gray, hint_box))
+        deadline = time.monotonic() + FOCUS_STABILITY_TIMEOUT_S
+        sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
+        previous = None
+        while True:
+            try:
+                frame = cam.fresh_still(discard=3)
+            except UvcError as exc:
+                raise UvcError(f"kein Bild von {cam.device} (Fokus-Sweep)") from exc
+            gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            score = sharpness(measurement_roi(gray, hint_box))
+            if previous is not None and abs(score - previous) <= abs(previous) * FOCUS_STABILITY_TOLERANCE:
+                return score
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return score
+            previous = score
+            sleep(min(FOCUS_SAMPLE_INTERVAL_S, remaining))
 
     cam.set_controls([("focus_automatic_continuous", 0)])
     if info is not None:
@@ -194,6 +211,24 @@ def focus_camera(
         measure, start=start_focus,
         on_fallback=(lambda: info("Fokus: Vollsweep (Rueckfall)")) if info is not None else None,
     )
+    best_measured = max(score for _, score in sweep_log)
+    verified = measure(best_focus)
+    attempts = 1
+    if not verified >= FOCUS_VERIFY_RATIO * best_measured:
+        away = best_focus + FOCUS_RETRY_STEP if best_focus <= 255 - FOCUS_RETRY_STEP else best_focus - FOCUS_RETRY_STEP
+        cam.set_controls([("focus_absolute", away)])
+        sleep(settle_s)
+        verified = measure(best_focus)
+        attempts = 2
+    if not verified >= FOCUS_VERIFY_RATIO * best_measured:
+        raise SetupError(
+            f"Fokus nicht stabil: Schaerfe {verified:.1f} von {best_measured:.1f} erreicht - Einrichtung neu starten"
+        )
+    sweep_log.focus_verify = {
+        "target": best_focus, "best_measured": best_measured, "verified": verified, "attempts": attempts,
+    }
+    if info is not None:
+        info(f"Fokus geprueft: Schaerfe {verified:.1f} von {best_measured:.1f}")
     cam.set_controls([("auto_exposure", 3), ("white_balance_automatic", 1)])
     sleep(WHITE_BALANCE_SETTLE_S)
     readback = cam.get_controls(["exposure_time_absolute", "white_balance_temperature", "gain"])

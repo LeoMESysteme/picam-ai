@@ -416,6 +416,7 @@ class LiveService:
         (setup_dir / "camera-settings.json").write_text(
             json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
                         "focus_method": getattr(sweep, "focus_method", "sweep"),
+                        "focus_verify": getattr(sweep, "focus_verify", None),
                         "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )

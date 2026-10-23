@@ -935,6 +935,11 @@ def test_focus_writes_camera_settings_with_best_focus(tmp_path, monkeypatch, pla
     assert len(data["focus_sweep"]) <= 10
     assert data["focus_sweep"][0][0] == 48
     assert data["focus_method"] == ("sweep" if plain_list else "climb")
+    if not plain_list:
+        assert data["focus_verify"] == {
+            "target": 48, "best_measured": max(s for _, s in data["focus_sweep"]),
+            "verified": max(s for _, s in data["focus_sweep"]), "attempts": 1,
+        }
     assert "created_at_utc" in data
     assert (out_dir / "control.png").exists()
     # Nach `focus` steht die Automatik wieder auf manuell (`auto_exposure=3`

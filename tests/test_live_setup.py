@@ -185,6 +185,76 @@ def test_focus_camera_turns_autofocus_off_first_and_reads_back(monkeypatch):
     assert settings.device == "/dev/fake" and sweep[0][0] == 48
 
 
+class FocusMotorCamera(FakeSetupCamera):
+    def __init__(self, readings):
+        super().__init__(None)
+        self.readings = iter(readings)
+        self.captured_at = []
+        self.now = 0.0
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def fresh_still(self, discard=10):
+        self.captured_at.append(self.now)
+        return np.full((12, 12), next(self.readings), dtype=float)
+
+
+def _focus_motor(monkeypatch, readings, *, target=48, best=100.0, sample=False):
+    from dispread.focus_sweep import FocusMeasurements
+
+    cam = FocusMotorCamera(readings)
+    monkeypatch.setattr(live_setup.time, "monotonic", lambda: cam.now)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+
+    def climb(measure, **kwargs):
+        measured = FocusMeasurements()
+        measured.append((target, measure(target) if sample else best))
+        return target, measured
+
+    monkeypatch.setattr(live_setup, "climb_focus", climb)
+    return cam
+
+
+def test_focus_motor_waits_for_stable_sharpness_and_verifies(monkeypatch):
+    cam = _focus_motor(monkeypatch, [10, 30, 60, 100, 105, 90, 94], sample=True)
+    messages = []
+    settings, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
+    assert cam.captured_at == pytest.approx([1, 1.3, 1.6, 1.9, 2.2, 3.2, 3.5])
+    assert measured == [(48, 105)]
+    assert settings.controls["focus_absolute"] == 48
+    assert measured.focus_verify == {"target": 48, "best_measured": 105, "verified": 94, "attempts": 1}
+    assert "Fokus geprueft: Schaerfe 94.0 von 105.0" in messages
+
+
+def test_focus_motor_stops_waiting_after_five_seconds(monkeypatch):
+    cam = _focus_motor(monkeypatch, [10, 100] * 8 + [100], sample=True)
+    _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    assert cam.captured_at[14] == pytest.approx(5.0)
+    assert measured == [(48, 10)]
+    assert measured.focus_verify["attempts"] == 1
+
+
+@pytest.mark.parametrize("target", [0, 48, 255])
+def test_focus_verification_retries_once_and_records_result(monkeypatch, target):
+    cam = _focus_motor(monkeypatch, [80, 80, 85, 85], target=target)
+    _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    moves = [value for controls in cam.controls for name, value in controls if name == "focus_absolute"]
+    assert moves == [target, target + 8 if target <= 247 else target - 8, target]
+    assert measured.focus_verify == {"target": target, "best_measured": 100, "verified": 85, "attempts": 2}
+
+
+def test_focus_verification_fails_twice_with_restart_message(monkeypatch):
+    cam = _focus_motor(monkeypatch, [80, 80, 84, 84])
+    messages = []
+    with pytest.raises(live_setup.SetupError, match=(
+        "Fokus nicht stabil: Schaerfe 84.0 von 100.0 erreicht - Einrichtung neu starten"
+    )):
+        live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
+    assert cam.controls[-3:] == [[("focus_absolute", 48)], [("focus_absolute", 56)], [("focus_absolute", 48)]]
+    assert not any(message.startswith("Fokus geprueft:") for message in messages)
+
+
 def test_offline_text_source_returns_capture_and_text():
     image = np.zeros((2, 2, 3), np.uint8)
     assert live_setup.offline_text_source("ABC")(lambda: image) == (image, "ABC")
@@ -288,7 +358,8 @@ def test_focus_camera_sucht_ab_start_und_protokolliert_rueckfall(monkeypatch, st
     monkeypatch.setattr(live_setup, "sharpness", score)
     messages = []
     settings, measured = live_setup.focus_camera(cam, None, start_focus=start, sleep=lambda _s: None, info=messages.append)
-    assert messages == ["Fokus: Bergsteigen"] + (["Fokus: Vollsweep (Rueckfall)"] if flat else [])
+    assert messages[:-1] == ["Fokus: Bergsteigen"] + (["Fokus: Vollsweep (Rueckfall)"] if flat else [])
+    assert messages[-1].startswith("Fokus geprueft: Schaerfe ")
     assert measured[0][0] == start
     assert measured.focus_method == method
     assert abs(settings.controls["focus_absolute"] - (50 if flat else 48)) <= 2
