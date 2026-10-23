@@ -244,3 +244,75 @@ def test_cli_checks_patterns_in_same_sources_as_front_matter(wiki_tree: Path) ->
     assert sorted(result.stderr.splitlines()) == sorted(
         f'{path}:1: wiki-setting fehlt Zeile "Quelle"' for path in paths
     )
+
+
+GLOSSARY = """# Glossar
+
+## Bildverarbeitung
+
+### ROI {#roi}
+
+Der bestätigte Anzeigebereich.
+
+*Weg:* Bedienen · *Auch:* Region of Interest, Anzeigebereich · *Quelle:* [Konzept](../../Konzept.md)
+"""
+
+
+def test_glossary_valid() -> None:
+    assert wiki_check.check_glossary(GLOSSARY) == []
+
+
+def test_glossary_meta_required() -> None:
+    text = GLOSSARY.split("*Weg:*")[0]
+    assert wiki_check.check_glossary(text) == ["glossar.md:5: ROI: Metazeile fehlt / falsche Form"]
+
+
+@pytest.mark.parametrize("weg", ["Projekt", "bedienen", "Unbekannt"])
+def test_glossary_weg_values(weg: str) -> None:
+    assert wiki_check.check_glossary(GLOSSARY.replace("Bedienen", weg)) == [
+        f'glossar.md:9: ROI: Weg unbekannt: {weg}'
+    ]
+
+
+@pytest.mark.parametrize("source", ["Konzept", "[Konzept]()", "[Konzept](../../src/gate.py)"])
+def test_glossary_source_link(source: str) -> None:
+    errors = wiki_check.check_glossary(GLOSSARY.replace("[Konzept](../../Konzept.md)", source))
+    assert len(errors) == 1
+    assert "Quelle ohne Link auf eine Wiki-Seite" in errors[0]
+
+
+@pytest.mark.parametrize("length", [280, 281])
+def test_glossary_short_length(length: int) -> None:
+    errors = wiki_check.check_glossary(GLOSSARY.replace("Der bestätigte Anzeigebereich.", "x" * length))
+    assert errors == ([] if length == 280 else ["glossar.md:7: ROI: Kurzdefinition > 280 Zeichen (281)"])
+
+
+def test_glossary_short_missing() -> None:
+    assert wiki_check.check_glossary(GLOSSARY.replace("Der bestätigte Anzeigebereich.\n\n", "")) == [
+        "glossar.md:5: ROI: Kurzdefinition fehlt"
+    ]
+
+
+@pytest.mark.parametrize("other", ["roi", "region of interest", "Anzeigebereich"])
+def test_glossary_duplicate_alias(other: str) -> None:
+    text = GLOSSARY + f"\n### `{other}`\n\nEin weiterer Begriff.\n\n*Weg:* Entwickeln · *Quelle:* [API](../../api/vertraege.md)\n"
+    errors = wiki_check.check_glossary(text)
+    assert len(errors) == 1
+    assert f"Begriff oder Synonym doppelt: {other}" in errors[0]
+
+
+@pytest.mark.parametrize("meta", [
+    "*Quelle:* [Konzept](../../Konzept.md) · *Weg:* Bedienen",
+    "*Weg:* Bedienen · *Quelle:* [Konzept](../../Konzept.md) · *Auch:* Bereich",
+    "*Weg:* Bedienen · *Auch:* · *Quelle:* [Konzept](../../Konzept.md)",
+])
+def test_glossary_meta_fixed_form(meta: str) -> None:
+    text = GLOSSARY[:GLOSSARY.index("*Weg:*")] + meta
+    assert wiki_check.check_glossary(text) == ["glossar.md:9: ROI: Metazeile fehlt / falsche Form"]
+
+
+def test_cli_checks_glossary(wiki_tree: Path) -> None:
+    (wiki_tree / "docs/anleitung/glossar.md").write_text(GLOSSARY.split("*Weg:*")[0], encoding="utf-8")
+    result = run_check(wiki_tree)
+    assert result.returncode == 1
+    assert result.stderr.strip() == "glossar.md:5: ROI: Metazeile fehlt / falsche Form"

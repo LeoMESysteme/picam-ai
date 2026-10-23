@@ -97,6 +97,58 @@ def check_patterns(md_text: str, path: str) -> list[str]:
     return errors
 
 
+def check_glossary(md_text: str) -> list[str]:
+    """Prüft Kurzdefinitionen, feste Metazeilen und eindeutige Begriffsnamen."""
+    errors = []
+    seen: set[str] = set()
+    headers = list(re.finditer(r"^(#{2,3}) ([^\n]+)$", md_text, re.MULTILINE))
+    meta_pattern = re.compile(
+        r"^\*Weg:\* ([^·\n]+?)"
+        r"(?: · \*Auch:\* (\S(?:[^·\n]*\S)?))? · \*Quelle:\* ([^·\n]+)$"
+    )
+    for index, header in enumerate(headers):
+        if header[1] != "###":
+            continue
+        term = re.sub(r"\s*\{#[^}]+\}\s*$", "", header[2]).replace("`", "").strip()
+        number = md_text.count("\n", 0, header.start()) + 1
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(md_text)
+        paragraphs = list(re.finditer(r"\S[^\n]*(?:\n(?!\s*\n)[^\n]+)*", md_text[header.end():end]))
+        prefix = f"glossar.md:{number}: {term}: "
+
+        def paragraph_line(paragraph: re.Match[str]) -> int:
+            return md_text.count("\n", 0, header.end() + paragraph.start()) + 1
+
+        first = paragraphs[0] if paragraphs else None
+        missing_short = first is None or first[0].startswith("*Weg:*")
+        if missing_short:
+            errors.append(prefix + "Kurzdefinition fehlt")
+        else:
+            short = re.sub(r"\s+", " ", first[0])
+            if len(short) > 280:
+                errors.append(f"glossar.md:{paragraph_line(first)}: {term}: Kurzdefinition > 280 Zeichen ({len(short)})")
+        meta = first if missing_short else (paragraphs[1] if len(paragraphs) > 1 else None)
+        match = meta_pattern.fullmatch(meta[0]) if meta else None
+        aliases = []
+        if not match:
+            line = paragraph_line(meta) if meta else number
+            errors.append(f"glossar.md:{line}: {term}: Metazeile fehlt / falsche Form")
+        else:
+            line = paragraph_line(meta)
+            if match[1] not in ("Bedienen", "Konfigurieren", "Entwickeln"):
+                errors.append(f"glossar.md:{line}: {term}: Weg unbekannt: {match[1]}")
+            source = re.fullmatch(r"\[[^\]]+\]\(([^\s)]+)\)", match[3])
+            target = source[1].split("#")[0] if source else ""
+            if not target.endswith(".md") or "/src/" in target or re.match(r"\w+:", target):
+                errors.append(f"glossar.md:{line}: {term}: Quelle ohne Link auf eine Wiki-Seite")
+            aliases = [alias.strip() for alias in (match[2] or "").split(",") if alias.strip()]
+        for name in [term, *aliases]:
+            key = name.casefold()
+            if key in seen:
+                errors.append(prefix + f"Begriff oder Synonym doppelt: {name}")
+            seen.add(key)
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", required=True, help="Wiki-Quellen prüfen, ohne sie zu ändern")
@@ -115,6 +167,8 @@ def main() -> int:
         name = path.relative_to(ROOT).as_posix()
         errors.extend(check_front_matter(text, name))
         errors.extend(check_patterns(text, name))
+        if name == "docs/anleitung/glossar.md":
+            errors.extend(check_glossary(text))
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0

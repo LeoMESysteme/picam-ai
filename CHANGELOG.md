@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Glossar als filterbarer Begriffsindex mit 50 vollständigen
+  Definitionen, festen Metazeilen und erhaltenen Abschnittsankern. A–Z,
+  Wegfilter und gruppierte Vorkommen erschließen die Begriffe; Hinweise
+  zeigen Kurzdefinitionen und Fundstellenkontext. Andere Wiki-Seiten
+  markieren die erste Nennung pro Abschnitt. Ein Wortindex verarbeitet den
+  Suchbestand in Häppchen; ohne Suchindex oder JavaScript bleiben die
+  Definitionen lesbar. `wiki-check.py --check` prüft das Glossarformat,
+  Quellen, Längengrenzen und doppelte Begriffe oder Synonyme.
+
 * 2026-10-23: Korrekturrunde 1 der Wiki-Seitenmuster: `wiki-check.py`
   erkennt Musteröffner nur am Zeilenanfang außerhalb umzäunten Codes und
   meldet fehlende schließende `</div>` nach der Tabelle, bevor eine fremde

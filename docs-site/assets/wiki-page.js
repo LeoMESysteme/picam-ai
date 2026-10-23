@@ -4,6 +4,88 @@
 
   const { onPage, siteUrl, make, icon, loadOqIndex, loadPhases, hint } = window.wiki;
 
+  hint.register("term", async (link) => {
+    const entries = await window.wiki.loadGlossary();
+    const entry = entries.find((item) => item.id === new URL(link.href).hash.slice(1));
+    if (!entry) return null;
+    const content = make("div");
+    const meta = make("div", "wiki-hint-meta");
+    const way = make("span", "", entry.weg);
+    way.prepend(icon(entry.weg.toLocaleLowerCase("de")));
+    const target = make("a", "", "Im Glossar");
+    target.href = link.href;
+    meta.append(way, " · ", target);
+    content.append(make("strong", "", entry.term), make("p", "", entry.short), meta);
+    return content;
+  });
+
+  onPage((article) => {
+    const path = new URL(window.location.href).pathname;
+    if (/\/(?:docs\/anleitung\/glossar|CHANGELOG|TODO|AGENTS|CLAUDE)\.html$/.test(path)) return;
+    let disposed = false;
+    window.wiki.loadGlossary().then((entries) => {
+      if (disposed) return;
+      const match = window.wiki.termMatcher(entries);
+      const tasks = [];
+      let seen = new Set();
+      const excluded = "a, pre, summary, button, [data-preview], .wiki-hint, .wiki-pagehead, .wiki-chip, .roadmap, nav, .md-typeset__table thead";
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+          if (element.closest(excluded)) return NodeFilter.FILTER_REJECT;
+          for (let parent = element; parent && parent !== article; parent = parent.parentElement) {
+            if ([...parent.classList].some((name) => name.startsWith("tour-"))) return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.matches("h2, h3")) seen = new Set();
+          if (node.matches("code") && !node.closest("h1, h2, h3, h4, h5, h6")) {
+            const hit = match(node.textContent).find((item) => item.entry.code && item.index === 0 && item.length === node.textContent.length);
+            if (hit && !seen.has(hit.entry.id)) {
+              seen.add(hit.entry.id);
+              tasks.push({ node, hits: [hit], code: true });
+            }
+          }
+          continue;
+        }
+        if (node.parentElement.closest("code, h1, h2, h3, h4, h5, h6")) continue;
+        const hits = match(node.textContent).filter((hit) => {
+          if (seen.has(hit.entry.id)) return false;
+          seen.add(hit.entry.id);
+          return true;
+        });
+        if (hits.length) tasks.push({ node, hits });
+      }
+      const linkFor = (hit) => {
+        const link = make("a", "wiki-term", hit.match);
+        link.href = siteUrl("docs/anleitung/glossar.html") + "#" + hit.entry.id;
+        link.dataset.hint = "term";
+        return link;
+      };
+      for (const { node, hits, code } of tasks) {
+        if (code) {
+          const link = linkFor(hits[0]);
+          node.replaceWith(link);
+          link.replaceChildren(node);
+        } else {
+          const fragment = document.createDocumentFragment();
+          let start = 0;
+          for (const hit of hits) {
+            fragment.append(node.textContent.slice(start, hit.index), linkFor(hit));
+            start = hit.index + hit.length;
+          }
+          fragment.append(node.textContent.slice(start));
+          node.replaceWith(fragment);
+        }
+      }
+      article.dataset.wikiTermsReady = "true";
+    }).catch(() => { /* Definitions stay readable if the glossary cannot be loaded. */ });
+    return () => { disposed = true; };
+  });
+
   function reference(link) {
     let url;
     try { url = new URL(link.href); }

@@ -737,7 +737,7 @@ test('Quelltabellen bleiben ohne JavaScript nutzbar', async ({ browser }) => {
 test('Glossarbegriff und Dokumentabschnitt zeigen eine Vorschau', async ({ page }) => {
   await page.goto('/docs/anleitung/01-kette-verstehen.html');
 
-  const term = page.locator('.md-content__inner a[href*="glossar.html#value-record"]');
+  const term = page.locator('.md-content__inner a[href*="glossar.html#value-record"]:not(.wiki-term)');
   await expect(term).toHaveAttribute('data-preview', '');
   await term.hover();
   await expect(page.locator('.md-tooltip2--active').filter({ hasText: 'interne Datensatz' })).toBeVisible();
@@ -774,7 +774,7 @@ test('Link auf die Glossarseite zeigt nur die kurze Einleitung', async ({ page }
 
 test('Glossarvorschau ist mit der Tastatur erreichbar', async ({ page }) => {
   await page.goto('/docs/anleitung/01-kette-verstehen.html');
-  const term = page.locator('.md-content__inner a[href*="glossar.html#value-record"]');
+  const term = page.locator('.md-content__inner a[href*="glossar.html#value-record"]:not(.wiki-term)');
   await term.focus();
   await expect(page.locator('.md-tooltip2--active').filter({ hasText: 'interne Datensatz' })).toBeVisible();
   await page.keyboard.press('Enter');
@@ -789,7 +789,7 @@ test('Glossarbegriff bleibt auf schmalem Bildschirm verlinkt', async ({ browser 
   });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/docs/anleitung/01-kette-verstehen.html');
-  await page.locator('.md-content__inner a[href*="glossar.html#value-record"]').tap();
+  await page.locator('.md-content__inner a[href*="glossar.html#value-record"]:not(.wiki-term)').tap();
   await expect(page).toHaveURL(/glossar\.html#value-record$/);
   await context.close();
 });
@@ -1139,4 +1139,123 @@ test('Abbildung spielt beim Sichtbarwerden, wiederholt per Knopf und führt in d
   // Die Sofortnavigation setzt die Adresse vor dem Austausch des Inhalts;
   // nur die Bühne der Tour zählt, nicht die Abbildungen der alten Seite.
   await expect(page.locator('.tour-ui .tour-stage')).toHaveAttribute('data-scene', 'erkennung-veraltet');
+});
+
+test('Glossar filtert über Synonyme und springt per A–Z', async ({ page }) => {
+  await page.goto('/docs/anleitung/glossar.html');
+  const filter = page.getByRole('searchbox', { name: 'Begriffe filtern' });
+  await filter.fill('Region');
+  await expect(page.locator('#roi')).toBeVisible();
+  await expect(page.locator('.wiki-glossar-count')).toContainText('1 von');
+  await expect(page.locator('.wiki-glossar-entry:visible')).toHaveCount(1);
+  await filter.fill('');
+  await page.getByRole('navigation', { name: 'Alphabet' }).getByRole('button', { name: 'R', exact: true }).click();
+  const firstR = page.locator('#buchstabe-r + .wiki-glossar-entry h3');
+  await expect(firstR).toBeInViewport();
+  expect(await firstR.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThanOrEqual(48);
+  await page.getByRole('group', { name: 'Weg', exact: true }).getByRole('button', { name: 'Entwickeln' }).click();
+  await expect(page.locator('.wiki-glossar-entry:visible .wiki-chip--weg')).toHaveText(
+    Array(await page.locator('.wiki-glossar-entry:visible').count()).fill('Entwickeln'),
+  );
+  await filter.fill('kein-passender-begriff');
+  await expect(page.locator('.wiki-glossar-empty')).toHaveText('Kein Begriff passt zu „kein-passender-begriff“.');
+  await page.getByRole('button', { name: 'In der Volltextsuche suchen' }).click();
+  // Playwright pierces the open shadow root used by the Zensical search.
+  await expect(page.getByRole('combobox')).toBeFocused();
+  await expect(page.getByRole('combobox')).toHaveValue('kein-passender-begriff');
+});
+
+test('Glossar zeigt Vorkommen mit Kontext beim Überfahren', async ({ page }) => {
+  const start = Date.now();
+  await page.goto('/docs/anleitung/glossar.html');
+  const occurrence = page.locator('.wiki-glossar-entry').filter({ has: page.locator('#roi') }).locator('.wiki-occ');
+  await expect(occurrence).toBeAttached({ timeout: 6000 });
+  const elapsed = Date.now() - start;
+  console.log(`Glossar-Vorkommen nach ${elapsed} ms`);
+  expect(elapsed).toBeLessThan(6000);
+  expect(await occurrence.locator('.wiki-occ-page').count()).toBeGreaterThanOrEqual(2);
+  await occurrence.locator('a[data-hint="fundstelle"]').first().hover();
+  const popup = page.locator('#wiki-hint[data-open="true"]');
+  await expect(popup.locator('mark')).toHaveText(/roi/i);
+  await expect(popup.locator('strong')).toContainText('›');
+  await expect(popup.locator('p')).toContainText(/.{1,90}ROI|ROI.{1,90}/i);
+  const href = await occurrence.locator('a[data-hint="fundstelle"]').first().getAttribute('href');
+  expect(href).toContain(':~:text=');
+  await occurrence.getByRole('link', { name: 'Alle Treffer in der Suche' }).click();
+  await expect(page.getByRole('combobox')).toHaveValue('ROI');
+});
+
+test('Glossar bleibt ohne Suchindex lesbar', async ({ page }) => {
+  await page.route('**/search.json', (route) => route.abort());
+  await page.goto('/docs/anleitung/glossar.html');
+  await expect(page.locator('.wiki-glossar-status')).toContainText('Vorkommen nicht verfügbar');
+  const headings = page.locator('.md-content__inner h3');
+  expect(await headings.count()).toBeGreaterThan(0);
+  for (const heading of await headings.all()) await expect(heading).toBeVisible();
+  await expect(page.locator('#roi + p')).toContainText('Region of Interest');
+  await expect(page.locator('.wiki-glossar-count')).not.toContainText('ermittelt');
+});
+
+test('Begriffe werden je Abschnitt einmal markiert ohne Links und Code zu verändern', async ({ page }) => {
+  const response = await page.request.get('/docs/uebersicht/messpfad.html');
+  expect(response.ok()).toBe(true);
+  const html = await response.text();
+  await page.goto('/docs/uebersicht/messpfad.html');
+  const before = await page.evaluate((source) => {
+    const article = new DOMParser().parseFromString(source, 'text/html').querySelector('.md-content__inner')!;
+    return { links: article.querySelectorAll('a[href]').length,
+      pre: [...article.querySelectorAll('pre')].map((node) => node.textContent) };
+  }, html);
+  const article = page.locator('.md-content__inner');
+  await expect(article).toHaveAttribute('data-wiki-terms-ready', 'true');
+  await expect(article.locator('a.wiki-term')).not.toHaveCount(0);
+  await expect(article.locator('a[href]:not(.wiki-term)')).toHaveCount(before.links);
+  expect(await article.locator('pre').allTextContents()).toEqual(before.pre);
+  const duplicates = await article.evaluate((element) => {
+    let seen = new Set<string>();
+    const repeated: string[] = [];
+    for (const node of element.querySelectorAll('h2, h3, a.wiki-term')) {
+      if (node.matches('h2, h3')) { seen = new Set(); continue; }
+      const href = (node as HTMLAnchorElement).href;
+      if (seen.has(href)) repeated.push(href);
+      seen.add(href);
+    }
+    return repeated;
+  });
+  expect(duplicates).toEqual([]);
+  await expect(article.locator('a a.wiki-term, pre .wiki-term, summary .wiki-term, h1 .wiki-term, h2 .wiki-term, h3 .wiki-term')).toHaveCount(0);
+});
+
+test('Begriff zeigt Kurzdefinition beim Überfahren', async ({ page }) => {
+  await page.goto('/docs/uebersicht/messpfad.html');
+  const term = page.locator('a.wiki-term').first();
+  await expect(term).toBeVisible();
+  const href = await term.getAttribute('href');
+  const id = new URL(href!).hash.slice(1);
+  const response = await page.request.get('/docs/anleitung/glossar.html');
+  const short = await page.evaluate(({ source, id }) => {
+    const doc = new DOMParser().parseFromString(source, 'text/html');
+    return doc.getElementById(id)!.nextElementSibling!.textContent!.trim();
+  }, { source: await response.text(), id });
+  await term.hover();
+  const popup = page.locator('#wiki-hint[data-open="true"]');
+  await expect(popup).toContainText(short);
+  await expect(popup.getByRole('link', { name: 'Im Glossar' })).toHaveAttribute('href', href!);
+});
+
+test('Glossar ohne JavaScript bleibt lesbar', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto('/docs/anleitung/glossar.html');
+    const headings = page.locator('.md-content__inner h3');
+    const count = await headings.count();
+    expect(count).toBeGreaterThan(0);
+    for (const heading of await headings.all()) await expect(heading).toBeVisible();
+    const metadata = page.locator('.md-content__inner p').filter({ hasText: /^Weg:/ });
+    await expect(metadata).toHaveCount(count);
+    for (const line of await metadata.all()) await expect(line).toBeVisible();
+    await expect(page.locator('#roi + p')).toContainText('Region of Interest');
+    await expect(page.locator('.wiki-glossar-controls')).toHaveCount(0);
+  } finally { await context.close(); }
 });

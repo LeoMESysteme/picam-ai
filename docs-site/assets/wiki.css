@@ -157,3 +157,80 @@
   .md-typeset details.wiki-layer::details-content { content-visibility: visible !important; }
   .md-typeset details.wiki-layer > :not(summary) { display: block !important; }
 }
+
+.md-typeset a.wiki-term {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--md-default-fg-color--light);
+  text-decoration-thickness: 1px; text-underline-offset: .22em;
+}
+.md-typeset a.wiki-term:hover, .md-typeset a.wiki-term:focus-visible {
+  color: var(--md-accent-fg-color); text-decoration-color: currentColor;
+}
+.md-typeset code > a.wiki-term, .md-typeset a.wiki-term > code { color: inherit; }
+.wiki-hint p { margin: .25rem 0; }
+.wiki-hint-meta svg { vertical-align: -.15em; margin-right: .25rem; }
+.wiki-hint mark { background: var(--docs-open-bg); color: var(--docs-open-fg); }
+
+.md-typeset .wiki-glossar-controls {
+  position: sticky; top: 2.4rem; z-index: 2;
+  padding: .6rem 0 .35rem; margin: 1.25rem 0;
+  background: var(--md-default-bg-color);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  max-width: 100%; min-width: 0;
+}
+.wiki-glossar-row { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .75rem; }
+.md-typeset .wiki-glossar-filter {
+  flex: 1 1 13rem; min-width: 0; padding: .4rem .55rem;
+  border: 1px solid var(--md-default-fg-color--light); border-radius: .2rem;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color); font-size: .75rem;
+  caret-color: var(--md-accent-fg-color);
+}
+.wiki-glossar-filter::placeholder { color: var(--md-default-fg-color--light); opacity: 1; }
+.wiki-glossar-wege { display: flex; flex-wrap: wrap; gap: .25rem; }
+.md-typeset .wiki-glossar-wege button,
+.md-typeset .wiki-glossar-empty-wrap button {
+  padding: .3rem .55rem; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 1rem; font-size: .65rem; cursor: pointer;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color);
+}
+.md-typeset .wiki-glossar-wege button[aria-pressed="true"] {
+  background: var(--md-accent-fg-color); color: var(--md-accent-bg-color);
+  border-color: var(--md-accent-fg-color);
+}
+.md-typeset .wiki-glossar-count { margin-left: auto; font-size: .65rem; color: var(--md-default-fg-color--light); }
+.md-typeset .wiki-glossar-az { display: flex; gap: .08rem; overflow-x: auto; margin-top: .4rem; max-width: 100%; }
+.md-typeset .wiki-glossar-az button {
+  flex: 0 0 auto; min-width: 1.6rem; height: 1.6rem;
+  border: 0; padding: 0 .25rem; background: none; color: var(--md-default-fg-color);
+  font-size: .68rem; font-weight: 600; cursor: pointer;
+}
+.md-typeset .wiki-glossar-az button:hover,
+.md-typeset .wiki-glossar-az button:active { color: var(--md-accent-fg-color); }
+.md-typeset .wiki-glossar-az button:disabled { color: var(--md-default-fg-color--lightest); cursor: default; }
+.wiki-glossar-controls :is(button, input):focus-visible,
+.wiki-glossar-empty-wrap button:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+.md-typeset .wiki-glossar-entry h3 { scroll-margin-top: 7rem; }
+.md-typeset .wiki-glossar-entry { margin-bottom: 2rem; overflow-wrap: anywhere; }
+.md-typeset .wiki-glossar-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem; font-size: .65rem; }
+.md-typeset .wiki-glossar-meta .wiki-chip--weg {
+  display: inline-flex; align-items: center; gap: .25rem; margin-left: 0; font-size: inherit;
+  background: var(--docs-discarded-bg); color: var(--docs-discarded-fg);
+}
+.wiki-glossar-cat { color: var(--md-default-fg-color--light); }
+.md-typeset .wiki-occ { margin-top: 1rem; font-size: .7rem; }
+.md-typeset .wiki-occ-count,
+.md-typeset .wiki-occ-number { color: var(--md-default-fg-color--light); font-variant-numeric: tabular-nums; }
+.md-typeset .wiki-occ ul { margin: .3rem 0 .65rem; padding-left: 1rem; }
+.md-typeset .wiki-occ .wiki-occ-pages { list-style: none; padding-left: 0; }
+.md-typeset .wiki-occ .wiki-occ-title { font-size: .72rem; font-weight: 600; }
+.md-typeset .wiki-occ li { margin-bottom: .2rem; }
+.md-typeset .wiki-occ-locations { font-size: .7rem; }
+.md-typeset .wiki-occ details { font-size: .7rem; }
+.md-typeset .wiki-glossar-status { font-size: .75rem; color: var(--md-default-fg-color--light); }
+.md-typeset :is(.wiki-glossar-entry, .wiki-glossar-group, .wiki-glossar-empty-wrap)[hidden] { display: none; }
+@media (width < 600px) {
+  .wiki-glossar-row { flex-wrap: wrap; }
+  .md-typeset .wiki-glossar-filter { flex: 1 0 100%; width: 100%; box-sizing: border-box; }
+  .md-typeset .wiki-glossar-controls { width: 100%; }
+}

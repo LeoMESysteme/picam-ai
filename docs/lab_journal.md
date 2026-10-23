@@ -2096,3 +2096,29 @@ Robustheits- oder Toleranznachweis.
 **Belege:** `reference-eval.json` und `werteplan-auswertung.json` neben den
 unveränderten Lauf-Audits. Keine Änderung am Messpfad, kein Push und kein
 Serverneustart für die Auswertung.
+
+---
+
+## 2026-10-23 — Wiki-Vorkommensindex
+
+**Ziel:** Vorkommen der Glossarbegriffe im echten Wiki-Suchbestand ohne
+lange blockierende Berechnung finden und die Fundstellen unabhängig prüfen.
+
+**Aufbau:** Raspberry Pi 5 Model B Rev 1.1 (`aarch64`), Node.js v20.19.2.
+Das Prüfskript `.superpowers/sdd/2026-10-23-wiki-geruest/task-4-check.mjs`
+lädt den produktiven Matcher und Index über `node:vm`, die Begriffe aus dem
+gebauten Glossar und den echten Suchindex aus `site/search.json`.
+Gemessen mit der monotonen Prozessuhr `performance.now()`; die Indexfunktion
+verarbeitet jeweils 200 Einträge und gibt über `setTimeout` die Kontrolle ab.
+
+**Beobachtung und Messergebnis:** 2.319 Sucheinträge, 50 Begriffe und 3.070
+Fundstellen; ROI hat 176 Stellen auf 34 Seiten. Zwei Kontrollläufe brauchten
+865,7 ms und 548,3 ms einschließlich Häppchenpausen. Ein vollständiger
+Textscan lieferte für alle Begriffe dieselben Fundstellen. Kurzformen,
+Unicode-Wortgrenzen, Phrasen, überlappende Treffer, HTML-Entities,
+Seitentitelfallback und der Ausschluss des Glossars wurden separat geprüft.
+Datensatzkennung und Zahlen: [Validierung](VALIDATION.md#wiki-vorkommensindex-2026-10-23).
+
+**Schluss:** Die reine Indexberechnung unterschreitet im geprüften Bestand
+das 3-s-Ziel. Das ist ein Laufzeitbeleg für die Wiki-Oberfläche; Fetch und
+DOM-Aufbau erfasst erst der vorgesehene Playwright-Test mit 6-s-Grenze.

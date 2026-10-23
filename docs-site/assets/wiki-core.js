@@ -88,6 +88,92 @@
     return loadCached(jsonCache, path, (response) => response.json());
   }
 
+  let glossaryPromise;
+  function loadGlossary() {
+    if (!glossaryPromise) {
+      glossaryPromise = loadHtml("docs/anleitung/glossar.html").then((doc) => {
+        const entries = [];
+        let category = "";
+        for (const heading of doc.querySelectorAll(".md-content__inner h2, .md-content__inner h3")) {
+          const title = heading.cloneNode(true);
+          title.querySelectorAll("a.headerlink").forEach((link) => link.remove());
+          if (heading.tagName === "H2") { category = title.textContent.trim(); continue; }
+          const short = heading.nextElementSibling;
+          const meta = short?.nextElementSibling;
+          const fields = /^Weg:\s*(.*?) · (?:Auch:\s*(.*?) · )?Quelle:/.exec(meta?.textContent.trim() || "");
+          if (!heading.id || short?.tagName !== "P" || meta?.tagName !== "P" || !fields) continue;
+          entries.push({
+            id: heading.id, term: title.textContent.trim(), category,
+            aliases: fields[2] ? fields[2].split(",").map((alias) => alias.trim()) : [],
+            weg: fields[1], short: short.textContent.trim(),
+            code: title.children.length === 1 && title.firstElementChild.tagName === "CODE"
+              && title.textContent.trim() === title.firstElementChild.textContent,
+          });
+        }
+        return entries;
+      }).catch((error) => { glossaryPromise = null; throw error; });
+    }
+    return glossaryPromise;
+  }
+
+  function termMatcher(entries) {
+    const exact = new Map();
+    const folded = new Map();
+    const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const entry of entries) {
+      for (const name of [entry.term, ...entry.aliases]) {
+        const map = /^[\p{Lu}\p{Nd}]{1,5}$/u.test(name) ? exact : folded;
+        map.set(map === exact ? name : name.toLocaleLowerCase("de"), entry);
+      }
+    }
+    const patterns = [exact, folded].map((map, index) => {
+      const names = [...map.keys()].sort((a, b) => b.length - a.length).map(escape);
+      return names.length ? new RegExp(`(?<![\\p{L}\\p{N}_])(?=(${names.join("|")})(?![\\p{L}\\p{N}_]))`, index ? "giu" : "gu") : null;
+    });
+    return (text) => {
+      const hits = [];
+      patterns.forEach((pattern, index) => {
+        if (!pattern) return;
+        pattern.lastIndex = 0;
+        for (const match of text.matchAll(pattern)) {
+          let entry = index ? folded.get(match[1].toLocaleLowerCase("de")) : exact.get(match[1]);
+          // Unicode /iu also folds characters such as long s, which lowercasing
+          // alone does not map to the same dictionary key.
+          if (!entry && index) entry = [...folded].find(([name]) => new RegExp(`^${escape(name)}$`, "iu").test(match[1]))?.[1];
+          hits.push({ entry, index: match.index, length: match[1].length, match: match[1] });
+        }
+      });
+      hits.sort((a, b) => a.index - b.index || b.length - a.length);
+      let end = 0;
+      return hits.filter((hit) => {
+        if (hit.index < end) return false;
+        end = hit.index + hit.length;
+        return true;
+      });
+    };
+  }
+
+  function openSearch(query) {
+    // Zensical mounts its combobox in an open shadow root and has no ?q= reader.
+    const roots = [document, ...Array.from(document.body.children, (child) => child.shadowRoot).filter(Boolean)];
+    const input = roots.map((root) => root.querySelector('input[role="combobox"], input[data-md-component="search-query"]')).find(Boolean);
+    if (!input) return;
+    let visible = Boolean(input.getClientRects().length) && getComputedStyle(input).pointerEvents !== "none";
+    for (let parent = input; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.visibility === "hidden" || style.display === "none") visible = false;
+    }
+    if (!visible) {
+      const toggle = document.querySelector("#__search");
+      if (toggle) toggle.click();
+    }
+    requestAnimationFrame(() => {
+      input.focus();
+      input.value = query;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
   function loadOqIndex() {
     if (!oqIndexPromise) {
       oqIndexPromise = loadHtml("docs/open-questions.html").then((doc) => {
@@ -149,7 +235,8 @@
     return svg;
   }
 
-  window.wiki = { onPage, siteUrl, loadHtml, loadJson, loadOqIndex, loadPhases, OQ_STATUS, make, icon };
+  window.wiki = { onPage, siteUrl, loadHtml, loadJson, loadGlossary, termMatcher, openSearch,
+    loadOqIndex, loadPhases, OQ_STATUS, make, icon };
 
   if (typeof document$ !== "undefined") document$.subscribe(buildPage);
   else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", buildPage);
