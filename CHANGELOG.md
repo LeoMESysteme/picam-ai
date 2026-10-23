@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Korrekturrunde 3 der Verarbeitungskette: Hinweise benennen
+  `manual_roi` als Primärpfad, gebaute und stillgelegte Neben-/Altpfade sowie
+  das erneute Setzen der Kameraregler durch `UvcSource`. Die kompakte Liste
+  erhält eine explizite Listenrolle; eine wirkungslose Reduced-Motion-Regel
+  entfällt. Die dokumentierte Zustandsregel folgt der Controllerentscheidung.
+
 * 2026-10-23: Korrekturrunde 2 der Verarbeitungskette: Die volle Darstellung
   bleibt bei jeder Breite senkrecht mit 14 px Verbindungslücken; Querlage und
   Breitenschwelle entfallen. Die kompakte Variante zeigt umbrechende Etiketten

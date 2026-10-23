@@ -41,6 +41,7 @@
     const compact = host.dataset.variant === "kompakt";
     const figure = make("figure", "wiki-kette-figure");
     const list = make("ol", "wiki-kette-list");
+    if (compact) list.setAttribute("role", "list");
     const arrows = [];
     for (const stage of stages) {
       const item = make("li");

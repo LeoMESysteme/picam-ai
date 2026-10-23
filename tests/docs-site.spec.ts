@@ -1303,6 +1303,8 @@ test('Glossar ohne JavaScript bleibt lesbar', async ({ browser, baseURL }) => {
 
 
 test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', async ({ page }) => {
+  const kette = JSON.parse(readFileSync(join(process.cwd(), 'docs-site/assets/data/kette.json'), 'utf8'));
+  const ocrStage = kette.stufen.find((stage: { id: string }) => stage.id === 'ocr');
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/docs/anleitung/01-kette-verstehen.html');
   const chain = page.locator('.wiki-kette');
@@ -1327,8 +1329,8 @@ test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', as
   await ocr.hover();
   const popup = page.locator('#wiki-hint[data-open="true"]');
   await expect(popup).toContainText('Wert lesen · ocr/');
-  await expect(popup).toContainText('Er liest die Wertzellen der Anzeige und prüft Leerzellen und Format.');
-  await expect(popup).toContainText('Einstellung:');
+  await expect(popup).toContainText(ocrStage.zweck);
+  await expect(popup).toContainText(`Einstellung: ${ocrStage.einstellung}`);
   await expect(popup).toContainText('Anbindung:');
   await expect(popup.locator('code')).toHaveText('src/dispread/ocr/');
   await page.keyboard.press('Escape');

@@ -6,7 +6,7 @@
       "titel": "Bildquelle",
       "zustand": "teilweise",
       "zweck": "Sie liefert Bilder mit der Zeitbasis der Quelle.",
-      "einstellung": "v4l2:// mit den bestätigten Kameraeinstellungen; folder:// und video:// fehlen noch.",
+      "einstellung": "v4l2:// über UvcSource, die Regler bei jedem Öffnen neu setzt; folder:// und video:// fehlen noch.",
       "anbindung": "src/dispread/frames/",
       "api": "api/frames.html",
       "doku": "docs/HARDWARE_PROFILE.html"
@@ -15,8 +15,8 @@
       "id": "detect",
       "titel": "Anzeige finden",
       "zustand": "fertig",
-      "zweck": "Sie liefert den bestätigten Anzeigebereich als Kandidaten.",
-      "einstellung": "Das vom Menschen bestätigte Viereck im Geräteprofil bestimmt den Livepfad.",
+      "zweck": "Die manuell bestätigte ROI (manual_roi) ist der Primärpfad und liefert den Anzeigebereich als Kandidaten.",
+      "einstellung": "Bestätigtes Viereck im Geräteprofil; nicht im Livepfad: contour_heuristic (gebaut, Vorschlagshilfe), imx500_detector (außer Betrieb).",
       "anbindung": "src/dispread/detect/",
       "api": "api/detect.html",
       "doku": "docs/anleitung/01-kette-verstehen.html"
@@ -45,7 +45,7 @@
       "id": "ocr",
       "titel": "Wert lesen",
       "zustand": "fertig",
-      "zweck": "Er liest die Wertzellen der Anzeige und prüft Leerzellen und Format.",
+      "zweck": "dotmatrix liest die Wertzellen und prüft Leerzellen und Format; nicht im Livepfad: sevenseg (Altpfad), tesseract_cli (gebaut, Erkennungsgüte nicht erreicht).",
       "einstellung": "DotMatrixReader mit geprüften Vorlagen und CharLayout; die Einheit kommt aus dem bestätigten Profil.",
       "anbindung": "src/dispread/ocr/",
       "api": "api/ocr.html",

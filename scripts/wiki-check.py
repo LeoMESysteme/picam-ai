@@ -155,7 +155,13 @@ def check_glossary(md_text: str) -> list[str]:
 
 
 def check_kette(data: object, root: Path) -> list[str]:
-    """Prüft die sieben Stufen samt Textgrenzen und Quellen im Repository."""
+    """Prüft die sieben Stufen samt Textgrenzen und Quellen im Repository.
+
+    Redaktionelle Zustandsregel: teilweise, wenn „Aufbau“ in CLAUDE.md einen
+    Teil als fehlend, „Quellmodule fehlen“ oder „wirft absichtlich“ führt.
+    Gebaute Neben- oder Altpfade und außer Betrieb gestellte Teile senken
+    den Zustand nicht. Diese Einordnung wird hier nicht automatisch geprüft.
+    """
     if not isinstance(data, dict) or data.get("schema") != "kette_v1":
         return [f"{KETTE_PATH}: Schema muss kette_v1 sein"]
     stages = data.get("stufen")

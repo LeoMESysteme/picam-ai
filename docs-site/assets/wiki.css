@@ -304,5 +304,4 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .md-typeset .wiki-kette-list > li + li::before { transform: none; }
-  .md-typeset .wiki-kette-pfeil { opacity: 1; }
 }
