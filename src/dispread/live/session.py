@@ -267,6 +267,7 @@ class LiveSession:
             "camera": owner_status.get("source", {}),
             "release_notice": RELEASE_NOTICE,
             "started_at_utc": self._wall().isoformat(),
+            "audit": {"rotation": False, "path": "records.jsonl"},
         }
         confirmation_path = self._profile_path.parent / "confirmation.json"
         if confirmation_path.exists():
@@ -276,7 +277,8 @@ class LiveSession:
         self._clock.sample()
         self._last_clock = self._monotonic()
         self._write_session(ended=False)
-        self._sink = JsonlSink(self.records_path)
+        # Vollstaendiger Audit je Lauf; Standardrotation verwirft alte Belege.
+        self._sink = JsonlSink(self.records_path, max_bytes=0)
         self._sink.open()
         if self._reference_recorder is not None:
             try:

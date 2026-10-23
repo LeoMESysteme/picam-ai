@@ -49,9 +49,9 @@ Offen:
      2026-10-21 zeigt nun Trackingverlust bei großen Wertwechseln (R13,
      [OQ-26](docs/open-questions.md#oq-26)); Abschlussdiagnose und eine
      vom Zifferninhalt unabhängige Trackerregion sind damit zu bearbeiten.
-   * `JsonlSink`-Rotation für Live-Audits klären: 64 MB, fünf Generationen
-     würden nach etwa 7 h alte Belege verwerfen; dauerhafte Aufbewahrung
-     vor längeren Läufen lösen.
+   * **Gebaut R13-16:** Live-Audits ohne Generationenrotation je Lauf;
+     Platzprüfung und manuelles Aufräumen mit Vorschau (Kapitel 10).
+     SD-Dauerbetrieb und Platzplanung vor längeren Läufen praktisch prüfen.
    * **Zurückgestellte Bedienpunkte:** Vorschau kann auf dem letzten Bild
      einfrieren; Streamstillstand beendet erst nach OpenCV-Select-Timeout
      (etwa 10–20 s) statt 2 s. Kamera-Neuverbindung nach Einrichtung behält
@@ -328,18 +328,25 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 5. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
    schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
    zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.
-6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen,
-   `JsonlSink`-Rotation für lange Läufe klären (Punkt 2 unter „Offen“).
+6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen.
+   Live-Audit ohne verlustbehaftete Rotation ist seit R13-16 gebaut.
 7. **Rest aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`
    wird relativ zum Arbeitsverzeichnis aufgelöst. Das Snippet in Anleitung
    Kapitel 10 liest Port/Baud seit dem Wiki-Abgleich aus dem Rückstellpunkt.
 
 **Speicherbudget für den Betrieb (neu 2026-10-23):** Im Unternehmen läuft das
 Werkzeug voraussichtlich auf einem Pi 5 mit 64-GB-SD-Karte, ohne SSD.
-Messläufe deshalb weiter auf der SD-Karte testen. Zu bauen: Aufbewahrung und
-Rotation der Laufdaten (ein 10-min-Lauf ≈ 10 MB `records.jsonl`, mit
-Diagnosebildern bis 0,6 GB), Diagnosebilder standardmäßig aus, eine Platzprüfung
-vor dem Laufstart mit klarer Meldung und die offene `JsonlSink`-Rotation.
+Messläufe deshalb weiter auf der SD-Karte testen. **Gebaut R13-16:**
+Platzprüfung vor Einrichtung und Laufstart (2 GB Reserve, mit Diagnose
+zusätzlich 0,6 GB), Status/Seite mit freiem Platz und Warnung unter 5 GB,
+Diagnosebilder standardmäßig aus in Seite und API, vollständige Auditdatei
+je Lauf ohne Generationenverlust und opt-in
+`dispread live aufraeumen --aelter-als <tage> [--nur-diagnose] [--ausfuehren]`
+mit Größen und Vorschau als Vorgabe. Keine automatische Löschung;
+Profile/Setup und laufende Läufe bleiben geschützt. Ein 10-min-Lauf braucht
+etwa 10 MB Audit, mit Diagnosebildern bis zu 0,6 GB zusätzlich.
+**Offen:** längeren Betrieb auf der Produktions-SD praktisch validieren
+und benötigte Daten vor manuellem Aufräumen sichern.
 Für die Entwicklung kann eine NVMe-SSD (500 GB, vorhanden) Aufnahmen,
 Datensätze und die fehlende `var/`-Sicherung aufnehmen, aber nicht die
 Messläufe selbst.
@@ -352,8 +359,14 @@ Messläufe selbst.
   Playwright-Zeitüberschreitungen (lokal danach 29/29 grün). **Nicht während
   eines Messlaufs nach `master` pushen.** Mittelfristig CI auf einen anderen
   Rechner oder während Läufen pausieren (Entscheidung der Person).
-* Nächtlicher Lauf `maintain` scheitert seit 2026-10-19 04:00, nicht
-  untersucht.
+* Nächtlicher Lauf `maintain`: scheiterte 2026-10-19 bis 2026-10-21 früh,
+  seit 2026-10-21 15:12 wieder grün (22. und 23.10. erfolgreich, letzter
+  Codex-Lauf ohne Befund, Doku-Build ok; `sudo picam-codex-logs`). Ursache der
+  drei Fehlschläge nicht mehr nachvollziehbar (keine Schritt-Logs per Token).
+* Playwright-CI für `master` `109d360` (Roadmap-Karte, 2026-10-23) fehlgeschlagen,
+  Build ok. Laut Wiki-Sitzung wahrscheinlich Last (Roadmap-Rad- und
+  Tour-Abbildungstests wackeln unter Last); ihr Branch `feat/wiki-geruest`
+  ersetzt Roadmap-Code und -Tests, daher nicht separat angefasst.
 * Kein persistentes Journal; der Hänger 2026-10-21 14:08 ist deshalb nicht
   belegbar. Aktivieren:
   `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`.

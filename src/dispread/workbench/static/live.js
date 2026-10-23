@@ -144,6 +144,12 @@ if (typeof document !== 'undefined') {
     $('run-start').disabled = Boolean(s.run_block && !$('test-override').checked);
     csrf = s.csrf;
     $('notice').textContent = s.release_notice;
+    const storage = s.storage;
+    $('storage-status').textContent = storage?.free_bytes == null
+      ? storage?.message || 'Speicherplatz nicht verfuegbar'
+      : `${storage.level === 'error' ? 'Speicher knapp: ' : storage.level === 'warn' ? 'Warnung: unter 5 GB frei. ' : ''}` +
+        `SD-Speicher: ${(storage.free_bytes / 1e9).toFixed(2).replace('.', ',')} GB frei`;
+    $('storage-status').className = storage?.level === 'ok' ? '' : storage?.level === 'warn' ? 'transition' : 'error';
     renderView(statusView(s));
     const causes = s.state === 'running' ? s.run?.rejection_causes : null;
     $('recent-causes').hidden = !(causes?.frames && causes.causes?.length);

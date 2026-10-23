@@ -1747,3 +1747,96 @@ def test_tracking_hint_is_available_in_small_and_full_status_and_clears(tmp_path
         assert service.status(full=full)['run']['tracking_hint'] == hint
     hint = None
     assert service.status()['run']['tracking_hint'] is None
+
+
+@pytest.mark.parametrize('free,level', [(5_000_000_000, 'ok'), (4_999_999_999, 'warn'),
+                                       (2_000_000_000, 'warn'), (1_999_999_999, 'error')])
+def test_storage_status_uses_existing_live_filesystem_without_creating_dirs(tmp_path, free, level):
+    from types import SimpleNamespace
+
+    paths = []
+    def usage(path):
+        paths.append(path)
+        return SimpleNamespace(free=free)
+
+    service = LiveService(FakeOwner(), tmp_path / 'missing' / 'live', disk_usage=usage)
+    storage = service.status()['storage']
+    assert storage['free_bytes'] == free and storage['level'] == level
+    assert storage['reserve_bytes'] == 2_000_000_000
+    assert paths == [tmp_path]
+    assert not (tmp_path / 'missing').exists()
+
+
+def test_storage_refuses_setup_before_worker_or_state_change(tmp_path):
+    from types import SimpleNamespace
+
+    calls = []
+    service = LiveService(FakeOwner(), tmp_path / 'live', setup_runner=lambda **kw: calls.append(kw),
+                          disk_usage=lambda p: SimpleNamespace(free=1_500_000_000))
+    with pytest.raises(LiveError, match=r'1\.50 GB.*2\.00 GB'):
+        service.start_setup()
+    assert service.status()['state'] == 'idle' and calls == []
+    assert not (tmp_path / 'live').exists()
+
+
+@pytest.mark.parametrize('diagnostics,free,refused', [(False, 1_999_999_999, True),
+    (False, 2_000_000_000, False), (True, 2_599_999_999, True), (True, 2_600_000_000, False)])
+def test_storage_run_reserves_diagnostic_copy_before_any_run_output(tmp_path, monkeypatch, diagnostics, free, refused):
+    from types import SimpleNamespace
+
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._disk_usage = lambda p: SimpleNamespace(free=free)
+    if refused:
+        with pytest.raises(LiveError, match=r'GB frei.*GB benoetigt'):
+            service.start_run(reference=False, diagnostics=diagnostics)
+        assert service.status()['state'] == 'confirmed'
+        assert not list(tmp_path.glob('run-*')) and service._owner.restarts == 0
+    else:
+        try:
+            service.start_run(reference=False, diagnostics=diagnostics)
+            assert service.status()['state'] == 'running'
+        finally:
+            service.close()
+
+
+def test_storage_unknown_refuses_setup_and_run(tmp_path, monkeypatch):
+    def failed(path):
+        raise OSError('nicht lesbar')
+
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._disk_usage = failed
+    assert service.status()['storage']['level'] == 'error'
+    assert service.status()['storage']['free_bytes'] is None
+    for start in (service.start_setup, service.start_run):
+        with pytest.raises(LiveError, match='Speicherplatz.*nicht.*pruefbar'):
+            start()
+    assert not list(tmp_path.glob('run-*'))
+
+
+@pytest.mark.parametrize('state', ['running', 'stopped'])
+@pytest.mark.parametrize('linked_parent', [False, True])
+def test_cleanup_protects_running_run_and_diagnostic_copy_in_active_session(tmp_path, state, linked_parent):
+    from types import SimpleNamespace
+
+    from test_live_storage import NOW, run_tree
+
+    root = tmp_path / 'real' / 'live'
+    old = run_tree(root)
+    current = run_tree(root, run='run-02')
+    copying = run_tree(root, run='run-03')
+    configured = root
+    if linked_parent:
+        parent = tmp_path / 'linked-parent'
+        parent.symlink_to(root.parent, target_is_directory=True)
+        configured = parent / 'live'
+    service = LiveService(FakeOwner(), configured, wall=lambda: NOW)
+    service._state, service._run_dir = state, configured / current.relative_to(root)
+    service._session_dir = old.parent
+    service._diagnostic_copies = [SimpleNamespace(
+        diagnose_kopie=True, _out_dir=configured / copying.relative_to(root))]
+    # Selbst irrefuehrend alte Endmetadaten duerfen einen laufenden Lauf nicht freigeben.
+    result = service.cleanup(days=10, execute=True)
+    deleted = {entry['path'] for entry in result['entries']}
+    assert str(old) in deleted and copying.exists()
+    assert current.exists() == (state == 'running')
+    assert service._state == state

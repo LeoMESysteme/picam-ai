@@ -66,6 +66,13 @@ def init_tls(directory, host):
     subprocess.run(["openssl", "x509", "-in", str(cert), "-noout", "-fingerprint", "-sha256"], check=True)
 
 
+def positive_days(value):
+    days = int(value)
+    if days <= 0:
+        raise argparse.ArgumentTypeError('Tage muessen positiv sein')
+    return days
+
+
 def parser():
     root = argparse.ArgumentParser(description="Kamera-Workbench und TUI")
     sub = root.add_subparsers(dest="command", required=True)
@@ -95,6 +102,10 @@ def parser():
     live_sub.add_parser("stop")
     live_sub.add_parser("camera")
     live_sub.add_parser('mark').add_argument('text')
+    cleanup = live_sub.add_parser('aufraeumen', help='Alte Live-Laeufe listen; Loeschen nur mit --ausfuehren')
+    cleanup.add_argument('--aelter-als', type=positive_days, required=True, metavar='TAGE')
+    cleanup.add_argument('--nur-diagnose', action='store_true')
+    cleanup.add_argument('--ausfuehren', action='store_true')
     mode = sub.add_parser("mode")
     mode.add_argument("value", choices=["setup", "run", "annotate"])
     profile = sub.add_parser("profile")
@@ -135,6 +146,9 @@ def main(argv=None):
                 values["force"] = True
             if args.action == 'mark':
                 values = {'text': args.text}
+            if args.action == 'aufraeumen':
+                values = {'days': args.aelter_als, 'diagnostics_only': args.nur_diagnose,
+                          'execute': args.ausfuehren}
         elif args.command == "mode":
             values = {"value": args.value}
         elif args.command == "profile":
@@ -155,7 +169,10 @@ def main(argv=None):
                 op, values = "focus", {"value": args.key == "on"}
             else:
                 op = {"auto-setup": "auto.start", "accept": "auto.accept", "cancel": "auto.cancel"}[args.action]
-        print(json.dumps(asyncio.run(request(op, values)), indent=2, ensure_ascii=False))
+        result = asyncio.run(request(op, values))
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        if op == 'live.aufraeumen' and result.get('failed'):
+            return 1
         return 0
     except (ValueError, OSError, ImportError, subprocess.CalledProcessError) as error:
         print(f"dispread: {error}")

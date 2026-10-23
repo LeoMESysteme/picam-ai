@@ -185,6 +185,8 @@ def test_routes_without_socket(tmp_path, monkeypatch):
 
         forwarded = []
         service.start_run = lambda **kwargs: forwarded.append(kwargs)
+        assert (await call("POST", "/live/run/start")).status == 200
+        assert forwarded[-1]['diagnostics'] is False
         assert (await call("POST", "/live/run/start", {"reference": False})).status == 200
         assert forwarded[-1] == {"test_override": False, "reference": False, "norm_schedule": None, "diagnostics": False}
         assert (await call("POST", "/live/run/start", {
@@ -303,6 +305,7 @@ def test_serve_cli_live_data_default_and_override():
     ("live.stop", {}, "stop_run", {}),
     ("live.mark", {"text": "Abdeckung"}, "mark", {"text": "Abdeckung"}),
     ("live.camera", {}, "start_camera", {}),
+    ("live.aufraeumen", {"days": 10, "execute": True}, "cleanup", {"days": 10, "execute": True}),
 ])
 def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, kwargs):
     import json
@@ -318,10 +321,11 @@ def test_local_live_routes_use_service_in_thread(monkeypatch, op, args, method, 
 
     to_thread = AsyncMock(side_effect=direct)
     monkeypatch.setattr(asyncio, "to_thread", to_thread)
-    getattr(service, method).return_value = {"state": "idle"} if method == "status" else None
+    result = {"state": "idle"} if method == "status" else {"dry_run": False, "entries": []} if method == "cleanup" else None
+    getattr(service, method).return_value = result
     response = asyncio.run(handle_local_op(op, args, controller, service))
     assert response.status == 200
-    assert json.loads(response.text) == ({"state": "idle"} if method == "status" else {"ok": True})
+    assert json.loads(response.text) == (result if method in ('status', 'cleanup') else {"ok": True})
     assert to_thread.await_args_list[-1].args == (getattr(service, method),)
     assert to_thread.await_args_list[-1].kwargs == kwargs
     assert service.method_calls == ([("status", (), {})] if op == "live.setup" else []) + [(method, (), kwargs)]
@@ -709,3 +713,95 @@ def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, con
             assert service._proposal['live_tracking']['proposal_revision'] == revision
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('options', [[], ['--nur-diagnose'], ['--nur-diagnose', '--ausfuehren']])
+def test_cleanup_cli_requests_service_and_prints_sizes(monkeypatch, capsys, options):
+    import json
+
+    from dispread.workbench import cli
+
+    calls = []
+    async def request(op, args):
+        calls.append((op, args))
+        return {'dry_run': not args['execute'], 'entries': [{'path': 'run-01', 'bytes': 12, 'mb': 0.000012}]}
+
+    monkeypatch.setattr(cli, 'request', request)
+    assert cli.main(['live', 'aufraeumen', '--aelter-als', '10', *options]) == 0
+    assert calls == [('live.aufraeumen', {'days': 10, 'diagnostics_only': '--nur-diagnose' in options,
+                                        'execute': '--ausfuehren' in options})]
+    output = capsys.readouterr()
+    assert json.loads(output.out)['entries'][0]['bytes'] == 12 and output.err == ''
+
+
+def test_cleanup_local_route_returns_listing_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from test_live_service import FakeOwner
+    from test_live_storage import NOW, run_tree
+
+    from dispread.live.service import LiveService
+    from dispread.workbench.server import handle_local_op
+
+    run = run_tree(tmp_path)
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    service = LiveService(FakeOwner(), tmp_path, wall=lambda: NOW)
+    response = asyncio.run(handle_local_op('live.aufraeumen', {'days': 10}, None, service))
+    assert response.status == 200
+    data = json.loads(response.text)
+    assert data['dry_run'] is True and data['entries'][0]['path'] == str(run)
+    assert run.exists()
+
+
+@pytest.mark.parametrize('age', ['0', '-1', 'no', '1.5'])
+def test_cleanup_cli_rejects_bad_age_before_request(monkeypatch, age):
+    from dispread.workbench import cli
+
+    monkeypatch.setattr(cli, 'request', lambda *a: pytest.fail('invalid cleanup reached service'))
+    with pytest.raises(SystemExit) as caught:
+        cli.parser().parse_args(['live', 'aufraeumen', '--aelter-als', age])
+    assert caught.value.code == 2
+
+
+def test_cleanup_cli_reports_all_results_and_exits_nonzero_on_partial_failure(tmp_path, monkeypatch, capsys):
+    import json
+    import shutil
+
+    from test_live_service import FakeOwner
+    from test_live_storage import NOW, run_tree
+
+    from dispread.live.service import LiveService
+    from dispread.workbench import cli
+    from dispread.workbench.server import handle_local_op
+
+    runs = [run_tree(tmp_path, run=f'run-{i:02}') for i in range(1, 4)]
+    service = LiveService(FakeOwner(), tmp_path, wall=lambda: NOW)
+    rmtree = shutil.rmtree
+
+    def fail_middle(target):
+        if target == runs[1]:
+            raise PermissionError('Loeschen verweigert')
+        rmtree(target)
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    async def request(op, args):
+        response = await handle_local_op(op, args, None, service)
+        assert response.status == 200
+        return json.loads(response.text)
+
+    monkeypatch.setattr(shutil, 'rmtree', fail_middle)
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    monkeypatch.setattr(cli, 'request', request)
+    assert cli.main(['live', 'aufraeumen', '--aelter-als', '10', '--ausfuehren']) == 1
+    output = capsys.readouterr()
+    data = json.loads(output.out)
+    assert output.err == '' and data['failed'] is True
+    assert [entry['path'] for entry in data['entries']] == [str(run) for run in runs]
+    assert [entry['status'] for entry in data['entries']] == ['deleted', 'failed', 'deleted']
+    assert data['entries'][1]['error'] == 'Loeschen verweigert'
+    assert not runs[0].exists() and runs[1].exists() and not runs[2].exists()

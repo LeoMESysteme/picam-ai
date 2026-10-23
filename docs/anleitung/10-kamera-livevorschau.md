@@ -445,8 +445,10 @@ Ein Toleranzlauf ≥ 10 min mit Werteplan bleibt separat offen
 ### Diagnosebilder und Ereignismarken
 
 Für die Fehlersuche bei verlorener Nachführung vor dem Lauf
-**„Diagnosebilder aufzeichnen (für Fehlersuche, belegt RAM)“** einschalten.
-Die Vorgabe ist aus. Gespeichert werden unveränderte Vollbilder als verlustfreie
+**„Diagnosebilder aufzeichnen“** einschalten.
+Die Vorgabe ist in Seite und API aus: Diagnosebilder können je Lauf bis zu
+600 MB auf der SD-Karte belegen. Nur für gezielte Fehlersuche einschalten.
+Gespeichert werden unveränderte Vollbilder als verlustfreie
 PNG (schnelle Kompressionsstufe 1), mit Trackingbefund, Aufnahmezeit samt
 Zeitbasis, Sequenzen, Recordstatus und Profil-/Referenzbildhash in `images.jsonl`.
 Bei der StreamCam ist `camera_sequence` dabei `null`: `UvcSource` liefert keine
@@ -504,9 +506,70 @@ des zugeordneten Bilds ist eine eigene Angabe mit ihrer eigenen Zeitbasis.
 
 Die Timing-Kalibrierung wird aufgezeichnet, nicht auf den Live-Wert angewandt.
 Zeitstempel tragen ihre Zeitbasis; unbekannte Unsicherheit ist `None`.
-Die `JsonlSink` rotiert standardmäßig bei 64 MiB und behält fünf
-Generationen zusätzlich zur aktuellen Datei. Wie lange das reicht, hängt
-von Bildrate und Recordgröße ab; dauerhafte Aufbewahrung ist ein Folgeschritt.
+Live verwendet `JsonlSink(max_bytes=0)`: eine vollständige `records.jsonl`
+je Lauf, ohne Rotation und ohne automatisches Verwerfen alter Generationen.
+`session.json` hält dies unter `audit.rotation: false` fest. Die allgemeine
+Sink-Vorgabe bleibt 64 MiB mit fünf Generationen zusätzlich zur aktuellen
+Datei; sie würde alte Belege überschreiben und ist deshalb für Live aus.
+Kann das Audit nicht mehr geschrieben werden (etwa bei voller Karte), stoppt
+der Lauf mit Auditfehler; ein unvollständig aufgezeichneter Lauf läuft nicht
+still weiter.
+
+### Speicherbudget und Aufräumen
+
+Produktionsziel ist ein **Pi 5 mit 64-GB-SD-Karte ohne SSD**. Als Größenordnung
+aus den bisherigen Läufen gelten: 10 Minuten etwa 9–10 MB `records.jsonl`
+plus 60 KB `reference.jsonl`, Einrichtung etwa 6 MB, Diagnose zusätzlich bis
+600 MB je Lauf. Hochgerechnet braucht ein Arbeitstag mit acht Stunden rund
+0,5 GB Audit; tatsächliche Größen hängen von Bildrate und Recordinhalt ab.
+
+Vor Einrichtung und jedem Laufstart prüft der Dienst den freien Platz auf dem
+Dateisystem von `var/live` (vor dessen Anlage am nächsten vorhandenen
+Elternverzeichnis). Er verlangt **mindestens 2,0 GB**, bei angeforderter
+Diagnose **2,6 GB** einschließlich des Budgets für die spätere SD-Kopie.
+Alle GB/MB hier sind dezimal. Zu wenig oder nicht prüfbarer Platz sperrt den
+Start; die Fehlermeldung nennt verfügbaren und benötigten Platz, soweit bekannt.
+Status und Live-Seite zeigen freien Platz und warnen unter **5,0 GB**.
+Das ist eine Startprüfung, keine Platzgarantie für beliebig lange Läufe;
+vor längeren Messungen Platz für die geplante Dauer einrechnen.
+
+Es gibt **keine automatische Löschung**. Über den laufenden Werkbankdienst
+lassen sich alte Daten zunächst prüfen, dann ausdrücklich entfernen:
+
+```bash
+dispread live aufraeumen --aelter-als 30
+dispread live aufraeumen --aelter-als 30 --nur-diagnose
+dispread live aufraeumen --aelter-als 30 --nur-diagnose --ausfuehren
+dispread live aufraeumen --aelter-als 30 --ausfuehren
+```
+
+Ohne `--ausfuehren` ist jeder Aufruf eine Vorschau (`dry_run: true`).
+Die JSON-Ausgabe nennt Pfad und Größe in Bytes/MB sowie die Gesamtgröße.
+Je Eintrag zeigt `status` entweder `planned` (Vorschau), `deleted` oder
+`failed` mit Fehlermeldung. Bei einem Löschfehler werden die weiteren
+Kandidaten trotzdem bearbeitet; `failed: true` im Gesamtergebnis und
+Exitcode 1 melden Teilfehler. Die Größen sind vorab ermittelte
+Kandidatengrößen, keine Zusage über tatsächlich freigegebenen Platz.
+Vor dem Löschen benötigte Auditdaten extern sichern. `--aelter-als` verlangt
+eine positive ganze Zahl Tage. Gelöscht werden nur `run-NN` unter
+`var/live/live-<UTC-Sitzungskennung>/` oder mit `--nur-diagnose` deren
+`diagnose/`. Bei `serve --live-data` gilt ausschließlich die konfigurierte
+Live-Ablage; die CLI nimmt keinen beliebigen Löschpfad entgegen.
+Die konfigurierte Wurzel wird einmal auf ihren realen Pfad aufgelöst;
+ein verlinktes Elternverzeichnis wie das Worktree-`var` ist zulässig.
+
+Ein Lauf muss ein bekanntes Ende mit Zeitbasis in `session.json` haben
+(`ended_at_utc` mit Zeitzone). Sowohl das Ende als auch alle Dateiänderungszeiten
+im Laufbaum müssen älter als die Grenze sein. Verzeichniszeiten zählen nicht,
+damit das Löschen von `diagnose/` eine spätere vollständige Bereinigung nicht
+verzögert. Laufende Läufe und noch kopierte Diagnosen sind zusätzlich im
+Dienst gesperrt. Unvollständige oder unbekannte Metadaten, abgebrochene Läufe
+ohne Endzeit, Symlinks innerhalb des Baums und Sonderdateien bleiben
+vorsichtshalber stehen. Profile, Bestätigungen und
+`setup/` werden in keiner Sitzung gelöscht, auch nicht im aktiven Aufbau.
+RAM-Rettungsablagen in `/dev/shm` gehören nicht zum Aufräumkommando.
+Abgestürzte Läufe ohne `ended_at_utc` müssen nach Prüfung und Sicherung von Hand
+entfernt werden.
 
 Lokale Befehle über den privaten Steuer-Socket:
 
@@ -928,6 +991,16 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
   Laufmetadaten je in `run-NN/`; Freigabehinweis bleibt sichtbar.
 * [ ] `dispread live status|setup|stop|camera` funktioniert lokal;
   Bestätigung und Laufstart erfolgen in der Oberfläche.
+* [ ] Platzprüfung vor Einrichtung und Laufstart prüfen: mindestens 2,0 GB
+  frei, mit Diagnose 2,6 GB; darunter oder bei unbekanntem Platz wird der
+  Start verweigert. Status und Seite warnen unter 5,0 GB.
+* [ ] `dispread live aufraeumen --aelter-als 30` zeigt als Vorschau Pfade
+  und Größen; erst `--ausfuehren` löscht geprüfte Kandidaten. `--nur-diagnose`
+  erhält das Audit; Setup/Profile und aktive Läufe bleiben geschützt.
+* [ ] Diagnose ist in Seite und API standardmäßig ausgeschaltet und wird
+  nur ausdrücklich für den gewünschten Lauf aktiviert.
+* [ ] Live-Audit schreibt vollständig in `run-NN/records.jsonl` ohne
+  Generationenrotation; `session.json` nennt `audit.rotation: false`.
 * [ ] `npx playwright test -c playwright.live.config.ts` prüft Login,
   Einrichtung, Fehler, frischen Wert und STALE ohne reale Kamera.
 

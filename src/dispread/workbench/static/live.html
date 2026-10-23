@@ -27,6 +27,7 @@ input[type=text]{font:inherit;width:22ch}
   <div id="test-banner" hidden>TESTLAUF — Lesesperre übergangen. Werte nicht freigegeben, nicht für Messungen verwenden.</div>
   <div class="notice" id="tolerance-banner" hidden></div>
   <div class="notice" id="notice"></div>
+  <p id="storage-status" role="status"></p>
   <section>
     <div class="value" id="headline">—</div>
     <div id="detail"></div>
@@ -81,7 +82,7 @@ input[type=text]{font:inherit;width:22ch}
       <label><input type="checkbox" id="test-override"> Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden</label>
     </details>
     <label><input type="checkbox" id="reference-enabled" checked> Referenz vom GSV-2AS mitschreiben</label>
-    <label><input type="checkbox" id="diagnostics-enabled"> Diagnosebilder aufzeichnen (für Fehlersuche, belegt RAM)</label>
+    <label><input type="checkbox" id="diagnostics-enabled"> Diagnosebilder aufzeichnen (fuer Fehlersuche, bis 600 MB RAM und SD je Lauf; zum Sparen von SD-Platz standardmaessig aus)</label>
     <label>Werteplan (set norm), z. B. 1:20,2:20,0.5:20
       <input id="norm-schedule" type="text" placeholder="optional: Faktor:Sekunden">
     </label>

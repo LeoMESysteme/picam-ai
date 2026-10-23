@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -25,9 +26,11 @@ from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
+from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
+from dispread.live.storage import cleanup_runs
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
 from dispread.workbench.fields import REASONS, live_cause
@@ -35,6 +38,8 @@ from dispread.workbench.fields import REASONS, live_cause
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
+STORAGE_RESERVE_BYTES = 2_000_000_000
+STORAGE_WARNING_BYTES = 5_000_000_000
 _LOG = logging.getLogger(__name__)
 
 
@@ -133,9 +138,11 @@ class LiveService:
         wall: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
         diagnostic_staging_root: Path = Path('/dev/shm'),
+        disk_usage: Callable[[Path], Any] | None = None,
     ) -> None:
         self._owner = owner
         self._data_dir = Path(data_dir)
+        self._disk_usage = disk_usage or shutil.disk_usage
         self._config = config
         self._simulate = simulate
         self._source_for = source_for or (lambda settings: UvcSource(settings))
@@ -173,6 +180,29 @@ class LiveService:
         self._setup_thread: threading.Thread | None = None
 
     # -- Anzeige -------------------------------------------------------------
+    def _storage_status(self) -> dict:
+        # Vor der ersten Einrichtung existiert var/live eventuell noch nicht.
+        path = self._data_dir
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        try:
+            free = self._disk_usage(path).free
+        except OSError as exc:
+            return {"free_bytes": None, "reserve_bytes": STORAGE_RESERVE_BYTES, "level": "error",
+                    "message": f"Speicherplatz nicht pruefbar: {exc}"}
+        level = "error" if free < STORAGE_RESERVE_BYTES else "warn" if free < STORAGE_WARNING_BYTES else "ok"
+        return {"free_bytes": free, "reserve_bytes": STORAGE_RESERVE_BYTES, "level": level,
+                "message": f"{free / 1e9:.2f} GB frei"}
+
+    def _require_storage(self, *, diagnostics: bool = False) -> None:
+        storage = self._storage_status()
+        if storage["free_bytes"] is None:
+            raise LiveError(storage["message"])
+        needed = STORAGE_RESERVE_BYTES + (DIAGNOSTIC_BUDGET_BYTES if diagnostics else 0)
+        if storage["free_bytes"] < needed:
+            raise LiveError(f"Zu wenig Speicherplatz: {storage['free_bytes'] / 1e9:.2f} GB frei, "
+                            f"{needed / 1e9:.2f} GB benoetigt. Alte Laufdaten pruefen und aufraeumen.")
+
     def status(self, *, full: bool = False) -> dict:
         with self._lock:
             setup = None
@@ -238,6 +268,7 @@ class LiveService:
                     run["rejection_causes"] = {**causes, "causes": [live_cause(c) for c in causes["causes"]]}
             return {
                 "state": self._state,
+                "storage": self._storage_status(),
                 **({"tracking_reasons": REASONS} if full else {}),
                 "step": self._step,
                 "error": self._error,
@@ -323,6 +354,7 @@ class LiveService:
                 except ValueError as exc:
                     raise LiveError(f"Zellentext: {exc}") from exc
             session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
+            self._require_storage()
             with self._lock:
                 self._state, self._step, self._error = "setup_running", "start", None
                 self._setup_started_at = self._monotonic()
@@ -580,6 +612,16 @@ class LiveService:
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
+    def cleanup(self, *, days: int, diagnostics_only: bool = False, execute: bool = False) -> dict:
+        with self._operation_lock:
+            with self._lock:
+                protected = {self._run_dir} if self._state == 'running' and self._run_dir else set()
+                for session in [*self._diagnostic_copies, self._session]:
+                    if session is not None and getattr(session, 'diagnose_kopie', False):
+                        protected.add(session._out_dir)
+            return cleanup_runs(self._data_dir, days=days, diagnostics_only=diagnostics_only,
+                                execute=execute, protected=protected, now=self._wall())
+
     def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None,
                   diagnostics: bool = False) -> None:
         try:
@@ -599,6 +641,7 @@ class LiveService:
                 confirmed_by = (self._profile_info or {}).get("confirmed_by")
                 if block is not None and not test_override:
                     raise LiveError(block)
+            self._require_storage(diagnostics=diagnostics)
             number = 1
             while True:
                 out_dir = profile_path.parent / f"run-{number:02d}"

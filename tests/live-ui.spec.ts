@@ -13,6 +13,9 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#notice')).toContainText('Validiert nur:');
   await expect(page.locator('#confirm-box')).toBeHidden();
   await expect(page.locator('#diagnostics-enabled')).not.toBeChecked();
+  await expect(page.locator('#storage-status')).toContainText('Warnung: unter 5 GB');
+  await expect(page.locator('#storage-status')).toContainText('4,20 GB frei');
+  await expect(page.getByLabel('Diagnosebilder aufzeichnen')).toBeVisible();
   await expect(page.locator('#mark-box')).toBeHidden();
 
   const setState = async (state) => {

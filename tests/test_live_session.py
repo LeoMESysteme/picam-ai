@@ -1228,3 +1228,19 @@ def test_reference_image_is_loaded_once_for_pipeline_and_advice(tmp_path, monkey
     session.start()
     session.stop()
     assert len(calls) == 1
+
+
+def test_live_audit_keeps_all_records_in_one_per_run_file(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 8)
+    session.start()
+    try:
+        assert session._sink.max_bytes == 0
+        for _ in range(8):
+            session.step()
+    finally:
+        session.stop()
+    entries = [json.loads(line) for line in session.records_path.read_text().splitlines()]
+    assert [entry['frame_sequence'] for entry in entries] == list(range(1, 9))
+    assert list(session.records_path.parent.glob('records.jsonl*')) == [session.records_path]
+    metadata = json.loads(session.session_path.read_text())
+    assert metadata['audit'] == {'rotation': False, 'path': 'records.jsonl'}

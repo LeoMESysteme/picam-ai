@@ -630,3 +630,24 @@ test('tracking advice gives a concrete recovery action without changing the reco
     assert.doesNotMatch(element('detail').textContent, /bewegt|verdeckt|einrichten/);
   });
 });
+
+test('storage warning shows free SD space and diagnostics remain opt-in', async () => {
+  await withLivePage(async (_page, element) => {
+    assert.match(element('storage-status').textContent, /Warnung.*5 GB.*4,20 GB/);
+    assert.equal(element('diagnostics-enabled').checked, false);
+    await element('run-start').onclick();
+    assert.equal(_page.posts.at(-1).body.diagnostics, false);
+  }, {status: {state: 'confirmed', storage: {free_bytes: 4_200_000_000, level: 'warn'}}});
+});
+
+test('storage displays enough space or an unknown-space error without guessing', async () => {
+  for (const [storage, expected] of [
+    [{free_bytes: 6_000_000_000, level: 'ok'}, /6,00 GB/],
+    [{free_bytes: 1_500_000_000, level: 'error'}, /Speicher knapp.*1,50 GB/],
+    [{free_bytes: null, level: 'error', message: 'Speicherplatz nicht pruefbar'}, /nicht pruefbar/],
+  ]) {
+    await withLivePage(async (_page, element) => {
+      assert.match(element('storage-status').textContent, expected);
+    }, {status: {state: 'idle', storage}});
+  }
+});

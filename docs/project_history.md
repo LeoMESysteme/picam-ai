@@ -9,6 +9,40 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-23 — R13-16: Vollständiges Live-Audit auf der 64-GB-SD
+
+## Problem und Entscheidung
+
+Die allgemeine JSONL-Sink rotiert bei 64 MiB und ersetzt nach fünf
+Generationen die ältesten Belege. Das reicht nicht für ein vollständiges
+Live-Audit über beliebig lange Läufe. Live schaltet diese Rotation deshalb
+mit `max_bytes=0` aus und dokumentiert eine Datei pro Lauf in `session.json`.
+Eine nur größere Generationenzahl verschiebt den Datenverlust; unbegrenzte
+Generationen würden zusätzlich alle Auswerter zum Zusammenführen zwingen.
+Eine einzelne Laufdatei passt zu den bestehenden Auswertern.
+
+Der Dienst verlangt vor Einrichtung und Lauf 2 GB freien SD-Platz, mit
+Diagnose zusätzlich deren 600-MB-Kopierbudget; unter 5 GB erscheint eine
+Warnung. Das begrenzt keine beliebig lange Laufdauer. Schreibfehler brechen
+den Lauf weiterhin sichtbar ab. Diagnose bleibt ausdrücklich opt-in.
+
+Aufbewahrung erfolgt per Vorschau und explizitem Löschaufruf über den
+bestehenden privaten Steuer-Socket. Ein separates Offline-Löschwerkzeug
+könnte laufende Läufe und asynchrone Diagnosekopien nicht sicher kennen.
+Der Dienst serialisiert Aufräumen mit Start/Stop, schützt beide und löscht
+nur nachweislich beendete, vollständig alte Laufbäume oder deren Diagnose.
+Setup und Profile bleiben in allen Sitzungen stehen. Automatische Retention
+wurde verworfen: Die Person entscheidet nach Sicherung, welche Belege
+entbehrlich sind. Unbekannte Endmetadaten und Links führen zum Überspringen.
+
+Fix round 1: Die konfigurierte Live-Wurzel wird einmal real aufgelöst;
+ein Verbot verlinkter Eltern wurde verworfen, weil Worktrees `var` darüber
+erreichen. Innerhalb des realen Baums bleiben Links gesperrt. Für das Alter
+zählen ausschließlich Dateien: Verzeichniszeiten würden nach dem Entfernen
+von Diagnosebildern auch alte Auditdateien unnötig zurückhalten. Löschfehler
+beenden nur den jeweiligen Eintrag; Ergebnis und CLI-Exitcode machen
+Teilerfolge und Fehler gemeinsam sichtbar.
+
 # 2026-10-23 — R13-15: Bewegungsdiagnose nur als Bedienhilfe
 
 ## Problem und Entscheidung

@@ -265,6 +265,8 @@ async def handle_local_op(op, args, controller, live):
             return web.json_response(controller.command(op, args))
         if op == "live.status":
             return web.json_response(await asyncio.to_thread(live.status))
+        if op == 'live.aufraeumen':
+            return web.json_response(await asyncio.to_thread(live.cleanup, **(args or {})))
         if op == "live.setup":
             status = await asyncio.to_thread(live.status)
             if status["state"] in {"setup_ready", "confirmed"} and not (args or {}).get("force"):

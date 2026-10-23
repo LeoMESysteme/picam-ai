@@ -46,6 +46,7 @@ class FakeLiveService:
                 "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
                 "camera": {"running": True, "frames": 1, "gaps": 0}, "diagnostic_leftovers": [],
+                "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn"},
                 **copy.deepcopy(state),
             }
 
