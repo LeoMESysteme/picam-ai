@@ -74,12 +74,13 @@
     }
 
     function setWidth(width) {
-      const horizontal = width >= 720;
-      if (horizontal !== host.classList.contains("wiki-kette--quer")) {
+      const horizontal = width >= 600;
+      if (horizontal !== figure.classList.contains("wiki-kette--quer")) {
         layoutVersion += 1;
         finish();
       }
       host.classList.toggle("wiki-kette--quer", horizontal);
+      figure.classList.toggle("wiki-kette--quer", horizontal);
     }
     setWidth(host.getBoundingClientRect().width);
     if (typeof ResizeObserver !== "undefined") {

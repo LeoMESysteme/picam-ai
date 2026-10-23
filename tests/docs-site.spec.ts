@@ -1303,11 +1303,18 @@ test('Glossar ohne JavaScript bleibt lesbar', async ({ browser, baseURL }) => {
 
 
 test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/docs/anleitung/01-kette-verstehen.html');
   const chain = page.locator('.wiki-kette');
+  const figure = chain.locator('.wiki-kette-figure');
   const nodes = chain.locator('ol.wiki-kette-list > li > a.wiki-kette-node');
   const ids = ['frames', 'detect', 'track', 'rectify', 'ocr', 'validate', 'sink'];
   await expect(nodes).toHaveCount(7);
+  await expect(figure).toHaveClass(/wiki-kette--quer/);
+  await expect.poll(async () => nodes.evaluateAll(elements => {
+    const tops = elements.map(node => node.getBoundingClientRect().top);
+    return Math.max(...tops) - Math.min(...tops);
+  })).toBeLessThanOrEqual(2);
   expect(await nodes.evaluateAll(elements => elements.map(node => (node as HTMLElement).dataset.stufe))).toEqual(ids);
   await expect(nodes.locator('.wiki-chip')).toHaveText([
     'teilweise', 'fertig', 'fertig', 'fertig', 'fertig', 'fertig', 'teilweise',
@@ -1324,7 +1331,16 @@ test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', as
   await expect(popup.locator('code')).toHaveText('src/dispread/ocr/');
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(chain).not.toHaveClass(/wiki-kette--quer/);
+  await expect(figure).not.toHaveClass(/wiki-kette--quer/);
+  await expect.poll(async () => nodes.evaluateAll(elements => {
+    const article = elements[0].closest('.md-content__inner')!.getBoundingClientRect();
+    const boxes = elements.map(node => node.getBoundingClientRect());
+    return boxes.every((box, index) => {
+      const gap = index ? box.top - boxes[index - 1].bottom : null;
+      return box.width <= article.width + 1 && box.left >= article.left - 1
+        && box.right <= article.right + 1 && (gap === null || (gap >= 10 && gap <= 20));
+    });
+  })).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await ocr.click();
   await expect(page).toHaveURL(/\/api\/ocr\.html$/);
