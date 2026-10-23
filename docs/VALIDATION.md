@@ -3416,3 +3416,45 @@ zu falschen Ablehnungen. Auch der Fenster-Prototyp (Grünsignal) hält auf C
 Folge: Die R13-Live-Einbindung wird nicht nach `master` gebracht. Eine
 Änderung der Randprüfung ist eine Designentscheidung und braucht eine neue,
 getrennte Abnahme (C/D sind dafür nicht mehr unabhängig).
+
+## 2026-10-23 — R13 live: Kandidat R13-7 am Aufbau, Kratzer, Härtung R13-8 { #r13-live-2026-10-23 }
+
+Zwei Live-Läufe mit der Person (Leonhard Hentschke), Raumlicht, StreamCam am
+GSV-2AS, neue Einrichtungen mit Rahmenbereichen (Modus `rahmenbereiche`,
+12 automatische Bereiche), strenger Leser, serielle Referenz, Werteplan.
+**Kein formaler Abnahme-Lauf** (eine Aufstellung je Lauf, ein Gerät).
+
+| | Lauf 1 `live-20261023T075343Z` | Lauf 2 `live-20261023T100613Z` |
+| --- | --- | --- |
+| Stand | Kandidat R13-7 (`c553d44`) | + R13-8 Displayhärtung (`21c83dc`) |
+| Dauer / Werteplan | 12 min, je Faktor 120 s, Hand/Stoß/Teilverdeckung markiert | 5,7 min, je Faktor 60 s, ohne Störung |
+| Fehllesungen gegen Referenz | **0 / 9077** | **0 / 6615** |
+| VALID in stabilen Fenstern | 52,7 % | **99,98 %** (6615/6616) |
+| UNREADABLE gesamt | 6025 (27 %) | 5 (0,05 %) |
+| Trackingverluste | 498, nur bei den markierten Störungen | **0** |
+| Gelesene Bilder/s, Wechsel Median | 27,7 / 241 ms | 27,2 / 250 ms |
+
+**Lauf 1:** 25 % der Bilder wurden mit `decimal_point_unknown` abgelehnt,
+danach 19 % `awaiting_confirmation`. Ursache war ein **Kratzer auf dem
+LCD-Glas** in Leerzelle 14. Die Grauwert-Schließung für den Punkthintergrund
+verschmierte den hellen Kratzer, der Hintergrund stieg, die Leerzelle wurde
+„unbekannt“ und der Leser lehnte mit `format` ab. Der Gate-Grund war
+irreführend. Mit ECC trat dasselbe auf. Der Kratzer ist auch in Einrichtungen
+seit dem 14.10. an derselben Glasstelle nachweisbar. Hand auf dem Rahmen
+führt mit dem Rahmen-Tracker zur Ablehnung: Das ist so gebaut und der Preis
+der Inhaltsunabhängigkeit.
+
+**R13-8:** Eine graue Öffnung (≤ 0,4 Punktabstand) vor der Schließung nimmt
+kleine helle Flecken aus der Hintergrundschätzung. Gleichheit auf allen 14
+Lesedatensätzen: 1549/1549 Proben unverändert. Gegenprüfung mit 75 742
+manipulierten Lesungen (Flecken, Linien): vorher wie nachher 0 falsche Werte.
+Ehrliche Gründe `leser:<grund>[:<zelle>]`, Ursachenanzeige der letzten 10 s
+auf `/live`, Einrichtungsprüfung `displayfehler` (nur Pflicht-Leerzellen,
+OK/WARNUNG).
+
+**Lauf 2:** Kamera von der Person umgestellt; `displayfehler` OK. Nahezu volle
+Verfügbarkeit, keine Fehllesung, keine verlorene Nachführung. Zwei Pi-Hänger
+von 12–13 s (Wächter) durch eine parallel laufende interaktive Codex-Sitzung
+kosteten 411 übersprungene Bilder. Ein Lauf ohne Bewegung zeigt nichts über
+die Robustheit gegen Bewegung. Der blinde Fleck des Kandidaten (bis 5,6 px bei
+gleich falsch gemeldeter Rahmenbewegung) bleibt bestehen.
