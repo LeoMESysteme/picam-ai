@@ -20,8 +20,12 @@
   let currentArticle = null;
 
   function run(entry) {
-    const cleanup = entry.fn(currentArticle);
-    entry.cleanup = typeof cleanup === "function" ? cleanup : null;
+    try {
+      const cleanup = entry.fn(currentArticle);
+      entry.cleanup = typeof cleanup === "function" ? cleanup : null;
+    } catch (error) {
+      console.warn(`wiki: Seitenaufbau für ${entry.fn.name || "anonymen Baustein"} fehlgeschlagen`, entry.fn, error);
+    }
   }
 
   function onPage(fn) {
@@ -34,7 +38,11 @@
     const article = document.querySelector(".md-content__inner");
     if (article === currentArticle) return;
     for (const entry of callbacks) {
-      if (entry.cleanup) entry.cleanup();
+      try {
+        if (entry.cleanup) entry.cleanup();
+      } catch (error) {
+        console.warn(`wiki: Aufräumen für ${entry.fn.name || "anonymen Baustein"} fehlgeschlagen`, entry.fn, error);
+      }
       entry.cleanup = null;
     }
     currentArticle = article;
@@ -51,6 +59,9 @@
       cache.set(url, fetch(url).then((response) => {
         if (!response.ok) throw new Error(`${response.status}: ${url}`);
         return parse(response);
+      }).catch((error) => {
+        cache.delete(url);
+        throw error;
       }));
     }
     return cache.get(url);

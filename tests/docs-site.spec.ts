@@ -19,6 +19,23 @@ test('Seitenkopf nennt Weg, Lesezeit und Weiter-Link unter der Überschrift', as
   expect(new URL(headTarget!, page.url()).href).toBe(new URL(target!, page.url()).href);
 });
 
+test('Seitenkopf erkennt Konventionsabsätze nur an ihrer Stelle', async ({ page }) => {
+  await page.route('**/docs/anleitung/index.html', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /<h2 id="so-ist-der-lernpfad-aufgebaut">/,
+      '<p><strong>Weiter mit:</strong> <a href="x.html">X</a></p>$&',
+    );
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/docs/anleitung/index.html');
+  const article = page.locator('.md-content__inner');
+  await expect(article.locator('p a[href$="/x.html"]')).toHaveCount(1);
+  await expect(article.locator('.wiki-pagehead-weiter')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+  await expect(article.locator('p.wiki-next')).toHaveCount(1);
+  await expect(article.locator('p.wiki-next a')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+});
+
 test('Seiten ohne Weg haben keinen Seitenkopf', async ({ page }) => {
   await page.goto('/docs/status.html');
   await expect(page.locator('.md-content__inner h1')).toBeVisible();

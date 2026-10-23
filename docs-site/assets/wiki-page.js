@@ -5,12 +5,15 @@
   const { onPage, siteUrl, make, icon } = window.wiki;
 
   function convention(article, label, firstOnly = false) {
-    for (const paragraph of article.querySelectorAll("p")) {
-      const markers = firstOnly ? [paragraph.firstElementChild] : Array.from(paragraph.querySelectorAll("strong"));
-      const link = paragraph.querySelector("a[href]");
-      if (link && markers.some((marker) => marker && marker.matches("strong") && marker.textContent === label)) {
-        return { paragraph, link };
-      }
+    const selector = firstOnly
+      ? ":scope > h1 ~ p:not(.wiki-pagehead)"
+      : ":scope > p:not(.wiki-pagehead)";
+    const paragraphs = article.querySelectorAll(selector);
+    const paragraph = firstOnly ? paragraphs[0] : paragraphs[paragraphs.length - 1];
+    const marker = paragraph?.firstElementChild;
+    const link = paragraph?.querySelector("a[href]");
+    if (link && marker && marker.matches("strong") && marker.textContent === label) {
+      return { paragraph, link };
     }
     return null;
   }

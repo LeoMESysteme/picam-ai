@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Wiki-Seitenkopf korrigiert: Der Weiter-Link bricht linksbündig
+  um, sein Pfeil folgt direkt dem Text. Konventionsabsätze zählen nur an
+  ihrer vorgesehenen Stelle mit führendem `strong`. Fehler einzelner
+  Wiki-Bausteine und Aufräumer brechen den Seitenwechsel nicht mehr ab;
+  fehlgeschlagene HTML-/JSON-Abfragen können erneut geladen werden.
+
 * 2026-10-23: Grundlage für die Wiki-Wege: Ein Zensical-Template-Override
   zeigt den Weg einer Seite auch ohne JavaScript. Der gemeinsame Namespace
   `window.wiki` bietet Seitenwechsel mit Aufräumen, Site-URLs, gecachte

@@ -10,12 +10,10 @@
 .md-typeset .wiki-pagehead-weg { font-weight: 600; color: var(--md-default-fg-color) !important; }
 .md-typeset .wiki-pagehead > * { display: inline-flex; align-items: center; gap: .35rem; }
 .md-typeset .wiki-pagehead svg { flex: none; }
-.md-typeset .wiki-pagehead-weiter { margin-left: auto; font-weight: 600; color: var(--md-typeset-a-color) !important; }
+.md-typeset .wiki-pagehead-weiter { display: inline; font-weight: 600; color: var(--md-typeset-a-color) !important; }
+.md-typeset .wiki-pagehead-weiter svg { display: inline; vertical-align: -.15em; margin-left: .35rem; }
 .md-typeset p.wiki-next {
   margin-top: 2.4rem; padding-top: .9rem;
   border-top: 1px solid var(--md-default-fg-color--lightest);
 }
 .md-typeset p.wiki-next a { font-weight: 600; }
-@media (max-width: 600px) {
-  .md-typeset .wiki-pagehead-weiter { margin-left: 0; flex-basis: 100%; }
-}
