@@ -7,7 +7,16 @@ wenn eine Aussage nicht belegbar ist, lass sie unverändert und melde die Lücke
 
 ## Ziel
 
-Halte die Zensical-Seite für neue Entwickler verständlich, knapp und aktuell.
+Halte die Zensical-Seite für ihre drei Lesergruppen verständlich, knapp und
+aktuell: Einsteiger und Bediener (einrichten, bedienen, ohne Code-Flut),
+fortgeschrittene Bediener (Einstellungen verstehen) und Entwickler
+(Trennstellen, Schnittstellen, Codebeispiele). Lies vor jeder Änderung
+`PRODUCT.md` im Projektwurzelverzeichnis; Leser, Leitlinien und Grenzen dort
+sind verbindlich. Der geplante Wiki-Umbau steht in
+`docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`: Solange er nicht
+umgesetzt ist, lege keine eigenen Wegweiser-, Schicht- oder Glossarstrukturen
+an, die ihm vorgreifen. Bestehende Navigationseinträge (`nav` in
+`zensical.toml`) und Seiten-URLs bleiben unverändert.
 Nutze die vollständige Dateiliste im JSON unten als Einstieg. Wenn `diff_base`
 gesetzt ist, prüfe die Änderungen mit `git diff diff_base..base -- <pfad>`;
 ohne `diff_base` ist die Liste ein vollständiges Datei-Inventar für den

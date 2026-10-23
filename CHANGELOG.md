@@ -5,6 +5,27 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: `PRODUCT.md` hält Leser und Leitlinien des Zensical-Wikis
+  fest (Einsteiger/Bediener, fortgeschrittene Bediener, Entwickler). Der
+  Brief `docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`
+  beschreibt den geplanten Umbau (Wege nach Rolle, Schichten, Glossar als
+  Begriffsindex), noch als Entwurf. Der tägliche Doku-Pflegelauf
+  (`scripts/docs-maintenance-prompt.md`) richtet sich jetzt an alle drei
+  Lesergruppen, liest `PRODUCT.md` und greift dem Umbau nicht vor.
+
+* 2026-10-23: Roadmap-Karte flüssiger. Mausrad, Zoomtasten und `+`/`-`
+  zoomen über einen Anime.js-`createAnimatable` geglättet statt in
+  Sprüngen; ein halb begonnener Ebenenwechsel rastet nach der Geste in
+  die innere Ebene oder zurück in die Übersicht ein. Kamerafahrten
+  zoomen logarithmisch und führen die Karte auf gerader Linie zur Mitte.
+  „Alles zeigen“, Rücksetzen, Pfeiltasten und angestoßenes Ziehen
+  gleiten, statt zu springen. Pro Bild wird kein Layout mehr gelesen,
+  unveränderte Stile werden nicht neu geschrieben, die ungenutzte
+  Wurzelvariable `--roadmap-depth` entfällt, und Überlagerungen liegen
+  auf eigenen Ebenen. Gemessen im headless Chromium auf dem Pi, Klick
+  in P2: Stilberechnung ≈ 500 → ≈ 120 ms, Rasterzeit 472 → 158 ms je
+  Übergang. Die Minimap hält ihren Sichtrahmen im Bild.
+
 * 2026-10-23: Roadmap im Zensical-Wiki als frei verschiebbare Karte mit
   Meilensteinen und eigener innerer Ebene für die Arbeitsschritte.
   Kartenminiaturen zeigen die enthaltene Struktur; beim Eintritt lösen
