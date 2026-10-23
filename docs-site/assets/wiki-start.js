@@ -48,8 +48,8 @@
       const section = make("section", "wiki-weg");
       section.id = "weg-" + ways[index];
       const symbol = icon(ways[index]);
-      symbol.setAttribute("width", "22");
-      symbol.setAttribute("height", "22");
+      symbol.setAttribute("width", "20");
+      symbol.setAttribute("height", "20");
       heading.prepend(symbol);
       heading.before(section);
       section.append(heading);

@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Korrekturrunde 2 der Wiki-Startseite: schmalere
+  Spalteninnenabstände, kleinerer Titelabstand und 20-px-Icons schaffen
+  mehr Platz für zweizeilige Wegtitel bei 1280 px. Der Linkvergleich im
+  Begriffstest nimmt den dynamisch ergänzten Seitenkopf aus.
+
+* 2026-10-23: Korrekturrunde 1 der Wiki-Startseite: kleinere, ausgewogen
+  umbrechende Wegtitel mit oben ausgerichteten Icons; Begriffsmarkierungen
+  entfallen in Wegspalten, Standetiketten und Verarbeitungskette.
+  Das aufklappbare Seitenverzeichnis erhält neutrale Trennlinien und einen
+  rechten Drehpfeil statt Admonition-Gestaltung und linkem Icon.
+
 * 2026-10-23: Die Wiki-Startseite führt über drei Wege zu Bedienung,
   Konfiguration und Entwicklung. Standangaben bleiben mit OQ-Status sichtbar,
   die kompakte Verarbeitungskette steht darunter. Das vollständige

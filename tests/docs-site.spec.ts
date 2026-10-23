@@ -459,7 +459,7 @@ test('Seitenkopf ohne JavaScript nennt den Weg', async ({ browser, baseURL }) =>
 });
 
 test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/index.html');
   const ways = ['bedienen', 'konfigurieren', 'entwickeln'];
   await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
@@ -472,18 +472,33 @@ test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
   expect(Math.max(...bounds.map(box => box.top)) - Math.min(...bounds.map(box => box.top))).toBeLessThan(2);
   expect(bounds[0].left).toBeLessThan(bounds[1].left);
   expect(bounds[1].left).toBeLessThan(bounds[2].left);
+  await page.evaluate(() => document.fonts.ready);
+  const titles = await page.locator('.wiki-weg h3').evaluateAll(nodes => nodes.map(node => ({
+    height: node.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(node).lineHeight),
+  })));
+  for (const title of titles) expect(title.height).toBeLessThanOrEqual(2.6 * title.lineHeight);
   await expect(page.locator('.wiki-stand-row .wiki-stand-label')).toHaveText(['Kamera', 'Messpfad', 'GSVmulti']);
   await expect(page.locator('.wiki-stand .wiki-chip')).toHaveCount(1);
   await expect(page.locator('.wiki-wege .wiki-kette')).toHaveCount(0);
   await expect(page.locator('.wiki-wege ~ .wiki-kette[data-variant="kompakt"]')).toHaveCount(1);
+  await expect(page.locator('.md-content__inner')).toHaveAttribute('data-wiki-terms-ready', 'true');
+  await expect(page.locator('.wiki-weg .wiki-term, .wiki-stand-label .wiki-term, .wiki-kette .wiki-term')).toHaveCount(0);
   const allPages = page.locator('details.wiki-allpages');
   await expect(allPages).toHaveCount(1);
   await expect(allPages).not.toHaveAttribute('open', '');
+  await expect(allPages).toHaveCSS('box-shadow', 'none');
+  const summaryIcon = await allPages.locator('summary').evaluate(node => {
+    const style = getComputedStyle(node, '::before');
+    return { content: style.content, display: style.display };
+  });
+  expect(summaryIcon.content === 'none' || summaryIcon.display === 'none').toBe(true);
   // Term marking may add links asynchronously; count the directory entries.
   const directoryLinks = allPages.locator('a[href]:not(.headerlink):not(.wiki-term)');
   await expect(allPages.locator('summary')).toHaveText(`Alle ${await directoryLinks.count()} Seiten anzeigen`);
   await allPages.locator('summary').click();
   await expect(allPages.locator('table').first()).toBeVisible();
+  await expect(allPages).toHaveCSS('box-shadow', 'none');
   await allPages.locator('summary').click();
   for (const way of ways) {
     const links = page.locator(`#weg-${way} .wiki-weg-links a`);
@@ -1482,7 +1497,7 @@ test('Begriffe werden je Abschnitt einmal markiert ohne Links und Code zu verän
   const article = page.locator('.md-content__inner');
   await expect(article).toHaveAttribute('data-wiki-terms-ready', 'true');
   await expect(article.locator('a.wiki-term')).not.toHaveCount(0);
-  await expect(article.locator('a[href]:not(.wiki-term):not(.tour-figure-link)')).toHaveCount(before.links);
+  await expect(article.locator('a[href]:not(.wiki-term):not(.tour-figure-link):not(.wiki-pagehead a)')).toHaveCount(before.links);
   expect(await article.locator('pre').allTextContents()).toEqual(before.pre);
   const duplicates = await article.evaluate((element) => {
     let seen = new Set<string>();
