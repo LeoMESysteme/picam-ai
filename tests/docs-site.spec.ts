@@ -1310,11 +1310,13 @@ test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', as
   const nodes = chain.locator('ol.wiki-kette-list > li > a.wiki-kette-node');
   const ids = ['frames', 'detect', 'track', 'rectify', 'ocr', 'validate', 'sink'];
   await expect(nodes).toHaveCount(7);
-  await expect(figure).toHaveClass(/wiki-kette--quer/);
   await expect.poll(async () => nodes.evaluateAll(elements => {
-    const tops = elements.map(node => node.getBoundingClientRect().top);
-    return Math.max(...tops) - Math.min(...tops);
-  })).toBeLessThanOrEqual(2);
+    const boxes = elements.map(node => node.getBoundingClientRect());
+    return boxes.every((box, index) => !index
+      || (box.top - boxes[index - 1].bottom >= 10 && box.top - boxes[index - 1].bottom <= 20));
+  })).toBe(true);
+  expect(await figure.locator('*').evaluateAll(elements => elements.every(node =>
+    getComputedStyle(node).hyphens !== 'auto'))).toBe(true);
   expect(await nodes.evaluateAll(elements => elements.map(node => (node as HTMLElement).dataset.stufe))).toEqual(ids);
   await expect(nodes.locator('.wiki-chip')).toHaveText([
     'teilweise', 'fertig', 'fertig', 'fertig', 'fertig', 'fertig', 'teilweise',
@@ -1331,7 +1333,6 @@ test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', as
   await expect(popup.locator('code')).toHaveText('src/dispread/ocr/');
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(figure).not.toHaveClass(/wiki-kette--quer/);
   await expect.poll(async () => nodes.evaluateAll(elements => {
     const article = elements[0].closest('.md-content__inner')!.getBoundingClientRect();
     const boxes = elements.map(node => node.getBoundingClientRect());
@@ -1341,9 +1342,44 @@ test('Verarbeitungskette zeigt sieben Stufen mit Zustand und führt zur API', as
         && box.right <= article.right + 1 && (gap === null || (gap >= 10 && gap <= 20));
     });
   })).toBe(true);
+  expect(await figure.locator('*').evaluateAll(elements => elements.every(node =>
+    getComputedStyle(node).hyphens !== 'auto'))).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await ocr.click();
   await expect(page).toHaveURL(/\/api\/ocr\.html$/);
+});
+
+test('Kompakte Kette passt in eine schmale Spalte', async ({ page }) => {
+  await page.route('**/docs/anleitung/01-kette-verstehen.html', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    expect(html).toContain('class="wiki-kette"');
+    await route.fulfill({ response, body: html.replace('class="wiki-kette"',
+      'class="wiki-kette" data-variant="kompakt"') });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  const figure = page.locator('.wiki-kette-figure');
+  const nodes = figure.locator('a.wiki-kette-node');
+  const arrows = figure.locator('.wiki-kette-pfeil');
+  await expect(nodes).toHaveCount(7);
+  await expect(arrows).toHaveCount(6);
+  await expect(figure.locator('.wiki-kette-id, .wiki-chip, figcaption')).toHaveCount(0);
+  await expect(nodes.locator('.wiki-kette-zustand')).toHaveText([
+    ', Zustand: teilweise', ', Zustand: fertig', ', Zustand: fertig', ', Zustand: fertig',
+    ', Zustand: fertig', ', Zustand: fertig', ', Zustand: teilweise',
+  ]);
+  for (const arrow of await arrows.all()) await expect(arrow).toHaveAttribute('aria-hidden', 'true');
+  await expect.poll(() => figure.evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(90);
+  await nodes.filter({ hasText: 'Bildquelle' }).focus();
+  const popup = page.locator('#wiki-hint[data-open="true"]');
+  await expect(popup).toContainText('Bildquelle · frames/');
+  await expect(popup.locator('.wiki-chip')).toHaveText('teilweise');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  expect(await figure.locator('*').evaluateAll(elements => elements.every(node =>
+    getComputedStyle(node).hyphens !== 'auto'))).toBe(true);
 });
 
 test('Verarbeitungskette bleibt ohne Daten beim Text', async ({ page }) => {

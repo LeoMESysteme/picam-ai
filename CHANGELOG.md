@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Korrekturrunde 2 der Verarbeitungskette: Die volle Darstellung
+  bleibt bei jeder Breite senkrecht mit 14 px Verbindungslücken; Querlage und
+  Breitenschwelle entfallen. Die kompakte Variante zeigt umbrechende Etiketten
+  mit Zustandspunkt und gestaffelt eingeblendeten Pfeilen. ID und Zustandschip
+  stehen dort im Hinweis, der Zustand bleibt für Screenreader lesbar.
+  Automatische Silbentrennung ist in beiden Varianten ausgeschaltet.
+
+* 2026-10-23: Korrekturrunde 1 der Verarbeitungskette: Querlage ab 600 px
+  Containerbreite, gleich breite Knoten und 18 px Abstand. Im Hochformat
+  stehen ID, Titel und Zustand nebeneinander; 14 px Abstand und Pfeile
+  verbinden die Knoten ohne Überlappung. Theme-Listeneinzüge sind aufgehoben;
+  der Playwright-Fall prüft die Geometrie bei 1280 und 375 px.
+
 * 2026-10-23: Interaktive Verarbeitungskette mit sieben geordneten Stufen,
   belegten Zuständen und API-Verweisen ergänzt. Hinweise erklären Zweck,
   Einstellung und Anbindung; die Darstellung folgt der Containerbreite.

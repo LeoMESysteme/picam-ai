@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  const { onPage, siteUrl, loadJson, make, hint } = window.wiki;
+  const { onPage, siteUrl, loadJson, make, icon, hint } = window.wiki;
   const ANIME_URL = new URL("vendor/anime-4.5.0.umd.min.js", document.currentScript.src).href;
   const IDS = ["frames", "detect", "track", "rectify", "ocr", "validate", "sink"];
   const STATES = { fertig: "resolved", gebaut: "progress", teilweise: "partial", "außer Betrieb": "discarded" };
@@ -38,56 +38,54 @@
   });
 
   function mount(host, stages) {
+    const compact = host.dataset.variant === "kompakt";
     const figure = make("figure", "wiki-kette-figure");
     const list = make("ol", "wiki-kette-list");
+    const arrows = [];
     for (const stage of stages) {
       const item = make("li");
+      if (compact && list.children.length) {
+        const arrow = icon("weiter");
+        arrow.classList.add("wiki-kette-pfeil");
+        arrow.setAttribute("width", "12");
+        arrow.setAttribute("height", "12");
+        item.append(arrow);
+        arrows.push(arrow);
+      }
       const node = make("a", "wiki-kette-node");
       node.href = siteUrl(stage.api);
       node.dataset.hint = "kette";
       node.dataset.stufe = stage.id;
-      node.append(make("span", "wiki-kette-id", `${stage.id}/`),
-        make("span", "wiki-kette-titel", stage.titel), chip(stage));
+      if (compact) {
+        const dot = make("span", `wiki-kette-punkt wiki-kette-punkt--${STATES[stage.zustand]}`);
+        dot.setAttribute("aria-hidden", "true");
+        node.append(dot, make("span", "wiki-kette-titel", stage.titel),
+          make("span", "wiki-kette-zustand", `, Zustand: ${stage.zustand}`));
+      } else {
+        node.append(make("span", "wiki-kette-id", `${stage.id}/`),
+          make("span", "wiki-kette-titel", stage.titel), chip(stage));
+      }
       stagesByNode.set(node, stage);
       item.append(node);
       list.append(item);
     }
     figure.append(list);
-    if (host.dataset.variant !== "kompakt") {
+    if (!compact) {
       figure.append(make("figcaption", "", "Verarbeitungskette · Überfahren zeigt Zweck und Anbindung"));
     }
     host.replaceChildren(figure);
 
-    const lines = Array.from(list.children).slice(1);
+    const targets = compact ? arrows : Array.from(list.children).slice(1);
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let stopped = false;
     let animation = null;
     let seen = false;
-    let layoutVersion = 0;
     let intersection;
-    let resize;
 
     function finish() {
       animation?.revert();
       animation = null;
-      lines.forEach((line) => line.style.removeProperty("--wiki-kette-progress"));
-    }
-
-    function setWidth(width) {
-      const horizontal = width >= 600;
-      if (horizontal !== figure.classList.contains("wiki-kette--quer")) {
-        layoutVersion += 1;
-        finish();
-      }
-      host.classList.toggle("wiki-kette--quer", horizontal);
-      figure.classList.toggle("wiki-kette--quer", horizontal);
-    }
-    setWidth(host.getBoundingClientRect().width);
-    if (typeof ResizeObserver !== "undefined") {
-      resize = new ResizeObserver((entries) => {
-        if (!stopped) setWidth(entries[0].contentRect.width);
-      });
-      resize.observe(host);
+      targets.forEach((target) => target.style.removeProperty(compact ? "opacity" : "--wiki-kette-progress"));
     }
 
     async function reveal() {
@@ -95,13 +93,12 @@
       seen = true;
       intersection?.disconnect();
       if (motion.matches) return;
-      const version = layoutVersion;
       const anime = await loadAnime();
-      if (stopped || motion.matches || !anime || version !== layoutVersion) return;
+      if (stopped || motion.matches || !anime) return;
       try {
-        // The inherited property scales only the connector pseudo-elements.
-        animation = anime.animate(lines, {
-          "--wiki-kette-progress": [0, 1],
+        // Labels stay visible; only arrows or connector pseudo-elements animate.
+        animation = anime.animate(targets, {
+          ...(compact ? { opacity: [0, 1] } : { "--wiki-kette-progress": [0, 1] }),
           duration: 220, delay: anime.stagger(70), ease: "outExpo",
         });
       } catch {
@@ -122,7 +119,6 @@
     return () => {
       stopped = true;
       intersection?.disconnect();
-      resize?.disconnect();
       motion.removeEventListener("change", motionChanged);
       finish();
     };
