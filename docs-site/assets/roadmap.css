@@ -37,7 +37,6 @@
 .roadmap-page .md-content__inner { margin-right: 22px; min-width: 0; }
 .roadmap-page .md-content__inner > h1#roadmap { margin-bottom: .8rem; }
 .roadmap {
-  --roadmap-depth: 0;
   color: var(--roadmap-ink);
   margin: 0 0 1.2rem;
   max-width: 100%;
@@ -79,6 +78,7 @@
   background-image: radial-gradient(var(--roadmap-dot) 1px, transparent 1px);
   background-size: 24px 24px;
   cursor: grab; touch-action: none; overscroll-behavior: contain;
+  contain: layout paint;
 }
 .roadmap-viewport--dragging, .roadmap-viewport--dragging * { cursor: grabbing !important; user-select: none; }
 .roadmap-viewport:fullscreen, .roadmap-viewport--expanded { width: 100%; height: 100svh; border-radius: 0; }
@@ -93,7 +93,8 @@
   --roadmap-node-color: var(--roadmap-partial);
   position: absolute; width: 300px; color: var(--roadmap-ink); background: var(--roadmap-surface);
   border: 1px solid var(--roadmap-edge); border-radius: 15px;
-  cursor: default; text-align: left; box-sizing: border-box;
+  cursor: default; text-align: left; box-sizing: border-box; contain: layout;
+  transition: border-color 180ms ease, box-shadow 220ms ease;
 }
 .roadmap-node { height: 270px; }
 .roadmap-node--done { --roadmap-node-color: var(--roadmap-done); }
@@ -101,7 +102,8 @@
 .roadmap-node--blocked { --roadmap-node-color: var(--roadmap-blocked); }
 .roadmap-node--quiet { --roadmap-node-color: var(--roadmap-quiet); }
 .roadmap-node--optional { border-style: dashed; }
-.roadmap-node:hover { border-color: var(--roadmap-node-color); }
+.roadmap-node:hover, .roadmap-step:hover { border-color: var(--roadmap-node-color); box-shadow: 0 10px 26px -18px color-mix(in srgb, var(--roadmap-node-color) 70%, transparent); }
+.roadmap[data-roadmap-view="entering"] .roadmap-node, .roadmap[data-roadmap-view="leaving"] .roadmap-node { box-shadow: none; }
 .roadmap-enter { display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 15px; color: inherit; background: transparent; font: inherit; text-align: left; cursor: zoom-in; }
 .roadmap-node-content { display: grid; grid-template-columns: 36px minmax(0, 1fr); grid-template-rows: 66px 20px auto; align-content: start; column-gap: 12px; row-gap: 5px; padding: 17px 18px 0; height: 100%; overflow: hidden; border-radius: 15px; }
 .roadmap-node-meta { display: flex; align-items: center; gap: 10px; padding-right: 25px; margin-bottom: 10px; }
@@ -157,7 +159,7 @@
 .roadmap a { color: var(--roadmap-link); text-underline-offset: 3px; }
 .roadmap-step-evidence a { color: var(--roadmap-link); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--roadmap-link) 30%, transparent); }
 .roadmap-step-evidence a:hover { text-decoration-color: currentColor; }
-.roadmap-portal-frame { position: absolute; z-index: 5; pointer-events: none; border: 1px solid var(--roadmap-current); box-sizing: border-box; background: transparent; }
+.roadmap-portal-frame { position: absolute; left: 0; top: 0; z-index: 5; transform-origin: 0 0; pointer-events: none; border: 1px solid var(--roadmap-current); box-sizing: border-box; background: transparent; }
 .roadmap-depth-boundary {
   position: absolute; inset: 0; z-index: 6; border-radius: inherit; pointer-events: none; opacity: 0;
   box-shadow: inset 0 0 24px color-mix(in srgb, var(--roadmap-current) 15%, transparent), inset 0 0 4px color-mix(in srgb, var(--roadmap-current) 10%, transparent);
@@ -236,8 +238,14 @@
 @media (prefers-reduced-motion: reduce) {
   .roadmap-nested-preview > svg { transition: none; }
   .roadmap-enter:hover .roadmap-nested-preview > svg { transform: none; }
+  .roadmap-node, .roadmap-step { transition: none; }
 }
 @media print {
   .roadmap { display: none; }
   #roadmap-phases[hidden], .roadmap-steps-source[hidden], #roadmap-schritte[hidden] { display: block !important; }
 }
+/* Level changes repaint only what changes: overlays and fading cards get their
+   own compositor layers, so the dotted stage is not redrawn on every frame. */
+.roadmap-portal-frame, .roadmap-depth-boundary, .roadmap-edge-particles { will-change: opacity; }
+.roadmap[data-roadmap-view="entering"] .roadmap-node,
+.roadmap[data-roadmap-view="leaving"] .roadmap-node { will-change: opacity; }

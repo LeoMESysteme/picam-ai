@@ -148,6 +148,40 @@ test('Roadmap-Mausrad und Tastatur führen durch denselben Ebenenwechsel', async
   await expect(enter).toBeFocused();
 });
 
+test('Roadmap-Mausrad zoomt geglättet über mehrere Bilder statt in Sprüngen', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  await page.waitForFunction(() => Boolean((window as any).anime?.createAnimatable));
+  await page.locator('.roadmap-viewport').hover({ position: { x: 40, y: 120 } });
+  const capture = page.evaluate(async () => {
+    const world = document.querySelector<HTMLElement>('.roadmap-phase-world')!;
+    const scales = new Set<string>();
+    const start = performance.now();
+    while (performance.now() - start < 700) {
+      scales.add(world.style.transform.match(/scale\(([^)]+)\)/)![1]);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return scales.size;
+  });
+  await page.mouse.wheel(0, -120);
+  expect(await capture).toBeGreaterThan(4);
+  await expect(page.locator('[data-roadmap]')).toHaveAttribute('data-roadmap-view', 'overview');
+});
+
+test('Roadmap rastet nach einem halben Zoom in eine Ebene ein', async ({ page }) => {
+  await page.goto('/docs/ROADMAP.html');
+  await page.waitForFunction(() => Boolean((window as any).anime?.createAnimatable));
+  const roadmap = page.locator('[data-roadmap]');
+  const node = await roadmap.locator('[data-phase="P2"]').boundingBox();
+  await page.mouse.move(node!.x + node!.width / 2, node!.y + node!.height / 2);
+  for (let i = 0; i < 20 && await roadmap.getAttribute('data-roadmap-view') !== 'entering'; i += 1) {
+    await page.mouse.wheel(0, -60);
+    await page.waitForTimeout(70);
+  }
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', 'entering');
+  await expect(roadmap).toHaveAttribute('data-roadmap-view', /^(inside|overview)$/);
+  await expect(roadmap.locator('.roadmap-mini-view')).toHaveCount(1);
+});
+
 test('Roadmap-Knoten verschieben folgt den Verbindungen und bleibt nach Neuladen erhalten', async ({ page }) => {
   await page.goto('/docs/ROADMAP.html');
   const node = page.locator('.roadmap-node[data-phase="P2"]');
@@ -167,7 +201,7 @@ test('Roadmap-Knoten verschieben folgt den Verbindungen und bleibt nach Neuladen
   await expect(node).toBeVisible();
   expect(await node.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(movedX);
   await page.getByRole('button', { name: 'Anordnung zurücksetzen', exact: true }).click();
-  expect(await node.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(originalX);
+  await expect.poll(() => node.evaluate((el) => (el as HTMLElement).offsetLeft)).toBe(originalX);
 });
 
 test('Roadmap bleibt bei fehlendem Anime und gesperrtem Speicher bedienbar', async ({ page }) => {
