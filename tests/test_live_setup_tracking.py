@@ -211,8 +211,8 @@ def test_region_edit_persists_requested_and_snapped_centres(tmp_path):
 
 
 @pytest.mark.parametrize(('requested', 'centre', 'initial_remove'), [
-    ([314, 251], [314, 248], [0]),  # Snapping again would move this to (312,247).
-    ([524, 467], [524, 464], []),  # Snapping again would reject (526,464) as ambiguous.
+    ([235, 124], [235, 127], []),  # Erneutes Snapping wuerde (237,127) waehlen.
+    ([309, 147], [309, 150], []),  # Erneutes Snapping wuerde (307,150) waehlen.
 ])
 def test_kept_manual_centre_stays_exact_through_unrelated_remove_and_add(tmp_path, requested, centre, initial_remove):
     _, _, proposal = _propose(tmp_path)
@@ -295,12 +295,12 @@ def test_region_edit_limit_includes_rejected_attempts_and_accepts_50th(tmp_path)
 
 def test_region_count_limit_accepts_24_requested_centres_but_refuses_25(tmp_path):
     _, _, proposal = _propose(tmp_path)
-    assert len(proposal['live_tracking']['proposal']['regions']) == 12
-    updated = live_setup.edit_regions(proposal, add=[[1, 1]] * 12, remove=[], out_dir=tmp_path,
+    count = len(proposal['live_tracking']['proposal']['regions'])
+    updated = live_setup.edit_regions(proposal, add=[[1, 1]] * (24-count), remove=[], out_dir=tmp_path,
                                        at_utc='2026-10-21T10:00:00+00:00')
     assert len(updated['live_tracking']['proposal']['metrics']['centre_results']) == 24
     with pytest.raises(live_setup.SetupError, match='24'):
-        live_setup.edit_regions(proposal, add=[[1, 1]] * 13, remove=[], out_dir=tmp_path,
+        live_setup.edit_regions(proposal, add=[[1, 1]] * (25-count), remove=[], out_dir=tmp_path,
                                 at_utc='2026-10-21T10:00:00+00:00')
 
 

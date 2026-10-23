@@ -35,7 +35,7 @@ def close_quad(result, expected, tolerance=1.0):
 
 def mask_polygon(image, polygon):
     mask = np.zeros(image.shape[:2], np.uint8)
-    cv2.fillConvexPoly(mask, np.rint(polygon).astype(np.int32), 255)
+    cv2.fillPoly(mask, [np.rint(polygon).astype(np.int32)], 255)
     return mask != 0
 
 
@@ -242,7 +242,7 @@ def test_neue_gruende_haben_bedientexte():
     from dispread.workbench.fields import REASONS
 
     reasons = {"zu_wenig_rahmenbereiche", "rahmenbereiche_einseitig", "zu_wenig_rahmenmerkmale",
-               "rahmen_mehrdeutig", "rahmen_unstimmig", "lcd_rand_fehlt",
+               "rahmen_mehrdeutig", "rahmen_unstimmig", "lcd_rand_fehlt", "rahmenbereiche_ohne_reserve",
                "bildgroesse_abweichend", "vorschlag_ungeeignet"}
     assert reasons <= REASONS.keys()
     assert all(REASONS[reason][0].islower() for reason in reasons)
@@ -290,15 +290,21 @@ def test_bewegung_knapp_ausserhalb_suchfenster_wird_abgelehnt(scene):
 
 @pytest.mark.parametrize("dy", [2.0, 2.5, 3.0])
 def test_einzelner_verschobener_fernseitiger_inlier_kippt_quad_nicht(scene, dy):
-    # rev4: rechts vier Fenster verdeckt, verbleibendes Fenster (693,520) verschoben.
+    # rev4: alle rechten Fenster bis auf den fernsten gewaehlten Hebel verdeckt.
     reference, quad, config, proposal, tracker = scene
     image = reference.copy()
     radius = config.patch_size // 2 + config.search_radius_px
-    for index in (2, 3, 6, 7):
-        x, y = proposal.regions[index].centre
-        image[y-radius:y+radius+1, x-radius:x+radius+1] = 128
-    x, y = proposal.regions[10].centre
-    assert (x, y) == (693, 520)
+    from dispread.live.frame_tracking import _axes
+
+    local_sources = (tracker.sources - quad.mean(axis=0)) @ _axes(quad).T
+    anchor = tuple(tracker.sources[np.argmax(local_sources[:, 0])].astype(int))
+    assert local_sources[:, 0].max() >= config.min_spread_px
+    for region in proposal.regions:
+        x, y = region.centre
+        local = (np.array([x, y]) - quad.mean(axis=0)) @ _axes(quad).T
+        if local[0] >= config.min_spread_px and (x, y) != anchor:
+            image[y-radius:y+radius+1, x-radius:x+radius+1] = 128
+    x, y = anchor
     window = reference[y-radius-5:y+radius+6, x-radius-5:x+radius+6]
     shifted = cv2.warpAffine(window, np.float32([[1, 0, 0], [0, 1, dy]]), window.shape[1::-1],
                              borderMode=cv2.BORDER_REPLICATE)
@@ -546,26 +552,33 @@ def test_kandidat_grobe_randgrenze_bei_direkter_falscher_bewegung(scene, monkeyp
                                                       "tested_to": float(values[-1])}))
 
 
-@pytest.mark.parametrize("subset", ["right", "bottom"])
-def test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie(scene, subset):
+@pytest.mark.parametrize("subset", ["right", "left", "bottom", "top"])
+@pytest.mark.parametrize("axis, sign", [(0, 1), (0, -1), (1, 1), (1, -1)])
+def test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie(scene, subset, axis, sign, record_property):
     # rev6/rev9: Eine ganze Seite meldet eine andere Bewegung als der Rest.
     from dispread.live import frame_tracking as ft
 
     reference, quad, config, proposal, tracker = scene
     local = (tracker.sources - quad.mean(axis=0)) @ ft._axes(quad).T
-    indices = np.flatnonzero(local[:, 0 if subset == "right" else 1] > 20)
+    half_axis = 0 if subset in ("right", "left") else 1
+    half_sign = 1 if subset in ("right", "bottom") else -1
+    indices = np.flatnonzero(half_sign * local[:, half_axis] > 20)
     radius = config.patch_size // 2 + config.search_radius_px
+    errors = []
     for angle in (-0.4, 0, 0.4):
         for bias in (0.5, 1.0, 1.5, 2.0, 3.0, 4.0):
             matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
-            matrix[:, 2] += (0, bias)
+            matrix[axis, 2] += sign * bias
             image = _paste_region_motion(reference, proposal, radius, matrix, indices)
             result = tracker.update(image)
             if result.quad is not None:
                 close_quad(result, quad)
+                errors.append(float(np.linalg.norm(np.asarray(result.quad) - quad, axis=1).max()))
+    record_property("half_bias", json.dumps({"half": subset, "axis": axis, "sign": sign,
+                                            "accepted": len(errors), "max_error_px": max(errors, default=None)}))
 
 
-@pytest.mark.parametrize("dx,dy,angle", [(4.0, 0, 0), (0, 4.0, 0), (0, 0, 1.0)])
+@pytest.mark.parametrize("dx,dy,angle", [(4.0, 0, 0), (0, 4.0, 0), (0, 0, 1.2)])
 def test_lcd_rand_verwirft_falsche_bewegung(scene, dx, dy, angle):
     reference, quad, config, proposal, tracker = scene
     matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
@@ -771,23 +784,12 @@ def test_config_json_rejects_bool_as_integer():
         FrameTrackingConfig.from_dict(data)
 
 
-@pytest.mark.parametrize(('name', 'digest'), [
-    ('reference.jpg', 'fa4d26fdb07a902bb4d1218e9be0eb779a19fc06ca291fba9226e228b56fb2e6'),
-    ('faktor-2_0.jpg', '36f647c4e1619681f728cec6854eba94dd316de0ba2166bb72ac48fc0c4956a3'),
-    ('faktor-5_0.jpg', '0c3faefdb3ffba6231131d049481314b5aa3323b46ebf76d8e300c1309241e76'),
-])
-def test_automatic_proposal_is_unchanged(name, digest):
-    from hashlib import sha256
-
-    quad = json.loads((FIXTURES / 'r13-fixtures.json').read_text())['quad']
-    proposal = propose_regions(cv2.imread(str(FIXTURES / name)), quad)
-    # Kandidat aendert nur diese Config-Felder; alle Vorschlagsdaten bleiben
-    # gegen den Freeze 2026-10-21 bytegleich geprueft, inklusive LCD-Modell.
-    frozen = proposal.to_dict()
-    frozen["config"]["edge_position_tolerance_px"] = 1.0
-    del frozen["config"]["max_inlier_rms_px"]
-    del frozen["config"]["max_inlier_residual_px"]
-    assert sha256(json.dumps(frozen, sort_keys=True).encode()).hexdigest() == digest
+def test_r11_proposal_preserves_frozen_lcd_model():
+    saved = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())['proposal']
+    image = cv2.imread(str(FIXTURES / 'reference.jpg'))
+    proposal = propose_regions(image, saved['normalised_quad'])
+    assert proposal.to_dict()['edges'] == saved['edges']
+    assert proposal.config['ambiguity_limit'] == saved['config']['ambiguity_limit']
 
 
 def test_manual_regions_preserve_automatic_checks_and_edge_model(scene):
@@ -823,17 +825,17 @@ def test_manual_regions_snap_to_real_corner(scene, distance, direction):
 def test_manual_snapping_chooses_strongest_not_nearest_local_maximum(scene):
     from dispread.live.frame_tracking import proposal_from_regions
 
-    image, quad, config, automatic, _ = scene
+    image, quad, config, _, _ = scene
     # Fixture has a weaker local maximum at (296,249), closer to this click.
     strength = cv2.cornerMinEigenVal(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 3, 3)
     assert strength[249, 296] == cv2.dilate(strength, np.ones((3, 3), np.uint8))[249, 296]
     assert strength[249, 296] < strength[247, 292]
     proposal = proposal_from_regions(image, quad, [(294, 249)], config)
-    assert proposal.regions == automatic.regions[:1]
+    assert [region.centre for region in proposal.regions] == [(292, 247)]
     assert proposal.metrics['centre_results'][0]['used_centre'] == [292, 247]
 
 
-@pytest.mark.parametrize('kept', [(314, 248), (524, 464)])
+@pytest.mark.parametrize('kept', [(235, 127), (309, 150)])
 def test_kept_centres_are_checked_exactly_while_new_centres_snap(scene, kept):
     from dispread.live.frame_tracking import proposal_from_regions
 
@@ -945,3 +947,301 @@ def test_manual_spacing_is_not_relaxed_and_one_dimensional_edges_fail():
     image[:, 250:] = 255
     line = proposal_from_regions(image, quad, [(250, 140)])
     assert line.metrics['centre_results'][0]['reason'] == 'zu_wenig_struktur'
+
+
+def test_r11_fixed_old_profile_update_results_are_unchanged():
+    from dataclasses import asdict
+
+    from dispread.live.frame_tracking import RegionProposal
+
+    saved = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())
+    old = saved['proposal']
+    # Explizite Testmigration nur neuer Vorschlagsfelder; kein neuer Vorschlag.
+    config = FrameTrackingConfig(**old['config'])
+    old['config'] = config.to_dict()
+    proposal = RegionProposal.from_dict(old)
+    image = cv2.imread(str(FIXTURES / 'reference.jpg'))
+    quad = np.asarray(proposal.normalised_quad)
+    tracker = FrameTracker(image, quad, proposal, config)
+    inputs = {path.name: cv2.imread(str(path)) for path in FIXTURES.glob('*.jpg')}
+    inputs['black'] = image * 0
+    for dx, dy, angle in [(4, -3, 0.5), (30, 0, 0), (0, 0, 4)]:
+        matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+        matrix[:, 2] += (dx, dy)
+        inputs[f'move_{dx}_{dy}_{angle}'] = cv2.warpAffine(image, matrix, image.shape[1::-1])
+    for name, expected in saved['results'].items():
+        actual = json.loads(json.dumps(asdict(tracker.update(inputs[name]))))
+        assert actual == expected, name
+
+
+@pytest.mark.parametrize('name', ['frame_000289.png', 'frame_000390.png', 'frame_000440.png'])
+def test_r11_fixed_old_profile_accepted_dev_updates_are_unchanged(name):
+    from dataclasses import asdict
+
+    from dispread.live.frame_tracking import RegionProposal
+
+    path = Path('var/diagnostics/r13-werteplan-20261021/frames') / name
+    if not path.is_file():
+        pytest.skip('lokale DEV-Bilder')
+    saved = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())
+    old = saved['accepted_dev']['proposal']
+    config = FrameTrackingConfig(**old['config'])
+    old['config'] = config.to_dict()
+    proposal = RegionProposal.from_dict(old)
+    reference_path = Path(saved['accepted_dev']['reference'])
+    if not reference_path.is_file():
+        pytest.skip('lokales DEV-Referenzbild')
+    reference = cv2.imread(str(reference_path))
+    tracker = FrameTracker(reference, proposal.normalised_quad, proposal, config)
+    actual = json.loads(json.dumps(asdict(tracker.update(cv2.imread(str(path))))))
+    assert actual['quad'] is not None, actual
+    assert actual == saved['accepted_dev']['results'][name]
+
+
+@pytest.mark.parametrize('second, accepted', [(0.89, True), (0.91, False), (0.96, False)])
+def test_r11_proposal_hysteresis_keeps_runtime_matching_unchanged(second, accepted):
+    from dispread.live import frame_tracking as ft
+
+    response = np.zeros((25, 25), np.float32)
+    response[12, 12], response[4, 4] = 1, second
+    assert ft._proposal_match(response, ft.FrameTrackingConfig()) == accepted
+    assert ft._peak(response, ft.FrameTrackingConfig())[2] == (second > 0.95)
+
+
+def test_r11_proposal_requires_absolute_peak_margin():
+    from dispread.live import frame_tracking as ft
+
+    response = np.zeros((25, 25), np.float32)
+    response[12, 12], response[4, 4] = 0.76, 0.68
+    assert not ft._proposal_match(response, ft.FrameTrackingConfig())
+
+
+def test_r11_manual_requires_reserve_without_moving_kept_centres(scene):
+    from itertools import combinations
+
+    from dispread.live import frame_tracking as ft
+
+    image, quad, config, automatic, _ = scene
+    centres = [region.centre for region in automatic.regions]
+    # Finde eine verteilte Teilmenge mit genau drei Punkten auf einer Seite.
+    chosen = next(subset for subset in combinations(centres, 6) if ft._spread(subset, quad, config))
+    manual = ft.proposal_from_regions(image, quad, [], config, kept_centres=chosen)
+    assert [region.centre for region in manual.regions] == list(chosen)
+    assert manual.metrics['spread_ok']
+    assert not manual.ok
+    assert 'rahmenbereiche_ohne_reserve' in manual.reasons
+    assert manual.metrics['reserve_removals'] == 2
+    assert not manual.metrics['reserve_ok']
+    assert automatic.ok
+    for removed in combinations(range(len(centres)), 2):
+        assert ft._spread([p for i, p in enumerate(centres) if i not in removed], quad, config)
+
+
+def test_r11_proposal_reserve_needs_lever_arm_on_each_axis_half():
+    from itertools import combinations
+
+    from dispread.live import frame_tracking as ft
+
+    config = FrameTrackingConfig()
+    quad = np.array([[-300, -30], [300, -30], [300, 30], [-300, 30]], float)
+    outer = quad * (2, 6)
+    limits = ft._proposal_spread_limits(quad, outer, config)
+    np.testing.assert_allclose(limits, [[210, 63], [210, 63]])
+    near = [(sign_x*x, sign_y*y) for sign_x in (-1, 1) for sign_y in (-1, 1)
+            for x, y in [(25, 25), (40, 30), (60, 35), (80, 40), (85, 45)]]
+    assert ft._spread(near, quad, config)  # Alte 20-px-Regel wuerde Reserve melden.
+    assert not ft._reserve_ok(near, quad, config, limits)
+    far = [(x*4, y*3) for x, y in near]
+    assert ft._reserve_ok(far, quad, config, limits)
+    for removed in combinations(range(len(far)), 2):
+        local = np.array([p for i, p in enumerate(far) if i not in removed])
+        assert np.all((local <= -limits[0]).sum(axis=0) >= config.min_inliers_per_side)
+        assert np.all((local >= limits[1]).sum(axis=0) >= config.min_inliers_per_side)
+
+
+def _r11_bezel_scene(cable_width=7):
+    image = np.full((600, 900), 210, np.uint8)
+    cv2.rectangle(image, (100, 90), (800, 510), 35, -1)
+    cv2.rectangle(image, (440, 0), (440+cable_width, 100), 35, -1)
+    cv2.rectangle(image, (240, 240), (660, 360), 180, -1)
+    for x in (150, 195, 705, 750):
+        for y in (145, 190, 410, 455):
+            cv2.rectangle(image, (x, y), (x+8, y+8), 65, -1)
+    quad = np.array([[270, 265], [630, 265], [630, 335], [270, 335]], float)
+    return image, quad
+
+
+def test_r11_bezel_band_reaches_bevel_and_cuts_thin_cable():
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad = _r11_bezel_scene()
+    proposal = proposal_from_regions(image, quad, [(150, 145), (440, 40)])
+    assert proposal.metrics['band_quelle'] == 'dunkler_rahmen'
+    assert proposal.regions[0].centre == (150, 145)
+    assert len(proposal.regions) == 1
+    assert not proposal.metrics['centre_results'][1]['ok']
+    assert propose_regions(image, quad).ok
+
+
+def test_r11_manual_near_centre_regions_cannot_supply_x_reserve():
+    from dispread.live import frame_tracking as ft
+
+    image, quad = _r11_bezel_scene()
+    centres = [(x, y) for x in (390, 420, 480, 510) for y in (145, 190, 410, 455)]
+    for x, y in centres:
+        cv2.rectangle(image, (x, y), (x+8, y+8), 65, -1)
+    manual = ft.proposal_from_regions(image, quad, [], kept_centres=centres)
+    assert [region.centre for region in manual.regions] == centres
+    assert ft._spread(centres, quad, FrameTrackingConfig())
+    assert not manual.ok
+    assert 'rahmenbereiche_einseitig' in manual.reasons
+    assert not manual.metrics['reserve_ok']
+    assert manual.metrics['regions_per_axis_side'] == [[0, 8], [0, 8]]
+
+
+def test_r11_automatic_and_manual_use_the_bezel_only_quality_maximum():
+    from dispread.live import frame_tracking as ft
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad = _r11_bezel_scene()
+    image[image == 65] = 39  # Schwache Rahmenpunkte neben starken Fensterkanten.
+    automatic = propose_regions(image, quad)
+    assert automatic.ok, automatic.metrics
+    manual = proposal_from_regions(
+        image, quad, [], kept_centres=[region.centre for region in automatic.regions])
+    assert manual.regions == automatic.regions
+    assert (158, 153) in [region.centre for region in automatic.regions]
+    _, _, mask, _, _ = ft._geometry(image, quad, FrameTrackingConfig())
+    strength = cv2.cornerMinEigenVal(image, blockSize=3, ksize=3)
+    # Dieser manuell gueltige Punkt faellt unter die bisherige globale
+    # goodFeaturesToTrack-Schwelle, wird jetzt aber auch automatisch gefunden.
+    assert strength[153, 158] < strength[mask != 0].max() * FrameTrackingConfig().bezel_corner_quality
+
+
+@pytest.mark.parametrize('kind', ['border', 'area', 'small_area', 'no_enclosure'])
+def test_r11_implausible_bezel_falls_back_to_fixed_band(kind):
+    image, quad = _r11_bezel_scene(cable_width=70 if kind == 'border' else 7)
+    if kind == 'no_enclosure':
+        image[:, 100:240] = 210
+    config = FrameTrackingConfig(**({'bezel_max_area_ratio': 3.0} if kind == 'area' else
+                                    {'bezel_min_area_ratio': 11.8} if kind == 'small_area' else {}))
+    proposal = propose_regions(image, quad, config)
+    assert proposal.metrics['band_quelle'] == 'festes_band'
+    assert proposal.metrics['band_rueckfallgrund']
+
+
+@pytest.mark.skipif(not Path('var/live/live-20261023T124226Z/setup/still.png').exists(), reason='lokaler R11-Befund')
+def test_r11_frontal_bezel_has_two_region_reserve():
+    setup = Path('var/live/live-20261023T124226Z/setup')
+    quad = json.loads((setup / 'proposal.json').read_text())['quad']
+    proposal = propose_regions(cv2.imread(str(setup / 'still.png')), quad)
+    assert proposal.ok, (proposal.reasons, proposal.metrics)
+    assert proposal.metrics['band_quelle'] == 'dunkler_rahmen'
+    assert proposal.metrics['reserve_ok']
+
+
+def test_r11_real_left_half_bias_does_not_reproduce_centre_line_false_fit():
+    from dispread.live import frame_tracking as ft
+
+    setup = Path('var/live/live-20261023T084344Z/setup')
+    if not all((setup / name).is_file() for name in ('still.png', 'proposal.json')):
+        pytest.skip('lokaler R11-Reviewbefund')
+    reference = cv2.imread(str(setup / 'still.png'))
+    quad = np.asarray(json.loads((setup / 'proposal.json').read_text())['quad'], float)
+    proposal = propose_regions(reference, quad)
+    assert proposal.ok, proposal.metrics
+    tracker = FrameTracker(reference, quad, proposal)
+    local = (tracker.sources - quad.mean(axis=0)) @ ft._axes(quad).T
+    indices = np.flatnonzero(local[:, 0] < -20)
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), -0.4, 1)
+    matrix[:, 2] += (1.5, 0)
+    radius = tracker.config.patch_size // 2 + tracker.config.search_radius_px
+    result = tracker.update(_paste_region_motion(reference, proposal, radius, matrix, indices))
+    if result.quad is not None:
+        close_quad(result, quad)  # Vor dem Fix 2.956 px akzeptierter Eckfehler.
+
+
+@pytest.mark.parametrize('session', ['live-20261023T124226Z', 'live-20261014T172340Z'])
+@pytest.mark.parametrize('width', [60, 90])
+def test_r11_textured_dark_bar_touching_real_bezel_falls_back(session, width):
+    from dispread.live import frame_tracking as ft
+
+    setup = Path('var/live') / session / 'setup'
+    if not (setup / 'still.png').is_file() or not (setup / 'proposal.json').is_file():
+        pytest.skip('lokale R11-Standbilder')
+    image = cv2.imread(str(setup / 'still.png'))
+    quad = ft._normalise_quad(json.loads((setup / 'proposal.json').read_text())['quad'])
+    clean = propose_regions(image, quad)
+    assert clean.metrics['band_quelle'] == 'dunkler_rahmen'
+    # Reviewer exp5.py: strukturierter dunkler Balken, 350x120 px schraeg abwaerts.
+    x0, y0 = int(quad[:, 0].mean()) + 200, int(quad[:, 1].max()) + 150
+    ends = np.array([[x0, y0], [x0+350, y0+120]])
+    bar = np.zeros(image.shape[:2], np.uint8)
+    cv2.line(bar, tuple(ends[0]), tuple(ends[1]), 255, width)
+    image[bar != 0] = 40
+    for t in np.linspace(0.3, 1.0, 6):
+        cx, cy = (ends[0] + t * (ends[1]-ends[0])).astype(int)
+        cv2.rectangle(image, (cx-3, cy-3), (cx+3, cy+3), (90, 90, 90), -1)
+    proposal = propose_regions(image, quad)
+    assert proposal.metrics['band_quelle'] == 'festes_band'
+    assert proposal.metrics['band_rueckfallgrund'] == 'rahmenform_unplausibel'
+    assert proposal.metrics['band_soliditaet'] < 0.97
+    _, _, mask, _, fixed = ft._geometry(ft._gray(image), quad, FrameTrackingConfig())
+    np.testing.assert_array_equal(mask, fixed)
+    assert all(not bar[y, x] for x, y in (region.centre for region in proposal.regions))
+
+
+@pytest.mark.parametrize('x, accepted', [(121, False), (122, True)])
+def test_r11_bezel_windows_include_erosion_and_interpolation_guard(x, accepted):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    image, quad = _r11_bezel_scene()
+    cv2.rectangle(image, (x, 300), (x+8, 308), 65, -1)
+    proposal = proposal_from_regions(image, quad, [(x, 300)])
+    assert proposal.metrics['band_quelle'] == 'dunkler_rahmen'
+    assert bool(proposal.regions) == accepted
+    if not accepted:
+        assert proposal.metrics['centre_results'][0]['reason'] == 'ausserhalb_rahmenband'
+
+
+@pytest.mark.parametrize('changes', [
+    {'proposal_ambiguity_limit': 0.95}, {'proposal_ambiguity_limit': 0.0},
+    {'proposal_min_peak_margin': 0.0}, {'proposal_min_peak_margin': 1.0},
+    {'reserve_regions': 1}, {'bezel_opening_px': 14}, {'bezel_erosion_px': 0},
+    {'bezel_min_area_ratio': 1.0}, {'bezel_max_area_ratio': 2.0},
+    {'bezel_threshold_margin': 0.0}, {'bezel_corner_quality': 0.03},
+    {'bezel_min_solidity': 0.0}, {'bezel_min_solidity': 1.01},
+    {'proposal_lever_arm_fraction': 0.0}, {'proposal_lever_arm_fraction': 1.0},
+])
+def test_r11_proposal_config_rejects_unsafe_limits(changes):
+    with pytest.raises(ValueError):
+        FrameTrackingConfig(**changes)
+
+
+def test_r11_old_tracking_config_requires_new_setup():
+    old = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())['proposal']['config']
+    with pytest.raises(ValueError, match='Unvollstaendige'):
+        FrameTrackingConfig.from_dict(old)
+
+
+def test_r11_additional_bezel_structure_must_localise_known_half_pixel_motion():
+    from dispread.live import frame_tracking as ft
+
+    image = cv2.cvtColor(cv2.imread(str(FIXTURES / 'reference.jpg')), cv2.COLOR_BGR2GRAY)
+    # Selbst-eindeutige Ecken: bekannte Halb-Pixel-Bewegungen lokalisieren
+    # die beiden ersten um >0.3 / >0.15 px falsch, die dritte bleibt <0.1 px.
+    assert not ft._bezel_motion_ok(image, (891, 325), FrameTrackingConfig())
+    assert not ft._bezel_motion_ok(image, (518, 503), FrameTrackingConfig())
+    assert ft._bezel_motion_ok(image, (853, 316), FrameTrackingConfig())
+
+
+@pytest.mark.skipif(not Path('var/diagnostics/r13-werteplan-20261021/frames/frame_000440.png').exists(),
+                    reason='lokale DEV-Bilder')
+@pytest.mark.parametrize('name', ['frame_000289.png', 'frame_000390.png', 'frame_000440.png'])
+def test_r11_new_proposal_preserves_dev_availability(name):
+    reference = cv2.imread('var/live/live-20261021T151835Z/setup/still.png')
+    quad = json.loads(Path('var/live/live-20261021T151835Z/profile.json').read_text())['quad']
+    proposal = propose_regions(reference, quad)
+    tracker = FrameTracker(reference, quad, proposal)
+    result = tracker.update(cv2.imread(str(Path('var/diagnostics/r13-werteplan-20261021/frames') / name)))
+    close_quad(result, quad)

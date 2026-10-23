@@ -39,6 +39,7 @@ REASONS = {
     "vorschlag_ungeeignet": "rahmenvorschlag ungeeignet",
     "zu_wenig_rahmenbereiche": "zu wenige geeignete Rahmenbereiche",
     "rahmenbereiche_einseitig": "rahmenbereiche nicht ausreichend verteilt",
+    "rahmenbereiche_ohne_reserve": "rahmenbereiche ohne Reserve fuer zwei Ausfaelle",
     "zu_wenig_rahmenmerkmale": "zu wenige Rahmenmerkmale wiedergefunden",
     "rahmen_mehrdeutig": "rahmenmerkmale nicht eindeutig zugeordnet",
     "rahmen_unstimmig": "rahmenbewegungen passen nicht zusammen",

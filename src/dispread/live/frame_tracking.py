@@ -1,8 +1,12 @@
 """Zustandslose Nachfuehrung aus begrenzten Rahmenfenstern und LCD-Rand.
 
-Kandidat R13-7, festgelegt am Entwicklungsdatensatz; C/D
+Vorschlag geaendert R13-11 (Band, Hysterese, Reserve); Update-Regeln unveraendert; neue
+Abnahme noetig. Profile vor R13-11 muessen neu eingerichtet werden.
+
+Update-Kandidat R13-7, festgelegt am Entwicklungsdatensatz; C/D
 (r13-abnahme-c/d-hell-20261022) waren Anlass und gelten nicht als Abnahme;
-neue Abnahme r13-abnahme-e/f-*. Keine Freigabe. Kleine rohe Fenster vermeiden
+R13-7-Abnahme r13-abnahme-e/f-*. Fuer R13-11 ist eine weitere getrennte
+Abnahme noetig. Keine Freigabe. Kleine rohe Fenster vermeiden
 Zeicheninhalt; Eindeutigkeit, verteilte Inlier und der unabhaengige helle
 LCD-Rand bleiben harte Regeln. Keine automatische Abschwaechung bei fehlender
 Struktur.
@@ -16,12 +20,34 @@ Pruefungen laufen anschliessend am verwendeten Mittelpunkt unveraendert.
 Beibehaltene Bereiche werden ohne erneutes Einrasten am gespeicherten
 Mittelpunkt geprueft, unabhaengig von ihrer automatischen/manuellen Herkunft.
 
-Aussengrenze: Quad um Faktor 3 um seinen Mittelpunkt skalieren, zusaetzlich
-an beiden Enden auf 100 Rohpixel Abstand begrenzen. Das schmale Band erfasst
-die Glasecken, aber nicht Kabel oberhalb oder Tisch jenseits des Rahmens.
-Dies ist eine geometrische Vorauswahl, keine allgemeine Gehaeuseerkennung.
-Alle Suchpixel samt einem Interpolationspixel bleiben in diesem Band und
-jenseits des um 8 Pixel dilatierten Zeichenpolygons.
+Vorschlagsband: aus dem LCD-Randmodell wird die dunkle Rahmenkomponente
+bestimmt. Schwelle: 90%-Quantil 20/35/50 px ausserhalb der starken Fensterkanten
+plus 24 Graustufen, nach oben durch die Otsu-Schwelle begrenzt; 15x15-Oeffnung trennt duenne Verbindungen (Kabel).
+Nur eine randfreie Komponente mit geschlossener Aussenkontur um Quad UND
+Fensterkanten, 2..12-facher Quadflaeche und Soliditaet >=0.97
+(Konturflaeche / konvexe Huellflaeche) ist plausibel. Ihre gefuellte
+Aussenkontur (auch helle Fasen) wird um 2 px erodiert. Hinzu kommt die bisherige
+Fenstereckenzone. Ohne plausiblen Rahmen gilt das bisherige feste Band:
+Quadskalierung 3, an den Enden auf 100 Rohpixel begrenzt. band_quelle und
+band_rueckfallgrund legen die Entscheidung offen. Zeichenpolygon weiterhin
+um 8 px dilatiert; ALLE Suchpixel samt Interpolationspixel bleiben im Band.
+Die Oeffnung trennt duenne Verbindungen nach aussen; ein Kabel vor der
+Rahmenflaeche liegt innerhalb des Bandes und wird dadurch nicht ausgeschlossen.
+Vorschlagsmatching verlangt Zweitpeak/Peak <=0.90 UND Peakabstand >=0.10;
+die Laufzeitgrenze bleibt 0.95. Shi-Tomasi-Schwelle bleibt fuer die
+Fensterzone 0.02, fuer neue Rahmenflaechen 0.005 (relative Schwelle je Zone).
+Neue Fasenstruktur muss zudem vier bekannte Halb-Pixel-Bewegungen
+(je Achse +/-0.5 px, bilinear) auf <=0.10 px lokalisieren, mit derselben
+Laufzeit-Mindestkorrelation und Eindeutigkeit. So werden selbst-eindeutige,
+aber schlecht lokalisierbare Kanten abgelehnt; unveraendert fuer Fensterpunkte.
+Die Probe ist fuer Fensterpunkte eine Auswahlpraeferenz, keine zusaetzliche
+Ablehnung. Bis zu 20 Bereiche, unveraenderter
+Abstand, reihum aus vier Quadranten. Bevorzugt werden Punkte mit Hebelarm
+an beiden Achsen, danach an einer, dann die bestandene Bewegungsprobe und
+Strukturstaerke. Nur fuer den Vorschlag zaehlt eine Achsenseite ab 35 Prozent
+ihrer Ausdehnung vom Quadmittelpunkt bis zur aeusseren Bandkontur (mindestens
+20 px). Diese strengere Streuung muss nach beliebigen zwei Bereichsausfaellen
+weiter gelten (mindestens fuenf solche Bereiche je Achsenseite).
 
 Streuung wird in lokalen Quadachsen geprueft: mindestens drei Inlier auf
 JEDER Seite BEIDER Achsen, jeweils mindestens 20 px vom Mittelpunkt entfernt
@@ -32,7 +58,7 @@ Dies schliesst den auf DEV-Fixtures reproduzierten einzelnen Hebelpunkt aus.
 Nach RANSAC, Streuung und Leave-one-out gelten zusaetzlich fuer die euklidischen
 Residuen ALLER Inlier des endgueltigen starren Fits: RMS <= 0.35 px UND
 Maximum <= 0.65 px, sonst rahmen_unstimmig. Genauigkeit wird damit explizit
-ueber die Konsistenz der Rahmenbereiche geprueft. DEV r13-werteplan-20261021:
+ueber die Konsistenz der Rahmenbereiche geprueft. R13-7, DEV r13-werteplan-20261021:
 568 Fits, 6346 Inlier; Residuen-99.9%-Quantil 0.503581 px, Maximum 0.527865 px;
 RMS-99.9%-Quantil je Bild 0.286432 px, Maximum 0.286613 px. Die Grenzen geben
 0.063568 px RMS- bzw. 0.146419 px Residuen-Marge zum jeweiligen 99.9%-Quantil.
@@ -73,9 +99,12 @@ grundsaetzlichen Verfuegbarkeitsentscheidung.
 15-px-Patches und 12-px-Suchradius lassen kleine Rohbildbewegungen zu;
 Peak >=0.75 und Zweitpeak/Peak <=0.95 ausserhalb +/-3 px verlangen erkennbare
 und eindeutige Struktur. Inlier mit <=1.5 px Residuum sichern den starren Fit;
-Bewegungsgrenzen bleiben 20 px / 3 Grad. Numerische Defaults ausschliesslich
+Bewegungsgrenzen bleiben 20 px / 3 Grad. Numerische Update-Defaults ausschliesslich
 an der benannten Entwicklungsaufnahme und ihren Fixtures festgelegt;
 ausgenommen die vom Controller vorgegebene grobe Randtoleranz 2.5 px.
+R13-11-Vorschlagsdefaults nutzen auch die benannten Einrichtungsbilder
+(insbesondere frontal live-20261023T124226Z); E/F sind fuer R13-11 kein
+unabhaengiger Abnahmebeleg.
 
 Eingaben: ausschliesslich uint8, Graustufen (H,W), BGR (H,W,3) oder BGRA
 (H,W,4), Alpha wird ignoriert. Float-/andere Typen oder Formen fuehren in
@@ -112,7 +141,18 @@ class FrameTrackingConfig:
     ambiguity_limit: float = 0.95
     ambiguity_radius_px: int = 3
     min_regions: int = 4
-    max_regions: int = 12
+    max_regions: int = 20
+    proposal_ambiguity_limit: float = 0.90
+    proposal_min_peak_margin: float = 0.10
+    reserve_regions: int = 2
+    bezel_max_localisation_error_px: float = 0.10
+    bezel_threshold_margin: float = 24.0
+    bezel_opening_px: int = 15
+    bezel_erosion_px: int = 2
+    bezel_min_area_ratio: float = 2.0
+    bezel_max_area_ratio: float = 12.0
+    bezel_min_solidity: float = 0.97
+    proposal_lever_arm_fraction: float = 0.35
     min_spread_px: float = 20.0
     min_inliers_per_side: int = 3
     max_leave_one_out_corner_px: float = 0.5
@@ -120,6 +160,7 @@ class FrameTrackingConfig:
     max_inlier_residual_px: float = 0.65
     min_spacing_px: float = 28.0
     corner_quality: float = 0.02
+    bezel_corner_quality: float = 0.005
     max_candidates: int = 200
     ransac_tolerance_px: float = 1.5
     max_shift_px: float = 20.0
@@ -161,6 +202,16 @@ class FrameTrackingConfig:
             raise ValueError("Ungerade Patchgroesse und positiver Suchradius erforderlich")
         if not 0 < self.min_peak <= 1 or not 0 < self.ambiguity_limit < 1:
             raise ValueError("Ungueltige Matchinggrenzen")
+        if (not 0 < self.proposal_ambiguity_limit < self.ambiguity_limit
+                or not 0 < self.proposal_min_peak_margin < 1
+                or self.bezel_max_localisation_error_px <= 0
+                or self.reserve_regions < 2 or not 0 < self.bezel_corner_quality <= self.corner_quality
+                or self.bezel_opening_px < 3 or self.bezel_opening_px % 2 != 1
+                or self.bezel_erosion_px < 1 or not 0 < self.bezel_threshold_margin < 255
+                or not 0 < self.bezel_min_solidity <= 1
+                or not 0 < self.proposal_lever_arm_fraction < 1
+                or not 1 < self.bezel_min_area_ratio < self.bezel_max_area_ratio):
+            raise ValueError("Ungueltige Vorschlagsgrenzen")
         if not 2 <= self.min_regions <= self.max_regions or self.min_spread_px <= 0:
             raise ValueError("Ungueltige Bereichszahl oder Streuung")
         if (self.min_inliers_per_side < 2 or 2*self.min_inliers_per_side > self.max_regions
@@ -276,7 +327,8 @@ def _polygon(points):
     return tuple((float(x), float(y)) for x, y in points)
 
 
-def _geometry(shape, quad, config):
+def _geometry(gray, quad, config):
+    shape = gray.shape
     centre = quad.mean(axis=0)
     outer = (quad - centre) * config.outer_scale + centre
     axes = _axes(quad)
@@ -297,10 +349,99 @@ def _geometry(shape, quad, config):
     zone = np.array([np.linalg.solve(normals[[i-1, i]], offsets[[i-1, i]]) for i in range(4)])
     mask = np.zeros(shape, np.uint8)
     cv2.fillConvexPoly(mask, np.rint(outer).astype(np.int32), 255)
+    fixed_band = mask.copy()
+    bezel, metrics = _bezel_band(gray, quad, config)
+    if bezel is not None:
+        mask |= bezel
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Aussenkontur nur fuer das Overlay; die Auswahl benutzt die Pixelmaske.
+        outer = max(contours, key=cv2.contourArea).reshape(-1, 2)
     cv2.fillConvexPoly(mask, np.rint(zone).astype(np.int32), 0)
     radius = config.patch_size // 2 + config.search_radius_px + config.interpolation_guard_px
     mask = cv2.erode(mask, np.ones((2*radius+1, 2*radius+1), np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=0)
-    return zone, outer, mask
+    cv2.fillConvexPoly(fixed_band, np.rint(zone).astype(np.int32), 0)
+    fixed_band = cv2.erode(fixed_band, np.ones((2*radius+1, 2*radius+1), np.uint8),
+                           borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    return zone, outer, mask, metrics, fixed_band
+
+
+def _bezel_band(gray, quad, config):
+    """Nur eine geschlossene, randfreie dunkle Rahmenkomponente zulassen."""
+    metrics = {"band_quelle": "festes_band", "band_rueckfallgrund": "lcd_rand_fehlt"}
+    edges = _edge_model(gray, quad, config)
+    if not edges:
+        return None, metrics
+    points = np.array([edge.point for edge in edges])
+    normals = np.array([edge.normal for edge in edges])
+    # Direkt an der Kante liegt oft eine schwarze Nut. Weiter aussen
+    # repraesentieren drei Probenabstaende die helleren Rahmenflaechen.
+    samples = _sample(gray, points[:, None] + np.array([20, 35, 50])[None, :, None] * normals[:, None])
+    otsu, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU)
+    threshold = min(float(otsu), float(np.percentile(samples, 90)) + config.bezel_threshold_margin)
+    metrics["band_schwelle"] = threshold
+    dark = np.uint8(gray <= threshold) * 255
+    dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((config.bezel_opening_px,)*2, np.uint8))
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(dark)
+    seeds = np.rint(points + 20*normals).astype(int)
+    valid = ((seeds >= 0).all(axis=1) & (seeds < gray.shape[::-1]).all(axis=1))
+    candidates = set(labels[seeds[valid, 1], seeds[valid, 0]]) - {0}
+    quad_mask = np.zeros_like(gray)
+    cv2.fillConvexPoly(quad_mask, np.rint(quad).astype(np.int32), 255)
+    area = cv2.contourArea(quad.astype(np.float32))
+    plausible = []
+    metrics["band_rueckfallgrund"] = "rahmen_nicht_geschlossen"
+    # Bei mehreren verworfenen Komponenten den Grund der groessten offenlegen.
+    for label in sorted(candidates, key=lambda label: (stats[label, cv2.CC_STAT_AREA], label)):
+        metrics["band_rueckfallgrund"] = "rahmen_nicht_geschlossen"
+        metrics.pop("band_flaeche_quad", None)
+        metrics.pop("band_soliditaet", None)
+        x, y, w, h, _ = stats[label]
+        if x == 0 or y == 0 or x+w == gray.shape[1] or y+h == gray.shape[0]:
+            metrics["band_rueckfallgrund"] = "rahmen_am_bildrand"
+            continue
+        component = np.uint8(labels == label) * 255
+        contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contour = max(contours, key=cv2.contourArea)
+        contour_area = cv2.contourArea(contour)
+        ratio = contour_area / area
+        solidity = contour_area / max(cv2.contourArea(cv2.convexHull(contour)), 1.0)
+        metrics.update(band_flaeche_quad=ratio, band_soliditaet=solidity)
+        if not config.bezel_min_area_ratio <= ratio <= config.bezel_max_area_ratio:
+            metrics["band_rueckfallgrund"] = "rahmenflaeche_unplausibel"
+            continue
+        if solidity < config.bezel_min_solidity:
+            metrics["band_rueckfallgrund"] = "rahmenform_unplausibel"
+            continue
+        filled = np.zeros_like(gray)
+        cv2.drawContours(filled, [contour], -1, 255, cv2.FILLED)
+        edge_pixels = np.rint(points).astype(int)
+        if (not np.all(filled[quad_mask != 0])
+                or not np.all(filled[edge_pixels[:, 1], edge_pixels[:, 0]])):
+            continue
+        plausible.append((ratio, solidity, filled))
+    if len(plausible) != 1:
+        if len(plausible) > 1:
+            metrics["band_rueckfallgrund"] = "rahmen_mehrdeutig"
+        return None, metrics
+    ratio, solidity, filled = plausible[0]
+    radius = config.bezel_erosion_px
+    bezel = cv2.erode(filled, np.ones((2*radius+1,)*2, np.uint8))
+    metrics.update(band_quelle="dunkler_rahmen", band_rueckfallgrund=None,
+                   band_flaeche_quad=ratio, band_soliditaet=solidity)
+    return bezel, metrics
+
+
+def _proposal_match(response, config):
+    """Strengere Eindeutigkeit nur bei der Einrichtung; _peak bleibt eingefroren."""
+    _, peak, ambiguous = _peak(response, config)
+    _, _, _, (x, y) = cv2.minMaxLoc(response)
+    other = response.copy()
+    r = config.ambiguity_radius_px
+    other[max(0, y-r):y+r+1, max(0, x-r):x+r+1] = -1
+    second = float(other.max())
+    return bool(not ambiguous and peak >= config.min_peak
+                and second <= peak * config.proposal_ambiguity_limit
+                and peak - second >= config.proposal_min_peak_margin)
 
 
 def _peak(response, config):
@@ -379,35 +520,53 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig()) -> Regi
     """Starke, selbst-eindeutige Ecken vorschlagen; fehlende Eignung offenlegen."""
     gray = _gray(reference_image)
     quad = _normalise_quad(quad)
-    zone, outer, mask = _geometry(gray.shape, quad, config)
-    candidates = cv2.goodFeaturesToTrack(gray, config.max_candidates, config.corner_quality,
-                                        config.min_spacing_px, mask=mask, blockSize=3)
+    zone, outer, mask, band_metrics, fixed_band = _geometry(gray, quad, config)
     groups = [[] for _ in range(4)]
     ambiguous_count = 0
-    if candidates is not None:
-        for candidate in candidates.reshape(-1, 2):
-            x, y = np.rint(candidate).astype(int)
-            h, r = config.patch_size // 2, config.search_radius_px
-            patch = _window(gray, (x, y), h)
-            search = _window(gray, (x, y), h+r+config.interpolation_guard_px)
-            if patch is None or search is None:
-                continue
-            search = _window(gray, (x, y), h+r)
-            _, peak, ambiguous = _peak(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config)
-            if ambiguous or peak < config.min_peak:
-                ambiguous_count += 1
-                continue
-            local = (candidate - quad.mean(axis=0)) @ _axes(quad).T
-            group = int(local[0] > 0) * 2 + int(local[1] > 0)
-            groups[group].append(FrameRegion((int(x), int(y)), config.patch_size))
+    strength, threshold = _proposal_strength(gray, mask, fixed_band, config)
+    # Je Zone dieselbe relative Schwellenbasis wie bei manuellen Punkten.
+    candidates = []
+    for candidate_mask, quality in ((fixed_band, config.corner_quality),
+                                    (mask & ~fixed_band, config.bezel_corner_quality)):
+        found = cv2.goodFeaturesToTrack(gray, config.max_candidates, quality,
+                                       config.min_spacing_px, mask=candidate_mask, blockSize=3)
+        if found is not None:
+            candidates.extend(found.reshape(-1, 2))
+    candidates.sort(key=lambda point: (-float(strength[int(point[1]), int(point[0])]), point[1], point[0]))
+    spaced = []
+    limits = _proposal_spread_limits(quad, outer, config)
+    for candidate in candidates:
+        if any(np.linalg.norm(candidate - point) < config.min_spacing_px for point in spaced):
+            continue
+        spaced.append(candidate)
+        if len(spaced) > config.max_candidates:
+            break
+        x, y = np.rint(candidate).astype(int)
+        if strength[y, x] <= threshold[y, x]:
+            continue
+        h, r = config.patch_size // 2, config.search_radius_px
+        patch = _window(gray, (x, y), h)
+        search = _window(gray, (x, y), h+r+config.interpolation_guard_px)
+        if patch is None or search is None:
+            continue
+        search = _window(gray, (x, y), h+r)
+        if not _proposal_match(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config):
+            ambiguous_count += 1
+            continue
+        stable = _bezel_motion_ok(gray, (x, y), config)
+        if not fixed_band[y, x] and not stable:
+            continue
+        local = (candidate - quad.mean(axis=0)) @ _axes(quad).T
+        group = int(local[0] > 0) * 2 + int(local[1] > 0)
+        arms = int(np.count_nonzero((local <= -limits[0]) | (local >= limits[1])))
+        groups[group].append((-arms, not stable, FrameRegion((int(x), int(y)), config.patch_size)))
     # Reihum aus vier Quadranten: starke Ecken einer Seite verdraengen nie alle anderen.
-    ordered = []
-    for row in range(max(map(len, groups), default=0)):
-        for group in groups:
-            if row < len(group):
-                ordered.append(group[row])
+    for group in groups:
+        group.sort(key=lambda candidate: candidate[:2])
+    ordered = [group[row][2] for row in range(max(map(len, groups), default=0))
+               for group in groups if row < len(group)]
     regions = tuple(ordered[:config.max_regions])
-    return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config)
+    return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, band_metrics)
 
 
 def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingConfig(), *, kept_centres=()) -> RegionProposal:
@@ -423,15 +582,12 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
     """
     gray = _gray(reference_image)
     quad = _normalise_quad(quad)
-    zone, outer, mask = _geometry(gray.shape, quad, config)
+    zone, outer, mask, band_metrics, fixed_band = _geometry(gray, quad, config)
     character = np.zeros(gray.shape, np.uint8)
-    outside = np.zeros(gray.shape, np.uint8)
     cv2.fillConvexPoly(character, np.rint(zone).astype(np.int32), 255)
-    cv2.fillConvexPoly(outside, np.rint(outer).astype(np.int32), 255)
     # Shi-Tomasi: dieselbe 2-D-Struktur und relative Schwelle wie
     # goodFeaturesToTrack(blockSize=3, qualityLevel=corner_quality, mask=mask).
-    strength = cv2.cornerMinEigenVal(gray, blockSize=3, ksize=3)
-    threshold = float(strength[mask != 0].max()) * config.corner_quality if np.any(mask) else 0.0
+    strength, threshold = _proposal_strength(gray, mask, fixed_band, config)
     local_maximum = cv2.dilate(strength, np.ones((3, 3), np.uint8))
     regions, results = [], []
     ambiguous_count = 0
@@ -451,7 +607,7 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
             for cy in range(top, bottom):
                 for cx in range(left, right):
                     distance_squared = (cx-x)**2 + (cy-y)**2
-                    if (distance_squared <= snap_radius**2 and strength[cy, cx] > threshold
+                    if (distance_squared <= snap_radius**2 and strength[cy, cx] > threshold[cy, cx]
                             and strength[cy, cx] == local_maximum[cy, cx]):
                         candidates.append((-float(strength[cy, cx]), distance_squared, cy, cx))
             used = None
@@ -465,46 +621,98 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
             reason = "am_bildrand"
         elif np.any(_window(character, (x, y), radius)):
             reason = "im_zeichenbereich"
-        elif not np.all(_window(outside, (x, y), radius)):
+        elif not mask[y, x]:
             reason = "ausserhalb_rahmenband"
-        elif strength[y, x] <= threshold or strength[y, x] != local_maximum[y, x]:
+        elif strength[y, x] <= threshold[y, x] or strength[y, x] != local_maximum[y, x]:
             reason = "zu_wenig_struktur"
         else:
             patch, search = _window(gray, (x, y), h), _window(gray, (x, y), h+r)
-            _, peak, ambiguous = _peak(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config)
-            if ambiguous or peak < config.min_peak:
+            if not _proposal_match(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config):
                 ambiguous_count += 1
                 reason = "mehrdeutig"
+            elif not fixed_band[y, x] and not _bezel_motion_ok(gray, (x, y), config):
+                reason = "zu_wenig_struktur"
             elif any(np.linalg.norm(np.asarray(region.centre) - (x, y)) < config.min_spacing_px for region in regions):
                 reason = "zu_nah"
         results.append({"requested_centre": point.tolist(), "centre": [x, y], "used_centre": used,
                         "ok": reason is None, "reason": reason})
         if reason is None:
             regions.append(FrameRegion((x, y), config.patch_size))
-    proposal = _region_proposal(gray, quad, zone, outer, tuple(regions), ambiguous_count, config)
+    proposal = _region_proposal(gray, quad, zone, outer, tuple(regions), ambiguous_count, config, band_metrics)
     proposal.metrics["centre_results"] = results
     return proposal
 
 
-def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config):
+def _proposal_strength(gray, mask, fixed_band, config):
+    strength = cv2.cornerMinEigenVal(gray, blockSize=3, ksize=3)
+    threshold = np.full(gray.shape, float(strength[mask != 0].max()) * config.bezel_corner_quality if np.any(mask) else 0.0)
+    for candidate_mask, quality in ((fixed_band, config.corner_quality),
+                                    (mask & ~fixed_band, config.bezel_corner_quality)):
+        if np.any(candidate_mask):
+            threshold[candidate_mask != 0] = float(strength[candidate_mask != 0].max()) * quality
+    return strength, threshold
+
+
+def _bezel_motion_ok(gray, centre, config):
+    """Neue Fasenstruktur muss bekannte Halb-Pixel-Bewegungen lokalisieren."""
+    h, r = config.patch_size // 2, config.search_radius_px
+    search = _window(gray, centre, h+r+1)
+    patch = _window(gray, centre, h)
+    if search is None or patch is None:
+        return False
+    for dx, dy in ((0.5, 0), (-0.5, 0), (0, 0.5), (0, -0.5)):
+        moved = cv2.warpAffine(search, np.float32([[1, 0, dx], [0, 1, dy]]), search.shape[::-1])[1:-1, 1:-1]
+        position, peak, ambiguous = _peak(cv2.matchTemplate(moved, patch, cv2.TM_CCOEFF_NORMED), config)
+        if (ambiguous or peak < config.min_peak
+                or np.linalg.norm(position - r - (dx, dy)) > config.bezel_max_localisation_error_px):
+            return False
+    return True
+
+
+def _proposal_spread_limits(quad, outer, config):
+    """Hebelarm je Achsenseite aus der Bandkontur, nur fuer den Vorschlag."""
+    local = (np.asarray(outer) - quad.mean(axis=0)) @ _axes(quad).T
+    extents = np.array([-local.min(axis=0), local.max(axis=0)])
+    return np.maximum(config.min_spread_px, extents * config.proposal_lever_arm_fraction)
+
+
+def _reserve_ok(centres, quad, config, limits):
+    local = (np.asarray(centres).reshape(-1, 2) - quad.mean(axis=0)) @ _axes(quad).T
+    required = config.min_inliers_per_side + config.reserve_regions
+    return bool(len(centres) - config.reserve_regions >= config.min_regions
+                and np.all((local <= -limits[0]).sum(axis=0) >= required)
+                and np.all((local >= limits[1]).sum(axis=0) >= required))
+
+
+def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, band_metrics):
     edges = _edge_model(gray, quad, config)
     counts = [sum(edge.side == side for edge in edges) for side in range(4)]
     strong_sides = [side for side, count in enumerate(counts) if count >= config.edge_min_points_per_side]
     weak_sides = [side for side in range(4) if side not in strong_sides]
     centres = [region.centre for region in regions]
-    spread = _spread(centres, quad, config)
     local = (np.asarray(centres).reshape(-1, 2) - quad.mean(axis=0)) @ _axes(quad).T
+    limits = _proposal_spread_limits(quad, outer, config)
+    side_counts = np.array([(local <= -limits[0]).sum(axis=0),
+                            (local >= limits[1]).sum(axis=0)])
+    spread = bool(np.all(side_counts >= config.min_inliers_per_side))
+    reserve_ok = _reserve_ok(centres, quad, config, limits)
     reasons = []
     if len(regions) < config.min_regions:
         reasons.append("zu_wenig_rahmenbereiche")
     if not spread:
         reasons.append("rahmenbereiche_einseitig")
+    if spread and not reserve_ok:
+        reasons.append("rahmenbereiche_ohne_reserve")
     if (len(strong_sides) < max(3, config.edge_required_sides)
             or not any(side in strong_sides for side in (0, 2))
             or not any(side in strong_sides for side in (1, 3))):
         reasons.append("lcd_rand_fehlt")
     return RegionProposal(regions, edges, _polygon(zone), _polygon(outer), not reasons, tuple(reasons),
-                          {"regions": len(regions), "spread_ok": spread, "ambiguous_candidates": ambiguous_count,
+                          {**band_metrics, "regions": len(regions), "spread_ok": spread, "ambiguous_candidates": ambiguous_count,
+                           "reserve_ok": reserve_ok, "reserve_removals": config.reserve_regions,
+                           "regions_per_axis_side": side_counts.tolist(),
+                           "proposal_spread_limits_px": limits.tolist(),
+                           "reserve_required_per_side": config.min_inliers_per_side + config.reserve_regions,
                            "edge_points_per_side": counts,
                            "edge_sides_strong": strong_sides, "edge_sides_weak": weak_sides,
                            "local_min_px": local.min(axis=0).tolist() if len(local) else None,
