@@ -1,10 +1,45 @@
-# Status — Stand 2026-10-21
+# Status — Stand 2026-10-23
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
-## Wiki-Abgleich
+## Aktuelle Arbeit: interaktive Wiki-Roadmap
+
+Die Roadmap ist im isolierten Arbeitsstand als frei verschiebbare Karte
+mit P0–P8 und einer eigenen inneren Ebene für die Arbeitsschritte gebaut.
+Kartenminiaturen zeigen die enthaltene Ebene. Beim Eintritt verblassen
+Inhalt und Füllung, der Umriss erreicht den Bühnenrand; Randlicht und eine
+statische Punktwolke kennzeichnen die innere Karte. Klick, Tastatur,
+Mausrad und Touch-Pinch nutzen denselben Ebenenwechsel.
+
+Die Hauptkarten zeigen gemäß Bildvorlage zwei verbundene Checkpoints mit
+Häkchen und Status rechts. Bei laufenden Phasen bleibt der nächste offene
+Schritt sichtbar. Schrittstatus und belegte Daten kommen aus der neuen
+Tabelle in [ROADMAP.md](ROADMAP.md#roadmap-schritte); die erste
+Phasentabelle bleibt unverändert. Quelltabellen und Nutzung ohne
+JavaScript bleiben erhalten. Die vorhandene lokale Anime.js-Kopie wird
+wiederverwendet, es gibt keine neue Abhängigkeit.
+
+Arbeitsstand: `/home/me-systeme/.codex/worktrees/bbce/picam-ai`. Die Roadmap
+wird auf ausdrücklichen Wunsch in einem eigenen lokalen Commit gesichert;
+eine Veröffentlichung erfolgt dabei nicht. Vorbestehende TODO-Änderungen
+und der R13-Plan bleiben außerhalb dieses Commits erhalten.
+[Entwurf](superpowers/specs/2026-10-23-roadmap-spatial-zoom-design.md)
+und [Umsetzungsplan](superpowers/plans/2026-10-23-roadmap-spatial-zoom.md)
+halten Entscheidungen und Abnahme fest. Eine unabhängige Codeprüfung
+fand einen inzwischen korrigierten Verlust unbesuchter Kartenpositionen
+nach Neuladen; ein Regressionstest deckt beide betroffenen Ebenen ab.
+Abschluss: **45/45 Doku-Browsertests bestanden**, strenger Website-Build
+ohne Befunde, JavaScript-Syntax- und Diff-Prüfung sauber. Desktop und
+375-Pixel-Ansicht in beiden Themes gesichtet; der Schlussreview bestätigt
+die Speicherkorrektur und hat keine offenen wichtigen Befunde.
+
+In dieser Session keine Hardwareänderung, kein Messlauf und keine
+Änderung am Messpfad. Die folgenden Lauf- und Messangaben sind der
+dokumentierte Projektstand vom 2026-10-21, keine neue Live-Abfrage.
+
+## Wiki-Abgleich vom 2026-10-21
 
 Alle 52 Zensical-Navigationsseiten und die 34 Tour-Schritte sind geprüft.
 Drei Subagents bearbeiteten Anleitungen, Projekt/Betrieb und Tour/API;
@@ -23,10 +58,9 @@ Neu erkannt und sofort erfasst:
   teilweise mit einer unpassenden Zeitbasis bezeichnet. Der aktuelle
   V4L2-Livepfad passt; andere Aufnahmezeitbasen brauchen eine Korrektur.
 
-Produktionscode wurde in dieser Doku-Runde nicht geändert. Vorbestehende
-Messdokumente und deren neue Abschlussbelege sind erhalten. Für den
-autorisierten gemeinsamen Doku-/Wiki-Commit auf `master` wird der Stand
-nochmals geprüft; der Messlauf ist beendet und die Rückstellung bestätigt.
+Produktionscode wurde bei diesem Abgleich nicht geändert. Vorbestehende
+Messdokumente und deren neue Abschlussbelege sind erhalten. Der damalige
+Messlauf ist beendet und die Rückstellung bestätigt.
 OQ-/Tour-Faktentests: **13 erfolgreich**, Browserprüfung: **29 erfolgreich**.
 Strenger Website-Build, Lint, Generator- und Diff-Prüfungen bestanden.
 Alle 52 Navigationsseiten laden mit HTTP 200 ohne JavaScript-Fehler;
@@ -101,7 +135,8 @@ aktiv. Port 8080 ist auf diesem Pi durch MEhub belegt. Vorbereitung und
 Register-Sicherung: `var/diagnostics/messlauf-vorbereitung-20261021/`.
 Aufstellung: Fokus 42, Belichtung 300, Gain 14, Weißabgleich 4717 K;
 sitzungsbezogene Einstellungen in `setup/camera-settings.json`.
-Keine Hardwareänderung oder neuer Messlauf durch den Wiki-Abgleich.
+Keine Hardwareänderung oder neuer Messlauf durch den Wiki-Abgleich oder
+die Roadmap-Gestaltung; der aktuelle Laufzustand wurde nicht abgefragt.
 
 Nächste Aufgaben gemäß TODO:
 

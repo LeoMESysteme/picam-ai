@@ -46,9 +46,16 @@ Zwei harte Sätze:
   sechs Spalten (`Phase`, `Ziel`, `Kamera?`, `GSVmulti-Spec?`,
   `Hartes Exit-Kriterium`, `Stand`) und die Statuswörter `erreicht`,
   `teilweise`, `blockiert`, `offen`. Bei einer Strukturänderung
-  `docs-site/assets/docs-interactive.js` und `tests/docs-site.spec.ts`
+  `docs-site/assets/roadmap.js` und `tests/docs-site.spec.ts`
   zusammen anpassen. Status und Exit-Kriterien bei neuen Belegen in der
   Roadmap selbst aktualisieren.
+  Die zusätzliche Tabelle in `.roadmap-steps-source` enthält `Phase`, `ID`,
+  `Schritt`, `Stand`, `Aktualisiert`, `Beleg`. Schritt-IDs sind eindeutig
+  und stabil; Termine nur mit Beleg, sonst `—`. Die Reihenfolge der offenen
+  Schritte bestimmt den nächsten Checkpoint innerhalb der Phase.
+  Die Karte und ihre innere Ebene stehen in `roadmap.js`/`roadmap.css`;
+  die vorhandene lokale Anime.js-Version bleibt die Animationslaufzeit.
+  Phasenstatus, gebaute Werkzeuge und bestandene Abnahme nicht vermischen.
 * Vorschau-Links auf Glossarbegriffe und Dokumentabschnitte brauchen stabile
   Überschriften-IDs und kurze Zielabschnitte. Links ohne Abschnittsanker auf
   Glossar und Timing zeigen die jeweilige Seiteneinleitung; diese knapp

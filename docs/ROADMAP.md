@@ -18,6 +18,60 @@ Freigabe und Abnahme bleiben an ihre Nachweise und Entscheidungen gebunden. Stan
 | **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | offen |
 | **P8** | *optional:* eigenes Modell, Lokalisierung auf den IMX500 | ja | nein | belegter Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante | offen — ruht, IMX500 außer Betrieb seit 2026-09-25 |
 
+## Arbeitsschritte und Checkpoints {#roadmap-schritte}
+
+Die Karte liest diese Schritte zusammen mit der Phasentabelle. Die Reihenfolge
+der offenen Schritte ist die Priorität innerhalb des jeweiligen Meilensteins;
+die projektweite Arbeitsreihenfolge bleibt in [TODO](../TODO.md).
+„Gebaut“ bezeichnet die Umsetzung, „belegt“ einen ausdrücklich verlinkten
+Nachweis. Beides ersetzt keine vollständige Systemabnahme. Ein leeres Datum
+bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
+
+<div class="roadmap-steps-source" markdown="1">
+
+| Phase | ID | Schritt | Stand | Aktualisiert | Beleg |
+| --- | --- | --- | --- | --- | --- |
+| P0 | p0-geruest | Repo-Grundgerüst | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P0 | p0-vertraege | `ValueRecord` und Trennstellen | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P0 | p0-freigabe | Freigabe mit Veralterung und eigenständigen Qualitätskriterien | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P0 | p0-audit | JSONL-Audit und ausdrücklich provisorische Ausgabe | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P0 | p0-beispiel | Ende-zu-Ende-Beispiel ohne Hardware | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P0 | p0-diagnose | Kamera-Diagnose und Projektdokumentation | gebaut | — | [P0-Nachweis](#p0-was-tatsachlich-steht) |
+| P1 | p1-kamera | StreamCam: Kamera-Commissioning mit Exit 0 | belegt | 2026-09-28 | [Inbetriebnahme](VALIDATION.md#2026-09-28-streamcam-inbetriebnahme-hardwaretest-probeaufnahme) |
+| P1 | p1-replay | `replay://` implementiert | gebaut | — | [Bildquellenstand](#p0-was-tatsachlich-steht) |
+| P1 | p1-zeitbasis | MONOTONIC nach BOOTTIME über gemessenen Versatz | vorhanden | — | [Zeitbezug](TIMING.md) |
+| P1 | p1-semantik | Zeitstempel-Semantik der Kamera klären | offen | — | [OQ-43](open-questions.md#oq-43) |
+| P2 | p2-sammeln | Sammelmodus und serielle Auto-Labels | gebaut | — | [Datensatz und Trennung](VALIDATION.md#datensatzaufbau) |
+| P2 | p2-ernte | Timing-Kalibrierung, Ernte und Import | gebaut | — | [StreamCam-Kalibrierung und Ernten](VALIDATION.md#2026-09-28-streamcam-timing-kalibrierung-und-erste-zwei-ernten-sc1-sc2) |
+| P2 | p2-sperren | Zwei Geräteinstanzen sperren | offen | — | [Gerätekreis und Sperrgeräte](open-questions.md#oq-04) |
+| P2 | p2-vielfalt | Mindestens sechs Geräteinstanzen über drei Displaytypen | offen | — | [Datensatzregeln](VALIDATION.md#datensatzaufbau) |
+| P3 | p3-leser | Dot-Matrix-Abnahme 3: 215/215 richtige Proben | belegt | 2026-09-30 | [Leser-Abnahme 3](VALIDATION.md#2026-09-30-abnahme-3-ab5ab6-bestanden-215215-0-falsch-0-abgelehnt) |
+| P3 | p3-live | Live-Bedienerläufe am begrenzten GSV-2AS-Aufbau | belegt | 2026-10-21 | [Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
+| P3 | p3-geraete | Weitere Geräte, Vorzeichen und Einheiten prüfen | offen | — | [Gerätekreis](open-questions.md#oq-04) |
+| P3 | p3-schwellen | Freigabeschwellen und angepasste Toleranz real belegen | offen | — | [Freigabeevidenz](open-questions.md#oq-14) |
+| P3 | p3-fehlerklassen | Trefferquote nach Fehlerklassen aufschlüsseln | offen | — | [Fehlerklassen](VALIDATION.md#fehlerklassen-getrennt-zu-zahlen) |
+| P4 | p4-format | Akzeptiertes GSVmulti-Format und Spezifikation beschaffen | offen | — | [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
+| P4 | p4-ungueltig | Behandlung ungültiger und veralteter Werte vereinbaren | offen | — | [OQ-06](open-questions.md#oq-06) |
+| P4 | p4-anbindung | Echtes Format über `TelegramFormatter` anbinden | blockiert | — | [Unbekanntes Protokoll](GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt) |
+| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | blockiert | — | [Anbindungsbedingungen](GSVMULTI_PROTOCOL.md#was-vorher-geklart-sein-muss-konzept-8) |
+| P5 | p5-kalibrierung | StreamCam-Timing-Kalibrierung | vorhanden | — | [Zeitbezug](TIMING.md) |
+| P5 | p5-referenz | Live-Referenzauswertung | vorhanden | 2026-10-21 | [Werteplan-Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21) |
+| P5 | p5-budget | Unsicherheitsbudget mit getrennten Einzelbeiträgen ausfüllen | offen | — | [Zeitbezug und Messprogramm](TIMING.md) |
+| P5 | p5-synchron | Referenzsynchronität klären und belegen | offen | — | [Referenzzeitbasis](open-questions.md#oq-03) |
+| P5 | p5-m8 | M8: Nutzung des Aufnahmezeitstempels durch GSVmulti prüfen | offen | — | [M8](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
+| P6 | p6-live | Live-Pfad mit STALE und Audit | gebaut | 2026-10-21 | [Live-Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
+| P6 | p6-stoerung | Kurze Störversuche am Aufbau | belegt | 2026-10-21 | [Bedienerläufe und Grenzen](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
+| P6 | p6-tracking | Nachführung bei großen Wertwechseln absichern | offen | — | [OQ-26](open-questions.md#oq-26) |
+| P6 | p6-audit | Audit-Belege dauerhaft aufbewahren | offen | — | [Aktive Arbeitsliste](../TODO.md) |
+| P6 | p6-dauerlauf | 72-h-Dauerlauf mit provozierten Störungen durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
+| P7 | p7-kriterien | Abnahmekriterien und Gerätekreis vorab festlegen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien), [OQ-04](open-questions.md#oq-04) |
+| P7 | p7-abnahme | Formale Abnahme auf den Sperrgeräten durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
+| P7 | p7-protokoll | Abnahmeprotokoll gegen die vereinbarten Kriterien erstellen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
+| P8 | p8-imx500 | Eigenes Modell und IMX500-Lokalisierung | ruht | 2026-09-25 | [Aktives Hardwareprofil](HARDWARE_PROFILE.md) |
+| P8 | p8-vergleich | Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante belegen | ruht | — | [Optionaler Meilenstein](#roadmap) |
+
+</div>
+
 ## P0 — was tatsächlich steht
 
 - [x] Live-Messpfad mit `CameraOwner`, Browser-Einrichtung und namentlicher
