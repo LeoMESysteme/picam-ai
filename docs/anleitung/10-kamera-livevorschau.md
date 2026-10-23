@@ -125,6 +125,8 @@ Harvest-Einrichtungen erhalten weder `nachfuehrung` noch `displayfehler`.
 
 Die Prüfung **Nachführung** verlangt geeignete, räumlich verteilte
 Rahmenbereiche und einen erkennbaren LCD-Rand im eingefrorenen Einrichtungsbild.
+Auch bei frontalem Blick wird der dunkle Rahmen einbezogen, wenn seine Kontur plausibel erkannt wird. Für die Reserve müssen auf jeder Achsenseite genügend Bereiche deutlich außerhalb der Mittellinie liegen, auch nach dem Ausfall beliebiger zwei Bereiche; sonst neu ausrichten oder Bereiche ergänzen.
+Rahmenprofile von vor R13-11 müssen neu eingerichtet werden; der Laufstart lehnt ihre alte Prüfkonfiguration ab.
 Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
 Suchfenster einschließlich Interpolationsrand blau und die LCD-Randpunkte
 orange markiert; die Legende steht im Bild. Prüfe, dass diese Fenster auf

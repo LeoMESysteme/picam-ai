@@ -2162,3 +2162,122 @@ den LCD-Fensterecken nötig; das ist bewusst nicht als Rückfallpfad eingebaut.
 **Offen:** getrennte Abnahme-Aufnahmen 2026-10-22 (eingefrorener Stand),
 Live-Läufe mit neuer Einrichtung an zwei Aufstellungen mit der Person,
 Bewegung und Abdeckung. Zahlen: [VALIDATION](VALIDATION.md#r13-entwicklung-2026-10-21).
+
+## 2026-10-23 — R13-11, Rahmenvorschlag offline härten
+
+**Ziel/Aufbau:** Die Befunde frontal `live-20261023T124226Z` (zu enges Band)
+und `live-20261023T131121Z` (Flackern ohne Bewegung) an gespeicherten Bildern
+untersuchen. Nur vorhandene Standbilder/Quads, DEV, E/F und Diagnose-PNGs
+lesen; keine Hardware, keine Kamera-/Seriellennutzung und keine Schreibzugriffe
+auf `var/`. Sämtliche Ausgaben im R13-Ledger unter `r11/`.
+
+**Beobachtung:** Die schwarze Nut direkt am LCD ist dunkler als die eigentliche
+Rahmenfläche; eine Schwelle allein dort unterschätzt den Rahmen. Proben weiter
+außen, begrenzt durch Otsu, erfassen die Fasen. Öffnung trennt dünne Verbindungen;
+Randkontakt, unplausible Fläche oder fehlender Fenstereinschluss führen zum
+festen Band zurück. Selbst-eindeutige Kanten können dennoch schlecht
+lokalisierbar sein. Eine bekannte Halb-Pixel-Bewegung macht diese Schwäche
+schon im Vorschlag sichtbar. Eine bloß minimale Auswahl mit Reserve verliert
+bei geänderter Beleuchtung Verfügbarkeit; deshalb bis zu 20 geeignete Bereiche
+und innerhalb der Quadranten stabile Lokalisation vor weiterer Strukturstärke.
+
+**Ergebnis:** 27/29 Standbilder mit gespeichertem Quad geeignet; frontal
+`124226Z` jetzt 20 Bereiche mit Reserve statt fünf ohne Streuung. Nur die zwei
+alten dunklen Aufstellungen `182644Z`/`194619Z` bleiben ungeeignet. DEV, E und F
+mit neuen Vorschlägen je Faktor 100 % gehalten; Diagnose 131121Z 146/148,
+beide Ablehnungen bei sichtbarer Handabdeckung, unverdeckt 146/146.
+Zahlen und Grenzen: [VALIDATION](VALIDATION.md#r13-r11-2026-10-23).
+
+**Deutung/Grenze:** Die Reserve behebt hier eine Auswahl-Schwäche, keine
+Bewegung des Geräts. Der Update-Algorithmus bleibt unverändert, belegt durch
+bytegleichen Quelltext und feste alte Vorschläge mit identischen Ergebnissen.
+Die neue Auswahl ist noch nicht separat abgenommen. E/F wurden zur Prüfung
+wiederholt verwendet; eine neue unabhängige Abnahme sowie neue Einrichtungen
+alter Rahmenprofile bleiben nötig. Der bekannte Sonderfall gemeinsam falscher
+Rahmenbewegungen bei ruhendem LCD bleibt prinzipiell bestehen.
+
+**Sicherheitsgegenprobe am neuen Vorschlag:** Zwei 300er-Sweeps und 400
+zufällige Bewegungs-/Verdeckungs-/Biasfälle ohne angenommenen Fehler über
+1 px; nach Fixrunde 1 im 400er-Sweep 144/400 angenommen, maximal 0,127337 px.
+Beim bekannten Sonderfall gemeinsam falscher Rahmenbewegungen nach
+Fixrunde 1 auf der Test-Fixture 413/3757 angenommen, beobachtetes Maximum
+4,700903 px. Das gilt nur für diese Fixture
+und dieses Raster; der Review erreichte an realen Aufstellungen 4,89 px.
+Die neue Auswahl behebt diesen prinzipiellen blinden Fleck nicht.
+
+**Fixrunde 1, Aufbau und Deutung:** Wieder nur gespeicherte Standbilder mit
+gespeicherten Quads, kein Hardwarezugriff. Die breiten strukturierten dunklen
+Balken aus dem Review (60/90 px auf 124226Z und 172340Z) überleben die
+Öffnung. Deshalb nun Kontursolidität ≥ 0,97 und höchstens 12 Quadflächen;
+alle 26 real erkannten Rahmen bleiben geeignet, die vier Balkenfälle fallen
+mit Formgrund auf das feste Band zurück, ohne Bereich auf dem Balken.
+Ein Kabel vor der Rahmenfläche bleibt im Band; die Öffnung schließt es
+nicht aus. Automatische und manuelle Qualitätsschwelle beziehen sich jetzt
+jeweils auf dasselbe Maximum der betreffenden Zone.
+
+Punkte nahe den Mittellinien konnten bei einer koordiniert falschen Hälfte
+beide Bewegungen stützen. Für Vorschlagsstreuung und Reserve zählt jetzt
+erst ein Abstand von 35 % der jeweiligen Achsenseitenausdehnung bis zur
+äußeren Bandkontur (mindestens 20 px); die Auswahl bevorzugt diese Hebelarme.
+Die Laufzeit-Streuregel bleibt unverändert. 27/29 Aufstellungen weiterhin
+geeignet, frontal 124226Z mit 20 Bereichen und Reserve.
+
+Die bisherige pauschale Ein-Pixel-Aussage für eine falsche Hälfte war
+zu weitgehend. Erneuter Sweep über alle vier Hälften, ±x/±y,
+0,5/1/1,5/2/3/4 px, −0,4/0/+0,4° auf allen 27 geeigneten Aufstellungen:
+558/7776 angenommen, 13 Fehler über 1 px, maximal **1,431800 px** (143419Z,
+rechte Hälfte, 10/20 Bereiche, 0°, dy=1,5 px). Der konkrete 084344Z-Fall
+mit zuvor 2,956 px wird nun abgelehnt; dessen ganzer Sweep bleibt bei
+höchstens 0,934795 px. Der Hebelarm verbessert die Auswahl, beweist aber
+keine allgemeine Ein-Pixel-Grenze. Alle Rohdaten unter `r11/fix-round-1/`;
+feste alte Vorschläge liefern erneut 424 Bilder mit null Update-Unterschieden.
+
+DEV/E/F nach Fixrunde 1 erneut je Faktor 100 % gehalten (gesamt
+568/568, 429/429, 1341/1341); Diagnose 131121Z erneut 146/148, beide
+Handabdeckungen jetzt als `rahmen_mehrdeutig` abgelehnt. Der Laufzeitcheck
+auf dem geteilten Pi verfehlt die unveränderte 10-ms-Grenze mit 10,735 ms
+Median. Im abwechselnden Vorher-/Nachher-Vergleich liegen beide Stände
+darüber (14,758 / 14,941 ms; je 61 Updates, `time.perf_counter`, vier
+OpenCV-Threads, Ein-Minuten-Systemlast 8,74). Keine Laufzeitabnahme und
+keine Anpassung von Update oder Zeitgrenze. Zahlen/Rohdaten:
+[VALIDATION](VALIDATION.md#r13-r11-2026-10-23), `r11/fix-round-1/`.
+
+## 2026-10-23 — R13-14: Einrichtung aus gespeicherten Winkelaufnahmen
+
+**Ziel/Aufbau:** Die beiden bereits vorhandenen sync-record-Aufnahmen
+`r13-winkel-links10-20261023` und `r13-winkel-links18-20261023` ohne Kamera
+oder seriellen Zugriff einrichten. Kameraeinstellungen stammen aus
+`session.json`, der Zellentext aus dem letzten höchstens eine Sekunde alten
+Telegramm vor jedem ausgewählten Bild. Dieses Limit folgt dem bestehenden
+Referenzabgleich; es beweist keine Gleichzeitigkeit von Telegramm und LCD.
+Standardauswahl: erstes Bild mehr als zwei Sekunden nach Wiederanlauf des
+ersten Faktor-1-Schritts, Stabilitätsbild mindestens 15 Sekunden später im
+selben Schritt. Die Aufnahmezeiten ersetzen das Warten des Live-Assistenten.
+Die CPU-Läufe liefen mit `nice -n 15` auf dem geteilten Pi.
+
+**Beobachtung:** links10 wählt frame_000016.jpg (Text `+0.60567 `),
+als zweites Bild frame_000091.jpg (`+0.60566 `); links18 wählt
+frame_000010.jpg und frame_000055.jpg (beide `+0.60566 `).
+Beide Rasterfits werden bereits mit `keine_startlage` abgelehnt.
+Gegenlesen, Rahmen-/Displayfehlerprüfung und Bestätigung werden nicht
+erreicht. Es wurde kein anderes Bild gesucht und kein Parameter angepasst.
+Zahlen und Zeitbasis stehen in [VALIDATION.md](VALIDATION.md#r13-14-offline-einrichtung-der-winkelaufnahmen-2026-10-23).
+
+**Deutung:** Die beiden Aufnahmen liefern mit der festgelegten Auswahl
+noch keine Offline-Profile für einen belastbaren Trackervergleich. Das ist
+keine Aussage über Fehllesungen oder den VALID-Anteil: Diese Kennzahlen
+bleiben ohne Replay unbestimmt. Einzelbilder ersetzen weder den Live-Fokus
+noch acht gemittelte Live-Bilder und drei frische Fitversuche. Die Ergebnisse
+sind Entwicklungsbefunde, keine Live-Abnahme. Keine Hardware berührt,
+keine Daten unter `var/` geschrieben. Originalkopien und Diagnose unter
+`.superpowers/sdd/2026-10-21-r13/r14/`; der Bericht nennt die Befehle.
+
+**Review-Nachtrag, Fixrunde 1:** Eine separat bereitgestellte Diagnose
+kodierte 59 PNG-Einrichtungsstandbilder als JPEG q95 neu: vier Fitstatus
+aenderten sich, Ecken verschoben sich bis 13 px. Keine Wiederholung dieser
+Diagnose in der Fixrunde. Damit sind die JPEG-Offline-Ergebnisse nicht
+repraesentativ fuer die Live-Einrichtung; eine Ablehnung auf JPEG allein
+belegt keinen entsprechenden Live-Fehler. Das Werkzeug gibt vor dem Fit
+eine JPEG-Warnung aus. JPEG/PNG bleiben die aufgezeichneten Quellen;
+Einzelbild, nur ein Fitversuch und fehlender Fokusschritt unterscheiden
+die Offline-Adapterpruefung weiterhin von Live.

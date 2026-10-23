@@ -3460,3 +3460,151 @@ von 12–13 s (Wächter) durch eine parallel laufende interaktive Codex-Sitzung
 kosteten 411 übersprungene Bilder. Ein Lauf ohne Bewegung zeigt nichts über
 die Robustheit gegen Bewegung. Der blinde Fleck des Kandidaten (bis 5,6 px bei
 gleich falsch gemeldeter Rahmenbewegung) bleibt bestehen.
+
+## 2026-10-23 — R13-11: Rahmenband und Auswahl, offline { #r13-r11-2026-10-23 }
+
+Nur der Vorschlag wurde geändert: plausibilisierte dunkle Rahmenkontur,
+strengere Eindeutigkeit (Zweitpeak/Peak ≤ 0,90, Peakabstand ≥ 0,10),
+Reserve gegen beliebige zwei Bereichsausfälle und bis zu 20 Bereiche.
+Fixrunde 1: Solidität der äußeren Kontur (Fläche / konvexe Hüllfläche)
+≥ 0,97, Fläche 2–12 statt 2–20 Quadflächen. Alle 26 erkannten realen Rahmen
+bleiben innerhalb der Grenzen (Solidität 0,978058–0,996001, Fläche
+8,5443–9,1574 Quadflächen). Die strukturierten, 60/90 px breiten dunklen
+Balken aus dem Review auf `124226Z` und `172340Z` führen zum festen Band,
+mit `band_rueckfallgrund=rahmenform_unplausibel` und ohne Bereich auf dem
+Balken. Dünne Verbindungen nach außen werden geöffnet; ein Kabel vor der
+Rahmenfläche liegt weiterhin innerhalb des Bandes.
+
+Nur die Vorschlagsstreuung und Reserve verlangen zusätzlich Hebelarm:
+mindestens 35 % der jeweiligen Achsenseitenausdehnung vom Quadmittelpunkt
+bis zur äußeren Bandkontur, mindestens 20 px. Die Auswahl bevorzugt in jedem
+Quadranten Punkte mit Hebelarm an beiden Achsen, dann an einer. Automatische
+und manuelle Strukturprüfung verwenden dasselbe Maximum je Zone.
+Neue Rahmenflächen müssen bekannte Halb-Pixel-Bewegungen auf ≤ 0,10 px
+lokalisieren; die automatische Auswahl bevorzugt solche Punkte auch in der
+Fensterzone. Update, Matching, RANSAC, Streuung, Leave-one-out, Residualgrenzen
+und LCD-Randprüfung bleiben unverändert. Ein fester alter Vorschlag liefert
+auf zehn Fixture-Fällen und drei akzeptierten DEV-Bildern exakt gleiche
+Update-Ergebnisse. Die 424 Bilder des Reviewer-Vergleichs liefern erneut
+**0 Unterschiede** (101 akzeptiert; 190 Eingaben abweichender Bildgröße
+beidseitig abgelehnt). Die verwendeten Update-Funktionen sind zusätzlich
+gegen beide Ausgangsstände im Quelltext bytegleich verglichen.
+
+**Einrichtungsbilder:** 38 gespeicherte Standbilder, davon 29 mit gespeichertem
+Quad. 27/29 neue automatische Vorschläge geeignet. Frontal `124226Z`:
+vorher 5 Bereiche, `rahmenbereiche_einseitig`; jetzt 20, dunkler Rahmen,
+6–10 qualifizierende Bereiche je Achsenseite und Reserve erfüllt.
+Auch `124012Z` wird geeignet.
+Weiter ungeeignet: `live-20261014T182644Z` und `live-20261014T194619Z`, jeweils
+nur zwei eindeutige Bereiche, beide auf derselben Seite der Querachse
+(`zu_wenig_rahmenbereiche`, `rahmenbereiche_einseitig`). Dort berührt die
+dunkle Komponente den Bildrand; das feste Band bleibt der Rückfall.
+Neun Standbilder ohne gespeichertes Quad wurden nicht geraten oder neu gefittet.
+Alle Vorher-/Nachher-Urteile, Bereiche und Bandquellen stehen im Ledger.
+
+Mit **neuen** Vorschlägen auf den vorhandenen Aufnahmen (kein neuer Kameralauf):
+
+| Settled gehalten / Bilder | Faktor 1 | Faktor 2 | Faktor 0,5 | Faktor 5 | Faktor 10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| DEV `r13-werteplan-20261021` | 172/172 | 106/106 | 77/77 | 106/106 | 77/77 |
+| E `r13-abnahme-e-hell-20261022` | 104/104 | 82/82 | 61/61 | 81/81 | 81/81 |
+| F `r13-abnahme-f-hell-10hz-20261022` | 221/221 | 306/306 | 203/203 | 307/307 | 204/204 |
+
+Je Faktor 100 %, damit kein Rückgang gegenüber Kandidat R13-7. Auch außerhalb
+der Settled-Fenster werden alle Bilder gehalten: insgesamt DEV 568/568,
+E 429/429 und F 1341/1341.
+Maximale Quad-Abweichung zur gespeicherten Referenz nach Fixrunde 1:
+DEV 0,510 px, E 0,508 px, F 0,284 px;
+dies ist keine unabhängige Ground-Truth-Messung.
+
+Diagnose `live-20261023T131121Z/run-01/diagnose`, mit dem Standbild derselben
+Sitzung als Referenz und neuem Vorschlag: 146/148 gehalten (98,65 %).
+`0203.png` und `0204.png` zeigen die Hand über der Anzeige und werden abgelehnt;
+alle 146 unverdeckten Bilder werden gehalten. Die ursprüngliche dauernde
+Ablehnung ohne Bewegung ist damit offline behoben.
+
+**Sicherheit mit neuen Vorschlägen:** Beide 300er-Zufallssweeps und der
+400er-Sweep (Seed 1307, Bewegung, Teilverdeckung und lokaler Bias) bestehen:
+kein angenommener Quad über 1 px zum bekannten synthetischen Sollquad. Im
+400er-Sweep nach Fixrunde 1: 144/400 angenommen, maximal 0,127337 px.
+Die frühere Aussage über koordinierten Bias einer Seite galt nur für die
+geprüften Fixture-Fälle und war zu allgemein: Der Review fand auf realen
+Aufstellungen bis 2,956 px (`084344Z`, linke Hälfte, −0,4°, dx=1,5 px).
+Nach Fixrunde 1: alle vier Hälften, ±x/±y mit Beträgen
+0,5/1/1,5/2/3/4 px und Winkeln −0,4/0/+0,4° auf allen 27 geeigneten realen
+Aufstellungen (zwei ungeeignete explizit ausgelassen): **558/7776 angenommen,
+13 Fehler über 1 px, maximal 1,431800 px** (`143419Z`, rechte Hälfte,
+10/20 Bereiche, 0°, dx=0, dy=1,5 px). Der konkrete 084344Z-Reviewfall wird
+jetzt als `rahmen_unstimmig` abgelehnt; sein gesamter 288er-Sweep erreicht
+höchstens 0,934795 px. Dies ist eine gemessene Verbesserung, keine allgemeine
+Ein-Pixel-Garantie. Rohdaten: `r11/fix-round-1/half-bias-*.json` und die
+einzelnen `*-half-bias.json`.
+
+Der bekannte Sonderfall
+„alle Rahmenfenster melden dieselbe falsche Bewegung, LCD bleibt still“
+bleibt: nach Fixrunde 1 auf der Test-Fixture 413/3757 Bildversuche angenommen,
+maximal **4,700903 px** bei OpenCV-Winkel −0,6°, dx=2,5 px, dy=0.
+Dieses Maximum gilt nur für diese Fixture und dieses Raster; der Review
+erreichte an realen Aufstellungen **4,89 px**. Es ist keine allgemeine obere
+Schranke. Direkt erzwungene gemeinsame Ziele zeigen
+bis 3,716 px akzeptierten Eckfehler. Die grobe LCD-Randprüfung liefert damit
+weiterhin keinen allgemeinen Ein-Pixel-Genauigkeitsnachweis.
+Die 16 erweiterten Fixture-Biasfälle (vier Hälften, ±x/±y) erreichen maximal
+0,920927 px. Testergebnisse und Zahlen nach Fixrunde 1:
+`r11/fix-round-1/functional.xml`, `safety-final.xml`, `safety-summary.json`.
+
+**Laufzeitcheck:** Die unveränderte 10-ms-Assertion schlägt auf dem geteilten
+Pi in der isolierten Prüfung fehl: 10,735 ms Median aus 31 Updates.
+Zeitbasis ist `time.perf_counter` (monotone lokale Laufzeituhr), keine
+Aufnahmezeit und keine aus Dateizeiten abgeleitete Latenz. Ein anschließender
+abwechselnder Vorher-/Nachher-Vergleich mit je 61 Updates liefert
+14,758 / 14,941 ms Median, OpenCV jeweils vier Threads; Systemlast 8,74
+im Ein-Minuten-Mittel bei vier Kernen. Das ist keine neue Laufzeitabnahme.
+Update-Code und 10-ms-Grenze bleiben unverändert. Belege:
+`r11/fix-round-1/timing-final.txt`, `timing-before-after.json`.
+
+Die Auswahl nutzt Einrichtungsbilder und Entwicklungs-Fixtures; E/F wurden
+wiederholt zur Verfügbarkeitsprüfung verwendet und sind für R13-11 **keine
+unabhängige Abnahme**. Neue Einrichtung alter Rahmenprofile und neue getrennte
+Abnahme nötig; keine Hardware oder Laufartefakte unter `var/` verändert.
+Belege: `.superpowers/sdd/2026-10-21-r13/r11/`, insbesondere
+`setups-comparison.json`, `*-eval.json`, `diagnose.json` und
+`update-source-comparison.json`. Varianten mit Präfix `initial-`, `minimal-`,
+`windows-`, `quarter-` und `eighth-` sind verworfene Auswahlversuche.
+
+## R13-14 — Offline-Einrichtung der Winkelaufnahmen, 2026-10-23
+
+Daten: `var/diagnostics/r13-winkel-links10-20261023` und
+`var/diagnostics/r13-winkel-links18-20261023`, unverändert gelesen.
+Werkzeug: `scripts/r13-offline-setup.py`, Standardauswahl im ersten
+Faktor-1-Schritt, dieselben Rasterprüfungen wie im Live-Setup;
+Einzelbilder statt Live-Mittelung. Keine angepassten Prüfgrenzen.
+
+| Aufnahme | Erstes Bild | Nach schedule-Wiederanlauf | Zweites Bild | Abstand der Aufnahmezeiten | Ergebnis |
+| --- | --- | --- | --- | --- | --- |
+| links10 | frame_000016.jpg | 2,069381 s | frame_000091.jpg | 15,005127 s | Rasterfit: `keine_startlage` |
+| links18 | frame_000010.jpg | 2,065598 s | frame_000055.jpg | 15,005119 s | Rasterfit: `keine_startlage` |
+
+Zeitbezug: originale `v4l2_monotonic`-Zeitstempel, mit dem aufgezeichneten
+BOOTTIME–MONOTONIC-Versatz umgerechnet; Semantik `unknown`, Unsicherheit
+`null`. Die Abstände sind keine Displaylatenzmessung.
+
+In beiden Fällen sind Rasterversatz, Gegenlesen, Nachführung und
+Displayfehlerprüfung **nicht erreicht**. Kein bestätigtes Offline-Profil,
+keine Tracker-/Replay-Auswertung. Für alle Faktoren 1, 2, 0,5, 5 und 10
+bleiben deshalb settled kept share, Fehllesungen und VALID-Anteil in
+stabilen Fenstern **nicht bestimmt**, nicht null. Die Ablehnung wird als
+Befund erhalten; es gab keine Suche nach einem günstigeren Bild oder
+Lockerung der Prüfungen. Artefakte:
+`.superpowers/sdd/2026-10-21-r13/r14/links10-setup/`,
+`.superpowers/sdd/2026-10-21-r13/r14/links18-setup/` und
+`.superpowers/sdd/2026-10-21-r13/task-R14-report.md`.
+
+**Einordnung aus Review, Fixrunde 1:** Die unabhaengige Diagnose an 59
+PNG-Einrichtungsstandbildern ergab beim Neu-Kodieren als JPEG q95 vier
+geaenderte Fitstatus und Eckverschiebungen bis 13 px. Dieser Befund wurde
+fuer die Fixrunde bereitgestellt und hier nicht erneut gemessen. Die
+JPEG-Offline-Ergebnisse oben sind nicht repraesentativ fuer Live-Setup:
+Quelle wie aufgezeichnet statt frischer Kamerabilder, ein Einzelbild statt
+8-Bilder-Mittel, ein Fitversuch statt drei und kein Fokusschritt. Das Tool
+warnt jetzt bei ausgewaehlten JPEG-Quellbildern, auch vor einem Fitabbruch.

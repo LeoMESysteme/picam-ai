@@ -9,6 +9,74 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-23 — R13-11: Rahmenvorschlag mit Reserve
+
+## Problem und Entscheidung
+
+Das feste Fensterband erfasst bei frontalem Blick die Fasen nicht. Eine
+manuelle Auswahl ohne Reserve verliert bei unverändertem Aufbau die
+Streuung, sobald einzelne Bereiche mehrdeutig werden. Der Vorschlag erhält
+eine dunkle, geschlossene Rahmenkomponente als zusätzliches Band, mit
+Öffnung gegen dünne Kabelverbindungen, Form-/Flächen-/Rand-/Einschlussprüfung und
+sichtbarem Rückfall auf das bisherige Band. Alle Suchpixel einschließlich
+Interpolationsrand bleiben außerhalb der bisherigen Zeichensperre.
+
+Die Einrichtung verlangt Zweitpeak/Peak ≤ 0,90 und Peakabstand ≥ 0,10;
+die Laufzeitgrenze bleibt 0,95. Nach beliebigen zwei Ausfällen muss die
+strengere Vorschlagsstreuung bestehen: Ein Punkt zählt erst ab 35 % des
+Abstands vom Quadmittelpunkt bis zur äußeren Bandkontur auf seiner Achsenseite
+(mindestens 20 px). Das bedeutet mindestens fünf solche Bereiche je Seite
+beider Quadachsen, bei höchstens 20 automatischen Bereichen.
+Die bisherige relative Strukturschwelle 0,02 gilt für Fensterpunkte;
+zusätzliche Rahmenflächen erhalten 0,005 und müssen vier bekannte
+Halb-Pixel-Verschiebungen auf höchstens 0,10 px genau lokalisieren. Bis zu
+20 geeignete Punkte werden reihum aus vier Quadranten gewählt; innerhalb
+eines Quadranten zählen zuerst Hebelarme an beiden Achsen, dann an einer,
+danach die bestandene Probe und die Strukturstärke. Für Fensterpunkte bleibt die
+Probe eine Auswahlpräferenz. Manuelle Bereiche werden gleich geprüft,
+behaltene Mittelpunkte weiterhin ohne erneutes Einrasten.
+Beide Auswahlwege verwenden je Zone dasselbe Shi-Tomasi-Maximum als
+Schwellenbasis; automatische Rahmenpunkte werden nicht zusätzlich gegen
+das stärkere Maximum der Fensterzone geprüft.
+
+## Alternativen und Konsequenz
+
+Ein pauschal breiteres Rechteck würde Kabel/Gehäuse einschließen. Eine
+ungeprüfte Dunkelkomponente kann bis zum Bildrand mit dem Hintergrund
+verschmelzen. Beide Varianten wurden verworfen. Selbst-eindeutige Ecken
+können trotz gutem Peak schlecht lokalisierbar sein: Die zusätzliche
+synthetische Prüfung verwirft solche Fasenstrukturen vor der Auswahl.
+Die Gegenprobe mit nur so vielen Bereichen wie zum erstmaligen Erreichen
+der Reserve nötig verlor Verfügbarkeit bei Lichtänderungen; deshalb
+werden bis zu 20 geeignete Strukturen aufgenommen. Eine reine Sortierung
+nach synthetischem Positionsfehler wurde ebenfalls verworfen: Sie
+bevorzugt schwache Textur, die zwischen Aufnahmen nicht stabil bleibt.
+
+**Fixrunde 1:** Ein breiter dunkler Balken kann die Öffnung überleben und
+die Rahmenkontur verzerren, obwohl ihre Fläche plausibel bleibt. Deshalb
+zusätzlich Solidität (Konturfläche / konvexe Hüllfläche) ≥ 0,97 und höchstens
+12 statt 20 Quadflächen; die Hülle dient nur der Prüfung, niemals dem Füllen.
+Die 26 erkannten realen Rahmen liegen bei 0,9781–0,9960 und 8,54–9,16
+Quadflächen. Bei Ablehnung bleibt das feste Band mit angegebenem Grund.
+Ein Kabel, das vor der Rahmenfläche verläuft, bleibt innerhalb des Bandes.
+
+Der bisherige 20-px-Abstand allein ließ Punkte nahe der Mittellinie beide
+Bewegungen einer koordiniert falschen Hälfte stützen (Reviewfall 084344Z:
+2,956 px akzeptierter Eckfehler). Der zusätzliche Hebelarm und seine
+Auswahlpräferenz ändern deshalb ausschließlich Vorschlagsstreuung und
+Reserve. Eine Verschärfung der Update-Streuung wurde verworfen, um die
+eingefrorenen Update-Regeln unverändert zu erhalten. Die gemessene Grenze
+ist weiterhin auf die geprüften Szenarien beschränkt, keine allgemeine
+Ein-Pixel-Garantie.
+
+Update, RANSAC, Streuung, Leave-one-out, Residualgrenzen und LCD-Randprüfung
+bleiben unverändert. Alte Rahmenprofile werden durch den vorhandenen
+Konfigurationsvergleich am Laufstart abgelehnt und müssen neu eingerichtet
+werden. Die Auswahländerung braucht eine neue Abnahme. Offline-Belege:
+[VALIDATION](VALIDATION.md#r13-r11-2026-10-23).
+
+---
+
 # 2026-10-13 — pytest-Importpfad und Aufbewahrung im Worktree (MEM-5)
 
 ## Problem
@@ -1473,3 +1541,32 @@ Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
 Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
 bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
 in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).
+
+## 2026-10-23 — R13-14: Offline-Profile dauerhaft von Live trennen
+
+Die Offline-Einrichtung speist zwei gespeicherte Einzelbilder und deren
+Aufnahmezeiten in den vorhandenen `assist_measure`-Vertrag ein. Fit,
+Rasterfeinschliff, Prüfungen, Gegenlesen und `propose_with_fit` bleiben
+unverändert; Live behält Fokus, Mittelung, Wiederholungen und echte
+Wartezeit. Ein zweiter kopierter Fit-/Prüfpfad wurde verworfen, weil er vom
+Live-Verhalten abweichen könnte. Eine zusätzliche Extraktion aus dem
+Live-Dienst ist durch die vorhandene Kamera-/Zeitinjektion unnötig.
+
+`SessionProfile` erhält ein optionales boolesches Feld `offline`, das bei
+bestehenden Profilen ohne Feld ausgelassen wird. Nur `r13-replay.py` erlaubt
+es ausdrücklich beim gemeinsamen Pipeline-Aufbau; `LiveSession.start`
+weist es vor Leser-, Quellen- und Ausgabedateizugriff ab. Eine Markierung
+nur im Dateinamen oder in rohem JSON wurde verworfen: Beim Laden und
+Speichern würde die Sperre sonst verloren gehen. Bestätigt wird nur ohne
+FEHLER und ohne Override, mit `confirmed_by: offline-auswertung`. Der
+Stabilitätsabstand bleibt wie im Live-Dienst mindestens 15 Sekunden.
+Die beiden neuen Winkelaufnahmen scheitern schon am Rasterfit; Befunde
+und Grenzen stehen in VALIDATION.md und im Task-R14-Bericht.
+
+Fixrunde 1 schliesst auch die Kamera-Ernte: `require_live_profile` in
+`session_profile.py` wird vom Pipeline-Aufbau und von `harvest.py` verwendet.
+Die Pruefung weist sowohl `offline: true` als auch die Bestaetigungsherkunft
+`offline-auswertung` ab, selbst nach manuellem Entfernen des Flags. Eine nur
+im Live-Pipeline-Aufbau liegende Sperre wurde verworfen, weil Harvest die
+Kamera ueber `sync-record.py` startet und diesen Aufbau umgeht. Reine
+Dateiauswertungen und der ausdrueckliche Replay-Opt-in bleiben moeglich.
