@@ -78,6 +78,25 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     )
 
 
+@pytest.mark.parametrize("markers", [
+    {"offline": True}, {"confirmed_by": "offline-auswertung"},
+])
+def test_offline_profile_refused_before_reader_or_run_output(tmp_path, markers):
+    path, config = _files(tmp_path)
+    data = json.loads(path.read_text())
+    data.update(markers)
+    path.write_text(json.dumps(data))
+
+    def forbidden_reader(*args, **kwargs):
+        pytest.fail("Offline-Profil muss vor dem Leseraufbau abgewiesen werden")
+
+    out = tmp_path / "run"
+    session = LiveSession(FakeOwner([]), path, config, out, reader_factory=forbidden_reader)
+    with pytest.raises(StartRefused, match="Offline-Profil"):
+        session.start()
+    assert not out.exists()
+
+
 def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     session = _session(tmp_path, [embed("+ 1.2345 "), embed("+ 1.2345 ")])
     session.start()

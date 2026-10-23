@@ -33,6 +33,24 @@ def _profile():
     return dataclasses.replace(_profile_v2(), schema_version=PROFILE_SCHEMA_VERSION, camera=_CAMERA)
 
 
+@pytest.mark.parametrize("offline,confirmed_by", [
+    (True, "bediener"), (True, "offline-auswertung"), (False, "offline-auswertung"),
+])
+def test_require_live_profile_refuses_offline_origin(offline, confirmed_by):
+    from dispread.session_profile import require_live_profile
+
+    profile = dataclasses.replace(_profile(), offline=offline, confirmed_by=confirmed_by)
+    with pytest.raises(ValueError, match="Offline-Profil"):
+        require_live_profile(profile)
+
+
+def test_require_live_profile_accepts_existing_live_profiles():
+    from dispread.session_profile import require_live_profile
+
+    require_live_profile(_profile())
+    require_live_profile(_profile_v2())
+
+
 def test_save_load_roundtrip(tmp_path):
     p = tmp_path / "profile.json"
     _profile().save(p)

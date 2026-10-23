@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from dispread.session_profile import SessionProfile  # noqa: E402
+from dispread.session_profile import SessionProfile, require_live_profile  # noqa: E402
 from dispread.timing_calibration import (  # noqa: E402
     DEFAULT_CALIBRATION_PATH,
     load_calibration_from_bytes,
@@ -150,7 +150,7 @@ def run(
     als Subprozesse aus und schreibt `out_dir/harvest.json`.
 
     Bricht vor jedem Subprozessaufruf ab (`HarvestError`), wenn das Profil
-    ein v2-Profil (IMX500, `camera is None`) ist, das Aufloesungs-Gate nicht
+    offline ist, ein v2-Profil (IMX500, `camera is None`) ist, das Aufloesungs-Gate nicht
     bestanden hat, die Timing-Kalibrierung nicht ladbar ist, sie zu einer
     anderen Kamera-USB-ID gehoert, oder `hold_s` zu kurz fuer ein labelbares
     Plateau ist. Bricht nach `sync-record.py` ab, wenn dessen Exitcode != 0
@@ -158,6 +158,10 @@ def run(
     """
     profile_path = Path(profile_path)
     profile = SessionProfile.load(profile_path)
+    try:
+        require_live_profile(profile)
+    except ValueError as exc:
+        raise HarvestError(str(exc)) from exc
     if profile.camera is None:
         raise HarvestError(
             "IMX500-Profil (schema_version 2), Kamera ausser Betrieb - "

@@ -83,6 +83,7 @@ def evaluate(recording_dir, profile_path, tracker):
         SimpleNamespace(source_id="sync-record_offline"), Path(profile_path), config,
         reader_factory=DotMatrixReader.from_file, locator_factory=locator_factory,
         reader_d_max_factor=1.0,
+        allow_offline=True,
     )
     reference = []
     for entry in recording.serial:

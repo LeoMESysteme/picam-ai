@@ -165,6 +165,26 @@ def _write_calibration(tmp_path, **kwargs):
     return path
 
 
+@pytest.mark.parametrize("markers", [
+    {"offline": True}, {"confirmed_by": "offline-auswertung"},
+])
+def test_run_rejects_offline_profile_before_subprocesses_or_output(tmp_path, markers):
+    profile_path = tmp_path / "profile.json"
+    # Zweiter Fall: offline wurde von Hand aus dem JSON entfernt.
+    data = _profile().to_dict()
+    data.update(markers)
+    profile_path.write_text(json.dumps(data))
+    out = tmp_path / "out"
+    with patch.object(harvest.subprocess, "run") as mock_run:
+        with pytest.raises(harvest.HarvestError, match="Offline-Profil"):
+            harvest.run(
+                profile_path=profile_path, out_dir=out, n_steps=3, hold_s=4.0,
+                seed=1, port="/dev/unused", calibration_path=_write_calibration(tmp_path),
+            )
+        mock_run.assert_not_called()
+    assert not out.exists()
+
+
 def test_run_rejects_v2_profile_without_camera(tmp_path):
     """v2-Profil (IMX500, `camera is None`): sofort HarvestError, kein
     Subprozess - "kein Erfinden" gilt auch fuer eine ausser Betrieb genommene

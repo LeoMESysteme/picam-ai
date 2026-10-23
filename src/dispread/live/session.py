@@ -38,7 +38,7 @@ from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus
-from dispread.session_profile import SessionProfile
+from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
 from dispread.timing_calibration import load_calibration
 from dispread.validate import ReleaseGate, default_gate_config
@@ -80,11 +80,14 @@ def build_live_pipeline(
     reader_factory: Callable[..., Any] = DotMatrixReader.from_file,
     locator_factory: Callable[[Any, list], Any] | None = None,
     reader_d_max_factor: float = 1.0,
+    allow_offline: bool = False,
 ) -> tuple[Pipeline, SessionProfile, Any, dict]:
     """Identischer, schreibfreier Aufbau fuer Live-Sitzung und Offline-Replay."""
     tracking = {"mode": "ecc_alt", "version": None, "regions": None}
     try:
         profile = SessionProfile.load(profile_path)
+        if not allow_offline:
+            require_live_profile(profile)
         layout = CharLayout.from_profile(profile, cfg.unit)
     except (OSError, ValueError, KeyError) as exc:
         raise StartRefused(f"Profil {profile_path}: {exc}") from exc

@@ -114,6 +114,8 @@ class SessionProfile:
     setup_checks: dict | None = None
     #: Bestaetigte Rahmenbereiche; fehlt unveraendert bei Bestandsprofilen.
     live_tracking: dict | None = None
+    #: Nur zur Offline-Auswertung; bei Bestandsprofilen ohne Feld bleibt das JSON unveraendert.
+    offline: bool = False
 
     def to_dict(self) -> dict:
         d = {
@@ -140,6 +142,8 @@ class SessionProfile:
             d["setup_checks"] = dict(self.setup_checks)
         if self.live_tracking is not None:
             d["live_tracking"] = dict(self.live_tracking)
+        if self.offline:
+            d["offline"] = True
         return d
 
     @classmethod
@@ -149,6 +153,9 @@ class SessionProfile:
         reference_frame = d.get("reference_frame")
         setup_checks = d.get("setup_checks")
         live_tracking = d.get("live_tracking")
+        offline = d.get("offline", False)
+        if type(offline) is not bool:
+            raise ValueError("offline im Profil muss bool sein")
         if live_tracking is not None and not isinstance(live_tracking, dict):
             raise ValueError("Rahmenbereiche im Profil muessen ein Objekt sein - neu einrichten")
         return cls(
@@ -170,6 +177,7 @@ class SessionProfile:
             reference_frame=dict(reference_frame) if reference_frame is not None else None,
             setup_checks=dict(setup_checks) if setup_checks is not None else None,
             live_tracking=dict(live_tracking) if live_tracking is not None else None,
+            offline=offline,
         )
 
     def save(self, path: Path) -> None:
@@ -230,3 +238,9 @@ class SessionProfile:
                     "(Bildpixel = native Pixel, StreamCam ohne Sensor-Binning)."
                 )
         return cls.from_dict(d)
+
+
+def require_live_profile(profile: SessionProfile) -> None:
+    """Verweigert Offline-Herkunft vor Ressourcenaufbau oder Kameraaufnahme."""
+    if profile.offline or profile.confirmed_by == "offline-auswertung":
+        raise ValueError("Offline-Profil: nur fuer die Auswertung einer Aufnahme, kein Live-Start")
