@@ -2,6 +2,59 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+test('Seitenkopf nennt Weg, Lesezeit und Weiter-Link unter der Überschrift', async ({ page }) => {
+  await page.goto('/docs/anleitung/index.html');
+  const head = page.locator('.md-content__inner h1 + .wiki-pagehead');
+  await expect(head).toHaveCount(1);
+  await expect(head).toHaveAttribute('data-ready', 'true');
+  await expect(head).toContainText('Für: Entwickeln und anbinden');
+  await expect(head).toContainText(/\d+ min Lesezeit/);
+  await expect(head.locator('.wiki-pagehead-weg')).toHaveAttribute('href', /index\.html#weg-entwickeln$/);
+  await expect(head.locator('.wiki-pagehead-weiter')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+  const next = page.locator('.md-content__inner p.wiki-next');
+  await expect(next).toHaveCount(1);
+  await expect(next.locator('a')).toHaveAttribute('href', /00-werkzeuge\.html$/);
+  const target = await next.locator('a').getAttribute('href');
+  const headTarget = await head.locator('.wiki-pagehead-weiter').getAttribute('href');
+  expect(new URL(headTarget!, page.url()).href).toBe(new URL(target!, page.url()).href);
+});
+
+test('Seiten ohne Weg haben keinen Seitenkopf', async ({ page }) => {
+  await page.goto('/docs/status.html');
+  await expect(page.locator('.md-content__inner h1')).toBeVisible();
+  await expect(page.locator('.wiki-pagehead')).toHaveCount(0);
+});
+
+test('Seitenkopf entsteht nach Sofortnavigation genau einmal', async ({ page }) => {
+  await page.goto('/docs/anleitung/index.html');
+  await expect(page.locator('.wiki-pagehead')).toHaveAttribute('data-ready', 'true');
+  await page.evaluate(() => { (window as any).__wikiNavigation = true; });
+  await page.locator('.md-nav--primary a[href$="/status.html"]').first().click();
+  await expect(page).toHaveURL(/\/docs\/status\.html$/);
+  await expect(page.locator('.wiki-pagehead')).toHaveCount(0);
+  await page.locator('.md-nav--primary a[href$="anleitung/index.html"]').first().click();
+  await expect(page).toHaveURL(/\/docs\/anleitung\/index\.html$/);
+  const head = page.locator('.md-content__inner h1 + .wiki-pagehead');
+  await expect(head).toHaveCount(1);
+  await expect(head).toHaveAttribute('data-ready', 'true');
+  await expect(head.locator('.wiki-pagehead-weg')).toHaveCount(1);
+  await expect(head.locator('.wiki-pagehead-zeit')).toHaveCount(1);
+  await expect(head.locator('.wiki-pagehead-weiter')).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).__wikiNavigation)).toBe(true);
+});
+
+test('Seitenkopf ohne JavaScript nennt den Weg', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  try {
+    const page = await context.newPage();
+    await page.goto('/docs/anleitung/index.html');
+    await expect(page.locator('.wiki-pagehead')).toBeVisible();
+    await expect(page.locator('.wiki-pagehead-weg')).toHaveText('Für: Entwickeln und anbinden');
+  } finally {
+    await context.close();
+  }
+});
+
 test('Startseite verlinkt alle Navigationsziele im Inhalt', async ({ page }) => {
   await page.goto('/');
   const targets = await page.locator('.md-nav--primary a[href]').evaluateAll((links) =>

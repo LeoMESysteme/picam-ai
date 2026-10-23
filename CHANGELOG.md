@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Grundlage für die Wiki-Wege: Ein Zensical-Template-Override
+  zeigt den Weg einer Seite auch ohne JavaScript. Der gemeinsame Namespace
+  `window.wiki` bietet Seitenwechsel mit Aufräumen, Site-URLs, gecachte
+  HTML-/JSON-Abfragen und SVG-Icons. Der Seitenkopf ergänzt Lesezeit und
+  Vorher-/Weiter-Links; die Entwickler-Anleitung dient als erste Seite.
+  `scripts/wiki-check.py --check` prüft die erlaubten `weg`-Werte vor
+  jedem Doku-Build. pytest und neue Playwright-Fälle sichern die Verträge.
+
 * 2026-10-23: `PRODUCT.md` hält Leser und Leitlinien des Zensical-Wikis
   fest (Einsteiger/Bediener, fortgeschrittene Bediener, Entwickler). Der
   Brief `docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`
