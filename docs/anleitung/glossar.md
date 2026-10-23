@@ -622,6 +622,12 @@ Schnittstellenvertrag der Ausgabe mit `emit()` und `health()`. Übertragungsfehl
 
 ## Zeit
 
+### `capture_timestamp`
+
+Aufnahmezeit des Bilds mit Zeitbasis, physikalischer Bedeutung und Unsicherheit. Sie bleibt im `ValueRecord` erhalten und wird nicht durch eine Verarbeitungszeit ersetzt.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
 ### `CLOCK_BOOTTIME`
 
 Zeit seit dem Booten, inklusive Suspend.
@@ -636,6 +642,48 @@ Monoton steigende Zeit ohne Sprünge. Domäne aller
 Verarbeitungsmarken im `PipelineTrace`.
 
 *Weg:* Entwickeln · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### `ClockLog`
+
+Protokolliert im Live-Lauf den Versatz `BOOTTIME` minus `MONOTONIC` zu Beginn, periodisch und beim Abschluss. Die Proben stehen in `session.json`; sie klären nicht die physikalische Bedeutung des Kamerastempels.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### `confirmation_span_ns`
+
+Dokumentierte Zeitspanne der Mehrbildbestätigung im Datensatz. Sie macht die Bestätigungsverzögerung sichtbar; die Aufnahmezeit wird dafür weder pauschal halbiert noch verändert.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### Displayaktualisierung
+
+Erneuerung der sichtbaren Geräteanzeige. Ein höherer Sendetakt erzeugt keine zusätzlichen unabhängigen Messwerte, wenn die Anzeige langsamer aktualisiert; wiederholte Beobachtungen sind nicht automatisch neue interne DUT-Messungen.
+
+*Weg:* Bedienen · *Quelle:* [Konzept](../../Konzept.md)
+
+### Displayverzögerung
+
+Verzögerung zwischen internem DUT-Messzeitpunkt und sichtbarer Anzeige. Ihre Schwankung ist für dynamische Vergleiche kritisch; ein Aufnahmezeitstempel allein beseitigt diesen Beitrag nicht.
+
+*Weg:* Bedienen · *Quelle:* [Konzept](../../Konzept.md)
+
+### Drift
+
+Zeitliche Veränderung des Versatzes zwischen Pi-Uhr und Referenzuhr. Messung M6 soll Offset und Drift bestimmen; der verbleibende Driftbeitrag gehört ins Unsicherheitsbudget.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### `FILE_MTIME`
+
+Zeitbasis eines aus der Dateizeit abgeleiteten Stempels. Sie ist keine belastbare Aufnahmezeit und erlaubt keine reale Latenz- oder Synchronitätsaussage; auch Replay macht sie nicht zeittragend.
+
+*Weg:* Entwickeln · *Quelle:* [Aufnahme und Replay](06-kamera-aufnahme-replay.md)
+
+### Haltezeit
+
+Dauer, für die ein angezeigter Wert stehen bleibt. Im Zeitmessprogramm wird sie zusammen mit der Displayaktualisierung je Gerätetyp in M5 untersucht; sie gehört zu den Beiträgen des Unsicherheitsbudgets.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
 
 ### Latenz vs. Zeitunsicherheit
 
@@ -655,11 +703,41 @@ Haltezeit, vermutlich der dominierende Term).
 
 *Weg:* Entwickeln · *Quelle:* [Zeitbezug](../TIMING.md)
 
-### `SensorTimestamp`
+### Offset
 
-Zeitstempel aus den libcamera-Metadaten.
+Versatz zwischen Zeitbasen, etwa `BOOTTIME` minus `MONOTONIC`. Er wird je Aufnahme gemessen; bei einer Zeitzuordnung sind der Versatz, seine Streuung und unbekannte systematische Reste getrennt zu behandeln.
 
-*Weg:* Entwickeln · *Quelle:* [Bildquellen-API](../../api/frames.md)
+*Weg:* Bedienen · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### `PipelineTrace`
+
+Verarbeitungsmarken eines Frames in `CLOCK_MONOTONIC`. Ihre Differenzen liefern Stufenrechenzeiten; sie belegen nicht automatisch den Abstand zwischen interner DUT-Messung und Referenzmessung.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### Reaktionszeit
+
+In der nachträglichen Live-Referenzauswertung gemessene Reaktion auf einen Wertwechsel. Sie ist keine Aussage über den internen DUT-Messzeitpunkt und ersetzt kein Unsicherheitsbudget.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### `REPLAY_RECORDED`
+
+Zeitbasis einer erhaltenen Aufnahmezeit im Replay. Sie trägt die Zeitinformation der ursprünglichen Aufnahme, nicht des Abspielens; Voraussetzung sind belastbare Aufnahmemetadaten.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### `result_timestamp`
+
+Zeitpunkt der Fertigstellung des Datensatzes. Die aktuelle Pipeline liest `MONOTONIC`, übernimmt aber die Basis des Frames; außerhalb des V4L2-Pfads ist diese Kennzeichnung nicht zuverlässig. Für Rechenzeiten dienen die Trace-Marken.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### Schutzintervall
+
+Gemessener Abstand um Anzeigewechsel, der serielle Auto-Labels vor unsicherer Zuordnung schützt. Er berücksichtigt Telegramm-zu-Glas-Versatz, Mischzeit und Streuung; er ist kein vollständiges Unsicherheitsbudget der DUT-Messung.
+
+*Weg:* Konfigurieren · *Quelle:* [Zeitbezug](../TIMING.md)
 
 ### Semantik
 
@@ -669,13 +747,41 @@ bezieht: Belichtungsbeginn, -mitte, Auslese-Ende, Host-Abholung. Steht auf
 
 *Weg:* Entwickeln · *Auch:* TimestampSemantics · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
 
-### Zeitbasis
+### `SensorTimestamp`
 
-Herkunft und Belastbarkeit: `V4L2_MONOTONIC`, `SENSOR_BOOTTIME` und `REPLAY_RECORDED` tragen eine Zeitaussage, `SYNTHETIC` und `FILE_MTIME` nicht (`carries_time_information`).
+Zeitstempel aus den libcamera-Metadaten.
 
-*Weg:* Entwickeln · *Auch:* TimeBaseKind · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+*Weg:* Entwickeln · *Quelle:* [Bildquellen-API](../../api/frames.md)
 
-Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
+### `SYNTHETIC`
+
+Zeitbasis generierter Bilder ohne reale Aufnahme- oder Synchronitätszeit. Daraus darf keine reale Latenzaussage entstehen; Rechenzeitmessungen sind ausdrücklich als solche zu kennzeichnen.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### `Timestamp`
+
+Datensatz für einen Zeitpunkt: Nanosekundenwert, Zeitbasis, physikalische Bedeutung und Unsicherheit. Eine noch nicht gemessene Unsicherheit ist `None`; für eine Zeitaussage müssen auch Domänen und Umrechnung passen.
+
+*Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### Timing-Kalibrierung
+
+Messung des Gesamtversatzes zwischen seriellem Telegramm und sichtbarer Anzeige samt Schutzintervall. Der Live-Lauf dokumentiert die Kalibrierdatei mit Prüfsumme, wendet den Versatz aber nicht auf Aufnahmezeiten an.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### `to_boottime_ns`
+
+Zentrale Umrechnung von Aufnahmezeitstempeln nach `BOOTTIME`. Für V4L2 verlangt sie gemessene Start- und Endversätze der Session; fehlende Angaben oder ein auffälliger Versatzwechsel führen zur Ablehnung.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### Trigger
+
+Optionales gemeinsames Ereignis für die zeitliche Zuordnung. Ein erfasstes GPIO-Ereignis synchronisiert allein weder die Kamerabelichtung noch die interne DUT-Messung.
+
+*Weg:* Bedienen · *Quelle:* [Konzept](../../Konzept.md)
 
 ### Unsicherheit
 
@@ -683,6 +789,32 @@ Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe [Zeits
 das wäre eine Falschaussage.
 
 *Weg:* Entwickeln · *Auch:* uncertainty_ns · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### Unsicherheitsbudget
+
+Getrennte Bilanz der Beiträge zur zeitlichen Zuordnung, von interner DUT-Messung bis Übertragung. Die Vorlage wird durch M1–M7 gefüllt und trennt korrigierbare systematische Beiträge von Streuung.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### `V4L2_MONOTONIC`
+
+Zeitbasis des unverändert gespeicherten V4L2-Pufferzeitstempels der aktiven StreamCam. Sie ist zeittragend; für `BOOTTIME` braucht es den gemessenen Versatz. Die physikalische Stempelsemantik bleibt offen.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### Zeilenweise Auslesung
+
+Zeitversatz zwischen Sensorzeilen beim Auslesen eines Bilds. Messung M3 soll diesen Beitrag bestimmen; die Budgetvorlage führt Zeilenposition mal Zeit je Zeile als systematischen Anteil, bislang ohne Messwert.
+
+*Weg:* Bedienen · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### Zeitbasis
+
+Herkunft und Belastbarkeit: `V4L2_MONOTONIC`, `SENSOR_BOOTTIME` und `REPLAY_RECORDED` tragen eine Zeitaussage, `SYNTHETIC` und `FILE_MTIME` nicht (`carries_time_information`).
+
+*Weg:* Entwickeln · *Auch:* TimeBaseKind · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+Für die nötige BOOTTIME-Umrechnung und die offene Stempelsemantik siehe [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md).
 
 ## Schnittstellen und Hardware
 
@@ -961,3 +1093,131 @@ Systempakete sichtbar lassen, keine PyPI-Kopien von `numpy`/`cv2`/`pyserial`
 darüberlegen. Begründung in [../dependencies.md](../dependencies.md).
 
 *Weg:* Entwickeln · *Auch:* --system-site-packages, --no-deps · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+## Messung, Daten und Abnahme
+
+### Abdeckung
+
+Umfang der im Datensatz vertretenen Ziffernpositionen, Vorzeichen, Dezimalpunkte, Einheiten, Betriebszustände, Störungen und Displaytechniken. Maßstab für ausreichende Daten ist diese Vielfalt, nicht die Frame-Anzahl.
+
+*Weg:* Bedienen · *Quelle:* [Validierung](../VALIDATION.md)
+
+### Abnahmekriterien
+
+Vor der Abnahme festzulegende Grenzen für Fehlablesungen, Falschablehnungen, Zeitbezug und Betrieb. Die Platzhalter in der Validierung sind keine erreichten Grenzwerte; geprüft wird auf zuvor gesperrten Geräten.
+
+*Weg:* Bedienen · *Quelle:* [Validierung](../VALIDATION.md)
+
+### Audit-Log
+
+Vollständiges JSONL-Protokoll der ValueRecords, auch wenn kein Wert freigegeben wurde. Es hält fest, was die Kette erkannt hat; tatsächlich gesendete Bytes werden davon getrennt im `TxReceipt` dokumentiert.
+
+*Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
+
+### Auto-Label
+
+Automatisch aus dem seriellen Gerätestrom zugeordnetes Trainingslabel. Die zeitliche Absicherung nutzt ein gemessenes Schutzintervall; diese Anzeigezuordnung belegt nicht die interne DUT-Verzögerung.
+
+*Weg:* Entwickeln · *Quelle:* [Zeitbezug](../TIMING.md)
+
+### Entwicklungsdaten
+
+Material, das während der Entwicklung für Schwellenwahl und Fehleranalyse genutzt wird. Solche Geräte zählen anschließend nicht als unberührte Abnahmegeräte; Entwicklungsbelege ersetzen keine unabhängige Abnahme.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### Falschablehnung
+
+Ablehnung eines korrekt lesbaren Werts. Sie mindert die Verfügbarkeit und muss getrennt von als gültig ausgegebenen falschen Werten ausgewertet werden.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### Fehlerklassen
+
+Getrennte Zählkategorien für falsche Ziffern, Vorzeichen, Dezimalpunkte, Einheiten, Anzeigenverwechslung, Betriebszustand, unmarkierte Altwerte und Verfügbarkeitsfehler. Eine hohe Zeichenquote ersetzt diese Auswertung nicht.
+
+*Weg:* Bedienen · *Quelle:* [Validierung](../VALIDATION.md)
+
+### Geräteinstanz
+
+Ein konkretes physisches Gerät als Einheit der Datentrennung. Benachbarte Frames oder neue Aufnahmen desselben Geräts sind keine unabhängigen Geräteproben; die Splitgrenze liegt deshalb bei der Instanz.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### Gruppensplit
+
+Trennung von Trainings- und Testmaterial nach physischer Geräteinstanz statt nach einzelnen Frames. Sie verhindert, dass benachbarte Bilder derselben Aufnahme beide Seiten der Auswertung besetzen.
+
+*Weg:* Entwickeln · *Quelle:* [Validierung](../VALIDATION.md)
+
+### Label
+
+Zur Probe gespeicherte Beurteilung der sichtbaren Anzeige. Im Sammelmodus wird lesbarer Text einschließlich Vorzeichen und Dezimalzeichen eingetippt oder die Probe als unlesbar beziehungsweise unsicher markiert; kein OCR-Vorschlag.
+
+*Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
+
+### `label_origin`
+
+Herkunftsmerkmal eines Datensatzlabels: `manual` oder `serial_ascii`. Seit Schema 2 ist es Pflicht und wird beim Export erhalten; serielle Labels brauchen zusätzliche Belege zu Quelle, Schutzintervall und Plateau.
+
+*Weg:* Entwickeln · *Quelle:* [Displaybus und Labelherkunft](../DISPLAYBUS_TAP.md)
+
+### `records.jsonl`
+
+Audit-Datei der Pipelineentscheidungen eines Live-Laufs. Sie kann auch im Testlauf einzelne `VALID`-Records enthalten; für die Messnutzung müssen `TESTLAUF.json` und die Laufmarkierung in `session.json` mit ausgewertet werden.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### `reference.jsonl`
+
+Separate Aufzeichnung des seriellen GSV-2AS-Stroms mit `BOOTTIME`-Empfangsstempeln. Sie dient als Gegenprobe zum optischen Wert desselben Geräts und ist keine unabhängige Kalibrierreferenz.
+
+*Weg:* Bedienen · *Quelle:* [Zeitstempel richtig lesen](../uebersicht/zeitstempel.md)
+
+### `session.json`
+
+Laufmetadaten mit Profil-, Vorlagen- und Kalibrierprüfsummen, Kameraeinstellungen, Gate-Konfiguration und Uhrenversatz. Testlauf und angepasste Lesetoleranz sind dort gesondert markiert.
+
+*Weg:* Bedienen · *Quelle:* [Pipeline-API](../../api/pipeline.md)
+
+### Situation
+
+Gruppe von Datensatzaufnahmen für einen bewusst geänderten Aufbau, etwa Blickwinkel oder Entfernung. Wiederholungsaufnahmen bleiben in derselben Gruppe; eine neue Uhrzeit allein erzeugt keine unabhängige Situation.
+
+*Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
+
+### Statistische Obergrenze
+
+Für die Abnahme geforderte obere Grenze der Quote unerkannter Fehlablesungen. Null beobachtete Fehler allein reichen nicht als Zusage für beliebige Geräte; Nenner und Geräteinstanzen sind mit anzugeben.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### Synthetische Daten
+
+Generierte Bilder für Funktionsprüfungen und gezielte Fehlerfälle. Sie ergänzen reale Daten, zählen aber nie zum realen Testset und belegen keine Trefferquote an realen Geräten.
+
+*Weg:* Bedienen · *Quelle:* [Validierung](../VALIDATION.md)
+
+### `TESTLAUF.json`
+
+Datei zur Kennzeichnung eines Laufs mit übergangener Lesesperre. Der gesamte Lauf liefert keine freigegebenen Messwerte, auch wenn einzelne Pipeline-Records `VALID` melden; die technische Sperre im Audit ist noch unvollständig.
+
+*Weg:* Bedienen · *Quelle:* [Kamera-Livevorschau](10-kamera-livevorschau.md)
+
+### Unerkannte Fehlablesung
+
+Ein als gültig freigegebener Wert, der gegenüber dem unabhängig erfassten Anzeigewert falsch ist. Dieser kritische Fehlermodus braucht eine eigene Rate samt Nenner und statistischer Obergrenze für die Abnahme.
+
+*Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
+
+### Vertreter
+
+Für den Export ausgewählte Probe einer Situation. Bei genau einer Aufnahme wird sie automatisch verwendet; bei mehreren ohne ausdrückliche Auswahl exportiert die gesamte Situation kein Bild.
+
+*Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
+
+### Zielbox
+
+Grobe rechteckige Markierung der gewünschten Zahlenzeile im Sammelmodus, ohne Segmentraster oder Ziffernzellen. Sie ist Prüfdatenmaterial und gelangt nicht in Leser, Freigabe, Tracker oder serielle Ausgabe.
+
+*Weg:* Bedienen · *Quelle:* [Datensatz sammeln](11-datensatz-sammeln.md)
