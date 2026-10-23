@@ -110,9 +110,25 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(headline).toHaveClass('value stale');
   await expect(headline).not.toContainText('1.2345');
 
+  const lost = { ...run, latest: { ...run.latest, status: 'unreadable', raw_text: '',
+    reject_reasons: ['tracking_lost:rahmen_unstimmig'] }, tracking_hint: {
+    kind: 'anzeige_bewegt', shift_px: 19, region_shift_px: 27, rotation_deg: -2.23, since_s: 3 } };
+  await setState({ state: 'running', run: lost });
+  await expect(headline).toHaveText('UNREADABLE');
+  await expect(page.locator('#detail')).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad)');
+  await expect(page.locator('#detail')).toContainText('Werte werden nicht freigegeben. Bitte neu einrichten.');
+  await setState({ state: 'running', run: { ...lost, tracking_hint: {
+    kind: 'rahmen_verdeckt', shift_px: null, rotation_deg: null, since_s: 10 } } });
+  await expect(page.locator('#detail')).toContainText('Rahmen verdeckt? Hand oder Gegenstand');
+  await expect(page.locator('#detail')).not.toContainText('Anzeige hat sich bewegt');
+  await setState({ state: 'running', run: { ...lost, tracking_hint: {
+    kind: 'unbekannt', shift_px: null, rotation_deg: null, since_s: 12 } } });
+  await expect(page.locator('#detail')).toContainText('Anzeige nicht sicher wiedergefunden');
+
   // Erst wieder frische Ziffern zeigen, dann die echte Poll-Anfrage abbrechen.
   await setState({ state: 'running', run });
   await expect(headline).toHaveText('+1.2345 mV/V');
+  await expect(page.locator('#detail')).not.toContainText('einrichten');
   await page.route('**/live/status', (route) => route.abort('connectionfailed'));
   await expect(headline).toHaveText('STALE');
   await expect(headline).not.toContainText('1.2345');

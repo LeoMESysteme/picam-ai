@@ -1148,3 +1148,83 @@ def test_session_counts_every_processed_frame_in_live_causes(tmp_path):
         assert causes['causes'] == [{'reason': 'awaiting_confirmation', 'count': 1, 'fraction': 0.5}]
     finally:
         session.stop()
+
+
+def test_tracking_advice_changes_only_status_and_summary_not_records(tmp_path, monkeypatch):
+    from test_tracking_advice import collect, transformed_scene
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    reference, quad, moved = transformed_scene()
+    import cv2
+    import numpy as np
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 2.25, 1)
+    matrix[:, 2] += (15, 0)
+    expected_shift = np.linalg.norm(quad @ matrix[:, :2].T + matrix[:, 2] - quad, axis=1).max()
+    images = [reference, moved, moved, moved, moved, reference]
+    outputs = []
+    for enabled in (False, True):
+        directory = tmp_path / str(enabled)
+        directory.mkdir()
+        now = [0.0]
+        session, _ = _region_session(directory, images, monotonic=lambda now=now: now[0])
+        session.start()
+        advice = session._tracking_advice
+        if not enabled:
+            advice.close()
+            session._tracking_advice = None
+        try:
+            for timestamp in (0, 1, 3.99, 4, 6, 7):
+                now[0] = timestamp
+                record = session.step()
+                if timestamp == 4 and enabled:
+                    hint = collect(advice, now[0])
+                    assert session.tracking_hint()['kind'] == 'anzeige_bewegt'
+                    assert hint['shift_px'] == pytest.approx(expected_shift, abs=3)
+                    assert record.reject_reasons[0].startswith('tracking_lost:')
+                    assert record.value is None
+            assert session.tracking_hint() is None
+        finally:
+            session.stop()
+        outputs.append(session.records_path.read_bytes())
+        summary = json.loads(session.session_path.read_text())['summary']['tracking_hints']
+        assert summary['count'] == (1 if enabled else 0)
+        assert set(summary['by_kind']) == {'anzeige_bewegt', 'rahmen_verdeckt', 'unbekannt'}
+        assert summary['max_shift_px'] == (pytest.approx(expected_shift, abs=3) if enabled else None)
+    assert outputs[0] == outputs[1]
+
+
+def test_advice_exception_cannot_skip_diagnostics_or_clock(tmp_path, monkeypatch, caplog):
+    now = [0.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, monotonic=lambda: now[0])
+    session.start()
+    diagnostics, samples = [], []
+    def fail(*args, **kwargs):
+        raise AttributeError('injected advice failure')
+    monkeypatch.setattr(session._tracking_advice, 'observe', fail)
+    monkeypatch.setattr(session._diagnostics, 'observe', lambda *a, **kw: diagnostics.append(1))
+    monkeypatch.setattr(session._clock, 'sample', lambda: samples.append(1))
+    try:
+        for tick in (61, 122):
+            now[0] = tick
+            assert session.step() is not None
+            assert session.tracking_hint()['kind'] == 'unbekannt'
+        assert diagnostics == [1, 1]
+        assert samples == [1, 1]
+        assert sum('injected advice failure' in r.getMessage() for r in caplog.records) == 1
+    finally:
+        session.stop()
+
+
+def test_reference_image_is_loaded_once_for_pipeline_and_advice(tmp_path, monkeypatch):
+    import dispread.live.session as module
+    session = _session(tmp_path, [])
+    calls = []
+    imread = module.cv2.imread
+    def read(path):
+        calls.append(path)
+        return imread(path)
+    monkeypatch.setattr(module.cv2, 'imread', read)
+    session.start()
+    session.stop()
+    assert len(calls) == 1

@@ -230,6 +230,8 @@ class LiveService:
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
                     "tracking": dict(getattr(self._session, "tracking", {})),
+                    "tracking_hint": (self._session.tracking_hint()
+                                      if hasattr(self._session, "tracking_hint") else None),
                 }
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()

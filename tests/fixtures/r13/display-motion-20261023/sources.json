@@ -1,0 +1,263 @@
+{
+  "note": "R13-15 fix round 1 development regression, not independent acceptance. Identical native-resolution crop, no resize, JPEG q95. Occluded: real hand on frame before final movement. Coordinates below are crop-local; displacement remains raw pixels.",
+  "source_shape_hw": [
+    1080,
+    1920
+  ],
+  "crop_xyxy": [
+    410,
+    270,
+    1402,
+    948
+  ],
+  "quad": [
+    [
+      229.3856201171875,
+      220.3759765625
+    ],
+    [
+      787.18798828125,
+      388.2601318359375
+    ],
+    [
+      768.388916015625,
+      457.23468017578125
+    ],
+    [
+      204.6531982421875,
+      285.443359375
+    ]
+  ],
+  "region_centres": [
+    [
+      210,
+      187
+    ],
+    [
+      163,
+      307
+    ],
+    [
+      639,
+      308
+    ],
+    [
+      785,
+      492
+    ],
+    [
+      176,
+      188
+    ],
+    [
+      421,
+      398
+    ],
+    [
+      821,
+      358
+    ],
+    [
+      661,
+      464
+    ],
+    [
+      410,
+      229
+    ],
+    [
+      126,
+      297
+    ],
+    [
+      846,
+      426
+    ],
+    [
+      629,
+      450
+    ]
+  ],
+  "files": {
+    "reference.jpg": {
+      "source": "var/live/live-20261023T121436Z/setup/still.png",
+      "source_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+      "kind": "reference"
+    },
+    "unmoved.jpg": {
+      "source": "var/live/live-20261023T121436Z/run-01/diagnose/0001.png",
+      "source_sha256": "51d7afab9d4f56fbb64b22842871a1c0493a3df833b1ca61b421656b028fbc0a",
+      "kind": "unmoved",
+      "diagnostic": {
+        "profile_sha256": "693b731a91520367d0f1a3df6bac3110f3959d73a9f74cd513e1b16b76163845",
+        "reference_frame_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+        "frame_sequence": 908,
+        "owner_sequence": 236846,
+        "camera_sequence": null,
+        "capture_timestamp": {
+          "value_ns": 173273387121000,
+          "base": "v4l2_monotonic",
+          "semantics": "unknown",
+          "uncertainty_ns": null
+        },
+        "tracking": {
+          "mode": "rahmenbereiche",
+          "reason": null,
+          "score": 0.9649916042884191,
+          "shift": 0.056836324288134045,
+          "rotation_deg": -9.233424763172804e-05,
+          "quad": [
+            [
+              639.3581845484065,
+              490.4262884141954
+            ],
+            [
+              1197.1608232632111,
+              658.3095447684644
+            ],
+            [
+              1178.361862152622,
+              727.2841234036123
+            ],
+            [
+              614.6258675319098,
+              555.4937110838148
+            ]
+          ]
+        },
+        "status": "valid",
+        "reject_reasons": [],
+        "trigger": "periodic",
+        "image": "0001.png"
+      }
+    },
+    "occluded.jpg": {
+      "source": "var/live/live-20261023T121436Z/run-01/diagnose/0031.png",
+      "source_sha256": "47c6ae22ac950385fc2f0b53c3b421a8f0dc2d615d038011486de7bac900b1c1",
+      "kind": "occluded",
+      "diagnostic": {
+        "profile_sha256": "693b731a91520367d0f1a3df6bac3110f3959d73a9f74cd513e1b16b76163845",
+        "reference_frame_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+        "frame_sequence": 8628,
+        "owner_sequence": 244566,
+        "camera_sequence": null,
+        "capture_timestamp": {
+          "value_ns": 173531382563000,
+          "base": "v4l2_monotonic",
+          "semantics": "unknown",
+          "uncertainty_ns": null
+        },
+        "tracking": {
+          "mode": "rahmenbereiche",
+          "reason": "rahmen_unstimmig",
+          "score": 0.0,
+          "shift": 0.0,
+          "rotation_deg": 0.0,
+          "quad": null
+        },
+        "status": "unreadable",
+        "reject_reasons": [
+          "tracking_lost:rahmen_unstimmig"
+        ],
+        "trigger": "tracking_loss",
+        "image": "0031.png"
+      }
+    },
+    "moved-0121.jpg": {
+      "source": "var/live/live-20261023T121436Z/run-01/diagnose/0121.png",
+      "source_sha256": "c718fd0c955730a6b65af17cb645772443210d4fc469d0a6f9b6d779d39f2dc0",
+      "kind": "moved",
+      "diagnostic": {
+        "profile_sha256": "693b731a91520367d0f1a3df6bac3110f3959d73a9f74cd513e1b16b76163845",
+        "reference_frame_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+        "frame_sequence": 13127,
+        "owner_sequence": 249065,
+        "camera_sequence": null,
+        "capture_timestamp": {
+          "value_ns": 173681733901000,
+          "base": "v4l2_monotonic",
+          "semantics": "unknown",
+          "uncertainty_ns": null
+        },
+        "tracking": {
+          "mode": "rahmenbereiche",
+          "reason": "rahmen_unstimmig",
+          "score": 0.0,
+          "shift": 0.0,
+          "rotation_deg": 0.0,
+          "quad": null
+        },
+        "status": "unreadable",
+        "reject_reasons": [
+          "tracking_lost:rahmen_unstimmig"
+        ],
+        "trigger": "tracking_loss",
+        "image": "0121.png"
+      }
+    },
+    "moved-0161.jpg": {
+      "source": "var/live/live-20261023T121436Z/run-01/diagnose/0161.png",
+      "source_sha256": "1e629b4df699ed4a6250e3415a27fc181fade65f5206bd0eee3af49b87348909",
+      "kind": "moved",
+      "diagnostic": {
+        "profile_sha256": "693b731a91520367d0f1a3df6bac3110f3959d73a9f74cd513e1b16b76163845",
+        "reference_frame_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+        "frame_sequence": 14350,
+        "owner_sequence": 250288,
+        "camera_sequence": null,
+        "capture_timestamp": {
+          "value_ns": 173722604986000,
+          "base": "v4l2_monotonic",
+          "semantics": "unknown",
+          "uncertainty_ns": null
+        },
+        "tracking": {
+          "mode": "rahmenbereiche",
+          "reason": "rahmen_unstimmig",
+          "score": 0.0,
+          "shift": 0.0,
+          "rotation_deg": 0.0,
+          "quad": null
+        },
+        "status": "unreadable",
+        "reject_reasons": [
+          "tracking_lost:rahmen_unstimmig"
+        ],
+        "trigger": "tracking_loss",
+        "image": "0161.png"
+      }
+    },
+    "moved-0201.jpg": {
+      "source": "var/live/live-20261023T121436Z/run-01/diagnose/0201.png",
+      "source_sha256": "00957951a6c539b5f3ef238cf40866b35d2455bf3ed0ab6505b338d74220fed9",
+      "kind": "moved",
+      "diagnostic": {
+        "profile_sha256": "693b731a91520367d0f1a3df6bac3110f3959d73a9f74cd513e1b16b76163845",
+        "reference_frame_sha256": "f003395017d03e391be6ff5891a154c1caf08c583b4b2db57277da5837172430",
+        "frame_sequence": 15567,
+        "owner_sequence": 251505,
+        "camera_sequence": null,
+        "capture_timestamp": {
+          "value_ns": 173763276051000,
+          "base": "v4l2_monotonic",
+          "semantics": "unknown",
+          "uncertainty_ns": null
+        },
+        "tracking": {
+          "mode": "rahmenbereiche",
+          "reason": "rahmen_unstimmig",
+          "score": 0.0,
+          "shift": 0.0,
+          "rotation_deg": 0.0,
+          "quad": null
+        },
+        "status": "unreadable",
+        "reject_reasons": [
+          "tracking_lost:rahmen_unstimmig"
+        ],
+        "trigger": "tracking_loss",
+        "image": "0201.png"
+      }
+    }
+  }
+}

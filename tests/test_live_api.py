@@ -112,6 +112,18 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     asyncio.run(check())
 
 
+def test_playwright_fake_preserves_tracking_hint_without_socket(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    hint = {'kind': 'anzeige_bewegt', 'shift_px': 19, 'region_shift_px': 27, 'rotation_deg': -2.23, 'since_s': 3}
+    for full in (False, True):
+        service.set_state({'state': 'running', 'run': {'tracking_hint': hint}})
+        assert service.status(full=full)['run']['tracking_hint'] == hint
+        service.set_state({'state': 'running', 'run': {}})
+        assert service.status(full=full)['run']['tracking_hint'] is None
+
+
 def test_routes_without_socket(tmp_path, monkeypatch):
     """Handler direkt pruefen; Socket-Integration bleibt oben separat."""
     import json

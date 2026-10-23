@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -35,6 +36,7 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
+from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus
@@ -44,6 +46,7 @@ from dispread.timing_calibration import load_calibration
 from dispread.validate import ReleaseGate, default_gate_config
 
 SCHEMA = "live-session/1"
+_LOG = logging.getLogger(__name__)
 
 
 class StartRefused(ValueError):
@@ -81,6 +84,7 @@ def build_live_pipeline(
     locator_factory: Callable[[Any, list], Any] | None = None,
     reader_d_max_factor: float = 1.0,
     allow_offline: bool = False,
+    reference_loaded: Callable[[Any, SessionProfile], None] | None = None,
 ) -> tuple[Pipeline, SessionProfile, Any, dict]:
     """Identischer, schreibfreier Aufbau fuer Live-Sitzung und Offline-Replay."""
     tracking = {"mode": "ecc_alt", "version": None, "regions": None}
@@ -144,6 +148,8 @@ def build_live_pipeline(
             profile_id=f"{profile.device_id}/{profile.session_id}", layout=layout, locate_every=0
         ),
     )
+    if reference_loaded is not None:
+        reference_loaded(image, profile)
     return pipeline, profile, calibration, tracking
 
 
@@ -208,6 +214,8 @@ class LiveSession:
         #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
         self._display_changing = 0
         self._rejection_window = RejectionWindow()
+        self._tracking_advice: TrackingAdvice | None = None
+        self._tracking_advice_warned = False
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -222,6 +230,12 @@ class LiveSession:
         self._stopped = False
         self._last_clock = 0.0
 
+    def _prepare_tracking_advice(self, image, profile):
+        centres = [region['centre'] for region in
+                   (profile.live_tracking or {}).get('proposal', {}).get('regions', [])]
+        # Bereits geladenes Referenzbild; kein Ergebnis geht zur Pipeline zurueck.
+        self._tracking_advice = TrackingAdvice(image, profile.quad, region_centres=centres)
+
     # -- Start ---------------------------------------------------------------
     def start(self) -> None:
         cfg = self._config
@@ -229,8 +243,8 @@ class LiveSession:
             self._owner, self._profile_path, cfg,
             reader_factory=self._reader_factory, locator_factory=self._locator_factory,
             reader_d_max_factor=self._reader_d_max_factor,
+            reference_loaded=self._prepare_tracking_advice,
         )
-        reference = profile.reference_frame
         self._out_dir.mkdir(parents=True, exist_ok=True)
         owner_status = self._owner.status()
         self._frame_gaps_start = owner_status.get("gaps", 0)
@@ -271,7 +285,7 @@ class LiveSession:
                 self.stop(reason="start_failed")
                 raise
         self._diagnostics.start(profile_sha256=self._meta['profile']['sha256'],
-                                reference_sha256=reference['sha256'])
+                                reference_sha256=profile.reference_frame['sha256'])
         try:
             self._write_session(ended=False)
         except Exception:
@@ -342,6 +356,15 @@ class LiveSession:
             self.latest = record
             self.latest_monotonic = self._monotonic()
             self._rejection_window.observe(self.latest_monotonic, record.status, record.reject_reasons)
+            if self._tracking_advice is not None:
+                lost = bool(record.reject_reasons and record.reject_reasons[0].startswith('tracking_lost:'))
+                try:
+                    self._tracking_advice.observe(frame.image, lost=lost, now=self.latest_monotonic)
+                except Exception as exc:  # noqa: BLE001 - Bedienhilfe darf keinen Lauf abbrechen
+                    if not self._tracking_advice_warned:
+                        _LOG.warning('Bewegungsdiagnose ausgefallen: %s', exc)
+                        self._tracking_advice_warned = True
+                    self._tracking_advice.failed(self.latest_monotonic)
             self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
@@ -352,6 +375,10 @@ class LiveSession:
     def rejection_causes(self) -> dict:
         """Hauptursachen aller verarbeiteten Bilder der letzten zehn Sekunden."""
         return self._rejection_window.snapshot(self._monotonic())
+
+    def tracking_hint(self) -> dict | None:
+        """Bedienhilfe mit monotoner Verlustdauer; kein Freigabeentscheid."""
+        return None if self._tracking_advice is None else self._tracking_advice.snapshot(self._monotonic())
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
@@ -436,6 +463,8 @@ class LiveSession:
                     try:
                         self._write_session(ended=True)
                     finally:
+                        if self._tracking_advice is not None:
+                            self._tracking_advice.close()
                         self._stopped = True
                         self._diagnostics.stop(on_done=self._diagnostics_done)
                         if not self._diagnostics.copying and self.diagnostics_status()['write_errors']:
@@ -461,6 +490,7 @@ class LiveSession:
         if self._stopped and not ended:
             return
         owner_status = self._owner.status()
+        self.tracking_hint()  # Fertige Diagnose vor dem Zusammenfassen abholen, nie darauf warten.
         self.summary = {
             "marks": self._marks,
             "by_status": dict(self._by_status),
@@ -473,6 +503,8 @@ class LiveSession:
             "audit_errors": self._audit_errors,
             "tracking_lost": self._tracking_lost,
             "tracking_lost_reasons": dict(self._tracking_lost_reasons),
+            "tracking_hints": (self._tracking_advice.summary() if self._tracking_advice is not None else
+                               empty_summary()),
             "track_score": {
                 "min": self._track_score_min,
                 # Median der letzten hoechstens 10 000 Tracks; Extremwerte und n ueber alle.

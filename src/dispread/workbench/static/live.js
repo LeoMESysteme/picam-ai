@@ -37,7 +37,8 @@ function recordView(status) {
     const cls = !fresh || run.status === 'valid' ? 'stale' : run.status;
     if (run.reject_reasons[0]?.startsWith('tracking_lost:')) {
       return {headline: cls.toUpperCase(), cls,
-        detail: `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
+        detail: (status.state === 'running' && trackingHintText(status.run.tracking_hint)) ||
+          `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
     }
     if (cls === 'transition' && run.reject_reasons[0] === 'anzeige_wechselt') {
       return {headline: 'TRANSITION', cls, detail: `Wert wechselt (${reasons})`};
@@ -56,6 +57,22 @@ function recordView(status) {
     confirmed: 'Bestätigt – Lauf starten', running: 'Lauf startet …', stopped: 'Lauf beendet',
   };
   return {headline: labels[status.state] || status.state, cls: status.error ? 'error' : '', detail: status.error || setup.message || ''};
+}
+
+function trackingHintText(hint) {
+  if (hint?.kind === 'anzeige_bewegt' && Number.isFinite(hint.shift_px) && Number.isFinite(hint.rotation_deg)) {
+    const shift = Math.round(hint.shift_px).toLocaleString('de-DE');
+    const rotation = Math.abs(hint.rotation_deg).toLocaleString('de-DE', {
+      minimumFractionDigits: 1, maximumFractionDigits: 1});
+    return `Anzeige hat sich bewegt (ca. ${shift} px (Ecken), ${rotation} Grad) – Werte werden nicht freigegeben. Bitte neu einrichten.`;
+  }
+  if (hint?.kind === 'rahmen_verdeckt') {
+    return 'Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen. Werte werden nicht freigegeben.';
+  }
+  if (hint?.kind === 'unbekannt') {
+    return 'Anzeige nicht sicher wiedergefunden. Bitte Sicht auf den Rahmen prüfen und bei Bedarf neu einrichten. Werte werden nicht freigegeben.';
+  }
+  return '';
 }
 
 export function connectionView(status, lastOkMs, nowMs, httpStatus) {

@@ -2326,3 +2326,41 @@ keine entsprechende Live-Qualität mit PNG-/Mehrbild-Einrichtung und keine
 breitere Geräteabnahme. Bericht und vollständige Eck-/Statustabelle:
 `.superpowers/sdd/2026-10-21-r13/task-R13-report.md`. Fokussierte Tests:
 347 bestanden; Ruff sauber. Keine neue Hardwaremessung.
+
+
+## 2026-10-23 — R13-15 Fix round 1: Bewegung offline reproduziert
+
+**Ziel:** Reviewerbefund am gespeicherten Lauf `live-20261023T121436Z`
+reproduzieren, ohne Kamera oder Geräte anzufassen.
+
+**Aufbau:** Projekt-venv, `nice -n 15`; bestätigtes Einrichtungsbild als
+Referenz und Diagnose-PNGs ausschließlich gelesen. Reviewer-Skripte
+`rev-r15/diag.py`, `stage.py`, `fixexp.py` als Grundlage. Native Crops
+mit JPEG q95 unter `tests/fixtures/r13/display-motion-20261023/`;
+`sources.json` hält Originalpfade, SHA256, Frame-/Zeitbasisbelege,
+Ausschnitt und lokale Quad-/Rahmenkoordinaten fest. Keine Schreibzugriffe
+unter `var/`, keine Hardware- oder Konfigurationsänderung.
+
+**Beobachtung:** Die alte 640-Pixel-Diagnose fand nur 25 Referenzmerkmale
+und auf den drei geprüften bewegten Originalbildern keinen Fit. Native
+lokale ORB-Suche erhält die feine Struktur. 2000 statt 1000 Merkmale
+bewahren auch im synthetischen Test die geforderte Streuung. Die
+Verdoppelungsregression zeigte außerdem, dass geometrische
+Diagnosetoleranzen wie der Zeichenabstand mit der Auflösung skalieren
+müssen. Die Regeln des eigentlichen Trackers wurden nicht geändert.
+
+**Ergebnis:** Drei reale bewegte JPEG-Ausschnitte ergeben Bewegung,
+stillstehender und von der Hand teilweise verdeckter Rahmen nie eine
+Bewegungsbehauptung. Auf den ursprünglichen PNGs 97/99 Schätzungen in
+der späten Bewegungsphase; die letzten zwei bleiben wegen fehlender
+Streuung unbestimmt. Offline-Benchmark: 25 Schätzungen, Median 36,81 ms,
+Maximum 64,51 ms, Vorbereitung maximal 2,42 ms auf monotoner Hostzeitbasis.
+Einzelwerte und Quellen stehen in
+[VALIDATION](VALIDATION.md#2026-10-23-r13-15-fix-round-1-offline-bewegungshinweis).
+
+**Deutung:** Der Bildursprung-Translationsanteil war kein brauchbares
+Bewegungsmaß. Die Diagnose meldet nun maximale Verschiebungen der Ecken
+und bestätigten Rahmenmittelpunkte; Größenordnung etwa 21 bzw. 23 px
+und −2,3 Grad im direkten PNG-Test. Das ist kein Genauigkeitsnachweis
+und keine Live-Durchsatzabnahme. Eine grobe Bilddiagnose darf weiterhin
+unbestimmt bleiben; ihre Fehler dürfen den Lauf nicht unterbrechen.

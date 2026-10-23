@@ -3655,3 +3655,35 @@ unverändert in `keine_startlage`. Die Zahlen sind keine Laufzeitgarantie.
 Befehle, vollständige 60-Fälle-Tabelle mit allen Eckverschiebungen und
 Testbelege: `.superpowers/sdd/2026-10-21-r13/task-R13-report.md`.
 Aufbau und Deutung: [Laborjournal](lab_journal.md#2026-10-23-r13-13-startsuche-bildgate-und-softwarekosten).
+
+
+## 2026-10-23 — R13-15 Fix round 1: Offline-Bewegungshinweis
+
+Entwicklungsregression, keine Hardware-/Freigabeabnahme. Quelle:
+`var/live/live-20261023T121436Z`, bestätigtes `setup/still.png` und
+`run-01/diagnose/`; Bilder ausschließlich gelesen. JPEG-q95-Ausschnitte
+(992 × 678, ohne Skalierung) und Quell-/Framebelege:
+`tests/fixtures/r13/display-motion-20261023/sources.json`.
+Drei bewegte Ausschnitte (`0121`, `0161`, `0201`) ergeben den
+Bewegungshinweis; `0001` (still) und `0031` (Hand am Rahmen vor der
+späteren Bewegung) keine Bewegungsbehauptung. Dasselbe gilt im
+Auflösungsregressionstest mit doppelter Bildgröße.
+
+Direkt auf den ursprünglichen PNGs liefert der native 992 × 646-Ausschnitt
+535 Referenzmerkmale statt 25 bei der früheren 640-Pixel-Verkleinerung.
+In der späten Bewegungsphase `0111`–`0209`: 97/99 belastbare Schätzungen
+und Bewegungshinweise; `0208`/`0209` bleiben wegen fehlender beidseitiger
+Streuung ohne belastbare Schätzung. Einzelwerte auf `0121`, `0161`, `0201`:
+maximale Eckverschiebung 20,89/20,93/20,95 Rohpixel, maximale Verschiebung
+der bestätigten Rahmenregionen 23,17/23,17/23,22 Rohpixel,
+Drehung −2,31/−2,28/−2,31 Grad. Dies sind grobe ORB-Diagnosen;
+Translation um den Bildursprung ist kein Verschiebungsmaß.
+
+Offline-Laufzeit unter `nice -n 15`, ein Auftrag nach dem anderen,
+OpenCV mit vier internen Threads, je fünf Schätzungen auf
+`0001`, `0031`, `0121`, `0161`, `0201` (25 insgesamt, erster Cacheaufbau
+enthalten): Schätzdauer Median 36,81 ms, Maximum 64,51 ms;
+Ausschnitt-/Grauwertvorbereitung maximal 2,42 ms. Zeitbasis:
+monotone Host-Verarbeitungsdauer (`time.perf_counter`), keine
+Aufnahmelatenz oder Live-Durchsatzmessung. Scheduler weiterhin höchstens
+ein offener Auftrag und mindestens zwei Sekunden zwischen Schätzungen.

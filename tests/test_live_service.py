@@ -1733,3 +1733,17 @@ def test_run_status_explains_recent_reader_cause(tmp_path):
     assert result['causes'][0]['cell'] == 14
     assert result['causes'][0]['fraction'] == 0.25
     assert 'Kratzer' in result['causes'][0]['explanation']
+
+
+def test_tracking_hint_is_available_in_small_and_full_status_and_clears(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'run'
+    hint = {'kind': 'anzeige_bewegt', 'shift_px': 19.0, 'region_shift_px': 27.0, 'rotation_deg': -2.23, 'since_s': 3.0}
+    service._session = SimpleNamespace(latest=None, summary={}, latest_age_s=lambda: None,
+                                       tracking_hint=lambda: hint)
+    for full in (False, True):
+        assert service.status(full=full)['run']['tracking_hint'] == hint
+    hint = None
+    assert service.status()['run']['tracking_hint'] is None

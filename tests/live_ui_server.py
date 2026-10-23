@@ -55,6 +55,7 @@ class FakeLiveService:
             if full:
                 data["tracking_reasons"] = REASONS.copy()
             if data.get("run") is not None:
+                data["run"].setdefault("tracking_hint", None)
                 window = data["run"].setdefault("rejection_causes",
                     {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
                 window["causes"] = [live_cause(c) for c in window["causes"]]

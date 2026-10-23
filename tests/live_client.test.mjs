@@ -606,3 +606,27 @@ test('recent causes show the affected cell and percentage and clear after the ru
     assert.deepEqual(element('recent-causes-list').children, []);
   });
 });
+
+test('tracking advice gives a concrete recovery action without changing the record class', async () => {
+  await withLivePage(async (page, element, poll) => {
+    const lost = {latest: latest({status: 'unreadable', raw_text: '',
+      reject_reasons: ['tracking_lost:rahmen_unstimmig']}), latest_age_s: 0.2};
+    page.status = {state: 'running', run: {...lost, tracking_hint: {
+      kind: 'anzeige_bewegt', shift_px: 19.1, region_shift_px: 27, rotation_deg: -2.23, since_s: 3}}};
+    await poll();
+    assert.match(element('detail').textContent, /Anzeige hat sich bewegt.*19 px \(Ecken\).*2,2 Grad/);
+    assert.match(element('detail').textContent, /Werte werden nicht freigegeben.*Bitte neu einrichten/);
+    assert.equal(element('headline').className, 'value unreadable');
+    for (const [kind, text] of [['rahmen_verdeckt', /Rahmen verdeckt\?.*Hand oder Gegenstand/],
+      ['unbekannt', /Anzeige nicht sicher wiedergefunden.*Bitte Sicht.*neu einrichten/]]) {
+      page.status.run.tracking_hint = {kind, shift_px: null, rotation_deg: null, since_s: 10};
+      await poll();
+      assert.match(element('detail').textContent, text);
+      assert.doesNotMatch(element('detail').textContent, /Anzeige hat sich bewegt/);
+    }
+    page.status = {...running, run: {...running.run, tracking_hint: null}};
+    await poll();
+    assert.equal(element('headline').textContent, '+1.2345 mV/V');
+    assert.doesNotMatch(element('detail').textContent, /bewegt|verdeckt|einrichten/);
+  });
+});

@@ -269,6 +269,36 @@ spezifischste Grund. Übersprungene Kamerabilder zählen nicht. Das Fenster
 läuft auch beim Stillstand aus; bei mehr als 4096 Bildern im Fenster wird
 die Begrenzung sichtbar gemeldet. Diese Hilfe verändert keine Freigabe.
 
+Ist die Nachführung mindestens **3 Sekunden ununterbrochen verloren**,
+prüft eine getrennte Hintergrunddiagnose höchstens alle **2 Sekunden** die
+Bewegung gegenüber dem bestätigten Einrichtungsbild. Eine lokale Maske um
+die Anzeige (Quad um x1,6/y3,0 skaliert, Zeichenbereich mit zur Auflösung
+passendem Abstand ausgespart) begrenzt die Referenzsuche. ORB erhält die
+native Auflösung in einem Ausschnitt um die Quad-Boundingbox mit 35 % Rand
+(mindestens 64 Rohpixel), höchstens 2000 Merkmalen und 500 RANSAC-Schritten.
+Es bleibt höchstens ein Auftrag offen. Verglichen wird die **maximale
+Verschiebung der bestätigten Rahmenregionen und Quad-Ecken**, nicht der
+Translationsanteil einer Drehung um den Bildursprung. Bei robuster Bewegung
+über den Suchradius von 12 Rohpixeln bzw. die Bewegungsgrenzen von
+20 Pixeln/3 Grad erscheint etwa „Anzeige hat sich bewegt (ca. 19 px (Ecken),
+2,2 Grad) – Werte werden
+nicht freigegeben. Bitte neu einrichten.“ Die Zahlen sind grobe Diagnosewerte.
+Ohne belastbaren Bewegungsnachweis nach **10 Sekunden Verlust** heißt es
+vorsichtig „Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen.“ bzw.
+„Anzeige nicht sicher wiedergefunden“. Diese Dauer nutzt die monotone
+Host-Verarbeitungszeit, nicht die Aufnahmezeit oder eine gemessene Latenz.
+Bei Rückkehr der Nachführung verschwindet der Hinweis sofort; er richtet
+nichts automatisch neu ein. `run.tracking_hint` im Status enthält Art,
+maximale Eckverschiebung (`shift_px`), maximale Verschiebung der bestätigten
+Rahmenregionen (`region_shift_px`), Drehung und bisherige Verlustdauer
+(`since_s`); unbekannte
+Bewegungswerte bleiben `null`. `session.json` hält unter
+`summary.tracking_hints` die Zahl der Verlustepisoden mit Hinweis (`count`),
+die je Episode aufgetretenen Hinweisarten (`by_kind`) und die größte belegte
+Eckverschiebung (`max_shift_px`, sonst `null`) fest. Diagnoseergebnisse gelangen
+ausschließlich in Bedienhilfe und Zusammenfassung; Nachführung, Quad,
+Leser, Freigabe und Messwertdatensätze bleiben unabhängig davon.
+
 Verbindungsfehler oder abgelaufene Anmeldung setzen die Anzeige auf STALE;
 auch wenn länger als 1,5 s kein erfolgreicher Statusabruf kam. Polling und
 Verbindungsfenster können die sichtbare Umschaltung verzögern (schlimmstenfalls

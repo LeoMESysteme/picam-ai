@@ -9,6 +9,65 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-23 — R13-15: Bewegungsdiagnose nur als Bedienhilfe
+
+## Problem und Entscheidung
+
+Nach einer Bewegung außerhalb der begrenzten Rahmensuche blieb nur eine
+unspezifische Ablehnung sichtbar. Eine getrennte Diagnose vergleicht nach
+drei Sekunden ununterbrochenem Trackingverlust das bestätigte Referenzbild
+mit dem aktuellen Bild. Nach Fix round 1 arbeitet ORB in nativer Auflösung
+auf einem Ausschnitt um die Quad-Boundingbox mit 35 % Rand (mindestens
+64 Rohpixel), höchstens 2000 Merkmalen und 500 RANSAC-Schritten. Die Referenzmaske
+skaliert das Quad um x1,6/y3,0 und spart den Zeichenbereich aus. Nur das
+aktuelle Ausschnitt wird ganz durchsucht, damit Bewegung außerhalb der
+alten Zeichenlage auffindbar bleibt. Robuste Zustimmung, Streuung auf beiden Quadachsen, Restfehler und
+annähernd starre Bewegung sind Voraussetzung einer Bewegungsbehauptung.
+
+Ein einzelner Hintergrundworker hält höchstens einen Auftrag. Zwischen
+Auftragsstarts liegen mindestens zwei Sekunden; weitere Bilder werden
+währenddessen nicht eingereiht. Referenzmerkmale werden einmalig und erst
+beim ersten Auftrag erzeugt. Die Diagnose benutzt monotone Hostdauer und
+behauptet keine Aufnahmelatenz. Rückkehr verwirft auch verspätete Ergebnisse
+einer früheren Verlustepisode. Abschluss wartet nicht auf einen Worker und
+sperrt weitere Hinweise. Zähler sind begrenzt auf drei feste Hinweisarten;
+es gibt keine wachsende Bild- oder Hinweishistorie.
+
+## Alternativen und Konsequenz
+
+Globales Referenzmatching würde den statischen Hintergrund bevorzugen.
+Die Matchingstatistiken der kleinen Trackerfenster allein können eine
+größere Verschiebung nicht beziffern. Deshalb wird die lokale ORB-Diagnose
+gewählt; weder Suchfenster noch Akzeptanzregeln des Trackers werden
+verändert. Bereits eine belegte Verschiebung über den Suchradius von
+12 Rohpixeln rechtfertigt den Neueinrichtungshinweis, auch unterhalb der
+20-Pixel-Bewegungsgrenze; Drehungen werden gegen 3 Grad geprüft. Ohne
+robusten Bewegungsnachweis folgt erst nach zehn Sekunden ein vorsichtiger
+Verdeckungs- oder unbekannt-Hinweis. Diagnosefehler bleiben Hinweise und
+beenden keinen Messlauf. Ergebnisse fließen ausschließlich in Status,
+Bedientext und konstante Summenzähler, niemals in Pipeline, Geometrie,
+Leser, Gate oder Messwertdatensätze. Die Tests mit synthetisch bewegten
+R13-Bildern ersetzen keine Hardwareabnahme (weiterhin OQ-26).
+
+Fix round 1 verwirft die zunächst gewählte 640-Pixel-Verkleinerung:
+Im echten Bewegungsfall blieben nach der Zeichenmaske nur 25 Referenzpunkte
+und 5–8 Zuordnungen; der Hinweis blieb aus. Die native Ausschnittssuche
+bewahrt Rahmenstruktur und spart Hintergrundarbeit. Zeichenabstand und
+geometrische ORB-Toleranzen skalieren mit der langen Quadkante; unverändert
+bleiben Mindestzahl, Zustimmung, Streuung und Skalengrenze. Ein kleineres
+Merkmalsbudget von 1000 lieferte im nativen synthetischen Test keine
+beidseitige Streuung; 2000 erhält diese Prüfung. Die ursprüngliche Angabe
+der Translation um den Bildursprung wurde als Bewegungsmaß verworfen:
+Bei Drehung hängt sie vom gewählten Koordinatenursprung ab. Stattdessen
+vergleichen wir maximale Rohpixelverschiebungen an bestätigten
+Rahmenmittelpunkten und Quad-Ecken mit Suchradius und Bewegungsgrenze.
+`shift_px` und `max_shift_px` bezeichnen die Ecken, `region_shift_px` die
+Rahmenregionen. Das bereits geladene Referenzbild wird über einen optionalen
+Callback beim gemeinsamen Pipeline-Aufbau an die Bedienhilfe gegeben;
+ein erneutes Lesen wurde vermieden. Der gesamte `observe`-Aufruf liegt
+hinter einer Exception-Grenze in der Session: einmalige Warnung, `unbekannt`,
+weiterhin Diagnoseaufzeichnung und Clock-Samples.
+
 # 2026-10-23 — R13-11: Rahmenvorschlag mit Reserve
 
 ## Problem und Entscheidung
