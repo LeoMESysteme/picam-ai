@@ -16,7 +16,7 @@ import threading
 import time
 from collections import Counter, deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -176,6 +176,7 @@ class LiveSession:
         self._reference_recorder = reference_recorder
         self._reference_error = None
         self._test_run = test_run
+        self._testlauf_unterdrueckt = 0
         # Lockerung und ihre Markierung in session.json muessen zusammenpassen.
         expected_factor = 1.0 if reader_tolerance is None else reader_tolerance.get("factor")
         if reader_d_max_factor != expected_factor:
@@ -315,6 +316,12 @@ class LiveSession:
             self._seen = sequence
             self._frames_skipped += skipped
             record = self._pipeline.process(frame, dropped_frames=skipped)
+            # Testlauf sperrt die Freigabe vor Audit und jeder weiteren Ausgabe.
+            gate_record = record
+            suppressed = self._test_run is not None and record.status is ValueStatus.VALID
+            if suppressed:
+                record = replace(record, status=ValueStatus.UNREADABLE, value=None,
+                                 reject_reasons=('testlauf_keine_freigabe', *record.reject_reasons))
             if record.reject_reasons and record.reject_reasons[0].startswith("tracking_lost:"):
                 self._tracking_lost += 1
                 self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
@@ -331,10 +338,12 @@ class LiveSession:
                 self._audit_errors += 1
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             self._frames_read += 1
+            if suppressed:
+                self._testlauf_unterdrueckt += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
             if record.reject_reasons and record.reject_reasons[0] == "anzeige_wechselt":
                 self._display_changing += 1
-            if self._reader_tolerance is not None and record.status is ValueStatus.VALID:
+            if self._reader_tolerance is not None and gate_record.status is ValueStatus.VALID:
                 read = self._pipeline.last_read
                 cells = read.diagnostics.get("cells", []) if read is not None else []
                 if any(isinstance(c, dict) and isinstance(c.get("d_best"), (int, float))
@@ -345,16 +354,21 @@ class LiveSession:
                 read = self._pipeline.last_read
                 diag = read.diagnostics if read is not None and read.backend_id == "dotmatrix" else {}
                 cells = diag.get("cells")
-                self.latest_guess = None
+                latest_guess = None
                 if (isinstance(cells, list) and cells
                         and all(isinstance(c, dict) and isinstance(c.get("best"), str)
                                 and isinstance(c.get("margin"), (int, float)) for c in cells)):
                     text = "".join(c["best"] for c in cells)
-                    self.latest_guess = {
+                    latest_guess = {
                         "text": text, "uncertain": [i for i, c in enumerate(cells) if c["margin"] < 0],
                         "reject_reason": diag.get("reject_reason"),
                     }
                     self._guesses[text] += 1
+                if suppressed:
+                    if latest_guess is None:
+                        latest_guess = {'text': gate_record.raw_text, 'uncertain': [], 'reject_reason': None}
+                    latest_guess['gate_status'] = gate_record.status.value
+                self.latest_guess = latest_guess
             self.latest = record
             self.latest_monotonic = self._monotonic()
             self._rejection_window.observe(self.latest_monotonic, record.status, record.reject_reasons)
@@ -524,6 +538,7 @@ class LiveSession:
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
         if self._test_run is not None:
+            self.summary['testlauf_unterdrueckt'] = self._testlauf_unterdrueckt
             data["test_run"] = self._test_run
             data["guesses"] = {"frames": self._guesses.total(), "top": self._guesses.most_common(10)}
         if ended:

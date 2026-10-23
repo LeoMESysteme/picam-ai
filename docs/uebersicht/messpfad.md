@@ -143,10 +143,11 @@ Die optionale serielle GSV-2AS-Aufzeichnung steht getrennt in
 <code>scripts/live-reference-eval.py</code>. Der Referenzwert verändert
 weder Leserentscheidung noch Freigabe. Ein Testlauf bei Lesesperre trägt
 <code>TESTLAUF.json</code> und die Markierung in <code>session.json</code>;
-seine Pipeline-Records sind zusammen mit dieser Markierung auszuwerten,
-auch wenn einzelne Records <code>valid</code> tragen. Die Oberfläche kann
-sie ebenfalls als VALID anzeigen; die Testlaufmarkierung untersagt ihre
-Messnutzung, erzwingt dies aber noch nicht technisch
+die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit von
+<code>VALID</code> auf <code>UNREADABLE</code>, mit <code>value=null</code>
+und dem ersten Ablehnungsgrund <code>testlauf_keine_freigabe</code>.
+Die Oberfläche zeigt nur die getrennte Leser-Vermutung als Diagnose,
+niemals einen gültigen Testlaufwert
 ([OQ-44](../open-questions.md#oq-44)). Eine angepasste Lesetoleranz setzt eine
 serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus;
 sie bleibt als nicht validiert markiert.

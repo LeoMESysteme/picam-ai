@@ -8,7 +8,6 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
-| [OQ-44](#oq-44) | Jetzt | offen | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 | [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-07](#oq-07) | Jetzt | offen | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
@@ -52,6 +51,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-16](#oq-16) | — | geklärt | Vollständigkeit des lokalen Planungsstands |
 | [OQ-31](#oq-31) | — | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
 | [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
+| [OQ-44](#oq-44) | — | geklärt | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 
 <!-- OQ-INDEX:END -->
 
@@ -2076,8 +2076,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-44 — Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen?
 
-* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
-* **Befund:** `LiveService.start_run` kennzeichnet das Übergehen der
+* **Status:** geklärt · 2026-10-23 · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Befund bei Eröffnung:** `LiveService.start_run` kennzeichnet das Übergehen der
   Lesesperre mit `TESTLAUF.json` und `test_run` in `session.json`.
   `LiveSession.step` schreibt jedoch den unveränderten Pipeline-Datensatz
   nach `records.jsonl`, bevor es Leser-Vermutungen ergänzt. Werden spätere
@@ -2085,7 +2085,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   den Testlauf-Hinweis, unterdrückt einen frischen gültigen Datensatz aber
   nicht. Eine technisch erzwungene Aussage „Testlauf gibt nie Werte frei“
   ist damit nicht belegt.
-* **Umgang bis zur Klärung:** Testlaufdaten nicht für Messungen oder als
+* **Bisheriger Umgang bis zur Klärung:** Testlaufdaten nicht für Messungen oder als
   Freigabenachweis verwenden. `records.jsonl` immer zusammen mit den
   Laufmarkierungen lesen; ein einzelner `VALID`-Datensatz hebt die
   Lesesperre der Einrichtung nicht auf. Keine Verhaltensänderung während
@@ -2095,8 +2095,28 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   erhaltenen Datensatzstatus braucht; anschließend die gewählte Sicherung
   mit einem Testlauf aus erst unlesbaren und später lesbaren Bildern
   prüfen. Kein neuer Status ohne Prüfung der bestehenden Verträge.
-* **Antwort landet in:** `src/dispread/live/session.py`,
-  `src/dispread/live/service.py`, zugehörigen Live-Tests und
+* **Antwort (2026-10-23):** Ein Testlauf zeigt Vermutungen und gibt niemals
+  einen Wert frei. `LiveSession.step()` ersetzt jeden vom Gate als `VALID`
+  bewerteten Record **vor dem Audit** durch `UNREADABLE`, `value=None` und
+  den ersten Ablehnungsgrund `testlauf_keine_freigabe`; weitere Gründe bleiben
+  erhalten. Der unterdrückte Record behält `raw_text`, `frames_confirmed`
+  und `confirmation_span_ns` der Ablesung als Diagnose, wie andere
+  `UNREADABLE`-Records, aber niemals einen Zahlenwert in `value`.
+  Es gibt keinen neuen Vertragsstatus. Die getrennte
+  Leser-Vermutung zeigt die ursprüngliche Gate-Entscheidung als Diagnose
+  (`gate_status`); sie ist kein freigegebener Wert. `session.json` zählt
+  erfolgreich auditierte Unterdrückungen als `summary.testlauf_unterdrueckt`.
+  Die Seite zeigt Testbanner und Vermutung, niemals einen Testlaufwert als
+  gültig. Normale Läufe behalten ihre bisherigen Auditbytes und Statuswerte.
+  Tests mit zunächst unlesbaren und später lesbaren Bildern prüfen Audit,
+  Status, Ausgabegrenze und Zähler. Der Referenzabgleich lehnt markierte
+  Testläufe weiterhin ab und zählt unterdrückte Records auch ohne
+  Laufmarkierung nicht als `VALID`. Historische Testläufe mit `VALID` bleiben
+  Testdaten und sind keine Messnachweise.
+* **Antwort umgesetzt in:** `src/dispread/live/session.py`,
+  `src/dispread/workbench/static/live.js`, `src/dispread/workbench/fields.py`,
+  `tests/test_live_session.py`, `tests/test_live_service.py`,
+  `tests/test_live_reference_eval.py`, `tests/live_client.test.mjs` und
   [Live-Anleitung](anleitung/10-kamera-livevorschau.md).
 
 ---

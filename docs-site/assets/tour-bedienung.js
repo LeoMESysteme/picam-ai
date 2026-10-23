@@ -335,8 +335,8 @@
     T.label(shell, 64, 322, "Einrichten → bestätigen → starten → stoppen", "t-small", { style: MONO });
     const role = T.group(layer, "role");
     T.chip(role, 30, 400, "Live: einrichten · bestätigen · lesen · Audit", "chip--flow");
-    T.label(role, 30, 454, "TESTLAUF: markiert, keine Messnutzung", "t-small t-plan-text");
-    T.label(role, 30, 476, "Kann dennoch VALID anzeigen / protokollieren · OQ-44", "t-small");
+    T.label(role, 30, 454, "TESTLAUF: Vermutungen, keine Messnutzung", "t-small");
+    T.label(role, 30, 476, "Freigabe vor Audit gesperrt · OQ-44 geklärt", "t-small");
     tour.docLink(role, "docs/open-questions.html#oq-44", "OQ-44: Testlauf-Freigabe öffnen", [500, 474]);
     T.label(role, 30, 510, "Toleranz erhöht: weiterhin nicht validiert", "t-small t-plan-text");
 

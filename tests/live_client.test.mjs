@@ -277,14 +277,30 @@ test('test run labels rejected guess separately and keeps STALE authoritative', 
   status.run.guess = {text: '+0.12345 ', uncertain: []};
   assert.match(statusView(status).detail, /unsichere Zellen: keine/);
   status.run.latest = latest();
-  assert.equal(statusView(status).headline, 'TESTLAUF · +1.2345 mV/V');
-  assert.doesNotMatch(statusView(status).detail, /Leser-Vermutung/);
+  assert.equal(statusView(status).headline, 'TESTLAUF · UNREADABLE');
+  assert.equal(statusView(status).cls, 'unreadable');
+  assert.match(statusView(status).detail, /Testlauf: keine Wertfreigabe/);
+  assert.match(statusView(status).detail, /Leser-Vermutung/);
   status.run.latest_age_s = 0.9;
   assert.equal(statusView(status).headline, 'TESTLAUF · STALE');
   assert.equal(statusView(status).cls, 'stale');
   status.run.latest = latest({status: 'unreadable', raw_text: null, reject_reasons: ['zelle_unbekannt']});
   assert.equal(statusView(status).cls, 'stale');
   assert.doesNotMatch(statusView(status).detail, /Leser-Vermutung/);
+});
+
+test('server-suppressed test record explains rejection using the German cause text', () => {
+  const status = {state: 'running', test_run: {testlauf: true}, run: {
+    latest: latest({status: 'unreadable', value: null, reject_reasons: ['testlauf_keine_freigabe']}),
+    latest_age_s: 0.2, guess: {text: '+1.2345', uncertain: [], gate_status: 'valid'},
+    rejection_causes: {causes: [{reason: 'testlauf_keine_freigabe',
+      explanation: 'Testlauf: keine Wertfreigabe', count: 1, fraction: 1}]},
+  }};
+  const view = statusView(status);
+  assert.equal(view.headline, 'TESTLAUF · UNREADABLE');
+  assert.match(view.detail, /Testlauf: keine Wertfreigabe \(testlauf_keine_freigabe\)/);
+  assert.match(view.detail, /Leser-Vermutung/);
+  assert.doesNotMatch(view.headline, /1\.2345/);
 });
 
 test('override requires explicit dialog approval and resets with session', async () => {

@@ -133,6 +133,119 @@ def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
     assert json.loads(session.records_path.read_text()) == record.to_dict()
 
 
+@pytest.mark.parametrize('marker', [None, {'testlauf': True}, {}])
+def test_later_readable_frames_are_suppressed_only_in_test_run(tmp_path, monkeypatch, marker):
+    from unittest.mock import Mock
+
+    image = embed('+ 1.2345 ')
+    session = _session(tmp_path, [image * 0 + 200, image, image, image], test_run=marker)
+    session.start()
+    # Live nutzt process(), das auch mit angehaengtem Sink nichts ausgibt.
+    assert session._pipeline.sinks == []
+    output = Mock()
+    session._pipeline.sinks.append(output)
+    pipeline_records = []
+    process = session._pipeline.process
+
+    def observe(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline_records.append(record)
+        return record
+
+    monkeypatch.setattr(session._pipeline, 'process', observe)
+    audited = []
+    emit = session._sink.emit
+
+    def audit(record):
+        audited.append(record)
+        return emit(record)
+
+    monkeypatch.setattr(session._sink, 'emit', audit)
+    try:
+        records = [session.step() for _ in range(4)]
+        assert [r.status for r in pipeline_records] == [
+            ValueStatus.UNREADABLE, ValueStatus.TRANSITION, ValueStatus.VALID, ValueStatus.VALID,
+        ]
+        if marker is not None:
+            assert all(r.status is not ValueStatus.VALID and r.value is None for r in audited)
+            assert all(r.status is ValueStatus.UNREADABLE
+                       and r.reject_reasons[0] == 'testlauf_keine_freigabe' for r in records[2:])
+            assert session.latest is records[-1]
+            assert session.latest_guess['gate_status'] == 'valid'
+            assert session.latest_guess['text'] == '+ 1.2345 '
+            assert records[2].raw_text == pipeline_records[2].raw_text
+            assert records[2].frames_confirmed == 2
+            assert records[2].confirmation_span_ns == 33_333_333
+        else:
+            assert records == pipeline_records
+            # Exakt die bisherigen JSONL-Bytes, einschliesslich aller Zeitmarken.
+            expected = ''.join(json.dumps(r.to_dict(), ensure_ascii=False, separators=(',', ':')) + '\n'
+                               for r in pipeline_records).encode('utf-8')
+            assert session.records_path.read_bytes() == expected
+        assert records[:2] == pipeline_records[:2]
+        output.emit.assert_not_called()
+    finally:
+        summary = session.stop()
+    if marker is not None:
+        assert summary['by_status'] == {'unreadable': 3, 'transition': 1}
+        assert summary['testlauf_unterdrueckt'] == 2
+        assert json.loads(session.session_path.read_text())['summary']['testlauf_unterdrueckt'] == 2
+    else:
+        assert 'testlauf_unterdrueckt' not in summary
+    assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
+        r.to_dict() for r in records
+    ]
+
+
+def test_suppressed_gate_result_remains_diagnostic_without_cell_details(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, test_run={'testlauf': True})
+    session.start()
+    reader = session._pipeline.reader
+    read = reader.read
+    monkeypatch.setattr(reader, 'read', lambda *args: replace(read(*args), diagnostics={}))
+    try:
+        session.step()
+        record = session.step()
+        assert record.status is ValueStatus.UNREADABLE and record.value is None
+        assert session.latest_guess['gate_status'] == 'valid'
+        assert session.latest_guess['text'] == record.raw_text
+        assert 'gate_status' not in session.records_path.read_text()
+    finally:
+        session.stop()
+
+
+@pytest.mark.parametrize('without_cells', [False, True])
+def test_suppressed_guess_is_complete_when_published(tmp_path, monkeypatch, without_cells):
+    from dataclasses import replace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, test_run={'testlauf': True})
+    session.start()
+    if without_cells:
+        read = session._pipeline.reader.read
+        monkeypatch.setattr(session._pipeline.reader, 'read', lambda *args: replace(read(*args), diagnostics={}))
+    session.step()
+    publications = []
+    set_attribute = LiveSession.__setattr__
+
+    def observe_publication(self, name, value):
+        set_attribute(self, name, value)
+        if self is session and name == 'latest_guess':
+            # Momentaufnahme wie beim gleichzeitigen Lesen durch status().
+            publications.append(None if self.latest_guess is None else dict(self.latest_guess))
+
+    monkeypatch.setattr(LiveSession, '__setattr__', observe_publication)
+    try:
+        record = session.step()
+        assert publications == [{
+            'text': record.raw_text if without_cells else '+ 1.2345 ',
+            'uncertain': [], 'reject_reason': None, 'gate_status': 'valid',
+        }]
+    finally:
+        session.stop()
+
+
 def test_start_refused_when_reference_still_changed(tmp_path):
     session = _session(tmp_path, [], reference_ok=False)
     with pytest.raises(StartRefused, match="Referenzbild"):
@@ -568,7 +681,8 @@ def test_reader_factor_must_match_recorded_tolerance(tmp_path, factor, tolerance
 
 
 @pytest.mark.parametrize('needs_tolerance', [False, True])
-def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, needs_tolerance):
+@pytest.mark.parametrize('test_mode', [False, True])
+def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, needs_tolerance, test_mode):
     from dataclasses import replace
 
     from dotmatrix_helpers import LAYOUT, render
@@ -581,7 +695,8 @@ def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, n
     tolerance = {'factor': 1.44, 'd_max_templates': templates.d_max, 'd_max_run': templates.d_max * 1.44,
                  'max_d_best': maximum, 'hinweis': 'nicht validiert'}
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 2,
-                       reader_d_max_factor=1.44, reader_tolerance=tolerance)
+                       reader_d_max_factor=1.44, reader_tolerance=tolerance,
+                       test_run={'testlauf': True} if test_mode else None)
     factors = []
 
     def factory(path, sha, *, d_max_factor):
@@ -592,7 +707,7 @@ def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, n
     session.start()
     first, second = session.step(), session.step()
     assert first.status is ValueStatus.TRANSITION
-    assert second.status is ValueStatus.VALID
+    assert second.status is (ValueStatus.UNREADABLE if test_mode else ValueStatus.VALID)
     summary = session.stop()
     assert factors == [1.44]
     assert summary['tolerance_frames'] == int(needs_tolerance)

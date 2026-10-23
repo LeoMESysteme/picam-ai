@@ -1153,6 +1153,46 @@ def test_override_without_block_stays_normal_and_new_setup_clears_markers(tmp_pa
     assert service.status()["run"] is None
 
 
+def test_test_run_later_readable_records_remain_rejected_in_status_and_audit(tmp_path, monkeypatch):
+    import json
+
+    from dotmatrix_helpers import embed
+    from test_live_session import _session
+
+    def factory(owner, profile, config, out_dir, **kwargs):
+        image = embed('+ 1.2345 ')
+        session = _session(tmp_path, [image * 0 + 200, image, image], out_dir=out_dir, **kwargs)
+        # Schritte im Test ausfuehren, der Service-Thread wartet nur auf Stop.
+        session.run = lambda stop: stop.wait()
+        return session
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    service._run_block = 'Lauf gesperrt: Gegenlesen WARNUNG'
+    service.start_run(test_override=True, reference=False)
+    try:
+        for _ in range(3):
+            service._session.step()
+        status = service.status()
+        assert status['test_run']['testlauf'] is True
+        assert status['run']['latest']['status'] == 'unreadable'
+        assert status['run']['latest']['value'] is None
+        assert status['run']['latest']['reject_reasons'][0] == 'testlauf_keine_freigabe'
+        assert status['run']['guess']['gate_status'] == 'valid'
+        assert status['run']['guess']['text'] == '+ 1.2345 '
+        cause = next(c for c in status['run']['rejection_causes']['causes']
+                     if c['reason'] == 'testlauf_keine_freigabe')
+        assert cause['explanation'] == 'Testlauf: keine Wertfreigabe'
+    finally:
+        service.stop_run()
+    metadata = json.loads(service._session.session_path.read_text())
+    marker = json.loads((service._session.session_path.parent / 'TESTLAUF.json').read_text())
+    assert metadata['test_run'] == marker == service.status()['test_run']
+    assert metadata['summary']['testlauf_unterdrueckt'] == 1
+    assert 'valid' not in metadata['summary']['by_status']
+
+
 def test_run_block_reason_explains_reference_contradiction():
     from dispread.live.service import run_block_reason
 

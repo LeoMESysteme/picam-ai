@@ -7,8 +7,9 @@ und Messlauf. Die ältere Werkbank erhält gedrosselte Bilder vom gleichen
 
 Ein normaler Lauf setzt erfolgreiches Gegenlesen voraus. Ein ausdrücklich
 markierter Testlauf kann die Lesesperre umgehen; sein Banner und
-`TESTLAUF.json` untersagen die Messnutzung. Gegenwärtig verhindert das
-jedoch weder VALID-Records noch ihre VALID-Anzeige
+`TESTLAUF.json` kennzeichnen ihn. Jede Gate-Freigabe wird vor dem Audit auf
+`UNREADABLE` mit `value=None` und `testlauf_keine_freigabe` gesetzt.
+Die Seite zeigt nur die getrennte Leser-Vermutung, keinen gültigen Testlaufwert
 ([OQ-44](../docs/open-questions.md#oq-44)). Angepasste Lesetoleranz setzt
 eine serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus
 und bleibt als nicht validiert markiert.

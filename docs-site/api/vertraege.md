@@ -41,10 +41,14 @@ belegen, warum ein Wert freigegeben oder abgelehnt wurde.
 
 Der aktuelle Dot-Matrix-Leser speichert als `raw_text` die geparste Zahl
 mit Pluszeichen, keine vollständige Abschrift der Displayzellen. Bei
-Ablehnung ist der Text leer. Ein Testlauf kann trotz Nutzungsverbot einzelne
-VALID-Pipeline-Records enthalten; sie müssen mit `TESTLAUF.json` und der
-Markierung in `session.json` ausgewertet werden
-([OQ-44](../docs/open-questions.md#oq-44)). Die Laufkennzeichnung ist kein
+Ablehnung kann der Text leer sein. Im Testlauf setzt `LiveSession` jede
+Gate-Freigabe vor dem Audit auf `UNREADABLE`, mit `value=None` und dem ersten
+Ablehnungsgrund `testlauf_keine_freigabe`. `raw_text`, `frames_confirmed`
+und `confirmation_span_ns` der Ablesung bleiben als Diagnose erhalten.
+Die Seite zeigt nur die getrennte Leser-Vermutung
+([OQ-44](../docs/open-questions.md#oq-44)). Historische Testläufe mit
+VALID-Records bleiben für Messungen gesperrt; `TESTLAUF.json` und die
+Markierung in `session.json` sind mit auszuwerten. Die Laufkennzeichnung ist kein
 Feld des einzelnen `ValueRecord`.
 
 Die Basenkennzeichnung der Ergebniszeit ist außerhalb des V4L2-Pfads noch

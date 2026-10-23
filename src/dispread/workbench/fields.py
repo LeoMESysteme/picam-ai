@@ -59,6 +59,7 @@ LIVE_CAUSE_TEXT = {
     "kontrast": "Kontrast zu gering",
     "ueberbelichtet": "Anzeige ueberbelichtet",
     "anzeige_wechselt": "Wert wechselt",
+    "testlauf_keine_freigabe": "Testlauf: keine Wertfreigabe",
     "awaiting_confirmation": "Warte auf Bestaetigung in weiteren Bildern",
     "decimal_point_unknown": "Dezimalpunkt nicht sicher erkannt",
     "sign_region_unreadable": "Vorzeichenbereich nicht lesbar",

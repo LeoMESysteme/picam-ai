@@ -219,19 +219,25 @@ oder Kanten, werden wie bisher bei der Bestätigung quittiert.
 Unter „Testmodus (nur zu Testzwecken)“ lässt sich die Lesesperre ausdrücklich
 übergehen. Haken setzen und den zusätzlichen Dialog bestätigen. Der Testlauf
 zeigt, welche Zeichen der Leser vermutet hätte; unsichere Zellen sind benannt.
-Die Vermutungsanzeige ist kein freigegebener Messwert. **Die technische
-Sperre im Audit ist jedoch unvollständig:** `LiveSession.step()` schreibt
-den Pipeline-Record unverändert, auch wenn ein späteres Bild `VALID` ergibt
-([OQ-44](../open-questions.md#oq-44)). Deshalb sind alle Records dieses
-Laufordners als Testdaten von Messungen auszuschließen; ein einzelnes
-`status=valid` hebt die Testmarkierung des Laufs nicht auf. Das rote Banner
-kennzeichnet auch den beendeten Testlauf.
+Die Vermutungsanzeige ist kein freigegebener Messwert. **Ein Testlauf gibt
+technisch nie einen Wert frei:** Auch später lesbare Bilder werden vor dem
+Audit von `VALID` auf `UNREADABLE` gesetzt, mit `value=null` und dem ersten
+Ablehnungsgrund `testlauf_keine_freigabe` („Testlauf: keine Wertfreigabe“).
+Der unterdrückte Record behält `raw_text`, `frames_confirmed` und
+`confirmation_span_ns` der Ablesung als Diagnose, wie andere
+`UNREADABLE`-Records; er enthält niemals einen Zahlenwert in `value`.
+Die ursprüngliche Gate-Entscheidung bleibt nur als getrennte Diagnose
+`gate_status` in der Leser-Vermutung sichtbar
+([OQ-44](../open-questions.md#oq-44)). Das rote Banner kennzeichnet auch den
+beendeten Testlauf; die Seite zeigt Testlaufwerte niemals als gültig.
 `var/live/<sitzung>/run-NN/TESTLAUF.json` hält Sperrgrund, Bedienperson und
 Startzeit fest; `session.json` enthält die Testmarkierung und die zehn
-häufigsten Vermutungen. Die einzelnen Records in `records.jsonl` tragen keine
-eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
+häufigsten Vermutungen. `summary.testlauf_unterdrueckt` zählt die erfolgreich
+auditierten, unterdrückten Freigaben. Die einzelnen Records in `records.jsonl`
+tragen keine eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
 und nicht ausgewertet wie ein regulärer Lauf. Für einen regulären Lauf neu und
 erfolgreich einrichten.
+Historische Testläufe mit `status=valid` bleiben von Messnachweisen ausgeschlossen.
 
 ### Lauf und Wertstatus
 
@@ -929,8 +935,10 @@ keine Lesung; Abstand zur zweitbesten Klasse, zwei bestätigende Bilder und
 STALE-Regeln gelten weiter. Ein Toleranzlauf trägt ein gelbes Banner und bei
 VALID den Detailtext „erweiterte Toleranz ×… – nicht validiert“.
 `confirmation.json` und `session.json` halten den Faktor als `reader_tolerance`
-fest; `summary.tolerance_frames` zählt gültige Datensätze, bei denen mindestens
-eine Zelle die ursprüngliche Vorlagenschwelle überschritt.
+fest; `summary.tolerance_frames` zählt vom Gate als gültig bewertete
+Datensätze, bei denen mindestens eine Zelle die ursprüngliche
+Vorlagenschwelle überschritt. Im Testlauf zählt diese Diagnose anhand der
+Gate-Entscheidung vor der Unterdrückung weiter; sie ist keine Wertfreigabe.
 
 ## Prüfstand dieser Implementierung
 
@@ -968,7 +976,9 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
 
 * [ ] Ein fehlgeschlagenes Gegenlesen sperrt den normalen Lauf; ein
   ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
-  Der Schutz gegen `VALID` im Test-Audit bleibt [OQ-44](../open-questions.md#oq-44).
+  Jede Gate-Freigabe wird vor dem Test-Audit als `UNREADABLE` mit
+  `value=null` und `testlauf_keine_freigabe` protokolliert; die Seite zeigt
+  nur die Leser-Vermutung ([OQ-44, geklärt](../open-questions.md#oq-44)).
 * [ ] `/live` führt ohne Anmeldung zum Login und danach zurück; bei Portkonflikt
   startet die Werkbank mit `--port 8081`.
 * [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;

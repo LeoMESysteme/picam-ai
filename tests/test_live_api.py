@@ -79,6 +79,49 @@ def test_unknown_overlay_is_404():
     _run(check)
 
 
+def test_status_transports_only_rejected_test_run_records_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from aiohttp.test_utils import make_mocked_request
+    from dotmatrix_helpers import embed
+    from test_live_session import _session
+
+    from dispread.live.service import LiveService
+
+    async def direct(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    marker = {'testlauf': True}
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, test_run=marker)
+    session.start()
+    service = LiveService(session._owner, tmp_path)
+    service._state, service._session, service._test_run = 'running', session, marker
+    service._run_dir = session.records_path.parent
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _request: 'tok')
+
+    async def check():
+        session.step()
+        session.step()
+        for path in ('/live/status', '/live/status?full=1'):
+            request = make_mocked_request('GET', path, app=app)
+            match = await app.router.resolve(request)
+            response = await match.handler(request)
+            assert response.status == 200
+            data = json.loads(response.text)
+            assert data['test_run'] == marker
+            assert data['run']['latest']['status'] == 'unreadable'
+            assert data['run']['latest']['value'] is None
+            assert data['run']['latest']['reject_reasons'][0] == 'testlauf_keine_freigabe'
+            assert data['run']['guess']['gate_status'] == 'valid'
+
+    try:
+        asyncio.run(check())
+    finally:
+        session.stop()
+
+
 @pytest.mark.parametrize("full", [False, True])
 def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     import json

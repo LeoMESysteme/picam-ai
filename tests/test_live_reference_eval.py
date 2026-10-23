@@ -77,6 +77,21 @@ def test_numeric_value_must_also_match_reference(tmp_path):
     assert _module().evaluate(tmp_path)['misreads'] == 1
 
 
+def test_suppressed_records_are_non_valid_even_without_session_marker(tmp_path):
+    fixture_run(tmp_path)
+    path = tmp_path / 'records.jsonl'
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    for record in records:
+        if record['status'] == 'valid':
+            record.update(status='unreadable', value=None, reject_reasons=['testlauf_keine_freigabe'])
+    _write_rows(path, records)
+    result = _module().evaluate(tmp_path)
+    assert result['compared_valid'] == result['undecided_valid'] == result['uncovered_valid'] == 0
+    assert result['stable']['by_status'] == {'unreadable': 2}
+    assert result['changing']['by_status'] == {'unreadable': 2, 'transition': 1}
+    assert result['latency_ms']['n'] == 0
+
+
 def test_dropped_reference_audit_is_not_a_validation(tmp_path):
     fixture_run(tmp_path)
     path = tmp_path / 'session.json'

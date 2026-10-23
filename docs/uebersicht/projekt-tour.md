@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-21. Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-10-23. Alle sechs Kapitel sind fertig: Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -782,12 +782,11 @@ stoppt den Lauf nicht automatisch.
 
 Bei Lesesperre ist nur ein ausdrücklich markierter Testlauf möglich
 (`TESTLAUF.json`, Banner). Vermutungen zu abgelehnten Bildern sind als nicht freigegeben beschriftet.
-Audit und Oberfläche können weiterhin `VALID`-Pipelineentscheidungen
-enthalten;
-Datensätze eines solchen Laufs müssen mit seiner Testlaufmarkierung
-zusammen ausgewertet werden. Auch ein `VALID`-Status ist dann keine
-Messfreigabe. Die technische Erzwingung dieser Sperre ist offen
-([OQ-44](../open-questions.md#oq-44)).
+Jede Gate-Freigabe wird vor dem Audit als unlesbar ohne Zahlenwert
+protokolliert; die Oberfläche zeigt niemals gültige Testlaufwerte.
+Die ursprüngliche Gate-Entscheidung bleibt eine getrennte Leser-Diagnose.
+Testläufe sind von Messnachweisen ausgeschlossen; die technische
+Freigabesicherung ist umgesetzt ([OQ-44](../open-questions.md#oq-44)).
 
 Der Live-Pfad ist am Aufbau gelaufen, aber noch nicht umfassend abgenommen:
 Große Wertwechsel können die Nachführung verlieren lassen (OQ-26), die

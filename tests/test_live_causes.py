@@ -44,4 +44,5 @@ def test_german_cause_explains_cell_and_preserves_machine_reason():
     assert 'rechts der Einheit' in cause['explanation']
     assert 'Kratzer, Staub oder Reflex' in cause['explanation']
     assert live_cause({'reason': 'anzeige_wechselt'})['explanation'] == 'Wert wechselt'
+    assert live_cause({'reason': 'testlauf_keine_freigabe'})['explanation'] == 'Testlauf: keine Wertfreigabe'
     assert 'Rahmenbereiche' in live_cause({'reason': 'tracking_lost:rahmen_unstimmig'})['explanation']

@@ -98,8 +98,11 @@ Wiki zu den aus `docs-site/api/` stammenden Seiten.
   widerlegt eine ausreichende Verfügbarkeit bei Faktor 2 und 5. Eine
   vom Zifferninhalt unabhängige Nachführung bleibt zu entwickeln.
 * [OQ-44](open-questions.md#oq-44): Testlaufmarkierungen und Banner
-  verhindern technisch weder gültige Audit-Datensätze noch deren Anzeige.
-  Solche Daten sind nicht für Messungen freigegeben.
+  verhinderten beim Abgleich am 2026-10-21 technisch weder gültige
+  Audit-Datensätze noch deren Anzeige. **Nachtrag 2026-10-23:** Die
+  Live-Sitzung setzt jede Gate-Freigabe vor dem Test-Audit auf `UNREADABLE`
+  mit `value=None` und `testlauf_keine_freigabe`; die Seite zeigt nur die
+  Leser-Vermutung. Historische Testlaufdaten bleiben für Messungen gesperrt.
 * [OQ-45](open-questions.md#oq-45): MONOTONIC-Verarbeitungsmarken sind
   teilweise mit einer unpassenden Zeitbasis bezeichnet. Keine allgemeine
   Aussage über Aufnahme-/Ergebniszeitdifferenzen daraus ableiten.

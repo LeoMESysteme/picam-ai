@@ -28,9 +28,13 @@ function recordView(status) {
     const fresh = typeof age === 'number' && Number.isFinite(age) && age <= 0.5;
     const reasons = run.reject_reasons.map((reason) => {
       const key = reason.startsWith('tracking_lost:') ? reason.slice('tracking_lost:'.length) : reason;
-      const label = status.tracking_reasons?.[key];
+      const label = status.tracking_reasons?.[key] || status.run.rejection_causes?.causes
+        ?.find((cause) => cause.reason === reason)?.explanation;
       return label ? `${label} (${reason})` : reason;
     }).join(', ');
+    if (status.test_run && run.status === 'valid' && fresh && status.state === 'running') {
+      return {headline: 'UNREADABLE', cls: 'unreadable', detail: 'Testlauf: keine Wertfreigabe'};
+    }
     if (status.state === 'running' && run.status === 'valid' && fresh) {
       return {headline: `${run.raw_text} ${run.unit}`, cls: 'valid', detail: `Bild ${run.frame_sequence}`};
     }
