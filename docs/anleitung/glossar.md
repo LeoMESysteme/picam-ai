@@ -1031,6 +1031,32 @@ Mögliche USB-Geräteschnittstelle zum Empfänger. Dafür verlangt das Konzept e
 
 ## Python und Werkzeuge
 
+### ABI
+
+Binäre Kompatibilität der zusammen gebauten Systempakete. Eine per pip installierte NumPy-Kopie kann das gegen System-NumPy gebaute OpenCV brechen; deshalb bleiben die betreffenden Debian-Pakete in der Projekt-venv sichtbar.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### `aiohttp`
+
+Python-Bibliothek für die Netzwerkdienste der Workbench: HTTPS, MJPEG, WebSockets und Unix-Socket-API. Sie kommt aus dem Debian-Paket `python3-aiohttp` und gehört zu den zusätzlichen Workbench-Abhängigkeiten.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### CLI
+
+Bedienung über Konsolenbefehle. Vorhanden ist die Workbench-CLI mit Live-Steuerung; die frei kombinierbare Pipeline-CLI mit Quelle, Geräteprofil und Senken ist weiterhin eine Bauaufgabe. `dispread run` ist kein verfügbarer Unterbefehl.
+
+*Weg:* Entwickeln · *Quelle:* [CLI](05-cli.md)
+
+### Docstring
+
+Dokumentation im Python-Quelltext. Modul-Docstrings sollen hier das Warum mit Konzept- oder OQ-Verweis erklären; beim Doku-Build entstehen aus den Docstrings unter `src/dispread` die API-Seiten.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
+
+Erzeugung der API-Seiten: [API-Referenz](../../api/index.md).
+
 ### Editierbarer Install
 
 Das Paket wird aus `src/`
@@ -1040,6 +1066,12 @@ umbenanntes Projektverzeichnis bricht ihn ([Kapitel 0](00-werkzeuge.md)).
 *Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
 
 Installation mit: `./.venv/bin/pip install --no-deps -e .`.
+
+### Einsprungpunkt
+
+Zuordnung eines Konsolenbefehls zu einer Python-Funktion. `pyproject.toml` verbindet `dispread` mit `dispread.workbench.cli:main`; der Befehl startet damit die separate Workbench-CLI.
+
+*Weg:* Entwickeln · *Quelle:* [CLI](05-cli.md)
 
 ### `frozen` Datenklasse
 
@@ -1064,6 +1096,32 @@ nicht unbenutzbar macht.
 
 *Weg:* Entwickeln · *Quelle:* [Bildquellen-API](../../api/frames.md)
 
+### Mock-Modus
+
+Standardmodus der Tests ohne Hardware. `tests/conftest.py` überspringt darin Tests mit den Markierungen `hardware` oder `serial`; neue Tests gehören grundsätzlich in diesen Pfad, sofern sie keine physische Kamera oder UART brauchen.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
+
+### NumPy
+
+Array-Bibliothek für Bildaufbereitung und Segmentanalyse. Der Messkern verwendet das Debian-Systempaket `python3-numpy`; eine zusätzliche PyPI-Kopie in der Projekt-venv würde die Systemkopie überschatten.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+Einsatz in der Bildverarbeitung: [Konzept](../../Konzept.md).
+
+### OpenCV
+
+Bildverarbeitungsbibliothek für Entzerrung und Bildaufbereitung, in Python als `cv2` eingebunden. Die aktive UVC-Bildquelle öffnet OpenCV erst beim Öffnen der Kamera; verwendet wird das Debian-Systempaket `python3-opencv`.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### `pip`
+
+Installationswerkzeug für Python-Pakete. Im Projekt installiert es das eigene Paket mit `--no-deps -e .`; pytest und Ruff dürfen in die venv, die dokumentierten Systembibliotheken dürfen dort keine PyPI-Kopie erhalten.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
+
 ### `Protocol`
 
 Strukturelle Typisierung: passende Methoden genügen, kein
@@ -1071,6 +1129,38 @@ Erben nötig. Mit `@runtime_checkable` ist `isinstance()` möglich und wird in
 Tests als Konformitätsprüfung benutzt.
 
 *Weg:* Entwickeln · *Quelle:* [Verträge](02-vertraege.md)
+
+### `pyproject.toml`
+
+Projektdatei mit Paketabhängigkeiten, Konsolen-Einsprungpunkt und Ruff-Konfiguration. `dependencies = []` ist hier Absicht, damit pip keine Kopien der benötigten Debian-Systembibliotheken installiert.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
+
+Der registrierte Konsolenbefehl: [CLI](05-cli.md).
+
+### `pyserial`
+
+Python-Bibliothek für die serielle Ausgabe des Messkerns. Sie wird als Debian-Paket `python3-serial` bereitgestellt; beim Import heißt das Modul `serial` und soll aus dem Systempaketpfad aufgelöst werden.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### `pytest`
+
+Testwerkzeug des Projekts, aufgerufen über `./.venv/bin/pytest`. Der Standardlauf nutzt den Mock-Modus ohne Hardware; der Exit-Code und die Zusammenfassung zeigen das Ergebnis, nicht eine festgeschriebene Testanzahl.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
+
+### Quellen-Registry
+
+Zuordnung von Quell-URIs zu Bildquellen in `dispread.frames`. Ein bekannter URI-Eintrag garantiert keine fertige Implementierung: `folder://` ist registriert, das zugehörige Modul fehlt derzeit noch.
+
+*Weg:* Entwickeln · *Auch:* URI-Registry · *Quelle:* [Eigene Bildquelle](03-erste-bildquelle-folder.md)
+
+### Ruff
+
+Linter für Python-Stil und Importordnung. Die Regeln stehen in `pyproject.toml`; geprüft wird über `./.venv/bin/ruff check src tests examples`. Bei Erfolg meldet das Werkzeug `All checks passed!`.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
 
 ### `slots=True`
 
@@ -1086,6 +1176,12 @@ JSON-Serialisierung über `.value`.
 
 *Weg:* Entwickeln · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
 
+### `subprocess`
+
+Python-Anbindung für externe Programmaufrufe. Das Projekt spricht Tesseract über dessen CLI mit `subprocess` an; dafür wird keine zusätzliche `pytesseract`-Abhängigkeit installiert.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
 ### `--system-site-packages` / `--no-deps`
 
 Die venv-Regel des Projekts:
@@ -1093,6 +1189,12 @@ Systempakete sichtbar lassen, keine PyPI-Kopien von `numpy`/`cv2`/`pyserial`
 darüberlegen. Begründung in [../dependencies.md](../dependencies.md).
 
 *Weg:* Entwickeln · *Auch:* --system-site-packages, --no-deps · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### venv
+
+Python-Umgebung für Projektpaket und Entwicklungswerkzeuge. Die Projekt-`.venv` muss Debian-Systempakete sehen; absolute Pfade in ihren Startskripten und Installationsdateien machen sie beim Verschieben des Repos reparaturbedürftig.
+
+*Weg:* Entwickeln · *Quelle:* [Werkzeuge](00-werkzeuge.md)
 
 ## Messung, Daten und Abnahme
 
@@ -1493,3 +1595,111 @@ Frist ohne neue Freigabe, nach der das Gate einen Wert als STALE behandelt, in N
 Aufbauspezifischer UVC-Weißabgleichsregler der StreamCam im CameraSettings-Profil. Er ist verpflichtend; die Weißabgleichsautomatik wird vor dem Setzen der Profilregler ausgeschaltet.
 
 *Weg:* Konfigurieren · *Quelle:* [Bildquellen-API](../../api/frames.md)
+
+## Doku und Projektpflege
+
+### Anime.js
+
+Animationslaufzeit für Projekt-Tour und räumlichen Ebenenwechsel der Roadmap. Das Wiki verwendet die vorhandene lokale Kopie unter `docs-site/assets/vendor/`; dafür braucht es weder einen CDN-Abruf noch einen npm-Build-Schritt.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### API-Referenz
+
+Beim Bauen direkt aus den Docstrings unter `src/dispread` erzeugte Code-Dokumentation. Signaturen und Docstrings spiegeln den Code; die einleitenden Texte ordnen dessen aktuellen Einsatz entlang der Verarbeitungskette ein.
+
+*Weg:* Entwickeln · *Quelle:* [API-Überblick](../../api/index.md)
+
+### `CHANGELOG.md`
+
+Änderungshistorie für nach außen sichtbare Änderungen. Ein neuer Eintrag steht oben und beschreibt Problem, Änderung und Konsequenz; bei Änderungen unter `src/` ist er Pflicht.
+
+*Weg:* Entwickeln · *Quelle:* [Anleitungsübersicht](README.md)
+
+Zweck der Datei: [Dokumentationsübersicht](../README.md).
+
+### `docs-site.sh`
+
+Skript zum Bauen der Doku und für die lokale Vorschau. `build -s` gehört zur Prüfung vor dem Merge, `serve` startet die Vorschau; vor beiden wird die OQ-Übersicht gegen TODO und offene Fragen geprüft.
+
+*Weg:* Entwickeln · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
+
+### `lab_journal.md`
+
+Fortlaufendes Laborjournal für Aufbau, Beobachtung und Deutung je Experiment. Auch Fehlversuche gehören hinein; die Datei wird um Einträge ergänzt und bewahrt den Versuchsverlauf.
+
+*Weg:* Entwickeln · *Quelle:* [Dokumentationsübersicht](../README.md)
+
+### `mkdocstrings`
+
+Werkzeug zur Erzeugung der API-Referenz aus Python-Docstrings. Es gehört mit `mkdocstrings-python` zu den gepinnten Doku-Abhängigkeiten in der eigenen `.venv-docs` und ist keine Laufzeitabhängigkeit des Messpfads.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### `oq-index.py`
+
+Generator der Übersicht in `docs/open-questions.md`. Nach Änderungen an OQ-Titeln, Status oder aktiven Aufgaben und OQ-Verweisen in TODO wird er ausgeführt; die Reihenfolge von „Jetzt“ folgt den unerledigten TODO-Aufgaben.
+
+*Weg:* Entwickeln · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
+
+### Playwright
+
+Browserprüfwerkzeug für die Doku-Seite. Die Suite `tests/docs-site.spec.ts` prüft die interaktive Ansicht; vor dem Merge wird sie mit `npx playwright test -c playwright.docs.config.ts` ausgeführt.
+
+*Weg:* Entwickeln · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
+
+### Projekt-Tour
+
+Animierte Einführung in das Projekt mit einzeln anwählbaren Schritten und Links zur Doku. Die Bühne zeigt schematische Abläufe; ihre Beispielwerte sind keine Messergebnisse. Konzept, Messpfad und API bleiben maßgeblich.
+
+*Weg:* Bedienen · *Quelle:* [Projekt-Tour](../uebersicht/projekt-tour.md)
+
+### `project_history.md`
+
+Projektgeschichte für Entscheidungen, die aus dem Code allein nicht ersichtlich sind. Ein Eintrag hält Problem, Entscheidung, Begründung, Alternativen und Konsequenz fest.
+
+*Weg:* Entwickeln · *Quelle:* [Dokumentationsübersicht](../README.md)
+
+### Roadmap
+
+Phasenplan P0–P8 mit harten Exit-Kriterien und belegtem Stand. Gebaute Werkzeuge oder einzelne Nachweise ersetzen keine vollständige Systemabnahme; die projektweite Arbeitsreihenfolge steht in TODO.
+
+*Weg:* Entwickeln · *Quelle:* [Roadmap](../ROADMAP.md)
+
+### `status.md`
+
+Momentaufnahme des aktuellen Projektstands mit Blockern und den nächsten drei Schritten. Diese Datei wird neu geschrieben und überschrieben, statt einen fortlaufenden Verlauf anzuhängen.
+
+*Weg:* Entwickeln · *Quelle:* [Dokumentationsübersicht](../README.md)
+
+### `TODO.md`
+
+Arbeitsliste der aktiven Aufgaben. Ihre Reihenfolge bestimmt den projektweiten Arbeitsablauf und die Anzeige „Jetzt“ in der OQ-Übersicht; diese Kennzeichnung ist kein eigener OQ-Status.
+
+*Weg:* Entwickeln · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
+
+Projektweite Reihenfolge: [Roadmap](../ROADMAP.md).
+
+### `tour-facts.py`
+
+Prüfskript für die Fakten der Projekt-Tour. Die Vorabprüfung des Doku-Pflegeablaufs ruft es mit `--check` auf; bei Abweichungen bricht der Job vor dem Codex-Aufruf ab und nennt die betroffenen Tour-Schritte.
+
+*Weg:* Entwickeln · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
+
+### `VALIDATION.md`
+
+Nachweisdokument für Fehlerklassen, Messreihen und Abnahmekriterien. Es sammelt Belege gegen die stillen Fehlermodi aus Konzept §7 und dient zur Bewertung des belegten Erkennungsumfangs.
+
+*Weg:* Entwickeln · *Quelle:* [Dokumentationsübersicht](../README.md)
+
+### Zensical
+
+Werkzeug zum Erzeugen der statischen Doku-Seite aus `docs/` und den Markdown-Dateien im Projektwurzelverzeichnis. Seine Build-Abhängigkeiten liegen in der getrennten `.venv-docs`, nicht in der Projekt-venv des Messpfads.
+
+*Weg:* Entwickeln · *Quelle:* [Abhängigkeiten](../dependencies.md)
+
+### `zensical.toml`
+
+Konfigurationsdatei der Doku-Seite. Darin werden die Ziele für Begriffsvorschauen gezielt aktiviert; zusätzliche Ziele brauchen kurze Zielabschnitte und einen passenden Browsertest.
+
+*Weg:* Konfigurieren · *Quelle:* [Doku-Hosting und Pflege](../HOSTING.md)
