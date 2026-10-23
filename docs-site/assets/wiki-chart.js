@@ -102,7 +102,7 @@
       });
       figure.append(legend);
     }
-    const svg = svgNode("svg", { role: "img", class: "wiki-chart-svg",
+    const svg = svgNode("svg", { role: "graphics-document", "aria-roledescription": "Diagramm", class: "wiki-chart-svg",
       "aria-label": `${data.kind === "bar" ? "Balkendiagramm" : "100-%-Stapeldiagramm"}: ${title}, ${data.rows.length} Kategorien` });
     figure.append(svg);
     // Zensical may wrap a table during page setup. Preserve those wrappers, too.
@@ -170,6 +170,8 @@
       const active = document.activeElement;
       const focusIndex = svg.contains(active) ? Array.from(svg.querySelectorAll('[data-hint="chart"]')).indexOf(active) : -1;
       finish();
+      // The hint API cannot reopen a replacement target; close before detaching it.
+      hint.closeWithin(svg);
       svg.replaceChildren();
       targets = [];
       const category = measure("", "wiki-chart-category");
@@ -211,13 +213,15 @@
         const pos = positions[rowIndex];
         textLines(pos.labels, 0, pos.y + category.line * .8, category, "wiki-chart-category");
         if (pos.notes.length) textLines(pos.notes, left, pos.y + 23 + axis.line * .8, axis, "wiki-chart-note");
-        rows[rowIndex].forEach((segment, segmentIndex, segments) => {
+        const groups = rows[rowIndex].map((segment, segmentIndex, segments) => {
           const x = left + segment.x;
-          const group = svgNode("g", { tabindex: "0", "data-hint": "chart",
+          const group = svgNode("g", { tabindex: "0", role: "graphics-symbol", "data-hint": "chart",
             "aria-label": `${row.label}, ${data.headers[segment.index + 1]}: ${row.original[segment.index]}` });
           records.set(group, { row, headers: data.headers });
           // The hit target remains stationary while the mark grows.
-          group.append(svgNode("rect", { x, y: pos.y - 3, width: Math.max(.01, segment.width), height: 24,
+          const hitWidth = Math.max(8, segment.width);
+          group.append(svgNode("rect", { x: x + (segment.width - hitWidth) / 2,
+            y: pos.y - 3, width: hitWidth, height: 24,
             class: "wiki-chart-hit" }));
           const growth = svgNode("g", { class: "wiki-chart-growth", style: `transform-origin: ${x}px ${pos.y}px` });
           const gap = data.kind === "stacked" && segmentIndex < segments.length - 1 ? Math.min(2, segment.width / 2) : 0;
@@ -228,19 +232,23 @@
           growth.append(svgNode("path", { d: path, class: `wiki-chart-mark wiki-chart-color--${role}` }));
           group.append(growth);
           targets.push(growth);
-          if (data.kind === "bar") {
-            group.append(svgNode("text", { x: x + segment.width + 6, y: pos.y + 13, class: "wiki-chart-value" }, format(segment.value)));
+          if (role === "series") {
+            group.append(svgNode("text", { x: x + segment.width + 6, y: pos.y + 13, class: "wiki-chart-value" },
+              `${format(segment.value)}${data.kind === "stacked" ? " %" : ""}`));
           } else {
             const label = `${format(segment.value)} %`;
             if (w >= 36 && valueMetric.width(label) + 8 <= w) group.append(svgNode("text", {
               x: x + w / 2, y: pos.y + 13, "text-anchor": "middle",
-              class: `wiki-chart-value wiki-chart-value--inside${role === "warning" ? " wiki-chart-value--warning" : ""}`,
+              class: `wiki-chart-value wiki-chart-value--inside wiki-chart-value--${role}`,
             }, label));
           }
-          svg.append(group);
+          return { group, width: segment.width };
         });
+        // Paint narrow targets last so their expanded hit areas remain reachable.
+        groups.sort((a, b) => b.width - a.width).forEach(({ group }) => svg.append(group));
       });
       if (focusIndex >= 0) svg.querySelectorAll('[data-hint="chart"]')[focusIndex]?.focus();
+      host.dataset.renderedWidth = String(Math.round(width));
     }
 
     async function reveal() {

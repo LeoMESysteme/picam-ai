@@ -450,6 +450,8 @@ def test_chart_overview_matches_reference_entries() -> None:
 
 
 def test_chart_browser_free_logic() -> None:
+    if shutil.which("node") is None:
+        pytest.skip("Node.js ist nicht verfügbar")
     result = subprocess.run(
         ['node', '-e', r"""
 const assert = require('node:assert/strict');

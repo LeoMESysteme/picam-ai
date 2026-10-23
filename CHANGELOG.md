@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Korrekturrunde 1 der Tabellendiagramme: Innenbeschriftungen
+  auf Grün, Gelb und beiden Reihenfarben verwenden dunklen Text. SVG und
+  Segmente erhalten Grafikrollen mit eigenen Beschriftungen; Tastaturfokus
+  zeigt eine 2-px-Kontur. Schmale Segmente liegen mit mindestens 8 px breiten,
+  zentrierten Trefferflächen über breiteren Nachbarn. Die Python-Prüfung
+  überspringt ihren Node.js-Anteil, wenn die Laufzeit fehlt.
+
 * 2026-10-23: Wiki-Diagramme entstehen aus ihren sichtbaren Quelltabellen:
   horizontale Balken für eine Zahlenreihe, 100-%-Stapel für Statusanteile.
   Hinweise zeigen die Originalwerte, Tabellen bleiben aufklappbar; ungültige

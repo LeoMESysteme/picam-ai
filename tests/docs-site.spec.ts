@@ -10,7 +10,9 @@ test('Diagramm entsteht aus der Tabelle und fällt ohne Zahlen auf die Tabelle z
   await page.goto('/docs/VALIDATION.html');
   const first = page.locator('.wiki-chart').nth(0);
   const second = page.locator('.wiki-chart').nth(1);
-  await expect(first.locator('svg[role="img"]')).toHaveAttribute('aria-label', /Balkendiagramm: .+, 3 Kategorien/);
+  await expect(first.locator('svg[role="graphics-document"]')).toHaveAttribute('aria-label', /Balkendiagramm: .+, 3 Kategorien/);
+  await expect(first.locator('svg')).toHaveAttribute('aria-roledescription', 'Diagramm');
+  await expect(second.locator('svg[role="graphics-document"]')).toHaveAttribute('aria-label', /100-%-Stapeldiagramm: .+, 2 Kategorien/);
   await expect(first.locator('g[data-hint="chart"]')).toHaveCount(3);
   await expect(second.locator('g[data-hint="chart"]')).toHaveCount(5);
   expect(await second.locator('g[data-hint="chart"]').evaluateAll(nodes => nodes.every(node =>
@@ -20,15 +22,59 @@ test('Diagramm entsteht aus der Tabelle und fällt ohne Zahlen auf die Tabelle z
   await expect(page.locator('.wiki-chart-figure .wiki-term')).toHaveCount(0);
   const bar = first.locator('g[data-hint="chart"]').first();
   await expect(bar).toHaveAttribute('tabindex', '0');
+  for (const segment of await page.locator('.wiki-chart g[data-hint="chart"]').all()) {
+    await expect(segment).toHaveAttribute('role', 'graphics-symbol');
+    await expect(segment).toHaveAttribute('aria-label', /.+, .+: .+/);
+  }
   await bar.hover();
   await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Fehllesungen: 0/715');
   await page.keyboard.press('Escape');
   await bar.focus();
+  await expect(bar).toBeFocused();
+  expect(await bar.evaluate(node => node.matches(':focus-visible'))).toBe(true);
+  await expect(bar.locator('.wiki-chart-hit')).toHaveCSS('stroke-width', '2px');
+  expect(await bar.locator('.wiki-chart-hit').evaluate(node => {
+    const sample = document.createElement('span');
+    sample.style.color = 'var(--md-accent-fg-color)';
+    node.parentElement!.append(sample);
+    const accent = getComputedStyle(sample).color;
+    sample.remove();
+    return getComputedStyle(node).stroke === accent;
+  })).toBe(true);
   await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Bilder/s: 27,2');
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 812 });
+  await expect.poll(() => second.evaluate(node =>
+    node.getAttribute('data-rendered-width') === String(Math.round(node.getBoundingClientRect().width)))).toBe(true);
   await expect.poll(async () => first.locator('svg').evaluate(node =>
     Math.abs(node.getBoundingClientRect().width - node.parentElement!.clientWidth))).toBeLessThan(2);
+  expect(await page.locator('.wiki-chart-hit').evaluateAll(nodes => nodes.every(node => {
+    const bounds = node.getBoundingClientRect();
+    return bounds.width >= 8 && bounds.height >= 24;
+  }))).toBe(true);
+  const narrow = second.locator('g[aria-label="Ruhige Anzeige, TRANSITION: 0,3"]');
+  expect(await narrow.evaluate(node => {
+    const hit = node.querySelector<SVGRectElement>('.wiki-chart-hit')!;
+    const svg = (node as SVGGraphicsElement).ownerSVGElement!;
+    const start = Number(svg.querySelector('.wiki-chart-axis')!.getAttribute('x1'));
+    const end = Number(Array.from(svg.querySelectorAll('.wiki-chart-grid')).at(-1)!.getAttribute('x1'));
+    const center = start + (end - start) * .9985;
+    const later = Array.from(svg.querySelectorAll('g[data-hint="chart"]')).filter(other =>
+      node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return Math.abs(hit.x.baseVal.value + hit.width.baseVal.value / 2 - center) < .01 &&
+      later.every(other => !other.getAttribute('aria-label')!.startsWith('Ruhige Anzeige,'));
+  })).toBe(true);
+  await narrow.locator('.wiki-chart-hit').hover();
+  await expect(page.locator('#wiki-hint[data-open="true"] strong')).toHaveText('Ruhige Anzeige');
+  const oldSegment = await narrow.elementHandle();
+  await second.evaluate(node => { node.style.width = `${node.getBoundingClientRect().width - 20}px`; });
+  await expect.poll(() => second.evaluate(node =>
+    node.getAttribute('data-rendered-width') === String(Math.round(node.getBoundingClientRect().width)))).toBe(true);
+  expect(await oldSegment!.evaluate(node => node.isConnected)).toBe(false);
+  expect(await oldSegment!.getAttribute('aria-describedby')).toBeNull();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toHaveCount(0);
+  await narrow.locator('.wiki-chart-hit').hover();
+  await expect(page.locator('#wiki-hint[data-open="true"] strong')).toHaveText('Ruhige Anzeige');
   await first.locator('summary').click();
   await expect(first.locator('table')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -43,6 +89,40 @@ test('Diagramm entsteht aus der Tabelle und fällt ohne Zahlen auf die Tabelle z
   await expect(page.locator('.wiki-chart').nth(1).locator('svg')).toHaveCount(1);
   await expect(page.locator('.wiki-chart').first().locator('svg, details')).toHaveCount(0);
   await expect(page.locator('.wiki-chart').first().locator('table')).toBeVisible();
+});
+
+test('Diagramm-Innenbeschriftungen folgen den Kontrastentscheidungen in beiden Themes', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.route('**/docs/VALIDATION.html', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    const table = '<table><thead><tr><th>Kategorie</th><th>VALID</th><th>TRANSITION</th>' +
+      '<th>UNREADABLE</th><th>Andere</th></tr></thead><tbody><tr><td>Prüfzeile</td>' +
+      '<td>25</td><td>25</td><td>25</td><td>25</td></tr></tbody></table>';
+    const changed = html.replace(/(<div class="wiki-chart"[^>]*data-chart="stacked"[^>]*>[\s\S]*?)<table[\s\S]*?<\/table>/, `$1${table}`);
+    expect(changed).not.toBe(html);
+    await route.fulfill({ response, body: changed });
+  });
+  await page.goto('/docs/VALIDATION.html');
+  for (const scheme of ['default', 'slate']) {
+    await page.locator('body').evaluate((body, value) => body.setAttribute('data-md-color-scheme', value), scheme);
+    const chart = page.locator('.wiki-chart').nth(1);
+    await expect(chart.locator('.wiki-chart-value--inside')).toHaveCount(3);
+    for (const role of ['good', 'warning']) {
+      await expect(chart.locator(`.wiki-chart-value--${role}`)).toHaveCSS('fill', 'rgb(11, 11, 11)');
+    }
+    await expect(chart.locator('.wiki-chart-value--critical')).toHaveCSS('fill', 'rgb(255, 255, 255)');
+    const series = chart.locator('g[data-hint="chart"]:has(.wiki-chart-color--series)');
+    await expect(series.locator('.wiki-chart-value--inside')).toHaveCount(0);
+    await expect(series.locator('.wiki-chart-value')).toHaveText('25 %');
+    expect(await series.evaluate(node => {
+      const mark = node.querySelector<SVGGraphicsElement>('.wiki-chart-mark')!.getBBox();
+      const label = node.querySelector<SVGTextElement>('.wiki-chart-value')!;
+      return label.x.baseVal.getItem(0).value > mark.x + mark.width;
+    })).toBe(true);
+    await expect(chart.locator('.wiki-chart-mark.wiki-chart-color--series')).toHaveCSS('fill',
+      scheme === 'slate' ? 'rgb(57, 135, 229)' : 'rgb(42, 120, 214)');
+  }
 });
 
 test('Diagrammtabellen bleiben ohne JavaScript lesbar', async ({ browser, baseURL }) => {
@@ -98,6 +178,24 @@ test('OQ-Verweise tragen Statuschip und Pop-up mit Titel', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(hint).toHaveCount(0);
   await expect(link).not.toHaveAttribute('aria-describedby');
+});
+
+test('Hinweis öffnet beim Überfahren trotz Fokus auf anderem Ziel', async ({ page }) => {
+  await page.goto('/docs/GSVMULTI_PROTOCOL.html');
+  const links = page.locator('.md-content__inner a[data-hint="oq"]');
+  const first = links.first();
+  const other = links.nth(1);
+  await first.focus();
+  const hint = page.locator('#wiki-hint[data-open="true"]');
+  await expect(hint.locator('strong')).toContainText((await first.innerText()).trim());
+  await page.keyboard.press('Escape');
+  await expect(hint).toHaveCount(0);
+  await expect(first).toBeFocused();
+  await other.hover();
+  await expect(hint.locator('strong')).toContainText((await other.innerText()).trim());
+  await expect(first).toBeFocused();
+  await expect(other).toHaveAttribute('aria-describedby', 'wiki-hint');
+  await expect(first).not.toHaveAttribute('aria-describedby');
 });
 
 test('Hinweise funktionieren per Touch', async ({ browser, baseURL }) => {

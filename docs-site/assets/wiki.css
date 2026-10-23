@@ -21,13 +21,14 @@
   font-style: normal; color: var(--md-default-fg-color); overflow-wrap: anywhere;
 }
 .wiki-chart-svg { display: block; width: 100%; max-width: 100%; font-family: inherit; }
+.wiki-chart-svg :not(.wiki-chart-hit) { pointer-events: none; }
 .wiki-chart-category { font-size: .68rem; fill: var(--md-default-fg-color); }
 .wiki-chart-axis-label, .wiki-chart-note {
   font-size: .62rem; font-variant-numeric: tabular-nums; fill: var(--md-default-fg-color);
 }
 .wiki-chart-value { font-size: .62rem; fill: var(--md-default-fg-color); }
 .wiki-chart-value--inside { fill: #ffffff; }
-.wiki-chart-value--warning { fill: #0b0b0b; }
+.wiki-chart-value--good, .wiki-chart-value--warning, .wiki-chart-value--series { fill: #0b0b0b; }
 .wiki-chart-grid { stroke: var(--wiki-chart-grid); stroke-width: 1; }
 .wiki-chart-axis { stroke: var(--wiki-chart-axis); stroke-width: 1; }
 .wiki-chart-color--series { fill: var(--wiki-chart-series); background: var(--wiki-chart-series); }
@@ -40,6 +41,7 @@
 .wiki-chart-svg g[data-hint="chart"]:is(:hover, :focus-visible) .wiki-chart-hit {
   stroke: var(--md-accent-fg-color); stroke-width: 1;
 }
+.wiki-chart-svg g[data-hint="chart"]:focus-visible .wiki-chart-hit { stroke-width: 2; }
 .wiki-chart-legend { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin-bottom: .6rem; }
 .wiki-chart-legend > span {
   display: inline-flex; align-items: center; gap: .3rem;
