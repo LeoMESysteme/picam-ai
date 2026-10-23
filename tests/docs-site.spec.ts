@@ -199,6 +199,50 @@ test('Seitenkopf entsteht nach Sofortnavigation genau einmal', async ({ page }) 
   expect(await page.evaluate(() => (window as any).__wikiNavigation)).toBe(true);
 });
 
+test.fixme('Schichten und Muster sind ohne und mit JavaScript lesbar', async ({ page, browser, baseURL }) => {
+  // In Aufgabe 9 aktivieren, sobald die Beispielseiten die Muster enthalten.
+  await page.goto('/docs/CAMERA_COMMISSIONING.html');
+  const layer = page.locator('details.wiki-layer').filter({
+    has: page.locator('summary', { hasText: /^Was passiert im Hintergrund$/ }),
+  }).first();
+  await expect(layer).toBeVisible();
+  await expect(layer.locator(':scope > summary')).toHaveText('Was passiert im Hintergrund');
+  if (await layer.getAttribute('open') === null) await layer.locator(':scope > summary').click();
+  await expect(layer).toHaveJSProperty('open', true);
+  await expect(layer.locator(':scope > :not(summary)').first()).toBeVisible();
+
+  await page.goto('/docs/anleitung/10-kamera-livevorschau.html');
+  const settings = page.locator('.wiki-setting');
+  expect(await settings.count()).toBeGreaterThan(0);
+  for (const setting of await settings.all()) {
+    const verdict = setting.locator('.wiki-verdict');
+    await expect(verdict).toBeVisible();
+    await expect(verdict).toHaveClass(/\bwiki-verdict--(nein|nurwenn|ja)\b/);
+  }
+
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  try {
+    const noJs = await context.newPage();
+    await noJs.goto('/docs/anleitung/10-kamera-livevorschau.html');
+    const plainSettings = noJs.locator('.wiki-setting');
+    expect(await plainSettings.count()).toBeGreaterThan(0);
+    for (const setting of await plainSettings.all()) {
+      await expect(setting.locator('thead th').first()).toHaveText('Einstellung');
+      const rows = setting.locator('tbody tr');
+      await expect(rows).toHaveCount(5);
+      for (const [index, label] of ['Wozu', 'Im Hintergrund', 'Standard', 'Ändern?', 'Quelle'].entries()) {
+        await expect(rows.nth(index)).toBeVisible();
+        await expect(rows.nth(index).locator('td').first()).toHaveText(label);
+        await expect(rows.nth(index).locator('td').nth(1)).toBeVisible();
+      }
+      await expect(rows.nth(3).locator('td').nth(1).locator('strong').first()).toHaveText(/^(Nein|Nur wenn|Ja)$/);
+      await expect(setting.locator('.wiki-verdict')).toHaveCount(0);
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 test('Seitenkopf ohne JavaScript nennt den Weg', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
   try {

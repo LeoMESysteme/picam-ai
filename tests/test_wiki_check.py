@@ -41,6 +41,117 @@ def test_unclosed_block_is_not_front_matter() -> None:
     assert wiki_check.check_front_matter("---\nweg: kunde\n# Titel\n", "seite.md") == []
 
 
+SETTING = """<div class="wiki-setting" markdown="1">
+
+| Einstellung | `Beispiel` |
+| --- | --- |
+| Wozu | Beschreibung |
+| Im Hintergrund | Beschreibung |
+| Standard | Beschreibung |
+| Ändern? | **Nur wenn** erforderlich. |
+| Quelle | [Quelle](quelle.md) |
+
+</div>
+"""
+
+SEAM = """<div class="wiki-seam" markdown="1">
+
+| Trennstelle | `Beispiel` |
+| --- | --- |
+| Vertrag | Beschreibung |
+| Darf geändert werden | Beschreibung |
+| Bleibt unverändert | Beschreibung |
+| Tests | [Tests](tests.md) |
+
+```python
+beispiel = "| keine Tabellenzeile |"
+```
+
+</div>
+"""
+
+
+@pytest.mark.parametrize("row", ["Wozu", "Im Hintergrund", "Standard", "Ändern?", "Quelle"])
+def test_setting_rows_complete(row: str) -> None:
+    text = "\n".join(line for line in SETTING.splitlines() if not line.startswith(f"| {row} |"))
+    assert wiki_check.check_patterns("# Titel\n\n" + text, "docs/seite.md") == [
+        f'docs/seite.md:3: wiki-setting fehlt Zeile "{row}"'
+    ]
+
+
+@pytest.mark.parametrize("verdict", ["Vielleicht", "**Vielleicht**", "Nein", "Nur wenn", "Ja", "Text **Nein**"])
+def test_setting_verdict_word(verdict: str) -> None:
+    text = SETTING.replace("**Nur wenn** erforderlich.", verdict)
+    assert wiki_check.check_patterns(text, "docs/seite.md") == [
+        'docs/seite.md:8: wiki-setting Zeile "Ändern?" muss mit **Nein**, **Nur wenn** oder **Ja** beginnen'
+    ]
+
+
+@pytest.mark.parametrize("verdict", ["Nein", "Nur wenn", "Ja"])
+def test_setting_valid(verdict: str) -> None:
+    text = SETTING.replace("**Nur wenn**", f"**{verdict}**")
+    assert wiki_check.check_patterns(text, "docs/seite.md") == []
+
+
+@pytest.mark.parametrize("row", ["Vertrag", "Darf geändert werden", "Bleibt unverändert", "Tests"])
+def test_seam_rows_complete(row: str) -> None:
+    text = "\n".join(line for line in SEAM.splitlines() if not line.startswith(f"| {row} |"))
+    assert wiki_check.check_patterns(text, "docs/seite.md") == [
+        f'docs/seite.md:1: wiki-seam fehlt Zeile "{row}"'
+    ]
+
+
+def test_seam_valid_with_optional_code_block() -> None:
+    assert wiki_check.check_patterns(SEAM, "docs/seite.md") == []
+
+
+@pytest.mark.parametrize("text,header", [(SETTING, "Einstellung"), (SEAM, "Trennstelle")], ids=["setting", "seam"])
+def test_pattern_header_required(text: str, header: str) -> None:
+    errors = wiki_check.check_patterns(text.replace(f"| {header} |", "| Titel |"), "seite.md")
+    assert len(errors) == 1
+    assert header in errors[0]
+
+
+@pytest.mark.parametrize(
+    "text,first,second", [(SETTING, "Wozu", "Standard"), (SEAM, "Vertrag", "Tests")], ids=["setting", "seam"]
+)
+def test_pattern_rows_in_fixed_order(text: str, first: str, second: str) -> None:
+    text = text.replace(f"| {first} |", "| Platzhalter |").replace(f"| {second} |", f"| {first} |")
+    text = text.replace("| Platzhalter |", f"| {second} |")
+    errors = wiki_check.check_patterns(text, "seite.md")
+    assert len(errors) == 1
+    assert "Reihenfolge" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (SETTING, "seite.md:3: wiki-setting Tabelle muss zweispaltig sein"),
+        (SEAM, "seite.md:3: wiki-seam Tabelle muss zweispaltig sein"),
+    ],
+    ids=["setting", "seam"],
+)
+def test_pattern_table_must_have_two_columns(text: str, expected: str) -> None:
+    errors = wiki_check.check_patterns(text.replace("`Beispiel` |", "`Beispiel` | Zusatz |"), "seite.md")
+    assert errors == [expected]
+
+
+def test_pattern_escaped_pipe_in_cell_is_not_a_column() -> None:
+    text = SETTING.replace("| Wozu | Beschreibung |", r"| Wozu | Links \| rechts |")
+    assert wiki_check.check_patterns(text, "seite.md") == []
+
+
+def test_patterns_do_not_consume_next_block() -> None:
+    text = SETTING.replace("| Quelle | [Quelle](quelle.md) |\n", "") + "\n" + SETTING
+    assert wiki_check.check_patterns(text, "seite.md") == ['seite.md:1: wiki-setting fehlt Zeile "Quelle"']
+
+
+def test_patterns_ignore_fenced_examples_and_unrelated_tables() -> None:
+    text = '```html\n<div class="wiki-setting" markdown="1">\n\n| Wozu | Beispiel |\n\n</div>\n```\n'
+    text += '\n| Ändern? | Vielleicht |\n'
+    assert wiki_check.check_patterns(text, "seite.md") == []
+
+
 @pytest.fixture
 def wiki_tree(tmp_path: Path) -> Path:
     scripts = tmp_path / "scripts"
@@ -83,4 +194,23 @@ def test_cli_reports_all_errors_in_docs_readme_and_root_docs(wiki_tree: Path) ->
     assert sorted(result.stderr.splitlines()) == sorted(
         f'{path}: weg "kunde" unbekannt (erlaubt: bedienen, konfigurieren, entwickeln, projekt)'
         for path in paths
+    )
+
+
+def test_cli_checks_patterns_in_same_sources_as_front_matter(wiki_tree: Path) -> None:
+    paths = [
+        "docs/anleitung/seite.md", "README.md", "Konzept.md", "CHANGELOG.md",
+        "AGENTS.md", "CLAUDE.md", "TODO.md", "PLANNED_FEATURES.md",
+    ]
+    text = SETTING.replace("| Quelle | [Quelle](quelle.md) |\n", "")
+    for path in paths:
+        (wiki_tree / path).write_text(text, encoding="utf-8")
+    (wiki_tree / "docs/kein-markdown.txt").write_text(text, encoding="utf-8")
+
+    result = run_check(wiki_tree)
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert sorted(result.stderr.splitlines()) == sorted(
+        f'{path}:1: wiki-setting fehlt Zeile "Quelle"' for path in paths
     )

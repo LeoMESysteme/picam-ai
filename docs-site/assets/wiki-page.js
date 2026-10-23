@@ -1,4 +1,4 @@
-/* Enhance the template marker with reading time and reading-path links. */
+/* Enhance page markers, reference links and setting verdicts. */
 (function () {
   "use strict";
 
@@ -51,6 +51,18 @@
     }
     return null;
   }
+
+  onPage((article) => {
+    const verdicts = { Nein: "nein", "Nur wenn": "nurwenn", Ja: "ja" };
+    for (const row of article.querySelectorAll(".wiki-setting tbody tr")) {
+      if (row.cells[0]?.textContent.trim() !== "Ändern?") continue;
+      const cell = row.cells[1];
+      const word = cell?.querySelector("strong");
+      const label = word?.textContent.trim();
+      if (!Object.hasOwn(verdicts, label) || cell.querySelector(".wiki-verdict")) continue;
+      word.replaceWith(make("span", `wiki-verdict wiki-verdict--${verdicts[label]}`, label));
+    }
+  });
 
   onPage((article) => {
     const head = article.querySelector("p.wiki-pagehead");

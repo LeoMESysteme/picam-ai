@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüft die Weg-Angaben der Wiki-Quellen vor dem Doku-Build."""
+"""Prüft Weg-Angaben und Seitenmuster der Wiki-Quellen vor dem Doku-Build."""
 
 from __future__ import annotations
 
@@ -11,6 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEGE = ("bedienen", "konfigurieren", "entwickeln", "projekt")
+PATTERNS = {
+    "wiki-setting": ("Einstellung", ("Wozu", "Im Hintergrund", "Standard", "Ändern?", "Quelle")),
+    "wiki-seam": ("Trennstelle", ("Vertrag", "Darf geändert werden", "Bleibt unverändert", "Tests")),
+}
 
 
 def check_front_matter(md_text: str, path: str) -> list[str]:
@@ -33,6 +37,57 @@ def check_front_matter(md_text: str, path: str) -> list[str]:
     return errors
 
 
+def check_patterns(md_text: str, path: str) -> list[str]:
+    """Prüft die erste Tabelle jeder Musterhülle; Codebeispiele bleiben außen vor."""
+    lines = md_text.splitlines()
+    fence = None
+    for index, line in enumerate(lines):
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if fence is not None:
+            lines[index] = ""
+            if re.fullmatch(rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}\s*", line):
+                fence = None
+        elif marker:
+            fence = marker[1]
+            lines[index] = ""
+
+    text = "\n".join(lines)
+    errors = []
+    for block in re.finditer(r'<div class="(wiki-setting|wiki-seam)"[^>]*>(.*?)</div>', text, re.DOTALL):
+        kind = block[1]
+        header, required = PATTERNS[kind]
+        start = text.count("\n", 0, block.start()) + 1
+        prefix = f"{path}:{start}: {kind}"
+        table = []
+        body_start = text.count("\n", 0, block.start(2)) + 1
+        for offset, line in enumerate(block[2].splitlines()):
+            if line.strip().startswith("|"):
+                cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+                table.append((body_start + offset, cells))
+            elif table:
+                break
+
+        if not table or table[0][1][0] != header:
+            errors.append(f'{prefix} Kopfzeile muss mit "{header}" beginnen')
+        rows = table[2:]
+        names = [cells[0] for _, cells in rows]
+        for name in required:
+            if name not in names:
+                errors.append(f'{prefix} fehlt Zeile "{name}"')
+        if all(name in names for name in required) and names != list(required):
+            errors.append(f'{prefix} Zeilen müssen in der Reihenfolge {", ".join(required)} stehen')
+        for number, cells in table:
+            if len(cells) != 2:
+                errors.append(f"{path}:{number}: {kind} Tabelle muss zweispaltig sein")
+            if kind == "wiki-setting" and cells[0] == "Ändern?":
+                if len(cells) < 2 or not re.match(r"^\*\*(Nein|Nur wenn|Ja)\*\*", cells[1]):
+                    errors.append(
+                        f'{path}:{number}: {kind} Zeile "Ändern?" muss mit '
+                        "**Nein**, **Nur wenn** oder **Ja** beginnen"
+                    )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", required=True, help="Wiki-Quellen prüfen, ohne sie zu ändern")
@@ -47,7 +102,10 @@ def main() -> int:
     paths += [ROOT / name for name in dict.fromkeys(["README.md", *shlex.split(root_docs[1])])]
     errors = []
     for path in paths:
-        errors.extend(check_front_matter(path.read_text(encoding="utf-8"), path.relative_to(ROOT).as_posix()))
+        text = path.read_text(encoding="utf-8")
+        name = path.relative_to(ROOT).as_posix()
+        errors.extend(check_front_matter(text, name))
+        errors.extend(check_patterns(text, name))
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0

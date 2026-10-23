@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-23: Wiki-Grundlage für Hintergrund-, Entwickler- und historische
+  Schichten sowie Einstellungs- und Anbindungstabellen ergänzt. Die Schichten
+  überschreiben die Admonition-Gestaltung des Themes; Tabellen bleiben ohne
+  JavaScript lesbar und ordnen sich auf schmalen Ansichten untereinander an.
+  JavaScript ergänzt Urteilschips, `wiki-check.py --check` prüft Pflichtzeilen,
+  Reihenfolge und Änderungsurteile. Beispielseiten folgen in Aufgabe 9.
+
 * 2026-10-23: Wiki-Verweise auf offene Punkte und Roadmap-Phasen zeigen
   Statuschips aus den jeweiligen Quelltabellen. Ein gemeinsamer
   Hinweis-Baustein ergänzt Titel und Status per Maus, Tastatur und Touch;

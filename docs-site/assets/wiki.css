@@ -19,6 +19,7 @@
 .md-typeset p.wiki-next a { font-weight: 600; }
 
 .md-typeset .wiki-chip,
+.md-typeset .wiki-verdict,
 .wiki-hint .wiki-chip {
   display: inline-block; margin-left: .3em; padding: .05em .5em;
   border-radius: 1em; font-size: .72em; font-weight: 600; line-height: 1.5;
@@ -48,3 +49,111 @@
 .wiki-hint strong { display: block; margin-bottom: .25rem; font-size: .72rem; }
 .wiki-hint .wiki-hint-meta { color: var(--md-default-fg-color--light); margin-top: .3rem; }
 @media (prefers-reduced-motion: reduce) { .wiki-hint { transition: none; transform: none; } }
+
+.md-typeset details.wiki-layer {
+  padding: 0 .75rem .75rem; margin: 1.3em 0;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .4rem; box-shadow: none;
+  color: var(--md-default-fg-color); font-size: inherit;
+  background: color-mix(in srgb, var(--md-default-fg-color) 3%, var(--md-default-bg-color));
+}
+.md-typeset details.wiki-layer:focus-within { box-shadow: none; }
+.md-typeset details.wiki-layer:not([open]) { padding-bottom: 0; }
+.md-typeset details.wiki-layer > summary {
+  position: relative; margin: 0 -.75rem; padding: .6rem 2.25rem;
+  border: none; border-radius: .4rem; background: none;
+  color: var(--md-default-fg-color); font-size: .74rem; font-weight: 600;
+}
+.md-typeset details.wiki-layer:not([open]) > summary { margin-bottom: 0; border-radius: .4rem; }
+.md-typeset details.wiki-layer > summary:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px;
+}
+.md-typeset details.wiki-layer > summary::before,
+.md-typeset details.wiki-layer > summary::after {
+  content: ""; position: absolute; top: .65rem; width: 1rem; height: 1rem;
+  mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+}
+.md-typeset details.wiki-layer > summary::before {
+  left: .75rem; right: auto;
+  mask-image: var(--wiki-layer-icon); background-color: var(--wiki-layer-color);
+}
+.md-typeset details.wiki-layer > summary::after {
+  left: auto; right: .75rem; background-color: currentColor;
+  mask-image: var(--md-details-icon); transform: rotate(0deg);
+  transition: transform 150ms ease;
+}
+.md-typeset details.wiki-layer[open] > summary::after { transform: rotate(90deg); }
+.md-typeset details.wiki-layer > summary + * {
+  margin-top: 0; padding-top: .75rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-typeset details.wiki-layer--hintergrund {
+  --wiki-layer-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'/%3E%3C/svg%3E");
+  --wiki-layer-color: var(--docs-progress-fg);
+}
+.md-typeset details.wiki-layer--entwickler {
+  --wiki-layer-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M16 18l6-6-6-6M8 6l-6 6 6 6'/%3E%3C/svg%3E");
+  --wiki-layer-color: var(--docs-partial-fg);
+}
+.md-typeset details.wiki-layer--historisch {
+  --wiki-layer-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3 2'/%3E%3C/svg%3E");
+  --wiki-layer-color: var(--md-default-fg-color--light);
+}
+
+.md-typeset :is(.wiki-setting, .wiki-seam) { margin: 1.3em 0; }
+.md-typeset :is(.wiki-setting, .wiki-seam) .md-typeset__scrollwrap {
+  margin: 0; overflow: visible;
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) .md-typeset__table { display: block; padding: 0; margin: 0; }
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) {
+  display: table; width: 100%; max-width: 100%; table-layout: fixed;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .4rem; border-collapse: separate; border-spacing: 0;
+  box-shadow: none; overflow: hidden;
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) :is(th, td) {
+  min-width: 0; padding: .6rem .75rem; vertical-align: top; overflow-wrap: anywhere;
+  border-color: var(--md-default-fg-color--lightest);
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) thead {
+  background: color-mix(in srgb, var(--md-default-fg-color) 3%, var(--md-default-bg-color));
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) th:first-child {
+  font-size: .66rem; font-weight: 400; color: var(--md-default-fg-color--light);
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) th:nth-child(2) {
+  font-size: .8rem; font-weight: 600;
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) :is(th, td):first-child { width: 9.5rem; }
+.md-typeset .wiki-seam table:not([class]) :is(th, td):first-child { width: 11rem; }
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) td:first-child {
+  font-size: .68rem; font-weight: 600; color: var(--md-default-fg-color--light);
+}
+.md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) tbody tr {
+  background: none; box-shadow: none; transition: none;
+}
+.md-typeset .wiki-verdict { margin-left: 0; }
+.wiki-verdict--nein { background: var(--docs-blocked-bg); color: var(--docs-blocked-fg); }
+.wiki-verdict--nurwenn { background: var(--docs-open-bg); color: var(--docs-open-fg); }
+.wiki-verdict--ja { background: var(--docs-resolved-bg); color: var(--docs-resolved-fg); }
+
+@media (width < 600px) {
+  .md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]),
+  .md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) :is(thead, tbody, tr, th, td) { display: block; }
+  .md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) :is(th, td):first-child {
+    width: auto; padding-bottom: .2rem;
+  }
+  .md-typeset :is(.wiki-setting, .wiki-seam) table:not([class]) :is(th, td):nth-child(2) {
+    padding-top: 0; border-top: none;
+  }
+  .md-typeset :is(.wiki-setting, .wiki-seam) pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset details.wiki-layer > summary::after { transition: none; }
+}
+@media print {
+  .md-typeset details.wiki-layer,
+  .md-typeset details.wiki-layer:not([open]) { padding-bottom: .75rem; }
+  .md-typeset details.wiki-layer::details-content { content-visibility: visible !important; }
+  .md-typeset details.wiki-layer > :not(summary) { display: block !important; }
+}
