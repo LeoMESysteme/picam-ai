@@ -12,10 +12,9 @@ aktuell: Einsteiger und Bediener (einrichten, bedienen, ohne Code-Flut),
 fortgeschrittene Bediener (Einstellungen verstehen) und Entwickler
 (Trennstellen, Schnittstellen, Codebeispiele). Lies vor jeder Änderung
 `PRODUCT.md` im Projektwurzelverzeichnis; Leser, Leitlinien und Grenzen dort
-sind verbindlich. Der geplante Wiki-Umbau steht in
-`docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`: Solange er nicht
-umgesetzt ist, lege keine eigenen Wegweiser-, Schicht- oder Glossarstrukturen
-an, die ihm vorgreifen. Bestehende Navigationseinträge (`nav` in
+sind verbindlich. Der Wiki-Umbau steht in
+`docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`; der Pflegelauf
+hält die Bausteine ein. Bestehende Navigationseinträge (`nav` in
 `zensical.toml`) und Seiten-URLs bleiben unverändert.
 Nutze die vollständige Dateiliste im JSON unten als Einstieg. Wenn `diff_base`
 gesetzt ist, prüfe die Änderungen mit `git diff diff_base..base -- <pfad>`;
@@ -66,6 +65,34 @@ und fuehrt danach die Browsertests (`tests/docs-site.spec.ts`) aus; die laufen
 nur im Gate, nicht in deiner Sandbox. Lehnt der Gate ab, setzt er diese
 Session mit seiner Meldung fort (hoechstens zweimal). Dann nur diese Meldung
 beheben, oder die betroffene eigene Aenderung zuruecknehmen.
+
+## Wiki-Bausteine einhalten
+
+* Front Matter `weg:` (`bedienen`, `konfigurieren`, `entwickeln`, `projekt`)
+  erhalten; neue Seiten unter `docs/anleitung/` und `docs/uebersicht/`
+  bekommen einen passenden Weg.
+* Absätze `**Vorher lesen:**` (erster Absatz nach der Überschrift) und
+  `**Weiter mit:**` (letzter Absatz) sind Wegweiser; Ziel nur ändern, wenn
+  die Folge des Wegs sich ändert.
+* Schichten `<details class="wiki-layer wiki-layer--hintergrund|entwickler|historisch" markdown="1">`
+  mit genau den Summary-Texten `Was passiert im Hintergrund`,
+  `Für Entwickler`, `Historisch: …`; Bedienschritte stehen davor, Technik
+  darin. Keine `???`/`!!!`-Admonitions.
+* Muster `wiki-setting` (Zeilen Wozu, Im Hintergrund, Standard, Ändern?,
+  Quelle; `Ändern?` beginnt mit **Nein**/**Nur wenn**/**Ja**) und
+  `wiki-seam` (Vertrag, Darf geändert werden, Bleibt unverändert, Tests)
+  nie zerlegen.
+* Startseite: Hüllen `wiki-stand` und `wiki-wege` (drei Wege in fester
+  Reihenfolge) und den Ketten-Platzhalter erhalten; Links darin nur mit Beleg
+  ändern.
+* Glossar `docs/anleitung/glossar.md`: Format `### Begriff`, erster Absatz
+  Kurzdefinition (≤ 280 Zeichen), zweiter Absatz Metazeile
+  `*Weg:* … · *Auch:* … · *Quelle:* [..](..)`. Neue Begriffe nur mit Quelle
+  auf einer Wiki-Seite; bestehende Anker nie ändern.
+* `scripts/wiki-check.py --check` läuft im Build; seine Meldungen haben
+  Vorrang vor stilistischen Änderungen.
+* Umbau der übrigen Seiten auf Wege/Schichten nur seitenweise, mit
+  vollständigem Faktenerhalt, und höchstens eine Seite pro Lauf.
 
 ## Grenzen
 

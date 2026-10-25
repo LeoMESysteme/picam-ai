@@ -86,8 +86,8 @@ Vorlage; die übrigen Seiten werden später nachgezogen (TODO-Eintrag).
 8. **Interaktive Verarbeitungskette** (`frames → detect → track → rectify →
    ocr → validate → sink`): Stufen mit Bauzustand aus Daten; Überfahren
    zeigt Zweck, wichtigste Einstellung und Anbindungspunkt, Klick führt zur
-   API-Seite. Auf der Startseite (Entwicklerweg) und in „Die Kette
-   verstehen".
+   API-Seite. Volle Darstellung als senkrechte Liste in „Die Kette
+   verstehen", kompakte Darstellung als Fluss auf der Startseite.
 9. **Diagramme aus Messdaten** für Validierung und Zeitverhalten, nach dem
    Muster der Fortschrittsseite: Daten werden erzeugt, die Tabelle bleibt
    Quelle und Ansicht ohne JavaScript.
@@ -128,16 +128,18 @@ Volltextsuche mit demselben Wort an.
   Abschnitt. Überfahren zeigt den Satz um die Fundstelle mit
   hervorgehobenem Begriff; Klick springt zum Abschnitt und markiert die
   Stelle. Viele Vorkommen werden gekürzt („und 37 weitere auf 9 Seiten").
-* Ohne JavaScript: Definitionen alphabetisch lesbar, Vorkommen als
-  einfache Linkliste je Begriff.
+* Ohne JavaScript: Definitionen alphabetisch lesbar; die Vorkommen brauchen
+  JavaScript und den Suchindex.
 
 **Datenfluss:** Definitionen stehen weiter in Markdown (Glossarseite, damit
 Menschen und der Pflegelauf sie bearbeiten können), mit stabilen IDs,
-Synonymen und Weg-Kennung je Eintrag. Ein Build-Skript erzeugt daraus und
-aus dem gebauten Wiki einen Vorkommensindex (Begriff → Seite, Abschnitt,
-Kontextsatz) und prüft wie `oq-index.py`/`tour-facts.py` mit `--check`,
-dass Index und Quellen zusammenpassen. Dieselben Daten speisen die
-automatische Begriffsmarkierung auf allen Seiten.
+Synonymen und Weg-Kennung je Eintrag. Vorkommen werden zur Laufzeit aus dem
+Suchindex `search.json` ermittelt (Begriff → Seite, Abschnitt, Kontextsatz).
+Damit stammen exakte Anker aus dem gebauten Wiki, es braucht keinen
+Zweiphasen-Build und die Vorkommen sind mit dem aktuellen Suchindex immer
+aktuell. Das Format der Glossareinträge prüft `scripts/wiki-check.py`
+mit `--check` vor dem Build. Die automatische Begriffsmarkierung auf allen
+Seiten nutzt dieselben Definitionen und Abgleichregeln.
 
 **Ausbau:** Ziel ist ein Begriffsbestand, der alle im Wiki verwendeten
 Fachbegriffe, Konfigurationsschlüssel, Verfahrensnamen und Abkürzungen

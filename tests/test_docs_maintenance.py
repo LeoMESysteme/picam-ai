@@ -12,6 +12,47 @@ maintenance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(maintenance)
 
 
+@pytest.mark.parametrize("required", [
+    ("Front Matter", "weg:", "bedienen", "konfigurieren", "entwickeln", "projekt",
+     "docs/anleitung/", "docs/uebersicht/"),
+    ("**Vorher lesen:**", "erster Absatz", "**Weiter mit:**", "letzter Absatz",
+     "Folge des Wegs"),
+    ('<details class="wiki-layer wiki-layer--hintergrund|entwickler|historisch" markdown="1">',
+     "Was passiert im Hintergrund", "Für Entwickler", "Historisch: …", "Bedienschritte",
+     "???", "!!!"),
+    ("wiki-setting", "Wozu", "Im Hintergrund", "Standard", "Ändern?", "Quelle",
+     "**Nein**", "**Nur wenn**", "**Ja**", "wiki-seam", "Vertrag",
+     "Darf geändert werden", "Bleibt unverändert", "Tests", "nie zerlegen"),
+    ("wiki-stand", "wiki-wege", "drei Wege in fester Reihenfolge", "Ketten-Platzhalter",
+     "nur mit Beleg"),
+    ("docs/anleitung/glossar.md", "### Begriff", "≤ 280 Zeichen",
+     "*Weg:* … · *Auch:* … · *Quelle:* [..](..)", "Neue Begriffe nur mit Quelle",
+     "bestehende Anker nie ändern"),
+    ("scripts/wiki-check.py --check", "im Build", "Vorrang vor stilistischen Änderungen"),
+    ("seitenweise", "vollständigem Faktenerhalt", "höchstens eine Seite pro Lauf"),
+])
+def test_maintenance_prompt_preserves_wiki_contract(required):
+    prompt = (SCRIPT.parent / "docs-maintenance-prompt.md").read_text(encoding="utf-8")
+    assert "## Wiki-Bausteine einhalten" in prompt
+    section = prompt.split("## Wiki-Bausteine einhalten\n", 1)[1].split("\n## ", 1)[0]
+    section = " ".join(section.split())
+    for rule in required:
+        assert rule in section
+
+
+def test_maintenance_prompt_uses_built_components_with_same_write_boundaries():
+    prompt = (SCRIPT.parent / "docs-maintenance-prompt.md").read_text(encoding="utf-8")
+    assert prompt.index("## Ziel") < prompt.index("## Wiki-Bausteine einhalten") < prompt.index("## Grenzen")
+    assert "hält die Bausteine ein" in " ".join(prompt.split())
+    assert "Solange er nicht" not in prompt
+    boundaries = prompt.split("## Grenzen\n\n", 1)[1].split("\n\n", 1)[0]
+    assert boundaries.startswith(
+        "Nur `README.md`, `zensical.toml`, `docs/anleitung/*.md`,\n"
+        "`docs/uebersicht/*.md`, `docs/ROADMAP.md`, `docs/status.md` und für neue\n"
+        "Unbekannte `docs/open-questions.md` bearbeiten."
+    )
+
+
 def test_unchanged_revision_uses_no_model_until_weekly_review():
     state = {"last_audited": "abc123", "last_week": "2026-W39"}
     assert maintenance.needs_audit(state, "abc123", "2026-W39") is False

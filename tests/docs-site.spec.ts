@@ -5,6 +5,52 @@ import { expect, test, type Page } from '@playwright/test';
 const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open-questions.html"]')
   .filter({ hasText: /^OQ-07$/ }).first();
 
+for (const width of [1280, 375]) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`Wiki-Pflegevertrag bleibt lesbar: ${scheme}, ${width} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      for (const path of [
+        '/index.html', '/docs/anleitung/glossar.html', '/docs/CAMERA_COMMISSIONING.html',
+        '/docs/anleitung/10-kamera-livevorschau.html', '/docs/GSVMULTI_PROTOCOL.html',
+      ]) {
+        await page.goto(path);
+        await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', scheme === 'dark' ? 'slate' : 'default');
+        await expect(page.locator('.md-content__inner h1')).toBeVisible();
+        if (path === '/index.html') {
+          await expect(page.locator('.wiki-stand')).toBeVisible();
+          await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+          await expect(page.locator('.wiki-kette[data-variant="kompakt"] .wiki-kette-node')).toHaveCount(7);
+        } else if (path.endsWith('/glossar.html')) {
+          await expect(page.locator('.wiki-glossar-entry')).toHaveCount(263);
+          await page.getByRole('searchbox', { name: 'Begriffe filtern' }).fill('Region of Interest');
+          const entry = page.locator('.wiki-glossar-entry').filter({ has: page.locator('#roi') });
+          await expect(entry).toBeVisible();
+          await expect(entry.locator('.wiki-occ:not([data-pending]) a[data-hint="fundstelle"]').first()).toBeAttached({ timeout: 10000 });
+        } else {
+          await expect(page.locator('.wiki-pagehead')).toHaveAttribute('data-ready', 'true');
+          if (path.endsWith('/GSVMULTI_PROTOCOL.html')) {
+            await expect(page.locator('.wiki-seam')).toContainText('TelegramFormatter');
+          } else {
+            const layer = page.locator('details.wiki-layer').first();
+            if (!(await layer.evaluate(node => (node as HTMLDetailsElement).open))) {
+              await layer.locator(':scope > summary').click();
+            }
+            await expect(layer).toHaveJSProperty('open', true);
+            if (path.includes('10-kamera-livevorschau')) {
+              expect(await page.locator('.wiki-setting').count()).toBeGreaterThan(0);
+            }
+          }
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      }
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
 test('Diagramm entsteht aus der Tabelle und fällt ohne Zahlen auf die Tabelle zurück', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/docs/VALIDATION.html');

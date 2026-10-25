@@ -5,106 +5,29 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
-* 2026-10-23: Korrekturrunde 2 der Wiki-Startseite: schmalere
-  Spalteninnenabstände, kleinerer Titelabstand und 20-px-Icons schaffen
-  mehr Platz für zweizeilige Wegtitel bei 1280 px. Der Linkvergleich im
-  Begriffstest nimmt den dynamisch ergänzten Seitenkopf aus.
-
-* 2026-10-23: Korrekturrunde 1 der Wiki-Startseite: kleinere, ausgewogen
-  umbrechende Wegtitel mit oben ausgerichteten Icons; Begriffsmarkierungen
-  entfallen in Wegspalten, Standetiketten und Verarbeitungskette.
-  Das aufklappbare Seitenverzeichnis erhält neutrale Trennlinien und einen
-  rechten Drehpfeil statt Admonition-Gestaltung und linkem Icon.
-
-* 2026-10-23: Die Wiki-Startseite führt über drei Wege zu Bedienung,
-  Konfiguration und Entwicklung. Standangaben bleiben mit OQ-Status sichtbar,
-  die kompakte Verarbeitungskette steht darunter. Das vollständige
-  Seitenverzeichnis ist aufklappbar; ohne JavaScript bleibt alles lesbar.
-  Die Quellenprüfung sichert Starthüllen und Wegreihenfolge vor dem Build.
-
-* 2026-10-23: Korrekturrunde 1 der Tabellendiagramme: Innenbeschriftungen
-  auf Grün, Gelb und beiden Reihenfarben verwenden dunklen Text. SVG und
-  Segmente erhalten Grafikrollen mit eigenen Beschriftungen; Tastaturfokus
-  zeigt eine 2-px-Kontur. Schmale Segmente liegen mit mindestens 8 px breiten,
-  zentrierten Trefferflächen über breiteren Nachbarn. Die Python-Prüfung
-  überspringt ihren Node.js-Anteil, wenn die Laufzeit fehlt.
-
-* 2026-10-23: Wiki-Diagramme entstehen aus ihren sichtbaren Quelltabellen:
-  horizontale Balken für eine Zahlenreihe, 100-%-Stapel für Statusanteile.
-  Hinweise zeigen die Originalwerte, Tabellen bleiben aufklappbar; ungültige
-  Zahlen lassen die Tabelle unverändert. Zwei Übersichten fassen bestehende
-  Referenzläufe vom 2026-10-21 zusammen. Containerbreite, Tastaturbedienung,
-  reduzierte Bewegung und Aufräumen bei Sofortnavigation sind berücksichtigt.
-
-* 2026-10-23: Korrekturrunde 3 der Verarbeitungskette: Hinweise benennen
-  `manual_roi` als Primärpfad, gebaute und stillgelegte Neben-/Altpfade sowie
-  das erneute Setzen der Kameraregler durch `UvcSource`. Die kompakte Liste
-  erhält eine explizite Listenrolle; eine wirkungslose Reduced-Motion-Regel
-  entfällt. Die dokumentierte Zustandsregel folgt der Controllerentscheidung.
-
-* 2026-10-23: Korrekturrunde 2 der Verarbeitungskette: Die volle Darstellung
-  bleibt bei jeder Breite senkrecht mit 14 px Verbindungslücken; Querlage und
-  Breitenschwelle entfallen. Die kompakte Variante zeigt umbrechende Etiketten
-  mit Zustandspunkt und gestaffelt eingeblendeten Pfeilen. ID und Zustandschip
-  stehen dort im Hinweis, der Zustand bleibt für Screenreader lesbar.
-  Automatische Silbentrennung ist in beiden Varianten ausgeschaltet.
-
-* 2026-10-23: Korrekturrunde 1 der Verarbeitungskette: Querlage ab 600 px
-  Containerbreite, gleich breite Knoten und 18 px Abstand. Im Hochformat
-  stehen ID, Titel und Zustand nebeneinander; 14 px Abstand und Pfeile
-  verbinden die Knoten ohne Überlappung. Theme-Listeneinzüge sind aufgehoben;
-  der Playwright-Fall prüft die Geometrie bei 1280 und 375 px.
-
-* 2026-10-23: Interaktive Verarbeitungskette mit sieben geordneten Stufen,
-  belegten Zuständen und API-Verweisen ergänzt. Hinweise erklären Zweck,
-  Einstellung und Anbindung; die Darstellung folgt der Containerbreite.
-  Verbindungslinien zeichnen sich bei Sichtbarkeit gestaffelt, reduzierte
-  Bewegung bleibt statisch. Ohne Daten oder JavaScript bleibt der Ersatztext
-  erhalten. `wiki-check.py --check` prüft Schema, Reihenfolge, Textgrenzen und
-  vorhandene Quellpfade der neuen `kette.json`.
-
-* 2026-10-23: Glossar als filterbarer Begriffsindex mit 50 vollständigen
-  Definitionen, festen Metazeilen und erhaltenen Abschnittsankern. A–Z,
-  Wegfilter und gruppierte Vorkommen erschließen die Begriffe; Hinweise
-  zeigen Kurzdefinitionen und Fundstellenkontext. Andere Wiki-Seiten
-  markieren die erste Nennung pro Abschnitt. Ein Wortindex verarbeitet den
-  Suchbestand in Häppchen; ohne Suchindex oder JavaScript bleiben die
-  Definitionen lesbar. `wiki-check.py --check` prüft das Glossarformat,
-  Quellen, Längengrenzen und doppelte Begriffe oder Synonyme.
-
-* 2026-10-23: Korrekturrunde 1 der Wiki-Seitenmuster: `wiki-check.py`
-  erkennt Musteröffner nur am Zeilenanfang außerhalb umzäunten Codes und
-  meldet fehlende schließende `</div>` nach der Tabelle, bevor eine fremde
-  Hülle beginnt. Urteilschips verwenden ausdrücklich `Nein`, `Nur wenn`
-  oder `Ja` als Text und eine feste Schriftgröße von `.62rem`.
-
-* 2026-10-23: Wiki-Grundlage für Hintergrund-, Entwickler- und historische
-  Schichten sowie Einstellungs- und Anbindungstabellen ergänzt. Die Schichten
-  überschreiben die Admonition-Gestaltung des Themes; Tabellen bleiben ohne
-  JavaScript lesbar und ordnen sich auf schmalen Ansichten untereinander an.
-  JavaScript ergänzt Urteilschips, `wiki-check.py --check` prüft Pflichtzeilen,
-  Reihenfolge und Änderungsurteile. Beispielseiten folgen in Aufgabe 9.
-
-* 2026-10-23: Wiki-Verweise auf offene Punkte und Roadmap-Phasen zeigen
-  Statuschips aus den jeweiligen Quelltabellen. Ein gemeinsamer
-  Hinweis-Baustein ergänzt Titel und Status per Maus, Tastatur und Touch;
-  fehlende Quellen lassen die Links unverändert. Die OQ-Ansicht nutzt
-  dieselbe Statusabbildung. Neue Playwright-Fälle sichern Hinweise,
-  Kontrast und Sofortnavigation ab.
-
-* 2026-10-23: Wiki-Seitenkopf korrigiert: Der Weiter-Link bricht linksbündig
-  um, sein Pfeil folgt direkt dem Text. Konventionsabsätze zählen nur an
-  ihrer vorgesehenen Stelle mit führendem `strong`. Fehler einzelner
-  Wiki-Bausteine und Aufräumer brechen den Seitenwechsel nicht mehr ab;
-  fehlgeschlagene HTML-/JSON-Abfragen können erneut geladen werden.
-
-* 2026-10-23: Grundlage für die Wiki-Wege: Ein Zensical-Template-Override
-  zeigt den Weg einer Seite auch ohne JavaScript. Der gemeinsame Namespace
-  `window.wiki` bietet Seitenwechsel mit Aufräumen, Site-URLs, gecachte
-  HTML-/JSON-Abfragen und SVG-Icons. Der Seitenkopf ergänzt Lesezeit und
-  Vorher-/Weiter-Links; die Entwickler-Anleitung dient als erste Seite.
-  `scripts/wiki-check.py --check` prüft die erlaubten `weg`-Werte vor
-  jedem Doku-Build. pytest und neue Playwright-Fälle sichern die Verträge.
+* 2026-10-23: Wiki-Gerüst für drei Lesergruppen gebaut. Zuvor fehlten
+  Wege nach Aufgabe und Rolle sowie eine gemeinsame Struktur für Bedienung,
+  Hintergrund und Entwicklerdetails; Fachbegriffe waren nur einzeln erklärt.
+  Die Startseite führt nun über drei feste Wege zu den Einstiegen, zeigt
+  belegten Stand und die kompakte Verarbeitungskette als Fluss; das gesamte
+  Seitenverzeichnis bleibt aufklappbar erreichbar. Seitenkopf mit Weg,
+  Lesezeit und Vorher-/Weiter-Links, gemeinsame Hinweise und Statuschips für
+  OQs und Roadmap-Phasen ergänzen die Navigation. `window.wiki` bündelt
+  Seitenwechsel, Aufräumen, Datenabfragen und Begriffsabgleich.
+  Schichten trennen Bedienschritte von Hintergrund, Entwicklung und Historie;
+  `wiki-setting` und `wiki-seam` ordnen Einstellungen und Anbindungsverträge.
+  Kamera-Inbetriebnahme, Kameraregler und GSVmulti-Anbindung dienen als
+  Beispielseiten. Das Glossar enthält 263 belegte Begriffe mit stabilen
+  Ankern, Kurzdefinitionen, Synonymen und Quellen; A–Z und Wegfilter führen
+  zu Definitionen und gruppierten Vorkommen aus dem aktuellen Suchindex.
+  Die volle Verarbeitungskette ist eine senkrechte Liste mit sieben Stufen;
+  Hinweise erklären Zustände, Einstellungen und API-Anbindungen.
+  Balken- und Stapeldiagramme entstehen aus bestehenden Quelltabellen.
+  Theme, Tastatur, schmale Ansichten und reduzierte Bewegung sind berücksichtigt;
+  ohne JavaScript bleiben Definitionen, Tabellen und Ersatztexte lesbar.
+  `wiki-check.py --check` prüft die Konventionen im Build. Pflegeauftrag und
+  AGENTS halten sie fest; TODO nennt die noch seitenweise umzustellenden Seiten.
+  Gerüst und Beispiele sind gebaut; der flächige Seitenumbau bleibt offen.
 
 * 2026-10-23: `PRODUCT.md` hält Leser und Leitlinien des Zensical-Wikis
   fest (Einsteiger/Bediener, fortgeschrittene Bediener, Entwickler). Der
