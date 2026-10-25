@@ -91,7 +91,11 @@
   let glossaryPromise;
   function loadGlossary() {
     if (!glossaryPromise) {
-      glossaryPromise = loadHtml("docs/anleitung/glossar.html").then((doc) => {
+      const path = "docs/anleitung/glossar.html";
+      const source = new URL(window.location.href).pathname === new URL(siteUrl(path)).pathname
+        ? Promise.resolve(document) : loadHtml(path);
+      // Parse the current glossary before its A–Z enhancement moves the entries.
+      glossaryPromise = source.then((doc) => {
         const entries = [];
         let category = "";
         for (const heading of doc.querySelectorAll(".md-content__inner h2, .md-content__inner h3")) {
@@ -188,7 +192,7 @@
           index.set(number, { id, title, status, category: OQ_STATUS[key], focus: focus === "Jetzt" });
         }
         return index;
-      }).catch(() => new Map());
+      }).catch(() => { oqIndexPromise = null; return new Map(); });
     }
     return oqIndexPromise;
   }
@@ -208,7 +212,7 @@
           });
         }
         return phases;
-      }).catch(() => new Map());
+      }).catch(() => { phasesPromise = null; return new Map(); });
     }
     return phasesPromise;
   }

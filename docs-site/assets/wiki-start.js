@@ -13,10 +13,14 @@
   function standRow(host) {
     const list = host?.querySelector(":scope > ul");
     if (!list) return;
+    const entries = [...list.children];
+    const labels = entries.map((entry) => [...entry.childNodes].find((node) =>
+      node.nodeType !== Node.TEXT_NODE || node.textContent.trim()));
+    if (entries.some((entry, index) => !entry.matches("li")
+      || labels[index]?.nodeType !== Node.ELEMENT_NODE || !labels[index].matches("strong"))) return;
     const row = make("div", "wiki-stand-row");
-    for (const entry of list.children) {
-      const strong = entry.querySelector("strong");
-      if (!strong) return;
+    for (const [index, entry] of entries.entries()) {
+      const strong = labels[index];
       const item = make("div", "wiki-stand-item");
       const label = make("span", "wiki-stand-label", strong.textContent.trim().replace(/:$/, ""));
       strong.remove();

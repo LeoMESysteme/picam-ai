@@ -6,7 +6,7 @@ hide:
 # Glossar
 
 Jeder Begriff, der in diesem Projekt eine engere Bedeutung hat als im
-Alltag. Alphabetisch.
+Alltag. Nach Themen gegliedert; mit JavaScript als A–Z-Ansicht mit Filter.
 
 ## Projekt und Fachliches
 

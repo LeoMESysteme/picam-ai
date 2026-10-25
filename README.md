@@ -52,7 +52,7 @@ Die Verarbeitungskette als Grafik braucht JavaScript; [Die Kette verstehen](docs
 
 </div>
 
-**Projektstand:** [Aktueller Stand](docs/status.md) · [Roadmap](docs/ROADMAP.md) · [Offene Punkte](docs/open-questions.md) · [Arbeitsliste](TODO.md)
+**Projektstand:** [Aktueller Stand](docs/status.md) · [Roadmap](docs/ROADMAP.md) · [Offene Punkte](docs/open-questions.md) · [Arbeitsliste](TODO.md) · [Konzept](Konzept.md) (maßgeblich für Anforderungen)
 
 ## Alle Seiten
 

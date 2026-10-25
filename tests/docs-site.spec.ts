@@ -24,7 +24,8 @@ for (const width of [1280, 375]) {
           await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
           await expect(page.locator('.wiki-kette[data-variant="kompakt"] .wiki-kette-node')).toHaveCount(7);
         } else if (path.endsWith('/glossar.html')) {
-          await expect(page.locator('.wiki-glossar-entry')).toHaveCount(263);
+          const glossaryCount = (readFileSync('docs/anleitung/glossar.md', 'utf8').match(/^### /gm) || []).length;
+          await expect(page.locator('.wiki-glossar-entry')).toHaveCount(glossaryCount);
           await page.getByRole('searchbox', { name: 'Begriffe filtern' }).fill('Region of Interest');
           const entry = page.locator('.wiki-glossar-entry').filter({ has: page.locator('#roi') });
           await expect(entry).toBeVisible();
@@ -206,6 +207,7 @@ test('Diagramme räumen bei Sofortnavigation auf und bleiben ohne Anime.js sicht
 test('OQ-Verweise tragen Statuschip und Pop-up mit Titel', async ({ page }) => {
   await page.goto('/docs/open-questions.html');
   const row = page.locator('#oq-index tbody tr').filter({ has: page.locator('a[href$="#oq-07"]') });
+  const focus = (await row.locator('td').nth(1).innerText()).trim();
   const status = (await row.locator('td').nth(2).innerText()).trim();
   const title = (await row.locator('td').nth(3).innerText()).trim();
   await expect(page.locator('.md-content__inner .wiki-chip')).toHaveCount(0);
@@ -219,7 +221,8 @@ test('OQ-Verweise tragen Statuschip und Pop-up mit Titel', async ({ page }) => {
   await expect(hint).toHaveAttribute('role', 'tooltip');
   await expect(hint).toContainText(`OQ-07 · ${title}`);
   await expect(hint.locator('.wiki-chip')).toHaveText(status);
-  await expect(hint).toContainText('Im Fokus');
+  if (focus === 'Jetzt') await expect(hint).toContainText('Im Fokus');
+  else await expect(hint).not.toContainText('Im Fokus');
   await expect(link).toHaveAttribute('aria-describedby', 'wiki-hint');
   await page.keyboard.press('Escape');
   await expect(hint).toHaveCount(0);
@@ -614,6 +617,42 @@ test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
   const tops = await page.locator('.wiki-weg').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().top));
   expect(tops[0]).toBeLessThan(tops[1]);
   expect(tops[1]).toBeLessThan(tops[2]);
+});
+
+test('Statuszeile bleibt bei abweichender Liste unverändert', async ({ page }) => {
+  let sourceHtml = '';
+  await page.route('**/index.html', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    const changed = html.replace(/(<div class="wiki-stand"[^>]*>[\s\S]*?<ul>)([\s\S]*?)(<\/ul>)/, (_all, start, items, end) => {
+      const entries = items.match(/<li\b[^>]*>[\s\S]*?<\/li>/g) || [];
+      expect(entries).toHaveLength(3);
+      const last = entries[2].replace(/<strong>([\s\S]*?)<\/strong>/, '$1');
+      expect(last).not.toBe(entries[2]);
+      return start + items.replace(entries[2], last) + end;
+    });
+    expect(changed).not.toBe(html);
+    sourceHtml = changed;
+    await route.fulfill({ response, body: changed });
+  });
+  await page.goto('/index.html');
+  await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+  await expect(page.locator('.md-content__inner')).toHaveAttribute('data-wiki-terms-ready', 'true');
+  // Read the expected text from the response before any page enhancement.
+  const expectedTexts = await page.evaluate(source => {
+    const doc = new DOMParser().parseFromString(source, 'text/html');
+    return Array.from(doc.querySelectorAll('.wiki-stand > ul > li'), item => item.textContent!.trim());
+  }, sourceHtml);
+  const entries = page.locator('.wiki-stand > ul > li');
+  await expect(entries).toHaveCount(3);
+  const actualTexts = await entries.evaluateAll(nodes => nodes.map(node => {
+    const copy = node.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.wiki-chip').forEach(chip => chip.remove());
+    return copy.textContent!.trim();
+  }));
+  expect(actualTexts).toEqual(expectedTexts);
+  for (const entry of await entries.all()) await expect(entry).toBeVisible();
+  await expect(page.locator('.wiki-stand-row')).toHaveCount(0);
 });
 
 test('Startseite bleibt ohne JavaScript als vollständiges Markdown lesbar', async ({ browser, baseURL }) => {

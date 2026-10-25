@@ -459,10 +459,9 @@ Die folgenden Karten zeigen die StreamCam-Regler, die Profil und Code beim
 `src/dispread/camera_settings.py`). Welche Regler die laufende
 Werkbank-Oberfläche tatsächlich anbietet, steht in ihrer Einstelltabelle.
 
-Die StreamCam hat dagegen
-`focus_automatic_continuous` und `focus_absolute`; für reproduzierbare
-Aufnahmen setzt [CameraSettings](../../api/frames.md) die Automatik aus und
-liest den festen Fokuswert zurück.
+Für reproduzierbare Aufnahmen schaltet `CameraSettings` die Fokusautomatik
+`focus_automatic_continuous` aus und liest den festen Fokuswert
+`focus_absolute` zurück.
 
 ### Fokus-Automatik
 

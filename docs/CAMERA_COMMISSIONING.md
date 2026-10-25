@@ -21,8 +21,8 @@ Aufnahmen dürfen währenddessen nicht laufen.
    Das Testbild liegt unter
    `var/diagnostics/camera-commissioning/test.png` (1920×1080).
 4. Fokus, Bildausschnitt und Licht am konkreten Gerät einrichten und
-   bestätigen. Für den Live-Pfad dient die Seite im vorhandenen Server
-   unter `/live`.
+   bestätigen. Für den Live-Pfad dient die Seite unter `/live` im vorhandenen
+   Server auf Port 8081.
 5. Aufbau und Diagnose nach [lab_journal.md](lab_journal.md) übernehmen;
    bei Konfigurationsänderungen [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
    aktualisieren. Ein Diagnose-Exit 0 ist keine Leser- oder Systemabnahme.
