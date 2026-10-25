@@ -691,7 +691,11 @@
     enter(phase) {
       if (this.disposed || this.tableMode) return;
       if (this.phase && this.phase.id !== phase.id) this.finishExit(false);
-      if (this.inside()) return;
+      // A wheel zoom can stop just short of the end; complete it instead of ignoring the request.
+      if (this.inside()) {
+        if (this.root.dataset.roadmapView !== "inside") this.finishEnter();
+        return;
+      }
       this.prepare(phase);
       this.view("entering");
       const r = this.rect(this.nodes.get(phase.id));
