@@ -1,0 +1,75 @@
+{
+  "schema": "kette_v1",
+  "stufen": [
+    {
+      "id": "frames",
+      "titel": "Bildquelle",
+      "zustand": "teilweise",
+      "zweck": "Sie liefert Bilder mit der Zeitbasis der Quelle.",
+      "einstellung": "v4l2:// über UvcSource, die Regler bei jedem Öffnen neu setzt; folder:// und video:// fehlen noch.",
+      "anbindung": "src/dispread/frames/",
+      "api": "api/frames.html",
+      "doku": "docs/HARDWARE_PROFILE.html"
+    },
+    {
+      "id": "detect",
+      "titel": "Anzeige finden",
+      "zustand": "fertig",
+      "zweck": "Die manuell bestätigte ROI (manual_roi) ist der Primärpfad und liefert den Anzeigebereich als Kandidaten.",
+      "einstellung": "Bestätigtes Viereck im Geräteprofil; nicht im Livepfad: contour_heuristic (gebaut, Vorschlagshilfe), imx500_detector (außer Betrieb).",
+      "anbindung": "src/dispread/detect/",
+      "api": "api/detect.html",
+      "doku": "docs/anleitung/01-kette-verstehen.html"
+    },
+    {
+      "id": "track",
+      "titel": "Nachführen",
+      "zustand": "fertig",
+      "zweck": "Sie registriert das bestätigte Viereck begrenzt gegen das Bestätigungsbild nach.",
+      "einstellung": "Bestätigungsbild und Viereck aus dem Profil; TrackConfig begrenzt die Nachführung.",
+      "anbindung": "src/dispread/track.py",
+      "api": "api/geometrie.html",
+      "doku": "docs/anleitung/01-kette-verstehen.html"
+    },
+    {
+      "id": "rectify",
+      "titel": "Entzerren",
+      "zustand": "fertig",
+      "zweck": "Sie entzerrt den Anzeigebereich mit einer Vierpunkt-Transformation aus dem Originalbild.",
+      "einstellung": "PipelineConfig.target_size bestimmt die Zielgröße des entzerrten Bilds.",
+      "anbindung": "src/dispread/rectify.py",
+      "api": "api/geometrie.html",
+      "doku": "docs/anleitung/01-kette-verstehen.html"
+    },
+    {
+      "id": "ocr",
+      "titel": "Wert lesen",
+      "zustand": "fertig",
+      "zweck": "dotmatrix liest die Wertzellen und prüft Leerzellen und Format; nicht im Livepfad: sevenseg (Altpfad), tesseract_cli (gebaut, Erkennungsgüte nicht erreicht).",
+      "einstellung": "DotMatrixReader mit geprüften Vorlagen und CharLayout; die Einheit kommt aus dem bestätigten Profil.",
+      "anbindung": "src/dispread/ocr/",
+      "api": "api/ocr.html",
+      "doku": "docs/anleitung/01-kette-verstehen.html"
+    },
+    {
+      "id": "validate",
+      "titel": "Freigabe",
+      "zustand": "fertig",
+      "zweck": "Sie prüft Syntax, Qualität und Betriebszustände und entscheidet über die Freigabe.",
+      "einstellung": "default_gate_config(\"dotmatrix\") mit confirm_frames und erwarteter Einheit aus der Livekonfiguration.",
+      "anbindung": "src/dispread/validate.py",
+      "api": "api/validate.html",
+      "doku": "docs/uebersicht/messpfad.html"
+    },
+    {
+      "id": "sink",
+      "titel": "Ausgabe",
+      "zustand": "teilweise",
+      "zweck": "Sie schreibt Audit-Daten; die serielle GSVmulti-Senke ist im Livepfad noch nicht angeschlossen.",
+      "einstellung": "Live: JsonlSink für records.jsonl. AsciiCsvFormatter ist vorläufig; GsvAsciiFormatter wirft absichtlich (OQ-07).",
+      "anbindung": "src/dispread/sink/",
+      "api": "api/sink.html",
+      "doku": "docs/GSVMULTI_PROTOCOL.html"
+    }
+  ]
+}

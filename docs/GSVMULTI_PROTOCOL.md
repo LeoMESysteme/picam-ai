@@ -1,3 +1,7 @@
+---
+weg: entwickeln
+---
+
 # GSVmulti-Anbindung
 
 Für die Trennung von erkanntem Wert, Zeitstempel und Transportbeleg siehe
@@ -100,6 +104,43 @@ sink/serial_out.py            Transport, unabhaengig vom Format
 sink/jsonl.py                 Audit-Log, laeuft immer parallel
 ```
 
+<div class="wiki-seam" markdown="1">
+
+| Trennstelle | `TelegramFormatter` (`sink/protocol`) |
+| --- | --- |
+| Vertrag | `capabilities(self) -> FormatterCapabilities` als `@property`; <code>format(self, record: ValueRecord) -&gt; bytes &#124; None</code> liefert Telegrammbytes oder `None`, wenn der Datensatz entfallen soll. `FormatterCapabilities` nennt `format_id`, `carries_capture_timestamp`, `timestamp_resolution_ns`, `supported_invalid_policies`, `requires_device_commands`, `channel_count` und `provisional`. |
+| Darf geändert werden | Ein **neuer** Formatter in `sink/protocol/`; wie in [Beispiel 16](../examples/16_end_to_end_headless.py) importieren, instanziieren und an `SerialSink` übergeben. Eine zentrale Formatter-Registrierung gibt es im vorhandenen Code nicht. |
+| Bleibt unverändert | Pipeline, `serial_out.py` (Transport), `jsonl.py` (Audit läuft immer); `gsv_ascii.py` wirft bis zur Spezifikation absichtlich `NotImplementedError` ([OQ-07](open-questions.md#oq-07)). |
+| Tests | Vorhanden: [tests/test_gate_und_referenz.py](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; je neuem Formatter einen eigenen Test ergänzen. |
+
+</div>
+
+So sieht ein neuer Formatter aus: Das folgende Gerüst verkürzt die Struktur
+von `ascii_csv.py` auf die beiden Schnittstellensignaturen. Die Rümpfe sind
+offen; es beschreibt **kein** GSVmulti-Telegramm. Fähigkeiten und Format dürfen
+erst nach der verbindlichen Spezifikation ausgefüllt werden. Solange der
+Formatter nicht gegen eine echte Spezifikation geprüft wurde, bleibt
+`provisional=True`.
+
+```python
+from dataclasses import dataclass
+
+from dispread.records import ValueRecord
+from dispread.sink.protocol import FormatterCapabilities
+
+
+@dataclass
+class NeuerFormatter:
+    @property
+    def capabilities(self) -> FormatterCapabilities:
+        # Format laut Spezifikation
+        ...
+
+    def format(self, record: ValueRecord) -> bytes | None:
+        # Format laut Spezifikation
+        ...
+```
+
 Das echte Format ist später ein **neuer Formatter**, keine Änderung an der
 Pipeline. Mehrere Ausgaben gleichzeitig sind vorgesehen (JSONL immer plus
 seriell).
@@ -159,3 +200,5 @@ Aufbau belegt weder den GPIO-Ausgang noch die GSVmulti-Kompatibilität.
 `sink/serial_out.py` enthält `required_baudrate()` für die Durchsatzrechnung.
 Konzept §6 warnt dabei: ein höherer Sendetakt liefert keine zusätzlichen
 unabhängigen Messwerte, wenn die Anzeige langsamer aktualisiert.
+
+**Weiter mit:** [Verträge](anleitung/02-vertraege.md)

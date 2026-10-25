@@ -41,6 +41,51 @@ was ist die Konsequenz.
   Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
   werden weiterhin wiederholt.
 
+* 2026-10-23: Wiki-Gerüst für drei Lesergruppen gebaut. Zuvor fehlten
+  Wege nach Aufgabe und Rolle sowie eine gemeinsame Struktur für Bedienung,
+  Hintergrund und Entwicklerdetails; Fachbegriffe waren nur einzeln erklärt.
+  Die Startseite führt nun über drei feste Wege zu den Einstiegen, zeigt
+  belegten Stand und die kompakte Verarbeitungskette als Fluss; das gesamte
+  Seitenverzeichnis bleibt aufklappbar erreichbar. Seitenkopf mit Weg,
+  Lesezeit und Vorher-/Weiter-Links, gemeinsame Hinweise und Statuschips für
+  OQs und Roadmap-Phasen ergänzen die Navigation. `window.wiki` bündelt
+  Seitenwechsel, Aufräumen, Datenabfragen und Begriffsabgleich.
+  Schichten trennen Bedienschritte von Hintergrund, Entwicklung und Historie;
+  `wiki-setting` und `wiki-seam` ordnen Einstellungen und Anbindungsverträge.
+  Kamera-Inbetriebnahme, Kameraregler und GSVmulti-Anbindung dienen als
+  Beispielseiten. Das Glossar enthält 263 belegte Begriffe mit stabilen
+  Ankern, Kurzdefinitionen, Synonymen und Quellen; A–Z und Wegfilter führen
+  zu Definitionen und gruppierten Vorkommen aus dem aktuellen Suchindex.
+  Die volle Verarbeitungskette ist eine senkrechte Liste mit sieben Stufen;
+  Hinweise erklären Zustände, Einstellungen und API-Anbindungen.
+  Balken- und Stapeldiagramme entstehen aus bestehenden Quelltabellen.
+  Theme, Tastatur, schmale Ansichten und reduzierte Bewegung sind berücksichtigt;
+  ohne JavaScript bleiben Definitionen, Tabellen und Ersatztexte lesbar.
+  `wiki-check.py --check` prüft die Konventionen im Build. Pflegeauftrag und
+  AGENTS halten sie fest; TODO nennt die noch seitenweise umzustellenden Seiten.
+  Gerüst und Beispiele sind gebaut; der flächige Seitenumbau bleibt offen.
+
+* 2026-10-23: `PRODUCT.md` hält Leser und Leitlinien des Zensical-Wikis
+  fest (Einsteiger/Bediener, fortgeschrittene Bediener, Entwickler). Der
+  Brief `docs/superpowers/specs/2026-10-23-wiki-geruest-design.md`
+  beschreibt den geplanten Umbau (Wege nach Rolle, Schichten, Glossar als
+  Begriffsindex), noch als Entwurf. Der tägliche Doku-Pflegelauf
+  (`scripts/docs-maintenance-prompt.md`) richtet sich jetzt an alle drei
+  Lesergruppen, liest `PRODUCT.md` und greift dem Umbau nicht vor.
+
+* 2026-10-23: Roadmap-Karte flüssiger. Mausrad, Zoomtasten und `+`/`-`
+  zoomen über einen Anime.js-`createAnimatable` geglättet statt in
+  Sprüngen; ein halb begonnener Ebenenwechsel rastet nach der Geste in
+  die innere Ebene oder zurück in die Übersicht ein. Kamerafahrten
+  zoomen logarithmisch und führen die Karte auf gerader Linie zur Mitte.
+  „Alles zeigen“, Rücksetzen, Pfeiltasten und angestoßenes Ziehen
+  gleiten, statt zu springen. Pro Bild wird kein Layout mehr gelesen,
+  unveränderte Stile werden nicht neu geschrieben, die ungenutzte
+  Wurzelvariable `--roadmap-depth` entfällt, und Überlagerungen liegen
+  auf eigenen Ebenen. Gemessen im headless Chromium auf dem Pi, Klick
+  in P2: Stilberechnung ≈ 500 → ≈ 120 ms, Rasterzeit 472 → 158 ms je
+  Übergang. Die Minimap hält ihren Sichtrahmen im Bild.
+
 * 2026-10-23: Roadmap im Zensical-Wiki als frei verschiebbare Karte mit
   Meilensteinen und eigener innerer Ebene für die Arbeitsschritte.
   Kartenminiaturen zeigen die enthaltene Struktur; beim Eintritt lösen

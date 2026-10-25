@@ -10,6 +10,13 @@
   const STORAGE = "dispread.roadmap.layout.v1";
   const WIDTH = 300;
   const STEP_WIDTH = 270;
+  const MIN_ZOOM = 0.18;
+  const MAX_ZOOM = 4.5;
+  const ENTER_MS = 720;
+  const EXIT_MS = 580;
+  const FLY_MS = 480;
+  const RESET_MS = 560;
+  const WHEEL_MS = 260;
   const POSITIONS = [[0, 80], [355, 0], [710, 70], [1065, 30], [1100, 370],
     [970, 680], [610, 650], [250, 675], [-100, 660]];
   const PHASE_STATE = { erreicht: "done", teilweise: "partial", blockiert: "blocked", offen: "open" };
@@ -34,6 +41,8 @@
   const clamp = (n, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
   const mix = (a, b, t) => a + (b - a) * t;
   const smooth = (a, b, n) => { const t = clamp((n - a) / (b - a)); return t * t * (3 - 2 * t); };
+  // Rounded style values let unchanged frames skip their DOM writes.
+  const fixed = (n) => String(Math.round(n * 1000) / 1000);
   const make = (tag, name, text) => {
     const el = document.createElement(tag);
     if (name) el.className = name;
@@ -142,11 +151,20 @@
       this.positions = { overview: {}, steps: {} };
       this.nodes = new Map();
       this.stepNodes = new Map();
+      this.parts = new Map();
+      // Node geometry is cached so a frame never reads layout after writing styles.
+      this.rects = new Map();
+      this.written = new WeakMap();
       this.camera = { x: 0, y: 0, z: 1 };
       this.innerCamera = { x: 0, y: 0, z: 1 };
       this.progress = 0;
       this.phase = null;
       this.pointers = new Map();
+      this.zoomState = { z: 1 };
+      this.lastZoom = 1;
+      this.zoomGoal = 1;
+      this.zoomDirection = 0;
+      this.motionDirection = 0;
       this.reducedQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
       this.reduced = this.reducedQuery.matches;
       this.root = make("section", "roadmap");
@@ -173,15 +191,38 @@
       this.resize();
       this.observer = new ResizeObserver(() => this.resize());
       this.observer.observe(this.viewport);
+      if (document.fonts) document.fonts.ready.then(() => { if (!this.disposed) this.relayout(); });
       loadAnime().then((A) => {
         if (this.disposed) return;
         this.A = A;
+        if (A) {
+          this.ease = A.cubicBezier(0.3, 0, 0.1, 1);
+          // One animatable carries wheel, button and key zoom; retargeting it keeps the motion continuous.
+          this.zoomer = A.createAnimatable(this.zoomState, { z: WHEEL_MS, ease: "out(3)", onUpdate: () => this.wheelStep() });
+        }
         if (this.phase) { this.makeReveal(); this.render(); }
       });
     }
 
     listen(target, event, handler, options = {}) {
       target.addEventListener(event, handler, { ...options, signal: this.abort.signal });
+    }
+
+    css(el, prop, value) {
+      let cache = this.written.get(el);
+      if (!cache) this.written.set(el, cache = {});
+      if (cache[prop] === value) return;
+      cache[prop] = value;
+      el.style[prop] = value;
+    }
+
+    flag(el, name, value) {
+      if (el[name] !== value) el[name] = value;
+    }
+
+    view(name) {
+      // Rewriting the same value would still invalidate every [data-roadmap-view] rule.
+      if (this.root.dataset.roadmapView !== name) this.root.dataset.roadmapView = name;
     }
 
     build() {
@@ -310,6 +351,7 @@
       node.append(handle, enter);
       this.phaseWorld.append(node);
       this.nodes.set(phase.id, node);
+      this.parts.set(phase.id, { content, drag: handle });
       this.place(node, this.positions.overview[phase.id]);
     }
 
@@ -334,6 +376,7 @@
       this.stepWorld.hidden = false;
       this.stepWorld.replaceChildren(this.stepLines);
       this.stepLines.replaceChildren();
+      for (const node of this.stepNodes.values()) this.rects.delete(node);
       this.stepNodes.clear();
       this.positions.steps[phase.id] = {};
       const columns = phase.steps.length <= 4 ? 2 : 3;
@@ -365,6 +408,7 @@
         this.stepNodes.set(step.id, node);
         this.place(node, pos);
       }
+      this.measure(this.stepNodes);
       this.contextBody.replaceChildren();
       const goal = make("p", "roadmap-context-exit");
       goal.append(make("strong", "", "Exit-Kriterium: "));
@@ -382,6 +426,7 @@
 
     makeReveal() {
       if (this.reveal) this.reveal.cancel();
+      this.revealAt = -1;
       if (!this.A || this.reduced || !this.stepNodes.size) {
         this.stepNodes.forEach((node) => {
           const content = node.querySelector(".roadmap-step-content");
@@ -397,10 +442,29 @@
         ease: "outExpo", delay: this.A.stagger(Math.min(35, 140 / Math.max(1, contents.length - 1))) }, 0);
     }
 
-    place(node, pos) { node.style.left = `${pos.x}px`; node.style.top = `${pos.y}px`; }
+    place(node, pos) {
+      node.style.left = `${pos.x}px`;
+      node.style.top = `${pos.y}px`;
+      const r = this.rects.get(node);
+      if (r) { r.x = pos.x; r.y = pos.y; } else this.rects.set(node, { x: pos.x, y: pos.y, w: 0, h: 0 });
+    }
+
+    rect(node) {
+      const r = this.rects.get(node);
+      if (!r.w) { r.w = node.offsetWidth; r.h = node.offsetHeight; }
+      return r;
+    }
+
+    measure(nodes) {
+      for (const node of nodes.values()) {
+        const r = this.rects.get(node);
+        r.w = node.offsetWidth;
+        r.h = node.offsetHeight;
+      }
+    }
 
     bounds(nodes) {
-      const rects = Array.from(nodes.values(), (node) => ({ x: node.offsetLeft, y: node.offsetTop, w: node.offsetWidth, h: node.offsetHeight }));
+      const rects = Array.from(nodes.values(), (node) => this.rect(node));
       return { x: Math.min(...rects.map((r) => r.x)), y: Math.min(...rects.map((r) => r.y)),
         right: Math.max(...rects.map((r) => r.x + r.w)), bottom: Math.max(...rects.map((r) => r.y + r.h)) };
     }
@@ -411,11 +475,11 @@
       const top = inside ? 92 : 32;
       const w = this.size.w - left - 26;
       const h = this.size.h - top - 112;
-      let z = clamp(Math.min(w / (b.right - b.x), h / (b.bottom - b.y)), 0.18, 1.12);
+      let z = clamp(Math.min(w / (b.right - b.x), h / (b.bottom - b.y)), MIN_ZOOM, 1.12);
       if (this.size.w < 640) {
         z = Math.min(1.05, (this.size.w - 42) / (inside ? STEP_WIDTH : WIDTH));
-        const first = inside ? nodes.values().next().value : this.nodes.get(this.phases.find((p) => p.state !== "erreicht").id);
-        return { x: (this.size.w - first.offsetWidth * z) / 2 - first.offsetLeft * z, y: top + 30 - first.offsetTop * z, z };
+        const first = this.rect(inside ? nodes.values().next().value : this.nodes.get(this.phases.find((p) => p.state !== "erreicht").id));
+        return { x: (this.size.w - first.w * z) / 2 - first.x * z, y: top + 30 - first.y * z, z };
       }
       return { x: left + (w - (b.right - b.x) * z) / 2 - b.x * z,
         y: top + (h - (b.bottom - b.y) * z) / 2 - b.y * z, z };
@@ -427,37 +491,54 @@
       if (!rect.width || !rect.height) return;
       const previous = this.size;
       this.size = { w: rect.width, h: rect.height };
+      this.measure(this.nodes);
+      if (this.phase && !this.stepWorld.hidden) this.measure(this.stepNodes);
       if (!previous) this.camera = this.fitCamera(this.nodes);
       else if (previous.w !== rect.width || previous.h !== rect.height) {
-        if (this.phase) this.innerCamera = this.fitCamera(this.stepNodes, true);
-        else this.camera = this.fitCamera(this.nodes);
+        this.stop();
+        if (this.phase) {
+          this.innerCamera = this.fitCamera(this.stepNodes, true);
+          this.innerBaseZoom = this.innerCamera.z;
+        } else this.camera = this.fitCamera(this.nodes);
       }
       this.connect(this.nodes, this.lines);
       this.drawParticles();
       this.render();
     }
 
+    relayout() {
+      // Late web fonts change card heights; the cached geometry follows them.
+      if (!this.size) return;
+      this.measure(this.nodes);
+      this.connect(this.nodes, this.lines);
+      if (this.phase && !this.stepWorld.hidden) {
+        this.measure(this.stepNodes);
+        this.connect(this.stepNodes, this.stepLines);
+      }
+      this.render();
+    }
+
     connect(nodes, layer) {
+      this.miniDirty = true;
       const entries = Array.from(nodes.entries());
       while (layer.children.length > Math.max(0, entries.length - 1)) layer.lastElementChild.remove();
       for (let i = 0; i < entries.length - 1; i += 1) {
         const [id, node] = entries[i];
         const [nextId, next] = entries[i + 1];
-        const ax = node.offsetLeft + node.offsetWidth / 2;
-        const ay = node.offsetTop + node.offsetHeight / 2;
-        const bx = next.offsetLeft + next.offsetWidth / 2;
-        const by = next.offsetTop + next.offsetHeight / 2;
+        const a = this.rect(node), b = this.rect(next);
+        const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
+        const bx = b.x + b.w / 2, by = b.y + b.h / 2;
         let d;
         if (Math.abs(by - ay) > Math.abs(bx - ax) * 1.2) {
           const sign = by >= ay ? 1 : -1;
-          const sy = ay + sign * node.offsetHeight / 2;
-          const ey = by - sign * next.offsetHeight / 2;
+          const sy = ay + sign * a.h / 2;
+          const ey = by - sign * b.h / 2;
           const bend = Math.max(46, Math.abs(ey - sy) * 0.6);
           d = `M${ax} ${sy}C${ax} ${sy + sign * bend} ${bx} ${ey - sign * bend} ${bx} ${ey}`;
         } else {
           const sign = bx >= ax ? 1 : -1;
-          const sx = ax + sign * node.offsetWidth / 2;
-          const ex = bx - sign * next.offsetWidth / 2;
+          const sx = ax + sign * a.w / 2;
+          const ex = bx - sign * b.w / 2;
           const bend = Math.max(46, Math.abs(ex - sx) * 0.6);
           d = `M${sx} ${ay}C${sx + sign * bend} ${ay} ${ex - sign * bend} ${by} ${ex} ${by}`;
         }
@@ -485,73 +566,109 @@
     }
 
     transformedRect(node) {
-      return { x: this.camera.x + node.offsetLeft * this.camera.z,
-        y: this.camera.y + node.offsetTop * this.camera.z,
-        w: node.offsetWidth * this.camera.z, h: node.offsetHeight * this.camera.z };
+      const r = this.rect(node);
+      return { x: this.camera.x + r.x * this.camera.z, y: this.camera.y + r.y * this.camera.z,
+        w: r.w * this.camera.z, h: r.h * this.camera.z };
+    }
+
+    inside() {
+      return Boolean(this.phase) && this.progress > 0.99;
+    }
+
+    activeCamera() {
+      return this.inside() ? this.innerCamera : this.camera;
     }
 
     render() {
       if (!this.size || this.disposed) return;
       const p = clamp(this.progress);
-      this.phaseWorld.style.transform = `translate(${this.camera.x}px,${this.camera.y}px) scale(${this.camera.z})`;
-      this.root.style.setProperty("--roadmap-depth", String(p));
-      this.frame.hidden = !this.phase || p === 0;
-      this.stepWorld.hidden = !this.phase || p === 0;
-      this.context.hidden = !this.phase || p < 0.94;
-      this.back.hidden = !this.phase || p < 0.1;
-      this.phaseWorld.inert = p > 0.1;
-      this.stepWorld.inert = p < 0.98;
-      this.phaseWorld.style.visibility = p >= 0.999 ? "hidden" : "";
+      const deep = Boolean(this.phase) && p > 0;
+      this.css(this.phaseWorld, "transform", `translate(${this.camera.x}px,${this.camera.y}px) scale(${this.camera.z})`);
+      this.flag(this.frame, "hidden", !deep);
+      this.flag(this.stepWorld, "hidden", !deep);
+      this.flag(this.context, "hidden", !this.phase || p < 0.94);
+      this.flag(this.back, "hidden", !this.phase || p < 0.1);
+      this.flag(this.phaseWorld, "inert", p > 0.1);
+      this.flag(this.stepWorld, "inert", p < 0.98);
+      this.css(this.phaseWorld, "visibility", p >= 0.999 ? "hidden" : "");
+      const others = fixed(1 - smooth(0.02, 0.72, p));
       for (const [id, node] of this.nodes) {
-        const selected = this.phase && this.phase.id === id;
-        node.style.opacity = String(selected ? 1 : 1 - smooth(0.02, 0.72, p));
-        node.style.borderColor = selected && p > 0 ? "transparent" : "";
-        node.style.backgroundColor = selected && p > 0
-          ? `color-mix(in srgb, var(--roadmap-surface) ${(1 - smooth(0.08, 0.58, p)) * 100}%, transparent)` : "";
-        const content = node.querySelector(".roadmap-node-content");
-        content.style.opacity = String(selected ? 1 - smooth(0.04, 0.45, p) : 1);
-        node.querySelector(".roadmap-drag").style.opacity = String(selected ? 1 - smooth(0.04, 0.35, p) : 1);
+        const selected = Boolean(this.phase) && this.phase.id === id;
+        const part = this.parts.get(id);
+        this.css(node, "opacity", selected ? "1" : others);
+        this.css(node, "borderColor", selected && p > 0 ? "transparent" : "");
+        this.css(node, "backgroundColor", selected && p > 0
+          ? `color-mix(in srgb, var(--roadmap-surface) ${fixed((1 - smooth(0.08, 0.58, p)) * 100)}%, transparent)` : "");
+        this.css(part.content, "opacity", selected ? fixed(1 - smooth(0.04, 0.45, p)) : "");
+        this.css(part.drag, "opacity", selected ? fixed(0.65 * (1 - smooth(0.04, 0.35, p))) : "");
       }
-      this.lines.style.opacity = String(1 - smooth(0.04, 0.65, p));
-      this.stepWorld.style.opacity = String(smooth(0.32, 0.86, p));
-      this.context.style.opacity = String(smooth(0.82, 1, p));
-      this.boundary.style.opacity = String(smooth(0.55, 1, p));
-      this.particles.style.opacity = String(smooth(0.55, 1, p));
-      if (this.phase) {
+      this.css(this.lines, "opacity", fixed(1 - smooth(0.04, 0.65, p)));
+      this.css(this.stepWorld, "opacity", fixed(smooth(0.32, 0.86, p)));
+      this.css(this.context, "opacity", fixed(smooth(0.82, 1, p)));
+      this.css(this.boundary, "opacity", fixed(smooth(0.55, 1, p)));
+      this.css(this.particles, "opacity", fixed(smooth(0.55, 1, p)));
+      if (deep) {
         const node = this.nodes.get(this.phase.id);
         const r = this.transformedRect(node);
         const t = smooth(0, 1, p);
-        const x = mix(r.x, 0, t), y = mix(r.y, 0, t);
-        const w = mix(r.w, this.size.w, t), h = mix(r.h, this.size.h, t);
-        Object.assign(this.frame.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`,
-          borderRadius: `${mix(15, 9, t)}px` });
+        this.css(this.frame, "transform", `translate(${mix(r.x, 0, t)}px,${mix(r.y, 0, t)}px)`);
+        this.css(this.frame, "width", `${mix(r.w, this.size.w, t)}px`);
+        this.css(this.frame, "height", `${mix(r.h, this.size.h, t)}px`);
+        // The card outline hands over to the stage outline: radius and colour meet in the middle.
+        this.css(this.frame, "borderRadius", `${fixed(mix(15 * this.camera.z, 9, t))}px`);
+        this.css(this.frame, "borderColor", `color-mix(in srgb, var(--roadmap-current) ${Math.round(smooth(0, 0.3, p) * 100)}%, var(--roadmap-edge))`);
         const stepBounds = this.bounds(this.stepNodes);
         const tinyZ = Math.min(264 / Math.max(1, stepBounds.right - stepBounds.x), 64 / Math.max(1, stepBounds.bottom - stepBounds.y)) * this.camera.z;
         const start = { x: r.x + 18 * this.camera.z - stepBounds.x * tinyZ,
-          y: r.y + (node.offsetHeight - 73) * this.camera.z - stepBounds.y * tinyZ, z: tinyZ };
+          y: r.y + (this.rect(node).h - 73) * this.camera.z - stepBounds.y * tinyZ, z: tinyZ };
         const u = smooth(0.22, 1, p);
-        const inner = { x: mix(start.x, this.innerCamera.x, u), y: mix(start.y, this.innerCamera.y, u), z: mix(start.z, this.innerCamera.z, u) };
-        this.stepWorld.style.transform = `translate(${inner.x}px,${inner.y}px) scale(${inner.z})`;
-        if (this.reveal) this.reveal.seek(smooth(0.3, 0.9, p) * this.reveal.duration);
+        const inner = p >= 1 ? this.innerCamera
+          : { x: mix(start.x, this.innerCamera.x, u), y: mix(start.y, this.innerCamera.y, u), z: mix(start.z, this.innerCamera.z, u) };
+        this.css(this.stepWorld, "transform", `translate(${inner.x}px,${inner.y}px) scale(${inner.z})`);
+        if (this.reveal) {
+          const at = smooth(0.3, 0.9, p) * this.reveal.duration;
+          if (at !== this.revealAt) { this.revealAt = at; this.reveal.seek(at); }
+        }
       }
-      const shownCamera = p > 0.99 ? this.innerCamera : this.camera;
-      this.zoomOutput.textContent = `${Math.round(shownCamera.z * 100)} %`;
+      const zoom = `${Math.round(this.activeCamera().z * 100)} %`;
+      if (zoom !== this.zoomText) { this.zoomText = zoom; this.zoomOutput.textContent = zoom; }
       this.drawMinimap();
     }
 
+    requestRender() {
+      if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = null; this.render(); });
+    }
+
     drawMinimap() {
-      const nodes = this.phase && this.progress > 0.99 ? this.stepNodes : this.nodes;
-      const camera = this.phase && this.progress > 0.99 ? this.innerCamera : this.camera;
-      const b = this.bounds(nodes);
-      const scale = Math.min(140 / (b.right - b.x), 76 / (b.bottom - b.y));
-      const ox = 10 - b.x * scale, oy = 12 - b.y * scale;
-      this.miniSvg.replaceChildren();
-      for (const [id, node] of nodes) svg("rect", { x: node.offsetLeft * scale + ox, y: node.offsetTop * scale + oy,
-        width: node.offsetWidth * scale, height: node.offsetHeight * scale, rx: 2,
-        class: this.phase && this.phase.id === id ? "roadmap-mini-current" : "roadmap-mini-node" }, this.miniSvg);
-      svg("rect", { x: -camera.x / camera.z * scale + ox, y: -camera.y / camera.z * scale + oy,
-        width: this.size.w / camera.z * scale, height: this.size.h / camera.z * scale, rx: 3,
-        class: "roadmap-mini-view" }, this.miniSvg);
+      const inside = this.inside();
+      const nodes = inside ? this.stepNodes : this.nodes;
+      const camera = inside ? this.innerCamera : this.camera;
+      const key = `${inside ? "steps" : "phases"}:${this.phase ? this.phase.id : ""}`;
+      // The miniature is rebuilt only when its level or layout changes; frames move the view box.
+      if (this.miniDirty || this.miniKey !== key) {
+        this.miniDirty = false;
+        this.miniKey = key;
+        const b = this.bounds(nodes);
+        // Include the fitted view so its frame stays inside the miniature.
+        const fit = this.fitCamera(nodes, inside);
+        const fx = -fit.x / fit.z, fy = -fit.y / fit.z;
+        b.x = Math.min(b.x, fx); b.y = Math.min(b.y, fy);
+        b.right = Math.max(b.right, fx + this.size.w / fit.z); b.bottom = Math.max(b.bottom, fy + this.size.h / fit.z);
+        const scale = Math.min(140 / (b.right - b.x), 76 / (b.bottom - b.y));
+        const ox = 10 - b.x * scale, oy = 12 - b.y * scale;
+        this.miniSvg.replaceChildren();
+        for (const [id, node] of nodes) {
+          const r = this.rect(node);
+          svg("rect", { x: r.x * scale + ox, y: r.y * scale + oy, width: r.w * scale, height: r.h * scale, rx: 2,
+            class: !inside && this.phase && this.phase.id === id ? "roadmap-mini-current" : "roadmap-mini-node" }, this.miniSvg);
+        }
+        this.mini = { scale, ox, oy, view: svg("rect", { rx: 3, class: "roadmap-mini-view" }, this.miniSvg) };
+      }
+      const { scale, ox, oy, view } = this.mini;
+      view.setAttribute("x", fixed(-camera.x / camera.z * scale + ox));
+      view.setAttribute("y", fixed(-camera.y / camera.z * scale + oy));
+      view.setAttribute("width", fixed(this.size.w / camera.z * scale));
+      view.setAttribute("height", fixed(this.size.h / camera.z * scale));
     }
 
     prepare(phase) {
@@ -561,7 +678,7 @@
       this.origin = { ...this.camera };
       this.returnFocus = this.nodes.get(phase.id).querySelector(".roadmap-enter");
       this.root.dataset.roadmapPhase = phase.id;
-      this.root.dataset.roadmapView = "entering";
+      this.view("entering");
       this.root.style.setProperty("--roadmap-current", `var(--roadmap-${PHASE_STATE[phase.state]})`);
       this.crumb.textContent = `${phase.id} · ${phase.title}`;
       this.makeSteps(phase);
@@ -574,45 +691,95 @@
     enter(phase) {
       if (this.disposed || this.tableMode) return;
       if (this.phase && this.phase.id !== phase.id) this.finishExit(false);
+      // A wheel zoom can stop just short of the end; complete it instead of ignoring the request.
+      if (this.inside()) {
+        if (this.root.dataset.roadmapView !== "inside") this.finishEnter();
+        return;
+      }
       this.prepare(phase);
-      const node = this.nodes.get(phase.id);
+      this.view("entering");
+      const r = this.rect(this.nodes.get(phase.id));
       const z = this.endZoom();
-      const target = { x: this.size.w / 2 - (node.offsetLeft + node.offsetWidth / 2) * z,
-        y: this.size.h / 2 - (node.offsetTop + node.offsetHeight / 2) * z, z };
+      const target = { x: this.size.w / 2 - (r.x + r.w / 2) * z, y: this.size.h / 2 - (r.y + r.h / 2) * z, z };
       this.transition(1, target, () => this.finishEnter());
     }
 
-    transition(progress, camera, done) {
+    cameraPath(from, to, anchor) {
+      // Zoom runs in log space, so every frame scales by the same ratio, and the
+      // anchor travels on a straight screen line instead of swinging out first.
+      const s0 = { x: from.x + anchor.x * from.z, y: from.y + anchor.y * from.z };
+      const s1 = { x: to.x + anchor.x * to.z, y: to.y + anchor.y * to.z };
+      const l0 = Math.log(from.z), l1 = Math.log(to.z);
+      return (e, out) => {
+        const z = Math.exp(mix(l0, l1, e));
+        out.x = mix(s0.x, s1.x, e) - anchor.x * z;
+        out.y = mix(s0.y, s1.y, e) - anchor.y * z;
+        out.z = z;
+      };
+    }
+
+    centerAnchor(camera) {
+      return { x: (this.size.w / 2 - camera.x) / camera.z, y: (this.size.h / 2 - camera.y) / camera.z };
+    }
+
+    run(duration, step, finish, direction = 0, ease = this.ease) {
+      // Shared driver for every camera flight; direct input cancels it through stop().
       this.stop();
-      if (!this.A || this.reduced) {
-        this.progress = progress;
-        Object.assign(this.camera, camera);
-        this.render();
-        done();
-        return;
-      }
-      this.phaseWorld.style.willChange = "transform";
-      this.stepWorld.style.willChange = "transform, opacity";
-      const motion = { p: this.progress, ...this.camera };
-      this.motion = this.A.createTimeline({ defaults: { ease: "outExpo" }, onUpdate: () => {
-        this.progress = motion.p;
-        Object.assign(this.camera, { x: motion.x, y: motion.y, z: motion.z });
-        this.render();
-      }, onComplete: () => {
+      this.wheelLive = false;
+      if (!this.A || this.reduced) { finish(); return; }
+      const state = { t: 0 };
+      this.motionDirection = direction;
+      this.motionEnd = finish;
+      this.motion = this.A.animate(state, { t: 1, duration, ease, onUpdate: () => step(state.t), onComplete: () => {
         this.motion = null;
+        this.motionEnd = null;
+        this.motionDirection = 0;
+        this.layers(false);
+        finish();
+      } });
+    }
+
+    transition(progress, camera, done) {
+      const node = this.phase && this.nodes.get(this.phase.id);
+      const r = node && this.rect(node);
+      const path = this.cameraPath({ ...this.camera }, camera, r ? { x: r.x + r.w / 2, y: r.y + r.h / 2 } : this.centerAnchor(camera));
+      const p0 = this.progress;
+      const entering = progress > p0;
+      this.run(entering ? ENTER_MS : EXIT_MS, (e) => {
+        path(e, this.camera);
+        this.progress = mix(p0, progress, e);
+        this.render();
+      }, () => {
         this.progress = progress;
         Object.assign(this.camera, camera);
-        this.phaseWorld.style.willChange = "";
-        this.stepWorld.style.willChange = "";
         this.render();
         done();
-      } });
-      this.motion.add(motion, { p: progress, x: camera.x, y: camera.y, z: camera.z, duration: progress ? 620 : 470 }, 0);
+      }, entering ? 1 : -1);
+      if (this.motion) this.layers(true);
+    }
+
+    fly(camera, target, duration = FLY_MS, ease = this.ease) {
+      const path = this.cameraPath({ ...camera }, target, this.centerAnchor(target));
+      this.run(duration, (e) => { path(e, camera); this.render(); }, () => {
+        this.flyGoal = null;
+        Object.assign(camera, target);
+        this.render();
+      }, 0, ease);
+      if (this.motion) this.flyGoal = target;
+    }
+
+    glide(dx, dy, duration = 220) {
+      const camera = this.activeCamera();
+      const base = this.motion && this.flyGoal ? this.flyGoal : camera;
+      this.fly(camera, { x: base.x + dx, y: base.y + dy, z: camera.z }, duration, "out(3)");
     }
 
     finishEnter() {
+      this.stop();
+      // Leftover wheel momentum must not keep zooming the inner map.
+      this.wheelLive = false;
       this.progress = 1;
-      this.root.dataset.roadmapView = "inside";
+      this.view("inside");
       this.live.textContent = `${this.phase.id}: ${this.phase.steps.length} Arbeitsschritte`;
       this.render();
       // The phase button becomes inert as its surface dissolves.
@@ -620,17 +787,27 @@
     }
 
     exit() {
-      if (!this.phase) return;
-      this.root.dataset.roadmapView = "leaving";
+      if (!this.phase || (this.motion && this.motionDirection < 0)) return;
+      this.view("leaving");
       this.transition(0, this.origin, () => this.finishExit());
     }
 
-    finishExit(focus = true) {
+    backOut() {
+      // A zoom that stopped half-way returns to the overview around the same card.
+      const r = this.rect(this.nodes.get(this.phase.id));
+      const z = Math.min(this.camera.z, Math.min(WIDTH, this.size.w - 40) * 1.3 / WIDTH);
+      const anchor = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+      const sx = this.camera.x + anchor.x * this.camera.z, sy = this.camera.y + anchor.y * this.camera.z;
+      this.view("leaving");
+      this.transition(0, { x: sx - anchor.x * z, y: sy - anchor.y * z, z }, () => this.finishExit(false, false));
+    }
+
+    finishExit(focus = true, restore = true) {
       this.stop();
-      if (this.origin) Object.assign(this.camera, this.origin);
+      if (restore && this.origin) Object.assign(this.camera, this.origin);
       this.progress = 0;
       this.phase = null;
-      this.root.dataset.roadmapView = "overview";
+      this.view("overview");
       delete this.root.dataset.roadmapPhase;
       this.crumb.textContent = "Meilensteine";
       this.live.textContent = "Meilensteine";
@@ -640,8 +817,17 @@
 
     stop() {
       if (this.motion) { this.motion.cancel(); this.motion = null; }
-      this.phaseWorld.style.willChange = "";
-      this.stepWorld.style.willChange = "";
+      this.motionEnd = null;
+      this.motionDirection = 0;
+      this.flyGoal = null;
+      if (!this.wheelLive) this.layers(false);
+    }
+
+    layers(on) {
+      // Both map levels move as cached layers while a flight or gesture runs;
+      // dropping the hint afterwards lets the browser redraw the text sharply.
+      this.css(this.phaseWorld, "willChange", on ? "transform" : "");
+      this.css(this.stepWorld, "willChange", on ? "transform" : "");
     }
 
     save() {
@@ -656,33 +842,53 @@
     reset() {
       this.stop();
       this.saved = {};
+      const from = new Map();
       for (const [i, phase] of this.phases.entries()) {
-        const pos = { x: POSITIONS[i][0], y: POSITIONS[i][1] };
-        this.positions.overview[phase.id] = pos;
-        this.place(this.nodes.get(phase.id), pos);
+        from.set(phase.id, { ...this.positions.overview[phase.id] });
+        this.positions.overview[phase.id] = { x: POSITIONS[i][0], y: POSITIONS[i][1] };
+        this.place(this.nodes.get(phase.id), this.positions.overview[phase.id]);
       }
       this.positions.steps = {};
-      if (this.phase) this.makeSteps(this.phase);
-      this.camera = this.fitCamera(this.nodes);
-      this.connect(this.nodes, this.lines);
       this.save();
-      this.render();
+      const target = this.fitCamera(this.nodes);
+      if (this.phase) {
+        this.makeSteps(this.phase);
+        this.camera = target;
+        this.connect(this.nodes, this.lines);
+        this.render();
+        return;
+      }
+      // Cards slide home together while the camera frames the default layout.
+      const path = this.cameraPath({ ...this.camera }, target, this.centerAnchor(target));
+      const move = (e) => {
+        for (const [id, node] of this.nodes) {
+          const a = from.get(id), b = this.positions.overview[id];
+          this.place(node, { x: mix(a.x, b.x, e), y: mix(a.y, b.y, e) });
+        }
+        this.connect(this.nodes, this.lines);
+      };
+      move(0);
+      this.run(RESET_MS, (e) => { move(e); path(e, this.camera); this.render(); }, () => {
+        move(1);
+        Object.assign(this.camera, target);
+        this.render();
+      });
     }
 
     fitCurrent() {
-      this.stop();
-      if (this.phase && this.progress > 0.99) {
-        this.innerCamera = this.fitCamera(this.stepNodes, true);
-        this.innerBaseZoom = this.innerCamera.z;
+      if (this.inside()) {
+        const target = this.fitCamera(this.stepNodes, true);
+        this.innerBaseZoom = target.z;
+        this.fly(this.innerCamera, target);
       } else {
-        if (this.phase) this.finishExit(false);
-        this.camera = this.fitCamera(this.nodes);
+        if (this.phase) this.finishExit(false, false);
+        this.fly(this.camera, this.fitCamera(this.nodes));
       }
-      this.render();
     }
 
     showTables(show) {
       this.stop();
+      this.wheelLive = false;
       this.tableMode = show;
       this.sources.forEach((source) => { source.hidden = !show; });
       this.viewport.hidden = show;
@@ -707,7 +913,7 @@
     }
 
     zoom(camera, factor, point) {
-      const z = clamp(camera.z * factor, 0.18, 4.5);
+      const z = clamp(camera.z * factor, MIN_ZOOM, MAX_ZOOM);
       const ratio = z / camera.z;
       camera.x = point.x - (point.x - camera.x) * ratio;
       camera.y = point.y - (point.y - camera.y) * ratio;
@@ -715,36 +921,86 @@
     }
 
     applyZoom(factor, point, target) {
-      this.stop();
-      if (this.phase && this.progress > 0.99) {
+      if (this.motion) this.stop();
+      if (this.inside()) {
         if (factor < 1 && this.innerCamera.z <= this.innerBaseZoom * 1.04) { this.exit(); return; }
         this.zoom(this.innerCamera, factor, point);
-      } else {
-        const phaseNode = target && target.closest ? target.closest(".roadmap-node[data-phase]") : null;
-        const phase = this.phase || (phaseNode && this.phases.find((p) => p.id === phaseNode.dataset.phase));
-        if (factor > 1 && phase && !this.phase) this.prepare(phase);
-        this.zoom(this.camera, factor, point);
-        if (this.phase) {
-          const reference = Math.min(WIDTH, this.size.w - 40);
-          this.progress = smooth(reference * 1.35, reference * 2.6, WIDTH * this.camera.z);
-          if (this.progress >= 0.999) this.finishEnter();
-          else if (this.progress === 0 && factor < 1) this.finishExit(false);
-          else this.root.dataset.roadmapView = "entering";
+        this.render();
+        return;
+      }
+      const before = { ...this.camera };
+      this.zoom(this.camera, factor, point);
+      const reference = Math.min(WIDTH, this.size.w - 40);
+      const progress = smooth(reference * 1.35, reference * 2.6, WIDTH * this.camera.z);
+      if (!this.phase && factor > 1 && progress > 0) {
+        const node = target && target.closest ? target.closest(".roadmap-node[data-phase]") : null;
+        const phase = node && this.phases.find((p) => p.id === node.dataset.phase);
+        if (phase) {
+          this.prepare(phase);
+          this.origin = before;
+          // Already past the threshold (zoomed in on the background): fly instead of jumping.
+          if (progress >= 0.999) { this.enter(phase); return; }
         }
+      }
+      if (this.phase) {
+        this.progress = progress;
+        if (progress >= 0.999) { this.finishEnter(); return; }
+        if (progress === 0) { this.finishExit(false, false); return; }
+        this.view("entering");
       }
       this.render();
     }
 
+    smoothZoom(factor, point, target) {
+      this.zoomDirection = Math.sign(factor - 1);
+      clearTimeout(this.settleTimer);
+      this.settleTimer = setTimeout(() => this.settle(), WHEEL_MS + 90);
+      if (!this.zoomer || this.reduced) { this.applyZoom(factor, point, target); return; }
+      if (!this.wheelLive) {
+        this.wheelLive = true;
+        this.lastZoom = this.zoomState.z;
+        this.zoomGoal = this.zoomState.z;
+        this.layers(true);
+      }
+      this.wheelPoint = point;
+      this.wheelTarget = target;
+      // Clamp the goal so zooming past a limit never has to be "unwound" later.
+      const camera = this.activeCamera();
+      const pending = this.zoomGoal / this.zoomState.z;
+      const final = clamp(camera.z * pending * factor, MIN_ZOOM, MAX_ZOOM);
+      this.zoomGoal = this.zoomState.z * final / camera.z;
+      this.zoomer.z(this.zoomGoal);
+    }
+
+    wheelStep() {
+      const z = this.zoomState.z;
+      const factor = z / this.lastZoom;
+      this.lastZoom = z;
+      if (!this.wheelLive || !Number.isFinite(factor) || Math.abs(factor - 1) < 1e-6) return;
+      this.applyZoom(factor, this.wheelPoint, this.wheelTarget);
+    }
+
+    settle() {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+      this.wheelLive = false;
+      if (!this.motion) this.layers(false);
+      if (!this.phase || this.motion || this.progress >= 0.999) return;
+      if (this.progress <= 0) this.finishExit(false, false);
+      else if (this.zoomDirection > 0 && this.progress > 0.12) this.enter(this.phase);
+      else this.backOut();
+    }
+
     zoomButton(direction) {
-      if (direction < 0 && this.phase && this.progress >= 0.99) { this.applyZoom(0.7, { x: this.size.w / 2, y: this.size.h / 2 }); return; }
+      const center = { x: this.size.w / 2, y: this.size.h / 2 };
       let node = this.phase && this.nodes.get(this.phase.id);
       if (!node && direction > 0) {
         node = Array.from(this.nodes.values()).sort((a, b) => {
           const ra = this.transformedRect(a), rb = this.transformedRect(b);
-          return Math.hypot(ra.x + ra.w / 2 - this.size.w / 2, ra.y + ra.h / 2 - this.size.h / 2) - Math.hypot(rb.x + rb.w / 2 - this.size.w / 2, rb.y + rb.h / 2 - this.size.h / 2);
+          return Math.hypot(ra.x + ra.w / 2 - center.x, ra.y + ra.h / 2 - center.y) - Math.hypot(rb.x + rb.w / 2 - center.x, rb.y + rb.h / 2 - center.y);
         })[0];
       }
-      this.applyZoom(direction > 0 ? 1.5 : 1 / 1.5, { x: this.size.w / 2, y: this.size.h / 2 }, node);
+      this.smoothZoom(direction > 0 ? 1.5 : 1 / 1.5, center, node);
     }
 
     bind() {
@@ -771,7 +1027,20 @@
       this.listen(this.viewport, "wheel", (event) => {
         if (event.target.closest(".roadmap-phase-context") && !event.ctrlKey) return;
         event.preventDefault();
-        this.applyZoom(Math.exp(clamp(-event.deltaY * 0.0022, -1.5, 1.5)), this.point(event), event.target);
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.size.h : 1;
+        const dx = event.deltaX * unit, dy = event.deltaY * unit;
+        // Sideways trackpad swipes pan; vertical wheel and trackpad pinch (ctrlKey) zoom.
+        if (!event.ctrlKey && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (this.motion) this.stop();
+          const camera = this.activeCamera();
+          camera.x -= dx;
+          this.requestRender();
+          return;
+        }
+        const factor = Math.exp(clamp(-dy * (event.ctrlKey ? 0.01 : 0.0022), -1.2, 1.2));
+        // Momentum that keeps pushing in the direction of a running level change is absorbed.
+        if (this.motion && Math.sign(factor - 1) === this.motionDirection) return;
+        this.smoothZoom(factor, this.point(event), event.target);
       }, { passive: false });
       this.listen(this.viewport, "pointerdown", (event) => this.pointerDown(event));
       this.listen(this.viewport, "pointermove", (event) => this.pointerMove(event));
@@ -783,7 +1052,7 @@
         const handle = event.target.closest("[data-roadmap-drag]");
         if (handle && event.shiftKey && /^Arrow/.test(event.key)) {
           event.preventDefault();
-          const inside = this.progress > 0.99 && this.phase;
+          const inside = this.inside();
           const positions = inside ? this.positions.steps[this.phase.id] : this.positions.overview;
           const nodes = inside ? this.stepNodes : this.nodes;
           const pos = positions[handle.dataset.roadmapDrag];
@@ -798,15 +1067,18 @@
         else if (event.key === "Home") { event.preventDefault(); this.fitCurrent(); }
         else if (event.target === this.viewport && /^Arrow/.test(event.key)) {
           event.preventDefault();
-          const camera = this.phase && this.progress > 0.99 ? this.innerCamera : this.camera;
-          camera.x += event.key === "ArrowLeft" ? 50 : event.key === "ArrowRight" ? -50 : 0;
-          camera.y += event.key === "ArrowUp" ? 50 : event.key === "ArrowDown" ? -50 : 0;
-          this.render();
+          this.glide(event.key === "ArrowLeft" ? 60 : event.key === "ArrowRight" ? -60 : 0,
+            event.key === "ArrowUp" ? 60 : event.key === "ArrowDown" ? -60 : 0);
         }
       });
       this.listen(this.reducedQuery, "change", (event) => {
         this.reduced = event.matches;
-        if (this.reduced && this.phase) { this.stop(); this.makeReveal(); this.finishEnter(); }
+        this.makeReveal();
+        // A running flight jumps to its end; its finish step sets the final level.
+        const end = this.motionEnd;
+        this.stop();
+        if (end) end();
+        else this.render();
       });
     }
 
@@ -816,6 +1088,7 @@
       this.pointers.set(event.pointerId, point);
       if (this.pointers.size === 2) {
         this.stop();
+        this.wheelLive = false;
         const points = Array.from(this.pointers.values());
         this.pinch = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), target: event.target };
         this.drag = null;
@@ -826,11 +1099,13 @@
       const handle = event.target.closest("[data-roadmap-drag]");
       if (!handle && event.target.closest("button, a, input, summary, .roadmap-phase-context")) return;
       this.stop();
-      const inside = this.phase && this.progress > 0.99;
+      this.wheelLive = false;
+      const inside = this.inside();
       const camera = inside ? this.innerCamera : this.camera;
       const id = handle && handle.dataset.roadmapDrag;
       const positions = inside ? this.positions.steps[this.phase.id] : this.positions.overview;
-      this.drag = { id, inside, pointer: event.pointerId, point, camera: { ...camera }, pos: id ? { ...positions[id] } : null, moved: false };
+      this.drag = { id, inside, pointer: event.pointerId, point, camera: { ...camera }, pos: id ? { ...positions[id] } : null,
+        moved: false, samples: [{ t: event.timeStamp, x: point.x, y: point.y }] };
       this.viewport.setPointerCapture(event.pointerId);
       this.viewport.classList.add("roadmap-viewport--dragging");
       if (!handle) this.viewport.focus({ preventScroll: true });
@@ -845,13 +1120,18 @@
         const points = Array.from(this.pointers.values());
         const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         const center = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 };
-        if (distance > 0 && this.pinch.distance > 0) this.applyZoom(distance / this.pinch.distance, center, this.pinch.target);
+        if (distance > 0 && this.pinch.distance > 0 && distance !== this.pinch.distance) {
+          this.zoomDirection = Math.sign(distance - this.pinch.distance);
+          this.applyZoom(distance / this.pinch.distance, center, this.pinch.target);
+        }
         this.pinch.distance = distance;
         event.preventDefault(); return;
       }
       const drag = this.drag;
       if (!drag || drag.pointer !== event.pointerId) return;
       const dx = point.x - drag.point.x, dy = point.y - drag.point.y;
+      drag.samples.push({ t: event.timeStamp, x: point.x, y: point.y });
+      if (drag.samples.length > 5) drag.samples.shift();
       if (!drag.moved && Math.hypot(dx, dy) < 5) return;
       drag.moved = true;
       const camera = drag.inside ? this.innerCamera : this.camera;
@@ -865,24 +1145,34 @@
         camera.x = drag.camera.x + dx;
         camera.y = drag.camera.y + dy;
       }
-      if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = null; this.render(); });
+      this.requestRender();
     }
 
     pointerUp(event) {
       this.pointers.delete(event.pointerId);
-      if (this.pinch && this.pointers.size < 2) this.pinch = null;
-      if (this.drag && this.drag.pointer === event.pointerId) {
-        if (this.drag.id && this.drag.moved) this.save();
+      if (this.pinch && this.pointers.size < 2) { this.pinch = null; this.settle(); }
+      const drag = this.drag;
+      if (drag && drag.pointer === event.pointerId) {
+        if (drag.id && drag.moved) this.save();
         this.drag = null;
+        // A flicked background keeps a little momentum and coasts to rest.
+        const first = drag.samples[0], last = drag.samples[drag.samples.length - 1];
+        const dt = last.t - first.t;
+        if (!drag.id && drag.moved && dt > 0 && event.timeStamp - last.t < 80) {
+          const vx = (last.x - first.x) / dt, vy = (last.y - first.y) / dt;
+          if (Math.hypot(vx, vy) > 0.25) this.glide(clamp(vx * 200, -600, 600), clamp(vy * 200, -600, 600), 600);
+        }
       }
       if (this.viewport.hasPointerCapture(event.pointerId)) this.viewport.releasePointerCapture(event.pointerId);
       this.viewport.classList.remove("roadmap-viewport--dragging");
-      this.render();
+      this.requestRender();
     }
 
     dispose() {
       this.disposed = true;
       this.stop();
+      clearTimeout(this.settleTimer);
+      if (this.zoomer) this.zoomer.revert();
       if (this.reveal) this.reveal.cancel();
       if (this.raf) cancelAnimationFrame(this.raf);
       this.abort.abort();

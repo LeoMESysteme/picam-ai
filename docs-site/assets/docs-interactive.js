@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const OQ_STATUS = {
+  const OQ_STATUS = window.wiki?.OQ_STATUS || {
     "offen": "open",
     "in arbeit": "progress",
     "teilweise geklärt": "partial",

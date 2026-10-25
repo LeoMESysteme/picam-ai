@@ -31,6 +31,7 @@ fi
 # Die Projekt-Tour zeigt Werte aus dem Code; weicht der Code ab, erst Szenen
 # und Texte prüfen und mit scripts/tour-facts.py --write übernehmen.
 "$ROOT/.venv-docs/bin/python" "$ROOT/scripts/tour-facts.py" --check
+"$ROOT/.venv-docs/bin/python" "$ROOT/scripts/wiki-check.py" --check
 
 rm -rf "$SITE_SRC/docs"
 cp -rs "$ROOT/docs" "$SITE_SRC/docs"

@@ -401,6 +401,57 @@ Aufstellung und jeweils ein Abgleich mit
 (Fehllesungen, Wechselanteile, Verzögerung und `tolerance_frames` in
 `session.json`; siehe [Anleitung Kapitel 10](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich)). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
 
+### Zensical-Wiki umbauen (Gerüst gebaut, weitere Seiten offen)
+
+Gerüst und Beispielseiten sind auf Branch `feat/wiki-geruest` gebaut,
+noch nicht gemergt. Leser und Leitlinien stehen in `PRODUCT.md`,
+Umfang und Konventionen im bestätigten Brief
+[2026-10-23 Wiki-Gerüst](docs/superpowers/specs/2026-10-23-wiki-geruest-design.md).
+Startseite, Seitenkopf, Hinweise und Statuschips, Schichten und Muster,
+Verarbeitungskette und Tabellendiagramme sind gebaut. Das Glossar umfasst
+263 Begriffe; Vorkommen kommen zur Laufzeit aus `search.json`.
+Beispielseiten: `docs/CAMERA_COMMISSIONING.md`, Kameraregler in
+`docs/anleitung/10-kamera-livevorschau.md`, Anbindung in
+`docs/GSVMULTI_PROTOCOL.md`. Linke Navigation und URLs bleiben.
+
+Noch nicht auf Wege/Schichten umgestellt (ohne `weg:` im Front Matter):
+
+* Projektseiten: `docs/CodeWiki-2.0-Umsetzungsplan.md`,
+  `docs/DISPLAYBUS_TAP.md`,
+  `docs/FORTSCHRITT.md`,
+  `docs/HARDWARE_PROFILE.md`,
+  `docs/HOSTING.md`,
+  `docs/OPTICAL_SETUP.md`,
+  `docs/README.md`,
+  `docs/ROADMAP.md`,
+  `docs/TIMING.md`,
+  `docs/dependencies.md`,
+  `docs/open-questions.md`,
+  `docs/status.md`.
+* Anleitung: `docs/anleitung/00-werkzeuge.md`,
+  `docs/anleitung/01-kette-verstehen.md`,
+  `docs/anleitung/02-vertraege.md`,
+  `docs/anleitung/03-erste-bildquelle-folder.md`,
+  `docs/anleitung/04-geraeteprofile.md`,
+  `docs/anleitung/05-cli.md`,
+  `docs/anleitung/06-kamera-aufnahme-replay.md`,
+  `docs/anleitung/07-lokalisierung.md`,
+  `docs/anleitung/08-ocr-backends.md`,
+  `docs/anleitung/09-betrieb.md`,
+  `docs/anleitung/11-datensatz-sammeln.md`,
+  `docs/anleitung/rezepte.md`.
+* Übersichten: `docs/uebersicht/daten-und-abnahme.md`,
+  `docs/uebersicht/projekt-tour.md`,
+  `docs/uebersicht/zeitstempel.md`.
+
+Messjournale (`docs/VALIDATION.md`, `docs/lab_journal.md`), Historie
+(`docs/project_history.md`, `docs/tool_review_2026-09-08.md`,
+`docs/wiki-audit-2026-10-21.md`), `docs/PLAN_*` und `docs/superpowers/`
+bleiben wie sie sind. Die übrigen Seiten seitenweise mit vollständigem
+Faktenerhalt umstellen; höchstens eine Seite pro Pflegelauf.
+Der tägliche Pflegelauf (`scripts/docs-maintenance-prompt.md`, Codex)
+kennt die Bausteine seit 2026-10-23 und hält ihre Konventionen ein.
+
 ### 1.–2. Erledigt 2026-09-23: M und führende Null
 
 * **M = 695 ms**, der grösste Wert über die Populationen. Das hat der Nutzer

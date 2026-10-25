@@ -1,18 +1,14 @@
+---
+weg: bedienen
+---
+
 # Kamera-Inbetriebnahme
 
+Prüfe die StreamCam, bevor du mit ihr misst. Die Inbetriebnahme gehört in ein
+Wartungsfenster mit freier Kamera: `dispread serve`, Harvest und andere
+Aufnahmen dürfen währenddessen nicht laufen.
+
 ## Aktuell: Logitech StreamCam (UVC)
-
-Seit 2026-09-25 ist die StreamCam die aktive Kamera. Das Skript
-[`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh)
-prüft `v4l2-ctl`, USB-ID `046d:0893` mit `index == 0`, USB-Geschwindigkeit,
-YUYV 1920×1080, Fokusregler und ein Testbild.
-
-Die Diagnose gehört in ein Wartungsfenster mit freier Kamera. Sie setzt
-`focus_automatic_continuous` und `focus_absolute` testweise und versucht die
-vorher gelesenen Werte wiederherzustellen. Sie schreibt ein Testbild und
-öffnet die Kamera direkt; deshalb darf sie nicht parallel zu
-`dispread serve`, Harvest oder einer anderen Aufnahme laufen. `CameraOwner` hält die
-Kamera während der gesamten Serverlaufzeit, auch ohne aktiven Messlauf.
 
 1. Vorher den aktuellen Aufbau und die Kamerabelegung anhand von
    [Status](status.md) und [Hardwareprofil](HARDWARE_PROFILE.md) prüfen.
@@ -25,16 +21,53 @@ Kamera während der gesamten Serverlaufzeit, auch ohne aktiven Messlauf.
    Das Testbild liegt unter
    `var/diagnostics/camera-commissioning/test.png` (1920×1080).
 4. Fokus, Bildausschnitt und Licht am konkreten Gerät einrichten und
-   bestätigen. Für den Live-Pfad dient `/live` im vorhandenen Server;
-   Port 8080 ist auf diesem Pi durch MEhub belegt, verwendet wird 8081.
+   bestätigen. Für den Live-Pfad dient die Seite unter `/live` im vorhandenen
+   Server auf Port 8081.
 5. Aufbau und Diagnose nach [lab_journal.md](lab_journal.md) übernehmen;
    bei Konfigurationsänderungen [HARDWARE_PROFILE.md](HARDWARE_PROFILE.md)
    aktualisieren. Ein Diagnose-Exit 0 ist keine Leser- oder Systemabnahme.
 
-Bei fehlendem Gerät USB-ID und Videoindex prüfen; bei reduzierter Auflösung
-USB3-Verbindung prüfen; bei „belegt“ den vorhandenen Kamerabesitzer klären.
+Wenn etwas nicht klappt:
+
+* Gerät fehlt: USB-ID und Videoindex prüfen.
+* Reduzierte Auflösung: USB3-Verbindung prüfen.
+* „Belegt“: den vorhandenen Kamerabesitzer klären.
+
+<details class="wiki-layer wiki-layer--hintergrund" markdown="1">
+<summary>Was passiert im Hintergrund</summary>
+
+Seit 2026-09-25 ist die StreamCam die aktive Kamera. Die Diagnose prüft
+`v4l2-ctl`, USB-ID `046d:0893` mit `index == 0`, USB-Geschwindigkeit,
+YUYV 1920×1080, Fokusregler und ein Testbild.
+
+Sie setzt `focus_automatic_continuous` und `focus_absolute` testweise und
+versucht die vorher gelesenen Werte wiederherzustellen. Sie schreibt ein
+Testbild und öffnet die Kamera direkt. Der Server hält die Kamera während
+der gesamten Serverlaufzeit, auch ohne aktiven Messlauf; deshalb darf die
+Diagnose nicht parallel zu `dispread serve`, Harvest oder einer anderen
+Aufnahme laufen.
+
+Port 8080 ist auf diesem Pi durch MEhub belegt, verwendet wird 8081.
 Zeitstempel stammen aus V4L2/CLOCK_MONOTONIC. Die Umrechnung und die noch
 offene physikalische Semantik stehen in [TIMING.md](TIMING.md).
+
+</details>
+
+<details class="wiki-layer wiki-layer--entwickler" markdown="1">
+<summary>Für Entwickler</summary>
+
+Das Skript für die Diagnose:
+[`scripts/camera-commissioning.sh`](../scripts/camera-commissioning.sh).
+`CameraOwner` hält die StreamCam während der gesamten Serverlaufzeit.
+`find_uvc_device()` sucht über USB-ID und `index == 0`; die Knotennummer
+wechselt mit der Steckreihenfolge und wird nicht fest eingetragen
+([gemeinsamer Kamera-Besitzer](../api/frames.md#gemeinsamer-kamera-besitzer-im-live-betrieb "Kamerabesitz im Live-Betrieb")
+und [Projektanweisungen](../CLAUDE.md#erwartete-zustande-die-keine-bugs-sind)).
+
+</details>
+
+<details class="wiki-layer wiki-layer--historisch" markdown="1">
+<summary>Historisch: IMX500-Aufbau (außer Betrieb)</summary>
 
 ## Historischer IMX500-Aufbau (außer Betrieb)
 
@@ -131,3 +164,7 @@ Beides ist ohne Hardware nicht bestimmbar und gehört nach
 * `CnnKpiInfo` mit `dnn_runtime` und `dsp_runtime`, sowie die tatsächlich
   erreichte Inferenzrate. Achtung: `network_intrinsics` behauptet eine Rate,
   die gemessen nicht erreicht wird (26 behauptet, 15,0 gemessen).
+
+</details>
+
+**Weiter mit:** [Kameraregler einstellen](anleitung/10-kamera-livevorschau.md#kamera-einstellen)

@@ -1,35 +1,58 @@
 # picam-ai · dispread
 
-Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Die aktive
-Kamera ist seit 2026-09-25 eine **Logitech StreamCam (UVC)**. Die zuvor
-verwendete IMX500 ist außer Betrieb. Erkannte Werte werden mit Zeitbasis,
-Freigabestatus und Begründung dokumentiert. Der Live-Messpfad ist über
-`dispread serve --port 8081` und `/live` gebaut: Einrichtung, namentliche
-Bestätigung, Messlauf und JSONL-Audit. Seine reale Prüfung ist auf
-GSV-2AS / Displaytech 161A, Raumlicht und mV/V begrenzt; die
-[offenen Grenzen](docs/status.md) gehören zur Bewertung. Die echte GSVmulti-Anbindung ist
-wegen der fehlenden Telegrammspezifikation offen
-([OQ-07](docs/open-questions.md#oq-07)).
+Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Erkannte
+Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
-**Neu hier?** Am schnellsten geht es mit der
-[Projekt-Tour](docs/uebersicht/projekt-tour.md): das Projekt als Animation,
-von dort führen Links in die Doku. Danach: [Aktueller Stand](docs/status.md) →
-[Verarbeitungskette](docs/anleitung/01-kette-verstehen.md) →
-[Messpfad und Freigabe](docs/uebersicht/messpfad.md).
-[Konzept.md](Konzept.md) ist für Anforderungen maßgeblich. Die
-[Roadmap](docs/ROADMAP.md) zeigt den Umsetzungsstand; die
-[API-Referenz](api/index.md) beschreibt den aktuellen Code.
+<div class="wiki-stand" markdown="1">
 
-## Nach Aufgabe einsteigen
+* **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.
+* **Messpfad:** live gebaut über `dispread serve --port 8081` und `/live` (Einrichtung, namentliche Bestätigung, Messlauf, JSONL-Audit); real geprüft nur an GSV-2AS / Displaytech 161A, Raumlicht, mV/V — siehe [offene Grenzen](docs/status.md).
+* **GSVmulti:** Anbindung offen, die Telegrammspezifikation fehlt ([OQ-07](docs/open-questions.md#oq-07)).
 
-| Aufgabe | Einstieg | Vertiefung |
-| --- | --- | --- |
-| Projektstand verstehen | [Status](docs/status.md) | [Roadmap](docs/ROADMAP.md), [Arbeitsliste](TODO.md) |
-| Messpfad verstehen oder erweitern | [Lernpfad](docs/anleitung/README.md) | [Messpfad](docs/uebersicht/messpfad.md), [Verträge](docs/anleitung/02-vertraege.md) |
-| Kamera und Anzeige einrichten | [Kamera-Inbetriebnahme](docs/CAMERA_COMMISSIONING.md) | [Workbench-Vorschau (Simulation)](docs/anleitung/10-kamera-livevorschau.md), [Optik](docs/OPTICAL_SETUP.md) |
-| Daten sammeln und Ergebnisse bewerten | [Sammelmodus](docs/anleitung/11-datensatz-sammeln.md) | [Daten und Abnahme](docs/uebersicht/daten-und-abnahme.md), [Validierung](docs/VALIDATION.md) |
-| Zeitstempel und Latenz einordnen | [Zeitstempel](docs/uebersicht/zeitstempel.md) | [Zeitmessungen](docs/TIMING.md) |
-| Eine unbekannte Frage klären | [Offene Punkte](docs/open-questions.md) | [Laborjournal](docs/lab_journal.md), [Projektgeschichte](docs/project_history.md) |
+</div>
+
+## Wähle deinen Weg
+
+<div class="wiki-wege" markdown="1">
+
+### Einrichten und bedienen
+
+Für Einsteiger und Bediener im Labor: Kamera aufbauen, Anzeige einrichten, Messlauf fahren.
+
+* [Kamera einrichten](docs/CAMERA_COMMISSIONING.md) — Diagnose und Inbetriebnahme der StreamCam
+* [Messpfad live bedienen](docs/anleitung/10-kamera-livevorschau.md) — einrichten, bestätigen, Lauf fahren
+* [Optischen Aufbau prüfen](docs/OPTICAL_SETUP.md) — Halterung, Licht, Reflexionen
+* [Projekt-Tour](docs/uebersicht/projekt-tour.md) — das Projekt als Animation
+
+### Konfigurieren und verstehen
+
+Für alle, die Einstellungen anpassen und verstehen wollen, was dahinter passiert.
+
+* [Messpfad und Freigabe](docs/uebersicht/messpfad.md) — wann ein Wert als gültig gilt
+* [Kameraregler](docs/anleitung/10-kamera-livevorschau.md#kamera-einstellen) — Fokus und Automatiken
+* [Zeitstempel richtig lesen](docs/uebersicht/zeitstempel.md) — Zeitbasen und zulässige Schlüsse
+* [Glossar](docs/anleitung/glossar.md) — Begriffe und wo sie vorkommen
+
+### Entwickeln und anbinden
+
+Für Entwickler: Trennstellen, Verträge und Stellen, an denen man anbindet.
+
+* [Lernpfad](docs/anleitung/README.md) — Werkzeuge, Kette, Baukapitel
+* [Verträge](docs/anleitung/02-vertraege.md) — Schnittstellen und Datenklassen
+* [Ausgabeprotokoll anbinden](docs/GSVMULTI_PROTOCOL.md#die-naht-im-code) — die Naht im Code
+* [API-Referenz](api/index.md) — Docstrings aller Module
+
+</div>
+
+**Für Entwickler:** die Verarbeitungskette, Stufe überfahren für Zweck und Anbindung.
+
+<div class="wiki-kette" data-variant="kompakt" markdown="1">
+
+Die Verarbeitungskette als Grafik braucht JavaScript; [Die Kette verstehen](docs/anleitung/01-kette-verstehen.md) beschreibt jede Stufe.
+
+</div>
+
+**Projektstand:** [Aktueller Stand](docs/status.md) · [Roadmap](docs/ROADMAP.md) · [Offene Punkte](docs/open-questions.md) · [Arbeitsliste](TODO.md) · [Konzept](Konzept.md) (maßgeblich für Anforderungen)
 
 ## Alle Seiten
 

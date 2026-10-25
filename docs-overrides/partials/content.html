@@ -1,0 +1,13 @@
+{% include "partials/actions.html" %}
+{% if "\u003ch1" not in page.content %}
+  <h1 id="__skip">{{ page.title | d(config.site_name, true)}}</h1>
+{% endif %}
+{% if page.meta and page.meta.weg %}
+  {% set wege = {"bedienen": "Einrichten und bedienen", "konfigurieren": "Konfigurieren und verstehen", "entwickeln": "Entwickeln und anbinden", "projekt": "Projektstand"} %}
+  <p class="wiki-pagehead" data-weg="{{ page.meta.weg }}"><span class="wiki-pagehead-weg">Für: {{ wege[page.meta.weg] | d(page.meta.weg) }}</span></p>
+{% endif %}
+{{ page.content }}
+{% include "partials/tags.html" %}
+{% include "partials/source-file.html" %}
+{% include "partials/feedback.html" %}
+{% include "partials/comments.html" %}

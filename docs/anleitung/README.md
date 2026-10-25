@@ -1,3 +1,7 @@
+---
+weg: entwickeln
+---
+
 # Anleitung — selbst programmieren
 
 Diese Anleitung ist für **dich als Programmierer**, nicht für Claude. Sie
@@ -118,3 +122,5 @@ Nach jedem Kapitel, das Code erzeugt hat (Pflicht laut
 * `docs/status.md` — vor Sessionende neu schreiben, nicht anhängen.
 * Neue Unbekannte entdeckt? Sofort ein `OQ-nn` in
   [../open-questions.md](../open-questions.md), auch ohne Codeänderung.
+
+**Weiter mit:** [0 — Werkzeuge und Arbeitsrhythmus](00-werkzeuge.md)

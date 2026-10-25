@@ -56,6 +56,16 @@ Zwei harte Sätze:
   Die Karte und ihre innere Ebene stehen in `roadmap.js`/`roadmap.css`;
   die vorhandene lokale Anime.js-Version bleibt die Animationslaufzeit.
   Phasenstatus, gebaute Werkzeuge und bestandene Abnahme nicht vermischen.
+* Die Wiki-Bausteine liegen in `docs-site/assets/wiki-*.js` / `wiki.css`,
+  das Template-Override in `docs-overrides/partials/content.html`.
+  Front Matter `weg`, Schichten, Muster `wiki-setting`/`wiki-seam`,
+  Glossarformat und Startseiten-Hüllen `wiki-stand`/`wiki-wege` erhalten;
+  Konventionen stehen im [Wiki-Brief](docs/superpowers/specs/2026-10-23-wiki-geruest-design.md)
+  und in `scripts/docs-maintenance-prompt.md`. Neue Glossarbegriffe brauchen
+  eine Wiki-Quelle; bestehende Anker bleiben stabil.
+  Prüfung: `scripts/wiki-check.py --check` läuft vor dem Build.
+  Kettendaten: `docs-site/assets/data/kette.json`; Zustand `teilweise` nur,
+  wenn ein Teil fehlt oder absichtlich wirft.
 * Vorschau-Links auf Glossarbegriffe und Dokumentabschnitte brauchen stabile
   Überschriften-IDs und kurze Zielabschnitte. Links ohne Abschnittsanker auf
   Glossar und Timing zeigen die jeweilige Seiteneinleitung; diese knapp
