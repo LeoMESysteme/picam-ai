@@ -53,7 +53,8 @@ Einrichtungsbilder ergeben geeignete Vorschläge.
 2. **Kein Betrieb ohne Raumlicht.** Der Rahmen-Tracker braucht Licht auf
    Rahmen und Gehäuse und lehnt im Dämmerlicht ab (sicher, nicht verfügbar).
    Der Prototyp LCD-Fenster-Tracker (`exp/r13-fenster-tracker`) ist nicht reif.
-3. **Sehr schräge Ansichten** (etwa 19°) lehnt die Einrichtung ehrlich ab;
+3. **Sehr schräge Ansichten** sind ein Grenzfall: Bei „links etwa 18°“
+   gelang am 26.10. eine von drei Einrichtungen, zwei lehnten ehrlich ab;
    bis etwa 11,5° gelingt sie.
 4. **Bewegung über 12 px** (zum Beispiel ein Stoß mit Drehung) führt zu
    dauerhafter Ablehnung mit dem Hinweis „neu einrichten“, nicht zur
@@ -63,7 +64,7 @@ Einrichtungsbilder ergeben geeignete Vorschläge.
    Gitteranpassung um bis zu 13 px).
 7. Keine formale Abnahme an zwei Aufstellungen mit dem neuen Vorschlag.
    Die Aufstellung muss die Person wählen; die Kamera steht seit dem 23.10.
-   an „links etwa 18°“, wo die Einrichtung ablehnt.
+   an „links etwa 18°“, wo die Einrichtung meist ablehnt.
 
 ## Zu entscheiden
 
@@ -94,7 +95,20 @@ Merge durch die Person (Merge-Commit, kein Fast-Forward möglich), danach auf
 Werkbank neu starten und vorhandene Profile neu einrichten. Die
 Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
 
-## Bis Mittwoch noch offen (wird hier nachgetragen)
+## Nachtrag 2026-10-26: Hardwareprüfung
 
-* Hardwareprüfung der Fokusanfahrt von unten (R13-12), sobald Raumlicht da ist.
-* PNG-Aufnahmen für die weitere Entwicklung.
+* **Fokusanfahrt von unten (R13-12) am Gerät bestätigt:** drei Einrichtungen,
+  jedes Mal Fokus 48 und Endprüfung im ersten Versuch bestanden (98–100 %
+  der besten Messung). Am 23.10. schlug die Prüfung dort vor R13-12 noch an.
+  Zweimal Vollsweep-Rückfall, etwa 70 s länger.
+* **Linksansicht etwa 18°:** eine von drei Einrichtungen mit Vorschlag
+  (20 Bereiche, Reserve erfüllt, 2 Warnungen), zwei ehrliche Ablehnungen.
+* **PNG-Aufnahmen** dieser Ansicht mit Werteplan für die weitere Entwicklung:
+  `var/diagnostics/r13-winkel-links18-png-20261026` (nur Replay) und
+  `…-png2-20261026` (auch Offline-Einrichtung). Rückstellung jeweils
+  bestätigt. Details: [Laborjournal](../../lab_journal.md).
+* Freier Platz auf der SD-Karte danach **2,1 GB** (Reserve für eine
+  Einrichtung 2 GB). Vor weiteren Aufnahmen muss die Person Platz schaffen.
+* Der Pi startete am 24.10. 17:12 und 25.10. 16:14 ohne erkennbaren Anlass
+  neu (kein persistentes Journal). Die Zweig-Werkbank wurde jeweils neu
+  angelegt.

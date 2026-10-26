@@ -2364,3 +2364,53 @@ und bestätigten Rahmenmittelpunkte; Größenordnung etwa 21 bzw. 23 px
 und −2,3 Grad im direkten PNG-Test. Das ist kein Genauigkeitsnachweis
 und keine Live-Durchsatzabnahme. Eine grobe Bilddiagnose darf weiterhin
 unbestimmt bleiben; ihre Fehler dürfen den Lauf nicht unterbrechen.
+
+## 2026-10-26 — R13-12 am Gerät: Fokus von unten, Linksansicht etwa 18°, PNG-Aufnahmen
+
+**Ziel:** Die Fokusanfahrt von unten (R13-12) an der echten StreamCam
+prüfen und für die weitere Entwicklung verlustfreie Aufnahmen der steilen
+Linksansicht gewinnen (die Aufnahmen vom 23.10. sind JPEG und verschieben
+die Gitteranpassung).
+
+**Aufbau:** Raumlicht an (Helligkeit des ganzen Vorschaubilds 0,55 bzw.
+0,52, also etwa 141/132 von 255, über den lokalen Werkbank-Status gemessen,
+ohne die Kamera zu übernehmen). Aufstellung unverändert seit 23.10.:
+„links etwa 18°“. Stand `feat/r13-display-haertung` (Merge 2f0183d). Drei
+Einrichtungen über die laufende Werkbank (`dispread live setup`, zweimal
+mit `--force`), keine Bestätigung. Danach zwei `sync-record.py`-Aufnahmen
+bei gestoppter Werkbank mit Kameraeinstellungen der ersten Einrichtung
+(Fokus 48), Staging in `/dev/shm`, Werteplan über `set norm` mit
+Rückstellpunkt-Prüfung vor dem ersten Schreiben. Wiki-Session vor und nach
+den Aufnahmen benachrichtigt; keine CI während der Messung.
+
+**Beobachtung Fokus:** Alle drei Einrichtungen wählen Fokus 48 und bestehen
+die Endprüfung im ersten Versuch: 331,9 von 338,8 (98 %), 256,8 von 256,8,
+289,1 von 287,6. Am 23.10. schlug dieselbe Prüfung an dieser Aufstellung
+vor R13-12 noch an (366 von 576). Die absolute Schärfe schwankt zwischen
+den Einrichtungen (Licht, Anzeigeinhalt). Zweimal fiel das Bergsteigen auf
+den Vollsweep zurück, was etwa 70 s kostet.
+
+**Beobachtung Gitter:** Die erste Einrichtung liefert einen Vorschlag
+(20 Rahmenbereiche, Reserve erfüllt, dunkler Rahmen als Bandquelle; 9 von
+11 Prüfungen OK, `raster` und `gegenlesen` WARNUNG). Die beiden anderen
+lehnen ab: `keine_startlage` bzw. „Verbessertes Raster-Quad abgelehnt:
+leerzelle_belegt“. Vor R13-13 endete diese Aufstellung immer in
+`keine_startlage`. Die Offline-Einrichtung auf der zweiten PNG-Aufnahme
+lehnt ebenfalls mit `keine_startlage` ab.
+
+**Aufnahmen:**
+`var/diagnostics/r13-winkel-links18-png-20261026` (82 PNG, 1 Hz, Plan
+`1:15,2:15,0.5:15,5:15,10:15,1:5`, 201 MB) und
+`var/diagnostics/r13-winkel-links18-png2-20261026` (66 PNG, 0,5 Hz, Plan
+`1:40,2:20,0.5:20,5:20,10:20,1:12`, 161 MB). Beide ohne Bildlücke und ohne
+verworfene Bilder, Rückstellung jeweils durch Rücklesen bestätigt (norm
+80/27/228, dpoint 1). Die erste Aufnahme hat zu kurze Schritte für die
+Offline-Einrichtung (sie braucht ein zweites Standbild mindestens 15 s
+später im selben Schritt) und dient nur dem Replay. Freier Platz danach
+2,1 GB.
+
+**Deutung:** Die Fokusanfahrt von unten ist am Gerät bestätigt (3/3).
+Die Linksansicht um 18° ist mit R13-13 ein Grenzfall: Die Einrichtung
+gelingt gelegentlich, lehnt aber meist ehrlich ab. Für den Betrieb bleibt
+die Empfehlung, die Kamera gerader vor die Anzeige zu stellen. Keine
+formale Abnahme, kein Messlauf.

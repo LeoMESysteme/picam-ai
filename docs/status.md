@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-24
+# Status — Stand 2026-10-26
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
@@ -22,9 +22,11 @@ mit `testlauf_keine_freigabe`) und [OQ-45](open-questions.md#oq-45)
 
 Live 2026-10-23: 0 Fehllesungen in allen Läufen; ruhiger Kontrolllauf
 99,98 % VALID. Profile von vor R13-11 müssen neu eingerichtet werden.
-Offen: Abnahme an zwei Aufstellungen mit dem neuen Rahmenvorschlag,
-Hardwareprüfung der Fokusanfahrt von unten, sehr schräge Ansichten (etwa
-19°, Startsuche lehnt ehrlich ab), Betrieb ohne Raumlicht. Details:
+Am 2026-10-26 am Gerät bestätigt: Fokusanfahrt von unten (3/3
+Einrichtungen, Endprüfung im ersten Versuch). Offen: Abnahme an zwei
+Aufstellungen mit dem neuen Rahmenvorschlag, sehr schräge Ansichten
+(bei etwa 18° gelingt eine von drei Einrichtungen, sonst ehrliche
+Ablehnung), Betrieb ohne Raumlicht. Details:
 [VALIDATION](VALIDATION.md#r13-live-2026-10-23), TODO Punkt R13.
 
 ## Aktuelle Arbeit: interaktive Wiki-Roadmap
@@ -159,15 +161,15 @@ Werkbank des R13-Zweigs als systemd-Benutzereinheit
 `dispread-werkbank-r13` (vorübergehend, nach `stop` neu mit `systemd-run`
 anlegen), `https://100.122.154.35:8081/live`. Port 8080 ist auf diesem Pi
 durch MEhub belegt. Die Kamera steht seit 2026-10-23 an der Aufstellung
-„links etwa 18°“, an der die Einrichtung ehrlich ablehnt; für Läufe muss
+„links etwa 18°“, an der die Einrichtung meist ehrlich ablehnt; für Läufe muss
 die Person eine brauchbare Aufstellung wählen. Einrichtungsrelevante
 Aufnahmen als PNG, nicht JPEG (JPEG verschiebt die Gitteranpassung).
 
 Nächste Aufgaben gemäß TODO:
 
 1. Entscheidung der Person am 2026-10-28: R13-Zweig nach `master`.
-2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26),
-   Fokusanfahrt am Gerät prüfen.
+2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26).
+   Vorher Platz auf der SD-Karte schaffen (2026-10-26: 2,1 GB frei).
 3. Toleranzlauf ≥ 10 min mit Werteplan; andere Lichtquellen/Geräte
    bleiben offen.
 4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
