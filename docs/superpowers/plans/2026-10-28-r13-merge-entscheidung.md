@@ -1,9 +1,10 @@
 # Entscheidungsvorlage R13 → master (für 2026-10-28)
 
-Stand 2026-10-24. Zweig `feat/r13-display-haertung` (Forgejo), 27 Commits
+Stand 2026-10-27. Zweig `feat/r13-display-haertung` (Forgejo), 27 Commits
 ohne Merges seit `master` 109d360, 108 Dateien. Volle Testsuite auf
 `b5d1b3b`: **2400 bestanden, 8 übersprungen**; Live- und Doku-Browsertests
-2/2 und 45/45. Nichts davon ist in `master`. Die Entscheidung trifft die
+2/2 und 45/45. Nach dem Einmischen von `master` c7e7c2d (Wiki-Gerüst,
+`2f0183d`): **2526 bestanden, 8 übersprungen**. Nichts davon ist in `master`. Die Entscheidung trifft die
 Person; diese Vorlage bündelt Belege, Grenzen und offene Fragen.
 
 ## Was der Zweig enthält
@@ -112,3 +113,20 @@ Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
 * Der Pi startete am 24.10. 17:12 und 25.10. 16:14 ohne erkennbaren Anlass
   neu (kein persistentes Journal). Die Zweig-Werkbank wurde jeweils neu
   angelegt.
+
+## Nachtrag 2026-10-27: dritter Neustart, Platz
+
+* **Neustart am 26.10. um 23:13**, wieder ohne erkennbaren Anlass. Keine
+  Paketaktualisierung (letzte apt-Aktion 14.10.), kein automatischer Neustart
+  konfiguriert, PMIC meldet keinen Stromreset (`power_reset` 0) und keinen
+  Überstrom an USB oder SD. Der Bootloader meldet `rsts` 0x20; das deutet
+  nach unserer Kenntnis auf einen Software- oder Watchdog-Reset statt eines
+  Kaltstarts hin (nicht gegen Quellen geprüft). Der Lastmonitor lief zu dem
+  Zeitpunkt nicht. Vorschlag: persistentes Journal einschalten
+  (`/var/log/journal` anlegen), dann zeigt der nächste Neustart seine Ursache.
+* **Freier Platz 1,5 GB** (26.10.: 2,1 GB). Hauptursache ist ein
+  automatisches Update von Claude Code (Version 2.1.311, +294 MB). Ohne
+  `var/` anzufassen ließen sich etwa 0,95 GB freimachen: Claude Code 2.1.307
+  und 2.1.309 (zusammen etwa 585 MB, nicht in Gebrauch) und Codex-Release
+  0.163.0 (368 MB, weder `current` noch in Gebrauch). Nicht gelöscht; das
+  entscheidet die Person.

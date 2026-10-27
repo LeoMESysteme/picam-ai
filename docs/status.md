@@ -169,7 +169,8 @@ Nächste Aufgaben gemäß TODO:
 
 1. Entscheidung der Person am 2026-10-28: R13-Zweig nach `master`.
 2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26).
-   Vorher Platz auf der SD-Karte schaffen (2026-10-26: 2,1 GB frei).
+   Vorher Platz auf der SD-Karte schaffen (2026-10-27: 1,5 GB frei; ohne
+   `var/` freizumachen etwa 0,95 GB, siehe Entscheidungsvorlage).
 3. Toleranzlauf ≥ 10 min mit Werteplan; andere Lichtquellen/Geräte
    bleiben offen.
 4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
