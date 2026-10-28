@@ -1,11 +1,11 @@
 """Vergleich mit dem bisherigen Leser; Referenzcode bleibt nur im Test."""
 
 from dataclasses import fields, replace
-from pathlib import Path
 
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import recording_glob
 from dotmatrix_helpers import GRID, LAYOUT, render, synthetic_reader
 
 from dispread.charcells import CharGrid
@@ -138,7 +138,7 @@ def test_sampling_uses_two_bilinear_calls(monkeypatch):
     assert calls == [(9 * 9 * 40, 2)] * 2
 
 
-_REAL = sorted(p for p in Path('var/live').glob('*/setup/*.png')
+_REAL = sorted(p for p in recording_glob('live/*/setup/*.png')
                if p.name in {'still.png', 'stability.png'} and (p.parent / 'proposal.json').is_file())
 
 

@@ -1,18 +1,17 @@
 """Setup checks use only synthetic images and existing read-only stills."""
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread.dotlattice import LatticeFit
 from dispread.ocr.dotmatrix_font import COLS, ROWS, rom_vector
 from dispread.setup_checks import CheckResult, check_setup, raster_offset_check
 
-ROOT = Path('/home/me-systeme/picam-ai/var/diagnostics')
 QUAD = [[0, 0], [400, 0], [400, 160], [0, 160]]
 OFFSET_QUAD = np.array([[120., 150.], [760., 120.], [770., 215.], [110., 240.]], np.float32)
 OFFSET_TEXT = '+0.46781 '
@@ -116,11 +115,10 @@ def test_optional_offset_result_participates_in_setup_total():
 
 
 def test_ab4_regridded_profile_clears_real_still_offset():
-    frame = ROOT / 'ab4-still/frames/frame_000016.png'
-    old = ROOT / 'ab4-profile'
-    regridded = ROOT / 'ab4-profile-regrid1.json'
-    if not all(path.exists() for path in (frame, old, regridded)):
-        pytest.skip('read-only ab4 diagnostic still unavailable')
+    frame = local_recording('diagnostics/ab4-still/frames/frame_000016.png')
+    old = local_recording('diagnostics/ab4-profile')
+    regridded = local_recording('diagnostics/ab4-profile-regrid1.json')
+
     image = cv2.imread(str(frame))
     assert image is not None
     # Display text was independently recorded in ab4-still/serial.jsonl.
@@ -248,10 +246,9 @@ def test_stability_requires_elapsed_time_and_warns_if_unreliable():
     ('ab1', 17, [], 2.5), ('ab2', 17, [8], 9.0), ('sc6', 15, [], 2.0),
 ])
 def test_real_still_edge_regression(name, frame_number, expected, step_cell_8):
-    frame = ROOT / f'{name}-still/frames/frame_{frame_number:06d}.png'
-    profile = ROOT / f'{name}-profile'
-    if not frame.exists() or not profile.exists():
-        pytest.skip('diagnostic still unavailable')
+    frame = local_recording(f'diagnostics/{name}-still/frames/frame_{frame_number:06d}.png')
+    profile = local_recording(f'diagnostics/{name}-profile')
+
     image = cv2.imread(str(frame))
     data = json.loads(profile.read_text())
     result = check_setup(image, fit(quad=data['quad']))
@@ -270,10 +267,9 @@ def test_real_still_edge_regression(name, frame_number, expected, step_cell_8):
     ('sc5', 17, 19.1, 0.284), ('sc6', 15, 19.7, 0.338),
 ])
 def test_real_still_good_point_contrast_is_ok(name, frame_number, point_contrast, reader_contrast):
-    frame = ROOT / f'{name}-still/frames/frame_{frame_number:06d}.png'
-    profile = ROOT / f'{name}-profile'
-    if not frame.exists() or not profile.exists():
-        pytest.skip('diagnostic still unavailable')
+    frame = local_recording(f'diagnostics/{name}-still/frames/frame_{frame_number:06d}.png')
+    profile = local_recording(f'diagnostics/{name}-profile')
+
     image = cv2.imread(str(frame))
     quad = json.loads(profile.read_text())['quad']
     result = check_setup(image, fit(quad=quad)).checks['kontrast']
@@ -283,10 +279,9 @@ def test_real_still_good_point_contrast_is_ok(name, frame_number, point_contrast
 
 
 def test_sc6_validated_still_has_clear_border():
-    frame = ROOT / 'sc6-still/frames/frame_000015.png'
-    profile = ROOT / 'sc6-profile'
-    if not frame.exists() or not profile.exists():
-        pytest.skip('diagnostic still unavailable')
+    frame = local_recording('diagnostics/sc6-still/frames/frame_000015.png')
+    profile = local_recording('diagnostics/sc6-profile')
+
     image = cv2.imread(str(frame))
     quad = json.loads(profile.read_text())['quad']
     border = check_setup(image, fit(quad=quad)).checks['rahmen']

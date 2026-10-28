@@ -18,7 +18,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
@@ -26,6 +28,7 @@ from types import SimpleNamespace
 
 import cv2
 import numpy as np
+from _devdata import input_path
 
 from dispread.frames import Frame
 from dispread.gsv2as_cell_text import cell_text_from_telegram
@@ -56,7 +59,27 @@ def _summary(rows, session, reference):
     }
 
 
+@contextmanager
+def _pipeline_profile(profile_path):
+    """Nur die Offline-Kopie bekommt den aufgeloesten Referenzpfad.
+
+    Die Produktpipeline prueft weiterhin unveraendert Bild und Pruefsumme.
+    Das Originalprofil und alle anderen Felder bleiben erhalten.
+    """
+    data = json.loads(profile_path.read_text(encoding="utf-8"))
+    reference = data.get("reference_frame")
+    if not reference or str(input_path(reference["path"])) == reference["path"]:
+        yield profile_path
+        return
+    reference["path"] = str(input_path(reference["path"]))
+    with tempfile.TemporaryDirectory(prefix="r13-replay-profile-") as directory:
+        temporary = Path(directory) / "profile.json"
+        temporary.write_text(json.dumps(data), encoding="utf-8")
+        yield temporary
+
+
 def evaluate(recording_dir, profile_path, tracker):
+    recording_dir, profile_path = input_path(recording_dir), input_path(profile_path)
     recording = load_recording(recording_dir)
     profile = SessionProfile.load(profile_path)
     regions_source = "profil" if profile.live_tracking is not None else "offline_vorschlag"
@@ -79,12 +102,13 @@ def evaluate(recording_dir, profile_path, tracker):
     if tracker not in ("ecc", "frame"):
         raise ValueError("Unbekannter Tracker")
     config = LiveConfig()
-    pipeline, profile, calibration, _ = build_live_pipeline(
-        SimpleNamespace(source_id="sync-record_offline"), Path(profile_path), config,
-        reader_factory=DotMatrixReader.from_file, locator_factory=locator_factory,
-        reader_d_max_factor=1.0,
-        allow_offline=True,
-    )
+    with _pipeline_profile(profile_path) as pipeline_profile:
+        pipeline, profile, calibration, _ = build_live_pipeline(
+            SimpleNamespace(source_id="sync-record_offline"), pipeline_profile, config,
+            reader_factory=DotMatrixReader.from_file, locator_factory=locator_factory,
+            reader_d_max_factor=1.0,
+            allow_offline=True,
+        )
     reference = []
     for entry in recording.serial:
         raw = entry["text"]
@@ -161,8 +185,8 @@ def evaluate(recording_dir, profile_path, tracker):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("recording_dir", type=Path)
-    parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("recording_dir", type=input_path)
+    parser.add_argument("--profile", type=input_path, required=True)
     parser.add_argument("--tracker", choices=("ecc", "frame"), required=True)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)

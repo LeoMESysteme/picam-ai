@@ -17,6 +17,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import cv2
+from _devdata import input_path
 
 from dispread.camera_settings import SETTABLE_CONTROLS, CameraSettings
 from dispread.gsv2as_cell_text import cell_text_from_telegram, validate_offline_cell_text
@@ -117,9 +118,9 @@ class RecordedStills:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("recording_dir", type=Path)
+    parser.add_argument("recording_dir", type=input_path)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--frame", type=Path)
+    parser.add_argument("--frame", type=input_path)
     parser.add_argument("--cell-text")
     args = parser.parse_args(argv)
     out = args.out.resolve()

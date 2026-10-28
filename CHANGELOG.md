@@ -5,6 +5,23 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: Entwicklungsaufnahmen sind nach der SSD-Auslagerung für Tests
+  und Skripte über `DISPREAD_DEV_DATA` erreichbar. Vorhandene Dateien unter
+  `var/` haben Vorrang; neue Diagnoseaufnahmen verwenden den gesetzten
+  Entwicklungsdatenort. Fehlende lokale Testaufnahmen werden übersprungen,
+  R13-Fixtures behalten portable relative Pfade. Ein Wächtertest hält
+  SSD-Verweise aus `src/` heraus; Produktdaten und Geräte-Rückstellpunkt
+  bleiben auf SD, das fertige Gerät benötigt keine SSD. Nach Review:
+  vorhandene Pfade bleiben unverändert, gespeicherte Pfade (Profil-
+  Referenzbild, Datensatz, `import.json`) und Erntekennungen nutzen über
+  `logical_path` immer das alte `var/`-Schema, damit weder SSD-Pfade in
+  Produktdaten landen noch ein erneuter Import Proben verdoppelt.
+
+* 2026-10-28: Tests laufen parallel mit `pytest -n 4` (pytest-xdist);
+  OpenCV je Arbeiter einthreadig. Wanduhr-Laufzeittests tragen `timing`
+  und laufen getrennt mit `pytest -m timing`. Volle Suite 2549 bestanden,
+  9 übersprungen in 10 min statt etwa 15 min.
+
 * 2026-10-23: R13-18 Fix round 1 gleicht Anleitungen, Zeitstempelübersicht, API-Doku, Plan und Aufgabenliste mit der geklärten OQ-45 ab. Tour-Text und Szene nennen gemeinsam HOST_MONOTONIC als Ergebniszeitbasis; das Label liest den Wert aus den erzeugten Tour-Fakten. Der historische Wiki-Audit erhält einen datierten Nachtrag, alte Auditlabels bleiben erhalten.
 
 * 2026-10-23: R13-18 klärt OQ-45: Verarbeitungsmarken aus `time.monotonic_ns()` tragen als `HOST_MONOTONIC` ihre tatsächliche Host-Zeitbasis, unabhängig von der Aufnahmequelle. Aufnahmezeiten bleiben unverändert. Die BOOTTIME-Umrechnung teilt Sessionversatz und Suspend-Ablehnung mit V4L2-MONOTONIC; alte Auditdateien bleiben ohne Migration lesbar. Tests sichern alle bisherigen Aufnahmezeitbasen und die neun Konzept-Pflichtfelder ab.

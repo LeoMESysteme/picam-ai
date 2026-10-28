@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from _devdata import input_path, recording_glob
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "docs-progress-data.py"
 spec = importlib.util.spec_from_file_location("docs_progress_data", SCRIPT)
@@ -17,6 +18,20 @@ GEN = "2026-09-29T00:00:00+00:00"
 def _write(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+
+
+def test_external_harvests_remain_visible_beside_local_diagnostics(tmp_path, monkeypatch):
+    repo, dev = tmp_path / "repo", tmp_path / "dev"
+    _run(repo / "var", "sc6", imported=1)
+    _run(dev, "sc6", imported=99)
+    _run(dev, "sc6b", session_id="sc6", imported=None)
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    monkeypatch.setattr(progress, "REPO_ROOT", repo)
+    monkeypatch.setattr(progress, "input_path", lambda path: input_path(path, repo_root=repo))
+    monkeypatch.setattr(progress, "recording_glob", lambda pattern: recording_glob(pattern, repo_root=repo))
+    data = progress.build(repo / "var", GEN)
+    assert {row["run"]: row["imported"] for row in data["harvests"]} == {"sc6-run": 1, "sc6b-run": None}
+    assert next(row for row in data["dataset"]["groups"] if row["group"] == "sc6")["samples"] is None
 
 
 def _run(var: Path, name: str, *, session_id=None, harvest=True, session=True,

@@ -90,6 +90,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from _devdata import input_path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -857,7 +858,7 @@ def _parse_hint_box(text: str) -> tuple[float, float, float, float]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("session_dir", type=Path, help="Aufzeichnungsverzeichnis (frames.jsonl, serial.jsonl, frames/)")
+    p.add_argument("session_dir", type=input_path, help="Aufzeichnungsverzeichnis (frames.jsonl, serial.jsonl, frames/)")
     quad_group = p.add_mutually_exclusive_group(required=True)
     quad_group.add_argument(
         "--hint-box",
@@ -866,7 +867,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     quad_group.add_argument(
         "--profile",
-        type=Path,
+        type=input_path,
         help=(
             "Pfad zu einem bestaetigten Sitzungsprofil (SessionProfile.load) - "
             "Quad kommt direkt aus dem Profil (Quellbildpixel), locate_quad "
@@ -904,7 +905,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    session_dir: Path = args.session_dir
+    session_dir = input_path(args.session_dir)
     out_dir: Path = args.out or (session_dir / "offset-analyse")
     out_dir.mkdir(parents=True, exist_ok=True)
 

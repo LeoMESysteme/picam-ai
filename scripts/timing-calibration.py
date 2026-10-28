@@ -21,6 +21,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from _devdata import input_path
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from dispread.camera_settings import STREAMCAM_USB_ID  # noqa: E402
@@ -30,7 +32,7 @@ from dispread.timing_calibration import calibration_from_offset_reports  # noqa:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "reports", nargs="+", type=Path, help="Ein oder mehrere offset-analyse.json-Dateien"
+        "reports", nargs="+", type=input_path, help="Ein oder mehrere offset-analyse.json-Dateien"
     )
     parser.add_argument("--out", type=Path, required=True, help="Zielpfad der Kalibrierungsdatei")
     parser.add_argument(

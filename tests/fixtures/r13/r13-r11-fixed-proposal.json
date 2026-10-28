@@ -1161,7 +1161,7 @@
     }
   },
   "accepted_dev": {
-    "reference": "var/live/live-20261021T151835Z/setup/still.png",
+    "reference": "live/live-20261021T151835Z/setup/still.png",
     "proposal": {
       "regions": [
         {

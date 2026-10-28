@@ -2423,14 +2423,27 @@ auf Leonhards Entscheidung neu formatiert (ext4, Label `picam-data`),
 eingehängt unter `/mnt/ssd` mit `nofail` (der Pi bootet weiter von der
 SD-Karte, auch ohne SSD).
 
-**Umzug:** `var/` (14,95 GB, 19 563 Dateien) per `rsync -aHX` auf
-`/mnt/ssd/picam-var` kopiert und in einem zweiten Lauf mit Prüfsummen je
-Datei verglichen: 0 Abweichungen. `/home/me-systeme/picam-ai/var` ist jetzt
-ein Link auf die SSD; die alte Kopie liegt als `var.sd-alt` auf der
-SD-Karte. Die Werkbank meldet 451 GB frei (Platzprüfung misst am
-Datenverzeichnis, folgt also dem Link). Das Systemjournal liegt ebenfalls
-auf der SSD (Bind-Mount nach `/var/log/journal`, höchstens 1 GB) und ist
-seit dem 28.10. dauerhaft.
+**Regel (Leonhard):** Die SSD dient nur zur Entlastung (Sicherungen,
+Tests, Trainings- und Diagnoseaufnahmen). Das fertige Produkt läuft ohne
+SSD allein von der SD-Karte; nichts, was es im Betrieb liest oder schreibt,
+darf auf der SSD liegen oder per Link dorthin zeigen. Ein erster Umzug von
+ganz `var/` per Link auf die SSD wurde deshalb am selben Tag
+zurückgenommen.
+
+**Aufteilung:** Sicherung von ganz `var/` (14,95 GB, 19 563 Dateien) nach
+`/mnt/ssd/backup-var-20261028`, Prüfsummenvergleich je Datei: 0
+Abweichungen. `var/` bleibt ein echter Ordner auf der SD-Karte mit den
+Produktdaten (Kalibrierung, Vorlagen, Live-Läufe ab 23.10., Werkbank samt
+Datensätzen, Geräte-Rückstellpunkt). Entwicklungsdaten liegen unter
+`/mnt/ssd/picam-dev` in derselben Struktur: alle Diagnoseaufnahmen
+(`diagnostics/`, 195 Einträge), die 29 Live-Läufe vor dem 23.10. (`live/`)
+und `rescue`/`removed` (`altlasten/`); Prüfsummen gegen die SD-Originale
+ohne Abweichung, danach auf der SD gelöscht. Freier Platz auf der SD-Karte
+danach 12 GB (vorher 1,8 GB). Tests und Skripte finden die
+Entwicklungsdaten über `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev`; `src/` kennt
+die SSD nicht (Wächtertest). Das Systemjournal liegt auf der SSD
+(Bind-Mount nach `/var/log/journal`, höchstens 1 GB, ohne SSD fällt es auf
+die SD-Karte zurück) und ist seit dem 28.10. dauerhaft.
 
 **Störung:** Um 10:31 riss der MEHub-Dienst `rm520n-watchdog` (prüft jede
 Minute ein 5G-Modem RM520N) die SSD vom Bus: Er fand am PCIe-Anschluss kein

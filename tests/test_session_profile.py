@@ -1,8 +1,8 @@
 import dataclasses
 import json
-from pathlib import Path
 
 import pytest
+from devdata_helpers import recording_glob
 
 from dispread.camera_settings import CameraSettings
 from dispread.charcells import CharGrid
@@ -123,16 +123,17 @@ def test_setup_checks_roundtrip(tmp_path):
     assert json.loads(path.read_text())["setup_checks"] == checks
 
 
-_DIAGNOSTICS = Path(__file__).parents[1] / "var/diagnostics"
 _EXISTING_PROFILES = sorted(
-    path for path in [*_DIAGNOSTICS.glob("*-profile"), *_DIAGNOSTICS.glob("*-profile/profile.json"),
-                      *_DIAGNOSTICS.glob("*-profile-regrid1.json")]
-    if path.is_file()
+    path for pattern in ("diagnostics/*-profile", "diagnostics/*-profile/profile.json",
+                         "diagnostics/*-profile-regrid1.json")
+    for path in recording_glob(pattern) if path.is_file()
 )
 
 
-@pytest.mark.parametrize("source", _EXISTING_PROFILES, ids=lambda path: str(path.relative_to(_DIAGNOSTICS)))
+@pytest.mark.parametrize("source", _EXISTING_PROFILES or [None], ids=lambda path: str(path))
 def test_existing_profile_resaves_byte_identically(tmp_path, source):
+    if source is None:
+        pytest.skip("lokale Profile fehlen: diagnostics/*-profile (DISPREAD_DEV_DATA setzen)")
     profile = SessionProfile.load(source)
     original = json.loads(source.read_text())
     assert (profile.setup_checks is not None) == ("setup_checks" in original)

@@ -36,6 +36,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from _devdata import input_path
 
 from dispread.lattice_offsets import (
     FULL,
@@ -320,23 +321,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, func in (("measure", _cmd_measure), ("refine", _cmd_refine)):
         s = sub.add_parser(name)
-        s.add_argument("--profile", type=Path, required=True)
+        s.add_argument("--profile", type=input_path, required=True)
         s.add_argument("--group", required=True, help="session_id der Proben im Datensatz")
-        s.add_argument("--dataset-root", type=Path, default=Path("var/workbench/datasets"))
+        s.add_argument("--dataset-root", type=input_path, default=Path("var/workbench/datasets"))
         s.add_argument("--n", type=int, default=40, help="hoechstens so viele Proben (gleichmaessig verteilt)")
         s.set_defaults(func=func)
         if name == "refine":
             s.add_argument("--out", type=Path, required=True, help="neue Profildatei (darf nicht existieren)")
     st = sub.add_parser("still")
-    st.add_argument("--quad-from", type=Path, required=True, help="proposal.json oder Sitzungsprofil")
-    st.add_argument("--frames", type=Path, required=True, help="Bildordner einer Standbildaufnahme")
+    st.add_argument("--quad-from", type=input_path, required=True, help="proposal.json oder Sitzungsprofil")
+    st.add_argument("--frames", type=input_path, required=True, help="Bildordner einer Standbildaufnahme")
     st.add_argument("--text", required=True, help="angezeigte Zellen 0-8, z. B. '+0.4678? ' (? = wechselt)")
     st.add_argument("--n", type=int, default=16, help="hoechstens so viele Bilder")
     st.add_argument("--limit", type=float, default=0.15, help="Grenze fuer die reine Messung")
     st.add_argument("--out-quad", type=Path, default=None, help="korrigieren und Quad hierhin schreiben")
     st.set_defaults(func=_cmd_still)
     c = sub.add_parser("confirm")
-    c.add_argument("--profile", type=Path, required=True)
+    c.add_argument("--profile", type=input_path, required=True)
     c.add_argument("--confirmed-by", required=True)
     c.set_defaults(func=_cmd_confirm)
     return p.parse_args(argv)

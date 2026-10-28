@@ -46,6 +46,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from _devdata import input_path
 
 from dispread.charcells import CharGrid
 from dispread.ocr.dotmatrix_font import CLASSES
@@ -83,9 +84,9 @@ REASON_UNCONFIRMED = "profil_unbestaetigt"
 #: Repo-Wurzel, wie in der Zuordnungsdatei abgelegt.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_PROFILE_PATHS: dict[str, Path] = {
-    "ernte1": _REPO_ROOT / "var" / "diagnostics" / "ernte1-profile" / "profile.json",
-    "auf2": _REPO_ROOT / "var" / "diagnostics" / "auf2-profile" / "profile.json",
-    "auf3": _REPO_ROOT / "var" / "diagnostics" / "auf3-profile" / "profile.json",
+    "ernte1": Path("var/diagnostics/ernte1-profile/profile.json"),
+    "auf2": Path("var/diagnostics/auf2-profile/profile.json"),
+    "auf3": Path("var/diagnostics/auf3-profile/profile.json"),
 }
 
 
@@ -210,7 +211,7 @@ def _resolve_profile(
             path_str = entry.get("path")
             expected_sha256 = entry.get("sha256")
             if path_str and expected_sha256:
-                profile_path = Path(path_str)
+                profile_path = input_path(path_str)
                 if profile_path.is_file():
                     if _profile_sha256(profile_path) != expected_sha256:
                         return REASON_HASH_MISMATCH
@@ -364,10 +365,10 @@ def read_profile_map(path: Path) -> dict[str, dict[str, str]]:
     Pfade relativ zur Repo-Wurzel werden aufgeloest, die `sha256` bleibt
     erhalten (Fix Runde 1: sie wird beim Aufloesen gegen die dann aktuelle
     Datei geprueft, statt kommentarlos verworfen zu werden)."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(input_path(path).read_text(encoding="utf-8"))
     out: dict[str, dict[str, str]] = {}
     for session_id, entry in data.items():
-        p = Path(entry["path"])
+        p = input_path(entry["path"])
         if not p.is_absolute():
             p = _REPO_ROOT / p
         out[session_id] = {"path": str(p), "sha256": entry.get("sha256", "")}
@@ -379,14 +380,16 @@ def read_profile_map(path: Path) -> dict[str, dict[str, str]]:
 def _cmd_write_map(args: argparse.Namespace) -> int:
     out: dict[str, dict[str, str]] = {}
     missing: list[str] = []
-    for session_id, path in SESSION_PROFILE_PATHS.items():
+    for session_id, original_path in SESSION_PROFILE_PATHS.items():
+        path = input_path(original_path)
         if not path.is_file():
             missing.append(session_id)
             continue
+        # Portable Zuordnung behaelt das alte var/-Schema.
         try:
-            rel = path.relative_to(_REPO_ROOT)
+            rel = original_path.relative_to(_REPO_ROOT)
         except ValueError:
-            rel = path
+            rel = original_path
         out[session_id] = {
             "path": str(rel),
             "sha256": _profile_sha256(path),

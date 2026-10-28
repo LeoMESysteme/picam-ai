@@ -1,6 +1,6 @@
 {
-  "quelle": "var/diagnostics/r13-werteplan-20261021 (sync-record, StreamCam am GSV-2AS, Raumlicht, 2026-10-21 18:15 MESZ, Aufstellung der Sitzung live-20261021T151835Z, unbewegt)",
-  "referenz": "var/live/live-20261021T151835Z/setup/still.png",
+  "quelle": "diagnostics/r13-werteplan-20261021 (sync-record, StreamCam am GSV-2AS, Raumlicht, 2026-10-21 18:15 MESZ, Aufstellung der Sitzung live-20261021T151835Z, unbewegt)",
+  "referenz": "live/live-20261021T151835Z/setup/still.png",
   "ausschnitt_vollbild_xyxy": [
     160,
     260,

@@ -8,13 +8,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 from dotmatrix_helpers import render
 
 from dispread.charcells import CharGrid
 from dispread.dotlattice import LatticeFit, evaluate_quad
 from dispread.setup_hint import find_green_hint_box
 
-DIAGNOSTICS = Path("var/diagnostics")
 EMPTY_CELLS = (8, 13, 14, 15)
 
 
@@ -26,10 +26,9 @@ EMPTY_CELLS = (8, 13, 14, 15)
     "sc7a-still/frames/frame_000023.png",
 ))
 def test_sc7a_point_shadows_do_not_populate_cursor_row(still: str):
-    image_path = DIAGNOSTICS / still
-    quad_path = DIAGNOSTICS / "sc7a-quad.json"
-    if not image_path.exists() or not quad_path.exists():
-        pytest.skip("Gespeichertes sc7a-Bild oder Quad fehlt")
+    image_path = local_recording(Path('diagnostics') / still)
+    quad_path = local_recording("diagnostics/sc7a-quad.json")
+
     image = cv2.imread(str(image_path))
     assert image is not None
     hint = find_green_hint_box(image)

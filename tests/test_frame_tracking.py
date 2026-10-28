@@ -9,6 +9,7 @@ from time import perf_counter
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, propose_regions
 from dispread.track import QuadTracker
@@ -224,6 +225,7 @@ def test_lcd_rand_unabhaengig_erforderlich(scene):
     assert result.reason == "lcd_rand_fehlt"
 
 
+@pytest.mark.timing
 @pytest.mark.skipif("CI" in os.environ, reason="Pi-Laufzeit nur ausserhalb CI")
 def test_laufzeit_unter_10_ms(scene):
     reference, _, _, _, tracker = scene
@@ -980,17 +982,15 @@ def test_r11_fixed_old_profile_accepted_dev_updates_are_unchanged(name):
 
     from dispread.live.frame_tracking import RegionProposal
 
-    path = Path('var/diagnostics/r13-werteplan-20261021/frames') / name
-    if not path.is_file():
-        pytest.skip('lokale DEV-Bilder')
+    path = local_recording(Path('diagnostics/r13-werteplan-20261021/frames') / name)
+
     saved = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())
     old = saved['accepted_dev']['proposal']
     config = FrameTrackingConfig(**old['config'])
     old['config'] = config.to_dict()
     proposal = RegionProposal.from_dict(old)
-    reference_path = Path(saved['accepted_dev']['reference'])
-    if not reference_path.is_file():
-        pytest.skip('lokales DEV-Referenzbild')
+    reference_path = local_recording(saved['accepted_dev']['reference'])
+
     reference = cv2.imread(str(reference_path))
     tracker = FrameTracker(reference, proposal.normalised_quad, proposal, config)
     actual = json.loads(json.dumps(asdict(tracker.update(cv2.imread(str(path))))))
@@ -1166,7 +1166,7 @@ def test_r11_real_left_half_bias_does_not_reproduce_centre_line_false_fit():
 def test_r11_textured_dark_bar_touching_real_bezel_falls_back(session, width):
     from dispread.live import frame_tracking as ft
 
-    setup = Path('var/live') / session / 'setup'
+    setup = local_recording(f'live/{session}/setup', required=False)
     if not (setup / 'still.png').is_file() or not (setup / 'proposal.json').is_file():
         pytest.skip('lokale R11-Standbilder')
     image = cv2.imread(str(setup / 'still.png'))
@@ -1235,13 +1235,11 @@ def test_r11_additional_bezel_structure_must_localise_known_half_pixel_motion():
     assert ft._bezel_motion_ok(image, (853, 316), FrameTrackingConfig())
 
 
-@pytest.mark.skipif(not Path('var/diagnostics/r13-werteplan-20261021/frames/frame_000440.png').exists(),
-                    reason='lokale DEV-Bilder')
 @pytest.mark.parametrize('name', ['frame_000289.png', 'frame_000390.png', 'frame_000440.png'])
 def test_r11_new_proposal_preserves_dev_availability(name):
-    reference = cv2.imread('var/live/live-20261021T151835Z/setup/still.png')
-    quad = json.loads(Path('var/live/live-20261021T151835Z/profile.json').read_text())['quad']
+    reference = cv2.imread(str(local_recording('live/live-20261021T151835Z/setup/still.png')))
+    quad = json.loads(local_recording('live/live-20261021T151835Z/profile.json').read_text())['quad']
     proposal = propose_regions(reference, quad)
     tracker = FrameTracker(reference, quad, proposal)
-    result = tracker.update(cv2.imread(str(Path('var/diagnostics/r13-werteplan-20261021/frames') / name)))
+    result = tracker.update(cv2.imread(str(local_recording(Path('diagnostics/r13-werteplan-20261021/frames') / name))))
     close_quad(result, quad)

@@ -39,6 +39,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from _devdata import input_path
+
 FROM_VERSION = 1
 TO_VERSION = 2
 
@@ -85,7 +87,7 @@ def migrate(path: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--root", type=Path, default=Path("var/workbench/datasets"))
+    parser.add_argument("--root", type=input_path, default=Path("var/workbench/datasets"))
     parser.add_argument("--apply", action="store_true", help="tatsaechlich schreiben (sonst nur Trockenlauf)")
     parser.add_argument("--backup-dir", type=Path, default=None)
     args = parser.parse_args()

@@ -137,6 +137,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+from _devdata import diagnostic_output, input_path
 
 from dispread import gsv2as_serial as _gsv_registers  # noqa: F401 -- bestehende Skript-API
 from dispread.camera_settings import CameraSettings, load_camera_settings
@@ -164,7 +165,7 @@ from dispread.live.clock import CLOCK_OFFSET_SAMPLES, measure_clock_offset_ns  #
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_OUTPUT_ROOT = Path("var/diagnostics")
+DEFAULT_OUTPUT_ROOT = diagnostic_output()
 DEFAULT_PORT = "/dev/ttyUSB0"
 DEFAULT_BAUDRATE = 38400
 DEFAULT_SYNTHETIC_URI = "synthetic://seven-seg"
@@ -241,7 +242,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output",
         type=Path,
         default=None,
-        help="Zielverzeichnis; Vorgabe: var/diagnostics/<Zeitstempel> (ausserhalb des Repos zu waehlen)",
+        help="Zielverzeichnis; Vorgabe: $DISPREAD_DEV_DATA/diagnostics/<Zeitstempel>, sonst var/diagnostics/<Zeitstempel>",
     )
     parser.add_argument("--source", choices=["synthetic", "camera"], default="synthetic")
     parser.add_argument(
@@ -290,7 +291,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--camera-settings",
-        type=Path,
+        type=input_path,
         default=None,
         help=(
             "Nur --source camera, dann Pflicht: Pfad zu einer JSON-Datei mit "
@@ -1251,7 +1252,7 @@ def run(args: argparse.Namespace) -> int:
             )
             return 2
 
-    output_dir = args.output or (DEFAULT_OUTPUT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S"))
+    output_dir = args.output or (diagnostic_output() / datetime.now().strftime("%Y%m%d-%H%M%S"))
 
     # Zwischenablage (siehe Moduldocstring 'Zwischenablage im RAM'): alles
     # VOR jedem Kamera-/Portzugriff pruefen. Ein nicht leeres --output wird

@@ -54,6 +54,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _devdata import input_path
+
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
 from dispread.ocr.dotmatrix_font import CLASSES
@@ -457,8 +459,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", required=True)
 
     loo = sub.add_parser("loo", help="Leave-one-group-out Entwicklungsmessung (Stufe 1).")
-    loo.add_argument("--dataset-root", type=Path, required=True)
-    loo.add_argument("--profile-map", type=Path, required=True)
+    loo.add_argument("--dataset-root", type=input_path, required=True)
+    loo.add_argument("--profile-map", type=input_path, required=True)
     loo.add_argument("--out", type=Path, required=True)
     loo.add_argument(
         "--exclude-groups",
@@ -481,18 +483,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     loo.set_defaults(func=_cmd_loo)
 
     abnahme = sub.add_parser("abnahme", help="Stufe 2: eingefrorene Vorlagen einmal ueber neue Gruppen.")
-    abnahme.add_argument("--dataset-root", type=Path, required=True)
-    abnahme.add_argument("--profile-map", type=Path, required=True)
-    abnahme.add_argument("--templates", type=Path, required=True)
+    abnahme.add_argument("--dataset-root", type=input_path, required=True)
+    abnahme.add_argument("--profile-map", type=input_path, required=True)
+    abnahme.add_argument("--templates", type=input_path, required=True)
     abnahme.add_argument("--templates-sha256", required=True, help="Eingefrorene Pruefsumme von --templates (Pflicht)")
     abnahme.add_argument("--groups", required=True, help="Kommagetrennte Testgruppen (nie in den Vorlagen)")
     abnahme.add_argument("--out", type=Path, required=True)
     abnahme.set_defaults(func=_cmd_abnahme)
 
     reader_check = sub.add_parser("reader-check", help="Volle Leser-Ausgabe gegen evaluate() vergleichen.")
-    reader_check.add_argument("--dataset-root", type=Path, required=True)
-    reader_check.add_argument("--profile-map", type=Path, required=True)
-    reader_check.add_argument("--templates", type=Path, required=True)
+    reader_check.add_argument("--dataset-root", type=input_path, required=True)
+    reader_check.add_argument("--profile-map", type=input_path, required=True)
+    reader_check.add_argument("--templates", type=input_path, required=True)
     reader_check.add_argument(
         "--templates-sha256", required=True, help="Erwartete Pruefsumme von --templates (Pflicht, fail-open schliessen)"
     )

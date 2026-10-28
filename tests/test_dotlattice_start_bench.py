@@ -1,10 +1,9 @@
 """Startsuche und sichere Ablehnung auf den Werkbank-Standbildern."""
 
-from pathlib import Path
-
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread import dotlattice
 from dispread.dotlattice import LatticeFit, _lattice_candidates, evaluate_quad, fit_lattice
@@ -15,7 +14,6 @@ from dispread.rectify import rectify
 from dispread.setup_checks import GRID, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 
-VAR = Path(__file__).resolve().parents[1] / "var"
 EMPTY_CELLS = (8, 13, 14, 15)
 STILLS = [
     ("live/live-20261014T123033Z/setup/still.png", "+0.46801 "),
@@ -26,9 +24,7 @@ STILLS = [
 
 
 def _load(path):
-    still = VAR / path
-    if not still.exists():
-        pytest.skip("Gespeichertes Standbild fehlt")
+    still = local_recording(path)
     image = cv2.imread(str(still))
     assert image is not None
     hint = find_green_hint_box(image)

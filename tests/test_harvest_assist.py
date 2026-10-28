@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread.camera_settings import STREAMCAM_MODEL, STREAMCAM_USB_ID, CameraSettings
 from dispread.charcells import CharGrid
@@ -177,11 +178,10 @@ def test_propose_fixed_quad_runs_offset_and_setup_checks(tmp_path, monkeypatch, 
 def test_propose_accepts_validated_profile_quad_with_cell_text(
     tmp_path, scene, profile_name, frame_number, cell_text,
 ):
-    diagnostics = Path(__file__).parents[1] / "var" / "diagnostics"
-    profile_path = diagnostics / profile_name
-    frame_path = diagnostics / f"{scene}-still" / "frames" / f"frame_{frame_number:06d}.png"
-    if not profile_path.is_file() or not frame_path.is_file():
-        pytest.skip(f"local diagnostic inputs missing for {scene}")
+
+    profile_path = local_recording(Path('diagnostics') / profile_name)
+    frame_path = local_recording(Path('diagnostics') / f"{scene}-still" / "frames" / f"frame_{frame_number:06d}.png")
+
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"camera": profile["camera"]}), encoding="utf-8")
@@ -202,12 +202,11 @@ def test_propose_accepts_validated_profile_quad_with_cell_text(
 
 
 def test_propose_accepts_sc7a_quad_despite_dot_shadows(tmp_path):
-    diagnostics = Path(__file__).parents[1] / "var" / "diagnostics"
-    frame = diagnostics / "sc7a-still/frames/frame_000016.png"
-    quad_file = diagnostics / "sc7a-quad.json"
-    settings = diagnostics / "sc7a-assist/camera-settings.json"
-    if not all(path.is_file() for path in (frame, quad_file, settings)):
-        pytest.skip("sc7a-Diagnosebilder fehlen")
+
+    frame = local_recording("diagnostics/sc7a-still/frames/frame_000016.png")
+    quad_file = local_recording("diagnostics/sc7a-quad.json")
+    settings = local_recording("diagnostics/sc7a-assist/camera-settings.json")
+
     quad = json.loads(quad_file.read_text(encoding="utf-8"))
     out = tmp_path / "proposal"
     rc = harvest_setup.main([
@@ -781,11 +780,9 @@ def test_assist_runs_real_lattice_and_checks_with_synthetic_camera(tmp_path, mon
 def test_assist_real_still_completes_fit_refine_and_checks(
     tmp_path, monkeypatch, scene, frame_number, cell_text, hint_box,
 ):
-    frame_dir = Path(__file__).parents[1] / "var" / "diagnostics" / f"{scene}-still" / "frames"
-    first_path = frame_dir / f"frame_{frame_number:06d}.png"
-    second_path = frame_dir / "frame_000030.png"
-    if not first_path.is_file() or not second_path.is_file():
-        pytest.skip(f"diagnostic still missing in {frame_dir}")
+    first_path = local_recording(f"diagnostics/{scene}-still/frames/frame_{frame_number:06d}.png")
+    second_path = local_recording(f"diagnostics/{scene}-still/frames/frame_000030.png")
+
     first_image = cv2.imread(str(first_path))
     second_image = cv2.imread(str(second_path))
     assert first_image is not None and second_image is not None

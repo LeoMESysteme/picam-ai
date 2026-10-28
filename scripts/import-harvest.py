@@ -85,6 +85,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from _devdata import input_path, logical_path
 
 from dispread.frame_alignment import estimate_quad_shift, prepare_reference
 from dispread.leading_zeros import map_suppressed_leading_zeros
@@ -228,8 +229,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(Ernte Phase 1, Entscheidung 5)."
         )
     )
-    parser.add_argument("--harvest", type=Path, required=True, help="Ausgabeverzeichnis von harvest.py")
-    parser.add_argument("--profile", type=Path, required=True, help="Sitzungsprofil (SessionProfile-JSON)")
+    parser.add_argument("--harvest", type=input_path, required=True, help="Ausgabeverzeichnis von harvest.py")
+    parser.add_argument("--profile", type=input_path, required=True, help="Sitzungsprofil (SessionProfile-JSON)")
     parser.add_argument("--dataset-root", type=Path, required=True, help="Wurzel des DatasetStore")
     parser.add_argument("--per-plateau", type=int, default=3, help="Hoechstens so viele Bilder je Plateau")
     parser.add_argument("--audit", type=int, default=0, help="Groesse der Stichprobenliste (audit.json)")
@@ -315,7 +316,7 @@ def _resolve_image_path(harvest_dir: Path, image_path: str) -> Path:
     candidate = harvest_dir / "recording" / "frames" / name
     if candidate.is_file():
         return candidate
-    return Path(image_path)
+    return input_path(image_path)
 
 
 def _select_per_plateau(images: list[dict], per_plateau: int) -> list[dict]:
@@ -382,6 +383,8 @@ def _normalized_cell(cell_img: np.ndarray) -> np.ndarray:
 
 
 def run(args: argparse.Namespace) -> int:
+    args.profile = input_path(args.profile)
+    args.harvest = input_path(args.harvest)
     harvest_dir: Path = args.harvest
     profile = SessionProfile.load(args.profile)
     if not profile.resolution_ok:
@@ -409,7 +412,7 @@ def run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        reference_path = Path(profile.reference_frame["path"])
+        reference_path = input_path(profile.reference_frame["path"])
         if not reference_path.is_file():
             print(
                 f"Fehler: Profilbild {reference_path} (reference_frame) fehlt - kein Import ohne "
@@ -634,7 +637,7 @@ def run(args: argparse.Namespace) -> int:
         harvest_run = Path(args.harvest).name
 
         for cand in consistent:
-            token = hashlib.sha256(f"{profile.session_id}:{cand.image_path}".encode()).hexdigest()
+            token = hashlib.sha256(f"{profile.session_id}:{logical_path(cand.image_path)}".encode()).hexdigest()
             capture = {
                 "image": cand.raw_image,
                 "capture_token": token,
@@ -708,8 +711,8 @@ def run(args: argparse.Namespace) -> int:
 
     total = len(images)
     result = {
-        "harvest": str(harvest_dir),
-        "profile": str(args.profile),
+        "harvest": str(logical_path(harvest_dir)),
+        "profile": str(logical_path(args.profile)),
         "dataset_root": str(args.dataset_root),
         "dry_run": bool(args.dry_run),
         "per_plateau": args.per_plateau,
@@ -839,7 +842,7 @@ def _write_audit(
         entries.append(
             {
                 "sample_id": sample_id,
-                "image_path": str(cand.image_path),
+                "image_path": str(logical_path(cand.image_path)),
                 "label_text": cand.label_text,
                 "overlay_path": str(overlay_path),
             }

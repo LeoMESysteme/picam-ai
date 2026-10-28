@@ -12,7 +12,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+
+from _devdata import input_path
 
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
 
@@ -25,7 +26,7 @@ def _rows(path):
 
 
 def evaluate(run_dir):
-    run_dir = Path(run_dir)
+    run_dir = input_path(run_dir)
     session = json.loads((run_dir / 'session.json').read_text(encoding='utf-8'))
     validate_reference_session(session)
     reference = list(_rows(run_dir / 'reference.jsonl'))
@@ -34,7 +35,7 @@ def evaluate(run_dir):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('run_dir', type=Path)
+    parser.add_argument('run_dir', type=input_path)
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:

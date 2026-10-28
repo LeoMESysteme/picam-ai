@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import recording_glob
 from dotmatrix_helpers import render
 
 from dispread.setup_checks import GRID
@@ -135,7 +136,7 @@ def test_live_scratch_is_fixed_across_both_setup_stills():
 def test_local_setup_sweep_reports_all_remaining_warnings():
     from dispread.setup_checks import BLANK_CELLS, display_defect_check
 
-    stills = sorted(Path('var/live').glob('*/setup/still.png'))
+    stills = sorted(recording_glob('live/*/setup/still.png'))
     if not stills:
         pytest.skip('Keine lokalen Live-Standbilder vorhanden')
     counts = {'OK': 0, 'WARNUNG': 0, 'missing_geometry': 0, 'stills': 0}

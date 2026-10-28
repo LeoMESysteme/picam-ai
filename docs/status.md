@@ -169,8 +169,8 @@ Nächste Aufgaben gemäß TODO:
 
 1. Entscheidung der Person am 2026-10-28: R13-Zweig nach `master`.
 2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26).
-   Platz ist da: `var/` liegt seit 2026-10-28 auf einer NVMe-SSD
-   (`/mnt/ssd/picam-var`, 421 GB frei), siehe
+   Platz ist da: 12 GB frei auf der SD-Karte, seit Entwicklungsdaten auf
+   einer NVMe-SSD liegen (nur Entlastung, Produkt bleibt SD-only), siehe
    [Laborjournal](lab_journal.md).
 3. Toleranzlauf ≥ 10 min mit Werteplan; andere Lichtquellen/Geräte
    bleiben offen.

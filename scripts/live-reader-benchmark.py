@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import cv2
+from _devdata import input_path
 
 from dispread.charcells import CharGrid
 from dispread.layout import CharLayout
@@ -151,9 +152,9 @@ def _or_bits(values: list[int]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--still', type=Path, default=Path('var/diagnostics/sc7-assist/still.png'))
-    parser.add_argument('--proposal', type=Path, default=Path('var/diagnostics/sc7-assist/proposal.json'))
-    parser.add_argument('--templates', type=Path, default=DEFAULT_TEMPLATES)
+    parser.add_argument('--still', type=input_path, default='var/diagnostics/sc7-assist/still.png')
+    parser.add_argument('--proposal', type=input_path, default='var/diagnostics/sc7-assist/proposal.json')
+    parser.add_argument('--templates', type=input_path, default=DEFAULT_TEMPLATES)
     parser.add_argument('--templates-sha256', default=DEFAULT_TEMPLATES_SHA256)
     parser.add_argument('--repeats', type=int, default=200)
     parser.add_argument('--duration', type=float, help='Messdauer in Sekunden, statt --repeats')

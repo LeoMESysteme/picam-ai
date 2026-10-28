@@ -19,6 +19,7 @@ from time import perf_counter_ns
 
 import cv2
 import numpy as np
+from _devdata import input_path
 
 from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, propose_regions
 from dispread.live.recording import (
@@ -57,14 +58,14 @@ def _summary(rows, names):
 
 def evaluate(recording_dir, profile_path, tracker="both", *, overlay_path=None):
     _output_path(overlay_path)
-    recording_dir, profile_path = Path(recording_dir), Path(profile_path)
+    recording_dir, profile_path = input_path(recording_dir), input_path(profile_path)
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     if not isinstance(profile, dict) or not isinstance(profile.get("reference_frame"), dict):
         raise ValueError("Profil und reference_frame muessen JSON-Objekte sein")
     reference_path = profile["reference_frame"]["path"]
     if not isinstance(reference_path, str) or not reference_path:
         raise ValueError("Referenzpfad muss ein nichtleerer Text sein")
-    reference = _image(REPO_ROOT / reference_path)
+    reference = _image(REPO_ROOT / input_path(reference_path))
     try:
         quad = np.asarray(profile["quad"], dtype=float)
     except (TypeError, ValueError) as error:
@@ -130,8 +131,8 @@ def draw_overlay(reference, quad, proposal, config):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("recording_dir", type=Path)
-    parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("recording_dir", type=input_path)
+    parser.add_argument("--profile", type=input_path, required=True)
     parser.add_argument("--tracker", choices=("ecc", "frame", "both"), default="both")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--overlay", type=Path)

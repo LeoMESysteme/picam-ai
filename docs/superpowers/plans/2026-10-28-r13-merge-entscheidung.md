@@ -136,11 +136,14 @@ Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
   0.163.0 (368 MB, weder `current` noch in Gebrauch). Nicht gelöscht; das
   entscheidet die Person.
 
-## Nachtrag 2026-10-28: SSD, `var/` umgezogen, PCIe-Watchdog
+## Nachtrag 2026-10-28: SSD zur Entlastung, PCIe-Watchdog
 
-* **Platz ist kein Hindernis mehr:** `var/` liegt auf einer NVMe-SSD
-  (`/mnt/ssd/picam-var`, 421 GB frei), Prüfsummenvergleich ohne
-  Abweichung; die alte Kopie liegt noch als `var.sd-alt` auf der SD-Karte.
+* **Platz ist kein Hindernis mehr:** 12 GB frei auf der SD-Karte. Die
+  Entwicklungsdaten (Diagnoseaufnahmen, Live-Läufe vor dem 23.10.,
+  Altlasten) liegen auf einer NVMe-SSD unter `/mnt/ssd/picam-dev`, dazu
+  eine geprüfte Sicherung von ganz `var/`. Die SSD ist nur Entlastung:
+  `var/` mit den Produktdaten bleibt auf der SD-Karte, `src/` kennt die
+  SSD nicht (Wächtertest), Tests finden Aufnahmen über `DISPREAD_DEV_DATA`.
   Das Journal liegt ebenfalls auf der SSD.
 * **Wahrscheinlicher Kandidat für die Neustarts:** Der MEHub-Dienst
   `rm520n-watchdog` setzte seit Tagen alle 10 Minuten den PCIe-Bus zurück,

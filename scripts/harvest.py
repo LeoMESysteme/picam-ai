@@ -31,6 +31,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _devdata import input_path
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from dispread.session_profile import SessionProfile, require_live_profile  # noqa: E402
@@ -156,7 +158,7 @@ def run(
     Plateau ist. Bricht nach `sync-record.py` ab, wenn dessen Exitcode != 0
     ist - `gate-label.py` wird dann gar nicht erst gestartet.
     """
-    profile_path = Path(profile_path)
+    profile_path = input_path(profile_path)
     profile = SessionProfile.load(profile_path)
     try:
         require_live_profile(profile)
@@ -329,7 +331,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Setzt ein bestaetigtes SessionProfile voraus (harvest-setup.py)."
         )
     )
-    parser.add_argument("--profile", type=Path, required=True, help="Pfad zu profile.json")
+    parser.add_argument("--profile", type=input_path, required=True, help="Pfad zu profile.json")
     parser.add_argument("--out-dir", type=Path, required=True, help="Zielverzeichnis des Ernte-Laufs")
     parser.add_argument("--n-steps", type=int, required=True, help="Zahl der Normierungsschritte")
     parser.add_argument(
