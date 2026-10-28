@@ -176,7 +176,7 @@
       return g;
     };
     // 1 Fokus-Sweep: Schärfekurve mit Spitze.
-    const c1 = card(30, "Fokus-Sweep", "schärfsten Wert suchen");
+    const c1 = card(30, "Fokus-Sweep", "Live: danach Belichtung");
     T.svg("path", { d: "M52 186C80 184 96 176 112 150C122 128 132 118 140 118C150 118 160 132 170 152C184 178 196 184 206 186", class: "t-flow-line", style: "stroke-width: 2.5" }, c1);
     T.svg("circle", { cx: 140, cy: 118, r: 5, style: "fill: var(--tour-valid)" }, c1);
     // 2 Zwei Standbilder.
@@ -211,13 +211,15 @@
     const checks = T.group(layer, "checks");
     T.panel(checks, 30, 250, 610, 260, "t-panel");
     T.label(checks, 50, 280, "Prüfungen (Beispiel)", "t-label t-strong");
-    const names = [
-      ["Kontrast", "OK"], ["Kanten", "OK"], ["Rahmen", "OK"], ["Glanz", "OK"],
-      ["Auflösung", "OK"], ["Raster", "OK"], ["Stabilität", "OK"], ["Rasterversatz", "WARNUNG"],
-    ];
+    const labels = {kontrast: "Kontrast", kanten: "Kanten", rahmen: "Rahmen", glanz: "Glanz",
+      belichtung: "Belichtung", aufloesung: "Auflösung", raster: "Raster", stabilitaet: "Stabilität",
+      rasterversatz: "Rasterversatz"};
+    // Fakten fuehren rasterversatz bereits; ohne Fakten die vollstaendige Liste.
+    const names = [...new Set(T.fact("setup.checks", Object.keys(labels)))]
+      .map(name => [labels[name] || name, name === "rasterversatz" ? "WARNUNG" : "OK"]);
     const checkEls = names.map(([name, status], i) => {
       const x = 50 + (i % 2) * 300;
-      const y = 316 + Math.floor(i / 2) * 46;
+      const y = 316 + Math.floor(i / 2) * 38;
       const g = T.group(checks, "check");
       T.label(g, x, y + 5, name, "t-label");
       T.badge(g, x + 220, y, status, status === "OK" ? "valid" : "plan", status === "OK" ? 60 : 100);

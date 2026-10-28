@@ -5,6 +5,26 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: R13-20 stimmt im Live-Assistenten nach dem Fokus die feste
+  Belichtung auf die Anzeige ab: acht Bilder mitteln, p80 grüner Pixel in
+  der Hinweisbox, Zielband 115–150 bei Ziel 130. Höchstens vier
+  Korrekturrunden, 100/200/300 (10/20/30 ms), bevorzugt 300, Gain 0–128;
+  anschließend beste gemessene Regler übernehmen. Fehlende Box oder
+  verfehltes Band werden dokumentiert und warnen, ohne allein den Lauf
+  zu sperren. `camera-settings.json` enthält unter `exposure_adjust`
+  Ausgang, Runden, Endpegel und Ergebnis; Profil und Lauf übernehmen die
+  finalen Regler. Neue Vorprüfung `belichtung`: WARNUNG bei entzerrtem
+  Glas-p80 <105 (dunkle Belege ≤98, gute ≥112), mit Bedienhinweis.
+  Werkbank zeigt Prüfung und Hinweis bereits dynamisch. Zwölf gespeicherte
+  Standbilder kalibrieren die Boxmessung auf höchstens 4 Graustufen
+  Abweichung; Regelung ausschließlich mit Fakes geprüft, keine Kamera-Abnahme.
+  Nach Review: zu helles Glas verlängert die Belichtung nicht mehr auf 30 ms,
+  der Hinweis unterscheidet „zu hell“ von „zu dunkel“, die Tour zeigt
+  Rasterversatz nicht mehr doppelt. Bekannt: ohne grüne Hinweisbox beim
+  ersten Messen bleiben die Automatikwerte (auch außerhalb 100/200/300)
+  stehen und es warnt; `test_close_waits_for_previous_and_current_diagnostic_copies`
+  ist unter Volllast (`pytest -n 3`) zeitabhängig, einzeln grün.
+
 * 2026-10-28: R13-19c ergänzt ausschließlich im zweiten Rahmenversuch einen
   Ähnlichkeitsfit mit gleichförmigem Maßstab 0,995…1,005; Minimalpaare und
   Umeyama-Endfit prüfen diese Grenze. Erster starrer Durchgang, Residuen,

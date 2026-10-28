@@ -421,7 +421,7 @@ class LiveService:
         return serial.Serial(live_setup.SERIAL_PORT, live_setup.SERIAL_BAUDRATE, timeout=2.0)
 
     def _run_setup(self, *, session_dir: Path, cell_text: str | None, report: Callable[[str], None]) -> dict:
-        """Echter Ablauf: Fokus -> Kamera mit festen Reglern -> Standbilder -> Vorschlag."""
+        """Fokus -> feste Kamera -> Displaybelichtung -> Standbilder -> Vorschlag."""
         setup_dir = session_dir / "setup"
         setup_dir.mkdir(parents=True, exist_ok=True)
         self._write_setup_diagnostic(setup_dir / "cell-text.json", [])
@@ -450,15 +450,31 @@ class LiveService:
         settings, sweep = live_setup.focus_camera(
             OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
         )
+        camera_record = {
+            "camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
+            "focus_method": getattr(sweep, "focus_method", "sweep"),
+            "focus_verify": getattr(sweep, "focus_verify", None),
+            "created_at_utc": self._wall().isoformat(),
+        }
         (setup_dir / "camera-settings.json").write_text(
-            json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
-                        "focus_method": getattr(sweep, "focus_method", "sweep"),
-                        "focus_verify": getattr(sweep, "focus_verify", None),
-                        "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
+            json.dumps(camera_record, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         report("kamera")
         self._owner.restart(lambda: self._source_for(settings))
+        report("belichtung")
+        self._setup_progress("Belichtung auf die Anzeige abstimmen")
+
+        def apply_exposure(adjusted: CameraSettings) -> None:
+            self._owner.restart(lambda: self._source_for(adjusted))
+
+        settings, exposure_adjust = live_setup.adjust_exposure(
+            OwnerSetupCamera(self._owner), settings, apply=apply_exposure, info=self._setup_progress,
+        )
+        camera_record.update(camera=settings.to_dict(), exposure_adjust=exposure_adjust)
+        (setup_dir / "camera-settings.json").write_text(
+            json.dumps(camera_record, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
         port = None
         try:
             if cell_text is None:
@@ -513,6 +529,7 @@ class LiveService:
             setup_attempt=result.setup_attempt,
             reader_check=result.reader_check,
             live_tracking=True,
+            exposure_adjust=exposure_adjust,
         )
 
     def edit_regions(self, *, proposal_revision, add, remove) -> dict:

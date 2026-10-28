@@ -29,6 +29,19 @@ class FakeOwner:
         pass
 
 
+@pytest.fixture
+def blank_exposure_still(monkeypatch):
+    """Alte Ablauf-Fakes brauchen jetzt acht Bilder vor assist_measure.
+
+    Ohne Hinweisbox wird der echte Abgleich dokumentiert uebersprungen;
+    der jeweils getestete Fokus-/Serial-/Diagnosepfad bleibt erreichbar.
+    """
+    import numpy as np
+
+    image = np.zeros((2, 3, 3), np.uint8)
+    monkeypatch.setattr('dispread.live.service.OwnerSetupCamera.fresh_still', lambda *a, **kw: image)
+
+
 def _wait_state(service, states, timeout=2.0):
     deadline = time.monotonic() + timeout
     while service.status()["state"] not in states and time.monotonic() < deadline:
@@ -351,8 +364,54 @@ def test_owner_setup_camera_reports_missing_control_target_and_frame():
         camera.fresh_still(discard=0)
 
 
+def test_setup_adjusts_display_exposure_before_stills_and_persists_final_controls(tmp_path, proposal, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from test_live_setup import ExposureCamera
+
+    from dispread.live import setup as live_setup
+
+    cam = ExposureCamera()
+
+    class Owner(FakeOwner):
+        def restart(self, factory=None):
+            cam.apply(factory())
+
+    monkeypatch.setattr('dispread.live.service.OwnerSetupCamera', lambda owner: cam)
+    monkeypatch.setattr(live_setup, 'focus_camera', lambda *a, **kw: (cam.settings, FocusMeasurements()))
+    monkeypatch.setattr(live_setup.time, 'sleep', lambda s: None)
+
+    def assist(camera, **kwargs):
+        saved = json.loads((tmp_path / service.status()['session_id'] / 'setup' / 'camera-settings.json').read_text())
+        assert saved['exposure_adjust']['achieved'] is True
+        assert saved['exposure_adjust']['initial_level'] < 105
+        assert saved['exposure_adjust']['selected_controls'] == cam.settings.controls
+        assert saved['camera'] == cam.settings.to_dict()
+        assert cam.settings.controls['exposure_time_absolute'] == 300
+        return SimpleNamespace(first=None, second=None, first_text='+ 1.2345 ', fit=None, offset_check=None,
+                               final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=1)
+
+    def propose(*a, **kwargs):
+        assert kwargs['camera_settings'] == cam.settings
+        return {**proposal, 'camera': cam.settings.to_dict()}
+
+    monkeypatch.setattr(live_setup, 'assist_measure', assist)
+    monkeypatch.setattr(live_setup, 'propose_with_fit', propose)
+    service = LiveService(Owner(), tmp_path, source_for=lambda settings: settings)
+    service.start_setup(cell_text='+ 1.2345 ')
+    service._setup_thread.join(2)
+    assert service.status()['state'] == 'setup_ready', service.status()['error']
+    assert service._proposal['camera'] == cam.settings.to_dict()
+    service.confirm(session_id=service.status()['session_id'], confirmed_by='Test', format_checked=True)
+    from dispread.session_profile import SessionProfile
+    profile = SessionProfile.load(tmp_path / service.status()['session_id'] / 'profile.json')
+    assert profile.camera == service._profile_camera == cam.settings
+
+
 @pytest.mark.parametrize("cell_text,fail", [("+ 1.2345 ", False), (None, False), (None, True)])
-def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monkeypatch, cell_text, fail):
+def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monkeypatch, cell_text, fail,
+                                                     blank_exposure_still):
     import json
     from types import SimpleNamespace
 
@@ -754,7 +813,8 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
 
 
 @pytest.mark.parametrize("plain_list", [False, True])
-def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch, plain_list):
+def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch, plain_list,
+                                                                   blank_exposure_still):
     import json
 
     from dispread.camera_settings import CameraSettings
@@ -822,7 +882,7 @@ def test_setup_elapsed_uses_monotonic_and_freezes(tmp_path, fail):
 
 
 @pytest.mark.parametrize("failed_step", ["fokus", "kamera", "seriell"])
-def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, failed_step):
+def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, failed_step, blank_exposure_still):
     import json
     from datetime import datetime
 
@@ -844,7 +904,7 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
     assert service.status()["state"] == "setup_failed"
     failure = json.loads((tmp_path / service.status()["session_id"] / "setup" / "failure.json").read_text())
     assert json.loads((tmp_path / service.status()["session_id"] / "setup" / "cell-text.json").read_text()) == []
-    assert failure["step"] == ("kamera" if failed_step == "seriell" else failed_step)
+    assert failure["step"] == ("belichtung" if failed_step == "seriell" else failed_step)
     assert "early failure" in failure["reason"]
     assert datetime.fromisoformat(failure["created_at_utc"]).tzinfo is not None
 
@@ -987,7 +1047,8 @@ def test_failure_diagnostic_write_keeps_original_outcome(tmp_path, monkeypatch, 
 
 @pytest.mark.parametrize("failed_write", [1, 2])
 @pytest.mark.parametrize("error_type", [OSError, TypeError, ValueError])
-def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypatch, failed_write, error_type):
+def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypatch, failed_write, error_type,
+                                                blank_exposure_still):
     from pathlib import Path
     from types import SimpleNamespace
 

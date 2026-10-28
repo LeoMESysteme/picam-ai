@@ -154,6 +154,35 @@ def display():
     return image
 
 
+@pytest.mark.parametrize('level,status', [(78, 'WARNUNG'), (98, 'WARNUNG'), (104, 'WARNUNG'),
+                                         (105, 'OK'), (112, 'OK'), (130, 'OK'), (152, 'OK')])
+def test_exposure_checks_glass_instead_of_dark_dots(level, status):
+    image = display()
+    image[image == 100] = level
+    result = check_setup(image, fit()).checks['belichtung']
+    assert result.status == status
+    assert result.metrics['glaspegel'] == pytest.approx(level)
+    assert result.metrics['warning_below'] == 105
+    if status == 'WARNUNG':
+        assert 'Display zu dunkel' in result.reason
+        assert 'neu einrichten' in result.reason
+    else:
+        assert result.reason is None
+
+
+@pytest.mark.parametrize('stamp,level,status', [
+    ('20261028T134306Z', 98, 'WARNUNG'), ('20261028T123044Z', 125, 'OK'),
+    ('20261028T110248Z', 143, 'OK'), ('20261023T100613Z', 119, 'OK'),
+])
+def test_exposure_of_saved_setup_still(stamp, level, status):
+    root = local_recording(f'live/live-{stamp}/setup')
+    image = cv2.imread(str(root / 'still.png'))
+    proposal = json.loads((root / 'proposal.json').read_text())
+    result = check_setup(image, fit(quad=proposal['quad'])).checks['belichtung']
+    assert result.status == status
+    assert result.metrics['glaspegel'] == pytest.approx(level, abs=1)
+
+
 def test_reports_both_contrast_measures_and_serializes():
     result = check_setup(display(), fit())
     report = result.to_dict()

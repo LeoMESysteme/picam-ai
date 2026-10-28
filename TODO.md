@@ -329,6 +329,16 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
      wählen.
    * **In Arbeit:** automatische Nachführung über größere Bewegungen
      (Grobschätzung der Gesamtverschiebung, dann unveränderte Feinprüfung).
+   * **Später (Leonhard 2026-10-28):** solche Fehler grundsätzlich vermeiden —
+     automatische Korrekturen und Rückfallstufen, im Extremfall manuelle
+     Belichtung durch die Person. R13-20 ergänzt vorerst Displaybelichtung
+     und die warnende Vorprüfung; reale Regelungsabnahme steht aus.
+   * **Hinweistext Gegenlesen (klein, später):** Einrichtung
+     `live-20261028T133037Z` mit absichtlichem Fleck auf dem Glas: „668“
+     (Zellen 5–7) blasser, Kontrasttiefe 0,36 statt 0,63–0,70; Lauf korrekt
+     gesperrt, Toleranz korrekt verweigert (`beste_vermutung_widerspricht_referenz`).
+     Der Hinweis nennt aber nur „Schatten“; besser „Schatten oder
+     Verschmutzung auf dem Glas: reinigen bzw. abschatten“.
    * Raster am rechten Rand leicht versetzt (Zellversatz bis 0,15 Spalten
      in den Einheitszellen, 6 von 157 Punkten im „mV/V“ nicht zugeordnet);
      ohne Einfluss auf den Wert, die Einheit wird nicht gelesen.

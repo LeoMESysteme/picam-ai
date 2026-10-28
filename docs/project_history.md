@@ -1761,3 +1761,24 @@ Die Pruefung weist sowohl `offline: true` als auch die Bestaetigungsherkunft
 im Live-Pipeline-Aufbau liegende Sperre wurde verworfen, weil Harvest die
 Kamera ueber `sync-record.py` startet und diesen Aufbau umgeht. Reine
 Dateiauswertungen und der ausdrueckliche Replay-Opt-in bleiben moeglich.
+
+## 2026-10-28 — R13-20: Lokale Displaybelichtung nach dem Fokus
+
+Die Gesamtbild-Automatik bleibt nur Ausgangspunkt nach dem Fokus. Der
+Live-Assistent misst anschließend die Anzeige und übernimmt die besten
+festen Regler in Kameradiagnose und Profil. Eine bloße Warnung wurde als
+einzige Abhilfe verworfen: Sie erklärt die Unterbelichtung, korrigiert sie
+aber nicht. Eine Korrektur im Leser wurde ebenfalls ausgeschlossen; das
+Quellbild muss brauchbar sein und Referenzwerte dürfen das Lesen nicht
+beeinflussen.
+
+Vor dem Rasterfit steht noch kein Quad zur Verfügung. Daher p80 grüner
+Pixel innerhalb der vorhandenen Hinweisbox, nach dem Fit eine unabhängige
+Vorprüfung mit entzerrtem p80. Ungefiltertes hohes Boxperzentil verworfen,
+weil die Sicherheitsränder helle Umgebung enthalten können; das ist mit
+einem Fake reproduziert. Zwölf gespeicherte Bilder begrenzen die beobachtete
+Abweichung der gewählten Definition auf 4 Graustufen. Höchstens vier
+Korrekturrunden begrenzen die Einrichtung; bei Fehlschlag beste Werte und
+WARNUNG statt eines neuen Abbruchgrundes. Die reale Kennlinie und die
+Vorabgrenzen sind damit noch nicht allgemein validiert; Belege und Grenzen
+stehen im Laborjournal und in VALIDATION unter R13-20.

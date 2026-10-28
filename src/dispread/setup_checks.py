@@ -36,6 +36,9 @@ TARGET_SIZE = (400, 160)
 GRID = CharGrid(16, 0.0, 25.0, 160.0 / 9.0, 160.0)
 POINT_CONTRAST_ERROR = 15.0
 POINT_CONTRAST_WARNING = 17.0
+# Vorabgrenze 2026-10-28: gute Aufstellungen p80 >=112, dunkle <=98.
+# Keine obere Grenze aus diesen Daten ableitbar; Saettigung prueft glanz.
+EXPOSURE_WARNING_BELOW = 105.0
 EDGE_WARNING = 6.0
 EDGE_ERROR = 8.0
 EDGE_OCCUPIED_WARNING = 16.0
@@ -588,12 +591,20 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
     resolution = float(source_dot_column_px(GRID, lattice_fit.quad, TARGET_SIZE))
     resolution_status = ('FEHLER' if resolution < RESOLUTION_ERROR_PX else
                          'WARNUNG' if resolution < RESOLUTION_WARNING_PX else 'OK')
+    glass_level = float(np.percentile(warped_gray[20:140, 5:395], 80))
+    underexposed = glass_level < EXPOSURE_WARNING_BELOW
     checks = {
         'kontrast': CheckResult(contrast_status, {'punktkontrast': contrast,
                                                  'leser_kontrast': sampled.contrast}),
         'kanten': _edge_check(warped_gray),
         'rahmen': _border_check(sampled),
         'glanz': _glare_check(warped_gray),
+        'belichtung': CheckResult('WARNUNG' if underexposed else 'OK',
+                                  {'glaspegel': glass_level, 'percentile': 80,
+                                   'warning_below': EXPOSURE_WARNING_BELOW},
+                                  reason=(f'Display zu dunkel belichtet (Glaspegel {glass_level:.0f}): '
+                                          'Kamera näher stellen oder helle Umgebung abdecken und neu einrichten'
+                                          if underexposed else None)),
         'aufloesung': CheckResult(resolution_status, {'min_source_dot_column_px': resolution}),
         'raster': _raster_check(lattice_fit, offset_check),
         'stabilitaet': _stability_check(image_bgr, stability_image_bgr,

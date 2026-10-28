@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-23. Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-10-28. Alle sechs Kapitel sind fertig: Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -716,7 +716,7 @@ wenn sich Kamera oder Gerät bewegt haben. Danach legt er das Punktraster über
 die Anzeige. Damit er weiß, was die Anzeige gerade zeigen sollte, liest er
 den Wert über die serielle Schnittstelle des GSV-2AS mit.
 
-Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Auflösung, Raster,
+Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Belichtung, Auflösung, Raster,
 Stabilität und den Versatz des Rasters. Jede Prüfung meldet OK, WARNUNG oder
 FEHLER. Am Ende stehen ein Vorschlag (`proposal.json`) und Kontrollbilder,
 auf denen man das Raster sieht.
@@ -725,6 +725,10 @@ Im Live-Browser unter `/live` nutzt die Einrichtung dieselben Messbausteine
 über den gemeinsamen `CameraOwner`. Dort prüft zusätzlich `gegenlesen` den
 Leser am Standbild; schwankende Zellen können maskiert werden. Für einen
 normalen Lauf muss diese Lesesperre aufgehoben sein.
+Vor den Standbildern stimmt die Live-Einrichtung die feste Belichtung auf
+die grüne Anzeige ab. Erreicht sie ihr Zielband nicht oder findet sie keinen
+Hinweisbereich, übernimmt sie die besten Einstellungen und meldet eine
+Belichtungswarnung. Der Fokus wird dabei nicht erneut gesucht.
 
 Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
 [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md)

@@ -16,7 +16,7 @@ import time
 import uuid
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,7 +36,7 @@ from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, pr
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
-from dispread.setup_hint import find_green_hint_box
+from dispread.setup_hint import GREEN_HUE_MAX, GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE, find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 from dispread.workbench.fields import REASONS
 
@@ -45,6 +45,14 @@ N_CELLS = 16
 DEFAULT_TARGET_SIZE = (400, 160)
 LATTICE_GRID = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
 WHITE_BALANCE_SETTLE_S = 3.0
+# Vorabwerte: p80 gruener Boxpixel liegt an 12 Standbildern hoechstens 4 Graustufen
+# neben dem entzerrten Glas-p80 (Laborjournal 2026-10-28, R13-20).
+EXPOSURE_TARGET = 130.0
+EXPOSURE_BAND = (115.0, 150.0)
+EXPOSURE_STEPS = (100, 200, 300)  # 50 Hz, 10/20/30 ms bei 30 fps.
+EXPOSURE_GAIN_RANGE = (0, 128)  # konservativer Bereich, keine Geraeteabfrage noetig.
+EXPOSURE_MAX_ROUNDS = 4
+EXPOSURE_SETTLE_S = 0.3
 # Fokus: alle 0.3 s pruefen, hoechstens 5 s ab Setzen (inklusive Einschwingen).
 # Zwei aufeinanderfolgende Schaerfen duerfen relativ zum Vorgaenger um 5 % abweichen.
 FOCUS_SAMPLE_INTERVAL_S = 0.3
@@ -115,6 +123,133 @@ def measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float
         x0, y0 = int(round(bx * width)), int(round(by * height))
         x1, y1 = int(round((bx + bw) * width)), int(round((by + bh) * height))
     return gray[y0:y1, x0:x1]
+
+
+def hint_glass_level(image: np.ndarray, hint_box: HintBox) -> float | None:
+    """p80 gruener Boxpixel: dunkle Punkte und helle Umgebung ausnehmen.
+
+    Die Farbgrenzen entsprechen der Hinweisboxsuche. Ihr Sicherheitsrand
+    darf keine helle Umgebung in den Glaspegel einbringen.
+    """
+    region = measurement_roi(image, hint_box)
+    hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+    green = cv2.inRange(hsv, (GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE), (GREEN_HUE_MAX, 255, 255))
+    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    values = gray[green > 0]
+    return float(np.percentile(values, 80)) if values.size else None
+
+
+def adjust_exposure(
+    cam: SetupCamera, settings: CameraSettings, *, apply: Callable[[CameraSettings], None],
+    sleep: Callable[[float], None] | None = None, info: Callable[[str], None] | None = None,
+) -> tuple[CameraSettings, dict[str, Any]]:
+    """Anzeige statt Gesamtbild messen, hoechstens vier feste Reglerpaare pruefen.
+
+    `apply` uebernimmt alle festen Regler via Kamera-Neustart wie nach Fokus.
+    Erst 30 ms bevorzugen, dann Gain; bei zu hellem Glas und Gain 0 verkuerzen.
+    Gain-Sekante nur aus eigenen Messungen bei gleicher Belichtung; bis dahin
+    vorsichtig 1 Graustufe/Schritt annehmen. Keine Hardwarekennlinie behauptet.
+    Die beste gemessene Einstellung wird auch bei Boxverlust zurueckgestellt.
+    """
+    sleep = sleep or time.sleep
+
+    def measure() -> tuple[float | None, HintBox | None]:
+        sleep(EXPOSURE_SETTLE_S)
+        image = mean_still(cam)
+        box = find_green_hint_box(image)
+        return (hint_glass_level(image, box) if box is not None else None), box
+
+    level, box = measure()
+    audit: dict[str, Any] = {
+        'initial_level': level, 'initial_controls': dict(settings.controls),
+        'percentile': 80, 'region': 'green_pixels_in_hint_box',
+        'target': EXPOSURE_TARGET, 'target_band': list(EXPOSURE_BAND),
+        'gain_range': list(EXPOSURE_GAIN_RANGE), 'rounds': [], 'achieved': False,
+        'reason': None, 'initial_hint_box': box,
+    }
+    current = best = settings
+    best_level = level
+    observations = [(settings, level)]
+    low, high = EXPOSURE_BAND
+
+    def rank(value: float) -> tuple[float, float]:
+        # Ein erreichter Bandrand geht vor einem knapp verfehlten Band.
+        return max(low - value, 0.0, value - high), abs(value - EXPOSURE_TARGET)
+
+    def allowed(candidate: CameraSettings) -> bool:
+        return (candidate.controls['exposure_time_absolute'] in EXPOSURE_STEPS
+                and EXPOSURE_GAIN_RANGE[0] <= candidate.controls['gain'] <= EXPOSURE_GAIN_RANGE[1])
+
+    def next_candidate(source: CameraSettings, measured_level: float) -> CameraSettings:
+        exposure, gain = source.controls['exposure_time_absolute'], source.controls['gain']
+        tried_300 = any(s.controls['exposure_time_absolute'] == 300 for s, _ in observations)
+        if not allowed(source) and measured_level > high:
+            # Unzulaessiger Automatikwert und schon zu hell: zuerst die naechst
+            # kuerzere zulaessige Stufe, nicht auf 30 ms verlaengern (Review R13-20).
+            exposure = max(s for s in EXPOSURE_STEPS if s <= max(EXPOSURE_STEPS[0], exposure))
+            gain = min(128, max(0, gain))
+        elif not allowed(source) or (measured_level < low and not tried_300):
+            exposure, gain = 300, min(128, max(0, gain))
+        elif measured_level > high and gain == 0:
+            exposure = max(100, exposure - 100)
+        else:
+            slope = 1.0
+            for previous, previous_level in reversed(observations):
+                delta = gain - previous.controls['gain']
+                if previous.controls['exposure_time_absolute'] == exposure and delta and previous_level is not None:
+                    measured_slope = (measured_level - previous_level) / delta
+                    if measured_slope > 0:
+                        slope = measured_slope
+                    break
+            gain = min(128, max(0, round(gain + (EXPOSURE_TARGET - measured_level) / slope)))
+        return replace(source, controls={**source.controls, 'exposure_time_absolute': exposure, 'gain': gain})
+
+    if level is None:
+        audit['reason'] = 'keine_gruene_hinweisbox'
+    else:
+        for _ in range(EXPOSURE_MAX_ROUNDS):
+            if low <= level <= high and allowed(current):
+                break
+            candidate = next_candidate(current, level)
+            reused = set()
+            # Beim Verkuerzen kann das Ausgangspaar wieder auftauchen.
+            # Dessen Pegel wiederverwenden und Gain weiterregeln, statt einen
+            # erreichbaren Fall als Wiederholung abzubrechen. Keine neue Messrunde.
+            while known := next(((s, v) for s, v in observations if s.controls == candidate.controls), None):
+                key = (candidate.controls['exposure_time_absolute'], candidate.controls['gain'])
+                if key in reused:
+                    audit['reason'] = 'reglergrenze_oder_wiederholung'
+                    break
+                reused.add(key)
+                candidate = next_candidate(*known)
+            if audit['reason'] is not None:
+                break
+            apply(candidate)
+            current = candidate
+            level, box = measure()
+            observations.append((current, level))
+            audit['rounds'].append({'controls': dict(current.controls), 'level': level, 'hint_box': box})
+            if info is not None:
+                info(f"Belichtung: {current.controls['exposure_time_absolute']}, "
+                     f"Gain {current.controls['gain']}, Glaspegel {level}")
+            if level is None:
+                audit['reason'] = 'gruene_hinweisbox_verloren'
+                break
+            if not allowed(best) or rank(level) < rank(best_level):
+                best, best_level = current, level
+        if current != best:
+            if allowed(best):
+                apply(best)
+            else:
+                # Ein unzulaessiger Automatik-Ausgangswert darf nach Boxverlust
+                # nicht erneut gesetzt werden. Der letzte feste Wert bleibt;
+                # ohne Messung seines Glases gibt es keinen gueltigen Endpegel.
+                best, best_level = current, level
+        audit['achieved'] = best_level is not None and low <= best_level <= high and allowed(best)
+        if not audit['achieved'] and audit['reason'] is None:
+            audit['reason'] = 'zielband_nach_vier_runden_nicht_erreicht'
+    audit.update(selected_controls=dict(best.controls), final_level=best_level)
+    return best, audit
 
 
 def serial_cell_text(port: Any) -> str:
@@ -521,6 +656,7 @@ def propose_with_fit(
     setup_attempt: int | None = None,
     reader_check: Any = None,
     live_tracking: bool = False,
+    exposure_adjust: dict[str, Any] | None = None,
 ) -> dict:
     """Punktraster-Vorschlag; Rahmenpruefung nur bei ausdruecklichem Live-Opt-in."""
     height, width = image.shape[:2]
@@ -552,6 +688,18 @@ def propose_with_fit(
     raster_result = checks_dict.get("checks", {}).get("rasterversatz")
     if not isinstance(raster_result, dict) or raster_result.get("status") not in {"OK", "WARNUNG"}:
         raise SetupError("Einrichtungspruefung ohne gueltigen rasterversatz; kein Vorschlag")
+    if exposure_adjust is not None:
+        exposure_check = checks_dict['checks'].setdefault('belichtung', {'status': 'OK', 'metrics': {}})
+        exposure_check['metrics']['exposure_adjust'] = deepcopy(exposure_adjust)
+        if not exposure_adjust['achieved']:
+            exposure_check['status'] = 'WARNUNG'
+            final_level = exposure_adjust.get('final_level')
+            too_bright = final_level is not None and final_level > EXPOSURE_BAND[1]
+            exposure_check.setdefault('reason', 'Automatischer Belichtungsabgleich ohne bestätigtes Zielband: ' + (
+                'Display zu hell, helle Lichtquelle oder Reflex abschatten und neu einrichten' if too_bright else
+                'Kamera näher stellen oder helle Umgebung abdecken und neu einrichten'))
+            if checks_dict['overall'] == 'OK':
+                checks_dict['overall'] = 'WARNUNG'
     if reader_check is not None:
         checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
         if reader_check.status == "FEHLER":

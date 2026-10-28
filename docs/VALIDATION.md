@@ -3925,3 +3925,51 @@ ist ausschließlich gemäß Personenentscheidung ersetzt. Getrennt
 Timing-Test. Ruff (`src tests examples scripts`, außer `wiki-check.py`),
 Wiki-Prüfung und `git diff --check` bestehen. `docs/status.md` bleibt
 auf ausdrücklichen Auftrag unverändert, kein Commit.
+
+## R13-20 — Displaybelichtung, offline und Fakes (2026-10-28) {#r13-20-belichtung-2026-10-28}
+
+Datensatz: zwölf vorhandene `live/live-<Kennung>/setup/still.png`, jeweils
+Quad aus `proposal.json`; ausschließlich lesender Zugriff, keine neue Aufnahme.
+Aufbau, vollständige Tabelle und Deutung im
+[Laborjournal](lab_journal.md#2026-10-28-r13-20-displaybelichtung-statt-gesamtbild-automatik).
+
+Die entzerrten Grau-p80-Werte im Ausschnitt `[20:140,5:395]` bei 400×160
+reproduzieren die zwölf übergebenen Werte exakt: gute/helle Fälle 112–152,
+dunkle Fälle 98 und 78. Die neue Vorabwarnung <105 trennt diese Befunde.
+Die vier beauftragten Echtdaten-Tests ergeben 134306Z WARNUNG (98),
+123044Z OK (125), 110248Z OK (143), 100613Z OK (119).
+
+Hinweisbox gefunden in **12/12** Bildern. Grau-p80 der grünen Pixel in
+der Box: 112, 114, 116, 113, 118, 148, 142, 137, 128, 144, 97, 77
+(Reihenfolge wie im Laborjournal). Absoluter Abstand zum entzerrten p80:
+**Mittel 2, Median 2, Maximum 4 Graustufen**. Diese Offline-Kalibrierung
+begründet das vorläufige Regelziel 130 und Band 115–150; eine echte
+Kameraregelung oder neue VALID-Rate ist damit nicht nachgewiesen.
+
+Die Fake-Kamera liefert beispielsweise dunkel 81 → 116 bei 200 → 300
+und unverändert Gain 10; zu hell 209 → 184 → 92 → 133 bei 300/200/100
+und schließlich Gain 38. Unterschiedliche Gain-Steigungen werden aus
+den eigenen Messungen nachgeführt. Ein ausgefallener Gain beendet die
+Suche nach genau vier Runden und stellt die beste Messung wieder her.
+Diese Zahlen sind synthetisch; keine neue Latenzaussage oder Hardware-Abnahme.
+
+Reviewregression: Ausgang 200/Gain 0, p80 112 → 300/Gain 0, p80 169 →
+200/Gain 18, p80 132. Bereits gemessene Paare werden für die Planung
+wiederverwendet; eine Rückkehr zur kürzeren Belichtung bricht nicht als
+Wiederholung ab. Vor Korrektur blieb dieser Fake-Fall unerreicht, danach
+erreicht er das Band in zwei Korrekturrunden.
+
+Prüfabschluss (keine volle Suite):
+
+| Prüfung | Vorher | Nachher |
+| --- | ---: | ---: |
+| Vier beauftragte Python-Dateien, `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev`, `-q -n 3` | 306 bestanden | 349 bestanden |
+| Live-Node-Tests (direkt ausgeführt; zusätzlich `node --test`) | 51 bestanden | 52 bestanden |
+| Tour-Fakten, `tests/test_tour_facts.py` | — | 5 bestanden |
+
+Alle neuen Verhaltensänderungen wurden mit zuvor fehlgeschlagenen Tests
+entwickelt, einschließlich einer Rückstellung mit ungültigem
+Automatik-Ausgangswert bei Boxverlust. Ruff (`src tests examples scripts`,
+außer `scripts/wiki-check.py`), Wiki-Check, OQ-Index-Prüfung,
+JavaScript-Syntaxprüfung der angepassten Tour und `git diff --check` bestehen.
+Kein Docs-Playwright, kein Commit, `docs/status.md` unverändert.

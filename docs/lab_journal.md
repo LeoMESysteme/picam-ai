@@ -2632,3 +2632,105 @@ Implementierung rot ausgeführt. Getrennt `-m timing`: **1 bestanden,
 2630 abgewählt**. Alte Sicherheitsprüfungen unverändert grün;
 Ruff, Wiki-Check und Diff-Prüfung ohne Befund. Keine volle Suite,
 kein Commit, `docs/status.md` wie beauftragt nicht verändert.
+
+---
+
+## 2026-10-28 — R13-20: Displaybelichtung statt Gesamtbild-Automatik
+
+**Aufbau:** Ausschließlich Offline-Auswertung vorhandener `setup/still.png`,
+`setup/proposal.json` (Quad) und `setup/camera-settings.json` sowie Fake-Kameras.
+Die Dateien wurden über `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev` nur gelesen;
+keine Kamera angesprochen und keine Hardware oder Entwicklungsdaten verändert.
+Die folgenden Einrichtungen heißen jeweils `live-<Kennung>/setup`.
+
+**Befund des Orchestrators:** Bei `20261028T134306Z` stand die Kamera weiter
+weg, sodass mehr helle Umgebung in die Gesamtbild-Automatik einging.
+Diese übernahm Belichtung 200 statt 300. Bei wechselnden Werten wurden die
+Ziffern 3/0/7 in Zellen 5/6 selten gelesen: Zelle 5, „3“, 4 gelesen gegen
+173 gescheitert; keine beobachtete Fehllesung, aber wenig VALID. Im helleren
+`123044Z` wurden diese Zeichen hunderte Male gelesen. Das ist ein
+Helligkeitsbefund, keine neue Leser-Abnahme; ein Kontrastproblem wie bei
+`133959Z` ist davon zu unterscheiden.
+
+**Nachgemessene Pegel und Kalibrierung:** BGR nach Grau, mit dem gespeicherten
+Quad auf 400×160 entzerren und im Ausschnitt `[20:140, 5:395]` p80 bilden.
+Für den früheren Zeitpunkt ohne Quad: `find_green_hint_box` suchen, darin
+nur Pixel derselben HSV-Grenzen wie die Boxsuche nehmen und deren Grau-p80
+bilden. So gehen dunkle Punkte kaum ein und helle Umgebung im Sicherheitsrand
+der Box bleibt draußen. Alle zwölf Boxen wurden gefunden.
+
+| Einrichtung | Belichtung | Gain | Entzerrtes p80 | Grünes Box-p80 | Einordnung |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 20261023T075343Z | 300 | 3 | 112 | 112 | gut |
+| 20261023T084344Z | 300 | 0 | 116 | 114 | gut |
+| 20261023T100613Z | 300 | 6 | 119 | 116 | gut, 99,98 % VALID laut Befund |
+| 20261023T121436Z | 300 | 9 | 115 | 113 | gut |
+| 20261023T131121Z | 300 | 9 | 121 | 118 | gut |
+| 20261023T124226Z | 300 | 29 | 152 | 148 | hell |
+| 20261028T110248Z | 300 | 15 | 143 | 142 | gut |
+| 20261028T121101Z | 300 | 13 | 140 | 137 | gut |
+| 20261028T123044Z | 300 | 6 | 125 | 128 | gut, schräg |
+| 20261028T133959Z | 300 | 14 | 145 | 144 | anderes Kontrastproblem |
+| 20261028T134306Z | 200 | 16 | 98 | 97 | zu dunkel |
+| 20261026T082712Z | 200 | 11 | 78 | 77 | zu dunkel, 18° links |
+
+Die entzerrten Werte reproduzieren die übergebene Tabelle exakt. Absoluter
+Abstand Boxmessung zu entzerrtem Pegel: Mittel 2, Median 2, Maximum 4
+Graustufen. Ungefiltertes Box-p90 wurde verworfen: Der Fake mit heller
+Umgebung zeigt, dass der Sicherheitsrand sonst die Messung übernehmen kann.
+
+**Fix und Vorabgrenzen:** `belichtung` warnt bei entzerrtem p80 <105:
+105 ist die Mitte zwischen dem höchsten dunklen Fall 98 und dem niedrigsten
+guten Fall 112. Keine FEHLER-Stufe oder eigene Laufsperre. Eine allgemeine
+obere Warngrenze ist aus diesen Daten nicht begründbar; `glanz` prüft weiter
+Sättigung. Der automatische Live-Abgleich strebt Box-p80 130 im Band 115–150
+an, mit Reserve zur Dunkelgrenze und Abstand zur hellen Aufstellung 152.
+Das liegt zwischen älteren guten Pegeln 112–121 und neueren 125–145;
+es ist kein nachgewiesenes Optimum für andere Anzeigen.
+
+Nach Fokus und Kamera-Neustart werden acht frische Bilder gemittelt.
+Außerhalb des Zielbands folgen höchstens vier Korrekturrunden mit Neustart,
+0,3 s Wartezeit und erneut acht Bildern. Belichtung nur 100/200/300
+(10/20/30 ms bei 50 Hz und 30 fps), zunächst 300 bevorzugen, dann Gain
+anpassen; bei Gain 0 und zu hellem Glas kürzer belichten. Gain konservativ
+0–128, da im vorhandenen Code und Hardwareprofil keine engere Grenze
+belegt ist. Der erste Gain-Schritt nimmt vorläufig eine Graustufe pro
+Schritt an; weitere nutzen die gemessene positive Sekante bei gleicher
+Belichtung. Kein Versprechen über die echte Kamerakennlinie.
+
+Bei Boxverlust oder unerreichtem Zielband werden die besten gemessenen
+Regler wiederhergestellt und der Grund gesichert; bei bereits passendem
+Pegel bleibt die Einstellung erhalten. Die Rückstellung benötigt keinen
+weiteren Messversuch. `exposure_adjust` in `camera-settings.json` enthält
+Ausgang, jede Runde, gewählte Regler, Endpegel und Erfolg/Grund. Profil
+und Lauf übernehmen genau diese festen Regler. Ein fehlgeschlagener oder
+übersprungener Abgleich ergänzt die Belichtungswarnung auch bei p80 ≥105.
+Fokus wird nicht erneut gesucht; der Abgleich liest keinen Referenzwert.
+
+**Prüfung und Grenzen:** Synthetische Punktanzeigen und helligkeitsabhängige
+Fake-Kameras prüfen dunkel/hell, verschiedene Gain-Steigungen, ausgefallenen
+Gain, maximal vier Runden, fehlende/verlorene Box und Rückstellung.
+Vier lokale Bilder prüfen die Vorprüfung (134306Z WARNUNG, 123044Z/110248Z/
+100613Z OK); zwölf lokale Bilder sichern die Pegelkalibrierung. Alte
+Service-Fakes bekommen nur dort acht zusätzliche leere Bilder, wo bislang
+Fokus und Standbilder getrennt ersetzt wurden, damit die eigentlichen
+Serial-/Diagnoseprüfungen erreichbar bleiben. Die leeren Bilder dokumentieren
+einen übersprungenen Abgleich. Die Werkbankliste ist dynamisch; ein Node-Test
+belegt die neue Prüfung samt Hinweis ohne Änderung von `live.js` oder HTML.
+Eine reale Regelungs- und Flickerprüfung bleibt offen; keine Gerätefreigabe.
+Zahlen stehen auch in [VALIDATION](VALIDATION.md#r13-20-belichtung-2026-10-28).
+
+**Reviewkorrektur:** Das unabhängige Code-Review fand einen erreichbaren Fall,
+der an einer zu frühen Wiederholungssperre scheiterte: initial 200/Gain 0
+mit p80 112, dann 300/Gain 0 mit 169. Der Regler verwendet beim Rückweg
+zu 200 jetzt den bekannten Pegel, statt erneut zu messen oder abzubrechen,
+und erreicht mit Gain 18 den Pegel 132. Dieser Fake-Fall wurde vor der
+Korrektur rot beobachtet; danach sind alle 18 gezielten Abgleich-/Vorschlagfälle
+grün. Es bleiben höchstens vier tatsächliche Mess-/Stell-Runden.
+
+**Prüfabschluss R13-20:** Die vier beauftragten Python-Dateien mit gesetztem
+Entwicklungsdatenort und `-q -n 3`: vorher **306**, nachher **349 bestanden**,
+keine fehlgeschlagenen oder übersprungenen Tests. Live-Node **51 → 52 bestanden**,
+Tour-Fakten zusätzlich **5 bestanden**. Ruff, Wiki-Check, OQ-Index-Prüfung,
+Tour-JavaScript-Syntax und Diff-Prüfung ohne Befund. Kein Docs-Playwright,
+keine volle Suite, kein Commit; `docs/status.md` bleibt unverändert.

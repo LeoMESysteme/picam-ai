@@ -395,6 +395,17 @@ test('norm plan needs confirmation and is sent with explicit reference selection
   }
 });
 
+test('new exposure check and its operator hint are visible', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {state: 'setup_ready', setup: {
+      checks: {belichtung: 'WARNUNG'},
+      check_reasons: {belichtung: 'Display zu dunkel belichtet (Glaspegel 98): Kamera näher stellen und neu einrichten'},
+    }};
+    await poll();
+    assert.match(element('setup-checks').textContent, /belichtung: WARNUNG.*Glaspegel 98.*neu einrichten/);
+  });
+});
+
 test('tracking check, German reason and mode are visible', async () => {
   await withLivePage(async (page, element, poll) => {
     page.status = {state: 'setup_ready', setup: {
