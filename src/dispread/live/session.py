@@ -115,6 +115,17 @@ def build_live_pipeline(
     if image is None:
         raise StartRefused(f"Referenzbild {ref_path} nicht lesbar - neu einrichten")
     block = profile.live_tracking
+    if isinstance(block, dict):
+        try:
+            # Ausschliesslich neue Grobschaetzungsfelder ergaenzen; Profildatei bleibt unveraendert.
+            # Eigener Import: der Vergleich unten nutzt das (in Tests ersetzbare)
+            # Modulattribut FrameTrackingConfig als "aktuelle Defaults", das
+            # Ergaenzen des gespeicherten Dicts dagegen immer die echte Klasse.
+            from dispread.live.frame_tracking import FrameTrackingConfig as StoredTrackingConfig
+
+            block = {**block, "config": StoredTrackingConfig.from_dict(block["config"]).to_dict()}
+        except (ValueError, KeyError, TypeError) as exc:
+            raise StartRefused(f"Rahmenkonfiguration ungueltig: {exc} - neu einrichten") from exc
     if block is not None:
         if (not isinstance(block, dict) or block.get("version") != 1 or block.get("method") != "rahmenbereiche"
                 or block.get("frame_sha256") != reference["sha256"]
@@ -222,6 +233,8 @@ class LiveSession:
         self._frame_gaps_start = 0
         self._audit_errors = 0
         self._tracking_lost = 0
+        self._tracking_coarse_retries = 0
+        self._tracking_coarse_accepted = 0
         self._tracking_lost_reasons: Counter[str] = Counter()
         self._track_scores: deque[float] = deque(maxlen=10_000)
         self._track_score_n = 0
@@ -326,6 +339,10 @@ class LiveSession:
                 self._tracking_lost += 1
                 self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
             track = getattr(self._pipeline.locator, "last_track", None)
+            coarse = getattr(getattr(self._pipeline.locator, "_tracker", None), "last_coarse", None)
+            if coarse is not None and coarse.used:
+                self._tracking_coarse_retries += 1
+                self._tracking_coarse_accepted += int(track is not None and track.quad is not None)
             if track is not None:
                 score = float(track.score)
                 self._track_scores.append(score)
@@ -518,6 +535,8 @@ class LiveSession:
             "frame_gaps_owner_total": owner_status.get("gaps", 0),
             "audit_errors": self._audit_errors,
             "tracking_lost": self._tracking_lost,
+            "tracking_coarse_retries": self._tracking_coarse_retries,
+            "tracking_coarse_accepted": self._tracking_coarse_accepted,
             "tracking_lost_reasons": dict(self._tracking_lost_reasons),
             "tracking_hints": (self._tracking_advice.summary() if self._tracking_advice is not None else
                                empty_summary()),

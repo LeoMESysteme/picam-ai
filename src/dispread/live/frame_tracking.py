@@ -1,7 +1,8 @@
 """Zustandslose Nachfuehrung aus begrenzten Rahmenfenstern und LCD-Rand.
 
-Vorschlag geaendert R13-11 (Band, Hysterese, Reserve); Update-Regeln unveraendert; neue
-Abnahme noetig. Profile vor R13-11 muessen neu eingerichtet werden.
+Vorschlag geaendert R13-11 (Band, Hysterese, Reserve); Feinpruefung unveraendert.
+R13-19c: zweiter Suchversuch mit eng begrenztem Massstab; neue Abnahme noetig.
+Profile vor R13-11 muessen neu eingerichtet werden.
 
 Update-Kandidat R13-7, festgelegt am Entwicklungsdatensatz; C/D
 (r13-abnahme-c/d-hell-20261022) waren Anlass und gelten nicht als Abnahme;
@@ -96,6 +97,50 @@ belastbare Positionsinformation und verursachte allein falsche Ablehnungen
 bei Helligkeit x0.8 oder 3x3-Gaussfilter. Der Ausschluss folgt dieser
 grundsaetzlichen Verfuegbarkeitsentscheidung.
 
+R13-19c: Der erste Durchgang ist numerisch unveraendert starr. Nur bei
+rahmen_unstimmig, zu_wenig_rahmenmerkmale oder rahmen_mehrdeutig folgt eine
+zustandslose Grobschaetzung gegen das Referenzgraubild: Phasenkorrelation
+auf einem zweifach verkleinerten Ausschnitt innerhalb outer_limit. Referenzausschnitt und
+Hann-Maske werden einmal vorbereitet; ein Laplace-Hochpass unterdrueckt die
+feste Maskenkante. Die Zeichenzone bleibt samt maximaler Translation,
+Drehbewegung, maximalem Massstab und Filter-Nachbarpixeln ausgespart, auch im bewegten Bild.
+Nur endliche Antworten mit response > coarse_min_response (Default 0.15)
+und coarse_min_shift_px (Default 2) <= Betrag <= max_shift_px erlauben
+einen zweiten Versuch. Derselbe Feinpfad sucht um Quelle plus ganzzahlig
+gerundete Grobverschiebung; Ziele sind absolute Bildkoordinaten. Patches,
+Peak/Eindeutigkeit, Streuung, Leave-one-out, beide Residualgrenzen und
+absolute Bewegung gegen das urspruengliche Quad bleiben gleich. Nur der
+zweite Versuch nutzt einen orientierungserhaltenden Aehnlichkeitsfit:
+RANSAC ueber alle Minimalpaare mit Drehung und gleichfoermigem Massstab,
+anschliessend Umeyama-Endfit und Leave-one-out mit Massstab. Minimalpaare
+und Endfit muessen 1-coarse_max_scale_deviation <= s <=
+1+coarse_max_scale_deviation erfuellen (Default und hoechstens 0.005).
+Das Ausgabequad und die LCD-Randpunkte werden mit s*R und Translation
+abgebildet; Randnormalen nur mit R. Randtoleranz weiterhin 2.5 px.
+Ein unbrauchbarer Vorschlag behaelt die erste Ablehnung; ein abgelehnter
+zweiter Versuch liefert seinen eigenen Grund. last_coarse ist None ohne
+Schaetzung, sonst (dx, dy, response, used, scale); used bedeutet zweiter Feinversuch,
+keinen Akzeptanznachweis. Kein Ergebnis wird ins naechste Bild uebernommen.
+scale ist None ohne begrenzten Endfit, sonst dessen Massstab (auch wenn
+eine spaetere Pruefung ablehnt). Die Grobschaetzung ist kein zusaetzlicher
+Sicherheitsbeleg und behebt den oben beschriebenen blinden Fleck nicht.
+Auch eine richtige Grobschaetzung kann an den unveraenderten Residualgrenzen
+scheitern (Live-DEV 2026-10-28).
+Neuer blinder Fleck, 2026-10-28: Bei stillstehendem LCD und gemeinsam
+falschen Rahmentreffern akzeptiert der isolierte zweite Durchgang im
+portablen Fixture-Raster bis 5.220583 px Quadeckenfehler bei s=1.005,
+4.466826 px bei s=0.995 und 4.725129 px bei s=1. Je Massstab 3757
+Hypothesen: Winkel -1.2..1.2 Grad (0.2), dx/dy -4..4 px (0.5).
+Erster Fehlschlag, plausibler Grobvorschlag und exakte falsche Treffer
+sind injiziert; Fit, Leave-one-out und LCD-Pruefung laufen unveraendert.
+Die 2.5-px-Randpruefung verwirft je Massstab ueber 2000 Hypothesen,
+auch groessere legale Aehnlichkeitsluegen, die ohne sie angenommen werden.
+Dies ist eine dokumentierte Rastergrenze, keine allgemeine obere Schranke
+und keine neue Abnahme (tests: r19c_gemeinsam_falsche_aehnlichkeit).
+Alte R13-11-Configs duerfen nur die drei neuen Grobfelder auslassen; diese
+werden beim Laden mit Defaults ergaenzt. Alle alten Pflichtfelder und die
+Referenz-/Quad-/SHA-Bindung bleiben strikt; Profile vor R13-11 bleiben abgelehnt.
+
 15-px-Patches und 12-px-Suchradius lassen kleine Rohbildbewegungen zu;
 Peak >=0.75 und Zweitpeak/Peak <=0.95 ausserhalb +/-3 px verlangen erkennbare
 und eindeutige Struktur. Inlier mit <=1.5 px Residuum sichern den starren Fit;
@@ -120,7 +165,7 @@ er ist nur informativ und keine Fehlerwahrscheinlichkeit.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from hashlib import sha256
 from itertools import combinations
 
@@ -181,15 +226,21 @@ class FrameTrackingConfig:
     edge_position_tolerance_px: float = 2.5
     edge_required_share: float = 0.8
     edge_required_sides: int = 3
+    coarse_min_response: float = 0.15
+    coarse_min_shift_px: float = 2.0
+    coarse_max_scale_deviation: float = 0.005
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> FrameTrackingConfig:
-        # Keine fehlenden Grenzen still mit heutigen Defaults auffuellen.
-        if not isinstance(data, dict) or set(data) != {field.name for field in fields(cls)}:
+        # Nur R13-19b/c ergaenzen: alte Feinpruefgrenzen bleiben Pflicht.
+        optional = {"coarse_min_response", "coarse_min_shift_px", "coarse_max_scale_deviation"}
+        names = {field.name for field in fields(cls)}
+        if not isinstance(data, dict) or not names - optional <= set(data) <= names:
             raise ValueError("Unvollstaendige oder unbekannte Rahmenkonfiguration")
+        data = {**{field.name: field.default for field in fields(cls) if field.name in optional}, **data}
         for field in fields(cls):
             if type(data[field.name]) is not type(field.default):
                 raise ValueError(f"Ungueltiger Typ fuer Rahmenkonfiguration: {field.name}")
@@ -198,6 +249,10 @@ class FrameTrackingConfig:
     def __post_init__(self):
         if not all(np.isfinite(getattr(self, field.name)) for field in fields(self)):
             raise ValueError("Pruefgrenzen muessen endlich sein")
+        if not 0 < self.coarse_min_response <= 1 or self.coarse_min_shift_px < 2:
+            raise ValueError("Ungueltige Grobschaetzungsgrenzen")
+        if not 0 < self.coarse_max_scale_deviation <= 0.005:
+            raise ValueError("Massstabsabweichung muss positiv und hoechstens 0.005 sein")
         if self.patch_size < 3 or self.patch_size % 2 != 1 or self.search_radius_px < 1:
             raise ValueError("Ungerade Patchgroesse und positiver Suchradius erforderlich")
         if not 0 < self.min_peak <= 1 or not 0 < self.ambiguity_limit < 1:
@@ -273,7 +328,7 @@ class RegionProposal:
         if set(data) != {field.name for field in fields(cls)}:
             raise ValueError("Unvollstaendiger oder unbekannter Rahmenvorschlag")
         data = dict(data)
-        FrameTrackingConfig.from_dict(data["config"])
+        data["config"] = FrameTrackingConfig.from_dict(data["config"]).to_dict()
         data["regions"] = tuple(FrameRegion(tuple(r["centre"]), r["size"]) for r in data["regions"])
         data["edges"] = tuple(LcdEdge(**{**edge, "point": tuple(edge["point"]),
                                        "normal": tuple(edge["normal"])}) for edge in data["edges"])
@@ -757,6 +812,64 @@ def _ransac(source, target, config):
     return None
 
 
+def _similarity(source, target):
+    # Umeyama, orientierungserhaltend; auch gestapelte Leave-one-out-Fits.
+    a, b = source.mean(axis=-2), target.mean(axis=-2)
+    centred_source, centred_target = source-a[..., None, :], target-b[..., None, :]
+    covariance = centred_source.swapaxes(-1, -2) @ centred_target
+    u, singular, vt = np.linalg.svd(covariance)
+    sign = np.where(np.linalg.det(vt.swapaxes(-1, -2) @ u.swapaxes(-1, -2)) < 0, -1, 1)
+    vt[..., -1, :] *= sign[..., None]
+    rotation = vt.swapaxes(-1, -2) @ u.swapaxes(-1, -2)
+    scale = (singular[..., 0] + sign*singular[..., 1]) / (centred_source**2).sum(axis=(-2, -1))
+    transform = scale[..., None, None]*rotation
+    return rotation, b - np.einsum("...ij,...j->...i", transform, a), scale
+
+
+def _similarity_ransac(source, target, config):
+    # Alle Minimalpaare, gleiche Konsens-/Kostenregel wie im starren Pfad.
+    pairs = np.array(list(combinations(range(len(source)), 2)))
+    ds, dt = source[pairs[:, 1]] - source[pairs[:, 0]], target[pairs[:, 1]] - target[pairs[:, 0]]
+    lengths = np.linalg.norm(ds, axis=1)
+    scales = np.divide(np.linalg.norm(dt, axis=1), lengths, out=np.zeros_like(lengths), where=lengths > 0)
+    limit = config.coarse_max_scale_deviation
+    valid = (scales >= 1-limit) & (scales <= 1+limit)
+    if not valid.any():
+        return None
+    pairs, ds, dt, scales = pairs[valid], ds[valid], dt[valid], scales[valid]
+    angles = np.arctan2(dt[:, 1], dt[:, 0]) - np.arctan2(ds[:, 1], ds[:, 0])
+    co, si = np.cos(angles), np.sin(angles)
+    transforms = scales[:, None, None]*np.array([[co, -si], [si, co]]).transpose(2, 0, 1)
+    translations = target[pairs].mean(axis=1) - np.einsum("nij,nj->ni", transforms, source[pairs].mean(axis=1))
+    residuals = np.linalg.norm(np.einsum("nij,kj->nki", transforms, source) + translations[:, None] - target, axis=2)
+    inliers = residuals <= config.ransac_tolerance_px
+    counts = inliers.sum(axis=1)
+    costs = np.minimum(residuals, config.ransac_tolerance_px).sum(axis=1)
+    selected = inliers[np.lexsort((costs, -counts))[0]]
+    for _ in range(2):
+        if selected.sum() < config.min_regions:
+            return None
+        rotation, translation, scale = _similarity(source[selected], target[selected])
+        if not 1-limit <= scale <= 1+limit:
+            return None
+        refined = np.linalg.norm(source @ (scale*rotation).T + translation - target, axis=1) <= config.ransac_tolerance_px
+        if np.array_equal(refined, selected):
+            return rotation, translation, selected, float(scale)
+        selected = refined
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class CoarseEstimate:
+    """Letzte Grobschaetzung in Rohpixeln; used bezeichnet den zweiten Feinversuch."""
+
+    dx: float
+    dy: float
+    response: float
+    used: bool = False
+    scale: float | None = None
+
+
 class FrameTracker:
     """Jedes Bild unabhaengig gegen die urspruengliche Referenz pruefen."""
 
@@ -784,12 +897,47 @@ class FrameTracker:
         self.edges = tuple(edge for edge in proposal.edges if counts[edge.side] >= config.edge_min_points_per_side)
         self.edge_points = np.asarray([edge.point for edge in self.edges]).reshape(-1, 2)
         self.edge_normals = np.asarray([edge.normal for edge in self.edges]).reshape(-1, 2)
+        self.last_coarse: CoarseEstimate | None = None
+        # Fester Ausschnitt und feste Maske; kein Zustand aus aktuellen Bildern.
+        outer = np.asarray(proposal.outer_limit)
+        lo = np.maximum(np.floor(outer.min(axis=0)).astype(int), 0)
+        hi = np.minimum(np.ceil(outer.max(axis=0)).astype(int)+1, gray.shape[::-1])
+        self._coarse_crop = (slice(lo[1], hi[1]), slice(lo[0], hi[0]))
+        mask = np.zeros(gray.shape, np.uint8)
+        cv2.fillPoly(mask, [np.rint(outer).astype(np.int32)], 1)
+        characters = np.zeros_like(mask)
+        cv2.fillConvexPoly(characters, np.rint(proposal.character_zone).astype(np.int32), 1)
+        # Bewegte Zeichen ausschliessen: Translation, Drehung, Skala und
+        # konservativ acht Rohpixel fuer AREA- und Laplace-Nachbarn.
+        radius = np.linalg.norm(self.quad - self.quad.mean(axis=0), axis=1).max()
+        guard = int(np.ceil(config.max_shift_px + 2*radius*np.sin(np.radians(config.max_rotation_deg)/2)
+                            + radius*config.coarse_max_scale_deviation)) + 8
+        characters = cv2.dilate(characters, np.ones((2*guard+1,)*2, np.uint8))
+        mask[characters != 0] = 0
+        mask = mask[self._coarse_crop].astype(np.float32)
+        # Zweifach kleiner; tatsaechliche Achsenfaktoren bei ungeraden Massen.
+        coarse_size = tuple((np.array(mask.shape[::-1]) + 1) // 2)
+        self._coarse_factors = np.array(mask.shape[::-1]) / coarse_size
+        mask = cv2.resize(mask, coarse_size, interpolation=cv2.INTER_AREA)
+        self._coarse_mask = mask * cv2.createHanningWindow(mask.shape[::-1], cv2.CV_32F)
+        self._coarse_reference = self._coarse_image(gray)
 
-    def _edges_visible(self, gray, rotation, translation):
+    def _coarse_image(self, gray):
+        # Hochpass vermeidet einen dominanten Nullshift der festen Maskenkante.
+        crop = cv2.resize(gray[self._coarse_crop], self._coarse_mask.shape[::-1],
+                          interpolation=cv2.INTER_AREA).astype(np.float32)
+        return cv2.Laplacian(crop, cv2.CV_32F) * self._coarse_mask
+
+    def _estimate_coarse(self, gray) -> CoarseEstimate:
+        (dx, dy), response = cv2.phaseCorrelate(self._coarse_reference, self._coarse_image(gray))
+        dx, dy = np.array((dx, dy))*self._coarse_factors
+        return CoarseEstimate(float(dx), float(dy), float(response))
+
+    def _edges_visible(self, gray, rotation, translation, scale=1.0):
         config = self.config
         if not self.edges:
             return False
-        points = self.edge_points @ rotation.T + translation
+        points = self.edge_points @ (scale*rotation).T + translation
         normals = self.edge_normals @ rotation.T
         distances = np.arange(-config.edge_search_radius_px, config.edge_search_radius_px+1)
         # Nur das Rand-ROI in Float konvertieren; dieselben bilinearen Proben,
@@ -809,12 +957,27 @@ class FrameTracker:
         return all(float(good[sides == side].mean()) >= config.edge_required_share for side in np.unique(sides))
 
     def update(self, image) -> TrackResult:
+        self.last_coarse = None
+        gray = _gray(image)
+        first = self._fine_update(gray)
+        if first.reason not in {"rahmen_unstimmig", "zu_wenig_rahmenmerkmale", "rahmen_mehrdeutig"}:
+            return first
+        estimate = self._estimate_coarse(gray)
+        self.last_coarse = estimate
+        config = self.config
+        if (not np.isfinite((estimate.dx, estimate.dy, estimate.response)).all()
+                or estimate.response <= config.coarse_min_response
+                or not config.coarse_min_shift_px <= np.hypot(estimate.dx, estimate.dy) <= config.max_shift_px):
+            return first
+        self.last_coarse = replace(estimate, used=True)
+        return self._fine_update(gray, tuple(np.rint((estimate.dx, estimate.dy)).astype(int)), similarity=True)
+
+    def _fine_update(self, gray, offset=(0, 0), *, similarity=False) -> TrackResult:
         config = self.config
 
         def reject(reason):
             return TrackResult(None, 0.0, 0.0, 0.0, reason)
 
-        gray = _gray(image)
         if gray.shape != self.shape:
             return reject("bildgroesse_abweichend")
         if not self.proposal.ok:
@@ -822,7 +985,10 @@ class FrameTracker:
         h, r = config.patch_size // 2, config.search_radius_px
         indices, targets, peaks = [], [], []
         ambiguous_count = 0
-        for index, ((x, y), patch) in enumerate(zip(self.sources.astype(int), self.patches, strict=True)):
+        centres = self.sources.astype(int)
+        if offset != (0, 0):
+            centres += offset
+        for index, ((x, y), patch) in enumerate(zip(centres, self.patches, strict=True)):
             search = _window(gray, (x, y), h+r)
             if patch is None or search is None:
                 continue
@@ -840,30 +1006,38 @@ class FrameTracker:
         if len(indices) < config.min_regions:
             return reject("rahmen_mehrdeutig" if ambiguous_count else "zu_wenig_rahmenmerkmale")
         source, target = self.sources[indices], np.asarray(targets)
-        fit = _ransac(source, target, config)
+        fit = _similarity_ransac(source, target, config) if similarity else _ransac(source, target, config)
         if fit is None:
             return reject("rahmen_unstimmig")
-        rotation, translation, inliers = fit
+        rotation, translation, inliers = fit[:3]
+        scale = fit[3] if similarity else 1.0
+        if similarity and self.last_coarse is not None:
+            self.last_coarse = replace(self.last_coarse, scale=scale)
+        transform = scale*rotation if similarity else rotation
         if not _spread(source[inliers], self.normalised_quad, config):
             return reject("rahmen_unstimmig")
         # Jeder Inlier muss entbehrlich sein: geometrische Hebelwirkung direkt
         # an allen vier OCR-Ecken messen, ohne nachtraegliche Inlier-Neuauswahl.
         stable_source, stable_target = source[inliers], target[inliers]
-        predicted = self.quad @ rotation.T + translation
+        predicted = self.quad @ transform.T + translation
         count = len(stable_source)
         keep = ~np.eye(count, dtype=bool)
         source_sets = np.broadcast_to(stable_source, (count, count, 2))[keep].reshape(count, count-1, 2)
         target_sets = np.broadcast_to(stable_target, (count, count, 2))[keep].reshape(count, count-1, 2)
-        loo_rotation, loo_translation = _rigid(source_sets, target_sets)
+        if similarity:
+            loo_rotation, loo_translation, loo_scale = _similarity(source_sets, target_sets)
+            loo_rotation = loo_scale[:, None, None]*loo_rotation
+        else:
+            loo_rotation, loo_translation = _rigid(source_sets, target_sets)
         loo_quads = self.quad @ loo_rotation.swapaxes(-1, -2) + loo_translation[:, None, :]
         if np.linalg.norm(loo_quads - predicted, axis=-1).max() > config.max_leave_one_out_corner_px:
             return reject("rahmen_unstimmig")
-        residuals = np.linalg.norm(stable_source @ rotation.T + translation - stable_target, axis=1)
+        residuals = np.linalg.norm(stable_source @ transform.T + translation - stable_target, axis=1)
         if (np.sqrt(np.mean(residuals**2)) > config.max_inlier_rms_px
                 or residuals.max() > config.max_inlier_residual_px):
             return reject("rahmen_unstimmig")
         centre = self.quad.mean(axis=0)
-        shift = float(np.linalg.norm(rotation @ centre + translation - centre))
+        shift = float(np.linalg.norm(transform @ centre + translation - centre))
         angle = float(np.degrees(np.arctan2(rotation[1, 0], rotation[0, 0])))
         score = float(np.clip(inliers.sum() / len(self.sources) * np.mean(np.asarray(peaks)[inliers]), 0, 1))
         reason = None
@@ -871,7 +1045,7 @@ class FrameTracker:
             reason = "shift_out_of_bounds"
         elif abs(angle) > config.max_rotation_deg:
             reason = "rotation_out_of_bounds"
-        elif not self._edges_visible(gray, rotation, translation):
+        elif not self._edges_visible(gray, rotation, translation, scale):
             reason = "lcd_rand_fehlt"
-        moved = None if reason else _polygon(self.quad @ rotation.T + translation)
+        moved = None if reason else _polygon(self.quad @ transform.T + translation)
         return TrackResult(moved, shift, angle, score, reason)

@@ -9,6 +9,61 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-28 — R13-19c: Maßstab nur im zweiten Rahmenfit
+
+**Problem:** Korrekte Grobverschiebungen allein beheben die Live-Verluste
+aus R13-19b nicht. Gemessene Maßstabsänderungen von etwa 0,1–0,3 % erzeugen
+an entfernten Rahmenpunkten Residuen bis über die unveränderten Grenzen.
+
+**Entscheidung:** Leonhard nimmt am 2026-10-28 gleichförmigen Maßstab ins
+Modell auf, eng begrenzt auf 0,995…1,005 und ausschließlich im zweiten
+Versuch. Deterministische Minimalpaare und Umeyama-Endfit prüfen den
+Maßstab; Leave-one-out verwendet dasselbe Modell. LCD-Randpunkte folgen
+der vollständigen Abbildung, Normalen bleiben Einheitsnormalen unter R.
+Der erste starre Durchgang bleibt bitgleich. Alle bisherigen Fein- und
+Bewegungsgrenzen bleiben erhalten; keine Glättung oder Referenzkorrektur.
+
+**Alternativen:** Ein starrer zweiter Fit bleibt am belegten
+Maßstabsunterschied hängen. Gelockerte Residuen, freie Affinität oder
+Homografie wären eine andere Sicherheitsentscheidung und sind verworfen.
+Vierfach verkleinerte Phasenkorrelation überschätzt synthetische 19 px
+als 20,15 px und verhindert den zweiten Versuch; deshalb nur Faktor 2
+(19,47 px). Die absolute Grobgrenze wird nicht erweitert oder gekappt.
+
+**Konsequenz:** Beide Live-Entwicklungsaufnahmen gewinnen Fits ohne
+Fehllesung; alle vorherigen Erfolge und DEV bleiben bitgleich. Der
+gemessene gemeinsame Rahmen-Bias erreicht im isolierten zweiten Versuch
+5,220583 px statt der starren Fixture-Rastergrenze von etwa 4,7 px.
+Die Person muss diesen verbleibenden blinden Fleck und das verfehlte
+10-ms-Ziel kennen; die Entscheidung ist keine formale Abnahme.
+Zahlen: [Validierung](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28).
+
+## 2026-10-28 — R13-19b: Grobversuch vor unveränderter Feinprüfung
+
+**Problem:** Eine Bewegung am Rand der ±12-px-Suche verliert Rahmenpunkte,
+obwohl die absolute Bewegungsgrenze 20 px / 3° erlaubt.
+
+**Entscheidung:** Nur nach drei Rahmenablehnungsgründen liefert maskierte
+Phasenkorrelation einen Suchfensterversatz. Der erste Erfolg bleibt
+unverändert; sämtliche Feinregeln gelten auch im zweiten Versuch.
+Ein generell größerer Suchradius würde jeden Normalfall verteuern und die
+Peak-/Eindeutigkeitsprüfung verändern; gelockerte Residualgrenzen wären
+eine neue Sicherheitsentscheidung. Beides bleibt ausgeschlossen.
+
+**Profil-Kompatibilität:** `from_dict` ergänzt ausschließlich die beiden
+neuen Grobfelder. Alte Feinparameter bleiben Pflicht und typgeprüft;
+die Live-Sitzung vergleicht die normalisierte Config weiter mit heutigen
+Defaults, der Konstruktor weiter mit Vorschlag, Referenz-SHA und Quad.
+Eine allgemeine Default-Migration könnte fehlende alte Sicherheitsfelder
+verdecken; eine neue Profileinrichtung nur wegen zusätzlicher Grobparameter
+würde vorhandene gebundene Rahmenfenster unnötig verwerfen.
+
+**Konsequenz:** Synthetische Nachführung bis 19 px, aber kein zusätzlicher
+Fit in den 208 Live-Diagnosebildern. Die Feinprüfung bleibt dort der
+belegte Engpass; keine Behauptung einer verbesserten Live-Verfügbarkeit.
+Einzelbelege: [Validierung](VALIDATION.md#r13-19b-grobschaetzung-2026-10-28),
+weitere Klärung: [OQ-46](open-questions.md#oq-46).
+
 # 2026-10-23 — R13-16: Vollständiges Live-Audit auf der 64-GB-SD
 
 ## Problem und Entscheidung

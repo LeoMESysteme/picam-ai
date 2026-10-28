@@ -3750,3 +3750,178 @@ Ausschnitt-/Grauwertvorbereitung maximal 2,42 ms. Zeitbasis:
 monotone Host-Verarbeitungsdauer (`time.perf_counter`), keine
 Aufnahmelatenz oder Live-Durchsatzmessung. Scheduler weiterhin höchstens
 ein offener Auftrag und mindestens zwei Sekunden zwischen Schätzungen.
+
+
+## R13-19b — Grobschätzung 2026-10-28 {#r13-19b-grobschaetzung-2026-10-28}
+
+Offline-Entwicklungsbeleg auf `raspi06`, Raspberry Pi 5 Model B Rev 1.1,
+OpenCV 4.10.0, ein OpenCV-Thread. Kein neuer Hardwarelauf, keine Abnahme.
+Baseline: unverändertes `frame_tracking.py` vor R13-19b;
+Auswertung: `scripts/r13-coarse-eval.py`. Artefakte ausschließlich unter
+`/tmp/claude-1000/r13-19b/`: `live.json`, `dev.json`, `summary.json`,
+`timing.json` und Testprotokolle.
+
+| Datensatz | Bilder | Fits vorher | Fits nachher | Vorher angenommene Ergebnisse unverändert | Neue Fits |
+| --- | --- | --- | --- | --- | --- |
+| `live/live-20261028T110248Z/run-01/diagnose` | 208 | 107 | 107 | 107/107, vollständiger TrackResult | 0 |
+| `diagnostics/r13-werteplan-20261021` | 568 | 568 | 568 | 568/568, vollständiger TrackResult | 0 |
+
+Live-Ablehnungen vorher wie nachher: 100 `rahmen_unstimmig`, 1
+`lcd_rand_fehlt`. 99 Grobschätzungen wurden im zweiten Feinversuch verwendet,
+0 davon akzeptiert: 98 scheitern an den Residuen, 1 an der Streuung
+(`0010.png`); gesonderter Trace ohne Laufzeitwertung
+in `fine-diagnostics.json`. Alle Einzelgründe, Schätzungen (dx, dy, Stärke,
+verwendet) und Quads stehen in `live.json`; neue DEV-Fits gibt es keine.
+Bei `0012.png` ist die Schätzung (+10,994146, −4,352031) px, Stärke
+0,504693; der zweite Fit scheitert am maximalen Inlier-Residuum
+**0,655465 px > 0,650000 px**. Die absolute Bewegung wäre plausibel.
+
+Leser auf jedem angenommenen Live-Bild wie live: dasselbe Profil, Raster,
+Entzerrungsziel und die in `session.json` per SHA gebundenen Vorlagen
+`templates-stufe2c-2026-09-30.json`, Standardtoleranz. Vorher und nachher
+91 gelesene Zahlen, 16 Leserablehnungen, **0/91 Fehllesungen**. Vergleich
+mit `reference.jsonl` ausschließlich nach dem Lesen im Fenster
+−1,5 s … +1,0 s um die Aufnahmezeit, über `to_boottime_ns` mit dem
+Sessionversatz in CLOCK_BOOTTIME umgerechnet. Keine Gate-VALID-Zählung
+und keine Messung von Aufnahme- oder DUT-Latenz.
+
+Laufzeit: zweiter Versuch = Grobschätzung plus zweite Feinprüfung, ohne
+ersten Durchgang und ohne Bildlesen. Alle 99 Live-Versuche während der
+parallelen Prüfläufe: Median **172,079 ms**, Maximum **365,739 ms**.
+Zusätzlich isoliert 31 Wiederholungen nach einem Warmlauf auf `0012.png`:
+Median **46,165 ms**, Maximum **67,768 ms**; davon zweite Feinprüfung
+Median **4,130 ms**, Maximum **11,716 ms**. Normaler erfolgreicher Update
+auf dem Referenzbild: Median **7,794 ms**, Maximum **20,261 ms**.
+Zeitbasis jeweils `perf_counter_ns` (monotone Host-Verarbeitungsdauer).
+Der native Grobausschnitt ist 1067 × 459 px; keine Verkleinerung.
+
+Synthetisch aus dem portablen R13-Referenzbild: 11,8 / 15 / 19 px werden
+mit höchstens 0,5 px Eckfehler angenommen; 23 px abgelehnt; 15 px + 1°
+entweder korrekt oder abgelehnt. Erzwungene falsche Grobschätzungen ergeben
+kein falsches Quad. Erste Erfolge bleiben bitgleich und rufen keinen
+Grobschätzer auf. Der bekannte gemeinsame Rahmen-Bias bleibt ein blinder
+Fleck. **Der geforderte Live-Wiederkehrnachweis ist nicht erreicht**;
+[OQ-46](open-questions.md#oq-46) dokumentiert den weiteren Klärungsbedarf.
+
+## R13-19c — Ähnlichkeit im zweiten Rahmenversuch 2026-10-28 {#r13-19c-aehnlichkeit-2026-10-28}
+
+Rein offline auf Pi 5 `raspi06`, OpenCV 4.10.0, ein Thread; keine neue
+Aufnahme, keine Hardwareänderung, kein Abnahmelauf. Baseline ist der
+uncommittete R13-19b-Stand zu Auftragsbeginn, gesichert als
+`/tmp/claude-1000/r13-19c/frame_tracking_before.py`. Reproduktion:
+`PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python scripts/r13-coarse-eval.py --baseline /tmp/claude-1000/r13-19c/frame_tracking_before.py`.
+Alle Artefakte liegen ausschließlich in diesem temporären Verzeichnis:
+`live-110248Z.json`, `live-121101Z.json`, `dev.json`, `summary.json`,
+`blind.json` und Testprotokolle. Quellen unter `var/` und SSD nur gelesen.
+
+| Datensatz | Bilder | Fits R13-19b | Fits R13-19c | Vorherige Erfolge bitgleich | Neue Fits |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Live `20261028T110248Z/run-01` | 208 | 107 | 205 | 107/107 | 98 |
+| Bewegung `20261028T121101Z/run-01` | 152 | 3 | 23 | 3/3 | 20 |
+| DEV `r13-werteplan-20261021` | 568 | 568 | 568 | 568/568 | 0 |
+
+Bitgleichheit bezieht sich auf den vollständigen `TrackResult`. DEV ruft
+den Grobschätzer nie auf; keine neuen DEV-Annahmen einzeln zu beurteilen.
+Jedes Diagnosebild wird gegen das gespeicherte Profil samt Referenz/SHA
+geprüft, DEV wie bisher mit frischem Vorschlag am gespeicherten Referenzbild.
+Einzelgründe, Quads, Skala und Mittelpunktverschiebung stehen pro Bild in
+den JSON-Artefakten. Neue Fits im ersten Lauf: Skala
+1,000321…1,001220; Mittelpunkt dx 10,296…11,084 / dy −5,080…−3,242 px.
+Im Bewegungslauf: 0,997725…0,998487; dx 14,761…15,550 /
+dy −4,911…−4,169 px. Der erste Lauf gewinnt 98 von 99 zweiten Versuchen;
+`0010.png` bleibt `rahmen_unstimmig`. Endgründe: 205 ok,
+2 `rahmen_unstimmig`, 1 `lcd_rand_fehlt` statt 107/100/1.
+Im Bewegungslauf gewinnen 20 von 29 zweiten Versuchen; 9 bleiben
+`rahmen_unstimmig`, außerdem unverändert 3 `lcd_rand_fehlt`,
+29 `rahmen_mehrdeutig`, 88 `zu_wenig_rahmenmerkmale`. Bewegung bei
+72–98 s sowie ab 166 s wird in den getesteten Bildern abgelehnt.
+Die Grobschätzung nahe null bei späteren großen Bewegungen bleibt ein
+Verfügbarkeitsproblem; sie ist kein Bewegungs- oder Sicherheitsbeleg.
+
+Leser wie live: DotMatrixReader mit SHA-gebundenen Vorlagen aus
+`session.json`, dessen Standardtoleranz, unverändertem Layout und
+Entzerrungsziel. Referenz erst nach Lesen verglichen, Aufnahmezeit mit
+Sessionversatz nach CLOCK_BOOTTIME umgerechnet, Fenster −1,5…+1,0 s.
+
+| Lauf | Gelesene Zahlen vorher/nachher | Leserablehnungen vorher/nachher | Fehllesungen vorher/nachher |
+| --- | ---: | ---: | --- |
+| 110248Z | 91 / 175 | 16 / 30 | 0/91 / 0/175 |
+| 121101Z | 1 / 21 | 2 / 2 | 0/1 / 0/21 |
+
+Zusammen **0/196 Fehllesungen** nachher, darunter 104 neu gelesene Zahlen.
+Dies ist ein Vergleich auf gespeicherten Diagnosebildern, kein neuer
+Gate-VALID-Nachweis und keine Messung von Aufnahme- oder DUT-Latenz.
+
+Isolierter Offlinevergleich ohne parallelen Testlauf: gemessen mit
+`perf_counter_ns`, reine monotone Host-Verarbeitungsdauer. Zweiter
+Durchgang = Grobschätzung plus zweiter Feinversuch, ohne ersten Versuch,
+Graukonversion, Datei-I/O und Leser. Keine 30-fps-Zusage.
+
+| Lauf | Zweite Versuche | R13-19b Median / Max ms | R13-19c Median / Max ms | Nur Grobschätzung R13-19c Median / Max ms |
+| --- | ---: | ---: | ---: | ---: |
+| 110248Z | 99 | 49,073 / 69,690 | 16,435 / 31,005 | 10,165 / 21,731 |
+| 121101Z | 29 | 49,428 / 88,752 | 17,490 / 30,110 | 9,615 / 20,027 |
+
+Die Grobschätzungsstatistik enthält auch verworfene Vorschläge
+(100 bzw. 146). Halbierter Ausschnitt statt nativer Phasenkorrelation;
+die Feinprüfung behält native Fenster. Rund dreifach schneller,
+**Ziel Median ≤10 ms für den gesamten zweiten Durchgang verfehlt**.
+Faktor 4 wurde verworfen: 19 px werden synthetisch als 20,147 px
+geschätzt und überschreiten die unveränderte Grobgrenze; Faktor 2
+liefert 19,467 px. Keine Kappung oder Lockerung dieser Grenze.
+
+Zusätzliche isolierte Wiederholungsmessung nach Abschluss aller Tests,
+ein Warmlauf und 31 Updates auf `110248Z/0012.png`: R13-19b zweiter
+Durchgang Median/Max **46,238/63,116 ms**, R13-19c
+**16,262/29,825 ms**; nur Grobschätzung vorher 42,223/57,709 ms,
+nachher 9,722/13,922 ms. Rohwerte in `timing.json` im Artefaktverzeichnis.
+Auch diese Messung verfehlt das 10-ms-Ziel.
+
+**Gemeinsame falsche Ähnlichkeit, dokumentierte Rastergrenze:**
+LCD bleibt im portablen R13-Referenzbild still; alle Rahmenbereiche
+melden gemeinsam exakte falsche Ziele. Erster Fehlschlag und plausibler
+Grobvorschlag (+2, 0) mit Antwortstärke 0,9 sind injiziert, damit der
+zweite Versuch isoliert läuft. Peakwerte werden ersetzt, sämtliche
+Fit-, Streuungs-, Leave-one-out-, Residual-, Bewegungs- und LCD-Regeln
+laufen real. Dies ist bewusst ein konservatives Modell falscher
+Korrespondenzen, kein Echtdaten-Häufigkeitsnachweis.
+Je Skala: 13 Winkel −1,2…1,2° (0,2°) × 17 dx × 17 dy
+−4…4 px (0,5 px), zusammen **11 271 Hypothesen**.
+
+| Skala | Angenommen | LCD-Rand verwirft | Fit verwirft | Maximaler angenommener Eckfehler px | Schlimmste Lage (Winkel°, dx, dy px) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 0,995 | 90 | 2137 | 1530 | 4,466826 | +0,6; +0,5; −1,0 |
+| 1,000 | 412 | 3345 | 0 | 4,725129 | −0,6; +2,5; 0 |
+| 1,005 | 86 | 2753 | 918 | **5,220583** | +0,6; −1,5; +1,0 |
+
+Fit-Ablehnungen an den beiden Skala-Endpunkten umfassen auch strikte
+Grenzvergleiche bei Gleitkomma-Rundung; die Grenzen sind nicht erweitert.
+Die Regressionstests halten diese Obergrenzen auf diesem Raster fest.
+Ein zusätzlicher gezielter Gegenversuch schaltet ausschließlich die
+LCD-Prüfung ab: eine innerhalb der Skala-/Shift-/Drehgrenzen liegende
+größere Lüge wird dann angenommen, mit LCD-Prüfung abgelehnt.
+Die 2,5-px-Randprüfung begrenzt Maßstabslügen; sie beweist weiterhin
+keine Subpixelgenauigkeit. **5,220583 px sind keine allgemeine obere
+Schranke**; R13-7s 4,7/4,89 px bleiben historische Rasterbelege.
+
+Synthetisch: 11,8 / 15 / 19 px mit s=0,998 und 1,002 nachgeführt,
+Eckfehler ≤0,5 px; s=0,990/1,010 und 21/23 px abgelehnt;
+um 8 px falsche Grobschätzung liefert nur korrektes Quad oder Ablehnung.
+Entscheidung Leonhard vom 2026-10-28: 13 px korrekt nachführen,
+alle absoluten und Residualgrenzen behalten. OQ-46 ist damit in seiner
+Ursache und der begrenzten Abhilfe geklärt; neue Abnahme bleibt nötig.
+
+Prüfung R13-19c (keine volle Suite): Vorher genau die vier beauftragten
+Dateien mit `-q -n 3`: **433 bestanden, 4 gescheitert, 1 übersprungen**
+(258,75 s). Nachher derselbe Aufruf einschließlich neuer Fälle:
+**472 bestanden, 0 gescheitert, 1 übersprungen** (245,54 s).
+Die bisherigen Sicherheitsprüfungen, insbesondere gemeinsam falsche
+starre Rahmenbewegung, Teilverdeckung, Bias und Seed-Fälle, bleiben
+unverändert grün. Die neue Testgruppe wurde vor Implementierung rot
+beobachtet (16 gescheitert, 15 bestanden); dann grün. Der alte 13-px-Test
+ist ausschließlich gemäß Personenentscheidung ersetzt. Getrennt
+`DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -m timing`:
+**1 bestanden, 2630 abgewählt** (3,42 s); der parallele Skip ist dieser
+Timing-Test. Ruff (`src tests examples scripts`, außer `wiki-check.py`),
+Wiki-Prüfung und `git diff --check` bestehen. `docs/status.md` bleibt
+auf ausdrücklichen Auftrag unverändert, kein Commit.

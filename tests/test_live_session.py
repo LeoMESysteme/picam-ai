@@ -1361,3 +1361,39 @@ def test_live_audit_keeps_all_records_in_one_per_run_file(tmp_path):
     assert list(session.records_path.parent.glob('records.jsonl*')) == [session.records_path]
     metadata = json.loads(session.session_path.read_text())
     assert metadata['audit'] == {'rotation': False, 'path': 'records.jsonl'}
+
+
+def test_r19b_session_zaehlt_zweiten_versuch_und_erfolg(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 15], [0, 1, 0]]), image.shape[1::-1])
+    session, _ = _region_session(tmp_path, images=[image, moved, image, moved, image * 0])
+    session.start()
+    try:
+        for _ in range(5):
+            session.step()
+    finally:
+        summary = session.stop()
+    assert summary['tracking_coarse_retries'] == 2
+    assert summary['tracking_coarse_accepted'] == 2
+
+
+def test_r19b_session_altes_profil_bekommt_nachfuehrung_ohne_neueinrichtung(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 19], [0, 1, 0]]), image.shape[1::-1])
+    session, data = _region_session(tmp_path, images=[moved])
+    for config in [data['live_tracking']['config'], data['live_tracking']['proposal']['config']]:
+        for name in ('coarse_min_response', 'coarse_min_shift_px', 'coarse_max_scale_deviation'):
+            config.pop(name, None)
+    session._profile_path.write_text(json.dumps(data))
+    session.start()
+    try:
+        session.step()
+        assert session._pipeline.locator.last_track.quad is not None
+    finally:
+        session.stop()

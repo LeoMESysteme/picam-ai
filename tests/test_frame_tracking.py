@@ -283,10 +283,18 @@ def test_bewegungsgrenzen_werden_durchgesetzt(scene, kind, expected_reason):
     assert result.reason == expected_reason
 
 
-def test_bewegung_knapp_ausserhalb_suchfenster_wird_abgelehnt(scene):
-    reference, _, config, _, tracker = scene
+def test_bewegung_knapp_ausserhalb_suchfenster_wird_nachgefuehrt(scene):
+    """Entscheidung 2026-10-28: zweiter Versuch erweitert den Suchbereich auf 20 px."""
+    reference, quad, config, _, tracker = scene
     matrix = np.float32([[1, 0, config.search_radius_px + 1], [0, 1, 0]])
     image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    close_quad(tracker.update(image), quad + (13, 0), 0.5)
+
+
+def test_bewegung_knapp_ueber_max_shift_wird_abgelehnt(scene):
+    """Entscheidung 2026-10-28 erweitert die Suche, die absolute 20-px-Grenze bleibt."""
+    reference, _, _, _, tracker = scene
+    image = cv2.warpAffine(reference, np.float32([[1, 0, 21], [0, 1, 0]]), reference.shape[1::-1])
     assert tracker.update(image).quad is None
 
 
@@ -1243,3 +1251,280 @@ def test_r11_new_proposal_preserves_dev_availability(name):
     tracker = FrameTracker(reference, quad, proposal)
     result = tracker.update(cv2.imread(str(local_recording(Path('diagnostics/r13-werteplan-20261021/frames') / name))))
     close_quad(result, quad)
+
+
+@pytest.mark.parametrize("dx", [11.8, 15.0, 19.0])
+def test_r19b_grosse_translation_bis_bewegungsgrenze(scene, dx):
+    reference, quad, _, _, tracker = scene
+    moved = cv2.warpAffine(reference, np.float32([[1, 0, dx], [0, 1, 0]]), reference.shape[1::-1])
+    close_quad(tracker.update(moved), quad + (dx, 0), 0.5)
+    assert tracker.last_coarse.used
+
+
+@pytest.mark.parametrize("dx,angle", [(23.0, 0.0), (15.0, 1.0)])
+def test_r19b_absolutgrenze_und_drehung_niemals_falsches_quad(scene, dx, angle):
+    reference, quad, _, _, tracker = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+    matrix[:, 2] += (dx, 0)
+    moved = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    result = tracker.update(moved)
+    if dx > 20:
+        assert result.quad is None
+    elif result.quad is not None:
+        close_quad(result, cv2.transform(quad.reshape(-1, 1, 2), matrix).reshape(-1, 2), 0.5)
+
+
+@pytest.mark.parametrize("offset", [(7.0, 0.0), (-15.0, 0.0)])
+def test_r19b_irrefuehrende_grobschaetzung_niemals_falsches_quad(scene, monkeypatch, offset):
+    from dispread.live.frame_tracking import CoarseEstimate
+
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    monkeypatch.setattr(tracker, "_estimate_coarse", lambda gray: CoarseEstimate(*offset, 0.9))
+    image = cv2.warpAffine(reference, np.float32([[1, 0, 15], [0, 1, 0]]), reference.shape[1::-1])
+    result = tracker.update(image)
+    if result.quad is not None:
+        close_quad(result, quad + (15, 0), 0.5)
+    assert tracker.last_coarse.used
+
+
+@pytest.mark.parametrize("dx", [0.0, 3.0, 6.0])
+def test_r19b_erster_erfolg_bitgleich_ohne_grobschaetzung(scene, monkeypatch, dx):
+    reference, _, config, proposal, _ = scene
+    tracker = FrameTracker(reference, proposal.normalised_quad, proposal, config)
+    image = cv2.warpAffine(reference, np.float32([[1, 0, dx], [0, 1, 0]]), reference.shape[1::-1])
+    expected = tracker._fine_update(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    assert expected.quad is not None
+    monkeypatch.setattr(tracker, "_estimate_coarse", lambda gray: pytest.fail("Grobschaetzung im Normalfall"))
+    assert tracker.update(image) == expected
+    assert tracker.last_coarse is None
+
+
+@pytest.mark.parametrize("dx,dy,strength", [(1.0, 0.0, 0.9), (21.0, 0.0, 0.9), (15.0, 0.0, 0.01),
+                                           (float('nan'), 0.0, 0.9), (15.0, 0.0, float('nan'))])
+def test_r19b_unbrauchbare_grobschaetzung_behaelt_erste_ablehnung(scene, monkeypatch, dx, dy, strength):
+    from dispread.live.frame_tracking import CoarseEstimate
+
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    image = cv2.warpAffine(reference, np.float32([[1, 0, 15], [0, 1, 0]]), reference.shape[1::-1])
+    expected = tracker._fine_update(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    monkeypatch.setattr(tracker, "_estimate_coarse", lambda gray: CoarseEstimate(dx, dy, strength))
+    assert tracker.update(image) == expected
+    assert not tracker.last_coarse.used
+
+
+def test_r19b_altes_config_nur_neue_defaults_ergaenzen(scene):
+    from dispread.live.frame_tracking import RegionProposal
+
+    reference, quad, config, proposal, _ = scene
+    saved = proposal.to_dict()
+    for name in ("coarse_min_response", "coarse_min_shift_px", "coarse_max_scale_deviation"):
+        saved['config'].pop(name, None)
+    restored = RegionProposal.from_dict(saved)
+    assert restored.config == config.to_dict()
+    tracker = FrameTracker(reference, quad, restored, FrameTrackingConfig.from_dict(saved['config']))
+    moved = cv2.warpAffine(reference, np.float32([[1, 0, 19], [0, 1, 0]]), reference.shape[1::-1])
+    close_quad(tracker.update(moved), quad + (19, 0), 0.5)
+    for name in ('min_peak', 'max_shift_px', 'patch_size'):
+        broken = dict(saved['config'])
+        broken.pop(name)
+        with pytest.raises(ValueError):
+            FrameTrackingConfig.from_dict(broken)
+
+
+@pytest.mark.parametrize("name", ['0012.png', '0014.png', '0016.png'])
+def test_r19b_live_bewegung_rahmen_unstimmig_wiedergefunden(name):
+    from dispread.live.frame_tracking import RegionProposal
+
+    root = local_recording('live/live-20261028T110248Z')
+    profile = json.loads((root / 'profile.json').read_text())
+    block = profile['live_tracking']
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    image = cv2.imread(str(root / 'run-01/diagnose' / name))
+    result = tracker.update(image)
+    close_quad(result, np.asarray(profile['quad']) + (11.0, -4.2), 1.0)
+    assert tracker.last_coarse.used
+
+
+@pytest.mark.parametrize('scale', [0.998, 1.002])
+@pytest.mark.parametrize('dx', [11.8, 15.0, 19.0])
+def test_r19c_zweiter_versuch_mit_massstab(scene, scale, dx):
+    reference, quad, _, _, tracker = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0, scale)
+    matrix[:, 2] += (dx, 0)
+    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    close_quad(tracker.update(image), quad @ matrix[:, :2].T + matrix[:, 2], 0.5)
+    assert tracker.last_coarse.used
+    assert tracker.last_coarse.scale == pytest.approx(scale, abs=0.0003)
+
+
+@pytest.mark.parametrize('scale,dx', [(0.990, 15), (1.010, 15), (0.998, 23), (1.002, 23)])
+def test_r19c_massstab_und_absolute_verschiebung_bleiben_begrenzt(scene, scale, dx):
+    reference, quad, _, _, tracker = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0, scale)
+    matrix[:, 2] += (dx, 0)
+    assert tracker.update(cv2.warpAffine(reference, matrix, reference.shape[1::-1])).quad is None
+
+
+@pytest.mark.parametrize('scale', [0.998, 1.002])
+@pytest.mark.parametrize('true_shift,offset', [(13.0, 5.0), (13.0, 20.0), (16.0, 2.0)])
+def test_r19c_falsche_grobschaetzung_um_8_px_niemals_falsches_quad(scene, monkeypatch, scale, true_shift, offset):
+    # Grobschaetzung 7, 8 bzw. 14 px daneben, aber innerhalb der Sperre
+    # (2..20 px), damit der zweite Durchgang wirklich laeuft (Review R13-19c).
+    from dispread.live.frame_tracking import CoarseEstimate
+
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    monkeypatch.setattr(tracker, '_estimate_coarse', lambda gray: CoarseEstimate(offset, 0, 0.9))
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0, scale)
+    matrix[:, 2] += (true_shift, 0)
+    result = tracker.update(cv2.warpAffine(reference, matrix, reference.shape[1::-1]))
+    assert tracker.last_coarse is not None and tracker.last_coarse.used
+    if result.quad is not None:
+        close_quad(result, quad @ matrix[:, :2].T + matrix[:, 2], 0.5)
+
+
+@pytest.mark.parametrize('value', [0.0, -0.005, 0.006, float('nan'), float('inf')])
+def test_r19c_ungueltige_massstabsgrenze(value):
+    with pytest.raises(ValueError):
+        FrameTrackingConfig(coarse_max_scale_deviation=value)
+
+
+@pytest.mark.parametrize('name,accepted', [('0012.png', True), ('0016.png', True),
+                                        ('0040.png', False), ('0050.png', False),
+                                        ('0135.png', False), ('0140.png', False)])
+def test_r19c_live_bewegungslauf_kleine_lage_wiederfinden_grosse_ablehnen(name, accepted):
+    from dispread.live.frame_tracking import RegionProposal
+
+    root = local_recording('live/live-20261028T121101Z')
+    profile = json.loads((root / 'profile.json').read_text())
+    block = profile['live_tracking']
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    result = tracker.update(cv2.imread(str(root / 'run-01/diagnose' / name)))
+    if accepted:
+        assert result.quad is not None, result
+        displacement = np.asarray(result.quad).mean(axis=0) - np.asarray(profile['quad']).mean(axis=0)
+        assert np.linalg.norm(displacement - (14.9, -4.5)) <= 1.5
+        assert tracker.last_coarse.used
+    else:
+        assert result.quad is None
+
+
+@pytest.mark.parametrize('kind', ['rms', 'maximum', 'spread', 'lever'])
+def test_r19c_zweiter_fit_behaelt_sicherheitspruefungen(scene, monkeypatch, kind):
+    """Konsens allein darf Residuen, Streuung und Leave-one-out nicht ersetzen."""
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    target = tracker.sources.copy()
+    if kind == 'rms':
+        target[:, 1] += np.where(np.arange(len(target)) % 2, 0.5, -0.5)
+    elif kind == 'maximum':
+        target[0, 1] += 0.8
+    elif kind == 'spread':
+        # Nur die linke Haelfte bleibt im Konsens.
+        local = (tracker.sources - quad.mean(axis=0)) @ ft._axes(quad).T
+        target[local[:, 0] > 0, 1] += np.arange(sum(local[:, 0] > 0))*5 + 5
+    else:
+        # Einzelner ferner Hebel, alle anderen Punkte nahe dem Zentrum:
+        # die Streuung gezielt isolieren, Leave-one-out bleibt real.
+        tracker.sources = (tracker.sources - quad.mean(axis=0))*0.05 + quad.mean(axis=0)
+        tracker.sources[0, 0] += 250
+        target = tracker.sources.copy()
+        target[0, 1] += 1.4
+        monkeypatch.setattr(ft, '_spread', lambda *args: True)
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker._fine_update(cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY), similarity=True)
+    assert result.quad is None
+    assert result.reason == 'rahmen_unstimmig'
+
+
+def test_r19c_zweiter_fit_ist_unabhaengig_vom_zufallsseed(scene):
+    from dispread.live.frame_tracking import _similarity_ransac
+
+    _, quad, config, _, tracker = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0.2, 1.002)
+    matrix[:, 2] += (15, -2)
+    target = tracker.sources @ matrix[:, :2].T + matrix[:, 2]
+    target[0] += (8, 5)
+    fits = []
+    for seed in [0, 7, 1307]:
+        cv2.setRNGSeed(seed)
+        fit = _similarity_ransac(tracker.sources, target, config)
+        assert fit is not None
+        assert not fit[2][0]
+        assert fit[3] == pytest.approx(1.002, abs=1e-12)
+        np.testing.assert_allclose(quad @ (fit[3]*fit[0]).T + fit[1],
+                                   quad @ matrix[:, :2].T + matrix[:, 2], atol=1e-10)
+        fits.append(fit)
+    for fit in fits[1:]:
+        for actual, expected in zip(fit, fits[0], strict=True):
+            np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('scale,limit', [(0.995, 4.466827), (1.0, 4.725130), (1.005, 5.220584)])
+def test_r19c_gemeinsam_falsche_aehnlichkeit_dokumentierte_grenze(scene, monkeypatch, record_property, scale, limit):
+    """Konservativ isolierter zweiter Versuch: alle Treffer luegen, LCD steht.
+
+    Ein erster Fehlschlag und ein plausibler, unzuverlaessiger Grobvorschlag
+    werden erzwungen. Nur diese Eingangsbelege sind ersetzt, alle Fit- und
+    Randpruefungen laufen real. Festes R13-7-Raster, jetzt mit Massstab.
+    Die Zahlen dokumentieren den blinden Fleck, keine allgemeine Schranke.
+    """
+    from dispread.live import frame_tracking as ft
+    from dispread.track import TrackResult
+
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    fine = tracker._fine_update
+    monkeypatch.setattr(tracker, '_fine_update',
+                        lambda gray, offset=(0, 0), **kw: fine(gray, offset, **kw) if kw.get('similarity')
+                        else TrackResult(None, 0, 0, 0, 'rahmen_unstimmig'))
+    monkeypatch.setattr(tracker, '_estimate_coarse', lambda gray: ft.CoarseEstimate(2, 0, 0.9))
+
+    def injected_update(matrix):
+        targets = tracker.sources @ matrix[:, :2].T + matrix[:, 2]
+        positions = iter(targets - tracker.sources - (2, 0) + config.search_radius_px)
+        monkeypatch.setattr(ft, '_peak', lambda response, config: (next(positions), 1.0, False))
+        return tracker.update(reference)
+
+    errors, reasons, worst = [], {}, None
+    for angle in np.linspace(-1.2, 1.2, 13):
+        for dx in np.linspace(-4, 4, 17):
+            for dy in np.linspace(-4, 4, 17):
+                matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), float(angle), scale)
+                matrix[:, 2] += (dx, dy)
+                result = injected_update(matrix)
+                reason = result.reason or 'ok'
+                reasons[reason] = reasons.get(reason, 0) + 1
+                if result.quad is not None:
+                    assert tracker.last_coarse.used
+                    error = float(np.linalg.norm(np.asarray(result.quad) - quad, axis=1).max())
+                    if not errors or error > max(errors):
+                        worst = [float(angle), float(dx), float(dy)]
+                    errors.append(error)
+    assert sum(reasons.values()) == 3757
+    assert reasons['lcd_rand_fehlt'] > 2000
+    assert 4 < max(errors) <= limit  # Dokumentierte Grenze niemals lockern.
+    record_property('all_regions_wrong_similarity', json.dumps(
+        {'scale': scale, 'trials': sum(reasons.values()), 'reasons': reasons,
+         'max_accepted_corner_error_px': max(errors), 'worst_angle_dx_dy': worst}))
+
+    # Skala bleibt legal, Shift/Drehung ebenso. Ausschliesslich der LCD-Rand
+    # muss diese deutlich groessere Luege stoppen; ohne ihn wird sie akzeptiert.
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0.8, 1 + (scale-1)*0.99)
+    matrix[:, 2] += (3, 3)
+    result = injected_update(matrix)
+    assert result.quad is None
+    assert result.reason == 'lcd_rand_fehlt'
+    monkeypatch.setattr(tracker, '_edges_visible', lambda *args: True)
+    result = injected_update(matrix)
+    assert result.quad is not None
+    assert np.linalg.norm(np.asarray(result.quad) - quad, axis=1).max() > limit

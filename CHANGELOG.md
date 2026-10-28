@@ -5,6 +5,32 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: R13-19c ergänzt ausschließlich im zweiten Rahmenversuch einen
+  Ähnlichkeitsfit mit gleichförmigem Maßstab 0,995…1,005; Minimalpaare und
+  Umeyama-Endfit prüfen diese Grenze. Erster starrer Durchgang, Residuen,
+  Leave-one-out, Streuung, 20 px / 3° und LCD-Randtoleranz bleiben erhalten.
+  Alte Profile bekommen den optionalen Maßstabsparameter als Default;
+  `last_coarse.scale` legt den Endfit offen. Halbierte Phasenkorrelation
+  beschleunigt den zweiten Durchgang auf rund 16–17 ms Median statt 49 ms
+  (Ziel ≤10 ms verfehlt). Offline: Live 107→205/208 und 3→23/152 Fits,
+  0 Fehllesungen; DEV 568/568 bitgleich. Gemeinsame falsche Rahmentreffer
+  bleiben ein blinder Fleck: im zweiten Pfad bis 5,220583 px Eckfehler im
+  festen Fixture-Raster. Die alte 13-px-Ablehnung ist gemäß Entscheidung
+  vom 28.10. durch korrekte Nachführung und eine 21-px-Ablehnung ersetzt.
+  OQ-46 geklärt; keine formale Abnahme oder Gerätefreigabe.
+
+* 2026-10-28: R13-19b ergänzt nach drei Arten von Rahmenablehnung eine
+  maskierte Phasenkorrelation und einen zweiten, versetzten Feinversuch.
+  Der erste Erfolg bleibt bitgleich; sämtliche Fein- und Bewegungsgrenzen
+  bleiben erhalten. Alte R13-11-Profile erhalten nur die zwei neuen
+  Grobparameter als Defaults; Referenz-/Quad-/SHA-Bindung bleibt strikt.
+  Sitzungen zählen zweite Versuche und deren Erfolge. Offline-Werkzeug
+  `scripts/r13-coarse-eval.py` vergleicht alle Live-Diagnose- und DEV-Bilder.
+  Synthetisch gelingt Translation bis 19 px; am untersuchten Live-Stoß
+  bleiben 99 zweite Versuche ohne zusätzlichen Fit (OQ-46). Drei neue
+  Echtdaten-Erwartungen und die alte 13-px-Ablehnungserwartung bleiben rot;
+  keine Sicherheitsgrenze oder bestehende Erwartung gelockert.
+
 * 2026-10-28: R13-19a hält bei der Kantenprüfung in Leerzellen das rechte
   Vergleichspixel vor einer belegten Nachbarzelle mindestens 6 px von der
   Zellgrenze entfernt (vor Leerzellen bleibt das alte Fenster, damit an

@@ -46,20 +46,45 @@ Einrichtungsbilder ergeben geeignete Vorschläge.
 
 ## Bekannte Grenzen (vor dem Merge zu kennen)
 
-1. **Blinder Fleck des Kandidaten R13-7:** Melden alle Rahmenbereiche
+1. **Blinder Fleck, ergänzt am 2026-10-28 (R13-19c):** Melden alle Rahmenbereiche
    dieselbe falsche Bewegung, während das LCD still steht, werden bis
    **4,7 px** (Fixture) bzw. **4,89 px** (reale Aufstellungen, Review)
    Eckfehler angenommen. Lügt nur eine Hälfte: bis **1,43 px**. Das ist
-   keine allgemeine obere Schranke.
+   keine allgemeine obere Schranke. Der neue zweite Ähnlichkeitsfit
+   akzeptiert im konservativen Fixture-Raster bei stillstehendem LCD
+   bis **5,220583 px** Eckfehler (s=1,005); bei s=0,995 sind es
+   4,466826 px, bei s=1 etwa 4,725129 px. Erster Fehlschlag,
+   plausibler Grobvorschlag und gemeinsam falsche Treffer sind injiziert;
+   alle weiteren Prüfungen laufen real. Die unveränderte 2,5-px-LCD-Prüfung
+   begrenzt auch Maßstabslügen, beweist aber keine Subpixelgenauigkeit.
+   Diese neue dokumentierte Grenze muss die Person bei der Entscheidung
+   berücksichtigen; sie ist ebenfalls keine allgemeine obere Schranke.
 2. **Kein Betrieb ohne Raumlicht.** Der Rahmen-Tracker braucht Licht auf
    Rahmen und Gehäuse und lehnt im Dämmerlicht ab (sicher, nicht verfügbar).
    Der Prototyp LCD-Fenster-Tracker (`exp/r13-fenster-tracker`) ist nicht reif.
 3. **Sehr schräge Ansichten** sind ein Grenzfall: Bei „links etwa 18°“
    gelang am 26.10. eine von drei Einrichtungen, zwei lehnten ehrlich ab;
    bis etwa 11,5° gelingt sie.
-4. **Bewegung über 12 px** (zum Beispiel ein Stoß mit Drehung) führt zu
-   dauerhafter Ablehnung mit dem Hinweis „neu einrichten“, nicht zur
-   Nachführung.
+4. **Bewegungsgrenzen, Stand 2026-10-28 (R13-19c):** Ein zweiter Versuch
+   mit Grobschätzung kann die unveränderten Suchfenster über 12 px hinaus
+   versetzen. Absolute Grenzen bleiben `max_shift_px` = **20 px** und
+   `max_rotation_deg` = **3°** gegen das Referenzquad; darüber wird abgelehnt.
+   Nur dieser zweite Versuch darf gemäß Entscheidung Leonhard vom
+   2026-10-28 zusätzlich gleichförmigen Maßstab **0,995…1,005** fitten.
+   Innerhalb dieser Grenzen müssen alle bisherigen Feinprüfungen bestehen,
+   einschließlich RMS ≤0,35 / Maximum ≤0,65 px und LCD-Rand ≤2,5 px.
+   Synthetisch gelingen 11,8/15/19 px mit s=0,998/1,002 auf ≤0,5 px
+   Eckfehler; 21/23 px und s=0,990/1,010 werden abgelehnt. Die frühere
+   13-px-Ablehnung ist ausdrücklich durch korrekte Nachführung ersetzt.
+   Offline verbessern sich die Live-Diagnosefits auf **205/208 statt
+   107/208** und im Bewegungslauf auf **23/152 statt 3/152**;
+   0/196 Fehllesungen, alte Erfolge und DEV 568/568 bitgleich.
+   Große Lagen bei 72–98 s und ab 166 s werden in den getesteten Bildern
+   abgelehnt; die kleine Lage bleibt teilweise unverfügbar.
+   Der zweite Durchgang braucht isoliert Median **16–17 ms statt 49 ms**;
+   **Ziel ≤10 ms verfehlt**. [OQ-46](../../open-questions.md#oq-46)
+   ist zur Ursache geklärt. Neue unabhängige Abnahme steht weiter aus,
+   Einzelbelege in [VALIDATION](../../VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28).
 5. **Profile von vor R13-11 müssen neu eingerichtet werden.**
 6. Einrichtungsrelevante Aufnahmen nur als PNG (JPEG verschiebt die
    Gitteranpassung um bis zu 13 px).

@@ -2489,3 +2489,146 @@ Alle Zahlen stehen im datierten Nachtrag zum ab2-Befund in
 Die Korrektur entfernt den Nachbareffekt bei unveränderten Grenzwerten
 und unveränderter Belegtzellenprüfung. Eine neue Live-Aufnahme oder
 Stabilitätsmessung wurde dabei nicht durchgeführt.
+
+
+## 2026-10-28 — R13-19b: Grobschätzung mit unveränderter Feinprüfung {#r13-19b-grobschaetzung}
+
+**Ziel:** Nachführung nach größeren Bewegungen durch einen zweiten
+Suchversuch ermöglichen, ohne Feinprüfung oder Bewegungsgrenzen zu lockern.
+
+**Aufbau:** Rein offline auf Pi 5 `raspi06`, OpenCV 4.10.0, ein Thread.
+Alle 208 PNG-Diagnosebilder des Live-Laufs
+`live/live-20261028T110248Z/run-01` gegen dessen gespeichertes Profil und
+Referenzbild; außerdem alle 568 Bilder des DEV-Werteplans vom 21.10., wie
+`scripts/r13-tracker-eval.py` mit frischem Vorschlag am damaligen
+Referenzbild. Unveränderte Codekopie vor dem Eingriff als Baseline.
+Keine Hardware angefasst und keine Aufnahme verändert. Ausgaben ausschließlich
+`/tmp/claude-1000/r13-19b/`, Einzelbildergebnisse in `live.json` / `dev.json`.
+
+**Beobachtung und Zahlen:** Live 107/208 Fits vorher wie nachher;
+100 `rahmen_unstimmig`, 1 `lcd_rand_fehlt`. Alle bisherigen 107 Erfolge
+vollständig bitgleich. 99 verwendete Grobschätzungen, **0 zusätzliche
+Erfolge**. Ein gesonderter Trace (`fine-diagnostics.json`, ohne
+Laufzeitwertung) lokalisiert 98 Ablehnungen an den Residualgrenzen und
+eine an der Streuung (`0010.png`).
+Die Grobbewegung ist plausibel, zum Beispiel `0012.png`:
+(+10,994146, −4,352031) px, Antwortstärke 0,504693. Die unveränderte
+Feinprüfung verwirft dort ein maximales Inlier-Residuum von
+0,655465 px bei erlaubten 0,65 px. Kein Grenzwert wurde verändert.
+DEV 568/568 Fits vorher wie nachher, alle TrackResults identisch;
+keine neuen Fits einzeln zu berichten.
+
+Leser wie live auf allen angenommenen Diagnosebildern, Profil und
+SHA-geprüfte Vorlagen aus `session.json`, keine erhöhte Lesetoleranz:
+vorher/nachher 91 gelesene Zahlen, 16 Ablehnungen, **0/91 Fehllesungen**.
+Vergleich erst nach dem Lesen mit den GSV-Werten im Fenster −1,5 … +1,0 s,
+Aufnahmezeit explizit nach CLOCK_BOOTTIME umgerechnet. Kein zusätzlicher
+VALID-/Gate-Nachweis und keine Latenzaussage.
+
+Der zweite Versuch braucht über alle 99 Live-Fälle unter paralleler
+Prüflast Median 172,079 ms / Maximum 365,739 ms. Isoliert, 31 Wiederholungen
+auf `0012.png` nach Warmlauf: **46,165 / 67,768 ms**, davon zweite
+Feinprüfung 4,130 / 11,716 ms; erfolgreicher Normalfall 7,794 / 20,261 ms.
+Zeitbasis `perf_counter_ns`, reine Host-Verarbeitungsdauer. Native
+Phasenkorrelation auf 1067 × 459 px; die zusätzliche Arbeit ist kein
+30-fps-Nachweis. Rohdaten in `timing.json`.
+
+**Tests:** Vor der Implementierung 17/19 neue Tracking-Fälle rot,
+2 bereits sichere Ablehnungsfälle grün; zusätzlich beide neuen
+Sitzungstests rot. Nachher gezielte vier Testdateien: 433 bestanden,
+1 Timing-Test parallel übersprungen, 4 gescheitert. Drei sind die
+unverändert geforderten Live-Wiederkehrfälle `0012/0014/0016.png`;
+der vierte ist die bestehende ausdrückliche Ablehnung bei 13 px
+(`test_bewegung_knapp_ausserhalb_suchfenster_wird_abgelehnt`), die nun
+korrekt nachgeführt werden. Erwartungen unverändert. Der getrennte Lauf mit `-m timing` besteht
+(1 bestanden, 2593 abgewählt); Ruff und Wiki-Prüfung bestehen.
+Gemeinsamer falscher
+Rahmen-Bias, Teilverdeckung, lokaler Bias und Seed-Verdeckung bleiben grün.
+
+**Schluss:** Der zweite Versuch funktioniert synthetisch bis 19 px,
+die absolute Grenze bleibt 20 px / 3°. Er löst den beobachteten Live-Verlust
+unter den vorgeschriebenen unveränderten Feinregeln jedoch nicht.
+Das ist ein offener Wirksamkeitsnachweis, keine Freigabe; [OQ-46](open-questions.md#oq-46).
+Profile ab R13-11 laden ohne Neueinrichtung durch eng begrenztes Ergänzen
+nur der zwei neuen Grobfelder. Alte Sicherheitsfelder, Referenzbild, Quad
+und beide SHA-Prüfungen bleiben gebunden; Profile werden nicht umgeschrieben.
+
+## 2026-10-28 — R13-19c: enger Maßstab im zweiten Fit {#r13-19c-aehnlichkeit}
+
+**Aufbau:** Rein offline am Pi 5 `raspi06`, OpenCV 4.10.0 einthreadig.
+R13-19b zu Auftragsbeginn gesichert; dann alle 208 Diagnosebilder von
+`live-20261028T110248Z`, alle 152 von `live-20261028T121101Z` und
+568 DEV-Bilder aus `r13-werteplan-20261021` vor/nach verglichen.
+Gespeicherte Liveprofile mit Referenzbild/SHA und Vorlagen/SHA unverändert
+benutzt; DEV wie zuvor mit neuem Vorschlag am alten Referenzbild.
+Eingaben unter `var/` und `/mnt/ssd` ausschließlich gelesen,
+keine Hardware angefasst. Ausgaben ausschließlich
+`/tmp/claude-1000/r13-19c/`, Werkzeug `scripts/r13-coarse-eval.py`.
+
+**Anlass und Entscheidung:** Leonhard hat am 28.10. Maßstab im zweiten
+Versuch erlaubt, begrenzt auf ±0,5 %. Die vom Orchestrator über das
+Gehäuse unabhängig gemessene kleine Maßstabsänderung erklärt die
+ortsabhängigen Rahmenresiduen. Der erste Durchgang bleibt starr;
+keine Residual-, Shift-, Dreh- oder Randgrenze wurde gelockert.
+
+**Beobachtung:** 110248Z gewinnt 98 Fits (107→205/208), Bewegungslauf
+20 (3→23/152). Alle 110 früheren Live-Erfolge bleiben bitgleich,
+ebenso DEV 568/568; neue DEV-Fits gibt es keine. Neue Skalen liegen bei
+1,000321…1,001220 bzw. 0,997725…0,998487. Im Bewegungslauf liegen die
+neuen Mittelpunkte bei dx 14,761…15,550 / dy −4,911…−4,169 px,
+passend zur unabhängigen Gehäusemessung der kleinen Lage bei 42–70 s.
+Große Lagen 72–98 s und ab 166 s werden in den getesteten Bildern abgelehnt.
+Nicht jedes Bild der kleinen Lage wird verfügbar: 9 zweite Versuche
+bleiben `rahmen_unstimmig`, im ersten Lauf einer (`0010.png`).
+
+Leser mit denselben Liveparametern, ohne Referenzwert als Eingabe:
+91→175 bzw. 1→21 Zahlen, **0/196 Fehllesungen** nachher; 30 bzw. 2
+Leserablehnungen. Referenzvergleich nach dem Lesen mit
+`reference.jsonl`, Fenster −1,5…+1,0 s in CLOCK_BOOTTIME nach expliziter
+Umrechnung der V4L2-Aufnahmezeit mit Sessionversatz. Kein Gate-VALID-
+oder neuer Latenznachweis. Details und Einzelgründe in den JSON-Dateien.
+
+**Laufzeit und verworfene Variante:** Ohne parallele Prüfläufe beträgt
+Grobschätzung plus zweite Feinprüfung Median/Max 16,435/31,005 ms
+(99 Versuche) bzw. 17,490/30,110 ms (29). R13-19b im selben Vergleich:
+49,073/69,690 bzw. 49,428/88,752 ms. Zeitbasis `perf_counter_ns`, reine
+Host-Verarbeitungsdauer ohne Datei-I/O, ersten Versuch, Graukonversion
+oder Leser. Die halbierte Phasenkorrelation ist deutlich schneller,
+das Ziel ≤10 ms Median aber verfehlt. Faktor 4 verwarf bereits legale
+synthetische 19 px wegen Grobfehler 20,147 px; Faktor 2 liefert 19,467 px.
+Die unveränderte Grobgrenze blieb strenger als der Optimierungswunsch.
+
+Nach allen Tests zusätzlich isoliert auf `110248Z/0012.png`, ein Warmlauf
+und 31 Wiederholungen: zweiter Durchgang vorher **46,238/63,116 ms**,
+nachher **16,262/29,825 ms** (Median/Max). Die reine Grobschätzung sinkt
+von 42,223/57,709 auf 9,722/13,922 ms. Rohwerte in `timing.json`.
+Diese Wiederholungsmessung bestätigt Beschleunigung und Zielverfehlung.
+
+**Sicherheitsgrenze:** Gemeinsame falsche Ähnlichkeit wurde am portablen
+Referenzbild mit stillstehendem LCD konservativ isoliert: erster
+Fehlschlag, plausibler Grobvorschlag und alle falschen Rahmentreffer
+injiziert; nachgelagerte Prüfungen real. Festes Raster wie R13-7
+(−1,2…+1,2° in 0,2°, dx/dy −4…4 px in 0,5 px), je Skala 3757 Fälle.
+Bei s=0,995 / 1 / 1,005 werden 90 / 412 / 86 falsche Quads angenommen,
+maximal 4,466826 / 4,725129 / **5,220583 px** Eckfehler.
+Die LCD-Prüfung verwirft 2137 / 3345 / 2753 Hypothesen. Ein Gegenversuch
+ohne ausschließlich diese Prüfung akzeptiert eine größere legale Lüge.
+Damit ist ihre begrenzende Wirkung belegt, zugleich ist der blinde
+Fleck größer als die historischen starren Rasterbelege. Keine allgemeine
+obere Fehlerschranke, keine Freigabe. Neue Tests halten die dokumentierten
+Rastergrenzen fest; alte Sicherheitsprüfungen bleiben unverändert.
+
+**Deutung:** OQ-46s Ursache und die enge Abhilfe sind geklärt. Die
+Ähnlichkeit erklärt den größten Teil der R13-19b-Live-Ausfälle ohne
+Residualgrenzen zu lockern. Die Person muss vor der Mergeentscheidung
+den verbleibenden blinden Fleck, Teilverfügbarkeit und das verfehlte
+Laufzeitziel berücksichtigen. Zahlen und Prüfbelege:
+[VALIDATION](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28).
+
+**Prüfabschluss:** Vier beauftragte Testdateien mit `-q -n 3`: vorher
+433 bestanden / 4 gescheitert / 1 übersprungen, nachher **472 bestanden /
+0 gescheitert / 1 übersprungen**. Die neue Testgruppe wurde vor der
+Implementierung rot ausgeführt. Getrennt `-m timing`: **1 bestanden,
+2630 abgewählt**. Alte Sicherheitsprüfungen unverändert grün;
+Ruff, Wiki-Check und Diff-Prüfung ohne Befund. Keine volle Suite,
+kein Commit, `docs/status.md` wie beauftragt nicht verändert.

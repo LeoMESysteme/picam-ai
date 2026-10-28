@@ -52,6 +52,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
 | [OQ-44](#oq-44) | — | geklärt | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 | [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
+| [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
 
 <!-- OQ-INDEX:END -->
 
@@ -2160,3 +2161,35 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `src/dispread/pipeline.py`, `tests/test_records.py`,
   `tests/test_live_tracking.py`, `tests/test_live_session.py`
   sowie [TIMING.md](TIMING.md).
+
+<span id="oq-46"></span>
+
+## OQ-46 — Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung?
+
+* **Status:** geklärt · **Erkannt:** 2026-10-28 · **Geklärt:** 2026-10-28 · **Zuständig:** Entwicklung / Labor
+* **Blockierte:** Wirksamkeitsnachweis R13-19b am Live-Stoß vom 28.10.; keine Freigabe.
+* **Befund:** Offline auf allen 208 Diagnosebildern von
+  `live/live-20261028T110248Z/run-01`: 99 zweite Feinversuche, kein
+  zusätzlicher Fit (98 Residuen-, 1 Streuungsablehnung).
+  Die Grobschätzung findet ungefähr (+11, −4,4) px;
+  bei `0012.png` überschreitet ein Inlier mit 0,655465 px die unveränderte
+  Maximumgrenze 0,65 px. Eine korrekte Gesamtbewegung allein reicht nicht.
+* **Antwort (2026-10-28):** Kleine reale Maßstabsänderungen erzeugen am
+  starren Fit ortsabhängige Residuen. Die unabhängige Gehäusemessung
+  zeigt etwa 1,0008…1,0015 bzw. 0,9973…0,9984. Entscheidung Leonhard:
+  ausschließlich im zweiten Versuch gleichförmigen Maßstab 0,995…1,005
+  erlauben; alle anderen Grenzen unverändert. R13-19c gewinnt offline
+  98/99 zweite Versuche im ersten Lauf (107→205/208 Fits) und 20/29 im
+  Bewegungslauf (3→23/152), 0/196 Fehllesungen, frühere Erfolge und
+  DEV 568/568 bitgleich. Verbleibende lokale Fehler werden weiter
+  abgelehnt. Der gemeinsame Rahmen-Bias bleibt: bis 5,220583 px im
+  konservativen zweiten Fixture-Raster. Median 16–17 ms statt 49 ms,
+  Ziel ≤10 ms verfehlt. Klärung der Ursache ist keine neue Abnahme.
+  Review 2026-10-28: Auch bei verdeckter oder leerer Anzeige läuft die
+  Grobschätzung bei jeder Ablehnung (etwa 25 ms je Bild), obwohl der zweite
+  Versuch dann nicht greift; das kostet Bildrate, keine Sicherheit.
+  Möglicher nächster Schritt: Grobschätzung kleiner/billiger rechnen.
+* **Antwort umgesetzt in:** `src/dispread/live/frame_tracking.py`,
+  `tests/test_frame_tracking.py`, `scripts/r13-coarse-eval.py`,
+  [Validierung](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28)
+  und [Laborjournal](lab_journal.md#r13-19c-aehnlichkeit).
