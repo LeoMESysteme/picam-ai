@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: Docs-Playwright in der CI wiederholt einen fehlgeschlagenen
+  Test einmal. Seit dem Wiki-Gerüst riss auf dem Pi bei fast jedem Lauf
+  ein anderer zeitkritischer Test: Glossar-Fundstelle nach 10 s,
+  Hinweis-Popup, Roadmap-Mausrad. Die CI teilt sich die CPU mit Werkbank
+  und Messläufen und läuft gedrosselt (Nice 19, 200 % CPU). Lokal bleibt
+  es bei null Wiederholungen. Wiederholte Tests führt der Bericht als
+  „flaky“. Die Glossar-Fundstelle darf 20 s statt 10 s brauchen; der
+  Suchindex ist auf dem Pi kalt nach gut 5 s bereit.
+
 * 2026-10-28: Doku-Pflegelauf nutzt dauerhaft die lokale Codex-Anmeldung.
   „maintain“ scheitert seit dem 19.10. immer wieder, zuletzt am 28.10. mit
   `workspace routing discovery unauthorized (401)`, ohne dass Codex einen
