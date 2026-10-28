@@ -139,8 +139,9 @@ Erkennungsfehler erscheinen
 [Sink-Vertrag](../../api/sink.md)). Der aktuelle Live-Lauf nutzt ausschließlich das JSONL-Log als Auditspur.
 Eine serielle GSVmulti-Ausgabe ist dort noch nicht angeschlossen.
 Das serielle ASCII-CSV ist nur ein als <code>provisional=True</code>
-gekennzeichneter Platzhalter; das GSVmulti-Format ist
-[unbekannt](../GSVMULTI_PROTOCOL.md).
+gekennzeichneter Platzhalter. Der
+[UserDefined-Einstieg](../GSVMULTI_PROTOCOL.md#userdefined-format) ist seit
+2026-10-28 dokumentiert; der zugehörige Adapter und seine Abnahme fehlen.
 
 Die optionale serielle GSV-2AS-Aufzeichnung steht getrennt in
 <code>reference.jsonl</code>; der Nachvergleich erfolgt mit

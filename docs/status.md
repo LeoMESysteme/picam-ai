@@ -145,8 +145,11 @@ Nächste Aufgaben gemäß TODO:
 2. Testlauf-Sicherung und Zeitbasis-Bezeichnung klären (OQ-44/OQ-45).
 3. Toleranzlauf ≥ 10 min mit Werteplan und weitere Aufstellung erst nach
    Bearbeitung der Trackinggrenze; andere Lichtquellen/Geräte bleiben offen.
-4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
-   Danach Bedienoberfläche und Aufräumarbeiten gemäß TODO.
+4. GSVmulti-UserDefined-Prototyp anhand der belegten Spezifikation bauen;
+   Empfang, Ungültigbehandlung und Transport prüfen
+   ([Bewertung](GSVMULTI_PROTOCOL.md), [OQ-07](open-questions.md#oq-07),
+   [OQ-47](open-questions.md#oq-47)). Danach Bedienoberfläche und
+   Aufräumarbeiten gemäß TODO.
 
 Weiter offen: `raw_text` enthält die geparste Zahl statt 16 Displayzellen;
 Streamstillstand beendet erst nach OpenCV-Timeout (etwa 10–20 s), die

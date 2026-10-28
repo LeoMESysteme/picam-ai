@@ -307,7 +307,7 @@
 
   T.register("regeln-protokoll", (ctx) => {
     const { tl, A, layer, tour } = ctx;
-    const head = heading(layer, "Kein erfundenes Protokoll", "Welches Telegramm erwartet GSVmulti? Unbekannt (OQ-07).");
+    const head = heading(layer, "Kein erfundenes Protokoll", "UserDefined ist dokumentiert. Adapter und Abnahme bleiben offen.");
 
     const rec = T.group(layer, "regeln-rec");
     T.panel(rec, 40, 200, 170, 64, "t-panel t-flow-box");
@@ -327,7 +327,7 @@
     gsvRect.setAttribute("style", BAD_PANEL);
     T.label(gsvFmt, 318, 296, "GsvAsciiFormatter", "t-mono t-strong");
     T.label(gsvFmt, 318, 320, "raise NotImplementedError", "t-mono t-mono-sm t-bad-text");
-    T.label(gsvFmt, 318, 344, "„Format ist nicht bekannt (OQ-07)“", "t-small");
+    T.label(gsvFmt, 318, 344, "alte Meldung: Format unbekannt", "t-small");
     tour.docLink(gsvFmt, "docs/open-questions.html#oq-07", "OQ-07 öffnen", [616, 284]);
 
     const toCsv = T.svg("path", { d: "M210 220C250 220 260 150 296 150", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
@@ -336,7 +336,7 @@
     const target = T.group(layer, "regeln-target");
     T.panel(target, 720, 200, 200, 64, "t-panel t-planned-box");
     T.label(target, 820, 228, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    T.label(target, 820, 250, "Format offen", "t-small t-plan-text", { "text-anchor": "middle" });
+    T.label(target, 820, 250, "Adapter fehlt", "t-small t-plan-text", { "text-anchor": "middle" });
     tour.docLink(target, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 214]);
     const toTarget = T.svg("path", { d: "M630 314C680 314 680 250 716 242", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
     const stop = T.group(layer, "regeln-stop");
@@ -349,7 +349,7 @@
     T.label(guess, 58, 442, "wäre im Test grün und fiele erst am Laborplatz auf", "t-small");
     const guessStrike = strikeThrough(guess, 56, 413, 196);
 
-    const way = T.chip(layer, 600, 400, "Belastbar: Mitschnitt GSV-Gerät → GSVmulti", "chip--flow");
+    const way = T.chip(layer, 600, 400, "UserDefined: Empfang und Ausfälle prüfen", "chip--flow");
 
     T.hidden(head, rec, csv, gsvFmt, toCsv, toGsv, target, toTarget, stop, guess, guessStrike, way);
     T.fadeUp(tl, head, {}, 0);
@@ -391,7 +391,7 @@
       ["andere Lichtquellen", "Freigabe bisher nur für Raumlicht", null],
       ["Minuszeichen", "Gerät zeigt nie „−“, der Leser kennt nur „+“", null],
       ["Freigabeschwellen", "an realen Geräten validieren · OQ-14", "docs/open-questions.html#oq-14"],
-      ["GSVmulti-Format", "Telegramm unbekannt · OQ-07", "docs/open-questions.html#oq-07"],
+      ["GSVmulti-Anbindung", "Adapter und Abnahme offen · OQ-07", "docs/open-questions.html#oq-07"],
     ].map(([title, sub, href], i) => {
       const g = T.group(open, "regeln-open");
       const y = 146 + i * 48;

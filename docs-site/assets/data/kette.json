@@ -66,7 +66,7 @@
       "titel": "Ausgabe",
       "zustand": "teilweise",
       "zweck": "Sie schreibt Audit-Daten; die serielle GSVmulti-Senke ist im Livepfad noch nicht angeschlossen.",
-      "einstellung": "Live: JsonlSink für records.jsonl. AsciiCsvFormatter ist vorläufig; GsvAsciiFormatter wirft absichtlich (OQ-07).",
+      "einstellung": "Live: nur JSONL. UserDefined belegt, Adapter fehlt. AsciiCsvFormatter vorläufig; GsvAsciiFormatter wirft (OQ-07).",
       "anbindung": "src/dispread/sink/",
       "api": "api/sink.html",
       "doku": "docs/GSVMULTI_PROTOCOL.html"

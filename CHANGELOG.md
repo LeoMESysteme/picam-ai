@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: GSVmulti-PDF gegen die Herstelleranleitung v2.6 und den
+  vorhandenen Ausgabepfad geprüft. UserDefined belegt einen konfigurierbaren
+  Windows-COM-Zahlenimport; die reine Spezifikationsbeschaffung sperrt den
+  Prototyp nicht mehr. Wiki-Anbindungsseite, Roadmap, Tourtexte und Szenen
+  zeigen den neuen Stand gemeinsam. OQ-01/OQ-07 teilweise geklärt;
+  OQ-47 hält Transport und Wiederanlauf fest. Original-PDF und nachgereichtes
+  Beispiel-ZIP im Wiki verlinkt. Elf Softwareprüfungen bestätigen den
+  Demodatenstrom und reproduzieren Fehler der Bridge bei COM-Schreibfehlern
+  und vollständigen überlangen Zeilen sowie Grenzen bei Zahlenlexik und
+  Altersprüfung. Die Beispiele bleiben unverändertes Quellmaterial.
+  Empfang in 2.01 Pro, Ungültigbehandlung, Zeitachse und Live-Integration
+  bleiben unbewiesen; kein Formatter implementiert, kein Messlauf.
+
 * 2026-10-28: Docs-Playwright in der CI wiederholt einen fehlgeschlagenen
   Test einmal. Seit dem Wiki-Gerüst riss auf dem Pi bei fast jedem Lauf
   ein anderer zeitkritischer Test: Glossar-Fundstelle nach 10 s,

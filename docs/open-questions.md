@@ -10,14 +10,15 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
 | [OQ-44](#oq-44) | Jetzt | offen | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 | [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
-| [OQ-07](#oq-07) | Jetzt | offen | GSVmulti-Telegrammspezifikation beschaffen |
+| [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
+| [OQ-47](#oq-47) | Jetzt | offen | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
+| [OQ-01](#oq-01) | Jetzt | teilweise geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
+| [OQ-06](#oq-06) | Jetzt | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
-| [OQ-01](#oq-01) | — | offen | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
 | [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
 | [OQ-04](#oq-04) | — | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
 | [OQ-05](#oq-05) | — | offen | Ist eine einmalige Bestätigung durch den Laboranten im Ablauf vorgesehen? |
-| [OQ-06](#oq-06) | — | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
 | [OQ-09](#oq-09) | — | offen | RS-232-/RS-485-Transceiver und galvanische Trennung |
 | [OQ-10](#oq-10) | — | offen | Spezialisierte 7-Segment-Traineddata für Tesseract |
 | [OQ-11](#oq-11) | — | offen | Workstation für die IMX500-Modellkonvertierung |
@@ -74,8 +75,15 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-01 — Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version?
 
-* **Status:** offen · **Zuständig:** ME-Systeme intern
-* **Blockiert:** P4. **Nicht** P0–P3.
+* **Status:** teilweise geklärt (2026-10-28) · **Zuständig:** ME-Systeme intern
+* **Antwort:** Die Herstelleranleitung v2.6, S. 118–121, beschreibt
+  `UserDefined` in GSVmulti PRO: selbsttätiger ASCII-/UTF-8-Zahlenstrom über
+  realen oder virtuellen COM-Port, 8N1, Dezimalpunkt, CRLF und konfigurierbare
+  Präfixe/Kanalpositionen. Der Nutzer bestätigt Windows; das bereitgestellte
+  PDF dokumentiert 2.01 Pro. Ein Empfang in dieser Installation ist noch
+  nicht nachgewiesen. Siehe [Format und Quellen](GSVMULTI_PROTOCOL.md#userdefined-format).
+* **Blockiert:** die vollständige P4-Abnahme; ein UserDefined-Prototyp kann
+  jetzt gebaut werden. **Nicht** P0–P3.
 * **Vorabdefault:** `AsciiCsvFormatter`, als `provisional=True` gekennzeichnet.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md)
 * Siehe OQ-07 — praktisch dieselbe Frage aus der Beschaffungsperspektive.
@@ -158,11 +166,18 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 ## OQ-06 — Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt?
 
 * **Status:** offen · **Zuständig:** ME-Systeme intern + QM
-* **Blockiert:** P4, zusammen mit OQ-01.
+* **Blockiert:** die Freigabe von P4, zusammen mit OQ-01.
 * **Vorabdefault:** `InvalidValuePolicy` als austauschbarer Adapterparameter
   mit den drei Varianten `omit_record`, `send_nan`, `status_flag`. Alle drei
   sind implementiert und getestet, die Wahl ist eine Konfiguration.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md)
+* **Ergänzung 2026-10-28:** UserDefined belegt den Zahlenimport, aber weder
+  `NaN` noch leere Wertfelder als Ungültigmarkierung. Ein zusätzlicher
+  numerischer Statuskanal macht einen anderen Kanal nicht automatisch
+  ungültig. Auslassen oder Senderstopp allein belegt nicht, dass GSVmulti
+  den letzten Wert rechtzeitig als veraltet kennzeichnet. Anzeige,
+  Aufzeichnung und Kalibrierauswertung gemeinsam prüfen; ungültige Zeiträume
+  dürfen keine Messfreigabe erhalten. [Prüffälle](GSVMULTI_PROTOCOL.md#ungultige-werte).
 
 ---
 
@@ -170,8 +185,16 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-07 — GSVmulti-Telegrammspezifikation beschaffen
 
-* **Status:** offen · **Zuständig:** Mensch bei ME-Systeme
-* **Befund:** Die Spezifikation liegt lokal nicht vor.
+* **Status:** teilweise geklärt (2026-10-28) · **Zuständig:** ME-Systeme intern
+* **Neuer Befund:** Das bereitgestellte PDF
+  [GSVmulti und Raspberry Pi](quellen/GSVmulti_Raspberry_Pi_Sensoranbindung.pdf)
+  nennt den Weg `UserDefined`. Die verlinkte
+  [Herstelleranleitung v2.6](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf#page=118)
+  wurde am 2026-10-28 direkt geprüft; S. 118–121 belegen den Zahlenimport.
+  Damit entfällt die reine Beschaffungssperre für einen Prototyp.
+  Empfang in 2.01 Pro, Ungültigbehandlung und Zeitachse bleiben offen;
+  kein Format ist dadurch bereits implementiert oder abgenommen.
+  [Bewertung und nächste Schritte](GSVMULTI_PROTOCOL.md).
 * **Korrektur der Abrufaussage (2026-09-22):** Die bisherige Formulierung
   „`me-systeme.de` blockt automatische Abrufe mit HTTP 403" ist **zu pauschal**.
   Gemessen am 2026-09-22:
@@ -184,7 +207,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
     die oben genannten URLs.
   * **HTML-Produktseiten liefern weiterhin HTTP 403** (geprüft an
     `https://www.me-systeme.de/en/gsv-2as-05`).
-* **Warum OQ-07 trotzdem offen bleibt:** Das beschaffte GSVmulti-Handbuch von
+* **Historischer Befund vom 2026-09-22:** Das damals beschaffte GSVmulti-Handbuch von
   2011 ist eine **Bedienungsanleitung der Oberfläche** (Kanal hinzufügen,
   Skalierung, Speichern), **keine Telegrammspezifikation**. Gesucht ist laut
   Konzept §12 ausserdem die Version 2.6, nicht die von 2011. Die
@@ -192,14 +215,16 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   GSVmulti als Eingang **akzeptiert**, ist damit nicht belegt, sondern nur
   plausibel. Es wird nichts geraten ([AGENTS.md](../AGENTS.md), „Kein Erfinden
   von Protokollen").
-* **Belastbarste Quelle ist nicht die Doku, sondern ein Mitschnitt:** ein
+* **Für eine native Geräteemulation weiterhin geeigneter Nachweis:** ein
   vorhandenes GSV-2/GSV-3 im ASCII-Modus an GSVmulti hängen und den realen
   Datenstrom aufzeichnen. Das liefert das tatsächliche Telegramm. **Neu
   verfügbar dafür:** das Laborgerät ist als **GSV-2AS** identifiziert
   ([OQ-38](open-questions.md)) und beherrscht laut Anleitung genau diesen
   ASCII-Modus — das für dieses Experiment nötige Gerät ist also vorhanden.
 * **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md),
-  Implementierung in `src/dispread/sink/protocol/gsv_ascii.py`
+  UserDefined als neuer `TelegramFormatter`; `gsv_ascii.py` bleibt der
+  absichtlich werfende Platzhalter. Kein Nachbau eines GSV-Geräts für den
+  UserDefined-Einstieg erforderlich.
 
 <span id="oq-08"></span>
 
@@ -216,10 +241,17 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 ## OQ-09 — RS-232-/RS-485-Transceiver und galvanische Trennung
 
 * **Status:** offen · **Zuständig:** Hardware / Beschaffung
-* **Befund:** Kein USB-Seriell-Adapter angeschlossen. Verfügbar sind nur
+* **Historischer Befund vom 2026-09-07:** Kein USB-Seriell-Adapter angeschlossen. Verfügbar waren nur
   `/dev/ttyAMA0` (Datenport, durch `dtparam=uart0=on` aktiv) und
   `/dev/ttyAMA10` alias `/dev/serial0` — letzteres ist der **3-Pin-Debug-Header**
   und nicht der Nutzdatenport.
+* **Dokumentabgleich 2026-10-28:** Seit 2026-09-22 ist ein PL2303 an
+  `/dev/ttyUSB0` für die eingehende GSV-2AS-Referenz dokumentiert, nicht
+  für den GSVmulti-Ausgang. Ein Windows-USB-UART mit 3,3-V-TTL wäre eine
+  andere Ausgangsvariante als RS-232/RS-485; Raw TCP benötigt keinen
+  GPIO-Transceiver. Die tatsächliche Wahl ist noch offen
+  ([Transportvergleich](GSVMULTI_PROTOCOL.md#transport),
+  [Hardwareprofil](HARDWARE_PROFILE.md)). Kein neuer Hardwaretest.
 * **Konzept §8:** Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden
   werden. Galvanische Trennung ist für den Laboraufbau zu bewerten.
 * **Blockiert:** die elektrische Strecke, nicht die Software. Getestet wird bis
@@ -2127,3 +2159,35 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** `src/dispread/records.py`,
   `src/dispread/pipeline.py`, zugehörigen Zeitbasis- und Pipeline-Tests
   sowie [TIMING.md](TIMING.md).
+
+<span id="oq-47"></span>
+
+## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
+
+* **Status:** offen · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
+* **Befund:** USB-UART und Raw TCP mit Windows-VCOM sind plausible Wege.
+  Ein konkreter Ausgang samt Windows-Port, Treiber/Lizenz, Pufferverhalten
+  und Wiederanlauf ist für dieses Projekt noch nicht ausgewählt oder
+  nachgewiesen. Das nachgereichte
+  [Beispiel-ZIP](quellen/GSVmulti_Raspberry_Pi_Beispiele.zip) wurde im
+  Quelltext und mit elf Softwareprüfungen untersucht. COM-Schreibfehler
+  landen im TCP-Retry, vollständige überlange Zeilen umgehen die
+  Größenprüfung, und das Zahlenprofil prüft kein Alter. Die erste Zeile
+  jeder Verbindung wird absichtlich verworfen; ein Empfangstimeout nach
+  5 s kann auch legitime Pausen unterbrechen.
+  [Reproduktionen und Grenzen](GSVMULTI_PROTOCOL.md#beispielcode).
+  TCP-Erreichbarkeit allein belegt keinen GSVmulti-Empfang.
+* **Blockiert:** Ende-zu-Ende-Abnahme von P4, nicht den Bau des Formatters.
+  OQ-09 behandelt die elektrische Strecke; OQ-06 die Bedeutung ungültiger
+  Werte. Hier geht es um die durchgängige Verbindung und ihren Wiederanlauf.
+* **Klärung:** Einen Transport festlegen; tatsächliche Portzuordnung und
+  Treiberversion sichern. Startreihenfolgen, Leitungsabbruch, Neustarts von
+  Sender/Bridge/GSVmulti, begrenzte Puffer und blockierten Empfänger prüfen.
+  Neue Verbindung an einer vollständigen Zeile synchronisieren und
+  nachweisen, dass keine vor dem Ausfall erfassten Werte als aktuelle
+  Messwerte nachgeliefert werden. Das Alter braucht eigene Belege, da das
+  einfache Zahlenprofil keinen Aufnahmezeitstempel trägt.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#transport),
+  [Hardwareprofil](HARDWARE_PROFILE.md) bei tatsächlicher Anschlusswahl;
+  spätere Messbelege in [VALIDATION.md](VALIDATION.md) und
+  [Laborjournal](lab_journal.md).

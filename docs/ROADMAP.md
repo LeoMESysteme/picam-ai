@@ -1,10 +1,11 @@
 # Roadmap
 
-Kernaussage zur Reihenfolge: von den sechs offenen Entscheidungen aus Konzept
-§11 blockiert **nur OQ-01 (und über OQ-01 auch OQ-06) echte
-Implementierungsarbeit** — und zwar ausschließlich P4. OQ-02, OQ-03 und OQ-04
-blockieren die **Abnahme**, nicht das Bauen. Der Bau kann damit weitergehen;
-Freigabe und Abnahme bleiben an ihre Nachweise und Entscheidungen gebunden. Stand des Abgleichs: 2026-10-21.
+Stand des Abgleichs: **2026-10-28**. Die UserDefined-Schnittstelle ist durch
+die Herstelleranleitung belegt; ein GSVmulti-Prototyp kann jetzt gebaut
+werden ([Bewertung](GSVMULTI_PROTOCOL.md)). P4 ist noch nicht umgesetzt
+oder abgenommen: Empfang in 2.01 Pro (OQ-01), Ungültigbehandlung (OQ-06),
+Transport/Wiederanlauf (OQ-47) und Zeitachse (M8/P5) brauchen Nachweise.
+OQ-02, OQ-03 und OQ-04 betreffen weiterhin die Abnahme.
 
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
 | --- | --- | --- | --- | --- | --- |
@@ -12,7 +13,7 @@ Freigabe und Abnahme bleiben an ihre Nachweise und Entscheidungen gebunden. Stan
 | **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — seit 2026-09-25 StreamCam statt IMX500; `camera-commissioning.sh` Exit 0 (2026-09-28), Zeitbasis MONOTONIC → BOOTTIME über gemessenen Versatz, `replay://` implementiert; Zeitstempel-Semantik offen (OQ-43, für die Ernte durch die Timing-Kalibrierung abgedeckt) |
 | **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | **teilweise** — Sammelmodus, serielle Auto-Labels, Timing-Kalibrierung, Ernte und Import gebaut; reale Dot-Matrix-Daten und mehrere Aufstellungen vorhanden. Geräte-/Displayvielfalt und zwei gesperrte Geräteinstanzen fehlen; mehrere Aufstellungen desselben GSV-2AS sind keine weiteren Geräte |
 | **P3** | Werterkennung an realen Anzeigen, Freigabeschwellen kalibrieren | ja | nein | Trefferquote **pro Fehlerklasse** aufgeschlüsselt; reale Freigabeschwellen für den vereinbarten Gerätekreis belegt | **teilweise** — Dot-Matrix-Abnahme 3: 215/215 richtig auf zwei neuen Aufstellungen desselben GSV-2AS (2026-09-30); Live-Bedienerläufe seit 2026-10-21. Andere Geräte, Vorzeichen, Einheiten und angepasste Toleranz nicht abgenommen |
-| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | blockiert durch OQ-01, OQ-06 |
+| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | **offen** — UserDefined-Spezifikation vorhanden (2026-10-28), Prototyp baubar; Adapter und Abnahme fehlen (OQ-01, OQ-06, OQ-47) |
 | **P5** | Zeitbezug vollständig: §6 von Prosa in Zahlen | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | **teilweise** — StreamCam-Timing-Kalibrierung und Live-Referenzauswertung vorhanden; getrenntes Budget, Referenzsynchronität und M8 weiter offen |
 | **P6** | Robustheit und Dauerbetrieb (§10 Ph. 3) | ja | teilw. | 72-h-Dauerlauf mit provozierten Störungen; **kein unmarkierter Altwert**; Speicher stabil | **teilweise** — Live-Pfad mit STALE und Audit gebaut, kurze Störversuche vorhanden; 72 h, Audit-Aufbewahrung und Nachführung bei großen Wertwechseln offen ([OQ-26](open-questions.md#oq-26)) |
 | **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | offen |
@@ -50,15 +51,15 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 | P3 | p3-geraete | Weitere Geräte, Vorzeichen und Einheiten prüfen | offen | — | [Gerätekreis](open-questions.md#oq-04) |
 | P3 | p3-schwellen | Freigabeschwellen und angepasste Toleranz real belegen | offen | — | [Freigabeevidenz](open-questions.md#oq-14) |
 | P3 | p3-fehlerklassen | Trefferquote nach Fehlerklassen aufschlüsseln | offen | — | [Fehlerklassen](VALIDATION.md#fehlerklassen-getrennt-zu-zahlen) |
-| P4 | p4-format | Akzeptiertes GSVmulti-Format und Spezifikation beschaffen | offen | — | [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
+| P4 | p4-format | UserDefined-Spezifikation für den Prototyp beschaffen | belegt | 2026-10-28 | [Primärquelle und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#quellen), [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
 | P4 | p4-ungueltig | Behandlung ungültiger und veralteter Werte vereinbaren | offen | — | [OQ-06](open-questions.md#oq-06) |
-| P4 | p4-anbindung | Echtes Format über `TelegramFormatter` anbinden | blockiert | — | [Unbekanntes Protokoll](GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt) |
-| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | blockiert | — | [Anbindungsbedingungen](GSVMULTI_PROTOCOL.md#was-vorher-geklart-sein-muss-konzept-8) |
+| P4 | p4-anbindung | UserDefined-Formatter, Transport und Live-Lebenszyklus anbinden | offen | — | [Anbindungsnaht](GSVMULTI_PROTOCOL.md#die-naht-im-code), [OQ-47](open-questions.md#oq-47) |
+| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | offen | — | [Abnahmeplan](GSVMULTI_PROTOCOL.md#abnahme) |
 | P5 | p5-kalibrierung | StreamCam-Timing-Kalibrierung | vorhanden | — | [Zeitbezug](TIMING.md) |
 | P5 | p5-referenz | Live-Referenzauswertung | vorhanden | 2026-10-21 | [Werteplan-Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21) |
 | P5 | p5-budget | Unsicherheitsbudget mit getrennten Einzelbeiträgen ausfüllen | offen | — | [Zeitbezug und Messprogramm](TIMING.md) |
 | P5 | p5-synchron | Referenzsynchronität klären und belegen | offen | — | [Referenzzeitbasis](open-questions.md#oq-03) |
-| P5 | p5-m8 | M8: Nutzung des Aufnahmezeitstempels durch GSVmulti prüfen | offen | — | [M8](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
+| P5 | p5-m8 | M8: Zeitachse des UserDefined-Imports prüfen | offen | — | [M8](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
 | P6 | p6-live | Live-Pfad mit STALE und Audit | gebaut | 2026-10-21 | [Live-Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
 | P6 | p6-stoerung | Kurze Störversuche am Aufbau | belegt | 2026-10-21 | [Bedienerläufe und Grenzen](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
 | P6 | p6-tracking | Nachführung bei großen Wertwechseln absichern | offen | — | [OQ-26](open-questions.md#oq-26) |
@@ -146,9 +147,11 @@ Siehe [VALIDATION.md](VALIDATION.md). Zwei Punkte, die die Roadmap prägen:
 
 M1–M8, siehe [TIMING.md](TIMING.md). Zwei Punkte prägen die Priorisierung:
 
-* **M8 ist der wichtigste Einzelversuch des Projekts** (nutzt GSVmulti den
-  gelieferten Aufnahmezeitstempel?) und kostet eine halbe Stunde. So früh wie
-  möglich, notfalls mit handgeschriebenem Telegramm.
+* **M8 klärt die tatsächlich verwendete GSVmulti-Zeitachse.** Das
+  UserDefined-Zahlenprofil hat kein definiertes Aufnahmezeitfeld. Zuerst
+  bekannte Sendefolgen, Pausen und gebündelten Empfang gegen gespeicherte
+  Werte und Zeitachse prüfen; ein weiteres Zahlenfeld wird nicht automatisch
+  zum Zeitstempel. [Versuchsgrenzen](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8).
 * **M5 ist mit hoher Wahrscheinlichkeit der dominierende Term**
   (Displayaktualisierung und Haltezeit) und wird von keiner
   Softwareoptimierung kleiner. Früh messen, bevor Aufwand in
@@ -156,7 +159,9 @@ M1–M8, siehe [TIMING.md](TIMING.md). Zwei Punkte prägen die Priorisierung:
 
 ## Sofort anstoßen, weil rein organisatorisch mit Vorlaufzeit
 
-* [OQ-07](open-questions.md) — GSVmulti-Telegrammspezifikation intern beschaffen
+* [OQ-07](open-questions.md#oq-07) — UserDefined-Empfang in 2.01 Pro bestätigen;
+  Spezifikationsbeschaffung seit 2026-10-28 nicht mehr der Blocker
+* [OQ-47](open-questions.md#oq-47) — Windows-COM-Transport und Wiederanlauf festlegen
 * [OQ-09](open-questions.md) — Transceiver und galvanische Trennung
 * [OQ-04](open-questions.md) — Gerätekreis festlegen, Sperrgeräte vereinbaren
 

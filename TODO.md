@@ -321,8 +321,18 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
-   wartet auf eine Protokollbeschreibung von GSVmulti; `protocol/gsv_ascii`
-   wirft bis dahin absichtlich. Kein Protokoll erfinden.
+   **2026-10-28:** UserDefined laut Herstelleranleitung v2.6 belegt;
+   ein Prototyp für die im PDF dokumentierte Windows-Version 2.01 Pro
+   kann gebaut werden. [Bewertung und Prüfplan](docs/GSVMULTI_PROTOCOL.md).
+   Eigenen einkanaligen `TelegramFormatter` und Transport wählen
+   ([OQ-47](docs/open-questions.md#oq-47)); die optionale ZIP-Bridge vor
+   Übernahme bei COM-Fehlern und Größen-/Zahlenprüfung korrigieren
+   ([Codeprüfung](docs/GSVMULTI_PROTOCOL.md#beispielcode)). Danach in den bisher nur
+   JSONL schreibenden Live-Pfad integrieren. Empfang in 2.01 Pro
+   ([OQ-01](docs/open-questions.md#oq-01)), sichere Ungültigbehandlung
+   ([OQ-06](docs/open-questions.md#oq-06)) und Zeitachse (M8) vor
+   Messfreigabe belegen. `protocol/gsv_ascii` wirft weiterhin absichtlich;
+   AsciiCsv bleibt provisorisch. Kein Protokoll erfinden.
 5. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
    schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
    zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.

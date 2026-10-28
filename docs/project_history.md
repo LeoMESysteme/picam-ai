@@ -9,6 +9,39 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-28 — UserDefined als Einstieg für einen GSVmulti-Prototyp
+
+Das bereitgestellte PDF führt zur bisher fehlenden Herstelleranleitung
+v2.6. Deren S. 118–121 beschreiben einen konfigurierbaren seriellen
+Zahlenimport in GSVmulti PRO. Die frühere Annahme, es müsse erst ein natives
+GSV-Geräteprotokoll beschafft oder mitgeschnitten werden, ist für diesen
+Einstieg damit überholt. [Bewertung und Quellen](GSVMULTI_PROTOCOL.md).
+
+Geplanter Einstieg: ein eigener einkanaliger UserDefined-Formatter hinter
+`TelegramFormatter`, zunächst Demowerte über einen ausgewählten
+Windows-COM-Transport. Native Geräteemulation und der ungeprüfte direkte
+NetGSV-Anschluss werden dafür nicht benötigt. Das Dreikanalprofil des PDFs
+ist keine Anforderung an den einzelnen optischen DUT. Das bisherige
+`AsciiCsvFormatter`-Defaulttelegramm ist wegen Zusatzfeldern kein passender
+Ersatz. `gsv_ascii.py` bleibt der absichtlich werfende Platzhalter.
+
+Dies ist eine dokumentierte Implementierungsrichtung, noch keine gebaute
+Anbindung. Der aktuelle Live-Pfad schreibt nur JSONL; dessen Ausgabe braucht
+zusätzlich Lebenszyklus, Fehlerbehandlung und Laufmetadaten. Vor der
+Messfreigabe sind tatsächlicher Empfang in der dokumentierten 2.01-Pro-
+Installation, sichere Ungültigbehandlung, Zeitachse und Wiederanlauf zu
+belegen. OQ-01/OQ-07 sind teilweise geklärt, OQ-06 bleibt offen und OQ-47
+erfasst den konkreten Transport. Keine Hardwareänderung und kein Messlauf.
+
+Das nachgereichte Beispiel-ZIP wurde anschließend im Quelltext und mit elf
+Softwareprüfungen untersucht. Der Demo-Sender und lokale TCP-Transport sind
+damit nachvollziehbar. Die optionale Bridge ist vor einer Übernahme zu
+korrigieren: COM-Schreibfehler werden als TCP-Abbruch behandelt, vollständige
+überlange Frames können die Größenprüfung umgehen. Zahlenlexik und
+Altersprüfung sind weitere Grenzen; die erste Zeile jeder Verbindung wird
+absichtlich verworfen. PDF und ZIP bleiben unverändert als Quellen im Repo.
+Diese Prüfungen ersetzen weder Windows-VCOM noch GSVmulti-Empfang.
+
 # 2026-10-23 — Roadmap als räumliche Kartenhierarchie
 
 ## Problem

@@ -10,8 +10,7 @@ Ausgabe noch nicht angeschlossen.
 <figure class="tour-figure" data-scene="erkennung-ausgabe" markdown="1">
 <figcaption markdown="span">Der Datensatz mit seinen neun Pflichtfeldern und
 wohin er geht: ins Audit-Log; die serielle Anbindung des Live-Laufs ist
-noch offen, ebenso das
-GSVmulti-Telegrammformat
+noch offen. UserDefined ist dokumentiert, aber noch nicht angebunden
 ([OQ-07](../docs/open-questions.md#oq-07)).</figcaption>
 </figure>
 

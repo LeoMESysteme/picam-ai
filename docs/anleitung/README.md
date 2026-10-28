@@ -95,7 +95,8 @@ Vollständig in [../../AGENTS.md](../../AGENTS.md), hier nur als Merkzettel:
 4. **Konfidenz ist keine Fehlerwahrscheinlichkeit.**
    `declares_confidence_calibrated` bleibt `False`, bis eine Kalibriermessung
    in [../VALIDATION.md](../VALIDATION.md) steht.
-5. **Kein Protokoll erfinden.** Das GSVmulti-Telegramm ist unbekannt
+5. **Kein Protokoll erfinden.** Der UserDefined-Einstieg ist dokumentiert,
+   der Adapter noch nicht implementiert oder abgenommen
    ([OQ-07](../open-questions.md)); alles Neue geht über einen
    `TelegramFormatter` mit `provisional=True`.
 
