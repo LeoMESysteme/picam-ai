@@ -135,3 +135,16 @@ Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
   und 2.1.309 (zusammen etwa 585 MB, nicht in Gebrauch) und Codex-Release
   0.163.0 (368 MB, weder `current` noch in Gebrauch). Nicht gelöscht; das
   entscheidet die Person.
+
+## Nachtrag 2026-10-28: SSD, `var/` umgezogen, PCIe-Watchdog
+
+* **Platz ist kein Hindernis mehr:** `var/` liegt auf einer NVMe-SSD
+  (`/mnt/ssd/picam-var`, 421 GB frei), Prüfsummenvergleich ohne
+  Abweichung; die alte Kopie liegt noch als `var.sd-alt` auf der SD-Karte.
+  Das Journal liegt ebenfalls auf der SSD.
+* **Wahrscheinlicher Kandidat für die Neustarts:** Der MEHub-Dienst
+  `rm520n-watchdog` setzte seit Tagen alle 10 Minuten den PCIe-Bus zurück,
+  weil er kein 5G-Modem fand; er riss dabei auch die SSD ab. Der Timer ist
+  abgeschaltet. Nicht belegt; bleiben Neustarts aus, spricht das dafür.
+  Details: [Laborjournal](../../lab_journal.md).
+* Run 216 fiel am 28.10. mit dem Kopierlauf und dem PCIe-Abriss zusammen.

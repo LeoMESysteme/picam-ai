@@ -2414,3 +2414,36 @@ Die Linksansicht um 18° ist mit R13-13 ein Grenzfall: Die Einrichtung
 gelingt gelegentlich, lehnt aber meist ehrlich ab. Für den Betrieb bleibt
 die Empfehlung, die Kamera gerader vor die Anzeige zu stellen. Keine
 formale Abnahme, kein Messlauf.
+
+## 2026-10-28 — SSD am Pi, `var/` umgezogen, MEHub-Watchdog setzte PCIe zurück
+
+**Aufbau:** Crucial P310 (500 GB, NVMe) per PCIe-HAT am Pi 5, PCIe x1 mit
+5 GT/s. Darauf lag ein altes System eines anderen Pi (raspi02, Debian 13);
+auf Leonhards Entscheidung neu formatiert (ext4, Label `picam-data`),
+eingehängt unter `/mnt/ssd` mit `nofail` (der Pi bootet weiter von der
+SD-Karte, auch ohne SSD).
+
+**Umzug:** `var/` (14,95 GB, 19 563 Dateien) per `rsync -aHX` auf
+`/mnt/ssd/picam-var` kopiert und in einem zweiten Lauf mit Prüfsummen je
+Datei verglichen: 0 Abweichungen. `/home/me-systeme/picam-ai/var` ist jetzt
+ein Link auf die SSD; die alte Kopie liegt als `var.sd-alt` auf der
+SD-Karte. Die Werkbank meldet 451 GB frei (Platzprüfung misst am
+Datenverzeichnis, folgt also dem Link). Das Systemjournal liegt ebenfalls
+auf der SSD (Bind-Mount nach `/var/log/journal`, höchstens 1 GB) und ist
+seit dem 28.10. dauerhaft.
+
+**Störung:** Um 10:31 riss der MEHub-Dienst `rm520n-watchdog` (prüft jede
+Minute ein 5G-Modem RM520N) die SSD vom Bus: Er fand am PCIe-Anschluss kein
+Modem und hängte den Bus dreimal ab und wieder an (`unbind/bind
+brcm-pcie`). Das tat er alle 10 Minuten seit Tagen, auch ohne Gerät am Bus
+(54 Relinks allein zwischen 07:06 und 09:56). Folge für die SSD:
+Ein-/Ausgabefehler, das Gerät hieß danach `nvme1n2` statt `nvme0n1`.
+Leonhard hat den Timer abgeschaltet (`systemctl disable --now
+rm520n-watchdog.timer`); danach Dateisystemprüfung, Neueinhängen und der
+Prüfsummenvergleich ohne Befund.
+
+**Deutung:** Modem und SSD können sich den einen PCIe-Anschluss nicht
+teilen. Ob die ständigen PCIe-Rücksetzungen die drei ungeklärten Neustarts
+(24.–26.10.) ausgelöst haben, ist nicht belegt; bleiben weitere Neustarts
+aus, spricht das dafür. Run 216 fiel heute zeitlich mit dem Kopierlauf und
+dem Abriss zusammen.
