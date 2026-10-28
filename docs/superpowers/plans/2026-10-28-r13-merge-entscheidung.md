@@ -122,8 +122,13 @@ Zweig-Werkbank `dispread-werkbank-r13` danach beenden.
   Überstrom an USB oder SD. Der Bootloader meldet `rsts` 0x20; das deutet
   nach unserer Kenntnis auf einen Software- oder Watchdog-Reset statt eines
   Kaltstarts hin (nicht gegen Quellen geprüft). Der Lastmonitor lief zu dem
-  Zeitpunkt nicht. Vorschlag: persistentes Journal einschalten
-  (`/var/log/journal` anlegen), dann zeigt der nächste Neustart seine Ursache.
+  Zeitpunkt nicht. Seit 2026-10-28 09:55 ist das Journal dauerhaft
+  (`/etc/systemd/journald.conf.d/50-persistent.conf`, übersteuert
+  `Storage=volatile` von Raspberry Pi OS); nach dem nächsten Neustart zeigt
+  `journalctl -b -1` das Ende des vorigen Boots. CI-Last scheidet als
+  gemeinsamer Auslöser aus: Am 24.10. 17:12 und 25.10. 16:14 lief laut
+  Forgejo kein CI-Lauf; beim dritten Neustart lief der Wiederholungslauf
+  von Run 216 (23:09–23:25), der dadurch rot wurde.
 * **Freier Platz 1,5 GB** (26.10.: 2,1 GB). Hauptursache ist ein
   automatisches Update von Claude Code (Version 2.1.311, +294 MB). Ohne
   `var/` anzufassen ließen sich etwa 0,95 GB freimachen: Claude Code 2.1.307
