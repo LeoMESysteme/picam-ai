@@ -1388,7 +1388,9 @@
         const link = event.target instanceof Element ? event.target.closest("a[href*='#']") : null;
         if (!link || link.closest(".tour-ui")) return;
         const url = new URL(link.href, window.location.href);
-        if (url.pathname !== window.location.pathname) return;
+        // Cloudflare Pages liefert /x.html als /x aus; beide gelten als dieselbe Seite.
+        const page = (path) => path.replace(/\.html$/, "").replace(/\/index$/, "/");
+        if (page(url.pathname) !== page(window.location.pathname)) return;
         const target = this.find(decodeURIComponent(url.hash.slice(1)));
         if (!target) return;
         event.preventDefault();

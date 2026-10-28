@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: Wiki-Bausteine erkennen Seiten auch ohne `.html`. Auf
+  Cloudflare Pages wird `/x.html` auf `/x` umgeleitet; die Skripte verglichen
+  aber den rohen Pfad mit `.html`. Wer das Glossar über die Suche, einen
+  direkten Link oder ein Neuladen öffnete, bekam deshalb die Seite ohne
+  A–Z-Leiste, Filter und Fundstellen, dazu Begriffsmarken auf dem Glossar
+  selbst; nur der Seitenwechsel über die Navigation behielt `.html` und
+  funktionierte. Betroffen waren auch die Ausnahmen für Begriffsmarken und
+  OQ-/Roadmap-Chips auf ihren eigenen Seiten; seiteninterne Links der
+  Projekt-Tour fing die Tour nicht mehr ab, sie liefen über die Umleitung.
+  `wiki.pageKey`/`wiki.isPage` vergleichen Seiten nun ohne Endung, auch die
+  Startseiten-Erkennung nutzt sie; ein Playwright-Test lädt Seiten in der
+  Cloudflare-Form.
+
 * 2026-10-23: Wiki-Gerüst für drei Lesergruppen gebaut. Zuvor fehlten
   Wege nach Aufgabe und Rolle sowie eine gemeinsame Struktur für Bedienung,
   Hintergrund und Entwicklerdetails; Fachbegriffe waren nur einzeln erklärt.

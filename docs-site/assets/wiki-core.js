@@ -65,6 +65,16 @@
     return new URL(path, SITE_ROOT).href;
   }
 
+  // Cloudflare Pages leitet /x.html auf /x und /index.html auf / um; ein
+  // Seitenvergleich darf deshalb nicht am rohen Pfad mit „.html“ hängen.
+  function pageKey(url) {
+    return new URL(url, window.location.href).pathname.replace(/\.html$/, "").replace(/\/index$/, "/");
+  }
+
+  function isPage(path) {
+    return pageKey(window.location.href) === pageKey(siteUrl(path));
+  }
+
   function loadCached(cache, path, parse) {
     const url = siteUrl(path);
     if (!cache.has(url)) {
@@ -92,8 +102,7 @@
   function loadGlossary() {
     if (!glossaryPromise) {
       const path = "docs/anleitung/glossar.html";
-      const source = new URL(window.location.href).pathname === new URL(siteUrl(path)).pathname
-        ? Promise.resolve(document) : loadHtml(path);
+      const source = isPage(path) ? Promise.resolve(document) : loadHtml(path);
       // Parse the current glossary before its A–Z enhancement moves the entries.
       glossaryPromise = source.then((doc) => {
         const entries = [];
@@ -240,7 +249,7 @@
     return svg;
   }
 
-  window.wiki = { onPage, siteUrl, loadHtml, loadJson, loadGlossary, termMatcher, openSearch,
+  window.wiki = { onPage, siteUrl, pageKey, isPage, loadHtml, loadJson, loadGlossary, termMatcher, openSearch,
     loadOqIndex, loadPhases, OQ_STATUS, make, icon };
 
   if (typeof document$ !== "undefined") document$.subscribe(buildPage);
