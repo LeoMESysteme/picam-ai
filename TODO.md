@@ -316,6 +316,22 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    unabhängig vom Zifferninhalt untersuchen und große Sprünge erneut
    prüfen. Die berichtete Abdeckung ist zeitlich nicht eindeutig
    zuordenbar. [Zahlen](docs/VALIDATION.md#messpfad-live-werteplan-2026-10-21).
+   **Befund 2026-10-28** (`live-20261028T110248Z/run-01`, 328 s, 0/6437
+   Fehllesungen): um 12:17:51 verschob sich die Anzeige im Bild um 11,8 px
+   (dx +11, dy −4,2) und blieb dort; knapp unter dem Suchradius 12 px
+   flackerte die Nachführung zwischen Wiederkehr und `rahmen_unstimmig`
+   (Strecken bis 28 s), VALID fiel von 83 % auf 49 %.
+   * **Später (Leonhard, zurückgestellt):** richtiger Hinweis bei dauerhafter
+     Verschiebung. Die Werkbank meldete „Rahmen verdeckt“ statt „Anzeige hat
+     sich bewegt – neu einrichten“ (`tracking_hints.max_shift_px` blieb
+     leer). Verschiebung grob über den ganzen Rahmen schätzen (z. B.
+     Phasenkorrelation mit ausgeblendetem LCD-Inhalt) und den Hinweis danach
+     wählen.
+   * **In Arbeit:** automatische Nachführung über größere Bewegungen
+     (Grobschätzung der Gesamtverschiebung, dann unveränderte Feinprüfung).
+   * Raster am rechten Rand leicht versetzt (Zellversatz bis 0,15 Spalten
+     in den Einheitszellen, 6 von 157 Punkten im „mV/V“ nicht zugeordnet);
+     ohne Einfluss auf den Wert, die Einheit wird nicht gelesen.
 2. **~~Testlauf-Sicherung und Zeitbasis-Bezeichnung klären~~ (erledigt 2026-10-23):**
    [OQ-44](docs/open-questions.md#oq-44) ist umgesetzt: Gate-Freigaben werden
    vor dem Test-Audit als `UNREADABLE` ohne `value` unterdrückt;

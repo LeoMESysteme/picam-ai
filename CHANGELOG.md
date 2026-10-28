@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: R13-19a hält bei der Kantenprüfung in Leerzellen das rechte
+  Vergleichspixel vor einer belegten Nachbarzelle mindestens 6 px von der
+  Zellgrenze entfernt (vor Leerzellen bleibt das alte Fenster, damit an
+  Grenzen zwischen Leerzellen keine Erkennungslücke entsteht). So lösen
+  weichgezeichnete Nachbarglyphen bei schräger Ansicht keinen Fehlalarm
+  mehr aus; die echte Spiegelkante in `ab2` bleibt eine WARNUNG.
+  Belegtzellenprüfung, Grenzwerte und Kennzahlenschlüssel bleiben erhalten.
+  Bricht die Live-Vorprüfung ab, nennt die Meldung die gescheiterten
+  Prüfungen und deren Zellen; `raster` bleibt ausgenommen.
+
 * 2026-10-28: Entwicklungsaufnahmen sind nach der SSD-Auslagerung für Tests
   und Skripte über `DISPREAD_DEV_DATA` erreichbar. Vorhandene Dateien unter
   `var/` haben Vorrang; neue Diagnoseaufnahmen verwenden den gesetzten

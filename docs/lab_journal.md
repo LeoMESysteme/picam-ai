@@ -2460,3 +2460,32 @@ teilen. Ob die ständigen PCIe-Rücksetzungen die drei ungeklärten Neustarts
 (24.–26.10.) ausgelöst haben, ist nicht belegt; bleiben weitere Neustarts
 aus, spricht das dafür. Run 216 fiel heute zeitlich mit dem Kopierlauf und
 dem Abriss zusammen.
+
+---
+
+## 2026-10-28 — R13-19a: Nachbarglyphen in der Kantenprüfung ausschließen
+
+**Ziel:** Den Kanten-Fehlalarm in der leeren Separatorzelle 8 bei schrägem
+Blick von links beheben und den echten Spiegelkantenbefund erhalten.
+
+**Aufbau:** Offline-Auswertung vorhandener Standbilder, ohne Hardwarezugriff.
+`sc3`–`sc5`, `ab1` und `ab2` verwenden Frame 17, `sc6` Frame 15 mit den
+bestätigten Profil-Quads. Bei `live-20261028T110248Z`, `113959Z` und
+`114104Z` wird das Raster wie in der Live-Einrichtung aus der grünen
+Hinweisbox mit den Format-Leerzellen bestimmt. Eingaben nur gelesen,
+Testausgaben ausschließlich in Temporärverzeichnissen.
+
+**Beobachtung:** Das alte Fenster reicht mit seinem rechten Vergleichspixel
+bis 3 px vor die Nachbarglyphe. Die 9 px breite Schließung und optische
+Unschärfe beeinflussen dort die Hintergrundschätzung. Ein synthetisches
+Display mit weichgezeichneter „0“ ab Zellgrenze 225 reproduziert den
+Fehlalarm; das dunkle Band `207:225` prüft die echte Kante in Zelle 8.
+
+**Messergebnis und Deutung:** Mit mindestens 6 px Abstand bleibt `ab2`
+in Zelle 8 als WARNUNG sichtbar (7,5 statt 9,0); die beiden Schrägaufnahmen
+ergeben 4,0 und keinen Kanten-FEHLER. Die frontale Aufnahme ergibt 2,0.
+Alle Zahlen stehen im datierten Nachtrag zum ab2-Befund in
+[VALIDATION.md](VALIDATION.md#2026-09-30-einrichtungsassistent-regression-nach-nacharbeit-1).
+Die Korrektur entfernt den Nachbareffekt bei unveränderten Grenzwerten
+und unveränderter Belegtzellenprüfung. Eine neue Live-Aufnahme oder
+Stabilitätsmessung wurde dabei nicht durchgeführt.

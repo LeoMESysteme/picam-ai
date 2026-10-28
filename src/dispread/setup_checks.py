@@ -2,6 +2,14 @@
 
 Die Ampelwerte sind Vorabwerte. Kennzahlen werden unveraendert mitgegeben,
 damit der Befund bei spaeterer Kalibrierung erneut bewertet werden kann.
+
+Die Kantenpruefung vergleicht in Leerzellen Hintergrundwerte im Abstand
+von 8 px. Vor einer belegten Nachbarzelle bleibt das rechte Vergleichspixel
+mindestens 6 px vor der Zellgrenze, damit Schliessung und optische
+Unschaerfe der Nachbarglyphe keine Spiegelkante vortaeuschen; vor einer
+Leerzelle und in Zelle 15 gilt das bisherige Fenster (3 px), damit an
+Grenzen zwischen Leerzellen keine Erkennungsluecke entsteht. Belegte Zellen nutzen eine eigene
+Helligkeitshuelse; die Vorabgrenzen bleiben fuer beide Masse getrennt.
 """
 
 from __future__ import annotations
@@ -35,6 +43,15 @@ EDGE_OCCUPIED_ERROR = 20.0
 EDGE_BACKGROUND_PERCENTILE = 99.0
 EDGE_BLANK_RELATIVE_HIGHPASS = 0.5
 EDGE_BLANK_ABSOLUTE_HIGHPASS = 10.0
+# Exklusives Fenster fuer x vor einer belegten Nachbarzelle: x+8 endet bei
+# 19, also 6 px vor Zellgrenze 25. Die Schliessungsbreite 9 wirkt +/-4 px,
+# dazu kommt optische Unschaerfe. Gemessen an sc3-6, ab1/ab2 und den
+# Live-Bildern 2026-10-28 (110248Z, 113959Z, 114104Z): Nachbareffekt
+# entfaellt, ab2 bleibt als WARNUNG sichtbar.
+EDGE_BLANK_STEP_WINDOW = (2, 12)
+# Vor einer Leerzelle oder am Ende: bisheriges Fenster bis 25 - 10 (x+8 bis
+# 3 px vor der Grenze), damit dort keine neue Erkennungsluecke entsteht.
+EDGE_BLANK_STEP_FREE_RIGHT = 10
 SATURATED_ERROR = 0.02
 GLARE_BRIGHTNESS_ABOVE_BACKGROUND = 35.0
 GLARE_BLOB_AREA_ERROR = 100
@@ -210,11 +227,17 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     blank_limit = max(EDGE_BLANK_ABSOLUTE_HIGHPASS, EDGE_BLANK_RELATIVE_HIGHPASS * median_peak)
     background = cv2.morphologyEx(warped_gray, cv2.MORPH_CLOSE, np.ones((5, 9), np.uint8)).astype(np.float32)
     horizontal_step = np.abs(background[25:140, 8:] - background[25:140, :-8])
+    blank_start, blank_stop = EDGE_BLANK_STEP_WINDOW
     scores = []
     for k in range(16):
-        # Beide Werte eines Paares liegen mit 2 px Abstand zum Zellrand.
-        # Sonst fliesst die Nachbarglyphe in die Leerzellenpruefung ein.
-        region = horizontal_step[:, 25 * k + 2:25 * (k + 1) - 10]
+        # Links bleiben 2 px Rand. Rechts mindestens 6 px fuer x+8, aber nur
+        # vor einer belegten Nachbarzelle: deren weichgezeichnete Glyphe
+        # wuerde sonst in den Befund einfliessen. Vor einer Leerzelle (und in
+        # Zelle 15) bleibt das alte Fenster, sonst entstuende dort ein blinder
+        # Bereich fuer echte Kanten an der Zellgrenze.
+        neighbour_occupied = k < 15 and peak[k + 1] >= blank_limit
+        stop = 25 * k + blank_stop if neighbour_occupied else 25 * (k + 1) - EDGE_BLANK_STEP_FREE_RIGHT
+        region = horizontal_step[:, 25 * k + blank_start:stop]
         scores.append(float(np.max(np.percentile(region, 75, axis=0))))
     # Fuer belegte Zellen: obere Helligkeitshuelse entlang der Punktzeilen.
     # Die Addition des Hochpasses hebt dunkle Glyphen an; eine breite

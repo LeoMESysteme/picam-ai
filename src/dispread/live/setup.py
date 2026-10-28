@@ -352,12 +352,17 @@ def assist_measure(
             raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
     prechecks = check_setup(first, fit)
     report(prechecks.to_dict())
-    precheck_failures = [
-        name for name, result in prechecks.checks.items()
-        if getattr(result, "status", None) == "FEHLER" and name != "raster"
-    ]
+    precheck_failures = []
+    for name, result in prechecks.checks.items():
+        if getattr(result, "status", None) == "FEHLER" and name != "raster":
+            cells = getattr(result, "cells", ())
+            if cells:
+                label = "Zelle" if len(cells) == 1 else "Zellen"
+                name += f" ({label} {', '.join(str(cell) for cell in cells)})"
+            precheck_failures.append(name)
     if precheck_failures:
-        raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
+        raise SetupError(f"Vorpruefung meldet FEHLER: {', '.join(precheck_failures)}; "
+                         "Stabilitaetsmessung nicht gestartet")
     sleep(stability_s)
     second, second_text = capture_text(attempt, "stability")
     stability_elapsed_s = monotonic() - first_captured_at

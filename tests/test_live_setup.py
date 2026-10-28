@@ -9,6 +9,7 @@ from frame_tracking_helpers import reference_scene
 
 from dispread.camera_settings import CameraSettings
 from dispread.live import setup as live_setup
+from dispread.setup_checks import CheckResult, SetupChecks
 
 
 class FakeSetupCamera:
@@ -148,6 +149,38 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     ]
     assert len(messages) == 2
     assert "1/3" in messages[0] and "2/3" in messages[1]
+
+
+@pytest.mark.parametrize('failures,details', [
+    ({'kanten': CheckResult('FEHLER', {}, (8,))}, 'kanten (Zelle 8)'),
+    ({'kanten': CheckResult('FEHLER', {}, (8,)), 'kontrast': CheckResult('FEHLER', {})},
+     'kanten (Zelle 8), kontrast'),
+    ({'kanten': CheckResult('FEHLER', {}, (8, 13))}, 'kanten (Zellen 8, 13)'),
+])
+def test_assist_precheck_error_names_checks_and_cells(monkeypatch, tmp_path, failures, details):
+    cam = SequenceSetupCamera([10])
+    lattice = SimpleNamespace(quad=[[0, 0], [3, 0], [3, 2], [0, 2]])
+    checks = SetupChecks('FEHLER', {
+        'raster': CheckResult('FEHLER', {}, (4,)),
+        'glanz': CheckResult('WARNUNG', {}),
+        'stabilitaet': CheckResult(None, {}),
+        **failures,
+    })
+    monkeypatch.setattr(live_setup, 'fit_lattice', lambda *_a, **_kw: lattice)
+    monkeypatch.setattr(live_setup, 'check_setup', lambda *_a, **_kw: checks)
+    reports, sleeps = [], []
+
+    with pytest.raises(live_setup.SetupError) as exc:
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source('text'), expected_size=(3, 2),
+            out_dir=tmp_path, hint_box=(0.0, 0.0, 1.0, 1.0),
+            report=reports.append, sleep=sleeps.append,
+        )
+    assert str(exc.value) == f'Vorpruefung meldet FEHLER: {details}; Stabilitaetsmessung nicht gestartet'
+    assert reports == [checks.to_dict()]
+    assert sleeps == []
+    assert cam.discards == [10]
+    assert not (tmp_path / 'stability.png').exists()
 
 
 def test_assist_all_search_attempts_fail_with_last_reason(monkeypatch, tmp_path):

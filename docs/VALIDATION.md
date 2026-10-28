@@ -2787,6 +2787,39 @@ berechnet (FEHLER <15, WARNUNG <17); `leser_kontrast` stammt aus
 31,2 (`ab2`) beruhten auf einem nicht belegten
 Bildbereich und werden nicht mit diesem definierten Maß gleichgesetzt.
 
+**Nachtrag 2026-10-28 (R13-19a):** Das Leerzellenfenster hält das rechte
+Vergleichspixel vor einer belegten Nachbarzelle jetzt mindestens 6 px vor
+der rechten Zellgrenze (`horizontal_step[:, 25*k+2:25*k+12]`); vor einer
+Leerzelle und in Zelle 15 bleibt das alte Fenster (Review: sonst
+Erkennungslücke an Grenzen zwischen Leerzellen, Test mit Kante bei x = 346). Die 9 px breite Schließung wirkt
+etwa ±4 px, optische Unschärfe reicht darüber hinaus. Mit dem bestätigten
+Profil-Quad ergibt `ab2` in Zelle 8 jetzt **7,5 → WARNUNG** statt
+9,0 → FEHLER: Der alte Wert enthielt den Einfluss der rechten
+Nachbarglyphe. Die echte Spiegelkante bleibt markiert und erfüllt den
+[Planmaßstab](superpowers/plans/2026-09-29-einrichtungsassistent.md)
+„WARNUNG oder FEHLER“. Die Grenzen WARNUNG >6 und FEHLER >8 sowie die
+Belegtzellenprüfung bleiben unverändert.
+
+Offline nachgemessen, ausschließlich vorhandene Standbilder gelesen:
+
+| Fall | Rastergrundlage | `cell_step[8]` | Kantenstatus |
+| --- | --- | ---: | --- |
+| `sc3`, Frame 17 | bestätigtes Profil-Quad | 2,0 | OK |
+| `sc4`, Frame 17 | bestätigtes Profil-Quad | 1,0 | OK |
+| `sc5`, Frame 17 | bestätigtes Profil-Quad | 2,0 | OK |
+| `ab1`, Frame 17 | bestätigtes Profil-Quad | 1,0 | OK |
+| `ab2`, Frame 17 | bestätigtes Profil-Quad | 7,5 | WARNUNG (Zelle 8) |
+| `sc6`, Frame 15 | bestätigtes Profil-Quad | 1,0 | OK |
+| `live-20261028T110248Z`, `setup/still.png` | automatische Live-Startsuche | 2,0 | OK |
+| `live-20261028T113959Z`, `setup/still.png` | automatische Live-Startsuche | 4,0 | OK |
+| `live-20261028T114104Z`, `setup/still.png` | automatische Live-Startsuche | 4,0 | OK |
+
+Die Live-Startsuche verwendet `find_green_hint_box` und
+`fit_lattice(..., empty_cells=GSV2AS_EMPTY_CELLS)`. Beide Schrägaufnahmen
+ergeben insgesamt keinen FEHLER. Der synthetische Nachbarfall (dunkle,
+weichgezeichnete Glyphe ab Zellgrenze 225) markiert Leerzelle 8 nicht;
+das dunkle Band innerhalb Zelle 8 (`207:225`) wird weiterhin erkannt.
+
 Die Stabilitätsprüfung benötigt zwei Standbilder im Abstand von
 mindestens 30 s und wurde hier nicht bewertet. Die optionale Diagnose
 mit eingefrorenen Leservorlagen wurde ohne übergebene Vorlage nicht

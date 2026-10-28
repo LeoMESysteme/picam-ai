@@ -8,9 +8,11 @@ import numpy as np
 import pytest
 from devdata_helpers import local_recording
 
-from dispread.dotlattice import LatticeFit
+from dispread.dotlattice import LatticeFit, fit_lattice
+from dispread.live.setup import GSV2AS_EMPTY_CELLS
 from dispread.ocr.dotmatrix_font import COLS, ROWS, rom_vector
 from dispread.setup_checks import CheckResult, check_setup, raster_offset_check
+from dispread.setup_hint import find_green_hint_box
 
 QUAD = [[0, 0], [400, 0], [400, 160], [0, 160]]
 OFFSET_QUAD = np.array([[120., 150.], [760., 120.], [770., 215.], [110., 240.]], np.float32)
@@ -180,6 +182,34 @@ def test_edge_in_blank_cell_is_reported_but_soft_gradient_is_clear():
     assert check_setup(soft, fit()).checks['kanten'].status == 'OK'
 
 
+def test_edge_at_boundary_between_blank_cells_is_still_reported():
+    # Ohne Nachbarglyphe gibt es keinen Grund fuer den 6-px-Rand: eine
+    # Kante kurz vor der Grenze Zelle 13/14 muss weiter auffallen (Review R13-19a).
+    image = display()
+    image[:, 346:] = np.clip(image[:, 346:].astype(int) - 28, 0, 255)
+    edged = check_setup(image, fit()).checks['kanten']
+    assert edged.status == 'FEHLER'
+    assert 13 in edged.cells
+
+
+def test_blurred_neighbor_glyph_does_not_flag_blank_cell():
+    image = display()
+    image[:, 225:250] = 100
+    glyph = np.full_like(image, 100)
+    dots = rom_vector('0').reshape(ROWS, COLS)
+    for row, column in zip(*np.nonzero(dots), strict=True):
+        # Die erste Punktspalte beginnt direkt an der Grenze Zelle 8/9.
+        x = 225 + round(column * 25 / 6)
+        y = round(160 / 9 + row * (160 * 7 / 9) / 7)
+        cv2.rectangle(glyph, (x, y), (x + 3, y + 12), (25, 25, 25), -1)
+    image = np.minimum(image, cv2.GaussianBlur(glyph, (0, 0), 2.0))
+
+    edges = check_setup(image, fit()).checks['kanten']
+    assert edges.metrics['cell_highpass'][8] < edges.metrics['blank_limit']
+    assert 8 not in edges.cells
+    assert edges.status == 'OK'
+
+
 def test_saturated_glare_fails():
     image = display()
     image[35:95, 35:155] = 255
@@ -242,8 +272,8 @@ def test_stability_requires_elapsed_time_and_warns_if_unreliable():
 
 
 @pytest.mark.parametrize('name,frame_number,expected,step_cell_8', [
-    ('sc3', 17, [], 4.0), ('sc4', 17, [], 1.0), ('sc5', 17, [], 2.0),
-    ('ab1', 17, [], 2.5), ('ab2', 17, [8], 9.0), ('sc6', 15, [], 2.0),
+    ('sc3', 17, [], 2.0), ('sc4', 17, [], 1.0), ('sc5', 17, [], 2.0),
+    ('ab1', 17, [], 1.0), ('ab2', 17, [8], 7.5), ('sc6', 15, [], 1.0),
 ])
 def test_real_still_edge_regression(name, frame_number, expected, step_cell_8):
     frame = local_recording(f'diagnostics/{name}-still/frames/frame_{frame_number:06d}.png')
@@ -260,7 +290,26 @@ def test_real_still_edge_regression(name, frame_number, expected, step_cell_8):
         assert cells == ()
         assert result.checks['kanten'].status == 'OK'
     else:
-        assert result.checks['kanten'].status == 'FEHLER'
+        # Planmassstab fuer ab2: WARNUNG oder FEHLER. Die bisherigen 9,0
+        # enthielten den Nachbareffekt; die echte Spiegelkante bleibt markiert.
+        assert result.checks['kanten'].status == 'WARNUNG'
+
+
+@pytest.mark.parametrize('recording', ['live-20261028T113959Z', 'live-20261028T114104Z'])
+def test_oblique_live_still_has_no_edge_error(recording):
+    still = cv2.imread(str(local_recording(f'live/{recording}/setup/still.png')))
+    assert still is not None
+    hint = find_green_hint_box(still)
+    assert hint is not None
+    lattice = fit_lattice(still, hint, empty_cells=GSV2AS_EMPTY_CELLS)
+    assert not isinstance(lattice, str), lattice
+
+    result = check_setup(still, lattice)
+    edges = result.checks['kanten']
+    assert edges.status == 'OK'
+    assert edges.metrics['cell_step'][8] == pytest.approx(4.0, abs=0.1)
+    assert result.overall in ('OK', 'WARNUNG')
+    assert all(check.status != 'FEHLER' for check in result.checks.values())
 
 
 @pytest.mark.parametrize('name,frame_number,point_contrast,reader_contrast', [
