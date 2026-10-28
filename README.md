@@ -114,6 +114,7 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 
 | Seite | Inhalt |
 | --- | --- |
+| [Session-Explorer](docs/session-explorer.md) | Gesamtkennzahlen, Entwicklung und Originaldateien abgeschlossener Läufe |
 | [Fortschritt Ernten/Training](docs/FORTSCHRITT.md) | interaktive Diagramme |
 | [Validierung](docs/VALIDATION.md) | Zahlen und Fehlerklassen |
 | [Zeitverhalten](docs/TIMING.md) | M1–M8 und Unsicherheitsbudget |

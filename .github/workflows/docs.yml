@@ -29,6 +29,20 @@ jobs:
       - name: Seite bauen
         run: ./scripts/docs-site.sh build
 
+      # Optional: weder PR-/Browserbuilds noch der getrennte Pflegerunner
+      # brauchen Sessiondaten. Ein ausgefallener Export verwendet den letzten
+      # geprüften Stand oder eine leere Ansicht. Auth-Gates unten bleiben hart.
+      - name: Geprüftes Session-Archiv ergänzen
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          # Projektregel: eigene .venv mit Debian-Systempaketen. Der reine
+          # Standardbibliothekshelfer braucht weder pip noch Paketinstallation.
+          if python3 -m venv --system-site-packages --without-pip .venv; then
+            ./.venv/bin/python scripts/wiki_session_site.py --site site --wait 15
+          else
+            echo 'Optionales Session-Archiv ausgelassen: Projekt-.venv nicht verfügbar.'
+          fi
+
       - name: Build-Info ablegen
         run: |
           {

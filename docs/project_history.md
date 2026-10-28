@@ -9,6 +9,37 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+# 2026-10-28 — Session-Archiv vom Messpfad und vom Wiki-Build trennen
+
+Der Records Explorer sollte alle abgeschlossenen Läufe und ihre Entwicklung
+im Wiki zeigen. Eine verpflichtende Session-Quelle im gemeinsamen Build hätte
+Playwright und den getrennten Doku-Pflegerunner von lokalen Messdaten abhängig
+gemacht. Ein direkter Bind-Mount von `var/live` in den Runner hätte außerdem
+laufende Dateien sichtbar gemacht und keine Rechenlast verhindert.
+
+Gewählt: eigener, begrenzter Exportdienst unter dem bisherigen Quellbesitzer,
+unveränderliche und dauerhaft erhaltene Archivgenerationen, optionales
+Einbinden erst im Veröffentlichungsworkflow. Keine Importarbeit bei laufender
+Workbench. Ein gescheiterter Import verwendet den bisherigen geprüften Stand
+oder einen Leerzustand. Runner, Workbench und Messpfad erhalten keine neuen
+Steuerkopplungen. Zusätzlicher Objektspeicher wurde zugunsten des vorhandenen
+geschützten Pages-Hostings verworfen; Originalblöcke werden verlustfrei
+komprimiert und aufgeteilt. Automatische Bereinigung ist nicht vorgesehen.
+
+Zwei Statistikansichten vermeiden eine versteckte Gewichtungsentscheidung:
+jeder Lauf gleich oder alle einzelnen Frames gemeinsam. Echte gepoolte
+Mediane und p95 werden aus den Beobachtungen berechnet; Mediane von
+Session-Medianen heißen ausdrücklich so. Vergleichsgruppen trennen Gerät,
+Einheit, Leser, Toleranz, Bestätigung und Aufnahmeparameter; Softwarestände
+bleiben als erklärende Versionsmarkierungen vergleichbar. Testläufe sind
+separat. VALID-Verfügbarkeit und Konfidenz werden nicht als Messrichtigkeit
+behauptet. Das bestehende Wiki-Design bleibt erhalten; der vorhandene Explorer
+arbeitet in einer eigenen eingebetteten Ansicht, um globale CSS- und
+Ereigniswechselwirkungen zu begrenzen.
+
+[Umsetzungsplan](superpowers/plans/2026-10-28-session-explorer.md) und
+[Hosting](HOSTING.md#session-archiv-und-explorer) beschreiben die Grenzen.
+
 # 2026-10-28 — UserDefined als Einstieg für einen GSVmulti-Prototyp
 
 Das bereitgestellte PDF führt zur bisher fehlenden Herstelleranleitung

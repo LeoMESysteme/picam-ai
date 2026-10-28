@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: Session-Explorer im Wiki: Gesamtkennzahlen mit gleicher
+  Laufgewichtung oder echten gepoolten Frame-Quantilen, Kalenderverläufe,
+  Vergleichsgruppen und Dateiliste führen zum eingebetteten Records Explorer
+  mit A/B-Vergleich und Vollansicht. Originaldateien bleiben unverändert;
+  Testläufe und fehlende Zeitbasen sind gekennzeichnet. Ein separater,
+  blockweise fortsetzbarer Exporter erstellt nur bei beendeter Workbench
+  geprüfte Archivgenerationen. Der optionale Veröffentlichungsschritt nutzt
+  bei Fehlern den bisherigen Stand oder einen Leerzustand. Normale Builds,
+  Playwright und Doku-Pflege brauchen keine echten Sessiondaten. Einrichtung
+  über `scripts/wiki-session-export-install.sh`; keine Änderung am Messpfad
+  oder Neustarts bestehender Dienste durch die Integration.
+
 * 2026-10-28: GSVmulti-PDF gegen die Herstelleranleitung v2.6 und den
   vorhandenen Ausgabepfad geprüft. UserDefined belegt einen konfigurierbaren
   Windows-COM-Zahlenimport; die reine Spezifikationsbeschaffung sperrt den

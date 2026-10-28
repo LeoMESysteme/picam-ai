@@ -67,6 +67,102 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Session-Archiv und Explorer
+
+Der [Session-Explorer](session-explorer.md) ist Teil des normalen Wikis.
+Ein Build ohne Archiv enthält einen klaren Leerzustand. Die bestehenden
+Playwright- und Doku-Pflege-Workflows bekommen weder Zugriff auf `var/live`
+noch eine neue lokale Abhängigkeit. Ein zusätzlicher Schritt in `docs.yml`
+ergänzt ausschließlich bei Push auf `master` eine bereits geprüfte Generation
+im Buildverzeichnis `site/`. Manuelle Prüfstandsdeployments verändern weiterhin
+keine Produktion. Anmeldung und Schutzprüfung gelten auch für Katalog,
+Manifeste, komprimierte Teile und die eigenständige Explorer-Seite.
+Der optionale Schritt legt für den Standardbibliothekshelfer eine Projekt-venv
+mit `--system-site-packages --without-pip` an. Es wird kein Paket installiert.
+Schlägt schon diese Vorbereitung fehl, bleibt der normale Wiki-Build mit
+Leerzustand gültig; die bisherigen übrigen Workflows brauchen diese venv nicht.
+
+**Einrichtung einmalig, in einer Messpause:**
+
+```bash
+sudo ./scripts/wiki-session-export-install.sh
+```
+
+Das Skript installiert nur `picam-wiki-export.service` und `.path`, den
+Standardbibliotheks-Exporter und seine feste Konfiguration. Es startet weder
+die Workbench noch bestehende Runner neu. Der Dienst läuft als `me-systeme`,
+mit `PrivateDevices`, lesbarem Home, geschütztem System, 25 % eines CPU-Kerns,
+256 MiB Speicher und niedriger CPU-/I/O-Priorität. Der Runner kann nur eine
+feste Anfrage schreiben und fertige Archivgenerationen lesen; er erhält keinen
+Zugriff auf Home, Steuersocket oder Geräte. Inhalt der Anfragedatei wird nicht
+als Befehl oder Parameter verwendet.
+
+Das nächste reguläre Produktionsdeployment schreibt
+`/srv/picam-wiki-export/request` und wartet höchstens 15 s. Der Exportdienst
+arbeitet pro Anfrage höchstens 45 s, mit zusätzlicher systemd-Zeitgrenze von
+75 s. Bei laufendem `dispread serve` oder unklarem Prozessstatus importiert er
+nichts. Startet eine Workbench während der Bearbeitung, endet sie am nächsten
+begrenzten Prüfschritt. Die Workbench wird niemals angehalten oder am Start
+gehindert. Das ersetzt keine harte Ressourcenisolation: Builds und Browsertests
+gehören auf dem gemeinsamen Pi weiterhin in Messpausen.
+
+Der dauerhafte Bestand liegt unter `/srv/picam-wiki-export/archive`:
+`checkpoint.sqlite3` enthält wiederaufnehmbare Dateiblöcke und numerische
+Beobachtungen, `blocks/` die komprimierten Originalblöcke, `snapshots/`
+unveränderliche Generationen. Die atomare Textdatei `current` nennt die aktuelle
+Generation; ein `published`-Beleg unterscheidet sie von abgebrochener Arbeit.
+Der Dienst legt Checkpoints und Blockcache privat an (`UMask=0077`). Nur
+vollständig publizierte Generationen werden für die Runner-Gruppe lesbar;
+`current` erhält seine Leserechte zuletzt. Verknüpfte Cache-Blöcke werden
+vorher blockweise abgetrennt, damit der private Cache privat bleibt.
+Bereits übernommene Läufe bleiben erhalten, wenn lokale Quellen verschwinden.
+Eine veränderte Quelle unter derselben Laufkennung wird als Konflikt gemeldet.
+Keine automatische Archivbereinigung; dieses Verzeichnis separat sichern.
+
+```bash
+# Nach beendeter Workbench eine Exportphase anfordern:
+sudo systemctl start picam-wiki-export.service
+sudo journalctl -u picam-wiki-export.service -n 20 --no-pager
+```
+
+Große Läufe können mehrere Exportphasen benötigen. Hashing, Komprimierung und
+JSONL-Verarbeitung setzen innerhalb einer Datei am letzten geprüften Block
+fort; fertige exakte Statistiken werden zwischengespeichert. Eine unterbrochene
+einzelne SQL-Abfrage beginnt erneut, ohne doppelte Beobachtungen einzufügen.
+Das Zeitbudget wird in jedem SQLite-Progress-Callback geprüft; der teurere
+Prozessscan dort höchstens alle 100 ms. Vor jedem Quellblock bleibt ein
+vollständiger Scan erhalten. Blockierende Systemaufrufe können die kooperative
+Reaktion verzögern; eine garantierte Stoppzeit wird damit nicht behauptet.
+Die Rohdateien sind in unabhängig komprimierte Blöcke von höchstens 1 MiB
+aufgeteilt. Metadatendateien über 1 MiB werden abgelehnt; JSONL-Zeilen über
+1 MiB bleiben in den Originaldateien erhalten, zählen aber als nicht auswertbar.
+Statistikfehler und ausgelassene Zeilen sind sichtbar, fehlende Zahlen sind
+`null` und niemals eine erfundene Nullmessung.
+
+Kommt keine neue Generation rechtzeitig an, bleibt der letzte geprüfte Stand
+sichtbar. Die Veröffentlichungsseite nennt immer das Archivdatum; während
+einer dauerhaft geöffneten Workbench kommen keine neuen Sessions hinzu.
+Der Runner merkt den letzten erfolgreich eingebundenen Stand unter
+`/var/lib/forgejo-runner/wiki-session-state.json`. Bei beschädigten oder zu
+großen Daten wird ein früherer gültiger Stand verwendet, sonst eine leere
+Ansicht mit Hinweis. Grenzen werden für Website **und** Archiv zusammen
+geprüft. Ein Fehler der Authentifizierung oder Schutzprüfung verhindert das
+Deployment weiterhin.
+
+Eine künstliche Integrationsgeneration lässt sich ohne Dienst und echte
+Sessions in einen separat gebauten Prüfstand einbinden:
+
+```bash
+./.venv/bin/python scripts/wiki_session_site.py --site site --snapshot /pfad/zur/fixture-generation
+```
+
+Die aktuelle Quelle ist das konfigurierte `var/live` des installierten
+Checkouts, nicht ein beliebiger Worktree. Bereits gelöschte historische Läufe
+werden nur aus einer vorhandenen Sicherung wiederherstellbar. Weder
+Diagnosebilder noch Vorlagen, Videos oder beliebige Pfade aus Metadaten werden
+mitveröffentlicht. Ohne native Browserentpackung stehen die gzip-Teile weiter
+zum Download bereit; Reihenfolge und Prüfsummen stehen im Manifest.
+
 ### Playwright-Prüfung auf dem vorhandenen Runner
 
 `.github/workflows/playwright.yml` läuft bei Pushes und Pull Requests nach

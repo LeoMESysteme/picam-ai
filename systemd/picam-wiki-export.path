@@ -1,0 +1,9 @@
+[Unit]
+Description=Feste Exportanfrage des Wiki-Deployments beobachten
+
+[Path]
+PathChanged=/srv/picam-wiki-export/request
+Unit=picam-wiki-export.service
+
+[Install]
+WantedBy=paths.target

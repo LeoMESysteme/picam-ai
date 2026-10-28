@@ -19,7 +19,10 @@ BASE="${1:?Aufruf: $0 https://host}"
 AUTHORIZE="${FORGEJO_AUTHORIZE:-https://ds1515.me-systeme.de/login/oauth/authorize?}"
 TIMEOUT_S="${TIMEOUT_S:-300}"
 PATHS=(/ /index.html /docs/status.html /docs/status /api/geometrie.html /search.json
-       /assets/javascripts/ /sitemap.xml /BUILD-INFO.txt /gibt-es-nicht-4711)
+       /assets/javascripts/ /sitemap.xml /BUILD-INFO.txt /gibt-es-nicht-4711
+       /docs/session-explorer.html /assets/sessions/catalog.json
+       /assets/sessions/runs/probe/manifest.json /assets/sessions/chunks/probe.gz.bin
+       /assets/records-explorer/index.html)
 
 probe() {
     # Ausgabe: "<code>|<location>|<bytes>" - "|" als Trenner, weil location leer sein kann
