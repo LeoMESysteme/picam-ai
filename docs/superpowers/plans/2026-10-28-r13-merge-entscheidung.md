@@ -35,6 +35,16 @@ Abnahmelauf; [VALIDATION](../../VALIDATION.md#r13-live-2026-10-23)):
 | `121436Z` 10 min, Störungen | + R13-8 | 0 / 10 316 | Hand/Rahmen verdeckt: Wiederkehr nach 2–3 s; Drehung −2,25° (Ecken ~19–21 px) über Suchradius 12 px → korrekt dauerhaft abgelehnt |
 | `131121Z` 10 Bereiche | + R13-8 | — | dauerndes `rahmen_unstimmig` ohne Bewegung; offline mit R13-11 behoben (146/148, die 2 abgelehnten zeigen die Hand) |
 
+**Live am 2026-10-28** (Leonhard, mit R13-19c und R13-20, offizielle
+Auswertung `scripts/live-reference-eval.py`;
+[Laborjournal](../../lab_journal.md)):
+
+| Lauf | Fehllesungen | Verfügbarkeit |
+| --- | ---: | --- |
+| `150914Z/run-01` Werteplan 16,5 min, Faktoren 1–5, 138 Umschaltungen | **0 / 14 785** | **99,99 %** VALID in stabilen Fenstern; Anzeige die ganze Zeit 3–4 px/+0,15 % versetzt, getragen vom zweiten Durchgang |
+| `150914Z/run-02` absichtliche Verschiebungen bis 27 px | 0 / 3274 | über 20 px korrekt abgelehnt, Hinweis „Anzeige bewegt“ |
+| `123044Z` schräg links (R13-19a) | 0 / 3187 | 76 % VALID bei 1,4 Wertwechseln/s |
+
 Über alle Live-Läufe: **0 Fehllesungen**. Die Ausfälle bei Faktor 2 und 5
 (`master`, 21.10.: kein VALID in stabilen Fenstern) traten im ruhigen Lauf
 `100613Z` und offline auf DEV/E/F mit dem Rahmen-Tracker nicht mehr auf.
@@ -89,8 +99,10 @@ Einrichtungsbilder ergeben geeignete Vorschläge.
 6. Einrichtungsrelevante Aufnahmen nur als PNG (JPEG verschiebt die
    Gitteranpassung um bis zu 13 px).
 7. Keine formale Abnahme an zwei Aufstellungen mit dem neuen Vorschlag.
-   Die Aufstellung muss die Person wählen; die Kamera steht seit dem 23.10.
-   an „links etwa 18°“, wo die Einrichtung meist ablehnt.
+   Stand 2026-10-28: Der Werteplan-Lauf `150914Z/run-01` (16,5 min,
+   0 Fehllesungen, 99,99 % VALID stabil) kommt einer Abnahme an **einer**
+   Aufstellung nahe; die zweite Aufstellung fehlt. Die Kamera steht jetzt
+   frontaler (Leonhard, 28.10.).
 
 ## Zu entscheiden
 

@@ -2734,3 +2734,47 @@ keine fehlgeschlagenen oder übersprungenen Tests. Live-Node **51 → 52 bestand
 Tour-Fakten zusätzlich **5 bestanden**. Ruff, Wiki-Check, OQ-Index-Prüfung,
 Tour-JavaScript-Syntax und Diff-Prüfung ohne Befund. Kein Docs-Playwright,
 keine volle Suite, kein Commit; `docs/status.md` bleibt unverändert.
+
+## 2026-10-28 — Leonhards Nachmittagsläufe: Werteplan 16 min, Bewegung, Belichtung
+
+**Einrichtungen:** `live-20261028T150539Z` und `…150914Z`, beide mit R13-19c
+und R13-20 (Werkbank aus 806cef4). Der Belichtungsabgleich musste nicht
+eingreifen: Automatik lieferte 300, Glaspegel 121 bzw. 132 (Zielband
+115–150), Vorprüfung `belichtung` OK (125 bzw. 134). Die Nachregelung selbst
+ist am Gerät damit **noch nicht** gezeigt (nur mit Fakes).
+
+**Werteplan-Lauf `150914Z/run-01`** (990 s, `set norm` Faktoren 1–5,
+138 Umschaltungen, Rückstellung durch die Werkbank), offizielle Auswertung
+`scripts/live-reference-eval.py`:
+
+| | Wert |
+| --- | --- |
+| Fehllesungen | **0 / 14 785** entschiedene VALID |
+| stabile Referenzfenster | **99,99 % VALID** (14 785 / 14 786), alle Faktoren 1–5 |
+| im Wechsel | 75 % VALID, 20 % TRANSITION, 4 % UNREADABLE |
+| Verzögerung erster VALID nach Wechsel | Median 244 ms, p90 278 ms |
+
+Die Anzeige stand während des ganzen Laufs gegenüber der Einrichtung
+versetzt (ORB: 3,3 px nach 30 s, 4,3 px nach 15 min, Maßstab +0,13…0,18 %,
+vermutlich nachkriechendes Stativ nach dem Umstellen). Der erste, starre
+Durchgang lehnte dadurch jedes Bild ab; **der zweite Durchgang (R13-19c)
+trug alle 27 449 Bilder** (`tracking_coarse_retries` = `accepted`).
+
+**Umschaltfenster:** Der Werteplan schaltet in zwei Befehlen
+(`set_norm`, dann `set_dpoint`). Dazwischen zeigt das Gerät echte
+Zwischenwerte mit neuer Normierung und altem Dezimalpunkt, z. B. „+5.8810“
+(Faktor 1 mit Punkt von Faktor 3) oder „+0.11762“; der Leser liest sie
+korrekt als VALID. Die Telegramme stoppen schon mit Befehl 35 etwa 0,4 s vor
+dem protokollierten `pause_transmission`. Die offizielle Auswertung
+schließt Telegrammlücken aus und zählt diese Bilder als „ohne
+Referenzdeckung“; einfache Textvergleiche ohne Lückenlogik melden dort
+scheinbare Fehllesungen (und unterscheiden außerdem „+ 1.1762“ mit
+Leerzelle von „+1.1762“).
+
+**Bewegungslauf `150914Z/run-02`** (276 s): 0 / 3274 Fehllesungen;
+zweiter Durchgang 4781 Versuche, 4773 angenommen; Verschiebungen bis 27 px
+(über der Grenze 20 px) korrekt abgelehnt, Hinweis „Anzeige bewegt“
+(`max_shift_px` 27,4).
+
+**Kurzlauf `150539Z/run-01`** (16 s, abgebrochen): 100 % UNREADABLE
+(`leser:zelle_unbekannt`), nicht weiter ausgewertet.
