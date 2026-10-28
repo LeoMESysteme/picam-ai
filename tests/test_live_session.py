@@ -135,6 +135,73 @@ def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
     assert json.loads(session.records_path.read_text()) == record.to_dict()
 
 
+@pytest.mark.parametrize('test_mode', [False, True])
+def test_reconfiguration_blocks_only_valid_captures_before_audit(tmp_path, monkeypatch, test_mode):
+    from dataclasses import replace
+
+    class Recorder:
+        reconfiguration_enabled = True
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {'enabled': True}
+
+        def is_reconfiguring(self, capture_boottime_ns):
+            # BOOTTIME: Sessionversatz 1000 ns muss beruecksichtigt werden.
+            return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 5 * 33_333_333 + 1000
+
+    image = embed('+ 1.2345 ')
+    session = _session(tmp_path, [image, image, image, image * 0 + 200, image, image],
+                       reference_recorder=Recorder(), test_run={} if test_mode else None)
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    pipeline_records, audited = [], []
+    process, emit = session._pipeline.process, session._sink.emit
+
+    def observe(frame, **kw):
+        record = process(frame, **kw)
+        pipeline_records.append(record)
+        return record
+
+    def audit(record):
+        audited.append(record)
+        return emit(record)
+
+    monkeypatch.setattr(session._pipeline, 'process', observe)
+    monkeypatch.setattr(session._sink, 'emit', audit)
+    try:
+        records = [session.step() for _ in range(6)]
+    finally:
+        summary = session.stop()
+    assert audited == records
+    assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
+        r.to_dict() for r in records
+    ]
+    if test_mode:
+        assert all(r.status is ValueStatus.UNREADABLE for r in records)
+        assert records[1].reject_reasons == ('testlauf_keine_freigabe',)
+        assert summary['testlauf_unterdrueckt'] == 5
+        assert summary['reconfiguration_suppressed'] == 0
+    else:
+        assert [r.status for r in records] == [
+            ValueStatus.VALID, ValueStatus.TRANSITION, ValueStatus.TRANSITION,
+            ValueStatus.UNREADABLE, ValueStatus.VALID, ValueStatus.VALID,
+        ]
+        for i in (1, 2):
+            assert records[i].reject_reasons == ('geraet_umkonfiguriert',)
+            assert records[i].value is None
+            assert records[i].raw_text == pipeline_records[i].raw_text
+        assert records[3:] == pipeline_records[3:]
+        assert records[0] == pipeline_records[0]  # vor Oeffnung, auch spaeter verarbeitet
+        assert summary['reconfiguration_suppressed'] == 2
+    assert json.loads(session.session_path.read_text())['summary'] == summary
+
+
 @pytest.mark.parametrize('marker', [None, {'testlauf': True}, {}])
 def test_later_readable_frames_are_suppressed_only_in_test_run(tmp_path, monkeypatch, marker):
     from unittest.mock import Mock
@@ -197,6 +264,33 @@ def test_later_readable_frames_are_suppressed_only_in_test_run(tmp_path, monkeyp
     assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
         r.to_dict() for r in records
     ]
+
+
+def test_reconfiguration_checks_fresh_offset_before_audit_after_suspend(tmp_path):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    # Nach Suspend ist BOOTTIME eine Sekunde weiter, MONOTONIC nicht.
+    offset = [1000]
+    queried = []
+    def is_reconfiguring(t):
+        queried.append(t)
+        return 1_000_000_000 <= t < 2_000_000_000
+    recorder = SimpleNamespace(reconfiguration_enabled=True, start=lambda: None, stop=lambda: None,
+                               status=lambda: {'enabled': True}, is_reconfiguring=is_reconfiguring)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], reference_recorder=recorder)
+    session._clock = ClockLog(measure=lambda: offset[0], monotonic_ns=lambda: 0)
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    offset[0] += 1_000_000_000
+    try:
+        record = session.step()
+    finally:
+        session.stop()
+    assert record.status is ValueStatus.TRANSITION
+    assert record.reject_reasons == ('geraet_umkonfiguriert',)
+    assert not queried  # Umrechnung muss den neuen Suspend bereits ablehnen.
+    assert json.loads(session.records_path.read_text()) == record.to_dict()
 
 
 def test_suppressed_gate_result_remains_diagnostic_without_cell_details(tmp_path, monkeypatch):
@@ -768,6 +862,7 @@ def test_reference_audit_leaves_records_byte_identical(tmp_path, monkeypatch):
     assert recorded.records_path.read_bytes() == expected
     meta = json.loads(recorded.session_path.read_text())
     assert meta['reference']['enabled'] and meta['reference']['lines'] == 1
+    assert 'reconfiguration_suppressed' not in meta['summary']
     assert port.closed and not port.writes
 
 

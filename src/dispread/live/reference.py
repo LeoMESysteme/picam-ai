@@ -1,4 +1,8 @@
-"""Referenz-Audit neben dem Messpfad; beeinflusst keine Leserentscheidung."""
+"""Referenz-Audit; Referenzwerte beeinflussen keine Leserentscheidung.
+
+Eigene Schreibsequenzen sperren dagegen die Live-Freigabe anhand der
+Aufnahmezeit: ab vor STOP bis Resume plus GUARD, auch bei spaeter Verarbeitung.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from pathlib import Path
 from dispread import gsv2as_serial as serial_io
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.gsv2as_serial import DEFAULT_RESTORE_POINT, NORM_MAX, NORM_MIN
+from dispread.live.reference_eval import GUARD_NS
 
 JOIN_TIMEOUT_S = 20.0
 RESTORE_ERROR = "Rückstellung nicht bestätigt – Gerät prüfen (gsv-registers.py)"
@@ -95,6 +100,37 @@ class ReferenceRecorder:
                        'norm_schedule': self._schedule, 'restoring': False}
         self._stop_lock = threading.Lock()
         self._stop_deadline = None
+        self._reconfiguration_lock = threading.Lock()
+        self._reconfiguration_windows: list[tuple[int, int | None]] = []
+
+    @property
+    def reconfiguration_enabled(self):
+        """Ohne Werteplan gibt es weder Schreibsequenzen noch Rueckstellung."""
+        return bool(self._schedule)
+
+    def is_reconfiguring(self, capture_boottime_ns: int) -> bool:
+        """Aufnahmezeit in [vor STOP, nach Resume + 695 ms), thread-sicher.
+
+        Abgeschlossene Intervalle bleiben fuer verspaetet verarbeitete Bilder
+        erhalten. Bilder vor STOP zeigen noch den alten Zustand und bleiben
+        freigabefaehig. Reine Register-Lesepausen aendern die Anzeige nicht.
+        """
+        with self._reconfiguration_lock:
+            return any(start <= capture_boottime_ns and (end is None or capture_boottime_ns < end)
+                       for start, end in self._reconfiguration_windows)
+
+    def _apply_configuration(self, port, norm_bytes, dpoint_byte, log, state, *, label):
+        # Oeffnen vor dem ersten Portzugriff, nicht erst beim verspaeteten Pause-Log.
+        with self._reconfiguration_lock:
+            index = len(self._reconfiguration_windows)
+            self._reconfiguration_windows.append((self._clock(), None))
+        ok = serial_io._apply_norm_dpoint(port, norm_bytes, dpoint_byte, log, state, label=label)
+        # Rueckkehr liegt nach resume_transmission. Bei Ausnahme ohne Resume bleibt
+        # das Fenster konservativ offen, auch wenn spaeter eine Rueckstellung gelingt.
+        with self._reconfiguration_lock:
+            start, _ = self._reconfiguration_windows[index]
+            self._reconfiguration_windows[index] = (start, self._clock() + GUARD_NS)
+        return ok
 
     def status(self):
         return dict(self._state)
@@ -183,7 +219,7 @@ class ReferenceRecorder:
                     factor, hold = self._schedule[index]
                     if self._stop.is_set():
                         break
-                    ok = serial_io._apply_norm_dpoint(
+                    ok = self._apply_configuration(
                         port, *serial_io._encode_norm(factor), log, command_state, label=f'schedule[{index}] factor={factor}')
                     if not ok:
                         raise ValueError('Werteplan: last_error meldet Fehler')
@@ -252,7 +288,7 @@ class ReferenceRecorder:
                 self._state['restoring'] = True
                 try:
                     reg = self._restore_point['register']
-                    ok = serial_io._apply_norm_dpoint(
+                    ok = self._apply_configuration(
                         self._port, reg['norm']['daten'], reg['dpoint']['daten'][0],
                         log, command_state, label='restore')
                     matches, detail = serial_io._check_restore_point(

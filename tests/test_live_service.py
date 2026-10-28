@@ -1652,7 +1652,8 @@ def test_leftover_diagnostics_are_reported_on_start_and_in_status(tmp_path, capl
     assert abandoned.is_dir()
 
 
-def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkeypatch):
+@pytest.mark.parametrize('last_copy', [0, 1])
+def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkeypatch, last_copy):
     import threading
 
     from test_live_session import _session, embed
@@ -1660,11 +1661,13 @@ def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkey
     from dispread.live import diagnostics
 
     monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
-    entered, release = threading.Event(), threading.Event()
+    entered = [threading.Event(), threading.Event()]
+    release = [threading.Event(), threading.Event()]
     original_copy = diagnostics.shutil.copyfile
     def delayed_copy(src, dst):
-        entered.set()
-        assert release.wait(3)
+        index = int(dst.relative_to(tmp_path).parts[0])
+        entered[index].set()
+        assert release[index].wait(30), 'Diagnosekopie wurde im Test nicht freigegeben'
         return original_copy(src, dst)
     monkeypatch.setattr(diagnostics.shutil, 'copyfile', delayed_copy)
     sessions = []
@@ -1675,9 +1678,10 @@ def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkey
         session.start()
         session.step()
         session.mark('Test')
-        if n == 0:
-            session.stop()
         sessions.append(session)
+    # Erst beide Sitzungen aufbauen: deren Bildverarbeitung darf unter Last
+    # nicht die Frist der absichtlich blockierten ersten Kopie verbrauchen.
+    sessions[0].stop()
     service = LiveService(FakeOwner(), tmp_path, diagnostic_staging_root=tmp_path)
     service._diagnostic_copies, service._session = sessions[:1], sessions[1]
     service._state, service._run_stop = 'running', threading.Event()
@@ -1689,15 +1693,19 @@ def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkey
             closed.set()
     thread = threading.Thread(target=close)
     try:
-        assert entered.wait(1)
         thread.start()
+        assert all(event.wait(10) for event in entered)
+        first_copy = 1 - last_copy
+        release[first_copy].set()
+        assert sessions[first_copy]._diagnostics.wait(30)
+        # Beide Varianten: close muss auch auf die jeweils andere Kopie warten.
         assert not closed.wait(0.05)
     finally:
-        release.set()
-        thread.join(3)
+        for event in release:
+            event.set()
+        thread.join(30)
     assert closed.is_set()
     for session in sessions:
-        assert session._diagnostics.wait(3)
         assert session.diagnostics_status()['copied']
         assert not session._diagnostics.staging.exists()
 

@@ -2778,3 +2778,70 @@ zweiter Durchgang 4781 Versuche, 4773 angenommen; Verschiebungen bis 27 px
 
 **Kurzlauf `150539Z/run-01`** (16 s, abgebrochen): 100 % UNREADABLE
 (`leser:zelle_unbekannt`), nicht weiter ausgewertet.
+
+## 2026-10-28 — R13-21: Freigabesicherung während eigener Geräteumschaltung
+
+**Befund aus dem vorliegenden Werteplan-Lauf `live-20261028T150914Z/run-01`:**
+`set_norm` und `set_dpoint` wirken nacheinander. Die echten Zwischenanzeigen
+mit neuer Normierung und altem Dezimalpunkt wurden bisher korrekt gelesen,
+aber als VALID freigegeben (etwa „+5.8810“ statt „+0.58810“, bei ca. 90,93 s;
+`set_norm` ca. 90,57 s, `set_dpoint` ca. 90,93 s). Der erste STOP liegt
+etwa 0,4 s vor dem Pause-Log. Diese Zwischenwerte dürfen während der
+bekannten Werkbank-Umschaltung nicht freigegeben werden. Keine neue Messung
+oder Aufnahme; der Befund stammt aus dem vorhandenen Lauf und Auftrag.
+
+**Fix und Entscheidung:** Der Referenzthread öffnet vor dem Aufruf der
+Schreibsequenz, also vor STOP, ein BOOTTIME-Intervall. Nach der Rückkehr
+aus der Sequenz (nach Resume) endet es mit **695 ms Nachlauf**, entsprechend
+dem bestehenden `GUARD_NS` in `reference_eval.py` bzw. M im Gate-Labeler.
+Dieses vorhandene Schutzintervall deckt Anzeigeverzögerung und
+LCD-Umschaltung konservativ ab; es ist keine neu bestimmte Latenz.
+Werteplan und Rückstellung nutzen denselben Pfad. Reine Register-Lesepausen
+ändern weder Normierung noch Dezimalpunkt und bleiben ausgenommen.
+
+Ein Lock schützt Öffnen, Schließen und Abfragen der Intervalle. Alte
+Intervalle bleiben erhalten, damit verspätete Verarbeitung keine Aufnahme
+aus dem Fenster freigibt. Aufnahmen vor STOP dürfen gültig bleiben, weil
+sie den alten Zustand zeigen. Die Alternative, auch solche alten Bilder
+nach Verarbeitungszeit zu sperren, würde gültige Aufnahmen unnötig verwerfen.
+Die Live-Sitzung nutzt `records.to_boottime_ns` mit Start- und frischer
+Sessionversatzprobe vor jeder sonst gültigen Aufnahme mit Werteplan.
+So fällt ein Suspend schon vor der nächsten periodischen Auditprobe auf;
+zusätzliche Versatzsprünge bleiben im Audit, ohne eine Probe je Bild zu
+speichern. Ohne sicheren Zeitbezug wird bei aktivem Werteplan
+gesperrt; eine Ausnahme vor Resume lässt das Intervall offen.
+
+Nur ansonsten VALID wird vor Audit/Ausgabe zu TRANSITION mit
+`geraet_umkonfiguriert` und `value=null`; UNREADABLE, TRANSITION und STALE
+bleiben erhalten. R13-17 hat Vorrang. `summary.reconfiguration_suppressed`
+zählt nur tatsächliche Umkonfigurations-Unterdrückungen und erscheint nur
+bei Werteplan. Referenzwerte selbst gelangen weiterhin nicht ins Gate.
+
+**Nacharbeiten:** Gegenlesen nennt nun Schatten **oder Verschmutzung** und
+„Glas reinigen bzw. abschatten und neu einrichten“ (passend auch zum
+vorhandenen Fleck-Befund `live-20261028T133037Z`, blasse „668“). Beim
+sporadischen Diagnosekopie-Test konnte die Drei-Sekunden-Frist des Fake-
+Kopierers schon während des zweiten Sitzungsaufbaus ablaufen. Das meldet
+einen Kopierfehler und setzt das Fertig-Ereignis trotzdem; weiteres Warten
+repariert diesen Fehler nicht. Beide Sitzungen werden jetzt vor Beginn
+der absichtlich blockierten Kopie aufgebaut; Ereignis-/Join-Fristen sind
+größer; getrennte Ereignisse und zwei Varianten lassen jeweils eine
+der beiden Kopien zuletzt ausstehen und prüfen, dass `close` weiter wartet.
+
+**Prüfung:** ausschließlich Fake-Port, Fake-Kamera und bestehende Testdaten;
+keine Kamera/Seriellschnittstelle geöffnet, keine Dateien unter `var/` oder
+`/mnt/ssd` verändert. Ausgangslauf der fünf beauftragten Python-Dateien:
+442 bestanden; Node: 52 bestanden. Neue Sperr-/Texttests zunächst
+5 fehlgeschlagen, 1 bestanden; nach Implementierung einschließlich
+Kopiertest 7 bestanden. Der zusätzliche Suspend-Regressionstest war vor
+der frischen Versatzprüfung ebenfalls rot. Abschließend mit
+`DISPREAD_DEV_DATA=/mnt/ssd/picam-dev` und `-q -n 3`: **449 bestanden**
+in 114,11 s, keine fehlgeschlagenen oder übersprungenen Tests; beide
+Kopier-Wartevarianten grün. Zusätzlich **3 Clock-Tests bestanden**;
+Node unverändert **52 bestanden**. Bytegleichheit ohne Werteplan,
+Nachlaufgrenze, überlappende Intervalle, Rückstellung, Schreibabbruch und
+R13-17 sind abgedeckt. Ruff, Wiki-Check, Tour-Fakten-Check und Diff-Prüfung
+ohne Befund. Die Statusgründe werden nicht aus Tour-Fakten generiert;
+dort ist keine Änderung erforderlich. Reale Werkbank-Abnahme bleibt offen.
+Kein Commit, keine volle Suite, kein Docs-Playwright; `docs/status.md`
+bleibt gemäß Auftrag unverändert.

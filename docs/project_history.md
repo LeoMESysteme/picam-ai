@@ -9,6 +9,31 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-28 — R13-21: Aufnahmezeit sperrt eigene Geräteumschaltungen
+
+**Problem:** Zwischen `set_norm` und `set_dpoint` zeigt das Gerät lesbare,
+aber falsch skalierte Zwischenwerte; STOP liegt bereits vor dem Pause-Log.
+
+**Entscheidung:** Der Referenzrecorder hält unter Lock BOOTTIME-Intervalle
+von vor dem ersten STOP einer Schreibsequenz bis nach Resume plus dem
+bestehenden Referenz-GUARD von 695 ms. Die Live-Sitzung prüft die nach
+BOOTTIME umgerechnete Aufnahmezeit und setzt nur VALID vor dem Audit auf
+TRANSITION mit `geraet_umkonfiguriert`. R13-17 bleibt vorrangig.
+
+**Alternativen:** Eine Sperre erst ab dem Pause-Log lässt das erste
+STOP/CLEAR-Fenster offen. Eine reine Verarbeitungszeitsperre würde auch
+ältere, noch korrekt skalierte Aufnahmen verwerfen und könnte später
+verarbeitete Umschaltbilder freigeben. Deshalb bleiben abgeschlossene
+Intervalle erhalten. Reine Register-Lesepausen verändern keine
+Anzeigeparameter und werden ausgenommen.
+
+**Konsequenz:** Werteplan und Rückstellung teilen dieselbe Sperre;
+Schreibabbruch ohne Resume oder fehlender sicherer Aufnahmezeitbezug
+lassen keine Freigabe zu. Ohne Werteplan bleiben Record-Bytes und
+Summary-Schema erhalten. Keine Referenzwertkorrektur, keine neue
+Zeitmessung oder Hardware-Abnahme. Befund und Fake-Prüfungen im
+[Laborjournal](lab_journal.md#2026-10-28-r13-21-freigabesicherung-wahrend-eigener-gerateumschaltung).
+
 ## 2026-10-28 — R13-19c: Maßstab nur im zweiten Rahmenfit
 
 **Problem:** Korrekte Grobverschiebungen allein beheben die Live-Verluste

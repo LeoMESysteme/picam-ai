@@ -4,6 +4,8 @@ Spec 2026-10-12 §2/§4. Liest immer das neueste Bild des CameraOwner,
 ueberspringt aeltere und zaehlt sie. Jeder Datensatz traegt die Aufnahmezeit
 des gelesenen Bilds. Die Timing-Kalibrierung ist Pflicht und wird in
 session.json aufgezeichnet, aber nicht angewandt.
+Werkbank-Schreibsequenzen sperren VALID vor Audit/Ausgabe als TRANSITION
+mit geraet_umkonfiguriert; Referenzwerte gehen weiterhin nicht ins Gate.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
-from dispread.records import ValueRecord, ValueStatus
+from dispread.records import ValueRecord, ValueStatus, to_boottime_ns
 from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
 from dispread.timing_calibration import load_calibration
@@ -188,6 +190,7 @@ class LiveSession:
         self._reference_error = None
         self._test_run = test_run
         self._testlauf_unterdrueckt = 0
+        self._reconfiguration_suppressed = 0
         # Lockerung und ihre Markierung in session.json muessen zusammenpassen.
         expected_factor = 1.0 if reader_tolerance is None else reader_tolerance.get("factor")
         if reader_d_max_factor != expected_factor:
@@ -335,6 +338,23 @@ class LiveSession:
             if suppressed:
                 record = replace(record, status=ValueStatus.UNREADABLE, value=None,
                                  reject_reasons=('testlauf_keine_freigabe', *record.reject_reasons))
+            reconfiguration_suppressed = False
+            if record.status is ValueStatus.VALID and getattr(
+                self._reference_recorder, 'reconfiguration_enabled', False
+            ):
+                try:
+                    # Frischen Versatz pruefen: ein Suspend darf nicht bis zur
+                    # naechsten periodischen Auditprobe unbemerkt bleiben.
+                    capture_ns = to_boottime_ns(record.capture_timestamp.to_dict(), {
+                        'clock_offset_boottime_minus_monotonic_ns': self._clock.checked_offset_bounds(),
+                    })
+                    reconfiguration_suppressed = self._reference_recorder.is_reconfiguring(capture_ns)
+                except ValueError:
+                    # Ohne sicheren Zeitbezug keine Freigabe bei aktivem Werteplan.
+                    reconfiguration_suppressed = True
+                if reconfiguration_suppressed:
+                    record = replace(record, status=ValueStatus.TRANSITION, value=None,
+                                     reject_reasons=('geraet_umkonfiguriert', *record.reject_reasons))
             if record.reject_reasons and record.reject_reasons[0].startswith("tracking_lost:"):
                 self._tracking_lost += 1
                 self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
@@ -357,6 +377,8 @@ class LiveSession:
             self._frames_read += 1
             if suppressed:
                 self._testlauf_unterdrueckt += 1
+            if reconfiguration_suppressed:
+                self._reconfiguration_suppressed += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
             if record.reject_reasons and record.reject_reasons[0] == "anzeige_wechselt":
                 self._display_changing += 1
@@ -556,6 +578,8 @@ class LiveSession:
         data['last_mark'] = self.last_mark
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
+        if getattr(self._reference_recorder, 'reconfiguration_enabled', False):
+            self.summary['reconfiguration_suppressed'] = self._reconfiguration_suppressed
         if self._test_run is not None:
             self.summary['testlauf_unterdrueckt'] = self._testlauf_unterdrueckt
             data["test_run"] = self._test_run

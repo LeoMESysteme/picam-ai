@@ -576,6 +576,8 @@ def test_lighting_hint_is_informational(monkeypatch, tmp_path, depths, edge):
         assert result.metrics['lighting']['edge_between'] == edge
         assert result.metrics['lighting']['max_ratio'] == pytest.approx(1.7)
         assert 'Zelle 3 und 4' in result.metrics['hinweis']
+        assert 'Schatten oder Verschmutzung' in result.metrics['hinweis']
+        assert 'Glas reinigen bzw. abschatten und neu einrichten' in result.metrics['hinweis']
     else:
         assert 'hinweis' not in result.metrics
 

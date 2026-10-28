@@ -370,7 +370,7 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         i, j = lighting['edge_between']
         metrics['hinweis'] = (
             f'Ungleichmaessige Beleuchtung auf dem Display (Kontrastsprung zwischen Zelle {i} und {j}, '
-            'vermutlich Schatten). Display gleichmaessig abschatten oder Schatten entfernen und neu einrichten.'
+            'vermutlich Schatten oder Verschmutzung). Glas reinigen bzw. abschatten und neu einrichten.'
         )
     if status == 'WARNUNG':
         tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)

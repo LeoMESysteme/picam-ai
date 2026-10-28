@@ -346,10 +346,12 @@ test('tolerance marks valid detail but STALE still wins', () => {
 
 test('proposal hint and tolerance selection are shown, posted and cleared', async () => {
   await withLivePage(async (page, element, poll) => {
+    const hint = 'Ungleichmaessige Beleuchtung auf dem Display (Kontrastsprung zwischen Zelle 3 und 4, '
+      + 'vermutlich Schatten oder Verschmutzung). Glas reinigen bzw. abschatten und neu einrichten.';
     page.status = {state: 'setup_ready', session_id: 'first', setup: {gegenlesen: {
-      metrics: {hinweis: 'Schatten entfernen.', tolerance: {possible: true, factor: 1.44}}}}};
+      metrics: {hinweis: hint, tolerance: {possible: true, factor: 1.44}}}}};
     await poll();
-    assert.equal(element('proposal-hint').textContent, 'Hinweis: Schatten entfernen.');
+    assert.equal(element('proposal-hint').textContent, `Hinweis: ${hint}`);
     assert.equal(element('tolerance-label').hidden, false);
     assert.match(element('tolerance-text').textContent, /×1.44/);
     element('use-tolerance').checked = true;

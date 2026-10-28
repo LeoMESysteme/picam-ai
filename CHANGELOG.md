@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: R13-21 sperrt die Live-Freigabe bei werkbankgesteuerter
+  Geräteumkonfiguration: ab vor STOP jeder Werteplan-/Rückstellsequenz bis
+  nach Resume plus 695 ms (bestehendes Referenz-GUARD). Ein sonst gültiges
+  Bild mit Aufnahmezeit im BOOTTIME-Fenster wird vor Audit/Ausgabe
+  `TRANSITION`, `value=null`, Grund `geraet_umkonfiguriert`; andere Status
+  und die vorrangige Testlauf-Sperre R13-17 bleiben erhalten. Thread-sichere
+  Intervalle berücksichtigen auch verspätet verarbeitete Bilder; Abbruch
+  ohne Resume bleibt gesperrt. Eine frische Versatzprüfung vor jeder
+  Werteplan-Freigabe erkennt auch Suspend vor der nächsten Auditprobe.
+  `summary.reconfiguration_suppressed` zählt
+  die Unterdrückungen nur bei Werteplan; reine Lesepausen ändern keine
+  Anzeigeparameter, Läufe ohne Werteplan behalten ihre JSONL-Bytes.
+  Gegenlesen nennt bei Kontrastsprüngen Schatten oder Verschmutzung und
+  empfiehlt Glasreinigung bzw. Abschattung. Der Diagnosekopie-Test startet
+  seine blockierte Kopie erst nach beiden Sitzungsaufbauten und wartet mit
+  größerer Frist auf getrennte Kopierereignisse, damit Last keinen
+  künstlichen Kopierfehler auslöst; beide Kopien werden einzeln abgesichert.
+  Alles mit Fakes geprüft, keine Hardware-Abnahme.
+
 * 2026-10-28: R13-20 stimmt im Live-Assistenten nach dem Fokus die feste
   Belichtung auf die Anzeige ab: acht Bilder mitteln, p80 grüner Pixel in
   der Hinweisbox, Zielband 115–150 bei Ziel 130. Höchstens vier

@@ -307,3 +307,73 @@ def test_oversized_rejected_line_is_audited(tmp_path):
     assert len(rows) == 3
     assert rows[1]['raw'] == raw.decode('ascii')
     assert rows[1]['cell_text'] is None and rows[1]['value'] is None and rows[1]['error']
+
+
+@pytest.mark.parametrize('restore_gap_ns', [0, 2_000_000_000])
+def test_reconfiguration_window_precedes_stop_and_covers_resume_tail_and_restore(
+    tmp_path, monkeypatch, restore_gap_ns,
+):
+    ticks = [1_000_000_000]
+    writes = []
+
+    class ObservedPort(RegisterPort):
+        def write(self, data):
+            writes.append((data, ticks[0], recorder.is_reconfiguring(ticks[0])))
+            return super().write(data)
+
+    def sleep(seconds):
+        ticks[0] += round(seconds * 1e9)
+
+    monkeypatch.setattr('dispread.gsv2as_serial._sleep', sleep)
+    point = {'register': {'norm': {'daten': [80, 27, 228]}, 'dpoint': {'daten': [1]}}}
+    port = ObservedPort()
+    recorder = ReferenceRecorder(lambda: port, tmp_path / 'reference.jsonl',
+                                 norm_schedule=[(2, 20)], restore_point=point,
+                                 monotonic=lambda: ticks[0] / 1e9, clock=lambda: ticks[0])
+    # Abfrage von anderem Thread; Zeit laeuft nur durch Fake-Schlaf.
+    assert recorder.reconfiguration_enabled
+    recorder.start()
+    try:
+        _wait_for(lambda: len([data for data, _, _ in writes if data == b'$']) == 2
+                  and not recorder.is_reconfiguring(ticks[0] + 695_000_000))
+        # Precheck STOP/CLEAR/Read/START ist ausgenommen; Schreibsequenz komplett gesperrt.
+        assert [blocked for _, _, blocked in writes] == [False] * 5 + [True] * 7
+        start = writes[5][1]
+        resume = ticks[0]
+        assert not recorder.is_reconfiguring(start - 1)
+        assert recorder.is_reconfiguring(start)
+        assert recorder.is_reconfiguring(resume + 694_999_999)
+        assert not recorder.is_reconfiguring(resume + 695_000_000)
+        # Rueckstellung auch innerhalb des ersten Nachlaufs; beide Fenster gelten.
+        ticks[0] = resume + restore_gap_ns
+    finally:
+        recorder.stop()
+    restore_start = writes[12][1]
+    assert all(blocked for _, _, blocked in writes[12:19])
+    assert recorder.is_reconfiguring(start)  # spaet verarbeitetes Bild aus abgeschlossenem Fenster
+    assert recorder.is_reconfiguring(restore_start)
+    # Restore-Verify ist eine reine Lesepause; beendet/verlaengert das Schreibfenster nicht.
+    restore_resume = restore_start + 1_800_000_000
+    assert recorder.is_reconfiguring(restore_resume + 694_999_999)
+    assert not recorder.is_reconfiguring(restore_resume + 695_000_000)
+
+
+def test_failed_reconfiguration_without_resume_stays_blocked(tmp_path, monkeypatch):
+    class BrokenPort(RegisterPort):
+        def write(self, data):
+            if data[0] == 16:
+                raise OSError('Schreiben abgebrochen')
+            return super().write(data)
+
+    monkeypatch.setattr('dispread.gsv2as_serial._sleep', lambda _: None)
+    point = {'register': {'norm': {'daten': [80, 27, 228]}, 'dpoint': {'daten': [1]}}}
+    recorder = ReferenceRecorder(BrokenPort, tmp_path / 'r', norm_schedule=[(2, 20)],
+                                 restore_point=point, clock=lambda: 1000)
+    recorder.start()
+    try:
+        _wait_for(lambda: 'error' in recorder.status())
+    finally:
+        recorder.stop()
+    assert recorder.is_reconfiguring(1000)
+    assert recorder.is_reconfiguring(100_000_000_000)
+    assert not recorder.is_reconfiguring(999)

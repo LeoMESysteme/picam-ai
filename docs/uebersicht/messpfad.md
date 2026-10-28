@@ -90,6 +90,7 @@ erklärt, welche Evidenz ein neuer Leser liefern muss.
 | --- | --- | --- |
 | Wert vollständig und eindeutig | <code>valid</code> | Wert, Einheit, Lesetext, Zeitbasis, Profil und Versionen |
 | Mischziffern kurz nach Freigabe, übrige Zellen unverändert | <code>transition</code> | Grund <code>anzeige_wechselt</code>, kein Zahlenwert |
+| Sonst gültige Aufnahme während werkbankgesteuerter Geräteumkonfiguration | <code>transition</code> | Grund <code>geraet_umkonfiguriert</code>, kein Zahlenwert |
 | Mehrbildbestätigung noch offen | <code>transition</code> | Grund <code>awaiting_confirmation</code>, Anzahl und Zeitspanne |
 | Anzeige fehlt oder Zeichen sind unlesbar | <code>unreadable</code> | kein freigegebener Zahlenwert, konkreter Ablehnungsgrund |
 | Nach einer Freigabe kommt lange keine neue gültige Lesung | <code>stale</code> | alter Wert wird nicht als aktueller Wert fortgeführt |
@@ -155,6 +156,32 @@ niemals einen gültigen Testlaufwert
 ([OQ-44](../open-questions.md#oq-44)). Eine angepasste Lesetoleranz setzt eine
 serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus;
 sie bleibt als nicht validiert markiert.
+
+Eigene **Schreibsequenzen** des Werteplans und der Rückstellung sperren
+dagegen die Freigabe: vom BOOTTIME-Zeitpunkt vor dem ersten STOP bis nach
+<code>resume_transmission</code> plus **695 ms Nachlauf**. Dieser Nachlauf
+übernimmt das bestehende GUARD-Schutzintervall aus dem Referenzabgleich für
+Anzeigeverzögerung und LCD-Umschaltung; er ist keine neue Zeitmessung.
+Die Live-Sitzung rechnet die Aufnahmezeit mit
+<code>records.to_boottime_ns</code> und dem gemessenen Sessionversatz um.
+Vor jeder sonst gültigen Aufnahme mit Werteplan wird der Versatz frisch
+geprüft, damit Suspend auch vor der nächsten periodischen Auditprobe
+erkannt wird; zusätzliche Versatzsprünge bleiben im Sessionaudit erhalten.
+Ein sonst gültiger Datensatz im Fenster wird vor Audit und Ausgabe
+<code>TRANSITION</code>, mit <code>value=null</code> und erstem Grund
+<code>geraet_umkonfiguriert</code>.
+<code>summary.reconfiguration_suppressed</code> zählt diese Bilder in
+<code>session.json</code>; der Zähler erscheint nur bei aktiviertem Werteplan.
+
+Die Referenzaufzeichnung hält die Intervalle thread-sicher auch nach ihrem
+Ende vor. Daher bleibt ein Bild aus dem Fenster bei später Verarbeitung
+gesperrt; eine Aufnahme vor STOP zeigt noch den alten Gerätezustand und
+darf gültig bleiben. Reine Register-Lesepausen (Precheck und
+Rückstellungsprüfung) schreiben keine Anzeigeparameter und sind ausgenommen.
+Bei Abbruch ohne Resume bleibt das Fenster offen; bei nicht umrechenbarer
+Aufnahmezeit wird mit aktivem Werteplan vorsorglich gesperrt. Andere Status,
+insbesondere <code>UNREADABLE</code>, werden nicht geändert. Die
+Testlauf-Sperre R13-17 hat Vorrang und bleibt <code>UNREADABLE</code>.
 
 Zur Diagnose zuerst den <code>status</code> und
 <code>reject_reasons</code> im JSONL-Record prüfen, dann
