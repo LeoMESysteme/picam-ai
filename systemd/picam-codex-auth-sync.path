@@ -1,0 +1,12 @@
+# Startet den Abgleich, sobald sich eine der beiden Anmeldungen ändert.
+# Der Installer ersetzt AUTH_HOME durch das Home-Verzeichnis des Entwicklers.
+[Unit]
+Description=Codex-Anmeldungen des Doku-Runners beobachten
+
+[Path]
+PathChanged=AUTH_HOME/.codex/auth.json
+PathChanged=/var/lib/picam-codex-runner/.codex/auth.json
+Unit=picam-codex-auth-sync.service
+
+[Install]
+WantedBy=paths.target

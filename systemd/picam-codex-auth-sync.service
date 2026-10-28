@@ -1,0 +1,19 @@
+# Codex-Anmeldung des Doku-Runners mit ~/.codex/auth.json gleich halten.
+# Ausgelöst von picam-codex-auth-sync.path und einmal beim Start.
+# Der Installer ersetzt AUTH_HOME durch das Home-Verzeichnis des Entwicklers.
+[Unit]
+Description=Codex-Anmeldung fuer den Doku-Runner abgleichen
+Before=forgejo-codex-runner.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/picam-codex-auth-sync
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateNetwork=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/picam-codex-runner/.codex
+ReadWritePaths=AUTH_HOME/.codex
+
+[Install]
+WantedBy=multi-user.target

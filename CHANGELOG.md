@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: Doku-Pflegelauf nutzt dauerhaft die lokale Codex-Anmeldung.
+  „maintain“ scheitert seit dem 19.10. immer wieder, zuletzt am 28.10. mit
+  `workspace routing discovery unauthorized (401)`, ohne dass Codex einen
+  Befehl ausführte. Der Runner
+  hatte eine einmal kopierte `auth.json`, die mit der lokalen Anmeldung
+  auseinanderlief. Vermutete, nicht belegte Ursache: Eine Seite erneuerte ihr
+  Token, danach galt das Refresh-Token der anderen nicht mehr.
+  `scripts/picam-codex-auth-sync` (root, über
+  `systemd/picam-codex-auth-sync.path` bei jeder Änderung ausgelöst) hält
+  `~/.codex/auth.json` und die Runner-Datei gleich. Die zuletzt erneuerte
+  Fassung gewinnt, sonst die lokale; ohne Symlinks, mit Eigentümer- und
+  Formprüfung, zurück nur bei gleicher `account_id`. Einrichtung einmalig
+  mit `sudo ./scripts/picam-codex-auth-sync-install.sh`, siehe
+  docs/HOSTING.md.
+
 * 2026-10-28: Wiki-Bausteine erkennen Seiten auch ohne `.html`. Auf
   Cloudflare Pages wird `/x.html` auf `/x` umgeleitet; die Skripte verglichen
   aber den rohen Pfad mit `.html`. Wer das Glossar über die Suche, einen
