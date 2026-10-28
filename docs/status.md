@@ -1,8 +1,33 @@
-# Status — Stand 2026-10-26
+# Status — Stand 2026-10-28
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
+
+## Neu am 2026-10-28 (Zweig `feat/r13-display-haertung`, nicht in `master`)
+
+* **R13-19a** (1d32ebe): Kantenprüfung ohne Nachbarglyphen-Fehlalarm;
+  Einrichtung schräg links geht wieder (Lauf `123044Z`: 76 % VALID,
+  0 Fehllesungen). Vorprüfungsmeldung nennt Prüfung und Zelle.
+* **R13-19b/c** (6578523): Nachführung über Bewegungen bis 20 px / 3°
+  (Grobschätzung, zweiter Durchgang mit Maßstab ±0,5 %). Offline 107→205/208
+  bzw. 3→23/152, live 151/151 zweite Durchgänge angenommen, 0 Fehllesungen.
+  Blinder Fleck zweiter Durchgang 5,22 px (Entscheidungsvorlage).
+* **R13-20** (806cef4): Belichtung auf die Anzeige abgestimmt (Ganzbild-
+  Automatik lieferte bei heller Umgebung 200 statt 300, Ziffern 3/0/7 fielen
+  aus); Vorprüfung `belichtung` warnt unter Glaspegel 105. Am Gerät noch
+  nicht geprüft.
+* **Infrastruktur:** NVMe-SSD nur zur Entlastung (`/mnt/ssd/picam-dev`,
+  `DISPREAD_DEV_DATA`), `var/` bleibt auf SD; Journal dauerhaft auf SSD;
+  MEHub-`rm520n-watchdog` aus (setzte PCIe alle 10 min zurück, Kandidat für
+  die Neustarts); 8 GB Swap auf SSD; Tests parallel mit `pytest -n 4`.
+* **Werkbank** läuft aus einem Export des Commits (nicht aus dem Worktree):
+  `systemd-run --user --unit dispread-werkbank-r13 --working-directory=<worktree>
+  --setenv=PYTHONPATH=<export>/src <worktree>/.venv/bin/dispread serve --port 8081`.
+  Nach einem Lauf erst neu starten, wenn `/dev/shm/dispread-diagnose-*` weg ist.
+* **Offen für Leonhard:** Live-Test Belichtung + Bewegung; formale Abnahme an
+  zwei Aufstellungen; Merge-Entscheidung (Vorlage
+  `docs/superpowers/plans/2026-10-28-r13-merge-entscheidung.md`).
 
 ## R13 Nachführung und Displayhärtung (Stand 2026-10-24)
 
