@@ -111,8 +111,11 @@ Die Mehrbildbestätigung meldet ihre eigene
 <code>confirmation_span_ns</code>. Diese Felder dürfen nicht zu
 einem einzigen undifferenzierten „Zeitstempel“ zusammenfallen.
 
-Ob GSVmulti die übermittelte Aufnahmezeit verwendet, muss Versuch M8 zeigen.
-Die Telegrammspezifikation und das Verhalten bei ungültigen Werten sind offen
+Seit 2026-10-28 ist der UserDefined-Zahlenimport dokumentiert. Dieses
+einfache Profil hat kein definiertes Aufnahmezeitfeld; eine weitere Zahl
+wird zunächst ein Messkanal. Versuch M8 muss seine tatsächliche Zeitachse
+bei bekannten Sendefolgen, Pausen und gebündeltem Empfang prüfen.
+Ungültigbehandlung und zeitliche Zuordnung sind weiter offen
 ([GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md),
 [OQ-07](../open-questions.md#oq-07)). Ein gleichmäßiger serieller
 Datenstrom belegt daher keine Synchronität zur Referenz.

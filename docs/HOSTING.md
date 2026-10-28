@@ -150,8 +150,28 @@ Einmalige Einrichtung auf dem Pi:
      /opt/picam-codex/node_modules/.bin/codex login status
    ```
    Die Kopie nutzt dasselbe ChatGPT-Konto, liegt aber nur im geschützten
-   Runner-Verzeichnis. Bei einem späteren Anmeldefehler den Status prüfen
-   und die Kopie nötigenfalls erneuern.
+   Runner-Verzeichnis.
+
+   **Dauerhaft gekoppelt (Standard seit 2026-10-28):** Zwei unabhängige
+   Kopien derselben Anmeldung laufen auseinander. Erneuert die lokale
+   Codex-Sitzung ihr Token, wird das Refresh-Token der Kopie ungültig, und
+   der Pflegelauf endet mit `workspace routing discovery unauthorized
+   (401)`. Deshalb hält ein root-Dienst die Runner-Datei mit
+   `~/.codex/auth.json` gleich:
+   ```bash
+   sudo ./scripts/picam-codex-auth-sync-install.sh
+   ```
+   Der Installer legt `/usr/local/bin/picam-codex-auth-sync`,
+   `picam-codex-auth-sync.service` und `.path` an. Die Path-Unit startet den
+   Abgleich bei jeder Änderung einer der beiden Dateien, der Dienst läuft
+   zusätzlich beim Start. Maßgeblich ist die zuletzt erneuerte Fassung
+   (`last_refresh`). Meist geht sie vom Entwickler zum Runner. Erneuert der
+   Runner selbst, geht seine Fassung zurück, sonst würde die lokale
+   Anmeldung ungültig. Die Runner-Datei gilt als unvertrauenswürdig: keine
+   Symlinks, nur reguläre Dateien des erwarteten Eigentümers. Zurück ins
+   Home-Verzeichnis geht sie nur mit derselben `account_id`. Der Runner
+   selbst bekommt weiterhin keinen Zugriff auf `/home`. Ob der Abgleich
+   lief, zeigt `journalctl -u picam-codex-auth-sync.service`.
 4. Einen Forgejo-PAT mit `write:repository` und Zugriff **nur auf dieses Repo**
    anlegen. Dafür kann das eigene Konto oder ein separater Bot genutzt werden.
    Den PAT als Repo-Secret `DOCS_BOT_TOKEN` hinterlegen und den zugehörigen

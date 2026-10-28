@@ -18,7 +18,8 @@ Auflösung geprüft und darf nicht stillschweigend auf ein anderes Bild
 Trenne diese Angaben von Laufzeit- und Freigabeschwellen. Schwellen gehören
 zur `GateConfig` und sind laut [OQ-14](../open-questions.md) noch nicht
 kalibriert. Ein Profil darf außerdem keine GSVmulti-Telegrammstruktur
-vorwegnehmen; das Format ist weiterhin offen ([OQ-07](../open-questions.md)).
+vorwegnehmen; der dokumentierte UserDefined-Einstieg braucht einen eigenen
+Ausgabeadapter ([OQ-07](../open-questions.md)).
 
 ## Bauaufgabe
 

@@ -30,7 +30,7 @@
 
   onPage((article) => {
     const path = new URL(window.location.href).pathname;
-    if (/\/(?:docs\/anleitung\/glossar|CHANGELOG|TODO|AGENTS|CLAUDE)\.html$/.test(path)) return;
+    if (/\/(?:docs\/anleitung\/glossar|CHANGELOG|TODO|AGENTS|CLAUDE)(?:\.html)?$/.test(path)) return;
     let disposed = false;
     const cancelIdle = whenIdle(() => {
       if (disposed) return;
@@ -103,11 +103,11 @@
     try { url = new URL(link.href); }
     catch { return null; }
     const text = link.textContent.trim();
-    if (url.pathname.endsWith("/docs/open-questions.html")) {
+    if (/\/docs\/open-questions(?:\.html)?$/.test(url.pathname)) {
       const key = /^#oq-(\d{2})$/.exec(url.hash)?.[1] || /^OQ-(\d{2})$/.exec(text)?.[1];
       if (key) return { kind: "oq", key };
     }
-    if (url.pathname.endsWith("/docs/ROADMAP.html")) {
+    if (/\/docs\/ROADMAP(?:\.html)?$/.test(url.pathname)) {
       const key = /^(P[0-8])\b/.exec(text)?.[1];
       if (key) return { kind: "phase", key };
     }
@@ -201,7 +201,7 @@
 
   onPage((article) => {
     const path = new URL(window.location.href).pathname;
-    if (path.endsWith("/docs/open-questions.html") || path.endsWith("/docs/ROADMAP.html")) return;
+    if (/\/docs\/(?:open-questions|ROADMAP)(?:\.html)?$/.test(path)) return;
     let disposed = false;
     const cancelIdle = whenIdle(() => {
       if (disposed) return;

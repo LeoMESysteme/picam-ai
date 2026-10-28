@@ -355,7 +355,7 @@
     const bCam = box(620, 70, 230, "StreamCam", "v4l2:// · Bildquelle fertig", "t-panel");
     const bRead = box(620, 186, 230, "Lesen · Freigabe", "Dot-Matrix · am Aufbau gelaufen", "t-panel t-flow-box");
     const bLog = box(560, 300, 160, "JSONL-Audit", "je Lauf", "t-panel t-flow-box");
-    const bGsv = box(750, 300, 170, "GSVmulti", "Format offen · OQ-07", "t-planned-box");
+    const bGsv = box(750, 300, 170, "GSVmulti", "Adapter offen · OQ-07", "t-planned-box");
     tour.docLink(bGsv, "docs/open-questions.html#oq-07", "OQ-07 öffnen", [904, 314]);
     const links = T.group(layer, "run-links");
     T.svg("path", { d: "M735 128V182", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);

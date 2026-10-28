@@ -192,15 +192,18 @@ Aufnahmen als PNG, nicht JPEG (JPEG verschiebt die Gitteranpassung).
 
 Nächste Aufgaben gemäß TODO:
 
-1. Entscheidung der Person am 2026-10-28: R13-Zweig nach `master`.
-2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26).
-   Platz ist da: 12 GB frei auf der SD-Karte, seit Entwicklungsdaten auf
-   einer NVMe-SSD liegen (nur Entlastung, Produkt bleibt SD-only), siehe
-   [Laborjournal](lab_journal.md).
+1. Entscheidung der Person: R13-Zweig nach `master`
+   ([Vorlage](superpowers/plans/2026-10-28-r13-merge-entscheidung.md)).
+2. Abnahme an zwei Aufstellungen mit neuem Rahmenvorschlag (R13/OQ-26);
+   der Werteplan-Lauf vom 28.10. (0/14 785, 99,99 % stabil) deckt eine
+   Aufstellung weitgehend ab. Platz ist da: 12 GB frei auf der SD-Karte.
 3. Toleranzlauf ≥ 10 min mit Werteplan; andere Lichtquellen/Geräte
    bleiben offen.
-4. GSVmulti-Anbindung wartet auf [OQ-07](open-questions.md#oq-07).
-   Danach Bedienoberfläche und Aufräumarbeiten gemäß TODO.
+4. GSVmulti-UserDefined-Prototyp anhand der belegten Spezifikation bauen;
+   Empfang, Ungültigbehandlung und Transport prüfen
+   ([Bewertung](GSVMULTI_PROTOCOL.md), [OQ-07](open-questions.md#oq-07),
+   [OQ-47](open-questions.md#oq-47)). Danach Bedienoberfläche und
+   Aufräumarbeiten gemäß TODO.
 
 Weiter offen: `raw_text` enthält die geparste Zahl statt 16 Displayzellen;
 Streamstillstand beendet erst nach OpenCV-Timeout (etwa 10–20 s), die

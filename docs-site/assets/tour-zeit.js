@@ -401,7 +401,7 @@
       ["OQ-03 · Zeitquelle der Referenz", "docs/open-questions.html#oq-03", "OQ-03 öffnen"],
       ["OQ-02 · zulässige Abweichung", "docs/open-questions.html#oq-02", "OQ-02 öffnen"],
       ["OQ-43 · Bedeutung Kamera-Stempel", "docs/open-questions.html#oq-43", "OQ-43 öffnen"],
-      ["M8 · nutzt GSVmulti die Aufnahmezeit?", "docs/TIMING.html#messprogramm", "TIMING: Messprogramm öffnen"],
+      ["M8 · welche Zeitachse nutzt GSVmulti?", "docs/TIMING.html#messprogramm", "TIMING: Messprogramm öffnen"],
     ];
     const pills = items.map(([text, path, name], i) => {
       const x = i % 2 === 0 ? 60 : 480;

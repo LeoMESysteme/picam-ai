@@ -528,7 +528,7 @@
     refs.gsv = group(layer, "bench-gsv");
     panel(refs.gsv, 760, 318, 160, 84, "t-window t-planned-box");
     label(refs.gsv, 840, 352, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    label(refs.gsv, 840, 376, "offen · OQ-07", "t-small t-plan-text", { "text-anchor": "middle" });
+    label(refs.gsv, 840, 376, "Adapter offen", "t-small t-plan-text", { "text-anchor": "middle" });
     refs.gsvLink = svg("path", { d: "M618 384H756", class: "t-plan-line" }, layer);
     tour.docLink(refs.gsv, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 334]);
     tour.docLink(refs.pi, "docs/HARDWARE_PROFILE.html", "Hardwareprofil öffnen", [630, 370]);
@@ -606,7 +606,7 @@
     const stop = group(layer, "stop");
     svg("circle", { cx: 690, cy: 384, r: 13, class: "t-plan-fill" }, stop);
     label(stop, 690, 389, "?", "t-label t-strong", { "text-anchor": "middle" });
-    tour.docLink(stop, "docs/open-questions.html#oq-07", "OQ-07 öffnen: GSVmulti-Telegrammformat");
+    tour.docLink(stop, "docs/open-questions.html#oq-07", "OQ-07 öffnen: UserDefined-Anbindung");
 
     hidden(log, ref, match, motto, stop, forbid, logToMatch, refToMatch, toLog);
     tl.set(dot, { opacity: 1 }, 100);
@@ -1182,7 +1182,7 @@
     label(gsv, 860, 278, "Ziel", "t-small", { "text-anchor": "middle" });
     const toGsv = svg("path", { d: "M750 262H796", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
     const open = group(layer, "oq07");
-    badge(open, 850, 326, "Format offen · OQ-07", "plan", 176);
+    badge(open, 850, 326, "Adapter offen · OQ-07", "plan", 176);
     ctx.tour.docLink(open, "docs/open-questions.html#oq-07", "OQ-07 öffnen");
 
     const receipt = group(layer, "receipt");
@@ -1388,7 +1388,9 @@
         const link = event.target instanceof Element ? event.target.closest("a[href*='#']") : null;
         if (!link || link.closest(".tour-ui")) return;
         const url = new URL(link.href, window.location.href);
-        if (url.pathname !== window.location.pathname) return;
+        // Cloudflare Pages liefert /x.html als /x aus; beide gelten als dieselbe Seite.
+        const page = (path) => path.replace(/\.html$/, "").replace(/\/index$/, "/");
+        if (page(url.pathname) !== page(window.location.pathname)) return;
         const target = this.find(decodeURIComponent(url.hash.slice(1)));
         if (!target) return;
         event.preventDefault();

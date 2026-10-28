@@ -1005,6 +1005,12 @@ Serielle Anschlussmöglichkeit des Pi. Für die geplante Ausgabe nach GSVmulti i
 
 *Weg:* Bedienen · *Quelle:* [Hardwareprofil](../HARDWARE_PROFILE.md)
 
+### UserDefined
+
+Konfigurierbarer Zahlenimport in GSVmulti PRO über einen echten oder virtuellen Windows-COM-Port. Belegt ist das Textformat; die Anbindung von picam-ai und ihre Messfreigabe stehen noch aus.
+
+*Weg:* Entwickeln · *Quelle:* [GSVmulti-Anbindung](../GSVMULTI_PROTOCOL.md#userdefined-format)
+
 ### USB-RS232-Adapter
 
 Adapter zwischen USB am Pi und der RS232-Schnittstelle des Messverstärkers. Im aktuellen Referenzpfad wird ein PL2303 an `/dev/ttyUSB0` verwendet; der vorgesehene UART-Ausgang bleibt davon getrennt.

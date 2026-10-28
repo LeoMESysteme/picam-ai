@@ -42,10 +42,13 @@ wird von keiner Softwareoptimierung kleiner.
 | **M5** | **Displayaktualisierung und Haltezeit je Gerätetyp** | Sprunganregung, gleichzeitig Highspeed-Aufnahme und elektrischer Sprungzeitpunkt über GPIO, ≥ 30 Wiederholungen je Typ | **teilweise** — serielle Anzeigezuordnung und Mischzeit am GSV-2AS für die Ernte kalibriert (2026-09-29, siehe unten); interne DUT-Verzögerung und andere Geräte fehlen |
 | **M6** | Pi gegen Referenz: Offset und Drift | abhängig von [OQ-03](open-questions.md). Bester Fall gemeinsame Zeitquelle, schlechtester Fall gemeinsames Ereignis und Kreuzkorrelation | offen |
 | **M7** | Serielle Strecke | Loopback bei Zielbaudrate, `write()` bis Empfang, Backpressure bei voller Leitung | **teilweise** — ausgehende Strecke gegen pty geprüft, GPIO-Ausgang nicht elektrisch ([OQ-09](open-questions.md#oq-09)). Eingehende USB-RS232-Referenzaufzeichnung am GSV-2AS ist ein getrennter Beleg |
-| **M8** | **Nutzt GSVmulti den gelieferten Aufnahmezeitstempel?** | Datenstrom mit absichtlich um z. B. 5 s vordatiertem Aufnahmezeitstempel einspeisen und prüfen, welche Zeit GSVmulti anzeigt bzw. speichert | offen — blockiert durch [OQ-07](open-questions.md) |
+| **M8** | **Welche Zeitachse verwendet GSVmulti für den DUT-Import?** | UserDefined: bekannte Sendefolge, Pausen und gebündelten Empfang gegen Anzahl und Zeitachse der gespeicherten Werte prüfen; einen Zeitstempelversatz nur bei nachgewiesenem Aufnahmezeitfeld testen | offen — UserDefined hat kein definiertes Aufnahmezeitfeld; [Prüfplan und Grenzen](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
 
-**M8 ist der wichtigste Einzelversuch des Projekts** und kostet nach Vorliegen
-der Spezifikation eine halbe Stunde. Fällt er negativ aus, beseitigt ein
+**M8 bleibt für die zeitliche Integration entscheidend.** Seit 2026-10-28
+ist der UserDefined-Zahlenimport dokumentiert; eine zusätzliche Zahl ist
+zunächst ein Kanal, kein nachgewiesenes Aufnahmezeitfeld. Die frühere
+Schätzung einer halben Stunde ist kein belegter Aufwand. Ohne geeignete
+Übernahme der Aufnahmezeit beseitigt ein
 interner Pi-Zeitstempel die zeitliche Verschiebung in GSVmulti nicht (Konzept
 §6) und die Integrationsstrategie muss anders aussehen — etwa nachträgliche
 Zuordnung über das JSONL-Audit-Log oder eine konstant gehaltene

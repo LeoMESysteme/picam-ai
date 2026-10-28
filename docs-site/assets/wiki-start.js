@@ -2,12 +2,11 @@
 (function () {
   "use strict";
 
-  const { onPage, siteUrl, make, icon } = window.wiki;
+  const { onPage, siteUrl, pageKey, make, icon } = window.wiki;
   const ways = ["bedienen", "konfigurieren", "entwickeln"];
 
   function isStartPage(url) {
-    const path = new URL(url).pathname;
-    return path === new URL(siteUrl("index.html")).pathname || path === new URL(siteUrl("./")).pathname;
+    return pageKey(url) === pageKey(siteUrl("index.html"));
   }
 
   function standRow(host) {

@@ -179,7 +179,7 @@
   }
 
   wiki.onPage((article) => {
-    if (!new URL(window.location.href).pathname.endsWith("/" + glossaryPath)) return;
+    if (!wiki.isPage(glossaryPath)) return;
     let disposed = false;
     let observer;
     const listeners = new AbortController();

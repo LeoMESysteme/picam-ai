@@ -1,0 +1,171 @@
+#!/usr/bin/python3 -I
+"""Codex-Anmeldung des Doku-Runners mit ~/.codex/auth.json gleich halten.
+
+Der Pflegelauf (`picam-codex-runner`) nutzt dasselbe ChatGPT-Konto wie der
+Entwickler. Zwei getrennte Kopien laufen auseinander: Erneuert eine Seite
+ihre Anmeldung, wird das Refresh-Token der anderen ungültig, und der
+Pflegelauf endet mit `401 unauthorized`. Dieses Skript hält beide Dateien
+inhaltsgleich; maßgeblich ist immer die zuletzt erneuerte (`last_refresh`).
+Normalfall ist die Richtung Entwickler → Runner; erneuert der Runner selbst,
+geht seine Fassung zurück, damit die lokale Anmeldung gültig bleibt.
+
+Installiert als root-eigene Kopie, ausgelöst von
+`systemd/picam-codex-auth-sync.path` bei jeder Änderung einer der beiden
+Dateien (`scripts/picam-codex-auth-sync-install.sh`).
+
+Die Runner-Datei gehört dem Nutzer, unter dem Codex-Jobs laufen, und gilt
+deshalb als unvertrauenswürdig: keine Symlinks, nur reguläre Dateien des
+erwarteten Eigentümers, Größenlimit, Form geprüft, und zurück in das
+Home-Verzeichnis geht sie nur mit derselben `account_id`. Geschrieben wird
+über eine neue Datei im Zielordner und `rename`, nie durch einen Pfad, den
+der andere Nutzer umbiegen könnte. Token-Inhalte werden nie ausgegeben.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pwd
+import stat
+import sys
+from datetime import datetime
+from pathlib import Path
+
+CONFIG = Path("/etc/picam-codex-runner/auth-sync.env")
+RUNNER_USER = "picam-codex-runner"
+RUNNER_AUTH = Path("/var/lib/picam-codex-runner/.codex/auth.json")
+MAX_BYTES = 64 * 1024
+
+
+class Refused(Exception):
+    """Eine Datei ist für den Abgleich nicht geeignet."""
+
+
+def read_auth(path: Path, uid: int) -> tuple[bytes, dict] | None:
+    """Datei sicher lesen; None, wenn sie fehlt."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return None
+    except OSError as err:
+        raise Refused(f"{path}: nicht lesbar ({err.strerror})") from err
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise Refused(f"{path}: keine reguläre Datei")
+        if info.st_uid != uid:
+            raise Refused(f"{path}: gehört nicht uid {uid}")
+        if info.st_size > MAX_BYTES:
+            raise Refused(f"{path}: größer als {MAX_BYTES} Bytes")
+        data = os.read(fd, MAX_BYTES + 1)
+    finally:
+        os.close(fd)
+    try:
+        auth = json.loads(data)
+    except ValueError as err:
+        raise Refused(f"{path}: kein JSON") from err
+    tokens = auth.get("tokens") if isinstance(auth, dict) else None
+    if not isinstance(tokens, dict) or not all(
+        isinstance(tokens.get(key), str) and tokens[key] for key in ("access_token", "refresh_token", "account_id")
+    ):
+        raise Refused(f"{path}: keine vollständige ChatGPT-Anmeldung")
+    return data, auth
+
+
+def refreshed_at(auth: dict) -> datetime | None:
+    value = auth.get("last_refresh")
+    if not isinstance(value, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else None
+
+
+def write_auth(path: Path, data: bytes, uid: int, gid: int) -> None:
+    """Neue Datei neben dem Ziel anlegen und atomar an seine Stelle setzen."""
+    tmp = path.with_name(f".{path.name}.sync-{os.getpid()}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        os.fchown(fd, uid, gid)
+        os.fchmod(fd, 0o600)
+        os.write(fd, data)
+        os.fsync(fd)
+    except BaseException:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
+    os.close(fd)
+    os.replace(tmp, path)
+
+
+def plan(local: tuple[bytes, dict] | None, runner: tuple[bytes, dict] | None) -> str:
+    """Richtung bestimmen: "to-runner", "to-local" oder "none"."""
+    if local is None:
+        return "none"
+    if runner is None:
+        return "to-runner"
+    if local[0] == runner[0]:
+        return "none"
+    if local[1]["tokens"]["account_id"] != runner[1]["tokens"]["account_id"]:
+        # Ein anderes Konto im Runner gilt nie als Ersatz für die lokale Anmeldung.
+        return "to-runner"
+    local_at, runner_at = refreshed_at(local[1]), refreshed_at(runner[1])
+    if runner_at and (local_at is None or runner_at > local_at):
+        return "to-local"
+    return "to-runner"
+
+
+def sync(local_path: Path, local_user: pwd.struct_passwd, runner_path: Path, runner_user: pwd.struct_passwd) -> str:
+    local = read_auth(local_path, local_user.pw_uid)
+    try:
+        runner = read_auth(runner_path, runner_user.pw_uid)
+    except Refused as err:
+        print(f"Runner-Datei wird ersetzt: {err}", file=sys.stderr)
+        runner = None
+    direction = plan(local, runner)
+    if direction == "to-runner":
+        write_auth(runner_path, local[0], runner_user.pw_uid, runner_user.pw_gid)
+    elif direction == "to-local":
+        write_auth(local_path, runner[0], local_user.pw_uid, local_user.pw_gid)
+    return direction
+
+
+def load_config(path: Path) -> dict[str, str]:
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    return values
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        print("Bitte als root ausführen (systemd-Dienst).", file=sys.stderr)
+        return 1
+    try:
+        local_user = pwd.getpwnam(load_config(CONFIG)["AUTH_USER"])
+        runner_user = pwd.getpwnam(RUNNER_USER)
+    except (OSError, KeyError) as err:
+        print(f"Konfiguration unvollständig: {err}", file=sys.stderr)
+        return 1
+    local_path = Path(local_user.pw_dir) / ".codex" / "auth.json"
+    try:
+        direction = sync(local_path, local_user, RUNNER_AUTH, runner_user)
+    except Refused as err:
+        print(f"Kein Abgleich: {err}", file=sys.stderr)
+        return 1
+    messages = {
+        "none": "Anmeldungen sind gleich.",
+        "to-runner": f"Runner übernimmt {local_path}.",
+        "to-local": f"{local_path} übernimmt die neuere Anmeldung des Runners.",
+    }
+    print(messages[direction])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

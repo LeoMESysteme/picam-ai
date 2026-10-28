@@ -8,6 +8,7 @@ const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open
 for (const width of [1280, 375]) {
   for (const scheme of ['light', 'dark'] as const) {
     test(`Wiki-Pflegevertrag bleibt lesbar: ${scheme}, ${width} px`, async ({ page }) => {
+      test.setTimeout(60000);
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       const errors: string[] = [];
@@ -29,7 +30,8 @@ for (const width of [1280, 375]) {
           await page.getByRole('searchbox', { name: 'Begriffe filtern' }).fill('Region of Interest');
           const entry = page.locator('.wiki-glossar-entry').filter({ has: page.locator('#roi') });
           await expect(entry).toBeVisible();
-          await expect(entry.locator('.wiki-occ:not([data-pending]) a[data-hint="fundstelle"]').first()).toBeAttached({ timeout: 10000 });
+          // Der Suchindex braucht auf dem Pi kalt gut 5 s, im gedrosselten CI-Runner mehr.
+          await expect(entry.locator('.wiki-occ:not([data-pending]) a[data-hint="fundstelle"]').first()).toBeAttached({ timeout: 20000 });
         } else {
           await expect(page.locator('.wiki-pagehead')).toHaveAttribute('data-ready', 'true');
           if (path.endsWith('/GSVMULTI_PROTOCOL.html')) {
@@ -1579,6 +1581,22 @@ test('Glossar filtert über Synonyme und springt per A–Z', async ({ page }) =>
   // Playwright pierces the open shadow root used by the Zensical search.
   await expect(page.getByRole('combobox')).toBeFocused();
   await expect(page.getByRole('combobox')).toHaveValue('kein-passender-begriff');
+});
+
+test('Seiten ohne .html wie auf Cloudflare Pages behalten ihre Bausteine', async ({ page }) => {
+  // Cloudflare Pages leitet /x.html auf /x um; der Testserver kennt nur /x.html.
+  await page.route((url) => url.host === '127.0.0.1:8766' && /\/[^./]+$/.test(url.pathname), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    route.fulfill({ path: join('site', `${path}.html`), contentType: 'text/html; charset=utf-8' });
+  });
+  await page.goto('/docs/anleitung/glossar?h=glossar');
+  await expect(page.getByRole('searchbox', { name: 'Begriffe filtern' })).toBeVisible();
+  await expect(page.locator('.wiki-glossar-entry').first()).toBeVisible();
+  await expect(page.locator('.md-content__inner a.wiki-term')).toHaveCount(0);
+  await page.goto('/docs/open-questions');
+  await expect(page.locator('.md-content__inner h1')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(page.locator('.md-content__inner a[data-wiki-chip]')).toHaveCount(0);
 });
 
 test('Glossar zeigt Vorkommen mit Kontext beim Überfahren', async ({ page }) => {

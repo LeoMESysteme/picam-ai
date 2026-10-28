@@ -133,6 +133,56 @@ was ist die Konsequenz.
   Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
   werden weiterhin wiederholt.
 
+* 2026-10-28: GSVmulti-PDF gegen die Herstelleranleitung v2.6 und den
+  vorhandenen Ausgabepfad geprüft. UserDefined belegt einen konfigurierbaren
+  Windows-COM-Zahlenimport; die reine Spezifikationsbeschaffung sperrt den
+  Prototyp nicht mehr. Wiki-Anbindungsseite, Roadmap, Tourtexte und Szenen
+  zeigen den neuen Stand gemeinsam. OQ-01/OQ-07 teilweise geklärt;
+  OQ-47 hält Transport und Wiederanlauf fest. Original-PDF und nachgereichtes
+  Beispiel-ZIP im Wiki verlinkt. Elf Softwareprüfungen bestätigen den
+  Demodatenstrom und reproduzieren Fehler der Bridge bei COM-Schreibfehlern
+  und vollständigen überlangen Zeilen sowie Grenzen bei Zahlenlexik und
+  Altersprüfung. Die Beispiele bleiben unverändertes Quellmaterial.
+  Empfang in 2.01 Pro, Ungültigbehandlung, Zeitachse und Live-Integration
+  bleiben unbewiesen; kein Formatter implementiert, kein Messlauf.
+
+* 2026-10-28: Docs-Playwright in der CI wiederholt einen fehlgeschlagenen
+  Test einmal. Seit dem Wiki-Gerüst riss auf dem Pi bei fast jedem Lauf
+  ein anderer zeitkritischer Test: Glossar-Fundstelle nach 10 s,
+  Hinweis-Popup, Roadmap-Mausrad. Die CI teilt sich die CPU mit Werkbank
+  und Messläufen und läuft gedrosselt (Nice 19, 200 % CPU). Lokal bleibt
+  es bei null Wiederholungen. Wiederholte Tests führt der Bericht als
+  „flaky“. Die Glossar-Fundstelle darf 20 s statt 10 s brauchen; der
+  Suchindex ist auf dem Pi kalt nach gut 5 s bereit.
+
+* 2026-10-28: Doku-Pflegelauf nutzt dauerhaft die lokale Codex-Anmeldung.
+  „maintain“ scheitert seit dem 19.10. immer wieder, zuletzt am 28.10. mit
+  `workspace routing discovery unauthorized (401)`, ohne dass Codex einen
+  Befehl ausführte. Der Runner
+  hatte eine einmal kopierte `auth.json`, die mit der lokalen Anmeldung
+  auseinanderlief. Vermutete, nicht belegte Ursache: Eine Seite erneuerte ihr
+  Token, danach galt das Refresh-Token der anderen nicht mehr.
+  `scripts/picam-codex-auth-sync` (root, über
+  `systemd/picam-codex-auth-sync.path` bei jeder Änderung ausgelöst) hält
+  `~/.codex/auth.json` und die Runner-Datei gleich. Die zuletzt erneuerte
+  Fassung gewinnt, sonst die lokale; ohne Symlinks, mit Eigentümer- und
+  Formprüfung, zurück nur bei gleicher `account_id`. Einrichtung einmalig
+  mit `sudo ./scripts/picam-codex-auth-sync-install.sh`, siehe
+  docs/HOSTING.md.
+
+* 2026-10-28: Wiki-Bausteine erkennen Seiten auch ohne `.html`. Auf
+  Cloudflare Pages wird `/x.html` auf `/x` umgeleitet; die Skripte verglichen
+  aber den rohen Pfad mit `.html`. Wer das Glossar über die Suche, einen
+  direkten Link oder ein Neuladen öffnete, bekam deshalb die Seite ohne
+  A–Z-Leiste, Filter und Fundstellen, dazu Begriffsmarken auf dem Glossar
+  selbst; nur der Seitenwechsel über die Navigation behielt `.html` und
+  funktionierte. Betroffen waren auch die Ausnahmen für Begriffsmarken und
+  OQ-/Roadmap-Chips auf ihren eigenen Seiten; seiteninterne Links der
+  Projekt-Tour fing die Tour nicht mehr ab, sie liefen über die Umleitung.
+  `wiki.pageKey`/`wiki.isPage` vergleichen Seiten nun ohne Endung, auch die
+  Startseiten-Erkennung nutzt sie; ein Playwright-Test lädt Seiten in der
+  Cloudflare-Form.
+
 * 2026-10-23: Wiki-Gerüst für drei Lesergruppen gebaut. Zuvor fehlten
   Wege nach Aufgabe und Rolle sowie eine gemeinsame Struktur für Bedienung,
   Hintergrund und Entwicklerdetails; Fachbegriffe waren nur einzeln erklärt.
