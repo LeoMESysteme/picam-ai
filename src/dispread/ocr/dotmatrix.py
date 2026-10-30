@@ -80,6 +80,7 @@ class DotMatrixReader:
             "saturated_fraction": sampled.saturated_fraction,
             "templates_groups": list(self._t.groups),
             "format_id": layout.format_id,
+            "reject_cell": None,
         }
         if sampled.saturated_fraction > MAX_SATURATED:
             return self._reject("ueberbelichtet", diag, layout)
@@ -110,18 +111,27 @@ class DotMatrixReader:
             for d in decisions
         )
         # Auch bei Zellablehnung muss die Einrichtung den leeren Rest pruefen koennen.
-        blank_ok = self._blank_cells_ok(gray, layout, sampled.ink)
+        blank_cell = self._broken_blank_cell(gray, layout, sampled.ink)
+        blank_ok = blank_cell is None
         diag["blank_cells_ok"] = blank_ok
-        first_reject = next((d.reason for d in decisions if d.reason), None)
+        first_cell = next((i for i, d in enumerate(decisions) if d.reason), None)
+        first_reject = decisions[first_cell].reason if first_cell is not None else None
+        diag["reject_cell"] = first_cell
         sign_ok = decisions[0].text == "+"
         if not sign_ok:
+            diag["reject_cell"] = 0
             reason = first_reject if decisions[0].text is None else "vorzeichen"
             return self._reject(reason, diag, layout, glyphs, sign_readable=False)
         if first_reject:
+            if first_cell == 8:
+                return self._reject("leerzelle_gestoert", diag, layout, glyphs)
             return self._reject(first_reject, diag, layout, glyphs)
         cells_text = "".join(d.text for d in decisions)
         parsed = parse_gsv2as(cells_text)
-        if parsed is None or not blank_ok:
+        if decisions[8].text != " " or not blank_ok:
+            diag["reject_cell"] = 8 if decisions[8].text != " " else blank_cell
+            return self._reject("leerzelle_gestoert", diag, layout, glyphs)
+        if parsed is None:
             return self._reject("format", diag, layout, glyphs)
         raw, value = parsed
         diag["reject_reason"] = None
@@ -132,7 +142,7 @@ class DotMatrixReader:
             backend_id=BACKEND_ID, backend_version=BACKEND_VERSION, diagnostics=diag,
         )
 
-    def _blank_cells_ok(self, gray: np.ndarray, layout: CharLayout, ink: float) -> bool:
+    def _broken_blank_cell(self, gray: np.ndarray, layout: CharLayout, ink: float) -> int | None:
         """`layout.blank_cells` (Rest, Zellen 13-15) muss sicher als
         Leerzelle erkannt werden. Eigene Abtastung, getrennt von den Zellen
         0-8 - Hintergrund/Punktpegel duerfen sich fuer 0-8 durch diese
@@ -143,11 +153,11 @@ class DotMatrixReader:
         `normalized()` zu einer Rauschverstaerkung statt einer sauberen
         Leerzelle fuehren wuerde (siehe `normalized`-Docstring)."""
         if not layout.blank_cells:
-            return True
+            return None
         sampled = sample_image(gray, layout.grid, layout.blank_cells)
         norm = normalized(sampled, ink=ink)
         decisions = [classify(norm[i], self._stacked, d_max_factor=self._d_max_factor) for i in range(len(layout.blank_cells))]
-        return all(d.text == " " for d in decisions)
+        return next((cell for cell, d in zip(layout.blank_cells, decisions, strict=True) if d.text != " "), None)
 
     def _reject(self, reason, diag, layout, glyphs=(), sign_readable=True) -> ReadResult:
         diag["reject_reason"] = reason

@@ -1,12 +1,16 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
+from frame_tracking_helpers import reference_scene
 
 from dispread.camera_settings import CameraSettings
 from dispread.live import setup as live_setup
+from dispread.setup_checks import CheckResult, SetupChecks
 
 
 class FakeSetupCamera:
@@ -36,6 +40,171 @@ class SequenceSetupCamera(FakeSetupCamera):
     def fresh_still(self, discard=10):
         self.discards.append(discard)
         return next(self.images)
+
+
+class ExposureCamera:
+    """StreamCam-Ersatz: Neustart setzt feste Regler, Helligkeit folgt exp/gain."""
+
+    device = '/dev/fake'
+
+    def __init__(self, base=65, slope=1, exposure=200, gain=10, hint=True):
+        self.base, self.slope, self.hint = base, slope, hint
+        self.settings = CameraSettings('logitech_streamcam', '046d:0893', (600, 240), 'YUYV', 30,
+                                       {'focus_absolute': 48, 'exposure_time_absolute': exposure,
+                                        'gain': gain, 'white_balance_temperature': 4600})
+        self.applied = []
+        self.discards = []
+
+    def apply(self, settings):
+        self.settings = settings
+        controls = dict(settings.ordered_controls())
+        assert controls['auto_exposure'] == 1
+        assert controls['focus_absolute'] == 48
+        assert controls['exposure_time_absolute'] in (100, 200, 300)
+        assert 0 <= controls['gain'] <= 128
+        self.applied.append(settings)
+
+    def fresh_still(self, discard=10):
+        self.discards.append(discard)
+        controls = self.settings.controls
+        level = np.clip(self.base * controls['exposure_time_absolute'] / 200
+                        + self.slope * controls['gain'], 0, 205)
+        image = np.full((240, 600, 3), 245, np.uint8)  # helle Umgebung darf nicht eingehen
+        if self.hint:
+            green = tuple(min(255, round(level * c)) for c in (.45, 1.35, .8))
+            image[60:180, 50:550] = green
+            for y in range(85, 161, 15):
+                for x in range(80, 521, 20):
+                    cv2.circle(image, (x, y), 3, tuple(round(c * .3) for c in green), -1)
+        return image
+
+
+@pytest.mark.parametrize('base,slope,exposure,gain', [
+    (65, 1, 200, 10), (25, 1, 300, 0), (65, 1, 300, 90),
+    (170, 1, 300, 0), (65, .25, 200, 0), (65, 2, 200, 0), (70, 2, 300, 0), (104, 1, 200, 0),
+])
+def test_display_exposure_converges_with_fixed_flicker_free_controls(base, slope, exposure, gain):
+    cam = ExposureCamera(base, slope, exposure, gain)
+    initial = cam.settings
+    settings, audit = live_setup.adjust_exposure(cam, initial, apply=cam.apply, sleep=lambda s: None)
+    assert audit['achieved'] is True
+    assert 115 <= audit['final_level'] <= 150
+    assert 1 <= len(audit['rounds']) <= 4
+    assert audit['initial_level'] < 115 or audit['initial_level'] > 150
+    assert settings == cam.settings
+    assert audit['selected_controls'] == settings.controls
+    assert initial.controls['gain'] == gain  # bestehendes Fokusresultat bleibt unveraendert
+    assert len(cam.discards) == 8 * (1 + len(audit['rounds']))
+    assert cam.discards[:8] == [10, 0, 0, 0, 0, 0, 0, 0]
+
+
+def test_display_exposure_too_bright_never_lengthens_exposure_first():
+    # Review R13-20: zu hell bei 20 ms darf die erste Runde nicht auf 30 ms gehen.
+    cam = ExposureCamera(base=120, slope=1, exposure=200, gain=60)
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=cam.apply, sleep=lambda s: None)
+    assert audit['initial_level'] > 150
+    assert audit['rounds'][0]['controls']['exposure_time_absolute'] <= 200
+    assert audit['rounds'][0]['level'] < audit['initial_level']
+    assert audit['achieved'] is True and settings == cam.settings
+
+
+def test_display_exposure_keeps_already_suitable_settings():
+    cam = ExposureCamera(base=80, exposure=300, gain=10)
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=cam.apply, sleep=lambda s: None)
+    assert audit['achieved'] is True
+    assert audit['rounds'] == []
+    assert settings == cam.settings
+    assert cam.applied == []
+
+
+def test_display_exposure_skips_missing_hint_without_guessing():
+    cam = ExposureCamera(hint=False)
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=cam.apply, sleep=lambda s: None)
+    assert settings == cam.settings
+    assert not audit['achieved']
+    assert audit['initial_level'] is audit['final_level'] is None
+    assert audit['reason'] == 'keine_gruene_hinweisbox'
+    assert cam.applied == []
+
+
+def test_display_exposure_restores_best_if_hint_disappears():
+    cam = ExposureCamera()
+    initial = cam.settings
+
+    def apply(settings):
+        cam.apply(settings)
+        cam.hint = False
+
+    settings, audit = live_setup.adjust_exposure(cam, initial, apply=apply, sleep=lambda s: None)
+    assert settings == initial == cam.settings
+    assert not audit['achieved']
+    assert audit['reason'] == 'gruene_hinweisbox_verloren'
+    assert audit['final_level'] == audit['initial_level']
+    assert len(audit['rounds']) == 1
+    assert audit['rounds'][0]['level'] is None
+
+
+def test_display_exposure_stops_after_four_rounds_if_gain_has_no_effect():
+    cam = ExposureCamera(base=65, slope=0, exposure=200, gain=0)
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=cam.apply, sleep=lambda s: None)
+    assert not audit['achieved']
+    assert len(audit['rounds']) == 4
+    assert audit['reason'] == 'zielband_nach_vier_runden_nicht_erreicht'
+    assert settings == cam.settings
+    assert settings.controls['exposure_time_absolute'] == 300
+    assert settings.controls['gain'] == 0
+    assert len(cam.applied) == 5  # vier Messrunden plus Rueckstellung ohne weitere Messung
+
+
+@pytest.mark.parametrize('exposure', [156, 400])
+def test_display_exposure_never_restores_non_flicker_free_initial_controls_on_box_loss(exposure):
+    cam = ExposureCamera(exposure=exposure)
+
+    def apply(settings):
+        cam.apply(settings)
+        cam.hint = False
+
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=apply, sleep=lambda s: None)
+    assert not audit['achieved']
+    assert audit['reason'] == 'gruene_hinweisbox_verloren'
+    assert settings.controls['exposure_time_absolute'] in (100, 200, 300)
+    assert audit['final_level'] is None  # fuer das gueltige Reglerpaar fehlt eine Messung
+    assert settings == cam.settings
+
+
+@pytest.mark.parametrize('base,slope,exposure,gain', [(35, .1, 200, 0), (350, 0, 100, 0)])
+def test_display_exposure_keeps_best_measured_controls_when_unreachable(base, slope, exposure, gain):
+    cam = ExposureCamera(base, slope, exposure, gain)
+    settings, audit = live_setup.adjust_exposure(cam, cam.settings, apply=cam.apply, sleep=lambda s: None)
+    assert not audit['achieved']
+    assert audit['reason']
+    assert len(audit['rounds']) <= 4
+    levels = [audit['initial_level']] + [r['level'] for r in audit['rounds']]
+    assert abs(audit['final_level'] - 130) == min(abs(level - 130) for level in levels)
+    assert settings == cam.settings
+    assert audit['selected_controls'] == settings.controls
+
+
+@pytest.mark.parametrize('stamp,expected', [
+    ('20261023T075343Z', 112), ('20261023T084344Z', 114), ('20261023T100613Z', 116),
+    ('20261023T121436Z', 113), ('20261023T131121Z', 118), ('20261023T124226Z', 148),
+    ('20261028T110248Z', 142), ('20261028T121101Z', 137), ('20261028T123044Z', 128),
+    ('20261028T133959Z', 144), ('20261028T134306Z', 97), ('20261026T082712Z', 77),
+])
+def test_hint_exposure_calibration_on_saved_stills(stamp, expected):
+    image = cv2.imread(str(local_recording(f'live/live-{stamp}/setup/still.png')))
+    hint = live_setup.find_green_hint_box(image)
+    assert hint is not None
+    assert live_setup.hint_glass_level(image, hint) == pytest.approx(expected, abs=1)
+
+
+def test_hint_glass_ignores_bright_surroundings_in_box_margin():
+    cam = ExposureCamera()
+    image = cam.fresh_still()
+    hint = live_setup.find_green_hint_box(image)
+    assert hint is not None
+    # Handrechnung BGR(34,101,60): Grauwert 81, Umgebung 245.
+    assert live_setup.hint_glass_level(image, hint) == 81
 
 
 @pytest.mark.parametrize("values,expected", [([250, 251, 253], 251), ([250, 253, 253], 252)])
@@ -148,6 +317,38 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     assert "1/3" in messages[0] and "2/3" in messages[1]
 
 
+@pytest.mark.parametrize('failures,details', [
+    ({'kanten': CheckResult('FEHLER', {}, (8,))}, 'kanten (Zelle 8)'),
+    ({'kanten': CheckResult('FEHLER', {}, (8,)), 'kontrast': CheckResult('FEHLER', {})},
+     'kanten (Zelle 8), kontrast'),
+    ({'kanten': CheckResult('FEHLER', {}, (8, 13))}, 'kanten (Zellen 8, 13)'),
+])
+def test_assist_precheck_error_names_checks_and_cells(monkeypatch, tmp_path, failures, details):
+    cam = SequenceSetupCamera([10])
+    lattice = SimpleNamespace(quad=[[0, 0], [3, 0], [3, 2], [0, 2]])
+    checks = SetupChecks('FEHLER', {
+        'raster': CheckResult('FEHLER', {}, (4,)),
+        'glanz': CheckResult('WARNUNG', {}),
+        'stabilitaet': CheckResult(None, {}),
+        **failures,
+    })
+    monkeypatch.setattr(live_setup, 'fit_lattice', lambda *_a, **_kw: lattice)
+    monkeypatch.setattr(live_setup, 'check_setup', lambda *_a, **_kw: checks)
+    reports, sleeps = [], []
+
+    with pytest.raises(live_setup.SetupError) as exc:
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source('text'), expected_size=(3, 2),
+            out_dir=tmp_path, hint_box=(0.0, 0.0, 1.0, 1.0),
+            report=reports.append, sleep=sleeps.append,
+        )
+    assert str(exc.value) == f'Vorpruefung meldet FEHLER: {details}; Stabilitaetsmessung nicht gestartet'
+    assert reports == [checks.to_dict()]
+    assert sleeps == []
+    assert cam.discards == [10]
+    assert not (tmp_path / 'stability.png').exists()
+
+
 def test_assist_all_search_attempts_fail_with_last_reason(monkeypatch, tmp_path):
     cam = SequenceSetupCamera([10, 12, 20, 22, 30, 32])
     brackets = []
@@ -175,12 +376,141 @@ def test_focus_camera_turns_autofocus_off_first_and_reads_back(monkeypatch):
     monkeypatch.setattr(live_setup, "sharpness", lambda roi: 1000 - (cam.controls[-1][0][1] - 48) ** 2)
     settings, sweep = live_setup.focus_camera(cam, None, settle_s=0, sleep=lambda _s: None)
     assert cam.controls[0] == [("focus_automatic_continuous", 0)]
-    assert cam.controls[1] == [("focus_absolute", 48)]
+    assert cam.controls[1:3] == [[("focus_absolute", 36)], [("focus_absolute", 48)]]
     assert cam.controls[-1] == [("auto_exposure", 3), ("white_balance_automatic", 1)]
     assert settings.controls == {
         "focus_absolute": 48, "exposure_time_absolute": 156, "white_balance_temperature": 4600, "gain": 10,
     }
     assert settings.device == "/dev/fake" and sweep[0][0] == 48
+
+
+class FocusMotorCamera(FakeSetupCamera):
+    def __init__(self, readings):
+        super().__init__(None)
+        self.readings = iter(readings)
+        self.captured_at = []
+        self.now = 0.0
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def fresh_still(self, discard=10):
+        self.captured_at.append(self.now)
+        return np.full((12, 12), next(self.readings), dtype=float)
+
+
+class HysteresisCamera(FakeSetupCamera):
+    """Abwaerts liegt die effektive Endlage drei Schritte ueber dem Sollwert."""
+
+    def __init__(self, peak):
+        super().__init__(None)
+        self.peak = peak
+        self.focus = 120
+        self.effective = 123
+        self.samples = []
+
+    def set_controls(self, controls):
+        super().set_controls(controls)
+        for name, value in controls:
+            if name == "focus_absolute":
+                assert 0 <= value <= 255
+                if value != self.focus:
+                    self.effective = value + (3 if value < self.focus else 0)
+                self.focus = value
+
+    def fresh_still(self, discard=10):
+        self.samples.append((self.focus, self.effective))
+        # Drei Schritte vom Gipfel kosten rund 40 % Schaerfe.
+        score = 1 + 614 * np.exp(-((self.effective - self.peak) ** 2) / 18)
+        return np.full((12, 12), score, dtype=float)
+
+
+@pytest.mark.parametrize("start,peak", [(42, 52), (100, 63), (200, 52), (48, 1), (48, 255)])
+def test_focus_hysteresis_reproduces_peak_on_first_verification(monkeypatch, start, peak):
+    cam = HysteresisCamera(peak)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+    settings, measured = live_setup.focus_camera(
+        cam, None, start_focus=start, settle_s=0, sleep=lambda _s: None,
+    )
+    assert abs(settings.controls["focus_absolute"] - peak) <= 1
+    assert measured.focus_verify["attempts"] == 1
+    assert measured.focus_verify["verified"] == pytest.approx(max(score for _, score in measured))
+    assert all(focus == effective for focus, effective in cam.samples)
+    assert measured.focus_verify["approach"] == "from_below"
+    assert measured.focus_verify["backlash_margin"] == 12
+
+
+def _focus_motor(monkeypatch, readings, *, target=48, best=100.0, sample=False):
+    from dispread.focus_sweep import FocusMeasurements
+
+    cam = FocusMotorCamera(readings)
+    monkeypatch.setattr(live_setup.time, "monotonic", lambda: cam.now)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+
+    def climb(measure, **kwargs):
+        measured = FocusMeasurements()
+        measured.append((target, measure(target) if sample else best))
+        return target, measured
+
+    monkeypatch.setattr(live_setup, "climb_focus", climb)
+    return cam
+
+
+def test_focus_motor_waits_for_stable_sharpness_and_verifies(monkeypatch):
+    cam = _focus_motor(monkeypatch, [10, 30, 60, 100, 105, 90, 94], sample=True)
+    messages = []
+    settings, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
+    # Je eine Sekunde am Anfahrpunkt vor Suchmessung und Endpruefung.
+    assert cam.captured_at == pytest.approx([2, 2.3, 2.6, 2.9, 3.2, 5.2, 5.5])
+    assert measured == [(48, 105)]
+    assert settings.controls["focus_absolute"] == 48
+    assert measured.focus_verify == {
+        "target": 48, "best_measured": 105, "verified": 94, "attempts": 1,
+        "approach": "from_below", "backlash_margin": 12,
+    }
+    assert "Fokus geprueft: Schaerfe 94.0 von 105.0" in messages
+
+
+def test_focus_motor_stops_waiting_after_five_seconds(monkeypatch):
+    cam = _focus_motor(monkeypatch, [10, 100] * 8 + [100], sample=True)
+    _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    # Fuenf Sekunden ab Setzen des Ziels, nach einer Sekunde am Anfahrpunkt.
+    assert cam.captured_at[14] == pytest.approx(6.0)
+    assert measured == [(48, 10)]
+    assert measured.focus_verify["attempts"] == 1
+
+
+@pytest.mark.parametrize("target,below", [(1, 0), (48, 36), (255, 243)])
+def test_focus_verification_retries_once_and_records_result(monkeypatch, target, below):
+    cam = _focus_motor(monkeypatch, [80, 80, 85, 85], target=target)
+    _, measured = live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    moves = [value for controls in cam.controls for name, value in controls if name == "focus_absolute"]
+    assert moves == [below, target, below, target]
+    assert measured.focus_verify == {
+        "target": target, "best_measured": 100, "verified": 85, "attempts": 2,
+        "approach": "from_below", "backlash_margin": 12,
+    }
+
+
+def test_focus_zero_is_rejected_without_a_below_approach(monkeypatch):
+    cam = _focus_motor(monkeypatch, [], target=0)
+    with pytest.raises(live_setup.SetupError, match="nicht von unten erreichbar"):
+        live_setup.focus_camera(cam, None, sleep=cam.sleep)
+    assert cam.controls == [[("focus_automatic_continuous", 0)]]
+
+
+def test_focus_verification_fails_twice_with_restart_message(monkeypatch):
+    cam = _focus_motor(monkeypatch, [80, 80, 84, 84])
+    messages = []
+    with pytest.raises(live_setup.SetupError, match=(
+        "Fokus nicht stabil: Schaerfe 84.0 von 100.0 erreicht - Einrichtung neu starten"
+    )):
+        live_setup.focus_camera(cam, None, sleep=cam.sleep, info=messages.append)
+    assert cam.controls[-4:] == [
+        [("focus_absolute", 36)], [("focus_absolute", 48)],
+        [("focus_absolute", 36)], [("focus_absolute", 48)],
+    ]
+    assert not any(message.startswith("Fokus geprueft:") for message in messages)
 
 
 def test_offline_text_source_returns_capture_and_text():
@@ -248,6 +578,49 @@ def test_confirm_refuses_empty_name(tmp_path):
         live_setup.confirm_proposal(_proposal(tmp_path), confirmed_by="  ", resolution_threshold_px=2.6)
 
 
+@pytest.mark.parametrize('achieved,status', [(True, 'OK'), (False, 'WARNUNG')])
+def test_proposal_warns_about_unfinished_exposure_adjustment_without_blocking_run(tmp_path, monkeypatch,
+                                                                             achieved, status):
+    from dispread.live.service import run_block_reason
+
+    checks = SetupChecks('OK', {'belichtung': CheckResult('OK', {'glaspegel': 110}),
+                               'kanten': CheckResult('OK', {}),
+                               'rasterversatz': CheckResult('OK', {})})
+    image, quad = reference_scene()
+    cv2.imwrite(str(tmp_path / 'still.png'), image)
+    monkeypatch.setattr(live_setup, 'write_overlays', lambda *a, **kw: [])
+    proposal = live_setup.propose_with_fit(
+        image, fit=SimpleNamespace(quad=quad), frame_path=tmp_path / 'still.png',
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id='test', session_id='test',
+        out_dir=tmp_path, final_checks=checks, offset_check=CheckResult('OK', {}),
+        reader_check=CheckResult('OK', {}),
+        exposure_adjust={'achieved': achieved, 'reason': None if achieved else 'reglergrenze_oder_wiederholung'},
+    )
+    result = proposal['setup_checks']['checks']['belichtung']
+    assert result['status'] == proposal['setup_checks']['overall'] == status
+    assert result['metrics']['glaspegel'] == 110
+    if not achieved:
+        assert 'neu einrichten' in result['reason']
+    assert run_block_reason(proposal) is None
+
+
+@pytest.mark.parametrize('final_level,expected', [(170.0, 'zu hell'), (95.0, 'näher stellen'), (None, 'näher stellen')])
+def test_unfinished_exposure_reason_matches_direction(tmp_path, monkeypatch, final_level, expected):
+    checks = SetupChecks('OK', {'kanten': CheckResult('OK', {}), 'rasterversatz': CheckResult('OK', {})})
+    image, quad = reference_scene()
+    cv2.imwrite(str(tmp_path / 'still.png'), image)
+    monkeypatch.setattr(live_setup, 'write_overlays', lambda *a, **kw: [])
+    proposal = live_setup.propose_with_fit(
+        image, fit=SimpleNamespace(quad=quad), frame_path=tmp_path / 'still.png',
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id='test', session_id='test',
+        out_dir=tmp_path, final_checks=checks, offset_check=CheckResult('OK', {}),
+        reader_check=CheckResult('OK', {}),
+        exposure_adjust={'achieved': False, 'reason': 'zielband_nach_vier_runden_nicht_erreicht',
+                         'final_level': final_level},
+    )
+    assert expected in proposal['setup_checks']['checks']['belichtung']['reason']
+
+
 def test_propose_with_fit_refuses_image_size_different_from_camera_settings(tmp_path):
     from types import SimpleNamespace
 
@@ -286,7 +659,8 @@ def test_focus_camera_sucht_ab_start_und_protokolliert_rueckfall(monkeypatch, st
     monkeypatch.setattr(live_setup, "sharpness", score)
     messages = []
     settings, measured = live_setup.focus_camera(cam, None, start_focus=start, sleep=lambda _s: None, info=messages.append)
-    assert messages == ["Fokus: Bergsteigen"] + (["Fokus: Vollsweep (Rueckfall)"] if flat else [])
+    assert messages[:-1] == ["Fokus: Bergsteigen"] + (["Fokus: Vollsweep (Rueckfall)"] if flat else [])
+    assert messages[-1].startswith("Fokus geprueft: Schaerfe ")
     assert measured[0][0] == start
     assert measured.focus_method == method
     assert abs(settings.controls["focus_absolute"] - (50 if flat else 48)) <= 2
@@ -340,11 +714,13 @@ def test_propose_forwards_stability_minimum_without_final_checks(monkeypatch, tm
                              to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}})
     monkeypatch.setattr(live_setup, "check_setup", lambda *a, **kw: called.append(kw) or checks)
     monkeypatch.setattr(live_setup, "write_overlays", lambda *a, **kw: [])
-    fit = SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]])
+    image, quad = reference_scene()
+    fit = SimpleNamespace(quad=quad)
+    cv2.imwrite(str(tmp_path / "still.png"), image)
     kwargs = {"stability_min_elapsed_s": minimum} if minimum == 15.0 else {}
     proposal = live_setup.propose_with_fit(
-        np.zeros((1080, 1920, 3), np.uint8), fit=fit, frame_path=tmp_path / "still.png",
-        camera_settings=_CAMERA, device_id="test", session_id="test", out_dir=tmp_path,
+        image, fit=fit, frame_path=tmp_path / "still.png",
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id="test", session_id="test", out_dir=tmp_path,
         offset_check=SimpleNamespace(status="OK"), stability_elapsed_s=minimum, setup_attempt=2, **kwargs,
     )
     assert called[0]["stability_min_elapsed_s"] == minimum
@@ -361,10 +737,12 @@ def test_proposal_merges_reader_status(monkeypatch, tmp_path, reader_status):
     checks = SimpleNamespace(overall="OK", checks={"kanten": SimpleNamespace(cells=[])},
                              to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}})
     monkeypatch.setattr(live_setup, "write_overlays", lambda *a, **kw: [])
+    image, quad = reference_scene()
+    cv2.imwrite(str(tmp_path / "still.png"), image)
     proposal = live_setup.propose_with_fit(
-        np.zeros((1080, 1920, 3), np.uint8),
-        fit=SimpleNamespace(quad=[[0, 0], [400, 0], [400, 160], [0, 160]]),
-        frame_path=tmp_path / "still.png", camera_settings=_CAMERA, device_id="test", session_id="test",
+        image, fit=SimpleNamespace(quad=quad),
+        frame_path=tmp_path / "still.png", camera_settings=replace(_CAMERA, size=image.shape[1::-1]),
+        device_id="test", session_id="test",
         out_dir=tmp_path, final_checks=checks, offset_check=CheckResult("OK", {}),
         reader_check=CheckResult(reader_status, {}),
     )

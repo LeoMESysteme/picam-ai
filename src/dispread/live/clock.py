@@ -4,12 +4,16 @@ StreamCam-Bilder tragen CLOCK_MONOTONIC (V4L2), serielle Telegramme
 CLOCK_BOOTTIME. Verglichen wird nur ueber `records.to_boottime_ns` mit dem
 hier gemessenen Versatz; `ClockLog` misst ihn bei Start, periodisch und am
 Ende und liefert die Form, die `session.json` braucht.
+Bei Werteplan-Freigaben prueft `checked_offset_bounds` den Versatz frisch,
+damit Suspend auch zwischen den periodischen Auditproben auffaellt.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable
+
+from dispread.records import SUSPEND_TOLERANCE_NS
 
 #: Anzahl Einzelmessungen fuer `measure_clock_offset_ns` (Median).
 CLOCK_OFFSET_SAMPLES = 5
@@ -50,6 +54,19 @@ class ClockLog:
         offset = int(self._measure())
         self.samples.append((int(self._monotonic_ns()), offset))
         return offset
+
+    def checked_offset_bounds(self) -> dict[str, int]:
+        """Frischer Versatz vor einer zeitabhaengigen Live-Freigabe.
+
+        Die Endgrenze stammt immer von jetzt, damit ein Suspend seit der
+        periodischen Probe nicht unbemerkt bleibt. Nur Versatzspruenge werden
+        zusaetzlich ins Audit aufgenommen, keine Probenliste je Bild aufgebaut.
+        `to_boottime_ns` entscheidet anhand beider Grenzen ueber die Umrechnung.
+        """
+        offset = int(self._measure())
+        if not self.samples or abs(offset - self.samples[-1][1]) > SUSPEND_TOLERANCE_NS:
+            self.samples.append((int(self._monotonic_ns()), offset))
+        return {'start': self.samples[0][1], 'end': offset}
 
     @property
     def last_sample_monotonic_ns(self) -> int | None:

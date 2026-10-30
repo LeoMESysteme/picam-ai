@@ -14,8 +14,12 @@ img{max-width:100%;border-radius:6px}
 button{font:inherit;padding:6px 12px;margin:4px 4px 0 0}
 input[type=text]{font:inherit;width:22ch}
 #overlays img{max-width:48%}
+#overlays img.region-editing{max-width:100%;cursor:crosshair}
+#region-results{white-space:pre-line}
+#region-list{padding-left:24px}
 #run-block,#test-banner{border:2px solid #ff7b72;padding:12px;color:#ff7b72}
 #detail{white-space:pre-line}
+#setup-checks{white-space:pre-line}
 </style>
 </head>
 <body>
@@ -23,12 +27,19 @@ input[type=text]{font:inherit;width:22ch}
   <div id="test-banner" hidden>TESTLAUF — Lesesperre übergangen. Werte nicht freigegeben, nicht für Messungen verwenden.</div>
   <div class="notice" id="tolerance-banner" hidden></div>
   <div class="notice" id="notice"></div>
+  <p id="storage-status" role="status"></p>
   <section>
     <div class="value" id="headline">—</div>
     <div id="detail"></div>
+    <div id="tracking-mode"></div>
+    <div id="recent-causes" hidden>
+      <p>Häufigste Ursachen in den letzten 10 Sekunden (verarbeitete Bilder)</p>
+      <ul id="recent-causes-list"></ul>
+      <span id="recent-causes-limit"></span>
+    </div>
   </section>
   <section>
-    <img id="preview" alt="Kameravorschau">
+    <img id="preview" src="/live/preview.jpg" alt="Kameravorschau">
     <div id="camera"></div>
     <button id="camera-start">Kamera neu verbinden</button>
   </section>
@@ -37,7 +48,20 @@ input[type=text]{font:inherit;width:22ch}
     <label>Zellentext Zellen 0–8 – empfohlen: leer lassen (dann liest die Werkbank den Wert vom GSV-2AS). Bei Eingabe schwankende Ziffern mit ? markieren, z. B. „+0.4678?“ <input type="text" id="cell-text" maxlength="9"></label>
     <button id="setup">Einrichtung starten</button>
     <div id="setup-state"></div>
+    <div id="setup-checks"></div>
     <div id="overlays"></div>
+    <p>Das Abtastbild (overlay_sampling) zeigt das feste Punktraster und hängt nicht von den Rahmenbereichen ab.</p>
+    <fieldset id="region-editor" hidden>
+      <legend>Rahmenbereiche</legend>
+      <label><input type="checkbox" id="edit-regions"> Rahmenbereiche bearbeiten</label>
+      <p>Im Quellbild freie Stelle anklicken zum Hinzufügen, magentafarbenen Bereich zum Entfernen.
+        Nur feste Rahmenstruktur auswählen, nie Zeichen, Kabel, Tisch oder Hintergrund.</p>
+      <label>Quellbild-Koordinaten x,y <input type="text" id="region-coordinates" placeholder="z. B. 320,240"></label>
+      <button id="region-add" type="button">Bereich hinzufügen</button>
+      <p id="region-selection"></p>
+      <ul id="region-list"></ul>
+      <div id="region-results" role="status" aria-live="polite"></div>
+    </fieldset>
     <p id="proposal-block" class="error" hidden>Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.</p>
     <p id="proposal-hint" hidden></p>
     <div id="confirm-box" hidden>
@@ -58,6 +82,7 @@ input[type=text]{font:inherit;width:22ch}
       <label><input type="checkbox" id="test-override"> Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden</label>
     </details>
     <label><input type="checkbox" id="reference-enabled" checked> Referenz vom GSV-2AS mitschreiben</label>
+    <label><input type="checkbox" id="diagnostics-enabled"> Diagnosebilder aufzeichnen (fuer Fehlersuche, bis 600 MB RAM und SD je Lauf; zum Sparen von SD-Platz standardmaessig aus)</label>
     <label>Werteplan (set norm), z. B. 1:20,2:20,0.5:20
       <input id="norm-schedule" type="text" placeholder="optional: Faktor:Sekunden">
     </label>
@@ -65,6 +90,12 @@ input[type=text]{font:inherit;width:22ch}
     <p id="reference-status" role="status"></p>
     <button id="run-start">Lauf starten</button>
     <button id="run-stop">Lauf stoppen</button>
+    <p id="diagnostics-status" role="status"></p>
+    <div id="mark-box" hidden>
+      <label>Ereignis (Meldezeit des Bedieners): <input id="mark-text" type="text" maxlength="200"></label>
+      <button id="run-mark">Ereignis markieren</button>
+    </div>
+    <p id="last-mark" role="status"></p>
     <div id="error" class="error" role="alert"></div>
   </section>
 </main>

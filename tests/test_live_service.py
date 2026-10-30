@@ -29,6 +29,19 @@ class FakeOwner:
         pass
 
 
+@pytest.fixture
+def blank_exposure_still(monkeypatch):
+    """Alte Ablauf-Fakes brauchen jetzt acht Bilder vor assist_measure.
+
+    Ohne Hinweisbox wird der echte Abgleich dokumentiert uebersprungen;
+    der jeweils getestete Fokus-/Serial-/Diagnosepfad bleibt erreichbar.
+    """
+    import numpy as np
+
+    image = np.zeros((2, 3, 3), np.uint8)
+    monkeypatch.setattr('dispread.live.service.OwnerSetupCamera.fresh_still', lambda *a, **kw: image)
+
+
 def _wait_state(service, states, timeout=2.0):
     deadline = time.monotonic() + timeout
     while service.status()["state"] not in states and time.monotonic() < deadline:
@@ -40,6 +53,29 @@ def test_simulate_refuses_setup_with_clear_reason(tmp_path):
     service = LiveService(FakeOwner(), tmp_path, simulate=True)
     with pytest.raises(LiveError, match="StreamCam"):
         service.start_setup()
+
+
+def test_setup_still_reports_stream_stall_instead_of_generic_missing_image():
+    from dispread.frames.uvc_source import UvcError
+    from dispread.live.service import OwnerSetupCamera
+
+    class StalledOwner(FakeOwner):
+        def status(self):
+            return {**super().status(), 'stalled': True, 'error': 'Streamstillstand: kein Bild seit 2.0 s'}
+
+    with pytest.raises(UvcError, match='Streamstillstand'):
+        OwnerSetupCamera(StalledOwner()).fresh_still(discard=0)
+
+
+def test_setup_refuses_stalled_camera_even_when_reader_is_running(tmp_path):
+    class StalledOwner(FakeOwner):
+        def status(self):
+            return {**super().status(), 'stalled': True, 'error': 'Streamstillstand: kein Bild seit 2.0 s'}
+
+    service = LiveService(StalledOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Streamstillstand'):
+        service.start_setup()
+    assert service.status()['state'] == 'idle'
 
 
 def test_bad_operator_cell_text_is_refused_before_camera(tmp_path):
@@ -351,8 +387,54 @@ def test_owner_setup_camera_reports_missing_control_target_and_frame():
         camera.fresh_still(discard=0)
 
 
+def test_setup_adjusts_display_exposure_before_stills_and_persists_final_controls(tmp_path, proposal, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from test_live_setup import ExposureCamera
+
+    from dispread.live import setup as live_setup
+
+    cam = ExposureCamera()
+
+    class Owner(FakeOwner):
+        def restart(self, factory=None):
+            cam.apply(factory())
+
+    monkeypatch.setattr('dispread.live.service.OwnerSetupCamera', lambda owner: cam)
+    monkeypatch.setattr(live_setup, 'focus_camera', lambda *a, **kw: (cam.settings, FocusMeasurements()))
+    monkeypatch.setattr(live_setup.time, 'sleep', lambda s: None)
+
+    def assist(camera, **kwargs):
+        saved = json.loads((tmp_path / service.status()['session_id'] / 'setup' / 'camera-settings.json').read_text())
+        assert saved['exposure_adjust']['achieved'] is True
+        assert saved['exposure_adjust']['initial_level'] < 105
+        assert saved['exposure_adjust']['selected_controls'] == cam.settings.controls
+        assert saved['camera'] == cam.settings.to_dict()
+        assert cam.settings.controls['exposure_time_absolute'] == 300
+        return SimpleNamespace(first=None, second=None, first_text='+ 1.2345 ', fit=None, offset_check=None,
+                               final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=1)
+
+    def propose(*a, **kwargs):
+        assert kwargs['camera_settings'] == cam.settings
+        return {**proposal, 'camera': cam.settings.to_dict()}
+
+    monkeypatch.setattr(live_setup, 'assist_measure', assist)
+    monkeypatch.setattr(live_setup, 'propose_with_fit', propose)
+    service = LiveService(Owner(), tmp_path, source_for=lambda settings: settings)
+    service.start_setup(cell_text='+ 1.2345 ')
+    service._setup_thread.join(2)
+    assert service.status()['state'] == 'setup_ready', service.status()['error']
+    assert service._proposal['camera'] == cam.settings.to_dict()
+    service.confirm(session_id=service.status()['session_id'], confirmed_by='Test', format_checked=True)
+    from dispread.session_profile import SessionProfile
+    profile = SessionProfile.load(tmp_path / service.status()['session_id'] / 'profile.json')
+    assert profile.camera == service._profile_camera == cam.settings
+
+
 @pytest.mark.parametrize("cell_text,fail", [("+ 1.2345 ", False), (None, False), (None, True)])
-def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monkeypatch, cell_text, fail):
+def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monkeypatch, cell_text, fail,
+                                                     blank_exposure_still):
     import json
     from types import SimpleNamespace
 
@@ -364,7 +446,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     events = []
     camera = CameraSettings.from_dict(proposal["camera"])
     image = np.zeros((2, 2, 3), np.uint8)
-    result = SimpleNamespace(first=image, second=image, fit=object(), offset_check=object(),
+    result = SimpleNamespace(first=image, second=image, first_text='+ 1.23?5 ', fit=object(), offset_check=object(),
                              final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2)
 
     class Owner(FakeOwner):
@@ -389,6 +471,10 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("focus")
         measured = FocusMeasurements()
         measured.append((48, 1.0))
+        measured.focus_verify = {
+            "target": 48, "best_measured": 1.0, "verified": 0.9, "attempts": 1,
+            "approach": "from_below", "backlash_margin": 12,
+        }
         return camera, measured
 
     def assist(cam, **kwargs):
@@ -407,12 +493,14 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
 
     def propose(first, **kwargs):
         assert first is image
+        assert kwargs['cell_text'] == result.first_text
         assert kwargs["camera_settings"] == camera
         assert kwargs["offset_check"] is result.offset_check
         assert kwargs["final_checks"] is result.final_checks
         assert kwargs["stability_elapsed_s"] == 30.0
         assert kwargs["stability_min_elapsed_s"] == 15.0
         assert kwargs["setup_attempt"] == 2
+        assert kwargs["live_tracking"] is True
         assert kwargs["device_id"] == "gsv-sensor-161a"
         events.append("proposal")
         return proposal
@@ -433,6 +521,10 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     settings = tmp_path / service.status()["session_id"] / "setup" / "camera-settings.json"
     assert json.loads(settings.read_text())["camera"] == camera.to_dict()
     assert json.loads(settings.read_text())["focus_method"] == "climb"
+    assert json.loads(settings.read_text())["focus_verify"] == {
+        "target": 48, "best_measured": 1.0, "verified": 0.9, "attempts": 1,
+        "approach": "from_below", "backlash_margin": 12,
+    }
     if fail:
         assert service.status()["error"] == "Standbild abgelehnt"
     else:
@@ -449,7 +541,7 @@ def test_start_camera_wraps_failure(tmp_path):
 
 
 class MarkerSession:
-    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None, reference_recorder=None):
+    def __init__(self, owner, profile_path, config, out_dir, *, test_run=None, reader_d_max_factor=1.0, reader_tolerance=None, reference_recorder=None, diagnostics=False, diagnostic_staging_root=None):
         self.latest, self.summary, self.end_reason = None, {}, None
         self.session_path = out_dir / "session.json"
         self.records_path = out_dir / "records.jsonl"
@@ -652,12 +744,16 @@ def test_preview_resizes_and_draws_quad_without_changing_camera_image(tmp_path):
 @pytest.mark.parametrize("message,expected", [
     ("Punktraster: startlage_mehrdeutig; bitte --hint-box angeben",
      "Punktraster: startlage_mehrdeutig; Anzeige mittig ins Bild bringen — "
-     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Punktraster: keine_startlage",
-     "Punktraster: keine_startlage — Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Punktraster: keine_startlage — "
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Punktraster abgelehnt: keine_startlage; Hinweisbox pruefen oder --hint-box angeben",
      "Punktraster abgelehnt: keine_startlage; Anzeige mittig ins Bild bringen — "
-     "Kamera senkrecht auf Displaymitte stellen und neu einrichten"),
+     "Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+     "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."),
     ("Pruefung: --override-reason oder --accept-default-grid", "Pruefung: oder"),
     ("Standbild abgelehnt", "Standbild abgelehnt"),
 ])
@@ -671,6 +767,41 @@ def test_setup_errors_use_browser_wording(tmp_path, message, expected):
     service.start_setup()
     assert _wait_state(service, {"setup_failed"}) == "setup_failed"
     assert service.status()["error"] == expected
+
+
+@pytest.mark.parametrize("reason", ["keine_startlage", "startlage_mehrdeutig"])
+def test_exhausted_setup_search_gives_camera_guidance_without_proposal(tmp_path, monkeypatch, reason):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live import setup
+
+    image = np.full((2, 3, 3), 30, np.uint8)
+    cam = SimpleNamespace(fresh_still=lambda **_kwargs: image)
+    monkeypatch.setattr(setup, "fit_lattice", lambda *_args, **_kwargs: reason)
+    attempts = []
+
+    def runner(*, session_dir, **_kwargs):
+        return setup.assist_measure(
+            cam, cell_text=lambda capture: (capture(), "+0.00000 mV/V   "),
+            expected_size=(3, 2), out_dir=session_dir / "setup",
+            hint_box=(0.0, 0.0, 1.0, 1.0), stack_frames=1, fit_attempts=3,
+            on_attempt=attempts.append,
+        )
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    try:
+        service.start_setup()
+        assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+        status = service.status()
+        assert reason in status["error"]
+        assert "Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran" in status["error"]
+        assert "mindestens ein Drittel der Bildbreite" in status["error"]
+        assert "overall" not in status["setup"]
+        assert [event["fit"] for event in attempts if "fit" in event] == [reason] * 3
+    finally:
+        service.close()
 
 
 def test_setup_refuses_stopped_camera_before_starting_worker(tmp_path):
@@ -705,7 +836,8 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
 
 
 @pytest.mark.parametrize("plain_list", [False, True])
-def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch, plain_list):
+def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, proposal, monkeypatch, plain_list,
+                                                                   blank_exposure_still):
     import json
 
     from dispread.camera_settings import CameraSettings
@@ -773,7 +905,7 @@ def test_setup_elapsed_uses_monotonic_and_freezes(tmp_path, fail):
 
 
 @pytest.mark.parametrize("failed_step", ["fokus", "kamera", "seriell"])
-def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, failed_step):
+def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, failed_step, blank_exposure_still):
     import json
     from datetime import datetime
 
@@ -795,7 +927,7 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
     assert service.status()["state"] == "setup_failed"
     failure = json.loads((tmp_path / service.status()["session_id"] / "setup" / "failure.json").read_text())
     assert json.loads((tmp_path / service.status()["session_id"] / "setup" / "cell-text.json").read_text()) == []
-    assert failure["step"] == ("kamera" if failed_step == "seriell" else failed_step)
+    assert failure["step"] == ("belichtung" if failed_step == "seriell" else failed_step)
     assert "early failure" in failure["reason"]
     assert datetime.fromisoformat(failure["created_at_utc"]).tzinfo is not None
 
@@ -938,7 +1070,8 @@ def test_failure_diagnostic_write_keeps_original_outcome(tmp_path, monkeypatch, 
 
 @pytest.mark.parametrize("failed_write", [1, 2])
 @pytest.mark.parametrize("error_type", [OSError, TypeError, ValueError])
-def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypatch, failed_write, error_type):
+def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypatch, failed_write, error_type,
+                                                blank_exposure_still):
     from pathlib import Path
     from types import SimpleNamespace
 
@@ -960,7 +1093,7 @@ def test_cell_diagnostic_write_does_not_fail_setup(tmp_path, proposal, monkeypat
         assert service.status()["setup"]["step"] == "standbilder"
         assert service.status()["setup"]["message"] == "Startsuche Versuch 1"
         kwargs["on_attempt"]({"attempt": 1, "still": "still", "masked": "+ 1.2345 "})
-        return SimpleNamespace(first=None, second=None, fit=None, offset_check=None,
+        return SimpleNamespace(first=None, second=None, first_text='+ 1.2345 ', fit=None, offset_check=None,
                                final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=1)
 
     camera = CameraSettings.from_dict(proposal["camera"])
@@ -1064,8 +1197,10 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     with pytest.raises(LiveError, match="Lauf gesperrt"):
         service.start_run()
     assert not list(session_dir.glob("run-*"))
-    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"})
+    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"},
+                   tracking={"mode": "ecc_alt", "version": None, "regions": None})
     session.latest_age_s.return_value = None
+    session.rejection_causes.return_value = {"frames": 0, "window_s": 10.0, "limited": False, "causes": []}
     session.run.side_effect = lambda stop: stop.wait()
     factory = Mock(return_value=session)
     monkeypatch.setattr("dispread.live.service.LiveSession", factory)
@@ -1100,6 +1235,46 @@ def test_override_without_block_stays_normal_and_new_setup_clears_markers(tmp_pa
     assert service.status()["test_run"] is None
     assert service.status()["run_block"] != "old block"
     assert service.status()["run"] is None
+
+
+def test_test_run_later_readable_records_remain_rejected_in_status_and_audit(tmp_path, monkeypatch):
+    import json
+
+    from dotmatrix_helpers import embed
+    from test_live_session import _session
+
+    def factory(owner, profile, config, out_dir, **kwargs):
+        image = embed('+ 1.2345 ')
+        session = _session(tmp_path, [image * 0 + 200, image, image], out_dir=out_dir, **kwargs)
+        # Schritte im Test ausfuehren, der Service-Thread wartet nur auf Stop.
+        session.run = lambda stop: stop.wait()
+        return session
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    service._run_block = 'Lauf gesperrt: Gegenlesen WARNUNG'
+    service.start_run(test_override=True, reference=False)
+    try:
+        for _ in range(3):
+            service._session.step()
+        status = service.status()
+        assert status['test_run']['testlauf'] is True
+        assert status['run']['latest']['status'] == 'unreadable'
+        assert status['run']['latest']['value'] is None
+        assert status['run']['latest']['reject_reasons'][0] == 'testlauf_keine_freigabe'
+        assert status['run']['guess']['gate_status'] == 'valid'
+        assert status['run']['guess']['text'] == '+ 1.2345 '
+        cause = next(c for c in status['run']['rejection_causes']['causes']
+                     if c['reason'] == 'testlauf_keine_freigabe')
+        assert cause['explanation'] == 'Testlauf: keine Wertfreigabe'
+    finally:
+        service.stop_run()
+    metadata = json.loads(service._session.session_path.read_text())
+    marker = json.loads((service._session.session_path.parent / 'TESTLAUF.json').read_text())
+    assert metadata['test_run'] == marker == service.status()['test_run']
+    assert metadata['summary']['testlauf_unterdrueckt'] == 1
+    assert 'valid' not in metadata['summary']['by_status']
 
 
 def test_run_block_reason_explains_reference_contradiction():
@@ -1356,3 +1531,520 @@ def test_server_close_restores_active_schedule_or_retains_read_only_abort(tmp_pa
     else:
         assert port.norm == [80, 27, 228] and port.dp == 1
         assert meta['reference']['restore_verification']['matches_restore_point']
+
+
+def test_confirmation_refuses_outdated_revision_in_same_session(tmp_path, proposal):
+    # Ein neuer Versuch kann dieselbe Sitzungs-ID tragen.
+    proposal["live_tracking"] = {"proposal_revision": "current"}
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["proposal_revision"] == "current"
+    for revision in ("previous", None):
+        with pytest.raises(LiveError, match="geaendert"):
+            service.confirm(session_id=status["session_id"], proposal_revision=revision,
+                            confirmed_by="Operator", format_checked=True)
+    assert service.status()["state"] == "setup_ready"
+    assert not (tmp_path / status["session_id"] / "profile.json").exists()
+
+
+def test_confirmation_refused_while_running_even_with_current_proposal(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    service._state = "running"
+    with pytest.raises(LiveError):
+        service.confirm(session_id=status["session_id"], confirmed_by="Operator", format_checked=True)
+    with pytest.raises(LiveError, match="Lauf zuerst beenden"):
+        service.start_setup()
+    assert service.status()["state"] == "running"
+    assert not (tmp_path / status["session_id"] / "profile.json").exists()
+
+
+def test_current_revision_confirms_and_tracking_status_reaches_page(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["checks"]["nachfuehrung"] == "OK"
+    assert service.status(full=True)["tracking_reasons"]["rahmen_mehrdeutig"] == "rahmenmerkmale nicht eindeutig zugeordnet"
+    service.confirm(session_id=status["session_id"], proposal_revision=status["setup"]["proposal_revision"],
+                    confirmed_by="Operator", format_checked=True)
+    assert service.status()["state"] == "confirmed"
+    assert service.status()["run"] is None
+    assert service.status()["profile"]["tracking_mode"] == "rahmenbereiche"
+    from dispread.session_profile import SessionProfile
+
+    profile = SessionProfile.load(tmp_path / status["session_id"] / "profile.json")
+    assert profile.live_tracking == proposal["live_tracking"]
+
+    from types import SimpleNamespace
+
+    tracking = {"mode": "rahmenbereiche", "version": 1,
+                "regions": len(profile.live_tracking["proposal"]["regions"])}
+    service._session = SimpleNamespace(latest=None, summary={}, tracking=tracking, latest_age_s=lambda: None)
+    service._run_dir = tmp_path / "run-01"
+    assert service.status()["run"]["tracking"] == tracking
+
+
+def test_tracking_failure_reason_reaches_setup_status(tmp_path, proposal):
+    proposal["setup_checks"]["checks"]["nachfuehrung"] = {
+        "status": "FEHLER", "reason": "zu wenige geeignete Rahmenbereiche",
+    }
+    proposal["setup_checks"]["overall"] = "FEHLER"
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    assert status["setup"]["check_reasons"]["nachfuehrung"] == "zu wenige geeignete Rahmenbereiche"
+    with pytest.raises(LiveError, match="FEHLER"):
+        service.confirm(session_id=status["session_id"], confirmed_by="Operator", format_checked=True)
+
+
+def test_old_confirmed_profile_exposes_tracking_mode_before_run(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
+    status = service.status()
+    assert status["run"] is None
+    assert status["profile"]["tracking_mode"] == "ecc_alt"
+
+
+def test_tracking_reasons_only_in_explicit_full_status(tmp_path):
+    from dispread.workbench.fields import REASONS
+
+    service = LiveService(FakeOwner(), tmp_path)
+    assert "tracking_reasons" not in service.status()
+    assert service.status(full=True)["tracking_reasons"] == REASONS
+    assert "tracking_reasons" not in service.status()
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_diagnostics_option_and_mark_status(tmp_path, monkeypatch, enabled):
+    class Session(MarkerSession):
+        def __init__(self, *args, diagnostics=False, **kw):
+            super().__init__(*args, **kw)
+            self.enabled = diagnostics
+            self.last_mark = None
+            self.diagnose_kopie = False
+
+        def mark(self, text):
+            self.last_mark = {'text': text, 'zeit': 'meldezeit_bediener'}
+
+        def diagnostics_status(self):
+            return {'enabled': self.enabled, 'saved': 3}
+
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    with pytest.raises(LiveError, match='kein Lauf'):
+        service.mark('zu frueh')
+    service.start_run(reference=False, diagnostics=enabled)
+    try:
+        service.mark('Abdeckung')
+        status = service.status()
+        assert status['diagnostics'] == {'enabled': enabled, 'saved': 3}
+        assert status['last_mark'] == {'text': 'Abdeckung', 'zeit': 'meldezeit_bediener'}
+        assert status['diagnose_kopie'] is False
+        service._session.diagnose_kopie = True
+        assert service.status()['diagnose_kopie'] is True
+    finally:
+        service.stop_run()
+    with pytest.raises(LiveError, match='kein Lauf'):
+        service.mark('zu spaet')
+
+
+def test_diagnostic_copy_stays_visible_during_new_setup(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=lambda **kw: {})
+    previous = SimpleNamespace(diagnose_kopie=True)
+    service._session = previous
+    service.start_setup()
+    assert service.status()['diagnose_kopie'] is True
+    previous.diagnose_kopie = False
+    assert service.status()['diagnose_kopie'] is False
+
+
+def test_leftover_diagnostics_are_reported_on_start_and_in_status(tmp_path, caplog):
+    staging = tmp_path / 'shm'
+    abandoned = staging / 'dispread-diagnose-old-run-01'
+    abandoned.mkdir(parents=True)
+    (abandoned / '0001.png').write_bytes(b'png')
+    (abandoned / 'images.jsonl').write_bytes(b'index')
+    service = LiveService(FakeOwner(), tmp_path / 'live', diagnostic_staging_root=staging)
+    assert str(abandoned) in caplog.text and '8' in caplog.text
+    assert service.status()['diagnostic_leftovers'] == [{'path': str(abandoned), 'bytes': 8}]
+    (abandoned / '0002.png').write_bytes(b'next')
+    assert service.status()['diagnostic_leftovers'][0]['bytes'] == 12
+    service.close()
+    assert abandoned.is_dir()
+
+
+@pytest.mark.parametrize('last_copy', [0, 1])
+def test_close_waits_for_previous_and_current_diagnostic_copies(tmp_path, monkeypatch, last_copy):
+    import threading
+
+    from test_live_session import _session, embed
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    entered = [threading.Event(), threading.Event()]
+    release = [threading.Event(), threading.Event()]
+    original_copy = diagnostics.shutil.copyfile
+    def delayed_copy(src, dst):
+        index = int(dst.relative_to(tmp_path).parts[0])
+        entered[index].set()
+        assert release[index].wait(30), 'Diagnosekopie wurde im Test nicht freigegeben'
+        return original_copy(src, dst)
+    monkeypatch.setattr(diagnostics.shutil, 'copyfile', delayed_copy)
+    sessions = []
+    for n in range(2):
+        root = tmp_path / str(n)
+        root.mkdir()
+        session = _session(root, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=root)
+        session.start()
+        session.step()
+        session.mark('Test')
+        sessions.append(session)
+    # Erst beide Sitzungen aufbauen: deren Bildverarbeitung darf unter Last
+    # nicht die Frist der absichtlich blockierten ersten Kopie verbrauchen.
+    sessions[0].stop()
+    service = LiveService(FakeOwner(), tmp_path, diagnostic_staging_root=tmp_path)
+    service._diagnostic_copies, service._session = sessions[:1], sessions[1]
+    service._state, service._run_stop = 'running', threading.Event()
+    closed = threading.Event()
+    def close():
+        try:
+            service.close()
+        finally:
+            closed.set()
+    thread = threading.Thread(target=close)
+    try:
+        thread.start()
+        assert all(event.wait(10) for event in entered)
+        first_copy = 1 - last_copy
+        release[first_copy].set()
+        assert sessions[first_copy]._diagnostics.wait(30)
+        # Beide Varianten: close muss auch auf die jeweils andere Kopie warten.
+        assert not closed.wait(0.05)
+    finally:
+        for event in release:
+            event.set()
+        thread.join(30)
+    assert closed.is_set()
+    for session in sessions:
+        assert session.diagnostics_status()['copied']
+        assert not session._diagnostics.staging.exists()
+
+
+def test_close_uses_one_bounded_copy_deadline_and_logs_timeout(tmp_path, monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    from dispread.live import service as module
+
+    monkeypatch.setattr(module, 'DIAGNOSTIC_CLOSE_TIMEOUT_S', 0.05, raising=False)
+    waits = []
+    def stalled(timeout):
+        waits.append(timeout)
+        time.sleep(timeout)
+        return False
+    service = LiveService(FakeOwner(), tmp_path, diagnostic_staging_root=tmp_path)
+    first = SimpleNamespace(diagnose_kopie=True, wait_diagnostics=stalled)
+    second = SimpleNamespace(diagnose_kopie=True, wait_diagnostics=stalled)
+    service._diagnostic_copies, service._session = [first], second
+    start = time.monotonic()
+    service.close()
+    assert waits and sum(waits) <= 0.05
+    assert time.monotonic() - start < 0.3
+    assert 'Diagnose' in caplog.text and 'Zeitlimit' in caplog.text
+
+
+def test_edit_regions_revises_checks_overlays_and_confirmed_profile(tmp_path):
+    import json
+
+    import cv2
+    import numpy as np
+    from test_live_setup_tracking import _propose
+
+    from dispread.session_profile import SessionProfile
+
+    image, quad, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    status = service.status()
+    revision = status['setup']['proposal_revision']
+    regions = proposal['live_tracking']['proposal']['regions']
+    centres = [r['centre'] for r in regions]
+    source = tmp_path / status['session_id'] / 'setup' / 'overlay_source.png'
+    original = source.read_bytes()
+    # Alle Bereiche entfernen: echtes FEHLER-Urteil samt neuem Overlay.
+    result = service.edit_regions(proposal_revision=revision, add=[], remove=list(range(len(regions))))
+    status = service.status()
+    assert status['setup']['checks']['nachfuehrung'] == status['setup']['overall'] == 'FEHLER'
+    assert source.read_bytes() != original
+    assert result['proposal_revision'] == status['setup']['proposal_revision'] != revision
+    assert status['setup']['regions'] == []
+    assert result['centre_results'] == []
+    with pytest.raises(LiveError, match='geaendert'):
+        service.edit_regions(proposal_revision=revision, add=centres, remove=[])
+    # Dasselbe Standbild reparieren, strukturfreien Zeichenpunkt ablehnen.
+    middle = list(np.rint(np.asarray(quad).mean(axis=0)).astype(int).tolist())
+    result = service.edit_regions(proposal_revision=result['proposal_revision'], add=centres + [middle], remove=[])
+    assert result['centre_results'][-1]['reason'] == 'zu_wenig_struktur'
+    assert service.status()['setup']['overall'] == 'OK'
+    assert service.status()['setup']['regions'] == regions
+    assert service.status()['setup']['centre_results'] == result['centre_results']
+    saved = json.loads((source.parent / 'proposal.json').read_text())
+    assert saved['live_tracking']['auswahl'] == 'manuell'
+    assert len(saved['live_tracking']['edits']) == 2 * len(regions) + 1
+    assert all(edit['at_utc'].endswith('+00:00') for edit in saved['live_tracking']['edits'])
+    assert saved['live_tracking']['frame_sha256'] == proposal['live_tracking']['frame_sha256']
+    service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True)
+    profile = SessionProfile.load(source.parent.parent / 'profile.json')
+    assert profile.live_tracking == saved['live_tracking']
+    assert cv2.imread(str(tmp_path / 'still.png')).shape == image.shape
+
+
+@pytest.mark.parametrize('state', ['idle', 'running', 'setup_running', 'setup_failed'])
+def test_edit_regions_refuses_missing_or_busy_proposal(tmp_path, state):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state = state
+    with pytest.raises(LiveError):
+        service.edit_regions(proposal_revision='old', add=[[1, 2]], remove=[])
+
+
+@pytest.mark.parametrize(('add', 'remove'), [
+    ([[1, 2]] * 25, []), ([[1, 2]] * 51, []), ([], [999]), ([], [-1]), ([], [True]),
+    ([], [0, 0]), ([[float('nan'), 2]], []), ([[True, 2]], []), ([[1]], []), ('bad', []), ([], 'bad'), ([], []),
+])
+def test_edit_regions_refuses_invalid_edits_without_revision_change(tmp_path, add, remove):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    before = service.status()
+    with pytest.raises(LiveError):
+        service.edit_regions(proposal_revision=before['setup']['proposal_revision'], add=add, remove=remove)
+    assert service.status()['setup']['proposal_revision'] == before['setup']['proposal_revision']
+
+
+def test_edit_regions_enforces_cumulative_edit_limit_and_still_hash(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    block = proposal['live_tracking']
+    block['edits'] = [{'action': 'add'}] * 50
+    with pytest.raises(LiveError, match='50'):
+        service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
+    block['edits'] = []
+    (tmp_path / 'still.png').write_bytes(b'changed')
+    with pytest.raises(LiveError, match='Einrichtungsbild'):
+        service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
+
+
+def test_region_edits_require_current_tracking_proposal_and_are_blocked_during_run(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match='Rahmenvorschlag'):
+        service.edit_regions(proposal_revision='missing', add=[[1, 2]], remove=[])
+    proposal['live_tracking'] = {'proposal_revision': 'current'}
+    service._state = 'running'
+    with pytest.raises(LiveError, match='Lauf zuerst beenden'):
+        service.edit_regions(proposal_revision='current', add=[[1, 2]], remove=[])
+    assert service._proposal == proposal
+
+
+def test_run_status_explains_recent_reader_cause(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'run'
+    service._session = SimpleNamespace(
+        latest=None, summary={}, latest_age_s=lambda: None,
+        rejection_causes=lambda: {'frames': 4, 'window_s': 10.0, 'limited': False,
+                                 'causes': [{'reason': 'leser:leerzelle_gestoert:14', 'count': 1, 'fraction': 0.25}]},
+    )
+    result = service.status()['run']['rejection_causes']
+    assert result['frames'] == 4
+    assert result['causes'][0]['cell'] == 14
+    assert result['causes'][0]['fraction'] == 0.25
+    assert 'Kratzer' in result['causes'][0]['explanation']
+
+
+def test_tracking_hint_is_available_in_small_and_full_status_and_clears(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'run'
+    hint = {'kind': 'anzeige_bewegt', 'shift_px': 19.0, 'region_shift_px': 27.0, 'rotation_deg': -2.23, 'since_s': 3.0}
+    service._session = SimpleNamespace(latest=None, summary={}, latest_age_s=lambda: None,
+                                       tracking_hint=lambda: hint)
+    for full in (False, True):
+        assert service.status(full=full)['run']['tracking_hint'] == hint
+    hint = None
+    assert service.status()['run']['tracking_hint'] is None
+
+
+@pytest.mark.parametrize('free,level', [(5_000_000_000, 'ok'), (4_999_999_999, 'warn'),
+                                       (2_000_000_000, 'warn'), (1_999_999_999, 'error')])
+def test_storage_status_uses_existing_live_filesystem_without_creating_dirs(tmp_path, free, level):
+    from types import SimpleNamespace
+
+    paths = []
+    def usage(path):
+        paths.append(path)
+        return SimpleNamespace(free=free)
+
+    service = LiveService(FakeOwner(), tmp_path / 'missing' / 'live', disk_usage=usage)
+    storage = service.status()['storage']
+    assert storage['free_bytes'] == free and storage['level'] == level
+    assert storage['reserve_bytes'] == 2_000_000_000
+    assert paths == [tmp_path]
+    assert not (tmp_path / 'missing').exists()
+
+
+def test_storage_refuses_setup_before_worker_or_state_change(tmp_path):
+    from types import SimpleNamespace
+
+    calls = []
+    service = LiveService(FakeOwner(), tmp_path / 'live', setup_runner=lambda **kw: calls.append(kw),
+                          disk_usage=lambda p: SimpleNamespace(free=1_500_000_000))
+    with pytest.raises(LiveError, match=r'1\.50 GB.*2\.00 GB'):
+        service.start_setup()
+    assert service.status()['state'] == 'idle' and calls == []
+    assert not (tmp_path / 'live').exists()
+
+
+@pytest.mark.parametrize('diagnostics,free,refused', [(False, 1_999_999_999, True),
+    (False, 2_000_000_000, False), (True, 2_599_999_999, True), (True, 2_600_000_000, False)])
+def test_storage_run_reserves_diagnostic_copy_before_any_run_output(tmp_path, monkeypatch, diagnostics, free, refused):
+    from types import SimpleNamespace
+
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._disk_usage = lambda p: SimpleNamespace(free=free)
+    if refused:
+        with pytest.raises(LiveError, match=r'GB frei.*GB benoetigt'):
+            service.start_run(reference=False, diagnostics=diagnostics)
+        assert service.status()['state'] == 'confirmed'
+        assert not list(tmp_path.glob('run-*')) and service._owner.restarts == 0
+    else:
+        try:
+            service.start_run(reference=False, diagnostics=diagnostics)
+            assert service.status()['state'] == 'running'
+        finally:
+            service.close()
+
+
+def test_storage_unknown_refuses_setup_and_run(tmp_path, monkeypatch):
+    def failed(path):
+        raise OSError('nicht lesbar')
+
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._disk_usage = failed
+    assert service.status()['storage']['level'] == 'error'
+    assert service.status()['storage']['free_bytes'] is None
+    for start in (service.start_setup, service.start_run):
+        with pytest.raises(LiveError, match='Speicherplatz.*nicht.*pruefbar'):
+            start()
+    assert not list(tmp_path.glob('run-*'))
+
+
+@pytest.mark.parametrize('state', ['running', 'stopped'])
+@pytest.mark.parametrize('linked_parent', [False, True])
+def test_cleanup_protects_running_run_and_diagnostic_copy_in_active_session(tmp_path, state, linked_parent):
+    from types import SimpleNamespace
+
+    from test_live_storage import NOW, run_tree
+
+    root = tmp_path / 'real' / 'live'
+    old = run_tree(root)
+    current = run_tree(root, run='run-02')
+    copying = run_tree(root, run='run-03')
+    configured = root
+    if linked_parent:
+        parent = tmp_path / 'linked-parent'
+        parent.symlink_to(root.parent, target_is_directory=True)
+        configured = parent / 'live'
+    service = LiveService(FakeOwner(), configured, wall=lambda: NOW)
+    service._state, service._run_dir = state, configured / current.relative_to(root)
+    service._session_dir = old.parent
+    service._diagnostic_copies = [SimpleNamespace(
+        diagnose_kopie=True, _out_dir=configured / copying.relative_to(root))]
+    # Selbst irrefuehrend alte Endmetadaten duerfen einen laufenden Lauf nicht freigeben.
+    result = service.cleanup(days=10, execute=True)
+    deleted = {entry['path'] for entry in result['entries']}
+    assert str(old) in deleted and copying.exists()
+    assert current.exists() == (state == 'running')
+    assert service._state == state
+
+
+@pytest.mark.parametrize('output', [
+    {}, {'port': ''}, {'port': '/dev/ttyUSB0'}, {'port': '/dev/serial0'},
+    {'port': '/dev/pts/fake', 'baudrate': 12345},
+    {'port': '/dev/pts/fake', 'baudrate': True},
+    {'port': '/dev/pts/fake', 'baudrate': '115200'},
+    {'port': '/dev/pts/fake', 'prefix': '+'},
+    {'port': '/dev/pts/fake', 'prefix': None}, [], 'port',
+])
+def test_output_invalid_options_rejected_before_start(tmp_path, output):
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Ausgabe'):
+        service.start_run(output=output)
+    assert service.status()['state'] == 'idle'
+    assert not list(tmp_path.iterdir())
+
+
+def test_output_reserved_alias_rejected(tmp_path):
+    alias = tmp_path / 'reference-alias'
+    alias.symlink_to('/dev/ttyUSB0')
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Ausgabe'):
+        service.start_run(output={'port': str(alias)})
+
+
+@pytest.mark.parametrize('schedule', [None, '2:20'])
+def test_output_reference_port_collision_rejected(tmp_path, monkeypatch, schedule):
+    monkeypatch.setattr('dispread.live.setup.SERIAL_PORT', '/dev/pts/reference')
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Referenz'):
+        service.start_run(output={'port': '/dev/pts/reference'}, reference=True, norm_schedule=schedule)
+
+
+def test_output_error_visible_in_service_status_and_run_continues(tmp_path, monkeypatch):
+    from dotmatrix_helpers import embed
+    from test_live_output import FakeSerial
+    from test_live_session import _session
+
+    class Disconnected(FakeSerial):
+        def write(self, data):
+            raise OSError('output disconnected')
+
+    monkeypatch.setattr('serial.Serial', Disconnected)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    monkeypatch.setattr('dispread.live.service.LiveSession',
+                        lambda owner, profile, config, out_dir, **kw:
+                        _session(tmp_path, [embed('+ 1.2345 ')] * 2, out_dir=out_dir, **kw))
+    try:
+        service.start_run(reference=False, output={'port': '/fake/output', 'baudrate': 9600, 'prefix': '#'})
+        deadline = time.monotonic() + 5
+        while not service.status()['run']['output']['errors']:
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        status = service.status()
+        assert status['state'] == 'running'
+        assert status['run']['output']['baudrate'] == 9600
+        assert 'disconnected' in status['run']['output']['first_error']
+        assert status['run']['output']['sent'] == 0
+    finally:
+        service.stop_run()
+    assert service.status()['state'] == 'stopped'
+
+
+def test_output_open_failure_rejects_service_start(tmp_path, monkeypatch):
+    from test_live_session import _session
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    monkeypatch.setattr('dispread.live.service.LiveSession',
+                        lambda owner, profile, config, out_dir, **kw: _session(tmp_path, [], out_dir=out_dir, **kw))
+    with pytest.raises(LiveError, match='Ausgabe nicht gestartet'):
+        service.start_run(reference=False, output={'port': str(tmp_path / 'missing')})
+    assert service.status()['state'] == 'confirmed'
+    assert service.status()['run'] is None

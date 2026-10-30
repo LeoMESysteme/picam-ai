@@ -8,13 +8,11 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
-| [OQ-44](#oq-44) | Jetzt | offen | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
-| [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-47](#oq-47) | Jetzt | offen | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
 | [OQ-01](#oq-01) | Jetzt | teilweise geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-06](#oq-06) | Jetzt | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
-| [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
+| [OQ-40](#oq-40) | Jetzt | weitgehend geklärt | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
 | [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
 | [OQ-04](#oq-04) | — | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
@@ -53,6 +51,9 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-16](#oq-16) | — | geklärt | Vollständigkeit des lokalen Planungsstands |
 | [OQ-31](#oq-31) | — | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
 | [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
+| [OQ-44](#oq-44) | — | geklärt | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
+| [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
+| [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
 
 <!-- OQ-INDEX:END -->
 
@@ -193,8 +194,16 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   wurde am 2026-10-28 direkt geprüft; S. 118–121 belegen den Zahlenimport.
   Damit entfällt die reine Beschaffungssperre für einen Prototyp.
   Empfang in 2.01 Pro, Ungültigbehandlung und Zeitachse bleiben offen;
-  kein Format ist dadurch bereits implementiert oder abgenommen.
+  keine Abnahme ist dadurch erfolgt.
   [Bewertung und nächste Schritte](GSVMULTI_PROTOCOL.md).
+* **Prototyp gebaut (2026-10-28):** P4-1 `UserDefinedFormatter` und P4-2
+  Demo-Sender sind mit pty/Fakes geprüft, ungeprüft am Windows-PC und nicht
+  freigegeben. Empfang, Ungültigwirkung und Zeitachse bleiben offen;
+  [Testanleitung](GSVMULTI_PROTOCOL.md#windows-test).
+* **Live-Prototyp gebaut (2026-10-30):** P4-3 ergänzt Opt-in-Ausgabe nach
+  allen Sperren, begrenzten Senderthread und Tx-Audit; pty/Fakes geprüft,
+  Windows-Abnahme weiterhin offen. Öffnungsfehler lehnt Start ab, spätere
+  Fehler sind im Status sichtbar; keine Messfreigabe.
 * **Korrektur der Abrufaussage (2026-09-22):** Die bisherige Formulierung
   „`me-systeme.de` blockt automatische Abrufe mit HTTP 403" ist **zu pauschal**.
   Gemessen am 2026-09-22:
@@ -1921,7 +1930,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-40 — Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen
 
-* **Status:** offen · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
+* **Status:** weitgehend geklärt (2026-10-30: 800 ms aus 74 min Live-Daten, Stundenmessung offen) · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
   · **Zuständig:** Labor
 * **Frage:** Ab welchem Telegrammabstand gilt ein Lauf gleicher Werte als
   nicht mehr vertrauenswürdig?
@@ -1968,6 +1977,41 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `sensor_sequence` lückenlos. Die folgende 15-min-Sitzung blieb ohne
   Verwurf. Der Schreibstau tritt also auch ohne erzwungene Last auf; für
   3,5-min-Ernten unkritisch, für die Stundenmessung zu beachten.
+* **Nachtrag 2026-10-30 — 13 Live-Läufe (23./28.10.), Kamera und Leser
+  laufend:** 7 813 Telegramme über 4 426 s (≈ 74 min, längster Lauf 990 s).
+  Pausen, die die Werkbank selbst auslöst (Werteplan und Vorprüfung, STOP
+  −100 ms bis START +1 200 ms), sind getrennt gezählt.
+  * **Ungestörter Strom, 7 245 Abstände:** min 506,0, p50 533,1, p95 535,3,
+    p99 538,7, max 561,0 ms. Über 600 ms: **0**. Fehlerhafte Telegramme:
+    0, `parse_errors` und `dropped_oldest` überall 0.
+  * Die extremen Werte treten als Paar auf: 561 + 506 = 2 Perioden. Das
+    Gerät taktet also gleichmäßig weiter, nur ein Stempel auf dem Pi kommt
+    bis +27,4 ms später.
+  * **Pausen, 555 Abstände:** 153 Pausen von 2 133, 2 666 bzw. 3 199 ms
+    (4–6 Perioden). Zwischen 600 und 2 100 ms liegt nichts. Direkt nach
+    START kommen 27 Abstände von 422–436 ms, offenbar setzt das Gerät seine
+    Taktphase neu. Sie liegen im gesperrten Fenster aus Pause und 695 ms
+    Schutzzeit.
+  * **Folgerung:** Ein einzelner Ausfall ergibt mindestens 2 × 533,3 −
+    27,4 ≈ 1 039 ms. Die bisherige Grenze von 1 000 ms in
+    `reference_eval.MAX_GAP_NS` und im Lückenzähler des Rekorders erkennt
+    ihn also nur mit ≈ 39 ms Abstand. **Umgesetzt 2026-10-30:** 800 ms,
+    gemeinsame Konstante. Das lässt nach beiden Seiten ≈ 240 ms Abstand.
+    Die Auswertung aller 13 Läufe ist bytegleich zu vorher; ein Test deckt
+    den einzelnen Ausfall ab. Für `gate-label.py` bestätigt das die
+    vorläufigen 300/800 ms der Ernte.
+  * **Weiter offen:**
+    * eine Stundenmessung;
+    * ein absichtlich erzeugter Ausfall als Gegenprobe;
+    * CPU- und USB-Last (wird nicht aufgezeichnet);
+    * Bruchstücke beim Wiederanlauf: Der Rekorder verwirft sie ohne
+      Protokoll.
+
+    Ohne Ausfall in 7 245 Abständen liegt die Ausfallrate mit 95 % unter
+    ≈ 4·10⁻⁴ je Telegramm (Dreierregel). Die Grenze gilt nur für die
+    Datenrate 533 ms. Ändert sich die Rate, muss sie neu bestimmt werden.
+    Skript: `oq40_telegramm_luecken.py` (Auswertung im Job-Verzeichnis,
+    nicht im Repo).
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans
@@ -2108,8 +2152,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-44 — Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen?
 
-* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
-* **Befund:** `LiveService.start_run` kennzeichnet das Übergehen der
+* **Status:** geklärt · 2026-10-23 · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Befund bei Eröffnung:** `LiveService.start_run` kennzeichnet das Übergehen der
   Lesesperre mit `TESTLAUF.json` und `test_run` in `session.json`.
   `LiveSession.step` schreibt jedoch den unveränderten Pipeline-Datensatz
   nach `records.jsonl`, bevor es Leser-Vermutungen ergänzt. Werden spätere
@@ -2117,7 +2161,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   den Testlauf-Hinweis, unterdrückt einen frischen gültigen Datensatz aber
   nicht. Eine technisch erzwungene Aussage „Testlauf gibt nie Werte frei“
   ist damit nicht belegt.
-* **Umgang bis zur Klärung:** Testlaufdaten nicht für Messungen oder als
+* **Bisheriger Umgang bis zur Klärung:** Testlaufdaten nicht für Messungen oder als
   Freigabenachweis verwenden. `records.jsonl` immer zusammen mit den
   Laufmarkierungen lesen; ein einzelner `VALID`-Datensatz hebt die
   Lesesperre der Einrichtung nicht auf. Keine Verhaltensänderung während
@@ -2127,8 +2171,28 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   erhaltenen Datensatzstatus braucht; anschließend die gewählte Sicherung
   mit einem Testlauf aus erst unlesbaren und später lesbaren Bildern
   prüfen. Kein neuer Status ohne Prüfung der bestehenden Verträge.
-* **Antwort landet in:** `src/dispread/live/session.py`,
-  `src/dispread/live/service.py`, zugehörigen Live-Tests und
+* **Antwort (2026-10-23):** Ein Testlauf zeigt Vermutungen und gibt niemals
+  einen Wert frei. `LiveSession.step()` ersetzt jeden vom Gate als `VALID`
+  bewerteten Record **vor dem Audit** durch `UNREADABLE`, `value=None` und
+  den ersten Ablehnungsgrund `testlauf_keine_freigabe`; weitere Gründe bleiben
+  erhalten. Der unterdrückte Record behält `raw_text`, `frames_confirmed`
+  und `confirmation_span_ns` der Ablesung als Diagnose, wie andere
+  `UNREADABLE`-Records, aber niemals einen Zahlenwert in `value`.
+  Es gibt keinen neuen Vertragsstatus. Die getrennte
+  Leser-Vermutung zeigt die ursprüngliche Gate-Entscheidung als Diagnose
+  (`gate_status`); sie ist kein freigegebener Wert. `session.json` zählt
+  erfolgreich auditierte Unterdrückungen als `summary.testlauf_unterdrueckt`.
+  Die Seite zeigt Testbanner und Vermutung, niemals einen Testlaufwert als
+  gültig. Normale Läufe behalten ihre bisherigen Auditbytes und Statuswerte.
+  Tests mit zunächst unlesbaren und später lesbaren Bildern prüfen Audit,
+  Status, Ausgabegrenze und Zähler. Der Referenzabgleich lehnt markierte
+  Testläufe weiterhin ab und zählt unterdrückte Records auch ohne
+  Laufmarkierung nicht als `VALID`. Historische Testläufe mit `VALID` bleiben
+  Testdaten und sind keine Messnachweise.
+* **Antwort umgesetzt in:** `src/dispread/live/session.py`,
+  `src/dispread/workbench/static/live.js`, `src/dispread/workbench/fields.py`,
+  `tests/test_live_session.py`, `tests/test_live_service.py`,
+  `tests/test_live_reference_eval.py`, `tests/live_client.test.mjs` und
   [Live-Anleitung](anleitung/10-kamera-livevorschau.md).
 
 ---
@@ -2137,7 +2201,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-45 — Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet?
 
-* **Status:** offen · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
+* **Status:** geklärt am 2026-10-23 · erkannt 2026-10-21 beim seitenweisen Wiki-Abgleich
 * **Befund:** `Timestamp.now_monotonic()` in `src/dispread/records.py`
   liest `time.monotonic_ns()`, setzt aber `base=SENSOR_BOOTTIME`.
   MONOTONIC und BOOTTIME dürfen nicht ungeprüft gleichgesetzt werden;
@@ -2147,24 +2211,99 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   V4L2-Livebildern, nicht allgemein bei Replay, synthetischen Bildern
   oder BOOTTIME-Aufnahmen. Das sind Bezeichnungslücken im Code, keine
   neu gemessenen Abweichungen eines Hardwarelaufs.
-* **Umgang bis zur Klärung:** Aus diesen Marken keinen belegten
+* **Umgang bis zur Klärung (historisch):** Aus diesen Marken keinen belegten
   BOOTTIME-Zeitbezug ableiten. Insbesondere bleiben synthetische
   Aufnahmezeiten ungeeignet für Latenz- und Synchronitätsaussagen.
   Der Live-Vergleich von V4L2-Aufnahmezeiten mit seriellen Referenzzeiten
   benötigt weiterhin den explizit gemessenen Versatz aus `session.json`.
-* **Klärung:** Aufrufer und Zeitdomänen getrennt erfassen, eine passende
+* **Klärung (durchgeführt):** Aufrufer und Zeitdomänen getrennt erfassen, eine passende
   Bezeichnung beziehungsweise explizite Umrechnung wählen und den
   Unterschied nach einem simulierten Suspend absichern. Das bestehende
   Verhalten nicht allein durch Umetikettieren der Dokumentation freigeben.
-* **Antwort landet in:** `src/dispread/records.py`,
-  `src/dispread/pipeline.py`, zugehörigen Zeitbasis- und Pipeline-Tests
+* **Antwort (2026-10-23):** `TimeBaseKind.HOST_MONOTONIC = "host_monotonic"`
+  bezeichnet Host-CLOCK_MONOTONIC bei der Verarbeitung, niemals eine
+  Aufnahmezeit. `Timestamp.now_monotonic()` und jede Pipeline-Ergebniszeit
+  verwenden diese Basis; `HOST_DEQUEUE` als Semantik bleibt bestehen.
+  Die Aufnahmezeit wird unverändert übernommen. `carries_time_information`
+  ist für die reale Host-Uhr wahr; daraus folgt keine Latenzaussage über
+  synthetische, Datei- oder Replay-Aufnahmen. `to_boottime_ns` verwendet für
+  HOST_MONOTONIC und V4L2_MONOTONIC denselben Sessionversatz und lehnt
+  fehlende Versätze oder Suspend ab. SENSOR_BOOTTIME bleibt unverändert.
+  Altdateien bleiben ohne Migration mit ihren bisherigen Ergebniszeitbasen
+  lesbar. Kein Verbraucher vergleicht Ergebnis- und Aufnahmezeit direkt;
+  Referenzvergleiche rechnen Aufnahmezeiten explizit nach BOOTTIME um.
+* **Antwort umgesetzt in:** `src/dispread/records.py`,
+  `src/dispread/pipeline.py`, `tests/test_records.py`,
+  `tests/test_live_tracking.py`, `tests/test_live_session.py`
   sowie [TIMING.md](TIMING.md).
+
+<span id="oq-46"></span>
+
+## OQ-46 — Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung?
+
+* **Status:** geklärt · **Erkannt:** 2026-10-28 · **Geklärt:** 2026-10-28 · **Zuständig:** Entwicklung / Labor
+* **Blockierte:** Wirksamkeitsnachweis R13-19b am Live-Stoß vom 28.10.; keine Freigabe.
+* **Befund:** Offline auf allen 208 Diagnosebildern von
+  `live/live-20261028T110248Z/run-01`: 99 zweite Feinversuche, kein
+  zusätzlicher Fit (98 Residuen-, 1 Streuungsablehnung).
+  Die Grobschätzung findet ungefähr (+11, −4,4) px;
+  bei `0012.png` überschreitet ein Inlier mit 0,655465 px die unveränderte
+  Maximumgrenze 0,65 px. Eine korrekte Gesamtbewegung allein reicht nicht.
+* **Antwort (2026-10-28):** Kleine reale Maßstabsänderungen erzeugen am
+  starren Fit ortsabhängige Residuen. Die unabhängige Gehäusemessung
+  zeigt etwa 1,0008…1,0015 bzw. 0,9973…0,9984. Entscheidung Leonhard:
+  ausschließlich im zweiten Versuch gleichförmigen Maßstab 0,995…1,005
+  erlauben; alle anderen Grenzen unverändert. R13-19c gewinnt offline
+  98/99 zweite Versuche im ersten Lauf (107→205/208 Fits) und 20/29 im
+  Bewegungslauf (3→23/152), 0/196 Fehllesungen, frühere Erfolge und
+  DEV 568/568 bitgleich. Verbleibende lokale Fehler werden weiter
+  abgelehnt. Der gemeinsame Rahmen-Bias bleibt: bis 5,220583 px im
+  konservativen zweiten Fixture-Raster. Median 16–17 ms statt 49 ms,
+  Ziel ≤10 ms verfehlt. Klärung der Ursache ist keine neue Abnahme.
+  Review 2026-10-28: Auch bei verdeckter oder leerer Anzeige läuft die
+  Grobschätzung bei jeder Ablehnung (etwa 25 ms je Bild), obwohl der zweite
+  Versuch dann nicht greift; das kostet Bildrate, keine Sicherheit.
+  Möglicher nächster Schritt: Grobschätzung kleiner/billiger rechnen.
+* **Nachtrag R13-23, Reviewkorrektur (2026-10-30):** Faktor 4 bleibt,
+  eigene Phasenkorrelation/Spektralcache entfernt; wieder OpenCV. Das
+  Grob-Gate erhält 6 px Fehlertoleranz (gemessener maximaler Vektorfehler
+  4,956 px plus Reserve); der zweite Feinversuch erzwingt selbst weiterhin
+  20 px/3°/±0,5 %. Kein fester Halbpixel-/Skalierungsversatz als einfache
+  Fehlerursache belegt. Schutzband +12 px, kleine Grobausschnitte sauber
+  deaktiviert. Reproduzierter Review-Sweep je 285 Fälle: zuerst 9/5 nur alt,
+  jetzt **0/0 nur alt, 76/54 nur neu, 0 falsche Quads >1 px**. DEV 568/568
+  mit `coarse_retries=0` ist kein Grobnachweis. Keine Cache-Ersparnis in
+  der Lösung. Live 205/208 und 23/152 Fits, 0/196 Fehllesungen
+  unverändert. Drei AB/BA-Wiederholungen je einem/vier Threads: zweiter
+  Durchgang Median 7,255–7,825 ms, gepaart neu/HEAD 0,473–0,533; Ziel
+  ≤10 ms hier erreicht, keine Lastgarantie. Details:
+  [Validierung](VALIDATION.md#r13-23-grobsuche-2026-10-30),
+  [Laborjournal](lab_journal.md#r13-23-grobsuche).
+* **Antwort umgesetzt in:** `src/dispread/live/frame_tracking.py`,
+  `tests/test_frame_tracking.py`, `scripts/r13-coarse-eval.py`,
+  `scripts/r13-coarse-sweep.py`,
+  [Validierung](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28)
+  und [Laborjournal](lab_journal.md#r13-19c-aehnlichkeit).
 
 <span id="oq-47"></span>
 
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
+* **Live-Prototyp (2026-10-30):** P4-3 hat höchstens einen offenen
+  Senderauftrag, verwirft neue Frames bei Stau mit Tx-Beleg und liefert sie
+  nicht nach. Begonnene Telegramme werden mit 1 s Gesamtfrist vervollständigt,
+  ohne Pufferverwerfen. Schreib-/Threadfehler sperren die Ausgabe bis zum
+  nächsten Lauf; keine automatische
+  Wiederverbindung. Nur pty/Fakes geprüft, tatsächlicher Transport,
+  Treiberpuffer und Altwertanzeige bleiben offen.
+
 * **Status:** offen · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
+* **Prototyp gebaut (2026-10-28):** Der eigenständige Demo-Sender nutzt
+  `UserDefinedFormatter` und JSONL-Belege. Reviewkorrektur 2026-10-30:
+  vollständige Writes mit 1 s Gesamtfrist, bei Stau nur den nächsten Frame
+  verwerfen; Fehler beendet den Lauf, kein Pufferverwerfen/Aufholburst. Nur pty/Fakes
+  geprüft. Treiberpuffer, Empfang und Altwertverhalten am Windows-PC bleiben
+  nachzuweisen; [Ablauf und Grenzen](GSVMULTI_PROTOCOL.md#windows-test).
 * **Befund:** USB-UART und Raw TCP mit Windows-VCOM sind plausible Wege.
   Ein konkreter Ausgang samt Windows-Port, Treiber/Lizenz, Pufferverhalten
   und Wiederanlauf ist für dieses Projekt noch nicht ausgewählt oder

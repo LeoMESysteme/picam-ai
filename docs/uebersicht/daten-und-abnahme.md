@@ -58,10 +58,13 @@ Bei großen Wertwechseln ist ein Nachführverlust belegt
 deshalb getrennt ausgewertet werden.
 
 Ein Lauf mit <code>TESTLAUF.json</code> liefert keine freigegebenen
-Messwerte. Seine <code>records.jsonl</code> enthält Pipelineentscheidungen;
-die Laufmarkierung in <code>session.json</code> ist zwingend mit auszuwerten,
-auch bei einzelnen <code>valid</code>-Records oder einer VALID-Anzeige
-in der Oberfläche ([OQ-44](../open-questions.md#oq-44)). Läufe mit angepasster Toleranz
+Messwerte. Die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit auf
+<code>UNREADABLE</code>, mit <code>value=null</code> und dem ersten
+Ablehnungsgrund <code>testlauf_keine_freigabe</code>. Die Oberfläche zeigt
+nur die getrennte Leser-Vermutung als Diagnose
+([OQ-44](../open-questions.md#oq-44)). Historische Testläufe können noch
+<code>valid</code>-Records enthalten; auch sie bleiben für Messungen gesperrt
+und sind mit der Laufmarkierung auszuwerten. Läufe mit angepasster Toleranz
 tragen <code>reader_tolerance</code> und bleiben als nicht validiert markiert.
 Diese Gruppen getrennt von strengen Läufen berichten.
 

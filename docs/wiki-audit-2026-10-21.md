@@ -98,11 +98,19 @@ Wiki zu den aus `docs-site/api/` stammenden Seiten.
   widerlegt eine ausreichende Verfügbarkeit bei Faktor 2 und 5. Eine
   vom Zifferninhalt unabhängige Nachführung bleibt zu entwickeln.
 * [OQ-44](open-questions.md#oq-44): Testlaufmarkierungen und Banner
-  verhindern technisch weder gültige Audit-Datensätze noch deren Anzeige.
-  Solche Daten sind nicht für Messungen freigegeben.
+  verhinderten beim Abgleich am 2026-10-21 technisch weder gültige
+  Audit-Datensätze noch deren Anzeige. **Nachtrag 2026-10-23:** Die
+  Live-Sitzung setzt jede Gate-Freigabe vor dem Test-Audit auf `UNREADABLE`
+  mit `value=None` und `testlauf_keine_freigabe`; die Seite zeigt nur die
+  Leser-Vermutung. Historische Testlaufdaten bleiben für Messungen gesperrt.
 * [OQ-45](open-questions.md#oq-45): MONOTONIC-Verarbeitungsmarken sind
   teilweise mit einer unpassenden Zeitbasis bezeichnet. Keine allgemeine
   Aussage über Aufnahme-/Ergebniszeitdifferenzen daraus ableiten.
+  **Nachtrag 2026-10-23:** `Timestamp.now_monotonic()` und jede
+  Pipeline-Ergebniszeit verwenden `HOST_MONOTONIC` aus
+  `time.monotonic_ns()`; die Aufnahmezeit behält ihre Quellbasis. Nach
+  BOOTTIME führt nur `to_boottime_ns` mit Sessionversatz und
+  Suspend-Prüfung. Alte Auditdateien behalten ihre bisherigen Labels.
 * GSVmulti ([OQ-07](open-questions.md#oq-07)), weitere Geräte/Lichtquellen,
   Toleranzvalidierung und Audit-Aufbewahrung bleiben offen.
 

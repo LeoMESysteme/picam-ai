@@ -19,6 +19,11 @@ _CAMERA = CameraSettings(model="logitech_streamcam", usb_id="046d:0893", size=(8
                                    "white_balance_temperature": 4600, "gain": 10})
 
 
+@pytest.fixture(autouse=True)
+def diagnostic_memory_available(monkeypatch):
+    monkeypatch.setattr('dispread.live.diagnostics.read_mem_available', lambda: 2_000_000_000)
+
+
 class FakeOwner:
     source_id = "fake"
 
@@ -65,12 +70,31 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     profile_path, config = _files(tmp_path, reference_ok=reference_ok)
     offsets = iter(range(1000, 2000))
     return LiveSession(
-        FakeOwner(images), profile_path, config, tmp_path / "run",
+        FakeOwner(images), profile_path, config, kw.pop("out_dir", tmp_path / "run"),
         reader_factory=lambda _p, _s, **kw: synthetic_reader(),
         locator_factory=lambda _ref, quad: ManualRoiLocator(tuple(tuple(p) for p in quad)),
         clock=ClockLog(measure=lambda: next(offsets), monotonic_ns=lambda: 0),
         **kw,
     )
+
+
+@pytest.mark.parametrize("markers", [
+    {"offline": True}, {"confirmed_by": "offline-auswertung"},
+])
+def test_offline_profile_refused_before_reader_or_run_output(tmp_path, markers):
+    path, config = _files(tmp_path)
+    data = json.loads(path.read_text())
+    data.update(markers)
+    path.write_text(json.dumps(data))
+
+    def forbidden_reader(*args, **kwargs):
+        pytest.fail("Offline-Profil muss vor dem Leseraufbau abgewiesen werden")
+
+    out = tmp_path / "run"
+    session = LiveSession(FakeOwner([]), path, config, out, reader_factory=forbidden_reader)
+    with pytest.raises(StartRefused, match="Offline-Profil"):
+        session.start()
+    assert not out.exists()
 
 
 def test_new_value_is_transition_then_valid_and_audited(tmp_path):
@@ -81,6 +105,8 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert second.status is ValueStatus.VALID and second.value == 1.2345
     assert second.capture_timestamp.base is TimeBaseKind.V4L2_MONOTONIC
     assert second.capture_timestamp.value_ns == 2 * 33_333_333
+    assert first.result_timestamp.base.value == "host_monotonic"
+    assert second.result_timestamp.base.value == "host_monotonic"
     assert second.frames_confirmed == 2
     assert second.confirmation_span_ns == 33_333_333
     summary = session.stop()
@@ -99,6 +125,81 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert summary["tolerance_frames"] == 0
 
 
+def test_blocking_stream_ends_live_run_and_persists_error_without_new_valid(tmp_path, monkeypatch):
+    from test_live_camera import FakeSource, StallingSource
+
+    from dispread.live.camera import CameraOwner
+    from dispread.live.service import LiveService
+
+    class ImageSource(StallingSource):
+        def frames(self):
+            for frame in super().frames():
+                yield Frame(frame_sequence=frame.frame_sequence, image=embed('+ 1.2345 '),
+                            capture_timestamp=frame.capture_timestamp, source_id='fake')
+
+    source = ImageSource()
+    owner = CameraOwner(lambda: source)
+    now = [100.0]
+    session = _session(tmp_path, [], monotonic=lambda: now[0])
+    session._owner = owner
+    session.start()
+    service = LiveService(owner, tmp_path / 'service', diagnostic_staging_root=tmp_path / 'staging')
+    service._session, service._run_dir, service._state = session, tmp_path / 'run', 'running'
+    stop = threading.Event()
+    finished = threading.Event()
+
+    def run():
+        try:
+            service._run_worker(session, stop)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=run)
+    owner.start()
+    try:
+        assert session.step().status is ValueStatus.TRANSITION
+        source.next_frame.set()
+        assert session.step().status is ValueStatus.VALID
+        assert source.blocked.wait(1.0)
+        before = session.records_path.read_bytes()
+        now[0] = 100.6
+        during = service.status()
+        assert during['state'] == 'running'
+        assert during['run']['latest_age_s'] > 0.5  # bestehende STALE-Anzeige
+        assert session.records_path.read_bytes() == before
+        monkeypatch.setattr('dispread.live.camera.STREAM_STALL_TIMEOUT_S', 0.05)
+        worker.start()
+        assert finished.wait(5.0), 'Lauf wartet auf blockierendes read()'
+        worker.join(1.0)
+        assert not worker.is_alive(), 'Lauf wartet auf blockierendes read()'
+        status = service.status()
+        assert status['state'] == 'stopped'
+        assert 'Streamstillstand' in status['error']
+        assert status['camera']['running'] is True
+        assert status['camera']['stalled'] is True
+        saved = json.loads(session.session_path.read_text())
+        assert 'Streamstillstand' in saved['summary']['camera_error']
+        assert 'Streamstillstand' in saved['summary']['end_reason']
+        assert saved['ended_at_utc']
+        assert session.records_path.read_bytes() == before  # kein VALID in der Luecke
+        assert owner.stop(timeout=0.02) is False
+        source.release.set()
+        assert owner.stop(timeout=1.0) is True
+        owner.restart(lambda: FakeSource([1], endless=True))
+        assert owner.status()['stalled'] is False
+        assert session.step() is None
+        assert service.status()['error'] == status['error']
+        assert json.loads(session.session_path.read_text()) == saved
+    finally:
+        stop.set()
+        source.next_frame.set()
+        source.release.set()
+        if worker.ident is not None:
+            worker.join(1.0)
+        session.stop()
+        owner.stop(timeout=1.0)
+
+
 def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
     blank = embed("+ 1.2345 ") * 0 + 200
     session = _session(tmp_path, [blank])
@@ -107,6 +208,213 @@ def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
     assert record.status is ValueStatus.UNREADABLE and record.value is None and record.reject_reasons
     session.stop()
     assert json.loads(session.records_path.read_text()) == record.to_dict()
+
+
+@pytest.mark.parametrize('test_mode', [False, True])
+def test_reconfiguration_blocks_only_valid_captures_before_audit(tmp_path, monkeypatch, test_mode):
+    from dataclasses import replace
+
+    class Recorder:
+        reconfiguration_enabled = True
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {'enabled': True}
+
+        def is_reconfiguring(self, capture_boottime_ns):
+            # BOOTTIME: Sessionversatz 1000 ns muss beruecksichtigt werden.
+            return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 5 * 33_333_333 + 1000
+
+    image = embed('+ 1.2345 ')
+    session = _session(tmp_path, [image, image, image, image * 0 + 200, image, image],
+                       reference_recorder=Recorder(), test_run={} if test_mode else None)
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    pipeline_records, audited = [], []
+    process, emit = session._pipeline.process, session._sink.emit
+
+    def observe(frame, **kw):
+        record = process(frame, **kw)
+        pipeline_records.append(record)
+        return record
+
+    def audit(record):
+        audited.append(record)
+        return emit(record)
+
+    monkeypatch.setattr(session._pipeline, 'process', observe)
+    monkeypatch.setattr(session._sink, 'emit', audit)
+    try:
+        records = [session.step() for _ in range(6)]
+    finally:
+        summary = session.stop()
+    assert audited == records
+    assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
+        r.to_dict() for r in records
+    ]
+    if test_mode:
+        assert all(r.status is ValueStatus.UNREADABLE for r in records)
+        assert records[1].reject_reasons == ('testlauf_keine_freigabe',)
+        assert summary['testlauf_unterdrueckt'] == 5
+        assert summary['reconfiguration_suppressed'] == 0
+    else:
+        assert [r.status for r in records] == [
+            ValueStatus.VALID, ValueStatus.TRANSITION, ValueStatus.TRANSITION,
+            ValueStatus.UNREADABLE, ValueStatus.VALID, ValueStatus.VALID,
+        ]
+        for i in (1, 2):
+            assert records[i].reject_reasons == ('geraet_umkonfiguriert',)
+            assert records[i].value is None
+            assert records[i].raw_text == pipeline_records[i].raw_text
+        assert records[3:] == pipeline_records[3:]
+        assert records[0] == pipeline_records[0]  # vor Oeffnung, auch spaeter verarbeitet
+        assert summary['reconfiguration_suppressed'] == 2
+    assert json.loads(session.session_path.read_text())['summary'] == summary
+
+
+@pytest.mark.parametrize('marker', [None, {'testlauf': True}, {}])
+def test_later_readable_frames_are_suppressed_only_in_test_run(tmp_path, monkeypatch, marker):
+    from unittest.mock import Mock
+
+    image = embed('+ 1.2345 ')
+    session = _session(tmp_path, [image * 0 + 200, image, image, image], test_run=marker)
+    session.start()
+    # Live nutzt process(), das auch mit angehaengtem Sink nichts ausgibt.
+    assert session._pipeline.sinks == []
+    output = Mock()
+    session._pipeline.sinks.append(output)
+    pipeline_records = []
+    process = session._pipeline.process
+
+    def observe(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline_records.append(record)
+        return record
+
+    monkeypatch.setattr(session._pipeline, 'process', observe)
+    audited = []
+    emit = session._sink.emit
+
+    def audit(record):
+        audited.append(record)
+        return emit(record)
+
+    monkeypatch.setattr(session._sink, 'emit', audit)
+    try:
+        records = [session.step() for _ in range(4)]
+        assert [r.status for r in pipeline_records] == [
+            ValueStatus.UNREADABLE, ValueStatus.TRANSITION, ValueStatus.VALID, ValueStatus.VALID,
+        ]
+        if marker is not None:
+            assert all(r.status is not ValueStatus.VALID and r.value is None for r in audited)
+            assert all(r.status is ValueStatus.UNREADABLE
+                       and r.reject_reasons[0] == 'testlauf_keine_freigabe' for r in records[2:])
+            assert session.latest is records[-1]
+            assert session.latest_guess['gate_status'] == 'valid'
+            assert session.latest_guess['text'] == '+ 1.2345 '
+            assert records[2].raw_text == pipeline_records[2].raw_text
+            assert records[2].frames_confirmed == 2
+            assert records[2].confirmation_span_ns == 33_333_333
+        else:
+            assert records == pipeline_records
+            # Exakt die bisherigen JSONL-Bytes, einschliesslich aller Zeitmarken.
+            expected = ''.join(json.dumps(r.to_dict(), ensure_ascii=False, separators=(',', ':')) + '\n'
+                               for r in pipeline_records).encode('utf-8')
+            assert session.records_path.read_bytes() == expected
+        assert records[:2] == pipeline_records[:2]
+        output.emit.assert_not_called()
+    finally:
+        summary = session.stop()
+    if marker is not None:
+        assert summary['by_status'] == {'unreadable': 3, 'transition': 1}
+        assert summary['testlauf_unterdrueckt'] == 2
+        assert json.loads(session.session_path.read_text())['summary']['testlauf_unterdrueckt'] == 2
+    else:
+        assert 'testlauf_unterdrueckt' not in summary
+    assert [json.loads(line) for line in session.records_path.read_text().splitlines()] == [
+        r.to_dict() for r in records
+    ]
+
+
+def test_reconfiguration_checks_fresh_offset_before_audit_after_suspend(tmp_path):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    # Nach Suspend ist BOOTTIME eine Sekunde weiter, MONOTONIC nicht.
+    offset = [1000]
+    queried = []
+    def is_reconfiguring(t):
+        queried.append(t)
+        return 1_000_000_000 <= t < 2_000_000_000
+    recorder = SimpleNamespace(reconfiguration_enabled=True, start=lambda: None, stop=lambda: None,
+                               status=lambda: {'enabled': True}, is_reconfiguring=is_reconfiguring)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], reference_recorder=recorder)
+    session._clock = ClockLog(measure=lambda: offset[0], monotonic_ns=lambda: 0)
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    offset[0] += 1_000_000_000
+    try:
+        record = session.step()
+    finally:
+        session.stop()
+    assert record.status is ValueStatus.TRANSITION
+    assert record.reject_reasons == ('geraet_umkonfiguriert',)
+    assert not queried  # Umrechnung muss den neuen Suspend bereits ablehnen.
+    assert json.loads(session.records_path.read_text()) == record.to_dict()
+
+
+def test_suppressed_gate_result_remains_diagnostic_without_cell_details(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, test_run={'testlauf': True})
+    session.start()
+    reader = session._pipeline.reader
+    read = reader.read
+    monkeypatch.setattr(reader, 'read', lambda *args: replace(read(*args), diagnostics={}))
+    try:
+        session.step()
+        record = session.step()
+        assert record.status is ValueStatus.UNREADABLE and record.value is None
+        assert session.latest_guess['gate_status'] == 'valid'
+        assert session.latest_guess['text'] == record.raw_text
+        assert 'gate_status' not in session.records_path.read_text()
+    finally:
+        session.stop()
+
+
+@pytest.mark.parametrize('without_cells', [False, True])
+def test_suppressed_guess_is_complete_when_published(tmp_path, monkeypatch, without_cells):
+    from dataclasses import replace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, test_run={'testlauf': True})
+    session.start()
+    if without_cells:
+        read = session._pipeline.reader.read
+        monkeypatch.setattr(session._pipeline.reader, 'read', lambda *args: replace(read(*args), diagnostics={}))
+    session.step()
+    publications = []
+    set_attribute = LiveSession.__setattr__
+
+    def observe_publication(self, name, value):
+        set_attribute(self, name, value)
+        if self is session and name == 'latest_guess':
+            # Momentaufnahme wie beim gleichzeitigen Lesen durch status().
+            publications.append(None if self.latest_guess is None else dict(self.latest_guess))
+
+    monkeypatch.setattr(LiveSession, '__setattr__', observe_publication)
+    try:
+        record = session.step()
+        assert publications == [{
+            'text': record.raw_text if without_cells else '+ 1.2345 ',
+            'uncertain': [], 'reject_reason': None, 'gate_status': 'valid',
+        }]
+    finally:
+        session.stop()
 
 
 def test_start_refused_when_reference_still_changed(tmp_path):
@@ -199,6 +507,21 @@ def test_start_ignores_camera_frames_from_before_start(tmp_path):
     session.start()
     assert session.step().frame_sequence == 2
     assert session.stop()["frames_skipped"] == 0
+
+
+def test_first_frame_after_camera_restart_is_not_counted_as_skipped(tmp_path):
+    # Kameraneustart (R13-22) leert latest(), die Bildnummer laeuft weiter.
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 3)
+    session._owner.items = [(seq + 44_700, img) for seq, img in session._owner.items]
+    session._owner.latest = lambda: None
+    session._owner.last_sequence = lambda: 44_700
+    session.start()
+    first = session.step()
+    assert first.frame_sequence == 44_701
+    assert first.trace.dropped_frames == 0
+    session._owner.items = session._owner.items[2:]
+    assert session.step().trace.dropped_frames == 1
+    assert session.stop()["frames_skipped"] == 1
 
 
 def test_start_refused_for_wrong_templates_checksum(tmp_path):
@@ -368,6 +691,7 @@ def test_tracking_quality_is_saved_for_successful_and_lost_tracks(tmp_path):
     finally:
         summary = session.stop()
     assert summary["tracking_lost"] == 1
+    assert summary["tracking_lost_reasons"] == {"test": 1}
     assert summary["track_score"] == {"min": 0.2, "median": 0.7, "max": 0.9, "n": 3}
     assert json.loads(session.session_path.read_text())["summary"] == summary
 
@@ -543,7 +867,8 @@ def test_reader_factor_must_match_recorded_tolerance(tmp_path, factor, tolerance
 
 
 @pytest.mark.parametrize('needs_tolerance', [False, True])
-def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, needs_tolerance):
+@pytest.mark.parametrize('test_mode', [False, True])
+def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, needs_tolerance, test_mode):
     from dataclasses import replace
 
     from dotmatrix_helpers import LAYOUT, render
@@ -556,7 +881,8 @@ def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, n
     tolerance = {'factor': 1.44, 'd_max_templates': templates.d_max, 'd_max_run': templates.d_max * 1.44,
                  'max_d_best': maximum, 'hinweis': 'nicht validiert'}
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 2,
-                       reader_d_max_factor=1.44, reader_tolerance=tolerance)
+                       reader_d_max_factor=1.44, reader_tolerance=tolerance,
+                       test_run={'testlauf': True} if test_mode else None)
     factors = []
 
     def factory(path, sha, *, d_max_factor):
@@ -567,7 +893,7 @@ def test_tolerance_counts_only_valid_frames_above_template_threshold(tmp_path, n
     session.start()
     first, second = session.step(), session.step()
     assert first.status is ValueStatus.TRANSITION
-    assert second.status is ValueStatus.VALID
+    assert second.status is (ValueStatus.UNREADABLE if test_mode else ValueStatus.VALID)
     summary = session.stop()
     assert factors == [1.44]
     assert summary['tolerance_frames'] == int(needs_tolerance)
@@ -626,7 +952,103 @@ def test_reference_audit_leaves_records_byte_identical(tmp_path, monkeypatch):
     assert recorded.records_path.read_bytes() == expected
     meta = json.loads(recorded.session_path.read_text())
     assert meta['reference']['enabled'] and meta['reference']['lines'] == 1
+    assert 'reconfiguration_suppressed' not in meta['summary']
     assert port.closed and not port.writes
+
+
+def test_diagnostics_and_marks_leave_records_byte_identical(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(free=2_000_000_000))
+    images = [embed('+ 1.2345 '), embed('+ 1.2345 ')]
+    plain = _session(tmp_path, images)
+    plain.start()
+    plain.step()
+    plain.step()
+    plain.stop()
+    expected = plain.records_path.read_bytes()
+    recorded = _session(tmp_path, images, diagnostics=True, diagnostic_staging_root=tmp_path,
+                        out_dir=tmp_path / "with-diagnostics", monotonic=lambda: 0.0)
+    recorded.start()
+    recorded.mark('vor erstem Bild')
+    recorded.step()
+    recorded.mark('Abdeckung')
+    recorded.mark('Ende')
+    recorded.step()
+    assert recorded.stop()['marks'] == 3
+    assert recorded._diagnostics.wait(3)
+    assert recorded.records_path.read_bytes() == expected
+    marks = [json.loads(line) for line in (recorded._out_dir / 'marks.jsonl').read_text().splitlines()]
+    assert [m['text'] for m in marks] == ['vor erstem Bild', 'Abdeckung', 'Ende']
+    assert all(m['zeit'] == 'meldezeit_bediener' and m['t_boottime_ns'] == 123456789
+               and m['received_at_utc'].endswith('+00:00') for m in marks)
+    meta = json.loads(recorded.session_path.read_text())
+    assert meta['diagnostics']['saved'] == 1 and meta['diagnostics']['copied']
+    assert meta['diagnostics']['dropped_mark_rate'] == 2
+    assert meta['summary']['marks'] == 3 and recorded.last_mark == marks[-1]
+    entries = [json.loads(line) for line in (recorded._out_dir / 'diagnose' / 'images.jsonl').read_text().splitlines()]
+    assert [e['mark'] for e in entries] == [1]
+    assert all(e['trigger'] == 'operator_mark' for e in entries)
+
+
+@pytest.mark.parametrize('text', ['', ' ', 'x' * 201, None, 42])
+def test_mark_rejects_invalid_text(tmp_path, text):
+    session = _session(tmp_path, [])
+    session.start()
+    with pytest.raises(ValueError, match='1 bis 200'):
+        session.mark(text)
+    assert session.stop()['marks'] == 0
+
+
+def test_marks_without_diagnostics_and_refusal_after_stop(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    session.mark('x' * 200)
+    assert session.stop()['marks'] == 1
+    assert not json.loads(session.session_path.read_text())['diagnostics']['enabled']
+    with pytest.raises(ValueError, match='kein Lauf'):
+        session.mark('zu spaet')
+
+
+def test_diagnostic_copy_does_not_hold_session_stop_and_updates_final_metadata(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(free=2_000_000_000))
+    entered, release = threading.Event(), threading.Event()
+    copy = diagnostics.shutil.copyfile
+
+    def slow(src, dst):
+        entered.set()
+        assert release.wait(3)
+        return copy(src, dst)
+
+    monkeypatch.setattr(diagnostics.shutil, 'copyfile', slow)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    session.mark('Kopie')
+    try:
+        session.stop()
+        assert entered.wait(1)
+        assert session.diagnose_kopie
+        meta = json.loads(session.session_path.read_text())
+        assert meta['ended_at_utc'] and not meta['diagnostics']['copied']
+        assert session.step() is None
+        # Die Kamera kann vor Kopierende schon fuer den naechsten Lauf arbeiten.
+        monkeypatch.setattr(session._owner, 'status', lambda: {'gaps': 999, 'error': 'neuer Lauf'})
+    finally:
+        release.set()
+    assert session._diagnostics.wait(3)
+    final = json.loads(session.session_path.read_text())
+    assert final['ended_at_utc'] == meta['ended_at_utc']
+    assert final['summary'] == meta['summary']
+    assert final['diagnostics']['copied'] and not session.diagnose_kopie
 
 
 def test_restore_timeout_is_saved_in_session_json(tmp_path, monkeypatch):
@@ -685,3 +1107,563 @@ def test_reference_stop_failure_still_closes_sink_and_finalizes_metadata(tmp_pat
     assert meta['reference']['error'] == 'recorder stop failed'
     assert meta['ended_at_utc']
     assert meta['summary']['end_reason'] == 'bediener'
+
+
+def _region_session(tmp_path, images=None, **kwargs):
+    from frame_tracking_helpers import reference_scene, tracking_block
+
+    image, quad = reference_scene()
+    path, config = _files(tmp_path)
+    still = tmp_path / "still.png"
+    cv2.imwrite(str(still), image)
+    data = json.loads(path.read_text())
+    data["quad"] = quad
+    data["camera"]["size"] = list(image.shape[1::-1])
+    data["reference_frame"]["sha256"] = hashlib.sha256(still.read_bytes()).hexdigest()
+    data["live_tracking"] = tracking_block(image, quad, still)
+    path.write_text(json.dumps(data))
+    session = LiveSession(
+        FakeOwner(images if images is not None else [image]), path, config, tmp_path / "run",
+        reader_factory=lambda *args, **kw: synthetic_reader(), **kwargs,
+    )
+    return session, data
+
+
+def test_region_run_uses_confirmed_locator_and_marks_artifact(tmp_path):
+    from dispread.live.tracking import ConfirmedRegionLocator
+
+    session, data = _region_session(tmp_path)
+    session.start()
+    try:
+        assert isinstance(session._pipeline.locator, ConfirmedRegionLocator)
+        assert session._pipeline.locator._tracker.proposal.to_dict() == data["live_tracking"]["proposal"]
+        assert session.tracking == {"mode": "rahmenbereiche", "version": 1,
+                                    "regions": len(data["live_tracking"]["proposal"]["regions"]), "auswahl": "automatisch"}
+    finally:
+        session.stop()
+    artifact = json.loads(session.session_path.read_text())
+    assert artifact["tracking"] == session.tracking
+    assert artifact["summary"]["tracking_lost_reasons"] == {}
+
+
+@pytest.mark.parametrize("tamper", ["frame_sha256", "config", "version", "method", "proposal_config", "gray_hash"])
+def test_region_run_refuses_wrong_reference_config_or_version(tmp_path, tamper):
+    session, data = _region_session(tmp_path)
+    block = data["live_tracking"]
+    if tamper == "config":
+        block["config"]["min_peak"] = 0.99
+    elif tamper == "proposal_config":
+        block["proposal"]["config"]["min_peak"] = 0.99
+    elif tamper == "gray_hash":
+        block["proposal"]["reference_sha256"] = "0" * 64
+    else:
+        block[tamper] = "wrong"
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+def test_region_run_compares_against_current_defaults(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from dispread.live import session as session_module
+    from dispread.live.frame_tracking import FrameTrackingConfig
+
+    session, _ = _region_session(tmp_path)
+    monkeypatch.setattr(session_module, "FrameTrackingConfig", lambda: replace(FrameTrackingConfig(), min_peak=0.99))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+
+
+def test_confirmed_profile_honours_injected_two_argument_locator_factory(tmp_path):
+    calls = []
+
+    def locator(reference, quad):
+        calls.append((reference, quad))
+        return ManualRoiLocator(quad)
+
+    session, data = _region_session(tmp_path, locator_factory=locator)
+    session.start()
+    try:
+        assert len(calls) == 1 and calls[0][1] == data["quad"]
+        assert isinstance(session._pipeline.locator, ManualRoiLocator)
+        assert session.tracking == {"mode": "injiziert", "profile_mode": "rahmenbereiche",
+                                    "version": None, "regions": None}
+        assert json.loads(session.session_path.read_text())["tracking"] == session.tracking
+    finally:
+        session.stop()
+
+
+def test_old_profile_uses_ecc_and_marks_old_mode(tmp_path):
+    from dispread.live.tracking import TrackedQuadLocator
+
+    path, config = _files(tmp_path)
+    session = LiveSession(FakeOwner([]), path, config, tmp_path / "run",
+                          reader_factory=lambda *args, **kw: synthetic_reader())
+    session.start()
+    try:
+        assert isinstance(session._pipeline.locator, TrackedQuadLocator)
+    finally:
+        session.stop()
+    assert json.loads(session.session_path.read_text())["tracking"] == {
+        "mode": "ecc_alt", "version": None, "regions": None,
+    }
+
+
+def test_visible_frame_with_hidden_digits_never_releases_value(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    from dispread.ocr import ReadResult
+
+    reference, _ = reference_scene()
+    session, data = _region_session(tmp_path)
+    hidden = reference.copy()
+    cv2.fillConvexPoly(hidden, np.rint(data["live_tracking"]["proposal"]["character_zone"]).astype(np.int32),
+                       (120, 120, 120))
+    session._owner = FakeOwner([hidden] * 3)
+    reads = []
+    unreadable = ReadResult(
+        raw_text="", value=None, glyphs=(), sign_detected=False, sign_region_readable=False,
+        decimal_point_detected=False, decimal_point_index=None, unit_text=None, status_flags=frozenset(),
+        backend_id="dotmatrix", backend_version="test",
+    )
+
+    class Reader:
+        backend_id = "dotmatrix"
+
+        def read(self, crop, layout):
+            reads.append(crop.copy())
+            return unreadable
+
+    session._reader_factory = lambda *args, **kwargs: Reader()
+    session.start()
+    try:
+        for _ in range(3):
+            record = session.step()
+            assert session._pipeline.locator.last_track.quad is not None
+            assert record.status is not ValueStatus.VALID and record.value is None
+    finally:
+        summary = session.stop()
+    assert len(reads) == 3
+    assert summary["tracking_lost"] == 0
+    assert summary["tracking_lost_reasons"] == {}
+
+
+def test_region_tracking_counts_each_loss_reason(tmp_path):
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    session, _ = _region_session(tmp_path, images=[image * 0, image[:100, :100], image * 0])
+    session.start()
+    try:
+        reasons = [session.step().reject_reasons[0].split(":", 1)[1] for _ in range(3)]
+    finally:
+        summary = session.stop()
+    assert reasons == ["zu_wenig_rahmenmerkmale", "bildgroesse_abweichend", "zu_wenig_rahmenmerkmale"]
+    assert summary["tracking_lost"] == 3
+    assert summary["tracking_lost_reasons"] == {"zu_wenig_rahmenmerkmale": 2, "bildgroesse_abweichend": 1}
+
+
+@pytest.mark.parametrize("value", [15.0, True])
+@pytest.mark.parametrize("config_path", ["block", "proposal"])
+def test_region_run_refuses_hand_edited_config_types(tmp_path, value, config_path):
+    session, data = _region_session(tmp_path)
+    key = "patch_size" if type(value) is float else "interpolation_guard_px"
+    block = data["live_tracking"]
+    config = block["config"] if config_path == "block" else block["proposal"]["config"]
+    config[key] = value
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+@pytest.mark.parametrize("block", [[], "rahmenbereiche", 1, True])
+def test_region_run_refuses_non_dict_tracking_block(tmp_path, block):
+    session, data = _region_session(tmp_path)
+    data["live_tracking"] = block
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused, match="neu einrichten"):
+        session.start()
+    assert not session.records_path.exists()
+
+
+def test_region_run_reports_reconfigure_instruction_once(tmp_path):
+    session, data = _region_session(tmp_path)
+    data["live_tracking"]["proposal"]["ok"] = False
+    session._profile_path.write_text(json.dumps(data))
+    with pytest.raises(StartRefused) as error:
+        session.start()
+    assert str(error.value) == "Rahmenbereiche ungueltig: Rahmenvorschlag ungeeignet - neu einrichten"
+
+
+def test_region_run_guards_injected_non_dict_profile_block(tmp_path, monkeypatch):
+    session, _ = _region_session(tmp_path)
+    profile = SessionProfile.load(session._profile_path)
+    from dataclasses import replace
+
+    monkeypatch.setattr(SessionProfile, "load", lambda path: replace(profile, live_tracking=[]))
+    with pytest.raises(StartRefused) as error:
+        session.start()
+    assert str(error.value) == "Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten"
+
+
+@pytest.mark.parametrize('resource,reason', [('space', 'Platz'), ('memory', 'MemAvailable')])
+def test_insufficient_diagnostic_ram_still_starts_and_records_reason(tmp_path, monkeypatch, resource, reason):
+    from types import SimpleNamespace
+
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, 'disk_usage', lambda root: SimpleNamespace(
+        free=100 if resource == 'space' else 2_000_000_000))
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 1_099_999_999)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    assert session.step() is not None
+    session.stop()
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status == session.diagnostics_status()
+    assert not status['enabled'] and reason in status['reason']
+    assert status['saved'] == 0 and status['staging'] is None
+
+
+def test_mark_snapshot_does_not_hold_pipeline_stop_lock(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    entered, release = threading.Event(), threading.Event()
+    original = session._diagnostics._enqueue
+    def delayed_snapshot(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(session._diagnostics, '_enqueue', delayed_snapshot)
+    thread = threading.Thread(target=session.mark, args=('Marke',))
+    thread.start()
+    try:
+        assert entered.wait(1)
+        acquired = session._stop_lock.acquire(timeout=0.1)
+        if acquired:
+            session._stop_lock.release()
+        assert acquired, 'mark snapshot held the pipeline stop lock'
+    finally:
+        release.set()
+        thread.join(3)
+        session.stop()
+        assert session._diagnostics.wait(3)
+
+
+def test_loss_and_periodic_diagnostics_leave_records_byte_identical(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: 2_000_000_000, raising=False)
+    monkeypatch.setattr(diagnostics, 'PERIODIC_INTERVAL_S', 0.25)
+    images = [embed('+ 1.2345 ')] * 5
+    outputs = []
+    for enabled in (False, True):
+        now = [0.0]
+        session = _session(tmp_path, images, diagnostics=enabled, diagnostic_staging_root=tmp_path,
+                           monotonic=lambda now=now: now[0], out_dir=tmp_path / str(enabled))
+        session.start()
+        locator = session._pipeline.locator
+        original_locate = locator.locate
+        def locate(frame, original=original_locate, locator=locator):
+            locator.last_reason = 'tracking_lost:abdeckung' if frame.frame_sequence in (2, 3) else None
+            return () if locator.last_reason else original(frame)
+        monkeypatch.setattr(locator, 'locate', locate)
+        for step in range(5):
+            now[0] = (step + 1) * 0.5
+            session.step()
+        session.stop()
+        assert session._diagnostics.wait(3)
+        outputs.append(session.records_path.read_bytes())
+    assert outputs[0] == outputs[1]
+    entries = [json.loads(line) for line in (session._out_dir / 'diagnose' / 'images.jsonl').read_text().splitlines()]
+    assert [e['trigger'] for e in entries] == ['periodic', 'tracking_loss', 'tracking_recovered', 'periodic']
+    assert [e['frame_sequence'] for e in entries] == [1, 2, 4, 5]
+
+
+def test_memory_drops_are_saved_in_session_diagnostics(tmp_path, monkeypatch):
+    from dispread.live import diagnostics
+
+    available, now = [2_000_000_000], [0.0]
+    monkeypatch.setattr(diagnostics, 'read_mem_available', lambda: available[0])
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True,
+                       diagnostic_staging_root=tmp_path, monotonic=lambda: now[0])
+    session.start()
+    session.step()
+    available[0], now[0] = 499_999_999, 1.0
+    session.mark('RAM knapp')
+    session.stop()
+    assert session.wait_diagnostics(3)
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status['saved'] == 0 and status['dropped_memory'] == 1
+    assert status == session.diagnostics_status()
+
+
+def test_finisher_start_error_is_saved_and_session_stop_still_succeeds(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed('+ 1.2345 ')], diagnostics=True, diagnostic_staging_root=tmp_path)
+    session.start()
+    session.step()
+    session.mark('Threadmangel')
+    start = threading.Thread.start
+    def fail_copy(thread):
+        if thread.name == 'diagnose-copy':
+            raise RuntimeError('kein Thread verfuegbar')
+        return start(thread)
+    monkeypatch.setattr(threading.Thread, 'start', fail_copy)
+    assert session.stop()['marks'] == 1
+    session._diagnostics._worker.join(3)
+    assert not session.diagnose_kopie
+    status = json.loads(session.session_path.read_text())['diagnostics']
+    assert status['first_error'] == 'RuntimeError: kein Thread verfuegbar'
+    assert not status['copied'] and session._diagnostics.staging.exists()
+
+
+@pytest.mark.parametrize('selection', ['automatisch', 'manuell'])
+def test_region_selection_origin_is_in_session_artifact(tmp_path, selection):
+    session, data = _region_session(tmp_path)
+    data['live_tracking']['auswahl'] = selection
+    data['live_tracking']['edits'] = []
+    session._profile_path.write_text(json.dumps(data))
+    session.start()
+    session.stop()
+    artifact = json.loads(session.session_path.read_text())
+    assert artifact['tracking']['auswahl'] == selection
+
+
+def test_session_counts_every_processed_frame_in_live_causes(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 '), embed('+ 1.2345 ')])
+    session.start()
+    try:
+        session.step()
+        session.step()
+        causes = session.rejection_causes()
+        assert causes['frames'] == 2
+        assert causes['causes'] == [{'reason': 'awaiting_confirmation', 'count': 1, 'fraction': 0.5}]
+    finally:
+        session.stop()
+
+
+def test_tracking_advice_changes_only_status_and_summary_not_records(tmp_path, monkeypatch):
+    from test_tracking_advice import collect, transformed_scene
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    monkeypatch.setattr('time.clock_gettime_ns', lambda _kind: 123456789)
+    reference, quad, moved = transformed_scene()
+    import cv2
+    import numpy as np
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 2.25, 1)
+    matrix[:, 2] += (15, 0)
+    expected_shift = np.linalg.norm(quad @ matrix[:, :2].T + matrix[:, 2] - quad, axis=1).max()
+    images = [reference, moved, moved, moved, moved, reference]
+    outputs = []
+    for enabled in (False, True):
+        directory = tmp_path / str(enabled)
+        directory.mkdir()
+        now = [0.0]
+        session, _ = _region_session(directory, images, monotonic=lambda now=now: now[0])
+        session.start()
+        advice = session._tracking_advice
+        if not enabled:
+            advice.close()
+            session._tracking_advice = None
+        try:
+            for timestamp in (0, 1, 3.99, 4, 6, 7):
+                now[0] = timestamp
+                record = session.step()
+                if timestamp == 4 and enabled:
+                    hint = collect(advice, now[0])
+                    assert session.tracking_hint()['kind'] == 'anzeige_bewegt'
+                    assert hint['shift_px'] == pytest.approx(expected_shift, abs=3)
+                    assert record.reject_reasons[0].startswith('tracking_lost:')
+                    assert record.value is None
+            assert session.tracking_hint() is None
+        finally:
+            session.stop()
+        outputs.append(session.records_path.read_bytes())
+        summary = json.loads(session.session_path.read_text())['summary']['tracking_hints']
+        assert summary['count'] == (1 if enabled else 0)
+        assert set(summary['by_kind']) == {'anzeige_bewegt', 'rahmen_verdeckt', 'unbekannt'}
+        assert summary['max_shift_px'] == (pytest.approx(expected_shift, abs=3) if enabled else None)
+    assert outputs[0] == outputs[1]
+
+
+def test_advice_exception_cannot_skip_diagnostics_or_clock(tmp_path, monkeypatch, caplog):
+    now = [0.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, monotonic=lambda: now[0])
+    session.start()
+    diagnostics, samples = [], []
+    def fail(*args, **kwargs):
+        raise AttributeError('injected advice failure')
+    monkeypatch.setattr(session._tracking_advice, 'observe', fail)
+    monkeypatch.setattr(session._diagnostics, 'observe', lambda *a, **kw: diagnostics.append(1))
+    monkeypatch.setattr(session._clock, 'sample', lambda: samples.append(1))
+    try:
+        for tick in (61, 122):
+            now[0] = tick
+            assert session.step() is not None
+            assert session.tracking_hint()['kind'] == 'unbekannt'
+        assert diagnostics == [1, 1]
+        assert samples == [1, 1]
+        assert sum('injected advice failure' in r.getMessage() for r in caplog.records) == 1
+    finally:
+        session.stop()
+
+
+def test_reference_image_is_loaded_once_for_pipeline_and_advice(tmp_path, monkeypatch):
+    import dispread.live.session as module
+    session = _session(tmp_path, [])
+    calls = []
+    imread = module.cv2.imread
+    def read(path):
+        calls.append(path)
+        return imread(path)
+    monkeypatch.setattr(module.cv2, 'imread', read)
+    session.start()
+    session.stop()
+    assert len(calls) == 1
+
+
+def test_live_audit_keeps_all_records_in_one_per_run_file(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 8)
+    session.start()
+    try:
+        assert session._sink.max_bytes == 0
+        for _ in range(8):
+            session.step()
+    finally:
+        session.stop()
+    entries = [json.loads(line) for line in session.records_path.read_text().splitlines()]
+    assert [entry['frame_sequence'] for entry in entries] == list(range(1, 9))
+    assert list(session.records_path.parent.glob('records.jsonl*')) == [session.records_path]
+    metadata = json.loads(session.session_path.read_text())
+    assert metadata['audit'] == {'rotation': False, 'path': 'records.jsonl'}
+
+
+def test_r19b_session_zaehlt_zweiten_versuch_und_erfolg(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 15], [0, 1, 0]]), image.shape[1::-1])
+    session, _ = _region_session(tmp_path, images=[image, moved, image, moved, image * 0])
+    session.start()
+    try:
+        for _ in range(5):
+            session.step()
+    finally:
+        summary = session.stop()
+    assert summary['tracking_coarse_retries'] == 2
+    assert summary['tracking_coarse_accepted'] == 2
+
+
+def test_r19b_session_altes_profil_bekommt_nachfuehrung_ohne_neueinrichtung(tmp_path):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 19], [0, 1, 0]]), image.shape[1::-1])
+    session, data = _region_session(tmp_path, images=[moved])
+    for config in [data['live_tracking']['config'], data['live_tracking']['proposal']['config']]:
+        for name in ('coarse_min_response', 'coarse_min_shift_px', 'coarse_max_scale_deviation'):
+            config.pop(name, None)
+    session._profile_path.write_text(json.dumps(data))
+    session.start()
+    try:
+        session.step()
+        assert session._pipeline.locator.last_track.quad is not None
+    finally:
+        session.stop()
+
+
+@pytest.mark.parametrize('test_run', [None, {}])
+def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run):
+    import os
+    import select
+    import time
+    from dataclasses import replace
+
+    class Recorder:
+        reconfiguration_enabled = True
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {'enabled': True}
+
+        def is_reconfiguring(self, capture_boottime_ns):
+            return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 3 * 33_333_333 + 1000
+
+    master, slave = os.openpty()
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, reference_recorder=Recorder(),
+                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#'})
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    try:
+        for number in range(1, 5):
+            session.step()
+            # Synchronize with receipt persistence; no timing-dependent queue overflow.
+            deadline = time.monotonic() + 3
+            while len((tmp_path / 'run/tx.jsonl').read_text().splitlines()) < number:
+                assert time.monotonic() < deadline
+                time.sleep(.005)
+        assert session.step() is None  # Kein frisches Bild: keinen Altwert wiederholen.
+        assert len((tmp_path / 'run/tx.jsonl').read_text().splitlines()) == 4
+        assert select.select([master], [], [], .05)[0] == ([] if test_run is not None else [master])
+        if test_run is None:
+            assert os.read(master, 4096) == b'#+1.2345\r\n' * 3
+    finally:
+        session.stop()
+        os.close(master)
+        os.close(slave)
+    tx = [json.loads(line) for line in (tmp_path / 'run/tx.jsonl').read_text().splitlines()]
+    assert [r['frame_sequence'] for r in tx] == [1, 2, 3, 4]
+    assert [r['omitted'] for r in tx] == ([False, True, False, False] if test_run is None else [True] * 4)
+    assert all(r['invalid_policy'] == 'omit_record' for r in tx)
+    assert all(r['time_base'] == 'host_monotonic' and r['uncertainty_ns'] is None for r in tx)
+    output = json.loads(session.session_path.read_text())['output']
+    assert output['sent'] == (3 if test_run is None else 0)
+    assert output['omitted'] == (1 if test_run is None else 4)
+    assert output['dropped'] == output['errors'] == 0
+    assert output['capabilities']['provisional'] is True
+    assert output['capabilities']['supported_invalid_policies'] == ['omit_record']
+
+
+def test_output_open_failure_refuses_session(tmp_path):
+    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port')})
+    with pytest.raises(StartRefused, match='Ausgabe'):
+        session.start()
+    assert session.latest is None
+
+
+@pytest.mark.parametrize('options', [{}, {'output': None}])
+def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, **options,
+                       monotonic=lambda: 0., wall=lambda: datetime(2026, 10, 30, tzinfo=UTC))
+    session.start()
+    for _ in range(3):
+        session.step()
+    session.stop()
+    fixture = Path(__file__).parent / 'fixtures/live_output_disabled'
+    assert session.records_path.read_bytes() == (fixture / 'records.jsonl').read_bytes()
+    data = json.loads(session.session_path.read_text())
+    actual = session.session_path.read_text().replace(data['profile']['sha256'], '<profile-sha256>')
+    actual = actual.replace(str(tmp_path), '<root>')
+    assert actual == (fixture / 'session.json').read_text()
+    assert not (session.records_path.parent / 'tx.jsonl').exists()

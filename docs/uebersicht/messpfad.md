@@ -90,6 +90,7 @@ erklärt, welche Evidenz ein neuer Leser liefern muss.
 | --- | --- | --- |
 | Wert vollständig und eindeutig | <code>valid</code> | Wert, Einheit, Lesetext, Zeitbasis, Profil und Versionen |
 | Mischziffern kurz nach Freigabe, übrige Zellen unverändert | <code>transition</code> | Grund <code>anzeige_wechselt</code>, kein Zahlenwert |
+| Sonst gültige Aufnahme während werkbankgesteuerter Geräteumkonfiguration | <code>transition</code> | Grund <code>geraet_umkonfiguriert</code>, kein Zahlenwert |
 | Mehrbildbestätigung noch offen | <code>transition</code> | Grund <code>awaiting_confirmation</code>, Anzahl und Zeitspanne |
 | Anzeige fehlt oder Zeichen sind unlesbar | <code>unreadable</code> | kein freigegebener Zahlenwert, konkreter Ablehnungsgrund |
 | Nach einer Freigabe kommt lange keine neue gültige Lesung | <code>stale</code> | alter Wert wird nicht als aktueller Wert fortgeführt |
@@ -116,8 +117,24 @@ steht im [Pipeline-Code](../../api/pipeline.md) und in der
 
 Fehlen neue Kamerabilder, kennzeichnet die Live-Oberfläche den zuletzt
 gelesenen Datensatz nach der Altersgrenze als STALE; ohne neues Bild
-entsteht kein zusätzlicher Record. Der Streamstillstand beendet den Lauf
-derzeit erst nach dem OpenCV-Timeout. Große Wertwechsel können außerdem
+entsteht kein zusätzlicher Record. Seit R13-22 erkennt der Kamera-Halter
+einen Streamstillstand nach 2 s ohne geliefertes Bild anhand der monotonen
+Host-Uhr, auch wenn OpenCV noch im Lesen blockiert. Der Lauf endet mit
+sichtbarem Kamerafehler; `session.json` hält den Stillstand fest. Der Fehler
+bleibt bis zum Quellenneustart erhalten, verspätete Bilder werden verworfen.
+Bis zum ersten Bild nach Start oder Neustart gilt eine eigene Anlauffrist
+von 5 s ab Leserstart nach dem Öffnen der Quelle: eine ungemessene Reserve
+für STREAMON und ersten Read unter Last. Danach gilt die 2-s-Frist.
+Die Vorschau startet nach Stillstand nicht von selbst neu; über **Kamera
+neu verbinden** oder einen Neustart des Werkbankservers wieder verbinden.
+Lebt der alte Lesethread nach dem Stop-Timeout noch, wird der Neustart
+abgelehnt: `running=False`, `stalled=True` und ein sichtbarer Fehler
+melden die hängende Kamera. Warten oder neu stecken, dann erneut verbinden.
+Leere Vorschauabrufe warten begrenzt; vorhandene Quellendiagnosen ergänzen
+den Fehler. Die Hardwareprüfung der Anlauf- und Wiederanlaufzeiten ist offen
+([Bedienung bei Stillstand](../anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus)).
+Diese Dauer beschreibt die Überwachung der Bildlieferung, keine
+Aufnahme- oder Messlatenz. Große Wertwechsel können außerdem
 <code>tracking_lost:low_score</code> auslösen, weil das Tracking noch den
 Zifferninhalt berücksichtigt ([OQ-26](../open-questions.md#oq-26)).
 
@@ -148,13 +165,40 @@ Die optionale serielle GSV-2AS-Aufzeichnung steht getrennt in
 <code>scripts/live-reference-eval.py</code>. Der Referenzwert verändert
 weder Leserentscheidung noch Freigabe. Ein Testlauf bei Lesesperre trägt
 <code>TESTLAUF.json</code> und die Markierung in <code>session.json</code>;
-seine Pipeline-Records sind zusammen mit dieser Markierung auszuwerten,
-auch wenn einzelne Records <code>valid</code> tragen. Die Oberfläche kann
-sie ebenfalls als VALID anzeigen; die Testlaufmarkierung untersagt ihre
-Messnutzung, erzwingt dies aber noch nicht technisch
+die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit von
+<code>VALID</code> auf <code>UNREADABLE</code>, mit <code>value=null</code>
+und dem ersten Ablehnungsgrund <code>testlauf_keine_freigabe</code>.
+Die Oberfläche zeigt nur die getrennte Leser-Vermutung als Diagnose,
+niemals einen gültigen Testlaufwert
 ([OQ-44](../open-questions.md#oq-44)). Eine angepasste Lesetoleranz setzt eine
 serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus;
 sie bleibt als nicht validiert markiert.
+
+Eigene **Schreibsequenzen** des Werteplans und der Rückstellung sperren
+dagegen die Freigabe: vom BOOTTIME-Zeitpunkt vor dem ersten STOP bis nach
+<code>resume_transmission</code> plus **695 ms Nachlauf**. Dieser Nachlauf
+übernimmt das bestehende GUARD-Schutzintervall aus dem Referenzabgleich für
+Anzeigeverzögerung und LCD-Umschaltung; er ist keine neue Zeitmessung.
+Die Live-Sitzung rechnet die Aufnahmezeit mit
+<code>records.to_boottime_ns</code> und dem gemessenen Sessionversatz um.
+Vor jeder sonst gültigen Aufnahme mit Werteplan wird der Versatz frisch
+geprüft, damit Suspend auch vor der nächsten periodischen Auditprobe
+erkannt wird; zusätzliche Versatzsprünge bleiben im Sessionaudit erhalten.
+Ein sonst gültiger Datensatz im Fenster wird vor Audit und Ausgabe
+<code>TRANSITION</code>, mit <code>value=null</code> und erstem Grund
+<code>geraet_umkonfiguriert</code>.
+<code>summary.reconfiguration_suppressed</code> zählt diese Bilder in
+<code>session.json</code>; der Zähler erscheint nur bei aktiviertem Werteplan.
+
+Die Referenzaufzeichnung hält die Intervalle thread-sicher auch nach ihrem
+Ende vor. Daher bleibt ein Bild aus dem Fenster bei später Verarbeitung
+gesperrt; eine Aufnahme vor STOP zeigt noch den alten Gerätezustand und
+darf gültig bleiben. Reine Register-Lesepausen (Precheck und
+Rückstellungsprüfung) schreiben keine Anzeigeparameter und sind ausgenommen.
+Bei Abbruch ohne Resume bleibt das Fenster offen; bei nicht umrechenbarer
+Aufnahmezeit wird mit aktivem Werteplan vorsorglich gesperrt. Andere Status,
+insbesondere <code>UNREADABLE</code>, werden nicht geändert. Die
+Testlauf-Sperre R13-17 hat Vorrang und bleibt <code>UNREADABLE</code>.
 
 Zur Diagnose zuerst den <code>status</code> und
 <code>reject_reasons</code> im JSONL-Record prüfen, dann

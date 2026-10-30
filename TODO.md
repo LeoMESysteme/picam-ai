@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-21
+# TODO — Stand 2026-10-30
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -49,9 +49,9 @@ Offen:
      2026-10-21 zeigt nun Trackingverlust bei großen Wertwechseln (R13,
      [OQ-26](docs/open-questions.md#oq-26)); Abschlussdiagnose und eine
      vom Zifferninhalt unabhängige Trackerregion sind damit zu bearbeiten.
-   * `JsonlSink`-Rotation für Live-Audits klären: 64 MB, fünf Generationen
-     würden nach etwa 7 h alte Belege verwerfen; dauerhafte Aufbewahrung
-     vor längeren Läufen lösen.
+   * **Gebaut R13-16:** Live-Audits ohne Generationenrotation je Lauf;
+     Platzprüfung und manuelles Aufräumen mit Vorschau (Kapitel 10).
+     SD-Dauerbetrieb und Platzplanung vor längeren Läufen praktisch prüfen.
    * **Zurückgestellte Bedienpunkte:** Vorschau kann auf dem letzten Bild
      einfrieren; Streamstillstand beendet erst nach OpenCV-Select-Timeout
      (etwa 10–20 s) statt 2 s. Kamera-Neuverbindung nach Einrichtung behält
@@ -291,6 +291,25 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 ### Messpfad live (aktiv)
 
+**Stand 2026-10-30:** Auf `feat/r13-display-haertung` (nicht in `master`)
+sind R13-1 bis R13-23 und der P4-Prototyp gebaut.
+
+* **Langlauf** `live-20261030T082502Z/run-01`: 42,8 min, Werteplan mit
+  280 Schritten, **0 / 45 702** Fehllesungen, 100 % VALID in stabilen
+  Fenstern, kein Trackingverlust
+  ([Laborjournal](docs/lab_journal.md#langlauf-2026-10-30)).
+* **Offen für Leonhard:**
+  * Merge R13 → `master` anhand der
+    [Entscheidungsvorlage](docs/superpowers/plans/2026-10-28-r13-merge-entscheidung.md).
+  * Zweite Aufstellung für die Abnahme.
+  * GSVmulti-Test am Windows-PC
+    ([Anleitung](docs/GSVMULTI_PROTOCOL.md#windows-test)).
+  * Belichtungsnachregelung (R13-20) am Gerät zeigen; dafür braucht es
+    dunkleres Licht.
+  * Stillstandserkennung (R13-22) mit echtem Abziehen der Kamera prüfen.
+* **Werkbank:** läuft als Unit `dispread-werkbank-r13` aus einem Export
+  (`PYTHONPATH`), nicht aus dem Worktree.
+
 **Stand 2026-10-21 abends:** Der Messpfad läuft am Aufbau. Lesesperre,
 schwankende Ziffern, Licht-Hinweis/Toleranz, Leser mit ~30 Bildern/s,
 TRANSITION bei Wertwechseln und Referenzaufzeichnung sind gebaut und in
@@ -304,6 +323,11 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 **Nächste Schritte, in Reihenfolge:**
 
 1. **Nachführung bei großen Wertwechseln bearbeiten (R13)**
+   — [freigegebener Plan](docs/superpowers/plans/2026-10-21-r13-strukturstabile-nachfuehrung.md),
+   **gebaut auf `feat/r13-display-haertung`** (R13-1…R13-18, nicht in
+   `master`); Merge entscheidet die Person am 2026-10-28 anhand der
+   [Entscheidungsvorlage](docs/superpowers/plans/2026-10-28-r13-merge-entscheidung.md).
+   Live 23.10.: 0 Fehllesungen, ruhiger Lauf 99,98 % VALID.
    ([OQ-26](docs/open-questions.md#oq-26)): Strenger Werteplan-Lauf
    `live-20261021T151835Z/run-01` abgeschlossen: 806 s, 0/11 137 Fehllesungen,
    aber 8074 Trackingverluste; bei Faktor 2 und 5 in stabilen
@@ -311,16 +335,50 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    unabhängig vom Zifferninhalt untersuchen und große Sprünge erneut
    prüfen. Die berichtete Abdeckung ist zeitlich nicht eindeutig
    zuordenbar. [Zahlen](docs/VALIDATION.md#messpfad-live-werteplan-2026-10-21).
-2. **Testlauf-Sicherung und Zeitbasis-Bezeichnung klären:**
-   [OQ-44](docs/open-questions.md#oq-44) dokumentiert, dass Testlaufmarkierung
-   und Banner allein `VALID` im Audit nicht verhindern;
-   [OQ-45](docs/open-questions.md#oq-45) betrifft MONOTONIC-Marken mit
-   unpassender Zeitbasis. Testlaufdaten bleiben für Messungen gesperrt.
+   **Befund 2026-10-28** (`live-20261028T110248Z/run-01`, 328 s, 0/6437
+   Fehllesungen): um 12:17:51 verschob sich die Anzeige im Bild um 11,8 px
+   (dx +11, dy −4,2) und blieb dort; knapp unter dem Suchradius 12 px
+   flackerte die Nachführung zwischen Wiederkehr und `rahmen_unstimmig`
+   (Strecken bis 28 s), VALID fiel von 83 % auf 49 %.
+   * **Später (Leonhard, zurückgestellt):** richtiger Hinweis bei dauerhafter
+     Verschiebung. Die Werkbank meldete „Rahmen verdeckt“ statt „Anzeige hat
+     sich bewegt – neu einrichten“ (`tracking_hints.max_shift_px` blieb
+     leer). Verschiebung grob über den ganzen Rahmen schätzen (z. B.
+     Phasenkorrelation mit ausgeblendetem LCD-Inhalt) und den Hinweis danach
+     wählen.
+   * **In Arbeit:** automatische Nachführung über größere Bewegungen
+     (Grobschätzung der Gesamtverschiebung, dann unveränderte Feinprüfung).
+   * **Später (Leonhard 2026-10-28):** solche Fehler grundsätzlich vermeiden —
+     automatische Korrekturen und Rückfallstufen, im Extremfall manuelle
+     Belichtung durch die Person. R13-20 ergänzt vorerst Displaybelichtung
+     und die warnende Vorprüfung; reale Regelungsabnahme steht aus.
+   * **Hinweistext Gegenlesen (klein, später):** Einrichtung
+     `live-20261028T133037Z` mit absichtlichem Fleck auf dem Glas: „668“
+     (Zellen 5–7) blasser, Kontrasttiefe 0,36 statt 0,63–0,70; Lauf korrekt
+     gesperrt, Toleranz korrekt verweigert (`beste_vermutung_widerspricht_referenz`).
+     Der Hinweis nennt aber nur „Schatten“; besser „Schatten oder
+     Verschmutzung auf dem Glas: reinigen bzw. abschatten“.
+   * Raster am rechten Rand leicht versetzt (Zellversatz bis 0,15 Spalten
+     in den Einheitszellen, 6 von 157 Punkten im „mV/V“ nicht zugeordnet);
+     ohne Einfluss auf den Wert, die Einheit wird nicht gelesen.
+2. **~~Testlauf-Sicherung und Zeitbasis-Bezeichnung klären~~ (erledigt 2026-10-23):**
+   [OQ-44](docs/open-questions.md#oq-44) ist umgesetzt: Gate-Freigaben werden
+   vor dem Test-Audit als `UNREADABLE` ohne `value` unterdrückt;
+   [OQ-45](docs/open-questions.md#oq-45) ist erledigt 2026-10-23:
+   Ergebniszeiten aus `time.monotonic_ns()` tragen für jede Quelle
+   `HOST_MONOTONIC`, Aufnahmezeitbasen bleiben unverändert. BOOTTIME nur
+   über `to_boottime_ns` mit Sessionversatz und Suspend-Prüfung;
+   alte Auditdateien behalten ihre Labels. Testlaufdaten bleiben für
+   Messungen gesperrt.
 3. **Toleranzlauf ≥ 10 min mit Werteplan** (siehe unten), mit der
    bedienenden Person; der Werteplan schreibt `set norm` und stellt danach
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
+   **2026-10-30:** P4-1 bis P4-3 sind als Prototyp gebaut:
+   `UserDefinedFormatter`, Demo-Sender und Opt-in-Ausgabe im Live-Lauf.
+   Geprüft ist das nur mit pty; der Windows-Test steht aus
+   ([Plan](docs/superpowers/plans/2026-10-29-p4-gsvmulti-userdefined.md)).
    **2026-10-28:** UserDefined laut Herstelleranleitung v2.6 belegt;
    ein Prototyp für die im PDF dokumentierte Windows-Version 2.01 Pro
    kann gebaut werden. [Bewertung und Prüfplan](docs/GSVMULTI_PROTOCOL.md).
@@ -336,11 +394,28 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 5. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
    schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
    zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.
-6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen,
-   `JsonlSink`-Rotation für lange Läufe klären (Punkt 2 unter „Offen“).
+6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen.
+   Live-Audit ohne verlustbehaftete Rotation ist seit R13-16 gebaut.
 7. **Rest aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`
    wird relativ zum Arbeitsverzeichnis aufgelöst. Das Snippet in Anleitung
    Kapitel 10 liest Port/Baud seit dem Wiki-Abgleich aus dem Rückstellpunkt.
+
+**Speicherbudget für den Betrieb (neu 2026-10-23):** Im Unternehmen läuft das
+Werkzeug voraussichtlich auf einem Pi 5 mit 64-GB-SD-Karte, ohne SSD.
+Messläufe deshalb weiter auf der SD-Karte testen. **Gebaut R13-16:**
+Platzprüfung vor Einrichtung und Laufstart (2 GB Reserve, mit Diagnose
+zusätzlich 0,6 GB), Status/Seite mit freiem Platz und Warnung unter 5 GB,
+Diagnosebilder standardmäßig aus in Seite und API, vollständige Auditdatei
+je Lauf ohne Generationenverlust und opt-in
+`dispread live aufraeumen --aelter-als <tage> [--nur-diagnose] [--ausfuehren]`
+mit Größen und Vorschau als Vorgabe. Keine automatische Löschung;
+Profile/Setup und laufende Läufe bleiben geschützt. Ein 10-min-Lauf braucht
+etwa 10 MB Audit, mit Diagnosebildern bis zu 0,6 GB zusätzlich.
+**Offen:** längeren Betrieb auf der Produktions-SD praktisch validieren
+und benötigte Daten vor manuellem Aufräumen sichern.
+Für die Entwicklung kann eine NVMe-SSD (500 GB, vorhanden) Aufnahmen,
+Datensätze und die fehlende `var/`-Sicherung aufnehmen, aber nicht die
+Messläufe selbst.
 
 **Pi-Betrieb (für ruhige Messläufe):**
 
@@ -350,8 +425,14 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
   Playwright-Zeitüberschreitungen (lokal danach 29/29 grün). **Nicht während
   eines Messlaufs nach `master` pushen.** Mittelfristig CI auf einen anderen
   Rechner oder während Läufen pausieren (Entscheidung der Person).
-* Nächtlicher Lauf `maintain` scheitert seit 2026-10-19 04:00, nicht
-  untersucht.
+* Nächtlicher Lauf `maintain`: scheiterte 2026-10-19 bis 2026-10-21 früh,
+  seit 2026-10-21 15:12 wieder grün (22. und 23.10. erfolgreich, letzter
+  Codex-Lauf ohne Befund, Doku-Build ok; `sudo picam-codex-logs`). Ursache der
+  drei Fehlschläge nicht mehr nachvollziehbar (keine Schritt-Logs per Token).
+* Playwright-CI für `master` `109d360` (Roadmap-Karte, 2026-10-23) fehlgeschlagen,
+  Build ok. Laut Wiki-Sitzung wahrscheinlich Last (Roadmap-Rad- und
+  Tour-Abbildungstests wackeln unter Last); ihr Branch `feat/wiki-geruest`
+  ersetzt Roadmap-Code und -Tests, daher nicht separat angefasst.
 * Kein persistentes Journal; der Hänger 2026-10-21 14:08 ist deshalb nicht
   belegbar. Aktivieren:
   `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`.
@@ -491,7 +572,13 @@ Ernte-Phase-1-Plan wird die Stundenaufzeichnung bewusst nicht vorgezogen:
 die erste Ernte benutzt 300/800 ms und markiert
 `gap_thresholds_provisional: true`. Die Stundenmessung folgt separat.
 
-→ [OQ-40](docs/open-questions.md).
+**2026-10-30:** 13 Live-Läufe (≈ 74 min, Kamera laufend) bestätigen
+800 ms. Der ungestörte Strom hat höchstens 561 ms Abstand; ein einzelner
+Ausfall ergäbe ≥ ≈ 1 039 ms. Die Referenzauswertung und der Rekorder nutzen
+jetzt 800 ms statt 1 000 ms; die Auswertung aller Läufe ist bytegleich.
+Offen bleiben die Stundenmessung und ein absichtlich erzeugter Ausfall.
+
+→ [OQ-40](docs/open-questions.md#oq-40).
 
 ### 6. Externer Loader lehnt Export-Schema 2 ab
 

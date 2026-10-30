@@ -157,10 +157,17 @@ def test_climb_geht_ueber_plateau_bis_zum_abfall():
     assert 88 not in calls
 
 
-def test_climb_feinsuche_bricht_pro_richtung_beim_ersten_abfall_ab():
+def test_climb_feinsuche_scannt_aufsteigend_das_ganze_fenster():
     best, measured = climb_focus(lambda f: 100 - (f - 48) ** 2)
     assert best == 48
-    assert [f for f, _ in measured] == [48, 56, 40, 50, 46]
+    assert [f for f, _ in measured] == [48, 56, 40, 42, 44, 46, 50, 52, 54]
+
+
+def test_climb_feinsuche_nimmt_das_grobmaximum_auch_unter_der_richtungsschwelle():
+    scores = {48: 100, 56: 104, 40: 50, 60: 150}
+    best, measured = climb_focus(lambda focus: scores.get(focus, 90))
+    assert best == 60
+    assert max(score for _, score in measured) == 150
 
 
 @pytest.mark.parametrize("peak_ratio,method", [(2.0, "climb"), (2.01, "sweep")])
@@ -169,6 +176,6 @@ def test_climb_feinabstand_und_plausibilitaetsgrenze(peak_ratio, method):
                                  step=10, fine_step=4, peak_ratio=peak_ratio)
     assert best == 48
     assert measured.focus_method == method
-    assert [f for f, _ in measured][:5] == [48, 58, 38, 52, 44]
+    assert [f for f, _ in measured][:7] == [48, 58, 38, 42, 46, 50, 54]
     if method == "climb":
-        assert len(measured) == 5
+        assert len(measured) == 7

@@ -265,6 +265,8 @@ async def handle_local_op(op, args, controller, live):
             return web.json_response(controller.command(op, args))
         if op == "live.status":
             return web.json_response(await asyncio.to_thread(live.status))
+        if op == 'live.aufraeumen':
+            return web.json_response(await asyncio.to_thread(live.cleanup, **(args or {})))
         if op == "live.setup":
             status = await asyncio.to_thread(live.status)
             if status["state"] in {"setup_ready", "confirmed"} and not (args or {}).get("force"):
@@ -272,6 +274,8 @@ async def handle_local_op(op, args, controller, live):
             await asyncio.to_thread(live.start_setup, cell_text=(args or {}).get("cell_text"))
         elif op == "live.stop":
             await asyncio.to_thread(live.stop_run)
+        elif op == 'live.mark':
+            await asyncio.to_thread(live.mark, text=(args or {}).get('text'))
         elif op == "live.camera":
             await asyncio.to_thread(live.start_camera)
         else:

@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 from dotmatrix_helpers import render
 
 from dispread import dotlattice
@@ -17,7 +18,7 @@ from dispread.setup_checks import check_setup
 from dispread.setup_hint import find_green_hint_box
 
 GRID = CharGrid(n_cells=16, left=0, pitch=25, top=160 / 9, bottom=160)
-DIAGNOSTICS = Path("/home/me-systeme/picam-ai/var/diagnostics")
+
 EMPTY_CELLS = (8, 13, 14, 15)
 
 
@@ -114,14 +115,9 @@ def test_minus_sign_has_specific_rejection_reason():
                        empty_cells=EMPTY_CELLS) == "vorzeichen_kein_plus"
 
 
-@pytest.mark.skipif(
-    not (DIAGNOSTICS / "ab3-still/frames/frame_000015.png").exists()
-    or not (DIAGNOSTICS / "ab3-profile").exists(),
-    reason="Standbild oder bestaetigtes Profil fehlt",
-)
 def test_ab3_plus_is_not_reported_as_proven_minus():
-    image = cv2.imread(str(DIAGNOSTICS / "ab3-still/frames/frame_000015.png"))
-    quad = np.asarray(json.loads((DIAGNOSTICS / "ab3-profile").read_text())["quad"], np.float32)
+    image = cv2.imread(str(local_recording("diagnostics/ab3-still/frames/frame_000015.png")))
+    quad = np.asarray(json.loads((local_recording("diagnostics/ab3-profile")).read_text())["quad"], np.float32)
     result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
     assert result != "vorzeichen_kein_plus"
 
@@ -253,10 +249,9 @@ def test_evaluate_quad_still_rejects_wrong_plus_location():
     ("sc6", "sc6-profile", 15, "bias"),
 ])
 def test_evaluate_quad_reports_validated_profile_within_rms_limits(name, profile, frame, proxy):
-    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
-    profile_path = DIAGNOSTICS / profile
-    if not still.exists() or not profile_path.exists():
-        pytest.skip("Standbild oder bestaetigtes Profil fehlt")
+    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+    profile_path = local_recording(Path('diagnostics') / profile)
+
     image = cv2.imread(str(still))
     assert image is not None
     hint = find_green_hint_box(image)
@@ -273,25 +268,11 @@ def test_evaluate_quad_reports_validated_profile_within_rms_limits(name, profile
         assert max(map(abs, (*result.row_bias, *result.cell_bias))) > 0.15
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            name,
-            marks=pytest.mark.skipif(
-                not (DIAGNOSTICS / f"{name}-still/frames/"
-                     f"frame_{'000015' if name == 'sc6' else '000017'}.png").exists()
-                or not (DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile").exists(),
-                reason="Standbild oder bestaetigtes Profil fehlt",
-            ),
-        )
-        for name in ("sc3", "sc4", "sc5", "ab1", "ab2", "sc6")
-    ],
-)
+@pytest.mark.parametrize("name", ("sc3", "sc4", "sc5", "ab1", "ab2", "sc6"))
 def test_real_still_matches_confirmed_quad(name):
     frame = "frame_000015.png" if name == "sc6" else "frame_000017.png"
-    still = DIAGNOSTICS / f"{name}-still/frames/{frame}"
-    profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
+    still = local_recording(f"diagnostics/{name}-still/frames/{frame}")
+    profile = local_recording(f"diagnostics/{name if name != 'sc3' else 'sc3b'}-profile")
     image = cv2.imread(str(still))
     quad = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
     result = fit_lattice(image, _box(quad, image.shape[:2]), empty_cells=EMPTY_CELLS)
@@ -299,14 +280,9 @@ def test_real_still_matches_confirmed_quad(name):
     assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
 
 
-@pytest.mark.skipif(
-    not (DIAGNOSTICS / "ab2-still/frames/frame_000017.png").exists()
-    or not (DIAGNOSTICS / "ab2-profile").exists(),
-    reason="Standbild oder bestaetigtes Profil fehlt",
-)
 def test_green_hint_still_finds_ab2_lattice():
-    image = cv2.imread(str(DIAGNOSTICS / "ab2-still/frames/frame_000017.png"))
-    quad = np.asarray(json.loads((DIAGNOSTICS / "ab2-profile").read_text())["quad"], np.float32)
+    image = cv2.imread(str(local_recording("diagnostics/ab2-still/frames/frame_000017.png")))
+    quad = np.asarray(json.loads((local_recording("diagnostics/ab2-profile")).read_text())["quad"], np.float32)
     hint = find_green_hint_box(image)
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
@@ -315,25 +291,15 @@ def test_green_hint_still_finds_ab2_lattice():
 
 
 @pytest.mark.parametrize("name,frame", [
-    pytest.param(
-        name, frame,
-        marks=pytest.mark.skipif(
-            not (DIAGNOSTICS / f"{name}-still/frames/{frame}").exists()
-            or not (DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile").exists(),
-            reason="Standbild oder bestaetigtes Profil fehlt",
-        ),
-    )
-    for name, frame in [
-        ("sc3", "frame_000017.png"),
-        ("sc4", "frame_000017.png"),
-        ("sc5", "frame_000017.png"),
-        ("ab1", "frame_000017.png"),
-        ("sc6", "frame_000015.png"),
-    ]
+    ("sc3", "frame_000017.png"),
+    ("sc4", "frame_000017.png"),
+    ("sc5", "frame_000017.png"),
+    ("ab1", "frame_000017.png"),
+    ("sc6", "frame_000015.png"),
 ])
 def test_green_hint_still_matches_confirmed_quad(name, frame):
-    still = DIAGNOSTICS / f"{name}-still/frames/{frame}"
-    profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
+    still = local_recording(f"diagnostics/{name}-still/frames/{frame}")
+    profile = local_recording(f"diagnostics/{name if name != 'sc3' else 'sc3b'}-profile")
     image = cv2.imread(str(still))
     quad = np.asarray(json.loads(profile.read_text())["quad"], np.float32)
     hint = find_green_hint_box(image)
@@ -343,12 +309,8 @@ def test_green_hint_still_matches_confirmed_quad(name, frame):
     assert np.max(np.linalg.norm(np.asarray(result.quad) - _profile_pixel_centers(quad), axis=1)) <= 1.5
 
 
-@pytest.mark.skipif(
-    not (DIAGNOSTICS / "sc6-still/frames/frame_000015.png").exists(),
-    reason="Standbild fehlt",
-)
 def test_evaluate_quad_agrees_with_fit_on_sc6_still():
-    image = cv2.imread(str(DIAGNOSTICS / "sc6-still/frames/frame_000015.png"))
+    image = cv2.imread(str(local_recording("diagnostics/sc6-still/frames/frame_000015.png")))
     hint = find_green_hint_box(image)
     assert hint is not None
     fit = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
@@ -365,9 +327,8 @@ def test_evaluate_quad_agrees_with_fit_on_sc6_still():
     ("ab6", 22, {"keine_startlage", "startlage_mehrdeutig"}),
 ])
 def test_uncertain_real_still_start_is_rejected(name, frame, reason):
-    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
-    if not still.exists():
-        pytest.skip("Standbild fehlt")
+    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+
     image = cv2.imread(str(still))
     hint = find_green_hint_box(image)
     assert hint is not None
@@ -376,12 +337,20 @@ def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     assert result in reason
 
 
+def test_moderate_left_view_finds_lattice_beyond_first_sixteen_starts():
+    image = cv2.imread(str(local_recording("diagnostics/r13-winkel-links10-20261023/frames/frame_000016.jpg")))
+    assert image is not None
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+
+
 @pytest.mark.parametrize("name,frame", [("sc3", 17), ("sc4", 17), ("sc6", 18), ("ab1", 17)])
 def test_refine_rejects_confirmed_quad_tilted_by_one_dot_row(name, frame):
-    still = DIAGNOSTICS / f"{name}-still/frames/frame_{frame:06d}.png"
-    profile = DIAGNOSTICS / f"{name if name != 'sc3' else 'sc3b'}-profile"
-    if not still.exists() or not profile.exists():
-        pytest.skip("Standbild oder bestaetigtes Profil fehlt")
+    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+    profile = local_recording(f"diagnostics/{name if name != 'sc3' else 'sc3b'}-profile")
+
     image = cv2.imread(str(still))
     assert image is not None
     q = np.asarray(json.loads(profile.read_text())["quad"], np.float32)

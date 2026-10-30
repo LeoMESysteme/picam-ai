@@ -8,6 +8,8 @@ oder tiefer (Spec 2026-10-12 §1/§3).
 from __future__ import annotations
 
 import json
+import logging
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -24,17 +26,30 @@ from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
+from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
+from dispread.live.diagnostics import staging_leftovers
+from dispread.live.output import validate_output
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
+from dispread.live.storage import cleanup_runs
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
+from dispread.workbench.fields import REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 DEVICE_ID = "gsv-sensor-161a"
+DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
+STORAGE_RESERVE_BYTES = 2_000_000_000
+STORAGE_WARNING_BYTES = 5_000_000_000
+_LOG = logging.getLogger(__name__)
 
 
 class LiveError(ValueError):
     """Bedienfehler oder abgelehnter Schritt; Meldung fuer die Seite."""
+
+
+class LiveInputError(LiveError):
+    """Ungueltige Anfrage; HTTP 400 statt eines Zustandskonflikts."""
 
 
 def run_block_reason(proposal: dict | None) -> str | None:
@@ -70,7 +85,10 @@ def _setup_error_for_page(message: str) -> str:
         message = message.replace(option, "")
     message = " ".join(message.split())
     if "startlage_mehrdeutig" in message or "keine_startlage" in message:
-        message += " — Kamera senkrecht auf Displaymitte stellen und neu einrichten"
+        message += (
+            " — Raster nicht gefunden - Kamera gerader vor die Anzeige stellen (weniger schraeg) oder naeher heran; "
+            "Anzeige soll mindestens ein Drittel der Bildbreite fuellen. Neu einrichten."
+        )
     if "vorzeichen_kein_plus" in message:
         message += " — Anzeige zeigt kein Plus — Wert positiv einstellen und neu einrichten"
     return message
@@ -102,7 +120,7 @@ class OwnerSetupCamera:
         for _ in range(discard + 1):
             got = self._owner.wait_newer(seen, 2.0)
             if got is None:
-                raise UvcError(f"kein frisches Bild von {self.device}")
+                raise UvcError(self._owner.status().get('error') or f"kein frisches Bild von {self.device}")
             seen = got[0]
         return got[1].image.copy()
 
@@ -120,9 +138,12 @@ class LiveService:
         setup_runner: Callable[..., dict] | None = None,
         wall: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
+        diagnostic_staging_root: Path = Path('/dev/shm'),
+        disk_usage: Callable[[Path], Any] | None = None,
     ) -> None:
         self._owner = owner
         self._data_dir = Path(data_dir)
+        self._disk_usage = disk_usage or shutil.disk_usage
         self._config = config
         self._simulate = simulate
         self._source_for = source_for or (lambda settings: UvcSource(settings))
@@ -130,6 +151,10 @@ class LiveService:
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
         self._monotonic = monotonic or time.monotonic
+        self._diagnostic_staging_root = diagnostic_staging_root
+        self._diagnostic_copies: list[LiveSession] = []
+        for leftover in staging_leftovers(self._diagnostic_staging_root):
+            _LOG.warning('Verbliebene Diagnose-Ablage: %s (%s Bytes)', leftover['path'], leftover['bytes'])
         self._setup_started_at: float | None = None
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
@@ -156,7 +181,30 @@ class LiveService:
         self._setup_thread: threading.Thread | None = None
 
     # -- Anzeige -------------------------------------------------------------
-    def status(self) -> dict:
+    def _storage_status(self) -> dict:
+        # Vor der ersten Einrichtung existiert var/live eventuell noch nicht.
+        path = self._data_dir
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        try:
+            free = self._disk_usage(path).free
+        except OSError as exc:
+            return {"free_bytes": None, "reserve_bytes": STORAGE_RESERVE_BYTES, "level": "error",
+                    "message": f"Speicherplatz nicht pruefbar: {exc}"}
+        level = "error" if free < STORAGE_RESERVE_BYTES else "warn" if free < STORAGE_WARNING_BYTES else "ok"
+        return {"free_bytes": free, "reserve_bytes": STORAGE_RESERVE_BYTES, "level": level,
+                "message": f"{free / 1e9:.2f} GB frei"}
+
+    def _require_storage(self, *, diagnostics: bool = False) -> None:
+        storage = self._storage_status()
+        if storage["free_bytes"] is None:
+            raise LiveError(storage["message"])
+        needed = STORAGE_RESERVE_BYTES + (DIAGNOSTIC_BUDGET_BYTES if diagnostics else 0)
+        if storage["free_bytes"] < needed:
+            raise LiveError(f"Zu wenig Speicherplatz: {storage['free_bytes'] / 1e9:.2f} GB frei, "
+                            f"{needed / 1e9:.2f} GB benoetigt. Alte Laufdaten pruefen und aufraeumen.")
+
+    def status(self, *, full: bool = False) -> dict:
         with self._lock:
             setup = None
             if self._proposal is not None:
@@ -166,6 +214,17 @@ class LiveService:
                     "checks": {n: c.get("status") for n, c in checks.get("checks", {}).items()},
                     "overlays": [n for n in OVERLAYS if self.setup_file(n) is not None],
                 }
+                block = self._proposal.get("live_tracking")
+                if block is not None:
+                    setup["proposal_revision"] = block.get("proposal_revision")
+                    setup["regions"] = block.get("proposal", {}).get("regions", [])
+                    setup["auswahl"] = block.get("auswahl", "automatisch")
+                    setup["centre_results"] = block.get("proposal", {}).get("metrics", {}).get("centre_results", [])
+                check_reasons = {
+                    name: check["reason"] for name, check in checks.get("checks", {}).items() if check.get("reason")
+                }
+                if check_reasons:
+                    setup["check_reasons"] = check_reasons
                 gegenlesen = checks.get("checks", {}).get("gegenlesen", {})
                 metrics = gegenlesen.get("metrics", {})
                 if metrics.get("hinweis") or "tolerance" in metrics:
@@ -201,9 +260,21 @@ class LiveService:
                     "dir": self._run_dir.name,
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
+                    "tracking": dict(getattr(self._session, "tracking", {})),
+                    "tracking_hint": (self._session.tracking_hint()
+                                      if hasattr(self._session, "tracking_hint") else None),
                 }
+                if hasattr(self._session, "rejection_causes"):
+                    causes = self._session.rejection_causes()
+                    run["rejection_causes"] = {**causes, "causes": [live_cause(c) for c in causes["causes"]]}
+            if run is not None and hasattr(self._session, 'output_status'):
+                output = self._session.output_status()
+                if output is not None:
+                    run['output'] = output
             return {
                 "state": self._state,
+                "storage": self._storage_status(),
+                **({"tracking_reasons": REASONS} if full else {}),
                 "step": self._step,
                 "error": self._error,
                 "simulate": self._simulate,
@@ -216,6 +287,18 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "diagnostics": (self._session.diagnostics_status()
+                                if self._session is not None and hasattr(self._session, 'diagnostics_status')
+                                else {'enabled': False, 'reason': 'kein Diagnoselauf'}),
+                "diagnose_kopie": any(getattr(s, 'diagnose_kopie', False)
+                                      for s in [*self._diagnostic_copies, self._session]),
+                "diagnostic_leftovers": staging_leftovers(self._diagnostic_staging_root, exclude={
+                    s.diagnostics_status().get('staging')
+                    for s in [*self._diagnostic_copies, self._session]
+                    if s is not None and hasattr(s, 'diagnostics_status')
+                    and (getattr(s, 'diagnose_kopie', False) or (s is self._session and self._state == 'running'))
+                }),
+                "last_mark": getattr(self._session, 'last_mark', None),
                 "reference": (self._session.reference_status()
                               if self._session is not None and hasattr(self._session, "reference_status")
                               else {"enabled": False, "reason": "kein Referenzlauf"}),
@@ -265,7 +348,7 @@ class LiveService:
                 if self._state == "setup_running":
                     raise LiveError("Einrichtung laeuft bereits")
             camera_status = self._owner.status()
-            if not camera_status["running"]:
+            if camera_status.get("stalled") or not camera_status["running"]:
                 raise LiveError(
                     f"Kamera laeuft nicht: {camera_status.get('error')} — 'Kamera neu verbinden'"
                 )
@@ -276,6 +359,7 @@ class LiveService:
                 except ValueError as exc:
                     raise LiveError(f"Zellentext: {exc}") from exc
             session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
+            self._require_storage()
             with self._lock:
                 self._state, self._step, self._error = "setup_running", "start", None
                 self._setup_started_at = self._monotonic()
@@ -285,6 +369,8 @@ class LiveService:
                 self._session_dir, self._proposal = session_dir, None
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
+                self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
+                                           if getattr(s, 'diagnose_kopie', False)]
                 self._session = None
             self._setup_thread = threading.Thread(
                 target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
@@ -340,7 +426,7 @@ class LiveService:
         return serial.Serial(live_setup.SERIAL_PORT, live_setup.SERIAL_BAUDRATE, timeout=2.0)
 
     def _run_setup(self, *, session_dir: Path, cell_text: str | None, report: Callable[[str], None]) -> dict:
-        """Echter Ablauf: Fokus -> Kamera mit festen Reglern -> Standbilder -> Vorschlag."""
+        """Fokus -> feste Kamera -> Displaybelichtung -> Standbilder -> Vorschlag."""
         setup_dir = session_dir / "setup"
         setup_dir.mkdir(parents=True, exist_ok=True)
         self._write_setup_diagnostic(setup_dir / "cell-text.json", [])
@@ -369,14 +455,31 @@ class LiveService:
         settings, sweep = live_setup.focus_camera(
             OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
         )
+        camera_record = {
+            "camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
+            "focus_method": getattr(sweep, "focus_method", "sweep"),
+            "focus_verify": getattr(sweep, "focus_verify", None),
+            "created_at_utc": self._wall().isoformat(),
+        }
         (setup_dir / "camera-settings.json").write_text(
-            json.dumps({"camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
-                        "focus_method": getattr(sweep, "focus_method", "sweep"),
-                        "created_at_utc": self._wall().isoformat()}, indent=2, ensure_ascii=False),
+            json.dumps(camera_record, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         report("kamera")
         self._owner.restart(lambda: self._source_for(settings))
+        report("belichtung")
+        self._setup_progress("Belichtung auf die Anzeige abstimmen")
+
+        def apply_exposure(adjusted: CameraSettings) -> None:
+            self._owner.restart(lambda: self._source_for(adjusted))
+
+        settings, exposure_adjust = live_setup.adjust_exposure(
+            OwnerSetupCamera(self._owner), settings, apply=apply_exposure, info=self._setup_progress,
+        )
+        camera_record.update(camera=settings.to_dict(), exposure_adjust=exposure_adjust)
+        (setup_dir / "camera-settings.json").write_text(
+            json.dumps(camera_record, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
         port = None
         try:
             if cell_text is None:
@@ -422,6 +525,7 @@ class LiveService:
             device_id=DEVICE_ID,
             session_id=session_dir.name,
             out_dir=setup_dir,
+            cell_text=result.first_text,
             offset_check=result.offset_check,
             final_checks=result.final_checks,
             stability_image_bgr=result.second,
@@ -429,16 +533,50 @@ class LiveService:
             stability_min_elapsed_s=15.0,
             setup_attempt=result.setup_attempt,
             reader_check=result.reader_check,
+            live_tracking=True,
+            exposure_adjust=exposure_adjust,
         )
 
+    def edit_regions(self, *, proposal_revision, add, remove) -> dict:
+        """Nur den aktuellen Vorschlag bearbeiten, nie waehrend eines Laufs."""
+        with self._operation_lock:
+            with self._lock:
+                if self._state == "running":
+                    raise LiveError("Lauf zuerst beenden - Rahmenbereiche nicht bearbeitbar")
+                if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
+                    raise LiveError("Kein aktueller Vorschlag zum Bearbeiten")
+                block = self._proposal.get("live_tracking")
+                if block is None:
+                    raise LiveError("Kein aktueller Rahmenvorschlag - neu einrichten")
+                if proposal_revision is None or proposal_revision != block.get("proposal_revision"):
+                    raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
+                proposal, session_dir = self._proposal, self._session_dir
+            try:
+                updated = live_setup.edit_regions(
+                    proposal, add=add, remove=remove, out_dir=session_dir / "setup",
+                    at_utc=self._wall().astimezone(UTC).isoformat(),
+                )
+            except live_setup.SetupInputError as exc:
+                raise LiveInputError(str(exc)) from exc
+            except (live_setup.SetupError, ValueError, OSError) as exc:
+                raise LiveError(str(exc)) from exc
+            with self._lock:
+                self._proposal = updated
+                self._run_block = run_block_reason(updated)
+            return {"proposal_revision": updated["live_tracking"]["proposal_revision"],
+                    "centre_results": updated["live_tracking"]["proposal"]["metrics"]["centre_results"]}
+
     def confirm(self, *, session_id: str, confirmed_by: str, format_checked: bool, acknowledge_warning: bool = False,
-                use_tolerance: bool = False) -> None:
+                use_tolerance: bool = False, proposal_revision: str | int | None = None) -> None:
         with self._operation_lock:
             with self._lock:
                 if self._state != "setup_ready" or self._proposal is None or self._session_dir is None:
                     raise LiveError("Kein Vorschlag zum Bestaetigen")
                 if session_id != self._session_dir.name:
                     raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
+                block = self._proposal.get("live_tracking")
+                if block is not None and (proposal_revision is None or proposal_revision != block.get("proposal_revision")):
+                    raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
                 proposal, session_dir = self._proposal, self._session_dir
             if not format_checked:
                 raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")
@@ -489,17 +627,30 @@ class LiveService:
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
                                       "confirmed_at_utc": profile.confirmed_at_utc,
-                                      "warning_acknowledged": overall == "WARNUNG"}
+                                      "warning_acknowledged": overall == "WARNUNG",
+                                      "tracking_mode": "rahmenbereiche" if profile.live_tracking is not None else "ecc_alt"}
                 self._run_block = confirmation["run_block"]
                 self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
-    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None) -> None:
+    def cleanup(self, *, days: int, diagnostics_only: bool = False, execute: bool = False) -> dict:
+        with self._operation_lock:
+            with self._lock:
+                protected = {self._run_dir} if self._state == 'running' and self._run_dir else set()
+                for session in [*self._diagnostic_copies, self._session]:
+                    if session is not None and getattr(session, 'diagnose_kopie', False):
+                        protected.add(session._out_dir)
+            return cleanup_runs(self._data_dir, days=days, diagnostics_only=diagnostics_only,
+                                execute=execute, protected=protected, now=self._wall())
+
+    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None,
+                  diagnostics: bool = False, output=None) -> None:
         try:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
+            output = validate_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
         except (TypeError, ValueError) as exc:
             raise LiveError(str(exc)) from exc
         with self._operation_lock:
@@ -513,6 +664,7 @@ class LiveService:
                 confirmed_by = (self._profile_info or {}).get("confirmed_by")
                 if block is not None and not test_override:
                     raise LiveError(block)
+            self._require_storage(diagnostics=diagnostics)
             number = 1
             while True:
                 out_dir = profile_path.parent / f"run-{number:02d}"
@@ -539,18 +691,22 @@ class LiveService:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
                 recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
-                                              norm_schedule=schedule) if reference else None)
+                                              norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
                 session = LiveSession(
                     self._owner, profile_path, self._config, out_dir, test_run=test_run,
                     reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
+                    diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
+                    **({'output': output} if output is not None else {}),
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
             stop = threading.Event()
             with self._lock:
+                self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
+                                           if getattr(s, 'diagnose_kopie', False)]
                 self._session, self._run_stop, self._state, self._error = session, stop, "running", None
                 self._run_dir = out_dir
                 self._test_run = test_run
@@ -576,6 +732,16 @@ class LiveService:
     def stop_run(self) -> None:
         with self._operation_lock:
             self._stop_run()
+
+    def mark(self, text: str) -> None:
+        with self._lock:
+            if self._state != 'running' or self._session is None:
+                raise LiveError('kein Lauf aktiv')
+            session = self._session
+        try:
+            session.mark(text)
+        except (ValueError, OSError) as exc:
+            raise LiveError(str(exc)) from exc
 
     def _stop_run(self) -> None:
         with self._lock:
@@ -606,8 +772,17 @@ class LiveService:
                 self._state, self._error = "stopped", error
 
     def close(self) -> None:
+        deadline = time.monotonic() + min(DIAGNOSTIC_CLOSE_TIMEOUT_S, 60.0)
         with self._operation_lock:
             with self._lock:
                 running = self._state == "running"
-            if running:
-                self._stop_run()
+            try:
+                if running:
+                    self._stop_run()
+            finally:
+                # Gemeinsames Zeitbudget fuer alte Kopien und den aktuellen Lauf.
+                for session in [*self._diagnostic_copies, self._session]:
+                    if session is None or not hasattr(session, 'wait_diagnostics'):
+                        continue
+                    if not session.wait_diagnostics(max(0.0, deadline - time.monotonic())):
+                        _LOG.warning('Diagnosekopie: Zeitlimit beim Dienstende; RAM-Ablage zur Rettung behalten')

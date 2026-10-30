@@ -10,9 +10,11 @@ Bild; übersprungene Bilder stehen im Trace und in der Laufzusammenfassung.
 Kameraeinstellungen, Gate-Konfiguration und Uhrenversatz fest. Die
 Timing-Kalibrierung ist beim Start Pflicht, wird aber nicht angewandt.
 Testlauf und angepasste Toleranz werden dort gesondert markiert.
-Pipeline-Records eines Testlaufs können trotzdem VALID enthalten; eine
-Messnutzung ist durch die Laufmarkierung untersagt, aber noch nicht
-technisch gesperrt ([OQ-44](../docs/open-questions.md#oq-44)).
+Im Testlauf setzt `LiveSession.step()` jeden VALID-Pipeline-Record vor dem
+Audit auf `UNREADABLE`, mit `value=None` und dem ersten Ablehnungsgrund
+`testlauf_keine_freigabe`. Die ursprüngliche Gate-Entscheidung bleibt nur
+in der getrennten Leser-Vermutung als Diagnose sichtbar; die Seite zeigt
+keinen gültigen Testlaufwert ([OQ-44](../docs/open-questions.md#oq-44)).
 
 ::: dispread.pipeline
 

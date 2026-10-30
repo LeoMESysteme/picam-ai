@@ -32,3 +32,16 @@ def test_clock_log_session_dict_and_boottime_conversion():
     }
     stamp = Timestamp(value_ns=1_000, base=TimeBaseKind.V4L2_MONOTONIC).to_dict()
     assert to_boottime_ns(stamp, session) == 1_005
+
+
+def test_checked_offset_bounds_refresh_without_unbounded_sample_history():
+    offsets = iter([1000, 1100, 1200, 2_001_000, 2_001_100])
+    log = ClockLog(measure=lambda: next(offsets), monotonic_ns=lambda: 10)
+    log.sample()
+    assert log.checked_offset_bounds() == {'start': 1000, 'end': 1100}
+    assert log.checked_offset_bounds() == {'start': 1000, 'end': 1200}
+    assert log.to_session(ended=True)['samples'] == [[10, 1000]]
+    assert log.checked_offset_bounds() == {'start': 1000, 'end': 2_001_000}
+    assert log.checked_offset_bounds() == {'start': 1000, 'end': 2_001_100}
+    # Ein Versatzsprung bleibt im Audit, normale Pruefungen nicht je Frame.
+    assert log.to_session(ended=True)['samples'] == [[10, 1000], [10, 2_001_000]]

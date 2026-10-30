@@ -29,20 +29,24 @@ Die zulässige Grundprüfung ist
 Bei einer unzulässigen Basis darf aus dem Zahlenwert in
 <code>value_ns</code> keine reale Latenzaussage entstehen.
 
-**Bekannte Implementierungsgrenze:** <code>Timestamp.now_monotonic()</code>
-liest MONOTONIC, kennzeichnet ihn aber als <code>sensor_boottime</code>.
-Die Pipeline liest die Ergebniszeit ebenfalls aus MONOTONIC und übernimmt
-dafür die Basis des Frames. Das passt aktuell zum V4L2-Live-Pfad, gilt aber
-nicht allgemein für andere Quellen. Eine Differenz aus Aufnahme- und
-Ergebniszeit deshalb nicht ungeprüft als Latenz verwenden; die gleichbasigen
-Marken des <code>PipelineTrace</code> dokumentieren die Rechenzeit.
-Korrektur und Abnahme: [OQ-45](../open-questions.md#oq-45).
+**Verarbeitungsmarken (geklärt 2026-10-23):**
+<code>Timestamp.now_monotonic()</code> und die Pipeline-Ergebniszeit
+<code>result_timestamp</code> stammen immer aus
+<code>time.monotonic_ns()</code> und tragen <code>HOST_MONOTONIC</code>.
+<code>capture_timestamp</code> behält die Zeitbasis der Quelle. Alte
+Auditdateien behalten ihre bisherigen Labels; sie werden nicht umgeschrieben
+([OQ-45](../open-questions.md#oq-45)). Eine Differenz aus Aufnahme- und
+Ergebniszeit nur bei belegtem gemeinsamem Uhrbezug als Latenz verwenden;
+Replay-Aufnahme und Verarbeitung gehören zu verschiedenen Sessions. Die
+gleichbasigen Marken des <code>PipelineTrace</code> dokumentieren die
+Rechenzeit.
 
 ## Welche Zeitbasis begegnet dir?
 
 | Basis | Herkunft | Zulässiger Schluss |
 | --- | --- | --- |
 | <code>v4l2_monotonic</code> | V4L2-Pufferzeitstempel der aktuellen StreamCam | zeittragend; Bezug auf BOOTTIME erst mit gemessenem Versatz |
+| <code>host_monotonic</code> | Host-Uhr beim Verarbeitungsabschluss | reale Verarbeitungszeit, niemals Aufnahmezeit; Bezug auf BOOTTIME erst mit gemessenem Sessionversatz |
 | <code>sensor_boottime</code> | historische IMX500-Metadaten | zeittragend; Semantik des Sensorereignisses war offen |
 | <code>replay_recorded</code> | erhaltene Aufnahmezeit eines Replays | zeittragend, wenn die Aufnahmemetadaten belastbar sind |
 | <code>synthetic</code> | Generator | keine reale Aufnahme- oder Synchronitätszeit |
@@ -53,8 +57,9 @@ periodisch und beim Abschluss; <code>session.json</code> enthält die Proben.
 Die Timing-Kalibrierung wird mit Prüfsumme dokumentiert, aber nicht auf
 Aufnahmezeit oder Wert angewandt.
 
-Die StreamCam liefert einen Stempel in <code>CLOCK_MONOTONIC</code>.
-<code>records.to_boottime_ns</code> rechnet nur um, wenn die Session
+Die StreamCam-Aufnahmezeit und die Host-Verarbeitungszeit stammen aus
+<code>CLOCK_MONOTONIC</code>. Nach BOOTTIME führt für beide ausschließlich
+<code>records.to_boottime_ns</code>, wenn die jeweilige Session
 Start- und Endversatz <code>BOOTTIME − MONOTONIC</code> enthält und keine
 auffällige Versatzänderung durch Suspend vorliegt. Fehlende Angaben werden
 abgelehnt. Die physikalische Bedeutung des V4L2-Stempels bleibt

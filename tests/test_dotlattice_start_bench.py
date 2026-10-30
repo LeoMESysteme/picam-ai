@@ -1,17 +1,19 @@
 """Startsuche und sichere Ablehnung auf den Werkbank-Standbildern."""
 
-from pathlib import Path
-
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread import dotlattice
 from dispread.dotlattice import LatticeFit, _lattice_candidates, evaluate_quad, fit_lattice
-from dispread.setup_checks import raster_offset_check
+from dispread.layout import CharLayout
+from dispread.live import DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256
+from dispread.ocr.dotmatrix import DotMatrixReader
+from dispread.rectify import rectify
+from dispread.setup_checks import GRID, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 
-VAR = Path(__file__).resolve().parents[1] / "var"
 EMPTY_CELLS = (8, 13, 14, 15)
 STILLS = [
     ("live/live-20261014T123033Z/setup/still.png", "+0.46801 "),
@@ -22,9 +24,7 @@ STILLS = [
 
 
 def _load(path):
-    still = VAR / path
-    if not still.exists():
-        pytest.skip("Gespeichertes Standbild fehlt")
+    still = local_recording(path)
     image = cv2.imread(str(still))
     assert image is not None
     hint = find_green_hint_box(image)
@@ -38,6 +38,20 @@ def test_bench_still_finds_lattice_with_ok_offset(path, text):
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
     assert raster_offset_check([(image, text)], result.quad).status == "OK"
+
+
+def test_left_oblique_still_finds_lattice_and_reads_expected_text():
+    image, hint = _load("live/live-20261023T123820Z/setup/still.png")
+    if not DEFAULT_TEMPLATES.is_file():
+        pytest.skip("Gespeicherte Leservorlagen fehlen")
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    reader = DotMatrixReader.from_file(DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256)
+    crop = rectify(image, result.quad, target_size=(400, 160)).image
+    reading = reader.read(crop, CharLayout(grid=GRID, unit="mV/V"))
+    assert reading.diagnostics["reject_reason"] is None, reading.diagnostics
+    assert f"{reading.raw_text} {reading.unit_text}" == "+0.60571 mV/V"
+    assert reading.value == pytest.approx(0.60571)
 
 
 def test_one_row_skewed_bench_quad_exceeds_row_limit_and_fails_offset():

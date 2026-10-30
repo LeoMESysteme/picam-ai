@@ -25,6 +25,8 @@ import json
 import sys
 from pathlib import Path
 
+from _devdata import input_path
+
 from dispread.ocr.dotmatrix_font import CLASSES, rom_vector
 from dispread.ocr.dotmatrix_templates import (
     ROM_CHECK,
@@ -99,8 +101,8 @@ def train(samples_by_char: dict[str, list], groups: tuple[str, ...]) -> Template
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Trainiert Dot-Matrix-Vorlagen aus gewaehlten Ernte-Gruppen.")
-    parser.add_argument("--dataset-root", type=Path, required=True, help="DatasetStore-Wurzelverzeichnis (nur lesen)")
-    parser.add_argument("--profile-map", type=Path, required=True, help="Sitzungsprofil-Zuordnung (write-map)")
+    parser.add_argument("--dataset-root", type=input_path, required=True, help="DatasetStore-Wurzelverzeichnis (nur lesen)")
+    parser.add_argument("--profile-map", type=input_path, required=True, help="Sitzungsprofil-Zuordnung (write-map)")
     parser.add_argument("--groups", required=True, help="Kommagetrennte Liste von Sitzungs-Gruppen, die trainiert werden")
     parser.add_argument("--out", type=Path, required=True, help="Zieldatei fuer templates.json")
     return parser.parse_args(argv)

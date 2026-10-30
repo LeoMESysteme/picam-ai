@@ -1,8 +1,8 @@
 import dataclasses
 import json
-from pathlib import Path
 
 import pytest
+from devdata_helpers import recording_glob
 
 from dispread.camera_settings import CameraSettings
 from dispread.charcells import CharGrid
@@ -31,6 +31,24 @@ def _profile_v2():
 def _profile():
     """Aktuelles Profil v3 mit `camera`."""
     return dataclasses.replace(_profile_v2(), schema_version=PROFILE_SCHEMA_VERSION, camera=_CAMERA)
+
+
+@pytest.mark.parametrize("offline,confirmed_by", [
+    (True, "bediener"), (True, "offline-auswertung"), (False, "offline-auswertung"),
+])
+def test_require_live_profile_refuses_offline_origin(offline, confirmed_by):
+    from dispread.session_profile import require_live_profile
+
+    profile = dataclasses.replace(_profile(), offline=offline, confirmed_by=confirmed_by)
+    with pytest.raises(ValueError, match="Offline-Profil"):
+        require_live_profile(profile)
+
+
+def test_require_live_profile_accepts_existing_live_profiles():
+    from dispread.session_profile import require_live_profile
+
+    require_live_profile(_profile())
+    require_live_profile(_profile_v2())
 
 
 def test_save_load_roundtrip(tmp_path):
@@ -105,16 +123,17 @@ def test_setup_checks_roundtrip(tmp_path):
     assert json.loads(path.read_text())["setup_checks"] == checks
 
 
-_DIAGNOSTICS = Path(__file__).parents[1] / "var/diagnostics"
 _EXISTING_PROFILES = sorted(
-    path for path in [*_DIAGNOSTICS.glob("*-profile"), *_DIAGNOSTICS.glob("*-profile/profile.json"),
-                      *_DIAGNOSTICS.glob("*-profile-regrid1.json")]
-    if path.is_file()
+    path for pattern in ("diagnostics/*-profile", "diagnostics/*-profile/profile.json",
+                         "diagnostics/*-profile-regrid1.json")
+    for path in recording_glob(pattern) if path.is_file()
 )
 
 
-@pytest.mark.parametrize("source", _EXISTING_PROFILES, ids=lambda path: str(path.relative_to(_DIAGNOSTICS)))
+@pytest.mark.parametrize("source", _EXISTING_PROFILES or [None], ids=lambda path: str(path))
 def test_existing_profile_resaves_byte_identically(tmp_path, source):
+    if source is None:
+        pytest.skip("lokale Profile fehlen: diagnostics/*-profile (DISPREAD_DEV_DATA setzen)")
     profile = SessionProfile.load(source)
     original = json.loads(source.read_text())
     assert (profile.setup_checks is not None) == ("setup_checks" in original)
@@ -249,3 +268,18 @@ def test_char_layout_from_profile_rejects_empty_confirmed_by():
     profile = dataclasses.replace(_profile(), confirmed_by="")
     with pytest.raises(ValueError, match="confirmed_by"):
         CharLayout.from_profile(profile, unit="mV/V")
+
+
+def test_live_tracking_optional_roundtrip_and_old_dict_byte_identity(tmp_path):
+    original = _profile().to_dict()
+    assert "live_tracking" not in original
+    encoded = json.dumps(original, indent=2, ensure_ascii=False).encode()
+    path = tmp_path / "old.json"
+    path.write_bytes(encoded)
+    profile = SessionProfile.load(path)
+    assert profile.live_tracking is None
+    profile.save(path)
+    assert path.read_bytes() == encoded
+    block = {"version": 1, "method": "rahmenbereiche", "proposal": {"regions": []}}
+    dataclasses.replace(profile, live_tracking=block).save(path)
+    assert SessionProfile.load(path).live_tracking == block

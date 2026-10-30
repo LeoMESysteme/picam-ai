@@ -19,12 +19,54 @@ ist fuer den Laboraufbau zu bewerten (OQ-09).
 
 from __future__ import annotations
 
+import math
 import threading
 import time
+from time import monotonic
 
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord, ValueStatus
 from dispread.sink import SinkHealth
 from dispread.sink.protocol import TelegramFormatter
+
+
+class SerialWriteError(OSError):
+    """Write fehlgeschlagen; None bedeutet unbekannte Teilbytes im Treiberaufruf."""
+
+    def __init__(self, message: str, bytes_written: int | None, confirmed: int):
+        super().__init__(f'{message}; confirmed_bytes_written={confirmed}')
+        self.bytes_written = bytes_written
+
+
+def write_complete(transport, payload: bytes, timeout: float) -> int:
+    """Nur dasselbe Telegramm fortsetzen, mit einer Gesamtfrist; nie flush/purge.
+
+    pySerial meldet bei Ausnahmen keine Teilbytezahl des fehlgeschlagenen
+    Aufrufs. Dann bleibt bytes_written unbekannt; bestaetigte vorherige Calls
+    stehen als Untergrenze im Fehlertext. Kein Aufrufer darf danach senden.
+    """
+    deadline = monotonic() + timeout
+    written = 0
+    configured_timeout = getattr(transport, 'write_timeout', timeout)
+    try:
+        while written < len(payload):
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise SerialWriteError('Schreibfrist abgelaufen', written, written)
+            transport.write_timeout = remaining
+            try:
+                count = transport.write(payload[written:])
+            except Exception as exc:
+                # EAGAIN schreibt nichts; andere Treiberfehler koennen Teilbytes hinterlassen.
+                known = written if isinstance(exc, BlockingIOError) else None
+                raise SerialWriteError(f'{type(exc).__name__}: {exc}', known, written) from exc
+            if type(count) is not int or not 0 <= count <= len(payload) - written:
+                raise SerialWriteError(f'Ungueltige Write-Laenge: {count}', None, written)
+            written += count
+            if not count or monotonic() > deadline:
+                raise SerialWriteError('Kein Schreibfortschritt oder Schreibfrist abgelaufen', written, written)
+        return written
+    finally:
+        transport.write_timeout = configured_timeout
 
 
 class SerialSink:
@@ -44,6 +86,8 @@ class SerialSink:
         timeout: float = 1.0,
         write_timeout: float = 1.0,
     ) -> None:
+        if not math.isfinite(write_timeout) or write_timeout <= 0:
+            raise ValueError('write_timeout muss positiv und begrenzt sein')
         self.port = port
         self.formatter = formatter
         self.baudrate = baudrate
@@ -98,15 +142,27 @@ class SerialSink:
         with self._lock:
             if self._serial is None:
                 raise RuntimeError("SerialSink.open() wurde nicht aufgerufen")
-            try:
-                self._serial.write(payload)
-                self._serial.flush()
-                self._sent += 1
-                complete = time.monotonic_ns()
-            except Exception as exc:  # serial.SerialTimeoutException u. a.
-                self._errors += 1
-                self._last_error = f"{type(exc).__name__}: {exc}"
-                complete = None
+            dropped = False
+            drop_reason = error = None
+            written = 0
+            complete = None
+            if self._last_error:
+                dropped, drop_reason = True, 'output_failed'
+                self._omitted += 1
+            else:
+                try:
+                    # Nur das neue Telegramm auslassen; vorherige Treiberbytes erhalten.
+                    if self._serial.out_waiting:
+                        dropped, drop_reason = True, 'output_backlog'
+                        self._omitted += 1
+                    else:
+                        written = write_complete(self._serial, payload, self.write_timeout)
+                        self._sent += 1
+                        complete = time.monotonic_ns()
+                except Exception as exc:
+                    self._errors += 1
+                    error = self._last_error = f"{type(exc).__name__}: {exc}"
+                    written = exc.bytes_written if isinstance(exc, SerialWriteError) else None
 
         return TxReceipt(
             frame_sequence=record.frame_sequence,
@@ -116,7 +172,11 @@ class SerialSink:
             t_enqueue_ns=t0,
             t_complete_ns=complete,
             invalid_policy=policy if isinstance(policy, InvalidValuePolicy) else None,
-            omitted=False,
+            omitted=dropped,
+            dropped=dropped,
+            drop_reason=drop_reason,
+            error=error,
+            bytes_written=written,
         )
 
     def health(self) -> SinkHealth:

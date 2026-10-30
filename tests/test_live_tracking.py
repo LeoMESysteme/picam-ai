@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from dotmatrix_helpers import LAYOUT, QUAD, embed, synthetic_reader
 
 from dispread.frames import Frame
@@ -28,6 +29,26 @@ def test_tracked_locator_reads_value_through_pipeline():
     record = _pipeline(TrackedQuadLocator(reference, QUAD)).process(_frame(1, embed("+ 1.2345 ")))
     assert record.status is ValueStatus.VALID
     assert record.value == 1.2345 and record.unit == "mV/V"
+
+
+@pytest.mark.parametrize("base", [
+    TimeBaseKind.V4L2_MONOTONIC, TimeBaseKind.SYNTHETIC, TimeBaseKind.REPLAY_RECORDED,
+    TimeBaseKind.FILE_MTIME, TimeBaseKind.SENSOR_BOOTTIME,
+])
+@pytest.mark.parametrize("located", [True, False])
+def test_ergebniszeit_ist_host_monotonic_unabhaengig_von_aufnahme(base, located, monkeypatch):
+    image = embed("+ 1.2345 ")
+    pipeline = _pipeline(TrackedQuadLocator(image, QUAD))
+    capture = Timestamp(123_456, base)
+    frame = Frame(frame_sequence=1, image=image if located else np.zeros_like(image),
+                  capture_timestamp=capture, source_id="fake")
+    monkeypatch.setattr("dispread.pipeline.time.monotonic_ns", lambda: 987_654_321)
+    record = pipeline.process(frame)
+    assert record.status is (ValueStatus.VALID if located else ValueStatus.UNREADABLE)
+    assert record.capture_timestamp is capture
+    assert record.result_timestamp.base.value == "host_monotonic"
+    assert record.result_timestamp.value_ns == 987_654_321
+    assert record.trace.t_record_built_ns == 987_654_321
 
 
 def test_lost_tracking_is_unreadable_with_reason():
@@ -88,3 +109,38 @@ def test_tracking_loss_preserves_last_valid_time_for_stale_rejection():
         assert pipeline.process(_second_frame(seq, image)).status is ValueStatus.UNREADABLE
     rejected = pipeline.process(_second_frame(6, image * 0 + 200))
     assert rejected.status is ValueStatus.STALE and rejected.value is None
+
+
+def test_confirmed_locator_uses_stored_regions_without_proposing(tmp_path, monkeypatch):
+    import cv2
+    from frame_tracking_helpers import reference_scene, tracking_block
+
+    from dispread.live import frame_tracking
+    from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, RegionProposal
+    from dispread.live.tracking import ConfirmedRegionLocator
+
+    image, quad = reference_scene()
+    path = tmp_path / "still.png"
+    cv2.imwrite(str(path), image)
+    block = tracking_block(image, quad, path)
+    block["proposal"]["regions"].reverse()
+    proposal = RegionProposal.from_dict(block["proposal"])
+    expected = FrameTracker(image, quad, proposal, FrameTrackingConfig())
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Kein neuer Vorschlag beim Laufstart")
+
+    monkeypatch.setattr(frame_tracking, "propose_regions", forbidden)
+    locator = ConfirmedRegionLocator(image, quad, block)
+    assert locator.locator_id == "rahmenbereiche_confirmed_quad"
+    for seq, current in enumerate((image, image * 0, image), 1):
+        candidates = locator.locate(_frame(seq, current))
+        result = expected.update(current)
+        assert locator.last_track == result
+        if result.quad is None:
+            assert candidates == ()
+            assert locator.last_reason == f"tracking_lost:{result.reason}"
+        else:
+            assert candidates[0].quad == result.quad
+            assert candidates[0].locator_id == locator.locator_id
+            assert locator.last_reason is None

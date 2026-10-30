@@ -77,6 +77,21 @@ def test_numeric_value_must_also_match_reference(tmp_path):
     assert _module().evaluate(tmp_path)['misreads'] == 1
 
 
+def test_suppressed_records_are_non_valid_even_without_session_marker(tmp_path):
+    fixture_run(tmp_path)
+    path = tmp_path / 'records.jsonl'
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    for record in records:
+        if record['status'] == 'valid':
+            record.update(status='unreadable', value=None, reject_reasons=['testlauf_keine_freigabe'])
+    _write_rows(path, records)
+    result = _module().evaluate(tmp_path)
+    assert result['compared_valid'] == result['undecided_valid'] == result['uncovered_valid'] == 0
+    assert result['stable']['by_status'] == {'unreadable': 2}
+    assert result['changing']['by_status'] == {'unreadable': 2, 'transition': 1}
+    assert result['latency_ms']['n'] == 0
+
+
 def test_dropped_reference_audit_is_not_a_validation(tmp_path):
     fixture_run(tmp_path)
     path = tmp_path / 'session.json'
@@ -85,6 +100,16 @@ def test_dropped_reference_audit_is_not_a_validation(tmp_path):
     path.write_text(json.dumps(session))
     with pytest.raises(ValueError, match='unvollstaendig'):
         _module().evaluate(tmp_path)
+
+
+@pytest.mark.parametrize('session,reason', [
+    ({'test_run': {'testlauf': True}, 'reference': {'dropped_oldest': 1}}, 'Testlauf'),
+    ({'reference': {'dropped_oldest': 1}}, 'Queue-Ueberlauf'),
+])
+def test_session_rejection_precedes_missing_reference(tmp_path, capsys, session, reason):
+    (tmp_path / 'session.json').write_text(json.dumps(session))
+    assert _module().main([str(tmp_path)]) == 2
+    assert reason in capsys.readouterr().err
 
 
 def _write_rows(path, rows):
@@ -109,6 +134,22 @@ def test_change_after_gap_has_no_measurable_latency_or_change_shares(tmp_path):
     assert result['uncovered_valid'] == 1
     assert result['undecided_valid'] == 0
     assert result['compared_valid'] == 1
+
+
+def test_single_missing_telegram_counts_as_gap(tmp_path):
+    # OQ-40: Periode 533 ms; ein Ausfall gibt >= ~1039 ms, ungestoert max 561 ms.
+    fixture_run(tmp_path)
+    refs = [{'t_boottime_ns': int(t * 1e9), 'raw': f'+0{v}.2345 mV/V',
+             'cell_text': f'+ {v}.2345 ', 'value': v + .2345}
+            for t, v in [(0, 1), (.5, 1), (1, 1), (1.9, 2), (2.4, 2), (2.9, 2)]]
+    records = [{'status': 'valid', 'raw_text': '+2.2345', 'value': 2.2345, 'unit': 'mV/V',
+                'capture_timestamp': {'value_ns': int(2.5e9) - 100, 'base': 'v4l2_monotonic'}}]
+    _write_rows(tmp_path / 'reference.jsonl', refs)
+    _write_rows(tmp_path / 'records.jsonl', records)
+    from dispread.live import reference_eval
+    assert reference_eval.MAX_GAP_NS == 800_000_000
+    result = _module().evaluate(tmp_path)
+    assert result['changes_after_gap'] == 1
 
 
 def test_parse_error_masks_previous_telegram_through_next_valid_plus_guard(tmp_path):

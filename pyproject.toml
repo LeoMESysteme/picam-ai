@@ -17,7 +17,7 @@ requires-python = ">=3.13"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-xdist>=3.8", "ruff>=0.6"]
 
 [project.scripts]
 dispread = "dispread.workbench.cli:main"
@@ -48,4 +48,5 @@ markers = [
     "hardware: braucht eine angeschlossene Kamera",
     "serial: braucht UART oder Transceiver",
     "slow: laeuft laenger als 5 s",
+    "timing: misst Wanduhr-Laufzeit; bei pytest -n uebersprungen, getrennt mit -m timing",
 ]

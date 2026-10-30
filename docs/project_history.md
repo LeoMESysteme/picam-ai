@@ -9,6 +9,335 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-30 — R13-23: Grobfehlertoleranz vor unveränderter Feinprüfung
+
+**Problem:** Faktor 4 spart Zeit, verliert mit einer harten 20-px-Sperre
+auf der Grobschätzung aber gültige Baseline-Tracks. Der bisherige
+Live-Vergleich und DEV ohne zweite Versuche deckten das nicht auf.
+
+**Entscheidung:** Ganzzahliges AREA-Faktor-4-Raster behalten und nur die
+Vorabsperre mit 6 px Grobfehlertoleranz versehen (maximal gemessener
+Vektorfehler 4,956 px plus Reserve). Der zweite Feinfit muss unverändert
+20 px/3°/±0,5 % gegen das ursprüngliche Quad einhalten. Wieder
+`cv2.phaseCorrelate` statt eigener Spektralnormierung/Referenz-DFT.
+Nur exakt leerer Hochpass bricht vorab ab. Schutzband von +8 auf +12 px
+vergrößert (7 Filterstütze, 5 Reserve); zu kleine Ausschnitte deaktivieren
+nur die optionale Grobsuche.
+
+**Alternativen:** Explizit gerade DFT-Maße ändern auf den realen Referenzen
+nichts; Float-Resize und unbeschnittenes Faktor-4-Raster beseitigen den
+Fehler nicht zuverlässig. Faktor 2 ist genauer, kostet aber die größere
+DFT; lokale zweite Korrelation ist nach verlustfreiem Sweep und Live-
+Vergleich nicht erforderlich. Keine empirische Bias-Subtraktion bei
+struktur-/rasterabhängigen Fehlern. Der Cache-Teilgewinn ist lastabhängig
+und rechtfertigt hier keine eigene OpenCV-Nachimplementierung; sämtliche
+aktuellen Laufzeitvergleiche verwenden OpenCV ohne Spektralcache.
+
+**Konsequenz:** Reproduzierbarer Review-Sweep als eigenes Skript, keine
+verlorenen HEAD-Tracks und keine falschen Quads >1 px in je 285 Fällen.
+Gezielte Tests isolieren die absoluten Feinfitgrenzen sowie kleine
+Ausschnitte und alle 16 Zeichenschutz-Rasterlagen. DEV belegt ausschließlich
+den ersten Pfad. Keine neue Abnahme; Zahlen und Einschränkungen im
+[Validierungsnachtrag](VALIDATION.md#r13-23-grobsuche-2026-10-30).
+
+## 2026-10-30 — P4-3: begrenzte Opt-in-Ausgabe nach dem Audit
+
+**Problem:** Der Live-Lauf braucht einen vorläufigen UserDefined-Ausgang,
+ohne Leser, Freigabesicherungen oder Record-Audit durch seriellen Stau
+aufzuhalten und ohne alte Werte nachzuliefern.
+
+**Entscheidung:** Nach dem Audit genau den endgültigen Record an einen
+separaten Senderthread übergeben. Höchstens ein offener Auftrag, weitere
+Frames entfallen mit Beleg. Reviewkorrektur am selben Tag: Live und Demo
+schreiben ein angefangenes Telegramm vollständig mit einer Gesamtfrist von
+1 s, Teilwrites setzen nur Restbytes fort. Treiberreste bleiben erhalten;
+nur ein neues Telegramm wird bei Stau verworfen. Timeout/Fehler sperrt den
+Ausgang; unerwartete Senderausnahmen bleiben sichtbar und lösen den
+Beschäftigt-Zustand. Tx-Belege und Formatter-Fähigkeiten bleiben neben dem
+Record-Audit im Laufordner.
+
+**Alternativen:** Ein synchroner SerialSink im Bildpfad kann blockieren;
+eine längere FIFO erzeugt Altwertnachlauf und Aufholbursts. Nicht blockierende
+Einzelwrites mit Pufferverwerfen wurden verworfen: Bereits übertragene
+Teilbytes lassen sich damit nicht zurücknehmen und würden das nächste
+Telegramm beschädigen. Ein unbeschränktes `flush()` könnte den Stop aufhalten. Ein tolerierter
+Öffnungsfehler würde einen scheinbar sendenden Lauf starten, deshalb wird
+der Start abgelehnt. Spätere Fehler sperren nur die Ausgabe für diesen Lauf;
+ein automatischer Wiederanlauf würde ohne Windows-Nachweis neue Risiken
+für die Zeilensynchronisation und Altwertanzeige schaffen.
+
+**Konsequenz:** Portprüfung schützt Referenz/Werteplan und Debugport samt
+auflösbaren Aliasen und PL2303-USB-ID `067b:2303`. Die ausdrückliche
+Adapterausnahme hebt aktive Portbelegung oder Debugschutz nicht auf. Der
+Ausgabeport öffnet vor dem Recorder; bei Öffnungsfehler gibt es keine
+Werteplan-/Rückstellaktivität. Live mindestens 9600 Baud, konservativ für
+19 Byte bei 8N1 in 19,79 ms < 33 ms; überlange Telegramme werden gesperrt.
+R13-17 und R13-21 wirken vor jeder Ausgabe. Lokale
+pty-/Fake-Belege ersetzen keine Windows-Abnahme, M8 oder Ungültigsemantik.
+Keine Hardwareänderung und keine neue Abhängigkeit.
+
+## 2026-10-28 — P4-1/P4-2: isolierter UserDefined-Transportprototyp
+
+**Problem:** Das UserDefined-Zahlenprofil ist belegt, der tatsächliche
+Windows-Empfang und die Ungültig-/Zeitsemantik sind offen. Für die Abnahme
+braucht es synthetische Werte und eine nachvollziehbare Sendespur.
+
+**Entscheidung:** Ein eigener `UserDefinedFormatter` hinter dem bestehenden
+`TelegramFormatter`-Vertrag erzeugt einen Wert ohne Rundung. Der Demo-Sender
+verwendet ihn mit synthetischen Records und schreibt separat nicht blockierend
+über pySerial, mit Pufferverwerfen, JSONL und ohne Retry/Aufholburst.
+
+**Alternativen:** `AsciiCsvFormatter` enthält zusätzliche Felder und ist kein
+Ein-Wert-Profil. `SerialSink.emit()` benutzt `flush()` und eignet sich deshalb
+unverändert nicht für den Demo-Schreibstaupfad; eine allgemeine Änderung des
+Sinks würde andere Verbraucher betreffen. Der Formatter wird zusätzlich am
+bestehenden SerialSink über pty geprüft. Eine Live-Anbindung bleibt P4-3 nach
+Review, der native GSV-Platzhalter bleibt erhalten.
+
+**Konsequenz:** Nur lokale pty-/Fake-Prüfungen; `sent` belegt Treiberannahme,
+keinen Empfang. Bereits übertragene Teilbytes können nicht zurückgenommen
+werden. Messfreigabe, reale Puffer und Zeitachse bleiben offen; der
+[Windows-Test](GSVMULTI_PROTOCOL.md#windows-test) dient dem nächsten Nachweis.
+
+## 2026-10-28 — R13-21: Aufnahmezeit sperrt eigene Geräteumschaltungen
+
+**Problem:** Zwischen `set_norm` und `set_dpoint` zeigt das Gerät lesbare,
+aber falsch skalierte Zwischenwerte; STOP liegt bereits vor dem Pause-Log.
+
+**Entscheidung:** Der Referenzrecorder hält unter Lock BOOTTIME-Intervalle
+von vor dem ersten STOP einer Schreibsequenz bis nach Resume plus dem
+bestehenden Referenz-GUARD von 695 ms. Die Live-Sitzung prüft die nach
+BOOTTIME umgerechnete Aufnahmezeit und setzt nur VALID vor dem Audit auf
+TRANSITION mit `geraet_umkonfiguriert`. R13-17 bleibt vorrangig.
+
+**Alternativen:** Eine Sperre erst ab dem Pause-Log lässt das erste
+STOP/CLEAR-Fenster offen. Eine reine Verarbeitungszeitsperre würde auch
+ältere, noch korrekt skalierte Aufnahmen verwerfen und könnte später
+verarbeitete Umschaltbilder freigeben. Deshalb bleiben abgeschlossene
+Intervalle erhalten. Reine Register-Lesepausen verändern keine
+Anzeigeparameter und werden ausgenommen.
+
+**Konsequenz:** Werteplan und Rückstellung teilen dieselbe Sperre;
+Schreibabbruch ohne Resume oder fehlender sicherer Aufnahmezeitbezug
+lassen keine Freigabe zu. Ohne Werteplan bleiben Record-Bytes und
+Summary-Schema erhalten. Keine Referenzwertkorrektur, keine neue
+Zeitmessung oder Hardware-Abnahme. Befund und Fake-Prüfungen im
+[Laborjournal](lab_journal.md#2026-10-28-r13-21-freigabesicherung-wahrend-eigener-gerateumschaltung).
+
+## 2026-10-28 — R13-19c: Maßstab nur im zweiten Rahmenfit
+
+**Problem:** Korrekte Grobverschiebungen allein beheben die Live-Verluste
+aus R13-19b nicht. Gemessene Maßstabsänderungen von etwa 0,1–0,3 % erzeugen
+an entfernten Rahmenpunkten Residuen bis über die unveränderten Grenzen.
+
+**Entscheidung:** Leonhard nimmt am 2026-10-28 gleichförmigen Maßstab ins
+Modell auf, eng begrenzt auf 0,995…1,005 und ausschließlich im zweiten
+Versuch. Deterministische Minimalpaare und Umeyama-Endfit prüfen den
+Maßstab; Leave-one-out verwendet dasselbe Modell. LCD-Randpunkte folgen
+der vollständigen Abbildung, Normalen bleiben Einheitsnormalen unter R.
+Der erste starre Durchgang bleibt bitgleich. Alle bisherigen Fein- und
+Bewegungsgrenzen bleiben erhalten; keine Glättung oder Referenzkorrektur.
+
+**Alternativen:** Ein starrer zweiter Fit bleibt am belegten
+Maßstabsunterschied hängen. Gelockerte Residuen, freie Affinität oder
+Homografie wären eine andere Sicherheitsentscheidung und sind verworfen.
+Vierfach verkleinerte Phasenkorrelation überschätzt synthetische 19 px
+als 20,15 px und verhindert den zweiten Versuch; deshalb nur Faktor 2
+(19,47 px). Die absolute Grobgrenze wird nicht erweitert oder gekappt.
+
+**Konsequenz:** Beide Live-Entwicklungsaufnahmen gewinnen Fits ohne
+Fehllesung; alle vorherigen Erfolge und DEV bleiben bitgleich. Der
+gemessene gemeinsame Rahmen-Bias erreicht im isolierten zweiten Versuch
+5,220583 px statt der starren Fixture-Rastergrenze von etwa 4,7 px.
+Die Person muss diesen verbleibenden blinden Fleck und das verfehlte
+10-ms-Ziel kennen; die Entscheidung ist keine formale Abnahme.
+Zahlen: [Validierung](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28).
+
+## 2026-10-28 — R13-19b: Grobversuch vor unveränderter Feinprüfung
+
+**Problem:** Eine Bewegung am Rand der ±12-px-Suche verliert Rahmenpunkte,
+obwohl die absolute Bewegungsgrenze 20 px / 3° erlaubt.
+
+**Entscheidung:** Nur nach drei Rahmenablehnungsgründen liefert maskierte
+Phasenkorrelation einen Suchfensterversatz. Der erste Erfolg bleibt
+unverändert; sämtliche Feinregeln gelten auch im zweiten Versuch.
+Ein generell größerer Suchradius würde jeden Normalfall verteuern und die
+Peak-/Eindeutigkeitsprüfung verändern; gelockerte Residualgrenzen wären
+eine neue Sicherheitsentscheidung. Beides bleibt ausgeschlossen.
+
+**Profil-Kompatibilität:** `from_dict` ergänzt ausschließlich die beiden
+neuen Grobfelder. Alte Feinparameter bleiben Pflicht und typgeprüft;
+die Live-Sitzung vergleicht die normalisierte Config weiter mit heutigen
+Defaults, der Konstruktor weiter mit Vorschlag, Referenz-SHA und Quad.
+Eine allgemeine Default-Migration könnte fehlende alte Sicherheitsfelder
+verdecken; eine neue Profileinrichtung nur wegen zusätzlicher Grobparameter
+würde vorhandene gebundene Rahmenfenster unnötig verwerfen.
+
+**Konsequenz:** Synthetische Nachführung bis 19 px, aber kein zusätzlicher
+Fit in den 208 Live-Diagnosebildern. Die Feinprüfung bleibt dort der
+belegte Engpass; keine Behauptung einer verbesserten Live-Verfügbarkeit.
+Einzelbelege: [Validierung](VALIDATION.md#r13-19b-grobschaetzung-2026-10-28),
+weitere Klärung: [OQ-46](open-questions.md#oq-46).
+
+# 2026-10-23 — R13-16: Vollständiges Live-Audit auf der 64-GB-SD
+
+## Problem und Entscheidung
+
+Die allgemeine JSONL-Sink rotiert bei 64 MiB und ersetzt nach fünf
+Generationen die ältesten Belege. Das reicht nicht für ein vollständiges
+Live-Audit über beliebig lange Läufe. Live schaltet diese Rotation deshalb
+mit `max_bytes=0` aus und dokumentiert eine Datei pro Lauf in `session.json`.
+Eine nur größere Generationenzahl verschiebt den Datenverlust; unbegrenzte
+Generationen würden zusätzlich alle Auswerter zum Zusammenführen zwingen.
+Eine einzelne Laufdatei passt zu den bestehenden Auswertern.
+
+Der Dienst verlangt vor Einrichtung und Lauf 2 GB freien SD-Platz, mit
+Diagnose zusätzlich deren 600-MB-Kopierbudget; unter 5 GB erscheint eine
+Warnung. Das begrenzt keine beliebig lange Laufdauer. Schreibfehler brechen
+den Lauf weiterhin sichtbar ab. Diagnose bleibt ausdrücklich opt-in.
+
+Aufbewahrung erfolgt per Vorschau und explizitem Löschaufruf über den
+bestehenden privaten Steuer-Socket. Ein separates Offline-Löschwerkzeug
+könnte laufende Läufe und asynchrone Diagnosekopien nicht sicher kennen.
+Der Dienst serialisiert Aufräumen mit Start/Stop, schützt beide und löscht
+nur nachweislich beendete, vollständig alte Laufbäume oder deren Diagnose.
+Setup und Profile bleiben in allen Sitzungen stehen. Automatische Retention
+wurde verworfen: Die Person entscheidet nach Sicherung, welche Belege
+entbehrlich sind. Unbekannte Endmetadaten und Links führen zum Überspringen.
+
+Fix round 1: Die konfigurierte Live-Wurzel wird einmal real aufgelöst;
+ein Verbot verlinkter Eltern wurde verworfen, weil Worktrees `var` darüber
+erreichen. Innerhalb des realen Baums bleiben Links gesperrt. Für das Alter
+zählen ausschließlich Dateien: Verzeichniszeiten würden nach dem Entfernen
+von Diagnosebildern auch alte Auditdateien unnötig zurückhalten. Löschfehler
+beenden nur den jeweiligen Eintrag; Ergebnis und CLI-Exitcode machen
+Teilerfolge und Fehler gemeinsam sichtbar.
+
+# 2026-10-23 — R13-15: Bewegungsdiagnose nur als Bedienhilfe
+
+## Problem und Entscheidung
+
+Nach einer Bewegung außerhalb der begrenzten Rahmensuche blieb nur eine
+unspezifische Ablehnung sichtbar. Eine getrennte Diagnose vergleicht nach
+drei Sekunden ununterbrochenem Trackingverlust das bestätigte Referenzbild
+mit dem aktuellen Bild. Nach Fix round 1 arbeitet ORB in nativer Auflösung
+auf einem Ausschnitt um die Quad-Boundingbox mit 35 % Rand (mindestens
+64 Rohpixel), höchstens 2000 Merkmalen und 500 RANSAC-Schritten. Die Referenzmaske
+skaliert das Quad um x1,6/y3,0 und spart den Zeichenbereich aus. Nur das
+aktuelle Ausschnitt wird ganz durchsucht, damit Bewegung außerhalb der
+alten Zeichenlage auffindbar bleibt. Robuste Zustimmung, Streuung auf beiden Quadachsen, Restfehler und
+annähernd starre Bewegung sind Voraussetzung einer Bewegungsbehauptung.
+
+Ein einzelner Hintergrundworker hält höchstens einen Auftrag. Zwischen
+Auftragsstarts liegen mindestens zwei Sekunden; weitere Bilder werden
+währenddessen nicht eingereiht. Referenzmerkmale werden einmalig und erst
+beim ersten Auftrag erzeugt. Die Diagnose benutzt monotone Hostdauer und
+behauptet keine Aufnahmelatenz. Rückkehr verwirft auch verspätete Ergebnisse
+einer früheren Verlustepisode. Abschluss wartet nicht auf einen Worker und
+sperrt weitere Hinweise. Zähler sind begrenzt auf drei feste Hinweisarten;
+es gibt keine wachsende Bild- oder Hinweishistorie.
+
+## Alternativen und Konsequenz
+
+Globales Referenzmatching würde den statischen Hintergrund bevorzugen.
+Die Matchingstatistiken der kleinen Trackerfenster allein können eine
+größere Verschiebung nicht beziffern. Deshalb wird die lokale ORB-Diagnose
+gewählt; weder Suchfenster noch Akzeptanzregeln des Trackers werden
+verändert. Bereits eine belegte Verschiebung über den Suchradius von
+12 Rohpixeln rechtfertigt den Neueinrichtungshinweis, auch unterhalb der
+20-Pixel-Bewegungsgrenze; Drehungen werden gegen 3 Grad geprüft. Ohne
+robusten Bewegungsnachweis folgt erst nach zehn Sekunden ein vorsichtiger
+Verdeckungs- oder unbekannt-Hinweis. Diagnosefehler bleiben Hinweise und
+beenden keinen Messlauf. Ergebnisse fließen ausschließlich in Status,
+Bedientext und konstante Summenzähler, niemals in Pipeline, Geometrie,
+Leser, Gate oder Messwertdatensätze. Die Tests mit synthetisch bewegten
+R13-Bildern ersetzen keine Hardwareabnahme (weiterhin OQ-26).
+
+Fix round 1 verwirft die zunächst gewählte 640-Pixel-Verkleinerung:
+Im echten Bewegungsfall blieben nach der Zeichenmaske nur 25 Referenzpunkte
+und 5–8 Zuordnungen; der Hinweis blieb aus. Die native Ausschnittssuche
+bewahrt Rahmenstruktur und spart Hintergrundarbeit. Zeichenabstand und
+geometrische ORB-Toleranzen skalieren mit der langen Quadkante; unverändert
+bleiben Mindestzahl, Zustimmung, Streuung und Skalengrenze. Ein kleineres
+Merkmalsbudget von 1000 lieferte im nativen synthetischen Test keine
+beidseitige Streuung; 2000 erhält diese Prüfung. Die ursprüngliche Angabe
+der Translation um den Bildursprung wurde als Bewegungsmaß verworfen:
+Bei Drehung hängt sie vom gewählten Koordinatenursprung ab. Stattdessen
+vergleichen wir maximale Rohpixelverschiebungen an bestätigten
+Rahmenmittelpunkten und Quad-Ecken mit Suchradius und Bewegungsgrenze.
+`shift_px` und `max_shift_px` bezeichnen die Ecken, `region_shift_px` die
+Rahmenregionen. Das bereits geladene Referenzbild wird über einen optionalen
+Callback beim gemeinsamen Pipeline-Aufbau an die Bedienhilfe gegeben;
+ein erneutes Lesen wurde vermieden. Der gesamte `observe`-Aufruf liegt
+hinter einer Exception-Grenze in der Session: einmalige Warnung, `unbekannt`,
+weiterhin Diagnoseaufzeichnung und Clock-Samples.
+
+# 2026-10-23 — R13-11: Rahmenvorschlag mit Reserve
+
+## Problem und Entscheidung
+
+Das feste Fensterband erfasst bei frontalem Blick die Fasen nicht. Eine
+manuelle Auswahl ohne Reserve verliert bei unverändertem Aufbau die
+Streuung, sobald einzelne Bereiche mehrdeutig werden. Der Vorschlag erhält
+eine dunkle, geschlossene Rahmenkomponente als zusätzliches Band, mit
+Öffnung gegen dünne Kabelverbindungen, Form-/Flächen-/Rand-/Einschlussprüfung und
+sichtbarem Rückfall auf das bisherige Band. Alle Suchpixel einschließlich
+Interpolationsrand bleiben außerhalb der bisherigen Zeichensperre.
+
+Die Einrichtung verlangt Zweitpeak/Peak ≤ 0,90 und Peakabstand ≥ 0,10;
+die Laufzeitgrenze bleibt 0,95. Nach beliebigen zwei Ausfällen muss die
+strengere Vorschlagsstreuung bestehen: Ein Punkt zählt erst ab 35 % des
+Abstands vom Quadmittelpunkt bis zur äußeren Bandkontur auf seiner Achsenseite
+(mindestens 20 px). Das bedeutet mindestens fünf solche Bereiche je Seite
+beider Quadachsen, bei höchstens 20 automatischen Bereichen.
+Die bisherige relative Strukturschwelle 0,02 gilt für Fensterpunkte;
+zusätzliche Rahmenflächen erhalten 0,005 und müssen vier bekannte
+Halb-Pixel-Verschiebungen auf höchstens 0,10 px genau lokalisieren. Bis zu
+20 geeignete Punkte werden reihum aus vier Quadranten gewählt; innerhalb
+eines Quadranten zählen zuerst Hebelarme an beiden Achsen, dann an einer,
+danach die bestandene Probe und die Strukturstärke. Für Fensterpunkte bleibt die
+Probe eine Auswahlpräferenz. Manuelle Bereiche werden gleich geprüft,
+behaltene Mittelpunkte weiterhin ohne erneutes Einrasten.
+Beide Auswahlwege verwenden je Zone dasselbe Shi-Tomasi-Maximum als
+Schwellenbasis; automatische Rahmenpunkte werden nicht zusätzlich gegen
+das stärkere Maximum der Fensterzone geprüft.
+
+## Alternativen und Konsequenz
+
+Ein pauschal breiteres Rechteck würde Kabel/Gehäuse einschließen. Eine
+ungeprüfte Dunkelkomponente kann bis zum Bildrand mit dem Hintergrund
+verschmelzen. Beide Varianten wurden verworfen. Selbst-eindeutige Ecken
+können trotz gutem Peak schlecht lokalisierbar sein: Die zusätzliche
+synthetische Prüfung verwirft solche Fasenstrukturen vor der Auswahl.
+Die Gegenprobe mit nur so vielen Bereichen wie zum erstmaligen Erreichen
+der Reserve nötig verlor Verfügbarkeit bei Lichtänderungen; deshalb
+werden bis zu 20 geeignete Strukturen aufgenommen. Eine reine Sortierung
+nach synthetischem Positionsfehler wurde ebenfalls verworfen: Sie
+bevorzugt schwache Textur, die zwischen Aufnahmen nicht stabil bleibt.
+
+**Fixrunde 1:** Ein breiter dunkler Balken kann die Öffnung überleben und
+die Rahmenkontur verzerren, obwohl ihre Fläche plausibel bleibt. Deshalb
+zusätzlich Solidität (Konturfläche / konvexe Hüllfläche) ≥ 0,97 und höchstens
+12 statt 20 Quadflächen; die Hülle dient nur der Prüfung, niemals dem Füllen.
+Die 26 erkannten realen Rahmen liegen bei 0,9781–0,9960 und 8,54–9,16
+Quadflächen. Bei Ablehnung bleibt das feste Band mit angegebenem Grund.
+Ein Kabel, das vor der Rahmenfläche verläuft, bleibt innerhalb des Bandes.
+
+Der bisherige 20-px-Abstand allein ließ Punkte nahe der Mittellinie beide
+Bewegungen einer koordiniert falschen Hälfte stützen (Reviewfall 084344Z:
+2,956 px akzeptierter Eckfehler). Der zusätzliche Hebelarm und seine
+Auswahlpräferenz ändern deshalb ausschließlich Vorschlagsstreuung und
+Reserve. Eine Verschärfung der Update-Streuung wurde verworfen, um die
+eingefrorenen Update-Regeln unverändert zu erhalten. Die gemessene Grenze
+ist weiterhin auf die geprüften Szenarien beschränkt, keine allgemeine
+Ein-Pixel-Garantie.
+
+Update, RANSAC, Streuung, Leave-one-out, Residualgrenzen und LCD-Randprüfung
+bleiben unverändert. Alte Rahmenprofile werden durch den vorhandenen
+Konfigurationsvergleich am Laufstart abgelehnt und müssen neu eingerichtet
+werden. Die Auswahländerung braucht eine neue Abnahme. Offline-Belege:
+[VALIDATION](VALIDATION.md#r13-r11-2026-10-23).
+
 # 2026-10-28 — Session-Archiv vom Messpfad und vom Wiki-Build trennen
 
 Der Records Explorer sollte alle abgeschlossenen Läufe und ihre Entwicklung
@@ -1582,3 +1911,90 @@ Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
 Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
 bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
 in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).
+
+## 2026-10-23 — R13-14: Offline-Profile dauerhaft von Live trennen
+
+Die Offline-Einrichtung speist zwei gespeicherte Einzelbilder und deren
+Aufnahmezeiten in den vorhandenen `assist_measure`-Vertrag ein. Fit,
+Rasterfeinschliff, Prüfungen, Gegenlesen und `propose_with_fit` bleiben
+unverändert; Live behält Fokus, Mittelung, Wiederholungen und echte
+Wartezeit. Ein zweiter kopierter Fit-/Prüfpfad wurde verworfen, weil er vom
+Live-Verhalten abweichen könnte. Eine zusätzliche Extraktion aus dem
+Live-Dienst ist durch die vorhandene Kamera-/Zeitinjektion unnötig.
+
+`SessionProfile` erhält ein optionales boolesches Feld `offline`, das bei
+bestehenden Profilen ohne Feld ausgelassen wird. Nur `r13-replay.py` erlaubt
+es ausdrücklich beim gemeinsamen Pipeline-Aufbau; `LiveSession.start`
+weist es vor Leser-, Quellen- und Ausgabedateizugriff ab. Eine Markierung
+nur im Dateinamen oder in rohem JSON wurde verworfen: Beim Laden und
+Speichern würde die Sperre sonst verloren gehen. Bestätigt wird nur ohne
+FEHLER und ohne Override, mit `confirmed_by: offline-auswertung`. Der
+Stabilitätsabstand bleibt wie im Live-Dienst mindestens 15 Sekunden.
+Die beiden neuen Winkelaufnahmen scheitern schon am Rasterfit; Befunde
+und Grenzen stehen in VALIDATION.md und im Task-R14-Bericht.
+
+Fixrunde 1 schliesst auch die Kamera-Ernte: `require_live_profile` in
+`session_profile.py` wird vom Pipeline-Aufbau und von `harvest.py` verwendet.
+Die Pruefung weist sowohl `offline: true` als auch die Bestaetigungsherkunft
+`offline-auswertung` ab, selbst nach manuellem Entfernen des Flags. Eine nur
+im Live-Pipeline-Aufbau liegende Sperre wurde verworfen, weil Harvest die
+Kamera ueber `sync-record.py` startet und diesen Aufbau umgeht. Reine
+Dateiauswertungen und der ausdrueckliche Replay-Opt-in bleiben moeglich.
+
+## 2026-10-28 — R13-20: Lokale Displaybelichtung nach dem Fokus
+
+Die Gesamtbild-Automatik bleibt nur Ausgangspunkt nach dem Fokus. Der
+Live-Assistent misst anschließend die Anzeige und übernimmt die besten
+festen Regler in Kameradiagnose und Profil. Eine bloße Warnung wurde als
+einzige Abhilfe verworfen: Sie erklärt die Unterbelichtung, korrigiert sie
+aber nicht. Eine Korrektur im Leser wurde ebenfalls ausgeschlossen; das
+Quellbild muss brauchbar sein und Referenzwerte dürfen das Lesen nicht
+beeinflussen.
+
+Vor dem Rasterfit steht noch kein Quad zur Verfügung. Daher p80 grüner
+Pixel innerhalb der vorhandenen Hinweisbox, nach dem Fit eine unabhängige
+Vorprüfung mit entzerrtem p80. Ungefiltertes hohes Boxperzentil verworfen,
+weil die Sicherheitsränder helle Umgebung enthalten können; das ist mit
+einem Fake reproduziert. Zwölf gespeicherte Bilder begrenzen die beobachtete
+Abweichung der gewählten Definition auf 4 Graustufen. Höchstens vier
+Korrekturrunden begrenzen die Einrichtung; bei Fehlschlag beste Werte und
+WARNUNG statt eines neuen Abbruchgrundes. Die reale Kennlinie und die
+Vorabgrenzen sind damit noch nicht allgemein validiert; Belege und Grenzen
+stehen im Laborjournal und in VALIDATION unter R13-20.
+
+## 2026-10-30 — R13-22: Bildlieferung unabhängig vom blockierten Read überwachen
+
+Der `CameraOwner` überwacht die monotone Host-Zeit seit der letzten
+Bildlieferung. Zwei Sekunden entsprechen rund 60 Bildabständen bei 30 fps
+und der vorhandenen `READ_FAIL_TIMEOUT_S`-Kulanz. Vor dem ersten Bild nach
+Start/Neustart gelten ab Leserstart nach Quellenöffnung eigene 5 s
+(`STREAM_START_TIMEOUT_S`). Dieselben 2 s auch beim Anlauf wurden verworfen:
+STREAMON und erster Read bei 1920×1080 YUYV unter Last sind ungemessen;
+vor dem ersten Bild entsteht kein Wert. Die 5 s sind Reserve und kein
+Hardwarebeleg. Ein bloßer Timeout in `UvcSource.frames()`
+wurde verworfen: Während OpenCV in `read()` blockiert, läuft diese Logik
+nicht. Stattdessen prüfen Status, Warten auf Bilder und die Rückkehr eines
+Reads die Frist unter derselben Zustandssperre. Der Stillstand bleibt bis
+zum erfolgreichen Quellenstart gespeichert; späte Bilder werden verworfen,
+damit ein bereits beendeter Lauf nicht stillschweigend wieder aktuell wird.
+
+Der Lauf endet über den bestehenden `CameraLost`-Pfad und wartet dabei nicht
+auf den Kamera-Lesethread. Gewaltsames Threadende oder Schließen der Quelle
+aus einem anderen Thread wurde ausgeschlossen; `stop()` meldet einen noch
+lebenden Thread nach begrenztem Join mit `False`, `restart()` lehnt dann ab.
+Bereits dieser Timeout setzt unabhängig von der Bildfrist einen sichtbaren
+Lesethread-Fehler mit `running=False`, `stalled=True`. Das Stop-Event darf
+keinen normal laufenden Stream vortäuschen; auch während des Joins warten
+leere Vorschauabrufe begrenzt. Quelldiagnosen (`read_error`, verworfene
+Zeitstempel seit letzter Lieferung/Start) ergänzen den gespeicherten Fehler,
+auch wenn sie erst beim späteren Ende des Reads vorliegen.
+Nach dessen Ende darf derselbe Owner eine neue Quelle starten.
+Die Vorschau erholt sich nicht selbst; die Bedienung verbindet manuell neu.
+
+`CAP_PROP_READ_TIMEOUT_MSEC` wird nicht gesetzt: Die OpenCV-4.10-Dokumentation
+beschränkt es auf FFmpeg/GStreamer, V4L2 implementiert es nicht. Eine globale
+Änderung von `OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT` ist für die unabhängige
+Erkennung unnötig und bleibt aus. Tests verwenden ausschließlich blockierende
+Fake-Quellen; reale Abschluss- und Wiederanlaufzeiten sind nicht an Hardware
+geprüft. Quellen und Bedienfolgen stehen in der
+[Live-Anleitung](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).

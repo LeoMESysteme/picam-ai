@@ -1,11 +1,11 @@
 """Vorsichtige automatische Hinweisbox fuer gruen hinterleuchtetes Glas."""
 
 import json
-from pathlib import Path
 
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording
 
 from dispread.setup_hint import find_green_hint_box
 
@@ -44,11 +44,10 @@ def test_plain_green_panel_without_dots_is_rejected():
 
 @pytest.mark.parametrize("name", ["sc3", "sc4", "sc5", "ab1", "ab2"])
 def test_real_green_hint_encloses_text_region(name):
-    root = Path("/home/me-systeme/picam-ai/var/diagnostics")
-    frame = root / f"{name}-still/frames/frame_000017.png"
-    profile = root / f"{name if name != 'sc3' else 'sc3b'}-profile"
-    if not frame.exists() or not profile.exists():
-        pytest.skip("Standbild oder Profil fehlt")
+
+    frame = local_recording(f"diagnostics/{name}-still/frames/frame_000017.png")
+    profile = local_recording(f"diagnostics/{name if name != 'sc3' else 'sc3b'}-profile")
+
     image = cv2.imread(str(frame))
     box = find_green_hint_box(image)
     assert box is not None

@@ -103,12 +103,85 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
    Stabilitätsprüfung in der Werkbank 15 s, Harvest-CLI weiterhin 30 s.
    Nach einem Abbruch bleiben Grund und Einrichtungshinweis sichtbar.
 4. Overlays und Prüfungen ansehen: Lage der Anzeige, Zellenraster,
-   Rasterversatz und Gegenlesen. **FEHLER** sperrt die Bestätigung.
+   Rasterversatz, Gegenlesen, **Nachführung** und **Displayfehler**. **FEHLER** sperrt die Bestätigung.
    Bei **WARNUNG** muss die bedienende Person den Befund prüfen und
    ausdrücklich „WARNUNG zur Kenntnis genommen“ abhaken.
 5. Namen eintragen, „Einheit mV/V und Format geprüft“ abhaken und
    **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
    das Profil und die Bedienbestätigung (Konzept §4).
+
+Die Prüfung **Displayfehler** (`displayfehler`) sucht kleine helle und dunkle
+Glasstörungen ausschließlich in Zellen, die bei dieser Einrichtung leer sein
+müssen: Separatorzelle 8, Zellen 13–15 rechts der Einheit und weitere Zellen
+mit einem ausdrücklichen Leerzeichen im abgeglichenen Setup-Zellentext.
+Unbekannte (`?`) oder mit Zeichen belegte Zellen werden nicht durchsucht:
+Dunkle Zeichenpunkte senken dort die Glasschätzung ab, und ihre hellen
+Zwischenräume könnten sonst fälschlich wie Kratzer aussehen.
+Nur Befunde, die in **jedem** Standbild desselben Einrichtungsversuchs an
+derselben Stelle erscheinen, zählen. Reguläre dunkle LCD-Punkte gehören
+nicht zum Befund. Das Ergebnis ist **OK** oder **WARNUNG**, allein niemals
+**FEHLER**. Quellbild und entzerrtes Overlay markieren die Stellen orange
+mit Zellnummer und Art (`hell`/`dunkel`); die Prüfmetriken enthalten auch die
+Punktposition und Stärke. **Kamera leicht verschieben, Glas reinigen oder
+Reflex abschatten** und erneut einrichten. Die Warnung ist eine Suchhilfe,
+keine sichere Unterscheidung zwischen Kratzer, Staub und Reflex.
+
+Harvest-Einrichtungen erhalten weder `nachfuehrung` noch `displayfehler`.
+
+Die Prüfung **Nachführung** verlangt geeignete, räumlich verteilte
+Rahmenbereiche und einen erkennbaren LCD-Rand im eingefrorenen Einrichtungsbild.
+Auch bei frontalem Blick wird der dunkle Rahmen einbezogen, wenn seine Kontur plausibel erkannt wird. Für die Reserve müssen auf jeder Achsenseite genügend Bereiche deutlich außerhalb der Mittellinie liegen, auch nach dem Ausfall beliebiger zwei Bereiche; sonst neu ausrichten oder Bereiche ergänzen.
+Rahmenprofile von vor R13-11 müssen neu eingerichtet werden; der Laufstart lehnt ihre alte Prüfkonfiguration ab.
+Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
+Suchfenster einschließlich Interpolationsrand blau und die LCD-Randpunkte
+orange markiert; die Legende steht im Bild. Prüfe, dass diese Fenster auf
+festen Strukturen des Displayrahmens liegen und weder Ziffern noch Tisch,
+Kabel oder Hintergrund erfassen. Die Randpunkte müssen auf dem LCD-Rand
+liegen. Bei fehlender Struktur Kamera und Gerät neu ausrichten und erneut
+einrichten. Das Prüfurteil ist keine allgemeine Gerätevalidierung.
+
+Korrigiere die Auswahl vor der Bestätigung mit **Rahmenbereiche bearbeiten**:
+Ein Klick auf eine freie Stelle im Quellbild fügt einen Bereich hinzu, ein
+Klick auf einen magentafarbenen Bereich entfernt ihn. Alternativ gib die
+Koordinaten `x,y` in Pixeln des Originalbilds ein und wähle **Bereich hinzufügen**;
+jeder Eintrag in der Bereichsliste hat außerdem eine Entfernen-Schaltfläche.
+Die Bildansicht rechnet verkleinerte Bildschirmkoordinaten in Originalpixel um.
+Manuelle Eingaben rasten am stärksten lokalen Strukturmaximum innerhalb von 3 Originalpixeln ein; die Rückmeldung zeigt angeforderte Koordinaten und „verwendet: x,y“, und alle Prüfungen gelten am verwendeten Punkt.
+Nach jeder Änderung werden Overlay, Nachführungsprüfung und Gesamturteil
+aktualisiert. Im Quellbild bleiben das gelbe Quad und die zugeordneten bzw.
+verworfenen Rasterpunkte erhalten. Das Abtastbild (`overlay_sampling.png`)
+zeigt das feste Punktraster; es hängt nicht von den Rahmenbereichen ab und
+bleibt bei deren Bearbeitung unverändert.
+Rückmeldungen nennen für jeden geprüften Mittelpunkt die Eignung
+oder den Ablehnungsgrund. Manuelle Bereiche durchlaufen dieselben Prüfungen
+für Zeichenabstand, Rahmenband, Bildrand, zweidimensionale Struktur,
+Eindeutigkeit und Mindestabstand. Ungeeignete Punkte werden nicht übernommen.
+Prüfe mit deinem Namen die gesamte Auswahl: alle Suchfenster liegen auf
+fester Rahmenstruktur, niemals auf Zeichen, Kabel, Tisch oder Hintergrund;
+auch die LCD-Randpunkte müssen stimmen. Es sind höchstens 24 Bereiche und
+50 einzelne Hinzufüge-/Entfernen-Versuche je Vorschlag erlaubt, danach neu
+einrichten. Jede Änderung leert die Bestätigungsfelder. Erst die neue
+Revision prüfen und erneut mit Namen, Einheit und Format bestätigen.
+Das Profil speichert `live_tracking.auswahl` (`automatisch` oder `manuell`)
+und die Änderungsliste mit UTC-Zeit; `session.json` zeigt die Auswahl unter
+`tracking.auswahl`. Während eines Laufs sind Änderungen gesperrt.
+
+Die Bestätigung bindet genau diese Bereiche an das Einrichtungsbild und die
+angezeigte Vorschlagsrevision. Ein erneuter Vorschlag verlangt erneutes Prüfen;
+während eines Laufs sind Einrichtung und Bestätigung gesperrt. Beim Laufstart
+werden die Bereiche aus dem Profil übernommen. Bei verändertem Referenzbild
+oder geänderten Prüfparametern ist eine neue Einrichtung nötig.
+
+Nach der Bestätigung zeigt die Seite bereits vor dem Lauf den Modus des
+Profils: **Nachführung: Rahmenbereiche** oder den alten ECC-Modus mit
+**neu einrichten empfohlen**. Der Lauf zeigt denselben Modus; `session.json` hält Modus,
+Version und Bereichszahl sowie die Trackingverluste je Grund fest. Bestandsprofile
+ohne bestätigte Rahmenbereiche bleiben nutzbar und zeigen ausdrücklich
+**Nachführung: alt (ECC, inhaltsabhängig)**. Diese Profile sollten neu
+eingerichtet werden, weil der alte Vergleich bei großen Ziffernwechseln die
+Anzeige verlieren kann. Sichtbare Rahmenstruktur bestätigt nur die Geometrie.
+Ob Ziffern lesbar sind, entscheiden weiterhin Leser und Gate; erfolgreiches
+Tracking gibt keinen Zahlenwert frei.
 
 Am 2026-10-14 lieferten nach N7 vier Einrichtungen Vorschläge mit
 Gesamt-WARNUNG wegen einer Proxy-Prüfung: zunächst `raster` WARNUNG wie
@@ -151,19 +224,25 @@ oder Kanten, werden wie bisher bei der Bestätigung quittiert.
 Unter „Testmodus (nur zu Testzwecken)“ lässt sich die Lesesperre ausdrücklich
 übergehen. Haken setzen und den zusätzlichen Dialog bestätigen. Der Testlauf
 zeigt, welche Zeichen der Leser vermutet hätte; unsichere Zellen sind benannt.
-Die Vermutungsanzeige ist kein freigegebener Messwert. **Die technische
-Sperre im Audit ist jedoch unvollständig:** `LiveSession.step()` schreibt
-den Pipeline-Record unverändert, auch wenn ein späteres Bild `VALID` ergibt
-([OQ-44](../open-questions.md#oq-44)). Deshalb sind alle Records dieses
-Laufordners als Testdaten von Messungen auszuschließen; ein einzelnes
-`status=valid` hebt die Testmarkierung des Laufs nicht auf. Das rote Banner
-kennzeichnet auch den beendeten Testlauf.
+Die Vermutungsanzeige ist kein freigegebener Messwert. **Ein Testlauf gibt
+technisch nie einen Wert frei:** Auch später lesbare Bilder werden vor dem
+Audit von `VALID` auf `UNREADABLE` gesetzt, mit `value=null` und dem ersten
+Ablehnungsgrund `testlauf_keine_freigabe` („Testlauf: keine Wertfreigabe“).
+Der unterdrückte Record behält `raw_text`, `frames_confirmed` und
+`confirmation_span_ns` der Ablesung als Diagnose, wie andere
+`UNREADABLE`-Records; er enthält niemals einen Zahlenwert in `value`.
+Die ursprüngliche Gate-Entscheidung bleibt nur als getrennte Diagnose
+`gate_status` in der Leser-Vermutung sichtbar
+([OQ-44](../open-questions.md#oq-44)). Das rote Banner kennzeichnet auch den
+beendeten Testlauf; die Seite zeigt Testlaufwerte niemals als gültig.
 `var/live/<sitzung>/run-NN/TESTLAUF.json` hält Sperrgrund, Bedienperson und
 Startzeit fest; `session.json` enthält die Testmarkierung und die zehn
-häufigsten Vermutungen. Die einzelnen Records in `records.jsonl` tragen keine
-eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
+häufigsten Vermutungen. `summary.testlauf_unterdrueckt` zählt die erfolgreich
+auditierten, unterdrückten Freigaben. Die einzelnen Records in `records.jsonl`
+tragen keine eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
 und nicht ausgewertet wie ein regulärer Lauf. Für einen regulären Lauf neu und
 erfolgreich einrichten.
+Historische Testläufe mit `status=valid` bleiben von Messnachweisen ausgeschlossen.
 
 ### Lauf und Wertstatus
 
@@ -178,12 +257,110 @@ Ablehnungsgrund statt gültiger Ziffern:
 | UNREADABLE | Bild, Tracking oder Ablesung abgelehnt; Ablehnungsgrund prüfen. |
 | STALE | Kein aktueller gültiger Wert: Ablesung älter als 0,5 s, Lauf beendet oder Verbindung/Anmeldung verloren. |
 
+Bei Leserablehnungen benennt der Grund die betroffene Zelle (Zählung 0–15):
+`leser:leerzelle_gestoert:14` bedeutet eine gestörte Leerzelle rechts der
+Einheit; `leser:zelle_unbekannt:5` ein nicht sicher erkanntes Zeichen in
+Zelle 5. `leser:zelle_mehrdeutig:<Zelle>` bedeutet mehrere mögliche Zeichen.
+`leser:format`, `leser:vorzeichen`, `leser:kontrast` und
+`leser:ueberbelichtet` nennen die übrigen Leserbefunde. Ein
+`decimal_point_unknown` bezeichnet weiterhin den ungesicherten Dezimalpunkt
+bei Lesern ohne eigenen Ablehnungsgrund. Eine allein unbekannte Separatorzelle 8
+war früher als `zelle_unbekannt` kurz TRANSITION-fähig; mit
+`leerzelle_gestoert:8` bleibt sie nun UNREADABLE. Dunkle Flecken behandelt der
+neue Filter nicht: Sie können als leer gelesen oder abgelehnt werden, ändern
+aber keinen Messwert. Kleine helle Defekte werden nur aus der
+Hintergrundschätzung entfernt, das abgetastete Bild bleibt erhalten.
+
+Während des Laufs zeigt die Seite die fünf häufigsten Hauptursachen der
+letzten **10 Sekunden Verarbeitungszeit**, etwa „Zelle 14 (rechts der
+Einheit): gestört – Kratzer, Staub oder Reflex?“, „Rahmenbereiche verdeckt
+oder verschoben“ oder „Wert wechselt“. Der Anteil bezieht sich auf **alle
+verarbeiteten Bilder**, einschließlich VALID; pro Bild zählt der erste,
+spezifischste Grund. Übersprungene Kamerabilder zählen nicht. Das Fenster
+läuft auch beim Stillstand aus; bei mehr als 4096 Bildern im Fenster wird
+die Begrenzung sichtbar gemeldet. Diese Hilfe verändert keine Freigabe.
+
+Ist die Nachführung mindestens **3 Sekunden ununterbrochen verloren**,
+prüft eine getrennte Hintergrunddiagnose höchstens alle **2 Sekunden** die
+Bewegung gegenüber dem bestätigten Einrichtungsbild. Eine lokale Maske um
+die Anzeige (Quad um x1,6/y3,0 skaliert, Zeichenbereich mit zur Auflösung
+passendem Abstand ausgespart) begrenzt die Referenzsuche. ORB erhält die
+native Auflösung in einem Ausschnitt um die Quad-Boundingbox mit 35 % Rand
+(mindestens 64 Rohpixel), höchstens 2000 Merkmalen und 500 RANSAC-Schritten.
+Es bleibt höchstens ein Auftrag offen. Verglichen wird die **maximale
+Verschiebung der bestätigten Rahmenregionen und Quad-Ecken**, nicht der
+Translationsanteil einer Drehung um den Bildursprung. Bei robuster Bewegung
+über den Suchradius von 12 Rohpixeln bzw. die Bewegungsgrenzen von
+20 Pixeln/3 Grad erscheint etwa „Anzeige hat sich bewegt (ca. 19 px (Ecken),
+2,2 Grad) – Werte werden
+nicht freigegeben. Bitte neu einrichten.“ Die Zahlen sind grobe Diagnosewerte.
+Ohne belastbaren Bewegungsnachweis nach **10 Sekunden Verlust** heißt es
+vorsichtig „Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen.“ bzw.
+„Anzeige nicht sicher wiedergefunden“. Diese Dauer nutzt die monotone
+Host-Verarbeitungszeit, nicht die Aufnahmezeit oder eine gemessene Latenz.
+Bei Rückkehr der Nachführung verschwindet der Hinweis sofort; er richtet
+nichts automatisch neu ein. `run.tracking_hint` im Status enthält Art,
+maximale Eckverschiebung (`shift_px`), maximale Verschiebung der bestätigten
+Rahmenregionen (`region_shift_px`), Drehung und bisherige Verlustdauer
+(`since_s`); unbekannte
+Bewegungswerte bleiben `null`. `session.json` hält unter
+`summary.tracking_hints` die Zahl der Verlustepisoden mit Hinweis (`count`),
+die je Episode aufgetretenen Hinweisarten (`by_kind`) und die größte belegte
+Eckverschiebung (`max_shift_px`, sonst `null`) fest. Diagnoseergebnisse gelangen
+ausschließlich in Bedienhilfe und Zusammenfassung; Nachführung, Quad,
+Leser, Freigabe und Messwertdatensätze bleiben unabhängig davon.
+
 Verbindungsfehler oder abgelaufene Anmeldung setzen die Anzeige auf STALE;
 auch wenn länger als 1,5 s kein erfolgreicher Statusabruf kam. Polling und
 Verbindungsfenster können die sichtbare Umschaltung verzögern (schlimmstenfalls
-etwa 2 s). Ein stillstehender Kamerastream beendet den Lauf erst nach dem
-OpenCV-Select-Timeout (etwa 10–20 s), nicht nach 2 s. Die Vorschau kann auf
-dem letzten Bild stehen bleiben; sie allein beweist keine aktuelle Messung.
+etwa 2 s). Ein stillstehender Kamerastream wird seit R13-22 nach **2 s ohne
+geliefertes Bild** erkannt (`STREAM_STALL_TIMEOUT_S`), unabhängig vom
+OpenCV-Select-Timeout. Das entspricht rund 60 Bildabständen bei 30 fps
+(33 ms) und der bisherigen Kulanz `READ_FAIL_TIMEOUT_S` für zurückkehrende
+erfolglose Leseversuche. Bis zum ersten gelieferten Bild nach Start oder
+Neustart gilt stattdessen eine **Anlauffrist von 5 s**
+(`STREAM_START_TIMEOUT_S`), gezählt ab Leserstart nach dem Öffnen der Quelle.
+Das lässt Reserve für STREAMON und den ersten Read bei 1920×1080 YUYV unter
+Last; die benötigte Zeit ist an Hardware noch ungemessen. Vor dem ersten
+Bild entsteht kein Messwert. Ab dessen Lieferung gilt die 2-s-Frist.
+Beide Fristen verwenden die monotone Host-Uhr und beschreiben keine
+Aufnahmelatenz. Der Lauf endet über den Kamerafehlerpfad; der Abschluss ist
+mit Fakes und verkürzter Testfrist geprüft.
+`camera.stalled`, die Fehlermeldung im Live-Status sowie
+`session.json.summary.camera_error` und `end_reason` nennen den
+Streamstillstand. Bis zum Ende bleibt die letzte Ablesung STALE; ohne neues
+Bild entsteht kein neuer Messwertdatensatz. Auch Vorschau und Einrichtung
+zeigen den Fehler. Die Vorschau kann auf dem letzten Bild stehen bleiben;
+sie allein beweist keine aktuelle Messung.
+Vorhandene Quelldiagnosen ergänzen den Stillstandsfehler: `read_error`
+zeigt erfolglose Leseversuche, `rejected_timestamps` zählt seit dem letzten
+gelieferten Bild (vor dem ersten Bild seit Start) verworfene Zeitstempel.
+
+Der blockierte Lesethread wird nicht gewaltsam beendet. `stop(timeout)`
+wartet höchstens seine Join-Frist (Standard 3 s) und meldet mit `False`, dass
+der Thread noch hängt. Dann zeigen `running=False`, `stalled=True` und ein
+sichtbarer Lesethread-/Kamera-hängt-Fehler den abgelehnten Stopp oder
+Neustart, auch wenn die Bildfrist noch nicht abgelaufen war. Die Vorschau
+wartet bei leeren Bildabrufen begrenzt und dreht nicht im Leerlauf.
+Der Laufabschluss wartet nicht auf diesen Thread.
+Solange er noch lebt, wird ein Neustart abgelehnt: **Kamera hängt: kurz
+warten oder Kamera neu stecken, dann erneut verbinden.** Die Vorschau
+startet nach einem Stillstand **nicht von selbst neu**. Sobald der Thread
+endet, über **Kamera neu verbinden** die Quelle neu starten; alternativ den
+Werkbankserver neu starten. Der Stillstandsfehler bleibt bis zum
+erfolgreichen Quellenstart erhalten; zurückkehrende Bilder setzen einen
+beendeten Lauf nicht fort.
+
+OpenCV 4.10.0 ist lokal bestätigt. `CAP_PROP_READ_TIMEOUT_MSEC` wird nicht
+gesetzt: Laut [OpenCV-4.10-Dokumentation](https://docs.opencv.org/4.10.0/d4/d15/group__videoio__flags__base.html)
+gilt die Eigenschaft nur beim Öffnen für FFmpeg/GStreamer; der
+[V4L2-Quellcode 4.10.0](https://github.com/opencv/opencv/blob/4.10.0/modules/videoio/src/cap_v4l.cpp)
+unterstützt sie nicht. Dort liegt die Select-Frist standardmäßig bei 10 s
+(`OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT`); diese globale Einstellung bleibt
+unverändert. **Nicht an Hardware geprüft:** Anlauffrist unter Last sowie
+reale Stillstands-, Abschluss- und Wiederanlaufzeiten; alle neuen Prüfungen
+verwenden Fakes.
+
 **Lauf stoppen** beendet den Lauf, die Kamera läuft für Vorschau weiter.
 
 ### Referenzaufzeichnung und Abgleich
@@ -321,6 +498,59 @@ weiteren Freigabeläufen überarbeitet und erneut geprüft werden.
 Ein Toleranzlauf ≥ 10 min mit Werteplan bleibt separat offen
 ([TODO](../../TODO.md)).
 
+### Diagnosebilder und Ereignismarken
+
+Für die Fehlersuche bei verlorener Nachführung vor dem Lauf
+**„Diagnosebilder aufzeichnen“** einschalten.
+Die Vorgabe ist in Seite und API aus: Diagnosebilder können je Lauf bis zu
+600 MB auf der SD-Karte belegen. Nur für gezielte Fehlersuche einschalten.
+Gespeichert werden unveränderte Vollbilder als verlustfreie
+PNG (schnelle Kompressionsstufe 1), mit Trackingbefund, Aufnahmezeit samt
+Zeitbasis, Sequenzen, Recordstatus und Profil-/Referenzbildhash in `images.jsonl`.
+Bei der StreamCam ist `camera_sequence` dabei `null`: `UvcSource` liefert keine
+Treibersequenz. Frame- und Owner-Sequenz bleiben zur Zuordnung verfügbar.
+Verlustbeginn und erste Wiederkehr lösen sofort ein Bild aus; während eines
+Verlusts höchstens eines je Sekunde, bei guter Nachführung alle 30 Sekunden.
+
+Die Diagnose belegt höchstens **300 Bilder und 600 MB je Lauf** in
+`/dev/shm/dispread-diagnose-<sitzung>-<run>/`. Beim Start müssen zusätzlich
+200 MB auf dem tmpfs frei bleiben und `MemAvailable` aus `/proc/meminfo`
+mindestens 1100 MB betragen (600 MB Budget plus 500 MB Hauptspeicherreserve).
+Sonst startet der Lauf mit sichtbarem Grund ohne Diagnose. tmpfs kann in den
+Swap auf der SD-Karte ausgelagert werden; sein freier Platz allein reicht nicht.
+Während des Laufs wird `MemAvailable` höchstens einmal pro Sekunde geprüft:
+Unter 500 MB werden neue Bilder als `dropped_memory` gezählt und verworfen.
+Eine volle Warteschlange verwirft das neue Diagnosebild; Status und `session.json`
+zeigen gespeicherte Bilder, Bytes, verworfene Bilder und Schreibfehler; die Seite
+zeigt den Speicherverbrauch in MB (dezimal).
+Tracking, Leser und Freigabe hängen nicht von der Diagnose ab.
+
+Nach dem Stoppen werden die Bilder im Hintergrund nach
+`var/live/<sitzung>/run-NN/diagnose/` kopiert. Solange zeigt der Status
+`diagnose_kopie: true`. Beim Dienstende wartet der Server insgesamt höchstens
+60 Sekunden auf ausstehende Diagnosekopien und protokolliert ein Zeitlimit.
+Erst nach geprüften Dateigrößen wird die RAM-Ablage entfernt; bei Kopierfehlern
+bleibt sie zur Rettung erhalten und ihr Pfad wird angezeigt. RAM-Daten überleben
+einen Neustart des Rechners nicht. Beim nächsten Serverstart werden verbliebene
+`dispread-diagnose-*`-Verzeichnisse mit Pfad und Größe protokolliert und unter
+`diagnostic_leftovers` im Status sowie auf der Seite angezeigt. Diese Ablagen
+werden nicht automatisch gelöscht: vor dem Entfernen nötige Daten retten.
+
+Während eines Laufs können kurze Texte (1–200 Zeichen) mit
+**„Ereignis markieren“** oder lokal mit
+`dispread live mark "Display abgedeckt"` festgehalten werden, auch ohne Diagnose.
+Jede Marke steht in `run-NN/marks.jsonl`; die Zusammenfassung zählt sie,
+der Status zeigt die letzte Marke. Bei aktiver Diagnose löst höchstens eine Marke
+je zwei Sekunden ein Bild des
+zuletzt verarbeiteten Frames aus (vor dem ersten Frame dessen nächstes Bild),
+vorbehaltlich der Speicher- und Queue-Grenzen.
+Zusätzliche Marken bleiben vollständig in `marks.jsonl`, ihre ausgelassenen
+Bilder werden als `dropped_mark_rate` gezählt.
+**Die Zeit der Marke ist die Meldezeit des Bedieners am Host**, mit
+CLOCK_BOOTTIME in ns und UTC, ausdrücklich `zeit: meldezeit_bediener`.
+Sie ist kein genauer physischer Ereigniszeitpunkt. Auch die Aufnahmezeit
+des zugeordneten Bilds ist eine eigene Angabe mit ihrer eigenen Zeitbasis.
+
 ### Dateien und lokale Bedienung
 
 | Ablage | Inhalt |
@@ -332,9 +562,70 @@ Ein Toleranzlauf ≥ 10 min mit Werteplan bleibt separat offen
 
 Die Timing-Kalibrierung wird aufgezeichnet, nicht auf den Live-Wert angewandt.
 Zeitstempel tragen ihre Zeitbasis; unbekannte Unsicherheit ist `None`.
-Die `JsonlSink` rotiert standardmäßig bei 64 MiB und behält fünf
-Generationen zusätzlich zur aktuellen Datei. Wie lange das reicht, hängt
-von Bildrate und Recordgröße ab; dauerhafte Aufbewahrung ist ein Folgeschritt.
+Live verwendet `JsonlSink(max_bytes=0)`: eine vollständige `records.jsonl`
+je Lauf, ohne Rotation und ohne automatisches Verwerfen alter Generationen.
+`session.json` hält dies unter `audit.rotation: false` fest. Die allgemeine
+Sink-Vorgabe bleibt 64 MiB mit fünf Generationen zusätzlich zur aktuellen
+Datei; sie würde alte Belege überschreiben und ist deshalb für Live aus.
+Kann das Audit nicht mehr geschrieben werden (etwa bei voller Karte), stoppt
+der Lauf mit Auditfehler; ein unvollständig aufgezeichneter Lauf läuft nicht
+still weiter.
+
+### Speicherbudget und Aufräumen
+
+Produktionsziel ist ein **Pi 5 mit 64-GB-SD-Karte ohne SSD**. Als Größenordnung
+aus den bisherigen Läufen gelten: 10 Minuten etwa 9–10 MB `records.jsonl`
+plus 60 KB `reference.jsonl`, Einrichtung etwa 6 MB, Diagnose zusätzlich bis
+600 MB je Lauf. Hochgerechnet braucht ein Arbeitstag mit acht Stunden rund
+0,5 GB Audit; tatsächliche Größen hängen von Bildrate und Recordinhalt ab.
+
+Vor Einrichtung und jedem Laufstart prüft der Dienst den freien Platz auf dem
+Dateisystem von `var/live` (vor dessen Anlage am nächsten vorhandenen
+Elternverzeichnis). Er verlangt **mindestens 2,0 GB**, bei angeforderter
+Diagnose **2,6 GB** einschließlich des Budgets für die spätere SD-Kopie.
+Alle GB/MB hier sind dezimal. Zu wenig oder nicht prüfbarer Platz sperrt den
+Start; die Fehlermeldung nennt verfügbaren und benötigten Platz, soweit bekannt.
+Status und Live-Seite zeigen freien Platz und warnen unter **5,0 GB**.
+Das ist eine Startprüfung, keine Platzgarantie für beliebig lange Läufe;
+vor längeren Messungen Platz für die geplante Dauer einrechnen.
+
+Es gibt **keine automatische Löschung**. Über den laufenden Werkbankdienst
+lassen sich alte Daten zunächst prüfen, dann ausdrücklich entfernen:
+
+```bash
+dispread live aufraeumen --aelter-als 30
+dispread live aufraeumen --aelter-als 30 --nur-diagnose
+dispread live aufraeumen --aelter-als 30 --nur-diagnose --ausfuehren
+dispread live aufraeumen --aelter-als 30 --ausfuehren
+```
+
+Ohne `--ausfuehren` ist jeder Aufruf eine Vorschau (`dry_run: true`).
+Die JSON-Ausgabe nennt Pfad und Größe in Bytes/MB sowie die Gesamtgröße.
+Je Eintrag zeigt `status` entweder `planned` (Vorschau), `deleted` oder
+`failed` mit Fehlermeldung. Bei einem Löschfehler werden die weiteren
+Kandidaten trotzdem bearbeitet; `failed: true` im Gesamtergebnis und
+Exitcode 1 melden Teilfehler. Die Größen sind vorab ermittelte
+Kandidatengrößen, keine Zusage über tatsächlich freigegebenen Platz.
+Vor dem Löschen benötigte Auditdaten extern sichern. `--aelter-als` verlangt
+eine positive ganze Zahl Tage. Gelöscht werden nur `run-NN` unter
+`var/live/live-<UTC-Sitzungskennung>/` oder mit `--nur-diagnose` deren
+`diagnose/`. Bei `serve --live-data` gilt ausschließlich die konfigurierte
+Live-Ablage; die CLI nimmt keinen beliebigen Löschpfad entgegen.
+Die konfigurierte Wurzel wird einmal auf ihren realen Pfad aufgelöst;
+ein verlinktes Elternverzeichnis wie das Worktree-`var` ist zulässig.
+
+Ein Lauf muss ein bekanntes Ende mit Zeitbasis in `session.json` haben
+(`ended_at_utc` mit Zeitzone). Sowohl das Ende als auch alle Dateiänderungszeiten
+im Laufbaum müssen älter als die Grenze sein. Verzeichniszeiten zählen nicht,
+damit das Löschen von `diagnose/` eine spätere vollständige Bereinigung nicht
+verzögert. Laufende Läufe und noch kopierte Diagnosen sind zusätzlich im
+Dienst gesperrt. Unvollständige oder unbekannte Metadaten, abgebrochene Läufe
+ohne Endzeit, Symlinks innerhalb des Baums und Sonderdateien bleiben
+vorsichtshalber stehen. Profile, Bestätigungen und
+`setup/` werden in keiner Sitzung gelöscht, auch nicht im aktiven Aufbau.
+RAM-Rettungsablagen in `/dev/shm` gehören nicht zum Aufräumkommando.
+Abgestürzte Läufe ohne `ended_at_utc` müssen nach Prüfung und Sicherung von Hand
+entfernt werden.
 
 Lokale Befehle über den privaten Steuer-Socket:
 
@@ -880,8 +1171,10 @@ keine Lesung; Abstand zur zweitbesten Klasse, zwei bestätigende Bilder und
 STALE-Regeln gelten weiter. Ein Toleranzlauf trägt ein gelbes Banner und bei
 VALID den Detailtext „erweiterte Toleranz ×… – nicht validiert“.
 `confirmation.json` und `session.json` halten den Faktor als `reader_tolerance`
-fest; `summary.tolerance_frames` zählt gültige Datensätze, bei denen mindestens
-eine Zelle die ursprüngliche Vorlagenschwelle überschritt.
+fest; `summary.tolerance_frames` zählt vom Gate als gültig bewertete
+Datensätze, bei denen mindestens eine Zelle die ursprüngliche
+Vorlagenschwelle überschritt. Im Testlauf zählt diese Diagnose anhand der
+Gate-Entscheidung vor der Unterdrückung weiter; sie ist keine Wertfreigabe.
 
 ## Prüfstand dieser Implementierung
 
@@ -919,11 +1212,16 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
 
 * [ ] Ein fehlgeschlagenes Gegenlesen sperrt den normalen Lauf; ein
   ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
-  Der Schutz gegen `VALID` im Test-Audit bleibt [OQ-44](../open-questions.md#oq-44).
+  Jede Gate-Freigabe wird vor dem Test-Audit als `UNREADABLE` mit
+  `value=null` und `testlauf_keine_freigabe` protokolliert; die Seite zeigt
+  nur die Leser-Vermutung ([OQ-44, geklärt](../open-questions.md#oq-44)).
 * [ ] `/live` führt ohne Anmeldung zum Login und danach zurück; bei Portkonflikt
   startet die Werkbank mit `--port 8081`.
 * [ ] Einrichtung zeigt Schritte, Sekunden, Overlays und Prüfungen;
   FEHLER sperrt, WARNUNG verlangt Kenntnisnahme, Bestätigung einen Namen.
+* [ ] **Nachführung** ist OK; Rahmenbereiche, gesamte Suchfenster und
+  LCD-Randpunkte im Quellbild-Overlay sind geprüft. Der Lauf zeigt seinen
+  Trackingmodus; alte ECC-Profile sind als solche markiert und neu einzurichten.
 * [ ] Ein bestätigter Lauf zeigt VALID/TRANSITION/UNREADABLE/STALE;
   Altwerte und Verbindungsverlust erscheinen nie als aktuelle gültige Ziffern.
 * [ ] Optionale Referenzaufzeichnung schreibt `reference.jsonl`; Status und
@@ -939,6 +1237,16 @@ Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
   Laufmetadaten je in `run-NN/`; Freigabehinweis bleibt sichtbar.
 * [ ] `dispread live status|setup|stop|camera` funktioniert lokal;
   Bestätigung und Laufstart erfolgen in der Oberfläche.
+* [ ] Platzprüfung vor Einrichtung und Laufstart prüfen: mindestens 2,0 GB
+  frei, mit Diagnose 2,6 GB; darunter oder bei unbekanntem Platz wird der
+  Start verweigert. Status und Seite warnen unter 5,0 GB.
+* [ ] `dispread live aufraeumen --aelter-als 30` zeigt als Vorschau Pfade
+  und Größen; erst `--ausfuehren` löscht geprüfte Kandidaten. `--nur-diagnose`
+  erhält das Audit; Setup/Profile und aktive Läufe bleiben geschützt.
+* [ ] Diagnose ist in Seite und API standardmäßig ausgeschaltet und wird
+  nur ausdrücklich für den gewünschten Lauf aktiviert.
+* [ ] Live-Audit schreibt vollständig in `run-NN/records.jsonl` ohne
+  Generationenrotation; `session.json` nennt `audit.rotation: false`.
 * [ ] `npx playwright test -c playwright.live.config.ts` prüft Login,
   Einrichtung, Fehler, frischen Wert und STALE ohne reale Kamera.
 

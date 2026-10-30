@@ -46,7 +46,9 @@ aktualisiert — insbesondere seine „Fertig, wenn"-Checkliste.
 ## Befehle
 
 ```bash
-./.venv/bin/pytest -q                          # Mock-Tests, kein Hardwarebedarf
+./.venv/bin/pytest -q -n 4                     # Mock-Tests parallel, ~10 min; Laufzeittests
+./.venv/bin/pytest -q -m timing                # ... laufen dabei nicht mit, hier getrennt
+DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -n 4   # mit Entwicklungsaufnahmen
 ./.venv/bin/pytest -q --mode=real              # zusätzlich @hardware und @serial
 ./.venv/bin/ruff check src tests examples
 ./scripts/camera-commissioning.sh              # StreamCam-Diagnose, Exit 0 = einsatzbereit
@@ -58,7 +60,7 @@ Einrichtung von Null (die Flags sind nicht optional, siehe `AGENTS.md`):
 ```bash
 python3 -m venv --system-site-packages .venv
 ./.venv/bin/pip install --no-deps -e .
-./.venv/bin/pip install pytest ruff
+./.venv/bin/pip install pytest pytest-xdist ruff
 ```
 
 ## Was dieses Projekt ist
@@ -155,6 +157,13 @@ dass Tests ohne Kamera laufen.
 
 ## Hardware-Fakten, die man leicht falsch annimmt
 
+* **Die NVMe-SSD unter `/mnt/ssd` ist nur Entlastung** (Backups, Tests,
+  Trainings-/Diagnoseaufnahmen). Das fertige Gerät hat keine SSD: alles,
+  was das Produkt liest oder schreibt, bleibt in `var/` auf der SD-Karte,
+  ohne Link auf die SSD. Entwicklungsaufnahmen liegen unter
+  `/mnt/ssd/picam-dev` und sind für Tests/Skripte über
+  `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev` erreichbar; `src/` kennt die SSD
+  nie (Wächtertest). Datenorte: [docs/HARDWARE_PROFILE.md](docs/HARDWARE_PROFILE.md).
 * Datenport für GSVmulti ist **`/dev/ttyAMA0`**. `/dev/serial0` zeigt auf
   `ttyAMA10` und ist der **3-Pin-Debug-Header**, nicht der Nutzdatenport.
 * Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden werden

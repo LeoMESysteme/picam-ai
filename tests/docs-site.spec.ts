@@ -1449,6 +1449,7 @@ test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', a
   facts.facts['live.confirm_frames'].value = 3;
   facts.facts['gate.transition_max_cells'].value = 1;
   facts.facts['gate.transition_window_ns'].value = 120_000_000;
+  facts.facts['record.host_monotonic'].value = 'host_uhr';
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
   await page.route('**/assets/data/tour-facts.json', (route) =>
@@ -1470,9 +1471,12 @@ test('Projekt-Tour zeichnet Werte aus der Faktendatei und kommt ohne sie aus', a
   await expect(stage).toContainText('anzeige_wechselt');
   await page.evaluate(() => { location.hash = 'bedienung-werkbank'; });
   await expect(stage).toContainText('Dot-Matrix · am Aufbau gelaufen');
-  await expect(stage).toContainText('TESTLAUF: markiert, keine Messnutzung');
-  await expect(stage).toContainText('Kann dennoch VALID anzeigen / protokollieren');
+  await expect(stage).toContainText('TESTLAUF: Vermutungen, keine Messnutzung');
+  await expect(stage).toContainText('Freigabe vor Audit gesperrt · OQ-44 geklärt');
+  await expect(stage).not.toContainText('Kann dennoch VALID anzeigen / protokollieren');
   await expect(stage).not.toContainText('StreamCam-Anbindung folgt');
+  await page.evaluate(() => { location.hash = 'zeit-latenz'; });
+  await expect(stage).toContainText('Ergebnis: HOST_UHR · OQ-45 geklärt');
   await context.close();
 
   const missing = await browser.newContext({ reducedMotion: 'reduce' });

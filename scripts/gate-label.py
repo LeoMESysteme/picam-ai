@@ -104,6 +104,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from _devdata import input_path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from dispread.leading_zeros import map_suppressed_leading_zeros  # noqa: E402
@@ -243,7 +245,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--recording",
-        type=Path,
+        type=input_path,
         required=True,
         help="Verzeichnis einer sync-record.py-Aufzeichnung (serial.jsonl, frames.jsonl, session.json)",
     )
@@ -571,7 +573,7 @@ def classify(
 
 
 def run(args: argparse.Namespace) -> int:
-    recording: Path = args.recording
+    recording = input_path(args.recording)
     serial_path = recording / "serial.jsonl"
     frames_path = recording / "frames.jsonl"
     frames_dir = recording / "frames"

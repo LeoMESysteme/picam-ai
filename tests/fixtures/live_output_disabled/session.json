@@ -1,0 +1,110 @@
+{
+  "schema": "live-session/1",
+  "tracking": {
+    "mode": "injiziert",
+    "profile_mode": "ecc_alt",
+    "version": null,
+    "regions": null
+  },
+  "reader_tolerance": null,
+  "session_id": "live-test",
+  "device_id": "gsv-sensor-161a",
+  "profile": {
+    "path": "<root>/profile.json",
+    "sha256": "<profile-sha256>"
+  },
+  "templates": {
+    "path": "<root>/templates.json",
+    "sha256": "x"
+  },
+  "timing_calibration": {
+    "path": "<root>/timing.json",
+    "sha256": "1d65da23e8a8d7d5541eb69cdaa83a49e08d53c8f4935219179436db8b36646f",
+    "display_offset_ms": 89.6,
+    "guard_margin_ms": 325.9,
+    "applied": false
+  },
+  "gate": {
+    "backend": "dotmatrix",
+    "confirm_frames": 2,
+    "expected_unit": "mV/V"
+  },
+  "camera": {
+    "device": "/dev/fake"
+  },
+  "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
+  "started_at_utc": "2026-10-30T00:00:00+00:00",
+  "audit": {
+    "rotation": false,
+    "path": "records.jsonl"
+  },
+  "reference": {
+    "enabled": false,
+    "reason": "vom Bediener deaktiviert"
+  },
+  "diagnostics": {
+    "enabled": false,
+    "reason": "vom Bediener deaktiviert",
+    "saved": 0,
+    "dropped_queue": 0,
+    "dropped_limit": 0,
+    "dropped_memory": 0,
+    "dropped_mark_rate": 0,
+    "write_errors": 0,
+    "first_error": null,
+    "bytes": 0,
+    "staging": null,
+    "copied": false
+  },
+  "last_mark": null,
+  "clock_offset_boottime_minus_monotonic_ns": {
+    "start": 1000,
+    "end": 1001,
+    "samples": [
+      [
+        0,
+        1000
+      ],
+      [
+        0,
+        1001
+      ]
+    ]
+  },
+  "summary": {
+    "marks": 0,
+    "by_status": {
+      "transition": 1,
+      "valid": 2
+    },
+    "transition_display_changing": 0,
+    "frames_read": 3,
+    "tolerance_frames": 0,
+    "frames_skipped": 0,
+    "frame_gaps": 0,
+    "frame_gaps_owner_total": 0,
+    "audit_errors": 0,
+    "tracking_lost": 0,
+    "tracking_coarse_retries": 0,
+    "tracking_coarse_accepted": 0,
+    "tracking_lost_reasons": {},
+    "tracking_hints": {
+      "count": 0,
+      "by_kind": {
+        "anzeige_bewegt": 0,
+        "rahmen_verdeckt": 0,
+        "unbekannt": 0
+      },
+      "max_shift_px": null
+    },
+    "track_score": {
+      "min": null,
+      "median": null,
+      "max": null,
+      "n": 0
+    },
+    "camera_error": null,
+    "end_reason": "bediener"
+  },
+  "ended_at_utc": "2026-10-30T00:00:00+00:00"
+}

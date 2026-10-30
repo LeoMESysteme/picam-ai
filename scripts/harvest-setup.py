@@ -98,6 +98,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+from _devdata import input_path, logical_path
 
 from dispread.camera_settings import (
     STREAMCAM_USB_ID,
@@ -181,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     propose = sub.add_parser("propose", help="Quad- und Rastervorschlag aus einem Einzelbild erzeugen")
-    propose.add_argument("--frame", type=Path, required=True, help="Einzelbild (z. B. aus einer Aufzeichnung)")
+    propose.add_argument("--frame", type=input_path, required=True, help="Einzelbild (z. B. aus einer Aufzeichnung)")
     propose.add_argument(
         "--hint-box",
         required=True,
@@ -193,12 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     propose.add_argument("--quad", default=None, help="x1,y1,x2,y2,x3,y3,x4,y4 in Quellbildpixeln, ersetzt die Suche")
     propose.add_argument("--auto-quad", action="store_true", help="Quad ueber das Punktraster automatisch bestimmen")
     propose.add_argument("--cell-text", help="bekannter Text der ersten neun Anzeigezellen fuer die Rasterversatzpruefung")
-    propose.add_argument("--cell-text-file", type=Path, help="UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
+    propose.add_argument("--cell-text-file", type=input_path, help="UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
     propose.add_argument("--grid", default=None, help="left,pitch,top,bottom im entzerrten Bild, ersetzt den Default")
     propose.add_argument("--target-size", default="400x160", help="Groesse des entzerrten Bildes, Vorgabe 400x160")
     propose.add_argument(
         "--camera-settings",
-        type=Path,
+        type=input_path,
         required=True,
         help=(
             "camera-settings.json aus 'harvest-setup.py focus' - die StreamCam-Einstellungen, "
@@ -219,7 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     confirm = sub.add_parser("confirm", help="Vorschlag zum SessionProfile bestaetigen")
-    confirm.add_argument("--proposal", type=Path, required=True)
+    confirm.add_argument("--proposal", type=input_path, required=True)
     confirm.add_argument(
         "--resolution-threshold-px",
         type=float,
@@ -256,10 +257,10 @@ def build_parser() -> argparse.ArgumentParser:
     assist.add_argument("--hint-box", help="normierte Box x,y,w,h; ohne Angabe wird gruenes Glas gesucht")
     assist.add_argument("--stability-s", type=float, default=30.0, help="Abstand der zwei Standbilder in Sekunden, mindestens 30")
     assist.add_argument("--device", default=None, help="Kamerageraet fuer focus und Standbilder")
-    assist.add_argument("--templates", type=Path, help="eingefrorene Vorlagendatei fuer optionales Gegenlesen")
+    assist.add_argument("--templates", type=input_path, help="eingefrorene Vorlagendatei fuer optionales Gegenlesen")
     assist.add_argument("--templates-sha256", help="erwartete SHA-256-Pruefsumme der Vorlagendatei")
     assist.add_argument("--cell-text", help="Offline: bekannter Text der ersten neun Anzeigezellen")
-    assist.add_argument("--cell-text-file", type=Path, help="Offline: UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
+    assist.add_argument("--cell-text-file", type=input_path, help="Offline: UTF-8-Datei mit dem Text der ersten neun Anzeigezellen")
     assist.add_argument("--serial-port", default="/dev/ttyUSB0", help="serieller GSV-2AS-Eingang, Vorgabe /dev/ttyUSB0")
     assist.add_argument("--baudrate", type=int, default=38400, help="Baudrate des GSV-2AS-Eingangs, Vorgabe 38400")
 
@@ -434,7 +435,9 @@ def run_propose(args: argparse.Namespace) -> int:
 
 
 def run_confirm(args: argparse.Namespace) -> int:
-    proposal = json.loads(args.proposal.read_text(encoding="utf-8"))
+    proposal = json.loads(input_path(args.proposal).read_text(encoding="utf-8"))
+    if isinstance(proposal.get("frame"), str) and proposal["frame"]:
+        proposal["frame"] = str(input_path(proposal["frame"]))
     try:
         profile = live_setup.confirm_proposal(
             proposal,
@@ -446,6 +449,14 @@ def run_confirm(args: argparse.Namespace) -> int:
     except SetupError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    if profile.reference_frame is not None:
+        # Gelesen wird ueber den aufgeloesten Pfad, gespeichert nie ein Pfad
+        # auf dem Entwicklungsmedium (Produktdaten bleiben SD-only).
+        profile = replace(
+            profile,
+            reference_frame={**profile.reference_frame,
+                             "path": str(logical_path(profile.reference_frame["path"]))},
+        )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     profile.save(args.out)
 
@@ -546,6 +557,7 @@ def run_focus(args: argparse.Namespace) -> int:
         "camera": settings.to_dict(),
         "focus_sweep": [[f, s] for f, s in sweep_log],
         "focus_method": getattr(sweep_log, "focus_method", "sweep"),
+        "focus_verify": getattr(sweep_log, "focus_verify", None),
         "created_at_utc": datetime.now(UTC).isoformat(),
     }
     (out_dir / "camera-settings.json").write_text(

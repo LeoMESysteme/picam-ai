@@ -7,10 +7,20 @@ ohne Hardware, real zusaetzlich die als @hardware/@serial markierten Tests.
 from __future__ import annotations
 
 import json
+import os
 
 import cv2
 import numpy as np
 import pytest
+from devdata_helpers import local_recording  # noqa: F401 -- auch Skriptimporte per importlib
+
+#: Gesetzt in jedem Arbeiterprozess von `pytest -n <N>` (pytest-xdist).
+XDIST_WORKER = os.environ.get("PYTEST_XDIST_WORKER")
+
+if XDIST_WORKER:
+    # N Prozesse mit je eigenem OpenCV-Threadpool wuerden sich die vier Kerne
+    # gegenseitig wegnehmen; parallel wird ueber die Prozesse.
+    cv2.setNumThreads(1)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -24,6 +34,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if XDIST_WORKER:
+        # Laufzeitmessungen unter Volllast sind nicht aussagekraeftig; sie
+        # laufen getrennt mit `pytest -m timing` (ohne -n).
+        skip_timing = pytest.mark.skip(reason="Laufzeitmessung nur ohne -n: pytest -m timing")
+        for item in items:
+            if "timing" in item.keywords:
+                item.add_marker(skip_timing)
     if config.getoption("--mode") == "real":
         return
     skip = pytest.mark.skip(reason="braucht --mode=real (Hardware)")

@@ -5,6 +5,226 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: R13-23-Reviewkorrektur: Faktor-4-Grobsuche erhält 6 px
+  Fehlertoleranz ausschließlich im Vorab-Gate; der zweite Feinversuch
+  erzwingt unverändert 20 px/3°/±0,5 %. Eigene Phasenkorrelation und
+  Spektralcache entfernt, wieder `cv2.phaseCorrelate`. Schutzband +12 px
+  mit 5 px Filterreserve; Ausschnitte unter 8 px deaktivieren die optionale
+  Grobsuche. Regressionstests für Translation nahe 20 px, absolute
+  Feinfitgrenzen, kleine Ausschnitte und alle 16 Rasterlagen über dx/dy.
+  Reproduzierter Review-Sweep je 285 Fälle: 0/0 nur alt, 76/54 nur neu,
+  0 falsche Quads >1 px; zuvor 9/5 verlorene Baseline-Tracks. DEV 568/568
+  ohne Grobversuch belegt diesen Pfad nicht; keine Cache-Ersparnis.
+  Live 205/208 und 23/152 Fits, 0 Fehllesungen unverändert; zweiter
+  Durchgang Median 7,255–7,825 ms, AB/BA neu/HEAD 0,473–0,533
+  (drei Wiederholungen, ein/vier Threads). Keine neue Freigabe; Messungen im
+  [OQ-46-Nachtrag](docs/VALIDATION.md#r13-23-grobsuche-2026-10-30).
+
+* 2026-10-30: Langlauf `live-20261030T082502Z/run-01`, 42,8 min.
+  * Werteplan mit 280 Schritten.
+  * **0 / 45 702** Fehllesungen, 100 % VALID in stabilen Fenstern, kein
+    Trackingverlust.
+  * Bestätigt hat Claude im Auftrag von Leonhard Hentschke.
+
+  Ein Nebenbefund ist behoben: Seit R13-22 leert ein Kamera-Neustart beim
+  Laufstart `latest()`. Die Sitzung zählte dadurch alle Bilder seit dem
+  Serverstart als `frames_skipped`, im Lauf 45 277. Jetzt zählt sie Lücken
+  erst ab dem ersten gelieferten Bild. Das betraf nur Zähler und Trace,
+  keine Werte.
+
+* 2026-10-30: R13-22 erkennt Streamstillstand nach 2 s ohne geliefertes Bild
+  über die monotone Host-Uhr im `CameraOwner`, auch bei blockierendem
+  OpenCV-Read. Bis zum ersten Bild nach Start/Neustart gilt eine eigene
+  Anlauffrist von 5 s als ungemessene Reserve für STREAMON und ersten Read
+  unter Last. `stalled` und Fehler bleiben bis zum Quellenneustart erhalten;
+  späte Bilder werden verworfen. Live beendet
+  den Lauf über `CameraLost` und hält den Fehler in `session.json` und
+  Status fest; die bestehende STALE-Anzeige und das Audit ohne neue Records
+  in Bildlücken bleiben erhalten. Vorschau und Einrichtung melden den
+  Stillstand ebenfalls. Ein noch blockierter Lesethread sperrt Neustart mit
+  Warte-/Neu-Stecken-Hinweis; `stop()` bleibt durch seinen Join-Timeout
+  begrenzt und meldet `False`, `running=False` und `stalled=True`, auch vor
+  Ablauf der Bildfrist. Die Vorschauschleife wartet bei leeren Abrufen
+  begrenzt; nach Stillstand ist manuelles Neuverbinden nötig. Vorhandene
+  `read_error`-Diagnosen und seit dem letzten Bild verworfene Zeitstempel
+  ergänzen den Fehler. Kein `CAP_PROP_READ_TIMEOUT_MSEC`: OpenCV
+  4.10 unterstützt dies bei V4L2 nicht. Ausschließlich Fakes geprüft,
+  keine Hardwareabnahme.
+
+* 2026-10-30: Die Schwelle für Telegrammlücken in der Referenz sinkt von
+  1 000 auf 800 ms (OQ-40). Grundlage sind 13 Live-Läufe mit laufender
+  Kamera, ≈ 74 min:
+  * Der ungestörte Abstand ist höchstens 561 ms, die Periode 533,3 ms.
+  * Ein einzelner Telegrammausfall ergibt mindestens ≈ 1 039 ms. Die alte
+    Grenze erkannte ihn deshalb nur mit ≈ 39 ms Abstand, die neue mit
+    ≈ 240 ms.
+
+  `reference_eval.MAX_GAP_NS` und der Lückenzähler des Rekorders teilen
+  jetzt eine Konstante. Die Auswertung aller 13 Läufe ist bytegleich zu
+  vorher, ein neuer Test deckt den einzelnen Ausfall ab. Offen bleiben die
+  Stundenmessung und ein absichtlich erzeugter Ausfall. Außerdem ist die
+  Ursache der Nachtpflegefehler im Status nachgetragen: abgelaufene
+  Codex-Anmeldung des Runners, seit dem 28.10. behoben.
+
+* 2026-10-30: P4-3 als Prototyp gebaut und nach Review korrigiert: Opt-in
+  `output` im Live-Service/API, Standard aus; nur endgültige Records nach
+  R13-17/R13-21 und erfolgreichem Audit. Ein Senderauftrag, neue Frames bei
+  Beschäftigung als `output_busy` belegen. Live- und Demo-Sender schreiben
+  begonnene Telegramme vollständig bis CRLF mit einer Gesamtfrist von 1 s;
+  kein Pufferverwerfen, kein `flush()` oder eigener O_NONBLOCK-Pfad. Bei
+  Treiberresten nur das neue Telegramm auslassen. Teilwrite/Timeout/Fehler
+  werden mit Bytezahl (bei unbekannten Teilbytes `null`, bestätigte Untergrenze
+  im Fehlertext) belegt; Fehler sperren Live bis Laufende bzw. beenden die Demo.
+  Jede Senderausnahme wird sichtbar und löst den Beschäftigt-Zustand.
+  Live mindestens 9600 Baud: maximal 19 Byte × 10 Bit brauchen 19,79 ms;
+  2400/4800 überschreiten konservativ 33 ms. Port-/Aliasprüfung plus sysfs-
+  USB-Kennung `067b:2303` schützt den PL2303 auch nach Umnummerierung;
+  API-Feld `allow_reference_adapter` erlaubt ihn ausdrücklich, niemals den
+  aktiven Referenz-/Werteplan- oder Debugport. Ausgabe öffnet vor Recorder
+  und Werteplan; Fehler startet weder Referenz noch Rückstellung.
+  `tx.jsonl`, `session.json.output` und Live-Status belegen Fähigkeiten,
+  Zähler und ersten Fehler. Ohne Ausgabe bleiben Legacy-Artefakte bytegleich.
+  Nicht-VALID loggt auf Debug, Inkonsistenz auf Warning. Nur pty/Fakes;
+  keine Hardware-/Windows-Abnahme, UI-Änderung oder Messfreigabe.
+
+* 2026-10-28: P4-1/P4-2 als Prototyp gebaut: `UserDefinedFormatter` erzeugt
+  einkanaliges ASCII mit konfigurierbarem Präfix und festem CRLF aus VALID-
+  Anzeigetext, prüft Dezimallexik und exakte Text/Wert-Konsistenz; sonst
+  `omit_record`. Eigenständiger Demo-Sender mit drei Profilen, 600 Frames
+  bei standardmäßig 10 Hz/115200 8N1, geschützten Referenz-/Debugports,
+  BOOTTIME-JSONL und Dry-run. Nicht blockierende Writes verwerfen Stau
+  ohne Retry/Aufholburst. Nur pty/Fakes geprüft; Windows-Annahme,
+  Ungültigwirkung und Zeitachse offen, keine Messfreigabe. P4-3 und der
+  werfende native GSV-Platzhalter bleiben unverändert.
+
+* 2026-10-28: R13-21 sperrt die Live-Freigabe bei werkbankgesteuerter
+  Geräteumkonfiguration: ab vor STOP jeder Werteplan-/Rückstellsequenz bis
+  nach Resume plus 695 ms (bestehendes Referenz-GUARD). Ein sonst gültiges
+  Bild mit Aufnahmezeit im BOOTTIME-Fenster wird vor Audit/Ausgabe
+  `TRANSITION`, `value=null`, Grund `geraet_umkonfiguriert`; andere Status
+  und die vorrangige Testlauf-Sperre R13-17 bleiben erhalten. Thread-sichere
+  Intervalle berücksichtigen auch verspätet verarbeitete Bilder; Abbruch
+  ohne Resume bleibt gesperrt. Eine frische Versatzprüfung vor jeder
+  Werteplan-Freigabe erkennt auch Suspend vor der nächsten Auditprobe.
+  `summary.reconfiguration_suppressed` zählt
+  die Unterdrückungen nur bei Werteplan; reine Lesepausen ändern keine
+  Anzeigeparameter, Läufe ohne Werteplan behalten ihre JSONL-Bytes.
+  Gegenlesen nennt bei Kontrastsprüngen Schatten oder Verschmutzung und
+  empfiehlt Glasreinigung bzw. Abschattung. Der Diagnosekopie-Test startet
+  seine blockierte Kopie erst nach beiden Sitzungsaufbauten und wartet mit
+  größerer Frist auf getrennte Kopierereignisse, damit Last keinen
+  künstlichen Kopierfehler auslöst; beide Kopien werden einzeln abgesichert.
+  Alles mit Fakes geprüft, keine Hardware-Abnahme.
+
+* 2026-10-28: R13-20 stimmt im Live-Assistenten nach dem Fokus die feste
+  Belichtung auf die Anzeige ab: acht Bilder mitteln, p80 grüner Pixel in
+  der Hinweisbox, Zielband 115–150 bei Ziel 130. Höchstens vier
+  Korrekturrunden, 100/200/300 (10/20/30 ms), bevorzugt 300, Gain 0–128;
+  anschließend beste gemessene Regler übernehmen. Fehlende Box oder
+  verfehltes Band werden dokumentiert und warnen, ohne allein den Lauf
+  zu sperren. `camera-settings.json` enthält unter `exposure_adjust`
+  Ausgang, Runden, Endpegel und Ergebnis; Profil und Lauf übernehmen die
+  finalen Regler. Neue Vorprüfung `belichtung`: WARNUNG bei entzerrtem
+  Glas-p80 <105 (dunkle Belege ≤98, gute ≥112), mit Bedienhinweis.
+  Werkbank zeigt Prüfung und Hinweis bereits dynamisch. Zwölf gespeicherte
+  Standbilder kalibrieren die Boxmessung auf höchstens 4 Graustufen
+  Abweichung; Regelung ausschließlich mit Fakes geprüft, keine Kamera-Abnahme.
+  Nach Review: zu helles Glas verlängert die Belichtung nicht mehr auf 30 ms,
+  der Hinweis unterscheidet „zu hell“ von „zu dunkel“, die Tour zeigt
+  Rasterversatz nicht mehr doppelt. Bekannt: ohne grüne Hinweisbox beim
+  ersten Messen bleiben die Automatikwerte (auch außerhalb 100/200/300)
+  stehen und es warnt; `test_close_waits_for_previous_and_current_diagnostic_copies`
+  ist unter Volllast (`pytest -n 3`) zeitabhängig, einzeln grün.
+
+* 2026-10-28: R13-19c ergänzt ausschließlich im zweiten Rahmenversuch einen
+  Ähnlichkeitsfit mit gleichförmigem Maßstab 0,995…1,005; Minimalpaare und
+  Umeyama-Endfit prüfen diese Grenze. Erster starrer Durchgang, Residuen,
+  Leave-one-out, Streuung, 20 px / 3° und LCD-Randtoleranz bleiben erhalten.
+  Alte Profile bekommen den optionalen Maßstabsparameter als Default;
+  `last_coarse.scale` legt den Endfit offen. Halbierte Phasenkorrelation
+  beschleunigt den zweiten Durchgang auf rund 16–17 ms Median statt 49 ms
+  (Ziel ≤10 ms verfehlt). Offline: Live 107→205/208 und 3→23/152 Fits,
+  0 Fehllesungen; DEV 568/568 bitgleich. Gemeinsame falsche Rahmentreffer
+  bleiben ein blinder Fleck: im zweiten Pfad bis 5,220583 px Eckfehler im
+  festen Fixture-Raster. Die alte 13-px-Ablehnung ist gemäß Entscheidung
+  vom 28.10. durch korrekte Nachführung und eine 21-px-Ablehnung ersetzt.
+  OQ-46 geklärt; keine formale Abnahme oder Gerätefreigabe.
+
+* 2026-10-28: R13-19b ergänzt nach drei Arten von Rahmenablehnung eine
+  maskierte Phasenkorrelation und einen zweiten, versetzten Feinversuch.
+  Der erste Erfolg bleibt bitgleich; sämtliche Fein- und Bewegungsgrenzen
+  bleiben erhalten. Alte R13-11-Profile erhalten nur die zwei neuen
+  Grobparameter als Defaults; Referenz-/Quad-/SHA-Bindung bleibt strikt.
+  Sitzungen zählen zweite Versuche und deren Erfolge. Offline-Werkzeug
+  `scripts/r13-coarse-eval.py` vergleicht alle Live-Diagnose- und DEV-Bilder.
+  Synthetisch gelingt Translation bis 19 px; am untersuchten Live-Stoß
+  bleiben 99 zweite Versuche ohne zusätzlichen Fit (OQ-46). Drei neue
+  Echtdaten-Erwartungen und die alte 13-px-Ablehnungserwartung bleiben rot;
+  keine Sicherheitsgrenze oder bestehende Erwartung gelockert.
+
+* 2026-10-28: R13-19a hält bei der Kantenprüfung in Leerzellen das rechte
+  Vergleichspixel vor einer belegten Nachbarzelle mindestens 6 px von der
+  Zellgrenze entfernt (vor Leerzellen bleibt das alte Fenster, damit an
+  Grenzen zwischen Leerzellen keine Erkennungslücke entsteht). So lösen
+  weichgezeichnete Nachbarglyphen bei schräger Ansicht keinen Fehlalarm
+  mehr aus; die echte Spiegelkante in `ab2` bleibt eine WARNUNG.
+  Belegtzellenprüfung, Grenzwerte und Kennzahlenschlüssel bleiben erhalten.
+  Bricht die Live-Vorprüfung ab, nennt die Meldung die gescheiterten
+  Prüfungen und deren Zellen; `raster` bleibt ausgenommen.
+
+* 2026-10-28: Entwicklungsaufnahmen sind nach der SSD-Auslagerung für Tests
+  und Skripte über `DISPREAD_DEV_DATA` erreichbar. Vorhandene Dateien unter
+  `var/` haben Vorrang; neue Diagnoseaufnahmen verwenden den gesetzten
+  Entwicklungsdatenort. Fehlende lokale Testaufnahmen werden übersprungen,
+  R13-Fixtures behalten portable relative Pfade. Ein Wächtertest hält
+  SSD-Verweise aus `src/` heraus; Produktdaten und Geräte-Rückstellpunkt
+  bleiben auf SD, das fertige Gerät benötigt keine SSD. Nach Review:
+  vorhandene Pfade bleiben unverändert, gespeicherte Pfade (Profil-
+  Referenzbild, Datensatz, `import.json`) und Erntekennungen nutzen über
+  `logical_path` immer das alte `var/`-Schema, damit weder SSD-Pfade in
+  Produktdaten landen noch ein erneuter Import Proben verdoppelt.
+
+* 2026-10-28: Tests laufen parallel mit `pytest -n 4` (pytest-xdist);
+  OpenCV je Arbeiter einthreadig. Wanduhr-Laufzeittests tragen `timing`
+  und laufen getrennt mit `pytest -m timing`. Volle Suite 2549 bestanden,
+  9 übersprungen in 10 min statt etwa 15 min.
+
+* 2026-10-23: R13-18 Fix round 1 gleicht Anleitungen, Zeitstempelübersicht, API-Doku, Plan und Aufgabenliste mit der geklärten OQ-45 ab. Tour-Text und Szene nennen gemeinsam HOST_MONOTONIC als Ergebniszeitbasis; das Label liest den Wert aus den erzeugten Tour-Fakten. Der historische Wiki-Audit erhält einen datierten Nachtrag, alte Auditlabels bleiben erhalten.
+
+* 2026-10-23: R13-18 klärt OQ-45: Verarbeitungsmarken aus `time.monotonic_ns()` tragen als `HOST_MONOTONIC` ihre tatsächliche Host-Zeitbasis, unabhängig von der Aufnahmequelle. Aufnahmezeiten bleiben unverändert. Die BOOTTIME-Umrechnung teilt Sessionversatz und Suspend-Ablehnung mit V4L2-MONOTONIC; alte Auditdateien bleiben ohne Migration lesbar. Tests sichern alle bisherigen Aufnahmezeitbasen und die neun Konzept-Pflichtfelder ab.
+
+* 2026-10-23: R13-17 Fix round 1 gleicht Übersichten, API-Doku und Aufgabenliste mit der technischen Testlauf-Sperre ab. Unterdrückte Records behalten Rohtext und Bestätigungsdiagnosen ohne Zahlenwert; `tolerance_frames` zählt anhand der ursprünglichen Gate-Entscheidung. Leser-Vermutungen werden vollständig samt `gate_status` veröffentlicht, und die Detailzeile nutzt die vorhandene deutsche Ursachenerklärung.
+
+* 2026-10-23: R13-17 klärt OQ-44: Testläufe unterdrücken jede Gate-Freigabe vor dem Audit als `UNREADABLE` mit `value=null` und `testlauf_keine_freigabe`. Leser-Vermutung und ursprünglicher Gate-Status bleiben getrennte Diagnosen; die Seite zeigt auch ältere Testlaufdaten niemals als gültig. `session.json` zählt `testlauf_unterdrueckt`; normale Läufe behalten unveränderte Auditbytes. Regressionstests sichern später lesbare Bilder, Ausgabegrenze und Referenzauswertung ab.
+
+* 2026-10-23: R13-16 Fix round 1 löst die konfigurierte Live-Ablage einmal real auf, sodass Aufräumen auch mit dem verlinkten Worktree-`var` funktioniert; Symlinks innerhalb des Baums bleiben gesperrt. Nur Dateiänderungszeiten bestimmen das Alter: Diagnose-Löschung verschiebt die Laufbereinigung nicht. Löschfehler werden je Eintrag gemeldet, weitere Kandidaten bearbeitet und Teilfehler ergeben CLI-Exitcode 1. Die Seite zeigt GB mit Dezimalkomma; Kapitel 10 ergänzt die Speicher-Abnahme und manuelle Behandlung abgestürzter Läufe.
+
+* 2026-10-23: R13-16 ergänzt das Speicherbudget für Pi 5 mit 64-GB-SD ohne SSD: Einrichtung und Laufstart verlangen 2 GB freien Platz auf dem Live-Dateisystem, mit Diagnose zusätzlich 600 MB. Status und Seite zeigen freien Platz und warnen unter 5 GB. Diagnose bleibt in API und Seite standardmäßig aus und verlangt ausdrückliches Einschalten; der Hinweis nennt RAM- und SD-Budget. `dispread live aufraeumen --aelter-als TAGE` listet alte, nachweislich beendete Läufe samt Größen; erst `--ausfuehren` löscht, `--nur-diagnose` begrenzt auf Diagnoseordner. Setup/Profile, laufende Läufe, ausstehende Diagnosekopien und Symlinks bleiben geschützt. Live-Audits schreiben je Lauf ohne verlustbehaftete Generationenrotation; Schreibfehler stoppen weiterhin sichtbar den Lauf. Keine automatische Löschung.
+
+* 2026-10-23: R13-15 Fix round 1 erhält feine Rahmenmerkmale durch ORB auf einem nativen Ausschnitt statt Verkleinerung auf 640 Pixel; Zeichenabstand und geometrische Diagnosetoleranzen skalieren mit der Anzeigeauflösung. Bewegung bedeutet die maximale Verschiebung der bestätigten Rahmenregionen und Quad-Ecken gegenüber Suchradius/Bewegungsgrenze, keine Translation um den Bildursprung. Die Seite nennt etwa „ca. 19 px (Ecken), 2,2 Grad“. Reale JPEG-Regressionsbilder sichern Bewegung und Verdeckung ab. Jeder Fehler aus der gesamten Diagnosebeobachtung wird einmal protokolliert und ergibt `unbekannt`; Diagnoseaufzeichnung und Clock-Samples laufen weiter. Referenzbild wird nur einmal geladen; `by_kind` hat auch ohne Bedienhilfe dieselben drei Schlüssel.
+
+* 2026-10-23: R13-15 ergänzt bei mindestens drei Sekunden ununterbrochen verlorener Nachführung eine getrennte, lokale Bewegungsdiagnose im Hintergrund (ORB in nativer Auflösung auf einem lokalen Ausschnitt, höchstens alle zwei Sekunden, ein Auftrag). `/live` nennt bei belegter Bewegung die ungefähre Verschiebung/Drehung und fordert zum Neueinrichten auf; nach zehn Sekunden ohne belastbaren Bewegungsbefund folgt ein vorsichtiger Verdeckungs-/Sichthinweis. Bei Rückkehr der Nachführung verschwindet der Hinweis. `session.json` zählt Hinweisepisoden und ihre maximale Verschiebung; Tracker, Geometrie, Leser, Freigabe und `records.jsonl` erhalten keine Diagnoseergebnisse.
+
+* 2026-10-23: R13-13 verfeinert bei der Startsuche bis zu 32 statt 16 Startlagen je Anker. Die moderate Linksansicht links10 findet damit ihr Raster; die Sicherheits- und Eindeutigkeitspruefungen bleiben erhalten. Bei `keine_startlage` oder `startlage_mehrdeutig` empfiehlt die Live-Seite einen flacheren Blick, geringeren Abstand und mindestens ein Drittel Bildbreite fuer die Anzeige. Erfolglose Einrichtungen koennen laenger dauern.
+
+* 2026-10-23: R13-12 berücksichtigt das Spiel des StreamCam-Fokusmotors: Suchmessungen, Endprüfung und Wiederholung fahren den Zielwert von unten an (12 Schritte Reserve, unten auf 0 begrenzt; Ziel 0 ausgeschlossen). Auf die Grobsuche folgt ein vollständiger aufsteigender Feinscan über ±6 in Zweierschritten. Stabilitätswartezeit und 85-%-Endprüfung bleiben erhalten; `focus_verify` in `camera-settings.json` nennt Anfahrregel und Reserve.
+
+* 2026-10-23: R13-14 richtet sync-record-Aufnahmen mit `scripts/r13-offline-setup.py` ohne Kamera ueber dieselben Raster-, Leser- und Rahmenpruefungen wie Live ein. Abweichungen zur Live-Einrichtung: ein Einzelbild statt des 8-Bilder-Mittels, ein Fitversuch statt drei, JPEG/PNG-Quelle wie aufgezeichnet und kein Fokusschritt. JPEG-Aufnahmen verzerren den Rasterfit: unabhaengige Diagnose an 59 PNG-Einrichtungsstandbildern, als JPEG q95 neu kodiert, ergab vier geaenderte Fitstatus und Eckverschiebungen bis 13 px. Offline-Einrichtungsergebnisse auf JPEG-Aufnahmen sind deshalb nicht repraesentativ fuer die Live-Einrichtung; das Werkzeug warnt bei JPEG-Quellbildern. Vorschlag, Overlays, Standbilder und Ablehnungsgruende landen ausschliesslich im angegebenen Ausgabeverzeichnis ausserhalb `var/`. Erfolgreiche Profile tragen `offline: true` und `confirmed_by: offline-auswertung`; Replay akzeptiert sie. Der gemeinsame Guard `require_live_profile` sperrt Live-Start und Kamera-Ernte vor Ressourcenaufbau und Ausgabe auch dann, wenn das Offline-Flag von Hand entfernt wurde. Beide neuen Winkelaufnahmen scheitern unveraendert an `keine_startlage`.
+
+* 2026-10-23: R13-11 erweitert den Rahmenvorschlag um ein plausibilisiertes Band am dunklen Rahmen (sonst festes Band), strengere Eindeutigkeit und Reserve gegen beliebige zwei Bereichsausfälle; bis zu 20 automatische Bereiche. Frontalansichten erhalten damit auch Fasenstruktur. Fixrunde 1 begrenzt die Kontur auf 2–12 Quadflächen mit Solidität ≥ 0,97 und verlangt für Vorschlagsstreuung und Reserve mindestens 35 % Hebelarm jeder Achsenseite; automatische und manuelle Strukturprüfung verwenden dieselben zonenbezogenen Maxima. Die Update-Regeln bleiben unverändert; bestehende Rahmenprofile müssen neu eingerichtet und neu abgenommen werden.
+
+* 2026-10-23: R13-10 erweitert die Startsuche am rechten Rand um zwei weiter innen liegende Kandidaten. Damit findet die Einrichtung bei schrägem Blick von links (123820Z) das Punktraster und liest `+0.60571 mV/V`; die bisherigen Ablehnungen bleiben erhalten.
+* R13-9 wartet beim Fokussieren auf stabile Schärfe und prüft die Endlage mit einem Wiederholversuch; bei zu geringer Schärfe bricht die Einrichtung ab, `focus_verify` dokumentiert das Ergebnis.
+* 2026-10-23: R13-8 unterdrückt kleine helle Glasdefekte nur in der Hintergrundschätzung des Dot-Matrix-Lesers (Grauwert-Öffnung bis 0,4 Punktabstände vor dem Schließen). Rohsignal, Kontrast, Sättigung und eingefrorene Vorlagen bleiben erhalten. Dunkle Flecken behandelt der neue Filter nicht: Sie können als leer gelesen oder abgelehnt werden, ändern aber keinen Messwert.
+* R13-8 benennt Leserablehnungen mit Zellindex (`leser:leerzelle_gestoert:14`, `leser:zelle_unbekannt:5`) statt eines irreführenden Dezimalpunktfehlers. `/live` zeigt die häufigsten Hauptursachen der letzten zehn Sekunden mit Bedienhilfe und Anteil aller verarbeiteten Bilder. Eine allein unbekannte Separatorzelle 8 war als `zelle_unbekannt` TRANSITION-fähig; als `leerzelle_gestoert:8` bleibt sie nun konservativ UNREADABLE. Die übrigen Anzeigewechsel- und STALE-Regeln bleiben erhalten.
+* R13-8 ergänzt ausschließlich für Live-Einrichtungen die Prüfung `displayfehler`: ortsfeste helle/dunkle Glasstörungen in allen Standbildern des Versuchs ergeben eine WARNUNG mit Zell-/Punktposition und Stärke. Fix round 1 beschränkt beide Defektarten auf Pflicht-Leerzellen 8 und 13–15 sowie ausdrücklich leere Setup-Zellen; die Glasschätzung bleibt innerhalb der jeweiligen Leerzelle. So erzeugen Zeichenpunkte und ihre Zwischenräume keine Fehlalarme. Quellbild und entzerrtes Overlay markieren den Befund; Kamera versetzen, Glas reinigen oder Reflex abschatten. Harvest erhält diese Prüfung nicht.
+
+* 2026-10-21: R13-2-Review: Der Playwright-Live-Service unterstützt
+  vollständige Statusabfragen mit Trackinggründen. Nach der ersten
+  erfolgreichen vollständigen Antwort fragt die Live-Seite auch ohne
+  Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
+  werden weiterhin wiederholt.
+
 * 2026-10-30: Docs-Playwright „Hinweise bleiben überfahrbar …“ fährt den
   Zeiger direkt zum Hinweis statt über `hint.hover()`. Playwright scrollte
   dabei gelegentlich erst das Fenster; der Hinweis folgte seinem Ziel, lag
@@ -195,6 +415,15 @@ lesen; der validierte Dot-Matrix-Leser lief nur in Skripten.
 * 2026-10-21: Wertwechsel als TRANSITION „Wert wechselt“ (`anzeige_wechselt`) statt UNREADABLE: Bedienerlauf mit 67 Wechseln zeigte je 1–3 Mischziffern-Bilder als UNREADABLE. Höchstens 3 unlesbare Zellen, alle lesbaren gleich dem letzten freigegebenen Zellentext, höchstens 0,5 s danach (STALE geht vor); nie bei Kontrast, Betriebszustand, Einheit oder verlorener Nachführung. Kein Wert wird freigegeben. `session.json` zählt diese Bilder getrennt (`transition_display_changing`).
 * 2026-10-21: Live-Läufe zeichnen den seriellen GSV-2AS-Strom optional getrennt als Referenz auf, bei fehlendem Gerät weiter ohne Referenz. Ausdrücklich bestätigter Werteplan nutzt gemeinsame belegte Serial-Helfer, protokolliert Befehle und stellt Normierung/Dezimalpunkt mit Prüfung zurück (Status währenddessen sichtbar, höchstens 20 s; rein lesend 2 s). Nachträglicher Abgleich mit 695-ms-Schutzintervall zeigt Fehllesungen, Zustandsanteile, Wechselverzögerung und Toleranzlaufzahlen; Referenz beeinflusst weder Leser noch Gate noch `records.jsonl`.
 * 2026-10-21: Referenzabgleich trennt Wechsel nach Telegrammlücken von messbaren Wechseln und unentschiedene von ungedeckten VALID. Parsefehler werden als abgelehnte Zeilen auditiert und sperren nur ihr Vergleichsfenster; Queue-Verlust bleibt ein Abbruchgrund. Wertepläne prüfen den Rückstellpunkt vor dem Start, bei Precheck-Abweichung läuft die Leseaufzeichnung weiter. Recorder-Stopfehler verhindern weder Sink-Abschluss noch finale Laufmetadaten; gemeinsame Serial-Helfer haben isoliert ersetzbare Wartezeiten. Anleitung ergänzt Referenzabnahme und manuelle Rückstellung nach hartem Prozessende.
+* 2026-10-21: R13-Rahmenbereich-Tracker mit begrenzten Rohbildfenstern, robuster starrer Bewegung, drei Inliern je Achsenseite, Leave-one-out-Stabilität und unabhängiger subpixelgenauer LCD-Randprüfung (höchstens 1 px Abweichung); Offline-Auswertung und Regressionen für inhaltsabhängige ECC-Verluste. Der Live-Pfad verwendet ihn noch nicht. Schwache LCD-Seiten werden ausgewiesen und ausgenommen; mindestens drei starke Seiten bleiben Pflicht.
+* 2026-10-21: R13-2 bindet Rahmenbereiche an Einrichtungsbild, Vorschlagsrevision und Profil: neue Prüfung „Nachführung“ samt sichtbaren Rahmenfenstern, Suchbereichen und LCD-Randpunkten. Live-Läufe verwenden ausschließlich die bestätigten Bereiche und verweigern veränderte Referenzen oder Prüfparameter; Bestandsprofile bleiben bytegleich und laufen im markierten alten ECC-Modus. Status und Laufartefakt nennen den Modus, Trackingverluste werden je Grund gezählt. Harvest-Einrichtungen bleiben unverändert und erhalten keine Prüfung `nachfuehrung`. Leser und Freigabe bleiben unabhängig; sichtbarer Rahmen bei verdeckten Ziffern gibt keinen Wert frei.
+* 2026-10-21: R13-3 ergänzt optionale Diagnosebilder aus dem vorhandenen Kamerastrom: unveränderte PNG-Vollbilder und Tracking-/Zeitmetadaten bei Verlust, Wiederkehr, periodisch und bei Bedienermarken. Ein begrenzter Worker schreibt höchstens 300 Bilder und 600 MB in RAM; zu wenig Platz oder Hauptspeicher deaktiviert nur die Diagnose, Verluste und Fehler sind sichtbar. Start braucht 500 MB Hauptspeicherreserve neben dem Budget, unter 500 MB MemAvailable werden im Lauf neue Bilder verworfen. Nach Laufende sichert ein Hintergrundthread die Daten mit Größenprüfung nach `run-NN/diagnose/`; Dienstende wartet insgesamt bis zu 60 s auf Kopien. Verbliebene RAM-Ablagen werden mit Pfad und Größe gemeldet. Ereignismarken über Seite oder `dispread live mark` stehen mit ausdrücklich gekennzeichneter Bediener-Meldezeit in `marks.jsonl`, Markenbilder sind auf eines je 2 s begrenzt. Ungültige Marken-JSON-Anfragen liefern 400; die Seite zeigt MB und Verlustzähler. Leser, Freigabe und `records.jsonl` bleiben unabhängig.
+* 2026-10-21: R13-5 ergänzt den Offline-Replay von sync-record-Aufnahmen durch denselben geprüften Pipeline-Aufbau wie Live (strenger Leser, unveränderte Freigabe und Aufnahmezeiten). ECC und bestätigte Rahmenbereiche sind vergleichbar; für alte Profile ist ein neuer Rahmenvorschlag ausschließlich offline erlaubt und als `offline_vorschlag` markiert. Gemeinsame Aufnahmeparser und Referenzprüfung mit 695-ms-Schutzintervall liefern Zustandsanteile und Trackinggründe je Faktor und Fenster, Fehllesungen und Verarbeitungslaufzeiten. Unvollständige Eingaben oder Fehllesungen ergeben Exit 1; Ausgaben unter `var/` sind gesperrt. Dev-Aufnahme: 0/231 gegenüber 0/429 Fehllesungen bei ECC/Rahmen, 220 gegenüber 0 Trackingverluste; keine 30-Hz-Live-Abnahme.
+* 2026-10-21: R13-5, Fix round 1: Ungültige serielle Telegramme werden im Replay gezählt und ihre Referenzfenster als Lücke behandelt; falsche Eingabetypen ergeben Exit 1 mit deutscher Meldung. Der Referenz-Evaluator prüft Testlauf und Queue-Überlauf wieder vor dem Lesen der Referenzdatei. Doku und Replay-Hinweis erklären die schwächere Aussagekraft bei etwa 3 Hz: kurzlebige Fehllesungen können herausgefiltert, Trackingverluste erzeugt oder verborgen werden; null Replay-Fehllesungen erlaubt keine Aussage über Fehllesungen bei 30 Hz.
+* 2026-10-21: R13-4 ergänzt manuelle Rahmenbereiche am eingefrorenen Einrichtungsbild: Bildklicks und tastaturbedienbare Koordinaten-/Entfernen-Eingaben verwenden dieselben Qualitätsprüfungen und unveränderten Freigabegrenzen wie automatische Vorschläge. Jede Änderung aktualisiert Overlay und Prüfurteil, erzeugt eine neue Revision und verlangt erneute namentliche Bestätigung. Die API lehnt laufende, fehlende oder veraltete Vorschläge ab; höchstens 24 Bereiche und 50 einzelne Änderungen sind erlaubt. Auswahlherkunft und UTC-Änderungsliste stehen im Profil, die Auswahlherkunft auch in session.json.
+* 2026-10-21: R13-4, Fix round 1: Bereichskorrekturen erhalten Quad, Rasterpunkte und Prüfurteil im Quellbild; das von den Rahmenbereichen unabhängige Abtastbild bleibt unverändert. Manuelle Mittelpunkte verlangen auch dasselbe lokale Shi-Tomasi-Maximum; automatische Vorschläge und eingefrorene Grenzen bleiben unverändert. Koordinaten außerhalb des Quellbilds werden vor jeder Speicherung abgelehnt, Bildklicks wählen den enthaltenen Pixel. Fehlerhafte Bereichseingaben liefern HTTP 400, Zustandskonflikte weiterhin 409.
+* 2026-10-21: R13-4, Fix round 2: Manuelle Mittelpunkte rasten vor der unveränderten Qualitätsprüfung am stärksten lokalen Shi-Tomasi-Maximum innerhalb von 3 Rohpixeln ein. Änderungsbelege und Seite zeigen angeforderten und verwendeten Mittelpunkt; fehlende Struktur oder ausgeschlossene Suchfenster bleiben abgelehnt. Vorschläge ohne Overlay-Belege verlangen mit verständlicher Fehlermeldung eine neue Einrichtung.
+* 2026-10-21: R13-4, Fix round 3: Nur neu hinzugefügte Rahmenpunkte rasten ein. Beibehaltene automatische und manuelle Bereiche werden am exakt gespeicherten Mittelpunkt erneut geprüft; unabhängige Änderungen verschieben oder entfernen sie nicht. Scheitert ein beibehaltener Bereich, wird die Änderung vor jeder Speicherung mit Bereichsindex, Mittelpunkt und Ablehnungsgrund verweigert.
 
 **Änderung:** Neuer Kern `dispread.live` (Plan
 `docs/superpowers/plans/2026-10-12-messpfad-live.md`):

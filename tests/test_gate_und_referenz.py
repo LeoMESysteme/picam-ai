@@ -6,7 +6,10 @@ der fehlschlaegt, wenn das System sie zeigt.
 
 from __future__ import annotations
 
+import dataclasses
 import os
+
+import pytest
 
 from dispread.detect.manual_roi import ManualRoiLocator, quad_from_box
 from dispread.frames import open_source
@@ -403,3 +406,54 @@ def test_uebergang_gibt_nie_einen_wert_frei_und_bestaetigt_neu():
     first = gate.evaluate(_dm_read(new), capture_ns=99 * MS)
     assert first.status is ValueStatus.TRANSITION and first.reject_reasons == ("awaiting_confirmation",)
     assert gate.evaluate(_dm_read(new), capture_ns=132 * MS).status is ValueStatus.VALID
+
+
+@pytest.mark.parametrize('reason,cell', [('leerzelle_gestoert', 14), ('zelle_unbekannt', 5), ('kontrast', None)])
+def test_dotmatrix_rejection_uses_reader_reason_instead_of_decimal(reason, cell):
+    read = _dm_read(OLD)
+    read = dataclasses.replace(read, value=None, decimal_point_detected=False)
+    read.diagnostics.update(reject_reason=reason, reject_cell=cell)
+    decision = _valid_gate().evaluate(read, capture_ns=100 * MS)
+    expected = 'leser:' + reason + (f':{cell}' if cell is not None else '')
+    assert expected in decision.reject_reasons
+    assert 'decimal_point_unknown' not in decision.reject_reasons
+    assert decision.status is ValueStatus.UNREADABLE
+
+
+def test_reader_cell_reason_keeps_display_transition_and_stale():
+    read = _dm_read(OLD[:7] + [None, ' '])
+    read.diagnostics.update(reject_reason='zelle_unbekannt', reject_cell=7)
+    gate = _valid_gate()
+    changing = gate.evaluate(read, capture_ns=100 * MS)
+    assert changing.status is ValueStatus.TRANSITION
+    assert changing.reject_reasons[0] == 'anzeige_wechselt'
+    assert 'leser:zelle_unbekannt:7' in changing.reject_reasons
+    assert gate.evaluate(read, capture_ns=600 * MS).status is ValueStatus.STALE
+
+
+def test_sevenseg_keeps_decimal_reason_even_with_diagnostics_reason():
+    read = dataclasses.replace(_dm_read(OLD), backend_id='sevenseg', value=None, decimal_point_detected=False)
+    read.diagnostics.update(reject_reason='format')
+    decision = _valid_gate().evaluate(read, capture_ns=100 * MS)
+    assert 'decimal_point_unknown' in decision.reject_reasons
+    assert 'leser:format' not in decision.reject_reasons
+
+
+def test_disturbed_blank_is_not_a_transition_even_with_a_mixed_digit():
+    read = _dm_read(OLD[:7] + [None, ' '])
+    read.diagnostics.update(reject_reason='leerzelle_gestoert', reject_cell=14)
+    decision = _valid_gate().evaluate(read, capture_ns=100 * MS)
+    assert decision.status is ValueStatus.UNREADABLE
+    assert 'anzeige_wechselt' not in decision.reject_reasons
+
+
+def test_unknown_separator_alone_was_transition_eligible_but_disturbed_blank_is_unreadable():
+    read = _dm_read(OLD[:8] + [None])
+    read.diagnostics.update(reject_reason='zelle_unbekannt', reject_cell=8)
+    legacy = _valid_gate().evaluate(read, capture_ns=100 * MS)
+    assert legacy.status is ValueStatus.TRANSITION
+    read.diagnostics['reject_reason'] = 'leerzelle_gestoert'
+    current = _valid_gate().evaluate(read, capture_ns=100 * MS)
+    assert current.status is ValueStatus.UNREADABLE
+    assert 'leser:leerzelle_gestoert:8' in current.reject_reasons
+    assert 'anzeige_wechselt' not in current.reject_reasons

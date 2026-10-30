@@ -580,7 +580,12 @@ def _auto_fit(
                             tl = anchor_tl + (left_shift, up_shift)
                             bl = anchor_bl + (left_shift, up_shift)
                             for right_shift in (-4.0 * pixel_scale, 0.0, 4.0 * pixel_scale):
-                                for right_edge in (bx1 - 16 * pixel_scale, bx1 - 8 * pixel_scale,
+                                # Rechter Rand relativ zu bx1: in 30 erfolgreichen
+                                # Aufstellungen -14..-24 * pixel_scale, bei schraegem
+                                # Blick von links (123820Z) -34 * pixel_scale.
+                                # Zu breite Starts rasten sonst in Leerzelle 15 ein.
+                                for right_edge in (bx1 - 32 * pixel_scale, bx1 - 24 * pixel_scale,
+                                                   bx1 - 16 * pixel_scale, bx1 - 8 * pixel_scale,
                                                    bx1, bx1 + 8 * pixel_scale):
                                     brx = right_edge + bl[0] - tl[0] + right_shift
                                     q = np.float32([
@@ -640,7 +645,10 @@ def _auto_fit(
     attempted_per_anchor = [0] * len(candidate_anchors)
     attempted_quads: list[np.ndarray] = []
     viable: list[LatticeFit] = []
-    for limit in (8, 16):
+    # Bei ~620 px breiter Linksansicht lagen ~43 px zu breite Starts vorn;
+    # passende Starts rangierten 19..1022. Bis zu 32 statt 16 je Anker
+    # verfeinern; die Eindeutigkeits- und Sicherheitspruefungen bleiben gleich.
+    for limit in (8, 16, 32):
         for _, h, anchor_index in candidates:
             if attempted_per_anchor[anchor_index] >= limit:
                 continue

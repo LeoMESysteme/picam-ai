@@ -238,6 +238,11 @@ FACTS = {
         ["zeit-versatz"],
         lambda: module_constant(RECORDS, "SUSPEND_TOLERANCE_NS"),
     ),
+    "record.host_monotonic": (
+        f"{RECORDS}:TimeBaseKind.HOST_MONOTONIC",
+        ["zeit-latenz"],
+        lambda: enum_members(RECORDS, "TimeBaseKind")["HOST_MONOTONIC"],
+    ),
     "gate.confirm_frames": (
         f"{VALIDATE}:GateConfig.confirm_frames",
         ["erkennung-freigabe", "regeln-spruenge"],

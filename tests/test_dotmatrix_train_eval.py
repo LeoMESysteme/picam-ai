@@ -814,3 +814,16 @@ def test_clopper_pearson_upper_bound():
     assert abs(eval_mod.clopper_pearson_upper(0, 30) - (1 - 0.05 ** (1 / 30))) < 1e-9
     assert eval_mod.clopper_pearson_upper(0, 0) == 1.0
     assert 0.0 < eval_mod.clopper_pearson_upper(1, 30) < 1.0
+
+
+def test_finer_blank_reasons_keep_evaluation_outcomes():
+    from dotmatrix_helpers import LAYOUT, synthetic_reader
+
+    reader = synthetic_reader()
+    for text, old_reason in (('+0.609720', 'format'), ('+0.60972°', 'zelle_unbekannt'),
+                             ('+0.60972 ' + ' ' * 5 + '0 ', 'format')):
+        result = reader.read(render(text), LAYOUT)
+        assert result.diagnostics['reject_reason'] == 'leerzelle_gestoert'
+        outcome, raw_reason = eval_mod._reader_outcome(result, '+0.60972 ')
+        assert outcome == 'abgelehnt:' + old_reason
+        assert raw_reason == 'leerzelle_gestoert'

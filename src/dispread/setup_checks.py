@@ -2,6 +2,14 @@
 
 Die Ampelwerte sind Vorabwerte. Kennzahlen werden unveraendert mitgegeben,
 damit der Befund bei spaeterer Kalibrierung erneut bewertet werden kann.
+
+Die Kantenpruefung vergleicht in Leerzellen Hintergrundwerte im Abstand
+von 8 px. Vor einer belegten Nachbarzelle bleibt das rechte Vergleichspixel
+mindestens 6 px vor der Zellgrenze, damit Schliessung und optische
+Unschaerfe der Nachbarglyphe keine Spiegelkante vortaeuschen; vor einer
+Leerzelle und in Zelle 15 gilt das bisherige Fenster (3 px), damit an
+Grenzen zwischen Leerzellen keine Erkennungsluecke entsteht. Belegte Zellen nutzen eine eigene
+Helligkeitshuelse; die Vorabgrenzen bleiben fuer beide Masse getrennt.
 """
 
 from __future__ import annotations
@@ -20,7 +28,7 @@ from dispread.frame_alignment import estimate_quad_shift
 from dispread.lattice_offsets import FULL, HALVES, max_abs_offset, measure_offsets, median_offsets
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
-from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, raw_cell_depths, sample_image
+from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, background_opening, raw_cell_depths, sample_image
 from dispread.rectify import rectify
 
 # Vorabwerte, aus den Aufstellungen vom 2026-09-29.
@@ -28,6 +36,9 @@ TARGET_SIZE = (400, 160)
 GRID = CharGrid(16, 0.0, 25.0, 160.0 / 9.0, 160.0)
 POINT_CONTRAST_ERROR = 15.0
 POINT_CONTRAST_WARNING = 17.0
+# Vorabgrenze 2026-10-28: gute Aufstellungen p80 >=112, dunkle <=98.
+# Keine obere Grenze aus diesen Daten ableitbar; Saettigung prueft glanz.
+EXPOSURE_WARNING_BELOW = 105.0
 EDGE_WARNING = 6.0
 EDGE_ERROR = 8.0
 EDGE_OCCUPIED_WARNING = 16.0
@@ -35,6 +46,15 @@ EDGE_OCCUPIED_ERROR = 20.0
 EDGE_BACKGROUND_PERCENTILE = 99.0
 EDGE_BLANK_RELATIVE_HIGHPASS = 0.5
 EDGE_BLANK_ABSOLUTE_HIGHPASS = 10.0
+# Exklusives Fenster fuer x vor einer belegten Nachbarzelle: x+8 endet bei
+# 19, also 6 px vor Zellgrenze 25. Die Schliessungsbreite 9 wirkt +/-4 px,
+# dazu kommt optische Unschaerfe. Gemessen an sc3-6, ab1/ab2 und den
+# Live-Bildern 2026-10-28 (110248Z, 113959Z, 114104Z): Nachbareffekt
+# entfaellt, ab2 bleibt als WARNUNG sichtbar.
+EDGE_BLANK_STEP_WINDOW = (2, 12)
+# Vor einer Leerzelle oder am Ende: bisheriges Fenster bis 25 - 10 (x+8 bis
+# 3 px vor der Grenze), damit dort keine neue Erkennungsluecke entsteht.
+EDGE_BLANK_STEP_FREE_RIGHT = 10
 SATURATED_ERROR = 0.02
 GLARE_BRIGHTNESS_ABOVE_BACKGROUND = 35.0
 GLARE_BLOB_AREA_ERROR = 100
@@ -52,6 +72,104 @@ STABILITY_ERROR_PX = 0.5
 STABILITY_WARNING_PX = 0.2
 BORDER_DARK_RATIO_ERROR = 0.7
 BLANK_CELLS = (8, 13, 14, 15)
+
+
+def _glass_defects(image: np.ndarray, quad, grid: CharGrid, blank_cells: Sequence[int]) -> list[dict]:
+    """Kleine helle/dunkle Residuen ausschliesslich in bekannten Leerzellen.
+
+    Vorabgrenzen in Grauwerten: Oeffnungsresiduum > 4 UND > 8 ueber
+    lokalem Glaspegel (15-px-Median), dunkles Schlussresiduum > 8.
+    Der Median wird innerhalb jeder Leerzelle geschaetzt: dort gibt es
+    keine regulaeren dunklen Punkte, die ihn nach unten ziehen. Belegte
+    Nachbarzellen gehen auch in die Morphologie nicht ein. In belegten
+    Zellen waeren helle Punktzwischenraeume nicht von Kratzern trennbar.
+    Gauss sigma=0,5 unterdrueckt Einzelpixelrauschen.
+    Komponenten von mindestens 3 Pixeln bis 1 Punktflaeche und maximal
+    1,5 Punktabstaenden je Achse; keine langen Rahmen-/Reflexkanten.
+    Die bilduebergreifende Pruefung verlangt zusaetzlich einen ausreichend
+    grossen Anker (0,1 Punktflaechen), um Rauschspitzen auszuschliessen.
+    Das ist ein Hinweis, keine Fehlerdiagnose und keine Lesefreigabe.
+    """
+    gray = _gray(rectify(image, quad, target_size=TARGET_SIZE).image)
+    col = grid.pitch / (grid.dot_columns + grid.gap_columns)
+    row = (grid.bottom - grid.top) / 8
+    kernel = np.ones((2 * int(row / 2) + 1, 2 * int(col / 2) + 1), np.uint8)
+    defects = []
+    for cell in blank_cells:
+        x0 = max(0, int(grid.left + cell * grid.pitch))
+        x1 = min(gray.shape[1], int(grid.left + (cell + 1) * grid.pitch))
+        y0 = max(0, int(grid.top))
+        y1 = min(gray.shape[0], int(grid.bottom))
+        region = gray[y0:y1, x0:x1]
+        if not region.size:
+            continue
+        smooth = cv2.GaussianBlur(region.astype(np.float32), (0, 0), 0.5)
+        glass = cv2.medianBlur(region, 15).astype(np.float32)
+        bright = smooth - background_opening(smooth, grid)
+        dark = cv2.morphologyEx(smooth, cv2.MORPH_CLOSE, kernel) - smooth
+        for kind, signal in (('hell', bright), ('dunkel', dark)):
+            eligible = signal > (4.0 if kind == 'hell' else 8.0)
+            if kind == 'hell':
+                eligible &= smooth - glass > 8.0
+            # Erst nach der Schaetzung die Suchraender ausnehmen; sonst
+            # veraendert die Randfortsetzung den Median neben dem Kratzer.
+            mask = np.zeros(region.shape, np.uint8)
+            interior = np.s_[int(grid.top + 0.25 * row) - y0:int(grid.bottom - 0.25 * row) - y0, 2:-2]
+            mask[interior] = eligible[interior]
+            n, labels, stats, centres = cv2.connectedComponentsWithStats(mask)
+            for label in range(1, n):
+                _, _, width, height, area = stats[label]
+                if not (3 <= area <= col * row
+                        and width <= 1.5 * col and height <= 1.5 * row):
+                    continue
+                x, y = centres[label] + [x0, y0]
+                defects.append({
+                    'cell': cell, 'kind': kind, 'area_px': int(area),
+                    'dot_position': [float((x - grid.left - cell * grid.pitch) / col - 0.5),
+                                     float((y - grid.top) / row - 0.5)],
+                    'rectified': [float(x), float(y)],
+                    'strength': float(signal[labels == label].max()),
+                })
+    return defects
+
+
+def display_defect_check(images: Sequence[np.ndarray], quad, *, grid: CharGrid = GRID,
+                         cell_text: str | None = None) -> CheckResult:
+    """Nur ortsfeste Befunde in ALLEN Standbildern desselben Setup-Versuchs.
+
+    Zuordnung je Art/Zelle innerhalb 0,35 Punktspalten und 0,2 Punktzeilen
+    zu einem festen Anker; kein Wandern durch paarweise Verkettung.
+    Mindestens ein Bild muss einen Anker >= 0,1 Punktflaechen liefern.
+    In jedem weiteren Bild genuegen 3 zusammenhaengende Residualpixel an
+    dieser Stelle: Rauschen darf einen echten Kratzer fragmentieren,
+    fehlende oder wandernde Stoerungen gelten weiter nicht als ortsfest.
+    Beide Arten nur in Pflicht-Leerzellen 8/13-15 und expliziten Leerzeichen
+    des Setup-Zellentexts. Dieser muss fuer alle Standbilder gelten;
+    wechselnde/unbekannte Zellen bleiben '?', niemals Leerzeichen.
+    """
+    from dispread.workbench.fields import DISPLAY_DEFECT_HINT
+
+    if not images:
+        raise ValueError('Displayfehlerpruefung braucht mindestens ein Standbild')
+    blank_cells = tuple(sorted({cell for cell in BLANK_CELLS if cell < grid.n_cells}
+                               | {i for i, ch in enumerate(cell_text or '') if ch == ' ' and i < grid.n_cells}))
+    observations = [_glass_defects(image, quad, grid, blank_cells) for image in images]
+    min_anchor_area = 0.1 * grid.pitch / (grid.dot_columns + grid.gap_columns) * (grid.bottom - grid.top) / 8
+
+    def same_position(a, b):
+        return (a['cell'] == b['cell'] and a['kind'] == b['kind']
+                and abs(a['dot_position'][0] - b['dot_position'][0]) <= 0.35
+                and abs(a['dot_position'][1] - b['dot_position'][1]) <= 0.2)
+
+    fixed = []
+    for defect in (d for frame in observations for d in frame if d['area_px'] >= min_anchor_area):
+        if any(same_position(defect, d) for d in fixed):
+            continue
+        matches = [[d for d in frame if same_position(defect, d)] for frame in observations]
+        if all(matches):
+            fixed.append({**defect, 'strength': min(max(d['strength'] for d in frame) for frame in matches)})
+    return CheckResult('WARNUNG' if fixed else 'OK', {'stills': len(images), 'defects': fixed},
+                       tuple(sorted({d['cell'] for d in fixed})), DISPLAY_DEFECT_HINT if fixed else None)
 
 
 @dataclass(frozen=True)
@@ -112,11 +230,17 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     blank_limit = max(EDGE_BLANK_ABSOLUTE_HIGHPASS, EDGE_BLANK_RELATIVE_HIGHPASS * median_peak)
     background = cv2.morphologyEx(warped_gray, cv2.MORPH_CLOSE, np.ones((5, 9), np.uint8)).astype(np.float32)
     horizontal_step = np.abs(background[25:140, 8:] - background[25:140, :-8])
+    blank_start, blank_stop = EDGE_BLANK_STEP_WINDOW
     scores = []
     for k in range(16):
-        # Beide Werte eines Paares liegen mit 2 px Abstand zum Zellrand.
-        # Sonst fliesst die Nachbarglyphe in die Leerzellenpruefung ein.
-        region = horizontal_step[:, 25 * k + 2:25 * (k + 1) - 10]
+        # Links bleiben 2 px Rand. Rechts mindestens 6 px fuer x+8, aber nur
+        # vor einer belegten Nachbarzelle: deren weichgezeichnete Glyphe
+        # wuerde sonst in den Befund einfliessen. Vor einer Leerzelle (und in
+        # Zelle 15) bleibt das alte Fenster, sonst entstuende dort ein blinder
+        # Bereich fuer echte Kanten an der Zellgrenze.
+        neighbour_occupied = k < 15 and peak[k + 1] >= blank_limit
+        stop = 25 * k + blank_stop if neighbour_occupied else 25 * (k + 1) - EDGE_BLANK_STEP_FREE_RIGHT
+        region = horizontal_step[:, 25 * k + blank_start:stop]
         scores.append(float(np.max(np.percentile(region, 75, axis=0))))
     # Fuer belegte Zellen: obere Helligkeitshuelse entlang der Punktzeilen.
     # Die Addition des Hochpasses hebt dunkle Glyphen an; eine breite
@@ -246,7 +370,7 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         i, j = lighting['edge_between']
         metrics['hinweis'] = (
             f'Ungleichmaessige Beleuchtung auf dem Display (Kontrastsprung zwischen Zelle {i} und {j}, '
-            'vermutlich Schatten). Display gleichmaessig abschatten oder Schatten entfernen und neu einrichten.'
+            'vermutlich Schatten oder Verschmutzung). Glas reinigen bzw. abschatten und neu einrichten.'
         )
     if status == 'WARNUNG':
         tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)
@@ -467,12 +591,20 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
     resolution = float(source_dot_column_px(GRID, lattice_fit.quad, TARGET_SIZE))
     resolution_status = ('FEHLER' if resolution < RESOLUTION_ERROR_PX else
                          'WARNUNG' if resolution < RESOLUTION_WARNING_PX else 'OK')
+    glass_level = float(np.percentile(warped_gray[20:140, 5:395], 80))
+    underexposed = glass_level < EXPOSURE_WARNING_BELOW
     checks = {
         'kontrast': CheckResult(contrast_status, {'punktkontrast': contrast,
                                                  'leser_kontrast': sampled.contrast}),
         'kanten': _edge_check(warped_gray),
         'rahmen': _border_check(sampled),
         'glanz': _glare_check(warped_gray),
+        'belichtung': CheckResult('WARNUNG' if underexposed else 'OK',
+                                  {'glaspegel': glass_level, 'percentile': 80,
+                                   'warning_below': EXPOSURE_WARNING_BELOW},
+                                  reason=(f'Display zu dunkel belichtet (Glaspegel {glass_level:.0f}): '
+                                          'Kamera näher stellen oder helle Umgebung abdecken und neu einrichten'
+                                          if underexposed else None)),
         'aufloesung': CheckResult(resolution_status, {'min_source_dot_column_px': resolution}),
         'raster': _raster_check(lattice_fit, offset_check),
         'stabilitaet': _stability_check(image_bgr, stability_image_bgr,

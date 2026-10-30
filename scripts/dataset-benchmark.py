@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+from _devdata import input_path
 
 from dispread.benchmark import (
     DatasetSample,
@@ -271,7 +272,7 @@ def _run_fold(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--samples", type=Path, default=Path("var/workbench/datasets"))
+    parser.add_argument("--samples", type=input_path, default=Path("var/workbench/datasets"))
     parser.add_argument("--split", choices=("development", "heldout", "all"), default="development")
     parser.add_argument("--deskew", choices=("both", "off", "on"), default="both")
     parser.add_argument("--device", help="Nur dieses Geraet (device_id) auswerten")

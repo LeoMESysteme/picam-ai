@@ -21,9 +21,10 @@ from dispread.sink import SinkHealth
 class JsonlSink:
     """Schreibt je Datensatz eine JSON-Zeile.
 
-    Rotiert bei `max_bytes`, behaelt `keep` Generationen. Begrenzte Puffer und
-    Groessen sind Pflicht - Konzept.md §5 nennt Dauerbetrieb mit begrenzten
-    Puffern, und auf diesem Pi sind nur 34 GB frei.
+    Rotiert bei `max_bytes`, behaelt `keep` Generationen zusaetzlich zur
+    aktuellen Datei und verwirft dabei aeltere Generationen. Fuer vollstaendige
+    Live-Audits schaltet `max_bytes=0` die Rotation ab: eine Datei je Lauf,
+    Platzpruefung vor dem Start und ausschliesslich manuelles Aufraeumen.
     """
 
     def __init__(self, path: Path | str, *, max_bytes: int = 64 * 1024 * 1024, keep: int = 5) -> None:

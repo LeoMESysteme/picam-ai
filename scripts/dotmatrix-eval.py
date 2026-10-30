@@ -54,6 +54,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _devdata import input_path
+
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader, parse_gsv2as
 from dispread.ocr.dotmatrix_font import CLASSES
@@ -270,8 +272,9 @@ def _normalize_reason(reason: str | None) -> str | None:
     """`evaluate()` kennt kein eigenes `vorzeichen` - eine falsche oder
     fehlende Vorzeichenzelle verletzt die Formatregel `gsv2as_v1` (Zelle 0 =
     `+`) und wird dort als `format` gezaehlt. Fuer den Vergleich in
-    `reader-check` wird die Leser-Ausgabe auf denselben Namen normiert."""
-    return "format" if reason == "vorzeichen" else reason
+    `reader-check` wird die Leser-Ausgabe auf denselben Namen normiert.
+    `leerzelle_gestoert` ist ebenfalls eine Formatverletzung."""
+    return "format" if reason in {"vorzeichen", "leerzelle_gestoert"} else reason
 
 
 def _reader_outcome(result, true_text: str) -> tuple[str, str | None]:
@@ -280,6 +283,13 @@ def _reader_outcome(result, true_text: str) -> tuple[str, str | None]:
     Bild-only-Erkennung."""
     reason = result.diagnostics.get("reject_reason")
     if reason is not None:
+        # Zelle 8 wird jetzt als gestoerte Leerzelle benannt. evaluate()
+        # arbeitet weiter mit dem alten Zell-/Formatvertrag.
+        if reason == "leerzelle_gestoert" and result.diagnostics.get("reject_cell") == 8:
+            cells = result.diagnostics.get("cells", [])
+            cell_reason = cells[8].get("reason") if len(cells) > 8 else None
+            if cell_reason:
+                return f"abgelehnt:{cell_reason}", reason
         return f"abgelehnt:{_normalize_reason(reason)}", reason
     predicted = "".join(g.text for g in result.glyphs)
     return ("richtig" if predicted == true_text else "falsch"), None
@@ -449,8 +459,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", required=True)
 
     loo = sub.add_parser("loo", help="Leave-one-group-out Entwicklungsmessung (Stufe 1).")
-    loo.add_argument("--dataset-root", type=Path, required=True)
-    loo.add_argument("--profile-map", type=Path, required=True)
+    loo.add_argument("--dataset-root", type=input_path, required=True)
+    loo.add_argument("--profile-map", type=input_path, required=True)
     loo.add_argument("--out", type=Path, required=True)
     loo.add_argument(
         "--exclude-groups",
@@ -473,18 +483,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     loo.set_defaults(func=_cmd_loo)
 
     abnahme = sub.add_parser("abnahme", help="Stufe 2: eingefrorene Vorlagen einmal ueber neue Gruppen.")
-    abnahme.add_argument("--dataset-root", type=Path, required=True)
-    abnahme.add_argument("--profile-map", type=Path, required=True)
-    abnahme.add_argument("--templates", type=Path, required=True)
+    abnahme.add_argument("--dataset-root", type=input_path, required=True)
+    abnahme.add_argument("--profile-map", type=input_path, required=True)
+    abnahme.add_argument("--templates", type=input_path, required=True)
     abnahme.add_argument("--templates-sha256", required=True, help="Eingefrorene Pruefsumme von --templates (Pflicht)")
     abnahme.add_argument("--groups", required=True, help="Kommagetrennte Testgruppen (nie in den Vorlagen)")
     abnahme.add_argument("--out", type=Path, required=True)
     abnahme.set_defaults(func=_cmd_abnahme)
 
     reader_check = sub.add_parser("reader-check", help="Volle Leser-Ausgabe gegen evaluate() vergleichen.")
-    reader_check.add_argument("--dataset-root", type=Path, required=True)
-    reader_check.add_argument("--profile-map", type=Path, required=True)
-    reader_check.add_argument("--templates", type=Path, required=True)
+    reader_check.add_argument("--dataset-root", type=input_path, required=True)
+    reader_check.add_argument("--profile-map", type=input_path, required=True)
+    reader_check.add_argument("--templates", type=input_path, required=True)
     reader_check.add_argument(
         "--templates-sha256", required=True, help="Erwartete Pruefsumme von --templates (Pflicht, fail-open schliessen)"
     )

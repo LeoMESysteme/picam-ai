@@ -13,10 +13,13 @@ import hashlib
 import json
 import math
 import time
+import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Protocol
 
 import cv2
@@ -29,17 +32,36 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_f
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
+from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, proposal_from_regions, propose_regions
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
-from dispread.setup_checks import check_setup, diagnose_reader, raster_offset_check
-from dispread.setup_hint import find_green_hint_box
+from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
+from dispread.setup_hint import GREEN_HUE_MAX, GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE, find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
+from dispread.workbench.fields import REASONS
 
 GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 N_CELLS = 16
 DEFAULT_TARGET_SIZE = (400, 160)
 LATTICE_GRID = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
 WHITE_BALANCE_SETTLE_S = 3.0
+# Vorabwerte: p80 gruener Boxpixel liegt an 12 Standbildern hoechstens 4 Graustufen
+# neben dem entzerrten Glas-p80 (Laborjournal 2026-10-28, R13-20).
+EXPOSURE_TARGET = 130.0
+EXPOSURE_BAND = (115.0, 150.0)
+EXPOSURE_STEPS = (100, 200, 300)  # 50 Hz, 10/20/30 ms bei 30 fps.
+EXPOSURE_GAIN_RANGE = (0, 128)  # konservativer Bereich, keine Geraeteabfrage noetig.
+EXPOSURE_MAX_ROUNDS = 4
+EXPOSURE_SETTLE_S = 0.3
+# Fokus: alle 0.3 s pruefen, hoechstens 5 s ab Setzen (inklusive Einschwingen).
+# Zwei aufeinanderfolgende Schaerfen duerfen relativ zum Vorgaenger um 5 % abweichen.
+FOCUS_SAMPLE_INTERVAL_S = 0.3
+FOCUS_STABILITY_TIMEOUT_S = 5.0
+FOCUS_STABILITY_TOLERANCE = 0.05
+FOCUS_VERIFY_RATIO = 0.85  # Endlage muss mindestens 85 % der besten Suchmessung erreichen.
+# StreamCam: 2-3 Schritte Hysterese (2026-10-23); 12 Schritte Reserve.
+# Unterhalb 12 wird der Anfahrpunkt auf 0 begrenzt; Ziel 0 ist nicht von unten erreichbar.
+FOCUS_BACKLASH_MARGIN = 12
 MIN_STABILITY_S = 30.0
 SERIAL_PORT = "/dev/ttyUSB0"
 SERIAL_BAUDRATE = 38400
@@ -50,6 +72,10 @@ CellTextSource = Callable[[Callable[[], np.ndarray]], tuple[np.ndarray, str]]
 
 class SetupError(ValueError):
     """Einrichtung abgebrochen; die Meldung ist fuer den Bediener."""
+
+
+class SetupInputError(SetupError):
+    """Ungueltige Eingabe statt eines Konflikts mit dem Einrichtungszustand."""
 
 
 class SetupCamera(Protocol):
@@ -97,6 +123,133 @@ def measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float
         x0, y0 = int(round(bx * width)), int(round(by * height))
         x1, y1 = int(round((bx + bw) * width)), int(round((by + bh) * height))
     return gray[y0:y1, x0:x1]
+
+
+def hint_glass_level(image: np.ndarray, hint_box: HintBox) -> float | None:
+    """p80 gruener Boxpixel: dunkle Punkte und helle Umgebung ausnehmen.
+
+    Die Farbgrenzen entsprechen der Hinweisboxsuche. Ihr Sicherheitsrand
+    darf keine helle Umgebung in den Glaspegel einbringen.
+    """
+    region = measurement_roi(image, hint_box)
+    hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+    green = cv2.inRange(hsv, (GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE), (GREEN_HUE_MAX, 255, 255))
+    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    values = gray[green > 0]
+    return float(np.percentile(values, 80)) if values.size else None
+
+
+def adjust_exposure(
+    cam: SetupCamera, settings: CameraSettings, *, apply: Callable[[CameraSettings], None],
+    sleep: Callable[[float], None] | None = None, info: Callable[[str], None] | None = None,
+) -> tuple[CameraSettings, dict[str, Any]]:
+    """Anzeige statt Gesamtbild messen, hoechstens vier feste Reglerpaare pruefen.
+
+    `apply` uebernimmt alle festen Regler via Kamera-Neustart wie nach Fokus.
+    Erst 30 ms bevorzugen, dann Gain; bei zu hellem Glas und Gain 0 verkuerzen.
+    Gain-Sekante nur aus eigenen Messungen bei gleicher Belichtung; bis dahin
+    vorsichtig 1 Graustufe/Schritt annehmen. Keine Hardwarekennlinie behauptet.
+    Die beste gemessene Einstellung wird auch bei Boxverlust zurueckgestellt.
+    """
+    sleep = sleep or time.sleep
+
+    def measure() -> tuple[float | None, HintBox | None]:
+        sleep(EXPOSURE_SETTLE_S)
+        image = mean_still(cam)
+        box = find_green_hint_box(image)
+        return (hint_glass_level(image, box) if box is not None else None), box
+
+    level, box = measure()
+    audit: dict[str, Any] = {
+        'initial_level': level, 'initial_controls': dict(settings.controls),
+        'percentile': 80, 'region': 'green_pixels_in_hint_box',
+        'target': EXPOSURE_TARGET, 'target_band': list(EXPOSURE_BAND),
+        'gain_range': list(EXPOSURE_GAIN_RANGE), 'rounds': [], 'achieved': False,
+        'reason': None, 'initial_hint_box': box,
+    }
+    current = best = settings
+    best_level = level
+    observations = [(settings, level)]
+    low, high = EXPOSURE_BAND
+
+    def rank(value: float) -> tuple[float, float]:
+        # Ein erreichter Bandrand geht vor einem knapp verfehlten Band.
+        return max(low - value, 0.0, value - high), abs(value - EXPOSURE_TARGET)
+
+    def allowed(candidate: CameraSettings) -> bool:
+        return (candidate.controls['exposure_time_absolute'] in EXPOSURE_STEPS
+                and EXPOSURE_GAIN_RANGE[0] <= candidate.controls['gain'] <= EXPOSURE_GAIN_RANGE[1])
+
+    def next_candidate(source: CameraSettings, measured_level: float) -> CameraSettings:
+        exposure, gain = source.controls['exposure_time_absolute'], source.controls['gain']
+        tried_300 = any(s.controls['exposure_time_absolute'] == 300 for s, _ in observations)
+        if not allowed(source) and measured_level > high:
+            # Unzulaessiger Automatikwert und schon zu hell: zuerst die naechst
+            # kuerzere zulaessige Stufe, nicht auf 30 ms verlaengern (Review R13-20).
+            exposure = max(s for s in EXPOSURE_STEPS if s <= max(EXPOSURE_STEPS[0], exposure))
+            gain = min(128, max(0, gain))
+        elif not allowed(source) or (measured_level < low and not tried_300):
+            exposure, gain = 300, min(128, max(0, gain))
+        elif measured_level > high and gain == 0:
+            exposure = max(100, exposure - 100)
+        else:
+            slope = 1.0
+            for previous, previous_level in reversed(observations):
+                delta = gain - previous.controls['gain']
+                if previous.controls['exposure_time_absolute'] == exposure and delta and previous_level is not None:
+                    measured_slope = (measured_level - previous_level) / delta
+                    if measured_slope > 0:
+                        slope = measured_slope
+                    break
+            gain = min(128, max(0, round(gain + (EXPOSURE_TARGET - measured_level) / slope)))
+        return replace(source, controls={**source.controls, 'exposure_time_absolute': exposure, 'gain': gain})
+
+    if level is None:
+        audit['reason'] = 'keine_gruene_hinweisbox'
+    else:
+        for _ in range(EXPOSURE_MAX_ROUNDS):
+            if low <= level <= high and allowed(current):
+                break
+            candidate = next_candidate(current, level)
+            reused = set()
+            # Beim Verkuerzen kann das Ausgangspaar wieder auftauchen.
+            # Dessen Pegel wiederverwenden und Gain weiterregeln, statt einen
+            # erreichbaren Fall als Wiederholung abzubrechen. Keine neue Messrunde.
+            while known := next(((s, v) for s, v in observations if s.controls == candidate.controls), None):
+                key = (candidate.controls['exposure_time_absolute'], candidate.controls['gain'])
+                if key in reused:
+                    audit['reason'] = 'reglergrenze_oder_wiederholung'
+                    break
+                reused.add(key)
+                candidate = next_candidate(*known)
+            if audit['reason'] is not None:
+                break
+            apply(candidate)
+            current = candidate
+            level, box = measure()
+            observations.append((current, level))
+            audit['rounds'].append({'controls': dict(current.controls), 'level': level, 'hint_box': box})
+            if info is not None:
+                info(f"Belichtung: {current.controls['exposure_time_absolute']}, "
+                     f"Gain {current.controls['gain']}, Glaspegel {level}")
+            if level is None:
+                audit['reason'] = 'gruene_hinweisbox_verloren'
+                break
+            if not allowed(best) or rank(level) < rank(best_level):
+                best, best_level = current, level
+        if current != best:
+            if allowed(best):
+                apply(best)
+            else:
+                # Ein unzulaessiger Automatik-Ausgangswert darf nach Boxverlust
+                # nicht erneut gesetzt werden. Der letzte feste Wert bleibt;
+                # ohne Messung seines Glases gibt es keinen gueltigen Endpegel.
+                best, best_level = current, level
+        audit['achieved'] = best_level is not None and low <= best_level <= high and allowed(best)
+        if not audit['achieved'] and audit['reason'] is None:
+            audit['reason'] = 'zielband_nach_vier_runden_nicht_erreicht'
+    audit.update(selected_controls=dict(best.controls), final_level=best_level)
+    return best, audit
 
 
 def serial_cell_text(port: Any) -> str:
@@ -164,27 +317,66 @@ def focus_camera(
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
 ) -> tuple[CameraSettings, FocusMeasurements]:
-    """Fokus-Bergsteigen, danach Automatiken kurz einschwingen lassen und deren
-    Werte als feste Regler uebernehmen (wie bisher `run_focus`)."""
+    """Grob bergsteigen, fein aufsteigend; jede Messung von unten anfahren.
+
+    Nach Endpruefung Automatiken einschwingen lassen und Werte fest uebernehmen.
+    Fokus 0 bleibt ausgeschlossen, weil keine Anfahrt von unten moeglich ist.
+    """
     sleep = sleep or time.sleep
+    last_focus = None
 
     def measure(focus: int) -> float:
+        nonlocal last_focus
+        if focus <= 0:
+            raise SetupError("Fokus 0 ist nicht von unten erreichbar - Einrichtung neu starten")
+        # Auch die erste (unbekannte) Lage und ein erneutes Setzen derselben
+        # Lage normalisieren. So fahren Endpruefung und Retry sicher von unten an.
+        if last_focus is None or focus <= last_focus:
+            cam.set_controls([("focus_absolute", max(0, focus - FOCUS_BACKLASH_MARGIN))])
+            sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
         cam.set_controls([("focus_absolute", focus)])
-        sleep(settle_s)
-        try:
-            frame = cam.fresh_still(discard=3)
-        except UvcError as exc:
-            raise UvcError(f"kein Bild von {cam.device} (Fokus-Sweep)") from exc
-        gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return sharpness(measurement_roi(gray, hint_box))
+        last_focus = focus
+        deadline = time.monotonic() + FOCUS_STABILITY_TIMEOUT_S
+        sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
+        previous = None
+        while True:
+            try:
+                frame = cam.fresh_still(discard=3)
+            except UvcError as exc:
+                raise UvcError(f"kein Bild von {cam.device} (Fokus-Sweep)") from exc
+            gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            score = sharpness(measurement_roi(gray, hint_box))
+            if previous is not None and abs(score - previous) <= abs(previous) * FOCUS_STABILITY_TOLERANCE:
+                return score
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return score
+            previous = score
+            sleep(min(FOCUS_SAMPLE_INTERVAL_S, remaining))
 
     cam.set_controls([("focus_automatic_continuous", 0)])
     if info is not None:
         info("Fokus: Bergsteigen")
     best_focus, sweep_log = climb_focus(
-        measure, start=start_focus,
+        measure, start=start_focus, lo=1,
         on_fallback=(lambda: info("Fokus: Vollsweep (Rueckfall)")) if info is not None else None,
     )
+    best_measured = max(score for _, score in sweep_log)
+    verified = measure(best_focus)
+    attempts = 1
+    if not verified >= FOCUS_VERIFY_RATIO * best_measured:
+        verified = measure(best_focus)
+        attempts = 2
+    if not verified >= FOCUS_VERIFY_RATIO * best_measured:
+        raise SetupError(
+            f"Fokus nicht stabil: Schaerfe {verified:.1f} von {best_measured:.1f} erreicht - Einrichtung neu starten"
+        )
+    sweep_log.focus_verify = {
+        "target": best_focus, "best_measured": best_measured, "verified": verified, "attempts": attempts,
+        "approach": "from_below", "backlash_margin": FOCUS_BACKLASH_MARGIN,
+    }
+    if info is not None:
+        info(f"Fokus geprueft: Schaerfe {verified:.1f} von {best_measured:.1f}")
     cam.set_controls([("auto_exposure", 3), ("white_balance_automatic", 1)])
     sleep(WHITE_BALANCE_SETTLE_S)
     readback = cam.get_controls(["exposure_time_absolute", "white_balance_temperature", "gain"])
@@ -295,12 +487,17 @@ def assist_measure(
             raise SetupError(f"Punktraster abgelehnt: {fit}; Hinweisbox pruefen oder --hint-box angeben")
     prechecks = check_setup(first, fit)
     report(prechecks.to_dict())
-    precheck_failures = [
-        name for name, result in prechecks.checks.items()
-        if getattr(result, "status", None) == "FEHLER" and name != "raster"
-    ]
+    precheck_failures = []
+    for name, result in prechecks.checks.items():
+        if getattr(result, "status", None) == "FEHLER" and name != "raster":
+            cells = getattr(result, "cells", ())
+            if cells:
+                label = "Zelle" if len(cells) == 1 else "Zellen"
+                name += f" ({label} {', '.join(str(cell) for cell in cells)})"
+            precheck_failures.append(name)
     if precheck_failures:
-        raise SetupError("Vorpruefung meldet FEHLER; Stabilitaetsmessung nicht gestartet")
+        raise SetupError(f"Vorpruefung meldet FEHLER: {', '.join(precheck_failures)}; "
+                         "Stabilitaetsmessung nicht gestartet")
     sleep(stability_s)
     second, second_text = capture_text(attempt, "stability")
     stability_elapsed_s = monotonic() - first_captured_at
@@ -377,6 +574,9 @@ def write_overlays(
     fit: Any = None,
     overall: str | None = None,
     edge_cells: tuple[int, ...] | None = None,
+    tracking_proposal: RegionProposal | None = None,
+    write_sampling: bool = True,
+    display_defects: list | tuple = (),
 ) -> list[Path]:
     """overlay_source.png, overlay_rectified.png und (mit Fit) overlay_sampling.png."""
     written: list[Path] = []
@@ -386,10 +586,41 @@ def write_overlays(
         overlay_source = image.copy()
         points = np.array(quad, dtype=np.int32).reshape(-1, 1, 2)
         cv2.polylines(overlay_source, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+    if tracking_proposal is not None:
+        if overlay_source.ndim == 2:
+            overlay_source = cv2.cvtColor(overlay_source, cv2.COLOR_GRAY2BGR)
+        config = tracking_proposal.config
+        for region in tracking_proposal.regions:
+            x, y = region.centre
+            h = region.size // 2
+            r = h + config["search_radius_px"] + config["interpolation_guard_px"]
+            cv2.rectangle(overlay_source, (x-r, y-r), (x+r, y+r), (255, 180, 0), 1)
+            cv2.rectangle(overlay_source, (x-h, y-h), (x+h, y+h), (255, 0, 255), 1)
+        for edge in tracking_proposal.edges:
+            point = tuple(np.rint(edge.point).astype(int))
+            cv2.circle(overlay_source, point, 2, (0, 160, 255), -1)
+        for row, (label, color) in enumerate((
+            ("Rahmenbereiche", (255, 0, 255)),
+            ("Suchfenster inkl. Interpolation", (255, 180, 0)),
+            ("LCD-Randpunkte", (0, 160, 255)),
+        )):
+            cv2.putText(overlay_source, label, (8, 42 + row*20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+    crop = rectify(image, quad, target_size=target_size)
+    if display_defects:
+        if overlay_source.ndim == 2:
+            overlay_source = cv2.cvtColor(overlay_source, cv2.COLOR_GRAY2BGR)
+        inverse = np.linalg.inv(np.asarray(crop.homography).reshape(3, 3))
+        points = np.asarray([d['rectified'] for d in display_defects], np.float32).reshape(-1, 1, 2)
+        source_points = cv2.perspectiveTransform(points, inverse).reshape(-1, 2)
+        for defect, point in zip(display_defects, source_points, strict=True):
+            x, y = np.rint(point).astype(int)
+            cv2.circle(overlay_source, (x, y), 5, (0, 180, 255), 1)
+            cv2.putText(overlay_source, f"Z{defect['cell']} {defect['kind']}", (x + 6, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 180, 255), 1)
     cv2.imwrite(str(out_dir / "overlay_source.png"), overlay_source)
     written.append(out_dir / "overlay_source.png")
-    crop = rectify(image, quad, target_size=target_size)
-    if fit is not None and edge_cells is not None:
+    if write_sampling and fit is not None and edge_cells is not None:
         cv2.imwrite(str(out_dir / "overlay_sampling.png"), draw_sampling_overlay(crop.image, edge_cells=edge_cells))
         written.append(out_dir / "overlay_sampling.png")
     rectified = crop.image
@@ -397,6 +628,11 @@ def write_overlays(
     for i, (x, y, w, h) in enumerate(grid.cell_boxes()):
         cv2.rectangle(rectified, (x, y), (x + w, y + h), (0, 255, 0), 1)
         cv2.putText(rectified, str(i), (x + 1, max(y + 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1)
+    for defect in display_defects:
+        x, y = np.rint(defect['rectified']).astype(int)
+        cv2.circle(rectified, (x, y), 4, (0, 180, 255), 1)
+        cv2.putText(rectified, f"Z{defect['cell']} {defect['kind']}", (x + 5, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 180, 255), 1)
     cv2.imwrite(str(out_dir / "overlay_rectified.png"), rectified)
     written.append(out_dir / "overlay_rectified.png")
     return written
@@ -419,8 +655,10 @@ def propose_with_fit(
     stability_min_elapsed_s: float = MIN_STABILITY_S,
     setup_attempt: int | None = None,
     reader_check: Any = None,
+    live_tracking: bool = False,
+    exposure_adjust: dict[str, Any] | None = None,
 ) -> dict:
-    """Vorschlag aus einem Punktraster-Fit (bisher `run_propose` mit Fit)."""
+    """Punktraster-Vorschlag; Rahmenpruefung nur bei ausdruecklichem Live-Opt-in."""
     height, width = image.shape[:2]
     if (width, height) != tuple(camera_settings.size):
         sw, sh = camera_settings.size
@@ -450,12 +688,39 @@ def propose_with_fit(
     raster_result = checks_dict.get("checks", {}).get("rasterversatz")
     if not isinstance(raster_result, dict) or raster_result.get("status") not in {"OK", "WARNUNG"}:
         raise SetupError("Einrichtungspruefung ohne gueltigen rasterversatz; kein Vorschlag")
+    if exposure_adjust is not None:
+        exposure_check = checks_dict['checks'].setdefault('belichtung', {'status': 'OK', 'metrics': {}})
+        exposure_check['metrics']['exposure_adjust'] = deepcopy(exposure_adjust)
+        if not exposure_adjust['achieved']:
+            exposure_check['status'] = 'WARNUNG'
+            final_level = exposure_adjust.get('final_level')
+            too_bright = final_level is not None and final_level > EXPOSURE_BAND[1]
+            exposure_check.setdefault('reason', 'Automatischer Belichtungsabgleich ohne bestätigtes Zielband: ' + (
+                'Display zu hell, helle Lichtquelle oder Reflex abschatten und neu einrichten' if too_bright else
+                'Kamera näher stellen oder helle Umgebung abdecken und neu einrichten'))
+            if checks_dict['overall'] == 'OK':
+                checks_dict['overall'] = 'WARNUNG'
     if reader_check is not None:
         checks_dict["checks"]["gegenlesen"] = reader_check.to_dict()
         if reader_check.status == "FEHLER":
             checks_dict["overall"] = "FEHLER"
         elif reader_check.status == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
+    tracking_proposal = None
+    if live_tracking:
+        stills = [image] if stability_image_bgr is None else [image, stability_image_bgr]
+        defects = display_defect_check(stills, quad, grid=grid, cell_text=cell_text)
+        checks_dict['checks']['displayfehler'] = defects.to_dict()
+        if defects.status == 'WARNUNG' and checks_dict['overall'] == 'OK':
+            checks_dict['overall'] = 'WARNUNG'
+        tracking_proposal = propose_regions(image, quad)
+        checks_dict["checks"]["nachfuehrung"] = {
+            "status": "OK" if tracking_proposal.ok else "FEHLER",
+            "reason": "; ".join(REASONS[reason] for reason in tracking_proposal.reasons) or None,
+            "metrics": tracking_proposal.metrics,
+        }
+        if not tracking_proposal.ok:
+            checks_dict["overall"] = "FEHLER"
     proposal = {
         "frame": str(frame_path),
         "device_id": device_id,
@@ -471,6 +736,18 @@ def propose_with_fit(
         "camera": camera_settings.to_dict(),
         "setup_checks": checks_dict,
     }
+    if tracking_proposal is not None:
+        proposal["overlay_evidence"] = {
+            "quad": quad, "assigned_points": fit.assigned_points, "rejected_points": fit.rejected_points,
+            "edge_cells": list(checks.checks["kanten"].cells), "overall": checks_dict["overall"],
+        }
+        proposal["live_tracking"] = {
+            "version": 1, "method": "rahmenbereiche", "config": tracking_proposal.config,
+            "proposal": tracking_proposal.to_dict(),
+            "frame_sha256": hashlib.sha256(Path(frame_path).read_bytes()).hexdigest(),
+            "proposal_revision": uuid.uuid4().hex,
+            "auswahl": "automatisch", "edits": [],
+        }
     if setup_attempt is not None:
         proposal["setup_attempt"] = setup_attempt
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -478,8 +755,78 @@ def propose_with_fit(
     write_overlays(
         image, quad, grid, out_dir, fit=fit, overall=checks_dict["overall"],
         edge_cells=tuple(checks.checks["kanten"].cells),
+        **({"tracking_proposal": tracking_proposal} if tracking_proposal is not None else {}),
+        display_defects=checks_dict['checks'].get('displayfehler', {}).get('metrics', {}).get('defects', []),
     )
     return proposal
+
+
+def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str) -> dict:
+    """Auswahl am unveraenderten Standbild pruefen und neu versionieren."""
+    if "overlay_evidence" not in proposal:
+        raise SetupError("Vorschlag ohne Overlay-Belege - neu einrichten")
+    block = proposal["live_tracking"]
+    current = block["proposal"]["regions"]
+    if not isinstance(add, list) or not isinstance(remove, list) or not (add or remove):
+        raise SetupInputError("Bereichsaenderung braucht Listen add und remove mit mindestens einer Aenderung")
+    if (any(type(index) is not int or not 0 <= index < len(current) for index in remove)
+            or len(set(remove)) != len(remove)):
+        raise SetupInputError("Ungueltiger oder doppelter Bereichsindex")
+    if len(current) - len(remove) + len(add) > 24:
+        raise SetupInputError("Hoechstens 24 Rahmenbereiche erlaubt")
+    if len(block.get("edits", [])) + len(add) + len(remove) > 50:
+        raise SetupError("Hoechstens 50 Bereichsaenderungen je Vorschlag erlaubt - neu einrichten")
+    for point in add:
+        if (not isinstance(point, list) or len(point) != 2
+                or any(type(value) not in (int, float) or (type(value) is float and not math.isfinite(value))
+                       for value in point)):
+            raise SetupInputError("Bereich braucht zwei endliche Pixelkoordinaten")
+    frame = Path(proposal["frame"])
+    if not frame.is_file() or hashlib.sha256(frame.read_bytes()).hexdigest() != block["frame_sha256"]:
+        raise SetupError("Einrichtungsbild fehlt oder wurde geaendert - neu einrichten")
+    image = cv2.imread(str(frame))
+    if image is None:
+        raise SetupError("Einrichtungsbild nicht lesbar - neu einrichten")
+    height, width = image.shape[:2]
+    if any(not (0 <= x < width and 0 <= y < height) for x, y in add):
+        raise SetupInputError("Bereichskoordinaten liegen ausserhalb des Quellbilds")
+    kept = [(index, region["centre"]) for index, region in enumerate(current) if index not in remove]
+    tracking = proposal_from_regions(image, proposal["quad"], add, FrameTrackingConfig.from_dict(block["config"]),
+                                     kept_centres=[centre for _, centre in kept])
+    results = tracking.metrics["centre_results"]
+    for (index, centre), result in zip(kept, results[:len(kept)], strict=True):
+        if not result["ok"]:
+            raise SetupError(
+                f"Beibehaltener Rahmenbereich {index} am Mittelpunkt {centre} "
+                f"abgelehnt ({result['reason']}) - neu einrichten"
+            )
+    updated = deepcopy(proposal)
+    new_block = updated["live_tracking"]
+    new_block.update(proposal=tracking.to_dict(), proposal_revision=uuid.uuid4().hex, auswahl="manuell")
+    edits = [{"action": "remove", "index": index, "centre": current[index]["centre"],
+              "requested_centre": current[index]["centre"], "used_centre": current[index]["centre"], "at_utc": at_utc}
+             for index in remove]
+    edits.extend({"action": "add", "requested_centre": point, "at_utc": at_utc, **result}
+                 for point, result in zip(add, results[len(kept):], strict=True))
+    new_block["edits"] = block.get("edits", []) + edits
+    checks = updated["setup_checks"]["checks"]
+    checks["nachfuehrung"] = {
+        "status": "OK" if tracking.ok else "FEHLER",
+        "reason": "; ".join(REASONS[reason] for reason in tracking.reasons) or None,
+        "metrics": tracking.metrics,
+    }
+    updated["setup_checks"]["overall"] = max(
+        (check["status"] for check in checks.values()), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__,
+    )
+    evidence = updated["overlay_evidence"]
+    evidence["overall"] = updated["setup_checks"]["overall"]
+    write_overlays(image, updated["quad"], CharGrid.from_dict(updated["grid"]), out_dir,
+                   target_size=tuple(updated["target_size"]), fit=SimpleNamespace(**evidence),
+                   overall=evidence["overall"], edge_cells=tuple(evidence["edge_cells"]),
+                   tracking_proposal=tracking, write_sampling=False,
+                   display_defects=checks.get('displayfehler', {}).get('metrics', {}).get('defects', []))
+    (out_dir / "proposal.json").write_text(json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8")
+    return updated
 
 
 def confirm_proposal(
@@ -566,6 +913,17 @@ def confirm_proposal(
         "path": str(frame_path),
         "sha256": hashlib.sha256(frame_path.read_bytes()).hexdigest(),
     }
+    live_tracking = proposal.get("live_tracking")
+    if live_tracking is not None:
+        if (not isinstance(live_tracking, dict) or live_tracking.get("version") != 1
+                or live_tracking.get("method") != "rahmenbereiche"
+                or live_tracking.get("frame_sha256") != reference_frame["sha256"]):
+            raise SetupError("Rahmenbereiche passen nicht zum Einrichtungsbild - neu einrichten")
+        tracking_check = setup_checks["checks"].get("nachfuehrung", {})
+        if override_reason is not None and tracking_check.get("status") == "FEHLER":
+            live_tracking = None
+        else:
+            live_tracking = deepcopy(live_tracking)
 
     grid = CharGrid.from_dict(proposal["grid"])
     target_size = tuple(proposal["target_size"])
@@ -596,5 +954,6 @@ def confirm_proposal(
         camera=camera_settings,
         reference_frame=reference_frame,
         setup_checks=setup_checks,
+        live_tracking=live_tracking,
     )
     return profile

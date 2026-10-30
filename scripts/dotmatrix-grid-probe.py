@@ -36,6 +36,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from _devdata import input_path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -298,7 +299,7 @@ def build_contact_sheet(cells_by_label: dict[str, list[np.ndarray]], out_path: P
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--samples", type=Path, default=SAMPLES_ROOT)
+    parser.add_argument("--samples", type=input_path, default=SAMPLES_ROOT)
     parser.add_argument(
         "--contact-sheet",
         type=Path,

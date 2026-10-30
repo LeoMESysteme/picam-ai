@@ -22,6 +22,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from _devdata import REPO_ROOT, input_path, recording_glob
+
 SCHEMA = "fortschritt_v1"
 
 # Rolle je Aufstellung (setup = Verzeichnisname ohne "-run").
@@ -97,7 +99,7 @@ ABNAHME_LABELS: dict[str, str] = {
 def load_json(path: Path) -> Any:
     """JSON lesen; fehlend oder unlesbar (z. B. halb geschrieben) -> None."""
     try:
-        with path.open(encoding="utf-8") as fh:
+        with input_path(path).open(encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return None
@@ -126,7 +128,7 @@ def _str(value: Any) -> str | None:
 def _profile_session_id(diag: Path, setup: str) -> str | None:
     base = diag / f"{setup}-profile"
     for candidate in (base / "profile.json", base):
-        if candidate.is_file():
+        if input_path(candidate).is_file():
             sid = _str(_dict(load_json(candidate)).get("session_id"))
             if sid:
                 return sid
@@ -183,10 +185,15 @@ def harvest_entry(diag: Path, run_dir: Path) -> dict:
     }
 
 
+def _diagnostic_paths(diag: Path, pattern: str) -> list[Path]:
+    # Explizite --var-root-Test-/Fremdverzeichnisse bleiben eigenstaendig.
+    if diag.resolve() == (REPO_ROOT / "var/diagnostics").resolve():
+        return recording_glob(f"diagnostics/{pattern}")
+    return sorted(diag.glob(pattern))
+
+
 def collect_harvests(diag: Path) -> list[dict]:
-    if not diag.is_dir():
-        return []
-    runs = sorted(p for p in diag.iterdir() if p.is_dir() and p.name.endswith("-run"))
+    runs = [p for p in _diagnostic_paths(diag, "*-run") if p.is_dir()]
     entries = [harvest_entry(diag, p) for p in runs]
     return sorted(entries, key=lambda e: (e["started_at_utc"] is None, e["started_at_utc"] or "", e["run"]))
 
@@ -236,7 +243,7 @@ def pending_import_groups(diag: Path, harvests: list[dict]) -> set[str]:
     dieser Gruppe ist daher offen."""
     return {
         h["group"] for h in harvests
-        if (diag / h["run"] / "harvest.json").is_file() and h["imported"] is None
+        if input_path(diag / h["run"] / "harvest.json").is_file() and h["imported"] is None
     }
 
 
@@ -306,8 +313,8 @@ def loo_groups(report: dict) -> dict:
 def collect_loo(diag: Path) -> list[dict]:
     known = {row[0] for row in LOO_RUNS}
     extra = sorted(
-        p.name for p in diag.glob("dotmatrix-loo-*.json") if p.name not in known
-    ) if diag.is_dir() else []
+        p.name for p in _diagnostic_paths(diag, "dotmatrix-loo-*.json") if p.name not in known
+    )
     table = list(LOO_RUNS) + [
         (name, Path(name).stem.removeprefix("dotmatrix-loo-"), None, None) for name in extra
     ]

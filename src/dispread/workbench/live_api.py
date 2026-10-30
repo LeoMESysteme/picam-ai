@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from pathlib import Path
 
 from aiohttp import web
 
-from dispread.live.service import LiveError
+from dispread.live.service import LiveError, LiveInputError
 
 STATIC = Path(__file__).parent / "static"
 
@@ -18,7 +19,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         return web.FileResponse(STATIC / "live.html")
 
     async def status(request):
-        data = await asyncio.to_thread(service.status)
+        data = await asyncio.to_thread(service.status, **({"full": True} if request.query.get("full") == "1" else {}))
         data["csrf"] = csrf_of(request)
         return web.json_response(data)
 
@@ -33,6 +34,24 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_setup, cell_text=data.get("cell_text"))
 
+    async def regions(request):
+        try:
+            data = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = None
+        if not isinstance(data, dict):
+            return web.json_response({"error": "Bereichsaenderung braucht ein JSON-Objekt"}, status=400)
+        try:
+            result = await asyncio.to_thread(
+                service.edit_regions, proposal_revision=data.get("proposal_revision"),
+                add=data.get("add", []), remove=data.get("remove", []),
+            )
+        except LiveInputError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except LiveError as exc:
+            return web.json_response({"error": str(exc)}, status=409)
+        return web.json_response({"ok": True, **result})
+
     async def confirm(request):
         data = await request.json()
         return await _call(
@@ -42,12 +61,24 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             format_checked=bool(data.get("format_checked")),
             acknowledge_warning=bool(data.get("acknowledge_warning")),
             use_tolerance=bool(data.get("use_tolerance", False)),
+            **({"proposal_revision": data["proposal_revision"]} if "proposal_revision" in data else {}),
         )
 
     async def run_start(request):
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_run, test_override=bool(data.get("test_override")),
-                           reference=bool(data.get("reference", True)), norm_schedule=data.get("norm_schedule"))
+                           reference=bool(data.get("reference", True)), norm_schedule=data.get("norm_schedule"),
+                           diagnostics=bool(data.get('diagnostics', False)),
+                           **({'output': data['output']} if 'output' in data else {}))
+
+    async def run_mark(request):
+        try:
+            data = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = None
+        if not isinstance(data, dict):
+            return web.json_response({'error': 'Ereignismarke braucht ein JSON-Objekt mit Text'}, status=400)
+        return await _call(service.mark, text=data.get('text'))
 
     async def run_stop(_request):
         return await _call(service.stop_run)
@@ -70,9 +101,11 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_get("/live", page)
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
+    app.router.add_post("/live/setup/regions", regions)
     app.router.add_post("/live/confirm", confirm)
     app.router.add_post("/live/run/start", run_start)
     app.router.add_post("/live/run/stop", run_stop)
+    app.router.add_post('/live/run/mark', run_mark)
     app.router.add_post("/live/camera/start", camera_start)
     app.router.add_get("/live/setup/{name}.png", setup_image)
     app.router.add_get("/live/preview.jpg", preview)

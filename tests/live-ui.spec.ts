@@ -12,6 +12,11 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(headline).toHaveText('Bereit zur Einrichtung');
   await expect(page.locator('#notice')).toContainText('Validiert nur:');
   await expect(page.locator('#confirm-box')).toBeHidden();
+  await expect(page.locator('#diagnostics-enabled')).not.toBeChecked();
+  await expect(page.locator('#storage-status')).toContainText('Warnung: unter 5 GB');
+  await expect(page.locator('#storage-status')).toContainText('4,20 GB frei');
+  await expect(page.getByLabel('Diagnosebilder aufzeichnen')).toBeVisible();
+  await expect(page.locator('#mark-box')).toBeHidden();
 
   const setState = async (state) => {
     const statusResponse = await page.request.get('/live/status');
@@ -79,8 +84,26 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#run-start')).toBeEnabled();
 
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
-    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2 };
-  await setState({ state: 'running', run });
+    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2,
+    rejection_causes: {window_s: 10, frames: 4, limited: false,
+      causes: [{reason: 'leser:leerzelle_gestoert:14', count: 1, fraction: 0.25}]}};
+  await setState({ state: 'running', run, diagnostics: {enabled: true, saved: 4, bytes: 12_500_000,
+    dropped_queue: 0, dropped_limit: 0, dropped_memory: 2, dropped_mark_rate: 3, write_errors: 0},
+    diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}] });
+  await expect(page.locator('#diagnostics-status')).toContainText('12.5 MB');
+  await expect(page.locator('#diagnostics-status')).toContainText('RAM verworfen: 2');
+  await expect(page.locator('#diagnostics-status')).toContainText('Markenbilder verworfen: 3');
+  await expect(page.locator('#diagnostics-status')).toContainText('/test/dispread-diagnose-old (2.5 MB)');
+  await expect(page.locator('#recent-causes')).toBeVisible();
+  await expect(page.locator('#recent-causes-list')).toContainText('Zelle 14 (rechts der Einheit)');
+  await expect(page.locator('#recent-causes-list')).toContainText('25 % der Bilder');
+  await expect(page.locator('#mark-box')).toBeVisible();
+  await page.locator('#mark-text').fill('Display abgedeckt');
+  const markRequest = page.waitForRequest('**/live/run/mark');
+  await page.getByRole('button', { name: 'Ereignis markieren', exact: true }).click();
+  expect((await markRequest).postDataJSON()).toEqual({text: 'Display abgedeckt'});
+  await expect(page.locator('#last-mark')).toContainText('Meldezeit');
+  await expect(page.locator('#last-mark')).toContainText('Display abgedeckt');
   await expect(headline).toHaveText('+1.2345 mV/V');
   await expect(headline).toHaveClass('value valid');
   await expect(headline).toHaveCSS('color', 'rgb(126, 231, 135)');
@@ -90,12 +113,86 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(headline).toHaveClass('value stale');
   await expect(headline).not.toContainText('1.2345');
 
+  const lost = { ...run, latest: { ...run.latest, status: 'unreadable', raw_text: '',
+    reject_reasons: ['tracking_lost:rahmen_unstimmig'] }, tracking_hint: {
+    kind: 'anzeige_bewegt', shift_px: 19, region_shift_px: 27, rotation_deg: -2.23, since_s: 3 } };
+  await setState({ state: 'running', run: lost });
+  await expect(headline).toHaveText('UNREADABLE');
+  await expect(page.locator('#detail')).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad)');
+  await expect(page.locator('#detail')).toContainText('Werte werden nicht freigegeben. Bitte neu einrichten.');
+  await setState({ state: 'running', run: { ...lost, tracking_hint: {
+    kind: 'rahmen_verdeckt', shift_px: null, rotation_deg: null, since_s: 10 } } });
+  await expect(page.locator('#detail')).toContainText('Rahmen verdeckt? Hand oder Gegenstand');
+  await expect(page.locator('#detail')).not.toContainText('Anzeige hat sich bewegt');
+  await setState({ state: 'running', run: { ...lost, tracking_hint: {
+    kind: 'unbekannt', shift_px: null, rotation_deg: null, since_s: 12 } } });
+  await expect(page.locator('#detail')).toContainText('Anzeige nicht sicher wiedergefunden');
+
   // Erst wieder frische Ziffern zeigen, dann die echte Poll-Anfrage abbrechen.
   await setState({ state: 'running', run });
   await expect(headline).toHaveText('+1.2345 mV/V');
+  await expect(page.locator('#detail')).not.toContainText('einrichten');
   await page.route('**/live/status', (route) => route.abort('connectionfailed'));
   await expect(headline).toHaveText('STALE');
   await expect(headline).not.toContainText('1.2345');
   await expect(page.locator('#detail')).toHaveText('Verbindung zur Werkbank verloren');
+  expect(errors).toEqual([]);
+});
+
+test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue Bestätigung', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/live');
+  await page.getByLabel('Linux-Passwort').fill('test-only');
+  await page.getByRole('button', { name: 'enter', exact: true }).click();
+  await expect(page).toHaveURL(/\/live$/);
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const stateResponse = await page.request.post('/__test__/state', {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
+    data: {state: 'setup_ready', setup: {overall: 'OK', proposal_revision: 'regions-v1',
+      auswahl: 'automatisch', overlays: ['overlay_source'], checks: {nachfuehrung: 'OK'},
+      regions: [{centre: [10, 10], size: 5}]}},
+  });
+  expect(stateResponse.ok()).toBe(true);
+  await expect(page.locator('#region-editor')).toBeVisible();
+  await page.locator('#confirmed-by').fill('Operator');
+  await page.locator('#format-checked').check();
+  await page.getByLabel('Quellbild-Koordinaten x,y').fill('30,12');
+  const added = page.waitForRequest('**/live/setup/regions');
+  await page.getByRole('button', {name: 'Bereich hinzufügen', exact: true}).click();
+  expect((await added).postDataJSON()).toEqual({proposal_revision: 'regions-v1', add: [[30, 12]], remove: []});
+  await expect(page.locator('#region-list li')).toHaveCount(2);
+  await expect(page.locator('#region-results')).toContainText('30,12 (verwendet: 30,12): geeignet');
+  await expect(page.locator('#confirmed-by')).toHaveValue('');
+  await expect(page.locator('#format-checked')).not.toBeChecked();
+  await expect(page.locator('#region-selection')).toHaveText('Auswahl: manuell');
+  await page.getByRole('checkbox', {name: 'Rahmenbereiche bearbeiten', exact: true}).check();
+  const image = page.locator('img[alt="overlay_source"]');
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+  const box = await image.boundingBox();
+  const removed = page.waitForRequest('**/live/setup/regions');
+  await image.click({position: {x: box!.width * 10 / 48, y: box!.height * 10 / 24}});
+  const body = (await removed).postDataJSON();
+  expect(body.remove).toEqual([0]);
+  expect(body.add).toEqual([]);
+  expect(body.proposal_revision).not.toBe('regions-v1');
+  await expect(page.locator('#region-list li')).toHaveCount(1);
+  await page.getByRole('button', {name: /Bereich 1 entfernen/}).click();
+  await expect(page.locator('#region-list li')).toHaveCount(0);
+  await expect(page.locator('#setup-checks')).toContainText('Nachführung: FEHLER');
+  const revision = (await (await page.request.get('/live/status')).json()).setup.proposal_revision;
+  for (const edit of [{add: [[1e300, 12]], remove: []}, {add: [], remove: ['0']}]) {
+    const rejected = await page.request.post('/live/setup/regions', {
+      headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
+      data: {proposal_revision: revision, ...edit},
+    });
+    expect(rejected.status()).toBe(400);
+  }
+  expect((await (await page.request.get('/live/status')).json()).setup.proposal_revision).toBe(revision);
+  const scaled = (await image.boundingBox())!;
+  const fractional = page.waitForRequest('**/live/setup/regions');
+  await image.click({position: {x: scaled.width * 35.8 / 48, y: scaled.height * 12.8 / 24}});
+  expect((await fractional).postDataJSON()).toEqual({proposal_revision: revision, add: [[35, 12]], remove: []});
+  await expect(page.locator('#region-list li')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

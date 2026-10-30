@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-21. Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-10-28. Alle sechs Kapitel sind fertig: Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -453,11 +453,13 @@ Lesen und Freigabe danach rechnen, verschiebt sie nicht; diese Rechenzeit
 steht getrennt im `PipelineTrace`, die Fertigstellung in
 `result_timestamp`. Wartet die Freigabe auf mehrere gleiche Bilder, steht
 diese Wartezeit eigens in `confirmation_span_ns`. Die Felder werden nie zu
-einem einzigen „Zeitstempel“ zusammengelegt. Die aktuelle Kennzeichnung
-der Ergebniszeit übernimmt noch die Basis des Frames, obwohl die Uhr
-MONOTONIC ist. Außerhalb des V4L2-Pfads ist sie deshalb nicht zuverlässig;
-Rechenzeit nur aus den gleichbasigen Trace-Marken bestimmen
-([OQ-45](../open-questions.md#oq-45)).
+einem einzigen „Zeitstempel“ zusammengelegt. `result_timestamp` stammt für
+jede Quelle aus `time.monotonic_ns()` und trägt `HOST_MONOTONIC`;
+`capture_timestamp` behält seine Quellbasis. Nach BOOTTIME führt nur
+`to_boottime_ns` mit dem Versatz der jeweiligen Session und Suspend-Prüfung.
+Alte Auditdateien behalten ihre bisherigen Labels. Rechenzeit aus den
+gleichbasigen Trace-Marken bestimmen
+([OQ-45, geklärt 2026-10-23](../open-questions.md#oq-45)).
 
 Das Beispiel aus TIMING.md rechts: Konstante 200 ms verschieben den
 Zeitbezug, verschlechtern ihn aber nicht. 50 ms ± 40 ms sind trotz kleinerem
@@ -714,7 +716,7 @@ wenn sich Kamera oder Gerät bewegt haben. Danach legt er das Punktraster über
 die Anzeige. Damit er weiß, was die Anzeige gerade zeigen sollte, liest er
 den Wert über die serielle Schnittstelle des GSV-2AS mit.
 
-Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Auflösung, Raster,
+Danach prüft er Kontrast, Kanten, Rahmen, Glanz, Belichtung, Auflösung, Raster,
 Stabilität und den Versatz des Rasters. Jede Prüfung meldet OK, WARNUNG oder
 FEHLER. Am Ende stehen ein Vorschlag (`proposal.json`) und Kontrollbilder,
 auf denen man das Raster sieht.
@@ -723,6 +725,10 @@ Im Live-Browser unter `/live` nutzt die Einrichtung dieselben Messbausteine
 über den gemeinsamen `CameraOwner`. Dort prüft zusätzlich `gegenlesen` den
 Leser am Standbild; schwankende Zellen können maskiert werden. Für einen
 normalen Lauf muss diese Lesesperre aufgehoben sein.
+Vor den Standbildern stimmt die Live-Einrichtung die feste Belichtung auf
+die grüne Anzeige ab. Erreicht sie ihr Zielband nicht oder findet sie keinen
+Hinweisbereich, übernimmt sie die besten Einstellungen und meldet eine
+Belichtungswarnung. Der Fokus wird dabei nicht erneut gesucht.
 
 Mehr dazu: [Datensatz sammeln](../anleitung/11-datensatz-sammeln.md) ·
 [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md)
@@ -782,12 +788,11 @@ stoppt den Lauf nicht automatisch.
 
 Bei Lesesperre ist nur ein ausdrücklich markierter Testlauf möglich
 (`TESTLAUF.json`, Banner). Vermutungen zu abgelehnten Bildern sind als nicht freigegeben beschriftet.
-Audit und Oberfläche können weiterhin `VALID`-Pipelineentscheidungen
-enthalten;
-Datensätze eines solchen Laufs müssen mit seiner Testlaufmarkierung
-zusammen ausgewertet werden. Auch ein `VALID`-Status ist dann keine
-Messfreigabe. Die technische Erzwingung dieser Sperre ist offen
-([OQ-44](../open-questions.md#oq-44)).
+Jede Gate-Freigabe wird vor dem Audit als unlesbar ohne Zahlenwert
+protokolliert; die Oberfläche zeigt niemals gültige Testlaufwerte.
+Die ursprüngliche Gate-Entscheidung bleibt eine getrennte Leser-Diagnose.
+Testläufe sind von Messnachweisen ausgeschlossen; die technische
+Freigabesicherung ist umgesetzt ([OQ-44](../open-questions.md#oq-44)).
 
 Der Live-Pfad ist am Aufbau gelaufen, aber noch nicht umfassend abgenommen:
 Große Wertwechsel können die Nachführung verlieren lassen (OQ-26), die

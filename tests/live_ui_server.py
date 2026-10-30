@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import ssl
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ import cv2
 import numpy as np
 from aiohttp import web
 
+from dispread.workbench.fields import REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -43,16 +45,57 @@ class FakeLiveService:
             self._status = {
                 "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
-                "camera": {"running": True, "frames": 1, "gaps": 0},
+                "camera": {"running": True, "frames": 1, "gaps": 0}, "diagnostic_leftovers": [],
+                "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn"},
                 **copy.deepcopy(state),
             }
 
-    def status(self):
+    def status(self, *, full=False):
         with self._lock:
-            return copy.deepcopy(self._status)
+            data = copy.deepcopy(self._status)
+            if full:
+                data["tracking_reasons"] = REASONS.copy()
+            if data.get("run") is not None:
+                data["run"].setdefault("tracking_hint", None)
+                window = data["run"].setdefault("rejection_causes",
+                    {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
+                window["causes"] = [live_cause(c) for c in window["causes"]]
+            return data
 
     def start_setup(self, *, cell_text=None):
         self.set_state({"state": "setup_running", "setup": {"step": "fokus", "elapsed_s": 0.0}})
+
+    def edit_regions(self, *, proposal_revision, add, remove):
+        from dispread.live.service import LiveError, LiveInputError
+
+        with self._lock:
+            setup = self._status.get("setup")
+            if self._status["state"] != "setup_ready" or not setup:
+                raise LiveError("Kein aktueller Vorschlag zum Bearbeiten")
+            if proposal_revision != setup.get("proposal_revision"):
+                raise LiveError("Vorschlag hat sich geaendert")
+            if not isinstance(add, list) or not isinstance(remove, list) or not (add or remove):
+                raise LiveInputError("Bereichsaenderung braucht Listen add und remove mit mindestens einer Aenderung")
+            if (any(type(index) is not int or not 0 <= index < len(setup['regions']) for index in remove)
+                    or len(set(remove)) != len(remove)):
+                raise LiveInputError("Ungueltiger oder doppelter Bereichsindex")
+            height, width = cv2.imread(str(self._image_path)).shape[:2]
+            for point in add:
+                if (not isinstance(point, list) or len(point) != 2
+                        or any(type(value) not in (int, float) or (type(value) is float and not math.isfinite(value))
+                               for value in point)):
+                    raise LiveInputError("Bereich braucht zwei endliche Pixelkoordinaten")
+                if not (0 <= point[0] < width and 0 <= point[1] < height):
+                    raise LiveInputError("Bereichskoordinaten liegen ausserhalb des Quellbilds")
+            regions = [region for index, region in enumerate(setup["regions"]) if index not in remove]
+            regions.extend({"centre": point, "size": 5} for point in add)
+            setup["regions"] = regions
+            setup["proposal_revision"] += "-edit"
+            setup["auswahl"] = "manuell"
+            setup["centre_results"] = [{"requested_centre": r["centre"], "centre": r["centre"],
+                                        "used_centre": r["centre"], "ok": True, "reason": None} for r in regions]
+            setup["checks"]["nachfuehrung"] = setup["overall"] = "OK" if regions else "FEHLER"
+            return {"proposal_revision": setup["proposal_revision"], "centre_results": setup["centre_results"]}
 
     def confirm(self, *, session_id, **kwargs):
         if session_id != self.status()["session_id"]:
@@ -61,8 +104,15 @@ class FakeLiveService:
             raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
         self.set_state({"state": "confirmed"})
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
-        self.set_state({"state": "running"})
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False):
+        self.set_state({"state": "running", "diagnostics": {"enabled": diagnostics, "saved": 0,
+                        "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
+                        "dropped_mark_rate": 0, "write_errors": 0}})
+
+    def mark(self, text):
+        with self._lock:
+            self._status['last_mark'] = {'text': text, 'zeit': 'meldezeit_bediener',
+                                         'received_at_utc': '2026-10-21T10:00:00Z'}
 
     def stop_run(self):
         self.set_state({"state": "stopped"})

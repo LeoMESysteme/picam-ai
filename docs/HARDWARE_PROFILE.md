@@ -8,6 +8,35 @@ Gerät `raspi06`. Rechner- und IMX500-Bestand unten: Stand 2026-09-07;
 aktuelle StreamCam-Sitzung: 2026-10-21. Speicherplatz- und Paketangaben
 sind datierte Schnappschüsse, keine laufende Zustandsanzeige.
 
+## Datenorte: Produkt und Entwicklung (2026-10-28)
+
+Die NVMe-SSD unter `/mnt/ssd` dient nur zur Entlastung bei Backups, Tests,
+Training und Diagnoseaufnahmen. Das fertige Gerät läuft ohne SSD auf
+SD-Karte. `var/` bleibt deshalb das Produktverzeichnis für Profile,
+Kalibrierung, Vorlagen, aktuelle Live-Läufe und Werkbankdaten. Auch der
+Geräte-Rückstellpunkt
+`var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json` bleibt dort.
+
+Für Tests und Entwicklungsskripte kann die Ablage gesetzt werden:
+
+```bash
+export DISPREAD_DEV_DATA=/mnt/ssd/picam-dev
+```
+
+Vorhandene Aufnahmen werden zuerst unter `var/<rel>` gesucht, danach unter
+`$DISPREAD_DEV_DATA/<rel>`. Ausgelagert sind `diagnostics/` mit Ausnahme des
+Rückstellpunkts sowie `live/`-Sitzungen vor `live-20261023…`. Die alten Ordner
+`rescue-20260925`, `removed-20260928-sc` und `removed-20260929-sc3a` liegen
+unter `$DISPREAD_DEV_DATA/altlasten/`. Fixture-Pfade behalten das relative
+alte Schema; absolute SSD-Pfade gehören nicht in Fixtures oder Profile.
+
+Ohne Variable werden Tests mit fehlenden lokalen Aufnahmen übersprungen;
+vorhandene lokale Aufnahmen bleiben nutzbar. Neue Diagnoseaufnahmen der
+Skripte verwenden standardmäßig `$DISPREAD_DEV_DATA/diagnostics/`, sonst
+wie bisher `var/diagnostics/`. Explizite Ausgabeorte bleiben maßgeblich.
+Produktcode unter `src/` kennt weder diese Variable noch die SSD; die
+Auflösung erfolgt ausschließlich in Tests und Skripten.
+
 ## Aktuelle StreamCam-Sitzung (2026-10-21)
 
 Einrichtung `live-20261021T151835Z` vor dem strengen Werteplan-Lauf:
@@ -17,8 +46,9 @@ Gain 14 und Weißabgleich 4717 K gesetzt und zurückgelesen; Autofokus,
 Belichtungs- und Weißabgleichsautomatik sind danach ausgeschaltet.
 Das sind sitzungsbezogene Einstellungen, keine Vorgaben für andere
 Aufstellungen. Diagnose unter
-`var/diagnostics/messlauf-vorbereitung-20261021/`, Kameraregler unter
-`var/live/live-20261021T151835Z/setup/camera-settings.json`.
+`$DISPREAD_DEV_DATA/diagnostics/messlauf-vorbereitung-20261021/`, Kameraregler unter
+`$DISPREAD_DEV_DATA/live/live-20261021T151835Z/setup/camera-settings.json`
+(seit 2026-10-28 ausgelagert, siehe Datenorte oben).
 Die nachfolgenden Kameraabschnitte bleiben historischer IMX500-Stand.
 
 ## Rechner
@@ -33,8 +63,9 @@ Die nachfolgenden Kameraabschnitte bleiben historischer IMX500-Stand.
 | Python | 3.13.5 |
 | Bootloader | aktuell (Stand 2026-05-26) |
 
-**Konsequenz aus 34 GB frei:** Datensätze und Diagnosebilder gehören auf
-externen Speicher. Im Betrieb Ringpuffer mit harter Obergrenze — der
+**Konsequenz aus dem damaligen Speicherstand:** Entwicklungsaufnahmen können
+auf externen Speicher ausgelagert werden (siehe Datenorte oben). Produktdaten
+bleiben auf SD. Im Betrieb Ringpuffer mit harter Obergrenze — der
 `JsonlSink` rotiert bei 64 MB und behält 5 Generationen.
 
 ## Kamera (historisch: IMX500) { #kamera }
