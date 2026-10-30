@@ -341,7 +341,11 @@ test('Hinweise bleiben überfahrbar, per Tastatur erreichbar und im Viewport', a
   await expect(hint).toHaveCount(0);
   await link.hover();
   await expect(hint).toBeVisible();
-  await hint.hover();
+  // Wie ein Mensch direkt zum Hinweis fahren: hint.hover() scrollt gelegentlich
+  // erst das Fenster (bis scrollY 625 beobachtet), der Hinweis folgt dann seinem
+  // Ziel, verlässt den Zeiger und schließt sich nach 150 ms.
+  const hintBox = (await hint.boundingBox())!;
+  await page.mouse.move(hintBox.x + hintBox.width / 2, hintBox.y + hintBox.height / 2);
   await page.waitForTimeout(200);
   await expect(hint).toBeVisible();
   await page.mouse.move(0, 0);
