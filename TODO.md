@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-21
+# TODO — Stand 2026-10-30
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -291,6 +291,25 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 ### Messpfad live (aktiv)
 
+**Stand 2026-10-30:** Auf `feat/r13-display-haertung` (nicht in `master`)
+sind R13-1 bis R13-23 und der P4-Prototyp gebaut.
+
+* **Langlauf** `live-20261030T082502Z/run-01`: 42,8 min, Werteplan mit
+  280 Schritten, **0 / 45 702** Fehllesungen, 100 % VALID in stabilen
+  Fenstern, kein Trackingverlust
+  ([Laborjournal](docs/lab_journal.md#langlauf-2026-10-30)).
+* **Offen für Leonhard:**
+  * Merge R13 → `master` anhand der
+    [Entscheidungsvorlage](docs/superpowers/plans/2026-10-28-r13-merge-entscheidung.md).
+  * Zweite Aufstellung für die Abnahme.
+  * GSVmulti-Test am Windows-PC
+    ([Anleitung](docs/GSVMULTI_PROTOCOL.md#windows-test)).
+  * Belichtungsnachregelung (R13-20) am Gerät zeigen; dafür braucht es
+    dunkleres Licht.
+  * Stillstandserkennung (R13-22) mit echtem Abziehen der Kamera prüfen.
+* **Werkbank:** läuft als Unit `dispread-werkbank-r13` aus einem Export
+  (`PYTHONPATH`), nicht aus dem Worktree.
+
 **Stand 2026-10-21 abends:** Der Messpfad läuft am Aufbau. Lesesperre,
 schwankende Ziffern, Licht-Hinweis/Toleranz, Leser mit ~30 Bildern/s,
 TRANSITION bei Wertwechseln und Referenzaufzeichnung sind gebaut und in
@@ -356,6 +375,10 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
+   **2026-10-30:** P4-1 bis P4-3 sind als Prototyp gebaut:
+   `UserDefinedFormatter`, Demo-Sender und Opt-in-Ausgabe im Live-Lauf.
+   Geprüft ist das nur mit pty; der Windows-Test steht aus
+   ([Plan](docs/superpowers/plans/2026-10-29-p4-gsvmulti-userdefined.md)).
    **2026-10-28:** UserDefined laut Herstelleranleitung v2.6 belegt;
    ein Prototyp für die im PDF dokumentierte Windows-Version 2.01 Pro
    kann gebaut werden. [Bewertung und Prüfplan](docs/GSVMULTI_PROTOCOL.md).
