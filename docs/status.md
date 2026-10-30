@@ -24,9 +24,11 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
   vollständige Telegramme, Baud ≥ 9600, Schutz des Referenzadapters).
   Prototyp ohne Messfreigabe, nur mit pty geprüft.
 * master 5d1452c (Session-Explorer) gemergt (30671c2); volle Suite
-  2908 bestanden. Docs-Playwright 89/90: der Hinweis-Test
-  `docs-site.spec.ts:326` scheitert seit dem Merge reproduzierbar; die
-  Wiki-Sitzung untersucht (Hinweis-Skript oder Test).
+  2908 bestanden. Docs-Playwright 89/90; der Hinweis-Test
+  `docs-site.spec.ts:326` scheiterte etwa jeden dritten Lauf, weil
+  Playwright vor dem Überfahren scrollt (auch auf master). Fix der
+  Wiki-Sitzung (`fix/hinweis-test-ohne-scroll`, nur Test) gemergt, 4/4 grün;
+  nach master erst mit Leonhards OK.
 
 ## Neu am 2026-10-28 (Zweig `feat/r13-display-haertung`, nicht in `master`)
 
