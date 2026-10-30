@@ -104,3 +104,49 @@ def test_serial_sink_pty_and_omission_receipts(formatter):
         sink.close()
         os.close(master)
         os.close(slave)
+
+
+def test_non_valid_logging_is_debug_but_inconsistency_warns(formatter, caplog):
+    import logging
+
+    with caplog.at_level(logging.DEBUG, logger='dispread.sink.protocol.userdefined'):
+        formatter.format(record('1', None, ValueStatus.UNREADABLE))
+        formatter.format(record('1', 2.0))
+    assert [r.levelno for r in caplog.records] == [logging.DEBUG, logging.WARNING]
+
+
+def test_saturated_pty_timeout_latches_without_purging_or_followup():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = """
+import os
+from test_userdefined_formatter import record
+from dispread.sink.protocol.userdefined import UserDefinedFormatter
+from dispread.sink.serial_out import SerialSink
+master, slave = os.openpty()
+sink = SerialSink(os.ttyname(slave), UserDefinedFormatter(), write_timeout=.05)
+try:
+    sink.open()
+    fd = sink._serial.fileno()
+    while True:
+        try:
+            os.write(fd, b'x' * 65536)
+        except BlockingIOError:
+            break
+    receipt = sink.emit(record())
+    assert receipt.error and receipt.t_complete_ns is None
+    assert receipt.bytes_written is None  # pySerial cannot report partial bytes on timeout.
+    assert sink.health().errors == 1
+    following = sink.emit(record())
+    assert following.dropped and following.drop_reason == 'output_failed'
+    assert following.bytes_written == 0
+finally:
+    sink.close()
+    os.close(master)
+    os.close(slave)
+"""
+    root = Path(__file__).parents[1]
+    subprocess.run([sys.executable, '-c', script], check=True, timeout=20,
+                   env={**os.environ, 'PYTHONPATH': f'{root / "src"}:{root / "tests"}'})

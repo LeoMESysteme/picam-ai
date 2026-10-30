@@ -55,7 +55,7 @@ class UserDefinedFormatter:
 
     def format(self, record: ValueRecord) -> bytes | None:
         if record.status is not ValueStatus.VALID:
-            _LOG.warning("UserDefined frame=%s ausgelassen: status=%s", record.frame_sequence, record.status)
+            _LOG.debug("UserDefined frame=%s ausgelassen: status=%s", record.frame_sequence, record.status)
             return None
         text = (record.raw_text or "").replace(" ", "")
         if _NUMBER.fullmatch(text) is None:

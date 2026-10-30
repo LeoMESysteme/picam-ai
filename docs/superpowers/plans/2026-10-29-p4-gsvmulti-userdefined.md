@@ -46,7 +46,7 @@ und SerialSink-Prüfungen mit pty/Fakes; weiterhin Prototyp, nicht freigegeben.
 ### P4-2 Demo-Sender für den Windows-Test (Codex)
 **Stand 2026-10-28: gebaut, ungeprüft am Windows-PC.** Profile, JSONL,
 Portablehnung und Schreibstau lokal mit pty/Fakes geprüft;
-[Windows-Anleitung](../../GSVMULTI_PROTOCOL.md#windows-test). P4-3 bleibt offen.
+[Windows-Anleitung](../../GSVMULTI_PROTOCOL.md#windows-test). P4-3 ist seit 2026-10-30 ebenfalls gebaut, ungeprüft am Windows-PC.
 
 * `scripts/gsvmulti-demo-sender.py`: sendet Demo-Werte (Konstanten,
   Treppe, Vorzeichen/Null/Bereichsgrenzen) mit dem Formatter aus P4-1 an
@@ -60,8 +60,27 @@ Portablehnung und Schreibstau lokal mit pty/Fakes geprüft;
   Vergleich.
 
 ### P4-3 Opt-in-Ausgabe im Live-Lauf (Codex, nach Review von P4-1/2)
+**Stand 2026-10-30: gebaut, ungeprüft am Windows-PC.** pty/Fakes prüfen
+Freigabesicherungen, exakte Bytes, Portprüfung, Stau, Fehler und Legacy-Bytes.
+Reviewkorrektur: ein offener Senderauftrag; angefangene Telegramme vollständig
+bis CRLF mit 1 s Gesamtfrist schreiben. Kein Pufferverwerfen und kein Aufholen;
+neue Frames bei Beschäftigung verwerfen. Schreib-/Timeout-/Threadfehler
+sperren den Ausgang, lösen den Beschäftigt-Zustand und erscheinen mit Beleg
+in Tx/Status/Session. Ausgabeport öffnet vor Referenzrecorder/Werteplan;
+Öffnungsfehler startet weder Plan noch Rückstellung.
+Live mindestens 9600 Baud: konservativ 16 Anzeigebytes + Präfix + CRLF =
+19 Byte × 10 Bit / 9600 = 19,79 ms < 33 ms; 4800 braucht 39,58 ms und wird
+wie 2400 abgelehnt. Längere Telegramme werden vor dem Write mit Fehler gesperrt.
+Portschutz prüft Aliasse, den aktiven Referenzport und sysfs-USB-ID `067b:2303`
+(PL2303). `allow_reference_adapter: true` ist eine ausdrückliche Ausnahme für
+den Adapter, nie für den aktiven Referenz-/Werteplan- oder Debugport.
+Die Demo nutzt dieselbe vollständige Schreibfunktion: Stau verwirft nur den
+nächsten Frame, ein Schreibfehler beendet den Lauf. Tx-Auslassungsbelege
+bleiben im Bildpfad; ihre Verlagerung brauchte eine weitere Audit-Warteschlange.
+Keine Hardware-Abnahme oder Messfreigabe. [Code-Naht und API](../../GSVMULTI_PROTOCOL.md#opt-in-im-live-lauf-p4-3).
+
 * `LiveService.start_run(..., output=None)` bzw. API-Parameter: Port,
-  Baudrate, Präfix. `LiveSession` hängt nach Audit einen `SerialSink` mit
+  Baudrate, Präfix, `allow_reference_adapter` (Standard aus). `LiveSession` hängt nach Audit einen `SerialSink` mit
   `UserDefinedFormatter` an; nur freigegebene VALID-Records; TxReceipts nach
   `tx.jsonl`; `session.json` enthält Formatter-Fähigkeiten (`provisional`)
   und Portdaten; Ausgabefehler beenden den Lauf nicht, sind aber im Status

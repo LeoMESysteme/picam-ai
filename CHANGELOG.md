@@ -5,6 +5,27 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: P4-3 als Prototyp gebaut und nach Review korrigiert: Opt-in
+  `output` im Live-Service/API, Standard aus; nur endgültige Records nach
+  R13-17/R13-21 und erfolgreichem Audit. Ein Senderauftrag, neue Frames bei
+  Beschäftigung als `output_busy` belegen. Live- und Demo-Sender schreiben
+  begonnene Telegramme vollständig bis CRLF mit einer Gesamtfrist von 1 s;
+  kein Pufferverwerfen, kein `flush()` oder eigener O_NONBLOCK-Pfad. Bei
+  Treiberresten nur das neue Telegramm auslassen. Teilwrite/Timeout/Fehler
+  werden mit Bytezahl (bei unbekannten Teilbytes `null`, bestätigte Untergrenze
+  im Fehlertext) belegt; Fehler sperren Live bis Laufende bzw. beenden die Demo.
+  Jede Senderausnahme wird sichtbar und löst den Beschäftigt-Zustand.
+  Live mindestens 9600 Baud: maximal 19 Byte × 10 Bit brauchen 19,79 ms;
+  2400/4800 überschreiten konservativ 33 ms. Port-/Aliasprüfung plus sysfs-
+  USB-Kennung `067b:2303` schützt den PL2303 auch nach Umnummerierung;
+  API-Feld `allow_reference_adapter` erlaubt ihn ausdrücklich, niemals den
+  aktiven Referenz-/Werteplan- oder Debugport. Ausgabe öffnet vor Recorder
+  und Werteplan; Fehler startet weder Referenz noch Rückstellung.
+  `tx.jsonl`, `session.json.output` und Live-Status belegen Fähigkeiten,
+  Zähler und ersten Fehler. Ohne Ausgabe bleiben Legacy-Artefakte bytegleich.
+  Nicht-VALID loggt auf Debug, Inkonsistenz auf Warning. Nur pty/Fakes;
+  keine Hardware-/Windows-Abnahme, UI-Änderung oder Messfreigabe.
+
 * 2026-10-28: P4-1/P4-2 als Prototyp gebaut: `UserDefinedFormatter` erzeugt
   einkanaliges ASCII mit konfigurierbarem Präfix und festem CRLF aus VALID-
   Anzeigetext, prüft Dezimallexik und exakte Text/Wert-Konsistenz; sonst

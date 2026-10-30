@@ -1949,3 +1949,79 @@ def test_cleanup_protects_running_run_and_diagnostic_copy_in_active_session(tmp_
     assert str(old) in deleted and copying.exists()
     assert current.exists() == (state == 'running')
     assert service._state == state
+
+
+@pytest.mark.parametrize('output', [
+    {}, {'port': ''}, {'port': '/dev/ttyUSB0'}, {'port': '/dev/serial0'},
+    {'port': '/dev/pts/fake', 'baudrate': 12345},
+    {'port': '/dev/pts/fake', 'baudrate': True},
+    {'port': '/dev/pts/fake', 'baudrate': '115200'},
+    {'port': '/dev/pts/fake', 'prefix': '+'},
+    {'port': '/dev/pts/fake', 'prefix': None}, [], 'port',
+])
+def test_output_invalid_options_rejected_before_start(tmp_path, output):
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Ausgabe'):
+        service.start_run(output=output)
+    assert service.status()['state'] == 'idle'
+    assert not list(tmp_path.iterdir())
+
+
+def test_output_reserved_alias_rejected(tmp_path):
+    alias = tmp_path / 'reference-alias'
+    alias.symlink_to('/dev/ttyUSB0')
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Ausgabe'):
+        service.start_run(output={'port': str(alias)})
+
+
+@pytest.mark.parametrize('schedule', [None, '2:20'])
+def test_output_reference_port_collision_rejected(tmp_path, monkeypatch, schedule):
+    monkeypatch.setattr('dispread.live.setup.SERIAL_PORT', '/dev/pts/reference')
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Referenz'):
+        service.start_run(output={'port': '/dev/pts/reference'}, reference=True, norm_schedule=schedule)
+
+
+def test_output_error_visible_in_service_status_and_run_continues(tmp_path, monkeypatch):
+    from dotmatrix_helpers import embed
+    from test_live_output import FakeSerial
+    from test_live_session import _session
+
+    class Disconnected(FakeSerial):
+        def write(self, data):
+            raise OSError('output disconnected')
+
+    monkeypatch.setattr('serial.Serial', Disconnected)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    monkeypatch.setattr('dispread.live.service.LiveSession',
+                        lambda owner, profile, config, out_dir, **kw:
+                        _session(tmp_path, [embed('+ 1.2345 ')] * 2, out_dir=out_dir, **kw))
+    try:
+        service.start_run(reference=False, output={'port': '/fake/output', 'baudrate': 9600, 'prefix': '#'})
+        deadline = time.monotonic() + 5
+        while not service.status()['run']['output']['errors']:
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        status = service.status()
+        assert status['state'] == 'running'
+        assert status['run']['output']['baudrate'] == 9600
+        assert 'disconnected' in status['run']['output']['first_error']
+        assert status['run']['output']['sent'] == 0
+    finally:
+        service.stop_run()
+    assert service.status()['state'] == 'stopped'
+
+
+def test_output_open_failure_rejects_service_start(tmp_path, monkeypatch):
+    from test_live_session import _session
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    monkeypatch.setattr('dispread.live.service.LiveSession',
+                        lambda owner, profile, config, out_dir, **kw: _session(tmp_path, [], out_dir=out_dir, **kw))
+    with pytest.raises(LiveError, match='Ausgabe nicht gestartet'):
+        service.start_run(reference=False, output={'port': str(tmp_path / 'missing')})
+    assert service.status()['state'] == 'confirmed'
+    assert service.status()['run'] is None

@@ -1492,3 +1492,88 @@ def test_r19b_session_altes_profil_bekommt_nachfuehrung_ohne_neueinrichtung(tmp_
         assert session._pipeline.locator.last_track.quad is not None
     finally:
         session.stop()
+
+
+@pytest.mark.parametrize('test_run', [None, {}])
+def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run):
+    import os
+    import select
+    import time
+    from dataclasses import replace
+
+    class Recorder:
+        reconfiguration_enabled = True
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {'enabled': True}
+
+        def is_reconfiguring(self, capture_boottime_ns):
+            return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 3 * 33_333_333 + 1000
+
+    master, slave = os.openpty()
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, reference_recorder=Recorder(),
+                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#'})
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    try:
+        for number in range(1, 5):
+            session.step()
+            # Synchronize with receipt persistence; no timing-dependent queue overflow.
+            deadline = time.monotonic() + 3
+            while len((tmp_path / 'run/tx.jsonl').read_text().splitlines()) < number:
+                assert time.monotonic() < deadline
+                time.sleep(.005)
+        assert session.step() is None  # Kein frisches Bild: keinen Altwert wiederholen.
+        assert len((tmp_path / 'run/tx.jsonl').read_text().splitlines()) == 4
+        assert select.select([master], [], [], .05)[0] == ([] if test_run is not None else [master])
+        if test_run is None:
+            assert os.read(master, 4096) == b'#+1.2345\r\n' * 3
+    finally:
+        session.stop()
+        os.close(master)
+        os.close(slave)
+    tx = [json.loads(line) for line in (tmp_path / 'run/tx.jsonl').read_text().splitlines()]
+    assert [r['frame_sequence'] for r in tx] == [1, 2, 3, 4]
+    assert [r['omitted'] for r in tx] == ([False, True, False, False] if test_run is None else [True] * 4)
+    assert all(r['invalid_policy'] == 'omit_record' for r in tx)
+    assert all(r['time_base'] == 'host_monotonic' and r['uncertainty_ns'] is None for r in tx)
+    output = json.loads(session.session_path.read_text())['output']
+    assert output['sent'] == (3 if test_run is None else 0)
+    assert output['omitted'] == (1 if test_run is None else 4)
+    assert output['dropped'] == output['errors'] == 0
+    assert output['capabilities']['provisional'] is True
+    assert output['capabilities']['supported_invalid_policies'] == ['omit_record']
+
+
+def test_output_open_failure_refuses_session(tmp_path):
+    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port')})
+    with pytest.raises(StartRefused, match='Ausgabe'):
+        session.start()
+    assert session.latest is None
+
+
+@pytest.mark.parametrize('options', [{}, {'output': None}])
+def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    monkeypatch.setattr('time.monotonic_ns', lambda: 123456789)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, **options,
+                       monotonic=lambda: 0., wall=lambda: datetime(2026, 10, 30, tzinfo=UTC))
+    session.start()
+    for _ in range(3):
+        session.step()
+    session.stop()
+    fixture = Path(__file__).parent / 'fixtures/live_output_disabled'
+    assert session.records_path.read_bytes() == (fixture / 'records.jsonl').read_bytes()
+    data = json.loads(session.session_path.read_text())
+    actual = session.session_path.read_text().replace(data['profile']['sha256'], '<profile-sha256>')
+    actual = actual.replace(str(tmp_path), '<root>')
+    assert actual == (fixture / 'session.json').read_text()
+    assert not (session.records_path.parent / 'tx.jsonl').exists()

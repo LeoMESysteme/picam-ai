@@ -848,3 +848,38 @@ def test_cleanup_cli_reports_all_results_and_exits_nonzero_on_partial_failure(tm
     assert [entry['status'] for entry in data['entries']] == ['deleted', 'failed', 'deleted']
     assert data['entries'][1]['error'] == 'Loeschen verweigert'
     assert not runs[0].exists() and runs[1].exists() and not runs[2].exists()
+
+
+def test_run_start_output_reaches_service_without_socket(monkeypatch):
+    from aiohttp.test_utils import make_mocked_request
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    service = FakeService()
+    received = []
+
+    def start_run(**kwargs):
+        received.append(kwargs)
+
+    service.start_run = start_run
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _: 'tok')
+    output = {'port': '/dev/pts/123', 'baudrate': 115200, 'prefix': '#'}
+
+    async def body(_request):
+        return {'reference': False, 'output': output}
+
+    monkeypatch.setattr(web.Request, 'json', body)
+    monkeypatch.setattr(web.Request, 'can_read_body', property(lambda _: True))
+
+    async def check():
+        request = make_mocked_request('POST', '/live/run/start', app=app)
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 200
+        assert received == [{'test_override': False, 'reference': False, 'norm_schedule': None,
+                             'diagnostics': False, 'output': output}]
+
+    asyncio.run(check())

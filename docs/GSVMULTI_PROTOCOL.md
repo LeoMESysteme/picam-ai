@@ -9,7 +9,7 @@ und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmu
 
 ## Stand: UserDefined-Prototyp gebaut, nicht freigegeben {#stand-das-format-ist-unbekannt}
 
-**Stand 2026-10-28:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
+**Stand 2026-10-30:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
 **Transportprototyp**, noch nicht für eine freigegebene Messanbindung.
 GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren seriellen
 Zahlenimport. Ein Nachbau des GSV-2-/GSV-6-/GSV-8-Geräteprotokolls ist für
@@ -28,12 +28,12 @@ Die Dokumentation dieser Prüfung verändert weder Windows noch den Pi-Aufbau.
 | Eigenständiger Sender für endliche Demowerte mit festem Zahlenprofil | Annahme und Aufzeichnung in der konkreten 2.01-Pro-Installation |
 | Neuer `TelegramFormatter` für einen freigegebenen DUT-Wert pro Zeile | Ungültig-/STALE-Verhalten in Anzeige, Datei und Kalibrierauswertung |
 | Serielle Ausgabe mit vorhandenem `SerialSink` an einen passenden COM-Transport | Port, Treiber, Pufferung, Wiederanlauf und Dauerbetrieb |
-| Geplante Einbindung in `/live` mit parallelem JSONL-Audit | Lebenszyklus, Freigabesicherung und Metadaten des tatsächlichen Laufs |
+| Opt-in-Ausgabe in `/live` mit parallelem JSONL- und Tx-Audit | Tatsächlicher Transport und Abnahme am Windows-PC |
 
 **Die vollständige Messfreigabe bleibt offen.** P4-1 (Formatter) und P4-2
 (Demo-Sender) sind als Prototyp gebaut und mit pty/Fakes geprüft, **ungeprüft
-am Windows-PC**. P4-3 (Live-Anbindung) ist nicht implementiert; die Phase ist
-nicht abgenommen.
+am Windows-PC**. P4-3 (Live-Anbindung) ist ebenfalls gebaut und lokal mit
+pty/Fakes geprüft, am Windows-PC ungeprüft; die Phase ist nicht abgenommen.
 
 ## Quellen und Nachweisgrenzen {#quellen}
 
@@ -271,7 +271,8 @@ sink/protocol/userdefined.py  UserDefinedFormatter, provisional=True, ein Wert
 sink/protocol/gsv_ascii.py    GsvAsciiFormatter wirft weiterhin absichtlich
 sink/serial_out.py            SerialSink, unabhängig vom Format
 sink/jsonl.py                 JsonlSink für das parallele Audit
-live/session.py              aktueller Live-Lauf: nur JSONL, kein SerialSink
+live/session.py              Audit nach allen Sperren, danach optional LiveOutput
+live/output.py               begrenzter Senderthread, SerialSink, tx.jsonl
 scripts/gsvmulti-demo-sender.py  eigenständiger Demo-Sender, kein Live-Lauf
 ```
 
@@ -280,9 +281,9 @@ scripts/gsvmulti-demo-sender.py  eigenständiger Demo-Sender, kein Live-Lauf
 | Trennstelle | `TelegramFormatter` (`sink/protocol`) |
 | --- | --- |
 | Vertrag | `capabilities(self) -> FormatterCapabilities` als `@property`; <code>format(self, record: ValueRecord) -&gt; bytes &#124; None</code> liefert Telegrammbytes oder `None`. Fähigkeiten nennen Formatkennung, Zeitstempel, Invalid-Policies, Gerätekommandos, Kanalzahl und `provisional`. |
-| Darf geändert werden | `UserDefinedFormatter` aus `dispread.sink.protocol.userdefined` direkt importieren und gezielt an `SerialSink` übergeben; konkrete Formatter haben keine zentrale Registry. Für `/live` zusätzlich Start/Stopp, Fehler, Portfreigabe und Auditmetadaten integrieren (P4-3, noch offen). |
+| Darf geändert werden | `UserDefinedFormatter` aus `dispread.sink.protocol.userdefined` direkt importieren und gezielt an `SerialSink` übergeben; konkrete Formatter haben keine zentrale Registry. P4-3 bindet ihn über `LiveOutput` an den Live-Lebenszyklus an; API-Option `output`, Standard aus. |
 | Bleibt unverändert | Leser und Freigabe ohne Referenzparameter, Wert und Aufnahmezeit im `ValueRecord`, paralleles JSONL-Audit; `gsv_ascii.py` bleibt der werfende Platzhalter. |
-| Tests | [Formatter und SerialSink am pty](../tests/test_userdefined_formatter.py), [Demo-Sender mit pty/Fakes](../tests/test_gsvmulti_demo_sender.py) und vorhandene [Gate-/Referenztests](../tests/test_gate_und_referenz.py); Windows-Abnahme und Live-Lebenszyklus weiterhin offen. |
+| Tests | [Formatter und SerialSink am pty](../tests/test_userdefined_formatter.py), [Demo-Sender mit pty/Fakes](../tests/test_gsvmulti_demo_sender.py) [Live-Ausgabe mit pty/Fakes](../tests/test_live_output.py) und vorhandene [Gate-/Referenztests](../tests/test_gate_und_referenz.py); Windows-Abnahme weiterhin offen. |
 
 </div>
 
@@ -295,10 +296,86 @@ Felder in `FormatterCapabilities`; die festen Formatregeln stehen im
 Formatter-Docstring. Der Prototyp bleibt vorläufig;
 `provisional` und die Fähigkeiten gehören in jedes Runartefakt. Beispiel 16
 schreibt sie nach `report.json`; `Pipeline` erzeugt keinen allgemeinen
-Laufbericht. Der aktuelle `/live`-Pfad hat noch keinen seriellen Formatter.
+Laufbericht. Der `/live`-Pfad verwendet ihn ausschließlich bei ausdrücklich gesetztem `output`.
 Die im PDF vorgeschlagene Funktion `read_values(t)` ersetzt bei picam-ai
 weder Leser noch Freigabe. Der DUT-Wert kommt aus dem `ValueRecord`; ein
 Referenzabgleich darf ihn nicht nachträglich korrigieren.
+
+### Opt-in im Live-Lauf (P4-3)
+
+**Gebaut 2026-10-30, ungeprüft am Windows-PC, keine Messfreigabe.**
+`LiveService.start_run(output=None)` lässt die bisherige Ausgabe unverändert.
+Die API `POST /live/run/start` akzeptiert zum Beispiel (Port ist ein Platzhalter
+für einen bestätigten freien Ausgang, die Werkbank-CSRF-Absicherung gilt weiter):
+
+```json
+{"reference": true, "output": {"port": "/dev/pts/123", "baudrate": 115200, "prefix": "%"}}
+```
+
+Port ist Pflicht; Baudrate und Präfix sind optional mit 115200 und `%`.
+Live gilt `MIN_LIVE_BAUDRATE = 9600`: konservativ höchstens 16 Zeichen der
+16-Zellen-Anzeige einschließlich Vorzeichen/Punkt plus ein Präfix und CRLF,
+also 19 Byte × 10 Bit (8N1) = 190 Bit. Bei 2400/4800 Baud dauert das
+79,17/39,58 ms und überschreitet den Bildabstand von 33 ms; bei 9600 Baud
+sind es 19,79 ms. Nur belegte Baudraten ab 9600 sind zulässig. Längere
+Telegramme sperren den Live-Ausgang mit Fehler, bevor Bytes geschrieben werden.
+
+Referenzport `/dev/ttyUSB0`, Debugport `/dev/serial0` und auflösbare Aliasse
+sind geschützt. Zusätzlich wird über die USB-Eltern im sysfs die Kennung des
+Referenzadapters PL2303 (`067b:2303`, [Hardwareprofil](HARDWARE_PROFILE.md))
+geprüft; damit bleibt er auch etwa als `/dev/ttyUSB1` gesperrt. Nur das
+API-Feld `allow_reference_adapter: true` (Standard `false`) erlaubt den
+Referenzadapter ausdrücklich. Der aufgelöste aktive Referenz-/Werteplan-Port
+und der Debugport bleiben auch damit gesperrt. Die sysfs-Wurzel ist für
+Fake-Tests injizierbar. Die Live-UI hat noch keinen Schalter.
+
+`LiveSession.step()` schreibt erst den endgültigen Record nach R13-17 und
+R13-21 ins Audit; erst nach erfolgreichem Audit wird er an `LiveOutput`
+übergeben. Nicht-VALID und inkonsistente Texte entfallen über `omit_record`.
+Testläufe senden auch später lesbare Frames nie. Ein eigener Thread mit
+höchstens einem offenen Auftrag ruft `SerialSink` mit `write_timeout=1.0` auf.
+Teilwrites setzen ausschließlich die Restbytes desselben Telegramms fort,
+mit einer Gesamtfrist von einer Sekunde. Kein `reset_output_buffer()`, kein
+`flush()`, keine eigenen O_NONBLOCK-Schreibversuche und kein Wiederverbinden.
+Solange der Auftrag offen ist, werden neue gültige Records als `output_busy`
+mit `bytes_written=0` verworfen. Liegen danach noch Treiberreste vor, entfällt
+nur das neue Telegramm als `output_backlog`; der alte Puffer bleibt erhalten.
+Bei Schreibfrist, fehlendem Fortschritt oder anderem Schreibfehler wird der
+Ausgang für diesen Lauf gesperrt. Ein begonnenes Telegramm wird niemals durch
+ein neues ergänzt. Stop verwirft noch nicht begonnene Aufträge, lässt den
+laufenden Write bis Abschluss/Fehler auslaufen und schließt Thread, Datei und Port.
+
+Ein Öffnungsfehler **lehnt den Laufstart klar ab** (HTTP 409); so entsteht
+kein vermeintlich sendender Lauf. Der Ausgabeport öffnet **vor** Referenzrecorder
+und Werteplan; bei Öffnungsfehler wird der Recorder weder gestartet noch
+zurückgestellt. Ein späterer Port-, Senderthread- oder Tx-Auditfehler
+sperrt die weitere Ausgabe für diesen Lauf, lässt Leser und Record-Audit
+weiterlaufen und erscheint sofort unter `run.output` in `/live/status`.
+`session.json` übernimmt den ersten Fehler beim nächsten Leseschritt (auch
+beim Warten auf ein Bild), spätestens beim Stop. Der Beschäftigt-Zustand
+wird auch nach unerwarteten Senderausnahmen gelöst.
+`session.json.output` enthält Port, Baudrate, Präfix, Formatter-Fähigkeiten
+mit `provisional: true`, `sent`, `omitted`, `dropped`, `errors` und
+`first_error`. `omitted` zählt auch verworfene Records, `dropped` ist dessen
+Teilmenge für Überlast/Transportverlust; Format-Auslassungen sind keine
+Transportfehler.
+
+`tx.jsonl` enthält je endgültigem Record den `TxReceipt` mit `provisional: true`, einschließlich
+Frame-/Tx-Sequenz, beabsichtigter `wire_bytes` als Hex, `omitted`, `dropped`,
+`drop_reason`, Fehler und soweit bekannt `bytes_written`. Die Zeilen können
+wegen des Senderthreads in Abschlussreihenfolge stehen; nach Sequenzen
+zuordnen, nicht nach Zeilennummer. `t_enqueue_ns` und `t_complete_ns` haben
+`time_base="host_monotonic"` und unbekannte Unsicherheit (`null`), keine
+Aufnahme- oder Windows-Zeit. SYNTHETIC/FILE_MTIME werden nicht für
+Latenzaussagen benutzt. `sent` wird erst nach vollständiger lokaler Annahme
+einschließlich CRLF gezählt.
+Bei einem Verbindungsfehler können bereits unwiderruflich gesendete Teilbytes
+übrig bleiben; danach folgen keine weiteren Telegramme. Meldet pySerial bei
+einem fehlgeschlagenen Write keine Teilbytezahl, ist `bytes_written=null`;
+`confirmed_bytes_written` im Fehlertext nennt die bestätigte Untergrenze aus
+vorherigen Teilwrites. Bei Ablauf zwischen Calls ist die Bytezahl exakt.
+Ein GSVmulti-Empfang folgt aus lokaler Annahme nicht. Ohne `output` entstehen weder dieser
+Session-Block noch eine Tx-Datei; die bisherigen Record-Bytes bleiben gleich.
 
 ### Der Platzhalter — ausdrücklich nicht das GSVmulti-Format
 
@@ -350,20 +427,23 @@ synthetische Aufnahmezeit mit unbekannter Unsicherheit. BOOTTIME bezeichnet
 den lokalen **Sendeversuch**, keine Aufnahme, Empfangszeit oder Sensorlatenz.
 Bei `--dry-run` wird kein Port geöffnet und `status="dry_run"` protokolliert.
 
-Der Sender schreibt nicht blockierend (`write_timeout=0`), ohne `flush()`
-und ohne Retry. Bei Schreibstau, kurzem Write oder überschrittener
-Schreibfrist wird der Ausgangspuffer verworfen und `status="dropped"` mit
-`drop_reason` protokolliert. Die nächste Wartefrist beginnt nach Verarbeitung
-und Audit neu; es gibt keinen Aufholburst. Ein Portfehler wird protokolliert
-und beendet den Lauf mit Exitcode 1. `sent` bedeutet nur lokale Annahme;
-`bytes_hex` sind die beabsichtigten Framebytes. Bei Abbruch/kurzem Write
-können Teilbytes bereits unterwegs sein, und auch ein als `sent` belegter
-Frame kann später beim Leeren eines gestauten Puffers verloren gehen.
-Treiber-/USB-Puffer und tatsächlicher Empfang bleiben Teil der Windows-Abnahme.
+Der Demo-Sender schreibt vollständig mit einer Gesamtfrist von einer Sekunde
+(`write_timeout=1.0`); Teilwrites setzen nur das angefangene Telegramm fort.
+Kein `flush()` und kein `reset_output_buffer()`: Bei vorhandenen Treiberresten
+wird der **nächste**, noch unbegonnene Frame als `status="dropped"`,
+`drop_reason="output_backlog"`, `bytes_written=0` belegt. Die nächste Wartefrist
+beginnt nach Verarbeitung und Audit neu; es gibt keinen Aufholburst.
+Timeout, fehlender Fortschritt und Portfehler werden mit Fehler und Bytezahl
+belegt und beenden den Lauf mit Exitcode 1. Ein nach einem Teilwrite defekter
+Transport erhält keinen weiteren Frame. Unbekannte Teilbytezahlen sind `null`,
+die bestätigte Untergrenze steht im Fehlertext wie im Live-Beleg.
+`sent` bedeutet vollständige lokale Annahme einschließlich CRLF;
+`bytes_hex` sind die beabsichtigten Framebytes. Treiber-/USB-Puffer und
+tatsächlicher Empfang bleiben Teil der Windows-Abnahme.
 
 ## Abnahme und nächste Schritte {#abnahme}
 
-**Prototypstatus:** Formatter und Demo-Sender sind gebaut, ungeprüft am
+**Prototypstatus:** P4-1/2 und P4-3 sind gebaut, ungeprüft am
 Windows-PC und nicht für Messungen freigegeben. pty/Fakes prüfen die lokale
 Software; sie belegen weder GSVmulti-Empfang noch elektrische Eignung.
 
@@ -383,7 +463,7 @@ Software; sie belegen weder GSVmulti-Empfang noch elektrische Eignung.
    erklären. Ablehnungen, Pause, Burst, Streamstillstand, Kabel-/Netzabbruch
    und Neustarts getrennt auslösen. Keine ausgedachten Grenzzeiten als
    erfüllt markieren; Kriterien vorher mit OQ-02/OQ-06 festlegen.
-4. **Aktuellen Live-Pfad anbinden:** nur freigegebene `ValueRecord`s, keine
+4. **Gebauten Live-Pfad am Ziel prüfen:** nur freigegebene `ValueRecord`s, keine
    Referenzkorrektur, Glättung oder Altwertwiederholung; JSONL und
    Übertragungsbelege behalten. Testlaufdaten dürfen keine Messfreigabe
    erhalten ([OQ-44](open-questions.md#oq-44)).

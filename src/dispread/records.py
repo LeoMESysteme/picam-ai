@@ -330,7 +330,7 @@ class InvalidValuePolicy(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TxReceipt:
-    """Was tatsächlich über die Leitung ging - adapterlokal.
+    """Adapterlokaler Sendeversuch; kein Nachweis des Empfangs.
 
     Absichtlich getrennt vom ValueRecord: hier steht der Sendezeitpunkt, dort
     der Aufnahmezeitpunkt. Wer beides in einem Objekt führt, kann später
@@ -340,7 +340,8 @@ class TxReceipt:
     frame_sequence: int
     tx_sequence: int
     format_id: str
-    #: Genau die Bytes auf der Leitung. Beweismittel bei Formatstreitigkeiten.
+    #: Beabsichtigte Telegrammbytes; bei Abbruch/Verwerfen ggf. nur teilweise
+    #: oder gar nicht angenommen. Auch lokale Annahme belegt keinen Empfang.
     wire_bytes: bytes | None
     t_enqueue_ns: int
     t_complete_ns: int | None
@@ -348,6 +349,11 @@ class TxReceipt:
     retry_count: int = 0
     invalid_policy: InvalidValuePolicy | None = None
     omitted: bool = False
+    #: Lokaler Verlust, ggf. bereits mit Teilbytes; kein Empfangsnachweis.
+    dropped: bool = False
+    drop_reason: str | None = None
+    error: str | None = None
+    bytes_written: int | None = None
 
     @property
     def duration_us(self) -> float | None:

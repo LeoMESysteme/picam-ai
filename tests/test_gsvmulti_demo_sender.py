@@ -48,6 +48,7 @@ def test_cli_pty_bytes_count_and_coarse_rate(tmp_path, profile):
             [sys.executable, str(SCRIPT), "--port", os.ttyname(slave), "--output", str(output),
              "--profile", profile, "--count", "8", "--rate", "40", "--prefix", "#"],
             capture_output=True, text=True, timeout=20,
+            env={**os.environ, 'PYTHONPATH': str(SCRIPT.parents[1] / 'src')},
         )
         assert result.returncode == 0, result.stderr
         entries = rows(output)
@@ -151,50 +152,69 @@ def test_explicit_allow_port_and_serial_configuration(demo, monkeypatch, fake_cl
     assert calls[0][0] == ("/dev/ttyUSB0",)
     config = calls[0][1]
     assert config == dict(baudrate=115200, bytesize=8, parity="N", stopbits=1, timeout=0,
-                          write_timeout=0, xonxoff=False, rtscts=False, dsrdtr=False)
+                          write_timeout=1.0, xonxoff=False, rtscts=False, dsrdtr=False)
     assert transport.closed
 
 
-@pytest.mark.parametrize("failure", ["timeout", "short", "queued"])
-def test_blocked_frame_dropped_no_retry_no_catchup(demo, monkeypatch, fake_clock, tmp_path, failure):
+def test_partial_write_finishes_without_truncating_frame(demo, monkeypatch, fake_clock, tmp_path):
     transport = FakeSerial()
-    attempts = []
 
     def write(data):
-        attempts.append((fake_clock.now, data))
-        if len(attempts) == 2:
-            fake_clock.now += 2_000_000_000  # simulierter Schreibstau
-            if failure == "timeout":
-                raise serial.SerialTimeoutException("blocked")
-            if failure == "short":
-                return 2
-            transport.out_waiting = len(data)
-        return len(data)
+        transport.written.append(data[:2])
+        return len(data[:2])
 
     transport.write = write
     monkeypatch.setattr(serial, "Serial", lambda *a, **kw: transport)
-    output = tmp_path / "frames.jsonl"
-    assert demo.main(["--port", "/fake", "--profile", "staircase", "--count", "4",
-                      "--output", str(output)]) == 0
-    entries = rows(output)
-    assert [e["status"] for e in entries] == ["sent", "dropped", "sent", "sent"]
-    assert entries[1]["drop_reason"]
-    assert transport.resets == 1 and transport.closed
-    assert len(attempts) == 4  # kein Retry des zweiten Frames
-    assert len({data for _, data in attempts}) == 4
-    assert all(b[0] - a[0] >= 100_000_000 for a, b in zip(attempts, attempts[1:], strict=False))
+    output = tmp_path / 'frames.jsonl'
+    assert demo.main(['--port', '/fake', '--count', '2', '--output', str(output)]) == 0
+    assert b''.join(transport.written) == b'%+12.345\r\n' * 2
+    assert all(e['status'] == 'sent' and e['bytes_written'] == 10 for e in rows(output))
+    assert transport.resets == 0
 
 
-def test_pending_output_is_purged_without_writing_current_frame(demo, monkeypatch, fake_clock, tmp_path):
+def test_partial_timeout_stops_without_appending_next_frame(demo, monkeypatch, fake_clock, tmp_path):
     transport = FakeSerial()
-    transport.out_waiting = 42
-    monkeypatch.setattr(serial, "Serial", lambda *a, **kw: transport)
-    output = tmp_path / "frames.jsonl"
-    assert demo.main(["--port", "/fake", "--count", "2", "--output", str(output)]) == 0
-    assert [e["status"] for e in rows(output)] == ["dropped", "sent"]
-    assert rows(output)[0]["drop_reason"] == "output_backlog"
-    assert rows(output)[0]["bytes_written"] == 0
-    assert transport.resets == 1 and len(transport.written) == 1
+
+    def write(data):
+        if not transport.written:
+            transport.written.append(data[:2])
+            return 2
+        raise serial.SerialTimeoutException('blocked')
+
+    transport.write = write
+    monkeypatch.setattr(serial, 'Serial', lambda *a, **kw: transport)
+    output = tmp_path / 'frames.jsonl'
+    assert demo.main(['--port', '/fake', '--count', '3', '--output', str(output)]) == 1
+    entries = rows(output)
+    assert len(entries) == 1 and entries[0]['error']
+    assert entries[0]['bytes_written'] is None
+    assert 'confirmed_bytes_written=2' in entries[0]['error']
+    assert b''.join(transport.written) == b'%+' and transport.resets == 0
+
+
+def test_backlog_preserves_previous_frame_and_drops_next(demo, monkeypatch, fake_clock, tmp_path):
+    transport = FakeSerial()
+
+    def write(data):
+        transport.written.append(data)
+        transport.out_waiting = len(data)
+        return len(data)
+
+    def drain(seconds):
+        fake_clock.sleep(seconds)
+        if fake_clock.now >= 200_000_000:
+            transport.out_waiting = 0
+
+    transport.write = write
+    monkeypatch.setattr(demo, 'sleep', drain)
+    monkeypatch.setattr(serial, 'Serial', lambda *a, **kw: transport)
+    output = tmp_path / 'frames.jsonl'
+    assert demo.main(['--port', '/fake', '--count', '3', '--output', str(output)]) == 0
+    entries = rows(output)
+    assert [e['status'] for e in entries] == ['sent', 'dropped', 'sent']
+    assert entries[1]['drop_reason'] == 'output_backlog' and entries[1]['bytes_written'] == 0
+    assert b''.join(transport.written) == b'%+12.345\r\n' * 2 and transport.resets == 0
+    assert entries[2]['t_send_boottime_ns'] == 200_000_000
 
 
 def test_port_failure_logged_once_and_stops(demo, monkeypatch, fake_clock, tmp_path):

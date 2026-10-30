@@ -37,6 +37,7 @@ from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
+from dispread.live.output import LiveOutput, validate_output
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -176,6 +177,7 @@ class LiveSession:
         *,
         test_run: dict | None = None,
         reference_recorder: Any = None,
+        output: dict | None = None,
         diagnostics: bool = False,
         diagnostic_staging_root: Path = Path('/dev/shm'),
         reader_d_max_factor: float = 1.0,
@@ -188,6 +190,7 @@ class LiveSession:
     ) -> None:
         self._reference_recorder = reference_recorder
         self._reference_error = None
+        self._reference_started = False
         self._test_run = test_run
         self._testlauf_unterdrueckt = 0
         self._reconfiguration_suppressed = 0
@@ -204,6 +207,9 @@ class LiveSession:
         self._profile_path = Path(profile_path)
         self._config = config
         self._out_dir = Path(out_dir)
+        options = validate_output(output)
+        self._output = None if options is None else LiveOutput(options, self._out_dir / 'tx.jsonl')
+        self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
         self._marks = 0
@@ -297,8 +303,15 @@ class LiveSession:
         # Vollstaendiger Audit je Lauf; Standardrotation verwirft alte Belege.
         self._sink = JsonlSink(self.records_path, max_bytes=0)
         self._sink.open()
+        if self._output is not None:
+            try:
+                self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+            except Exception as exc:
+                self.stop(reason='start_failed')
+                raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
         if self._reference_recorder is not None:
             try:
+                self._reference_started = True  # Auch teilweise gestarteten Recorder bereinigen.
                 self._reference_recorder.start()
             except Exception:
                 self.stop(reason="start_failed")
@@ -322,6 +335,11 @@ class LiveSession:
         with self._stop_lock:
             if self._stopped:
                 return None
+            if (self._output is not None and not self._output_error_saved
+                    and self._output.failed_event.is_set()):
+                # Im Leserthread schreiben: kein Session-Dateirennen oder Lock/Join-Deadlock.
+                self._write_session(ended=False)
+                self._output_error_saved = True
             if got is None:
                 status = self._owner.status()
                 if not status["running"]:
@@ -374,6 +392,8 @@ class LiveSession:
             if receipt.t_complete_ns is None or health.errors:
                 self._audit_errors += 1
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
+            if self._output is not None:
+                self._output.submit(record)
             self._frames_read += 1
             if suppressed:
                 self._testlauf_unterdrueckt += 1
@@ -505,11 +525,13 @@ class LiveSession:
             if self.end_reason is None:
                 self.end_reason = reason
             try:
-                if self._reference_recorder is not None:
+                if self._reference_started:
                     self._reference_recorder.stop()
             except Exception as exc:  # noqa: BLE001 - Abschluss bleibt erhalten
                 self._reference_error = str(exc)
             finally:
+                if self._output is not None:
+                    self._output.stop()
                 self._clock.sample()
                 try:
                     if self._sink is not None:
@@ -530,7 +552,7 @@ class LiveSession:
             return self.summary
 
     def request_reference_stop(self) -> None:
-        if self._reference_recorder is not None:
+        if self._reference_started:
             self._reference_recorder.request_stop()
 
     def reference_status(self) -> dict:
@@ -540,6 +562,9 @@ class LiveSession:
         if self._reference_error is not None:
             status['error'] = self._reference_error
         return status
+
+    def output_status(self) -> dict | None:
+        return None if self._output is None else self._output.status()
 
     def _write_session(self, *, ended: bool) -> None:
         if self._stopped and not ended:
@@ -573,6 +598,8 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
+        if self._output is not None:
+            data['output'] = self.output_status()
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark

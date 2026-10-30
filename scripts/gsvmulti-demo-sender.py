@@ -3,7 +3,7 @@
 
 Keine Kamera, keine Messfreigabe. Nur der Sendeversuch hat CLOCK_BOOTTIME;
 die ValueRecords sind SYNTHETIC und tragen keine Aufnahmezeitaussage.
-Nicht blockierende Schreibversuche, keine Retries und kein Aufholburst.
+Vollstaendige Telegramme mit Schreibfrist; kein Aufholburst.
 sent bedeutet Annahme durch den lokalen Treiber, keinen GSVmulti-Empfang.
 """
 
@@ -23,6 +23,7 @@ import serial
 
 from dispread.records import TimeBaseKind, Timestamp, ValueRecord, ValueStatus
 from dispread.sink.protocol.userdefined import UserDefinedFormatter
+from dispread.sink.serial_out import SerialWriteError, write_complete
 
 BAUDRATES = (2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600)
 # Grenzen des Demo-Profils aus dem Beispiel-ZIP, keine behaupteten GSVmulti-Grenzen.
@@ -58,30 +59,14 @@ def protected_port(port: str) -> bool:
     return any(path == Path(name) or path.resolve() == Path(name).resolve() for name in PROTECTED_PORTS)
 
 
-def send_frame(transport, payload: bytes, deadline_ns: int) -> tuple[str | None, int | None]:
-    """Kein flush(): auch Treiberreste verwerfen, statt alte Frames anzuhäufen.
+WRITE_TIMEOUT_S = 1.0
 
-    Ein kurzer/abgebrochener Write kann bereits Teilbytes übertragen haben.
-    reset_output_buffer kann physisch übertragene Bytes nicht zurückholen.
-    bytes_written ist bei einem Timeout unbekannt (None).
-    """
-    written = 0
-    try:
-        if transport.out_waiting:
-            reason = "output_backlog"
-        else:
-            written = transport.write(payload)
-            if written != len(payload):
-                reason = "short_write"
-            elif boottime_ns() > deadline_ns:
-                reason = "write_deadline"
-            else:
-                return None, written
-    except serial.SerialTimeoutException:
-        reason = "write_timeout"
-        written = None
-    transport.reset_output_buffer()
-    return reason, written
+
+def send_frame(transport, payload: bytes) -> tuple[str | None, int]:
+    """Bei Stau nur das neue Telegramm auslassen; begonnene Bytes erhalten."""
+    if transport.out_waiting:
+        return 'output_backlog', 0
+    return None, write_complete(transport, payload, WRITE_TIMEOUT_S)
 
 
 def run_demo(transport, output: TextIO, formatter: UserDefinedFormatter, *,
@@ -113,14 +98,15 @@ def run_demo(transport, output: TextIO, formatter: UserDefinedFormatter, *,
         fatal_error = None
         if transport is not None:
             try:
-                reason, written = send_frame(transport, payload, t_send + interval_ns)
+                reason, written = send_frame(transport, payload)
                 entry["bytes_written"] = written
                 if reason:
                     entry.update(status="dropped", drop_reason=reason)
             except (serial.SerialException, OSError) as exc:
                 # Portausfall wird einmal belegt und beendet den Lauf, kein Wiederverbinden.
                 fatal_error = f"{type(exc).__name__}: {exc}"
-                entry.update(status="dropped", drop_reason="serial_error", error=fatal_error, bytes_written=None)
+                entry.update(status="dropped", drop_reason="serial_error", error=fatal_error,
+                             bytes_written=exc.bytes_written if isinstance(exc, SerialWriteError) else None)
         output.write(json.dumps(entry, ensure_ascii=True) + "\n")
         output.flush()
         if fatal_error:
@@ -158,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             if not args.dry_run:
                 transport = serial.Serial(
                     args.port, baudrate=args.baud, bytesize=8, parity="N", stopbits=1,
-                    timeout=0, write_timeout=0, xonxoff=False, rtscts=False, dsrdtr=False,
+                    timeout=0, write_timeout=WRITE_TIMEOUT_S, xonxoff=False, rtscts=False, dsrdtr=False,
                 )
                 stack.callback(transport.close)
             return run_demo(transport, output, formatter, profile=args.profile, rate=args.rate,

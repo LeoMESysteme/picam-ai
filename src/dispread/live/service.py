@@ -28,6 +28,7 @@ from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
+from dispread.live.output import validate_output
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
@@ -266,6 +267,10 @@ class LiveService:
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()
                     run["rejection_causes"] = {**causes, "causes": [live_cause(c) for c in causes["causes"]]}
+            if run is not None and hasattr(self._session, 'output_status'):
+                output = self._session.output_status()
+                if output is not None:
+                    run['output'] = output
             return {
                 "state": self._state,
                 "storage": self._storage_status(),
@@ -640,11 +645,12 @@ class LiveService:
                                 execute=execute, protected=protected, now=self._wall())
 
     def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None,
-                  diagnostics: bool = False) -> None:
+                  diagnostics: bool = False, output=None) -> None:
         try:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
+            output = validate_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
         except (TypeError, ValueError) as exc:
             raise LiveError(str(exc)) from exc
         with self._operation_lock:
@@ -685,13 +691,14 @@ class LiveService:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:
                 recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
-                                              norm_schedule=schedule) if reference else None)
+                                              norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
                 session = LiveSession(
                     self._owner, profile_path, self._config, out_dir, test_run=test_run,
                     reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
                     diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
+                    **({'output': output} if output is not None else {}),
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite

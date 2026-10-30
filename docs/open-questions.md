@@ -199,7 +199,11 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 * **Prototyp gebaut (2026-10-28):** P4-1 `UserDefinedFormatter` und P4-2
   Demo-Sender sind mit pty/Fakes geprüft, ungeprüft am Windows-PC und nicht
   freigegeben. Empfang, Ungültigwirkung und Zeitachse bleiben offen;
-  [Testanleitung](GSVMULTI_PROTOCOL.md#windows-test). P4-3 ist nicht umgesetzt.
+  [Testanleitung](GSVMULTI_PROTOCOL.md#windows-test).
+* **Live-Prototyp gebaut (2026-10-30):** P4-3 ergänzt Opt-in-Ausgabe nach
+  allen Sperren, begrenzten Senderthread und Tx-Audit; pty/Fakes geprüft,
+  Windows-Abnahme weiterhin offen. Öffnungsfehler lehnt Start ab, spätere
+  Fehler sind im Status sichtbar; keine Messfreigabe.
 * **Korrektur der Abrufaussage (2026-09-22):** Die bisherige Formulierung
   „`me-systeme.de` blockt automatische Abrufe mit HTTP 403" ist **zu pauschal**.
   Gemessen am 2026-09-22:
@@ -2234,10 +2238,19 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
+* **Live-Prototyp (2026-10-30):** P4-3 hat höchstens einen offenen
+  Senderauftrag, verwirft neue Frames bei Stau mit Tx-Beleg und liefert sie
+  nicht nach. Begonnene Telegramme werden mit 1 s Gesamtfrist vervollständigt,
+  ohne Pufferverwerfen. Schreib-/Threadfehler sperren die Ausgabe bis zum
+  nächsten Lauf; keine automatische
+  Wiederverbindung. Nur pty/Fakes geprüft, tatsächlicher Transport,
+  Treiberpuffer und Altwertanzeige bleiben offen.
+
 * **Status:** offen · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
 * **Prototyp gebaut (2026-10-28):** Der eigenständige Demo-Sender nutzt
-  `UserDefinedFormatter`, nicht blockierende Writes, Pufferverwerfen und
-  JSONL-Belege für verworfene Frames; kein Retry/Aufholburst. Nur pty/Fakes
+  `UserDefinedFormatter` und JSONL-Belege. Reviewkorrektur 2026-10-30:
+  vollständige Writes mit 1 s Gesamtfrist, bei Stau nur den nächsten Frame
+  verwerfen; Fehler beendet den Lauf, kein Pufferverwerfen/Aufholburst. Nur pty/Fakes
   geprüft. Treiberpuffer, Empfang und Altwertverhalten am Windows-PC bleiben
   nachzuweisen; [Ablauf und Grenzen](GSVMULTI_PROTOCOL.md#windows-test).
 * **Befund:** USB-UART und Raw TCP mit Windows-VCOM sind plausible Wege.

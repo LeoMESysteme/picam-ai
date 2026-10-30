@@ -68,7 +68,8 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_run, test_override=bool(data.get("test_override")),
                            reference=bool(data.get("reference", True)), norm_schedule=data.get("norm_schedule"),
-                           diagnostics=bool(data.get('diagnostics', False)))
+                           diagnostics=bool(data.get('diagnostics', False)),
+                           **({'output': data['output']} if 'output' in data else {}))
 
     async def run_mark(request):
         try:

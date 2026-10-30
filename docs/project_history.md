@@ -9,6 +9,42 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-30 — P4-3: begrenzte Opt-in-Ausgabe nach dem Audit
+
+**Problem:** Der Live-Lauf braucht einen vorläufigen UserDefined-Ausgang,
+ohne Leser, Freigabesicherungen oder Record-Audit durch seriellen Stau
+aufzuhalten und ohne alte Werte nachzuliefern.
+
+**Entscheidung:** Nach dem Audit genau den endgültigen Record an einen
+separaten Senderthread übergeben. Höchstens ein offener Auftrag, weitere
+Frames entfallen mit Beleg. Reviewkorrektur am selben Tag: Live und Demo
+schreiben ein angefangenes Telegramm vollständig mit einer Gesamtfrist von
+1 s, Teilwrites setzen nur Restbytes fort. Treiberreste bleiben erhalten;
+nur ein neues Telegramm wird bei Stau verworfen. Timeout/Fehler sperrt den
+Ausgang; unerwartete Senderausnahmen bleiben sichtbar und lösen den
+Beschäftigt-Zustand. Tx-Belege und Formatter-Fähigkeiten bleiben neben dem
+Record-Audit im Laufordner.
+
+**Alternativen:** Ein synchroner SerialSink im Bildpfad kann blockieren;
+eine längere FIFO erzeugt Altwertnachlauf und Aufholbursts. Nicht blockierende
+Einzelwrites mit Pufferverwerfen wurden verworfen: Bereits übertragene
+Teilbytes lassen sich damit nicht zurücknehmen und würden das nächste
+Telegramm beschädigen. Ein unbeschränktes `flush()` könnte den Stop aufhalten. Ein tolerierter
+Öffnungsfehler würde einen scheinbar sendenden Lauf starten, deshalb wird
+der Start abgelehnt. Spätere Fehler sperren nur die Ausgabe für diesen Lauf;
+ein automatischer Wiederanlauf würde ohne Windows-Nachweis neue Risiken
+für die Zeilensynchronisation und Altwertanzeige schaffen.
+
+**Konsequenz:** Portprüfung schützt Referenz/Werteplan und Debugport samt
+auflösbaren Aliasen und PL2303-USB-ID `067b:2303`. Die ausdrückliche
+Adapterausnahme hebt aktive Portbelegung oder Debugschutz nicht auf. Der
+Ausgabeport öffnet vor dem Recorder; bei Öffnungsfehler gibt es keine
+Werteplan-/Rückstellaktivität. Live mindestens 9600 Baud, konservativ für
+19 Byte bei 8N1 in 19,79 ms < 33 ms; überlange Telegramme werden gesperrt.
+R13-17 und R13-21 wirken vor jeder Ausgabe. Lokale
+pty-/Fake-Belege ersetzen keine Windows-Abnahme, M8 oder Ungültigsemantik.
+Keine Hardwareänderung und keine neue Abhängigkeit.
+
 ## 2026-10-28 — P4-1/P4-2: isolierter UserDefined-Transportprototyp
 
 **Problem:** Das UserDefined-Zahlenprofil ist belegt, der tatsächliche

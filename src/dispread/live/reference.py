@@ -80,8 +80,9 @@ class _CommandLog:
 class ReferenceRecorder:
     def __init__(self, port_opener, out_path, *, clock=None, norm_schedule=None,
                  restore_point=None, monotonic=time.monotonic, startup_timeout_s=2.0,
-                 queue_size=1024):
+                 queue_size=1024, port: str | None = None):
         self._opener = port_opener
+        self._configured_port = port
         self._path = Path(out_path)
         self._clock = clock or (lambda: time.clock_gettime_ns(time.CLOCK_BOOTTIME))
         self._monotonic = monotonic
@@ -131,6 +132,11 @@ class ReferenceRecorder:
             start, _ = self._reconfiguration_windows[index]
             self._reconfiguration_windows[index] = (start, self._clock() + GUARD_NS)
         return ok
+
+    @property
+    def port(self):
+        """Tatsaechlicher Port fuer Kollisionspruefung, ohne erneutes Oeffnen."""
+        return getattr(self._port, 'port', None) or self._configured_port
 
     def status(self):
         return dict(self._state)
