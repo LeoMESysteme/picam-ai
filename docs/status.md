@@ -19,10 +19,14 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 * **Nicht geschafft:** Langzeitlauf (29.10. fiel durch API-Limit aus; die
   Werkbank endete am 28.10. 16:57 ohne protokollierten Grund, die
   Bestätigung ist damit verloren — neue Einrichtung nötig).
-* Docs-Playwright 30.10.: 84 bestanden, 1 lastbedingter Ausreißer
-  (Tour-Abbildungen, einzeln grün). Ein zwischenzeitlich gemeldeter
-  Fehlschlag des Hinweis-Tests kam von einer Port-Überschneidung mit der
-  Wiki-Sitzung (beide auf 8766), nicht vom Stand.
+* **P4-3** (172ee16): Opt-in-Ausgabe an GSVmulti im Live-Lauf (API-Feld
+  `output`, Standard aus, nur VALID nach allen Sperren, nie im Testlauf,
+  vollständige Telegramme, Baud ≥ 9600, Schutz des Referenzadapters).
+  Prototyp ohne Messfreigabe, nur mit pty geprüft.
+* master 5d1452c (Session-Explorer) gemergt (30671c2); volle Suite
+  2908 bestanden. Docs-Playwright 89/90: der Hinweis-Test
+  `docs-site.spec.ts:326` scheitert seit dem Merge reproduzierbar; die
+  Wiki-Sitzung untersucht (Hinweis-Skript oder Test).
 
 ## Neu am 2026-10-28 (Zweig `feat/r13-display-haertung`, nicht in `master`)
 
