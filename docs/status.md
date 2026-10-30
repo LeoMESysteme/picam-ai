@@ -31,6 +31,18 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
   erkannt (Anlauffrist 5 s), nicht erst nach dem OpenCV-Timeout von
   10–20 s. Der Lauf endet dann mit sichtbarem Fehler. Geprüft nur mit
   Fakes.
+* **R13-23:** Die Grobschätzung im zweiten Nachführungsversuch rechnet
+  jetzt auf einem Viertel der Auflösung, auf einem Ausschnitt, der auf
+  ein Vielfaches von 4 zugeschnitten ist.
+  * Der zweite Durchgang braucht im Median etwa 7,5 ms statt 15 ms
+    (OQ-46-Ziel ≤ 10 ms).
+  * Der Grobfehler ist größer geworden, bis 5 px. Das Vorab-Gate
+    berücksichtigt ihn deshalb mit 6 px Toleranz. Die harten Grenzen von
+    20 px, 3° und ±0,5 % prüft unverändert der Feinversuch.
+  * Ein synthetischer Durchlauf über zweimal 285 Fälle hat **keinen**
+    vorher gefundenen Track verloren, 130 neu gefunden und 0 falsche Quads
+    geliefert. Die Live-Läufe bleiben unverändert (205/208, 23/152,
+    0/196 Fehllesungen).
 * **OQ-40** (16021e1): Die Schwelle für Telegrammlücken liegt bei 800 ms
   statt 1 000 ms. Grundlage sind 74 min Live-Daten: maximal 561 ms
   ungestört, ein einzelner Ausfall ergäbe ≥ 1 039 ms.

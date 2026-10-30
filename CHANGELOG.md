@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: R13-23-Reviewkorrektur: Faktor-4-Grobsuche erhält 6 px
+  Fehlertoleranz ausschließlich im Vorab-Gate; der zweite Feinversuch
+  erzwingt unverändert 20 px/3°/±0,5 %. Eigene Phasenkorrelation und
+  Spektralcache entfernt, wieder `cv2.phaseCorrelate`. Schutzband +12 px
+  mit 5 px Filterreserve; Ausschnitte unter 8 px deaktivieren die optionale
+  Grobsuche. Regressionstests für Translation nahe 20 px, absolute
+  Feinfitgrenzen, kleine Ausschnitte und alle 16 Rasterlagen über dx/dy.
+  Reproduzierter Review-Sweep je 285 Fälle: 0/0 nur alt, 76/54 nur neu,
+  0 falsche Quads >1 px; zuvor 9/5 verlorene Baseline-Tracks. DEV 568/568
+  ohne Grobversuch belegt diesen Pfad nicht; keine Cache-Ersparnis.
+  Live 205/208 und 23/152 Fits, 0 Fehllesungen unverändert; zweiter
+  Durchgang Median 7,255–7,825 ms, AB/BA neu/HEAD 0,473–0,533
+  (drei Wiederholungen, ein/vier Threads). Keine neue Freigabe; Messungen im
+  [OQ-46-Nachtrag](docs/VALIDATION.md#r13-23-grobsuche-2026-10-30).
+
 * 2026-10-30: Langlauf `live-20261030T082502Z/run-01`, 42,8 min.
   * Werteplan mit 280 Schritten.
   * **0 / 45 702** Fehllesungen, 100 % VALID in stabilen Fenstern, kein

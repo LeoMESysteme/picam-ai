@@ -3933,6 +3933,167 @@ Timing-Test. Ruff (`src tests examples scripts`, außer `wiki-check.py`),
 Wiki-Prüfung und `git diff --check` bestehen. `docs/status.md` bleibt
 auf ausdrücklichen Auftrag unverändert, kein Commit.
 
+## R13-23 — billigere Grobsuche, Reviewkorrektur 2026-10-30 {#r13-23-grobsuche-2026-10-30}
+
+OQ-46-Nachtrag, ausschließlich offline auf Pi 5 `raspi06`, OpenCV 4.10.0.
+Die zuvor behauptete Gleichwertigkeit war zu weitgehend: Der unabhängige
+Reviewer fand bei Faktor 4 trotz gleicher Live-Annahmemengen verlorene
+synthetische Tracks nahe 20 px. Das ursprüngliche Reviewer-Raster wurde
+unverändert reproduziert: je 285 Fälle, vorher **9/5 nur alt**, **53/35 nur
+neu**, keine falschen Quads. DEV 568/568 ist ausschließlich eine Regression
+des ersten Feinpfads: **`coarse_retries=0`, kein Wirksamkeits- oder
+Genauigkeitsbeleg für die Grobschätzung**. In dieser Korrekturrunde wird
+DEV deshalb nicht erneut als Grobnachweis ausgewertet.
+
+**Lösung:** Weiter ganzzahliger AREA-Faktor 4 auf uint8, höchstens drei
+Randpixel je Achse abgeschnitten. Das Vorab-Gate erlaubt jetzt
+`coarse_min_shift_px <= |Grobshift| <= max_shift_px + 6 px`;
+Antwortschwelle weiterhin strikt >0,15. Die 6 px sind ausschließlich
+Grobfehlertoleranz. Sie ändern keine Grenze des zweiten Feinversuchs:
+20 px Verschiebung gegen das ursprüngliche Quad, 3°, Maßstab
+0,995…1,005, Residuen, Streuung, Leave-one-out und LCD-Rand bleiben gleich.
+Gezielte Tests lassen einen Grobvorschlag von 22 px zu und prüfen mit
+echten Fits: 19/20 px werden angenommen, 20,01 px, ±3,01° und Maßstäbe
+0,9949/1,0051 verworfen. Die Test-Suchfenster sind nur dort breiter, damit
+die Winkelgrenze statt des Suchrands entscheidet; Produktionsdefaults
+bleiben unverändert. Reale Translationstests auf beiden Referenzen
+schließen insbesondere (−19,5), (−14,−13), (−14,12), 18/19/19,8 px ein.
+
+**Fehlerursache und Reserve:** Das Translationsraster aus `synth.py`
+(210 Fälle je Referenz, dx −16…16,5 in 2,5 px, dy −12…12,5 in 1,75 px)
+misst am eingereichten Stand maximal 4,550 px Komponentenfehler und
+4,734 px Vektorfehler. Mit dem vergrößerten Schutzband des finalen
+Kandidaten steigt der maximale Vektorfehler auf 4,956 px; 6 px enthalten
+dafür noch mindestens 1,044 px Reserve. Keine
+allgemeine Fehlerschranke: schlechte Grobschätzungen dürfen weiterhin
+nur suchen; jede Annahme braucht den Feinfit. Beide tatsächlichen
+DFT-Raster sind gerade (120×270), Selbstkorrelation liefert exakt (0,0).
+Erzwungen gerade DFT-Maße ändern die Messung nicht. Float statt uint8
+beseitigt den Fehler nicht (max. Vektorfehler 4,856/4,208 px); unbeschnittenes
+Faktor-4-Raster ebenfalls nicht zuverlässig (3,834/4,280 px), ganzzahliger
+Faktor 2 ist genauer (0,846/0,930 px). Das spricht für struktur- und
+rasterabhängige Fehler der verkleinerten Hochpasskorrelation; ein fester
+Skalierungs-/Halbpixelversatz ist in diesen Referenzen nicht belegt.
+Keine empirische Bias-Subtraktion. Die preiswerte Fehlertoleranz besteht
+Sweep und Live-Vergleich; eine weitere Korrelation ist dafür nicht nötig.
+Diagnosevarianten und Einzelwerte: `/tmp/r13-correction/{probe,cause}.py`,
+zugehörige `.log`-Dateien.
+
+`_PhaseCorrelator` samt eigener Spektralnormierung wurde entfernt;
+`cv2.phaseCorrelate` übernimmt die komplette Korrelation. Keine
+Cache-Ersparnis in der gewählten Lösung. Der frühere Cache-Vorteil war
+lastabhängig: Reviewer 1,07 bzw. 1,00 cached/uncached; eigene drei
+AB/BA-Wiederholungen mit zwei Threads auf je 60 vorbereiteten Bildern
+0,885…0,942 bzw. 0,894…0,918. Dieser kleine lokale Teilgewinn rechtfertigt
+hier keine eigene OpenCV-Nachimplementierung. Die unten gemessene
+Beschleunigung ist vollständig ohne Spektralcache erreicht.
+Nur exakt leerer aktueller oder Referenzhochpass bricht trivial vor der
+Korrelation ab; beide Fälle sind getestet.
+
+Das Zeichenschutzband erhält **12 statt 8 Rohpixel** zusätzlich zur
+Bewegungshülle: bis 3 Pixel AREA-Zelle + 4 Pixel Laplace-Nachbar,
+**5 Pixel Reserve**. 192 Tests prüfen alle 16 Rasterlagen, dx und dy
+(±20 entlang beider Achsen sowie ±(12,16)), ±3° und die Maßstabsenden.
+Die veränderte Zeichenzone enthält zusätzlich einen vier Rohpixel breiten
+Halo und darf das Grobbild nicht ändern. Bei einer Ausschnittachse <8 px
+wird nur die optionale Grobsuche deaktiviert: keine Nullgröße beim Resize,
+kein Hann auf 1×1; der erste Feinpfad bleibt verwendbar. Tests für
+1/2/3 px in beiden Achsen und 4×4 px.
+
+Finales reines Translationsraster (je 210 Fälle, Grobschätzung direkt):
+
+| Referenz | Max. Vektorfehler HEAD / neu px | Median Vektorfehler HEAD / neu px | Response Median HEAD / neu | Response Minimum neu |
+| --- | ---: | ---: | ---: | ---: |
+| 110248Z | 0,617 / 4,956 | 0,338 / 1,388 | 0,510 / 0,442 | 0,265 |
+| 121101Z | 0,606 / 3,947 | 0,315 / 1,058 | 0,563 / 0,465 | 0,349 |
+
+Die Grobschätzung ist also weiterhin ungenauer als HEAD. Der verlustfreie
+Feinpfad und das Laufzeitverhältnis begründen die Wahl; die Response ist
+keine Fehlerwahrscheinlichkeit.
+
+**Reproduzierbarer Sweep gegen HEAD:**
+
+```bash
+mkdir -p /tmp/r13-correction
+git show HEAD:src/dispread/live/frame_tracking.py > /tmp/r13-correction/baseline.py
+PYTHONPATH=src ./.venv/bin/python scripts/r13-coarse-sweep.py \
+  --baseline /tmp/r13-correction/baseline.py --output /tmp/r13-correction/sweep.json
+```
+
+Das Skript nutzt die echten Referenzbilder und gespeicherten Vorschläge,
+warpt bekannte Translationen ≤20 px mit ±2,5°/±1,2°/0° und
+Skala 0,996/1/1,004 (genaues Raster im Skript); `BORDER_REPLICATE` wie
+im Review. Es speichert jeden Fall und endet mit Fehler bei nur-alt-Fällen
+oder >1 px euklidischem Quadeckenfehler. Zusätzlich protokolliert es das
+reine Translationsraster und dessen Grobfehler/Response.
+
+| Referenz | Fälle | Fits HEAD / neu | Nur alt | Nur neu | Falsche Quads neu (>1 px) | Max. Eckenfehler neu px |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 110248Z | 285 | 95 / 171 | 0 | 76 | 0 | 0,065255 |
+| 121101Z | 285 | 117 / 171 | 0 | 54 | 0 | 0,083210 |
+
+**Live und Laufzeit:**
+
+```bash
+PYTHONPATH=src ./.venv/bin/python scripts/r13-coarse-eval.py \
+  --baseline /tmp/r13-correction/baseline.py --output /tmp/r13-correction/live \
+  --threads both --quad-tolerance-px 0.0001 --repeats 3 --live-only
+```
+
+Alle sechs Vergleiche (3 Wiederholungen × 2 Threadmodi) erhalten
+**205/208** bzw. **23/152** Fits. Je Lauf 175 bzw. 21 ausgegebene Lesewerte,
+**0/196 Fehllesungen**; 30 bzw. 2 Leserablehnungen unverändert. Keine
+verlorenen/neuen Live-Annahmen oder geänderten Lesungen. Maximaler Abstand
+zwischen HEAD- und neuen Quads 0,000035259 bzw. 0,000030816 Rohpixel,
+unter der vorab festgelegten Toleranz 0,0001. Die 110 Erfolge des ersten
+Feinversuchs bleiben bitgleich. Je Referenz 99/29 zweite Versuche,
+davon 98/20 erfolgreich, wie HEAD.
+
+Die Tabellenbereiche sind die kleinsten/größten Mediane der drei
+Wiederholungen, „Max neu“ die höchste Einzelzeit aller Wiederholungen:
+
+| Threads | Referenz | Zweiter Durchgang HEAD Median ms | Neu Median ms | Max neu ms | Gepaarter Median neu/HEAD |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1 | 110248Z | 15,394–15,598 | 7,373–7,587 | 21,342 | 0,473–0,480 |
+| 1 | 121101Z | 14,452–15,158 | 7,285–7,421 | 18,021 | 0,497–0,516 |
+| Standard (4) | 110248Z | 14,693–14,923 | 7,311–7,512 | 21,746 | 0,497–0,509 |
+| Standard (4) | 121101Z | 13,782–13,877 | 7,255–7,825 | 20,589 | 0,519–0,533 |
+
+**Medianziel ≤10 ms in allen Wiederholungen erreicht**, ohne Spektralcache.
+Nur die Grobschätzung: Mediane über alle Modi/Wiederholungen
+2,292–2,374 ms statt 8,474–9,966 ms. Separater synthetischer Timing-Test
+mit vier Threads: zweiter Durchgang Median/Max 8,548/20,399 ms,
+Grob 3,241/5,182 ms, Fein 5,221/16,856 ms; erster Durchgang 5,581 ms Median.
+
+AB/BA pro bereits geladenem Bild, gleicher Prozess; drei Wiederholungen
+je Threadmodus. Verhältnis = Median der gepaarten Quotienten neu/HEAD,
+keine Division zweier Mediane. Zweiter Durchgang umfasst Grobschätzung
+und zweites Feinmatching, ohne ersten Versuch, Graukonversion, I/O und
+Leser. `perf_counter_ns` misst monotone Host-Verarbeitungsdauer, keine
+Aufnahme- oder DUT-Latenz. Keine gleichzeitig gestarteten eigenen Tests;
+Fremdlast ist möglich. Maxima sind Lastbeobachtungen, keine obere Garantie.
+Einzelwerte, Teilzeiten und vollständige TrackResults/Lesungen liegen unter
+`/tmp/r13-correction/live/{1,standard}/repeat-{1,2,3}/`.
+
+**Gezielte Prüfungen (keine volle Suite):** Die neuen Track-/Kleinbild-/
+Grenztests waren zunächst 19-mal rot. Der Sweep endete zunächst mit
+Exit 1 und den 9/5 Verlusten, nach Korrektur mit Exit 0.
+`PYTHONPATH=src ./.venv/bin/pytest -q -n 3 tests/test_frame_tracking.py`
+(mit lesendem `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev`): **542 bestanden,
+2 Timing-Skips**, 198,29 s. Separat `-m timing`: **2 bestanden**, 1,53 s.
+Der anschließend ergänzte Evaluator-Kleinbildtest war rot (fehlende Probe,
+danach undefinierter Quotient 0/0); der gezielte Nachlauf aus Evaluator-,
+Grenz- und Leerreferenztests besteht mit **10 bestanden**, 2,17 s.
+Vorverarbeitung ohne Aufruf wird als null erfasst, undefinierte
+Zeitquotienten ausgelassen. Die vorhandenen Live-Eingaben sind davon
+nicht betroffen. Ruff (`src tests examples scripts`, außer
+`scripts/wiki-check.py`), Wiki-/OQ-Indexprüfung und `git diff --check`
+bestehen; der zusätzliche lesende Code-Review hat nach dieser Korrektur
+keinen verbleibenden Befund.
+Keine Hardware, kein Docs-Playwright, kein Commit; `docs/status.md`,
+TODO und Messdaten bleiben wie beauftragt unverändert. Keine neue Abnahme,
+der bekannte gemeinsame Rahmen-Bias aus R13-19c bleibt dokumentiert.
+
 ## R13-20 — Displaybelichtung, offline und Fakes (2026-10-28) {#r13-20-belichtung-2026-10-28}
 
 Datensatz: zwölf vorhandene `live/live-<Kennung>/setup/still.png`, jeweils

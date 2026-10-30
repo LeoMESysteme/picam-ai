@@ -2264,8 +2264,24 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Grobschätzung bei jeder Ablehnung (etwa 25 ms je Bild), obwohl der zweite
   Versuch dann nicht greift; das kostet Bildrate, keine Sicherheit.
   Möglicher nächster Schritt: Grobschätzung kleiner/billiger rechnen.
+* **Nachtrag R13-23, Reviewkorrektur (2026-10-30):** Faktor 4 bleibt,
+  eigene Phasenkorrelation/Spektralcache entfernt; wieder OpenCV. Das
+  Grob-Gate erhält 6 px Fehlertoleranz (gemessener maximaler Vektorfehler
+  4,956 px plus Reserve); der zweite Feinversuch erzwingt selbst weiterhin
+  20 px/3°/±0,5 %. Kein fester Halbpixel-/Skalierungsversatz als einfache
+  Fehlerursache belegt. Schutzband +12 px, kleine Grobausschnitte sauber
+  deaktiviert. Reproduzierter Review-Sweep je 285 Fälle: zuerst 9/5 nur alt,
+  jetzt **0/0 nur alt, 76/54 nur neu, 0 falsche Quads >1 px**. DEV 568/568
+  mit `coarse_retries=0` ist kein Grobnachweis. Keine Cache-Ersparnis in
+  der Lösung. Live 205/208 und 23/152 Fits, 0/196 Fehllesungen
+  unverändert. Drei AB/BA-Wiederholungen je einem/vier Threads: zweiter
+  Durchgang Median 7,255–7,825 ms, gepaart neu/HEAD 0,473–0,533; Ziel
+  ≤10 ms hier erreicht, keine Lastgarantie. Details:
+  [Validierung](VALIDATION.md#r13-23-grobsuche-2026-10-30),
+  [Laborjournal](lab_journal.md#r13-23-grobsuche).
 * **Antwort umgesetzt in:** `src/dispread/live/frame_tracking.py`,
   `tests/test_frame_tracking.py`, `scripts/r13-coarse-eval.py`,
+  `scripts/r13-coarse-sweep.py`,
   [Validierung](VALIDATION.md#r13-19c-aehnlichkeit-2026-10-28)
   und [Laborjournal](lab_journal.md#r13-19c-aehnlichkeit).
 

@@ -2633,6 +2633,55 @@ Implementierung rot ausgeführt. Getrennt `-m timing`: **1 bestanden,
 Ruff, Wiki-Check und Diff-Prüfung ohne Befund. Keine volle Suite,
 kein Commit, `docs/status.md` wie beauftragt nicht verändert.
 
+## 2026-10-30 — R13-23: Reviewkorrektur der Grobsuche {#r13-23-grobsuche}
+
+**Aufbau:** Rein offline am Pi 5, OpenCV 4.10.0, gespeicherte Referenzen,
+Profile, Diagnosebilder und Vorlagen nur gelesen. Baseline aus HEAD unter
+`/tmp/r13-correction/baseline.py`; Ergebnisse ausschließlich unter `/tmp`.
+Keine Hardware benutzt. `docs/status.md`, TODO und Messdaten unangetastet.
+
+**Befund:** Die früheren gleichen Live-Annahmemengen genügten nicht:
+Review-Sweep reproduziert 9/5 verlorene Baseline-Tracks unter je 285
+bekannten Transformationen. Grobfehler bis 4,550 px komponentenweise,
+4,734 px als Vektor. Gerade DFT-Maße und unveränderte Ergebnisse bei
+explizit geradem Padding schließen hier einen festen DFT-Halbpixelversatz
+aus. Float-Verkleinerung bzw. Weglassen des Trims beseitigen den Fehler
+nicht zuverlässig; Faktor 2 ist genauer. Keine feste Bias-Korrektur
+begründbar. DEV 568/568 hatte keinen einzigen zweiten Versuch und belegt
+für die Grobschätzung nichts.
+
+**Änderung und Beobachtung:** Grob-Vorabgrenze um 6 px Fehlertoleranz
+(final maximal 4,956 px Vektorfehler plus 1,044 px Reserve) erweitert;
+20 px/3°/±0,5 % werden weiterhin erst am echten Feinfit geprüft.
+Grenztests erzwingen den zweiten Versuch mit Grobvorschlag 22 px und
+belegen diese Schranken. Faktor 4 und ganzzahliger AREA-Ausschnitt bleiben.
+Schutzband jetzt +12 Rohpixel (7 Filterstütze +5 Reserve), alle 16
+Rasterlagen und beide Bewegungsachsen einschließlich vier Pixel Halo
+getestet. Kleine Ausschnitte deaktivieren die optionale Grobsuche.
+Eigene Phasenkorrelation und Cache entfernt, wieder `cv2.phaseCorrelate`;
+keine Cache-Ersparnis Bestandteil der gewählten Lösung. Die widersprüchlichen
+Cache-Teilzeitmessungen rechtfertigen den zusätzlichen Algorithmus nicht.
+
+**Ergebnis:** Sweep je 285 Fälle: nur alt/neu/falsche Quads
+**0/76/0** und **0/54/0**, maximaler euklidischer Eckenfehler 0,083210 px.
+Drei AB/BA-Wiederholungen je einem/vier OpenCV-Threads erhalten
+205/208 und 23/152 Fits, 175/21 Lesewerte, 0/196 Fehllesungen. Keine
+geänderten Lesungen; Quadabweichung gegenüber HEAD höchstens 0,000035259 px
+(Toleranz 0,0001). Zweiter Durchgang Median 7,255–7,825 ms statt
+13,782–15,598 ms, gepaart neu/HEAD 0,473–0,533; Maximum neu 21,746 ms.
+Das Medianziel ≤10 ms ist in allen sechs Vergleichen erreicht.
+Separater Timing-Test: erster Durchgang 5,581 ms Median, zweiter
+8,548/20,399 ms Median/Max. Monotone Host-Verarbeitungsdauer über
+`perf_counter_ns` bzw. `perf_counter`, keine Aufnahme-/DUT-Latenz.
+Eigene Regressionstests liefen erst danach; Fremdlast bleibt möglich.
+
+**Deutung:** Die günstigere Grobsuche braucht eine Fehlertoleranz vor dem
+Feinversuch. Ihre Schätzung ist weiterhin kein Sicherheitsnachweis.
+Die zuvor dokumentierte allgemeine Gleichwertigkeit und der Cache-Gewinn
+werden hiermit zurückgenommen. Kein neuer Abnahmebeleg, bekannter
+Rahmen-Bias unverändert. Zahlen, Befehle, Lastgrenzen und Prüfungen im
+[Validierungsnachtrag](VALIDATION.md#r13-23-grobsuche-2026-10-30).
+
 ---
 
 ## 2026-10-28 — R13-20: Displaybelichtung statt Gesamtbild-Automatik

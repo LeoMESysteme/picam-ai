@@ -1,5 +1,6 @@
 """Rahmenstruktur statt wechselnder Zeichen; ausschliesslich feste Testbilder."""
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -238,6 +239,35 @@ def test_laufzeit_unter_10_ms(scene):
     elapsed = median(times)
     print(f"Rahmentracker Median: {elapsed:.3f} ms")
     assert elapsed < 10
+
+
+@pytest.mark.timing
+@pytest.mark.skipif("CI" in os.environ, reason="Pi-Laufzeit nur ausserhalb CI")
+def test_r23_laufzeit_zweiter_durchgang(scene):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    moved = cv2.warpAffine(reference, np.float32([[1, 0, 19], [0, 1, 0]]), reference.shape[1::-1])
+    gray = cv2.cvtColor(moved, cv2.COLOR_BGR2GRAY)
+    close_quad(tracker.update(moved), quad + (19, 0), 0.5)
+    assert tracker.last_coarse.used
+    coarse_times, fine_times, times = [], [], []
+    for _ in range(31):
+        start = perf_counter()
+        estimate = tracker._estimate_coarse(gray)
+        offset = tuple(np.rint((estimate.dx, estimate.dy)).astype(int))
+        middle = perf_counter()
+        result = tracker._fine_update(gray, offset, similarity=True)
+        end = perf_counter()
+        coarse_times.append((middle-start)*1000)
+        fine_times.append((end-middle)*1000)
+        times.append((end-start)*1000)
+        close_quad(result, quad + (19, 0), 0.5)
+    print(f"Zweiter Durchgang ({cv2.getNumThreads()} OpenCV-Threads), Median/Max ms: "
+          f"Grob {median(coarse_times):.3f}/{max(coarse_times):.3f}, "
+          f"Fein {median(fine_times):.3f}/{max(fine_times):.3f}, "
+          f"gesamt {median(times):.3f}/{max(times):.3f}")
+    # Keine harte Zeitgrenze unter CI-Fremdlast. Fuer das <=10-ms-Ziel
+    # berichtet r13-coarse-eval.py AB/BA-Vergleiche auf den Livebildern.
 
 
 def test_neue_gruende_haben_bedientexte():
@@ -1261,6 +1291,163 @@ def test_r19b_grosse_translation_bis_bewegungsgrenze(scene, dx):
     assert tracker.last_coarse.used
 
 
+@pytest.fixture(scope='module', params=['110248Z', '121101Z'])
+def r23_live_scene(request):
+    from dispread.live.frame_tracking import RegionProposal
+
+    root = local_recording(f'live/live-20261028T{request.param}')
+    profile = json.loads((root / 'profile.json').read_text())
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    block = profile['live_tracking']
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    return reference, np.asarray(profile['quad']), tracker
+
+
+@pytest.mark.parametrize('dx,dy', [(-19, 5), (-14, -13), (-14, 12), (18, 0), (19, 0), (19.8, 0)])
+def test_r23_translation_18_bis_20_px_verliert_keinen_track(r23_live_scene, dx, dy):
+    reference, quad, tracker = r23_live_scene
+    image = cv2.warpAffine(reference, np.float32([[1, 0, dx], [0, 1, dy]]),
+                           reference.shape[1::-1], borderMode=cv2.BORDER_REPLICATE)
+    close_quad(tracker.update(image), quad + (dx, dy), 0.5)
+    assert tracker.last_coarse.used
+
+
+@pytest.mark.parametrize('width,height', [(1, 12), (2, 12), (3, 12), (12, 1), (12, 2), (12, 3), (4, 4)])
+def test_r23_kleiner_grobausschnitt_stuerzt_nicht_ab(scene, width, height):
+    from dataclasses import replace
+
+    reference, quad, config, proposal, _ = scene
+    tiny = replace(proposal, outer_limit=((0, 0), (width-1, 0), (width-1, height-1), (0, height-1)))
+    tracker = FrameTracker(reference, quad, tiny, config)
+    # Der unveraenderte erste Feinversuch funktioniert auch ohne Grobsuche.
+    close_quad(tracker.update(reference), quad)
+    estimate = tracker._estimate_coarse(cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY))
+    assert (estimate.dx, estimate.dy, estimate.response) == (0, 0, 0)
+
+
+@pytest.mark.parametrize('dx,angle,scale,reason', [
+    (19, 0, 1, None), (20, 0, 1, None), (20.01, 0, 1, 'shift_out_of_bounds'),
+    (15, 3.01, 1, 'rotation_out_of_bounds'), (15, -3.01, 1, 'rotation_out_of_bounds'),
+    (15, 0, 1.0051, 'rahmen_unstimmig'), (15, 0, 0.9949, 'rahmen_unstimmig'),
+])
+def test_r23_zweiter_feinversuch_erzwingt_absolute_grenzen(scene, monkeypatch, dx, angle, scale, reason):
+    from dataclasses import replace
+
+    from dispread.live import frame_tracking as ft
+    from dispread.track import TrackResult
+
+    reference, quad, config, proposal, _ = scene
+    # Breitere Test-Suchfenster machen auch 3.01 Grad erreichbar, damit
+    # die absolute Winkelgrenze und nicht schon der Suchrand entscheidet.
+    config = replace(config, search_radius_px=32)
+    proposal = replace(proposal, config=config.to_dict())
+    tracker = FrameTracker(reference, quad, proposal, config)
+    fine = tracker._fine_update
+    # Nur erste Ablehnung und unzuverlaessige Grobschaetzung ersetzen;
+    # echte Fits, absolute Grenzen und LCD-Pruefung bleiben aktiv.
+    monkeypatch.setattr(tracker, '_fine_update',
+                        lambda gray, offset=(0, 0), **kw: fine(gray, offset, **kw) if kw.get('similarity')
+                        else TrackResult(None, 0, 0, 0, 'rahmen_unstimmig'))
+    monkeypatch.setattr(tracker, '_estimate_coarse', lambda gray: ft.CoarseEstimate(22, 0, 0.9))
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, scale)
+    matrix[:, 2] += (dx, 0)
+    targets = tracker.sources @ matrix[:, :2].T + matrix[:, 2]
+    positions = iter(targets - tracker.sources - (22, 0) + config.search_radius_px)
+    monkeypatch.setattr(ft, '_peak', lambda response, config: (next(positions), 1.0, False))
+    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    result = tracker.update(image)
+    assert tracker.last_coarse.used
+    assert result.reason == reason
+    if reason is None:
+        close_quad(result, quad @ matrix[:, :2].T + matrix[:, 2], 0.001)
+    else:
+        assert result.quad is None
+
+
+@pytest.mark.parametrize('value', [0, 127, 255])
+def test_r23_empty_highpass_skips_phase_and_preserves_rejection(scene, monkeypatch, value):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    image = np.full_like(reference, value)
+    expected = tracker._fine_update(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    assert expected.quad is None
+    monkeypatch.setattr(cv2, 'phaseCorrelate', lambda *args: pytest.fail('DFT ohne Struktur'))
+    assert tracker.update(image) == expected
+    assert tracker.last_coarse.response == 0
+    assert not tracker.last_coarse.used
+
+
+def test_r23_leerer_referenzhochpass_korreliert_nicht(scene, monkeypatch):
+    reference, quad, config, _, _ = scene
+    blank = np.zeros_like(reference)
+    tracker = FrameTracker(blank, quad, propose_regions(blank, quad, config), config)
+    monkeypatch.setattr(cv2, 'phaseCorrelate', lambda *args: pytest.fail('DFT ohne Referenzstruktur'))
+    estimate = tracker._estimate_coarse(cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY))
+    assert estimate.response == 0
+
+
+@pytest.fixture(scope='module', params=[(x, y) for x in range(4) for y in range(4)])
+def r23_raster_scene(scene, request):
+    from dataclasses import replace
+
+    reference, quad, config, proposal, _ = scene
+    # Alle 16 Lagen der Zeichenzone relativ zum AREA-Raster pruefen.
+    outer = np.asarray(proposal.outer_limit) + request.param
+    tracker = FrameTracker(reference, quad, replace(proposal, outer_limit=tuple(map(tuple, outer))), config)
+    return reference, quad, proposal, tracker
+
+
+@pytest.mark.parametrize('dx,dy', [(20, 0), (-20, 0), (0, 20), (0, -20), (12, 16), (-12, -16)])
+@pytest.mark.parametrize('angle,scale', [(3, 1.005), (-3, 0.995)])
+def test_r23_coarse_excludes_moved_characters_with_filter_support(r23_raster_scene, dx, dy, angle, scale):
+    reference, quad, proposal, tracker = r23_raster_scene
+    gray = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
+    zone = mask_polygon(gray, proposal.character_zone).astype(np.uint8)
+    transform = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, scale)
+    transform[:, 2] += (dx, dy)
+    moved_zone = cv2.warpAffine(zone, transform, gray.shape[::-1], flags=cv2.INTER_NEAREST)
+    # Zusaetzliche vier Rohpixel um die bewegten Zeichen als Filterreserve.
+    moved_zone = cv2.dilate(moved_zone, np.ones((9, 9), np.uint8)) != 0
+    changed = gray.copy()
+    changed[moved_zone] = 255-gray[moved_zone]
+    assert np.array_equal(tracker._coarse_image(gray), tracker._coarse_image(changed))
+
+
+def test_r23_evaluator_detects_changed_rejected_dev_results(scene):
+    from dataclasses import replace
+
+    path = Path(__file__).parents[1] / 'scripts/r13-coarse-eval.py'
+    spec = importlib.util.spec_from_file_location('coarse_eval', path)
+    evaluation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluation)
+    reference, quad, config, proposal, _ = scene
+    before = FrameTracker(reference, quad, proposal, config)
+    after = FrameTracker(reference, quad, replace(proposal, ok=False), config)
+    report = evaluation.compare(before, after, [({'image': 'blank'}, np.zeros_like(reference))])
+    assert report['summary']['before']['accepted'] == report['summary']['after']['accepted'] == 0
+    assert report['summary']['previously_accepted_changed'] == []
+    assert report['summary']['changed_results'] == ['blank']
+
+
+def test_r23_evaluator_zaehlt_deaktivierte_grobsuche_ohne_vorverarbeitung(scene):
+    from dataclasses import replace
+
+    path = Path(__file__).parents[1] / 'scripts/r13-coarse-eval.py'
+    spec = importlib.util.spec_from_file_location('coarse_eval_tiny', path)
+    evaluation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluation)
+    reference, quad, config, proposal, _ = scene
+    tiny = replace(proposal, outer_limit=((0, 0), (2, 0), (2, 2), (0, 2)))
+    before = FrameTracker(reference, quad, tiny, config)
+    after = FrameTracker(reference, quad, tiny, config)
+    report = evaluation.compare(before, after, [({'image': 'blank'}, np.zeros_like(reference))])
+    assert report['summary']['changed_results'] == []
+    assert report['summary']['coarse_retries'] == 0
+    assert report['summary']['parts_ms']['preprocess']['after'] == {'n': 1, 'median': 0, 'max': 0}
+    assert report['summary']['paired_ratio_after_before']['preprocess'] is None
+
+
 @pytest.mark.parametrize("dx,angle", [(23.0, 0.0), (15.0, 1.0)])
 def test_r19b_absolutgrenze_und_drehung_niemals_falsches_quad(scene, dx, angle):
     reference, quad, _, _, tracker = scene
@@ -1300,7 +1487,7 @@ def test_r19b_erster_erfolg_bitgleich_ohne_grobschaetzung(scene, monkeypatch, dx
     assert tracker.last_coarse is None
 
 
-@pytest.mark.parametrize("dx,dy,strength", [(1.0, 0.0, 0.9), (21.0, 0.0, 0.9), (15.0, 0.0, 0.01),
+@pytest.mark.parametrize("dx,dy,strength", [(1.0, 0.0, 0.9), (27.0, 0.0, 0.9), (15.0, 0.0, 0.01),
                                            (float('nan'), 0.0, 0.9), (15.0, 0.0, float('nan'))])
 def test_r19b_unbrauchbare_grobschaetzung_behaelt_erste_ablehnung(scene, monkeypatch, dx, dy, strength):
     from dispread.live.frame_tracking import CoarseEstimate

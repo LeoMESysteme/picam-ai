@@ -9,6 +9,37 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-30 — R13-23: Grobfehlertoleranz vor unveränderter Feinprüfung
+
+**Problem:** Faktor 4 spart Zeit, verliert mit einer harten 20-px-Sperre
+auf der Grobschätzung aber gültige Baseline-Tracks. Der bisherige
+Live-Vergleich und DEV ohne zweite Versuche deckten das nicht auf.
+
+**Entscheidung:** Ganzzahliges AREA-Faktor-4-Raster behalten und nur die
+Vorabsperre mit 6 px Grobfehlertoleranz versehen (maximal gemessener
+Vektorfehler 4,956 px plus Reserve). Der zweite Feinfit muss unverändert
+20 px/3°/±0,5 % gegen das ursprüngliche Quad einhalten. Wieder
+`cv2.phaseCorrelate` statt eigener Spektralnormierung/Referenz-DFT.
+Nur exakt leerer Hochpass bricht vorab ab. Schutzband von +8 auf +12 px
+vergrößert (7 Filterstütze, 5 Reserve); zu kleine Ausschnitte deaktivieren
+nur die optionale Grobsuche.
+
+**Alternativen:** Explizit gerade DFT-Maße ändern auf den realen Referenzen
+nichts; Float-Resize und unbeschnittenes Faktor-4-Raster beseitigen den
+Fehler nicht zuverlässig. Faktor 2 ist genauer, kostet aber die größere
+DFT; lokale zweite Korrelation ist nach verlustfreiem Sweep und Live-
+Vergleich nicht erforderlich. Keine empirische Bias-Subtraktion bei
+struktur-/rasterabhängigen Fehlern. Der Cache-Teilgewinn ist lastabhängig
+und rechtfertigt hier keine eigene OpenCV-Nachimplementierung; sämtliche
+aktuellen Laufzeitvergleiche verwenden OpenCV ohne Spektralcache.
+
+**Konsequenz:** Reproduzierbarer Review-Sweep als eigenes Skript, keine
+verlorenen HEAD-Tracks und keine falschen Quads >1 px in je 285 Fällen.
+Gezielte Tests isolieren die absoluten Feinfitgrenzen sowie kleine
+Ausschnitte und alle 16 Zeichenschutz-Rasterlagen. DEV belegt ausschließlich
+den ersten Pfad. Keine neue Abnahme; Zahlen und Einschränkungen im
+[Validierungsnachtrag](VALIDATION.md#r13-23-grobsuche-2026-10-30).
+
 ## 2026-10-30 — P4-3: begrenzte Opt-in-Ausgabe nach dem Audit
 
 **Problem:** Der Live-Lauf braucht einen vorläufigen UserDefined-Ausgang,

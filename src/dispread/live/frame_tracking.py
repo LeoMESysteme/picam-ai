@@ -100,13 +100,16 @@ grundsaetzlichen Verfuegbarkeitsentscheidung.
 R13-19c: Der erste Durchgang ist numerisch unveraendert starr. Nur bei
 rahmen_unstimmig, zu_wenig_rahmenmerkmale oder rahmen_mehrdeutig folgt eine
 zustandslose Grobschaetzung gegen das Referenzgraubild: Phasenkorrelation
-auf einem zweifach verkleinerten Ausschnitt innerhalb outer_limit. Referenzausschnitt und
-Hann-Maske werden einmal vorbereitet; ein Laplace-Hochpass unterdrueckt die
+auf einem vierfach verkleinerten Ausschnitt innerhalb outer_limit (R13-23:
+ganzzahliger AREA-Faktor auf uint8). Referenzhochpass und Hann-Maske werden
+einmal vorbereitet; cv2.phaseCorrelate korreliert die Bilder. Laplace unterdrueckt die
 feste Maskenkante. Die Zeichenzone bleibt samt maximaler Translation,
 Drehbewegung, maximalem Massstab und Filter-Nachbarpixeln ausgespart, auch im bewegten Bild.
 Nur endliche Antworten mit response > coarse_min_response (Default 0.15)
-und coarse_min_shift_px (Default 2) <= Betrag <= max_shift_px erlauben
-einen zweiten Versuch. Derselbe Feinpfad sucht um Quelle plus ganzzahlig
+und coarse_min_shift_px (Default 2) <= Betrag <= max_shift_px + 6 px erlauben
+einen zweiten Versuch. Die 6 px beruecksichtigen nur den Grobfehler;
+der Feinversuch setzt die absolute max_shift_px-Grenze selbst durch.
+Derselbe Feinpfad sucht um Quelle plus ganzzahlig
 gerundete Grobverschiebung; Ziele sind absolute Bildkoordinaten. Patches,
 Peak/Eindeutigkeit, Streuung, Leave-one-out, beide Residualgrenzen und
 absolute Bewegung gegen das urspruengliche Quad bleiben gleich. Nur der
@@ -176,6 +179,10 @@ from dispread.detect import Quad
 from dispread.track import TrackResult
 
 MANUAL_SNAP_RADIUS_PX = 3
+# Nur fuer das Vorab-Gate, niemals fuer den absoluten Feinfit:
+# gemessener maximaler Vektorfehler 4.956 px + mindestens 1.044 px Reserve
+# (zwei echte Referenzen, reiner Translationssweep; VALIDATION R13-23).
+_COARSE_ERROR_MARGIN_PX = 6.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -902,21 +909,30 @@ class FrameTracker:
         outer = np.asarray(proposal.outer_limit)
         lo = np.maximum(np.floor(outer.min(axis=0)).astype(int), 0)
         hi = np.minimum(np.ceil(outer.max(axis=0)).astype(int)+1, gray.shape[::-1])
+        # Fuer Hann und Laplace mindestens 2x2 Grobpixel; unbrauchbare
+        # kleine Ausschnitte deaktivieren nur die optionale Grobsuche.
+        self._coarse_reference = None
+        self._coarse_mask = None
+        if np.any(hi-lo < 8):
+            return
+        # Bis zu drei Randpixel abschneiden: exakter AREA-Faktor 4 statt
+        # teurem gebrochenem Flaechenfilter. Hann bleibt am Ausschnittrand 0.
+        hi -= (hi-lo) % 4
         self._coarse_crop = (slice(lo[1], hi[1]), slice(lo[0], hi[0]))
         mask = np.zeros(gray.shape, np.uint8)
         cv2.fillPoly(mask, [np.rint(outer).astype(np.int32)], 1)
         characters = np.zeros_like(mask)
         cv2.fillConvexPoly(characters, np.rint(proposal.character_zone).astype(np.int32), 1)
         # Bewegte Zeichen ausschliessen: Translation, Drehung, Skala und
-        # konservativ acht Rohpixel fuer AREA- und Laplace-Nachbarn.
+        # zwoelf Rohpixel: sieben fuer AREA/Laplace, fuenf Reserve.
         radius = np.linalg.norm(self.quad - self.quad.mean(axis=0), axis=1).max()
         guard = int(np.ceil(config.max_shift_px + 2*radius*np.sin(np.radians(config.max_rotation_deg)/2)
-                            + radius*config.coarse_max_scale_deviation)) + 8
+                            + radius*config.coarse_max_scale_deviation)) + 12
         characters = cv2.dilate(characters, np.ones((2*guard+1,)*2, np.uint8))
         mask[characters != 0] = 0
         mask = mask[self._coarse_crop].astype(np.float32)
-        # Zweifach kleiner; tatsaechliche Achsenfaktoren bei ungeraden Massen.
-        coarse_size = tuple((np.array(mask.shape[::-1]) + 1) // 2)
+        # Vierfach kleiner, auf beiden Achsen exakt derselbe Rohpixelfaktor.
+        coarse_size = tuple(np.array(mask.shape[::-1]) // 4)
         self._coarse_factors = np.array(mask.shape[::-1]) / coarse_size
         mask = cv2.resize(mask, coarse_size, interpolation=cv2.INTER_AREA)
         self._coarse_mask = mask * cv2.createHanningWindow(mask.shape[::-1], cv2.CV_32F)
@@ -929,7 +945,12 @@ class FrameTracker:
         return cv2.Laplacian(crop, cv2.CV_32F) * self._coarse_mask
 
     def _estimate_coarse(self, gray) -> CoarseEstimate:
-        (dx, dy), response = cv2.phaseCorrelate(self._coarse_reference, self._coarse_image(gray))
+        if self._coarse_reference is None:
+            return CoarseEstimate(0.0, 0.0, 0.0)
+        image = self._coarse_image(gray)
+        if not np.any(image) or not np.any(self._coarse_reference):
+            return CoarseEstimate(0.0, 0.0, 0.0)
+        (dx, dy), response = cv2.phaseCorrelate(self._coarse_reference, image)
         dx, dy = np.array((dx, dy))*self._coarse_factors
         return CoarseEstimate(float(dx), float(dy), float(response))
 
@@ -967,7 +988,8 @@ class FrameTracker:
         config = self.config
         if (not np.isfinite((estimate.dx, estimate.dy, estimate.response)).all()
                 or estimate.response <= config.coarse_min_response
-                or not config.coarse_min_shift_px <= np.hypot(estimate.dx, estimate.dy) <= config.max_shift_px):
+                or not config.coarse_min_shift_px <= np.hypot(estimate.dx, estimate.dy)
+                <= config.max_shift_px + _COARSE_ERROR_MARGIN_PX):
             return first
         self.last_coarse = replace(estimate, used=True)
         return self._fine_update(gray, tuple(np.rint((estimate.dx, estimate.dy)).astype(int)), similarity=True)
