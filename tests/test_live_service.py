@@ -55,6 +55,29 @@ def test_simulate_refuses_setup_with_clear_reason(tmp_path):
         service.start_setup()
 
 
+def test_setup_still_reports_stream_stall_instead_of_generic_missing_image():
+    from dispread.frames.uvc_source import UvcError
+    from dispread.live.service import OwnerSetupCamera
+
+    class StalledOwner(FakeOwner):
+        def status(self):
+            return {**super().status(), 'stalled': True, 'error': 'Streamstillstand: kein Bild seit 2.0 s'}
+
+    with pytest.raises(UvcError, match='Streamstillstand'):
+        OwnerSetupCamera(StalledOwner()).fresh_still(discard=0)
+
+
+def test_setup_refuses_stalled_camera_even_when_reader_is_running(tmp_path):
+    class StalledOwner(FakeOwner):
+        def status(self):
+            return {**super().status(), 'stalled': True, 'error': 'Streamstillstand: kein Bild seit 2.0 s'}
+
+    service = LiveService(StalledOwner(), tmp_path)
+    with pytest.raises(LiveError, match='Streamstillstand'):
+        service.start_setup()
+    assert service.status()['state'] == 'idle'
+
+
 def test_bad_operator_cell_text_is_refused_before_camera(tmp_path):
     called = []
     service = LiveService(FakeOwner(), tmp_path, setup_runner=lambda **kw: called.append(kw))

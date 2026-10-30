@@ -79,6 +79,62 @@ def test_unknown_overlay_is_404():
     _run(check)
 
 
+def test_stream_stall_and_blocked_reconnect_reach_api_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from aiohttp.test_utils import make_mocked_request
+    from test_live_camera import BlockingSource, FakeSource
+
+    from dispread.live.camera import CameraOwner
+    from dispread.live.service import LiveService
+
+    async def direct(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    blocked = BlockingSource(emit=False)
+    sources = iter([blocked, FakeSource([1], endless=True)])
+    owner = CameraOwner(lambda: next(sources))
+    service = LiveService(owner, tmp_path, diagnostic_staging_root=tmp_path / 'staging')
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+    monkeypatch.setattr('dispread.live.camera.STREAM_STALL_TIMEOUT_S', 0.0)
+    # Die Quelle liefert kein Bild: es gilt die Anlauffrist.
+    monkeypatch.setattr('dispread.live.camera.STREAM_START_TIMEOUT_S', 0.0)
+    owner.start()
+
+    async def call(method, path):
+        request = make_mocked_request(method, path, app=app)
+        match = await app.router.resolve(request)
+        return await match.handler(request)
+
+    async def check():
+        status = json.loads((await call('GET', '/live/status')).text)
+        assert status['camera']['running'] is True
+        assert status['camera']['stalled'] is True
+        assert 'Streamstillstand' in status['camera']['error']
+        response = await call('POST', '/live/camera/start')
+        assert response.status == 409
+        message = json.loads(response.text)['error']
+        assert 'Kamera hängt' in message and 'warten' in message and 'neu stecken' in message
+        blocked.release.set()
+        assert owner.stop(timeout=1.0) is True
+        monkeypatch.setattr('dispread.live.camera.STREAM_STALL_TIMEOUT_S', 2.0)
+        monkeypatch.setattr('dispread.live.camera.STREAM_START_TIMEOUT_S', 5.0)
+        assert (await call('POST', '/live/camera/start')).status == 200
+        assert owner.wait_newer(0, 1.0) is not None
+        status = json.loads((await call('GET', '/live/status')).text)
+        assert status['camera']['stalled'] is False
+        assert status['camera']['error'] is None
+
+    try:
+        assert blocked.reading.wait(1.0)
+        asyncio.run(check())
+    finally:
+        blocked.release.set()
+        owner.stop(timeout=1.0)
+
+
 def test_status_transports_only_rejected_test_run_records_without_socket(tmp_path, monkeypatch):
     import json
 

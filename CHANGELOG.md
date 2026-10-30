@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: R13-22 erkennt Streamstillstand nach 2 s ohne geliefertes Bild
+  über die monotone Host-Uhr im `CameraOwner`, auch bei blockierendem
+  OpenCV-Read. Bis zum ersten Bild nach Start/Neustart gilt eine eigene
+  Anlauffrist von 5 s als ungemessene Reserve für STREAMON und ersten Read
+  unter Last. `stalled` und Fehler bleiben bis zum Quellenneustart erhalten;
+  späte Bilder werden verworfen. Live beendet
+  den Lauf über `CameraLost` und hält den Fehler in `session.json` und
+  Status fest; die bestehende STALE-Anzeige und das Audit ohne neue Records
+  in Bildlücken bleiben erhalten. Vorschau und Einrichtung melden den
+  Stillstand ebenfalls. Ein noch blockierter Lesethread sperrt Neustart mit
+  Warte-/Neu-Stecken-Hinweis; `stop()` bleibt durch seinen Join-Timeout
+  begrenzt und meldet `False`, `running=False` und `stalled=True`, auch vor
+  Ablauf der Bildfrist. Die Vorschauschleife wartet bei leeren Abrufen
+  begrenzt; nach Stillstand ist manuelles Neuverbinden nötig. Vorhandene
+  `read_error`-Diagnosen und seit dem letzten Bild verworfene Zeitstempel
+  ergänzen den Fehler. Kein `CAP_PROP_READ_TIMEOUT_MSEC`: OpenCV
+  4.10 unterstützt dies bei V4L2 nicht. Ausschließlich Fakes geprüft,
+  keine Hardwareabnahme.
+
 * 2026-10-30: Die Schwelle für Telegrammlücken in der Referenz sinkt von
   1 000 auf 800 ms (OQ-40). Grundlage sind 13 Live-Läufe mit laufender
   Kamera, ≈ 74 min:

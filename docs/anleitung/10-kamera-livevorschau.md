@@ -313,9 +313,54 @@ Leser, Freigabe und Messwertdatensätze bleiben unabhängig davon.
 Verbindungsfehler oder abgelaufene Anmeldung setzen die Anzeige auf STALE;
 auch wenn länger als 1,5 s kein erfolgreicher Statusabruf kam. Polling und
 Verbindungsfenster können die sichtbare Umschaltung verzögern (schlimmstenfalls
-etwa 2 s). Ein stillstehender Kamerastream beendet den Lauf erst nach dem
-OpenCV-Select-Timeout (etwa 10–20 s), nicht nach 2 s. Die Vorschau kann auf
-dem letzten Bild stehen bleiben; sie allein beweist keine aktuelle Messung.
+etwa 2 s). Ein stillstehender Kamerastream wird seit R13-22 nach **2 s ohne
+geliefertes Bild** erkannt (`STREAM_STALL_TIMEOUT_S`), unabhängig vom
+OpenCV-Select-Timeout. Das entspricht rund 60 Bildabständen bei 30 fps
+(33 ms) und der bisherigen Kulanz `READ_FAIL_TIMEOUT_S` für zurückkehrende
+erfolglose Leseversuche. Bis zum ersten gelieferten Bild nach Start oder
+Neustart gilt stattdessen eine **Anlauffrist von 5 s**
+(`STREAM_START_TIMEOUT_S`), gezählt ab Leserstart nach dem Öffnen der Quelle.
+Das lässt Reserve für STREAMON und den ersten Read bei 1920×1080 YUYV unter
+Last; die benötigte Zeit ist an Hardware noch ungemessen. Vor dem ersten
+Bild entsteht kein Messwert. Ab dessen Lieferung gilt die 2-s-Frist.
+Beide Fristen verwenden die monotone Host-Uhr und beschreiben keine
+Aufnahmelatenz. Der Lauf endet über den Kamerafehlerpfad; der Abschluss ist
+mit Fakes und verkürzter Testfrist geprüft.
+`camera.stalled`, die Fehlermeldung im Live-Status sowie
+`session.json.summary.camera_error` und `end_reason` nennen den
+Streamstillstand. Bis zum Ende bleibt die letzte Ablesung STALE; ohne neues
+Bild entsteht kein neuer Messwertdatensatz. Auch Vorschau und Einrichtung
+zeigen den Fehler. Die Vorschau kann auf dem letzten Bild stehen bleiben;
+sie allein beweist keine aktuelle Messung.
+Vorhandene Quelldiagnosen ergänzen den Stillstandsfehler: `read_error`
+zeigt erfolglose Leseversuche, `rejected_timestamps` zählt seit dem letzten
+gelieferten Bild (vor dem ersten Bild seit Start) verworfene Zeitstempel.
+
+Der blockierte Lesethread wird nicht gewaltsam beendet. `stop(timeout)`
+wartet höchstens seine Join-Frist (Standard 3 s) und meldet mit `False`, dass
+der Thread noch hängt. Dann zeigen `running=False`, `stalled=True` und ein
+sichtbarer Lesethread-/Kamera-hängt-Fehler den abgelehnten Stopp oder
+Neustart, auch wenn die Bildfrist noch nicht abgelaufen war. Die Vorschau
+wartet bei leeren Bildabrufen begrenzt und dreht nicht im Leerlauf.
+Der Laufabschluss wartet nicht auf diesen Thread.
+Solange er noch lebt, wird ein Neustart abgelehnt: **Kamera hängt: kurz
+warten oder Kamera neu stecken, dann erneut verbinden.** Die Vorschau
+startet nach einem Stillstand **nicht von selbst neu**. Sobald der Thread
+endet, über **Kamera neu verbinden** die Quelle neu starten; alternativ den
+Werkbankserver neu starten. Der Stillstandsfehler bleibt bis zum
+erfolgreichen Quellenstart erhalten; zurückkehrende Bilder setzen einen
+beendeten Lauf nicht fort.
+
+OpenCV 4.10.0 ist lokal bestätigt. `CAP_PROP_READ_TIMEOUT_MSEC` wird nicht
+gesetzt: Laut [OpenCV-4.10-Dokumentation](https://docs.opencv.org/4.10.0/d4/d15/group__videoio__flags__base.html)
+gilt die Eigenschaft nur beim Öffnen für FFmpeg/GStreamer; der
+[V4L2-Quellcode 4.10.0](https://github.com/opencv/opencv/blob/4.10.0/modules/videoio/src/cap_v4l.cpp)
+unterstützt sie nicht. Dort liegt die Select-Frist standardmäßig bei 10 s
+(`OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT`); diese globale Einstellung bleibt
+unverändert. **Nicht an Hardware geprüft:** Anlauffrist unter Last sowie
+reale Stillstands-, Abschluss- und Wiederanlaufzeiten; alle neuen Prüfungen
+verwenden Fakes.
+
 **Lauf stoppen** beendet den Lauf, die Kamera läuft für Vorschau weiter.
 
 ### Referenzaufzeichnung und Abgleich

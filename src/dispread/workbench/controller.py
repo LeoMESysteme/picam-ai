@@ -1495,10 +1495,12 @@ class Controller:
             got = self.owner.wait_newer(seen, 0.5)
             if got is None:
                 status = self.owner.status()
-                if not status["running"]:
+                if status.get("stalled") or not status["running"]:
                     with self.lock:
                         self.error = status["error"] or "Kamera aus"
-                    self.stop.wait(0.2)
+                # Ein gesetztes Owner-Stop-Event kann schon vor Ende des
+                # Join sofort None liefern. Auch dann begrenzt warten.
+                self.stop.wait(0.2)
                 continue
             seen, frame = got
             with self.lock:

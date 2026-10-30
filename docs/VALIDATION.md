@@ -3051,8 +3051,15 @@ in `var/live/<sitzung>/`; erst ein gestarteter Lauf schreibt
 `records.jsonl` und `session.json` unter `run-NN/`. Bei dessen Auswertung
 `tracking_lost` und `track_score` prüfen, 0,0 bei `ecc_diverged` gesondert
 zählen. `raw_text` ist die geparste Zahl, nicht der Text aller 16 Zellen.
-Streamstillstand beendet erst nach OpenCV-Select-Timeout, nicht nach 2 s.
-Vor Ablauf des Timeouts zeigt die Oberfläche bereits STALE statt eines Wertes.
+Beim damaligen Lauf beendete Streamstillstand erst nach OpenCV-Select-Timeout,
+nicht nach 2 s; vorher zeigte die Oberfläche bereits STALE statt eines Wertes.
+Seit R13-22 (2026-10-30) überwacht der Kamera-Halter unabhängig vom Read eine
+2-s-Frist ab letzter Bildlieferung, vor dem ersten Bild nach Start/Neustart
+eine eigene 5-s-Anlauffrist. Fristgrenzen, Fehlerweitergabe und Laufabschluss
+sind mit blockierenden Fakes, Fake-Uhr beziehungsweise verkürzter Testfrist
+geprüft; daraus folgt keine reale Abschlusszeit. Eine Hardwareprüfung der
+Anlauffrist unter Last und dieses Endpfads steht aus, siehe
+[Bedienung bei Stillstand](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).
 Rotation würde nach etwa 7 h alte Auditgenerationen verwerfen.
 
 Belege: Die Werkbank schreibt die Einrichtungsdateien unter

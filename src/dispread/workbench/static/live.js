@@ -1,6 +1,12 @@
 // Live-Seite: zeigt LiveService.status() an und reicht Bedienschritte weiter.
 // Entscheidungen fallen im Server (dispread.live), nie hier.
 
+function cameraView(camera) {
+  if (camera.stalled) return camera.error || 'Streamstillstand: kein neues Kamerabild';
+  return camera.running ? `Kamera läuft, ${camera.frames} Bilder, ${camera.gaps} Lücken`
+    : `Kamera aus: ${camera.error || '—'}`;
+}
+
 export function statusView(status) {
   if (status.reference?.restoring) {
     return {headline: 'Werte werden zurückgestellt …', cls: 'transition', detail: 'Gerät verbunden lassen.'};
@@ -164,8 +170,7 @@ if (typeof document !== 'undefined') {
     }));
     $('recent-causes-limit').textContent = causes?.limited ? 'Fenster wegen hoher Bildrate begrenzt' : '';
     const cam = s.camera || {};
-    $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
-      : `Kamera aus: ${cam.error || '—'}`;
+    $('camera').textContent = cameraView(cam);
     $('reference-status').textContent = s.reference?.restoring ? 'Werte werden zurückgestellt …'
       : s.reference?.error ? s.reference.error
       : s.reference?.enabled ? `Referenz: ${s.reference.lines} Telegramme`

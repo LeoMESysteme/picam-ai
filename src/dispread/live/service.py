@@ -120,7 +120,7 @@ class OwnerSetupCamera:
         for _ in range(discard + 1):
             got = self._owner.wait_newer(seen, 2.0)
             if got is None:
-                raise UvcError(f"kein frisches Bild von {self.device}")
+                raise UvcError(self._owner.status().get('error') or f"kein frisches Bild von {self.device}")
             seen = got[0]
         return got[1].image.copy()
 
@@ -348,7 +348,7 @@ class LiveService:
                 if self._state == "setup_running":
                     raise LiveError("Einrichtung laeuft bereits")
             camera_status = self._owner.status()
-            if not camera_status["running"]:
+            if camera_status.get("stalled") or not camera_status["running"]:
                 raise LiveError(
                     f"Kamera laeuft nicht: {camera_status.get('error')} — 'Kamera neu verbinden'"
                 )

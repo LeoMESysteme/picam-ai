@@ -1930,3 +1930,40 @@ Korrekturrunden begrenzen die Einrichtung; bei Fehlschlag beste Werte und
 WARNUNG statt eines neuen Abbruchgrundes. Die reale Kennlinie und die
 Vorabgrenzen sind damit noch nicht allgemein validiert; Belege und Grenzen
 stehen im Laborjournal und in VALIDATION unter R13-20.
+
+## 2026-10-30 — R13-22: Bildlieferung unabhängig vom blockierten Read überwachen
+
+Der `CameraOwner` überwacht die monotone Host-Zeit seit der letzten
+Bildlieferung. Zwei Sekunden entsprechen rund 60 Bildabständen bei 30 fps
+und der vorhandenen `READ_FAIL_TIMEOUT_S`-Kulanz. Vor dem ersten Bild nach
+Start/Neustart gelten ab Leserstart nach Quellenöffnung eigene 5 s
+(`STREAM_START_TIMEOUT_S`). Dieselben 2 s auch beim Anlauf wurden verworfen:
+STREAMON und erster Read bei 1920×1080 YUYV unter Last sind ungemessen;
+vor dem ersten Bild entsteht kein Wert. Die 5 s sind Reserve und kein
+Hardwarebeleg. Ein bloßer Timeout in `UvcSource.frames()`
+wurde verworfen: Während OpenCV in `read()` blockiert, läuft diese Logik
+nicht. Stattdessen prüfen Status, Warten auf Bilder und die Rückkehr eines
+Reads die Frist unter derselben Zustandssperre. Der Stillstand bleibt bis
+zum erfolgreichen Quellenstart gespeichert; späte Bilder werden verworfen,
+damit ein bereits beendeter Lauf nicht stillschweigend wieder aktuell wird.
+
+Der Lauf endet über den bestehenden `CameraLost`-Pfad und wartet dabei nicht
+auf den Kamera-Lesethread. Gewaltsames Threadende oder Schließen der Quelle
+aus einem anderen Thread wurde ausgeschlossen; `stop()` meldet einen noch
+lebenden Thread nach begrenztem Join mit `False`, `restart()` lehnt dann ab.
+Bereits dieser Timeout setzt unabhängig von der Bildfrist einen sichtbaren
+Lesethread-Fehler mit `running=False`, `stalled=True`. Das Stop-Event darf
+keinen normal laufenden Stream vortäuschen; auch während des Joins warten
+leere Vorschauabrufe begrenzt. Quelldiagnosen (`read_error`, verworfene
+Zeitstempel seit letzter Lieferung/Start) ergänzen den gespeicherten Fehler,
+auch wenn sie erst beim späteren Ende des Reads vorliegen.
+Nach dessen Ende darf derselbe Owner eine neue Quelle starten.
+Die Vorschau erholt sich nicht selbst; die Bedienung verbindet manuell neu.
+
+`CAP_PROP_READ_TIMEOUT_MSEC` wird nicht gesetzt: Die OpenCV-4.10-Dokumentation
+beschränkt es auf FFmpeg/GStreamer, V4L2 implementiert es nicht. Eine globale
+Änderung von `OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT` ist für die unabhängige
+Erkennung unnötig und bleibt aus. Tests verwenden ausschließlich blockierende
+Fake-Quellen; reale Abschluss- und Wiederanlaufzeiten sind nicht an Hardware
+geprüft. Quellen und Bedienfolgen stehen in der
+[Live-Anleitung](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).

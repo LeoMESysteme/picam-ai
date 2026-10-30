@@ -170,6 +170,148 @@ class BlockingSource(FakeSource):
             yield _frame(1, 33_333_333)
 
 
+class StallingSource(FakeSource):
+    """Zwei einzeln abrufbare Bilder, danach blockiert der naechste Read."""
+
+    def __init__(self):
+        super().__init__([])
+        self.next_frame = threading.Event()
+        self.blocked = threading.Event()
+        self.release = threading.Event()
+
+    def frames(self):
+        yield _frame(1, 33_333_333)
+        if not self.next_frame.wait(5.0):
+            return
+        yield _frame(2, 66_666_666)
+        self.blocked.set()
+        if self.release.wait(5.0):
+            yield _frame(3, 99_999_999)
+
+
+def test_stream_stall_uses_last_delivery_and_stays_latched_until_restart(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+    source = StallingSource()
+    owner = CameraOwner(lambda: source)
+    owner.start()
+    try:
+        first = owner.wait_newer(0, 1.0)
+        now[0] = 101.5
+        source.next_frame.set()
+        assert source.blocked.wait(1.0)
+        second = owner.wait_newer(first[0], 1.0)
+        assert second is not None
+        now[0] = 103.49
+        assert owner.status().get('stalled') is False
+        assert owner.status()['error'] is None
+        now[0] = 103.51
+        status = owner.status()
+        assert status['running'] is True
+        assert status['stalled'] is True
+        assert 'Streamstillstand' in status['error'] and '2.0' in status['error']
+        with pytest.raises(RuntimeError, match='Kamera.*hängt.*warten.*stecken'):
+            owner.start()
+        # Auch ein noch nicht abgeholtes Bild darf nach Ablauf nicht als neu gelten.
+        assert owner.wait_newer(0, 0.01) is None
+        assert owner.stop(timeout=0.02) is False
+        with pytest.raises(RuntimeError, match='Kamera.*hängt.*warten.*stecken'):
+            owner.restart()
+        assert not source.closed
+        source.release.set()
+        assert owner.stop(timeout=1.0) is True
+        assert owner.latest()[0] == second[0]  # spaetes Bild verworfen
+        assert status['error'] in owner.status()['error']
+        assert 'Lesethread' in owner.status()['error']
+        assert owner.status()['stalled'] is True
+        owner.restart(lambda: FakeSource([1], endless=True))
+        assert owner.wait_newer(second[0], 1.0) is not None
+        assert owner.status()['stalled'] is False
+        assert owner.status()['error'] is None
+    finally:
+        source.next_frame.set()
+        source.release.set()
+        owner.stop(timeout=1.0)
+
+
+@pytest.mark.parametrize('restart', [False, True])
+def test_start_grace_before_first_frame_is_reset_on_restart(monkeypatch, restart):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+    source = BlockingSource()
+    owner = CameraOwner(lambda: FakeSource([1]) if restart else source)
+    if restart:
+        owner.start()
+        _wait_stopped(owner)
+        now[0] = 200.0
+        owner.restart(lambda: source)
+    else:
+        owner.start()
+    try:
+        assert source.reading.wait(1.0)
+        started = now[0]
+        now[0] = started + 2.01
+        assert owner.status()['stalled'] is False
+        now[0] = started + 4.99
+        assert owner.status()['stalled'] is False
+        now[0] = started + 5.01
+        assert owner.status()['stalled'] is True
+        assert 'Streamstillstand' in owner.status()['error']
+    finally:
+        source.release.set()
+        owner.stop(timeout=1.0)
+
+
+def test_late_frame_cannot_hide_unpolled_stall(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+    source = BlockingSource()
+    owner = CameraOwner(lambda: source)
+    owner.start()
+    try:
+        assert source.reading.wait(1.0)
+        now[0] = 105.01
+        source.release.set()
+        _wait_stopped(owner)
+        assert owner.latest() is None
+        assert owner.status()['stalled'] is True
+    finally:
+        source.release.set()
+        owner.stop(timeout=1.0)
+
+
+def test_first_delivery_after_two_seconds_is_accepted_then_uses_stall_timeout(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+
+    class SlowStartSource(BlockingSource):
+        def frames(self):
+            self.reading.set()
+            if self.release.wait(5.0):
+                yield _frame(1, 33_333_333)
+                blocked.set()
+                finish.wait(5.0)
+
+    blocked, finish = threading.Event(), threading.Event()
+    source = SlowStartSource()
+    owner = CameraOwner(lambda: source)
+    owner.start()
+    try:
+        assert source.reading.wait(1.0)
+        now[0] = 104.9
+        source.release.set()
+        assert blocked.wait(1.0)
+        assert owner.wait_newer(0, 1.0) is not None
+        now[0] = 106.89
+        assert owner.status()['stalled'] is False
+        now[0] = 106.91
+        assert owner.status()['stalled'] is True
+    finally:
+        source.release.set()
+        finish.set()
+        owner.stop(timeout=1.0)
+
+
 @pytest.mark.parametrize("action", ["stop", "restart"])
 def test_blocked_reader_refuses_restart_and_keeps_single_source(action):
     source = BlockingSource()
@@ -185,7 +327,7 @@ def test_blocked_reader_refuses_restart_and_keeps_single_source(action):
     try:
         if action == "stop":
             assert owner.stop(timeout=0.01) is False
-            assert owner.status()["running"] is True
+            assert owner.status()["running"] is False
             with pytest.raises(RuntimeError, match="Lesethread.*nicht beendet"):
                 owner.start()
             with pytest.raises(RuntimeError, match="Lesethread.*nicht beendet"):
@@ -198,6 +340,86 @@ def test_blocked_reader_refuses_restart_and_keeps_single_source(action):
         source.release.set()
         owner.stop(timeout=1.0)
     assert source.closed
+
+
+def test_rejected_restart_before_stall_deadline_reports_blocked_reader(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+    source = StallingSource()
+    owner = CameraOwner(lambda: source)
+    stop_owner = owner.stop
+    # Die echte Stop-Logik bleibt erhalten, nur die Join-Frist wird verkürzt.
+    monkeypatch.setattr(owner, 'stop', lambda: stop_owner(timeout=0.01))
+    owner.start()
+    try:
+        assert owner.wait_newer(0, 1.0) is not None
+        now[0] = 100.5
+        with pytest.raises(RuntimeError, match='Neustart abgelehnt'):
+            owner.restart()
+        status = owner.status()
+        assert status['running'] is False
+        assert status['stalled'] is True
+        assert 'Lesethread' in status['error'] and 'Kamera hängt' in status['error']
+        now[0] = 120.0
+        assert owner.status() == status
+        assert owner.wait_newer(0, 0.1) is None
+        assert not source.closed
+        source.next_frame.set()
+        source.release.set()
+        assert stop_owner(timeout=1.0)
+        assert owner.latest()[0] == 1
+        assert owner.status()['error'] == status['error']
+    finally:
+        source.next_frame.set()
+        source.release.set()
+        stop_owner(timeout=1.0)
+
+
+@pytest.mark.parametrize('read_error,rejected', [
+    ('kein Bild innerhalb von READ_FAIL_TIMEOUT_S=2.0s', 0),
+    (None, 3),
+    ('read liefert False', 3),
+])
+def test_stall_keeps_source_diagnostics_even_when_source_finishes_later(monkeypatch, read_error, rejected):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+
+    class DiagnosedSource(BlockingSource):
+        rejected_timestamps = 7
+
+        def frames(self):
+            yield _frame(1, 33_333_333)
+            self.reading.set()
+            if self.release.wait(5.0):
+                self.read_error = read_error
+                self.rejected_timestamps += rejected
+
+    source = DiagnosedSource()
+    owner = CameraOwner(lambda: source)
+    owner.start()
+    try:
+        assert source.reading.wait(1.0)
+        now[0] = 102.1
+        assert owner.status()['stalled'] is True
+        source.release.set()
+        _wait_stopped(owner)
+        error = owner.status()['error']
+        assert 'Streamstillstand' in error
+        if read_error:
+            assert read_error in error
+        if rejected:
+            assert 'rejected_timestamps=3' in error
+        else:
+            assert 'rejected_timestamps' not in error
+        with pytest.raises(RuntimeError, match='Erneutes Öffnen fehlgeschlagen'):
+            owner.restart(lambda: FakeSource([], fail_open='Erneutes Öffnen fehlgeschlagen'))
+        # Auch ein fehlgeschlagener Verbindungsversuch darf die genauere
+        # Stillstandsursache erst nach einem erfolgreichen Start löschen.
+        assert error in owner.status()['error']
+        assert 'Erneutes Öffnen fehlgeschlagen' in owner.status()['error']
+    finally:
+        source.release.set()
+        owner.stop(timeout=1.0)
 
 
 def test_new_generation_stays_running_after_blocked_generation_ends():

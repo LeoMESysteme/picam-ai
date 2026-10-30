@@ -154,6 +154,20 @@ async function withLivePage(check, initial = {}) {
 }
 let domTestNumber = 0;
 
+test('camera status shows stream stall even while its reader still runs', async () => {
+  await withLivePage(async (page, element, poll) => {
+    page.status = {...running, run: {...running.run, latest_age_s: 2.1},
+      camera: {running: true, stalled: true, error: 'Streamstillstand: kein Bild seit 2.0 s'}};
+    await poll();
+    assert.equal(element('camera').textContent, 'Streamstillstand: kein Bild seit 2.0 s');
+    assert.equal(element('headline').className, 'value stale');
+    page.status = {state: 'stopped', error: 'kamera: Streamstillstand: kein Bild seit 2.0 s',
+      camera: page.status.camera};
+    await poll();
+    assert.match(element('error').textContent, /Streamstillstand/);
+  });
+});
+
 test('action error survives running polls until an accepted setup start', async () => {
   await withLivePage(async (page, element, poll) => {
     await element('setup').onclick();

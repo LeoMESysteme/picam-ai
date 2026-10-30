@@ -117,8 +117,24 @@ steht im [Pipeline-Code](../../api/pipeline.md) und in der
 
 Fehlen neue Kamerabilder, kennzeichnet die Live-Oberfläche den zuletzt
 gelesenen Datensatz nach der Altersgrenze als STALE; ohne neues Bild
-entsteht kein zusätzlicher Record. Der Streamstillstand beendet den Lauf
-derzeit erst nach dem OpenCV-Timeout. Große Wertwechsel können außerdem
+entsteht kein zusätzlicher Record. Seit R13-22 erkennt der Kamera-Halter
+einen Streamstillstand nach 2 s ohne geliefertes Bild anhand der monotonen
+Host-Uhr, auch wenn OpenCV noch im Lesen blockiert. Der Lauf endet mit
+sichtbarem Kamerafehler; `session.json` hält den Stillstand fest. Der Fehler
+bleibt bis zum Quellenneustart erhalten, verspätete Bilder werden verworfen.
+Bis zum ersten Bild nach Start oder Neustart gilt eine eigene Anlauffrist
+von 5 s ab Leserstart nach dem Öffnen der Quelle: eine ungemessene Reserve
+für STREAMON und ersten Read unter Last. Danach gilt die 2-s-Frist.
+Die Vorschau startet nach Stillstand nicht von selbst neu; über **Kamera
+neu verbinden** oder einen Neustart des Werkbankservers wieder verbinden.
+Lebt der alte Lesethread nach dem Stop-Timeout noch, wird der Neustart
+abgelehnt: `running=False`, `stalled=True` und ein sichtbarer Fehler
+melden die hängende Kamera. Warten oder neu stecken, dann erneut verbinden.
+Leere Vorschauabrufe warten begrenzt; vorhandene Quellendiagnosen ergänzen
+den Fehler. Die Hardwareprüfung der Anlauf- und Wiederanlaufzeiten ist offen
+([Bedienung bei Stillstand](../anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus)).
+Diese Dauer beschreibt die Überwachung der Bildlieferung, keine
+Aufnahme- oder Messlatenz. Große Wertwechsel können außerdem
 <code>tracking_lost:low_score</code> auslösen, weil das Tracking noch den
 Zifferninhalt berücksichtigt ([OQ-26](../open-questions.md#oq-26)).
 

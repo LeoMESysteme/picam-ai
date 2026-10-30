@@ -125,6 +125,81 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert summary["tolerance_frames"] == 0
 
 
+def test_blocking_stream_ends_live_run_and_persists_error_without_new_valid(tmp_path, monkeypatch):
+    from test_live_camera import FakeSource, StallingSource
+
+    from dispread.live.camera import CameraOwner
+    from dispread.live.service import LiveService
+
+    class ImageSource(StallingSource):
+        def frames(self):
+            for frame in super().frames():
+                yield Frame(frame_sequence=frame.frame_sequence, image=embed('+ 1.2345 '),
+                            capture_timestamp=frame.capture_timestamp, source_id='fake')
+
+    source = ImageSource()
+    owner = CameraOwner(lambda: source)
+    now = [100.0]
+    session = _session(tmp_path, [], monotonic=lambda: now[0])
+    session._owner = owner
+    session.start()
+    service = LiveService(owner, tmp_path / 'service', diagnostic_staging_root=tmp_path / 'staging')
+    service._session, service._run_dir, service._state = session, tmp_path / 'run', 'running'
+    stop = threading.Event()
+    finished = threading.Event()
+
+    def run():
+        try:
+            service._run_worker(session, stop)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=run)
+    owner.start()
+    try:
+        assert session.step().status is ValueStatus.TRANSITION
+        source.next_frame.set()
+        assert session.step().status is ValueStatus.VALID
+        assert source.blocked.wait(1.0)
+        before = session.records_path.read_bytes()
+        now[0] = 100.6
+        during = service.status()
+        assert during['state'] == 'running'
+        assert during['run']['latest_age_s'] > 0.5  # bestehende STALE-Anzeige
+        assert session.records_path.read_bytes() == before
+        monkeypatch.setattr('dispread.live.camera.STREAM_STALL_TIMEOUT_S', 0.05)
+        worker.start()
+        assert finished.wait(5.0), 'Lauf wartet auf blockierendes read()'
+        worker.join(1.0)
+        assert not worker.is_alive(), 'Lauf wartet auf blockierendes read()'
+        status = service.status()
+        assert status['state'] == 'stopped'
+        assert 'Streamstillstand' in status['error']
+        assert status['camera']['running'] is True
+        assert status['camera']['stalled'] is True
+        saved = json.loads(session.session_path.read_text())
+        assert 'Streamstillstand' in saved['summary']['camera_error']
+        assert 'Streamstillstand' in saved['summary']['end_reason']
+        assert saved['ended_at_utc']
+        assert session.records_path.read_bytes() == before  # kein VALID in der Luecke
+        assert owner.stop(timeout=0.02) is False
+        source.release.set()
+        assert owner.stop(timeout=1.0) is True
+        owner.restart(lambda: FakeSource([1], endless=True))
+        assert owner.status()['stalled'] is False
+        assert session.step() is None
+        assert service.status()['error'] == status['error']
+        assert json.loads(session.session_path.read_text()) == saved
+    finally:
+        stop.set()
+        source.next_frame.set()
+        source.release.set()
+        if worker.ident is not None:
+            worker.join(1.0)
+        session.stop()
+        owner.stop(timeout=1.0)
+
+
 def test_unreadable_frame_is_rejected_not_guessed(tmp_path):
     blank = embed("+ 1.2345 ") * 0 + 200
     session = _session(tmp_path, [blank])

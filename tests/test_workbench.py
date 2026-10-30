@@ -2357,6 +2357,25 @@ def test_gedrosselte_ablesung_bleibt_ohne_nachfuehrungsverlust_unveraendert(tmp_
     assert controller.reading["gate_status"] == vorher["gate_status"]
 
 
+def test_controller_reports_stream_stall_while_reader_is_running(tmp_path):
+    class StalledOwner:
+        def wait_newer(self, after, timeout):
+            return None
+
+        def status(self):
+            return {'running': True, 'stalled': True, 'error': 'Streamstillstand: kein Bild seit 2.0 s'}
+
+    c = Controller(tmp_path / 'data', owner=StalledOwner())
+    c.start()
+    try:
+        deadline = time.monotonic() + 1.0
+        while c.snapshot()['error'] is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert 'Streamstillstand' in (c.snapshot()['error'] or '')
+    finally:
+        c.close()
+
+
 def test_controller_is_fed_by_camera_owner_and_can_save_profile(tmp_path):
     import numpy as np
 
@@ -2433,6 +2452,47 @@ def test_controller_stopped_owner_backs_off_and_closes_promptly(tmp_path):
         started = time.monotonic()
         c.close()
         assert time.monotonic() - started < 2
+
+
+def test_controller_backs_off_when_owner_stop_wakes_waiter_before_join_finishes(tmp_path):
+    from test_live_camera import BlockingSource
+
+    from dispread.live.camera import CameraOwner
+
+    source = BlockingSource()
+    owner = CameraOwner(lambda: source)
+    c = Controller(tmp_path / 'data', owner=owner)
+    waits = []
+
+    class ObservedStop(threading.Event):
+        def wait(self, timeout=None):
+            waits.append(timeout)
+            self.set()
+            return True
+
+    c.stop = ObservedStop()
+    calls = 0
+    wait_newer = owner.wait_newer
+
+    def bounded_wait(after, timeout):
+        nonlocal calls
+        calls += 1
+        assert calls <= 2, 'Vorschauschleife dreht ohne Pause'
+        return wait_newer(after, timeout)
+
+    owner.start()
+    try:
+        assert source.reading.wait(1.0)
+        # stop() hat die Leser geweckt, wartet aber noch auf seinen Join.
+        owner._stop.set()
+        owner.wait_newer = bounded_wait
+        c._feed_from_owner()
+        assert waits and 0 < waits[0] <= 0.5
+        assert calls == 1
+    finally:
+        source.release.set()
+        owner.stop(timeout=1.0)
+        c.close()
 
 
 def test_controller_without_owner_and_without_simulation_reports_missing_camera(tmp_path):

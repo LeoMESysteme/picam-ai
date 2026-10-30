@@ -342,7 +342,7 @@ class LiveSession:
                 self._output_error_saved = True
             if got is None:
                 status = self._owner.status()
-                if not status["running"]:
+                if status.get("stalled") or not status["running"]:
                     raise CameraLost(status.get("error") or "Kamera gestoppt")
                 return None
             sequence, frame = got
