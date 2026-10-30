@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: Docs-Playwright „Hinweise bleiben überfahrbar …“ fährt den
+  Zeiger direkt zum Hinweis statt über `hint.hover()`. Playwright scrollte
+  dabei gelegentlich erst das Fenster; der Hinweis folgte seinem Ziel, lag
+  nicht mehr unter dem Zeiger und schloss sich regulär nach 150 ms. Etwa
+  jeder dritte Lauf scheiterte so, auch ohne Last; mit dem direkten Weg 8/8.
+  Das Verhalten von `wiki-hint.js` bleibt unverändert.
+
 * 2026-10-30: Session-Exportdienst nach zwei Reviews repariert. Die Exportanfrage
   kam nie an: Der Runner darf wegen `ProtectSystem=strict` nur unter
   `/var/lib/forgejo-runner` schreiben, der EROFS-Fehler wurde verschluckt.
