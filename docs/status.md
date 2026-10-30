@@ -19,8 +19,10 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 * **Nicht geschafft:** Langzeitlauf (29.10. fiel durch API-Limit aus; die
   Werkbank endete am 28.10. 16:57 ohne protokollierten Grund, die
   Bestätigung ist damit verloren — neue Einrichtung nötig).
-* Docs-Playwright: Hinweis-Test `docs-site.spec.ts:324` scheitert auf der
-  neuen GSVmulti-Seite (Geometrie/Timer); Fix übernimmt die Wiki-Sitzung.
+* Docs-Playwright 30.10.: 84 bestanden, 1 lastbedingter Ausreißer
+  (Tour-Abbildungen, einzeln grün). Ein zwischenzeitlich gemeldeter
+  Fehlschlag des Hinweis-Tests kam von einer Port-Überschneidung mit der
+  Wiki-Sitzung (beide auf 8766), nicht vom Stand.
 
 ## Neu am 2026-10-28 (Zweig `feat/r13-display-haertung`, nicht in `master`)
 
