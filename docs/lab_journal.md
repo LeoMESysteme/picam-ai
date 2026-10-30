@@ -2950,3 +2950,58 @@ Bildnummer zählt aber weiter. Die Sitzung buchte deshalb alle Bilder seit
 dem Serverstart als übersprungen. Das betraf nur Zähler und Trace des
 ersten Records, keine Werte. Die Sitzung zählt Lücken jetzt erst ab dem
 ersten gelieferten Bild (Test).
+
+## 2026-10-30 — Neue Aufstellungen nach dem Merge: frontal mit Stößen, schräg links {#neue-aufstellungen-2026-10-30}
+
+Beide Läufe hat Leonhard eingerichtet, bestätigt und gefahren. Die Werkbank
+lief mit `master` 3a67aa2 (R13 gemergt). Es gab keinen Werteplan: Die
+Anzeige wechselte durch Laständerung am Sensor ständig. Ausgewertet ist
+mit `scripts/live-reference-eval.py`, die Lage mit ORB gegen das
+Einrichtungsbild.
+
+**Frontal, `live-20261030T113427Z/run-01`** (7,2 min):
+
+* Einrichtung: Belichtung OK (Glaspegel 141), Gegenlesen `+0.61094` OK.
+  Die Warnungen betreffen nur den Einheitsbereich.
+* **0 / 2 606** Fehllesungen; Verzögerung im Median 241 ms (n = 487).
+* Bis zur ersten Marke (331 s) lag die Anzeige in der Einrichtungslage
+  (1–2 px). Ergebnis: 76 % VALID, kaum Trackingverlust.
+* „Leicht verschoben“: 6,5–7 px Versatz. Die Nachführung folgte über den
+  zweiten Durchgang ohne einen einzigen Verlust. Der TRANSITION-Anteil lag
+  danach bei 13 % (vorher 20 %); die TRANSITIONs waren Wertwechsel.
+* „Kamera angestoßen“, etwa 12 s vor der Meldemarke: 71–72 px Versatz und
+  0,6–0,9° Drehung. Das liegt über der Grenze von 20 px. Ab da war jedes
+  Bild UNREADABLE (`tracking_lost`), und der Hinweis „Anzeige bewegt“
+  meldete 72 px. So ist es vorgesehen: Bei so großen Sprüngen muss neu
+  eingerichtet werden.
+
+**Schräg links, `live-20261030T115636Z/run-01`** (3,2 min):
+
+* Einrichtung:
+  * Raster mit 126 von 159 Punkten zugeordnet, Zellversatz bis 0,26
+    Spalten.
+  * Belichtung mit Glaspegel 117 am unteren Bandende.
+  * Gegenlesen `+0.60288` OK.
+* **0 / 1 226** Fehllesungen. Insgesamt 62 % VALID, in stabilen Fenstern
+  93,6 %; frontal waren es 100 %.
+* Der Ausfall kommt in Schüben (bis 48 % UNREADABLE je 20 s), stets mit
+  `rahmen_unstimmig` (832 Bilder). Die Anzeige bewegte sich dabei nicht:
+  0–2 px Versatz, Maßstab etwa −0,1 %.
+* Unsichere Zellen sammeln sich rechts (Zellen 4–7). Von links betrachtet
+  liegen sie am weitesten weg.
+
+**Ursache des Trackingverlusts (offline, 210 Diagnosebilder):**
+* Der starre erste Durchgang scheitert schräg schon an etwa 0,1 % Maßstab.
+* Die Grobschätzung findet nur 1,2–1,9 px Verschiebung. Das liegt unter
+  `coarse_min_shift_px` = 2, deshalb startet kein zweiter Durchgang
+  (109 von 210 Bildern).
+* Die Schwelle stammt aus R13-19b. Damals war der zweite Durchgang starr
+  und hätte nur den ersten wiederholt. Seit R13-19c darf er den Maßstab
+  um ±0,5 % ausgleichen und ist damit nicht mehr derselbe.
+* Ohne die Schwelle würden offline alle 210 Bilder nachgeführt (141 über
+  den zweiten Durchgang).
+
+Ob die zusätzlich nachgeführten Bilder richtig gelesen werden, ist noch
+nicht belegt. Dazu folgt R13-24 mit Nachweis über alle Live-Läufe und den
+synthetischen Durchlauf. Skripte (Job-Verzeichnis): `tracker_replay.py`,
+`abschnitte.py`, `gruende_zeit.py`, `orb_lage.py`.
