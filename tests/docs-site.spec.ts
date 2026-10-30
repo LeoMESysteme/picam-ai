@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
+import { mockSessionArchive } from './session-fixtures';
 
 const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open-questions.html"]')
   .filter({ hasText: /^OQ-07$/ }).first();
@@ -1821,4 +1823,110 @@ test('Verarbeitungskette räumt bei Sofortnavigation auf und bleibt ohne JavaScr
   } finally {
     await context.close();
   }
+});
+
+test('Sessionübersicht trennt Laufgewichtung und echte gepoolte Mediane ohne Rohdatenabruf', async ({ page }) => {
+  await mockSessionArchive(page);
+  const rawRequests: string[] = [];
+  page.on('request', request => { if (request.url().endsWith('.gz.bin')) rawRequests.push(request.url()); });
+  await page.goto('/docs/session-explorer.html');
+  await expect(page.getByRole('combobox', { name: 'Vergleichsgruppe', exact: true })).toHaveValue('regular');
+  await expect(page.locator('.session-metrics')).toContainText('20,5');
+  await expect(page.locator('.session-trend')).toHaveCount(3);
+  const widths = await page.locator('.session-trend').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+  await page.getByRole('combobox', { name: 'Gewichtung', exact: true }).selectOption('frame_weighted');
+  await expect(page.locator('.session-metrics')).toContainText('25');
+  await expect(page.locator('.session-metrics')).toContainText('47,5');
+  // Die Liste folgt der Vergleichsgruppe; „Alle Sessions“ zeigt auch die Testläufe.
+  await expect(page.locator('.session-table tbody tr')).toHaveCount(2);
+  await page.getByRole('combobox', { name: 'Zeigen', exact: true }).selectOption('all');
+  await expect(page.locator('.session-table tbody tr')).toHaveCount(3);
+  expect(rawRequests).toEqual([]);
+  // Ein Tabstopp je Diagramm statt eines je Datenpunkt.
+  await expect(page.locator('.session-trend svg[tabindex="0"]')).toHaveCount(3);
+  await expect(page.locator('.session-trend svg a[tabindex="0"]')).toHaveCount(0);
+  await page.getByLabel('Sessions durchsuchen').fill('live-test');
+  await expect(page.locator('.session-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.session-table')).toContainText('Testlauf – nicht für Messungen verwenden');
+});
+
+test('Sessionauswahl lädt geprüftes Archiv im Explorer und erhält teilbaren A/B-Link', async ({ page }) => {
+  await mockSessionArchive(page);
+  await page.goto('/docs/session-explorer.html');
+  await expect(page.locator('tr[data-session="live-b/run-01"]').getByRole('button', { name: 'Als B vergleichen' })).toBeDisabled();
+  await page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: 'Öffnen', exact: true }).click();
+  // „Öffnen“ führt sichtbar zur Einzelansicht.
+  await expect(page.locator('#untersuchen')).toBeFocused();
+  await expect(page.locator('#untersuchen')).toBeInViewport();
+  await expect(page.locator('tr[data-session="live-a/run-01"] .session-chip--a')).toHaveText('A');
+  const explorer = page.frameLocator('.session-viewer iframe');
+  await expect(explorer.locator('.archive-context')).toContainText('live-a/run-01');
+  await expect(explorer.locator('#workspace')).toBeVisible();
+  await page.locator('tr[data-session="live-b/run-01"]').getByRole('button', { name: 'Als B vergleichen' }).click();
+  await page.locator('.session-viewer').scrollIntoViewIfNeeded();
+  await expect(explorer.locator('#compare')).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('b')).toBe('live-b/run-01');
+  await expect(explorer.locator('.archive-context')).toContainText('keine physikalische Synchronität');
+  await page.reload();
+  await page.locator('.session-viewer').scrollIntoViewIfNeeded();
+  await expect(explorer.locator('#compare')).toBeVisible();
+});
+
+test('Explorer verwirft synthetische Zeitaussagen und markiert Testläufe', async ({ page }) => {
+  await mockSessionArchive(page);
+  await page.goto('/assets/records-explorer/index.html?a=live-test%2Frun-01');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('.archive-context')).toContainText('TESTLAUF');
+  await expect(page.locator('.archive-context')).toContainText('Frameindex');
+  await expect(page.locator('#fTime')).toContainText('Frameindex');
+  await expect(page.locator('#fTime')).not.toContainText(' s');
+});
+
+test('Sessionseite räumt bei Sofortnavigation auf und bleibt schmal bedienbar', async ({ page }) => {
+  await mockSessionArchive(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/docs/session-explorer.html');
+  await expect(page.locator('.session-table tbody tr')).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  const widths = await page.locator('.session-table tbody tr').first().locator('td').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+  await page.locator('.md-content__inner a[href$="uebersicht/messpfad.html"]').click();
+  await expect(page.locator('html')).not.toHaveClass(/session-page/);
+  await page.goBack();
+  await expect(page.locator('#session-dashboard')).toHaveCount(1);
+  await expect(page.locator('.session-trend')).toHaveCount(3);
+});
+
+test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen den Explorer', async ({ page }) => {
+  // Download, Explorer-Ladevorgang und zwei Themewechsel: unter Last auf dem Pi mehr als 30 s.
+  test.setTimeout(60000);
+  const fixture = await mockSessionArchive(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/docs/session-explorer.html');
+  const row = page.locator('tr[data-session="live-a/run-01"]');
+  await row.locator('summary').click();
+  const downloading = page.waitForEvent('download');
+  await row.getByRole('button', { name: 'Original herunterladen' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('records.jsonl');
+  const path = await download.path();
+  const expected = gunzipSync(fixture.bodies.get('chunks/live-a-run-01.gz.bin')!.body as Buffer);
+  expect(readFileSync(path!)).toEqual(expected);
+  const plot = page.locator('.session-trend svg').first();
+  await plot.focus();
+  await expect(page.locator('.session-point-readout').first()).toContainText('live-b/run-01');
+  await plot.press('Home');
+  await expect(page.locator('.session-point-readout').first()).toContainText('live-a/run-01');
+  await plot.press('Enter');
+  await page.locator('.session-viewer').scrollIntoViewIfNeeded();
+  const explorer = page.frameLocator('.session-viewer iframe');
+  await expect(explorer.locator('#workspace')).toBeVisible();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', 'slate');
+  await expect(explorer.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', 'default');
+  await expect(explorer.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(explorer.locator('#workspace')).toBeVisible();
 });

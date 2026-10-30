@@ -164,6 +164,60 @@ was ist die Konsequenz.
   Grundtabelle nur noch den kleinen Status ab; fehlgeschlagene Abfragen
   werden weiterhin wiederholt.
 
+* 2026-10-30: Session-Exportdienst nach zwei Reviews repariert. Die Exportanfrage
+  kam nie an: Der Runner darf wegen `ProtectSystem=strict` nur unter
+  `/var/lib/forgejo-runner` schreiben, der EROFS-Fehler wurde verschluckt.
+  Die Anfrage liegt jetzt unter `/var/lib/forgejo-runner/wiki-export-request`,
+  ein Fehler steht als `request_error` im JSON-Ergebnis. Die Freigabe neuer
+  Generationen scheiterte mit EPERM, weil `chmod` durch den Dienstnutzer
+  setgid löscht und `fchown` auf die Runner-Gruppe verboten ist. Jetzt sind
+  die Blöcke ein gemeinsamer Chunk-Speicher (0640 in privatem 2700-Verzeichnis),
+  Generationen verlinken ihn per Hardlink ohne Kopie und ohne `chown`, die
+  Freigabe geht Dateien → Verzeichnisse von unten → `current`. Der
+  Integritätscache hängt nicht mehr an ctime, verwaiste Generationen werden
+  entfernt, und nach jeder Publikation bleiben `current` und bis zu drei
+  vorherige Generationen als Rückfall. Tief verschachtelte JSONL-Zeilen zählen als ungültig
+  statt den Export dauerhaft zu blockieren, Fehler bleiben pro Lauf. Frames
+  folgen der Annahmeregel des Explorers (Status und Aufnahmezeit nötig;
+  NaN-Konstanten ungültig, Leerzeilen übersprungen), die
+  Leserate ist `(n−1)/Dauer`; archivierte Läufe werden dafür einmalig aus
+  den gespeicherten Blöcken neu ausgewertet (`stats.rules` = 2). Die Auth-Prüfung testet ein echtes Manifest und
+  einen echten Teil statt erfundener Pfade. Konsequenz: einmal
+  `sudo ./scripts/wiki-session-export-install.sh` erneut ausführen; es
+  migriert `/srv/picam-wiki-export/archive` und entfernt die alte Anfrage.
+  Danach brauchen Neuhashen und Neuauswertung einmalig mehrere Exportphasen.
+  Noch offen: kein Selbstheilen bei einem beschädigten gemeinsamen Block,
+  Läufe ohne lokale Quelle behalten die alten Zählregeln.
+
+* 2026-10-30: Session-Explorer nach Design-Review (Impeccable, 22/40) und
+  Codeprüfung überarbeitet. Die Kalenderachse legte über Tage ohne Läufe
+  einen Trend nahe; jetzt steht jeder Lauf als eigene Spalte, Tage sind
+  gruppiert, Statusanteile sind gestapelte Balken in den Diagrammtönen des
+  Wikis, und über jedem Diagramm steht ein Kernsatz aus den Daten. Jedes
+  Diagramm ist ein Tabstopp mit Pfeiltasten statt 77 Einzelpunkten.
+  „Öffnen“ springt sichtbar zur Einzelansicht, A und B sind in der Liste
+  markiert, „Als B vergleichen“ ist erst mit A aktiv, Downloadfehler stehen
+  in der Zeile. Die Liste folgt der Vergleichsgruppe („Alle Sessions“
+  wählbar). Abschnitte stehen im Inhaltsverzeichnis, die Seite nutzt wieder
+  die normale Textbreite. Der eingebettete Explorer zeigt im Wiki weder
+  eigene Marke noch Farbschalter und benennt Status wie das Wiki (VALID …).
+  Behoben: Kopfzeile zeigte Frames statt Dauer, mehr als 255 Statuswerte
+  liefen auf VALID über, Leserate um einen Frame zu hoch ((n−1)/Dauer),
+  fehlendes Gerät erschien als „null“. Die statische Fassung nennt Zeiten
+  und Größen lesbar und springt nicht mehr von h1 auf h3.
+
+* 2026-10-28: Session-Explorer im Wiki: Gesamtkennzahlen mit gleicher
+  Laufgewichtung oder echten gepoolten Frame-Quantilen, Kalenderverläufe,
+  Vergleichsgruppen und Dateiliste führen zum eingebetteten Records Explorer
+  mit A/B-Vergleich und Vollansicht. Originaldateien bleiben unverändert;
+  Testläufe und fehlende Zeitbasen sind gekennzeichnet. Ein separater,
+  blockweise fortsetzbarer Exporter erstellt nur bei beendeter Workbench
+  geprüfte Archivgenerationen. Der optionale Veröffentlichungsschritt nutzt
+  bei Fehlern den bisherigen Stand oder einen Leerzustand. Normale Builds,
+  Playwright und Doku-Pflege brauchen keine echten Sessiondaten. Einrichtung
+  über `scripts/wiki-session-export-install.sh`; keine Änderung am Messpfad
+  oder Neustarts bestehender Dienste durch die Integration.
+
 * 2026-10-28: GSVmulti-PDF gegen die Herstelleranleitung v2.6 und den
   vorhandenen Ausgabepfad geprüft. UserDefined belegt einen konfigurierbaren
   Windows-COM-Zahlenimport; die reine Spezifikationsbeschaffung sperrt den

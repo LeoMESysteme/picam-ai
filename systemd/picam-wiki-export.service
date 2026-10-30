@@ -1,0 +1,30 @@
+[Unit]
+Description=Abgeschlossene Messpfad-Sessions für das Wiki vorbereiten
+Documentation=file:/home/me-systeme/picam-ai/docs/HOSTING.md
+
+[Service]
+Type=oneshot
+User=me-systeme
+EnvironmentFile=/etc/picam-wiki-export.conf
+ExecStart=/usr/local/lib/picam-wiki-export/run
+UMask=0077
+Nice=19
+CPUQuota=25%
+CPUWeight=1
+IOSchedulingClass=idle
+MemoryMax=256M
+# The application checkpoints each bounded block. Timeout is an additional
+# limit; a kill cannot publish a partial generation.
+TimeoutStartSec=75
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/srv/picam-wiki-export/archive
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+

@@ -67,6 +67,182 @@ Prüfstand dient nur der automatischen Schutzprüfung.
 
 ## Wartung
 
+### Session-Archiv und Explorer
+
+Der [Session-Explorer](session-explorer.md) ist Teil des normalen Wikis.
+Ein Build ohne Archiv enthält einen klaren Leerzustand. Die bestehenden
+Playwright- und Doku-Pflege-Workflows bekommen weder Zugriff auf `var/live`
+noch eine neue lokale Abhängigkeit. Ein zusätzlicher Schritt in `docs.yml`
+ergänzt ausschließlich bei Push auf `master` eine bereits geprüfte Generation
+im Buildverzeichnis `site/`. Manuelle Prüfstandsdeployments verändern weiterhin
+keine Produktion. Anmeldung und Schutzprüfung gelten auch für Katalog,
+Manifeste, komprimierte Teile und die eigenständige Explorer-Seite.
+Der optionale Schritt legt für den Standardbibliothekshelfer eine Projekt-venv
+mit `--system-site-packages --without-pip` an. Es wird kein Paket installiert.
+Schlägt schon diese Vorbereitung fehl, bleibt der normale Wiki-Build mit
+Leerzustand gültig; die bisherigen übrigen Workflows brauchen diese venv nicht.
+
+**Einrichtung einmalig, in einer Messpause:**
+
+```bash
+sudo ./scripts/wiki-session-export-install.sh
+```
+
+Das Skript installiert nur `picam-wiki-export.service` und `.path`, den
+Standardbibliotheks-Exporter und seine feste Konfiguration. Es startet weder
+die Workbench noch bestehende Runner neu. Der Dienst läuft als `me-systeme`,
+mit `PrivateDevices`, lesbarem Home, geschütztem System, 25 % eines CPU-Kerns,
+256 MiB Speicher und niedriger CPU-/I/O-Priorität. Der Runner kann nur eine
+feste Anfrage schreiben und fertige Archivgenerationen lesen; er erhält keinen
+Zugriff auf Home, Steuersocket oder Geräte. Inhalt der Anfragedatei wird nicht
+gelesen und nicht als Befehl oder Parameter verwendet.
+
+Das Skript ist idempotent. Ein erneuter Lauf aktualisiert Code und Units,
+startet nur `picam-wiki-export.path` neu und migriert ein älteres Archiv:
+Gruppe `forgejo-runner` und setgid auf allen Archivverzeichnissen,
+`blocks/` auf 2700 mit 0640-Dateien, `snapshots/` auf 2750. Die frühere
+Anfragedatei `/srv/picam-wiki-export/request` wird entfernt. Die neue
+Anfragedatei legt der Runner beim ersten Deploy selbst an; root schreibt
+nichts in sein Verzeichnis.
+
+**Einmalige Kosten nach diesem Update:** Der Integritätscache bekommt ein
+neues Schlüsselformat, und alle Läufe mit vorhandener Quelle werden nach den
+neuen Zählregeln neu ausgewertet. Das braucht mehrere Exportphasen
+(je 45 s bei 25 % CPU); bis dahin bleibt der bisherige Archivstand sichtbar.
+Nach dem Update in einer Messpause einige Phasen anstoßen (Befehl unten).
+
+Das nächste reguläre Produktionsdeployment schreibt
+`/var/lib/forgejo-runner/wiki-export-request` und wartet höchstens 15 s.
+Der Runner läuft mit `ProtectSystem=strict` und darf nur unter
+`/var/lib/forgejo-runner` schreiben; eine Anfrage unter `/srv` scheiterte
+früher still mit EROFS. `picam-wiki-export.path` beobachtet die Datei als
+systemd (root); der Exportdienst braucht keinen Zugriff darauf, und der
+Runner keinen Neustart. Scheitert das Schreiben, steht der Fehler als
+`request_error` im JSON-Ergebnis des CI-Schritts, und es wird nicht
+gewartet. Der Exportdienst
+arbeitet pro Anfrage höchstens 45 s, mit zusätzlicher systemd-Zeitgrenze von
+75 s. Bei laufendem `dispread serve` oder unklarem Prozessstatus importiert er
+nichts. Startet eine Workbench während der Bearbeitung, endet sie am nächsten
+begrenzten Prüfschritt. Die Workbench wird niemals angehalten oder am Start
+gehindert. Das ersetzt keine harte Ressourcenisolation: Builds und Browsertests
+gehören auf dem gemeinsamen Pi weiterhin in Messpausen.
+
+Der dauerhafte Bestand liegt unter `/srv/picam-wiki-export/archive`:
+`checkpoint.sqlite3` enthält wiederaufnehmbare Dateiblöcke und numerische
+Beobachtungen, `blocks/` die komprimierten Originalblöcke, `snapshots/`
+unveränderliche Generationen. Die atomare Textdatei `current` nennt die aktuelle
+Generation; ein `published`-Beleg unterscheidet sie von abgebrochener Arbeit.
+
+Rechte: `archive/` gehört `me-systeme:forgejo-runner` mit 2750 (setgid).
+Der Dienstnutzer ist **nicht** in `forgejo-runner`; alles, was er anlegt,
+erhält die Gruppe nur über setgid-Vererbung. Ein `chmod` durch ihn löscht
+setgid (Kernelregel für Nichtmitglieder), und `chown` auf diese Gruppe ist ihm
+verboten. Deshalb legt der Dienst Dateien nie in einem Verzeichnis an, das er
+schon umgestellt hat, und ruft kein `chown` auf. `blocks/` ist der gemeinsame
+Chunk-Speicher: Dateien 0640, das Verzeichnis privat 2700, für den Runner
+also unerreichbar. Jede Generation verweist per Hardlink auf dieselben
+Inodes, kostet also keinen zusätzlichen Platz und muss bei der Freigabe nicht
+kopiert werden. Checkpoints und Integritätscache bleiben 0600
+(`UMask=0077`). Eine neue Generation entsteht als privates 0700-Verzeichnis.
+Erst nach vollständiger Publikation prüft der Dienst, dass jeder Eintrag die
+Archivgruppe trägt (sonst Fehler statt einer für den Runner unlesbaren
+Generation), öffnet dann alle Dateien, danach die Verzeichnisse von unten nach
+oben und `current` zuletzt. Bei Generationsverzeichnissen geht setgid dabei
+verloren; das ist unschädlich, weil darin nichts mehr angelegt wird.
+
+Bereinigung: Nach jeder erfolgreichen Publikation bleiben `current` und bis
+zu drei vorherige Generationen erhalten (bevorzugt eine bereits für den Runner
+freigegebene). Ältere Generationen, abgebrochene Staging-Verzeichnisse und
+nicht freigegebene Generationen werden entfernt; eine Generation wird erst
+atomar aus `snapshots/` verschoben und dann gelöscht. Den Runnerzustand
+`/var/lib/forgejo-runner/wiki-session-state.json` kann der Dienst nicht
+lesen. Zeigt er auf eine schon entfernte Generation, fällt der Runner auf
+`current` zurück. Zwei Publikationen während eines einzigen Deploys könnten
+ihm die gerade gelesene Generation entziehen; Prüfsummen und Dateizugriffe
+fangen das ab, das Deploy bleibt dann ohne neu eingebundene Sessions
+(Leerzustand des Builds), die Schutzprüfung bleibt unberührt. Lehnt der
+Runner mehr als drei Generationen hintereinander ab (etwa weil das Archiv
+die Hosting-Grenzen übersteigt), gibt es keinen älteren Rückfallstand mehr.
+Generationen teilen sich die Blöcke als Hardlinks: Ein beschädigter Block
+trifft alle Generationen zugleich, und der Exporter bemerkt das wegen des
+Integritätscaches nicht; der Runner prüft jede Prüfsumme und lehnt dann ab.
+Eine automatische Reparatur gibt es dafür noch nicht.
+`blocks/` selbst wird nicht bereinigt: Blöcke bereits übernommener Läufe
+bleiben dauerhaft, auch wenn lokale Quellen verschwinden.
+Eine veränderte Quelle unter derselben Laufkennung wird als Konflikt gemeldet.
+Dieses Verzeichnis separat sichern.
+
+```bash
+# Nach beendeter Workbench eine Exportphase anfordern:
+sudo systemctl start picam-wiki-export.service
+sudo journalctl -u picam-wiki-export.service -n 20 --no-pager
+```
+
+Große Läufe können mehrere Exportphasen benötigen. Hashing, Komprimierung und
+JSONL-Verarbeitung setzen innerhalb einer Datei am letzten geprüften Block
+fort; fertige exakte Statistiken werden zwischengespeichert. Eine unterbrochene
+einzelne SQL-Abfrage beginnt erneut, ohne doppelte Beobachtungen einzufügen.
+Das Zeitbudget wird bei jedem Prüfschritt und in jedem SQLite-Progress-Callback
+geprüft. Der teurere Prozessscan (`/proc`) läuft höchstens alle 100 ms, im
+Exporter wie bei der Freigabe; der erste Prüfschritt jeder Exportphase scannt
+immer, sodass eine laufende Workbench jeden Quellzugriff verhindert. Der
+Integritätscache verifizierter Blöcke ist an Inode, Größe und mtime gebunden,
+nicht an ctime: Hardlinks und `chmod` ändern ctime und lösten früher bei
+jeder neuen Generation ein vollständiges Neuhashen aus. Neue Blöcke werden
+einmal gehasht, der Fortschritt bleibt über abgebrochene Phasen erhalten.
+Wird eine Phase nach dem Anlegen einer Generation, aber vor ihrem
+`published`-Beleg abgebrochen, entfernt der Exporter diese Generation sofort.
+Blockierende Systemaufrufe können die kooperative
+Reaktion verzögern; eine garantierte Stoppzeit wird damit nicht behauptet.
+Die Rohdateien sind in unabhängig komprimierte Blöcke von höchstens 1 MiB
+aufgeteilt. Metadatendateien über 1 MiB werden abgelehnt; JSONL-Zeilen über
+1 MiB bleiben in den Originaldateien erhalten, zählen aber als nicht auswertbar.
+Statistikfehler und ausgelassene Zeilen sind sichtbar, fehlende Zahlen sind
+`null` und niemals eine erfundene Nullmessung.
+
+Annahmeregel wie im Records Explorer: Ein Frame ist ein JSON-Objekt mit
+Zeichenketten-`status` und endlichem `capture_timestamp.value_ns`. Alles andere,
+auch zu tief verschachtelte Zeilen, zählt als nicht auswertbare Zeile
+(`invalid_lines`, Hinweis `invalid-record-lines`). Die Statusanteile der
+gezählten Frames ergeben damit 100 %; unbekannte Statuswerte erscheinen unter
+ihrem eigenen Namen. Ein Fehler in den Metadaten eines Laufs landet in
+`errors` und hält die übrigen Läufe nicht auf.
+Leserate je Lauf: `(n − 1) / ((t_last − t_first) / 1e9)` Hz, mit `n`
+gezählten Frames und erstem/letztem Aufnahmezeitstempel, nur bei einheitlicher
+bekannter Zeitbasis und monotoner Folge. Gruppen: gleich gewichtet der
+Mittelwert der Laufraten, frame-gewichtet `Σ(n_i − 1) / Σ Dauer_i` über Läufe
+mit Dauer. Jeder Lauf trägt die Regelversion in `stats.rules` (aktuell 2).
+Bereits archivierte Läufe mit älterer Regel werden einmalig aus den
+gespeicherten Blöcken neu ausgewertet (nur Entpacken und Parsen, ohne
+Quellzugriff auf `records.jsonl`, blockweise fortsetzbar); die Dateiteile
+bleiben identisch. Das gilt für Läufe, deren Quellverzeichnis noch existiert.
+Läufe ohne lokale Quelle behalten die Statistik ihrer Übernahme und sind am
+fehlenden `stats.rules` erkennbar.
+
+Kommt keine neue Generation rechtzeitig an, bleibt der letzte geprüfte Stand
+sichtbar. Die Veröffentlichungsseite nennt immer das Archivdatum; während
+einer dauerhaft geöffneten Workbench kommen keine neuen Sessions hinzu.
+Der Runner merkt den letzten erfolgreich eingebundenen Stand unter
+`/var/lib/forgejo-runner/wiki-session-state.json`. Bei beschädigten oder zu
+großen Daten wird ein früherer gültiger Stand verwendet, sonst eine leere
+Ansicht mit Hinweis. Grenzen werden für Website **und** Archiv zusammen
+geprüft. Ein Fehler der Authentifizierung oder Schutzprüfung verhindert das
+Deployment weiterhin.
+
+Eine künstliche Integrationsgeneration lässt sich ohne Dienst und echte
+Sessions in einen separat gebauten Prüfstand einbinden:
+
+```bash
+./.venv/bin/python scripts/wiki_session_site.py --site site --snapshot /pfad/zur/fixture-generation
+```
+
+Die aktuelle Quelle ist das konfigurierte `var/live` des installierten
+Checkouts, nicht ein beliebiger Worktree. Bereits gelöschte historische Läufe
+werden nur aus einer vorhandenen Sicherung wiederherstellbar. Weder
+Diagnosebilder noch Vorlagen, Videos oder beliebige Pfade aus Metadaten werden
+mitveröffentlicht. Ohne native Browserentpackung stehen die gzip-Teile weiter
+zum Download bereit; Reihenfolge und Prüfsummen stehen im Manifest.
+
 ### Playwright-Prüfung auf dem vorhandenen Runner
 
 `.github/workflows/playwright.yml` läuft bei Pushes und Pull Requests nach
@@ -320,7 +496,10 @@ Zwei Quellen, beide ohne Zugriff auf `auth.json`:
 * **Client-Secret erneuern:** in Forgejo bei der OAuth2-Anwendung neu erzeugen,
   dann `OAUTH_CLIENT_SECRET` im Pages-Projekt setzen und neu deployen.
 * **Schutz von Hand prüfen:**
-  `./scripts/check-auth-protected.sh https://picam-docs.pages.dev`
+  `./scripts/check-auth-protected.sh https://picam-docs.pages.dev`.
+  Enthält der lokale Build `site/assets/sessions/catalog.json` Läufe, prüft
+  das Skript zusätzlich ein echtes Manifest und einen echten Teil daraus
+  (anderer Build: `SITE_DIR=/pfad/site`); sonst nur die festen Pfade.
 * **Abschalten:** die Variable `CLOUDFLARE_PAGES_PROJECT` in Forgejo löschen,
   dann gibt es keine Uploads mehr. Um alles zu entfernen, das Pages-Projekt löschen.
 

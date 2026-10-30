@@ -1,0 +1,12 @@
+[Unit]
+Description=Feste Exportanfrage des Wiki-Deployments beobachten
+
+[Path]
+# Der Runner (ProtectSystem=strict) darf nur unter /var/lib/forgejo-runner
+# schreiben. systemd beobachtet die Datei als root; der Exportdienst liest sie
+# nie, ihr Inhalt hat keine Bedeutung.
+PathChanged=/var/lib/forgejo-runner/wiki-export-request
+Unit=picam-wiki-export.service
+
+[Install]
+WantedBy=paths.target
