@@ -5,6 +5,36 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: Session-Explorer-Tab neu gegliedert, nachdem eine
+  Impeccable-Kritik 21/40 ergab (unverbundene Abschnitte, keine Antwort
+  oben, dreifache Live-Ansage, unvollständige Fassung ohne JavaScript).
+  Der Lauf ist jetzt das zentrale Objekt: oben „Letzter Lauf“ und „Zum
+  Nachsehen“ mit benannten Auffälligkeiten (Tukey-Zäune innerhalb der
+  Gruppe, ab vier Läufen; Hinweis, kein Qualitätsurteil), drei statt sechs
+  Kennzahlen, Gewichtung und seltene Kennzahlen in einer Tiefenebene.
+  Verlauf als ein umschaltbares Diagramm; Klick und Enter führen zur
+  Tabellenzeile statt sofort Rohdaten zu laden. Eine Laufmatrix ersetzt
+  die Fließtextliste: Startzeit statt Verzeichnisname, Statusstreifen,
+  Zahlen in Spalten, Sortierung nach VALID und p95, „Als B daneben“ nur
+  bei gesetztem A, Details und Downloads in einer aufklappbaren Zeile.
+  p95 nicht mehr im Warngelb, Leserate-Achse um die Daten mit
+  Kamera-Bildrate, Versionsmarken erst ab zwei Ständen. Einzelansicht
+  mit Abstand unter dem Seitenkopf, breiter ohne rechte Leiste, geteilte
+  Links springen direkt hin; Ladefehler ersetzen auch Verlauf und Tabelle.
+  `scripts/wiki_session_site.py`: Die Tabelle ohne JavaScript enthält die
+  Statusanteile je Lauf und ist eine Tiefenebene. Tests angepasst, neuer
+  Node-Test für die Auffälligkeitsregel. Zweite Kritik (27/40) umgesetzt:
+  Jeder Verlaufsreiter markiert nur Auffälligkeiten seiner Kennzahl, die
+  übrigen Gründe nennt die Auslesezeile; Filter „Nur auffällige“ und Suche
+  nach „auffällig“; „Im üblichen Bereich der Gruppe“ sagt ausdrücklich,
+  dass das keine Messfreigabe ist. Ladefehler erscheinen einmal mit
+  „Seite neu laden“, klappen die Ersatztabelle auf und lassen den Explorer
+  für lokale Dateien erreichbar. Ohne JavaScript bekommt die Ersatztabelle
+  eine Spalte je Kennzahl, `caption`/`scope` und einen eigenen
+  Scrollbereich; die rechte Leiste weicht per `:has()`. Knöpfe tragen den
+  Lauf im zugänglichen Namen, Feldrahmen haben 3:1, Statusanteile eine
+  Haarfuge, Zahl und Einheit brechen nicht mehr getrennt um.
+
 * 2026-10-30: R13-24 behebt Trackingverlust bei kleiner scheinbarer
   Maßstabsänderung in Schrägsicht: Der zweite Ähnlichkeitsversuch darf
   auch bei Grobverschiebung unter 2 px und Offset (0,0) laufen.

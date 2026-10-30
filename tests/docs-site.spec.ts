@@ -1834,47 +1834,73 @@ test('Sessionübersicht trennt Laufgewichtung und echte gepoolte Mediane ohne Ro
   const rawRequests: string[] = [];
   page.on('request', request => { if (request.url().endsWith('.gz.bin')) rawRequests.push(request.url()); });
   await page.goto('/docs/session-explorer.html');
-  await expect(page.getByRole('combobox', { name: 'Vergleichsgruppe', exact: true })).toHaveValue('regular');
-  await expect(page.locator('.session-metrics')).toContainText('20,5');
-  await expect(page.locator('.session-trend')).toHaveCount(3);
-  const widths = await page.locator('.session-trend').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
-  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+  await expect(page.getByRole('combobox', { name: 'Gerät und Einstellungen', exact: true })).toHaveValue('regular');
+  const overview = page.locator('.session-overview .session-metrics');
+  await expect(overview).toContainText('20,5');
+  // Zwei Läufe reichen nicht für eine Aussage über die Gruppe.
+  await expect(page.locator('.session-verdict')).toContainText('mindestens vier Läufe');
+  // Ein Diagramm zur Zeit, umschaltbar.
+  await expect(page.locator('.session-trend')).toHaveCount(1);
+  await expect(page.getByRole('tab')).toHaveCount(3);
+  await page.getByRole('tab', { name: 'Verarbeitung' }).click();
+  await expect(page.locator('.session-trend figcaption')).toHaveText('Verarbeitungsdauer je Lauf');
+  await expect(page.getByRole('tab', { name: 'Verarbeitung' })).toHaveAttribute('aria-selected', 'true');
+  // Die Gewichtung liegt in der Tiefenebene.
+  await page.locator('.session-depth > summary').click();
   await page.getByRole('combobox', { name: 'Gewichtung', exact: true }).selectOption('frame_weighted');
-  await expect(page.locator('.session-metrics')).toContainText('25');
-  await expect(page.locator('.session-metrics')).toContainText('47,5');
-  // Die Liste folgt der Vergleichsgruppe; „Alle Sessions“ zeigt auch die Testläufe.
-  await expect(page.locator('.session-table tbody tr')).toHaveCount(2);
+  await expect(overview).toContainText('25');
+  await expect(overview).toContainText('47,5');
+  // Die Tabelle folgt der Gruppe; „Alle Läufe“ zeigt auch die Testläufe.
+  const rows = page.locator('.session-matrix tbody tr.session-row');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().locator('.session-strip')).toHaveAttribute('aria-label', /VALID/);
   await page.getByRole('combobox', { name: 'Zeigen', exact: true }).selectOption('all');
-  await expect(page.locator('.session-table tbody tr')).toHaveCount(3);
+  await expect(rows).toHaveCount(3);
   expect(rawRequests).toEqual([]);
-  // Ein Tabstopp je Diagramm statt eines je Datenpunkt.
-  await expect(page.locator('.session-trend svg[tabindex="0"]')).toHaveCount(3);
-  await expect(page.locator('.session-trend svg a[tabindex="0"]')).toHaveCount(0);
-  await page.getByLabel('Sessions durchsuchen').fill('live-test');
-  await expect(page.locator('.session-table tbody tr')).toHaveCount(1);
-  await expect(page.locator('.session-table')).toContainText('Testlauf – nicht für Messungen verwenden');
+  // Ein Tabstopp für das Diagramm statt eines je Datenpunkt.
+  await expect(page.locator('.session-trend svg[tabindex="0"]')).toHaveCount(1);
+  await expect(page.locator('.session-trend svg a')).toHaveCount(0);
+  await page.getByLabel('Läufe durchsuchen').fill('live-test');
+  await expect(rows).toHaveCount(1);
+  await expect(page.locator('.session-matrix')).toContainText('Testlauf – nicht für Messungen verwenden');
 });
 
 test('Sessionauswahl lädt geprüftes Archiv im Explorer und erhält teilbaren A/B-Link', async ({ page }) => {
   await mockSessionArchive(page);
   await page.goto('/docs/session-explorer.html');
-  await expect(page.locator('tr[data-session="live-b/run-01"]').getByRole('button', { name: 'Als B vergleichen' })).toBeDisabled();
-  await page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: 'Öffnen', exact: true }).click();
-  // „Öffnen“ führt sichtbar zur Einzelansicht.
+  // Ohne A gibt es keinen B-Knopf, statt zwölf gesperrter.
+  await expect(page.getByRole('button', { name: 'Als B daneben' })).toHaveCount(0);
+  await page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: /^Ansehen/ }).click();
+  // „Ansehen“ führt sichtbar zur Einzelansicht, die Überschrift liegt nicht unter dem Seitenkopf.
   await expect(page.locator('#untersuchen')).toBeFocused();
   await expect(page.locator('#untersuchen')).toBeInViewport();
+  expect(await page.locator('#untersuchen').evaluate(node => node.getBoundingClientRect().top)).toBeGreaterThan(40);
   await expect(page.locator('tr[data-session="live-a/run-01"] .session-chip--a')).toHaveText('A');
   const explorer = page.frameLocator('.session-viewer iframe');
   await expect(explorer.locator('.archive-context')).toContainText('live-a/run-01');
   await expect(explorer.locator('#workspace')).toBeVisible();
-  await page.locator('tr[data-session="live-b/run-01"]').getByRole('button', { name: 'Als B vergleichen' }).click();
+  await page.locator('tr[data-session="live-b/run-01"]').getByRole('button', { name: 'Als B daneben' }).click();
   await page.locator('.session-viewer').scrollIntoViewIfNeeded();
   await expect(explorer.locator('#compare')).toBeVisible();
   expect(new URL(page.url()).searchParams.get('b')).toBe('live-b/run-01');
   await expect(explorer.locator('.archive-context')).toContainText('keine physikalische Synchronität');
+  // Ein geteilter Link führt direkt zur Einzelansicht.
   await page.reload();
-  await page.locator('.session-viewer').scrollIntoViewIfNeeded();
+  await expect(page.locator('#untersuchen')).toBeInViewport();
   await expect(explorer.locator('#compare')).toBeVisible();
+});
+
+test('Session-Ladefehler meldet sich einmal, bietet Neuladen und lässt lokale Aufnahmen offen', async ({ page }) => {
+  await page.route('**/assets/sessions/**', route => route.fulfill({ status: 500, body: 'kaputt' }));
+  await page.goto('/docs/session-explorer.html');
+  const alert = page.locator('#session-dashboard [role="alert"]');
+  await expect(alert).toHaveCount(1);
+  await expect(alert.getByRole('button', { name: 'Seite neu laden' })).toBeVisible();
+  // Verlauf und Tabelle wiederholen die Meldung nicht und behaupten nicht, JavaScript fehle.
+  await expect(page.locator('#session-trends')).toBeEmpty();
+  await expect(page.locator('#session-list')).toBeEmpty();
+  await expect(page.locator('#session-viewer')).not.toContainText('braucht JavaScript');
+  await expect(page.locator('#session-viewer').getByRole('link', { name: 'Explorer ohne Lauf öffnen' })).toBeVisible();
 });
 
 test('Explorer verwirft synthetische Zeitaussagen und markiert Testläufe', async ({ page }) => {
@@ -1891,15 +1917,18 @@ test('Sessionseite räumt bei Sofortnavigation auf und bleibt schmal bedienbar',
   await mockSessionArchive(page);
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/docs/session-explorer.html');
-  await expect(page.locator('.session-table tbody tr')).toHaveCount(2);
+  const rows = page.locator('.session-matrix tbody tr.session-row');
+  await expect(rows).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  const widths = await page.locator('.session-table tbody tr').first().locator('td').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
+  // Schmal wird jede Zeile ein Block: Lauf und Statusstreifen nehmen die volle Breite.
+  const widths = await rows.first().locator('th, .session-col-strip').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
   expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
   await page.locator('.md-content__inner a[href$="uebersicht/messpfad.html"]').click();
   await expect(page.locator('html')).not.toHaveClass(/session-page/);
+  await expect(page.locator('.session-announce')).toHaveCount(0);
   await page.goBack();
   await expect(page.locator('#session-dashboard')).toHaveCount(1);
-  await expect(page.locator('.session-trend')).toHaveCount(3);
+  await expect(page.locator('.session-trend')).toHaveCount(1);
 });
 
 test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen den Explorer', async ({ page }) => {
@@ -1908,10 +1937,11 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   const fixture = await mockSessionArchive(page);
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/docs/session-explorer.html');
-  const row = page.locator('tr[data-session="live-a/run-01"]');
-  await row.locator('summary').click();
+  await page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: 'Details und Dateien' }).click();
+  const detail = page.locator('tr[data-detail-for="live-a/run-01"]');
+  await expect(page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: 'Details schließen' })).toHaveAttribute('aria-expanded', 'true');
   const downloading = page.waitForEvent('download');
-  await row.getByRole('button', { name: 'Original herunterladen' }).click();
+  await detail.getByRole('button', { name: 'Original herunterladen' }).click();
   const download = await downloading;
   expect(download.suggestedFilename()).toBe('records.jsonl');
   const path = await download.path();
@@ -1919,10 +1949,18 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   expect(readFileSync(path!)).toEqual(expected);
   const plot = page.locator('.session-trend svg').first();
   await plot.focus();
-  await expect(page.locator('.session-point-readout').first()).toContainText('live-b/run-01');
+  // Die zuletzt berührte Tabellenzeile bleibt im Diagramm gewählt.
+  await expect(page.locator('.session-point-readout')).toContainText('23.10.2026, 10:00 UTC');
+  await plot.press('End');
+  await expect(page.locator('.session-point-readout')).toContainText('28.10.2026, 10:00 UTC');
   await plot.press('Home');
-  await expect(page.locator('.session-point-readout').first()).toContainText('live-a/run-01');
+  await expect(page.locator('.session-point-readout')).toContainText('23.10.2026, 10:00 UTC');
+  await expect(page.locator('.session-announce')).toContainText('23.10.2026, 10:00 UTC: VALID');
+  await expect(page.locator('tr[data-session="live-a/run-01"]')).toHaveClass(/session-row--active/);
+  // Enter führt zur Tabellenzeile, ohne Rohdaten zu laden; erst „Ansehen“ öffnet den Lauf.
   await plot.press('Enter');
+  await expect(page.locator('tr[data-session="live-a/run-01"]').getByRole('button', { name: /^Ansehen/ })).toBeFocused();
+  await page.keyboard.press('Enter');
   await page.locator('.session-viewer').scrollIntoViewIfNeeded();
   const explorer = page.frameLocator('.session-viewer iframe');
   await expect(explorer.locator('#workspace')).toBeVisible();

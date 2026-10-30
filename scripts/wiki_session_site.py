@@ -146,14 +146,16 @@ def static_content(catalog: dict, notice: str) -> str:
         chunks.append("<p>Keine Sessions veröffentlicht. Abgeschlossene Läufe erscheinen nach einer "
                       "Exportphase mit beendeter Workbench und einem regulären Wiki-Deploy.</p>")
     else:
-        chunks.append('<details class="session-source"><summary>Archivkennzahlen und Dateien als Tabelle</summary>')
+        chunks.append('<details class="session-source wiki-layer wiki-layer--hintergrund">'
+                      '<summary>Archivkennzahlen und Dateien als Tabelle</summary><div>')
         for group in catalog["groups"]:
             kind = "Testläufe" if group.get("test_run") else "reguläre Läufe"
             # Kein h3: die Fassung steht vor dem ersten h2 der Seite.
             chunks.append(f'<p class="session-source-group">{esc(group.get("label"))} · {kind}</p>'
                           f'<p>{esc(group.get("session_count"))} Läufe · {esc(number(group.get("frames"), 0))} Frames</p>')
-            chunks.append("<table><thead><tr><th>Kennzahl</th><th>Jeder Lauf zählt gleich</th>"
-                          "<th>Alle Frames gemeinsam</th></tr></thead><tbody>")
+            chunks.append(f'<table><caption>Kennzahlen: {esc(group.get("label"))} · {kind}</caption>'
+                          '<thead><tr><th scope="col">Kennzahl</th><th scope="col">Jeder Lauf zählt gleich</th>'
+                          '<th scope="col">Alle Frames gemeinsam</th></tr></thead><tbody>')
             a, b = group["run_equal"], group["frame_weighted"]
             rows = []
             for status in ("valid", "transition", "unreadable", "stale"):
@@ -169,10 +171,16 @@ def static_content(catalog: dict, notice: str) -> str:
                 ("Trackingverluste / 1.000 Frames", number(a.get("tracking_per_1000")), number(b.get("tracking_per_1000"))),
             ])
             for label, left, right in rows:
-                chunks.append(f'<tr><th>{esc(label)}</th><td>{esc(left)}</td><td>{esc(right)}</td></tr>')
+                chunks.append(f'<tr><th scope="row">{esc(label)}</th><td>{esc(left)}</td><td>{esc(right)}</td></tr>')
             chunks.append("</tbody></table>")
-        chunks.append("<table><thead><tr><th>Lauf / Start (UTC)</th><th>Gerät</th>"
-                      "<th>Statistik</th><th>Hinweise</th><th>Dateien</th></tr></thead><tbody>")
+        # Eine Spalte je Kennzahl, damit die Werte nicht in einer schmalen Zelle umbrechen.
+        chunks.append('<div class="session-source-scroll" tabindex="0" role="region" aria-label="Läufe und Dateien, waagerecht scrollbar">'
+                      '<table class="session-source-runs"><caption>Läufe und Dateien; Status in % als VALID / TRANSITION / UNREADABLE / STALE</caption><thead><tr>'
+                      '<th scope="col">Lauf, Start (UTC), Gerät</th><th scope="col">Frames</th>'
+                      '<th scope="col">Status in %<br>V / T / U / S</th>'
+                      '<th scope="col">Verarbeitung in ms<br>Median / p95</th><th scope="col">Leserate in Hz</th>'
+                      '<th scope="col">Konfidenzmedian VALID</th><th scope="col">Messwertmedian VALID</th>'
+                      '<th scope="col">Hinweise</th><th scope="col">Dateien</th></tr></thead><tbody>')
         for run in catalog["runs"]:
             query = quote(run["id"], safe="")
             files = []
@@ -185,17 +193,20 @@ def static_content(catalog: dict, notice: str) -> str:
             proc = stats.get("processing_ms") or {}
             conf = stats.get("confidence") or {}
             value = stats.get("value") or {}
-            summary = (f'{esc(stats.get("frames"))} Frames<br>Verarbeitung Median / p95: '
-                       f'{number(proc.get("median"))} / {number(proc.get("p95"))} ms<br>'
-                       f'Konfidenzmedian (VALID): {percent(conf.get("median"))}<br>'
-                       f'Leserate: {number(stats.get("rate_hz"))} Hz<br>'
-                       f'Messwertmedian (VALID): {number(value.get("median"), 6)} {esc(run.get("unit"))}')
-            chunks.append(f'<tr><td><a href="../assets/records-explorer/index.html?a={query}" target="_blank" '
-                          f'rel="noopener">{esc(run["id"])}</a><br>{esc(utc_text(run.get("started_at_utc")))}</td>'
-                          f'<td>{esc(run.get("device_id"))}</td><td>{summary}</td>'
+            frames = stats.get("frames") or 0
+            counts = stats.get("counts") or {}
+            shares = " / ".join(number(counts.get(status, 0) / frames * 100, 1) if frames else "—"
+                                for status in ("valid", "transition", "unreadable", "stale"))
+            measured = number(value.get("median"), 6)
+            cells = [esc(number(frames, 0)), esc(shares), f'{number(proc.get("median"))} / {number(proc.get("p95"))}',
+                     esc(number(stats.get("rate_hz"))), esc(percent(conf.get("median"))),
+                     esc(measured + (" " + run["unit"] if measured != "—" and run.get("unit") else ""))]
+            chunks.append(f'<tr><th scope="row" class="session-source-run"><a href="../assets/records-explorer/index.html?a={query}" target="_blank" '
+                          f'rel="noopener">{esc(run["id"])}</a><br>{esc(utc_text(run.get("started_at_utc")))}<br>{esc(run.get("device_id"))}</th>'
+                          + "".join(f"<td>{cell}</td>" for cell in cells) +
                           f'<td>{esc(" · ".join(warnings))}</td><td><ul>{"".join(files)}</ul>'
                           f'<a href="../assets/sessions/{quote(run["manifest"], safe="/")}">Manifest</a></td></tr>')
-        chunks.append("</tbody></table></details>")
+        chunks.append("</tbody></table></div></div></details>")
     for error in catalog.get("errors", []):
         chunks.append(f'<p>Archivhinweis: {esc(error)}</p>')
     return "\n".join(chunks)

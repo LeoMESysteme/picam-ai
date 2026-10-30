@@ -54,6 +54,19 @@ test('missing calendar dates never turn into January 1970', () => {
   const rows = [{id:'unknown',started_at_utc:null},{id:'older',started_at_utc:'2026-10-23T10:00:00Z'},{id:'newer',started_at_utc:'2026-10-28T10:00:00Z'}];
   assert.deepEqual(rows.sort((a,b)=>ctx.order(a,b,true)).map(r=>r.id), ['newer','older','unknown']);
 });
+test('notable runs follow Tukey fences within the group and need four runs', () => {
+  const dashboard = readFileSync(new URL('../docs-site/assets/wiki-sessions.js', import.meta.url), 'utf8');
+  const helpers = dashboard.slice(dashboard.indexOf('const share ='), dashboard.indexOf('// Kurzname'));
+  const rules = dashboard.slice(dashboard.indexOf('/* Auffälligkeiten'), dashboard.indexOf('/* Ende Auffälligkeiten */'));
+  const ctx = {}; vm.createContext(ctx); vm.runInContext(helpers + rules + '\nglobalThis.notable=notableRuns;', ctx);
+  const run = (id, valid, p95 = 20) => ({ id, stats: { frames: 100, counts: { valid }, processing_ms: { p95 }, rate_hz: 29.8, confidence: { median: .99 }, tracking_lost: 5 } });
+  const runs = [run('a', 60), run('b', 62), run('c', 65), run('d', 66), run('e', 20, 80)];
+  const found = ctx.notable(runs);
+  assert.equal([...found.keys()].join(), 'e');
+  assert.equal(found.get('e').map(n => n.key).sort().join(), 'p95,valid');
+  // Unter vier Läufen gibt es keine Aussage über die Gruppe.
+  assert.equal(ctx.notable(runs.slice(2)).size, 0);
+});
 const parserCode = explorer.slice(explorer.indexOf('async function parseFile('), explorer.indexOf('/* ---------------- workspace'));
 const summaryCode = explorer.slice(explorer.indexOf('function summary('), explorer.indexOf('function renderCompare('));
 function parser() {
