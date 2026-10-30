@@ -4,6 +4,24 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
 [Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
 
+## Neu bis 2026-10-30 (autonome Phase, Zweig `feat/r13-display-haertung`)
+
+* **Werteplan-Lauf 28.10. (Leonhard):** `150914Z/run-01`, 16,5 min,
+  **0 / 14 785** Fehllesungen, **99,99 %** VALID in stabilen Fenstern über
+  Faktoren 1–5; getragen vom zweiten Durchgang (Anzeige 3–4 px versetzt).
+* **R13-21** (a0c3d97): Während die Werkbank das Gerät selbst umschaltet
+  (`set_norm`/`set_dpoint`), keine Freigabe mehr: Zwischenwerte wie
+  „+5.8810“ werden TRANSITION `geraet_umkonfiguriert`.
+* **GSVmulti:** UserDefined-Format belegt (Doku von Codex/Wiki-Session,
+  OQ-47). **P4-1/P4-2** (0347d35): `UserDefinedFormatter` und
+  `scripts/gsvmulti-demo-sender.py` als Prototyp, nur mit pty geprüft;
+  Windows-Test steht in [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md).
+* **Nicht geschafft:** Langzeitlauf (29.10. fiel durch API-Limit aus; die
+  Werkbank endete am 28.10. 16:57 ohne protokollierten Grund, die
+  Bestätigung ist damit verloren — neue Einrichtung nötig).
+* Docs-Playwright: Hinweis-Test `docs-site.spec.ts:324` scheitert auf der
+  neuen GSVmulti-Seite (Geometrie/Timer); Fix übernimmt die Wiki-Sitzung.
+
 ## Neu am 2026-10-28 (Zweig `feat/r13-display-haertung`, nicht in `master`)
 
 * **R13-19a** (1d32ebe): Kantenprüfung ohne Nachbarglyphen-Fehlalarm;
