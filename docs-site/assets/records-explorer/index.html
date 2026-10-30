@@ -323,8 +323,13 @@ table.cmp td.txt{white-space:normal;overflow-wrap:anywhere;font-family:var(--mon
   .drop{padding:28px 18px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* medium widths (also the wiki's content column): file details get their own row instead of being squeezed beside the view switch */
+@media (max-width:900px){.file-meta{order:3;flex-basis:100%}.file-meta.two{flex-direction:row;flex-wrap:wrap;gap:3px 24px}}
+/* embed=1: inside the wiki page, which owns brand and colour scheme */
+[data-embed] .brand,[data-embed] #themeBtn{display:none}
+[data-embed]{--st-valid:#0ca30c;--st-transition:#fab219;--st-unreadable:#d03b3b}
 </style>
-<script>(()=>{let t=new URLSearchParams(location.search).get('theme');if(!t)try{t=localStorage.getItem('records-explorer-theme')}catch{}if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;})();</script>
+<script>(()=>{const q=new URLSearchParams(location.search);if(q.get('embed')==='1')document.documentElement.dataset.embed='1';let t=q.get('theme');if(!t)try{t=localStorage.getItem('records-explorer-theme')}catch{}if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;})();</script>
 <script src="../session-files.js" defer></script>
 </head>
 <body>
@@ -366,7 +371,7 @@ table.cmp td.txt{white-space:normal;overflow-wrap:anywhere;font-family:var(--mon
           Erwartet wird ein JSON-Objekt pro Zeile, z. B. <code>records.jsonl</code>. Pflichtfelder:
           <ul>
             <li><code>capture_timestamp.value_ns</code> · Zeitachse, relativ zum ersten Frame</li>
-            <li><code>status</code> · gültig, Übergang, unlesbar, veraltet</li>
+            <li><code>status</code> · VALID, TRANSITION, UNREADABLE, STALE</li>
           </ul>
           Ausgewertet werden außerdem <code>value</code>, <code>confidence</code>, <code>reject_reasons</code> und <code>trace</code>, soweit vorhanden.
         </div>
@@ -498,13 +503,13 @@ const nf=(n,d=0)=>Number.isFinite(n)?n.toLocaleString('de-DE',{minimumFractionDi
 const nv=n=>Number.isFinite(n)?n.toLocaleString('de-DE',{maximumFractionDigits:6}):'–';
 const pct=(a,b,d=1)=>b?nf(a/b*100,d)+' %':'–';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const dur=s=>!Number.isFinite(s)?'–':!D?.timeBearing?nf(s)+' Frames':s<60?nf(s,s<10?2:1)+' s':Math.floor(s/60)+' min '+nf(s%60,1)+' s';
+const dur=(s,tb=D?.timeBearing)=>!Number.isFinite(s)?'–':!tb?nf(s)+' Frames':s<60?nf(s,s<10?2:1)+' s':Math.floor(s/60)+' min '+nf(s%60,1)+' s';
 const mb=b=>b<1e6?nf(b/1e3,0)+' kB':nf(b/1e6,1)+' MB';
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 const wide=matchMedia('(min-width:1100px)');
 const coarse=matchMedia('(pointer:coarse)');
 
-const STATUS_DEF={valid:['gültig','--st-valid'],transition:['Übergang','--st-transition'],unreadable:['unlesbar','--st-unreadable'],stale:['veraltet','--st-stale']};
+const STATUS_DEF={valid:['VALID','--st-valid'],transition:['TRANSITION','--st-transition'],unreadable:['UNREADABLE','--st-unreadable'],stale:['STALE','--st-stale']};
 const STATUS_BASE=['valid','transition','unreadable','stale'];
 const ST_VALID=0,ST_UNREADABLE=2;
 const stLabel=k=>STATUS_DEF[k]?.[0]??k;
@@ -635,7 +640,7 @@ async function parseFile(file,onProgress){
   const t0=n?tns[order?order[0]:0]:0;
   const t=new Float64Array(n);for(let i=0;i<n;i++)t[i]=timeBearing?(tns[order?order[i]:i]-t0)/1e9:i;
   const R={timeBearing,sessionContext:file.sessionContext||null,name:file.name,size:file.size,lines:lineNo,n,t,errors,sorted:!!order,schema,stKeys,reasonSets,
-    v:P(v,Float64Array),conf:P(conf,Float32Array),proc:P(proc,Float32Array),lat:P(lat,Float32Array),st:P(st,Uint8Array),seq:P(seq,Float64Array),rid:P(rid,Uint32Array),drop:P(drop,Float32Array),line:P(lines,Int32Array),
+    v:P(v,Float64Array),conf:P(conf,Float32Array),proc:P(proc,Float32Array),lat:P(lat,Float32Array),st:P(st,Uint16Array),seq:P(seq,Float64Array),rid:P(rid,Uint32Array),drop:P(drop,Float32Array),line:P(lines,Int32Array),
     text:order?order.map(i=>texts[i]):texts,
     profiles,units,bases,versions,comps};
   R.duration=n?t[n-1]:0;
@@ -690,7 +695,7 @@ function findAnomalies(R){
 const FILES={A:null,B:null};
 let VIEW='A';
 function metaHtml(R,tag,full){const errN=R.errors.length,prof=[...R.profiles.keys()];
-  return `${tag?`<span class="tag ${tag.toLowerCase()}" aria-label="Aufnahme ${tag}">${tag}</span>`:''}<b>${esc(R.name)}</b>${full?`<span class="num">${mb(R.size)}</span>`:''}<span class="num">${nf(R.n)} Frames</span><span class="num">${R.timeBearing?dur(R.duration):'Frameindex · keine Zeitinformation'}</span><span class="num">${pct(R.stCount[0],R.n)} gültig</span>${full&&prof.length?`<span class="profile" title="${esc(prof.join(', '))}">${esc(prof[0])}${prof.length>1?' +'+(prof.length-1):''}</span>`:''}${errN?`<span class="warn num">${nf(errN)} Zeile${errN>1?'n':''} übersprungen</span>`:''}`;}
+  return `${tag?`<span class="tag ${tag.toLowerCase()}" aria-label="Aufnahme ${tag}">${tag}</span>`:''}<b>${esc(R.name)}</b>${full?`<span class="num">${mb(R.size)}</span>`:''}<span class="num">${nf(R.n)} Frames</span><span class="num">${R.timeBearing?dur(R.duration,true):'Frameindex · keine Zeitinformation'}</span><span class="num">${pct(R.stCount[0],R.n)} VALID</span>${full&&prof.length?`<span class="profile" title="${esc(prof.join(', '))}">${esc(prof[0])}${prof.length>1?' +'+(prof.length-1):''}</span>`:''}${errN?`<span class="warn num">${nf(errN)} Zeile${errN>1?'n':''} übersprungen</span>`:''}`;}
 function renderHeader(){
   const fm=$('fileMeta');fm.hidden=false;
   if(VIEW==='cmp'){fm.classList.add('two');fm.innerHTML=`<span class="fm">${metaHtml(FILES.A,'A',false)}</span><span class="fm">${metaHtml(FILES.B,'B',false)}</span>`;}
@@ -1116,7 +1121,7 @@ function summary(R){
   s.steps=R.steps.map(a=>{const v=[...a].filter(Number.isFinite).sort((x,y)=>x-y);return{med:q(v,.5),present:v.length/n};});
   const w=[...R.wait].filter(Number.isFinite).sort((a,b)=>a-b);s.wait=q(w,.5);
   s.unreadN=R.timeBearing&&R.duration>0?R.unread.length:NaN;s.unreadMax=R.timeBearing&&R.duration>0?R.unread.reduce((m,r)=>Math.max(m,r.t1-r.t0),0):NaN;s.unreadTime=R.timeBearing&&R.duration>0?R.unread.reduce((m,r)=>m+(r.t1-r.t0),0)/(R.duration||1):NaN;
-  const measurable=R.timeBearing&&R.duration>0,min=measurable?R.duration/60:NaN;s.dropPerMin=measurable?dropped/min:NaN;s.rate=measurable?n/R.duration:NaN;s.min=min;
+  const measurable=R.timeBearing&&R.duration>0,min=measurable?R.duration/60:NaN;s.dropPerMin=measurable?dropped/min:NaN;s.rate=measurable&&n>1?(n-1)/R.duration:NaN;s.min=min;
   const l=[...R.lat].filter(Number.isFinite).sort((a,b)=>a-b);s.lat=q(l,.5);
   return R.sum=s;
 }
@@ -1174,7 +1179,7 @@ function drawCmpCharts(){
   });
   const yx=2*(rowH+gapR)+8;
   for(const f of [0,.25,.5,.75,1])svg+=`<text x="${(ml+f*pw).toFixed(1)}" y="${yx}" text-anchor="${f===0?'start':f===1?'end':'middle'}">${nf(f*100)} %</text>`;
-  svg+=`<text x="${ml+pw}" y="${yx+18}" text-anchor="end">100 % entspricht A ${esc(A.timeBearing?dur(A.duration):'Frameindex')} · B ${esc(B.timeBearing?dur(B.duration):'Frameindex')}</text>`;
+  svg+=`<text x="${ml+pw}" y="${yx+18}" text-anchor="end">100 % entspricht A ${esc(A.timeBearing?dur(A.duration,true):'Frameindex')} · B ${esc(B.timeBearing?dur(B.duration,true):'Frameindex')}</text>`;
   host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Status über den normierten Aufnahmeumfang für A und B">${svg}</svg>`;
   // processing histogram, normalized to each file's frame count
   const hh=$('cmpHist'),HW=hh.clientWidth;if(HW<80)return;
@@ -1204,7 +1209,7 @@ function renderCmpTable(a,b,T){
   const rows=[
     ['Umfang'],
     ['Frames',a.n,b.n,v=>nf(v),'n'],
-    ['Dauer',A.timeBearing?A.duration:NaN,B.timeBearing?B.duration:NaN,dur,'s'],
+    ['Dauer',A.timeBearing?A.duration:NaN,B.timeBearing?B.duration:NaN,v=>dur(v,true),'s'],
     ['Frames pro Sekunde',a.rate,b.rate,v=>nf(v,1),'n1'],
     ['Status'],
     ...STATUS_BASE.map(k=>[stLabel(k),a.byKey[k]||0,b.byKey[k]||0,v=>pct(v,1),'pp',k==='valid'?'up':k==='transition'?null:'down']),
@@ -1221,7 +1226,7 @@ function renderCmpTable(a,b,T){
     ...(Number.isFinite(a.lat)||Number.isFinite(b.lat)?[['Latenz Median',a.lat,b.lat,v=>Number.isFinite(v)?nf(v,1)+' ms':'–','ms','down']]:[]),
     ['Stabilität'],
     ['Unlesbare Phasen ≥ 1 s',a.unreadN,b.unreadN,v=>nf(v),'n','down'],
-    ['Längste unlesbare Phase',a.unreadMax,b.unreadMax,v=>v?dur(v):'–','s','down'],
+    ['Längste unlesbare Phase',a.unreadMax,b.unreadMax,v=>v?dur(v,true):'–','s','down'],
     ['Zeitanteil dieser Phasen',a.unreadTime,b.unreadTime,v=>pct(v,1),'pp','down'],
     ['Verworfene Kamera-Frames je Minute',a.dropPerMin,b.dropPerMin,v=>nf(v,1),'n1','down'],
     ['Datei'],

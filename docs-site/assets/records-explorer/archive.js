@@ -15,7 +15,9 @@
       if (!record) continue;
       const run = record.sessionContext;
       if (run) {
-        lines.push(`${tag}: ${run.id} · ${run.device_id} · Start (UTC): ${run.started_at_utc || "unbekannt"}`);
+        const start = Date.parse(run.started_at_utc || "");
+        const when = Number.isFinite(start) ? new Intl.DateTimeFormat("de-DE", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }).format(start) + " UTC" : "unbekannt";
+        lines.push(`${tag}: ${run.id} · ${run.device_id ?? "Gerät unbekannt"} · Start ${when}`);
         if (run.test_run) lines.push(`${tag}: TESTLAUF – nicht für Messungen verwenden. Aufgezeichnetes VALID ist kein Richtigkeitsnachweis.`);
         for (const warning of run.warnings || []) lines.push(`${tag}: ${window.SessionFiles.warning(warning)}`);
       } else lines.push(`${tag}: Lokale Einzeldatei ohne Session-Metadaten; Testlauf und Toleranzstatus unbekannt.`);

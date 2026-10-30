@@ -206,7 +206,7 @@ test("Abmelden löscht die Sitzung", async () => {
   assert.ok(setCookies(res).some((c) => c.startsWith(`${SESSION_COOKIE}=;`) && c.includes("Max-Age=0")));
 });
 
-for (const path of ['/docs/session-explorer.html', '/assets/records-explorer/index.html', '/assets/sessions/catalog.json', '/assets/sessions/runs/probe/manifest.json', '/assets/sessions/chunks/probe.gz.bin']) {
+for (const path of ['/docs/session-explorer.html', '/assets/records-explorer/index.html', '/assets/sessions/catalog.json', '/assets/sessions/runs/run-0123456789abcdef01234567/manifest.json', '/assets/sessions/chunks/' + 'a'.repeat(64) + '.gz.bin']) {
   test(`Session-Artefakt ohne Anmeldung gesperrt: ${path}`, async () => {
     const { res, nextCalled } = await run(path);
     assert.equal(res.status, 302);

@@ -167,3 +167,40 @@ def test_no_js_summary_preserves_both_weightings_and_optional_metrics(site, tmp_
     assert "Jeder Lauf zählt gleich" in html and "Alle Frames gemeinsam" in html
     assert "10,00 / 30,00" in html and "25,00 / 30,00" in html
     assert "Konfidenz" in html and "80,00" in html and "20,00" in html
+
+
+def test_request_goes_to_runner_writable_path_by_default():
+    # forgejo-runner.service: ProtectSystem=strict, ReadWritePaths=/var/lib/forgejo-runner.
+    assert site_tools.REQUEST.parent == Path("/var/lib/forgejo-runner")
+    unit = (Path(__file__).parents[1] / "systemd/picam-wiki-export.path").read_text()
+    assert f"PathChanged={site_tools.REQUEST}" in unit
+    runner = (Path(__file__).parents[1] / "systemd/forgejo-runner.service").read_text()
+    assert "ReadWritePaths=/var/lib/forgejo-runner" in runner
+
+
+def test_request_is_written_and_new_generation_is_selected(tmp_path):
+    root, request = tmp_path / "export", tmp_path / "runner" / "wiki-export-request"
+    request.parent.mkdir()
+    (root / "archive/snapshots").mkdir(parents=True)
+    report = {}
+    assert site_tools.select_snapshots(root, tmp_path / "state.json", 0, report, request) == []
+    assert request.read_bytes() == b"export\n"
+    assert report["request_error"] is None
+
+
+def test_failed_request_is_reported_not_swallowed_and_skips_waiting(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "export"
+    (root / "archive/snapshots").mkdir(parents=True)
+    unwritable = tmp_path / "missing-dir" / "wiki-export-request"
+    monkeypatch.setattr(site_tools.time, "sleep", lambda s: pytest.fail("must not wait after a failed request"))
+    report = {}
+    assert site_tools.select_snapshots(root, tmp_path / "state.json", 15, report, unwritable) == []
+    assert "Exportanfrage" in report["request_error"] and str(unwritable) in report["request_error"]
+    site = tmp_path / "site"
+    (site / "docs").mkdir(parents=True)
+    (site / "docs/session-explorer.html").write_text("<!-- SESSION-SNAPSHOT:START --><!-- SESSION-SNAPSHOT:END -->")
+    monkeypatch.setattr(sys, "argv", ["wiki_session_site.py", "--site", str(site), "--export-root", str(root),
+                                      "--state", str(tmp_path / "state.json"), "--request", str(unwritable)])
+    site_tools.main()
+    output = json.loads(capsys.readouterr().out)
+    assert output["attached"] is False and "Exportanfrage" in output["request_error"]

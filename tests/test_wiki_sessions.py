@@ -62,7 +62,9 @@ def test_export_exact_statistics_and_lossless_chunks(tmp_path):
     assert group["run_equal"]["processing_median_ms"] == 11.5
     assert group["frame_weighted"]["processing_median_ms"] == 3.5
     assert group["frame_weighted"]["processing_p95_ms"] == 80
-    assert group["frame_weighted"]["rate_hz"] == 1.25
+    # Five frames at 0..4 s span four intervals; run-2 has no duration.
+    assert group["frame_weighted"]["rate_hz"] == 1.0
+    assert group["run_equal"]["rate_hz"] == 1.0
     first = next(x for x in data["runs"] if x["id"].endswith("run-1"))
     assert first["stats"]["frames"] == 5
     manifest = json.loads((result / first["manifest"]).read_text())
@@ -77,7 +79,9 @@ def test_export_exact_statistics_and_lossless_chunks(tmp_path):
     assert raw == (run / "records.jsonl").read_bytes()
 
 
-def test_resume_atomicity_and_deletion(tmp_path):
+def test_resume_atomicity_and_deletion(tmp_path, monkeypatch):
+    # Counts individual guard calls, so the process-scan throttle is disabled.
+    monkeypatch.setattr(w, "GUARD_INTERVAL_S", 0)
     source, archive = tmp_path / "source", tmp_path / "archive"
     make_run(source, values=tuple(range(30)))
     checks = [0]
@@ -115,17 +119,44 @@ def test_busy_zero_source_access_and_guard(tmp_path):
 def test_invalid_json_unknown_status_and_timebases(tmp_path):
     source, archive = tmp_path / "source", tmp_path / "archive"
     run = make_run(source, base="synthetic")
+    stamp = {"base": "synthetic", "value_ns": 5}
     with (run / "records.jsonl").open("a") as f:
-        f.write("bad\n" + json.dumps({"status": "future", "confidence": 1, "value": 999}) + "\n")
+        f.write("bad\n" + json.dumps({"status": "future", "confidence": 1, "value": 999, "capture_timestamp": stamp}) + "\n")
+        # Explorer acceptance rule: no string status or no finite capture
+        # timestamp is an invalid line, not an "unknown" frame.
+        f.write(json.dumps({"confidence": 1, "capture_timestamp": stamp}) + "\n")
+        f.write(json.dumps({"status": 3, "capture_timestamp": stamp}) + "\n")
+        f.write(json.dumps({"status": "valid", "value": 7}) + "\n")
+        f.write(json.dumps({"status": "valid", "capture_timestamp": {"base": "synthetic", "value_ns": "5"}}) + "\n")
     result = w.Exporter(source, archive, idle=lambda: True).run()
     stat = catalog(result)["runs"][0]["stats"]
     assert stat["frames"] == 4
-    assert stat["invalid_lines"] == 1
+    assert stat["invalid_lines"] == 5
+    assert stat["counts"] == {"valid": 3, "future": 1}
     assert stat["duration_s"] is None
     assert stat["rate_hz"] is None
     assert stat["processing_ms"]["median"] == 2
     assert stat["value"]["n"] == 3
-    assert catalog(result)["groups"][0]["frame_weighted"]["shares"]["valid"] == 0.75
+    shares = catalog(result)["groups"][0]["frame_weighted"]["shares"]
+    assert shares == {"valid": 0.75, "future": 0.25}
+    assert sum(shares.values()) == 1
+
+
+def test_deeply_nested_line_is_invalid_and_does_not_block_export(tmp_path):
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    run = make_run(source)
+    with (run / "records.jsonl").open("a") as f:
+        f.write("[" * 200000 + "\n")
+    broken = make_run(source, name="run-2")
+    (broken / "session.json").write_text("[" * 200000)
+    exporter = w.Exporter(source, archive, idle=lambda: True)
+    result = exporter.run()
+    assert exporter.error is None
+    data = catalog(result)
+    assert [r["id"] for r in data["runs"]] == ["session-a/run-1"]
+    stat = data["runs"][0]["stats"]
+    assert stat["frames"] == 3 and stat["invalid_lines"] == 1
+    assert any(e.startswith("session-a/run-2: ") for e in data["errors"])
 
 
 def test_conflict_retains_archived_bytes_and_symlink_refusal(tmp_path):
@@ -197,7 +228,7 @@ def test_negative_trace_and_mixed_capture_bases(tmp_path):
     records = [json.loads(x) for x in (run / "records.jsonl").read_text().splitlines()]
     records[1]["trace"]["t_record_built_ns"] = -1
     records[2]["capture_timestamp"]["base"] = "v4l2_monotonic"
-    records[2]["confidence"] = float("nan")
+    records[2]["confidence"] = None
     (run / "records.jsonl").write_text("\n".join(json.dumps(x) for x in records))
     stat = catalog(w.Exporter(source, archive, idle=lambda: True).run())["runs"][0]["stats"]
     assert stat["processing_ms"]["n"] == 2
@@ -205,7 +236,21 @@ def test_negative_trace_and_mixed_capture_bases(tmp_path):
     assert stat["duration_s"] is None
 
 
-def test_busy_after_checkpoint_preserves_published_generation(tmp_path):
+def test_nan_and_blank_lines_follow_the_explorer(tmp_path):
+    # JSON.parse lehnt NaN ab und der Explorer überspringt Leerzeilen; das Archiv zählt gleich.
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    run = make_run(source)
+    lines = (run / "records.jsonl").read_text().splitlines()
+    nan = json.loads(lines[1])
+    nan["confidence"] = float("nan")
+    (run / "records.jsonl").write_text("\n".join([lines[0], json.dumps(nan), "", "   ", *lines[2:]]) + "\n")
+    stat = catalog(w.Exporter(source, archive, idle=lambda: True).run())["runs"][0]["stats"]
+    assert stat["invalid_lines"] == 1
+    assert stat["frames"] == len(lines) - 1
+
+
+def test_busy_after_checkpoint_preserves_published_generation(tmp_path, monkeypatch):
+    monkeypatch.setattr(w, "GUARD_INTERVAL_S", 0)
     source, archive = tmp_path / "source", tmp_path / "archive"
     make_run(source)
     old = w.Exporter(source, archive, idle=lambda: True).run()
@@ -300,7 +345,9 @@ def test_rejected_pending_run_is_never_retained_on_retry_or_deletion(tmp_path):
 
     def mutate():
         if not changed[0]:
-            (first / "records.jsonl").write_text('{"status":"fresh"}\n')
+            (first / "records.jsonl").write_text(
+                '{"status":"fresh","capture_timestamp":{"base":"sensor_boottime","value_ns":0}}\n'
+            )
             changed[0] = True
         validate()
 
@@ -380,7 +427,7 @@ def test_aggregate_sql_interruption_defers_without_publication(tmp_path):
         exporter.idle = lambda: False
         # Force SQLite to invoke the same registered progress callback on a
         # tiny query, without constructing a large performance fixture.
-        exporter._sql_guard_checked_at = None
+        exporter._guard_at = None
         exporter.db.set_progress_handler(exporter._sql_progress, 1)
         return original(ids, metric)
 
@@ -452,7 +499,7 @@ def test_sql_interruption_during_pooled_query_reuses_completed_summaries(tmp_pat
     def interrupted(ids, metric):
         if len(ids) > 1:
             exporter.idle = lambda: False
-            exporter._sql_guard_checked_at = None
+            exporter._guard_at = None
             exporter.db.set_progress_handler(exporter._sql_progress, 1)
         return original(ids, metric)
 
@@ -521,8 +568,9 @@ def test_fallback_uses_publication_order_not_generation_uuid(tmp_path):
     one = w.Exporter(source, archive, idle=lambda: True).run()
     make_run(source, name="run-2")
     two = w.Exporter(source, archive, idle=lambda: True).run()
-    make_run(source, name="run-3")
-    three = w.Exporter(source, archive, idle=lambda: True).run()
+    # Pruning keeps only current plus one previous; add a third by copy.
+    three = archive / "snapshots" / "generation-third"
+    shutil.copytree(two, three)
     renamed = []
     for index, (path, name) in enumerate(
         [(one, "generation-zzzz"), (two, "generation-aaaa"), (three, "generation-current")]
@@ -544,12 +592,14 @@ def test_unrepresentable_integer_observations_are_excluded_without_crash(tmp_pat
     record = json.loads((run / "records.jsonl").read_text())
     record["value"] = record["confidence"] = 10**400
     record["trace"]["t_record_built_ns"] = 10**400
-    record["capture_timestamp"]["value_ns"] = 10**400
-    (run / "records.jsonl").write_text(json.dumps(record) + "\n")
+    unstamped = json.loads(json.dumps(record))
+    unstamped["capture_timestamp"]["value_ns"] = 10**400
+    (run / "records.jsonl").write_text(json.dumps(record) + "\n" + json.dumps(unstamped) + "\n")
     exporter = w.Exporter(source, archive, idle=lambda: True)
     data = catalog(exporter.run())
     assert exporter.error is None
     assert data["runs"][0]["stats"]["frames"] == 1
+    assert data["runs"][0]["stats"]["invalid_lines"] == 1  # unrepresentable capture time
     for metric in ["processing_ms", "confidence", "value"]:
         assert data["runs"][0]["stats"][metric]["n"] == 0
     assert data["runs"][0]["stats"]["duration_s"] is None
@@ -606,3 +656,161 @@ def test_sql_progress_checks_budget_each_callback_and_limits_process_scans(tmp_p
     assert exporter._sql_progress() == 1
     assert exporter.sql_deferred
     assert len(scans) == 3
+
+
+def chunk_files(generation):
+    return {p.name: p for p in (generation / "chunks").iterdir()}
+
+
+def test_new_generation_reuses_integrity_proofs_of_linked_blocks(tmp_path, monkeypatch):
+    # os.link changes ctime; the cache key must not, or every generation rehashes all.
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    make_run(source)
+    old = w.Exporter(source, archive, idle=lambda: True).run()
+    old_chunks = set(chunk_files(old))
+    make_run(source, name="run-2", values=(7, 8, 9, 10))
+    hashed = []
+    original = Path.open
+
+    def recording(path, *args, **kwargs):
+        if str(path).endswith(".gz.bin") and "/snapshots/" in str(path):
+            hashed.append(path.name)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", recording)
+    new = w.Exporter(source, archive, idle=lambda: True).run()
+    assert new != old and len(catalog(new)["runs"]) == 2
+    assert hashed, "new blocks must be verified once"
+    assert not old_chunks & set(hashed)
+
+
+def test_generations_share_block_inodes_and_old_ones_are_pruned(tmp_path):
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    make_run(source)
+    generations = [w.Exporter(source, archive, idle=lambda: True).run()]
+    for name in ("run-2", "run-3", "run-4", "run-5", "run-6"):
+        make_run(source, name=name, values=(int(name[-1]),))
+        generations.append(w.Exporter(source, archive, idle=lambda: True).run())
+    remaining = sorted(p.name for p in (archive / "snapshots").iterdir())
+    assert remaining == sorted(g.name for g in generations[-(w.KEEP_PREVIOUS + 1):])
+    assert not [p for p in archive.iterdir() if p.name.startswith(("stage-", "trash-"))]
+    latest, previous = generations[-1], generations[-2]
+    for name, path in chunk_files(previous).items():
+        block = archive / "blocks" / name
+        assert path.stat().st_ino == chunk_files(latest)[name].stat().st_ino == block.stat().st_ino
+        assert (block.stat().st_mode & 0o777) == 0o640
+    assert w.current_snapshot(archive) == latest
+
+
+def test_pruning_keeps_exposed_previous_generation(tmp_path):
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    make_run(source)
+    exposed = w.Exporter(source, archive, idle=lambda: True).run()
+    exposed.chmod(0o750)  # the exposure service made it readable for the runner
+    make_run(source, name="run-2")
+    unexposed = w.Exporter(source, archive, idle=lambda: True).run()
+    unexposed.chmod(0o700)
+    make_run(source, name="run-3")
+    latest = w.Exporter(source, archive, idle=lambda: True).run()
+    assert sorted(p.name for p in (archive / "snapshots").iterdir()) == sorted([exposed.name, latest.name])
+
+
+@pytest.mark.parametrize("stage", ["validate", "pointer"])
+def test_deferred_publication_leaves_no_orphaned_generation(tmp_path, monkeypatch, stage):
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    make_run(source)
+    old = w.Exporter(source, archive, idle=lambda: True).run()
+    make_run(source, name="run-2")
+    exporter = w.Exporter(source, archive, idle=lambda: True)
+    staged = []
+    if stage == "validate":
+        validate = w._validate_snapshot
+
+        def deferred(directory, cache, check):
+            if directory != old:
+                staged.append(directory)
+                raise w.Deferred()
+            return validate(directory, cache, check)
+
+        monkeypatch.setattr(w, "_validate_snapshot", deferred)
+    else:
+        original = w._atomic
+
+        def failing(path, data):
+            if path.name == "current":
+                staged.append(path)
+                raise OSError("pointer write failed")
+            return original(path, data)
+
+        monkeypatch.setattr(w, "_atomic", failing)
+    assert exporter.run() == old
+    assert staged, "publication path was not reached"
+    assert exporter.deferred == (stage == "validate")
+    assert [p.name for p in (archive / "snapshots").iterdir()] == [old.name]
+    assert not [p for p in archive.iterdir() if p.name.startswith(("stage-", "trash-"))]
+
+
+def test_guard_scans_processes_at_most_every_interval(tmp_path, monkeypatch):
+    now = [100.0]
+    scans = []
+    exporter = w.Exporter(tmp_path / "source", tmp_path / "archive", idle=lambda: scans.append(now[0]) or True)
+    exporter.deadline = 200.0
+    monkeypatch.setattr(w.time, "monotonic", lambda: now[0])
+    for _ in range(500):
+        exporter._check()
+    assert scans == [100.0]
+    now[0] = 100.101
+    exporter._check()
+    assert len(scans) == 2
+    exporter.idle = lambda: False
+    now[0] = 100.15
+    exporter._check()  # inside the interval: no scan
+    now[0] = 100.25
+    with pytest.raises(w.Deferred):
+        exporter._check()
+    exporter.idle = lambda: True
+    now[0] = 200.0
+    with pytest.raises(w.Deferred):
+        exporter._check()  # deadline stays unconditional
+
+
+def test_archived_runs_are_reevaluated_once_from_blocks_under_new_rules(tmp_path, monkeypatch):
+    import sqlite3
+
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    run = make_run(source, values=(1, 2, 3, 4), name="run-1")
+    with (run / "records.jsonl").open("a") as f:
+        f.write(json.dumps({"status": "valid", "value": 9}) + "\n")  # no capture time
+    monkeypatch.setattr(w, "STATS_RULES", 1)
+    old = w.Exporter(source, archive, idle=lambda: True, block_size=61).run()
+    assert catalog(old)["runs"][0]["stats"]["rules"] == 1
+    monkeypatch.setattr(w, "STATS_RULES", 2)
+    original = w._open_source
+
+    def no_records(path, flags=w.os.O_RDONLY):
+        if path.name == "records.jsonl" and not flags & w.os.O_PATH:
+            raise AssertionError("re-evaluation must read stored blocks, not the source")
+        return original(path, flags)
+
+    monkeypatch.setattr(w, "_open_source", no_records)
+    # Interrupt the block-wise re-evaluation once, then resume.
+    monkeypatch.setattr(w, "GUARD_INTERVAL_S", 0)
+    checks = [0]
+
+    def idle():
+        checks[0] += 1
+        return checks[0] < 25
+
+    assert w.Exporter(source, archive, idle=idle, block_size=61).run() == old
+    new = w.Exporter(source, archive, idle=lambda: True, block_size=61).run()
+    assert new != old
+    stats = catalog(new)["runs"][0]["stats"]
+    assert stats["rules"] == 2
+    assert stats["frames"] == 4 and stats["invalid_lines"] == 1
+    assert stats["rate_hz"] == 1.0  # four frames over three seconds
+    assert catalog(new)["runs"][0]["files"] == catalog(old)["runs"][0]["files"]
+    with sqlite3.connect(archive / "checkpoint.sqlite3") as db:
+        keys = {row[0] for row in db.execute("SELECT DISTINCT run FROM samples")}
+    assert keys and all(k.endswith(":r2") for k in keys)
+    # Unchanged afterwards: no further generation.
+    assert w.Exporter(source, archive, idle=lambda: True, block_size=61).run() == new

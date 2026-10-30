@@ -27,9 +27,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 MAX_BLOCK = 1024 * 1024
+# A /proc walk per guarded step is expensive; the deadline stays unconditional.
+GUARD_INTERVAL_S = 0.1
+# Published generations keep: current plus one previous (preferably exposed).
+# Der Dienst kann den Runner-State nicht lesen; mehrere freigegebene Vorstände
+# halten den Rückfall, falls der Runner die neueste Generation ablehnt.
+KEEP_PREVIOUS = 3
+# Statistics rules of records.jsonl. 2: explorer acceptance rule (string status
+# and finite capture_timestamp.value_ns), rate (n-1)/duration. Archived runs
+# with older rules are re-evaluated once from their stored blocks.
+STATS_RULES = 2
 SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}\Z")
 BASES = {"sensor_boottime", "replay_recorded", "v4l2_monotonic"}
 
+
+
+def _reject_constant(name):
+    """NaN/Infinity sind kein JSON; JSON.parse im Explorer lehnt sie ebenso ab."""
+    raise ValueError("non-standard JSON constant " + name)
 
 class Deferred(Exception):
     """The caller's time slice or idle permission ended."""
@@ -76,6 +91,45 @@ def _atomic(path, data):
     os.replace(temp, path)
 
 
+def _store_block(path, data):
+    """Write one immutable shared chunk: 0640 inode, private only by its directory.
+
+    The block store directory stays 0700 (setgid inherited from the archive), so
+    the runner cannot reach these inodes until a published generation links them.
+    No chmod is needed at exposure time and no copy is made per generation.
+    """
+    temp = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
+    descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), 0o640)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _share_block(path):
+    """Migrate an older private 0600 block to the shared 0640 mode in place."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        st = os.fstat(descriptor)
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError("cached block is not a regular file")
+        if stat.S_IMODE(st.st_mode) != 0o640:
+            os.fchmod(descriptor, 0o640)
+    finally:
+        os.close(descriptor)
+
+
+def _chunk_identity(st):
+    # No ctime: os.link and chmod change it, but not the immutable content.
+    # Size and mtime of the same inode still reveal an in-place rewrite.
+    return [st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns]
+
+
 def _safe_path(root, relative):
     p = Path(relative)
     if p.is_absolute() or ".." in p.parts or not p.parts:
@@ -92,10 +146,10 @@ _SNAPSHOT_CACHE = {}
 
 
 def _checked_chunk(target, part, cache, check):
-    identity = _stat_identity(target.stat())
+    identity = _chunk_identity(target.stat())
     if identity[2] != part["size"]:
         raise ValueError("chunk size mismatch")
-    key = _dump([*identity, part["sha256"]])
+    key = _dump(["chunk/2", *identity, part["sha256"]])
     if cache.execute("SELECT 1 FROM verified WHERE identity=?", (key,)).fetchone():
         return
     digest = hashlib.sha256()
@@ -106,7 +160,7 @@ def _checked_chunk(target, part, cache, check):
             if not block:
                 break
             digest.update(block)
-    if _stat_identity(target.stat()) != identity or digest.hexdigest() != part["sha256"]:
+    if _chunk_identity(target.stat()) != identity or digest.hexdigest() != part["sha256"]:
         raise ValueError("chunk hash mismatch")
     with cache:
         cache.execute("INSERT OR IGNORE INTO verified VALUES(?)", (key,))
@@ -188,7 +242,7 @@ def current_snapshot(archive, *, _check=None):
                 # A fallback is returned without changing the publication pointer.
                 _remember_snapshot(archive, directory)
                 return directory
-            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
                 continue
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
         pass
@@ -255,6 +309,25 @@ def _mean(values):
     return statistics.fmean(values) if values else None
 
 
+def _fresh_stats():
+    return {
+        "frames": 0,
+        "invalid_lines": 0,
+        "counts": {},
+        "base": None,
+        "time_ok": True,
+        "first": None,
+        "last": None,
+        "versions": {},
+        "tracking_seen": 0,
+    }
+
+
+def _rules_sample_key(sample_key):
+    # rid has no ":" (SAFE names); keep "<rid>:<identity hash>" and tag the rules.
+    return ":".join(sample_key.split(":")[:2]) + ":r" + str(STATS_RULES)
+
+
 class Exporter:
     def __init__(self, source, archive, *, idle=None, block_size=MAX_BLOCK):
         self.source, self.archive = Path(source), Path(archive)
@@ -264,14 +337,24 @@ class Exporter:
         self.block_size = block_size
         self.deferred = False
         self.error = None
+        self._guard_at = None
 
     def _check(self):
-        if time.monotonic() >= self.deadline or not self.idle():
+        # Deadline every call; the process scan at most every GUARD_INTERVAL_S,
+        # shared with the SQLite progress handler. The first check of a run
+        # always scans, so a busy Workbench still prevents any source access.
+        now = time.monotonic()
+        if now >= self.deadline:
             raise Deferred()
+        if self._guard_at is None or now - self._guard_at >= GUARD_INTERVAL_S:
+            self._guard_at = now
+            if not self.idle():
+                raise Deferred()
 
     def run(self, budget_s=45):
         self.deadline = time.monotonic() + max(0, budget_s)
         self.deferred, self.error = False, None
+        self._guard_at = None
         self.validations = []
         old = _cached_snapshot(self.archive)
         try:
@@ -339,12 +422,12 @@ class Exporter:
         # SQLite invokes this every 1,000 VM instructions. Keep the deadline
         # unconditional, but avoid a full /proc walk on every few records.
         now = time.monotonic()
-        last_guard = getattr(self, "_sql_guard_checked_at", None)
+        last_guard = self._guard_at
         if now >= self.deadline:
             self.sql_deferred = True
             return 1
-        if last_guard is None or now - last_guard >= 0.1:
-            self._sql_guard_checked_at = now
+        if last_guard is None or now - last_guard >= GUARD_INTERVAL_S:
+            self._guard_at = now
             if not self.idle():
                 self.sql_deferred = True
                 return 1
@@ -371,8 +454,17 @@ class Exporter:
         # from its verified catalog even if this small promotion is interrupted.
         self.db.set_progress_handler(None, 0)
         with self.db:
+            superseded = [
+                row[0]
+                for row in self.db.execute(
+                    "SELECT a.sample_key FROM archived_samples a JOIN pending p ON a.id=p.id "
+                    "WHERE a.sample_key != p.sample_key"
+                )
+            ]
             self.db.execute("INSERT OR REPLACE INTO archived SELECT id,run,signature FROM pending")
             self.db.execute("INSERT OR REPLACE INTO archived_samples SELECT id,sample_key FROM pending")
+            # Samples of a run re-evaluated under newer rules are no longer referenced.
+            self.db.executemany("DELETE FROM samples WHERE run=?", [(key,) for key in superseded])
 
     def _run(self, old):
         self._check()
@@ -410,13 +502,17 @@ class Exporter:
                     continue
                 try:
                     self._import(run)
-                except (OSError, ValueError, KeyError, TypeError) as exc:
-                    errors.append(session.name + "/" + run.name + ": " + str(exc))
+                except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+                    # One malformed run must not block every later export.
+                    errors.append(session.name + "/" + run.name + ": " + (str(exc) or type(exc).__name__))
         self._check()
         self._validate_sources()
         runs = [
             _load_json(row[1])
-            for row in self.db.execute("SELECT id,run FROM archived UNION ALL SELECT id,run FROM pending ORDER BY id")
+            for row in self.db.execute(
+                "SELECT id,run FROM archived WHERE id NOT IN (SELECT id FROM pending) "
+                "UNION ALL SELECT id,run FROM pending ORDER BY id"
+            )
         ]
         if old:
             previous = _load(old / "catalog.json")
@@ -436,9 +532,12 @@ class Exporter:
             if previous == payload:
                 return old
         # Build a new immutable generation. All chunks already live in the
-        # cache; hard links keep snapshots independent of future source changes.
+        # shared block store; hard links keep snapshots independent of future
+        # source changes and cost no extra space per generation.
         stage = self.archive / ("stage-" + uuid.uuid4().hex)
         stage.mkdir()
+        final = None
+        published = False
         try:
             for run in runs:
                 self._check()
@@ -452,7 +551,9 @@ class Exporter:
                         destination = stage / part["path"]
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         if not destination.exists():
-                            os.link(self.archive / "blocks" / (part["sha256"] + ".gz.bin"), destination)
+                            block = self.archive / "blocks" / (part["sha256"] + ".gz.bin")
+                            _share_block(block)
+                            os.link(block, destination)
             payload["generated_at"] = datetime.now(UTC).isoformat()
             (stage / "catalog.json").write_text(_dump(payload), encoding="utf-8")
             self._check()
@@ -472,12 +573,64 @@ class Exporter:
             self._validate_sources()
             _atomic(self.archive / "current", name.encode("ascii") + b"\n")
             _atomic(final / "published", b"published\n")
+            published = True
             _remember_snapshot(self.archive, final)
             self._promote()
+            self._prune(final)
             return final
         finally:
             if stage.exists():
                 shutil.rmtree(stage)
+            if final is not None and not published:
+                # Deferred or failed before the receipt was written: never leave
+                # an orphaned generation behind. If the pointer already moved,
+                # it stays: the receiptless-current recovery rebuilds from it.
+                try:
+                    pointed = (self.archive / "current").read_text(encoding="ascii").strip()
+                except (OSError, UnicodeDecodeError):
+                    pointed = final.name  # unklar: nichts löschen, _prune räumt später auf
+                if pointed != final.name:
+                    self._discard(final)
+
+    def _discard(self, directory):
+        """Atomically retire a generation, then delete it; leftovers are retried."""
+        trash = self.archive / ("trash-" + uuid.uuid4().hex)
+        try:
+            os.replace(directory, trash)
+        except OSError:
+            return  # already gone or not movable; the next prune retries
+        shutil.rmtree(trash, ignore_errors=True)
+
+    def _prune(self, keep_current):
+        """Delete generations neither current nor the kept previous one.
+
+        Runs only after a successful publication and never turns it into a
+        failure. The runner's own state file is not readable by this service,
+        so one previous published generation is kept (preferably one already
+        exposed to the runner) as its fallback.
+        """
+        try:
+            for leftover in self.archive.iterdir():
+                if leftover.name.startswith(("stage-", "trash-")) and not leftover.is_symlink() and leftover.is_dir():
+                    self._check()
+                    shutil.rmtree(leftover, ignore_errors=True)
+            snapshots = self.archive / "snapshots"
+            others = [
+                p
+                for p in snapshots.iterdir()
+                if p.name != keep_current.name and SAFE.fullmatch(p.name) and not p.is_symlink() and p.is_dir()
+            ]
+            published = [p for p in others if (p / "published").is_file() and not (p / "published").is_symlink()]
+            published.sort(key=lambda p: (p / "published").stat().st_mtime_ns, reverse=True)
+            exposed = [p for p in published if stat.S_IMODE(p.stat().st_mode) & 0o050]
+            keep = {p.name for p in (exposed or published)[:KEEP_PREVIOUS]}
+            for directory in others:
+                if directory.name in keep:
+                    continue
+                self._check()
+                self._discard(directory)
+        except (Deferred, OSError):
+            pass  # remaining generations are pruned after the next publication
 
     def _validate_sources(self):
         for rid, paths, identities in self.validations:
@@ -504,7 +657,7 @@ class Exporter:
         rid = directory.parent.name + "/" + directory.name
         paths, warnings = self._paths(directory)
         identities = {name: _identity(path) for name, path in paths}
-        signature = _dump(identities)
+        signature = _dump({"files": identities, "rules": STATS_RULES})
         previous = self.db.execute("SELECT signature FROM archived WHERE id=?", (rid,)).fetchone()
         if previous and previous[0] == signature:
             self.validations.append((rid, paths, identities))
@@ -555,9 +708,12 @@ class Exporter:
             archived = _load_json(prior[0])
             if archived["files"] != files:
                 raise ValueError("archive ID conflict; existing content retained")
-            with self.db:
-                self.db.execute("UPDATE archived SET signature=? WHERE id=?", (signature, rid))
-            return
+            if (archived.get("stats") or {}).get("rules") == STATS_RULES:
+                with self.db:
+                    self.db.execute("UPDATE archived SET signature=? WHERE id=?", (signature, rid))
+                return
+            # Same bytes, older statistics rules: recompute below; promotion
+            # replaces the archived entry after the next publication.
         record_state = self._file_state(rid + "/records.jsonl")
         stat_state = record_state["stats"]
         sample_key = record_state["sample_key"]
@@ -614,33 +770,27 @@ class Exporter:
     def _file(self, rid, name, path, identity):
         key = rid + "/" + name
         row = self.db.execute("SELECT identity,state FROM files WHERE key=?", (key,)).fetchone()
-        if row and _load_json(row[0]) == identity:
-            state = _load_json(row[1])
-        else:
-            sample_key = rid + ":" + hashlib.sha256(_dump(identity).encode()).hexdigest()
+        state = _load_json(row[1]) if row and _load_json(row[0]) == identity else None
+        if state is not None and name == "records.jsonl" and state.get("rules") != STATS_RULES and not state["finished"]:
+            state = None  # partial parse under older rules: restart, blocks deduplicate
+        if state is None:
+            sample_key = _rules_sample_key(rid + ":" + hashlib.sha256(_dump(identity).encode()).hexdigest())
             state = {
                 "offset": 0,
                 "parts": [],
                 "tail": "",
                 "discard": False,
                 "finished": False,
+                "rules": STATS_RULES,
                 "sample_key": sample_key,
-                "stats": {
-                    "frames": 0,
-                    "invalid_lines": 0,
-                    "counts": {},
-                    "base": None,
-                    "time_ok": True,
-                    "first": None,
-                    "last": None,
-                    "versions": {},
-                    "tracking_seen": 0,
-                },
+                "stats": _fresh_stats(),
             }
             with self.db:
                 self.db.execute("INSERT OR REPLACE INTO files VALUES(?,?,?)", (key, _dump(identity), _dump(state)))
                 if name == "records.jsonl":
                     self.db.execute("DELETE FROM samples WHERE run=?", (sample_key,))
+        if state["finished"] and name == "records.jsonl" and state.get("rules") != STATS_RULES:
+            self._reparse(key, state)
         if state["finished"]:
             return {"name": name, "size": identity[2], "parts": state["parts"]}
         self._check()
@@ -668,7 +818,7 @@ class Exporter:
                             if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
                                 raise ValueError("cached block hash conflict")
                         else:
-                            _atomic(target, compressed)
+                            _store_block(target, compressed)
                         state["parts"].append(
                             {
                                 "path": "chunks/" + digest + ".gz.bin",
@@ -686,6 +836,50 @@ class Exporter:
             if _stat_identity(os.fstat(stream.fileno())) != identity:
                 raise ValueError("source mutated during read")
         return {"name": name, "size": identity[2], "parts": state["parts"]}
+
+    def _reparse(self, key, state):
+        """Re-evaluate finished records under STATS_RULES from the stored blocks.
+
+        Only gzip decompression and parsing: no source access, no recompression.
+        Checkpointed per block like the first pass; a new sample key keeps
+        cached aggregates of the old rules from being reused.
+        """
+        redo = state.get("reparse")
+        if redo is None:
+            redo = {
+                "index": 0,
+                "tail": "",
+                "discard": False,
+                "sample_key": _rules_sample_key(state["sample_key"]),
+                "stats": _fresh_stats(),
+            }
+            with self.db:
+                self.db.execute("DELETE FROM samples WHERE run=?", (redo["sample_key"],))
+                state["reparse"] = redo
+                self.db.execute("UPDATE files SET state=? WHERE key=?", (_dump(state), key))
+        parts = state["parts"]
+        while True:
+            self._check()
+            index = redo["index"]
+            final = index >= len(parts) - 1
+            block = b""
+            if parts:
+                digest = parts[index]["sha256"]
+                compressed = (self.archive / "blocks" / (digest + ".gz.bin")).read_bytes()
+                if hashlib.sha256(compressed).hexdigest() != digest:
+                    raise ValueError("cached block hash conflict")
+                block = gzip.decompress(compressed)
+            with self.db:
+                self._parse(redo["sample_key"], redo, block, final)
+                redo["index"] = index + 1
+                if final:
+                    state.update(
+                        tail="", discard=False, stats=redo["stats"], sample_key=redo["sample_key"], rules=STATS_RULES
+                    )
+                    del state["reparse"]
+                self.db.execute("UPDATE files SET state=? WHERE key=?", (_dump(state), key))
+            if final:
+                return
 
     def _metadata(self, file):
         if file["size"] > MAX_BLOCK:
@@ -722,17 +916,26 @@ class Exporter:
         state["tail"] = base64.b64encode(tail).decode("ascii")
 
     def _record(self, rid, stats, line):
+        if not line.strip():
+            return  # Leerzeilen ignoriert auch der Explorer
         try:
-            record = json.loads(line)
+            record = json.loads(line, parse_constant=_reject_constant)
             if not isinstance(record, dict):
                 raise ValueError("record is not an object")
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            # RecursionError: deeply nested lines are invalid, not fatal.
+            stats["invalid_lines"] += 1
+            return
+        # Same acceptance rule as the records explorer: a frame needs a string
+        # status and a finite capture_timestamp.value_ns. Everything else is a
+        # visible invalid line, so frame counts and shares agree in both views
+        # and the status shares of the counted frames add up to 100 %.
+        status = record.get("status")
+        stamp = record.get("capture_timestamp")
+        if not isinstance(status, str) or not isinstance(stamp, dict) or not _finite(stamp.get("value_ns")):
             stats["invalid_lines"] += 1
             return
         stats["frames"] += 1
-        status = record.get("status", "unknown")
-        if not isinstance(status, str):
-            status = "unknown"
         stats["counts"][status] = stats["counts"].get(status, 0) + 1
         reasons = record.get("reject_reasons")
         if (
@@ -760,12 +963,8 @@ class Exporter:
             if _finite(start) and _finite(end) and end >= start:
                 observations.append((rid, "processing_ms", (end - start) / 1e6))
         self.db.executemany("INSERT INTO samples VALUES(?,?,?)", observations)
-        stamp = record.get("capture_timestamp")
-        if not isinstance(stamp, dict):
-            stats["time_ok"] = False
-            return
         base, value = stamp.get("base"), stamp.get("value_ns")
-        if base not in BASES or not _finite(value):
+        if base not in BASES:
             stats["time_ok"] = False
             return
         if stats["base"] is not None and stats["base"] != base:
@@ -828,8 +1027,10 @@ class Exporter:
             "counts": state["counts"],
             **{m: self._summary([rid], m) for m in ("processing_ms", "confidence", "value")},
             "duration_s": duration,
-            "rate_hz": n / duration if duration else None,
+            # n frames span n-1 intervals between first and last capture stamp.
+            "rate_hz": (n - 1) / duration if duration else None,
             "tracking_lost": tracking,
+            "rules": STATS_RULES,
         }
 
     def _groups(self, runs):
@@ -853,10 +1054,10 @@ class Exporter:
             eligible = [r["stats"] for r in members if r["stats"]["duration_s"] is not None]
             tracked = [r["stats"] for r in members if r["stats"]["tracking_lost"] is not None and r["stats"]["frames"]]
             sample_keys = [
-                self.db.execute(
-                    "SELECT sample_key FROM pending WHERE id=? UNION ALL SELECT sample_key FROM archived_samples WHERE id=?",
-                    (r["id"], r["id"]),
-                ).fetchone()[0]
+                (
+                    self.db.execute("SELECT sample_key FROM pending WHERE id=?", (r["id"],)).fetchone()
+                    or self.db.execute("SELECT sample_key FROM archived_samples WHERE id=?", (r["id"],)).fetchone()
+                )[0]
                 for r in members
             ]
             proc = self._summary(sample_keys, "processing_ms")
@@ -874,7 +1075,7 @@ class Exporter:
                 "processing_median_ms": proc["median"],
                 "processing_p95_ms": proc["p95"],
                 "confidence_median": confidence["median"],
-                "rate_hz": sum(s["frames"] for s in eligible) / sum(s["duration_s"] for s in eligible)
+                "rate_hz": sum(s["frames"] - 1 for s in eligible) / sum(s["duration_s"] for s in eligible)
                 if eligible
                 else None,
                 "tracking_per_1000": sum(s["tracking_lost"] for s in tracked) * 1000 / sum(s["frames"] for s in tracked)

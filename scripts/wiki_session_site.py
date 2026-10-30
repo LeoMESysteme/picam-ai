@@ -17,6 +17,7 @@ import re
 import shutil
 import tempfile
 import time
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
@@ -114,7 +115,22 @@ def esc(value):
 
 
 def number(value, digits=2):
-    return f"{value:.{digits}f}".replace(".", ",") if isinstance(value, (float, int)) else "—"
+    if not isinstance(value, (float, int)):
+        return "—"
+    return f"{value:,.{digits}f}".translate(str.maketrans(",.", ".,"))
+
+
+def utc_text(value):
+    """ISO-Zeitstempel als „28.10.2026, 16:31 UTC“; Unlesbares bleibt sichtbar unverändert."""
+    try:
+        moment = datetime.fromisoformat(str(value)).astimezone(UTC)
+    except (TypeError, ValueError):
+        return "unbekannt" if value is None else str(value)
+    return moment.strftime("%d.%m.%Y, %H:%M UTC")
+
+
+def kib(value):
+    return number(value / 1024, 1) + " KiB" if isinstance(value, (float, int)) else "Größe unbekannt"
 
 
 def percent(value):
@@ -124,7 +140,8 @@ def percent(value):
 def static_content(catalog: dict, notice: str) -> str:
     """Real tables remain readable before JS and after a JS failure."""
     chunks = [f'<p class="session-archive-notice" role="status">{esc(notice)} '
-              f'Archivstand (UTC): <time>{esc(catalog.get("generated_at"))}</time>.</p>']
+              f'Archivstand: <time datetime="{esc(catalog.get("generated_at"))}">'
+              f'{esc(utc_text(catalog.get("generated_at")))}</time>.</p>']
     if not catalog["runs"]:
         chunks.append("<p>Keine Sessions veröffentlicht. Abgeschlossene Läufe erscheinen nach einer "
                       "Exportphase mit beendeter Workbench und einem regulären Wiki-Deploy.</p>")
@@ -132,8 +149,9 @@ def static_content(catalog: dict, notice: str) -> str:
         chunks.append('<details class="session-source"><summary>Archivkennzahlen und Dateien als Tabelle</summary>')
         for group in catalog["groups"]:
             kind = "Testläufe" if group.get("test_run") else "reguläre Läufe"
-            chunks.append(f'<h3>{esc(group.get("label"))} · {kind}</h3><p>{esc(group.get("session_count"))} '
-                          f'Läufe · {esc(group.get("frames"))} Frames</p>')
+            # Kein h3: die Fassung steht vor dem ersten h2 der Seite.
+            chunks.append(f'<p class="session-source-group">{esc(group.get("label"))} · {kind}</p>'
+                          f'<p>{esc(group.get("session_count"))} Läufe · {esc(number(group.get("frames"), 0))} Frames</p>')
             chunks.append("<table><thead><tr><th>Kennzahl</th><th>Jeder Lauf zählt gleich</th>"
                           "<th>Alle Frames gemeinsam</th></tr></thead><tbody>")
             a, b = group["run_equal"], group["frame_weighted"]
@@ -161,7 +179,7 @@ def static_content(catalog: dict, notice: str) -> str:
             for file in run["files"]:
                 links = " ".join(f'<a href="../assets/sessions/{quote(part["path"], safe="/")}" download>'
                                  f'Teil {i + 1}</a>' for i, part in enumerate(file["parts"]))
-                files.append(f'<li>{esc(file["name"])} ({esc(file["size"])} Bytes): {links}</li>')
+                files.append(f'<li>{esc(file["name"])} ({esc(kib(file["size"]))}): {links}</li>')
             warnings = (["Testlauf – nicht für Messungen verwenden"] if run.get("test_run") else []) + run.get("warnings", [])
             stats = run["stats"]
             proc = stats.get("processing_ms") or {}
@@ -173,7 +191,7 @@ def static_content(catalog: dict, notice: str) -> str:
                        f'Leserate: {number(stats.get("rate_hz"))} Hz<br>'
                        f'Messwertmedian (VALID): {number(value.get("median"), 6)} {esc(run.get("unit"))}')
             chunks.append(f'<tr><td><a href="../assets/records-explorer/index.html?a={query}" target="_blank" '
-                          f'rel="noopener">{esc(run["id"])}</a><br>{esc(run.get("started_at_utc"))}</td>'
+                          f'rel="noopener">{esc(run["id"])}</a><br>{esc(utc_text(run.get("started_at_utc")))}</td>'
                           f'<td>{esc(run.get("device_id"))}</td><td>{summary}</td>'
                           f'<td>{esc(" · ".join(warnings))}</td><td><ul>{"".join(files)}</ul>'
                           f'<a href="../assets/sessions/{quote(run["manifest"], safe="/")}">Manifest</a></td></tr>')
@@ -215,11 +233,20 @@ def attach(site: Path, candidates: list[Path], *, max_files=MAX_FILES, max_file=
     stage = Path(tempfile.mkdtemp(prefix=".sessions-", dir=assets))
     try:
         if chosen:
-            for name in sorted(paths):
-                destination = stage / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(member(chosen, name), destination)
-        else:
+            try:
+                for name in sorted(paths):
+                    destination = stage / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(member(chosen, name), destination)
+            except (OSError, ValueError) as error:
+                # Generation verschwand beim Kopieren: echter Leerzustand statt halber Seite.
+                issues.append(str(error))
+                shutil.rmtree(stage)
+                stage.mkdir()
+                chosen = None
+                catalog = {"schema": "sessions/1", "stats_version": "sessions-stats/1", "generated_at": None,
+                           "runs": [], "groups": [], "errors": []}
+        if not chosen:
             (stage / "catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
         if target.exists():
             shutil.rmtree(target)
@@ -239,8 +266,16 @@ def attach(site: Path, candidates: list[Path], *, max_files=MAX_FILES, max_file=
     return {"attached": chosen is not None, "snapshot": str(chosen) if chosen else None, "issues": issues}
 
 
-def select_snapshots(root: Path, state: Path, wait_s=15, report=None) -> list[Path]:
-    """Request a fixed exporter operation; never send commands or source paths."""
+REQUEST = Path("/var/lib/forgejo-runner/wiki-export-request")
+
+
+def select_snapshots(root: Path, state: Path, wait_s=15, report=None, request: Path = REQUEST) -> list[Path]:
+    """Request a fixed exporter operation; never send commands or source paths.
+
+    The request lives in the runner's only writable directory (its systemd unit
+    has ProtectSystem=strict). picam-wiki-export.path watches it; the content
+    is never read. A failed write is reported, not swallowed.
+    """
     pointer = root / "archive/current"
 
     def current():
@@ -258,20 +293,23 @@ def select_snapshots(root: Path, state: Path, wait_s=15, report=None) -> list[Pa
             return None
 
     before = current()
+    request_error = None
     try:
-        with (root / "request").open("wb") as request:
-            request.write(b"export\n")
+        with request.open("wb") as stream:
+            stream.write(b"export\n")
+    except OSError as error:
+        request_error = f"Exportanfrage {request} nicht geschrieben: {error.strerror or error}"
+    if request_error is None:
         # Waiting is bounded even if the export service is absent or busy.
         deadline = time.monotonic() + min(15, max(0, wait_s))
         while time.monotonic() < deadline:
             if current() != before:
                 break
             time.sleep(min(.25, max(0, deadline - time.monotonic())))
-    except OSError:
-        pass
     after = current()
     if report is not None:
         report["update_notice"] = "" if after and after != before else "Keine neue Archivgeneration im Wartefenster; eine zurückgestellte Aktualisierung verändert den angezeigten Stand nicht."
+        report["request_error"] = request_error
     candidates = [path for path in [after, before] if path]
     try:
         previous = Path(read_json(state)["snapshot"]).resolve(strict=True)
@@ -287,13 +325,17 @@ def main():
     parser.add_argument("--site", type=Path, default=Path("site"))
     parser.add_argument("--export-root", type=Path, default=Path("/srv/picam-wiki-export"))
     parser.add_argument("--state", type=Path, default=Path("/var/lib/forgejo-runner/wiki-session-state.json"))
+    parser.add_argument("--request", type=Path, default=REQUEST, help="Feste Anfragedatei; Inhalt wird nicht ausgewertet")
     parser.add_argument("--wait", type=float, default=15)
     parser.add_argument("--snapshot", type=Path, help="Explizite Generation, z. B. Integrationsfixture; keine Exportanfrage")
     args = parser.parse_args()
     try:
         report = {}
-        snapshots = [args.snapshot] if args.snapshot else select_snapshots(args.export_root, args.state, args.wait, report)
+        snapshots = ([args.snapshot] if args.snapshot
+                     else select_snapshots(args.export_root, args.state, args.wait, report, args.request))
         result = attach(args.site, snapshots, update_notice=report.get("update_notice", ""))
+        if report.get("request_error"):
+            result["request_error"] = report["request_error"]
         if result.get("snapshot") and not args.snapshot:
             args.state.parent.mkdir(parents=True, exist_ok=True)
             temp = args.state.with_suffix(".tmp")

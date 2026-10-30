@@ -177,6 +177,9 @@ Aufklappbarer Block: 1px Haarlinie, Radius 0.4rem, 3 %-Tönung, Zusammenfassung 
 ### Diagramm aus Tabelle (wiki-chart)
 SVG aus Tabellendaten, Titel 0.74rem 600, Beschriftung 0.62 bis 0.68rem, Raster/Achse aus `chart-grid`/`chart-axis`, Balken wachsen in 420ms (`outExpo`, 60ms Staffel). Tabelle bleibt als Quelle erreichbar.
 
+### Verlauf je Lauf (Session-Explorer)
+Eine Spalte je Lauf in Startreihenfolge, Tage darunter gruppiert und durch eine gepunktete Linie getrennt; Abstände sind keine Zeitabstände. Statusanteile als gestapelte Balken (VALID `chart-good`, TRANSITION `chart-warning`, UNREADABLE `chart-critical`, STALE `ink-light`), Verarbeitung als Median-Punkt mit p95-Strich, Gesamtwerte gestrichelt. Über jedem Diagramm ein Kernsatz aus den Daten (0.68rem, `ink-light`), Legende als Schlüssel-Pillen wie auf der Fortschrittsseite. Ein Tabstopp je Diagramm, Pfeiltasten wählen den Lauf, ein 6-%-Band markiert ihn in allen Diagrammen zugleich. Softwarestände als `V1…` am ersten Lauf jedes Stands.
+
 ### Verarbeitungskette (wiki-kette)
 Interaktive Kette aus `kette.json`: Stufenkästen 0.4rem, Titel 0.74rem 600, Code-Kennung mono 0.62rem, Statuspunkte 8px, Einblendung 220ms mit 70ms Staffel; kompakte Variante mit Pillen.
 

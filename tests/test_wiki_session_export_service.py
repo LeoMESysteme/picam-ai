@@ -46,7 +46,7 @@ def test_exposure_changes_only_published_snapshot_and_pointer(tmp_path):
     (source / "records").write_text("untouched")
     source_before = mode(source)
     assert service.expose_snapshot(archive, snapshot, idle=lambda: True)
-    assert mode(archive / "snapshots") == 0o2750
+    assert mode(archive / "snapshots") == 0o750
     assert mode(snapshot) == mode(snapshot / "runs") == 0o750
     assert mode(snapshot / "catalog.json") == 0o640
     assert mode(archive / "current") == 0o640
@@ -61,13 +61,30 @@ def test_interrupted_exposure_never_exposes_pointer(tmp_path):
     snapshot = fixture(archive)
 
     def idle():
-        return mode(archive / "snapshots") != 0o2750
+        return mode(snapshot) != 0o750
 
     assert not service.expose_snapshot(archive, snapshot, idle=idle)
-    assert mode(archive / "snapshots") == 0o2750
+    assert mode(snapshot) == 0o750
     assert mode(archive / "current") == 0o600
     assert service.expose_snapshot(archive, snapshot, idle=lambda: True)
     assert mode(archive / "current") == 0o640
+
+
+def test_exposure_opens_files_then_directories_bottom_up(tmp_path):
+    archive = tmp_path / "archive"
+    snapshot = fixture(archive)
+
+    def idle():
+        # Interrupt as soon as the first directory changes.
+        return mode(snapshot / "runs") == 0o700 and mode(snapshot) == 0o700
+
+    (snapshot / "runs").chmod(0o700)
+    snapshot.chmod(0o700)
+    assert not service.expose_snapshot(archive, snapshot, idle=idle)
+    assert mode(snapshot / "catalog.json") == mode(snapshot / "runs" / "manifest.json") == 0o640
+    assert mode(snapshot / "runs") == 0o750  # deepest directory first
+    assert mode(snapshot) == 0o700  # generation root stays closed until last
+    assert mode(archive / "current") == 0o600
 
 
 @pytest.mark.parametrize("kind", ["outside", "traversal", "symlink", "unpublished", "pointer-symlink"])
@@ -127,8 +144,10 @@ def test_private_umask_export_exposes_only_completed_generation(tmp_path):
     assert mode(snapshot / "catalog.json") == 0o640
     assert mode(archive / "checkpoint.sqlite3") == 0o600
     assert mode(archive / "integrity.sqlite3") == 0o600
+    # Shared block store: 0640 inodes behind a private 0700 directory. The
+    # runner reaches them only through links in a published generation.
     assert mode(archive / "blocks") == 0o700
-    assert all(mode(p) == 0o600 for p in (archive / "blocks").iterdir())
+    assert all(mode(p) == 0o640 for p in (archive / "blocks").iterdir())
     after = (run / "records.jsonl").stat()
     assert (after.st_mode, after.st_size, after.st_mtime_ns) == (before.st_mode, before.st_size, before.st_mtime_ns)
 
@@ -163,3 +182,73 @@ def test_service_recovers_receiptless_pointer_and_exposes_twice(tmp_path, has_pr
         assert (Path(result["path"]) / "published").is_file()
         if has_previous:
             assert result["path"] == previous["path"]
+
+
+def test_production_rights_setgid_group_without_chown(tmp_path, monkeypatch):
+    """Mirror /srv: archive 2750 in a group the service user is NOT in.
+
+    Without root we use a supplementary group and emulate the two kernel rules
+    that matter for a non-member owner: chmod clears S_ISGID, and fchown/chown
+    to the archive group fails with EPERM. Every published entry must still
+    carry the archive group, which only setgid inheritance can provide.
+    """
+    groups = [g for g in os.getgroups() if g != os.getegid()]
+    if not groups:
+        pytest.skip("keine Zusatzgruppe zum Nachbilden der Runner-Gruppe")
+    group = groups[0]
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    archive.mkdir()
+    os.chown(archive, -1, group)
+    archive.chmod(0o2750)
+    assert mode(archive) == 0o2750
+
+    real_fchmod, real_chmod = os.fchmod, os.chmod
+
+    def strip(gid, permissions):
+        return permissions & ~stat.S_ISGID if gid == group else permissions
+
+    def fchmod(fd, permissions):
+        real_fchmod(fd, strip(os.fstat(fd).st_gid, permissions))
+
+    def chmod(path, permissions, *args, **kwargs):
+        gid = os.stat(path, *args, **kwargs).st_gid
+        real_chmod(path, strip(gid, permissions), *args, **kwargs)
+
+    def eperm(*args, **kwargs):
+        raise PermissionError(1, "Operation not permitted (non-member)")
+
+    monkeypatch.setattr(os, "fchmod", fchmod)
+    monkeypatch.setattr(os, "chmod", chmod)
+    monkeypatch.setattr(os, "fchown", eperm)
+    monkeypatch.setattr(os, "chown", eperm)
+
+    def add(name, values):
+        run = source / "session-one" / name
+        run.mkdir(parents=True)
+        (run / "session.json").write_text(json.dumps({"schema": "live-session/1", "ended_at_utc": "done"}))
+        stamp = '"capture_timestamp":{"base":"sensor_boottime","value_ns":%d}'
+        (run / "records.jsonl").write_text("".join('{"status":"valid",%s}\n' % (stamp % v) for v in values))
+
+    previous_mask = os.umask(0o077)
+    try:
+        add("run-one", range(3))
+        first = service.run_once(source, archive, idle=lambda: True)
+        # The second generation is built after the first exposure already
+        # cleared setgid on snapshots/ (as on the Pi) and links shared blocks.
+        add("run-two", range(5))
+        second = service.run_once(source, archive, idle=lambda: True)
+    finally:
+        os.umask(previous_mask)
+    for result in (first, second):
+        assert result["error"] is None and result["deferred"] is False, result
+    generation = Path(second["path"])
+    assert (archive / "current").read_text().strip() == generation.name
+    assert mode(archive) == 0o2750
+    assert mode(archive / "blocks") == 0o2700
+    assert (archive / "current").stat().st_gid == group and mode(archive / "current") == 0o640
+    assert mode(archive / "checkpoint.sqlite3") == 0o600
+    for path in [generation, *generation.rglob("*")]:
+        assert path.stat().st_gid == group, path
+        assert mode(path) & 0o777 == (0o750 if path.is_dir() else 0o640), path
+    for chunk in (generation / "chunks").iterdir():
+        assert chunk.stat().st_ino == (archive / "blocks" / chunk.name).stat().st_ino
