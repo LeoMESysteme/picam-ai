@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: Die Schwelle für Telegrammlücken in der Referenz sinkt von
+  1 000 auf 800 ms (OQ-40). Grundlage sind 13 Live-Läufe mit laufender
+  Kamera, ≈ 74 min:
+  * Der ungestörte Abstand ist höchstens 561 ms, die Periode 533,3 ms.
+  * Ein einzelner Telegrammausfall ergibt mindestens ≈ 1 039 ms. Die alte
+    Grenze erkannte ihn deshalb nur mit ≈ 39 ms Abstand, die neue mit
+    ≈ 240 ms.
+
+  `reference_eval.MAX_GAP_NS` und der Lückenzähler des Rekorders teilen
+  jetzt eine Konstante. Die Auswertung aller 13 Läufe ist bytegleich zu
+  vorher, ein neuer Test deckt den einzelnen Ausfall ab. Offen bleiben die
+  Stundenmessung und ein absichtlich erzeugter Ausfall. Außerdem ist die
+  Ursache der Nachtpflegefehler im Status nachgetragen: abgelaufene
+  Codex-Anmeldung des Runners, seit dem 28.10. behoben.
+
 * 2026-10-30: P4-3 als Prototyp gebaut und nach Review korrigiert: Opt-in
   `output` im Live-Service/API, Standard aus; nur endgültige Records nach
   R13-17/R13-21 und erfolgreichem Audit. Ein Senderauftrag, neue Frames bei

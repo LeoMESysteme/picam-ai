@@ -12,7 +12,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-47](#oq-47) | Jetzt | offen | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
 | [OQ-01](#oq-01) | Jetzt | teilweise geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-06](#oq-06) | Jetzt | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
-| [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
+| [OQ-40](#oq-40) | Jetzt | weitgehend geklärt | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
 | [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
 | [OQ-04](#oq-04) | — | teilweise geklärt | Welche Gerätetypen bilden den ersten freizugebenden Umfang? |
@@ -1930,7 +1930,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-40 — Schwelle für „Telegrammlücke" im Gate-Labeler ist ungemessen
 
-* **Status:** offen · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
+* **Status:** weitgehend geklärt (2026-10-30: 800 ms aus 74 min Live-Daten, Stundenmessung offen) · erkannt 2026-09-22 beim Bau von `scripts/gate-label.py`
   · **Zuständig:** Labor
 * **Frage:** Ab welchem Telegrammabstand gilt ein Lauf gleicher Werte als
   nicht mehr vertrauenswürdig?
@@ -1977,6 +1977,41 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `sensor_sequence` lückenlos. Die folgende 15-min-Sitzung blieb ohne
   Verwurf. Der Schreibstau tritt also auch ohne erzwungene Last auf; für
   3,5-min-Ernten unkritisch, für die Stundenmessung zu beachten.
+* **Nachtrag 2026-10-30 — 13 Live-Läufe (23./28.10.), Kamera und Leser
+  laufend:** 7 813 Telegramme über 4 426 s (≈ 74 min, längster Lauf 990 s).
+  Pausen, die die Werkbank selbst auslöst (Werteplan und Vorprüfung, STOP
+  −100 ms bis START +1 200 ms), sind getrennt gezählt.
+  * **Ungestörter Strom, 7 245 Abstände:** min 506,0, p50 533,1, p95 535,3,
+    p99 538,7, max 561,0 ms. Über 600 ms: **0**. Fehlerhafte Telegramme:
+    0, `parse_errors` und `dropped_oldest` überall 0.
+  * Die extremen Werte treten als Paar auf: 561 + 506 = 2 Perioden. Das
+    Gerät taktet also gleichmäßig weiter, nur ein Stempel auf dem Pi kommt
+    bis +27,4 ms später.
+  * **Pausen, 555 Abstände:** 153 Pausen von 2 133, 2 666 bzw. 3 199 ms
+    (4–6 Perioden). Zwischen 600 und 2 100 ms liegt nichts. Direkt nach
+    START kommen 27 Abstände von 422–436 ms, offenbar setzt das Gerät seine
+    Taktphase neu. Sie liegen im gesperrten Fenster aus Pause und 695 ms
+    Schutzzeit.
+  * **Folgerung:** Ein einzelner Ausfall ergibt mindestens 2 × 533,3 −
+    27,4 ≈ 1 039 ms. Die bisherige Grenze von 1 000 ms in
+    `reference_eval.MAX_GAP_NS` und im Lückenzähler des Rekorders erkennt
+    ihn also nur mit ≈ 39 ms Abstand. **Umgesetzt 2026-10-30:** 800 ms,
+    gemeinsame Konstante. Das lässt nach beiden Seiten ≈ 240 ms Abstand.
+    Die Auswertung aller 13 Läufe ist bytegleich zu vorher; ein Test deckt
+    den einzelnen Ausfall ab. Für `gate-label.py` bestätigt das die
+    vorläufigen 300/800 ms der Ernte.
+  * **Weiter offen:**
+    * eine Stundenmessung;
+    * ein absichtlich erzeugter Ausfall als Gegenprobe;
+    * CPU- und USB-Last (wird nicht aufgezeichnet);
+    * Bruchstücke beim Wiederanlauf: Der Rekorder verwirft sie ohne
+      Protokoll.
+
+    Ohne Ausfall in 7 245 Abständen liegt die Ausfallrate mit 95 % unter
+    ≈ 4·10⁻⁴ je Telegramm (Dreierregel). Die Grenze gilt nur für die
+    Datenrate 533 ms. Ändert sich die Rate, muss sie neu bestimmt werden.
+    Skript: `oq40_telegramm_luecken.py` (Auswertung im Job-Verzeichnis,
+    nicht im Repo).
 * **Verwandt:** [OQ-38](open-questions.md) (zeitliche Kopplung, M).
 * **Antwort landet in:** [VALIDATION.md](VALIDATION.md) und der
   Vorab-Festlegung des Plans

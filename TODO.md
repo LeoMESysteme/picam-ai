@@ -549,7 +549,13 @@ Ernte-Phase-1-Plan wird die Stundenaufzeichnung bewusst nicht vorgezogen:
 die erste Ernte benutzt 300/800 ms und markiert
 `gap_thresholds_provisional: true`. Die Stundenmessung folgt separat.
 
-→ [OQ-40](docs/open-questions.md).
+**2026-10-30:** 13 Live-Läufe (≈ 74 min, Kamera laufend) bestätigen
+800 ms. Der ungestörte Strom hat höchstens 561 ms Abstand; ein einzelner
+Ausfall ergäbe ≥ ≈ 1 039 ms. Die Referenzauswertung und der Rekorder nutzen
+jetzt 800 ms statt 1 000 ms; die Auswertung aller Läufe ist bytegleich.
+Offen bleiben die Stundenmessung und ein absichtlich erzeugter Ausfall.
+
+→ [OQ-40](docs/open-questions.md#oq-40).
 
 ### 6. Externer Loader lehnt Export-Schema 2 ab
 

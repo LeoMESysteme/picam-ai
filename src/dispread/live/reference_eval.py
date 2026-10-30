@@ -10,7 +10,10 @@ from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.records import to_boottime_ns
 
 GUARD_NS = 695_000_000
-MAX_GAP_NS = 1_000_000_000
+# OQ-40 (2026-10-30, 7245 ungestoerte Abstaende unter Kameralast): Periode
+# 533,3 ms, max 561 ms; ein ausgefallenes Telegramm gibt >= ~1039 ms.
+# 800 ms laesst nach beiden Seiten ~240 ms Abstand (1000 ms nur ~39 ms).
+MAX_GAP_NS = 800_000_000
 
 
 def _text(text):

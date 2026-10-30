@@ -238,7 +238,10 @@ etwa 7 h alte Generationen verwerfen (R13-Zweig: Live-Audit ohne
 Rotation). Import bei schrägem Blick und Aufräumen des alten
 7-Segment-Pfads bleiben Aufgaben. `var/` braucht eine Sicherung auf anderem
 Medium. Das frühere Codex-Staging-Leck wurde am 2026-10-21 abgestellt
-(Details/Sicherung in TODO). Nachtpflegefehler seit 2026-10-19 ungeklärt.
+(Details/Sicherung in TODO). Die Nachtpflege (`maintain`) scheiterte
+19.–21.10. und 24.–28.10. an der abgelaufenen Codex-Anmeldung des Runners
+(`401`, für die zweite Serie belegt); seit dem Auth-Abgleich vom 28.10.
+(`picam-codex-auth-sync.path`) läuft sie wieder grün (29./30.10.).
 
 Forgejo-CI und Messpfad teilen denselben Pi. Während Messläufen keine
 Builds, Browsertests oder Pushes nach `master`: früher bis 44 s Stillstand.

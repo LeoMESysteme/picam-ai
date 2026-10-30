@@ -16,7 +16,7 @@ from pathlib import Path
 from dispread import gsv2as_serial as serial_io
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.gsv2as_serial import DEFAULT_RESTORE_POINT, NORM_MAX, NORM_MIN
-from dispread.live.reference_eval import GUARD_NS
+from dispread.live.reference_eval import GUARD_NS, MAX_GAP_NS
 
 JOIN_TIMEOUT_S = 20.0
 RESTORE_ERROR = "Rückstellung nicht bestätigt – Gerät prüfen (gsv-registers.py)"
@@ -267,7 +267,7 @@ class ReferenceRecorder:
                 self._enqueue('reference', entry)
                 if entry.get('error'):
                     continue
-                if last_t is not None and t - last_t > 1_000_000_000:
+                if last_t is not None and t - last_t > MAX_GAP_NS:
                     self._state['gaps'] += 1
                 last_t = t
                 self._latest = entry
