@@ -2845,3 +2845,59 @@ ohne Befund. Die Statusgründe werden nicht aus Tour-Fakten generiert;
 dort ist keine Änderung erforderlich. Reale Werkbank-Abnahme bleibt offen.
 Kein Commit, keine volle Suite, kein Docs-Playwright; `docs/status.md`
 bleibt gemäß Auftrag unverändert.
+
+## 2026-10-30 — Langlauf 43 min mit Werteplan {#langlauf-2026-10-30}
+
+**Rahmen:** Die Einrichtung `live-20261030T082502Z` hat Claude im Auftrag
+von Leonhard Hentschke bestätigt und gestartet; Leonhard hatte das im Chat
+ausdrücklich freigegeben (`confirmed_by` vermerkt das so). Die Werkbank
+lief aus e3eda0b (R13-22, OQ-40), mit Raumlicht am Vormittag.
+
+**Einrichtung:**
+* Belichtung OK: Glaspegel 137, Belichtung 300, Gain 14. Die Regelung
+  musste nicht eingreifen, das zeigt die Nachregelung am Gerät also
+  weiterhin nicht.
+* Gegenlesen OK: `+0.61085` auf beiden Standbildern.
+* Zwei Warnungen, beide nur im Einheitsbereich „mV/V“: Raster mit
+  Zellabweichung bis 0,21 Spalten in den Zellen 9–12 (Zahlenzellen 0–7
+  höchstens 0,07), und ein heller Fleck von 8 px in Zelle 14.
+
+**Lauf `run-01`** (42,8 min, 76 165 Bilder ≈ 30 Bilder/s):
+* Werteplan mit 280 Schritten: zweimal der Plan vom 28.10. (Faktoren 1–5,
+  je 5 s), danach 10 Haltestufen à 60 s.
+* Referenzaufzeichnung und Diagnosebilder an (85 gespeichert).
+* Am Ende Rückstellung und Gegenprüfung von Normierung und Dezimalpunkt:
+  beide OK.
+
+Offizielle Auswertung `scripts/live-reference-eval.py`:
+
+| | Wert |
+| --- | --- |
+| Fehllesungen | **0 / 45 702** entschiedene VALID |
+| stabile Referenzfenster | **100 % VALID** (45 702 / 45 702), alle Faktoren 1–5 |
+| im Wechsel | 75 % VALID, 25 % TRANSITION |
+| Verzögerung erster VALID nach Wechsel | Median 241 ms, p90 271 ms (n = 326) |
+| Trackingverlust | 0; der erste Durchgang trug alles (Grobschätzung 0×) |
+| Sperre während Umschaltung (R13-21) | 17 432 Bilder |
+
+**VALID ohne Referenzdeckung:** Das sind 3 542 Bilder in den
+Telegrammpausen des Werteplans, also nach STOP bis zur ersten
+nicht verworfenen Zeile nach START. Sie wurden zusätzlich gegen das
+Telegramm direkt davor und danach geprüft (grobe Lückenlogik, 2 524
+Bilder):
+* 2 462 stimmen mit einem der beiden überein.
+* 62 weichen nur in der letzten Stelle um ±1 ab, je 1–2 Bilder lang, zum
+  Beispiel `+0.61084` zwischen zwei Telegrammen `+0.61085`. Diese
+  Nachbarwerte sendet das Gerät auch selbst, `+0.61084` etwa 7-mal.
+
+Das passt zum Rauschen des echten Signals in der letzten Stelle, während
+keine Telegramme kommen. Ohne Referenz in diesen Momenten ist es aber
+nicht beweisbar; die Fenster zählen deshalb weiter nicht als geprüft.
+Skript: `ungedeckt_check.py` (Job-Verzeichnis).
+
+**Nebenbefund (behoben):** `frames_skipped` stand bei 45 277. Ursache:
+Seit R13-22 leert ein Kamera-Neustart beim Laufstart `latest()`, die
+Bildnummer zählt aber weiter. Die Sitzung buchte deshalb alle Bilder seit
+dem Serverstart als übersprungen. Das betraf nur Zähler und Trace des
+ersten Records, keine Werte. Die Sitzung zählt Lücken jetzt erst ab dem
+ersten gelieferten Bild (Test).

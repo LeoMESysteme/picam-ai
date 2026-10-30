@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-28
+# Status — Stand 2026-10-30
 
 Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
 [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
@@ -16,9 +16,24 @@ Dieser Snapshot wird zum Sessionende neu geschrieben. Arbeitsliste:
   OQ-47). **P4-1/P4-2** (0347d35): `UserDefinedFormatter` und
   `scripts/gsvmulti-demo-sender.py` als Prototyp, nur mit pty geprüft;
   Windows-Test steht in [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md).
-* **Nicht geschafft:** Langzeitlauf (29.10. fiel durch API-Limit aus; die
-  Werkbank endete am 28.10. 16:57 ohne protokollierten Grund, die
-  Bestätigung ist damit verloren — neue Einrichtung nötig).
+* **Langlauf 30.10.:** `live-20261030T082502Z/run-01`, 42,8 min.
+  * **0 / 45 702** Fehllesungen, **100 %** VALID in stabilen Fenstern.
+  * Werteplan mit 280 Schritten über die Faktoren 1–5.
+  * Kein Trackingverlust, Verzögerung im Median 241 ms.
+  * Rückstellung des Geräts geprüft.
+  * Bestätigt und gestartet hat Claude im Auftrag von Leonhard
+    (Chat-Freigabe).
+  * Zuvor fiel der 29.10. durch ein API-Limit aus; die Werkbank endete am
+    28.10. um 16:57 ohne protokollierten Grund.
+
+  [Laborjournal](lab_journal.md#langlauf-2026-10-30).
+* **R13-22** (e3eda0b): Ein Streamstillstand wird nach 2 s ohne Bild
+  erkannt (Anlauffrist 5 s), nicht erst nach dem OpenCV-Timeout von
+  10–20 s. Der Lauf endet dann mit sichtbarem Fehler. Geprüft nur mit
+  Fakes.
+* **OQ-40** (16021e1): Die Schwelle für Telegrammlücken liegt bei 800 ms
+  statt 1 000 ms. Grundlage sind 74 min Live-Daten: maximal 561 ms
+  ungestört, ein einzelner Ausfall ergäbe ≥ 1 039 ms.
 * **P4-3** (172ee16): Opt-in-Ausgabe an GSVmulti im Live-Lauf (API-Feld
   `output`, Standard aus, nur VALID nach allen Sperren, nie im Testlauf,
   vollständige Telegramme, Baud ≥ 9600, Schutz des Referenzadapters).

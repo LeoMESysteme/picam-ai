@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: Langlauf `live-20261030T082502Z/run-01`, 42,8 min.
+  * Werteplan mit 280 Schritten.
+  * **0 / 45 702** Fehllesungen, 100 % VALID in stabilen Fenstern, kein
+    Trackingverlust.
+  * Bestätigt hat Claude im Auftrag von Leonhard Hentschke.
+
+  Ein Nebenbefund ist behoben: Seit R13-22 leert ein Kamera-Neustart beim
+  Laufstart `latest()`. Die Sitzung zählte dadurch alle Bilder seit dem
+  Serverstart als `frames_skipped`, im Lauf 45 277. Jetzt zählt sie Lücken
+  erst ab dem ersten gelieferten Bild. Das betraf nur Zähler und Trace,
+  keine Werte.
+
 * 2026-10-30: R13-22 erkennt Streamstillstand nach 2 s ohne geliefertes Bild
   über die monotone Host-Uhr im `CameraOwner`, auch bei blockierendem
   OpenCV-Read. Bis zum ersten Bild nach Start/Neustart gilt eine eigene

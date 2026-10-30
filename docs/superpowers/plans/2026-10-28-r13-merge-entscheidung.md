@@ -44,6 +44,7 @@ Auswertung `scripts/live-reference-eval.py`;
 | `150914Z/run-01` Werteplan 16,5 min, Faktoren 1–5, 138 Umschaltungen | **0 / 14 785** | **99,99 %** VALID in stabilen Fenstern; Anzeige die ganze Zeit 3–4 px/+0,15 % versetzt, getragen vom zweiten Durchgang |
 | `150914Z/run-02` absichtliche Verschiebungen bis 27 px | 0 / 3274 | über 20 px korrekt abgelehnt, Hinweis „Anzeige bewegt“ |
 | `123044Z` schräg links (R13-19a) | 0 / 3187 | 76 % VALID bei 1,4 Wertwechseln/s |
+| **30.10.** `082502Z/run-01` Langlauf 42,8 min, Werteplan 280 Schritte (Faktoren 1–5, zuletzt 60-s-Stufen), mit R13-21/R13-22 | **0 / 45 702** | **100 %** VALID in stabilen Fenstern, kein Trackingverlust, Verzögerung Median 241 ms; bestätigt von Claude im Auftrag ([Laborjournal](../../lab_journal.md#langlauf-2026-10-30)) |
 
 Über alle Live-Läufe: **0 Fehllesungen**. Die Ausfälle bei Faktor 2 und 5
 (`master`, 21.10.: kein VALID in stabilen Fenstern) traten im ruhigen Lauf

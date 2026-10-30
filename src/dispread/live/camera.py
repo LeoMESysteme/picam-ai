@@ -150,6 +150,12 @@ class CameraOwner:
         with self._cond:
             return self._latest
 
+    def last_sequence(self) -> int:
+        """Zuletzt vergebene Bildnummer; laeuft ueber Quellenneustarts weiter,
+        auch wenn latest() nach einem Neustart noch leer ist."""
+        with self._cond:
+            return self._sequence
+
     def wait_newer(self, after: int, timeout: float) -> tuple[int, Frame] | None:
         """Neuestes Bild mit Owner-Folgenummer > `after`, sonst None.
 

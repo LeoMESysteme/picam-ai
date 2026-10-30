@@ -297,6 +297,10 @@ class LiveSession:
             self._meta["confirmation"] = json.loads(confirmation_path.read_text(encoding="utf-8"))
         latest = self._owner.latest() if hasattr(self._owner, "latest") else None
         self._seen = latest[0] if latest else 0
+        if latest is None and hasattr(self._owner, "last_sequence"):
+            # Nach einem Kameraneustart ist latest() leer, die Bildnummer
+            # laeuft aber weiter: Luecken erst ab dem Laufstart zaehlen.
+            self._seen = self._owner.last_sequence()
         self._clock.sample()
         self._last_clock = self._monotonic()
         self._write_session(ended=False)

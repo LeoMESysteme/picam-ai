@@ -509,6 +509,21 @@ def test_start_ignores_camera_frames_from_before_start(tmp_path):
     assert session.stop()["frames_skipped"] == 0
 
 
+def test_first_frame_after_camera_restart_is_not_counted_as_skipped(tmp_path):
+    # Kameraneustart (R13-22) leert latest(), die Bildnummer laeuft weiter.
+    session = _session(tmp_path, [embed("+ 1.2345 ")] * 3)
+    session._owner.items = [(seq + 44_700, img) for seq, img in session._owner.items]
+    session._owner.latest = lambda: None
+    session._owner.last_sequence = lambda: 44_700
+    session.start()
+    first = session.step()
+    assert first.frame_sequence == 44_701
+    assert first.trace.dropped_frames == 0
+    session._owner.items = session._owner.items[2:]
+    assert session.step().trace.dropped_frames == 1
+    assert session.stop()["frames_skipped"] == 1
+
+
 def test_start_refused_for_wrong_templates_checksum(tmp_path):
     profile_path, config = _files(tmp_path)
     session = LiveSession(FakeOwner([]), profile_path, config, tmp_path / "run")

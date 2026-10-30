@@ -96,6 +96,22 @@ def test_restart_swaps_source_and_keeps_owner_sequence_rising():
     owner.stop()
 
 
+def test_last_sequence_survives_restart_while_latest_is_empty():
+    owner = CameraOwner(lambda: FakeSource([33_333_333], endless=True))
+    owner.start()
+    before = owner.wait_newer(0, 1.0)[0]
+    owner.stop()
+    blocked = BlockingSource(emit=False)
+    try:
+        owner.restart(lambda: blocked)
+        assert blocked.reading.wait(1.0)
+        assert owner.latest() is None
+        assert owner.last_sequence() >= before
+    finally:
+        blocked.release.set()
+        owner.stop()
+
+
 def test_control_target_only_for_sources_with_controls():
     owner = CameraOwner(lambda: FakeSource([1], endless=True))
     owner.start()
