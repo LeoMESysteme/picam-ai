@@ -27,6 +27,9 @@ Zeitachse (M8) sind ungeklärt.
 ## Aufgaben
 
 ### P4-1 Formatter `userdefined` (Codex)
+**Stand 2026-10-28: gebaut, ungeprüft am Windows-PC.** Lokale Formatter-
+und SerialSink-Prüfungen mit pty/Fakes; weiterhin Prototyp, nicht freigegeben.
+
 * `src/dispread/sink/protocol/userdefined.py`: `UserDefinedFormatter`
   (`TelegramFormatter`), `capabilities`: Formatkennung `gsvmulti_userdefined_v0`,
   `provisional=True`, 1 Kanal, keine Gerätekommandos,
@@ -41,6 +44,10 @@ Zeitachse (M8) sind ungeklärt.
   inkonsistenter Text → `None`, Präfixprüfung; pty-Test über `SerialSink`.
 
 ### P4-2 Demo-Sender für den Windows-Test (Codex)
+**Stand 2026-10-28: gebaut, ungeprüft am Windows-PC.** Profile, JSONL,
+Portablehnung und Schreibstau lokal mit pty/Fakes geprüft;
+[Windows-Anleitung](../../GSVMULTI_PROTOCOL.md#windows-test). P4-3 bleibt offen.
+
 * `scripts/gsvmulti-demo-sender.py`: sendet Demo-Werte (Konstanten,
   Treppe, Vorzeichen/Null/Bereichsgrenzen) mit dem Formatter aus P4-1 an
   einen Port/pty, Rate (Standard 10 Hz) und Anzahl (Standard 600),

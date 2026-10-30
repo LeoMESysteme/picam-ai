@@ -1,15 +1,15 @@
 """Telegrammformate - die Naht, an der das GSVmulti-Format eingesetzt wird.
 
-Das konkrete Telegramm, das die eingesetzte GSVmulti-Version akzeptiert, ist
-unbekannt (OQ-07: nicht lokal verfuegbar, me-systeme.de blockt automatische
-Abrufe mit HTTP 403, muss intern von einem Menschen beschafft werden).
+UserDefined ist dokumentiert (docs/GSVMULTI_PROTOCOL.md); der einkanalige
+UserDefinedFormatter bleibt bis zur Windows-Abnahme ein Prototyp (OQ-07).
+Das native GSV-Geraeteprotokoll wird hier nicht nachgebaut.
 
 Deshalb ist das Format hier eine austauschbare Komponente und nicht fest in
 die Pipeline verdrahtet. Konzept.md §8 nennt CSV-Dateiimport, ASCII-Streaming
 und die Emulation eines GSV-Geraets als drei verschiedene Schnittstellenfaelle -
 alle drei sind hinter dieser Schnittstelle abbildbar.
 
-**Kein Erfinden von Protokollen.** Der ASCII-CSV-Formatter unten ist ein
+**Kein Erfinden von Protokollen.** Der ASCII-CSV-Formatter ist ein
 ausdruecklich als provisorisch gekennzeichneter Platzhalter zum Testen der
 Kette, keine Vermutung darueber, was GSVmulti akzeptiert.
 """

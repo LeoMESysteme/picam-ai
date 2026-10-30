@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-28: P4-1/P4-2 als Prototyp gebaut: `UserDefinedFormatter` erzeugt
+  einkanaliges ASCII mit konfigurierbarem Präfix und festem CRLF aus VALID-
+  Anzeigetext, prüft Dezimallexik und exakte Text/Wert-Konsistenz; sonst
+  `omit_record`. Eigenständiger Demo-Sender mit drei Profilen, 600 Frames
+  bei standardmäßig 10 Hz/115200 8N1, geschützten Referenz-/Debugports,
+  BOOTTIME-JSONL und Dry-run. Nicht blockierende Writes verwerfen Stau
+  ohne Retry/Aufholburst. Nur pty/Fakes geprüft; Windows-Annahme,
+  Ungültigwirkung und Zeitachse offen, keine Messfreigabe. P4-3 und der
+  werfende native GSV-Platzhalter bleiben unverändert.
+
 * 2026-10-28: R13-21 sperrt die Live-Freigabe bei werkbankgesteuerter
   Geräteumkonfiguration: ab vor STOP jeder Werteplan-/Rückstellsequenz bis
   nach Resume plus 695 ms (bestehendes Referenz-GUARD). Ein sonst gültiges

@@ -9,6 +9,29 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-10-28 — P4-1/P4-2: isolierter UserDefined-Transportprototyp
+
+**Problem:** Das UserDefined-Zahlenprofil ist belegt, der tatsächliche
+Windows-Empfang und die Ungültig-/Zeitsemantik sind offen. Für die Abnahme
+braucht es synthetische Werte und eine nachvollziehbare Sendespur.
+
+**Entscheidung:** Ein eigener `UserDefinedFormatter` hinter dem bestehenden
+`TelegramFormatter`-Vertrag erzeugt einen Wert ohne Rundung. Der Demo-Sender
+verwendet ihn mit synthetischen Records und schreibt separat nicht blockierend
+über pySerial, mit Pufferverwerfen, JSONL und ohne Retry/Aufholburst.
+
+**Alternativen:** `AsciiCsvFormatter` enthält zusätzliche Felder und ist kein
+Ein-Wert-Profil. `SerialSink.emit()` benutzt `flush()` und eignet sich deshalb
+unverändert nicht für den Demo-Schreibstaupfad; eine allgemeine Änderung des
+Sinks würde andere Verbraucher betreffen. Der Formatter wird zusätzlich am
+bestehenden SerialSink über pty geprüft. Eine Live-Anbindung bleibt P4-3 nach
+Review, der native GSV-Platzhalter bleibt erhalten.
+
+**Konsequenz:** Nur lokale pty-/Fake-Prüfungen; `sent` belegt Treiberannahme,
+keinen Empfang. Bereits übertragene Teilbytes können nicht zurückgenommen
+werden. Messfreigabe, reale Puffer und Zeitachse bleiben offen; der
+[Windows-Test](GSVMULTI_PROTOCOL.md#windows-test) dient dem nächsten Nachweis.
+
 ## 2026-10-28 — R13-21: Aufnahmezeit sperrt eigene Geräteumschaltungen
 
 **Problem:** Zwischen `set_norm` und `set_dpoint` zeigt das Gerät lesbare,

@@ -194,8 +194,12 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   wurde am 2026-10-28 direkt geprüft; S. 118–121 belegen den Zahlenimport.
   Damit entfällt die reine Beschaffungssperre für einen Prototyp.
   Empfang in 2.01 Pro, Ungültigbehandlung und Zeitachse bleiben offen;
-  kein Format ist dadurch bereits implementiert oder abgenommen.
+  keine Abnahme ist dadurch erfolgt.
   [Bewertung und nächste Schritte](GSVMULTI_PROTOCOL.md).
+* **Prototyp gebaut (2026-10-28):** P4-1 `UserDefinedFormatter` und P4-2
+  Demo-Sender sind mit pty/Fakes geprüft, ungeprüft am Windows-PC und nicht
+  freigegeben. Empfang, Ungültigwirkung und Zeitachse bleiben offen;
+  [Testanleitung](GSVMULTI_PROTOCOL.md#windows-test). P4-3 ist nicht umgesetzt.
 * **Korrektur der Abrufaussage (2026-09-22):** Die bisherige Formulierung
   „`me-systeme.de` blockt automatische Abrufe mit HTTP 403" ist **zu pauschal**.
   Gemessen am 2026-09-22:
@@ -2231,6 +2235,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
 * **Status:** offen · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
+* **Prototyp gebaut (2026-10-28):** Der eigenständige Demo-Sender nutzt
+  `UserDefinedFormatter`, nicht blockierende Writes, Pufferverwerfen und
+  JSONL-Belege für verworfene Frames; kein Retry/Aufholburst. Nur pty/Fakes
+  geprüft. Treiberpuffer, Empfang und Altwertverhalten am Windows-PC bleiben
+  nachzuweisen; [Ablauf und Grenzen](GSVMULTI_PROTOCOL.md#windows-test).
 * **Befund:** USB-UART und Raw TCP mit Windows-VCOM sind plausible Wege.
   Ein konkreter Ausgang samt Windows-Port, Treiber/Lizenz, Pufferverhalten
   und Wiederanlauf ist für dieses Projekt noch nicht ausgewählt oder
