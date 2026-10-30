@@ -1,6 +1,7 @@
 """Rahmenstruktur statt wechselnder Zeichen; ausschliesslich feste Testbilder."""
 
 import importlib.util
+import itertools
 import json
 import os
 from pathlib import Path
@@ -399,7 +400,9 @@ def test_jeder_inlier_muss_stabilen_fit_tragen(scene, monkeypatch):
     target = tracker.sources.copy()
     target[1] += (0, 2)
     original_peak = ft._peak
-    calls = iter(enumerate(target - tracker.sources + tracker.config.search_radius_px))
+    # Dieselben Treffer in jedem Durchgang: auch der Aehnlichkeitsversuch (R13-24)
+    # muss den einflussreichen Treffer ablehnen.
+    calls = itertools.cycle(enumerate(target - tracker.sources + tracker.config.search_radius_px))
 
     def biased_peak(response, config):
         _, peak, ambiguous = original_peak(response, config)
@@ -410,12 +413,14 @@ def test_jeder_inlier_muss_stabilen_fit_tragen(scene, monkeypatch):
     result = tracker.update(reference)
     assert result.quad is None
     assert result.reason == "rahmen_unstimmig"
+    assert tracker.last_coarse.used
 
 
 def _force_region_targets(monkeypatch, tracker, targets):
     from dispread.live import frame_tracking as ft
 
-    positions = iter(targets - tracker.sources + tracker.config.search_radius_px)
+    # Je Durchgang dieselben Treffer: erster starrer und zweiter Aehnlichkeitsversuch.
+    positions = itertools.cycle(targets - tracker.sources + tracker.config.search_radius_px)
     monkeypatch.setattr(ft, "_peak", lambda response, config: (next(positions), 1.0, False))
 
 
@@ -444,6 +449,7 @@ def test_kandidat_unstimmige_inlier_trotz_stabilem_fit_ablehnen(scene, monkeypat
     result = tracker.update(reference)
     assert result.quad is None
     assert result.reason == "rahmen_unstimmig"
+    assert tracker.last_coarse.used
 
 
 @pytest.mark.parametrize("dx,dy,angle", [(3.5, 0, 0), (0, 3.5, 0), (0, 0, 1.0)])
@@ -484,7 +490,10 @@ def test_kandidat_residualgrenzen_sind_inklusiv(scene, monkeypatch, field, margi
     proposal = propose_regions(reference, quad, config)
     tracker = FrameTracker(reference, quad, proposal, config)
     _force_region_targets(monkeypatch, tracker, target)
-    result = tracker.update(reference)
+    # Randsemantik des starren Fits: Der Aehnlichkeitsversuch hat einen
+    # Freiheitsgrad mehr und liegt bei der exakt starren Grenze knapp darunter.
+    # Fuer ihn gelten dieselben Grenzen, getestet in den r19c/r24-Faellen.
+    result = tracker._fine_update(cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY))
     if margin < 0:
         assert result.quad is None
         assert result.reason == "rahmen_unstimmig"
@@ -1448,6 +1457,38 @@ def test_r23_evaluator_zaehlt_deaktivierte_grobsuche_ohne_vorverarbeitung(scene)
     assert report['summary']['paired_ratio_after_before']['preprocess'] is None
 
 
+@pytest.mark.parametrize('reading,allowed,expected', [
+    ('+3.0542', ['+03.0542'], True),
+    ('-3.0542', ['-03.0542'], True),
+    ('+3.0543', ['+03.0542'], False),
+    ('-3.0542', ['+03.0542'], False),
+    ('+3.0542', [], False),
+])
+def test_r24_evaluator_vergleicht_referenz_numerisch(reading, allowed, expected):
+    path = Path(__file__).parents[1] / 'scripts/r13-coarse-eval.py'
+    spec = importlib.util.spec_from_file_location('coarse_eval_numeric', path)
+    evaluation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluation)
+    assert evaluation.reference_match(reading, allowed) is expected
+
+
+def test_r24_evaluator_verwirft_abgelehnte_referenztelegramme():
+    path = Path(__file__).parents[1] / 'scripts/r13-coarse-eval.py'
+    spec = importlib.util.spec_from_file_location('coarse_eval_rejected', path)
+    evaluation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluation)
+    references = [
+        {'raw': '+03.0542 mV/V', 't_boottime_ns': 2_000_000_000},
+        {'raw': 'ERR', 't_boottime_ns': 2_100_000_000, 'error': 'format'},
+        {'raw': '+9.9999 V', 't_boottime_ns': 2_200_000_000, 'error': 'unit'},
+        {'raw': '+01.0000 mV/V', 't_boottime_ns': 0},
+        {'raw': '+02.0000 mV/V', 't_boottime_ns': 4_000_000_000},
+    ]
+    allowed = evaluation.allowed_reference_values(references, 2_000_000_000)
+    assert allowed == {'+03.0542'}
+    assert evaluation.reference_match('+3.0542', allowed)
+
+
 @pytest.mark.parametrize("dx,angle", [(23.0, 0.0), (15.0, 1.0)])
 def test_r19b_absolutgrenze_und_drehung_niemals_falsches_quad(scene, dx, angle):
     reference, quad, _, _, tracker = scene
@@ -1487,7 +1528,7 @@ def test_r19b_erster_erfolg_bitgleich_ohne_grobschaetzung(scene, monkeypatch, dx
     assert tracker.last_coarse is None
 
 
-@pytest.mark.parametrize("dx,dy,strength", [(1.0, 0.0, 0.9), (27.0, 0.0, 0.9), (15.0, 0.0, 0.01),
+@pytest.mark.parametrize("dx,dy,strength", [(27.0, 0.0, 0.9), (15.0, 0.0, 0.15), (15.0, 0.0, 0.01),
                                            (float('nan'), 0.0, 0.9), (15.0, 0.0, float('nan'))])
 def test_r19b_unbrauchbare_grobschaetzung_behaelt_erste_ablehnung(scene, monkeypatch, dx, dy, strength):
     from dispread.live.frame_tracking import CoarseEstimate
@@ -1578,6 +1619,76 @@ def test_r19c_falsche_grobschaetzung_um_8_px_niemals_falsches_quad(scene, monkey
 def test_r19c_ungueltige_massstabsgrenze(value):
     with pytest.raises(ValueError):
         FrameTrackingConfig(coarse_max_scale_deviation=value)
+
+
+@pytest.fixture(scope='module')
+def r24_small_shift_scene(scene):
+    # Laengere Hebelarme: 0.1 % Massstab verletzt bereits die starren
+    # Residualgrenzen. Keine injizierten Treffer oder erzwungene Ablehnung.
+    reference, quad, _, _, _ = scene
+    reference = cv2.resize(reference, None, fx=1.5, fy=1.5)
+    quad = quad * 1.5
+    proposal = propose_regions(reference, quad)
+    assert proposal.ok
+    return reference, quad, proposal
+
+
+@pytest.mark.parametrize('dx', [0.0, 0.5, 1.0])
+def test_r24_kleiner_versatz_massstab_0999(r24_small_shift_scene, dx):
+    reference, quad, proposal = r24_small_shift_scene
+    tracker = FrameTracker(reference, quad, proposal)
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0, 0.999)
+    matrix[:, 2] += (dx, 0)
+    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    assert tracker._fine_update(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)).reason == 'rahmen_unstimmig'
+    close_quad(tracker.update(image), quad @ matrix[:, :2].T + matrix[:, 2], 0.5)
+    assert tracker.last_coarse.used
+    assert np.hypot(tracker.last_coarse.dx, tracker.last_coarse.dy) < 2
+    assert tracker.last_coarse.scale == pytest.approx(0.999, abs=0.0003)
+    if dx == 0:
+        assert tuple(np.rint((tracker.last_coarse.dx, tracker.last_coarse.dy))) == (0, 0)
+
+
+@pytest.mark.parametrize('dx,dy,used', [(0.2, 0.1, False), (3.0, 0.4, True)])
+def test_r24_kleiner_versatz_verdeckter_rahmen(r24_small_shift_scene, monkeypatch, dx, dy, used):
+    from dispread.live.frame_tracking import CoarseEstimate
+
+    reference, quad, proposal = r24_small_shift_scene
+    tracker = FrameTracker(reference, quad, proposal)
+    image = reference.copy()
+    image[mask_polygon(image, proposal.outer_limit)] = 100
+    # Absichtlich plausible Grobantwort. Bei Offset (0,0) und fehlenden
+    # Merkmalen waere der zweite Versuch eine identische Wiederholung und
+    # entfaellt; sonst muessen die echten Feinpruefungen ablehnen.
+    monkeypatch.setattr(tracker, '_estimate_coarse', lambda gray: CoarseEstimate(dx, dy, 0.9))
+    first = tracker._fine_update(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    assert first.reason in {"zu_wenig_rahmenmerkmale", "rahmen_mehrdeutig"}
+    assert tracker.update(image).quad is None
+    assert tracker.last_coarse.used is used
+
+
+@pytest.mark.parametrize('legacy', [0.0, 2.0, 3.0])
+def test_r24_alte_mindestverschiebung_blockiert_keinen_aehnlichkeitsfit(r24_small_shift_scene, legacy):
+    from dispread.live.frame_tracking import RegionProposal
+
+    reference, quad, proposal = r24_small_shift_scene
+    saved = proposal.to_dict()
+    saved['config']['coarse_min_shift_px'] = legacy
+    config = FrameTrackingConfig.from_dict(saved['config'])
+    restored = RegionProposal.from_dict(saved)
+    tracker = FrameTracker(reference, quad, restored, config)
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0, 0.999)
+    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    close_quad(tracker.update(image), quad @ matrix[:, :2].T + matrix[:, 2], 0.5)
+    assert tracker.last_coarse.used
+
+
+@pytest.mark.parametrize('legacy', [-1.0, float('nan'), float('inf'), 2, '2'])
+def test_r24_ungueltige_alte_mindestverschiebung(legacy):
+    saved = FrameTrackingConfig().to_dict()
+    saved['coarse_min_shift_px'] = legacy
+    with pytest.raises(ValueError):
+        FrameTrackingConfig.from_dict(saved)
 
 
 @pytest.mark.parametrize('name,accepted', [('0012.png', True), ('0016.png', True),

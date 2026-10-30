@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: R13-24 behebt Trackingverlust bei kleiner scheinbarer
+  Maßstabsänderung in Schrägsicht: Der zweite Ähnlichkeitsversuch darf
+  auch bei Grobverschiebung unter 2 px und Offset (0,0) laufen.
+  `coarse_min_shift_px` entfällt samt Untergrenze; gespeicherte Profile
+  werden beim Laden kontrolliert normalisiert. Alle Feinprüfungen und die
+  Mindestantwort der Grobschätzung bleiben unverändert. Testgetriebene
+  Regression für Maßstab 0,999, Verdeckung und Konfigurationsmigration.
+  Offline auf 913 Live-Diagnosebildern mit Leser/Referenz: 499→636 Quads,
+  429→533 Lesewerte, 0 Fehllesungen, frühere Ergebnisse bitgleich.
+  Synthetisch 3.042 Fälle ohne Verlust/falsches Quad >1 px;
+  192/192 Verdeckungs-/Leerbildproben weiterhin abgelehnt.
+  Auswerteskripte um Laufwahl, kleine Versätze und Gegenprobe erweitert;
+  exakter numerischer Referenzvergleich berücksichtigt führende Nullen
+  (OQ-41) und schließt abgelehnte Telegramme aus. Keine neue Freigabe;
+  [Belege und Laufzeit](docs/VALIDATION.md#r13-24-kleiner-versatz-2026-10-30).
+
 * 2026-10-30: R13-23-Reviewkorrektur: Faktor-4-Grobsuche erhält 6 px
   Fehlertoleranz ausschließlich im Vorab-Gate; der zweite Feinversuch
   erzwingt unverändert 20 px/3°/±0,5 %. Eigene Phasenkorrelation und

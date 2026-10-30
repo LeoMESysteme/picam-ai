@@ -4,7 +4,8 @@
 PYTHONPATH=src ./.venv/bin/python scripts/r13-coarse-sweep.py \
     --baseline /tmp/r13-correction/baseline.py --output /tmp/r13-correction/sweep.json
 
-Je Referenz 285 bekannte Aehnlichkeiten; keine Aufnahme oder Hardware.
+Je Referenz 285 grosse und 729 kleine bekannte Aehnlichkeiten (R13-24);
+klein: dx/dy -3..3 px, Massstab 0.996..1.004. Keine Aufnahme oder Hardware.
 Exit 1 bei verlorenen Baseline-Tracks oder Quadeckenfehler >1 Rohpixel.
 """
 
@@ -15,6 +16,7 @@ import importlib.util
 import json
 import sys
 from dataclasses import asdict
+from itertools import product
 from pathlib import Path
 
 import cv2
@@ -46,7 +48,7 @@ def translation_accuracy(trackers, reference):
 
 
 def sweep(baseline, name):
-    root = input_path(f'live/live-20261028T{name}')
+    root = input_path(f'live/{name}' if name.startswith('live-') else f'live/live-20261028T{name}')
     profile = json.loads((root / 'profile.json').read_text())
     reference = cv2.imread(str(input_path(profile['reference_frame']['path'])))
     block = profile['live_tracking']
@@ -57,27 +59,28 @@ def sweep(baseline, name):
         for side, module in (('before', baseline), ('after', current))
     }
     cases = []
-    for dx in (-19, -14, -9, 6, 11, 17):
-        for dy in (-13, -7, 5, 12):
-            if np.hypot(dx, dy) > 20:
-                continue
-            for angle in (-2.5, -1.2, 0, 1.2, 2.5):
-                for scale in (0.996, 1.0, 1.004):
-                    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, scale)
-                    matrix[:, 2] += (dx, dy)
-                    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1],
-                                           borderMode=cv2.BORDER_REPLICATE)
-                    expected = quad @ matrix[:, :2].T + matrix[:, 2]
-                    case = {'dx': dx, 'dy': dy, 'angle': angle, 'scale': scale}
-                    for side, tracker in trackers.items():
-                        result = tracker.update(image)
-                        case[side] = {'result': asdict(result),
-                                      'coarse': asdict(tracker.last_coarse) if tracker.last_coarse else None,
-                                      'accepted': result.quad is not None,
-                                      'corner_error_px': float(np.linalg.norm(np.asarray(result.quad)-expected,
-                                                                            axis=1).max())
-                                      if result.quad is not None else None}
-                    cases.append(case)
+    motions = [(*motion, 'large') for motion in product(
+        (-19, -14, -9, 6, 11, 17), (-13, -7, 5, 12), (-2.5, -1.2, 0, 1.2, 2.5), (0.996, 1.0, 1.004))
+        if np.hypot(*motion[:2]) <= 20]
+    small_shifts = (-3, -2, -1, -0.5, 0, 0.5, 1, 2, 3)
+    motions += [(*motion, 'small') for motion in product(
+        small_shifts, small_shifts, (0,), (0.996, 0.997, 0.998, 0.999, 1.0, 1.001, 1.002, 1.003, 1.004))]
+    for dx, dy, angle, scale, group in motions:
+        matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, scale)
+        matrix[:, 2] += (dx, dy)
+        image = cv2.warpAffine(reference, matrix, reference.shape[1::-1],
+                               borderMode=cv2.BORDER_REPLICATE)
+        expected = quad @ matrix[:, :2].T + matrix[:, 2]
+        case = {'dx': dx, 'dy': dy, 'angle': angle, 'scale': scale, 'group': group}
+        for side, tracker in trackers.items():
+            result = tracker.update(image)
+            case[side] = {'result': asdict(result),
+                          'coarse': asdict(tracker.last_coarse) if tracker.last_coarse else None,
+                          'accepted': result.quad is not None,
+                          'corner_error_px': float(np.linalg.norm(np.asarray(result.quad)-expected,
+                                                                axis=1).max())
+                          if result.quad is not None else None}
+        cases.append(case)
     summary = {'cases': len(cases),
                'only_before': sum(c['before']['accepted'] and not c['after']['accepted'] for c in cases),
                'only_after': sum(c['after']['accepted'] and not c['before']['accepted'] for c in cases)}
@@ -93,6 +96,7 @@ def main():
     parser.add_argument('--baseline', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--threads', type=int, default=2)
+    parser.add_argument('--run', action='append', help='Referenz live-YYYYMMDDThhmmssZ; wiederholbar')
     args = parser.parse_args()
     if not args.output.resolve().is_relative_to(Path('/tmp')):
         parser.error('--output muss unter /tmp liegen')
@@ -102,7 +106,7 @@ def main():
     spec.loader.exec_module(baseline)
     cv2.setNumThreads(args.threads)
     result = {'baseline': str(args.baseline), 'opencv': cv2.__version__, 'threads': cv2.getNumThreads(),
-              'runs': {name: sweep(baseline, name) for name in ('110248Z', '121101Z')}}
+              'runs': {name: sweep(baseline, name) for name in (args.run or ('110248Z', '121101Z'))}}
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')
     for name, run in result['runs'].items():
         print(name, json.dumps(run['summary']), flush=True)

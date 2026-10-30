@@ -3005,3 +3005,73 @@ Ob die zusätzlich nachgeführten Bilder richtig gelesen werden, ist noch
 nicht belegt. Dazu folgt R13-24 mit Nachweis über alle Live-Läufe und den
 synthetischen Durchlauf. Skripte (Job-Verzeichnis): `tracker_replay.py`,
 `abschnitte.py`, `gruende_zeit.py`, `orb_lage.py`.
+
+
+## 2026-10-30 — R13-24: Schrägsicht trotz kleiner Grobverschiebung nachführen {#r13-24-kleiner-versatz}
+
+Nachtrag zum [Befund der neuen Aufstellungen](#neue-aufstellungen-2026-10-30),
+ausschließlich offline. Keine Hardware angefasst; Kamera und Referenzanschluss
+bleiben bei der Werkbank. Die vorhandenen Laufdateien und Dev-Daten wurden
+nur gelesen. Neue Analyseartefakte liegen unter `/tmp/r13-24/`; keine
+Aufnahme unter `var/` oder `/mnt/ssd` angelegt oder verändert.
+
+**Änderung:** Die 2-px-Untergrenze war eine Bedingung des alten starren
+zweiten Versuchs. Der zweite Versuch schätzt inzwischen Maßstab und kann
+auch bei Offset (0,0) ein anderes Ergebnis liefern. Der Konfigurationswert
+entfällt; alte Profile mit 2.0 werden beim Laden normalisiert, sonst würde
+die reine Defaultänderung nichts helfen. Grobantwort >0,15 und alle
+Feingrenzen bleiben gleich. Der Regressionstest vergrößert das portable
+Referenzfixture auf 1920×1170, damit schon Maßstab 0,999 die starren
+Residuen verletzt; der echte Ähnlichkeitsfit gewinnt die Quads bei
+0/0,5/1 px Versatz zurück. Eine verdeckte Rahmenfläche bleibt auch bei
+absichtlich starker Grobantwort abgelehnt.
+
+**Leser und Referenz:** Alle 913 Diagnosebilder aus den sieben beauftragten
+Läufen, gleiche gespeicherte Raster und Vorlagen. Schräg 101→210/210 Quads,
+frontal 39→66/141, Langlauf 85→85/85, 28.10. 150914Z run-01 32→32/32,
+run-02 14→14/85, 110248Z 205→206/208, 121101Z 23→23/152.
+Keine frühere Annahme verloren; bisher angenommene Quads und Lesungen
+bitgleich. Insgesamt 429→533 Lesewerte, **0/533 Fehllesungen** gegen die
+nachgelagert verglichene Referenz. Das bisherige Skript verglich Rohtext:
+`+3.0542` war gegenüber `+03.0542` scheinbar falsch. Nach exaktem
+Dezimalvergleich (bekannter OQ-41-Fall) und erneutem Leser-/Referenzlauf auf
+den beiden betroffenen Beständen sind diese Formatunterschiede korrekt
+zugeordnet. Keine Toleranz oder Referenzkorrektur des Lesers. Das Review
+verlangte außerdem den Ausschluss abgelehnter Referenztelegramme; ein
+Regressionstest sichert das. In den sieben Läufen gibt es keine solchen
+Telegramme. Das Vergleichsfenster ist −1,5/+1,0 s in CLOCK_BOOTTIME nach
+gespeicherter Zeitbasisumrechnung, kein neuer Verzögerungsnachweis.
+
+**Gegenproben:** Drei Referenzen mit je 1.014 bekannten Warps, davon 729
+kleine Versätze und Maßstab 0,996…1,004. 0 nur vorher, 0 falsche Quads
+über 1 px, maximaler Eckenfehler 0,371434 px; 607 zusätzliche Fits.
+Je Referenz werden alle 729 kleinen Fälle gehalten. Synthetisch 180
+Rahmenverdeckungen mit erhaltener Umgebung und 12 vollständige Leerbilder:
+alle abgelehnt. Die reale Grobschätzung löst bei Verdeckung jetzt 180 statt
+50 zweite Versuche aus. Das belegt die weiter wirksame Strukturprüfung,
+keine allgemeine Verdeckungsgarantie. Der bekannte gemeinsam falsche
+Rahmen-Bias aus R13-19c bleibt eine Grenze.
+
+**Deutung:** Der offline belegte Ausfallgrund in Schrägsicht ist behoben.
+Der reale Leser gewinnt 82 Werte in diesem Diagnosebestand und weitere 22
+frontal. Die 109 zusätzlich nachgeführten schrägen Bilder liefern nicht
+alle einen Lesewert; die unveränderten Leserprüfungen lehnen 27 davon ab.
+Es ist ein Entwicklungsnachweis auf ausgewählten Diagnosebildern, keine
+neue Live-Abnahme und keine Auswertung sämtlicher Bilder der Originalläufe.
+Die großen Stöße bleiben abgelehnt. Zahlen, reproduzierbare Befehle und
+Verarbeitungszeiten stehen in der [Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30).
+
+
+**Laufzeitnachtrag:** Abschließender Gesamtlauf mit einem OpenCV-Thread,
+AB/BA je Bild im selben Prozess, nach Ende der eigenen Tests/Sweeps.
+Schräg alle 210 Bilder: Tracker-Median 9,899→14,258 ms, gepaarter Faktor
+1,309. Bei den 109 zusätzlich gestarteten zweiten Versuchen kostet der
+Tracker gepaart Median 6,186 ms mehr (Faktor 1,645), frontal bei 27 Bildern
+6,889 ms (1,709). Verdeckungsgegenprobe: bei 66/64 neu gestarteten Versuchen
+schräg/frontal 4,722/4,967 ms Mehrarbeit, Faktoren 1,349/1,517; weiterhin
+keine Annahme. `perf_counter_ns` misst Host-Verarbeitung inklusive
+Graukonversion, ohne OCR/Dateizugriff; Maximalzeit 106,324 ms zeigt
+Hoststreuung. Keine Aufnahme-/DUT-Latenz oder Bildratengarantie.
+Tracker-Tests abschließend 560 bestanden, 2 Timing-Tests unter xdist
+übersprungen; separat 2 Timing-Tests bestanden. Mit vier OpenCV-Threads
+Normalfall Median 5,602 ms, isolierter zweiter Durchgang 8,704 ms.

@@ -1998,3 +1998,27 @@ Erkennung unnötig und bleibt aus. Tests verwenden ausschließlich blockierende
 Fake-Quellen; reale Abschluss- und Wiederanlaufzeiten sind nicht an Hardware
 geprüft. Quellen und Bedienfolgen stehen in der
 [Live-Anleitung](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).
+
+
+## 2026-10-30 — R13-24: Ähnlichkeitsversuch ohne Mindestverschiebung {#r13-24-konfiguration}
+
+`coarse_min_shift_px` entfällt. R13-19b sperrte Verschiebungen unter 2 px,
+weil ein zweiter starrer Fit ohne anderen Suchmittelpunkt denselben Versuch
+wiederholt hätte. Seit R13-19c schätzt ausschließlich der zweite Versuch
+zusätzlich einen gleichförmigen Maßstab; auch mit Offset (0,0) ist er daher
+sinnvoll. Schrägsicht am 30.10. zeigt den Fehler schon bei etwa −0,1 % Maßstab.
+
+Nur den Default auf 0 zu setzen wurde verworfen: gespeicherte Profile mit
+2.0 würden die wirksame Korrektur weiter verhindern. Eine Untergrenze für
+einen rein starren zweiten Fall wird ebenfalls nicht behalten, weil es diesen
+Fall im aktuellen Updatepfad nicht gibt. Beim Laden wird der bekannte
+Altparameter nach Prüfung auf Float, endlich und nicht negativ entfernt;
+das gilt für Konfiguration und Vorschlagskonfiguration. Damit passen alte
+Profile weiterhin zur normalisierten Konfiguration. Unbekannte Felder,
+fehlende bisherige Pflichtgrenzen und die Referenz-/Quad-/SHA-Bindung bleiben
+strikt. Der Parameter ist in neu serialisierten Konfigurationen nicht mehr
+enthalten. Die Grobantwort muss weiterhin endlich und stärker als 0,15 sein;
+Grobobergrenze und sämtliche Feinprüfungen bleiben unverändert.
+
+Nachweise und Grenzen: [R13-24-Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30)
+und [Laborjournal](lab_journal.md#r13-24-kleiner-versatz).

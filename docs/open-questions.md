@@ -2279,6 +2279,21 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   ≤10 ms hier erreicht, keine Lastgarantie. Details:
   [Validierung](VALIDATION.md#r13-23-grobsuche-2026-10-30),
   [Laborjournal](lab_journal.md#r13-23-grobsuche).
+* **Nachtrag R13-24 (2026-10-30):** Der Ähnlichkeitsversuch läuft jetzt
+  auch unter 2 px Grobverschiebung, einschließlich gerundetem Offset (0,0).
+  `coarse_min_shift_px` entfällt; beim Laden alter Profile wird nur dieses
+  bekannte Feld nach Typ-/Endlichkeits-/Nichtnegativprüfung entfernt.
+  Ein Default 0 allein würde gespeicherte 2.0-Profile weiter sperren.
+  Grobantwort, obere Bewegungsgrenze und sämtliche Feinprüfungen bleiben
+  unverändert. Offline mit Leser und Referenz: schräg 101→210/210,
+  frontal 39→66/141, insgesamt 499→636/913 Quads und 429→533 Lesewerte,
+  0 Fehllesungen, keine verlorenen Fits, frühere Ergebnisse bitgleich.
+  Sweep: 3.042 Fälle, 0 nur vorher, 0 falsche Quads >1 px; 192/192
+  Verdeckungs-/Leerbildproben weiterhin abgelehnt, obwohl bei Verdeckung
+  180 statt 50 zweite Versuche laufen. Keine neue Abnahme; Laufzeit,
+  Reproduktion und Grenzen in der
+  [Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30) und im
+  [Laborjournal](lab_journal.md#r13-24-kleiner-versatz).
 * **Antwort umgesetzt in:** `src/dispread/live/frame_tracking.py`,
   `tests/test_frame_tracking.py`, `scripts/r13-coarse-eval.py`,
   `scripts/r13-coarse-sweep.py`,

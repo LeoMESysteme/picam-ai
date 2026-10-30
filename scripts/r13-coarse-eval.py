@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""R13-23: Baseline/Kandidat auf zwei Live-Laeufen und DEV, nur Offline.
+"""R13-23/24: Baseline/Kandidat auf Live-Laeufen und DEV, nur Offline.
 
 PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
     scripts/r13-coarse-eval.py --baseline /tmp/claude-1000/r13-23/frame_tracking_baseline.py \
@@ -9,6 +9,7 @@ Baseline ist eine unveraenderte Kopie des alten frame_tracking-Moduls.
 Ergebnisse ausschliesslich unter /tmp/claude-1000/r13-23. Laufzeiten sind
 Host-Verarbeitungsdauern mit perf_counter_ns, keine Aufnahmelatenzen.
 Die GSV-Referenz wird erst nach Tracking und Lesen zum Vergleich benutzt.
+Weitere Laeufe mit --run live-20261030T115636Z/run-01 (wiederholbar).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import platform
 import sys
 from collections import Counter
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 from time import perf_counter_ns
 
@@ -45,6 +47,21 @@ def rows(path):
 
 def distribution(values):
     return {'n': len(values), 'median': float(np.median(values)), 'max': float(max(values))} if values else None
+
+
+def reference_match(reading, allowed):
+    """Exakte Zahlengleichheit trotz fuehrender Referenznull (OQ-41).
+
+    Nur nachgelagerter Vergleich, keine Rundung/Toleranz oder Leserkorrektur.
+    """
+    return Decimal(reading) in {Decimal(value) for value in allowed}
+
+
+def allowed_reference_values(references, time_ns):
+    """Vergleichsfenster ohne die im Audit erhaltenen abgelehnten Telegramme."""
+    return {ref['raw'].split()[0] for ref in references
+            if not ref.get('error')
+            and time_ns-1_500_000_000 <= ref['t_boottime_ns'] <= time_ns+1_000_000_000}
 
 
 def instrument(tracker):
@@ -124,8 +141,7 @@ def compare(before, after, frames, *, reader=None, layout=None, profile=None, re
             time_ns = to_boottime_ns(meta['capture_timestamp'], session)
             # Gemeinsame CLOCK_BOOTTIME; Fenster ist Vergleichstoleranz,
             # keine Aussage ueber Belichtungs- oder DUT-Messzeit.
-            allowed = {ref['raw'].split()[0] for ref in references
-                       if time_ns-1_500_000_000 <= ref['t_boottime_ns'] <= time_ns+1_000_000_000}
+            allowed = allowed_reference_values(references, time_ns)
             entry['reference_values'] = sorted(allowed)
             entry['read'] = {}
             for name, result in (('before', old), ('after', new)):
@@ -134,7 +150,7 @@ def compare(before, after, frames, *, reader=None, layout=None, profile=None, re
                 read = reader.read(rectify(image, result.quad, target_size=profile.target_size).image, layout)
                 entry['read'][name] = {'raw_text': read.raw_text, 'value': read.value,
                                        'reasons': read.diagnostics.get('reason'),
-                                       'reference_match': read.raw_text in allowed if read.value is not None else None}
+                                       'reference_match': reference_match(read.raw_text, allowed) if read.value is not None else None}
         results.append(entry)
     summary = {'frames': len(results), 'second_pass_ms': distribution(retry_ms),
                'before_second_pass_ms': distribution(old_retry_ms),
@@ -142,6 +158,8 @@ def compare(before, after, frames, *, reader=None, layout=None, profile=None, re
                'before_coarse_estimate_ms': distribution(old_estimate_ms)}
     summary['parts_ms'] = {k: {'before': distribution(old_parts[k]), 'after': distribution(parts[k])} for k in parts}
     summary['paired_ratio_after_before'] = {k: distribution(v) for k, v in paired.items()}
+    summary['update_ms'] = {side: distribution([r[f'{side}_ms'] for r in results])
+                            for side in ('before', 'after')}
     for name in ('before', 'after'):
         readings = [r['read'][name] for r in results if name in r.get('read', {})]
         summary[name] = {'accepted': sum(r[name]['quad'] is not None for r in results),
@@ -203,8 +221,10 @@ def profile_coarse_parts(before, after, run):
             'samples_ms': samples}
 
 def evaluate_live(baseline, name):
-    root = input_path(f'live/live-20261028T{name}')
-    run = root / 'run-01'
+    relative = Path(name) if '/' in name else Path(f'live-20261028T{name}/run-01')
+    run = input_path(Path('live') / relative)
+    root = run.parent
+    label = str(relative).replace('/', '-')
     data = json.loads((root / 'profile.json').read_text())
     reference = cv2.imread(str(input_path(data['reference_frame']['path'])))
     block = data['live_tracking']
@@ -220,15 +240,54 @@ def evaluate_live(baseline, name):
                    reader=reader, layout=CharLayout.from_profile(profile, session['gate']['expected_unit']),
                    profile=profile, references=rows(run / 'reference.jsonl'), session=session)
     parts = profile_coarse_parts(before, after, run)
-    (OUTPUT_ROOT / f'live-{name}-parts.json').write_text(json.dumps(parts, indent=2, allow_nan=False)+'\n')
+    (OUTPUT_ROOT / f'{label}-parts.json').write_text(json.dumps(parts, indent=2, allow_nan=False)+'\n')
     live['summary']['parts_profile'] = {k: v for k, v in parts.items() if not k.endswith('samples_ms')}
-    (OUTPUT_ROOT / f'live-{name}.json').write_text(json.dumps(live, indent=2, allow_nan=False)+'\n')
+    (OUTPUT_ROOT / f'{label}.json').write_text(json.dumps(live, indent=2, allow_nan=False)+'\n')
     print(f'LIVE {name}', json.dumps(live['summary']), flush=True)
     return live['summary']
 
 
-def evaluate(baseline, *, live_only=False):
-    lives = {name: evaluate_live(baseline, name) for name in ('110248Z', '121101Z')}
+def evaluate_negative(baseline, name):
+    """Synthetische Verdeckung aller Suchfenster und vollstaendig leere Bilder.
+
+    Unveraenderte Grobschaetzung; erhaltene Umgebung kann eine starke Antwort
+    bei kleinem Versatz liefern. Keine injizierten Trackerergebnisse.
+    """
+    root = input_path(Path('live') / name)
+    data = json.loads((root / 'profile.json').read_text())
+    reference = cv2.imread(str(input_path(data['reference_frame']['path'])))
+    block = data['live_tracking']
+    trackers = [module.FrameTracker(reference, data['quad'], module.RegionProposal.from_dict(block['proposal']),
+                                   module.FrameTrackingConfig.from_dict(block['config']))
+                for module in (baseline, current)]
+    centre = tuple(np.asarray(data['quad']).mean(axis=0))
+
+    def frames():
+        # Zwei Wiederholungen in umgekehrter Reihenfolge: jeder Fall einmal
+        # AB und einmal BA, Bilder jeweils vor Beginn der Zeitmessung gebaut.
+        cases = [('blank', level, 0, 1.0) for level in (0, 100, 255)]
+        cases += [('occluded', radius, dx, scale) for radius in (20, 30, 50)
+                  for dx in (0, 0.5, 1, 2, 3) for scale in (0.996, 0.999, 1.004)]
+        for repeat in range(2):
+            for kind, level, dx, scale in (cases if repeat == 0 else cases[::-1]):
+                image = reference.copy() if kind == 'occluded' else np.full_like(reference, level)
+                if kind == 'occluded':
+                    for region in trackers[1].proposal.regions:
+                        x, y = region.centre
+                        cv2.rectangle(image, (x-level, y-level), (x+level, y+level), (100, 100, 100), -1)
+                    matrix = cv2.getRotationMatrix2D(centre, 0, scale)
+                    matrix[:, 2] += (dx, 0)
+                    image = cv2.warpAffine(image, matrix, image.shape[1::-1], borderMode=cv2.BORDER_REPLICATE)
+                yield {'image': f'{kind}-{level}-dx{dx}-s{scale}-repeat{repeat+1}'}, image
+
+    report = compare(*trackers, frames())
+    (OUTPUT_ROOT / f'{name}-negative.json').write_text(json.dumps(report, indent=2, allow_nan=False)+'\n')
+    print(f'NEGATIVE {name}', json.dumps(report['summary']), flush=True)
+    return report['summary']
+
+
+def evaluate(baseline, *, live_only=False, runs=None):
+    lives = {name: evaluate_live(baseline, name) for name in (runs or ('110248Z', '121101Z'))}
     if live_only:
         return {'host': platform.uname()._asdict(), 'opencv': cv2.__version__,
                 'opencv_threads': cv2.getNumThreads(), 'live': lives, 'dev': None,
@@ -258,6 +317,8 @@ def main():
     parser.add_argument('--quad-tolerance-px', type=float, default=0.0)
     parser.add_argument('--repeats', type=int, default=1)
     parser.add_argument('--live-only', action='store_true')
+    parser.add_argument('--run', action='append', help='live-YYYYMMDDThhmmssZ/run-nn; wiederholbar')
+    parser.add_argument('--negative-probes', action='store_true', help='Zusaetzliche synthetische Verdeckung/Leerbilder')
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location('r19b_baseline', args.baseline)
     baseline = importlib.util.module_from_spec(spec)
@@ -281,7 +342,12 @@ def main():
             if args.repeats > 1:
                 OUTPUT_ROOT /= f'repeat-{repeat+1}'
             OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-            result = evaluate(baseline, live_only=args.live_only)
+            result = evaluate(baseline, live_only=args.live_only, runs=args.run)
+            if args.negative_probes:
+                result['negative'] = {name: evaluate_negative(baseline, name)
+                                      for name in ('live-20261030T115636Z', 'live-20261030T113427Z')}
+                failed |= any(run[side]['accepted'] for run in result['negative'].values()
+                              for side in ('before', 'after'))
             result['baseline'] = str(args.baseline)
             result['timing_order'] = 'AB/BA pro Bild, gleicher Prozess; parallele CI-Last moeglich'
             (OUTPUT_ROOT / 'summary.json').write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')

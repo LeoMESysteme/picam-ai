@@ -2,6 +2,7 @@
 
 Vorschlag geaendert R13-11 (Band, Hysterese, Reserve); Feinpruefung unveraendert.
 R13-19c: zweiter Suchversuch mit eng begrenztem Massstab; neue Abnahme noetig.
+R13-24: Aehnlichkeitsversuch auch ohne Mindestverschiebung, einschliesslich (0,0).
 Profile vor R13-11 muessen neu eingerichtet werden.
 
 Update-Kandidat R13-7, festgelegt am Entwicklungsdatensatz; C/D
@@ -106,12 +107,14 @@ einmal vorbereitet; cv2.phaseCorrelate korreliert die Bilder. Laplace unterdruec
 feste Maskenkante. Die Zeichenzone bleibt samt maximaler Translation,
 Drehbewegung, maximalem Massstab und Filter-Nachbarpixeln ausgespart, auch im bewegten Bild.
 Nur endliche Antworten mit response > coarse_min_response (Default 0.15)
-und coarse_min_shift_px (Default 2) <= Betrag <= max_shift_px + 6 px erlauben
+und Betrag <= max_shift_px + 6 px erlauben
 einen zweiten Versuch. Die 6 px beruecksichtigen nur den Grobfehler;
 der Feinversuch setzt die absolute max_shift_px-Grenze selbst durch.
 Derselbe Feinpfad sucht um Quelle plus ganzzahlig
-gerundete Grobverschiebung; Ziele sind absolute Bildkoordinaten. Patches,
-Peak/Eindeutigkeit, Streuung, Leave-one-out, beide Residualgrenzen und
+gerundete Grobverschiebung, auch (0,0); Ziele sind absolute Bildkoordinaten.
+Seit R13-24 gibt es keine Mindestverschiebung: der Aehnlichkeitsfit kann auch
+bei stillstehendem Quadmittelpunkt einen kleinen Massstabsfehler korrigieren.
+Patches, Peak/Eindeutigkeit, Streuung, Leave-one-out, beide Residualgrenzen und
 absolute Bewegung gegen das urspruengliche Quad bleiben gleich. Nur der
 zweite Versuch nutzt einen orientierungserhaltenden Aehnlichkeitsfit:
 RANSAC ueber alle Minimalpaare mit Drehung und gleichfoermigem Massstab,
@@ -140,9 +143,11 @@ Die 2.5-px-Randpruefung verwirft je Massstab ueber 2000 Hypothesen,
 auch groessere legale Aehnlichkeitsluegen, die ohne sie angenommen werden.
 Dies ist eine dokumentierte Rastergrenze, keine allgemeine obere Schranke
 und keine neue Abnahme (tests: r19c_gemeinsam_falsche_aehnlichkeit).
-Alte R13-11-Configs duerfen nur die drei neuen Grobfelder auslassen; diese
+Alte R13-11-Configs duerfen die neuen Grobfelder auslassen; diese
 werden beim Laden mit Defaults ergaenzt. Alle alten Pflichtfelder und die
 Referenz-/Quad-/SHA-Bindung bleiben strikt; Profile vor R13-11 bleiben abgelehnt.
+Das entfallene coarse_min_shift_px wird beim Laden alter Configs nach
+Typ-/Endlichkeits-/Nichtnegativpruefung entfernt, auch im gespeicherten Vorschlag.
 
 15-px-Patches und 12-px-Suchradius lassen kleine Rohbildbewegungen zu;
 Peak >=0.75 und Zweitpeak/Peak <=0.95 ausserhalb +/-3 px verlangen erkennbare
@@ -234,7 +239,6 @@ class FrameTrackingConfig:
     edge_required_share: float = 0.8
     edge_required_sides: int = 3
     coarse_min_response: float = 0.15
-    coarse_min_shift_px: float = 2.0
     coarse_max_scale_deviation: float = 0.005
 
     def to_dict(self) -> dict:
@@ -243,7 +247,12 @@ class FrameTrackingConfig:
     @classmethod
     def from_dict(cls, data: dict) -> FrameTrackingConfig:
         # Nur R13-19b/c ergaenzen: alte Feinpruefgrenzen bleiben Pflicht.
-        optional = {"coarse_min_response", "coarse_min_shift_px", "coarse_max_scale_deviation"}
+        optional = {"coarse_min_response", "coarse_max_scale_deviation"}
+        if isinstance(data, dict) and "coarse_min_shift_px" in data:
+            data = dict(data)
+            legacy_shift = data.pop("coarse_min_shift_px")
+            if type(legacy_shift) is not float or not np.isfinite(legacy_shift) or legacy_shift < 0:
+                raise ValueError("Ungueltige alte Grob-Mindestverschiebung")
         names = {field.name for field in fields(cls)}
         if not isinstance(data, dict) or not names - optional <= set(data) <= names:
             raise ValueError("Unvollstaendige oder unbekannte Rahmenkonfiguration")
@@ -256,7 +265,7 @@ class FrameTrackingConfig:
     def __post_init__(self):
         if not all(np.isfinite(getattr(self, field.name)) for field in fields(self)):
             raise ValueError("Pruefgrenzen muessen endlich sein")
-        if not 0 < self.coarse_min_response <= 1 or self.coarse_min_shift_px < 2:
+        if not 0 < self.coarse_min_response <= 1:
             raise ValueError("Ungueltige Grobschaetzungsgrenzen")
         if not 0 < self.coarse_max_scale_deviation <= 0.005:
             raise ValueError("Massstabsabweichung muss positiv und hoechstens 0.005 sein")
@@ -988,11 +997,15 @@ class FrameTracker:
         config = self.config
         if (not np.isfinite((estimate.dx, estimate.dy, estimate.response)).all()
                 or estimate.response <= config.coarse_min_response
-                or not config.coarse_min_shift_px <= np.hypot(estimate.dx, estimate.dy)
-                <= config.max_shift_px + _COARSE_ERROR_MARGIN_PX):
+                or np.hypot(estimate.dx, estimate.dy) > config.max_shift_px + _COARSE_ERROR_MARGIN_PX):
+            return first
+        offset = tuple(np.rint((estimate.dx, estimate.dy)).astype(int))
+        if offset == (0, 0) and first.reason != "rahmen_unstimmig":
+            # Gleiche Fenster, gleiche Treffer: zu wenige oder mehrdeutige
+            # Merkmale wiederholen sich exakt; nur ein Fit kann sich aendern.
             return first
         self.last_coarse = replace(estimate, used=True)
-        return self._fine_update(gray, tuple(np.rint((estimate.dx, estimate.dy)).astype(int)), similarity=True)
+        return self._fine_update(gray, offset, similarity=True)
 
     def _fine_update(self, gray, offset=(0, 0), *, similarity=False) -> TrackResult:
         config = self.config

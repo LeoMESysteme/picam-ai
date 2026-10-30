@@ -4141,3 +4141,204 @@ Automatik-Ausgangswert bei Boxverlust. Ruff (`src tests examples scripts`,
 außer `scripts/wiki-check.py`), Wiki-Check, OQ-Index-Prüfung,
 JavaScript-Syntaxprüfung der angepassten Tour und `git diff --check` bestehen.
 Kein Docs-Playwright, kein Commit, `docs/status.md` unverändert.
+
+
+## 2026-10-30 — R13-24: Ähnlichkeitsversuch bei kleinem Versatz {#r13-24-kleiner-versatz-2026-10-30}
+
+Offline-Entwicklungsregression auf Diagnosebildern, keine neue Aufnahme oder
+Freigabe. Baseline ist die unveränderte HEAD-Kopie von `frame_tracking.py`
+auf `f693f8d`; Kandidat entfernt ausschließlich die Mindestverschiebung im
+Grob-Gate und migriert den entfallenen Konfigurationsparameter beim Laden.
+Der starre erste Durchgang und sämtliche Feinprüfungen bleiben unverändert.
+Grobschätzung weiterhin endlich, Response **>0,15**, Betrag **≤26 px**;
+Feinfit weiterhin **20 px / 3° / ±0,5 %**, Residuen **Maximum 0,65 / RMS 0,35 px**.
+Auch ein auf **(0,0)** gerundeter Groboffset erlaubt den Ähnlichkeitsfit.
+Entscheidung und verworfene Alternativen: [Projektgeschichte](project_history.md#r13-24-konfiguration).
+
+### Live-Bilder mit Leser und Referenz
+
+Alle Diagnosebilder der sieben angeforderten Läufe. Je Version wird der
+unveränderte Dot-Matrix-Leser mit dem jeweiligen Quad und dem gespeicherten
+Profil/Raster ausgeführt. Erst danach Vergleich mit den Referenztelegrammen
+im bisherigen Fenster **Aufnahmezeit −1,5 bis +1,0 s**, umgerechnet mit
+`to_boottime_ns` und der gespeicherten MONOTONIC/BOOTTIME-Zuordnung.
+Das ist eine Vergleichstoleranz, kein Latenznachweis. Exakte Dezimalgleichheit
+berücksichtigt OQ-41 (`+3.0542` gegenüber `+03.0542`), ohne numerische Toleranz,
+Rundung oder Änderung der Rohlesung. Abgelehnte Referenztelegramme werden
+nicht als Vergleichswerte benutzt; in diesen sieben Beständen gibt es keine.
+Leserablehnungen bleiben Ablehnungen und zählen nicht als richtige Lesewerte.
+
+| Lauf (`live-…`) | Diagnosebilder | Quads vorher / nachher | Nur vorher | Lesewerte vorher / nachher | Fehllesungen vorher / nachher | Max. Quadänderung bisher angenommener Bilder px |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20261030T115636Z/run-01, schräg links | 210 | 101 / 210 | 0 | 82 / 164 | 0 / 0 | 0 |
+| 20261030T113427Z/run-01, frontal/Stöße | 141 | 39 / 66 | 0 | 31 / 53 | 0 / 0 | 0 |
+| 20261030T082502Z/run-01, Langlauf | 85 | 85 / 85 | 0 | 80 / 80 | 0 / 0 | 0 |
+| 20261028T150914Z/run-01 | 32 | 32 / 32 | 0 | 28 / 28 | 0 / 0 | 0 |
+| 20261028T150914Z/run-02 | 85 | 14 / 14 | 0 | 12 / 12 | 0 / 0 | 0 |
+| 20261028T110248Z/run-01 | 208 | 205 / 206 | 0 | 175 / 175 | 0 / 0 | 0 |
+| 20261028T121101Z/run-01 | 152 | 23 / 23 | 0 | 21 / 21 | 0 / 0 | 0 |
+| Gesamt | 913 | 499 / 636 | 0 | 429 / 533 | 0 / 0 | 0 |
+
+Alle früher angenommenen Ergebnisse einschließlich Quads und Lesungen bleiben bitgleich.
+Schräg: erster Durchgang 69 Fits, zweiter vorher 32, jetzt 141. Frontal:
+zweite Versuche 14→41, 27 zusätzliche Quads und 22 zusätzliche Lesewerte.
+Der zusätzliche Fit im Lauf `110248Z` bleibt vom Leser abgelehnt. Die
+großen Stöße im Frontal- und Bewegungslauf bleiben außerhalb der Grenzen.
+Diagnosebilder sind eine Auswahl aus den Live-Läufen, keine Neuauswertung
+aller 5.674 Schrägbilder oder aller Langlaufbilder.
+
+### Synthetisches Raster
+
+`scripts/r13-coarse-sweep.py`: Je Referenz die bisherigen 285 größeren
+Ähnlichkeiten plus 729 kleine Fälle. Klein: dx und dy jeweils
+−3/−2/−1/−0,5/0/0,5/1/2/3 px, Winkel 0°, Maßstab 0,996 bis 1,004
+in Schritten von 0,001. Sollquad aus der bekannten Warp-Matrix;
+Fehler = größte euklidische Eckabweichung in Rohpixeln.
+
+| Referenz (`live-…`) | Fälle | Fits vorher / nachher | Nur vorher | Nur nachher | Falsche Quads >1 px nachher | Max. Eckenfehler nachher px |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20261028T110248Z | 1.014 | 692 / 900 | 0 | 208 | 0 | 0,361611 |
+| 20261028T121101Z | 1.014 | 713 / 900 | 0 | 187 | 0 | 0,371434 |
+| 20261030T115636Z | 1.014 | 688 / 900 | 0 | 212 | 0 | 0,321516 |
+
+In allen drei Referenzen werden jetzt **729/729 kleine Fälle** angenommen.
+Im bisherigen 285er-Raster bleiben je Referenz **171/171** Fits unverändert.
+Insgesamt **0 nur vorher**, **0 falsche Quads >1 px**, **607 zusätzliche Fits**
+in 3.042 Fällen. Die Annahmequote der großen Fälle ist kein vollständiger
+Bewegungsraum-Nachweis; bewusst abgelehnte Fälle werden weiter abgelehnt.
+
+### Verdeckung und Leerbilder
+
+Synthetische Gegenprobe auf den tatsächlichen Referenzen schräg links und
+frontal: alle gespeicherten Rahmen-Suchfenster mit grauen Quadraten verdeckt
+(Radien 20/30/50 px), danach dx 0/0,5/1/2/3 px und Maßstab
+0,996/0,999/1,004. Zusätzlich vollständig leere Bilder mit Grauwert
+0/100/255. Je Referenz 48 Fälle, jeweils einmal AB und einmal BA.
+Die Umgebung bleibt bei Verdeckung erhalten; die **echte Grobschätzung**
+liefert weiterhin plausible Antworten. Keine Treffer oder Fits injiziert.
+
+**192/192 Bilder von beiden Versionen abgelehnt**, jeweils
+`zu_wenig_rahmenmerkmale`; 180 verdeckte und 12 vollständig leere Bilder.
+Der zweite Versuch läuft bei Verdeckung nun **180 statt 50 Mal**
+(schräg 24→90, frontal 26→90). Leere Bilder liefern weiterhin keine
+brauchbare Grobantwort und starten keinen zweiten Versuch.
+Das prüft fehlende Rahmenstruktur; eine leere Zeichenfläche bei vollständig
+sichtbarem Rahmen muss erst der Leser ablehnen und ist keine Forderung an
+die Quad-Nachführung.
+
+
+### Laufzeit mit AB/BA im selben Prozess
+
+Abschließender Gesamtlauf auf `raspi06`, OpenCV 4.10.0 mit **einem Thread**,
+nach Ende der eigenen Sweep-/Testprozesse. Andere Host-/Werkbanklast wird
+nicht ausgeschlossen. Pro Bild AB/BA abwechselnd, beide Versionen erhalten
+dasselbe bereits geladene Bild. Zeitbasis `perf_counter_ns`, monotone
+Host-Verarbeitungsdauer von `FrameTracker.update` **einschließlich
+Graukonversion**, ohne Dateizugriff, Entzerrung oder Leser. Die vorhandene
+Teilinstrumentierung läuft in beiden Versionen. Kein Ende-zu-Ende-Durchsatz-
+oder Aufnahmelatenznachweis.
+
+„Δ gepaart“ ist der Median der Differenzen je Bild, „Faktor gepaart“ der
+Median der Quotienten nachher/vorher; beide sind keine Differenz bzw.
+kein Quotient der separat gebildeten Mediane.
+
+| Lauf / Probe | Bilder | Median vorher ms | Median nachher ms | Δ gepaart ms | Faktor gepaart | Max. nachher ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20261030T115636Z/run-01 | 210 | 9,899 | 14,258 | 3,095 | 1,309 | 79,010 |
+| 20261030T113427Z/run-01 | 141 | 8,621 | 8,762 | 0,186 | 1,026 | 41,508 |
+| 20261030T082502Z/run-01 | 85 | 7,713 | 7,979 | -0,018 | 0,998 | 26,457 |
+| 20261028T150914Z/run-01 | 32 | 16,347 | 16,065 | -1,455 | 0,917 | 35,034 |
+| 20261028T150914Z/run-02 | 85 | 9,358 | 8,081 | -0,051 | 0,993 | 48,330 |
+| 20261028T110248Z/run-01 | 208 | 13,248 | 13,034 | 0,181 | 1,022 | 40,084 |
+| 20261028T121101Z/run-01 | 152 | 8,268 | 8,655 | 0,060 | 1,009 | 25,206 |
+| 20261030T115636Z verdeckt/leer | 96 | 12,882 | 17,848 | 3,190 | 1,243 | 106,324 |
+| 20261030T113427Z verdeckt/leer | 96 | 12,556 | 16,892 | 3,971 | 1,313 | 78,152 |
+
+Die zusätzliche Arbeit lässt sich auf die Bilder eingrenzen, bei denen nur
+neu ein zweiter Feinversuch startet (die übrigen Bedingungen gleich):
+
+| Bildgruppe | Bilder | Zusätzliche Dauer Δ gepaart ms | Faktor gepaart |
+| --- | ---: | ---: | ---: |
+| 20261030T115636Z/run-01 | 109 | 6,186 | 1,645 |
+| 20261030T113427Z/run-01 | 27 | 6,889 | 1,709 |
+| 20261028T110248Z/run-01 | 1 | 3,544 | 1,277 |
+| 20261030T115636Z verdeckt/leer | 66 | 4,722 | 1,349 |
+| 20261030T113427Z verdeckt/leer | 64 | 4,967 | 1,517 |
+
+Mehrarbeit wird damit ausdrücklich auch bei weiter abgelehnter Verdeckung
+bezahlt. Die unveränderten Erfolgsfälle zeigen Hoststreuung um Faktor 1;
+daraus folgt keine Beschleunigung der unveränderten ersten Feinprüfung.
+Einzelzeiten bis 106,324 ms in der Gegenprobe und 79,010 ms schräg zeigen,
+dass das Medianziel für den isolierten zweiten Durchgang keine Garantie
+für vollständige Tracker-Aufrufe unter Last ist. Der Normalfall-Timingtest
+und das isolierte Grob-/Fein-Timing stehen im folgenden Prüfblock.
+
+### Softwareprüfungen
+
+Testgetrieben: die neuen kleinen Versätze und die alte Konfigurationssperre
+zuerst rot, danach grün; auch die Referenzformat- und Telegrammfiltertests
+wurden zuerst gegen die bisherige falsche Auswertung rot ausgeführt.
+Ältere Tests mit injizierten Treffern liefern diese jetzt in jedem
+Durchgang gleich (vorher einmalige Iteratoren, die beim neu erlaubten
+zweiten Versuch erschöpft waren). Die Tests für einen einflussreichen
+Treffer und für unstimmige Inlier laufen wieder über `update()`. Sie
+lehnen ab, und es ist abgesichert, dass der zweite Versuch tatsächlich
+lief. Nur der Test der inklusiven Residualgrenze prüft den starren Fit
+direkt: Der Ähnlichkeitsfit hat einen Freiheitsgrad mehr und liegt an der
+exakt starren Grenze knapp darunter. Für ihn gelten dieselben Grenzen,
+geprüft in den gesonderten Ähnlichkeitstests.
+
+Nachtrag aus dem Review: Ist der gerundete Grobversatz (0,0) und lautet
+die erste Ablehnung `zu_wenig_rahmenmerkmale` oder `rahmen_mehrdeutig`,
+entfällt der zweite Versuch. Er wäre eine identische Wiederholung mit
+denselben Fenstern und Treffern; bei langer Verdeckung spart das etwa 5 ms
+je Bild. Bei `rahmen_unstimmig` läuft er weiter, denn nur dort kann der
+Ähnlichkeitsfit ein anderes Ergebnis liefern.
+
+* `PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -n 3 tests/test_frame_tracking.py`:
+  **560 bestanden, 2 Timing-Tests übersprungen**.
+* Dieselbe Datei separat mit `-q -s -m timing`: **2 bestanden**.
+  Vier OpenCV-Threads: Normalfall Median **5,602 ms**;
+  Grobschätzung plus zweiter Feinversuch Median **8,704 ms**, Maximum
+  **28,034 ms** (Grob Median/Max 3,300/6,335 ms;
+  Fein 5,226/22,470 ms). Das sind monotone Host-Verarbeitungsdauern,
+  keine Aufnahme- oder DUT-Latenzen und keine Lastgarantie.
+* Ruff mit dem beauftragten Ausschluss `scripts/wiki-check.py`,
+  `wiki-check.py --check`, `oq-index.py --check`, `tour-facts.py --check`
+  und `git diff --check` ohne Befund.
+* Unabhängiges Code-Review: keine offenen Befunde nach dem Ausschluss
+  abgelehnter Referenztelegramme. Volle Suite, Docs-Playwright und
+  Hardwarezugriffe wurden entsprechend dem Auftrag nicht ausgeführt.
+
+### Reproduktion und Artefakte
+
+Alle neuen Ausgaben liegen unter `/tmp/r13-24/`; Originaldaten bleiben
+unverändert. `DISPREAD_DEV_DATA` löst bei Bedarf nur Eingaben auf.
+Die Baseline-Kopie vor der Änderung erzeugen:
+
+```bash
+mkdir -p /tmp/r13-24
+git show f693f8d:src/dispread/live/frame_tracking.py > /tmp/r13-24/frame_tracking_head.py
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-coarse-eval.py --baseline /tmp/r13-24/frame_tracking_head.py \
+  --output /tmp/r13-24/final --threads 1 --live-only --negative-probes \
+  --run live-20261030T115636Z/run-01 --run live-20261030T113427Z/run-01 \
+  --run live-20261030T082502Z/run-01 --run live-20261028T150914Z/run-01 \
+  --run live-20261028T150914Z/run-02 --run live-20261028T110248Z/run-01 \
+  --run live-20261028T121101Z/run-01
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-coarse-sweep.py --baseline /tmp/r13-24/frame_tracking_head.py \
+  --output /tmp/r13-24/sweep.json --threads 1 \
+  --run live-20261028T110248Z --run live-20261028T121101Z \
+  --run live-20261030T115636Z
+```
+
+Die Live-JSON-Dateien enthalten für jedes Bild beide Quads, Rohlesungen,
+Referenzwerte, Grobdiagnostik und Verarbeitungsdauern; die Sweep-Datei beide
+Ergebnisse und den Fehler zum bekannten Sollquad. Die ursprüngliche
+Textvergleichsauswertung liegt unter `/tmp/r13-24/live/1/`; Wiederholungen
+mit numerischem Vergleich der beiden von OQ-41 betroffenen Bestände unter
+`/tmp/r13-24/numeric/1/`. Als gültiger Leser-/Referenznachweis zählen die
+numerisch verglichenen Ergebnisse, keine falsch als Fehllesung gezählten
+führenden Nullen. Der abschließende Gesamtlauf unter `final/1/` verwendet
+direkt den korrigierten numerischen Vergleich und die Gegenproben.
