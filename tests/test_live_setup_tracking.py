@@ -363,6 +363,33 @@ def test_r25_too_few_stable_regions_explains_setup_failure(tmp_path):
     assert not result['live_tracking']['proposal']['regions']
 
 
+def test_r25_replacements_without_position_consistency_warn(tmp_path, monkeypatch):
+    real = live_setup.propose_regions
+
+    def fallback(*args, **kwargs):
+        proposal = real(*args, **kwargs)
+        # Letzte Stufe: Reserve nur ohne Lagekonsistenz erreichbar.
+        metrics = {**proposal.metrics, 'stability_consistency_px': None,
+                   'stability_replacements': [{'index': 0, 'old_centre': [1, 1], 'new_centre': [2, 2],
+                                               'distance_px': 1.4}]}
+        return replace(proposal, metrics=metrics)
+
+    monkeypatch.setattr(live_setup, 'propose_regions', fallback)
+    _, _, proposal = _propose(tmp_path, stability=True)
+    check = proposal['setup_checks']['checks']['nachfuehrung']
+    assert check['status'] == 'WARNUNG'
+    assert proposal['setup_checks']['overall'] in {'WARNUNG', 'FEHLER'}
+    assert 'Lage' in check['reason'] and 'Licht' in check['reason']
+    assert proposal['live_tracking']['proposal']['ok']
+
+
+def test_r25_consistent_replacements_stay_ok(tmp_path):
+    _, _, proposal = _propose(tmp_path, stability=True)
+    check = proposal['setup_checks']['checks']['nachfuehrung']
+    assert check['status'] == 'OK'
+    assert check['metrics']['stability_consistency_px'] is not None
+
+
 def test_r25_manual_edit_rechecks_bound_second_image(tmp_path):
     image, quad, proposal = _propose(tmp_path, stability=True)
     proof = proposal['live_tracking']['stability_frame']

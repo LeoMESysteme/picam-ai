@@ -1264,6 +1264,23 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   bleiben Fehlvorhersagen der Einzelbildprobe. Kein Nullverlust-Nachweis.
   [Kalibrierung und Grenzen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
   [Aufbau und Deutung](lab_journal.md#r13-25-stabile-rahmenregionen).
+* **Nachtrag 2026-10-31 (R13-25 Runde 3):** Neue Einrichtungen behalten jetzt
+  die bisherige Auswahl und ersetzen nur probefällige Bereiche. Ein Ersatz
+  muss in den Einzelbildern lagekonsistent zum starren Konsens liegen, in
+  Stufen der unveränderten Laufgrenzen 0,35/0,50/0,65 px. Ohne erfüllbare
+  Stufe meldet `nachfuehrung` WARNUNG. Befund: Die Verluste der Runde 2
+  kamen aus der Auswahl. Ein großer Austausch verschob die Lage um ≤ 0,14 px
+  und kippte Grenzbilder der LCD-Randprüfung. Diese stehen schon mit dem
+  alten Satz bei 15/18 Randpunkten, Grenze 14,4. Ersatzbereiche mit
+  systematischem Residuum über 0,65 px scheiterten im Lauf als Inlier an
+  der Residuengrenze. Stand: Pflichtbestand 738→861 Tracks, 1 verloren
+  (`121101/0034`, Rückfallstufe ohne Lageprüfung). Alle 1.492 Bilder 4
+  verloren, davon drei Grenzbilder in `113238`. 0 Fehllesungen, Sweep
+  0 falsche Quads, aber 22 verlorene synthetische Tracks in `121101`. OQ-26
+  bleibt offen: kein Nullverlust, die Probe sagt die Live-Nutzbarkeit
+  einzelner Regionen weiterhin nicht verlässlich voraus (Hauptfall
+  schlechteste Region 29 %).
+  [Runde 3](VALIDATION.md#r13-25-runde-3).
 * **Antwort landet in:** `docs/VALIDATION.md`.
 
 <span id="oq-27"></span>

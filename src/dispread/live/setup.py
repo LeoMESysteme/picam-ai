@@ -733,13 +733,21 @@ def propose_with_fit(
         if stability_image_bgr is None:
             tracking_proposal = replace(tracking_proposal, ok=False,
                                         reasons=(*tracking_proposal.reasons, "rahmenbereiche_zweitbild_fehlt"))
+        # R13-25: Reserve nur mit Ersatz ohne Lagekonsistenz erreichbar.
+        # Bestaetigung bleibt moeglich (Konzept §4), Risiko wird benannt.
+        unchecked = (tracking_proposal.ok and tracking_proposal.metrics.get("stability_replacements")
+                     and "stability_consistency_px" in tracking_proposal.metrics
+                     and tracking_proposal.metrics["stability_consistency_px"] is None)
         checks_dict["checks"]["nachfuehrung"] = {
-            "status": "OK" if tracking_proposal.ok else "FEHLER",
-            "reason": "; ".join(REASONS[reason] for reason in tracking_proposal.reasons) or None,
+            "status": "OK" if tracking_proposal.ok and not unchecked else "WARNUNG" if unchecked else "FEHLER",
+            "reason": ("; ".join(REASONS[reason] for reason in tracking_proposal.reasons)
+                       or (REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"] if unchecked else None)),
             "metrics": tracking_proposal.metrics,
         }
         if not tracking_proposal.ok:
             checks_dict["overall"] = "FEHLER"
+        elif unchecked and checks_dict["overall"] == "OK":
+            checks_dict["overall"] = "WARNUNG"
     proposal = {
         "frame": str(frame_path),
         "device_id": device_id,

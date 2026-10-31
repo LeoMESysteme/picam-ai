@@ -2075,3 +2075,27 @@ Stand wird deshalb als nicht abnahmefähige Entwicklung dokumentiert.
 
 [Messungen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
 [Laborjournal](lab_journal.md#r13-25-stabile-rahmenregionen).
+
+### 2026-10-31 — R13-25 Runde 3: Minimalprinzip statt Neuwahl {#r13-25-runde-3}
+
+Die Neuwahl der Runde 2 tauschte bis zu 15 von 20 Bereichen. Schon ein
+Lagebias von 0,1 px kippte Grenzbilder der LCD-Randprüfung. Entschieden:
+Die bisherige Auswahl bleibt, nur probefällige Bereiche werden ersetzt, und
+ein Ersatz muss im starren Konsens der Einzelbilder liegen. Die Stufen sind
+die Laufgrenzen RMS 0,35, Mitte 0,50, Einzelresiduum 0,65 px.
+
+Verworfen, jeweils auf allen 1.492 Bestandsbildern gemessen:
+
+* reiner Nahersatz: 46–74 verlorene Bilder;
+* Mediankonsens und feste 0,35-px-Grenze: Reserve in mehreren
+  Einrichtungen unerfüllbar;
+* feste 0,50-px-Grenze: neue Verluste;
+* Lageprüfung auch für bewährte Bereiche: fast überall ohne Reserve;
+* Rückfall nach Kandidatenstärke;
+* gar kein Rückfall: `121101` würde abgelehnt.
+
+Den Rückfall ohne Lageprüfung meldet `nachfuehrung` als WARNUNG, die Person
+bestätigt (Konzept §4). Lockern der Laufgrenzen oder der Randprüfung bleibt
+verworfen. Der Stand ist nicht abnahmefähig: 4 verlorene Bilder, 22
+verlorene synthetische Tracks in `121101`.
+[Messungen](VALIDATION.md#r13-25-runde-3).

@@ -4345,19 +4345,226 @@ direkt den korrigierten numerischen Vergleich und die Gegenproben.
 
 ## 2026-10-30 — R13-25: Stabile Rahmenregionen bei der Einrichtung {#r13-25-stabile-rahmenregionen-2026-10-30}
 
-**Reviewkorrektur, Entwicklungsstand. Abnahme nicht bestanden.** Die mechanischen
-Befunde sind korrigiert. Der Einzelbild-Kandidat verbessert den Hauptfall,
-erfüllt aber weder Nullverlust über alle Gegenläufe noch eine allgemeine
-Vorhersage überwiegend nutzbarer Regionen. Die früheren Aussagen über eine
-belegte Rauschreserve aus gemittelten Bildern sind zurückgenommen.
+**Runde 3 (2026-10-31), Entwicklungsstand. Abnahme weiterhin nicht bestanden.**
+Minimalprinzip und Lagekonsistenz der Ersatzbereiche senken die verlorenen
+Bilder von 13 auf 4 (Pflichtbestand 3 → 1), der Hauptfall bleibt bei
+210/210. Nullverlust ist nicht erreicht. Die Abschnitte ab „Kriterium,
+Speicherung und Kopplung“ bis „Dauer der Einrichtung“ beschreiben die
+**Runde 2**. Ihr Einzelbildkriterium gilt unverändert weiter. Ihre Tabellen
+gehören zur Runde-2-Auswahl und sind durch die Zahlen unten überholt. Die
+früheren Aussagen über eine belegte Rauschreserve aus gemittelten Bildern
+bleiben zurückgenommen.
 
 Keine Kamera, kein serieller Port und keine Hardwareänderung. Alle Aufnahmen
 und Profile unter `var/` und `/mnt/ssd` wurden ausschließlich gelesen.
-Neue Artefakte: `/tmp/r13-25-correction/`. `docs/status.md` und TODO bleiben
-auf ausdrücklichen Auftrag unangetastet; keine Commits, keine volle Suite,
-kein Docs-Playwright oder Docs-Build.
+Artefakte: Runde 2 `/tmp/r13-25-correction/`, Runde 3 `/tmp/claude-1000/r13-25-r3/`.
+`docs/status.md` und TODO bleiben auf ausdrücklichen Auftrag unangetastet;
+keine Commits, keine volle Suite, kein Docs-Playwright oder Docs-Build.
 
-### Kriterium, Speicherung und Kopplung
+### Runde 3: Minimalprinzip und Lagekonsistenz {#r13-25-runde-3}
+
+**Was Runde 2 tat.** Runde 2 hat nicht minimal ersetzt, sondern den Satz neu
+gewählt. Die Probe lief in der Kandidatenschleife vor der Quadrantenzuordnung.
+Durchgefallene Kandidaten fielen heraus, die Liste wurde reihum aus den vier
+Quadranten neu aufgefüllt. Alle probefesten alten Bereiche blieben zwar als
+Menge erhalten. Index und Reihenfolge verschoben sich aber, und jeder Ersatz
+war der nächststärkere Kandidat seines Quadranten, ohne Bezug zum Ort des
+Ersetzten. Beispiele: Hauptfall 9 von 20 ersetzt, nur 9 Indizes gleich;
+`113238` 12 ersetzt, 4 Indizes gleich; `134306` 15 ersetzt, kein Index
+gleich. Die gespeicherten Vorschläge sind in allen elf Einrichtungen
+identisch mit einer Neuberechnung ohne Probe.
+
+**Ursache `lcd_rand_fehlt` (113238, 10 Bilder in Runde 2).** Gemessen je
+verlorenem Bild mit altem und Runde-2-Satz:
+
+* Die Quads unterscheiden sich um höchstens 0,04–0,14 px. Das LCD-Eck links
+  oben liegt 0,04–0,14 px höher, die Drehung ist um +0,003…+0,013° größer.
+  Das ist ein kleiner, gleichgerichteter Lagebias der neuen Bereiche.
+* Kein Randpunkt scheitert an der Lagetoleranz: Die Randoffsets liegen bei
+  −0,2 bis −0,85 px, die Grenze ist 2,5 px.
+* Gekippt ist jeweils einer von zwei schwachen Randpunkten (0 oder 4) der
+  oberen LCD-Kante. Seine Stufenhöhe liegt am Schwellwert
+  (halbe Referenzstufe): alt 57,3–89,2, neu 55,8–88,0. `_locate_edges` tastet
+  die Stufe an ganzzahligen Abständen zum vorhergesagten Punkt ab. Eine
+  Verschiebung um 0,1 px ändert die Abtastphase und damit den Maximalwert.
+* Seite 0 steht schon mit dem alten Satz in jedem dieser Bilder genau auf
+  der Grenze: 15/18 gute Punkte, nötig sind 0,8 · 18 = 14,4. Ein einziger
+  Punkt entscheidet.
+
+Ursache in der Auswahl: Der große Austausch in Runde 2 erzeugt den Bias. Der
+Minimalaustausch hält die Lage näher am alten Satz, **beseitigt die
+Grenzlage der Randprüfung aber nicht**: Auch mit Runde 3 kippen in `113238`
+drei solche Bilder, bei Quad-Differenzen von nur 0,05 px. Die
+Randprüfung und ihre Schwellen sind unverändert.
+
+**Ursache der Bewegungsverluste (110248/0179, 121101/0034–35).** Kein
+Ersatz fiel aus Suchfenster oder Bild; in 0179 fanden alle 20 Fenster einen
+Treffer. Abgelehnt wurde in der Ähnlichkeitsstufe an den
+Residuengrenzen. In 0179 kam das größte Residuum 0,67 px (Grenze 0,65)
+von einem alten Bereich, der Fit hatte sich durch neue Bereiche verschoben.
+In 0034 lagen die Ersatzbereiche bei RMS 0,356–0,379 px (Grenze 0,35) mit
+Einzelresiduen bis 0,68 px. Die Ersatzbereiche aus Runde 2 und aus einem
+reinen Nahersatz liegen weiter außen am Rahmen. In
+`113238` bringt ein Nahersatz (1445/444) in jedem Bild ein systematisches
+Residuum von 1,1–1,3 px. Er ist damit RANSAC-Inlier (Toleranz 1,5 px),
+überschreitet aber das Einzelresiduum. Ein strikter Nahersatz ohne Lageprüfung
+verlor deshalb in `113238` 46 und in `110248` 2 Bilder. Die Einzelbildprobe
+lässt 2 px Lageabweichung zu und sieht solche Bereiche nicht.
+
+**Änderung (nur Einrichtung).**
+
+1. Zuerst wird die bisherige Auswahl berechnet, bitgleich mit gespeicherten
+   Profilen. Bereiche, die die 7/8-Einzelbildprobe bestehen, bleiben exakt
+   an Ort und Index.
+2. Ein durchgefallener Bereich wird aus den übrigen, bereits voll geprüften
+   Kandidaten ersetzt: gleiche Masken-, Abstands-, Eindeutigkeits- und
+   Bewegungsregeln. Vorrang hat ein Kandidat, der dieselben Achsenseiten
+   belegt (Hebelarm), danach der geringste Abstand zum Ersetzten.
+3. **Lagekonsistenz:** Je Einzelbild wird aus den Versätzen der bisherigen
+   Bereiche ein starrer Konsens bestimmt, mit demselben `_ransac` wie im
+   Lauf. Ein Ersatz muss in mindestens 7 von 8 Einzelbildern innerhalb einer
+   Stufengrenze an diesem Konsens liegen.
+4. Die Stufen sind die unveränderten Laufgrenzen: `max_inlier_rms_px` 0,35,
+   Mitte 0,50, `max_inlier_residual_px` 0,65. Es gilt die strengste Stufe,
+   mit der die Ausfallreserve erfüllt ist.
+5. Reicht keine Stufe, wird zuletzt ohne Lagekonsistenz ersetzt. Dann meldet
+   `nachfuehrung` **WARNUNG** mit Handlungshinweis: Aufbau ruhig halten,
+   mehr Licht, anderer Blickwinkel. Kennzahlen: `stability_replacements`
+   (Index, alter/neuer Mittelpunkt, Abstand) und `stability_consistency_px`
+   (Stufe oder `null`).
+
+Laufgrenzen, `FrameTracker`, `_peak`, `_spread` und die Randprüfung sind
+unverändert. Die manuelle Bereichskorrektur ersetzt nichts automatisch und
+behält die 7/8-Probe.
+
+Verworfene Varianten, alle über dieselben 1.492 Bilder (Zahlen in
+`h1*.log`–`h4.log`):
+
+* Strikter Nahersatz nur mit gleichen Seiten: `121101` ohne Reserve.
+* Nahersatz ohne Lageprüfung, mit Seitenrückfall: 74 verlorene Bilder
+  (`113238` 53, `110248` 15).
+* Konsens als Median statt Starrfit: Hauptfall, `121101` und `134306` ohne
+  Reserve.
+* Feste Grenze 0,35: Hauptfall und `121101` ohne Reserve.
+* Feste Grenze 0,50: `110248/0015` und fünf Bilder in `113238` verloren.
+* Lageprüfung auch für bestehende Bereiche: fast alle Einrichtungen ohne
+  Reserve.
+* Konsistenz vor Seitenwahl sortiert: Reserve verfehlt.
+* Rückfall nach Kandidatenstärke statt Abstand: `121101` ohne Reserve.
+* Kein Rückfall: `121101` würde als FEHLER abgelehnt, alle 23 alten Tracks
+  entfielen.
+
+**Ergebnis je Aufzeichnung.** Gleicher Probe-Ersatz wie Runde 2 (erste acht
+Diagnosebilder aus run-01, ganzzahlig ausgerichtet), unveränderter HEAD-
+Tracker und Leser, Referenz erst nach der Lesung. Spalten: Tracks
+vorher (gespeichert) → Runde 2 → **Runde 3**, verlorene Runde 2 → **Runde 3**.
+
+| Aufzeichnung | Bilder | Tracks | verloren | Leserwerte vorher → R3 | Fehllesungen R3 | ersetzt | Stufe px | Ersatzabstand px |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 | 206 → 205 → **206** | 1 → **0** | 175 → 175 | 0 | 7 | 0.35 | 34–493 |
+| `live-20261028T113238Z/run-01` | 208 | 121 → 185 → **193** | 10 → **3** | 108 → 168 | 0 | 12 | 0.35 | 30–705 |
+| `live-20261028T121101Z/run-01` | 152 | 23 → 30 → **31** | 2 → **1** | 21 → 29 | 0 | 11 | ohne (WARNUNG) | 68–194 |
+| `live-20261028T123044Z/run-01` | 32 | 31 → 32 → **32** | 0 → **0** | 22 → 23 | 0 | 7 | 0.35 | 89–173 |
+| `live-20261028T133959Z/run-01` | 38 | 37 → 37 → **37** | 0 → **0** | 0 → 0 | 0 | 4 | 0.35 | 52–504 |
+| `live-20261028T134306Z/run-01` | 91 | 51 → 90 → **91** | 0 → **0** | 26 → 45 | 0 | 15 | 0.35 | 43–757 |
+| `live-20261028T150914Z/run-01` | 32 | 32 → 32 → **32** | 0 → **0** | 28 → 28 | 0 | 3 | 0.35 | 276–405 |
+| `live-20261028T150914Z/run-02` | 85 | 14 → 21 → **21** | 0 → **0** | 12 → 18 | 0 | 3 | 0.35 | 276–405 |
+| `live-20261030T082502Z/run-01` | 85 | 85 → 85 → **85** | 0 → **0** | 80 → 80 | 0 | 0 | 0.35 | — |
+| `live-20261030T113427Z/run-01` | 141 | 66 → 66 → **66** | 0 → **0** | 53 → 53 | 0 | 4 | 0.35 | 140–260 |
+| `live-20261030T115636Z/run-01` | 210 | 210 → 210 → **210** | 0 → **0** | 164 → 164 | 0 | 8 (19 Bereiche) | 0.35 | 213–381 |
+| `live-20261030T133635Z/run-01` | 210 | 102 → 210 → **210** | 0 → **0** | 71 → 150 | 0 | 9 | 0.50 | 55–375 |
+
+Pflichtbestand: **738 → 859 → 861 Tracks auf 1.123 Bildern, verloren 3 → 1,
+0/697 Fehllesungen.** Alle Bestandsbilder: **978 → 1.203 → 1.214 Tracks auf
+1.492 Bildern, verloren 13 → 4, 0/933 Fehllesungen**, keine Werte ohne
+Vergleichsreferenz. Verbleibende Verluste:
+
+* `121101/0034` (`rahmen_unstimmig`): Hier griff der Rückfall ohne
+  Lagekonsistenz, 11 von 20 alten Bereichen sind probefällig. Ersatzbereiche
+  liegen 68–194 px entfernt. Im Bild ergibt das RMS 0,379 px und ein
+  Einzelresiduum bis 0,68 px, vor allem von 834/782, 538/517 und 534/669.
+  Die Probe-Ersatzbilder 7 und 8 sind um 14/−5 px bewegt. Deren starrer
+  Konsens hat schon für alte Bereiche Residuen bis 0,94 px. Dort ist keine
+  Konsistenzstufe erfüllbar.
+* `113238/0163`, `0167`, `0177` (`lcd_rand_fehlt`): die oben beschriebene
+  Grenzlage an der oberen LCD-Kante (15/18), Quad-Differenz ≤ 0,056 px.
+
+Den Abstand nennt die Tabelle ehrlich: Ein lagekonsistenter Ersatz auf
+derselben Seite liegt teils weit vom Ersetzten (bis 757 px). Wo nahe
+Kandidaten die Konsistenz nicht erfüllen, hat die Konsistenz Vorrang vor der
+Nähe.
+
+**Probe-Vorhersage gegen Live-Nutzungsanteil (Runde 3).** Gleiches Verfahren
+wie Runde 2: festes ±12-px-Fenster, Peak ≥ 0,75, Lauf-Eindeutigkeit. Alle
+Regionen haben die Probe bestanden.
+
+| Aufzeichnung | Bilder / Holdout | Regionen | schlechtester / medianer Live-Anteil | schlechtester Holdout-Anteil | kleinste Seitenzahl |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 / 200 | 20 | 93,8 % / 99,8 % | 93,5 % | 6 |
+| `live-20261028T113238Z/run-01` | 208 / 200 | 20 | 43,3 % / 97,6 % | 41,0 % | 5 |
+| `live-20261028T121101Z/run-01` | 152 / 144 | 20 | 17,8 % / 24,3 % | 13,2 % | 5 |
+| `live-20261028T123044Z/run-01` | 32 / 24 | 20 | 96,9 % / 100,0 % | 95,8 % | 7 |
+| `live-20261028T133959Z/run-01` | 38 / 30 | 20 | 97,4 % / 100,0 % | 96,7 % | 8 |
+| `live-20261028T134306Z/run-01` | 91 / 83 | 20 | 94,5 % / 100,0 % | 94,0 % | 5 |
+| `live-20261028T150914Z/run-01` | 32 / 24 | 20 | 68,8 % / 100,0 % | 58,3 % | 7 |
+| `live-20261028T150914Z/run-02` | 85 / 85 | 20 | 55,3 % / 95,9 % | 55,3 % | 7 |
+| `live-20261030T082502Z/run-01` | 85 / 77 | 20 | 100,0 % / 100,0 % | 100,0 % | 7 |
+| `live-20261030T113427Z/run-01` | 141 / 133 | 20 | 61,0 % / 97,9 % | 58,6 % | 6 |
+| `live-20261030T115636Z/run-01` | 210 / 202 | 19 | 86,2 % / 100,0 % | 86,1 % | 5 |
+| `live-20261030T133635Z/run-01` | 210 / 202 | 20 | 29,0 % / 100,0 % | 26,7 % | 6 |
+
+Im Hauptfall ist die Vorhersage schlechter als in Runde 2 (95,2 %). Zwei
+Ersatzbereiche aus der Stufe 0,50 liegen nur bei 29,0 % (947/687, Probe
+0,798) und 74,3 % (928/711, Probe 0,801). Sie sind nahe der Probeschwelle
+gewählt, weil Nähe und Konsistenz vor Stärke gehen. Das Tracking bleibt
+210/210. Die Probe sagt die Live-Nutzbarkeit einzelner Regionen weiterhin
+nicht verlässlich voraus.
+
+**Synthetischer Sweep** (`r13-coarse-sweep.py --proposals`, je 1.014 Fälle):
+
+| Referenz | Tracks vorher → R3 | nur vorher / nur R3 | falsche Quads >1 px | max. Eckfehler R3 |
+| --- | --- | --- | --- | --- |
+| `live-20261030T133635Z` | 900 → 900 | 0 / 0 | 0 | 0,393 px |
+| `live-20261028T110248Z` | 900 → 900 | 0 / 0 | 0 | 0,425 px |
+| `live-20261028T121101Z` | 900 → 878 | 22 / 0 | 0 | 0,408 px |
+
+**0 falsche Quads in 3.042 Fällen.** In `121101` gehen aber 22 synthetische
+Tracks verloren (Runde 2: 3), alle `rahmen_unstimmig`, 19 davon bei −1,2°
+Drehung. Das ist der Preis des Rückfalls ohne Lagekonsistenz: Weiter
+entfernte, nach Abstand gewählte Ersatzbereiche lokalisieren unter Drehung
+schlechter.
+
+**Einrichtungsdauer.** Monotone Host-Verarbeitungszeit (`perf_counter`),
+zwei OpenCV-Threads, sieben AB/BA-Paare je Einrichtung. Gemessen bei
+laufender Werkbank (`dispread` ≈ 50 % CPU, Last 3,7–6,5). Ohne PNG-Prüfung
+wächst der Vorschlag um 60–230 ms. Mit PNG-Prüfung und SHA beträgt die
+Mehrarbeit 109–284 ms (Runde 2: 184–243 ms). Im Hauptfall dauert es
+487 → 771 ms (Runde 2: 497 → 740 ms). Die volle Assistentendauer ist nicht
+neu gemessen.
+
+Reproduktion (Ausgaben nur unter `/tmp`):
+
+```bash
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-stability-eval.py --live-root /home/me-systeme/picam-ai/var/live \
+  --run live-20261030T133635Z --run live-20261030T115636Z --run live-20261028T110248Z \
+  --output /tmp/claude-1000/r13-25-r3/eval-a
+# eval-b: 113427, 082502, 150914, 121101; eval-c: 113238, 123044, 133959,
+# 134306; eval-run02: 150914 --recording run-02
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-coarse-sweep.py --baseline /tmp/r13-25-correction/baseline.py \
+  --proposals /tmp/claude-1000/r13-25-r3/sweep-proposals \
+  --output /tmp/claude-1000/r13-25-r3/sweep.json --threads 2 \
+  --run live-20261030T133635Z --run live-20261028T110248Z --run live-20261028T121101Z
+```
+
+Weitere Artefakte: `harness.py` (Variantenvergleich), `lcdbias.py`/
+`lcdbias.log` (Randanalyse), `lost.py` (Residuen je Bereich), `cons121.py`
+(Konsens je Probebild), `setup-cost.py`/`setup-cost.json`, `tests.log`.
+
+Softwareprüfungen Runde 3: siehe [Abschnitt unten](#r13-25-runde-3-pruefung).
+
+### Kriterium, Speicherung und Kopplung (Runde 2, gilt weiter)
 
 Die Stabilitätsaufnahme liefert weiterhin ein Mittelbild aus acht frischen
 Aufnahmen für die bisherigen Raster-/Bildprüfungen. Dieselben **ungemittelten
@@ -4395,7 +4602,7 @@ werden nicht neu ausgewählt. Die frühere Behauptung, Altprofile mit hoher
 abweichender Laufschwelle starteten, war falsch; der irreführende reine
 Konstruktor-Test ist durch tatsächliche Startprüfungen ersetzt.
 
-### Kalibrierungsmethode und Grenzen
+### Kalibrierungsmethode und Grenzen (Runde 2)
 
 Elf Einrichtungen mit zwölf Aufzeichnungen vom 28. und 30.10. enthalten
 **1.492 Diagnose-Einzelbilder**. Der bisher genannte Bestand umfasst davon
@@ -4449,7 +4656,7 @@ entfernt sie zwei schwache Bereiche, lässt aber sechs weitere unter 80 %.
 Sie ist damit ein gemischter Zusatzfilter und löst die Vorhersage-/Nullverlust-
 Probleme nicht. Die vorhandene Referenz-Bewegungsprobe für Fasen bleibt.
 
-### Probe-Vorhersage gegen Live-Nutzungsanteil je Lauf
+### Probe-Vorhersage gegen Live-Nutzungsanteil je Lauf (Runde 2, überholt)
 
 Alle folgenden Regionen bestehen die Probe (≥7/8); Index und Mittelpunkt
 beziehen sich ausschließlich auf den **neuen** Vorschlag. Die ersten beiden
@@ -4492,7 +4699,7 @@ wurde keine unabhängige ORB-Teilmenge bestimmt. Die gewünschte allgemeine
 Vorhersage ist deshalb nicht erreicht und darf nicht aus dem guten Hauptfall
 abgeleitet werden. Einzelheiten: `final-calibration-conditional.json`.
 
-### Tracker und Leser: vorher / nachher
+### Tracker und Leser: vorher / nachher (Runde 2, überholt)
 
 Vorher: gespeicherter Regionsvorschlag. Nachher: neu vorgeschlagene Regionen.
 Beide verwenden denselben unveränderten HEAD-Tracker und Leser. Der Zahlen-
@@ -4537,7 +4744,7 @@ Bestand nicht durch Bewegung außerhalb der 20-px-Laufgrenze entschuldigt:
 die vorherigen Fits lagen bei etwa 11,23 bzw. 16,19/16,06 px. Sie bleiben
 offene Regressionen der neuen Regionswahl.
 
-### Gegenprobe über den historischen Einrichtungsbestand
+### Gegenprobe über den historischen Einrichtungsbestand (Runde 2)
 
 `/tmp/claude-1000/r13-25-review/recompute.py` unverändert gelesen/ausgeführt.
 Der unveränderte Reviewer findet beim Arbeitsbeginn **23** vollständige
@@ -4585,7 +4792,7 @@ inhaltlich nachkalibriert werden; der neue Datensatz ist nicht Teil des
 | `live-20261030T133635Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
 | `live-20261030T150751Z` | nicht im Startbestand | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
 
-### Synthetischer Sweep
+### Synthetischer Sweep (Runde 2, überholt)
 
 `scripts/r13-coarse-sweep.py --proposals` mit neuen Vorschlägen, jeweils
 285 große und 729 kleine bekannte Ähnlichkeiten. Die Sweep-Vorschläge
@@ -4602,7 +4809,7 @@ in `121101`, jeweils `rahmen_unstimmig`: (dx,dy,Winkel,Maßstab)
 (−9,−13,1,2°,1), (11,−13,1,2°,0,996), (11,−13,1,2°,1).
 Damit ist auch der synthetische Nullverlust-Nachweis nicht bestanden.
 
-### Dauer der Einrichtung
+### Dauer der Einrichtung (Runde 2, überholt)
 
 Keine neue Hardware-Aufnahme und keine erneute Messung der gesamten
 Assistentendauer. Das bestehende Wartefenster bleibt 15 s in der Werkbank
@@ -4633,7 +4840,26 @@ Bestandteil dieser kleinen Kostenmessung.
 
 ### Softwareprüfungen und Artefakte
 
-Testgetrieben: einzelne Rohbilder, 7/8-Regel, fehlende Belege, Bewegungsgate-
+<span id="r13-25-runde-3-pruefung"></span>**Runde 3:** testgetrieben neu sind:
+
+* probefeste Bereiche bleiben an Ort und Index, Ersatz ist der nächste
+  probefeste Kandidat derselben Seiten;
+* ein Ersatz mit systematischem 1-px-Versatz wird übersprungen;
+* stufenweise Lockerung nur bis zur erfüllten Reserve;
+* WARNUNG bei Ersatz ohne Lagekonsistenz, OK sonst.
+
+Die Regression `test_r25_single_frame_reserve_keeps_control_track` deckt
+jetzt fünf Fälle ab. Grün sind `110248/0012`, `110248/0179` und
+`113238/0098`. Rot bleiben `121101/0034` und der neu ergänzte offene Fall
+`113238/0163`, beide ehrlich und ohne Testlockerung.
+
+Gezielte sechs pytest-Dateien mit `-n 3`: **1 failed, 1009 passed,
+2 skipped in 214,55 s**. Der eine Fehlschlag ist `121101/0034`; der Lauf war
+vor dem Ergänzen von `113238/0163`. Die Socket-Tests liefen diesmal ohne
+Sandbox-EPERM. Separat: beide offenen Fälle rot, vier grün. Node 59/59,
+Ruff, `wiki-check --check` und `oq-index --check` ohne Befund.
+
+**Runde 2:** Testgetrieben: einzelne Rohbilder, 7/8-Regel, fehlende Belege, Bewegungsgate-
 Reihenfolge, 2-px-Lageprüfung, Speicherkopien, Bildweitergabe und -verlust,
 einmaliges PNG-Schreiben, Laufstart-Kopplung und deutsche Mittelpunkttexte.
 Eine unabhängige Nachprüfung fand einen Fehler im Offline-Auswerter:
@@ -4660,7 +4886,14 @@ Regressionen bleiben offen; dieser Stand ist nicht abnahmefähig.
 
 ### Geänderte Dateien {#r13-25-dateien}
 
-Uncommitteter R13-25-Arbeitsbaum einschließlich des übernommenen Vorstands:
+Runde 3 (uncommittet auf WIP-Commit 9a89b98): `src/dispread/live/frame_tracking.py`,
+`src/dispread/live/setup.py`, `src/dispread/workbench/fields.py`,
+`tests/test_frame_tracking.py`, `tests/test_live_setup_tracking.py`,
+`CHANGELOG.md`, `docs/VALIDATION.md`, `docs/lab_journal.md`,
+`docs/open-questions.md` (OQ-26), `docs/project_history.md`,
+`docs/anleitung/10-kamera-livevorschau.md`.
+
+Runde 2, R13-25-Arbeitsbaum einschließlich des übernommenen Vorstands:
 
 * Lauf/Einrichtung: `src/dispread/live/frame_tracking.py`,
   `src/dispread/live/setup.py`, `src/dispread/live/service.py`,
@@ -4714,309 +4947,310 @@ PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
   tests/test_live_service.py tests/test_live_api.py -n 3 -q
 ```
 
-### Einzelwerte der Probe-Vorhersage
+### Einzelwerte der Probe-Vorhersage (Runde 3)
 
-Jede Tabelle zeigt alle angenommenen Regionen einer Aufzeichnung.
-Probe-Spitze ist die maßgebliche k-te bestandene Korrelation nach der
-stationären Ersatzbildausrichtung; alle erfüllen ≥0,775 und ≥7/8.
+Jede Tabelle zeigt alle angenommenen Regionen einer Aufzeichnung in der
+Runde-3-Auswahl. „bisher“ steht für einen unverändert übernommenen Bereich
+gleichen Index. Probe-Spitze ist die maßgebliche k-te bestandene Korrelation
+nach der stationären Ersatzbildausrichtung; alle erfüllen ≥0,775 und ≥7/8.
 Live/Holdout stammen aus den unveränderten Diagnosebildern im festen Fenster.
+Die Runde-2-Einzelwerte stehen in `/tmp/r13-25-correction/final-calibration.json`.
 
-**`live-20261028T110248Z/run-01`** (208 Bilder, 200 Holdout):
+**`live-20261028T110248Z/run-01`** (208 Bilder, 200 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 884 / 330 | 0.790 | 99,0 % | 99,0 % |
-| 1 | 781 / 629 | 0.808 | 94,7 % | 94,5 % |
-| 2 | 1366 / 348 | 0.822 | 100,0 % | 100,0 % |
-| 3 | 1322 / 709 | 0.884 | 96,6 % | 96,5 % |
-| 4 | 822 / 334 | 0.847 | 100,0 % | 100,0 % |
-| 5 | 872 / 644 | 0.786 | 95,2 % | 95,0 % |
-| 6 | 1488 / 348 | 0.926 | 100,0 % | 100,0 % |
-| 7 | 1415 / 714 | 0.926 | 92,3 % | 92,0 % |
-| 8 | 750 / 333 | 0.792 | 100,0 % | 100,0 % |
-| 9 | 775 / 704 | 0.901 | 100,0 % | 100,0 % |
-| 10 | 1523 / 362 | 0.858 | 100,0 % | 100,0 % |
-| 11 | 1316 / 652 | 0.847 | 99,0 % | 99,0 % |
-| 12 | 974 / 330 | 0.849 | 100,0 % | 100,0 % |
-| 13 | 865 / 705 | 0.918 | 100,0 % | 100,0 % |
-| 14 | 1404 / 361 | 0.788 | 99,0 % | 99,0 % |
-| 15 | 1364 / 618 | 0.827 | 98,6 % | 98,5 % |
-| 16 | 1005 / 334 | 0.778 | 99,0 % | 99,5 % |
-| 17 | 696 / 597 | 0.897 | 100,0 % | 100,0 % |
-| 18 | 1308 / 342 | 0.914 | 100,0 % | 100,0 % |
-| 19 | 1498 / 605 | 0.845 | 91,8 % | 91,5 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 974 / 330 | Ersatz für 749 / 375 (229 px) | 0.849 | 100,0 % | 100,0 % |
+| 1 | 781 / 629 | bisher | 0.808 | 94,7 % | 94,5 % |
+| 2 | 1366 / 348 | bisher | 0.822 | 100,0 % | 100,0 % |
+| 3 | 1322 / 709 | bisher | 0.884 | 99,5 % | 99,5 % |
+| 4 | 884 / 330 | bisher | 0.790 | 99,0 % | 99,0 % |
+| 5 | 865 / 705 | Ersatz für 828 / 649 (67 px) | 0.918 | 100,0 % | 100,0 % |
+| 6 | 1488 / 348 | bisher | 0.926 | 100,0 % | 100,0 % |
+| 7 | 1415 / 714 | bisher | 0.926 | 100,0 % | 100,0 % |
+| 8 | 1164 / 341 | Ersatz für 678 / 422 (493 px) | 0.847 | 100,0 % | 100,0 % |
+| 9 | 898 / 710 | Ersatz für 734 / 645 (176 px) | 0.880 | 100,0 % | 100,0 % |
+| 10 | 1523 / 362 | bisher | 0.858 | 100,0 % | 100,0 % |
+| 11 | 1316 / 652 | bisher | 0.847 | 99,5 % | 99,5 % |
+| 12 | 1214 / 370 | Ersatz für 844 / 407 (372 px) | 0.777 | 93,8 % | 93,5 % |
+| 13 | 872 / 644 | bisher | 0.786 | 95,2 % | 95,0 % |
+| 14 | 1308 / 342 | Ersatz für 1269 / 417 (85 px) | 0.914 | 100,0 % | 100,0 % |
+| 15 | 1364 / 618 | bisher | 0.827 | 99,0 % | 99,0 % |
+| 16 | 822 / 334 | bisher | 0.847 | 100,0 % | 100,0 % |
+| 17 | 775 / 704 | bisher | 0.901 | 99,5 % | 99,5 % |
+| 18 | 1404 / 361 | bisher | 0.788 | 99,0 % | 99,0 % |
+| 19 | 1164 / 660 | Ersatz für 1195 / 645 (34 px) | 0.805 | 99,5 % | 99,5 % |
 
-**`live-20261028T113238Z/run-01`** (208 Bilder, 200 Holdout):
+**`live-20261028T113238Z/run-01`** (208 Bilder, 200 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 894 / 325 | 0.786 | 100,0 % | 100,0 % |
-| 1 | 711 / 700 | 0.892 | 100,0 % | 100,0 % |
-| 2 | 1319 / 337 | 0.911 | 76,9 % | 76,0 % |
-| 3 | 1321 / 643 | 0.844 | 99,0 % | 99,0 % |
-| 4 | 760 / 328 | 0.805 | 99,0 % | 99,0 % |
-| 5 | 825 / 693 | 0.822 | 100,0 % | 100,0 % |
-| 6 | 1529 / 355 | 0.839 | 43,8 % | 41,5 % |
-| 7 | 1397 / 649 | 0.823 | 97,6 % | 97,5 % |
-| 8 | 984 / 325 | 0.810 | 100,0 % | 100,0 % |
-| 9 | 875 / 701 | 0.876 | 100,0 % | 100,0 % |
-| 10 | 1283 / 427 | 0.812 | 80,3 % | 79,5 % |
-| 11 | 1355 / 624 | 0.855 | 97,6 % | 97,5 % |
-| 12 | 717 / 446 | 0.934 | 100,0 % | 100,0 % |
-| 13 | 785 / 699 | 0.896 | 100,0 % | 100,0 % |
-| 14 | 1492 / 384 | 0.792 | 48,1 % | 46,0 % |
-| 15 | 1285 / 650 | 0.805 | 98,1 % | 98,0 % |
-| 16 | 1015 / 712 | 0.960 | 99,5 % | 99,5 % |
-| 17 | 1520 / 417 | 0.817 | 93,8 % | 93,5 % |
-| 18 | 1303 / 615 | 0.800 | 100,0 % | 100,0 % |
-| 19 | 1077 / 634 | 0.799 | 72,1 % | 71,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 894 / 325 | Ersatz für 688 / 417 (226 px) | 0.786 | 100,0 % | 100,0 % |
+| 1 | 785 / 699 | Ersatz für 791 / 624 (75 px) | 0.896 | 100,0 % | 100,0 % |
+| 2 | 1423 / 368 | Ersatz für 1398 / 351 (30 px) | 0.806 | 43,3 % | 41,0 % |
+| 3 | 1321 / 643 | bisher | 0.844 | 99,0 % | 99,0 % |
+| 4 | 1158 / 341 | Ersatz für 843 / 320 (316 px) | 0.797 | 49,0 % | 47,0 % |
+| 5 | 875 / 701 | Ersatz für 818 / 633 (89 px) | 0.876 | 100,0 % | 100,0 % |
+| 6 | 1319 / 337 | bisher | 0.911 | 76,9 % | 76,0 % |
+| 7 | 1397 / 649 | bisher | 0.823 | 97,6 % | 97,5 % |
+| 8 | 1207 / 433 | Ersatz für 759 / 369 (453 px) | 0.826 | 75,0 % | 74,5 % |
+| 9 | 711 / 700 | bisher | 0.892 | 100,0 % | 100,0 % |
+| 10 | 1283 / 427 | Ersatz für 1343 / 408 (63 px) | 0.812 | 80,3 % | 79,5 % |
+| 11 | 1355 / 624 | bisher | 0.855 | 97,6 % | 97,5 % |
+| 12 | 1492 / 384 | Ersatz für 788 / 343 (705 px) | 0.792 | 48,1 % | 46,0 % |
+| 13 | 908 / 705 | Ersatz für 744 / 640 (176 px) | 0.858 | 50,0 % | 48,0 % |
+| 14 | 1529 / 355 | Ersatz für 1369 / 351 (160 px) | 0.839 | 43,8 % | 41,5 % |
+| 15 | 1285 / 650 | bisher | 0.805 | 98,1 % | 98,0 % |
+| 16 | 1520 / 417 | Ersatz für 887 / 396 (633 px) | 0.817 | 93,8 % | 93,5 % |
+| 17 | 825 / 693 | bisher | 0.822 | 100,0 % | 100,0 % |
+| 18 | 1554 / 415 | Ersatz für 1301 / 397 (254 px) | 0.852 | 100,0 % | 100,0 % |
+| 19 | 1303 / 615 | bisher | 0.800 | 100,0 % | 100,0 % |
 
-**`live-20261028T121101Z/run-01`** (152 Bilder, 144 Holdout):
+**`live-20261028T121101Z/run-01`** (152 Bilder, 144 Holdout, Konsistenzstufe ohne):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 519 / 485 | 0.817 | 3,9 % | 0,0 % |
-| 1 | 898 / 702 | 0.797 | 3,9 % | 0,0 % |
-| 2 | 1258 / 410 | 0.792 | 3,9 % | 0,0 % |
-| 3 | 1101 / 774 | 0.908 | 3,9 % | 0,0 % |
-| 4 | 556 / 446 | 0.840 | 3,9 % | 0,0 % |
-| 5 | 892 / 730 | 0.824 | 3,9 % | 0,0 % |
-| 6 | 1173 / 479 | 0.794 | 3,9 % | 0,0 % |
-| 7 | 1109 / 745 | 0.829 | 3,9 % | 0,0 % |
-| 8 | 499 / 399 | 0.799 | 3,9 % | 0,0 % |
-| 9 | 834 / 782 | 0.963 | 5,3 % | 1,4 % |
-| 10 | 1196 / 408 | 0.823 | 3,9 % | 0,0 % |
-| 11 | 1097 / 706 | 0.841 | 3,9 % | 0,0 % |
-| 12 | 723 / 398 | 0.867 | 3,9 % | 0,0 % |
-| 13 | 534 / 669 | 0.898 | 3,9 % | 0,0 % |
-| 14 | 1353 / 413 | 0.870 | 3,9 % | 0,0 % |
-| 15 | 1361 / 714 | 0.797 | 3,9 % | 0,0 % |
-| 16 | 538 / 517 | 0.921 | 3,9 % | 0,0 % |
-| 17 | 1336 / 462 | 0.800 | 3,9 % | 0,0 % |
-| 18 | 1270 / 695 | 0.803 | 3,9 % | 0,0 % |
-| 19 | 1340 / 494 | 0.845 | 3,9 % | 0,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 519 / 485 | bisher | 0.817 | 21,7 % | 17,4 % |
+| 1 | 834 / 782 | Ersatz für 698 / 718 (150 px) | 0.963 | 24,3 % | 20,1 % |
+| 2 | 1231 / 398 | Ersatz für 1133 / 450 (111 px) | 0.873 | 24,3 % | 20,1 % |
+| 3 | 1101 / 774 | bisher | 0.908 | 24,3 % | 20,1 % |
+| 4 | 556 / 446 | Ersatz für 664 / 389 (122 px) | 0.840 | 22,4 % | 18,1 % |
+| 5 | 534 / 669 | Ersatz für 690 / 690 (157 px) | 0.898 | 24,3 % | 20,1 % |
+| 6 | 1258 / 410 | bisher | 0.792 | 17,8 % | 13,2 % |
+| 7 | 1109 / 745 | bisher | 0.829 | 24,3 % | 20,1 % |
+| 8 | 499 / 399 | Ersatz für 685 / 424 (188 px) | 0.799 | 24,3 % | 20,1 % |
+| 9 | 892 / 730 | Ersatz für 709 / 770 (187 px) | 0.824 | 24,3 % | 20,1 % |
+| 10 | 1173 / 479 | bisher | 0.794 | 24,3 % | 20,1 % |
+| 11 | 1270 / 695 | Ersatz für 1135 / 774 (156 px) | 0.803 | 24,3 % | 20,1 % |
+| 12 | 723 / 398 | Ersatz für 704 / 463 (68 px) | 0.867 | 24,3 % | 20,1 % |
+| 13 | 898 / 702 | bisher | 0.797 | 24,3 % | 20,1 % |
+| 14 | 1283 / 394 | Ersatz für 1100 / 459 (194 px) | 0.891 | 24,3 % | 20,1 % |
+| 15 | 1097 / 706 | bisher | 0.841 | 24,3 % | 20,1 % |
+| 16 | 538 / 517 | Ersatz für 610 / 447 (100 px) | 0.921 | 24,3 % | 20,1 % |
+| 17 | 921 / 723 | Ersatz für 816 / 720 (105 px) | 0.792 | 24,3 % | 20,1 % |
+| 18 | 1196 / 408 | bisher | 0.823 | 24,3 % | 20,1 % |
+| 19 | 1361 / 714 | bisher | 0.797 | 24,3 % | 20,1 % |
 
-**`live-20261028T123044Z/run-01`** (32 Bilder, 24 Holdout):
+**`live-20261028T123044Z/run-01`** (32 Bilder, 24 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 640 / 387 | 0.805 | 100,0 % | 100,0 % |
-| 1 | 686 / 734 | 0.939 | 100,0 % | 100,0 % |
-| 2 | 1103 / 379 | 0.817 | 100,0 % | 100,0 % |
-| 3 | 1263 / 634 | 0.873 | 100,0 % | 100,0 % |
-| 4 | 620 / 362 | 0.829 | 100,0 % | 100,0 % |
-| 5 | 671 / 667 | 0.850 | 100,0 % | 100,0 % |
-| 6 | 1288 / 389 | 0.822 | 100,0 % | 100,0 % |
-| 7 | 1086 / 715 | 0.839 | 100,0 % | 100,0 % |
-| 8 | 672 / 426 | 0.800 | 100,0 % | 100,0 % |
-| 9 | 521 / 657 | 0.889 | 100,0 % | 100,0 % |
-| 10 | 1131 / 377 | 0.886 | 100,0 % | 100,0 % |
-| 11 | 1199 / 714 | 0.819 | 100,0 % | 100,0 % |
-| 12 | 623 / 439 | 0.851 | 100,0 % | 100,0 % |
-| 13 | 488 / 684 | 0.845 | 100,0 % | 100,0 % |
-| 14 | 1077 / 368 | 0.833 | 100,0 % | 100,0 % |
-| 15 | 1121 / 713 | 0.875 | 100,0 % | 100,0 % |
-| 16 | 675 / 389 | 0.808 | 96,9 % | 95,8 % |
-| 17 | 560 / 643 | 0.813 | 100,0 % | 100,0 % |
-| 18 | 1298 / 539 | 0.808 | 100,0 % | 100,0 % |
-| 19 | 1158 / 701 | 0.812 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 640 / 387 | bisher | 0.805 | 100,0 % | 100,0 % |
+| 1 | 686 / 734 | bisher | 0.939 | 100,0 % | 100,0 % |
+| 2 | 1077 / 368 | Ersatz für 1188 / 424 (124 px) | 0.833 | 100,0 % | 100,0 % |
+| 3 | 1263 / 634 | bisher | 0.873 | 100,0 % | 100,0 % |
+| 4 | 620 / 362 | bisher | 0.829 | 100,0 % | 100,0 % |
+| 5 | 560 / 643 | Ersatz für 444 / 744 (154 px) | 0.813 | 100,0 % | 100,0 % |
+| 6 | 1103 / 379 | bisher | 0.817 | 100,0 % | 100,0 % |
+| 7 | 1000 / 713 | Ersatz für 1054 / 637 (93 px) | 0.814 | 100,0 % | 100,0 % |
+| 8 | 672 / 426 | bisher | 0.800 | 100,0 % | 100,0 % |
+| 9 | 671 / 667 | bisher | 0.850 | 100,0 % | 100,0 % |
+| 10 | 1072 / 461 | Ersatz für 1157 / 428 (91 px) | 0.824 | 100,0 % | 100,0 % |
+| 11 | 1086 / 715 | bisher | 0.839 | 100,0 % | 100,0 % |
+| 12 | 623 / 439 | bisher | 0.851 | 100,0 % | 100,0 % |
+| 13 | 521 / 657 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 14 | 1218 / 609 | Ersatz für 1273 / 453 (165 px) | 0.922 | 100,0 % | 100,0 % |
+| 15 | 1199 / 714 | bisher | 0.819 | 100,0 % | 100,0 % |
+| 16 | 675 / 389 | bisher | 0.808 | 96,9 % | 95,8 % |
+| 17 | 488 / 684 | bisher | 0.845 | 100,0 % | 100,0 % |
+| 18 | 900 / 363 | Ersatz für 1065 / 414 (173 px) | 0.792 | 100,0 % | 100,0 % |
+| 19 | 969 / 715 | Ersatz für 1052 / 682 (89 px) | 0.820 | 100,0 % | 100,0 % |
 
-**`live-20261028T133959Z/run-01`** (38 Bilder, 30 Holdout):
+**`live-20261028T133959Z/run-01`** (38 Bilder, 30 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 659 / 381 | 0.867 | 100,0 % | 100,0 % |
-| 1 | 790 / 645 | 0.825 | 100,0 % | 100,0 % |
-| 2 | 1380 / 385 | 0.874 | 100,0 % | 100,0 % |
-| 3 | 1300 / 708 | 0.899 | 100,0 % | 100,0 % |
-| 4 | 697 / 392 | 0.796 | 97,4 % | 96,7 % |
-| 5 | 602 / 728 | 0.826 | 100,0 % | 100,0 % |
-| 6 | 1472 / 315 | 0.975 | 100,0 % | 100,0 % |
-| 7 | 1210 / 704 | 0.898 | 100,0 % | 100,0 % |
-| 8 | 732 / 296 | 0.869 | 100,0 % | 100,0 % |
-| 9 | 661 / 709 | 0.885 | 100,0 % | 100,0 % |
-| 10 | 1343 / 327 | 0.804 | 100,0 % | 100,0 % |
-| 11 | 1433 / 609 | 0.857 | 100,0 % | 100,0 % |
-| 12 | 770 / 297 | 0.870 | 100,0 % | 100,0 % |
-| 13 | 967 / 714 | 0.871 | 100,0 % | 100,0 % |
-| 14 | 1414 / 372 | 0.856 | 100,0 % | 100,0 % |
-| 15 | 1483 / 700 | 0.894 | 100,0 % | 100,0 % |
-| 16 | 529 / 354 | 0.836 | 100,0 % | 100,0 % |
-| 17 | 893 / 642 | 0.777 | 100,0 % | 100,0 % |
-| 18 | 1259 / 312 | 0.957 | 100,0 % | 100,0 % |
-| 19 | 1272 / 709 | 0.898 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 659 / 381 | bisher | 0.867 | 100,0 % | 100,0 % |
+| 1 | 790 / 645 | bisher | 0.825 | 100,0 % | 100,0 % |
+| 2 | 1380 / 385 | bisher | 0.874 | 100,0 % | 100,0 % |
+| 3 | 1300 / 708 | bisher | 0.899 | 100,0 % | 100,0 % |
+| 4 | 697 / 392 | bisher | 0.796 | 97,4 % | 96,7 % |
+| 5 | 1272 / 709 | Ersatz für 768 / 703 (504 px) | 0.898 | 100,0 % | 100,0 % |
+| 6 | 1472 / 315 | bisher | 0.975 | 100,0 % | 100,0 % |
+| 7 | 1210 / 704 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 8 | 732 / 296 | bisher | 0.869 | 100,0 % | 100,0 % |
+| 9 | 602 / 728 | bisher | 0.826 | 100,0 % | 100,0 % |
+| 10 | 1259 / 312 | Ersatz für 1309 / 327 (52 px) | 0.957 | 100,0 % | 100,0 % |
+| 11 | 1433 / 609 | bisher | 0.857 | 100,0 % | 100,0 % |
+| 12 | 770 / 297 | bisher | 0.870 | 100,0 % | 100,0 % |
+| 13 | 661 / 709 | bisher | 0.885 | 100,0 % | 100,0 % |
+| 14 | 1343 / 327 | bisher | 0.804 | 100,0 % | 100,0 % |
+| 15 | 1330 / 647 | Ersatz für 1244 / 630 (88 px) | 0.842 | 100,0 % | 100,0 % |
+| 16 | 529 / 354 | bisher | 0.836 | 100,0 % | 100,0 % |
+| 17 | 967 / 714 | bisher | 0.871 | 100,0 % | 100,0 % |
+| 18 | 1414 / 372 | bisher | 0.856 | 100,0 % | 100,0 % |
+| 19 | 1388 / 593 | Ersatz für 1266 / 656 (137 px) | 0.971 | 100,0 % | 100,0 % |
 
-**`live-20261028T134306Z/run-01`** (91 Bilder, 83 Holdout):
+**`live-20261028T134306Z/run-01`** (91 Bilder, 83 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 784 / 160 | 0.791 | 95,6 % | 95,2 % |
-| 1 | 807 / 498 | 0.777 | 98,9 % | 98,8 % |
-| 2 | 1309 / 157 | 0.786 | 97,8 % | 97,6 % |
-| 3 | 1216 / 508 | 0.797 | 100,0 % | 100,0 % |
-| 4 | 756 / 160 | 0.800 | 96,7 % | 96,4 % |
-| 5 | 573 / 474 | 0.854 | 100,0 % | 100,0 % |
-| 6 | 1448 / 270 | 0.781 | 100,0 % | 100,0 % |
-| 7 | 1338 / 523 | 0.790 | 94,5 % | 94,0 % |
-| 8 | 909 / 158 | 0.834 | 100,0 % | 100,0 % |
-| 9 | 611 / 504 | 0.903 | 100,0 % | 100,0 % |
-| 10 | 1287 / 260 | 0.855 | 100,0 % | 100,0 % |
-| 11 | 1451 / 510 | 0.812 | 100,0 % | 100,0 % |
-| 12 | 986 / 160 | 0.857 | 100,0 % | 100,0 % |
-| 13 | 938 / 512 | 0.815 | 100,0 % | 100,0 % |
-| 14 | 1084 / 261 | 0.868 | 100,0 % | 100,0 % |
-| 15 | 1456 / 467 | 0.858 | 100,0 % | 100,0 % |
-| 16 | 945 / 161 | 0.843 | 100,0 % | 100,0 % |
-| 17 | 643 / 407 | 0.850 | 100,0 % | 100,0 % |
-| 18 | 1030 / 156 | 0.873 | 100,0 % | 100,0 % |
-| 19 | 1431 / 490 | 0.834 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 573 / 474 | Ersatz für 583 / 221 (253 px) | 0.854 | 100,0 % | 100,0 % |
+| 1 | 807 / 498 | Ersatz für 810 / 455 (43 px) | 0.777 | 98,9 % | 98,8 % |
+| 2 | 1287 / 260 | Ersatz für 1344 / 225 (67 px) | 0.855 | 100,0 % | 100,0 % |
+| 3 | 1431 / 490 | Ersatz für 1257 / 514 (176 px) | 0.834 | 100,0 % | 100,0 % |
+| 4 | 784 / 160 | bisher | 0.791 | 95,6 % | 95,2 % |
+| 5 | 611 / 504 | Ersatz für 766 / 440 (168 px) | 0.903 | 100,0 % | 100,0 % |
+| 6 | 1448 / 270 | Ersatz für 1385 / 209 (88 px) | 0.781 | 100,0 % | 100,0 % |
+| 7 | 1216 / 508 | bisher | 0.797 | 100,0 % | 100,0 % |
+| 8 | 909 / 158 | Ersatz für 582 / 255 (341 px) | 0.834 | 100,0 % | 100,0 % |
+| 9 | 938 / 512 | Ersatz für 679 / 450 (266 px) | 0.815 | 100,0 % | 100,0 % |
+| 10 | 1309 / 157 | Ersatz für 1311 / 216 (59 px) | 0.786 | 97,8 % | 97,6 % |
+| 11 | 1456 / 467 | Ersatz für 1190 / 526 (272 px) | 0.858 | 100,0 % | 100,0 % |
+| 12 | 945 / 161 | Ersatz für 551 / 190 (395 px) | 0.843 | 100,0 % | 100,0 % |
+| 13 | 1475 / 420 | Ersatz für 719 / 461 (757 px) | 0.909 | 100,0 % | 100,0 % |
+| 14 | 1084 / 261 | Ersatz für 1403 / 170 (332 px) | 0.868 | 100,0 % | 100,0 % |
+| 15 | 1338 / 523 | bisher | 0.790 | 94,5 % | 94,0 % |
+| 16 | 756 / 160 | bisher | 0.800 | 96,7 % | 96,4 % |
+| 17 | 986 / 160 | Ersatz für 671 / 483 (451 px) | 0.857 | 98,9 % | 98,8 % |
+| 18 | 1030 / 156 | Ersatz für 1241 / 216 (219 px) | 0.873 | 100,0 % | 100,0 % |
+| 19 | 1451 / 510 | bisher | 0.812 | 100,0 % | 100,0 % |
 
-**`live-20261028T150914Z/run-01`** (32 Bilder, 24 Holdout):
+**`live-20261028T150914Z/run-01`** (32 Bilder, 24 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 665 / 296 | 0.837 | 100,0 % | 100,0 % |
-| 1 | 724 / 609 | 0.812 | 96,9 % | 95,8 % |
-| 2 | 1251 / 342 | 0.889 | 100,0 % | 100,0 % |
-| 3 | 1406 / 629 | 0.841 | 100,0 % | 100,0 % |
-| 4 | 542 / 390 | 0.798 | 96,9 % | 95,8 % |
-| 5 | 719 / 662 | 0.921 | 100,0 % | 100,0 % |
-| 6 | 1272 / 294 | 0.942 | 100,0 % | 100,0 % |
-| 7 | 1126 / 647 | 0.833 | 100,0 % | 100,0 % |
-| 8 | 447 / 310 | 0.820 | 100,0 % | 100,0 % |
-| 9 | 562 / 676 | 0.906 | 100,0 % | 100,0 % |
-| 10 | 1335 / 302 | 0.858 | 68,8 % | 58,3 % |
-| 11 | 1400 / 582 | 0.835 | 93,8 % | 91,7 % |
-| 12 | 516 / 376 | 0.798 | 100,0 % | 100,0 % |
-| 13 | 644 / 598 | 0.815 | 93,8 % | 91,7 % |
-| 14 | 1304 / 299 | 0.930 | 100,0 % | 100,0 % |
-| 15 | 1156 / 609 | 0.814 | 100,0 % | 100,0 % |
-| 16 | 816 / 295 | 0.907 | 100,0 % | 100,0 % |
-| 17 | 662 / 637 | 0.797 | 68,8 % | 58,3 % |
-| 18 | 1177 / 297 | 0.925 | 100,0 % | 100,0 % |
-| 19 | 1127 / 589 | 0.818 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 665 / 296 | bisher | 0.837 | 100,0 % | 100,0 % |
+| 1 | 724 / 609 | bisher | 0.812 | 96,9 % | 95,8 % |
+| 2 | 1251 / 342 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 3 | 1406 / 629 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 4 | 840 / 565 | Ersatz für 701 / 326 (276 px) | 0.903 | 84,4 % | 83,3 % |
+| 5 | 719 / 662 | bisher | 0.921 | 100,0 % | 100,0 % |
+| 6 | 1272 / 294 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 7 | 1126 / 647 | bisher | 0.833 | 100,0 % | 100,0 % |
+| 8 | 901 / 564 | Ersatz für 674 / 360 (305 px) | 0.948 | 100,0 % | 100,0 % |
+| 9 | 562 / 676 | bisher | 0.906 | 100,0 % | 100,0 % |
+| 10 | 1335 / 302 | bisher | 0.858 | 68,8 % | 58,3 % |
+| 11 | 1400 / 582 | bisher | 0.835 | 93,8 % | 91,7 % |
+| 12 | 542 / 390 | bisher | 0.798 | 96,9 % | 95,8 % |
+| 13 | 644 / 598 | bisher | 0.815 | 93,8 % | 91,7 % |
+| 14 | 1304 / 299 | bisher | 0.930 | 100,0 % | 100,0 % |
+| 15 | 1156 / 609 | bisher | 0.814 | 100,0 % | 100,0 % |
+| 16 | 900 / 623 | Ersatz für 615 / 335 (405 px) | 0.787 | 71,9 % | 62,5 % |
+| 17 | 662 / 637 | bisher | 0.797 | 68,8 % | 58,3 % |
+| 18 | 1177 / 297 | bisher | 0.925 | 100,0 % | 100,0 % |
+| 19 | 1127 / 589 | bisher | 0.818 | 100,0 % | 100,0 % |
 
-**`live-20261028T150914Z/run-02`** (85 Bilder, 85 Holdout):
+**`live-20261028T150914Z/run-02`** (85 Bilder, 85 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 665 / 296 | 0.837 | 16,5 % | 16,5 % |
-| 1 | 724 / 609 | 0.812 | 3,5 % | 3,5 % |
-| 2 | 1251 / 342 | 0.889 | 16,5 % | 16,5 % |
-| 3 | 1406 / 629 | 0.841 | 16,5 % | 16,5 % |
-| 4 | 542 / 390 | 0.798 | 1,2 % | 1,2 % |
-| 5 | 719 / 662 | 0.921 | 17,6 % | 17,6 % |
-| 6 | 1272 / 294 | 0.942 | 16,5 % | 16,5 % |
-| 7 | 1126 / 647 | 0.833 | 16,5 % | 16,5 % |
-| 8 | 447 / 310 | 0.820 | 1,2 % | 1,2 % |
-| 9 | 562 / 676 | 0.906 | 7,1 % | 7,1 % |
-| 10 | 1335 / 302 | 0.858 | 16,5 % | 16,5 % |
-| 11 | 1400 / 582 | 0.835 | 16,5 % | 16,5 % |
-| 12 | 516 / 376 | 0.798 | 1,2 % | 1,2 % |
-| 13 | 644 / 598 | 0.815 | 8,2 % | 8,2 % |
-| 14 | 1304 / 299 | 0.930 | 16,5 % | 16,5 % |
-| 15 | 1156 / 609 | 0.814 | 11,8 % | 11,8 % |
-| 16 | 816 / 295 | 0.907 | 23,5 % | 23,5 % |
-| 17 | 662 / 637 | 0.797 | 2,4 % | 2,4 % |
-| 18 | 1177 / 297 | 0.925 | 16,5 % | 16,5 % |
-| 19 | 1127 / 589 | 0.818 | 14,1 % | 14,1 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 665 / 296 | bisher | 0.837 | 100,0 % | 100,0 % |
+| 1 | 724 / 609 | bisher | 0.812 | 84,7 % | 84,7 % |
+| 2 | 1251 / 342 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 3 | 1406 / 629 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 4 | 840 / 565 | Ersatz für 701 / 326 (276 px) | 0.903 | 84,7 % | 84,7 % |
+| 5 | 719 / 662 | bisher | 0.921 | 100,0 % | 100,0 % |
+| 6 | 1272 / 294 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 7 | 1126 / 647 | bisher | 0.833 | 100,0 % | 100,0 % |
+| 8 | 901 / 564 | Ersatz für 674 / 360 (305 px) | 0.948 | 89,4 % | 89,4 % |
+| 9 | 562 / 676 | bisher | 0.906 | 83,5 % | 83,5 % |
+| 10 | 1335 / 302 | bisher | 0.858 | 98,8 % | 98,8 % |
+| 11 | 1400 / 582 | bisher | 0.835 | 100,0 % | 100,0 % |
+| 12 | 542 / 390 | bisher | 0.798 | 69,4 % | 69,4 % |
+| 13 | 644 / 598 | bisher | 0.815 | 85,9 % | 85,9 % |
+| 14 | 1304 / 299 | bisher | 0.930 | 100,0 % | 100,0 % |
+| 15 | 1156 / 609 | bisher | 0.814 | 85,9 % | 85,9 % |
+| 16 | 900 / 623 | Ersatz für 615 / 335 (405 px) | 0.787 | 58,8 % | 58,8 % |
+| 17 | 662 / 637 | bisher | 0.797 | 55,3 % | 55,3 % |
+| 18 | 1177 / 297 | bisher | 0.925 | 100,0 % | 100,0 % |
+| 19 | 1127 / 589 | bisher | 0.818 | 92,9 % | 92,9 % |
 
-**`live-20261030T082502Z/run-01`** (85 Bilder, 77 Holdout):
+**`live-20261030T082502Z/run-01`** (85 Bilder, 77 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 672 / 319 | 0.911 | 100,0 % | 100,0 % |
-| 1 | 675 / 602 | 0.898 | 100,0 % | 100,0 % |
-| 2 | 1370 / 296 | 0.985 | 100,0 % | 100,0 % |
-| 3 | 1206 / 669 | 0.982 | 100,0 % | 100,0 % |
-| 4 | 754 / 298 | 0.936 | 100,0 % | 100,0 % |
-| 5 | 712 / 599 | 0.870 | 100,0 % | 100,0 % |
-| 6 | 1204 / 378 | 0.959 | 100,0 % | 100,0 % |
-| 7 | 1155 / 670 | 0.976 | 100,0 % | 100,0 % |
-| 8 | 561 / 298 | 0.917 | 100,0 % | 100,0 % |
-| 9 | 865 / 618 | 0.946 | 100,0 % | 100,0 % |
-| 10 | 1239 / 358 | 0.959 | 100,0 % | 100,0 % |
-| 11 | 1240 / 667 | 0.981 | 100,0 % | 100,0 % |
-| 12 | 668 / 384 | 0.904 | 100,0 % | 100,0 % |
-| 13 | 946 / 599 | 0.955 | 100,0 % | 100,0 % |
-| 14 | 1304 / 294 | 0.978 | 100,0 % | 100,0 % |
-| 15 | 1294 / 666 | 0.973 | 100,0 % | 100,0 % |
-| 16 | 726 / 329 | 0.898 | 100,0 % | 100,0 % |
-| 17 | 802 / 613 | 0.932 | 100,0 % | 100,0 % |
-| 18 | 1282 / 349 | 0.960 | 100,0 % | 100,0 % |
-| 19 | 1209 / 581 | 0.952 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 672 / 319 | bisher | 0.911 | 100,0 % | 100,0 % |
+| 1 | 675 / 602 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 2 | 1370 / 296 | bisher | 0.985 | 100,0 % | 100,0 % |
+| 3 | 1206 / 669 | bisher | 0.982 | 100,0 % | 100,0 % |
+| 4 | 754 / 298 | bisher | 0.936 | 100,0 % | 100,0 % |
+| 5 | 712 / 599 | bisher | 0.870 | 100,0 % | 100,0 % |
+| 6 | 1204 / 378 | bisher | 0.959 | 100,0 % | 100,0 % |
+| 7 | 1155 / 670 | bisher | 0.976 | 100,0 % | 100,0 % |
+| 8 | 561 / 298 | bisher | 0.917 | 100,0 % | 100,0 % |
+| 9 | 865 / 618 | bisher | 0.946 | 100,0 % | 100,0 % |
+| 10 | 1239 / 358 | bisher | 0.959 | 100,0 % | 100,0 % |
+| 11 | 1240 / 667 | bisher | 0.981 | 100,0 % | 100,0 % |
+| 12 | 668 / 384 | bisher | 0.904 | 100,0 % | 100,0 % |
+| 13 | 946 / 599 | bisher | 0.955 | 100,0 % | 100,0 % |
+| 14 | 1304 / 294 | bisher | 0.978 | 100,0 % | 100,0 % |
+| 15 | 1294 / 666 | bisher | 0.973 | 100,0 % | 100,0 % |
+| 16 | 726 / 329 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 17 | 802 / 613 | bisher | 0.932 | 100,0 % | 100,0 % |
+| 18 | 1282 / 349 | bisher | 0.960 | 100,0 % | 100,0 % |
+| 19 | 1209 / 581 | bisher | 0.952 | 100,0 % | 100,0 % |
 
-**`live-20261030T113427Z/run-01`** (141 Bilder, 133 Holdout):
+**`live-20261030T113427Z/run-01`** (141 Bilder, 133 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 721 / 299 | 0.794 | 47,5 % | 44,4 % |
-| 1 | 735 / 590 | 0.776 | 39,0 % | 35,3 % |
-| 2 | 1369 / 296 | 0.929 | 48,2 % | 45,1 % |
-| 3 | 1428 / 578 | 0.840 | 47,5 % | 44,4 % |
-| 4 | 754 / 298 | 0.830 | 47,5 % | 44,4 % |
-| 5 | 591 / 680 | 0.819 | 47,5 % | 44,4 % |
-| 6 | 1254 / 368 | 0.800 | 47,5 % | 44,4 % |
-| 7 | 1214 / 598 | 0.819 | 47,5 % | 44,4 % |
-| 8 | 561 / 298 | 0.811 | 47,5 % | 44,4 % |
-| 9 | 746 / 617 | 0.810 | 46,8 % | 43,6 % |
-| 10 | 1304 / 295 | 0.891 | 47,5 % | 44,4 % |
-| 11 | 1178 / 590 | 0.832 | 47,5 % | 44,4 % |
-| 12 | 464 / 417 | 0.811 | 46,8 % | 43,6 % |
-| 13 | 748 / 663 | 0.864 | 47,5 % | 44,4 % |
-| 14 | 1249 / 294 | 0.843 | 47,5 % | 44,4 % |
-| 15 | 1289 / 661 | 0.926 | 47,5 % | 44,4 % |
-| 16 | 880 / 295 | 0.821 | 47,5 % | 44,4 % |
-| 17 | 504 / 658 | 0.854 | 47,5 % | 44,4 % |
-| 18 | 1315 / 357 | 0.802 | 47,5 % | 44,4 % |
-| 19 | 1161 / 639 | 0.793 | 47,5 % | 44,4 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 721 / 299 | bisher | 0.794 | 97,9 % | 97,7 % |
+| 1 | 833 / 660 | Ersatz für 697 / 625 (140 px) | 0.848 | 98,6 % | 98,5 % |
+| 2 | 1369 / 296 | bisher | 0.929 | 98,6 % | 98,5 % |
+| 3 | 1428 / 578 | bisher | 0.840 | 91,5 % | 91,0 % |
+| 4 | 754 / 298 | bisher | 0.830 | 98,6 % | 98,5 % |
+| 5 | 735 / 590 | bisher | 0.776 | 61,0 % | 58,6 % |
+| 6 | 1254 / 368 | bisher | 0.800 | 75,9 % | 74,4 % |
+| 7 | 1214 / 598 | bisher | 0.819 | 87,2 % | 86,5 % |
+| 8 | 931 / 295 | Ersatz für 672 / 319 (260 px) | 0.844 | 98,6 % | 98,5 % |
+| 9 | 591 / 680 | bisher | 0.819 | 98,6 % | 98,5 % |
+| 10 | 1304 / 295 | bisher | 0.891 | 98,6 % | 98,5 % |
+| 11 | 1178 / 590 | bisher | 0.832 | 85,8 % | 85,0 % |
+| 12 | 981 / 293 | Ersatz für 726 / 329 (258 px) | 0.813 | 97,9 % | 97,7 % |
+| 13 | 746 / 617 | bisher | 0.810 | 91,5 % | 91,0 % |
+| 14 | 1249 / 294 | bisher | 0.843 | 95,7 % | 95,5 % |
+| 15 | 1289 / 661 | bisher | 0.926 | 98,6 % | 98,5 % |
+| 16 | 561 / 298 | bisher | 0.811 | 74,5 % | 72,9 % |
+| 17 | 891 / 674 | Ersatz für 665 / 582 (244 px) | 0.890 | 98,6 % | 98,5 % |
+| 18 | 1315 / 357 | bisher | 0.802 | 97,9 % | 97,7 % |
+| 19 | 1161 / 639 | bisher | 0.793 | 68,1 % | 66,2 % |
 
-**`live-20261030T115636Z/run-01`** (210 Bilder, 202 Holdout):
+**`live-20261030T115636Z/run-01`** (210 Bilder, 202 Holdout, Konsistenzstufe 0.35):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 812 / 369 | 0.904 | 100,0 % | 100,0 % |
-| 1 | 915 / 736 | 0.941 | 100,0 % | 100,0 % |
-| 2 | 1294 / 388 | 0.885 | 100,0 % | 100,0 % |
-| 3 | 1485 / 659 | 0.895 | 100,0 % | 100,0 % |
-| 4 | 898 / 372 | 0.826 | 99,5 % | 99,5 % |
-| 5 | 859 / 742 | 0.933 | 100,0 % | 100,0 % |
-| 6 | 1412 / 400 | 0.791 | 97,6 % | 97,5 % |
-| 7 | 1396 / 713 | 0.861 | 100,0 % | 100,0 % |
-| 8 | 722 / 426 | 0.781 | 100,0 % | 100,0 % |
-| 9 | 830 / 741 | 0.942 | 100,0 % | 100,0 % |
-| 10 | 1473 / 406 | 0.848 | 100,0 % | 100,0 % |
-| 11 | 1283 / 640 | 0.800 | 95,2 % | 95,0 % |
-| 12 | 683 / 463 | 0.811 | 100,0 % | 100,0 % |
-| 13 | 860 / 654 | 0.785 | 86,2 % | 86,1 % |
-| 14 | 1330 / 401 | 0.776 | 98,6 % | 98,5 % |
-| 15 | 1431 / 647 | 0.778 | 99,0 % | 99,0 % |
-| 16 | 1019 / 384 | 0.795 | 66,2 % | 65,3 % |
-| 17 | 857 / 705 | 0.831 | 98,1 % | 98,0 % |
-| 18 | 1265 / 376 | 0.814 | 100,0 % | 100,0 % |
-| 19 | 1479 / 714 | 0.886 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 1154 / 381 | Ersatz für 813 / 409 (342 px) | 0.863 | 100,0 % | 100,0 % |
+| 1 | 915 / 736 | bisher | 0.941 | 100,0 % | 100,0 % |
+| 2 | 1265 / 376 | Ersatz für 1462 / 456 (213 px) | 0.814 | 100,0 % | 100,0 % |
+| 3 | 1485 / 659 | bisher | 0.895 | 100,0 % | 100,0 % |
+| 4 | 1216 / 388 | Ersatz für 883 / 466 (342 px) | 0.791 | 99,5 % | 99,5 % |
+| 5 | 859 / 742 | bisher | 0.933 | 100,0 % | 100,0 % |
+| 6 | 1294 / 388 | bisher | 0.885 | 100,0 % | 100,0 % |
+| 7 | 1396 / 713 | bisher | 0.861 | 100,0 % | 100,0 % |
+| 8 | 952 / 735 | Ersatz für 840 / 426 (329 px) | 0.938 | 100,0 % | 100,0 % |
+| 9 | 830 / 741 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 10 | 1412 / 400 | bisher | 0.791 | 97,6 % | 97,5 % |
+| 11 | 1283 / 640 | bisher | 0.800 | 95,2 % | 95,0 % |
+| 12 | 980 / 733 | Ersatz für 838 / 459 (309 px) | 0.918 | 100,0 % | 100,0 % |
+| 13 | 860 / 654 | bisher | 0.785 | 86,2 % | 86,1 % |
+| 14 | 1220 / 662 | Ersatz für 1310 / 436 (243 px) | 0.776 | 92,9 % | 92,6 % |
+| 15 | 1431 / 647 | bisher | 0.778 | 99,0 % | 99,0 % |
+| 16 | 1026 / 725 | Ersatz für 866 / 379 (381 px) | 0.884 | 100,0 % | 100,0 % |
+| 17 | 857 / 705 | bisher | 0.831 | 98,1 % | 98,0 % |
+| 18 | 1135 / 736 | Ersatz für 1360 / 444 (369 px) | 0.811 | 96,2 % | 96,0 % |
 
-**`live-20261030T133635Z/run-01`** (210 Bilder, 202 Holdout):
+**`live-20261030T133635Z/run-01`** (210 Bilder, 202 Holdout, Konsistenzstufe 0.5):
 
-| neuer Index | Mittelpunkt x/y | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
-| --- | --- | --- | --- | --- |
-| 0 | 763 / 434 | 0.808 | 100,0 % | 100,0 % |
-| 1 | 915 / 737 | 0.951 | 100,0 % | 100,0 % |
-| 2 | 1291 / 391 | 0.780 | 100,0 % | 100,0 % |
-| 3 | 1485 / 658 | 0.881 | 100,0 % | 100,0 % |
-| 4 | 841 / 376 | 0.794 | 95,2 % | 95,0 % |
-| 5 | 822 / 737 | 0.902 | 100,0 % | 100,0 % |
-| 6 | 1465 / 426 | 0.796 | 100,0 % | 100,0 % |
-| 7 | 1457 / 635 | 0.900 | 100,0 % | 100,0 % |
-| 8 | 739 / 408 | 0.855 | 100,0 % | 100,0 % |
-| 9 | 858 / 742 | 0.936 | 100,0 % | 100,0 % |
-| 10 | 1460 / 390 | 0.851 | 100,0 % | 100,0 % |
-| 11 | 1321 / 707 | 0.841 | 100,0 % | 100,0 % |
-| 12 | 903 / 373 | 0.840 | 100,0 % | 100,0 % |
-| 13 | 916 / 659 | 0.820 | 96,2 % | 96,0 % |
-| 14 | 1320 / 385 | 0.855 | 100,0 % | 100,0 % |
-| 15 | 1289 / 710 | 0.829 | 100,0 % | 100,0 % |
-| 16 | 810 / 364 | 0.921 | 100,0 % | 100,0 % |
-| 17 | 699 / 678 | 0.898 | 100,0 % | 100,0 % |
-| 18 | 1379 / 391 | 0.832 | 100,0 % | 100,0 % |
-| 19 | 1397 / 714 | 0.855 | 100,0 % | 100,0 % |
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 1168 / 381 | Ersatz für 873 / 385 (295 px) | 0.830 | 100,0 % | 100,0 % |
+| 1 | 915 / 737 | bisher | 0.951 | 100,0 % | 100,0 % |
+| 2 | 1379 / 391 | Ersatz für 1256 / 422 (127 px) | 0.832 | 100,0 % | 100,0 % |
+| 3 | 1485 / 658 | bisher | 0.881 | 100,0 % | 100,0 % |
+| 4 | 901 / 694 | Ersatz für 829 / 411 (292 px) | 0.830 | 100,0 % | 100,0 % |
+| 5 | 822 / 737 | bisher | 0.902 | 100,0 % | 100,0 % |
+| 6 | 1460 / 390 | Ersatz für 1310 / 437 (157 px) | 0.851 | 100,0 % | 100,0 % |
+| 7 | 1457 / 635 | bisher | 0.900 | 100,0 % | 100,0 % |
+| 8 | 928 / 711 | Ersatz für 877 / 459 (257 px) | 0.801 | 74,3 % | 73,3 % |
+| 9 | 858 / 742 | bisher | 0.936 | 100,0 % | 100,0 % |
+| 10 | 1291 / 391 | bisher | 0.780 | 100,0 % | 100,0 % |
+| 11 | 1321 / 707 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 12 | 884 / 728 | Ersatz für 841 / 458 (273 px) | 0.896 | 100,0 % | 100,0 % |
+| 13 | 916 / 659 | bisher | 0.820 | 96,2 % | 96,0 % |
+| 14 | 1391 / 482 | Ersatz für 1377 / 429 (55 px) | 0.971 | 100,0 % | 100,0 % |
+| 15 | 1289 / 710 | bisher | 0.829 | 100,0 % | 100,0 % |
+| 16 | 1241 / 382 | Ersatz für 868 / 420 (375 px) | 0.855 | 100,0 % | 100,0 % |
+| 17 | 947 / 687 | Ersatz für 778 / 636 (177 px) | 0.798 | 29,0 % | 26,7 % |
+| 18 | 1465 / 426 | bisher | 0.796 | 100,0 % | 100,0 % |
+| 19 | 1397 / 714 | bisher | 0.855 | 100,0 % | 100,0 % |

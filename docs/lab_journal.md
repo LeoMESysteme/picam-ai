@@ -3163,3 +3163,46 @@ Der unabhängige Reviewfund im Offline-Auswerter (fehlendes verschobenes
 Fenster wurde fälschlich gezählt) ist testgetrieben behoben. API-Socket-
 Tests bleiben durch die Sandbox eingeschränkt; echte Regionswahl-
 Regressionen werden getrennt davon ausgewiesen.
+
+## 2026-10-31 — R13-25 Runde 3: Minimalprinzip und Lagekonsistenz {#r13-25-runde-3}
+
+Reine Offline-Arbeit im Worktree, Implementierung durch Claude anstelle von
+Codex. Keine Kamera, kein serieller Port, die Werkbank lief unverändert
+weiter. `var/` und `/mnt/ssd` wurden nur gelesen. Artefakte liegen unter
+`/tmp/claude-1000/r13-25-r3/`. Keine Commits, `docs/status.md` und TODO
+nicht angefasst.
+
+Zuerst geprüft: Runde 2 hat den ganzen Satz neu gewählt. Probefeste Bereiche
+blieben als Menge, aber mit anderem Index, und jeder Ersatz war der
+nächststärkere Kandidat seines Quadranten.
+
+Die zehn `lcd_rand_fehlt`-Verluste in `113238` sind keine Maßstabsfrage. Der
+neue Satz verschiebt das Quad um 0,04–0,14 px (Ecke links oben höher,
++0,003…+0,013°). Die Randoffsets bleiben weit unter der Toleranz. Gekippt ist
+jeweils ein schwacher Randpunkt der oberen LCD-Kante: Seine diskret
+abgetastete Stufe liegt am 50-%-Schwellwert, 57 gegen 56. Die Seite steht schon
+mit dem alten Satz auf 15/18 (Grenze 14,4).
+
+Die Bewegungsverluste kamen nicht aus Suchfenster oder Bildrand, sondern aus
+der Residuengrenze 0,65 px bzw. RMS 0,35 px. Ein reiner Nahersatz brachte
+zusätzlich Bereiche mit systematischem Residuum von 1,1–1,3 px. Er verlor
+damit in `113238` 46 Bilder, also mehr als Runde 2.
+
+Lösung: Die bisherige Auswahl bleibt bestehen, ersetzt werden nur
+probefällige Bereiche. Ein Ersatz muss in 7 von 8 Einzelbildern am starren
+Konsens der bisherigen Bereiche liegen. Die Stufen sind die Laufgrenzen
+0,35/0,50/0,65 px; erst ohne erfüllbare Stufe wird ohne Lageprüfung ersetzt,
+mit WARNUNG. Varianten mit Mediankonsens, fester Grenze, Lageprüfung auch der
+alten Bereiche, Rückfall nach Stärke oder ganz ohne Rückfall wurden auf allen
+1.492 Bildern gemessen und verworfen.
+
+Ergebnis: Hauptfall 210/210. Pflichtbestand 738→861 Tracks, 1 verloren
+(`121101/0034`, Rückfallstufe). Alle Bilder 978→1.214, 4 verloren, davon drei
+Grenzbilder in `113238`. 0/933 Fehllesungen. Sweep: 0 falsche Quads, aber
+22 verlorene synthetische Tracks in `121101`. Mehrarbeit bei der Einrichtung
+109–284 ms Host-Zeit, gemessen bei laufender Werkbank. Die Kalibrierung ist im
+Hauptfall schlechter als in Runde 2: Die schwächste Region ist nur zu 29 %
+nutzbar. **Nullverlust nicht erreicht, keine Freigabe.**
+
+Zahlen, Tabellen und Reproduktion:
+[VALIDATION R13-25 Runde 3](VALIDATION.md#r13-25-runde-3).

@@ -5,6 +5,29 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-31: R13-25 Runde 3, Minimalprinzip für Rahmenbereiche. Runde 2
+  wählte den Satz neu. Ihr großer Austausch verschob die Lage um 0,04–0,14 px
+  und kippte damit Grenzbilder der LCD-Randprüfung (`113238`). Er brachte
+  außerdem Ersatzbereiche mit systematischem Residuum ein, die im Lauf
+  RANSAC-Inlier sind und an der Residuengrenze scheitern.
+  * Neu bleibt die bisherige Auswahl bestehen. Probefeste Bereiche behalten
+    Ort und Index, nur probefällige werden ersetzt: bevorzugt auf denselben
+    Achsenseiten und nah am Ersetzten.
+  * Ein Ersatz muss lagekonsistent sein: in 7 von 8 Einzelbildern nahe am
+    starren Konsens der bisherigen Bereiche. Die Stufen sind die
+    unveränderten Laufgrenzen 0,35/0,50/0,65 px, es gilt die strengste
+    Stufe mit erfüllter Ausfallreserve.
+  * Reicht keine Stufe, wird ohne Lageprüfung ersetzt und `nachfuehrung`
+    meldet WARNUNG mit Handlungshinweis.
+  * Laufgrenzen, Tracker und Randprüfung sind unverändert.
+
+  Ergebnis: Hauptfall 102→210 Tracks, Pflichtbestand 738→861 mit 1 statt 3
+  verlorenen, alle 1.492 Bilder 978→1.214 mit 4 statt 13 verlorenen,
+  0 Fehllesungen. Sweep: 0 falsche Quads, aber 22 verlorene synthetische
+  Tracks in `121101` (Rückfallstufe). **Nullverlust weiter nicht erreicht**,
+  keine Freigabe. Zwei Regressionsfälle bleiben rot.
+  [Ursachen, Tabellen, Kalibrierung](docs/VALIDATION.md#r13-25-runde-3).
+
 * 2026-10-30: R13-25-Reviewkorrektur: Neue Rahmenbereiche werden in den
   acht ungemittelten Aufnahmen des Stabilitätsstapels geprüft. Mindestens
   sieben brauchen Peak ≥0,775 (Laufschwelle 0,75 plus Reserve 0,025),

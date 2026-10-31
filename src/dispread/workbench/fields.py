@@ -48,6 +48,9 @@ REASONS = {
     "zweitbild_suchrand": "Rahmenbereich im Zweitbild am Rand des Suchbereichs",
     "zweitbild_am_bildrand": "Rahmenbereich im Zweitbild zu nah am Bildrand",
     "zweitbild_lage_abweichend": "Rahmenbereich im Zweitbild an anderer Position wiedergefunden",
+    "rahmenbereiche_ersatz_ohne_lagekonsistenz": (
+        "Ersatz-Rahmenbereiche ohne belegte Lagekonsistenz in den Einzelbildern; "
+        "Aufbau ruhig halten, mehr Licht auf den Rahmen geben oder anderen Blickwinkel waehlen und neu einrichten"),
     "rahmenbereiche_zweitbild_fehlt": "rahmenbereiche ohne unabhaengiges Zweitbild; neu einrichten",
     "rahmenbereiche_einzelbilder_fehlen": "rahmenbereiche ohne ausreichende Einzelbilder; neu einrichten",
     "zu_wenig_rahmenmerkmale": "zu wenige Rahmenmerkmale wiedergefunden",

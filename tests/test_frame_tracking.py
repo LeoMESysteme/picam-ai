@@ -4,6 +4,7 @@ import importlib.util
 import itertools
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from statistics import median
 from time import perf_counter
@@ -1981,6 +1982,8 @@ def test_r25_stability_rejections_exclude_candidates_failing_motion_gate(scene, 
     ('live-20261028T110248Z', '0012.png', [(0, 0), (0, 0), (1, 1), (0, 1), (0, 1), (2, 0), (3, 0), (2, 0)]),
     ('live-20261028T110248Z', '0179.png', [(0, 0), (0, 0), (1, 1), (0, 1), (0, 1), (2, 0), (3, 0), (2, 0)]),
     ('live-20261028T113238Z', '0098.png', [(0, 0)]*8),
+    # R13-25 Runde 3: offen, obere LCD-Kante steht mit 15/18 an der Grenze.
+    ('live-20261028T113238Z', '0163.png', [(0, 0)]*8),
     ('live-20261028T121101Z', '0034.png', [(0, 0), (0, 0), (0, 1), (0, 1), (0, 1), (0, 1), (14, -5), (14, -5)]),
 ])
 def test_r25_single_frame_reserve_keeps_control_track(name, frame_name, offsets):
@@ -1996,6 +1999,114 @@ def test_r25_single_frame_reserve_keeps_control_track(name, frame_name, offsets)
     proposal = propose_regions(reference, profile['quad'], stability_images=samples)
     tracker = FrameTracker(reference, profile['quad'], proposal)
     assert tracker.update(cv2.imread(str(root / 'run-01/diagnose' / frame_name))).quad is not None
+
+
+def _r25_sides(proposal, quad, centres):
+    from dispread.live import frame_tracking as ft
+
+    normalised = ft._normalise_quad(quad)
+    local = (np.asarray(centres, float).reshape(-1, 2) - normalised.mean(axis=0)) @ ft._axes(normalised).T
+    limits = np.asarray(proposal.metrics['proposal_spread_limits_px'])
+    return np.column_stack((local <= -limits[0], local >= limits[1]))
+
+
+def test_r25_probe_keeps_passing_regions_in_place_and_replaces_nearby(scene):
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, original, _ = scene
+    index = 5
+    x, y = original.regions[index].centre
+    frames = []
+    for i in range(8):
+        frame = reference.copy()
+        noise = np.random.default_rng(330+i).normal(0, 90, frame[y-7:y+8, x-7:x+8].shape)
+        frame[y-7:y+8, x-7:x+8] = np.clip(frame[y-7:y+8, x-7:x+8].astype(float) + noise, 0, 255).astype(np.uint8)
+        frames.append(frame)
+    proposal = propose_regions(reference, quad, config, stability_images=frames)
+    # Minimalprinzip: bestandene Bereiche bleiben exakt an Ort und Index.
+    assert [r for i, r in enumerate(proposal.regions) if i != index] == \
+        [r for i, r in enumerate(original.regions) if i != index]
+    replacement = proposal.regions[index]
+    assert replacement not in original.regions
+    # Ersatz: naechster probefester Kandidat mit denselben Rahmenseiten.
+    pool = propose_regions(reference, quad, replace(config, max_regions=config.max_candidates)).regions
+    gray, samples = ft._gray(reference), [ft._gray(frame) for frame in frames]
+    wanted = _r25_sides(proposal, quad, [(x, y)])[0]
+    eligible = [r.centre for r in pool if r not in original.regions
+                and np.all(_r25_sides(proposal, quad, [r.centre])[0] >= wanted)
+                and ft._stability_probe(gray, samples, r.centre, config)[1] is None]
+    nearest = min(eligible, key=lambda c: (np.hypot(c[0]-x, c[1]-y), c[1], c[0]))
+    assert replacement.centre == nearest
+    replaced = proposal.metrics['stability_replacements']
+    assert replaced == [{'index': index, 'old_centre': [x, y], 'new_centre': list(nearest),
+                         'distance_px': pytest.approx(float(np.hypot(nearest[0]-x, nearest[1]-y)))}]
+    # Strengste Stufe der Lagekonsistenz (Lauf-RMS-Grenze) genuegt hier.
+    assert proposal.metrics['stability_consistency_px'] == config.max_inlier_rms_px
+
+
+def _r25_noisy_frames(reference, centre, seed):
+    x, y = centre
+    frames = []
+    for i in range(8):
+        frame = reference.copy()
+        noise = np.random.default_rng(seed+i).normal(0, 90, frame[y-7:y+8, x-7:x+8].shape)
+        frame[y-7:y+8, x-7:x+8] = np.clip(frame[y-7:y+8, x-7:x+8].astype(float) + noise, 0, 255).astype(np.uint8)
+        frames.append(frame)
+    return frames
+
+
+def test_r25_replacement_with_systematic_offset_is_skipped(scene):
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, original, _ = scene
+    index = 5
+    x, y = original.regions[index].centre
+    frames = _r25_noisy_frames(reference, (x, y), 330)
+    first = propose_regions(reference, quad, config, stability_images=frames).regions[index]
+    # Der naechste Ersatz liegt in allen Einzelbildern 1 px versetzt: Probe
+    # (<= 2 px) besteht, im Lauf waere er aber Inlier mit Residuum ~1 px.
+    fx, fy = first.centre
+    shifted_frames = []
+    for frame in frames:
+        moved = cv2.warpAffine(frame, np.float32([[1, 0, 1], [0, 1, 0]]), frame.shape[1::-1])
+        frame = frame.copy()
+        frame[fy-20:fy+21, fx-20:fx+21] = moved[fy-20:fy+21, fx-20:fx+21]
+        shifted_frames.append(frame)
+    gray, samples = ft._gray(reference), [ft._gray(frame) for frame in shifted_frames]
+    assert ft._stability_probe(gray, samples, first.centre, config)[1] is None
+    proposal = propose_regions(reference, quad, config, stability_images=shifted_frames)
+    assert proposal.regions[index] != first
+    assert [r for i, r in enumerate(proposal.regions) if i != index] == \
+        [r for i, r in enumerate(original.regions) if i != index]
+    assert proposal.metrics['stability_consistency_px'] == config.max_inlier_rms_px
+
+
+def test_r25_consistency_relaxes_only_until_reserve_is_met(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, original, _ = scene
+    frames = _r25_noisy_frames(reference, original.regions[5].centre, 330)
+    calls = []
+
+    def reserve(centres, *args):
+        calls.append(len(centres))
+        return len(calls) >= 3
+
+    monkeypatch.setattr(ft, '_reserve_ok', reserve)
+    proposal = propose_regions(reference, quad, config, stability_images=frames)
+    # Stufen: RMS-Grenze, Mitte, Einzelresiduum, zuletzt ohne Lagekonsistenz.
+    assert proposal.metrics['stability_consistency_px'] == config.max_inlier_residual_px
+    monkeypatch.setattr(ft, '_reserve_ok', lambda *args: False)
+    proposal = propose_regions(reference, quad, config, stability_images=frames)
+    assert proposal.metrics['stability_consistency_px'] is None
+
+
+def test_r25_probe_without_failures_keeps_unprobed_selection(scene):
+    reference, quad, config, original, _ = scene
+    proposal = propose_regions(reference, quad, config, stability_images=[reference.copy() for _ in range(8)])
+    assert proposal.regions == original.regions
+    assert proposal.metrics['stability_replacements'] == []
+    assert proposal.metrics['stability_consistency_px'] == config.max_inlier_rms_px
 
 
 def test_r25_raw_probe_uses_runtime_ambiguity_rule(scene, monkeypatch):

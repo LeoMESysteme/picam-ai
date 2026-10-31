@@ -135,8 +135,14 @@ Einzelbildern** der zeitlich getrennten Stabilitätsaufnahme gesucht.
 Mindestens **sieben von acht** müssen einen eindeutigen inneren Treffer mit
 Peak **≥0,775** (Laufschwelle 0,75 plus Einrichtungsreserve 0,025) liefern.
 Der Treffer darf im unbewegten Aufbau höchstens **2 Originalpixel** vom
-Sollort abweichen. Schwache, mehrdeutige oder versetzte Kandidaten werden
-durch andere Rahmenpunkte ersetzt. Die Prüfung nutzt dieselben acht
+Sollort abweichen. Die bisherige Auswahl bleibt dabei erhalten: Nur
+Bereiche, die diese Probe nicht bestehen, werden ersetzt, bevorzugt auf
+derselben Rahmenseite und nahe am Ersetzten. Ein Ersatz muss in den
+Einzelbildern außerdem **lagekonsistent** zu den übrigen Bereichen liegen,
+höchstens 0,35 px, ersatzweise 0,50 oder 0,65 px Abweichung, gemäß den
+Residuengrenzen des Laufs. Gelingt die Ausfallreserve nur mit Ersatz ohne
+diese Lageprüfung, meldet **Nachführung: WARNUNG**: Aufbau ruhig halten,
+mehr Licht oder anderen Blickwinkel wählen. Die Prüfung nutzt dieselben acht
 Aufnahmen, aus denen das zweite Standbild gemittelt wird; zusätzliche
 Aufnahmen oder Bilddateien entstehen dafür nicht. Das gemittelte Standbild
 allein belegt die Wiederfindbarkeit im verrauschten Laufbild nicht.
@@ -146,8 +152,8 @@ nicht aus, meldet **Nachführung: FEHLER** mit Grund und sperrt die Bestätigung
 und neu einrichten**. Die Person prüft und bestätigt weiterhin alle Bereiche;
 die Prüfung ist keine Garantie für spätere Beleuchtungsänderungen.
 Der Einzelbildfilter ist derzeit ein **nicht abgenommener Entwicklungskandidat**:
-Die Gegenläufe zeigen weiterhin verlorene Tracks und Fehlvorhersagen
-([Kalibrierung und Grenzen](../VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30)).
+Die Gegenläufe zeigen weiterhin vier verlorene Tracks und Fehlvorhersagen
+([Kalibrierung und Grenzen](../VALIDATION.md#r13-25-runde-3)).
 Auch bei frontalem Blick wird der dunkle Rahmen einbezogen, wenn seine Kontur plausibel erkannt wird. Für die Reserve müssen auf jeder Achsenseite genügend Bereiche deutlich außerhalb der Mittellinie liegen, auch nach dem Ausfall beliebiger zwei Bereiche; sonst neu ausrichten oder Bereiche ergänzen.
 Rahmenprofile von vor R13-11 müssen neu eingerichtet werden; der Laufstart lehnt ihre alte Prüfkonfiguration ab.
 Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
