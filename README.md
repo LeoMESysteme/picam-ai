@@ -7,7 +7,7 @@ Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
 * **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.
 * **Messpfad:** live gebaut über `dispread serve --port 8081` und `/live` (Einrichtung, namentliche Bestätigung, Messlauf, JSONL-Audit); real geprüft nur an GSV-2AS / Displaytech 161A, Raumlicht, mV/V — siehe [offene Grenzen](docs/status.md).
-* **GSVmulti:** UserDefined-Zahlenimport für Windows dokumentiert; Prototyp baubar, Live-Anbindung und Messfreigabe offen ([Bewertung](docs/GSVMULTI_PROTOCOL.md), [OQ-07](docs/open-questions.md#oq-07)).
+* **GSVmulti:** UserDefined-Zahlenimport dokumentiert; Formatter, Demo-Sender und opt-in Live-Ausgabe sind gebaut und nur mit pty geprüft. GSVmulti-Empfang und Messfreigabe sind offen ([Bewertung](docs/GSVMULTI_PROTOCOL.md), [OQ-07](docs/open-questions.md#oq-07)).
 
 </div>
 
