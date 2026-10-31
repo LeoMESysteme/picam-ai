@@ -370,7 +370,7 @@ async def serve(args):
         await web.TCPSite(runner, args.host, args.port, ssl_context=context).start()
         controller.start()
         try:
-            owner.start()
+            owner.start(reason="serverstart")
         except Exception as error:  # noqa: BLE001 - Server laeuft weiter, Seite zeigt den Fehler
             controller.log("error", f"Kamera: {error}")
         watcher = asyncio.create_task(watch())

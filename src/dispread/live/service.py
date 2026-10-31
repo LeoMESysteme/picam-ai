@@ -333,7 +333,7 @@ class LiveService:
     def start_camera(self) -> None:
         with self._operation_lock:
             try:
-                self._owner.start()
+                self._owner.start(reason="kamera_verbinden")
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
 
@@ -466,12 +466,12 @@ class LiveService:
             encoding="utf-8",
         )
         report("kamera")
-        self._owner.restart(lambda: self._source_for(settings))
+        self._owner.restart(lambda: self._source_for(settings), reason="einrichtung_regler")
         report("belichtung")
         self._setup_progress("Belichtung auf die Anzeige abstimmen")
 
         def apply_exposure(adjusted: CameraSettings) -> None:
-            self._owner.restart(lambda: self._source_for(adjusted))
+            self._owner.restart(lambda: self._source_for(adjusted), reason="einrichtung_belichtung")
 
         settings, exposure_adjust = live_setup.adjust_exposure(
             OwnerSetupCamera(self._owner), settings, apply=apply_exposure, info=self._setup_progress,
@@ -686,7 +686,7 @@ class LiveService:
                 )
             if camera is not None:
                 try:
-                    self._owner.restart(lambda: self._source_for(camera))
+                    self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
                 except RuntimeError as exc:
                     raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
             try:

@@ -278,6 +278,42 @@ def test_start_grace_before_first_frame_is_reset_on_restart(monkeypatch, restart
         owner.stop(timeout=1.0)
 
 
+def test_start_reason_and_first_frame_time_are_reported(caplog):
+    owner = CameraOwner(lambda: FakeSource([33_333_333], endless=True))
+    with caplog.at_level('WARNING', logger='dispread.live.camera'):
+        owner.restart(reason='einrichtung_belichtung')
+        assert owner.wait_newer(0, 1.0) is not None
+    try:
+        start = owner.status()['last_start']
+        assert start['reason'] == 'einrichtung_belichtung'
+        assert start['at_utc'].endswith('+00:00')
+        assert start['first_frame_s'] is not None and start['first_frame_s'] >= 0
+        messages = [record.getMessage() for record in caplog.records]
+        assert 'Kamerastart (einrichtung_belichtung)' in messages
+        assert any(m.startswith('Kamera: erstes Bild nach') and 'einrichtung_belichtung' in m for m in messages)
+    finally:
+        owner.stop()
+
+
+def test_stall_log_names_last_start(monkeypatch, caplog):
+    now = [100.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: now[0])
+    source = BlockingSource()
+    owner = CameraOwner(lambda: source)
+    with caplog.at_level('WARNING', logger='dispread.live.camera'):
+        owner.start(reason='laufstart')
+        try:
+            assert source.reading.wait(1.0)
+            now[0] += 5.01
+            assert owner.status()['stalled'] is True
+            assert owner.status()['last_start']['first_frame_s'] is None
+        finally:
+            source.release.set()
+            owner.stop(timeout=1.0)
+    assert any('Streamstillstand' in record.getMessage() and 'laufstart' in record.getMessage()
+               for record in caplog.records)
+
+
 def test_late_frame_cannot_hide_unpolled_stall(monkeypatch):
     now = [100.0]
     monkeypatch.setattr(time, 'monotonic', lambda: now[0])

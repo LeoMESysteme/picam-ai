@@ -5,6 +5,20 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-31: Kamerastarts werden protokolliert.
+  * **Anlass:** Am 30.10. um 14:34 meldete die Werkbank „Streamstillstand:
+    kein Bild seit 5.0 s“ nach einem Kamera-Neustart. Welcher Neustart das
+    war und wie lange die Kamera sonst bis zum ersten Bild braucht, war
+    nicht nachvollziehbar.
+  * **Neu:** `CameraOwner.start`/`restart` nehmen einen Anlass entgegen:
+    Serverstart, Kamera verbinden, Einrichtungsregler, Belichtung oder
+    Laufstart. Jeder Start, das erste Bild mit Anlaufzeit, ein Stillstand
+    mit dem Anlass des letzten Starts und ein abgelehnter Neustart gehen
+    als Warnung ins Journal. `camera.last_start` im Status führt Anlass,
+    Zeit (UTC) und `first_frame_s`.
+  * **Folge:** Die Anlauffrist von 5 s lässt sich künftig an gemessenen
+    Werten festlegen. Am Verhalten ändert sich nichts.
+
 * 2026-10-30: Session-Explorer-Tab neu gegliedert, nachdem eine
   Impeccable-Kritik 21/40 ergab (unverbundene Abschnitte, keine Antwort
   oben, dreifache Live-Ansage, unvollständige Fassung ohne JavaScript).
