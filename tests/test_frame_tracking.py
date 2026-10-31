@@ -833,6 +833,89 @@ def test_config_json_rejects_bool_as_integer():
         FrameTrackingConfig.from_dict(data)
 
 
+def test_r25_noisy_second_image_replaces_weak_region(scene):
+    reference, quad, config, original, _ = scene
+    # A weak edge can look unique in its own reference yet fail independently.
+    weak = min(original.regions, key=lambda region: np.std(
+        reference[region.centre[1]-7:region.centre[1]+8, region.centre[0]-7:region.centre[0]+8]))
+    x, y = weak.centre
+    second = reference.copy()
+    noise = np.random.default_rng(25).normal(0, 60, second[y-20:y+21, x-20:x+21].shape)
+    second[y-20:y+21, x-20:x+21] = np.clip(
+        second[y-20:y+21, x-20:x+21].astype(float) + noise, 0, 255).astype(np.uint8)
+    before = second.copy()
+    proposal = propose_regions(reference, quad, config, stability_images=[second]*8)
+    assert weak not in proposal.regions
+    assert len(proposal.regions) == config.max_regions
+    assert set(proposal.regions) - set(original.regions)
+    assert proposal.metrics['stability_rejected_candidates'] > 0
+    assert len(proposal.metrics['stability_peaks']) == len(proposal.regions)
+    assert min(proposal.metrics['stability_peaks']) >= config.min_peak + config.proposal_stability_peak_margin
+    np.testing.assert_array_equal(second, before)
+
+
+def test_r25_identical_raw_samples_do_not_need_extra_pixel_phases(scene):
+    reference, quad, config, original, _ = scene
+    proposal = propose_regions(reference, quad, config, stability_images=[reference.copy() for _ in range(8)])
+    assert proposal.metrics['stability_rejected_candidates'] == 0
+    assert proposal.metrics['stability_probe_count'] == 8
+    assert proposal.regions == original.regions
+
+
+def test_r25_manual_rejects_ambiguous_second_image(scene):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    reference, quad, config, original, _ = scene
+    x, y = original.regions[0].centre
+    patch = reference[y-7:y+8, x-7:x+8]
+    second = reference.copy()
+    for dx in (-9, 9):
+        second[y-7:y+8, x+dx-7:x+dx+8] = patch
+    proposal = proposal_from_regions(reference, quad, [], config, kept_centres=[(x, y)], stability_images=[second]*8)
+    assert not proposal.regions
+    assert proposal.metrics['centre_results'][0]['reason'] == 'zweitbild_mehrdeutig'
+
+
+@pytest.mark.parametrize('second', [np.zeros((10, 10), np.uint8), np.zeros((10, 10), float)])
+def test_r25_second_image_rejects_wrong_shape_or_dtype(scene, second):
+    reference, quad, config, _, _ = scene
+    with pytest.raises(ValueError):
+        propose_regions(reference, quad, config, stability_image=second)
+
+
+def test_r25_old_saved_proposal_loads_without_reselection(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, proposal, tracker = scene
+    saved = proposal.to_dict()
+    saved['config'].pop('proposal_stability_peak_margin', None)
+    saved_regions = saved['regions'].copy()
+    monkeypatch.setattr(ft, 'propose_regions', lambda *a, **kw: pytest.fail('saved proposal recomputed'))
+    restored = ft.RegionProposal.from_dict(saved)
+    replay = FrameTracker(reference, quad, restored, FrameTrackingConfig.from_dict(saved['config']))
+    assert replay.update(reference) == tracker.update(reference)
+    assert restored.to_dict()['regions'] == saved_regions
+
+
+@pytest.mark.parametrize('margin', [-0.01, 0.0, 1.01, float('nan')])
+def test_r25_invalid_stability_margin_rejected(margin):
+    with pytest.raises(ValueError):
+        FrameTrackingConfig(proposal_stability_peak_margin=margin)
+
+
+
+def test_r25_frontal_keeps_previously_trackable_frame():
+    root = local_recording('live/live-20261030T113427Z')
+    profile = json.loads((root / 'profile.json').read_text())
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    samples = [cv2.imread(str(path)) for path in sorted((root / 'run-01/diagnose').glob('*.png'))[:8]]
+    proposal = propose_regions(reference, profile['quad'], stability_images=samples)
+    tracker = FrameTracker(reference, profile['quad'], proposal)
+    # R13-25: merely filtering while retaining self-corner-strength order
+    # lost this formerly accepted frame through inconsistent frame matches.
+    assert tracker.update(cv2.imread(str(root / 'run-01/diagnose/0054.png'))).quad is not None
+
+
 def test_r11_proposal_preserves_frozen_lcd_model():
     saved = json.loads((FIXTURES / 'r13-r11-fixed-proposal.json').read_text())['proposal']
     image = cv2.imread(str(FIXTURES / 'reference.jpg'))
@@ -1826,3 +1909,102 @@ def test_r19c_gemeinsam_falsche_aehnlichkeit_dokumentierte_grenze(scene, monkeyp
     result = injected_update(matrix)
     assert result.quad is not None
     assert np.linalg.norm(np.asarray(result.quad) - quad, axis=1).max() > limit
+
+
+def test_r25_single_frame_peak_rejects_displaced_unique_match(scene):
+    from dispread.live.frame_tracking import _gray, _stability_peak
+
+    reference, _, config, original, _ = scene
+    shifted = cv2.warpAffine(reference, np.float32([[1, 0, 4], [0, 1, 0]]), reference.shape[1::-1])
+    peak, reason = _stability_peak(_gray(reference), _gray(shifted), original.regions[0].centre, config)
+    assert peak > 0.95
+    assert reason == 'zweitbild_lage_abweichend'
+
+
+def test_r25_raw_samples_reject_region_hidden_by_mean(scene):
+    reference, quad, config, original, _ = scene
+    weak = original.regions[0]
+    x, y = weak.centre
+    frames = []
+    for i in range(8):
+        frame = reference.copy()
+        noise = np.random.default_rng(260+i).normal(0, 90, frame[y-20:y+21, x-20:x+21].shape)
+        frame[y-20:y+21, x-20:x+21] = np.clip(
+            frame[y-20:y+21, x-20:x+21].astype(float) + noise, 0, 255).astype(np.uint8)
+        frames.append(frame)
+    proposal = propose_regions(reference, quad, config, stability_images=frames)
+    assert weak not in proposal.regions
+    assert proposal.metrics['stability_probe_count'] == 8
+    assert proposal.metrics['stability_rejected_candidates'] > 0
+    assert proposal.ok
+
+
+def test_r25_raw_probe_requires_seven_of_eight_samples(scene):
+    from dispread.live.frame_tracking import proposal_from_regions
+
+    reference, quad, config, original, _ = scene
+    centre = original.regions[0].centre
+    blank = np.full_like(reference, 120)
+    for failures, accepted in ((1, True), (2, False)):
+        proposal = proposal_from_regions(reference, quad, [], config, kept_centres=[centre],
+                                         stability_images=[reference] * (8-failures) + [blank] * failures)
+        assert bool(proposal.regions) is accepted
+        assert proposal.metrics['stability_required_count'] == 7
+
+
+def test_r25_averaged_second_alone_cannot_prove_single_frame_reserve(scene):
+    reference, quad, config, _, _ = scene
+    proposal = propose_regions(reference, quad, config, stability_image=reference.copy())
+    assert not proposal.ok
+    assert 'rahmenbereiche_einzelbilder_fehlen' in proposal.reasons
+
+
+def test_r25_stability_rejections_exclude_candidates_failing_motion_gate(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, _, _ = scene
+    geometry = ft._geometry
+
+    def outside_fixed(*args):
+        zone, outer, mask, metrics, fixed = geometry(*args)
+        return zone, outer, mask, metrics, np.zeros_like(fixed)
+
+    monkeypatch.setattr(ft, '_geometry', outside_fixed)
+    monkeypatch.setattr(ft, '_bezel_motion_ok', lambda *args: False)
+    # Every candidate already fails the motion gate; none is a stability rejection.
+    proposal = propose_regions(reference, quad, config, stability_images=[np.full_like(reference, 120)] * 8)
+    assert proposal.metrics['stability_rejected_candidates'] == 0
+    assert 'rahmenbereiche_zweitbild_instabil' not in proposal.reasons
+
+
+@pytest.mark.parametrize('name,frame_name,offsets', [
+    ('live-20261028T110248Z', '0012.png', [(0, 0), (0, 0), (1, 1), (0, 1), (0, 1), (2, 0), (3, 0), (2, 0)]),
+    ('live-20261028T110248Z', '0179.png', [(0, 0), (0, 0), (1, 1), (0, 1), (0, 1), (2, 0), (3, 0), (2, 0)]),
+    ('live-20261028T113238Z', '0098.png', [(0, 0)]*8),
+    ('live-20261028T121101Z', '0034.png', [(0, 0), (0, 0), (0, 1), (0, 1), (0, 1), (0, 1), (14, -5), (14, -5)]),
+])
+def test_r25_single_frame_reserve_keeps_control_track(name, frame_name, offsets):
+    root = local_recording(f'live/{name}')
+    profile = json.loads((root / 'profile.json').read_text())
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    samples = []
+    # Historical live frames already moved. Integer alignment preserves their noise.
+    for path, (dx, dy) in zip(sorted((root / 'run-01/diagnose').glob('*.png'))[:8], offsets, strict=True):
+        raw = cv2.imread(str(path))
+        samples.append(cv2.warpAffine(raw, np.float32([[1, 0, -dx], [0, 1, -dy]]),
+                                      raw.shape[1::-1], flags=cv2.INTER_NEAREST))
+    proposal = propose_regions(reference, profile['quad'], stability_images=samples)
+    tracker = FrameTracker(reference, profile['quad'], proposal)
+    assert tracker.update(cv2.imread(str(root / 'run-01/diagnose' / frame_name))).quad is not None
+
+
+def test_r25_raw_probe_uses_runtime_ambiguity_rule(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, _, config, original, _ = scene
+    response = np.zeros((25, 25), np.float32)
+    response[12, 12] = 0.90
+    response[12, 20] = 0.82  # Runtime ratio .911 passes; clean-reference rule is stricter.
+    monkeypatch.setattr(ft.cv2, 'matchTemplate', lambda *_args: response.copy())
+    _, reason = ft._stability_peak(ft._gray(reference), ft._gray(reference), original.regions[0].centre, config)
+    assert reason is None

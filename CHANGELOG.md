@@ -5,6 +5,24 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-30: R13-25-Reviewkorrektur: Neue Rahmenbereiche werden in den
+  acht ungemittelten Aufnahmen des Stabilitätsstapels geprüft. Mindestens
+  sieben brauchen Peak ≥0,775 (Laufschwelle 0,75 plus Reserve 0,025),
+  Lauf-Eindeutigkeit, ein inneres Maximum und höchstens 2 px Lageabweichung.
+  Die zusätzliche Halb-Pixel-Probe am Zweitbild entfällt. Ausfallreserve
+  zählt nur bestandene Regionen; die Probe folgt dem bestehenden Bewegungs-
+  und Band-Gate. Einzelbilder bleiben im RAM; `stability.png` wird einmal
+  geschrieben und danach nur geprüft/gehasht. Manuelle Neubewertung
+  verlangt dieselben Einzelbilder. Fehlende Belege ergeben FEHLER.
+  Die Einrichtungsreserve entfällt aus dem Laufstart-Defaultsvergleich;
+  abweichende Laufgrenzen bleiben abgelehnt. Neue Mittelpunktgründe sind
+  in beiden UI-Textpfaden übersetzt. Bestätigte Profile werden nicht neu
+  ausgewählt; der Laufcode bleibt unverändert. Hauptfall 102→210 Tracks;
+  **Nullverlust über alle Gegenläufe bisher nicht erreicht**, keine Freigabe.
+  Frühere Aussagen zur Rauschreserve aus Mittelbildern und zu angepassten
+  hohen Laufschwellen sind zurückgenommen.
+  [Kalibrierung, Regressionen und Grenzen](docs/VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30).
+
 * 2026-10-30: R13-24 behebt Trackingverlust bei kleiner scheinbarer
   Maßstabsänderung in Schrägsicht: Der zweite Ähnlichkeitsversuch darf
   auch bei Grobverschiebung unter 2 px und Offset (0,0) laufen.

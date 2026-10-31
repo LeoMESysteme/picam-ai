@@ -78,6 +78,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _run_start_tracking_config(config: dict) -> dict:
+    # Diese Marge bewertet nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
+    return {key: value for key, value in config.items() if key != "proposal_stability_peak_margin"}
+
+
 def build_live_pipeline(
     source: Any,
     profile_path: Path,
@@ -120,7 +125,7 @@ def build_live_pipeline(
     block = profile.live_tracking
     if isinstance(block, dict):
         try:
-            # Ausschliesslich neue Grobschaetzungsfelder ergaenzen; Profildatei bleibt unveraendert.
+            # Optionale Vorschlags-/Grobschaetzungsfelder ergaenzen; Profildatei bleibt unveraendert.
             # Eigener Import: der Vergleich unten nutzt das (in Tests ersetzbare)
             # Modulattribut FrameTrackingConfig als "aktuelle Defaults", das
             # Ergaenzen des gespeicherten Dicts dagegen immer die echte Klasse.
@@ -132,7 +137,8 @@ def build_live_pipeline(
     if block is not None:
         if (not isinstance(block, dict) or block.get("version") != 1 or block.get("method") != "rahmenbereiche"
                 or block.get("frame_sha256") != reference["sha256"]
-                or block.get("config") != FrameTrackingConfig().to_dict()):
+                or _run_start_tracking_config(block["config"])
+                != _run_start_tracking_config(FrameTrackingConfig().to_dict())):
             raise StartRefused("Rahmenbereiche oder Pruefversion passen nicht zum Profil - neu einrichten")
         try:
             locator = ConfirmedRegionLocator(image, profile.quad, block)

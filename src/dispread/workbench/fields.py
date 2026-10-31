@@ -40,6 +40,16 @@ REASONS = {
     "zu_wenig_rahmenbereiche": "zu wenige geeignete Rahmenbereiche",
     "rahmenbereiche_einseitig": "rahmenbereiche nicht ausreichend verteilt",
     "rahmenbereiche_ohne_reserve": "rahmenbereiche ohne Reserve fuer zwei Ausfaelle",
+    "rahmenbereiche_zweitbild_instabil": (
+        "rahmenbereiche im Zweitbild nicht stabil genug wiedergefunden; "
+        "mehr Licht auf den Rahmen geben oder anderen Blickwinkel waehlen und neu einrichten"),
+    "zweitbild_peak_zu_niedrig": "Rahmenbereich im Zweitbild nicht deutlich genug wiedergefunden",
+    "zweitbild_mehrdeutig": "Rahmenbereich im Zweitbild nicht eindeutig wiedergefunden",
+    "zweitbild_suchrand": "Rahmenbereich im Zweitbild am Rand des Suchbereichs",
+    "zweitbild_am_bildrand": "Rahmenbereich im Zweitbild zu nah am Bildrand",
+    "zweitbild_lage_abweichend": "Rahmenbereich im Zweitbild an anderer Position wiedergefunden",
+    "rahmenbereiche_zweitbild_fehlt": "rahmenbereiche ohne unabhaengiges Zweitbild; neu einrichten",
+    "rahmenbereiche_einzelbilder_fehlen": "rahmenbereiche ohne ausreichende Einzelbilder; neu einrichten",
     "zu_wenig_rahmenmerkmale": "zu wenige Rahmenmerkmale wiedergefunden",
     "rahmen_mehrdeutig": "rahmenmerkmale nicht eindeutig zugeordnet",
     "rahmen_unstimmig": "rahmenbewegungen passen nicht zusammen",

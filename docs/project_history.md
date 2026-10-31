@@ -2022,3 +2022,56 @@ Grobobergrenze und sämtliche Feinprüfungen bleiben unverändert.
 
 Nachweise und Grenzen: [R13-24-Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30)
 und [Laborjournal](lab_journal.md#r13-24-kleiner-versatz).
+
+## 2026-10-30 — R13-25: Wiederfindbarkeit bei der Einrichtung {#r13-25-einrichtung}
+
+Die Laufschwelle bleibt bei 0,75. Schwache Regionen im schrägen Aufbau
+`live-20261030T133635Z` werden bei der Einrichtung ersetzt; niedrigere
+Laufschwellen oder gelockerte Streuung würden die Nachweisqualität schwächen.
+
+**Reviewkorrektur:** Die erste Lösung mit gemitteltem Zweitbild und vier
+zusätzlichen Halb-Pixel-Proben war zu optimistisch. Eine gewählte Region
+überschritt in keinem der 210 Diagnosebilder die Laufschwelle. Die frühere
+Begründung, diese Probe weise ausreichende Rauschreserve nach, ist verworfen.
+Stattdessen bleiben die acht ungemittelten Bilder des ohnehin aufgenommenen
+Stabilitätsstapels im Speicher. Sieben von acht müssen Peak ≥0,775, die
+Lauf-Eindeutigkeit, ein inneres Maximum und höchstens 2 px Abstand zum
+Sollort bestehen. Die Auswahl zählt nur solche Regionen für Streuung und
+zwei Ausfälle je Rahmenseite. Die Lageprüfung verhindert, dass eine andere
+ähnliche Struktur als Wiederfindbarkeit am unbewegten Sollort zählt.
+Die zusätzliche Phasenprobe am Zweitbild entfällt; die bereits bestehende
+Bewegungsprobe für neue Fasenstruktur bleibt unverändert.
+
+Die Kalibrierung vergleicht Probe-Ersatzbilder und spätere Diagnosebilder
+getrennt. Historische Laufbilder sind bereits bewegt: Für den Ersatz der
+stationären Setup-Aufnahme wird ausschließlich ganzzahlig verschoben, ohne
+Mitteln oder interpoliertes Entrauschen. Der unveränderte Tracker erhält
+weiter die ursprünglichen Laufbilder. Bildabschnitte außerhalb des
+Such-/Bewegungsbereichs bleiben im Gesamtergebnis sichtbar. Reserve 0,025
+ist ein Entwicklungswert und keine garantierte Rauschobergrenze.
+
+Das Speichern zusätzlicher Einzelbilder wurde verworfen: nur die vorhandenen
+Mittelbilder und Kennzahlen bleiben auf Platte. Manuelle Neubewertung
+verwendet dieselben Einzelbilder im Speicher und kontrolliert die Datei-SHA
+des gemittelten Zweitbilds. Ohne Speicherbelege ist neu einzurichten. Das
+bestehende `stability.png` wird bei der Vorschlagsbindung geprüft und gehasht,
+nicht erneut geschrieben.
+
+Bestätigte Profile werden beim Start nicht neu ausgewählt. Nur das reine
+Einrichtungsfeld `proposal_stability_peak_margin` entfällt aus dem Vergleich
+mit aktuellen Laufdefaults; die gespeicherte Konfiguration und
+Vorschlagsbindung bleiben erhalten. Abweichende Laufgrenzen wie ein hohes
+`min_peak` bleiben abgelehnt. Die frühere Aussage zu solchen Altprofilen war
+falsch und ist korrigiert.
+
+Der aktuelle Einzelbild-Kandidat erreicht die Abnahme nicht: 738→859 Tracks
+auf den geforderten 1.123 Bildern, aber drei vorherige Tracks verloren;
+im erweiterten Bestand dreizehn. Auch der Sweep verliert drei Tracks.
+Reserve- und mehrere Rangfolgenproben wurden ohne Lösung dieser Fälle
+verworfen. Eine Lockerung der Lauf-Gates zur Erhaltung der Annahmen bleibt
+verworfen. Die faire zusätzliche Halb-Pixel-Probe entfernt schwache und
+perfekte Bereiche; ein pauschal fehlender Nutzen ist nicht belegt. Dieser
+Stand wird deshalb als nicht abnahmefähige Entwicklung dokumentiert.
+
+[Messungen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
+[Laborjournal](lab_journal.md#r13-25-stabile-rahmenregionen).

@@ -47,7 +47,7 @@ def translation_accuracy(trackers, reference):
             for side, values in errors.items()}
 
 
-def sweep(baseline, name):
+def sweep(baseline, name, proposals=None):
     root = input_path(f'live/{name}' if name.startswith('live-') else f'live/live-20261028T{name}')
     profile = json.loads((root / 'profile.json').read_text())
     reference = cv2.imread(str(input_path(profile['reference_frame']['path'])))
@@ -58,6 +58,11 @@ def sweep(baseline, name):
                                   module.FrameTrackingConfig.from_dict(block['config']))
         for side, module in (('before', baseline), ('after', current))
     }
+    if proposals is not None:
+        # R13-25: gleicher HEAD-Feinpfad, nur neu eingerichtete Bereiche.
+        selected = current.RegionProposal.from_dict(json.loads((proposals / f'{root.name}.json').read_text())['proposal'])
+        trackers['after'] = current.FrameTracker(reference, quad, selected,
+                                                current.FrameTrackingConfig.from_dict(selected.config))
     cases = []
     motions = [(*motion, 'large') for motion in product(
         (-19, -14, -9, 6, 11, 17), (-13, -7, 5, 12), (-2.5, -1.2, 0, 1.2, 2.5), (0.996, 1.0, 1.004))
@@ -97,6 +102,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--threads', type=int, default=2)
     parser.add_argument('--run', action='append', help='Referenz live-YYYYMMDDThhmmssZ; wiederholbar')
+    parser.add_argument('--proposals', type=Path, help='R13-25-Ausgaben: <Sitzungsname>.json mit neuem proposal')
     args = parser.parse_args()
     if not args.output.resolve().is_relative_to(Path('/tmp')):
         parser.error('--output muss unter /tmp liegen')
@@ -106,7 +112,8 @@ def main():
     spec.loader.exec_module(baseline)
     cv2.setNumThreads(args.threads)
     result = {'baseline': str(args.baseline), 'opencv': cv2.__version__, 'threads': cv2.getNumThreads(),
-              'runs': {name: sweep(baseline, name) for name in (args.run or ('110248Z', '121101Z'))}}
+              'proposals': str(args.proposals) if args.proposals is not None else None,
+              'runs': {name: sweep(baseline, name, args.proposals) for name in (args.run or ('110248Z', '121101Z'))}}
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')
     for name, run in result['runs'].items():
         print(name, json.dumps(run['summary']), flush=True)

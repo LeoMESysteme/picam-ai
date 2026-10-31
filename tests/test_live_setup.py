@@ -222,10 +222,29 @@ def test_mean_still_one_frame_preserves_original():
     assert live_setup.mean_still(cam, frames=1) is image
 
 
+def test_mean_still_optionally_keeps_unaveraged_copies_when_camera_reuses_memory():
+    class ReusedBufferCamera:
+        def __init__(self):
+            self.image = np.zeros((2, 3, 3), np.uint8)
+            self.values = iter((10, 20, 60))
+
+        def fresh_still(self, discard=10):
+            self.image[:] = next(self.values)
+            return self.image
+
+    cam = ReusedBufferCamera()
+    frames = []
+    averaged = live_setup.mean_still(cam, frames=3, captured_frames=frames)
+    np.testing.assert_array_equal(averaged, np.full((2, 3, 3), 30, np.uint8))
+    assert [int(frame[0, 0, 0]) for frame in frames] == [10, 20, 60]
+    cam.image[:] = 99
+    assert [int(frame[0, 0, 0]) for frame in frames] == [10, 20, 60]
+
+
 @pytest.mark.parametrize("stability_s", [30.0, 15.0])
 @pytest.mark.parametrize("explicit_hint", [None, (0.1, 0.2, 0.3, 0.4)])
 def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, tmp_path, explicit_hint, stability_s):
-    cam = SequenceSetupCamera([10, 12, 30, 34, 32, 32])
+    cam = SequenceSetupCamera([10, 12, 30, 34, 28, 36])
     texts = iter(["old", "new", "new"])
     brackets = []
 
@@ -294,6 +313,9 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     np.testing.assert_array_equal(result.second, result.first)
     np.testing.assert_array_equal(cv2.imread(str(tmp_path / "still.png")), result.first)
     np.testing.assert_array_equal(cv2.imread(str(tmp_path / "stability.png")), result.second)
+    assert isinstance(result.stability_frames, tuple)
+    assert [int(frame[0, 0, 0]) for frame in result.stability_frames] == [28, 36]
+    assert {path.name for path in tmp_path.glob('*.png')} == {'still.png', 'stability.png'}
     assert result.first_text == result.second_text == "new"
     assert result.setup_attempt == 2
     assert checked[0][0] is result.first and checked[0][1] is fit

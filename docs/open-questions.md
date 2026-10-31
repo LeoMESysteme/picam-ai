@@ -1246,6 +1246,24 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Rückstellung bestätigt. Die Frage bleibt offen; strukturstabile
   Nachführung muss erst entwickelt und geprüft werden.
   [Zahlen](VALIDATION.md#messpfad-live-werteplan-2026-10-21).
+* **Nachtrag 2026-10-30 (R13-25, Reviewkorrektur):** Die zunächst verwendeten
+  gemittelten Zweitbilder samt Halb-Pixel-Proben waren zu optimistisch:
+  im Hauptfall blieb eine als stabil gemeldete Region in sämtlichen 210
+  Laufbildern unter 0,75. Neue Einrichtungen prüfen deshalb die acht
+  ungemittelten Aufnahmen der Stabilitätsaufnahme: mindestens sieben
+  eindeutige innere Treffer mit Peak ≥0,775 und höchstens 2 px Lageabweichung.
+  Die Reserve 0,025 gilt nur bei der Einrichtung; Laufgrenzen bleiben gleich.
+  Die Ausfallreserve je Rahmenseite zählt ausschließlich solche Regionen.
+  Einzelbilder bleiben nur im Speicher, Kennzahlen und gemitteltes Zweitbild
+  bleiben gespeichert. Alte Mittelbilder allein liefern keinen nachträglichen
+  Einzelbildnachweis; bestätigte Profile laufen ohne Neuauswahl und mit
+  unverändert strikter Laufkonfiguration weiter. Der Vergleich mit den
+  Diagnosebildern ist Entwicklung und ersetzt keine unabhängige Abnahme;
+  OQ-26 bleibt offen. Die Korrektur ist nicht abgenommen: im geforderten
+  Bestand 738→859 Tracks, drei vorherige Tracks verloren; zusätzlich
+  bleiben Fehlvorhersagen der Einzelbildprobe. Kein Nullverlust-Nachweis.
+  [Kalibrierung und Grenzen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
+  [Aufbau und Deutung](lab_journal.md#r13-25-stabile-rahmenregionen).
 * **Antwort landet in:** `docs/VALIDATION.md`.
 
 <span id="oq-27"></span>
