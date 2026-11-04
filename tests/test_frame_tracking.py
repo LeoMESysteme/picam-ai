@@ -1983,8 +1983,18 @@ def test_r25_stability_rejections_exclude_candidates_failing_motion_gate(scene, 
     ('live-20261028T110248Z', '0179.png', [(0, 0), (0, 0), (1, 1), (0, 1), (0, 1), (2, 0), (3, 0), (2, 0)]),
     ('live-20261028T113238Z', '0098.png', [(0, 0)]*8),
     # R13-25 Runde 3: offen, obere LCD-Kante steht mit 15/18 an der Grenze.
-    ('live-20261028T113238Z', '0163.png', [(0, 0)]*8),
-    ('live-20261028T121101Z', '0034.png', [(0, 0), (0, 0), (0, 1), (0, 1), (0, 1), (0, 1), (14, -5), (14, -5)]),
+    # strict: eine kuenftige Behebung faellt als XPASS auf; raises: fehlende
+    # Daten oder andere Fehler werden nicht als erwartetes Scheitern verbucht.
+    pytest.param('live-20261028T113238Z', '0163.png', [(0, 0)]*8, marks=pytest.mark.xfail(
+        strict=True, raises=AssertionError,
+        reason='Bekannter offener Verlust (lcd_rand_fehlt): obere LCD-Kante 15/18 an der Grenze, '
+               'Quad-Differenz <= 0,056 px; siehe docs/VALIDATION.md #r13-25-runde-3')),
+    pytest.param('live-20261028T121101Z', '0034.png',
+                 [(0, 0), (0, 0), (0, 1), (0, 1), (0, 1), (0, 1), (14, -5), (14, -5)],
+                 marks=pytest.mark.xfail(
+                     strict=True, raises=AssertionError,
+                     reason='Bekannter offener Verlust (rahmen_unstimmig): Ersatz ohne Lagekonsistenz, '
+                            'RMS 0,379 px > 0,35 px; siehe docs/VALIDATION.md #r13-25-runde-3')),
 ])
 def test_r25_single_frame_reserve_keeps_control_track(name, frame_name, offsets):
     root = local_recording(f'live/{name}')
@@ -2096,9 +2106,15 @@ def test_r25_consistency_relaxes_only_until_reserve_is_met(scene, monkeypatch):
     proposal = propose_regions(reference, quad, config, stability_images=frames)
     # Stufen: RMS-Grenze, Mitte, Einzelresiduum, zuletzt ohne Lagekonsistenz.
     assert proposal.metrics['stability_consistency_px'] == config.max_inlier_residual_px
+    assert proposal.metrics['stability_fallback_centres'] == []
     monkeypatch.setattr(ft, '_reserve_ok', lambda *args: False)
     proposal = propose_regions(reference, quad, config, stability_images=frames)
     assert proposal.metrics['stability_consistency_px'] is None
+    # Review-Fix: Ersatz ohne Lagekonsistenz bleibt namentlich gefuehrt.
+    fallback = [item['new_centre'] for item in proposal.metrics['stability_replacements']]
+    assert fallback and all(tuple(centre) in [r.centre for r in proposal.regions] for centre in fallback)
+    assert proposal.metrics['stability_fallback_centres'] == fallback
+    assert proposal.metrics['stability_fallback_remaining'] == fallback
 
 
 def test_r25_probe_without_failures_keeps_unprobed_selection(scene):

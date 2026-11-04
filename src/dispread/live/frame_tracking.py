@@ -715,6 +715,11 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig(), *, stab
         band_metrics.update(_stability_metrics(samples, peaks, rejected))
         band_metrics["stability_replacements"] = replacements
         band_metrics["stability_consistency_px"] = consistency
+        # Ersatz der letzten Stufe ohne Lagekonsistenz namentlich fuehren:
+        # die Einrichtung warnt, solange einer davon im Satz steht.
+        fallback = [item["new_centre"] for item in replacements] if consistency is None else []
+        band_metrics["stability_fallback_centres"] = fallback
+        band_metrics["stability_fallback_remaining"] = list(fallback)
     return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, band_metrics)
 
 

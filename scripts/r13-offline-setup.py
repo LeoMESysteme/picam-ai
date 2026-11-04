@@ -3,7 +3,9 @@
 
 Benutzt assist_measure und propose_with_fit der Live-Einrichtung. Die beiden
 Einzelbilder ersetzen Aufnahme/Mittelung; ihre Aufnahmezeiten ersetzen das
-Warten. Ein Offline-Profil ist keine Freigabe fuer einen Live-Lauf.
+Warten. Die Einzelbildprobe der Rahmenbereiche (R13-25) bekommt das
+Stabilitaetsbild und die sieben direkt folgenden Aufnahmebilder desselben
+schedule-Schritts. Ein Offline-Profil ist keine Freigabe fuer einen Live-Lauf.
 """
 
 from __future__ import annotations
@@ -31,13 +33,13 @@ from dispread.setup_checks import RESOLUTION_ERROR_PX
 
 # Dasselbe Minimum wie LiveService._run_setup, gemessen an Aufnahmezeiten.
 STABILITY_S = 15.0
+# Dieselbe Zahl Einzelbilder wie die Live-Stabilitaetsaufnahme (stack_frames=8,
+# R13-25-Probe braucht mindestens 8).
+STABILITY_FRAMES = 8
 
 
-def select_stills(recording, frame=None, cell_text=None):
-    """Erstes ruhiges Faktor-1-Bild und unabhaengiges Bild im selben Schritt."""
-    window = next((i for i, (_, factor) in enumerate(recording.steps) if factor == "1.0"), None)
-    if window is None and frame is None:
-        raise ValueError("Kein schedule-Schritt mit Faktor 1")
+def _rows(recording):
+    """Bildzeilen mit geprueftem Pfad, BOOTTIME und schedule-Schritt."""
     starts = [step[0] for step in recording.steps]
     rows = []
     previous = -1
@@ -55,6 +57,16 @@ def select_stills(recording, frame=None, cell_text=None):
         seconds = ns / 1e9
         index = bisect.bisect_right(starts, seconds) - 1
         rows.append({**entry, "path": path, "t_boottime_ns": ns, "window": index})
+    return rows
+
+
+def select_stills(recording, frame=None, cell_text=None):
+    """Erstes ruhiges Faktor-1-Bild und unabhaengiges Bild im selben Schritt."""
+    window = next((i for i, (_, factor) in enumerate(recording.steps) if factor == "1.0"), None)
+    if window is None and frame is None:
+        raise ValueError("Kein schedule-Schritt mit Faktor 1")
+    starts = [step[0] for step in recording.steps]
+    rows = _rows(recording)
     if frame is None:
         first = next((row for row in rows if row["window"] == window
                       and row["t_boottime_ns"] / 1e9 - starts[window] > 2.0), None)
@@ -84,6 +96,30 @@ def select_stills(recording, frame=None, cell_text=None):
             row["serial"] = recording.serial[index]["text"]
             row["cell_text"] = cell_text_from_telegram(row["serial"])
     return first, second
+
+
+def select_stability_frames(recording, second, count=STABILITY_FRAMES):
+    """Stabilitaetsbild und die direkt folgenden Aufnahmebilder fuer die 7/8-Probe.
+
+    Live liefert dieselbe Zahl ungemittelter, direkt aufeinanderfolgender
+    Kamerabilder (``stack_frames=8``). Die Aufnahme kennt nur ihre eigene
+    Bildfolge: genommen werden das Stabilitaetsbild und die naechsten
+    Zeilen aus frames.jsonl, ohne Auslassung, alle im selben
+    schedule-Schritt. Sie spannen je nach Aufnahmerate laenger als die
+    rund 0,27 s der Live-Aufnahme. Nichts wird gemittelt, verschoben oder
+    erfunden; reicht die Aufnahme nicht, wird abgelehnt.
+    """
+    rows = _rows(recording)
+    start = next((i for i, row in enumerate(rows) if row["path"] == second["path"]), None)
+    if start is None:
+        raise ValueError("Stabilitaetsbild fehlt in frames.jsonl")
+    selected = rows[start:start + count]
+    if len(selected) < count:
+        raise ValueError(f"Weniger als {count} Stabilitaets-Einzelbilder ab dem Stabilitaetsbild in der Aufnahme")
+    if any(row["window"] != second["window"] for row in selected):
+        raise ValueError(f"{count} Stabilitaets-Einzelbilder ab dem Stabilitaetsbild liegen nicht im selben "
+                         "schedule-Schritt")
+    return selected
 
 
 def camera_settings(recording):
@@ -145,6 +181,9 @@ def main(argv=None):
         recording = load_recording(args.recording_dir)
         settings = camera_settings(recording)
         first, second = select_stills(recording, args.frame, args.cell_text)
+        stability_rows = select_stability_frames(recording, second)
+        result["stability_frames"] = [{"file": row["file"], "t_boottime_ns": row["t_boottime_ns"]}
+                                      for row in stability_rows]
         if any(row["path"].suffix.lower() in (".jpg", ".jpeg") for row in (first, second)):
             print("WARNUNG: JPEG-Quellbilder verzerren den Rasterfit; Offline-Einrichtungsergebnisse "
                   "auf JPEG-Aufnahmen sind fuer die Live-Einrichtung nicht repraesentativ.", file=sys.stderr)
@@ -166,11 +205,15 @@ def main(argv=None):
             sleep=lambda _seconds: None, monotonic=camera.monotonic,
         )
         result["stage"] = "propose_with_fit"
+        # Ungemittelte Aufnahmebilder fuer die 7/8-Einzelbildprobe (R13-25);
+        # nur im Speicher, wie live.
+        stability_images = tuple(_image(row["path"]) for row in stability_rows)
         proposal = live_setup.propose_with_fit(
             measured.first, fit=measured.fit, frame_path=out / "still.png", camera_settings=settings,
             device_id="gsv-sensor-161a", session_id=f"offline-{args.recording_dir.name}", out_dir=out,
             cell_text=measured.first_text, offset_check=measured.offset_check, final_checks=measured.final_checks,
-            stability_image_bgr=measured.second, stability_elapsed_s=measured.stability_elapsed_s,
+            stability_image_bgr=measured.second, stability_images=stability_images,
+            stability_elapsed_s=measured.stability_elapsed_s,
             stability_min_elapsed_s=STABILITY_S, setup_attempt=measured.setup_attempt,
             reader_check=measured.reader_check, live_tracking=True,
         )

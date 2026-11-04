@@ -735,18 +735,13 @@ def propose_with_fit(
                                         reasons=(*tracking_proposal.reasons, "rahmenbereiche_zweitbild_fehlt"))
         # R13-25: Reserve nur mit Ersatz ohne Lagekonsistenz erreichbar.
         # Bestaetigung bleibt moeglich (Konzept §4), Risiko wird benannt.
-        unchecked = (tracking_proposal.ok and tracking_proposal.metrics.get("stability_replacements")
-                     and "stability_consistency_px" in tracking_proposal.metrics
-                     and tracking_proposal.metrics["stability_consistency_px"] is None)
-        checks_dict["checks"]["nachfuehrung"] = {
-            "status": "OK" if tracking_proposal.ok and not unchecked else "WARNUNG" if unchecked else "FEHLER",
-            "reason": ("; ".join(REASONS[reason] for reason in tracking_proposal.reasons)
-                       or (REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"] if unchecked else None)),
-            "metrics": tracking_proposal.metrics,
-        }
+        # Welche Bereiche das sind, steht in den Kennzahlen, damit eine
+        # manuelle Korrektur die WARNUNG nicht verliert.
+        _bind_fallback_regions(tracking_proposal, _fallback_centres(tracking_proposal.metrics, bound=False))
+        checks_dict["checks"]["nachfuehrung"] = _tracking_check(tracking_proposal)
         if not tracking_proposal.ok:
             checks_dict["overall"] = "FEHLER"
-        elif unchecked and checks_dict["overall"] == "OK":
+        elif checks_dict["checks"]["nachfuehrung"]["status"] == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
     proposal = {
         "frame": str(frame_path),
@@ -802,6 +797,41 @@ def propose_with_fit(
     return proposal
 
 
+def _fallback_centres(metrics: dict, *, bound: bool = True) -> list[list[int]]:
+    """Mittelpunkte der Ersatzbereiche ohne Lagekonsistenz (R13-25).
+
+    Massgeblich sind die Ersatzkennzahlen der letzten Stufe
+    (``stability_consistency_px`` = None). Nach einer manuellen Korrektur
+    fehlen diese; dann wird die gebundene Liste unveraendert weitergefuehrt
+    (``bound``).
+    """
+    if bound and "stability_fallback_centres" in metrics:
+        return [list(centre) for centre in metrics["stability_fallback_centres"]]
+    if (metrics.get("stability_replacements") and "stability_consistency_px" in metrics
+            and metrics["stability_consistency_px"] is None):
+        return [list(item["new_centre"]) for item in metrics["stability_replacements"]]
+    return []
+
+
+def _bind_fallback_regions(tracking: Any, fallback: list[list[int]]) -> None:
+    """Ersatzliste und den davon noch im Satz stehenden Teil in die Kennzahlen schreiben."""
+    tracking.metrics["stability_fallback_centres"] = fallback
+    tracking.metrics["stability_fallback_remaining"] = [
+        list(region.centre) for region in tracking.regions if list(region.centre) in fallback
+    ]
+
+
+def _tracking_check(tracking: Any) -> dict:
+    """nachfuehrung: FEHLER vor WARNUNG (Ersatz ohne Lagekonsistenz im Satz) vor OK."""
+    unchecked = bool(tracking.metrics.get("stability_fallback_remaining"))
+    return {
+        "status": "FEHLER" if not tracking.ok else "WARNUNG" if unchecked else "OK",
+        "reason": ("; ".join(REASONS[reason] for reason in tracking.reasons)
+                   or (REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"] if unchecked else None)),
+        "metrics": tracking.metrics,
+    }
+
+
 def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str,
                  stability_images: tuple[np.ndarray, ...] = ()) -> dict:
     """Auswahl am unveraenderten Standbild pruefen und neu versionieren."""
@@ -854,6 +884,10 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
                 f"Beibehaltener Rahmenbereich {index} am Mittelpunkt {centre} "
                 f"abgelehnt ({result['reason']}) - neu einrichten"
             )
+    # Ersatzbereiche ohne Lagekonsistenz bleiben ueber alle Korrekturen
+    # benannt; die WARNUNG entfaellt erst, wenn keiner mehr im Satz steht.
+    # Gleiche Mittelpunkte zaehlen auch nach Entfernen und Wiederhinzufuegen.
+    _bind_fallback_regions(tracking, _fallback_centres(block["proposal"]["metrics"]))
     updated = deepcopy(proposal)
     new_block = updated["live_tracking"]
     new_block.update(proposal=tracking.to_dict(), proposal_revision=uuid.uuid4().hex, auswahl="manuell")
@@ -864,11 +898,7 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
                  for point, result in zip(add, results[len(kept):], strict=True))
     new_block["edits"] = block.get("edits", []) + edits
     checks = updated["setup_checks"]["checks"]
-    checks["nachfuehrung"] = {
-        "status": "OK" if tracking.ok else "FEHLER",
-        "reason": "; ".join(REASONS[reason] for reason in tracking.reasons) or None,
-        "metrics": tracking.metrics,
-    }
+    checks["nachfuehrung"] = _tracking_check(tracking)
     updated["setup_checks"]["overall"] = max(
         (check["status"] for check in checks.values()), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__,
     )

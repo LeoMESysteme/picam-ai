@@ -5,6 +5,29 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: R13-25 Runde 3, Korrekturen aus dem unabhängigen Review.
+  * Die manuelle Bereichskorrektur setzte `nachfuehrung` ohne Rücksicht
+    auf die Rückfallstufe auf OK. Wer nach einer WARNUNG einen beliebigen
+    Bereich entfernte, konnte dadurch ohne Kenntnisnahme bestätigen,
+    obwohl die Ersatzbereiche ohne Lageprüfung blieben. Diese Bereiche
+    stehen jetzt als `stability_fallback_centres` im Vorschlag. Die
+    WARNUNG mit gleichem Text bleibt, solange einer davon im Satz steht,
+    auch nach Hinzufügen oder Wiederhinzufügen.
+  * `scripts/r13-offline-setup.py` gab der neuen Einzelbildprobe keine
+    Einzelbilder. Jede Offline-Einrichtung endete deshalb mit
+    `nachfuehrung` FEHLER. Jetzt bekommt die Probe das Stabilitätsbild und
+    die sieben direkt folgenden Aufnahmebilder desselben schedule-Schritts.
+    Das ist dieselbe Anzahl wie live, aber in der Bildrate der Aufnahme.
+    Fehlen Bilder, lehnt das Werkzeug schon bei der Auswahl ab.
+  * Die beiden offenen Regressionsfälle `113238/0163` und `121101/0034`
+    sind als strenges `xfail` markiert. Nur `AssertionError` gilt als
+    erwartetes Scheitern.
+  * Die acht Einzelbilder (rund 50 MB) werden mit der Bestätigung und beim
+    Laufstart freigegeben.
+
+  Tracker, Laufgrenzen und Auswahl bleiben unverändert. Abnahme weiter offen.
+  [Details und Prüfungen](docs/VALIDATION.md#r13-25-review-korrekturen).
+
 * 2026-10-31: R13-25 Runde 3, Minimalprinzip für Rahmenbereiche. Runde 2
   wählte den Satz neu. Ihr großer Austausch verschob die Lage um 0,04–0,14 px
   und kippte damit Grenzbilder der LCD-Randprüfung (`113238`). Er brachte

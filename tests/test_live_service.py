@@ -1906,6 +1906,76 @@ def test_edit_regions_enforces_cumulative_edit_limit_and_still_hash(tmp_path):
         service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
 
 
+def test_r25_fallback_warning_still_needs_acknowledgement_after_region_edit(tmp_path, monkeypatch):
+    from test_live_setup_tracking import _propose_with_fallback
+
+    image, _, proposal = _propose_with_fallback(tmp_path, monkeypatch, [2])
+    service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
+    status = service.status()
+    assert status['setup']['overall'] == 'WARNUNG'
+    # Unbeteiligten Bereich entfernen: Ersatz ohne Lagekonsistenz bleibt im Satz.
+    result = service.edit_regions(proposal_revision=status['setup']['proposal_revision'], add=[], remove=[0])
+    status = service.status()
+    assert status['setup']['checks']['nachfuehrung'] == status['setup']['overall'] == 'WARNUNG'
+    with pytest.raises(LiveError, match='WARNUNG'):
+        service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                        confirmed_by='Operator', format_checked=True)
+    service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True, acknowledge_warning=True)
+    assert service.status()['state'] == 'confirmed'
+
+
+def test_r25_stability_frames_kept_for_edits_and_freed_on_confirmation(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    image, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    frames = tuple(image.copy() for _ in range(8))
+    service._stability_frames = frames
+    revision = service.status()['setup']['proposal_revision']
+    with pytest.raises(LiveError):
+        service.confirm(session_id=service.status()['session_id'], proposal_revision=revision,
+                        confirmed_by='Operator', format_checked=False)
+    # Abgelehnte Bestaetigung: Einzelbilder bleiben fuer Korrekturen erhalten.
+    assert service._stability_frames is frames
+    result = service.edit_regions(proposal_revision=revision, add=[], remove=[0])
+    assert service._stability_frames is frames
+    service.confirm(session_id=service.status()['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True)
+    assert service._stability_frames == ()
+
+
+def test_r25_stability_frames_freed_when_run_starts(tmp_path, monkeypatch):
+    import numpy as np
+
+    class FakeSession:
+        def __init__(self, *a, **kw):
+            self.latest, self.summary, self.end_reason = None, {}, None
+            self.session_path = tmp_path / "s.json"
+
+        def latest_age_s(self):
+            return None
+
+        def start(self):
+            pass
+
+        def run(self, stop):
+            stop.wait()
+
+        def stop(self, reason="bediener"):
+            return {"end_reason": reason}
+
+    monkeypatch.setattr("dispread.live.service.LiveSession", FakeSession)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path, service._profile_camera = "confirmed", tmp_path / "p.json", None
+    service._stability_frames = tuple(np.zeros((2, 2, 3), np.uint8) for _ in range(8))
+    service.start_run()
+    assert service._stability_frames == ()
+    service.stop_run()
+    service.close()
+
+
 def test_r25_region_edits_without_raw_frames_require_new_setup(tmp_path):
     from test_live_setup_tracking import _propose
 

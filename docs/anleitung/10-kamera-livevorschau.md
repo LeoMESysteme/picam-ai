@@ -184,7 +184,15 @@ Bei der Neubewertung werden dieselben acht Einzelbilder aus dem Speicher
 der aktuellen Einrichtung verwendet. Auf Platte stehen nur die Kennzahlen
 und das ohnehin benötigte gemittelte Zweitbild mit Datei-SHA. Fehlen die
 Einzelbilder nach einem Neustart oder wurde das gespeicherte Zweitbild
-verändert, muss neu eingerichtet werden. Bereits bestätigte Profile behalten
+verändert, muss neu eingerichtet werden. Mit der Bestätigung oder spätestens
+beim Laufstart werden die Einzelbilder freigegeben; nach der Bestätigung
+ist keine Bereichskorrektur mehr möglich. Ersatzbereiche ohne
+Lageprüfung bleiben im Vorschlag namentlich vermerkt
+(`stability_fallback_centres`). Die **WARNUNG** bleibt bei jeder
+Korrektur bestehen, solange einer davon im Satz steht, auch nach
+Entfernen und Wiederhinzufügen desselben Punkts. Erst ohne jeden
+solchen Bereich und mit sonst gültigem Satz wird Nachführung wieder OK.
+Bereits bestätigte Profile behalten
 im Lauf ihre gespeicherte Auswahl; sie wird beim Laden nicht neu berechnet.
 Das Laufstart-Gate verlangt weiterhin die Standard-Laufgrenzen. Die reine
 Einrichtungsreserve nimmt an diesem Vergleich nicht teil.

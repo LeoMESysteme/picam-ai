@@ -364,23 +364,81 @@ def test_r25_too_few_stable_regions_explains_setup_failure(tmp_path):
 
 
 def test_r25_replacements_without_position_consistency_warn(tmp_path, monkeypatch):
-    real = live_setup.propose_regions
-
-    def fallback(*args, **kwargs):
-        proposal = real(*args, **kwargs)
-        # Letzte Stufe: Reserve nur ohne Lagekonsistenz erreichbar.
-        metrics = {**proposal.metrics, 'stability_consistency_px': None,
-                   'stability_replacements': [{'index': 0, 'old_centre': [1, 1], 'new_centre': [2, 2],
-                                               'distance_px': 1.4}]}
-        return replace(proposal, metrics=metrics)
-
-    monkeypatch.setattr(live_setup, 'propose_regions', fallback)
-    _, _, proposal = _propose(tmp_path, stability=True)
+    # Letzte Stufe: Reserve nur ohne Lagekonsistenz erreichbar. Der Ersatz
+    # muss ein Bereich des Satzes sein (Review-Fix: Warnung haengt am Bereich).
+    _, _, proposal = _propose_with_fallback(tmp_path, monkeypatch, [0])
     check = proposal['setup_checks']['checks']['nachfuehrung']
     assert check['status'] == 'WARNUNG'
     assert proposal['setup_checks']['overall'] in {'WARNUNG', 'FEHLER'}
     assert 'Lage' in check['reason'] and 'Licht' in check['reason']
     assert proposal['live_tracking']['proposal']['ok']
+
+
+def _propose_with_fallback(tmp_path, monkeypatch, fallback_indices):
+    """Vorschlag, dessen Bereiche fallback_indices Ersatz ohne Lagekonsistenz sind."""
+    real = live_setup.propose_regions
+
+    def fallback(*args, **kwargs):
+        proposal = real(*args, **kwargs)
+        replacements = [{'index': index, 'old_centre': [1, 1], 'new_centre': list(proposal.regions[index].centre),
+                         'distance_px': 1.4} for index in fallback_indices]
+        metrics = {**proposal.metrics, 'stability_consistency_px': None, 'stability_replacements': replacements}
+        return replace(proposal, metrics=metrics)
+
+    monkeypatch.setattr(live_setup, 'propose_regions', fallback)
+    return _propose(tmp_path, stability=True)
+
+
+def test_r25_fallback_warning_survives_unrelated_manual_edits(tmp_path, monkeypatch):
+    _, _, proposal = _propose_with_fallback(tmp_path, monkeypatch, [2, 5])
+    initial = proposal['setup_checks']['checks']['nachfuehrung']
+    assert initial['status'] == proposal['setup_checks']['overall'] == 'WARNUNG'
+    regions = proposal['live_tracking']['proposal']['regions']
+    fallback = [regions[2]['centre'], regions[5]['centre']]
+    assert initial['metrics']['stability_fallback_centres'] == fallback
+    assert initial['metrics']['stability_fallback_remaining'] == fallback
+    # Entfernen eines unbeteiligten Bereichs darf die Warnung nicht loeschen.
+    removed = regions[0]['centre']
+    updated = _edit_regions(proposal, add=[], remove=[0], out_dir=tmp_path, at_utc='2026-10-31T10:00:00+00:00')
+    check = updated['setup_checks']['checks']['nachfuehrung']
+    assert updated['live_tracking']['proposal']['ok']
+    assert check['status'] == updated['setup_checks']['overall'] == 'WARNUNG'
+    assert check['reason'] == initial['reason']
+    assert check['metrics']['stability_fallback_remaining'] == fallback
+    # Auch nach Hinzufuegen (nach Neuladen) bleibt sie, solange Ersatzbereiche bleiben.
+    updated = json.loads((tmp_path / 'proposal.json').read_text())
+    updated = _edit_regions(updated, add=[removed], remove=[], out_dir=tmp_path, at_utc='2026-10-31T10:00:01+00:00')
+    check = updated['setup_checks']['checks']['nachfuehrung']
+    assert check['status'] == updated['setup_checks']['overall'] == 'WARNUNG'
+    assert check['reason'] == initial['reason']
+    assert check['metrics']['stability_fallback_centres'] == fallback
+
+
+def test_r25_fallback_warning_clears_only_without_fallback_regions(tmp_path, monkeypatch):
+    _, _, proposal = _propose_with_fallback(tmp_path, monkeypatch, [2, 5])
+    regions = proposal['live_tracking']['proposal']['regions']
+    fallback = [regions[2]['centre'], regions[5]['centre']]
+    # Einen von zwei Ersatzbereichen entfernen: Warnung bleibt.
+    updated = _edit_regions(proposal, add=[], remove=[2], out_dir=tmp_path, at_utc='2026-10-31T10:00:00+00:00')
+    check = updated['setup_checks']['checks']['nachfuehrung']
+    assert check['status'] == 'WARNUNG'
+    assert check['metrics']['stability_fallback_remaining'] == [fallback[1]]
+    # Den Ersatzbereich wieder hinzufuegen waescht die Warnung nicht.
+    readded = _edit_regions(updated, add=[fallback[0]], remove=[], out_dir=tmp_path,
+                            at_utc='2026-10-31T10:00:01+00:00')
+    assert readded['setup_checks']['checks']['nachfuehrung']['status'] == 'WARNUNG'
+    assert sorted(readded['setup_checks']['checks']['nachfuehrung']['metrics']['stability_fallback_remaining']) \
+        == sorted(fallback)
+    # Erst ohne jeden Ersatzbereich und mit gueltigem Rest: OK.
+    current = [region['centre'] for region in updated['live_tracking']['proposal']['regions']]
+    cleared = _edit_regions(updated, add=[], remove=[current.index(fallback[1])], out_dir=tmp_path,
+                            at_utc='2026-10-31T10:00:02+00:00')
+    check = cleared['setup_checks']['checks']['nachfuehrung']
+    assert cleared['live_tracking']['proposal']['ok']
+    assert check['status'] == cleared['setup_checks']['overall'] == 'OK'
+    assert check['reason'] is None
+    assert check['metrics']['stability_fallback_remaining'] == []
+    assert check['metrics']['stability_fallback_centres'] == fallback
 
 
 def test_r25_consistent_replacements_stay_ok(tmp_path):

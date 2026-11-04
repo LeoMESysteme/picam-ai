@@ -639,6 +639,9 @@ class LiveService:
                 self._run_block = confirmation["run_block"]
                 self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"
+                # R13-25 Review: die acht Einzelbilder (~50 MB) braucht nur
+                # die Bereichskorrektur vor der Bestaetigung.
+                self._stability_frames = ()
 
     # -- Lauf ----------------------------------------------------------------
     def cleanup(self, *, days: int, diagnostics_only: bool = False, execute: bool = False) -> dict:
@@ -671,6 +674,9 @@ class LiveService:
                 confirmed_by = (self._profile_info or {}).get("confirmed_by")
                 if block is not None and not test_override:
                     raise LiveError(block)
+                # Nach der Bestaetigung keine Bereichskorrektur mehr: nie
+                # Einrichtungs-Einzelbilder durch den Lauf mitschleppen.
+                self._stability_frames = ()
             self._require_storage(diagnostics=diagnostics)
             number = 1
             while True:

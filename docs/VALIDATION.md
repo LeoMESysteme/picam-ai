@@ -4564,6 +4564,93 @@ Weitere Artefakte: `harness.py` (Variantenvergleich), `lcdbias.py`/
 
 Softwareprüfungen Runde 3: siehe [Abschnitt unten](#r13-25-runde-3-pruefung).
 
+### Nachtrag 2026-11-04: Korrekturen aus dem unabhängigen Review {#r13-25-review-korrekturen}
+
+Vier Befunde, testgetrieben behoben. Auswahl, Tracker, Laufgrenzen und
+Randprüfung sind unverändert. Die Zahlen oben gelten weiter, die Abnahme
+bleibt offen. Keine Kamera, kein serieller Port. `var/` und `/mnt/ssd`
+wurden nur gelesen.
+
+1. **WARNUNG überlebte keine Bereichskorrektur (mittel).** `edit_regions`
+   setzte `nachfuehrung` nur auf OK oder FEHLER. Ein Beispiel: Nach einer
+   WARNUNG der Rückfallstufe entfernte die Person einen unbeteiligten
+   Bereich. Die Prüfung wurde OK, obwohl die Ersatzbereiche ohne
+   Lageprüfung blieben, und die Bestätigung verlangte keine Kenntnisnahme
+   mehr. Neu führt `propose_regions` die Ersatzbereiche der Rückfallstufe
+   als `stability_fallback_centres`. Der davon noch im Satz stehende Teil
+   steht in `stability_fallback_remaining`. Die Liste geht durch jede
+   Korrektur unverändert mit. Ältere Vorschläge ohne diese Liste leiten sie
+   aus `stability_replacements` mit `stability_consistency_px = null` ab.
+   Die WARNUNG trägt denselben Text und bleibt, solange ein solcher
+   Mittelpunkt im Satz steht. Das gilt auch nach Hinzufügen und nach
+   Entfernen und Wiederhinzufügen desselben Punkts. Erst ohne jeden solchen
+   Bereich und mit sonst gültigem Satz wird die Prüfung OK; FEHLER geht vor.
+   Tests: `test_r25_fallback_warning_survives_unrelated_manual_edits`,
+   `test_r25_fallback_warning_clears_only_without_fallback_regions`,
+   `test_r25_fallback_warning_still_needs_acknowledgement_after_region_edit`
+   (Dienst: Bestätigung ohne Kenntnisnahme abgelehnt). Der Test
+   `test_r25_replacements_without_position_consistency_warn` benutzt jetzt
+   einen echten Bereich des Satzes als Ersatz. Vorher stand dort der
+   Phantom-Mittelpunkt (2, 2), der nicht im Satz lag.
+2. **Offline-Einrichtung scheiterte an der Einzelbildprobe (mittel).**
+   `scripts/r13-offline-setup.py` rief `propose_with_fit(live_tracking=True)`
+   ohne Einzelbilder auf. Dann ist `stability_probe_count < 8`,
+   `nachfuehrung` meldet FEHLER und `confirm_proposal` bricht ab.
+   `test_recording_setup_uses_real_checks_and_copied_reference` scheiterte
+   daran. Der Test liest die versionierten Fixtures `tests/fixtures/r13`
+   und nichts aus `var/`; er scheiterte auch mit vorhandenem `var/`.
+
+   **Gewählte Bilder:** das Stabilitätsbild und die sieben direkt folgenden
+   Zeilen aus `frames.jsonl`, ohne Auslassung und alle im selben
+   schedule-Schritt. Das sind acht ungemittelte Bilder wie bei
+   `stack_frames=8` live. Die Aufnahme enthält aber nicht die
+   unmittelbar aufeinanderfolgenden 30-fps-Kamerabilder des Live-Stapels
+   (rund 0,27 s). Bei 1–5 Bildern/s der sync-record-Aufnahmen spannen die
+   acht Bilder etwa 1,6–8 s. Die Probe sieht damit eher mehr Drift als
+   live und wird nicht lockerer. Das Stabilitätsbild bleibt wie bisher das
+   einzelne Aufnahmebild, nicht das Mittel. Fehlen Bilder oder wechselt der
+   Schritt, lehnt das Werkzeug schon in der Auswahl ab und deaktiviert die
+   Probe nicht. Die Dateien stehen in `setup-result.json` unter
+   `stability_frames`. Die Test-Fixture bekam deshalb sechs weitere
+   identische Bilder nach dem Stabilitätsbild. Ihre Asserts blieben, neu
+   geprüft werden `nachfuehrung` OK mit 8 Einzelbildern. Neue
+   Ablehnungstests: 1 und 7 Bilder, Schrittwechsel.
+3. **Offene Regressionsfälle (niedrig).** `113238/0163` und `121101/0034`
+   in `test_r25_single_frame_reserve_keeps_control_track` sind
+   `xfail(strict=True, raises=AssertionError)`. Eine Behebung fällt als
+   XPASS auf. Fehlende Daten oder andere Ausnahmen werden nicht als
+   erwartetes Scheitern verbucht. Die anderen drei Fälle sind unverändert.
+4. **Einzelbilder im Speicher (niedrig).** `LiveService._stability_frames`
+   (8 Vollbilder, rund 50 MB) wird bei erfolgreicher Bestätigung und beim
+   Laufstart geleert. Für Bereichskorrekturen vor der Bestätigung und
+   nach einer abgelehnten Bestätigung bleiben die Bilder erhalten. Tests:
+   `test_r25_stability_frames_kept_for_edits_and_freed_on_confirmation`,
+   `test_r25_stability_frames_freed_when_run_starts`.
+
+**Nebenbefund `test_setup_saves_cross_masked_text_before_2j_failure_or_success[OK]`.**
+Im Worktree ist der Test grün. Ohne `var/` scheitert er, auf diesem Zweig
+wie auf der Basis `100cb51`: `setup_failed` mit `[Errno 2] No such file or
+directory: 'var/dotmatrix/templates-stufe2c-2026-09-30.json'`.
+`assist_measure` lädt die Vorlagen über den relativen Standardpfad.
+Das ist eine Datenabhängigkeit des Tests und keine Regression von R13-25.
+Der Test wurde nicht geändert.
+
+**Prüfungen.** Ruff ohne Befund. Gezielte acht pytest-Dateien
+(`frame_tracking`, `live_setup_tracking`, `r13_stability_eval`,
+`live_setup`, `live_service`, `live_api`, `r13_offline_setup`,
+`live_session`) mit `-n 3`: **15 failed, 1135 passed, 2 skipped in
+246 s.** Alle 15 Fehlschläge lesen `var/live/<sitzung>/run-01/diagnose`.
+Dort liegen die Diagnosebilder seit der Verlagerung vom 04.11. nicht mehr,
+sie stehen unter `/mnt/ssd/picam-dev/live/…/diagnose`. Es handelt sich um
+`test_r25_frontal_keeps_previously_trackable_frame`, 3× `test_r19b_…`,
+6× `test_r19c_…` und 5× `test_r25_single_frame_reserve_…`.
+`local_recording` verweist Sitzungen ab `live-20261023` nicht auf den
+Dev-Pfad. Auftragsgemäß wurden Tests und `_devdata` dafür nicht angepasst.
+Dieselben 15 Tests liefen über eine reine Lese-Überlagerung mit Links
+(var/-Profil und -Setup, Diagnosebilder vom Dev-Pfad, nur in `/tmp`):
+**13 passed, 2 xfailed**. Node 59/59, `wiki-check --check` und
+`oq-index --check` ohne Befund.
+
 ### Kriterium, Speicherung und Kopplung (Runde 2, gilt weiter)
 
 Die Stabilitätsaufnahme liefert weiterhin ein Mittelbild aus acht frischen
@@ -4851,7 +4938,9 @@ Bestandteil dieser kleinen Kostenmessung.
 Die Regression `test_r25_single_frame_reserve_keeps_control_track` deckt
 jetzt fünf Fälle ab. Grün sind `110248/0012`, `110248/0179` und
 `113238/0098`. Rot bleiben `121101/0034` und der neu ergänzte offene Fall
-`113238/0163`, beide ehrlich und ohne Testlockerung.
+`113238/0163`, beide ehrlich und ohne Testlockerung. Seit dem
+[Review-Nachtrag](#r13-25-review-korrekturen) sind beide als striktes
+`xfail` markiert, mit `raises=AssertionError`.
 
 Gezielte sechs pytest-Dateien mit `-n 3`: **1 failed, 1009 passed,
 2 skipped in 214,55 s**. Der eine Fehlschlag ist `121101/0034`; der Lauf war
@@ -4885,6 +4974,14 @@ kein Docs-Build, keine volle Suite. Die bereits bekannten echten roten
 Regressionen bleiben offen; dieser Stand ist nicht abnahmefähig.
 
 ### Geänderte Dateien {#r13-25-dateien}
+
+Review-Korrekturen 2026-11-04 (uncommittet auf 73b23d6):
+`src/dispread/live/frame_tracking.py` (nur Kennzahlen),
+`src/dispread/live/setup.py`, `src/dispread/live/service.py`,
+`scripts/r13-offline-setup.py`, `tests/test_frame_tracking.py`,
+`tests/test_live_setup_tracking.py`, `tests/test_live_service.py`,
+`tests/test_r13_offline_setup.py`, `CHANGELOG.md`, `docs/VALIDATION.md`,
+`docs/anleitung/10-kamera-livevorschau.md`.
 
 Runde 3 (uncommittet auf WIP-Commit 9a89b98): `src/dispread/live/frame_tracking.py`,
 `src/dispread/live/setup.py`, `src/dispread/workbench/fields.py`,
