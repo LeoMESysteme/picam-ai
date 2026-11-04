@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Der Docs-Test „Session-Dateidownload bleibt bytegleich“
+  scheiterte zeitweise (CI zweimal, lokal etwa jeder fünfte Lauf): statt
+  des zuletzt berührten Laufs (23.10.) zeigte der Tooltip den letzten
+  (28.10.). Ursache war der Test, nicht die Seite: Der Zeiger blieb auf
+  dem Downloadknopf stehen, `focus()` scrollte das Diagramm darunter,
+  und Chromium meldete danach ein echtes `pointerenter` auf der
+  Diagrammspalte unter dem Zeiger – das wählt diesen Lauf, wie beim
+  Überfahren gewollt. Der Test stellt den Zeiger vor dem Tastaturteil in
+  die feste Kopfleiste. Geprüft wird weiter dasselbe: gewählte Zeile
+  bleibt im Diagramm, End/Home, keine Verschiebung durch den Tooltip.
+  `wiki-sessions.js` bleibt unverändert.
+
 * 2026-11-04: Nach dem Auslagern der Live-Diagnosebilder auf die SSD
   fanden Tests und Auswerteskripte Bilder nicht mehr, wenn die Sitzung
   weiterhin unter `var/live/` lag. `scripts/_devdata.py` löst mit

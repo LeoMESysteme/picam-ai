@@ -1949,6 +1949,10 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   const path = await download.path();
   const expected = gunzipSync(fixture.bodies.get('chunks/live-a-run-01.gz.bin')!.body as Buffer);
   expect(readFileSync(path!)).toEqual(expected);
+  // Ab hier bedient die Tastatur. Der Zeiger steht noch auf dem Downloadknopf; scrollt der Fokus
+  // das Diagramm darunter, meldet Chromium ein echtes pointerenter auf einer Diagrammspalte und
+  // wählt deren Lauf. Der Zeiger geht deshalb in die feste Kopfleiste, abseits von Tabelle und Diagramm.
+  await page.mouse.move(0, 0);
   const plot = page.locator('.session-trend svg').first();
   await plot.focus();
   // Die zuletzt berührte Tabellenzeile bleibt im Diagramm gewählt; die Werte schweben über dem Diagramm.
