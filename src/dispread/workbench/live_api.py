@@ -17,6 +17,10 @@ STATIC = Path(__file__).parent / "static"
 
 def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Request], str]) -> None:
     async def page(_request):
+        return web.FileResponse(STATIC / "live" / "index.html")
+
+    async def page_alt(_request):
+        # Voruebergehend: alte Seite bis zu ihrer Abloesung (Aufgabe 12 der Neugestaltung).
         return web.FileResponse(STATIC / "live.html")
 
     async def status(request):
@@ -141,6 +145,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         return response
 
     app.router.add_get("/live", page)
+    app.router.add_get("/live/alt", page_alt)  # voruebergehend, entfaellt mit Aufgabe 12
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
     app.router.add_post("/live/setup/regions", regions)

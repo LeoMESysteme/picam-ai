@@ -114,10 +114,17 @@ Konsolenbefehl `dispread` ist in `pyproject.toml` registriert.
 | Debian `openssl` | Systempaket | Lokales TLS-Zertifikat und Fingerabdruck |
 | `@xterm/xterm` | 5.5.0 | Browser-Terminalemulator |
 | `@xterm/addon-fit` | 0.10.0 | Anpassung der Terminalgröße |
+| Schrift Noto Sans (Regular, Latin-Teilmenge) | 2.007 | Grundschrift der Live-Seite `/live` |
+| Schrift Noto Sans Mono (Regular, Bold) | 2.006 | Werte, Koordinaten und Kennungen auf `/live` |
 
 Die beiden xterm-Pakete wurden versioniert von jsDelivr bezogen und liegen
 mit MIT-Lizenzen unter `src/dispread/workbench/static/vendor/`. Im Betrieb
-werden keine CDN-Verbindungen benötigt. Browserassets werden mit dem Python-
+werden keine CDN-Verbindungen benötigt. Die Noto-Schriften (SIL OFL 1.1)
+liegen als woff2 unter `static/vendor/fonts/` mit `LICENSE.noto`; sie wurden
+ohne Netz aus vorhandenen TTF-Dateien (Debian `fonts-noto-mono`, Google-Fonts-
+Latin-Ausschnitt von Noto Sans) mit unveränderten Tabellen nach WOFF2
+umgepackt. Noto Sans liegt nur in Regular vor; halbfette Auszeichnungen
+synthetisiert der Browser, bis die Schnitte 500/600/700 nachgeliefert sind. Browserassets werden mit dem Python-
 Paket ausgeliefert; es ist keine Node.js-Laufzeit erforderlich.
 
 Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess

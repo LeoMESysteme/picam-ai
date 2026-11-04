@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {statusView, connectionView} from '../src/dispread/workbench/static/live.js';
+import {readFileSync} from 'node:fs';
+import {statusView, connectionView, effectState, stepRows} from '../src/dispread/workbench/static/live/model.js';
+import {createClient} from '../src/dispread/workbench/static/live/api.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
   reject_reasons: [], ...over});
@@ -726,4 +728,259 @@ test('storage displays enough space or an unknown-space error without guessing',
       assert.match(element('storage-status').textContent, expected);
     }, {status: {state: 'idle', storage}});
   }
+});
+
+// ---------------------------------------------------------------------------
+// Neue Seite (static/live/): Modell, Abruf, Gestaltungsregeln
+// ---------------------------------------------------------------------------
+const scene = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
+// Geometrie wie im Mock: Rahmenbereiche 5-8 liegen rechts der Anzeige.
+const MOCK_QUAD = [[608, 383], [1027, 383], [1033, 435], [610, 443]];
+const MOCK_REGIONS = [[528, 292], [800, 290], [520, 420], [545, 560], [1082, 292], [1112, 385], [1120, 470], [1090, 535]];
+const hudWith = ({failed = [], correcting = false} = {}) => ({seq: 1, w: 1920, h: 1080, track: {
+  quad: MOCK_QUAD, score: 0.5, shift_px: 0.4, rotation_deg: 0, reason: null, correcting,
+  regions: MOCK_REGIONS.map((c, i) => ({c, s: 15, peak: failed.includes(i) ? 0.2 : 0.92, ok: !failed.includes(i)}))}});
+
+test('effectState: offline wins over everything', () => {
+  const status = scene('running_rahmen_verdeckt');
+  status.camera.stalled = true;
+  status.run.tracking_hint = {kind: 'anzeige_bewegt', shift_px: 19, rotation_deg: -2.2, since_s: 3};
+  const effect = effectState(status, {offline: true, frameAgeS: 9, hud: hudWith({failed: [4, 5], correcting: true})});
+  assert.deepEqual(effect, {kind: 'offline', corners: [], regions: []});
+});
+
+test('effectState: stalled beats unreadable', () => {
+  const status = scene('running_rahmen_verdeckt');
+  status.camera.stalled = true;
+  assert.equal(effectState(status, {offline: false, hud: hudWith({failed: [4]})}).kind, 'stalled');
+  // Auch ohne Servermeldung: kein neues Bild seit mehr als 1,5 s.
+  assert.equal(effectState(scene('running_rahmen_verdeckt'), {offline: false, frameAgeS: 1.6}).kind, 'stalled');
+  assert.equal(effectState(scene('running_rahmen_verdeckt'), {offline: false, frameAgeS: 1.5}).kind, 'error');
+  assert.equal(effectState(scene('running_stalled'), {offline: false}).kind, 'stalled');
+});
+
+test('effectState: rahmen_verdeckt marks right corners', () => {
+  const status = scene('running_rahmen_verdeckt');
+  status.run.tracking_hint = {kind: 'rahmen_verdeckt', shift_px: null, rotation_deg: null, since_s: 10};
+  const effect = effectState(status, {offline: false, hud: hudWith({failed: [4, 5, 6, 7]})});
+  assert.equal(effect.kind, 'error');
+  assert.deepEqual(effect.regions, [4, 5, 6, 7]);
+  assert.ok(effect.corners.includes(1) && effect.corners.includes(2), JSON.stringify(effect.corners));
+  assert.ok(!effect.corners.includes(0) && !effect.corners.includes(3), 'linke Ecken bleiben ruhig');
+});
+
+test('effectState: moved display marks all corners, correction beats transition, valid is calm', () => {
+  const moved = scene('running_anzeige_bewegt');
+  assert.deepEqual(effectState(moved, {offline: false, hud: hudWith({failed: [4]})}).corners, [0, 1, 2, 3]);
+  const transition = scene('running_transition');
+  assert.equal(effectState(transition, {offline: false}).kind, 'transition');
+  assert.equal(effectState(transition, {offline: false, hud: hudWith({correcting: true})}).kind, 'correcting');
+  // Ein veralteter Wechsel ist Veraltet, kein Wechsel-Effekt.
+  transition.run.latest_age_s = 0.9;
+  assert.equal(effectState(transition, {offline: false}).kind, null);
+  assert.deepEqual(effectState(scene('running_valid'), {offline: false}), {kind: null, corners: [], regions: []});
+  assert.equal(effectState(scene('idle'), {offline: false}).kind, null);
+});
+
+test('stepRows: running standbilder shows wait 9/15', () => {
+  const rows = stepRows(scene('setup_standbilder'));
+  assert.deepEqual(rows.map(row => row.key), ['fokus', 'kamera', 'belichtung', 'standbilder', 'vorschlag', 'bestaetigen']);
+  assert.deepEqual(rows.map(row => row.label), ['Fokus', 'Kamera', 'Belichtung', 'Standbilder', 'Vorschlag', 'Prüfen & Bestätigen']);
+  assert.deepEqual(rows.map(row => row.state), ['done', 'done', 'done', 'running', 'pending', 'pending']);
+  const still = rows[3];
+  assert.equal(still.elapsed_s, 9);
+  assert.match(still.detail, /Versuch 1\/3/);
+  assert.match(still.detail, /noch 6 s/);
+  const wait = still.sub.find(item => item.key === 'stabilitaet');
+  assert.equal(wait.state, 'running');
+  assert.equal(wait.value, '9/15 s');
+  assert.deepEqual(still.sub.map(item => item.state), ['done', 'done', 'done', 'running', 'pending', 'pending']);
+  assert.match(rows[0].detail, /Bestwert 48 · Schärfe 630/);
+  assert.match(rows[2].detail, /p80 124 im Band 115–150 · Runde 1\/4/);
+  assert.deepEqual(rows[4].sub, []);
+});
+
+test('stepRows: focus shows probes in order and the cross-check', () => {
+  const running = stepRows(scene('setup_focus'))[0];
+  assert.equal(running.state, 'running');
+  assert.deepEqual(running.sub.map(item => [item.label, item.state]),
+    [['Probe 3', 'running'], ['Gegenprüfung ≥ 85 %', 'pending']]);
+  assert.equal(running.sub[0].value, 'focus_absolute 40');
+  const done = stepRows(scene('setup_focus_done'))[0];
+  assert.deepEqual(done.sub.map(item => item.state), ['done', 'done']);
+  assert.equal(done.sub[1].value, '624 ≥ 536 (99 %)');
+});
+
+test('stepRows: failure before the first step is shown on the first step', () => {
+  const status = {state: 'setup_failed', error: 'Kamera laeuft nicht', setup: {step: 'start', elapsed_s: 0.4,
+    progress: {steps: ['fokus', 'kamera', 'belichtung', 'standbilder', 'vorschlag'].map(key =>
+      ({key, state: 'pending', elapsed_s: null})), attempt: 1, attempts_max: 3, phase: null, wait: null}}};
+  const rows = stepRows(status);
+  assert.deepEqual(rows.map(row => row.state), ['failed', 'pending', 'pending', 'pending', 'pending', 'pending']);
+  assert.match(rows[0].detail, /Abgebrochen/);
+});
+
+test('stepRows: after setup_failed phase and wait show where it failed, not a running countdown', () => {
+  const status = scene('setup_standbilder');
+  status.state = 'setup_failed';
+  status.error = 'Vorpruefung meldet FEHLER: kontrast';
+  status.setup.progress.steps[3].state = 'failed';
+  const still = stepRows(status)[3];
+  assert.equal(still.state, 'failed');
+  assert.match(still.detail, /Abgebrochen bei Stabilität/);
+  assert.doesNotMatch(still.detail, /noch/);
+  const wait = still.sub.find(item => item.key === 'stabilitaet');
+  assert.equal(wait.state, 'failed');
+  assert.equal(wait.value, '9/15 s');
+  assert.ok(still.sub.every(item => item.state !== 'running'));
+  // Defensiv: ein nach dem Abbruch noch "laufender" Schritt gilt als fehlgeschlagen.
+  status.setup.progress.steps[3].state = 'running';
+  assert.equal(stepRows(status)[3].state, 'failed');
+});
+
+test('stepRows: idle lists the steps pending, ready asks for review', () => {
+  const idle = stepRows(scene('idle'));
+  assert.equal(idle.length, 6);
+  assert.ok(idle.every(row => row.state === 'pending' && row.elapsed_s === null && row.sub.length === 0));
+  const ready = stepRows(scene('setup_ready_warnung'));
+  assert.deepEqual(ready.map(row => row.state), ['done', 'done', 'done', 'done', 'done', 'running']);
+  assert.equal(ready[4].tone, 'warn');
+  assert.match(ready[4].detail, /Gesamturteil WARNUNG/);
+});
+
+function fakeClock() {
+  let t = 1000;
+  const timers = [];
+  const add = (fn, ms, repeat) => { const id = timers.length + 1; timers.push({id, fn, at: t + ms, ms, repeat}); return id; };
+  return {
+    now: () => t,
+    timers: {setTimeout: (fn, ms) => add(fn, ms, false), clearTimeout: id => { const x = timers.find(y => y.id === id); if (x) x.fn = null; },
+      setInterval: (fn, ms) => add(fn, ms, true), clearInterval: id => { const x = timers.find(y => y.id === id); if (x) x.fn = null; }},
+    async advance(ms) {
+      const end = t + ms;
+      for (;;) {
+        const due = timers.filter(x => x.fn && x.at <= end).sort((a, b) => a.at - b.at)[0];
+        if (!due) break;
+        t = due.at;
+        const fn = due.fn;
+        if (due.repeat) due.at += due.ms; else due.fn = null;
+        fn();
+        await new Promise(setImmediate);
+      }
+      t = end;
+      await new Promise(setImmediate);
+    },
+  };
+}
+
+test('client polls full status once, keeps German reasons, and posts with the CSRF token', async () => {
+  const clock = fakeClock();
+  const gets = [];
+  const posts = [];
+  let reply = {ok: true, status: 200, body: {state: 'idle', csrf: 'tok-1', tracking_reasons: {rahmen_unstimmig: 'Rahmen passt nicht'}}};
+  const fetchImpl = async (path, options) => {
+    if (options?.method === 'POST') {
+      posts.push({path, headers: options.headers, body: JSON.parse(options.body)});
+      return {ok: false, status: 409, statusText: 'Conflict', text: async () => JSON.stringify({error: 'Einrichtung laeuft bereits'})};
+    }
+    gets.push(path);
+    return {ok: reply.ok, status: reply.status, json: async () => structuredClone(reply.body)};
+  };
+  const client = createClient({fetchImpl, now: clock.now, timers: clock.timers});
+  const statuses = [];
+  const connections = [];
+  client.start(s => statuses.push(s), c => connections.push(c));
+  await new Promise(setImmediate);
+  reply = {ok: true, status: 200, body: {state: 'idle', csrf: 'tok-2'}};
+  await clock.advance(1100);
+  assert.equal(gets[0], '/live/status?full=1');
+  assert.ok(gets.slice(1).length >= 2 && gets.slice(1).every(path => path === '/live/status'), gets.join(' '));
+  assert.equal(statuses.at(-1).tracking_reasons.rahmen_unstimmig, 'Rahmen passt nicht');
+  assert.equal(connections.at(-1).offline, false);
+  assert.equal(connections.at(-1).view.headline, 'Bereit zur Einrichtung');
+  const result = await client.post('/live/setup', {cell_text: null});
+  assert.deepEqual(result, {ok: false, error: 'Einrichtung laeuft bereits'});
+  assert.equal(posts[0].headers['X-CSRF-Token'], 'tok-2');
+  assert.deepEqual(posts[0].body, {cell_text: null});
+  client.stop();
+  const count = gets.length;
+  await clock.advance(5000);
+  assert.equal(gets.length, count, 'nach stop keine Abrufe mehr');
+});
+
+test('client retries the full status until the first success and reports a hanging poll as offline', async () => {
+  const clock = fakeClock();
+  const gets = [];
+  let mode = 'fail';
+  const fetchImpl = async (path) => {
+    gets.push(path);
+    if (mode === 'fail') return {ok: false, status: 503, json: async () => ({})};
+    if (mode === 'hang') return new Promise(() => {});
+    return {ok: true, status: 200, json: async () => ({state: 'idle', csrf: 'x'})};
+  };
+  const client = createClient({fetchImpl, now: clock.now, timers: clock.timers});
+  const connections = [];
+  client.start(() => {}, c => connections.push(c));
+  await new Promise(setImmediate);
+  await clock.advance(600);
+  assert.deepEqual(gets, ['/live/status?full=1', '/live/status?full=1']);
+  assert.equal(connections.at(-1).offline, true);
+  assert.equal(connections.at(-1).view.detail, 'Verbindung zur Werkbank verloren');
+  mode = 'ok';
+  await clock.advance(600);
+  assert.equal(connections.at(-1).offline, false);
+  mode = 'hang';
+  await clock.advance(1400);
+  assert.equal(connections.at(-1).offline, false, '1,4 s ohne Antwort ist noch verbunden');
+  await clock.advance(700);
+  assert.equal(connections.at(-1).offline, true);
+  assert.equal(connections.at(-1).view.headline, 'STALE');
+  const post = await createClient({fetchImpl: async () => { throw new TypeError('network'); }, now: clock.now,
+    timers: clock.timers}).post('/live/run/stop');
+  assert.equal(post.ok, false);
+  assert.match(post.error, /Verbindung prüfen/);
+  client.stop();
+});
+
+test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, shadows only on popover/menu/modal', () => {
+  const css = readFileSync(new URL('../src/dispread/workbench/static/live/live.css', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const tokens = {'--bg0': '#0d0c0b', '--bg1': '#161513', '--dock': '#1c1b19', '--title': '#24231f',
+    '--ctl': '#2c2a26', '--ctl-h': '#363430', '--line': '#3a3833', '--line2': '#292724', '--stripe': '#201f1c',
+    '--tx': '#ebe7e0', '--tx2': '#bab4aa', '--tx3': '#958f85', '--sel': '#3f6fb8', '--sel-hi': '#86aee8',
+    '--sel-bg': '#212d40', '--sel-line': '#36507a', '--ok': '#55c46e', '--warn': '#e5a535', '--err': '#ee5b4d',
+    '--stale': '#8f8a82', '--teal': '#30c6b7', '--mag': '#d65ccf',
+    '--sans': '"Segoe UI","Noto Sans",system-ui,sans-serif', '--mono': '"Noto Sans Mono",ui-monospace,monospace'};
+  const root = css.match(/:root\s*\{([^}]*)\}/)[1];
+  for (const [name, value] of Object.entries(tokens)) {
+    const found = root.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
+    assert.ok(found, `${name} fehlt`);
+    assert.equal(found[1].trim(), value, name);
+  }
+  assert.match(css, /body\s*\{[^}]*font:\s*13px\/[\d.]+ var\(--sans\)/);
+  for (const [, radius] of css.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+    for (const part of radius.trim().split(/\s+/)) assert.ok(parseFloat(part) <= 2, `Radius ${radius}`);
+  }
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/box-shadow/.test(body) || /box-shadow\s*:\s*none/.test(body)) continue;
+    assert.ok(selector.split(',').every(part => /\.(popover|menu|modal)\b/.test(part)), `Schatten an ${selector.trim()}`);
+  }
+  for (const font of ['NotoSans-Regular.woff2', 'NotoSansMono-Regular.woff2', 'NotoSansMono-Bold.woff2']) {
+    assert.match(css, new RegExp(`url\\("\\.\\./vendor/fonts/${font}"\\)`));
+    assert.ok(readFileSync(new URL(`../src/dispread/workbench/static/vendor/fonts/${font}`, import.meta.url))
+      .subarray(0, 4).toString('latin1') === 'wOF2', font);
+  }
+});
+
+test('new page loads only module scripts from /static/live (CSP: no inline script)', () => {
+  const html = readFileSync(new URL('../src/dispread/workbench/static/live/index.html', import.meta.url), 'utf8');
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+  assert.ok(scripts.length >= 1);
+  for (const [, attrs, body] of scripts) {
+    assert.match(attrs, /type="module"/);
+    assert.match(attrs, /src="\/static\/live\/[\w/.-]+\.js"/);
+    assert.equal(body.trim(), '');
+  }
+  assert.match(html, /<html lang="de">/);
+  assert.match(html, /href="\/static\/live\/live\.css"/);
 });

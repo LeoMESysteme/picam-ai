@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', async ({ page }) => {
   const errors: string[] = [];
@@ -7,7 +7,9 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page).toHaveURL(/\/login\?next=\/live$/);
   await page.getByLabel('Linux-Passwort').fill('test-only');
   await page.getByRole('button', { name: 'enter', exact: true }).click();
-  await expect(page).toHaveURL(/\/live$/);
+  await expect(page).toHaveURL(/:\d+\/live$/);
+  // Alte Seite bis zur Ablösung in Aufgabe 12 unter /live/alt.
+  await page.goto('/live/alt');
   const headline = page.locator('#headline');
   await expect(headline).toHaveText('Bereit zur Einrichtung');
   await expect(page.locator('#notice')).toContainText('Validiert nur:');
@@ -145,7 +147,9 @@ test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue
   await page.goto('/live');
   await page.getByLabel('Linux-Passwort').fill('test-only');
   await page.getByRole('button', { name: 'enter', exact: true }).click();
-  await expect(page).toHaveURL(/\/live$/);
+  await expect(page).toHaveURL(/:\d+\/live$/);
+  // Alte Seite bis zur Ablösung in Aufgabe 12 unter /live/alt.
+  await page.goto('/live/alt');
   const { csrf } = await (await page.request.get('/live/status')).json();
   const stateResponse = await page.request.post('/__test__/state', {
     headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
@@ -194,5 +198,76 @@ test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue
   await image.click({position: {x: scaled.width * 35.8 / 48, y: scaled.height * 12.8 / 24}});
   expect((await fractional).postDataJSON()).toEqual({proposal_revision: revision, add: [[35, 12]], remove: []});
   await expect(page.locator('#region-list li')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+async function login(page: Page) {
+  await page.goto('/live');
+  await page.getByLabel('Linux-Passwort').fill('test-only');
+  await page.getByRole('button', { name: 'enter', exact: true }).click();
+  await expect(page).toHaveURL(/:\d+\/live$/);
+}
+
+async function hook(page: Page, path: string, data: unknown) {
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const response = await page.request.post(path, {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf }, data,
+  });
+  expect(response.ok()).toBe(true);
+}
+
+test('Hülle zeigt Titel, Docks und Statusleiste in Szene idle', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+
+  const title = page.getByRole('banner');
+  await expect(title).toContainText('picam-ai Werkbank');
+  await expect(title.getByRole('navigation', { name: 'Ablauf' })).toHaveText(/Einrichtung\s*Lauf/);
+  await expect(title.locator('[aria-current="step"]')).toHaveText('Einrichtung');
+  await expect(title).toContainText('GSV-2AS · Displaytech 161A');
+  const start = title.getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await expect(start).toBeEnabled();
+
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left).toContainText('Bereit zur Einrichtung');
+  await expect(left.locator('[data-step] b')).toHaveText(
+    ['Fokus', 'Kamera', 'Belichtung', 'Standbilder', 'Vorschlag', 'Prüfen & Bestätigen']);
+  await expect(left.locator('[data-step]').first()).toHaveAttribute('data-state', 'pending');
+  await expect(left).toContainText('test-session');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector).toContainText('Inspektor');
+  await expect(inspector.getByRole('tab')).toHaveText(['Schritt', 'Fokus', 'Prüfungen']);
+  await expect(inspector.getByRole('tab', { name: 'Schritt' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'Bildansicht' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Zeitleiste' })).toBeVisible();
+
+  const bar = page.getByRole('contentinfo');
+  for (const text of ['StreamCam', 'Vorschau', 'Bilder', 'Lücken', 'Latenz', 'SD', '4,20 GB', 'Sitzung', 'test-session']) {
+    await expect(bar).toContainText(text);
+  }
+  await expect(bar).toContainText('Validiert nur:');
+
+  // Maße wie im Mock, keine horizontale Rollleiste, Schriften lokal geladen.
+  expect(Math.round((await left.boundingBox())!.width)).toBe(248);
+  expect(Math.round((await inspector.boundingBox())!.width)).toBe(368);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([document.fonts.load('13px "Noto Sans"'), document.fonts.load('13px "Noto Sans Mono"')]);
+    return document.fonts.check('13px "Noto Sans"') && document.fonts.check('13px "Noto Sans Mono"');
+  })).toBe(true);
+  await expect(page.locator('body')).toHaveCSS('font-size', '13px');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(22, 21, 19)');
+
+  // Die Kontextaktion geht mit CSRF an den Server, der Ablauf folgt dem Status.
+  const request = page.waitForRequest('**/live/setup');
+  await start.click();
+  expect((await request).postDataJSON()).toEqual({ cell_text: null });
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+  await expect(title.getByRole('button', { name: 'Einrichtung starten', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });

@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Die Werkbank-Seite `/live` war eine lange Formularseite
+  ohne festes Layout. `/live` liefert jetzt das neue Seitengerüst im
+  Machine-Vision-Stil des freigegebenen Mocks (`static/live/`): Titelleiste
+  mit Kontextaktion je Zustand (Einrichtung starten mit optionalem
+  Zellentext, Lauf starten, Lauf stoppen, Neu einrichten), Ablauf-Dock mit
+  Schrittliste und Teilfortschritt, Inspektorrahmen, Zeitleisten- und
+  Viewer-Platz und eine Statusleiste mit Kamera, Bildern, Lücken, SD,
+  Referenz, Freigabehinweis und Sitzung. Statusabruf (500 ms, voller Status
+  einmal), CSRF-POSTs und die Verbindungsregel (1,5 s) liegen in `api.js`;
+  `statusView` und `connectionView` sind unverändert nach `model.js`
+  umgezogen, dazu `effectState` (Effektvorrang der Spec) und `stepRows`
+  (Fortschritt aus `setup.progress`, Abbruch vor dem ersten Schritt und
+  nach `setup_failed` als Ort des Abbruchs). Die Schriften Noto Sans und
+  Noto Sans Mono liegen als woff2 mit OFL-Lizenz lokal. Die alte Seite
+  bleibt bis zu ihrer Ablösung unter `/live/alt` erreichbar; Viewer, HUD,
+  Einrichtungs- und Laufansicht folgen in eigenen Schritten.
+  `pyproject.toml` nimmt `static/live/` und die Schriften in die
+  Paketdaten auf.
+
 * 2026-11-04: Der Fake-Server der Live-Seite kannte die neuen Einrichtungs-
   und Laufdaten noch nicht. Elf steuerbare Szenen liefern jetzt Fokus,
   Fortschritt, Prüfungen, Zähler und Verlauf sowie eine MJPEG-Vorschau mit
