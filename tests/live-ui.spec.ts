@@ -1347,8 +1347,82 @@ test('Hilfe findet „Gegenlesen“', async ({ page }) => {
   // Gründe kommen aus dem Status (fields.py REASONS über tracking_reasons).
   await search.fill('rahmenbewegungen');
   await expect(dock.locator('.gl-entry:visible')).toContainText(['rahmenbewegungen passen nicht zusammen']);
+  // Lesegründe aus cause_texts (fields.py LIVE_CAUSE_TEXT im vollen Status).
+  await search.fill('zelle_mehrdeutig');
+  await expect(dock.locator('.gl-entry:visible')).toHaveCount(1);
+  await expect(dock.locator('.gl-entry:visible')).toContainText('Zeichen mehrdeutig');
+  await expect(dock.locator('.gl-sec:visible .gl-h')).toContainText(['Lesegründe']);
   await dock.getByRole('button', { name: 'Hilfe schließen' }).click();
   await expect(dock).toBeHidden();
   await expect(page.locator('.inspector')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+// Helfer: Übungslauf über das Hilfe-Menü starten und bis in den Lauf bringen.
+async function practiceToRun(page: Page) {
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
+  await expect(title.getByText('Übungslauf – keine Messung')).toBeVisible();
+  await title.getByRole('button', { name: /Einrichtung starten|Neu einrichten/ }).first().click();
+  await page.clock.fastForward(50_000);
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.getByLabel('Name')).toBeVisible({ timeout: 10_000 });
+  await inspector.getByLabel('Name').fill('Übung');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  await title.getByRole('button', { name: 'Bestätigen', exact: true }).click();
+  await title.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
+}
+
+test('Übung beenden mitten im Lauf: kein falscher „gestoppt“-Hinweis für die echte Werkbank', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.clock.install();
+  await login(page);
+  await hook(page, '/test/scene', { name: 'stopped' });
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Neu einrichten' })).toBeVisible();
+  await practiceToRun(page);
+  await expect(page.locator('.toast', { hasText: 'gestartet' })).toBeVisible();
+  await page.getByRole('banner').getByRole('button', { name: 'Übung beenden' }).click();
+  await expect(page.getByRole('contentinfo')).toContainText('test-session');
+  // Echter Stand "Lauf beendet" kommt an; weder "gestoppt" noch ein Übungsereignis taucht auf.
+  // Momentaufnahmen statt wartender Erwartung: ein Hinweis schliesst nach 4 s von selbst.
+  for (let i = 0; i < 6; i++) {
+    expect(await page.locator('.toast').allTextContents()).toEqual([]);
+    await page.waitForTimeout(400);
+  }
+  await expect(page.locator('.modalbg')).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Ablauf' })).toContainText('Lauf beendet');
+  expect(errors).toEqual([]);
+});
+
+test('Übungslauf läuft weiter, wenn die echte Werkbank nicht antwortet', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const offline = (on: boolean) => page.request.post('/test/offline', {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf }, data: { on } });
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  const meta = page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-part="meta"]');
+  expect((await offline(true)).ok()).toBe(true);
+  try {
+    const first = await meta.textContent();
+    await page.waitForTimeout(4000);
+    // Die Einrichtung zählt weiter, kein Band "Verbindung verloren".
+    await expect(meta).not.toHaveText(first!);
+    await expect(page.locator('.netband')).toBeHidden();
+    await expect(page.locator('body')).not.toHaveClass(/offline/);
+  } finally {
+    expect((await offline(false)).ok()).toBe(true);
+  }
+  await title.getByRole('button', { name: 'Übung beenden' }).click();
   expect(errors).toEqual([]);
 });

@@ -39,7 +39,7 @@
         {"term": "Gegenlesen", "code": "gegenlesen", "anchor": "gegenlesen",
           "text": "Der Leser liest beide Standbilder und vergleicht Zeichen für Zeichen mit dem Zellentext des GSV-2AS. Nur OK erlaubt einen normalen Lauf."},
         {"term": "Displayfehler", "code": "displayfehler", "anchor": "auto-setup",
-          "text": "Sucht Kratzer, Staub oder tote Punkte in Zellen, die leer sein sollten. Nur ein Hinweis, kein Fehler."},
+          "text": "Sucht Kratzer, Staub oder tote Punkte in Zellen, die leer sein sollten. Ergibt höchstens WARNUNG; die ist vor dem Bestätigen zu quittieren."},
         {"term": "Nachführung", "code": "nachfuehrung", "anchor": "quadtracker",
           "text": "Prüft, ob genug Rahmenbereiche gefunden und im zweiten Standbild wiedergefunden wurden. Ohne sie folgt das Viereck der Anzeige nicht."}
       ]

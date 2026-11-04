@@ -35,6 +35,8 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
   let sequence = 0;
   let running = false;
   let pollTimer = null;
+  // Eigener Takt des Szenarios: ein haengender echter Abruf haelt den Uebungslauf nie an.
+  let scenarioTimer = null;
   let connectionTimer = null;
   let onStatus = null;
   let onConnection = null;
@@ -113,7 +115,6 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
   };
 
   const tick = async () => {
-    scenarioTick();
     try { await refresh(); } finally {
       if (running) pollTimer = timers.setTimeout(tick, POLL_MS);
     }
@@ -137,8 +138,13 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
       if (next && next !== 'server' && !scenario) throw new TypeError('Quelle: "server" oder ein Szenario mit status() und act()');
       source = scenario ? next : 'server';
       practice = {lastStatus: null, lastOkMs: null};
+      if (scenarioTimer !== null) timers.clearInterval(scenarioTimer);
+      scenarioTimer = null;
       if (!running) return;
-      if (scenario) scenarioTick();
+      if (scenario) {
+        scenarioTimer = timers.setInterval(scenarioTick, POLL_MS);
+        scenarioTick();
+      }
       else {
         // Den letzten echten Stand sofort zeigen, dann frisch abrufen.
         if (lastStatus) deliver(onStatus, lastStatus);
@@ -192,7 +198,8 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
       sequence++;
       if (pollTimer !== null) timers.clearTimeout(pollTimer);
       if (connectionTimer !== null) timers.clearInterval(connectionTimer);
-      pollTimer = connectionTimer = null;
+      if (scenarioTimer !== null) timers.clearInterval(scenarioTimer);
+      pollTimer = connectionTimer = scenarioTimer = null;
     },
   };
 }

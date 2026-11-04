@@ -272,6 +272,11 @@ test('glossary: short texts, all checks and status words, reasons from status, s
     assert.ok(!/wahrscheinlich|sicherheit\s*%/i.test(entry.text), `${entry.term}: Konfidenz ist keine Wahrscheinlichkeit`);
     assert.match(entry.href, /^https:\/\/picam-docs\.pages\.dev\/docs\/anleitung\/glossar\//);
   }
+  // Displayfehler ergibt WARNUNG (setup_checks.py), die vor dem Bestaetigen zu quittieren ist.
+  const defect = checks.find((e) => e.code === 'displayfehler');
+  assert.match(defect.text, /WARNUNG/);
+  assert.match(defect.text, /quittier/);
+  assert.doesNotMatch(defect.text, /kein Fehler/);
   // Gruende kommen aus dem Status, nicht aus einer Kopie der Python-Tabellen.
   assert.ok(!entries.some((e) => e.code === 'rahmen_unstimmig'));
   const status = {tracking_reasons: {rahmen_unstimmig: 'rahmenbewegungen passen nicht zusammen'},
@@ -289,4 +294,62 @@ test('glossary: short texts, all checks and status words, reasons from status, s
   assert.ok(filterEntries(merged, 'GEGENLESEN').some((e) => e.term === 'Gegenlesen'));
   assert.ok(filterEntries(merged, 'nachfuhrung').some((e) => e.code === 'nachfuehrung'), 'Umlaute egal');
   assert.equal(filterEntries(merged, '').length, merged.length);
+});
+
+// Fix-Runde 1: eigene Uhr fuer Timer und Zeit (wie fakeClock in live_client.test.mjs).
+function fakeTimers() {
+  let t = 1000;
+  const list = [];
+  const add = (fn, ms, repeat) => { const id = list.length + 1; list.push({id, fn, at: t + ms, ms, repeat}); return id; };
+  const clear = (id) => { const x = list.find((y) => y.id === id); if (x) x.fn = null; };
+  return {
+    now: () => t,
+    timers: {setTimeout: (fn, ms) => add(fn, ms, false), clearTimeout: clear, setInterval: (fn, ms) => add(fn, ms, true), clearInterval: clear},
+    async advance(ms) {
+      const end = t + ms;
+      for (;;) {
+        const due = list.filter((x) => x.fn && x.at <= end).sort((a, b) => a.at - b.at)[0];
+        if (!due) break;
+        t = due.at;
+        const fn = due.fn;
+        if (due.repeat) due.at += due.ms; else due.fn = null;
+        fn();
+        await new Promise(setImmediate);
+      }
+      t = end;
+      await new Promise(setImmediate);
+    },
+  };
+}
+
+test('practice runs on its own timer: a hanging real server neither stalls nor offline-marks it', async () => {
+  const clock = fakeTimers();
+  let hang = false;
+  const fetchImpl = (path, init = {}) => {
+    if (init.method === 'POST') throw new Error('kein POST im Uebungslauf');
+    if (hang) return new Promise(() => {}); // haengender Abruf, endet nie
+    return Promise.resolve({ok: true, status: 200, json: async () => ({state: 'idle', csrf: 't'})});
+  };
+  const client = createClient({fetchImpl, now: clock.now, timers: clock.timers});
+  const statuses = [];
+  const connections = [];
+  client.start((s) => statuses.push(s), (c) => connections.push(c));
+  await clock.advance(600);
+  const scenario = createScenario({clock: clock.now});
+  client.useSource(scenario);
+  await client.post('/live/setup', {cell_text: null});
+  hang = true;
+  const before = statuses.length;
+  await clock.advance(10_000);
+  // Alle 500 ms ein Szenario-Status, obwohl jeder echte Abruf bis zum 3-s-Abbruch haengt.
+  assert.ok(statuses.length - before >= 18, `nur ${statuses.length - before} Status in 10 s`);
+  assert.equal(statuses.at(-1).state, 'setup_running');
+  assert.ok(statuses.at(-1).setup.elapsed_s > 9);
+  assert.equal(connections.at(-1).offline, false);
+  assert.ok(connections.slice(-15).every((c) => !c.offline), 'kein Verbindungsverlust im Uebungslauf');
+  // Zurueck zum Server: dessen haengender Abruf gilt wieder.
+  client.useSource('server');
+  await clock.advance(3000);
+  assert.equal(connections.at(-1).offline, true);
+  client.stop();
 });

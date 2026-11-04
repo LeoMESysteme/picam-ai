@@ -57,7 +57,8 @@ function recordView(status) {
           `Anzeige verloren — Kamera bewegt? Neu einrichten (${reasons})`};
     }
     if (cls === 'transition' && run.reject_reasons[0] === 'anzeige_wechselt') {
-      return {headline: 'TRANSITION', cls, detail: `Wert wechselt (${reasons})`};
+      // Traegt der Grund schon die Erklaerung "Wert wechselt" (live_cause), nicht doppelt klammern.
+      return {headline: 'TRANSITION', cls, detail: reasons.startsWith('Wert wechselt') ? reasons : `Wert wechselt (${reasons})`};
     }
     return {headline: cls.toUpperCase(), cls, detail: status.error || reasons};
   }

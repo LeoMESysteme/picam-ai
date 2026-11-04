@@ -566,7 +566,11 @@ if (typeof document !== 'undefined') {
     status = next;
     render();
     effects.update(next, undefined);
-    alerts = watchAlerts(next, {client, viewer: viewerUi.viewer, run: practice ? practiceRun(practice.scenario) : alertRun});
+    // Ein Waechter je Quelle: sein letzter Stand (prev) gehoert nur zu ihr. So meldet die
+    // Rueckkehr vom Uebungslauf keinen Uebergang (etwa "gestoppt") fuer die echte Werkbank.
+    alerts = practice
+      ? watchAlerts(next, {client: practice.scenario, viewer: viewerUi.viewer, run: practiceRun(practice.scenario)})
+      : watchAlerts(next, {client, viewer: viewerUi.viewer, run: alertRun});
   }, (next) => {
     conn = next;
     effects.update(undefined, next);

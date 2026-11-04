@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Nacharbeit am Übungslauf und an der Hilfe der Live-Seite.
+  * **Falscher Hinweis nach dem Übungslauf:** Wer die Übung mitten im Lauf
+    beendete, sah „Lauf NN gestoppt“ für die echte Werkbank. Der Wächter
+    für Hinweise und Dialog gilt jetzt je Quelle (Server oder Szenario).
+    Die Rückkehr meldet so keinen Übergang aus der Übung.
+  * **Eigener Takt:** Das Szenario läuft im eigenen 500-ms-Takt. Hängt der
+    echte Statusabruf, meldet der Übungslauf deshalb keinen falschen
+    Verbindungsverlust mehr. Der echte Status wird weiter nur gelesen.
+  * **Glossar Displayfehler:** Der Text sagt jetzt, dass die Prüfung
+    höchstens WARNUNG ergibt und diese vor dem Bestätigen zu quittieren
+    ist. Vorher hieß es „kein Fehler“.
+  * **Ergebnistext bei Wechsel:** „Wert wechselt (Wert wechselt
+    (anzeige_wechselt))“ wird nicht mehr doppelt geklammert, wenn der
+    Server die Erklärung mitliefert.
+  * Das Hilfe-Dock zeigt die Lesegründe aus `cause_texts`.
+
 * 2026-11-04: Dem Hilfe-Dock fehlte die vollständige Lesegrund-Tabelle.
   `/live/status?full=1` liefert jetzt `cause_texts` direkt aus
   `LIVE_CAUSE_TEXT`; der Fake-Server folgt demselben Vertrag. So bleiben
@@ -45,9 +61,8 @@ was ist die Konsequenz.
     * Nachführungsgründe kommen zur Laufzeit aus `tracking_reasons` des
       Status, Lesegründe aus den gemeldeten `rejection_causes`. Sie werden
       nicht im Client gepflegt.
-    * Die vollständige Lesegrund-Tabelle (`LIVE_CAUSE_TEXT`) liefert der
-      Status noch nicht. Der Client übernimmt sie, sobald `cause_texts`
-      im vollen Status steht.
+    * Die vollständige Lesegrund-Tabelle (`LIVE_CAUSE_TEXT`) übernimmt der
+      Client aus `cause_texts` im vollen Status.
   * **Konsequenz:** Eine Einarbeitung braucht keinen Aufbau und keine
     Kamera. Ein Übungswert ist überall als Übung markiert, und der
     Übungslauf sendet nichts an die Werkbank.

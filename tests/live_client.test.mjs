@@ -1223,3 +1223,15 @@ test('region edit: a lost request shows the old live.js wording, server answers 
   assert.deepEqual(editFeedback({add: [[1, 1]], remove: []}, {ok: false, error: 'CSRF rejected'}, {}),
     {ok: false, text: 'CSRF rejected'});
 });
+
+test('transition detail does not wrap the server explanation twice (rejection_causes as in the fixture)', () => {
+  const status = scene('running_transition');
+  status.run.rejection_causes = {window_s: 10.0, frames: 10, limited: false,
+    causes: [{reason: 'anzeige_wechselt', count: 3, fraction: 0.3, cell: null, explanation: 'Wert wechselt'}]};
+  const view = statusView(status);
+  assert.equal(view.headline, 'TRANSITION');
+  assert.equal(view.detail, 'Wert wechselt (anzeige_wechselt)');
+  // Ohne Erklaerung bleibt der Text von statusView woertlich.
+  status.run.rejection_causes.causes = [];
+  assert.equal(statusView(status).detail, 'Wert wechselt (anzeige_wechselt)');
+});
