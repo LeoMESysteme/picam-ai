@@ -1,6 +1,6 @@
 // Bestaetigen im Inspektor, Tab Schritt (Spec "Einrichtungs-Fortschritt":
 // Felder wie heute; Mock-Kapitel 7, #t=50). Felder, Texte und POST-Koerper
-// sind woertlich aus static/live.js/live.html uebernommen. Bestaetigen geht
+// sind woertlich aus der alten Live-Seite uebernommen. Bestaetigen geht
 // nur ueber client.post (HTTPS mit CSRF, Wahrheitsregel 5); Antworten des
 // Servers erscheinen woertlich und inline (Wahrheitsregel 6). Bei neuer
 // proposal_revision oder session_id beginnt die Bestaetigung von vorn.
@@ -36,7 +36,7 @@ export function fieldsReady(model, fields) {
   return Boolean(model.visible && String(fields.name || '').trim() && fields.format && (!model.needAck || fields.ack));
 }
 
-// POST-Koerper woertlich wie static/live.js ($('confirm').onclick).
+// POST-Koerper woertlich wie auf der alten Live-Seite ($('confirm').onclick).
 export function confirmBody(status, fields) {
   return {session_id: status?.session_id, confirmed_by: fields.name,
     format_checked: Boolean(fields.format), acknowledge_warning: Boolean(fields.ack),
@@ -123,7 +123,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
         if (lastKey !== null) reset();
         lastKey = model.key;
       }
-      // Wie static/live.js: ohne moegliche Toleranz kein Haken.
+      // Wie auf der alten Live-Seite: ohne moegliche Toleranz kein Haken.
       if (!model.tolerance) field('tolerance').checked = false;
       if (!model.needAck) field('ack').checked = false;
       host.hidden = !model.visible;

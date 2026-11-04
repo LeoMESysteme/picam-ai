@@ -4,7 +4,7 @@
 // (dispread.live), nie hier.
 //
 // statusView, connectionView, cameraView, recordView und trackingHintText sind
-// inhaltsgleich aus static/live.js uebernommen (Spec "Technik"); connectionLost
+// inhaltsgleich aus der alten Live-Seite uebernommen (Spec "Technik"); connectionLost
 // ist nur die herausgezogene Bedingung von connectionView.
 
 export function cameraView(camera) {

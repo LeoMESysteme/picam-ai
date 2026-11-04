@@ -11,7 +11,7 @@ const CHECK_LABELS = {kontrast: 'Kontrast', kanten: 'Kanten', rahmen: 'Rahmen', 
   rasterversatz: 'Rasterversatz', gegenlesen: 'Gegenlesen', displayfehler: 'Displayfehler',
   nachfuehrung: 'Nachführung'};
 const WORDS = {OK: ['OK', 'ok'], WARNUNG: ['WARNUNG', 'warn'], FEHLER: ['FEHLER', 'err']};
-// "nicht geprüft" wie static/live.js (status ?? 'nicht geprüft').
+// "nicht geprüft" wie auf der alten Live-Seite (status ?? 'nicht geprüft').
 const UNCHECKED = ['nicht geprüft', 'pend'];
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);

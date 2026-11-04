@@ -74,11 +74,12 @@ function ursachenHTML(status, result) {
     `${window?.limited ? '<p class="note pad">Fenster wegen hoher Bildrate begrenzt</p>' : ''}</div>`;
 }
 
-// Modus-Texte aus static/live.js (woertlich), sonst die Kennung.
-function trackingModeText(mode) {
+// Modus-Texte aus der alten Live-Seite (woertlich), sonst die Kennung
+// (known: nur die bekannten Modi, sonst '' wie auf der alten Seite).
+export function trackingModeText(mode, {known = false} = {}) {
   return mode === 'rahmenbereiche' ? 'Nachführung: Rahmenbereiche'
     : mode === 'ecc_alt' ? 'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen'
-      : mode === 'injiziert' ? 'Nachführung: injiziert' : mode || '–';
+      : mode === 'injiziert' ? 'Nachführung: injiziert' : known ? '' : mode || '–';
 }
 
 function trackingHTML(status, hud) {
@@ -95,7 +96,7 @@ function trackingHTML(status, hud) {
   }).join('');
   const lost = Object.entries(summary.tracking_lost_reasons || {}).map(([reason, count]) =>
     `<tr><td class="wrap">${esc(status?.tracking_reasons?.[reason] || reason)}</td><td class="m r">${grp(count)}</td></tr>`).join('');
-  return `<div class="blk"><h4>Spurgüte<span>${esc(trackingModeText(status?.run?.tracking?.mode))}</span></h4>` +
+  return `<div class="blk"><h4>Spurgüte<span>${esc(trackingModeText(status?.run?.tracking?.mode ?? status?.profile?.tracking_mode))}</span></h4>` +
     `<dl class="kv2"><dt>Spur</dt><dd>${value(track?.score, 2)}</dd><dt>Versatz</dt><dd>${value(track?.shift_px, 1, ' px')}</dd>` +
     `<dt>Drehung</dt><dd>${value(track?.rotation_deg, 1, '°')}</dd><dt>Nachregistrierung</dt><dd class="t">${correcting}</dd>` +
     `<dt>Spur im Lauf</dt><dd>${finite(score.median) ? `${value(score.min, 2)} · ${value(score.median, 2)} · ${value(score.max, 2)}` : '–'}</dd></dl>` +
@@ -107,7 +108,7 @@ function trackingHTML(status, hud) {
       `<table class="grid"><tbody>${lost}</tbody></table></div>` : '');
 }
 
-// Diagnose-Zeile aus static/live.js (woertlich).
+// Diagnose-Zeile aus der alten Live-Seite (woertlich).
 export function diagnosticsText(s) {
   const diag = s?.diagnostics;
   return (diag?.enabled

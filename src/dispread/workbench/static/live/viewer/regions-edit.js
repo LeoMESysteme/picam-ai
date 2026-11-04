@@ -1,14 +1,14 @@
 // Rahmenbereiche bearbeiten (Spec "Viewer": nur setup_ready, Bildquelle
 // Live oder Standbild; Mock-Kapitel 6, #t=46). Klick auf freien Rahmen fuegt
 // einen Bereich hinzu, Klick auf einen Bereich entfernt ihn. Vertrag wie
-// static/live.js: POST /live/setup/regions {proposal_revision, add, remove}.
+// Alte Live-Seite: POST /live/setup/regions {proposal_revision, add, remove}.
 // Die Rueckmeldung je Klick kommt aus centre_results der Antwort und steht
 // als Etikett am Klickpunkt. Solange eine Anfrage laeuft, sind Bestaetigen
 // und weitere Aenderungen gesperrt. Die Koordinateneingabe x,y im Inspektor
 // (mountRegionPanel) bleibt der Tastaturweg.
 import {drawHud} from './hud.js';
 
-// Gruende woertlich aus static/live.js; status.tracking_reasons (fields.py) gewinnt.
+// Gruende woertlich aus der alten Live-Seite; status.tracking_reasons (fields.py) gewinnt.
 export const REGION_REASONS = {im_zeichenbereich: 'im Zeichenbereich', ausserhalb_rahmenband: 'außerhalb des Rahmenbands',
   am_bildrand: 'am Bildrand', zu_wenig_struktur: 'zu wenig zweidimensionale Struktur',
   mehrdeutig: 'mehrdeutige Struktur', zu_nah: 'zu nah an einem anderen Bereich',
@@ -20,9 +20,9 @@ export const REGION_REASONS = {im_zeichenbereich: 'im Zeichenbereich', ausserhal
 const COORDINATES = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
 const COORDINATE_ERROR = 'Koordinaten als x,y eingeben, zum Beispiel 320,240.';
 const BUSY_TEXT = 'Rahmenbereich wird geprüft …';
-// Woertlich aus static/live.js (editRegions, catch-Zweig).
+// Woertlich aus der alten Live-Seite (editRegions, catch-Zweig).
 export const REGION_NETWORK_ERROR = 'Bereichsänderung nicht bestätigt – Verbindung prüfen und erneut versuchen.';
-// Wie live.js nach erfolgreichem POST auf refresh() wartet: Sperre bis zum
+// Wie die alte Live-Seite nach erfolgreichem POST auf refresh() wartet: Sperre bis zum
 // Status mit neuer proposal_revision, hoechstens so lange.
 const REVISION_WAIT_MS = 3000;
 // Mindest-Trefferflaeche am Bildschirm, damit 15-px-Bereiche auch eingepasst klickbar bleiben.
@@ -36,7 +36,7 @@ export function reasonText(reason, trackingReasons) {
   return trackingReasons?.[reason] || REGION_REASONS[reason] || reason;
 }
 
-// Zeile wie static/live.js #region-results.
+// Zeile wie #region-results der alten Live-Seite.
 export function resultText(result, trackingReasons) {
   const requested = result.requested_centre || result.centre;
   const used = result.used_centre === undefined ? result.centre : result.used_centre;
@@ -44,7 +44,7 @@ export function resultText(result, trackingReasons) {
     `${result.ok ? 'geeignet' : reasonText(result.reason, trackingReasons)}`;
 }
 
-// Index des Bereichs unter dem Bildpunkt (Pruefung wie static/live.js, aber
+// Index des Bereichs unter dem Bildpunkt (Pruefung wie auf der alten Live-Seite, aber
 // mindestens MIN_HIT_PX Bildschirmpixel breit), sonst -1. scale = CSS-px je Bildpixel.
 export function regionAt(regions, [x, y], scale = 1) {
   return (regions || []).findIndex((region) => {
@@ -229,7 +229,7 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
 }
 
 // Tastaturweg und Liste im Inspektor (Tab Schritt): Koordinaten x,y,
-// Bereiche mit Entfernen, Auswahl und Pruefergebnisse (Texte aus live.js/live.html).
+// Bereiche mit Entfernen, Auswahl und Pruefergebnisse (Texte der alten Live-Seite).
 export function mountRegionPanel(host, editor) {
   host.classList.add('blk');
   host.innerHTML = `

@@ -5,6 +5,40 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Die alte Live-Seite ist abgelöst; die neue Werkbank-Seite
+  `/live` ist die einzige.
+  * **Entfernt:** `static/live.html`, `static/live.js` und die Übergangsroute
+    `/live/alt`. Die DOM-Tests der alten Seite in
+    `tests/live_client.test.mjs` entfallen. Ihre Inhalte prüfen jetzt
+    Playwright und Einzeltests an den neuen Modulen (Begründungen der
+    Rahmenbereiche, Speicheranzeige, Nachführungsmodus).
+  * **Kamera neu verbinden** gab es bisher nur auf der alten Seite. Es
+    steht jetzt im Menü des Kamerafelds der Statusleiste (Spec „Aufbau der
+    Oberfläche“), mit dem Kamerazustand als Kopfzeile, und geht wie dort an
+    `POST /live/camera/start`. Die Servermeldung „Kamera laeuft nicht: … —
+    'Kamera neu verbinden'“ verweist damit wieder auf ein vorhandenes
+    Bedienelement.
+  * **Nachführungsmodus vor dem Lauf:** Nach dem Bestätigen nennt der
+    Inspektor wieder den kommenden Modus aus dem Profil, etwa „alt (ECC,
+    inhaltsabhängig) – neu einrichten empfohlen“. Die alte Seite zeigte das;
+    die neue zeigte den Modus bisher nur im Lauf.
+  * **Layout bei 1280 × 800:** Die Werkzeugleiste schnitt „Entzerrt“ ab.
+    Unter 1360 px stehen „Einpassen“ und „Legende“ nur als Symbol da; der
+    Name bleibt für Screenreader und Tests erhalten. Die Statusleiste
+    kürzte im Übungslauf die Sitzungskennung. Jetzt gibt zuerst die
+    Freigabegrenze Platz ab (bis 40 px), dann Referenz und Toleranz. Beide
+    tragen den vollen Text als Titel. Die Sitzung bleibt ganz lesbar.
+    Auflösung und Bildrate der Kamera entfallen schmal und stehen im Titel.
+  * **Playwright:** Die beiden alten Abläufe (Verbindungsverlust,
+    Bereichsbearbeitung per Tastatur und Bildklick) laufen mit gleichem
+    Prüfinhalt auf der neuen Seite. Neu ist der Gesamtablauf „Einrichtung →
+    Bestätigen → Lauf → Stopp“ samt Übungslauf bei 1280 × 800, 1440 × 900
+    und 1920 × 1080. Er prüft: keine Konsolenfehler, kein waagerechtes
+    Rollen, nichts abgeschnitten in Titel-, Werkzeug- und Statusleiste.
+  * **CI:** `playwright.yml` führt `playwright.live.config.ts` als eigenen
+    Schritt aus (Fake-Server Port 8767, Doku 8766). Es gibt einen eigenen
+    Bericht `playwright-report-live`.
+
 * 2026-11-04: Nacharbeit am Übungslauf und an der Hilfe der Live-Seite.
   * **Falscher Hinweis nach dem Übungslauf:** Wer die Übung mitten im Lauf
     beendete, sah „Lauf NN gestoppt“ für die echte Werkbank. Der Wächter

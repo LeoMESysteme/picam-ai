@@ -8,7 +8,8 @@ Bauen mit `./build.sh`, die Sprungmarken stehen im README. Der Mock ist
 Wahrheitsregeln und Schnittstellen. Widersprechen sich beide, gewinnt die
 Spec, und der Widerspruch kommt in die offenen Punkte.
 **Bezug:** Konzept.md §4, §6, §7, §8. Spec Messpfad live 2026-10-12. Die
-heutige Seite: `src/dispread/workbench/static/live.html` + `live.js`.
+frühere Seite: `src/dispread/workbench/static/live.html` + `live.js`
+(mit Aufgabe 12 entfernt).
 Die Bestandsaufnahme der Server-Schnittstelle steht im Anhang A.
 
 ## Ziel und Erfolg

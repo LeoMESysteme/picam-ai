@@ -699,7 +699,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
             with pytest.raises(web.HTTPFound) as redirect:
                 await handle(method, "/live")
             assert redirect.value.location == "/login?next=/live"
-        for path in ("/live/status", "/live/preview.jpg", "/static/live.js"):
+        for path in ("/live/status", "/live/preview.jpg", "/static/live/app.js"):
             with pytest.raises(web.HTTPUnauthorized):
                 await handle("GET", path)
         response = await handle("POST", "/login", {"Host": "localhost", "Origin": "https://localhost"},

@@ -18,7 +18,7 @@ import {overallView, renderChecks, warningCount} from './setup/checks.js';
 import {mountConfirm} from './setup/confirm.js';
 import {renderResult} from './run/result.js';
 import {runDockHTML, runTitle} from './run/dock.js';
-import {RUN_TABS, createRecordLog, renderRunInspector, runBadges} from './run/inspector.js';
+import {RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
 import {createTimeline} from './run/timeline.js';
 import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
 import {mountEffects} from './viewer/effects.js';
@@ -28,6 +28,7 @@ import {createScenario} from './practice/scenario.js';
 import {createFrameComposer} from './practice/frames.js';
 import {mountHelp} from './help/dock.js';
 import {mountHelpMenu} from './help/menu.js';
+import {mountCameraMenu} from './ui/camera-menu.js';
 import {TOUR_STOPS, createCoach, offerTour, practiceLock, practiceTask, startTour, tourActive} from './help/tour.js';
 
 const RUN_STATES = ['running', 'stopped'];
@@ -183,7 +184,10 @@ function stepInfoHTML(status) {
   }
   if (status.state === 'confirmed') {
     const by = status.profile?.confirmed_by;
-    return `<div class="ins"><h3>Bestätigt</h3><p>${by ? `Einrichtung bestätigt von ${esc(by)}. ` : ''}Lauf über die Titelleiste starten.</p></div>`;
+    // Wie auf der alten Seite: der kommende Nachfuehrungsmodus steht schon vor dem Lauf da.
+    const mode = trackingModeText(status.profile?.tracking_mode, {known: true});
+    return `<div class="ins"><h3>Bestätigt</h3><p>${by ? `Einrichtung bestätigt von ${esc(by)}. ` : ''}Lauf über die Titelleiste starten.</p>` +
+      `${mode ? `<p class="${status.profile.tracking_mode === 'ecc_alt' ? 'warn-t' : 'mut'}" data-part="tracking-mode">${esc(mode)}</p>` : ''}</div>`;
   }
   return '';
 }
@@ -314,6 +318,8 @@ if (typeof document !== 'undefined') {
     onGlossary: () => help.open(),
   });
   nodes.practiceEnd.addEventListener('click', () => endPractice());
+  // Kameramenue der Statusleiste: "Kamera neu verbinden" wie auf der alten Seite (POST /live/camera/start).
+  const cameraMenu = mountCameraMenu(nodes.cameraButton, nodes.cameraMenu, {onReconnect: () => act('/live/camera/start')});
   let hudProc = null;
   let status = null;
   let conn = null;
@@ -434,6 +440,7 @@ if (typeof document !== 'undefined') {
     updateTimeline(status);
     timeline.draw();
     renderStatusbar(status, hudProc);
+    cameraMenu.update(status);
     viewerUi.setStatus(status);
     help.update(status);
     menu.update({practice: Boolean(practice),
@@ -463,6 +470,7 @@ if (typeof document !== 'undefined') {
     alerts?.episode()?.modal?.close?.(null);
     startPop.close?.();
     markPop.close?.();
+    cameraMenu.close();
     for (const key of PRACTICE_TOASTS) closeToast(key);
     hud = null;
     hudProc = null;

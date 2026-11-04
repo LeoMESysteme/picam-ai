@@ -60,7 +60,7 @@ export function planText(reference) {
 }
 
 export function referenceLine(reference) {
-  // Texte aus static/live.js (woertlich).
+  // Texte aus der alten Live-Seite (woertlich).
   if (reference?.restoring) return 'Werte werden zurückgestellt …';
   if (reference?.error) return reference.error;
   if (reference?.enabled) return `Referenz: ${finite(reference.lines) ? grp(reference.lines) : '–'} Telegramme`;

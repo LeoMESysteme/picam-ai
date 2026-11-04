@@ -1,7 +1,7 @@
 // Hinweise und der Dialog "Anzeige hat sich bewegt" (Spec "Meldungen").
 // Nur "Anzeige hat sich bewegt" blockiert (Dialog); alles andere ist ein
 // Hinweis unten rechts im Viewer. Texte: trackingHintText und statusView
-// (woertlich aus live.js), Ueberschriften aus der Spec-Tabelle "Meldungen".
+// (woertlich aus der alten Live-Seite), Ueberschriften aus der Spec-Tabelle "Meldungen".
 //
 // watchAlerts(status, {client, viewer}) wertet jeden Statusabruf aus.
 // createAlerts(deps) ist dieselbe Logik mit eingespeisten Hinweisen, Dialog,

@@ -61,7 +61,8 @@ Konfidenz ist keine Fehlerwahrscheinlichkeit.
   CDN. Schriften Noto Sans und Noto Sans Mono (OFL) lokal unter
   `static/vendor/fonts/`.
 * CSP bleibt `connect-src 'self'; img-src 'self' blob:`; keine Inline-Skripte.
-* Die gesamte UI-Sprache ist Deutsch. Produkttexte aus `static/live.js`,
+* Die gesamte UI-Sprache ist Deutsch. Produkttexte der abgelösten alten
+  Live-Seite (seit Aufgabe 12 in den Modulen unter `static/live/`),
   `workbench/fields.py` und `tracking_advice.py` werden wörtlich übernommen.
 * Statuswörter: Freigegeben VALID, Wechselt TRANSITION, Unlesbar UNREADABLE,
   Veraltet STALE.

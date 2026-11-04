@@ -46,20 +46,21 @@ const TEMPLATE = `${ICONS}
   </aside>
   <footer class="statusbar">
     <span class="it pband" data-item="practice" hidden><i class="hatch" aria-hidden="true"></i>Übungslauf – keine Messung</span>
-    <span class="it" data-item="camera"></span>
+    <button type="button" class="it cam" data-item="camera" aria-haspopup="menu" aria-expanded="false"></button>
     <span class="it" data-item="preview">Vorschau <b data-slot="preview-fps">–</b><span data-slot="preview-note"></span></span>
     <span class="it" data-item="frames"></span>
     <span class="it" data-item="gaps"></span>
     <span class="it" data-item="latency"></span>
     <span class="it" data-item="storage"></span>
-    <span class="it" data-item="reference"></span>
-    <span class="it" data-item="tolerance" hidden></span>
+    <span class="it shr" data-item="reference"></span>
+    <span class="it shr" data-item="tolerance" hidden></span>
     <span class="it notice" data-item="notice" hidden></span>
     <span class="it last" data-item="session"></span>
   </footer>
+  <div class="menu cammenu" role="menu" aria-label="Kamera" hidden></div>
 </div>`;
 
-// Feldtext aus static/live.html (woertlich).
+// Feldtext der alten Live-Seite (woertlich).
 const CELL_TEXT_LABEL = 'Zellentext Zellen 0–8 – empfohlen: leer lassen (dann liest die Werkbank den Wert vom GSV-2AS). ' +
   'Bei Eingabe schwankende Ziffern mit ? markieren, z. B. „+0.4678?“';
 
@@ -104,6 +105,8 @@ export function mountShell(root) {
     helpMenu: q('.hdr-help'),
     helpDock: q('.helpdock'),
     practiceEnd: q('[data-practice-end]'),
+    cameraButton: items.camera,
+    cameraMenu: q('.cammenu'),
   };
 }
 
@@ -232,7 +235,7 @@ export function renderTitle(status, view = {}, handlers = {}) {
   if (toggle) toggle.disabled = Boolean(actions.find((a) => a.kind === 'setup')?.disabled);
 }
 
-function storageItem(storage) {
+export function storageItem(storage) {
   if (!storage || storage.free_bytes == null) {
     const message = storage?.message || 'Speicherplatz nicht verfuegbar';
     return {cls: 'err', html: `<span class="sq err"></span>SD <b class="t">${esc(message)}</b>`, title: message};
@@ -245,15 +248,18 @@ function storageItem(storage) {
 }
 
 function referenceItem(reference) {
-  // Texte aus static/live.js (woertlich).
-  if (reference?.restoring) return {cls: 'warn', html: '<span class="sq warn"></span>Werte werden zurückgestellt …', title: ''};
-  if (reference?.error) return {cls: 'err', html: `<span class="sq err"></span>${esc(reference.error)}`, title: reference.error};
+  // Texte aus der alten Live-Seite (woertlich).
+  if (reference?.restoring) {
+    return {cls: 'warn', html: '<span class="sq warn"></span><span class="tx">Werte werden zurückgestellt …</span>',
+      title: 'Werte werden zurückgestellt …'};
+  }
+  if (reference?.error) return {cls: 'err', html: `<span class="sq err"></span><span class="tx">${esc(reference.error)}</span>`, title: reference.error};
   if (reference?.enabled) {
-    return {cls: '', html: `<span class="sq ok"></span>Referenz <b>${grp(reference.lines ?? 0)}</b> Telegramme`,
+    return {cls: '', html: `<span class="sq ok"></span><span class="tx">Referenz <b>${grp(reference.lines ?? 0)}</b> Telegramme</span>`,
       title: `Referenz: ${reference.lines} Telegramme`};
   }
   const text = `ohne Referenz: ${reference?.reason || 'nicht gestartet'}`;
-  return {cls: '', html: `<span class="sq stale"></span>${esc(text)}`, title: text};
+  return {cls: '', html: `<span class="sq stale"></span><span class="tx">${esc(text)}</span>`, title: text};
 }
 
 function setItem(el, {html, cls = '', title = '', hidden = false}) {
@@ -280,9 +286,11 @@ export function renderStatusbar(status, hudProc = null) {
   else if (camera.running) {
     const size = Array.isArray(source.size) ? ` · ${source.size[0]}×${source.size[1]}` : '';
     const fps = finite(source.fps) ? ` · ${source.fps} fps` : '';
-    cam = {cls: '', html: `<span class="sq ok"></span><b class="t">${esc(name)}</b>${size}${fps}`};
+    // Aufloesung und Rate entfallen in schmalen Fenstern (CSS); sie stehen im Titel.
+    cam = {cls: '', html: `<span class="sq ok"></span><b class="t">${esc(name)}</b><span class="dt">${size}${fps}</span>`,
+      detail: `${size}${fps}`.replace(/^ · /, '')};
   } else cam = {cls: 'err', html: `<span class="sq err"></span><b class="t">${esc(name)}</b> · aus`};
-  setItem(items.camera, {...cam, title: cameraView(camera)});
+  setItem(items.camera, {...cam, title: [cameraView(camera), cam.detail].filter(Boolean).join(' · ')});
   setItem(items.frames, {html: `Bilder <b>${finite(camera.frames) ? grp(camera.frames) : '–'}</b>`});
   setItem(items.gaps, {html: `Lücken <b>${finite(camera.gaps) ? grp(camera.gaps) : '–'}</b>`,
     cls: camera.gaps > 0 ? 'warn' : ''});
@@ -291,7 +299,7 @@ export function renderStatusbar(status, hudProc = null) {
   setItem(items.reference, referenceItem(status?.reference));
   const tolerance = status?.reader_tolerance;
   setItem(items.tolerance, {hidden: !tolerance, cls: 'warn',
-    html: `<span class="sq warn"></span>Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert`,
+    html: `<span class="sq warn"></span><span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert</span>`,
     title: tolerance ? `Angepasste Lesetoleranz ×${tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft, nicht validiert.` : ''});
   const notice = status?.release_notice;
   setItem(items.notice, {hidden: !notice, html: `<span>${esc(notice)}</span>`, title: notice || ''});

@@ -1,189 +1,229 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
+// Die beiden Abläufe der abgelösten alten Seite,
+// mit gleichem Prüfinhalt auf der neuen Seite.
 test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    try { localStorage.setItem('werkbank.rundgang', 'gesehen'); } catch { /* ohne Speicher */ }
+  });
   await page.goto('/live');
   await expect(page).toHaveURL(/\/login\?next=\/live$/);
   await page.getByLabel('Linux-Passwort').fill('test-only');
   await page.getByRole('button', { name: 'enter', exact: true }).click();
   await expect(page).toHaveURL(/:\d+\/live$/);
-  // Alte Seite bis zur Ablösung in Aufgabe 12 unter /live/alt.
-  await page.goto('/live/alt');
-  const headline = page.locator('#headline');
-  await expect(headline).toHaveText('Bereit zur Einrichtung');
-  await expect(page.locator('#notice')).toContainText('Validiert nur:');
-  await expect(page.locator('#confirm-box')).toBeHidden();
-  await expect(page.locator('#diagnostics-enabled')).not.toBeChecked();
-  await expect(page.locator('#storage-status')).toContainText('Warnung: unter 5 GB');
-  await expect(page.locator('#storage-status')).toContainText('4,20 GB frei');
-  await expect(page.getByLabel('Diagnosebilder aufzeichnen')).toBeVisible();
-  await expect(page.locator('#mark-box')).toBeHidden();
+  sessionCookies = await page.context().cookies();
+  await hook(page, '/__test__/state', {});
+  const title = page.getByRole('banner');
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const bar = page.getByRole('contentinfo');
+  const lead = left.locator('.lead');
+  await expect(lead.locator('h2')).toHaveText('Bereit zur Einrichtung');
+  await expect(bar).toContainText('Validiert nur:');
+  await expect(inspector.getByLabel('Name')).toBeHidden();
+  await expect(bar.locator('[data-item="storage"]')).toHaveAttribute('title', /Warnung: unter 5 GB/);
+  await expect(bar.locator('[data-item="storage"]')).toContainText('4,20 GB');
+  await expect(title.getByRole('button', { name: 'Ereignis markieren' })).toHaveCount(0);
 
-  const setState = async (state) => {
-    const statusResponse = await page.request.get('/live/status');
-    expect(statusResponse.ok()).toBe(true);
-    const { csrf } = await statusResponse.json();
-    const response = await page.request.post('/__test__/state', {
-      headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
-      data: state,
-    });
-    expect(response.ok()).toBe(true);
-  };
-
-  await page.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
-  await expect(headline).toContainText('fokus');
+  const setState = (state: unknown) => hook(page, '/__test__/state', state);
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
   await setState({ state: 'setup_running', setup: { step: 'punktraster', elapsed_s: 12.3 } });
-  await expect(headline).toContainText('punktraster');
-  await expect(headline).toContainText('12.3 s');
+  await expect(left.locator('[data-part="meta"]')).toHaveText('0:12');
+  await expect(inspector.locator('[data-part="meta"]')).toHaveText('');
 
   const failure = 'Punktraster abgelehnt: keine_startlage — Kamera senkrecht auf Displaymitte';
   await setState({ state: 'setup_failed', error: failure,
     setup: { step: 'punktraster', elapsed_s: 12.3 } });
-  await expect(headline).toHaveText('Einrichtung abgebrochen');
-  await expect(page.locator('#detail')).toContainText('keine_startlage');
-  await expect(page.locator('#error')).toHaveText(failure);
+  await expect(lead.locator('h2')).toHaveText('Einrichtung abgebrochen');
+  await expect(lead).toContainText('keine_startlage');
+  await expect(lead).toHaveClass(/error/);
   // Ein erfolgreicher anderer Bedienschritt darf den Fehler nicht wegwischen.
+  const camera = bar.getByRole('button', { name: /StreamCam/ });
+  await camera.click();
+  const cameraMenu = page.getByRole('menu', { name: 'Kamera' });
+  await expect(cameraMenu).toBeVisible();
   const cameraResponse = page.waitForResponse('**/live/camera/start');
-  await page.getByRole('button', { name: 'Kamera neu verbinden' }).click();
+  await cameraMenu.getByRole('menuitem', { name: /Kamera neu verbinden/ }).click();
   expect((await cameraResponse).ok()).toBe(true);
-  await expect(page.locator('#error')).toHaveText(failure);
-  await page.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
-  await expect(headline).toContainText('fokus');
-  await expect(page.locator('#error')).toBeEmpty();
+  await expect(cameraMenu).toBeHidden();
+  await expect(camera).toBeFocused();
+  await page.waitForTimeout(700);
+  await expect(lead).toContainText(failure);
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+  await expect(left).not.toContainText('keine_startlage');
 
-  await setState({ state: 'setup_ready', setup: { overall: 'WARNUNG',
-    overlays: ['still', 'checks'], step: 'vorschlag', elapsed_s: 15.0 } });
-  await expect(headline).toHaveText('Vorschlag prüfen und bestätigen');
-  await expect(page.locator('#setup-state')).toHaveText('Gesamturteil: WARNUNG');
-  const overlays = page.locator('#overlays img');
-  await expect(overlays).toHaveCount(2);
-  await expect(overlays.nth(0)).toHaveAttribute('alt', 'still');
-  await expect(overlays.nth(1)).toHaveAttribute('alt', 'checks');
-  await expect.poll(() => overlays.evaluateAll((images) =>
-    images.every((image) => image.complete && image.naturalWidth > 0))).toBe(true);
-  await expect(page.locator('#confirm-box')).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'WARNUNG zur Kenntnis genommen' })).toBeVisible();
+  await setState({ state: 'setup_ready', setup: { overall: 'WARNUNG', checks: { raster: 'WARNUNG' },
+    overlays: ['overlay_source', 'overlay_sampling'], step: 'vorschlag', elapsed_s: 15.0 } });
+  await expect(lead.locator('h2')).toHaveText('Vorschlag prüfen und bestätigen');
+  await expect(inspector).toContainText('Gesamturteil WARNUNG');
+  const viewer = page.getByRole('region', { name: 'Bildansicht' });
+  const source = viewer.getByRole('group', { name: 'Bildquelle' });
+  await expect(source.getByRole('button', { name: 'Standbild' })).toBeEnabled();
+  await expect(source.getByRole('button', { name: 'Abtastbild' })).toBeEnabled();
+  await expect(source.getByRole('button', { name: 'Entzerrt' })).toBeDisabled();
+  for (const [button, name] of [['Standbild', 'overlay_source'], ['Abtastbild', 'overlay_sampling']]) {
+    const still = page.waitForResponse((r) => r.url().includes(`/live/setup/${name}.png`));
+    await source.getByRole('button', { name: button }).click();
+    expect((await still).ok()).toBe(true);
+  }
+  await source.getByRole('button', { name: 'Live' }).click();
+  await expect(inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' })).toBeVisible();
+  await expect(inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ })).toBeVisible();
 
-  await page.locator('#confirmed-by').fill('Operator');
-  await page.locator('#format-checked').check();
-  await page.locator('#ack').check();
+  await inspector.getByLabel('Name').fill('Operator');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
   const confirmRequest = page.waitForRequest('**/live/confirm');
-  await page.locator('#confirm').click();
+  await title.getByRole('button', { name: 'Bestätigen', exact: true }).click();
   expect((await confirmRequest).postDataJSON()).toEqual({
     session_id: 'test-session', confirmed_by: 'Operator',
     format_checked: true, acknowledge_warning: true, use_tolerance: false,
   });
-  await expect(headline).toHaveText('Bestätigt – Lauf starten');
+  await expect(lead.locator('h2')).toHaveText('Bestätigt – Lauf starten');
 
-  await setState({ state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG' });
-  await expect(headline).toHaveText('Lauf gesperrt');
-  await expect(page.locator('#run-block')).toBeVisible();
-  await expect(page.locator('#run-start')).toBeDisabled();
-  await page.locator('#test-override-box summary').click();
-  await page.locator('#test-override').check();
-  await expect(page.locator('#run-start')).toBeEnabled();
+  await setState({ state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
+    profile: { tracking_mode: 'ecc_alt' } });
+  await expect(lead.locator('h2')).toHaveText('Lauf gesperrt');
+  // Der kommende Nachführungsmodus steht schon vor dem Lauf da.
+  await expect(inspector.locator('[data-part="tracking-mode"]')).toHaveText(
+    'Nachführung: alt (ECC, inhaltsabhängig) – neu einrichten empfohlen');
+  const start = title.locator('.hdr-act').getByRole('button', { name: 'Lauf starten', exact: true });
+  await expect(start).toBeDisabled();
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const options = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(options).toContainText('Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen');
+  await expect(options.getByRole('checkbox', { name: /^Diagnosebilder aufzeichnen/ })).not.toBeChecked();
+  await options.getByText('Testmodus (nur zu Testzwecken)').click();
+  await options.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  await expect(start).toBeEnabled();
+  await page.keyboard.press('Escape');
 
   const run = { latest: { frame_sequence: 7, status: 'valid', raw_text: '+1.2345',
-    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2,
+    unit: 'mV/V', reject_reasons: [] }, latest_age_s: 0.2, summary: {},
     rejection_causes: {window_s: 10, frames: 4, limited: false,
       causes: [{reason: 'leser:leerzelle_gestoert:14', count: 1, fraction: 0.25}]}};
   await setState({ state: 'running', run, diagnostics: {enabled: true, saved: 4, bytes: 12_500_000,
     dropped_queue: 0, dropped_limit: 0, dropped_memory: 2, dropped_mark_rate: 3, write_errors: 0},
     diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}] });
-  await expect(page.locator('#diagnostics-status')).toContainText('12.5 MB');
-  await expect(page.locator('#diagnostics-status')).toContainText('RAM verworfen: 2');
-  await expect(page.locator('#diagnostics-status')).toContainText('Markenbilder verworfen: 3');
-  await expect(page.locator('#diagnostics-status')).toContainText('/test/dispread-diagnose-old (2.5 MB)');
-  await expect(page.locator('#recent-causes')).toBeVisible();
-  await expect(page.locator('#recent-causes-list')).toContainText('Zelle 14 (rechts der Einheit)');
-  await expect(page.locator('#recent-causes-list')).toContainText('25 % der Bilder');
-  await expect(page.locator('#mark-box')).toBeVisible();
-  await page.locator('#mark-text').fill('Display abgedeckt');
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Freigegeben');
+  await expect(judge.locator('.jv .num')).toHaveText('+1.2345');
+  await expect(judge.locator('.jv .unit')).toHaveText('mV/V');
+  await inspector.getByRole('tab', { name: 'Referenz' }).click();
+  const panel = inspector.getByRole('tabpanel');
+  await expect(panel).toContainText('12.5 MB');
+  await expect(panel).toContainText('RAM verworfen: 2');
+  await expect(panel).toContainText('Markenbilder verworfen: 3');
+  await expect(panel).toContainText('/test/dispread-diagnose-old (2.5 MB)');
+  await inspector.getByRole('tab', { name: /Ursachen/ }).click();
+  await expect(panel).toContainText('Zelle 14 (rechts der Einheit)');
+  await expect(panel.locator('tbody tr').first()).toContainText('25 %');
+  await title.getByRole('button', { name: 'Ereignis markieren' }).click();
+  const markPop = page.getByRole('dialog', { name: 'Ereignis markieren' });
+  await markPop.getByLabel('Ereignis (Meldezeit des Bedieners):').fill('Display abgedeckt');
   const markRequest = page.waitForRequest('**/live/run/mark');
-  await page.getByRole('button', { name: 'Ereignis markieren', exact: true }).click();
+  await page.keyboard.press('Enter');
   expect((await markRequest).postDataJSON()).toEqual({text: 'Display abgedeckt'});
-  await expect(page.locator('#last-mark')).toContainText('Meldezeit');
-  await expect(page.locator('#last-mark')).toContainText('Display abgedeckt');
-  await expect(headline).toHaveText('+1.2345 mV/V');
-  await expect(headline).toHaveClass('value valid');
-  await expect(headline).toHaveCSS('color', 'rgb(126, 231, 135)');
-  await expect(page.locator('#confirm-box')).toBeHidden();
+  await inspector.getByRole('tab', { name: 'Referenz' }).click();
+  await expect(panel).toContainText('Meldezeit');
+  await expect(panel).toContainText('Display abgedeckt');
+  await expect(inspector.getByLabel('Name')).toBeHidden();
   await setState({ state: 'running', run: { ...run, latest_age_s: 0.9 } });
-  await expect(headline).toHaveText('STALE');
-  await expect(headline).toHaveClass('value stale');
-  await expect(headline).not.toContainText('1.2345');
+  await expect(judge.locator('.jh')).toContainText('Veraltet');
+  await expect(judge.locator('.jh')).toContainText('STALE');
+  await expect(judge.locator('.jv .num')).toHaveCSS('text-decoration-line', 'line-through');
 
   const lost = { ...run, latest: { ...run.latest, status: 'unreadable', raw_text: '',
     reject_reasons: ['tracking_lost:rahmen_unstimmig'] }, tracking_hint: {
     kind: 'anzeige_bewegt', shift_px: 19, region_shift_px: 27, rotation_deg: -2.23, since_s: 3 } };
   await setState({ state: 'running', run: lost });
-  await expect(headline).toHaveText('UNREADABLE');
-  await expect(page.locator('#detail')).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad)');
-  await expect(page.locator('#detail')).toContainText('Werte werden nicht freigegeben. Bitte neu einrichten.');
+  await expect(judge.locator('.jh')).toContainText('UNREADABLE');
+  await expect(judge.locator('.jsub')).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad)');
+  await expect(judge.locator('.jsub')).toContainText('Werte werden nicht freigegeben. Bitte neu einrichten.');
+  const moved = page.getByRole('dialog', { name: 'Anzeige hat sich bewegt' });
+  await expect(moved).toBeVisible();
+  await page.keyboard.press('Escape');
   await setState({ state: 'running', run: { ...lost, tracking_hint: {
     kind: 'rahmen_verdeckt', shift_px: null, rotation_deg: null, since_s: 10 } } });
-  await expect(page.locator('#detail')).toContainText('Rahmen verdeckt? Hand oder Gegenstand');
-  await expect(page.locator('#detail')).not.toContainText('Anzeige hat sich bewegt');
+  await expect(judge.locator('.jsub')).toContainText('Rahmen verdeckt? Hand oder Gegenstand');
+  await expect(judge.locator('.jsub')).not.toContainText('Anzeige hat sich bewegt');
   await setState({ state: 'running', run: { ...lost, tracking_hint: {
     kind: 'unbekannt', shift_px: null, rotation_deg: null, since_s: 12 } } });
-  await expect(page.locator('#detail')).toContainText('Anzeige nicht sicher wiedergefunden');
+  await expect(judge.locator('.jsub')).toContainText('Anzeige nicht sicher wiedergefunden');
 
   // Erst wieder frische Ziffern zeigen, dann die echte Poll-Anfrage abbrechen.
   await setState({ state: 'running', run });
-  await expect(headline).toHaveText('+1.2345 mV/V');
-  await expect(page.locator('#detail')).not.toContainText('einrichten');
-  await page.route('**/live/status', (route) => route.abort('connectionfailed'));
-  await expect(headline).toHaveText('STALE');
-  await expect(headline).not.toContainText('1.2345');
-  await expect(page.locator('#detail')).toHaveText('Verbindung zur Werkbank verloren');
-  expect(errors).toEqual([]);
+  await expect(judge.locator('.jv .num')).toHaveText('+1.2345');
+  await expect(judge.locator('.jsub')).not.toContainText('einrichten');
+  await page.route('**/live/status*', (route) => route.abort('connectionfailed'));
+  await expect(judge.locator('.jh')).toContainText('Veraltet', { timeout: 5000 });
+  await expect(lead.locator('h2')).toHaveText('STALE');
+  await expect(lead).toContainText('Verbindung zur Werkbank verloren');
+  await expect(page.locator('.netband')).toContainText('Verbindung zur Werkbank verloren');
+  await page.unroute('**/live/status*');
+  await expect(judge.locator('.jv .num')).toHaveText('+1.2345', { timeout: 5000 });
+  // Erwartet: die abgebrochenen Statusabrufe.
+  expect(errors.filter((e) => !/ERR_CONNECTION_FAILED|Failed to load resource/.test(e))).toEqual([]);
 });
 
 test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue Bestätigung', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/live');
-  await page.getByLabel('Linux-Passwort').fill('test-only');
-  await page.getByRole('button', { name: 'enter', exact: true }).click();
-  await expect(page).toHaveURL(/:\d+\/live$/);
-  // Alte Seite bis zur Ablösung in Aufgabe 12 unter /live/alt.
-  await page.goto('/live/alt');
-  const { csrf } = await (await page.request.get('/live/status')).json();
-  const stateResponse = await page.request.post('/__test__/state', {
-    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf },
-    data: {state: 'setup_ready', setup: {overall: 'OK', proposal_revision: 'regions-v1',
-      auswahl: 'automatisch', overlays: ['overlay_source'], checks: {nachfuehrung: 'OK'},
-      regions: [{centre: [10, 10], size: 5}]}},
-  });
-  expect(stateResponse.ok()).toBe(true);
-  await expect(page.locator('#region-editor')).toBeVisible();
-  await page.locator('#confirmed-by').fill('Operator');
-  await page.locator('#format-checked').check();
-  await page.getByLabel('Quellbild-Koordinaten x,y').fill('30,12');
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', {state: 'setup_ready', setup: {overall: 'OK', proposal_revision: 'regions-v1',
+    auswahl: 'automatisch', overlays: ['overlay_source'], checks: {nachfuehrung: 'OK'},
+    regions: [{centre: [10, 10], size: 5}]}});
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const regionList = inspector.locator('[data-part="region-list"] li');
+  // Ganzes Bild zeigen: ein vorher geladenes Lauf-HUD kann die Ansicht noch auf seinen Rahmen gelegt haben.
+  await page.getByRole('region', { name: 'Bildansicht' }).getByRole('button', { name: 'Einpassen' }).click();
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  await expect(regionList).toHaveCount(1);
+  const name = inspector.getByLabel('Name');
+  const format = inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' });
+  await name.fill('Operator');
+  await format.check();
+  // Tastatur: Koordinaten eingeben; Unvollständiges wird ohne Anfrage abgelehnt.
+  const edits: any[] = [];
+  page.on('request', (r) => { if (r.url().endsWith('/live/setup/regions') && r.method() === 'POST') edits.push(r.postDataJSON()); });
+  const coordinates = inspector.getByLabel('Quellbild-Koordinaten x,y');
+  await coordinates.fill('123,');
+  await inspector.getByRole('button', { name: 'Bereich hinzufügen', exact: true }).click();
+  await expect(inspector.locator('[data-part="msg"]')).toContainText('x,y');
+  expect(edits).toHaveLength(0);
+  await coordinates.fill('30,12');
   const added = page.waitForRequest('**/live/setup/regions');
-  await page.getByRole('button', {name: 'Bereich hinzufügen', exact: true}).click();
+  await inspector.getByRole('button', { name: 'Bereich hinzufügen', exact: true }).click();
   expect((await added).postDataJSON()).toEqual({proposal_revision: 'regions-v1', add: [[30, 12]], remove: []});
-  await expect(page.locator('#region-list li')).toHaveCount(2);
-  await expect(page.locator('#region-results')).toContainText('30,12 (verwendet: 30,12): geeignet');
-  await expect(page.locator('#confirmed-by')).toHaveValue('');
-  await expect(page.locator('#format-checked')).not.toBeChecked();
-  await expect(page.locator('#region-selection')).toHaveText('Auswahl: manuell');
-  await page.getByRole('checkbox', {name: 'Rahmenbereiche bearbeiten', exact: true}).check();
-  const image = page.locator('img[alt="overlay_source"]');
-  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
-  const box = await image.boundingBox();
+  await expect(regionList).toHaveCount(2);
+  await inspector.getByText('Prüfergebnisse').click();
+  await expect(inspector.locator('[data-part="results-list"]')).toContainText('30,12 (verwendet: 30,12): geeignet');
+  await expect(name).toHaveValue('');
+  await expect(format).not.toBeChecked();
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: manuell');
+
+  // Bildklick auf einen Bereich entfernt ihn.
+  await expect(inspector.getByRole('button', { name: 'Bereich hinzufügen', exact: true })).toBeEnabled({ timeout: 5000 });
   const removed = page.waitForRequest('**/live/setup/regions');
-  await image.click({position: {x: box!.width * 10 / 48, y: box!.height * 10 / 24}});
+  await clickImage(page, [10, 10]);
   const body = (await removed).postDataJSON();
   expect(body.remove).toEqual([0]);
   expect(body.add).toEqual([]);
   expect(body.proposal_revision).not.toBe('regions-v1');
-  await expect(page.locator('#region-list li')).toHaveCount(1);
-  await page.getByRole('button', {name: /Bereich 1 entfernen/}).click();
-  await expect(page.locator('#region-list li')).toHaveCount(0);
-  await expect(page.locator('#setup-checks')).toContainText('Nachführung: FEHLER');
+  await expect(regionList).toHaveCount(1);
+  await inspector.getByText('Bereiche einzeln').click();
+  await inspector.getByRole('button', { name: /Bereich 1 entfernen/ }).click();
+  await expect(regionList).toHaveCount(0);
+  await inspector.getByRole('tab', { name: /Prüfungen/ }).click();
+  await expect(inspector.getByRole('tabpanel').locator('tbody tr', { hasText: 'Nachführung' })).toContainText('FEHLER');
+  await inspector.getByRole('tab', { name: 'Schritt' }).click();
+
+  // Der Server lehnt kaputte Änderungen ab, die Revision bleibt.
+  const { csrf } = await (await page.request.get('/live/status')).json();
   const revision = (await (await page.request.get('/live/status')).json()).setup.proposal_revision;
   for (const edit of [{add: [[1e300, 12]], remove: []}, {add: [], remove: ['0']}]) {
     const rejected = await page.request.post('/live/setup/regions', {
@@ -193,12 +233,19 @@ test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue
     expect(rejected.status()).toBe(400);
   }
   expect((await (await page.request.get('/live/status')).json()).setup.proposal_revision).toBe(revision);
-  const scaled = (await image.boundingBox())!;
+
+  // Bildklick wählt das Quellpixel, in dem der Zeiger liegt (abrunden, nicht runden).
+  await expect(inspector.getByRole('button', { name: 'Bereich hinzufügen', exact: true })).toBeEnabled({ timeout: 5000 });
+  const canvas = page.locator('canvas.vcanvas');
+  await canvas.evaluate((el: any) => {
+    el.viewer.zoomBy(16, el.viewer.viewState().imageToScreen([36, 13]));
+  });
+  expect(await canvas.evaluate((el: any) => el.viewer.viewState().scale)).toBeGreaterThan(3);
   const fractional = page.waitForRequest('**/live/setup/regions');
-  await image.click({position: {x: scaled.width * 35.8 / 48, y: scaled.height * 12.8 / 24}});
+  await clickImage(page, [35.8, 12.8]);
   expect((await fractional).postDataJSON()).toEqual({proposal_revision: revision, add: [[35, 12]], remove: []});
-  await expect(page.locator('#region-list li')).toHaveCount(1);
-  expect(errors).toEqual([]);
+  await expect(regionList).toHaveCount(1);
+  expect(errors.filter((e) => !/status of 400/.test(e))).toEqual([]);
 });
 
 // Der Server lässt je Adresse nur 5 Anmeldungen pro Minute zu (auth.py);
@@ -793,7 +840,7 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) requests++; });
   const override = pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ });
   const modal = page.getByRole('dialog', { name: 'TESTLAUF starten?' });
-  // Testlauf-Dialog (Text aus live.js): Esc bricht ab, nichts wird gesendet, der Haken bleibt.
+  // Testlauf-Dialog (Text aus der alten Live-Seite): Esc bricht ab, nichts wird gesendet, der Haken bleibt.
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   await expect(modal).toContainText('Die Lesesperre wird übergangen.');
   await expect(modal).toContainText('(TESTLAUF.json)');
@@ -802,7 +849,7 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   await expect(override).toBeChecked();
   expect(requests).toBe(0);
 
-  // Werteplan ohne Referenz: Hinweis aus live.js, kein Start; wie dort ist der Haken danach verbraucht.
+  // Werteplan ohne Referenz: Hinweis aus der alten Live-Seite, kein Start; wie dort ist der Haken danach verbraucht.
   await pop.getByLabel(/^Werteplan \(set norm\)/).fill('1:20,2:20');
   await reference.uncheck();
   await start.click();
@@ -1426,3 +1473,135 @@ test('Übungslauf läuft weiter, wenn die echte Werkbank nicht antwortet', async
   await title.getByRole('button', { name: 'Übung beenden' }).click();
   expect(errors).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Gesamtablauf (Aufgabe 12): Einrichtung → Bestätigen → Lauf → Stopp
+// ---------------------------------------------------------------------------
+// Kein horizontales Rollen und nichts abgeschnitten: Bedienelemente der
+// Titelleiste, der Werkzeugleiste und die Felder der Statusleiste liegen ganz
+// in ihrer Leiste; ein Feld mit Auslassung (…) trägt den vollen Text als Titel.
+async function fits(page: Page, where: string) {
+  await noOverflow(page);
+  const clipped = await page.evaluate(() => {
+    const out: string[] = [];
+    const bars = document.querySelectorAll('.titlebar, .vt, .statusbar');
+    for (const bar of bars) {
+      const edge = bar.getBoundingClientRect();
+      const items = bar.matches('.statusbar') ? bar.querySelectorAll(':scope > .it')
+        : bar.querySelectorAll('button, .brand, .device, .testband, .pband, .hdr-note');
+      for (const el of items as NodeListOf<HTMLElement>) {
+        if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') continue;
+        if (el.closest('.menu, .popover')) continue;
+        const box = el.getBoundingClientRect();
+        if (!box.width) continue;
+        const label = `${bar.className}: ${(el.textContent || '').trim().slice(0, 30)}`;
+        if (box.left < edge.left - 0.5 || box.right > edge.right + 0.5) out.push(`${label} ragt hinaus`);
+        const inner = [el, ...el.querySelectorAll('*')] as HTMLElement[];
+        const cut = inner.some((node) => node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflow !== 'visible');
+        if (cut && !el.title) out.push(`${label} abgeschnitten ohne Titel`);
+      }
+    }
+    return out;
+  });
+  expect(clipped, where).toEqual([]);
+}
+
+for (const [width, height] of [[1280, 800], [1440, 900], [1920, 1080]]) {
+  test(`Gesamtablauf ${width}×${height}: Einrichtung → Bestätigen → Lauf → Stopp`, async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width, height });
+    await login(page);
+    await hook(page, '/test/scene', { name: 'idle' });
+    const title = page.getByRole('banner');
+    const left = page.getByRole('complementary', { name: 'Ablauf' });
+    const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+    const bar = page.getByRole('contentinfo');
+    const judge = page.getByRole('region', { name: 'Ergebnis' });
+    await expect(left).toContainText('Bereit zur Einrichtung');
+    await expect(bar).toContainText('test-session');
+    await fits(page, 'idle');
+
+    // Einrichtung starten; der Fake springt auf die Fokussuche.
+    const setup = page.waitForRequest('**/live/setup');
+    await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+    expect((await setup).postDataJSON()).toEqual({ cell_text: null });
+    await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+    await expect(inspector.getByRole('tab', { name: 'Fokus' })).toHaveAttribute('aria-selected', 'true');
+    await fits(page, 'Fokus');
+    await hook(page, '/test/scene', { name: 'setup_standbilder' });
+    await expect(left.locator('[data-step="standbilder"] [data-sub="stabilitaet"]')).toContainText('9/15 s');
+    await fits(page, 'Standbilder');
+
+    // Vorschlag prüfen: Bildquellen und Prüfungen, dann mit Namen bestätigen.
+    await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+    await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+    const source = page.getByRole('region', { name: 'Bildansicht' }).getByRole('group', { name: 'Bildquelle' });
+    for (const name of ['Standbild', 'Abtastbild', 'Entzerrt']) {
+      await source.getByRole('button', { name }).click();
+      await expect(source.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
+      await fits(page, `Quelle ${name}`);
+    }
+    await source.getByRole('button', { name: 'Live' }).click();
+    await inspector.getByRole('tab', { name: /Prüfungen/ }).click();
+    await expect(inspector.getByRole('tabpanel').locator('tr[data-check="raster"]')).toContainText('WARNUNG');
+    await fits(page, 'Prüfungen');
+    await inspector.getByRole('tab', { name: 'Schritt' }).click();
+    const titleConfirm = title.getByRole('button', { name: 'Bestätigen', exact: true });
+    await expect(titleConfirm).toBeDisabled();
+    await inspector.getByLabel('Name').fill('L. Hentschke');
+    await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+    await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+    await fits(page, 'Bestätigen');
+    const confirm = page.waitForRequest('**/live/confirm');
+    await titleConfirm.click();
+    expect((await confirm).postDataJSON()).toEqual({ session_id: 'test-session', confirmed_by: 'L. Hentschke',
+      format_checked: true, acknowledge_warning: true, use_tolerance: false,
+      proposal_revision: 'b358259f721241f0b9e6af42d4fdb390' });
+
+    // Lauf starten mit den Vorgaben aus dem Pop-up.
+    const start = title.locator('.hdr-act').getByRole('button', { name: 'Lauf starten', exact: true });
+    await expect(start).toBeEnabled();
+    await title.getByRole('button', { name: 'Laufoptionen' }).click();
+    const options = page.getByRole('dialog', { name: 'Laufoptionen' });
+    await expect(options.getByRole('checkbox', { name: 'Referenz vom GSV-2AS mitschreiben' })).toBeChecked();
+    await expect(options.getByRole('checkbox', { name: /^Diagnosebilder aufzeichnen/ })).not.toBeChecked();
+    const pop = (await options.boundingBox())!;
+    expect(pop.x).toBeGreaterThanOrEqual(0);
+    expect(pop.x + pop.width).toBeLessThanOrEqual(width);
+    expect(pop.y + pop.height).toBeLessThanOrEqual(height);
+    await fits(page, 'Laufoptionen');
+    const run = page.waitForRequest('**/live/run/start');
+    await options.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+    expect((await run).postDataJSON()).toEqual({ test_override: false, reference: true,
+      norm_schedule: null, diagnostics: false });
+    await expect(judge.locator('.jh')).toContainText('Freigegeben');
+    await expect(judge.locator('.jv .num')).toHaveText('+0.62427');
+    await expect(page.getByRole('region', { name: 'Zeitleiste' })).toContainText('letzte 40 s');
+    await fits(page, 'Lauf');
+    for (const tab of ['Wert', 'Ursachen', 'Nachführung', 'Referenz']) {
+      await inspector.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
+      await expect(inspector.getByRole('tab', { name: new RegExp(`^${tab}`) })).toHaveAttribute('aria-selected', 'true');
+      await fits(page, `Lauf, Tab ${tab}`);
+    }
+
+    // Stoppen: Zusammenfassung, kein frischer Wert, Neu einrichten.
+    const stop = page.waitForRequest('**/live/run/stop');
+    await title.getByRole('button', { name: 'Lauf stoppen' }).click();
+    await stop;
+    await expect(judge.locator('.jh')).toContainText('Lauf beendet');
+    await expect(judge.locator('.jv .num')).not.toContainText('0.62427');
+    await expect(left).toContainText('Fehllesungen gegen Referenz');
+    await expect(title.getByRole('button', { name: 'Neu einrichten' })).toBeVisible();
+    await fits(page, 'Stopp');
+
+    // Übungslauf (eigene Sitzungskennung, längste Statusleiste).
+    await page.getByRole('button', { name: /^Hilfe/ }).click();
+    await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
+    await expect(bar).toContainText('Übungslauf – keine Messung');
+    await expect(bar.locator('[data-item="session"]')).toContainText('uebung-');
+    await fits(page, 'Übungslauf');
+    await page.getByRole('button', { name: 'Übung beenden' }).click();
+    await expect(bar.locator('[data-item="practice"]')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}

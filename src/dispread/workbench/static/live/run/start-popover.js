@@ -1,7 +1,7 @@
 // Pop-ups der Laufaktionen in der Titelleiste (Spec "Aufbau der Oberflaeche"):
 // Lauf starten mit Referenz, Diagnosebilder, Werteplan und Testmodus, und
 // Ereignis markieren mit Text. Texte, Ablauf und POST-Koerper woertlich aus
-// static/live.js bzw. live.html; window.confirm ist durch openModal ersetzt.
+// der alten Live-Seite; window.confirm ist durch openModal ersetzt.
 import {openModal} from '../ui/modal.js';
 
 const TEXT = {
@@ -110,7 +110,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       if (next?.state !== 'confirmed') pop.close();
       refresh();
     },
-    // Ablauf wie run-start in live.js: Sperre, Testlauf-Dialog, Werteplan-Pruefung und -Dialog.
+    // Ablauf wie run-start der alten Live-Seite: Sperre, Testlauf-Dialog, Werteplan-Pruefung und -Dialog.
     async start() {
       if (busy) return null;
       const override = Boolean(status?.run_block && part('override').checked);
