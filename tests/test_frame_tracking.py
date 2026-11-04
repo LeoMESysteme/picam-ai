@@ -11,7 +11,7 @@ from time import perf_counter
 import cv2
 import numpy as np
 import pytest
-from devdata_helpers import local_recording
+from devdata_helpers import diagnose_dir, local_recording
 
 from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, propose_regions
 from dispread.track import QuadTracker
@@ -1571,7 +1571,7 @@ def test_r19b_live_bewegung_rahmen_unstimmig_wiedergefunden(name):
     reference = cv2.imread(str(root / 'setup/still.png'))
     tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
                            FrameTrackingConfig.from_dict(block['config']))
-    image = cv2.imread(str(root / 'run-01/diagnose' / name))
+    image = cv2.imread(str(diagnose_dir(root / 'run-01') / name))
     result = tracker.update(image)
     close_quad(result, np.asarray(profile['quad']) + (11.0, -4.2), 1.0)
     assert tracker.last_coarse.used
@@ -1703,7 +1703,7 @@ def test_r19c_live_bewegungslauf_kleine_lage_wiederfinden_grosse_ablehnen(name, 
     reference = cv2.imread(str(root / 'setup/still.png'))
     tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
                            FrameTrackingConfig.from_dict(block['config']))
-    result = tracker.update(cv2.imread(str(root / 'run-01/diagnose' / name)))
+    result = tracker.update(cv2.imread(str(diagnose_dir(root / 'run-01') / name)))
     if accepted:
         assert result.quad is not None, result
         displacement = np.asarray(result.quad).mean(axis=0) - np.asarray(profile['quad']).mean(axis=0)

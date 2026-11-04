@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Nach dem Auslagern der Live-Diagnosebilder auf die SSD
+  fanden Tests und Auswerteskripte Bilder nicht mehr, wenn die Sitzung
+  weiterhin unter `var/live/` lag. `scripts/_devdata.py` löst mit
+  `diagnose_dir(run_dir)` den Diagnoseordner gesondert auf; direkte
+  `input_path`-Anfragen auf Live-Diagnosen berücksichtigen jetzt alle
+  Sitzungsdaten. Lokale Daten haben Vorrang, fehlende Daten behalten den
+  lokalen Pfad. Trackingtests und Grobsuche-Auswertung verwenden den
+  Helfer; Produktcode und Ausgabeorte bleiben unverändert.
+
 * 2026-10-31: Session-Explorer-Tab geschliffen (Rückmeldung: Text an
   Rändern, unübersichtliche Abschnitte, Diagramme lassen die Seite
   wackeln, Farbstreifen ohne Erklärung). Der Überblick ist jetzt ein

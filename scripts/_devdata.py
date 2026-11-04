@@ -35,6 +35,8 @@ def _development_relative(relative: Path) -> Path | None:
     if parts[0] == "diagnostics":
         return None if len(parts) > 1 and parts[1] == _RESTORE_POINT else relative
     if parts[0] == "live":
+        if len(parts) >= 4 and parts[3] == "diagnose":
+            return relative
         if len(parts) == 1 or parts[1] < "live-20261023":
             return relative
     return None
@@ -65,6 +67,20 @@ def input_path(path: str | Path, *, repo_root: Path = REPO_ROOT) -> Path:
         if candidate.exists():
             return candidate
     return local
+
+
+def diagnose_dir(run_dir: str | Path, *, repo_root: Path = REPO_ROOT) -> Path:
+    """Diagnoseordner eines aufgezeichneten Live-Laufs, lokal vor Entwicklung.
+
+    Nur Pfade unter var/live werden umgeleitet, unabhaengig vom Sitzungsdatum.
+    Andere Laufpfade bleiben erhalten. Fehlt der Ordner ueberall, bleibt der
+    lokale Pfad fuer die Fehlerbehandlung des Aufrufers. Legt nichts an.
+    """
+    path = Path(run_dir) / "diagnose"
+    relative = _relative(path, repo_root)
+    if relative is None or not relative.parts or relative.parts[0] != "live":
+        return path
+    return input_path(path, repo_root=repo_root)
 
 
 def logical_path(path: str | Path) -> Path:

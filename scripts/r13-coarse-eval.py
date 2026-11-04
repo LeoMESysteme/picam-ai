@@ -27,7 +27,7 @@ from time import perf_counter_ns
 
 import cv2
 import numpy as np
-from _devdata import input_path
+from _devdata import diagnose_dir, input_path
 
 from dispread.layout import CharLayout
 from dispread.live import frame_tracking as current
@@ -194,8 +194,9 @@ def profile_coarse_parts(before, after, run):
     """
     names = ('resize', 'laplace', 'mask', 'phase')
     samples = {side: {part: [] for part in names} for side in ('before', 'after')}
-    for index, meta in enumerate(rows(run / 'diagnose/images.jsonl')[:60]):
-        gray = cv2.cvtColor(cv2.imread(str(run / 'diagnose' / meta['image'])), cv2.COLOR_BGR2GRAY)
+    diagnostics = diagnose_dir(run)
+    for index, meta in enumerate(rows(diagnostics / 'images.jsonl')[:60]):
+        gray = cv2.cvtColor(cv2.imread(str(diagnostics / meta['image'])), cv2.COLOR_BGR2GRAY)
         order = (('before', before), ('after', after))
         for side, tracker in (order if index % 2 == 0 else order[::-1]):
             start = perf_counter_ns()
@@ -235,8 +236,9 @@ def evaluate_live(baseline, name):
     session = json.loads((run / 'session.json').read_text())
     profile = SessionProfile.load(root / 'profile.json')
     reader = DotMatrixReader.from_file(input_path(session['templates']['path']), session['templates']['sha256'])
-    live = compare(before, after, ((row, cv2.imread(str(run / 'diagnose' / row['image'])))
-                                   for row in rows(run / 'diagnose/images.jsonl')),
+    diagnostics = diagnose_dir(run)
+    live = compare(before, after, ((row, cv2.imread(str(diagnostics / row['image'])))
+                                   for row in rows(diagnostics / 'images.jsonl')),
                    reader=reader, layout=CharLayout.from_profile(profile, session['gate']['expected_unit']),
                    profile=profile, references=rows(run / 'reference.jsonl'), session=session)
     parts = profile_coarse_parts(before, after, run)

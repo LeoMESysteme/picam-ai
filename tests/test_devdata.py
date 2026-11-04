@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import _devdata
 import pytest
 from _devdata import diagnostic_output, input_path, logical_path, recording_glob
 from devdata_helpers import local_recording
@@ -42,6 +43,82 @@ def test_unset_variable_does_not_search_external_data(tmp_path, monkeypatch):
     monkeypatch.delenv("DISPREAD_DEV_DATA", raising=False)
     assert input_path("diagnostics/run", repo_root=tmp_path) == tmp_path / "var/diagnostics/run"
     assert diagnostic_output("run") == Path("var/diagnostics/run")
+
+
+@pytest.mark.parametrize("session", ["live-20261022T235959Z", "live-20261023T000000Z", "live-20261104T120000Z"])
+@pytest.mark.parametrize("suffix", ["", "images.jsonl", "0012.png"])
+def test_live_diagnose_inputs_resolve_independently_of_local_session(tmp_path, monkeypatch, session, suffix):
+    repo, dev = tmp_path / "repo", tmp_path / "dev"
+    relative = Path("live") / session / "run-01/diagnose"
+    external = _write(dev / relative / "0012.png").parent
+    _write(external / "images.jsonl")
+    _write(repo / "var" / relative.parent.parent / "profile.json")
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    assert input_path(relative / suffix, repo_root=repo) == external / suffix
+
+
+@pytest.mark.parametrize("spelling", ["relative", "var", "absolute", "linked"])
+def test_diagnose_dir_prefers_local_then_external_then_missing_local(tmp_path, monkeypatch, spelling):
+    repo, dev = tmp_path / "repo", tmp_path / "dev"
+    relative = Path("live/live-20261104T120000Z/run-01")
+    local_image = _write(repo / "var" / relative / "diagnose/0012.png")
+    external_image = _write(dev / relative / "diagnose/0012.png")
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    run = {"relative": relative, "var": Path("var") / relative,
+           "absolute": local_image.parent.parent, "linked": local_image.parent.parent}[spelling]
+    if spelling == "linked":
+        shared = tmp_path / "shared-var"
+        (repo / "var").rename(shared)
+        (repo / "var").symlink_to(shared, target_is_directory=True)
+        run = shared / relative
+    local = repo / "var" / relative / "diagnose"
+    assert _devdata.diagnose_dir(run, repo_root=repo) == (run / "diagnose" if run.is_absolute() else local)
+    local_image.unlink()
+    local.rmdir()
+    assert _devdata.diagnose_dir(run, repo_root=repo) == external_image.parent
+    external_image.unlink()
+    external_image.parent.rmdir()
+    assert _devdata.diagnose_dir(run, repo_root=repo) == local
+    assert not local.exists()
+    assert not external_image.parent.exists()
+
+
+def test_diagnose_dir_without_dev_data_keeps_missing_local_path(tmp_path, monkeypatch):
+    monkeypatch.delenv("DISPREAD_DEV_DATA", raising=False)
+    local = tmp_path / "var/live/live-20261104T120000Z/run-01/diagnose"
+    assert _devdata.diagnose_dir(local.parent, repo_root=tmp_path) == local
+    assert not local.exists()
+
+
+@pytest.mark.parametrize("relative", [
+    "live/live-20261104T120000Z/profile.json",
+    "live/live-20261104T120000Z/run-01/session.json",
+    "live/live-20261104T120000Z/run-01/other/diagnose/0012.png",
+    "live/live-20261104T120000Z/run-01/diagnose/../../profile.json",
+])
+def test_live_diagnose_exception_does_not_redirect_other_product_inputs(tmp_path, monkeypatch, relative):
+    dev = tmp_path / "dev"
+    _write(dev / relative)
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    assert input_path(relative, repo_root=tmp_path) == tmp_path / "var" / relative
+
+
+@pytest.mark.parametrize("relative", ["diagnostics/run", "workbench/run", "live/../outside/run"])
+def test_diagnose_dir_does_not_redirect_other_recordings(tmp_path, monkeypatch, relative):
+    repo, dev = tmp_path / "repo", tmp_path / "dev"
+    _write(dev / relative / "diagnose/0012.png")
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    run = repo / "var" / relative
+    assert _devdata.diagnose_dir(run, repo_root=repo) == run / "diagnose"
+
+
+def test_diagnose_dir_preserves_explicit_paths_outside_var(tmp_path, monkeypatch):
+    repo, dev = tmp_path / "repo", tmp_path / "dev"
+    external = _write(dev / "live/live-20261104T120000Z/run-01/diagnose/0012.png").parent
+    monkeypatch.setenv("DISPREAD_DEV_DATA", str(dev))
+    assert _devdata.diagnose_dir(external.parent, repo_root=repo) == external
+    run = tmp_path / "other/live/live-20261104T120000Z/run-01"
+    assert _devdata.diagnose_dir(run, repo_root=repo) == run / "diagnose"
 
 
 def test_output_uses_external_root_even_when_local_directory_exists(tmp_path, monkeypatch):

@@ -8,7 +8,7 @@ Gerät `raspi06`. Rechner- und IMX500-Bestand unten: Stand 2026-09-07;
 aktuelle StreamCam-Sitzung: 2026-10-21. Speicherplatz- und Paketangaben
 sind datierte Schnappschüsse, keine laufende Zustandsanzeige.
 
-## Datenorte: Produkt und Entwicklung (2026-10-28)
+## Datenorte: Produkt und Entwicklung (2026-11-04)
 
 Die NVMe-SSD unter `/mnt/ssd` dient nur zur Entlastung bei Backups, Tests,
 Training und Diagnoseaufnahmen. Das fertige Gerät läuft ohne SSD auf
@@ -29,6 +29,18 @@ Rückstellpunkts sowie `live/`-Sitzungen vor `live-20261023…`. Die alten Ordne
 `rescue-20260925`, `removed-20260928-sc` und `removed-20260929-sc3a` liegen
 unter `$DISPREAD_DEV_DATA/altlasten/`. Fixture-Pfade behalten das relative
 alte Schema; absolute SSD-Pfade gehören nicht in Fixtures oder Profile.
+
+Seit 2026-11-04 liegen auch die Diagnoseordner aller aufgezeichneten
+Live-Läufe unter `$DISPREAD_DEV_DATA/live/<sitzung>/<lauf>/diagnose/`
+(19 Ordner, 6,4 GB, prüfsummengleich von der SD-Karte verschoben).
+Records, `session.json`, `profile.json` und `setup/` der neueren Sitzungen
+bleiben unter `var/live/`. Tests und Skripte lösen den Diagnoseordner eines
+Laufs mit `scripts/_devdata.py:diagnose_dir(run_dir)` gesondert auf:
+lokaler Ordner zuerst, danach Entwicklungsablage, unabhängig vom
+Sitzungsdatum. Auch direkte `input_path`-Anfragen auf
+`live/<sitzung>/<lauf>/diagnose[/...]` verwenden diese Reihenfolge.
+Es werden keine Verzeichnisse oder Links von Produktpfaden auf die SSD
+angelegt; neue Live-Läufe schreiben weiterhin nach `var/live/`.
 
 Ohne Variable werden Tests mit fehlenden lokalen Aufnahmen übersprungen;
 vorhandene lokale Aufnahmen bleiben nutzbar. Neue Diagnoseaufnahmen der

@@ -8,7 +8,7 @@ import pytest
 # Wie bei direkt gestarteten Skripten auch fuer importlib-Aufrufe auffindbar.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from _devdata import input_path, recording_glob  # noqa: E402, F401
+from _devdata import diagnose_dir, input_path, recording_glob  # noqa: E402, F401
 
 
 def local_recording(relative: str | Path, *, required: bool = True) -> Path:
