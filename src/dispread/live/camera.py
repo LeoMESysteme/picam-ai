@@ -10,12 +10,18 @@ nichts gepuffert - wer langsamer ist, ueberspringt Bilder (Spec 2026-10-12
 from __future__ import annotations
 
 import contextlib
+import logging
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from dispread.frames import Frame, FrameSource
+
+# Warnstufe, damit Starts ohne eigene Logging-Konfiguration im Journal landen;
+# Starts sind selten, und ohne sie ist ein Stillstand nicht zuzuordnen.
+_LOG = logging.getLogger(__name__)
 
 # Rund 60 fehlende Bilder bei 30 fps (33 ms); gleiche Kulanz wie
 # UvcSource.READ_FAIL_TIMEOUT_S, aber unabhaengig von capture.read().
@@ -60,9 +66,11 @@ class CameraOwner:
         self._rejected_at_delivery = 0
         self._stalled = False
         self._stall_reason: str | None = None
+        self._last_start: dict[str, Any] | None = None
 
     # -- Steuerung ---------------------------------------------------------
-    def start(self) -> None:
+    def start(self, reason: str = "start") -> None:
+        """Quelle oeffnen; `reason` nennt den Anlass in Status und Journal."""
         with self._lifecycle:
             with self._cond:
                 if self._thread is not None and self._thread.is_alive():
@@ -94,6 +102,9 @@ class CameraOwner:
                     self._stall_reason = None
                     self._running, self._error = True, None
                     self._stop, self._thread = stop, thread
+                    self._last_start = {"reason": reason, "at_utc": datetime.now(UTC).isoformat(),
+                                        "first_frame_s": None}
+                    _LOG.warning("Kamerastart (%s)", reason)
                     thread.start()
             except Exception as exc:
                 with contextlib.suppress(Exception):
@@ -137,13 +148,14 @@ class CameraOwner:
                 self._cond.notify_all()
             return True
 
-    def restart(self, source_factory: Callable[[], FrameSource] | None = None) -> None:
+    def restart(self, source_factory: Callable[[], FrameSource] | None = None, reason: str = "neustart") -> None:
         with self._lifecycle:
             if not self.stop():
+                _LOG.warning("Kamera-Neustart (%s) abgelehnt: %s", reason, _READER_BLOCKED)
                 raise RuntimeError(f"Kamera-Neustart abgelehnt: {_READER_BLOCKED}")
             if source_factory is not None:
                 self._factory = source_factory
-            self.start()
+            self.start(reason)
 
     # -- Bilder ------------------------------------------------------------
     def latest(self) -> tuple[int, Frame] | None:
@@ -191,6 +203,7 @@ class CameraOwner:
                 "frames": self._frames,
                 "gaps": self._gaps,
                 "source": dict(self._describe),
+                "last_start": dict(self._last_start) if self._last_start else None,
             }
 
     @property
@@ -221,6 +234,9 @@ class CameraOwner:
                 age = now - since
                 self._stalled = True
                 self._stall_reason = f"Streamstillstand: kein Bild seit {age:.1f} s"
+                start = self._last_start or {}
+                _LOG.warning("%s (letzter Kamerastart: %s, erstes Bild nach %s s)", self._stall_reason,
+                             start.get("reason"), start.get("first_frame_s"))
                 self._cond.notify_all()
         if self._stalled:
             details = []
@@ -264,6 +280,12 @@ class CameraOwner:
         ts = frame.capture_timestamp.value_ns
         with self._cond:
             self._last_delivery = time.monotonic()
+            if (self._last_start is not None and self._last_start["first_frame_s"] is None
+                    and self._started_at is not None):
+                # Gemessene Anlaufzeit: Grundlage fuer STREAM_START_TIMEOUT_S.
+                self._last_start["first_frame_s"] = round(self._last_delivery - self._started_at, 3)
+                _LOG.warning("Kamera: erstes Bild nach %.2f s (%s)", self._last_start["first_frame_s"],
+                             self._last_start["reason"])
             self._rejected_at_delivery = getattr(self._source, "rejected_timestamps", 0)
             if self._last_ts is not None and self._period_ns:
                 dt = ts - self._last_ts

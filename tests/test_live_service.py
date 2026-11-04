@@ -22,10 +22,10 @@ class FakeOwner:
         time.sleep(min(timeout, 0.01))
         return None
 
-    def restart(self, factory=None):
+    def restart(self, factory=None, reason=None):
         self.restarts += 1
 
-    def start(self):
+    def start(self, reason=None):
         pass
 
 
@@ -269,7 +269,7 @@ def test_confirmation_refuses_missing_name_and_insufficient_resolution(tmp_path,
 
 def test_start_run_reports_blocked_camera_restart(tmp_path, proposal):
     class BlockedOwner(FakeOwner):
-        def restart(self, factory=None):
+        def restart(self, factory=None, reason=None):
             raise RuntimeError("Kamera-Neustart abgelehnt: Lesethread noch nicht beendet")
 
     service = ready_service(tmp_path, proposal)
@@ -339,7 +339,7 @@ def test_real_setup_camera_restart_failure_becomes_setup_failed(tmp_path, propos
     from dispread.live import setup as live_setup
 
     class BlockedOwner(FakeOwner):
-        def restart(self, factory=None):
+        def restart(self, factory=None, reason=None):
             raise RuntimeError("Lesethread noch nicht beendet")
 
     camera = CameraSettings.from_dict(proposal["camera"])
@@ -398,7 +398,7 @@ def test_setup_adjusts_display_exposure_before_stills_and_persists_final_control
     cam = ExposureCamera()
 
     class Owner(FakeOwner):
-        def restart(self, factory=None):
+        def restart(self, factory=None, reason=None):
             cam.apply(factory())
 
     monkeypatch.setattr('dispread.live.service.OwnerSetupCamera', lambda owner: cam)
@@ -450,7 +450,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
                              final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2)
 
     class Owner(FakeOwner):
-        def restart(self, factory=None):
+        def restart(self, factory=None, reason=None):
             assert factory() == camera
             events.append("restart")
 
@@ -533,7 +533,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
 
 def test_start_camera_wraps_failure(tmp_path):
     class Owner(FakeOwner):
-        def start(self):
+        def start(self, reason=None):
             raise RuntimeError("belegt")
 
     with pytest.raises(LiveError, match="Kamera nicht gestartet: belegt"):
@@ -920,7 +920,7 @@ def test_setup_early_failure_writes_diagnostic(tmp_path, proposal, monkeypatch, 
                         fail() if failed_step == "fokus" else (camera, FocusMeasurements()))
     owner = FakeOwner()
     if failed_step == "kamera":
-        owner.restart = lambda *a: fail()
+        owner.restart = lambda *a, **kw: fail()
     service = LiveService(owner, tmp_path, serial_opener=fail)
     service.start_setup()
     service._setup_thread.join(2)

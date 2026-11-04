@@ -321,8 +321,22 @@ erfolglose Leseversuche. Bis zum ersten gelieferten Bild nach Start oder
 Neustart gilt stattdessen eine **Anlauffrist von 5 s**
 (`STREAM_START_TIMEOUT_S`), gezählt ab Leserstart nach dem Öffnen der Quelle.
 Das lässt Reserve für STREAMON und den ersten Read bei 1920×1080 YUYV unter
-Last; die benötigte Zeit ist an Hardware noch ungemessen. Vor dem ersten
-Bild entsteht kein Messwert. Ab dessen Lieferung gilt die 2-s-Frist.
+Last. An Hardware ist die benötigte Zeit noch nicht systematisch gemessen:
+Am 2026-10-30 lieferte ein Neuverbinden das erste Bild nach 1,3 s, ein
+Neustart unbekannten Anlasses blieb über 5 s ohne Bild. Vor dem ersten Bild
+entsteht kein Messwert. Ab dessen Lieferung gilt die 2-s-Frist.
+
+Jeder Kamerastart steht seit dem 2026-10-31 mit Anlass im Journal der
+Werkbank (`journalctl --user -u dispread-werkbank-r13`) und im Status unter
+`camera.last_start`:
+
+* Anlässe: `serverstart`, `kamera_verbinden`, `einrichtung_regler`,
+  `einrichtung_belichtung` und `laufstart`.
+* Mit dem ersten Bild kommt die Zeile „Kamera: erstes Bild nach … s“ dazu.
+  Diese Anlaufzeit steht auch in `first_frame_s`.
+* Ein Stillstand nennt den Anlass des letzten Starts.
+
+So lässt sich die Anlauffrist an gemessenen Werten festlegen.
 Beide Fristen verwenden die monotone Host-Uhr und beschreiben keine
 Aufnahmelatenz. Der Lauf endet über den Kamerafehlerpfad; der Abschluss ist
 mit Fakes und verkürzter Testfrist geprüft.
