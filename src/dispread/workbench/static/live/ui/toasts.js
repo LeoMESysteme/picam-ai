@@ -17,9 +17,6 @@ let host = null;
 let timers = globalThis;
 const entries = [];
 
-const esc = (value) => String(value ?? '').replace(/[&<>"]/g,
-  (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-
 export function mountToasts(el, {timers: injected} = {}) {
   host = el;
   if (injected) timers = injected;
@@ -55,15 +52,39 @@ function remove(entry, reason) {
   entry.onClose?.(reason);
 }
 
-function fill(entry) {
+// Aufbau einmal je Hinweis; danach werden nur geaenderte Teile nachgezogen.
+// So bleibt der Fokus auf dem Schliessen-Knopf, und die Live-Region liest
+// einen unveraenderten Hinweis nicht bei jedem Statusabruf erneut vor.
+function build(entry) {
+  const doc = host.ownerDocument;
+  const el = entry.el;
+  const sq = doc.createElement('span');
+  const b = doc.createElement('b');
+  const button = doc.createElement('button');
+  button.type = 'button';
+  button.className = 'ghost';
+  button.setAttribute('aria-label', 'Schließen');
+  button.title = 'Schließen';
+  button.innerHTML = '<svg class="i" aria-hidden="true" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  button.onclick = () => remove(entry, 'user');
+  const p = doc.createElement('p');
+  el.append(sq, b, button, p);
+  entry.parts = {sq, b, p};
+}
+
+function fill(entry, previous) {
   const {level, title, text} = entry;
-  entry.el.className = `toast ${level}`;
-  entry.el.setAttribute('role', level === 'err' ? 'alert' : 'status');
-  entry.el.innerHTML = `<span class="sq ${level === 'info' ? 'sel' : level}"></span><b>${esc(title)}</b>` +
-    '<button type="button" class="ghost" aria-label="Schließen" title="Schließen">' +
-    '<svg class="i" aria-hidden="true" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>' +
-    (text ? `<p>${esc(text).replace(/\n/g, '<br>')}</p>` : '');
-  entry.el.querySelector('button').onclick = () => remove(entry, 'user');
+  const {sq, b, p} = entry.parts;
+  if (previous?.level !== level) {
+    entry.el.className = `toast ${level}`;
+    entry.el.setAttribute('role', level === 'err' ? 'alert' : 'status');
+    sq.className = `sq ${level === 'info' ? 'sel' : level}`;
+  }
+  if (previous?.title !== title) b.textContent = title;
+  if (previous?.text !== text) {
+    p.textContent = text;
+    p.hidden = !text;
+  }
 }
 
 export function toast({level = 'info', title = '', text = '', sticky = false, key = null, onClose = null} = {}) {
@@ -71,15 +92,18 @@ export function toast({level = 'info', title = '', text = '', sticky = false, ke
   const lvl = LEVELS.includes(level) ? level : 'info';
   const id = key ?? `${lvl}|${title}|${text}`;
   let entry = entries.find((e) => e.key === id);
+  let previous = null;
   if (entry) {
     timers.clearTimeout(entry.timer);
+    previous = {level: entry.level, title: entry.title, text: entry.text};
     Object.assign(entry, {level: lvl, title, text, sticky, onClose});
   } else {
     entry = {key: id, level: lvl, title, text, sticky, onClose, el: host.ownerDocument.createElement('div')};
+    build(entry);
     entries.push(entry);
     host.append(entry.el);
   }
-  fill(entry);
+  fill(entry, previous);
   if (!sticky) entry.timer = timers.setTimeout(() => remove(entry, 'timeout'), TOAST_MS);
   render();
   return {close: () => remove(entry, 'code'), el: entry.el};

@@ -86,6 +86,7 @@ function defaultSprite(size) {
 }
 
 export function createEffects(canvas, {reducedMotion = false, random = Math.random, sprite = defaultSprite} = {}) {
+  let rm = Boolean(reducedMotion);
   const ctx = canvas.getContext('2d');
   const parts = [];
   const sprites = new Map();
@@ -254,7 +255,7 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
     ctx.strokeStyle = TEAL;
     poly(toS, to);
     ctx.stroke();
-    if (reducedMotion) return;
+    if (rm) return;
     const n = Math.round(120 * budget());
     ctx.lineCap = 'round';
     ctx.lineWidth = 1.6;
@@ -282,7 +283,7 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
   // Wechsel: kurzer Puls am Viereck-Rand, kein Leuchten am Rahmen.
   function drawPulse(toS) {
     const quad = validQuad(geo.quad) ? geo.quad : null;
-    if (!quad || reducedMotion || pulseT0 === null) return;
+    if (!quad || rm || pulseT0 === null) return;
     const phase = ((t - pulseT0) % PULSE_EVERY_S) / PULSE_S;
     if (phase > 1) return;
     const a = Math.sin(Math.PI * phase);
@@ -311,7 +312,7 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
     const toS = geo?.imageToScreen;
     if (toS && geo.live) {
       const scale = geo.scale || 1;
-      if (k === 'error' && reducedMotion) drawStatic(toS, scale);
+      if (k === 'error' && rm) drawStatic(toS, scale);
       else if (parts.length) drawParticles(toS, clamp(scale, 0.7, 3));
       if (k === 'correcting') drawCorrection(toS);
       if (k === 'transition') drawPulse(toS);
@@ -326,11 +327,23 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
       const dt = Math.min(0.1, Math.max(0, dtMs) / 1000);
       if (dtMs > 0) fps = fps * 0.85 + (1000 / dtMs) * 0.15;
       t += dt;
-      if (!reducedMotion) step(dt);
+      if (!rm) step(dt);
       if (kind() || parts.length || dirty) draw();
     },
     // Laeuft noch etwas (Zustand, auslaufende Wolke oder Korrektur)?
     busy: () => Boolean(kind() || parts.length || dirty),
+    // Braucht die Ebene Bild fuer Bild? Stillstand, Verbindung und reduzierte
+    // Bewegung zeichnen ruhend: dann genuegt render() bei einer Aenderung.
+    animating() {
+      const k = kind();
+      return Boolean(parts.length || k === 'correcting' || (!rm && (k === 'error' || k === 'transition')));
+    },
+    // Ein einzelnes Bild ohne Zeitschritt (Zustandswechsel, ruhende Effekte).
+    render: () => draw(),
+    setReducedMotion(on) {
+      rm = Boolean(on);
+      if (rm) parts.length = 0;
+    },
     stats: () => ({particles: parts.length, lastDrawMs, kind: kind(), corners: [...state.corners],
       regions: [...state.regions], fps, maxParticles: maxParticles(), streaks,
       // Versatz altes -> neues Viereck der laufenden Korrektur (Bildpixel, Ecke oben links).
@@ -354,10 +367,15 @@ export function staleFilter(ageS, {reducedMotion = false, dpr = 1} = {}) {
   return `blur(${blur.toFixed(2)}px) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(3)})`;
 }
 
-export function mountEffects(stage, viewer, {reducedMotion} = {}) {
+// Ruhende Effekte (Stillstand, Verbindung) zaehlen ihr Alter in diesem Takt.
+export const TEXT_MS = 250;
+
+export function mountEffects(stage, viewer, {reducedMotion, win: injectedWin} = {}) {
   const doc = stage.ownerDocument;
-  const win = doc.defaultView || globalThis;
-  const reduce = reducedMotion ?? Boolean(win.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  const win = injectedWin || doc.defaultView || globalThis;
+  // Ohne feste Vorgabe folgt die Ebene der Systemeinstellung, auch zur Laufzeit.
+  const motion = reducedMotion === undefined ? win.matchMedia?.('(prefers-reduced-motion: reduce)') : null;
+  let reduce = reducedMotion ?? Boolean(motion?.matches);
   const canvas = doc.createElement('canvas');
   canvas.className = 'vfx';
   canvas.setAttribute('aria-hidden', 'true');
@@ -378,8 +396,15 @@ export function mountEffects(stage, viewer, {reducedMotion} = {}) {
   band.className = 'netband';
   band.setAttribute('role', 'alert');
   band.hidden = true;
-  band.innerHTML = '<svg class="i" aria-hidden="true" viewBox="0 0 16 16"><path d="M2 6.5a9 9 0 0 1 12 0M4.2 9a5.6 5.6 0 0 1 7.6 0M6.5 11.5a2.2 2.2 0 0 1 3 0"/><path d="M2.5 2.5l11 11"/></svg>' +
-    '<b>Verbindung zur Werkbank verloren – Werte veraltet</b><span data-part="why"></span><span class="num" data-part="age"></span>';
+  const bandIcon = doc.createElement('span');
+  bandIcon.className = 'bi';
+  bandIcon.innerHTML = '<svg class="i" aria-hidden="true" viewBox="0 0 16 16"><path d="M2 6.5a9 9 0 0 1 12 0M4.2 9a5.6 5.6 0 0 1 7.6 0M6.5 11.5a2.2 2.2 0 0 1 3 0"/><path d="M2.5 2.5l11 11"/></svg>';
+  const bandTitle = doc.createElement('b');
+  bandTitle.textContent = 'Verbindung zur Werkbank verloren – Werte veraltet';
+  const bandWhy = doc.createElement('span');
+  const bandAge = doc.createElement('span');
+  bandAge.className = 'num';
+  band.append(bandIcon, bandTitle, bandWhy, bandAge);
   doc.body.append(band);
 
   const fx = createEffects(canvas, {reducedMotion: reduce});
@@ -392,6 +417,7 @@ export function mountEffects(stage, viewer, {reducedMotion} = {}) {
   let lastText = 0;
   let filter = 'none';
   let darkTimer = null;
+  let textTimer = null;
 
   const geometry = () => {
     const vs = viewer.viewState();
@@ -444,8 +470,7 @@ export function mountEffects(stage, viewer, {reducedMotion} = {}) {
     if (current.kind === 'offline') {
       const age = finite(conn?.lastOkMs) ? (t - conn.lastOkMs) / 1000 : null;
       const text = age === null ? '' : `seit ${dec(age, 1)} s`;
-      const el = band.querySelector('[data-part="age"]');
-      if (el.textContent !== text) el.textContent = text;
+      if (bandAge.textContent !== text) bandAge.textContent = text;
     }
   }
 
@@ -469,12 +494,21 @@ export function mountEffects(stage, viewer, {reducedMotion} = {}) {
     stale.hidden = next.kind !== 'stalled';
     if (next.kind !== 'stalled') setFilter('none');
     band.hidden = next.kind !== 'offline';
-    const why = band.querySelector('[data-part="why"]');
     const whyText = conn?.httpStatus === 401 ? 'Anmeldung abgelaufen' : 'Anzeige eingefroren, neuer Versuch läuft';
-    if (why.textContent !== whyText) why.textContent = whyText;
+    if (bandWhy.textContent !== whyText) bandWhy.textContent = whyText;
     if (changed) texts(true);
     fx.set(current, geometry());
+    // Ruhende Ebene: einmal zeichnen (Wechsel, oder statische Wolke folgt dem Bild).
+    if (!fx.animating() && (changed || (current.kind === 'error' && reduce))) fx.render();
+    textTicker();
     start();
+  }
+
+  // Alter von Stillstand und Verbindungsverlust im ruhigen Takt statt je Bild.
+  function textTicker() {
+    const need = current.kind === 'stalled' || current.kind === 'offline';
+    if (need && textTimer === null) textTimer = win.setInterval(() => texts(true), TEXT_MS);
+    else if (!need && textTimer !== null) { win.clearInterval(textTimer); textTimer = null; }
   }
 
   function loop(ts) {
@@ -483,19 +517,28 @@ export function mountEffects(stage, viewer, {reducedMotion} = {}) {
     last = ts;
     fx.set(current, geometry());
     fx.frame(dt);
-    texts();
-    if (fx.busy() || current.kind) raf = win.requestAnimationFrame(loop);
-    else last = null;
+    if (fx.animating()) raf = win.requestAnimationFrame(loop);
+    else {
+      // Letztes Bild nach dem Auslaufen (leert die Ebene oder zeigt den ruhenden Zustand).
+      fx.render();
+      last = null;
+    }
   }
 
   function start() {
-    if (raf !== null || doc.hidden) return;
-    if (!fx.busy() && !current.kind) return;
+    if (raf !== null || doc.hidden || !fx.animating()) return;
     raf = win.requestAnimationFrame(loop);
   }
 
   doc.addEventListener('visibilitychange', () => {
     if (doc.hidden && raf !== null) { win.cancelAnimationFrame(raf); raf = null; last = null; } else start();
+  });
+  motion?.addEventListener?.('change', (event) => {
+    reduce = Boolean(event.matches);
+    fx.setReducedMotion(reduce);
+    filter = null; // Stillstandsfilter neu bewerten (ohne Verlauf bzw. mit)
+    apply();
+    texts(true);
   });
 
   return {

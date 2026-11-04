@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Nacharbeit an Zustandseffekten und Hinweisen der Live-Seite.
+  * **Stehender Hinweis:** „Rahmen verdeckt“ wurde bei jedem Statusabruf
+    neu aufgebaut. Der Fokus fiel vom Schließen-Knopf, und Vorleser
+    sagten den Hinweis alle 0,5 s neu an. Jetzt ändern sich nur noch
+    geänderte Texte.
+  * **Verbindung verloren:** Das Band liegt unter der Titelleiste, und
+    die Titelleiste bleibt ungedimmt. „Lauf stoppen“ bleibt so bedienbar,
+    falls nur der Statusabruf hängt.
+  * **Ruhende Effekte:** Stillstand und Verbindungsverlust zeichnen nicht
+    mehr Bild für Bild. Ihr Alter zählt im 250-ms-Takt. Eine Änderung der
+    Einstellung „Bewegung reduzieren“ wirkt sofort.
+  * **Verlusthinweis:** Er steht nur bei frischem Datensatz, nicht neben
+    einem Streamstillstand.
+  * **Dialog „Anzeige bewegt“:** Seine Bedienschritte sind austauschbar.
+    So kann der Übungslauf (Aufgabe 11) nie an den Server senden.
+
 * 2026-11-04: Störzustände waren auf der neuen Live-Seite nur am
   Statuswort zu erkennen, und eine abgelehnte Aktion stand klein in der
   Titelleiste. Jetzt gibt es Zustandseffekte, Hinweise und den Dialog

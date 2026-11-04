@@ -54,12 +54,19 @@ function writeStore(storage, value) {
 const runKeyOf = (status) => (['running', 'stopped'].includes(status?.state) ? `${status.session_id}|${status.run?.dir}` : null);
 const markKeyOf = (mark) => (mark ? `${mark.number ?? ''}|${mark.received_at_utc}|${mark.text}` : null);
 
+// Wie effectState (model.js): nur ein frischer Datensatz (<= 0,5 s) belegt den
+// Verlust; bei Stillstand oder Verbindungsluecke steht der Hinweis nicht daneben.
+function freshLatest(status) {
+  const age = status?.run?.latest_age_s;
+  return typeof age === 'number' && Number.isFinite(age) && age <= 0.5;
+}
+
 function lostOf(status) {
   if (status?.state !== 'running') return null;
   const hint = status.run?.tracking_hint || null;
   const lost = (status.run?.latest?.reject_reasons || []).some((r) => r.startsWith('tracking_lost:'));
   if (!hint && !lost) return null;
-  return {hint, text: trackingHintText(hint) || statusView(status).detail};
+  return {hint, fresh: freshLatest(status), text: trackingHintText(hint) || statusView(status).detail};
 }
 
 function warningWhy(status) {
@@ -68,8 +75,21 @@ function warningWhy(status) {
     .map(([k]) => setup.check_reasons?.[k] || k).join(', ');
 }
 
-export function createAlerts({toast = defaultToast, closeToast = defaultClose, openModal = defaultModal,
-  storage = sessionStore(), wallNow = () => Date.now(), run = {}} = {}) {
+const DEFAULTS = {toast: defaultToast, closeToast: defaultClose, openModal: defaultModal, wallNow: () => Date.now(), run: {}};
+
+export function createAlerts(initial = {}) {
+  // Abhaengigkeiten sind austauschbar (setDeps): der Uebungslauf (Aufgabe 11)
+  // ersetzt Status und Bedienschritte im Client; ein Dialog-Knopf nimmt immer
+  // die gerade gueltigen, damit der Uebungslauf nie an den Server sendet.
+  const deps = {...DEFAULTS, storage: sessionStore()};
+  const setDeps = (next = {}) => {
+    for (const [key, value] of Object.entries(next)) if (value !== undefined) deps[key] = value;
+  };
+  setDeps(initial);
+  const toast = (opts) => deps.toast(opts);
+  const closeToast = (key) => deps.closeToast(key);
+  const openModal = (opts) => deps.openModal(opts);
+  const wallNow = () => deps.wallNow();
   let prev = null;
   let episode = null; // {run, since, start, modal}
   let lostDismissed = false;
@@ -79,22 +99,23 @@ export function createAlerts({toast = defaultToast, closeToast = defaultClose, o
   let latest = null;
 
   function sameStored(runKey, since, start) {
-    const stored = readStore(storage);
+    const stored = readStore(deps.storage);
     if (!stored || stored.run !== runKey) return false;
     return stored.since === since || (finite(stored.at) && start <= stored.at + START_SLACK_MS);
   }
 
   async function choose(value, ep) {
     if (value === 'weiter') {
-      writeStore(storage, {run: ep.run, since: ep.since, start: ep.start, at: wallNow()});
+      writeStore(deps.storage, {run: ep.run, since: ep.since, start: ep.start, at: wallNow()});
       ep.dismissed = true;
       update(latest, {replay: true});
       return;
     }
     if (value === 'stopp' || value === 'neu') {
       ep.dismissed = true;
-      const stopped = latest?.state === 'running' ? await run.stop?.() : {ok: true};
-      if (value === 'neu' && stopped?.ok) await run.setup?.();
+      // Erst beim Klick nachschlagen: die dann gueltige Quelle (echt oder Uebung).
+      const stopped = latest?.state === 'running' ? await deps.run.stop?.() : {ok: true};
+      if (value === 'neu' && stopped?.ok) await deps.run.setup?.();
     }
   }
 
@@ -131,9 +152,10 @@ export function createAlerts({toast = defaultToast, closeToast = defaultClose, o
   function lost(status) {
     const info = lostOf(status);
     const movedOpen = info?.hint?.kind === 'anzeige_bewegt' && !episode?.dismissed;
-    if (!info || movedOpen) {
+    if (!info || !info.fresh || movedOpen) {
       if (lostShown) closeToast('nachfuehrung');
       lostShown = false;
+      // Weggelegt bleibt weggelegt, bis der Verlust wirklich endet (nicht nur veraltet).
       if (!info) lostDismissed = false;
       return;
     }
@@ -190,7 +212,7 @@ export function createAlerts({toast = defaultToast, closeToast = defaultClose, o
     prev = status;
   }
 
-  return {update, episode: () => episode};
+  return {update, setDeps, episode: () => episode};
 }
 
 const watchers = new WeakMap();
@@ -200,7 +222,7 @@ export function watchAlerts(status, deps = {}) {
   if (!watcher) {
     watcher = createAlerts(deps);
     watchers.set(owner, watcher);
-  }
+  } else watcher.setDeps(deps);
   watcher.update(status);
   return watcher;
 }

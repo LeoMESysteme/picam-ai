@@ -67,8 +67,11 @@ input.mono{font-family:var(--mono)}
 .ok-t{color:var(--ok)}.warn-t{color:var(--warn)}.err-t{color:var(--err)}.mut{color:var(--tx3)}.sel-t{color:var(--sel-hi)}
 
 /* ---------- Huelle ---------- */
-.app{position:fixed;inset:0;display:grid;grid-template-rows:40px minmax(0,1fr) 24px;grid-template-columns:248px minmax(0,1fr) 368px;transition:filter .35s}
-body.offline .app{filter:brightness(.5) saturate(.45)}
+.app{position:fixed;inset:0;display:grid;grid-template-rows:40px minmax(0,1fr) 24px;grid-template-columns:248px minmax(0,1fr) 368px}
+/* Verbindung verloren: alles ausser der Titelleiste gedimmt. Deren Aktionen
+   (Lauf stoppen) bleiben bedienbar, POSTs koennen trotz haengendem Abruf ankommen. */
+.app>:not(.titlebar){transition:filter .35s}
+body.offline .app>:not(.titlebar){filter:brightness(.5) saturate(.45)}
 .titlebar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 10px 0 14px;background:#1f1e1b;border-bottom:1px solid var(--line);min-width:0}
 .brand{font-weight:600;font-size:13.5px;letter-spacing:.005em;white-space:nowrap}
 .vsep{width:1px;height:18px;background:var(--line);flex:none}
@@ -183,14 +186,15 @@ body.offline .app{filter:brightness(.5) saturate(.45)}
 .toast{pointer-events:auto;width:330px;max-width:calc(100vw - 32px);background:#272622;border:1px solid #47443e;border-radius:2px;box-shadow:0 8px 22px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);padding:8px 8px 9px 11px;display:grid;grid-template-columns:12px 1fr 20px;gap:2px 8px;font-size:12.5px;animation:tin .3s cubic-bezier(.16,1,.3,1)}
 .toast .sq{margin-top:4px}
 .toast b{font-weight:600}
-.toast p{grid-column:2;margin:0;color:var(--tx2);font-size:12px}
+.toast p{grid-column:2;margin:0;color:var(--tx2);font-size:12px;white-space:pre-line}
 .toast button{width:20px;height:20px;padding:0;justify-content:center;color:var(--tx3)}
 .toast button svg.i{width:12px;height:12px}
 .toast.err{border-color:#6a3129}
 @keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* Verbindung zur Werkbank verloren: Band oben, ausserhalb der gedimmten Huelle */
-.netband{position:fixed;left:0;right:0;top:0;height:40px;z-index:50;display:flex;align-items:center;gap:12px;padding:0 16px;background:#5a201a;border-bottom:1px solid #8a3a30;color:#ffe2dc;font-size:13px}
+.netband{position:fixed;left:0;right:0;top:40px;height:32px;z-index:50;display:flex;align-items:center;gap:12px;padding:0 16px;background:#5a201a;border-bottom:1px solid #8a3a30;color:#ffe2dc;font-size:13px}
 .netband b{font-weight:600}
+.netband .bi{display:flex}
 .netband .num{margin-left:auto;color:#ffc9c0}
 .strip{height:118px;flex:none;display:flex;flex-direction:column;background:var(--dock);border-top:1px solid var(--line)}
 .strip .pt{border-bottom:1px solid var(--line2)}

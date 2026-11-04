@@ -4,8 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createEffects} from '../src/dispread/workbench/static/live/viewer/effects.js';
-import {createAlerts, LOST_TITLE, STALL_TITLE} from '../src/dispread/workbench/static/live/run/alerts.js';
+import {createEffects, mountEffects, TEXT_MS} from '../src/dispread/workbench/static/live/viewer/effects.js';
+import {createAlerts, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
 import {effectState} from '../src/dispread/workbench/static/live/model.js';
 
 const scene = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
@@ -270,4 +270,132 @@ test('alerts: hidden frame stays until recovery, stall and run events are toasts
   alerts.update(stopped);
   const stop = [...h.toasts.values()].find((t) => /gestoppt/.test(t.title));
   assert.ok(stop && !stop.sticky, JSON.stringify([...h.toasts.keys()]));
+});
+
+test('alerts: a swapped action source is used by the dialog (practice run never POSTs)', async () => {
+  const h = harness({answer: null});
+  const client = {};
+  const real = [];
+  const practice = [];
+  const runOf = (log) => ({stop: async () => { log.push('stop'); return {ok: true}; },
+    setup: async () => { log.push('setup'); return {ok: true}; }});
+  watchAlerts(scene('running_anzeige_bewegt'), {...h.deps, client, run: runOf(real)});
+  assert.equal(h.modals.length, 1);
+  // Der Uebungslauf (Aufgabe 11) tauscht die Bedienschritte, waehrend der Dialog offen ist.
+  watchAlerts(scene('running_anzeige_bewegt'), {client, run: runOf(practice)});
+  h.modals[0].resolve('neu');
+  await settle();
+  await settle();
+  assert.deepEqual(real, []);
+  assert.deepEqual(practice, ['stop', 'setup']);
+});
+
+test('alerts: a stale record does not keep the loss toast next to the stall', () => {
+  const h = harness();
+  const alerts = createAlerts(h.deps);
+  alerts.update(scene('running_valid'));
+  alerts.update(scene('running_rahmen_verdeckt'));
+  assert.ok(h.toasts.has('nachfuehrung'));
+  const stale = scene('running_rahmen_verdeckt');
+  stale.run.latest_age_s = 2;
+  stale.camera.stalled = true;
+  alerts.update(stale);
+  assert.ok(!h.toasts.has('nachfuehrung'));
+  assert.ok(h.toasts.has('stillstand'));
+});
+
+// Minimal-DOM fuer mountEffects: Elemente, Fenster mit gezaehltem rAF und Takt.
+function fakeDom({reduce = false} = {}) {
+  const el = (tag) => {
+    const classes = new Set();
+    const node = {tag, hidden: false, textContent: '', innerHTML: '', className: '', clientWidth: 820, clientHeight: 680,
+      width: 0, height: 0, setAttribute() {}, append() {}, after() {}, addEventListener() {},
+      classList: {toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)), add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c), contains: (c) => classes.has(c)}};
+    if (tag === 'canvas') node.getContext = () => fakeCanvas().getContext();
+    return node;
+  };
+  let t = 0;
+  const rafs = [];
+  const intervals = new Map();
+  let id = 0;
+  const listeners = [];
+  const mql = {matches: reduce, addEventListener: (type, fn) => listeners.push(fn)};
+  const win = {
+    performance: {now: () => t},
+    requestAnimationFrame: (fn) => { rafs.push(fn); return ++id; },
+    cancelAnimationFrame() {},
+    setInterval: (fn, ms) => { intervals.set(++id, {fn, ms, next: t + ms}); return id; },
+    clearInterval: (k) => intervals.delete(k),
+    setTimeout: () => 0, clearTimeout() {},
+    matchMedia: () => mql,
+  };
+  const doc = {hidden: false, body: {append() {}}, createElement: el, addEventListener() {}, defaultView: win};
+  const stage = {ownerDocument: doc, querySelector: () => el('canvas'), classList: el('div').classList};
+  let frameAt = 0;
+  let filter = 'none';
+  const viewer = {
+    viewState: () => ({imageToScreen: ([x, y]) => [x * 0.5, y * 0.5], scale: 0.5, width: 820, height: 680, dpr: 1, source: 'live'}),
+    hud: () => hudWith(), frameAgeS: () => (t - frameAt) / 1000, setImageFilter: (f) => { filter = f; },
+  };
+  // Zeit vorstellen: rAF-Rueckrufe dieses Bilds ausfuehren, faellige Takte ausloesen.
+  const advance = (ms, step = 16) => {
+    let frames = 0;
+    for (let end = t + ms; t < end; t += step) {
+      const due = rafs.splice(0);
+      frames += due.length;
+      for (const fn of due) fn(t);
+      for (const timer of intervals.values()) while (timer.next <= t) { timer.next += timer.ms; timer.fn(); }
+    }
+    return frames;
+  };
+  return {stage, viewer, win, advance, filter: () => filter, intervals, mql, listeners,
+    frame: () => { frameAt = t; }};
+}
+
+test('effects loop rests while stalled or offline: no rAF, age on a slow timer', () => {
+  for (const reduce of [true, false]) {
+    const dom = fakeDom({reduce});
+    const fx = mountEffects(dom.stage, dom.viewer, {win: dom.win});
+    const stalled = scene('running_stalled');
+    fx.update(stalled, {offline: false, httpStatus: 200, lastOkMs: 0});
+    assert.equal(fx.kind(), 'stalled');
+    let frames = 0;
+    for (let i = 0; i < 24; i++) {
+      frames += dom.advance(250);
+      fx.update(stalled, {offline: false, httpStatus: 200, lastOkMs: 0});
+    }
+    assert.equal(frames, 0, `reduce=${reduce}: kein Bild-fuer-Bild im Stillstand`);
+    assert.equal([...dom.intervals.values()][0]?.ms, TEXT_MS);
+    // Die Unschaerfe kommt im ruhigen Takt an und steht danach still.
+    assert.match(dom.filter(), /blur\(5\.00px\) saturate\(0\.12\) brightness\(0\.750\)/);
+    // Verbindung verloren: ebenso ruhend.
+    fx.update(stalled, {offline: true, httpStatus: null, lastOkMs: 0});
+    assert.equal(fx.kind(), 'offline');
+    assert.equal(dom.advance(1000), 0, 'offline: kein rAF');
+    assert.equal(dom.filter(), 'none');
+    // Zurueck im Lauf ohne Stoerung (neues Bild): kein Takt mehr.
+    dom.frame();
+    fx.update(scene('running_valid'), {offline: false, httpStatus: 200, lastOkMs: 0});
+    assert.equal(dom.intervals.size, 0, 'kein Takt ohne Stoerung');
+  }
+});
+
+test('effects animate only what moves and follow a reduced-motion change at runtime', () => {
+  const dom = fakeDom({reduce: false});
+  const fx = mountEffects(dom.stage, dom.viewer, {win: dom.win});
+  const lost = scene('running_rahmen_verdeckt');
+  dom.frame();
+  fx.update(lost, {offline: false, httpStatus: 200, lastOkMs: 0});
+  assert.equal(fx.kind(), 'error');
+  assert.ok(dom.advance(500) > 20, 'Wolke laeuft Bild fuer Bild');
+  assert.ok(fx.effects.stats().particles > 0);
+  // Systemeinstellung wechselt auf reduzierte Bewegung: keine Teilchen, kein rAF mehr.
+  dom.mql.matches = true;
+  for (const fn of dom.listeners) fn({matches: true});
+  dom.advance(100);
+  assert.equal(fx.effects.stats().particles, 0);
+  dom.frame();
+  fx.update(lost, {offline: false, httpStatus: 200, lastOkMs: 0});
+  assert.equal(dom.advance(500), 0);
 });

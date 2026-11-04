@@ -1026,9 +1026,21 @@ test('Rahmen verdeckt: Leuchten, Hinweis, Ecken rechts', async ({ page }) => {
     requestAnimationFrame(step);
   }));
   expect(median).toBeLessThan(4);
-  // Hinweis bleibt bis zur Erholung, dann verschwinden Leuchten und Hinweis.
-  await hook(page, '/test/scene', { name: 'running_valid' });
+  // Der stehende Hinweis wird je Abruf nur nachgezogen, nicht neu gebaut:
+  // der Fokus bleibt auf dem Schliessen-Knopf, Enter schliesst ihn.
+  const close = toast.getByRole('button', { name: 'Schließen' });
+  await close.focus();
+  const node = await toast.elementHandle();
+  await page.waitForTimeout(1200);
+  await expect(close).toBeFocused();
+  expect(await node!.evaluate((el) => el.isConnected)).toBe(true);
+  await page.keyboard.press('Enter');
   await expect(toast).toHaveCount(0);
+  // Weggelegt bleibt weggelegt, solange der Verlust anhaelt.
+  await page.waitForTimeout(1200);
+  await expect(toast).toHaveCount(0);
+  // Bei der Erholung verschwindet das Leuchten.
+  await hook(page, '/test/scene', { name: 'running_valid' });
   await expect(stage).not.toHaveClass(/fx-err/);
   expect(errors).toEqual([]);
 });
@@ -1118,10 +1130,18 @@ test('Verbindung verloren: Band nach 1,5 s', async ({ page }) => {
     expect(await seconds()).toBeGreaterThan(a);
     await expect(page.locator('body')).toHaveClass(/offline/);
     expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().kind)).toBe('offline');
+    // Das Band liegt unter der Titelleiste: Lauf stoppen bleibt sichtbar und klickbar
+    // (POSTs koennen ankommen, auch wenn der Statusabruf haengt).
+    const stopButton = page.getByRole('banner').getByRole('button', { name: 'Lauf stoppen' });
+    await expect(stopButton).toBeVisible();
+    const stop = page.waitForRequest('**/live/run/stop');
+    await stopButton.click();
+    await stop;
   } finally {
     expect((await offline(false)).ok()).toBe(true);
   }
   await expect(band).toBeHidden({ timeout: 5000 });
+  await hook(page, '/test/scene', { name: 'running_valid' });
   expect(errors).toEqual([]);
 });
 
