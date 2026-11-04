@@ -65,6 +65,32 @@ def test_status_run_counts_are_per_frame(tmp_path, monkeypatch):
         session.stop()
 
 
+def test_status_run_recent_now_ms_anchors_paused_strip(tmp_path):
+    from test_live_session import _session, embed
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, monotonic=lambda: now[0])
+    session.start()
+    service = LiveService(session._owner, tmp_path, monotonic=lambda: now[0])
+    service._session, service._run_dir = session, tmp_path / 'run'
+    try:
+        assert service.status()['run']['recent_now_ms'] == 0
+        session.step()
+        now[0] = 102.0
+        session.step()
+        now[0] = 105.0
+        run = service.status()['run']
+        assert [entry[0] for entry in run['recent']] == [0, 2000]
+        assert run['recent_now_ms'] == 5000
+        assert run['recent_now_ms'] - run['recent'][-1][0] >= 3000 - 250
+        now[0] = 162.0
+        run = service.status()['run']
+        assert run['recent'] == []
+        assert run['recent_now_ms'] == 0
+    finally:
+        session.stop()
+
+
 @pytest.fixture
 def blank_exposure_still(monkeypatch):
     """Alte Ablauf-Fakes brauchen jetzt acht Bilder vor assist_measure.
@@ -1507,6 +1533,8 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     import json
     from unittest.mock import Mock
 
+    from dispread.live.recent import RecentStrip
+
     proposal["setup_checks"]["checks"]["gegenlesen"] = {
         "status": "WARNUNG", "metrics": {"frames": 2, "read_count": 0, "rejection_reasons": {}},
     }
@@ -1519,7 +1547,7 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     with pytest.raises(LiveError, match="Lauf gesperrt"):
         service.start_run()
     assert not list(session_dir.glob("run-*"))
-    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"},
+    session = Mock(latest=None, summary={}, latest_guess={"text": "guess"}, recent=RecentStrip(),
                    tracking={"mode": "ecc_alt", "version": None, "regions": None})
     session.latest_age_s.return_value = None
     session.rejection_causes.return_value = {"frames": 0, "window_s": 10.0, "limited": False, "causes": []}

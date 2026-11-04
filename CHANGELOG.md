@@ -14,6 +14,7 @@ was ist die Konsequenz.
   übersprungener Bilder über zwei Sekunden. Alte Ablesungen erscheinen
   auch dort als veraltet; Fehler der Anzeigeaufbereitung unterbrechen
   die Messung nicht.
+  `run.recent_now_ms` verankert den Verlauf auch bei ausbleibenden Bildern zeitlich.
 
 * 2026-11-04: Während der Einrichtung waren die Dauer einzelner Schritte,
   die Stabilitätswartezeit und bereits berechnete Prüfungen nicht live

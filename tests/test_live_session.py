@@ -129,16 +129,27 @@ def test_frame_info_has_quad_cells_regions_and_proc(tmp_path):
         session.stop()
 
 
-def test_frame_info_skipped_recent(tmp_path):
+def test_frame_info_skipped_recent(tmp_path, monkeypatch):
+    from dataclasses import replace
+
     now = [100.0]
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, monotonic=lambda: now[0])
     session._owner.items = [(seq, image) for seq, (_, image) in
                             zip([1, 2, 5, 6], session._owner.items, strict=True)]
+    wait_newer = session._owner.wait_newer
+
+    def different_source_sequence(after, timeout):
+        sequence, frame = wait_newer(after, timeout)
+        return sequence, replace(frame, frame_sequence=sequence + 100)
+
+    monkeypatch.setattr(session._owner, 'wait_newer', different_source_sequence)
     session.start()
     try:
-        for i in range(4):
+        for i, sequence in enumerate([1, 2, 5, 6]):
             now[0] = 100 + i * 0.4
-            session.step()
+            record = session.step()
+            assert record.frame_sequence == sequence + 100
+            assert session.frame_info()['rec']['seq'] == sequence
         assert session.frame_info()['proc']['skipped_recent'] == pytest.approx(2 / 6)
         assert session.frame_info()['proc']['fps'] == pytest.approx(4 / 2)
         session._owner.items.append((7, embed('+ 1.2345 ')))
@@ -146,6 +157,43 @@ def test_frame_info_skipped_recent(tmp_path):
         session.step()
         assert session.frame_info()['proc']['skipped_recent'] == 0
         assert session.frame_info()['proc']['fps'] == pytest.approx(1 / 2)
+    finally:
+        session.stop()
+
+
+@pytest.mark.parametrize('backend,cells', [
+    ('dotmatrix', [{'best': '7', 'margin': 0.4}, {'best': '8', 'margin': None}]),
+    ('dotmatrix', [{'best': None, 'margin': 0.4}]),
+    ('dotmatrix', [None]),
+    ('dotmatrix', {'best': '7', 'margin': 0.4}),
+    ('other', [{'best': '7', 'margin': 0.4}]),
+])
+def test_frame_info_invalid_cells_keep_other_hud_fields(tmp_path, backend, cells):
+    from dataclasses import replace
+
+    from dispread.track import TrackResult
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')])
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+
+    def injected(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline.locator.last_track = TrackResult(QUAD, 0.4, 0.2, 0.93, None)
+        pipeline.last_read = replace(pipeline.last_read, backend_id=backend, diagnostics={'cells': cells})
+        return record
+
+    pipeline.process = injected
+    try:
+        record = session.step()
+        info = session.frame_info()
+        assert info is not None
+        assert info['cells'] == []
+        assert info['track']['quad'] == QUAD
+        assert info['rec']['status'] == record.status.value
+        assert info['proc']['latency_ms'] >= 0
+        assert len(session.records_path.read_text().splitlines()) == 1
     finally:
         session.stop()
 

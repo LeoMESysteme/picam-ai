@@ -36,9 +36,14 @@ class RecentStrip:
                 last[2] = value
 
     def to_list(self, now_s: float) -> list[list]:
+        return self.snapshot(now_s)[0]
+
+    def snapshot(self, now_s: float) -> tuple[list[list], float]:
+        """Verlauf und Jetzt auf derselben Achse, unter einem Lock gelesen."""
         with self._lock:
             self._expire(now_s)
             if not self._buckets:
-                return []
+                return [], 0.0
             origin = self._buckets[0][0]
-            return [[bucket - origin, status, value] for bucket, status, value in self._buckets]
+            entries = [[bucket - origin, status, value] for bucket, status, value in self._buckets]
+            return entries, now_s * 1000 - origin

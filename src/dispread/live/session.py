@@ -469,7 +469,7 @@ class LiveSession:
                 while self._processing_window and self._processing_window[0][0] <= now - 2.0:
                     self._processing_window.popleft()
                 self._processing_window.append((now, skipped))
-                self._frame_info = (now, self._build_frame_info(record, track, coarse))
+                self._frame_info = (now, self._build_frame_info(sequence, record, track, coarse))
             except Exception as exc:  # noqa: BLE001 - Messung hat Vorrang vor Anzeige
                 self._frame_info = None
                 if not self._frame_info_warned:
@@ -477,20 +477,24 @@ class LiveSession:
                     self._frame_info_warned = True
             return record
 
-    def _build_frame_info(self, record, track, coarse) -> dict:
+    def _build_frame_info(self, sequence, record, track, coarse) -> dict:
         pipeline = self._pipeline
         tracker = getattr(pipeline.locator, '_tracker', None)
         regions = getattr(tracker, 'last_regions', None) or []
         read = pipeline.last_read
-        diagnostics = read.diagnostics if read is not None else {}
-        cells = diagnostics.get('cells') or []
+        diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
+        cells = diagnostics.get('cells')
+        if not (isinstance(cells, list) and cells
+                and all(isinstance(c, dict) and isinstance(c.get('best'), str)
+                        and isinstance(c.get('margin'), (int, float)) for c in cells)):
+            cells = []
         trace = record.trace
         latency = (None if trace is None or trace.t_record_built_ns is None else
                    (trace.t_record_built_ns - trace.t_dequeue_ns) / 1e6)
         count = len(self._processing_window)
         skipped = sum(item[1] for item in self._processing_window)
         return {
-            'rec': {'seq': record.frame_sequence, 'status': record.status.value,
+            'rec': {'seq': sequence, 'status': record.status.value,
                     'text': record.raw_text, 'unit': record.unit,
                     'reasons': list(record.reject_reasons), 'age_s': 0.0},
             'track': {

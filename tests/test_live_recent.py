@@ -23,6 +23,23 @@ def test_recent_strip_drops_older_than_window():
     assert strip.to_list(12.0) == []
 
 
+def test_recent_strip_snapshot_anchors_now_after_last_observation():
+    from dispread.live.recent import RecentStrip
+
+    strip = RecentStrip()
+    assert strip.snapshot(0.0) == ([], 0)
+    strip.observe(0.0, 'valid', 1.0)
+    strip.observe(2.0, 'valid', 2.0)
+    entries, now_ms = strip.snapshot(5.0)
+    assert entries == [[0, 'v', 1.0], [2000, 'v', 2.0]]
+    assert now_ms == 5000
+    assert now_ms - entries[-1][0] >= 3000 - 250
+    assert strip.snapshot(61.0) == ([[0, 'v', 2.0]], 59000)
+    assert strip.snapshot(62.0) == ([], 0)
+    # Bereits gelieferte Ansichten bleiben unabhaengig vom Ablauf.
+    assert entries == [[0, 'v', 1.0], [2000, 'v', 2.0]]
+
+
 @pytest.mark.parametrize('statuses,worst', [
     (['valid', 'transition'], 't'), (['transition', 'unreadable'], 'u'),
     (['stale', 'unreadable', 'valid'], 's'),
