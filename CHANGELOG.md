@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Laufzähler und Bilddiagnosen waren während eines Laufs
+  nicht vollständig für die Werkbank verfügbar. `/live/status` ergänzt
+  jetzt alle vier Statuszähler je auditiertem Bild und einen 60-s-Verlauf
+  in 250-ms-Eimern mit schlechtestem Status und letztem freigegebenem
+  Wert. Ein unabhängiger HUD-Snapshot liefert Quad, Rahmenbereiche,
+  vorhandene Zelldiagnosen, Verarbeitungstempo, Latenz und den Anteil
+  übersprungener Bilder über zwei Sekunden. Alte Ablesungen erscheinen
+  auch dort als veraltet; Fehler der Anzeigeaufbereitung unterbrechen
+  die Messung nicht.
+
 * 2026-11-04: Während der Einrichtung waren die Dauer einzelner Schritte,
   die Stabilitätswartezeit und bereits berechnete Prüfungen nicht live
   sichtbar. `/live/status` ergänzt jetzt fünf Schritte mit Laufzeiten,

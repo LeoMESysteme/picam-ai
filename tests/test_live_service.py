@@ -30,6 +30,41 @@ class FakeOwner:
         pass
 
 
+def test_status_run_counts_are_per_frame(tmp_path, monkeypatch):
+    from test_live_session import _files, _session, embed
+
+    from dispread.live.session import LiveConfig
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, monotonic=lambda: now[0])
+    _, config = _files(tmp_path)
+    session._config = LiveConfig(**{**config.__dict__, 'confirm_frames': 1})
+    session.start()
+    service = LiveService(session._owner, tmp_path, monotonic=lambda: now[0])
+    service._session, service._run_dir = session, tmp_path / 'run'
+    try:
+        # Kein periodisches Schreiben, keine Aktualisierung des summaries.
+        monkeypatch.setattr(session, '_write_session', lambda **kw: pytest.fail('kein Session-Schreiben'))
+        initial = dict(session.summary)
+        for i in range(3):
+            now[0] += 0.3
+            session.step()
+            assert service.status()['run']['counts']['valid'] == i + 1
+        run = service.status()['run']
+        assert run['counts'] == {'valid': 3, 'transition': 0, 'unreadable': 0, 'stale': 0}
+        assert run['summary'] == initial
+        assert run['recent'] == [[0, 'v', 1.2345], [250, 'v', 1.2345], [500, 'v', 1.2345]]
+        run['counts']['valid'] = -1
+        run['recent'][0][2] = -1
+        assert service.status()['run']['counts']['valid'] == 3
+        assert service.status()['run']['recent'][0][2] == 1.2345
+        now[0] += 61
+        assert service.status()['run']['recent'] == []
+    finally:
+        monkeypatch.undo()
+        session.stop()
+
+
 @pytest.fixture
 def blank_exposure_still(monkeypatch):
     """Alte Ablauf-Fakes brauchen jetzt acht Bilder vor assist_measure.

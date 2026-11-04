@@ -18,6 +18,7 @@ import threading
 import time
 from collections import Counter, deque
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import LiveOutput, validate_output
+from dispread.live.recent import RecentStrip
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -237,6 +239,10 @@ class LiveSession:
         self._meta: dict = {}
         self._seen = 0
         self._by_status: dict[str, int] = {}
+        self.recent = RecentStrip()
+        self._frame_info: tuple[float, dict] | None = None
+        self._frame_info_warned = False
+        self._processing_window: deque[tuple[float, int]] = deque()
         #: TRANSITION wegen Ziffernwechsel (Grund anzeige_wechselt), getrennt
         #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
         self._display_changing = 0
@@ -455,7 +461,69 @@ class LiveSession:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
                 self._write_session(ended=False)
+            # Nur kleine Metadaten nach erfolgreichem Audit, keine Bildkopien.
+            # Ein Anzeigeproblem darf weder Messung noch Ausgabe unterbrechen.
+            try:
+                now = self.latest_monotonic
+                self.recent.observe(now, record.status.value, record.value)
+                while self._processing_window and self._processing_window[0][0] <= now - 2.0:
+                    self._processing_window.popleft()
+                self._processing_window.append((now, skipped))
+                self._frame_info = (now, self._build_frame_info(record, track, coarse))
+            except Exception as exc:  # noqa: BLE001 - Messung hat Vorrang vor Anzeige
+                self._frame_info = None
+                if not self._frame_info_warned:
+                    _LOG.warning('Laufanzeige ausgefallen: %s', exc)
+                    self._frame_info_warned = True
             return record
+
+    def _build_frame_info(self, record, track, coarse) -> dict:
+        pipeline = self._pipeline
+        tracker = getattr(pipeline.locator, '_tracker', None)
+        regions = getattr(tracker, 'last_regions', None) or []
+        read = pipeline.last_read
+        diagnostics = read.diagnostics if read is not None else {}
+        cells = diagnostics.get('cells') or []
+        trace = record.trace
+        latency = (None if trace is None or trace.t_record_built_ns is None else
+                   (trace.t_record_built_ns - trace.t_dequeue_ns) / 1e6)
+        count = len(self._processing_window)
+        skipped = sum(item[1] for item in self._processing_window)
+        return {
+            'rec': {'seq': record.frame_sequence, 'status': record.status.value,
+                    'text': record.raw_text, 'unit': record.unit,
+                    'reasons': list(record.reject_reasons), 'age_s': 0.0},
+            'track': {
+                'quad': None if track is None or track.quad is None else
+                        [[float(x), float(y)] for x, y in track.quad],
+                'score': None if track is None else float(track.score),
+                'shift_px': None if track is None else float(track.shift),
+                'rotation_deg': None if track is None else float(track.rotation_deg),
+                'reason': None if track is None else track.reason,
+                'correcting': bool(coarse is not None and coarse.used),
+                'regions': [{'c': list(region['c']), 's': region['s'],
+                             'peak': float(region['peak']), 'ok': bool(region['ok'])}
+                            for region in regions],
+            },
+            'cells': [{'i': i, 'best': cell['best'], 'margin': cell['margin'],
+                       'uncertain': cell['margin'] < 0} for i, cell in enumerate(cells)],
+            'proc': {'fps': count / 2.0, 'latency_ms': latency,
+                     'skipped_recent': skipped / (count + skipped)},
+        }
+
+    def frame_info(self) -> dict | None:
+        """Unabhaengiges Abbild des letzten auditierten Bilds, ohne Bilddaten."""
+        snapshot = self._frame_info
+        if snapshot is None:
+            return None
+        observed, data = snapshot
+        info = deepcopy(data)
+        # Nur die Ansicht altert; Datensatz und gespeichertes Abbild bleiben gleich.
+        age = max(0.0, self._monotonic() - observed)
+        info['rec']['age_s'] = age
+        if age > 0.5:
+            info['rec']['status'] = 'stale'
+        return info
 
     def rejection_causes(self) -> dict:
         """Hauptursachen aller verarbeiteten Bilder der letzten zehn Sekunden."""

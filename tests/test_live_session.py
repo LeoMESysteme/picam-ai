@@ -78,6 +78,135 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     )
 
 
+def test_frame_info_has_quad_cells_regions_and_proc(tmp_path):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from dispread.live.frame_tracking import CoarseEstimate
+    from dispread.track import TrackResult
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, monotonic=lambda: now[0])
+    assert session.frame_info() is None
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+    regions = [{'c': [10, 20], 's': 15, 'peak': 0.92, 'ok': True}]
+
+    def injected(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline.locator.last_track = TrackResult(QUAD, 0.4, 0.2, 0.93, None)
+        pipeline.locator._tracker = SimpleNamespace(
+            last_regions=regions, last_coarse=CoarseEstimate(3, 2, 0.8, used=True))
+        pipeline.last_read = replace(pipeline.last_read, diagnostics={'cells': [
+            {'best': '7', 'margin': -0.1 if i == 8 else 0.4} for i in range(16)]})
+        return record
+
+    pipeline.process = injected
+    try:
+        record = session.step()
+        info = session.frame_info()
+        assert set(info) == {'rec', 'track', 'cells', 'proc'}
+        assert info['rec'] == {'seq': record.frame_sequence, 'status': record.status.value,
+                               'text': record.raw_text, 'unit': record.unit,
+                               'reasons': list(record.reject_reasons), 'age_s': 0.0}
+        assert len(info['track']['quad']) == 4
+        assert info['track'] == {'quad': QUAD, 'score': 0.93, 'shift_px': 0.4,
+                                 'rotation_deg': 0.2, 'reason': None, 'correcting': True,
+                                 'regions': regions}
+        assert len(info['cells']) == 16
+        assert info['cells'][8] == {'i': 8, 'best': '7', 'margin': -0.1, 'uncertain': True}
+        assert info['cells'][7]['uncertain'] is False
+        assert info['proc']['latency_ms'] >= 0
+        assert info['proc']['latency_ms'] == (
+            record.trace.t_record_built_ns - record.trace.t_dequeue_ns) / 1e6
+        # Keine Referenzen auf den Locator und keine veraenderbaren Rueckgaben.
+        regions[0]['c'][0] = -1
+        info['cells'][8]['best'] = '?'
+        assert session.frame_info()['track']['regions'][0]['c'] == [10, 20]
+        assert session.frame_info()['cells'][8]['best'] == '7'
+    finally:
+        session.stop()
+
+
+def test_frame_info_skipped_recent(tmp_path):
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, monotonic=lambda: now[0])
+    session._owner.items = [(seq, image) for seq, (_, image) in
+                            zip([1, 2, 5, 6], session._owner.items, strict=True)]
+    session.start()
+    try:
+        for i in range(4):
+            now[0] = 100 + i * 0.4
+            session.step()
+        assert session.frame_info()['proc']['skipped_recent'] == pytest.approx(2 / 6)
+        assert session.frame_info()['proc']['fps'] == pytest.approx(4 / 2)
+        session._owner.items.append((7, embed('+ 1.2345 ')))
+        now[0] = 104.0
+        session.step()
+        assert session.frame_info()['proc']['skipped_recent'] == 0
+        assert session.frame_info()['proc']['fps'] == pytest.approx(1 / 2)
+    finally:
+        session.stop()
+
+
+def test_frame_info_display_failure_does_not_break_measurement(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2)
+    session.start()
+    session._pipeline.locator._tracker = SimpleNamespace(last_regions=[object()])
+    try:
+        for _ in range(2):
+            record = session.step()
+        assert record.status is ValueStatus.VALID
+        assert len(session.records_path.read_text().splitlines()) == 2
+        assert session.frame_info() is None
+        assert session._by_status == {'transition': 1, 'valid': 1}
+    finally:
+        session.stop()
+
+
+def test_frame_info_only_published_after_audit(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed('+ 1.2345 ')])
+    session.start()
+
+    def failed(record):
+        assert session.frame_info() is None
+        raise AuditFailed('Test: Audit nicht geschrieben')
+
+    monkeypatch.setattr(session._sink, 'emit', failed)
+    try:
+        with pytest.raises(AuditFailed):
+            session.step()
+        assert session.frame_info() is None
+        assert session.recent.to_list(session._monotonic()) == []
+    finally:
+        session.stop()
+
+
+def test_frame_info_age_marks_old_record_stale_without_changing_audit(tmp_path):
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, monotonic=lambda: now[0])
+    session.start()
+    try:
+        session.step()
+        record = session.step()
+        fresh = session.frame_info()
+        assert fresh['rec']['status'] == 'valid'
+        now[0] += 0.25
+        assert session.frame_info()['rec']['age_s'] == 0.25
+        assert session.frame_info()['rec']['status'] == 'valid'
+        now[0] += 0.26
+        assert session.frame_info()['rec']['age_s'] == pytest.approx(0.51)
+        assert session.frame_info()['rec']['status'] == 'stale'
+        assert fresh['rec']['status'] == 'valid' and fresh['rec']['age_s'] == 0
+        assert session.latest is record and record.status is ValueStatus.VALID
+        assert json.loads(session.records_path.read_text().splitlines()[-1])['status'] == 'valid'
+    finally:
+        session.stop()
+
+
 @pytest.mark.parametrize("markers", [
     {"offline": True}, {"confirmed_by": "offline-auswertung"},
 ])

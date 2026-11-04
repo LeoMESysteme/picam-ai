@@ -266,6 +266,10 @@ class LiveService:
                         "capture_timestamp": latest.capture_timestamp.to_dict(),
                     },
                     "summary": dict(self._session.summary),
+                    "counts": {status: getattr(self._session, '_by_status', {}).get(status, 0)
+                               for status in ('valid', 'transition', 'unreadable', 'stale')},
+                    "recent": (self._session.recent.to_list(self._monotonic())
+                               if hasattr(self._session, 'recent') else []),
                     "dir": self._run_dir.name,
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
