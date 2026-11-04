@@ -13,6 +13,7 @@ import shutil
 import threading
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -159,6 +160,10 @@ class LiveService:
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
         self._setup_message: str | None = None
+        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None}
+        self._setup_exposure: dict = {
+            "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
+        }
         self._diagnostics_error: str | None = None
         self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
@@ -233,6 +238,8 @@ class LiveService:
                         key: metrics[key] for key in ("hinweis", "tolerance") if key in metrics}}
             if self._setup_started_at is not None:
                 setup = setup or {}
+                setup["focus"] = deepcopy(self._setup_focus)
+                setup["exposure"] = deepcopy(self._setup_exposure)
                 setup["step"] = self._setup_step
                 if self._setup_message is not None:
                     setup["message"] = self._setup_message
@@ -367,6 +374,10 @@ class LiveService:
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
+                self._setup_focus = {"method": "climb", "samples": [], "verify": None}
+                self._setup_exposure = {
+                    "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
+                }
                 self._session_dir, self._proposal = session_dir, None
                 self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
@@ -451,12 +462,33 @@ class LiveService:
             capture_tries = tries
             raw_texts[:] = [value for value in (before, after) if value is not None]
 
+        def focus_sample(focus: int, score: float) -> None:
+            with self._lock:
+                self._setup_focus["samples"].append([focus, score])
+
+        def focus_fallback() -> None:
+            with self._lock:
+                self._setup_focus["method"] = "sweep"
+
+        def exposure_round(entry: dict) -> None:
+            with self._lock:
+                self._setup_exposure["rounds"].append(deepcopy(entry))
+
         report("fokus")
         with self._lock:
             start_focus = self._last_confirmed_focus
         settings, sweep = live_setup.focus_camera(
             OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
+            on_sample=focus_sample, on_fallback=focus_fallback,
         )
+        with self._lock:
+            self._setup_focus["method"] = getattr(sweep, "focus_method", "sweep")
+            verification = getattr(sweep, "focus_verify", None)
+            if verification is not None:
+                self._setup_focus["verify"] = {
+                    "score": verification["verified"],
+                    "threshold": live_setup.FOCUS_VERIFY_RATIO * verification["best_measured"],
+                }
         camera_record = {
             "camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
             "focus_method": getattr(sweep, "focus_method", "sweep"),
@@ -477,6 +509,7 @@ class LiveService:
 
         settings, exposure_adjust = live_setup.adjust_exposure(
             OwnerSetupCamera(self._owner), settings, apply=apply_exposure, info=self._setup_progress,
+            on_round=exposure_round,
         )
         camera_record.update(camera=settings.to_dict(), exposure_adjust=exposure_adjust)
         (setup_dir / "camera-settings.json").write_text(

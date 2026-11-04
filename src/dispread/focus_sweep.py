@@ -39,6 +39,7 @@ def climb_focus(
     flat_tolerance: float = 0.05,
     peak_ratio: float = 2.0,
     on_fallback: Callable[[], None] | None = None,
+    on_sample: Callable[[int, float], None] | None = None,
 ) -> tuple[int, FocusMeasurements]:
     """Bergsteigen: ab `start` in Schritten `step` in die Richtung, in der die
     Schaerfe steigt; faellt sie nach einem Anstieg, ist der Gipfel ueberschritten.
@@ -51,6 +52,7 @@ def climb_focus(
     Nach Grob- und Feinlauf muss der Gipfel mindestens `peak_ratio` mal so
     hoch wie die kleinste gemessene Schaerfe sein, sonst ebenfalls Rueckfall.
     Rueckgabe wie `sweep_focus`: (bester Fokus, Messungen in Reihenfolge).
+    `on_sample` meldet jede neue Messung einmal, auch im Rueckfall.
     """
     measured = FocusMeasurements()
     seen: dict[int, float] = {}
@@ -59,6 +61,8 @@ def climb_focus(
         if focus not in seen:
             seen[focus] = measure(focus)
             measured.append((focus, seen[focus]))
+            if on_sample is not None:
+                on_sample(focus, seen[focus])
         return seen[focus]
 
     def fallback() -> tuple[int, FocusMeasurements]:
@@ -124,6 +128,7 @@ def sweep_focus(
     fine_step: int = 2,
     lo: int = 0,
     hi: int = 255,
+    on_sample: Callable[[int, float], None] | None = None,
 ) -> tuple[int, list[tuple[int, float]]]:
     """Sucht den Fokuswert mit dem hoechsten `measure(focus)`-Ergebnis.
 
@@ -140,6 +145,7 @@ def sweep_focus(
 
     Bei Gleichstand gewinnt der zuerst gemessene Wert (strikt "> best",
     nie ">="). Rueckgabe: `(bester Fokus, alle Messungen in Messreihenfolge)`.
+    `on_sample` meldet jede neue Messung einmal in derselben Reihenfolge.
     """
     measured: list[tuple[int, float]] = []
     seen: set[int] = set()
@@ -153,6 +159,8 @@ def sweep_focus(
         seen.add(focus)
         score = measure(focus)
         measured.append((focus, score))
+        if on_sample is not None:
+            on_sample(focus, score)
         if best_score is None or score > best_score:
             best_score = score
             best_focus = focus

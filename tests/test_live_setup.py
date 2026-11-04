@@ -79,6 +79,38 @@ class ExposureCamera:
         return image
 
 
+def test_adjust_exposure_reports_each_round(monkeypatch):
+    cam = ExposureCamera(exposure=300, gain=0)
+    levels = iter([100.0, 124.0])
+    monkeypatch.setattr(live_setup, "hint_glass_level", lambda *args: next(levels))
+    rounds = []
+    initial_controls = dict(cam.settings.controls)
+    settings, audit = live_setup.adjust_exposure(
+        cam, cam.settings, apply=cam.apply, sleep=lambda s: None, on_round=rounds.append,
+    )
+    assert rounds == [
+        {"level": 100.0, "controls": initial_controls},
+        {"level": 124.0, "controls": {**initial_controls, "gain": 30}},
+    ]
+    assert settings.controls == rounds[-1]["controls"]
+    # Das bestehende Audit zaehlt weiterhin nur die Nachregelungen.
+    assert len(audit["rounds"]) == 1
+    rounds[-1]["controls"]["gain"] = 999
+    assert settings.controls["gain"] == audit["rounds"][0]["controls"]["gain"] == 30
+
+
+def test_adjust_exposure_rounds_omit_unmeasurable_levels(monkeypatch):
+    cam = ExposureCamera(exposure=300, gain=0)
+    levels = iter([100.0, None])
+    monkeypatch.setattr(live_setup, "hint_glass_level", lambda *args: next(levels))
+    rounds = []
+    _, audit = live_setup.adjust_exposure(
+        cam, cam.settings, apply=cam.apply, sleep=lambda s: None, on_round=rounds.append,
+    )
+    assert [entry["level"] for entry in rounds] == [100.0]
+    assert audit["reason"] == "gruene_hinweisbox_verloren"
+
+
 @pytest.mark.parametrize('base,slope,exposure,gain', [
     (65, 1, 200, 10), (25, 1, 300, 0), (65, 1, 300, 90),
     (170, 1, 300, 0), (65, .25, 200, 0), (65, 2, 200, 0), (70, 2, 300, 0), (104, 1, 200, 0),

@@ -1,3 +1,4 @@
+import threading
 import time
 
 import pytest
@@ -47,6 +48,117 @@ def _wait_state(service, states, timeout=2.0):
     while service.status()["state"] not in states and time.monotonic() < deadline:
         time.sleep(0.01)
     return service.status()["state"]
+
+
+@pytest.mark.parametrize("start,method,best,verified", [(48, "climb", 50, 1000.0), (200, "sweep", 49, 999.0)])
+def test_status_exposes_focus_samples_while_focusing(tmp_path, monkeypatch, start, method, best, verified):
+    import numpy as np
+
+    from dispread.live import setup as live_setup
+
+    focus_blocked, continue_focus = threading.Event(), threading.Event()
+    exposure_blocked, continue_exposure = threading.Event(), threading.Event()
+    restart_blocked, continue_restart = threading.Event(), threading.Event()
+
+    def score_for(focus):
+        if start == 200:
+            return max(10.0, 1000.0 - (focus - 50) ** 2)
+        return float(1000 * np.exp(-((focus - 50) / 10) ** 2))
+
+    class Camera:
+        device = "/dev/fake"
+
+        def __init__(self):
+            self.focus = None
+            self.measured = []
+
+        def set_controls(self, controls):
+            for name, value in controls:
+                if name == "focus_absolute":
+                    self.focus = value
+
+        def get_controls(self, names):
+            values = {"exposure_time_absolute": 300, "white_balance_temperature": 4600, "gain": 0}
+            return {name: values[name] for name in names}
+
+        def fresh_still(self, discard=10):
+            if self.focus not in self.measured:
+                if len(self.measured) == 3:
+                    focus_blocked.set()
+                    assert continue_focus.wait(5)
+                self.measured.append(self.focus)
+            return np.full((12, 12), score_for(self.focus), dtype=float)
+
+    camera = Camera()
+    focus_camera = live_setup.focus_camera
+    monkeypatch.setattr("dispread.live.service.OwnerSetupCamera", lambda owner: camera)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi.mean()))
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw:
+                        focus_camera(*a, **kw, sleep=lambda s: None))
+
+    def exposure(cam, settings, *, apply, info, on_round):
+        on_round({"level": 100.0, "controls": dict(settings.controls)})
+        exposure_blocked.set()
+        assert continue_exposure.wait(5)
+        on_round({"level": 124.0, "controls": {**settings.controls, "gain": 30}})
+        raise live_setup.SetupError("Ende der Testeinrichtung")
+
+    monkeypatch.setattr(live_setup, "adjust_exposure", exposure)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._last_confirmed_focus = start
+    service.start_setup(cell_text="+ 1.2345 ")
+    try:
+        assert focus_blocked.wait(2), service.status()
+        focus = service.status()["setup"]["focus"]
+        assert focus["method"] == method
+        assert len(focus["samples"]) == 3
+        assert [f for f, _ in focus["samples"]] == camera.measured
+        assert [s for _, s in focus["samples"]] == pytest.approx([score_for(f) for f in camera.measured])
+        assert focus["verify"] is None
+        continue_focus.set()
+        assert exposure_blocked.wait(2), service.status()
+        setup = service.status()["setup"]
+        assert setup["focus"]["verify"] == {
+            "score": verified, "threshold": 0.85 * max(score for _, score in setup["focus"]["samples"]),
+        }
+        assert setup["focus"]["method"] == method
+        assert len(setup["focus"]["samples"]) == len(camera.measured)
+        controls = {"focus_absolute": best, "exposure_time_absolute": 300,
+                    "white_balance_temperature": 4600, "gain": 0}
+        assert setup["exposure"] == {"target": 130, "band": [115, 150],
+                                     "rounds": [{"level": 100.0, "controls": controls}]}
+        # Statusantworten duerfen den laufenden Zustand nicht veraendern.
+        setup["focus"]["samples"][0][1] = -1
+        setup["focus"]["verify"]["score"] = -1
+        setup["exposure"]["band"][0] = -1
+        setup["exposure"]["rounds"][0]["controls"]["gain"] = -1
+        continue_exposure.set()
+        assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+        setup = service.status()["setup"]
+        assert setup["focus"]["samples"][0][1] >= 10
+        assert setup["focus"]["verify"]["score"] == verified
+        assert setup["exposure"]["band"] == [115, 150]
+        assert setup["exposure"]["rounds"] == [
+            {"level": 100.0, "controls": controls},
+            {"level": 124.0, "controls": {**controls, "gain": 30}},
+        ]
+
+        def restarted(**kwargs):
+            restart_blocked.set()
+            assert continue_restart.wait(5)
+            return {}
+
+        service._setup_runner = restarted
+        service.start_setup()
+        assert restart_blocked.wait(2)
+        setup = service.status()["setup"]
+        assert setup["focus"] == {"method": "climb", "samples": [], "verify": None}
+        assert setup["exposure"] == {"target": 130, "band": [115, 150], "rounds": []}
+    finally:
+        continue_focus.set()
+        continue_exposure.set()
+        continue_restart.set()
+        service._setup_thread.join(2)
 
 
 def test_simulate_refuses_setup_with_clear_reason(tmp_path):
@@ -239,6 +351,8 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     assert service.status()["setup"] == {
         "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": service.status()["setup"]["elapsed_s"],
+        "focus": {"method": "climb", "samples": [], "verify": None},
+        "exposure": {"target": 130, "band": [115, 150], "rounds": []},
     }
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
     status = service.status()
@@ -481,7 +595,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("serial_opened")
         return port
 
-    def focus(cam, hint, *, start_focus, info):
+    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback):
         assert info == service._setup_progress
         assert hint is None
         assert start_focus == 48
@@ -866,7 +980,7 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
     service = ready_service(tmp_path, proposal)
     starts = []
 
-    def focus(cam, hint, *, start_focus, info):
+    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback):
         assert info == service._setup_progress
         starts.append(start_focus)
         measured = FocusMeasurements("sweep")

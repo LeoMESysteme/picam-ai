@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Während der Einrichtung waren Fokusproben und
+  Belichtungsrunden erst nach Abschluss nachvollziehbar. Die Such- und
+  Einrichtungsfunktionen melden neue Proben jetzt über optionale Haken;
+  `/live/status` zeigt sie in Messreihenfolge samt Suchmethode,
+  Fokus-Gegenprobe und Belichtungszielband. Eine neue Einrichtung leert
+  beide Verläufe. Bestehende Statusfelder und Diagnoseartefakte behalten
+  ihren Vertrag; fehlende Belichtungspegel werden nicht als Werte geraten.
+
 * 2026-11-04: Nach dem Auslagern der Live-Diagnosebilder auf die SSD
   fanden Tests und Auswerteskripte Bilder nicht mehr, wenn die Sitzung
   weiterhin unter `var/live/` lag. `scripts/_devdata.py` löst mit

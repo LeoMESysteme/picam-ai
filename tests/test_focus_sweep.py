@@ -9,6 +9,41 @@ import pytest
 from dispread.focus_sweep import climb_focus, sharpness, sweep_focus
 
 
+def test_climb_focus_reports_each_new_sample_in_order():
+    samples = []
+    best, measurements = climb_focus(
+        lambda focus: float(1000 * np.exp(-((focus - 50) / 10) ** 2)),
+        on_sample=lambda focus, score: samples.append((focus, score)),
+    )
+    assert best == 50
+    assert samples == list(measurements)
+    assert len(samples) == len({focus for focus, _ in samples})
+
+
+def test_climb_focus_reports_fallback_samples():
+    samples = []
+    _, measurements = climb_focus(
+        lambda focus: max(10.0, 1000.0 - (focus - 50) ** 2), start=200,
+        on_sample=lambda focus, score: samples.append((focus, score)),
+    )
+    assert measurements.focus_method == "sweep"
+    assert samples[:3] == [(200, 10.0), (208, 10.0), (192, 10.0)]
+    assert len(samples) > 32
+    assert samples == list(measurements)
+    assert len(samples) == len({focus for focus, _ in samples})
+
+
+def test_sweep_focus_reports_each_new_sample_in_order():
+    samples = []
+    best, measurements = sweep_focus(
+        lambda focus: -abs(focus - 50),
+        on_sample=lambda focus, score: samples.append((focus, score)),
+    )
+    assert best == 50
+    assert samples == measurements
+    assert len(samples) == len({focus for focus, _ in samples})
+
+
 def test_sweep_findet_maximum_grob_dann_fein():
     calls = []
 

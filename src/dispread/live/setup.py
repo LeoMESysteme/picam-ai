@@ -148,6 +148,7 @@ def hint_glass_level(image: np.ndarray, hint_box: HintBox) -> float | None:
 def adjust_exposure(
     cam: SetupCamera, settings: CameraSettings, *, apply: Callable[[CameraSettings], None],
     sleep: Callable[[float], None] | None = None, info: Callable[[str], None] | None = None,
+    on_round: Callable[[dict], None] | None = None,
 ) -> tuple[CameraSettings, dict[str, Any]]:
     """Anzeige statt Gesamtbild messen, hoechstens vier feste Reglerpaare pruefen.
 
@@ -156,6 +157,7 @@ def adjust_exposure(
     Gain-Sekante nur aus eigenen Messungen bei gleicher Belichtung; bis dahin
     vorsichtig 1 Graustufe/Schritt annehmen. Keine Hardwarekennlinie behauptet.
     Die beste gemessene Einstellung wird auch bei Boxverlust zurueckgestellt.
+    `on_round` meldet gemessene Pegel samt Reglern, einschliesslich Ausgangspegel.
     """
     sleep = sleep or time.sleep
 
@@ -177,6 +179,13 @@ def adjust_exposure(
     best_level = level
     observations = [(settings, level)]
     low, high = EXPOSURE_BAND
+
+    def report_round() -> None:
+        # Ohne gemessenen Pegel gibt es keine gueltige Probe fuer die Kurve.
+        if on_round is not None and level is not None:
+            on_round({"level": float(level), "controls": dict(current.controls)})
+
+    report_round()
 
     def rank(value: float) -> tuple[float, float]:
         # Ein erreichter Bandrand geht vor einem knapp verfehlten Band.
@@ -235,6 +244,7 @@ def adjust_exposure(
             level, box = measure()
             observations.append((current, level))
             audit['rounds'].append({'controls': dict(current.controls), 'level': level, 'hint_box': box})
+            report_round()
             if info is not None:
                 info(f"Belichtung: {current.controls['exposure_time_absolute']}, "
                      f"Gain {current.controls['gain']}, Glaspegel {level}")
@@ -322,11 +332,15 @@ def focus_camera(
     info: Callable[[str], None] | None = None,
     settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
+    on_sample: Callable[[int, float], None] | None = None,
+    on_fallback: Callable[[], None] | None = None,
 ) -> tuple[CameraSettings, FocusMeasurements]:
     """Grob bergsteigen, fein aufsteigend; jede Messung von unten anfahren.
 
     Nach Endpruefung Automatiken einschwingen lassen und Werte fest uebernehmen.
     Fokus 0 bleibt ausgeschlossen, weil keine Anfahrt von unten moeglich ist.
+    `on_sample` meldet Suchproben, nicht die getrennte Endpruefung.
+    `on_fallback` meldet den Wechsel zum Vollsweep.
     """
     sleep = sleep or time.sleep
     last_focus = None
@@ -363,9 +377,15 @@ def focus_camera(
     cam.set_controls([("focus_automatic_continuous", 0)])
     if info is not None:
         info("Fokus: Bergsteigen")
+
+    def fallback() -> None:
+        if info is not None:
+            info("Fokus: Vollsweep (Rueckfall)")
+        if on_fallback is not None:
+            on_fallback()
+
     best_focus, sweep_log = climb_focus(
-        measure, start=start_focus, lo=1,
-        on_fallback=(lambda: info("Fokus: Vollsweep (Rueckfall)")) if info is not None else None,
+        measure, start=start_focus, lo=1, on_fallback=fallback, on_sample=on_sample,
     )
     best_measured = max(score for _, score in sweep_log)
     verified = measure(best_focus)
