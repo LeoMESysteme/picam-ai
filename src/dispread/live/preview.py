@@ -56,7 +56,8 @@ class PreviewEncoder:
 
     Der Lock gehoert allein der Vorschau. CameraOwner.latest() gibt seinen
     eigenen Lock bereits vor der Kodierung frei. Das HUD wird auch bei
-    gleicher Sequenz neu gelesen, damit alte Ablesungen als stale ankommen.
+    gecachtem Bild neu gelesen, damit alte Ablesungen als stale ankommen.
+    Die Zeitgrenze gilt gemeinsam, auch bei versetzten Betrachtern.
     """
 
     def __init__(
@@ -76,6 +77,9 @@ class PreviewEncoder:
         self._lock = threading.Lock()
         self._seq: int | None = None
         self._jpeg: bytes | None = None
+        self._encoded_at: float | None = None
+        self._cap_ns = 0
+        self._size = (0, 0)
 
     def frame(self) -> PreviewFrame | None:
         import cv2
@@ -86,7 +90,10 @@ class PreviewEncoder:
                 return None
             seq, frame = latest
             encode_ms = None
-            if seq != self._seq:
+            if seq != self._seq and (
+                self._jpeg is None or self._encoded_at is None
+                or time.monotonic() - self._encoded_at >= self._governor.interval_s
+            ):
                 started = time.perf_counter()
                 image = frame.image
                 height = round(image.shape[0] * self._width / image.shape[1])
@@ -95,6 +102,9 @@ class PreviewEncoder:
                 self._seq = seq
                 self._jpeg = encoded.tobytes() if ok else None
                 encode_ms = (time.perf_counter() - started) * 1000
+                self._encoded_at = time.monotonic()
+                self._cap_ns = frame.capture_timestamp.value_ns
+                self._size = (frame.image.shape[1], frame.image.shape[0])
             # Erst nach dem Kodieren lesen: eine inzwischen veraltete
             # Ablesung darf nicht mit ihrem vorherigen valid-Status reisen.
             info = deepcopy(self._hud_of() or {})
@@ -105,9 +115,10 @@ class PreviewEncoder:
                 )
             if self._jpeg is None:
                 return None
-            cap_ns = frame.capture_timestamp.value_ns
+            seq = self._seq
+            cap_ns = self._cap_ns
             hud = {
-                "seq": seq, "cap_ns": cap_ns, "w": frame.image.shape[1], "h": frame.image.shape[0],
+                "seq": seq, "cap_ns": cap_ns, "w": self._size[0], "h": self._size[1],
                 **{key: info.get(key) for key in ("rec", "track", "cells", "proc")},
                 "preview": {"fps": 15 if self._governor.reason is None else 5,
                             "throttled": self._governor.reason},

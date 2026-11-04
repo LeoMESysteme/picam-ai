@@ -14,6 +14,8 @@ was ist die Konsequenz.
   außerhalb der Messung, langsame Betrachter enden nach zwei Sekunden
   Schreibwartezeit. Der Strom endet nach zehn Minuten zum Neuverbinden.
   Das Quad bleibt als HUD-Geometrie verfügbar, ohne das JPEG zu verändern.
+  Auch versetzt verbundene Betrachter teilen eine Kodierung pro Intervall;
+  ein fester Sendezeitplan vermeidet zusätzliche Bildratenverluste durch Schreibpausen.
 
 * 2026-11-04: Laufzähler und Bilddiagnosen waren während eines Laufs
   nicht vollständig für die Werkbank verfügbar. `/live/status` ergänzt

@@ -30,6 +30,8 @@ def frame_info():
 
 
 def test_encoder_encodes_each_sequence_once(monkeypatch):
+    from types import SimpleNamespace
+
     from dispread.live.preview import PreviewEncoder, RateGovernor
 
     calls = []
@@ -42,15 +44,45 @@ def test_encoder_encodes_each_sequence_once(monkeypatch):
     monkeypatch.setattr(cv2, "imencode", spy)
     image = camera_frame()
     latest = [7, image]
+    now = [0.0]
+    monkeypatch.setattr("dispread.live.preview.time", SimpleNamespace(
+        monotonic=lambda: now[0], perf_counter=lambda: 0.0))
     encoder = PreviewEncoder(lambda: tuple(latest), frame_info, governor=RateGovernor(lambda: 0.0))
     first, second = encoder.frame(), encoder.frame()
     assert first.jpeg == second.jpeg and first.seq == second.seq == 7
     assert calls == [[cv2.IMWRITE_JPEG_QUALITY, 80]]
     latest[0] = 8
+    # Die naechste Sequenz kommt nach dem gemeinsamen Vorschauintervall.
+    now[0] = 1 / 15
     assert encoder.frame().seq == 8
     assert len(calls) == 2
     assert not image.image.any()
     assert cv2.imdecode(np.frombuffer(first.jpeg, np.uint8), cv2.IMREAD_COLOR).shape == (540, 960, 3)
+
+
+@pytest.mark.parametrize("skips, interval", [(0.0, 1 / 15), (0.2, 0.2)])
+def test_encoder_caches_changing_sequences_for_shared_interval(monkeypatch, skips, interval):
+    from types import SimpleNamespace
+
+    from dispread.live import preview
+
+    now = [0.0]
+    monkeypatch.setattr(preview, "time", SimpleNamespace(monotonic=lambda: now[0], perf_counter=lambda: 0.0))
+    latest = [7, camera_frame(7)]
+    info = frame_info()
+    info["proc"]["skipped_recent"] = skips
+    encoder = preview.PreviewEncoder(lambda: tuple(latest), lambda: info,
+                                     governor=preview.RateGovernor(lambda: now[0]))
+    first = encoder.frame()
+    latest[:] = [8, camera_frame(8)]
+    now[0] = interval - 0.001
+    info["rec"]["status"] = "stale"
+    cached = encoder.frame()
+    assert (cached.seq, cached.cap_ns, cached.jpeg) == (first.seq, first.cap_ns, first.jpeg)
+    assert cached.hud["seq"] == 7 and cached.hud["cap_ns"] == first.cap_ns
+    assert cached.hud["rec"]["status"] == "stale"
+    now[0] = interval
+    assert encoder.frame().seq == 8
 
 
 def test_encoder_concurrent_calls_share_encoding(monkeypatch):
@@ -95,7 +127,7 @@ def test_encoder_refreshes_hud_without_mutating_session_snapshot(monkeypatch):
 
     from dispread.live.preview import PreviewEncoder, RateGovernor
 
-    monkeypatch.setattr("dispread.live.preview.time", SimpleNamespace(perf_counter=lambda: 0.0))
+    monkeypatch.setattr("dispread.live.preview.time", SimpleNamespace(monotonic=lambda: 0.0, perf_counter=lambda: 0.0))
     info = frame_info()
     original = deepcopy(info)
     encoder = PreviewEncoder(lambda: (7, camera_frame()), lambda: info, governor=RateGovernor(lambda: 0.0))

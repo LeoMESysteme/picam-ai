@@ -83,14 +83,20 @@ def _run_preview(check):
             loop.close()
 
 
-async def _preview_handler(service):
+async def _preview_handler(service, *, transport=...):
     from contextlib import suppress
+    from unittest.mock import Mock
 
     from aiohttp.test_utils import make_mocked_request
 
     app = web.Application()
     add_live_routes(app, service, csrf_of=lambda _r: "tok")
-    request = make_mocked_request("GET", "/live/preview.mjpg", app=app)
+
+    if transport is ...:
+        transport = Mock()
+        transport.is_closing.return_value = False
+    request = make_mocked_request("GET", "/live/preview.mjpg", app=app,
+                                  transport=transport, protocol=Mock(transport=transport))
     match = await app.router.resolve(request)
     task = asyncio.create_task(match.handler(request))
     try:
@@ -192,36 +198,61 @@ def test_preview_mjpg_headers_and_encoding_thread_without_socket(tmp_path, monke
 
 
 def test_two_streams_share_encoding(tmp_path, monkeypatch):
-    import cv2
+    import itertools
+    import time
+    from types import SimpleNamespace
+    from unittest.mock import Mock
 
-    responses = _capture_preview(monkeypatch)
+    import cv2
+    from test_live_preview import camera_frame
+
+    from dispread.live import preview
+
+    responses = _capture_preview(monkeypatch, limit=None)
     calls = []
     encode = cv2.imencode
+    # Lastmessung von der zufaelligen CPU-Last des Testrechners trennen.
+    monkeypatch.setattr(preview, "time", SimpleNamespace(monotonic=time.monotonic, perf_counter=lambda: 0.0))
 
     def spy(*args):
-        calls.append(1)
+        calls.append(time.monotonic())
         return encode(*args)
 
     monkeypatch.setattr(cv2, "imencode", spy)
-    service = _preview_service(tmp_path)
+    seqs = itertools.count(7)
+    image = camera_frame()
+    service = _preview_service(tmp_path, latest=lambda: (next(seqs), image))
+    transport = Mock()
+    transport.is_closing.return_value = False
 
     async def check():
-        await asyncio.gather(_preview_handler(service), _preview_handler(service))
+        first = asyncio.create_task(_preview_handler(service, transport=transport))
+        await asyncio.sleep(0.015)
+        second = asyncio.create_task(_preview_handler(service, transport=transport))
+        await asyncio.sleep(0.485)
+        for task in (first, second):
+            task.cancel()
+        results = await asyncio.gather(first, second, return_exceptions=True)
+        assert all(isinstance(result, asyncio.CancelledError) for result in results)
 
-    _run_preview(check())
-    assert len(responses) == 2 and len(calls) == 1
-    for response in responses:
-        _check_preview_part(response.parts[0][1])
+    start = time.monotonic()
+    _run_preview(asyncio.wait_for(check(), 1))
+    elapsed = time.monotonic() - start
+    assert len(responses) == 2 and all(len(r.parts) >= 3 for r in responses)
+    assert len(calls) <= int(elapsed / (1 / 15)) + 1
 
 
 def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
     import time
+    from unittest.mock import Mock
 
     from test_live_camera import FakeSource
 
     from dispread.live.camera import CameraOwner
     from dispread.live.service import LiveService
 
+    transport = Mock()
+    transport.is_closing.return_value = False
     writing = asyncio.Event()
 
     class BlockedResponse(web.StreamResponse):
@@ -240,17 +271,86 @@ def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
 
     async def check():
         start = time.monotonic()
-        task = asyncio.create_task(_preview_handler(service))
+        task = asyncio.create_task(_preview_handler(service, transport=transport))
         await asyncio.wait_for(writing.wait(), 1)
         before = owner.latest()[0]
         await asyncio.wait_for(task, 2.5)
         assert time.monotonic() - start <= 2.5
         assert owner.latest()[0] > before and owner.status()["running"]
+        transport.close.assert_called_once()
 
     try:
         _run_preview(check())
     finally:
         owner.stop()
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_preview_mjpg_disconnect_without_new_frames(tmp_path, monkeypatch, missing):
+    from unittest.mock import Mock
+
+    responses = _capture_preview(monkeypatch, limit=None)
+    service = _preview_service(tmp_path)
+    service.preview_frame = Mock(return_value=None)
+    transport = None if missing else Mock()
+    if transport is not None:
+        # Die Kamera liefert kein Bild; danach trennt sich der Betrachter.
+        transport.is_closing.side_effect = [False, True]
+    _run_preview(asyncio.wait_for(_preview_handler(service, transport=transport), 0.1))
+    if missing:
+        service.preview_frame.assert_not_called()
+    else:
+        service.preview_frame.assert_called_once()
+    assert responses[0].parts == []
+
+
+def test_preview_mjpg_write_failure_closes_transport(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    _capture_preview(monkeypatch)
+    transport = Mock()
+    transport.is_closing.return_value = False
+    _run_preview(_preview_handler(_preview_service(tmp_path), transport=transport))
+    transport.close.assert_called_once()
+
+
+@pytest.mark.parametrize("first_write_s", [0.015, 0.3])
+def test_preview_mjpg_reaches_target_rate_with_instant_encoding(monkeypatch, first_write_s):
+    from types import SimpleNamespace
+
+    from dispread.live.preview import PreviewFrame
+    from dispread.workbench import live_api
+
+    now = [0.0]
+    sent = []
+    monkeypatch.setattr(live_api, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    async def sleep(delay):
+        now[0] += max(delay, 1e-9)
+
+    async def to_thread(fn):
+        return fn()
+
+    class Response(web.StreamResponse):
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            if now[0] >= 1:
+                raise ConnectionResetError()
+            sent.append(now[0])
+            # Schreibdauer darf den Zeitplan nicht pro Bild verschieben.
+            now[0] += first_write_s if len(sent) == 1 else 0.015
+
+    monkeypatch.setattr(live_api.asyncio, "sleep", sleep)
+    monkeypatch.setattr(live_api.asyncio, "to_thread", to_thread)
+    monkeypatch.setattr(live_api.web, "StreamResponse", Response)
+    service = SimpleNamespace(preview_frame=lambda: PreviewFrame(
+        seq=len(sent), cap_ns=0, jpeg=b"jpeg", hud={"preview": {"fps": 15}}))
+    _run_preview(_preview_handler(service))
+    assert len(sent) >= (14 if first_write_s == 0.015 else 11)
+    assert sent[1] == pytest.approx(max(first_write_s, 1 / 15))
+    assert all(b - a == pytest.approx(1 / 15) for a, b in zip(sent[1:], sent[2:], strict=False))
 
 
 def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeypatch):

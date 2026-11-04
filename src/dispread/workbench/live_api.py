@@ -106,19 +106,19 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         await response.prepare(request)
         started = time.monotonic()
         previous = None
-        last_sent = None
-        interval = 1 / 15
+        next_due = started
         try:
             while time.monotonic() - started < 600:
+                if request.transport is None or request.transport.is_closing():
+                    break
                 now = time.monotonic()
-                if last_sent is not None and now - last_sent < interval:
-                    await asyncio.sleep(min(interval - (now - last_sent), 0.03))
+                if now < next_due:
+                    await asyncio.sleep(min(next_due - now, 0.01))
                     continue
                 frame = await asyncio.to_thread(service.preview_frame)
                 if frame is not None:
                     interval = 1 / frame.hud["preview"]["fps"]
-                    now = time.monotonic()
-                    if frame.seq != previous and (last_sent is None or now - last_sent >= interval):
+                    if frame.seq != previous:
                         hud = json.dumps(frame.hud, ensure_ascii=True, separators=(",", ":"))
                         header = (
                             "--frame\r\nContent-Type: image/jpeg\r\n"
@@ -128,10 +128,16 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
                         ).encode("ascii")
                         await asyncio.wait_for(response.write(header + frame.jpeg + b"\r\n"), 2)
                         previous = frame.seq
-                        last_sent = time.monotonic()
-                await asyncio.sleep(0.03)
-        except (ConnectionError, TimeoutError):
-            pass
+                        next_due += interval
+                        now = time.monotonic()
+                        if now - next_due > interval:
+                            next_due = now
+                        continue
+                await asyncio.sleep(0.01)
+        except OSError:
+            # Auch aiohttp.write_eof() darf nicht am langsamen Client warten.
+            if request.transport is not None:
+                request.transport.close()
         return response
 
     app.router.add_get("/live", page)
