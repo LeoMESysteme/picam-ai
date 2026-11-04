@@ -610,7 +610,11 @@ export function mountViewer(host, {statusbar = null} = {}) {
   roi.setAttribute('aria-checked', 'false');
   roi.title = 'Nur in der Einrichtung; die Lage der Fokus-ROI meldet der Server noch nicht';
 
+  // Uebungslauf: Standbilder kommen aus static/live/practice, nie vom Server.
+  let stillSource = null;
+  let practice = false;
   function stillUrl(src) {
+    if (stillSource) return stillSource(src);
     const key = status?.setup?.proposal_revision || status?.session_id || '';
     return `/live/setup/${STILL_NAMES[src]}.png?r=${encodeURIComponent(key)}`;
   }
@@ -618,7 +622,8 @@ export function mountViewer(host, {statusbar = null} = {}) {
   function selectSource(src) {
     host.querySelectorAll('.seg [data-src]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.src === src)));
     viewer.setSource(src);
-    if (src !== 'live') viewer.setStill(stillUrl(src));
+    const url = src === 'live' ? null : stillUrl(src);
+    if (url) viewer.setStill(url);
     updateChip();
   }
 
@@ -627,7 +632,10 @@ export function mountViewer(host, {statusbar = null} = {}) {
     let html;
     if (src === 'live') {
       const age = viewer.frameAgeS();
-      if (!viewer.hud() && stream !== 'offen') html = '<span class="sq stale"></span><b>Live</b> · verbindet …';
+      if (practice) {
+        html = `<span class="sq hatch"></span><b>Übung</b> · simuliertes Bild${age > 1.5 ? ' · kein neues Bild'
+          : ` · <span class="num">${Math.round(viewer.measuredFps())} fps</span>`}`;
+      } else if (!viewer.hud() && stream !== 'offen') html = '<span class="sq stale"></span><b>Live</b> · verbindet …';
       else if (age > 1.5) html = '<span class="sq stale"></span><b>Live</b> · kein neues Bild';
       else html = `<span class="sq ok"></span><b>Live</b> · <span class="num">${Math.round(viewer.measuredFps())} fps</span>`;
     } else {
@@ -676,6 +684,13 @@ export function mountViewer(host, {statusbar = null} = {}) {
       updateRate(hud);
     },
     setStream(next) { stream = next; updateChip(); },
+    // Uebungslauf: Chip "Übung", Standbilder aus resolve(src) -> URL oder null.
+    setPractice(on, resolve = null) {
+      practice = Boolean(on);
+      stillSource = practice ? resolve : null;
+      if (viewer.source() !== 'live') selectSource('live');
+      updateChip();
+    },
     // Quellenumschalter aus setup.overlays; fehlt das Bild, ist die Quelle
     // gesperrt und traegt den Grund. Faellt die gewaehlte Quelle weg, zurueck auf Live.
     setStatus(next) {
@@ -691,15 +706,17 @@ export function mountViewer(host, {statusbar = null} = {}) {
         renderLegend(legend, {grid: legendGrid});
       }
       const overlays = next?.setup?.overlays || [];
+      const usable = (src) => overlays.includes(STILL_NAMES[src]) && Boolean(stillUrl(src));
       for (const button of host.querySelectorAll('.seg [data-src]')) {
         const src = button.dataset.src;
         if (src === 'live') continue;
-        const ok = overlays.includes(STILL_NAMES[src]);
+        const ok = usable(src);
         button.disabled = !ok;
-        if (ok) button.removeAttribute('title'); else button.title = 'Erst mit dem Vorschlag';
+        if (ok) button.removeAttribute('title');
+        else button.title = stillSource && overlays.includes(STILL_NAMES[src]) ? 'Im Übungslauf nicht vorhanden' : 'Erst mit dem Vorschlag';
       }
       const current = viewer.source();
-      if (current !== 'live' && !overlays.includes(STILL_NAMES[current])) selectSource('live');
+      if (current !== 'live' && !usable(current)) selectSource('live');
       else if (current !== 'live' && (next?.setup?.proposal_revision || next?.session_id) !== previousKey) {
         viewer.setStill(stillUrl(current));
       }

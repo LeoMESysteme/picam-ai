@@ -205,7 +205,14 @@ test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue
 // die Tests teilen sich deshalb ein Sitzungs-Cookie (ein Worker).
 let sessionCookies: Awaited<ReturnType<BrowserContext['cookies']>> | null = null;
 
-async function login(page: Page) {
+// Rundgang-Angebot: nur beim ersten Besuch. Die übrigen Tests spielen
+// wiederkehrende Bediener; der Rundgang-Test meldet sich mit {tour: true} an.
+async function login(page: Page, { tour = false } = {}) {
+  if (!tour) {
+    await page.addInitScript(() => {
+      try { localStorage.setItem('werkbank.rundgang', 'gesehen'); } catch { /* ohne Speicher */ }
+    });
+  }
   if (sessionCookies) {
     await page.context().addCookies(sessionCookies);
     await page.goto('/live');
@@ -1176,5 +1183,172 @@ test('Hinweise: gleicher Schlüssel ersetzt, höchstens drei sichtbar, per Tasta
   });
   await expect(page.locator('.toast', { hasText: 'Kurz' })).toBeVisible();
   await expect(page.locator('.toast', { hasText: 'Kurz' })).toHaveCount(0, { timeout: 6000 });
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Einarbeitung (Aufgabe 11): Übungslauf, Rundgang, Hilfe-Dock
+// ---------------------------------------------------------------------------
+
+test('Übungslauf sendet keine POSTs', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Szenario-Zeit vorspulen statt 80 s zu warten (performance.now und Timer).
+  await page.clock.install();
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  const title = page.getByRole('banner');
+  const bar = page.getByRole('contentinfo');
+  await title.getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
+  await expect(title.getByText('Übungslauf – keine Messung')).toBeVisible();
+  await expect(bar.getByText('Übungslauf – keine Messung')).toBeVisible();
+  const coach = page.locator('.coach');
+  await expect(coach).toContainText('Einrichtung starten');
+  await expect(bar).toContainText(/Sitzung\s*uebung-/);
+
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+  await page.clock.fastForward(50_000);
+  await expect(left.locator('[data-step="bestaetigen"]')).toHaveAttribute('data-state', 'running', { timeout: 10_000 });
+  await expect(coach).toContainText('Bestätigen');
+
+  // Rahmenbereich per Bildklick: Antwort kommt aus dem Szenario, nicht vom Server.
+  const canvas = page.locator('canvas.vcanvas');
+  const box = (await canvas.boundingBox())!;
+  const [sx, sy] = await canvas.evaluate((el: any) => el.viewer.imageToScreen([700, 330]));
+  await page.mouse.click(box.x + sx, box.y + sy);
+  await expect(page.locator('.vfb')).toContainText('hinzugefügt – geeignet');
+
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await inspector.getByLabel('Name').fill('Übung Bediener');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  await title.getByRole('button', { name: 'Bestätigen', exact: true }).click();
+  await expect(title).toContainText('Einrichtung bestätigt · Übung Bediener');
+  await title.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Freigegeben');
+  await expect(page.locator('.vchip').first()).toContainText('Übung');
+
+  await title.getByRole('button', { name: 'Ereignis markieren' }).click();
+  await page.locator('#mark-text').fill('Übungsmarke');
+  await page.getByRole('button', { name: 'Marke setzen' }).click();
+  await expect(page.locator('.toast', { hasText: 'Ereignis markiert' })).toBeVisible();
+
+  // Mock EP.bump = 35 s: Dialog "Anzeige hat sich bewegt", Lauf stoppen geht ans Szenario.
+  await page.clock.fastForward(37_000);
+  const modal = page.getByRole('dialog', { name: 'Anzeige hat sich bewegt' });
+  await expect(modal).toBeVisible({ timeout: 10_000 });
+  await modal.getByRole('button', { name: 'Lauf stoppen' }).click();
+  await expect(title.getByRole('button', { name: 'Neu einrichten' })).toBeVisible();
+  await expect(left).toContainText('Endgrund bediener');
+  await expect(coach).toContainText('Übung beenden');
+
+  await title.getByRole('button', { name: 'Übung beenden' }).click();
+  await expect(title.getByText('Übungslauf – keine Messung')).toBeHidden();
+  await expect(bar.getByText('Übungslauf – keine Messung')).toBeHidden();
+  await expect(coach).toBeHidden();
+  await expect(bar).toContainText('test-session');
+  await expect(title.getByRole('button', { name: 'Einrichtung starten', exact: true })).toBeVisible();
+  expect(posts).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Übungslauf gesperrt während eines Laufs', async ({ page }) => {
+  const errors = watchErrors(page);
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
+  await page.getByRole('banner').getByRole('button', { name: 'Hilfe' }).click();
+  const item = page.getByRole('menuitem', { name: /Übungslauf/ });
+  await expect(item).toBeDisabled();
+  await expect(item).toContainText('Gesperrt, solange ein Lauf läuft');
+  await expect(page.getByRole('menuitem', { name: /Rundgang/ })).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(item).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('Rundgang: 8 Stationen, Überspringen merkt sich', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, { tour: true });
+  await hook(page, '/test/scene', { name: 'idle' });
+  await page.evaluate(() => localStorage.removeItem('werkbank.rundgang'));
+  await page.reload();
+  const offer = page.getByRole('dialog', { name: 'Rundgang anbieten' });
+  await expect(offer).toBeVisible();
+  await offer.getByRole('button', { name: 'Rundgang starten' }).click();
+  const tour = page.getByRole('dialog', { name: 'Rundgang' });
+  const titles = ['Titelleiste und Aktionen', 'Ablauf-Dock', 'Viewer mit Werkzeugleiste', 'HUD-Legende', 'Inspektor',
+    'Ergebnisanzeige', 'Zeitleiste', 'Statusleiste'];
+  for (const [i, name] of titles.entries()) {
+    await expect(tour).toContainText(`${i + 1}/8`);
+    await expect(tour.locator('h3')).toHaveText(name);
+    const frame = (await page.locator('.tour-hl').boundingBox())!;
+    expect(frame.width).toBeGreaterThan(40);
+    if (name === 'HUD-Legende') await expect(page.locator('.legend')).toBeVisible();
+    if (i < titles.length - 1) await tour.getByRole('button', { name: 'Weiter' }).click();
+  }
+  await tour.getByRole('button', { name: 'Zurück' }).click();
+  await expect(tour.locator('h3')).toHaveText('Zeitleiste');
+  // Überspringen merkt sich: kein Angebot mehr nach dem Neuladen.
+  await tour.getByRole('button', { name: 'Überspringen' }).click();
+  await expect(tour).toHaveCount(0);
+  await expect(page.locator('.legend')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('werkbank.rundgang'))).toBe('übersprungen');
+  await page.reload();
+  await expect(page.getByRole('banner')).toContainText('Einrichtung starten');
+  await page.waitForTimeout(800);
+  await expect(offer).toHaveCount(0);
+  // Über Hilfe › Rundgang bleibt er erreichbar; Esc beendet ihn.
+  await page.getByRole('banner').getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Rundgang/ }).click();
+  await expect(tour.locator('h3')).toHaveText('Titelleiste und Aktionen');
+  await page.keyboard.press('Escape');
+  await expect(tour).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Rundgang: kein Angebot über einem laufenden Lauf', async ({ page }) => {
+  const errors = watchErrors(page);
+  await login(page, { tour: true });
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await page.evaluate(() => localStorage.removeItem('werkbank.rundgang'));
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('dialog', { name: 'Rundgang anbieten' })).toHaveCount(0);
+  await hook(page, '/test/scene', { name: 'idle' });
+  expect(errors).toEqual([]);
+});
+
+test('Hilfe findet „Gegenlesen“', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  await page.getByRole('banner').getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Glossar/ }).click();
+  const dock = page.getByRole('complementary', { name: 'Hilfe' });
+  await expect(dock).toBeVisible();
+  await expect(page.locator('.inspector')).toBeHidden();
+  const search = dock.getByRole('searchbox', { name: 'Begriff suchen' });
+  await search.fill('gegenl');
+  const hit = dock.locator('.gl-entry', { hasText: 'Gegenlesen' }).first();
+  await expect(hit).toBeVisible();
+  await expect(dock.locator('.gl-entry:visible', { hasText: 'Kontrast' })).toHaveCount(0);
+  await expect(hit.getByRole('link', { name: /Wiki/ })).toHaveAttribute('href', /glossar\/#gegenlesen$/);
+  // Gründe kommen aus dem Status (fields.py REASONS über tracking_reasons).
+  await search.fill('rahmenbewegungen');
+  await expect(dock.locator('.gl-entry:visible')).toContainText(['rahmenbewegungen passen nicht zusammen']);
+  await dock.getByRole('button', { name: 'Hilfe schließen' }).click();
+  await expect(dock).toBeHidden();
+  await expect(page.locator('.inspector')).toBeVisible();
   expect(errors).toEqual([]);
 });

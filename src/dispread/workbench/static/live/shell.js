@@ -27,6 +27,11 @@ const TEMPLATE = `${ICONS}
     <span class="vsep"></span>
     <span class="device">GSV-2AS · Displaytech 161A</span>
     <span class="testband" role="alert" hidden>TESTLAUF – Werte nicht freigegeben</span>
+    <span class="pband" data-part="practice" hidden><i class="hatch" aria-hidden="true"></i><span>Übungslauf – keine Messung</span><button type="button" class="ghost" data-practice-end>Übung beenden</button></span>
+    <div class="hdr-help menuwrap">
+      <button type="button" class="ghost" data-help-toggle aria-haspopup="menu" aria-expanded="false">Hilfe<svg class="i dn" aria-hidden="true"><use href="#i-down"/></svg></button>
+      <div class="menu helpmenu" role="menu" aria-label="Hilfe" hidden></div>
+    </div>
     <div class="hdr-act"></div>
   </header>
   <aside class="dock ldock" aria-label="Ablauf"></aside>
@@ -37,8 +42,10 @@ const TEMPLATE = `${ICONS}
   <aside class="dock rdock" aria-label="Inspektor">
     <section class="judge" aria-label="Ergebnis" aria-live="polite" hidden></section>
     <div class="inspector"></div>
+    <section class="helpdock" hidden></section>
   </aside>
   <footer class="statusbar">
+    <span class="it pband" data-item="practice" hidden><i class="hatch" aria-hidden="true"></i>Übungslauf – keine Messung</span>
     <span class="it" data-item="camera"></span>
     <span class="it" data-item="preview">Vorschau <b data-slot="preview-fps">–</b><span data-slot="preview-note"></span></span>
     <span class="it" data-item="frames"></span>
@@ -79,7 +86,8 @@ export function mountShell(root) {
   const items = Object.fromEntries([...root.querySelectorAll('.statusbar [data-item]')]
     .map((el) => [el.dataset.item, el]));
   shell = {root, crumbs: {setup: q('[data-crumb="setup"]'), run: q('[data-crumb="run"]')},
-    testband: q('.testband'), titleActions: q('.hdr-act'), items, handlers: {}, signature: null};
+    testband: q('.testband'), titleActions: q('.hdr-act'), items, handlers: {}, signature: null,
+    practice: [q('.titlebar .pband'), items.practice]};
   // Pop-up der Kontextaktion schliesst bei Klick daneben und mit Esc.
   root.ownerDocument.addEventListener('pointerdown', (event) => {
     const pop = shell?.titleActions.querySelector('.popover');
@@ -93,7 +101,17 @@ export function mountShell(root) {
     inspector: q('.inspector'),
     timeline: q('.strip'),
     statusbar: q('.statusbar'),
+    helpMenu: q('.hdr-help'),
+    helpDock: q('.helpdock'),
+    practiceEnd: q('[data-practice-end]'),
   };
+}
+
+// Uebungslauf: Band "Übungslauf – keine Messung" in Titel- und Statusleiste.
+export function setPracticeBand(on) {
+  if (!shell) throw new Error('mountShell zuerst');
+  for (const el of shell.practice) el.hidden = !on;
+  shell.root.querySelector('.app')?.classList.toggle('practice', Boolean(on));
 }
 
 function togglePopover(open) {

@@ -1,0 +1,108 @@
+{
+  "wiki": "https://picam-docs.pages.dev/docs/anleitung/glossar/",
+  "wiki_label": "Wiki · Bedienen",
+  "sections": [
+    {
+      "title": "Statuswörter",
+      "entries": [
+        {"term": "Freigegeben", "code": "VALID", "anchor": "valid",
+          "text": "Der Wert ist gelesen, in mehreren Bildern bestätigt und jünger als 0,5 s. Nur ein freigegebener Wert ist ein Messwert."},
+        {"term": "Wechselt", "code": "TRANSITION", "anchor": "transition",
+          "text": "Die Anzeige ändert sich gerade. Der Wert wird erst freigegeben, wenn er wieder steht."},
+        {"term": "Unlesbar", "code": "UNREADABLE", "anchor": "unreadable",
+          "text": "Der Wert ist nicht sicher lesbar, etwa weil ein Zeichen unklar oder der Rahmen verdeckt ist. Es gibt keinen Wert."},
+        {"term": "Veraltet", "code": "STALE", "anchor": "stale",
+          "text": "Der letzte Wert ist älter als 0,5 s oder die Verbindung fehlt seit 1,5 s. Er erscheint grau und durchgestrichen und gilt nicht."}
+      ]
+    },
+    {
+      "title": "Prüfungen",
+      "entries": [
+        {"term": "Kontrast", "code": "kontrast", "anchor": "auto-setup",
+          "text": "Wie deutlich die dunklen Punkte vom Glas abstechen. Zu wenig: Licht oder Blickwinkel ändern."},
+        {"term": "Kanten", "code": "kanten", "anchor": "auto-setup",
+          "text": "Sucht Helligkeitssprünge im Anzeigegrund, etwa eine Spiegelkante oder einen Reflex. Betroffene Zellen werden genannt."},
+        {"term": "Rahmen", "code": "rahmen", "anchor": "auto-setup",
+          "text": "Prüft, ob der Gehäuserahmen äußere Punktreihen verdeckt. Dann die Kamera mittiger und senkrechter stellen."},
+        {"term": "Glanz", "code": "glanz", "anchor": "auto-setup",
+          "text": "Sucht übersteuerte Stellen und helle Flecken auf der Anzeige. Bei Glanz Licht oder Kamera verschieben."},
+        {"term": "Belichtung", "code": "belichtung", "anchor": "auto-setup",
+          "text": "Helligkeit des Glases (p80). Die Einrichtung regelt auf das Band 115–150; zu dunkel ergibt WARNUNG."},
+        {"term": "Auflösung", "code": "aufloesung", "anchor": "auto-setup",
+          "text": "Wie viele Kamerapixel eine Punktspalte abdeckt. Zu wenig: Kamera näher an die Anzeige stellen."},
+        {"term": "Raster", "code": "raster", "anchor": "cell_boxes",
+          "text": "Wie gut das eingepasste Punktraster zu den gefundenen Punkten der Anzeige passt."},
+        {"term": "Stabilität", "code": "stabilitaet", "anchor": "auto-setup",
+          "text": "Vergleicht die Lage der Anzeige in zwei Standbildern mit 15 s Ruhe dazwischen. Währenddessen nichts berühren."},
+        {"term": "Rasterversatz", "code": "rasterversatz", "anchor": "auto-setup",
+          "text": "Prüft, ob die Abtastpunkte auf den Punktmitten liegen, gemessen in Punktspalten und Punktzeilen."},
+        {"term": "Gegenlesen", "code": "gegenlesen", "anchor": "gegenlesen",
+          "text": "Der Leser liest beide Standbilder und vergleicht Zeichen für Zeichen mit dem Zellentext des GSV-2AS. Nur OK erlaubt einen normalen Lauf."},
+        {"term": "Displayfehler", "code": "displayfehler", "anchor": "auto-setup",
+          "text": "Sucht Kratzer, Staub oder tote Punkte in Zellen, die leer sein sollten. Nur ein Hinweis, kein Fehler."},
+        {"term": "Nachführung", "code": "nachfuehrung", "anchor": "quadtracker",
+          "text": "Prüft, ob genug Rahmenbereiche gefunden und im zweiten Standbild wiedergefunden wurden. Ohne sie folgt das Viereck der Anzeige nicht."}
+      ]
+    },
+    {
+      "title": "Markierungen",
+      "entries": [
+        {"term": "Anzeige-Viereck", "anchor": "quad",
+          "text": "Umriss der Anzeige im Kamerabild, mit Ecken. Seine Farbe zeigt den Status des aktuellen Werts."},
+        {"term": "Raster und Zellen", "anchor": "cell_boxes",
+          "text": "Die 16 Zellen des Lesers über der Anzeige. Zeigen auf eine Zelle nennt Bestwert und Abstand."},
+        {"term": "Unsichere Zelle", "anchor": "marge",
+          "text": "Zelle, deren Zeichen der Leser nicht sicher trennt (Abstand unter null). Sie ist gelb getönt."},
+        {"term": "Rahmenbereich", "anchor": "quadtracker",
+          "text": "Kleiner, markanter Ausschnitt des Gehäuserahmens. Über ihn folgt das Viereck kleinen Bewegungen. Magenta mit Treffer, rot ohne."},
+        {"term": "Suchfenster", "anchor": "quadtracker",
+          "text": "Gestrichelter Bereich um einen Rahmenbereich, in dem er im nächsten Bild gesucht wird (±12 px)."},
+        {"term": "Treffer und Spur", "anchor": "konfidenz",
+          "text": "Wie gut ein Rahmenbereich oder das ganze Viereck wiedergefunden wurde, von 0 bis 1. Ein Maß der Übereinstimmung, keine Fehlerrate des Werts."},
+        {"term": "Korrektur läuft", "anchor": "ecc",
+          "text": "Türkis: Die Nachführung holt das Viereck nach einer kleinen Verschiebung zurück."},
+        {"term": "Fehlerort", "anchor": "tracking_lost",
+          "text": "Rote Wolke an den Ecken und Rahmenbereichen, die das Problem betrifft."},
+        {"term": "Wert-Etikett", "anchor": "value-record",
+          "text": "Am Viereck: Wert, Status und Spur des gerade gezeigten Bilds."},
+        {"term": "Fokus-ROI", "anchor": "fokus-sweep",
+          "text": "Bereich, in dem die Einrichtung die Schärfe misst. Nur in der Einrichtung."}
+      ]
+    },
+    {
+      "title": "Bedienung",
+      "entries": [
+        {"term": "Einrichtung", "anchor": "auto-setup",
+          "text": "Läuft selbsttätig: Fokus, Kamera, Belichtung, Standbilder, Vorschlag. Etwa eine Minute; den Aufbau dabei nicht berühren."},
+        {"term": "Bestätigen",
+          "text": "Der Bediener prüft den Vorschlag und bestätigt mit seinem Namen. Erst danach lässt sich ein Lauf starten."},
+        {"term": "Lesesperre", "code": "run_block", "anchor": "lesesperre",
+          "text": "Gegenlesen war nicht OK: Ein normaler Lauf ist gesperrt. Möglich ist nur ein Testlauf ohne Freigabe."},
+        {"term": "Testlauf", "anchor": "testlauf",
+          "text": "Lauf trotz Lesesperre. Es wird nichts freigegeben; die Titelleiste trägt ein rotes Band."},
+        {"term": "Werteplan", "code": "set norm", "anchor": "werteplan",
+          "text": "Normierungsfaktoren, die die Werkbank im Lauf am GSV-2AS setzt. Braucht die Referenz; Sprünge werden nie geglättet."},
+        {"term": "Zellentext", "anchor": "zellentext",
+          "text": "Text der Zellen 0–8, wie das GSV-2AS ihn seriell meldet. Leer lassen: Dann liest die Werkbank ihn selbst."},
+        {"term": "Referenz", "anchor": "referenz",
+          "text": "Der Wert des GSV-2AS über die serielle Schnittstelle. Er dient nur dem Abgleich, nie der Korrektur des gelesenen Werts."},
+        {"term": "Abgleich", "anchor": "referenz",
+          "text": "Zählt nach Laufende, wie oft ein freigegebener Wert von der Referenz abweicht (Fehllesungen)."},
+        {"term": "Ereignismarke",
+          "text": "Marke mit Text im Lauf, etwa „Last aufgelegt“. Sie steht in der Zeitleiste und in der Ablage."},
+        {"term": "Rahmen verdeckt", "code": "rahmen_verdeckt", "anchor": "tracking_lost",
+          "text": "Etwas verdeckt Rahmenbereiche, oft eine Hand. Bis die Sicht frei ist, wird nichts freigegeben."},
+        {"term": "Anzeige bewegt", "code": "anzeige_bewegt", "anchor": "tracking_lost",
+          "text": "Die ganze Anzeige ist verrutscht. Werte werden nicht mehr freigegeben; neu einrichten."},
+        {"term": "Streamstillstand", "anchor": "stale",
+          "text": "Kein neues Kamerabild. Das Bild friert ein, der Wert gilt als veraltet."},
+        {"term": "Übungslauf",
+          "text": "Die Oberfläche läuft mit simulierten Daten, ohne Kamera und ohne Messung. Es geht keine Aktion an die Werkbank."}
+      ]
+    }
+  ],
+  "reasons": {
+    "tracking": {"title": "Nachführungsgründe", "anchor": "tracking_lost"},
+    "causes": {"title": "Lesegründe", "anchor": "reject_reasons"}
+  }
+}

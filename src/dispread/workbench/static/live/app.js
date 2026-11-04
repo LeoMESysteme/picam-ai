@@ -2,12 +2,15 @@
 // Entscheidungen fallen im Server (dispread.live), nie hier. Die Ansichten
 // fuer Einrichtung, Lauf, Effekte und Einarbeitung kommen in eigenen
 // Modulen dazu; der Viewer zeigt den MJPEG-Strom mit HUD.
+// Uebungslauf: dieselbe Oberflaeche auf einem clientseitigen Szenario
+// (practice/scenario.js); client.useSource schaltet Status und Aktionen um,
+// der Vorschaustrom ist durch zusammengesetzte Standbilder ersetzt.
 import {createClient} from './api.js';
 import {openPreview} from './mjpeg.js';
 import {mountViewer} from './viewer/view.js';
 import {enableRegionEditing, mountRegionPanel} from './viewer/regions-edit.js';
 import {cameraView, statusView, stepRows} from './model.js';
-import {dec, esc, mountShell, renderStatusbar, renderTitle} from './shell.js';
+import {dec, esc, mountShell, renderStatusbar, renderTitle, setPracticeBand} from './shell.js';
 import {renderSteps} from './setup/steps.js';
 import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/focus-chart.js';
 import {exposureHTML} from './setup/exposure.js';
@@ -21,6 +24,11 @@ import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
 import {mountEffects} from './viewer/effects.js';
 import {closeToast, mountToasts, toast} from './ui/toasts.js';
 import {watchAlerts} from './run/alerts.js';
+import {createScenario} from './practice/scenario.js';
+import {createFrameComposer} from './practice/frames.js';
+import {mountHelp} from './help/dock.js';
+import {mountHelpMenu} from './help/menu.js';
+import {TOUR_STOPS, createCoach, offerTour, practiceLock, practiceTask, startTour, tourActive} from './help/tour.js';
 
 const RUN_STATES = ['running', 'stopped'];
 const SETUP_TABS = ['Schritt', 'Fokus', 'Prüfungen'];
@@ -281,6 +289,10 @@ function renderTimelineChrome(parts, status) {
 }
 
 const HINT_LABEL = {anzeige_bewegt: 'Anzeige bewegt', rahmen_verdeckt: 'Rahmen verdeckt', unbekannt: 'Nachführung unsicher'};
+// Standbilder des Uebungslaufs (statt /live/setup/*.png des Servers).
+const PRACTICE_STILLS = {still: new URL('./practice/still.jpg', import.meta.url).href,
+  abtast: new URL('./practice/sampling.jpg', import.meta.url).href};
+const PRACTICE_TOASTS = ['lauf', 'marke', 'werteplan', 'aktion', 'vorschlag', 'nachfuehrung', 'stillstand'];
 
 if (typeof document !== 'undefined') {
   const root = document.getElementById('root');
@@ -291,6 +303,17 @@ if (typeof document !== 'undefined') {
   mountToasts(stage.appendChild(document.createElement('div')));
   const effects = mountEffects(stage, viewerUi.viewer);
   const client = createClient();
+  const coach = createCoach();
+  const help = mountHelp(nodes.helpDock, null, {onToggle: (open) => {
+    nodes.inspector.hidden = open;
+    menu.update({glossary: open});
+  }});
+  const menu = mountHelpMenu(nodes.helpMenu, {
+    onTour: () => startTour(TOUR_STOPS),
+    onPractice: () => (practice ? endPractice() : startPractice()),
+    onGlossary: () => help.open(),
+  });
+  nodes.practiceEnd.addEventListener('click', () => endPractice());
   let hudProc = null;
   let status = null;
   let conn = null;
@@ -303,6 +326,10 @@ if (typeof document !== 'undefined') {
   let runKey = null;
   let resultModel = null;
   let runDirty = false;
+  // Uebungslauf: {scenario, composer, timer} oder null.
+  let practice = null;
+  let alerts = null;
+  let offered = false;
   // mark: undefined = dieser Lauf noch ungesehen (Neuladen), sonst Kennung der letzten Marke.
   const seen = {mark: undefined, hint: null, stalled: false, plan: null};
   // Bereichsaenderung: solange die Antwort aussteht, sind Bestaetigen und weitere Klicks gesperrt.
@@ -391,6 +418,7 @@ if (typeof document !== 'undefined') {
   function render() {
     if (!status) {
       renderTitle(status, titleView(), handlers);
+      menu.update({practice: false, lock: practiceLock(null)});
       return;
     }
     startPop.update(status);
@@ -407,12 +435,98 @@ if (typeof document !== 'undefined') {
     timeline.draw();
     renderStatusbar(status, hudProc);
     viewerUi.setStatus(status);
+    help.update(status);
+    menu.update({practice: Boolean(practice),
+      lock: practice ? null : practiceLock(client.serverStatus(), {offline: Boolean(conn?.offline)})});
+    updateCoach();
+    maybeOffer();
   }
+
+  // ---- Einarbeitung: Rundgang, Hilfe-Dock, Uebungslauf ----
+  function updateCoach() {
+    if (!practice) return;
+    coach.show(practiceTask(status, {offline: Boolean(conn?.offline), frameAgeS: viewerUi.viewer.frameAgeS(),
+      correcting: Boolean(hud?.track?.correcting), modalOpen: Boolean(document.querySelector('.modalbg'))}));
+  }
+
+  // Angebot beim ersten Besuch, nie ueber einer laufenden Einrichtung oder einem Lauf.
+  function maybeOffer() {
+    if (offered || practice || tourActive() || !status || conn?.offline) return;
+    if (['running', 'setup_running'].includes(status.state)) return;
+    offered = true;
+    offerTour({onStart: () => startTour(TOUR_STOPS)});
+  }
+
+  // Quellwechsel: offene Pop-ups, Dialog und Hinweise der alten Quelle schliessen,
+  // das alte Bild verwerfen (ein Uebungsbild darf nie als Live-Bild stehen bleiben).
+  function leaveSource() {
+    alerts?.episode()?.modal?.close?.(null);
+    startPop.close?.();
+    markPop.close?.();
+    for (const key of PRACTICE_TOASTS) closeToast(key);
+    hud = null;
+    hudProc = null;
+    viewerUi.setFrame(null, null);
+  }
+
+  function practiceFrame() {
+    if (!practice || document.hidden) return;
+    const next = practice.scenario.frame();
+    if (!next) return;
+    const canvas = practice.composer.get(next.bitmapSource);
+    if (!canvas) return;
+    hud = next.hud;
+    hudProc = hud?.proc || null;
+    viewerUi.setFrame(canvas, hud);
+    effects.refresh();
+    if (status?.state === 'running' && log.note(hud?.rec, {testRun: Boolean(status.test_run)})) runDirty = true;
+  }
+
+  async function startPractice() {
+    if (practice || practiceLock(client.serverStatus(), {offline: Boolean(conn?.offline)})) return;
+    const scenario = createScenario({base: client.serverStatus()});
+    const composer = createFrameComposer();
+    practice = {scenario, composer, timer: null};
+    stopPreview();
+    leaveSource();
+    viewerUi.setPractice(true, (src) => PRACTICE_STILLS[src] || null);
+    setPracticeBand(true);
+    client.useSource(scenario);
+    try {
+      await composer.ready;
+    } catch (error) {
+      endPractice(`Übungslauf nicht möglich: ${error.message}`);
+      return;
+    }
+    if (practice?.scenario !== scenario) return;
+    practice.timer = setInterval(practiceFrame, 1000 / 15);
+    practiceFrame();
+  }
+
+  function endPractice(note = null) {
+    if (!practice) return;
+    clearInterval(practice.timer);
+    practice = null;
+    coach.hide();
+    leaveSource();
+    setPracticeBand(false);
+    viewerUi.setPractice(false);
+    client.useSource('server');
+    if (note) toast({level: 'warn', title: note, sticky: true, key: 'uebung'});
+    if (!document.hidden) startPreview();
+    render();
+  }
+
+  // Dialog "Anzeige bewegt" im Uebungslauf: nur an dieses Szenario, nie an den Server.
+  const practiceRun = (scenario) => {
+    const only = (path, body) => (client.source() === scenario ? act(path, body) : Promise.resolve({ok: false}));
+    return {stop: () => only('/live/run/stop'), setup: () => only('/live/setup', {cell_text: null})};
+  };
 
   // Vorschau nur bei sichtbarer Seite: ein Hintergrund-Tab kostet den Pi keine Kodierung.
   let preview = null;
   const startPreview = () => {
-    if (preview) return;
+    if (preview || practice) return;
     preview = new AbortController();
     openPreview('/live/preview.mjpg', ({bitmap, hud: frameHud}) => {
       hudProc = frameHud?.proc || null;
@@ -438,6 +552,7 @@ if (typeof document !== 'undefined') {
       runDirty = false;
       renderInspector(nodes.inspector, status, ui);
     }
+    updateCoach();
   }, 200);
   // Mitlaufen des rechten Rands (20 px/s bei 1440 px): 10 Bilder je Sekunde, nur im laufenden Lauf.
   setInterval(() => {
@@ -451,7 +566,7 @@ if (typeof document !== 'undefined') {
     status = next;
     render();
     effects.update(next, undefined);
-    watchAlerts(next, {client, viewer: viewerUi.viewer, run: alertRun});
+    alerts = watchAlerts(next, {client, viewer: viewerUi.viewer, run: practice ? practiceRun(practice.scenario) : alertRun});
   }, (next) => {
     conn = next;
     effects.update(undefined, next);
@@ -462,6 +577,12 @@ if (typeof document !== 'undefined') {
       renderRun();
       renderLeftDock(nodes.leftDock, status, conn, {resultCls: resultModel?.cls});
     }
-  });
+    updateCoach();
+  }, {onServerStatus: (real) => {
+    // Echte Einrichtung oder echter Lauf an der Werkbank: der Uebungslauf weicht.
+    if (practice && ['running', 'setup_running'].includes(real.state)) {
+      endPractice('Übungslauf beendet: An der Werkbank läuft eine Einrichtung oder ein Lauf.');
+    }
+  }});
   render();
 }

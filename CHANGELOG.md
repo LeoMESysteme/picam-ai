@@ -5,6 +5,48 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Neue Bediener fanden sich auf der neuen Live-Seite nur
+  durch Ausprobieren am echten Aufbau zurecht. Jetzt gibt es Rundgang,
+  Übungslauf ohne Hardware und ein Hilfe-Dock (Spec „Einarbeitung“).
+  * **Rundgang** (`help/tour.js`): acht Stationen von der Titelleiste bis
+    zur Statusleiste, je ein hervorgehobener Bereich mit 1–3 Sätzen.
+    * Beim ersten Besuch erscheint ein Angebot („Rundgang starten /
+      Später“), nie über einer laufenden Einrichtung oder einem Lauf.
+    * Sonst startet er über Hilfe › Rundgang.
+    * „Überspringen“ und „Fertig“ merkt sich `localStorage`; ohne Speicher
+      fragt die Seite beim nächsten Besuch wieder.
+  * **Übungslauf** (Hilfe › Übungslauf, nur bei Bereit, Lauf beendet oder
+    abgebrochener Einrichtung): Die echte Oberfläche läuft auf einem
+    Szenario im Browser (`practice/scenario.js`). Es folgt der Zeitachse
+    des Mocks und wartet an den Bedienstellen auf den Bediener:
+    Einrichtung starten, Rahmenbereich bearbeiten, Bestätigen mit Namen,
+    Lauf starten, Dialog „Anzeige bewegt“, Lauf stoppen.
+    * `api.js` hat dafür eine umschaltbare Quelle (`useSource`). Im
+      Übungslauf gehen alle Bedienschritte an das Szenario; `fetch` wird
+      für POST nie aufgerufen.
+    * Die Kamera-Vorschau ist durch zusammengesetzte Bilder ersetzt
+      (`practice/frames.js` aus `still.jpg`, Zeichnung aus dem Mock).
+    * Titel- und Statusleiste tragen das Band „Übungslauf – keine
+      Messung“. Dazu kommen ein schraffierter Viewer-Rahmen, der Chip
+      „Übung“ und „ÜBUNG“ in der Ergebnisanzeige.
+    * Ein kurzer Auftrag im Rundgang-Stil sagt, was als Nächstes zu tun
+      ist.
+    * Startet an der Werkbank eine echte Einrichtung oder ein echter Lauf,
+      endet der Übungslauf von selbst.
+  * **Hilfe-Dock** (`help/dock.js`, Texte in `help/glossar-de.json`): Es
+    ersetzt rechts den Inspektor bis zum Schließen.
+    * Inhalt: Statuswörter, alle 12 Prüfungen, Markierungen und
+      Bedienbegriffe, je mit Link ins Wiki-Glossar, dazu eine Suche.
+    * Nachführungsgründe kommen zur Laufzeit aus `tracking_reasons` des
+      Status, Lesegründe aus den gemeldeten `rejection_causes`. Sie werden
+      nicht im Client gepflegt.
+    * Die vollständige Lesegrund-Tabelle (`LIVE_CAUSE_TEXT`) liefert der
+      Status noch nicht. Der Client übernimmt sie, sobald `cause_texts`
+      im vollen Status steht.
+  * **Konsequenz:** Eine Einarbeitung braucht keinen Aufbau und keine
+    Kamera. Ein Übungswert ist überall als Übung markiert, und der
+    Übungslauf sendet nichts an die Werkbank.
+
 * 2026-11-04: Nacharbeit an Zustandseffekten und Hinweisen der Live-Seite.
   * **Stehender Hinweis:** „Rahmen verdeckt“ wurde bei jedem Statusabruf
     neu aufgebaut. Der Fokus fiel vom Schließen-Knopf, und Vorleser

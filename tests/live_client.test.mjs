@@ -972,8 +972,11 @@ test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, sh
     // Das Innenleuchten des Zustandseffekts (nur inset) ist kein Schatten.
     const shadows = /box-shadow\s*:\s*([^;}]+)/.exec(body)[1].split(/,(?![^(]*\))/);
     if (/\.vglow\b/.test(selector) && shadows.every(part => /^\s*inset\b/.test(part))) continue;
-    // Pop-ups: Popover, Menue, Dialog, Hinweis (toast) und das Stillstandsfeld (Mock 8c).
-    assert.ok(selector.split(',').every(part => /\.(popover|menu|modal|toast|stalep)\b/.test(part)), `Schatten an ${selector.trim()}`);
+    // Die Abdeckung des Rundgangs (nur Ausdehnung, ohne Unschaerfe) ist kein Schatten.
+    if (/\.tour-hl\b/.test(selector) && shadows.every(part => /^\s*0 0 0 \S+/.test(part))) continue;
+    // Pop-ups: Popover, Menue, Dialog, Hinweis (toast), das Stillstandsfeld (Mock 8c)
+    // und die Pop-ups der Einarbeitung (Rundgang, Angebot, Auftrag im Uebungslauf).
+    assert.ok(selector.split(',').every(part => /\.(popover|menu|modal|toast|stalep|tour-pop|tour-offer|coach)\b/.test(part)), `Schatten an ${selector.trim()}`);
   }
   for (const font of ['NotoSans-Regular.woff2', 'NotoSans-Medium.woff2', 'NotoSans-SemiBold.woff2',
     'NotoSans-Bold.woff2', 'NotoSansMono-Regular.woff2', 'NotoSansMono-Bold.woff2']) {
