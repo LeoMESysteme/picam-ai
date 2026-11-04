@@ -555,6 +555,116 @@ def ready_service(tmp_path, proposal):
     return service
 
 
+def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
+    from test_live_setup_tracking import _propose
+
+    from dispread.charcells import CharGrid
+    from dispread.live import setup as live_setup
+
+    image, _, proposal = _propose(tmp_path)
+    calls = []
+    cell_boxes = CharGrid.cell_boxes
+
+    def boxes(grid):
+        calls.append(grid)
+        return cell_boxes(grid)
+
+    monkeypatch.setattr(CharGrid, 'cell_boxes', boxes)
+    service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
+    setup = service.status()['setup']
+    grid = setup['grid']
+    assert grid['target_size'] == [400, 160]
+    assert grid['source'] == 'dot_lattice'
+    assert len(grid['cell_boxes']) == 16
+    assert grid['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
+    assert grid['cell_boxes'][-1] == [375.0, 18.0, 25.0, 142.0]
+    assert all(type(value) is float for box in grid['cell_boxes'] for value in box)
+    assert len(calls) == 1
+    # Rueckgaben duerfen den Cache nicht veraendern; Polling rechnet nicht neu.
+    grid['target_size'][0] = -1
+    grid['cell_boxes'][0][0] = -1
+    assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
+    assert service.status()['setup']['grid']['target_size'] == [400, 160]
+    assert len(calls) == 1
+    edit_regions = live_setup.edit_regions
+    calls_after_overlays = []
+
+    def edit(*args, **kwargs):
+        updated = edit_regions(*args, **kwargs)
+        calls_after_overlays.append(len(calls))
+        return updated
+
+    monkeypatch.setattr(live_setup, 'edit_regions', edit)
+    result = service.edit_regions(proposal_revision=setup['proposal_revision'], add=[], remove=[0])
+    assert result['proposal_revision'] != setup['proposal_revision']
+    # Die Overlay-Erzeugung ruft cell_boxes ebenfalls auf: nur der zusaetzliche
+    # Aufruf nach ihrer Rueckkehr belegt das Erneuern des Status-Caches.
+    assert len(calls) == calls_after_overlays[0] + 1
+    after_edit = len(calls)
+    assert service.status()['setup']['grid']['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
+    assert len(calls) == after_edit
+
+
+def test_status_setup_grid_none_without_proposal(tmp_path, proposal):
+    service = LiveService(FakeOwner(), tmp_path)
+    assert service.status()['setup'] is None
+    entered, resume = threading.Event(), threading.Event()
+
+    def runner(**kwargs):
+        entered.set()
+        assert resume.wait(5)
+        raise ValueError('Einrichtung abgebrochen')
+
+    service = ready_service(tmp_path, proposal)
+    service._setup_runner = runner
+    service.start_setup()
+    try:
+        assert entered.wait(2)
+        assert service.status()['setup']['grid'] is None
+    finally:
+        resume.set()
+        service._setup_thread.join(5)
+    assert service.status()['setup']['grid'] is None
+
+
+def test_status_setup_grid_running_and_stopped(tmp_path, proposal, monkeypatch):
+    class Session:
+        def __init__(self, *args, **kwargs):
+            self.latest, self.summary, self.end_reason = None, {}, None
+
+        def start(self):
+            pass
+
+        def run(self, stop):
+            stop.wait()
+
+        def stop(self, reason='bediener'):
+            return {}
+
+        def latest_age_s(self):
+            return None
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', Session)
+    # Kein gleichmaessiges Schaetzen: auch gerundete Einzelbreiten uebernehmen.
+    proposal['grid'].update(left=1.2, pitch=24.7)
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True)
+    confirmed = service.status()['setup']['grid']
+    assert confirmed['target_size'] == [400, 160]
+    assert confirmed['source'] == 'dot_lattice'
+    assert confirmed['cell_boxes'][:2] == [[1.0, 18.0, 25.0, 142.0], [26.0, 18.0, 25.0, 142.0]]
+    assert confirmed['cell_boxes'][2] == [51.0, 18.0, 24.0, 142.0]
+    service.start_run(reference=False)
+    try:
+        assert service.status()['state'] == 'running'
+        assert service.status()['setup']['grid'] == confirmed
+    finally:
+        service.stop_run()
+    assert service.status()['state'] == 'stopped'
+    assert service.status()['setup']['grid'] == confirmed
+
+
 @pytest.mark.parametrize("overall", ["OK", "WARNUNG"])
 def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, proposal, overall):
     from dispread.session_profile import SessionProfile
@@ -563,6 +673,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     service = ready_service(tmp_path, proposal)
     setup = service.status()["setup"]
     setup.pop("progress")
+    setup.pop("grid")  # Rastergeometrie wird separat geprueft.
     assert setup == {
         "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": setup["elapsed_s"],

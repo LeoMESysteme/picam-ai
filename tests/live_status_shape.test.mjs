@@ -6,6 +6,26 @@ import { assertStatusShape } from './live_status_shape.mjs';
 const dir = new URL('./fixtures/live/', import.meta.url);
 const load = name => JSON.parse(readFileSync(new URL(`scene-${name}.json`, dir)));
 const scenes = readdirSync(dir).filter(name => /^scene-.*\.json$/.test(name));
+test('setup grid accepts reader boxes or null and rejects malformed or missing geometry', () => {
+  const status = load('setup_ready_warnung');
+  const grid = { target_size: [400, 160], cell_boxes: [[0, 18, 25, 142]], source: 'dot_lattice' };
+  status.setup.grid = grid;
+  assert.doesNotThrow(() => assertStatusShape(status));
+  status.setup.grid = null;
+  assert.doesNotThrow(() => assertStatusShape(status));
+  for (const broken of [undefined, [], {},
+    { ...grid, target_size: [400] }, { ...grid, target_size: [400, '160'] },
+    { ...grid, cell_boxes: {} }, { ...grid, cell_boxes: [[0, 18, 25]] },
+    { ...grid, cell_boxes: [[0, 18, 25, Infinity]] },
+    { ...grid, cell_boxes: [[0, '18', 25, 142]] }, { ...grid, source: 1 },
+    { target_size: grid.target_size, cell_boxes: grid.cell_boxes },
+  ]) {
+    status.setup.grid = broken;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+  delete status.setup.grid;
+  assert.throws(() => assertStatusShape(status), TypeError);
+});
 test('all committed scenes exist', () => assert.equal(scenes.length, 11));
 for (const name of scenes) {
   test(`${name}: complete contract`, () => {

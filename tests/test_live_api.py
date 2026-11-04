@@ -1333,6 +1333,28 @@ def test_fake_status_has_all_real_keys_for_every_scene(tmp_path):
         session.stop()
 
 
+def test_fake_setup_grid_for_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        setup = service.status()['setup']
+        if name == 'idle':
+            assert setup is None
+        elif name in ('setup_focus', 'setup_focus_done', 'setup_standbilder'):
+            assert setup['grid'] is None
+        else:
+            grid = setup['grid']
+            assert grid['target_size'] == [400, 160]
+            assert grid['source'] == 'dot_lattice'
+            assert len(grid['cell_boxes']) == 16
+            assert grid['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
+            assert grid['cell_boxes'][-1] == [375.0, 18.0, 25.0, 142.0]
+            grid['cell_boxes'][0][0] = -1
+            assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
+
+
 def test_fake_dump_scenes_matches_committed_fixtures(tmp_path):
     import os
     import subprocess

@@ -5,6 +5,11 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: `/live/status` liefert mit `setup.grid` die tatsächlichen
+  Leserboxen samt Zielgröße und Rasterquelle. Die Geometrie folgt dem
+  Vorschlag und Bereichskorrekturen, bleibt im bestätigten Lauf erhalten
+  und wird nur bei Änderungen berechnet; ohne Vorschlag fehlt das Raster.
+
 * 2026-11-04: Das Grafikfenster der neuen Live-Seite war leer. Jetzt
   liest der Viewer den MJPEG-Strom `/live/preview.mjpg` per `fetch()`
   (`mjpeg.js`: Teile über Chunk-Grenzen zerlegen, Content-Length gilt,

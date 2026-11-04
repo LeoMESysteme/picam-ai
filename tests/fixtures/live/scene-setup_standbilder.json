@@ -2,6 +2,7 @@
   "state": "setup_running",
   "error": null,
   "setup": {
+    "grid": null,
     "step": "standbilder",
     "elapsed_s": 36.4,
     "focus": {

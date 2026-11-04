@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from dispread.camera_settings import CameraSettings
+from dispread.charcells import CharGrid
 from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
@@ -171,6 +172,7 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        self._setup_grid: dict | None = None
         self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
         self._test_run: dict | None = None
@@ -253,6 +255,8 @@ class LiveService:
                     self._monotonic() - self._setup_started_at
                     if self._state == "setup_running" else self._setup_elapsed_s
                 )
+            if setup is not None:
+                setup["grid"] = deepcopy(self._setup_grid)
             run = None
             if self._session is not None:
                 latest = self._session.latest
@@ -350,6 +354,18 @@ class LiveService:
                 raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
 
     # -- Einrichtung ---------------------------------------------------------
+    def _cache_setup_grid(self, proposal: dict) -> None:
+        """Leserboxen nur bei einem neuen Vorschlag unter self._lock berechnen."""
+        if not all(key in proposal for key in ("grid", "target_size", "grid_source")):
+            self._setup_grid = None
+            return
+        grid = CharGrid.from_dict(proposal["grid"])
+        self._setup_grid = {
+            "target_size": list(proposal["target_size"]),
+            "cell_boxes": [[round(float(value), 2) for value in box] for box in grid.cell_boxes()],
+            "source": proposal["grid_source"],
+        }
+
     def _reset_setup_live(self) -> None:
         """Live-Verlaeufe nur beim Erzeugen oder unter self._lock leeren."""
         self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None}
@@ -430,6 +446,7 @@ class LiveService:
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
                 self._reset_setup_live()
                 self._session_dir, self._proposal = session_dir, None
+                self._setup_grid = None
                 self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
@@ -492,6 +509,7 @@ class LiveService:
             self._setup_elapsed_s = now - self._setup_started_at
             self._setup_phase = self._setup_wait = None
             self._setup_step = "vorschlag"
+            self._cache_setup_grid(proposal)
             self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
             self._run_block = run_block_reason(proposal)
 
@@ -666,6 +684,7 @@ class LiveService:
             except (live_setup.SetupError, ValueError, OSError) as exc:
                 raise LiveError(str(exc)) from exc
             with self._lock:
+                self._cache_setup_grid(updated)
                 self._proposal = updated
                 self._run_block = run_block_reason(updated)
             return {"proposal_revision": updated["live_tracking"]["proposal_revision"],
@@ -728,6 +747,8 @@ class LiveService:
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
             )
             with self._lock:
+                self._cache_setup_grid({"grid": profile.grid.to_dict(), "target_size": profile.target_size,
+                                        "grid_source": proposal["grid_source"]})
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,

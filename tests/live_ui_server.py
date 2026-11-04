@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 from aiohttp import web
 
+from dispread.charcells import CharGrid
 from dispread.live import RELEASE_NOTICE
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
@@ -51,8 +52,10 @@ def scene_state(name):
     """Deterministische Szenen; synthetische Zeiten sind keine Messbelege."""
     if name not in SCENES:
         raise ValueError(f"Unbekannte Szene: {name}")
-    if name in ("idle", "stopped"):
+    if name == "idle":
         return {"state": name}
+    if name == "stopped":
+        return {**scene_state("setup_ready_warnung"), "state": name}
     focus = name in ("setup_focus", "setup_focus_done")
     ready = name == "setup_ready_warnung" or name.startswith("running_")
     step = "fokus" if focus else "vorschlag" if ready else "standbilder"
@@ -63,6 +66,7 @@ def scene_state(name):
         "elapsed_s": (5.0 if focus else durations[i]) if ready or i <= keys.index(step) else None}
         for i, key in enumerate(keys)]
     setup = {
+        "grid": None,
         "step": step, "elapsed_s": 5.0 if focus else 36.4,
         "focus": {"method": "climb", "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus"
                                                                else FOCUS_SAMPLES),
@@ -76,6 +80,10 @@ def scene_state(name):
         "checks_live": {} if focus else {"kontrast": {"status": "OK", "reason": None}},
     }
     if ready:
+        grid = CharGrid(n_cells=16, left=0, pitch=25, top=17.78, bottom=160)
+        setup["grid"] = {"target_size": [400, 160],
+                         "cell_boxes": [[round(float(v), 2) for v in box] for box in grid.cell_boxes()],
+                         "source": "dot_lattice"}
         checks = dict.fromkeys(("kontrast", "kanten", "rahmen", "glanz", "belichtung", "aufloesung",
                                 "stabilitaet", "rasterversatz", "gegenlesen", "displayfehler", "nachfuehrung"), "OK")
         setup.update(overall="WARNUNG", checks={**checks, "raster": "WARNUNG"},
