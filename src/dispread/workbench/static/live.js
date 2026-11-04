@@ -222,12 +222,17 @@ if (typeof document !== 'undefined') {
     }
     const reasons = {im_zeichenbereich: 'im Zeichenbereich', ausserhalb_rahmenband: 'außerhalb des Rahmenbands',
       am_bildrand: 'am Bildrand', zu_wenig_struktur: 'zu wenig zweidimensionale Struktur',
-      mehrdeutig: 'mehrdeutige Struktur', zu_nah: 'zu nah an einem anderen Bereich'};
+      mehrdeutig: 'mehrdeutige Struktur', zu_nah: 'zu nah an einem anderen Bereich',
+      zweitbild_peak_zu_niedrig: 'Rahmenbereich im Zweitbild nicht deutlich genug wiedergefunden',
+      zweitbild_mehrdeutig: 'Rahmenbereich im Zweitbild nicht eindeutig wiedergefunden',
+      zweitbild_suchrand: 'Rahmenbereich im Zweitbild am Rand des Suchbereichs',
+      zweitbild_am_bildrand: 'Rahmenbereich im Zweitbild zu nah am Bildrand',
+      zweitbild_lage_abweichend: 'Rahmenbereich im Zweitbild an anderer Position wiedergefunden'};
     $('region-results').textContent = (s.setup?.centre_results || []).map(result => {
       const requested = result.requested_centre || result.centre;
       const used = result.used_centre === undefined ? result.centre : result.used_centre;
       return `${requested.join(',')} (verwendet: ${used ? used.join(',') : 'kein Mittelpunkt'}): ` +
-        `${result.ok ? 'geeignet' : reasons[result.reason] || result.reason}`;
+        `${result.ok ? 'geeignet' : s.tracking_reasons?.[result.reason] || reasons[result.reason] || result.reason}`;
     }).join('\n');
     // Bilder und fokussierte Entfernen-Schaltflaechen zwischen Statuspolls erhalten.
     if (s.session_id !== lastStatus?.session_id || s.setup?.proposal_revision !== lastStatus?.setup?.proposal_revision ||

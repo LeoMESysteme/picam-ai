@@ -167,6 +167,7 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
         self._test_run: dict | None = None
         self._reader_tolerance: dict | None = None
@@ -367,6 +368,7 @@ class LiveService:
                 self._setup_step = "start"
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
                 self._session_dir, self._proposal = session_dir, None
+                self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
@@ -517,6 +519,8 @@ class LiveService:
             if port is not None:
                 port.close()
         report("vorschlag")
+        with self._lock:
+            self._stability_frames = getattr(result, "stability_frames", ())
         return live_setup.propose_with_fit(
             result.first,
             fit=result.fit,
@@ -529,6 +533,7 @@ class LiveService:
             offset_check=result.offset_check,
             final_checks=result.final_checks,
             stability_image_bgr=result.second,
+            stability_images=self._stability_frames,
             stability_elapsed_s=result.stability_elapsed_s,
             stability_min_elapsed_s=15.0,
             setup_attempt=result.setup_attempt,
@@ -551,10 +556,12 @@ class LiveService:
                 if proposal_revision is None or proposal_revision != block.get("proposal_revision"):
                     raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
                 proposal, session_dir = self._proposal, self._session_dir
+                stability_frames = self._stability_frames
             try:
                 updated = live_setup.edit_regions(
                     proposal, add=add, remove=remove, out_dir=session_dir / "setup",
                     at_utc=self._wall().astimezone(UTC).isoformat(),
+                    stability_images=stability_frames,
                 )
             except live_setup.SetupInputError as exc:
                 raise LiveInputError(str(exc)) from exc
@@ -632,6 +639,9 @@ class LiveService:
                 self._run_block = confirmation["run_block"]
                 self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"
+                # R13-25 Review: die acht Einzelbilder (~50 MB) braucht nur
+                # die Bereichskorrektur vor der Bestaetigung.
+                self._stability_frames = ()
 
     # -- Lauf ----------------------------------------------------------------
     def cleanup(self, *, days: int, diagnostics_only: bool = False, execute: bool = False) -> dict:
@@ -664,6 +674,9 @@ class LiveService:
                 confirmed_by = (self._profile_info or {}).get("confirmed_by")
                 if block is not None and not test_override:
                     raise LiveError(block)
+                # Nach der Bestaetigung keine Bereichskorrektur mehr: nie
+                # Einrichtungs-Einzelbilder durch den Lauf mitschleppen.
+                self._stability_frames = ()
             self._require_storage(diagnostics=diagnostics)
             number = 1
             while True:

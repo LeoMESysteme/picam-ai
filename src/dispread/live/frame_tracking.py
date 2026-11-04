@@ -201,6 +201,8 @@ class FrameTrackingConfig:
     max_regions: int = 20
     proposal_ambiguity_limit: float = 0.90
     proposal_min_peak_margin: float = 0.10
+    # Nur Einrichtung: Reserve fuer die 7-von-8-Einzelbildprobe, nicht Laufstartbindung.
+    proposal_stability_peak_margin: float = 0.025
     reserve_regions: int = 2
     bezel_max_localisation_error_px: float = 0.10
     bezel_threshold_margin: float = 24.0
@@ -246,8 +248,8 @@ class FrameTrackingConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> FrameTrackingConfig:
-        # Nur R13-19b/c ergaenzen: alte Feinpruefgrenzen bleiben Pflicht.
-        optional = {"coarse_min_response", "coarse_max_scale_deviation"}
+        # Neue Einrichtungs-/Grobfelder ergaenzen; alte Feinpruefgrenzen bleiben Pflicht.
+        optional = {"coarse_min_response", "coarse_max_scale_deviation", "proposal_stability_peak_margin"}
         if isinstance(data, dict) and "coarse_min_shift_px" in data:
             data = dict(data)
             legacy_shift = data.pop("coarse_min_shift_px")
@@ -275,6 +277,8 @@ class FrameTrackingConfig:
             raise ValueError("Ungueltige Matchinggrenzen")
         if (not 0 < self.proposal_ambiguity_limit < self.ambiguity_limit
                 or not 0 < self.proposal_min_peak_margin < 1
+                # Setup-Reserve unabhaengig von den Laufgrenzen validieren.
+                or not 0 < self.proposal_stability_peak_margin <= 1
                 or self.bezel_max_localisation_error_px <= 0
                 or self.reserve_regions < 2 or not 0 < self.bezel_corner_quality <= self.corner_quality
                 or self.bezel_opening_px < 3 or self.bezel_opening_px % 2 != 1
@@ -587,9 +591,77 @@ def _edge_model(gray, quad, config):
     return tuple(edges)
 
 
-def propose_regions(reference_image, quad, config=FrameTrackingConfig()) -> RegionProposal:
-    """Starke, selbst-eindeutige Ecken vorschlagen; fehlende Eignung offenlegen."""
+def _stability_gray(gray, image):
+    if image is None:
+        return None
+    second = _gray(image)
+    if second.shape != gray.shape:
+        raise ValueError("Stabilitaetsbild muss dieselbe Bildgroesse haben")
+    return second
+
+
+def _stability_match(gray, second, centre, config):
+    """Unveraendertes Einzelbild: eindeutiger Treffer hoechstens 2 px vom Sollort.
+
+    Liefert zusaetzlich den Subpixelversatz des bestandenen Treffers fuer die
+    Lagekonsistenz von Ersatzbereichen (R13-25 Runde 3).
+    """
+    h, r = config.patch_size // 2, config.search_radius_px
+    patch = _window(gray, centre, h)
+    search = _window(second, centre, h+r)
+    if patch is None or search is None:
+        return 0.0, "zweitbild_am_bildrand", None
+    response = cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED)
+    position, peak, ambiguous = _peak(response, config)
+    if peak < config.min_peak + config.proposal_stability_peak_margin:
+        return peak, "zweitbild_peak_zu_niedrig", None
+    if ambiguous:
+        return peak, "zweitbild_mehrdeutig", None
+    if np.any(position <= 0) or np.any(position >= 2*r):
+        return peak, "zweitbild_suchrand", None
+    if np.linalg.norm(position-r) > 2.0:
+        return peak, "zweitbild_lage_abweichend", None
+    return peak, None, position - r
+
+
+def _stability_peak(gray, second, centre, config):
+    return _stability_match(gray, second, centre, config)[:2]
+
+
+def _stability_frames(gray, image, images):
+    if images is not None:
+        return tuple(_stability_gray(gray, frame) for frame in images)
+    return None if image is None else (_stability_gray(gray, image),)
+
+
+def _stability_probe(gray, samples, centre, config):
+    return _probe_summary([_stability_peak(gray, frame, centre, config) for frame in samples])
+
+
+def _probe_summary(results):
+    required = (7*len(results)+7)//8
+    usable = sorted((peak for peak, reason in results if reason is None), reverse=True)
+    if len(usable) >= required and required:
+        return usable[required-1], None
+    return (min((peak for peak, _ in results), default=0.0),
+            next((reason for _, reason in results if reason), "zweitbild_peak_zu_niedrig"))
+
+
+def _stability_metrics(samples, peaks, rejected):
+    return {"stability_probe_count": len(samples), "stability_required_count": (7*len(samples)+7)//8,
+            "stability_min_samples": 8, "stability_max_displacement_px": 2.0,
+            "stability_rejected_candidates": rejected, "stability_peaks": peaks}
+
+
+def propose_regions(reference_image, quad, config=FrameTrackingConfig(), *, stability_image=None,
+                    stability_images=None) -> RegionProposal:
+    """Eindeutige Ecken mit unabhaengiger Wiederfindbarkeitsprobe vorschlagen.
+
+    Ohne Zweitbild bleibt die bisherige Einbildauswahl fuer Offline-Werkzeuge
+    verfuegbar; gespeicherte Profile werden beim Laden niemals neu ausgewaehlt.
+    """
     gray = _gray(reference_image)
+    samples = _stability_frames(gray, stability_image, stability_images)
     quad = _normalise_quad(quad)
     zone, outer, mask, band_metrics, fixed_band = _geometry(gray, quad, config)
     groups = [[] for _ in range(4)]
@@ -637,10 +709,113 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig()) -> Regi
     ordered = [group[row][2] for row in range(max(map(len, groups), default=0))
                for group in groups if row < len(group)]
     regions = tuple(ordered[:config.max_regions])
+    if samples is not None:
+        regions, peaks, rejected, replacements, consistency = _stable_replacements(
+            gray, samples, regions, ordered[config.max_regions:], quad, limits, config)
+        band_metrics.update(_stability_metrics(samples, peaks, rejected))
+        band_metrics["stability_replacements"] = replacements
+        band_metrics["stability_consistency_px"] = consistency
+        # Ersatz der letzten Stufe ohne Lagekonsistenz namentlich fuehren:
+        # die Einrichtung warnt, solange einer davon im Satz steht.
+        fallback = [item["new_centre"] for item in replacements] if consistency is None else []
+        band_metrics["stability_fallback_centres"] = fallback
+        band_metrics["stability_fallback_remaining"] = list(fallback)
     return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, band_metrics)
 
 
-def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingConfig(), *, kept_centres=()) -> RegionProposal:
+def _axis_sides(centres, quad, limits):
+    local = (np.asarray(centres, dtype=float).reshape(-1, 2) - quad.mean(axis=0)) @ _axes(quad).T
+    return np.column_stack((local <= -limits[0], local >= limits[1]))
+
+
+def _stable_replacements(gray, samples, regions, pool, quad, limits, config):
+    """R13-25 Minimalprinzip: nur probefaellige Bereiche ersetzen.
+
+    Bestandene Bereiche bleiben exakt an Ort und Index. Ein Ersatz kommt aus
+    den uebrigen, bereits voll geprueften Kandidaten (gleiche Abstands-,
+    Masken- und Eindeutigkeitsregeln), belegt moeglichst dieselben
+    Achsenseiten (Hebelarm) und liegt so nah wie moeglich am Ersetzten.
+
+    Zusaetzlich muss ein Ersatz lagekonsistent sein: in mindestens 7 von 8
+    Einzelbildern weicht sein Versatz hoechstens um die Stufengrenze vom
+    starren Konsens der bisherigen Bereiche ab. Ein Ersatz mit systematischem
+    Versatz von 0,65..1,5 px waere im Lauf RANSAC-Inlier und wuerde frueher
+    angenommene Bilder an der Residuengrenze verwerfen. Die Stufen folgen den
+    unveraenderten Laufgrenzen (RMS, Mitte, Einzelresiduum); die strengste
+    Stufe mit erfuellter Ausfallreserve gewinnt. Erst wenn keine Stufe die
+    Reserve erreicht, wird ohne Lagekonsistenz ersetzt; das steht in den
+    Kennzahlen (``stability_consistency_px`` = None).
+    """
+    probes, offsets = {}, {}
+
+    def match(centre):
+        if centre not in probes:
+            results = [_stability_match(gray, frame, centre, config) for frame in samples]
+            probes[centre] = _probe_summary([result[:2] for result in results])
+            offsets[centre] = [offset for _, _, offset in results]
+        return probes[centre]
+
+    for region in regions:
+        match(region.centre)
+    # Starrer Konsens je Einzelbild aus den bisherigen Bereichen, wie im Lauf.
+    consensus = []
+    for k in range(len(samples)):
+        keys = [region.centre for region in regions if offsets[region.centre][k] is not None]
+        fit = None
+        if len(keys) >= config.min_regions:
+            source = np.asarray(keys, dtype=float)
+            fit = _ransac(source, source + np.asarray([offsets[key][k] for key in keys]), config)
+        consensus.append(None if fit is None else fit[:2])
+    required = (7*len(samples)+7)//8
+
+    def consistent(centre, limit):
+        if limit is None:
+            return True
+        point = np.asarray(centre, dtype=float)
+        good = 0
+        for offset, fit in zip(offsets[centre], consensus, strict=True):
+            if offset is not None and fit is not None:
+                rotation, translation = fit
+                good += float(np.linalg.norm(point + offset - (rotation @ point + translation))) <= limit
+        return good >= required
+
+    pool = list(pool)
+    pool_sides = _axis_sides([region.centre for region in pool], quad, limits) if pool else np.zeros((0, 4), bool)
+    stages = (config.max_inlier_rms_px, (config.max_inlier_rms_px + config.max_inlier_residual_px) / 2,
+              config.max_inlier_residual_px, None)
+    for limit in stages:
+        kept, peaks, replacements = list(regions), [], []
+        used = np.zeros(len(pool), bool)
+        for index, region in enumerate(regions):
+            peak, reason = match(region.centre)
+            if reason is None:
+                peaks.append(peak)
+                continue
+            wanted = _axis_sides([region.centre], quad, limits)[0]
+            centre = np.asarray(region.centre, dtype=float)
+            order = sorted((i for i in range(len(pool)) if not used[i]),
+                           key=lambda i: (int(np.count_nonzero(wanted & ~pool_sides[i])),
+                                          float(np.linalg.norm(np.asarray(pool[i].centre) - centre)),
+                                          pool[i].centre[1], pool[i].centre[0]))
+            kept[index] = None
+            for i in order:
+                peak, reason = match(pool[i].centre)
+                if reason is None and consistent(pool[i].centre, limit):
+                    used[i] = True
+                    kept[index] = pool[i]
+                    peaks.append(peak)
+                    replacements.append({"index": index, "old_centre": list(region.centre),
+                                         "new_centre": list(pool[i].centre),
+                                         "distance_px": float(np.linalg.norm(np.asarray(pool[i].centre) - centre))})
+                    break
+        selected = tuple(region for region in kept if region is not None)
+        if _reserve_ok([region.centre for region in selected], quad, config, limits):
+            break
+    rejected = sum(reason is not None for _, reason in probes.values())
+    return selected, peaks, rejected, replacements, limit
+
+def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingConfig(), *, kept_centres=(),
+                          stability_image=None, stability_images=None) -> RegionProposal:
     """Manuelle Mittelpunkte mit denselben Masken und Qualitaetsgrenzen pruefen.
 
     centre_results in metrics enthaelt zuerst kept_centres, dann centres,
@@ -652,6 +827,7 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
     Maximum). Masken werden erst am gefundenen Punkt geprueft.
     """
     gray = _gray(reference_image)
+    samples = _stability_frames(gray, stability_image, stability_images)
     quad = _normalise_quad(quad)
     zone, outer, mask, band_metrics, fixed_band = _geometry(gray, quad, config)
     character = np.zeros(gray.shape, np.uint8)
@@ -662,6 +838,7 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
     local_maximum = cv2.dilate(strength, np.ones((3, 3), np.uint8))
     regions, results = [], []
     ambiguous_count = 0
+    stability_peaks, stability_rejected = [], 0
     h, r = config.patch_size // 2, config.search_radius_px
     radius = h + r + config.interpolation_guard_px
     for index, centre in enumerate([*kept_centres, *centres]):
@@ -705,10 +882,18 @@ def proposal_from_regions(reference_image, quad, centres, config=FrameTrackingCo
                 reason = "zu_wenig_struktur"
             elif any(np.linalg.norm(np.asarray(region.centre) - (x, y)) < config.min_spacing_px for region in regions):
                 reason = "zu_nah"
+            if reason is None and samples is not None:
+                peak, reason = _stability_probe(gray, samples, (x, y), config)
+                if reason is not None:
+                    stability_rejected += 1
+                else:
+                    stability_peaks.append(peak)
         results.append({"requested_centre": point.tolist(), "centre": [x, y], "used_centre": used,
                         "ok": reason is None, "reason": reason})
         if reason is None:
             regions.append(FrameRegion((x, y), config.patch_size))
+    if samples is not None:
+        band_metrics.update(_stability_metrics(samples, stability_peaks, stability_rejected))
     proposal = _region_proposal(gray, quad, zone, outer, tuple(regions), ambiguous_count, config, band_metrics)
     proposal.metrics["centre_results"] = results
     return proposal
@@ -768,6 +953,8 @@ def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, 
     spread = bool(np.all(side_counts >= config.min_inliers_per_side))
     reserve_ok = _reserve_ok(centres, quad, config, limits)
     reasons = []
+    if band_metrics.get("stability_probe_count", 8) < 8:
+        reasons.append("rahmenbereiche_einzelbilder_fehlen")
     if len(regions) < config.min_regions:
         reasons.append("zu_wenig_rahmenbereiche")
     if not spread:
@@ -778,6 +965,8 @@ def _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, 
             or not any(side in strong_sides for side in (0, 2))
             or not any(side in strong_sides for side in (1, 3))):
         reasons.append("lcd_rand_fehlt")
+    if not reserve_ok and band_metrics.get("stability_rejected_candidates", 0):
+        reasons.append("rahmenbereiche_zweitbild_instabil")
     return RegionProposal(regions, edges, _polygon(zone), _polygon(outer), not reasons, tuple(reasons),
                           {**band_metrics, "regions": len(regions), "spread_ok": spread, "ambiguous_candidates": ambiguous_count,
                            "reserve_ok": reserve_ok, "reserve_removals": config.reserve_regions,

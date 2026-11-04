@@ -4342,3 +4342,1012 @@ mit numerischem Vergleich der beiden von OQ-41 betroffenen Bestände unter
 numerisch verglichenen Ergebnisse, keine falsch als Fehllesung gezählten
 führenden Nullen. Der abschließende Gesamtlauf unter `final/1/` verwendet
 direkt den korrigierten numerischen Vergleich und die Gegenproben.
+
+## 2026-10-30 — R13-25: Stabile Rahmenregionen bei der Einrichtung {#r13-25-stabile-rahmenregionen-2026-10-30}
+
+**Runde 3 (2026-10-31), Entwicklungsstand. Abnahme weiterhin nicht bestanden.**
+Minimalprinzip und Lagekonsistenz der Ersatzbereiche senken die verlorenen
+Bilder von 13 auf 4 (Pflichtbestand 3 → 1), der Hauptfall bleibt bei
+210/210. Nullverlust ist nicht erreicht. Die Abschnitte ab „Kriterium,
+Speicherung und Kopplung“ bis „Dauer der Einrichtung“ beschreiben die
+**Runde 2**. Ihr Einzelbildkriterium gilt unverändert weiter. Ihre Tabellen
+gehören zur Runde-2-Auswahl und sind durch die Zahlen unten überholt. Die
+früheren Aussagen über eine belegte Rauschreserve aus gemittelten Bildern
+bleiben zurückgenommen.
+
+Keine Kamera, kein serieller Port und keine Hardwareänderung. Alle Aufnahmen
+und Profile unter `var/` und `/mnt/ssd` wurden ausschließlich gelesen.
+Artefakte: Runde 2 `/tmp/r13-25-correction/`, Runde 3 `/tmp/claude-1000/r13-25-r3/`.
+`docs/status.md` und TODO bleiben auf ausdrücklichen Auftrag unangetastet;
+keine Commits, keine volle Suite, kein Docs-Playwright oder Docs-Build.
+
+### Runde 3: Minimalprinzip und Lagekonsistenz {#r13-25-runde-3}
+
+**Was Runde 2 tat.** Runde 2 hat nicht minimal ersetzt, sondern den Satz neu
+gewählt. Die Probe lief in der Kandidatenschleife vor der Quadrantenzuordnung.
+Durchgefallene Kandidaten fielen heraus, die Liste wurde reihum aus den vier
+Quadranten neu aufgefüllt. Alle probefesten alten Bereiche blieben zwar als
+Menge erhalten. Index und Reihenfolge verschoben sich aber, und jeder Ersatz
+war der nächststärkere Kandidat seines Quadranten, ohne Bezug zum Ort des
+Ersetzten. Beispiele: Hauptfall 9 von 20 ersetzt, nur 9 Indizes gleich;
+`113238` 12 ersetzt, 4 Indizes gleich; `134306` 15 ersetzt, kein Index
+gleich. Die gespeicherten Vorschläge sind in allen elf Einrichtungen
+identisch mit einer Neuberechnung ohne Probe.
+
+**Ursache `lcd_rand_fehlt` (113238, 10 Bilder in Runde 2).** Gemessen je
+verlorenem Bild mit altem und Runde-2-Satz:
+
+* Die Quads unterscheiden sich um höchstens 0,04–0,14 px. Das LCD-Eck links
+  oben liegt 0,04–0,14 px höher, die Drehung ist um +0,003…+0,013° größer.
+  Das ist ein kleiner, gleichgerichteter Lagebias der neuen Bereiche.
+* Kein Randpunkt scheitert an der Lagetoleranz: Die Randoffsets liegen bei
+  −0,2 bis −0,85 px, die Grenze ist 2,5 px.
+* Gekippt ist jeweils einer von zwei schwachen Randpunkten (0 oder 4) der
+  oberen LCD-Kante. Seine Stufenhöhe liegt am Schwellwert
+  (halbe Referenzstufe): alt 57,3–89,2, neu 55,8–88,0. `_locate_edges` tastet
+  die Stufe an ganzzahligen Abständen zum vorhergesagten Punkt ab. Eine
+  Verschiebung um 0,1 px ändert die Abtastphase und damit den Maximalwert.
+* Seite 0 steht schon mit dem alten Satz in jedem dieser Bilder genau auf
+  der Grenze: 15/18 gute Punkte, nötig sind 0,8 · 18 = 14,4. Ein einziger
+  Punkt entscheidet.
+
+Ursache in der Auswahl: Der große Austausch in Runde 2 erzeugt den Bias. Der
+Minimalaustausch hält die Lage näher am alten Satz, **beseitigt die
+Grenzlage der Randprüfung aber nicht**: Auch mit Runde 3 kippen in `113238`
+drei solche Bilder, bei Quad-Differenzen von nur 0,05 px. Die
+Randprüfung und ihre Schwellen sind unverändert.
+
+**Ursache der Bewegungsverluste (110248/0179, 121101/0034–35).** Kein
+Ersatz fiel aus Suchfenster oder Bild; in 0179 fanden alle 20 Fenster einen
+Treffer. Abgelehnt wurde in der Ähnlichkeitsstufe an den
+Residuengrenzen. In 0179 kam das größte Residuum 0,67 px (Grenze 0,65)
+von einem alten Bereich, der Fit hatte sich durch neue Bereiche verschoben.
+In 0034 lagen die Ersatzbereiche bei RMS 0,356–0,379 px (Grenze 0,35) mit
+Einzelresiduen bis 0,68 px. Die Ersatzbereiche aus Runde 2 und aus einem
+reinen Nahersatz liegen weiter außen am Rahmen. In
+`113238` bringt ein Nahersatz (1445/444) in jedem Bild ein systematisches
+Residuum von 1,1–1,3 px. Er ist damit RANSAC-Inlier (Toleranz 1,5 px),
+überschreitet aber das Einzelresiduum. Ein strikter Nahersatz ohne Lageprüfung
+verlor deshalb in `113238` 46 und in `110248` 2 Bilder. Die Einzelbildprobe
+lässt 2 px Lageabweichung zu und sieht solche Bereiche nicht.
+
+**Änderung (nur Einrichtung).**
+
+1. Zuerst wird die bisherige Auswahl berechnet, bitgleich mit gespeicherten
+   Profilen. Bereiche, die die 7/8-Einzelbildprobe bestehen, bleiben exakt
+   an Ort und Index.
+2. Ein durchgefallener Bereich wird aus den übrigen, bereits voll geprüften
+   Kandidaten ersetzt: gleiche Masken-, Abstands-, Eindeutigkeits- und
+   Bewegungsregeln. Vorrang hat ein Kandidat, der dieselben Achsenseiten
+   belegt (Hebelarm), danach der geringste Abstand zum Ersetzten.
+3. **Lagekonsistenz:** Je Einzelbild wird aus den Versätzen der bisherigen
+   Bereiche ein starrer Konsens bestimmt, mit demselben `_ransac` wie im
+   Lauf. Ein Ersatz muss in mindestens 7 von 8 Einzelbildern innerhalb einer
+   Stufengrenze an diesem Konsens liegen.
+4. Die Stufen sind die unveränderten Laufgrenzen: `max_inlier_rms_px` 0,35,
+   Mitte 0,50, `max_inlier_residual_px` 0,65. Es gilt die strengste Stufe,
+   mit der die Ausfallreserve erfüllt ist.
+5. Reicht keine Stufe, wird zuletzt ohne Lagekonsistenz ersetzt. Dann meldet
+   `nachfuehrung` **WARNUNG** mit Handlungshinweis: Aufbau ruhig halten,
+   mehr Licht, anderer Blickwinkel. Kennzahlen: `stability_replacements`
+   (Index, alter/neuer Mittelpunkt, Abstand) und `stability_consistency_px`
+   (Stufe oder `null`).
+
+Laufgrenzen, `FrameTracker`, `_peak`, `_spread` und die Randprüfung sind
+unverändert. Die manuelle Bereichskorrektur ersetzt nichts automatisch und
+behält die 7/8-Probe.
+
+Verworfene Varianten, alle über dieselben 1.492 Bilder (Zahlen in
+`h1*.log`–`h4.log`):
+
+* Strikter Nahersatz nur mit gleichen Seiten: `121101` ohne Reserve.
+* Nahersatz ohne Lageprüfung, mit Seitenrückfall: 74 verlorene Bilder
+  (`113238` 53, `110248` 15).
+* Konsens als Median statt Starrfit: Hauptfall, `121101` und `134306` ohne
+  Reserve.
+* Feste Grenze 0,35: Hauptfall und `121101` ohne Reserve.
+* Feste Grenze 0,50: `110248/0015` und fünf Bilder in `113238` verloren.
+* Lageprüfung auch für bestehende Bereiche: fast alle Einrichtungen ohne
+  Reserve.
+* Konsistenz vor Seitenwahl sortiert: Reserve verfehlt.
+* Rückfall nach Kandidatenstärke statt Abstand: `121101` ohne Reserve.
+* Kein Rückfall: `121101` würde als FEHLER abgelehnt, alle 23 alten Tracks
+  entfielen.
+
+**Ergebnis je Aufzeichnung.** Gleicher Probe-Ersatz wie Runde 2 (erste acht
+Diagnosebilder aus run-01, ganzzahlig ausgerichtet), unveränderter HEAD-
+Tracker und Leser, Referenz erst nach der Lesung. Spalten: Tracks
+vorher (gespeichert) → Runde 2 → **Runde 3**, verlorene Runde 2 → **Runde 3**.
+
+| Aufzeichnung | Bilder | Tracks | verloren | Leserwerte vorher → R3 | Fehllesungen R3 | ersetzt | Stufe px | Ersatzabstand px |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 | 206 → 205 → **206** | 1 → **0** | 175 → 175 | 0 | 7 | 0.35 | 34–493 |
+| `live-20261028T113238Z/run-01` | 208 | 121 → 185 → **193** | 10 → **3** | 108 → 168 | 0 | 12 | 0.35 | 30–705 |
+| `live-20261028T121101Z/run-01` | 152 | 23 → 30 → **31** | 2 → **1** | 21 → 29 | 0 | 11 | ohne (WARNUNG) | 68–194 |
+| `live-20261028T123044Z/run-01` | 32 | 31 → 32 → **32** | 0 → **0** | 22 → 23 | 0 | 7 | 0.35 | 89–173 |
+| `live-20261028T133959Z/run-01` | 38 | 37 → 37 → **37** | 0 → **0** | 0 → 0 | 0 | 4 | 0.35 | 52–504 |
+| `live-20261028T134306Z/run-01` | 91 | 51 → 90 → **91** | 0 → **0** | 26 → 45 | 0 | 15 | 0.35 | 43–757 |
+| `live-20261028T150914Z/run-01` | 32 | 32 → 32 → **32** | 0 → **0** | 28 → 28 | 0 | 3 | 0.35 | 276–405 |
+| `live-20261028T150914Z/run-02` | 85 | 14 → 21 → **21** | 0 → **0** | 12 → 18 | 0 | 3 | 0.35 | 276–405 |
+| `live-20261030T082502Z/run-01` | 85 | 85 → 85 → **85** | 0 → **0** | 80 → 80 | 0 | 0 | 0.35 | — |
+| `live-20261030T113427Z/run-01` | 141 | 66 → 66 → **66** | 0 → **0** | 53 → 53 | 0 | 4 | 0.35 | 140–260 |
+| `live-20261030T115636Z/run-01` | 210 | 210 → 210 → **210** | 0 → **0** | 164 → 164 | 0 | 8 (19 Bereiche) | 0.35 | 213–381 |
+| `live-20261030T133635Z/run-01` | 210 | 102 → 210 → **210** | 0 → **0** | 71 → 150 | 0 | 9 | 0.50 | 55–375 |
+
+Pflichtbestand: **738 → 859 → 861 Tracks auf 1.123 Bildern, verloren 3 → 1,
+0/697 Fehllesungen.** Alle Bestandsbilder: **978 → 1.203 → 1.214 Tracks auf
+1.492 Bildern, verloren 13 → 4, 0/933 Fehllesungen**, keine Werte ohne
+Vergleichsreferenz. Verbleibende Verluste:
+
+* `121101/0034` (`rahmen_unstimmig`): Hier griff der Rückfall ohne
+  Lagekonsistenz, 11 von 20 alten Bereichen sind probefällig. Ersatzbereiche
+  liegen 68–194 px entfernt. Im Bild ergibt das RMS 0,379 px und ein
+  Einzelresiduum bis 0,68 px, vor allem von 834/782, 538/517 und 534/669.
+  Die Probe-Ersatzbilder 7 und 8 sind um 14/−5 px bewegt. Deren starrer
+  Konsens hat schon für alte Bereiche Residuen bis 0,94 px. Dort ist keine
+  Konsistenzstufe erfüllbar.
+* `113238/0163`, `0167`, `0177` (`lcd_rand_fehlt`): die oben beschriebene
+  Grenzlage an der oberen LCD-Kante (15/18), Quad-Differenz ≤ 0,056 px.
+
+Den Abstand nennt die Tabelle ehrlich: Ein lagekonsistenter Ersatz auf
+derselben Seite liegt teils weit vom Ersetzten (bis 757 px). Wo nahe
+Kandidaten die Konsistenz nicht erfüllen, hat die Konsistenz Vorrang vor der
+Nähe.
+
+**Probe-Vorhersage gegen Live-Nutzungsanteil (Runde 3).** Gleiches Verfahren
+wie Runde 2: festes ±12-px-Fenster, Peak ≥ 0,75, Lauf-Eindeutigkeit. Alle
+Regionen haben die Probe bestanden.
+
+| Aufzeichnung | Bilder / Holdout | Regionen | schlechtester / medianer Live-Anteil | schlechtester Holdout-Anteil | kleinste Seitenzahl |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 / 200 | 20 | 93,8 % / 99,8 % | 93,5 % | 6 |
+| `live-20261028T113238Z/run-01` | 208 / 200 | 20 | 43,3 % / 97,6 % | 41,0 % | 5 |
+| `live-20261028T121101Z/run-01` | 152 / 144 | 20 | 17,8 % / 24,3 % | 13,2 % | 5 |
+| `live-20261028T123044Z/run-01` | 32 / 24 | 20 | 96,9 % / 100,0 % | 95,8 % | 7 |
+| `live-20261028T133959Z/run-01` | 38 / 30 | 20 | 97,4 % / 100,0 % | 96,7 % | 8 |
+| `live-20261028T134306Z/run-01` | 91 / 83 | 20 | 94,5 % / 100,0 % | 94,0 % | 5 |
+| `live-20261028T150914Z/run-01` | 32 / 24 | 20 | 68,8 % / 100,0 % | 58,3 % | 7 |
+| `live-20261028T150914Z/run-02` | 85 / 85 | 20 | 55,3 % / 95,9 % | 55,3 % | 7 |
+| `live-20261030T082502Z/run-01` | 85 / 77 | 20 | 100,0 % / 100,0 % | 100,0 % | 7 |
+| `live-20261030T113427Z/run-01` | 141 / 133 | 20 | 61,0 % / 97,9 % | 58,6 % | 6 |
+| `live-20261030T115636Z/run-01` | 210 / 202 | 19 | 86,2 % / 100,0 % | 86,1 % | 5 |
+| `live-20261030T133635Z/run-01` | 210 / 202 | 20 | 29,0 % / 100,0 % | 26,7 % | 6 |
+
+Im Hauptfall ist die Vorhersage schlechter als in Runde 2 (95,2 %). Zwei
+Ersatzbereiche aus der Stufe 0,50 liegen nur bei 29,0 % (947/687, Probe
+0,798) und 74,3 % (928/711, Probe 0,801). Sie sind nahe der Probeschwelle
+gewählt, weil Nähe und Konsistenz vor Stärke gehen. Das Tracking bleibt
+210/210. Die Probe sagt die Live-Nutzbarkeit einzelner Regionen weiterhin
+nicht verlässlich voraus.
+
+**Synthetischer Sweep** (`r13-coarse-sweep.py --proposals`, je 1.014 Fälle):
+
+| Referenz | Tracks vorher → R3 | nur vorher / nur R3 | falsche Quads >1 px | max. Eckfehler R3 |
+| --- | --- | --- | --- | --- |
+| `live-20261030T133635Z` | 900 → 900 | 0 / 0 | 0 | 0,393 px |
+| `live-20261028T110248Z` | 900 → 900 | 0 / 0 | 0 | 0,425 px |
+| `live-20261028T121101Z` | 900 → 878 | 22 / 0 | 0 | 0,408 px |
+
+**0 falsche Quads in 3.042 Fällen.** In `121101` gehen aber 22 synthetische
+Tracks verloren (Runde 2: 3), alle `rahmen_unstimmig`, 19 davon bei −1,2°
+Drehung. Das ist der Preis des Rückfalls ohne Lagekonsistenz: Weiter
+entfernte, nach Abstand gewählte Ersatzbereiche lokalisieren unter Drehung
+schlechter.
+
+**Einrichtungsdauer.** Monotone Host-Verarbeitungszeit (`perf_counter`),
+zwei OpenCV-Threads, sieben AB/BA-Paare je Einrichtung. Gemessen bei
+laufender Werkbank (`dispread` ≈ 50 % CPU, Last 3,7–6,5). Ohne PNG-Prüfung
+wächst der Vorschlag um 60–230 ms. Mit PNG-Prüfung und SHA beträgt die
+Mehrarbeit 109–284 ms (Runde 2: 184–243 ms). Im Hauptfall dauert es
+487 → 771 ms (Runde 2: 497 → 740 ms). Die volle Assistentendauer ist nicht
+neu gemessen.
+
+Reproduktion (Ausgaben nur unter `/tmp`):
+
+```bash
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-stability-eval.py --live-root /home/me-systeme/picam-ai/var/live \
+  --run live-20261030T133635Z --run live-20261030T115636Z --run live-20261028T110248Z \
+  --output /tmp/claude-1000/r13-25-r3/eval-a
+# eval-b: 113427, 082502, 150914, 121101; eval-c: 113238, 123044, 133959,
+# 134306; eval-run02: 150914 --recording run-02
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-coarse-sweep.py --baseline /tmp/r13-25-correction/baseline.py \
+  --proposals /tmp/claude-1000/r13-25-r3/sweep-proposals \
+  --output /tmp/claude-1000/r13-25-r3/sweep.json --threads 2 \
+  --run live-20261030T133635Z --run live-20261028T110248Z --run live-20261028T121101Z
+```
+
+Weitere Artefakte: `harness.py` (Variantenvergleich), `lcdbias.py`/
+`lcdbias.log` (Randanalyse), `lost.py` (Residuen je Bereich), `cons121.py`
+(Konsens je Probebild), `setup-cost.py`/`setup-cost.json`, `tests.log`.
+
+Softwareprüfungen Runde 3: siehe [Abschnitt unten](#r13-25-runde-3-pruefung).
+
+### Nachtrag 2026-11-04: Korrekturen aus dem unabhängigen Review {#r13-25-review-korrekturen}
+
+Vier Befunde, testgetrieben behoben. Auswahl, Tracker, Laufgrenzen und
+Randprüfung sind unverändert. Die Zahlen oben gelten weiter, die Abnahme
+bleibt offen. Keine Kamera, kein serieller Port. `var/` und `/mnt/ssd`
+wurden nur gelesen.
+
+1. **WARNUNG überlebte keine Bereichskorrektur (mittel).** `edit_regions`
+   setzte `nachfuehrung` nur auf OK oder FEHLER. Ein Beispiel: Nach einer
+   WARNUNG der Rückfallstufe entfernte die Person einen unbeteiligten
+   Bereich. Die Prüfung wurde OK, obwohl die Ersatzbereiche ohne
+   Lageprüfung blieben, und die Bestätigung verlangte keine Kenntnisnahme
+   mehr. Neu führt `propose_regions` die Ersatzbereiche der Rückfallstufe
+   als `stability_fallback_centres`. Der davon noch im Satz stehende Teil
+   steht in `stability_fallback_remaining`. Die Liste geht durch jede
+   Korrektur unverändert mit. Ältere Vorschläge ohne diese Liste leiten sie
+   aus `stability_replacements` mit `stability_consistency_px = null` ab.
+   Die WARNUNG trägt denselben Text und bleibt, solange ein solcher
+   Mittelpunkt im Satz steht. Das gilt auch nach Hinzufügen und nach
+   Entfernen und Wiederhinzufügen desselben Punkts. Erst ohne jeden solchen
+   Bereich und mit sonst gültigem Satz wird die Prüfung OK; FEHLER geht vor.
+   Tests: `test_r25_fallback_warning_survives_unrelated_manual_edits`,
+   `test_r25_fallback_warning_clears_only_without_fallback_regions`,
+   `test_r25_fallback_warning_still_needs_acknowledgement_after_region_edit`
+   (Dienst: Bestätigung ohne Kenntnisnahme abgelehnt). Der Test
+   `test_r25_replacements_without_position_consistency_warn` benutzt jetzt
+   einen echten Bereich des Satzes als Ersatz. Vorher stand dort der
+   Phantom-Mittelpunkt (2, 2), der nicht im Satz lag.
+2. **Offline-Einrichtung scheiterte an der Einzelbildprobe (mittel).**
+   `scripts/r13-offline-setup.py` rief `propose_with_fit(live_tracking=True)`
+   ohne Einzelbilder auf. Dann ist `stability_probe_count < 8`,
+   `nachfuehrung` meldet FEHLER und `confirm_proposal` bricht ab.
+   `test_recording_setup_uses_real_checks_and_copied_reference` scheiterte
+   daran. Der Test liest die versionierten Fixtures `tests/fixtures/r13`
+   und nichts aus `var/`; er scheiterte auch mit vorhandenem `var/`.
+
+   **Gewählte Bilder:** das Stabilitätsbild und die sieben direkt folgenden
+   Zeilen aus `frames.jsonl`, ohne Auslassung und alle im selben
+   schedule-Schritt. Das sind acht ungemittelte Bilder wie bei
+   `stack_frames=8` live. Die Aufnahme enthält aber nicht die
+   unmittelbar aufeinanderfolgenden 30-fps-Kamerabilder des Live-Stapels
+   (rund 0,27 s). Bei 1–5 Bildern/s der sync-record-Aufnahmen spannen die
+   acht Bilder etwa 1,6–8 s. Die Probe sieht damit eher mehr Drift als
+   live und wird nicht lockerer. Das Stabilitätsbild bleibt wie bisher das
+   einzelne Aufnahmebild, nicht das Mittel. Fehlen Bilder oder wechselt der
+   Schritt, lehnt das Werkzeug schon in der Auswahl ab und deaktiviert die
+   Probe nicht. Die Dateien stehen in `setup-result.json` unter
+   `stability_frames`. Die Test-Fixture bekam deshalb sechs weitere
+   identische Bilder nach dem Stabilitätsbild. Ihre Asserts blieben, neu
+   geprüft werden `nachfuehrung` OK mit 8 Einzelbildern. Neue
+   Ablehnungstests: 1 und 7 Bilder, Schrittwechsel.
+3. **Offene Regressionsfälle (niedrig).** `113238/0163` und `121101/0034`
+   in `test_r25_single_frame_reserve_keeps_control_track` sind
+   `xfail(strict=True, raises=AssertionError)`. Eine Behebung fällt als
+   XPASS auf. Fehlende Daten oder andere Ausnahmen werden nicht als
+   erwartetes Scheitern verbucht. Die anderen drei Fälle sind unverändert.
+4. **Einzelbilder im Speicher (niedrig).** `LiveService._stability_frames`
+   (8 Vollbilder, rund 50 MB) wird bei erfolgreicher Bestätigung und beim
+   Laufstart geleert. Für Bereichskorrekturen vor der Bestätigung und
+   nach einer abgelehnten Bestätigung bleiben die Bilder erhalten. Tests:
+   `test_r25_stability_frames_kept_for_edits_and_freed_on_confirmation`,
+   `test_r25_stability_frames_freed_when_run_starts`.
+
+**Nebenbefund `test_setup_saves_cross_masked_text_before_2j_failure_or_success[OK]`.**
+Im Worktree ist der Test grün. Ohne `var/` scheitert er, auf diesem Zweig
+wie auf der Basis `100cb51`: `setup_failed` mit `[Errno 2] No such file or
+directory: 'var/dotmatrix/templates-stufe2c-2026-09-30.json'`.
+`assist_measure` lädt die Vorlagen über den relativen Standardpfad.
+Das ist eine Datenabhängigkeit des Tests und keine Regression von R13-25.
+Der Test wurde nicht geändert.
+
+**Prüfungen.** Ruff ohne Befund. Gezielte acht pytest-Dateien
+(`frame_tracking`, `live_setup_tracking`, `r13_stability_eval`,
+`live_setup`, `live_service`, `live_api`, `r13_offline_setup`,
+`live_session`) mit `-n 3`: **15 failed, 1135 passed, 2 skipped in
+246 s.** Alle 15 Fehlschläge lesen `var/live/<sitzung>/run-01/diagnose`.
+Dort liegen die Diagnosebilder seit der Verlagerung vom 04.11. nicht mehr,
+sie stehen unter `/mnt/ssd/picam-dev/live/…/diagnose`. Es handelt sich um
+`test_r25_frontal_keeps_previously_trackable_frame`, 3× `test_r19b_…`,
+6× `test_r19c_…` und 5× `test_r25_single_frame_reserve_…`.
+`local_recording` verweist Sitzungen ab `live-20261023` nicht auf den
+Dev-Pfad. Auftragsgemäß wurden Tests und `_devdata` dafür nicht angepasst.
+Dieselben 15 Tests liefen über eine reine Lese-Überlagerung mit Links
+(var/-Profil und -Setup, Diagnosebilder vom Dev-Pfad, nur in `/tmp`):
+**13 passed, 2 xfailed**. Node 59/59, `wiki-check --check` und
+`oq-index --check` ohne Befund.
+
+### Kriterium, Speicherung und Kopplung (Runde 2, gilt weiter)
+
+Die Stabilitätsaufnahme liefert weiterhin ein Mittelbild aus acht frischen
+Aufnahmen für die bisherigen Raster-/Bildprüfungen. Dieselben **ungemittelten
+Einzelbilder** bleiben als Kopien im Speicher. Eine Region besteht bei
+**mindestens sieben von acht** eindeutigen inneren Treffern mit Peak
+**≥0,775 = min_peak 0,75 + Reserve 0,025**. Lauf-Eindeutigkeit entspricht
+`_peak` (Zweitpeak/Peak ≤0,95); die strengere Selbstbild-Eindeutigkeit für
+Referenzkandidaten bleibt bei ≤0,90 und Peakabstand ≥0,10. Der Treffer muss
+im unbewegten Aufbau höchstens **2 px euklidisch** vom Sollort liegen.
+Bei mehr als acht Eingaben gilt aufgerundet 7n/8, mindestens acht Bilder.
+`stability_peaks` enthält die dafür maßgebliche k-te bestandene Spitze,
+nicht das Minimum einschließlich des erlaubten Ausreißers.
+
+Erst nach Referenz-Eindeutigkeit, `_bezel_motion_ok` und `fixed_band` folgt
+diese Probe. `stability_rejected_candidates` zählt daher keine Kandidaten,
+die bereits am Bewegungsgate scheitern. Nur bestandene Regionen zählen für
+Anzahl, die bisherigen Hebelarme und die Reserve von zwei beliebigen
+Ausfällen: mindestens fünf auf jeder Achsenseite. Laufgrenzen bleiben gleich;
+`FrameTracker`, `_peak` und `_spread` sind per AST mit HEAD unverändert.
+Modell-Konfidenz wird dadurch nicht kalibriert.
+
+Zusätzliche Einzelbilder werden nicht gespeichert. `assist_measure` schreibt
+das ohnehin benötigte `stability.png` einmal; die Vorschlagsbindung prüft
+eine vorhandene Datei auf unveränderten Bildinhalt und verwendet deren SHA.
+Es gibt keinen zweiten PNG-Schreibvorgang. Manuelle Neubewertung prüft
+Mittelbild-SHA und dieselben acht Einzelbilder aus dem Sitzungsspeicher.
+Nach Verlust des Speichers ist neu einzurichten. Für Mittelpunkte gibt es
+verständliche deutsche Texte in Server- und Clientpfad, einschließlich der
+Lageabweichung.
+
+`proposal_stability_peak_margin` bleibt als Einrichtungsbeleg gespeichert,
+gehört aber **nicht** zum Laufstart-Defaultsvergleich. Abweichungen bei
+`min_peak` oder anderen Laufgrenzen bleiben abgelehnt. Bestätigte Profile
+werden nicht neu ausgewählt. Die frühere Behauptung, Altprofile mit hoher
+abweichender Laufschwelle starteten, war falsch; der irreführende reine
+Konstruktor-Test ist durch tatsächliche Startprüfungen ersetzt.
+
+### Kalibrierungsmethode und Grenzen (Runde 2)
+
+Elf Einrichtungen mit zwölf Aufzeichnungen vom 28. und 30.10. enthalten
+**1.492 Diagnose-Einzelbilder**. Der bisher genannte Bestand umfasst davon
+sieben Einrichtungen, acht Aufzeichnungen und **1.123 Bilder**; vier weitere
+vorhandene Aufzeichnungen mit 369 Bildern werden zusätzlich ausgewiesen.
+Historische Setup-Einzelbilder fehlen. Als ausdrücklich bezeichneten Ersatz
+verwenden wir die ersten acht Diagnosebilder aus `run-01`. `run-02` derselben
+Einrichtung verwendet exakt denselben neuen Vorschlag und dieselben acht
+Probe-Ersatzbilder. Seine 85 Bilder sind vollständig Holdout; bei `run-01`
+sind die ersten acht aus dem Holdout ausgeschlossen.
+
+Die Laufbilder sind gegenüber dem Setup bereits bewegt. Für den Ersatz der
+stationären Setup-Aufnahme werden sie über Rahmen-Phasenkorrelation und den
+Median eindeutiger Patchversätze ausschließlich **ganzzahlig** zurückgeschoben
+(`INTER_NEAREST`). Es wird nicht gemittelt oder interpoliert entrauscht.
+Die Offsets je Probe stehen im Artefakt. Dies ist eine nachträgliche
+Entwicklungskalibrierung, keine unabhängige Abnahme der echten Setup-Aufnahme.
+Die eigentlichen Tracker-Replays verarbeiten stets die originalen Bilder.
+
+Die folgenden Nutzungsanteile entsprechen dem Reviewer-Verfahren: derselbe
+Referenzpatch im **festen ursprünglichen ±12-px-Fenster**, Peak ≥0,75,
+Lauf-Eindeutigkeit und inneres Maximum. Eine starre Suchposition ist bei
+späterer großer Bewegung erwartbar unbrauchbar; diese Bilder bleiben im
+Gesamtanteil enthalten. Zusätzlich enthalten die Replay-JSONs Matching mit
+grober Fensterverschiebung. Diese unbeschränkte Diagnose ist kein zulässiger
+Track und ersetzt die primären festen Anteile nicht. Fehlende verschobene
+Fenster werden ausdrücklich als unbrauchbar gezählt (zusätzlicher Reviewfix).
+
+| Reserve | Peakgrenze | Vorschläge mit Reserve / 12 | schlechteste Hauptfall-Region, alle / Holdout |
+| --- | --- | --- | --- |
+| 0,0 | 0.750 | 12/12 | 59,5 % / 58,4 % |
+| 0,025 | 0.775 | 12/12 | 95,2 % / 95,0 % |
+| 0,05 | 0.800 | 10/12 | 96,2 % / 96,0 % |
+| 0,075 | 0.825 | 9/12 | 100,0 % / 100,0 % |
+| 0,1 | 0.850 | 6/12 | 100,0 % / 100,0 % |
+
+**0,025 ist ein Entwicklungskandidat**, weil er alle zwölf geometrischen
+Reserven erhält und im Hauptfall gegenüber Reserve null schwache Regionen
+ersetzt. Höhere Reserven verwerfen ganze Einrichtungen. Das ist keine
+allgemein abgesicherte Rauschreserve: `115636` enthält weiterhin eine Region
+mit nur 65,35 % Holdout-Nutzbarkeit. Änderungen von k, Reserve und mehreren
+Rangfolgen beheben die unten genannten Trackingverluste nicht; verworfene
+Proben liegen separat in den temporären Artefakten.
+
+Die zusätzliche Halb-Pixel-Probe am Zweitbild entfällt im aktuellen Kandidaten.
+Ein **pauschal fehlender Nutzen ist nicht belegt**: Mit derselben 7/8-Regel,
+Reserve 0,025 und Lauf-Eindeutigkeit würde sie 13 von 240 Region-Aufzeichnung-
+Paaren zusätzlich entfernen. Im Hauptfall träfe sie einen zu 100 % nutzbaren
+Bereich, in `115636` vier Bereiche einschließlich des schwachen. In Run 02
+entfernt sie zwei schwache Bereiche, lässt aber sechs weitere unter 80 %.
+Sie ist damit ein gemischter Zusatzfilter und löst die Vorhersage-/Nullverlust-
+Probleme nicht. Die vorhandene Referenz-Bewegungsprobe für Fasen bleibt.
+
+### Probe-Vorhersage gegen Live-Nutzungsanteil je Lauf (Runde 2, überholt)
+
+Alle folgenden Regionen bestehen die Probe (≥7/8); Index und Mittelpunkt
+beziehen sich ausschließlich auf den **neuen** Vorschlag. Die ersten beiden
+Anteile verwenden alle originalen Diagnosebilder bzw. den getrennten Holdout.
+Die vollständigen Einzelwerte stehen direkt anschließend je Aufzeichnung.
+
+| Aufzeichnung | Bilder / Holdout | bestandene Regionen | schlechtester / medianer Live-Anteil | schlechtester Holdout-Anteil | kleinste vorgeschlagene Seitenzahl |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 / 200 | 20 | 91,8 % / 99,5 % | 91,5 % | 8 |
+| `live-20261028T113238Z/run-01` | 208 / 200 | 20 | 43,8 % / 99,0 % | 41,5 % | 7 |
+| `live-20261028T121101Z/run-01` | 152 / 144 | 20 | 3,9 % / 3,9 % | 0,0 % | 5 |
+| `live-20261028T123044Z/run-01` | 32 / 24 | 20 | 96,9 % / 100,0 % | 95,8 % | 9 |
+| `live-20261028T133959Z/run-01` | 38 / 30 | 20 | 97,4 % / 100,0 % | 96,7 % | 8 |
+| `live-20261028T134306Z/run-01` | 91 / 83 | 20 | 94,5 % / 100,0 % | 94,0 % | 6 |
+| `live-20261028T150914Z/run-01` | 32 / 24 | 20 | 68,8 % / 100,0 % | 58,3 % | 9 |
+| `live-20261028T150914Z/run-02` | 85 / 85 | 20 | 1,2 % / 16,5 % | 1,2 % | 9 |
+| `live-20261030T082502Z/run-01` | 85 / 77 | 20 | 100,0 % / 100,0 % | 100,0 % | 7 |
+| `live-20261030T113427Z/run-01` | 141 / 133 | 20 | 39,0 % / 47,5 % | 35,3 % | 9 |
+| `live-20261030T115636Z/run-01` | 210 / 202 | 20 | 66,2 % / 100,0 % | 65,3 % | 9 |
+| `live-20261030T133635Z/run-01` | 210 / 202 | 20 | 95,2 % / 100,0 % | 95,0 % | 10 |
+
+Unabhängige ORB/RANSAC-Lagebestimmung mit maskiertem Zeicheninhalt erklärt
+einen großen Teil niedriger Gesamtanteile: in `113427` werden später etwa
+72 px, in `121101` etwa 94 px und in Run 02 etwa 27 px Verschiebung gemessen.
+Die Bilder sind hell und strukturiert, keine schwarzen Ausfälle.
+Die Bewegungsanalyse bestimmt die Teilmenge unabhängig von den Korrelationen
+der ausgewählten Regionen; alle Bilder bleiben in obiger Gesamttabelle.
+
+| Aufzeichnung | im festen Fenster liegende Bilder / Holdout | ausgeschlossene Bilder | schlechtester Holdout-Anteil | Regionen unter 80 % Holdout |
+| --- | --- | --- | --- | --- |
+| `live-20261028T121101Z/run-01` | 6 / 0 | 146 | kein Holdout | — |
+| `live-20261028T150914Z/run-02` | 14 / 14 | 71 | 7,1 % | 8 |
+| `live-20261030T113427Z/run-01` | 66 / 58 | 75 | 81,0 % | 0 |
+
+**Auch nach dieser Bewegungsbereinigung bleiben in Run 02 acht von zwanzig
+Regionen unter 80 % Nutzbarkeit**, die schlechteste bei 7,14 %. Nur sechs
+Bilder von `121101` liegen im festen Fenster, alle noch in der Probe; dort
+existiert kein solcher Holdout-Nachweis. Für die anderen neun Aufzeichnungen
+wurde keine unabhängige ORB-Teilmenge bestimmt. Die gewünschte allgemeine
+Vorhersage ist deshalb nicht erreicht und darf nicht aus dem guten Hauptfall
+abgeleitet werden. Einzelheiten: `final-calibration-conditional.json`.
+
+### Tracker und Leser: vorher / nachher (Runde 2, überholt)
+
+Vorher: gespeicherter Regionsvorschlag. Nachher: neu vorgeschlagene Regionen.
+Beide verwenden denselben unveränderten HEAD-Tracker und Leser. Der Zahlen-
+vergleich erhält die GSV-Referenzen erst **nach** der Lesung: exakte numerische
+Gleichheit mit gültigen Telegrammen im bestehenden −1,5/+1-s-Vergleichsfenster,
+Zeitabbildung über `to_boottime_ns` und die gespeicherte Sitzungs-Zeitbasis.
+Keine Referenzkorrektur und keine Aufnahme-/DUT-Latenzaussage.
+
+| Aufzeichnung | Bilder | Tracks vorher → nachher | verlorene | Leserwerte vorher → nachher | Fehllesungen nachher |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z/run-01` | 208 | 206 → 205 | 1 | 175 → 174 | 0 |
+| `live-20261028T113238Z/run-01` | 208 | 121 → 185 | 10 | 108 → 159 | 0 |
+| `live-20261028T121101Z/run-01` | 152 | 23 → 30 | 2 | 21 → 28 | 0 |
+| `live-20261028T123044Z/run-01` | 32 | 31 → 32 | 0 | 22 → 23 | 0 |
+| `live-20261028T133959Z/run-01` | 38 | 37 → 37 | 0 | 0 → 0 | 0 |
+| `live-20261028T134306Z/run-01` | 91 | 51 → 90 | 0 | 26 → 43 | 0 |
+| `live-20261028T150914Z/run-01` | 32 | 32 → 32 | 0 | 28 → 28 | 0 |
+| `live-20261028T150914Z/run-02` | 85 | 14 → 21 | 0 | 12 → 18 | 0 |
+| `live-20261030T082502Z/run-01` | 85 | 85 → 85 | 0 | 80 → 80 | 0 |
+| `live-20261030T113427Z/run-01` | 141 | 66 → 66 | 0 | 53 → 53 | 0 |
+| `live-20261030T115636Z/run-01` | 210 | 210 → 210 | 0 | 164 → 164 | 0 |
+| `live-20261030T133635Z/run-01` | 210 | 102 → 210 | 0 | 71 → 150 | 0 |
+
+Geforderter Bestand: **738→859 Tracks auf 1123 Bildern, 3 verlorene, 0/695 Fehllesungen**.
+Gesamter vorhandener Bestand: **978→1203 Tracks auf 1492 Bildern, 13 verlorene, 0/920 Fehllesungen**.
+Alle ausgegebenen Werte besitzen Vergleichsreferenzen; `133959` liefert
+überhaupt keine Leserwerte und daher keinen zusätzlichen Leser-Nachweis.
+Trackingannahme bleibt von Messwertfreigabe getrennt.
+
+**Nullverlust ist nicht erreicht.** Neue Ablehnungen innerhalb der alten
+Annahmen, ohne Lockerung eines Lauf-Gates:
+
+| Einrichtung | verlorene Bilder | neuer Grund |
+| --- | --- | --- |
+| `live-20261028T110248Z/run-01` | `0179.png` | `rahmen_unstimmig` |
+| `live-20261028T113238Z/run-01` | `0098.png`, `0161.png`, `0165.png`, `0167.png`, `0169.png`, `0171.png`, `0173.png`, `0175.png`, `0177.png`, `0182.png` | `lcd_rand_fehlt` |
+| `live-20261028T121101Z/run-01` | `0034.png`, `0035.png` | `rahmen_unstimmig` |
+
+Diese Verluste werden weder aus dem Nenner entfernt noch durch zusätzliche
+neue Tracks verrechnet. Insbesondere sind die drei Verluste im geforderten
+Bestand nicht durch Bewegung außerhalb der 20-px-Laufgrenze entschuldigt:
+die vorherigen Fits lagen bei etwa 11,23 bzw. 16,19/16,06 px. Sie bleiben
+offene Regressionen der neuen Regionswahl.
+
+### Gegenprobe über den historischen Einrichtungsbestand (Runde 2)
+
+`/tmp/claude-1000/r13-25-review/recompute.py` unverändert gelesen/ausgeführt.
+Der unveränderte Reviewer findet beim Arbeitsbeginn **23** vollständige
+Einrichtungen, nicht die im Auftrag genannten 22; bei der Schlussprüfung
+**24**. `live-20261030T150751Z` kam während der Arbeit von außen hinzu.
+Die Kalibrierung und Replays beziehen sich auf den eingefrorenen Startbestand.
+Die vorherige R13-25-Mittelbildprobe besteht 23/23 Start-Einrichtungen.
+Neue API mit ausschließlich dem vorhandenen
+**gemittelten** `stability.png`: **23/23 Start-Einrichtungen FEHLER**,
+zusätzlich derselbe Fehler beim neu hinzugekommenen 24. Datensatz.
+Jeder neue Fehler hat
+`rahmenbereiche_einzelbilder_fehlen`: ein Mittelbild ist kein Acht-Einzelbild-
+Nachweis. Das ist keine Behauptung über eine mit echten Setup-Einzelbildern
+wiederholte Einrichtung und invalidiert keine bestätigten Profile.
+Die elf Einrichtungen mit Diagnosebildern ergeben mit den ausdrücklich
+als Ersatz verwendeten Bildern dagegen elf geometrisch gültige Vorschläge
+(zwei Aufzeichnungen teilen einen Vorschlag). Die übrigen zwölf Start-Einrichtungen können ohne neue Aufnahmen nicht
+inhaltlich nachkalibriert werden; der neue Datensatz ist nicht Teil des
+1.492-Bild-Startbestands.
+
+| Einrichtung | vorherige Mittelbildprobe | nur vorhandenes Mittelbild nachher | Begründung |
+| --- | --- | --- | --- |
+| `live-20261023T075343Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T084344Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T100613Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T121436Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T124012Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T124226Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261023T131121Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261026T082712Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T110248Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T113238Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T121101Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T123044Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T132724Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T133037Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T133959Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T134306Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T150539Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261028T150914Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T080144Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T082502Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T113427Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T115636Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T133635Z` | OK | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+| `live-20261030T150751Z` | nicht im Startbestand | FEHLER | acht ungemittelte Setup-Aufnahmen fehlen |
+
+### Synthetischer Sweep (Runde 2, überholt)
+
+`scripts/r13-coarse-sweep.py --proposals` mit neuen Vorschlägen, jeweils
+285 große und 729 kleine bekannte Ähnlichkeiten. Die Sweep-Vorschläge
+werden gegen die vollständigen Replay-Vorschläge auf Gleichheit geprüft.
+
+| Referenz | Fälle | Tracks vorher → nachher | nur vorher / nur nachher | falsche Quads >1 px | maximaler neuer Eckfehler |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261030T133635Z` | 1014 | 900 → 900 | 0 / 0 | 0 | 0.306292 px |
+| `live-20261028T110248Z` | 1014 | 900 → 900 | 0 / 0 | 0 | 0.415094 px |
+| `live-20261028T121101Z` | 1014 | 900 → 897 | 3 / 0 | 0 | 0.399965 px |
+
+**0 falsche Quads in 3.042 Fällen**, aber **drei verlorene synthetische Tracks**
+in `121101`, jeweils `rahmen_unstimmig`: (dx,dy,Winkel,Maßstab)
+(−9,−13,1,2°,1), (11,−13,1,2°,0,996), (11,−13,1,2°,1).
+Damit ist auch der synthetische Nullverlust-Nachweis nicht bestanden.
+
+### Dauer der Einrichtung (Runde 2, überholt)
+
+Keine neue Hardware-Aufnahme und keine erneute Messung der gesamten
+Assistentendauer. Das bestehende Wartefenster bleibt 15 s in der Werkbank
+und 30 s im Harvest-CLI; Fokus, Regler und Aufnahmezeit sind hier nicht
+neu vermessen. Die acht Rohbilder stammen aus dem vorhandenen Stapel.
+Gemessen wird ausschließlich **monotone Host-Verarbeitungsdauer mit
+`perf_counter`, ms**, keine Aufnahme-/DUT-Latenz.
+
+Nach Ende der eigenen Tests/Replays/Sweeps: zwei OpenCV-Threads, je
+Einrichtung ein warmer Durchlauf und sieben AB/BA-Paare. Referenz und acht
+Einzelbilder liegen bereits im Speicher; die historische ganzzahlige
+Ersatzbildausrichtung zählt nicht zum Produktablauf. Vorher ist die
+HEAD-Vorschlagsfunktion, nachher die Einzelbildprobe. Die vorhandene
+Mittelbilddatei wird separat dekodiert, mit dem bereits vorhandenen
+Mittelbild verglichen und gehasht, ohne erneuten Schreibvorgang.
+Kopien beim Kameraeinlesen, der übrige Assistent und Overlays sind nicht
+Bestandteil dieser kleinen Kostenmessung.
+
+| Einrichtung | alter Vorschlag | neuer Vorschlag | vorhandene PNG prüfen/SHA | neu gesamt | Mehrarbeit |
+| --- | --- | --- | --- | --- | --- |
+| `live-20261028T110248Z` | 518.303 | 650.574 | 48.872 | 701.941 | 183.638 |
+| `live-20261028T121101Z` | 513.705 | 673.173 | 50.997 | 726.765 | 213.059 |
+| `live-20261028T150914Z` | 504.926 | 691.315 | 52.505 | 744.207 | 239.282 |
+| `live-20261030T082502Z` | 511.955 | 675.443 | 48.029 | 724.350 | 212.395 |
+| `live-20261030T113427Z` | 496.831 | 674.961 | 50.310 | 728.233 | 231.402 |
+| `live-20261030T115636Z` | 485.279 | 666.061 | 48.882 | 713.842 | 228.563 |
+| `live-20261030T133635Z` | 496.627 | 682.625 | 49.082 | 739.989 | 243.363 |
+
+### Softwareprüfungen und Artefakte
+
+<span id="r13-25-runde-3-pruefung"></span>**Runde 3:** testgetrieben neu sind:
+
+* probefeste Bereiche bleiben an Ort und Index, Ersatz ist der nächste
+  probefeste Kandidat derselben Seiten;
+* ein Ersatz mit systematischem 1-px-Versatz wird übersprungen;
+* stufenweise Lockerung nur bis zur erfüllten Reserve;
+* WARNUNG bei Ersatz ohne Lagekonsistenz, OK sonst.
+
+Die Regression `test_r25_single_frame_reserve_keeps_control_track` deckt
+jetzt fünf Fälle ab. Grün sind `110248/0012`, `110248/0179` und
+`113238/0098`. Rot bleiben `121101/0034` und der neu ergänzte offene Fall
+`113238/0163`, beide ehrlich und ohne Testlockerung. Seit dem
+[Review-Nachtrag](#r13-25-review-korrekturen) sind beide als striktes
+`xfail` markiert, mit `raises=AssertionError`.
+
+Gezielte sechs pytest-Dateien mit `-n 3`: **1 failed, 1009 passed,
+2 skipped in 214,55 s**. Der eine Fehlschlag ist `121101/0034`; der Lauf war
+vor dem Ergänzen von `113238/0163`. Die Socket-Tests liefen diesmal ohne
+Sandbox-EPERM. Separat: beide offenen Fälle rot, vier grün. Node 59/59,
+Ruff, `wiki-check --check` und `oq-index --check` ohne Befund.
+
+**Runde 2:** Testgetrieben: einzelne Rohbilder, 7/8-Regel, fehlende Belege, Bewegungsgate-
+Reihenfolge, 2-px-Lageprüfung, Speicherkopien, Bildweitergabe und -verlust,
+einmaliges PNG-Schreiben, Laufstart-Kopplung und deutsche Mittelpunkttexte.
+Eine unabhängige Nachprüfung fand einen Fehler im Offline-Auswerter:
+fehlende verschobene Suchfenster verwendeten zuvor den festen Treffer.
+Eigener roter Test, danach `region_match` mit Peak null/unbrauchbar.
+
+Gezielte sechs pytest-Dateien mit `-n 3`: **6 failed, 998 passed, 2 skipped in 259.01s (0:04:19)**.
+Drei echte neue Regionswahl-Regressionen stehen als rote Beispiele in
+`test_r25_single_frame_reserve_keeps_control_track` (110248/0179,
+121101/0034, 113238/0098). Drei weitere API-Tests scheitern vor HTTP-Anfragen
+mit `PermissionError: Operation not permitted` beim Socket-Öffnen in der
+Sandbox: `test_status_carries_csrf_and_notice`,
+`test_setup_passes_cell_text_and_errors_become_409`,
+`test_unknown_overlay_is_404`. Die Einschränkung wurde nicht durch Skips
+oder geänderte Produktlogik kaschiert. Ein daneben beobachtetes
+`FileExistsError` im Test-Runner-Stummel `ready_service` war ein Rennen
+mit der Diagnosedatei; `mkdir(exist_ok=True)` im Stummel und beide
+betroffenen Testvarianten wurden separat nachgeprüft.
+
+Node: 59/59 bestanden. Ruff, `wiki-check --check`, `oq-index --check` und
+`git diff --check` im Abschlussstand ohne Befund. Kein Docs-Playwright,
+kein Docs-Build, keine volle Suite. Die bereits bekannten echten roten
+Regressionen bleiben offen; dieser Stand ist nicht abnahmefähig.
+
+### Geänderte Dateien {#r13-25-dateien}
+
+Review-Korrekturen 2026-11-04 (uncommittet auf 73b23d6):
+`src/dispread/live/frame_tracking.py` (nur Kennzahlen),
+`src/dispread/live/setup.py`, `src/dispread/live/service.py`,
+`scripts/r13-offline-setup.py`, `tests/test_frame_tracking.py`,
+`tests/test_live_setup_tracking.py`, `tests/test_live_service.py`,
+`tests/test_r13_offline_setup.py`, `CHANGELOG.md`, `docs/VALIDATION.md`,
+`docs/anleitung/10-kamera-livevorschau.md`.
+
+Runde 3 (uncommittet auf WIP-Commit 9a89b98): `src/dispread/live/frame_tracking.py`,
+`src/dispread/live/setup.py`, `src/dispread/workbench/fields.py`,
+`tests/test_frame_tracking.py`, `tests/test_live_setup_tracking.py`,
+`CHANGELOG.md`, `docs/VALIDATION.md`, `docs/lab_journal.md`,
+`docs/open-questions.md` (OQ-26), `docs/project_history.md`,
+`docs/anleitung/10-kamera-livevorschau.md`.
+
+Runde 2, R13-25-Arbeitsbaum einschließlich des übernommenen Vorstands:
+
+* Lauf/Einrichtung: `src/dispread/live/frame_tracking.py`,
+  `src/dispread/live/setup.py`, `src/dispread/live/service.py`,
+  `src/dispread/live/session.py`.
+* Werkbank: `src/dispread/workbench/fields.py`,
+  `src/dispread/workbench/static/live.js`.
+* Skripte: `scripts/r13-stability-eval.py`, `scripts/r13-coarse-sweep.py`.
+* Tests: `tests/test_frame_tracking.py`, `tests/test_live_setup_tracking.py`,
+  `tests/test_r13_stability_eval.py`, `tests/test_live_setup.py`,
+  `tests/test_live_service.py`, `tests/test_live_api.py`,
+  `tests/live_client.test.mjs`.
+* Dokumentation: `CHANGELOG.md`, `docs/VALIDATION.md`, `docs/lab_journal.md`,
+  `docs/open-questions.md` (OQ-26), `docs/project_history.md`,
+  `docs/anleitung/10-kamera-livevorschau.md`.
+
+Reproduzierbare Eingaben und Ergebnisse unter `/tmp/r13-25-correction/`:
+`final-run01/`, `final-run02/`, `final-extra/` (alle Quads, Lesungen,
+Referenzvergleiche, Probe-Offets und Bereiche); `final-calibration.py`,
+`final-calibration.json`, `final-calibration-summary.json`,
+`final-calibration-conditional.json` (alle k-/Reserve-/Nutzungsanteile);
+`diagnose-pose-attribution.py` / `pose-attribution.json`;
+`final-recompute.log`, `final-sweep.json`, `setup-cost-final.py` /
+`setup-cost-final.json`, `final-tests-reviewed.log`, `final-node.log` und
+`final-ruff.log`. Verworfene Reserven/Rangfolgen liegen in eigenen Dateien;
+sie sind kein abschließender Erfolgsnachweis.
+
+```bash
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-stability-eval.py --live-root /home/me-systeme/picam-ai/var/live \
+  --run live-20261030T133635Z --run live-20261030T115636Z \
+  --run live-20261030T113427Z --run live-20261030T082502Z \
+  --run live-20261028T150914Z --run live-20261028T110248Z \
+  --run live-20261028T121101Z --output /tmp/r13-25-correction/final-run01
+# run-02: dieselbe Einrichtung / derselbe Vorschlag wie run-01
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-stability-eval.py --live-root /home/me-systeme/picam-ai/var/live \
+  --run live-20261028T150914Z --recording run-02 \
+  --output /tmp/r13-25-correction/final-run02
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-stability-eval.py --live-root /home/me-systeme/picam-ai/var/live \
+  --run live-20261028T113238Z --run live-20261028T123044Z \
+  --run live-20261028T133959Z --run live-20261028T134306Z \
+  --output /tmp/r13-25-correction/final-extra
+PYTHONPATH=src DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/python \
+  scripts/r13-coarse-sweep.py --baseline /tmp/r13-25-correction/baseline.py \
+  --proposals /tmp/r13-25-correction/sweep-proposals \
+  --output /tmp/r13-25-correction/final-sweep.json --threads 2 \
+  --run live-20261030T133635Z --run live-20261028T110248Z --run live-20261028T121101Z
+./.venv/bin/pytest tests/test_frame_tracking.py tests/test_live_setup_tracking.py \
+  tests/test_r13_stability_eval.py tests/test_live_setup.py \
+  tests/test_live_service.py tests/test_live_api.py -n 3 -q
+```
+
+### Einzelwerte der Probe-Vorhersage (Runde 3)
+
+Jede Tabelle zeigt alle angenommenen Regionen einer Aufzeichnung in der
+Runde-3-Auswahl. „bisher“ steht für einen unverändert übernommenen Bereich
+gleichen Index. Probe-Spitze ist die maßgebliche k-te bestandene Korrelation
+nach der stationären Ersatzbildausrichtung; alle erfüllen ≥0,775 und ≥7/8.
+Live/Holdout stammen aus den unveränderten Diagnosebildern im festen Fenster.
+Die Runde-2-Einzelwerte stehen in `/tmp/r13-25-correction/final-calibration.json`.
+
+**`live-20261028T110248Z/run-01`** (208 Bilder, 200 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 974 / 330 | Ersatz für 749 / 375 (229 px) | 0.849 | 100,0 % | 100,0 % |
+| 1 | 781 / 629 | bisher | 0.808 | 94,7 % | 94,5 % |
+| 2 | 1366 / 348 | bisher | 0.822 | 100,0 % | 100,0 % |
+| 3 | 1322 / 709 | bisher | 0.884 | 99,5 % | 99,5 % |
+| 4 | 884 / 330 | bisher | 0.790 | 99,0 % | 99,0 % |
+| 5 | 865 / 705 | Ersatz für 828 / 649 (67 px) | 0.918 | 100,0 % | 100,0 % |
+| 6 | 1488 / 348 | bisher | 0.926 | 100,0 % | 100,0 % |
+| 7 | 1415 / 714 | bisher | 0.926 | 100,0 % | 100,0 % |
+| 8 | 1164 / 341 | Ersatz für 678 / 422 (493 px) | 0.847 | 100,0 % | 100,0 % |
+| 9 | 898 / 710 | Ersatz für 734 / 645 (176 px) | 0.880 | 100,0 % | 100,0 % |
+| 10 | 1523 / 362 | bisher | 0.858 | 100,0 % | 100,0 % |
+| 11 | 1316 / 652 | bisher | 0.847 | 99,5 % | 99,5 % |
+| 12 | 1214 / 370 | Ersatz für 844 / 407 (372 px) | 0.777 | 93,8 % | 93,5 % |
+| 13 | 872 / 644 | bisher | 0.786 | 95,2 % | 95,0 % |
+| 14 | 1308 / 342 | Ersatz für 1269 / 417 (85 px) | 0.914 | 100,0 % | 100,0 % |
+| 15 | 1364 / 618 | bisher | 0.827 | 99,0 % | 99,0 % |
+| 16 | 822 / 334 | bisher | 0.847 | 100,0 % | 100,0 % |
+| 17 | 775 / 704 | bisher | 0.901 | 99,5 % | 99,5 % |
+| 18 | 1404 / 361 | bisher | 0.788 | 99,0 % | 99,0 % |
+| 19 | 1164 / 660 | Ersatz für 1195 / 645 (34 px) | 0.805 | 99,5 % | 99,5 % |
+
+**`live-20261028T113238Z/run-01`** (208 Bilder, 200 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 894 / 325 | Ersatz für 688 / 417 (226 px) | 0.786 | 100,0 % | 100,0 % |
+| 1 | 785 / 699 | Ersatz für 791 / 624 (75 px) | 0.896 | 100,0 % | 100,0 % |
+| 2 | 1423 / 368 | Ersatz für 1398 / 351 (30 px) | 0.806 | 43,3 % | 41,0 % |
+| 3 | 1321 / 643 | bisher | 0.844 | 99,0 % | 99,0 % |
+| 4 | 1158 / 341 | Ersatz für 843 / 320 (316 px) | 0.797 | 49,0 % | 47,0 % |
+| 5 | 875 / 701 | Ersatz für 818 / 633 (89 px) | 0.876 | 100,0 % | 100,0 % |
+| 6 | 1319 / 337 | bisher | 0.911 | 76,9 % | 76,0 % |
+| 7 | 1397 / 649 | bisher | 0.823 | 97,6 % | 97,5 % |
+| 8 | 1207 / 433 | Ersatz für 759 / 369 (453 px) | 0.826 | 75,0 % | 74,5 % |
+| 9 | 711 / 700 | bisher | 0.892 | 100,0 % | 100,0 % |
+| 10 | 1283 / 427 | Ersatz für 1343 / 408 (63 px) | 0.812 | 80,3 % | 79,5 % |
+| 11 | 1355 / 624 | bisher | 0.855 | 97,6 % | 97,5 % |
+| 12 | 1492 / 384 | Ersatz für 788 / 343 (705 px) | 0.792 | 48,1 % | 46,0 % |
+| 13 | 908 / 705 | Ersatz für 744 / 640 (176 px) | 0.858 | 50,0 % | 48,0 % |
+| 14 | 1529 / 355 | Ersatz für 1369 / 351 (160 px) | 0.839 | 43,8 % | 41,5 % |
+| 15 | 1285 / 650 | bisher | 0.805 | 98,1 % | 98,0 % |
+| 16 | 1520 / 417 | Ersatz für 887 / 396 (633 px) | 0.817 | 93,8 % | 93,5 % |
+| 17 | 825 / 693 | bisher | 0.822 | 100,0 % | 100,0 % |
+| 18 | 1554 / 415 | Ersatz für 1301 / 397 (254 px) | 0.852 | 100,0 % | 100,0 % |
+| 19 | 1303 / 615 | bisher | 0.800 | 100,0 % | 100,0 % |
+
+**`live-20261028T121101Z/run-01`** (152 Bilder, 144 Holdout, Konsistenzstufe ohne):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 519 / 485 | bisher | 0.817 | 21,7 % | 17,4 % |
+| 1 | 834 / 782 | Ersatz für 698 / 718 (150 px) | 0.963 | 24,3 % | 20,1 % |
+| 2 | 1231 / 398 | Ersatz für 1133 / 450 (111 px) | 0.873 | 24,3 % | 20,1 % |
+| 3 | 1101 / 774 | bisher | 0.908 | 24,3 % | 20,1 % |
+| 4 | 556 / 446 | Ersatz für 664 / 389 (122 px) | 0.840 | 22,4 % | 18,1 % |
+| 5 | 534 / 669 | Ersatz für 690 / 690 (157 px) | 0.898 | 24,3 % | 20,1 % |
+| 6 | 1258 / 410 | bisher | 0.792 | 17,8 % | 13,2 % |
+| 7 | 1109 / 745 | bisher | 0.829 | 24,3 % | 20,1 % |
+| 8 | 499 / 399 | Ersatz für 685 / 424 (188 px) | 0.799 | 24,3 % | 20,1 % |
+| 9 | 892 / 730 | Ersatz für 709 / 770 (187 px) | 0.824 | 24,3 % | 20,1 % |
+| 10 | 1173 / 479 | bisher | 0.794 | 24,3 % | 20,1 % |
+| 11 | 1270 / 695 | Ersatz für 1135 / 774 (156 px) | 0.803 | 24,3 % | 20,1 % |
+| 12 | 723 / 398 | Ersatz für 704 / 463 (68 px) | 0.867 | 24,3 % | 20,1 % |
+| 13 | 898 / 702 | bisher | 0.797 | 24,3 % | 20,1 % |
+| 14 | 1283 / 394 | Ersatz für 1100 / 459 (194 px) | 0.891 | 24,3 % | 20,1 % |
+| 15 | 1097 / 706 | bisher | 0.841 | 24,3 % | 20,1 % |
+| 16 | 538 / 517 | Ersatz für 610 / 447 (100 px) | 0.921 | 24,3 % | 20,1 % |
+| 17 | 921 / 723 | Ersatz für 816 / 720 (105 px) | 0.792 | 24,3 % | 20,1 % |
+| 18 | 1196 / 408 | bisher | 0.823 | 24,3 % | 20,1 % |
+| 19 | 1361 / 714 | bisher | 0.797 | 24,3 % | 20,1 % |
+
+**`live-20261028T123044Z/run-01`** (32 Bilder, 24 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 640 / 387 | bisher | 0.805 | 100,0 % | 100,0 % |
+| 1 | 686 / 734 | bisher | 0.939 | 100,0 % | 100,0 % |
+| 2 | 1077 / 368 | Ersatz für 1188 / 424 (124 px) | 0.833 | 100,0 % | 100,0 % |
+| 3 | 1263 / 634 | bisher | 0.873 | 100,0 % | 100,0 % |
+| 4 | 620 / 362 | bisher | 0.829 | 100,0 % | 100,0 % |
+| 5 | 560 / 643 | Ersatz für 444 / 744 (154 px) | 0.813 | 100,0 % | 100,0 % |
+| 6 | 1103 / 379 | bisher | 0.817 | 100,0 % | 100,0 % |
+| 7 | 1000 / 713 | Ersatz für 1054 / 637 (93 px) | 0.814 | 100,0 % | 100,0 % |
+| 8 | 672 / 426 | bisher | 0.800 | 100,0 % | 100,0 % |
+| 9 | 671 / 667 | bisher | 0.850 | 100,0 % | 100,0 % |
+| 10 | 1072 / 461 | Ersatz für 1157 / 428 (91 px) | 0.824 | 100,0 % | 100,0 % |
+| 11 | 1086 / 715 | bisher | 0.839 | 100,0 % | 100,0 % |
+| 12 | 623 / 439 | bisher | 0.851 | 100,0 % | 100,0 % |
+| 13 | 521 / 657 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 14 | 1218 / 609 | Ersatz für 1273 / 453 (165 px) | 0.922 | 100,0 % | 100,0 % |
+| 15 | 1199 / 714 | bisher | 0.819 | 100,0 % | 100,0 % |
+| 16 | 675 / 389 | bisher | 0.808 | 96,9 % | 95,8 % |
+| 17 | 488 / 684 | bisher | 0.845 | 100,0 % | 100,0 % |
+| 18 | 900 / 363 | Ersatz für 1065 / 414 (173 px) | 0.792 | 100,0 % | 100,0 % |
+| 19 | 969 / 715 | Ersatz für 1052 / 682 (89 px) | 0.820 | 100,0 % | 100,0 % |
+
+**`live-20261028T133959Z/run-01`** (38 Bilder, 30 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 659 / 381 | bisher | 0.867 | 100,0 % | 100,0 % |
+| 1 | 790 / 645 | bisher | 0.825 | 100,0 % | 100,0 % |
+| 2 | 1380 / 385 | bisher | 0.874 | 100,0 % | 100,0 % |
+| 3 | 1300 / 708 | bisher | 0.899 | 100,0 % | 100,0 % |
+| 4 | 697 / 392 | bisher | 0.796 | 97,4 % | 96,7 % |
+| 5 | 1272 / 709 | Ersatz für 768 / 703 (504 px) | 0.898 | 100,0 % | 100,0 % |
+| 6 | 1472 / 315 | bisher | 0.975 | 100,0 % | 100,0 % |
+| 7 | 1210 / 704 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 8 | 732 / 296 | bisher | 0.869 | 100,0 % | 100,0 % |
+| 9 | 602 / 728 | bisher | 0.826 | 100,0 % | 100,0 % |
+| 10 | 1259 / 312 | Ersatz für 1309 / 327 (52 px) | 0.957 | 100,0 % | 100,0 % |
+| 11 | 1433 / 609 | bisher | 0.857 | 100,0 % | 100,0 % |
+| 12 | 770 / 297 | bisher | 0.870 | 100,0 % | 100,0 % |
+| 13 | 661 / 709 | bisher | 0.885 | 100,0 % | 100,0 % |
+| 14 | 1343 / 327 | bisher | 0.804 | 100,0 % | 100,0 % |
+| 15 | 1330 / 647 | Ersatz für 1244 / 630 (88 px) | 0.842 | 100,0 % | 100,0 % |
+| 16 | 529 / 354 | bisher | 0.836 | 100,0 % | 100,0 % |
+| 17 | 967 / 714 | bisher | 0.871 | 100,0 % | 100,0 % |
+| 18 | 1414 / 372 | bisher | 0.856 | 100,0 % | 100,0 % |
+| 19 | 1388 / 593 | Ersatz für 1266 / 656 (137 px) | 0.971 | 100,0 % | 100,0 % |
+
+**`live-20261028T134306Z/run-01`** (91 Bilder, 83 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 573 / 474 | Ersatz für 583 / 221 (253 px) | 0.854 | 100,0 % | 100,0 % |
+| 1 | 807 / 498 | Ersatz für 810 / 455 (43 px) | 0.777 | 98,9 % | 98,8 % |
+| 2 | 1287 / 260 | Ersatz für 1344 / 225 (67 px) | 0.855 | 100,0 % | 100,0 % |
+| 3 | 1431 / 490 | Ersatz für 1257 / 514 (176 px) | 0.834 | 100,0 % | 100,0 % |
+| 4 | 784 / 160 | bisher | 0.791 | 95,6 % | 95,2 % |
+| 5 | 611 / 504 | Ersatz für 766 / 440 (168 px) | 0.903 | 100,0 % | 100,0 % |
+| 6 | 1448 / 270 | Ersatz für 1385 / 209 (88 px) | 0.781 | 100,0 % | 100,0 % |
+| 7 | 1216 / 508 | bisher | 0.797 | 100,0 % | 100,0 % |
+| 8 | 909 / 158 | Ersatz für 582 / 255 (341 px) | 0.834 | 100,0 % | 100,0 % |
+| 9 | 938 / 512 | Ersatz für 679 / 450 (266 px) | 0.815 | 100,0 % | 100,0 % |
+| 10 | 1309 / 157 | Ersatz für 1311 / 216 (59 px) | 0.786 | 97,8 % | 97,6 % |
+| 11 | 1456 / 467 | Ersatz für 1190 / 526 (272 px) | 0.858 | 100,0 % | 100,0 % |
+| 12 | 945 / 161 | Ersatz für 551 / 190 (395 px) | 0.843 | 100,0 % | 100,0 % |
+| 13 | 1475 / 420 | Ersatz für 719 / 461 (757 px) | 0.909 | 100,0 % | 100,0 % |
+| 14 | 1084 / 261 | Ersatz für 1403 / 170 (332 px) | 0.868 | 100,0 % | 100,0 % |
+| 15 | 1338 / 523 | bisher | 0.790 | 94,5 % | 94,0 % |
+| 16 | 756 / 160 | bisher | 0.800 | 96,7 % | 96,4 % |
+| 17 | 986 / 160 | Ersatz für 671 / 483 (451 px) | 0.857 | 98,9 % | 98,8 % |
+| 18 | 1030 / 156 | Ersatz für 1241 / 216 (219 px) | 0.873 | 100,0 % | 100,0 % |
+| 19 | 1451 / 510 | bisher | 0.812 | 100,0 % | 100,0 % |
+
+**`live-20261028T150914Z/run-01`** (32 Bilder, 24 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 665 / 296 | bisher | 0.837 | 100,0 % | 100,0 % |
+| 1 | 724 / 609 | bisher | 0.812 | 96,9 % | 95,8 % |
+| 2 | 1251 / 342 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 3 | 1406 / 629 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 4 | 840 / 565 | Ersatz für 701 / 326 (276 px) | 0.903 | 84,4 % | 83,3 % |
+| 5 | 719 / 662 | bisher | 0.921 | 100,0 % | 100,0 % |
+| 6 | 1272 / 294 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 7 | 1126 / 647 | bisher | 0.833 | 100,0 % | 100,0 % |
+| 8 | 901 / 564 | Ersatz für 674 / 360 (305 px) | 0.948 | 100,0 % | 100,0 % |
+| 9 | 562 / 676 | bisher | 0.906 | 100,0 % | 100,0 % |
+| 10 | 1335 / 302 | bisher | 0.858 | 68,8 % | 58,3 % |
+| 11 | 1400 / 582 | bisher | 0.835 | 93,8 % | 91,7 % |
+| 12 | 542 / 390 | bisher | 0.798 | 96,9 % | 95,8 % |
+| 13 | 644 / 598 | bisher | 0.815 | 93,8 % | 91,7 % |
+| 14 | 1304 / 299 | bisher | 0.930 | 100,0 % | 100,0 % |
+| 15 | 1156 / 609 | bisher | 0.814 | 100,0 % | 100,0 % |
+| 16 | 900 / 623 | Ersatz für 615 / 335 (405 px) | 0.787 | 71,9 % | 62,5 % |
+| 17 | 662 / 637 | bisher | 0.797 | 68,8 % | 58,3 % |
+| 18 | 1177 / 297 | bisher | 0.925 | 100,0 % | 100,0 % |
+| 19 | 1127 / 589 | bisher | 0.818 | 100,0 % | 100,0 % |
+
+**`live-20261028T150914Z/run-02`** (85 Bilder, 85 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 665 / 296 | bisher | 0.837 | 100,0 % | 100,0 % |
+| 1 | 724 / 609 | bisher | 0.812 | 84,7 % | 84,7 % |
+| 2 | 1251 / 342 | bisher | 0.889 | 100,0 % | 100,0 % |
+| 3 | 1406 / 629 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 4 | 840 / 565 | Ersatz für 701 / 326 (276 px) | 0.903 | 84,7 % | 84,7 % |
+| 5 | 719 / 662 | bisher | 0.921 | 100,0 % | 100,0 % |
+| 6 | 1272 / 294 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 7 | 1126 / 647 | bisher | 0.833 | 100,0 % | 100,0 % |
+| 8 | 901 / 564 | Ersatz für 674 / 360 (305 px) | 0.948 | 89,4 % | 89,4 % |
+| 9 | 562 / 676 | bisher | 0.906 | 83,5 % | 83,5 % |
+| 10 | 1335 / 302 | bisher | 0.858 | 98,8 % | 98,8 % |
+| 11 | 1400 / 582 | bisher | 0.835 | 100,0 % | 100,0 % |
+| 12 | 542 / 390 | bisher | 0.798 | 69,4 % | 69,4 % |
+| 13 | 644 / 598 | bisher | 0.815 | 85,9 % | 85,9 % |
+| 14 | 1304 / 299 | bisher | 0.930 | 100,0 % | 100,0 % |
+| 15 | 1156 / 609 | bisher | 0.814 | 85,9 % | 85,9 % |
+| 16 | 900 / 623 | Ersatz für 615 / 335 (405 px) | 0.787 | 58,8 % | 58,8 % |
+| 17 | 662 / 637 | bisher | 0.797 | 55,3 % | 55,3 % |
+| 18 | 1177 / 297 | bisher | 0.925 | 100,0 % | 100,0 % |
+| 19 | 1127 / 589 | bisher | 0.818 | 92,9 % | 92,9 % |
+
+**`live-20261030T082502Z/run-01`** (85 Bilder, 77 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 672 / 319 | bisher | 0.911 | 100,0 % | 100,0 % |
+| 1 | 675 / 602 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 2 | 1370 / 296 | bisher | 0.985 | 100,0 % | 100,0 % |
+| 3 | 1206 / 669 | bisher | 0.982 | 100,0 % | 100,0 % |
+| 4 | 754 / 298 | bisher | 0.936 | 100,0 % | 100,0 % |
+| 5 | 712 / 599 | bisher | 0.870 | 100,0 % | 100,0 % |
+| 6 | 1204 / 378 | bisher | 0.959 | 100,0 % | 100,0 % |
+| 7 | 1155 / 670 | bisher | 0.976 | 100,0 % | 100,0 % |
+| 8 | 561 / 298 | bisher | 0.917 | 100,0 % | 100,0 % |
+| 9 | 865 / 618 | bisher | 0.946 | 100,0 % | 100,0 % |
+| 10 | 1239 / 358 | bisher | 0.959 | 100,0 % | 100,0 % |
+| 11 | 1240 / 667 | bisher | 0.981 | 100,0 % | 100,0 % |
+| 12 | 668 / 384 | bisher | 0.904 | 100,0 % | 100,0 % |
+| 13 | 946 / 599 | bisher | 0.955 | 100,0 % | 100,0 % |
+| 14 | 1304 / 294 | bisher | 0.978 | 100,0 % | 100,0 % |
+| 15 | 1294 / 666 | bisher | 0.973 | 100,0 % | 100,0 % |
+| 16 | 726 / 329 | bisher | 0.898 | 100,0 % | 100,0 % |
+| 17 | 802 / 613 | bisher | 0.932 | 100,0 % | 100,0 % |
+| 18 | 1282 / 349 | bisher | 0.960 | 100,0 % | 100,0 % |
+| 19 | 1209 / 581 | bisher | 0.952 | 100,0 % | 100,0 % |
+
+**`live-20261030T113427Z/run-01`** (141 Bilder, 133 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 721 / 299 | bisher | 0.794 | 97,9 % | 97,7 % |
+| 1 | 833 / 660 | Ersatz für 697 / 625 (140 px) | 0.848 | 98,6 % | 98,5 % |
+| 2 | 1369 / 296 | bisher | 0.929 | 98,6 % | 98,5 % |
+| 3 | 1428 / 578 | bisher | 0.840 | 91,5 % | 91,0 % |
+| 4 | 754 / 298 | bisher | 0.830 | 98,6 % | 98,5 % |
+| 5 | 735 / 590 | bisher | 0.776 | 61,0 % | 58,6 % |
+| 6 | 1254 / 368 | bisher | 0.800 | 75,9 % | 74,4 % |
+| 7 | 1214 / 598 | bisher | 0.819 | 87,2 % | 86,5 % |
+| 8 | 931 / 295 | Ersatz für 672 / 319 (260 px) | 0.844 | 98,6 % | 98,5 % |
+| 9 | 591 / 680 | bisher | 0.819 | 98,6 % | 98,5 % |
+| 10 | 1304 / 295 | bisher | 0.891 | 98,6 % | 98,5 % |
+| 11 | 1178 / 590 | bisher | 0.832 | 85,8 % | 85,0 % |
+| 12 | 981 / 293 | Ersatz für 726 / 329 (258 px) | 0.813 | 97,9 % | 97,7 % |
+| 13 | 746 / 617 | bisher | 0.810 | 91,5 % | 91,0 % |
+| 14 | 1249 / 294 | bisher | 0.843 | 95,7 % | 95,5 % |
+| 15 | 1289 / 661 | bisher | 0.926 | 98,6 % | 98,5 % |
+| 16 | 561 / 298 | bisher | 0.811 | 74,5 % | 72,9 % |
+| 17 | 891 / 674 | Ersatz für 665 / 582 (244 px) | 0.890 | 98,6 % | 98,5 % |
+| 18 | 1315 / 357 | bisher | 0.802 | 97,9 % | 97,7 % |
+| 19 | 1161 / 639 | bisher | 0.793 | 68,1 % | 66,2 % |
+
+**`live-20261030T115636Z/run-01`** (210 Bilder, 202 Holdout, Konsistenzstufe 0.35):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 1154 / 381 | Ersatz für 813 / 409 (342 px) | 0.863 | 100,0 % | 100,0 % |
+| 1 | 915 / 736 | bisher | 0.941 | 100,0 % | 100,0 % |
+| 2 | 1265 / 376 | Ersatz für 1462 / 456 (213 px) | 0.814 | 100,0 % | 100,0 % |
+| 3 | 1485 / 659 | bisher | 0.895 | 100,0 % | 100,0 % |
+| 4 | 1216 / 388 | Ersatz für 883 / 466 (342 px) | 0.791 | 99,5 % | 99,5 % |
+| 5 | 859 / 742 | bisher | 0.933 | 100,0 % | 100,0 % |
+| 6 | 1294 / 388 | bisher | 0.885 | 100,0 % | 100,0 % |
+| 7 | 1396 / 713 | bisher | 0.861 | 100,0 % | 100,0 % |
+| 8 | 952 / 735 | Ersatz für 840 / 426 (329 px) | 0.938 | 100,0 % | 100,0 % |
+| 9 | 830 / 741 | bisher | 0.942 | 100,0 % | 100,0 % |
+| 10 | 1412 / 400 | bisher | 0.791 | 97,6 % | 97,5 % |
+| 11 | 1283 / 640 | bisher | 0.800 | 95,2 % | 95,0 % |
+| 12 | 980 / 733 | Ersatz für 838 / 459 (309 px) | 0.918 | 100,0 % | 100,0 % |
+| 13 | 860 / 654 | bisher | 0.785 | 86,2 % | 86,1 % |
+| 14 | 1220 / 662 | Ersatz für 1310 / 436 (243 px) | 0.776 | 92,9 % | 92,6 % |
+| 15 | 1431 / 647 | bisher | 0.778 | 99,0 % | 99,0 % |
+| 16 | 1026 / 725 | Ersatz für 866 / 379 (381 px) | 0.884 | 100,0 % | 100,0 % |
+| 17 | 857 / 705 | bisher | 0.831 | 98,1 % | 98,0 % |
+| 18 | 1135 / 736 | Ersatz für 1360 / 444 (369 px) | 0.811 | 96,2 % | 96,0 % |
+
+**`live-20261030T133635Z/run-01`** (210 Bilder, 202 Holdout, Konsistenzstufe 0.5):
+
+| Index | Mittelpunkt x/y | Herkunft | Probe ≥7/8, k-te Spitze | Live nutzbar | Holdout nutzbar |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 1168 / 381 | Ersatz für 873 / 385 (295 px) | 0.830 | 100,0 % | 100,0 % |
+| 1 | 915 / 737 | bisher | 0.951 | 100,0 % | 100,0 % |
+| 2 | 1379 / 391 | Ersatz für 1256 / 422 (127 px) | 0.832 | 100,0 % | 100,0 % |
+| 3 | 1485 / 658 | bisher | 0.881 | 100,0 % | 100,0 % |
+| 4 | 901 / 694 | Ersatz für 829 / 411 (292 px) | 0.830 | 100,0 % | 100,0 % |
+| 5 | 822 / 737 | bisher | 0.902 | 100,0 % | 100,0 % |
+| 6 | 1460 / 390 | Ersatz für 1310 / 437 (157 px) | 0.851 | 100,0 % | 100,0 % |
+| 7 | 1457 / 635 | bisher | 0.900 | 100,0 % | 100,0 % |
+| 8 | 928 / 711 | Ersatz für 877 / 459 (257 px) | 0.801 | 74,3 % | 73,3 % |
+| 9 | 858 / 742 | bisher | 0.936 | 100,0 % | 100,0 % |
+| 10 | 1291 / 391 | bisher | 0.780 | 100,0 % | 100,0 % |
+| 11 | 1321 / 707 | bisher | 0.841 | 100,0 % | 100,0 % |
+| 12 | 884 / 728 | Ersatz für 841 / 458 (273 px) | 0.896 | 100,0 % | 100,0 % |
+| 13 | 916 / 659 | bisher | 0.820 | 96,2 % | 96,0 % |
+| 14 | 1391 / 482 | Ersatz für 1377 / 429 (55 px) | 0.971 | 100,0 % | 100,0 % |
+| 15 | 1289 / 710 | bisher | 0.829 | 100,0 % | 100,0 % |
+| 16 | 1241 / 382 | Ersatz für 868 / 420 (375 px) | 0.855 | 100,0 % | 100,0 % |
+| 17 | 947 / 687 | Ersatz für 778 / 636 (177 px) | 0.798 | 29,0 % | 26,7 % |
+| 18 | 1465 / 426 | bisher | 0.796 | 100,0 % | 100,0 % |
+| 19 | 1397 / 714 | bisher | 0.855 | 100,0 % | 100,0 % |

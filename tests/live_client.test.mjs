@@ -594,6 +594,39 @@ test('region editor shows requested and used centres including rejected snapped 
   });
 });
 
+for (const [reason, explanation] of [
+  ['zweitbild_peak_zu_niedrig', 'Rahmenbereich im Zweitbild nicht deutlich genug wiedergefunden'],
+  ['zweitbild_mehrdeutig', 'Rahmenbereich im Zweitbild nicht eindeutig wiedergefunden'],
+  ['zweitbild_suchrand', 'Rahmenbereich im Zweitbild am Rand des Suchbereichs'],
+  ['zweitbild_am_bildrand', 'Rahmenbereich im Zweitbild zu nah am Bildrand'],
+  ['zweitbild_lage_abweichend', 'Rahmenbereich im Zweitbild an anderer Position wiedergefunden'],
+]) {
+  test(`region editor explains rejected centre ${reason} in German without a server table`, async () => {
+    await withLivePage(async (page, element, poll) => {
+      page.status = {state: 'setup_ready', setup: {proposal_revision: 'v1', centre_results: [
+        {centre: [100, 80], ok: false, reason},
+      ]}};
+      await poll();
+      assert.equal(element('region-results').textContent, `100,80 (verwendet: 100,80): ${explanation}`);
+    });
+  });
+}
+
+test('region editor uses supplied German reasons and retains them across small status polls', async () => {
+  await withLivePage(async (page, element, poll) => {
+    const setup = {proposal_revision: 'v1', centre_results: [
+      {centre: [100, 80], ok: false, reason: 'zweitbild_mehrdeutig'},
+    ]};
+    page.status = {state: 'setup_ready', setup,
+      tracking_reasons: {zweitbild_mehrdeutig: 'Rahmenbereich im Zweitbild mehrfach wiedergefunden'}};
+    await poll();
+    assert.match(element('region-results').textContent, /Rahmenbereich im Zweitbild mehrfach wiedergefunden/);
+    page.status = {state: 'setup_ready', setup};
+    await poll();
+    assert.match(element('region-results').textContent, /Rahmenbereich im Zweitbild mehrfach wiedergefunden/);
+  });
+});
+
 test('region editor has keyboard add/remove and rejects malformed coordinates locally', async () => {
   await withLivePage(async (page, element, poll) => {
     page.status = {state: 'setup_ready', setup: {proposal_revision: 'v1',

@@ -76,6 +76,70 @@ was ist die Konsequenz.
   Lauf im zugänglichen Namen, Feldrahmen haben 3:1, Statusanteile eine
   Haarfuge, Zahl und Einheit brechen nicht mehr getrennt um.
 
+* 2026-11-04: R13-25 Runde 3, Korrekturen aus dem unabhängigen Review.
+  * Die manuelle Bereichskorrektur setzte `nachfuehrung` ohne Rücksicht
+    auf die Rückfallstufe auf OK. Wer nach einer WARNUNG einen beliebigen
+    Bereich entfernte, konnte dadurch ohne Kenntnisnahme bestätigen,
+    obwohl die Ersatzbereiche ohne Lageprüfung blieben. Diese Bereiche
+    stehen jetzt als `stability_fallback_centres` im Vorschlag. Die
+    WARNUNG mit gleichem Text bleibt, solange einer davon im Satz steht,
+    auch nach Hinzufügen oder Wiederhinzufügen.
+  * `scripts/r13-offline-setup.py` gab der neuen Einzelbildprobe keine
+    Einzelbilder. Jede Offline-Einrichtung endete deshalb mit
+    `nachfuehrung` FEHLER. Jetzt bekommt die Probe das Stabilitätsbild und
+    die sieben direkt folgenden Aufnahmebilder desselben schedule-Schritts.
+    Das ist dieselbe Anzahl wie live, aber in der Bildrate der Aufnahme.
+    Fehlen Bilder, lehnt das Werkzeug schon bei der Auswahl ab.
+  * Die beiden offenen Regressionsfälle `113238/0163` und `121101/0034`
+    sind als strenges `xfail` markiert. Nur `AssertionError` gilt als
+    erwartetes Scheitern.
+  * Die acht Einzelbilder (rund 50 MB) werden mit der Bestätigung und beim
+    Laufstart freigegeben.
+
+  Tracker, Laufgrenzen und Auswahl bleiben unverändert. Abnahme weiter offen.
+  [Details und Prüfungen](docs/VALIDATION.md#r13-25-review-korrekturen).
+
+* 2026-10-31: R13-25 Runde 3, Minimalprinzip für Rahmenbereiche. Runde 2
+  wählte den Satz neu. Ihr großer Austausch verschob die Lage um 0,04–0,14 px
+  und kippte damit Grenzbilder der LCD-Randprüfung (`113238`). Er brachte
+  außerdem Ersatzbereiche mit systematischem Residuum ein, die im Lauf
+  RANSAC-Inlier sind und an der Residuengrenze scheitern.
+  * Neu bleibt die bisherige Auswahl bestehen. Probefeste Bereiche behalten
+    Ort und Index, nur probefällige werden ersetzt: bevorzugt auf denselben
+    Achsenseiten und nah am Ersetzten.
+  * Ein Ersatz muss lagekonsistent sein: in 7 von 8 Einzelbildern nahe am
+    starren Konsens der bisherigen Bereiche. Die Stufen sind die
+    unveränderten Laufgrenzen 0,35/0,50/0,65 px, es gilt die strengste
+    Stufe mit erfüllter Ausfallreserve.
+  * Reicht keine Stufe, wird ohne Lageprüfung ersetzt und `nachfuehrung`
+    meldet WARNUNG mit Handlungshinweis.
+  * Laufgrenzen, Tracker und Randprüfung sind unverändert.
+
+  Ergebnis: Hauptfall 102→210 Tracks, Pflichtbestand 738→861 mit 1 statt 3
+  verlorenen, alle 1.492 Bilder 978→1.214 mit 4 statt 13 verlorenen,
+  0 Fehllesungen. Sweep: 0 falsche Quads, aber 22 verlorene synthetische
+  Tracks in `121101` (Rückfallstufe). **Nullverlust weiter nicht erreicht**,
+  keine Freigabe. Zwei Regressionsfälle bleiben rot.
+  [Ursachen, Tabellen, Kalibrierung](docs/VALIDATION.md#r13-25-runde-3).
+
+* 2026-10-30: R13-25-Reviewkorrektur: Neue Rahmenbereiche werden in den
+  acht ungemittelten Aufnahmen des Stabilitätsstapels geprüft. Mindestens
+  sieben brauchen Peak ≥0,775 (Laufschwelle 0,75 plus Reserve 0,025),
+  Lauf-Eindeutigkeit, ein inneres Maximum und höchstens 2 px Lageabweichung.
+  Die zusätzliche Halb-Pixel-Probe am Zweitbild entfällt. Ausfallreserve
+  zählt nur bestandene Regionen; die Probe folgt dem bestehenden Bewegungs-
+  und Band-Gate. Einzelbilder bleiben im RAM; `stability.png` wird einmal
+  geschrieben und danach nur geprüft/gehasht. Manuelle Neubewertung
+  verlangt dieselben Einzelbilder. Fehlende Belege ergeben FEHLER.
+  Die Einrichtungsreserve entfällt aus dem Laufstart-Defaultsvergleich;
+  abweichende Laufgrenzen bleiben abgelehnt. Neue Mittelpunktgründe sind
+  in beiden UI-Textpfaden übersetzt. Bestätigte Profile werden nicht neu
+  ausgewählt; der Laufcode bleibt unverändert. Hauptfall 102→210 Tracks;
+  **Nullverlust über alle Gegenläufe bisher nicht erreicht**, keine Freigabe.
+  Frühere Aussagen zur Rauschreserve aus Mittelbildern und zu angepassten
+  hohen Laufschwellen sind zurückgenommen.
+  [Kalibrierung, Regressionen und Grenzen](docs/VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30).
+
 * 2026-10-30: R13-24 behebt Trackingverlust bei kleiner scheinbarer
   Maßstabsänderung in Schrägsicht: Der zweite Ähnlichkeitsversuch darf
   auch bei Grobverschiebung unter 2 px und Offset (0,0) laufen.

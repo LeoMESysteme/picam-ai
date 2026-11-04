@@ -88,16 +88,22 @@ class SetupCamera(Protocol):
     def fresh_still(self, discard: int = 10) -> np.ndarray: ...
 
 
-def mean_still(cam: SetupCamera, frames: int = 8, discard: int = 10) -> np.ndarray:
-    """Frische aufeinanderfolgende Standbilder in float32 mitteln."""
+def mean_still(cam: SetupCamera, frames: int = 8, discard: int = 10, *,
+               captured_frames: list[np.ndarray] | None = None) -> np.ndarray:
+    """Frische Bilder mitteln; auf Wunsch ungemittelte Kopien im RAM behalten."""
     if frames < 1:
         raise SetupError("Standbildmittelung braucht mindestens ein Bild")
     first = cam.fresh_still(discard=discard)
+    if captured_frames is not None:
+        captured_frames.append(first.copy())
     if frames == 1:
         return first
     total = first.astype(np.float32)
     for _ in range(frames - 1):
-        total += cam.fresh_still(discard=0)
+        frame = cam.fresh_still(discard=0)
+        if captured_frames is not None:
+            captured_frames.append(frame.copy())
+        total += frame
     return np.rint(total / frames).astype(np.uint8)
 
 
@@ -410,6 +416,7 @@ class AssistResult:
     reader_check: Any | None
     stability_elapsed_s: float
     setup_attempt: int
+    stability_frames: tuple[np.ndarray, ...] = ()
 
 
 def assist_measure(
@@ -448,10 +455,16 @@ def assist_measure(
     if fit_attempts < 1:
         raise SetupError("Startsuche braucht mindestens einen Versuch")
 
-    def capture() -> np.ndarray:
-        return mean_still(cam, stack_frames)
+    stability_frames: list[np.ndarray] = []
 
     def capture_text(attempt: int, still: str) -> tuple[np.ndarray, str]:
+        def capture() -> np.ndarray:
+            # Bei einem erneuten seriell geklammerten Versuch nur die Bilder
+            # behalten, aus denen das tatsaechlich verwendete Mittel entsteht.
+            stability_frames.clear()
+            return mean_still(cam, stack_frames,
+                              captured_frames=stability_frames if still == "stability" else None)
+
         try:
             return cell_text(capture)
         except Exception as exc:  # noqa: BLE001 - abgebrochene Aufnahme fuer Diagnose sichern
@@ -561,6 +574,7 @@ def assist_measure(
         first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,
         stability_elapsed_s=stability_elapsed_s, setup_attempt=attempt,
+        stability_frames=tuple(stability_frames),
     )
 
 
@@ -651,6 +665,7 @@ def propose_with_fit(
     offset_check: Any = None,
     final_checks: Any = None,
     stability_image_bgr: np.ndarray | None = None,
+    stability_images: tuple[np.ndarray, ...] = (),
     stability_elapsed_s: float | None = None,
     stability_min_elapsed_s: float = MIN_STABILITY_S,
     setup_attempt: int | None = None,
@@ -713,14 +728,21 @@ def propose_with_fit(
         checks_dict['checks']['displayfehler'] = defects.to_dict()
         if defects.status == 'WARNUNG' and checks_dict['overall'] == 'OK':
             checks_dict['overall'] = 'WARNUNG'
-        tracking_proposal = propose_regions(image, quad)
-        checks_dict["checks"]["nachfuehrung"] = {
-            "status": "OK" if tracking_proposal.ok else "FEHLER",
-            "reason": "; ".join(REASONS[reason] for reason in tracking_proposal.reasons) or None,
-            "metrics": tracking_proposal.metrics,
-        }
+        tracking_proposal = propose_regions(image, quad, stability_image=stability_image_bgr,
+                                            stability_images=stability_images)
+        if stability_image_bgr is None:
+            tracking_proposal = replace(tracking_proposal, ok=False,
+                                        reasons=(*tracking_proposal.reasons, "rahmenbereiche_zweitbild_fehlt"))
+        # R13-25: Reserve nur mit Ersatz ohne Lagekonsistenz erreichbar.
+        # Bestaetigung bleibt moeglich (Konzept §4), Risiko wird benannt.
+        # Welche Bereiche das sind, steht in den Kennzahlen, damit eine
+        # manuelle Korrektur die WARNUNG nicht verliert.
+        _bind_fallback_regions(tracking_proposal, _fallback_centres(tracking_proposal.metrics, bound=False))
+        checks_dict["checks"]["nachfuehrung"] = _tracking_check(tracking_proposal)
         if not tracking_proposal.ok:
             checks_dict["overall"] = "FEHLER"
+        elif checks_dict["checks"]["nachfuehrung"]["status"] == "WARNUNG" and checks_dict["overall"] == "OK":
+            checks_dict["overall"] = "WARNUNG"
     proposal = {
         "frame": str(frame_path),
         "device_id": device_id,
@@ -748,6 +770,20 @@ def propose_with_fit(
             "proposal_revision": uuid.uuid4().hex,
             "auswahl": "automatisch", "edits": [],
         }
+        if stability_image_bgr is not None:
+            # assist_measure hat das gemittelte Bild bereits geschrieben.
+            # Nur dessen unveraenderte Datei binden, keine Einzelbilder ablegen.
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stability_path = out_dir / "stability.png"
+            if stability_path.exists():
+                saved = cv2.imread(str(stability_path), cv2.IMREAD_UNCHANGED)
+                if saved is None or not np.array_equal(saved, stability_image_bgr):
+                    raise SetupError("Stabilitaetsbild abweichend vom aufgenommenen Bild - neu einrichten")
+            elif not cv2.imwrite(str(stability_path), stability_image_bgr):
+                raise SetupError("Stabilitaetsbild konnte nicht gespeichert werden")
+            proposal["live_tracking"]["stability_frame"] = {
+                "path": str(stability_path), "sha256": hashlib.sha256(stability_path.read_bytes()).hexdigest(),
+            }
     if setup_attempt is not None:
         proposal["setup_attempt"] = setup_attempt
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -761,7 +797,43 @@ def propose_with_fit(
     return proposal
 
 
-def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str) -> dict:
+def _fallback_centres(metrics: dict, *, bound: bool = True) -> list[list[int]]:
+    """Mittelpunkte der Ersatzbereiche ohne Lagekonsistenz (R13-25).
+
+    Massgeblich sind die Ersatzkennzahlen der letzten Stufe
+    (``stability_consistency_px`` = None). Nach einer manuellen Korrektur
+    fehlen diese; dann wird die gebundene Liste unveraendert weitergefuehrt
+    (``bound``).
+    """
+    if bound and "stability_fallback_centres" in metrics:
+        return [list(centre) for centre in metrics["stability_fallback_centres"]]
+    if (metrics.get("stability_replacements") and "stability_consistency_px" in metrics
+            and metrics["stability_consistency_px"] is None):
+        return [list(item["new_centre"]) for item in metrics["stability_replacements"]]
+    return []
+
+
+def _bind_fallback_regions(tracking: Any, fallback: list[list[int]]) -> None:
+    """Ersatzliste und den davon noch im Satz stehenden Teil in die Kennzahlen schreiben."""
+    tracking.metrics["stability_fallback_centres"] = fallback
+    tracking.metrics["stability_fallback_remaining"] = [
+        list(region.centre) for region in tracking.regions if list(region.centre) in fallback
+    ]
+
+
+def _tracking_check(tracking: Any) -> dict:
+    """nachfuehrung: FEHLER vor WARNUNG (Ersatz ohne Lagekonsistenz im Satz) vor OK."""
+    unchecked = bool(tracking.metrics.get("stability_fallback_remaining"))
+    return {
+        "status": "FEHLER" if not tracking.ok else "WARNUNG" if unchecked else "OK",
+        "reason": ("; ".join(REASONS[reason] for reason in tracking.reasons)
+                   or (REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"] if unchecked else None)),
+        "metrics": tracking.metrics,
+    }
+
+
+def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str,
+                 stability_images: tuple[np.ndarray, ...] = ()) -> dict:
     """Auswahl am unveraenderten Standbild pruefen und neu versionieren."""
     if "overlay_evidence" not in proposal:
         raise SetupError("Vorschlag ohne Overlay-Belege - neu einrichten")
@@ -791,8 +863,20 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
     if any(not (0 <= x < width and 0 <= y < height) for x, y in add):
         raise SetupInputError("Bereichskoordinaten liegen ausserhalb des Quellbilds")
     kept = [(index, region["centre"]) for index, region in enumerate(current) if index not in remove]
+    if "stability_frame" not in block:
+        raise SetupError("Stabilitaetsbild fuer Bereichspruefung fehlt - neu einrichten")
+    proof = block["stability_frame"]
+    stability_path = Path(proof["path"])
+    if (not stability_path.is_file()
+            or hashlib.sha256(stability_path.read_bytes()).hexdigest() != proof["sha256"]):
+        raise SetupError("Stabilitaetsbild fehlt oder wurde geaendert - neu einrichten")
+    stability_image = cv2.imread(str(stability_path))
+    if stability_image is None:
+        raise SetupError("Stabilitaetsbild nicht lesbar - neu einrichten")
+    if len(stability_images) < 8:
+        raise SetupError("Stabilitaets-Einzelbilder fuer Bereichspruefung fehlen (mindestens 8) - neu einrichten")
     tracking = proposal_from_regions(image, proposal["quad"], add, FrameTrackingConfig.from_dict(block["config"]),
-                                     kept_centres=[centre for _, centre in kept])
+                                     kept_centres=[centre for _, centre in kept], stability_images=stability_images)
     results = tracking.metrics["centre_results"]
     for (index, centre), result in zip(kept, results[:len(kept)], strict=True):
         if not result["ok"]:
@@ -800,6 +884,10 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
                 f"Beibehaltener Rahmenbereich {index} am Mittelpunkt {centre} "
                 f"abgelehnt ({result['reason']}) - neu einrichten"
             )
+    # Ersatzbereiche ohne Lagekonsistenz bleiben ueber alle Korrekturen
+    # benannt; die WARNUNG entfaellt erst, wenn keiner mehr im Satz steht.
+    # Gleiche Mittelpunkte zaehlen auch nach Entfernen und Wiederhinzufuegen.
+    _bind_fallback_regions(tracking, _fallback_centres(block["proposal"]["metrics"]))
     updated = deepcopy(proposal)
     new_block = updated["live_tracking"]
     new_block.update(proposal=tracking.to_dict(), proposal_revision=uuid.uuid4().hex, auswahl="manuell")
@@ -810,11 +898,7 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
                  for point, result in zip(add, results[len(kept):], strict=True))
     new_block["edits"] = block.get("edits", []) + edits
     checks = updated["setup_checks"]["checks"]
-    checks["nachfuehrung"] = {
-        "status": "OK" if tracking.ok else "FEHLER",
-        "reason": "; ".join(REASONS[reason] for reason in tracking.reasons) or None,
-        "metrics": tracking.metrics,
-    }
+    checks["nachfuehrung"] = _tracking_check(tracking)
     updated["setup_checks"]["overall"] = max(
         (check["status"] for check in checks.values()), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__,
     )

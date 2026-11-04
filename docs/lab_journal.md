@@ -3075,3 +3075,134 @@ Hoststreuung. Keine Aufnahme-/DUT-Latenz oder Bildratengarantie.
 Tracker-Tests abschließend 560 bestanden, 2 Timing-Tests unter xdist
 übersprungen; separat 2 Timing-Tests bestanden. Mit vier OpenCV-Threads
 Normalfall Median 5,602 ms, isolierter zweiter Durchgang 8,704 ms.
+
+## 2026-10-30 — R13-25: Stabile Rahmenregionen bei der Einrichtung {#r13-25-stabile-rahmenregionen}
+
+Reviewkorrektur im Worktree, reine Offline-Arbeit. Keine Kamera, kein
+serieller Port, kein Eingriff am Aufbau. Aufnahmen unter
+`/home/me-systeme/picam-ai/var/live/` und `/mnt/ssd` nur gelesen;
+neue Artefakte ausschließlich `/tmp/r13-25-correction/`. Keine Commits,
+`docs/status.md` und TODO ausdrücklich nicht angefasst.
+
+Der Reviewer hat die bisherige Deutung widerlegt: `still.png` und
+`stability.png` sind beide Mittel aus acht Aufnahmen. Die ursprüngliche
+Halb-Pixel-Probe mit Reserve 0,10 wählte eine Region, die in keinem der
+210 Diagnosebilder über 0,75 lag. Das Reviewer-Skript `margin.py` wurde
+mit der unveränderten vorliegenden R13-25-Kopie reproduziert: Region 12
+0 % nutzbar; obere Seite in 47 Bildern nur vier nutzbare Bereiche. Die
+frühere Behauptung nachgewiesener Rausch-/Ausfallreserve war falsch.
+
+Die Stabilitätsaufnahme hält nun ihre acht ungemittelten Aufnahmen als
+Kopien im Speicher. Aktueller Kandidat: sieben eindeutige innere Treffer
+von acht mit Peak ≥0,775, höchstens 2 px Lageabweichung. Lauf-Eindeutigkeit
+entspricht dem tatsächlichen Feinpfad, Referenz-Selbstbild bleibt strenger.
+Die Probe folgt dem bisherigen Bewegungs-/Band-Gate. Die vorhandene
+Mittelbild-PNG wird nicht nochmals geschrieben, sondern geprüft/gehasht.
+Manuelle Neubewertung verwendet dieselben Rohbilder im RAM; nach Verlust
+ist neu einzurichten. Nur die reine Einrichtungsreserve entfällt aus dem
+Laufstartvergleich, keine Laufgrenze. UI-Texte für Mittelpunkte ergänzt.
+
+Für die historische Kalibrierung fehlen originale Setup-Einzelbilder.
+Erste acht Diagnosebilder aus run-01 als Ersatz, ausschließlich ganzzahlig
+zur stationären Setup-Lage zurückgeschoben, ohne Mitteln oder interpolierte
+Glättung. Alle übrigen run-01-Bilder sind Holdout, run-02 teilt dieselbe
+Einrichtung und ist vollständig Holdout. Zwölf Aufzeichnungen mit 1.492
+Bildern, davon der geforderte frühere Bestand 1.123. Die eigentlichen
+Tracker und der Leser erhalten unveränderte Bilder, keine Referenzwerte.
+Die numerische GSV-Referenz dient nur dem nachgelagerten Vergleich.
+
+Reserve 0,025 erhält alle zwölf geometrischen Vorschläge mit zwanzig
+Bereichen und mindestens fünf je Seite. Ohne Reserve bleibt die schwächste
+Hauptfall-Region nur zu 59,5 % nutzbar; mit 0,025 zu 95,2 % (Holdout 95,05 %).
+Das ist eine Entwicklungskalibrierung, kein allgemeiner Nachweis:
+`115636` enthält weiterhin eine Region mit 65,35 % Holdout-Nutzung, und
+bewegungsbereinigt liegen in run-02 acht Regionen unter 80 %, eine bei 7,14 %.
+Unabhängige ORB/RANSAC-Lagebestimmung zeigt in mehreren Läufen große
+Verschiebungen bis etwa 94 px; das erklärt viele niedrige feste
+Suchfenster-Anteile, beseitigt aber die verbleibenden Fehlvorhersagen nicht.
+
+Die faire zusätzliche Halb-Pixel-Gegenprobe entfernt 13/240 Region-
+Aufzeichnung-Paare, darunter perfekte und schwache Bereiche. Sie verbessert
+`115636` und entfernt in run-02 zwei schwache Bereiche, lässt dort sechs
+weitere bestehen. Deshalb ist „kein zusätzlicher Nutzen“ nicht belegt.
+Die zusätzlichen Phasen sind im aktuellen Kandidaten entfallen; ihre
+Kosten-/Verfügbarkeitsabwägung bleibt Teil der offenen Korrektur. Die
+bestehende Referenz-Bewegungsprobe ist unverändert.
+
+**Abnahme gescheitert:** geforderte 1123 Bilder **738→859 Tracks**,
+**3 verloren**, **0/695 Fehllesungen**. Gesamter Bestand
+**978→1203 Tracks auf 1492 Bildern, 13 verloren, 0/920 Fehllesungen**.
+Die drei Verluste im geforderten Bestand sind 110248/0179 und
+121101/0034–0035, jeweils `rahmen_unstimmig`. Zehn weitere im zusätzlichen
+113238-Lauf scheitern an `lcd_rand_fehlt`. Reserve- und Rangfolgenproben
+beheben diese Fälle nicht. Diese Bilder bleiben in den Nennern und als
+rote Regressionen erhalten. Lauf-Gates wurden nicht gelockert.
+
+Der Sweep enthält 3.042 synthetische Fälle, 0 falsche Quads >1 px, aber
+2700→2697 Tracks mit drei Verlusten in 121101. Die Neuberechnung aller
+23 Start-Einrichtungen meldet 23 neue FEHLER, jeweils fehlende
+ungemittelte Setup-Einzelbilder. Der während der Arbeit von außen neu
+hinzugekommene 24. Datensatz hat denselben Fehler. Das verwirft keine
+bestätigten Profile;
+mit historischen Diagnose-Ersatzbildern bestehen elf Einrichtungen die
+Vorschlagsgeometrie. Der notwendige Nullverlust-/Vorhersagenachweis ist
+weiter offen, keine Freigabe und kein erfolgreicher R13-25-Abschluss.
+
+Nach Abschluss der eigenen Lasten: sieben AB/BA-Paare mit zwei OpenCV-Threads.
+Im Hauptfall alter Vorschlag 496.627 ms, neuer Vorschlag
+682.625 ms, vorhandene PNG prüfen/SHA
+49.082 ms, neu gesamt
+739.989 ms. Mehrarbeit über alle Einrichtungen
+183.638–243.363 ms. Nur monotone Host-Verarbeitungsdauern,
+keine Aufnahme-/DUT-Latenz oder vollständige Assistentendauer.
+
+Gezielte Softwareprüfung und alle Zahlen einschließlich Einzelwerttabellen,
+Dauern, Fehler und Artefakte stehen in
+[VALIDATION R13-25](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30).
+Der unabhängige Reviewfund im Offline-Auswerter (fehlendes verschobenes
+Fenster wurde fälschlich gezählt) ist testgetrieben behoben. API-Socket-
+Tests bleiben durch die Sandbox eingeschränkt; echte Regionswahl-
+Regressionen werden getrennt davon ausgewiesen.
+
+## 2026-10-31 — R13-25 Runde 3: Minimalprinzip und Lagekonsistenz {#r13-25-runde-3}
+
+Reine Offline-Arbeit im Worktree, Implementierung durch Claude anstelle von
+Codex. Keine Kamera, kein serieller Port, die Werkbank lief unverändert
+weiter. `var/` und `/mnt/ssd` wurden nur gelesen. Artefakte liegen unter
+`/tmp/claude-1000/r13-25-r3/`. Keine Commits, `docs/status.md` und TODO
+nicht angefasst.
+
+Zuerst geprüft: Runde 2 hat den ganzen Satz neu gewählt. Probefeste Bereiche
+blieben als Menge, aber mit anderem Index, und jeder Ersatz war der
+nächststärkere Kandidat seines Quadranten.
+
+Die zehn `lcd_rand_fehlt`-Verluste in `113238` sind keine Maßstabsfrage. Der
+neue Satz verschiebt das Quad um 0,04–0,14 px (Ecke links oben höher,
++0,003…+0,013°). Die Randoffsets bleiben weit unter der Toleranz. Gekippt ist
+jeweils ein schwacher Randpunkt der oberen LCD-Kante: Seine diskret
+abgetastete Stufe liegt am 50-%-Schwellwert, 57 gegen 56. Die Seite steht schon
+mit dem alten Satz auf 15/18 (Grenze 14,4).
+
+Die Bewegungsverluste kamen nicht aus Suchfenster oder Bildrand, sondern aus
+der Residuengrenze 0,65 px bzw. RMS 0,35 px. Ein reiner Nahersatz brachte
+zusätzlich Bereiche mit systematischem Residuum von 1,1–1,3 px. Er verlor
+damit in `113238` 46 Bilder, also mehr als Runde 2.
+
+Lösung: Die bisherige Auswahl bleibt bestehen, ersetzt werden nur
+probefällige Bereiche. Ein Ersatz muss in 7 von 8 Einzelbildern am starren
+Konsens der bisherigen Bereiche liegen. Die Stufen sind die Laufgrenzen
+0,35/0,50/0,65 px; erst ohne erfüllbare Stufe wird ohne Lageprüfung ersetzt,
+mit WARNUNG. Varianten mit Mediankonsens, fester Grenze, Lageprüfung auch der
+alten Bereiche, Rückfall nach Stärke oder ganz ohne Rückfall wurden auf allen
+1.492 Bildern gemessen und verworfen.
+
+Ergebnis: Hauptfall 210/210. Pflichtbestand 738→861 Tracks, 1 verloren
+(`121101/0034`, Rückfallstufe). Alle Bilder 978→1.214, 4 verloren, davon drei
+Grenzbilder in `113238`. 0/933 Fehllesungen. Sweep: 0 falsche Quads, aber
+22 verlorene synthetische Tracks in `121101`. Mehrarbeit bei der Einrichtung
+109–284 ms Host-Zeit, gemessen bei laufender Werkbank. Die Kalibrierung ist im
+Hauptfall schlechter als in Runde 2: Die schwächste Region ist nur zu 29 %
+nutzbar. **Nullverlust nicht erreicht, keine Freigabe.**
+
+Zahlen, Tabellen und Reproduktion:
+[VALIDATION R13-25 Runde 3](VALIDATION.md#r13-25-runde-3).

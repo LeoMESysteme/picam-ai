@@ -111,6 +111,22 @@ def test_setup_failure_is_reported(tmp_path):
     assert "keine_startlage" in service.status()["error"]
 
 
+def test_r25_new_setup_discards_previous_stability_frames(tmp_path):
+    import numpy as np
+
+    observed = []
+
+    def runner(**kwargs):
+        observed.append(service._stability_frames)
+        return {"setup_checks": {"overall": "OK", "checks": {}}}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service._stability_frames = tuple(np.zeros((2, 2, 3), np.uint8) for _ in range(8))
+    service.start_setup()
+    assert _wait_state(service, {'setup_ready', 'setup_failed'}) == 'setup_ready'
+    assert observed == [()]
+
+
 def test_run_rules_double_start_stop_without_run_and_setup_while_running(tmp_path, monkeypatch):
     service = LiveService(FakeOwner(), tmp_path)
     with pytest.raises(LiveError, match="kein Lauf"):
@@ -204,7 +220,7 @@ def proposal(tmp_path):
 
 def ready_service(tmp_path, proposal):
     def runner(*, session_dir, **kwargs):
-        (session_dir / "setup").mkdir(parents=True)
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
         (session_dir / "setup" / "overlay_source.png").write_bytes(b"png")
         return proposal
 
@@ -447,7 +463,8 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     camera = CameraSettings.from_dict(proposal["camera"])
     image = np.zeros((2, 2, 3), np.uint8)
     result = SimpleNamespace(first=image, second=image, first_text='+ 1.23?5 ', fit=object(), offset_check=object(),
-                             final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2)
+                             final_checks=object(), stability_elapsed_s=30.0, reader_check=object(), setup_attempt=2,
+                             stability_frames=tuple(image.copy() for _ in range(8)))
 
     class Owner(FakeOwner):
         def restart(self, factory=None, reason=None):
@@ -501,6 +518,8 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         assert kwargs["stability_min_elapsed_s"] == 15.0
         assert kwargs["setup_attempt"] == 2
         assert kwargs["live_tracking"] is True
+        assert kwargs['stability_images'] is result.stability_frames
+        assert service._stability_frames is result.stability_frames
         assert kwargs["device_id"] == "gsv-sensor-161a"
         events.append("proposal")
         return proposal
@@ -1598,6 +1617,51 @@ def test_tracking_failure_reason_reaches_setup_status(tmp_path, proposal):
         service.confirm(session_id=status["session_id"], confirmed_by="Operator", format_checked=True)
 
 
+def test_r25_run_start_accepts_saved_setup_margin_after_default_change(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from test_live_session import _region_session
+
+    from dispread.live import session as session_module
+    from dispread.live.frame_tracking import FrameTrackingConfig
+
+    session, _ = _region_session(tmp_path, images=[])
+    profile_before = session._profile_path.read_bytes()
+    monkeypatch.setattr(session_module, 'FrameTrackingConfig', lambda: replace(
+        FrameTrackingConfig(), proposal_stability_peak_margin=0.20))
+    monkeypatch.setattr('dispread.live.service.LiveSession', lambda *args, **kwargs: session)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', session._profile_path
+    try:
+        service.start_run(reference=False)
+        assert service.status()['state'] == 'running'
+        assert service.status()['run']['tracking']['mode'] == 'rahmenbereiche'
+        assert session._profile_path.read_bytes() == profile_before
+    finally:
+        service.close()
+
+
+def test_r25_run_start_refuses_saved_nondefault_runtime_peak_threshold(tmp_path, monkeypatch):
+    import json
+
+    from test_live_session import _region_session
+
+    session, data = _region_session(tmp_path, images=[])
+    for config in (data['live_tracking']['config'], data['live_tracking']['proposal']['config']):
+        config['min_peak'] = 0.99
+    session._profile_path.write_text(json.dumps(data))
+    monkeypatch.setattr('dispread.live.service.LiveSession', lambda *args, **kwargs: session)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', session._profile_path
+    try:
+        with pytest.raises(LiveError, match='Pruefversion.*neu einrichten'):
+            service.start_run(reference=False)
+        assert service.status()['state'] == 'confirmed'
+        assert not session.records_path.exists()
+    finally:
+        service.close()
+
+
 def test_old_confirmed_profile_exposes_tracking_mode_before_run(tmp_path, proposal):
     service = ready_service(tmp_path, proposal)
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
@@ -1766,6 +1830,7 @@ def test_edit_regions_revises_checks_overlays_and_confirmed_profile(tmp_path):
 
     image, quad, proposal = _propose(tmp_path)
     service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
     status = service.status()
     revision = status['setup']['proposal_revision']
     regions = proposal['live_tracking']['proposal']['regions']
@@ -1816,8 +1881,9 @@ def test_edit_regions_refuses_missing_or_busy_proposal(tmp_path, state):
 def test_edit_regions_refuses_invalid_edits_without_revision_change(tmp_path, add, remove):
     from test_live_setup_tracking import _propose
 
-    _, _, proposal = _propose(tmp_path)
+    image, _, proposal = _propose(tmp_path)
     service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
     before = service.status()
     with pytest.raises(LiveError):
         service.edit_regions(proposal_revision=before['setup']['proposal_revision'], add=add, remove=remove)
@@ -1827,8 +1893,9 @@ def test_edit_regions_refuses_invalid_edits_without_revision_change(tmp_path, ad
 def test_edit_regions_enforces_cumulative_edit_limit_and_still_hash(tmp_path):
     from test_live_setup_tracking import _propose
 
-    _, _, proposal = _propose(tmp_path)
+    image, _, proposal = _propose(tmp_path)
     service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
     block = proposal['live_tracking']
     block['edits'] = [{'action': 'add'}] * 50
     with pytest.raises(LiveError, match='50'):
@@ -1837,6 +1904,87 @@ def test_edit_regions_enforces_cumulative_edit_limit_and_still_hash(tmp_path):
     (tmp_path / 'still.png').write_bytes(b'changed')
     with pytest.raises(LiveError, match='Einrichtungsbild'):
         service.edit_regions(proposal_revision=block['proposal_revision'], add=[], remove=[0])
+
+
+def test_r25_fallback_warning_still_needs_acknowledgement_after_region_edit(tmp_path, monkeypatch):
+    from test_live_setup_tracking import _propose_with_fallback
+
+    image, _, proposal = _propose_with_fallback(tmp_path, monkeypatch, [2])
+    service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
+    status = service.status()
+    assert status['setup']['overall'] == 'WARNUNG'
+    # Unbeteiligten Bereich entfernen: Ersatz ohne Lagekonsistenz bleibt im Satz.
+    result = service.edit_regions(proposal_revision=status['setup']['proposal_revision'], add=[], remove=[0])
+    status = service.status()
+    assert status['setup']['checks']['nachfuehrung'] == status['setup']['overall'] == 'WARNUNG'
+    with pytest.raises(LiveError, match='WARNUNG'):
+        service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                        confirmed_by='Operator', format_checked=True)
+    service.confirm(session_id=status['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True, acknowledge_warning=True)
+    assert service.status()['state'] == 'confirmed'
+
+
+def test_r25_stability_frames_kept_for_edits_and_freed_on_confirmation(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    image, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    frames = tuple(image.copy() for _ in range(8))
+    service._stability_frames = frames
+    revision = service.status()['setup']['proposal_revision']
+    with pytest.raises(LiveError):
+        service.confirm(session_id=service.status()['session_id'], proposal_revision=revision,
+                        confirmed_by='Operator', format_checked=False)
+    # Abgelehnte Bestaetigung: Einzelbilder bleiben fuer Korrekturen erhalten.
+    assert service._stability_frames is frames
+    result = service.edit_regions(proposal_revision=revision, add=[], remove=[0])
+    assert service._stability_frames is frames
+    service.confirm(session_id=service.status()['session_id'], proposal_revision=result['proposal_revision'],
+                    confirmed_by='Operator', format_checked=True)
+    assert service._stability_frames == ()
+
+
+def test_r25_stability_frames_freed_when_run_starts(tmp_path, monkeypatch):
+    import numpy as np
+
+    class FakeSession:
+        def __init__(self, *a, **kw):
+            self.latest, self.summary, self.end_reason = None, {}, None
+            self.session_path = tmp_path / "s.json"
+
+        def latest_age_s(self):
+            return None
+
+        def start(self):
+            pass
+
+        def run(self, stop):
+            stop.wait()
+
+        def stop(self, reason="bediener"):
+            return {"end_reason": reason}
+
+    monkeypatch.setattr("dispread.live.service.LiveSession", FakeSession)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path, service._profile_camera = "confirmed", tmp_path / "p.json", None
+    service._stability_frames = tuple(np.zeros((2, 2, 3), np.uint8) for _ in range(8))
+    service.start_run()
+    assert service._stability_frames == ()
+    service.stop_run()
+    service.close()
+
+
+def test_r25_region_edits_without_raw_frames_require_new_setup(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, _, proposal = _propose(tmp_path)
+    service = ready_service(tmp_path, proposal)
+    before = service.status()
+    with pytest.raises(LiveError, match='Stabilitaets-Einzelbilder.*neu einrichten'):
+        service.edit_regions(proposal_revision=before['setup']['proposal_revision'], add=[], remove=[0])
+    assert service.status()['setup']['proposal_revision'] == before['setup']['proposal_revision']
 
 
 def test_region_edits_require_current_tracking_proposal_and_are_blocked_during_run(tmp_path, proposal):

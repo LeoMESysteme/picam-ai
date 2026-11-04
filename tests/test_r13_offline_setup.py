@@ -32,13 +32,18 @@ def write_rows(path, rows):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
+# Stabilitaetsbild frame_000004 (27,2 s) und sieben direkt folgende Bilder
+# im selben schedule-Schritt: dieselbe Zahl Einzelbilder wie die Live-Probe.
+TIMES = (10, 12, 12.1, 27.2, 27.4, 27.6, 27.8, 28, 28.2, 28.4, 28.6)
+
+
 def recording(tmp_path):
     source = tmp_path / "recording"
     (source / "frames").mkdir(parents=True)
     frames = []
     # Alle Fixture-Frames sind identisch: getestet wird nur die Verdrahtung,
     # keine unabhaengige Stabilitaet oder Erkennungszuverlaessigkeit.
-    for index, seconds in enumerate((10, 12, 12.1, 27.2, 28), start=1):
+    for index, seconds in enumerate(TIMES, start=1):
         name = f"frame_{index:06}.jpg"
         shutil.copyfile(FIXTURES / "faktor-1_0.jpg", source / "frames" / name)
         frames.append({"file": name, "frame_sequence": index, "capture_timestamp": {
@@ -47,7 +52,7 @@ def recording(tmp_path):
         }})
     write_rows(source / "frames.jsonl", frames)
     write_rows(source / "serial.jsonl", [
-        {"t_boot": seconds, "text": "+0.60572 mV/V"} for seconds in (10, 12, 12.1, 27.2, 28)
+        {"t_boot": seconds, "text": "+0.60572 mV/V"} for seconds in TIMES
     ])
     write_rows(source / "commands.jsonl", [
         {"event": "resume_transmission", "label": "schedule[0] factor=1.0", "t_boot": 10},
@@ -101,6 +106,8 @@ def test_recording_setup_uses_real_checks_and_copied_reference(tmp_path, capsys)
     assert result["second"]["file"] == "frame_000004.jpg"
     assert result["first"]["cell_text"] == "+0.60572 "
     assert result["stability_elapsed_s"] == pytest.approx(15.1)
+    # R13-25: echte aufgezeichnete Einzelbilder fuer die 7/8-Probe, ab dem Stabilitaetsbild.
+    assert [row["file"] for row in result["stability_frames"]] == [f"frame_{i:06}.jpg" for i in range(4, 12)]
     profile = SessionProfile.load(out / "profile.json")
     assert profile.offline is True
     assert profile.confirmed_by == "offline-auswertung"
@@ -110,6 +117,8 @@ def test_recording_setup_uses_real_checks_and_copied_reference(tmp_path, capsys)
     for name in ("rasterversatz", "gegenlesen", "nachfuehrung", "displayfehler"):
         assert name in profile.setup_checks["checks"]
     assert profile.setup_checks["checks"]["gegenlesen"]["status"] == "OK"
+    assert profile.setup_checks["checks"]["nachfuehrung"]["status"] == "OK"
+    assert profile.setup_checks["checks"]["nachfuehrung"]["metrics"]["stability_probe_count"] == 8
     for name in ("still.png", "stability.png", "overlay_source.png", "overlay_rectified.png", "overlay_sampling.png"):
         assert cv2.imread(str(out / name)) is not None
     np.testing.assert_array_equal(cv2.imread(str(out / "still.png")),
@@ -123,7 +132,7 @@ def test_recording_setup_uses_real_checks_and_copied_reference(tmp_path, capsys)
     replay_spec.loader.exec_module(replay)
     replay_result = replay.evaluate(source, out / "profile.json", "frame")
     assert replay_result["offline"] is True and replay_result["regions_source"] == "profil"
-    assert replay_result["summary"]["frames"] == 5
+    assert replay_result["summary"]["frames"] == len(TIMES)
     tracker_spec = importlib.util.spec_from_file_location("r13_tracker_eval", ROOT / "scripts/r13-tracker-eval.py")
     tracker = importlib.util.module_from_spec(tracker_spec)
     tracker_spec.loader.exec_module(tracker)
@@ -191,6 +200,31 @@ def test_unverifiable_recording_is_rejected(tmp_path, change, reason, capsys):
     assert result["stage"] == "auswahl"
     assert reason.lower() in result["reason"].lower()
     assert "Traceback" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("keep", [4, 10])
+def test_too_few_recorded_stability_frames_are_refused_before_setup(tmp_path, keep):
+    # 4: nur das Stabilitaetsbild; 10: sieben statt acht Einzelbilder.
+    source = recording(tmp_path)
+    path = source / "frames.jsonl"
+    path.write_text("\n".join(path.read_text().splitlines()[:keep]) + "\n")
+    out = tmp_path / "setup"
+    assert module().main([str(source), "--out", str(out)]) == 1
+    result = json.loads((out / "setup-result.json").read_text())
+    assert result["stage"] == "auswahl"
+    assert "8 Stabilitaets-Einzelbilder" in result["reason"]
+    assert not (out / "profile.json").exists()
+
+
+def test_stability_frames_stay_in_the_schedule_step(tmp_path):
+    source = recording(tmp_path)
+    path = source / "commands.jsonl"
+    # Schrittwechsel bei 28,1 s: frame_000009..11 gehoeren nicht mehr dazu.
+    path.write_text(path.read_text().replace('"t_boot": 40', '"t_boot": 28.1'))
+    out = tmp_path / "setup"
+    assert module().main([str(source), "--out", str(out)]) == 1
+    result = json.loads((out / "setup-result.json").read_text())
+    assert result["stage"] == "auswahl" and "schedule-Schritt" in result["reason"]
 
 
 def test_output_under_var_is_refused_without_writes(tmp_path):

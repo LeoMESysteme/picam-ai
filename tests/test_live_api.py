@@ -755,8 +755,9 @@ def test_region_edit_input_errors_are_400_without_mutation(tmp_path, monkeypatch
             'checks': {'nachfuehrung': 'OK'}, 'overall': 'OK',
         }})
     else:
-        _, _, proposal = _propose(tmp_path)
+        image, _, proposal = _propose(tmp_path)
         service = ready_service(tmp_path, proposal)
+        service._stability_frames = tuple(image.copy() for _ in range(8))
     original = copy.deepcopy(service._status if fake else service._proposal)
     revision = service.status()['setup']['proposal_revision']
     app = web.Application()
@@ -775,7 +776,9 @@ def test_region_edit_input_errors_are_400_without_mutation(tmp_path, monkeypatch
     assert service.status()['setup']['proposal_revision'] == revision
 
 
-@pytest.mark.parametrize('conflict', ['running', 'no_proposal', 'outdated_revision', 'no_overlay_evidence'])
+@pytest.mark.parametrize('conflict', [
+    'running', 'no_proposal', 'outdated_revision', 'no_overlay_evidence', 'no_stability_frames',
+])
 def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, conflict):
     from unittest.mock import AsyncMock
 
@@ -787,8 +790,9 @@ def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, con
         return fn(**kwargs)
 
     monkeypatch.setattr(asyncio, 'to_thread', direct)
-    _, _, proposal = _propose(tmp_path)
+    image, _, proposal = _propose(tmp_path)
     service = ready_service(tmp_path, proposal)
+    service._stability_frames = tuple(image.copy() for _ in range(8))
     revision = proposal['live_tracking']['proposal_revision']
     if conflict == 'running':
         service._state = 'running'
@@ -796,6 +800,8 @@ def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, con
         service._proposal = None
     elif conflict == 'no_overlay_evidence':
         del service._proposal['overlay_evidence']
+    elif conflict == 'no_stability_frames':
+        service._stability_frames = ()
     else:
         revision = 'outdated'
     app = web.Application()
@@ -809,6 +815,9 @@ def test_region_edit_state_conflicts_still_return_409(tmp_path, monkeypatch, con
         assert response.status == 409
         if conflict == 'no_overlay_evidence':
             assert 'Vorschlag ohne Overlay-Belege - neu einrichten' in response.text
+            assert service._proposal['live_tracking']['proposal_revision'] == revision
+        elif conflict == 'no_stability_frames':
+            assert 'Stabilitaets-Einzelbilder' in response.text and 'neu einrichten' in response.text
             assert service._proposal['live_tracking']['proposal_revision'] == revision
 
     asyncio.run(check())

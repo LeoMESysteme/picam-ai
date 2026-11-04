@@ -130,6 +130,30 @@ Harvest-Einrichtungen erhalten weder `nachfuehrung` noch `displayfehler`.
 
 Die Prüfung **Nachführung** verlangt geeignete, räumlich verteilte
 Rahmenbereiche und einen erkennbaren LCD-Rand im eingefrorenen Einrichtungsbild.
+Neu eingerichtete Bereiche werden zusätzlich in den **acht ungemittelten
+Einzelbildern** der zeitlich getrennten Stabilitätsaufnahme gesucht.
+Mindestens **sieben von acht** müssen einen eindeutigen inneren Treffer mit
+Peak **≥0,775** (Laufschwelle 0,75 plus Einrichtungsreserve 0,025) liefern.
+Der Treffer darf im unbewegten Aufbau höchstens **2 Originalpixel** vom
+Sollort abweichen. Die bisherige Auswahl bleibt dabei erhalten: Nur
+Bereiche, die diese Probe nicht bestehen, werden ersetzt, bevorzugt auf
+derselben Rahmenseite und nahe am Ersetzten. Ein Ersatz muss in den
+Einzelbildern außerdem **lagekonsistent** zu den übrigen Bereichen liegen,
+höchstens 0,35 px, ersatzweise 0,50 oder 0,65 px Abweichung, gemäß den
+Residuengrenzen des Laufs. Gelingt die Ausfallreserve nur mit Ersatz ohne
+diese Lageprüfung, meldet **Nachführung: WARNUNG**: Aufbau ruhig halten,
+mehr Licht oder anderen Blickwinkel wählen. Die Prüfung nutzt dieselben acht
+Aufnahmen, aus denen das zweite Standbild gemittelt wird; zusätzliche
+Aufnahmen oder Bilddateien entstehen dafür nicht. Das gemittelte Standbild
+allein belegt die Wiederfindbarkeit im verrauschten Laufbild nicht.
+Reichen die stabilen Bereiche für Anzahl, Verteilung und Ausfallreserve
+nicht aus, meldet **Nachführung: FEHLER** mit Grund und sperrt die Bestätigung:
+**mehr Licht auf den Rahmen geben oder einen anderen Blickwinkel wählen
+und neu einrichten**. Die Person prüft und bestätigt weiterhin alle Bereiche;
+die Prüfung ist keine Garantie für spätere Beleuchtungsänderungen.
+Der Einzelbildfilter ist derzeit ein **nicht abgenommener Entwicklungskandidat**:
+Die Gegenläufe zeigen weiterhin vier verlorene Tracks und Fehlvorhersagen
+([Kalibrierung und Grenzen](../VALIDATION.md#r13-25-runde-3)).
 Auch bei frontalem Blick wird der dunkle Rahmen einbezogen, wenn seine Kontur plausibel erkannt wird. Für die Reserve müssen auf jeder Achsenseite genügend Bereiche deutlich außerhalb der Mittellinie liegen, auch nach dem Ausfall beliebiger zwei Bereiche; sonst neu ausrichten oder Bereiche ergänzen.
 Rahmenprofile von vor R13-11 müssen neu eingerichtet werden; der Laufstart lehnt ihre alte Prüfkonfiguration ab.
 Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
@@ -156,6 +180,22 @@ Rückmeldungen nennen für jeden geprüften Mittelpunkt die Eignung
 oder den Ablehnungsgrund. Manuelle Bereiche durchlaufen dieselben Prüfungen
 für Zeichenabstand, Rahmenband, Bildrand, zweidimensionale Struktur,
 Eindeutigkeit und Mindestabstand. Ungeeignete Punkte werden nicht übernommen.
+Bei der Neubewertung werden dieselben acht Einzelbilder aus dem Speicher
+der aktuellen Einrichtung verwendet. Auf Platte stehen nur die Kennzahlen
+und das ohnehin benötigte gemittelte Zweitbild mit Datei-SHA. Fehlen die
+Einzelbilder nach einem Neustart oder wurde das gespeicherte Zweitbild
+verändert, muss neu eingerichtet werden. Mit der Bestätigung oder spätestens
+beim Laufstart werden die Einzelbilder freigegeben; nach der Bestätigung
+ist keine Bereichskorrektur mehr möglich. Ersatzbereiche ohne
+Lageprüfung bleiben im Vorschlag namentlich vermerkt
+(`stability_fallback_centres`). Die **WARNUNG** bleibt bei jeder
+Korrektur bestehen, solange einer davon im Satz steht, auch nach
+Entfernen und Wiederhinzufügen desselben Punkts. Erst ohne jeden
+solchen Bereich und mit sonst gültigem Satz wird Nachführung wieder OK.
+Bereits bestätigte Profile behalten
+im Lauf ihre gespeicherte Auswahl; sie wird beim Laden nicht neu berechnet.
+Das Laufstart-Gate verlangt weiterhin die Standard-Laufgrenzen. Die reine
+Einrichtungsreserve nimmt an diesem Vergleich nicht teil.
 Prüfe mit deinem Namen die gesamte Auswahl: alle Suchfenster liegen auf
 fester Rahmenstruktur, niemals auf Zeichen, Kabel, Tisch oder Hintergrund;
 auch die LCD-Randpunkte müssen stimmen. Es sind höchstens 24 Bereiche und
