@@ -308,6 +308,19 @@ test('Viewer zoomt um den Zeiger und Popover erklärt Rahmenbereich', async ({ p
   await expect(pop).toContainText('0,92');
   await expect(pop).not.toContainText('%');
 
+  // Zellen kommen aus dem Leser-Raster des Status (setup.grid).
+  const [cx, cy] = await canvas.evaluate(async (el: any) => {
+    const {cellQuads} = await import('/static/live/viewer/hud.js');
+    const box = cellQuads(el.viewer.hud().track.quad, el.viewer.grid())[8];
+    const mid = [0, 1].map((k) => box.reduce((sum: number, p: number[]) => sum + p[k], 0) / 4);
+    return el.viewer.imageToScreen(mid);
+  });
+  await page.mouse.move(box.x + cx, box.y + cy);
+  await expect(pop).toContainText('Zelle 8');
+  await expect(pop).toContainText('Abstand');
+  await page.mouse.move(box.x + rx, box.y + ry);
+  await expect(pop).toContainText('Rahmenbereich 4');
+
   // Klick heftet an, Wegbewegen schliesst nicht, Esc schliesst.
   await page.mouse.click(box.x + rx, box.y + ry);
   await page.mouse.move(box.x + 20, box.y + box.height - 20);

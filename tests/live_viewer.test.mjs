@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createViewer} from '../src/dispread/workbench/static/live/viewer/view.js';
-import {drawHud, hitTest, homography, readoutTag} from '../src/dispread/workbench/static/live/viewer/hud.js';
-import {LEGEND_ROWS} from '../src/dispread/workbench/static/live/viewer/legend.js';
+import {readFileSync} from 'node:fs';
+import {cellQuads, drawHud, hitTest, homography, readoutTag} from '../src/dispread/workbench/static/live/viewer/hud.js';
+import {LEGEND_ROWS, legendRows} from '../src/dispread/workbench/static/live/viewer/legend.js';
+
+// Leser-Raster wie im Live-Status (Szene running_valid): entzerrte Pixel.
+const GRID = JSON.parse(readFileSync(new URL('./fixtures/live/scene-running_valid.json', import.meta.url), 'utf8')).setup.grid;
+// Mitte einer Rasterzelle im Kamerabild.
+const cellCentre = (i) => {
+  const [x, y, w, h] = GRID.cell_boxes[i];
+  return homography(QUAD).map((x + w / 2) / GRID.target_size[0], (y + h / 2) / GRID.target_size[1]);
+};
 
 // Zeichenkontext-Attrappe: nimmt jeden Aufruf an und merkt sich Texte.
 function fakeContext() {
@@ -97,8 +106,8 @@ test('hitTest finds region 3 and cell 8', () => {
   assert.equal(lost.index, 1);
   assert.match(lost.info, /kein Treffer/);
 
-  // Mitte von Zelle 8 im Viereck (16 gleiche Zellen, projektiv).
-  const cell = hitTest(hud(), homography(QUAD).map(8.5 / 16, 0.5), {scale: 0.5});
+  // Mitte von Zelle 8 des Leser-Rasters.
+  const cell = hitTest(hud(), cellCentre(8), {scale: 0.5, grid: GRID});
   assert.equal(cell.kind, 'cell');
   assert.equal(cell.index, 8);
   assert.match(cell.info, /^Zelle 8 · /);
@@ -112,7 +121,7 @@ test('hitTest finds region 3 and cell 8', () => {
 
 test('hitTest only reports numbers the HUD carries', () => {
   const bare = hud({cells: [{i: 8, best: '7', margin: null, uncertain: false}]});
-  const cell = hitTest(bare, homography(QUAD).map(8.5 / 16, 0.5), {scale: 0.5});
+  const cell = hitTest(bare, cellCentre(8), {scale: 0.5, grid: GRID});
   assert.equal(cell.index, 8);
   assert.ok(!cell.info.includes('Abstand'), cell.info);
   // Ausgeblendete Ebenen sind nicht treffbar; ohne Lauf gibt es nichts.
@@ -156,4 +165,88 @@ test('legend explains every marker without probability wording', () => {
   for (const word of ['Rahmenbereich mit Treffer', 'Rahmenbereich ohne Treffer', 'Suchfenster', 'Unsichere Zelle',
     'Korrektur läuft', 'Wert-Etikett']) assert.ok(labels.includes(word), word);
   assert.ok(!/Wahrscheinlichkeit|%/.test(labels));
+});
+
+test('cell boxes come from the reader grid and land inside the quad', () => {
+  const boxes = cellQuads(QUAD, GRID);
+  assert.equal(boxes.length, 16);
+  const inside = (p) => {
+    let c = false;
+    for (let i = 0, j = 3; i < 4; j = i++) {
+      const [xi, yi] = QUAD[i], [xj, yj] = QUAD[j];
+      if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  for (const box of boxes) for (const p of box) assert.ok(inside([p[0] - Math.sign(p[0] - 1100) * 0.01, p[1] - 0.01]) || inside(p), `${p}`);
+  // Zelle 0 beginnt 18 von 160 entzerrten Pixeln unter der Oberkante.
+  const top = homography(QUAD).map(0, 0);
+  assert.ok(boxes[0][0][1] > top[1] + 5, `Oberkante ${boxes[0][0][1]} nicht unter ${top[1]}`);
+  // Der Rasterrand (top 18) ist kein Zelltreffer.
+  const [, , , h] = GRID.cell_boxes[0];
+  assert.ok(h < 160);
+  assert.equal(hitTest(hud(), homography(QUAD).map(12.5 / 400, 5 / 160), {scale: 0.5, grid: GRID}), null);
+});
+
+test('without a reader grid there are no cell boxes and no cell hits', () => {
+  assert.deepEqual(cellQuads(QUAD, null), []);
+  assert.equal(hitTest(hud(), cellCentre(8), {scale: 0.5}), null);
+  assert.equal(hitTest(hud(), cellCentre(8), {scale: 0.5, grid: {target_size: [400, 160], cell_boxes: []}}), null);
+  const labels = legendRows({grid: false}).map(([, label]) => label).join(' | ');
+  assert.ok(!/Raster|Zelle/.test(labels), labels);
+  assert.ok(legendRows({grid: true}).some(([, label]) => label.startsWith('Raster')));
+  assert.ok(!LEGEND_ROWS.some(([, label]) => label.includes('Fehlerort')));
+});
+
+test('a released value turns Veraltet while no new frame arrives', () => {
+  const tag = readoutTag(hud(), {frameAgeS: 0.6});
+  assert.equal(tag.word, 'Veraltet');
+  assert.ok(!/\d\.\d/.test(tag.value), tag.value);
+  assert.equal(readoutTag(hud(), {frameAgeS: 0.3}).word, 'Freigegeben');
+});
+
+test('viewer redraws at the value age limit and keeps the frame size on a broken HUD', () => {
+  let t = 0;
+  const pending = [];
+  const timers = {setTimeout: (fn, ms) => { pending.push({fn, at: t + ms}); return pending.length; }, clearTimeout: () => {}};
+  let draws = 0;
+  const viewer = createViewer(fakeCanvas(), {dpr: 1, now: () => t, timers, schedule: (fn) => { draws += 1; fn(); }});
+  viewer.setFrame({width: 960, height: 540}, hud());
+  const words = [];
+  viewer.addPainter((ctx, view) => words.push(readoutTag(viewer.hud(), {frameAgeS: view.frameAgeS})?.word));
+  // Timer an der 0,5-s-Grenze (0,5 − 0,04 s) und an der 1,5-s-Bildgrenze.
+  const due = pending.map((p) => p.at).sort((a, b) => a - b);
+  assert.ok(due.some((ms) => ms >= 460 && ms <= 470), `${due}`);
+  assert.ok(due.some((ms) => ms >= 1500 && ms <= 1510), `${due}`);
+  t = 470;
+  const before = draws;
+  pending.find((p) => p.at >= 460 && p.at <= 470).fn();
+  assert.ok(draws > before);
+  assert.equal(words[words.length - 1], 'Veraltet');
+  assert.equal(viewer.tagWord(), 'Veraltet');
+  // Ein Teil ohne lesbares X-Hud bleibt im Kamerabild-Raum (1920 breit).
+  viewer.fit();
+  const wide = viewer.imageToScreen([1920, 0])[0] - viewer.imageToScreen([0, 0])[0];
+  viewer.setFrame({width: 960, height: 540}, null);
+  viewer.fit();
+  assert.ok(Math.abs(viewer.imageToScreen([1920, 0])[0] - viewer.imageToScreen([0, 0])[0] - wide) < 1e-9);
+});
+
+test('click handlers compose: the first one returning true consumes the click', () => {
+  const viewer = createViewer(fakeCanvas(), {dpr: 1, schedule: () => {}});
+  viewer.setFrame({width: 960, height: 540}, hud());
+  const calls = [];
+  const removeA = viewer.addClickHandler((point) => { calls.push(['a', Math.round(point[0])]); return false; });
+  viewer.addClickHandler(() => { calls.push(['b']); return true; });
+  viewer.addClickHandler(() => { calls.push(['c']); return true; });
+  const screen = viewer.imageToScreen([1485, 658]);
+  viewer.click(screen);
+  assert.deepEqual(calls, [['a', 1485], ['b']]);
+  assert.equal(viewer.pinned(), null, 'verbrauchter Klick heftet nicht an');
+  removeA();
+  calls.length = 0;
+  viewer.click(screen);
+  assert.deepEqual(calls, [['b']]);
+  const removePainter = viewer.addPainter(() => {});
+  assert.equal(typeof removePainter, 'function');
 });

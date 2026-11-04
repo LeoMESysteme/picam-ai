@@ -103,3 +103,27 @@ test('openPreview passes a null HUD when the header is broken', async () => {
   assert.equal(frames.length, 1);
   assert.equal(frames[0].hud, null);
 });
+
+test('openPreview surfaces a render error and keeps reading the same stream', async () => {
+  const controller = new AbortController();
+  const raw = concat(part(1, Uint8Array.from([1])), part(2, Uint8Array.from([2])));
+  const seen = [];
+  const errors = [];
+  const sleeps = [];
+  let calls = 0;
+  await openPreview('/x', (frame) => {
+    seen.push(frame.seq);
+    if (frame.seq === 1) throw new Error('Renderfehler');
+    controller.abort();
+  }, controller.signal, {
+    fetchImpl: async () => { calls += 1; return {ok: true,
+      headers: new Map([['content-type', 'multipart/x-mixed-replace; boundary=frame']]), body: chunked(raw, [9])}; },
+    decode: async () => ({width: 960}),
+    sleep: async (ms) => { sleeps.push(ms); },
+    onError: (error) => errors.push(error.message),
+  });
+  assert.deepEqual(seen, [1, 2]);
+  assert.deepEqual(errors, ['Renderfehler']);
+  assert.equal(calls, 1, 'kein Neuverbinden wegen eines Anzeigefehlers');
+  assert.deepEqual(sleeps, []);
+});

@@ -7,7 +7,7 @@
 // das Kamerabild (hud.w × hud.h). Das 960 px breite Vorschau-JPEG wird auf
 // diese Groesse gezogen, damit HUD und Bild denselben Raum teilen.
 // Bildschirmkoordinaten sind CSS-px relativ zur Canvas.
-import {ALL_LAYERS, LAYERS, drawHud, hitTest, markerInfo} from './hud.js';
+import {ALL_LAYERS, FRAME_MAX_AGE_S, LAYERS, VALUE_MAX_AGE_S, drawHud, hitTest, markerInfo, readoutTag} from './hud.js';
 import {renderLegend} from './legend.js';
 
 const ZOOM_MIN = 0.05;
@@ -21,10 +21,12 @@ export function createViewer(canvas, opts = {}) {
   const dprOf = () => opts.dpr || Math.min(globalThis.devicePixelRatio || 1, 2);
   const schedule = opts.schedule || ((fn) => globalThis.requestAnimationFrame(fn));
   const now = opts.now || (() => globalThis.performance.now());
+  const timers = opts.timers || globalThis;
   const ctx = canvas.getContext('2d');
   const state = {
     src: 'live', layers: new Set(ALL_LAYERS), hud: null, frame: null, frameAt: null, frames: [],
     stills: {}, views: {}, auto: {live: true}, hover: null, pinned: null, pointer: null, queued: false,
+    frameSize: null, grid: null, painters: [], clickHandlers: [], ageTimers: [],
   };
   const viewKey = () => (state.src === 'still' ? 'live' : state.src);
   const size = () => [canvas.clientWidth || 0, canvas.clientHeight || 0];
@@ -37,7 +39,9 @@ export function createViewer(canvas, opts = {}) {
 
   function dims() {
     if (state.src === 'live' || state.src === 'still') {
-      if (finite(state.hud?.w) && finite(state.hud?.h)) return [state.hud.w, state.hud.h];
+      // Letzte bekannte Kamerabildgroesse; ein Teil ohne lesbares X-Hud
+      // faellt so nicht auf die 960 px des Vorschau-JPEGs zurueck.
+      if (state.frameSize) return state.frameSize;
       const img = state.src === 'live' ? state.frame : state.stills.still?.ready && state.stills.still.img;
       const w = img?.naturalWidth || img?.width, h = img?.naturalHeight || img?.height;
       return w && h ? [w, h] : null;
@@ -106,7 +110,7 @@ export function createViewer(canvas, opts = {}) {
   function viewState() {
     const v = view();
     return {imageToScreen, screenToImage, width: v.W, height: v.H, scale: v.s, dpr: dprOf(),
-      hover: state.pinned || state.hover, frameAgeS: frameAgeS(), source: state.src};
+      hover: state.pinned || state.hover, frameAgeS: frameAgeS(), source: state.src, grid: state.grid};
   }
 
   function draw() {
@@ -133,7 +137,10 @@ export function createViewer(canvas, opts = {}) {
     // Live-HUD gehoert nur zum Live-Bild: Standbilder tragen ihre eigene
     // Geometrie, ein Live-Viereck darueber laege auf einem anderen Bild.
     if (state.src === 'live' && state.hud) drawHud(ctx, state.hud, viewState(), state.layers);
-    opts.paint?.(ctx, viewState());
+    for (const painter of state.painters) {
+      ctx.save();
+      try { painter(ctx, viewState()); } finally { ctx.restore(); }
+    }
   }
 
   function redraw() {
@@ -163,7 +170,7 @@ export function createViewer(canvas, opts = {}) {
 
   function hitAt(screen) {
     if (state.src !== 'live' || !state.hud) return null;
-    return hitTest(state.hud, screenToImage(screen), {scale: view().s, layers: state.layers});
+    return hitTest(state.hud, screenToImage(screen), {scale: view().s, layers: state.layers, grid: state.grid});
   }
 
   function unpin() {
@@ -174,12 +181,31 @@ export function createViewer(canvas, opts = {}) {
     redraw();
   }
 
+  // Wahrheitsregel 1 ohne neues Bild: an den Altersgrenzen des Werts (0,5 s
+  // ab Kodierung) und des Bilds (1,5 s) neu zeichnen, damit das Etikett
+  // sofort auf Veraltet springt und nicht erst beim naechsten Takt.
+  function armAgeTimers() {
+    for (const timer of state.ageTimers) timers.clearTimeout(timer);
+    state.ageTimers = [];
+    const ages = [FRAME_MAX_AGE_S];
+    const rec = state.hud?.rec;
+    if (rec?.status === 'valid' && finite(rec.age_s) && rec.age_s <= VALUE_MAX_AGE_S) {
+      ages.push(VALUE_MAX_AGE_S - rec.age_s);
+    }
+    for (const age of ages) {
+      const timer = timers.setTimeout(() => redraw(), Math.ceil(age * 1000) + 5);
+      timer?.unref?.();
+      state.ageTimers.push(timer);
+    }
+  }
+
   const api = {
     setFrame(bitmap, hud) {
       if (state.frame && state.frame !== bitmap) state.frame.close?.();
       const firstQuad = !state.hud?.track?.quad && hud?.track?.quad;
       state.frame = bitmap;
       state.hud = hud || null;
+      if (finite(hud?.w) && finite(hud?.h) && hud.w > 0 && hud.h > 0) state.frameSize = [hud.w, hud.h];
       const t = now();
       state.frameAt = t;
       state.frames.push(t);
@@ -190,6 +216,7 @@ export function createViewer(canvas, opts = {}) {
       }
       // Erstes Viereck: Ansicht auf die Anzeige legen, solange unberuehrt.
       if (firstQuad && state.auto.live) delete state.views.live;
+      armAgeTimers();
       if (state.src === 'live' || state.src === 'still') {
         refreshMarker();
         redraw();
@@ -290,7 +317,8 @@ export function createViewer(canvas, opts = {}) {
     click(screen) {
       const point = screenToImage(screen);
       const hit = hitAt(screen);
-      if (opts.onClick?.(point, hit) === true) return;
+      // Der erste Handler, der true liefert, verbraucht den Klick.
+      for (const handler of state.clickHandlers) if (handler(point, hit) === true) return;
       if (hit) {
         state.pinned = {...hit, anchor: point};
         state.hover = null;
@@ -303,6 +331,33 @@ export function createViewer(canvas, opts = {}) {
     },
     unpin,
     pinned: () => state.pinned,
+    // Leser-Raster aus status.setup.grid (null ohne Vorschlag/Profil).
+    setGrid(grid) {
+      const key = JSON.stringify(grid ?? null);
+      if (key === state.gridKey) return;
+      state.gridKey = key;
+      state.grid = grid || null;
+      refreshMarker();
+      redraw();
+    },
+    grid: () => state.grid,
+    // Zusatzebenen (Bereichsbearbeitung, Effekte): painter(ctx, viewState)
+    // zeichnet nach dem HUD in CSS-px; Rueckgabe entfernt ihn wieder.
+    addPainter(painter) {
+      state.painters.push(painter);
+      redraw();
+      return () => {
+        state.painters = state.painters.filter((p) => p !== painter);
+        redraw();
+      };
+    },
+    // handler(imagePoint, hit) -> true verbraucht den Klick (kein Anheften).
+    addClickHandler(handler) {
+      state.clickHandlers.push(handler);
+      return () => { state.clickHandlers = state.clickHandlers.filter((h) => h !== handler); };
+    },
+    // Status des Etiketts, wie er gerade gezeichnet wuerde (fuer den Takt).
+    tagWord: () => readoutTag(state.hud, {frameAgeS: frameAgeS()})?.word ?? null,
   };
 
   function hitLayerOn(kind) {
@@ -332,8 +387,10 @@ function popHTML(info, pinned) {
 
 // Baut das Grafikfenster in host (viewerHost der Huelle). Rueckgabe:
 // {viewer, canvas, setStatus(status), setFrame(bitmap, hud), setStream(state)}.
+// Zusatzebenen und Klicks haengen sich ueber viewer.addPainter und
+// viewer.addClickHandler an.
 // statusbar: Knoten der Statusleiste mit [data-slot="preview-fps"].
-export function mountViewer(host, {statusbar = null, onClick = null, paint = null} = {}) {
+export function mountViewer(host, {statusbar = null} = {}) {
   host.innerHTML = `
     <div class="vt" role="toolbar" aria-label="Werkzeuge der Bildansicht">
       <button type="button" data-act="out" title="Verkleinern" aria-label="Verkleinern">${ICON('zm')}</button>
@@ -370,7 +427,8 @@ export function mountViewer(host, {statusbar = null, onClick = null, paint = nul
   const legend = q('.legend');
   const menu = q('.menu');
   const layersButton = q('[data-act="layers"]');
-  renderLegend(legend);
+  let legendGrid = false;
+  renderLegend(legend, {grid: legendGrid});
   let stream = 'verbindet';
   let status = null;
   let lastPop = null;
@@ -399,8 +457,6 @@ export function mountViewer(host, {statusbar = null, onClick = null, paint = nul
 
   const viewer = createViewer(canvas, {
     onMarker: placePop,
-    onClick,
-    paint,
     onView: (zoom) => { zoomLabel.textContent = `${Math.round(zoom * 100)} %`; },
     onPointer: (point) => {
       if (!point) { coord.textContent = ''; return; }
@@ -554,10 +610,11 @@ export function mountViewer(host, {statusbar = null, onClick = null, paint = nul
   }
 
   // Ruhiger Takt: Alter und Rate weiterzaehlen, auch wenn keine Bilder kommen.
-  let lastStale = false;
+  let lastTag = null;
   setInterval(() => {
-    const stale = viewer.frameAgeS() > 1.5;
-    if (stale !== lastStale) { lastStale = stale; viewer.redraw(); }
+    // Sicherheitsnetz zu den Alterstimern: aendert sich das Etikett, neu zeichnen.
+    const tag = viewer.tagWord();
+    if (tag !== lastTag) { lastTag = tag; viewer.redraw(); }
     updateChip();
     updateRate(viewer.hud());
   }, 500);
@@ -580,6 +637,12 @@ export function mountViewer(host, {statusbar = null, onClick = null, paint = nul
     setStatus(next) {
       const previousKey = status?.setup?.proposal_revision || status?.session_id;
       status = next;
+      const grid = next?.setup?.grid || null;
+      viewer.setGrid(grid);
+      if (Boolean(grid) !== legendGrid) {
+        legendGrid = Boolean(grid);
+        renderLegend(legend, {grid: legendGrid});
+      }
       const overlays = next?.setup?.overlays || [];
       for (const button of host.querySelectorAll('.seg [data-src]')) {
         const src = button.dataset.src;

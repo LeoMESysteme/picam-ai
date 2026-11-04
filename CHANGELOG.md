@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Im Viewer der Live-Seite konnte ein freigegebener Wert bei
+  stehendem Strom noch bis etwa 2,5 s als „Freigegeben“ stehen, weil das
+  Etikett nur das Alter beim Kodieren kannte. Jetzt zählt das Alter des
+  Werts weiter, solange kein neues Bild kommt (Alter + Bildalter > 0,5 s
+  ergibt Veraltet), und der Viewer zeichnet genau an den Grenzen neu.
+  Die Zellkästen kommen aus dem echten Leser-Raster (`setup.grid`, über
+  das Viereck ins Kamerabild abgebildet) statt aus 16 gleichen Teilen des
+  Vierecks; ohne Raster gibt es keine Zellkästen, keine Zelltreffer und
+  keine Zellzeilen in der Legende. Ein Fehler beim Zeichnen eines Bilds
+  erscheint als Seitenfehler statt als stilles Neuverbinden, ein Teil ohne
+  lesbares X-Hud behält die Kamerabildgröße. Zusatzebenen und Klicks
+  hängen sich mehrfach an (`addPainter`, `addClickHandler`), rote und
+  gelbe Hinweise im Info-Fenster sind wieder farbig, und die Legende
+  nennt den Fehlerort erst, wenn er gezeichnet wird.
+
 * 2026-11-04: `/live/status` liefert mit `setup.grid` die tatsächlichen
   Leserboxen samt Zielgröße und Rasterquelle. Die Geometrie folgt dem
   Vorschlag und Bereichskorrekturen, bleibt im bestätigten Lauf erhalten
@@ -16,7 +31,7 @@ was ist die Konsequenz.
   Neuverbindung nach 0,5 s bis 5 s) und zeichnet Bild und HUD aus
   demselben Teil auf einer Canvas mit 1-px-Linien in Kamerabild-
   Koordinaten: Anzeige-Viereck in der Statusfarbe (Teal bei Korrektur),
-  Raster mit 16 gleichen Zellen, unsichere Zellen getönt, Rahmenbereiche
+  Zellen des Leser-Rasters, unsichere Zellen getönt, Rahmenbereiche
   in Magenta bzw. ohne Treffer rot mit Suchfenster, Wert-Etikett mit
   Wert, Status und Spur (älter als 0,5 s oder Bild älter als 1,5 s:
   Veraltet). Mausrad zoomt um den Zeiger, Ziehen verschiebt,

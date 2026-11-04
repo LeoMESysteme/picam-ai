@@ -109,6 +109,12 @@ const defaultSleep = (ms, signal) => new Promise((resolve) => {
   signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, {once: true});
 });
 
+// Wie api.js: Fehler der Anzeige sichtbar machen (Konsole, pageerror).
+function surfaceError(error) {
+  if (typeof globalThis.reportError === 'function') globalThis.reportError(error);
+  else setTimeout(() => { throw error; });
+}
+
 const defaultDecode = (bytes) => createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}));
 
 function headerOf(headers, name) {
@@ -120,11 +126,14 @@ function headerOf(headers, name) {
 // 0,5 s, dann verdoppelt bis 5 s; ein empfangenes Bild setzt auf 0,5 s zurueck.
 // onFrame bekommt {bitmap, hud, seq, capNs}; hud ist null, wenn X-Hud fehlt
 // oder nicht lesbar ist. onState('verbindet'|'offen'|'getrennt') ist optional.
+// Wirft onFrame, geht der Fehler an onError (Standard: reportError) und der
+// Strom laeuft weiter.
 export async function openPreview(url, onFrame, signal, deps = {}) {
   const fetchImpl = deps.fetchImpl || ((...args) => fetch(...args));
   const decode = deps.decode || defaultDecode;
   const sleep = deps.sleep || defaultSleep;
   const onState = deps.onState || (() => {});
+  const onError = deps.onError || surfaceError;
   let failures = 0;
   while (!signal?.aborted) {
     let gotFrame = false;
@@ -146,10 +155,15 @@ export async function openPreview(url, onFrame, signal, deps = {}) {
         failures = 0;
         const seq = Number.parseInt(part.headers.get('x-frame-sequence'), 10);
         const capNs = part.headers.get('x-capture-ns') ?? null;
-        onFrame({bitmap, hud, seq: Number.isFinite(seq) ? seq : null, capNs});
+        try {
+          onFrame({bitmap, hud, seq: Number.isFinite(seq) ? seq : null, capNs});
+        } catch (error) {
+          // Ein Anzeigefehler ist kein Stromabbruch: sichtbar machen, weiterlesen.
+          onError(error);
+        }
       }
     } catch {
-      // Abbruch oder Netzfehler: unten mit Wartezeit neu verbinden.
+      // Nur Abruf-, Strom- und Lesefehler: unten mit Wartezeit neu verbinden.
     }
     if (signal?.aborted) return;
     onState('getrennt');

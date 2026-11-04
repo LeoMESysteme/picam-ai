@@ -1,9 +1,12 @@
-// HUD des Viewers: zeichnet Anzeige-Viereck, Zellenraster, unsichere Zellen,
+// HUD des Viewers: zeichnet Anzeige-Viereck, Leser-Zellen, unsichere Zellen,
 // Rahmenbereiche und das Wert-Etikett aus dem X-Hud des gerade gezeigten
 // MJPEG-Teils, mit 1-px-Linien im Bildschirmraum (bei jedem Zoom scharf).
 // Alle Zahlen in Etikett und Markierungs-Info kommen aus dem HUD; Konfidenz
 // heisst "Spur" oder "Treffer", nie Wahrscheinlichkeit.
 // Koordinaten im HUD sind Kamerabild-Pixel (hud.w × hud.h, 1920×1080).
+// Die Zellkaesten kommen aus status.setup.grid (Raster des Lesers in
+// entzerrten Pixeln, target_size); sie werden ueber das Viereck ins
+// Kamerabild abgebildet. Ohne Raster gibt es keine Zellkaesten.
 
 export const LAYERS = [
   ['anzeige', 'Anzeige'], ['raster', 'Raster'], ['zellen', 'Zellen'],
@@ -18,9 +21,6 @@ const STATUS = {
   valid: ['Freigegeben', 'ok'], transition: ['Wechselt', 'warn'],
   unreadable: ['Unlesbar', 'err'], stale: ['Veraltet', 'stale'],
 };
-// Displaytech 161A: 16 Zeichen × 1 Zeile; das HUD traegt kein Raster, nur das
-// Viereck. Die Zellen sind deshalb 16 gleiche Teile des Vierecks.
-export const CELLS = 16;
 // Suchradius des Rahmen-Trackers (FrameTrackingConfig.search_radius_px). Der
 // Laufstart verlangt die Standardkonfiguration, das HUD traegt ihn nicht;
 // er bestimmt nur die gezeichnete Fenstergroesse, nie einen Infotext.
@@ -59,20 +59,51 @@ export function homography(q) {
   };
 }
 
+function validGrid(grid) {
+  const size = grid?.target_size;
+  return Array.isArray(size) && finite(size[0]) && finite(size[1]) && size[0] > 0 && size[1] > 0
+    && Array.isArray(grid.cell_boxes) && grid.cell_boxes.length > 0;
+}
+
+// Zellkaesten des Leser-Rasters im Kamerabild: entzerrtes Rechteck
+// (0,0)-(w,h) <-> Viereck (Eckenfolge wie im Viereck). Leer ohne Raster.
+export function cellQuads(quad, grid) {
+  if (!validQuad(quad) || !validGrid(grid)) return [];
+  const [w, h] = grid.target_size;
+  const H = homography(quad);
+  return grid.cell_boxes.map((box) => {
+    if (!Array.isArray(box) || box.length !== 4 || !box.every(finite)) return null;
+    const [x, y, bw, bh] = box;
+    return [H.map(x / w, y / h), H.map((x + bw) / w, y / h), H.map((x + bw) / w, (y + bh) / h), H.map(x / w, (y + bh) / h)];
+  });
+}
+
+function cellAt(quad, grid, [x, y]) {
+  if (!validQuad(quad) || !validGrid(grid)) return -1;
+  const [w, h] = grid.target_size;
+  const [u, v] = homography(quad).inv(x, y);
+  const [tx, ty] = [u * w, v * h];
+  return grid.cell_boxes.findIndex((box) => Array.isArray(box) && box.length === 4 && box.every(finite)
+    && tx >= box[0] && tx < box[0] + box[2] && ty >= box[1] && ty <= box[1] + box[3]);
+}
+
 const layerOn = (layers, key) => !layers || layers.has(key);
 const cellsOf = (hud) => (Array.isArray(hud?.cells) ? hud.cells : []);
 const regionsOf = (hud) => (Array.isArray(hud?.track?.regions) ? hud.track.regions
   .filter((r) => Array.isArray(r?.c) && finite(r.c[0]) && finite(r.c[1])) : []);
 
 // Wert-Etikett (Wahrheitsregel 1): ein Wert aelter als 0,5 s oder ein Bild
-// ohne Nachfolger seit 1,5 s ist Veraltet, nie Freigegeben. Eine
-// Leser-Vermutung erscheint hier nie.
+// ohne Nachfolger seit 1,5 s ist Veraltet, nie Freigegeben. Das Alter des
+// Werts zaehlt weiter, solange kein neues Bild kommt (age_s stammt aus der
+// Kodierzeit). Eine Leser-Vermutung erscheint hier nie.
+export const VALUE_MAX_AGE_S = 0.5;
+export const FRAME_MAX_AGE_S = 1.5;
 export function readoutTag(hud, {frameAgeS = 0} = {}) {
   const rec = hud?.rec;
   if (!rec) return null;
   let status = STATUS[rec.status] ? rec.status : 'unreadable';
-  const fresh = finite(rec.age_s) && rec.age_s <= 0.5;
-  if ((status === 'valid' && !fresh) || frameAgeS > 1.5) status = 'stale';
+  const fresh = finite(rec.age_s) && rec.age_s + Math.max(0, frameAgeS) <= VALUE_MAX_AGE_S;
+  if ((status === 'valid' && !fresh) || frameAgeS > FRAME_MAX_AGE_S) status = 'stale';
   const [word, tone] = STATUS[status];
   const value = status === 'valid' ? `${rec.text} ${rec.unit || ''}`.trim()
     : status === 'transition' ? 'Wert wechselt' : status === 'stale' ? 'veraltet' : 'kein Wert';
@@ -125,8 +156,9 @@ export function markerInfo(hud, kind, index) {
 }
 
 // Trifft [x, y] (Kamerabild-Pixel) eine Markierung? scale = Bildschirm-px je
-// Bildpixel, damit kleine Ziele bei kleinem Zoom treffbar bleiben.
-export function hitTest(hud, [x, y], {scale = 1, layers} = {}) {
+// Bildpixel, damit kleine Ziele bei kleinem Zoom treffbar bleiben; grid =
+// status.setup.grid (ohne Raster keine Zelltreffer).
+export function hitTest(hud, [x, y], {scale = 1, layers, grid = null} = {}) {
   if (!hud?.track) return null;
   if (layerOn(layers, 'rahmen')) {
     const regions = hud.track.regions || [];
@@ -144,9 +176,9 @@ export function hitTest(hud, [x, y], {scale = 1, layers} = {}) {
       if (Math.hypot(quad[i][0] - x, quad[i][1] - y) * scale < 9) return markerInfo(hud, 'corner', i);
     }
   }
-  if (layerOn(layers, 'zellen') || layerOn(layers, 'raster') || layerOn(layers, 'anzeige')) {
-    const [u, v] = homography(quad).inv(x, y);
-    if (u >= 0 && u < 1 && v >= 0 && v <= 1) return markerInfo(hud, 'cell', Math.floor(u * CELLS));
+  if (layerOn(layers, 'zellen') || layerOn(layers, 'raster')) {
+    const index = cellAt(quad, grid, [x, y]);
+    if (index >= 0) return markerInfo(hud, 'cell', index);
   }
   return null;
 }
@@ -247,7 +279,7 @@ function drawTag(ctx, tag, quad, view) {
 }
 
 // view: {imageToScreen([x, y]) -> [sx, sy] (CSS-px), width, height, scale,
-// dpr, hover: {kind, index} | null, frameAgeS}. ctx steht auf CSS-px
+// dpr, hover: {kind, index} | null, frameAgeS, grid}. ctx steht auf CSS-px
 // (setTransform(dpr, 0, 0, dpr, 0, 0)).
 export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
   if (!hud) return;
@@ -263,23 +295,26 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
   const quadColor = track?.correcting ? COL.teal : tag ? COL[tag.tone] : COL.sel;
 
   if (quad) {
-    const H = homography(quad);
-    if (layerOn(layers, 'raster')) {
+    const boxes = cellQuads(quad, view.grid);
+    if (layerOn(layers, 'raster') && boxes.length) {
       ctx.beginPath();
-      for (let i = 1; i < CELLS; i += 1) {
-        const a = toS(H.map(i / CELLS, 0)), b = toS(H.map(i / CELLS, 1));
-        ctx.moveTo(a[0], a[1]);
-        ctx.lineTo(b[0], b[1]);
+      for (const box of boxes) {
+        if (!box) continue;
+        box.forEach((p, i) => {
+          const [a, b] = toS(p);
+          if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b);
+        });
+        ctx.closePath();
       }
       ctx.lineWidth = 1;
       ctx.strokeStyle = tag ? 'rgba(235,231,224,.18)' : 'rgba(134,174,232,.38)';
       ctx.stroke();
     }
-    const cellQuad = (i) => [H.map(i / CELLS, 0), H.map((i + 1) / CELLS, 0), H.map((i + 1) / CELLS, 1), H.map(i / CELLS, 1)];
     if (layerOn(layers, 'zellen')) {
       for (const cell of cellsOf(hud)) {
-        if (!cell?.uncertain || !(cell.i >= 0 && cell.i < CELLS)) continue;
-        poly(ctx, cellQuad(cell.i), toS);
+        const box = cell?.uncertain ? boxes[cell.i] : null;
+        if (!box) continue;
+        poly(ctx, box, toS);
         ctx.fillStyle = 'rgba(229,165,53,.20)';
         ctx.fill();
         ctx.lineWidth = 1.5;
@@ -287,16 +322,17 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
         ctx.stroke();
       }
     }
-    if (hover?.kind === 'cell' && hover.index >= 0 && hover.index < CELLS) {
-      poly(ctx, cellQuad(hover.index), toS);
+    const hoverBox = hover?.kind === 'cell' ? boxes[hover.index] : null;
+    if (hoverBox) {
+      poly(ctx, hoverBox, toS);
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#fff';
       ctx.stroke();
-      const [a, b] = toS(H.map((hover.index + 0.5) / CELLS, 0));
+      const [a0, b0] = toS(hoverBox[0]), [a1, b1] = toS(hoverBox[1]);
       ctx.font = `600 11px ${MONO}`;
       const label = String(hover.index);
       const w = ctx.measureText(label).width + 8;
-      badge(ctx, a - w / 2, b - 19, label, '#fff');
+      badge(ctx, (a0 + a1) / 2 - w / 2, Math.min(b0, b1) - 19, label, '#fff');
     }
     if (layerOn(layers, 'anzeige')) {
       poly(ctx, quad, toS);
