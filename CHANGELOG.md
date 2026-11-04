@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Der Fake-Server der Live-Seite kannte die neuen Einrichtungs-
+  und Laufdaten noch nicht. Elf steuerbare Szenen liefern jetzt Fokus,
+  Fortschritt, Prüfungen, Zähler und Verlauf sowie eine MJPEG-Vorschau mit
+  Szenen-HUD. Gespeicherte Szenen werden gegen frische Dumps und den echten
+  Statusvertrag geprüft; Node und spätere Browsertests teilen dieselbe
+  Formprüfung. Revisionswechsel, verzögerte Antworten und ausbleibende
+  Statusantworten sind für Bedienungstests steuerbar.
+
 * 2026-11-04: Die Live-Vorschau kodierte bei jedem Abruf erneut und
   zeichnete das Quad fest ins Bild. `/live/preview.mjpg` liefert jetzt
   JPEG-Teile mit Sequenz, Aufnahmezeit und kompaktem HUD im Kopf;

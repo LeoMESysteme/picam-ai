@@ -1284,3 +1284,245 @@ def test_run_start_output_reaches_service_without_socket(monkeypatch):
                              'diagnostics': False, 'output': output}]
 
     asyncio.run(check())
+
+
+SCENE_NAMES = (
+    'idle', 'setup_focus', 'setup_focus_done', 'setup_standbilder', 'setup_ready_warnung',
+    'running_valid', 'running_transition', 'running_rahmen_verdeckt', 'running_stalled',
+    'running_anzeige_bewegt', 'stopped',
+)
+
+
+def _assert_real_keys(fake, real, path='status'):
+    if isinstance(real, dict):
+        assert isinstance(fake, dict), path
+        assert fake.keys() >= real.keys(), f'{path}: missing {real.keys() - fake.keys()}'
+        for key, value in real.items():
+            _assert_real_keys(fake[key], value, f'{path}.{key}')
+    elif isinstance(real, list) and real and isinstance(real[0], dict):
+        for item in fake:
+            _assert_real_keys(item, real[0], f'{path}[]')
+
+
+def test_fake_status_has_all_real_keys_for_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+    from test_live_session import _session, embed
+
+    from dispread.live.service import LiveService
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3)
+    session.start()
+    try:
+        session.step()
+        real = LiveService(session._owner, tmp_path, diagnostic_staging_root=tmp_path / 'staging')
+        fake = FakeLiveService(tmp_path / 'overlay.png')
+        for name in SCENE_NAMES:
+            fake.set_scene(name)
+            status = fake.status(full=True)
+            real._state = status['state']
+            real._setup_started_at = 0.0 if status['setup'] else None
+            real._proposal = None
+            if name == 'setup_ready_warnung' or status['run']:
+                real._proposal = {'setup_checks': {'overall': 'WARNUNG', 'checks': {
+                    'raster': {'status': 'WARNUNG'}, 'gegenlesen': {'status': 'OK'}}},
+                    'live_tracking': {'proposal_revision': 'v1', 'proposal': {}}}
+            real._session = session if status['run'] else None
+            real._run_dir = tmp_path / 'run-01'
+            _assert_real_keys(status, real.status(full=True), name)
+    finally:
+        session.stop()
+
+
+def test_fake_dump_scenes_matches_committed_fixtures(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    fixtures = Path(__file__).parent / 'fixtures' / 'live'
+    subprocess.run([sys.executable, str(Path(__file__).with_name('live_ui_server.py')),
+                    '--dump-scenes', str(tmp_path)], check=True, env={**os.environ, 'PYTHONPATH': 'src'})
+    expected = {f'scene-{name}.json' for name in SCENE_NAMES}
+    assert {p.name for p in tmp_path.glob('scene-*.json')} == expected
+    assert {p.name for p in fixtures.glob('scene-*.json')} == expected
+    for name in expected:
+        assert (fixtures / name).read_bytes() == (tmp_path / name).read_bytes(), name
+    source = Path('docs/superpowers/specs/2026-11-04-werkbank-redesign-mock/img/still.jpg')
+    assert (fixtures / 'still.jpg').read_bytes() == source.read_bytes()
+
+
+def test_fake_scene_values_and_hud(tmp_path):
+    import json
+
+    import cv2
+    import numpy as np
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name, samples in [('setup_focus', 3), ('setup_focus_done', 9)]:
+        service.set_scene(name)
+        focus = service.status()['setup']['focus']
+        assert [p[0] for p in focus['samples']] == [48, 56, 40, 42, 44, 46, 50, 52, 54][:samples]
+        assert [round(p[1]) for p in focus['samples']] == [630, 274, 201, 302, 442, 543, 607, 525, 391][:samples]
+        assert (focus['verify'] is None) == (samples == 3)
+    service.set_scene('setup_standbilder')
+    progress = service.status()['setup']['progress']
+    assert progress['phase'] == 'stabilitaet'
+    assert progress['wait'] == {'elapsed_s': 9, 'total_s': 15}
+    assert service.status()['setup']['exposure']['rounds'] == [{
+        'level': 124.0, 'controls': {'focus_absolute': 48, 'exposure_time_absolute': 300,
+                                  'white_balance_temperature': 4742, 'gain': 10},
+    }]
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        frame = service.preview_frame()
+        hud = frame.hud
+        assert frame.seq == hud['seq'] and frame.cap_ns == hud['cap_ns']
+        assert hud['w'] == 1920 and hud['h'] == 1080
+        assert hud['preview'] == {'fps': 15, 'throttled': None}
+        assert len(json.dumps(hud, ensure_ascii=True, separators=(',', ':')).encode('ascii')) <= 2048
+        image = cv2.imdecode(np.frombuffer(frame.jpeg, np.uint8), cv2.IMREAD_COLOR)
+        assert image.shape == (540, 960, 3)
+        if not name.startswith('running_'):
+            assert hud['track'] is hud['cells'] is hud['rec'] is None
+        else:
+            assert hud['track']['quad'] == [[810, 511], [1369, 511], [1377, 580], [814, 591]]
+            assert len(hud['cells']) == 16
+            assert len(hud['track']['regions']) == len(service.status()['setup']['regions'])
+        if name == 'running_rahmen_verdeckt':
+            assert [i + 1 for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [5, 6, 7, 8]
+        if name == 'running_stalled':
+            assert hud['rec']['status'] == 'stale' and hud['rec']['age_s'] > 0.5
+            camera = service.status()['camera']
+            assert camera['stalled'] and camera['running'] and 'Streamstillstand' in camera['error']
+            assert service.preview_frame().seq == frame.seq
+        if name == 'running_anzeige_bewegt':
+            hint = service.status()['run']['tracking_hint']
+            assert hint['kind'] == 'anzeige_bewegt' and hint['since_s'] == 3
+            assert service.status()['run']['tracking_hint'] == hint
+    with pytest.raises(ValueError):
+        service.set_scene('unknown')
+
+
+def test_fake_controls_without_socket(tmp_path, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+    from live_ui_server import make_test_app
+
+    async def direct(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    app = make_test_app(tmp_path / 'overlay.png')
+    app.freeze()
+    auth = {}
+
+    async def call(path, data=None, *, method='POST', authenticated=True):
+        headers = {'Host': 'localhost', 'Origin': 'https://localhost'}
+        if authenticated:
+            headers.update(auth)
+        request = make_mocked_request(method, path, headers=headers, app=app)
+        request.json = AsyncMock(return_value=data)
+        return await app._handle(request)
+
+    async def check():
+        # Prueft Middleware und Handler gemeinsam, ohne lokale Sockets.
+        with pytest.raises(web.HTTPUnauthorized):
+            await call('/test/scene', {'name': 'idle'}, authenticated=False)
+        response = await call('/login', {'password': 'test-only'}, authenticated=False)
+        auth['Cookie'] = f"dispread_session={response.cookies['dispread_session'].value}"
+        response = await call('/live/status', method='GET')
+        auth['X-CSRF-Token'] = json.loads(response.text)['csrf']
+        assert (await call('/test/scene', {'name': 'setup_ready_warnung'})).status == 200
+        before = json.loads((await call('/live/status', method='GET')).text)
+        revision = before['setup']['proposal_revision']
+        changed = json.loads((await call('/test/revision')).text)['proposal_revision']
+        assert changed != revision
+        stale = await call('/live/setup/regions', {'proposal_revision': revision, 'add': [], 'remove': [0]})
+        assert stale.status == 409 and 'geaendert' in json.loads(stale.text)['error']
+        sleeps = []
+
+        async def sleep(seconds):
+            sleeps.append(seconds)
+
+        monkeypatch.setattr(asyncio, 'sleep', sleep)
+        assert (await call('/test/delay', {'path': '/live/setup/regions', 'ms': 1000})).status == 200
+        for rev in (changed, changed + '-edit'):
+            response = await call('/live/setup/regions', {'proposal_revision': rev, 'add': [[100, 100]], 'remove': []})
+            assert response.status == 200, response.text
+        assert sleeps == [1.0]  # Genau die naechste POST-Antwort.
+        assert (await call('/test/offline', {'on': True})).status == 200
+        pending = asyncio.create_task(call('/live/status', method='GET'))
+        await asyncio.wait((pending,), timeout=0.02)
+        assert not pending.done()
+        assert (await call('/test/offline', {'on': False})).status == 200
+        assert (await call('/live/status', method='GET')).status == 200
+        assert (await asyncio.wait_for(pending, 0.1)).status == 200
+        assert (await call('/test/scene', {'name': 'unknown'})).status == 400
+        assert (await call('/test/delay', {'path': '/live/setup', 'ms': -1})).status == 400
+        assert (await call('/test/offline', {'on': 'yes'})).status == 400
+        # Der alte Hook bleibt nutzbar, einschliesslich seiner Bildabmessungen.
+        assert (await call('/__test__/state', {'state': 'idle'})).status == 200
+        import cv2
+
+        assert cv2.imread(str(tmp_path / 'overlay.png')).shape == (24, 48, 3)
+        with pytest.raises(web.HTTPForbidden):
+            token = auth.pop('X-CSRF-Token')
+            try:
+                await call('/test/scene', {'name': 'idle'})
+            finally:
+                auth['X-CSRF-Token'] = token
+
+    asyncio.run(check())
+
+
+def test_fake_mjpeg_parts_and_cadence_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene('running_rahmen_verdeckt')
+    responses = _capture_preview(monkeypatch, limit=3)
+    _run_preview(_preview_handler(service))
+    parts = responses[0].parts
+    sequences = []
+    for _, part in parts:
+        header, body = part.split(b'\r\n\r\n', 1)
+        headers = dict(line.split(b': ', 1) for line in header.split(b'\r\n')[1:])
+        assert header.startswith(b'--frame\r\n')
+        assert headers[b'Content-Type'] == b'image/jpeg'
+        assert len(body) - 2 == int(headers[b'Content-Length'])
+        assert body.startswith(b'\xff\xd8') and body.endswith(b'\xff\xd9\r\n')
+        assert headers[b'X-Hud'].isascii() and len(headers[b'X-Hud']) <= 2048
+        hud = json.loads(headers[b'X-Hud'])
+        assert hud['seq'] == int(headers[b'X-Frame-Sequence'])
+        assert hud['cap_ns'] == int(headers[b'X-Capture-Ns'])
+        assert [r['ok'] for r in hud['track']['regions'][4:8]] == [False] * 4
+        sequences.append(hud['seq'])
+    assert sequences == sorted(set(sequences)) and len(sequences) == 3
+    elapsed = parts[-1][0] - parts[0][0]
+    assert elapsed >= 2 / 15 - 0.02
+    assert elapsed < 0.5
+
+
+def test_fake_scene_confirmation_preserves_proposal_and_rejects_old_revision(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene('setup_ready_warnung')
+    revision = service.status()['setup']['proposal_revision']
+    service.bump_revision()
+    with pytest.raises(LiveError, match='geaendert'):
+        service.confirm(session_id='test-session', proposal_revision=revision)
+    proposal = service.status()['setup']
+    service.confirm(session_id='test-session', proposal_revision=proposal['proposal_revision'])
+    assert service.status()['state'] == 'confirmed'
+    assert service.status()['setup'] == proposal
+    service.start_run(test_override=True)
+    run = service.status()['run']
+    assert run['latest']['status'] == 'unreadable' and run['latest']['value'] is None
+    assert all(item[2] is None for item in run['recent'])
+    assert service.preview_frame().hud['rec']['status'] == 'unreadable'

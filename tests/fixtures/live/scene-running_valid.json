@@ -1,0 +1,375 @@
+{
+  "state": "running",
+  "error": null,
+  "setup": {
+    "step": "vorschlag",
+    "elapsed_s": 36.4,
+    "focus": {
+      "method": "climb",
+      "samples": [
+        [
+          48,
+          630.3558194010419
+        ],
+        [
+          56,
+          273.53271242939513
+        ],
+        [
+          40,
+          201.1113182858314
+        ],
+        [
+          42,
+          301.5480297000838
+        ],
+        [
+          44,
+          442.0887939597047
+        ],
+        [
+          46,
+          542.9752734088474
+        ],
+        [
+          50,
+          607.4170064667126
+        ],
+        [
+          52,
+          525.0128897387846
+        ],
+        [
+          54,
+          391.07734162279286
+        ]
+      ],
+      "verify": {
+        "score": 624.465370104453,
+        "threshold": 535.8024464908856
+      }
+    },
+    "exposure": {
+      "target": 130,
+      "band": [
+        115,
+        150
+      ],
+      "rounds": [
+        {
+          "level": 124.0,
+          "controls": {
+            "focus_absolute": 48,
+            "exposure_time_absolute": 300,
+            "white_balance_temperature": 4742,
+            "gain": 10
+          }
+        }
+      ]
+    },
+    "progress": {
+      "steps": [
+        {
+          "key": "fokus",
+          "state": "done",
+          "elapsed_s": 21.3
+        },
+        {
+          "key": "kamera",
+          "state": "done",
+          "elapsed_s": 2.0
+        },
+        {
+          "key": "belichtung",
+          "state": "done",
+          "elapsed_s": 4.1
+        },
+        {
+          "key": "standbilder",
+          "state": "done",
+          "elapsed_s": 9.0
+        },
+        {
+          "key": "vorschlag",
+          "state": "done",
+          "elapsed_s": 1.0
+        }
+      ],
+      "attempt": 1,
+      "attempts_max": 3,
+      "phase": null,
+      "wait": null
+    },
+    "checks_live": {
+      "kontrast": {
+        "status": "OK",
+        "reason": null
+      }
+    },
+    "overall": "WARNUNG",
+    "checks": {
+      "kontrast": "OK",
+      "kanten": "OK",
+      "rahmen": "OK",
+      "glanz": "OK",
+      "belichtung": "OK",
+      "aufloesung": "OK",
+      "stabilitaet": "OK",
+      "rasterversatz": "OK",
+      "gegenlesen": "OK",
+      "displayfehler": "OK",
+      "nachfuehrung": "OK",
+      "raster": "WARNUNG"
+    },
+    "overlays": [
+      "still",
+      "stability",
+      "overlay_source",
+      "overlay_sampling",
+      "overlay_rectified"
+    ],
+    "proposal_revision": "b358259f721241f0b9e6af42d4fdb390",
+    "regions": [
+      {
+        "centre": [
+          873,
+          385
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          915,
+          737
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1256,
+          422
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1485,
+          658
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          829,
+          411
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          822,
+          737
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1310,
+          437
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1457,
+          635
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          877,
+          459
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          858,
+          742
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1291,
+          391
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1321,
+          707
+        ],
+        "size": 15
+      }
+    ],
+    "auswahl": "automatisch",
+    "centre_results": []
+  },
+  "run": {
+    "latest": {
+      "frame_sequence": 51233,
+      "status": "valid",
+      "value": 0.62427,
+      "unit": "mV/V",
+      "raw_text": "+0.62427",
+      "reject_reasons": [],
+      "frames_confirmed": 3,
+      "confirmation_span_ns": 100000000,
+      "capture_timestamp": {
+        "value_ns": 1730000000000,
+        "base": "synthetic",
+        "semantics": "unknown",
+        "uncertainty_ns": null
+      }
+    },
+    "summary": {
+      "marks": 0,
+      "by_status": {
+        "valid": 842,
+        "transition": 12,
+        "unreadable": 4
+      },
+      "transition_display_changing": 12,
+      "frames_read": 858,
+      "tolerance_frames": 0,
+      "frames_skipped": 2,
+      "frame_gaps": 0,
+      "frame_gaps_owner_total": 0,
+      "audit_errors": 0,
+      "tracking_lost": 4,
+      "tracking_coarse_retries": 0,
+      "tracking_coarse_accepted": 0,
+      "tracking_lost_reasons": {},
+      "tracking_hints": {
+        "count": 0,
+        "by_kind": {
+          "anzeige_bewegt": 0,
+          "rahmen_verdeckt": 0,
+          "unbekannt": 0
+        },
+        "max_shift_px": null
+      },
+      "track_score": {
+        "min": 0.43,
+        "median": 0.93,
+        "max": 0.98,
+        "n": 858
+      },
+      "camera_error": null,
+      "end_reason": null
+    },
+    "counts": {
+      "valid": 842,
+      "transition": 12,
+      "unreadable": 4,
+      "stale": 0
+    },
+    "recent": [
+      [
+        0,
+        "v",
+        0.62427
+      ],
+      [
+        250,
+        "v",
+        0.62427
+      ],
+      [
+        500,
+        "v",
+        0.62427
+      ]
+    ],
+    "recent_now_ms": 540,
+    "dir": "run-01",
+    "latest_age_s": 0.04,
+    "guess": null,
+    "tracking": {
+      "mode": "frame_local",
+      "profile_mode": "frame_local",
+      "version": 1,
+      "regions": 12
+    },
+    "tracking_hint": null,
+    "rejection_causes": {
+      "window_s": 10.0,
+      "frames": 10,
+      "limited": false,
+      "causes": []
+    }
+  },
+  "reader_tolerance": null,
+  "session_id": "test-session",
+  "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
+  "camera": {
+    "running": true,
+    "stalled": false,
+    "error": null,
+    "frames": 1,
+    "gaps": 0,
+    "source": {
+      "model": "logitech_streamcam",
+      "usb_id": "046d:0893",
+      "size": [
+        1920,
+        1080
+      ],
+      "fourcc": "YUYV",
+      "fps": 30,
+      "device": "/dev/video0",
+      "controls": {
+        "focus_absolute": 48,
+        "exposure_time_absolute": 300,
+        "white_balance_temperature": 4742,
+        "gain": 10
+      }
+    },
+    "last_start": null
+  },
+  "diagnostic_leftovers": [],
+  "storage": {
+    "free_bytes": 4200000000,
+    "reserve_bytes": 2000000000,
+    "level": "warn",
+    "message": "4.20 GB frei"
+  },
+  "step": null,
+  "simulate": false,
+  "profile": null,
+  "run_block": null,
+  "test_run": null,
+  "diagnostics": {
+    "enabled": false,
+    "reason": "vom Bediener deaktiviert",
+    "saved": 0,
+    "bytes": 0,
+    "dropped_queue": 0,
+    "dropped_limit": 0,
+    "dropped_memory": 0,
+    "dropped_mark_rate": 0,
+    "write_errors": 0,
+    "first_error": null,
+    "staging": null,
+    "copied": false
+  },
+  "diagnose_kopie": false,
+  "last_mark": null,
+  "reference": {
+    "enabled": false,
+    "reason": "kein Referenzlauf"
+  }
+}
