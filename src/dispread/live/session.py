@@ -23,6 +23,7 @@ from typing import Any
 
 import cv2
 
+from dispread.gsv_transport import OutputConfig, OutputPublisher
 from dispread.layout import CharLayout
 from dispread.live import (
     DEFAULT_CALIBRATION,
@@ -78,6 +79,8 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
+        output: OutputConfig | None = None,
+        output_factory: Callable[..., Any] = OutputPublisher,
         reference_recorder: Any = None,
         reader_d_max_factor: float = 1.0,
         reader_tolerance: dict | None = None,
@@ -90,6 +93,11 @@ class LiveSession:
         self._reference_recorder = reference_recorder
         self._reference_error = None
         self._test_run = test_run
+        self._output_config = output or OutputConfig.from_dict(None)
+        if test_run is not None and self._output_config.transport != "off":
+            raise StartRefused("Testlauf erlaubt keine externe Ausgabe")
+        self._output = (output_factory(self._output_config, Path(out_dir))
+                        if self._output_config.transport != "off" else None)
         # Lockerung und ihre Markierung in session.json muessen zusammenpassen.
         expected_factor = 1.0 if reader_tolerance is None else reader_tolerance.get("factor")
         if reader_d_max_factor != expected_factor:
@@ -205,15 +213,25 @@ class LiveSession:
         self._clock.sample()
         self._last_clock = self._monotonic()
         self._write_session(ended=False)
-        self._sink = JsonlSink(self.records_path)
+        self._sink = JsonlSink(self.records_path, max_bytes=0)
         self._sink.open()
+        if self._output is not None:
+            try:
+                self._output.start()
+            except Exception:
+                self.stop(reason="output_start_failed")
+                raise
         if self._reference_recorder is not None:
             try:
                 self._reference_recorder.start()
             except Exception:
                 self.stop(reason="start_failed")
                 raise
-        self._write_session(ended=False)
+        try:
+            self._write_session(ended=False)
+        except Exception:
+            self.stop(reason="start_failed")
+            raise
 
     # -- Lesen ---------------------------------------------------------------
     def step(self, timeout: float = 0.5) -> ValueRecord | None:
@@ -250,6 +268,8 @@ class LiveSession:
             if receipt.t_complete_ns is None or health.errors:
                 self._audit_errors += 1
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
+            if self._output is not None:
+                self._output.publish(record)
             self._frames_read += 1
             self._by_status[record.status.value] = self._by_status.get(record.status.value, 0) + 1
             if record.reject_reasons and record.reject_reasons[0] == "anzeige_wechselt":
@@ -322,8 +342,12 @@ class LiveSession:
             finally:
                 self._clock.sample()
                 try:
-                    if self._sink is not None:
-                        self._sink.close()
+                    try:
+                        if self._output is not None:
+                            self._output.stop()
+                    finally:
+                        if self._sink is not None:
+                            self._sink.close()
                 finally:
                     self._write_session(ended=True)
                     self._stopped = True
@@ -332,6 +356,11 @@ class LiveSession:
     def request_reference_stop(self) -> None:
         if self._reference_recorder is not None:
             self._reference_recorder.request_stop()
+
+    def output_status(self) -> dict:
+        if self._output is None:
+            return {"transport": "off", "state": "off"}
+        return {**self._output.status(), "config": self._output_config.to_dict()}
 
     def reference_status(self) -> dict:
         if self._reference_recorder is None:
@@ -367,6 +396,9 @@ class LiveSession:
         }
         data = dict(self._meta)
         data["reference"] = self.reference_status()
+        data["output"] = ({**self._output.metadata(), "status": self.output_status()}
+                          if self._output is not None else {"config": self._output_config.to_dict(),
+                                                           "status": self.output_status()})
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
         if self._test_run is not None:

@@ -63,6 +63,26 @@ export function connectionView(status, lastOkMs, nowMs, httpStatus) {
   return statusView(status);
 }
 
+export function outputView(output) {
+  if (!output || output.transport === 'off') return 'Ausgabe ausgeschaltet';
+  const labels = {disconnected: 'Verbindung unterbrochen – lokaler Lauf läuft weiter',
+    bridge_connected: 'Brücke erreichbar', waiting: 'Warte auf Windows-Brücke',
+    audit_failed: 'Ausgabebeleg nicht schreibbar',
+    stopped: 'Ausgabe beendet', locked: 'DUT-Ausgabe gesperrt'};
+  const transport = output.transport === 'uart' ? 'UART' : 'Netzwerk';
+  const state = labels[output.state] || output.state || 'Verbindungszustand unbekannt';
+  const ack = output.last_ack || output.last_driver_ack;
+  const frame = Number.isInteger(ack?.frame_sequence) ? ` (Bild ${ack.frame_sequence})` : '';
+  const outcomes = {failed: 'fehlgeschlagen', expired: 'veraltet – nicht weitergegeben',
+    unconfirmed: 'unbestätigt'};
+  const attempt = !ack ? null : ack.outcome === 'written'
+    ? `Letzte COM-Weitergabe durch Brücke bestätigt${frame}.`
+    : `Letzter COM-Versuch${frame}: ${outcomes[ack.outcome] || 'Ergebnis unbekannt'}.`;
+  return [`${transport}: ${state}`, output.release_block,
+    output.error || output.last_error, attempt, 'GSVmulti-Empfang unbestätigt.']
+    .filter(Boolean).join('\n');
+}
+
 if (typeof document !== 'undefined') {
   let csrf = '';
   let actionError = '';
@@ -87,6 +107,12 @@ if (typeof document !== 'undefined') {
   };
   const renderConnection = () => renderView(connectionView(lastStatus, lastOkMs,
     performance.now(), httpStatus));
+  const outputControls = () => {
+    const mode = $('output-transport').value;
+    $('output-uart-settings').hidden = mode !== 'uart';
+    $('output-tcp-settings').hidden = mode !== 'tcp';
+    $('output-lock').hidden = mode === 'off';
+  };
   const render = (s) => {
     if (s.session_id !== lastStatus?.session_id) {
       $('confirmed-by').value = '';
@@ -121,6 +147,16 @@ if (typeof document !== 'undefined') {
     const cam = s.camera || {};
     $('camera').textContent = cam.running ? `Kamera läuft, ${cam.frames} Bilder, ${cam.gaps} Lücken`
       : `Kamera aus: ${cam.error || '—'}`;
+    if (s.state === 'running' && s.output?.transport) {
+      $('output-transport').value = s.output.transport;
+      if (s.output.config?.serial_port) $('output-serial-port').value = s.output.config.serial_port;
+      if (s.output.config?.tcp_port) $('output-tcp-port').value = s.output.config.tcp_port;
+    }
+    for (const id of ['output-transport', 'output-serial-port', 'output-tcp-port']) {
+      $(id).disabled = s.state === 'running';
+    }
+    $('output-status').textContent = outputView(s.output);
+    outputControls();
     $('reference-status').textContent = s.reference?.restoring ? 'Werte werden zurückgestellt …'
       : s.reference?.error ? s.reference.error
       : s.reference?.enabled ? `Referenz: ${s.reference.lines} Telegramme`
@@ -176,9 +212,20 @@ if (typeof document !== 'undefined') {
       return;
     }
     if (schedule && !window.confirm('Werteplan anwenden? Der Plan schreibt in den RAM des GSV-2AS. Beim Stoppen werden die Ausgangswerte zurückgestellt und geprüft. Gerät verbunden lassen.')) return;
+    const transport = $('output-transport').value;
+    if (override && transport !== 'off') {
+      actionError = 'Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.';
+      renderError();
+      return;
+    }
+    const output = {transport};
+    if (transport === 'uart') output.serial_port = $('output-serial-port').value;
+    if (transport === 'tcp') output.tcp_port = Number($('output-tcp-port').value);
     return post('/live/run/start', {test_override: override,
-      reference: $('reference-enabled').checked, norm_schedule: schedule || null});
+      reference: $('reference-enabled').checked, norm_schedule: schedule || null, output});
   };
+  $('output-transport').onchange = outputControls;
+  outputControls();
   $('run-stop').onclick = () => post('/live/run/stop');
   $('camera-start').onclick = () => post('/live/camera/start');
   setInterval(renderConnection, 500);

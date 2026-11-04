@@ -11,9 +11,14 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-44](#oq-44) | Jetzt | offen | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 | [OQ-45](#oq-45) | Jetzt | offen | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
-| [OQ-47](#oq-47) | Jetzt | offen | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
-| [OQ-01](#oq-01) | Jetzt | teilweise geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
-| [OQ-06](#oq-06) | Jetzt | offen | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
+| [OQ-06](#oq-06) | Jetzt | teilweise geklärt | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
+| [OQ-50](#oq-50) | Jetzt | teilweise geklärt | Bleiben GSVmulti-Einzelwerte bei Anzeige und Aufzeichnung unverändert? |
+| [OQ-51](#oq-51) | Jetzt | teilweise geklärt | Erhält Replace Missing Values ungültige Zeiträume bei UserDefined? |
+| [OQ-52](#oq-52) | Jetzt | teilweise geklärt | Warum scheitert das Wiederöffnen nach Device/Channel Close mit Port bereits offen? |
+| [OQ-53](#oq-53) | Jetzt | teilweise geklärt | Wie wird der UserDefined-Zahlenfilter in der Session kodiert und wirksam übernommen? |
+| [OQ-55](#oq-55) | Jetzt | teilweise geklärt | Warum meldet die UserDefined-Initialisierung einen Clear-Buffer-Fehler? |
+| [OQ-58](#oq-58) | Jetzt | teilweise geklärt | Warum ersetzt die frei laufende TCP-Demo auch außerhalb des Abbruchs einen gültigen Wert? |
+| [OQ-47](#oq-47) | Jetzt | teilweise geklärt | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
 | [OQ-40](#oq-40) | Jetzt | offen | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
 | [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
@@ -47,12 +52,18 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-41](#oq-41) | — | teilweise geklärt | Telegramm und Anzeige unterscheiden sich in der führenden Null |
 | [OQ-42](#oq-42) | — | offen | Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar? |
 | [OQ-43](#oq-43) | — | offen | Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang? |
+| [OQ-48](#oq-48) | — | offen | Lassen sich ausgefallene Übertragungszeiträume historisch in GSVmulti importieren? |
+| [OQ-49](#oq-49) | — | offen | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
+| [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
+| [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
+| [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
 | [OQ-15](#oq-15) | — | geklärt | `tesseract-ocr`, `socat` und `chrony` installieren |
 | [OQ-16](#oq-16) | — | geklärt | Vollständigkeit des lokalen Planungsstands |
 | [OQ-31](#oq-31) | — | geklärt | Stale-Vorschau-Zustand bei manueller Regler-Bearbeitung nach Autofit |
 | [OQ-37](#oq-37) | — | beantwortet | Anzeigeformat des GSV-Sensors bei Werten ab 10 mV/V ungemessen |
+| [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
 
 <!-- OQ-INDEX:END -->
 
@@ -75,18 +86,55 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-01 — Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version?
 
-* **Status:** teilweise geklärt (2026-10-28) · **Zuständig:** ME-Systeme intern
-* **Antwort:** Die Herstelleranleitung v2.6, S. 118–121, beschreibt
+* **Status:** geklärt (2026-11-04) · **Zuständig:** ME-Systeme intern
+* **Antwort 2026-11-04:** GSVmulti 2.03 Pro unter Windows 11 akzeptiert
+  im geprüften UserDefined-Profil einen gültigen Einkanal-Zahlenstrom
+  `%<vorzeichenbehaftete Dezimalzahl mit Punkt>\r\n`, 115200/8N1,
+  ein Wert/Position 1, Zahlenfilter ein. Rampen und acht abrupte Sprünge
+  unverändert gespeichert; Lauf 11 belegt Skalierung 1 und mV/V in TDMS
+  sowie der gespeicherten Session. Einheit ist Empfängermetadatum, kein
+  Bestandteil des Zahlentelegramms. [Antwort](GSVMULTI_PROTOCOL.md#userdefined-format),
+  [Messbeleg](VALIDATION.md#uart-demo-20261104-11).
+  Dies klärt gültige Zahlen dieser Konfiguration, nicht native GSV-Protokolle,
+  Ungültigbehandlung, Quellzeiten oder die gemeinsame Windows-Brücke.
+  Formatter bleibt provisional; OQ-06/OQ-47/OQ-50/OQ-51 bleiben eigenständig.
+* **Ursprünglicher Quellenstand:** Die Herstelleranleitung v2.6, S. 118–121, beschreibt
   `UserDefined` in GSVmulti PRO: selbsttätiger ASCII-/UTF-8-Zahlenstrom über
   realen oder virtuellen COM-Port, 8N1, Dezimalpunkt, CRLF und konfigurierbare
   Präfixe/Kanalpositionen. Der Nutzer bestätigt Windows; das bereitgestellte
   PDF dokumentiert 2.01 Pro. Ein Empfang in dieser Installation ist noch
   nicht nachgewiesen. Siehe [Format und Quellen](GSVMULTI_PROTOCOL.md#userdefined-format).
-* **Blockiert:** die vollständige P4-Abnahme; ein UserDefined-Prototyp kann
-  jetzt gebaut werden. **Nicht** P0–P3.
-* **Vorabdefault:** `AsciiCsvFormatter`, als `provisional=True` gekennzeichnet.
-* **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md)
-* Siehe OQ-07 — praktisch dieselbe Frage aus der Beschaffungsperspektive.
+* **Update 2026-11-04:** Nutzer meldet Windows 11 und GSVmulti 2.03;
+  Python 3.15 x64 und COM3 per PowerShell zurückgemeldet. PRO-Lizenz,
+  UserDefined-Verfügbarkeit und Empfang bleiben unbestätigt.
+* **Weitere Rückmeldung 2026-11-04:** `UserDefined` ist in der eingesetzten
+  2.03-Installation ausgegraut. Die Anleitung ordnet den Eingang GSVmulti
+  PRO zu (S. 118); eine fehlende/ungültige PRO-Freischaltung ist damit eine
+  zu prüfende Ursache, noch keine bestätigte Diagnose. Der Empfangstest
+  wartet auf die Klärung der Freischaltung.
+* **Klärung der Freischaltung 2026-11-04:** Nutzer hat die PRO-Lizenz
+  aktiviert; `UserDefined` ist nun verfügbar. Damit ist diese Voraussetzung
+  in GSVmulti 2.03 bestätigt. COM-Portpaar und tatsächlicher Empfang sind
+  weiterhin offen. Verweis: [Windows-Teststand](GSVMULTI_PROTOCOL.md#windows-bruecke).
+* **UART-Versuch 2026-11-04:** GSVmulti zeigte trotz passender gezeigter
+  Kanal-/Präfixkonfiguration Timeout. Bei geschlossenem GSVmulti bestätigt
+  der PowerShell-Hex-Ausschnitt sechs korrekte Telegramme auf COM4. Die
+  Eingangsbytes sind für diese Proben belegt; die Ursache der fehlenden
+  GSVmulti-Übernahme bleibt offen. Nächster kontrollierter Vergleich ist
+  der Zahlenfilter. [Beleg](VALIDATION.md#uart-demo-20261104-03).
+* **Empfang 2026-11-04:** Nach eingeschaltetem Zahlenfilter zeigt Lauf 04
+  erstmals Zahlen in GSVmulti 2.03 Pro. Direkter UART-Demoweg damit sichtbar;
+  Einzelwerttreue, Aufzeichnung und Zeitachse bleiben in OQ-50 offen.
+  [Beleg](VALIDATION.md#uart-demo-20261104-04).
+* **Freigabegrenze:** Die gültige Zahlenformatfrage ist geklärt. Vollständige
+  P4-Abnahme bleibt insbesondere wegen fehlender Ungültigmarkierung offen
+  (OQ-06/OQ-51); gemeinsame Brücke und Quellzeitnachweis nicht daraus ableiten.
+* **Historischer Vorabdefault:** `AsciiCsvFormatter`, als `provisional=True` gekennzeichnet.
+  Der gebaute UserDefinedFormatter bleibt ebenfalls provisional.
+* **Antwort landet in:** [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md#userdefined-format),
+  [VALIDATION](VALIDATION.md#uart-demo-20261104-11)
+* OQ-07 führt die weitergehende Spezifikations-/Beschaffungssicht;
+  die Ungültigbehandlung liegt in OQ-06.
 
 <span id="oq-02"></span>
 
@@ -165,7 +213,7 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-06 — Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt?
 
-* **Status:** offen · **Zuständig:** ME-Systeme intern + QM
+* **Status:** teilweise geklärt (2026-11-04) · **Zuständig:** ME-Systeme intern + QM
 * **Blockiert:** die Freigabe von P4, zusammen mit OQ-01.
 * **Vorabdefault:** `InvalidValuePolicy` als austauschbarer Adapterparameter
   mit den drei Varianten `omit_record`, `send_nan`, `status_flag`. Alle drei
@@ -179,12 +227,74 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Aufzeichnung und Kalibrierauswertung gemeinsam prüfen; ungültige Zeiträume
   dürfen keine Messfreigabe erhalten. [Prüffälle](GSVMULTI_PROTOCOL.md#ungultige-werte).
 
+* **Teilantwort 2026-11-04:** Lauf 08: 30,000983790 s absichtliche
+  UART-Sendepause (HOST_MONOTONIC), Screenshot zeigt timeout! bei gestarteter
+  Aufnahme; Fortsetzung auf neue −0,750 laut Nutzer ohne Eingriff. TXT/TDMS
+  enthalten alle 500 gesendeten Zahlen, aber der nominelle 0,1-s-Modus
+  verdichtet die Pause vollständig: weder Zeitlücke noch Ungültigmarkierung
+  im Messkanal. Omit/Senderpause allein ist in dieser Konfiguration für
+  Kalibrierdaten unzureichend. Timeout-Verzögerung, Altwertanzeige davor,
+  explizite Ungültigmarkierung und NaN-Semantik weiter offen; reale DUT-Ausgabe
+  bleibt gesperrt. [Antwort und Messbeleg](VALIDATION.md#uart-demo-20261104-08).
+
+* **NaN-Teilbefund 2026-11-04:** Lauf 09 sendet 200 %NaN-Telegramme über
+  demo-only SEND_NAN. TXT/TDMS enthalten nur die gültigen Zahlen, weder NaN
+  noch einen anderen Fehlwertmarker. Screenshot zeigt Timeout, Nutzer meldet
+  anschließendes Weiterlesen ohne Lücke. NaN genügt im getesteten Profil mit
+  Zahlenfilter nicht; Ursache nicht auf Parser/Filter isoliert, kein genereller
+  Ausschluss für alle Konfigurationen. Weiterer dokumentierter Empfängerweg:
+  Replace Missing Values, noch unbewiesen (OQ-51).
+  [Antwort und Messbeleg](VALIDATION.md#uart-demo-20261104-09).
+
+* **Optionenvergleich 2026-11-04:** Auch mit ausdrücklich bestätigtem
+  Replace Missing Values keine Ungültigmarkierung in TXT/TDMS (Lauf 10).
+  OQ-51 teilweise geklärt; Ursache und geeignete UserDefined-Integration
+  mit der GSVmulti-Entwicklung klären. Zahlenimport ist kein Nachweis der
+  Kalibriertauglichkeit. [Beleg](VALIDATION.md#uart-demo-20261104-10).
+
+* **Weiterer Vergleich vorbereitet 2026-11-04:** Nutzer schlägt Zahlenfilter
+  aus vor. Gleiche NaN-Fixture wie Lauf 10, nur diese Option ändern. Filter-
+  bedingtes Entfernen ist Hypothese; zuerst Empfang gültiger Zahlen prüfen,
+  denn frühere Filter-aus-Versuche zeigten auch dafür Timeout. Noch kein
+  Ergebnis oder neuer Senderlauf. [Vorbereitung](lab_journal.md).
+
+* **Filter-aus-Ergebnis 2026-11-04:** Lauf 13 sendet dieselben 700 Payloads
+  wie Lauf 10. Nutzer bestätigt durchgehenden Timeout, bereits bei gültigen
+  Zahlen vor NaN. Keine erfolgreiche Aufzeichnung belegt. Daraus keine
+  isolierte NaN-Aussage ableiten; aktuelle Filter-aus-UCF gegen erfolgreiche
+  Filter-ein-UCF vergleichen. Binärpräfix 25 ist dasselbe %-Byte und nicht
+  ohne Beleg ein anderer Parserweg. [Messbeleg](VALIDATION.md#uart-demo-20261104-13).
+
+* **Konfigurationsvergleich 2026-11-04:** Gelieferte Filter-aus-UCF aus
+  Lauf 13 steht auf 1 Hz und leerer Einheit; erfolgreiche UCF hatte 10 Hz
+  und mV/V. Raw Separator 256→0, OpenFlags unverändert. Kein abgesicherter
+  Ein-Variablen-Vergleich und kein bewiesener Timeout-Grund; Konfiguration
+  vor Wiederholung abgleichen (OQ-53). [Beleg](VALIDATION.md#uart-demo-20261104-13).
+
+* **Korrigierter Vergleich 2026-11-04:** Lauf 14 mit bestätigter10Hz/mV/V-
+  UCF liefert laut Nutzer weiter durchgehend Timeout, schon für gültige
+  Zahlen. Positive Gegenprobe mit bekannter funktionierender Filter-ein-UCF
+  und identischem NaN-Stimulus vorbereitet. Keine NaN-Semantik aus dem
+  allgemeinen Empfangsausfall ableiten. [Beleg](VALIDATION.md#uart-demo-20261104-14).
+
+* **Positive Kontrolle 2026-11-04:** Nach erneutem Laden der bekannten
+  Filter-ein-Session zeigt Lauf15 wieder gültige Zahlen und speichert440
+  passende Werte mit mV/V/Scaling1/10Hz. Keine NaN-/Fehlwertmarker; NaN-
+  Abschnitt auf nominelle0,1-s-Grenze verdichtet. Parserursache weiterhin
+  offen. Dokumentierter Zeichenpräfix A bei Filter aus als gezielter
+  Vergleich zu Lauf14 vorbereitet, noch nicht gesendet.
+  [Beleg](VALIDATION.md#uart-demo-20261104-15).
+
 ---
 
 <span id="oq-07"></span>
 
 ## OQ-07 — GSVmulti-Telegrammspezifikation beschaffen
 
+* **Update 2026-11-04:** Nutzer bestätigt Windows 11 / GSVmulti 2.03,
+  aktivierte PRO-Lizenz und verfügbares `UserDefined`. Software-Prototyp
+  vorhanden; COM-Portpaar, Empfang, Ungültigbehandlung und Zeitachse sind
+  weiterhin nicht abgenommen. [Aktueller Teststand](GSVMULTI_PROTOCOL.md#windows-bruecke).
 * **Status:** teilweise geklärt (2026-10-28) · **Zuständig:** ME-Systeme intern
 * **Neuer Befund:** Das bereitgestellte PDF
   [GSVmulti und Raspberry Pi](quellen/GSVmulti_Raspberry_Pi_Sensoranbindung.pdf)
@@ -2164,7 +2274,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
-* **Status:** offen · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs
 * **Befund:** USB-UART und Raw TCP mit Windows-VCOM sind plausible Wege.
   Ein konkreter Ausgang samt Windows-Port, Treiber/Lizenz, Pufferverhalten
   und Wiederanlauf ist für dieses Projekt noch nicht ausgewählt oder
@@ -2177,6 +2287,110 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   5 s kann auch legitime Pausen unterbrechen.
   [Reproduktionen und Grenzen](GSVMULTI_PROTOCOL.md#beispielcode).
   TCP-Erreichbarkeit allein belegt keinen GSVmulti-Empfang.
+* **Update 2026-11-04:** Die Architektur ist gewählt: pro Lauf Netzwerk
+  oder UART, beide über dieselbe eigene Windows-Brücke und ein com0com-Portpaar.
+  Verbindungsfehler stoppen das lokale Lesen/Audit nicht; Wiederanlauf sendet
+  keine historische Zahlenfolge als aktuelle Werte. Software-Prototyp vorhanden,
+  DUT-Ausgabe bis zum Windows-Nachweis strukturell gesperrt. Windows-Treiber,
+  Kabelmodell/Pinbelegung, Puffernachlauf und GSVmulti-Empfang sind noch nicht
+  geprüft. [Betrieb und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#windows-bruecke).
+* **Windows-Befund 2026-11-04:** Nutzer bestätigt die signierte com0com-
+  Ausgabe; beide Busgeräte `ROOT\COM0COM\0000` und `0001` melden
+  `Status: Error`, `ConfigManagerErrorCode: 52`. Die installierte Ausgabe
+  startet auf diesem Zielrechner nicht; Microsoft ordnet Code 52 der
+  abgelehnten/nicht verifizierbaren Treibersignatur zu. Das ist ein anderer
+  Befund als die .NET-Abhängigkeit der GUI. Exaktes Paket und Zertifikat
+  wurden hier nicht unabhängig untersucht. [Einrichtungshindernis](GSVMULTI_PROTOCOL.md#com0com-code52).
+* **Treiberinventar 2026-11-04:** Beide Geräte melden aktuell
+  CM_PROB_UNSIGNED_DRIVER; com0com3.0.0.0/Vyacheslav Frolov, oem234.inf,
+  IsSigned=False, Signer leer. Nutzer nennt signiertes ZIP. Offizielles
+  Archiv enthält x86-/x64-Installer, ausgewählte EXE noch offen. INF-Katalog
+  und CodeIntegrity-Ablehnungsgrund als Nächstes lesen. Keine konkrete
+  Katalog-/Zertifikatsursache bewiesen. [Beleg](GSVMULTI_PROTOCOL.md#com0com-code52).
+* **Installerwahl geklärt 2026-11-04:** Nutzer bestätigt x86-Signed-EXE.
+  Originalpaket-PE-Prüfung bestätigt32-Bit-Treiber darin, x64-Installer enthält
+  64-Bit-Treiber. Korrekturschritt ist Installation der x64-Ausgabe, danach
+  Geräte-/Paketstatus erneut lesen. Aktuell gebundene Windows-Datei nicht
+  binär geprüft, vollständige Code52-Ursache weiter offen. Aktive INF-Abfrage
+  scheitert an nicht vorhandener oem234.inf; Ereignisabfrage deshalb nicht
+  ausgeführt. Keine Treiberlöschung anhand des alten Namens.
+  [Beleg und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#com0com-code52).
+* **Folgeinventar 2026-11-04:** Nach x64-Anleitung identische zwei Geräte
+  mit CM_PROB_UNSIGNED_DRIVER/oem234.inf/IsSigned=False; Nutzer nennt nur
+  .NET-GUI-Warnung. Öffentlicher Installerskriptpfad trennt GUI-/CLI-Wahl
+  von Treiberoperationen. Erfolgreicher Treiberwechsel unbewiesen.
+  Nächste Diagnose: PnPUtil-Gerätedetails, Treiber-Servicepfad und unabhängige
+  CodeIntegrity-Abfrage, keine weitere blinde Neuinstallation.
+* **CodeIntegrity-Beleg 2026-11-04:** PnPUtil erkennt CyberCircuits als
+  Signierer von oem234.inf, Gerät0000 bleibt Code52/0xC0000428, Dienst Stopped.
+  Zweimal3004 zum fehlenden Image-Hash, einmal3076 ausdrücklich Audit/erlaubt.
+  Aktiver Datei-/Katalogbestand noch nicht verglichen; keine konkrete Ursache
+  oder erfolgreiche Installation daraus ableiten. Nächster Vergleich per
+  SHA256/Authenticode. [Beleg](VALIDATION.md#com0com-ci-20261104).
+* **Dateivergleich 2026-11-04:** SHA256 der aktiven com0com.sys stimmt exakt
+  mit offiziellem x64-Original überein, Authenticode=Valid/CyberCircuits.
+  x86-Rest/abweichender Dateiinhalt an diesem Pfad ausgeschlossen. Kernel-
+  Zulassung und Katalogzustand bleiben offen; Statusabfrage von Windows-Build,
+  Secure Boot und DeviceGuard/HVCI als Nächstes. Keine Richtlinie geändert.
+  [Beleg](VALIDATION.md#com0com-ci-20261104).
+* **Schutzstatus/Testkandidat 2026-11-04:** Build26200, Secure Boot und
+  Speicherintegrität aktiv, CI erzwungen. Originaldatei/Authenticode gültig,
+  Kernel-Ladung weiter blockiert; konkrete Regel unisoliert. Vovsoft-verlinkten
+  anderen Build statisch geprüft: Christos-Nikolaou-Zertifikat ab2012,
+  anderer PE-Inhalt, HVCI/Zulassung nicht geprüft. Genau ein kontrollierter
+  normaler Installationsvergleich vorbereitet, ohne Schutzänderung.
+  [Quellen/Grenzen](GSVMULTI_PROTOCOL.md#com0com-code52).
+* **Teilantwort 2026-11-04:** Nach angeleitetem Vovsoft-Buildwechsel alle
+  sechs gemeldeten PnP-Geräte Code0; Paar1 CNCA1=COM5/CNCB1=COM6. Code52
+  aktuell überwunden, Öffnen/Byteübertragung und neue Hash-/Schutzstatus-
+  Bestätigung stehen aus. Gemeinsame Brücke, TCP und Altwertnachlauf bleiben
+  offen. [Antwort/Beleg](VALIDATION.md#com0com-pnp-ok-20261104).
+* **Portpaar-Teilantwort 2026-11-04:** Exakte Zeile je Richtung COM5↔COM6
+  vom Nutzer bestätigt; SecureBoot/HVCI weiter aktiv, Treiberhash entspricht
+  geprüftem Vovsoft-Kandidaten. Lokale Portpaarfunktion auf diesem Zielrechner
+  belegt. Windows-Brücke/TCP, Dauerlauf und Altwertnachlauf bleiben offen.
+  [Antwort/Beleg](VALIDATION.md#com0com-pair-ok-20261104).
+* **Lokaler Windows-Demobeleg 2026-11-04:**600/600 Zahlen und mV/V/Scaling1
+  exakt in TXT/TDMS auf COM6 gespeichert. Der lokale Demomodus benutzt COM5,
+  umgeht aber Pi/TCP und internen JSONL-/ACK-Austausch; diese Probe folgt.
+  Zeitraster nominell, Windows-Zielrate abweichend (OQ-57).
+  [Antwort/Beleg](VALIDATION.md#windows-local-demo-20261104-01).
+* **Gemeinsamer TCP-Teilbeleg 2026-11-04:** Pi-Publisher regulär beendet,
+  600 Quellwerte/600 Angebote/600 passende COM-written-ACKs. Windows-Payloads
+  bytegleich, TXT/TDMS jeweils600 exakte Werte in Quellreihenfolge; mV/V,
+  Scaling1 und COM6 bestätigt. Keine Verbindungsfehler während der Zahlenfolge;
+  Retry-Timeouts nur davor/danach. Vollständiger gültiger Demo-Dateipfad belegt,
+  Ungültig-/Altwert-/Puffer-/Abbruchverhalten und UART über gemeinsame Brücke
+  bleiben offen. Nominelles Zeitraster, keine Latenz- oder DUT-Freigabe.
+  [Antwort/Beleg](VALIDATION.md#tcp-demo-20261104-01).
+* **Wiederanlauf-Vorbereitung 2026-11-04:** Bisheriger endlicher Publisher
+  wartet pro Wert auf ACK; er simuliert keine weiterlaufende Quelle bei
+  Brückenabbruch. Throwaway-Generator mit unabhängiger Erzeugung lokal über
+  TCP/Memory-COM geprüft:100 Quellwerte,50 Veröffentlichungen während der
+  Unterbrechung, Wiederanlauf19→69 und anschließend bis99. Keine Zwischen-
+  historienfolge, keine Windows-/Frischeabnahme. Windows-Prozessunterbrechung
+  mit10s Pause vorbereitet, noch nicht gestartet.
+  [Beleg/Grenzen](VALIDATION.md#tcp-reconnect-precheck-20261104-01).
+* **Prozess-Wiederanlauf 2026-11-04:** Quelle läuft unabhängig weiter,
+  gezielter Windows-Brückenprozessabbruch mit10s Pause und neue Instanz.
+ 510/510 COM-geschriebene Werte exakt in TXT/TDMS, Anzeige ohne Eingriff
+  fortgesetzt; erstes neues Angebot entspricht jüngster Veröffentlichung.
+  Keine Zwischenhistorie nachgesendet. Frame356 zusätzlich durch Latest-
+  Auswahl ersetzt (OQ-58), GSVmulti verdichtet Unterbrechung weiterhin auf
+  nominell0,1s. Netz-/Kabel-/Betriebssystem-Neustart nicht geprüft.
+  [Antwort/Grenzen](VALIDATION.md#tcp-reconnect-20261104-01).
+* **Direkter UART-Teilbeleg 2026-11-04:** Lauf 08 bestätigt nach
+  30 s absichtlicher Sendepause ohne physische Trennung eine automatische
+  Fortsetzung laut Nutzer; alle gesendeten Zahlen sind aufgezeichnet.
+  Kein Kabel-/Prozessneustart und kein Test der gemeinsamen Windows-Brücke.
+  Die Pause fehlt im nominellen Messdateiraster (OQ-06/OQ-50).
+  [Beleg](VALIDATION.md#uart-demo-20261104-08).
+* **Wiederöffnen 2026-11-04:** Lauf 12 endet ohne erfolgreichen
+  Empfängerwiederanlauf. Nach Device/Channel Close meldet GSVmulti Fehler
+  805306614: Comport already open; Nutzer meldet Abhilfe erst durch
+  vollständiges Beenden/Neustarten. Kein Puffernachlaufnachweis möglich.
+  Portbesitz gegen internen DLL-Zustand ist in OQ-52 zu trennen.
+  [Beleg](VALIDATION.md#uart-demo-20261104-12).
 * **Blockiert:** Ende-zu-Ende-Abnahme von P4, nicht den Bau des Formatters.
   OQ-09 behandelt die elektrische Strecke; OQ-06 die Bedeutung ungültiger
   Werte. Hier geht es um die durchgängige Verbindung und ihren Wiederanlauf.
@@ -2191,3 +2405,373 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [Hardwareprofil](HARDWARE_PROFILE.md) bei tatsächlicher Anschlusswahl;
   spätere Messbelege in [VALIDATION.md](VALIDATION.md) und
   [Laborjournal](lab_journal.md).
+
+
+---
+
+<span id="oq-48"></span>
+
+## OQ-48 — Lassen sich ausgefallene Übertragungszeiträume historisch in GSVmulti importieren?
+
+* **Status:** offen · erkannt 2026-11-04 bei der Planung des Wiederanlaufs
+* **Befund:** Lokal erkannte, aber nicht an GSVmulti übertragene Werte bleiben
+  im Lauf-Audit erhalten. Der Nutzer möchte prüfen, ob sie nachträglich
+  übernommen werden können. Das UserDefined-Zahlenprofil besitzt keinen
+  definierten Aufnahmezeitstempel. Ein Aufholburst könnte alte Werte als
+  aktuelle Messungen erscheinen lassen und ist deshalb kein zulässiger
+  historischer Import. Das Handbuch beschreibt Logger-Textdateien und
+  TDMS-Import im File Monitor; daraus folgt keine Unterstützung beliebiger
+  CSV-Dateien oder das korrekte Übernehmen unserer Zeitbasis in der
+  eingesetzten GSVmulti-Version.
+* **Blockiert:** einen späteren Historien-Konverter, nicht den lokalen Lauf
+  oder die Verbindungserprobung. Bei Kameraausfall nicht erfasste Werte
+  können nicht aus dem Audit rekonstruiert werden.
+* **Klärung:** Kontrollierten Ausfall erzeugen, gespeicherte Aufnahmen und
+  Übertragungsbelege zusammenführen und ein kleines Importbeispiel mit
+  ursprünglichen Zeiten und ungültigen Abschnitten prüfen. Ergebnis als
+  möglich, eingeschränkt möglich oder nicht nachgewiesen dokumentieren;
+  keinen generischen Dateiimport erfinden.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#windows-bruecke),
+  späterer Beispielbeleg in [VALIDATION.md](VALIDATION.md) und
+  [Laborjournal](lab_journal.md).
+
+---
+
+<span id="oq-49"></span>
+
+## OQ-49 — Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt?
+
+* **Status:** offen · erkannt 2026-11-04 beim ersten Windows-Setup
+* **Befund:** Der Nutzer möchte später einen einzigen Befehl für Download,
+  Bestandsprüfung, Installation fehlender Komponenten und Einrichtung
+  über die geplante TUI/CLI. Der Einstieg muss online/extern abrufbar sein
+  und darf kein lokales Repository voraussetzen. Bei SSH bestimmt der
+  Zielhost, ob Pi- oder Windows-Komponenten eingerichtet werden.
+* **Blockiert:** die Veröffentlichung des späteren Installers, nicht den
+  manuellen aktuellen GSVmulti-Test. Noch kein öffentlicher Installer
+  oder funktionierender Download-Befehl zugesichert.
+* **Klärung:** Hosting/Release-Quelle, stabile Einstiegsadresse, eventuell
+  erforderlichen Zugang, versionierte Artefakte und Integritätsprüfung
+  wählen. Wiederholtes Ausführen muss vorhandene Komponenten erhalten;
+  Einrichtung ohne GUI, Fehler-/Neustartbehandlung und nichtinteraktiven
+  Modus für beide Zielplattformen festlegen. Windows-Treiber müssen auf
+  Windows eingerichtet werden, nicht auf dem per SSH erreichten Pi.
+* **Antwort landet in:** [Geplante Funktionen](../PLANNED_FEATURES.md),
+  späterer Installationsplan und [Abhängigkeiten](dependencies.md).
+
+
+---
+
+<span id="oq-50"></span>
+
+## OQ-50 — Bleiben GSVmulti-Einzelwerte bei Anzeige und Aufzeichnung unverändert?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 beim ersten sichtbaren UART-Empfang
+* **Befund:** Demo 04 sendet eine 0,001-Rampe mit Zielrate 10/s. GSVmulti
+  zeigt −0,134500, also keinen gesendeten Einzelwert, bei gezeigten 1 Hz.
+  Die Herstelleranleitung S. 34 beschreibt Mittelwertbildung für numerische
+  Anzeigen auf vier Anzeigen/s. Das erklärt Zwischenwerte grundsätzlich;
+  das konkrete Fenster, die tatsächliche Import-/Zeitachse und die
+  unveränderte Aufzeichnung sind damit nicht nachgewiesen.
+  [Messbeleg](VALIDATION.md#uart-demo-20261104-04).
+* **Teilantwort 2026-11-04:** TXT und TDMS aus Lauf 05 enthalten 420
+  unveränderte, lückenlose Rampenwerte der Senderindizes 180–599 einschließlich
+  negativ/Null/positiv. Keine Mittelung in diesen gespeicherten Werten,
+  Datenreduktion laut TDMS aus. Fehlender Anfang passt zu später Aufnahme;
+  genaue Startgrenze unbekannt. Frequenzmetadatum 1 Hz, Wellenformintervall
+  ca. 0,102407 s. Exportspanne 42,908590 s gegenüber 42,160910364 s
+  Pi-Schreibereignisspanne derselben Werte; keine verifizierte gemeinsame
+  Zeitbasis oder Latenzaussage. Sprungtreue und Zeitrekonstruktion bleiben
+  offen. [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-05).
+* **Weitere Teilantwort 2026-11-04:** Lauf 06 bestätigt Frequency=10 Hz
+  und 467 unveränderte Werte (Senderindizes 133–599), ohne Lücken/Duplikate.
+  dt mode bleibt `tf`: Die Herstelleranleitung S. 73–74/155 erklärt die
+  Berechnung aus Startzeit, Endzeit und Werteanzahl; Formel gegen TDMS
+  bestätigt. Das Frequenzfeld bestimmt in diesem Modus nicht das Zeitinkrement.
+  Exportspanne 48,198790 s, Pi-Schreibereignisspanne 47,088755820 s
+  (HOST_MONOTONIC); tatsächliche Einzelwertzeiten und Ursache der Differenz
+  noch offen. Advanced-Einstellungen vor Änderung prüfen, nominelle 0,1 s
+  nicht als gemessene Zeit ausgeben. [Beleg](VALIDATION.md#uart-demo-20261104-06).
+* **Sprungnachweis 2026-11-04:** Lauf 07 bestätigt alle acht direkten
+  Sprünge und Blocklängen (je 50 Werte) in TXT/TDMS. 446 Werte entsprechen
+  exakt Senderindizes 154–599; kein zusätzlicher Zwischenwert. Zeitmodus
+  `1/f0` und dt=0,1 s sind bestätigt, ausdrücklich nominell. Tatsächliche
+  Quellzeitpunkte und Synchronisierung werden damit nicht nachgewiesen;
+  bei konstanten Plateaus bleiben kompensierende Verluste/Wiederholungen
+  unbeobachtbar. [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-07).
+* **Pausenbefund 2026-11-04:** Lauf 08 belegt, dass das nominelle
+  Raster die 30-s-Sendepause nicht erhält: letzte/erste Zahl beider Seiten
+  stehen im Export 0,1 s auseinander. Sichtbarer Timeout und automatische
+  Fortsetzung sind bestätigt; die Datei enthält keine Ungültigmarkierung
+  für die Pause. Das nominelle Raster ist daher kein Beleg kontinuierlicher
+  gültiger Messung. [Beleg](VALIDATION.md#uart-demo-20261104-08).
+* **NaN-Befund 2026-11-04:** Lauf 09 bestätigt dieselbe Zeitverdichtung
+  trotz gesendeter %NaN-Marker: keine NaN-Einträge im Messkanal, gültige
+  Blöcke 0,1 s auseinander. Der ungültige Zeitraum ist im nominellen Raster
+  nicht erhalten. [Beleg](VALIDATION.md#uart-demo-20261104-09).
+* **Blockiert:** belastbare Zeitaussagen und vollständige P4-Abnahme.
+  Direkte UART-Demo, gespeicherte Rampen- und getestete Sprungtreue sind
+  belegt. Keine Senderglättung als Lösung.
+* **Klärung:** GSVmulti-Datenfrequenz zur Senderate prüfen, ohne Datenreduktion
+  aufzeichnen (Record every value), Einzelwerte gegen das Sendelog vergleichen;
+  Vorzeichen, Null und abrupte Sprünge einschließen. Numerische Anzeige und
+  gespeicherte Daten getrennt bewerten; keine Latenz aus SYNTHETIC ableiten.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md),
+  [VALIDATION](VALIDATION.md#uart-demo-20261104-08) und
+  [Laborjournal](lab_journal.md).
+
+
+---
+
+<span id="oq-51"></span>
+
+## OQ-51 — Erhält Replace Missing Values ungültige Zeiträume bei UserDefined?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 nach der NaN-Probe
+* **Befund:** Lauf 09 sendet 200 %NaN-Telegramme über die vorhandene
+  Demo-Policy. Die Aufnahme enthält weder NaN noch einen anderen Fehlwertmarker;
+  GSVmulti zeigt Timeout und setzt gültige Zahlen ohne Zeitlücke fort.
+  [Messbeleg](VALIDATION.md#uart-demo-20261104-09).
+  Die [Herstelleranleitung S. 74](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+  beschreibt Replace Missing values als Empfängeroption, die per Timeout-Zählung
+  fehlende Werte mit 1E+300 markiert. Die Funktion ist für UserDefined in dieser
+  Installation noch nicht belegt. Das ist keine Spezifikation, diesen Marker
+  über unseren Formatter zu senden.
+* **Teilantwort 2026-11-04:** Lauf 10 wiederholt alle 700 Payloads aus
+  Lauf 09 bytegleich. Replace Missing Values ist laut ausdrücklicher
+  Prüfung/Rückmeldung des Nutzers aktiviert. TXT/TDMS enthalten 428 gültige
+  Zahlen, aber weder NaN noch 1E+300-/anderen großen Fehlwertmarker; NaN-
+  Zeitraum erneut auf 0,1-s-Übergang verdichtet. In dieser Konfiguration
+  kein wirksamer Nachweis der Option. Interne Ursache und unterstützter Weg
+  bei UserDefined bleiben offen; mit GSVmulti-Entwicklung anhand des
+  [Reproduktionsfalls](GSVMULTI_PROTOCOL.md#userdefined-ungueltig-repro) klären.
+  [Messbeleg und Antwort](VALIDATION.md#uart-demo-20261104-10).
+* **Blockiert:** Erhaltung und sichere Auswertung ungültiger Abschnitte,
+  zusammen mit OQ-06; direkte synthetische Zahlenversuche bleiben möglich.
+* **Klärung:** Identische NaN-Folge wie Lauf 09 mit ausschließlich dieser
+  Empfängeroption aktiviert testen. TXT und TDMS auf Marker, Anzahl und
+  Lage prüfen; kurze ungültige Abschnitte vor dem Timeout gesondert beachten.
+  Nachweisen, dass kein Marker als gültiger Messwert in die Kalibrierauswertung
+  gelangt. Hersteller nennt Einschränkungen für Schwellenwert-Trigger und
+  Software-Spezialsensoren; im Test manuelle Aufnahme und ein UserDefined-Kanal.
+  Keine allgemeine Zulässigkeit oder Gültigkeitssemantik daraus voraussetzen.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#ungultige-werte),
+  [VALIDATION](VALIDATION.md#uart-demo-20261104-10) und
+  [Laborjournal](lab_journal.md).
+
+
+---
+
+<span id="oq-52"></span>
+
+## OQ-52 — Warum scheitert das Wiederöffnen nach Device/Channel Close mit Port bereits offen?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 beim COM-Wiederanlaufversuch
+* **Befund:** GSVmulti 2.03 Pro meldet nach Device Close bzw. Channel Close
+  beim erneuten Öffnen Error 805306614 (0x300000F6): Comport requested for
+  opening is already open. Nutzer meldet, dass vollständiges Beenden und
+  Neustarten von GSVmulti die Verbindung wieder ermöglicht. Screenshot und
+  Bericht unter `var/diagnostics/gsvmulti/uart-direct-demo-20261104-12/`.
+* **Probe vor Prozessende 2026-11-04:** Externes SerialPort.Open auf COM4
+  wird verweigert, während GSVmulti weiter im Fehlerzustand läuft. Ein
+  separat eingegebenes finally scheitert im PowerShell-Prompt; Cleanup und
+  Vergleich nach vollständigem GSVmulti-Ende werden angeleitet. Portbesitzer
+  und Fehlerursache noch nicht bewiesen.
+  [Beleg](VALIDATION.md#uart-demo-20261104-12).
+* **Vergleich nach Prozessende 2026-11-04:** Dieselbe externe COM4-Probe
+  öffnet nach vollständigem Beenden von GSVmulti erfolgreich. Der Vergleich
+  spricht für eine mit GSVmulti/Bibliothek verbundene Port-Ressourcenverwaltung;
+  tatsächlicher Handle-Besitzer und interne Ursache bleiben unbewiesen.
+  Manueller kompletter Neustart ist ein Nutzer-Workaround, keine erfolgreiche
+  In-Prozess-Wiederanlaufabnahme. [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-12).
+* **Loggingbeleg 2026-11-04:** LogLevel2 wirksam. Gelieferter Logausschnitt
+  enthält zweimal0x300000F6 bei GS Vactivate Extended über OpenSession.
+  Bereits initial0xFFFFFFFF bei GS Vclear Buffer; Ursache und Zusammenhang
+  offen (OQ-55). Keine explizite Close-/Deactivate-Zeile, kein interner
+  Cleanup-Nachweis. [Beleg](VALIDATION.md#userdefined-logging-20261104).
+* **Add-Channel-Gegenprobe 2026-11-04:** Auch ohne Sessionladen zweimal
+  derselbe Aktivierungsfehler, jetzt über AddChannel_v5.vi. Datenrate1 Hz
+  statt10 Hz; kein allgemeiner Konfigurationseinfluss ausgeschlossen.
+  Vergleichspaket für den vom Nutzer bestätigten direkten Entwicklungskontakt
+  vorbereitet. [Beleg](VALIDATION.md#userdefined-addchannel-logging-20261104).
+* **Blockiert:** COM-Schließen/Öffnen-Abnahme und nachfolgende Bewertung des
+  Puffernachlaufs (OQ-47). Datenpause bei weiter offenem Port ist ein anderer
+  bereits geprüfter Fall.
+* **Klärung:** Im Fehlerzustand mit weiter laufendem GSVmulti externes
+  SerialPort.Open/Dispose auf COM4 prüfen. Erfolg würde gegen einen zu diesem
+  Zeitpunkt exklusiv belegten Windows-Port sprechen; verweigerter Zugriff
+  beweist noch keinen bestimmten Eigentümerprozess. Danach dieselbe Probe
+  bei vollständig beendetem GSVmulti vergleichen. Keine interne DLL-/Treiber-
+  Ursache ohne diese Trennung behaupten. Sender muss dafür nicht laufen.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#userdefined-reopen-fehler),
+  [VALIDATION](VALIDATION.md#uart-demo-20261104-12) und
+  [Laborjournal](lab_journal.md).
+
+
+---
+
+<span id="oq-53"></span>
+
+## OQ-53 — Wie wird der UserDefined-Zahlenfilter in der Session kodiert und wirksam übernommen?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 beim UCF-Vergleich von Lauf 13
+* **Befund:** Erfolgreiche Session aus Lauf 11: Unit=mV/V, Frequency=10,
+  Separator=256. Gelieferte Filter-aus-Session: Unit leer, Frequency=1,
+  Separator=0. COM4/115200, Prefix=37, ein Kanal und OpenFlags=1073741824
+  sind identisch. Der Versuch änderte somit neben dem beabsichtigten Filter
+  auch Rate und Einheit. Die genaue Separator-Kodierung ist nicht belegt;
+  sie darf weder als reine Trennzeichenwahl noch als sicher dekodiertes
+  Filterbit ausgegeben werden.
+* **Teilantwort 2026-11-04:** Korrigierte UCF mit10Hz und mV/V stimmt bis
+  auf Separator0 statt256 mit erfolgreicher Lauf-11-UCF überein. Filter aus
+  ist im UI bestätigt, allgemeine Bitkodierung weiter unbewiesen. Lauf 14
+  bleibt dennoch durchgehend auf Timeout. Positive Gegenprobe15 mit
+  Filter ein und byteidentischem Stimulus liest gültige Zahlen wieder.
+  A-Präfix mit Filter aus (Lauf16) bleibt ebenfalls durchgehend auf Timeout.
+  Keine allgemeine Kodierung oder interne Parserursache daraus bewiesen.
+  [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-14).
+* **Blockiert:** belastbaren Ein-Variablen-Vergleich des Filtermodus und
+  späteres automatisiertes Übernehmen dieser Sessioneinstellung. Die zuvor
+  belegte gültige Filter-ein-Konfiguration (OQ-01) bleibt davon unberührt.
+* **Klärung:** Bei aktueller Filter-aus-Definition 10 Hz und mV/V wieder
+  setzen, unter neuem Namen speichern und UCF erneut vergleichen. UI-Zustand
+  und gespeicherte Werte paarweise sichern. Herstellerbeschreibung der
+  Session-/DLL-Parameter prüfen; aus einer einzelnen Differenz kein
+  allgemeines Bitprotokoll erfinden. Dann erst weiteren Sendevergleich werten.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md),
+  [VALIDATION](VALIDATION.md#uart-demo-20261104-14) und
+  [Laborjournal](lab_journal.md).
+
+---
+
+<span id="oq-54"></span>
+
+## OQ-54 — Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation?
+
+* **Status:** geklärt (2026-11-04) · erkannt 2026-11-04 nach UART-Demo16
+* **Befund:** GSVmulti2.03 Pro ist nutzerbestätigt; zunächst waren Dateiversionen
+  und Pfade geladener GSV-Bibliotheken unbekannt. Das öffentliche MEGSV-SDK
+  mit älterem Header war nicht als diese Laufzeitbibliothek identifiziert.
+* **Antwort 2026-11-04:** Nutzer liefert Ausgabe von Get-Process mit Module
+  und FileVersionInfo. GSVmultichannel.exe2.3.4, MEGSV.dll1.62.0.64
+  (ProductVersion1.62.0.0), MEGSV4w32.dll1.20.0.64,
+  MEGSV86w32.dll1.48.1.64 und GSV86CAN.dll1.17.7.64. Alle unter
+  C:\Program Files\GSV-Multichannel_v2.03, Bibliotheken im Unterordner data.
+  [Versionsinventar und Antwort](GSVMULTI_PROTOCOL.md#geladene-gsv-bibliotheken).
+* **Grenze:** Nutzergelieferter Prozess-Snapshot, nur nach GSV-Dateinamen
+  gefilterte Module. Kein vollständiges DLL-Inventar, keine Hash-Identität,
+  Parserzuständigkeit oder Port-Handle-Zuordnung bewiesen. OQ-52/OQ-53 bleiben
+  teilweise geklärt, reale DUT-Ausgabe gesperrt.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#geladene-gsv-bibliotheken),
+  [Laborjournal](lab_journal.md) und [Status](status.md).
+
+---
+
+<span id="oq-55"></span>
+
+## OQ-55 — Warum meldet die UserDefined-Initialisierung einen Clear-Buffer-Fehler?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 im LogLevel2-Ausschnitt
+* **Befund:** Bei initialem Open Session UserDevice COM4/Input1/Fdata10,000
+  meldet GS Vclear Buffer.vi0xFFFFFFFF; später beim Wiederöffnen zweimal
+  0x300000F6. Kein Sender aktiv. Ursache und Zusammenhang unbewiesen;
+  allgemeines−1 nicht als bestimmter Timeout-/Pufferfehler interpretieren.
+* **Blockiert:** Beurteilung des UserDefined-Initialisierungs-/Pufferpfads;
+  OQ-52 bleibt teilweise geklärt, echte DUT-Ausgabe gesperrt.
+* **Teilantwort 2026-11-04:** Gegenprobe ohne Sessionladen reproduziert
+  beide Fehler über AddChannel_v5.vi. Sessionladen ist somit keine notwendige
+  Bedingung. Datenrate1 Hz statt10 Hz, keine neue UCF; andere Konfigurations-
+  einflüsse nicht isoliert. Ursache und Zusammenhang offen.
+  [Antwort und Beleg](VALIDATION.md#userdefined-addchannel-logging-20261104).
+* **Klärung:** Mit zuständiger Entwicklung UserDevice-ClearBuffer-Unterstützung
+  und tatsächliche Deaktivierungs-/Cleanup-Aufrufe samt Fehlerrückgaben prüfen.
+  Nutzer hat direkten Kontakt. Geprüftes Vergleichspaket lokal vorhanden;
+  keine weitere gleichartige Wiederholung vorgesehen, kein Versand.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#userdefined-logging-befund),
+  [VALIDATION](VALIDATION.md#userdefined-logging-20261104) und
+  [Laborjournal](lab_journal.md).
+
+---
+
+<span id="oq-56"></span>
+
+## OQ-56 — Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-11-04 nach Nutzerfrage zu USB statt UART
+* **Befund:** Lokaler Modellnachweis Raspberry Pi5 ModelB Rev1.1.
+  Hersteller dokumentiert OTG/Peripheral am USB-C-Port und Serial CDC ACM
+  über ConfigFS. Microsoft dokumentiert integrierten Usbser-Treiber für
+  passend deklarierte CDC-Geräte. Das belegt Machbarkeit, keinen erfolgreichen
+  Aufbau. /sys/class/udc aktuell leer; Gadget nicht aktiviert. Bootkonfiguration
+  nur gelesen, vorhandenes dwc2-host-Overlay steht unter cm5, nicht pi5.
+* **Teilantwort 2026-11-04:** Nutzer nennt X1201 V1.1, lädt über eigenen
+  USB-C; Produktion eventuell ohne UPS. Hersteller untersagt zusätzliche
+  Versorgung am Pi-USB-C. Normaler PC-Kabelanschluss parallel zur UPS daher
+  nicht freigegeben. VBUS-getrennte Datenverbindung ist Kandidat, nicht
+  erprobte Lösung. Kernelbausteine vorhanden, configfs gemountet, kein UDC
+  aktiv. [Antwort und Umsetzungsskizze](GSVMULTI_PROTOCOL.md#usb-cdc-umsetzung).
+* **Offen:** UPS-Modell jetzt nutzerbestätigt; elektrische Trennung der USB-Datenstrecke,
+  ausreichende Leistung über
+  gewählten Windows-USB-Port bzw. geeignete alternative Versorgung, Datenkabel,
+  Windows-Enumeration und GSVmulti-Verhalten. USB-C ist zugleich Stromanschluss;
+  normale Pi-USB-A-Ports sind kein direkter Gadget-Anschluss.
+* **Blockiert:** belastbare Auswahl dieser optionalen direkten USB-Strecke.
+  Aktueller UART-/Netzwerkplan nicht automatisch ersetzt. Für direkten CDC-COM
+  wäre kein com0com-Paar nötig, Netzwerkbetrieb braucht weiterhin eigene Lösung.
+* **Klärung:** Zuerst Versorgungs-/Verkabelungsplan und Host-Port klären, dann
+  getrennten reversiblen Gadget-Test mit synthetischen Telegrammen planen.
+  Keine automatische Neuinstallation, Aktivierung oder GPIO-Stromverdrahtung.
+  USB löst weder UserDefined-Ungültigsemantik noch belegte GSVmulti-Fehler.
+* **Antwort landet in:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#usb-cdc-option),
+  [Hardwareprofil](HARDWARE_PROFILE.md#usb-gadget-option) und
+  [Laborjournal](lab_journal.md).
+
+---
+
+<span id="oq-57"></span>
+
+## OQ-57 — Wie genau hält der lokale Windows-Demosender seine Zielrate ein?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt beim vollständigen600er-Windows-Demolog
+* **Befund:** Ziel10Hz, tatsächliche Schreibereignisspanne66,1322657 s über
+  599 Intervalle, Mittel9,0576059Hz. Alle600 Zahlen in GSVmulti vorhanden,
+  nominelle Exportspanne59,9 s. Kein Datenverlust und keine Latenzmessung.
+* **Teilantwort 2026-11-04:** send_demo wartet nach Schreib-/Logarbeit
+  jeweils1/rate. Deadline-Kompensation fehlt in diesem Hilfssender;
+  Windows-Scheduling-/IO-Anteile nicht getrennt gemessen. Capture-Zeitbasis
+  SYNTHETIC; Ereignisintervalle stammen aus Windows-HOST_MONOTONIC.
+  [Antwort/Beleg](VALIDATION.md#windows-local-demo-20261104-01).
+* **Blockiert:** Annahme einer exakt10Hz getakteten lokalen Demoreferenz.
+  Blockiert keine gültigen TCP-Demoversuche. QM-Zeitgrenzen bleiben OQ-02;
+  nominelle GSVmulti-Zeitachse weiterhin OQ-50.
+* **Klärung:** Taktabweichung wiederholt messen und ggf. Demo-Pacing separat
+  korrigieren. Für gemeinsame Brücke Quellrate und Pollingrate unterscheiden;
+  nächsten TCP-Versuch mit10Hz-Pi-Quelle und100Hz-Windows-Abfrage separat
+  auswerten. Kein künstliches Glätten oder nachträgliches Umdeuten von Zeiten.
+* **Antwort landet in:** [VALIDATION](VALIDATION.md#windows-local-demo-20261104-01),
+  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#windows-demo-timing) und
+  [Laborjournal](lab_journal.md).
+
+<span id="oq-58"></span>
+
+## OQ-58 — Warum ersetzt die frei laufende TCP-Demo auch außerhalb des Abbruchs einen gültigen Wert?
+
+* **Status:** teilweise geklärt (2026-11-04) · erkannt im TCP-Wiederanlauftest
+* **Befund:** Alle600 Quellwerte auditiert;510 Angebote und matching COM-written-
+  ACKs sowie510 exakte TXT/TDMS-Werte.89 Zwischenwerte100…188 beim Abbruch
+  nicht nachgesendet. Zusätzlich Frame356=+0,056 nie angeboten, obwohl diese
+  Stelle nach der Wiederverbindung liegt. Alle Angebote entsprechen den neuesten
+  Publish-start/complete-Sequenzgrenzen. Daher Ersatz vor Transportübergabe,
+  kein Verlust zwischen COM-Schreiben und GSVmulti-Datei.
+* **Offen:** Konkrete zeitliche Folge von Quelle, Poll/ACK und Scheduling am
+  Übergang355→357 isolieren; unter welchen Last-/Ratenbedingungen die gewollte
+  Latest-Auswahl einzelne gültige Werte ersetzt. Keine verlustfreie Vollfolge
+  aus dem Wiederanlaufversuch ableiten. Keine ungepaarten Uhren subtrahieren.
+* **Blockiert:** Aussage verlustfreier Weitergabe einer frei laufenden Quelle;
+  nicht den belegten synthetischen Prozesswiederanlauf oder den gesperrten Bau
+  der Workbench-Ausgabenaht. Keine neue DUT-Freigabe.
+* **Antwort landet in:** [VALIDATION](VALIDATION.md#tcp-reconnect-20261104-01),
+  [GSVmulti-Transport](GSVMULTI_PROTOCOL.md#windows-bruecke).
+* **Beleg:** source-/recording-comparison.json und Originale in
+  var/diagnostics/gsvmulti/tcp-reconnect-20261104-01/; bei Übergabe zusätzlich
+  versioniertes Belegarchiv unter docs/quellen/.

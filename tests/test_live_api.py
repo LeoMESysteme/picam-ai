@@ -21,8 +21,9 @@ class FakeService:
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, output=None):
         self.calls.append(("run", test_override))
+        self.output = output
 
     def stop_run(self):
         raise LiveError("kein Lauf aktiv")
@@ -466,3 +467,13 @@ def test_local_setup_requires_force_to_replace_reviewed_proposal(monkeypatch, st
     else:
         assert "--force" in json.loads(response.text)["error"]
         service.start_setup.assert_not_called()
+
+
+def test_run_start_forwards_output_configuration():
+    async def check(client, service):
+        config = {"transport": "tcp", "tcp_port": 5001}
+        response = await client.post("/live/run/start", json={"output": config})
+        assert response.status == 200
+        assert service.output == config
+
+    _run(check)

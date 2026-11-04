@@ -65,8 +65,8 @@
       "id": "sink",
       "titel": "Ausgabe",
       "zustand": "teilweise",
-      "zweck": "Sie schreibt Audit-Daten; die serielle GSVmulti-Senke ist im Livepfad noch nicht angeschlossen.",
-      "einstellung": "Live: nur JSONL. UserDefined belegt, Adapter fehlt. AsciiCsvFormatter vorläufig; GsvAsciiFormatter wirft (OQ-07).",
+      "zweck": "Sie schreibt zuerst Audit-Daten und bindet optional die TCP-/UART-Brücke an; echte DUT-Ausgabe bleibt gesperrt.",
+      "einstellung": "UserDefinedFormatter und Brücke gebaut, Windows-Abnahme offen. Prototyp vorläufig; GsvAsciiFormatter bleibt nativer Platzhalter (OQ-07).",
       "anbindung": "src/dispread/sink/",
       "api": "api/sink.html",
       "doku": "docs/GSVMULTI_PROTOCOL.html"

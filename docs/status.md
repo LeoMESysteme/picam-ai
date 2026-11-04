@@ -1,55 +1,135 @@
-# Status — Stand 2026-10-28
+# Status und Übergabe — 2026-11-04
 
-Dieser Snapshot fasst den belegten Stand zusammen; Hardware- und Messwerte
-stammen aus den jeweils genannten Aufzeichnungen, nicht aus einer Live-Abfrage.
-Arbeitsliste: [TODO.md](../TODO.md); Verlauf: [Changelog](../CHANGELOG.md),
-[Projektgeschichte](project_history.md) und [Laborjournal](lab_journal.md).
+Gesicherter GSVmulti-Arbeitsstand auf Branch `feat/gsvmulti-bridge`.
+Nutzer beendet die Arbeit für einige Tage und hat Dokumentation, Commit und
+Push beauftragt. Kein Merge nach master und keine weiteren Messversuche.
+Einstieg für Fortsetzung durch Codex/Claude:
+[Arbeitsplan](superpowers/plans/2026-11-04-gsvmulti-anbindung.md),
+[Protokoll/Schranken](GSVMULTI_PROTOCOL.md#windows-bruecke),
+[TODO](../TODO.md), [Belegarchiv](quellen/gsvmulti-validation-2026-11-04.md).
 
-## Gebauter Messpfad
+## Ergebnis der heutigen Hardware-/Windowsversuche
 
-Auf `master` hält `dispread serve` die Logitech StreamCam über
-`CameraOwner` für seine gesamte Laufzeit. `/live` führt durch Einrichtung,
-namentliche Bestätigung und Messlauf mit Dot-Matrix-Leser. Bedienerläufe,
-JSONL-Audit und die getrennte optionale Referenzaufzeichnung sind dokumentiert
-in [VALIDATION](VALIDATION.md) und im [Laborjournal](lab_journal.md).
-Die Referenz korrigiert keine DUT-Werte und wird Leser/Gate nicht als Parameter
-übergeben.
+* Windows11 Pro Build26200, GSVmulti2.03 Pro (EXE2.3.4), Python3.15x64.
+* com0com auf diesem Rechner funktionsfähig: CNCA1=COM5 (Brücke), CNCB1=COM6
+  (GSVmulti). Bidirektionale Probe bestanden; SecureBoot/HVCI weiter aktiv.
+  Aktiver x64-Treiberhash e61c4943fb534f932193a81e8fbcb2f453e4b073a14159f9c161537b38d2bc38,
+  Vovsoft-verlinkter Build. Keine allgemeine Treiberzulassung behaupten.
+* Lokaler Windows-Demoweg:600/600 Werte exakt in TXT/TDMS, mV/V/Scaling1.
+  Tatsächliche Windows-Ereignisrate9,0576Hz bei Ziel10Hz, OQ-57.
+* Gemeinsamer Pi→TCP→Windows-Brücke→COM5/com0com/COM6→GSVmulti-Dateipfad:
+  600/600 Werte−0,300…+0,299 exakt in TXT/TDMS, alle ACK-/Request-/Run-/
+  Frame-Zuordnungen und Payloads passend. [Beleg](VALIDATION.md#tcp-demo-20261104-01).
+* Brückenprozessabbruch bei weiterlaufender Quelle:600 Quellwerte auditiert,
+  510 angeboten/COM-geschrieben, alle510 exakt in TXT/TDMS. Nach100 written
+  eigener Windows-Kindprozess beendet,10,0001885s Steuerpause, Neustart.
+  Übergang Frame99=−0,201 → Frame189=−0,111, jüngste Veröffentlichung;
+  89 Zwischenwerte nicht nachgesendet. Zusätzlich Frame356=+0,056 schon vor
+  Angebot durch Latest-Auswahl ersetzt (OQ-58). Anzeige ohne Bedienereingriff
+  fortgesetzt. Beide Kindprozesse absichtlich beendet, Controller completed.
+  [Beleg](VALIDATION.md#tcp-reconnect-20261104-01).
+* GSVmulti verdichtet weiterhin Ausfallzeiten:10,1779168s zwischen Windows-
+  Schreibereignissen werden am Übergang in TXT zu0,1s, kein Fehlwertmarker.
+  Gesamtraster50,9s gegenüber61,1879196s Windows-Ereignisspanne. Nominelles
+  dt mode=1/f0 ist keine gemessene Quell-/Ankunftszeitachse.
+* 16 direkte UART-Demoversuche belegen Rampen/Sprünge/Einheit, aber NaN/Pause
+  verschwinden auch mit bestätigtem Replace Missing Values. Filter aus
+  scheitert schon bei gültigen Zahlen, Gegenprobe mit Filter ein funktioniert.
+  [Belege](VALIDATION.md#uart-demo-20261104-08).
 
-Die reale Prüfung bleibt auf GSV-2AS / Displaytech 161A, Raumlicht und mV/V
-begrenzt. Leser-Abnahme 3 ergab 215/215 richtige Proben; weitere Geräte,
-Vorzeichen, Einheiten und eine allgemeine Systemabnahme sind nicht belegt.
-Die dokumentierten Bedienerläufe und ihre Grenzen stehen in
-[VALIDATION](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21).
+Nur synthetische Demo, demo/provisional=true, time_claim=false. Ereigniszeiten
+jeweils HOST_MONOTONIC auf eigenem Host, Pi und Windows nicht gepaart.
+Keine physische Framealter-/Latenzaussage. Kein Kabel-/Netz-Blackout oder
+Betriebssystem-Neustart und keine reale DUT-Abnahme. Echte Ausgabe bleibt
+strukturell gesperrt. Keine Mittelung, keine Referenzkorrektur, keine Altwerte
+unmarkiert weiterführen und keinen Freigabebypass ergänzen.
 
-## GSVmulti-Anbindung
+## Workbench ist bereits als Prototyp angeschlossen
 
-Die Herstelleranleitung v2.6 beschreibt `UserDefined` als konfigurierbaren
-Zahlenimport über einen realen oder virtuellen Windows-COM-Port. Ein Prototyp
-ist damit planbar; Empfang in der eingesetzten Version, Adapter, Live-Ausgabe
-und Messfreigabe sind nicht nachgewiesen. Ungültig-/Altwertbehandlung und die
-von GSVmulti verwendete Zeitachse bleiben offen. Details und Grenzen stehen in
-der [Bewertung](GSVMULTI_PROTOCOL.md), [OQ-07](open-questions.md#oq-07) und
-[OQ-47](open-questions.md#oq-47).
+Nicht erneut eine zweite Transportstrecke bauen. Vorhandene Nähte:
 
-## Session-Explorer
+* src/dispread/sink/protocol/user_defined.py: UserDefinedFormatter erhält
+  Rohtext-Dezimalauflösung und prüft Zahl/Wert. Format provisional; natives
+  gsv_ascii.py wirft absichtlich. SEND_NAN ausschließlich Demo.
+* src/dispread/gsv_transport.py: OutputConfig/OutputPublisher, TCP/UART,
+  höchstens ein ausstehendes Angebot plus jüngster Wert; Invalidierungsbarriere
+  getrennt, Run-/Frame-/Request-IDs. ACK nur COM-Treiberübergabe.
+* src/dispread/gsv_bridge.py und scripts/gsv-bridge.py: gemeinsame Windows-
+  Python-/pySerial-Brücke, nur synthetische Demowerte akzeptiert.
+* src/dispread/live/session.py: Audit vor Publish, vollständiger Lauf ohne
+  JSONL-Rotation, Ausgabestart/-stop und Konfiguration im session.json.
+* src/dispread/live/service.py, workbench/live_api.py: optionale output-
+  Konfiguration an /live/run/start, Ausgabestatus an /live/status;
+  Test-Override erlaubt keine externe Ausgabe.
+* workbench/static/live.html und live.js: Auswahl Aus/UART/Netzwerk,
+  UART-Gerät/TCP-Port, Status/Warnung und Freigabesperre. Auswahl während Lauf
+  gesperrt. Meldung unterscheidet COM-Bestätigung und GSVmulti-Empfang.
 
-Die Dokumentationsseite kann abgeschlossene Messläufe mit Kennzahlen,
-Verläufen und Originaldateien darstellen. Die Export- und Hostinggrenzen sind
-in [Session-Explorer](session-explorer.md) und
-[Doku-Hosting](HOSTING.md#session-archiv-und-explorer) beschrieben. Der
-Katalog enthält derzeit keine veröffentlichten Sessions; daraus folgt keine
-Aussage über nicht veröffentlichte lokale Dateien.
+Die neue Workbench-Gestaltung kann diese Nähte übernehmen; UI-Umbau und echte
+Messfreigabe bleiben getrennte Aufgaben. Browser-/Unitprüfungen ersetzen keinen
+Live-DUT-Nachweis. Referenz bleibt Audit und korrigiert keinen DUT-Wert.
 
-## Nächste Schritte
+## Reihenfolge für die Fortsetzung
 
-1. Nachführung unabhängig vom Zifferninhalt untersuchen und große
-   Wertwechsel erneut prüfen ([OQ-26](open-questions.md#oq-26)).
-2. Testlauf-Sicherung und Zeitbasis-Bezeichnung klären
-   ([OQ-44](open-questions.md#oq-44), [OQ-45](open-questions.md#oq-45)).
-3. GSVmulti-Prototyp, Windows-COM-Transport, Empfang und Verhalten bei
-   ungültigen Werten prüfen ([OQ-06](open-questions.md#oq-06),
-   [OQ-47](open-questions.md#oq-47)); danach folgen die im
-   [TODO](../TODO.md) genannten Mess- und Aufräumarbeiten.
+1. Belege/Code von diesem Branch übernehmen, Status und OQ-06/OQ-47/OQ-50/
+   OQ-51 lesen. GSVmulti-Entwicklung muss Ungültig-/Zeitsemantik klären;
+   Nutzer hat direkten Kontakt, Agent hat nichts versandt. Lokales Support-
+   Vergleichspaket im Belegarchiv. Fehlerbehebung derzeit zurückgestellt.
+2. OQ-58 isolieren: zusätzliche Latest-Ersetzung Frame356 während bestehender
+   Verbindung anhand Quell-Publikationen/Poll-/ACK-Reihenfolge prüfen; kein
+   Verlust nach COM-Schreiben. Keine ungepaarten Uhren subtrahieren.
+3. UART über dieselbe gemeinsame Windows-Brücke prüfen. Direkter UART-Erfolg
+   umgeht diese Strecke. Weitere Netz-/COM-/ACK-/Startreihenfolge-/Pufferfälle
+   getrennt prüfen. Belegter Prozesswiederanlauf ersetzt sie nicht.
+4. Workbench-Prototyp in die geplante Gestaltung übernehmen; Warnung,
+   lokale Fortsetzung bei Abbruch, Audit vor Publish, Testlaufsperre und
+   strukturelle DUT-Sperre erhalten. Native GSV-Protokolle nicht erfinden.
+5. Erst nach belegter Ungültig-/Altwert-/Zeitbehandlung Freigabeimplementierung
+   gesondert reviewen und je Weg mindestens30min Live-Abnahme. Historischer
+   Import OQ-48 bleibt getrennt, keine alten Daten in aktuellen Stream nachholen.
+6. Danach extern erreichbaren Ein-Befehl-Bootstrap/Setup-TUI/CLI für SSH
+   umsetzen (OQ-49). SCP-Pilot ist kein veröffentlichter Installer.
 
-Keine Hardwareänderung und kein neuer Messlauf sind für diesen Doku-Abgleich
-dokumentiert. Der aktuelle Laufzustand wurde nicht abgefragt.
+## Wiederaufbau und bekannte Fallstricke
+
+Pi raspi06/Pi5, SSH/TCP über Tailscale100.122.154.35; TCP-Port5000 zuletzt
+frei, kein Demopublisher aktiv. Windows-Brückenordner:
+C:\Users\EE-User-4\gsvmulti-demo-da3ed32a\bridge.
+UserDefined COM6/115200/8N1, Zeichenpräfix%, ein Wert, Zahlenfilter ein,
+Separator unused,10Hz,mV/V,Scaling1. Manuelle Aufnahme aller Werte, TXT-
+Autoexport. Für neue Verbindung GSVmulti vollständig neu starten; Close/Open
+scheitert mit Port already open (OQ-52/OQ-55), Workaround vom Nutzer akzeptiert.
+LogLevel2 unter ProgramData/MEsystemeGSVmulti/config.ini, Logs C:\GSVmultiLog.
+COM4 FTDI-USB-TTL; direkter Pi-UART ttyAMA0, RXD an physischem Pin8/TXD0,
+GND an Pin6 laut Nutzer, übrige Kontakte frei. COM3 Intel AMT SOL.
+
+Der endliche scripts/gsv-publisher-demo.py wartet pro Datensatz auf ACK;
+für weiterlaufende Quelle bei Ausfall ungeeignet. Deshalb getrennter Throwaway-
+Generator reconnect-source-spike.py unter var/diagnostics/gsvmulti/, ebenfalls
+im Archiv. Windows-Controller unterbricht nur eigene Kindprozesse, keine
+GSVmulti-Prozesse. Nicht als fertiges Produktionswerkzeug darstellen.
+
+Originale/Rezepte weiter lokal unter var/diagnostics/gsvmulti/.292 relevante
+Dateien zusätzlich versioniert im ZIP unter docs/quellen/ (Manifest/Hashes).
+Drittanbieter-Treiber/Installer und npTDMS-Wheel nicht enthalten. Keine neue
+Pi-Laufzeitabhängigkeit; .venv mit --system-site-packages, Installation --no-deps.
+Reale Messbelege weiterhin nur GSV-2AS/Displaytech161A/Raumlicht/mV/V.
+USB-C-Gadget auf Nutzerwunsch zurückgestellt: X1201V1.1 versorgt Pi; parallele
+Pi-USB-C-Stromführung nicht freigegeben, kein Gadget aktiviert (OQ-56).
+
+Unabhängige lokale Redesign-Entwürfe, Benutzer-Notizen und Synchronisations-
+Dateien gehören nicht zum GSVmulti-Commit und bleiben im Arbeitsplatz erhalten.
+Nachführung/Testlauf-Audit/alte Zeitbasis-Bezeichnungen (OQ-26/OQ-44/OQ-45)
+weiter offen. Aktuelle Abschlussprüfungen und Commit stehen im Git-Verlauf;
+keine vollständige Hardware-/Windows-Systemabnahme behaupten.
+
+## Abschlussprüfung dieser Sicherung
+
+87 gezielte GSV-/Live-Backendtests bestanden, Ruff grün,40 Node-Clienttests bestanden;
+strikter Doku-Build und vollständige Wertevergleiche beider TCP-Versuche
+bestanden. Vorheriger vollständiger Implementierungslauf:1805 Tests bestanden,
+76 übersprungen,90 Doku-Browserfälle und2 Live-Browserfälle abgedeckt.
+Die erneute vollständige pytest-/Doku-Browserwiederholung beim Sessionende
+wurde auf ausdrücklichen Nutzerwunsch „werde jetzt fertig“ abgebrochen;
+sie wird nicht als abgeschlossener grüner Lauf ausgegeben. Vor Merge die
+vollständigen Doku-Browserprüfungen erneut abschließen. Kein Merge erfolgt.

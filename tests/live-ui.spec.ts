@@ -99,3 +99,31 @@ test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', asyn
   await expect(page.locator('#detail')).toHaveText('Verbindung zur Werkbank verloren');
   expect(errors).toEqual([]);
 });
+
+test('GSVmulti-Ausgabe: Auswahl, Abnahmesperre und Warnung bei weiterlaufendem Audit', async ({ page }) => {
+  await page.goto('/live');
+  await page.getByLabel('Linux-Passwort').fill('test-only');
+  await page.getByRole('button', { name: 'enter', exact: true }).click();
+  const {csrf} = await (await page.request.get('/live/status')).json();
+  await page.request.post('/__test__/state', {
+    headers: {Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf}, data: {state: 'confirmed'},
+  });
+  const select = page.getByLabel('Verbindungsweg');
+  await expect(select).toBeEnabled();
+  await select.selectOption('uart');
+  await expect(page.getByLabel('Pi-UART')).toBeVisible();
+  await expect(page.getByLabel('Netzwerk-Port')).toBeHidden();
+  await select.selectOption('tcp');
+  await expect(page.getByLabel('Pi-UART')).toBeHidden();
+  await expect(page.locator('#output-lock')).toContainText('Windows-Abnahme fehlt');
+  await page.getByLabel('Netzwerk-Port').fill('5001');
+  const start = page.waitForRequest('**/live/run/start');
+  await page.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  expect((await start).postDataJSON().output).toEqual({transport: 'tcp', tcp_port: 5001});
+  await expect(select).toBeDisabled();
+  await expect(page.locator('#output-status')).toContainText('lokaler Lauf läuft weiter');
+  await expect(page.locator('#output-status')).toContainText('Windows-Abnahme fehlt');
+  await expect(page.locator('#output-status')).toContainText('GSVmulti-Empfang unbestätigt');
+  await expect(page.getByRole('button', {name: 'Lauf stoppen', exact: true})).toBeEnabled();
+  await page.screenshot({path: '/tmp/gsv-live-output.png', fullPage: true});
+});

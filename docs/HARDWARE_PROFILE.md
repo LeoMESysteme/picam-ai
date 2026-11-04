@@ -291,3 +291,211 @@ relativen Schärfewert; sie bewegt nichts.
 Ebenfalls sichtbar: `ExposureTimeMode`/`AnalogueGainMode` sind die neueren
 libcamera-Controls neben dem älteren `AeEnable`. Die Workbench benutzt weiter
 `AeEnable`; ob ein Wechsel nötig ist, ist nicht geprüft.
+
+## Windows-Gegenstelle für GSVmulti — Rückmeldung 2026-11-04
+
+Windows 11, GSVmulti 2.03 mit aktivierter PRO-Lizenz und verfügbarem
+UserDefined; Python 3.15 x64. Die CIM-Abfrage identifiziert COM3 als Intel Active Management
+Technology SOL (PCI), nicht als USB-TTL-Kabel. Ein realer Adapter-COM-Port
+wurde anschließend per USB-PnP-Vergleich als COM4 mit Status OK identifiziert
+(USB Serial Port, FTDIBUS VID_0403/PID_6001). Diese Angaben
+stammen vom Nutzer, nicht von einer direkten Fernabfrage.
+
+Die laut Nutzer signierte com0com-Ausgabe startet nicht: Beide konfigurierten
+Busgeräte melden PnP-Code 52. Keine funktionsfähigen virtuellen COM-Ports
+oder GSVmulti-Empfang bestätigt. Exaktes Paket/Zertifikat unbekannt.
+Beleg: `var/diagnostics/gsvmulti/windows-com0com-pnp-20261104-03.txt`,
+Deutung im [Laborjournal](lab_journal.md). Physische Pi-UART-Verdrahtung
+ist durch diesen Softwarebefund nicht geprüft.
+
+### Pi-UART-Vorprüfung für den direkten Demotest, 2026-11-04
+
+Direkt lesend geprüft: `/dev/ttyAMA0` vorhanden, uart0 in der Bootdatei
+aktiviert, `serial-getty@ttyAMA0` inaktiv. `pinctrl get 14-15` zeigt
+GPIO14=TXD0 und GPIO15=RXD0; `fuser /dev/ttyAMA0` nennt keinen Prozess.
+Beleg: `var/diagnostics/gsvmulti/pi-uart-preflight-20261104.txt`.
+Keine serielle Ausgabe oder Pinänderung durchgeführt. Die Kabelbelegung
+und dessen Windows-Port sind damit noch nicht bestätigt.
+
+### Windows-USB-TTL-Port identifiziert, 2026-11-04
+
+Nutzerrückmeldung beim Einstecken: `USB Serial Port (COM4)`, Klasse Ports,
+Status OK, sowie `USB Serial Converter`, Klasse USB, Status OK. VID_0403,
+PID_6001; Beleg `var/diagnostics/gsvmulti/windows-usb-ttl-20261104-05.txt`.
+COM4 wird für den direkten UserDefined-Demotest verwendet. RXD/GND-Ader-
+zuordnung und tatsächliche Datenübertragung sind noch nicht bestätigt.
+
+### Vorgesehene Verdrahtung des einseitigen UART-Demotests
+
+Nutzerrecherche 2026-11-04: Gelb=RXD, Schwarz=GND, Orange=TXD. Genaues
+DELOCK-Modell und Internetquelle nicht unabhängig identifiziert; Schema
+entspricht den üblichen FTDI-Kabelfarben. Für den Test wird folgende
+Verbindung angeleitet, Durchführung noch nicht bestätigt:
+
+| Pi, physischer Pin | Kabel |
+| --- | --- |
+| 8, GPIO14/TXD0 | Gelb, RXD laut Nutzerrecherche |
+| 6, GND | Schwarz, GND laut Nutzerrecherche |
+
+Orange/TXD, Rot/VCC, Braun/CTS und Grün/RTS bleiben frei. Kein Anschluss
+der Kabelversorgung an den Pi. Pi-Pinpositionen:
+[Raspberry-Pi-Dokumentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#pin-functions).
+GPIO14=TXD0 am Pi erneut lesend geprüft; fuser nennt keinen UART-Nutzer.
+Noch kein Telegramm gesendet.
+
+### Anschlusskorrektur: gemeinsamer 6-poliger Kabelblock
+
+Nutzerrückmeldung 2026-11-04: Die Kabelkontakte sitzen gemeinsam in einem
+schwarzen 6-poligen Buchsenblock, beschriftet GND, CTS, VCC, TXD, RXD, RTS.
+Die frühere Beschreibung als einzeln steckbare Female-Enden ist damit
+überholt. Block-Pinfolge und Pi-GPIO-Pinfolge sind nicht deckungsgleich;
+den Block nicht direkt auf die Pi-Leiste stecken.
+
+Für den einseitigen Demotest zwei Male–Female-Jumper benutzen: Stecker
+in Block GND und Buchse auf physischen Pi-Pin 6; Stecker in Block RXD
+und Buchse auf physischen Pi-Pin 8 (GPIO14/TXD0). CTS/VCC/TXD/RTS bleiben
+frei. Diese Anweisung nutzt die gemeldete Kontaktbeschriftung, nicht nur
+Farben. Durchführung noch nicht bestätigt.
+
+### Verdrahtung gemeldet, Empfangsbereitschaft offen
+
+Nutzer meldet am 2026-11-04 die Pins als angeschlossen, nach obiger
+Zwei-Jumper-Anweisung. Keine unabhängige Sichtprüfung. Vorbereitender
+Read-only-Check bestätigt erneut GPIO14=TXD0, GPIO15=RXD0; fuser zeigt
+keinen Portnutzer, Getty inaktiv. Noch kein Telegramm gesendet; zuerst
+GSVmulti-UserDefined auf COM4 empfangsbereit machen.
+
+### UART-Rohdatenempfang auf Windows belegt, 2026-11-04
+
+Im direkten Versuch 03 mit geschlossenem GSVmulti bestätigt der vom Nutzer
+kopierte PowerShell-Hex-Ausschnitt sechs erwartete Telegramme einschließlich
+% und CRLF. COM4/115200/8N1, Pi ttyAMA0 und gemeldete Zwei-Jumper-Verbindung.
+Belege und Grenzen: [VALIDATION](VALIDATION.md#uart-demo-20261104-03).
+Keine allgemeine Leitungs-, GSVmulti-, Isolations- oder DUT-Freigabe.
+
+
+### Direkter GSVmulti-Zahlenempfang sichtbar, 2026-11-04
+
+Lauf 04 mit gleicher gemeldeter UART-Verbindung: Nach Einschalten von
+Filter Out Non-Numeric zeigt GSVmulti 2.03 Pro auf COM4 Zahlen.
+Pi-seitig 600 Telegramme/6600 Bytes, GSVmulti-Empfangsanzahl unbekannt.
+Der Screenshot ist wegen möglicher Anzeigemittelung kein Einzelwertbeleg.
+[Messung und Grenzen](VALIDATION.md#uart-demo-20261104-04).
+Keine neue Verdrahtung und keine Freigabe realer DUT-Ausgabe.
+
+
+### GSVmulti-Datenfrequenz auf 10 Hz gemeldet, 2026-11-04
+
+Der gezeigte Change Data Rate-Dialog stand auf 1 Wert/s. Nach Anleitung
+zur Eingabe von 10 und Bestätigung mit OK meldet der Nutzer 10 Hz als
+eingetragen. Keine Änderung am Pi-UART oder der Verdrahtung. Snapshot
+mit ursprünglichem Dialog und Nutzerrückmeldung:
+`var/diagnostics/gsvmulti/uart-direct-demo-20261104-06/receiver-setup.json`.
+Wirkung auf die exportierte Zeitachse noch nicht bestätigt.
+
+
+Der Nutzerexport aus Lauf 06 bestätigt Frequency=10 Hz in TXT und TDMS.
+Zeitmodus bleibt `tf`, weshalb das Intervall aus Start/Ende/Werteanzahl
+berechnet wird. Keine weitere Einstellung geändert.
+[Auswertung](VALIDATION.md#uart-demo-20261104-06).
+
+
+### Nominelle GSVmulti-Zeitachse für Sprungtest angeleitet, 2026-11-04
+
+Advanced-Screenshot bestätigt Auto-Select mit Calculate dt from Final time.
+Danach für den synthetischen Funktionstest Auto-Select aus und Use device
+data rate (0,1 s bei 10 Hz) angeleitet; Nutzer meldet bereit. Noch keine
+unabhängige Bestätigung durch neuen Export. Es ist eine nominelle Zeitachse,
+kein Quellzeit-/Latenznachweis. Konfig-Snapshot unter
+`var/diagnostics/gsvmulti/uart-direct-demo-20261104-07/receiver-setup.json`.
+
+
+Lauf 07 bestätigt im Nutzer-TXT/TDMS Frequency=10 Hz, dt mode=1/f0 und
+nominelles Intervall 0,1 s nach der angeleiteten Umstellung. Alle acht
+getesteten Sprünge sind in den gespeicherten Werten unverändert.
+Keine neue Hardwareänderung und kein Nachweis tatsächlicher Quellzeiten.
+[Auswertung](VALIDATION.md#uart-demo-20261104-07).
+
+
+### Replace Missing Values nach Test als aktiv bestätigt, 2026-11-04
+
+Nutzer prüft die Checkbox nach Lauf 10 ausdrücklich und bestätigt sie als
+gesetzt. Bei ansonsten gleichem UserDefined-NaN-Stimulus keine Fehlwertmarker
+in TDMS/TXT; Zeitraster verdichtet weiter. Kein neuer Hardwareumbau und keine
+Freigabe echter DUT-Ausgabe. [Messung](VALIDATION.md#uart-demo-20261104-10).
+
+
+### Einheit mV/V für Demolauf 11 angeleitet, 2026-11-04
+
+Nutzer bestätigt Unit bei gestoppter Messung/Aufnahme als bedienbar.
+Anleitung Unit=mV/V, User Scaling=1 und Save Session unter neuem Namen;
+danach Bereitschaft zu Lauf 11 gemeldet. Auswahl noch nicht im Export
+bestätigt. Konfig-Snapshot:
+`var/diagnostics/gsvmulti/uart-direct-demo-20261104-11/receiver-setup.json`.
+Keine Hardwareänderung und keine reale DUT-Freigabe.
+
+
+Lauf 11 bestätigt die Auswahl im Nutzerexport: TDMS unit_string und
+NI_UnitDescription jeweils mV/V, Scaling=1. Die gespeicherte UCF enthält
+Unit=mV/V, COM4/115200 und Frequency=10 Hz. TXT ohne eigene Einheitenangabe.
+Kein Neuladeversuch und keine echte DUT-Freigabe.
+[Messbeleg](VALIDATION.md#uart-demo-20261104-11).
+
+
+### COM-Kanal nach Close nicht wieder geöffnet, Lauf 12 am 2026-11-04
+
+Gleiche angeschlossene UART-Strecke, kein Kabel abgezogen. Nutzer bestätigt
+Device Close, Wiederöffnen scheitert mit MEGSV-Fehler 805306614 (Port bereits
+offen). Vollständiger GSVmulti-Neustart hilft laut Nutzer. COM4-Belegung gegen
+internen DLL-Zustand noch nicht isoliert; keine aktuelle Prozesszuordnung
+behaupten. Snapshot: `var/diagnostics/gsvmulti/uart-direct-demo-20261104-12/receiver-error.json`.
+[Diagnose](GSVMULTI_PROTOCOL.md#userdefined-reopen-fehler).
+
+
+### Experimentelles A-Präfix-Profil gespeichert, noch nicht gesendet, 2026-11-04
+
+Neue UserDefined-UCF bestätigt Prefix65 (A), Separator0, Frequency10Hz,
+UnitmV/V, COM4/115200 und ein Wert. Gegen Filter-aus-Profil aus Lauf14 ist
+nur Prefix37→65 geändert. Keine Annahme über erfolgreiche Aktivierung oder
+NaN-Unterstützung vor dem Sendeversuch. Snapshot
+`var/diagnostics/gsvmulti/A-prefix-nan-preparation.json`.
+
+## Option USB-Gadget, noch nicht aktiviert {#usb-gadget-option}
+
+2026-11-04, ausschließlich lesend geprüft: lokaler Modellstring bestätigt
+Pi5 ModelB Rev1.1, /sys/class/udc leer. Hersteller dokumentiert USB-Peripheral
+am USB-C-Port; die normalen USB-A-Ports sind Host-Ports. Damit ist ein
+CDC-ACM-Gadget grundsätzlich eine Option, kein bereits eingerichteter Port.
+Snapshot mit unveränderter Bootkonfiguration unter
+`var/diagnostics/gsvmulti/usb-gadget-feasibility-20261104/`.
+Vorhandenes dwc2-host-Overlay steht in Abschnitt cm5 und belegt keinen aktiven
+Pi5-Hostmodus. Keine Konfiguration oder Hardware geändert. Konkrete Versorgung
+und ausreichende Leistungsreserve des USB-Hosts noch nicht erfasst
+([OQ-56](open-questions.md#oq-56)); USB-C übernimmt zugleich die Stromzufuhr.
+[Quellen und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#usb-cdc-option).
+
+### Versorgung über X1201 V1.1 laut Nutzer
+
+2026-11-04: Nutzer nennt 5V UPS Shield X1201 V1.1 von SupTronics Technologies,
+Ladeversorgung am eigenen USB-C des Shields; Produktion kann ohne UPS geplant
+sein. Hersteller beschreibt5.1V/max5A und Pi-Kontaktierung über pogo pins;
+keine unabhängige Foto-/Versorgungsmessung. Genaue Lade-Netzteilleistung noch
+nicht belegt. [Herstellerhinweis](https://suptronics.com/Raspberrypi/Power_mgmt/x1201-v1.1.html):
+keine zusätzliche Versorgung des Pi über dessen USB-C-Port. Das schränkt die
+Gadget-Verkabelung ein; normalen PC-USB-Anschluss nicht parallel freigeben.
+VBUS-getrennte Datenstrecke und Produktionsversorgung sind noch zu prüfen
+([Umsetzung](GSVMULTI_PROTOCOL.md#usb-cdc-umsetzung), OQ-56). Keine Hardwareänderung.
+
+### Virtuelles Windows-COM-Paar nach Buildvergleich erkannt
+
+2026-11-04: Nutzer meldet nach angeleitetem Wechsel zur Vovsoft-verlinkten
+com0com-Ausgabe beide Busse und vier Portgeräte mit Code0. Paar1 ist
+CNCA1=COM5, CNCB1=COM6. Historischer Code52-Befund des CyberCircuits-Pakets
+bleibt oben erhalten. Byteübertragung/GSVmulti noch nicht geprüft, aktuelle
+Treiberdatei und Schutzstatus nach Installation noch nicht rückgelesen.
+[Nachweisgrenzen](VALIDATION.md#com0com-pnp-ok-20261104). Keine Pi-Hardwareänderung.
+
+**Folgeprobe am selben Tag:** COM5↔COM6 überträgt je eine exakt geprüfte
+ASCII-Zeile. Aktueller Treiberhash passt zum Vovsoft-Kandidaten; SecureBoot
+und Speicherintegrität bleiben aktiv. [Beleg](VALIDATION.md#com0com-pair-ok-20261104).
+Noch keine GSVmulti-/Windows-Brücken-/Dauerlaufabnahme, keine Pi-Hardwareänderung.

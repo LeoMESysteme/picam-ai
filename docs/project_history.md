@@ -9,6 +9,38 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART
+
+**Problem:** GSVmulti benötigt einen COM-Eingang, der Pi soll wahlweise über
+Netzwerk oder das vorhandene USB-TTL-Kabel senden. Der Nutzer will bei
+Verbindungsabbruch weiter lokal messen und nach Wiederverbindung aktuelle
+Werte sehen. Ein direkter UART-Schreibvorgang liefert dem Pi keinen
+GSVmulti-Empfangsnachweis; das Beispiel-ZIP besitzt zudem bekannte
+Fehler- und Puffernachlaufprobleme.
+
+**Entscheidung:** Beide Wege benutzen eine eigene Windows-Brücke mit
+kostenfrei zu prüfendem com0com-Portpaar. Das interne versionierte Protokoll
+führt Lauf-/Bildkennung und bestätigungspflichtige Invalidierung getrennt
+vom jüngsten Zahlenwert. ACK bedeutet nur COM-Treiberschreibvorgang. Die
+Brücke ist ein Python-/pySerial-Baustein ohne Kamera-/CV-Abhängigkeiten.
+Der lokale Lauf bleibt bei Transportausfall aktiv, die Oberfläche warnt.
+Historische Übertragungslücken werden separat untersucht (OQ-48).
+
+**Alternativen:** UART direkt an GSVmulti entfällt zugunsten einheitlicher
+Überwachung für beide Wege. VSPE als fertige TCP-/COM-Lösung wurde wegen
+der bevorzugten kostenfreien Lösung nicht gewählt. Das Beispielprogramm
+unverändert zu übernehmen verwürfe die bereits dokumentierten Fehler.
+Historische Werte in den aktuellen Zahlenstrom nachzusenden würde ohne
+belegtes Zeitstempelfeld ihren Zeitbezug verfälschen und ist ausgeschlossen.
+
+**Konsequenz:** Es gibt einen zusätzlichen Windows-Prozess und einen noch
+zu prüfenden virtuellen COM-Treiber. Software kann vorbereitet und mit
+Demodaten geprüft werden; echte DUT-Zahlen bleiben bis zum Nachweis von
+Ungültig-/STALE-Semantik und Altwertbehandlung in GSVmulti strukturell
+gesperrt. Ein geöffnetes Portpaar hebt diese Sperre nicht auf. Änderungen
+an Hardware oder Windows wurden in dieser Implementierung nicht vorgenommen.
+
+
 # 2026-10-28 — Session-Archiv vom Messpfad und vom Wiki-Build trennen
 
 Der Records Explorer sollte alle abgeschlossenen Läufe und ihre Entwicklung
@@ -1582,3 +1614,50 @@ Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
 Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
 bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
 in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).
+
+## 2026-11-04 — com0com-Auswahl bleibt nach Windows-Code-52 ungeprüft
+
+Die ursprünglich für die kostenfreie gemeinsame Windows-Brücke gewählte
+com0com-Basis besteht den lokalen Treiberstart nicht: Nutzer bestätigt
+signierte Ausgabe, PnP meldet für beide Busgeräte Code 52. Das beweist
+keine generelle Unbrauchbarkeit aller com0com-Pakete, verhindert aber den
+Empfangstest mit der vorliegenden Installation. Namensänderungen am
+virtuellen Port sind damit nicht die nächste Problemlösung.
+
+HHD Free Virtual Serial Ports wird für den Firmen-Laborbetrieb wegen des
+expliziten Ausschlusses kommerzieller Nutzung in der Free-Version nicht
+als kostenlose Ersatzbasis empfohlen. VSPE-Erprobung und ein isolierter
+direkter UART-Demotest bleiben mögliche nächste Wege; noch keine Auswahl
+oder Abnahme. Die Brücke bleibt vom VCOM-Anbieter unabhängig, echte
+DUT-Ausgabe gesperrt. Quellen und Grenzen:
+[GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#com0com-code52).
+
+## 2026-11-04 — Direkter UART-Demotest vor weiterer VCOM-Auswahl
+
+Nach Code 52 der signierten com0com-Ausgabe wählt der Nutzer zunächst den
+direkten UART-Empfangstest. Ein endlicher Pi-Demosender soll über das
+USB-TTL-Kabel den realen Windows-COM-Port von GSVmulti erreichen. Für
+diesen begrenzten Versuch entfällt die virtuelle Portstrecke. VSPE wird
+jetzt nicht installiert; die dauerhafte VCOM-Lösung bleibt offen.
+Die gemeinsame Brückenarchitektur und deren Fehler-/Nachweisanforderungen
+werden dadurch nicht als abgenommen behandelt. Vor Verdrahtung sind
+Kabelbelegung und Windows-Port zu bestätigen; echte DUT-Ausgabe bleibt
+gesperrt. Siehe [Testweg](GSVMULTI_PROTOCOL.md#gewahlter-nachster-versuch-uart-direkt).
+
+## 2026-11-04 — Gemeinsamer TCP-Demoweg belegt, Freigabe und UI-Übernahme getrennt
+
+Nach Nutzerentscheidung zurück zu com0com wurde dessen Code52 auf genau dem
+Windows11-Zielrechner durch Vovsoft-verlinkten Build überwunden; Schutz blieb
+aktiv.600/600 gültige Werte über gemeinsamen TCP-Dateipfad und510/510 COM-
+geschriebene Werte beim Brückenprozesswiederanlauf belegt. Keine historische
+Aufholfolge. Direkte USB-CDC-Option wegen Nutzerpriorität und ungeklärter
+X1201-/USB-C-Stromführung zurückgestellt, kein Gadget aktiviert.
+
+Die Workbench-Ausgabenaht ist bereits als Software-Prototyp vorhanden;
+eine spätere Gestaltung übernimmt sie. Eine zweite parallele Brücke oder
+Entsperrung aufgrund gültiger Demowerte wird nicht eingeführt: GSVmulti
+verdichtet Ausfallzeiten weiterhin auf nominelle0,1s. Der gesonderte
+Throwaway-Generator für den Abbruchtest ersetzt den ACK-wartenden endlichen
+Demosender nur diagnostisch, nicht als neue Produktionsquelle.
+Nutzer beendet Session, beauftragt Commit/Push und wünscht Übergabe auch an
+Claude. Status/Belegarchiv halten Nachweise und offene Schranken getrennt.

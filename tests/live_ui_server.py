@@ -61,8 +61,9 @@ class FakeLiveService:
             raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
         self.set_state({"state": "confirmed"})
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None):
-        self.set_state({"state": "running"})
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, output=None):
+        self.set_state({"state": "running", "output": {"transport": (output or {}).get("transport", "off"),
+                       "state": "disconnected", "release_block": "Windows-Abnahme fehlt"}})
 
     def stop_run(self):
         self.set_state({"state": "stopped"})

@@ -43,3 +43,16 @@ Modell-Konfidenz ist ohne Kalibriermessung keine Fehlerwahrscheinlichkeit.
   absichern; Leistung am Aufbau messen. Installationspaket und automatischer
   Dienst bleiben Ausbauziele. Der vorhandene Python-Einsprungpunkt heißt
   `dispread`; Node.js ist für die Workbench-Laufzeit nicht erforderlich.
+
+* **SSH-tauglicher Ein-Befehl-Installer (Nutzerwunsch 2026-11-04):** Ein
+  extern erreichbarer Bootstrap lädt die Einrichtung herunter, prüft
+  vorhandene Komponenten und ergänzt nur Fehlendes. Anschließend führt
+  die geplante Setup-TUI/CLI durch die Konfiguration; ein Betrieb ohne GUI
+  und ein nichtinteraktiver Modus gehören dazu. Entscheidend ist der
+  SSH-Zielrechner: Pi-Pakete auf dem Pi, Windows-Brücke/COM-Treiber auf
+  Windows. Die Installationsdatei darf kein bereits geklontes Repo
+  voraussetzen. Veröffentlichung/Download-Adresse, Versionierung und
+  Integritätsprüfung sind noch festzulegen. Die Prüfung muss den tatsächlichen
+  Treiberstart samt PnP-Fehlercode einbeziehen; ein vorhandenes Setup oder
+  ein erfolgreicher Installationsaufruf genügt nicht
+  ([OQ-49](docs/open-questions.md#oq-49)).

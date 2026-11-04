@@ -22,6 +22,7 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import validate_offline_cell_text
+from dispread.gsv_transport import OutputConfig
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
@@ -216,6 +217,9 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "output": (self._session.output_status()
+                           if self._session is not None and hasattr(self._session, "output_status")
+                           else {"transport": "off", "state": "off"}),
                 "reference": (self._session.reference_status()
                               if self._session is not None and hasattr(self._session, "reference_status")
                               else {"enabled": False, "reason": "kein Referenzlauf"}),
@@ -495,8 +499,10 @@ class LiveService:
                 self._state = "confirmed"
 
     # -- Lauf ----------------------------------------------------------------
-    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None) -> None:
+    def start_run(self, *, test_override: bool = False, reference: bool = True, norm_schedule=None,
+                  output: dict | None = None) -> None:
         try:
+            output_config = OutputConfig.from_dict(output)
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
@@ -513,6 +519,8 @@ class LiveService:
                 confirmed_by = (self._profile_info or {}).get("confirmed_by")
                 if block is not None and not test_override:
                     raise LiveError(block)
+                if test_override and output_config.transport != "off":
+                    raise LiveError("Testlauf erlaubt keine externe Ausgabe")
             number = 1
             while True:
                 out_dir = profile_path.parent / f"run-{number:02d}"
@@ -545,6 +553,7 @@ class LiveService:
                     reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
+                    **({"output": output_config} if output_config.transport != "off" else {}),
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite

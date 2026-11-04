@@ -7,31 +7,346 @@ weg: entwickeln
 **Vorher lesen:** [Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
 und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
 
-## Stand: UserDefined-Prototyp kann gebaut werden {#stand-das-format-ist-unbekannt}
+## Stand: Software-Prototyp, DUT-Ausgabe gesperrt {#stand-das-format-ist-unbekannt}
 
-**Stand 2026-10-28:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
-**Transportprototyp**, noch nicht für eine freigegebene Messanbindung.
-GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren seriellen
-Zahlenimport. Ein Nachbau des GSV-2-/GSV-6-/GSV-8-Geräteprotokolls ist für
-diesen Weg nicht erforderlich. Die vorherige Aussage „das Eingangsformat
-ist vollständig unbekannt“ ist damit überholt
-([OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md)).
+**Stand 2026-11-04:** UserDefined-Formatter, gemeinsame Windows-Brücke und
+Live-Konfiguration für Netzwerk oder UART sind als Software-Prototyp gebaut.
+Die Workbench bietet **Aus / UART / Netzwerk**. Pro Lauf ist ein Weg gewählt.
+Ein erkannter Verbindungsabbruch unterbricht Kamera und lokales Audit nicht;
+die Brücke versucht die Verbindung erneut aufzubauen. Das ist noch kein
+Nachweis des Empfangs oder der Speicherung durch GSVmulti
+([OQ-07](open-questions.md#oq-07)).
 
-Der Nutzer bestätigt Windows als Zielsystem. Das PDF dokumentiert dort
-**GSVmulti 2.01 Pro**; die aktuelle Herstelleranleitung **v2.6 ist ein
-Dokumentstand**, keine Bestätigung der Funktionen jeder Softwareversion.
-Ein Empfangs- oder Aufzeichnungstest in dieser 2.01-Installation fehlt.
-Die Dokumentation dieser Prüfung verändert weder Windows noch den Pi-Aufbau.
+**Echte DUT-Ausgabe bleibt strukturell gesperrt.** Der Pi beantwortet
+Live-Abfragen ohne DUT-Zahlen; die Windows-Brücke lehnt nichtsynthetische
+Messdaten ab. Es gibt keinen Freigabeschalter in der Oberfläche. Erst ein
+belegter Umgang mit ungültigen Werten und Altwerten in den COM-Puffern
+ermöglicht einen weiteren Freigabeschritt. Lokale Live-Läufe bleiben möglich.
+[Arbeitsplan und Abnahme](superpowers/plans/2026-11-04-gsvmulti-anbindung.md).
 
-| Was lässt sich jetzt bauen? | Was bleibt nachzuweisen? |
+GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren Zahlenimport.
+Ein Nachbau des nativen GSV-Geräteprotokolls ist dafür nicht erforderlich.
+Der Nutzer meldet am 2026-11-04 **Windows 11 und GSVmulti 2.03**; Python
+3.15 x64 und der sichtbare Port COM3 wurden per PowerShell zurückgemeldet.
+Nach Aktivierung der PRO-Lizenz bestätigt der Nutzer `UserDefined` als
+verfügbar. Direkte UART-Demowerte und Einzelwertaufzeichnung sind inzwischen belegt;
+die gemeinsame Windows-Brücke und der Umgang mit ungültigen Zeiträumen
+bleiben zu prüfen. Das frühere
+PDF dokumentierte 2.01 Pro und beschreibt damit nicht die aktuelle Installation.
+Die Herstelleranleitung v2.6 ist ein Dokumentstand, kein Versionsnachweis.
+
+| Gebaut | Noch offen |
 | --- | --- |
-| Eigenständiger Sender für endliche Demowerte mit festem Zahlenprofil | Annahme und Aufzeichnung in der konkreten 2.01-Pro-Installation |
-| Neuer `TelegramFormatter` für einen freigegebenen DUT-Wert pro Zeile | Ungültig-/STALE-Verhalten in Anzeige, Datei und Kalibrierauswertung |
-| Serielle Ausgabe mit vorhandenem `SerialSink` an einen passenden COM-Transport | Port, Treiber, Pufferung, Wiederanlauf und Dauerbetrieb |
-| Geplante Einbindung in `/live` mit parallelem JSONL-Audit | Lebenszyklus, Freigabesicherung und Metadaten des tatsächlichen Laufs |
+| Einkanaliger `UserDefinedFormatter`, `provisional=True`, vorhandene Dezimalauflösung | Ungültige Zeiträume und GSVmulti-Empfang über die gemeinsame Brücke |
+| Endlicher Demodatensender und gemeinsame TCP-/UART-Brücke | Windows-Python-Brücke/TCP; Portpaar COM5/COM6 inzwischen bidirektional geprüft |
+| Versionsgebundenes internes Brückenprotokoll mit Lauf-/Bildkennung und Invalidierungssperre | NaN-/STALE-Verhalten, Puffernachlauf und Zeitachse in GSVmulti |
+| Live-Auswahl, Verbindungsstatus und paralleles vollständiges Lauf-Audit | UART-Kabel/Pinbelegung sowie Hardware- und Ende-zu-Ende-Abnahme |
 
-**Die vollständige Messfreigabe bleibt offen.** P4 ist damit zum Bauen
-zugänglich; die Phase ist weder implementiert noch bestanden.
+## Windows-Brücke vorbereiten {#windows-bruecke}
+
+Beide Wege benutzen dieselbe Brücke:
+
+```text
+Pi → TCP oder UART → Windows-Brücke → virtuelles COM-Portpaar → GSVmulti
+```
+
+Die kostenfreie Grundlage ist ein com0com-Portpaar. Nach Wechsel zur
+[Vovsoft-verlinkten Ausgabe](https://vovsoft.com/blog/how-to-sniff-serial-port-communication/)
+ist COM5↔COM6 auf dem Zielrechner bidirektional geprüft, SecureBoot und
+Speicherintegrität bleiben aktiv. [Beleg](VALIDATION.md#com0com-pair-ok-20261104).
+Die Brücke öffnet COM5, GSVmulti COM6. Windows-Python-Brücke und Empfang
+durch GSVmulti über dieses Paar sind noch nicht abgenommen.
+
+1. Windows-/GSVmulti-Version und PRO-Funktion festhalten; den belegten
+   Treiberstand samt Hash sichern. Vorhandenes Paar CNCA1=COM5/CNCB1=COM6
+   verwenden. Auf anderen Zielrechnern beide tatsächlichen Portnamen nachweisen.
+2. Projekt auf Windows bereitstellen. Eine eigene Python-Umgebung mit
+   Python 3.13 oder neuer und pySerial 3.5 verwenden. Die Brücke lädt keine
+   Kamera-/OpenCV-Pakete; siehe [Abhängigkeiten](dependencies.md#windows-bruecke).
+3. In GSVmulti den gegenüberliegenden Port als `UserDefined`, einen Wert,
+   Präfix `%`, Dezimalpunkt und CRLF konfigurieren. Einheit und Skalierung
+   gesondert auf mV/V prüfen. Keine bestätigten COM-Nummern durch die
+   Beispiele `COM20`/`COM21` ersetzen.
+4. Zunächst lokal Demodaten senden. Die folgenden Portnamen sind Beispiele:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/gsv-bridge.py --demo --com-port COM20 --count 600 --rate-hz 10 --log bridge-demo.jsonl
+```
+
+Ohne COM ist der erzeugte Zahlenstrom auf dem Pi prüfbar:
+
+```bash
+./.venv/bin/python scripts/gsv-bridge.py --demo --stdout --count 3 --rate-hz 10 --log /tmp/bridge-demo.jsonl
+```
+
+Danach den Verbindungsweg prüfen. Auf dem Pi zuerst einen synthetischen
+Publisher starten; für jeden Versuch ein neues Ausgabeverzeichnis verwenden:
+
+```bash
+./.venv/bin/python scripts/gsv-publisher-demo.py --transport tcp --out-dir var/gsv-demo-tcp --count 600 --rate-hz 10
+./.venv/bin/python scripts/gsv-publisher-demo.py --transport uart --out-dir var/gsv-demo-uart --count 600 --rate-hz 10
+```
+
+Die beiden Befehle sind alternative Versuche. Der Publisher wartet
+standardmäßig bis zu 30 Sekunden auf die Brücke. Er schreibt jeden
+Demodatensatz vor Veröffentlichung ins Audit und zählt erst nach
+COM-Schreibbestätigung weiter. Bleibt diese aus, wird der Versuch als
+unvollständig abgeschlossen. Die Rate ist ein Ziel für den Versuch, kein
+Nachweis über erreichten Durchsatz; synthetische Zeitangaben tragen keine
+Latenzaussage. `session.json` hält Demomarkierung, angeforderte und bestätigte
+Anzahl sowie Abschlussgrund fest.
+
+Dann auf Windows den passenden Brückeneingang wählen:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/gsv-bridge.py --tcp-host <PI-IP> --com-port COM20 --log bridge-tcp.jsonl
+.\.venv\Scripts\python.exe scripts/gsv-bridge.py --uart-port <USB-TTL-COM> --com-port COM20 --log bridge-uart.jsonl
+```
+
+Im normalen Live-Lauf erscheint weiterhin die DUT-Ausgabesperre. Ein
+geöffneter COM-Port oder die Brückenbestätigung `written` beweist nur den
+Schreibvorgang zum Treiber, keine Übernahme durch GSVmulti. Für die
+Zuordnung dienen Laufkennung und Bildnummer; Zeilennummern allein reichen
+nach einer Lücke nicht aus.
+
+### com0com: Code 52 des Originalpakets und aktueller Buildvergleich {#com0com-code52}
+
+Am Zielrechner Windows 11 meldet der Nutzer für beide com0com-Busgeräte
+`Status: Error` und `ConfigManagerErrorCode: 52`. Der Nutzer bestätigt,
+die signierte Ausgabe installiert zu haben; Paketversion/Zertifikat wurden
+nicht unabhängig geprüft. Nach
+[Microsoft](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-unsigned-driver)
+bedeutet Code 52, dass Windows die erforderliche Treibersignatur nicht
+akzeptiert und das Gerät nicht startet. Eine COM-Namensänderung behebt
+diesen Startfehler nicht; die vorhandene Installation ist für diesen
+Empfangstest noch nicht verwendbar. Die GUI-.NET-Meldung ist davon getrennt.
+
+Nächste Wahl ist noch offen: VSPE lässt sich laut
+[Hersteller](https://eterlogic.com/Products.VSPE_License.html) zunächst
+erproben; für den geplanten dauerhaften/automatisierten Firmenbetrieb
+ist eine passende Lizenz zu klären. HHD Free Virtual Serial Ports schließt
+in den [Free-Version-Grenzen](https://freevirtualserialports.com/features)
+kommerzielle Nutzung ausdrücklich aus und ist damit keine kostenlose
+Standardlösung für diesen Laborbetrieb. Ein direkter UART-Demotest könnte
+den UserDefined-Empfang ohne virtuellen COM-Treiber prüfen; dabei wären
+Kabelbelegung und realer Windows-Adapterport vorher zu bestätigen. Das wäre
+ein isolierter Empfangstest, kein Nachweis der gemeinsamen Netzwerk-/UART-
+Brücke. Es wurde noch keine dieser Alternativen auf Windows installiert
+oder abgenommen.
+
+**Aktuelle Fortsetzung 2026-11-04:** Nach direktem UART-Test und USB-
+Machbarkeitsuntersuchung wählt Nutzer erneut com0com. Nächster Schritt ist
+lesendes PnP-/Treiberinventar: tatsächlicher Fehlercode, Version, Provider,
+zugeordnete INF, IsSigned und Signer. Danach konkrete
+[CodeIntegrity-Ereignisse](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/troubleshooting-driver-signing-installation)
+korrelieren. Signiert-Metadatum allein belegt keine erfolgreiche
+Kernel-Ladefreigabe. Kein Treiberwechsel oder Portpaarerfolg behauptet.
+
+**Aktuelles Inventar:** Beide Geräte0000/0001 melden weiterhin
+CM_PROB_UNSIGNED_DRIVER. Zugeordnet ist com0com3.0.0.0, Provider Vyacheslav
+Frolov, `oem234.inf`, IsSigned=False, Signer leer. Nutzer nennt ZIP
+com0com-3.0.0.0-i386-and-x64-signed. Das
+[offizielle Projektarchiv](https://sourceforge.net/projects/com0com/files/com0com/3.0.0.0/)
+enthält getrennte x86-/x64-Installer, lokal nur heruntergeladen und gelistet,
+nicht ausgeführt. Welche EXE auf Windows lief und welche Katalogdatei dem
+aktiven Paket zugeordnet ist, bleibt offen. Archivname allein beweist keine
+Windows-Ladefreigabe. Als Nächstes aktive INF-Metadaten und passende
+CodeIntegrity-Ereignisse lesen. Treiber können
+[über einen Katalog signiert sein](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/catalog-files);
+Datei-, Paket- und Kernel-Ladeprüfung nicht gleichsetzen. Keine Neuinstallation
+oder Entfernung aus den bisherigen Metadaten allein ableiten.
+
+**Installerwahl anschließend geklärt:** Nutzer führte die x86-EXE aus.
+Beide offiziellen Installer rein statisch entpackt und com0com.sys-PE-Header
+geprüft: x86-Paket Machine014c, x64-Paket8664. Der x86-Kerneltreiber ist für
+den Intel-Windows11-Rechner ungeeignet; Microsoft beschreibt die
+[Architekturgrenze](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/porting-your-driver-to-64-bit-windows).
+Das beweist nicht die Architektur der aktuell gebundenen Windows-Datei oder
+alle Ursachen von Code52. INF-Abfrage meldet oem234.inf nicht vorhanden;
+der kombinierte Block bricht deshalb vor der CodeIntegrity-Abfrage ab.
+Keine Ereignisausgabe oder neue Treiberzuordnung empfangen. INF-Dateinamen
+nicht als dauerhaft fest behandeln, keine Zwangslöschung anhand alter Angaben.
+Nächster Schritt: Setup_com0com_v3.0.0.0_W7_x64_signed.exe aus demselben ZIP
+normal installieren und Geräte-/Paketstatus danach neu erfassen. Signatur-
+akzeptanz bleibt zu prüfen; bei weiterem Fehler CodeIntegrity unabhängig von
+der INF-Abfrage lesen. Noch keine Installation dieses Schritts bestätigt.
+
+**Nach x64-Anleitung:** Nutzerinventar unverändert: zwei Geräte mit
+CM_PROB_UNSIGNED_DRIVER und oem234.inf/IsSigned=False. Als Setup-Meldung
+berichtet Nutzer erneut nur fehlende .NET2.0-GUI-Laufzeit. Keine erfolgreiche
+Treiberbindung oder Kernel-Ladung daraus ableiten. Jetzt PnPUtil-Gerätedetails,
+registrierten com0com-Treiberpfad und unabhängige CodeIntegrity-Ereignisse
+lesen; nicht erneut anhand unveränderter Metadaten installieren.
+
+**Konkreter CodeIntegrity-Befund:** PnPUtil erkennt jetzt CyberCircuits als
+Signierer von oem234.inf, Gerät bleibt mit Code52/0xC0000428 blockiert.
+Registrierter Treiber C:\windows\system32\drivers\com0com.sys, Dienst Stopped.
+Zweimal3004: Image-Integrität nicht prüfbar, Dateihash im System nicht gefunden.
+Älteres3076: Audit-Regel verletzt, Laden laut Meldung erlaubt. Dieses Ereignis
+allein ist kein aktueller Sperrnachweis. [Mess-/Diagnosebeleg](VALIDATION.md#com0com-ci-20261104).
+WMI-IsSigned=False, PnP-Katalogsignierer und Kernel-Verifikation sind getrennte
+Befunde. Nächster Schritt: aktive Datei mit Original per SHA256 und Windows-
+Authenticode vergleichen. Kein konkreter x86-Rest, Dateischaden, fehlender
+Katalog oder Secure-Boot-Fehler isoliert bewiesen; nichts manuell in CatRoot
+oder Zertifikatsspeicher kopieren. Keine Treiber-/Sicherheitsänderung erfolgt.
+
+**Dateivergleich geklärt:** Nutzer-SHA256 der aktiven com0com.sys stimmt exakt
+mit dem unabhängig gesicherten offiziellen x64-Original überein; Windows-
+Authenticode meldet Valid/CyberCircuits. Ein x86-Rest oder abweichender Inhalt
+an diesem Pfad ist damit ausgeschlossen. Kernelzulassung und Katalogzustand
+sind separate Prüfungen. Microsoft beschreibt strengere
+[Kerneltreiber-Signierungsanforderungen](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/kernel-mode-code-signing-policy--windows-vista-and-later-).
+Welche Richtlinie auf dem Zielgerät wirkt, ist noch nicht nachgewiesen.
+Jetzt Windows-Build, Secure Boot und DeviceGuard/HVCI nur lesen. Keine
+Zertifikatsablauf-/Secure-Boot-Ursache aus dem bisherigen Befund allein ableiten.
+
+**Schutzstatus nun belegt:** Windows11 Pro10.0.26200, Secure Boot aktiv,
+VBS/Speicherintegrität laufen, CI erzwungen. AuthenticodeValid des Original-
+x64-Builds ist somit weiterhin kein Kernel-Ladenachweis. Welche konkrete
+Prüfung ablehnt, bleibt unisoliert; keine Schutzfunktion ändern.
+
+**Weiterer gezielter com0com-Kandidat:** [Vovsoft verlinkt selbst](https://vovsoft.com/blog/how-to-sniff-serial-port-communication/)
+ein [kombiniertes Setup im eigenen Repository](https://github.com/vovsoft/com0com).
+Statische Prüfung: x64-Treiber mit anderem Inhalt und Signierer Christos
+Nikolaou, Zertifikat ab13.6.2012. Das liegt vor dem Altersstichtag der
+[Microsoft-Ausnahmeregel für Cross-Signaturen](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/kernel-mode-code-signing-policy--windows-vista-and-later-),
+belegt aber keine Erfüllung aller Bedingungen oder HVCI-Kompatibilität.
+Kein moderner Microsoft-WHQL-Build behauptet. Ein kontrollierter normaler
+Installationsversuch nach Sicherung/normaler Entfernung des bisherigen
+com0com ist vorbereitet. Installer-Hash
+`ae0dd19472f92bab3165d370c3713616a3ffb708fad785684759b04653705a71`;
+Treiber-Hash und Quellen im Diagnoseverzeichnis. Installerhülle ohne eigene
+eingebettete Signatur, Treibersignatur separat vorhanden. Keine EXE ausgeführt,
+kein Sicherheitswechsel oder erfolgreiches Windows-Portpaar belegt.
+
+**Aktueller Erfolg nach angeleitetem Buildvergleich:** Nutzer meldet für
+beide Busse und vier Portgeräte ConfigManagerErrorCode0. Paar1 ist
+CNCA1=COM5 und CNCB1=COM6. Code52 ist damit im aktuellen PnP-Snapshot
+überwunden. [Beleg](VALIDATION.md#com0com-pnp-ok-20261104).
+Noch keine Byteübertragung, kein Windows-Brücken-/TCP-/GSVmulti-Nachweis.
+Aktiver Hash und Schutzstatus nach Installation werden zusammen mit der
+bidirektionalen Portprobe erneut erfasst; keine pauschale HVCI-Kompatibilität
+ableiten. Für die Folgeversuche COM5 als Brückenseite, COM6 für GSVmulti
+vorgesehen. GSVmulti während des reinen Porttests geschlossen lassen.
+
+**Portpaar jetzt funktional bestätigt:** Je eine exakte ASCII-Zeile in beide
+Richtungen, Ports nach Probe freigegeben. Aktueller Treiberhash entspricht
+Vovsoft-Kandidat; SecureBoot und Speicherintegrität nach Installation erneut
+aktiv bestätigt. Keine Durchsatz-/Dauerlauf-/Wiederanlauf-Abnahme.
+[Beleg](VALIDATION.md#com0com-pair-ok-20261104). Nächster Schritt: portables
+Windows-Paket per bestehendem SSH übertragen, isolierte Python3.15-Umgebung
+mit pyserial3.5, zuerst --help prüfen. Danach lokale Brückendemo COM5→COM6,
+anschließend TCP. Neues Paket/Manifest im Diagnoseverzeichnis gesichert;
+kein öffentlich gehosteter Installer oder OQ-49-Abschluss.
+
+### com0com-GUI meldet fehlendes .NET
+
+Nutzerrückmeldung 2026-11-04: Trotz vorhandener Runtime/Developer-Pack
+startet nur das Kommandozeilen-Setup. Die
+[com0com-Quelltext-README](https://raw.githubusercontent.com/datamancer/com0com/master/com0com/ReadMe.txt)
+nennt .NET Framework 2.0 als Voraussetzung der alten GUI. Das ist nicht
+dasselbe wie ein aktuelles .NET-Runtime-/Developer-Pack; Framework 3.5
+umfasst die 2.0-Laufzeit, Framework 4 ist eine andere Laufzeitfamilie
+([Microsoft](https://learn.microsoft.com/en-us/dotnet/framework/install/versions-and-dependencies)).
+Die genaue Ursache auf dem Zielrechner ist noch nicht nachgewiesen.
+
+Das öffentliche3.0.0.0-Installerskript NSIS/install.nsi wurde zusätzlich
+statisch geprüft: AdviseDotNETVersion enthält diese Warnung und wird dort in
+.onInstSuccess aufgerufen. LaunchSetup fällt auf setupc.exe zurück. Die
+Treiberoperationen erfolgen separat. Damit betrifft die Warnung den GUI-Pfad;
+sie beweist keinen Treiberinstallationsfehler oder erfolgreichen Treiberstart.
+Quell-/Archivnachweis im Diagnoseverzeichnis; exakte Zuordnung zum kompilierten
+Signed-Installer nicht binär bewiesen. Keine Framework-Installation notwendig,
+um die vorhandene CLI für die weitere Diagnose zu verwenden.
+
+Für den Versuch genügt das mitgelieferte Setup Command Prompt. Am Prompt
+`command>` zunächst `list` eingeben und die vorhandenen Paar-/Portnamen
+sichern. Dies ist noch kein Nachweis eines geladenen Treibers oder
+erfolgreichen Empfangs. Die
+[Projektanleitung](https://com0com.sourceforge.net/doc/UsingCom0com.pdf)
+beschreibt `list`, `install` und `change`. Die spätere automatische
+Einrichtung soll dieses CLI verwenden; der extern abrufbare Bootstrap
+ist noch geplant ([OQ-49](open-questions.md#oq-49)).
+
+### Gewählter nächster Versuch: UART direkt
+
+Der Nutzer wählt am 2026-11-04 nach der com0com-Code-52-Blockade zunächst
+einen isolierten Empfangstest über die physische Strecke:
+
+```text
+Pi-UART TX → USB-TTL-Kabel RX → realer Windows-COM-Port → GSVmulti UserDefined
+```
+
+Der PnP-Vergleich identifiziert das USB-TTL-Kabel inzwischen als
+`USB Serial Port (COM4)` mit Status OK (FTDIBUS, VID_0403/PID_6001). COM3
+ist Intel AMT SOL und wird nicht verwendet. Kabel-RXD/GND-Belegung und
+Empfang waren zunächst unbestätigt; der aktuelle Beleg folgt unten.
+
+Gemeinsames GND ist erforderlich; VCC bleibt frei. Für diesen einseitigen
+Demodatentest wird der TX-Ausgang des Kabels nicht benötigt. Vor Anschluss
+Kabelbelegung und Windows-Port anhand der tatsächlichen Geräteangaben
+bestätigen. Kein com0com und keine Windows-Python-Brücke für diesen Versuch.
+Der vorhandene `send_demo`-Sender kann die endliche Zahlenfolge auf dem Pi
+senden. Inzwischen ist sichtbarer Empfang im direkten Versuch 04 belegt;
+dies prüft nicht die gemeinsame Netzwerk-/UART-Brücke oder echte DUT-Werte.
+
+### Anschluss des gemeldeten 6-poligen Buchsenblocks
+
+Der Nutzer beschreibt inzwischen einen gemeinsamen schwarzen Block,
+beschriftet GND, CTS, VCC, TXD, RXD, RTS. Dies korrigiert die frühere
+Annahme einzeln steckbarer Female-Enden. **Den Block nicht direkt auf die
+Pi-GPIO-Leiste stecken:** Die Kontaktfolge ist nicht kompatibel.
+
+Für den einseitigen Demotest zwei Male–Female-Jumper verwenden, jeweils
+Stecker am Kabelblock und Buchse am Pi:
+
+| Kontakt am Kabelblock | Physischer Pi-Pin |
+| --- | --- |
+| GND | 6 (GND) |
+| RXD | 8 (GPIO14/TXD0) |
+
+CTS, VCC, TXD und RTS bleiben frei. Beschriftete Kontakte statt einer
+vermuteten Farbfolge verwenden. Nutzer meldet die Verdrahtung ausgeführt;
+keine unabhängige Sichtprüfung. Rohdaten- und Zahlenempfang sind unten belegt.
+
+### UART-Kabel vor dem Anschluss prüfen
+
+Der Nutzer hat ein DELOCK-Kabel mit „3V“-Beschriftung und sechs einzelnen
+Female-Anschlüssen: braun CTS, rot VCC, grün RTS sowie orange, gelb und
+schwarz. Der AWM-Isolationsaufdruck identifiziert das Adaptermodell nicht.
+Artikelnummer, Signalpegel und TX-/RX-/GND-Zuordnung vor dem Anschluss
+bestätigen; aus den Farben allein keine Anschlussfreigabe ableiten.
+
+Für den bidirektionalen Brückenweg werden TX, RX und gemeinsames GND
+benötigt, TX jeweils zum RX der Gegenseite. VCC, CTS und RTS bleiben frei.
+Der Pi-Ausgang ist `/dev/ttyAMA0`, nicht `/dev/serial0`; die konkreten
+GPIO-Pins gegen das [Hardwareprofil](HARDWARE_PROFILE.md) und die aktive
+Konfiguration prüfen. Der Referenzport `/dev/ttyUSB0` bleibt unberührt.
+115200 Baud, 8N1 und kein Handshake sind die Prototypvorgaben. Eine neue
+Verdrahtung wurde in dieser Software-Session nicht vorgenommen.
+
+### Weiterlaufen, Wiederanlauf und Historie
+
+Der Leser schreibt `records.jsonl` vor Veröffentlichung an die Brücke.
+Das Lauf-Audit rotiert nicht mehr nach fünf Generationen alte Belege weg.
+Bei einem erkannten Transportausfall liest und protokolliert der Pi weiter;
+die Workbench zeigt den Fehler. Ein Audit-Schreibfehler bleibt ein harter
+Stopp. Übertragungsereignisse stehen getrennt in `output.jsonl`, auf
+Windows im mit `--log` gewählten Brücken-Audit.
+
+Die Brücke verwendet begrenzte Nachrichten, eine ausstehende Anfrage und
+Wiederverbindungsabstände von 1, 2, 4 und höchstens 8 Sekunden. Ein
+unbestätigter ungültiger Zustand bleibt als Sperre erhalten und darf nicht
+durch einen neuen gültigen Zahlenwert verdrängt werden. Nach Wiederverbindung
+gibt es keinen historischen Aufholburst. Die vorläufige Altersgrenze von
+1 Sekunde bezieht sich nur auf den COM-Schreibvorgang; sie ist kein
+QM-Grenzwert und keine Zusage über den Verarbeitungszeitpunkt in GSVmulti.
+Synthetische Demodaten belegen keine Latenz.
+
+Ein historischer Import mit ursprünglichen Zeiten wird gesondert untersucht
+([OQ-48](open-questions.md#oq-48)). Die im Handbuch beschriebenen
+Logger-Textdateien und TDMS-Dateien sind Ausgangspunkte; ein generischer
+CSV-Import mit korrekter Zeitachse ist dadurch nicht belegt.
 
 ## Quellen und Nachweisgrenzen {#quellen}
 
@@ -213,7 +528,7 @@ ist damit **nicht** belegt:
 | Policy oder Vorschlag | Grenze bei UserDefined |
 | --- | --- |
 | `omit_record` | `TxReceipt.omitted=True` belegt die absichtliche Lücke nur im Pi-Audit; GSVmulti könnte den alten Wert weiter anzeigen oder die Zeitachse verdichten. |
-| `send_nan` | Annahme und Ungültigsemantik von `NaN` sind unbestätigt. |
+| `send_nan` | Lauf 09: Im getesteten UserDefined-Profil mit Zahlenfilter keine NaN-Einträge in TXT/TDMS; nach Timeout gültige Zahlen ohne Zeitlücke. Keine Freigabe; andere Konfigurationen nicht geprüft. |
 | `status_flag` | Der bisherige Textstatus und leere Wertfelder sind für das reine Zahlenprofil nicht nachgewiesen. |
 | Separater Zahlenkanal für Gültigkeit | Ein weiterer Messkanal; sperrt nicht automatisch Anzeige oder Verwendung des DUT-Kanals. |
 | Sender bei Fehler stoppen | Keine neuen Werte; rechtzeitige Kennzeichnung des Altwerts und sichere Beendigung der Auswertung bleiben nachzuweisen. |
@@ -235,7 +550,9 @@ Transportversuche mit Demodaten, keine Messfreigabe
 | Pi Raw-TCP-Server → Windows-VCOM → GSVmulti | Plausibler LAN-Weg; VCOM-Treiber, Lizenz, Puffer und Wiederanlauf sind zusätzliche Bestandteile. |
 | USB-ACM-Gadget | Alternative nach Nachweis von Pi-Modell, Device-Port, OS und Windows-Treiber; kein automatisches Merkmal eines USB-Kabels. |
 
-Die Wahl ist noch offen ([OQ-47](open-questions.md#oq-47)). `COM20`,
+Gewählt sind Netzwerk und UART als pro Lauf alternative Eingänge derselben
+eigenen Windows-Brücke mit com0com-Portpaar. Ihr Hardware-/Windows-Nachweis
+bleibt offen ([OQ-47](open-questions.md#oq-47)). `COM20`,
 `COM21`, IP und Port 5000 im PDF sind Beispiele, keine installierte
 Konfiguration. Raw TCP und RFC2217 sind verschiedene Protokolle.
 Eine pySerial-URL erzeugt keinen Windows-COM-Port. VSPE-Connector mit
@@ -268,7 +585,10 @@ sink/protocol/ascii_csv.py    AsciiCsvFormatter, provisional=True
 sink/protocol/gsv_ascii.py    GsvAsciiFormatter wirft weiterhin absichtlich
 sink/serial_out.py            SerialSink, unabhängig vom Format
 sink/jsonl.py                 JsonlSink für das parallele Audit
-live/session.py              aktueller Live-Lauf: nur JSONL, kein SerialSink
+sink/protocol/user_defined.py UserDefinedFormatter, provisional=True
+gsv_transport.py             Pi-Publisher, Konfiguration, Brückenprotokoll
+gsv_bridge.py                Windows-Brücke und endliche Demowerte
+live/session.py              JSONL-Audit vor optionalem Brücken-Publisher
 ```
 
 <div class="wiki-seam" markdown="1">
@@ -276,18 +596,17 @@ live/session.py              aktueller Live-Lauf: nur JSONL, kein SerialSink
 | Trennstelle | `TelegramFormatter` (`sink/protocol`) |
 | --- | --- |
 | Vertrag | `capabilities(self) -> FormatterCapabilities` als `@property`; <code>format(self, record: ValueRecord) -&gt; bytes &#124; None</code> liefert Telegrammbytes oder `None`. Fähigkeiten nennen Formatkennung, Zeitstempel, Invalid-Policies, Gerätekommandos, Kanalzahl und `provisional`. |
-| Darf geändert werden | Später einen eigenen UserDefined-Formatter hinzufügen und gezielt an `SerialSink` übergeben; [Beispiel 16](../examples/16_end_to_end_headless.py) zeigt die vorhandene Anbindung. Für `/live` zusätzlich Start/Stopp, Fehler, Portfreigabe und Auditmetadaten integrieren. |
-| Bleibt unverändert | Leser und Freigabe ohne Referenzparameter, Wert und Aufnahmezeit im `ValueRecord`, paralleles JSONL-Audit; `gsv_ascii.py` bleibt der werfende Platzhalter. Diese Dokumentationsprüfung implementiert keinen Adapter. |
-| Tests | Vorhandene pty-Prüfungen in [tests/test_gate_und_referenz.py](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; künftig eigene Formatter- und Lebenszyklusprüfungen sowie Windows-Abnahme. |
+| Darf geändert werden | Der neue `UserDefinedFormatter` erhält Dezimalauflösung und prüft Zahlenlexik/Wertübereinstimmung. Die gemeinsame Brücke verwendet ihn für Demodaten; die echte DUT-Ausgabe bleibt bis zur Windows-Abnahme gesperrt. [Beispiel 16](../examples/16_end_to_end_headless.py) zeigt weiterhin den getrennten alten seriellen Testpfad. |
+| Bleibt unverändert | Leser und Freigabe ohne Referenzparameter, Wert und Aufnahmezeit im `ValueRecord`, paralleles JSONL-Audit; `gsv_ascii.py` bleibt der werfende Platzhalter. Die neue Brücke ergänzt den vorhandenen Testpfad, ohne das native Geräteprotokoll zu erfinden. |
+| Tests | Vorhandene pty-Prüfungen in [tests/test_gate_und_referenz.py](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; zusätzlich `test_gsv_transport.py`, `test_gsv_bridge.py` und `test_live_output.py`; Windows-Abnahme bleibt offen. |
 
 </div>
 
-Für den neuen einkanaligen Formatter wären keine Gerätekommandos und ein
-Kanal zu deklarieren. Invalid-Policies dürfen nur als unterstützt gelten,
+Der neue einkanalige Formatter deklariert einen Kanal und keine Gerätekommandos. Invalid-Policies dürfen nur als unterstützt gelten,
 wenn ihre tatsächliche Wirkung belegt ist. Der Prototyp bleibt vorläufig;
 `provisional` und die Fähigkeiten gehören in jedes Runartefakt. Beispiel 16
 schreibt sie nach `report.json`; `Pipeline` erzeugt keinen allgemeinen
-Laufbericht. Der aktuelle `/live`-Pfad hat noch keinen seriellen Formatter.
+Laufbericht. Der aktuelle `/live`-Pfad speichert nun die Fähigkeiten der optionalen Brücke in `session.json`; die Zahlenweitergabe bleibt gesperrt.
 Die im PDF vorgeschlagene Funktion `read_values(t)` ersetzt bei picam-ai
 weder Leser noch Freigabe. Der DUT-Wert kommt aus dem `ValueRecord`; ein
 Referenzabgleich darf ihn nicht nachträglich korrigieren.
@@ -324,8 +643,8 @@ liefert keine zusätzlichen unabhängigen DUT-Messungen.
    negativer Wert prüft nur den Import, keine Freigabe des optischen Lesers.
 3. **Zeit und Ausfälle prüfen:** etwa 600 Frames bei 10 Hz, gesendete und
    gespeicherte Werte je Kanal sowie Zeitachse vergleichen; Start-/Stoppränder
-   und den absichtlichen Verlust der ersten Zeile je Bridge-Verbindung
-   erklären. Ablehnungen, Pause, Burst, Streamstillstand, Kabel-/Netzabbruch
+   und die erste vollständige Zeile jeder neuen Brückenverbindung prüfen
+   (die neue Brücke verwirft sie nicht absichtlich). Ablehnungen, Pause, Burst, Streamstillstand, Kabel-/Netzabbruch
    und Neustarts getrennt auslösen. Keine ausgedachten Grenzzeiten als
    erfüllt markieren; Kriterien vorher mit OQ-02/OQ-06 festlegen.
 4. **Aktuellen Live-Pfad anbinden:** nur freigegebene `ValueRecord`s, keine
@@ -361,3 +680,426 @@ Zahlenstrom in der tatsächlichen Windows-Installation prüfen.
 </details>
 
 **Weiter mit:** [Verträge](anleitung/02-vertraege.md)
+
+
+## Direkter UART-Demoempfang belegt, Einzelwertprüfung offen
+
+Am 2026-11-04 zeigt GSVmulti 2.03 Pro nach Einschalten von
+**Filter Out Non-Numeric** erstmals Zahlen: COM4, 115200/8N1, Präfix %,
+ein Wert/Position 1. Der Pi hat im endlichen synthetischen Lauf 600
+Telegramme mit Zielrate 10/s geschrieben. Das sind keine bestätigten
+600 GSVmulti-Einzelwerte. [Messbeleg](VALIDATION.md#uart-demo-20261104-04).
+
+Der Screenshot zeigt −0,134500 außerhalb des 0,001-Rasters der Sendefolge,
+Datenfrequenz 1 Hz und keine Einheit. Die
+[Herstelleranleitung, S. 34](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+beschreibt Mittelwertbildung für numerische Anzeigen auf vier Anzeigen/s.
+Der Zahlenbildschirm belegt deshalb keine unveränderten Einzelwerte.
+Aufzeichnung ohne Datenreduktion, Sendervergleich und passende
+Datenfrequenz sind noch zu prüfen ([OQ-50](open-questions.md#oq-50)).
+GSVmulti-Konfiguration über Save Session sichern; Einheit und Skalierung
+weiter getrennt prüfen. DUT-Ausgabe bleibt gesperrt.
+
+
+### Lauf 05: Gespeicherte Rampenwerte unverändert
+
+Nutzer-TXT und TDMS enthalten 420 exakt passende Werte (−0,120 bis +0,299,
+Senderindizes 180–599), ohne Lücken oder Duplikate im Ausschnitt. Negative
+Werte, Null und positive Werte sind belegt. Die gespeicherten Rampenwerte
+werden nicht gemittelt; abrupte Sprünge sind noch nicht geprüft. Der fehlende
+Anfang passt zur später gestarteten Aufnahme, ist kein Beleg für einen
+Verlust während der Aufnahme. [Messung](VALIDATION.md#uart-demo-20261104-05).
+
+Die Frequenzmetadaten melden weiterhin 1 Hz, die Wellenform aber ein Intervall
+von ca. 0,102407 s. Ihre Zeitspanne stimmt nicht mit der Pi-Schreibereignisspanne
+derselben Werte überein. Eine gültige Aufnahmezeit-/Synchronitätsaussage ist
+daraus nicht abgeleitet. OQ-50 bleibt teilweise offen. Einheit leer,
+Skalierung 1; echte DUT-Ausgabe und gemeinsame Brücke weiter nicht abgenommen.
+
+
+### Lauf 06: 10 Hz bestätigt, Zeitmodus aus Start und Ende
+
+TXT und TDMS des Folgelaufs enthalten 467 unveränderte Werte von −0,167
+bis +0,299, ohne Lücken/Duplikate im Ausschnitt. Frequency=10 Hz ist in den
+Dateien bestätigt; der Zeitmodus bleibt `tf`. Die
+[Anleitung, S. 73–74/155](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+ordnet dies der Berechnung dt=(Endzeit−Startzeit)/(Werteanzahl−1) zu;
+die Formel passt zu den TDMS-Daten. Das ist keine Speicherung einzelner
+Quellzeitstempel. Änderung von Frequency allein berichtigt daher die
+beobachtete Zeitachse nicht. Advanced → Timestamp Calculation zunächst
+prüfen; ein nominelles dt von 0,1 s wäre kein gemessener Zeitnachweis.
+[Messwerte und Grenzen](VALIDATION.md#uart-demo-20261104-06).
+
+
+### Lauf 07: Getestete Sprünge erhalten, Zeitraster nominell
+
+TXT und TDMS enthalten 446 exakt passende Werte des Senderabschnitts
+154–599: 46 Null-Vorlaufwerte und acht vollständige Blöcke zu je 50 Werten.
+Alle acht Übergänge erfolgen direkt, auch −0,250 → +0,750. Kein zusätzlicher
+Zwischenwert oder veränderte Blocklänge. GSVmulti 2.03 Pro bewahrt diese
+getesteten Sprünge bei Record every value. Numerische Anzeige weiterhin
+getrennt betrachten. [Beleg](VALIDATION.md#uart-demo-20261104-07).
+
+Die Einstellung Use device data rate ist bestätigt: Frequency=10 Hz,
+dt mode=`1/f0`, Wellenformintervall und TXT-Zeitschritte 0,1 s. Dieses Raster
+ist nominell, keine Messung der Aufnahme-/Empfangszeiten. Einheit weiterhin
+leer; reale DUT-Ausgabe gesperrt. Als nächstes sind Ungültig-/Altwertverhalten
+und Wiederanlauf zu belegen; gemeinsamer Windows-Brückenpfad bleibt ungeprüft.
+
+
+### Lauf 08: Timeout und Fortsetzung belegt, nominelle Zeitachse verliert Datenpause
+
+GSVmulti zeigt bei einer 30-s-No-Byte-Pause timeout! während der Aufnahme.
+Neue −0,750 erscheinen laut Nutzer ohne manuellen Eingriff. TXT und TDMS
+enthalten genau die 500 gesendeten Zahlen: 300× +0,250, 200× −0,750.
+Die 30,000983790 s Pi-Pause (HOST_MONOTONIC) steht im Export jedoch nur als
+0,1-s-Abstand beider Wertblöcke, ohne Ungültigmarkierung. Der Zahlenkanal
+ist scheinbar kontinuierlich. [Messbeleg](VALIDATION.md#uart-demo-20261104-08).
+
+Damit ist Omit/Senderpause in Verbindung mit dem nominellen Raster keine
+hinreichende Ungültigbehandlung für Kalibrierdaten. Timeout-Anzeige allein
+schützt die exportierten Daten nicht. Eine explizite Ungültigmarkierung
+muss getrennt erprobt werden; NaN bleibt bis dahin unbestätigt. Reale
+DUT-Ausgabe bleibt gesperrt. Timeout-Verzögerung, Altwertanzeige vor Timeout,
+physische Leitungs-/Prozessausfälle und gemeinsame Brücke sind nicht abgenommen.
+
+
+### Lauf 09: NaN-Probe negativ, dokumentierte Empfängeroption noch zu prüfen
+
+Trotz 200 gesendeter %NaN-Telegramme enthält Lauf 09 keine NaN-Einträge in
+TXT oder TDMS. Nur 408 gültige Werte (+0,125 und −0,625), dazwischen 0,1 s
+nomineller Abstand; GSVmulti zeigt während NaN Timeout. Zahlenfilter bleibt
+aktiv, weshalb dies keine allgemeine Aussage gegen jede NaN-Konfiguration ist.
+[Messung](VALIDATION.md#uart-demo-20261104-09).
+
+Die [Anleitung S. 74](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+beschreibt Replace Missing values als Aufnahmeoption: fehlende Werte werden
+per Timeout-Zählung mit 1E+300 markiert. Wirkung bei UserDefined unbekannt
+([OQ-51](open-questions.md#oq-51)). Ein Vergleich mit unverändertem NaN-Sender
+ist vorbereitet, noch nicht gestartet. Kein Senden dieser Markerzahl als
+Protokollerfindung; keine Auswertung eines Markers als gültiger Messwert.
+Manuelle Aufnahme und ein UserDefined-Kanal im Test; Herstellereinschränkungen
+für Schwellenwert-Trigger und Software-Spezialsensoren beachten. Reale
+DUT-Ausgabe bleibt gesperrt.
+
+
+## Reproduzierbarer UserDefined-Fall: Ungültige Zeiträume fehlen {#userdefined-ungueltig-repro}
+
+Windows 11, GSVmulti 2.03 Pro, UserDefined auf realem FTDI-COM4,
+115200/8N1, Präfix %, ein Wert, Zahlenfilter ein. Aufnahme manuell,
+Record every value, nominell 10 Hz (dt mode=1/f0), Text-Auto-Export.
+Synthetische gültige Zahlen und abrupte Sprünge werden korrekt gespeichert.
+Lauf 08: No-Byte-Pause wird sichtbar als Timeout gemeldet, aber im Export
+verdichtet. Lauf 09: Gesendete %NaN-Telegramme erzeugen keine NaN-Einträge.
+Lauf 10: Nach Aktivieren von Replace Missing Values dieselbe Sendefolge;
+weiterhin keine Fehlwertmarker. Nutzer bestätigt den Haken nach dem Test.
+[Belege](VALIDATION.md#uart-demo-20261104-10).
+
+Minimaler Stimulus der Läufe 09/10: 300× `%+000.125\r\n`, dann
+200× `%NaN\r\n`, danach 200× `%-000.625\r\n`, Zielrate 10/s.
+Alle Payloads beider Läufe sind identisch. Ergebnis von Lauf 10:
+228 gültige +0,125 und 200 gültige −0,625, keine Marker, beide Blöcke im
+Export 0,1 s auseinander. Manuelle Aufnahme startet nach Senderbeginn;
+der fehlende Zahlenanfang ist keine Aussage über Verlust innerhalb der Aufnahme.
+
+Mit GSVmulti-Entwicklung zu klären:
+
+1. Welche explizite Ungültigmarkierung unterstützt UserDefined, und wie wirkt
+   Filter Out Non-Numeric darauf?
+2. Gilt Replace Missing Values auch für UserDefined, und unter welchen
+   Bedingungen werden Marker in TDMS/TXT erzeugt?
+3. Welcher unterstützte Weg erhält ungültige Zeiträume, ohne den letzten
+   gültigen Wert weiterzuverwenden oder die Zeitachse zu verdichten?
+
+Es wurde keine Nachricht versandt. Das lokale Reproduktionspaket dient der
+Prüfung, enthält Demowerte und keine echte DUT-Messung. Bis zur geklärten,
+belegten Ungültigbehandlung bleibt reale Ausgabe gesperrt. Kein neues natives
+Protokoll oder Zahlenersatz wird aus diesem Befund erfunden. OQ-06 und OQ-51
+bleiben teilweise geklärt; P4 ist nicht abgenommen.
+
+
+### Lauf 11: Einheit mV/V und Skalierung 1 gespeichert
+
+510 gültige Rampenwerte (−0,210 bis +0,299, Senderindizes 90–599) sind in
+TXT und TDMS exakt unverändert erhalten. TDMS trägt mV/V sowohl in
+unit_string als auch NI_UnitDescription, Scaling=1. Die gespeicherte
+`svmulti-uart-mvv-test.ucf` enthält ebenfalls Unit=mV/V. Ein Neuladen der
+Session ist damit noch nicht getestet. Der TXT-Export trägt keine eigene
+Einheit; zugehörige Metadaten gemeinsam aufbewahren.
+[Beleg](VALIDATION.md#uart-demo-20261104-11).
+
+OQ-01 ist damit für das gültige Zahlenprofil der eingesetzten 2.03-Pro-
+Konfiguration geklärt. Das hebt weder provisional noch die DUT-Ausgabesperre
+auf; fehlende Ungültigzeiträume, Quellzeit-/Latenznachweis und gemeinsame
+Windows-Brücke bleiben offen.
+
+
+## Wiederöffnen nach Device/Channel Close scheitert {#userdefined-reopen-fehler}
+
+Lauf 12 sollte Altwertnachlauf nach COM-Schließen/Öffnen prüfen. Der Pi
+sendet 900 eindeutige gültige Demowerte in drei unterscheidbaren Abschnitten;
+der Empfänger öffnet nach Close aber nicht wieder. Screenshot:
+Error 805306614 (0x300000F6), MEGSV.DLL: Comport requested for opening is
+already open, Aufrufkette GS Vactivate Extended / OpenDevice2.vi.
+Nutzer meldet, dass vollständiges Beenden/Neustarten von GSVmulti hilft.
+[Versuch und Grenzen](VALIDATION.md#uart-demo-20261104-12).
+
+Die [Herstellerreferenz einer verwandten DLL](https://www.me-systeme.de/produkte/elektronik/gsv-8/anleitungen/gsv86dll_referencemanual.pdf)
+führt den Code als ERR_COM_ALREADY_OPEN. Das ist kein Beweis, welcher Prozess
+einen Windows-Handle hält oder ob nur interne DLL-Verwaltung übrig bleibt.
+OQ-52 trennt beides mit einer externen SerialPort.Open/Dispose-Probe im
+Fehlerzustand und nach vollständigem GSVmulti-Ende. Kein Sender notwendig,
+keine Bytes schreiben. Erst danach gezielt über Wiederanlauf oder Puffer
+urteilen; dieser Versuch hat keinen erfolgreichen Wiederanlauf belegt.
+Reale DUT-Ausgabe bleibt gesperrt.
+
+
+Die externe COM4-Probe aus Lauf 12 ist bei weiter laufendem GSVmulti nach
+Close verweigert und bei vollständig beendetem GSVmulti erfolgreich.
+Das spricht für eine GSVmulti-/Bibliotheks-assoziierte Portbelegung;
+Handle-Besitzer und interne Ursache sind nicht direkt erfasst.
+[Vorher-/Nachher-Beleg](VALIDATION.md#uart-demo-20261104-12).
+OQ-52 teilweise geklärt. Manueller kompletter Prozessneustart bleibt der
+Nutzer-Workaround; kein erfolgreicher Wiederanlauf im selben Prozess belegt.
+
+
+### Lauf 13: Filter-aus-Variante liefert keine gültigen Zahlen
+
+Bei bytegleicher 700er-NaN-Folge meldet der Nutzer mit ausgeschaltetem
+Zahlenfilter durchgehend Timeout, auch in den gültigen Abschnitten +0,125
+und −0,625. Damit kein brauchbares Zahlen-/NaN-Profil nachgewiesen.
+[Versuch](VALIDATION.md#uart-demo-20261104-13). Aktuelle geänderte Session
+zuerst gegen die erfolgreiche mV/V-Session aus Lauf 11 vergleichen; interne
+Ursache und isolierte NaN-Unterstützung bleiben offen. Möglicher UI-Test
+Binärpräfix 25 hex würde dasselbe %-Byte senden, ein anderer Parserweg ist
+nicht belegt. Reale DUT-Ausgabe bleibt gesperrt.
+
+
+### UCF-Vergleich: Filter-aus-Versuch mit weiteren Konfigurationsänderungen
+
+Die neue `svmulti-uart-mvv-test2.ucf` aus Lauf 13 unterscheidet sich von der
+erfolgreichen mV/V-Session in genau drei Feldern: Unit leer statt mV/V,
+Frequency 1 statt 10, Separator 0 statt 256. Port, Bitrate, Kanalposition,
+Präfix37 und OpenFlags gleich. Die Bedeutung des Rohfelds Separator ist nicht
+belegt; keine eigene Filterbit-/Trennzeichenspezifikation daraus erfinden.
+[Vergleich](VALIDATION.md#uart-demo-20261104-13), [OQ-53](open-questions.md#oq-53).
+Vor weiteren Versuchen die aktuelle Filter-aus-Definition mit 10 Hz/mV/V
+und unveränderter Skalierung 1 neu speichern und UI/Datei abgleichen. Mehrere
+geänderte Parameter beweisen keine einzelne Ursache der Timeouts.
+
+
+### Lauf 14: Nach Konfigurationsabgleich weiterhin Timeout ohne Filter
+
+Korrigierte UCF mit10Hz und mV/V stimmt bis auf Separator0 statt256 mit der
+funktionierenden Lauf-11-UCF überein; Filter aus ist im UI bestätigt. Bei der
+identischen 700er-NaN-Sendefolge aus Lauf 10 meldet Nutzer trotzdem durchgehend
+Timeout einschließlich gültiger Zahlen. Das ergibt keinen isolierten NaN-
+oder internen Parserbefund. Positive Kontrolle mit bekannter funktionierender
+UCF und derselben Sendefolge ist vorbereitet, noch nicht ausgeführt.
+[Beleg](VALIDATION.md#uart-demo-20261104-14), [OQ-53](open-questions.md#oq-53).
+
+
+### Lauf 15: Filter-ein-Kontrolle liest gültige Zahlen, NaN bleibt unmarkiert
+
+440 korrekte Zahlen in TXT/TDMS (240×+0,125 und200×−0,625), mV/V,
+Skalierung1 und10Hz bestätigt. Die identische Sendefolge zum Filter-aus-Lauf14
+enthält200 NaN-Marker, keiner ist in der Aufnahme erhalten. Die gültigen
+Blöcke liegen nominell0,1 s auseinander. [Beleg](VALIDATION.md#uart-demo-20261104-15).
+Aktuelle Replace-Missing-Values-Checkbox nicht separat bestätigt; die explizite
+Bestätigung der negativen Optionentestwirkung stammt weiterhin aus Lauf10.
+
+Gezielter nächster Vergleich zur Filter-aus-Konfiguration14: dokumentiertes
+Zeichenpräfix A statt %, gleiche Zahlen und NaN, übrige UCF-Parameter gleich.
+Nur der Präfixbytewert wird über einen eigenen synthetischen Demo-Formatter
+geändert. Keine interne Parserursache oder NaN-Unterstützung voraussetzen;
+vor Senden neue UCF prüfen und nach vollständigem GSVmulti-Neustart laden.
+Experiment vorbereitet, kein A-Präfix-Lauf durchgeführt. Reale DUT-Ausgabe
+weiter gesperrt.
+
+### Lauf 16: A-Präfix behebt Filter-aus-Timeout nicht
+
+Gegenüber korrigiertem Profil14 nur Prefix37→65 geändert, alle700 Frames
+bis auf das erste Byte identisch geprüft. Nutzer bestätigt durchgehend
+Timeout, bereits im gültigen Anfangsabschnitt. Kein isolierter NaN-Befund
+und kein erfolgreicher Export. [Beleg](VALIDATION.md#uart-demo-20261104-16).
+Der zuvor vorbereitete A-Vergleich ist damit abgeschlossen. Weitere
+Konfigurationsvarianten zurückstellen und tatsächlich geladene Bibliotheks-
+versionen erfassen ([OQ-54](open-questions.md#oq-54)). Öffentliches MEGSV-SDK
+mit älterem Header ist nicht als diese Laufzeitbibliothek identifiziert.
+Reale DUT-Ausgabe bleibt gesperrt.
+
+### Geladene GSV-Bibliotheken {#geladene-gsv-bibliotheken}
+
+Nutzer liefert am 2026-11-04 den laufenden Windows-Prozess-Snapshot aus
+Get-Process -Module -FileVersionInfo, gefiltert nach GSV im Dateinamen.
+Installationsbasis `C:\Program Files\GSV-Multichannel_v2.03`:
+
+| Relativer Pfad | FileVersion | ProductVersion |
+| --- | --- | --- |
+| GSVmultichannel.exe | 2.3.4 | 2.3.4 |
+| data\MEGSV4w32.dll | 1.20.0.64 | 1.20.0.64 |
+| data\MEGSV.dll | 1.62.0.64 | 1.62.0.0 |
+| data\MEGSV86w32.dll | 1.48.1.64 | 1.48.1.64 |
+| data\GSV86CAN.dll | 1.17.7.64 | 1.17.7.64 |
+
+Snapshot: `var/diagnostics/gsvmulti/windows-loaded-modules-20261104/modules.json`.
+[OQ-54](open-questions.md#oq-54) damit geklärt. Dateiversion2.3.4 und
+UI-Bezeichnung2.03 als getrennte Angaben erhalten; daraus keinen Versions-
+konflikt ableiten. Parserzuständigkeit und interner Portbesitzer unbewiesen.
+
+Die [Hersteller-Versionshistorie](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/gsvmulti_1.txt)
+beschreibt ab2.02 Logging: in `C:\ProgramData\MEsystemeGSVmulti\config.ini`,
+Abschnitt `[Config]`, LogLevel1 für Ereignisse, LogLevel2 zusätzlich für
+Fehler der GSV-Hardwaretreiber (ausgenommen GSV-1A8). Ausgabe unter
+`C:\GSVmultiLog`, LogLevel0 deaktiviert. Keine Garantie, dass jeder
+UserDefined-Parserfehler dort erscheint. Nächster Schritt: vorhandenen
+LogLevel und vorhandene Logdateien lesend prüfen, bevor eine gesicherte
+Konfigurationsänderung und gezielte Reproduktion angeleitet werden.
+Keine ausdrücklich benannte UserDefined-/NaN-Korrektur in der geprüften
+Versionshistorie gefunden; keine Reparatur oder Updatewirkung behaupten.
+
+**Istzustand am 2026-11-04:** Nutzerabfrage zeigt `[Config]`, keinen aktiven
+LogLevel-Eintrag. Bestehende Logdateien und implizite Defaultwirkung ungemessen.
+Aktivierung von LogLevel2 mit vorherigem vollständigem Prozessende und
+Konfigurationssicherung vorbereitet. Noch keine erfolgreiche Aktivierung oder
+UserDefined-Fehlererfassung behaupten. Zuerst bekannten Filter-ein-Stand laden
+und Wiederöffnungsfehler einmal mitprotokollieren; Sender dafür nicht nötig.
+
+**Folgestand:** Nutzer bestätigt Erfolg des gesicherten Konfigurationsblocks:
+LogLevel2 gesetzt, Backup-Pfad im Laborjournal und Diagnose-Snapshot.
+Wirksame Übernahme nach Neustart und tatsächliche Logausgabe noch unbewiesen;
+noch kein protokollierter Close-/Reopen-Versuch.
+
+### Laufzeit-Logging: Zwei getrennte Fehlerbefunde {#userdefined-logging-befund}
+
+LogLevel2 ist jetzt durch eine tatsächliche Logausgabe belegt. Beim initialen
+Open Session UserDevice COM4/Input1/Fdata10,000 tritt0xFFFFFFFF in
+GS Vclear Buffer.vi auf. Später zweimal0x300000F6 bei GS Vactivate Extended
+über OpenDevice2.vi/OpenSession.vi. Screenshot bestätigt already open.
+[Beleg](VALIDATION.md#userdefined-logging-20261104). Kein Sender aktiv.
+Kein kausaler Zusammenhang oder konkreter interner Ressourcenfehler bewiesen;
+Close/Deaktivierung ist im gelieferten Logausschnitt nicht explizit enthalten.
+
+Die [ältere MEGSV-Referenz S.171](https://www.me-systeme.de/produkte/software/megsv/ba-megsv-v2.0.pdf)
+beschreibt mehrere mögliche GSVclearBuffer-Fehlerursachen. Der allgemeine
+Code−1 erlaubt keine einzelne Diagnose für die aktuelle UserDefined-Version.
+Neue [OQ-55](open-questions.md#oq-55). Gegenprobe ohne Sessionladen vorgesehen:
+Programm startet laut Nutzer leer, dann identisches Profil direkt über Add
+Channel anlegen; einmal Close und ebenfalls per Add Channel wieder anlegen.
+Numerischer Timeout ohne Sender ist kein Aktivierungsfehlernachweis.
+
+Lokales Belegpaket mit geprüftem Manifest/CRC:
+`var/exports/gsvmulti-userdefined-reopen-logging-2026-11-04.zip`.
+Original-Voll-Log nicht hochgeladen, nur Nutzer-Ausschnitt; kein Versand und
+keine Reparatur behauptet. Echte DUT-Ausgabe bleibt gesperrt.
+
+### Add Channel reproduziert die Fehlersignaturen ohne Sessionladen
+
+Gegenprobe mit leerem Neustart, direktem Anlegen und Wiederanlegen über Add
+Channel: initial einmal0xFFFFFFFF in GS Vclear Buffer, später zweimal
+0x300000F6 über GS Vactivate Extended/OpenDevice2/AddChannel_v5. Screenshot
+bestätigt Error805306614. Neues Log meldet1 Hz statt10 Hz im Sessionfall;
+keine neue UCF. Beide Fehler benötigen somit kein Sessionladen, ihre Ursache
+und ein kausaler Zusammenhang bleiben offen.
+[Beleg](VALIDATION.md#userdefined-addchannel-logging-20261104).
+
+Nutzer hat direkten Entwicklungskontakt. Nächster Schritt: tatsächliche
+UserDevice-Initialisierungs-/Cleanup-Pfade dort prüfen, insbesondere
+ClearBuffer-Unterstützung, COM-Handle/interne Portregistrierung und
+Deaktivierungsfehler. Kein erneuter gleichartiger Versuch geplant.
+Vergleichspaket beider Fälle lokal geprüft, ohne Versand:
+`var/exports/gsvmulti-userdefined-reopen-comparison-2026-11-04.zip`.
+Kein korrigierter Build oder erfolgreicher In-Prozess-Wiederanlauf belegt;
+vollständiger Prozessneustart bleibt Workaround, reale DUT-Ausgabe gesperrt.
+
+### Option: Direkter USB-COM-Port vom Pi 5 {#usb-cdc-option}
+
+Nutzer fragt nach USB statt UART. Der aktuelle DELOCK-Aufbau benutzt bereits
+USB auf Windows-Seite, Pi-seitig aber GPIO-UART. Ein direkter USB-Weg wäre
+Pi5-USB-C im Peripheral/Gadget-Modus, als Serial CDC ACM konfiguriert, zu
+Windows-COM und GSVmulti UserDefined. Das würde das com0com-Portpaar für
+**diesen direkten Weg** vermeiden; kein Nachweis für Netzwerk oder gemeinsame
+Brücke. Anwendungstelegramme bleiben Aufgabe eines TelegramFormatter.
+
+Die [offizielle OTG-Anleitung, Abschnitt Raspberry Pi4/5 und Serial CDC ACM](https://pip-assets.raspberrypi.com/categories/685-app-notes-guides-whitepapers/documents/RP-009276-WP-1-Using%20OTG%20mode%20on%20Raspberry%20Pi%20SBCs)
+dokumentiert USB-C-Peripheral und acm.usb0. Die normalen Pi-USB-A-Ports sind
+Host-Anschlüsse. [Microsofts Usbser-Dokumentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/usb-driver-installation-based-on-compatible-ids)
+beschreibt den integrierten Treiber für korrekt deklarierte CDC-Geräte;
+konkrete Enumeration dieses Pi noch nicht geprüft. USB-Ethernet ist eine
+andere Funktion und erzeugt keinen seriellen COM-Port.
+
+USB-C wird auch zur Stromversorgung verwendet. Ausreichende Versorgung des
+Pi5 mit Kamera/Peripherie über den gewählten Hostanschluss oder eine geeignete
+alternative Versorgung muss vor Umbau geklärt werden. Keine generische
+Y-Kabel-/GPIO-Stromlösung daraus ableiten. Lokaler Nur-Lese-Snapshot:
+`var/diagnostics/gsvmulti/usb-gadget-feasibility-20261104/`. Kein UDC aktuell
+sichtbar; Gadget/Bootkonfiguration nicht geändert. Nicht als ausgewählter
+oder abgenommener Transport zählen. [OQ-56](open-questions.md#oq-56).
+UserDefined-Fehler und ungültige Zeiträume bleiben separate Grenzen.
+
+### Konkrete USB-Umsetzung geprüft, Versorgung noch zu entscheiden {#usb-cdc-umsetzung}
+
+Nur-Lese-Untersuchung: dwc2 eingebaut, libcomposite/usb_f_acm/g_serial als
+Module vorhanden; configfs gemountet, kein aktiver UDC/kein Gadget. ttyGS0-
+Getty deaktiviert, keine Gadget-Konsole in cmdline. Keine Installation,
+Modulladung oder Bootänderung. Firmware-Stromabfragen wegen fehlendem Zugriff
+auf vcio_gencmd gescheitert; kein Last-/Unterspannungsbefund ableitbar.
+Snapshots und ausführliche Untersuchung:
+`var/diagnostics/gsvmulti/usb-gadget-feasibility-20261104/implementation-assessment.md`.
+
+Nutzer nennt SupTronics X1201 V1.1, Versorgung über dessen eigenen USB-C;
+Produktion möglicherweise ohne UPS. [Der exakte Herstellerhinweis](https://suptronics.com/Raspberrypi/Power_mgmt/x1201-v1.1.html)
+untersagt zusätzliche Versorgung des Pi über dessen USB-C-Buchse. Daher kein
+gewöhnliches PC-USB-Kabel parallel zur UPS als freigegebenen Aufbau ansehen.
+Ein USB2-Power-Blocker mit unterbrochenem VBUS ist ein zu prüfender Kandidat;
+[der Hersteller](https://portablepowersupplies.co.uk/product/usb-power-blocker)
+warnt selbst vor ausbleibender Datenkommunikation bei vielen Geräten. Keine
+Pi5/X1201-Kompatibilität oder galvanische Trennung daraus behaupten.
+Für Produktion ohne UPS ist eine eigene Versorgungslösung zu bestimmen.
+Raspberry Pi empfiehlt [5V/5A, bei3A standardmäßig600mA USB-Peripheriebudget](https://www.raspberrypi.com/documentation/computers/getting-started.html#power-supply).
+Vorhandene StreamCam/Referenz bei der Lastprüfung berücksichtigen.
+
+Vorgeschlagener Softwareweg: nach gesicherter Versorgung gezieltes Pi5-
+Peripheral-Overlay, geplanter Neustart, genau ein CDC-ACM-Gadget über ConfigFS,
+Windows-Usbser/COM-Erkennung und dann endliche synthetische Demo. CDC-Deskriptoren,
+Seriennummer und VID/PID-Herkunft festlegen, keinen GSV-Gerätetyp imitieren.
+[ConfigFS](https://docs.kernel.org/usb/gadget_configfs.html) erlaubt kontrollierten
+Aufbau/Unbind; Legacy g_serial ist die einfachere Alternative mit weniger
+Deskriptorkontrolle. USB-Ethernet erzeugt dagegen keinen direkten COM-Port.
+Bestehende Demo-CLI kann ttyGS0 als com-port öffnen, noch nicht praktisch
+geprüft. OutputConfig unterstützt weiterhin nur off/uart/tcp; USB-Live-Auswahl
+ist nicht implementiert und nicht durch lockere Portprüfung zu ersetzen.
+Systemd/Installer erst nach Erfolg der ersten USB-Demo planen; Rückbau eigener
+Gadget-/Booteinträge, keine globalen USB-Hostmodule entfernen.
+[OQ-56](open-questions.md#oq-56) bleibt teilweise geklärt; echte Ausgabe gesperrt.
+
+### Windows-Python-Brücke importiert erfolgreich
+
+SCP-Transfer, eigene Python3.15-Umgebung, pyserial3.5 und --help auf Windows
+vom Nutzer bestätigt. [Beleg](VALIDATION.md#windows-bridge-help-20261104).
+Nächster Schritt ist der vorhandene lokale Demomodus COM5→COM6/GSVmulti,
+mit600 eindeutigen synthetischen Zahlen, Zielrate10Hz und eigenem Logordner.
+Aufnahme und Export vor Senderstart vorbereiten; vor Datenbeginn ist ein
+Timeout erwartbar, aber kein Beleg eines COM-Aktivierungsfehlers. Dieser
+Demomodus prüft noch nicht den Pi-JSONL-/ACK-Austausch; TCP folgt danach.
+Noch kein neuer Demolauf, keine echte DUT-Ausgabe.
+
+### Lokale Windows-Demo vollständig, Takt und Zeitraster getrennt bewerten {#windows-demo-timing}
+
+600/600 Werte aus Windows-Demomodus sind exakt und in vollständiger Reihenfolge
+in TXT/TDMS auf COM6 gespeichert, mV/V/Scaling1 bestätigt.
+[Beleg](VALIDATION.md#windows-local-demo-20261104-01). Kein Verlust und keine
+Mittelung in dieser gespeicherten Folge. Lokaler Format-/COM-/Empfangspfad
+somit belegt, gemeinsamer Pi-JSONL-/ACK-Pfad noch nicht getestet.
+
+Tatsächliche Windows-Ereignisspanne66,1322657 s (HOST_MONOTONIC), Mittel9,0576Hz
+bei Ziel10Hz. GSVmulti verwendet weiterhin1/f0 und nominell59,9 s. Weder
+Ankunftszeiten noch Latenz daraus ableiten; OQ-50 bleibt teilweise geklärt,
+Demo-Pacing als [OQ-57](open-questions.md#oq-57) separat nachführen.
+
+Nächster TCP-Versuch: Pi liefert600 synthetische Werte bei Ziel10Hz;
+Windows-Brücke fragt mit --rate-hz100 ab. Im Nicht-Demomodus steuert dieser
+Parameter die Wartezeit zwischen Poll-Anfragen, nicht die Messwertquelle.
+Unverändert COM5 für Brücke, COM6 für GSVmulti. Neue Aufnahme und eigener
+Logordner, Pi-Publisher erst nach Empfangsbereitschaft starten. Kein laufender
+TCP-Sender und keine echte DUT-Ausgabefreigabe.

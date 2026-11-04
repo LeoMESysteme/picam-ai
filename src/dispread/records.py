@@ -41,6 +41,8 @@ class TimeBaseKind(StrEnum):
     #: gemessen 2026-09-25). Roh gespeichert; nach CLOCK_BOOTTIME nur über
     #: `to_boottime_ns` mit dem in session.json gemessenen Versatz.
     V4L2_MONOTONIC = "v4l2_monotonic"
+    #: Host CLOCK_MONOTONIC processing/transport marks, not camera exposure.
+    HOST_MONOTONIC = "host_monotonic"
 
     @property
     def carries_time_information(self) -> bool:
@@ -49,6 +51,7 @@ class TimeBaseKind(StrEnum):
             TimeBaseKind.SENSOR_BOOTTIME,
             TimeBaseKind.REPLAY_RECORDED,
             TimeBaseKind.V4L2_MONOTONIC,
+            TimeBaseKind.HOST_MONOTONIC,
         )
 
 

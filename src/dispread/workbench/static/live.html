@@ -13,6 +13,13 @@ section{background:#1c1c1c;border-radius:8px;padding:12px}
 img{max-width:100%;border-radius:6px}
 button{font:inherit;padding:6px 12px;margin:4px 4px 0 0}
 input[type=text]{font:inherit;width:22ch}
+#output-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+#output-settings label{display:grid;gap:4px}
+#output-settings [hidden]{display:none}
+#output-settings input,#output-settings select{font:inherit;max-width:100%;padding:4px}
+#output-settings input[type=number]{width:9ch}
+#output-status{white-space:pre-line}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #7ee787;outline-offset:3px}
 #overlays img{max-width:48%}
 #run-block,#test-banner{border:2px solid #ff7b72;padding:12px;color:#ff7b72}
 #detail{white-space:pre-line}
@@ -63,6 +70,20 @@ input[type=text]{font:inherit;width:22ch}
     </label>
     <p>schreibt in den RAM des GSV-2AS (laut Messung 2026-10 EEnow = 0 an diesem Gerät, kein EEPROM-Verschleiss; nicht live geprüft)</p>
     <p id="reference-status" role="status"></p>
+    <h2>GSVmulti-Ausgabe</h2>
+    <div id="output-settings">
+      <label>Verbindungsweg
+        <select id="output-transport"><option value="off">Aus</option><option value="uart">UART</option><option value="tcp">Netzwerk</option></select>
+      </label>
+      <label id="output-uart-settings" hidden>Pi-UART
+        <input id="output-serial-port" type="text" value="/dev/ttyAMA0" spellcheck="false">
+      </label>
+      <label id="output-tcp-settings" hidden>Netzwerk-Port
+        <input id="output-tcp-port" type="number" min="1" max="65535" value="5000">
+      </label>
+    </div>
+    <p id="output-lock" class="notice" hidden>DUT-Ausgabe gesperrt: Windows-Abnahme fehlt. Verbindung und Diagnose sind vorbereitet; Messwerte werden noch nicht an GSVmulti ausgegeben.</p>
+    <p id="output-status" role="status" aria-live="polite">Ausgabe ausgeschaltet</p>
     <button id="run-start">Lauf starten</button>
     <button id="run-stop">Lauf stoppen</button>
     <div id="error" class="error" role="alert"></div>

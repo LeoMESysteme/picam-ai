@@ -118,7 +118,7 @@ async function withLivePage(check) {
   const originals = {document: globalThis.document, fetch: globalThis.fetch,
     setInterval: globalThis.setInterval, setTimeout: globalThis.setTimeout};
   const element = (id) => {
-    if (!elements.has(id)) elements.set(id, {textContent: '', value: '',
+    if (!elements.has(id)) elements.set(id, {textContent: '', value: id === 'output-transport' ? 'off' : '',
       checked: id === 'reference-enabled', replaceChildren() {}});
     return elements.get(id);
   };
@@ -301,7 +301,7 @@ test('override requires explicit dialog approval and resets with session', async
       assert.equal(page.posts.length, 0);
       globalThis.window.confirm = () => true;
       await element('run-start').onclick();
-      assert.deepEqual(page.posts.at(-1).body, {test_override: true, reference: true, norm_schedule: null});
+      assert.deepEqual(page.posts.at(-1).body, {test_override: true, reference: true, norm_schedule: null, output: {transport: 'off'}});
       assert.equal(element('test-override').checked, false);
       page.status = {...page.status, session_id: 'new'};
       await poll();
@@ -362,7 +362,7 @@ test('norm plan needs confirmation and is sent with explicit reference selection
       assert.equal(page.posts.length, 0);
       globalThis.window.confirm = () => true;
       await element('run-start').onclick();
-      assert.deepEqual(page.posts.at(-1).body, {test_override: false, reference: true, norm_schedule: '1:20,2:20'});
+      assert.deepEqual(page.posts.at(-1).body, {test_override: false, reference: true, norm_schedule: '1:20,2:20', output: {transport: 'off'}});
       element('reference-enabled').checked = false;
       await element('run-start').onclick();
       assert.equal(page.posts.length, 1);
@@ -371,4 +371,51 @@ test('norm plan needs confirmation and is sent with explicit reference selection
     if (oldWindow === undefined) delete globalThis.window;
     else globalThis.window = oldWindow;
   }
+});
+
+test('output status never claims GSVmulti reception', async () => {
+  const {outputView} = await import('../src/dispread/workbench/static/live.js');
+  assert.match(outputView({transport: 'tcp', state: 'disconnected', release_block: 'Windows-Abnahme fehlt'}), /Windows-Abnahme fehlt/);
+  assert.match(outputView({transport: 'uart', state: 'disconnected', last_error: 'Kabel fehlt'}), /Kabel fehlt/);
+  assert.equal(outputView({transport: 'off', state: 'off'}), 'Ausgabe ausgeschaltet');
+});
+
+
+test('output controls select one transport and remain fixed during the run', async () => {
+  await withLivePage(async (page, element, poll) => {
+    element('output-transport').value = 'tcp';
+    element('output-tcp-port').value = '5001';
+    element('output-transport').onchange();
+    assert.equal(element('output-lock').hidden, false);
+    assert.equal(element('output-uart-settings').hidden, true);
+    assert.equal(element('output-tcp-settings').hidden, false);
+    page.status = {state: 'confirmed'};
+    await poll();
+    await element('run-start').onclick();
+    assert.deepEqual(page.posts.at(-1).body.output, {transport: 'tcp', tcp_port: 5001});
+    page.status = {state: 'running', output: {transport: 'tcp', state: 'disconnected', error: 'Netz getrennt'}};
+    await poll();
+    assert.equal(element('output-transport').disabled, true);
+    assert.match(element('output-status').textContent, /Netz getrennt/);
+    assert.match(element('output-status').textContent, /lokaler Lauf läuft weiter/);
+  });
+});
+
+for (const [outcome, description] of [['failed', 'fehlgeschlagen'], ['expired', 'veraltet'], ['unconfirmed', 'unbestätigt']]) {
+  test(`output ${outcome} ACK is never displayed as successful forwarding`, async () => {
+    const {outputView} = await import('../src/dispread/workbench/static/live.js');
+    const view = outputView({transport: 'tcp', state: 'bridge_connected', last_ack: {outcome, frame_sequence: 23}});
+    assert.doesNotMatch(view, /COM-Weitergabe durch Brücke bestätigt/);
+    assert.match(view, new RegExp(description));
+    assert.match(view, /Bild 23/);
+    assert.match(view, /GSVmulti-Empfang unbestätigt/);
+  });
+}
+
+test('only written ACK confirms COM forwarding, never GSVmulti reception', async () => {
+  const {outputView} = await import('../src/dispread/workbench/static/live.js');
+  const view = outputView({transport: 'tcp', state: 'bridge_connected', last_ack: {outcome: 'written', frame_sequence: 42}});
+  assert.match(view, /COM-Weitergabe durch Brücke bestätigt/);
+  assert.match(view, /Bild 42/);
+  assert.match(view, /GSVmulti-Empfang unbestätigt/);
 });
