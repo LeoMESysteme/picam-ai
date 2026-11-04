@@ -6,17 +6,21 @@ import {createClient} from './api.js';
 import {openPreview} from './mjpeg.js';
 import {mountViewer} from './viewer/view.js';
 import {enableRegionEditing, mountRegionPanel} from './viewer/regions-edit.js';
-import {cameraView, stepRows} from './model.js';
+import {cameraView, statusView, stepRows} from './model.js';
 import {dec, esc, mountShell, renderStatusbar, renderTitle} from './shell.js';
 import {renderSteps} from './setup/steps.js';
 import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/focus-chart.js';
 import {exposureHTML} from './setup/exposure.js';
 import {overallView, renderChecks, warningCount} from './setup/checks.js';
 import {mountConfirm} from './setup/confirm.js';
+import {renderResult} from './run/result.js';
+import {runDockHTML, runTitle} from './run/dock.js';
+import {RUN_TABS, createRecordLog, renderRunInspector, runBadges} from './run/inspector.js';
+import {createTimeline} from './run/timeline.js';
+import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
 
 const RUN_STATES = ['running', 'stopped'];
 const SETUP_TABS = ['Schritt', 'Fokus', 'Prüfungen'];
-const RUN_TABS = ['Wert', 'Ursachen', 'Nachführung', 'Referenz'];
 const STATE_META = {idle: 'Bereit', setup_ready: 'Prüfen & Bestätigen', setup_failed: 'Abgebrochen',
   confirmed: 'Bestätigt', running: 'Lauf', stopped: 'Lauf beendet'};
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -53,20 +57,27 @@ function factsHTML(status) {
     `<dt>Belichtung</dt><dd>${esc(exposure)}</dd><dt>Weißabgleich</dt><dd>${esc(white)}</dd>`;
 }
 
-function renderLeftDock(host, status, conn) {
+function renderLeftDock(host, status, conn, run = {}) {
   if (!host._mounted) {
     host.innerHTML = '<div class="pt"><span data-part="title"></span><span class="pa mono" data-part="meta"></span></div>' +
-      '<div class="scroll" data-part="body"><div data-part="lead"></div><div data-part="steps"></div></div>' +
+      '<div class="scroll" data-part="body"><div data-part="lead"></div><div data-part="steps"></div>' +
+      '<div data-part="run" hidden></div></div>' +
       '<dl class="facts" data-part="facts"></dl>';
     host._mounted = true;
   }
   const part = (name) => host.querySelector(`[data-part="${name}"]`);
   const runPhase = RUN_STATES.includes(status.state);
-  part('title').textContent = runPhase ? 'Lauf' : 'Ablauf';
-  part('meta').textContent = status.state === 'setup_running' && finite(status.setup?.elapsed_s)
-    ? mmss(status.setup.elapsed_s) : status.state === 'idle' ? 'Einrichtung' : '';
+  part('title').textContent = runPhase ? runTitle(status) : 'Ablauf';
+  part('meta').textContent = runPhase ? (status.state === 'running' ? 'läuft' : 'beendet')
+    : status.state === 'setup_running' && finite(status.setup?.elapsed_s)
+      ? mmss(status.setup.elapsed_s) : status.state === 'idle' ? 'Einrichtung' : '';
+  // Im Lauf traegt die Ergebnisanzeige rechts den Zustand; links stehen Laufdaten.
+  part('lead').hidden = runPhase && !conn?.offline;
   setHTML(part('lead'), leadHTML(status, conn));
+  part('steps').hidden = runPhase;
   renderSteps(part('steps'), runPhase ? [] : stepRows(status));
+  part('run').hidden = !runPhase;
+  if (runPhase) setHTML(part('run'), runDockHTML(status, {resultCls: run.resultCls}));
   setHTML(part('facts'), factsHTML(status));
 }
 
@@ -221,17 +232,22 @@ function renderInspector(host, status, ui) {
   }
   const running = stepRows(status).find((row) => row.state === 'running');
   host.querySelector('[data-part="meta"]').textContent = status.state === 'setup_running'
-    ? (running?.label || '') : (STATE_META[status.state] || '');
+    ? (running?.label || '') : runPhase ? runTitle(status) : (STATE_META[status.state] || '');
   const warnings = runPhase ? 0 : warningCount(status);
+  const badges = runPhase ? runBadges(status) : {};
   setHTML(host.querySelector('[data-part="tabs"]'), tabs.map((tab) =>
     `<button type="button" role="tab" data-scope="${key}" data-tab="${esc(tab)}" aria-controls="inspector-panel" ` +
     `aria-selected="${tab === current}" tabindex="${tab === current ? 0 : -1}">${esc(tab)}` +
-    `${tab === 'Prüfungen' && warnings ? ` <span class="cnt">${warnings}</span>` : ''}</button>`).join(''));
+    `${tab === 'Prüfungen' && warnings ? ` <span class="cnt">${warnings}</span>` : ''}` +
+    `${badges[tab] ? ` <span class="cnt err-t">${badges[tab]}</span>` : ''}</button>`).join(''));
   const pane = (name) => host.querySelector(`[data-pane="${name}"]`);
   for (const el of host.querySelectorAll('[data-pane]')) {
     el.hidden = runPhase ? el.dataset.pane !== 'run' : el.dataset.pane !== current;
   }
-  if (runPhase) return;
+  if (runPhase) {
+    renderRunInspector(pane('run'), status, current, ui.runContext());
+    return;
+  }
   if (current === 'Schritt') setHTML(pane('Schritt').querySelector('[data-part="info"]'), stepInfoHTML(status));
   if (current === 'Fokus') {
     const focus = focusPaneHTML(status);
@@ -242,11 +258,26 @@ function renderInspector(host, status, ui) {
   if (current === 'Prüfungen') renderChecks(pane('Prüfungen'), status);
 }
 
-function renderTimeline(host) {
-  if (host._mounted) return;
-  host.innerHTML = '<div class="pt"><span>Zeitleiste</span><span class="pa"></span></div>';
-  host._mounted = true;
+const LEGEND = [['ok', 'Freigegeben'], ['warn', 'Wechselt'], ['err', 'Unlesbar'], ['stale', 'Veraltet']]
+  .map(([tone, word]) => `<span><span class="sq ${tone}"></span>${word}</span>`).join('') +
+  '<span><svg width="16" height="8" aria-hidden="true"><path d="M0 6h6V2h10" stroke="#ebe7e0" fill="none" stroke-width="1.5"/></svg>Wert</span>';
+
+function mountTimeline(host) {
+  host.innerHTML = '<div class="pt"><span data-part="title">Zeitleiste</span><span class="pa slg" data-part="legend"></span></div>' +
+    '<canvas class="stripc" role="img" aria-label="Statusband und Wertspur der letzten 40 s" hidden></canvas>';
+  return {title: host.querySelector('[data-part="title"]'), legend: host.querySelector('[data-part="legend"]'),
+    canvas: host.querySelector('canvas')};
 }
+
+function renderTimelineChrome(parts, status) {
+  const runPhase = RUN_STATES.includes(status.state);
+  parts.canvas.hidden = !runPhase;
+  parts.title.textContent = !runPhase ? 'Zeitleiste'
+    : status.state === 'running' ? `Zeitleiste · ${runTitle(status)} · letzte 40 s` : `Zeitleiste · ${runTitle(status)}`;
+  setHTML(parts.legend, runPhase ? LEGEND : '');
+}
+
+const HINT_LABEL = {anzeige_bewegt: 'Anzeige bewegt', rahmen_verdeckt: 'Rahmen verdeckt', unbekannt: 'Nachführung unsicher'};
 
 if (typeof document !== 'undefined') {
   const root = document.getElementById('root');
@@ -258,9 +289,19 @@ if (typeof document !== 'undefined') {
   let conn = null;
   let confirmUi = null;
   let regionPanel = null;
+  let hud = null;
+  const timelineParts = mountTimeline(nodes.timeline);
+  const timeline = createTimeline(timelineParts.canvas);
+  const log = createRecordLog();
+  let runKey = null;
+  let resultModel = null;
+  let runDirty = false;
+  // mark: undefined = dieser Lauf noch ungesehen (Neuladen), sonst Kennung der letzten Marke.
+  const seen = {mark: undefined, hint: null, stalled: false};
   // Bereichsaenderung: solange die Antwort aussteht, sind Bestaetigen und weitere Klicks gesperrt.
   const regions = enableRegionEditing(viewerUi, client, null, {onBusy: () => render()});
   const ui = {busy: false, error: null, tab: {setup: null, run: null}, render: () => render(), status: () => status,
+    runContext: () => ({log, hud, result: resultModel}),
     mountSetup(host) {
       confirmUi = mountConfirm(host.querySelector('[data-part="confirm"]'), client,
         {locked: () => regions.busy(), onChange: () => renderTitle(status, titleView(), handlers)});
@@ -279,24 +320,77 @@ if (typeof document !== 'undefined') {
   const handlers = {
     setup: (cellText) => act('/live/setup', {cell_text: cellText || null}),
     confirm: () => confirmUi?.submit(),
-    // Standardwerte der alten Seite: Referenz an, Diagnosebilder aus, kein Werteplan.
-    runStart: () => act('/live/run/start', {test_override: false, reference: true, norm_schedule: null, diagnostics: false}),
+    // Optionen und Bestaetigungen im Pop-up (Referenz, Diagnosebilder, Werteplan, Testmodus).
+    runStart: () => startPop.start(),
+    runOptions: (button) => startPop.toggle(button),
+    mark: (button) => markPop.toggle(button),
     stop: () => act('/live/run/stop'),
   };
-  const titleView = () => ({busy: ui.busy, canConfirm: Boolean(confirmUi?.ready()) && !regions.busy(), error: ui.error});
+  const titleView = () => ({busy: ui.busy, canConfirm: Boolean(confirmUi?.ready()) && !regions.busy(), error: ui.error,
+    canStart: startPop.canStart(), runOptionsOpen: startPop.isOpen(), markOpen: markPop.isOpen()});
+  const titlebar = nodes.titleActions.closest('.titlebar');
+  const startPop = mountStartPopover(titlebar, client, {onStart: (body) => act('/live/run/start', body),
+    onChange: () => renderTitle(status, titleView(), handlers)});
+  const markPop = mountMarkPopover(titlebar, client);
+
+  // Ergebnis: Statuswort nach derselben Regel wie das HUD-Etikett (Bildalter laeuft mit).
+  const renderRun = () => {
+    if (!status) return;
+    const frameAgeS = viewerUi.viewer.frameAgeS();
+    resultModel = renderResult(nodes.resultHost, statusView(status), status, hud?.rec || null,
+      {frameAgeS, offline: Boolean(conn?.offline), track: hud?.track || null});
+  };
+
+  // Zeitleiste: run.recent ist massgeblich und wird je Statusabruf neu angelegt;
+  // Ereignismarken (Bediener, Stoerungen) legt der Client auf seine Achse.
+  function updateTimeline(next) {
+    const key = RUN_STATES.includes(next.state) ? `${next.session_id}|${next.run?.dir}` : null;
+    if (key !== runKey) {
+      runKey = key;
+      timeline.clear();
+      log.clear();
+      Object.assign(seen, {mark: undefined, hint: null, stalled: false});
+    }
+    if (!key) return;
+    const nowMs = performance.now();
+    const back = (seconds) => nowMs - Math.min(60, Math.max(0, seconds)) * 1000;
+    timeline.freeze(next.state === 'stopped');
+    timeline.setUnit(next.run?.latest?.unit);
+    if (next.state === 'running' || timeline.buckets().length === 0) timeline.seed(next.run?.recent, next.run?.recent_now_ms);
+    const mark = next.last_mark;
+    const markKey = mark ? `${mark.number ?? ''}|${mark.received_at_utc}|${mark.text}` : null;
+    if (markKey && markKey !== seen.mark) {
+      // Neu waehrend des Zusehens: seit dem letzten Abruf gesetzt. Nach dem
+      // Neuladen aus der Meldezeit (Uhren von Pi und Browser koennen abweichen).
+      const age = seen.mark === undefined ? (Date.now() - Date.parse(mark.received_at_utc)) / 1000 : 0.25;
+      timeline.mark(back(Number.isFinite(age) ? age : 0), mark.text, 'mark');
+    }
+    seen.mark = markKey;
+    const hint = next.state === 'running' ? next.run?.tracking_hint?.kind || null : null;
+    if (hint && hint !== seen.hint) timeline.mark(back(next.run.tracking_hint.since_s || 0), HINT_LABEL[hint] || hint, 'stoerung');
+    seen.hint = hint;
+    const stalled = next.state === 'running' && Boolean(next.camera?.stalled);
+    if (stalled && !seen.stalled) timeline.mark(nowMs, 'Stillstand', 'stoerung');
+    seen.stalled = stalled;
+  }
 
   function render() {
     if (!status) {
       renderTitle(status, titleView(), handlers);
       return;
     }
-    renderLeftDock(nodes.leftDock, status, conn);
+    startPop.update(status);
+    markPop.update(status);
+    renderRun();
+    renderLeftDock(nodes.leftDock, status, conn, {resultCls: resultModel?.cls});
     regions.update(status);
     renderInspector(nodes.inspector, status, ui);
     confirmUi?.update(status);
     regionPanel?.update();
     renderTitle(status, titleView(), handlers);
-    renderTimeline(nodes.timeline);
+    renderTimelineChrome(timelineParts, status);
+    updateTimeline(status);
+    timeline.draw();
     renderStatusbar(status, hudProc);
     viewerUi.setStatus(status);
   }
@@ -306,9 +400,11 @@ if (typeof document !== 'undefined') {
   const startPreview = () => {
     if (preview) return;
     preview = new AbortController();
-    openPreview('/live/preview.mjpg', ({bitmap, hud}) => {
-      hudProc = hud?.proc || null;
-      viewerUi.setFrame(bitmap, hud);
+    openPreview('/live/preview.mjpg', ({bitmap, hud: frameHud}) => {
+      hudProc = frameHud?.proc || null;
+      hud = frameHud || null;
+      viewerUi.setFrame(bitmap, frameHud);
+      if (status?.state === 'running' && log.note(hud?.rec, {testRun: Boolean(status.test_run)})) runDirty = true;
     }, preview.signal, {onState: viewerUi.setStream});
   };
   const stopPreview = () => {
@@ -318,13 +414,32 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => (document.hidden ? stopPreview() : startPreview()));
   if (!document.hidden) startPreview();
 
+  // Ruhiger Takt fuer Ergebnis und Datensaetze
+  // zwischen den Statusabrufen (Bild- und Wertalter zaehlen weiter).
+  setInterval(() => {
+    if (!status || !RUN_STATES.includes(status.state) || document.hidden) return;
+    renderRun();
+    if (runDirty || ui.tab.run === 'Nachführung') {
+      runDirty = false;
+      renderInspector(nodes.inspector, status, ui);
+    }
+  }, 200);
+  // Mitlaufen des rechten Rands (20 px/s bei 1440 px): 10 Bilder je Sekunde, nur im laufenden Lauf.
+  setInterval(() => {
+    if (status?.state === 'running' && !document.hidden) timeline.draw();
+  }, 100);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => timeline.draw()).observe(timelineParts.canvas);
+
   client.start((next) => {
     status = next;
     render();
   }, (next) => {
     conn = next;
     document.body.classList.toggle('offline', next.offline);
-    if (status) renderLeftDock(nodes.leftDock, status, conn);
+    if (status) {
+      renderRun();
+      renderLeftDock(nodes.leftDock, status, conn, {resultCls: resultModel?.cls});
+    }
   });
   render();
 }

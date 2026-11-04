@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import cv2
@@ -55,7 +56,13 @@ def scene_state(name):
     if name == "idle":
         return {"state": name}
     if name == "stopped":
-        return {**scene_state("setup_ready_warnung"), "state": name}
+        # Wie der echte Dienst: die Sitzung bleibt nach dem Stopp stehen,
+        # run traegt Zusammenfassung und Endgrund (kein Wert ist mehr frisch).
+        state = scene_state("running_valid")
+        state["state"] = name
+        state["run"].update(latest_age_s=12.0)
+        state["run"]["summary"]["end_reason"] = "bediener"
+        return state
     focus = name in ("setup_focus", "setup_focus_done")
     ready = name == "setup_ready_warnung" or name.startswith("running_")
     step = "fokus" if focus else "vorschlag" if ready else "standbilder"
@@ -113,8 +120,7 @@ def scene_state(name):
                     "track_score": {"min": 0.43, "median": 0.93, "max": 0.98, "n": 858},
                     "camera_error": None, "end_reason": None},
         "counts": {"valid": 842, "transition": 12, "unreadable": 4, "stale": 0},
-        "recent": [[0, "v", 0.62427], [250, "v", 0.62427], [500, status[0],
-                    0.62427 if status == "valid" else None]], "recent_now_ms": 2500 if age > 0.5 else 540,
+        **recent_strip(status, stalled=age > 0.5),
         "dir": "run-01", "latest_age_s": age, "guess": None,
         "tracking": {"mode": "frame_local", "profile_mode": "frame_local", "version": 1,
                      "regions": len(REGION_CENTRES)},
@@ -133,6 +139,37 @@ def scene_state(name):
                            "error": "Streamstillstand: kein Bild seit 2.0 s",
                            "source": copy.deepcopy(CAMERA_SOURCE), "last_start": None}
     return state
+
+
+def recent_strip(status, *, stalled=False):
+    """60 s Verlauf in 250-ms-Eimern wie RecentStrip: freigegeben mit kurzen
+    Wechseln, ein Werteplan-Sprung, am Ende der Status der Szene. Bei
+    Stillstand endet der Verlauf 2 s vor "jetzt"."""
+    n = 232 if stalled else 240
+    recent = []
+    for i in range(n):
+        value = 0.62427 if i < 120 else 1.24855
+        code = "t" if i in (40, 41, 76, 119, 120, 121, 170, 205) else "v"
+        recent.append([i * 250, code, value])
+    tail = {"transition": "t", "unreadable": "u"}.get(status)
+    if tail:
+        for bucket in recent[-(2 if tail == "t" else 12):]:
+            bucket[1:] = [tail, None if tail == "u" else bucket[2]]
+    now = recent[-1][0] + (2000 if stalled else 40)
+    return {"recent": recent, "recent_now_ms": now}
+
+
+def apply_test_run(status):
+    """Wie live/session.py im Testlauf: VALID wird UNREADABLE mit testlauf_keine_freigabe."""
+    status["test_run"] = {"testlauf": True, "run_block": "Lauf gesperrt: Gegenlesen WARNUNG",
+                          "confirmed_by": "Test", "started_at_utc": "2026-11-04T12:00:00Z",
+                          "hinweis": "Lesesperre uebergangen. Werte nicht freigegeben, nicht fuer Messungen verwenden."}
+    latest = status["run"]["latest"]
+    if latest["status"] == "valid":
+        latest.update(status="unreadable", value=None, reject_reasons=["testlauf_keine_freigabe"])
+    counts = status["run"]["counts"]
+    status["run"]["counts"] = {**counts, "valid": 0, "unreadable": counts["unreadable"] + counts["valid"]}
+    status["run"]["recent"] = [[t, "u" if code == "v" else code, None] for t, code, _ in status["run"]["recent"]]
 
 
 class FakeController:
@@ -179,8 +216,13 @@ class FakeLiveService:
                 **copy.deepcopy(state),
             }
 
-    def set_scene(self, name):
-        self.set_state(scene_state(name))
+    def set_scene(self, name, *, test_run=False):
+        state = scene_state(name)
+        if test_run:
+            if state.get("run") is None:
+                raise ValueError("Testlauf nur in Laufszenen")
+            apply_test_run(state)
+        self.set_state(state)
         with self._lock:
             self._scene = name
             self._sequence += 1  # Auch der letzte Teil einer Stallszene traegt deren HUD.
@@ -276,21 +318,21 @@ class FakeLiveService:
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
                         "dropped_mark_rate": 0, "write_errors": 0}
             if test_override:
-                self._status["test_run"] = {"testlauf": True, "run_block": "Lauf gesperrt: Gegenlesen WARNUNG",
-                                            "confirmed_by": "Test", "started_at_utc": "2026-11-04T12:00:00Z",
-                                            "hinweis": "Lesesperre uebergangen. Werte nicht freigegeben, nicht fuer Messungen verwenden."}
-                latest = self._status["run"]["latest"]
-                latest.update(status="unreadable", value=None, reject_reasons=["testlauf_keine_freigabe"])
-                self._status["run"]["counts"] = {"valid": 0, "transition": 0, "unreadable": 858, "stale": 0}
-                self._status["run"]["recent"] = [[0, "u", None], [250, "u", None], [500, "u", None]]
+                apply_test_run(self._status)
 
     def mark(self, text):
         with self._lock:
-            self._status['last_mark'] = {'text': text, 'zeit': 'meldezeit_bediener',
-                                         'received_at_utc': '2026-10-21T10:00:00Z'}
+            # Wie session.mark: Meldezeit beim Eingang, fortlaufende Nummer.
+            number = (self._status.get('last_mark') or {}).get('number', 0) + 1
+            self._status['last_mark'] = {'text': text, 'zeit': 'meldezeit_bediener', 'number': number,
+                                         'received_at_utc': datetime.now(UTC).isoformat()}
 
     def stop_run(self):
-        self.set_state({"state": "stopped"})
+        with self._lock:
+            # Wie der echte Dienst: Sitzung und Lauf bleiben nach dem Stopp lesbar.
+            self._status["state"] = "stopped"
+            if self._status.get("run"):
+                self._status["run"]["summary"]["end_reason"] = "bediener"
 
     def start_camera(self):
         pass
@@ -363,7 +405,11 @@ def make_test_app(image_path):
         return response
 
     async def scene(request):
-        live.set_scene((await request.json())["name"])
+        data = await request.json()
+        test_run = data.get("test_run", False)
+        if type(test_run) is not bool:
+            raise ValueError("test_run braucht ein Boolean")
+        live.set_scene(data["name"], test_run=test_run)
         return web.json_response({"ok": True})
 
     async def revision(_request):

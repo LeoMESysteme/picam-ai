@@ -280,5 +280,87 @@ label.f{display:block;font-size:12px;color:var(--tx2);margin:0 0 4px}
 .popover label{display:block;margin-bottom:6px;line-height:1.4}
 .popover .fa{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 
-@media (max-width:1360px){.app{grid-template-columns:228px minmax(0,1fr) 352px}}
+/* ---------- Lauf (Aufgabe 9, Mock-Kapitel 8) ---------- */
+.teal-t{color:var(--teal)}
+.pad{padding-left:12px;padding-right:12px}
+.note.pad{margin:8px 0}
+.wrap{white-space:normal;overflow-wrap:anywhere}
+/* Ergebnisanzeige: Kopfband in der Statusfarbe, grosser Wert */
+.judge .jh{height:30px;display:flex;align-items:center;gap:10px;padding:0 12px;font-weight:700;font-size:14px;letter-spacing:.01em;transition:background .15s}
+.judge .jh .code{font:600 11.5px var(--mono);opacity:.8}
+.judge .jh .tm{margin-left:auto;font:500 12px var(--mono);font-variant-numeric:tabular-nums;opacity:.85}
+.judge.V .jh{background:var(--ok);color:var(--ok-ink)}
+.judge.T .jh{background:var(--warn);color:var(--warn-ink)}
+.judge.U .jh{background:var(--err);color:var(--err-ink)}
+.judge.S .jh{background:#5c5953;color:#f1eee8}
+.judge.X .jh{background:var(--line);color:var(--tx2)}
+.judge .jb{padding:10px 12px 11px;border:2px solid transparent;border-top:0}
+.judge.V .jb{border-color:#2f5a39}.judge.T .jb{border-color:#6b5222}.judge.U .jb{border-color:#6a3129}
+.judge.S .jb,.judge.X .jb{border-color:#3d3b37}
+.judge .jv{display:flex;align-items:baseline;gap:10px;min-height:48px;min-width:0}
+.judge .jv .num{font-size:38px;font-weight:500;letter-spacing:-.01em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.judge .jv .num.word{font-family:var(--sans);font-size:30px;font-weight:600;color:#7d776e}
+.judge.T .jv .num.word{color:#d8cdb8}
+.judge .jv .num.struck{color:#8a857d;text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:#6b665f}
+.judge .jv .unit{font-size:15px;color:var(--tx2)}
+.judge .jsub{font-size:12.5px;color:var(--tx2);min-height:18px;white-space:pre-line}
+.judge .jsub.err{color:#ffb4a9}
+.judge .jref{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:2px 10px;margin:8px 0 0;padding-top:8px;border-top:1px solid #2a2825;font-size:12.5px}
+.judge .jref dt{color:var(--tx3)}
+.judge .jref dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Dock links im Lauf */
+.runhead{padding:10px 12px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:8px}
+.runhead b{font-size:14px;font-weight:600}
+.runhead .mut{margin-left:auto;font-size:12px}
+.endbox{padding:10px 12px;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--tx2);display:flex;flex-direction:column;gap:3px}
+.endbox b{color:var(--tx);font-size:14px;font-weight:600}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12.5px;padding:9px 12px;margin:0}
+.kv dt{color:var(--tx3)}
+.kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.kv dd.wrap{font-size:11.5px}
+.sect{border-top:1px solid var(--line2)}
+.pt.flat{background:transparent;border-bottom:0}
+.stt{width:100%;border-collapse:collapse;font-size:12.5px}
+.stt td{padding:3px 8px 3px 0;height:24px;white-space:nowrap}
+.stt td:first-child{padding-left:12px;width:21px}
+.stt td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.stt td.p{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--tx3);padding-right:12px}
+.stt .code{font:10px var(--mono);color:var(--tx3);margin-left:5px;letter-spacing:-.01em}
+.share{display:flex;height:6px;margin:4px 12px 10px;background:#2b2926}
+.share i{display:block;height:100%}
+.share i.ok{background:var(--ok)}.share i.warn{background:var(--warn)}.share i.err{background:var(--err)}.share i.stale{background:var(--stale)}
+.kvf{padding:8px 12px 9px;font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.kvf div{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:8px;min-width:0}
+.kvf span{color:var(--tx3);white-space:nowrap}
+/* Passt der Wert nicht neben die Bezeichnung, rutscht er rechtsbuendig in die naechste Zeile. */
+.kvf b{font:400 12.5px var(--mono);font-variant-numeric:tabular-nums;text-align:right;margin-left:auto;overflow-wrap:anywhere}
+.kvf b.t{font-family:var(--sans)}
+.kvf b.mut{color:var(--tx3)}
+/* Zeitleiste */
+.stripc{flex:1;min-height:0;display:block;width:100%}
+.slg{display:flex;gap:10px;align-items:center;font-size:11.5px;color:var(--tx3)}
+.slg span{display:flex;gap:5px;align-items:center}
+.slg .sq{width:8px;height:8px}
+/* Pop-ups der Laufaktionen */
+.titlebar{position:relative}
+.popover.runpop,.popover.markpop{top:38px;right:10px;width:380px}
+.popover .ck{display:flex;gap:9px;align-items:flex-start;margin:0 0 8px;font-size:12.5px;color:var(--tx);cursor:pointer}
+.popover .ck input{margin:2px 0 0;accent-color:var(--sel);width:14px;height:14px;flex:none}
+.popover label.f{margin:10px 0 4px}
+.popover .note{margin:5px 0 0;font-size:11.5px;color:var(--tx3)}
+.popover .runblock{margin:0 0 10px;padding:8px 10px;border:1px solid #6a3129;background:#2a1714;color:#ffcbc3;font-size:12.5px}
+.popover .runblock p{margin:4px 0 0;color:var(--tx2)}
+.popover .fold summary{color:var(--tx)}
+.popover .fold .ck{margin-top:4px}
+.popover .msg{margin:8px 0 0}
+/* Dialog (blockierend, mit Schatten erlaubt) */
+.modalbg{position:fixed;inset:0;z-index:40;background:rgba(8,7,6,.55);display:flex;align-items:center;justify-content:center}
+.modal{width:480px;max-width:calc(100vw - 32px);background:#24231f;border:1px solid #4d4a43;border-radius:2px;box-shadow:0 18px 50px rgba(0,0,0,.6),0 3px 10px rgba(0,0,0,.4)}
+.modal .mt{height:32px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px}
+.modal .mbody{padding:14px 16px 6px}
+.modal .mbody p{margin:0 0 10px;font-size:13.5px;line-height:1.5}
+.modal .mbody p.sub{color:var(--tx2);font-size:12.5px}
+.modal .mf{display:flex;gap:8px;justify-content:flex-end;padding:10px 12px 12px}
+
+@media (max-width:1360px){.app{grid-template-columns:228px minmax(0,1fr) 352px}.stt .code{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

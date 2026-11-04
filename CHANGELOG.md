@@ -5,6 +5,45 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Die neue Live-Seite zeigte im Lauf nur Platzhalter; Start
+  mit Optionen, Testmodus und Ereignismarken gingen nur über die alte
+  Seite. Jetzt gibt es die Laufansicht nach Mock-Kapitel 8.
+  * **Ergebnisanzeige** rechts oben: Kopfband in der Statusfarbe mit
+    Statuswort und Codewort („Freigegeben VALID“ …), großer Wert mit
+    Einheit, Grund, Referenz, Spur, Alter und Bild. Das Statuswort folgt
+    derselben Regel wie das Wert-Etikett im HUD (`readoutTag`): ein Wert
+    über 0,5 s oder ohne neues Bild seit 1,5 s erscheint grau und
+    durchgestrichen als Veraltet, Unlesbar als „Kein Wert“, Wechselt
+    ohne Ziffern. Im Testlauf erscheint nie ein Wert. Ohne Verbindung
+    zur Werkbank ist nichts freigegeben.
+  * **Dock links:** Bilder, Lücken, Datensätze, Marken, Statusanteile je
+    Bild aus `run.counts` mit Anteilsbalken, Referenz und Werteplan.
+    „Fehllesungen gegen Referenz“ zeigt während des Laufs „Abgleich nach
+    Laufende“ (Spec OP-1). Nach dem Stopp stehen Endgrund und Ablage da.
+  * **Inspektor:** Wert (eine Zeile je Wechsel von Status oder Wert,
+    Werte nur bei Freigegeben), Ursachen (10-s-Fenster aus
+    `rejection_causes`), Nachführung (Spurgüte, Rahmenbereiche mit
+    Treffer, verlorene Gründe) und Referenz mit „Ablage“ (Diagnose-Zeile
+    und letzte Marke, Texte aus `live.js`).
+  * **Zeitleiste** (40 s): Statusband je 250-ms-Eimer, darüber die
+    Wertspur nur aus freigegebenen Werten als Stufen, nie geglättet und
+    über nicht freigegebene Eimer nie überbrückt. Dazu kommen Marken für
+    Bedienermarken, Hinweise und Stillstand. Nach dem Neuladen füllt
+    `run.recent` die Leiste über `recent_now_ms`. Ein Stillstand zeigt
+    seine Lücke bis jetzt.
+  * **Lauf starten** hat ein Pop-up mit Referenz, Diagnosebildern,
+    Werteplan und Testmodus (Texte, Ablauf und POST-Körper aus
+    `live.js`). Testlauf und Werteplan bestätigt ein eigener Dialog
+    (`ui/modal.js`: Fokusfalle, Hintergrund inert, Esc wählt die
+    Esc-Aktion, Fokus kehrt zurück) statt `window.confirm`.
+    **Ereignis markieren** fragt den Text ab und sendet ihn an
+    `/live/run/mark`.
+  * **Test-Server:** Die Laufszenen tragen 60 s `recent` wie
+    `RecentStrip`. `POST /test/scene` nimmt `test_run: true` und schreibt
+    VALID wie `live/session.py` auf UNREADABLE um. `stopped` behält wie
+    der echte Dienst seinen Lauf mit Endgrund, und Marken tragen die
+    Meldezeit.
+
 * 2026-11-04: Nacharbeit an der Einrichtungsansicht der Live-Seite.
   * **Rahmen der Anzeige:** Ohne Lauf-HUD zeigte der Viewer das ganze
     Kamerabild, und die 15-px-Rahmenbereiche waren kaum zu treffen. Jetzt

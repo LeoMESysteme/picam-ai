@@ -125,10 +125,14 @@ function titleActions(status, view, handlers) {
   } else if (state === 'confirmed') {
     const by = status.profile?.confirmed_by;
     if (by) actions.push({kind: 'note', text: `Einrichtung bestätigt · ${by}`});
-    actions.push({kind: 'button', name: 'runStart', label: 'Lauf starten', icon: 'run', cls: 'primary',
-      disabled: busy || !handlers.runStart || Boolean(status.run_block), title: status.run_block || ''});
+    // view.canStart (Pop-up): gesperrt bei Lesesperre ohne Testmodus-Haken.
+    const canStart = view.canStart ?? !status.run_block;
+    actions.push({kind: 'run', name: 'runStart', toggle: 'runOptions', label: 'Lauf starten', icon: 'run', cls: 'primary',
+      disabled: busy || !handlers.runStart || !canStart, toggleDisabled: busy || !handlers.runOptions,
+      expanded: Boolean(view.runOptionsOpen), title: status.run_block && !canStart ? status.run_block : ''});
   } else if (state === 'running') {
-    actions.push({kind: 'button', name: 'mark', label: 'Ereignis markieren', icon: 'flag', disabled: busy || !handlers.mark},
+    actions.push({kind: 'button', name: 'mark', label: 'Ereignis markieren', icon: 'flag', popup: true,
+      expanded: Boolean(view.markOpen), disabled: busy || !handlers.mark},
       {kind: 'button', name: 'stop', label: 'Lauf stoppen', icon: 'stop', cls: 'danger', disabled: busy || !handlers.stop});
   }
   return actions;
@@ -144,7 +148,13 @@ function actionHTML(action, index) {
       `<div class="popover" role="dialog" aria-label="Zellentext" hidden><label for="cell-text">${esc(CELL_TEXT_LABEL)}</label>` +
       `<input type="text" id="cell-text" class="mono" maxlength="9" autocomplete="off" spellcheck="false"></div>`;
   }
-  return `<button type="button" class="${action.cls || ''}" data-action="${index}">${action.icon ? icon(action.icon) : ''}${esc(action.label)}</button>`;
+  if (action.kind === 'run') {
+    return `<div class="split"><button type="button" class="primary" data-action="${index}">${icon(action.icon)}${esc(action.label)}</button>` +
+      `<button type="button" class="primary" data-action-toggle="${index}" aria-haspopup="dialog" aria-expanded="false" ` +
+      `aria-label="Laufoptionen" title="Referenz, Diagnosebilder, Werteplan, Testmodus">${icon('down')}</button></div>`;
+  }
+  const popup = action.popup ? ' aria-haspopup="dialog" aria-expanded="false"' : '';
+  return `<button type="button" class="${action.cls || ''}" data-action="${index}"${popup}>${action.icon ? icon(action.icon) : ''}${esc(action.label)}</button>`;
 }
 
 export function renderTitle(status, view = {}, handlers = {}) {
@@ -171,9 +181,13 @@ export function renderTitle(status, view = {}, handlers = {}) {
           togglePopover(false);
           shell.handlers.setup?.(value);
         } else {
-          shell.handlers[action.name]?.();
+          shell.handlers[action.name]?.(button);
         }
       };
+    });
+    shell.titleActions.querySelectorAll('[data-action-toggle]').forEach((button) => {
+      const action = actions[Number(button.dataset.actionToggle)];
+      button.onclick = () => shell.handlers[action.toggle]?.(button);
     });
     const toggle = shell.titleActions.querySelector('[data-popover-toggle]');
     if (toggle) {
@@ -189,6 +203,12 @@ export function renderTitle(status, view = {}, handlers = {}) {
     const action = actions[Number(button.dataset.action)];
     button.disabled = Boolean(action.disabled);
     if (action.title) button.title = action.title; else button.removeAttribute('title');
+    if (action.popup) button.setAttribute('aria-expanded', String(Boolean(action.expanded)));
+  });
+  shell.titleActions.querySelectorAll('[data-action-toggle]').forEach((button) => {
+    const action = actions[Number(button.dataset.actionToggle)];
+    button.disabled = Boolean(action.toggleDisabled);
+    button.setAttribute('aria-expanded', String(Boolean(action.expanded)));
   });
   const toggle = shell.titleActions.querySelector('[data-popover-toggle]');
   if (toggle) toggle.disabled = Boolean(actions.find((a) => a.kind === 'setup')?.disabled);

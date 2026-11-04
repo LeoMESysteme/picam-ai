@@ -75,7 +75,7 @@ function recordView(status) {
   return {headline: labels[status.state] || status.state, cls: status.error ? 'error' : '', detail: status.error || setup.message || ''};
 }
 
-function trackingHintText(hint) {
+export function trackingHintText(hint) {
   if (hint?.kind === 'anzeige_bewegt' && Number.isFinite(hint.shift_px) && Number.isFinite(hint.rotation_deg)) {
     const shift = Math.round(hint.shift_px).toLocaleString('de-DE');
     const rotation = Math.abs(hint.rotation_deg).toLocaleString('de-DE', {

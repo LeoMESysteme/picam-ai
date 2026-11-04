@@ -659,3 +659,223 @@ test('Rahmenbereich-Sperre hält bis zum Status der neuen Revision', async ({ pa
   await page.unroute('**/live/status*');
   expect(errors.filter((e) => !/live\/status/.test(e))).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Laufansicht (Aufgabe 9)
+// ---------------------------------------------------------------------------
+const STATUS_RGB = [[85, 196, 110], [229, 165, 53], [238, 91, 77], [143, 138, 130]];
+
+// Spalten der Zeitleiste, in denen ein Statusband-Pixel liegt.
+async function coloredColumns(page: Page) {
+  return page.locator('.strip canvas').evaluate((canvas: HTMLCanvasElement, colors) => {
+    const ctx = canvas.getContext('2d')!;
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let columns = 0;
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        const i = (y * width + x) * 4;
+        if (colors.some(([r, g, b]) => Math.abs(data[i] - r) < 8 && Math.abs(data[i + 1] - g) < 8
+            && Math.abs(data[i + 2] - b) < 8)) { columns++; break; }
+      }
+    }
+    return Math.round(columns / (window.devicePixelRatio || 1));
+  }, STATUS_RGB);
+}
+
+test('Ergebnis zeigt Veraltet durchgestrichen', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_stalled' });
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge).toBeVisible();
+  await expect(judge.locator('.jh')).toContainText('Veraltet');
+  await expect(judge.locator('.jh')).toContainText('STALE');
+  const value = judge.locator('.jv .num');
+  await expect(value).toHaveText('+0.62427');
+  await expect(value).toHaveCSS('text-decoration-line', 'line-through');
+  await expect(judge).not.toContainText('Freigegeben');
+  await expect(judge).toContainText('kein neues Kamerabild');
+  // Fehllesungen gibt es erst nach Laufende (Spec OP-1).
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left).toContainText('Fehllesungen gegen Referenz');
+  await expect(left).toContainText('Abgleich nach Laufende');
+  await expect(left).toContainText('Veraltet');
+  expect(errors).toEqual([]);
+});
+
+test('Testlauf zeigt nie einen Wert', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid', test_run: true });
+  await expect(page.getByRole('banner')).toContainText('TESTLAUF – Werte nicht freigegeben');
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Unlesbar');
+  await expect(judge.locator('.jh')).toContainText('UNREADABLE');
+  await expect(judge.locator('.jv .num')).toHaveText('Kein Wert');
+  await expect(judge).toContainText('Testlauf: keine Wertfreigabe');
+  // Ueber mehrere Bilder und Statusabrufe: nirgends rechts ein Wert.
+  const right = page.getByRole('complementary', { name: 'Inspektor' });
+  for (let i = 0; i < 6; i++) {
+    await expect(judge).not.toContainText('0.62427');
+    await expect(right).not.toContainText('0.62427');
+    await page.waitForTimeout(250);
+  }
+  await expect(page.locator('.strip')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Neuladen füllt die Zeitleiste aus run.recent', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await page.reload();
+  const strip = page.getByRole('region', { name: 'Zeitleiste' });
+  await expect(strip).toContainText('letzte 40 s');
+  await expect.poll(() => coloredColumns(page), { timeout: 5000 }).toBeGreaterThanOrEqual(100);
+  // Stillstand: die Luecke bis "jetzt" bleibt frei, der letzte Eimer rutscht nicht an den Rand.
+  await hook(page, '/test/scene', { name: 'running_stalled' });
+  await expect.poll(() => strip.locator('canvas').evaluate((el: any) => {
+    const l = el.timeline.layout(el.clientWidth);
+    return l.x(l.nowMs) - l.bands.at(-1).x1;
+  }), { timeout: 5000 }).toBeGreaterThan(30);
+  expect(errors).toEqual([]);
+});
+
+test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dialog', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', { state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
+    profile: { confirmed_by: 'L. Hentschke' } });
+  const title = page.getByRole('banner');
+  const start = title.locator('.hdr-act').getByRole('button', { name: 'Lauf starten', exact: true });
+  await expect(start).toBeDisabled();
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop).toContainText('Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen');
+  await expect(pop).toContainText('Lauf gesperrt: Gegenlesen WARNUNG');
+  const reference = pop.getByRole('checkbox', { name: 'Referenz vom GSV-2AS mitschreiben' });
+  await expect(reference).toBeChecked();
+  await expect(pop.getByRole('checkbox', { name: /^Diagnosebilder aufzeichnen/ })).not.toBeChecked();
+  await expect(pop).toContainText('EEnow = 0');
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  await expect(start).toBeEnabled();
+
+  let requests = 0;
+  page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) requests++; });
+  const override = pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ });
+  const modal = page.getByRole('dialog', { name: 'TESTLAUF starten?' });
+  // Testlauf-Dialog (Text aus live.js): Esc bricht ab, nichts wird gesendet, der Haken bleibt.
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  await expect(modal).toContainText('Die Lesesperre wird übergangen.');
+  await expect(modal).toContainText('(TESTLAUF.json)');
+  await page.keyboard.press('Escape');
+  await expect(modal).toBeHidden();
+  await expect(override).toBeChecked();
+  expect(requests).toBe(0);
+
+  // Werteplan ohne Referenz: Hinweis aus live.js, kein Start; wie dort ist der Haken danach verbraucht.
+  await pop.getByLabel(/^Werteplan \(set norm\)/).fill('1:20,2:20');
+  await reference.uncheck();
+  await start.click();
+  await modal.getByRole('button', { name: 'Testlauf starten' }).click();
+  await expect(pop.getByRole('alert')).toHaveText('Werteplan braucht Referenzaufzeichnung');
+  await expect(override).not.toBeChecked();
+  await expect(start).toBeDisabled();
+  expect(requests).toBe(0);
+
+  await reference.check();
+  await override.check();
+  await start.click();
+  await modal.getByRole('button', { name: 'Testlauf starten' }).click();
+  const plan = page.getByRole('dialog', { name: 'Werteplan anwenden?' });
+  await expect(plan).toContainText('Der Plan schreibt in den RAM des GSV-2AS.');
+  const request = page.waitForRequest('**/live/run/start');
+  await plan.getByRole('button', { name: 'Werteplan anwenden' }).click();
+  expect((await request).postDataJSON()).toEqual({ test_override: true, reference: true,
+    norm_schedule: '1:20,2:20', diagnostics: false });
+  await expect(title).toContainText('TESTLAUF – Werte nicht freigegeben');
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jv .num')).toHaveText('Kein Wert');
+
+  // Ereignis markieren: Text geht an den Server, Marke erscheint.
+  await title.getByRole('button', { name: 'Ereignis markieren' }).click();
+  const markPop = page.getByRole('dialog', { name: 'Ereignis markieren' });
+  await markPop.getByLabel('Ereignis (Meldezeit des Bedieners):').fill('Display abgedeckt');
+  const mark = page.waitForRequest('**/live/run/mark');
+  await page.keyboard.press('Enter');
+  expect((await mark).postDataJSON()).toEqual({ text: 'Display abgedeckt' });
+  await expect(markPop).toBeHidden();
+  await expect.poll(() => page.locator('.strip canvas').evaluate((el: any) =>
+    el.timeline.layout(el.clientWidth).marks.map((m: any) => m.label))).toContain('Display abgedeckt');
+  expect(errors).toEqual([]);
+});
+
+test('Dialog hält den Fokus, Esc wählt die Esc-Aktion, Fokus kehrt zurück', async ({ page }) => {
+  const errors = watchErrors(page);
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  const opener = page.getByRole('banner').getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await opener.focus();
+  await page.evaluate(async () => {
+    const { openModal } = await import('/static/live/ui/modal.js');
+    (window as any).modalResult = openModal({ title: 'Anzeige hat sich bewegt', text: 'Bitte neu einrichten.',
+      actions: [{ label: 'Neu einrichten', value: 'neu', primary: true }, { label: 'Lauf stoppen', value: 'stopp' },
+        { label: 'Weiter beobachten', value: 'weiter', escape: true }] });
+  });
+  const modal = page.getByRole('dialog', { name: 'Anzeige hat sich bewegt' });
+  await expect(modal).toBeVisible();
+  await expect(modal).toHaveAttribute('aria-modal', 'true');
+  const focused = () => page.evaluate(() => document.activeElement?.textContent);
+  await expect.poll(focused).toBe('Weiter beobachten');
+  // Fokusfalle: Tab und Umschalt+Tab bleiben im Dialog.
+  for (const expected of ['Neu einrichten', 'Lauf stoppen', 'Weiter beobachten', 'Neu einrichten']) {
+    await page.keyboard.press('Tab');
+    expect(await focused()).toBe(expected);
+  }
+  await page.keyboard.press('Shift+Tab');
+  expect(await focused()).toBe('Weiter beobachten');
+  // Der Hintergrund ist gesperrt.
+  const inert = () => page.evaluate(() => Boolean(document.querySelector('.app')!.closest('[inert]')));
+  expect(await inert()).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).modalResult)).toBe('weiter');
+  await expect(opener).toBeFocused();
+  expect(await inert()).toBe(false);
+
+  // Ohne Esc-Aktion schliesst Esc nicht; ein Knopf liefert seinen Wert.
+  await page.evaluate(async () => {
+    const { openModal } = await import('/static/live/ui/modal.js');
+    (window as any).modalResult = openModal({ title: 'Zweiter Dialog', text: 'A\n\nB',
+      actions: [{ label: 'OK', value: 42, primary: true }] });
+  });
+  const second = page.getByRole('dialog', { name: 'Zweiter Dialog' });
+  await page.keyboard.press('Escape');
+  await expect(second).toBeVisible();
+  await expect(second.locator('p')).toHaveCount(2);
+  await second.getByRole('button', { name: 'OK' }).click();
+  expect(await page.evaluate(() => (window as any).modalResult)).toBe(42);
+  expect(errors).toEqual([]);
+});
+
+test('Lauf beendet: Zusammenfassung, Fehllesungen erst nach Laufende', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'stopped' });
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Lauf beendet');
+  await expect(judge.locator('.jv .num')).not.toContainText('0.62427');
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left).toContainText('Lauf beendet');
+  await expect(left).toContainText('Fehllesungen gegen Referenz');
+  await expect(left).not.toContainText('Abgleich nach Laufende');
+  await expect(left).toContainText('bediener');
+  await expect(left).toContainText('run-01');
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Neu einrichten' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
