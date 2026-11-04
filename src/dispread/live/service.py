@@ -356,13 +356,16 @@ class LiveService:
     # -- Einrichtung ---------------------------------------------------------
     def _cache_setup_grid(self, proposal: dict) -> None:
         """Leserboxen nur bei einem neuen Vorschlag unter self._lock berechnen."""
-        if not all(key in proposal for key in ("grid", "target_size", "grid_source")):
+        if not all(key in proposal for key in ("grid", "target_size", "grid_source", "quad")):
             self._setup_grid = None
             return
         grid = CharGrid.from_dict(proposal["grid"])
         self._setup_grid = {
             "target_size": list(proposal["target_size"]),
             "cell_boxes": [[round(float(value), 2) for value in box] for box in grid.cell_boxes()],
+            # Vorschlagsreihenfolge OL, OR, UR, UL im Kamerabild beibehalten:
+            # rectify bildet sie auf (0,0), (w-1,0), (w-1,h-1), (0,h-1) ab.
+            "quad": [[round(float(value), 1) for value in point] for point in proposal["quad"]],
             "source": proposal["grid_source"],
         }
 
@@ -748,7 +751,7 @@ class LiveService:
             )
             with self._lock:
                 self._cache_setup_grid({"grid": profile.grid.to_dict(), "target_size": profile.target_size,
-                                        "grid_source": proposal["grid_source"]})
+                                        "grid_source": proposal["grid_source"], "quad": profile.quad})
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,

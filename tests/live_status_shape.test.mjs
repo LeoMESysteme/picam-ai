@@ -8,7 +8,8 @@ const load = name => JSON.parse(readFileSync(new URL(`scene-${name}.json`, dir))
 const scenes = readdirSync(dir).filter(name => /^scene-.*\.json$/.test(name));
 test('setup grid accepts reader boxes or null and rejects malformed or missing geometry', () => {
   const status = load('setup_ready_warnung');
-  const grid = { target_size: [400, 160], cell_boxes: [[0, 18, 25, 142]], source: 'dot_lattice' };
+  const grid = { target_size: [400, 160], cell_boxes: [[0, 18, 25, 142]], source: 'dot_lattice',
+    quad: [[810, 511], [1369, 511], [1377, 580], [814, 591]] };
   status.setup.grid = grid;
   assert.doesNotThrow(() => assertStatusShape(status));
   status.setup.grid = null;
@@ -19,6 +20,11 @@ test('setup grid accepts reader boxes or null and rejects malformed or missing g
     { ...grid, cell_boxes: [[0, 18, 25, Infinity]] },
     { ...grid, cell_boxes: [[0, '18', 25, 142]] }, { ...grid, source: 1 },
     { target_size: grid.target_size, cell_boxes: grid.cell_boxes },
+    { target_size: grid.target_size, cell_boxes: grid.cell_boxes, source: grid.source },
+    ...[null, {}, [], grid.quad.slice(0, 3), [...grid.quad, [1, 2]],
+      [[810], ...grid.quad.slice(1)], [[810, 511, 0], ...grid.quad.slice(1)],
+      [['810', 511], ...grid.quad.slice(1)], [[810, Infinity], ...grid.quad.slice(1)],
+      [[NaN, 511], ...grid.quad.slice(1)]].map(quad => ({ ...grid, quad })),
   ]) {
     status.setup.grid = broken;
     assert.throws(() => assertStatusShape(status), TypeError);

@@ -47,6 +47,8 @@ was ist die Konsequenz.
   Leserboxen samt Zielgröße und Rasterquelle. Die Geometrie folgt dem
   Vorschlag und Bereichskorrekturen, bleibt im bestätigten Lauf erhalten
   und wird nur bei Änderungen berechnet; ohne Vorschlag fehlt das Raster.
+  Das zugehörige Anzeige-Viereck steht als `setup.grid.quad` in
+  Kamerabild-Koordinaten mit einer Nachkommastelle auch außerhalb eines Laufs bereit.
 
 * 2026-11-04: Das Grafikfenster der neuen Live-Seite war leer. Jetzt
   liest der Viewer den MJPEG-Strom `/live/preview.mjpg` per `fetch()`

@@ -1346,12 +1346,15 @@ def test_fake_setup_grid_for_every_scene(tmp_path):
             assert setup['grid'] is None
         else:
             grid = setup['grid']
+            assert grid['quad'] == [[810.0, 511.0], [1369.0, 511.0], [1377.0, 580.0], [814.0, 591.0]]
             assert grid['target_size'] == [400, 160]
             assert grid['source'] == 'dot_lattice'
             assert len(grid['cell_boxes']) == 16
             assert grid['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
             assert grid['cell_boxes'][-1] == [375.0, 18.0, 25.0, 142.0]
             grid['cell_boxes'][0][0] = -1
+            grid['quad'][0][0] = -1
+            assert service.status()['setup']['grid']['quad'][0] == [810.0, 511.0]
             assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
 
 

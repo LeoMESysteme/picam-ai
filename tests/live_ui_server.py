@@ -83,6 +83,7 @@ def scene_state(name):
         grid = CharGrid(n_cells=16, left=0, pitch=25, top=17.78, bottom=160)
         setup["grid"] = {"target_size": [400, 160],
                          "cell_boxes": [[round(float(v), 2) for v in box] for box in grid.cell_boxes()],
+                         "quad": [[round(float(v), 1) for v in point] for point in QUAD],
                          "source": "dot_lattice"}
         checks = dict.fromkeys(("kontrast", "kanten", "rahmen", "glanz", "belichtung", "aufloesung",
                                 "stabilitaet", "rasterversatz", "gegenlesen", "displayfehler", "nachfuehrung"), "OK")

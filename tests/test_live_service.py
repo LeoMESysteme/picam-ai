@@ -574,6 +574,9 @@ def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
     service._stability_frames = tuple(image.copy() for _ in range(8))
     setup = service.status()['setup']
     grid = setup['grid']
+    expected_quad = [[round(float(value), 1) for value in point] for point in proposal['quad']]
+    assert grid['quad'] == expected_quad
+    assert all(type(value) is float for point in grid['quad'] for value in point)
     assert grid['target_size'] == [400, 160]
     assert grid['source'] == 'dot_lattice'
     assert len(grid['cell_boxes']) == 16
@@ -584,6 +587,8 @@ def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
     # Rueckgaben duerfen den Cache nicht veraendern; Polling rechnet nicht neu.
     grid['target_size'][0] = -1
     grid['cell_boxes'][0][0] = -1
+    grid['quad'][0][0] = -1
+    assert service.status()['setup']['grid']['quad'] == expected_quad
     assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
     assert service.status()['setup']['grid']['target_size'] == [400, 160]
     assert len(calls) == 1
@@ -592,6 +597,8 @@ def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
 
     def edit(*args, **kwargs):
         updated = edit_regions(*args, **kwargs)
+        # Eine neue Geometrie muss zusammen mit den Leserboxen im Cache landen.
+        updated['quad'] = [[value + 0.125 for value in point] for point in updated['quad']]
         calls_after_overlays.append(len(calls))
         return updated
 
@@ -603,6 +610,9 @@ def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
     assert len(calls) == calls_after_overlays[0] + 1
     after_edit = len(calls)
     assert service.status()['setup']['grid']['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
+    edited_quad = [[round(float(value), 1) for value in point] for point in service._proposal['quad']]
+    assert edited_quad != expected_quad
+    assert service.status()['setup']['grid']['quad'] == edited_quad
     assert len(calls) == after_edit
 
 
@@ -629,6 +639,19 @@ def test_status_setup_grid_none_without_proposal(tmp_path, proposal):
 
 
 def test_status_setup_grid_running_and_stopped(tmp_path, proposal, monkeypatch):
+    from dataclasses import replace
+
+    from dispread.live import setup as live_setup
+    from dispread.session_profile import SessionProfile
+
+    confirm_proposal = live_setup.confirm_proposal
+    profile_quad = [[0.123, 0.276], [400.126, 0.274], [400.124, 160.278], [0.129, 160.273]]
+
+    def confirm(*args, **kwargs):
+        return replace(confirm_proposal(*args, **kwargs), quad=profile_quad)
+
+    monkeypatch.setattr(live_setup, 'confirm_proposal', confirm)
+
     class Session:
         def __init__(self, *args, **kwargs):
             self.latest, self.summary, self.end_reason = None, {}, None
@@ -651,6 +674,10 @@ def test_status_setup_grid_running_and_stopped(tmp_path, proposal, monkeypatch):
     service = ready_service(tmp_path, proposal)
     service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True)
     confirmed = service.status()['setup']['grid']
+    profile = SessionProfile.load(service._profile_path)
+    assert profile.quad == profile_quad
+    assert confirmed['quad'] == [[0.1, 0.3], [400.1, 0.3], [400.1, 160.3], [0.1, 160.3]]
+    assert confirmed['quad'] == [[round(float(value), 1) for value in point] for point in profile.quad]
     assert confirmed['target_size'] == [400, 160]
     assert confirmed['source'] == 'dot_lattice'
     assert confirmed['cell_boxes'][:2] == [[1.0, 18.0, 25.0, 142.0], [26.0, 18.0, 25.0, 142.0]]

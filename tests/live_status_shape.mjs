@@ -55,7 +55,7 @@ const progress = fields({
 function setup(v, p) {
   fields({ focus, exposure, progress, step: nullable(string), elapsed_s: nullable(nonnegative),
     grid: nullable(fields({ target_size: point, cell_boxes: array(tuple(number, number, number, number)),
-                            source: string })),
+                            quad: tuple(point, point, point, point), source: string })),
   })(v, p);
   if (v.progress.steps.length !== 5 || new Set(v.progress.steps.map(s => s.key)).size !== 5) {
     fail(`${p}.progress.steps`, 'fuenf unterschiedliche Schritte');
