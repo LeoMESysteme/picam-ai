@@ -455,6 +455,8 @@ def assist_measure(
     templates_sha256: str | None = None,
     reference_kind: str = "eingabe",
     report: Callable[[dict], None] = lambda _checks: None,
+    on_phase: Callable[[str, int], None] = lambda _phase, _attempt: None,
+    on_wait: Callable[[float, float], None] = lambda _elapsed, _total: None,
     info: Callable[[str], None] = lambda _message: None,
     sleep: Callable[[float], None] | None = None,
     monotonic: Callable[[], float] | None = None,
@@ -467,6 +469,8 @@ def assist_measure(
     Nach der Startsuche folgt fit (Ablehnungsgrund oder "ok"); spaetere
     Maskenupdates erhalten diesen Eintrag in der Diagnose.
     Bei Aufnahmefehlern: masked=None und error mit dem Abbruchgrund.
+    `on_phase` meldet Unterphase und Suchversuch (ab 1); `on_wait` die
+    bereits geschlafene Zeit nach jeder Scheibe von hoechstens 0,5 s.
     """
     sleep = sleep or time.sleep
     monotonic = monotonic or time.monotonic
@@ -482,8 +486,11 @@ def assist_measure(
             # Bei einem erneuten seriell geklammerten Versuch nur die Bilder
             # behalten, aus denen das tatsaechlich verwendete Mittel entsteht.
             stability_frames.clear()
-            return mean_still(cam, stack_frames,
-                              captured_frames=stability_frames if still == "stability" else None)
+            image = mean_still(cam, stack_frames,
+                               captured_frames=stability_frames if still == "stability" else None)
+            if still == "still":
+                on_phase("zelltext", attempt)
+            return image
 
         try:
             return cell_text(capture)
@@ -494,6 +501,7 @@ def assist_measure(
 
     explicit_hint_box = hint_box
     for attempt in range(1, fit_attempts + 1):
+        on_phase("mitteln", attempt)
         if stack_frames != 1 or fit_attempts != 1:
             info(f"Punktraster-Startsuche: Versuch {attempt}/{fit_attempts} ({stack_frames} Bilder)")
         first, first_text = capture_text(attempt, "still")
@@ -505,6 +513,7 @@ def assist_measure(
         out_dir.mkdir(parents=True, exist_ok=True)
         if not cv2.imwrite(str(out_dir / "still.png"), first):
             raise SetupError("still.png konnte nicht geschrieben werden")
+        on_phase("raster", attempt)
         hint_box = explicit_hint_box if explicit_hint_box is not None else find_green_hint_box(first)
         if hint_box is None:
             if attempt < fit_attempts:
@@ -531,7 +540,14 @@ def assist_measure(
     if precheck_failures:
         raise SetupError(f"Vorpruefung meldet FEHLER: {', '.join(precheck_failures)}; "
                          "Stabilitaetsmessung nicht gestartet")
-    sleep(stability_s)
+    on_phase("stabilitaet", attempt)
+    waited = 0.0
+    while waited < stability_s:
+        interval = min(0.5, stability_s - waited)
+        sleep(interval)
+        waited += interval
+        on_wait(waited, stability_s)
+    on_phase("zweites_standbild", attempt)
     second, second_text = capture_text(attempt, "stability")
     stability_elapsed_s = monotonic() - first_captured_at
     if on_attempt is not None:
@@ -545,6 +561,7 @@ def assist_measure(
         raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
     if not cv2.imwrite(str(out_dir / "stability.png"), second):
         raise SetupError("stability.png konnte nicht geschrieben werden")
+    on_phase("gegenlesen", attempt)
     frame_texts = [(first, first_text), (second, second_text)]
     original_quad = fit.quad
     try:

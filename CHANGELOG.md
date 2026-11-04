@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Während der Einrichtung waren die Dauer einzelner Schritte,
+  die Stabilitätswartezeit und bereits berechnete Prüfungen nicht live
+  sichtbar. `/live/status` ergänzt jetzt fünf Schritte mit Laufzeiten,
+  Suchversuch und Unterphase sowie Prüfungen vor dem Vorschlag. Die
+  Wartezeit meldet ihren Fortschritt in Scheiben von höchstens 0,5 s;
+  abgebrochene Schritte werden als fehlgeschlagen markiert. Eine neue
+  Einrichtung leert diese Angaben zusammen mit Fokus und Belichtung.
+
 * 2026-11-04: Während der Einrichtung waren Fokusproben und
   Belichtungsrunden erst nach Abschluss nachvollziehbar. Die Such- und
   Einrichtungsfunktionen melden neue Proben jetzt über optionale Haken;

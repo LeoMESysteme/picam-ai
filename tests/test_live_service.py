@@ -161,6 +161,158 @@ def test_status_exposes_focus_samples_while_focusing(tmp_path, monkeypatch, star
         service._setup_thread.join(2)
 
 
+@pytest.mark.parametrize("fail", [False, True])
+def test_status_progress_marks_steps(tmp_path, fail):
+    from dispread.live.setup import SetupError
+
+    entered, finish = threading.Event(), threading.Event()
+    now = [100.0]
+
+    def runner(*, report, **kwargs):
+        report("fokus")
+        now[0] += 2
+        report("kamera")
+        now[0] += 3
+        report("belichtung")
+        now[0] += 4
+        report("standbilder")
+        now[0] += 5
+        entered.set()
+        assert finish.wait(2)
+        if fail:
+            raise SetupError("Standbild abgelehnt")
+        report("vorschlag")
+        now[0] += 2
+        return {"setup_checks": {"overall": "OK", "checks": {}}}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, monotonic=lambda: now[0])
+    assert service.status()["setup"] is None
+    try:
+        service.start_setup()
+        assert entered.wait(1)
+        progress = service.status()["setup"]["progress"]
+        assert progress == {
+            "steps": [
+                {"key": "fokus", "state": "done", "elapsed_s": 2.0},
+                {"key": "kamera", "state": "done", "elapsed_s": 3.0},
+                {"key": "belichtung", "state": "done", "elapsed_s": 4.0},
+                {"key": "standbilder", "state": "running", "elapsed_s": 5.0},
+                {"key": "vorschlag", "state": "pending", "elapsed_s": None},
+            ],
+            "attempt": 1, "attempts_max": 3, "phase": None, "wait": None,
+        }
+        now[0] += 1
+        assert service.status()["setup"]["progress"]["steps"][3]["elapsed_s"] == 6.0
+    finally:
+        finish.set()
+        service._setup_thread.join(2)
+    status = service.status()
+    assert status["state"] == ("setup_failed" if fail else "setup_ready")
+    steps = status["setup"]["progress"]["steps"]
+    assert steps[3] == {"key": "standbilder", "state": "failed" if fail else "done", "elapsed_s": 6.0}
+    assert steps[4] == {"key": "vorschlag", "state": "pending" if fail else "done",
+                        "elapsed_s": None if fail else 2.0}
+    now[0] += 10
+    assert service.status()["setup"]["progress"] == status["setup"]["progress"]
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_status_checks_live_before_proposal(tmp_path, monkeypatch, proposal, blank_exposure_still, fail):
+    from types import SimpleNamespace
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    entered, finish = threading.Event(), threading.Event()
+    waiting, continue_wait = threading.Event(), threading.Event()
+    second, continue_second = threading.Event(), threading.Event()
+    restarted, finish_restart = threading.Event(), threading.Event()
+
+    def assist(*args, **kwargs):
+        kwargs["on_phase"]("raster", 2)
+        kwargs["report"]({"checks": {"kontrast": {"status": "OK"},
+                                    "stabilitaet": {"status": None, "reason": "zweites Bild fehlt"}}})
+        entered.set()
+        assert finish.wait(2)
+        kwargs["report"]({"checks": {"rasterversatz": {"status": "WARNUNG", "reason": "Versatz"}}})
+        kwargs["on_phase"]("stabilitaet", 2)
+        kwargs["on_wait"](0.5, 15.0)
+        waiting.set()
+        assert continue_wait.wait(2)
+        kwargs["on_phase"]("zweites_standbild", 2)
+        second.set()
+        assert continue_second.wait(2)
+        if fail:
+            raise live_setup.SetupError("Standbild abgelehnt")
+        kwargs["on_phase"]("gegenlesen", 2)
+        return SimpleNamespace(first=None, second=None, first_text="+ 1.2345 ", fit=None, offset_check=None,
+                               final_checks=None, stability_elapsed_s=15, reader_check=None, setup_attempt=2)
+
+    monkeypatch.setattr(live_setup, "focus_camera", lambda *a, **kw: (
+        CameraSettings.from_dict(proposal["camera"]), FocusMeasurements()))
+    monkeypatch.setattr(live_setup, "assist_measure", assist)
+    monkeypatch.setattr(live_setup, "propose_with_fit", lambda *a, **kw: proposal)
+    service = LiveService(FakeOwner(), tmp_path)
+    try:
+        service.start_setup(cell_text="+ 1.2345 ")
+        assert entered.wait(1), service.status()["error"]
+        setup = service.status()["setup"]
+        assert setup.get("checks") is None
+        assert setup["checks_live"] == {
+            "kontrast": {"status": "OK", "reason": None},
+            "stabilitaet": {"status": "NICHT_GEPRUEFT", "reason": "zweites Bild fehlt"},
+        }
+        assert setup["progress"]["phase"] == "raster"
+        assert setup["progress"]["attempt"] == 2
+        assert setup["progress"]["wait"] is None
+        setup["checks_live"]["kontrast"]["status"] = "FEHLER"
+        setup["progress"]["steps"][0]["state"] = "failed"
+        assert service.status()["setup"]["checks_live"]["kontrast"]["status"] == "OK"
+        assert service.status()["setup"]["progress"]["steps"][0]["state"] == "done"
+        finish.set()
+        assert waiting.wait(1)
+        setup = service.status()["setup"]
+        assert setup["checks_live"]["kontrast"]["status"] == "OK"
+        assert setup["checks_live"]["rasterversatz"] == {"status": "WARNUNG", "reason": "Versatz"}
+        assert setup["progress"]["phase"] == "stabilitaet"
+        assert setup["progress"]["wait"] == {"elapsed_s": 0.5, "total_s": 15.0}
+        continue_wait.set()
+        assert second.wait(1)
+        setup = service.status()["setup"]
+        assert setup["progress"]["phase"] == "zweites_standbild"
+        assert setup["progress"]["wait"] is None
+        continue_second.set()
+        service._setup_thread.join(2)
+        status = service.status()
+        assert status["state"] == ("setup_failed" if fail else "setup_ready"), status["error"]
+        if not fail:
+            assert status["setup"]["progress"]["phase"] is None
+            assert "checks_live" not in status["setup"]
+            assert status["setup"]["checks"] == {"rasterversatz": "OK", "gegenlesen": "OK"}
+
+        def restart(**kwargs):
+            restarted.set()
+            assert finish_restart.wait(2)
+            raise live_setup.SetupError("Abbruch")
+
+        service._setup_runner = restart
+        service.start_setup()
+        assert restarted.wait(1)
+        setup = service.status()["setup"]
+        assert setup["checks_live"] == {}
+        assert setup["progress"]["phase"] is None
+        assert setup["progress"]["wait"] is None
+        assert setup["progress"]["attempt"] == 1
+        assert all(step["state"] == "pending" and step["elapsed_s"] is None
+                   for step in setup["progress"]["steps"])
+    finally:
+        finish.set()
+        continue_wait.set()
+        continue_second.set()
+        finish_restart.set()
+        service._setup_thread.join(2)
+
+
 def test_simulate_refuses_setup_with_clear_reason(tmp_path):
     service = LiveService(FakeOwner(), tmp_path, simulate=True)
     with pytest.raises(LiveError, match="StreamCam"):
@@ -348,9 +500,11 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
 
     proposal["setup_checks"]["overall"] = overall
     service = ready_service(tmp_path, proposal)
-    assert service.status()["setup"] == {
+    setup = service.status()["setup"]
+    setup.pop("progress")
+    assert setup == {
         "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
-        "step": "vorschlag", "elapsed_s": service.status()["setup"]["elapsed_s"],
+        "step": "vorschlag", "elapsed_s": setup["elapsed_s"],
         "focus": {"method": "climb", "samples": [], "verify": None},
         "exposure": {"target": 130, "band": [115, 150], "rounds": []},
     }

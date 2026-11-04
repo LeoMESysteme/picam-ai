@@ -38,6 +38,7 @@ from dispread.setup_checks import RESOLUTION_ERROR_PX
 from dispread.workbench.fields import REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
+SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
 STORAGE_RESERVE_BYTES = 2_000_000_000
@@ -160,10 +161,7 @@ class LiveService:
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
         self._setup_message: str | None = None
-        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None}
-        self._setup_exposure: dict = {
-            "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
-        }
+        self._reset_setup_live()
         self._diagnostics_error: str | None = None
         self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
@@ -240,6 +238,9 @@ class LiveService:
                 setup = setup or {}
                 setup["focus"] = deepcopy(self._setup_focus)
                 setup["exposure"] = deepcopy(self._setup_exposure)
+                setup["progress"] = self._setup_progress_status()
+                if self._proposal is None:
+                    setup["checks_live"] = deepcopy(self._setup_checks_live)
                 setup["step"] = self._setup_step
                 if self._setup_message is not None:
                     setup["message"] = self._setup_message
@@ -346,6 +347,56 @@ class LiveService:
                 raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
 
     # -- Einrichtung ---------------------------------------------------------
+    def _reset_setup_live(self) -> None:
+        """Live-Verlaeufe nur beim Erzeugen oder unter self._lock leeren."""
+        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None}
+        self._setup_exposure: dict = {
+            "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
+        }
+        self._step_times: dict[str, list[float | None]] = {key: [None, None] for key in SETUP_STEPS}
+        self._setup_phase: str | None = None
+        self._setup_attempt = 1
+        self._setup_wait: dict | None = None
+        self._setup_checks_live: dict = {}
+
+    def _setup_progress_status(self) -> dict:
+        """Schrittzeiten unter self._lock lesen; nur laufende Zeiten wachsen."""
+        now = self._monotonic()
+        steps = []
+        for key, (start, end) in self._step_times.items():
+            state = "pending"
+            elapsed = None
+            if start is not None:
+                elapsed = (now if end is None else end) - start
+                state = "running" if end is None else "done"
+                if self._state == "setup_failed" and key == self._setup_step:
+                    state = "failed"
+            steps.append({"key": key, "state": state, "elapsed_s": elapsed})
+        return {"steps": steps, "attempt": self._setup_attempt, "attempts_max": 3,
+                "phase": self._setup_phase, "wait": deepcopy(self._setup_wait)}
+
+    def _finish_setup_step(self, now: float) -> None:
+        """Laufenden Schritt unter self._lock abschliessen."""
+        times = self._step_times.get(self._setup_step)
+        if times is not None and times[0] is not None and times[1] is None:
+            times[1] = now
+
+    def _report_setup_phase(self, phase: str, attempt: int) -> None:
+        with self._lock:
+            self._setup_phase, self._setup_attempt = phase, attempt
+            self._setup_wait = None
+
+    def _report_setup_wait(self, elapsed: float, total: float) -> None:
+        with self._lock:
+            self._setup_wait = {"elapsed_s": elapsed, "total_s": total}
+
+    def _report_setup_checks(self, report: dict) -> None:
+        with self._lock:
+            for name, check in report.get("checks", {}).items():
+                self._setup_checks_live[name] = {
+                    "status": check.get("status") or "NICHT_GEPRUEFT", "reason": check.get("reason"),
+                }
+
     def start_setup(self, *, cell_text: str | None = None) -> None:
         with self._operation_lock:
             if self._simulate:
@@ -374,10 +425,7 @@ class LiveService:
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
-                self._setup_focus = {"method": "climb", "samples": [], "verify": None}
-                self._setup_exposure = {
-                    "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
-                }
+                self._reset_setup_live()
                 self._session_dir, self._proposal = session_dir, None
                 self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
@@ -392,6 +440,12 @@ class LiveService:
 
     def _report(self, step: str) -> None:
         with self._lock:
+            if step != self._setup_step:
+                now = self._monotonic()
+                self._finish_setup_step(now)
+                if step in self._step_times:
+                    self._step_times[step] = [now, None]
+                self._setup_phase = self._setup_wait = None
             self._step = self._setup_step = step
             self._setup_message = self._setup_message_base = None
 
@@ -420,7 +474,9 @@ class LiveService:
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
             with self._lock:
                 step = self._setup_step
-                self._setup_elapsed_s = self._monotonic() - self._setup_started_at
+                now = self._monotonic()
+                self._finish_setup_step(now)
+                self._setup_elapsed_s = now - self._setup_started_at
                 self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
             self._write_setup_diagnostic(
                 session_dir / "setup" / "failure.json",
@@ -428,7 +484,10 @@ class LiveService:
             )
             return
         with self._lock:
-            self._setup_elapsed_s = self._monotonic() - self._setup_started_at
+            now = self._monotonic()
+            self._finish_setup_step(now)
+            self._setup_elapsed_s = now - self._setup_started_at
+            self._setup_phase = self._setup_wait = None
             self._setup_step = "vorschlag"
             self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
             self._run_block = run_block_reason(proposal)
@@ -546,6 +605,9 @@ class LiveService:
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
                 reference_kind="seriell" if cell_text is None else "eingabe",
+                report=self._report_setup_checks,
+                on_phase=self._report_setup_phase,
+                on_wait=self._report_setup_wait,
                 info=self._setup_progress,
             )
         finally:

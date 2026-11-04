@@ -356,7 +356,8 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     assert refinement[0][0] is result.first and refinement[0][1] == "new"
     assert offsets[-1][0][0] is result.first and offsets[-1][0][1] == "new"
     assert offsets[-1][1][0] is result.second and offsets[-1][1][1] == "new"
-    assert sleeps == [stability_s]
+    assert sum(sleeps) == pytest.approx(stability_s)
+    assert all(0 < seconds <= 0.5 for seconds in sleeps)
     assert checked[-1][2]["stability_min_elapsed_s"] == stability_s
     assert attempts == [
         {"attempt": 1, "still": "still", "masked": "old"},
@@ -369,6 +370,59 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     ]
     assert len(messages) == 2
     assert "1/3" in messages[0] and "2/3" in messages[1]
+
+
+@pytest.fixture
+def assist_progress_camera(monkeypatch):
+    fit = SimpleNamespace(quad=[[0, 0], [3, 0], [3, 2], [0, 2]])
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *a, **kw: fit)
+    monkeypatch.setattr(live_setup, "check_setup", lambda *a, **kw: SetupChecks("OK", {}))
+    monkeypatch.setattr(live_setup, "refine_quad", lambda *a: (fit.quad, []))
+    monkeypatch.setattr(live_setup, "raster_offset_check", lambda *a: CheckResult("OK", {}))
+    return SequenceSetupCamera([10, 10, 20])
+
+
+@pytest.mark.parametrize("total", [15.0, 15.25])
+def test_assist_measure_waits_in_slices_and_reports_wait(tmp_path, assist_progress_camera, total):
+    sleeps, waits = [], []
+    now = [100.0]
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    result = live_setup.assist_measure(
+        assist_progress_camera, cell_text=live_setup.offline_text_source("text"),
+        expected_size=(3, 2), out_dir=tmp_path, hint_box=(0, 0, 1, 1),
+        sleep=sleep, monotonic=lambda: now[0], stability_s=total, min_stability_s=15.0,
+        on_wait=lambda elapsed, duration: waits.append((elapsed, duration)),
+    )
+    assert sum(sleeps) == total
+    assert all(0 < seconds <= 0.5 for seconds in sleeps)
+    assert waits[0] == (0.5, total)
+    assert waits[-1] == (total, total)
+    assert len(waits) == len(sleeps)
+    assert result.stability_elapsed_s == total
+
+
+@pytest.mark.parametrize("attempt", [1, 2])
+def test_assist_measure_reports_phases_in_order(tmp_path, monkeypatch, assist_progress_camera, attempt):
+    if attempt == 2:
+        fit = SimpleNamespace(quad=[[0, 0], [3, 0], [3, 2], [0, 2]])
+        fits = iter(["keine_startlage", fit])
+        monkeypatch.setattr(live_setup, "fit_lattice", lambda *a, **kw: next(fits))
+    phases = []
+    live_setup.assist_measure(
+        assist_progress_camera, cell_text=live_setup.offline_text_source("text"),
+        expected_size=(3, 2), out_dir=tmp_path, hint_box=(0, 0, 1, 1),
+        sleep=lambda _: None, fit_attempts=3,
+        on_phase=lambda phase, number: phases.append((phase, number)),
+    )
+    expected = [("mitteln", 1), ("zelltext", 1), ("raster", 1)]
+    if attempt == 2:
+        expected += [("mitteln", 2), ("zelltext", 2), ("raster", 2)]
+    expected += [("stabilitaet", attempt), ("zweites_standbild", attempt), ("gegenlesen", attempt)]
+    assert phases == expected
 
 
 @pytest.mark.parametrize('failures,details', [
