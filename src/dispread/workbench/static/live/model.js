@@ -244,7 +244,10 @@ function stillParts(progress, state) {
   const sub = PHASES.map(([key, label], i) => ({key, label,
     state: current < 0 || i > current ? 'pending' : i < current ? 'done' : state,
     value: key === 'stabilitaet' && i === current ? waitText(wait) : ''}));
-  return {detail, sub};
+  // Nur die Ruhezeit hat einen gemessenen Anteil; andere Phasen haben keine Dauer im Status.
+  const fraction = state === 'running' && finite(wait?.elapsed_s) && finite(wait?.total_s) && wait.total_s > 0
+    ? Math.min(1, Math.max(0, wait.elapsed_s / wait.total_s)) : null;
+  return {detail, sub, progress: fraction};
 }
 
 function proposalParts(setup, state) {
@@ -277,7 +280,8 @@ export function stepRows(status) {
     }
   }
   const rows = steps.map(({key, state, elapsed_s}) => {
-    const row = {key, label: STEP_LABELS[key] || key, state, elapsed_s, detail: '', sub: [], tone: state === 'failed' ? 'err' : null};
+    const row = {key, label: STEP_LABELS[key] || key, state, elapsed_s, detail: '', sub: [], tone: state === 'failed' ? 'err' : null,
+      progress: null};
     if (key === 'fokus') Object.assign(row, focusParts(setup, state));
     else if (key === 'kamera') row.detail = state === 'done' ? 'Neustart mit festen Reglern'
       : state === 'running' ? 'Neustart mit festen Reglern …' : state === 'failed' ? 'Abgebrochen' : '';
@@ -293,6 +297,6 @@ export function stepRows(status) {
   rows.push({key: 'bestaetigen', label: 'Prüfen & Bestätigen', state: review, elapsed_s: null,
     detail: review === 'running' ? 'Vorschlag prüfen, mit Namen bestätigen'
       : review === 'done' ? (confirmedBy ? `Bestätigt von ${confirmedBy}` : 'Bestätigt') : '',
-    sub: [], tone: null});
+    sub: [], tone: null, progress: null});
   return rows;
 }

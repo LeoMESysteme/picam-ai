@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 test('Live-Seite: Anmeldung, Einrichtung, Freigabe und Verbindungsverlust', async ({ page }) => {
   const errors: string[] = [];
@@ -201,11 +201,21 @@ test('Rahmenbereiche: Tastatur und Bildklick ändern Revision und verlangen neue
   expect(errors).toEqual([]);
 });
 
+// Der Server lässt je Adresse nur 5 Anmeldungen pro Minute zu (auth.py);
+// die Tests teilen sich deshalb ein Sitzungs-Cookie (ein Worker).
+let sessionCookies: Awaited<ReturnType<BrowserContext['cookies']>> | null = null;
+
 async function login(page: Page) {
+  if (sessionCookies) {
+    await page.context().addCookies(sessionCookies);
+    await page.goto('/live');
+    if (/:\d+\/live$/.test(page.url())) return;
+  }
   await page.goto('/live');
   await page.getByLabel('Linux-Passwort').fill('test-only');
   await page.getByRole('button', { name: 'enter', exact: true }).click();
   await expect(page).toHaveURL(/:\d+\/live$/);
+  sessionCookies = await page.context().cookies();
 }
 
 async function hook(page: Page, path: string, data: unknown) {
@@ -375,5 +385,194 @@ test('Viewer zoomt um den Zeiger und Popover erklärt Rahmenbereich', async ({ p
 
   // Gemessene Vorschau-Rate in der Statusleiste.
   await expect(page.locator('[data-slot="preview-fps"]')).toHaveText(/^\d+ fps$/);
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Einrichtungsansicht (Aufgabe 8)
+// ---------------------------------------------------------------------------
+function watchErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  return errors;
+}
+
+async function noOverflow(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+// Klickt im Viewer auf einen Punkt des Kamerabilds (1920×1080).
+async function clickImage(page: Page, point: number[]) {
+  const canvas = page.locator('canvas.vcanvas');
+  await expect(canvas).toHaveAttribute('data-seq', /^\d+$/);
+  const box = (await canvas.boundingBox())!;
+  const [x, y] = await canvas.evaluate((el: any, p) => el.viewer.imageToScreen(p), point);
+  await page.mouse.click(box.x + x, box.y + y);
+  return [box.x + x, box.y + y];
+}
+
+test('Einrichtung zeigt Fokuskurve live', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  // Während der Fokussuche steht der Inspektor von selbst auf Fokus.
+  await expect(inspector.getByRole('tab', { name: 'Fokus' })).toHaveAttribute('aria-selected', 'true');
+  const chart = inspector.locator('svg.chart');
+  const samples = chart.locator('[data-sample]');
+  await expect(samples).toHaveCount(3);
+  expect(await samples.evaluateAll((els) => els.map((el) => el.getAttribute('data-sample')))).toEqual(['1', '2', '3']);
+  await expect(chart.locator('[data-best="true"]')).toHaveCount(1);
+  await expect(chart.locator('[data-part="threshold"]')).toHaveAttribute('data-value', '536');
+  await expect(chart.locator('[data-part="verify"]')).toHaveCount(0);
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-step="fokus"]')).toContainText('Probe 3');
+
+  await hook(page, '/test/scene', { name: 'setup_focus_done' });
+  await expect(samples).toHaveCount(9);
+  await expect(chart.locator('[data-part="threshold"]')).toHaveAttribute('data-value', '536');
+  await expect(chart).toContainText('85 % = 536');
+  await expect(chart.locator('[data-part="verify"]')).toHaveCount(1);
+  await expect(inspector).toContainText('624 ≥ 536 (99 %)');
+  await expect(inspector).not.toContainText('Wahrscheinlichkeit');
+  await expect(left.locator('[data-sub="gegenpruefung"]')).toContainText('624 ≥ 536');
+  await noOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('Stabilität zählt 9/15', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_standbilder' });
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  const step = left.locator('[data-step="standbilder"]');
+  await expect(step).toHaveAttribute('data-state', 'running');
+  await expect(step.locator('[data-sub="stabilitaet"]')).toContainText('9/15 s');
+  await expect(step).toContainText('noch 6 s');
+  await expect(step.locator('.prog i')).toHaveAttribute('style', /width:\s*60%/);
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  // Ab dem Raster zeigt der Inspektor die Prüfungen, sobald sie gemeldet werden.
+  await expect(inspector.getByRole('tab', { name: /Prüfungen/ })).toHaveAttribute('aria-selected', 'true');
+  const table = inspector.locator('table.grid');
+  await expect(table.locator('tbody tr', { hasText: 'Kontrast' })).toContainText('OK');
+  await expect(table.locator('tbody tr', { hasText: 'Stabilität' })).toContainText('läuft');
+  await expect(table.locator('tbody tr', { hasText: 'Stabilität' })).toContainText('noch 6 s');
+  await inspector.getByRole('tab', { name: 'Schritt' }).click();
+  await expect(inspector.getByRole('tabpanel')).toContainText('Versuch');
+  await expect(inspector.getByRole('tabpanel')).toContainText('9/15 s');
+  await noOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('Bestätigen setzt sich bei neuer Revision zurück', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.getByRole('tab', { name: 'Schritt' })).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  const name = inspector.getByLabel('Name');
+  const format = inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' });
+  const ack = inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ });
+  const titleConfirm = page.getByRole('banner').getByRole('button', { name: 'Bestätigen', exact: true });
+  await expect(titleConfirm).toBeDisabled();
+  await name.fill('L. Hentschke');
+  await format.check();
+  await ack.check();
+  await expect(titleConfirm).toBeEnabled();
+
+  await hook(page, '/test/revision', {});
+  await expect(name).toHaveValue('');
+  await expect(format).not.toBeChecked();
+  await expect(ack).not.toBeChecked();
+  await expect(titleConfirm).toBeDisabled();
+  // Die Eingabe überlebt Statusabrufe ohne neue Revision.
+  await name.fill('L. Hentschke');
+  await page.waitForTimeout(1200);
+  await expect(name).toHaveValue('L. Hentschke');
+
+  await format.check();
+  await ack.check();
+  const request = page.waitForRequest('**/live/confirm');
+  await inspector.getByRole('button', { name: 'Bestätigen', exact: true }).click();
+  const sent = await request;
+  expect(sent.headers()['x-csrf-token']).toBeTruthy();
+  expect(sent.postDataJSON()).toEqual({ session_id: 'test-session', confirmed_by: 'L. Hentschke',
+    format_checked: true, acknowledge_warning: true, use_tolerance: false,
+    proposal_revision: 'b358259f721241f0b9e6af42d4fdb390-bump' });
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Lauf starten' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Rahmenbereich-Klick sperrt bis zur Antwort', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  await inspector.getByLabel('Name').fill('L. Hentschke');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  const formConfirm = inspector.getByRole('button', { name: 'Bestätigen', exact: true });
+  const titleConfirm = page.getByRole('banner').getByRole('button', { name: 'Bestätigen', exact: true });
+  await expect(formConfirm).toBeEnabled();
+
+  const edits: any[] = [];
+  page.on('request', (r) => { if (r.url().endsWith('/live/setup/regions') && r.method() === 'POST') edits.push(r.postDataJSON()); });
+  await hook(page, '/test/delay', { path: '/live/setup/regions', ms: 1000 });
+  const answered = page.waitForResponse('**/live/setup/regions');
+  await clickImage(page, [600, 300]);
+  // Solange die Antwort aussteht: Bestätigen gesperrt, weitere Klicks wirkungslos.
+  await expect(formConfirm).toBeDisabled();
+  await expect(titleConfirm).toBeDisabled();
+  await expect(inspector).toContainText('Rahmenbereich wird geprüft');
+  await clickImage(page, [640, 300]);
+  await inspector.getByRole('button', { name: 'Bereich hinzufügen' }).isDisabled().then((d) => expect(d).toBe(true));
+  expect((await answered).ok()).toBe(true);
+  await page.waitForTimeout(400);
+  // Genau eine Anfrage; der Punkt ist das Quellpixel unter dem Zeiger (± ein Bildschirmpixel).
+  expect(edits).toHaveLength(1);
+  expect(edits[0]).toMatchObject({ proposal_revision: 'b358259f721241f0b9e6af42d4fdb390', remove: [] });
+  expect(edits[0].add).toHaveLength(1);
+  expect(Math.abs(edits[0].add[0][0] - 600)).toBeLessThanOrEqual(4);
+  expect(Math.abs(edits[0].add[0][1] - 300)).toBeLessThanOrEqual(4);
+  await expect(page.locator('.vfb')).toContainText('Rahmenbereich 13 hinzugefügt');
+  await expect(inspector).not.toContainText('Rahmenbereich wird geprüft');
+  // Neue Revision: Bestätigung beginnt von vorn.
+  await expect(inspector.getByLabel('Name')).toHaveValue('');
+
+  // Klick auf einen Bereich entfernt ihn (Index 3 liegt bei 1485, 658).
+  const removed = page.waitForRequest('**/live/setup/regions');
+  await clickImage(page, [1485, 658]);
+  expect((await removed).postDataJSON()).toMatchObject({ add: [], remove: [3] });
+  await expect(page.locator('.vfb')).toContainText('Rahmenbereich 4 entfernt');
+  expect(errors).toEqual([]);
+});
+
+test('Klick im Zeichenbereich zeigt Grund', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  // Erst klicken, wenn der Status der Szene angekommen ist (sonst alte Revision -> 409).
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  const answered = page.waitForResponse('**/live/setup/regions');
+  const [x, y] = await clickImage(page, [1092, 548]);
+  expect((await answered).ok()).toBe(true);
+  const label = page.locator('.vfb');
+  await expect(label).toBeVisible();
+  await expect(label).toContainText('im Zeichenbereich – nicht geeignet');
+  const box = (await label.boundingBox())!;
+  expect(Math.abs(box.x - x)).toBeLessThan(40);
+  expect(Math.abs(box.y - y)).toBeLessThan(40);
+  await expect(inspector.locator('[data-part="results-list"]')).toContainText(
+    /109\d,54\d \(verwendet: 109\d,54\d\): im Zeichenbereich/);
+  await expect(inspector.locator('[data-part="region-list"] li')).toHaveCount(12);
   expect(errors).toEqual([]);
 });

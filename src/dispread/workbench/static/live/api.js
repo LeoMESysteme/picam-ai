@@ -110,14 +110,15 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
         text = await response.text();
         data = JSON.parse(text);
       } catch { /* Antwort ohne JSON, z. B. "CSRF rejected" */ }
+      // data = Antwortkoerper (z. B. centre_results der Bereichsaenderung).
       if (response.ok) {
         if (running) refresh();
-        return {ok: true, error: null};
+        return {ok: true, error: null, data};
       }
       // Rueckmeldungen des Servers erscheinen woertlich (Wahrheitsregel 6).
       const error = (data && typeof data.error === 'string' && data.error) || text.trim() ||
         response.statusText || `HTTP ${response.status}`;
-      return {ok: false, error};
+      return {ok: false, error, data};
     },
     stop() {
       running = false;

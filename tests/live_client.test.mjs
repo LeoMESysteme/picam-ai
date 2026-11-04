@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {statusView, connectionView, effectState, stepRows} from '../src/dispread/workbench/static/live/model.js';
 import {createClient} from '../src/dispread/workbench/static/live/api.js';
+import {focusChartModel, focusChartSVG} from '../src/dispread/workbench/static/live/setup/focus-chart.js';
+import {checkRows, checksSummary, warningCount} from '../src/dispread/workbench/static/live/setup/checks.js';
+import {confirmBody, confirmModel, fieldsReady} from '../src/dispread/workbench/static/live/setup/confirm.js';
+import {exposureHTML} from '../src/dispread/workbench/static/live/setup/exposure.js';
+import {stepsHTML} from '../src/dispread/workbench/static/live/setup/steps.js';
+import {editFeedback, regionAt, resultText} from '../src/dispread/workbench/static/live/viewer/regions-edit.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
   reject_reasons: [], ...over});
@@ -899,7 +905,7 @@ test('client polls full status once, keeps German reasons, and posts with the CS
   assert.equal(connections.at(-1).offline, false);
   assert.equal(connections.at(-1).view.headline, 'Bereit zur Einrichtung');
   const result = await client.post('/live/setup', {cell_text: null});
-  assert.deepEqual(result, {ok: false, error: 'Einrichtung laeuft bereits'});
+  assert.deepEqual(result, {ok: false, error: 'Einrichtung laeuft bereits', data: {error: 'Einrichtung laeuft bereits'}});
   assert.equal(posts[0].headers['X-CSRF-Token'], 'tok-2');
   assert.deepEqual(posts[0].body, {cell_text: null});
   client.stop();
@@ -1029,4 +1035,152 @@ test('effectState: test run suppresses only the server-rewritten records, not ge
   assert.equal(effectState(status, {offline: false}).kind, null);
   status.run.latest.reject_reasons = ['leser:leerzelle_gestoert:14'];
   assert.equal(effectState(status, {offline: false}).kind, 'error');
+});
+
+// ---------------------------------------------------------------------------
+// Einrichtungsansicht (Aufgabe 8)
+// ---------------------------------------------------------------------------
+const focusOf = (name) => scene(name).setup.focus;
+
+test('focus chart: points in measurement order, best marked, line at 85 % of the maximum while running', () => {
+  const model = focusChartModel(focusOf('setup_focus'));
+  assert.deepEqual(model.points.map(p => [p.order, p.focus]), [[1, 48], [2, 56], [3, 40]]);
+  assert.deepEqual(model.points.filter(p => p.best).map(p => p.focus), [48]);
+  assert.equal(model.latest.focus, 40);
+  assert.equal(model.line.source, 'maximum');
+  assert.equal(Math.round(model.line.value), 536);
+  assert.equal(model.verify, null);
+  const svg = focusChartSVG(focusOf('setup_focus'));
+  assert.equal((svg.match(/data-sample="/g) || []).length, 3);
+  assert.match(svg, /data-sample="1"[^>]*data-best="true"/);
+  assert.match(svg, /85 % = 536/);
+  assert.doesNotMatch(svg, /data-part="verify"/);
+  assert.doesNotMatch(svg, /%\s*Wahrscheinlich|Sicherheit/);
+});
+
+test('focus chart: the line follows verify.threshold and the cross-check is drawn at the best focus', () => {
+  const focus = focusOf('setup_focus_done');
+  const model = focusChartModel(focus);
+  assert.equal(model.points.length, 9);
+  assert.equal(model.line.source, 'verify');
+  assert.equal(model.line.value, focus.verify.threshold);
+  assert.deepEqual([model.verify.focus, Math.round(model.verify.score)], [48, 624]);
+  const svg = focusChartSVG(focus);
+  assert.equal((svg.match(/data-sample="/g) || []).length, 9);
+  assert.match(svg, /data-part="threshold"[^>]*data-value="536"/);
+  assert.match(svg, /data-part="verify"/);
+  // Ein anderer Schwellwert vom Server gewinnt gegen 85 % des Maximums.
+  const other = focusChartModel({...focus, verify: {score: 500, threshold: 512.4}});
+  assert.equal(Math.round(other.line.value), 512);
+});
+
+test('focus chart: failed verification without verify keeps the 85 % line and invents no score', () => {
+  const focus = {...focusOf('setup_focus_done'), verify: null};
+  const model = focusChartModel(focus);
+  assert.equal(model.line.source, 'maximum');
+  assert.equal(Math.round(model.line.value), 536);
+  assert.equal(model.verify, null);
+  assert.doesNotMatch(focusChartSVG(focus), /data-part="verify"/);
+  assert.equal(focusChartModel({method: 'climb', samples: [], verify: null}).line, null);
+  assert.match(focusChartSVG({method: 'climb', samples: [], verify: null}), /noch keine Probe/);
+});
+
+test('checks: live checks appear before the proposal, with the stability wait as a running row', () => {
+  const status = scene('setup_standbilder');
+  status.setup.checks_live.raster = {status: 'WARNUNG', reason: 'Raster am Rand knapp'};
+  status.setup.checks_live.glanz = {status: 'NICHT_GEPRUEFT', reason: null};
+  const rows = checkRows(status);
+  assert.deepEqual(rows.map(row => [row.label, row.word, row.tone, row.hint]), [
+    ['Kontrast', 'OK', 'ok', ''],
+    ['Raster', 'WARNUNG', 'warn', 'Raster am Rand knapp'],
+    ['Glanz', 'nicht geprüft', 'pend', ''],
+    ['Stabilität', 'läuft', 'run', 'noch 6 s'],
+  ]);
+  assert.equal(warningCount(status), 1);
+  assert.match(checksSummary(status).text, /Erst nach dem Vorschlag/);
+});
+
+test('checks: after the proposal the table shows checks with check_reasons and the overall verdict', () => {
+  const status = scene('setup_ready_warnung');
+  status.setup.check_reasons = {raster: 'Raster am Rand knapp'};
+  const rows = checkRows(status);
+  assert.equal(rows.length, 12);
+  const raster = rows.find(row => row.key === 'raster');
+  assert.deepEqual([raster.label, raster.word, raster.tone, raster.hint], ['Raster', 'WARNUNG', 'warn', 'Raster am Rand knapp']);
+  assert.equal(rows.find(row => row.key === 'nachfuehrung').label, 'Nachführung');
+  assert.equal(rows.find(row => row.key === 'aufloesung').label, 'Auflösung');
+  assert.ok(!rows.some(row => row.word === 'läuft'));
+  const summary = checksSummary(status);
+  assert.equal(summary.overall, 'WARNUNG');
+  assert.match(summary.counts, /11 OK · 1 Warnung/);
+  assert.equal(warningCount(status), 1);
+});
+
+test('confirm: fields and texts as on the old page, readiness needs name, format and the warning tick', () => {
+  const status = scene('setup_ready_warnung');
+  const model = confirmModel(status);
+  assert.equal(model.visible, true);
+  assert.equal(model.needAck, true);
+  assert.equal(model.tolerance, null);
+  assert.equal(model.block, null);
+  assert.equal(fieldsReady(model, {name: 'L. Hentschke', format: true, ack: false}), false);
+  assert.equal(fieldsReady(model, {name: '  ', format: true, ack: true}), false);
+  assert.equal(fieldsReady(model, {name: 'L. Hentschke', format: true, ack: true}), true);
+  assert.deepEqual(confirmBody(status, {name: 'L. Hentschke', format: true, ack: true, tolerance: false}), {
+    session_id: 'test-session', confirmed_by: 'L. Hentschke', format_checked: true, acknowledge_warning: true,
+    use_tolerance: false, proposal_revision: 'b358259f721241f0b9e6af42d4fdb390'});
+  status.run_block = 'Lauf gesperrt: Gegenlesen WARNUNG';
+  status.setup.gegenlesen = {status: 'WARNUNG', metrics: {hinweis: 'Zelle 8 knapp', tolerance: {possible: true, factor: 1.5}}};
+  const blocked = confirmModel(status);
+  assert.equal(blocked.tolerance, 'Angepasste Toleranz ×1.5 verwenden – Lesung nur in dieser Aufstellung gegen den Referenzwert geprüft, nicht validiert');
+  assert.equal(blocked.block, 'Achtung: Der strikte Lauf ist gesperrt. Angepasste Toleranz kann ausdrücklich gewählt werden; sonst ist nur ein Testlauf möglich.');
+  assert.equal(blocked.hint, 'Hinweis: Zelle 8 knapp');
+  status.setup.gegenlesen.metrics.tolerance = {possible: false};
+  assert.equal(confirmModel(status).block, 'Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.');
+  assert.equal(confirmModel(scene('setup_standbilder')).visible, false);
+  const ok = scene('setup_ready_warnung');
+  ok.setup.overall = 'OK';
+  assert.equal(confirmModel(ok).needAck, false);
+  assert.equal(fieldsReady(confirmModel(ok), {name: 'A', format: true, ack: false}), true);
+  delete ok.setup.proposal_revision;
+  assert.ok(!('proposal_revision' in confirmBody(ok, {name: 'A', format: true})));
+});
+
+test('region editing: hit test uses the region box, feedback names the reason at the click', () => {
+  const regions = scene('setup_ready_warnung').setup.regions;
+  assert.equal(regionAt(regions, [1485, 658], 1), 3);
+  assert.equal(regionAt(regions, [1492, 665], 1), 3, 'Rand des 15-px-Bereichs');
+  assert.equal(regionAt(regions, [1500, 658], 1), -1);
+  assert.equal(regionAt(regions, [1497, 658], 0.5), 3, 'bei kleinem Zoom mindestens 6 Bildschirmpixel');
+  const rejected = {requested_centre: [1090, 550], centre: [1090, 550], used_centre: [1090, 550], ok: false, reason: 'im_zeichenbereich'};
+  assert.deepEqual(editFeedback({add: [[1090, 550]], remove: []}, {ok: true, data: {centre_results: [rejected]}}, {}),
+    {ok: false, text: 'im Zeichenbereich – nicht geeignet'});
+  assert.equal(editFeedback({add: [[10, 10]], remove: []}, {ok: true, data: {centre_results: [{...rejected, reason: 'zu_nah'}]}},
+    {zu_nah: 'zu nah am Nachbarn'}).text, 'zu nah am Nachbarn – nicht geeignet');
+  assert.deepEqual(editFeedback({add: [[10, 10]], remove: []}, {ok: true, data: {centre_results: [
+    {requested_centre: [1, 1], centre: [1, 1], used_centre: [1, 1], ok: true, reason: null},
+    {requested_centre: [10, 10], centre: [11, 10], used_centre: [11, 10], ok: true, reason: null}]}}, {}),
+  {ok: true, text: 'Rahmenbereich 2 hinzugefügt – geeignet'});
+  assert.deepEqual(editFeedback({add: [], remove: [3]}, {ok: true, data: {}}, {}), {ok: true, text: 'Rahmenbereich 4 entfernt'});
+  assert.deepEqual(editFeedback({add: [[1, 1]], remove: []}, {ok: false, error: 'Vorschlag hat sich geaendert'}, {}),
+    {ok: false, text: 'Vorschlag hat sich geaendert'});
+  assert.equal(resultText({requested_centre: [30, 12], centre: [30, 12], used_centre: [30, 12], ok: true}, {}),
+    '30,12 (verwendet: 30,12): geeignet');
+  assert.equal(resultText({requested_centre: [5, 5], centre: [5, 5], used_centre: null, ok: false, reason: 'zu_wenig_struktur'}, {}),
+    '5,5 (verwendet: kein Mittelpunkt): zu wenig zweidimensionale Struktur');
+});
+
+test('steps and exposure render squares with words, the stability wait as a bar, and the p80 band', () => {
+  const html = stepsHTML(stepRows(scene('setup_standbilder')));
+  assert.match(html, /data-step="standbilder" data-state="running"/);
+  assert.match(html, /data-sub="stabilitaet"[^]*9\/15 s/);
+  assert.match(html, /class="prog"[^>]*><i style="width:60%"/);
+  assert.match(html, /aria-label="erledigt"/);
+  const exposure = exposureHTML(scene('setup_standbilder').setup.exposure, {state: 'done'});
+  assert.match(exposure, /p80 124/);
+  assert.match(exposure, /115/);
+  assert.match(exposure, /150/);
+  assert.match(exposure, /Runde<\/dt><dd>1\/4/);
+  assert.match(exposure, /4742 K/);
+  assert.match(exposureHTML({target: 130, band: [115, 150], rounds: []}, {state: 'running'}), /Ziel p80 130/);
 });

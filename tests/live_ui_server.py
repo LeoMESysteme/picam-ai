@@ -237,12 +237,22 @@ class FakeLiveService:
                 if not (0 <= point[0] < width and 0 <= point[1] < height):
                     raise LiveInputError("Bereichskoordinaten liegen ausserhalb des Quellbilds")
             regions = [region for index, region in enumerate(setup["regions"]) if index not in remove]
-            regions.extend({"centre": point, "size": 5} for point in add)
+            # Wie proposal_from_regions: erst die behaltenen, dann die neuen Punkte;
+            # ein Punkt im Anzeige-Viereck wird mit im_zeichenbereich abgelehnt
+            # und nie als Bereich verwendet.
+            results = [{"requested_centre": r["centre"], "centre": r["centre"],
+                        "used_centre": r["centre"], "ok": True, "reason": None} for r in regions]
+            quad = np.array(QUAD, dtype=np.float32)
+            for point in add:
+                inside = bool(self._scene) and cv2.pointPolygonTest(quad, (float(point[0]), float(point[1])), False) >= 0
+                results.append({"requested_centre": point, "centre": point, "used_centre": point,
+                                "ok": not inside, "reason": "im_zeichenbereich" if inside else None})
+                if not inside:
+                    regions.append({"centre": point, "size": 5})
             setup["regions"] = regions
             setup["proposal_revision"] += "-edit"
             setup["auswahl"] = "manuell"
-            setup["centre_results"] = [{"requested_centre": r["centre"], "centre": r["centre"],
-                                        "used_centre": r["centre"], "ok": True, "reason": None} for r in regions]
+            setup["centre_results"] = results
             setup["checks"]["nachfuehrung"] = setup["overall"] = "OK" if regions else "FEHLER"
             return {"proposal_revision": setup["proposal_revision"], "centre_results": setup["centre_results"]}
 

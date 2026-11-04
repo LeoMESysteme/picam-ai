@@ -5,6 +5,29 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Die neue Live-Seite zeigte während der Einrichtung nur
+  Platzhalter; Bestätigen und Rahmenbereiche gingen nur über die alte
+  Seite. Jetzt zeigt das Ablauf-Dock die Schritte mit Teilschritten und
+  der Ruhezeit als Balken („Stabilität 9/15 s“). Der Inspektor wechselt
+  selbst zu Fokus (Schärfekurve live in Messreihenfolge, Bestwert
+  markiert, Linie bei `verify.threshold`, sonst bei 85 % des Maximums,
+  Gegenprüfung „624 ≥ 536 (99 %)“; fehlt `verify`, wird kein Wert
+  erfunden), zu den Prüfungen (Prüfung | Status | Hinweis aus
+  `checks_live`, nach dem Vorschlag aus `checks` und `check_reasons`,
+  Gesamturteil) und zur Belichtung (p80 im Band 115–150 mit Ziel und
+  Runden). Bestätigt wird im Tab Schritt mit den Feldern und Texten der
+  alten Seite (Name, Format, WARNUNG, angepasste Toleranz, Lesesperre)
+  über HTTPS mit CSRF; neue `proposal_revision` oder `session_id` leeren
+  die Felder, Serverantworten stehen wörtlich darunter. Im Viewer (Live
+  oder Standbild) fügt ein Klick auf den Rahmen einen Rahmenbereich
+  hinzu, ein Klick auf einen Bereich entfernt ihn; das Ergebnis aus
+  `centre_results` steht als Etikett am Klickpunkt („im Zeichenbereich –
+  nicht geeignet“). Solange die Anfrage läuft, sind Bestätigen und
+  weitere Klicks gesperrt; die Eingabe x,y bleibt als Tastaturweg.
+  `client.post` liefert dafür auch den Antwortkörper (`data`). Der
+  Test-Server lehnt Punkte im Anzeige-Viereck wie das Backend mit
+  `im_zeichenbereich` ab.
+
 * 2026-11-04: Im Viewer der Live-Seite konnte ein freigegebener Wert bei
   stehendem Strom noch bis etwa 2,5 s als „Freigegeben“ stehen, weil das
   Etikett nur das Alter beim Kodieren kannte. Jetzt zählt das Alter des

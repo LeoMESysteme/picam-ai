@@ -159,6 +159,12 @@ body.offline .app{filter:brightness(.5) saturate(.45)}
 .vpop dd.t{font-family:var(--sans)}
 .vpop .hint{margin-top:5px;color:var(--tx3);font-size:11.5px}
 .vpop .hint.err-t{color:var(--err)}.vpop .hint.warn-t{color:var(--warn)}
+/* Rahmenbereiche bearbeiten: Fadenkreuz, Rueckmeldung am Klickpunkt */
+.vstage.editing{cursor:crosshair}
+.vstage.editing.on-region{cursor:pointer}
+.vstage.editing.drag{cursor:grabbing}
+.vfb{position:absolute;z-index:12;pointer-events:none;height:20px;display:flex;align-items:center;padding:0 6px;background:rgba(22,21,19,.92);border:1px solid var(--line);font-size:12px;font-weight:500;color:var(--tx);white-space:nowrap}
+.vfb.ok{border-color:var(--mag)}.vfb.err{border-color:var(--err)}.vfb.pend{border-color:var(--sel-line);color:var(--tx2)}
 .strip{height:118px;flex:none;display:flex;flex-direction:column;background:var(--dock);border-top:1px solid var(--line)}
 .strip .pt{border-bottom:1px solid var(--line2)}
 
@@ -179,6 +185,84 @@ body.offline .app{filter:brightness(.5) saturate(.45)}
 .kv2{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px;margin:0}
 .kv2 dt{color:var(--tx3)}
 .kv2 dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.kv2 dd.t{font-family:var(--sans)}
+.blk.flush{padding:0}
+.ins .note,.blk .note{font-size:12px;color:var(--tx3)}
+.tabs .cnt{font:11px var(--mono);color:var(--warn)}
+
+/* Einrichtung: Fortschritt im Ablauf-Dock */
+.prog{grid-column:2/-1;height:3px;background:#2f3a4b;margin:7px 0 2px}
+.prog i{display:block;height:100%;background:var(--sel-hi);transition:width .45s linear}
+/* Wert rechts; passt er nicht neben den Teilschritt, rutscht er rechtsbuendig in die naechste Zeile. */
+.subl li{flex-wrap:wrap;row-gap:0}
+.subl .l,.subl .r{white-space:nowrap}
+.subl .r:empty{display:none}
+
+/* Einrichtung: Kurven (SVG, Farben aus den Tokens) */
+.chart{display:block;width:100%;height:auto;overflow:visible}
+.chart text{font:10.5px var(--mono);font-variant-numeric:tabular-nums;fill:var(--tx3)}
+.chart text.cap{font-family:var(--sans)}
+.chart .gl{stroke:var(--ctl);stroke-width:1}
+.chart .thr{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3}
+.chart text.thr-t{fill:var(--warn)}
+.chart .curve{fill:none;stroke:var(--sel-hi);stroke-width:1.5}
+.chart .now{stroke:var(--tx);stroke-opacity:.55;stroke-dasharray:2 2}
+.chart .smp{fill:var(--dock);stroke:var(--sel-hi);stroke-width:1.5}
+.chart .smp.best{fill:var(--sel-hi)}
+.chart .ver{fill:none;stroke:var(--ok);stroke-width:1.5}
+.chart .ver.fail{stroke:var(--err)}
+.chart text.bt,.chart text.lv{fill:var(--tx)}
+.gauge{margin:6px 0 8px}
+.gauge .track{fill:#23221f;stroke:var(--line)}
+.gauge .band{fill:#2c3a2f}
+.gauge .target{stroke:var(--tx);stroke-dasharray:2 2}
+.gauge .lvl{fill:var(--sel-hi)}.gauge .lvl.in{fill:var(--ok)}
+.gauge .cur{stroke:#fff;stroke-width:2}
+
+/* Einrichtung: Raster-Tabellen (Pruefungen, Runden) */
+.grid{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;table-layout:auto}
+.grid th{position:sticky;top:0;background:#23221f;text-align:left;font-weight:500;color:var(--tx2);font-size:12px;height:24px;padding:0 6px;border-bottom:1px solid var(--line);border-right:1px solid var(--line2);white-space:nowrap}
+.grid th:last-child{border-right:0}
+.grid th.st{width:104px}
+.grid th.r,.grid td.r{text-align:right}
+.grid td{height:23px;padding:0 6px;border-bottom:1px solid var(--line2);white-space:nowrap}
+.grid td.wrap{white-space:normal;line-height:1.3;padding-top:3px;padding-bottom:3px}
+.grid tbody tr:nth-child(even) td{background:var(--stripe)}
+.grid td.m{font-family:var(--mono)}
+.grid td .stc{display:inline-flex;align-items:center;gap:6px}
+.grid tr.pend td{color:var(--tx3)}
+.verdict{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.verdict .sq{align-self:center}
+
+/* Einrichtung: Bestaetigen und Rahmenbereiche im Inspektor */
+.form{padding:12px;border-top:1px solid var(--line2)}
+.form h3{margin:0 0 8px;font-size:13px;font-weight:600}
+label.f{display:block;font-size:12px;color:var(--tx2);margin:0 0 4px}
+.form .ck{display:flex;gap:9px;align-items:flex-start;margin-top:10px;font-size:12.5px;cursor:pointer}
+.form .ck input{margin:2px 0 0;accent-color:var(--sel);width:14px;height:14px;flex:none}
+.form .fa{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.form .fh{font-size:12px;color:var(--tx3);margin-top:8px}
+.form .fh.err-t{color:var(--err);white-space:pre-line}
+.form .blockmsg{margin:0 0 8px;font-size:12.5px}
+.form .runblock{margin:0 0 10px;padding:8px 10px;border:1px solid #6a3129;background:#2a1714;color:#ffcbc3;font-size:12.5px}
+.form .runblock p{margin:4px 0 0;color:var(--tx2)}
+.form>p.mut{margin:0 0 8px;font-size:12.5px}
+.inrow{display:flex;gap:6px}
+.inrow input{flex:1;min-width:0}
+.blk .msg{margin:8px 0 0;font-size:12px}
+.blk .selection{margin:8px 0 4px;font-size:12px}
+.rlist{list-style:none;margin:0;padding:0;font-size:12px}
+.rlist li{display:flex;align-items:center;gap:8px;height:24px;border-bottom:1px solid var(--line2)}
+.rlist .n{width:22px;text-align:right;font-family:var(--mono);color:var(--tx3)}
+.rlist .c{flex:1;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.rlist button{height:22px;padding:0 7px;font-size:12px}
+.fold{margin-top:8px;border-top:1px solid var(--line2)}
+.fold summary{height:26px;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--tx2);cursor:pointer;list-style:none}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary::before{content:"";width:0;height:0;border:4px solid transparent;border-left:5px solid var(--tx3);margin-right:4px;transform-origin:2px 4px}
+.fold[open] summary::before{transform:rotate(90deg)}
+.results ul{list-style:none;margin:0;padding:0;font:11.5px/1.5 var(--mono);color:var(--tx2)}
+.results li.err-t{color:var(--err)}
 
 /* Statusleiste */
 .statusbar{grid-column:1/-1;display:flex;align-items:stretch;background:#1f1e1b;border-top:1px solid var(--line);font-size:12px;color:var(--tx2);white-space:nowrap;overflow:hidden;min-width:0}
