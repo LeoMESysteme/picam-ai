@@ -5,6 +5,26 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Nacharbeit an der Einrichtungsansicht der Live-Seite.
+  * **Rahmen der Anzeige:** Ohne Lauf-HUD zeigte der Viewer das ganze
+    Kamerabild, und die 15-px-Rahmenbereiche waren kaum zu treffen. Jetzt
+    rahmen Anfangsansicht und „Einpassen“ den Anzeigerahmen des Vorschlags
+    (`setup.grid.quad`) samt Rahmenbereichen mit etwa 25 % Rand.
+  * **Sperre nach einer Bereichsänderung:** Sie hält jetzt, bis der Status
+    die neue `proposal_revision` bringt, höchstens etwa 3 s, so wie die
+    alte Seite auf `refresh()` wartete. In der Lücke zwischen Antwort und
+    neuem Status bleiben Bestätigen und weitere Klicks wirkungslos.
+  * **Wortlaut bei verlorener Anfrage:** Eine verlorene Bereichsänderung
+    zeigt wieder „Bereichsänderung nicht bestätigt – Verbindung prüfen und
+    erneut versuchen.“ wie die alte Seite.
+  * **Graues Gesamturteil:** Ein Gesamturteil NICHT_GEPRUEFT oder ein
+    unbekanntes Urteil erscheint grau statt im Freigabe-Grün.
+  * **Beschriftung der Fokus-Schwelle:** Die Linie heißt nur dann
+    „85 % = N“, wenn sie nachweislich 85 % des Maximums ist, sonst
+    „Schwelle N“.
+  * **Test-Server:** Das Gesamturteil nach einer Bereichsänderung ist wie
+    im Backend die schlechteste Prüfung.
+
 * 2026-11-04: Die neue Live-Seite zeigte während der Einrichtung nur
   Platzhalter; Bestätigen und Rahmenbereiche gingen nur über die alte
   Seite. Jetzt zeigt das Ablauf-Dock die Schritte mit Teilschritten und

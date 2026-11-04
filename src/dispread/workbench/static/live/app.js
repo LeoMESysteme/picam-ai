@@ -11,7 +11,7 @@ import {dec, esc, mountShell, renderStatusbar, renderTitle} from './shell.js';
 import {renderSteps} from './setup/steps.js';
 import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/focus-chart.js';
 import {exposureHTML} from './setup/exposure.js';
-import {renderChecks, warningCount} from './setup/checks.js';
+import {overallView, renderChecks, warningCount} from './setup/checks.js';
 import {mountConfirm} from './setup/confirm.js';
 
 const RUN_STATES = ['running', 'stopped'];
@@ -149,12 +149,12 @@ function stepInfoHTML(status) {
   }
   if (status.state === 'setup_ready') {
     const overall = setup.overall;
-    const tone = overall === 'WARNUNG' ? 'warn-t' : overall === 'FEHLER' ? 'err-t' : 'ok-t';
+    const verdict = overallView(overall);
     const why = Object.entries(setup.checks || {}).filter(([, v]) => v === overall && overall !== 'OK')
       .map(([k]) => setup.check_reasons?.[k]).filter(Boolean).join(', ');
     const cells = Array.isArray(setup.grid?.cell_boxes) ? `${setup.grid.cell_boxes.length} Zellen` : '–';
     return '<div class="ins"><h3>Prüfen &amp; Bestätigen</h3><p>Vorschlag im Bild prüfen: Viereck, Raster, Rahmenbereiche.' +
-      `${overall ? ` Gesamturteil <b class="${tone}">${esc(overall)}</b>${why ? ` (${esc(why)})` : ''}.` : ''}</p>` +
+      `${verdict ? ` Gesamturteil <b class="${verdict.cls}">${esc(verdict.word)}</b>${why ? ` (${esc(why)})` : ''}.` : ''}</p>` +
       '<p class="note">Das Abtastbild (overlay_sampling) zeigt das feste Punktraster und hängt nicht von den Rahmenbereichen ab.</p></div>' +
       `<div class="blk"><dl class="kv2"><dt>Raster</dt><dd>${esc(cells)}</dd><dt>Einheit</dt><dd>mV/V</dd>` +
       `<dt>Rahmenbereiche</dt><dd>${Array.isArray(setup.regions) ? setup.regions.length : '–'}</dd></dl></div>`;
@@ -181,7 +181,8 @@ function focusPaneHTML(status) {
   }
   const method = {climb: 'Bergsteigen', sweep: 'Vollsweep'}[model.method] || '–';
   return {state, kv: `<dt>Bestwert</dt><dd>${esc(best)}</dd><dt>Gegenprüfung</dt><dd class="${cls}">${esc(check)}</dd>` +
-    `<dt>Schwelle</dt><dd>${model.line ? `${Math.round(FOCUS_VERIFY_RATIO * 100)} % des Bestwerts` : '–'}</dd>` +
+    `<dt>Schwelle</dt><dd>${!model.line ? '–' : model.line.ratio ? `${Math.round(FOCUS_VERIFY_RATIO * 100)} % des Bestwerts`
+      : esc(String(Math.round(model.line.value)))}</dd>` +
     `<dt>Proben</dt><dd>${model.points.length}</dd><dt>Verfahren</dt><dd class="t">${esc(method)}</dd>`,
   running: row?.state === 'running'};
 }

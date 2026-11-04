@@ -56,6 +56,22 @@ export function createViewer(canvas, opts = {}) {
     return {s, ox: W / 2 - ((x0 + x1) / 2) * s, oy: H / 2 - ((y0 + y1) / 2) * s};
   }
 
+  function frameAround(pts, d, share) {
+    const ok = pts.filter((p) => Array.isArray(p) && finite(p[0]) && finite(p[1]));
+    if (!ok.length) return null;
+    const xs = ok.map((p) => p[0]), ys = ok.map((p) => p[1]);
+    const pad = Math.max(60, share * (Math.max(...xs) - Math.min(...xs)));
+    return fitRect([Math.max(0, Math.min(...xs) - pad), Math.max(0, Math.min(...ys) - pad),
+      Math.min(d[0], Math.max(...xs) + pad), Math.min(d[1], Math.max(...ys) + pad)]);
+  }
+
+  // Einrichtung ohne Lauf-HUD: Anzeigerahmen des Vorschlags (setup.grid.quad)
+  // und Rahmenbereiche mit etwa 25 % Rand (Mock #t=46). Nur Live/Standbild.
+  function setupFrame(d) {
+    if (viewKey() !== 'live' || state.hud?.track?.quad || !state.framing) return null;
+    return frameAround(state.framing, d, 0.25);
+  }
+
   // Erster Blick auf die Anzeige: Viereck und Rahmenbereiche mit Rand,
   // solange der Bediener nichts verschoben hat. Sonst das ganze Bild.
   function autoView() {
@@ -63,14 +79,10 @@ export function createViewer(canvas, opts = {}) {
     if (!d) return null;
     const quad = state.hud?.track?.quad;
     if (viewKey() === 'live' && Array.isArray(quad) && quad.length === 4) {
-      const pts = [...quad, ...(state.hud.track.regions || []).map((r) => r?.c).filter(Array.isArray)]
-        .filter((p) => finite(p[0]) && finite(p[1]));
-      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-      const pad = Math.max(60, 0.15 * (Math.max(...xs) - Math.min(...xs)));
-      return fitRect([Math.max(0, Math.min(...xs) - pad), Math.max(0, Math.min(...ys) - pad),
-        Math.min(d[0], Math.max(...xs) + pad), Math.min(d[1], Math.max(...ys) + pad)]);
+      const framed = frameAround([...quad, ...(state.hud.track.regions || []).map((r) => r?.c)], d, 0.15);
+      if (framed) return framed;
     }
-    return fitRect([0, 0, d[0], d[1]]);
+    return setupFrame(d) || fitRect([0, 0, d[0], d[1]]);
   }
 
   function view() {
@@ -275,9 +287,21 @@ export function createViewer(canvas, opts = {}) {
       const v = view();
       setView({s: v.s, ox: v.ox + dx, oy: v.oy + dy});
     },
+    // Einpassen: in der Einrichtung auf den Anzeigerahmen, sonst das ganze Bild.
     fit() {
       const d = dims();
-      if (d) setView(fitRect([0, 0, d[0], d[1]]));
+      if (d) setView(setupFrame(d) || fitRect([0, 0, d[0], d[1]]));
+    },
+    // Punkte fuer den Einrichtungsrahmen (setup.grid.quad und Rahmenbereiche)
+    // oder null. Neue Punkte rahmen die Ansicht neu, solange sie unberuehrt ist.
+    setFraming(points) {
+      const next = Array.isArray(points) && points.length ? points : null;
+      const key = JSON.stringify(next);
+      if (key === state.framingKey) return;
+      state.framingKey = key;
+      state.framing = next;
+      if (state.auto.live !== false) delete state.views.live;
+      redraw();
     },
     // 1:1 = ein Bildpunkt auf einem Geraetepixel; die Bildmitte bleibt stehen.
     oneToOne() {
@@ -639,6 +663,9 @@ export function mountViewer(host, {statusbar = null} = {}) {
       status = next;
       const grid = next?.setup?.grid || null;
       viewer.setGrid(grid);
+      // Ohne Lauf-HUD rahmt der Vorschlag die Ansicht (Anzeigerahmen + Rahmenbereiche).
+      const quad = Array.isArray(grid?.quad) && grid.quad.length === 4 ? grid.quad : null;
+      viewer.setFraming(quad ? [...quad, ...(next?.setup?.regions || []).map((r) => r?.centre)] : null);
       if (Boolean(grid) !== legendGrid) {
         legendGrid = Boolean(grid);
         renderLegend(legend, {grid: legendGrid});

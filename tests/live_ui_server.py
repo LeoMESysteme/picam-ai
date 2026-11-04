@@ -254,7 +254,9 @@ class FakeLiveService:
             setup["proposal_revision"] += "-edit"
             setup["auswahl"] = "manuell"
             setup["centre_results"] = results
-            setup["checks"]["nachfuehrung"] = setup["overall"] = "OK" if regions else "FEHLER"
+            setup["checks"]["nachfuehrung"] = "OK" if regions else "FEHLER"
+            # Wie live/setup.edit_regions: Gesamturteil = schlechteste Pruefung.
+            setup["overall"] = max(setup["checks"].values(), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__)
             return {"proposal_revision": setup["proposal_revision"], "centre_results": setup["centre_results"]}
 
     def confirm(self, *, session_id, **kwargs):

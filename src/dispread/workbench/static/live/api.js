@@ -102,7 +102,8 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
         response = await fetchImpl(path, {method: 'POST', headers: {'Content-Type': 'application/json',
           'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})});
       } catch {
-        return {ok: false, error: NETWORK_ERROR};
+        // network: die Anfrage kam nie an; Aufrufer duerfen ihren eigenen Wortlaut nehmen.
+        return {ok: false, error: NETWORK_ERROR, network: true};
       }
       let text = '';
       let data = {};

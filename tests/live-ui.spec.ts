@@ -526,12 +526,12 @@ test('Rahmenbereich-Klick sperrt bis zur Antwort', async ({ page }) => {
   page.on('request', (r) => { if (r.url().endsWith('/live/setup/regions') && r.method() === 'POST') edits.push(r.postDataJSON()); });
   await hook(page, '/test/delay', { path: '/live/setup/regions', ms: 1000 });
   const answered = page.waitForResponse('**/live/setup/regions');
-  await clickImage(page, [600, 300]);
+  await clickImage(page, [700, 300]);
   // Solange die Antwort aussteht: Bestätigen gesperrt, weitere Klicks wirkungslos.
   await expect(formConfirm).toBeDisabled();
   await expect(titleConfirm).toBeDisabled();
   await expect(inspector).toContainText('Rahmenbereich wird geprüft');
-  await clickImage(page, [640, 300]);
+  await clickImage(page, [740, 300]);
   await inspector.getByRole('button', { name: 'Bereich hinzufügen' }).isDisabled().then((d) => expect(d).toBe(true));
   expect((await answered).ok()).toBe(true);
   await page.waitForTimeout(400);
@@ -539,7 +539,7 @@ test('Rahmenbereich-Klick sperrt bis zur Antwort', async ({ page }) => {
   expect(edits).toHaveLength(1);
   expect(edits[0]).toMatchObject({ proposal_revision: 'b358259f721241f0b9e6af42d4fdb390', remove: [] });
   expect(edits[0].add).toHaveLength(1);
-  expect(Math.abs(edits[0].add[0][0] - 600)).toBeLessThanOrEqual(4);
+  expect(Math.abs(edits[0].add[0][0] - 700)).toBeLessThanOrEqual(4);
   expect(Math.abs(edits[0].add[0][1] - 300)).toBeLessThanOrEqual(4);
   await expect(page.locator('.vfb')).toContainText('Rahmenbereich 13 hinzugefügt');
   await expect(inspector).not.toContainText('Rahmenbereich wird geprüft');
@@ -575,4 +575,87 @@ test('Klick im Zeichenbereich zeigt Grund', async ({ page }) => {
     /109\d,54\d \(verwendet: 109\d,54\d\): im Zeichenbereich/);
   await expect(inspector.locator('[data-part="region-list"] li')).toHaveCount(12);
   expect(errors).toEqual([]);
+});
+
+test('Einrichtung rahmt die Anzeige statt des ganzen Bilds', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  const canvas = page.locator('canvas.vcanvas');
+  await expect(canvas).toHaveAttribute('data-seq', /^\d+$/);
+  const view = () => canvas.evaluate((el: any) => {
+    const v = el.viewer.viewState();
+    const quad = el.viewer.grid().quad.map((p: number[]) => el.viewer.imageToScreen(p));
+    return { scale: v.scale, full: Math.min(v.width / 1920, v.height / 1080) * 0.98, w: v.width, h: v.height, quad };
+  });
+  const check = async () => {
+    const v = await view();
+    // Rahmenbereiche (15 px) erscheinen deutlich größer als bei eingepasstem Gesamtbild.
+    expect(v.scale).toBeGreaterThan(1.5 * v.full);
+    for (const [x, y] of v.quad) {
+      expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(v.w);
+      expect(y).toBeGreaterThan(0); expect(y).toBeLessThan(v.h);
+    }
+  };
+  await expect.poll(async () => (await view()).scale / (await view()).full).toBeGreaterThan(1.5);
+  await check();
+  // Einpassen rahmt in der Einrichtung ebenfalls die Anzeige.
+  const viewer = page.getByRole('region', { name: 'Bildansicht' });
+  await viewer.getByRole('button', { name: '1:1' }).click();
+  await viewer.getByRole('button', { name: 'Einpassen' }).click();
+  await check();
+  expect(errors).toEqual([]);
+});
+
+test('Rahmenbereich-Sperre hält bis zum Status der neuen Revision', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.locator('[data-part="selection"]')).toHaveText('Auswahl: automatisch');
+  const name = inspector.getByLabel('Name');
+  await name.fill('L. Hentschke');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  const formConfirm = inspector.getByRole('button', { name: 'Bestätigen', exact: true });
+  const titleConfirm = page.getByRole('banner').getByRole('button', { name: 'Bestätigen', exact: true });
+  const addButton = inspector.getByRole('button', { name: 'Bereich hinzufügen' });
+  await expect(formConfirm).toBeEnabled();
+
+  // Statusabrufe der Seite festhalten: Lücke zwischen POST-Antwort und neuem Status.
+  let release: () => void = () => {};
+  let gate: Promise<void> | null = null;
+  await page.route('**/live/status*', async (route) => {
+    if (gate) await gate;
+    try { await route.continue(); } catch { /* vom Client nach 3 s abgebrochen */ }
+  });
+  gate = new Promise<void>((resolve) => { release = resolve; });
+  const edits: unknown[] = [];
+  page.on('request', (r) => { if (r.url().endsWith('/live/setup/regions') && r.method() === 'POST') edits.push(r.postDataJSON()); });
+  const answered = page.waitForResponse('**/live/setup/regions');
+  await clickImage(page, [700, 300]);
+  expect((await answered).ok()).toBe(true);
+  const answeredAt = Date.now();
+  await expect(page.locator('.vfb')).toContainText('hinzugefügt');
+  await page.waitForTimeout(400);
+  // Antwort da, neuer Status noch nicht: Bestätigen und weitere Klicks bleiben wirkungslos.
+  await expect(formConfirm).toBeDisabled();
+  await expect(titleConfirm).toBeDisabled();
+  await expect(addButton).toBeDisabled();
+  await clickImage(page, [740, 300]);
+  await page.waitForTimeout(300);
+  expect(edits).toHaveLength(1);
+  // Rückfall: ohne neuen Status löst die Sperre nach etwa 3 s.
+  await expect(addButton).toBeEnabled({ timeout: 5000 });
+  expect(Date.now() - answeredAt).toBeGreaterThan(2500);
+  gate = null;
+  release();
+  // Der Status der neuen Revision setzt die Bestätigung zurück.
+  await expect(name).toHaveValue('');
+  await page.unroute('**/live/status*');
+  expect(errors.filter((e) => !/live\/status/.test(e))).toEqual([]);
 });

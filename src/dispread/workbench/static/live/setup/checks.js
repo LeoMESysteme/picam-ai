@@ -46,6 +46,15 @@ export function warningCount(status) {
   return checkRows(status).filter((r) => r.tone === 'warn' || r.tone === 'err').length;
 }
 
+// Gesamturteil: nur OK/WARNUNG/FEHLER tragen Statusfarben. NICHT_GEPRUEFT oder
+// ein unbekanntes Urteil erscheint grau (ausstehend), nie im Freigabe-Gruen.
+export function overallView(overall) {
+  if (!overall) return null;
+  const known = WORDS[overall];
+  if (known) return {word: known[0], square: known[1], cls: `${known[1]}-t`};
+  return {word: overall === 'NICHT_GEPRUEFT' ? UNCHECKED[0] : String(overall), square: 'stale', cls: 'mut'};
+}
+
 export function checksSummary(status) {
   const rows = checkRows(status);
   const n = (tone) => rows.filter((r) => r.tone === tone).length;
@@ -66,9 +75,9 @@ export function checksHTML(status) {
     `<td class="${r.tone === 'warn' ? 'warn-t' : r.tone === 'err' ? 'err-t' : 'mut'} wrap">${esc(r.hint)}</td></tr>`).join('')
     : '<tr class="pend"><td colspan="3">Noch keine Prüfung gemeldet</td></tr>';
   const summary = checksSummary(status);
-  const tone = WORDS[summary.overall]?.[1];
-  const verdict = summary.overall
-    ? `<div class="verdict">${dotHTML(tone || 'pend')}<b class="${tone === 'ok' ? '' : `${tone}-t`}">${esc(summary.overall)}</b>` +
+  const view = overallView(summary.overall);
+  const verdict = view
+    ? `<div class="verdict" data-overall="${esc(summary.overall)}">${dotHTML(view.square)}<b class="${view.cls}">${esc(view.word)}</b>` +
       `${summary.text ? `<span class="mut">${esc(summary.text)}</span>` : ''}</div>`
     : `<span class="mut">${esc(summary.text)}</span>`;
   return '<div class="blk flush"><table class="grid"><thead><tr><th>Prüfung</th><th class="st">Status</th><th>Hinweis</th></tr></thead>' +

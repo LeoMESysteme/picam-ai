@@ -31,8 +31,16 @@ export function focusChartModel(focus) {
       passed: finite(v.threshold) ? v.score >= v.threshold : null}
     : null;
   let line = null;
-  if (v && finite(v.threshold)) line = {value: v.threshold, source: 'verify'};
-  else if (best) line = {value: FOCUS_VERIFY_RATIO * best.score, source: 'maximum'};
+  const ratioLabel = (value) => `${Math.round(FOCUS_VERIFY_RATIO * 100)} % = ${round(value)}`;
+  if (v && finite(v.threshold)) {
+    // Schwelle vom Server: "85 %" nur, wenn sie nachweislich 85 % des Probenmaximums ist.
+    const derived = best && best.score > 0 && Math.abs(v.threshold / best.score - FOCUS_VERIFY_RATIO) < 1e-3;
+    line = {value: v.threshold, source: 'verify', ratio: Boolean(derived),
+      label: derived ? ratioLabel(v.threshold) : `Schwelle ${round(v.threshold)}`};
+  } else if (best) {
+    const value = FOCUS_VERIFY_RATIO * best.score;
+    line = {value, source: 'maximum', ratio: true, label: ratioLabel(value)};
+  }
   return {method: focus?.method || null, points, best, latest: points.at(-1) || null, verify, line};
 }
 
@@ -81,7 +89,7 @@ export function focusChartInner(focus, {running = false} = {}) {
   g += `<text class="cap" x="${X1}" y="${H - 2}" text-anchor="end">focus_absolute</text>` +
     `<text class="cap" x="4" y="10">Schärfe</text>`;
   if (line) {
-    const label = `${round(FOCUS_VERIFY_RATIO * 100)} % = ${round(line.value)}`;
+    const {label} = line;
     const ly = y(line.value);
     // Beschriftung an das Ende der Linie, an dem keine Probe in ihrer Naehe liegt.
     const LABEL_W = 74;

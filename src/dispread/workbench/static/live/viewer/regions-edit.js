@@ -20,6 +20,11 @@ export const REGION_REASONS = {im_zeichenbereich: 'im Zeichenbereich', ausserhal
 const COORDINATES = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
 const COORDINATE_ERROR = 'Koordinaten als x,y eingeben, zum Beispiel 320,240.';
 const BUSY_TEXT = 'Rahmenbereich wird geprüft …';
+// Woertlich aus static/live.js (editRegions, catch-Zweig).
+export const REGION_NETWORK_ERROR = 'Bereichsänderung nicht bestätigt – Verbindung prüfen und erneut versuchen.';
+// Wie live.js nach erfolgreichem POST auf refresh() wartet: Sperre bis zum
+// Status mit neuer proposal_revision, hoechstens so lange.
+const REVISION_WAIT_MS = 3000;
 // Mindest-Trefferflaeche am Bildschirm, damit 15-px-Bereiche auch eingepasst klickbar bleiben.
 const MIN_HIT_PX = 6;
 const FEEDBACK_MS = 4000;
@@ -51,7 +56,7 @@ export function regionAt(regions, [x, y], scale = 1) {
 
 // Etikett nach der Antwort: {ok, text}. edit = {add, remove}; result = client.post(...).
 export function editFeedback(edit, result, trackingReasons) {
-  if (!result.ok) return {ok: false, text: result.error};
+  if (!result.ok) return {ok: false, text: result.network ? REGION_NETWORK_ERROR : result.error};
   if (!edit.add.length) return {ok: true, text: `Rahmenbereich ${edit.remove[0] + 1} entfernt`};
   const results = Array.isArray(result.data?.centre_results) ? result.data.centre_results : [];
   // centre_results: erst die behaltenen, dann die neuen Punkte (proposal_from_regions).
@@ -110,6 +115,18 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     notify();
   }
 
+  // Sperre loesen: nach Fehlern sofort, nach Erfolg erst mit dem Status der
+  // neuen Revision (update) oder nach REVISION_WAIT_MS.
+  let waitFor = null; // {revision, timer}
+  // quiet: aus update() heraus; der Aufrufer rendert ohnehin weiter.
+  function release(quiet = false) {
+    if (waitFor) clearTimeout(waitFor.timer);
+    waitFor = null;
+    busy = false;
+    if (!quiet) onBusy(false);
+    notify();
+  }
+
   async function edit(add, remove, point = null) {
     if (busy || current?.state !== 'setup_ready') return false;
     const revision = setup().proposal_revision;
@@ -117,10 +134,14 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     onBusy(true);
     showFeedback(point, BUSY_TEXT, 'pend', true);
     const result = await client.post('/live/setup/regions', {proposal_revision: revision, add, remove});
-    busy = false;
     const answer = editFeedback({add, remove}, result, current?.tracking_reasons);
     showFeedback(point, answer.text, answer.ok ? 'ok' : 'err');
-    onBusy(false);
+    if (result.ok && current?.state === 'setup_ready' && setup().proposal_revision === revision) {
+      waitFor = {revision, timer: setTimeout(() => release(), REVISION_WAIT_MS)};
+      notify();
+    } else {
+      release();
+    }
     return result.ok;
   }
 
@@ -187,6 +208,7 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     update(next) {
       const before = JSON.stringify([current?.state, current?.setup?.proposal_revision, current?.setup?.regions]);
       current = next;
+      if (waitFor && (next?.state !== 'setup_ready' || next?.setup?.proposal_revision !== waitFor.revision)) release(true);
       if (JSON.stringify([next?.state, next?.setup?.proposal_revision, next?.setup?.regions]) !== before) {
         if (hover >= regions().length) hover = -1;
         viewer.redraw();

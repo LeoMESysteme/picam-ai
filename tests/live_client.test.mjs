@@ -4,11 +4,11 @@ import {readFileSync} from 'node:fs';
 import {statusView, connectionView, effectState, stepRows} from '../src/dispread/workbench/static/live/model.js';
 import {createClient} from '../src/dispread/workbench/static/live/api.js';
 import {focusChartModel, focusChartSVG} from '../src/dispread/workbench/static/live/setup/focus-chart.js';
-import {checkRows, checksSummary, warningCount} from '../src/dispread/workbench/static/live/setup/checks.js';
+import {checkRows, checksHTML, checksSummary, overallView, warningCount} from '../src/dispread/workbench/static/live/setup/checks.js';
 import {confirmBody, confirmModel, fieldsReady} from '../src/dispread/workbench/static/live/setup/confirm.js';
 import {exposureHTML} from '../src/dispread/workbench/static/live/setup/exposure.js';
 import {stepsHTML} from '../src/dispread/workbench/static/live/setup/steps.js';
-import {editFeedback, regionAt, resultText} from '../src/dispread/workbench/static/live/viewer/regions-edit.js';
+import {REGION_NETWORK_ERROR, editFeedback, regionAt, resultText} from '../src/dispread/workbench/static/live/viewer/regions-edit.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
   reject_reasons: [], ...over});
@@ -1072,6 +1072,12 @@ test('focus chart: the line follows verify.threshold and the cross-check is draw
   // Ein anderer Schwellwert vom Server gewinnt gegen 85 % des Maximums.
   const other = focusChartModel({...focus, verify: {score: 500, threshold: 512.4}});
   assert.equal(Math.round(other.line.value), 512);
+  // "85 %" nur, wenn die Server-Schwelle nachweislich 85 % des Maximums ist.
+  assert.equal(model.line.label, '85 % = 536');
+  assert.equal(other.line.label, 'Schwelle 512');
+  const otherSvg = focusChartSVG({...focus, verify: {score: 500, threshold: 512.4}});
+  assert.match(otherSvg, /Schwelle 512/);
+  assert.doesNotMatch(otherSvg, /85 % =/);
 });
 
 test('focus chart: failed verification without verify keeps the 85 % line and invents no score', () => {
@@ -1183,4 +1189,30 @@ test('steps and exposure render squares with words, the stability wait as a bar,
   assert.match(exposure, /Runde<\/dt><dd>1\/4/);
   assert.match(exposure, /4742 K/);
   assert.match(exposureHTML({target: 130, band: [115, 150], rounds: []}, {state: 'running'}), /Ziel p80 130/);
+});
+
+test('overall verdict: NICHT_GEPRUEFT or unknown is grey, never release green or undefined-t', () => {
+  assert.deepEqual(overallView('OK'), {word: 'OK', square: 'ok', cls: 'ok-t'});
+  assert.deepEqual(overallView('WARNUNG'), {word: 'WARNUNG', square: 'warn', cls: 'warn-t'});
+  assert.deepEqual(overallView('NICHT_GEPRUEFT'), {word: 'nicht geprüft', square: 'stale', cls: 'mut'});
+  assert.deepEqual(overallView('SPAETER'), {word: 'SPAETER', square: 'stale', cls: 'mut'});
+  assert.equal(overallView(null), null);
+  for (const overall of ['NICHT_GEPRUEFT', 'SPAETER']) {
+    const status = scene('setup_ready_warnung');
+    status.setup.overall = overall;
+    const html = checksHTML(status);
+    const verdict = html.slice(html.indexOf('class="verdict"'));
+    assert.doesNotMatch(html, /undefined/);
+    assert.doesNotMatch(verdict, /ok-t|sq ok/);
+    assert.match(verdict, /sq stale/);
+  }
+});
+
+test('region edit: a lost request shows the old live.js wording, server answers stay verbatim', async () => {
+  assert.equal(REGION_NETWORK_ERROR, 'Bereichsänderung nicht bestätigt – Verbindung prüfen und erneut versuchen.');
+  const lost = await createClient({fetchImpl: async () => { throw new TypeError('network'); }}).post('/live/setup/regions', {});
+  assert.equal(lost.network, true);
+  assert.deepEqual(editFeedback({add: [[1, 1]], remove: []}, lost, {}), {ok: false, text: REGION_NETWORK_ERROR});
+  assert.deepEqual(editFeedback({add: [[1, 1]], remove: []}, {ok: false, error: 'CSRF rejected'}, {}),
+    {ok: false, text: 'CSRF rejected'});
 });
