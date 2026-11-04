@@ -95,6 +95,7 @@ class ReferenceRecorder:
         self._ready = threading.Event()
         self._port = None
         self._latest = None
+        self._schedule_step: tuple[int, float, float] | None = None
         self._reader = self._writer = None
         self._state = {'enabled': False, 'reason': 'noch nicht gestartet', 'path': self._path.name,
                        'lines': 0, 'parse_errors': 0, 'gaps': 0, 'dropped_oldest': 0,
@@ -143,6 +144,20 @@ class ReferenceRecorder:
 
     def latest(self):
         return None if self._latest is None else dict(self._latest)
+
+    def latest_status(self):
+        entry = self.latest()
+        if entry is None:
+            return None
+        return {**{key: entry[key] for key in ('cell_text', 'raw', 'value')},
+                'age_s': (self._clock() - entry['t_boottime_ns']) / 1e9}
+
+    def schedule_step_status(self):
+        step = self._schedule_step
+        if step is None:
+            return None
+        index, factor, started = step
+        return {'index': index, 'factor': factor, 'since_s': self._monotonic() - started}
 
     def start(self):
         if self._reader is not None:
@@ -229,6 +244,7 @@ class ReferenceRecorder:
                         port, *serial_io._encode_norm(factor), log, command_state, label=f'schedule[{index}] factor={factor}')
                     if not ok:
                         raise ValueError('Werteplan: last_error meldet Fehler')
+                    self._schedule_step = (index, factor, self._monotonic())
                     index += 1
                     due = self._monotonic() + hold
                     discard, fragment = True, b''

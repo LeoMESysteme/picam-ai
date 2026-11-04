@@ -264,6 +264,10 @@ class LiveSession:
         self._stop_lock = threading.Lock()
         self._stopped = False
         self._last_clock = 0.0
+        self._started_monotonic: float | None = None
+        self._ended_monotonic: float | None = None
+        self._ended_at_utc: str | None = None
+        self._frozen_recent: tuple[list[list], float] | None = None
 
     def _prepare_tracking_advice(self, image, profile):
         centres = [region['centre'] for region in
@@ -283,6 +287,7 @@ class LiveSession:
         self._out_dir.mkdir(parents=True, exist_ok=True)
         owner_status = self._owner.status()
         self._frame_gaps_start = owner_status.get("gaps", 0)
+        self._started_monotonic = self._monotonic()
         self._meta = {
             "schema": SCHEMA,
             "tracking": dict(self.tracking),
@@ -600,6 +605,18 @@ class LiveSession:
             data['diagnostics'] = self.diagnostics_status()
             self._save_session(data)
 
+    def timing_status(self) -> dict:
+        end = self._ended_monotonic if self._ended_monotonic is not None else self._monotonic()
+        return {'started_at_utc': self._meta.get('started_at_utc'),
+                'elapsed_s': None if self._started_monotonic is None else end - self._started_monotonic,
+                'ended_at_utc': self._ended_at_utc}
+
+    def recent_snapshot(self) -> tuple[list[list], float]:
+        if self._frozen_recent is None:
+            return self.recent.snapshot(self._monotonic())
+        entries, now_ms = self._frozen_recent
+        return [list(entry) for entry in entries], now_ms
+
     def stop(self, reason: str = "bediener") -> dict:
         with self._stop_lock:
             if self._stopped:
@@ -620,6 +637,9 @@ class LiveSession:
                         self._sink.close()
                 finally:
                     try:
+                        self._ended_monotonic = self._monotonic()
+                        self._ended_at_utc = self._wall().isoformat()
+                        self._frozen_recent = self.recent.snapshot(self._ended_monotonic)
                         self._write_session(ended=True)
                     finally:
                         if self._tracking_advice is not None:
@@ -644,6 +664,12 @@ class LiveSession:
         if self._reference_error is not None:
             status['error'] = self._reference_error
         return status
+
+    def reference_live_status(self) -> dict:
+        recorder = self._reference_recorder
+        return {**self.reference_status(),
+                'latest': None if recorder is None else recorder.latest_status(),
+                'schedule_step': None if recorder is None else recorder.schedule_step_status()}
 
     def output_status(self) -> dict | None:
         return None if self._output is None else self._output.status()
@@ -694,7 +720,7 @@ class LiveSession:
             data["test_run"] = self._test_run
             data["guesses"] = {"frames": self._guesses.total(), "top": self._guesses.most_common(10)}
         if ended:
-            data["ended_at_utc"] = self._wall().isoformat()
+            data["ended_at_utc"] = self._ended_at_utc
         self._save_session(data)
 
     def _save_session(self, data: dict) -> None:

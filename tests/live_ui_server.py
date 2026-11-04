@@ -47,6 +47,8 @@ CAMERA_SOURCE = {"model": "logitech_streamcam", "usb_id": "046d:0893", "size": [
                  "fourcc": "YUYV", "fps": 30, "device": "/dev/video0", "controls": {
                      "focus_absolute": 48, "exposure_time_absolute": 300,
                      "white_balance_temperature": 4742, "gain": 10}}
+TEST_RUN_EVAL_ERROR = ('Abgleich abgelehnt: Testlauf: keine freigegebenen Messwerte '
+                       'fuer einen Referenznachweis')
 
 
 def scene_state(name):
@@ -60,8 +62,11 @@ def scene_state(name):
         # run traegt Zusammenfassung und Endgrund (kein Wert ist mehr frisch).
         state = scene_state("running_valid")
         state["state"] = name
-        state["run"].update(latest_age_s=12.0)
+        state["run"].update(latest_age_s=12.0, ended_at_utc="2026-11-04T12:01:00+00:00")
         state["run"]["summary"]["end_reason"] = "bediener"
+        state['reference_eval'] = {'state': 'done', 'misreads': 0, 'compared_valid': 842,
+                                   'undecided_valid': 0, 'uncovered_valid': 0}
+        state['reference']['latest']['age_s'] = 12.0
         return state
     focus = name in ("setup_focus", "setup_focus_done")
     ready = name == "setup_ready_warnung" or name.startswith("running_")
@@ -107,6 +112,7 @@ def scene_state(name):
                                            else "tracking_lost:rahmen_unstimmig"]
     age = 2.0 if name == "running_stalled" else 0.04
     state.update(state="running", run={
+        "started_at_utc": "2026-11-04T12:00:00+00:00", "elapsed_s": 60.0, "ended_at_utc": None,
         "latest": {"frame_sequence": 51233, "status": status, "value": 0.62427 if status == "valid" else None,
                    "unit": "mV/V", "raw_text": "+0.62427", "reject_reasons": reasons,
                    "frames_confirmed": 3 if status == "valid" else 0, "confirmation_span_ns": 100_000_000,
@@ -127,6 +133,10 @@ def scene_state(name):
         "tracking_hint": None,
         "rejection_causes": {"window_s": 10.0, "frames": 10, "limited": False, "causes": []},
     })
+    state['reference'] = {'enabled': True, 'reason': None,
+                          'latest': {'cell_text': '+ 0.62427', 'raw': '+00.62427 mV/V',
+                                     'value': .62427, 'age_s': .1},
+                          'schedule_step': {'index': 1, 'factor': 2.0, 'since_s': 12.0}}
     state["diagnostics"] = {"enabled": False, "reason": "vom Bediener deaktiviert", "saved": 0,
                             "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
                             "dropped_mark_rate": 0, "write_errors": 0, "first_error": None,
@@ -170,6 +180,8 @@ def apply_test_run(status):
     counts = status["run"]["counts"]
     status["run"]["counts"] = {**counts, "valid": 0, "unreadable": counts["unreadable"] + counts["valid"]}
     status["run"]["recent"] = [[t, "u" if code == "v" else code, None] for t, code, _ in status["run"]["recent"]]
+    if status.get('state') == 'stopped':
+        status['reference_eval'] = {'state': 'error', 'error': TEST_RUN_EVAL_ERROR}
 
 
 class FakeController:
@@ -212,7 +224,8 @@ class FakeLiveService:
                 "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
                 "diagnose_kopie": False, "last_mark": None,
-                "reference": {"enabled": False, "reason": "kein Referenzlauf"},
+                "reference": {"enabled": False, "reason": "kein Referenzlauf",
+                              "latest": None, "schedule_step": None}, "reference_eval": None,
                 **copy.deepcopy(state),
             }
 
@@ -333,6 +346,12 @@ class FakeLiveService:
             self._status["state"] = "stopped"
             if self._status.get("run"):
                 self._status["run"]["summary"]["end_reason"] = "bediener"
+                self._status['run']['ended_at_utc'] = '2026-11-04T12:01:00+00:00'
+                if self._status['reference']['enabled']:
+                    self._status['reference_eval'] = (
+                        {'state': 'error', 'error': TEST_RUN_EVAL_ERROR} if self._status.get('test_run') else
+                        {'state': 'done', 'misreads': 0, 'compared_valid': 842,
+                         'undecided_valid': 0, 'uncovered_valid': 0})
 
     def start_camera(self):
         pass
@@ -475,8 +494,16 @@ def dump_scenes(directory):
         live = FakeLiveService(Path(scratch) / "overlay.png")
         for name in SCENES:
             live.set_scene(name)
+            status = live.status()
+            # Die 240 Eimer kompakt halten; Ausgabe bleibt regulaeres JSON.
+            recent = status['run'].pop('recent') if status.get('run') is not None else None
+            if recent is not None:
+                status['run']['recent'] = '__RECENT_STRIP__'
+            rendered = json.dumps(status, ensure_ascii=False, indent=2)
+            if recent is not None:
+                rendered = rendered.replace('"__RECENT_STRIP__"', json.dumps(recent, separators=(',', ':')))
             (directory / f"scene-{name}.json").write_text(
-                json.dumps(live.status(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                rendered + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

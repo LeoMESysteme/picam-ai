@@ -1551,3 +1551,41 @@ def test_fake_scene_confirmation_preserves_proposal_and_rejects_old_revision(tmp
     assert run['latest']['status'] == 'unreadable' and run['latest']['value'] is None
     assert all(item[2] is None for item in run['recent'])
     assert service.preview_frame().hud['rec']['status'] == 'unreadable'
+
+
+def test_fake_run_timing_reference_and_stopped_eval(tmp_path):
+    from live_ui_server import SCENES, FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    assert service.status()['reference_eval'] is None
+    assert service.status()['reference']['latest'] is None
+    for scene in SCENES:
+        if not scene.startswith('running_'):
+            continue
+        service.set_scene(scene)
+        status = service.status()
+        assert status['run']['started_at_utc'] == '2026-11-04T12:00:00+00:00'
+        assert status['run']['elapsed_s'] == 60.0
+        assert status['run']['ended_at_utc'] is None
+        assert status['reference']['latest'] == {
+            'cell_text': '+ 0.62427', 'raw': '+00.62427 mV/V', 'value': .62427, 'age_s': .1}
+        assert status['reference']['schedule_step'] == {'index': 1, 'factor': 2.0, 'since_s': 12.0}
+        assert status['reference_eval'] is None
+    before = service.status()['run']['recent']
+    service.stop_run()
+    status = service.status()
+    assert status['run']['recent'] == before
+    assert status['run']['ended_at_utc'] == '2026-11-04T12:01:00+00:00'
+    assert status['reference_eval'] == {'state': 'done', 'misreads': 0, 'compared_valid': 842,
+                                      'undecided_valid': 0, 'uncovered_valid': 0}
+    service.set_scene('stopped')
+    assert service.status()['run']['ended_at_utc'] == '2026-11-04T12:01:00+00:00'
+    assert service.status()['reference_eval']['misreads'] == 0
+    service.set_scene('stopped', test_run=True)
+    assert service.status()['run']['latest']['value'] is None
+    assert service.status()['reference_eval'] == {
+        'state': 'error', 'error': 'Abgleich abgelehnt: Testlauf: keine freigegebenen Messwerte '
+                                   'fuer einen Referenznachweis'}
+    service.set_scene('running_valid', test_run=True)
+    service.stop_run()
+    assert service.status()['reference_eval']['state'] == 'error'

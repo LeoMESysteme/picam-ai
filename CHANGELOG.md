@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Der Laufstatus enthielt weder Dauer noch aktuelle Referenz
+  oder den Abgleich nach Laufende; die Zeitleiste verschwand nach dem Stopp.
+  Jetzt liefert er Start, Ende und eingefrorene Dauer, Referenztext mit
+  fortlaufendem Alter und den letzten Werteplan-Schritt. Nach dem Dateischluss
+  berechnet ein eigener Thread die bestehenden Referenzzähler oder meldet die
+  Ablehnung wörtlich. Die Zeitleiste bleibt nach dem Stopp erhalten. Fake-Szenen,
+  kompakte Status-Fixtures und die Formprüfung tragen dieselben Ergänzungen.
+
 * 2026-11-04: Die neue Live-Seite zeigte im Lauf nur Platzhalter; Start
   mit Optionen, Testmodus und Ereignismarken gingen nur über die alte
   Seite. Jetzt gibt es die Laufansicht nach Mock-Kapitel 8.

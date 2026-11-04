@@ -1690,6 +1690,10 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
     assert not list(session_dir.glob("run-*"))
     session = Mock(latest=None, summary={}, latest_guess={"text": "guess"}, recent=RecentStrip(),
                    tracking={"mode": "ecc_alt", "version": None, "regions": None})
+    session.recent_snapshot.return_value = ([], 0.0)
+    session.timing_status.return_value = {'started_at_utc': '2026-11-04T12:00:00+00:00',
+                                        'elapsed_s': 0.0, 'ended_at_utc': None}
+    session.reference_live_status.return_value = {'enabled': False, 'latest': None, 'schedule_step': None}
     session.latest_age_s.return_value = None
     session.rejection_causes.return_value = {"frames": 0, "window_s": 10.0, "limited": False, "causes": []}
     session.run.side_effect = lambda stop: stop.wait()
@@ -1907,7 +1911,10 @@ def test_reference_start_falls_back_and_metadata_matches_status(tmp_path, monkey
         assert 'kein GSV-2AS' in status['reference']['reason']
     service.stop_run()
     metadata = json.loads(service._session.session_path.read_text())
-    assert metadata['reference'] == service.status()['reference']
+    live_reference = service.status()['reference']
+    # Dynamisches Alter gehoert nur zur Live-Anzeige, nicht zum Referenzaudit.
+    assert metadata['reference'] == {key: value for key, value in live_reference.items()
+                                     if key not in ('latest', 'schedule_step')}
     if not missing:
         assert port.closed and not port.writes
 
@@ -2668,3 +2675,201 @@ def test_output_open_failure_rejects_service_start(tmp_path, monkeypatch):
         service.start_run(reference=False, output={'port': str(tmp_path / 'missing')})
     assert service.status()['state'] == 'confirmed'
     assert service.status()['run'] is None
+
+
+def test_run_elapsed_and_recent_freeze_at_stop(tmp_path):
+    from test_live_session import _session, embed
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')], monotonic=lambda: now[0])
+    session.start()
+    service = LiveService(session._owner, tmp_path, monotonic=lambda: now[0])
+    service._session, service._run_dir, service._state = session, tmp_path / 'run', 'running'
+    service._run_stop = threading.Event()
+    try:
+        session.step()
+        now[0] = 102.5
+        run = service.status()['run']
+        assert run['started_at_utc'] == session._meta['started_at_utc']
+        assert run['elapsed_s'] == 2.5
+        assert run['ended_at_utc'] is None
+        service.stop_run()
+        stopped = service.status()['run']
+        assert stopped['elapsed_s'] == 2.5
+        assert stopped['ended_at_utc']
+        assert stopped['recent_now_ms'] == 2500
+        now[0] = 200.0
+        again = service.status()['run']
+        assert again['elapsed_s'] == 2.5
+        assert again['ended_at_utc'] == stopped['ended_at_utc']
+        assert again['recent'] == stopped['recent']
+        assert again['recent_now_ms'] == 2500
+        stopped['recent'][0][2] = -999
+        assert service.status()['run']['recent'][0][2] != -999
+    finally:
+        session.stop()
+
+
+def test_reference_latest_age_uses_recorder_clock_and_copies(tmp_path):
+    from test_live_reference import FakePort
+    from test_live_session import _session, embed
+
+    from dispread.live.reference import ReferenceRecorder
+
+    now = [1_000_000_000]
+    recorder = ReferenceRecorder(lambda: FakePort([b'partial\n', b'+01.2345 mV/V\n']),
+                                 tmp_path / 'reference.jsonl', clock=lambda: now[0])
+    session = _session(tmp_path, [embed('+ 1.2345 ')], reference_recorder=recorder)
+    service = LiveService(session._owner, tmp_path)
+    service._session, service._run_dir = session, tmp_path / 'run'
+    assert service.status()['reference']['latest'] is None
+    assert service.status()['reference']['schedule_step'] is None
+    session.start()
+    try:
+        now[0] += 2_000_000_000
+        latest = service.status()['reference']['latest']
+        assert latest == {'cell_text': '+ 1.2345 ', 'raw': '+01.2345 mV/V', 'value': 1.2345, 'age_s': 2.0}
+        latest['cell_text'] = 'changed'
+        now[0] += 1_000_000_000
+        assert service.status()['reference']['latest']['age_s'] == 3.0
+        assert service.status()['reference']['latest']['cell_text'] == '+ 1.2345 '
+    finally:
+        session.stop()
+    now[0] += 1_000_000_000
+    assert service.status()['reference']['latest']['age_s'] == 4.0
+    empty = LiveService(FakeOwner(), tmp_path).status()['reference']
+    assert empty['latest'] is None and empty['schedule_step'] is None
+
+
+@pytest.mark.parametrize('natural_stop', [False, True])
+def test_reference_eval_after_stop_runs_once_in_background(tmp_path, monkeypatch, natural_stop):
+    from test_live_reference_eval import fixture_run
+
+    from dispread.live import reference_eval
+
+    entered, proceed, finish = threading.Event(), threading.Event(), threading.Event()
+    calls = []
+    evaluate = reference_eval.evaluate_records
+
+    def blocked_evaluate(*args):
+        calls.append(threading.current_thread().name)
+        entered.set()
+        assert proceed.wait(5)
+        return evaluate(*args)
+
+    class Session(MarkerSession):
+        def start(self):
+            fixture_run(self.session_path.parent, wrong=True)
+
+        def run(self, stop):
+            if natural_stop:
+                assert finish.wait(5)
+                self.end_reason = 'kamera'
+            else:
+                stop.wait()
+
+    monkeypatch.setattr('dispread.live.service.evaluate_records', blocked_evaluate, raising=False)
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    assert service.status()['reference_eval'] is None
+    service.start_run(reference=True)
+    assert service.status()['reference_eval'] is None
+    try:
+        if natural_stop:
+            finish.set()
+            assert _wait_state(service, {'stopped'}) == 'stopped'
+        else:
+            service.stop_run()
+        assert entered.wait(2)
+        assert service.status()['reference_eval'] == {'state': 'running'}
+        proceed.set()
+        deadline = time.monotonic() + 2
+        while service.status()['reference_eval']['state'] == 'running' and time.monotonic() < deadline:
+            time.sleep(.005)
+        result = service.status()['reference_eval']
+        assert result == {'state': 'done', 'misreads': 1, 'compared_valid': 2,
+                          'undecided_valid': 1, 'uncovered_valid': 0}
+        result['misreads'] = 99
+        assert service.status()['reference_eval']['misreads'] == 1
+        assert len(calls) == 1 and calls[0] not in ('MainThread', 'live-run')
+    finally:
+        proceed.set()
+        service.close()
+
+
+@pytest.mark.parametrize('problem', ['rejected', 'missing'])
+def test_reference_eval_error_preserves_rejection_or_missing_file_reason(tmp_path, monkeypatch, problem):
+    import json
+
+    from test_live_reference_eval import fixture_run
+
+    class Session(MarkerSession):
+        def start(self):
+            fixture_run(self.session_path.parent)
+            if problem == 'rejected':
+                self.session_path.write_text(json.dumps({'test_run': {'testlauf': True}}))
+            (self.session_path.parent / 'reference.jsonl').unlink()
+
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    service.start_run()
+    service.stop_run()
+    deadline = time.monotonic() + 2
+    while (service.status()['reference_eval'] or {}).get('state') == 'running' and time.monotonic() < deadline:
+        time.sleep(.005)
+    result = service.status()['reference_eval']
+    assert result['state'] == 'error'
+    if problem == 'rejected':
+        assert result['error'] == ('Abgleich abgelehnt: Testlauf: keine freigegebenen Messwerte '
+                                   'fuer einen Referenznachweis')
+    else:
+        path = service._run_dir / 'reference.jsonl'
+        assert result['error'] == f"Abgleich abgelehnt: [Errno 2] No such file or directory: '{path}'"
+
+
+def test_reference_eval_null_without_reference(tmp_path, monkeypatch):
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service.start_run(reference=False)
+    assert service.status()['reference_eval'] is None
+    service.stop_run()
+    assert service.status()['reference_eval'] is None
+
+
+@pytest.mark.parametrize('next_action', ['run', 'setup'])
+def test_reference_eval_cleared_and_late_result_ignored(tmp_path, monkeypatch, next_action):
+    from test_live_reference_eval import fixture_run
+
+    from dispread.live.reference_eval import evaluate_records
+
+    entered, proceed, evaluated = threading.Event(), threading.Event(), threading.Event()
+
+    class Session(MarkerSession):
+        def start(self):
+            fixture_run(self.session_path.parent)
+
+    def blocked(*args):
+        entered.set()
+        assert proceed.wait(5)
+        result = evaluate_records(*args)
+        evaluated.set()
+        return result
+
+    monkeypatch.setattr('dispread.live.service.evaluate_records', blocked, raising=False)
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    service.start_run()
+    service.stop_run()
+    try:
+        assert entered.wait(2)
+        if next_action == 'run':
+            service.start_run(reference=False)
+        else:
+            service.start_setup()
+        assert service.status()['reference_eval'] is None
+        proceed.set()
+        assert evaluated.wait(2)
+        # Auf die tatsaechliche Veroeffentlichung warten, nicht nur auf den Evaluator.
+        for thread in threading.enumerate():
+            if thread.name == 'live-reference-eval':
+                thread.join(2)
+        assert service.status()['reference_eval'] is None
+    finally:
+        proceed.set()
+        service.close()

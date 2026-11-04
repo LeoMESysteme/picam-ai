@@ -51,6 +51,9 @@
   "last_mark": null,
   "reference": {
     "enabled": false,
-    "reason": "kein Referenzlauf"
-  }
+    "reason": "kein Referenzlauf",
+    "latest": null,
+    "schedule_step": null
+  },
+  "reference_eval": null
 }

@@ -97,9 +97,16 @@ function run(v, p) {
     counts: fields({ valid: integer, transition: integer, unreadable: integer, stale: integer }),
     recent: array(tuple(nonnegative, choice('v', 't', 'u', 's'), nullable(number))),
     recent_now_ms: nonnegative, dir: string, latest_age_s: nullable(nonnegative), guess: nullable(object),
+    started_at_utc: string, elapsed_s: nonnegative, ended_at_utc: nullable(string),
     tracking: object, tracking_hint: nullable(hint), rejection_causes: causes,
   })(v, p);
   optional(v, 'output', object, p);
+}
+function referenceEval(v, p) {
+  fields({ state: choice('running', 'done', 'error') })(v, p);
+  if (v.state === 'done') {
+    fields({ misreads: integer, compared_valid: integer, undecided_valid: integer, uncovered_valid: integer })(v, p);
+  } else if (v.state === 'error') fields({ error: string })(v, p);
 }
 const root = fields({
   state: choice('idle', 'setup_running', 'setup_failed', 'setup_ready', 'confirmed', 'running', 'stopped', 'error'),
@@ -112,7 +119,10 @@ const root = fields({
   run_block: nullable(string), test_run: nullable(object), reader_tolerance: nullable(object), run: nullable(run),
   diagnostics: fields({ enabled: boolean }), diagnose_kopie: boolean,
   diagnostic_leftovers: array(fields({ path: string, bytes: nullable(nonnegative) })),
-  last_mark: nullable(object), reference: fields({ enabled: boolean }),
+  last_mark: nullable(object), reference: fields({ enabled: boolean,
+    latest: nullable(fields({ cell_text: string, raw: string, value: number, age_s: nonnegative })),
+    schedule_step: nullable(fields({ index: integer, factor: number, since_s: nonnegative })),
+  }), reference_eval: nullable(referenceEval),
 });
 
 /** Throws TypeError with a field path if required status fields have a wrong shape. */

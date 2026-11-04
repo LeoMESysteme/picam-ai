@@ -33,6 +33,7 @@ from dispread.live.diagnostics import staging_leftovers
 from dispread.live.output import validate_output
 from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
+from dispread.live.reference_eval import evaluate_records, validate_reference_session
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
 from dispread.session_profile import SessionProfile
@@ -185,6 +186,8 @@ class LiveService:
         self._session: LiveSession | None = None
         self._run_stop: threading.Event | None = None
         self._run_thread: threading.Thread | None = None
+        self._run_reference = False
+        self._reference_eval: dict | None = None
         self._setup_thread: threading.Thread | None = None
         self._preview = PreviewEncoder(lambda: self._owner.latest(), self._preview_hud,
                                        governor=RateGovernor(self._monotonic))
@@ -260,9 +263,13 @@ class LiveService:
             run = None
             if self._session is not None:
                 latest = self._session.latest
-                recent, recent_now_ms = (self._session.recent.snapshot(self._monotonic())
-                                         if hasattr(self._session, 'recent') else ([], 0.0))
+                if hasattr(self._session, 'recent_snapshot'):
+                    recent, recent_now_ms = self._session.recent_snapshot()
+                else:
+                    recent, recent_now_ms = (self._session.recent.snapshot(self._monotonic())
+                                             if hasattr(self._session, 'recent') else ([], 0.0))
                 run = {
+                    **(self._session.timing_status() if hasattr(self._session, 'timing_status') else {}),
                     "latest": None if latest is None else {
                         "frame_sequence": latest.frame_sequence,
                         "status": latest.status.value,
@@ -309,6 +316,7 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "reference_eval": deepcopy(self._reference_eval),
                 "diagnostics": (self._session.diagnostics_status()
                                 if self._session is not None and hasattr(self._session, 'diagnostics_status')
                                 else {'enabled': False, 'reason': 'kein Diagnoselauf'}),
@@ -321,9 +329,12 @@ class LiveService:
                     and (getattr(s, 'diagnose_kopie', False) or (s is self._session and self._state == 'running'))
                 }),
                 "last_mark": getattr(self._session, 'last_mark', None),
-                "reference": (self._session.reference_status()
-                              if self._session is not None and hasattr(self._session, "reference_status")
-                              else {"enabled": False, "reason": "kein Referenzlauf"}),
+                "reference": (self._session.reference_live_status()
+                              if self._session is not None and hasattr(self._session, "reference_live_status")
+                              else {"latest": None, "schedule_step": None,
+                                    **(self._session.reference_status()
+                                       if self._session is not None and hasattr(self._session, "reference_status")
+                                       else {"enabled": False, "reason": "kein Referenzlauf"})}),
             }
 
     def _preview_hud(self) -> dict | None:
@@ -456,6 +467,8 @@ class LiveService:
                 self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                            if getattr(s, 'diagnose_kopie', False)]
                 self._session = None
+                self._reference_eval = None
+                self._run_reference = False
             self._setup_thread = threading.Thread(
                 target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
             )
@@ -845,6 +858,8 @@ class LiveService:
                 self._session, self._run_stop, self._state, self._error = session, stop, "running", None
                 self._run_dir = out_dir
                 self._test_run = test_run
+                self._run_reference = reference
+                self._reference_eval = None
             self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
                                                 daemon=True)
             self._run_thread.start()
@@ -862,7 +877,36 @@ class LiveService:
             finally:
                 with self._lock:
                     if self._session is session and not stop.is_set():
-                        self._state, self._error = "stopped", error
+                        self._finish_run(session, error)
+
+    def _finish_run(self, session: LiveSession, error: str | None) -> None:
+        """Unter self._lock, erst nach dem Abschluss der Laufdateien."""
+        self._state, self._error = 'stopped', error
+        if self._run_reference:
+            self._reference_eval = {'state': 'running'}
+            threading.Thread(target=self._reference_eval_worker, args=(session, self._run_dir),
+                             name='live-reference-eval', daemon=True).start()
+
+    def _reference_eval_worker(self, session: LiveSession, run_dir: Path) -> None:
+        def rows(path):
+            with path.open(encoding='utf-8') as stream:
+                for line in stream:
+                    if line.strip():
+                        yield json.loads(line)
+
+        try:
+            meta = json.loads((run_dir / 'session.json').read_text(encoding='utf-8'))
+            validate_reference_session(meta)
+            reference = list(rows(run_dir / 'reference.jsonl'))
+            counts = evaluate_records(meta, reference, rows(run_dir / 'records.jsonl'))
+            result = {'state': 'done', **{key: counts[key] for key in
+                      ('misreads', 'compared_valid', 'undecided_valid', 'uncovered_valid')}}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            result = {'state': 'error', 'error': f'Abgleich abgelehnt: {exc}'}
+        with self._lock:
+            # Eine neue Einrichtung oder Sitzung entwertet noch laufende Auswertungen.
+            if self._session is session and self._state == 'stopped':
+                self._reference_eval = result
 
     def stop_run(self) -> None:
         with self._operation_lock:
@@ -904,7 +948,7 @@ class LiveService:
                 raise LiveError(error) from exc
         finally:
             with self._lock:
-                self._state, self._error = "stopped", error
+                self._finish_run(session, error)
 
     def close(self) -> None:
         deadline = time.monotonic() + min(DIAGNOSTIC_CLOSE_TIMEOUT_S, 60.0)

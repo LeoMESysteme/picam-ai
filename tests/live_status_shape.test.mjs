@@ -104,3 +104,54 @@ test('exposure rounds and nullable data use the real contract', () => {
   status.setup.exposure.rounds[0] = { level: 124, controls: [] };
   assert.throws(() => assertStatusShape(status), TypeError);
 });
+
+const r19Status = () => {
+  const status = load('running_valid');
+  Object.assign(status.run, { started_at_utc: '2026-11-04T12:00:00+00:00', elapsed_s: 60, ended_at_utc: null });
+  Object.assign(status.reference, {
+    latest: { cell_text: '+ 0.62427', raw: '+00.62427 mV/V', value: .62427, age_s: .1 },
+    schedule_step: { index: 1, factor: 2, since_s: 12 },
+  });
+  status.reference_eval = null;
+  return status;
+};
+for (const [path, wrong] of [
+  ['run.started_at_utc', 42], ['run.elapsed_s', -1], ['run.ended_at_utc', false],
+  ['reference.latest.cell_text', 1], ['reference.latest.raw', null],
+  ['reference.latest.value', '0.62427'], ['reference.latest.age_s', -1],
+  ['reference.schedule_step.index', .5], ['reference.schedule_step.factor', '2'],
+  ['reference.schedule_step.since_s', -1], ['reference_eval', {}],
+]) {
+  test(`run additions reject missing or invalid ${path}`, () => {
+    for (const missing of [true, false]) {
+      const status = r19Status();
+      const keys = path.split('.');
+      const parent = keys.slice(0, -1).reduce((obj, key) => obj[key], status);
+      if (missing) delete parent[keys.at(-1)];
+      else parent[keys.at(-1)] = wrong;
+      assert.throws(() => assertStatusShape(status), TypeError);
+    }
+  });
+}
+test('reference evaluation accepts running, complete counts or error, rejecting incomplete results', () => {
+  const status = r19Status();
+  for (const result of [null, { state: 'running' },
+    { state: 'done', misreads: 0, compared_valid: 2, undecided_valid: 1, uncovered_valid: 0 },
+    { state: 'error', error: 'Abgleich abgelehnt: Testlauf' },
+  ]) {
+    status.reference_eval = result;
+    assert.doesNotThrow(() => assertStatusShape(status));
+  }
+  for (const result of [{ state: 'unknown' }, { state: 'done', misreads: 0 }, { state: 'error' },
+    { state: 'done', misreads: -1, compared_valid: 2, undecided_valid: 1, uncovered_valid: 0 },
+    { state: 'done', misreads: 0, compared_valid: '2', undecided_valid: 1, uncovered_valid: 0 },
+  ]) {
+    status.reference_eval = result;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+});
+test('reference latest and schedule can be null', () => {
+  const status = r19Status();
+  status.reference.latest = status.reference.schedule_step = null;
+  assert.doesNotThrow(() => assertStatusShape(status));
+});
