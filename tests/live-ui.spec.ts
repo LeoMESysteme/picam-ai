@@ -278,3 +278,89 @@ test('Hülle zeigt Titel, Docks und Statusleiste in Szene idle', async ({ page }
   await expect(title.getByRole('button', { name: 'Einrichtung starten', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('Viewer zoomt um den Zeiger und Popover erklärt Rahmenbereich', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+
+  const viewer = page.getByRole('region', { name: 'Bildansicht' });
+  const canvas = viewer.locator('canvas.vcanvas');
+  // Bild und HUD kommen aus demselben MJPEG-Teil.
+  await expect(canvas).toHaveAttribute('data-seq', /^\d+$/);
+  await expect(canvas).toHaveAttribute('data-hud', 'track');
+  const box = (await canvas.boundingBox())!;
+  const toScreen = (point: number[]) => canvas.evaluate((el: any, p) => el.viewer.imageToScreen(p), point);
+  const toImage = (point: number[]) => canvas.evaluate((el: any, p) => el.viewer.screenToImage(p), point);
+
+  // Rahmenbereich 4 (Index 3) liegt im Fake bei 1485, 658.
+  const [rx, ry] = await toScreen([1485, 658]);
+  await page.mouse.move(box.x + rx, box.y + ry);
+  const pop = viewer.locator('.vpop');
+  await expect(pop).toBeVisible();
+  await expect(pop).toContainText('Rahmenbereich 4');
+  await expect(pop).toContainText('Suchfenster-Mitte');
+  await expect(pop).toContainText('1485, 658');
+  await expect(pop).toContainText('Treffer');
+  await expect(pop).toContainText('0,92');
+  await expect(pop).not.toContainText('%');
+
+  // Klick heftet an, Wegbewegen schliesst nicht, Esc schliesst.
+  await page.mouse.click(box.x + rx, box.y + ry);
+  await page.mouse.move(box.x + 20, box.y + box.height - 20);
+  await expect(pop).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(pop).toBeHidden();
+
+  // Mausrad zoomt um den Zeiger: der Bildpunkt darunter bleibt stehen.
+  const zoomLabel = viewer.locator('[data-part="zoom"]');
+  const before = await zoomLabel.textContent();
+  const pointer = [box.width * 0.3, box.height * 0.4];
+  await page.mouse.move(box.x + pointer[0], box.y + pointer[1]);
+  const anchor = await toImage(pointer);
+  await page.mouse.wheel(0, -400);
+  await expect(zoomLabel).not.toHaveText(before!);
+  const moved = await toImage(pointer);
+  expect(Math.hypot(moved[0] - anchor[0], moved[1] - anchor[1])).toBeLessThan(1);
+  expect(Number.parseInt((await zoomLabel.textContent())!, 10)).toBeGreaterThan(Number.parseInt(before!, 10));
+
+  // Einpassen und 1:1 aus der Werkzeugleiste.
+  await viewer.getByRole('button', { name: '1:1' }).click();
+  await expect(zoomLabel).toHaveText('100 %');
+  await viewer.getByRole('button', { name: 'Einpassen' }).click();
+  await expect(zoomLabel).not.toHaveText('100 %');
+
+  // Ebenen einzeln schaltbar; ohne Rahmenbereiche gibt es dort keinen Treffer.
+  await viewer.getByRole('button', { name: 'Ebenen' }).click();
+  const menu = viewer.getByRole('menu');
+  await expect(menu.getByRole('menuitemcheckbox')).toHaveText(
+    ['Anzeige', 'Raster', 'Zellen', 'Rahmenbereiche', 'Fokus-ROI', 'Wert-Etikett']);
+  await menu.getByRole('menuitemcheckbox', { name: 'Rahmenbereiche' }).click();
+  await expect(menu.getByRole('menuitemcheckbox', { name: 'Rahmenbereiche' })).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  const [qx, qy] = await toScreen([1485, 658]);
+  await page.mouse.move(box.x + qx, box.y + qy);
+  await expect(pop).toBeHidden();
+
+  // Legende erklärt die Symbole; Quellen ohne Bild sind gesperrt mit Grund.
+  await viewer.getByRole('button', { name: 'Legende' }).click();
+  await expect(viewer.locator('.legend')).toContainText('Rahmenbereich ohne Treffer');
+  await expect(viewer.getByRole('button', { name: 'Live', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(viewer.getByRole('button', { name: 'Standbild' })).toBeEnabled();
+  // Standbild aus der Einrichtung: eigenes Bild, kein Live-HUD darüber.
+  const still = page.waitForResponse((r) => r.url().includes('/live/setup/overlay_source.png'));
+  await viewer.getByRole('button', { name: 'Standbild' }).click();
+  expect((await still).ok()).toBe(true);
+  await expect(viewer.locator('[data-part="chip"]')).toContainText('Standbild · aus der Einrichtung');
+  await page.mouse.move(box.x + qx, box.y + qy);
+  await expect(pop).toBeHidden();
+  await viewer.getByRole('button', { name: 'Live', exact: true }).click();
+  await expect(viewer.locator('[data-part="chip"]')).toContainText(/Live · \d+ fps/);
+
+  // Gemessene Vorschau-Rate in der Statusleiste.
+  await expect(page.locator('[data-slot="preview-fps"]')).toHaveText(/^\d+ fps$/);
+  expect(errors).toEqual([]);
+});

@@ -115,6 +115,49 @@ body.offline .app{filter:brightness(.5) saturate(.45)}
 /* Mitte: Grafikfenster und Zeitleiste */
 .center{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg0)}
 .viewer-host{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg0);overflow:hidden}
+.sq.sel{background:var(--sel-hi)}.sq.mag{background:var(--mag)}.sq.teal{background:var(--teal)}
+
+/* Viewer: Werkzeugleiste, Grafikfenster, Chips, Legende, Markierungs-Info */
+.vt{height:34px;flex:none;display:flex;align-items:center;gap:2px;padding:0 6px;background:var(--title);border-bottom:1px solid var(--line);min-width:0}
+.vt button{height:26px;padding:0 7px;background:transparent;border-color:transparent;color:var(--tx2);font-size:12px}
+.vt button:hover:not(:disabled){background:var(--ctl-h);color:var(--tx)}
+.vt button[aria-pressed=true],.vt button[aria-expanded=true]{background:var(--sel-bg);border-color:var(--sel-line);color:#d6e4fa}
+.vt .zv{font:12px var(--mono);font-variant-numeric:tabular-nums;min-width:46px;text-align:center;color:var(--tx)}
+.vt .vsep{height:16px;margin:0 5px}
+.vt button .lbl+svg.i{width:10px;height:10px;margin-left:-2px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.vt .seg button{border:0;border-radius:0;height:24px;padding:0 9px;border-right:1px solid var(--line)}
+.vt .seg button:last-child{border-right:0}
+.vt .seg button[aria-pressed=true]{background:var(--sel);color:#fff;border-color:var(--line)}
+.vt .seg button:disabled{background:transparent;color:#6d675f}
+.menuwrap{position:relative}
+.menu{position:absolute;top:30px;left:0;z-index:30;background:#262521;border:1px solid var(--line);border-radius:2px;box-shadow:0 8px 24px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.4);padding:4px 0;min-width:230px}
+.menu .mh{padding:6px 12px 4px;font-size:11.5px;color:var(--tx3)}
+.vt .menu button{display:flex;width:100%;height:28px;justify-content:flex-start;gap:9px;padding:0 12px;border:0;border-radius:0;font-size:12.5px;color:var(--tx)}
+.vt .menu button:hover:not([aria-disabled=true]),.vt .menu button:focus-visible{background:var(--ctl-h);outline:none}
+.vt .menu button[aria-disabled=true]{color:#78726a;cursor:not-allowed}
+.menu .ck{width:13px;height:13px;flex:none;border:1px solid #6c665e;border-radius:2px;background:#141311;display:grid;place-items:center}
+.menu [aria-checked=true] .ck{background:var(--sel);border-color:#5582c6}
+.menu [aria-checked=true] .ck::after{content:"";width:6px;height:3px;border:solid #fff;border-width:0 0 1.5px 1.5px;transform:translateY(-1px) rotate(-45deg)}
+.vstage{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--bg0);cursor:grab}
+.vstage.drag{cursor:grabbing}
+.vcanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.vchip{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:7px;background:rgba(20,19,17,.86);border:1px solid var(--line);border-radius:2px;padding:3px 8px;font-size:12px;color:var(--tx2);pointer-events:none;white-space:nowrap}
+.vchip b{color:var(--tx);font-weight:500}
+.vchip.coordc{left:auto;right:10px;font:12px var(--mono);font-variant-numeric:tabular-nums;color:var(--tx2)}
+.vchip:empty{display:none}
+.legend{position:absolute;left:10px;bottom:10px;z-index:10;background:rgba(24,23,21,.94);border:1px solid var(--line);border-radius:2px;padding:6px 0;font-size:12px;min-width:252px}
+.legend .lh{padding:0 10px 4px;color:var(--tx3);font-size:11.5px}
+.legend div.r{display:flex;align-items:center;gap:9px;padding:2px 10px;color:var(--tx2)}
+.legend svg{width:22px;height:12px;flex:none}
+.popover.vpop{top:auto;right:auto;width:auto;min-width:190px;max-width:320px;z-index:20;pointer-events:none;background:#272622;border-color:#47443e;box-shadow:0 8px 22px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.4);padding:7px 10px 8px;font-size:12px}
+.popover.vpop.pinned{border-color:var(--sel-line)}
+.vpop .ph{font-weight:600;color:var(--tx);margin-bottom:4px;display:flex;align-items:center;gap:7px;font-size:12.5px}
+.vpop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0}
+.vpop dt{color:var(--tx3)}
+.vpop dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--tx)}
+.vpop dd.t{font-family:var(--sans)}
+.vpop .hint{margin-top:5px;color:var(--tx3);font-size:11.5px}
 .strip{height:118px;flex:none;display:flex;flex-direction:column;background:var(--dock);border-top:1px solid var(--line)}
 .strip .pt{border-bottom:1px solid var(--line2)}
 

@@ -1,9 +1,10 @@
 // Einstieg der Live-Seite /live: Huelle aufbauen, Status abrufen, rendern.
 // Entscheidungen fallen im Server (dispread.live), nie hier. Die Ansichten
-// fuer Viewer, Einrichtung, Lauf, Effekte und Einarbeitung kommen in eigenen
-// Modulen dazu; bis dahin zeigt die Huelle Ablauf, Inspektorrahmen und
-// Statusleiste.
+// fuer Einrichtung, Lauf, Effekte und Einarbeitung kommen in eigenen
+// Modulen dazu; der Viewer zeigt den MJPEG-Strom mit HUD.
 import {createClient} from './api.js';
+import {openPreview} from './mjpeg.js';
+import {mountViewer} from './viewer/view.js';
 import {cameraView, stepRows} from './model.js';
 import {dec, esc, mountShell, renderStatusbar, renderTitle} from './shell.js';
 
@@ -149,7 +150,9 @@ function renderTimeline(host) {
 if (typeof document !== 'undefined') {
   const root = document.getElementById('root');
   const nodes = mountShell(root);
+  const viewerUi = mountViewer(nodes.viewerHost, {statusbar: nodes.statusbar});
   const client = createClient();
+  let hudProc = null;
   const ui = {busy: false, error: null, tab: {setup: null, run: null}, render: () => render()};
   let status = null;
   let conn = null;
@@ -176,8 +179,26 @@ if (typeof document !== 'undefined') {
     renderLeftDock(nodes.leftDock, status, conn);
     renderInspector(nodes.inspector, status, ui);
     renderTimeline(nodes.timeline);
-    renderStatusbar(status, null);
+    renderStatusbar(status, hudProc);
+    viewerUi.setStatus(status);
   }
+
+  // Vorschau nur bei sichtbarer Seite: ein Hintergrund-Tab kostet den Pi keine Kodierung.
+  let preview = null;
+  const startPreview = () => {
+    if (preview) return;
+    preview = new AbortController();
+    openPreview('/live/preview.mjpg', ({bitmap, hud}) => {
+      hudProc = hud?.proc || null;
+      viewerUi.setFrame(bitmap, hud);
+    }, preview.signal, {onState: viewerUi.setStream});
+  };
+  const stopPreview = () => {
+    preview?.abort();
+    preview = null;
+  };
+  document.addEventListener('visibilitychange', () => (document.hidden ? stopPreview() : startPreview()));
+  if (!document.hidden) startPreview();
 
   client.start((next) => {
     status = next;

@@ -11,6 +11,11 @@ const ICONS = `<svg class="sprite" aria-hidden="true" focusable="false"><defs>
 <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8"/></symbol>
 <symbol id="i-flag" viewBox="0 0 16 16"><path d="M4 14V2.5M4 3h8l-1.8 3L12 9H4"/></symbol>
 <symbol id="i-redo" viewBox="0 0 16 16"><path d="M12.5 4.5v3h-3"/><path d="M12.3 7.3A5 5 0 1 0 13 10"/></symbol>
+<symbol id="i-zm" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/></symbol>
+<symbol id="i-zp" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4M7 5v4"/></symbol>
+<symbol id="i-fit" viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></symbol>
+<symbol id="i-lay" viewBox="0 0 16 16"><path d="M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.2l5.5 3 5.5-3M2.5 10.8l5.5 3 5.5-3"/></symbol>
+<symbol id="i-lg" viewBox="0 0 16 16"><path d="M6 4.5h7.5M6 8h7.5M6 11.5h7.5"/><rect x="2.5" y="3.5" width="2" height="2"/><rect x="2.5" y="7" width="2" height="2"/><rect x="2.5" y="10.5" width="2" height="2"/></symbol>
 </defs></svg>`;
 
 const TEMPLATE = `${ICONS}

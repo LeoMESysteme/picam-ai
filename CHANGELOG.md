@@ -5,6 +5,27 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Das Grafikfenster der neuen Live-Seite war leer. Jetzt
+  liest der Viewer den MJPEG-Strom `/live/preview.mjpg` per `fetch()`
+  (`mjpeg.js`: Teile über Chunk-Grenzen zerlegen, Content-Length gilt,
+  Neuverbindung nach 0,5 s bis 5 s) und zeichnet Bild und HUD aus
+  demselben Teil auf einer Canvas mit 1-px-Linien in Kamerabild-
+  Koordinaten: Anzeige-Viereck in der Statusfarbe (Teal bei Korrektur),
+  Raster mit 16 gleichen Zellen, unsichere Zellen getönt, Rahmenbereiche
+  in Magenta bzw. ohne Treffer rot mit Suchfenster, Wert-Etikett mit
+  Wert, Status und Spur (älter als 0,5 s oder Bild älter als 1,5 s:
+  Veraltet). Mausrad zoomt um den Zeiger, Ziehen verschiebt,
+  Werkzeugleiste mit −/+, Prozent, 1:1 (ein Bildpunkt je Gerätepixel) und
+  Einpassen, Ebenen-Menü, Legende und Quellen Live, Standbild,
+  Abtastbild und Entzerrt aus `setup.overlays`. Zeigen auf eine
+  Markierung öffnet eine Info nur mit Zahlen aus dem HUD
+  („Rahmenbereich 4 · Suchfenster-Mitte 1485, 658 · Treffer 0,92“,
+  „Zelle 8 · Bestwert 7 · Abstand 0,41 · unsicher“), Klicken heftet sie
+  an. Die Statusleiste zeigt die gemessene Vorschau-Rate und den Grund
+  einer Drosselung; ein Hintergrund-Tab hält keinen Strom offen. Die
+  Lage der Fokus-ROI meldet der Server noch nicht, die Ebene ist daher
+  gesperrt.
+
 * 2026-11-04: Auf der neuen Live-Seite fettete der Browser Überschriften
   künstlich, weil Noto Sans nur in Regular vorlag. Jetzt liegen die
   offiziellen Schnitte 400/500/600/700 und Noto Sans Mono 400/700 als
