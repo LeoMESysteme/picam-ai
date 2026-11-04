@@ -4,7 +4,7 @@
 // (readoutTag), damit beide nie auseinanderlaufen. Wahrheitsregeln: Veraltet
 // erscheint grau und durchgestrichen, Unlesbar als "Kein Wert", im Testlauf
 // nie ein Wert, Konfidenz heisst "Spur".
-import {FRAME_MAX_AGE_S, readoutTag} from '../viewer/hud.js';
+import {FRAME_MAX_AGE_S, VALUE_MAX_AGE_S, readoutTag} from '../viewer/hud.js';
 
 const META = {
   valid: {cls: 'V', word: 'Freigegeben', code: 'VALID'},
@@ -23,13 +23,20 @@ function ageText(s) {
   return s < 1 ? `${Math.round(s * 1000)} ms` : `${dec(s, 1)} s`;
 }
 
-// Neuester Referenztext, falls der Status ihn traegt (reference.latest wie
-// ReferenceRecorder.latest(): {raw, cell_text, value}); sonst "–".
+// Neuester Referenztext (reference.latest = {cell_text, raw, value, age_s}); sonst "–".
 export function referenceText(reference) {
-  if (!reference?.enabled) return '–';
-  const latest = reference.latest;
-  if (typeof latest === 'string') return latest;
+  const latest = reference?.enabled ? reference.latest : null;
   return latest?.cell_text ?? latest?.raw ?? '–';
+}
+
+// Referenz mit Alter; aelter als 0,5 s (oder Statusabruf verloren) ist sie
+// veraltet wie der Pruefling-Wert (Wahrheitsregel 1). Die Referenz darf auch
+// im Testlauf erscheinen: sie ist kein freigegebener Pruefling-Wert.
+export function referenceModel(reference, {offline = false} = {}) {
+  const latest = reference?.enabled ? reference.latest : null;
+  if (!latest) return {text: '–', age: '', stale: false};
+  const age = latest.age_s;
+  return {text: referenceText(reference), age: ageText(age), stale: offline || !finite(age) || age > VALUE_MAX_AGE_S};
 }
 
 // Reines Modell der Anzeige. hudRec = X-Hud.rec des gezeigten Bilds (oder
@@ -39,20 +46,20 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   const run = status?.run || {};
   const latest = run.latest || null;
   const testRun = Boolean(status?.test_run);
-  const base = {refText: referenceText(status?.reference), spur: finite(track?.score) ? dec(track.score, 2) : '–',
+  const base = {ref: referenceModel(status?.reference, {offline}), spur: finite(track?.score) ? dec(track.score, 2) : '–',
     seq: hudRec?.seq ?? latest?.frame_sequence ?? null};
   if (status?.state === 'stopped') {
     return {...base, cls: 'X', word: 'Lauf beendet', code: '', value: '–', unit: '', struck: false,
       sub: 'Kein Wert freigegeben: Lauf gestoppt.', subErr: false, age: '–', spur: '–'};
   }
   let key = null;
-  if (hudRec) key = TONE_KEY[readoutTag({rec: hudRec, track}, {frameAgeS})?.tone] || 'unreadable';
-  else if (latest) key = META[view?.cls] ? view.cls : 'unreadable';
+  // Dieselbe Regel und dieselben Eingaben wie das Wert-Etikett im HUD (auch offline).
+  if (hudRec) key = TONE_KEY[readoutTag({rec: hudRec, track}, {frameAgeS, offline})?.tone] || 'unreadable';
+  else if (latest) key = offline ? 'stale' : META[view?.cls] ? view.cls : 'unreadable';
   if (!key) {
     return {...base, cls: 'X', word: view?.headline || 'Lauf startet …', code: '', value: '–', unit: '',
       struck: false, sub: '', subErr: false, age: '–'};
   }
-  if (offline && key !== 'unreadable') key = 'stale';
   // Im Testlauf gibt es keine Freigabe (Wahrheitsregel 2).
   const withheld = testRun && key === 'valid';
   if (withheld) key = 'unreadable';
@@ -72,8 +79,10 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   // Text wie statusView fuer diesen Fall.
   if (testRun && (key === 'stale' || withheld || reasons.includes('testlauf_keine_freigabe'))) {
     sub = 'Testlauf: keine Wertfreigabe';
+  } else if (key === 'valid') {
+    // "Bild N" steht schon im Raster darunter; nur ein Toleranzhinweis bleibt.
+    sub = key === view?.cls ? (view.detail || '').replace(/(?:^| · )Bild \d+$/, '') : '';
   } else if (key === view?.cls && view.detail) sub = view.detail;
-  else if (key === 'valid') sub = base.seq == null ? '' : `Bild ${base.seq}`;
   else if (key === 'transition') sub = 'Wert wechselt';
   else if (key === 'unreadable') {
     sub = reasons.map((reason) => {
@@ -94,24 +103,24 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
     subErr: key === 'unreadable' && !testRun, age: ageText(age)};
 }
 
-const pad2 = (n) => String(n).padStart(2, '0');
-
 // Zeichnet die Anzeige in host (.judge der Huelle); nur im Lauf und danach sichtbar.
 export function renderResult(host, view, status, hudRec, opts = {}) {
   const visible = ['running', 'stopped'].includes(status?.state);
   host.hidden = !visible;
   if (!visible) return null;
   const model = resultModel(status, view, hudRec, opts);
-  const d = new Date();
-  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   const numeric = model.cls === 'V' || (model.cls === 'S' && model.value !== '–');
   for (const cls of ['V', 'T', 'U', 'S', 'X']) host.classList.toggle(cls, model.cls === cls);
-  const html = `<div class="jh"><span class="jw">${esc(model.word)}</span><span class="code">${esc(model.code)}</span>` +
-    `<span class="tm">${model.cls === 'X' ? '' : time}</span></div>` +
+  // Keine Uhrzeit im Kopf: eine laufende Browseruhr neben einem alten Wert taeuscht Frische vor.
+  const ref = model.ref;
+  const html = `<div class="jh"><span class="jw">${esc(model.word)}</span><span class="code">${esc(model.code)}</span></div>` +
     `<div class="jb"><div class="jv"><span class="num${numeric ? ' mono' : ' word'}${model.struck ? ' struck' : ''}">` +
     `${esc(model.value)}</span><span class="unit">${esc(model.unit)}</span></div>` +
     `<div class="jsub${model.subErr ? ' err' : ''}">${esc(model.sub)}</div>` +
-    `<dl class="jref"><dt>Referenz</dt><dd>${esc(model.refText)}</dd><dt>Spur</dt><dd>${esc(model.spur)}</dd>` +
+    `<dl class="jref"><dt>Referenz</dt><dd class="wide"><span class="ref${ref.stale ? ' struck' : ''}"` +
+    `${ref.stale ? ' title="Referenz veraltet"' : ''}>${esc(ref.text)}</span>` +
+    `${ref.age ? ` <span class="age${ref.stale ? ' stale' : ''}">${esc(ref.age)}</span>` : ''}</dd>` +
+    `<dt>Spur</dt><dd>${esc(model.spur)}</dd>` +
     `<dt>Alter</dt><dd>${esc(model.age)}</dd><dt>Bild</dt><dd>${esc(model.seq ?? '–')}</dd></dl></div>`;
   if (host._html !== html) { host._html = html; host.innerHTML = html; }
   return model;

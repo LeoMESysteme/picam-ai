@@ -696,6 +696,14 @@ test('Ergebnis zeigt Veraltet durchgestrichen', async ({ page }) => {
   await expect(value).toHaveCSS('text-decoration-line', 'line-through');
   await expect(judge).not.toContainText('Freigegeben');
   await expect(judge).toContainText('kein neues Kamerabild');
+  // Keine Browseruhr im Kopf neben einem alten Wert; "Bild N" steht nur einmal da.
+  await expect(judge.locator('.jh')).toHaveText(/^\s*Veraltet\s*STALE\s*$/);
+  await expect(judge).toContainText('Bild');
+  expect((await judge.textContent())!.match(/Bild/g)!.length).toBe(1);
+  // Referenz mit Alter, frisch (0,1 s) also nicht durchgestrichen.
+  await expect(judge.locator('.jref .ref')).toHaveText('+ 0.62427');
+  await expect(judge.locator('.jref .age')).toHaveText('100 ms');
+  await expect(judge.locator('.jref .ref')).not.toHaveCSS('text-decoration-line', 'line-through');
   // Fehllesungen gibt es erst nach Laufende (Spec OP-1).
   const left = page.getByRole('complementary', { name: 'Ablauf' });
   await expect(left).toContainText('Fehllesungen gegen Referenz');
@@ -715,13 +723,16 @@ test('Testlauf zeigt nie einen Wert', async ({ page }) => {
   await expect(judge.locator('.jh')).toContainText('UNREADABLE');
   await expect(judge.locator('.jv .num')).toHaveText('Kein Wert');
   await expect(judge).toContainText('Testlauf: keine Wertfreigabe');
-  // Ueber mehrere Bilder und Statusabrufe: nirgends rechts ein Wert.
-  const right = page.getByRole('complementary', { name: 'Inspektor' });
+  // Ueber mehrere Bilder und Statusabrufe: nie ein Pruefling-Wert (Wertfeld,
+  // Grundzeile, Datensaetze). Die Referenz darf stehen; sie ist kein freigegebener Wert.
+  const records = page.locator('.inspector');
   for (let i = 0; i < 6; i++) {
-    await expect(judge).not.toContainText('0.62427');
-    await expect(right).not.toContainText('0.62427');
+    await expect(judge.locator('.jv')).not.toContainText('0.62427');
+    await expect(judge.locator('.jsub')).not.toContainText('0.62427');
+    await expect(records).not.toContainText('0.62427');
     await page.waitForTimeout(250);
   }
+  await expect(judge.locator('.jref')).toContainText('+ 0.62427');
   await expect(page.locator('.strip')).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -735,6 +746,12 @@ test('Neuladen füllt die Zeitleiste aus run.recent', async ({ page }) => {
   const strip = page.getByRole('region', { name: 'Zeitleiste' });
   await expect(strip).toContainText('letzte 40 s');
   await expect.poll(() => coloredColumns(page), { timeout: 5000 }).toBeGreaterThanOrEqual(100);
+  // Werteplan-Schritt aus reference.schedule_step, zurueckdatiert um since_s (12 s).
+  const marks = () => strip.locator('canvas').evaluate((el: any) =>
+    el.timeline.layout(el.clientWidth).marks.map((m: any) => m.label));
+  await expect.poll(marks).toEqual(['set norm 2']);
+  await page.waitForTimeout(1200);
+  expect(await marks()).toEqual(['set norm 2']); // einmal je Schritt, nicht je Abruf
   // Stillstand: die Luecke bis "jetzt" bleibt frei, der letzte Eimer rutscht nicht an den Rand.
   await hook(page, '/test/scene', { name: 'running_stalled' });
   await expect.poll(() => strip.locator('canvas').evaluate((el: any) => {
@@ -804,6 +821,11 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   // Ereignis markieren: Text geht an den Server, Marke erscheint.
   await title.getByRole('button', { name: 'Ereignis markieren' }).click();
   const markPop = page.getByRole('dialog', { name: 'Ereignis markieren' });
+  // Leer geht wie auf der alten Seite an den Server; dessen Antwort steht woertlich da.
+  const empty = page.waitForRequest('**/live/run/mark');
+  await markPop.getByLabel('Ereignis (Meldezeit des Bedieners):').press('Enter');
+  expect((await empty).postDataJSON()).toEqual({ text: '' });
+  await expect(markPop.getByRole('alert')).toHaveText('Ereignismarke braucht 1 bis 200 Zeichen');
   await markPop.getByLabel('Ereignis (Meldezeit des Bedieners):').fill('Display abgedeckt');
   const mark = page.waitForRequest('**/live/run/mark');
   await page.keyboard.press('Enter');
@@ -811,7 +833,8 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   await expect(markPop).toBeHidden();
   await expect.poll(() => page.locator('.strip canvas').evaluate((el: any) =>
     el.timeline.layout(el.clientWidth).marks.map((m: any) => m.label))).toContain('Display abgedeckt');
-  expect(errors).toEqual([]);
+  // Einzige erwartete Konsolenmeldung: die 409-Antwort auf die leere Marke.
+  expect(errors).toEqual(['Failed to load resource: the server responded with a status of 409 (Conflict)']);
 });
 
 test('Dialog hält den Fokus, Esc wählt die Esc-Aktion, Fokus kehrt zurück', async ({ page }) => {
@@ -847,6 +870,34 @@ test('Dialog hält den Fokus, Esc wählt die Esc-Aktion, Fokus kehrt zurück', a
   await expect(opener).toBeFocused();
   expect(await inert()).toBe(false);
 
+  // Vor dem Zeigen geschlossen: loest mit dem Wert auf, baut nichts auf, kein Tastatur-Haken bleibt.
+  const cdp = await page.context().newCDPSession(page);
+  const keydownListeners = async () => {
+    const { result } = await cdp.send('Runtime.evaluate', { expression: 'document' });
+    const { listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId! });
+    return listeners.filter((l: any) => l.type === 'keydown').length;
+  };
+  const before = await keydownListeners();
+  expect(await page.evaluate(async () => {
+    const { openModal } = await import('/static/live/ui/modal.js');
+    const pending = openModal({ title: 'Früh geschlossen', text: 'x',
+      actions: [{ label: 'OK', value: 1, escape: true }] });
+    pending.close('x');
+    return pending;
+  })).toBe('x');
+  await expect(page.locator('.modalbg')).toHaveCount(0);
+  expect(await inert()).toBe(false);
+  expect(await keydownListeners()).toBe(before);
+  // Esc und Tab wirken danach wieder auf der Seite.
+  await opener.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Zellentext angeben' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  const cellPop = page.getByRole('dialog', { name: 'Zellentext' });
+  await expect(cellPop).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(cellPop).toBeHidden();
+
   // Ohne Esc-Aktion schliesst Esc nicht; ein Knopf liefert seinen Wert.
   await page.evaluate(async () => {
     const { openModal } = await import('/static/live/ui/modal.js');
@@ -874,8 +925,44 @@ test('Lauf beendet: Zusammenfassung, Fehllesungen erst nach Laufende', async ({ 
   await expect(left).toContainText('Lauf beendet');
   await expect(left).toContainText('Fehllesungen gegen Referenz');
   await expect(left).not.toContainText('Abgleich nach Laufende');
+  await expect(left.locator('.kv').first()).toContainText('Gestartet');
+  await expect(left.locator('.kv').first()).toContainText('00:01:00');
+  for (const text of ['Verglichen', '842', 'Nicht entscheidbar (Wechsel)', 'Ohne Referenz']) {
+    await expect(left).toContainText(text);
+  }
+  await expect(left).not.toContainText('reference_eval');
+  // Referenz 12 s alt: veraltet wie ein Pruefling-Wert.
+  await expect(judge.locator('.jref .ref')).toHaveCSS('text-decoration-line', 'line-through');
   await expect(left).toContainText('bediener');
   await expect(left).toContainText('run-01');
   await expect(page.getByRole('banner').getByRole('button', { name: 'Neu einrichten' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Verbindung verloren: Etikett und Ergebnis veraltet, obwohl Bilder kommen', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Freigegeben');
+  const canvas = page.locator('canvas.vcanvas');
+  await expect.poll(() => canvas.evaluate((el: any) => el.viewer.tagWord())).toBe('Freigegeben');
+  // Nur /live/status bleibt aus, der Bildstrom laeuft weiter.
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const offline = (on: boolean) => page.request.post('/test/offline', {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf }, data: { on } });
+  expect((await offline(true)).ok()).toBe(true);
+  try {
+    await expect(judge.locator('.jh')).toContainText('Veraltet', { timeout: 5000 });
+    expect(await canvas.evaluate((el: any) => el.viewer.tagWord())).toBe('Veraltet');
+    const seq = await canvas.getAttribute('data-seq');
+    await expect.poll(() => canvas.getAttribute('data-seq')).not.toBe(seq);
+    expect(await canvas.evaluate((el: any) => el.viewer.tagWord())).toBe('Veraltet');
+    await expect(judge.locator('.jref .ref')).toHaveCSS('text-decoration-line', 'line-through');
+  } finally {
+    expect((await offline(false)).ok()).toBe(true);
+  }
+  await expect(judge.locator('.jh')).toContainText('Freigegeben', { timeout: 5000 });
   expect(errors).toEqual([]);
 });

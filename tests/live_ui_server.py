@@ -334,6 +334,11 @@ class FakeLiveService:
                 apply_test_run(self._status)
 
     def mark(self, text):
+        from dispread.live.service import LiveError
+
+        # Wie session.mark (ValueError) bzw. LiveService.mark (LiveError).
+        if not isinstance(text, str) or not text.strip() or len(text) > 200:
+            raise LiveError('Ereignismarke braucht 1 bis 200 Zeichen')
         with self._lock:
             # Wie session.mark: Meldezeit beim Eingang, fortlaufende Nummer.
             number = (self._status.get('last_mark') or {}).get('number', 0) + 1

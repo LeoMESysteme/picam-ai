@@ -156,7 +156,8 @@ export function mountMarkPopover(host, client, {onMarked = () => {}, onError = (
   let busy = false;
   const send = async () => {
     const text = part('text').value;
-    if (busy || !text.trim()) return;
+    // Wie die alte Seite: auch ein leerer Text geht an den Server, dessen Antwort steht woertlich da.
+    if (busy) return;
     busy = true;
     part('send').disabled = true;
     const result = await client.post('/live/run/mark', {text});

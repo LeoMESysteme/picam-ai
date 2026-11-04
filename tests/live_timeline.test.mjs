@@ -3,10 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {BUCKET_MS, VIEW_MS, createTimeline, layoutTimeline, valueTrace}
+import {BUCKET_MS, VIEW_MS, createTimeline, layoutTimeline, placeMarkLabel, valueTrace}
   from '../src/dispread/workbench/static/live/run/timeline.js';
 import {resultModel} from '../src/dispread/workbench/static/live/run/result.js';
 import {statusView} from '../src/dispread/workbench/static/live/model.js';
+import {readoutTag} from '../src/dispread/workbench/static/live/viewer/hud.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
 const points = (runs) => runs.flat();
@@ -95,6 +96,18 @@ test('marks appear at their time and fall out of the window', () => {
   assert.equal(layout.marks.length, 0);
 });
 
+test('mark labels flip away from the right edge and from value labels', () => {
+  assert.equal(placeMarkLabel(100, 50, 800).align, 'left');
+  assert.equal(placeMarkLabel(770, 50, 800).align, 'right');
+  // "Stillstand" rechts neben einer Marke wuerde die Wertbeschriftung oben rechts treffen.
+  const valueLabel = {x0: 700, x1: 788, y0: 4, y1: 15};
+  const place = placeMarkLabel(660, 50, 800, [valueLabel]);
+  assert.equal(place.align, 'right');
+  assert.ok(place.x1 <= valueLabel.x0);
+  // Liegt die Wertbeschriftung tiefer, bleibt die Marke rechts.
+  assert.equal(placeMarkLabel(660, 50, 800, [{...valueLabel, y0: 16, y1: 27}]).align, 'left');
+});
+
 test('layoutTimeline scales released values only and keeps zero on the axis', () => {
   const layout = layoutTimeline([[0, 'v', 0.62427], [250, 'u', 99], [500, 'v', 1.24855]], [],
     {nowMs: 750, width: 800});
@@ -144,11 +157,37 @@ test('result never shows a value in a test run', () => {
   for (const rec of [hudRec(status), {...hudRec(status), status: 'stale', age_s: 3}, null]) {
     const model = resultModel(status, statusView(status), rec, {frameAgeS: rec?.age_s > 1 ? 2 : 0});
     assert.notEqual(model.cls, 'V');
-    assert.ok(!JSON.stringify(model).includes('0.62427'), JSON.stringify(model));
+    // Der Pruefling-Wert erscheint nie; die Referenz darf stehen (sie ist kein freigegebener Wert).
+    for (const field of ['value', 'unit', 'sub', 'word']) {
+      assert.ok(!String(model[field]).includes('0.62427'), `${field}: ${model[field]}`);
+    }
   }
   const model = resultModel(status, statusView(status), hudRec(status));
   assert.equal(model.code, 'UNREADABLE');
   assert.equal(model.value, 'Kein Wert');
+});
+
+test('result shows the reference with its age and marks it stale after 0,5 s', () => {
+  const status = load('running_valid');
+  let model = resultModel(status, statusView(status), hudRec(status));
+  assert.deepEqual(model.ref, {text: '+ 0.62427', age: '100 ms', stale: false});
+  const old = {...status, reference: {...status.reference, latest: {...status.reference.latest, age_s: 0.8}}};
+  model = resultModel(old, statusView(old), hudRec(old));
+  assert.equal(model.ref.stale, true);
+  assert.equal(resultModel(status, statusView(status), hudRec(status), {offline: true}).ref.stale, true);
+  const none = {...status, reference: {enabled: false, reason: 'vom Bediener deaktiviert', latest: null}};
+  assert.deepEqual(resultModel(none, statusView(none), hudRec(none)).ref, {text: '–', age: '', stale: false});
+});
+
+test('result: valid shows no duplicate frame number; offline uses the same tag rule as the HUD', () => {
+  const status = load('running_valid');
+  const model = resultModel(status, statusView(status), hudRec(status));
+  assert.ok(!model.sub.includes('Bild'), model.sub);
+  assert.equal(model.seq, 51233);
+  // Unlesbar und offline: wie das Etikett (readoutTag mit offline) Veraltet.
+  const lost = load('running_rahmen_verdeckt');
+  assert.equal(resultModel(lost, statusView(lost), hudRec(lost), {offline: true}).cls, 'S');
+  assert.equal(readoutTag({rec: hudRec(lost)}, {offline: true}).word, 'Veraltet');
 });
 
 test('result: unreadable says Kein Wert, transition never shows digits, stopped ends the run', () => {
@@ -164,4 +203,24 @@ test('result: unreadable says Kein Wert, transition never shows digits, stopped 
   const end = resultModel(stopped, statusView(stopped), null);
   assert.equal(end.cls, 'X');
   assert.equal(end.word, 'Lauf beendet');
+});
+
+// ---------------------------------------------------------------------------
+// Abgleich gegen die Referenz: im Lauf nie Zahlen (OP-1), danach aus reference_eval.
+// ---------------------------------------------------------------------------
+test('comparison rows follow reference_eval only after the run', async () => {
+  const {comparisonRows, hms, planText} = await import('../src/dispread/workbench/static/live/run/dock.js');
+  const running = load('running_valid');
+  assert.deepEqual(comparisonRows({...running, reference_eval: {state: 'done', misreads: 3}}).map((r) => r[1]),
+    ['Abgleich nach Laufende']);
+  const stopped = load('stopped');
+  assert.deepEqual(comparisonRows(stopped).map((r) => r.slice(0, 2)), [['Fehllesungen gegen Referenz', '0'],
+    ['Verglichen', '842'], ['Nicht entscheidbar (Wechsel)', '0'], ['Ohne Referenz', '0']]);
+  assert.equal(comparisonRows({...stopped, reference_eval: {state: 'running'}})[0][1], 'Abgleich läuft …');
+  const error = 'Abgleich abgelehnt: Referenzdatei fehlt';
+  assert.deepEqual(comparisonRows({...stopped, reference_eval: {state: 'error', error}})[0].slice(1, 3), [error, 'err-t']);
+  assert.equal(comparisonRows({...stopped, reference_eval: null})[0][1], '–');
+  assert.equal(hms(3725.9), '01:02:05');
+  assert.equal(planText(stopped.reference), 'set norm 2 (Schritt 2)');
+  assert.equal(planText({norm_schedule: [[1, 20], [2, 20]], schedule_step: null}), '1:20, 2:20');
 });

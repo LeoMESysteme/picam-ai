@@ -98,12 +98,13 @@ const regionsOf = (hud) => (Array.isArray(hud?.track?.regions) ? hud.track.regio
 // Kodierzeit). Eine Leser-Vermutung erscheint hier nie.
 export const VALUE_MAX_AGE_S = 0.5;
 export const FRAME_MAX_AGE_S = 1.5;
-export function readoutTag(hud, {frameAgeS = 0} = {}) {
+// offline: Statusabruf verloren (connectionLost) - dann ist nichts freigegeben.
+export function readoutTag(hud, {frameAgeS = 0, offline = false} = {}) {
   const rec = hud?.rec;
   if (!rec) return null;
   let status = STATUS[rec.status] ? rec.status : 'unreadable';
   const fresh = finite(rec.age_s) && rec.age_s + Math.max(0, frameAgeS) <= VALUE_MAX_AGE_S;
-  if ((status === 'valid' && !fresh) || frameAgeS > FRAME_MAX_AGE_S) status = 'stale';
+  if ((status === 'valid' && !fresh) || frameAgeS > FRAME_MAX_AGE_S || offline) status = 'stale';
   const [word, tone] = STATUS[status];
   const value = status === 'valid' ? `${rec.text} ${rec.unit || ''}`.trim()
     : status === 'transition' ? 'Wert wechselt' : status === 'stale' ? 'veraltet' : 'kein Wert';
@@ -287,7 +288,7 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
   const dpr = view.dpr || 1;
   const hover = view.hover || null;
   const track = hud.track || null;
-  const tag = readoutTag(hud, {frameAgeS: view.frameAgeS || 0});
+  const tag = readoutTag(hud, {frameAgeS: view.frameAgeS || 0, offline: Boolean(view.offline)});
   const quad = validQuad(track?.quad) ? track.quad : null;
   ctx.save();
   ctx.lineJoin = 'miter';

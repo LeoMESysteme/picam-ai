@@ -23,22 +23,47 @@ export function scheduleText(schedule) {
   return schedule.map(([factor, seconds]) => `${factor}:${seconds}`).join(', ');
 }
 
-// Fehllesungen: erst nach Laufende, aus der bestehenden Auswertung, falls
-// der Status sie traegt (reference_eval); sonst ehrlich "–".
-export function misreadText(status) {
-  if (status?.state !== 'stopped') return {text: 'Abgleich nach Laufende', cls: 'mut', mono: false};
-  const misreads = status?.reference_eval?.misreads;
-  if (!finite(misreads)) {
-    return {text: '–', cls: 'mut', mono: true, title: 'Auswertung (reference_eval) liegt im Status nicht vor'};
-  }
-  return {text: grp(misreads), cls: misreads === 0 ? 'ok-t' : 'err-t', mono: true};
+// Abgleich gegen die Referenz (Spec OP-1): im Lauf nur "Abgleich nach
+// Laufende"; danach aus reference_eval: laeuft, fertig mit Zahlen, Fehler
+// woertlich. Zeilen [Bezeichnung, Text, Klasse, mono].
+export function comparisonRows(status) {
+  const label = 'Fehllesungen gegen Referenz';
+  if (status?.state !== 'stopped') return [[label, 'Abgleich nach Laufende', 'mut', false]];
+  const result = status?.reference_eval;
+  if (result?.state === 'running') return [[label, 'Abgleich läuft …', 'mut', false]];
+  if (result?.state === 'error') return [[label, result.error || '–', 'err-t', false]];
+  if (result?.state !== 'done') return [[label, '–', 'mut', true]];
+  const n = (x) => (finite(x) ? grp(x) : '–');
+  return [[label, n(result.misreads), result.misreads === 0 ? 'ok-t' : 'err-t', true],
+    ['Verglichen', n(result.compared_valid), '', true],
+    ['Nicht entscheidbar (Wechsel)', n(result.undecided_valid), '', true],
+    ['Ohne Referenz', n(result.uncovered_valid), '', true]];
+}
+
+const pad2 = (x) => String(x).padStart(2, '0');
+// Uhrzeit des Laufstarts im Browser (Ortszeit) aus started_at_utc.
+export function clockOf(utc) {
+  const d = new Date(utc);
+  return Number.isNaN(d.getTime()) ? '–' : `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+export function hms(seconds) {
+  if (!finite(seconds)) return '–';
+  const s = Math.floor(seconds);
+  return `${pad2(Math.floor(s / 3600))}:${pad2(Math.floor((s % 3600) / 60))}:${pad2(s % 60)}`;
+}
+
+// Werteplan mit laufendem Schritt (reference.schedule_step, index ab 0).
+export function planText(reference) {
+  const step = reference?.schedule_step;
+  const plan = scheduleText(reference?.norm_schedule);
+  return step ? `set norm ${step.factor} (Schritt ${step.index + 1})` : plan;
 }
 
 export function referenceLine(reference) {
   // Texte aus static/live.js (woertlich).
   if (reference?.restoring) return 'Werte werden zurückgestellt …';
   if (reference?.error) return reference.error;
-  if (reference?.enabled) return `Referenz: ${reference.lines} Telegramme`;
+  if (reference?.enabled) return `Referenz: ${finite(reference.lines) ? grp(reference.lines) : '–'} Telegramme`;
   return `ohne Referenz: ${reference?.reason || 'nicht gestartet'}`;
 }
 
@@ -48,13 +73,15 @@ export function runDockHTML(status, {resultCls = 'X'} = {}) {
   const counts = run.counts || {};
   const total = STATUS_ROWS.reduce((sum, [key]) => sum + (finite(counts[key]) ? counts[key] : 0), 0);
   const stopped = status?.state === 'stopped';
+  const elapsed = finite(run.elapsed_s) ? run.elapsed_s : null;
   const head = stopped
     ? `<div class="endbox"><b>Lauf beendet</b>${summary.end_reason
       ? `<span>Endgrund <span class="mono">${esc(summary.end_reason)}</span></span>` : ''}` +
       `${status?.error ? `<span class="err-t">${esc(status.error)}</span>` : ''}</div>`
     : `<div class="runhead"><span class="sq ${CLS_TONE[resultCls] || 'stale'}"></span><b>${status?.test_run ? 'Testlauf läuft' : 'Lauf läuft'}</b>` +
-      `<span class="mut mono">${esc(run.dir || '')}</span></div>`;
-  const facts = `<dl class="kv"><dt>Bilder</dt><dd>${num(summary.frames_read)}</dd>` +
+      `<span class="mut mono">${esc(hms(elapsed))}</span></div>`;
+  const facts = `<dl class="kv"><dt>Gestartet</dt><dd>${esc(clockOf(run.started_at_utc))}</dd>` +
+    `<dt>Dauer</dt><dd>${esc(hms(elapsed))}</dd><dt>Bilder</dt><dd>${num(summary.frames_read)}</dd>` +
     `<dt>Lücken</dt><dd>${num(summary.frame_gaps)}</dd><dt>Übersprungen</dt><dd>${num(summary.frames_skipped)}</dd>` +
     `<dt>Datensätze</dt><dd>${num(total)}</dd><dt>Marken</dt><dd>${num(summary.marks)}</dd></dl>`;
   const rows = STATUS_ROWS.map(([key, tone, word, code]) => {
@@ -66,15 +93,12 @@ export function runDockHTML(status, {resultCls = 'X'} = {}) {
     const n = finite(counts[key]) ? counts[key] : 0;
     return n ? `<i class="${tone}" style="width:${((100 * n) / total).toFixed(3)}%"></i>` : '';
   }).join('') : '';
-  const misread = misreadText(status);
   const reference = status?.reference || {};
-  const compared = status?.reference_eval?.compared_valid;
   const comparison = `<div class="sect kvf">` +
-    `<div><span>Fehllesungen gegen Referenz</span><b class="${misread.cls}${misread.mono ? '' : ' t'}"` +
-    `${misread.title ? ` title="${esc(misread.title)}"` : ''}>${esc(misread.text)}</b></div>` +
-    (stopped && finite(compared) ? `<div><span>Verglichen</span><b>${grp(compared)}</b></div>` : '') +
+    comparisonRows(status).map(([label, text, cls, mono]) =>
+      `<div><span>${esc(label)}</span><b class="${cls}${mono ? '' : ' t'}">${esc(text)}</b></div>`).join('') +
     `<div><span>Referenz</span><b class="t">${esc(referenceLine(reference))}</b></div>` +
-    `<div><span>Werteplan</span><b>${esc(scheduleText(reference.norm_schedule))}</b></div></div>`;
+    `<div><span>Werteplan</span><b>${esc(planText(reference))}</b></div></div>`;
   const storage = stopped
     ? `<div class="sect"><dl class="kv"><dt>Ablage</dt><dd class="wrap">${esc([status?.session_id, run.dir].filter(Boolean).join('/') || '–')}</dd></dl></div>`
     : '';

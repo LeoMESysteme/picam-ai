@@ -5,7 +5,7 @@
 import {trackingHintText} from '../model.js';
 import {dec, esc, grp} from '../shell.js';
 import {referenceText} from './result.js';
-import {misreadText, referenceLine, scheduleText} from './dock.js';
+import {comparisonRows, planText, referenceLine} from './dock.js';
 
 export const RUN_TABS = ['Wert', 'Ursachen', 'Nachführung', 'Referenz'];
 const STATUS = {valid: ['ok', 'Freigegeben'], transition: ['warn', 'Wechselt'],
@@ -126,16 +126,18 @@ function referenzHTML(status) {
   const reference = status?.reference || {};
   const tone = reference.restoring ? 'warn' : reference.error ? 'err' : reference.enabled ? 'ok' : 'stale';
   const n = (x) => (finite(x) ? grp(x) : '–');
-  const misread = misreadText(status);
   const mark = status?.last_mark;
+  const latest = reference.enabled ? reference.latest : null;
   return `<div class="blk"><h4>Referenz GSV-2AS<span>${sq(tone)} ${esc(referenceLine(reference))}</span></h4>` +
     `<dl class="kv2"><dt>Telegramme</dt><dd>${n(reference.lines)}</dd><dt>Lesefehler</dt><dd>${n(reference.parse_errors)}</dd>` +
     `<dt>Lücken</dt><dd>${n(reference.gaps)}</dd><dt>Verworfen</dt><dd>${n(reference.dropped_oldest)}</dd>` +
-    `<dt>Letzter Wert</dt><dd>${esc(referenceText(reference))}</dd><dt>Werteplan</dt><dd>${esc(scheduleText(reference.norm_schedule))}</dd>` +
+    `<dt>Letzter Wert</dt><dd>${esc(referenceText(reference))}</dd>` +
+    `<dt>Alter</dt><dd>${latest && finite(latest.age_s) ? `${dec(latest.age_s, 1)} s` : '–'}</dd>` +
+    `<dt>Werteplan</dt><dd>${esc(planText(reference))}</dd>` +
     `<dt>Datei</dt><dd>${esc(reference.path || '–')}</dd></dl>` +
     '<p class="note">Der Referenzwert wird nur verglichen, nie zur Korrektur des gelesenen Werts benutzt.</p></div>' +
-    `<div class="blk"><h4>Abgleich</h4><dl class="kv2"><dt>Fehllesungen gegen Referenz</dt>` +
-    `<dd class="${misread.cls}${misread.mono ? '' : ' t'}"${misread.title ? ` title="${esc(misread.title)}"` : ''}>${esc(misread.text)}</dd></dl></div>` +
+    `<div class="blk"><h4>Abgleich</h4><dl class="kv2">${comparisonRows(status).map(([label, text, cls, mono]) =>
+      `<dt>${esc(label)}</dt><dd class="${cls}${mono ? '' : ' t wrap'}">${esc(text)}</dd>`).join('')}</dl></div>` +
     `<div class="blk"><h4>Ablage</h4><dl class="kv2"><dt>Lauf</dt><dd>${esc([status?.session_id, status?.run?.dir].filter(Boolean).join('/') || '–')}</dd></dl>` +
     `<p class="note wrap">${esc(diagnosticsText(status))}</p>` +
     `${mark ? `<p class="note wrap">${esc(`Letzte Marke (Meldezeit): ${mark.received_at_utc} · ${mark.text}`)}</p>` : ''}</div>`;

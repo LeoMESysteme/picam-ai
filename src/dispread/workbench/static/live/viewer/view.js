@@ -26,7 +26,7 @@ export function createViewer(canvas, opts = {}) {
   const state = {
     src: 'live', layers: new Set(ALL_LAYERS), hud: null, frame: null, frameAt: null, frames: [],
     stills: {}, views: {}, auto: {live: true}, hover: null, pinned: null, pointer: null, queued: false,
-    frameSize: null, grid: null, painters: [], clickHandlers: [], ageTimers: [],
+    frameSize: null, grid: null, painters: [], clickHandlers: [], ageTimers: [], offline: false,
   };
   const viewKey = () => (state.src === 'still' ? 'live' : state.src);
   const size = () => [canvas.clientWidth || 0, canvas.clientHeight || 0];
@@ -122,7 +122,8 @@ export function createViewer(canvas, opts = {}) {
   function viewState() {
     const v = view();
     return {imageToScreen, screenToImage, width: v.W, height: v.H, scale: v.s, dpr: dprOf(),
-      hover: state.pinned || state.hover, frameAgeS: frameAgeS(), source: state.src, grid: state.grid};
+      hover: state.pinned || state.hover, frameAgeS: frameAgeS(), source: state.src, grid: state.grid,
+      offline: state.offline};
   }
 
   function draw() {
@@ -381,7 +382,14 @@ export function createViewer(canvas, opts = {}) {
       return () => { state.clickHandlers = state.clickHandlers.filter((h) => h !== handler); };
     },
     // Status des Etiketts, wie er gerade gezeichnet wuerde (fuer den Takt).
-    tagWord: () => readoutTag(state.hud, {frameAgeS: frameAgeS()})?.word ?? null,
+    tagWord: () => readoutTag(state.hud, {frameAgeS: frameAgeS(), offline: state.offline})?.word ?? null,
+    // Statusabruf verloren: das Wert-Etikett wird Veraltet wie die Ergebnisanzeige.
+    setOffline(on) {
+      if (Boolean(on) === state.offline) return;
+      state.offline = Boolean(on);
+      redraw();
+    },
+    offline: () => state.offline,
   };
 
   function hitLayerOn(kind) {

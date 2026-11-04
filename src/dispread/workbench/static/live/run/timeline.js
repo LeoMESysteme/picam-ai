@@ -14,7 +14,7 @@ const CODES = {v: 'v', t: 't', u: 'u', s: 's', valid: 'v', transition: 't', unre
 const RANK = {v: 0, t: 1, u: 2, s: 3};
 const EPS_MS = 1;
 // Farben = Spec-Tokens (Canvas kennt keine CSS-Variablen).
-const COL = {v: '#55c46e', t: '#e5a535', u: '#ee5b4d', s: '#8f8a82', tx: '#ebe7e0', tx3: '#958f85', dock: '#1c1b19',
+const COL = {v: '#55c46e', t: '#e5a535', u: '#ee5b4d', s: '#8f8a82', tx: '#ebe7e0', tx2: '#bab4aa', tx3: '#958f85', dock: '#1c1b19',
   grid: '#2a2825', axis: '#7e786f', sel: '#86aee8', err: '#ee5b4d'};
 const MONO = '"Noto Sans Mono",monospace';
 const SANS = '"Segoe UI","Noto Sans",sans-serif';
@@ -78,6 +78,18 @@ export function layoutTimeline(buckets, marks, {nowMs, width, view = VIEW_MS, bu
   const scale = {lo: lo < 0 ? lo - head : lo, hi: hi > 0 ? hi + head : hi, top: hi, bottom: lo};
   return {t0, t1, nowMs, pxPerMs, x, bands, trace, scale,
     marks: marks.filter((m) => m.t >= t0 && m.t <= t1).map((m) => ({...m, x: x(m.t)}))};
+}
+
+// Beschriftung einer Ereignismarke: rechts der Linie, sonst links; nie ueber
+// den Rand und nie ueber eine Wertbeschriftung (boxes: {x0, x1, y0, y1}).
+export const MARK_LABEL_Y = [2, 14];
+export function placeMarkLabel(mx, width, W, boxes = []) {
+  const [y0, y1] = MARK_LABEL_Y;
+  const right = {x: mx + 4, align: 'left', x0: mx + 4, x1: mx + 4 + width};
+  const left = {x: mx - 4, align: 'right', x0: mx - 4 - width, x1: mx - 4};
+  const inside = (c) => c.x0 >= 0 && c.x1 <= W - PAD;
+  const free = (c) => !boxes.some((b) => b.y0 < y1 && b.y1 > y0 && b.x0 < c.x1 && b.x1 > c.x0);
+  return [right, left].find((c) => inside(c) && free(c)) || [right, left].find(inside) || left;
 }
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -186,20 +198,16 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
     ctx.lineTo(W - PAD, yy);
   }
   ctx.stroke();
-  ctx.fillStyle = COL.axis;
-  ctx.font = `10.5px ${MONO}`;
-  ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
-  // Beschriftung auf Dock-Grund, damit Jetzt-Linie und Spur sie nicht kreuzen.
-  for (const v of levels) {
-    const label = v === 0 ? '0' : `${fmt(v)}${unit ? ` ${unit}` : ''}`;
+  // Wertbeschriftung rechts; gezeichnet wird sie zuletzt auf Dock-Grund,
+  // damit Marken, Jetzt-Linie und Spur sie nicht kreuzen.
+  ctx.font = `10.5px ${MONO}`;
+  const valueLabels = levels.map((v) => {
+    const text = v === 0 ? '0' : `${fmt(v)}${unit ? ` ${unit}` : ''}`;
     const ly = Math.round(y(v)) - 3;
-    ctx.fillStyle = COL.dock;
-    ctx.fillRect(W - PAD - ctx.measureText(label).width - 3, ly - 9, ctx.measureText(label).width + 3, 11);
-    ctx.fillStyle = COL.axis;
-    ctx.fillText(label, W - PAD, ly);
-  }
-  ctx.textAlign = 'left';
+    const w = ctx.measureText(text).width;
+    return {text, ly, x0: W - PAD - w - 3, x1: W - PAD, y0: ly - 9, y1: ly + 2};
+  });
   // Statusband.
   for (const band of bands) {
     ctx.fillStyle = COL[band.code];
@@ -221,7 +229,7 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
   ctx.font = `11px ${SANS}`;
   for (const m of marks) {
     const mx = Math.round(m.x) + 0.5;
-    const color = m.kind === 'stoerung' ? COL.err : COL.sel;
+    const color = m.kind === 'stoerung' ? COL.err : m.kind === 'plan' ? COL.tx2 : COL.sel;
     ctx.strokeStyle = color;
     ctx.beginPath();
     ctx.moveTo(mx, 2);
@@ -229,10 +237,9 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
     ctx.stroke();
     ctx.fillStyle = color;
     const label = m.label.length > 28 ? `${m.label.slice(0, 27)}…` : m.label;
-    // Am rechten Rand steht die Beschriftung links der Marke.
-    const flip = mx + 4 + ctx.measureText(label).width > W - PAD;
-    ctx.textAlign = flip ? 'right' : 'left';
-    ctx.fillText(label, flip ? mx - 4 : mx + 4, 12);
+    const place = placeMarkLabel(mx, ctx.measureText(label).width, W, valueLabels);
+    ctx.textAlign = place.align;
+    ctx.fillText(label, place.x, 12);
     ctx.textAlign = 'left';
   }
   // Zeitachse (Uhrzeit des Clients) alle 5 s.
@@ -253,4 +260,13 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
     ctx.lineTo(nx, by + bh + 2);
     ctx.stroke();
   }
+  ctx.font = `10.5px ${MONO}`;
+  ctx.textAlign = 'right';
+  for (const label of valueLabels) {
+    ctx.fillStyle = COL.dock;
+    ctx.fillRect(label.x0, label.y0, label.x1 - label.x0, label.y1 - label.y0);
+    ctx.fillStyle = COL.axis;
+    ctx.fillText(label.text, W - PAD, label.ly);
+  }
+  ctx.textAlign = 'left';
 }

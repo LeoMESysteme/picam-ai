@@ -297,7 +297,7 @@ if (typeof document !== 'undefined') {
   let resultModel = null;
   let runDirty = false;
   // mark: undefined = dieser Lauf noch ungesehen (Neuladen), sonst Kennung der letzten Marke.
-  const seen = {mark: undefined, hint: null, stalled: false};
+  const seen = {mark: undefined, hint: null, stalled: false, plan: null};
   // Bereichsaenderung: solange die Antwort aussteht, sind Bestaetigen und weitere Klicks gesperrt.
   const regions = enableRegionEditing(viewerUi, client, null, {onBusy: () => render()});
   const ui = {busy: false, error: null, tab: {setup: null, run: null}, render: () => render(), status: () => status,
@@ -349,7 +349,7 @@ if (typeof document !== 'undefined') {
       runKey = key;
       timeline.clear();
       log.clear();
-      Object.assign(seen, {mark: undefined, hint: null, stalled: false});
+      Object.assign(seen, {mark: undefined, hint: null, stalled: false, plan: null});
     }
     if (!key) return;
     const nowMs = performance.now();
@@ -369,6 +369,11 @@ if (typeof document !== 'undefined') {
     const hint = next.state === 'running' ? next.run?.tracking_hint?.kind || null : null;
     if (hint && hint !== seen.hint) timeline.mark(back(next.run.tracking_hint.since_s || 0), HINT_LABEL[hint] || hint, 'stoerung');
     seen.hint = hint;
+    // Werteplan: eine Marke je neuem Schritt, zurueckdatiert um since_s (nur im Lauf,
+    // nach dem Stopp zaehlt since_s weiter und gehoert nicht mehr auf die Achse).
+    const step = next.state === 'running' ? next.reference?.schedule_step : null;
+    if (step && step.index !== seen.plan) timeline.mark(back(step.since_s || 0), `set norm ${step.factor}`, 'plan');
+    if (step) seen.plan = step.index;
     const stalled = next.state === 'running' && Boolean(next.camera?.stalled);
     if (stalled && !seen.stalled) timeline.mark(nowMs, 'Stillstand', 'stoerung');
     seen.stalled = stalled;
@@ -436,6 +441,8 @@ if (typeof document !== 'undefined') {
   }, (next) => {
     conn = next;
     document.body.classList.toggle('offline', next.offline);
+    // Wert-Etikett im HUD und Ergebnisanzeige folgen derselben Regel (readoutTag mit offline).
+    viewerUi.viewer.setOffline(next.offline);
     if (status) {
       renderRun();
       renderLeftDock(nodes.leftDock, status, conn, {resultCls: resultModel?.cls});

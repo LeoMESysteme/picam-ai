@@ -21,6 +21,11 @@ export function openModal({title = '', text = '', actions = [{label: 'OK', value
   let closeNow = null;
   let pendingClose;
   const result = queue.then(() => new Promise((resolve) => {
+    // Vor dem Zeigen geschlossen: nichts aufbauen, keinen Tastatur-Haken setzen.
+    if (pendingClose) {
+      resolve(pendingClose.value);
+      return;
+    }
     const doc = globalThis.document;
     const id = `modal-${++counter}`;
     const back = doc.createElement('div');
@@ -52,7 +57,6 @@ export function openModal({title = '', text = '', actions = [{label: 'OK', value
       resolve(value);
     };
     closeNow = finish;
-    if (pendingClose) finish(pendingClose.value);
     function onKey(event) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -69,7 +73,7 @@ export function openModal({title = '', text = '', actions = [{label: 'OK', value
     }
     doc.addEventListener('keydown', onKey, true);
     buttons.forEach((button, i) => { button.onclick = () => finish(actions[i].value); });
-    if (!done) (buttons[escapeIndex >= 0 ? escapeIndex : Math.max(0, primaryIndex)] || back).focus();
+    (buttons[escapeIndex >= 0 ? escapeIndex : Math.max(0, primaryIndex)] || back).focus();
   }));
   queue = result.catch(() => {});
   result.close = (value) => {

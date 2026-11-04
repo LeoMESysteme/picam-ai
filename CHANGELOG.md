@@ -5,6 +5,33 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Nacharbeit an der Laufansicht der Live-Seite.
+  * **Dialog:** Ein vor dem Zeigen geschlossener Dialog (`close()`) ließ
+    einen Tastatur-Haken auf der Seite zurück. Der schluckte Esc und
+    fing Tab ab. Jetzt löst er sofort auf und hinterlässt nichts.
+  * **Referenz in der Ergebnisanzeige:** Sie zeigt `reference.latest` mit
+    Alter. Ist der Wert älter als 0,5 s oder die Verbindung weg, erscheint
+    er grau und durchgestrichen wie ein veralteter Prüflingswert. Im
+    Testlauf darf die Referenz stehen, denn sie ist kein freigegebener
+    Wert.
+  * **Kopf der Ergebnisanzeige:** Die Browseruhr im Kopf entfällt. Sie
+    lief neben einem alten Wert weiter. „Bild N“ steht nur noch einmal
+    da.
+  * **Verbindung verloren:** Wert-Etikett im HUD und Ergebnisanzeige
+    werden nach derselben Regel Veraltet (`readoutTag` mit `offline`),
+    auch wenn nur `/live/status` ausfällt und Bilder weiter kommen.
+  * **Dock links:** Gestartet und Dauer kommen aus `run.started_at_utc`
+    und `run.elapsed_s`. Der Werteplan zeigt den laufenden Schritt. Nach
+    dem Stopp stehen die Fehllesungen und die drei Zähler aus
+    `reference_eval`, „Abgleich läuft …“ während der Auswertung und die
+    Ablehnung wörtlich. Im Lauf bleibt „Abgleich nach Laufende“ (OP-1).
+    Der Entwickler-Tooltip entfällt.
+  * **Zeitleiste:** Werteplan-Schritte erscheinen als Marke, einmal je
+    Schritt. Markenbeschriftungen weichen der Wertbeschriftung rechts aus.
+  * **Ereignis markieren:** Ein leerer Text geht wie auf der alten Seite
+    an den Server, und dessen Antwort steht wörtlich da. Der Test-Server
+    prüft die Marke wie `session.mark`.
+
 * 2026-11-04: Der Laufstatus enthielt weder Dauer noch aktuelle Referenz
   oder den Abgleich nach Laufende; die Zeitleiste verschwand nach dem Stopp.
   Jetzt liefert er Start, Ende und eingefrorene Dauer, Referenztext mit
