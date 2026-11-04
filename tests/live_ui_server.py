@@ -24,7 +24,7 @@ from dispread.live import RELEASE_NOTICE
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
 from dispread.records import TimeBaseKind, Timestamp
-from dispread.workbench.fields import REASONS, live_cause
+from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -262,6 +262,7 @@ class FakeLiveService:
             data = copy.deepcopy(self._status)
             if full:
                 data["tracking_reasons"] = REASONS.copy()
+                data["cause_texts"] = LIVE_CAUSE_TEXT.copy()
             if data.get("run") is not None:
                 data["run"].setdefault("tracking_hint", None)
                 window = data["run"].setdefault("rejection_causes",

@@ -6,6 +6,20 @@ import { assertStatusShape } from './live_status_shape.mjs';
 const dir = new URL('./fixtures/live/', import.meta.url);
 const load = name => JSON.parse(readFileSync(new URL(`scene-${name}.json`, dir)));
 const scenes = readdirSync(dir).filter(name => /^scene-.*\.json$/.test(name));
+test('cause_texts is optional and accepts only an object of strings', () => {
+  const status = load('idle');
+  delete status.cause_texts;
+  assert.doesNotThrow(() => assertStatusShape(status));
+  for (const texts of [{}, { no_value: 'Kein lesbarer Wert', kontrast: 'Kontrast zu gering' }]) {
+    status.cause_texts = texts;
+    assert.doesNotThrow(() => assertStatusShape(status));
+  }
+  for (const texts of [null, [], 'Text', 1, true, { no_value: 1 }, { no_value: null },
+    { no_value: {} }, { no_value: [] }, { no_value: 'Text', kontrast: false }]) {
+    status.cause_texts = texts;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+});
 test('setup grid accepts reader boxes or null and rejects malformed or missing geometry', () => {
   const status = load('setup_ready_warnung');
   const grid = { target_size: [400, 160], cell_boxes: [[0, 18, 25, 142]], source: 'dot_lattice',

@@ -521,6 +521,8 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     from aiohttp.test_utils import make_mocked_request
     from live_ui_server import FakeLiveService
 
+    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+
     async def direct(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
@@ -540,9 +542,12 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
         assert data["csrf"] == "tok"
         if full:
             assert data["tracking_reasons"]["lcd_rand_fehlt"] == "lcd-rand nicht ausreichend bestaetigt"
+            assert data["cause_texts"] == LIVE_CAUSE_TEXT
         else:
             assert "tracking_reasons" not in data
+            assert "cause_texts" not in data
         assert "tracking_reasons" not in service.status()
+        assert "cause_texts" not in service.status()
 
     asyncio.run(check())
 
@@ -1302,6 +1307,24 @@ def _assert_real_keys(fake, real, path='status'):
     elif isinstance(real, list) and real and isinstance(real[0], dict):
         for item in fake:
             _assert_real_keys(item, real[0], f'{path}[]')
+
+
+def test_fake_full_status_carries_cause_texts(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+
+    expected = LIVE_CAUSE_TEXT.copy()
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        assert 'cause_texts' not in service.status()
+        texts = service.status(full=True)['cause_texts']
+        assert texts == expected
+        texts['no_value'] = 'geaendert'
+        texts.pop('kontrast')
+        assert service.status(full=True)['cause_texts'] == expected
+        assert 'cause_texts' not in service.status()
 
 
 def test_fake_status_has_all_real_keys_for_every_scene(tmp_path):

@@ -2149,6 +2149,20 @@ def test_old_confirmed_profile_exposes_tracking_mode_before_run(tmp_path, propos
     assert status["profile"]["tracking_mode"] == "ecc_alt"
 
 
+def test_full_status_carries_cause_texts(tmp_path):
+    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+
+    expected = LIVE_CAUSE_TEXT.copy()
+    service = LiveService(FakeOwner(), tmp_path)
+    assert "cause_texts" not in service.status()
+    texts = service.status(full=True)["cause_texts"]
+    assert texts == expected
+    texts["no_value"] = "geaendert"
+    texts.pop("kontrast")
+    assert service.status(full=True)["cause_texts"] == expected
+    assert "cause_texts" not in service.status()
+
+
 def test_tracking_reasons_only_in_explicit_full_status(tmp_path):
     from dispread.workbench.fields import REASONS
 

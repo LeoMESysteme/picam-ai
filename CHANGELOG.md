@@ -5,6 +5,11 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Dem Hilfe-Dock fehlte die vollständige Lesegrund-Tabelle.
+  `/live/status?full=1` liefert jetzt `cause_texts` direkt aus
+  `LIVE_CAUSE_TEXT`; der Fake-Server folgt demselben Vertrag. So bleiben
+  die Erklärungen zentral im Backend gepflegt.
+
 * 2026-11-04: Neue Bediener fanden sich auf der neuen Live-Seite nur
   durch Ausprobieren am echten Aufbau zurecht. Jetzt gibt es Rundgang,
   Übungslauf ohne Hardware und ein Hilfe-Dock (Spec „Einarbeitung“).

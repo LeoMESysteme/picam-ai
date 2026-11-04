@@ -130,4 +130,5 @@ export function assertStatusShape(status) {
   root(status, 'status');
   optional(status, 'csrf', string, 'status');
   optional(status, 'tracking_reasons', dictionary(string), 'status');
+  optional(status, 'cause_texts', dictionary(string), 'status');
 }

@@ -38,7 +38,7 @@ from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
-from dispread.workbench.fields import REASONS, live_cause
+from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
@@ -303,7 +303,7 @@ class LiveService:
             return {
                 "state": self._state,
                 "storage": self._storage_status(),
-                **({"tracking_reasons": REASONS} if full else {}),
+                **({"tracking_reasons": REASONS, "cause_texts": LIVE_CAUSE_TEXT.copy()} if full else {}),
                 "step": self._step,
                 "error": self._error,
                 "simulate": self._simulate,
