@@ -5,7 +5,9 @@
 /* Die Seite ist ein Arbeitsraum: rechte Leiste weg, Tabelle und Einzelansicht bekommen die Breite. */
 /* :has() wirkt auch ohne JavaScript, damit die Ersatztabelle ebenfalls die Breite bekommt. */
 @media (min-width: 76.25em) { body:has(#session-dashboard) .md-sidebar--secondary { display: none; } }
-.session-announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Fließtext in Lesebreite, auch wenn die rechte Leiste fehlt. */
+body:has(#session-dashboard) .md-content__inner > :is(p, ul, ol) { max-width: 40rem; }
+.session-sr, .session-announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Bedienelemente: klein und ruhig, Gewicht 400 (Small-Quiet-Regel). */
 .session-controls { display: flex; flex-wrap: wrap; align-items: start; gap: .8rem 1.6rem; margin: .8rem 0 1rem; }
@@ -20,6 +22,7 @@
 .session-controls input { caret-color: var(--md-accent-fg-color); min-width: 14rem; }
 .session-controls input::placeholder { color: var(--md-default-fg-color--light); opacity: 1; }
 .session-field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; max-width: 100%; }
+.session-page .md-content .session-field > label > select { width: min(100%, 30rem); }
 .session-hint { font-size: .66rem; max-width: 34rem; color: var(--md-default-fg-color--light); }
 .session-page .md-content button { cursor: pointer; font-size: .66rem; min-height: 1.6rem; }
 .session-page .md-content button:hover:not(:disabled) { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
@@ -39,27 +42,41 @@
 .session-empty-state { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .6rem; }
 .session-empty-state p { margin: 0; flex: 1 1 18rem; font-size: .72rem; }
 
-/* Überblick: zuerst das Urteil aus den Daten, dann drei Kennzahlen. */
-.md-typeset .session-lead { margin: 1rem 0 .2rem; }
-.md-typeset .session-verdict { margin: 0 0 .4rem; }
-.md-typeset .session-verdict p { margin: .25rem 0; }
-.md-typeset .session-verdict-label { font-weight: 600; }
-.md-typeset .session-rule-link { font-size: .68rem; }
-.session-page .md-content button.session-runlink--quiet { font-size: .68rem; font-weight: 400; }
-.md-typeset .session-verdict-quiet { color: var(--md-default-fg-color--light); }
-.md-typeset .session-notable { margin: .2rem 0 0; padding: 0; list-style: none; }
-.md-typeset ul.session-notable { margin-left: 0; }
-.md-typeset ul.session-notable > li { margin-left: 0; }
-.md-typeset .session-notable li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .6rem; margin: 0; padding: .35rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
-.md-typeset .session-notable li:last-child { border-bottom: 1px solid var(--md-default-fg-color--lightest); }
-.md-typeset .session-notable-why { font-size: .68rem; color: var(--md-default-fg-color--light); }
+/* Überblick: Lagebild in zwei Spalten, darunter die Gruppe. */
+.md-typeset .session-lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem 1rem; margin: 1rem 0 .8rem; }
+.md-typeset .session-lead-meta { font-size: .68rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-verdict { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); margin: 0 0 .4rem; border-top: 1px solid var(--md-default-fg-color--lightest); border-bottom: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .session-brief-col { min-width: 0; padding: .9rem 1.2rem 1rem; }
+.md-typeset .session-brief-col:first-child { padding-left: 0; }
+.md-typeset .session-brief-col + .session-brief-col { border-left: 1px solid var(--md-default-fg-color--lightest); padding-right: 0; }
+.md-typeset h3.session-brief-title { display: flex; align-items: center; gap: .4rem; margin: 0 0 .6rem; font-size: .78rem; font-weight: 600; letter-spacing: 0; }
+.md-typeset .session-count { display: inline-block; min-width: 1.4em; padding: 0 .45em; border-radius: 1em; text-align: center; font-size: .64rem; line-height: 1.6; background: var(--docs-open-bg); color: var(--docs-open-fg); }
+.md-typeset .session-brief-name { margin: 0 0 .5rem; font-size: .84rem; }
+.md-typeset .session-brief-col .session-strip { margin: 0 0 .6rem; }
+.md-typeset .session-brief-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 .8rem; margin: 0; }
+.md-typeset .session-brief-facts dt { font-size: .62rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-brief-facts dd { margin: .05rem 0 0; font-size: .84rem; font-weight: 600; }
+.md-typeset .session-brief-note { margin: .7rem 0 0; font-size: .66rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-verdict-quiet { margin: 0; color: var(--md-default-fg-color--light); }
+.md-typeset ul.session-notable { margin: 0; padding: 0; list-style: none; }
+.md-typeset ul.session-notable > li { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: .1rem .8rem; margin: 0; padding: .45rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset ul.session-notable > li:first-child { border-top: 0; padding-top: 0; }
+.md-typeset ul.session-reasons { margin: 0; padding: 0; list-style: none; }
+.md-typeset ul.session-reasons > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .5rem; margin: 0; font-size: .68rem; }
+.md-typeset .session-reasons strong { font-weight: 600; }
+.md-typeset .session-reason-range { font-size: .64rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-brief-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; margin: .7rem 0 0; }
+.md-typeset .session-rule-link { font-size: .66rem; }
 /* Lauf-Verweis: sieht aus wie ein Link, springt aber nur zur Tabellenzeile. */
-.session-page .md-content button.session-runlink { min-height: 0; padding: 0; border: 0; background: none; font-size: inherit; font-weight: 600; color: var(--md-typeset-a-color); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: .2em; }
+.session-page .md-content button.session-runlink { min-height: 0; padding: 0; border: 0; background: none; font-size: inherit; font-weight: 600; text-align: left; color: var(--md-typeset-a-color); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: .2em; }
 .session-page .md-content button.session-runlink:hover { color: var(--md-accent-fg-color); text-decoration-color: currentColor; }
-.md-typeset .session-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 1.2rem; margin: .6rem 0 0; }
+.session-page .md-content button.session-ghost { border-color: var(--md-default-fg-color--lightest); border-radius: 1rem; padding: .2rem .7rem; }
+.md-typeset .session-metrics-title { margin: 1.2rem 0 .2rem; font-size: .66rem; font-weight: 600; color: var(--md-default-fg-color--light); }
+.md-typeset .session-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 1.2rem; margin: 0; }
 .session-metrics > div { padding: .55rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
 .md-typeset .session-metrics dt { font-size: .66rem; font-weight: 400; color: var(--md-default-fg-color--light); }
 .md-typeset .session-metrics dd { margin: .15rem 0 0; font-size: 1rem; font-weight: 600; }
+.md-typeset .session-metrics dd .session-strip { max-width: 12rem; margin-top: .4rem; }
 .md-typeset .session-metric-note { display: block; font-size: .64rem; font-weight: 400; color: var(--md-default-fg-color--light); }
 .md-typeset .session-metrics--quiet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .md-typeset .session-metrics--quiet dd { font-size: .8rem; }
@@ -113,8 +130,22 @@
 /* Kamera-Bildrate liegt oft auf einer Rasterlinie; daher kräftiger als das Raster. */
 .session-baseline--camera { stroke-width: 2; stroke-dasharray: 1 4; stroke-linecap: round; opacity: .75; }
 .session-hit { fill: transparent; cursor: pointer; }
-.md-typeset .session-point-readout { min-height: 1.4rem; margin: .4rem 0 0; font-size: .68rem; text-align: left; }
-.md-typeset .session-readout-why { display: block; color: var(--md-default-fg-color--light); }
+.md-typeset .session-point-readout { margin: .3rem 0 0; font-size: .64rem; color: var(--md-default-fg-color--light); text-align: left; }
+/* Schwebende Werte über dem Diagramm: liegt über der Legende, verschiebt nichts. */
+.session-plot { position: relative; }
+.md-typeset .session-overview.wiki-chart { margin: 0; }
+#session-trends { position: relative; }
+.session-probe { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; }
+.session-tip-row { display: flex; align-items: center; gap: .35rem; }
+.session-tip { position: absolute; top: 0; left: 0; z-index: 2; display: flex; flex-direction: column; gap: .05rem;
+  padding: .45rem .6rem; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .4rem;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color); box-shadow: 0 .5rem 1.4rem -.6rem rgb(0 0 0 / .35);
+  font-size: .64rem; line-height: 1.5; white-space: nowrap; pointer-events: none;
+  opacity: 0; transform: translateY(calc(-100% + 4px)); transition: opacity 120ms ease-out, transform 120ms ease-out; }
+.session-tip[data-open="true"] { opacity: 1; transform: translateY(calc(-100% - .3rem)); }
+.session-tip strong { font-size: .68rem; }
+.session-tip .session-tip-flag { color: var(--docs-open-fg); font-weight: 600; }
+.session-run { transform-box: fill-box; transform-origin: 50% 100%; }
 .md-typeset .session-trend-note { margin: .2rem 0 1.4rem; font-size: .66rem; color: var(--md-default-fg-color--light); }
 
 /* Laufmatrix: eine Zeile je Lauf, Zahlen in Spalten. */
@@ -129,20 +160,32 @@
 .md-typeset .session-matrix thead .session-col-num { text-align: right; white-space: normal; }
 .md-typeset .session-matrix .session-col-strip { width: 22%; min-width: 6rem; }
 .md-typeset .session-matrix .session-col-act { padding-left: .6rem; }
+/* Zeilentönung mit Innenrand: Text berührt die getönte Kante nicht. */
+.md-typeset .session-matrix :is(thead, tbody) tr > :first-child { padding-left: .6rem; }
+.md-typeset .session-matrix :is(thead, tbody) tr > :last-child { padding-right: .6rem; }
+.session-page .md-content :is(button.session-open, button.session-compare) { border-color: var(--md-default-fg-color--lightest); }
+/* Hinweis an den Statusstreifen: Farbe, Anteil und Bedeutung. */
+.wiki-hint .session-hint-body { margin: 0; }
+.md-typeset .session-hint-rows, .wiki-hint .session-hint-rows { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 0 .8rem; margin: .2rem 0 0; }
+.wiki-hint .session-hint-rows dt { display: flex; align-items: center; gap: .35rem; font-weight: 600; }
+.wiki-hint .session-hint-rows dd { margin: 0; font-variant-numeric: tabular-nums; }
+.wiki-hint .session-hint-rows .session-hint-meaning { grid-column: 1 / -1; margin: 0 0 .3rem 1rem; color: var(--md-default-fg-color--light); }
 .md-typeset .session-run-title { margin: 0; overflow-wrap: normal; }
 .md-typeset .session-run-title strong { font-weight: 600; }
 .md-typeset .session-th-sub { display: block; font-weight: 400; }
-.session-page .md-content button.session-textbutton { display: block; min-height: 0; margin-top: .2rem; padding: .1rem 0; border: 0; background: none; font-size: .64rem; color: var(--md-typeset-a-color); }
-.md-typeset .session-id { display: block; font-size: .62rem; color: var(--md-default-fg-color--light); overflow-wrap: anywhere; }
-.session-strip { display: flex; height: .7rem; margin-top: .3rem; border-radius: 2px; overflow: hidden; background: var(--wiki-chart-grid); }
+.session-page .md-content button.session-textbutton { display: inline; min-height: 0; margin: 0; padding: .1rem 0; border: 0; background: none; font-size: .64rem; color: var(--md-typeset-a-color); }
+.md-typeset .session-run-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .6rem; margin: .1rem 0 0; }
+.md-typeset .session-id { font-size: .62rem; color: var(--md-default-fg-color--light); overflow-wrap: anywhere; }
+.session-strip { display: flex; height: .7rem; margin-top: .3rem; border-radius: 2px; overflow: hidden; background: var(--wiki-chart-grid); transform-origin: 0 50%; cursor: help; }
 .session-strip--empty { background: repeating-linear-gradient(135deg, var(--wiki-chart-grid) 0 3px, transparent 3px 6px); }
 .session-strip-part { display: block; height: 100%; background: var(--tone); }
 .session-strip-part + .session-strip-part { box-shadow: inset 2px 0 0 var(--md-default-bg-color); }
 .md-typeset .session-actions { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; }
 .md-typeset .session-picked-note { align-self: center; font-size: .64rem; font-weight: 600; color: var(--docs-progress-fg); }
-.session-row > * { transition: background-color 120ms ease-out; }
-.session-row--active > * { background: color-mix(in srgb, var(--md-default-fg-color) 6%, transparent); }
-.session-row--picked > * { background: color-mix(in srgb, var(--docs-progress-bg) 55%, transparent); }
+.session-row { transition: background-color 120ms ease-out; }
+/* Tönung auf der ganzen Zeile, damit sie auch im schmalen Rasterlayout ohne Lücken bleibt. */
+.md-typeset .session-matrix tbody tr.session-row--active { background: color-mix(in srgb, var(--md-default-fg-color) 6%, transparent); }
+.md-typeset .session-matrix tbody tr.session-row--picked { background: color-mix(in srgb, var(--docs-progress-bg) 55%, transparent); }
 .md-typeset .session-detail-row > td { padding: .2rem 0 .9rem; border-top: 0; background: color-mix(in srgb, var(--md-default-fg-color) 3%, transparent); }
 .md-typeset .session-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .4rem 1.2rem; margin: .4rem .75rem .6rem; }
 .md-typeset .session-facts dt { font-size: .62rem; color: var(--md-default-fg-color--light); }
@@ -171,7 +214,7 @@
 .md-typeset details.session-source { font-size: .68rem; }
 .md-typeset .session-source-group { font-weight: 600; margin-top: 1rem; }
 .md-typeset .session-source table { font-size: .64rem; }
-.md-typeset .session-source caption { caption-side: top; text-align: left; font-weight: 600; padding: .6rem 0 .3rem; }
+.md-typeset .session-source caption { caption-side: top; text-align: left; font-weight: 600; padding: .5rem .75rem .4rem; }
 .md-typeset .session-source :is(td, th) { overflow-wrap: normal; hyphens: manual; }
 /* Nur die lange Laufkennung darf beliebig umbrechen. */
 .md-typeset .session-source .session-source-run { min-width: 9rem; overflow-wrap: anywhere; font-weight: 400; }
@@ -183,9 +226,14 @@
 .md-typeset .session-source-runs ul { margin: 0 0 .3rem; padding: 0; list-style: none; }
 .md-typeset .session-source-runs li { margin: 0 0 .25rem; }
 
-@media (prefers-reduced-motion: reduce) { .session-row > * { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .session-row, .session-tip { transition: none; } }
 
 @media (max-width: 700px) {
+  .md-typeset .session-verdict { grid-template-columns: minmax(0, 1fr); }
+  .md-typeset .session-brief-col, .md-typeset .session-brief-col:first-child { padding: .8rem 0; }
+  .md-typeset .session-brief-col + .session-brief-col { border-left: 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+  .md-typeset ul.session-notable > li { grid-template-columns: minmax(0, 1fr); }
+  .session-tip { white-space: normal; max-width: 15rem; }
   .md-typeset .session-metrics { grid-template-columns: minmax(0, 1fr); }
   .md-typeset .session-metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
   .md-typeset .session-metrics dd { text-align: right; }
@@ -194,7 +242,7 @@
   /* Jede Zeile wird ein Block: Lauf, Statusstreifen, drei Zahlen nebeneinander, Auswahl. */
   .md-typeset table.session-matrix, .session-matrix tbody { display: block; width: 100%; }
   .session-matrix thead { display: none; }
-  .session-matrix tr.session-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem .6rem; padding: .6rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+  .session-matrix tr.session-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem .6rem; padding: .6rem .5rem; border-top: 1px solid var(--md-default-fg-color--lightest); }
   .md-typeset .session-matrix tbody tr.session-row > * { display: block; padding: 0; border: 0; }
   .session-matrix .session-row > th, .session-matrix .session-row > .session-col-strip, .session-matrix .session-row > .session-col-act { grid-column: 1 / -1; }
   .md-typeset .session-matrix .session-col-num { text-align: left; white-space: normal; }

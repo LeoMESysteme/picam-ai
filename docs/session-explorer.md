@@ -5,28 +5,33 @@ weg: bedienen
 # Session-Explorer
 
 Wie zuverlässig hat das System in den aufgezeichneten Messläufen gelesen?
-Oben steht, welcher Lauf auffällt. Die Tabelle zeigt jeden Lauf mit seinen
+Der Überblick zeigt, welcher Lauf auffällt. Die Tabelle zeigt jeden Lauf mit seinen
 Kennzahlen und Originaldateien; „Ansehen“ öffnet ihn darunter Frame für Frame.
+
+
+## Überblick {#ueberblick}
+
+<div id="session-dashboard" aria-busy="true"><p class="session-load-status">Die Übersicht braucht JavaScript. Alle Zahlen stehen ohne JavaScript in der Archivtabelle unten.</p></div>
+
+## Läufe im Vergleich {#laeufe}
+
+<div id="session-trends"><p class="session-load-status">Der Verlauf braucht JavaScript; die Archivtabelle unten enthält Statusanteile, Verarbeitung und Leserate je Lauf.</p></div>
+<div id="session-list"><p class="session-load-status">Ohne JavaScript stehen die Downloads in der Archivtabelle unten.</p></div>
+
+## Einzelansicht {#untersuchen}
+
+<div id="session-viewer"><p class="session-load-status">Die Einzelansicht braucht JavaScript.
+<a href="../assets/records-explorer/index.html" target="_blank" rel="noopener">Explorer ohne Lauf öffnen</a></p></div>
+
+## Archivtabelle {#archiv}
+
+Alle Zahlen und Downloads als Tabelle; sie braucht kein JavaScript.
 
 <!-- SESSION-SNAPSHOT:START -->
 <p class="session-archive-notice">Keine Sessions veröffentlicht. Neue Läufe
 werden bei beendeter Workbench vorbereitet und mit dem nächsten regulären
 Wiki-Deploy übernommen. Ein fehlendes Archiv verhindert den Wiki-Build nicht.</p>
 <!-- SESSION-SNAPSHOT:END -->
-
-## Überblick {#ueberblick}
-
-<div id="session-dashboard" aria-busy="true"><p class="session-load-status">Die Übersicht braucht JavaScript. Alle Zahlen stehen ohne JavaScript in der Tabelle „Archivkennzahlen und Dateien“ oben.</p></div>
-
-## Läufe im Vergleich {#laeufe}
-
-<div id="session-trends"><p class="session-load-status">Der Verlauf braucht JavaScript; die Tabelle oben enthält Statusanteile, Verarbeitung und Leserate je Lauf.</p></div>
-<div id="session-list"><p class="session-load-status">Ohne JavaScript stehen die Downloads in der Tabelle oben.</p></div>
-
-## Einzelansicht {#untersuchen}
-
-<div id="session-viewer"><p class="session-load-status">Die Einzelansicht braucht JavaScript.
-<a href="../assets/records-explorer/index.html" target="_blank" rel="noopener">Explorer ohne Lauf öffnen</a></p></div>
 
 ## Kennzahlen einordnen
 

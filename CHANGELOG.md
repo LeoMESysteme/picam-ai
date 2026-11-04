@@ -5,6 +5,24 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-10-31: Session-Explorer-Tab geschliffen (Rückmeldung: Text an
+  Rändern, unübersichtliche Abschnitte, Diagramme lassen die Seite
+  wackeln, Farbstreifen ohne Erklärung). Der Überblick ist jetzt ein
+  zweispaltiges Lagebild – links der letzte Lauf mit Statusstreifen und
+  drei Zahlen, rechts „Zum Nachsehen“ mit je einer Zeile pro Grund und
+  dem üblichen Bereich der Gruppe –, darunter die Gruppe mit eigenem
+  Streifen; Archivstand steht in der Kopfzeile. Werte zum Lauf erscheinen
+  schwebend über dem Diagramm statt in einer wachsenden Zeile darunter;
+  die Höhe aller Reiter wird vorab gemessen, sodass weder Überfahren noch
+  Reiterwechsel etwas verschiebt. Jeder Statusstreifen erklärt beim
+  Überfahren Farbe, Anteil, Framezahl und Bedeutung (gemeinsamer
+  Wiki-Hinweis). Säulen wachsen, Streifen laufen ein und Detailzeilen
+  blenden auf (Anime.js lokal, 220–420 ms, nicht bei reduzierter
+  Bewegung). Tabellenzeilen mit Innenrand und durchgehender Tönung,
+  Kennung und „Details“ in einer Zeile, Fließtext in Lesebreite. Die
+  Archivtabelle ohne JavaScript steht am Seitenende; ihre Beschriftungen
+  halten Abstand zum Rahmen, die doppelte Gruppenzeile entfällt.
+
 * 2026-10-30: Session-Explorer-Tab neu gegliedert, nachdem eine
   Impeccable-Kritik 21/40 ergab (unverbundene Abschnitte, keine Antwort
   oben, dreifache Live-Ansage, unvollständige Fassung ohne JavaScript).

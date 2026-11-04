@@ -1854,6 +1854,8 @@ test('Sessionübersicht trennt Laufgewichtung und echte gepoolte Mediane ohne Ro
   const rows = page.locator('.session-matrix tbody tr.session-row');
   await expect(rows).toHaveCount(2);
   await expect(rows.first().locator('.session-strip')).toHaveAttribute('aria-label', /VALID/);
+  await rows.first().locator('.session-strip').hover();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('freigegebener Wert');
   await page.getByRole('combobox', { name: 'Zeigen', exact: true }).selectOption('all');
   await expect(rows).toHaveCount(3);
   expect(rawRequests).toEqual([]);
@@ -1949,12 +1951,16 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   expect(readFileSync(path!)).toEqual(expected);
   const plot = page.locator('.session-trend svg').first();
   await plot.focus();
-  // Die zuletzt berührte Tabellenzeile bleibt im Diagramm gewählt.
-  await expect(page.locator('.session-point-readout')).toContainText('23.10.2026, 10:00 UTC');
+  // Die zuletzt berührte Tabellenzeile bleibt im Diagramm gewählt; die Werte schweben über dem Diagramm.
+  const tip = page.locator('.session-tip[data-open="true"]');
+  await expect(tip).toContainText('23.10.2026, 10:00 UTC');
+  const tableTop = await page.locator('.session-matrix').evaluate(node => node.getBoundingClientRect().top);
   await plot.press('End');
-  await expect(page.locator('.session-point-readout')).toContainText('28.10.2026, 10:00 UTC');
+  await expect(tip).toContainText('28.10.2026, 10:00 UTC');
+  // Der Tooltip verschiebt nichts um das Diagramm herum.
+  expect(await page.locator('.session-matrix').evaluate(node => node.getBoundingClientRect().top)).toBe(tableTop);
   await plot.press('Home');
-  await expect(page.locator('.session-point-readout')).toContainText('23.10.2026, 10:00 UTC');
+  await expect(tip).toContainText('23.10.2026, 10:00 UTC');
   await expect(page.locator('.session-announce')).toContainText('23.10.2026, 10:00 UTC: VALID');
   await expect(page.locator('tr[data-session="live-a/run-01"]')).toHaveClass(/session-row--active/);
   // Enter führt zur Tabellenzeile, ohne Rohdaten zu laden; erst „Ansehen“ öffnet den Lauf.

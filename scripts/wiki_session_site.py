@@ -153,7 +153,7 @@ def static_content(catalog: dict, notice: str) -> str:
             # Kein h3: die Fassung steht vor dem ersten h2 der Seite.
             chunks.append(f'<p class="session-source-group">{esc(group.get("label"))} · {kind}</p>'
                           f'<p>{esc(group.get("session_count"))} Läufe · {esc(number(group.get("frames"), 0))} Frames</p>')
-            chunks.append(f'<table><caption>Kennzahlen: {esc(group.get("label"))} · {kind}</caption>'
+            chunks.append('<table><caption>Kennzahlen nach Gewichtung</caption>'
                           '<thead><tr><th scope="col">Kennzahl</th><th scope="col">Jeder Lauf zählt gleich</th>'
                           '<th scope="col">Alle Frames gemeinsam</th></tr></thead><tbody>')
             a, b = group["run_equal"], group["frame_weighted"]
