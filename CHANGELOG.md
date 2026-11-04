@@ -5,6 +5,53 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Störzustände waren auf der neuen Live-Seite nur am
+  Statuswort zu erkennen, und eine abgelehnte Aktion stand klein in der
+  Titelleiste. Jetzt gibt es Zustandseffekte, Hinweise und den Dialog
+  „Anzeige hat sich bewegt“ nach Mock-Kapitel 8a–8e.
+  * **Effektebene** über dem Bild (`viewer/effects.js`). Es läuft nur der
+    Effekt mit dem höchsten Vorrang: Verbindung verloren, dann
+    Streamstillstand, dann Unlesbar/verloren, dann Korrektur, dann
+    Wechselt.
+    * Unlesbar: rotes Innenleuchten und eine treibende Punktwolke an den
+      betroffenen Ecken und Rahmenbereichen. Die Wolke liegt in
+      Bildkoordinaten und folgt Zoom und Verschieben.
+    * Korrektur: Geisterbild des alten Vierecks mit Teal-Strichen zum
+      neuen.
+    * Wechselt: kurzer Puls am Viereck.
+    * Stillstand: Das eingefrorene Bild wird unscharf und entsättigt, das
+      HUD bleibt scharf. Dazu ein Feld „Kein neues Kamerabild seit N s“
+      mit laufendem Alter.
+    * Verbindung verloren: Band oben mit Sekunden.
+    * Kamera-Neustart der Einrichtung: Das Bild ist kurz dunkel, mit
+      Hinweis.
+  * **Bewegung reduziert** (`prefers-reduced-motion`): keine Teilchen.
+    Stattdessen statische Punkte und markierte Ecken.
+  * **Rechenbudget:** Die Effekte bleiben unter 4 ms Zeichenzeit (Median
+    über 60 Bilder bei 1440×900 gemessen). Unter 20 fps halbiert sich die
+    Teilchenzahl.
+  * **Hinweise** unten rechts im Viewer (`ui/toasts.js`):
+    * Höchstens drei sind sichtbar; ein gleicher Schlüssel ersetzt den
+      alten Hinweis.
+    * Sie sind per Tastatur schließbar, und ein nicht stehender Hinweis
+      schließt nach 4 s.
+    * Rahmen verdeckt bleibt stehen, bis die Nachführung sich erholt.
+    * Weitere Hinweise: Streamstillstand, Lauf gestartet/gestoppt,
+      Werteplan-Schritt, Marke und Vorschlag mit WARNUNG.
+    * Eine abgelehnte Aktion steht mit dem Servertext als stehender
+      Hinweis da, nicht mehr in der Titelleiste.
+  * **Dialog „Anzeige hat sich bewegt“** (`run/alerts.js`):
+    * Er erscheint einmal je Verlust. Esc bedeutet „Weiter beobachten“,
+      nie Stopp.
+    * Das Weglegen merkt sich die Seite in `sessionStorage`, sodass der
+      Dialog auch nach dem Neuladen nicht wiederkommt. Ohne Speicher
+      funktioniert die Seite trotzdem.
+    * „Lauf stoppen“ und „Neu einrichten“ nutzen die bestehenden POSTs
+      `/live/run/stop` und `/live/setup`.
+  * **Test-Server:** Rahmen verdeckt trifft nun die Bereiche rechts der
+    Anzeige, eine Hand von rechts wie im Mock. Bei „Anzeige bewegt“
+    findet kein Bereich mehr seinen Treffer.
+
 * 2026-11-04: Nacharbeit an der Laufansicht der Live-Seite.
   * **Dialog:** Ein vor dem Zeigen geschlossener Dialog (`close()`) ließ
     einen Tastatur-Haken auf der Seite zurück. Der schluckte Esc und

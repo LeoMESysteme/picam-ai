@@ -1,6 +1,7 @@
 // Blockierender Dialog im Seitenstil (Spec "Meldungen"), loest window.confirm ab.
-// openModal({title, text, actions: [{label, value, primary, escape}]}) liefert
-// ein Promise mit dem value der gewaehlten Aktion.
+// openModal({title, text, actions: [{label, value, primary, escape, cls, icon}]})
+// liefert ein Promise mit dem value der gewaehlten Aktion. cls ist eine
+// Knopfklasse (danger, ghost), icon ein Symbol der Huelle (stop, redo).
 // * Fokusfalle: Tab/Umschalt+Tab bleiben im Dialog, der Rest der Seite ist inert.
 // * Esc waehlt die Aktion mit escape: true; ohne sie schliesst Esc nicht.
 // * Der Fokus startet auf der Esc-Aktion (sicherer Standard), sonst auf der
@@ -36,8 +37,11 @@ export function openModal({title = '', text = '', actions = [{label: 'OK', value
       `<div class="mt" id="${id}-t">${tone ? `<span class="sq ${esc(tone)}"></span>` : ''}${esc(title)}</div>` +
       `<div class="mbody" id="${id}-b">${paragraphs.map((p, i) =>
         `<p${i ? ' class="sub"' : ''}>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` +
-      `<div class="mf">${actions.map((a, i) => `<button type="button" data-i="${i}"` +
-        `${a.primary ? ' class="primary"' : ''}>${esc(a.label)}</button>`).join('')}</div></div>`;
+      `<div class="mf">${actions.map((a, i) => {
+        const cls = [a.primary ? 'primary' : '', a.cls || ''].filter(Boolean).join(' ');
+        const icon = a.icon ? `<svg class="i" aria-hidden="true"><use href="#i-${esc(a.icon)}"/></svg>` : '';
+        return `<button type="button" data-i="${i}"${cls ? ` class="${esc(cls)}"` : ''}>${icon}${esc(a.label)}</button>`;
+      }).join('')}</div></div>`;
     const before = doc.activeElement;
     // Hintergrund sperren: alle anderen Kinder von body inert (Klicks, Fokus, Vorlesen).
     const siblings = [...doc.body.children].filter((el) => el !== back && !el.hasAttribute('inert'));

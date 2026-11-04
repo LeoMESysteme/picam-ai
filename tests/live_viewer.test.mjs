@@ -195,7 +195,8 @@ test('without a reader grid there are no cell boxes and no cell hits', () => {
   const labels = legendRows({grid: false}).map(([, label]) => label).join(' | ');
   assert.ok(!/Raster|Zelle/.test(labels), labels);
   assert.ok(legendRows({grid: true}).some(([, label]) => label.startsWith('Raster')));
-  assert.ok(!LEGEND_ROWS.some(([, label]) => label.includes('Fehlerort')));
+  // Seit Aufgabe 10 zeichnet die Effektebene die Fehlerwolke; die Legende erklaert sie.
+  assert.ok(LEGEND_ROWS.some(([, label]) => label.includes('Fehlerort')));
 });
 
 test('a released value turns Veraltet while no new frame arrives', () => {

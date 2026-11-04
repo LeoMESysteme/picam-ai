@@ -42,6 +42,8 @@ FOCUS_SAMPLES = [[48, 630.3558194010419], [56, 273.53271242939513], [40, 201.111
 REGION_CENTRES = [[873, 385], [915, 737], [1256, 422], [1485, 658], [829, 411], [822, 737],
                   [1310, 437], [1457, 635], [877, 459], [858, 742], [1291, 391], [1321, 707]]
 # Zwoelf echte Bereiche lassen im 2-KB-HUD Platz fuer alle 16 Zellen.
+# Bereiche rechts der Anzeige (Rahmen verdeckt von rechts, Ecken oben/unten rechts).
+RIGHT_REGIONS = {3, 6, 7, 11}
 QUAD = [[810, 511], [1369, 511], [1377, 580], [814, 591]]
 CAMERA_SOURCE = {"model": "logitech_streamcam", "usb_id": "046d:0893", "size": [1920, 1080],
                  "fourcc": "YUYV", "fps": 30, "device": "/dev/video0", "controls": {
@@ -386,11 +388,15 @@ class FakeLiveService:
                        else latest["status"], "text": latest["raw_text"], "unit": latest["unit"],
                        "reasons": latest["reject_reasons"], "age_s": age}
                 lost = self._scene in ("running_rahmen_verdeckt", "running_anzeige_bewegt")
+                # Verdeckt: eine Hand von rechts (Mock 8a) trifft die Bereiche rechts der
+                # Anzeige; bewegt: kein Bereich findet seinen Treffer mehr.
+                missing = (set(range(len(REGION_CENTRES))) if self._scene == "running_anzeige_bewegt"
+                           else RIGHT_REGIONS if lost else set())
                 track = {"quad": copy.deepcopy(QUAD), "score": 0.43 if lost else 0.93,
                          "shift_px": 0.4, "rotation_deg": 0.0, "reason": "rahmen_unstimmig" if lost else None,
                          "correcting": False, "regions": [
-                             {"c": c.copy(), "s": 15, "peak": 0.3 if lost and 4 <= i < 8 else 0.92,
-                              "ok": not (lost and 4 <= i < 8)} for i, c in enumerate(REGION_CENTRES)]}
+                             {"c": c.copy(), "s": 15, "peak": 0.3 if i in missing else 0.92,
+                              "ok": i not in missing} for i, c in enumerate(REGION_CENTRES)]}
                 cells = [{"i": i, "best": char, "margin": 0.41, "uncertain": False}
                          for i, char in enumerate("+ 0.62427 mV/V  ")]
                 proc = {"fps": 14.8, "latency_ms": None, "skipped_recent": 0.02}

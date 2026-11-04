@@ -1415,7 +1415,10 @@ def test_fake_scene_values_and_hud(tmp_path):
             assert len(hud['cells']) == 16
             assert len(hud['track']['regions']) == len(service.status()['setup']['regions'])
         if name == 'running_rahmen_verdeckt':
-            assert [i + 1 for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [5, 6, 7, 8]
+            # Hand von rechts (Mock 8a): die Bereiche rechts der Anzeige verlieren ihren Treffer.
+            assert [i + 1 for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [4, 7, 8, 12]
+        if name == 'running_anzeige_bewegt':
+            assert not any(r['ok'] for r in hud['track']['regions'])
         if name == 'running_stalled':
             assert hud['rec']['status'] == 'stale' and hud['rec']['age_s'] > 0.5
             camera = service.status()['camera']
@@ -1525,7 +1528,7 @@ def test_fake_mjpeg_parts_and_cadence_without_socket(tmp_path, monkeypatch):
         hud = json.loads(headers[b'X-Hud'])
         assert hud['seq'] == int(headers[b'X-Frame-Sequence'])
         assert hud['cap_ns'] == int(headers[b'X-Capture-Ns'])
-        assert [r['ok'] for r in hud['track']['regions'][4:8]] == [False] * 4
+        assert [i for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [3, 6, 7, 11]
         sequences.append(hud['seq'])
     assert sequences == sorted(set(sequences)) and len(sequences) == 3
     elapsed = parts[-1][0] - parts[0][0]

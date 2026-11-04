@@ -18,6 +18,9 @@ import {runDockHTML, runTitle} from './run/dock.js';
 import {RUN_TABS, createRecordLog, renderRunInspector, runBadges} from './run/inspector.js';
 import {createTimeline} from './run/timeline.js';
 import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
+import {mountEffects} from './viewer/effects.js';
+import {closeToast, mountToasts, toast} from './ui/toasts.js';
+import {watchAlerts} from './run/alerts.js';
 
 const RUN_STATES = ['running', 'stopped'];
 const SETUP_TABS = ['Schritt', 'Fokus', 'Prüfungen'];
@@ -283,6 +286,10 @@ if (typeof document !== 'undefined') {
   const root = document.getElementById('root');
   const nodes = mountShell(root);
   const viewerUi = mountViewer(nodes.viewerHost, {statusbar: nodes.statusbar});
+  const stage = nodes.viewerHost.querySelector('.vstage');
+  // Hinweise unten rechts im Viewer, Zustandseffekte als eigene Ebene ueber dem Bild.
+  mountToasts(stage.appendChild(document.createElement('div')));
+  const effects = mountEffects(stage, viewerUi.viewer);
   const client = createClient();
   let hudProc = null;
   let status = null;
@@ -300,7 +307,7 @@ if (typeof document !== 'undefined') {
   const seen = {mark: undefined, hint: null, stalled: false, plan: null};
   // Bereichsaenderung: solange die Antwort aussteht, sind Bestaetigen und weitere Klicks gesperrt.
   const regions = enableRegionEditing(viewerUi, client, null, {onBusy: () => render()});
-  const ui = {busy: false, error: null, tab: {setup: null, run: null}, render: () => render(), status: () => status,
+  const ui = {busy: false, tab: {setup: null, run: null}, render: () => render(), status: () => status,
     runContext: () => ({log, hud, result: resultModel}),
     mountSetup(host) {
       confirmUi = mountConfirm(host.querySelector('[data-part="confirm"]'), client,
@@ -313,7 +320,9 @@ if (typeof document !== 'undefined') {
     render();
     const result = await client.post(path, body);
     ui.busy = false;
-    ui.error = result.ok ? null : result.error;
+    // Abgelehnte Aktion: stehender Hinweis mit dem Servertext (Wahrheitsregel 6).
+    if (result.ok) closeToast('aktion');
+    else toast({level: 'err', title: result.error, sticky: true, key: 'aktion'});
     render();
     return result;
   };
@@ -326,7 +335,7 @@ if (typeof document !== 'undefined') {
     mark: (button) => markPop.toggle(button),
     stop: () => act('/live/run/stop'),
   };
-  const titleView = () => ({busy: ui.busy, canConfirm: Boolean(confirmUi?.ready()) && !regions.busy(), error: ui.error,
+  const titleView = () => ({busy: ui.busy, canConfirm: Boolean(confirmUi?.ready()) && !regions.busy(),
     canStart: startPop.canStart(), runOptionsOpen: startPop.isOpen(), markOpen: markPop.isOpen()});
   const titlebar = nodes.titleActions.closest('.titlebar');
   const startPop = mountStartPopover(titlebar, client, {onStart: (body) => act('/live/run/start', body),
@@ -409,6 +418,7 @@ if (typeof document !== 'undefined') {
       hudProc = frameHud?.proc || null;
       hud = frameHud || null;
       viewerUi.setFrame(bitmap, frameHud);
+      effects.refresh();
       if (status?.state === 'running' && log.note(hud?.rec, {testRun: Boolean(status.test_run)})) runDirty = true;
     }, preview.signal, {onState: viewerUi.setStream});
   };
@@ -435,11 +445,16 @@ if (typeof document !== 'undefined') {
   }, 100);
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => timeline.draw()).observe(timelineParts.canvas);
 
+  // Dialog "Anzeige bewegt": dieselben Bedienschritte wie die Titelleiste.
+  const alertRun = {stop: () => act('/live/run/stop'), setup: () => act('/live/setup', {cell_text: null})};
   client.start((next) => {
     status = next;
     render();
+    effects.update(next, undefined);
+    watchAlerts(next, {client, viewer: viewerUi.viewer, run: alertRun});
   }, (next) => {
     conn = next;
+    effects.update(undefined, next);
     document.body.classList.toggle('offline', next.offline);
     // Wert-Etikett im HUD und Ergebnisanzeige folgen derselben Regel (readoutTag mit offline).
     viewerUi.viewer.setOffline(next.offline);

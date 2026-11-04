@@ -165,6 +165,33 @@ body.offline .app{filter:brightness(.5) saturate(.45)}
 .vstage.editing.drag{cursor:grabbing}
 .vfb{position:absolute;z-index:12;pointer-events:none;height:20px;display:flex;align-items:center;padding:0 6px;background:rgba(22,21,19,.92);border:1px solid var(--line);font-size:12px;font-weight:500;color:var(--tx);white-space:nowrap}
 .vfb.ok{border-color:var(--mag)}.vfb.err{border-color:var(--err)}.vfb.pend{border-color:var(--sel-line);color:var(--tx2)}
+/* Zustandseffekte (Spec "Zustandseffekte", Mock 8a–8e): eigene Ebene ueber dem Bild */
+.vfx{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.vglow{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .45s cubic-bezier(.16,1,.3,1);box-shadow:inset 0 0 0 1px rgba(238,91,77,.75),inset 0 0 60px 4px rgba(238,91,77,.30),inset 0 0 150px 10px rgba(238,91,77,.07)}
+.vstage.fx-err .vglow{opacity:1}
+.vcanvas{transition:filter .25s}
+.vstage.fx-dark .vcanvas{filter:brightness(.3)}
+.vmsg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;color:var(--tx2);font-size:13px;pointer-events:none;background:rgba(20,19,17,.86);border:1px solid var(--line);border-radius:2px;padding:6px 12px}
+.stalep{position:absolute;left:50%;top:52px;transform:translateX(-50%);width:420px;max-width:calc(100% - 32px);z-index:11;background:rgba(28,27,25,.94);border:1px solid #4a4741;border-radius:2px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:14px 18px 15px;pointer-events:none}
+.stalep .h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-bottom:6px}
+.stalep .big{font-size:19px;font-weight:600;color:var(--tx);line-height:1.25}
+.stalep .big .num{font-weight:600}
+.stalep p{margin:6px 0 0;color:var(--tx2);font-size:12.5px}
+.stalep p b{color:var(--tx);font-weight:600}
+/* Hinweise unten rechts im Viewer, hoechstens drei */
+.toasts{position:absolute;right:10px;bottom:10px;z-index:15;display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:none}
+.toast{pointer-events:auto;width:330px;max-width:calc(100vw - 32px);background:#272622;border:1px solid #47443e;border-radius:2px;box-shadow:0 8px 22px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);padding:8px 8px 9px 11px;display:grid;grid-template-columns:12px 1fr 20px;gap:2px 8px;font-size:12.5px;animation:tin .3s cubic-bezier(.16,1,.3,1)}
+.toast .sq{margin-top:4px}
+.toast b{font-weight:600}
+.toast p{grid-column:2;margin:0;color:var(--tx2);font-size:12px}
+.toast button{width:20px;height:20px;padding:0;justify-content:center;color:var(--tx3)}
+.toast button svg.i{width:12px;height:12px}
+.toast.err{border-color:#6a3129}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Verbindung zur Werkbank verloren: Band oben, ausserhalb der gedimmten Huelle */
+.netband{position:fixed;left:0;right:0;top:0;height:40px;z-index:50;display:flex;align-items:center;gap:12px;padding:0 16px;background:#5a201a;border-bottom:1px solid #8a3a30;color:#ffe2dc;font-size:13px}
+.netband b{font-weight:600}
+.netband .num{margin-left:auto;color:#ffc9c0}
 .strip{height:118px;flex:none;display:flex;flex-direction:column;background:var(--dock);border-top:1px solid var(--line)}
 .strip .pt{border-bottom:1px solid var(--line2)}
 

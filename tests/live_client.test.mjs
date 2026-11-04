@@ -948,7 +948,7 @@ test('client retries the full status until the first success and reports a hangi
   client.stop();
 });
 
-test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, shadows only on popover/menu/modal', () => {
+test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, shadows only on pop-ups', () => {
   const css = readFileSync(new URL('../src/dispread/workbench/static/live/live.css', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
   const tokens = {'--bg0': '#0d0c0b', '--bg1': '#161513', '--dock': '#1c1b19', '--title': '#24231f',
@@ -969,7 +969,11 @@ test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, sh
   }
   for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!/box-shadow/.test(body) || /box-shadow\s*:\s*none/.test(body)) continue;
-    assert.ok(selector.split(',').every(part => /\.(popover|menu|modal)\b/.test(part)), `Schatten an ${selector.trim()}`);
+    // Das Innenleuchten des Zustandseffekts (nur inset) ist kein Schatten.
+    const shadows = /box-shadow\s*:\s*([^;}]+)/.exec(body)[1].split(/,(?![^(]*\))/);
+    if (/\.vglow\b/.test(selector) && shadows.every(part => /^\s*inset\b/.test(part))) continue;
+    // Pop-ups: Popover, Menue, Dialog, Hinweis (toast) und das Stillstandsfeld (Mock 8c).
+    assert.ok(selector.split(',').every(part => /\.(popover|menu|modal|toast|stalep)\b/.test(part)), `Schatten an ${selector.trim()}`);
   }
   for (const font of ['NotoSans-Regular.woff2', 'NotoSans-Medium.woff2', 'NotoSans-SemiBold.woff2',
     'NotoSans-Bold.woff2', 'NotoSansMono-Regular.woff2', 'NotoSansMono-Bold.woff2']) {

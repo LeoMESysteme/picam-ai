@@ -1,6 +1,6 @@
 // Legende des Viewers: erklaert jedes Markierungs-Symbol (Mock "Legende").
 // Die Symbole sind kleine Inline-SVGs in denselben Farben wie das HUD.
-// Nur Symbole, die der Viewer heute zeichnet (Effekte folgen mit Aufgabe 10).
+// Nur Symbole, die Viewer und Effektebene zeichnen (Texte aus dem Mock).
 
 export const LEGEND_ROWS = [
   ['<path d="M1 6h20" stroke="#55c46e" stroke-width="1.5"/><rect x="0" y="3.5" width="5" height="5" fill="#55c46e"/>',
@@ -14,7 +14,10 @@ export const LEGEND_ROWS = [
     'Rahmenbereich ohne Treffer'],
   ['<rect x="2" y=".5" width="17" height="11" fill="none" stroke="#d65ccf" stroke-opacity=".6" stroke-dasharray="2 2"/>',
     'Suchfenster des Rahmenbereichs'],
-  ['<path d="M1 6h20" stroke="#30c6b7" stroke-width="1.5"/>', 'Korrektur läuft (Nachregistrierung)'],
+  ['<g fill="#30c6b7"><circle cx="4" cy="6" r="1.6"/><circle cx="10" cy="5" r="1.2"/><circle cx="16" cy="7" r="1.6"/></g>',
+    'Korrektur läuft (Nachregistrierung)'],
+  ['<g fill="#ff6250" opacity=".8"><circle cx="5" cy="4" r="1.3"/><circle cx="9" cy="8" r="1.8"/><circle cx="15" cy="5" r="1.2"/><circle cx="18" cy="9" r="1"/></g>',
+    'Fehlerort (Wolke an betroffenen Ecken)'],
   ['<rect x="1" y="1.5" width="20" height="9" fill="#121110" stroke="#55c46e"/>', 'Wert-Etikett: Wert, Status, Spur'],
 ];
 

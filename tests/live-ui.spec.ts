@@ -966,3 +966,195 @@ test('Verbindung verloren: Etikett und Ergebnis veraltet, obwohl Bilder kommen',
   await expect(judge.locator('.jh')).toContainText('Freigegeben', { timeout: 5000 });
   expect(errors).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Zustandseffekte, Hinweise und Dialoge (Aufgabe 10)
+// ---------------------------------------------------------------------------
+// Mittlerer Rotanteil r/(r+g+b) eines Bildschirmstreifens (Screenshot mit
+// Effektebene, Leuchten und Bild). Dekodiert im Browser per createImageBitmap.
+async function redShare(page: Page, clip: { x: number; y: number; width: number; height: number }) {
+  const png = (await page.screenshot({ clip })).toString('base64');
+  return page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let red = 0, sum = 0;
+    for (let i = 0; i < data.length; i += 4) { red += data[i]; sum += data[i] + data[i + 1] + data[i + 2]; }
+    return red / Math.max(1, sum);
+  }, png);
+}
+
+async function rightEdge(page: Page) {
+  const box = (await page.locator('.vstage').boundingBox())!;
+  return { x: Math.round(box.x + box.width - 24), y: Math.round(box.y + 40), width: 20, height: Math.round(box.height - 220) };
+}
+
+test('Rahmen verdeckt: Leuchten, Hinweis, Ecken rechts', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
+  await page.waitForTimeout(600);
+  const calm = await redShare(page, await rightEdge(page));
+  await hook(page, '/test/scene', { name: 'running_rahmen_verdeckt' });
+  const stage = page.locator('.vstage');
+  await expect(stage).toHaveClass(/fx-err/);
+  const toast = page.locator('.toast', { hasText: 'Rahmenbereiche verdeckt oder verschoben – Kamera und Sicht prüfen' });
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText('Anzeige verloren');
+  const fx = page.locator('canvas.vfx');
+  await expect.poll(() => fx.evaluate((el: any) => el.effects.stats().kind)).toBe('error');
+  expect(await fx.evaluate((el: any) => el.effects.stats().corners)).toEqual([1, 2]);
+  await expect.poll(() => fx.evaluate((el: any) => el.effects.stats().particles)).toBeGreaterThan(100);
+  await page.waitForTimeout(800);
+  const hot = await redShare(page, await rightEdge(page));
+  expect(hot).toBeGreaterThan(calm + 0.01);
+  // Zeichenzeit der Effektebene: Median ueber 60 Bilder unter 4 ms.
+  const median = await fx.evaluate((el: any) => new Promise<number>((resolve) => {
+    const samples: number[] = [];
+    const step = () => {
+      samples.push(el.effects.stats().lastDrawMs);
+      if (samples.length < 60) requestAnimationFrame(step);
+      else resolve(samples.sort((a, b) => a - b)[30]);
+    };
+    requestAnimationFrame(step);
+  }));
+  expect(median).toBeLessThan(4);
+  // Hinweis bleibt bis zur Erholung, dann verschwinden Leuchten und Hinweis.
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(toast).toHaveCount(0);
+  await expect(stage).not.toHaveClass(/fx-err/);
+  expect(errors).toEqual([]);
+});
+
+test('Anzeige bewegt: Dialog, Esc = Weiter beobachten, kein Wiederauftauchen nach Neuladen', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.evaluate(() => sessionStorage.clear());
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(r.url())) posts.push(new URL(r.url()).pathname); });
+  await hook(page, '/test/scene', { name: 'running_anzeige_bewegt' });
+  const modal = page.getByRole('dialog', { name: 'Anzeige hat sich bewegt' });
+  await expect(modal).toBeVisible();
+  await expect(modal).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad) – Werte werden nicht freigegeben. Bitte neu einrichten.');
+  for (const name of ['Weiter beobachten', 'Lauf stoppen', 'Neu einrichten']) {
+    await expect(modal.getByRole('button', { name })).toBeVisible();
+  }
+  await expect(modal.getByRole('button', { name: 'Lauf stoppen' })).toHaveClass(/danger/);
+  expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().corners)).toEqual([0, 1, 2, 3]);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  await page.waitForTimeout(1500);
+  await expect(modal).toHaveCount(0);
+  // Neuladen: dieselbe Episode fragt nicht wieder.
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Unlesbar');
+  await page.waitForTimeout(2000);
+  await expect(modal).toHaveCount(0);
+  expect(posts.filter((p) => p === '/live/run/stop' || p === '/live/setup')).toEqual([]);
+  // Lauf stoppen geht ueber den bestehenden Vertrag (POST /live/run/stop).
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await expect(modal).toBeVisible();
+  const stop = page.waitForRequest('**/live/run/stop');
+  await modal.getByRole('button', { name: 'Lauf stoppen' }).click();
+  await stop;
+  await expect(modal).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Streamstillstand: Feld mit Alter', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_stalled' });
+  const panel = page.locator('.stalep');
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('Streamstillstand: kein neues Kamerabild');
+  const age = async () => Number((await panel.locator('.big .num').textContent())!.replace(',', '.'));
+  const first = await age();
+  expect(first).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(1200);
+  expect(await age()).toBeGreaterThan(first + 0.5);
+  await expect(page.locator('.toast', { hasText: 'Streamstillstand: kein neues Kamerabild' })).toBeVisible();
+  // Eingefroren, unscharf und entsaettigt (nur das Bild, das HUD bleibt scharf).
+  await expect.poll(() => page.locator('canvas.vcanvas').evaluate((el: any) => el.viewer.imageFilter()))
+    .toMatch(/blur\(.*saturate/);
+  expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().kind)).toBe('stalled');
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(panel).toBeHidden();
+  await expect.poll(() => page.locator('canvas.vcanvas').evaluate((el: any) => el.viewer.imageFilter())).toBe('none');
+  expect(errors).toEqual([]);
+});
+
+test('Verbindung verloren: Band nach 1,5 s', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
+  const band = page.locator('.netband');
+  await expect(band).toBeHidden();
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  const offline = (on: boolean) => page.request.post('/test/offline', {
+    headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': csrf }, data: { on } });
+  expect((await offline(true)).ok()).toBe(true);
+  const started = Date.now();
+  try {
+    await expect(band).toBeVisible({ timeout: 5000 });
+    expect(Date.now() - started).toBeGreaterThan(900);
+    await expect(band).toContainText('Verbindung zur Werkbank verloren – Werte veraltet');
+    const seconds = async () => Number(/seit ([\d,]+) s/.exec((await band.textContent())!)![1].replace(',', '.'));
+    const a = await seconds();
+    expect(a).toBeGreaterThanOrEqual(1.5);
+    await page.waitForTimeout(700);
+    expect(await seconds()).toBeGreaterThan(a);
+    await expect(page.locator('body')).toHaveClass(/offline/);
+    expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().kind)).toBe('offline');
+  } finally {
+    expect((await offline(false)).ok()).toBe(true);
+  }
+  await expect(band).toBeHidden({ timeout: 5000 });
+  expect(errors).toEqual([]);
+});
+
+test('Hinweise: gleicher Schlüssel ersetzt, höchstens drei sichtbar, per Tastatur schließbar', async ({ page }) => {
+  const errors = watchErrors(page);
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  await page.evaluate(async () => {
+    const { toast } = await import('/static/live/ui/toasts.js');
+    toast({ level: 'info', title: 'Eins', key: 'a', sticky: true });
+    toast({ level: 'info', title: 'Eins neu', key: 'a', sticky: true });
+    for (const t of ['Zwei', 'Drei', 'Vier']) toast({ level: 'warn', title: t, sticky: true });
+    toast({ level: 'warn', title: 'Vier', sticky: true });
+  });
+  const visible = page.locator('.toast:visible');
+  await expect(visible).toHaveCount(3);
+  await expect(page.locator('.toast', { hasText: 'Eins' })).toHaveCount(1);
+  await expect(page.locator('.toast', { hasText: 'Vier' })).toHaveCount(1);
+  await expect(visible.first()).toContainText('Zwei');
+  const close = page.locator('.toast', { hasText: 'Vier' }).getByRole('button', { name: 'Schließen' });
+  await close.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.toast', { hasText: 'Vier' })).toHaveCount(0);
+  await expect(visible).toHaveCount(3);
+  await page.locator('.toast', { hasText: 'Drei' }).getByRole('button', { name: 'Schließen' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.toast', { hasText: 'Drei' })).toHaveCount(0);
+  // Nicht stehende Hinweise schliessen nach 4 s selbst.
+  await page.evaluate(async () => {
+    const { toast } = await import('/static/live/ui/toasts.js');
+    toast({ level: 'info', title: 'Kurz' });
+  });
+  await expect(page.locator('.toast', { hasText: 'Kurz' })).toBeVisible();
+  await expect(page.locator('.toast', { hasText: 'Kurz' })).toHaveCount(0, { timeout: 6000 });
+  expect(errors).toEqual([]);
+});

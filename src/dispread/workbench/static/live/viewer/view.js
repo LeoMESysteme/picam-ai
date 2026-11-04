@@ -27,6 +27,7 @@ export function createViewer(canvas, opts = {}) {
     src: 'live', layers: new Set(ALL_LAYERS), hud: null, frame: null, frameAt: null, frames: [],
     stills: {}, views: {}, auto: {live: true}, hover: null, pinned: null, pointer: null, queued: false,
     frameSize: null, grid: null, painters: [], clickHandlers: [], ageTimers: [], offline: false,
+    imageFilter: 'none',
   };
   const viewKey = () => (state.src === 'still' ? 'live' : state.src);
   const size = () => [canvas.clientWidth || 0, canvas.clientHeight || 0];
@@ -144,7 +145,10 @@ export function createViewer(canvas, opts = {}) {
       // Ab 2,2 Geraetepixeln je Quellpixel ohne Glaetten: Bildpunkte bleiben sichtbar.
       ctx.imageSmoothingEnabled = (v.s * dpr * d[0]) / (img.width || d[0]) < 2.2;
       ctx.imageSmoothingQuality = 'high';
+      // Stillstand: nur das Bild wird unscharf und entsaettigt, das HUD bleibt scharf.
+      if (state.imageFilter !== 'none') ctx.filter = state.imageFilter;
       ctx.drawImage(img, 0, 0, d[0], d[1]);
+      ctx.filter = 'none';
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Live-HUD gehoert nur zum Live-Bild: Standbilder tragen ihre eigene
@@ -390,6 +394,14 @@ export function createViewer(canvas, opts = {}) {
       redraw();
     },
     offline: () => state.offline,
+    // CSS-Filter nur fuer das Bild (Zustandseffekt Streamstillstand), 'none' = aus.
+    setImageFilter(filter) {
+      const next = filter || 'none';
+      if (next === state.imageFilter) return;
+      state.imageFilter = next;
+      redraw();
+    },
+    imageFilter: () => state.imageFilter,
   };
 
   function hitLayerOn(kind) {
