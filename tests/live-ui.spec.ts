@@ -260,6 +260,13 @@ test('Hülle zeigt Titel, Docks und Statusleiste in Szene idle', async ({ page }
     await Promise.all([document.fonts.load('13px "Noto Sans"'), document.fonts.load('13px "Noto Sans Mono"')]);
     return document.fonts.check('13px "Noto Sans"') && document.fonts.check('13px "Noto Sans Mono"');
   })).toBe(true);
+  // Echte Schnitte statt synthetischer Fettung: die Titel nutzen 600, die Marke 600, Knöpfe 500.
+  expect(await page.evaluate(async () => {
+    await Promise.all(['500', '600', '700'].map((w) => document.fonts.load(`${w} 13px "Noto Sans"`)));
+    return [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'Noto Sans' && f.status === 'loaded')
+      .map((f) => f.weight).sort();
+  })).toEqual(['400', '500', '600', '700']);
+  await expect(page.locator('body')).toHaveCSS('font-synthesis-weight', 'none');
   await expect(page.locator('body')).toHaveCSS('font-size', '13px');
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(22, 21, 19)');
 

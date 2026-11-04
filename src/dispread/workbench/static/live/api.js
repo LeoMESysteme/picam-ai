@@ -4,10 +4,19 @@
 import {connectionLost, connectionView} from './model.js';
 
 const POLL_MS = 500;
+// Ein haengender Abruf darf den Takt nicht bis zum TCP-Timeout anhalten.
+const STATUS_TIMEOUT_MS = 3000;
 const NETWORK_ERROR = 'Aktion nicht bestätigt – Verbindung prüfen und erneut versuchen.';
 
+// Fehler der Anzeige-Callbacks sichtbar machen (Konsole, pageerror), ohne
+// sie als Verbindungsverlust zu deuten.
+function surfaceError(error) {
+  if (typeof globalThis.reportError === 'function') globalThis.reportError(error);
+  else setTimeout(() => { throw error; });
+}
+
 export function createClient({fetchImpl = (...args) => fetch(...args), now = () => performance.now(),
-  timers = globalThis} = {}) {
+  timers = globalThis, onError = surfaceError} = {}) {
   let lastStatus = null;
   let lastOkMs = null;
   let httpStatus = null;
@@ -26,17 +35,31 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
     return {offline: connectionLost(lastOkMs, t, httpStatus), httpStatus, lastOkMs,
       ageMs: lastOkMs === null ? null : t - lastOkMs, view: connectionView(lastStatus, lastOkMs, t, httpStatus)};
   };
-  const report = () => { if (running) onConnection?.(connection()); };
+  const deliver = (callback, value) => {
+    try { callback?.(value); } catch (error) { onError(error); }
+  };
+  const report = () => { if (running) deliver(onConnection, connection()); };
 
   const refresh = async () => {
     const mine = ++sequence;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer = null;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = timers.setTimeout(() => {
+        controller?.abort();
+        reject(new Error('Statusabruf ohne Antwort'));
+      }, STATUS_TIMEOUT_MS);
+    });
+    timeout.catch(() => {});
+    let received = null;
     try {
       // Einmal den vollen Status (deutsche Gruende), danach nur den kleinen.
-      const response = await fetchImpl(fullReceived ? '/live/status' : '/live/status?full=1');
+      const response = await Promise.race([
+        fetchImpl(fullReceived ? '/live/status' : '/live/status?full=1', {signal: controller?.signal}), timeout]);
       if (mine !== sequence) return;
       httpStatus = response.status;
       if (response.ok) {
-        const status = await response.json();
+        const status = await Promise.race([response.json(), timeout]);
         if (mine !== sequence) return;
         fullReceived = true;
         if (status.tracking_reasons) trackingReasons = status.tracking_reasons;
@@ -44,12 +67,17 @@ export function createClient({fetchImpl = (...args) => fetch(...args), now = () 
         if (typeof status.csrf === 'string') csrf = status.csrf;
         lastStatus = status;
         lastOkMs = now();
-        if (running) onStatus?.(status);
+        received = status;
       }
     } catch {
       if (mine === sequence) httpStatus = null;
+    } finally {
+      timers.clearTimeout(timer);
     }
-    if (mine === sequence) report();
+    if (mine !== sequence) return;
+    // Ausserhalb des Abruf-try: ein Fehler beim Rendern ist kein Verbindungsverlust.
+    if (received && running) deliver(onStatus, received);
+    report();
   };
 
   const tick = async () => {

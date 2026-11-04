@@ -965,7 +965,8 @@ test('live.css carries the spec tokens verbatim, 13 px base, radius ≤ 2 px, sh
     if (!/box-shadow/.test(body) || /box-shadow\s*:\s*none/.test(body)) continue;
     assert.ok(selector.split(',').every(part => /\.(popover|menu|modal)\b/.test(part)), `Schatten an ${selector.trim()}`);
   }
-  for (const font of ['NotoSans-Regular.woff2', 'NotoSansMono-Regular.woff2', 'NotoSansMono-Bold.woff2']) {
+  for (const font of ['NotoSans-Regular.woff2', 'NotoSans-Medium.woff2', 'NotoSans-SemiBold.woff2',
+    'NotoSans-Bold.woff2', 'NotoSansMono-Regular.woff2', 'NotoSansMono-Bold.woff2']) {
     assert.match(css, new RegExp(`url\\("\\.\\./vendor/fonts/${font}"\\)`));
     assert.ok(readFileSync(new URL(`../src/dispread/workbench/static/vendor/fonts/${font}`, import.meta.url))
       .subarray(0, 4).toString('latin1') === 'wOF2', font);
@@ -983,4 +984,49 @@ test('new page loads only module scripts from /static/live (CSP: no inline scrip
   }
   assert.match(html, /<html lang="de">/);
   assert.match(html, /href="\/static\/live\/live\.css"/);
+});
+
+test('client: a throwing status renderer stays online and surfaces the error', async () => {
+  const clock = fakeClock();
+  const errors = [];
+  const fetchImpl = async () => ({ok: true, status: 200, json: async () => ({state: 'idle', csrf: 'x'})});
+  const client = createClient({fetchImpl, now: clock.now, timers: clock.timers, onError: e => errors.push(e)});
+  const connections = [];
+  client.start(() => { throw new TypeError('Renderfehler'); }, c => connections.push(c));
+  await new Promise(setImmediate);
+  await clock.advance(600);
+  assert.ok(errors.length >= 2 && errors.every(e => e.message === 'Renderfehler'), String(errors));
+  assert.equal(connections.at(-1).offline, false);
+  assert.equal(connections.at(-1).httpStatus, 200);
+  assert.equal(connections.at(-1).view.headline, 'Bereit zur Einrichtung');
+  client.stop();
+});
+
+test('client: a status request without answer is abandoned after 3 s and polling continues', async () => {
+  const clock = fakeClock();
+  const gets = [];
+  const signals = [];
+  const fetchImpl = (path, options) => { gets.push(path); signals.push(options?.signal); return new Promise(() => {}); };
+  const client = createClient({fetchImpl, now: clock.now, timers: clock.timers});
+  const connections = [];
+  client.start(() => {}, c => connections.push(c));
+  await new Promise(setImmediate);
+  await clock.advance(2900);
+  assert.equal(gets.length, 1, 'vor dem Zeitlimit kein zweiter Abruf');
+  await clock.advance(200);
+  assert.ok(signals[0]?.aborted, 'der haengende Abruf wird abgebrochen');
+  await clock.advance(500);
+  assert.equal(gets.length, 2, 'nach dem Zeitlimit geht der Takt weiter');
+  assert.equal(connections.at(-1).offline, true);
+  client.stop();
+});
+
+test('effectState: test run suppresses only the server-rewritten records, not genuinely unreadable ones', () => {
+  const status = scene('running_valid');
+  status.test_run = {testlauf: true};
+  status.run.latest = {...status.run.latest, status: 'unreadable', value: null,
+    reject_reasons: ['testlauf_keine_freigabe']};
+  assert.equal(effectState(status, {offline: false}).kind, null);
+  status.run.latest.reject_reasons = ['leser:leerzelle_gestoert:14'];
+  assert.equal(effectState(status, {offline: false}).kind, 'error');
 });

@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Auf der neuen Live-Seite fettete der Browser Überschriften
+  künstlich, weil Noto Sans nur in Regular vorlag. Jetzt liegen die
+  offiziellen Schnitte 400/500/600/700 und Noto Sans Mono 400/700 als
+  Latein-Teilmenge lokal; synthetische Fettung ist abgeschaltet. Ein
+  Fehler beim Darstellen des Status erscheint jetzt als Seitenfehler statt
+  als „Verbindung zur Werkbank verloren“, ein Statusabruf ohne Antwort
+  wird nach 3 s abgebrochen und der Abruftakt läuft weiter. Im Testlauf
+  zeigen echt unlesbare Bilder wieder den Unlesbar-Effekt; nur die vom
+  Server gesperrten Freigaben (`testlauf_keine_freigabe`) bleiben ruhig.
+
 * 2026-11-04: Die Werkbank-Seite `/live` war eine lange Formularseite
   ohne festes Layout. `/live` liefert jetzt das neue Seitengerüst im
   Machine-Vision-Stil des freigegebenen Mocks (`static/live/`): Titelleiste

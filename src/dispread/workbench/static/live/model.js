@@ -141,8 +141,11 @@ export function effectState(status, conn = {}) {
   const fresh = freshLatest(status);
   const hint = status.run?.tracking_hint?.kind || null;
   const lost = fresh && (latest?.reject_reasons || []).some(reason => reason.startsWith('tracking_lost:'));
-  // Im Testlauf ist jeder Datensatz absichtlich UNREADABLE; das allein ist keine Stoerung.
-  const unreadable = fresh && latest?.status === 'unreadable' && !status.test_run;
+  // Im Testlauf schreibt der Server nur VALID-Datensaetze auf UNREADABLE um
+  // (erster Grund testlauf_keine_freigabe, live/session.py); das ist keine Stoerung.
+  // Echt unlesbare Bilder behalten ihre eigenen Gruende und zeigen den Effekt.
+  const unreadable = fresh && latest?.status === 'unreadable' &&
+    !(latest.reject_reasons || []).includes('testlauf_keine_freigabe');
   const track = conn?.hud?.track || null;
   if (hint || lost || unreadable) {
     const regions = (track?.regions || []).flatMap((region, i) => (region && region.ok === false ? [i] : []));
