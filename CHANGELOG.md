@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-04: Die Live-Vorschau kodierte bei jedem Abruf erneut und
+  zeichnete das Quad fest ins Bild. `/live/preview.mjpg` liefert jetzt
+  JPEG-Teile mit Sequenz, Aufnahmezeit und kompaktem HUD im Kopf;
+  `/live/preview.jpg` teilt denselben Kodiercache. Die Vorschau zielt
+  auf 15 fps und fällt bei übersprungenen Messbildern oder langsamer
+  Kodierung auf 5 fps, mit fünf Sekunden Erholzeit. Die Kodierung läuft
+  außerhalb der Messung, langsame Betrachter enden nach zwei Sekunden
+  Schreibwartezeit. Der Strom endet nach zehn Minuten zum Neuverbinden.
+  Das Quad bleibt als HUD-Geometrie verfügbar, ohne das JPEG zu verändern.
+
 * 2026-11-04: Laufzähler und Bilddiagnosen waren während eines Laufs
   nicht vollständig für die Werkbank verfügbar. `/live/status` ergänzt
   jetzt alle vier Statuszähler je auditiertem Bild und einen 60-s-Verlauf

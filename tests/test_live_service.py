@@ -1069,23 +1069,26 @@ def test_preview_without_frame_is_unavailable(tmp_path):
     assert service.preview_jpeg() is None
 
 
-def test_preview_resizes_and_draws_quad_without_changing_camera_image(tmp_path):
+def test_preview_resizes_without_quad_or_changing_camera_image(tmp_path):
     from types import SimpleNamespace
 
     import cv2
     import numpy as np
 
+    from dispread.records import TimeBaseKind, Timestamp
+
     image = np.zeros((100, 200, 3), dtype=np.uint8)
     owner = FakeOwner()
-    owner.latest = lambda: (1, SimpleNamespace(image=image))
+    owner.latest = lambda: (1, SimpleNamespace(
+        image=image, capture_timestamp=Timestamp(value_ns=123, base=TimeBaseKind.SYNTHETIC)))
     service = LiveService(owner, tmp_path)
-    service._session = SimpleNamespace(_pipeline=SimpleNamespace(locator=SimpleNamespace(
-        last_track=SimpleNamespace(quad=((20, 20), (180, 20), (180, 80), (20, 80)))
-    )))
-    jpeg = service.preview_jpeg(width=100)
+    track = {"quad": [[20, 20], [180, 20], [180, 80], [20, 80]]}
+    service._state = "running"
+    service._session = SimpleNamespace(frame_info=lambda: {"track": track})
+    jpeg = service.preview_jpeg()
     preview = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
-    assert preview.shape == (50, 100, 3)
-    assert preview[10, 50, 1] > 150
+    assert preview.shape == (480, 960, 3)
+    assert not preview.any()
     assert not image.any()
 
 

@@ -30,6 +30,7 @@ from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
 from dispread.live.output import validate_output
+from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
@@ -183,6 +184,8 @@ class LiveService:
         self._run_stop: threading.Event | None = None
         self._run_thread: threading.Thread | None = None
         self._setup_thread: threading.Thread | None = None
+        self._preview = PreviewEncoder(lambda: self._owner.latest(), self._preview_hud,
+                                       governor=RateGovernor(self._monotonic))
 
     # -- Anzeige -------------------------------------------------------------
     def _storage_status(self) -> dict:
@@ -319,24 +322,18 @@ class LiveService:
                               else {"enabled": False, "reason": "kein Referenzlauf"}),
             }
 
-    def preview_jpeg(self, width: int = 960) -> bytes | None:
-        """Neuestes Bild verkleinert als JPEG; mit Lauf das nachgefuehrte Quad."""
-        import cv2
-
-        latest = self._owner.latest()
-        if latest is None:
-            return None
-        image = latest[1].image
-        scale = width / image.shape[1]
-        small = cv2.resize(image, (width, round(image.shape[0] * scale)))
+    def _preview_hud(self) -> dict | None:
         session = self._session
-        locator = getattr(getattr(session, "_pipeline", None), "locator", None)
-        track = getattr(locator, "last_track", None)
-        if track is not None and track.quad is not None:
-            points = np.array([[x * scale, y * scale] for x, y in track.quad], dtype=np.int32)
-            cv2.polylines(small, [points], True, (0, 220, 0), 2)
-        ok, encoded = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        return encoded.tobytes() if ok else None
+        return session.frame_info() if self._state == "running" and session is not None else None
+
+    def preview_frame(self) -> PreviewFrame | None:
+        """Bild und HUD fuer denselben Vorschau-Teil, ohne eingezeichnetes Quad."""
+        return self._preview.frame()
+
+    def preview_jpeg(self) -> bytes | None:
+        """Werkzeugzugriff teilt die Kodierung mit dem Vorschau-Strom."""
+        frame = self.preview_frame()
+        return frame.jpeg if frame is not None else None
 
     def setup_file(self, name: str) -> Path | None:
         if name not in OVERLAYS or self._session_dir is None:

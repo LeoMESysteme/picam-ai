@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -98,6 +99,41 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             raise web.HTTPServiceUnavailable()
         return web.Response(body=jpeg, content_type="image/jpeg")
 
+    async def preview_mjpg(request):
+        response = web.StreamResponse(headers={
+            "Content-Type": "multipart/x-mixed-replace; boundary=frame", "Cache-Control": "no-store",
+        })
+        await response.prepare(request)
+        started = time.monotonic()
+        previous = None
+        last_sent = None
+        interval = 1 / 15
+        try:
+            while time.monotonic() - started < 600:
+                now = time.monotonic()
+                if last_sent is not None and now - last_sent < interval:
+                    await asyncio.sleep(min(interval - (now - last_sent), 0.03))
+                    continue
+                frame = await asyncio.to_thread(service.preview_frame)
+                if frame is not None:
+                    interval = 1 / frame.hud["preview"]["fps"]
+                    now = time.monotonic()
+                    if frame.seq != previous and (last_sent is None or now - last_sent >= interval):
+                        hud = json.dumps(frame.hud, ensure_ascii=True, separators=(",", ":"))
+                        header = (
+                            "--frame\r\nContent-Type: image/jpeg\r\n"
+                            f"Content-Length: {len(frame.jpeg)}\r\n"
+                            f"X-Frame-Sequence: {frame.seq}\r\nX-Capture-Ns: {frame.cap_ns}\r\n"
+                            f"X-Hud: {hud}\r\n\r\n"
+                        ).encode("ascii")
+                        await asyncio.wait_for(response.write(header + frame.jpeg + b"\r\n"), 2)
+                        previous = frame.seq
+                        last_sent = time.monotonic()
+                await asyncio.sleep(0.03)
+        except (ConnectionError, TimeoutError):
+            pass
+        return response
+
     app.router.add_get("/live", page)
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
@@ -109,3 +145,4 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_post("/live/camera/start", camera_start)
     app.router.add_get("/live/setup/{name}.png", setup_image)
     app.router.add_get("/live/preview.jpg", preview)
+    app.router.add_get("/live/preview.mjpg", preview_mjpg)

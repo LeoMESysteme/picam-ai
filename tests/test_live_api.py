@@ -54,6 +54,242 @@ def _run(check):
     asyncio.run(main())
 
 
+def _preview_service(tmp_path, *, latest=None):
+    from types import SimpleNamespace
+
+    from test_live_preview import camera_frame, frame_info
+
+    from dispread.live.service import LiveService
+
+    service = LiveService(SimpleNamespace(latest=latest or (lambda: (7, camera_frame()))), tmp_path,
+                          diagnostic_staging_root=tmp_path / "staging")
+    service._state = "running"
+    service._session = SimpleNamespace(frame_info=frame_info)
+    return service
+
+
+def _run_preview(check):
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Worker ausserhalb des Loops beenden: auch dessen Shutdown-Weckung
+    # ueber socketpair ist im Sandbox gesperrt.
+    with ThreadPoolExecutor() as executor:
+        loop = asyncio.new_event_loop()
+        loop.set_default_executor(executor)
+        try:
+            return loop.run_until_complete(check)
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+
+
+async def _preview_handler(service):
+    from contextlib import suppress
+
+    from aiohttp.test_utils import make_mocked_request
+
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: "tok")
+    request = make_mocked_request("GET", "/live/preview.mjpg", app=app)
+    match = await app.router.resolve(request)
+    task = asyncio.create_task(match.handler(request))
+    try:
+        # Der Sandbox sperrt auch die Socketpair-Weckung von to_thread.
+        # Timer halten hier den echten Eventloop und echte Worker benutzbar.
+        while not task.done():
+            await asyncio.wait((task,), timeout=0.01)
+        return await task
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+def _capture_preview(monkeypatch, *, limit=1):
+    import time
+
+    responses = []
+
+    class CaptureResponse(web.StreamResponse):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.parts = []
+            responses.append(self)
+
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            self.parts.append((time.monotonic(), data))
+            if limit is not None and len(self.parts) >= limit:
+                raise ConnectionResetError("Betrachter getrennt")
+
+    monkeypatch.setattr("dispread.workbench.live_api.web.StreamResponse", CaptureResponse)
+    return responses
+
+
+def _check_preview_part(part):
+    import json
+
+    header, body = part.split(b"\r\n\r\n", 1)
+    lines = header.split(b"\r\n")
+    assert lines[0] == b"--frame"
+    headers = dict(line.split(b": ", 1) for line in lines[1:])
+    assert headers[b"Content-Type"] == b"image/jpeg"
+    assert body.startswith(b"\xff\xd8") and body.endswith(b"\xff\xd9\r\n")
+    assert len(body) - 2 == int(headers[b"Content-Length"])
+    hud_bytes = headers[b"X-Hud"]
+    assert hud_bytes.isascii() and len(hud_bytes) <= 2048
+    hud = json.loads(hud_bytes)
+    assert hud["seq"] == int(headers[b"X-Frame-Sequence"]) == 7
+    assert hud["cap_ns"] == int(headers[b"X-Capture-Ns"]) == 123463
+    assert hud["rec"]["seq"] == 6
+    return hud
+
+
+def test_preview_mjpg_parts_carry_hud_headers(tmp_path):
+    async def check():
+        app = web.Application()
+        add_live_routes(app, _preview_service(tmp_path), csrf_of=lambda _r: "tok")
+        async with TestClient(TestServer(app)) as client:
+            async with client.get("/live/preview.mjpg") as response:
+                assert response.status == 200
+                assert response.headers["Content-Type"] == "multipart/x-mixed-replace; boundary=frame"
+                header = await asyncio.wait_for(response.content.readuntil(b"\r\n\r\n"), 1)
+                length = int(dict(line.split(b": ", 1) for line in header.split(b"\r\n")[1:-2])[b"Content-Length"])
+                body = await response.content.readexactly(length + 2)
+                _check_preview_part(header + body)
+
+    asyncio.run(check())
+
+
+def test_preview_mjpg_headers_and_encoding_thread_without_socket(tmp_path, monkeypatch):
+    import threading
+
+    import cv2
+
+    responses = _capture_preview(monkeypatch)
+    encode = cv2.imencode
+    threads = []
+
+    def spy(*args):
+        threads.append(threading.get_ident())
+        return encode(*args)
+
+    monkeypatch.setattr(cv2, "imencode", spy)
+    service = _preview_service(tmp_path)
+    # Auch Nicht-ASCII im HUD muss eine einzelne ASCII-Kopfzeile bleiben.
+    from test_live_preview import frame_info
+
+    info = frame_info()
+    info["rec"]["reasons"] = ["Pr\u00fcfung\r\n"]
+    service._session.frame_info = lambda: info
+    response = _run_preview(_preview_handler(service))
+    hud = _check_preview_part(responses[0].parts[0][1])
+    assert hud["rec"]["reasons"] == ["Pr\u00fcfung\r\n"]
+    assert response.headers["Cache-Control"] == "no-store"
+    assert threads and all(t != threading.get_ident() for t in threads)
+
+
+def test_two_streams_share_encoding(tmp_path, monkeypatch):
+    import cv2
+
+    responses = _capture_preview(monkeypatch)
+    calls = []
+    encode = cv2.imencode
+
+    def spy(*args):
+        calls.append(1)
+        return encode(*args)
+
+    monkeypatch.setattr(cv2, "imencode", spy)
+    service = _preview_service(tmp_path)
+
+    async def check():
+        await asyncio.gather(_preview_handler(service), _preview_handler(service))
+
+    _run_preview(check())
+    assert len(responses) == 2 and len(calls) == 1
+    for response in responses:
+        _check_preview_part(response.parts[0][1])
+
+
+def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
+    import time
+
+    from test_live_camera import FakeSource
+
+    from dispread.live.camera import CameraOwner
+    from dispread.live.service import LiveService
+
+    writing = asyncio.Event()
+
+    class BlockedResponse(web.StreamResponse):
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            writing.set()
+            await asyncio.Future()
+
+    monkeypatch.setattr("dispread.workbench.live_api.web.StreamResponse", BlockedResponse)
+    owner = CameraOwner(lambda: FakeSource([1], endless=True))
+    service = LiveService(owner, tmp_path, diagnostic_staging_root=tmp_path / "staging")
+    owner.start()
+    assert owner.wait_newer(0, 1.0) is not None
+
+    async def check():
+        start = time.monotonic()
+        task = asyncio.create_task(_preview_handler(service))
+        await asyncio.wait_for(writing.wait(), 1)
+        before = owner.latest()[0]
+        await asyncio.wait_for(task, 2.5)
+        assert time.monotonic() - start <= 2.5
+        assert owner.latest()[0] > before and owner.status()["running"]
+
+    try:
+        _run_preview(check())
+    finally:
+        owner.stop()
+
+
+def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from test_live_preview import camera_frame, frame_info
+
+    responses = _capture_preview(monkeypatch, limit=3)
+    seqs = iter([7, 7, 8, 9])
+    service = _preview_service(tmp_path, latest=lambda: (next(seqs, 9), camera_frame()))
+    info = frame_info()
+    info["proc"]["skipped_recent"] = 0.2
+    service._session = SimpleNamespace(frame_info=lambda: info)
+    _run_preview(asyncio.wait_for(_preview_handler(service), 2))
+    parts = responses[0].parts
+    huds = [json.loads(data.split(b"X-Hud: ")[1].split(b"\r\n")[0]) for _, data in parts]
+    assert [h["seq"] for h in huds] == [7, 8, 9]
+    assert all(h["preview"] == {"fps": 5, "throttled": "messung"} for h in huds)
+    assert all(parts[i][0] - parts[i - 1][0] >= 0.2 for i in (1, 2))
+
+
+def test_preview_mjpg_expires_after_600s_without_repeating_frame(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.workbench import live_api
+
+    responses = _capture_preview(monkeypatch, limit=None)
+    now = [0.0]
+    monkeypatch.setattr(live_api, "time", SimpleNamespace(monotonic=lambda: now[0]), raising=False)
+
+    async def sleep(delay):
+        now[0] += 300.0
+
+    monkeypatch.setattr(live_api.asyncio, "sleep", sleep)
+    _run_preview(asyncio.wait_for(_preview_handler(_preview_service(tmp_path)), 1))
+    assert len(responses[0].parts) == 1 and now[0] == 600.0
+
+
 def test_status_carries_csrf_and_notice():
     async def check(client, _service):
         data = await (await client.get("/live/status")).json()
