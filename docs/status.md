@@ -1,4 +1,4 @@
-# Status — Stand 2026-10-31
+# Status — Stand 2026-11-05
 
 Dieser Snapshot fasst den zuletzt dokumentierten Stand zusammen. Er ist keine
 Live-Abfrage; Hardware- und Messwerte verweisen auf ihre Aufzeichnungen.
@@ -33,8 +33,11 @@ Der Rahmen-Tracker nutzt einen ziffernunabhängigen zweiten Durchgang. Die
 Grobschätzung folgt Bewegungen bis 20 px und 3° bei ±0,5 % Maßstab; R13-23
 senkte deren Medianlaufzeit von etwa 15 ms auf etwa 7,5 ms. Ein synthetischer
 Durchlauf verlor keinen zuvor gefundenen Track und lieferte keine falschen
-Quads. Das ist kein zusätzlicher Hardware-Abnahmenachweis
-([Validierungsnachtrag](VALIDATION.md#r13-23-grobsuche-2026-10-30)).
+Quads. Der spätere Einzelbildfilter für neue Rahmenbereiche (R13-25) ist
+hingegen nicht abnahmefähig: Im Pflichtbestand gingen 1 Track verloren, im
+erweiterten Bestand 4 Bilder und 22 synthetische Tracks. OQ-26 bleibt offen;
+der Kandidat belegt keine Nullverluste
+([Runde 3](VALIDATION.md#r13-25-runde-3)).
 
 Die Freigabe sperrt Testläufe technisch und unterdrückt Werte während
 werkbankgesteuerter Geräteumschaltungen. Der Streamstillstand wird nach
@@ -66,6 +69,9 @@ die Telegrammfrage ([OQ-07](open-questions.md#oq-07)) und die GSVmulti-Zeitachse
 
 Entwicklungsdaten können unter `/mnt/ssd/picam-dev` über
 `DISPREAD_DEV_DATA` liegen; Produktdaten in `var/` bleiben auf der SD.
+Seit 2026-11-04 liegen auch Diagnoseordner der aufgezeichneten Live-Läufe in
+dieser Entwicklungsablage; Laufdaten und Profile der neueren Sitzungen
+bleiben unter `var/live/` ([Hardwareprofil](HARDWARE_PROFILE.md#datenorte-produkt-und-entwicklung-2026-11-04)).
 Während eines Messlaufs sollen auf dem gemeinsam genutzten Pi keine Builds,
 Browsertests oder Pushes nach `master` laufen. Die im Journal dokumentierten
 unerklärten Neustarts vom 24. bis 26. Oktober bleiben offen; der dort
