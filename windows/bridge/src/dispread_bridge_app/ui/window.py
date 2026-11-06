@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -118,6 +119,7 @@ class MainWindow(QWidget):
         self._tray_tip = ''
         self.on_event_hook = None
         self.confirm_exit = self._confirm_exit_dialog
+        self.confirm_disconnect = self._confirm_disconnect_dialog
         self.pick_file = lambda: QFileDialog.getOpenFileName(self, 'Profil öffnen', '', 'Profil (*.dispread)')[0]
         self.pick_folder = lambda: QFileDialog.getExistingDirectory(self, 'Ordner für die Session')
         self.pick_save = lambda: QFileDialog.getSaveFileName(self, 'Diagnose speichern', 'dispread-diagnose.zip',
@@ -175,7 +177,6 @@ class MainWindow(QWidget):
             self.stack.setCurrentWidget(self.setup_view)
         else:
             self.stack.setCurrentWidget(self.status_view)
-        self.setup_view.setEnabled(not locked)
         h = texts.headline(r, w, c)
         self.tray_state = {'err': 'err', 'warn': 'warn'}.get(h.tone, 'normal')
         self._tray_tip = h.text
@@ -215,8 +216,16 @@ class MainWindow(QWidget):
         c, ctl = self.controller.context(), self.controller
         if aid in ('connect', 'reconnect', 'next_connect'):
             self._call(ctl.connect, self._mode(), None)
-        elif aid in ('stop_retry', 'disconnect'):
+        elif aid == 'stop_retry':
             self._call(ctl.disconnect)
+        elif aid == 'disconnect':
+            if self._transmitting() and not self.confirm_disconnect():
+                return
+            self._call(ctl.disconnect)
+        elif aid == 'overview':
+            self._call(ctl.setup_step, 'overview')
+        elif aid == 'resume_setup':
+            self._call(ctl.setup_step, 'resume')
         elif aid == 'install':
             self._call(ctl.install_components)
         elif aid == 'open_profile':
@@ -338,6 +347,15 @@ class MainWindow(QWidget):
         dlg = self.build_exit_dialog()
         dlg.exec()
         return dlg.confirmed
+
+    def _confirm_disconnect_dialog(self) -> bool:
+        box = QMessageBox(QMessageBox.Icon.Question, texts.DISCONNECT_TITLE, texts.DISCONNECT_TEXT,
+                          QMessageBox.StandardButton.NoButton, self)
+        keep = box.addButton(texts.EXIT_KEEP, QMessageBox.ButtonRole.RejectRole)
+        box.addButton('Trennen', QMessageBox.ButtonRole.AcceptRole)
+        box.setDefaultButton(keep)
+        box.exec()
+        return box.clickedButton() is not keep
 
     def _transmitting(self) -> bool:
         w, r = self.controller.worker_status(), self.controller.snapshot()

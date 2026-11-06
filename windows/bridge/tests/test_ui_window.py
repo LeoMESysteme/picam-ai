@@ -148,7 +148,7 @@ def test_tray_state_and_tooltip_follow_headline(make):
 def test_busy_run_locks_configuration(make):
     _, w = make('B1x')
     assert w.status_view.lock_button.isVisibleTo(w)
-    assert not w.setup_view.isEnabled()
+    assert w.setup_view.isEnabled()      # Navigation/Export bleiben; nur Konfigurationsfelder werden je Schritt gesperrt
     assert w.status_view.lock_button.accessibleName() == 'Pi-Wechsel gesperrt'
     assert w.status_view.lock_button.focusPolicy() != Qt.NoFocus
 

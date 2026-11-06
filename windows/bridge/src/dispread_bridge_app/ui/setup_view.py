@@ -168,7 +168,12 @@ class SetupView(QWidget):
         self.lead = _label('', strong=True)
         top.addWidget(self.header)
         top.addWidget(self.step_header)
-        top.addWidget(self.lead)
+        self.overview_button = button('Zur Übersicht', name='btn_overview')
+        self.overview_button.hide()
+        lead_row = QHBoxLayout()
+        lead_row.addWidget(self.lead, 1)
+        lead_row.addWidget(self.overview_button, 0, Qt.AlignmentFlag.AlignTop)
+        top.addLayout(lead_row)
         root.addLayout(top)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -190,6 +195,7 @@ class SetupView(QWidget):
         fl.addWidget(self.next_button)
         root.addWidget(foot)
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
+        self.overview_button.clicked.connect(lambda: self.action.emit('overview'))
         self.back_button.clicked.connect(lambda: self.action.emit('back'))
         self.next_button.clicked.connect(lambda: self.action.emit('next'))
         self.dut_label = self.header.dut
@@ -199,6 +205,8 @@ class SetupView(QWidget):
         self._graveyard: list = []
         self.checks: dict[str, QCheckBox] = {}
         self.buttons: dict[str, QWidget] = {}
+        self.radio_buttons: list = []
+        self._locked, self._step = False, 1
 
     def code_text(self) -> str:
         e = getattr(self, 'code_edit', None)
@@ -223,11 +231,13 @@ class SetupView(QWidget):
         self.header.headline.setVisible(False)
         self.header.head_icon.setVisible(False)
         st = ctx.setup
-        spec = texts.setup_spec(ctx)
-        key = (st.variant, repr(spec))
+        self.overview_button.setVisible(readiness.peer == 'authenticated')
+        spec = texts.setup_spec(ctx, locked)
+        key = (st.variant, repr(spec), locked)
         if key == self.variant:
             return
         self.variant = key
+        self._locked, self._step = locked, spec['step']
         self.step_header.set_step(spec['step'])
         self.lead.setText(spec['lead'])
         self._build(spec)
@@ -242,6 +252,8 @@ class SetupView(QWidget):
                 w.deleteLater()
         QTimer.singleShot(500, self._graveyard.clear)
         self.checks, self.buttons = {}, {}
+        self.radio_buttons = []
+        self.endpoint_edit = self.code_edit = None
 
     def _build(self, spec) -> None:
         self._clear()
@@ -257,6 +269,27 @@ class SetupView(QWidget):
         from .widgets import repolish
         repolish(self.next_button)
         self._wire_gates()
+        self._apply_lock()
+
+    CONFIG_BUTTONS = ('install', 'manual_pair', 'set_port_pair', 'rescan', 'pair', 'open_profile')
+
+    def _apply_lock(self) -> None:
+        """Bei aktiver Verbindung nur Konfiguration sperren; Navigation vorwärts, Export, Übersicht bleiben."""
+        if not (getattr(self, '_locked', False) and getattr(self, '_step', 9) <= 3):
+            return
+        for r in self.radio_buttons:
+            r.setEnabled(False)
+        for aid in self.CONFIG_BUTTONS:
+            b = self.buttons.get(aid)
+            if b is not None:
+                b.setEnabled(False)
+        for w in (getattr(self, 'endpoint_edit', None), getattr(self, 'code_edit', None), self.checks.get('fp_ok')):
+            try:
+                if w is not None:
+                    w.setEnabled(False)
+            except RuntimeError:
+                pass
+        self.back_button.setEnabled(False)
 
     def _wire_gates(self) -> None:
         """Knöpfe, die eine Bestätigung brauchen, bleiben bis dahin aus."""
@@ -422,6 +455,7 @@ class SetupView(QWidget):
             rl.setContentsMargins(12, 8, 12, 8)
             rb = QRadioButton()
             rb.setChecked(checked)
+            self.radio_buttons.append(rb)
             rb.setAccessibleName(f'{title}. {desc}')
             rb.toggled.connect(lambda on, n=name, i=idx: on and self.action.emit(f'radio:{n}:{i}'))
             group.addButton(rb)

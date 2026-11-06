@@ -319,3 +319,77 @@ def test_unknown_commit_reads_as_unknown_source(tmp_path):
     import types
     info = types.SimpleNamespace(version='0.1.0.dev0', commit='unbekannt', channel=None)
     assert make(tmp_path, build_info=info).context().version == '0.1.0.dev0 · Quelle unbekannt'
+
+
+def _connected(tmp_path, identity, output='output_off', start_error=None):
+    from dispread_bridge_app.readiness import Readiness
+
+    class M:
+        def __init__(self, profile, client_id, credentials, devices, **kw):
+            self.out = output
+            self.demo = []
+
+        def set_worker(self, w): pass
+        def connect(self, mode, selected=None): pass
+        def disconnect(self): pass
+
+        def snapshot(self):
+            return Readiness('ready', 'not_required', 'authenticated', self.out, 'idle', 'unconfirmed',
+                             {'output_off': 'output_off', 'blocked': 'dut_release_blocked'}.get(self.out))
+
+        def start_demo(self, count, rate):
+            if start_error:
+                raise start_error
+            self.demo.append((count, rate))
+
+    c = make(tmp_path, manager_factory=M, worker_factory=FakeWorker)
+    c.set_port_pair('COM4', 'COM5')
+    c.load_profile(profile_bytes(identity))
+    c.connect('network')
+    return c
+
+
+def test_step4_needs_manual_confirmation_then_step5(tmp_path, identity):
+    c = _connected(tmp_path, identity)
+    c._step = 4
+    spec = texts.setup_spec(c.context())
+    assert 'In GSVmulti den Kanal auf COM5 115200 8N1 einstellen' in repr(spec['blocks'])
+    with pytest.raises(AppError) as e:
+        c.setup_step('next')
+    assert e.value.code == 'session_unconfirmed'
+    c.confirm_session(True)
+    c.setup_step('next')
+    assert c.context().setup.step == 5
+
+
+def test_running_measurement_blocks_demo_with_clear_text(tmp_path, identity):
+    c = _connected(tmp_path, identity, output='blocked')
+    c._step = 5
+    assert c.context().setup.variant == 'E5busy'
+    with pytest.raises(AppError) as e:
+        c.begin_demo_check(True)
+    assert e.value.code == 'run_active'
+    assert 'Auf dem Pi läuft ein Messlauf.' in texts.explain_code('run_active')[0]
+
+
+@pytest.mark.parametrize('code', ['run_conflict', 'peer_refused', 'demo_unconfirmed'])
+def test_demo_rejection_codes_map_to_run_explanation(tmp_path, identity, code):
+    from dispread_bridge_app.connection import ConnectionError as CE
+    c = _connected(tmp_path, identity, start_error=CE(code))
+    c._step = 5
+    with pytest.raises(AppError) as e:
+        c.begin_demo_check(True)
+    assert e.value.code == 'demo_rejected'
+    assert 'Messlauf' in ' '.join(texts.explain_code('demo_rejected'))
+
+
+def test_overview_and_resume_switch_mode_without_finishing_setup(tmp_path, identity):
+    c = _connected(tmp_path, identity)
+    assert c.context().mode == 'setup'
+    c.setup_step('overview')
+    assert c.context().mode == 'operate'
+    c.setup_step('resume')
+    assert c.context().mode == 'setup'
+    c._step = 5
+    c.setup_step('finish')
+    assert c.context().mode == 'operate'

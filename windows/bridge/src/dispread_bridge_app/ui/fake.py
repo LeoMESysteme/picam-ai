@@ -66,6 +66,12 @@ STATES: dict[str, tuple] = {
     'B5': (_OK, _RUN, replace(_BASE, demo=True)),
     'B10': (replace(_OK, peer='disconnected', output='unavailable', com='unknown'), None,
             replace(_BASE, pi_name='Prüfstand 3 – Halle A', pi_id='pi-d21a77e6', session_confirmed=False)),
+    'E3ok_run': (_OK, _RUN, replace(_setup('E3ok', 3)[2])),
+    'E3_run': (_OK, _RUN, replace(_setup('E3', 3)[2], setup=SetupState(3, 'E3', dict(
+        found_items=(('https://pi.local', 'aus dem Profil', True),), choices={'found': ('https://pi.local',)})))),
+    'E4locked_run': (_OK, _RUN, replace(_setup('E4locked', 4)[2])),
+    'E5_run': (_OK, _RUN, replace(_setup('E5', 5)[2])),
+    'E5busy': (replace(_OK, output='blocked', next_action='dut_release_blocked'), _RUN, replace(_setup('E5busy', 5)[2])),
     'blocked': (_OK, WorkerStatus('blocked', False, False, 'unknown_delivery'), _BASE),
     'usb_missing': (replace(_OK, adapter='unavailable', peer='disconnected', output='unavailable',
                             com='unknown', next_action='adapter_unavailable'), None,

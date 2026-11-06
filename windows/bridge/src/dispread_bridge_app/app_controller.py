@@ -156,6 +156,7 @@ class AppController:
         self._pair: PortPair | None = None
         self._session_confirmed = False
         self._setup_done = False
+        self._overview = False
         self._step = 1
         self.client_id = ''
         self._load_state()
@@ -475,9 +476,18 @@ class AppController:
         manager = self._manager
         if manager is None or manager.snapshot().peer != 'authenticated':
             raise AppError('not_connected')
+        if self._run_active(manager.snapshot()):
+            raise AppError('run_active')
         with self._lock:
             self._demo_started, self._written, self._com_issue = True, 0, None
-        manager.start_demo(self._demo_count, self._demo_rate)
+        try:
+            manager.start_demo(self._demo_count, self._demo_rate)
+        except Exception as e:
+            with self._lock:
+                self._demo_started = False
+            if getattr(e, 'code', None) in ('run_conflict', 'peer_refused', 'demo_unconfirmed'):
+                raise AppError('demo_rejected') from None
+            raise
 
     # ------------------------------------------------------------ Session
     @_reports
@@ -500,11 +510,15 @@ class AppController:
         with self._lock:
             if direction == 'back':
                 self._step = max(1, self._step - 1)
+            elif direction == 'overview':
+                self._overview = True
+            elif direction == 'resume':
+                self._overview, self._setup_done = False, False
             elif direction == 'pairing':
-                self._setup_done, self._step = False, 2
+                self._setup_done, self._overview, self._step = False, False, 2
                 self._save_state()
             elif direction == 'restart':
-                self._setup_done, self._step = False, 1
+                self._setup_done, self._overview, self._step = False, False, 1
                 self._save_state()
             elif direction == 'next':
                 self._advance()
@@ -586,7 +600,13 @@ class AppController:
         if done:
             d['written'] = self._written
             return 'E5done', d
+        if self._run_active(r):
+            return 'E5busy', d
         return 'E5', d
+
+    def _run_active(self, r: Readiness) -> bool:
+        """Ein Lauf des Pi (Messlauf oder fremde Demo), den wir nicht selbst gestartet haben."""
+        return r.peer == 'authenticated' and r.output in ('blocked', 'demo_only') and not self._demo_started
 
     def _safe_ports(self):
         try:
@@ -642,7 +662,7 @@ class AppController:
             data = dict(data, notice=self._notice)
             return UiContext(
                 pi_name=p.name if p else None, route=route, run_id=run_id,
-                mode='operate' if self._setup_done else 'setup',
+                mode='operate' if (self._setup_done or self._overview) else 'setup',
                 setup=SetupState(self._step, variant, data),
                 dut_locked=True,                         # nie freigegeben: Abnahme fehlt (OQ-06/OQ-47)
                 demo=demo, waiting_for_run=authenticated and r.output == 'output_off',

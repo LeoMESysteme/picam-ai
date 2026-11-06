@@ -38,6 +38,8 @@ EXIT_TEXT_ACTIVE = 'Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läu
 EXIT_TEXT_LOCKED = ('Die Verbindung zum Pi endet; es werden keine Werte übertragen. '
                     'Der Lauf auf dem Pi läuft weiter.')
 EXIT_KEEP, EXIT_QUIT = 'Weiter übertragen', 'Beenden'
+DISCONNECT_TITLE = 'Verbindung trennen?'
+DISCONNECT_TEXT = 'Die Verbindung zum Pi und die Übertragung an GSVmulti enden. Der Lauf auf dem Pi läuft weiter.'
 JOURNAL_DETAILS = 'Begrenzt, Zugangsdaten werden nicht protokolliert.'
 
 
@@ -112,6 +114,11 @@ CONNECTION_CODE_TEXT = {
     'cancelled': ('Verbindung abgebrochen', 'Verbinden Sie bei Bedarf erneut.'),
 }
 # Bereitschaftswerte des Kerns (output / next_action): erklärender Satz + nächste Aktion
+RUN_ACTIVE_TITLE = 'Auf dem Pi läuft ein Messlauf.'
+RUN_ACTIVE_TEXT = (
+    'Der Empfangstest braucht einen Pi ohne Lauf: Lauf in der Werkbank stoppen, dann erneut starten. '
+    'Während des Messlaufs bleibt die Ausgabe gesperrt – GSVmulti erhält dann absichtlich keine Werte.')
+LOCKED_REASON = 'Während einer aktiven Verbindung nicht änderbar – erst trennen'
 OUTPUT_TEXT = {
     'output_off': ('Auf dem Pi läuft keine Ausgabe.', 'Starten Sie dort einen Lauf; die Brücke startet keinen.'),
     'dut_release_blocked': ('Die DUT-Ausgabe ist gesperrt (Abnahme fehlt).', 'Nichts tun: es werden keine Messwerte an COM geschrieben.'),
@@ -134,6 +141,8 @@ ERROR_TEXT = {
     'session_unconfirmed': ('Session nicht bestätigt', 'Bestätigen Sie, dass Sie GSVmulti eingestellt haben.'),
     'automatic_export_blocked': ('Automatische Session noch nicht freigegeben', 'Stellen Sie GSVmulti von Hand ein.'),
     'endpoint_unsupported': ('Adresse nicht unterstützt', 'Erlaubt sind direkte https-Adressen ohne Proxy und Pfadpräfix.'),
+    'run_active': (RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT),
+    'demo_rejected': (RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT),
 }
 
 
@@ -560,7 +569,8 @@ SETUP: dict[str, dict] = {
                                                   ('Port', '{gsv_port}'), ('Baudrate', '115200'),
                                                   ('Format', '8N1, kein Handshake'))),
         ('text', 'Ob GSVmulti die Einstellungen übernimmt, belegt erst der Empfangstest.'),
-        ('check_dyn', 'Ich habe GSVmulti so eingestellt.', 'session_ok', 'session_confirmed')], nxt='Weiter'),
+        ('check_dyn', 'In GSVmulti eingestellt: Kanal auf {gsv_port}, 115200 8N1.', 'session_ok', 'session_confirmed')],
+        nxt='Weiter'),
     'E4': _s(4, 'Schritt 4 von 5: GSVmulti-Session erzeugen.', [
         _PORTS, ('text', 'Die Session verweist auf {gsv_port}. Vorhandene GSVmulti-Sessions bleiben unverändert.'),
         ('button', 'Session erzeugen', 'export_session', True)]),
@@ -592,6 +602,8 @@ SETUP: dict[str, dict] = {
         ('progress', 'Test läuft', '{progress_text}', '{progress_value}'),
         ('text', 'Der Test lässt sich nicht abbrechen; der Pi beendet ihn nach der eingestellten Anzahl Werte.')],
         back=False),
+    'E5busy': _s(5, 'Schritt 5 von 5: Empfang prüfen.', [
+        ('info', 'warn', RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT, ())], nxt='Fertig'),
     'E5done': _s(5, 'Schritt 5 von 5: Test gesendet.', [
         _TEST_INFO,
         ('info', 'warn', 'Empfang nicht nachgewiesen – Werte in GSVmulti selbst prüfen',
@@ -632,7 +644,7 @@ def fill(obj, mapping):
     return obj
 
 
-def setup_spec(ctx):
+def setup_spec(ctx, locked=False):
     """SETUP-Zustand mit Werten aus ctx (und ctx.setup.data) gefüllt."""
     m = dict(bridge_port=ctx.bridge_port, gsv_port=ctx.gsv_port, version=ctx.version, protocol=ctx.protocol,
              pi_name=ctx.pi_name, pi_id=ctx.pi_id, endpoint=ctx.endpoint, fingerprint=ctx.fingerprint,
@@ -665,6 +677,9 @@ def setup_spec(ctx):
     if data.get('notice'):
         title, text = explain_code(data['notice'])
         blocks = (('info', 'err', title, text, ()),) + blocks
+    if locked and spec['step'] <= 3:
+        blocks = (('info', 'info', LOCKED_REASON, 'Beenden Sie die Verbindung, um Pi, Weg oder Portpaar zu ändern.',
+                   (('Verbindung trennen', 'disconnect', True),)),) + blocks
     spec['blocks'] = blocks
     return spec
 

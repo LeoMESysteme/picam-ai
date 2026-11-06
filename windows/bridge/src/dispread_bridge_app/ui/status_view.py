@@ -378,11 +378,13 @@ class StatusView(QWidget):
         foot, fl = footer_frame()
         self.export_button = button('Diagnose exportieren', name='export')
         self.details_button = button('Details', name='details')
+        self.setup_button = button('Einrichtung', name='setup')
         self.version_label = QLabel()
         self.version_label.setProperty('secondary', True)
         self.version_label.setProperty('caption', True)
         fl.addWidget(self.export_button)
         fl.addWidget(self.details_button)
+        fl.addWidget(self.setup_button)
         fl.addStretch(1)
         fl.addWidget(self.version_label)
         self.channel_label = QLabel()
@@ -394,6 +396,7 @@ class StatusView(QWidget):
         root.addWidget(foot)
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
         self.details_button.clicked.connect(lambda: self.action.emit('details'))
+        self.setup_button.clicked.connect(lambda: self.action.emit('resume_setup'))
         self.flyout: Flyout | None = None
         self._pi_name = None
         self.lock_button = self.header.lock_button

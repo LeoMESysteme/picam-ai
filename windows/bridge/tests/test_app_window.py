@@ -207,3 +207,77 @@ def test_inventory_rows_have_caption_label_and_body_value(real):
     assert not value.property('caption')
     assert 'Unterstützte Windows-Version' not in labels and 'Installiert' not in labels
     assert labels['Brücke'].property('caption') is True
+
+
+# ---- Einrichtung bei aktiver Verbindung (Fake-Zustand "verbunden, Worker aktiv")
+@pytest.fixture
+def fake_win(app):
+    from dispread_bridge_app.ui.fake import FakeController
+    made = []
+
+    def _make(state):
+        fc = FakeController(state)
+        w = MainWindow(fc, dark=False)
+        w.show()
+        made.append(w)
+        return fc, w
+    yield _make
+    for w in made:
+        w.force_close()
+        w.deleteLater()
+    QApplication.processEvents()
+
+
+def test_active_connection_locks_only_configuration_not_navigation(fake_win):
+    fc, w = fake_win('E3ok_run')
+    sv = w.setup_view
+    assert sv.next_button.isEnabled() and sv.export_button.isEnabled()
+    assert not sv.back_button.isEnabled()                       # Schritt <= 3: würde Konfiguration ändern
+    assert 'disconnect' in sv.buttons                           # sichtbarer Knopf „Verbindung trennen“
+    fc.set_state('E3_run')
+    w.refresh()
+    assert sv.next_button.isEnabled() and sv.export_button.isEnabled()
+    radios = sv.findChildren(QRadioButton)
+    assert radios and not any(r.isEnabled() for r in radios)
+    labels = ' '.join(lab.text() for lab in sv.findChildren(QLabel))
+    assert 'Während einer aktiven Verbindung nicht änderbar – erst trennen' in labels
+    assert sv.buttons['rescan'].isEnabled() is False
+
+
+def test_later_steps_stay_fully_usable_while_connected(fake_win):
+    fc, w = fake_win('E4locked_run')
+    sv = w.setup_view
+    assert sv.back_button.isEnabled() and sv.next_button.isEnabled() and sv.export_button.isEnabled()
+    assert sv.checks['session_ok'].isEnabled()
+    fc.set_state('E5_run')
+    w.refresh()
+    assert sv.checks['test_session_ok'].isEnabled()
+
+
+def test_disconnect_button_confirms_when_transmitting(fake_win):
+    fc, w = fake_win('E3_run')
+    asked = []
+    w.confirm_disconnect = lambda: asked.append(1) or False
+    w.setup_view.buttons['disconnect'].click()
+    pump()
+    assert asked and ('disconnect',) not in fc.calls
+    w.confirm_disconnect = lambda: True
+    w.setup_view.buttons['disconnect'].click()
+    settle(w)
+    assert ('disconnect',) in fc.calls
+
+
+def test_overview_link_when_connected_and_goes_to_status_view(fake_win):
+    fc, w = fake_win('E3ok_run')
+    assert not w.setup_view.overview_button.isHidden()
+    w.setup_view.overview_button.click()
+    settle(w)
+    assert ('setup_step', 'overview') in fc.calls
+
+
+def test_running_pi_run_shows_clear_message_and_no_start(fake_win):
+    fc, w = fake_win('E5busy')
+    labels = ' '.join(lab.text() for lab in w.setup_view.findChildren(QLabel))
+    assert 'Auf dem Pi läuft ein Messlauf.' in labels
+    assert 'GSVmulti erhält dann absichtlich keine Werte' in labels
+    assert 'start_demo_check' not in w.setup_view.buttons
