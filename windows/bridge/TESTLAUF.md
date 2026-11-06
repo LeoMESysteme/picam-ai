@@ -5,12 +5,9 @@ zusammenpasst. **Es werden keine Messwerte an GSVmulti übergeben**: die
 DUT-Ausgabe bleibt gesperrt. Nichts in dieser Anleitung wurde bisher auf einem
 Windows-PC ausgeführt.
 
-**Stand beim Schreiben:** Die Oberfläche der App gibt es; der echte
-AppController (Verbindung, Kopplung, Portpaar) wird parallel gebaut. Ohne ihn
-zeigt `--demo-ui` nur Beispielzustände. Prüfen Sie vor Abschnitt B, ob der
-Stand des Branches `feat/bruecke-ui` den Controller enthält (Änderungsprotokoll
-`CHANGELOG.md`, oberster Eintrag). Wenn nicht, bricht die App mit
-„Kein Controller verfügbar“ ab und der Lauf ab Abschnitt C ist noch nicht möglich.
+**Stand der App:** Oberfläche und AppController sind vorhanden. Geprüft wurde
+unter Linux (offscreen, lokaler TLS-Pi mit Fake-COM); auf Windows ist nichts
+davon geprüft, ebenso wenig echte COM-Ports und GSVmulti.
 
 ## A. Pi vorbereiten (Entwickler, jeder Schritt mit Freigabe)
 
