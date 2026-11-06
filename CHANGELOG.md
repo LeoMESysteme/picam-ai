@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Qt-Oberfläche der Windows-App „GSVmulti-Brücke“ (`windows/bridge/src/dispread_bridge_app/ui/`:
+  `port.py`, `theme.py`, `texts.py`, `status_view.py`, `setup_view.py`, `window.py`, `fake.py`) und
+  `main.py` (Einzelinstanz, Tray, `--demo-ui` mit FakeController). Die Oberfläche hängt nur am
+  `ControllerPort`; der echte AppController fehlt noch. Wahrheitsregeln in `texts.py` mit Tests
+  (`tests/test_ui_*.py`, 34 Tests). **Nur offscreen unter Linux geprüft: keine Windows-Abnahme, keine EXE,
+  keine echten Zustände; die DUT-Ausgabe bleibt gesperrt.**
 * 2026-11-06: Gestaltungsmock der Windows-App „GSVmulti-Brücke“ ergänzt
   (`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`, mit Qt-Umsetzungsnotiz
   und Texttabelle) sowie `windows/bridge/PRODUCT.md` und `windows/bridge/DESIGN.md`

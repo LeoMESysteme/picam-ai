@@ -287,3 +287,12 @@ PYTHONPATH=src:windows/bridge/src ./.venv/bin/python -m pytest -q windows/bridge
 
 Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/topic_archidentifiers.htm),
 [Admin-Modus](https://jrsoftware.org/ishelp/topic_admininstallmode.htm).
+
+## Oberfläche (`ui/`, nur Entwurf)
+
+`src/dispread_bridge_app/ui/` enthält die Qt-Widgets-Oberfläche nach dem Mock unter
+`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`; sie hängt nur am `ControllerPort`
+(`ui/port.py`). `python -m dispread_bridge_app.main --demo-ui [--state=B3]` startet sie mit dem
+`FakeController` (Zustände des Mocks, synthetisch) zur Sichtprüfung auf Windows. Tests offscreen:
+`QT_QPA_PLATFORM=offscreen PYTHONPATH=src:../../src python -m pytest -q tests/test_ui*.py`.
+Nur unter Linux geprüft, keine Windows-Abnahme.
