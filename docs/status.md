@@ -36,22 +36,25 @@ softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
 abschließenden Backend- und UI-Korrekturen. Hardware-Abnahme T13 und Merge
 nach `master` stehen aus und brauchen Leonhards ausdrückliches OK.
 
-## Windows-EXE: Spec freigegeben, Umsetzungsplan erstellt
+## Windows-EXE: technische Umsetzung, UI für Claude
 
-Leonhard hat am 06.11.2026 den vollständigen [Entwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md)
-freigegeben. Der [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md)
-liegt mit drei Teilplänen und zwölf Aufgaben vor: Nachweise (N1–N3),
-Pi/Protokoll (P1–P4), Windows (W1–W4), Endabnahme (G1).
-Selbstprüfung gegen alle Spec-Abschnitte, Schnittstellen und fünf
-Review-Fokusfälle durchgeführt. Nächster Schritt ist Planprüfung und
-Auswahl Native/subagentengetrieben; noch kein Produktcode verändert.
+Leonhard hat Spec und Plan zur Ausführung durch Codex/Subagents freigegeben.
+EXE-GUI und sämtliche sichtbaren Workbench-Anpassungen (Anleitung je Weg,
+Auswahl, Verbindung/Bereitschaft) bleiben ausdrücklich Claude vorbehalten;
+am Ende wird eine konkrete Übergabe vorbereitet, noch keine Nachricht
+an einen anderen Chat gesendet.
 
-Zuerst Windows-Paket ohne System-Python, zulässiges automatisiertes Portpaar,
-belegte GSVmulti-Session und überprüfte Kopplung. Größerer GUI-Ausbau wartet
-auf diese Nachweise. Der vorhandene Forgejo-Runner ist ein Pi-Host;
-Windows-Build/Treibertests benötigen eigenen Windows-Rechner/Runner.
-Bestehende DUT-Sperren und OQ-53/OQ-62/OQ-64 bleiben bis zum tatsächlichen
-Nachweis bestehen. Neue Qt-/Buildabhängigkeiten noch nicht installiert.
+Arbeitsstand dieser Umsetzung: verwalteter Worktree
+`/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`, Branch
+`codex/windows-bridge-core`, Basis `ea29e44`. Der bisherige Redesign-Worktree
+mit fremden Änderungen und laufender Werkbank bleibt unberührt.
+N1/N2/P1 parallel in getrennten Dateien umgesetzt bzw. geprüft; P1-Kern
+und Codec haben 70 relevante bestandene Tests. Windows-Paket-/Treiber-
+Nachweise bleiben separat ausstehend, keine Qt-Pakete am Pi installiert.
+Weitere technische Teile und Reviews folgen gemäß [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
+[Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md)
+wird mit tatsächlich vorhandenen Schnittstellen und offenen Gates fortgeführt.
+DUT-Sperren und OQ-53/OQ-62/OQ-64 bleiben bestehen.
 
 ## Neue Produktanforderung für später
 

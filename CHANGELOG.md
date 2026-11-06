@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Technische Grundlage für die Windows-Brücke v2: strenge,
+  größenbegrenzte Profil-/Nachrichtencodierung und eindeutige UART-
+  Signaturbytes ergänzt. Begrenzten Ausgabezustand aus dem bisherigen
+  Transport gelöst; v1 verwendet denselben Kern weiter. Ungültigkeitsbarriere,
+  unklare Übergaben und DUT-Sperre bleiben erhalten. Kopplung/GUI und echte
+  Windows-Nachweise sind damit noch nicht implementiert oder abgenommen.
+
+
 * 2026-11-06: Werkbank `/live`, Schlussreview UI (W4): Ein abgelehnter Datensatz, den
   der Server beim Altern auf `stale` umschreibt, erscheint nicht mehr als
   durchgestrichener letzter Wert, sondern als „Kein Wert“. Ohne HUD-Datensatz läuft
