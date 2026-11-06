@@ -4703,3 +4703,23 @@ Vorgesehener Weg: Pi ttyAMA0 → physisches COM6 → Windows-Brücke → COM5
 Kommunikationsanschluss und wird nicht benutzt. Keine Übertragung oder
 GSVmulti-Aufzeichnung dieses Aufbaus belegt. Die zusätzliche Verbindung
 Kabel-TXD → physischer Pi-Pin 10 ist weiterhin nicht bestätigt.
+
+
+### 2026-11-06 — UART-Brückenversuch ohne Rückkanal beendet
+
+Windows-Brücke unter Python 3.15 mit COM6 als UART-Eingang und COM5 als
+Ausgang gestartet; Nutzer meldet „Pi reply timeout“. Pi-Demoquelle
+`uart-demo-01`, Run-ID `8ac57b8e92eb499db9f56cd760a86c21`, gestartet
+mit 600 angeforderten Datensätzen bei Ziel 10 Hz. UART-Pins lesend geprüft:
+GPIO14=TXD0, GPIO15=RXD0; Port war frei. Keine COM-Schreibbestätigung
+(0 completed); wiederholt „bridge heartbeat missing“. `connected` im
+Pi-Ereignislog bezeichnet hier nur den geöffneten UART-Port, keinen
+nachgewiesenen Dialog mit Windows.
+
+Nutzer bestätigt weiterhin nur GND/RXD angeschlossen; PC-TXD → Pi-RXD
+fehlt. Versuch mit SIGINT sauber beendet, session.json meldet
+`interrupted`, demo/provisional=true, time_claim=false; ttyAMA0 danach frei.
+Kein Ende-zu-Ende-Nachweis. Ereigniszeitbasis HOST_MONOTONIC auf dem Pi,
+keine Latenzaussage. Diagnose: `var/diagnostics/werkbank-t13-20261106/uart-demo-01/`.
+Nächster Schritt: Brücke auf Windows stoppen, zusätzliche Leitung vom
+beschrifteten Kabelkontakt TXD zu physischem Pi-Pin 10, dann neuer Versuch.

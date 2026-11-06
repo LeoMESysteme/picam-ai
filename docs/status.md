@@ -1,5 +1,10 @@
 # Status und Übergabe — 2026-11-06
 
+Werkzeugpflege 2026-11-06: Repowise auf Nutzerwunsch systemweit deinstalliert.
+Agent-Anweisungen, Doku-Pflegeprompt und lokale Plugin-Einträge in diesem
+Worktree bereinigt. Laufende Clients für geladene Hooks/Werkzeuglisten neu
+starten. Der bisherige fachliche Arbeitsstand folgt unverändert.
+
 Arbeitszweig `feat/werkbank-redesign`, Worktree
 `.claude/worktrees/feat-werkbank-redesign`. T13 ist jetzt vorbereitet: echter Dienst `dispread-werkbank-t13.service`
 auf `https://100.122.154.35:8082/live`, Sitzung `live-20261106T112527Z`.
@@ -10,8 +15,8 @@ Laufsperre, Ausgabe `off`. Laufstart mit Referenz auf der Seite steht aus. Nutze
 UART-Brücke testen. Neuer Windows-PC: Python/GSVmulti und virtuelles Portpaar inzwischen
 vorhanden. Nutzer-Portliste: COM5=CNCA1 ↔ COM4=CNCB1, physischer FTDI-Adapter
 COM6 (0403:6001, SER AB8556ZCA). Brücke soll COM6→COM5 verwenden, GSVmulti
-COM4. Zusätzliche TXD-Leitung zum Pi-Pin 10 noch nicht bestätigt; kein
-UART-Publisher gestartet. Frisches Brückenpaket unter
+COM4. Zusätzliche TXD-Leitung zum Pi-Pin 10 laut Nutzer noch nicht angeschlossen;
+erster UART-Demoversuch ohne Bestätigung beendet (Details unten). Frisches Brückenpaket unter
 `var/diagnostics/werkbank-t13-20261106/download/` vorbereitet und isoliert
 mit drei synthetischen Telegrammen geprüft. Download nur über Tailscale:
 `http://100.122.154.35:8083/gsvmulti-bridge-20261106.zip`, begrenzter Dienst
@@ -38,9 +43,12 @@ In TODO, PLANNED_FEATURES und OQ-62 erfasst; noch keine neue Funktion
 implementiert. Ergänzt: unabhängig von fehlendem/altem System-Python;
 Skriptalternative mit vorab geprüfter, automatisch eingerichteter isolierter
 Laufzeit. Abnahme auch ohne Python und mit ausschließlich Python 3.7.
-Aktueller Windows-Test blockiert am Visual-Studio-Python 3.7; offizieller
-Python-3.13-Installer und Befehle für separate `.venv313` ausgegeben,
-Installation und erneuter Brückenstart noch nicht bestätigt. Der aktuelle UART-Demotest bleibt der nächste praktische Schritt.
+Windows hat inzwischen Python 3.15; Brücke mit `.venv315`, COM6→COM5
+startet und wartet auf Pi-Antwort. Erster Pi-Demoversuch `uart-demo-01`
+kontrolliert unterbrochen: 0 COM-Schreibbestätigungen. Nutzer bestätigt
+weiterhin nur GND/RXD verdrahtet, Rückkanal TXD→Pi-Pin 10 fehlt. Pi-Sender
+ist beendet und ttyAMA0 frei. Auf zusätzliche Leitung und erneute
+Bereitschaftsmeldung warten; T13-Leserabnahmelauf weiterhin ausstehend. Der aktuelle UART-Demotest bleibt der nächste praktische Schritt.
 
 ## Übernahme und Abschluss
 

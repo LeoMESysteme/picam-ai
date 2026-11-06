@@ -6543,3 +6543,14 @@ keine physische Kameralatenz. StreamCam: USB 3 (5000 Mbit/s), 1920×1080 YUYV,
 Bestätigung, mindestens 30 Minuten Referenzlauf und Lastvergleich stehen aus.
 Aufbau und Diagnose: [Laborjournal](lab_journal.md),
 `var/diagnostics/werkbank-t13-20261106/status-setup.json`.
+
+
+### 2026-11-06 — UART-Brückenversuch 01 ohne Rückkanal
+
+600 synthetische Demodatensätze angefordert, 0 COM-Schreibbestätigungen,
+Versuch kontrolliert unterbrochen (`end_reason=interrupted`). Nutzer bestätigt
+fehlende TXD-Leitung zum Pi-RX; kein vollständiger UART-Brückendialog und
+kein GSVmulti-Empfang nachgewiesen. Zielrate 10 Hz ist keine gemessene Rate;
+Ereignisse HOST_MONOTONIC, demo/provisional=true, time_claim=false.
+Aufbau und Deutung im [Laborjournal](lab_journal.md), Diagnose unter
+`var/diagnostics/werkbank-t13-20261106/uart-demo-01/`.
