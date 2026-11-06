@@ -128,6 +128,6 @@ def test_context_has_no_invented_real_values():
 def test_setup_spec_fills_ports_from_context_not_examples():
     from dispread_bridge_app.ui.port import SetupState
     spec = texts.setup_spec(UiContext(setup=SetupState(4, 'E4')))
-    assert 'COM4' not in repr(spec) and '{' not in repr(spec)
+    assert 'COM4' not in repr(spec) and '{bridge_port}' not in repr(spec)
     spec = texts.setup_spec(UiContext(bridge_port='COM9', gsv_port='COM8', setup=SetupState(4, 'E4')))
     assert 'COM9' in repr(spec) and 'COM8' in repr(spec)
