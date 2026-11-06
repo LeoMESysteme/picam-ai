@@ -9,7 +9,7 @@ from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import QMimeData, QPoint, Qt, QUrl
 from PySide6.QtGui import QDropEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton, QRadioButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QRadioButton
 from test_app_controller import (  # noqa: F401  (identity-Fixture unten)
     CODE,
     identity,  # noqa: F401
@@ -196,3 +196,14 @@ def test_step_circle_tooltip_names_the_step(real):
     finally:
         sv.QToolTip.showText = orig
     assert shown == ['Schritt 3: Verbinden']
+
+
+def test_inventory_rows_have_caption_label_and_body_value(real):
+    c, w = real()
+    labels = {lab.text(): lab for lab in w.setup_view.findChildren(QLabel)}
+    key = labels['Windows']
+    assert key.property('caption') is True and key.property('secondary') is True
+    value = labels['Windows 11, 64 Bit – unterstützt']
+    assert not value.property('caption')
+    assert 'Unterstützte Windows-Version' not in labels and 'Installiert' not in labels
+    assert labels['Brücke'].property('caption') is True

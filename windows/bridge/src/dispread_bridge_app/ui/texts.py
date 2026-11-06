@@ -444,8 +444,8 @@ FP_PROFILE = '{fingerprint}'
 FP_OTHER = '{peer_fingerprint}'
 UART_WIRING = ('115200 Baud, 8N1, kein Handshake. TX des Adapters an RX des Pi, RX des Adapters an TX des Pi, '
                'GND an GND. VCC, CTS und RTS bleiben frei.')
-_INV = ('card', 'Bestandsaufnahme', (('Windows 11, 64 Bit', 'Unterstützte Windows-Version'),
-                                     ('Brücke {version}', 'Installiert')))
+_INV = ('statusrows', 'Bestandsaufnahme', (('Windows', 'Windows 11, 64 Bit – unterstützt', 'ok'),
+                                           ('Brücke', '{version}', 'info')))
 _PROFILE = ('card', 'Profil geladen', (('Anzeigename', '{pi_name}'), ('Pi-ID', '{pi_id}')))
 _WAY = ('radios', 'way', (('Netzwerk', 'LAN oder Tailscale, verschlüsselt', True),
                           ('UART (USB-Adapter)', 'Direktverbindung, unverschlüsselt', False)))

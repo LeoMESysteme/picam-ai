@@ -82,6 +82,8 @@ def _build_label(info=None) -> tuple[str, str | None]:
     if not version:
         return DEV_BUILD, None
     commit = str(getattr(info, 'commit', '') or '')[:12]
+    if commit.lower() in ('', 'unbekannt', 'unknown'):
+        commit = 'Quelle unbekannt'
     channel = getattr(info, 'channel', None)
     return (f'{version} · {commit}' if commit else str(version)), (str(channel) if channel else None)
 

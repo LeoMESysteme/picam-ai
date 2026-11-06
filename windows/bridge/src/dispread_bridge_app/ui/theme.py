@@ -21,6 +21,9 @@ DARK = dict(
 
 FONT_FAMILIES = ['Segoe UI Variable Text', 'Segoe UI', 'Noto Sans', 'DejaVu Sans']
 MONO_FAMILIES = ['Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'monospace']
+# QSS-Schriftlisten: jede mit generischem Fallback, damit Qt unter Windows nie auf Serif (Times) fällt
+FONT_QSS = ', '.join(f'"{n}"' for n in FONT_FAMILIES) + ', sans-serif'
+MONO_QSS = '"Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace'
 
 _current: dict = dict(LIGHT)
 _dark = False
@@ -73,6 +76,7 @@ def _accent(base: dict) -> dict:
 def make_font(pt: float = 10.5, weight=QFont.Weight.Normal, mono=False, tabular=False) -> QFont:
     f = QFont()
     f.setFamilies(MONO_FAMILIES if mono else FONT_FAMILIES)
+    f.setStyleHint(QFont.StyleHint.Monospace if mono else QFont.StyleHint.SansSerif)
     f.setPointSizeF(pt)
     f.setWeight(weight)
     if tabular:
@@ -86,7 +90,8 @@ def make_font(pt: float = 10.5, weight=QFont.Weight.Normal, mono=False, tabular=
 def qss(t: dict) -> str:
     return f"""
 * {{ outline: 0; }}
-QWidget {{ color: {t['text']}; font-size: 10.5pt; }}
+QWidget {{ color: {t['text']}; font-family: {FONT_QSS}; font-size: 10.5pt; }}
+QWidget[mono="true"] {{ font-family: {MONO_QSS}; }}
 QWidget#root, QDialog {{ background: {t['mica']}; }}
 QLabel {{ background: transparent; }}
 QLabel[secondary="true"] {{ color: {t['text2']}; }}

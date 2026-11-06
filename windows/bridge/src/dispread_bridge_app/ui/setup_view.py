@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import texts, theme
-from .widgets import Header, InfoBar, button, footer_frame
+from .widgets import Header, InfoBar, StateIcon, button, footer_frame
 
 
 class StepHeader(QWidget):
@@ -141,6 +141,7 @@ def fingerprint_label(fp: str, other: str | None = None) -> QLabel:
     lab = QLabel('<br>'.join(lines))
     lab.setTextFormat(Qt.TextFormat.RichText)
     lab.setFont(theme.make_font(9, mono=True))
+    lab.setProperty('mono', True)
     lab.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     lab.setAccessibleName('Fingerabdruck ' + ' '.join(groups))
     lab.setWordWrap(False)
@@ -284,6 +285,20 @@ class SetupView(QWidget):
             lay.addWidget(_label(v))
         return f
 
+    def _b_statusrows(self, heading, rows):
+        """Je Zeile: Label (Caption, grau) darüber, Wert (Body) mit Statussymbol."""
+        f, lay = _card()
+        lay.addWidget(_label(heading, strong=True))
+        for key, value, tone in rows:
+            lay.addWidget(_label(key, secondary=True, caption=True))
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            icon = StateIcon(tone, 16)
+            row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+            row.addWidget(_label(value), 1)
+            lay.addLayout(row)
+        return f
+
     def _b_text(self, text):
         return _label(text, secondary=True)
 
@@ -354,6 +369,7 @@ class SetupView(QWidget):
         e.setObjectName('pairing_code')
         e.setAccessibleName(label)
         e.setFont(theme.make_font(10.5, mono=True))
+        e.setProperty('mono', True)
         e.setMaxLength(64)
         e.setEchoMode(QLineEdit.EchoMode.Password)      # Code nicht mitlesbar am Bildschirm
         lay.addWidget(e)

@@ -313,3 +313,9 @@ def test_build_info_fields_shape_footer_and_channel(tmp_path):
     assert texts.version_label(ctx.version) == '0.1.0 · 0123456789ab'
     none = make(tmp_path / 'x', build_info=False).context()
     assert none.version == 'Entwicklungsstand' and none.channel is None
+
+
+def test_unknown_commit_reads_as_unknown_source(tmp_path):
+    import types
+    info = types.SimpleNamespace(version='0.1.0.dev0', commit='unbekannt', channel=None)
+    assert make(tmp_path, build_info=info).context().version == '0.1.0.dev0 · Quelle unbekannt'

@@ -115,6 +115,7 @@ class Flyout(QFrame):
             vl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             if k.startswith('TLS'):
                 vl.setFont(theme.make_font(9, mono=True))
+                vl.setProperty('mono', True)
             lay.addWidget(vl)
         if view.hint:
             h = QLabel(view.hint)
