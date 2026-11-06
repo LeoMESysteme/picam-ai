@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createViewer} from '../src/dispread/workbench/static/live/viewer/view.js';
 import {readFileSync} from 'node:fs';
-import {cellQuads, drawHud, hitTest, homography, readoutTag} from '../src/dispread/workbench/static/live/viewer/hud.js';
+import {cellQuads, drawHud, drawSetupHud, hitTest, homography, readoutTag, setupOverlay}
+  from '../src/dispread/workbench/static/live/viewer/hud.js';
 import {LEGEND_ROWS, legendRows} from '../src/dispread/workbench/static/live/viewer/legend.js';
 
 // Leser-Raster wie im Live-Status (Szene running_valid): entzerrte Pixel.
@@ -250,4 +251,111 @@ test('click handlers compose: the first one returning true consumes the click', 
   assert.deepEqual(calls, [['b']]);
   const removePainter = viewer.addPainter(() => {});
   assert.equal(typeof removePainter, 'function');
+});
+
+// ---------------------------------------------------------------------------
+// Einrichtungs-HUD (Finish-Review F1): Vorschlag, Raster, Suchfenster, Fokus-ROI.
+// ---------------------------------------------------------------------------
+const scene = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
+
+// Zeichenkontext, der Linienzuege mit ihrem Strichmuster mitschreibt.
+function recordingContext() {
+  const paths = [];
+  const texts = [];
+  let current = [];
+  let dash = [];
+  const ctx = new Proxy({paths, texts}, {
+    get(target, key) {
+      if (key in target) return target[key];
+      if (key === 'measureText') return (text) => ({width: String(text).length * 7});
+      if (key === 'fillText') return (text) => texts.push(String(text));
+      if (key === 'setLineDash') return (d) => { dash = d.slice(); };
+      if (key === 'beginPath') return () => { current = []; };
+      if (key === 'moveTo' || key === 'lineTo') return (x, y) => current.push([x, y]);
+      if (key === 'rect') return (x, y, w, h) => current.push([x, y], [x + w, y + h]);
+      if (key === 'stroke') return () => paths.push({points: current.slice(), dash: dash.slice(), color: target.strokeStyle});
+      return () => {};
+    },
+    set(target, key, value) { target[key] = value; return true; },
+  });
+  return ctx;
+}
+
+const identityView = {imageToScreen: (p) => p, screenToImage: (p) => p, width: 1920, height: 1080, scale: 1, dpr: 1};
+
+test('setupOverlay: proposal quad, grid and regions in setup_ready; ROI only while focusing', () => {
+  const ready = setupOverlay(scene('setup_ready_warnung'));
+  assert.deepEqual(ready.quad, scene('setup_ready_warnung').setup.grid.quad);
+  assert.equal(ready.grid.cell_boxes.length, 16);
+  assert.equal(ready.roi, null);
+  // check_reasons nennen keine Zelle: nichts wird getoent, nichts geraten.
+  assert.deepEqual(ready.warnCells, []);
+  const focus = setupOverlay(scene('setup_focus'));
+  assert.equal(focus.quad, null);
+  assert.deepEqual(focus.roi, [640, 360, 640, 360]);
+  // Neueste Probe der Reihe (Messreihenfolge), gerundet wie in der Fokuskurve.
+  assert.equal(focus.roiLabel, 'Fokus-ROI · Schärfe 201');
+  const done = setupOverlay(scene('setup_focus_done'));
+  assert.equal(done.roiLabel, `Fokus-ROI · Schärfe ${Math.round(scene('setup_focus_done').setup.focus.verify.score)}`);
+  const none = structuredClone(scene('setup_focus'));
+  none.setup.focus.samples = [];
+  assert.equal(setupOverlay(none).roiLabel, 'Fokus-ROI · misst …');
+  // Im Lauf und ohne Einrichtung: nichts.
+  assert.equal(setupOverlay(scene('running_valid')), null);
+  assert.equal(setupOverlay(scene('idle')), null);
+  // Laufende Einrichtung mit Vorschlag (Raster schon da): Viereck ja, ROI nein.
+  const running = structuredClone(scene('setup_standbilder'));
+  running.setup.grid = structuredClone(scene('setup_ready_warnung').setup.grid);
+  assert.deepEqual(setupOverlay(running).quad, running.setup.grid.quad);
+});
+
+test('drawSetupHud draws quad, 16 cells, dashed ROI with label; layers switch them off', () => {
+  const overlay = setupOverlay(scene('setup_ready_warnung'));
+  let ctx = recordingContext();
+  drawSetupHud(ctx, overlay, identityView);
+  const quad = ctx.paths.find((p) => p.dash.length === 0 && p.points.length === 4
+    && p.points.every(([x, y], i) => Math.abs(x - overlay.quad[i][0]) < 1e-6 && Math.abs(y - overlay.quad[i][1]) < 1e-6));
+  assert.ok(quad, 'Viereck des Vorschlags');
+  const cells = cellQuads(overlay.quad, overlay.grid);
+  const grid = ctx.paths.find((p) => p.points.length === cells.length * 4);
+  assert.ok(grid, 'Raster mit 16 Zellen');
+  ctx = recordingContext();
+  drawSetupHud(ctx, overlay, identityView, new Set(['zellen']));
+  assert.equal(ctx.paths.length, 0);
+  const focus = setupOverlay(scene('setup_focus'));
+  ctx = recordingContext();
+  drawSetupHud(ctx, focus, identityView);
+  const roi = ctx.paths.find((p) => p.dash.length > 0);
+  assert.ok(roi, 'gestrichelte ROI');
+  const xs = roi.points.map(([x]) => x), ys = roi.points.map(([, y]) => y);
+  assert.deepEqual([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], [640, 360, 1280, 720]);
+  assert.ok(ctx.texts.includes('Fokus-ROI · Schärfe 201'));
+  ctx = recordingContext();
+  drawSetupHud(ctx, focus, identityView, new Set(['anzeige']));
+  assert.equal(ctx.paths.length, 0);
+});
+
+test('drawHud draws the dashed search window around every region when asked (setup)', () => {
+  const regions = scene('setup_ready_warnung').setup.regions.map((r) => ({c: r.centre, s: r.size, ok: true}));
+  let ctx = recordingContext();
+  drawHud(ctx, {track: {regions}}, identityView, new Set(['rahmen']));
+  assert.equal(ctx.paths.filter((p) => p.dash.length).length, 0, 'im Lauf ruhig: nur verlorene oder gezeigte');
+  ctx = recordingContext();
+  drawHud(ctx, {track: {regions}}, {...identityView, searchWindows: true}, new Set(['rahmen']));
+  assert.equal(ctx.paths.filter((p) => p.dash.length).length, regions.length);
+});
+
+test('viewer frames the focus ROI while focusing and draws the setup HUD on live', () => {
+  const canvas = fakeCanvas(800, 450);
+  const viewer = createViewer(canvas, {dpr: 1, schedule: (fn) => fn()});
+  viewer.setFrame({width: 960, height: 540}, {seq: 1, w: 1920, h: 1080, rec: null, track: null});
+  viewer.setSetupOverlay(setupOverlay(scene('setup_focus')));
+  const [x0, y0] = viewer.imageToScreen([640, 360]);
+  const [x1, y1] = viewer.imageToScreen([1280, 720]);
+  // ROI deutlich groesser als im eingepassten Gesamtbild (Breite 800/1920 je Bildpunkt).
+  assert.ok((x1 - x0) / 640 > 1.5 * (800 / 1920) * 0.98, `ROI-Breite ${x1 - x0}`);
+  assert.ok(x0 > 0 && y0 > 0 && x1 < 800 && y1 < 450, `ROI im Bild: ${[x0, y0, x1, y1]}`);
+  canvas.ctx.texts.length = 0;
+  viewer.redraw();
+  assert.ok(canvas.ctx.texts.includes('Fokus-ROI · Schärfe 201'));
 });

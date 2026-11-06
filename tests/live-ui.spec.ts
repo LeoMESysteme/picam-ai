@@ -1720,3 +1720,106 @@ test('Vorschlag mit WARNUNG: Hinweis nennt die Prüfung und bittet um Prüfung i
   await expect(toast).toContainText('Prüfung Raster. Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.');
   expect(errors).toEqual([]);
 });
+
+// Farbe nahe einer Zielfarbe in einem kleinen Fenster um einen Bildpunkt der Canvas.
+async function colourNear(page: Page, image: number[], rgb: number[], radius = 3, tol = 40) {
+  return page.locator('canvas.vcanvas').evaluate((el: any, [image, rgb, radius, tol]: any) => {
+    const [sx, sy] = el.viewer.imageToScreen(image);
+    const dpr = el.width / el.clientWidth;
+    const ctx = el.getContext('2d');
+    const r = Math.round(radius * dpr);
+    const data = ctx.getImageData(Math.round(sx * dpr) - r, Math.round(sy * dpr) - r, 2 * r + 1, 2 * r + 1).data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - rgb[0]) + Math.abs(data[i + 1] - rgb[1]) + Math.abs(data[i + 2] - rgb[2]) < tol) return true;
+    }
+    return false;
+  }, [image, rgb, radius, tol]);
+}
+
+// Wie viele Bildpunkte im Fenster um einen Bildpunkt aendert eine Ebene? (Ebene aus,
+// neu zeichnen, vergleichen, Ebene wieder an.) Unabhaengig von Bildinhalt und Strichmuster.
+async function layerPixels(page: Page, layer: string, image: number[], radius = 6) {
+  return page.locator('canvas.vcanvas').evaluate(async (el: any, [layer, image, radius]: any) => {
+    const grab = async () => {
+      el.viewer.redraw();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const [sx, sy] = el.viewer.imageToScreen(image);
+      const dpr = el.width / el.clientWidth;
+      const r = Math.round(radius * dpr);
+      return el.getContext('2d').getImageData(Math.round(sx * dpr) - r, Math.round(sy * dpr) - r, 2 * r + 1, 2 * r + 1).data;
+    };
+    const on = el.viewer.layers();
+    const withLayer = await grab();
+    const off = new Set(on);
+    off.delete(layer);
+    el.viewer.setLayers(off);
+    const without = await grab();
+    el.viewer.setLayers(on);
+    let changed = 0;
+    for (let i = 0; i < withLayer.length; i += 4) {
+      if (Math.abs(withLayer[i] - without[i]) + Math.abs(withLayer[i + 1] - without[i + 1]) + Math.abs(withLayer[i + 2] - without[i + 2]) > 24) changed++;
+    }
+    return changed;
+  }, [layer, image, radius]);
+}
+
+test('Einrichtungs-HUD: Vorschlag mit Viereck, Raster und Suchfenstern im Live-Bild', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const canvas = page.locator('canvas.vcanvas');
+  await expect(canvas).toHaveAttribute('data-seq', /^\d+$/);
+  const quad: number[][] = await canvas.evaluate((el: any) => el.viewer.grid().quad);
+  await expect.poll(() => canvas.evaluate((el: any) => Boolean(el.viewer.setupOverlay()?.quad))).toBe(true);
+  // Oberkante des Vierecks in --sel (#86aee8), Mitte zwischen den oberen Ecken.
+  const top = [(quad[0][0] + quad[1][0]) / 2, (quad[0][1] + quad[1][1]) / 2];
+  await expect.poll(() => colourNear(page, top, [134, 174, 232])).toBe(true);
+  // Rasterlinie zwischen Zelle 0 und 1 (25 von 400 entzerrten Pixeln) auf halber Hoehe;
+  // die Linie ist zart (--sel bei 38 %), daher ein etwas groesseres Fenster.
+  const grid = await canvas.evaluate((el: any) => el.viewer.grid());
+  const u = 25 / grid.target_size[0];
+  const mid = [quad[0][0] + (quad[1][0] - quad[0][0]) * u, (quad[0][1] + quad[3][1]) / 2 + 4];
+  await expect.poll(() => layerPixels(page, 'raster', mid, 10)).toBeGreaterThan(4);
+  // Suchfenster: gestrichelter Rahmen 12 px ausserhalb jedes Rahmenbereichs (hier Bereich 1).
+  const region = await page.evaluate(async () => (await (await fetch('/live/status')).json()).setup.regions[0]);
+  const edge = [region.centre[0] - region.size / 2 - 12, region.centre[1]];
+  await expect.poll(() => colourNear(page, edge, [214, 92, 207], 4, 150)).toBe(true);
+  // Ebene Anzeige aus: das Viereck verschwindet.
+  const viewer = page.getByRole('region', { name: 'Bildansicht' });
+  await viewer.getByRole('button', { name: 'Ebenen' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Anzeige' }).click();
+  await expect.poll(() => colourNear(page, top, [134, 174, 232], 1, 30)).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('Fokus-ROI: gestrichelt mit Schärfe, Ansicht rahmt die ROI, Ebene schaltbar', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  const canvas = page.locator('canvas.vcanvas');
+  await expect(canvas).toHaveAttribute('data-seq', /^\d+$/);
+  await expect.poll(() => canvas.evaluate((el: any) => el.viewer.setupOverlay()?.roiLabel))
+    .toBe('Fokus-ROI · Schärfe 201');
+  const view = await canvas.evaluate((el: any) => {
+    const v = el.viewer.viewState();
+    return { a: el.viewer.imageToScreen([640, 360]), b: el.viewer.imageToScreen([1280, 720]), w: v.width, h: v.height,
+      scale: v.scale, full: Math.min(v.width / 1920, v.height / 1080) * 0.98 };
+  });
+  // Gerahmt auf die ROI statt auf das ganze Bild, ROI ganz sichtbar.
+  expect(view.scale).toBeGreaterThan(1.4 * view.full);
+  expect(view.a[0]).toBeGreaterThan(0); expect(view.a[1]).toBeGreaterThan(20);
+  expect(view.b[0]).toBeLessThan(view.w); expect(view.b[1]).toBeLessThan(view.h);
+  // Gestrichelte helle Linie an der linken ROI-Kante (Mitte), Beschriftung darueber.
+  await expect.poll(() => layerPixels(page, 'fokus', [640, 540], 8)).toBeGreaterThan(4);
+  const viewer = page.getByRole('region', { name: 'Bildansicht' });
+  await viewer.getByRole('button', { name: 'Ebenen' }).click();
+  const item = page.getByRole('menuitemcheckbox', { name: 'Fokus-ROI' });
+  await expect(item).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(item).toHaveAttribute('aria-checked', 'true');
+  await item.click();
+  await expect(item).toHaveAttribute('aria-checked', 'false');
+  await expect.poll(() => canvas.evaluate((el: any) => el.viewer.layers().has('fokus'))).toBe(false);
+  expect(errors).toEqual([]);
+});

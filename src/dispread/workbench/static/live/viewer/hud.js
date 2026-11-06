@@ -356,8 +356,9 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
       const lost = !region.ok;
       const hovered = hover?.kind === 'region' && hover.index === i;
       const color = lost ? COL.err : COL.mag;
-      // Suchfenster nur am verlorenen oder gezeigten Bereich, sonst bleibt das Bild ruhig.
-      if (lost || hovered) {
+      // Suchfenster im Lauf nur am verlorenen oder gezeigten Bereich, sonst bleibt das
+      // Bild ruhig; in der Einrichtung an jedem Bereich (view.searchWindows, Mock #t=46).
+      if (lost || hovered || view.searchWindows) {
         screenRect(ctx, centre, (half + SEARCH_RADIUS_PX) * view.scale, 1, dpr);
         ctx.setLineDash([3, 3]);
         ctx.lineWidth = 1;
@@ -377,5 +378,112 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
   }
 
   if (tag && layerOn(layers, 'etikett')) drawTag(ctx, tag, quad, view);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Einrichtung (Mock #t=10 und #t=46): Vorschlag aus status.setup.grid (Viereck
+// und Zellraster in Kamerapixeln), Fokus-ROI aus setup.focus.roi waehrend der
+// Fokussuche. Das Lauf-HUD (X-Hud.track) hat Vorrang; hier zeichnet nur, was
+// der Status traegt.
+// ---------------------------------------------------------------------------
+const SETUP_STATES = ['setup_running', 'setup_ready'];
+
+function focusing(status) {
+  const steps = status?.setup?.progress?.steps;
+  if (Array.isArray(steps) && steps.length) return steps.some((step) => step?.key === 'fokus' && step.state === 'running');
+  return status?.setup?.step === 'fokus';
+}
+
+function validRoi(roi) {
+  return Array.isArray(roi) && roi.length === 4 && roi.every(finite) && roi[2] > 0 && roi[3] > 0;
+}
+
+// Was die Einrichtung im Bild zeigt, oder null. warnCells: Zellen, die eine
+// Pruefung ausdruecklich benennt. check_reasons sind Texte ohne Zellindex,
+// daher bleibt die Liste leer; geraten wird nie.
+export function setupOverlay(status) {
+  if (!SETUP_STATES.includes(status?.state) || !status.setup) return null;
+  const setup = status.setup;
+  const grid = setup.grid && validQuad(setup.grid.quad) ? setup.grid : null;
+  const roi = status.state === 'setup_running' && focusing(status) && validRoi(setup.focus?.roi) ? setup.focus.roi : null;
+  let roiLabel = null;
+  if (roi) {
+    // Neueste Messung: Gegenpruefung, sonst die letzte Probe; gerundet wie die Fokuskurve.
+    const samples = (Array.isArray(setup.focus.samples) ? setup.focus.samples : []).filter((p) => Array.isArray(p) && finite(p[1]));
+    const verify = setup.focus.verify;
+    const score = finite(verify?.score) ? verify.score : samples.length ? samples.at(-1)[1] : null;
+    roiLabel = score === null ? 'Fokus-ROI · misst …' : `Fokus-ROI · Schärfe ${Math.round(score)}`;
+  }
+  if (!grid && !roi) return null;
+  return {quad: grid ? grid.quad : null, grid, roi, roiLabel, warnCells: []};
+}
+
+function labelBox(ctx, x, y, text) {
+  ctx.font = `500 12px ${SANS}`;
+  const w = Math.round(ctx.measureText(text).width + 12);
+  ctx.fillStyle = 'rgba(22,21,19,.9)';
+  ctx.fillRect(Math.round(x), Math.round(y), w, 20);
+  ctx.fillStyle = COL.tx;
+  ctx.fillText(text, Math.round(x) + 6, Math.round(y) + 14);
+}
+
+// overlay = setupOverlay(status); view wie drawHud. Ebenen: anzeige (Viereck),
+// raster (Zellraster), zellen (unsichere Zellen), fokus (ROI).
+export function drawSetupHud(ctx, overlay, view, layers = ALL_LAYERS) {
+  if (!overlay) return;
+  const toS = view.imageToScreen;
+  ctx.save();
+  ctx.lineJoin = 'miter';
+  ctx.setLineDash([]);
+  if (overlay.roi && layerOn(layers, 'fokus')) {
+    const [x, y, w, h] = overlay.roi;
+    const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    poly(ctx, corners, toS);
+    ctx.setLineDash([6, 4]);
+    strokeHalo(ctx, 'rgba(240,236,228,.92)', 1);
+    ctx.setLineDash([]);
+    const [a, b] = toS(corners[0]);
+    labelBox(ctx, a, Math.max(2, b - 24), overlay.roiLabel);
+  }
+  const quad = overlay.quad;
+  if (quad) {
+    const boxes = cellQuads(quad, overlay.grid);
+    if (layerOn(layers, 'raster') && boxes.length) {
+      ctx.beginPath();
+      for (const box of boxes) {
+        if (!box) continue;
+        box.forEach((p, i) => {
+          const [a, b] = toS(p);
+          if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b);
+        });
+        ctx.closePath();
+      }
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(134,174,232,.38)';
+      ctx.stroke();
+    }
+    if (layerOn(layers, 'zellen')) {
+      for (const index of overlay.warnCells || []) {
+        const box = boxes[index];
+        if (!box) continue;
+        poly(ctx, box, toS);
+        ctx.fillStyle = 'rgba(229,165,53,.20)';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = COL.warn;
+        ctx.stroke();
+      }
+    }
+    if (layerOn(layers, 'anzeige')) {
+      poly(ctx, quad, toS);
+      strokeHalo(ctx, COL.sel, 1.5);
+      ctx.fillStyle = COL.sel;
+      for (const p of quad) {
+        const [a, b] = toS(p);
+        ctx.fillRect(Math.round(a) - 3, Math.round(b) - 3, 6, 6);
+      }
+    }
+  }
   ctx.restore();
 }

@@ -7,7 +7,8 @@
 // das Kamerabild (hud.w × hud.h). Das 960 px breite Vorschau-JPEG wird auf
 // diese Groesse gezogen, damit HUD und Bild denselben Raum teilen.
 // Bildschirmkoordinaten sind CSS-px relativ zur Canvas.
-import {ALL_LAYERS, FRAME_MAX_AGE_S, LAYERS, VALUE_MAX_AGE_S, drawHud, hitTest, markerInfo, readoutTag} from './hud.js';
+import {ALL_LAYERS, FRAME_MAX_AGE_S, LAYERS, VALUE_MAX_AGE_S, drawHud, drawSetupHud, hitTest, markerInfo, readoutTag,
+  setupOverlay} from './hud.js';
 import {renderLegend} from './legend.js';
 
 const ZOOM_MIN = 0.05;
@@ -27,7 +28,7 @@ export function createViewer(canvas, opts = {}) {
     src: 'live', layers: new Set(ALL_LAYERS), hud: null, frame: null, frameAt: null, frames: [],
     stills: {}, views: {}, auto: {live: true}, hover: null, pinned: null, pointer: null, queued: false,
     frameSize: null, grid: null, painters: [], clickHandlers: [], ageTimers: [], offline: false,
-    imageFilter: 'none',
+    imageFilter: 'none', setup: null, roiFrame: null,
   };
   const viewKey = () => (state.src === 'still' ? 'live' : state.src);
   const size = () => [canvas.clientWidth || 0, canvas.clientHeight || 0];
@@ -67,10 +68,12 @@ export function createViewer(canvas, opts = {}) {
   }
 
   // Einrichtung ohne Lauf-HUD: Anzeigerahmen des Vorschlags (setup.grid.quad)
-  // und Rahmenbereiche mit etwa 25 % Rand (Mock #t=46). Nur Live/Standbild.
+  // und Rahmenbereiche mit etwa 25 % Rand (Mock #t=46); waehrend der
+  // Fokussuche die Fokus-ROI mit Rand (Mock #t=10). Nur Live/Standbild.
   function setupFrame(d) {
-    if (viewKey() !== 'live' || state.hud?.track?.quad || !state.framing) return null;
-    return frameAround(state.framing, d, 0.25);
+    if (viewKey() !== 'live' || state.hud?.track?.quad) return null;
+    if (state.framing) return frameAround(state.framing, d, 0.25);
+    return state.roiFrame ? frameAround(state.roiFrame, d, 0.15) : null;
   }
 
   // Erster Blick auf die Anzeige: Viereck und Rahmenbereiche mit Rand,
@@ -153,6 +156,11 @@ export function createViewer(canvas, opts = {}) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Live-HUD gehoert nur zum Live-Bild: Standbilder tragen ihre eigene
     // Geometrie, ein Live-Viereck darueber laege auf einem anderen Bild.
+    // Einrichtungs-HUD (Vorschlag, Raster, Fokus-ROI) gehoert zu Live und Standbild:
+    // der Vorschlag stammt aus genau diesem Standbild. Ein Lauf-Viereck hat Vorrang.
+    if (viewKey() === 'live' && state.setup && !state.hud?.track?.quad) {
+      drawSetupHud(ctx, state.setup, viewState(), state.layers);
+    }
     if (state.src === 'live' && state.hud) drawHud(ctx, state.hud, viewState(), state.layers);
     for (const painter of state.painters) {
       ctx.save();
@@ -308,6 +316,23 @@ export function createViewer(canvas, opts = {}) {
       if (state.auto.live !== false) delete state.views.live;
       redraw();
     },
+    // Einrichtungs-HUD aus setupOverlay(status) oder null. Eine neue Fokus-ROI
+    // rahmt die Ansicht neu, solange der Bediener nichts verschoben hat.
+    setSetupOverlay(overlay) {
+      const next = overlay || null;
+      const key = JSON.stringify(next);
+      if (key === state.setupKey) return;
+      state.setupKey = key;
+      state.setup = next;
+      const roi = next?.roi;
+      const frame = roi ? [[roi[0], roi[1]], [roi[0] + roi[2], roi[1] + roi[3]]] : null;
+      if (JSON.stringify(frame) !== JSON.stringify(state.roiFrame)) {
+        state.roiFrame = frame;
+        if (state.auto.live !== false) delete state.views.live;
+      }
+      redraw();
+    },
+    setupOverlay: () => state.setup,
     // 1:1 = ein Bildpunkt auf einem Geraetepixel; die Bildmitte bleibt stehen.
     oneToOne() {
       const [W, H] = size();
@@ -604,11 +629,8 @@ export function mountViewer(host, {statusbar = null} = {}) {
     const index = items.indexOf(doc.activeElement);
     items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
   });
-  // Die Lage der Fokus-ROI steht weder im Status noch im HUD.
-  const roi = menu.querySelector('[data-layer="fokus"]');
-  roi.setAttribute('aria-disabled', 'true');
-  roi.setAttribute('aria-checked', 'false');
-  roi.title = 'Nur in der Einrichtung; die Lage der Fokus-ROI meldet der Server noch nicht';
+  // Fokus-ROI (setup.focus.roi) erscheint nur waehrend der Fokussuche.
+  menu.querySelector('[data-layer="fokus"]').title = 'Nur während der Fokussuche im Bild';
 
   // Uebungslauf: Standbilder kommen aus static/live/practice, nie vom Server.
   let stillSource = null;
@@ -701,6 +723,7 @@ export function mountViewer(host, {statusbar = null} = {}) {
       // Ohne Lauf-HUD rahmt der Vorschlag die Ansicht (Anzeigerahmen + Rahmenbereiche).
       const quad = Array.isArray(grid?.quad) && grid.quad.length === 4 ? grid.quad : null;
       viewer.setFraming(quad ? [...quad, ...(next?.setup?.regions || []).map((r) => r?.centre)] : null);
+      viewer.setSetupOverlay(setupOverlay(next));
       if (Boolean(grid) !== legendGrid) {
         legendGrid = Boolean(grid);
         renderLegend(legend, {grid: legendGrid});

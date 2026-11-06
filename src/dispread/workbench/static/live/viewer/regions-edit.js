@@ -164,7 +164,8 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     if (shown() && viewer.layers().has('rahmen')) {
       const track = {regions: regions().filter((r) => Array.isArray(r?.centre))
         .map((r) => ({c: r.centre, s: r.size, ok: true}))};
-      drawHud(ctx, {track}, {...view, hover: hover >= 0 ? {kind: 'region', index: hover} : null}, new Set(['rahmen']));
+      drawHud(ctx, {track}, {...view, hover: hover >= 0 ? {kind: 'region', index: hover} : null, searchWindows: true},
+        new Set(['rahmen']));
     }
     if (!feedback?.point || !shown()) {
       label.hidden = true;

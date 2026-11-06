@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 2): Der Viewer zeigt
+  in der Einrichtung, was der Inspektor zu prüfen verlangt. Sobald ein
+  Vorschlag vorliegt, zeichnet er auf Live und Standbild das Viereck aus
+  `setup.grid.quad` (Ebene Anzeige), das Zellraster aus `cell_boxes`
+  (Ebene Raster) und um jeden Rahmenbereich das gestrichelte Suchfenster.
+  Unsichere Zellen werden nur getönt, wenn eine Prüfung eine Zelle benennt;
+  `check_reasons` sind Texte ohne Zellindex, also bleibt das Raster ungetönt.
+  Während der Fokussuche erscheint die Fokus-ROI aus `setup.focus.roi`
+  gestrichelt mit „Fokus-ROI · Schärfe N“, die Ansicht rahmt sie statt des
+  ganzen Bilds, und die Ebene Fokus-ROI ist schaltbar (Legende ergänzt).
+
 * 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 1): In der laufenden
   Einrichtung steht „Einrichtung abbrechen“ neben dem gesperrten Bestätigen
   (`POST /live/setup/cancel` mit CSRF); der Übungslauf beantwortet den

@@ -19,6 +19,7 @@ export const LEGEND_ROWS = [
   ['<g fill="#ff6250" opacity=".8"><circle cx="5" cy="4" r="1.3"/><circle cx="9" cy="8" r="1.8"/><circle cx="15" cy="5" r="1.2"/><circle cx="18" cy="9" r="1"/></g>',
     'Fehlerort (Wolke an betroffenen Ecken)'],
   ['<rect x="1" y="1.5" width="20" height="9" fill="#121110" stroke="#55c46e"/>', 'Wert-Etikett: Wert, Status, Spur'],
+  ['<path d="M1 6h20" stroke="#ebe7e0" stroke-dasharray="4 3"/>', 'Fokus-ROI: Messbereich der Schärfe (nur bei der Fokussuche)'],
 ];
 
 // Zeilen mit 'grid' nur, wenn der Status ein Leser-Raster liefert; ohne
