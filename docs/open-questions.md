@@ -3141,6 +3141,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Vertrauen auf `py -3` oder PATH. Abnahmefälle: kein Python, nur Python 3.7,
   mehrere vorhandene Versionen; verständliche Hinweise bei gescheiterter
   Einrichtung statt eines Python-Tracebacks.
+* **Architekturwahl 2026-11-06:** Leonhard wählt Python-Brückenkern + Qt-GUI
+  + Windows-Installer; Online-Downloads bei Einrichtung sind erlaubt.
+  [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md) wird vor Umsetzung geprüft und zur
+  Freigabe vorgelegt. Architekturwahl klärt nicht Treiberzulassung,
+  Sessionformat oder produktive Messfreigabe.
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
   Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung

@@ -9,6 +9,30 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Windows-Anwendung mit bestehendem Python-Brückenkern
+
+**Problem:** Die manuelle Einrichtung auf einem weiteren Windows-PC benötigt
+Python-Auswahl, Treiber, Portpaar und COM-Zuordnung; Python 3.7 führte direkt
+zu einem Importfehler. Netzverbindungen dürfen nicht von einer festen
+Pi-IP oder einem bestimmten Tailscale-Aufbau abhängen.
+
+**Entscheidung:** Leonhard wählt vorhandenen Python-Brückenkern plus Qt-GUI
+und Windows-Installer als Grundlage der konkreten Spezifikation. Die EXE
+bringt eine passende Laufzeit mit; Downloads bei Einrichtung sind erlaubt.
+Workbench und Windows-Anwendung teilen sich Pi-Verbindungsprofil und lokal
+passende GSVmulti-Sessionerzeugung als unterschiedliche Aufgaben.
+
+**Alternativen:** Vollständiger C#/.NET-Neubau hätte zusätzliche Übertragung
+und Prüfung der Brückenlogik erfordert. Ein reines Downloadskript als
+Haupteinstieg erfüllt die gewünschte GUI und Fehlerführung nicht; als
+spätere Alternative bleibt es möglich.
+
+**Konsequenz:** Ein eigener Windows-Build und Ergänzungen auf der Pi-Seite
+sind erforderlich. Konkrete Paketierung, Kopplung, Zielplattform und
+Abnahmeschranken stehen zunächst im [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md).
+Architekturwahl ist keine Freigabe dieses Entwurfs oder der Implementierung;
+Treiber-, Session- und fachliche DUT-Abnahme bleiben eigene Nachweise.
+
 ## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART
 
 **Problem:** GSVmulti benötigt einen COM-Eingang, der Pi soll wahlweise über

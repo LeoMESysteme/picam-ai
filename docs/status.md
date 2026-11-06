@@ -36,20 +36,20 @@ softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
 abschließenden Backend- und UI-Korrekturen. Hardware-Abnahme T13 und Merge
 nach `master` stehen aus und brauchen Leonhards ausdrückliches OK.
 
-## Windows-EXE: Recherche und Architekturvorschlag
+## Windows-EXE: Architektur gewählt, Design zur Freigabe
 
-Nutzer beauftragt jetzt Überlegungen zu Installation, UART/Netzwerk,
-Pi-Erkennung mit/ohne Tailscale, mehreren Pi/Netzen und Sonderfällen.
-Downloads bei Einrichtung sind erlaubt. Recherchiert: gebündelter
-Python-Interpreter unter Windows, Treibersignaturen, USB-Identifikation,
-LAN-Erkennung und Tailscale-DNS. Codebefund: heutiger roher TCP-Pfad hat
-keine eigene Anmeldung/TLS; Standardhost und PAM-Benutzer sind teils
-auf diesen Aufbau zugeschnitten. OQ-64 führt allgemeine Netzaufnahme,
-Geräteidentität, Kopplung und Wiederanlauf; OQ-62 bleibt Installer,
-OQ-53 GSVmulti-Sessionformat. Vorschlag: vorhandenen Python-Brückenkern
-mit eigener Laufzeit paketieren, GUI und Installer ergänzen; .NET-Neubau
-als Alternative abwägen. Noch keine Technologieentscheidung angenommen,
-keine freigegebene Design-Spec, kein Produktcode geändert.
+Aktuelle Aufgabe: konkrete Spezifikation, noch keine Implementierung.
+Leonhard hat Python-Brückenkern + Qt-GUI + Windows-Installer gewählt.
+Downloads bei Einrichtung sind erlaubt. [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md)
+legt Installation, Pi-Erstzugang, Geräteidentität/Kopplung, LAN/Tailscale,
+UART, Zustandsmodell, Sessiongenerator, Wiederanlauf und Abnahme fest.
+Unabhängiger Builder-Check abgeschlossen: keine wichtigen offenen
+Planungsfragen. Strenger Doku-Build erfolgreich. Das Dokument selbst
+muss vor Umsetzung freigegeben werden. Vorgeschlagene Details wie
+Windows 11 x64 zuerst, Tray-App, PyInstaller/Inno Setup und gekoppelte
+WSS-Verbindung sind als Entwurfsentscheidungen markiert. Produktcode und
+Abhängigkeiten unverändert. OQ-62/OQ-64 bleiben bis zu den nötigen
+Nachweisen offen; OQ-53 und fachliche DUT-Sperren bestehen weiter.
 
 ## Neue Produktanforderung für später
 

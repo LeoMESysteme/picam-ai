@@ -21,6 +21,9 @@ die nur noch in GSVmulti geöffnet/importiert wird. Python-Umgebung,
 Treiber/virtuelles Portpaar und Zuordnung sollen nicht manuell verkettet
 werden müssen. Dies ist geplant; unterstützte Sessionformate, Windows- und
 GSVmulti-Versionen sowie Installationsrechte sind noch zu klären.
+Architektur gewählt am 06.11.: bestehender Python-Brückenkern, Qt-GUI und
+Windows-Installer. [Designentwurf](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md)
+noch zur Freigabe; keine Umsetzung zugesichert.
 [Offene Umsetzungspunkte](docs/open-questions.md#oq-62),
 [aktive Arbeitsreihenfolge](TODO.md).
 
