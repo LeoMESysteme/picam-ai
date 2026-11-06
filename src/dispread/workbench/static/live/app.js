@@ -362,8 +362,8 @@ if (typeof document !== 'undefined') {
   const act = async (path, body) => {
     ui.busy = true;
     render();
-    const result = await client.post(path, body);
-    ui.busy = false;
+    let result;
+    try { result = await client.post(path, body); } finally { ui.busy = false; }
     // Abgelehnte Aktion: stehender Hinweis mit dem Servertext (Wahrheitsregel 6).
     if (result.ok) closeToast('aktion');
     else toast({level: 'err', title: result.error, sticky: true, key: 'aktion'});
@@ -389,15 +389,16 @@ if (typeof document !== 'undefined') {
   const markPop = mountMarkPopover(titlebar, client);
 
   // Datensatz des gezeigten Bilds in die Wert-Tabelle, mit dem gerade gueltigen Referenztext.
-  const noteRecord = () => log.note(hud?.rec, {testRun: Boolean(status.test_run),
+  const noteRecord = () => log.note(hud?.rec, {testRun: Boolean(status.test_run), offline: Boolean(conn?.offline),
     reference: referenceModel(status.reference, {offline: Boolean(conn?.offline)})});
 
   // Ergebnis: Statuswort nach derselben Regel wie das HUD-Etikett (Bildalter laeuft mit).
   const renderRun = () => {
     if (!status) return;
     const frameAgeS = viewerUi.viewer.frameAgeS();
-    resultModel = renderResult(nodes.resultHost, statusView(status), status, hud?.rec || null,
-      {frameAgeS, offline: Boolean(conn?.offline), track: hud?.track || null});
+    const sinceStatusS = Number.isFinite(conn?.ageMs) ? Math.max(0, conn.ageMs / 1000) : 0;
+    resultModel = renderResult(nodes.resultHost, statusView(status, {sinceS: sinceStatusS}), status, hud?.rec || null,
+      {frameAgeS, offline: Boolean(conn?.offline), track: hud?.track || null, sinceStatusS});
   };
 
   // Zeitleiste: run.recent ist massgeblich und wird je Statusabruf neu angelegt;
@@ -415,6 +416,7 @@ if (typeof document !== 'undefined') {
     const back = (seconds) => nowMs - Math.min(60, Math.max(0, seconds)) * 1000;
     timeline.freeze(next.state === 'stopped');
     timeline.setUnit(next.run?.latest?.unit);
+    timeline.setTestRun(Boolean(next.test_run));
     if (next.state === 'running' || timeline.buckets().length === 0) timeline.seed(next.run?.recent, next.run?.recent_now_ms);
     const mark = next.last_mark;
     const markKey = mark ? `${mark.number ?? ''}|${mark.received_at_utc}|${mark.text}` : null;

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createEffects, mountEffects, TEXT_MS} from '../src/dispread/workbench/static/live/viewer/effects.js';
+import {createCorrectionChip, createEffects, mountEffects, TEXT_MS} from '../src/dispread/workbench/static/live/viewer/effects.js';
 import {createAlerts, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
 import {effectState} from '../src/dispread/workbench/static/live/model.js';
 
@@ -451,4 +451,31 @@ test('alerts: Anzeige-bewegt ohne Maße nennt weder leeren Text noch "Rahmen ver
   await settle();
   alerts.update(moved);
   assert.equal(h.toasts.get('nachfuehrung')?.text, 'Anzeige hat sich bewegt');
+});
+
+test('effects: correcting for many frames starts the animation once, then stays calm', () => {
+  const hud = hudWith({correcting: true});
+  const valid = scene('running_valid');
+  const fx = createEffects(fakeCanvas(), {random: seeded()});
+  // 100 Bilder mit correcting, 50 ms Abstand = 5 s.
+  run(fx, effectState(valid, {offline: false, hud}), geometry(hud), {seconds: 5, dtMs: 50});
+  assert.equal(fx.stats().correctionStarts, 1);
+  assert.equal(fx.stats().kind, null);
+  assert.equal(fx.animating(), false);
+  // Fehler schlaegt weiterhin alles; nach Ende der Korrektur startet ein neues Auftreten neu.
+  run(fx, effectState(valid, {offline: false, hud: hudWith()}), geometry(), {seconds: 3});
+  run(fx, effectState(valid, {offline: false, hud}), geometry(hud), {seconds: 0.2});
+  assert.equal(fx.stats().correctionStarts, 2);
+  assert.equal(fx.stats().kind, 'correcting');
+});
+
+test('correction chip shows after the animation and hides 2 s after correcting ends', () => {
+  const chip = createCorrectionChip();
+  assert.equal(chip.update(true, 0), false);
+  assert.equal(chip.update(true, 1000), false);
+  assert.equal(chip.update(true, 2000), true);
+  assert.equal(chip.update(true, 9000), true);
+  assert.equal(chip.update(false, 9500), true);
+  assert.equal(chip.update(false, 11100), false);
+  assert.equal(chip.update(true, 11200), false);
 });

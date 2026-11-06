@@ -14,11 +14,11 @@ export function cameraView(camera) {
     : `Kamera aus: ${camera.error || '—'}`;
 }
 
-export function statusView(status) {
+export function statusView(status, {sinceS = 0} = {}) {
   if (status.reference?.restoring) {
     return {headline: 'Werte werden zurückgestellt …', cls: 'transition', detail: 'Gerät verbunden lassen.'};
   }
-  const view = recordView(status);
+  const view = recordView(status, sinceS);
   if (status.reader_tolerance && view.cls === 'valid') {
     view.detail = `erweiterte Toleranz ×${status.reader_tolerance.factor} – nicht validiert · ${view.detail}`;
   }
@@ -34,10 +34,11 @@ export function statusView(status) {
   return view;
 }
 
-function recordView(status) {
+function recordView(status, sinceS = 0) {
   const run = status.run && status.run.latest;
   if (run) {
-    const age = status.run.latest_age_s;
+    // Ohne HUD laeuft das Alter ab Eingang des Status weiter (Wahrheitsregel 1).
+    const age = Number.isFinite(status.run.latest_age_s) ? status.run.latest_age_s + Math.max(0, sinceS) : status.run.latest_age_s;
     const fresh = typeof age === 'number' && Number.isFinite(age) && age <= 0.5;
     const reasons = run.reject_reasons.map((reason) => {
       const key = reason.startsWith('tracking_lost:') ? reason.slice('tracking_lost:'.length) : reason;

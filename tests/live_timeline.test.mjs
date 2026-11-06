@@ -342,3 +342,51 @@ test('Freigegeben-Zeit nur, wenn das gezeigte Bild den neuesten Datensatz trägt
   const other = resultModel(status, statusView(status), {...hudRec(status), text: '+9.99999'});
   assert.equal(other.released, '');
 });
+
+// ---------------------------------------------------------------------------
+// W4: Wahrheitsrandfaelle aus dem Schlussreview.
+// ---------------------------------------------------------------------------
+test('result: a rejected read that aged to stale shows no struck value', () => {
+  const status = load('running_stalled');
+  status.run.latest = {...status.run.latest, status: 'unreadable', raw_text: '+0.62427'};
+  // Der Server schreibt jeden gealterten Status auf stale um (live/session.py).
+  const rec = {...hudRec(status), status: 'stale'};
+  const model = resultModel(status, statusView(status), rec, {frameAgeS: 2});
+  assert.equal(model.cls, 'S');
+  assert.equal(model.word, 'Veraltet');
+  assert.equal(model.value, 'Kein Wert');
+  assert.equal(model.struck, false);
+  // War der Datensatz freigegeben, bleibt der Wert durchgestrichen stehen.
+  const valid = load('running_stalled');
+  valid.run.latest = {...valid.run.latest, status: 'valid'};
+  const kept = resultModel(valid, statusView(valid), {...hudRec(valid), status: 'stale'}, {frameAgeS: 2});
+  assert.equal(kept.value, '+0.62427');
+  assert.equal(kept.struck, true);
+});
+
+test('result: without a HUD the age keeps running since the status arrived', () => {
+  const status = load('running_valid');
+  status.run.latest_age_s = 0.1;
+  const fresh = resultModel(status, statusView(status, {sinceS: 0.2}), null, {sinceStatusS: 0.2});
+  assert.equal(fresh.cls, 'V');
+  const aged = resultModel(status, statusView(status, {sinceS: 0.6}), null, {sinceStatusS: 0.6});
+  assert.equal(aged.cls, 'S');
+  assert.equal(aged.struck, true);
+});
+
+test('record log marks values as stale while offline', () => {
+  const log = createRecordLog();
+  assert.ok(log.note({seq: 1, status: 'valid', text: '+1.0', unit: 'mV/V'}, {offline: true}));
+  assert.equal(log.rows()[0].status, 'stale');
+  assert.equal(log.rows()[0].text, '');
+  log.note({seq: 2, status: 'valid', text: '+1.1', unit: 'mV/V'});
+  assert.equal(log.rows()[0].status, 'valid');
+});
+
+test('timeline draws no value trace in a test run', () => {
+  const tl = createTimeline(null, {now: () => 1000});
+  tl.seed([[0, 'v', 1.5], [250, 'v', 1.6]], 500);
+  assert.ok(tl.layout(800).trace.length > 0);
+  tl.setTestRun(true);
+  assert.equal(tl.layout(800).trace.length, 0);
+});

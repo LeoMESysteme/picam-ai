@@ -67,7 +67,7 @@ export function referenceModel(reference, {offline = false} = {}) {
 // Reines Modell der Anzeige. hudRec = X-Hud.rec des gezeigten Bilds (oder
 // null), track = X-Hud.track, frameAgeS = Sekunden seit diesem Bild,
 // offline = Statusabruf verloren (connectionLost).
-export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = false, track = null} = {}) {
+export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = false, track = null, sinceStatusS = 0} = {}) {
   const run = status?.run || {};
   const latest = run.latest || null;
   const testRun = Boolean(status?.test_run);
@@ -90,14 +90,20 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   if (withheld) key = 'unreadable';
   const text = hudRec ? hudRec.text : latest?.raw_text;
   const unit = (hudRec ? hudRec.unit : latest?.unit) || '';
-  const wasValid = hudRec ? ['valid', 'stale'].includes(hudRec.status) : latest?.status === 'valid';
+  // Der Server schreibt jeden gealterten Status auf 'stale' um: ein abgelehnter Datensatz
+  // darf nicht als durchgestrichener Wert erscheinen. Stale zaehlt nur, wenn der
+  // Statusdatensatz zum selben Wert freigegeben war.
+  const wasValid = hudRec
+    ? hudRec.status === 'valid' || (hudRec.status === 'stale' && latest?.status === 'valid' && latest.raw_text === hudRec.text)
+    : latest?.status === 'valid';
   let value = '–';
   let valueUnit = '';
   if (key === 'valid') { value = text || '–'; valueUnit = unit; }
   else if (key === 'transition') value = 'Wert wechselt';
   else if (key === 'unreadable') value = 'Kein Wert';
   else if (!testRun && wasValid && text) { value = text; valueUnit = unit; }
-  const age = hudRec && finite(hudRec.age_s) ? hudRec.age_s + Math.max(0, frameAgeS) : run.latest_age_s;
+  else if (!testRun && key === 'stale') value = 'Kein Wert';
+  const age = hudRec && finite(hudRec.age_s) ? hudRec.age_s + Math.max(0, frameAgeS) : (finite(run.latest_age_s) ? run.latest_age_s + Math.max(0, sinceStatusS) : run.latest_age_s);
   const reasons = hudRec?.reasons || latest?.reject_reasons || [];
   let sub;
   // Testlauf: der Server schreibt VALID auf UNREADABLE um (testlauf_keine_freigabe);
@@ -131,7 +137,7 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   // auch im Status freigegeben ist (Wahrheitsregel 1: Veraltet ist nie freigegeben).
   const sameRecord = !hudRec || hudRec.text === latest?.raw_text;
   const released = key === 'valid' && latest?.status === 'valid' && base.time && sameRecord ? `Freigegeben ${base.time}` : '';
-  return {...base, ...META[key], value, unit: valueUnit, struck: key === 'stale', sub, released,
+  return {...base, ...META[key], value, unit: valueUnit, struck: key === 'stale' && value !== 'Kein Wert', sub, released,
     subErr: key === 'unreadable' && !testRun, age: ageText(age)};
 }
 

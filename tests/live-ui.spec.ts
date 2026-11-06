@@ -1949,7 +1949,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   expect(errors).toEqual([]);
 });
 
-test('Ausgabe: Testlauf mit Ausgabe wird vor dem POST abgelehnt', async ({ page }) => {
+test('Ausgabe: Testmodus sperrt die Ausgabewahl und zeigt sie als Aus', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await login(page);
@@ -1959,13 +1959,15 @@ test('Ausgabe: Testlauf mit Ausgabe wird vor dem POST abgelehnt', async ({ page 
   const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
   await pop.getByText('Testmodus (nur zu Testzwecken)').click();
-  await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
-  let posts = 0;
-  page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) posts++; });
-  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
-  await expect(pop.getByRole('alert')).toHaveText('Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.');
-  await expect(page.getByRole('dialog', { name: 'TESTLAUF starten?' })).toHaveCount(0);
-  expect(posts).toBe(0);
+  const override = pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ });
+  await override.check();
+  const radios = pop.getByRole('radio');
+  await expect(pop.getByRole('radio', { name: 'Aus' })).toBeChecked();
+  for (let i = 0; i < await radios.count(); i++) await expect(radios.nth(i)).toBeDisabled();
+  // Abwaehlen gibt die gewaehlte Ausgabe zurueck.
+  await override.uncheck();
+  await expect(pop.getByRole('radio', { name: 'Netzwerk über Brücke' })).toBeChecked();
+  await expect(pop.getByRole('radio', { name: 'Aus' })).toBeEnabled();
   expect(errors).toEqual([]);
 });
 

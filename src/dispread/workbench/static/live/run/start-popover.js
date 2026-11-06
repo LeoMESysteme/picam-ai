@@ -120,7 +120,16 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     part('start').disabled = !canStart();
     onChange();
   };
-  part('override').addEventListener('change', refresh);
+  // Testmodus bietet keine Ausgabe an: Auswahl und Felder gesperrt, gezeigt als "Aus"
+  // (der gespeicherte Weg kommt beim Abwaehlen zurueck; der Start bleibt abgelehnt).
+  let beforeTest = null;
+  const syncTest = () => {
+    const test = part('override').checked && !running();
+    if (test && beforeTest === null) { beforeTest = choice(); setChoice('off'); }
+    else if (!test && beforeTest !== null) { setChoice(beforeTest); beforeTest = null; }
+    for (const el of part('output').querySelectorAll('input, select')) el.disabled = test || Boolean(running());
+  };
+  part('override').addEventListener('change', () => { showError(''); syncTest(); refresh(); });
   part('out-ack').addEventListener('change', () => { showError(''); refresh(); });
   for (const [key] of PATHS) {
     part(`path-${key}`).addEventListener('change', () => { saveChoice(key); showOutput(); showError(''); refresh(); });
@@ -143,6 +152,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       const live = running();
       for (const el of part('output').querySelectorAll('input, select')) el.disabled = Boolean(live);
       part('out-ro').hidden = !live;
+      syncTest();
       if (live) {
         const out = status.output;
         setChoice(out.transport);

@@ -149,6 +149,7 @@ body.offline .app>:not(.titlebar){filter:brightness(.5) saturate(.45)}
 .vchip b{color:var(--tx);font-weight:500}
 .vchip.coordc{left:auto;right:10px;font:12px var(--mono);font-variant-numeric:tabular-nums;color:var(--tx2)}
 .vchip:empty{display:none}
+.corrchip{position:absolute;left:10px;bottom:10px;display:flex;align-items:center;background:rgba(20,19,17,.86);border:1px solid rgba(48,198,183,.45);border-radius:2px;padding:3px 8px;font-size:12px;color:var(--teal);pointer-events:auto;white-space:nowrap}.corrchip[hidden]{display:none}
 .legend{position:absolute;left:10px;bottom:10px;z-index:10;background:rgba(24,23,21,.94);border:1px solid var(--line);border-radius:2px;padding:6px 0;font-size:12px;min-width:252px}
 .legend .lh{padding:0 10px 4px;color:var(--tx3);font-size:11.5px}
 .legend div.r{display:flex;align-items:center;gap:9px;padding:2px 10px;color:var(--tx2)}

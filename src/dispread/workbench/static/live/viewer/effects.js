@@ -112,7 +112,11 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
   // Gezeichnete Art: der gesetzte Zustand, ausser eine noch auslaufende Korrektur
   // hat Vorrang (sie schlaegt Wechselt und das Ende des Ausloesebilds).
   const latched = () => Boolean(correction && t - correction.t0 < CORRECTION_S);
+  let correctionStarts = 0;
   function kind() {
+    // R32: Der Korrektureffekt laeuft nur beim Einsetzen; dauert correcting an,
+    // bleibt die Ebene ruhig (die Anzeige macht ein statisches Kennzeichen).
+    if (state.kind === 'correcting' && !latched()) return null;
     if (latched() && (!state.kind || PRIORITY.indexOf(state.kind) > PRIORITY.indexOf('correcting'))) return 'correcting';
     return state.kind;
   }
@@ -122,8 +126,10 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
     geo = geometry || null;
     const quad = validQuad(geo?.quad) ? geo.quad : null;
     if (k === 'correcting') {
-      if (!correction || t - correction.t0 >= CORRECTION_S) correction = {from: lastQuad || quad, to: quad, t0: t};
-      else if (quad) correction.to = quad;
+      if (state.kind !== 'correcting' && !latched()) {
+        correction = {from: lastQuad || quad, to: quad, t0: t};
+        correctionStarts += 1;
+      } else if (quad && latched()) correction.to = quad;
     } else if (k && PRIORITY.indexOf(k) < PRIORITY.indexOf('correcting')) {
       // Ein Zustand mit hoeherem Vorrang verdraengt eine auslaufende Korrektur.
       correction = null;
@@ -344,7 +350,7 @@ export function createEffects(canvas, {reducedMotion = false, random = Math.rand
       rm = Boolean(on);
       if (rm) parts.length = 0;
     },
-    stats: () => ({particles: parts.length, lastDrawMs, kind: kind(), corners: [...state.corners],
+    stats: () => ({correctionStarts, particles: parts.length, lastDrawMs, kind: kind(), corners: [...state.corners],
       regions: [...state.regions], fps, maxParticles: maxParticles(), streaks,
       // Versatz altes -> neues Viereck der laufenden Korrektur (Bildpixel, Ecke oben links).
       correctionPx: kind() === 'correcting' && validQuad(correction?.from) && validQuad(correction?.to)
@@ -366,6 +372,25 @@ export function staleFilter(ageS, {reducedMotion = false, dpr = 1} = {}) {
   const bright = 1 - Math.min(a * 0.06, 0.25);
   return `blur(${blur.toFixed(2)}px) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(3)})`;
 }
+
+// Statisches Kennzeichen "Nachfuehrung aktiv" (R32, vorlaeufig): erscheint, wenn
+// correcting nach dem Auslaufen des Effekts noch anhaelt, und verschwindet, wenn
+// correcting >= 2 s lang falsch war.
+export function createCorrectionChip({showAfterMs = CORRECTION_S * 1000, holdMs = 2000} = {}) {
+  let since = null;
+  let lastTrue = null;
+  return {
+    update(correcting, nowMs) {
+      if (correcting) {
+        if (since === null) since = nowMs;
+        lastTrue = nowMs;
+      } else if (since !== null && nowMs - lastTrue >= holdMs) since = null;
+      return since !== null && nowMs - since >= showAfterMs;
+    },
+  };
+}
+export const CORRECTION_CHIP_TEXT = 'Nachführung aktiv – Anzeige verschoben, Werte werden weiter geprüft';
+export const CORRECTION_CHIP_TITLE = 'Zweiter Fit bei jedem Bild; bei Bedarf neu einrichten';
 
 // Ruhende Effekte (Stillstand, Verbindung) zaehlen ihr Alter in diesem Takt.
 export const TEXT_MS = 250;
@@ -391,7 +416,13 @@ export function mountEffects(stage, viewer, {reducedMotion, win: injectedWin} = 
   restart.textContent = 'Kamera wird mit festen Reglern neu gestartet';
   restart.hidden = true;
   const base = stage.querySelector('.vcanvas');
-  base.after(canvas, glow, stale, restart);
+  const corrChip = doc.createElement('div');
+  corrChip.className = 'corrchip';
+  corrChip.title = CORRECTION_CHIP_TITLE;
+  corrChip.textContent = CORRECTION_CHIP_TEXT;
+  corrChip.hidden = true;
+  const chipGate = createCorrectionChip();
+  base.after(canvas, glow, stale, restart, corrChip);
   const band = doc.createElement('div');
   band.className = 'netband';
   band.setAttribute('role', 'alert');
@@ -497,6 +528,7 @@ export function mountEffects(stage, viewer, {reducedMotion, win: injectedWin} = 
     const whyText = conn?.httpStatus === 401 ? 'Anmeldung abgelaufen' : 'Anzeige eingefroren, neuer Versuch läuft';
     if (bandWhy.textContent !== whyText) bandWhy.textContent = whyText;
     if (changed) texts(true);
+    corrChip.hidden = !chipGate.update(Boolean(viewer.hud()?.track?.correcting), win.performance.now());
     fx.set(current, geometry());
     // Ruhende Ebene: einmal zeichnen (Wechsel, oder statische Wolke folgt dem Bild).
     if (!fx.animating() && (changed || (current.kind === 'error' && reduce))) fx.render();

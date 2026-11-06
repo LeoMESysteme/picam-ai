@@ -106,6 +106,7 @@ export function createTimeline(canvas, {now = () => performance.now(), wallNow =
   let frozenWall = null;
   let unit = '';
   let running = true;
+  let testRun = false;
   const current = () => (frozen === null ? now() : frozen);
   const prune = () => {
     const limit = current() - KEEP_MS;
@@ -155,8 +156,10 @@ export function createTimeline(canvas, {now = () => performance.now(), wallNow =
       running = !on;
     },
     setUnit(next) { unit = next || ''; },
+    // Testlauf: keine Wertspur (Wahrheitsregel 2), auch nicht aus alten Eimern.
+    setTestRun(on) { testRun = Boolean(on); },
     buckets: () => buckets.map((b) => [...b]),
-    layout: (width) => layoutTimeline(buckets, marks, {nowMs: current(), width, view}),
+    layout: (width) => layoutTimeline(testRun ? buckets.map(([t, c]) => [t, c, null]) : buckets, marks, {nowMs: current(), width, view}),
     draw() {
       if (!canvas || typeof canvas.getContext !== 'function') return;
       const rect = canvas.getBoundingClientRect();

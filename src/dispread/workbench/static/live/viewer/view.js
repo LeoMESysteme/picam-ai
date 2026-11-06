@@ -164,7 +164,7 @@ export function createViewer(canvas, opts = {}) {
     if (state.src === 'live' && state.hud) drawHud(ctx, state.hud, viewState(), state.layers);
     for (const painter of state.painters) {
       ctx.save();
-      try { painter(ctx, viewState()); } finally { ctx.restore(); }
+      try { painter(ctx, viewState()); } catch (error) { globalThis.reportError ? globalThis.reportError(error) : setTimeout(() => { throw error; }); } finally { ctx.restore(); }
     }
   }
 

@@ -29,10 +29,12 @@ export function createRecordLog({max = 40, wallNow = () => Date.now()} = {}) {
   return {
     rows: () => rows,
     clear() { rows.length = 0; lastSeq = null; },
-    note(rec, {testRun = false, reference = null} = {}) {
+    note(rec, {testRun = false, reference = null, offline = false} = {}) {
       if (!rec || rec.seq == null || rec.seq === lastSeq) return false;
       lastSeq = rec.seq;
-      const status = STATUS[rec.status] ? (testRun && rec.status === 'valid' ? 'unreadable' : rec.status) : 'unreadable';
+      let status = STATUS[rec.status] ? (testRun && rec.status === 'valid' ? 'unreadable' : rec.status) : 'unreadable';
+      // Verbindung verloren: nichts wird als freigegeben gefuehrt (Wahrheitsregel 1).
+      if (offline && status === 'valid') status = 'stale';
       const text = status === 'valid' ? `${rec.text ?? ''}` : '';
       const top = rows[0];
       if (top && top.status === status && top.text === text) { top.frames += 1; top.lastSeq = rec.seq; return true; }

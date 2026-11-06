@@ -57,7 +57,7 @@ export function configText(output) {
   const c = output?.config || {};
   if (output?.transport === 'serial') return `${c.port ?? '–'} · ${c.baudrate ?? '–'} Baud · Präfix ${c.prefix ?? '–'}`;
   if (output?.transport === 'tcp') return `TCP-Port ${c.tcp_port ?? '–'}`;
-  if (output?.transport === 'uart') return `${c.port ?? DEFAULTS.port} · ${c.baudrate ?? DEFAULTS.baudrate} Baud`;
+  if (output?.transport === 'uart') return `${c.serial_port ?? c.port ?? DEFAULTS.port} · ${c.baudrate ?? DEFAULTS.baudrate} Baud`;
   return '';
 }
 
@@ -86,7 +86,8 @@ export function saveChoice(choice, storage = globalThis.localStorage) {
 export function outputItem(output, esc = String) {
   if (isOff(output)) return {hidden: true, html: ''};
   const way = `GSVmulti: ${NAMES[output.transport] || output.transport} · `;
-  const mark = output.transport === 'serial' ? ` <span class="tag">${MARKER}</span>` : '';
+  const mark = output.transport === 'serial' ? ` <span class="tag">${MARKER}</span>`
+    : ` <span class="tag" title="${esc(LOCK_NOTICE)}">gesperrt</span>`;
   return {hidden: false, cls: outputTone(output), html: `<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${mark}`,
     title: outputView(output)};
 }
