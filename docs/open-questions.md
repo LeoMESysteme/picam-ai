@@ -61,6 +61,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
+| [OQ-66](#oq-66) | — | in Arbeit | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3271,3 +3272,33 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [Abhängigkeiten und Buildgrenzen](dependencies.md#windows-installer-und-updatevertrage);
   im Repository zusätzlich `windows/bridge/README.md` und
   `windows/bridge/src/dispread_bridge_app/updates.py`.
+
+
+---
+
+<span id="oq-66"></span>
+
+## OQ-66 — Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag?
+
+* **Status:** in Arbeit · erkannt 2026-11-06 beim Doku-Regressionslauf der Windows-Brücke
+* **Beobachtung:** Gesamtlauf `playwright.docs.config.ts`: 90 bestanden,
+  ein Fehler in „Session-Dateidownload bleibt bytegleich; Tastatur und
+  Wiki-Theme erreichen den Explorer“. Nach Fokus auf das Diagramm erwartet
+  der Test den zuletzt gewählten 23.10.2026, 10:00 UTC, der Tooltip zeigt
+  stattdessen 28.10.2026, 10:00 UTC. Es handelt sich um Testfixtures, nicht
+  um eine Messung. Die Brückenänderungen berühren weder Test noch Explorer-
+  Assets; unabhängige Wiederholungen und Ereignisfolge werden eingegrenzt.
+* **Eingegrenzt 2026-11-06:** Diagrammfokus übernimmt eine gültige aktuelle
+  Auswahl; Tabellen-Fokus und Pointerenter können sie vorher ändern. Der
+  bisherige Test prüfte diese Voraussetzung nach Download/Scrollen nicht.
+  Die genaue alte Pointerfolge ist nicht aufgezeichnet, ein UI-Fehler ist
+  nicht nachgewiesen.
+* **Korrektur:** Maus außerhalb parken, gewünschte Tabellensteuerung
+  ausdrücklich fokussieren und aktive Zeile prüfen, danach die unveränderten
+  Übernahme-/End-/Home-Prüfungen. Drei echte Wiederholungen bestanden;
+  unabhängiges Review ohne Befund. Gesamtlauf nach Korrektur steht aus.
+* **Klärung:** betroffenen Test isoliert wiederholen, Pointer-/Fokusfolge
+  gegen die gewünschte Tastaturbedienung prüfen; einen nötigen Testfix von
+  einer tatsächlichen UI-Korrektur unterscheiden.
+* **Antwort landet in:** `tests/docs-site.spec.ts` und gegebenenfalls
+  `docs-site/assets/wiki-sessions.js`; Zusammenfassung in [Status](status.md).

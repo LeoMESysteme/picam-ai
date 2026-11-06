@@ -92,3 +92,9 @@ Historische Windows-Demobelege vom 04.11. stehen in
 
 Nach T13 bleiben Aufbewahrung/Export (OQ-60), Nachberechnung (OQ-59) und
 Altcontroller-Bestandsaufnahme (OQ-61) gemäß [TODO](../TODO.md) spätere Arbeit.
+
+Doku-Vorprüfung: strenger Build bestanden. Browserlauf 90 bestanden/1 Fehler
+im unveränderten Session-Explorer-Test; isoliert danach 3/3. OQ-66 eingegrenzt:
+Testvorbedingung für Maus-/Tabellenwahl jetzt explizit, ursprüngliche
+Tastaturprüfungen erhalten; nach Testfix 3/3 und Review sauber. Vollständige
+Wiederholung folgt, keine Änderung am Wiki-Oberflächenverhalten.
