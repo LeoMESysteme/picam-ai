@@ -15,7 +15,7 @@ GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren seriellen
 Zahlenimport. Ein Nachbau des GSV-2-/GSV-6-/GSV-8-Geräteprotokolls ist für
 diesen Weg nicht erforderlich. Die vorherige Aussage „das Eingangsformat
 ist vollständig unbekannt“ ist damit überholt
-([OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md)).
+([OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07)).
 
 **Stand 2026-11-04:** UserDefined-Formatter, gemeinsame Windows-Brücke und
 Live-Konfiguration für Netzwerk oder UART sind als Software-Prototyp gebaut.
@@ -627,7 +627,7 @@ gsv_bridge.py                Windows-Brücke und endliche Demowerte
 | Vertrag | `capabilities(self) -> FormatterCapabilities` als `@property`; <code>format(self, record: ValueRecord) -&gt; bytes &#124; None</code> liefert Telegrammbytes oder `None`. Fähigkeiten nennen Formatkennung, Zeitstempel, Invalid-Policies, Gerätekommandos, Kanalzahl und `provisional`. |
 | Darf geändert werden | `UserDefinedFormatter` aus `dispread.sink.protocol.userdefined` direkt importieren und gezielt an `SerialSink` übergeben; konkrete Formatter haben keine zentrale Registry. P4-3 bindet ihn über `LiveOutput` an den Live-Lebenszyklus an; API-Option `output`, Standard aus. Der neue `UserDefinedFormatter` erhält Dezimalauflösung und prüft Zahlenlexik/Wertübereinstimmung. Die gemeinsame Brücke verwendet ihn für Demodaten; die echte DUT-Ausgabe bleibt bis zur Windows-Abnahme gesperrt. [Beispiel 16](../examples/16_end_to_end_headless.py) zeigt weiterhin den getrennten alten seriellen Testpfad. |
 | Bleibt unverändert | Leser und Freigabe ohne Referenzparameter, Wert und Aufnahmezeit im `ValueRecord`, paralleles JSONL-Audit; `gsv_ascii.py` bleibt der werfende Platzhalter. Die neue Brücke ergänzt den vorhandenen Testpfad, ohne das native Geräteprotokoll zu erfinden. |
-| Tests | [Formatter und SerialSink am pty](../tests/test_userdefined_formatter.py), [Demo-Sender mit pty/Fakes](../tests/test_gsvmulti_demo_sender.py) [Live-Ausgabe mit pty/Fakes](../tests/test_live_output.py) und vorhandene [Gate-/Referenztests](../tests/test_gate_und_referenz.py); Windows-Abnahme weiterhin offen. Vorhandene pty-Prüfungen in [tests/test_gate_und_referenz.py](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; zusätzlich `test_gsv_transport.py`, `test_gsv_bridge.py` und `test_live_output.py`; Windows-Abnahme bleibt offen. |
+| Tests | [Formatter und SerialSink am pty](../tests/test_userdefined_formatter.py), [Demo-Sender mit pty/Fakes](../tests/test_gsvmulti_demo_sender.py) [Live-Ausgabe mit pty/Fakes](../tests/test_live_output.py) und vorhandene [Gate-/Referenztests](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; zusätzlich `test_gsv_transport.py`, `test_gsv_bridge.py` und `test_live_output.py`; Windows-Abnahme bleibt offen. |
 
 </div>
 

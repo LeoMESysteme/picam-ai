@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W1: Unerwartete Fehler
+  im Referenzabgleich enden mit einer Fehlermeldung statt dauerhaftem
+  „running“. Fehlerhafte Geometrie im Rastercache wird mit Warnung als
+  nicht verfügbar gemeldet; eine fehlende Rasterquelle verhindert die
+  Bestätigung nicht mehr. Die Vorschau zählt ihr gemeinsames Bildintervall
+  ab Kodierbeginn, damit die Kodierdauer die Zielrate nicht senkt.
+  Bei Schreibzeitüberschreitung bricht sie den Clienttransport ab, soweit
+  unterstützt. Konsequenz: Einrichtung und Abgleich schließen ihren
+  Zustand ab, langsame Betrachter halten die Verbindung nicht offen;
+  Messpfad und Freigaberegeln bleiben unverändert.
+
 * 2026-11-06: Werkbank `/live`, G2: GSVmulti-Ausgabe in der neuen Seite.
   Das Start-Popover bekommt die Gruppe „GSVmulti-Ausgabe“ mit den Wegen
   Aus, UART direkt, UART über Brücke und Netzwerk über Brücke (ein Weg je

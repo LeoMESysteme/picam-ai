@@ -137,6 +137,14 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
                             next_due = now
                         continue
                 await asyncio.sleep(0.01)
+        except TimeoutError:
+            # Gepufferte Daten nicht mehr an einen blockierten Client zustellen.
+            if request.transport is not None:
+                abort = getattr(request.transport, "abort", None)
+                if callable(abort):
+                    abort()
+                else:
+                    request.transport.close()
         except OSError:
             # Auch aiohttp.write_eof() darf nicht am langsamen Client warten.
             if request.transport is not None:

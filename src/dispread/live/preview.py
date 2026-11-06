@@ -94,6 +94,7 @@ class PreviewEncoder:
                 self._jpeg is None or self._encoded_at is None
                 or time.monotonic() - self._encoded_at >= self._governor.interval_s
             ):
+                self._encoded_at = time.monotonic()
                 started = time.perf_counter()
                 image = frame.image
                 height = round(image.shape[0] * self._width / image.shape[1])
@@ -102,7 +103,6 @@ class PreviewEncoder:
                 self._seq = seq
                 self._jpeg = encoded.tobytes() if ok else None
                 encode_ms = (time.perf_counter() - started) * 1000
-                self._encoded_at = time.monotonic()
                 self._cap_ns = frame.capture_timestamp.value_ns
                 self._size = (frame.image.shape[1], frame.image.shape[0])
             # Erst nach dem Kodieren lesen: eine inzwischen veraltete

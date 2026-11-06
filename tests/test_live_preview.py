@@ -85,6 +85,33 @@ def test_encoder_caches_changing_sequences_for_shared_interval(monkeypatch, skip
     assert encoder.frame().seq == 8
 
 
+def test_encoder_keeps_target_rate_with_slow_encoding(monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.live import preview
+
+    now = [0.0]
+    starts = []
+    encode = cv2.imencode
+
+    def slow(*args):
+        starts.append(now[0])
+        now[0] += 0.015
+        return encode(*args)
+
+    monkeypatch.setattr(preview, 'time', SimpleNamespace(
+        monotonic=lambda: now[0], perf_counter=lambda: now[0]))
+    monkeypatch.setattr(cv2, 'imencode', slow)
+    encoder = preview.PreviewEncoder(lambda: (len(starts), camera_frame()), frame_info,
+                                     governor=preview.RateGovernor(lambda: now[0]))
+    # Zwei Betrachter fragen versetzt alle 5 ms nach dem neuesten Bild.
+    while now[0] < 1:
+        encoder.frame()
+        now[0] += 0.005
+    assert len(starts) == 15
+    assert all(1 / 15 <= b - a <= 1 / 15 + 0.005 for a, b in zip(starts, starts[1:], strict=False))
+
+
 def test_encoder_concurrent_calls_share_encoding(monkeypatch):
     from dispread.live.preview import PreviewEncoder, RateGovernor
 

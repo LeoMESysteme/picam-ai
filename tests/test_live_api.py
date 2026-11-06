@@ -115,9 +115,10 @@ async def _preview_handler(service, *, transport=...):
             await task
 
 
-def _capture_preview(monkeypatch, *, limit=1):
+def _capture_preview(monkeypatch, *, limit=1, clock=None):
     import time
 
+    clock = clock or time.monotonic
     responses = []
 
     class CaptureResponse(web.StreamResponse):
@@ -130,7 +131,7 @@ def _capture_preview(monkeypatch, *, limit=1):
             return None
 
         async def write(self, data):
-            self.parts.append((time.monotonic(), data))
+            self.parts.append((clock(), data))
             if limit is not None and len(self.parts) >= limit:
                 raise ConnectionResetError("Betrachter getrennt")
 
@@ -246,7 +247,8 @@ def test_two_streams_share_encoding(tmp_path, monkeypatch):
     assert len(calls) <= int(elapsed / (1 / 15)) + 1
 
 
-def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
+@pytest.mark.parametrize('has_abort', [True, False])
+def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch, has_abort):
     import time
     from unittest.mock import Mock
 
@@ -255,7 +257,7 @@ def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
     from dispread.live.camera import CameraOwner
     from dispread.live.service import LiveService
 
-    transport = Mock()
+    transport = Mock(spec=['is_closing', 'close', 'abort'] if has_abort else ['is_closing', 'close'])
     transport.is_closing.return_value = False
     writing = asyncio.Event()
 
@@ -281,7 +283,11 @@ def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch):
         await asyncio.wait_for(task, 2.5)
         assert time.monotonic() - start <= 2.5
         assert owner.latest()[0] > before and owner.status()["running"]
-        transport.close.assert_called_once()
+        if has_abort:
+            transport.abort.assert_called_once()
+            transport.close.assert_not_called()
+        else:
+            transport.close.assert_called_once()
 
     try:
         _run_preview(check())
@@ -363,7 +369,23 @@ def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeyp
 
     from test_live_preview import camera_frame, frame_info
 
-    responses = _capture_preview(monkeypatch, limit=3)
+    from dispread.workbench import live_api
+
+    now = [0.0]
+    clock = SimpleNamespace(monotonic=lambda: now[0], perf_counter=lambda: now[0])
+    monkeypatch.setattr(live_api, 'time', clock)
+    monkeypatch.setattr('dispread.live.preview.time', clock)
+    monkeypatch.setattr('dispread.live.service.time', clock)
+
+    async def sleep(delay):
+        now[0] += max(delay, 1e-9)
+
+    async def to_thread(fn):
+        return fn()
+
+    monkeypatch.setattr(live_api.asyncio, 'sleep', sleep)
+    monkeypatch.setattr(live_api.asyncio, 'to_thread', to_thread)
+    responses = _capture_preview(monkeypatch, limit=3, clock=clock.monotonic)
     seqs = iter([7, 7, 8, 9])
     service = _preview_service(tmp_path, latest=lambda: (next(seqs, 9), camera_frame()))
     info = frame_info()
@@ -1386,21 +1408,24 @@ def test_fake_setup_grid_for_every_scene(tmp_path):
             assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
 
 
-def test_fake_dump_scenes_matches_committed_fixtures(tmp_path):
+def test_fake_dump_scenes_matches_committed_fixtures(tmp_path, monkeypatch):
     import os
     import subprocess
     import sys
     from pathlib import Path
 
-    fixtures = Path(__file__).parent / 'fixtures' / 'live'
-    subprocess.run([sys.executable, str(Path(__file__).with_name('live_ui_server.py')),
-                    '--dump-scenes', str(tmp_path)], check=True, env={**os.environ, 'PYTHONPATH': 'src'})
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
+    fixtures = root / 'tests' / 'fixtures' / 'live'
+    pythonpath = os.pathsep.join(filter(None, [os.environ.get('PYTHONPATH'), str(root / 'src')]))
+    subprocess.run([sys.executable, str(root / 'tests' / 'live_ui_server.py'),
+                    '--dump-scenes', str(tmp_path)], check=True, env={**os.environ, 'PYTHONPATH': pythonpath})
     expected = {f'scene-{name}.json' for name in SCENE_NAMES}
     assert {p.name for p in tmp_path.glob('scene-*.json')} == expected
     assert {p.name for p in fixtures.glob('scene-*.json')} == expected
     for name in expected:
         assert (fixtures / name).read_bytes() == (tmp_path / name).read_bytes(), name
-    source = Path('docs/superpowers/specs/2026-11-04-werkbank-redesign-mock/img/still.jpg')
+    source = root / 'docs/superpowers/specs/2026-11-04-werkbank-redesign-mock/img/still.jpg'
     assert (fixtures / 'still.jpg').read_bytes() == source.read_bytes()
 
 

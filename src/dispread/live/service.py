@@ -407,18 +407,21 @@ class LiveService:
     # -- Einrichtung ---------------------------------------------------------
     def _cache_setup_grid(self, proposal: dict) -> None:
         """Leserboxen nur bei einem neuen Vorschlag unter self._lock berechnen."""
-        if not all(key in proposal for key in ("grid", "target_size", "grid_source", "quad")):
-            self._setup_grid = None
-            return
-        grid = CharGrid.from_dict(proposal["grid"])
-        self._setup_grid = {
-            "target_size": list(proposal["target_size"]),
-            "cell_boxes": [[round(float(value), 2) for value in box] for box in grid.cell_boxes()],
-            # Vorschlagsreihenfolge OL, OR, UR, UL im Kamerabild beibehalten:
-            # rectify bildet sie auf (0,0), (w-1,0), (w-1,h-1), (0,h-1) ab.
-            "quad": [[round(float(value), 1) for value in point] for point in proposal["quad"]],
-            "source": proposal["grid_source"],
-        }
+        self._setup_grid = None
+        try:
+            if not all(key in proposal for key in ("grid", "target_size", "grid_source", "quad")):
+                return
+            grid = CharGrid.from_dict(proposal["grid"])
+            self._setup_grid = {
+                "target_size": list(proposal["target_size"]),
+                "cell_boxes": [[round(float(value), 2) for value in box] for box in grid.cell_boxes()],
+                # Vorschlagsreihenfolge OL, OR, UR, UL im Kamerabild beibehalten:
+                # rectify bildet sie auf (0,0), (w-1,0), (w-1,h-1), (0,h-1) ab.
+                "quad": [[round(float(value), 1) for value in point] for point in proposal["quad"]],
+                "source": proposal["grid_source"],
+            }
+        except Exception as exc:  # noqa: BLE001 - optionaler Anzeigecache darf Einrichtung nicht abbrechen
+            _LOG.warning("Rastervorschau nicht verfuegbar: %s", exc)
 
     def _reset_setup_live(self) -> None:
         """Live-Verlaeufe nur beim Erzeugen oder unter self._lock leeren."""
@@ -827,7 +830,7 @@ class LiveService:
             )
             with self._lock:
                 self._cache_setup_grid({"grid": profile.grid.to_dict(), "target_size": profile.target_size,
-                                        "grid_source": proposal["grid_source"], "quad": profile.quad})
+                                        "grid_source": proposal.get("grid_source"), "quad": profile.quad})
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
@@ -968,6 +971,8 @@ class LiveService:
             result = {'state': 'done', **{key: counts[key] for key in
                       ('misreads', 'compared_valid', 'undecided_valid', 'uncovered_valid')}}
         except (OSError, ValueError, KeyError, TypeError) as exc:
+            result = {'state': 'error', 'error': f'Abgleich abgelehnt: {exc}'}
+        except Exception as exc:  # noqa: BLE001 - Auswertung darf nicht in running verbleiben
             result = {'state': 'error', 'error': f'Abgleich abgelehnt: {exc}'}
         with self._lock:
             # Eine neue Einrichtung oder Sitzung entwertet noch laufende Auswertungen.

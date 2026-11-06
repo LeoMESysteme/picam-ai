@@ -616,6 +616,24 @@ def test_status_setup_grid_follows_proposal(tmp_path, monkeypatch):
     assert len(calls) == after_edit
 
 
+@pytest.mark.parametrize('field, value', [('grid', None), ('target_size', None), ('quad', [None])])
+def test_malformed_setup_grid_does_not_fail_setup(tmp_path, proposal, caplog, field, value):
+    proposal[field] = value
+    service = ready_service(tmp_path, proposal)
+    assert service.status()['state'] == 'setup_ready'
+    assert service.status()['setup']['grid'] is None
+    assert any(record.levelname == 'WARNING' and 'Raster' in record.message for record in caplog.records)
+
+
+def test_confirmation_accepts_proposal_without_grid_source(tmp_path, proposal):
+    proposal.pop('grid_source')
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True)
+    assert service.status()['state'] == 'confirmed'
+    assert service.status()['setup']['grid']['source'] is None
+    assert service.status()['setup']['grid']['target_size'] == [400, 160]
+
+
 def test_status_setup_grid_none_without_proposal(tmp_path, proposal):
     service = LiveService(FakeOwner(), tmp_path)
     assert service.status()['setup'] is None
@@ -2811,7 +2829,7 @@ def test_reference_eval_after_stop_runs_once_in_background(tmp_path, monkeypatch
         service.close()
 
 
-@pytest.mark.parametrize('problem', ['rejected', 'missing'])
+@pytest.mark.parametrize('problem', ['rejected', 'missing', 'unexpected'])
 def test_reference_eval_error_preserves_rejection_or_missing_file_reason(tmp_path, monkeypatch, problem):
     import json
 
@@ -2822,7 +2840,14 @@ def test_reference_eval_error_preserves_rejection_or_missing_file_reason(tmp_pat
             fixture_run(self.session_path.parent)
             if problem == 'rejected':
                 self.session_path.write_text(json.dumps({'test_run': {'testlauf': True}}))
-            (self.session_path.parent / 'reference.jsonl').unlink()
+            if problem != 'unexpected':
+                (self.session_path.parent / 'reference.jsonl').unlink()
+
+    if problem == 'unexpected':
+        def evaluate(*args):
+            raise AttributeError('Auswertung fehlgeschlagen')
+
+        monkeypatch.setattr('dispread.live.service.evaluate_records', evaluate)
 
     service = _confirmed_service(tmp_path, monkeypatch, Session)
     service.start_run()
@@ -2835,9 +2860,11 @@ def test_reference_eval_error_preserves_rejection_or_missing_file_reason(tmp_pat
     if problem == 'rejected':
         assert result['error'] == ('Abgleich abgelehnt: Testlauf: keine freigegebenen Messwerte '
                                    'fuer einen Referenznachweis')
-    else:
+    elif problem == 'missing':
         path = service._run_dir / 'reference.jsonl'
         assert result['error'] == f"Abgleich abgelehnt: [Errno 2] No such file or directory: '{path}'"
+    else:
+        assert result['error'] == 'Abgleich abgelehnt: Auswertung fehlgeschlagen'
 
 
 def test_reference_eval_null_without_reference(tmp_path, monkeypatch):
