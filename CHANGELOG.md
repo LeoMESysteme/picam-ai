@@ -5,6 +5,20 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Schlussreview UI (W4): Ein abgelehnter Datensatz, den
+  der Server beim Altern auf `stale` umschreibt, erscheint nicht mehr als
+  durchgestrichener letzter Wert, sondern als „Kein Wert“. Ohne HUD-Datensatz läuft
+  das Alter ab Statuseingang weiter, sodass ein Wert nach 0,5 s nicht mehr als
+  freigegeben gilt; offline führt die Werttabelle keine Zeile mehr als
+  „Freigegeben“. Der Testmodus sperrt die GSVmulti-Ausgabewahl und zeigt sie als
+  „Aus“; Brückenwege tragen in der Statusleiste „gesperrt“. Härtungen: Zeichner
+  fangen Fehler einzeln ab, Aktionen geben `busy` im `finally` frei, im Testlauf
+  keine Wertspur, UART-Konfiguration liest `serial_port`. T13-Befund (OQ-63,
+  vorläufig): „Korrektur läuft“ animiert nur beim Einsetzen (≤ 1,6 s), danach
+  zeigt ein ruhiges Kennzeichen „Nachführung aktiv“ den Zustand.
+  Konsequenz: keine abgelehnten oder zu alten Werte mehr als freigegeben
+  dargestellt; dauerhafte Zweitfit-Nachführung wirkt nicht mehr alarmierend.
+
 * 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W3: Serielle Läufe
   protokollieren die fehlende Abnahme und deren bewusste Bestätigung in
   `session.json`. Bei fehlgeschlagener oder abgebrochener Einrichtung
