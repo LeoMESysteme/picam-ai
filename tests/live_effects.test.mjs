@@ -440,3 +440,15 @@ test('alerts: dialog "Lauf beenden und neu einrichten" stops the run, then start
   await settle();
   assert.deepEqual(h.calls, ['stop', 'setup']);
 });
+
+test('alerts: Anzeige-bewegt ohne Maße nennt weder leeren Text noch "Rahmen verdeckt"', async () => {
+  const h = harness();
+  const moved = scene('running_anzeige_bewegt');
+  moved.run.tracking_hint = {kind: 'anzeige_bewegt', since_s: 3};
+  const alerts = createAlerts(h.deps);
+  alerts.update(moved);
+  assert.match(h.modals[0].opts.text, /^Anzeige hat sich bewegt\n\nSeit /);
+  await settle();
+  alerts.update(moved);
+  assert.equal(h.toasts.get('nachfuehrung')?.text, 'Anzeige hat sich bewegt');
+});

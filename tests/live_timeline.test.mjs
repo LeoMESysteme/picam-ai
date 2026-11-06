@@ -224,6 +224,7 @@ test('comparison rows follow reference_eval only after the run', async () => {
   assert.equal(hms(3725.9), '01:02:05');
   assert.equal(planText(stopped.reference), 'set norm 2 (Schritt 2)');
   assert.equal(planText({norm_schedule: [[1, 20], [2, 20]], schedule_step: null}), '1:20, 2:20');
+  assert.equal(planText(stopped.reference, true), 'zuletzt Schritt 2 · Faktor 2');
 });
 
 // ---------------------------------------------------------------------------
@@ -331,4 +332,13 @@ test('Wert table carries the reference text current when each row began, Δ stay
   assert.match(rows[0], />–<\/td>/); // ohne Referenz: Strich
   assert.match(rows[1], /class="[^"]*struck[^"]*"[^>]*>\+ 0\.62428</); // veraltet: durchgestrichen
   assert.match(rows[2], />\+ 0\.62427</);
+});
+
+test('Freigegeben-Zeit nur, wenn das gezeigte Bild den neuesten Datensatz trägt', () => {
+  const status = load('running_valid');
+  const same = resultModel(status, statusView(status), hudRec(status));
+  assert.match(same.released, /^Freigegeben \d\d:\d\d:\d\d,\d$/);
+  assert.match(resultModel(status, statusView(status), null).released, /^Freigegeben /);
+  const other = resultModel(status, statusView(status), {...hudRec(status), text: '+9.99999'});
+  assert.equal(other.released, '');
 });

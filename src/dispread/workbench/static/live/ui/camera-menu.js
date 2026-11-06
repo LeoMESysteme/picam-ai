@@ -17,8 +17,8 @@ export function mountCameraMenu(button, menu, {onReconnect = () => {}} = {}) {
   function paint() {
     const camera = status?.camera || {};
     const tone = camera.stalled || !camera.running ? 'err-t' : 'mut';
-    const html = '<div class="mh">Kamera</div>' +
-      `<p class="mstate ${tone}">${esc(cameraView(camera))}</p>` +
+    const html = '<div class="mh" role="presentation">Kamera</div>' +
+      `<p class="mstate ${tone}" role="presentation">${esc(cameraView(camera))}</p>` +
       '<button type="button" role="menuitem" data-camera="reconnect">Kamera neu verbinden</button>';
     if (menu._html !== html) { menu._html = html; menu.innerHTML = html; }
   }

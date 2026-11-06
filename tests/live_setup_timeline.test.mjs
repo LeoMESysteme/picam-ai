@@ -87,7 +87,7 @@ test('setup timeline paints labels, probe ticks, axis and the playhead inside th
   const model = setupTimelineModel(load('setup_ready_warnung'));
   paintSetupTimeline(ctx, model, {W, H});
   const words = texts.map(([t]) => t);
-  for (const word of ['Fokus', 'Standbilder', 'Bestätigen', 'Fokusproben', '0:00', '0:10']) {
+  for (const word of ['Fokus', 'Standbilder', 'Bestätigen', 'Fokusproben (Reihenfolge)', '0:00', '0:10']) {
     assert.ok(words.includes(word), `${word} fehlt in ${words.join('|')}`);
   }
   // Schmale Abschnitte (Kamera 2 s) bekommen keine abgeschnittene Beschriftung.

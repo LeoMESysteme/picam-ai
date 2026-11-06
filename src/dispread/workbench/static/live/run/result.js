@@ -129,7 +129,8 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   }
   // "Freigegeben hh:mm:ss,s" nur neben einem freigegebenen Wert, dessen Datensatz
   // auch im Status freigegeben ist (Wahrheitsregel 1: Veraltet ist nie freigegeben).
-  const released = key === 'valid' && latest?.status === 'valid' && base.time ? `Freigegeben ${base.time}` : '';
+  const sameRecord = !hudRec || hudRec.text === latest?.raw_text;
+  const released = key === 'valid' && latest?.status === 'valid' && base.time && sameRecord ? `Freigegeben ${base.time}` : '';
   return {...base, ...META[key], value, unit: valueUnit, struck: key === 'stale', sub, released,
     subErr: key === 'unreadable' && !testRun, age: ageText(age)};
 }

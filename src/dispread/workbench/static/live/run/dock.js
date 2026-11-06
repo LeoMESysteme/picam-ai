@@ -54,9 +54,11 @@ export function hms(seconds) {
 }
 
 // Werteplan mit laufendem Schritt (reference.schedule_step, index ab 0).
-export function planText(reference) {
+export function planText(reference, stopped = false) {
   const step = reference?.schedule_step;
   const plan = scheduleText(reference?.norm_schedule);
+  // Nach dem Stopp ist der letzte Schritt Verlauf, kein laufender Werteplan.
+  if (stopped && step) return `zuletzt Schritt ${step.index + 1} · Faktor ${step.factor}`;
   return step ? `set norm ${step.factor} (Schritt ${step.index + 1})` : plan;
 }
 
@@ -115,7 +117,7 @@ export function runDockHTML(status, {resultCls = 'X'} = {}) {
     comparisonRows(status).map(([label, text, cls, mono]) =>
       `<div><span>${esc(label)}</span><b class="${cls}${mono ? '' : ' t'}">${esc(text)}</b></div>`).join('') +
     `<div><span>Referenz</span><b class="t">${esc(referenceLine(reference, {label: false}))}</b></div>` +
-    `<div><span>Werteplan</span><b>${esc(planText(reference))}</b></div></div>`;
+    `<div><span>Werteplan</span><b>${esc(planText(reference, stopped))}</b></div></div>`;
   const storage = stopped
     ? `<div class="sect"><dl class="kv"><dt>Ablage</dt><dd class="wrap">${esc([status?.session_id, run.dir].filter(Boolean).join('/') || '–')}</dd></dl></div>`
     : '';

@@ -17,7 +17,7 @@ export function mountHelpMenu(wrap, {onTour = () => {}, onPractice = () => {}, o
   function paint() {
     const practiceLabel = view.practice ? 'Übungslauf beenden' : 'Übungslauf';
     const practiceNote = view.practice ? 'Zurück zur Werkbank' : view.lock || 'Ohne Kamera, ohne Messung';
-    const html = '<div class="mh">Hilfe</div>' +
+    const html = '<div class="mh" role="presentation">Hilfe</div>' +
       '<button type="button" role="menuitem" data-help="tour"><span class="mi"><b>Rundgang</b><span>8 Stationen, etwa eine Minute</span></span></button>' +
       `<button type="button" role="menuitem" data-help="practice"${!view.practice && view.lock ? ' disabled' : ''}` +
       `${!view.practice && view.lock ? ` title="${esc(view.lock)}"` : ''}><span class="mi"><b>${practiceLabel}</b>` +

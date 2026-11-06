@@ -17,8 +17,8 @@ kommt. Arbeitszweig ist `feat/werkbank-redesign` (Plan
 [Spec](docs/superpowers/specs/2026-11-04-werkbank-redesign-design.md)).
 In dieser Reihenfolge:
 
-1. **Werkbank-Redesign fertigstellen, einschließlich GSVmulti-Ausgabewahl
-   in der neuen `/live`-Oberfläche.** Pro Lauf genau ein Weg: Aus | UART
+1. **Werkbank-Redesign softwareseitig fertiggestellt (2026-11-06), einschließlich
+   GSVmulti-Ausgabewahl in der neuen `/live`-Oberfläche.** Pro Lauf genau ein Weg: Aus | UART
    direkt (P4-3) | UART über Brücke | Netzwerk über Brücke. Backend steht
    (Commit `7bb4898`): „UART direkt“ gibt echte Werte aus, ist aber dauerhaft
    als „Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe“

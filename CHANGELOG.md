@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, letzte UI-Korrekturen (W2). Die Bestätigung
+  für UART direkt lässt sich nicht mehr umgehen: `start()` bricht ohne Haken mit
+  Hinweis ab (Enter im Plan-Feld, `runStart`), `acknowledge_unaccepted` wird nur
+  aus dem echten Haken gesendet. „Freigegeben hh:mm:ss,s“ erscheint nur, wenn
+  das gezeigte Bild den neuesten Datensatz trägt. Der Hinweis bei „Anzeige hat
+  sich bewegt“ ohne Maße fällt nicht mehr auf „Rahmen verdeckt“ zurück.
+  Übungslauf behält Millisekunden; Fokusproben-Zeile heißt „(Reihenfolge)“;
+  Wert-Tabelle trägt „Seitenzeit“; Fehlerton der Schrittspur folgt `--err`;
+  Werteplan nach dem Stopp als „zuletzt Schritt N · Faktor F“; Menü-Kopfzeilen
+  `role="presentation"`; Stillstandsalter mit Dezimalkomma; Zoom-Beschriftung
+  nur bei Änderung geschrieben. Tests: Node (Haken, Freigabezeit, Hinweistext,
+  CPU „–“, Plan) und Playwright (Enter und direkter Start-Handler ohne
+  Haken, 409 beim Abbrechen). Der Viewer-Test wartet auf das separat vom
+  Bildstream gelieferte Raster, bevor er eine Zelle abfragt.
+
 * 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W1: Unerwartete Fehler
   im Referenzabgleich enden mit einer Fehlermeldung statt dauerhaftem
   „running“. Fehlerhafte Geometrie im Rastercache wird mit Warnung als

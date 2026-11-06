@@ -17,10 +17,17 @@ export const NOMINAL_S = {fokus: 14, kamera: 2, belichtung: 4, standbilder: 27, 
 const STATES = ['setup_running', 'setup_ready', 'setup_failed', 'confirmed'];
 const SHORT = {bestaetigen: 'Bestätigen'};
 const PAD = 12;
+// --err (live.css) als Mischquelle: der Fehlerton der Spur folgt dem Token statt einem Eigenwert.
+const ERR = '#ee5b4d';
+const PENDING_BG = '#23221f';
+function mix(a, b, t) {
+  const c = (hex, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return '#' + [0, 1, 2].map((i) => Math.round(c(a, i) * t + c(b, i) * (1 - t)).toString(16).padStart(2, '0')).join('');
+}
 // Farben = Spec-Tokens bzw. Mock-Toene der Schrittspur (Canvas kennt keine CSS-Variablen).
 const COL = {
   done: ['#2a3a2d', '#a9d8b3'], running: ['#26344a', '#dfe8f6'], pending: ['#23221f', '#958f85'],
-  failed: ['#3a2320', '#ffb4a9'], fill: '#35507a', failFill: '#6a3129', sel: '#86aee8', tx: '#ebe7e0', tx3: '#958f85',
+  failed: [mix(ERR, PENDING_BG, 0.1), '#ffb4a9'], fill: '#35507a', failFill: '#6a3129', sel: '#86aee8', tx: '#ebe7e0', tx3: '#958f85',
 };
 const SANS = '"Segoe UI","Noto Sans",sans-serif';
 const MONO = '"Noto Sans Mono",monospace';
@@ -78,7 +85,7 @@ export function paintSetupTimeline(ctx, model, {W, H}) {
   ctx.textAlign = 'left';
   ctx.fillStyle = COL.tx3;
   ctx.font = `11.5px ${SANS}`;
-  ctx.fillText('Fokusproben', PAD, 14);
+  ctx.fillText('Fokusproben (Reihenfolge)', PAD, 14);
   for (const seg of model.segments) {
     const x0 = x(seg.t0), x1 = x(seg.t1);
     const [bg, fg] = COL[seg.state] || COL.pending;

@@ -8,7 +8,8 @@
 // ist nur die herausgezogene Bedingung von connectionView.
 
 export function cameraView(camera) {
-  if (camera.stalled) return camera.error || 'Streamstillstand: kein neues Kamerabild';
+  // Serverzahl "seit 5.3 s" erscheint mit Dezimalkomma wie alle Zahlen der Seite.
+  if (camera.stalled) return (camera.error || 'Streamstillstand: kein neues Kamerabild').replace(/(\d)\.(\d)/g, '$1,$2');
   return camera.running ? `Kamera läuft, ${camera.frames} Bilder, ${camera.gaps} Lücken`
     : `Kamera aus: ${camera.error || '—'}`;
 }

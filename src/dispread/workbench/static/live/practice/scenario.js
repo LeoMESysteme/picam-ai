@@ -147,7 +147,7 @@ function regionPeak(i, r) {
   return Math.round(m * 100) / 100;
 }
 
-function utc(ms) { return new Date(ms).toISOString().replace('.000Z', '+00:00').replace(/\.\d+Z$/, '+00:00'); }
+function utc(ms) { return new Date(ms).toISOString().replace(/Z$/, '+00:00'); }
 function stamp(ms) { return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'); }
 
 const ok = (data = {ok: true}) => ({ok: true, error: null, data});

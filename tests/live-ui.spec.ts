@@ -373,6 +373,8 @@ test('Viewer zoomt um den Zeiger und Popover erklärt Rahmenbereich', async ({ p
   await expect(pop).not.toContainText('%');
 
   // Zellen kommen aus dem Leser-Raster des Status (setup.grid).
+  // Status und MJPEG werden getrennt geliefert; ein HUD beweist noch kein Raster.
+  await expect.poll(() => canvas.evaluate((el: any) => el.viewer.grid()?.cell_boxes?.length ?? 0)).toBe(16);
   const [cx, cy] = await canvas.evaluate(async (el: any) => {
     const {cellQuads} = await import('/static/live/viewer/hud.js');
     const box = cellQuads(el.viewer.hud().track.quad, el.viewer.grid())[8];
@@ -2021,4 +2023,41 @@ test('Ausgabe: Übungslauf stellt den gewählten Weg nach und sendet keinen POST
   expect(posts.filter((p) => p.endsWith('/run/start'))).toEqual([]);
   expect(posts).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test('Ausgabe: UART direkt ohne Haken sendet über Enter und runStart nichts', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page);
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) posts.push(r.url()); });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART direkt', { exact: true }).click();
+  await expect(pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' })).not.toBeChecked();
+  await pop.locator('[data-part="plan"]').press('Enter');
+  await expect(pop.locator('[data-part="error"]')).toContainText('Haken');
+  await page.waitForTimeout(300);
+  expect(posts).toEqual([]);
+  await page.keyboard.press('Escape');
+  // Den Handler direkt auslösen: Auch ohne disabled-Schutz muss start() ablehnen.
+  await page.getByRole('banner').getByRole('button', { name: 'Lauf starten', exact: true }).dispatchEvent('click');
+  await expect(pop).toBeVisible();
+  await expect(pop.locator('[data-part="error"]')).toContainText('Haken');
+  await page.waitForTimeout(300);
+  expect(posts).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Einrichtung abbrechen: 409 des Servers erscheint wörtlich als stehender Hinweis', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  await page.route('**/live/setup/cancel', (route) => route.fulfill({
+    status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Keine Einrichtung läuft' }) }));
+  await page.getByRole('banner').getByRole('button', { name: 'Einrichtung abbrechen' }).click();
+  await expect(page.locator('.toast', { hasText: 'Keine Einrichtung läuft' })).toBeVisible();
+  expect(errors).toEqual(['Failed to load resource: the server responded with a status of 409 (Conflict)']);
 });

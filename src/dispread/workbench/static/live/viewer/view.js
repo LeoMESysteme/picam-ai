@@ -470,7 +470,7 @@ export function mountViewer(host, {statusbar = null} = {}) {
       <span class="vsep"></span>
       <div class="menuwrap">
         <button type="button" data-act="layers" aria-haspopup="menu" aria-expanded="false" title="Ebenen im Bild">${ICON('lay')}<span class="lbl">Ebenen</span>${ICON('down')}</button>
-        <div class="menu" role="menu" aria-label="Ebenen" hidden><div class="mh">Im Bild zeigen</div>${LAYERS.map(([key, label]) =>
+        <div class="menu" role="menu" aria-label="Ebenen" hidden><div class="mh" role="presentation">Im Bild zeigen</div>${LAYERS.map(([key, label]) =>
           `<button type="button" role="menuitemcheckbox" data-layer="${key}" aria-checked="true">` +
           `<span class="ck" aria-hidden="true"></span>${label}</button>`).join('')}</div>
       </div>
@@ -526,7 +526,7 @@ export function mountViewer(host, {statusbar = null} = {}) {
 
   const viewer = createViewer(canvas, {
     onMarker: placePop,
-    onView: (zoom) => { zoomLabel.textContent = `${Math.round(zoom * 100)} %`; },
+    onView: (zoom) => setZoomLabel(zoom),
     onPointer: (point) => {
       if (!point) { coord.textContent = ''; return; }
       const suffix = viewer.source() === 'abtast' || viewer.source() === 'entz' ? ' (entzerrt)' : '';
@@ -649,6 +649,12 @@ export function mountViewer(host, {statusbar = null} = {}) {
     updateChip();
   }
 
+  // Nur bei Aenderung schreiben (wie updateChip), nicht in jedem Bild.
+  function setZoomLabel(zoom) {
+    const text = `${Math.round(zoom * 100)} %`;
+    if (zoomLabel.textContent !== text) zoomLabel.textContent = text;
+  }
+
   function updateChip() {
     const src = viewer.source();
     let html;
@@ -701,7 +707,7 @@ export function mountViewer(host, {statusbar = null} = {}) {
     canvas,
     setFrame(bitmap, hud) {
       viewer.setFrame(bitmap, hud);
-      zoomLabel.textContent = `${Math.round(viewer.zoom() * 100)} %`;
+      setZoomLabel(viewer.zoom());
       updateChip();
       updateRate(hud);
     },

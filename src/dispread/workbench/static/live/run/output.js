@@ -65,7 +65,7 @@ export function configText(output) {
 export function outputBody(choice, fields = {}) {
   if (choice === 'serial') {
     return {transport: 'serial', port: fields.port, baudrate: Number(fields.baudrate), prefix: fields.prefix,
-      acknowledge_unaccepted: true};
+      acknowledge_unaccepted: fields.ack === true};
   }
   if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort)};
   if (choice === 'uart') return {transport: 'uart'};

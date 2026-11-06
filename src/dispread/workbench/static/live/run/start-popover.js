@@ -7,6 +7,7 @@ import {BAUDRATES, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE,
   loadChoice, outputBody, saveChoice} from './output.js';
 
 const TEXT = {
+  serialAck: 'Bitte zuerst den Haken „Mir ist bewusst“ setzen: UART direkt ist nicht abgenommen.',
   blockTitle: 'Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen',
   testSummary: 'Testmodus (nur zu Testzwecken)',
   testLabel: 'Lesesperre übergehen – Testlauf, Werte sind nicht freigegeben und nicht für Messungen zu verwenden',
@@ -168,6 +169,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       const override = Boolean(status?.run_block && part('override').checked);
       if (status?.run_block && !override) return null;
       const mode = choice();
+      if (mode === 'serial' && !part('out-ack').checked) {
+        showError(TEXT.serialAck);
+        pop.open();
+        return null;
+      }
       if (override && mode !== 'off') {
         showError(TEST_BLOCK);
         pop.open();
@@ -193,7 +199,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
         const body = {test_override: override, reference: part('reference').checked,
           norm_schedule: schedule || null, diagnostics: part('diagnostics').checked,
           output: outputBody(mode, {port: part('out-port').value, baudrate: part('out-baud').value,
-            prefix: part('out-prefix').value, tcpPort: part('out-tcp').value})};
+            prefix: part('out-prefix').value, tcpPort: part('out-tcp').value, ack: part('out-ack').checked})};
         part('out-ack').checked = false;
         return onStart ? await onStart(body) : await client.post('/live/run/start', body);
       } finally {

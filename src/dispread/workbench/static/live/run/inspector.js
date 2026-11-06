@@ -59,7 +59,7 @@ function wertHTML(log) {
         : '<td class="m r">–</td>') +
       `<td class="m r">${grp(row.frames)}</td></tr>`;
   }).join('');
-  return '<table class="grid"><thead><tr><th>Zeit</th><th class="r">Wert</th><th>Status</th><th class="r">Referenz</th>' +
+  return '<table class="grid"><thead><tr><th title="Uhrzeit dieser Seite, nicht die Aufnahmezeit des Datensatzes">Seitenzeit</th><th class="r">Wert</th><th>Status</th><th class="r">Referenz</th>' +
     '<th class="r">Bilder</th></tr></thead>' +
     `<tbody>${body || '<tr class="pend"><td colspan="5">Keine Datensätze seit dem Laden der Seite</td></tr>'}</tbody></table>` +
     '<p class="note pad">Eine Zeile je Wechsel von Status oder Wert; Werte nur bei Freigegeben.</p>';
@@ -152,7 +152,7 @@ function referenzHTML(status) {
     `<dt>Lücken</dt><dd>${n(reference.gaps)}</dd><dt>Verworfen</dt><dd>${n(reference.dropped_oldest)}</dd>` +
     `<dt>Letzter Wert</dt><dd>${esc(referenceText(reference))}</dd>` +
     `<dt>Alter</dt><dd>${latest && finite(latest.age_s) ? `${dec(latest.age_s, 1)} s` : '–'}</dd>` +
-    `<dt>Werteplan</dt><dd>${esc(planText(reference))}</dd>` +
+    `<dt>Werteplan</dt><dd>${esc(planText(reference, status?.state === 'stopped'))}</dd>` +
     `<dt>Datei</dt><dd>${esc(reference.path || '–')}</dd></dl>` +
     '<p class="note">Der Referenzwert wird nur verglichen, nie zur Korrektur des gelesenen Werts benutzt.</p></div>' +
     `<div class="blk"><h4>Abgleich</h4><dl class="kv2">${comparisonRows(status).map(([label, text, cls, mono]) =>

@@ -56,8 +56,9 @@ test('POST-Koerper je Weg', () => {
   assert.deepEqual(outputBody('off'), {transport: 'off'});
   assert.deepEqual(outputBody('uart'), {transport: 'uart'});
   assert.deepEqual(outputBody('tcp', {tcpPort: '5001'}), {transport: 'tcp', tcp_port: 5001});
-  assert.deepEqual(outputBody('serial', {port: '/dev/ttyAMA0', baudrate: '115200', prefix: '%'}),
+  assert.deepEqual(outputBody('serial', {port: '/dev/ttyAMA0', baudrate: '115200', prefix: '%', ack: true}),
     {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', acknowledge_unaccepted: true});
+  assert.equal(outputBody('serial', {port: 'p', baudrate: '9600', prefix: '%'}).acknowledge_unaccepted, false);
 });
 
 test('Wahl wird gemerkt, kaputter Speicher stoert nicht', () => {

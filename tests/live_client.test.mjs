@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {statusView, connectionView, effectState, stepRows} from '../src/dispread/workbench/static/live/model.js';
+import {cameraView, statusView, connectionView, effectState, stepRows} from '../src/dispread/workbench/static/live/model.js';
 import {createClient} from '../src/dispread/workbench/static/live/api.js';
 import {focusChartModel, focusChartSVG} from '../src/dispread/workbench/static/live/setup/focus-chart.js';
 import {checkRows, checksHTML, checksSummary, overallView, warningCount} from '../src/dispread/workbench/static/live/setup/checks.js';
@@ -9,7 +9,7 @@ import {confirmBody, confirmModel, fieldsReady} from '../src/dispread/workbench/
 import {exposureHTML} from '../src/dispread/workbench/static/live/setup/exposure.js';
 import {stepsHTML} from '../src/dispread/workbench/static/live/setup/steps.js';
 import {REGION_NETWORK_ERROR, editFeedback, regionAt, resultText} from '../src/dispread/workbench/static/live/viewer/regions-edit.js';
-import {referenceItem, storageItem} from '../src/dispread/workbench/static/live/shell.js';
+import {cpuItem, referenceItem, storageItem} from '../src/dispread/workbench/static/live/shell.js';
 import {diagnosticsText, trackingModeText} from '../src/dispread/workbench/static/live/run/inspector.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
@@ -776,4 +776,16 @@ test('reference count in the status bar: an unknown count reads "–", never 0',
   assert.match(referenceItem({enabled: true, lines: 0}).html, /<b>0<\/b>/);
   assert.match(referenceItem({enabled: true, lines: 12345}).html, /<b>12\u202f345<\/b>/);
   assert.equal(referenceItem({enabled: false, reason: 'kein Referenzlauf'}).title, 'ohne Referenz: kein Referenzlauf');
+});
+
+test('CPU-Anzeige ohne Messwert zeigt einen Strich', () => {
+  const item = cpuItem({cpu_percent: null, cpu_window_s: 0});
+  assert.equal(item.html, 'CPU <b>–</b>');
+  assert.equal(item.title, 'CPU-Last noch nicht gemessen');
+  assert.match(cpuItem({cpu_percent: 12.4, cpu_window_s: 1}).html, /12 %/);
+});
+
+test('Kamera-Menü: Stillstandsalter mit Dezimalkomma', () => {
+  assert.equal(cameraView({stalled: true, error: 'Streamstillstand: kein Bild seit 5.3 s'}),
+    'Streamstillstand: kein Bild seit 5,3 s');
 });

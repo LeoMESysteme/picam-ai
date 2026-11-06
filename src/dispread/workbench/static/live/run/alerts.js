@@ -74,7 +74,7 @@ function lostOf(status) {
   const lost = (status.run?.latest?.reject_reasons || []).some((r) => r.startsWith('tracking_lost:'));
   if (!hint && !lost) return null;
   // Ohne Hinweis des Servers (nur tracking_lost:*) gilt der Spec-Text fuer "Rahmen verdeckt".
-  return {hint, fresh: freshLatest(status), text: trackingHintText(hint) || COVERED_TEXT};
+  return {hint, fresh: freshLatest(status), text: trackingHintText(hint) || (hint?.kind === 'anzeige_bewegt' ? MOVED_TITLE : COVERED_TEXT)};
 }
 
 // "Raster: Raster am Rand knapp. Bitte im Bild pruefen …" bzw. "Pruefung Raster. …":
@@ -152,7 +152,7 @@ export function createAlerts(initial = {}) {
     episode = {run: runKey, since, start, dismissed: sameStored(runKey, since, start)};
     if (episode.dismissed) return;
     const ep = episode;
-    const text = `${trackingHintText(hint)}\n\nSeit ${clock(start)} sind alle Datensätze Unlesbar (anzeige_bewegt).`;
+    const text = `${trackingHintText(hint) || MOVED_TITLE}\n\nSeit ${clock(start)} sind alle Datensätze Unlesbar (anzeige_bewegt).`;
     ep.modal = openModal({title: MOVED_TITLE, text, tone: 'err', actions: MOVED_ACTIONS});
     Promise.resolve(ep.modal).then((value) => {
       ep.answered = true;

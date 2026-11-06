@@ -69,6 +69,7 @@ test('scenario statuses pass assertStatusShape at every chapter', async () => {
   assert.equal(status.profile.confirmed_by, 'Übung');
   assert.equal((await scenario.act('/live/run/start', {test_override: false, reference: true,
     norm_schedule: '1, 2', diagnostics: false})).ok, true);
+  assert.match(scenario.status().run.started_at_utc, /T\d\d:\d\d:\d\d\.\d{3}\+00:00$/, 'Millisekunden bleiben erhalten');
   // Lauf bis "Anzeige bewegt" (Mock EP.bump = 35 s), dabei Stillstand und Verbindungsverlust.
   let offline = 0;
   for (let s = 0; s < 40; s += 0.25) {
