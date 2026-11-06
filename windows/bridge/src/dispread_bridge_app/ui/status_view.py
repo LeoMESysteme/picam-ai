@@ -391,7 +391,7 @@ class StatusView(QWidget):
         self.infobar.set_bar(texts.action_bar(readiness, worker, ctx))
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx)):
             chip.set_view(view)
-        self.version_label.setText(f'Version {ctx.version}' if ctx.version else '')
+        self.version_label.setText(texts.version_label(ctx.version))
         if ctx.pi_name != self._pi_name or self.model.total == 0:
             self.model.set_entries(ctx.journal)
             self._pi_name = ctx.pi_name

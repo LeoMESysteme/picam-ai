@@ -147,6 +147,20 @@ class SetupView(QWidget):
         self.checks: dict[str, QCheckBox] = {}
         self.buttons: dict[str, QWidget] = {}
 
+    def code_text(self) -> str:
+        e = getattr(self, 'code_edit', None)
+        try:
+            return e.text().strip() if e is not None else ''
+        except RuntimeError:           # Widget wurde beim Neuaufbau zerstört
+            return ''
+
+    def endpoint_text(self) -> str:
+        e = getattr(self, 'endpoint_edit', None)
+        try:
+            return e.text().strip() if e is not None else ''
+        except RuntimeError:
+            return ''
+
     def checked(self, aid: str) -> bool:
         c = self.checks.get(aid)
         return bool(c and c.isChecked())
@@ -156,10 +170,10 @@ class SetupView(QWidget):
         self.header.headline.setVisible(False)
         self.header.head_icon.setVisible(False)
         st = ctx.setup
-        key = (st.variant, repr(ctx))
+        spec = texts.setup_spec(ctx)
+        key = (st.variant, repr(spec))
         if key == self.variant:
             return
-        spec = texts.setup_spec(ctx)
         self.variant = key
         self.step_header.set_step(spec['step'])
         self.lead.setText(spec['lead'])
@@ -241,8 +255,9 @@ class SetupView(QWidget):
         lay.addStretch(1)
         return w
 
-    def _b_check(self, text, aid):
+    def _b_check(self, text, aid, checked=False):
         c = QCheckBox(text)
+        c.setChecked(checked)
         self.checks[aid] = c
         c.toggled.connect(lambda on, a=aid: self.action.emit(a + (':on' if on else ':off')))
         return c
@@ -250,7 +265,6 @@ class SetupView(QWidget):
     def _b_drop(self, title, sub, label, aid):
         f, lay = _card()
         f.setObjectName('drop')
-        f.setAcceptDrops(True)
         f.setMinimumHeight(120)
         t = _label(title, strong=True, wrap=False)
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -288,7 +302,8 @@ class SetupView(QWidget):
         e.setObjectName('pairing_code')
         e.setAccessibleName(label)
         e.setFont(theme.make_font(10.5, mono=True))
-        e.setMaxLength(16)
+        e.setMaxLength(64)
+        e.setEchoMode(QLineEdit.EchoMode.Password)      # Code nicht mitlesbar am Bildschirm
         lay.addWidget(e)
         lay.addWidget(_label(note, secondary=True, caption=True))
         self.code_edit = e
@@ -301,7 +316,10 @@ class SetupView(QWidget):
         lay.setSpacing(4)
         lay.addWidget(_label(label, strong=True))
         e = QLineEdit()
+        e.setObjectName('manual_endpoint')
         e.setAccessibleName(label)
+        e.editingFinished.connect(lambda: self.action.emit('entry:manual_endpoint'))
+        self.endpoint_edit = e
         lay.addWidget(e)
         lay.addWidget(_label(note, secondary=True, caption=True))
         return w
@@ -314,7 +332,7 @@ class SetupView(QWidget):
         lay.addWidget(_label(title, strong=True))
         pb = QProgressBar()
         pb.setTextVisible(False)
-        pb.setValue(value)
+        pb.setValue(int(value))
         pb.setAccessibleName(title)
         lay.addWidget(pb)
         lay.addWidget(_label(text, secondary=True, caption=True))
@@ -328,7 +346,7 @@ class SetupView(QWidget):
         if heading:
             lay.addWidget(_label(heading, strong=True))
         group = QButtonGroup(w)
-        for it in items:
+        for idx, it in enumerate(items):
             title, desc, checked, *badge = it
             row = QFrame()
             row.setProperty('card', True)
@@ -337,6 +355,7 @@ class SetupView(QWidget):
             rb = QRadioButton()
             rb.setChecked(checked)
             rb.setAccessibleName(f'{title}. {desc}')
+            rb.toggled.connect(lambda on, n=name, i=idx: on and self.action.emit(f'radio:{n}:{i}'))
             group.addButton(rb)
             rl.addWidget(rb, 0, Qt.AlignmentFlag.AlignTop)
             col = QVBoxLayout()

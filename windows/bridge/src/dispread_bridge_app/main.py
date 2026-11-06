@@ -40,15 +40,20 @@ def run(argv=None, *, instance=None, controller_factory=None, exec_loop=True, on
     app = QApplication.instance() or QApplication([sys.argv[0]])
     from .ui.window import MainWindow
     if controller_factory is None:
-        if '--demo-ui' not in argv:
-            instance.close()
-            raise SystemExit('Kein Controller verfügbar (echter AppController folgt); --demo-ui zeigt die Oberfläche.')
-        from .ui.fake import FakeController
-        controller = FakeController(_demo_state(argv))
+        if '--demo-ui' in argv:
+            from .ui.fake import FakeController
+            controller = FakeController(_demo_state(argv))
+        else:
+            from .app_controller import AppController
+            from .devices import WindowsDevices
+            controller = AppController(devices=WindowsDevices())
     else:
         controller = controller_factory()
     window = MainWindow(controller)
     window.show()
+    profile_path = _profile_arg(argv)
+    if profile_path:
+        window.open_profile_path(profile_path)      # Dateizuordnung .dispread: Pfad als Argument
 
     class _Act(QObject):
         raise_window = Signal()
@@ -66,9 +71,17 @@ def run(argv=None, *, instance=None, controller_factory=None, exec_loop=True, on
         stop.set()
         return 0
     code = app.exec()
+    stop_for_session_end(controller)      # Beenden über jeden Weg: Worker sicher stoppen
     stop.set()
     instance.close()
     return code
+
+
+def _profile_arg(argv) -> str | None:
+    for a in argv:
+        if not a.startswith('-') and a.lower().endswith('.dispread'):
+            return a
+    return None
 
 
 def _demo_state(argv) -> str:

@@ -110,6 +110,10 @@ class MainWindow(QWidget):
         self.confirm_exit = self._confirm_exit_dialog
         self.pick_file = lambda: QFileDialog.getOpenFileName(self, 'Profil öffnen', '', 'Profil (*.dispread)')[0]
         self.pick_folder = lambda: QFileDialog.getExistingDirectory(self, 'Ordner für die Session')
+        self.pick_save = lambda: QFileDialog.getSaveFileName(self, 'Diagnose speichern', 'dispread-diagnose.zip',
+                                                             'ZIP (*.zip)')[0]
+        self._ports: dict[str, str] = {}
+        self.setAcceptDrops(True)
         self.unhandled: list[str] = []
         for v in (self.status_view, self.setup_view):
             v.action.connect(self.do_action)
@@ -208,19 +212,83 @@ class MainWindow(QWidget):
         elif aid == 'open_profile':
             path = self.pick_file()
             if path:
-                self._call(lambda p=path: ctl.load_profile(Path(p).read_bytes()))
+                self.open_profile_path(path)
         elif aid == 'export_session':
             dest = self.pick_folder()
             if dest:
                 self._call(ctl.export_session, {'gsv_port': c.gsv_port}, Path(dest))
         elif aid == 'start_demo_check':
             self._call(ctl.begin_demo_check, self.setup_view.checked('test_session_ok'))
+        elif aid == 'export_diagnostics':
+            dest = self.pick_save()
+            if dest:
+                self._call(ctl.export_diagnostics, Path(dest))
+        elif aid == 'pair':
+            self._call(ctl.pair, self.setup_view.code_text(), self.setup_view.checked('fp_ok'))
+        elif aid in ('next', 'back'):
+            self._call(ctl.setup_step, aid)
+        elif aid in ('goto_pairing', 'new_code'):
+            self._call(ctl.setup_step, 'pairing')
+        elif aid == 'manual_pair':
+            self._call(ctl.open_manual_pair)
+        elif aid == 'set_port_pair':
+            self._call(ctl.set_port_pair, self._ports.get('bridge_port'), self._ports.get('gsv_port'))
+        elif aid == 'rescan':
+            self._call(ctl.rescan)
+        elif aid == 'entry:manual_endpoint':
+            text = self.setup_view.endpoint_text()
+            if text:
+                self._call(ctl.select_endpoint, text, True)
+        elif aid.startswith('session_ok:'):
+            self._call(ctl.confirm_session, aid.endswith(':on'))
+        elif aid.startswith('radio:'):
+            self._radio(aid)
+        elif aid.startswith(('fp_ok:', 'test_session_ok:')):
+            pass                          # reine Freigabefelder der Oberfläche (Knopf-Gate)
         elif aid == 'details':
             self._show_details()
         elif aid == 'recheck' or aid == 'recheck_adapter':
             self._call(lambda: None)      # liest den Zustand neu; der Controller meldet über subscribe
         else:
             self.unhandled.append(aid)    # z. B. pair, export_diagnostics: Port hat noch keine Methode
+
+    def _radio(self, aid: str) -> None:
+        _, name, idx = aid.split(':')
+        idx, ctl = int(idx), self.controller
+        if name == 'way':
+            self._call(ctl.select_route, ('network', 'uart')[idx])
+            return
+        setup = ctl.context().setup
+        ids = ((setup.data.get('choices') or {}).get(name) or ()) if setup else ()
+        if idx >= len(ids):
+            return
+        if name == 'found':
+            self._call(ctl.select_endpoint, ids[idx], False)
+        elif name == 'adapter':
+            self._call(ctl.select_adapter, ids[idx])
+        elif name in ('bridge_port', 'gsv_port'):
+            self._ports[name] = ids[idx]
+
+    def open_profile_path(self, path: str) -> None:
+        """Profil aus Datei (Dialog, Drag&Drop, Dateizuordnung); der Kern prüft strikt."""
+        def read() -> bytes:
+            try:
+                with open(path, 'rb') as f:
+                    return f.read(256 * 1024 + 1)
+            except OSError:
+                return b''
+        self._call(lambda: self.controller.load_profile(read()))
+
+    def dragEnterEvent(self, e):
+        if any(u.toLocalFile().lower().endswith('.dispread') for u in e.mimeData().urls()):
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        for u in e.mimeData().urls():
+            if u.toLocalFile().lower().endswith('.dispread'):
+                self.open_profile_path(u.toLocalFile())
+                e.acceptProposedAction()
+                return
 
     def _flyout_show(self, view: texts.ChipView, anchor: QWidget) -> None:
         if self._flyout is not None:

@@ -111,6 +111,16 @@ class FakeController:
     def disconnect(self): self._rec('disconnect')
     def export_session(self, settings, destination): self._rec('export_session', settings, destination)
     def begin_demo_check(self, confirmed_test_session): self._rec('begin_demo_check', confirmed_test_session)
+    def pair(self, code, fingerprint_confirmed): self._rec('pair', fingerprint_confirmed)   # Code nie aufzeichnen
+    def select_route(self, mode): self._rec('select_route', mode)
+    def select_endpoint(self, endpoint, manual=False): self._rec('select_endpoint', endpoint, manual)
+    def select_adapter(self, device_id): self._rec('select_adapter', device_id)
+    def set_port_pair(self, bridge_port, gsv_port): self._rec('set_port_pair', bridge_port, gsv_port)
+    def open_manual_pair(self): self._rec('open_manual_pair')
+    def rescan(self): self._rec('rescan')
+    def confirm_session(self, on): self._rec('confirm_session', on)
+    def setup_step(self, direction): self._rec('setup_step', direction)
+    def export_diagnostics(self, destination): self._rec('export_diagnostics', destination); return destination
 
     def request_exit(self, confirmed):
         self._rec('request_exit', confirmed)
