@@ -3,6 +3,7 @@
 // nur Layout und Kontextaktionen; Inhalte rendern die Ansichten in die
 // zurueckgegebenen Knoten.
 import {cameraView} from './model.js';
+import {outputItem} from './run/output.js';
 
 const ICONS = `<svg class="sprite" aria-hidden="true" focusable="false"><defs>
 <symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 3.5l4.5 4.5L6 12.5"/></symbol>
@@ -55,6 +56,7 @@ const TEMPLATE = `${ICONS}
     <span class="it" data-item="cpu"></span>
     <span class="it" data-item="storage"></span>
     <span class="it shr" data-item="reference"></span>
+    <span class="it shr" data-item="output" hidden></span>
     <span class="it shr" data-item="tolerance" hidden></span>
     <span class="it notice" data-item="notice" hidden></span>
     <span class="it last" data-item="session"></span>
@@ -315,6 +317,7 @@ export function renderStatusbar(status, hudProc = null) {
   setItem(items.cpu, cpuItem(status?.system));
   setItem(items.storage, storageItem(status?.storage));
   setItem(items.reference, referenceItem(status?.reference));
+  setItem(items.output, outputItem(status?.output, esc));
   const tolerance = status?.reader_tolerance;
   setItem(items.tolerance, {hidden: !tolerance, cls: 'warn',
     html: `<span class="sq warn"></span><span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert</span>`,

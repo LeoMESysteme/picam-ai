@@ -3,6 +3,7 @@
 // dem Stopp die Zusammenfassung mit Endgrund und Ablage. Fehllesungen gegen
 // die Referenz erst nach Laufende (Spec OP-1), vorher "Abgleich nach Laufende".
 import {dec, esc, grp} from '../shell.js';
+import {MARKER, configText, isOff, outputLines, outputTone} from './output.js';
 
 export const STATUS_ROWS = [
   ['valid', 'ok', 'Freigegeben', 'VALID'], ['transition', 'warn', 'Wechselt', 'TRANSITION'],
@@ -70,6 +71,19 @@ export function referenceLine(reference, {label = true} = {}) {
   return `ohne Referenz: ${reference?.reason || 'nicht gestartet'}`;
 }
 
+// Ausgabezeile im Dock (nur bei Ausgabe ausser Aus); Text wie outputView.
+export function outputDockHTML(output) {
+  if (isOff(output)) return '';
+  const tone = outputTone(output);
+  const lines = outputLines(output);
+  const cfg = configText(output);
+  return `<div class="sect" data-part="output"><div class="pt flat">GSVmulti-Ausgabe` +
+    `${output.transport === 'serial' ? `<span class="pa"><span class="tag">${MARKER}</span></span>` : ''}</div>` +
+    `<p class="${tone ? `${tone}-t ` : ''}wrap"><b>${esc(lines[0])}</b></p>` +
+    lines.slice(1).map((line) => `<p class="note wrap">${esc(line)}</p>`).join('') +
+    (cfg ? `<p class="note mono">${esc(cfg)}</p>` : '') + '</div>';
+}
+
 export function runDockHTML(status, {resultCls = 'X'} = {}) {
   const run = status?.run || {};
   const summary = run.summary || {};
@@ -107,5 +121,5 @@ export function runDockHTML(status, {resultCls = 'X'} = {}) {
     : '';
   return head + facts +
     `<div class="sect"><div class="pt flat">Status<span class="pa">Anteil</span></div><table class="stt">${rows}</table>` +
-    `<div class="share" aria-hidden="true">${share}</div></div>` + comparison + storage;
+    `<div class="share" aria-hidden="true">${share}</div></div>` + comparison + outputDockHTML(status?.output) + storage;
 }

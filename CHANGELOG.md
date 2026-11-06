@@ -5,6 +5,23 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, G2: GSVmulti-Ausgabe in der neuen Seite.
+  Das Start-Popover bekommt die Gruppe „GSVmulti-Ausgabe“ mit den Wegen
+  Aus, UART direkt, UART über Brücke und Netzwerk über Brücke (ein Weg je
+  Lauf, Wahl je Browser gemerkt). UART direkt zeigt den Prototyp-Hinweis
+  wörtlich und startet erst nach dem Haken „Mir ist bewusst: nicht
+  abgenommen, keine Messfreigabe“; der Haken fällt mit jeder neuen
+  Sitzung oder Revision und wird nie gemerkt. Die Brückenwege zeigen die
+  Sperre „DUT-Ausgabe gesperrt: Windows-Abnahme fehlt“. Ein Testlauf mit
+  Ausgabe wird vor dem POST abgelehnt. Im Lauf zeigen Dock, Inspektor
+  (Reiter Referenz) und Statusleiste „GSVmulti: <Weg> · <Zustand>“ aus
+  `status.output` samt „GSVmulti-Empfang unbestätigt.“; UART direkt trägt
+  dauerhaft „nicht abgenommen“. Unterbrechung der Brücke und Ausfall
+  erscheinen als stehender Hinweis (Schlüssel „ausgabe“), ohne Dialog. Der
+  Übungslauf stellt den Status nur nach und sendet nichts. Konsequenz:
+  keine Änderung am Messpfad; der Server bleibt für die Prüfung der Wege
+  maßgeblich. Testserver: `POST /test/output`, Port über `LIVE_UI_PORT`.
+
 * 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 3): Die Zeitleiste
   zeigt in der Einrichtung nicht mehr nur „Zeitleiste“, sondern die
   Schrittspur aus `setup.progress.steps[].elapsed_s` (laufender Schritt

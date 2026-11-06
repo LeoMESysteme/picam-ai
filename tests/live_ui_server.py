@@ -7,6 +7,7 @@ import asyncio
 import copy
 import json
 import math
+import os
 import ssl
 import subprocess
 import tempfile
@@ -30,7 +31,7 @@ from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
-PORT = 8767
+PORT = int(os.environ.get("LIVE_UI_PORT", "8767"))
 FIXTURES = Path(__file__).parent / "fixtures" / "live"
 SCENES = (
     "idle", "setup_focus", "setup_focus_done", "setup_standbilder", "setup_ready_warnung",
@@ -250,6 +251,15 @@ class FakeLiveService:
             # Quellbildkoordinaten fuer das echte 1920x1080-Standbild.
             cv2.imwrite(str(self._image_path), self._scene_image)
             self._frame_due = 0.0
+
+    def set_output(self, state, error=None):
+        # Test-Haken: Zustand des laufenden Ausgabewegs setzen (Form wie der echte Status).
+        with self._lock:
+            output = self._status['output']
+            if output['transport'] == 'off':
+                raise ValueError('Kein Ausgabeweg gewaehlt')
+            output['state'] = state
+            output['error'] = error
 
     def bump_revision(self):
         from dispread.live.service import LiveError
@@ -485,6 +495,11 @@ def make_test_app(image_path):
         except LiveError as exc:
             return web.json_response({"error": str(exc)}, status=409)
 
+    async def set_output(request):
+        data = await request.json()
+        live.set_output(data["state"], data.get("error"))
+        return web.json_response({"ok": True})
+
     async def delay(request):
         data = await request.json()
         path, ms = data["path"], data["ms"]
@@ -509,6 +524,7 @@ def make_test_app(image_path):
     app.middlewares.append(controls)
     app.router.add_post("/test/scene", scene)
     app.router.add_post("/test/revision", revision)
+    app.router.add_post("/test/output", set_output)
     app.router.add_post("/test/delay", delay)
     app.router.add_post("/test/offline", set_offline)
     return app

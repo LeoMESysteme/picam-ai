@@ -5,6 +5,7 @@
 import {trackingHintText} from '../model.js';
 import {dec, esc, grp} from '../shell.js';
 import {referenceText} from './result.js';
+import {MARKER, configText, isOff, outputLines, outputTone} from './output.js';
 import {comparisonRows, planText, referenceLine} from './dock.js';
 
 export const RUN_TABS = ['Wert', 'Ursachen', 'Nachführung', 'Referenz'];
@@ -129,6 +130,17 @@ export function diagnosticsText(s) {
       `${item.bytes == null ? 'Größe unbekannt' : (item.bytes / 1e6).toFixed(1) + ' MB'})`).join('');
 }
 
+export function outputInspectorHTML(output) {
+  const lines = outputLines(output);
+  const tone = outputTone(output);
+  const cfg = configText(output);
+  return `<div class="blk" data-part="output"><h4>GSVmulti-Ausgabe<span>${isOff(output) ? '' : sq(tone || 'ok')}${output?.transport === 'serial'
+    ? ` <span class="tag">${MARKER}</span>` : ''}</span></h4>` +
+    lines.map((line, i) => `<p class="${i === 0 && tone ? `${tone}-t` : i ? 'note' : ''} wrap">${esc(line)}</p>`).join('') +
+    (cfg ? `<dl class="kv2"><dt>Verbindung</dt><dd class="wrap">${esc(cfg)}</dd>` +
+      `<dt>Abnahme</dt><dd>${esc(output.acceptance || '–')}</dd></dl>` : '') + '</div>';
+}
+
 function referenzHTML(status) {
   const reference = status?.reference || {};
   const tone = reference.restoring ? 'warn' : reference.error ? 'err' : reference.enabled ? 'ok' : 'stale';
@@ -145,6 +157,7 @@ function referenzHTML(status) {
     '<p class="note">Der Referenzwert wird nur verglichen, nie zur Korrektur des gelesenen Werts benutzt.</p></div>' +
     `<div class="blk"><h4>Abgleich</h4><dl class="kv2">${comparisonRows(status).map(([label, text, cls, mono]) =>
       `<dt>${esc(label)}</dt><dd class="${cls}${mono ? '' : ' t wrap'}">${esc(text)}</dd>`).join('')}</dl></div>` +
+    outputInspectorHTML(status?.output) +
     `<div class="blk"><h4>Ablage</h4><dl class="kv2"><dt>Lauf</dt><dd>${esc([status?.session_id, status?.run?.dir].filter(Boolean).join('/') || '–')}</dd></dl>` +
     `<p class="note wrap">${esc(diagnosticsText(status))}</p>` +
     `${mark ? `<p class="note wrap">${esc(`Letzte Marke (Meldezeit): ${mark.received_at_utc} · ${mark.text}`)}</p>` : ''}</div>`;

@@ -3,6 +3,8 @@
 // Ereignis markieren mit Text. Texte, Ablauf und POST-Koerper woertlich aus
 // der alten Live-Seite; window.confirm ist durch openModal ersetzt.
 import {openModal} from '../ui/modal.js';
+import {BAUDRATES, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, TEST_BLOCK, configText,
+  loadChoice, outputBody, saveChoice} from './output.js';
 
 const TEXT = {
   blockTitle: 'Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen',
@@ -18,6 +20,7 @@ const TEXT = {
   testText: 'Die Lesesperre wird übergangen. Angezeigte Vermutungen und Werte sind nicht freigegeben und dürfen nicht für Messungen verwendet werden. Der Lauf wird als Testlauf gekennzeichnet (TESTLAUF.json).',
   planTitle: 'Werteplan anwenden?',
   planText: 'Der Plan schreibt in den RAM des GSV-2AS. Beim Stoppen werden die Ausgangswerte zurückgestellt und geprüft. Gerät verbunden lassen.',
+  outputGroup: 'GSVmulti-Ausgabe',
   markLabel: 'Ereignis (Meldezeit des Bedieners):',
 };
 
@@ -70,6 +73,20 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     `<label class="f" for="norm-schedule">${esc(TEXT.plan)}</label>` +
     `<input type="text" id="norm-schedule" class="mono" data-part="plan" placeholder="${esc(TEXT.planPlaceholder)}" autocomplete="off" spellcheck="false">` +
     `<p class="note">${esc(TEXT.planNote)}</p>` +
+    `<fieldset class="outgrp" data-part="output"><legend>${esc(TEXT.outputGroup)}</legend>` +
+    `<div class="seg" role="radiogroup" aria-label="${esc(TEXT.outputGroup)}">${PATHS.map(([key, label]) =>
+      `<label><input type="radio" name="output-path" value="${key}" data-part="path-${key}"><span>${esc(label)}</span></label>`).join('')}</div>` +
+    '<div data-part="out-serial" hidden>' +
+    '<label class="f" for="out-port">Port</label><input type="text" id="out-port" class="mono" data-part="out-port" autocomplete="off" spellcheck="false">' +
+    '<label class="f" for="out-baud">Baudrate</label><select id="out-baud" class="mono" data-part="out-baud">' +
+    BAUDRATES.map((b) => `<option value="${b}">${b}</option>`).join('') + '</select>' +
+    '<label class="f" for="out-prefix">Präfix</label><input type="text" id="out-prefix" class="mono" maxlength="1" data-part="out-prefix" autocomplete="off" spellcheck="false">' +
+    `<p class="note err-t" data-part="out-note">${esc(SERIAL_NOTE)}</p>` +
+    `<label class="ck"><input type="checkbox" data-part="out-ack"> ${esc(SERIAL_ACK)}</label></div>` +
+    '<div data-part="out-tcpbox" hidden><label class="f" for="out-tcp">TCP-Port</label>' +
+    '<input type="number" id="out-tcp" class="mono" min="1" max="65535" data-part="out-tcp"></div>' +
+    `<p class="note warn-t" data-part="out-lock" hidden>${esc(LOCK_NOTICE)}</p>` +
+    '<p class="note" data-part="out-ro" hidden></p></fieldset>' +
     `<details class="fold" data-part="test" hidden><summary>${esc(TEXT.testSummary)}</summary>` +
     `<label class="ck"><input type="checkbox" data-part="override"> ${esc(TEXT.testLabel)}</label></details>` +
     '<p class="msg err-t" role="alert" data-part="error" hidden></p>' +
@@ -82,12 +99,31 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     part('error').textContent = text || '';
     part('error').hidden = !text;
   };
-  const canStart = () => !busy && !(status?.run_block && !part('override').checked);
+  const running = () => status?.state === 'running' && status?.output;
+  const choice = () => PATHS.map(([key]) => key).find((key) => part(`path-${key}`).checked) || 'off';
+  const showOutput = () => {
+    const mode = choice();
+    part('out-serial').hidden = mode !== 'serial';
+    part('out-tcpbox').hidden = mode !== 'tcp';
+    part('out-lock').hidden = !['uart', 'tcp'].includes(mode);
+  };
+  const setChoice = (key) => { part(`path-${key}`).checked = true; showOutput(); };
+  part('out-port').value = DEFAULTS.port;
+  part('out-baud').value = String(DEFAULTS.baudrate);
+  part('out-prefix').value = DEFAULTS.prefix;
+  part('out-tcp').value = String(DEFAULTS.tcpPort);
+  setChoice(loadChoice());
+  const canStart = () => !busy && !(status?.run_block && !part('override').checked) &&
+    !(choice() === 'serial' && !part('out-ack').checked);
   const refresh = () => {
     part('start').disabled = !canStart();
     onChange();
   };
   part('override').addEventListener('change', refresh);
+  part('out-ack').addEventListener('change', () => { showError(''); refresh(); });
+  for (const [key] of PATHS) {
+    part(`path-${key}`).addEventListener('change', () => { saveChoice(key); showOutput(); showError(''); refresh(); });
+  }
   part('plan').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') { event.preventDefault(); api.start(); }
   });
@@ -101,7 +137,23 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       status = next;
       // Jeder neue Vorschlag bzw. jede neue Sitzung verlangt einen neuen Testmodus-Haken.
       const key = `${next?.session_id}|${next?.setup?.proposal_revision ?? ''}`;
-      if (key !== resetKey) { resetKey = key; part('override').checked = false; }
+      if (key !== resetKey) { resetKey = key; part('override').checked = false; part('out-ack').checked = false; }
+      // Im Lauf schreibgeschuetzt und aus status.output.config vorbelegt.
+      const live = running();
+      for (const el of part('output').querySelectorAll('input, select')) el.disabled = Boolean(live);
+      part('out-ro').hidden = !live;
+      if (live) {
+        const out = status.output;
+        setChoice(out.transport);
+        const c = out.config || {};
+        if (out.transport === 'serial') {
+          part('out-port').value = c.port ?? DEFAULTS.port;
+          part('out-baud').value = String(c.baudrate ?? DEFAULTS.baudrate);
+          part('out-prefix').value = c.prefix ?? DEFAULTS.prefix;
+        } else if (out.transport === 'tcp') part('out-tcp').value = String(c.tcp_port ?? DEFAULTS.tcpPort);
+        part('out-ro').textContent = out.transport === 'off' ? 'Im Lauf nicht änderbar.'
+          : `${NAMES[out.transport]}: ${configText(out)} · im Lauf nicht änderbar.`;
+      }
       part('block').hidden = !next?.run_block;
       part('block-reason').textContent = next?.run_block || '';
       part('test').hidden = !next?.run_block;
@@ -115,6 +167,12 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       if (busy) return null;
       const override = Boolean(status?.run_block && part('override').checked);
       if (status?.run_block && !override) return null;
+      const mode = choice();
+      if (override && mode !== 'off') {
+        showError(TEST_BLOCK);
+        pop.open();
+        return null;
+      }
       busy = true;
       refresh();
       try {
@@ -133,7 +191,10 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
         showError('');
         pop.close();
         const body = {test_override: override, reference: part('reference').checked,
-          norm_schedule: schedule || null, diagnostics: part('diagnostics').checked};
+          norm_schedule: schedule || null, diagnostics: part('diagnostics').checked,
+          output: outputBody(mode, {port: part('out-port').value, baudrate: part('out-baud').value,
+            prefix: part('out-prefix').value, tcpPort: part('out-tcp').value})};
+        part('out-ack').checked = false;
         return onStart ? await onStart(body) : await client.post('/live/run/start', body);
       } finally {
         busy = false;

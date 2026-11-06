@@ -20,6 +20,7 @@ import {trackingHintText} from '../model.js';
 import {checkLabel} from '../setup/checks.js';
 import {runTitle} from './dock.js';
 import {isCode, withoutCodes} from './result.js';
+import {TOAST_DOWN} from './output.js';
 
 export const STORE_KEY = 'werkbank.anzeige-bewegt';
 // Spec "Meldungen" (fields.py live_cause mit Umlauten und Halbgeviertstrich).
@@ -109,6 +110,7 @@ export function createAlerts(initial = {}) {
   let stalledShown = false;
   let warned = null;
   let latest = null;
+  let outputKey = null;
 
   function sameStored(runKey, since, start) {
     const stored = readStore(deps.storage);
@@ -177,6 +179,19 @@ export function createAlerts(initial = {}) {
       onClose: (reason) => { if (reason === 'user') lostDismissed = true; lostShown = false; }});
   }
 
+  // Ausgabe (GSVmulti): Unterbrechung als Hinweis bis zur Rueckkehr, Ausfall
+  // stehend mit dem Servertext. Kein Dialog (Spec "Meldungen").
+  function outputToast(status) {
+    const out = status.state === 'running' ? status.output : null;
+    const state = out && out.transport !== 'off' ? out.state : null;
+    const key = ['failed', 'audit_failed'].includes(state) ? `${state}|${out.error}` : state === 'disconnected' ? state : null;
+    if (key === outputKey) return;
+    if (outputKey) closeToast('ausgabe');
+    outputKey = key;
+    if (key === 'disconnected') toast({level: 'warn', title: TOAST_DOWN, sticky: true, key: 'ausgabe'});
+    else if (key) toast({level: 'err', title: out.error || 'Ausgabe fehlgeschlagen', sticky: true, key: 'ausgabe'});
+  }
+
   function update(status, {replay = false} = {}) {
     if (!status) return;
     latest = status;
@@ -184,6 +199,8 @@ export function createAlerts(initial = {}) {
     moved(status, runKey);
     lost(status);
     if (replay) return;
+
+    outputToast(status);
 
     const stalled = Boolean(status.camera?.stalled);
     if (stalled && !stalledShown) {

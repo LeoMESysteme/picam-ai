@@ -153,6 +153,8 @@ function stamp(ms) { return new Date(ms).toISOString().replace(/[-:]/g, '').repl
 const ok = (data = {ok: true}) => ({ok: true, error: null, data});
 const fail = (error) => ({ok: false, error, data: {error}});
 
+import {LOCK_NOTICE, SERIAL_NOTE} from '../run/output.js';
+
 export function createScenario({clock = () => globalThis.performance.now(), wall = () => Date.now(), base = null} = {}) {
   // phase: idle | setup | failed | ready | confirmed | run | stopped
   let phase = 'idle';
@@ -164,6 +166,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
   let centreResults = [];
   let profile = null;
   let runOpts = null;
+  let outputChoice = null;
   let runStartedWall = null;
   let stopR = null;
   let lastMark = null;
@@ -388,10 +391,22 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       reference: referenceBlock(),
       reference_eval: phase === 'stopped' && runOpts?.reference
         ? {state: 'done', misreads: 0, compared_valid: countsUntil(stopR).valid, undecided_valid: 0, uncovered_valid: 0} : null,
-      // Der Uebungslauf gibt nie etwas aus (einheitlicher Ausgabestatus, transport off).
-      output: {transport: 'off', state: 'off'},
+      // Der Uebungslauf gibt nie etwas aus: der gewaehlte Weg wird nur im Status
+      // nachgestellt (einheitlicher Ausgabestatus), ohne Netz und ohne Schnittstelle.
+      output: practiceOutput(),
     };
     return result;
+  }
+
+  function practiceOutput() {
+    const out = outputChoice;
+    if (!out) return {transport: 'off', state: 'off'};
+    const serial = out.transport === 'serial';
+    const {acknowledge_unaccepted: _ack, transport: _t, ...config} = out;
+    return {transport: out.transport, state: phase === 'stopped' ? 'stopped' : serial ? 'serial_ready' : 'waiting',
+      config: serial || out.transport === 'tcp' ? config : {port: '/dev/ttyAMA0', baudrate: 115200},
+      error: null, release_block: serial ? null : LOCK_NOTICE, last_ack: null, acceptance: 'fehlt',
+      ack_scope: 'Übungslauf: simuliert, nichts gesendet', ...(serial ? {release_note: SERIAL_NOTE} : {})};
   }
 
   // ---- Bild und HUD ----
@@ -452,6 +467,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       centreResults = [];
       profile = null;
       runOpts = null;
+      outputChoice = null;
       stopR = null;
       lastMark = null;
       cancelU = null;
@@ -517,6 +533,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       if (phase !== 'confirmed') return fail('Erst einrichten und bestaetigen');
       if (data.norm_schedule && data.reference === false) return fail('Werteplan braucht Referenzaufzeichnung');
       runOpts = {reference: data.reference !== false, norm_schedule: data.norm_schedule || null, diagnostics: Boolean(data.diagnostics)};
+      outputChoice = data.output?.transport && data.output.transport !== 'off' ? data.output : null;
       runStartedWall = wall();
       stopR = null;
       lastMark = null;

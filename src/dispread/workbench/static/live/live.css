@@ -482,3 +482,16 @@ input[type=search]::placeholder{color:#8a847b}
 /* Finish-Review F1: Referenz im Werteraster, Freigabezeit im Ergebnis */
 .grid td.struck{color:#8a857d;text-decoration:line-through;text-decoration-color:#6b665f}
 .judge .jsub .rel{font-variant-numeric:tabular-nums}
+/* GSVmulti-Ausgabe (G2) */
+.popover .outgrp{margin:10px 0 0;padding:8px 10px 10px;border:1px solid var(--line);min-width:0}
+.popover .outgrp legend{padding:0 5px;font-size:11.5px;color:var(--tx3)}
+.popover .seg{display:flex;flex-wrap:wrap;gap:4px}
+.popover .seg label{margin:0;position:relative}
+.popover .seg input{position:absolute;opacity:0;pointer-events:none}
+.popover .seg span{display:block;padding:4px 9px;border:1px solid var(--line);border-radius:2px;background:var(--ctl);color:var(--tx2);cursor:pointer;font-size:12px}
+.popover .seg input:checked+span{border-color:var(--sel-line);background:var(--sel);color:var(--tx)}
+.popover .seg input:focus-visible+span{outline:2px solid var(--sel-hi);outline-offset:1px}
+.popover .seg input:disabled+span{cursor:default;opacity:.8}
+.popover .outgrp select,.popover .outgrp input[type=text],.popover .outgrp input[type=number]{width:100%;box-sizing:border-box}
+.tag{display:inline-block;padding:0 5px;border:1px solid var(--warn);border-radius:2px;color:var(--warn);font-size:10.5px;line-height:15px;white-space:nowrap}
+.popover .outgrp select,.popover .outgrp input[type=number]{height:30px;background:#141311;border:1px solid var(--line);border-radius:2px;color:var(--tx);font:13px var(--mono, monospace);padding:0 9px}

@@ -889,7 +889,7 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   const request = page.waitForRequest('**/live/run/start');
   await plan.getByRole('button', { name: 'Werteplan anwenden' }).click();
   expect((await request).postDataJSON()).toEqual({ test_override: true, reference: true,
-    norm_schedule: '1:20,2:20', diagnostics: false });
+    norm_schedule: '1:20,2:20', diagnostics: false, output: { transport: 'off' } });
   await expect(title).toContainText('TESTLAUF – Werte nicht freigegeben');
   await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jv .num')).toHaveText('Kein Wert');
 
@@ -1139,7 +1139,6 @@ test('Anzeige bewegt: Dialog, Esc = Weiter beobachten, kein Wiederauftauchen nac
   expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().corners)).toEqual([0, 1, 2, 3]);
   await page.keyboard.press('Escape');
   await expect(modal).toHaveCount(0);
-  await page.waitForTimeout(1500);
   await expect(modal).toHaveCount(0);
   // Neuladen: dieselbe Episode fragt nicht wieder.
   await page.reload();
@@ -1428,7 +1427,7 @@ test('Hilfe findet „Gegenlesen“', async ({ page }) => {
 });
 
 // Helfer: Übungslauf über das Hilfe-Menü starten und bis in den Lauf bringen.
-async function practiceToRun(page: Page) {
+async function practiceToRun(page: Page, startRun?: () => Promise<void>) {
   const title = page.getByRole('banner');
   await title.getByRole('button', { name: 'Hilfe' }).click();
   await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
@@ -1441,7 +1440,8 @@ async function practiceToRun(page: Page) {
   await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
   await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
   await title.getByRole('button', { name: 'Bestätigen', exact: true }).click();
-  await title.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  if (startRun) await startRun();
+  else await title.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Ergebnis' }).locator('.jh')).toContainText('Freigegeben');
 }
 
@@ -1595,7 +1595,7 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1920, 1080]]) {
     const run = page.waitForRequest('**/live/run/start');
     await options.getByRole('button', { name: 'Lauf starten', exact: true }).click();
     expect((await run).postDataJSON()).toEqual({ test_override: false, reference: true,
-      norm_schedule: null, diagnostics: false });
+      norm_schedule: null, diagnostics: false, output: { transport: 'off' } });
     await expect(judge.locator('.jh')).toContainText('Freigegeben');
     await expect(judge.locator('.jv .num')).toHaveText('+0.62427');
     await expect(page.getByRole('region', { name: 'Zeitleiste' })).toContainText('letzte 40 s');
@@ -1857,5 +1857,168 @@ test('Zeitleiste der Einrichtung: Schritte, Fokusproben und Abspielkopf statt le
   await hook(page, '/test/scene', { name: 'running_valid' });
   await expect(strip.locator('[data-part="title"]')).toHaveText(/Zeitleiste · Lauf 01/);
   await expect(canvas).toHaveAttribute('aria-label', 'Statusband und Wertspur der letzten 40 s');
+  expect(errors).toEqual([]);
+});
+
+
+// GSVmulti-Ausgabe (G2)
+async function confirmedState(page: Page, extra: Record<string, unknown> = {}) {
+  await hook(page, '/test/scene', { name: 'idle' });
+  await hook(page, '/__test__/state', { state: 'confirmed', profile: { confirmed_by: 'L. Hentschke' },
+    setup: { proposal_revision: 'rev-1' }, ...extra });
+}
+
+test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhalten', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  const startBtn = title.locator('.hdr-act').getByRole('button', { name: 'Lauf starten', exact: true });
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop).toContainText('GSVmulti-Ausgabe');
+  await expect(pop.getByRole('radio', { name: 'Aus' })).toBeChecked();
+  await noOverflow(page);
+  const bodyOf = async (choose: string) => {
+    await confirmedState(page);
+    if (!(await pop.isVisible())) await title.getByRole('button', { name: 'Laufoptionen' }).click();
+    await pop.getByText(choose, { exact: true }).click();
+    const sent = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
+    await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+    return (await sent).postDataJSON().output;
+  };
+  expect(await bodyOf('Aus')).toEqual({ transport: 'off' });
+  expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart' });
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await expect(pop.locator('[data-part="out-lock"]')).toHaveText(/^DUT-Ausgabe gesperrt: Windows-Abnahme fehlt\./);
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByLabel('TCP-Port').fill('5001');
+
+  const sentTcp = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001 });
+
+  // UART direkt: Hinweis wörtlich, Start gesperrt bis zum Haken, Haken wird nie gemerkt.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await pop.getByText('UART direkt', { exact: true }).click();
+  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.');
+  const ack = pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' });
+  await expect(pop.getByLabel('Port', { exact: true })).toHaveValue('/dev/ttyAMA0');
+  await expect(pop.getByLabel('Baudrate')).toHaveValue('115200');
+  await expect(pop.getByLabel('Präfix')).toHaveValue('%');
+  await noOverflow(page);
+  await expect(startBtn).toBeDisabled();
+  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeDisabled();
+  await ack.check();
+  await expect(startBtn).toBeEnabled();
+  // Neue Revision verlangt den Haken neu.
+  await hook(page, '/test/revision', {});
+  await expect(ack).not.toBeChecked();
+  await expect(startBtn).toBeDisabled();
+  await ack.check();
+  await pop.getByLabel('Baudrate').selectOption('230400');
+  const sentSerial = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  expect((await sentSerial).postDataJSON().output).toEqual({ transport: 'serial', port: '/dev/ttyAMA0',
+    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true });
+
+  // Lauf: Zeile im Dock, Inspektor, Statusleiste mit Marker; Gruppe schreibgeschützt.
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-part="output"]')).toContainText('UART direkt: Schnittstelle bereit');
+  await expect(left.locator('[data-part="output"]')).toContainText('GSVmulti-Empfang unbestätigt.');
+  await expect(left.locator('[data-part="output"] .tag')).toHaveText('nicht abgenommen');
+  const bar = page.getByRole('contentinfo');
+  await expect(bar.locator('[data-item="output"]')).toContainText('GSVmulti: UART direkt · Schnittstelle bereit');
+  await expect(bar.locator('[data-item="output"] .tag')).toHaveText('nicht abgenommen');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await inspector.getByRole('tab', { name: 'Referenz' }).click();
+  await expect(inspector.locator('[data-part="output"]')).toContainText('GSVmulti-Empfang unbestätigt.');
+  await expect(inspector.locator('[data-part="output"]')).toContainText('230400 Baud');
+  await noOverflow(page);
+  // Nach dem Neuladen ist die Wahl (nicht der Haken) gemerkt.
+  await confirmedState(page);
+  await page.reload();
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await expect(pop.getByRole('radio', { name: 'UART direkt' })).toBeChecked();
+  await expect(pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' })).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testlauf mit Ausgabe wird vor dem POST abgelehnt', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page, { run_block: 'Lauf gesperrt: Gegenlesen WARNUNG' });
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  let posts = 0;
+  page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) posts++; });
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  await expect(pop.getByRole('alert')).toHaveText('Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.');
+  await expect(page.getByRole('dialog', { name: 'TESTLAUF starten?' })).toHaveCount(0);
+  expect(posts).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Unterbrechung der Brücke meldet einen Hinweis, Rückkehr schließt ihn, Ausfall bleibt stehen', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  const bar = page.getByRole('contentinfo');
+  await expect(bar.locator('[data-item="output"]')).toContainText('GSVmulti: UART über Brücke · Warte auf Windows-Brücke');
+  await expect(bar.locator('[data-item="output"]')).toHaveClass(/warn/);
+  const toastText = 'Verbindung zur GSVmulti-Brücke unterbrochen – lokaler Lauf läuft weiter';
+  await hook(page, '/test/output', { state: 'bridge_connected' });
+  await expect(bar.locator('[data-item="output"]')).toContainText('Brücke erreichbar');
+  await hook(page, '/test/output', { state: 'disconnected' });
+  const hint = page.locator('.toast', { hasText: toastText });
+  await expect(hint).toBeVisible();
+  await expect(page.locator('.modalbg')).toHaveCount(0);
+  await page.waitForTimeout(4600); // stehend: schließt nicht nach 4 s
+  await expect(hint).toBeVisible();
+  await hook(page, '/test/output', { state: 'bridge_connected' });
+  await expect(hint).toHaveCount(0);
+  await hook(page, '/test/output', { state: 'audit_failed', error: 'Ausgabebeleg nicht schreibbar: Platte voll' });
+  const fail = page.locator('.toast', { hasText: 'Ausgabebeleg nicht schreibbar: Platte voll' });
+  await expect(fail).toBeVisible();
+  await expect(bar.locator('[data-item="output"]')).toHaveClass(/err/);
+  await page.waitForTimeout(4600);
+  await expect(fail).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Übungslauf stellt den gewählten Weg nach und sendet keinen POST', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.clock.install();
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  const title = page.getByRole('banner');
+  await practiceToRun(page, async () => {
+    await title.getByRole('button', { name: 'Laufoptionen' }).click();
+    const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+    await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+    await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  });
+  await expect(page.getByRole('contentinfo').locator('[data-item="output"]'))
+    .toContainText('GSVmulti: Netzwerk über Brücke · Warte auf Windows-Brücke');
+  expect(posts.filter((p) => p.endsWith('/run/start'))).toEqual([]);
+  expect(posts).toEqual([]);
   expect(errors).toEqual([]);
 });
