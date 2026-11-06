@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "source_archive": "docs/quellen/gsvmulti-validation-2026-11-04.zip",
+  "source_archive_sha256": "e7e6742acee9203ed0f1da251006e9c9bb9a8eb4c10f2ce06992512daf1ae5e3",
+  "templates": [
+    {
+      "template_id": "uart-direct-demo-20261104-11",
+      "file": "uart-demo-11.ucf",
+      "archive_member": "var/diagnostics/gsvmulti/uart-direct-demo-20261104-11/receiver/svmulti-uart-mvv-test.ucf",
+      "source_sha256": "0880ab1c2406e4761624de904407060579d85ca8126ce411bdf31455734f2b4e",
+      "gsv_version": null,
+      "allowed_fields": [],
+      "roundtrip_verified": false
+    },
+    {
+      "template_id": "uart-direct-demo-20261104-14",
+      "file": "uart-demo-14.ucf",
+      "archive_member": "var/diagnostics/gsvmulti/uart-direct-demo-20261104-14/receiver-profile.ucf",
+      "source_sha256": "f7ee09ad481d6d38612d54fda049f0d2d9be7d4d9d4f6a9e3b50a9dbb44c844c",
+      "gsv_version": null,
+      "allowed_fields": [],
+      "roundtrip_verified": false
+    }
+  ],
+  "recordings": [
+    {
+      "file": "uart-demo-11-receiver.txt",
+      "archive_member": "var/diagnostics/gsvmulti/uart-direct-demo-20261104-11/receiver/04_11_26-14_00_02.txt",
+      "source_sha256": "24617dc71f18f14ca4d261f00a00d66ce197f21a622ce44e4ebf95c07db3f7ba"
+    }
+  ]
+}

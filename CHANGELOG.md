@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Zwei historische GSVmulti-UCFs und eine originale Empfangsdatei
+  samt Archivpfaden und Hashes als Vorlagenbelege gesichert. Inspektion und
+  Manifestprüfung erkennen nur diese Originale; unbekannte Version und
+  fehlender Feld-/Wiederöffnungsnachweis sperren automatischen Sessionexport.
+  17 Tests bestanden. Dies ist kein neuer GSVmulti-Roundtrip oder Formatbeleg.
+
 * 2026-11-06: Isolierten Windows-Build mit eigener Laufzeit, Qt-Probe und
   geprüftem Importumfang vorbereitet. Paketfreigabe bindet Lockdateien,
   Freigabedatensatz und kopierte Belege an dieselben geprüften Hashes;

@@ -1,0 +1,3 @@
+# Preserve byte-for-byte archived CRLF originals on every checkout.
+*.ucf -text
+*.txt -text

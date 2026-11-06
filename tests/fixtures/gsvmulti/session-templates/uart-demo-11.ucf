@@ -1,0 +1,18 @@
+[ch1]
+device = "UserDef"
+ComNr = 4
+Input = 1
+BaudRate = 115200
+OpenFlags = 1073741824
+Name = "Chan. 4_1"
+SerNr = 0
+Color = 16777215
+IsHidden = FALSE
+Unit = "mV/V"
+
+[UserDevice]
+ComNo = 4
+Frequency = 10.000000
+NumChan = 1
+Prefix = 37
+Separator = 256
