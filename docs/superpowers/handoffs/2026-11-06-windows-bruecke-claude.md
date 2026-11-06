@@ -57,5 +57,41 @@ Codeprüfung ableiten.
 
 ## Technischer Lieferstand und Prüfungen
 
-Wird aus den Implementierungs- und Reviewberichten vor Übergabe ergänzt.
+Bisher versioniert, jeweils nach Taskreview:
+
+| Teil | Lieferstand | Nachweisgrenze |
+| --- | --- | --- |
+| P1 | Strikter v2-Codec, Profile, kanonische UART-Signaturbytes, begrenzter OutputState | 70 relevante Tests; Auth/Hub separat |
+| N1 | Build-/Probe-/Hashfreigabe unter windows/bridge | 79 Tests inklusive Bestand, 1 echter Windows-Skip; keine qualifizierten Locks/EXE |
+| N2 | PnP-/USB-Auswahl und injizierbare VCOM-Verwaltung | 48 Tests; echter Treiberprovider unverifiziert und gesperrt |
+| N3 | Gepinnte UCF-/TXT-Originale, Herkunftsinspektion | 17 Tests; Versionsbindung/Roundtrip fehlen, Export gesperrt |
+| P2 | Geräteidentität, Zertifikat/Signatur, Kopplung und lokale CLI | 26 gezielte Tests, zusätzlich vorher 142/2skip mit Workbench; HTTP folgt |
+| W3 | Fortsetzbare Installer-/Updateverträge, begrenzter Helfer, internes Probe-Setup | 47 fokussierte Tests nach Reviewkorrektur; native Anbieter, Signierung und Windows-Gates fehlen |
+
+P2 ist auf `6e9e2e6` abgeschlossen. Öffentliche Verifikation liegt in
+`dispread.bridge.identity`; Pi-only Datei-/Hardwareoperationen werden beim
+Windows-Import nicht ausgeführt. Einmalangebote sind 256 Bit, höchstens
+300 Sekunden gültig, atomar einmalig und client-/transportgebunden.
+
+Lokale technische Vorbereitung (keine Messung):
+
+```bash
+./.venv/bin/dispread bridge identity --directory var/workbench/bridge --provision
+./.venv/bin/dispread bridge export-profile --directory var/workbench/bridge \
+  --output pi-profil.json --name Labor-Pi --pair --transport uart
+./.venv/bin/dispread bridge revoke --directory var/workbench/bridge CLIENT_ID
+```
+
+Nur auf dem tatsächlich einzurichtenden Pi und unter dessen autorisiertem
+OS-Konto ausführen. `--provision` ersetzt bestehende Identitäten nicht.
+Das Paarungsprofil rechtzeitig übertragen; beim Ablauf neues Angebot
+erzeugen. Eine bestehende Workbench-TLS-Konfiguration bleibt erhalten;
+explizite Dienstaktivierung wird im folgenden P3 ergänzt.
+
+Weitere technische Teile und der gesamte Branchreview folgen vor endgültiger
+Übergabe. Keine vorläufige Tabelle als Gesamtfertigmeldung verwenden.
 Offene Gates und Teilaufgaben bleiben im Hauptplan/status.md sichtbar.
+
+Release-Key/-Kanal und Schutz gegen alte signierte Versionen bleiben in
+[OQ-65](../../open-questions.md#oq-65) offen. Keine Testschlüssel übernehmen.
+W3 liefert ausdrücklich keinen nativen UAC-Launcher/Deploymentanbieter.

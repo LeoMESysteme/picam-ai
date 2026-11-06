@@ -3,7 +3,7 @@
 Stand 2026-11-06: technische Grundlage für N1, **kein bestandener Windows-
 Nachweis**. Dieses Verzeichnis enthält eine Konsolenprobe und ein Rezept
 für ein internes, unsigniertes PyInstaller-Ordnerpaket. Produkt-GUI und
-Setup-EXE fehlen absichtlich. DUT-Ausgabe bleibt im bestehenden Kern gesperrt.
+Produkt-Setup-EXE fehlen weiterhin; ein internes Probe-Setup-Rezept steht unten. DUT-Ausgabe bleibt im bestehenden Kern gesperrt.
 
 Die Probe importiert `dispread.gsv_bridge`, pySerial und PySide6, erzeugt
 eine verborgene `QApplication` und beendet sich mit einem JSON-Bericht.
@@ -175,3 +175,115 @@ Primärquellen zum Rezept:
 [PyInstaller-Spec und Ordnerpaket](https://pyinstaller.org/en/stable/spec-files.html),
 [Qt/PyInstaller](https://doc.qt.io/qtforpython-6/deployment/deployment-pyinstaller.html),
 [pip: Hashprüfung und ausschließlich Wheels](https://pip.pypa.io/en/stable/topics/secure-installs/).
+
+
+## Installer-/Update-Verträge W3
+
+`install.py` hält den Zustand einer Portpaar-Einrichtung mit atomarem Austausch,
+OS-Dateisperre und einem fortlaufenden Audit fest. `InstallRequest` enthält nur
+das ausdrücklich gewählte `PortPair` und einen Abbruchwunsch. Geräteinventar und
+`VcomAdapter` werden injiziert; ohne qualifizierten N2-Provider bleibt das Ergebnis
+`unverified`. `Installer.ensure_components(request, devices, vcom)` und
+`Installer.resume_install(state_path, devices=..., vcom=...)` verwenden dieselbe
+Zustandsdatei. Auch die Modulfunktion `resume_install` ist verfügbar. Die Pfade
+kommen aus der lokalen Anwendung, niemals aus einem Pi-Verbindungsprofil.
+
+Ein vor einem Prozessabbruch begonnenes Erstellen wird vor einer Wiederholung
+mit dem gespeicherten Inventar abgeglichen; genau ein neu gefundenes eigenes
+Paar wird wiederverwendet, mehrere erfordern Auswahl. Neustart, UAC-Verweigerung
+und Cancel behalten den Zustand. `previous_ready` bezeichnet ausschließlich ein
+historisches, zuletzt geprüftes Paar; der aktuelle `result` wird erneut ermittelt.
+`ready` bestätigt hier nur den N2-Portpaar-Selbsttest, weder Pi-Verbindung noch
+USB-Treiberinstallation, App-Installation oder GSVmulti-Übernahme. Für einen
+USB-Treiber existiert noch kein freigegebenes Paket/Installationsverfahren.
+
+`admin_helper.py` ist eine beschränkte Provider-Grenze, **kein ausführbarer
+UAC-Starter**. Nur `inventory`, `create_pair`, `repair_owned_pair` und
+`remove_unused_owned_pair` sind erlaubt. Die beiden gezielten Aktionen nehmen
+nur eine Paar-ID an; Kommandos, URLs und Dateipfade sind verboten. Aktuelles
+Eigentum und freie Nutzung werden neu geprüft. Fremde und belegte/ungeprüfte
+Paare sowie bestehende Audits bleiben erhalten. Der Provider muss die letzte
+Eigentums-/Nutzungsprüfung mit seiner Mutation atomar ausführen. Entfernen ist
+als zusätzliche Provider-Methode noch unqualifiziert; es gibt keinen geratenen
+Treiberaufruf. Audit-Schreibfehler verhindern jede nachfolgende Mutation.
+
+`updates.py` prüft maximal 64 KiB große Manifeste nach
+`packaging/release-manifest.schema.json`: exakte Felder, keine doppelten
+JSON-Schlüssel, festes Windows-Ziel, Versions-/Commitform, eindeutige Artefakte,
+begrenzt große Dateien und vollständige SHA-256-Werte. Es gibt **keinen
+Produkt-Vertrauensschlüssel und keinen vorgewählten Downloadhost**. Aufrufer
+müssen einen `TrustedReleaseKey` und feste HTTPS-Ursprünge provisionieren.
+Der Standardprüfer verwendet Ed25519 aus `cryptography`; ein qualifizierter
+Prüfer kann injiziert werden. Die Prüfung muss bei Fehlern werfen und bei
+Erfolg `None` liefern. Testschlüssel existieren ausschließlich in Tests.
+
+Signiert wird das JSON-Objekt ohne `signature`, mit sortierten Schlüsseln,
+kompakten Trennzeichen und ASCII-Escapes (Python: `sort_keys=True`,
+`separators=(',', ':')`, `ensure_ascii=True`). Der Signaturblock nennt
+`algorithm=ed25519`, die lokal bekannte `key_id` und kanonisches Base64 der
+64 Signaturbytes. Beim Installationsaufruf wird das Originalmanifest erneut
+geprüft; ein selbst konstruiertes `ReleaseInfo` umgeht diese Prüfung nicht.
+
+Downloads verwenden HTTPS mit normalem Proxyzugang und begrenzten Lesegrößen;
+Redirects, Quellenwechsel, Größengrenzen und Hashfehler werden abgelehnt.
+Teilbytes bleiben als `.partial` erkennbar und werden beim erneuten Versuch
+neu geladen. Erst vollständig geprüfte Bytes heißen `.verified`; auch diese
+werden beim Wiederanlauf erneut gehasht. Knapper Platz, Downloadabbruch und
+Cancel erhalten einen fortsetzbaren Zustand. Aktive Ausgabe blockiert den
+Aufruf vor Download und Änderungen. Cache/Zustandsverzeichnisse und die
+Ausgabesperre werden vom lokalen Programm festgelegt, nie durch das Manifest.
+
+Ein injizierter `DeploymentBackend` muss alte Version/Konfiguration sichern,
+Konfigurationen als versionierte Kopie migrieren, innerhalb seiner nativen
+Privileggrenze Hash/Signatur und ruhende Ausgabe erneut prüfen und erst nach
+aktueller Prüfung `ready` melden. `backup`, `prepare`, `activate`, `rollback`
+und `verify_installed` sind die Adaptergrenze. Nach Prozessabbruch oder
+Neustart während Aktivierung wird der gesicherte Stand vor erneutem Versuch
+zurückgeholt; fehlgeschlagene Rückkehr meldet `recovery_required`.
+**Dieser native Deployer fehlt weiterhin.** Portable Tests mit einem lokalen
+Dateisystem-Doppel belegen Zustands-/Rollbackpolitik, keine erfolgreiche
+Windows-Installation. Weder Anwendung noch Treiber werden hier signiert,
+installiert, entfernt oder extern veröffentlicht.
+
+## Optionales internes Probe-Setup
+
+`packaging/setup.iss` verpackt ausschließlich die bereits geprüfte N1-
+Konsolenprobe einschließlich ihres unveränderten, unsignierten Baumanifests.
+Es enthält keine Produktoberfläche, Treiberaktionen, Dateizuordnungen oder
+privilegierten Helfer. Standard-Inno-Dialoge sind reine Paketierungsfunktion.
+Die Installation wäre nach Program Files erhöht; die Probe wird anschließend
+vom normalen Benutzer separat gestartet. Setup startet sie nicht erhöht und
+fasst Benutzerkonfiguration/Audits nicht an. Es wird nur Windows 11 x64
+zugelassen; ARM bleibt ausgeschlossen.
+
+Nach den unverändert verpflichtenden N1-Qualifikationsschritten kann das
+interne Rezept mit ausdrücklich gewähltem, lokal qualifiziertem Inno-Compiler
+zusätzlich gebaut werden (noch keine hier geprüfte Inno-Version):
+
+```powershell
+.\windows\bridge\build.ps1 `
+  -BuildPython 'C:\BuildTools\Python313\python.exe' `
+  -VerifiedInputs 'C:\BridgeEvidence\verification.json' `
+  -BuildInternalProbeSetup `
+  -InnoCompiler 'C:\BuildTools\Inno Setup\ISCC.exe'
+```
+
+Die Ausgabe bleibt unter `.build/<ID>/internal-probe-setup/`; Name und
+`internal-setup-build.json` kennzeichnen sie als unsignierte, noch nicht auf
+Windows abgenommene Probe. Das Protokoll enthält Setup-/Compilerhash,
+Compilerdateiversion, Rezepthash, Quellcommit und Hash des eingebetteten N1-Manifests.
+Rezept, Compiler und Manifest werden vor/nach der Kompilierung verglichen;
+auch das vollständige N1-Paketinventar wird erneut gegen dessen Hashliste geprüft.
+Es entsteht kein signiertes Release-Manifest. Originale Windows-Belege für
+frische VM, UAC-Verweigerung, Reboot und zweimalige Reparatur fehlen;
+Schlüssel, Hosting, echte App und freigegebener Treiber bleiben externe Gates.
+Ohne bereitgestellten Windows-Runner wird keine Workflowdatei angelegt.
+
+Portable W3-Prüfung, ohne Installation neuer Pakete in der Pi-venv:
+
+```bash
+PYTHONPATH=src:windows/bridge/src ./.venv/bin/python -m pytest -q windows/bridge/tests/test_install.py windows/bridge/tests/test_updates.py
+```
+
+Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/topic_archidentifiers.htm),
+[Admin-Modus](https://jrsoftware.org/ishelp/topic_admininstallmode.htm).

@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory = $true)][string]$BuildPython,
     [Parameter(Mandatory = $true)][string]$VerifiedInputs,
     [string]$OutputDirectory = (Join-Path $PSScriptRoot "dist"),
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$BuildInternalProbeSetup,
+    [string]$InnoCompiler
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -30,6 +32,10 @@ function Invoke-Checked {
 if ($env:OS -ne "Windows_NT") { throw "Build blocked: use a Windows 11 x64 build host." }
 $BuildPython = (Resolve-Path -LiteralPath $BuildPython).Path
 $VerifiedInputs = (Resolve-Path -LiteralPath $VerifiedInputs).Path
+if ($BuildInternalProbeSetup) {
+    if (-not $InnoCompiler) { throw "Internal probe setup requires an explicitly selected, locally qualified Inno Setup compiler; no PATH discovery." }
+    $InnoCompiler = (Resolve-Path -LiteralPath $InnoCompiler).Path
+}
 $BridgeRoot = $PSScriptRoot
 $RepoRoot = (Resolve-Path (Join-Path $BridgeRoot "../..")).Path
 $Support = Join-Path $BridgeRoot "packaging/build_support.py"
@@ -69,3 +75,42 @@ Move-Item -LiteralPath $Stage -Destination $SiblingStage
 Invoke-Checked $Python @("-I", $Support, "finalize", "--bridge-root", $BridgeRoot, "--verification", $VerifiedInputs, "--stage", $SiblingStage, "--destination", $Destination, "--source-root", $RepoRoot, "--source-commit", $Commit, "--snapshot", $Snapshot)
 Write-Output "Internal unsigned probe package: $Destination"
 Write-Output "N1 acceptance still requires clean VM tests without Python and alongside unchanged Python 3.7."
+
+# Optional packaging of the SAME qualified runtime probe. No product GUI/helper
+# or driver is added. The existing Windows/locks/evidence/self-test gates above
+# remain mandatory. No product release signature or Windows acceptance is claimed.
+if ($BuildInternalProbeSetup) {
+    $VerifyProbeCode = "import json,runpy,sys; from pathlib import Path; support=runpy.run_path(sys.argv[1]); package=Path(sys.argv[2]); manifest=json.loads((package/'build-manifest.json').read_text(encoding='utf-8')); support['verify_tree'](package, manifest['files'])"
+    Invoke-Checked $Python @("-I", "-c", $VerifyProbeCode, $Support, $Destination)
+    $ProbeSetupRecipe = Join-Path $BridgeRoot "packaging/setup.iss"
+    $ProbeRecipeHash = (Get-FileHash -LiteralPath $ProbeSetupRecipe -Algorithm SHA256).Hash.ToLowerInvariant()
+    $ProbeManifestHash = (Get-FileHash -LiteralPath (Join-Path $Destination "build-manifest.json") -Algorithm SHA256).Hash.ToLowerInvariant()
+    $InnoCompilerHash = (Get-FileHash -LiteralPath $InnoCompiler -Algorithm SHA256).Hash.ToLowerInvariant()
+    $InternalSetupOutput = Join-Path $BuildRoot "internal-probe-setup"
+    New-Item -ItemType Directory -Path $InternalSetupOutput -Force | Out-Null
+    Invoke-Checked $InnoCompiler @("/DProbePackage=$Destination", "/DProbeCommit=$($Commit.Substring(0,12))", "/DProbeBuildId=$BuildId", "/DProbeOutput=$InternalSetupOutput", $ProbeSetupRecipe)
+    Invoke-Checked $Python @("-I", "-c", $VerifyProbeCode, $Support, $Destination)
+    $InternalSetupName = "internal-probe-setup-$($Commit.Substring(0,12))-$BuildId.exe"
+    $InternalSetup = Join-Path $InternalSetupOutput $InternalSetupName
+    if (-not (Test-Path -LiteralPath $InternalSetup -PathType Leaf)) { throw "Internal probe setup output missing." }
+    $InternalSetupHash = (Get-FileHash -LiteralPath $InternalSetup -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ((Get-FileHash -LiteralPath $ProbeSetupRecipe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ProbeRecipeHash) { throw "Internal probe setup recipe changed during compile." }
+    if ((Get-FileHash -LiteralPath $InnoCompiler -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InnoCompilerHash) { throw "Inno compiler changed during compile." }
+    if ((Get-FileHash -LiteralPath (Join-Path $Destination "build-manifest.json") -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ProbeManifestHash) { throw "N1 manifest changed during setup compile." }
+    # Keep original compiler/version/hash and input manifest hash beside this
+    # internal artifact; this unsigned record is not an authenticated release.
+    $InternalRecord = [ordered]@{
+        schema_version = 1
+        status = "internal_unsigned_probe_setup_unqualified"
+        release_signed = $false
+        source_commit = $Commit
+        setup = $InternalSetupName
+        setup_sha256 = $InternalSetupHash
+        n1_manifest_sha256 = $ProbeManifestHash
+        setup_recipe_sha256 = $ProbeRecipeHash
+        inno_compiler_sha256 = $InnoCompilerHash
+        inno_compiler_version = (Get-Item -LiteralPath $InnoCompiler).VersionInfo.FileVersion
+    }
+    $InternalRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $InternalSetupOutput "internal-setup-build.json") -Encoding UTF8
+    Write-Output "Internal unsigned probe setup (not Windows-qualified): $InternalSetup"
+}

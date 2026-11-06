@@ -7,6 +7,9 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
+| [OQ-62](#oq-62) | Jetzt | in Arbeit | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
+| [OQ-64](#oq-64) | Jetzt | in Arbeit | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
+| [OQ-65](#oq-65) | Jetzt | offen | Wie werden Windows-Releases signiert, aktualisiert und gegen Rückstufung geschützt? |
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
 | [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-06](#oq-06) | Jetzt | teilweise geklärt | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
@@ -57,9 +60,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-49](#oq-49) | — | offen | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
-| [OQ-62](#oq-62) | — | offen | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
-| [OQ-64](#oq-64) | — | offen | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3124,7 +3125,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-62 — Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet?
 
-* **Status:** offen · erkannt 2026-11-06 bei der Einrichtung auf einem neuen Windows-PC
+* **Status:** in Arbeit · erkannt 2026-11-06 bei der Einrichtung auf einem neuen Windows-PC
 * **Nutzervorgabe:** Wahl der GSVmulti-Ausgabe in der Werkbank bietet eine
   Verbindungsanleitung. Bevorzugt fertige Windows-EXE, die benötigte Komponenten
   installiert/einrichtet, UART und Netzwerk auswählbar macht und in einer
@@ -3145,7 +3146,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   + Windows-Installer; Online-Downloads bei Einrichtung sind erlaubt.
   [Spezifikation](superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
   am 06.11. freigegeben; [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md)
-  liegt zur Planprüfung vor. Architekturwahl klärt nicht Treiberzulassung,
+  ist zur Ausführung freigegeben. EXE-GUI und sichtbare Workbench-Anbindung
+  bleiben auf Nutzerwunsch Claude vorbehalten. Architekturwahl klärt nicht Treiberzulassung,
   Sessionformat oder produktive Messfreigabe.
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
@@ -3197,19 +3199,19 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-64 — Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale?
 
-* **Status:** offen · erkannt 2026-11-06 beim Entwurf der Windows-Einrichtung
+* **Status:** in Arbeit · erkannt 2026-11-06 beim Entwurf der Windows-Einrichtung
 * **Nutzerauftrag:** automatische Installation sowie Verbindung per UART
   oder Netzwerk ohne fest angenommene Pi-IP; verschiedene Pi und Netze,
   mit und ohne Tailscale und nachvollziehbare Fehlerbehandlung. Download
   während der Ersteinrichtung ist ausdrücklich erlaubt; ein vollständiges
   Offline-Installationspaket ist aktuell keine Pflicht.
-* **Codebefund:** `OutputPublisher` öffnet für TCP einen Socket mit eigenem
+* **Codebefund vor v2-Umsetzung:** `OutputPublisher` öffnet für TCP einen Socket mit eigenem
   Port (Vorgabe 5000) ohne TLS oder Anwendungskopplung. Workbench-CLI hat eine
   konkrete Tailscale-Adresse als Host-Vorgabe; PAM-Anmeldung verwendet
   aktuell den Benutzer `me-systeme`. Für einen allgemeinen Geräteeinsatz
   brauchen auch Pi-Dienst, Identität und Erstkonfiguration eine Spezifikation.
   Der bestehende Messgeräte-`device_id` ersetzt keine eindeutige Pi-Identität.
-* **Vorschläge, noch nicht freigegeben:** generische Windows-Anwendung mit
+* **Freigegebener Entwurf 2026-11-06:** generische Windows-Anwendung mit
   gebündelter Laufzeit; universeller Installer und getrenntes Verbindungsprofil
   aus der Workbench; stabile Pi-Identität mit überprüfter Kopplung. LAN-Suche
   per DNS-SD/mDNS plus Host-/Adressfallback, optional Tailscale-FQDN; bei
@@ -3224,7 +3226,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Discovery entdeckt Kandidaten; sie ersetzt weder Erreichbarkeit noch
   Identitätsprüfung. Ohne Route zwischen getrennten Netzen kann eine EXE
   keine Verbindung allein durch eine bekannte IP herstellen.
-* **Klärung:** technische Varianten mit Leonhard auswählen; dann Kopplungs-,
+* **Umsetzung 2026-11-06:** Geräteidentität, widerrufbare Kopplung und
+  strikter v2-Vertrag sind als Backend geprüft; Dienst-/Discovery- und
+  Windows-Anbindung folgen. Keine reale Zwei-Pi-/Netzwechselabnahme daraus
+  ableiten. [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
+* **Klärung:** Freigegebenen Entwurf umsetzen, Kopplungs-,
   Berechtigungs- und Zustandsvertrag spezifizieren. Tests mit zwei Pi,
   DHCP-/Netzwechsel, gesperrtem Multicast, Ausfall/Neustart und falscher
   Identität; Altwerte/Doppelausgabe strukturell verhindern. OQ-62 führt den
@@ -3238,3 +3244,29 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** spätere Windows-Brücken-Spezifikation,
   [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md), [Abhängigkeiten](dependencies.md)
   und [Geplante Funktionen](../PLANNED_FEATURES.md).
+
+
+---
+
+<span id="oq-65"></span>
+
+## OQ-65 — Wie werden Windows-Releases signiert, aktualisiert und gegen Rückstufung geschützt?
+
+* **Status:** offen · erkannt 2026-11-06 beim Installer-/Updatekern W3
+* **Befund:** Der portable Updatekern prüft ein begrenztes, signiertes
+  Manifest, Artefakthashes und explizit konfigurierte HTTPS-Herkünfte. Er
+  enthält keinen produktiven Vertrauensschlüssel, Release-Host oder nativen
+  Deploymentanbieter. Eine gültige Signatur allein legt noch keine aktuelle
+  freigegebene Version bzw. erlaubte Rückstufung fest.
+* **Offen:** verantwortlicher Release-Kanal, Bereitstellung und Wechsel des
+  Vertrauensschlüssels, Behandlung alter signierter Manifeste, Mindestversion
+  und ausdrücklich freigegebene Rückkehr zur Vorgängerversion. Die dafür
+  nötigen Kanal-/Versionsdaten sind noch nicht festgelegt. Anwendungssignatur
+  und Treibersignatur brauchen zusätzlich echte Windows-Nachweise.
+* **Grenze:** Ohne diese Provisionierung und Nachweise bleibt der Produkt-
+  Release gesperrt. Interne Probe-Installer und Unit-Tests mit Testschlüsseln
+  sind kein verteilter Vertrauensanker. Aktive Ausgabe blockiert Updates;
+  vorhandene Konfiguration und Audits dürfen nicht still verloren gehen.
+* **Antwort landet in:** [Windows-Spec §4](superpowers/specs/2026-11-06-windows-bruecke-design.md#4-installation-und-wiederholung),
+  [Windows-Buildrezept](../windows/bridge/README.md) und
+  [Updatekern](../windows/bridge/src/dispread_bridge_app/updates.py).

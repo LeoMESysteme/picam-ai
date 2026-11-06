@@ -82,7 +82,7 @@ In dieser Reihenfolge:
    6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
 
 **Windows-Einrichtung der GSVmulti-Brücke vereinfachen** (Nutzervorgabe
-2026-11-06, später; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
+2026-11-06, nun zur Umsetzung freigegeben; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
 GSVmulti-Ausgabe in der Werkbank führt zu einer passenden Verbindungsanleitung.
 Bevorzugt lädt die Person eine fertige Windows-EXE herunter, die benötigte
 Komponenten installiert und einrichtet. Eine einfache GUI bietet UART oder
@@ -105,7 +105,8 @@ keine Pflicht. Architektur und [Spezifikation](docs/superpowers/specs/2026-11-06
 sind am 06.11. freigegeben: bestehender Python-Kern + Qt-GUI + Windows-Installer.
 [Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md) mit drei
 Teilplänen und zwölf Aufgaben liegt vor. Nachweise vor GUI-Ausbau;
-Planprüfung und Ausführungsmethode noch ausstehend.
+Ausführung durch Codex mit Subagents freigegeben; EXE-GUI und sichtbare
+Workbench-Anbindung bleiben Claude vorbehalten.
 Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
 ([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
 ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den
@@ -392,6 +393,18 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 ---
 
 ## Die Aufgaben, in Reihenfolge
+
+### Windows-Brücke v2 (aktiv, Nutzerfreigabe 2026-11-06)
+
+Backend und testbare Paketierung im isolierten Zweig `codex/windows-bridge-core`
+fortführen. [OQ-62](docs/open-questions.md#oq-62),
+[OQ-64](docs/open-questions.md#oq-64),
+[OQ-65](docs/open-questions.md#oq-65) und
+[Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md) führen
+Technik und offene echte Windows-Gates. P1/N1/N2/N3/P2 als technische
+Grundlagen geprüft; laufende Schritte und nächste Aufgaben in
+[Status](docs/status.md). UI/Anleitung/Bereitschaftsdarstellung für Claude
+vorbereiten, keine Veröffentlichung oder DUT-Entsperrung daraus ableiten.
 
 ### Messpfad live (aktiv)
 

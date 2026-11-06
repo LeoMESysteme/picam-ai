@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Fortsetzbaren Windows-Installer-/Updatekern ergänzt: aktuelle
+  Portprüfung, Auswahl nach Abbruch, Besitzschutz, auditierte Aktionen,
+  signierte Manifeste und Hashprüfung vor Versionswechsel. Aktive Ausgabe
+  blockiert Updates; Fehler erhalten die Vorversion. 47 fokussierte Tests
+  bestanden, Reviewkorrektur bestätigt. Native UAC-/Deploymentanbieter und
+  Produkt-Release fehlen; Inno-Rezept paketiert nur die interne Runtime-Probe.
+  Release-Vertrauens-/Versionspolitik ist als OQ-65 erfasst.
+
 * 2026-11-06: Hardwaregebundene Pi-Identität, öffentliche Zertifikats-/UART-
   Signaturprüfung und widerrufbare Kopplung ergänzt. Einmalangebote mit
   256 Bit verfallen nach höchstens 300 Sekunden auch bei Datenbanksperren;

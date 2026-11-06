@@ -58,6 +58,22 @@ Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
 bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
 [Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
 
+## Windows-Installer und Updateverträge
+
+W3 verwendet Standardbibliothek plus die bereits getrennt deklarierte
+cryptography-Bibliothek für Ed25519-Manifestprüfung. Vertrauensschlüssel und
+erlaubter HTTPS-Release-Ursprung müssen ausdrücklich provisioniert werden;
+Testschlüssel sind keine Produktvorgabe. OQ-65 führt Kanal-/Schlüsselwechsel
+und Schutz gegen alte signierte Releases. Native Deployment-/UAC-Anbieter
+fehlen weiterhin und bleiben ohne Qualifikation gesperrt.
+
+Optionales Inno-Setup-Rezept paketiert ausschließlich die interne N1-Probe
+nach bestandenen N1-Buildgates. Es ist kein signierter Produktinstaller und
+enthält keinen Treiber-/GUI-Start. Kein Windows-Runner ist bereitgestellt;
+deshalb wurde keine zusätzliche CI-Jobdatei angelegt. Konkrete Inno-Version,
+Signierung und VM-Nachweise sind externe Voraussetzungen, keine Installation
+in der Pi-venv.
+
 ## Brücke v2: Identität und Kopplung
 
 Der Pi benötigt zusätzlich Debian `python3-cryptography`;

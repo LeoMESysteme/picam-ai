@@ -9,6 +9,30 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Windows-Vorarbeit ohne unbelegte Produktfreigabe
+
+**Problem:** Linux-Vertragstests können Windows-Paketierung, Treiber-/HVCI-
+Eignung und GSVmulti-Sessionimport nicht nachweisen. Die historischen UCFs
+enthalten zudem keine belegte Skalierungskodierung oder genaue Versionsbindung.
+
+**Entscheidung:** Portable Build-, Geräte-, Installer- und Updateverträge
+sind injizierbar testbar; unqualifizierte native Anbieter verweigern reale
+Änderungen. N3 erkennt nur gepinnte Originalbytes und sperrt den Export.
+Das Inno-Rezept bleibt eine interne Runtime-Probe. Release-Vertrauen nutzt
+einen gesondert provisionierten Ed25519-Schlüssel; Pi-Identitäten verwenden
+davon getrennte RSA-3072-Schlüssel. OQ-65 hält die noch offene Kanal-/
+Versionspolitik fest.
+
+**Alternativen:** Installer-Exitcode, selbst erzeugte Sessiondatei oder
+Fake-Antworten als Abnahme zu behandeln liefert keinen realen Nachweis.
+Ein produktiver Standard-Testschlüssel würde keine vertrauenswürdige
+Herkunft schaffen. Diese Abkürzungen werden nicht verwendet.
+
+**Konsequenz:** Claude erhält geprüfte technische Schnittstellen und
+konkrete externe Gates. UI-Fertigstellung allein hebt sie nicht auf.
+Bestehende Installation, Python-Umgebungen und laufende Werkbank bleiben
+unverändert; keine Produkt-EXE oder Windows-Abnahme behauptet.
+
 ## 2026-11-06 — Windows-Anwendung mit bestehendem Python-Brückenkern
 
 **Problem:** Die manuelle Einrichtung auf einem weiteren Windows-PC benötigt
