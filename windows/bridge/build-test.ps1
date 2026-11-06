@@ -6,7 +6,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Python,
     [string]$Inno,
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot "dist-test")
+    [string]$OutputDirectory = ""
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -35,7 +35,10 @@ $Python = (Resolve-Path -LiteralPath $Python).Path
 Invoke-Checked $Python @("-I", "-c", "import sys,struct; sys.exit(0 if sys.version_info >= (3,13) and struct.calcsize('P') == 8 and sys.platform == 'win32' else 'Python >=3.13 x64 fuer Windows erforderlich.')")
 if ($Inno) { $Inno = (Resolve-Path -LiteralPath $Inno).Path }
 
-$BridgeRoot = $PSScriptRoot
+# $PSScriptRoot ist in Windows PowerShell 5.1 in Parametervorgaben leer;
+# deshalb erst hier auswerten, mit Rueckfall auf den Skriptpfad.
+$BridgeRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $BridgeRoot "dist-test" }
 $RepoRoot = (Resolve-Path (Join-Path $BridgeRoot "../..")).Path
 $Version = ([regex]::Match((Get-Content -LiteralPath (Join-Path $BridgeRoot "pyproject.toml") -Raw), '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value
 if (-not $Version) { throw "Version in pyproject.toml nicht gefunden." }
@@ -105,6 +108,7 @@ Write-Output "Selbsttest der EXE: bestanden (Importtest, kein Fenster)."
 # ZIP
 $Zip = Join-Path $OutputDirectory "$PackageName.zip"
 if (Test-Path -LiteralPath $Zip) { throw "Ausgabe existiert bereits: $Zip" }
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($AppDir, $Zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 $ZipHash = (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant()
