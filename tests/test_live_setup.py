@@ -969,3 +969,75 @@ def test_assist_explains_manual_text_change(monkeypatch, tmp_path, first_status,
     else:
         assert str(exc.value) == "Rasterversatz 2j meldet FEHLER; kein Vorschlag"
     assert observed == [(2, 10), (1, 10), (1, 20)]
+
+
+@pytest.mark.parametrize('fallback', [False, True])
+def test_focus_cancel_between_samples_keeps_applied_controls(monkeypatch, fallback):
+    cam = FakeSetupCamera(np.full((12, 12), 100, np.uint8))
+    stopped = [False]
+    samples = []
+    monkeypatch.setattr(live_setup, 'sharpness', lambda roi: float(roi.mean()))
+
+    def sample(focus, score):
+        samples.append([focus, score])
+        if not fallback or len(samples) == 4:
+            stopped[0] = True
+
+    with pytest.raises(live_setup.SetupCancelled, match='^Einrichtung abgebrochen$'):
+        live_setup.focus_camera(cam, None, settle_s=0, sleep=lambda _: None,
+                                on_sample=sample, should_stop=lambda: stopped[0])
+    assert len(samples) == (4 if fallback else 1)
+    assert cam.controls[-1] == [('focus_absolute', samples[-1][0])]
+
+
+def test_focus_cancel_during_settle_stops_within_one_slice():
+    cam = FakeSetupCamera(np.full((12, 12), 100, np.uint8))
+    sleeps = []
+    with pytest.raises(live_setup.SetupCancelled, match='^Einrichtung abgebrochen$'):
+        live_setup.focus_camera(cam, None, sleep=sleeps.append, should_stop=lambda: bool(sleeps))
+    assert sleeps == [0.5]
+
+
+@pytest.mark.parametrize('cancel_phase', ['mitteln', 'zelltext', 'raster', 'stabilitaet',
+                                         'zweites_standbild', 'gegenlesen', 'wait'])
+def test_assist_cancel_between_phases_and_wait_slices(tmp_path, assist_progress_camera, cancel_phase):
+    stopped = [False]
+    sleeps, phases = [], []
+
+    def phase(name, attempt):
+        phases.append(name)
+        if name == cancel_phase:
+            stopped[0] = True
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        if cancel_phase == 'wait':
+            stopped[0] = True
+
+    with pytest.raises(live_setup.SetupCancelled, match='^Einrichtung abgebrochen$'):
+        live_setup.assist_measure(
+            assist_progress_camera, cell_text=live_setup.offline_text_source('text'),
+            expected_size=(3, 2), out_dir=tmp_path, hint_box=(0, 0, 1, 1),
+            sleep=sleep, on_phase=phase, should_stop=lambda: stopped[0],
+        )
+    if cancel_phase == 'wait':
+        assert sleeps == [0.5]
+        assert phases[-1] == 'stabilitaet'
+    else:
+        assert phases[-1] == cancel_phase
+    assert not (tmp_path / 'proposal.json').exists()
+
+
+@pytest.mark.parametrize('size,hint,expected', [
+    ((1920, 1080), None, [640, 360, 640, 360]),
+    ((1920, 1080), (.421, .471, .296, .077), [808, 509, 569, 83]),
+    ((11, 8), None, [3, 2, 4, 3]),
+])
+def test_focus_roi_pixels_equal_actual_measurement_crop(size, hint, expected):
+    width, height = size
+    # Jedes Pixel traegt seine Position, sodass auch der Ursprung geprueft wird.
+    gray = np.arange(width * height).reshape(height, width)
+    roi = live_setup.measurement_roi_pixels(size, hint)
+    assert roi == expected
+    x, y, w, h = roi
+    np.testing.assert_array_equal(live_setup.measurement_roi(gray, hint), gray[y:y + h, x:x + w])

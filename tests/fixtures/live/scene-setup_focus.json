@@ -7,6 +7,12 @@
     "elapsed_s": 5.0,
     "focus": {
       "method": "climb",
+      "roi": [
+        790,
+        490,
+        610,
+        120
+      ],
       "samples": [
         [
           48,
@@ -101,6 +107,10 @@
     "reserve_bytes": 2000000000,
     "level": "warn",
     "message": "4.20 GB frei"
+  },
+  "system": {
+    "cpu_percent": 37.5,
+    "cpu_window_s": 1.0
   },
   "step": null,
   "simulate": false,

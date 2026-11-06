@@ -6,6 +6,7 @@ const object = (v, p) => {
 const string = (v, p) => { if (typeof v !== 'string') fail(p, 'String'); };
 const boolean = (v, p) => { if (typeof v !== 'boolean') fail(p, 'Boolean'); };
 const number = (v, p) => { if (typeof v !== 'number' || !Number.isFinite(v)) fail(p, 'endliche Zahl'); };
+const percentage = (v, p) => { number(v, p); if (v < 0 || v > 100) fail(p, 'Zahl von 0 bis 100'); };
 const nonnegative = (v, p) => { number(v, p); if (v < 0) fail(p, 'Zahl >= 0'); };
 const integer = (v, p) => { nonnegative(v, p); if (!Number.isInteger(v)) fail(p, 'Ganzzahl >= 0'); };
 const positive = (v, p) => { integer(v, p); if (v === 0) fail(p, 'positive Ganzzahl'); };
@@ -38,6 +39,7 @@ const timestamp = fields({ value_ns: integer, base: string, semantics: string, u
 const focus = fields({
   method: choice('climb', 'sweep'), samples: array(tuple(number, number)),
   verify: nullable(fields({ score: number, threshold: number })),
+  roi: nullable(tuple(integer, integer, positive, positive)),
 });
 const exposure = fields({
   target: number, band: tuple(number, number),
@@ -128,6 +130,7 @@ const root = fields({
                    gaps: integer, source: object, last_start: nullable(object) }),
   storage: fields({ free_bytes: nullable(nonnegative), reserve_bytes: nonnegative,
                     level: choice('ok', 'warn', 'error'), message: string }),
+  system: fields({ cpu_percent: nullable(percentage), cpu_window_s: nonnegative }),
   release_notice: string, session_id: nullable(string), setup: nullable(setup), profile: nullable(object),
   run_block: nullable(string), test_run: nullable(object), reader_tolerance: nullable(object), run: nullable(run),
   diagnostics: fields({ enabled: boolean }), diagnose_kopie: boolean,

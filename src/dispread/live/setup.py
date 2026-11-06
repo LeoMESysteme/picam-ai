@@ -74,6 +74,18 @@ class SetupError(ValueError):
     """Einrichtung abgebrochen; die Meldung ist fuer den Bediener."""
 
 
+class SetupCancelled(SetupError):
+    """Kooperativer Abbruch durch den Bediener."""
+
+    def __init__(self) -> None:
+        super().__init__("Einrichtung abgebrochen")
+
+
+def check_cancelled(should_stop: Callable[[], bool] | None) -> None:
+    if should_stop is not None and should_stop():
+        raise SetupCancelled()
+
+
 class SetupInputError(SetupError):
     """Ungueltige Eingabe statt eines Konflikts mit dem Einrichtungszustand."""
 
@@ -117,10 +129,9 @@ def serial_text_source(port: Any) -> CellTextSource:
     return lambda capture: capture_with_text(capture, port)
 
 
-def measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float] | None) -> np.ndarray:
-    """ROI fuer die Schaerfemessung: `hint_box` (normiert x,y,w,h) oder, ohne
-    Angabe, das mittlere Drittel in beiden Achsen."""
-    height, width = gray.shape[:2]
+def measurement_roi_pixels(size: tuple[int, int], hint_box: HintBox | None) -> list[int]:
+    """Derselbe Messbereich als x,y,w,h in Pixeln des Kamerabildes."""
+    width, height = size
     if hint_box is None:
         x0, x1 = width // 3, 2 * width // 3
         y0, y1 = height // 3, 2 * height // 3
@@ -128,7 +139,14 @@ def measurement_roi(gray: np.ndarray, hint_box: tuple[float, float, float, float
         bx, by, bw, bh = hint_box
         x0, y0 = int(round(bx * width)), int(round(by * height))
         x1, y1 = int(round((bx + bw) * width)), int(round((by + bh) * height))
-    return gray[y0:y1, x0:x1]
+    return [x0, y0, x1 - x0, y1 - y0]
+
+
+def measurement_roi(gray: np.ndarray, hint_box: HintBox | None) -> np.ndarray:
+    """Hinweisbox oder mittleres Drittel fuer die Schaerfemessung."""
+    height, width = gray.shape[:2]
+    x, y, w, h = measurement_roi_pixels((width, height), hint_box)
+    return gray[y:y + h, x:x + w]
 
 
 def hint_glass_level(image: np.ndarray, hint_box: HintBox) -> float | None:
@@ -334,32 +352,49 @@ def focus_camera(
     sleep: Callable[[float], None] | None = None,
     on_sample: Callable[[int, float], None] | None = None,
     on_fallback: Callable[[], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> tuple[CameraSettings, FocusMeasurements]:
     """Grob bergsteigen, fein aufsteigend; jede Messung von unten anfahren.
 
     Nach Endpruefung Automatiken einschwingen lassen und Werte fest uebernehmen.
     Fokus 0 bleibt ausgeschlossen, weil keine Anfahrt von unten moeglich ist.
     `on_sample` meldet Suchproben, nicht die getrennte Endpruefung.
-    `on_fallback` meldet den Wechsel zum Vollsweep.
+    `on_fallback` meldet den Wechsel zum Vollsweep. `should_stop` bricht
+    zwischen Proben und innerhalb von Wartezeiten alle hoechstens 0,5 s ab.
     """
     sleep = sleep or time.sleep
+
+    def wait(seconds: float) -> None:
+        if should_stop is None:
+            sleep(seconds)
+            return
+        check_cancelled(should_stop)
+        while seconds > 0:
+            interval = min(0.5, seconds)
+            sleep(interval)
+            check_cancelled(should_stop)
+            seconds -= interval
+
+    check_cancelled(should_stop)
     last_focus = None
 
     def measure(focus: int) -> float:
         nonlocal last_focus
+        check_cancelled(should_stop)
         if focus <= 0:
             raise SetupError("Fokus 0 ist nicht von unten erreichbar - Einrichtung neu starten")
         # Auch die erste (unbekannte) Lage und ein erneutes Setzen derselben
         # Lage normalisieren. So fahren Endpruefung und Retry sicher von unten an.
         if last_focus is None or focus <= last_focus:
             cam.set_controls([("focus_absolute", max(0, focus - FOCUS_BACKLASH_MARGIN))])
-            sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
+            wait(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
         cam.set_controls([("focus_absolute", focus)])
         last_focus = focus
         deadline = time.monotonic() + FOCUS_STABILITY_TIMEOUT_S
-        sleep(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
+        wait(min(settle_s, FOCUS_STABILITY_TIMEOUT_S))
         previous = None
         while True:
+            check_cancelled(should_stop)
             try:
                 frame = cam.fresh_still(discard=3)
             except UvcError as exc:
@@ -372,7 +407,7 @@ def focus_camera(
             if remaining <= 0:
                 return score
             previous = score
-            sleep(min(FOCUS_SAMPLE_INTERVAL_S, remaining))
+            wait(min(FOCUS_SAMPLE_INTERVAL_S, remaining))
 
     cam.set_controls([("focus_automatic_continuous", 0)])
     if info is not None:
@@ -387,6 +422,7 @@ def focus_camera(
     best_focus, sweep_log = climb_focus(
         measure, start=start_focus, lo=1, on_fallback=fallback, on_sample=on_sample,
     )
+    check_cancelled(should_stop)
     best_measured = max(score for _, score in sweep_log)
     verified = measure(best_focus)
     attempts = 1
@@ -404,7 +440,7 @@ def focus_camera(
     if info is not None:
         info(f"Fokus geprueft: Schaerfe {verified:.1f} von {best_measured:.1f}")
     cam.set_controls([("auto_exposure", 3), ("white_balance_automatic", 1)])
-    sleep(WHITE_BALANCE_SETTLE_S)
+    wait(WHITE_BALANCE_SETTLE_S)
     readback = cam.get_controls(["exposure_time_absolute", "white_balance_temperature", "gain"])
     settings = CameraSettings(
         model=STREAMCAM_MODEL,
@@ -460,6 +496,7 @@ def assist_measure(
     info: Callable[[str], None] = lambda _message: None,
     sleep: Callable[[float], None] | None = None,
     monotonic: Callable[[], float] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> AssistResult:
     """Zwei Standbilder mit Zellentext, Punktraster, 2j und Setup-Pruefungen.
 
@@ -489,7 +526,7 @@ def assist_measure(
             image = mean_still(cam, stack_frames,
                                captured_frames=stability_frames if still == "stability" else None)
             if still == "still":
-                on_phase("zelltext", attempt)
+                phase("zelltext", attempt)
             return image
 
         try:
@@ -499,9 +536,14 @@ def assist_measure(
                 on_attempt({"attempt": attempt, "still": still, "masked": None, "error": str(exc)})
             raise
 
+    def phase(name: str, attempt: int) -> None:
+        check_cancelled(should_stop)
+        on_phase(name, attempt)
+        check_cancelled(should_stop)
+
     explicit_hint_box = hint_box
     for attempt in range(1, fit_attempts + 1):
-        on_phase("mitteln", attempt)
+        phase("mitteln", attempt)
         if stack_frames != 1 or fit_attempts != 1:
             info(f"Punktraster-Startsuche: Versuch {attempt}/{fit_attempts} ({stack_frames} Bilder)")
         first, first_text = capture_text(attempt, "still")
@@ -513,7 +555,7 @@ def assist_measure(
         out_dir.mkdir(parents=True, exist_ok=True)
         if not cv2.imwrite(str(out_dir / "still.png"), first):
             raise SetupError("still.png konnte nicht geschrieben werden")
-        on_phase("raster", attempt)
+        phase("raster", attempt)
         hint_box = explicit_hint_box if explicit_hint_box is not None else find_green_hint_box(first)
         if hint_box is None:
             if attempt < fit_attempts:
@@ -540,14 +582,16 @@ def assist_measure(
     if precheck_failures:
         raise SetupError(f"Vorpruefung meldet FEHLER: {', '.join(precheck_failures)}; "
                          "Stabilitaetsmessung nicht gestartet")
-    on_phase("stabilitaet", attempt)
+    phase("stabilitaet", attempt)
     waited = 0.0
     while waited < stability_s:
         interval = min(0.5, stability_s - waited)
+        check_cancelled(should_stop)
         sleep(interval)
+        check_cancelled(should_stop)
         waited += interval
         on_wait(waited, stability_s)
-    on_phase("zweites_standbild", attempt)
+    phase("zweites_standbild", attempt)
     second, second_text = capture_text(attempt, "stability")
     stability_elapsed_s = monotonic() - first_captured_at
     if on_attempt is not None:
@@ -561,7 +605,7 @@ def assist_measure(
         raise SetupError("Zweites Standbild hat eine andere Bildgroesse")
     if not cv2.imwrite(str(out_dir / "stability.png"), second):
         raise SetupError("stability.png konnte nicht geschrieben werden")
-    on_phase("gegenlesen", attempt)
+    phase("gegenlesen", attempt)
     frame_texts = [(first, first_text), (second, second_text)]
     original_quad = fit.quad
     try:

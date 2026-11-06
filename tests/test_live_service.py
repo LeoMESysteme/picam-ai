@@ -213,7 +213,7 @@ def test_status_exposes_focus_samples_while_focusing(tmp_path, monkeypatch, star
         service.start_setup()
         assert restart_blocked.wait(2)
         setup = service.status()["setup"]
-        assert setup["focus"] == {"method": "climb", "samples": [], "verify": None}
+        assert setup["focus"] == {"method": "climb", "samples": [], "verify": None, "roi": None}
         assert setup["exposure"] == {"target": 130, "band": [115, 150], "rounds": []}
     finally:
         continue_focus.set()
@@ -704,7 +704,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     assert setup == {
         "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": setup["elapsed_s"],
-        "focus": {"method": "climb", "samples": [], "verify": None},
+        "focus": {"method": "climb", "samples": [], "verify": None, "roi": None},
         "exposure": {"target": 130, "band": [115, 150], "rounds": []},
     }
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
@@ -948,7 +948,7 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         events.append("serial_opened")
         return port
 
-    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback):
+    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback, should_stop):
         assert info == service._setup_progress
         assert hint is None
         assert start_focus == 48
@@ -1336,7 +1336,7 @@ def test_setup_reuses_only_last_confirmed_focus_across_failed_retries(tmp_path, 
     service = ready_service(tmp_path, proposal)
     starts = []
 
-    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback):
+    def focus(cam, hint, *, start_focus, info, on_sample, on_fallback, should_stop):
         assert info == service._setup_progress
         starts.append(start_focus)
         measured = FocusMeasurements("sweep")
@@ -2888,3 +2888,199 @@ def test_reference_eval_cleared_and_late_result_ignored(tmp_path, monkeypatch, n
     finally:
         proceed.set()
         service.close()
+
+
+@pytest.mark.parametrize('checkpoint', ['step', 'phase', 'wait', 'return'])
+def test_cancel_setup_is_nonblocking_marks_failure_and_allows_restart(tmp_path, checkpoint):
+    entered, proceed = threading.Event(), threading.Event()
+
+    def runner(*, report, **kwargs):
+        report('standbilder')
+        entered.set()
+        assert proceed.wait(2)
+        if checkpoint == 'step':
+            report('vorschlag')
+        elif checkpoint == 'phase':
+            service._report_setup_phase('raster', 1)
+        elif checkpoint == 'wait':
+            service._report_setup_wait(0.5, 15.0)
+        return {}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    try:
+        assert entered.wait(1)
+        # Auch eine andere laufende Operation darf den Abbruch nicht blockieren.
+        with service._operation_lock:
+            started = time.monotonic()
+            service.cancel_setup()
+            assert time.monotonic() - started <= 0.05
+        assert service.status()['state'] == 'setup_running'
+        proceed.set()
+        service._setup_thread.join(0.5)
+        status = service.status()
+        assert status['state'] == 'setup_failed'
+        assert status['error'] == 'Einrichtung abgebrochen'
+        assert status['setup']['progress']['steps'][3]['state'] == 'failed'
+        assert status['setup']['progress']['steps'][4]['state'] == 'pending'
+        assert service._proposal is None
+        service._setup_runner = lambda **kwargs: {}
+        service.start_setup()
+        service._setup_thread.join(1)
+        assert service.status()['state'] == 'setup_ready'
+    finally:
+        proceed.set()
+        service._setup_thread.join(2)
+
+
+@pytest.mark.parametrize('state', ['idle', 'setup_failed', 'setup_ready', 'confirmed', 'running', 'stopped', 'error'])
+def test_cancel_setup_rejects_other_states(tmp_path, state):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state = state
+    with pytest.raises(LiveError, match='Keine Einrichtung laeuft'):
+        service.cancel_setup()
+
+
+def test_focus_roi_visible_at_start_copied_retained_and_reset(tmp_path):
+    entered, proceed = threading.Event(), threading.Event()
+
+    def runner(*, report, **kwargs):
+        report('fokus')
+        entered.set()
+        assert proceed.wait(2)
+        report('kamera')
+        return {}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    try:
+        assert entered.wait(1)
+        focus = service.status()['setup']['focus']
+        assert focus['roi'] == [640, 360, 640, 360]
+        focus['roi'][0] = -1
+        proceed.set()
+        service._setup_thread.join(1)
+        assert service.status()['setup']['focus']['roi'] == [640, 360, 640, 360]
+        entered.clear()
+        proceed.clear()
+
+        def restarted(**kwargs):
+            entered.set()
+            assert proceed.wait(2)
+            return {}
+
+        service._setup_runner = restarted
+        service.start_setup()
+        assert entered.wait(1)
+        assert service.status()['setup']['focus']['roi'] is None
+    finally:
+        proceed.set()
+        service._setup_thread.join(2)
+
+
+@pytest.mark.parametrize('snapshots,expected', [
+    (['cpu 100 0 100 800 0 0 0 0 20 0\ncpu0 10 0 10 80 0 0 0 0',
+      'cpu 125 0 125 950 0 0 0 0 25 0\ncpu0 10 0 10 80 0 0 0 0'], 25.0),
+    (['cpu 100 0 100 800 0 0 0 0', 'cpu 110 0 110 850 30 0 0 0'], 20.0),
+])
+def test_system_cpu_from_proc_deltas_and_cached_below_half_second(tmp_path, snapshots, expected):
+    now = [100.0]
+    readings = iter(snapshots)
+    service = LiveService(FakeOwner(), tmp_path, monotonic=lambda: now[0],
+                          cpu_reader=lambda: next(readings))
+    assert service.status()['system'] == {'cpu_percent': None, 'cpu_window_s': 0.0}
+    now[0] += .49
+    assert service.status()['system'] == {'cpu_percent': None, 'cpu_window_s': 0.0}
+    now[0] += .51
+    system = service.status()['system']
+    assert system == {'cpu_percent': expected, 'cpu_window_s': 1.0}
+    system['cpu_percent'] = -1
+    assert service.status()['system']['cpu_percent'] == expected
+
+
+@pytest.mark.parametrize('bad', [None, '', 'cpu x 1 2 3', 'cpu0 1 2 3 4', 'cpu 1 2 3',
+                               'cpu -1 0 0 0', 'cpu 1 0 1 1'])
+def test_system_cpu_unreadable_or_reset_needs_two_new_samples(tmp_path, bad):
+    now = [0.0]
+    readings = iter(['cpu 100 0 100 800', bad, 'cpu 200 0 200 1600', 'cpu 225 0 225 1750'])
+
+    def read():
+        value = next(readings)
+        if value is None:
+            raise OSError('kein procfs')
+        return value
+
+    service = LiveService(FakeOwner(), tmp_path, monotonic=lambda: now[0], cpu_reader=read)
+    assert service.status()['system']['cpu_percent'] is None
+    now[0] += 1
+    assert service.status()['system'] == {'cpu_percent': None, 'cpu_window_s': 0.0}
+    now[0] += 1
+    system = service.status()['system']
+    # Ein Zaehlerreset liefert bereits den ersten neuen, gueltigen Ausgangspunkt.
+    if bad == 'cpu 1 0 1 1':
+        assert system['cpu_percent'] is not None
+    else:
+        assert system['cpu_percent'] is None
+    now[0] += 1
+    assert service.status()['system'] == {'cpu_percent': 25.0, 'cpu_window_s': 1.0}
+
+
+@pytest.mark.parametrize('checkpoint', ['focus', 'stability_wait'])
+def test_cancel_real_setup_worker_within_one_slice(tmp_path, monkeypatch, checkpoint):
+    from types import SimpleNamespace
+
+    import numpy as np
+    from test_live_setup import FakeSetupCamera
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+    from dispread.setup_checks import SetupChecks
+
+    entered, proceed = threading.Event(), threading.Event()
+    cam = FakeSetupCamera(np.full((12, 12), 100, np.uint8))
+    monkeypatch.setattr('dispread.live.service.OwnerSetupCamera', lambda owner: cam)
+    sleeps = []
+
+    def blocked_slice(seconds):
+        sleeps.append(seconds)
+        entered.set()
+        assert proceed.wait(2)
+
+    if checkpoint == 'focus':
+        focus = live_setup.focus_camera
+        monkeypatch.setattr(live_setup, 'focus_camera', lambda *args, **kwargs:
+                            focus(*args, **kwargs, sleep=blocked_slice))
+    else:
+        cam.image = np.full((2, 3, 3), 100, np.uint8)
+        settings = CameraSettings('logitech_streamcam', '046d:0893', (3, 2), 'YUYV', 30,
+                                  {'focus_absolute': 48, 'exposure_time_absolute': 300,
+                                   'white_balance_temperature': 4600, 'gain': 0})
+        monkeypatch.setattr(live_setup, 'focus_camera', lambda *a, **kw: (settings, FocusMeasurements()))
+        monkeypatch.setattr(live_setup, 'adjust_exposure', lambda cam, settings, **kw: (settings, {}))
+        monkeypatch.setattr(live_setup, 'find_green_hint_box', lambda image: (0, 0, 1, 1))
+        monkeypatch.setattr(live_setup, 'fit_lattice', lambda *a, **kw: SimpleNamespace())
+        monkeypatch.setattr(live_setup, 'check_setup', lambda *a: SetupChecks('OK', {}))
+        assist = live_setup.assist_measure
+        monkeypatch.setattr(live_setup, 'assist_measure', lambda *args, **kwargs:
+                            assist(*args, **kwargs, sleep=blocked_slice))
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service.start_setup(cell_text='+ 1.2345 ')
+    try:
+        assert entered.wait(1), service.status()
+        service.cancel_setup()
+        proceed.set()
+        service._setup_thread.join(.5)
+        status = service.status()
+        assert status['state'] == 'setup_failed'
+        assert status['error'] == 'Einrichtung abgebrochen'
+        assert sleeps == [.5]
+        step = 'fokus' if checkpoint == 'focus' else 'standbilder'
+        assert next(s for s in status['setup']['progress']['steps'] if s['key'] == step)['state'] == 'failed'
+        if checkpoint == 'focus':
+            assert cam.controls[-1] == [('focus_absolute', 36)]
+        else:
+            assert not (service._session_dir / 'setup' / 'stability.png').exists()
+    finally:
+        proceed.set()
+        service._setup_thread.join(2)

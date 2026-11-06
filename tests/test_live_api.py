@@ -21,6 +21,9 @@ class FakeService:
     def start_setup(self, *, cell_text=None):
         self.calls.append(("setup", cell_text))
 
+    def cancel_setup(self):
+        raise LiveError("Keine Einrichtung laeuft")
+
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
@@ -715,11 +718,11 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         response = await handle("GET", "/live/status", headers)
         csrf = json.loads(response.text)["csrf"]
         assert response.headers["Cache-Control"] == "no-store"
-        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions', '/live/setup/cancel'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["Origin"] = "https://localhost"
-        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions', '/live/setup/cancel'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["X-CSRF-Token"] = csrf
@@ -728,6 +731,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         assert (await handle('POST', '/live/run/mark', headers, {'text': 'Abdeckung'})).status == 200
         assert service.calls[-1] == ('mark', 'Abdeckung')
         assert (await handle("POST", "/live/run/stop", headers)).status == 409
+        assert (await handle("POST", "/live/setup/cancel", headers)).status == 409
 
     asyncio.run(check())
 
@@ -1656,3 +1660,77 @@ def test_unified_output_route_forwards_unchanged_without_socket(monkeypatch, con
         assert service.output == config
 
     asyncio.run(check())
+
+
+def test_setup_cancel_route_returns_conflict_and_success_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from aiohttp.test_utils import make_mocked_request
+    from test_live_service import FakeOwner
+
+    from dispread.live.service import LiveService
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    service = LiveService(FakeOwner(), tmp_path)
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _: 'tok')
+
+    async def check():
+        request = make_mocked_request('POST', '/live/setup/cancel', app=app)
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 409
+        assert json.loads(response.text) == {'error': 'Keine Einrichtung laeuft'}
+        service._state = 'setup_running'
+        response = await match.handler(request)
+        assert response.status == 200
+        assert json.loads(response.text) == {'ok': True}
+        assert service._setup_cancel.is_set()
+
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('scene', SCENE_NAMES)
+def test_fake_setup_cancel(tmp_path, scene):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene(scene)
+    if scene in ('setup_focus', 'setup_focus_done', 'setup_standbilder'):
+        service.cancel_setup()
+        status = service.status()
+        assert status['state'] == 'setup_failed'
+        assert status['error'] == 'Einrichtung abgebrochen'
+        assert any(step['state'] == 'failed' for step in status['setup']['progress']['steps'])
+        service.start_setup()
+        assert service.status()['state'] == 'setup_running'
+    else:
+        with pytest.raises(LiveError, match='Keine Einrichtung laeuft'):
+            service.cancel_setup()
+
+
+def test_fake_focus_roi_in_source_coordinates(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for scene in ('setup_focus', 'setup_focus_done'):
+        service.set_scene(scene)
+        roi = service.status()['setup']['focus']['roi']
+        assert roi == [790, 490, 610, 120]
+        roi[0] = -1
+        assert service.status()['setup']['focus']['roi'][0] == 790
+
+
+def test_fake_system_cpu_is_available_in_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for scene in SCENE_NAMES:
+        service.set_scene(scene)
+        system = service.status()['system']
+        assert system == {'cpu_percent': 37.5, 'cpu_window_s': 1.0}
+        system['cpu_percent'] = -1
+        assert service.status()['system']['cpu_percent'] == 37.5

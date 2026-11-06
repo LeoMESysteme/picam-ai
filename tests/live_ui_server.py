@@ -84,8 +84,8 @@ def scene_state(name):
     setup = {
         "grid": None,
         "step": step, "elapsed_s": 5.0 if focus else 36.4,
-        "focus": {"method": "climb", "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus"
-                                                               else FOCUS_SAMPLES),
+        "focus": {"method": "climb", "roi": [790, 490, 610, 120],
+                  "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus" else FOCUS_SAMPLES),
                   "verify": None if name == "setup_focus" else {
                       "score": 624.465370104453, "threshold": 0.85 * FOCUS_SAMPLES[0][1]}},
         "exposure": {"target": 130, "band": [115, 150], "rounds": [] if focus else [
@@ -225,6 +225,7 @@ class FakeLiveService:
                            "source": copy.deepcopy(CAMERA_SOURCE), "last_start": None}, "diagnostic_leftovers": [],
                 "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn",
                             "message": "4.20 GB frei"},
+                "system": {"cpu_percent": 37.5, "cpu_window_s": 1.0},
                 "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
                 "diagnose_kopie": False, "last_mark": None,
@@ -275,6 +276,17 @@ class FakeLiveService:
 
     def start_setup(self, *, cell_text=None):
         self.set_scene("setup_focus")
+
+    def cancel_setup(self):
+        from dispread.live.service import LiveError
+
+        with self._lock:
+            if self._status['state'] != 'setup_running':
+                raise LiveError('Keine Einrichtung laeuft')
+            self._status.update(state='setup_failed', error='Einrichtung abgebrochen')
+            for step in self._status['setup']['progress']['steps']:
+                if step['state'] == 'running':
+                    step['state'] = 'failed'
 
     def edit_regions(self, *, proposal_revision, add, remove):
         from dispread.live.service import LiveError, LiveInputError

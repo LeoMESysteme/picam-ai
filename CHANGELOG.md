@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Die Live-Einrichtung lässt sich über `/live/setup/cancel`
+  kooperativ abbrechen. Fokusproben, Unterphasen und Warteintervalle prüfen
+  den Abbruch; der laufende Schritt endet mit „Einrichtung abgebrochen“,
+  angewandte Kameraregler bleiben wie bei anderen Fehlern stehen. Der
+  Status ergänzt die tatsächliche Fokusregion in Kamerapixeln und die
+  Gesamt-CPU-Auslastung aus `/proc/stat`-Differenzen; bis zur zweiten Probe
+  oder bei Lesefehlern bleibt CPU unbekannt. Fake, Fixtures und
+  Statusvertragsprüfungen bilden die Ergänzungen ab.
+
 * 2026-11-06: Der Test zur verweigerten UART-Direktausgabe ohne ausdrückliche
   Bestätigung vergleicht Laufzustand, Ausgabe und Sitzungsidentität gezielt.
   Veränderliche Statuswerte und freier Plattenplatz lösen unter paralleler

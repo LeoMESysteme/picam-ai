@@ -209,3 +209,32 @@ test('output requires a known transport and complete enabled status', () => {
   status.output = { transport: 'off', state: 'off' };
   assert.doesNotThrow(() => assertStatusShape(status));
 });
+
+test('system CPU requires finite percentages in range and a nonnegative window', () => {
+  const status = load('idle');
+  for (const system of [{ cpu_percent: null, cpu_window_s: 0 },
+    { cpu_percent: 25.0, cpu_window_s: .5 }, { cpu_percent: 100, cpu_window_s: 1 }]) {
+    status.system = system;
+    assert.doesNotThrow(() => assertStatusShape(status));
+  }
+  for (const system of [undefined, null, {}, { cpu_percent: 25 }, { cpu_window_s: 1 },
+    { cpu_percent: -1, cpu_window_s: 1 }, { cpu_percent: 101, cpu_window_s: 1 },
+    { cpu_percent: NaN, cpu_window_s: 1 }, { cpu_percent: '25', cpu_window_s: 1 },
+    { cpu_percent: 25, cpu_window_s: -1 }, { cpu_percent: 25, cpu_window_s: '1' }]) {
+    status.system = system;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+});
+
+test('focus ROI requires null or four integer camera pixel coordinates', () => {
+  const status = load('setup_focus');
+  for (const roi of [null, [640, 360, 640, 360]]) {
+    status.setup.focus.roi = roi;
+    assert.doesNotThrow(() => assertStatusShape(status));
+  }
+  for (const roi of [undefined, {}, [1, 2, 3], [1, 2, 3, 4, 5], ['1', 2, 3, 4],
+    [-1, 2, 3, 4], [1.5, 2, 3, 4], [1, 2, 0, 4], [1, 2, 3, NaN]]) {
+    status.setup.focus.roi = roi;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+});

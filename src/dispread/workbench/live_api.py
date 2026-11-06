@@ -35,6 +35,9 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_setup, cell_text=data.get("cell_text"))
 
+    async def setup_cancel(_request):
+        return await _call(service.cancel_setup)
+
     async def regions(request):
         try:
             data = await request.json()
@@ -143,6 +146,7 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_get("/live", page)
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
+    app.router.add_post("/live/setup/cancel", setup_cancel)
     app.router.add_post("/live/setup/regions", regions)
     app.router.add_post("/live/confirm", confirm)
     app.router.add_post("/live/run/start", run_start)
