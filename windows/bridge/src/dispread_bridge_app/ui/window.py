@@ -246,8 +246,8 @@ class MainWindow(QWidget):
     def _show_details(self) -> None:
         c = self.controller.context()
         v = texts.ChipView('details', 'Details', '', 'info', details=(
-            ('App', c.version), ('Brückenseite', c.bridge_port), ('Gegenport', c.gsv_port),
-            ('Pi-ID', c.pi_id or '–'), ('Protokoll', c.protocol), ('Journal', texts.JOURNAL_DETAILS)))
+            ('App', c.version or '–'), ('Brückenseite', c.bridge_port or '–'), ('Gegenport', c.gsv_port or '–'),
+            ('Pi-ID', c.pi_id or '–'), ('Protokoll', c.protocol or '–'), ('Journal', texts.JOURNAL_DETAILS)))
         self._flyout_show(v, self.status_view.details_button)
 
     # ---------------------------------------------------------------- Beenden

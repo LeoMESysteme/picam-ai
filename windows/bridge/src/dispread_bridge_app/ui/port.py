@@ -59,17 +59,17 @@ class UiContext:
     waiting_for_run: bool = False
     retry_in_s: int | None = None
     com_issue: str | None = None            # busy | write_failed | unclear (nur Demo)
-    bridge_port: str = 'COM4'
-    gsv_port: str = 'COM5'
+    bridge_port: str | None = None      # echter Wert vom Portpaar; None = nicht festgelegt
+    gsv_port: str | None = None
     session_name: str | None = None
     session_confirmed: bool = False
     receipt: Receipt | None = None
     switch_locked: bool = False
-    version: str = '0.1.0.dev0'
+    version: str | None = None          # App-Version; None = unbekannt
     pi_id: str = ''
     endpoint: str = ''
     fingerprint: str = ''
-    protocol: str = 'Version 2'
+    protocol: str | None = None
     paired: tuple[tuple[str, str, str], ...] = ()   # (Name, Pi-ID, zuletzt)
     journal: tuple[JournalEntry, ...] = ()
     last_report: str = ''

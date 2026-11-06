@@ -28,7 +28,8 @@ _HEUTE = (
 _OK = Readiness('ready', 'not_required', 'authenticated', 'demo_only', 'driver_ready', 'unconfirmed', None)
 _IDLE = WorkerStatus('idle', False, False, None)
 _RUN = WorkerStatus('running', True, True, None)
-_BASE = UiContext(pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
+_BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', protocol='Version 2',
+                  pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
                   endpoint='wss://192.168.10.24 (LAN, Beispiel)', fingerprint=_FP,
                   last_report='Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben',
                   session_name='GSVmulti_Prüfstand2_COM5.ucf', session_confirmed=True, journal=_HEUTE,
@@ -36,12 +37,16 @@ _BASE = UiContext(pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi
                           ('Prüfstand 3 – Halle A', 'pi-d21a77e6', 'zuletzt gestern')))
 
 
+_DATA = dict(peer_fingerprint='a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 55e0 1b6c 9a46 3f02',
+             test_sha256='9f2c 41ab 07d3 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 0e5b c3f8 9a46 71de')
+
+
 def _setup(variant, step, **kw):
     pre = dict(pi_name=None, route=None) if variant in ('E1', 'E1uac', 'E1restart', 'E1ok', 'E2') else {}
     if variant in ('E3uart', 'E3uart2', 'E3fail'):
         pre = dict(route='UART (USB-Adapter)')
     return (replace(_OK, peer='disconnected', output='unavailable', com='unknown'), None,
-            replace(_BASE, mode='setup', setup=SetupState(step, variant), **pre, **kw))
+            replace(_BASE, mode='setup', setup=SetupState(step, variant, dict(_DATA)), **pre, **kw))
 
 
 STATES: dict[str, tuple] = {

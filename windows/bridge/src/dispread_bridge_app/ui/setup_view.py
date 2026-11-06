@@ -156,10 +156,11 @@ class SetupView(QWidget):
         self.header.headline.setVisible(False)
         self.header.head_icon.setVisible(False)
         st = ctx.setup
-        spec = texts.SETUP[st.variant]
-        if st.variant == self.variant:
+        key = (st.variant, repr(ctx))
+        if key == self.variant:
             return
-        self.variant = st.variant
+        spec = texts.setup_spec(ctx)
+        self.variant = key
         self.step_header.set_step(spec['step'])
         self.lead.setText(spec['lead'])
         self._build(spec)

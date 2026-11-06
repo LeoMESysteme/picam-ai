@@ -10,7 +10,8 @@ was ist die Konsequenz.
   `main.py` (Einzelinstanz, Tray, `--demo-ui` mit FakeController). Die Oberfläche hängt nur am
   `ControllerPort`; der echte AppController fehlt noch. Wahrheitsregeln in `texts.py` mit Tests
   (`tests/test_ui_*.py`, 34 Tests). **Nur offscreen unter Linux geprüft: keine Windows-Abnahme, keine EXE,
-  keine echten Zustände; die DUT-Ausgabe bleibt gesperrt.**
+  keine echten Zustände; die DUT-Ausgabe bleibt gesperrt.** `UiContext` erfindet keine realen Werte mehr
+  (Ports, Version, Protokoll leer = „–“); Übergabe an Codex: `docs/superpowers/handoffs/2026-11-06-windows-bruecke-ui-an-codex.md`.
 * 2026-11-06: Gestaltungsmock der Windows-App „GSVmulti-Brücke“ ergänzt
   (`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`, mit Qt-Umsetzungsnotiz
   und Texttabelle) sowie `windows/bridge/PRODUCT.md` und `windows/bridge/DESIGN.md`

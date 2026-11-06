@@ -110,3 +110,24 @@ def test_setup_variants_cover_mock_states():
     for k in ('E1', 'E1uac', 'E1restart', 'E1ok', 'E2', 'E2b', 'E2exp', 'E2bad', 'E2ok', 'E3', 'E3uart', 'E3uart2',
               'E3ok', 'E3fail', 'E4', 'E4ok', 'E4unk', 'E5', 'E5run', 'E5file', 'E5ok', 'E5bad'):
         assert k in texts.SETUP and k in STATES
+
+
+def test_context_has_no_invented_real_values():
+    c = UiContext()
+    assert c.bridge_port is None and c.gsv_port is None and c.protocol is None and c.version is None
+    r = Readiness('ready', 'not_required', 'authenticated', 'demo_only', 'driver_ready', 'unconfirmed', None)
+    cv = {x.key: x for x in texts.chips(r, None, c)}
+    flat = repr(cv)
+    assert 'COM4' not in flat and 'COM5' not in flat and 'Version 2' not in flat
+    assert ('Brückenseite', 'nicht festgelegt') in cv['forward'].details
+    busy = replace(c, demo=True, com_issue='busy')
+    assert 'COM' not in texts.headline(r, None, busy).text
+    assert 'COM' not in texts.action_bar(r, None, busy).title
+
+
+def test_setup_spec_fills_ports_from_context_not_examples():
+    from dispread_bridge_app.ui.port import SetupState
+    spec = texts.setup_spec(UiContext(setup=SetupState(4, 'E4')))
+    assert 'COM4' not in repr(spec) and '{' not in repr(spec)
+    spec = texts.setup_spec(UiContext(bridge_port='COM9', gsv_port='COM8', setup=SetupState(4, 'E4')))
+    assert 'COM9' in repr(spec) and 'COM8' in repr(spec)
