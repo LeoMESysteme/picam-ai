@@ -763,7 +763,7 @@ class LiveSession:
         }
         data = dict(self._meta)
         if self._output_transport == 'serial':
-            data['output'] = self.output_status()
+            data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
         elif self._output is not None:
             data['output'] = {**self._output.metadata(), 'status': self.unified_output_status()}
         data["reference"] = self.reference_status()

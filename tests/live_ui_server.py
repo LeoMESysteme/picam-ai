@@ -416,13 +416,15 @@ class FakeLiveService:
     def preview_jpeg(self):
         return self.preview_frame().jpeg
 
-    def preview_frame(self):
+    def preview_frame(self, *, after_seq=None):
         with self._lock:
             now = time.monotonic()
             if now >= self._frame_due and self._scene != "running_stalled":
                 self._sequence += 1
                 self._frame_due = now + 1 / 15
             seq = self._sequence
+            if after_seq is not None and seq <= after_seq:
+                return None
             cap_ns = 1_730_000_000_000 + (seq - 51234) * 66_666_667
             run = self._status.get("run") if self._status["state"] == "running" else None
             rec = track = cells = proc = None

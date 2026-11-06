@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W3: Serielle Läufe
+  protokollieren die fehlende Abnahme und deren bewusste Bestätigung in
+  `session.json`. Bei fehlgeschlagener oder abgebrochener Einrichtung
+  werden Phase und Wartezeit geleert; der betroffene Schritt bleibt
+  fehlgeschlagen. Vorschauabrufe übergeben die zuletzt gesendete Sequenz
+  und bauen für unveränderte Bilder kein weiteres HUD auf. Nicht endliche
+  HUD-Zahlen werden als `null` statt ungültigem JSON übertragen.
+  Konsequenz: vollständigerer Auditpfad, abgeschlossener Fortschritt und
+  weniger Kopierarbeit beim Warten auf das nächste Vorschaubild;
+  Bildratentakt, Schreibzeitgrenze und Messfreigabe bleiben unverändert.
+
 * 2026-11-06: Werkbank `/live`, letzte UI-Korrekturen (W2). Die Bestätigung
   für UART direkt lässt sich nicht mehr umgehen: `start()` bricht ohne Haken mit
   Hinweis ab (Enter im Plan-Feld, `runStart`), `acknowledge_unaccepted` wird nur

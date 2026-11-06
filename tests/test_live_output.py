@@ -54,6 +54,21 @@ def make_session(tmp_path, monkeypatch, factory, **kwargs):
     return session
 
 
+def test_serial_session_records_missing_acceptance_and_acknowledgement(tmp_path, monkeypatch):
+    session = make_session(tmp_path, monkeypatch, FakeSerial)
+    session.start()
+    try:
+        output = json.loads(session.session_path.read_text())['output']
+        assert output['acceptance'] == 'fehlt'
+        assert output['acknowledged_unaccepted'] is True
+        assert output['capabilities']['provisional'] is True
+    finally:
+        session.stop()
+    output = json.loads(session.session_path.read_text())['output']
+    assert output['acceptance'] == 'fehlt'
+    assert output['acknowledged_unaccepted'] is True
+
+
 def test_busy_output_drops_without_blocking_read_or_catchup(tmp_path, monkeypatch):
     entered, release = threading.Event(), threading.Event()
     ports = []

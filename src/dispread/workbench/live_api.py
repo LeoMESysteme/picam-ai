@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -13,6 +14,17 @@ from aiohttp import web
 from dispread.live.service import LiveError, LiveInputError
 
 STATIC = Path(__file__).parent / "static"
+
+
+def _finite_json(value: object) -> object:
+    """Nicht-endliche HUD-Zahlen als unbekannt an den Client geben."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _finite_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_json(item) for item in value]
+    return value
 
 
 def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Request], str]) -> None:
@@ -118,11 +130,12 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
                 if now < next_due:
                     await asyncio.sleep(min(next_due - now, 0.01))
                     continue
-                frame = await asyncio.to_thread(service.preview_frame)
+                frame = await asyncio.to_thread(service.preview_frame, after_seq=previous)
                 if frame is not None:
                     interval = 1 / frame.hud["preview"]["fps"]
                     if frame.seq != previous:
-                        hud = json.dumps(frame.hud, ensure_ascii=True, separators=(",", ":"))
+                        hud = json.dumps(_finite_json(frame.hud), ensure_ascii=True,
+                                         separators=(",", ":"), allow_nan=False)
                         header = (
                             "--frame\r\nContent-Type: image/jpeg\r\n"
                             f"Content-Length: {len(frame.jpeg)}\r\n"

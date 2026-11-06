@@ -202,6 +202,36 @@ def test_preview_mjpg_headers_and_encoding_thread_without_socket(tmp_path, monke
     assert threads and all(t != threading.get_ident() for t in threads)
 
 
+@pytest.mark.parametrize('nonfinite', [float('nan'), float('inf'), float('-inf')])
+def test_preview_mjpg_hud_maps_nonfinite_numbers_to_null(tmp_path, monkeypatch, nonfinite):
+    import json
+
+    from test_live_preview import frame_info
+
+    responses = _capture_preview(monkeypatch)
+    service = _preview_service(tmp_path)
+    info = frame_info()
+    info['track']['score'] = nonfinite
+    info['track']['regions'][0]['peak'] = nonfinite
+    info['track']['quad'] = ((nonfinite, 20), (180, 20), (180, 80), (20, 80))
+    info['cells'][0]['margin'] = nonfinite
+    service._session.frame_info = lambda: info
+    _run_preview(_preview_handler(service))
+    header = responses[0].parts[0][1].split(b'X-Hud: ')[1].split(b'\r\n')[0]
+
+    def reject_constant(value):
+        raise ValueError(f'Ungueltige JSON-Zahl: {value}')
+
+    hud = json.loads(header, parse_constant=reject_constant)
+    assert hud['track']['score'] is None
+    assert hud['track']['regions'][0]['peak'] is None
+    assert hud['track']['quad'][0] == [None, 20]
+    assert hud['cells'][0]['margin'] is None
+    assert hud['cells'][1]['margin'] == 0.41
+    assert hud['track']['regions'][0]['ok'] is True
+    assert hud['rec'] == info['rec']
+
+
 def test_two_streams_share_encoding(tmp_path, monkeypatch):
     import itertools
     import time
@@ -338,8 +368,8 @@ def test_preview_mjpg_reaches_target_rate_with_instant_encoding(monkeypatch, fir
     async def sleep(delay):
         now[0] += max(delay, 1e-9)
 
-    async def to_thread(fn):
-        return fn()
+    async def to_thread(fn, **kwargs):
+        return fn(**kwargs)
 
     class Response(web.StreamResponse):
         async def prepare(self, request):
@@ -355,7 +385,7 @@ def test_preview_mjpg_reaches_target_rate_with_instant_encoding(monkeypatch, fir
     monkeypatch.setattr(live_api.asyncio, "sleep", sleep)
     monkeypatch.setattr(live_api.asyncio, "to_thread", to_thread)
     monkeypatch.setattr(live_api.web, "StreamResponse", Response)
-    service = SimpleNamespace(preview_frame=lambda: PreviewFrame(
+    service = SimpleNamespace(preview_frame=lambda *, after_seq=None: PreviewFrame(
         seq=len(sent), cap_ns=0, jpeg=b"jpeg", hud={"preview": {"fps": 15}}))
     _run_preview(_preview_handler(service))
     assert len(sent) >= (14 if first_write_s == 0.015 else 11)
@@ -366,6 +396,7 @@ def test_preview_mjpg_reaches_target_rate_with_instant_encoding(monkeypatch, fir
 def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeypatch):
     import json
     from types import SimpleNamespace
+    from unittest.mock import Mock
 
     from test_live_preview import camera_frame, frame_info
 
@@ -380,8 +411,8 @@ def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeyp
     async def sleep(delay):
         now[0] += max(delay, 1e-9)
 
-    async def to_thread(fn):
-        return fn()
+    async def to_thread(fn, **kwargs):
+        return fn(**kwargs)
 
     monkeypatch.setattr(live_api.asyncio, 'sleep', sleep)
     monkeypatch.setattr(live_api.asyncio, 'to_thread', to_thread)
@@ -390,11 +421,13 @@ def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeyp
     service = _preview_service(tmp_path, latest=lambda: (next(seqs, 9), camera_frame()))
     info = frame_info()
     info["proc"]["skipped_recent"] = 0.2
-    service._session = SimpleNamespace(frame_info=lambda: info)
+    frame_info_spy = Mock(return_value=info)
+    service._session = SimpleNamespace(frame_info=frame_info_spy)
     _run_preview(asyncio.wait_for(_preview_handler(service), 2))
     parts = responses[0].parts
     huds = [json.loads(data.split(b"X-Hud: ")[1].split(b"\r\n")[0]) for _, data in parts]
     assert [h["seq"] for h in huds] == [7, 8, 9]
+    assert frame_info_spy.call_count == 3
     assert all(h["preview"] == {"fps": 5, "throttled": "messung"} for h in huds)
     assert all(parts[i][0] - parts[i - 1][0] >= 0.2 for i in (1, 2))
 

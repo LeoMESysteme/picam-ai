@@ -3151,6 +3151,8 @@ def test_cancel_real_setup_worker_within_one_slice(tmp_path, monkeypatch, checkp
         assert status['state'] == 'setup_failed'
         assert status['error'] == 'Einrichtung abgebrochen'
         assert sleeps == [.5]
+        assert status['setup']['progress']['phase'] is None
+        assert status['setup']['progress']['wait'] is None
         step = 'fokus' if checkpoint == 'focus' else 'standbilder'
         assert next(s for s in status['setup']['progress']['steps'] if s['key'] == step)['state'] == 'failed'
         if checkpoint == 'focus':

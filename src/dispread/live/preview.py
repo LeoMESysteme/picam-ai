@@ -57,6 +57,7 @@ class PreviewEncoder:
     Der Lock gehoert allein der Vorschau. CameraOwner.latest() gibt seinen
     eigenen Lock bereits vor der Kodierung frei. Das HUD wird auch bei
     gecachtem Bild neu gelesen, damit alte Ablesungen als stale ankommen.
+    Mit after_seq wird das HUD nur fuer noch nicht gesendete Bilder gebaut.
     Die Zeitgrenze gilt gemeinsam, auch bei versetzten Betrachtern.
     """
 
@@ -81,7 +82,7 @@ class PreviewEncoder:
         self._cap_ns = 0
         self._size = (0, 0)
 
-    def frame(self) -> PreviewFrame | None:
+    def frame(self, *, after_seq: int | None = None) -> PreviewFrame | None:
         import cv2
 
         with self._lock:
@@ -105,6 +106,8 @@ class PreviewEncoder:
                 encode_ms = (time.perf_counter() - started) * 1000
                 self._cap_ns = frame.capture_timestamp.value_ns
                 self._size = (frame.image.shape[1], frame.image.shape[0])
+            if after_seq is not None and self._seq is not None and self._seq <= after_seq:
+                return None
             # Erst nach dem Kodieren lesen: eine inzwischen veraltete
             # Ablesung darf nicht mit ihrem vorherigen valid-Status reisen.
             info = deepcopy(self._hud_of() or {})

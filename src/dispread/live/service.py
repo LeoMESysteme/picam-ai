@@ -381,9 +381,9 @@ class LiveService:
         session = self._session
         return session.frame_info() if self._state == "running" and session is not None else None
 
-    def preview_frame(self) -> PreviewFrame | None:
+    def preview_frame(self, *, after_seq: int | None = None) -> PreviewFrame | None:
         """Bild und HUD fuer denselben Vorschau-Teil, ohne eingezeichnetes Quad."""
-        return self._preview.frame()
+        return self._preview.frame(after_seq=after_seq)
 
     def preview_jpeg(self) -> bytes | None:
         """Werkzeugzugriff teilt die Kodierung mit dem Vorschau-Strom."""
@@ -585,6 +585,7 @@ class LiveService:
                 now = self._monotonic()
                 self._finish_setup_step(now)
                 self._setup_elapsed_s = now - self._setup_started_at
+                self._setup_phase = self._setup_wait = None
                 self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
             self._write_setup_diagnostic(
                 session_dir / "setup" / "failure.json",

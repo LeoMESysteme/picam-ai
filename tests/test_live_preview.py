@@ -60,6 +60,40 @@ def test_encoder_encodes_each_sequence_once(monkeypatch):
     assert cv2.imdecode(np.frombuffer(first.jpeg, np.uint8), cv2.IMREAD_COLOR).shape == (540, 960, 3)
 
 
+def test_preview_polling_builds_hud_only_for_unsent_sequences(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from dispread.live.service import LiveService
+
+    now = [0.0]
+    monkeypatch.setattr('dispread.live.preview.time', SimpleNamespace(
+        monotonic=lambda: now[0], perf_counter=lambda: 0.0))
+    latest = [7, camera_frame(7)]
+    service = LiveService(SimpleNamespace(latest=lambda: tuple(latest)), tmp_path)
+    info = Mock(wraps=frame_info)
+    service._state = 'running'
+    service._session = SimpleNamespace(frame_info=info)
+    first = service.preview_frame(after_seq=None)
+    assert first.seq == 7
+    assert info.call_count == 1
+    for _ in range(100):
+        assert service.preview_frame(after_seq=7) is None
+    # Auch ein neueres Kamerabild wartet noch auf das gemeinsame Intervall.
+    latest[:] = [8, camera_frame(8)]
+    for _ in range(100):
+        assert service.preview_frame(after_seq=7) is None
+    assert info.call_count == 1
+    # Ein neuer Betrachter bekommt das Cachebild mit frischem HUD.
+    assert service.preview_frame(after_seq=None).seq == 7
+    assert info.call_count == 2
+    now[0] = 1 / 15
+    assert service.preview_frame(after_seq=7).seq == 8
+    assert info.call_count == 3
+    assert service.preview_frame(after_seq=9) is None
+    assert info.call_count == 3
+
+
 @pytest.mark.parametrize("skips, interval", [(0.0, 1 / 15), (0.2, 0.2)])
 def test_encoder_caches_changing_sequences_for_shared_interval(monkeypatch, skips, interval):
     from types import SimpleNamespace
