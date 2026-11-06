@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Isolierten Windows-Build mit eigener Laufzeit, Qt-Probe und
+  geprüftem Importumfang vorbereitet. Paketfreigabe bindet Lockdateien,
+  Freigabedatensatz und kopierte Belege an dieselben geprüften Hashes;
+  Fehler erhalten frühere Pakete. 79 lokale Tests bestanden, ein echter
+  Windows-Artefakttest ist hier übersprungen. Ohne qualifizierte Windows-
+  Locks und VM-Nachweise wird kein freigegebenes Paket erzeugt.
+
 * 2026-11-06: Windows-Brücke erkennt USB-UART-Geräte über PnP/COM-Inventar
   und verlangt bei fehlender Seriennummer eine ausdrückliche Auswahl.
   Portpaarverwaltung prüft Besitz, Gerätefehler und begrenzte bidirektionale

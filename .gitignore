@@ -33,3 +33,7 @@ node_modules/
 !/docs-site/assets/
 # Lokaler Wrangler-Cache (enthält Account-ID)
 /cloudflare/.wrangler/
+
+# Isolierte Windows-Bruecken-Builds und Artefakte
+/windows/bridge/.build/
+/windows/bridge/dist/

@@ -1,0 +1,4 @@
+# Resolution INPUT ONLY. Not installable release locks; no combination tested yet.
+# Resolve for the chosen explicit Python >=3.13 Windows 11 x64 runtime.
+PySide6
+pyserial

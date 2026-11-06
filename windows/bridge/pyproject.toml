@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dispread-windows-bridge"
+version = "0.1.0.dev0"
+description = "Internal Windows runtime probe for the provisional GSVmulti bridge"
+requires-python = ">=3.13"
+# Installation/builds use reviewed hash locks, never an implicit Pi dependency resolution.
+dependencies = []
+
+[project.scripts]
+dispread-bridge-probe = "dispread_bridge_app.probe_main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../../src"]

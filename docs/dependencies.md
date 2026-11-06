@@ -42,6 +42,22 @@ Auf dem Pi gelten unverändert die untenstehenden Regeln: Projekt-`.venv`
 mit `--system-site-packages`, Projektinstallation mit `--no-deps` und keine
 PyPI-Kopien der Debian-Kamera-/CV-/Serialpakete.
 
+## Windows-EXE: getrennte Buildvorbereitung
+
+Die technische Umsetzung unter `windows/bridge/` verwendet einen eigenen
+Windows-Build und bündelt die Laufzeit. Die vorhandene Pi-venv bleibt
+unverändert; Qt/PyInstaller werden dort nicht installiert. Kandidaten für
+Windows-Laufzeit/Build stehen in den `.in`-Dateien des Windows-Pakets.
+Verifizierte, hashgesperrte Locks und tatsächlicher Freeze-Nachweis fehlen,
+solange kein entsprechend geprüfter Windows-Build vorliegt. Der Build darf
+fehlende oder ungeprüfte Lock-Evidenz nicht als erfolgreich ersetzen.
+
+Device-/VCOM-Adapter werden lokal mit injizierten Betriebssystemantworten
+geprüft. Die tatsächliche Windows-PnP-/Treiberinstallation und Freigabe der
+Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
+bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
+[Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
+
 ## Zensical-Pflege auf dem Forgejo-Runner
 
 Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
