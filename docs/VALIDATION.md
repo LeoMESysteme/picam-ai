@@ -6530,3 +6530,16 @@ Framealter: SYNTHETIC, demo/provisional=true, time_claim=false. Nur innerhalb
 des jeweiligen HOST_MONOTONIC-Hosts vergleichen, keine Latenz-/Quellzeit-
 Aussage und keine echte DUT-Freigabe. npTDMS isoliert importiert, keine neue
 Laufzeitabhängigkeit oder Produktcodeänderung für diesen Versuch.
+
+
+## 2026-11-06 — T13-Vorbereitung, noch keine Abnahme
+
+Echte Einrichtung `live-20261106T112527Z` mit Code `ab2423c` nach
+55,990 s im Zustand `setup_ready`. Gesamturteil WARNUNG: Raster und
+Displayfehler WARNUNG; zehn weitere Prüfungen einschließlich Gegenlesen OK.
+Dauer aus `setup.elapsed_s`, relative Host-Laufzeit des Einrichtungsdienstes,
+keine physische Kameralatenz. StreamCam: USB 3 (5000 Mbit/s), 1920×1080 YUYV,
+30 fps angefordert; kein gemessener Vorschau-fps-Nachweis. Visuelle
+Bestätigung, mindestens 30 Minuten Referenzlauf und Lastvergleich stehen aus.
+Aufbau und Diagnose: [Laborjournal](lab_journal.md),
+`var/diagnostics/werkbank-t13-20261106/status-setup.json`.

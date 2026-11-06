@@ -1,7 +1,16 @@
 # Status und Übergabe — 2026-11-06
 
 Arbeitszweig `feat/werkbank-redesign`, Worktree
-`.claude/worktrees/feat-werkbank-redesign`. Die neue `/live`-Werkbank ist
+`.claude/worktrees/feat-werkbank-redesign`. T13 ist jetzt vorbereitet: echter Dienst `dispread-werkbank-t13.service`
+auf `https://100.122.154.35:8082/live`, Sitzung `live-20261106T112527Z`.
+Automatische Einrichtung nach 55,990 s fertig, Gesamturteil WARNUNG
+(Raster/Displayfehler), Gegenlesen OK, keine Laufsperre. Leonhard muss
+Rahmen und Format auf der Seite prüfen und bestätigen. Noch kein Lauf.
+Beobachter `dispread-t13-observe` und `dispread-t13-top` sammeln bis zu
+zwei Stunden unter `var/diagnostics/werkbank-t13-20261106/`; bei Abschluss
+beenden. Kamera und Werkbank laufen für die gemeinsame Abnahme weiter.
+
+Die neue `/live`-Werkbank ist
 softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
 abschließenden Backend- und UI-Korrekturen. Hardware-Abnahme T13 und Merge
 nach `master` stehen aus und brauchen Leonhards ausdrückliches OK.
@@ -53,8 +62,8 @@ Die Windows-Demobelege vom 04.11. bleiben gültig: 600/600 exakte TCP-Werte,
 Ausfallzeiten; Ungültig-/Altwert- und Zeitsemantik sind weiter offen.
 Details und Wiederaufbau stehen im [Protokoll](GSVMULTI_PROTOCOL.md),
 [Belegarchiv](quellen/gsvmulti-validation-2026-11-04.md) und
-[Validierungsbericht](VALIDATION.md). Keine neue Hardwaremessung in dieser
-Übernahme; Kamera, serielle Ports und Werkbank-Dienste wurden nicht benutzt.
+[Validierungsbericht](VALIDATION.md). Die W2-Übernahme griff nicht auf Hardware zu; die danach gestartete
+T13-Einrichtung steht im Laborjournal und in VALIDATION.md.
 
 ## Nächster Schritt
 

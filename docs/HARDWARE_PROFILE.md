@@ -49,6 +49,16 @@ wie bisher `var/diagnostics/`. Explizite Ausgabeorte bleiben maßgeblich.
 Produktcode unter `src/` kennt weder diese Variable noch die SSD; die
 Auflösung erfolgt ausschließlich in Tests und Skripten.
 
+## T13-Einrichtung (2026-11-06)
+
+Sitzung `live-20261106T112527Z`, Code `ab2423c`, neue Werkbank auf Port 8082.
+StreamCam `/dev/video0`, USB 3, 1920×1080 YUYV bei angeforderten 30 fps.
+Nach automatischer Einrichtung zurückgelesen: Fokus 50, Belichtung 300,
+Gain 17, Weißabgleich 4832 K; Fokus- und Weißabgleichsautomatik aus,
+`auto_exposure=1`. Sitzungswerte, keine neuen allgemeinen Vorgaben.
+Vorschlag WARNUNG; Bestätigung und T13-Lauf noch offen. Diagnose:
+`var/diagnostics/werkbank-t13-20261106/`.
+
 ## Aktuelle StreamCam-Sitzung (2026-10-21)
 
 Einrichtung `live-20261021T151835Z` vor dem strengen Werteplan-Lauf:

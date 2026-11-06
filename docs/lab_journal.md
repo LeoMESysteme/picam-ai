@@ -4645,3 +4645,31 @@ Workbench-Nähte/Tests und offene Abnahme getrennt dokumentieren. Kein Merge
 nach master und keine neue Messung; unabhängige lokale Redesign-/Benutzernotizen
 nicht mit GSVmulti vermischen. Diagnosebelege mit Manifest im Repo archivieren,
 damit die Fortsetzung nicht von ignoriertem var/ oder Chat-Anhängen abhängt.
+
+
+## 2026-11-06 — T13 vorbereitet: echte neue Werkbank
+
+Leonhard hat die Hardware-Abnahme beauftragt und Raumlicht, eingeschaltetes
+Display und unveränderte Kameraposition bestätigt. Auf Branch
+`feat/werkbank-redesign`, Code `ab2423c`, ist der getrennte Benutzerdienst
+`dispread-werkbank-t13.service` auf `https://100.122.154.35:8082/live` gestartet.
+Zuvor waren Kamera und `/dev/ttyUSB0` ohne Besitzer; kein alter
+Werkbank-Dienst lief. Eigene Controller-Daten: `var/workbench-t13-20261106`,
+Live-Daten: `var/live`, Socket: `/tmp/dispread-werkbank-t13/control.sock`.
+
+Automatische echte Einrichtung gestartet, Sitzung `live-20261106T112527Z`.
+Nach 55,990 s Vorschlag mit Gesamturteil WARNUNG: Raster und Displayfehler
+WARNUNG, Gegenlesen und alle übrigen Prüfungen OK. Displayfehler-Hinweis:
+„Kamera leicht verschieben, Glas reinigen oder Reflex abschatten“. Keine
+Laufsperre; visuelle Bestätigung durch Leonhard steht aus. Kein Messlauf
+gestartet und keine Abnahme behauptet. Nicht blind gegen die Warnung starten.
+
+Kameraregler werden von der Einrichtung gesetzt; Rücklesestand im
+Hardware-Profil. Diagnose vor/nach unter
+`var/diagnostics/werkbank-t13-20261106/`. Die begrenzten Beobachterdienste
+`dispread-t13-observe.service` (Status alle 5 s) und
+`dispread-t13-top.service` (top alle 5 s) sammeln höchstens zwei Stunden.
+Beide lesen nur; sie starten oder stoppen keinen Messlauf. Status-Abfragezeit
+ist HOST_MONOTONIC auf dem Pi plus UTC-Beobachtungszeit und ersetzt keine
+physische Aufnahmezeit. Für den Vergleich mit/ohne Seite müssen die Phasen
+noch festgelegt und die X-Hud-Vorschaudaten erfasst werden.
