@@ -11,7 +11,26 @@ die Windows-Brücke oder `tcp` = Netzwerk über die Windows-Brücke.
 Bestehende `output`-Objekte ohne `transport`, aber mit `port`, wählen
 weiterhin `serial`. Testläufe erlauben keine externe Ausgabe; die
 Brückenwege bleiben für echte DUT-Werte bis zum Ungültig-/Altwertnachweis
-strukturell gesperrt.
+strukturell gesperrt. „UART direkt“ gibt weiter echte Werte aus, ist aber
+dauerhaft als „Prototyp – nicht am Windows-PC abgenommen, keine
+Messfreigabe“ gekennzeichnet und startet nur nach ausdrücklicher Bestätigung
+(`acknowledge_unaccepted`).
+
+**Weitere Nutzerentscheidungen 2026-11-06 (Fahrplan):** Bei nicht
+korrigierbarer Anzeigeverschiebung wählt die bedienende Person zwischen
+„Neu einrichten“ (bisherige Aufzeichnung wird verworfen, erst mit der
+Speicherverwaltung; bis dahin bleiben die Dateien liegen) und „Lauf
+stoppen“ (Lauf bleibt zum Speichern, Export und Ansehen). Laufablage,
+Download-Formate und Aufräumen werden spezifiziert
+([OQ-60](open-questions.md#oq-60)); ein Nachberechnungsmodus aus einer
+begrenzten Bildaufzeichnung ist als Lückenschluss machbar, braucht aber
+Spec und Messungen ([OQ-59](open-questions.md#oq-59)). Alter Controller und
+alte Startseite fallen nach einer Bestandsaufnahme weg, sobald die neue
+Werkbank produktionsreif ist ([OQ-61](open-questions.md#oq-61), OP-2 der
+[Werkbank-Spec](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte)).
+Danach: Code und Wiki polieren, TUI, Frischinstallationstest mit
+Ein-Befehl-Installer, Produktionsabnahme, dann GSV-2TSD-DI
+([Roadmap P9](ROADMAP.md#p9-betrieb-und-ausbau), [TODO](../TODO.md)).
 
 ## Übergabe vom 2026-11-04 (GSVmulti-Brückenzweig)
 

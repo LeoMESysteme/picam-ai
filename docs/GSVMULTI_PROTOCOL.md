@@ -31,7 +31,12 @@ die Windows-Brücke oder `tcp` = Netzwerk über die Windows-Brücke.
 Bestehende `output`-Objekte ohne `transport`, aber mit `port`, wählen
 weiterhin `serial`. Testläufe erlauben keine externe Ausgabe; die
 Brückenwege bleiben für echte DUT-Werte bis zum Ungültig-/Altwertnachweis
-strukturell gesperrt.
+strukturell gesperrt. „UART direkt“ (P4-3) gibt weiter echte Werte aus, ist
+aber dauerhaft als „Prototyp – nicht am Windows-PC abgenommen, keine
+Messfreigabe“ gekennzeichnet und startet nur nach ausdrücklicher Bestätigung
+dieses Hinweises (`acknowledge_unaccepted`). Ungültige Werte werden dort
+ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter
+([OQ-06](open-questions.md#oq-06)).
 
 **Echte DUT-Ausgabe über die Brücke bleibt strukturell gesperrt.** Der Pi beantwortet
 Brücken-Live-Abfragen ohne DUT-Zahlen; die Windows-Brücke lehnt nichtsynthetische

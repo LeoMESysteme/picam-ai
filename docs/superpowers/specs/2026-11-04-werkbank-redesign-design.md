@@ -447,8 +447,27 @@ GSVmulti-Ausgabe (OQ-07).
   (`controller.py`, Publish alle 0,2 s). Er soll pausieren, solange
   `/live` aktiv ist. Das wird erst gemessen (Aufgabe 13) und nur bei
   Bedarf umgesetzt.
+  **Entschieden 2026-11-06 (Leonhard):** Der alte Controller
+  (`src/dispread/workbench/controller.py`, 5-Hz-Publish) wird zusammen mit
+  der alten Werkbank-Startseite entfernt oder abgeschaltet, sobald die neue
+  Werkbank produktionsreif ist. Vorher wird geprüft, dass nichts Wichtiges
+  nur dort lebt ([OQ-61](../../open-questions.md#oq-61)). Die Messung in
+  Aufgabe 13 bleibt als Beleg.
 * **OP-3:** Wie sollen Tablets bedient werden (Berührung statt
   Mausrad)? Es gibt keinen Bedarf, nicht geplant.
+* **Hinweis Laufende nach Verschiebung (Leonhard, 2026-11-06):** Die
+  Werkbank korrigiert so weit wie möglich selbst (heute Grobverschiebung
+  plus begrenzte ECC-Nachregistrierung, „Korrektur läuft“), damit ein
+  wichtiger Lauf nicht verloren geht. Ist das nicht korrigierbar, wählt die
+  bedienende Person: **„Neu einrichten“** verwirft die bisherige
+  Aufzeichnung, **„Lauf stoppen“** behält den Lauf zum Speichern,
+  Exportieren/Herunterladen und Ansehen. Heute bietet der Dialog „Anzeige
+  hat sich bewegt“ Weiter beobachten · Lauf stoppen · Neu einrichten;
+  „Neu einrichten“ beendet den Lauf und lässt seine Dateien liegen. Das
+  Verwerfen ist destruktiv und kommt erst mit der Speicherverwaltung
+  ([OQ-60](../../open-questions.md#oq-60)). Bessere automatische Korrektur
+  bleibt eine spätere Aufgabe; eine Nachberechnung aus einer
+  Bildaufzeichnung prüft [OQ-59](../../open-questions.md#oq-59).
 
 ## Anhang A: heutige Schnittstelle (Bestandsaufnahme 2026-10-30, `origin/master` 41dfafe, seither unverändert)
 

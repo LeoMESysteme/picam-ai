@@ -17,6 +17,9 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-55](#oq-55) | Jetzt | teilweise geklärt | Warum meldet die UserDefined-Initialisierung einen Clear-Buffer-Fehler? |
 | [OQ-58](#oq-58) | Jetzt | teilweise geklärt | Warum ersetzt die frei laufende TCP-Demo auch außerhalb des Abbruchs einen gültigen Wert? |
 | [OQ-47](#oq-47) | Jetzt | teilweise geklärt | Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf? |
+| [OQ-60](#oq-60) | Jetzt | offen | Wie werden Läufe gespeichert, exportiert und wieder aufgeräumt? |
+| [OQ-59](#oq-59) | Jetzt | offen | Lässt sich ein Lauf nach Anzeigeverschiebung oder Kamerastoß aus einer Bildaufzeichnung nachberechnen? |
+| [OQ-61](#oq-61) | Jetzt | offen | Was lebt nur noch im alten Controller und auf der alten Startseite? |
 | [OQ-40](#oq-40) | Jetzt | weitgehend geklärt | Schwelle für „Telegrammlücke&quot; im Gate-Labeler ist ungemessen |
 | [OQ-02](#oq-02) | — | offen | Welche maximale Zeitabweichung zwischen DUT und Referenz ist zulässig? |
 | [OQ-03](#oq-03) | — | offen | Kann die Referenz einen Trigger oder Zeitstempel bereitstellen? |
@@ -2965,3 +2968,148 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Beleg:** source-/recording-comparison.json und Originale in
   var/diagnostics/gsvmulti/tcp-reconnect-20261104-01/; bei Übergabe zusätzlich
   versioniertes Belegarchiv unter docs/quellen/.
+
+---
+
+<span id="oq-59"></span>
+
+## OQ-59 — Lässt sich ein Lauf nach Anzeigeverschiebung oder Kamerastoß aus einer Bildaufzeichnung nachberechnen?
+
+* **Status:** offen · erkannt 2026-11-06 aus Leonhards Idee „Nachberechnungsmodus“
+* **Befund:** Bewegt sich die Anzeige oder wackelt die Kamera, korrigiert die
+  Werkbank heute grob über die Gesamtverschiebung und danach begrenzt per
+  ECC-Nachregistrierung („Korrektur läuft“). Reicht das nicht, gibt es bis zur
+  Neueinrichtung keine freigegebenen Werte. Die Idee: Das Kamerabild läuft
+  als Sicherheitsnetz parallel mit. Bricht die Nachführung ab, wird ohne
+  Lücke weiter aufgezeichnet, während die bedienende Person entscheidet. Nach
+  dem Lauf liest der Leser die Aufzeichnung neu und schließt die Lücke mit
+  neuer Geometrie. Bei „Neu einrichten“ (verwerfen) wird die Aufzeichnung
+  gelöscht.
+* **Einschätzung 2026-11-06:** machbar als begrenzter Lückenschluss, nicht
+  als durchgehende Vollbildaufzeichnung. Vor einer Entscheidung braucht es
+  eine Spec und Messungen am Pi 5.
+  * **Vollbild dauerhaft ist zu schwer.** Roh 1920×1080 YUYV bei etwa
+    27 Bildern/s sind etwa 110 MB/s. Der Pi 5 hat keinen H.264-Hardware-
+    Encoder. JPEG mit Qualität ≈ 90 liegt bei etwa 250–400 KB je Vollbild,
+    also 7–11 MB/s oder 25–40 GB/h. Das schließt die SD-Karte aus. SSD oder
+    USB3 könnten es fassen, aber die Kodierung je Bild konkurriert um CPU mit
+    dem Leser. Schon die Vorschau (960 px, bis 15 Bilder/s) wird zum Schutz
+    der Messung gedrosselt.
+  * **Tragfähige Form:** ein RAM-Ringpuffer der letzten N Sekunden
+    (z. B. 10–30 s), nur ein Ausschnitt um das bestätigte Anzeige-Quad. Die
+    Anzeige belegt etwa 560×80 px; der Rand muss großzügig sein, damit eine
+    verschobene Anzeige im Ausschnitt bleibt. Ablage in Graustufen oder
+    verlustfrei. Beginnt ein Trackingverlust, wird der Ringpuffer gesichert
+    und weiter aufgezeichnet, bis die Person entscheidet. Wird neu
+    eingerichtet, liest der Leser das gesicherte Stück mit dem neuen Quad
+    bzw. Profil und füllt die Lücke. Bei „Neu einrichten“ (verwerfen) oder
+    „Lauf stoppen“ ohne Nachberechnung wird das Stück verworfen.
+  * **Wahrheitsregeln** ([AGENTS.md](../AGENTS.md#nicht-verhandelbar-konzeptmd-7),
+    Konzept §7/§8): Nachberechnete Werte stammen vom selben Leser auf
+    gespeicherten Pixeln (verlustfrei oder mit validiertem Codec) und tragen
+    ihre ursprünglichen Aufnahmezeitstempel samt Zeitbasis. Die Herkunft
+    „nachberechnet“ gehört in Audit und Sitzungsmetadaten. Der
+    `ValueRecord` hat genau neun Felder (Konzept §8); ein zusätzliches
+    Herkunftsfeld geht nur mit einer Konzeptänderung — **offener Punkt**.
+    Nachberechnete Werte erreichen GSVmulti nie live, weil die Ausgabe
+    absichtlich keinen Nachhol-Burst kennt; sie gehen nur in Laufdatei und
+    Exporte. Der Referenzabgleich bleibt zeitstempelbasiert und funktioniert
+    auch nachträglich. Keine Glättung, keine Korrektur über die Referenz.
+  * **Vorhandene Bausteine:** Bildquelle `replay://`, die Diagnoseaufnahme
+    des Laufs (Ablage in `/dev/shm`, Kopie nach Laufende), Einrichtungs-
+    vorschlag und Bestätigung. Diese müssten auch auf einem aufgezeichneten
+    Standbild arbeiten.
+* **Offen:** Messungen vor der Entscheidung:
+  * CPU-Last und übersprungene Bilder mit aktivem Ringpuffer,
+  * Bytes je Stunde für den gewählten Ausschnitt und Codec,
+  * ob der Leser auf gespeicherten Bildern dasselbe liest wie live,
+  * wie oft eine Verschiebung die Anzeige aus dem Ausschnitt schiebt.
+  Dazu: Herkunftskennzeichnung ohne zehntes `ValueRecord`-Feld oder mit
+  Konzeptänderung; Speicherort und Aufräumen über [OQ-60](#oq-60).
+* **Blockiert:** den Bau des Nachberechnungsmodus. Nicht die verbesserte
+  automatische Korrektur ([OQ-26](#oq-26)) und nicht die heutigen
+  Laufende-Optionen.
+* **Klärung:** Spec mit Leonhard, danach Messprototyp hinter einem Schalter;
+  Entscheidung anhand der vier Messungen.
+* **Antwort landet in:** [Werkbank-Spec](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte),
+  späterer Spec Nachberechnungsmodus, [VALIDATION](VALIDATION.md) und
+  [Roadmap](ROADMAP.md#roadmap-schritte).
+
+---
+
+<span id="oq-60"></span>
+
+## OQ-60 — Wie werden Läufe gespeichert, exportiert und wieder aufgeräumt?
+
+* **Status:** offen · erkannt 2026-11-06 aus Leonhards Vorgaben zu Laufende und Speicher
+* **Befund:** Heute schreibt jeder Lauf unter `var/live/` ein vollständiges
+  JSONL-Audit und `session.json`; Diagnosebilder sind optional (Haken beim
+  Laufstart, in `/dev/shm` abgelegt und nach Laufende kopiert). Es gibt eine
+  Platzprüfung vor Einrichtung und Laufstart und das manuelle
+  `dispread live aufraeumen` mit Vorschau, aber keine automatische Löschung,
+  keinen Download aus der Werkbank und keinen wählbaren Speicherort. Der
+  Dialog „Anzeige hat sich bewegt“ bietet Weiter beobachten · Lauf stoppen ·
+  Neu einrichten; „Neu einrichten“ beendet den Lauf und lässt seine Dateien
+  liegen.
+* **Vorgaben Leonhard 2026-11-06:**
+  * **Laufende bei nicht korrigierbarer Verschiebung:** (a) „Neu einrichten“
+    verwirft die bisherige Aufzeichnung, (b) „Lauf stoppen“ behält den Lauf
+    zum Speichern, Exportieren/Herunterladen und Ansehen. Das Löschen in (a)
+    ist destruktiv und kommt erst mit der Speicherverwaltung; bis dahin bleiben
+    die Dateien liegen.
+  * **Speicherort:** immer ein gesetzter Standard; überschreibbar, z. B. Logs
+    und Diagnosebilder auf SSD oder USB.
+  * **Download als Datei** aus der Werkbank: txt, csv, json, GSVmulti-Format
+    und frei definierbare Formatierung.
+  * **Aufzeichnungsoptionen**, z. B. ob Diagnosebilder mitlaufen (heute schon
+    beim Laufstart wählbar).
+* **Offen:**
+  * Wird jeder Lauf immer gespeichert, auch Testläufe?
+  * Wie verhindert man, dass der lokale Speicher langsam vollläuft
+    (Aufbewahrungsfrist, Obergrenze, Warnstufen)? Produktion voraussichtlich
+    64-GB-SD ohne SSD.
+  * Wie finden unerfahrene Nutzer ihre Daten und löschen sie, ohne Profile,
+    Einrichtungsdaten oder einen laufenden Lauf zu treffen?
+  * Was genau ist das „GSVmulti-Format“ für den Export? Nur, was belegt ist
+    (UserDefined-Zahlenstrom bzw. GSVmulti-TXT); kein Protokoll erfinden
+    ([OQ-07](#oq-07)). Exporte tragen `provisional` und Zeitbasis mit.
+  * Wie wird ein gewählter Speicherort auf SSD/USB geprüft, wenn der
+    Datenträger fehlt oder abgerissen ist (vgl. PCIe-Abriss der SSD)?
+* **Blockiert:** das destruktive Verwerfen bei „Neu einrichten“, Download und
+  Speicherverwaltung in der Werkbank, die Ablage einer Nachberechnungs-
+  aufzeichnung ([OQ-59](#oq-59)). Nicht den laufenden Werkbank-Umbau.
+* **Klärung:** Spec „Laufablage, Export und Aufbewahrung“ mit Leonhard
+  schreiben; vorhandene Platzprüfung und `aufraeumen` als Grundlage nehmen.
+* **Antwort landet in:** [Werkbank-Spec](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte),
+  [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md),
+  [Roadmap](ROADMAP.md#roadmap-schritte) und [TODO](../TODO.md).
+
+---
+
+<span id="oq-61"></span>
+
+## OQ-61 — Was lebt nur noch im alten Controller und auf der alten Startseite?
+
+* **Status:** offen · erkannt 2026-11-06 mit der Entscheidung zu OP-2
+* **Befund:** Der alte Controller (`src/dispread/workbench/controller.py`)
+  veröffentlicht dauerhaft mit 5 Hz (alle 0,2 s), auch wenn nur `/live`
+  benutzt wird. Leonhard hat am 2026-11-06 entschieden: Controller und alte
+  Werkbank-Startseite werden entfernt oder abgeschaltet, sobald die neue
+  Werkbank produktionsreif ist — vorher prüfen, dass nichts Wichtiges nur
+  dort lebt. Bei einer ersten Durchsicht hängen an Server und Controller
+  noch u. a. Datensatz-Sammelmodus samt Export (`dataset.*`,
+  `/dataset/exports/…`), Profilbearbeitung (`profile.*`, `layout.*`),
+  Einfrieren/ROI/Autofit, Clip-Aufnahme, Terminals im Browser, MJPEG-Stream
+  und Anmeldung. Das ist keine vollständige Liste.
+* **Offen:** vollständige Bestandsaufnahme: welche Funktion wird noch
+  gebraucht, welche hat auf `/live`, in der CLI oder der geplanten TUI einen
+  Ersatz, welche fällt weg. Welche Skripte, Tests und Wiki-Seiten hängen an
+  der alten Seite. Ob Anmeldung und Terminals bleiben.
+* **Blockiert:** das Entfernen von Controller und alter Seite. Nicht den
+  Werkbank-Umbau und nicht dessen Abnahme (Aufgabe 13 misst den
+  Controller-Verbrauch nur).
+* **Klärung:** nach der Produktionsreife der neuen Werkbank die
+  Bestandsaufnahme machen, mit Leonhard entscheiden, dann entfernen oder
+  abschalten; CHANGELOG und Wiki im selben Commit nachziehen.
+* **Antwort landet in:** [Werkbank-Spec OP-2](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte),
+  [TODO](../TODO.md) und [CHANGELOG](../CHANGELOG.md).

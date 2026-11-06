@@ -1,6 +1,12 @@
 # Roadmap
 
-Stand des Abgleichs: **2026-11-04**. UserDefined-Formatter, gemeinsame
+Stand des Abgleichs: **2026-11-06**. Neu: Nutzerentscheidungen vom
+2026-11-06 zu Laufende, Laufablage und Fahrplan nach dem Werkbank-Redesign
+(P6/P7-Schritte unten, [Ausblick P9](#p9-betrieb-und-ausbau),
+[OQ-59](open-questions.md#oq-59) bis [OQ-61](open-questions.md#oq-61)).
+Ausgabe pro Lauf: Aus, UART direkt (P4-3, als nicht abgenommener Prototyp
+gekennzeichnet, nur nach Bestätigung) oder UART/Netzwerk über die Brücke
+(DUT-gesperrt bis zur Windows-Abnahme). UserDefined-Formatter, gemeinsame
 TCP-/UART-Windows-Brücke und Live-Konfiguration sind als Software-Prototyp
 gebaut ([Bewertung](GSVMULTI_PROTOCOL.md)). P4 ist teilweise umgesetzt,
 aber nicht abgenommen: Echte DUT-Ausgabe bleibt strukturell gesperrt.
@@ -65,15 +71,45 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 | P6 | p6-live | Live-Pfad mit STALE und Audit | gebaut | 2026-10-21 | [Live-Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
 | P6 | p6-stoerung | Kurze Störversuche am Aufbau | belegt | 2026-10-21 | [Bedienerläufe und Grenzen](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
 | P6 | p6-tracking | Nachführung bei großen Wertwechseln absichern | offen | — | [OQ-26](open-questions.md#oq-26) |
+| P6 | p6-korrektur | Automatische Korrektur bei Kamerastoß und Anzeigeverschiebung verbessern | offen | — | [OQ-26](open-questions.md#oq-26), [Laufende nach Verschiebung](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte) |
 | P6 | p6-audit | Audit-Belege dauerhaft aufbewahren | offen | — | [Aktive Arbeitsliste](../TODO.md) |
+| P6 | p6-ablage | Laufablage, Export und Aufbewahrung spezifizieren und bauen | offen | — | [OQ-60](open-questions.md#oq-60) |
+| P6 | p6-nachberechnung | Nachberechnungsmodus: Spec und Messungen am Pi 5 | offen | — | [OQ-59](open-questions.md#oq-59) |
 | P6 | p6-dauerlauf | 72-h-Dauerlauf mit provozierten Störungen durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
 | P7 | p7-kriterien | Abnahmekriterien und Gerätekreis vorab festlegen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien), [OQ-04](open-questions.md#oq-04) |
+| P7 | p7-frischinstallation | Einrichtung, Konfiguration und Betrieb auf einem frisch installierten Pi prüfen | offen | — | [OQ-49](open-questions.md#oq-49), [Aktive Arbeitsliste](../TODO.md) |
 | P7 | p7-abnahme | Formale Abnahme auf den Sperrgeräten durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
 | P7 | p7-protokoll | Abnahmeprotokoll gegen die vereinbarten Kriterien erstellen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
+| P7 | p7-produktionsabnahme | Produktionsabnahme durch die Abteilungsleitung | offen | — | [Aktive Arbeitsliste](../TODO.md) |
 | P8 | p8-imx500 | Eigenes Modell und IMX500-Lokalisierung | ruht | 2026-09-25 | [Aktives Hardwareprofil](HARDWARE_PROFILE.md) |
 | P8 | p8-vergleich | Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante belegen | ruht | — | [Optionaler Meilenstein](#roadmap) |
 
 </div>
+
+## Ausblick P9: Betrieb und Ausbau {#p9-betrieb-und-ausbau}
+
+Fahrplan nach Leonhards Entscheidung vom 2026-11-06, gültig sobald die neue
+Werkbank und die GSVmulti-Anbindung fertig sind. P9 steht absichtlich nicht
+in der Phasentabelle oben: Die interaktive Karte liest genau neun Phasen
+(P0–P8). Die Aufnahme in die Karte braucht eine Änderung an
+`docs-site/assets/roadmap.js` und `tests/docs-site.spec.ts` und folgt
+gesondert.
+
+| Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
+| --- | --- | --- | --- | --- | --- |
+| **P9** | Betrieb und Ausbau: Code und Wiki polieren, TUI für Einrichtung, Verwaltung, Konfiguration und Fehlersuche, Ein-Befehl-Installer, nächster Sensor GSV-2TSD-DI | ja | teilw. | Frischer Pi mit einem Befehl eingerichtet; TUI deckt Einrichtung, Konfiguration und Fehlersuche ab; zweiter Sensor angelernt und abgenommen | offen |
+
+Reihenfolge:
+
+1. Codebasis polieren.
+2. Wiki polieren (Doku und Zensical-Seite).
+3. TUI für Einrichtung, Verwaltung, Konfiguration und Fehlersuche; deckt so
+   viel wie möglich ab und wird entsprechend umfangreich.
+4. Frische Pi-Installation prüfen (P7, `p7-frischinstallation`): Einrichtung
+   möglichst mit einem einzigen Befehl ([OQ-49](open-questions.md#oq-49)).
+5. Produktionsabnahme (P7, `p7-produktionsabnahme`), voraussichtlich durch
+   den Abteilungsleiter Holger Kabelitz.
+6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
 
 ## P0 — was tatsächlich steht
 
