@@ -7,7 +7,8 @@ was ist die Konsequenz.
 
 * 2026-11-06: Gestaltungsmock der Windows-App „GSVmulti-Brücke“ ergänzt
   (`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`, mit Qt-Umsetzungsnotiz
-  und Texttabelle) sowie `windows/bridge/PRODUCT.md`. Reine Doku, synthetische
+  und Texttabelle) sowie `windows/bridge/PRODUCT.md` und `windows/bridge/DESIGN.md`
+  (aus dem Mock abgeleitet: Fluent-Tokens, Wahrheitsregeln der Prüfpunkt-Chips). Reine Doku, synthetische
   Daten; keine Funktion, nichts als geprüft oder ausgeliefert zu verstehen.
 
 * 2026-11-06: Werkbank /live: Dialog „Windows-Brücke einrichten“ (nur

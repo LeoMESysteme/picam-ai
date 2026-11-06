@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T00:00:00Z",
+  "title": "Design System: GSVmulti-Brücke (Windows-App)",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Systemakzent (Mock-Wert)", "canonical": "#005fb8", "tonalRamp": ["#003a70", "#004a8f", "#005fb8", "#196ebd", "#3a82c5", "#6ea5d6", "#a3c6e6", "#d6e6f4"] },
+      "mica": { "role": "neutral", "displayName": "Mica", "canonical": "#f3f3f3", "tonalRamp": ["#202020", "#2b2b2b", "#5d5d5d", "#8a8a8a", "#d1d1d1", "#e5e5e5", "#ededed", "#f3f3f3"] },
+      "ok": { "role": "status", "displayName": "Erfolg (nur belegt)", "canonical": "#0f7b0f", "tonalRamp": ["#0a4f0a", "#0f7b0f", "#6ccb5f", "#dff6dd"] },
+      "warn": { "role": "status", "displayName": "Achtung", "canonical": "#9d5d00", "tonalRamp": ["#6b3e00", "#9d5d00", "#fce100", "#fff4ce"] },
+      "err": { "role": "status", "displayName": "Fehler", "canonical": "#c42b1c", "tonalRamp": ["#8a1e13", "#c42b1c", "#ff99a4", "#fde7e9"] }
+    },
+    "typographyMeta": {
+      "subtitle": { "displayName": "Untertitel", "purpose": "Pi-Anzeigename, Dialogtitel." },
+      "body": { "displayName": "Text", "purpose": "Fließtext, Journaltitel, Schaltflächen; Tabellenziffern." },
+      "body-strong": { "displayName": "Text stark", "purpose": "Zustandssatz, InfoBar-Titel." },
+      "caption": { "displayName": "Beschriftung", "purpose": "Chip-Name, Zweitzeile, Journalzeit." },
+      "caption-strong": { "displayName": "Beschriftung stark", "purpose": "Chip-Statuswort, Störungsdauer." },
+      "data": { "displayName": "Daten (mono)", "purpose": "Fingerabdruck, Pi-ID, Endpunkt." }
+    },
+    "shadows": [
+      { "name": "flyout", "value": "0 8px 16px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.2)", "purpose": "Nur Flyout, Dialog und Toast; dunkel 0 8px 16px rgba(0,0,0,.5)." }
+    ],
+    "motion": [
+      { "name": "state-150", "value": "150ms ease-out", "purpose": "Hover und Zustandswechsel; bei reduzierter Bewegung 0." }
+    ],
+    "breakpoints": [
+      { "name": "window-min", "value": "380x560" },
+      { "name": "window-default", "value": "440x720" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Akzent-Schaltfläche", "kind": "button", "refersTo": "button-accent",
+      "description": "Primäraktion der InfoBar oder des Schritts, rechts, genau eine.",
+      "html": "<button class=\"ds-btn-accent\">Erneut versuchen</button>",
+      "css": ".ds-btn-accent{min-height:32px;padding:4px 12px;border:1px solid #005fb8;border-radius:4px;background:#005fb8;color:#fff;font:600 14px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s ease-out}.ds-btn-accent:hover{background:#196ebd;border-color:#196ebd}.ds-btn-accent:active{background:#3a82c5;border-color:#3a82c5}.ds-btn-accent:focus-visible{outline:2px solid #1a1a1a;outline-offset:-2px;box-shadow:inset 0 0 0 3px #fff}"
+    },
+    {
+      "name": "Standard-Schaltfläche", "kind": "button", "refersTo": "button",
+      "description": "Sekundäre Aktionen wie Details, Diagnose exportieren.",
+      "html": "<button class=\"ds-btn\">Details</button>",
+      "css": ".ds-btn{min-height:32px;padding:4px 12px;border:1px solid #d1d1d1;border-radius:4px;background:#fdfdfd;color:#1a1a1a;font:400 14px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s ease-out}.ds-btn:hover{background:#f6f6f6}.ds-btn:active{background:#efefef;color:#5d5d5d}.ds-btn:focus-visible{outline:2px solid #1a1a1a;outline-offset:-2px;box-shadow:inset 0 0 0 3px #fff}"
+    },
+    {
+      "name": "Prüfpunkt-Chip (neutral, nicht belegt)", "kind": "chip", "refersTo": "checkpoint-chip",
+      "description": "Weitergabe unter DUT-Sperre: neutral, kein Grün.",
+      "html": "<button class=\"ds-chip\"><span class=\"ds-cl\">Weitergabe</span><span class=\"ds-cw\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\"><circle cx=\"8\" cy=\"8\" r=\"6\"/><path d=\"M5 8h6\"/></svg>Keine Weitergabe</span><span class=\"ds-cs\">DUT-Ausgabe gesperrt</span></button>",
+      "css": ".ds-chip{display:flex;flex-direction:column;gap:1px;width:160px;text-align:left;padding:4px 10px 6px;background:#fbfbfb;border:1px solid #e5e5e5;border-radius:4px;color:#1a1a1a;font:400 12px/16px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out}.ds-chip:hover{background:#f6f6f6}.ds-chip:focus-visible{outline:2px solid #1a1a1a;outline-offset:-2px;box-shadow:inset 0 0 0 3px #fff}.ds-cl,.ds-cs{color:#5d5d5d}.ds-cw{display:flex;gap:6px;color:#5d5d5d}"
+    },
+    {
+      "name": "InfoBar Achtung", "kind": "custom", "refersTo": "infobar-warn",
+      "description": "Genau eine nächste Aktion, höchstens zwei Knöpfe.",
+      "html": "<div class=\"ds-bar\"><div><b>Pi antwortet nicht</b><div>Erneuter Versuch in 8 s.</div></div></div>",
+      "css": ".ds-bar{padding:12px;background:#fff4ce;border-radius:4px;color:#1a1a1a;font:400 14px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif}.ds-bar b{font-weight:600}"
+    },
+    {
+      "name": "DUT-Sperrzeile", "kind": "custom", "refersTo": "body",
+      "description": "Feste Zeile unter dem Zustandssatz, in jedem Zustand sichtbar.",
+      "html": "<div class=\"ds-lock\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"#9d5d00\" stroke-width=\"1.2\" stroke-linecap=\"round\"><circle cx=\"8\" cy=\"8\" r=\"6.5\"/><path d=\"M8 4.5v4M8 11v.5\"/></svg>DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei</div>",
+      "css": ".ds-lock{display:flex;gap:6px;align-items:flex-start;font:400 12px/16px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1a1a1a}"
+    },
+    {
+      "name": "Journalzeile (Störung)", "kind": "custom", "refersTo": "journal-row",
+      "description": "Signatur: Zeit in Tabellenziffern, Symbol, Titel mit Ausgang, Dauer rechts.",
+      "html": "<div class=\"ds-jr\"><time>14:12:40</time><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"#9d5d00\" stroke-width=\"1.2\" stroke-linecap=\"round\"><circle cx=\"8\" cy=\"8\" r=\"6.5\"/><path d=\"M8 4.5v4M8 11v.5\"/></svg><div>Verbindung unterbrochen<span class=\"ds-js\">wieder verbunden · Netzwerk (LAN), gleicher Pi</span></div><b>4 s</b></div>",
+      "css": ".ds-jr{display:grid;grid-template-columns:58px 16px 1fr auto;gap:0 10px;align-items:start;padding:6px 12px;background:#fbfbfb;border:1px solid #e5e5e5;border-radius:8px;color:#1a1a1a;font:400 14px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-jr time{font-size:12px;line-height:20px;color:#5d5d5d}.ds-jr svg{margin-top:2px}.ds-js{display:block;font-size:12px;line-height:16px;color:#5d5d5d}.ds-jr b{font-size:12px;line-height:20px;font-weight:600}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Das Fahrtenbuch am Rand",
+    "overview": "Ein schmales Fenster, das neben GSVmulti stehen bleibt und zweierlei sagt: oben in einem Satz, was jetzt gilt, darunter als Journal, was passiert ist, während niemand hinsah. Windows 11 Fluent nativ, Vertrauen durch Wahrheitsregeln statt Dekoration.",
+    "keyCharacteristics": [
+      "Hell und dunkel folgen dem Windows-Farbschema; Akzent ist der Systemakzent.",
+      "Zustand immer als Symbol plus Wort.",
+      "Sechs Prüfpunkte als 3 × 2-Raster (bewusste Abweichung von der Einzeile).",
+      "Ereignisjournal mit Tabellenziffern und Störungsdauer als Signatur.",
+      "Feste DUT-Sperrzeile in jedem Zustand."
+    ],
+    "rules": [
+      { "name": "The Proven-Green Rule", "body": "Grün steht nur für einen belegten Zustand; Ausgabe bleibt Achtung, solange die DUT-Sperre gilt; Empfang belegt nur nach Testdateivergleich; Weitergabe heißt nur COM-Treiber.", "section": "colors" },
+      { "name": "The One Accent Rule", "body": "Der Akzent markiert Primäraktion, Auswahl und Fokus, nie einen Zustand.", "section": "colors" },
+      { "name": "The Word-Beside-Color Rule", "body": "Jede Statusfarbe steht mit Symbol und sichtbarem Wort.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Zeiten, Dauern und Zähler in Tabellenziffern.", "section": "typography" },
+      { "name": "The Flat-Until-Floating Rule", "body": "Karten, Chips und InfoBars tragen Rand statt Schatten; Schatten nur für Flyout und Dialog.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do Statusfarbe immer mit Symbol und Wort zeigen; Kontrast Text ≥ 4,5 : 1 in hell und dunkel.",
+      "Do Grün nur für belegte Zustände; „Empfang belegt“ nur nach Testdateivergleich, „Weitergabe“ nur als COM-Treiber-Aussage.",
+      "Do die DUT-Sperrzeile in jedem Zustand zeigen, solange der Pi sie meldet.",
+      "Do pro InfoBar genau eine nächste Aktion, Primäraktion rechts.",
+      "Do Systemakzent und Windows-Farbschema übernehmen; Hochkontrast aus der Systempalette.",
+      "Do Zeiten und Dauern in Tabellenziffern setzen."
+    ],
+    "donts": [
+      "Don't pauschal grün anzeigen oder „Verbunden“ als „Freigegeben“ lesen lassen.",
+      "Don't die Sperre im Zustandssatz doppeln oder hinter einen Klick legen.",
+      "Don't einen erzeugten oder bestätigten Zwischenschritt grün tönen.",
+      "Don't wiederholte Timeout-Pop-ups, Verläufe oder Schatten auf Karten.",
+      "Don't den Akzent als Statusfarbe benutzen oder Markenfarben erfinden.",
+      "Don't den Mock-Rahmen in die App übernehmen."
+    ]
+  }
+}
