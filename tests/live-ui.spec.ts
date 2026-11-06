@@ -1823,3 +1823,39 @@ test('Fokus-ROI: gestrichelt mit Schärfe, Ansicht rahmt die ROI, Ebene schaltba
   await expect.poll(() => canvas.evaluate((el: any) => el.viewer.layers().has('fokus'))).toBe(false);
   expect(errors).toEqual([]);
 });
+
+test('Zeitleiste der Einrichtung: Schritte, Fokusproben und Abspielkopf statt leerer Leiste', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  const strip = page.getByRole('region', { name: 'Zeitleiste' });
+  await expect(strip.locator('[data-part="title"]')).toHaveText('Zeitleiste · Einrichtung');
+  const canvas = strip.locator('canvas');
+  await expect(canvas).toBeVisible();
+  await expect(canvas).toHaveAttribute('aria-label', 'Schritte der Einrichtung mit Fokusproben');
+  // Farbe der Zeichenflaeche an einer Stelle (CSS-px relativ zur Canvas).
+  const pixel = (x: number, y: number) => canvas.evaluate((el: any, [x, y]: number[]) => {
+    const dpr = el.width / el.clientWidth;
+    return Array.from(el.getContext('2d').getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data).slice(0, 3);
+  }, [x, y]);
+  const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 12);
+  // Fokus laeuft seit 5 s: Anfang des Abschnitts gefuellt (#35507a), Spur endet nicht leer.
+  await expect.poll(async () => near(await pixel(16, 33), [53, 80, 122])).toBe(true);
+  // Probenstriche in --sel unter der Spur.
+  await expect.poll(() => canvas.evaluate((el: any) => {
+    const dpr = el.width / el.clientWidth;
+    const row = el.getContext('2d').getImageData(0, Math.round(50 * dpr), el.width, 1).data;
+    let n = 0;
+    for (let i = 0; i < row.length; i += 4) if (Math.abs(row[i] - 134) + Math.abs(row[i + 1] - 174) + Math.abs(row[i + 2] - 232) < 60) n++;
+    return n;
+  })).toBeGreaterThanOrEqual(3);
+  // Vorschlag liegt vor: alle Schritte erledigt, Bestaetigen laeuft.
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  await expect.poll(async () => near(await pixel(16, 33), [42, 58, 45])).toBe(true);
+  // Im Lauf: wieder die Laufspur.
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  await expect(strip.locator('[data-part="title"]')).toHaveText(/Zeitleiste · Lauf 01/);
+  await expect(canvas).toHaveAttribute('aria-label', 'Statusband und Wertspur der letzten 40 s');
+  expect(errors).toEqual([]);
+});

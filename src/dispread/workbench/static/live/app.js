@@ -16,6 +16,7 @@ import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/foc
 import {exposureHTML} from './setup/exposure.js';
 import {overallView, renderChecks, warningCount} from './setup/checks.js';
 import {mountConfirm} from './setup/confirm.js';
+import {drawSetupTimeline, setupTimelineModel} from './setup/timeline.js';
 import {referenceModel, renderResult} from './run/result.js';
 import {runDockHTML, runTitle} from './run/dock.js';
 import {RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
@@ -284,10 +285,15 @@ function mountTimeline(host) {
     canvas: host.querySelector('canvas')};
 }
 
+// Lauf: Statusband und Wertspur (run/timeline.js). Einrichtung: Schritte,
+// Fokusproben und Abspielkopf (setup/timeline.js), sobald setup.progress da ist.
 function renderTimelineChrome(parts, status) {
   const runPhase = RUN_STATES.includes(status.state);
-  parts.canvas.hidden = !runPhase;
-  parts.title.textContent = !runPhase ? 'Zeitleiste'
+  const setupPhase = !runPhase && Boolean(setupTimelineModel(status));
+  parts.canvas.hidden = !runPhase && !setupPhase;
+  const label = runPhase ? 'Statusband und Wertspur der letzten 40 s' : 'Schritte der Einrichtung mit Fokusproben';
+  if (parts.canvas.getAttribute('aria-label') !== label) parts.canvas.setAttribute('aria-label', label);
+  parts.title.textContent = setupPhase ? 'Zeitleiste · Einrichtung' : !runPhase ? 'Zeitleiste'
     : status.state === 'running' ? `Zeitleiste · ${runTitle(status)} · letzte 40 s` : `Zeitleiste · ${runTitle(status)}`;
   setHTML(parts.legend, runPhase ? LEGEND : '');
 }
@@ -328,6 +334,11 @@ if (typeof document !== 'undefined') {
   let hud = null;
   const timelineParts = mountTimeline(nodes.timeline);
   const timeline = createTimeline(timelineParts.canvas);
+  // Eine Canvas fuer beide Zeitleisten: im Lauf die Laufspur, sonst die Einrichtung.
+  const drawStrip = () => {
+    if (status && !RUN_STATES.includes(status.state)) drawSetupTimeline(timelineParts.canvas, status);
+    else timeline.draw();
+  };
   const log = createRecordLog();
   let runKey = null;
   let resultModel = null;
@@ -444,7 +455,7 @@ if (typeof document !== 'undefined') {
     renderTitle(status, titleView(), handlers);
     renderTimelineChrome(timelineParts, status);
     updateTimeline(status);
-    timeline.draw();
+    drawStrip();
     renderStatusbar(status, hudProc);
     cameraMenu.update(status);
     viewerUi.setStatus(status);
@@ -572,7 +583,7 @@ if (typeof document !== 'undefined') {
   setInterval(() => {
     if (status?.state === 'running' && !document.hidden) timeline.draw();
   }, 100);
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => timeline.draw()).observe(timelineParts.canvas);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => drawStrip()).observe(timelineParts.canvas);
 
   // Dialog "Anzeige bewegt": dieselben Bedienschritte wie die Titelleiste.
   const alertRun = {stop: () => act('/live/run/stop'), setup: () => act('/live/setup', {cell_text: null})};

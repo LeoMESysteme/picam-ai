@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 3): Die Zeitleiste
+  zeigt in der Einrichtung nicht mehr nur „Zeitleiste“, sondern die
+  Schrittspur aus `setup.progress.steps[].elapsed_s` (laufender Schritt
+  gefüllt bis zu seiner Dauer, abgebrochener Schritt endet dort), die
+  Fokusproben als Striche und einen Abspielkopf. Noch nicht begonnene
+  Schritte und „Bestätigen“ stehen mit einer geplanten Breite aus dem Mock
+  da; das ist Gestaltung, keine Zeitangabe. Die Proben tragen im Status
+  keine Zeit, ihre Striche zeigen Zahl und Reihenfolge.
+
 * 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 2): Der Viewer zeigt
   in der Einrichtung, was der Inspektor zu prüfen verlangt. Sobald ein
   Vorschlag vorliegt, zeichnet er auf Live und Standbild das Viereck aus
