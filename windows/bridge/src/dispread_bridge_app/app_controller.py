@@ -505,6 +505,8 @@ class AppController:
     def setup_step(self, direction: str) -> None:
         if direction == 'next' and self._step == 3 and not (
                 self._manager is not None and self._manager.snapshot().peer == 'authenticated'):
+            if self._worker is not None and self._worker.is_active():
+                raise AppError('not_connected')        # Verbindung wird gerade wiederhergestellt; kein connect
             self.connect(self._route or 'network', None)      # „Verbinden“; keine Demo, keine Messung
             return
         with self._lock:

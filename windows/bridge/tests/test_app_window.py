@@ -281,3 +281,17 @@ def test_running_pi_run_shows_clear_message_and_no_start(fake_win):
     assert 'Auf dem Pi läuft ein Messlauf.' in labels
     assert 'GSVmulti erhält dann absichtlich keine Werte' in labels
     assert 'start_demo_check' not in w.setup_view.buttons
+
+
+def test_locked_step3_offers_weiter_never_verbinden_and_dims_inputs(fake_win):
+    fc, w = fake_win('E3_run')
+    sv = w.setup_view
+    assert sv.next_button.text() == 'Weiter'
+    sv.next_button.click()
+    settle(w)
+    assert ('setup_step', 'next') in fc.calls and not any(c[0] == 'connect' for c in fc.calls)
+    for r in sv.findChildren(QRadioButton):
+        assert not r.isEnabled() and not r.parentWidget().isEnabled()      # ganze Zeile gedimmt
+    from dispread_bridge_app.ui import theme
+    sheet = theme.qss(theme.LIGHT)
+    assert 'QWidget:disabled' in sheet and 'QLineEdit:disabled' in sheet

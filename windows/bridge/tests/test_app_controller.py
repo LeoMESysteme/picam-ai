@@ -393,3 +393,15 @@ def test_overview_and_resume_switch_mode_without_finishing_setup(tmp_path, ident
     c._step = 5
     c.setup_step('finish')
     assert c.context().mode == 'operate'
+
+
+def test_step3_next_with_active_worker_never_reconnects(tmp_path, identity):
+    active = WorkerStatus('recovering', True, False, None)
+    c = make(tmp_path, worker_factory=lambda m, f, j, e: FakeWorker(m, f, j, e, active))
+    c.set_port_pair('COM4', 'COM5')
+    c.load_profile(profile_bytes(identity))
+    c.connect('network')
+    c._step = 3
+    with pytest.raises(AppError) as e:
+        c.setup_step('next')
+    assert e.value.code == 'not_connected'                  # nicht transmission_active, kein connect

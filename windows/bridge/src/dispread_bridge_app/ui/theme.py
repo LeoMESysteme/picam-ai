@@ -128,6 +128,8 @@ QLineEdit {{ background: {t['ctrl']}; border: 1px solid {t['ctrl_stroke']}; bord
   border-radius: 4px; padding: 5px 8px; selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
 QLineEdit:focus {{ border-bottom: 2px solid {t['accent']}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
+QWidget:disabled {{ color: {t['text_dis']}; }}
+QLineEdit:disabled {{ background: {t['mica2']}; color: {t['text_dis']}; border: 1px solid {t['stroke']}; }}
 QProgressBar {{ background: {t['stroke']}; border: none; border-radius: 2px; max-height: 4px; min-height: 4px; }}
 QProgressBar::chunk {{ background: {t['accent']}; border-radius: 2px; }}
 QListView {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px;

@@ -279,6 +279,8 @@ class SetupView(QWidget):
             return
         for r in self.radio_buttons:
             r.setEnabled(False)
+            if r.parentWidget() is not None:
+                r.parentWidget().setEnabled(False)      # ganze Zeile dimmen, auch die Labels
         for aid in self.CONFIG_BUTTONS:
             b = self.buttons.get(aid)
             if b is not None:
@@ -290,6 +292,8 @@ class SetupView(QWidget):
             except RuntimeError:
                 pass
         self.back_button.setEnabled(False)
+        if self._step == 3:
+            self.next_button.setText('Weiter')          # verbunden: weiter zu Schritt 4, nie erneut verbinden
 
     def _wire_gates(self) -> None:
         """Knöpfe, die eine Bestätigung brauchen, bleiben bis dahin aus."""
