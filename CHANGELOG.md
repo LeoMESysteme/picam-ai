@@ -5,6 +5,570 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Schlussreview UI (W4): Ein abgelehnter Datensatz, den
+  der Server beim Altern auf `stale` umschreibt, erscheint nicht mehr als
+  durchgestrichener letzter Wert, sondern als „Kein Wert“. Ohne HUD-Datensatz läuft
+  das Alter ab Statuseingang weiter, sodass ein Wert nach 0,5 s nicht mehr als
+  freigegeben gilt; offline führt die Werttabelle keine Zeile mehr als
+  „Freigegeben“. Der Testmodus sperrt die GSVmulti-Ausgabewahl und zeigt sie als
+  „Aus“; Brückenwege tragen in der Statusleiste „gesperrt“. Härtungen: Zeichner
+  fangen Fehler einzeln ab, Aktionen geben `busy` im `finally` frei, im Testlauf
+  keine Wertspur, UART-Konfiguration liest `serial_port`. T13-Befund (OQ-63,
+  vorläufig): „Korrektur läuft“ animiert nur beim Einsetzen (≤ 1,6 s), danach
+  zeigt ein ruhiges Kennzeichen „Nachführung aktiv“ den Zustand.
+  Konsequenz: keine abgelehnten oder zu alten Werte mehr als freigegeben
+  dargestellt; dauerhafte Zweitfit-Nachführung wirkt nicht mehr alarmierend.
+
+* 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W3: Serielle Läufe
+  protokollieren die fehlende Abnahme und deren bewusste Bestätigung in
+  `session.json`. Bei fehlgeschlagener oder abgebrochener Einrichtung
+  werden Phase und Wartezeit geleert; der betroffene Schritt bleibt
+  fehlgeschlagen. Vorschauabrufe übergeben die zuletzt gesendete Sequenz
+  und bauen für unveränderte Bilder kein weiteres HUD auf. Nicht endliche
+  HUD-Zahlen werden als `null` statt ungültigem JSON übertragen.
+  Konsequenz: vollständigerer Auditpfad, abgeschlossener Fortschritt und
+  weniger Kopierarbeit beim Warten auf das nächste Vorschaubild;
+  Bildratentakt, Schreibzeitgrenze und Messfreigabe bleiben unverändert.
+
+* 2026-11-06: Werkbank `/live`, letzte UI-Korrekturen (W2). Die Bestätigung
+  für UART direkt lässt sich nicht mehr umgehen: `start()` bricht ohne Haken mit
+  Hinweis ab (Enter im Plan-Feld, `runStart`), `acknowledge_unaccepted` wird nur
+  aus dem echten Haken gesendet. „Freigegeben hh:mm:ss,s“ erscheint nur, wenn
+  das gezeigte Bild den neuesten Datensatz trägt. Der Hinweis bei „Anzeige hat
+  sich bewegt“ ohne Maße fällt nicht mehr auf „Rahmen verdeckt“ zurück.
+  Übungslauf behält Millisekunden; Fokusproben-Zeile heißt „(Reihenfolge)“;
+  Wert-Tabelle trägt „Seitenzeit“; Fehlerton der Schrittspur folgt `--err`;
+  Werteplan nach dem Stopp als „zuletzt Schritt N · Faktor F“; Menü-Kopfzeilen
+  `role="presentation"`; Stillstandsalter mit Dezimalkomma; Zoom-Beschriftung
+  nur bei Änderung geschrieben. Tests: Node (Haken, Freigabezeit, Hinweistext,
+  CPU „–“, Plan) und Playwright (Enter und direkter Start-Handler ohne
+  Haken, 409 beim Abbrechen). Der Viewer-Test wartet auf das separat vom
+  Bildstream gelieferte Raster, bevor er eine Zelle abfragt.
+
+* 2026-11-06: Werkbank `/live`, Backend-Nacharbeit W1: Unerwartete Fehler
+  im Referenzabgleich enden mit einer Fehlermeldung statt dauerhaftem
+  „running“. Fehlerhafte Geometrie im Rastercache wird mit Warnung als
+  nicht verfügbar gemeldet; eine fehlende Rasterquelle verhindert die
+  Bestätigung nicht mehr. Die Vorschau zählt ihr gemeinsames Bildintervall
+  ab Kodierbeginn, damit die Kodierdauer die Zielrate nicht senkt.
+  Bei Schreibzeitüberschreitung bricht sie den Clienttransport ab, soweit
+  unterstützt. Konsequenz: Einrichtung und Abgleich schließen ihren
+  Zustand ab, langsame Betrachter halten die Verbindung nicht offen;
+  Messpfad und Freigaberegeln bleiben unverändert.
+
+* 2026-11-06: Werkbank `/live`, G2: GSVmulti-Ausgabe in der neuen Seite.
+  Das Start-Popover bekommt die Gruppe „GSVmulti-Ausgabe“ mit den Wegen
+  Aus, UART direkt, UART über Brücke und Netzwerk über Brücke (ein Weg je
+  Lauf, Wahl je Browser gemerkt). UART direkt zeigt den Prototyp-Hinweis
+  wörtlich und startet erst nach dem Haken „Mir ist bewusst: nicht
+  abgenommen, keine Messfreigabe“; der Haken fällt mit jeder neuen
+  Sitzung oder Revision und wird nie gemerkt. Die Brückenwege zeigen die
+  Sperre „DUT-Ausgabe gesperrt: Windows-Abnahme fehlt“. Ein Testlauf mit
+  Ausgabe wird vor dem POST abgelehnt. Im Lauf zeigen Dock, Inspektor
+  (Reiter Referenz) und Statusleiste „GSVmulti: <Weg> · <Zustand>“ aus
+  `status.output` samt „GSVmulti-Empfang unbestätigt.“; UART direkt trägt
+  dauerhaft „nicht abgenommen“. Unterbrechung der Brücke und Ausfall
+  erscheinen als stehender Hinweis (Schlüssel „ausgabe“), ohne Dialog. Der
+  Übungslauf stellt den Status nur nach und sendet nichts. Konsequenz:
+  keine Änderung am Messpfad; der Server bleibt für die Prüfung der Wege
+  maßgeblich. Testserver: `POST /test/output`, Port über `LIVE_UI_PORT`.
+
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 3): Die Zeitleiste
+  zeigt in der Einrichtung nicht mehr nur „Zeitleiste“, sondern die
+  Schrittspur aus `setup.progress.steps[].elapsed_s` (laufender Schritt
+  gefüllt bis zu seiner Dauer, abgebrochener Schritt endet dort), die
+  Fokusproben als Striche und einen Abspielkopf. Noch nicht begonnene
+  Schritte und „Bestätigen“ stehen mit einer geplanten Breite aus dem Mock
+  da; das ist Gestaltung, keine Zeitangabe. Die Proben tragen im Status
+  keine Zeit, ihre Striche zeigen Zahl und Reihenfolge.
+
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 2): Der Viewer zeigt
+  in der Einrichtung, was der Inspektor zu prüfen verlangt. Sobald ein
+  Vorschlag vorliegt, zeichnet er auf Live und Standbild das Viereck aus
+  `setup.grid.quad` (Ebene Anzeige), das Zellraster aus `cell_boxes`
+  (Ebene Raster) und um jeden Rahmenbereich das gestrichelte Suchfenster.
+  Unsichere Zellen werden nur getönt, wenn eine Prüfung eine Zelle benennt;
+  `check_reasons` sind Texte ohne Zellindex, also bleibt das Raster ungetönt.
+  Während der Fokussuche erscheint die Fokus-ROI aus `setup.focus.roi`
+  gestrichelt mit „Fokus-ROI · Schärfe N“, die Ansicht rahmt sie statt des
+  ganzen Bilds, und die Ebene Fokus-ROI ist schaltbar (Legende ergänzt).
+
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 1): In der laufenden
+  Einrichtung steht „Einrichtung abbrechen“ neben dem gesperrten Bestätigen
+  (`POST /live/setup/cancel` mit CSRF); der Übungslauf beantwortet den
+  Abbruch selbst und meldet jetzt auch Fokus-ROI, CPU und Ausgabe „aus“, wie
+  es der Statusvertrag verlangt (drei rote Szenario-Tests wieder grün). Die
+  Ergebnisanzeige zeigt die Zeit des neuesten Datensatzes aus Laufstart,
+  Laufzeit und Datensatzalter (nie die Browseruhr) und „Freigegeben
+  hh:mm:ss,s“ nur bei freigegebenem Wert; Veraltet, Unlesbar und Testlauf
+  zeigen keine Freigabe. Ergebnisanzeige und Hinweise tragen keine
+  Kennungen wie „(anzeige_wechselt)“ mehr (Ursachenliste behält sie),
+  „Rahmen verdeckt“ und „Vorschlag mit WARNUNG“ sprechen den Spec-Wortlaut.
+  Die Wert-Tabelle hat eine Referenzspalte, die Statusleiste die CPU-Last,
+  das Lauf-Dock kein doppeltes „Referenz: “ mehr. Der Dialog „Anzeige hat
+  sich bewegt“ heißt jetzt „Lauf beenden und neu einrichten“ (Ruling R28).
+  Die Wertbeschriftung der Zeitleiste rückt vor die Jetzt-Linie, statt sie
+  zu unterbrechen.
+
+* 2026-11-06: Die Live-Einrichtung lässt sich über `/live/setup/cancel`
+  kooperativ abbrechen. Fokusproben, Unterphasen und Warteintervalle prüfen
+  den Abbruch; der laufende Schritt endet mit „Einrichtung abgebrochen“,
+  angewandte Kameraregler bleiben wie bei anderen Fehlern stehen. Der
+  Status ergänzt die tatsächliche Fokusregion in Kamerapixeln und die
+  Gesamt-CPU-Auslastung aus `/proc/stat`-Differenzen; bis zur zweiten Probe
+  oder bei Lesefehlern bleibt CPU unbekannt. Fake, Fixtures und
+  Statusvertragsprüfungen bilden die Ergänzungen ab. Auch Belichtungsrunden
+  prüfen den Abbruch; Fake und Dienst verwenden dieselbe mittlere Fokusregion.
+
+* 2026-11-06: Der Test zur verweigerten UART-Direktausgabe ohne ausdrückliche
+  Bestätigung vergleicht Laufzustand, Ausgabe und Sitzungsidentität gezielt.
+  Veränderliche Statuswerte und freier Plattenplatz lösen unter paralleler
+  Testlast keinen unbegründeten Fehler mehr aus; ein Lauf oder Portzugriff
+  bleibt weiterhin ausgeschlossen.
+
+* 2026-11-06: UART direkt bleibt nach Nutzerentscheidung als nicht abgenommener
+  P4-3-Prototyp nutzbar. Der Laufstart verlangt dafür ausdrücklich
+  `output.acknowledge_unaccepted: true`, auch bei bestehenden Port-Objekten
+  ohne `transport`: bewusste Verschärfung des bisherigen POST-Vertrags.
+  Alle externen Wege melden `acceptance: fehlt`; direkt erklärt ein
+  Freigabehinweis den unmarkiert stehenbleibenden GSVmulti-Altwert bei
+  ausgelassenen ungültigen Werten. Einheitlich gelten `last_ack` und
+  `ack_scope`; P4-3 bestätigt nur lokale Treiberannahme. Dauerhafte direkte
+  Sendefehler heißen `failed`, Tx-Auditfehler `audit_failed`; die Brücke
+  behält Wiederanlauf und DUT-Sperre. Fake und Statusprüfungen folgen dem
+  Vertrag, die neue Ausgabewahl bleibt Aufgabe G2.
+
+* 2026-11-06: GSVmulti: Brücke und P4-3-Direktausgabe unter einem Ausgabevertrag.
+  Laufstart akzeptiert Aus, serielle Direktausgabe, UART über Brücke und
+  Netzwerk über Brücke; bestehende Port-Konfigurationen bleiben gültig.
+  Der gemeinsame Ausgabestatus ergänzt den bisherigen P4-3-Status.
+  Testläufe lehnen jeden externen Ausgabeweg vor dem Laufstart ab.
+  Die Brückensperre für echte DUT-Werte und die Port-Schutzregeln bleiben
+  erhalten. Beide Formatter bleiben wegen unterschiedlicher Zahlenlexik,
+  Konsistenzprüfung und Demo-NaN getrennt. Fake-Server und Status-Fixtures
+  bilden den erweiterten Vertrag ab.
+
+* 2026-11-04: GSVmulti-Software-Prototyp ergänzt: einkanaliger
+  `UserDefinedFormatter` erhält die gelesene Dezimalauflösung, gemeinsame
+  Windows-Brücke empfängt wahlweise über TCP oder UART und schreibt an ein
+  virtuelles COM-Portpaar. Die Live-Seite bietet Aus/UART/Netzwerk und
+  Verbindungsstatus; Audit wird vor Veröffentlichung geschrieben und je
+  Lauf nicht mehr wegrotiert. Transportfehler lassen Kamera/Audit weiterlaufen,
+  Wiederanlauf verwirft historische Aufholfolgen. Unbestätigte Invalidierung
+  bleibt getrennt vom jüngsten Zahlenwert erhalten. **Echte DUT-Ausgabe ist
+  bis zur vollständigen Abnahme strukturell gesperrt**. Gültiger TCP-Demoweg
+  mit600/600 exakten TXT-/TDMS-Werten und Brückenprozess-Wiederanlauf mit
+  510/510 geschriebenen Werten belegt. GSVmulti verdichtet Ausfälle weiter
+  auf nominelle0,1s; Ungültig-/Altwertbehandlung, weitere Abbruchfälle und
+  historischer Import bleiben offen. com0com auf dem getesteten Windows11-PC
+  mit aktivem SecureBoot/HVCI funktionsfähig; keine allgemeine Treiberzulassung. Neue
+  Transportmarken tragen die explizite Zeitbasis `HOST_MONOTONIC`; die
+  bestehenden Bezeichnungslücken aus OQ-45 werden damit nicht geschlossen.
+
+* 2026-11-04: Die alte Live-Seite ist abgelöst; die neue Werkbank-Seite
+  `/live` ist die einzige.
+  * **Entfernt:** `static/live.html`, `static/live.js` und die Übergangsroute
+    `/live/alt`. Die DOM-Tests der alten Seite in
+    `tests/live_client.test.mjs` entfallen. Ihre Inhalte prüfen jetzt
+    Playwright und Einzeltests an den neuen Modulen (Begründungen der
+    Rahmenbereiche, Speicheranzeige, Nachführungsmodus).
+  * **Kamera neu verbinden** gab es bisher nur auf der alten Seite. Es
+    steht jetzt im Menü des Kamerafelds der Statusleiste (Spec „Aufbau der
+    Oberfläche“), mit dem Kamerazustand als Kopfzeile, und geht wie dort an
+    `POST /live/camera/start`. Die Servermeldung „Kamera laeuft nicht: … —
+    'Kamera neu verbinden'“ verweist damit wieder auf ein vorhandenes
+    Bedienelement.
+  * **Nachführungsmodus vor dem Lauf:** Nach dem Bestätigen nennt der
+    Inspektor wieder den kommenden Modus aus dem Profil, etwa „alt (ECC,
+    inhaltsabhängig) – neu einrichten empfohlen“. Die alte Seite zeigte das;
+    die neue zeigte den Modus bisher nur im Lauf.
+  * **Layout bei 1280 × 800:** Die Werkzeugleiste schnitt „Entzerrt“ ab.
+    Unter 1360 px stehen „Einpassen“ und „Legende“ nur als Symbol da; der
+    Name bleibt für Screenreader und Tests erhalten. Die Statusleiste
+    kürzte im Übungslauf die Sitzungskennung. Jetzt gibt zuerst die
+    Freigabegrenze Platz ab (bis 40 px), dann Referenz und Toleranz. Beide
+    tragen den vollen Text als Titel. Die Sitzung bleibt ganz lesbar.
+    Auflösung und Bildrate der Kamera entfallen schmal und stehen im Titel.
+  * **Playwright:** Die beiden alten Abläufe (Verbindungsverlust,
+    Bereichsbearbeitung per Tastatur und Bildklick) laufen mit gleichem
+    Prüfinhalt auf der neuen Seite. Neu ist der Gesamtablauf „Einrichtung →
+    Bestätigen → Lauf → Stopp“ samt Übungslauf bei 1280 × 800, 1440 × 900
+    und 1920 × 1080. Er prüft: keine Konsolenfehler, kein waagerechtes
+    Rollen, nichts abgeschnitten in Titel-, Werkzeug- und Statusleiste.
+  * **CI:** `playwright.yml` führt `playwright.live.config.ts` als eigenen
+    Schritt aus (Fake-Server Port 8767, Doku 8766). Es gibt einen eigenen
+    Bericht `playwright-report-live`.
+    In CI wiederholt die Suite einen fehlgeschlagenen Test einmal, weil der
+    Pi-Runner gedrosselt wird und die Suite 0,5-s- und 1,5-s-Grenzen prüft.
+    Lokal gibt es keine Wiederholung.
+  * **Referenzzähler:** Die Statusleiste zeigte bei unbekannter
+    Telegrammzahl „Referenz 0 Telegramme“. Unbekannt heißt jetzt „–“, wie im
+    Lauf-Dock; eine unbekannte Zahl darf nicht als null erscheinen.
+  * Tests für den Testmodus-Haken (neue Revision oder Sitzung verlangt
+    einen neuen Haken) und für die Diagnosezeile (erster Fehler,
+    Kopie läuft/gesichert, Schreibfehler, Reste) kamen zurück.
+
+* 2026-11-04: Nacharbeit am Übungslauf und an der Hilfe der Live-Seite.
+  * **Falscher Hinweis nach dem Übungslauf:** Wer die Übung mitten im Lauf
+    beendete, sah „Lauf NN gestoppt“ für die echte Werkbank. Der Wächter
+    für Hinweise und Dialog gilt jetzt je Quelle (Server oder Szenario).
+    Die Rückkehr meldet so keinen Übergang aus der Übung.
+  * **Eigener Takt:** Das Szenario läuft im eigenen 500-ms-Takt. Hängt der
+    echte Statusabruf, meldet der Übungslauf deshalb keinen falschen
+    Verbindungsverlust mehr. Der echte Status wird weiter nur gelesen.
+  * **Glossar Displayfehler:** Der Text sagt jetzt, dass die Prüfung
+    höchstens WARNUNG ergibt und diese vor dem Bestätigen zu quittieren
+    ist. Vorher hieß es „kein Fehler“.
+  * **Ergebnistext bei Wechsel:** „Wert wechselt (Wert wechselt
+    (anzeige_wechselt))“ wird nicht mehr doppelt geklammert, wenn der
+    Server die Erklärung mitliefert.
+  * Das Hilfe-Dock zeigt die Lesegründe aus `cause_texts`.
+
+* 2026-11-04: Dem Hilfe-Dock fehlte die vollständige Lesegrund-Tabelle.
+  `/live/status?full=1` liefert jetzt `cause_texts` direkt aus
+  `LIVE_CAUSE_TEXT`; der Fake-Server folgt demselben Vertrag. So bleiben
+  die Erklärungen zentral im Backend gepflegt.
+
+* 2026-11-04: Neue Bediener fanden sich auf der neuen Live-Seite nur
+  durch Ausprobieren am echten Aufbau zurecht. Jetzt gibt es Rundgang,
+  Übungslauf ohne Hardware und ein Hilfe-Dock (Spec „Einarbeitung“).
+  * **Rundgang** (`help/tour.js`): acht Stationen von der Titelleiste bis
+    zur Statusleiste, je ein hervorgehobener Bereich mit 1–3 Sätzen.
+    * Beim ersten Besuch erscheint ein Angebot („Rundgang starten /
+      Später“), nie über einer laufenden Einrichtung oder einem Lauf.
+    * Sonst startet er über Hilfe › Rundgang.
+    * „Überspringen“ und „Fertig“ merkt sich `localStorage`; ohne Speicher
+      fragt die Seite beim nächsten Besuch wieder.
+  * **Übungslauf** (Hilfe › Übungslauf, nur bei Bereit, Lauf beendet oder
+    abgebrochener Einrichtung): Die echte Oberfläche läuft auf einem
+    Szenario im Browser (`practice/scenario.js`). Es folgt der Zeitachse
+    des Mocks und wartet an den Bedienstellen auf den Bediener:
+    Einrichtung starten, Rahmenbereich bearbeiten, Bestätigen mit Namen,
+    Lauf starten, Dialog „Anzeige bewegt“, Lauf stoppen.
+    * `api.js` hat dafür eine umschaltbare Quelle (`useSource`). Im
+      Übungslauf gehen alle Bedienschritte an das Szenario; `fetch` wird
+      für POST nie aufgerufen.
+    * Die Kamera-Vorschau ist durch zusammengesetzte Bilder ersetzt
+      (`practice/frames.js` aus `still.jpg`, Zeichnung aus dem Mock).
+    * Titel- und Statusleiste tragen das Band „Übungslauf – keine
+      Messung“. Dazu kommen ein schraffierter Viewer-Rahmen, der Chip
+      „Übung“ und „ÜBUNG“ in der Ergebnisanzeige.
+    * Ein kurzer Auftrag im Rundgang-Stil sagt, was als Nächstes zu tun
+      ist.
+    * Startet an der Werkbank eine echte Einrichtung oder ein echter Lauf,
+      endet der Übungslauf von selbst.
+  * **Hilfe-Dock** (`help/dock.js`, Texte in `help/glossar-de.json`): Es
+    ersetzt rechts den Inspektor bis zum Schließen.
+    * Inhalt: Statuswörter, alle 12 Prüfungen, Markierungen und
+      Bedienbegriffe, je mit Link ins Wiki-Glossar, dazu eine Suche.
+    * Nachführungsgründe kommen zur Laufzeit aus `tracking_reasons` des
+      Status, Lesegründe aus den gemeldeten `rejection_causes`. Sie werden
+      nicht im Client gepflegt.
+    * Die vollständige Lesegrund-Tabelle (`LIVE_CAUSE_TEXT`) übernimmt der
+      Client aus `cause_texts` im vollen Status.
+  * **Konsequenz:** Eine Einarbeitung braucht keinen Aufbau und keine
+    Kamera. Ein Übungswert ist überall als Übung markiert, und der
+    Übungslauf sendet nichts an die Werkbank.
+
+* 2026-11-04: Nacharbeit an Zustandseffekten und Hinweisen der Live-Seite.
+  * **Stehender Hinweis:** „Rahmen verdeckt“ wurde bei jedem Statusabruf
+    neu aufgebaut. Der Fokus fiel vom Schließen-Knopf, und Vorleser
+    sagten den Hinweis alle 0,5 s neu an. Jetzt ändern sich nur noch
+    geänderte Texte.
+  * **Verbindung verloren:** Das Band liegt unter der Titelleiste, und
+    die Titelleiste bleibt ungedimmt. „Lauf stoppen“ bleibt so bedienbar,
+    falls nur der Statusabruf hängt.
+  * **Ruhende Effekte:** Stillstand und Verbindungsverlust zeichnen nicht
+    mehr Bild für Bild. Ihr Alter zählt im 250-ms-Takt. Eine Änderung der
+    Einstellung „Bewegung reduzieren“ wirkt sofort.
+  * **Verlusthinweis:** Er steht nur bei frischem Datensatz, nicht neben
+    einem Streamstillstand.
+  * **Dialog „Anzeige bewegt“:** Seine Bedienschritte sind austauschbar.
+    So kann der Übungslauf (Aufgabe 11) nie an den Server senden.
+
+* 2026-11-04: Störzustände waren auf der neuen Live-Seite nur am
+  Statuswort zu erkennen, und eine abgelehnte Aktion stand klein in der
+  Titelleiste. Jetzt gibt es Zustandseffekte, Hinweise und den Dialog
+  „Anzeige hat sich bewegt“ nach Mock-Kapitel 8a–8e.
+  * **Effektebene** über dem Bild (`viewer/effects.js`). Es läuft nur der
+    Effekt mit dem höchsten Vorrang: Verbindung verloren, dann
+    Streamstillstand, dann Unlesbar/verloren, dann Korrektur, dann
+    Wechselt.
+    * Unlesbar: rotes Innenleuchten und eine treibende Punktwolke an den
+      betroffenen Ecken und Rahmenbereichen. Die Wolke liegt in
+      Bildkoordinaten und folgt Zoom und Verschieben.
+    * Korrektur: Geisterbild des alten Vierecks mit Teal-Strichen zum
+      neuen.
+    * Wechselt: kurzer Puls am Viereck.
+    * Stillstand: Das eingefrorene Bild wird unscharf und entsättigt, das
+      HUD bleibt scharf. Dazu ein Feld „Kein neues Kamerabild seit N s“
+      mit laufendem Alter.
+    * Verbindung verloren: Band oben mit Sekunden.
+    * Kamera-Neustart der Einrichtung: Das Bild ist kurz dunkel, mit
+      Hinweis.
+  * **Bewegung reduziert** (`prefers-reduced-motion`): keine Teilchen.
+    Stattdessen statische Punkte und markierte Ecken.
+  * **Rechenbudget:** Die Effekte bleiben unter 4 ms Zeichenzeit (Median
+    über 60 Bilder bei 1440×900 gemessen). Unter 20 fps halbiert sich die
+    Teilchenzahl.
+  * **Hinweise** unten rechts im Viewer (`ui/toasts.js`):
+    * Höchstens drei sind sichtbar; ein gleicher Schlüssel ersetzt den
+      alten Hinweis.
+    * Sie sind per Tastatur schließbar, und ein nicht stehender Hinweis
+      schließt nach 4 s.
+    * Rahmen verdeckt bleibt stehen, bis die Nachführung sich erholt.
+    * Weitere Hinweise: Streamstillstand, Lauf gestartet/gestoppt,
+      Werteplan-Schritt, Marke und Vorschlag mit WARNUNG.
+    * Eine abgelehnte Aktion steht mit dem Servertext als stehender
+      Hinweis da, nicht mehr in der Titelleiste.
+  * **Dialog „Anzeige hat sich bewegt“** (`run/alerts.js`):
+    * Er erscheint einmal je Verlust. Esc bedeutet „Weiter beobachten“,
+      nie Stopp.
+    * Das Weglegen merkt sich die Seite in `sessionStorage`, sodass der
+      Dialog auch nach dem Neuladen nicht wiederkommt. Ohne Speicher
+      funktioniert die Seite trotzdem.
+    * „Lauf stoppen“ und „Neu einrichten“ nutzen die bestehenden POSTs
+      `/live/run/stop` und `/live/setup`.
+  * **Test-Server:** Rahmen verdeckt trifft nun die Bereiche rechts der
+    Anzeige, eine Hand von rechts wie im Mock. Bei „Anzeige bewegt“
+    findet kein Bereich mehr seinen Treffer.
+
+* 2026-11-04: Nacharbeit an der Laufansicht der Live-Seite.
+  * **Dialog:** Ein vor dem Zeigen geschlossener Dialog (`close()`) ließ
+    einen Tastatur-Haken auf der Seite zurück. Der schluckte Esc und
+    fing Tab ab. Jetzt löst er sofort auf und hinterlässt nichts.
+  * **Referenz in der Ergebnisanzeige:** Sie zeigt `reference.latest` mit
+    Alter. Ist der Wert älter als 0,5 s oder die Verbindung weg, erscheint
+    er grau und durchgestrichen wie ein veralteter Prüflingswert. Im
+    Testlauf darf die Referenz stehen, denn sie ist kein freigegebener
+    Wert.
+  * **Kopf der Ergebnisanzeige:** Die Browseruhr im Kopf entfällt. Sie
+    lief neben einem alten Wert weiter. „Bild N“ steht nur noch einmal
+    da.
+  * **Verbindung verloren:** Wert-Etikett im HUD und Ergebnisanzeige
+    werden nach derselben Regel Veraltet (`readoutTag` mit `offline`),
+    auch wenn nur `/live/status` ausfällt und Bilder weiter kommen.
+  * **Dock links:** Gestartet und Dauer kommen aus `run.started_at_utc`
+    und `run.elapsed_s`. Der Werteplan zeigt den laufenden Schritt. Nach
+    dem Stopp stehen die Fehllesungen und die drei Zähler aus
+    `reference_eval`, „Abgleich läuft …“ während der Auswertung und die
+    Ablehnung wörtlich. Im Lauf bleibt „Abgleich nach Laufende“ (OP-1).
+    Der Entwickler-Tooltip entfällt.
+  * **Zeitleiste:** Werteplan-Schritte erscheinen als Marke, einmal je
+    Schritt. Markenbeschriftungen weichen der Wertbeschriftung rechts aus.
+  * **Ereignis markieren:** Ein leerer Text geht wie auf der alten Seite
+    an den Server, und dessen Antwort steht wörtlich da. Der Test-Server
+    prüft die Marke wie `session.mark`.
+
+* 2026-11-04: Der Laufstatus enthielt weder Dauer noch aktuelle Referenz
+  oder den Abgleich nach Laufende; die Zeitleiste verschwand nach dem Stopp.
+  Jetzt liefert er Start, Ende und eingefrorene Dauer, Referenztext mit
+  fortlaufendem Alter und den letzten Werteplan-Schritt. Nach dem Dateischluss
+  berechnet ein eigener Thread die bestehenden Referenzzähler oder meldet die
+  Ablehnung wörtlich. Die Zeitleiste bleibt nach dem Stopp erhalten. Fake-Szenen,
+  kompakte Status-Fixtures und die Formprüfung tragen dieselben Ergänzungen.
+
+* 2026-11-04: Die neue Live-Seite zeigte im Lauf nur Platzhalter; Start
+  mit Optionen, Testmodus und Ereignismarken gingen nur über die alte
+  Seite. Jetzt gibt es die Laufansicht nach Mock-Kapitel 8.
+  * **Ergebnisanzeige** rechts oben: Kopfband in der Statusfarbe mit
+    Statuswort und Codewort („Freigegeben VALID“ …), großer Wert mit
+    Einheit, Grund, Referenz, Spur, Alter und Bild. Das Statuswort folgt
+    derselben Regel wie das Wert-Etikett im HUD (`readoutTag`): ein Wert
+    über 0,5 s oder ohne neues Bild seit 1,5 s erscheint grau und
+    durchgestrichen als Veraltet, Unlesbar als „Kein Wert“, Wechselt
+    ohne Ziffern. Im Testlauf erscheint nie ein Wert. Ohne Verbindung
+    zur Werkbank ist nichts freigegeben.
+  * **Dock links:** Bilder, Lücken, Datensätze, Marken, Statusanteile je
+    Bild aus `run.counts` mit Anteilsbalken, Referenz und Werteplan.
+    „Fehllesungen gegen Referenz“ zeigt während des Laufs „Abgleich nach
+    Laufende“ (Spec OP-1). Nach dem Stopp stehen Endgrund und Ablage da.
+  * **Inspektor:** Wert (eine Zeile je Wechsel von Status oder Wert,
+    Werte nur bei Freigegeben), Ursachen (10-s-Fenster aus
+    `rejection_causes`), Nachführung (Spurgüte, Rahmenbereiche mit
+    Treffer, verlorene Gründe) und Referenz mit „Ablage“ (Diagnose-Zeile
+    und letzte Marke, Texte aus `live.js`).
+  * **Zeitleiste** (40 s): Statusband je 250-ms-Eimer, darüber die
+    Wertspur nur aus freigegebenen Werten als Stufen, nie geglättet und
+    über nicht freigegebene Eimer nie überbrückt. Dazu kommen Marken für
+    Bedienermarken, Hinweise und Stillstand. Nach dem Neuladen füllt
+    `run.recent` die Leiste über `recent_now_ms`. Ein Stillstand zeigt
+    seine Lücke bis jetzt.
+  * **Lauf starten** hat ein Pop-up mit Referenz, Diagnosebildern,
+    Werteplan und Testmodus (Texte, Ablauf und POST-Körper aus
+    `live.js`). Testlauf und Werteplan bestätigt ein eigener Dialog
+    (`ui/modal.js`: Fokusfalle, Hintergrund inert, Esc wählt die
+    Esc-Aktion, Fokus kehrt zurück) statt `window.confirm`.
+    **Ereignis markieren** fragt den Text ab und sendet ihn an
+    `/live/run/mark`.
+  * **Test-Server:** Die Laufszenen tragen 60 s `recent` wie
+    `RecentStrip`. `POST /test/scene` nimmt `test_run: true` und schreibt
+    VALID wie `live/session.py` auf UNREADABLE um. `stopped` behält wie
+    der echte Dienst seinen Lauf mit Endgrund, und Marken tragen die
+    Meldezeit.
+
+* 2026-11-04: Nacharbeit an der Einrichtungsansicht der Live-Seite.
+  * **Rahmen der Anzeige:** Ohne Lauf-HUD zeigte der Viewer das ganze
+    Kamerabild, und die 15-px-Rahmenbereiche waren kaum zu treffen. Jetzt
+    rahmen Anfangsansicht und „Einpassen“ den Anzeigerahmen des Vorschlags
+    (`setup.grid.quad`) samt Rahmenbereichen mit etwa 25 % Rand.
+  * **Sperre nach einer Bereichsänderung:** Sie hält jetzt, bis der Status
+    die neue `proposal_revision` bringt, höchstens etwa 3 s, so wie die
+    alte Seite auf `refresh()` wartete. In der Lücke zwischen Antwort und
+    neuem Status bleiben Bestätigen und weitere Klicks wirkungslos.
+  * **Wortlaut bei verlorener Anfrage:** Eine verlorene Bereichsänderung
+    zeigt wieder „Bereichsänderung nicht bestätigt – Verbindung prüfen und
+    erneut versuchen.“ wie die alte Seite.
+  * **Graues Gesamturteil:** Ein Gesamturteil NICHT_GEPRUEFT oder ein
+    unbekanntes Urteil erscheint grau statt im Freigabe-Grün.
+  * **Beschriftung der Fokus-Schwelle:** Die Linie heißt nur dann
+    „85 % = N“, wenn sie nachweislich 85 % des Maximums ist, sonst
+    „Schwelle N“.
+  * **Test-Server:** Das Gesamturteil nach einer Bereichsänderung ist wie
+    im Backend die schlechteste Prüfung.
+
+* 2026-11-04: Die neue Live-Seite zeigte während der Einrichtung nur
+  Platzhalter; Bestätigen und Rahmenbereiche gingen nur über die alte
+  Seite. Jetzt zeigt das Ablauf-Dock die Schritte mit Teilschritten und
+  der Ruhezeit als Balken („Stabilität 9/15 s“). Der Inspektor wechselt
+  selbst zu Fokus (Schärfekurve live in Messreihenfolge, Bestwert
+  markiert, Linie bei `verify.threshold`, sonst bei 85 % des Maximums,
+  Gegenprüfung „624 ≥ 536 (99 %)“; fehlt `verify`, wird kein Wert
+  erfunden), zu den Prüfungen (Prüfung | Status | Hinweis aus
+  `checks_live`, nach dem Vorschlag aus `checks` und `check_reasons`,
+  Gesamturteil) und zur Belichtung (p80 im Band 115–150 mit Ziel und
+  Runden). Bestätigt wird im Tab Schritt mit den Feldern und Texten der
+  alten Seite (Name, Format, WARNUNG, angepasste Toleranz, Lesesperre)
+  über HTTPS mit CSRF; neue `proposal_revision` oder `session_id` leeren
+  die Felder, Serverantworten stehen wörtlich darunter. Im Viewer (Live
+  oder Standbild) fügt ein Klick auf den Rahmen einen Rahmenbereich
+  hinzu, ein Klick auf einen Bereich entfernt ihn; das Ergebnis aus
+  `centre_results` steht als Etikett am Klickpunkt („im Zeichenbereich –
+  nicht geeignet“). Solange die Anfrage läuft, sind Bestätigen und
+  weitere Klicks gesperrt; die Eingabe x,y bleibt als Tastaturweg.
+  `client.post` liefert dafür auch den Antwortkörper (`data`). Der
+  Test-Server lehnt Punkte im Anzeige-Viereck wie das Backend mit
+  `im_zeichenbereich` ab.
+
+* 2026-11-04: Im Viewer der Live-Seite konnte ein freigegebener Wert bei
+  stehendem Strom noch bis etwa 2,5 s als „Freigegeben“ stehen, weil das
+  Etikett nur das Alter beim Kodieren kannte. Jetzt zählt das Alter des
+  Werts weiter, solange kein neues Bild kommt (Alter + Bildalter > 0,5 s
+  ergibt Veraltet), und der Viewer zeichnet genau an den Grenzen neu.
+  Die Zellkästen kommen aus dem echten Leser-Raster (`setup.grid`, über
+  das Viereck ins Kamerabild abgebildet) statt aus 16 gleichen Teilen des
+  Vierecks; ohne Raster gibt es keine Zellkästen, keine Zelltreffer und
+  keine Zellzeilen in der Legende. Ein Fehler beim Zeichnen eines Bilds
+  erscheint als Seitenfehler statt als stilles Neuverbinden, ein Teil ohne
+  lesbares X-Hud behält die Kamerabildgröße. Zusatzebenen und Klicks
+  hängen sich mehrfach an (`addPainter`, `addClickHandler`), rote und
+  gelbe Hinweise im Info-Fenster sind wieder farbig, und die Legende
+  nennt den Fehlerort erst, wenn er gezeichnet wird.
+
+* 2026-11-04: `/live/status` liefert mit `setup.grid` die tatsächlichen
+  Leserboxen samt Zielgröße und Rasterquelle. Die Geometrie folgt dem
+  Vorschlag und Bereichskorrekturen, bleibt im bestätigten Lauf erhalten
+  und wird nur bei Änderungen berechnet; ohne Vorschlag fehlt das Raster.
+  Das zugehörige Anzeige-Viereck steht als `setup.grid.quad` in
+  Kamerabild-Koordinaten mit einer Nachkommastelle auch außerhalb eines Laufs bereit.
+
+* 2026-11-04: Das Grafikfenster der neuen Live-Seite war leer. Jetzt
+  liest der Viewer den MJPEG-Strom `/live/preview.mjpg` per `fetch()`
+  (`mjpeg.js`: Teile über Chunk-Grenzen zerlegen, Content-Length gilt,
+  Neuverbindung nach 0,5 s bis 5 s) und zeichnet Bild und HUD aus
+  demselben Teil auf einer Canvas mit 1-px-Linien in Kamerabild-
+  Koordinaten: Anzeige-Viereck in der Statusfarbe (Teal bei Korrektur),
+  Zellen des Leser-Rasters, unsichere Zellen getönt, Rahmenbereiche
+  in Magenta bzw. ohne Treffer rot mit Suchfenster, Wert-Etikett mit
+  Wert, Status und Spur (älter als 0,5 s oder Bild älter als 1,5 s:
+  Veraltet). Mausrad zoomt um den Zeiger, Ziehen verschiebt,
+  Werkzeugleiste mit −/+, Prozent, 1:1 (ein Bildpunkt je Gerätepixel) und
+  Einpassen, Ebenen-Menü, Legende und Quellen Live, Standbild,
+  Abtastbild und Entzerrt aus `setup.overlays`. Zeigen auf eine
+  Markierung öffnet eine Info nur mit Zahlen aus dem HUD
+  („Rahmenbereich 4 · Suchfenster-Mitte 1485, 658 · Treffer 0,92“,
+  „Zelle 8 · Bestwert 7 · Abstand 0,41 · unsicher“), Klicken heftet sie
+  an. Die Statusleiste zeigt die gemessene Vorschau-Rate und den Grund
+  einer Drosselung; ein Hintergrund-Tab hält keinen Strom offen. Die
+  Lage der Fokus-ROI meldet der Server noch nicht, die Ebene ist daher
+  gesperrt.
+
+* 2026-11-04: Auf der neuen Live-Seite fettete der Browser Überschriften
+  künstlich, weil Noto Sans nur in Regular vorlag. Jetzt liegen die
+  offiziellen Schnitte 400/500/600/700 und Noto Sans Mono 400/700 als
+  Latein-Teilmenge lokal; synthetische Fettung ist abgeschaltet. Ein
+  Fehler beim Darstellen des Status erscheint jetzt als Seitenfehler statt
+  als „Verbindung zur Werkbank verloren“, ein Statusabruf ohne Antwort
+  wird nach 3 s abgebrochen und der Abruftakt läuft weiter. Im Testlauf
+  zeigen echt unlesbare Bilder wieder den Unlesbar-Effekt; nur die vom
+  Server gesperrten Freigaben (`testlauf_keine_freigabe`) bleiben ruhig.
+
+* 2026-11-04: Die Werkbank-Seite `/live` war eine lange Formularseite
+  ohne festes Layout. `/live` liefert jetzt das neue Seitengerüst im
+  Machine-Vision-Stil des freigegebenen Mocks (`static/live/`): Titelleiste
+  mit Kontextaktion je Zustand (Einrichtung starten mit optionalem
+  Zellentext, Lauf starten, Lauf stoppen, Neu einrichten), Ablauf-Dock mit
+  Schrittliste und Teilfortschritt, Inspektorrahmen, Zeitleisten- und
+  Viewer-Platz und eine Statusleiste mit Kamera, Bildern, Lücken, SD,
+  Referenz, Freigabehinweis und Sitzung. Statusabruf (500 ms, voller Status
+  einmal), CSRF-POSTs und die Verbindungsregel (1,5 s) liegen in `api.js`;
+  `statusView` und `connectionView` sind unverändert nach `model.js`
+  umgezogen, dazu `effectState` (Effektvorrang der Spec) und `stepRows`
+  (Fortschritt aus `setup.progress`, Abbruch vor dem ersten Schritt und
+  nach `setup_failed` als Ort des Abbruchs). Die Schriften Noto Sans und
+  Noto Sans Mono liegen als woff2 mit OFL-Lizenz lokal. Die alte Seite
+  bleibt bis zu ihrer Ablösung unter `/live/alt` erreichbar; Viewer, HUD,
+  Einrichtungs- und Laufansicht folgen in eigenen Schritten.
+  `pyproject.toml` nimmt `static/live/` und die Schriften in die
+  Paketdaten auf.
+
+* 2026-11-04: Der Fake-Server der Live-Seite kannte die neuen Einrichtungs-
+  und Laufdaten noch nicht. Elf steuerbare Szenen liefern jetzt Fokus,
+  Fortschritt, Prüfungen, Zähler und Verlauf sowie eine MJPEG-Vorschau mit
+  Szenen-HUD. Gespeicherte Szenen werden gegen frische Dumps und den echten
+  Statusvertrag geprüft; Node und spätere Browsertests teilen dieselbe
+  Formprüfung. Revisionswechsel, verzögerte Antworten und ausbleibende
+  Statusantworten sind für Bedienungstests steuerbar.
+
+* 2026-11-04: Die Live-Vorschau kodierte bei jedem Abruf erneut und
+  zeichnete das Quad fest ins Bild. `/live/preview.mjpg` liefert jetzt
+  JPEG-Teile mit Sequenz, Aufnahmezeit und kompaktem HUD im Kopf;
+  `/live/preview.jpg` teilt denselben Kodiercache. Die Vorschau zielt
+  auf 15 fps und fällt bei übersprungenen Messbildern oder langsamer
+  Kodierung auf 5 fps, mit fünf Sekunden Erholzeit. Die Kodierung läuft
+  außerhalb der Messung, langsame Betrachter enden nach zwei Sekunden
+  Schreibwartezeit. Der Strom endet nach zehn Minuten zum Neuverbinden.
+  Das Quad bleibt als HUD-Geometrie verfügbar, ohne das JPEG zu verändern.
+  Auch versetzt verbundene Betrachter teilen eine Kodierung pro Intervall;
+  ein fester Sendezeitplan vermeidet zusätzliche Bildratenverluste durch Schreibpausen.
+
+* 2026-11-04: Laufzähler und Bilddiagnosen waren während eines Laufs
+  nicht vollständig für die Werkbank verfügbar. `/live/status` ergänzt
+  jetzt alle vier Statuszähler je auditiertem Bild und einen 60-s-Verlauf
+  in 250-ms-Eimern mit schlechtestem Status und letztem freigegebenem
+  Wert. Ein unabhängiger HUD-Snapshot liefert Quad, Rahmenbereiche,
+  vorhandene Zelldiagnosen, Verarbeitungstempo, Latenz und den Anteil
+  übersprungener Bilder über zwei Sekunden. Alte Ablesungen erscheinen
+  auch dort als veraltet; Fehler der Anzeigeaufbereitung unterbrechen
+  die Messung nicht.
+  `run.recent_now_ms` verankert den Verlauf auch bei ausbleibenden Bildern zeitlich.
+
+* 2026-11-04: Während der Einrichtung waren die Dauer einzelner Schritte,
+  die Stabilitätswartezeit und bereits berechnete Prüfungen nicht live
+  sichtbar. `/live/status` ergänzt jetzt fünf Schritte mit Laufzeiten,
+  Suchversuch und Unterphase sowie Prüfungen vor dem Vorschlag. Die
+  Wartezeit meldet ihren Fortschritt in Scheiben von höchstens 0,5 s;
+  abgebrochene Schritte werden als fehlgeschlagen markiert. Eine neue
+  Einrichtung leert diese Angaben zusammen mit Fokus und Belichtung.
+
+* 2026-11-04: Während der Einrichtung waren Fokusproben und
+  Belichtungsrunden erst nach Abschluss nachvollziehbar. Die Such- und
+  Einrichtungsfunktionen melden neue Proben jetzt über optionale Haken;
+  `/live/status` zeigt sie in Messreihenfolge samt Suchmethode,
+  Fokus-Gegenprobe und Belichtungszielband. Eine neue Einrichtung leert
+  beide Verläufe. Bestehende Statusfelder und Diagnoseartefakte behalten
+  ihren Vertrag; fehlende Belichtungspegel werden nicht als Werte geraten.
+
 * 2026-11-04: Nach dem Auslagern der Live-Diagnosebilder auf die SSD
   fanden Tests und Auswerteskripte Bilder nicht mehr, wenn die Sitzung
   weiterhin unter `var/live/` lag. `scripts/_devdata.py` löst mit

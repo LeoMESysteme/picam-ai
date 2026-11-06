@@ -1,4 +1,9 @@
-"""Einkanaliger GSVmulti-UserDefined-Prototyp, noch ohne Windows-Abnahme.
+"""P4-3-Direktausgabe: enthaelt eine andere Lexik als user_defined.py.
+ASCII-Leerzellen werden entfernt, Ganzzahlen und eigene Praefixe sind erlaubt;
+Decimal prueft Text/Wert exakt, unbekannte Werte werden ausgelassen.
+Keine Einheitenpruefung und keine SEND_NAN-Demopolicy.
+
+Einkanaliger GSVmulti-UserDefined-Prototyp, noch ohne Windows-Abnahme.
 
 Grundlage: docs/GSVMULTI_PROTOCOL.md, ME v2.6 S. 118–121. ASCII und CRLF
 sind feste Formatregeln. FormatterCapabilities besitzt keine Felder für

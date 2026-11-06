@@ -584,8 +584,10 @@ def test_assist_uses_injected_camera_and_writes_two_stills(tmp_path, monkeypatch
     assert camera_opens == [None]
     assert capture.released
     assert capture.reads >= 22  # vor jedem Standbild mindestens 10 alte Frames
-    assert ("sleep", 30.0) in events
-    assert events.index(("fit", None)) < events.index(("sleep", 30.0))
+    sleep_events = [event for event in events if event[0] == "sleep"]
+    assert sum(value for _, value in sleep_events) == pytest.approx(30.0, rel=0, abs=1e-9)
+    assert all(value <= 0.5 for _, value in sleep_events)
+    assert events.index(("fit", None)) < events.index(sleep_events[0])
     assert events.count(("fit", None)) == 1
     proposal = json.loads((out / "proposal.json").read_text())
     assert proposal["setup_checks"]["overall"] == "WARNUNG"

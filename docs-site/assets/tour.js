@@ -528,7 +528,7 @@
     refs.gsv = group(layer, "bench-gsv");
     panel(refs.gsv, 760, 318, 160, 84, "t-window t-planned-box");
     label(refs.gsv, 840, 352, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    label(refs.gsv, 840, 376, "Adapter offen", "t-small t-plan-text", { "text-anchor": "middle" });
+    label(refs.gsv, 840, 376, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
     refs.gsvLink = svg("path", { d: "M618 384H756", class: "t-plan-line" }, layer);
     tour.docLink(refs.gsv, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 334]);
     tour.docLink(refs.pi, "docs/HARDWARE_PROFILE.html", "Hardwareprofil öffnen", [630, 370]);
@@ -1171,8 +1171,8 @@
 
     const serial = group(layer, "out-serial");
     panel(serial, 610, 230, 140, 64, "t-panel t-planned-box");
-    label(serial, 680, 258, "serial_out", "t-mono", { "text-anchor": "middle" });
-    label(serial, 680, 278, "Live: noch offen", "t-small t-plan-text", { "text-anchor": "middle" });
+    label(serial, 680, 258, "UserDefined", "t-mono", { "text-anchor": "middle" });
+    label(serial, 680, 278, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
     ctx.tour.docLink(serial, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [740, 246]);
     const toSerial = svg("path", { d: "M470 262H606", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
 
@@ -1182,7 +1182,7 @@
     label(gsv, 860, 278, "Ziel", "t-small", { "text-anchor": "middle" });
     const toGsv = svg("path", { d: "M750 262H796", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
     const open = group(layer, "oq07");
-    badge(open, 850, 326, "Adapter offen · OQ-07", "plan", 176);
+    badge(open, 850, 326, "Abnahme offen · OQ-07", "plan", 176);
     ctx.tour.docLink(open, "docs/open-questions.html#oq-07", "OQ-07 öffnen");
 
     const receipt = group(layer, "receipt");

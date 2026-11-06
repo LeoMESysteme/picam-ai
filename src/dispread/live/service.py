@@ -13,6 +13,7 @@ import shutil
 import threading
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from dispread.camera_settings import CameraSettings
+from dispread.charcells import CharGrid
 from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
@@ -28,15 +30,19 @@ from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
-from dispread.live.output import validate_output
+from dispread.live.output import normalize_output, require_output_acknowledgement
+from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
+from dispread.live.reference_eval import evaluate_records, validate_reference_session
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
-from dispread.workbench.fields import REASONS, live_cause
+from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
+SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
+SETUP_FOCUS_HINT: live_setup.HintBox | None = None
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
 STORAGE_RESERVE_BYTES = 2_000_000_000
@@ -140,10 +146,16 @@ class LiveService:
         monotonic: Callable[[], float] | None = None,
         diagnostic_staging_root: Path = Path('/dev/shm'),
         disk_usage: Callable[[Path], Any] | None = None,
+        cpu_reader: Callable[[], str] | None = None,
     ) -> None:
         self._owner = owner
         self._data_dir = Path(data_dir)
         self._disk_usage = disk_usage or shutil.disk_usage
+        self._cpu_reader = cpu_reader or (lambda: Path('/proc/stat').read_text(encoding='ascii'))
+        self._cpu_sample_at: float | None = None
+        self._cpu_previous: tuple[int, int, float] | None = None
+        self._cpu_percent: float | None = None
+        self._cpu_window_s = 0.0
         self._config = config
         self._simulate = simulate
         self._source_for = source_for or (lambda settings: UvcSource(settings))
@@ -159,6 +171,7 @@ class LiveService:
         self._setup_elapsed_s: float | None = None
         self._setup_step: str | None = None
         self._setup_message: str | None = None
+        self._reset_setup_live()
         self._diagnostics_error: str | None = None
         self._operation_lock = threading.Lock()
         self._lock = threading.Lock()
@@ -167,6 +180,7 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        self._setup_grid: dict | None = None
         self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
         self._test_run: dict | None = None
@@ -179,9 +193,42 @@ class LiveService:
         self._session: LiveSession | None = None
         self._run_stop: threading.Event | None = None
         self._run_thread: threading.Thread | None = None
+        self._run_reference = False
+        self._reference_eval: dict | None = None
+        self._setup_cancel = threading.Event()
         self._setup_thread: threading.Thread | None = None
+        self._preview = PreviewEncoder(lambda: self._owner.latest(), self._preview_hud,
+                                       governor=RateGovernor(self._monotonic))
 
     # -- Anzeige -------------------------------------------------------------
+    def _system_status(self) -> dict:
+        """Unter self._lock: Gesamt-CPU aus procfs, hoechstens alle 0,5 s lesen."""
+        now = self._monotonic()
+        if self._cpu_sample_at is None or now - self._cpu_sample_at >= 0.5:
+            self._cpu_sample_at = now
+            self._cpu_percent, self._cpu_window_s = None, 0.0
+            try:
+                fields = self._cpu_reader().splitlines()[0].split()
+                if fields[0] != 'cpu' or len(fields) < 5:
+                    raise ValueError('Gesamt-CPU fehlt')
+                values = [int(value) for value in fields[1:]]
+                if any(value < 0 for value in values):
+                    raise ValueError('Negativer CPU-Zaehler')
+                # guest/guest_nice sind bereits in user/nice enthalten.
+                total = sum(values[:8])
+                idle = values[3] + (values[4] if len(values) > 4 else 0)
+            except (OSError, ValueError, IndexError):
+                self._cpu_previous = None
+            else:
+                previous = self._cpu_previous
+                self._cpu_previous = (total, idle, now)
+                if previous is not None:
+                    delta, idle_delta = total - previous[0], idle - previous[1]
+                    if delta > 0 and 0 <= idle_delta <= delta:
+                        self._cpu_percent = 100.0 * (delta - idle_delta) / delta
+                        self._cpu_window_s = now - previous[2]
+        return {'cpu_percent': self._cpu_percent, 'cpu_window_s': self._cpu_window_s}
+
     def _storage_status(self) -> dict:
         # Vor der ersten Einrichtung existiert var/live eventuell noch nicht.
         path = self._data_dir
@@ -233,6 +280,11 @@ class LiveService:
                         key: metrics[key] for key in ("hinweis", "tolerance") if key in metrics}}
             if self._setup_started_at is not None:
                 setup = setup or {}
+                setup["focus"] = deepcopy(self._setup_focus)
+                setup["exposure"] = deepcopy(self._setup_exposure)
+                setup["progress"] = self._setup_progress_status()
+                if self._proposal is None:
+                    setup["checks_live"] = deepcopy(self._setup_checks_live)
                 setup["step"] = self._setup_step
                 if self._setup_message is not None:
                     setup["message"] = self._setup_message
@@ -242,10 +294,18 @@ class LiveService:
                     self._monotonic() - self._setup_started_at
                     if self._state == "setup_running" else self._setup_elapsed_s
                 )
+            if setup is not None:
+                setup["grid"] = deepcopy(self._setup_grid)
             run = None
             if self._session is not None:
                 latest = self._session.latest
+                if hasattr(self._session, 'recent_snapshot'):
+                    recent, recent_now_ms = self._session.recent_snapshot()
+                else:
+                    recent, recent_now_ms = (self._session.recent.snapshot(self._monotonic())
+                                             if hasattr(self._session, 'recent') else ([], 0.0))
                 run = {
+                    **(self._session.timing_status() if hasattr(self._session, 'timing_status') else {}),
                     "latest": None if latest is None else {
                         "frame_sequence": latest.frame_sequence,
                         "status": latest.status.value,
@@ -258,6 +318,10 @@ class LiveService:
                         "capture_timestamp": latest.capture_timestamp.to_dict(),
                     },
                     "summary": dict(self._session.summary),
+                    "counts": {status: getattr(self._session, '_by_status', {}).get(status, 0)
+                               for status in ('valid', 'transition', 'unreadable', 'stale')},
+                    "recent": recent,
+                    "recent_now_ms": recent_now_ms,
                     "dir": self._run_dir.name,
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
@@ -275,7 +339,8 @@ class LiveService:
             return {
                 "state": self._state,
                 "storage": self._storage_status(),
-                **({"tracking_reasons": REASONS} if full else {}),
+                "system": self._system_status(),
+                **({"tracking_reasons": REASONS, "cause_texts": LIVE_CAUSE_TEXT.copy()} if full else {}),
                 "step": self._step,
                 "error": self._error,
                 "simulate": self._simulate,
@@ -288,6 +353,10 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "output": (self._session.unified_output_status()
+                           if self._session is not None and hasattr(self._session, 'unified_output_status')
+                           else {"transport": "off", "state": "off"}),
+                "reference_eval": deepcopy(self._reference_eval),
                 "diagnostics": (self._session.diagnostics_status()
                                 if self._session is not None and hasattr(self._session, 'diagnostics_status')
                                 else {'enabled': False, 'reason': 'kein Diagnoselauf'}),
@@ -300,29 +369,26 @@ class LiveService:
                     and (getattr(s, 'diagnose_kopie', False) or (s is self._session and self._state == 'running'))
                 }),
                 "last_mark": getattr(self._session, 'last_mark', None),
-                "reference": (self._session.reference_status()
-                              if self._session is not None and hasattr(self._session, "reference_status")
-                              else {"enabled": False, "reason": "kein Referenzlauf"}),
+                "reference": (self._session.reference_live_status()
+                              if self._session is not None and hasattr(self._session, "reference_live_status")
+                              else {"latest": None, "schedule_step": None,
+                                    **(self._session.reference_status()
+                                       if self._session is not None and hasattr(self._session, "reference_status")
+                                       else {"enabled": False, "reason": "kein Referenzlauf"})}),
             }
 
-    def preview_jpeg(self, width: int = 960) -> bytes | None:
-        """Neuestes Bild verkleinert als JPEG; mit Lauf das nachgefuehrte Quad."""
-        import cv2
-
-        latest = self._owner.latest()
-        if latest is None:
-            return None
-        image = latest[1].image
-        scale = width / image.shape[1]
-        small = cv2.resize(image, (width, round(image.shape[0] * scale)))
+    def _preview_hud(self) -> dict | None:
         session = self._session
-        locator = getattr(getattr(session, "_pipeline", None), "locator", None)
-        track = getattr(locator, "last_track", None)
-        if track is not None and track.quad is not None:
-            points = np.array([[x * scale, y * scale] for x, y in track.quad], dtype=np.int32)
-            cv2.polylines(small, [points], True, (0, 220, 0), 2)
-        ok, encoded = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        return encoded.tobytes() if ok else None
+        return session.frame_info() if self._state == "running" and session is not None else None
+
+    def preview_frame(self, *, after_seq: int | None = None) -> PreviewFrame | None:
+        """Bild und HUD fuer denselben Vorschau-Teil, ohne eingezeichnetes Quad."""
+        return self._preview.frame(after_seq=after_seq)
+
+    def preview_jpeg(self) -> bytes | None:
+        """Werkzeugzugriff teilt die Kodierung mit dem Vorschau-Strom."""
+        frame = self.preview_frame()
+        return frame.jpeg if frame is not None else None
 
     def setup_file(self, name: str) -> Path | None:
         if name not in OVERLAYS or self._session_dir is None:
@@ -339,6 +405,86 @@ class LiveService:
                 raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
 
     # -- Einrichtung ---------------------------------------------------------
+    def _cache_setup_grid(self, proposal: dict) -> None:
+        """Leserboxen nur bei einem neuen Vorschlag unter self._lock berechnen."""
+        self._setup_grid = None
+        try:
+            if not all(key in proposal for key in ("grid", "target_size", "grid_source", "quad")):
+                return
+            grid = CharGrid.from_dict(proposal["grid"])
+            self._setup_grid = {
+                "target_size": list(proposal["target_size"]),
+                "cell_boxes": [[round(float(value), 2) for value in box] for box in grid.cell_boxes()],
+                # Vorschlagsreihenfolge OL, OR, UR, UL im Kamerabild beibehalten:
+                # rectify bildet sie auf (0,0), (w-1,0), (w-1,h-1), (0,h-1) ab.
+                "quad": [[round(float(value), 1) for value in point] for point in proposal["quad"]],
+                "source": proposal["grid_source"],
+            }
+        except Exception as exc:  # noqa: BLE001 - optionaler Anzeigecache darf Einrichtung nicht abbrechen
+            _LOG.warning("Rastervorschau nicht verfuegbar: %s", exc)
+
+    def _reset_setup_live(self) -> None:
+        """Live-Verlaeufe nur beim Erzeugen oder unter self._lock leeren."""
+        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None, "roi": None}
+        self._setup_exposure: dict = {
+            "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
+        }
+        self._step_times: dict[str, list[float | None]] = {key: [None, None] for key in SETUP_STEPS}
+        self._setup_phase: str | None = None
+        self._setup_attempt = 1
+        self._setup_wait: dict | None = None
+        self._setup_checks_live: dict = {}
+
+    def _setup_progress_status(self) -> dict:
+        """Schrittzeiten unter self._lock lesen; nur laufende Zeiten wachsen."""
+        now = self._monotonic()
+        steps = []
+        for key, (start, end) in self._step_times.items():
+            state = "pending"
+            elapsed = None
+            if start is not None:
+                elapsed = (now if end is None else end) - start
+                state = "running" if end is None else "done"
+                if self._state == "setup_failed" and key == self._setup_step:
+                    state = "failed"
+            steps.append({"key": key, "state": state, "elapsed_s": elapsed})
+        return {"steps": steps, "attempt": self._setup_attempt, "attempts_max": 3,
+                "phase": self._setup_phase, "wait": deepcopy(self._setup_wait)}
+
+    def _finish_setup_step(self, now: float) -> None:
+        """Laufenden Schritt unter self._lock abschliessen."""
+        times = self._step_times.get(self._setup_step)
+        if times is not None and times[0] is not None and times[1] is None:
+            times[1] = now
+
+    def _check_setup_cancel(self) -> None:
+        live_setup.check_cancelled(self._setup_cancel.is_set)
+
+    def cancel_setup(self) -> None:
+        """Nur Abbruch anfordern; der Worker beendet den laufenden Schritt."""
+        with self._lock:
+            if self._state != "setup_running":
+                raise LiveError("Keine Einrichtung laeuft")
+            self._setup_cancel.set()
+
+    def _report_setup_phase(self, phase: str, attempt: int) -> None:
+        self._check_setup_cancel()
+        with self._lock:
+            self._setup_phase, self._setup_attempt = phase, attempt
+            self._setup_wait = None
+
+    def _report_setup_wait(self, elapsed: float, total: float) -> None:
+        self._check_setup_cancel()
+        with self._lock:
+            self._setup_wait = {"elapsed_s": elapsed, "total_s": total}
+
+    def _report_setup_checks(self, report: dict) -> None:
+        with self._lock:
+            for name, check in report.get("checks", {}).items():
+                self._setup_checks_live[name] = {
+                    "status": check.get("status") or "NICHT_GEPRUEFT", "reason": check.get("reason"),
+                }
+
     def start_setup(self, *, cell_text: str | None = None) -> None:
         with self._operation_lock:
             if self._simulate:
@@ -367,13 +513,18 @@ class LiveService:
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
                 self._setup_message = self._setup_message_base = self._diagnostics_error = None
+                self._reset_setup_live()
+                self._setup_cancel.clear()
                 self._session_dir, self._proposal = session_dir, None
+                self._setup_grid = None
                 self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                            if getattr(s, 'diagnose_kopie', False)]
                 self._session = None
+                self._reference_eval = None
+                self._run_reference = False
             self._setup_thread = threading.Thread(
                 target=self._setup_worker, args=(session_dir, text), name="live-setup", daemon=True
             )
@@ -381,6 +532,17 @@ class LiveService:
 
     def _report(self, step: str) -> None:
         with self._lock:
+            self._check_setup_cancel()
+            if step != self._setup_step:
+                now = self._monotonic()
+                self._finish_setup_step(now)
+                if step in self._step_times:
+                    self._step_times[step] = [now, None]
+                self._setup_phase = self._setup_wait = None
+            if step == "fokus":
+                self._setup_focus["roi"] = live_setup.measurement_roi_pixels(
+                    live_setup.FOCUS_SOURCE_SIZE, SETUP_FOCUS_HINT,
+                )
             self._step = self._setup_step = step
             self._setup_message = self._setup_message_base = None
 
@@ -405,22 +567,31 @@ class LiveService:
 
     def _setup_worker(self, session_dir: Path, text: str | None) -> None:
         try:
+            self._check_setup_cancel()
             proposal = self._setup_runner(session_dir=session_dir, cell_text=text, report=self._report)
+            with self._lock:
+                self._check_setup_cancel()
+                now = self._monotonic()
+                self._finish_setup_step(now)
+                self._setup_elapsed_s = now - self._setup_started_at
+                self._setup_phase = self._setup_wait = None
+                self._setup_step = "vorschlag"
+                self._cache_setup_grid(proposal)
+                self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
+                self._run_block = run_block_reason(proposal)
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
             with self._lock:
                 step = self._setup_step
-                self._setup_elapsed_s = self._monotonic() - self._setup_started_at
+                now = self._monotonic()
+                self._finish_setup_step(now)
+                self._setup_elapsed_s = now - self._setup_started_at
+                self._setup_phase = self._setup_wait = None
                 self._state, self._error = "setup_failed", _setup_error_for_page(str(exc))
             self._write_setup_diagnostic(
                 session_dir / "setup" / "failure.json",
                 {"step": step, "reason": str(exc), "created_at_utc": self._wall().isoformat()},
             )
             return
-        with self._lock:
-            self._setup_elapsed_s = self._monotonic() - self._setup_started_at
-            self._setup_step = "vorschlag"
-            self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
-            self._run_block = run_block_reason(proposal)
 
     def _open_serial(self) -> Any:
         import serial
@@ -451,12 +622,35 @@ class LiveService:
             capture_tries = tries
             raw_texts[:] = [value for value in (before, after) if value is not None]
 
+        def focus_sample(focus: int, score: float) -> None:
+            self._check_setup_cancel()
+            with self._lock:
+                self._setup_focus["samples"].append([focus, score])
+
+        def focus_fallback() -> None:
+            with self._lock:
+                self._setup_focus["method"] = "sweep"
+
+        def exposure_round(entry: dict) -> None:
+            self._check_setup_cancel()
+            with self._lock:
+                self._setup_exposure["rounds"].append(deepcopy(entry))
+
         report("fokus")
         with self._lock:
             start_focus = self._last_confirmed_focus
         settings, sweep = live_setup.focus_camera(
-            OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
+            OwnerSetupCamera(self._owner), SETUP_FOCUS_HINT, start_focus=start_focus, info=self._setup_progress,
+            on_sample=focus_sample, on_fallback=focus_fallback, should_stop=self._setup_cancel.is_set,
         )
+        with self._lock:
+            self._setup_focus["method"] = getattr(sweep, "focus_method", "sweep")
+            verification = getattr(sweep, "focus_verify", None)
+            if verification is not None:
+                self._setup_focus["verify"] = {
+                    "score": verification["verified"],
+                    "threshold": live_setup.FOCUS_VERIFY_RATIO * verification["best_measured"],
+                }
         camera_record = {
             "camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
             "focus_method": getattr(sweep, "focus_method", "sweep"),
@@ -477,6 +671,7 @@ class LiveService:
 
         settings, exposure_adjust = live_setup.adjust_exposure(
             OwnerSetupCamera(self._owner), settings, apply=apply_exposure, info=self._setup_progress,
+            on_round=exposure_round,
         )
         camera_record.update(camera=settings.to_dict(), exposure_adjust=exposure_adjust)
         (setup_dir / "camera-settings.json").write_text(
@@ -513,6 +708,10 @@ class LiveService:
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
                 reference_kind="seriell" if cell_text is None else "eingabe",
+                report=self._report_setup_checks,
+                on_phase=self._report_setup_phase,
+                on_wait=self._report_setup_wait,
+                should_stop=self._setup_cancel.is_set,
                 info=self._setup_progress,
             )
         finally:
@@ -568,6 +767,7 @@ class LiveService:
             except (live_setup.SetupError, ValueError, OSError) as exc:
                 raise LiveError(str(exc)) from exc
             with self._lock:
+                self._cache_setup_grid(updated)
                 self._proposal = updated
                 self._run_block = run_block_reason(updated)
             return {"proposal_revision": updated["live_tracking"]["proposal_revision"],
@@ -630,6 +830,8 @@ class LiveService:
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
             )
             with self._lock:
+                self._cache_setup_grid({"grid": profile.grid.to_dict(), "target_size": profile.target_size,
+                                        "grid_source": proposal.get("grid_source"), "quad": profile.quad})
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
@@ -660,7 +862,10 @@ class LiveService:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
-            output = validate_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
+            output = normalize_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
+            if test_override and output['transport'] != 'off':
+                raise ValueError('Testlauf erlaubt keine externe Ausgabe')
+            require_output_acknowledgement(output)
         except (TypeError, ValueError) as exc:
             raise LiveError(str(exc)) from exc
         with self._operation_lock:
@@ -711,7 +916,7 @@ class LiveService:
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
                     diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
-                    **({'output': output} if output is not None else {}),
+                    **({'output': output} if output['transport'] != 'off' else {}),
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
@@ -723,6 +928,8 @@ class LiveService:
                 self._session, self._run_stop, self._state, self._error = session, stop, "running", None
                 self._run_dir = out_dir
                 self._test_run = test_run
+                self._run_reference = reference
+                self._reference_eval = None
             self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
                                                 daemon=True)
             self._run_thread.start()
@@ -740,7 +947,38 @@ class LiveService:
             finally:
                 with self._lock:
                     if self._session is session and not stop.is_set():
-                        self._state, self._error = "stopped", error
+                        self._finish_run(session, error)
+
+    def _finish_run(self, session: LiveSession, error: str | None) -> None:
+        """Unter self._lock, erst nach dem Abschluss der Laufdateien."""
+        self._state, self._error = 'stopped', error
+        if self._run_reference:
+            self._reference_eval = {'state': 'running'}
+            threading.Thread(target=self._reference_eval_worker, args=(session, self._run_dir),
+                             name='live-reference-eval', daemon=True).start()
+
+    def _reference_eval_worker(self, session: LiveSession, run_dir: Path) -> None:
+        def rows(path):
+            with path.open(encoding='utf-8') as stream:
+                for line in stream:
+                    if line.strip():
+                        yield json.loads(line)
+
+        try:
+            meta = json.loads((run_dir / 'session.json').read_text(encoding='utf-8'))
+            validate_reference_session(meta)
+            reference = list(rows(run_dir / 'reference.jsonl'))
+            counts = evaluate_records(meta, reference, rows(run_dir / 'records.jsonl'))
+            result = {'state': 'done', **{key: counts[key] for key in
+                      ('misreads', 'compared_valid', 'undecided_valid', 'uncovered_valid')}}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            result = {'state': 'error', 'error': f'Abgleich abgelehnt: {exc}'}
+        except Exception as exc:  # noqa: BLE001 - Auswertung darf nicht in running verbleiben
+            result = {'state': 'error', 'error': f'Abgleich abgelehnt: {exc}'}
+        with self._lock:
+            # Eine neue Einrichtung oder Sitzung entwertet noch laufende Auswertungen.
+            if self._session is session and self._state == 'stopped':
+                self._reference_eval = result
 
     def stop_run(self) -> None:
         with self._operation_lock:
@@ -782,7 +1020,7 @@ class LiveService:
                 raise LiveError(error) from exc
         finally:
             with self._lock:
-                self._state, self._error = "stopped", error
+                self._finish_run(session, error)
 
     def close(self) -> None:
         deadline = time.monotonic() + min(DIAGNOSTIC_CLOSE_TIMEOUT_S, 60.0)

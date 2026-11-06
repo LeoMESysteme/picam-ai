@@ -21,11 +21,15 @@ class FakeService:
     def start_setup(self, *, cell_text=None):
         self.calls.append(("setup", cell_text))
 
+    def cancel_setup(self):
+        raise LiveError("Keine Einrichtung laeuft")
+
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False):
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):
         self.calls.append(("run", test_override))
+        self.output = output
 
     def stop_run(self):
         raise LiveError("kein Lauf aktiv")
@@ -52,6 +56,397 @@ def _run(check):
             await check(client, service)
 
     asyncio.run(main())
+
+
+def _preview_service(tmp_path, *, latest=None):
+    from types import SimpleNamespace
+
+    from test_live_preview import camera_frame, frame_info
+
+    from dispread.live.service import LiveService
+
+    service = LiveService(SimpleNamespace(latest=latest or (lambda: (7, camera_frame()))), tmp_path,
+                          diagnostic_staging_root=tmp_path / "staging")
+    service._state = "running"
+    service._session = SimpleNamespace(frame_info=frame_info)
+    return service
+
+
+def _run_preview(check):
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Worker ausserhalb des Loops beenden: auch dessen Shutdown-Weckung
+    # ueber socketpair ist im Sandbox gesperrt.
+    with ThreadPoolExecutor() as executor:
+        loop = asyncio.new_event_loop()
+        loop.set_default_executor(executor)
+        try:
+            return loop.run_until_complete(check)
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+
+
+async def _preview_handler(service, *, transport=...):
+    from contextlib import suppress
+    from unittest.mock import Mock
+
+    from aiohttp.test_utils import make_mocked_request
+
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _r: "tok")
+
+    if transport is ...:
+        transport = Mock()
+        transport.is_closing.return_value = False
+    request = make_mocked_request("GET", "/live/preview.mjpg", app=app,
+                                  transport=transport, protocol=Mock(transport=transport))
+    match = await app.router.resolve(request)
+    task = asyncio.create_task(match.handler(request))
+    try:
+        # Der Sandbox sperrt auch die Socketpair-Weckung von to_thread.
+        # Timer halten hier den echten Eventloop und echte Worker benutzbar.
+        while not task.done():
+            await asyncio.wait((task,), timeout=0.01)
+        return await task
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+def _capture_preview(monkeypatch, *, limit=1, clock=None):
+    import time
+
+    clock = clock or time.monotonic
+    responses = []
+
+    class CaptureResponse(web.StreamResponse):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.parts = []
+            responses.append(self)
+
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            self.parts.append((clock(), data))
+            if limit is not None and len(self.parts) >= limit:
+                raise ConnectionResetError("Betrachter getrennt")
+
+    monkeypatch.setattr("dispread.workbench.live_api.web.StreamResponse", CaptureResponse)
+    return responses
+
+
+def _check_preview_part(part):
+    import json
+
+    header, body = part.split(b"\r\n\r\n", 1)
+    lines = header.split(b"\r\n")
+    assert lines[0] == b"--frame"
+    headers = dict(line.split(b": ", 1) for line in lines[1:])
+    assert headers[b"Content-Type"] == b"image/jpeg"
+    assert body.startswith(b"\xff\xd8") and body.endswith(b"\xff\xd9\r\n")
+    assert len(body) - 2 == int(headers[b"Content-Length"])
+    hud_bytes = headers[b"X-Hud"]
+    assert hud_bytes.isascii() and len(hud_bytes) <= 2048
+    hud = json.loads(hud_bytes)
+    assert hud["seq"] == int(headers[b"X-Frame-Sequence"]) == 7
+    assert hud["cap_ns"] == int(headers[b"X-Capture-Ns"]) == 123463
+    assert hud["rec"]["seq"] == 6
+    return hud
+
+
+def test_preview_mjpg_parts_carry_hud_headers(tmp_path):
+    async def check():
+        app = web.Application()
+        add_live_routes(app, _preview_service(tmp_path), csrf_of=lambda _r: "tok")
+        async with TestClient(TestServer(app)) as client:
+            async with client.get("/live/preview.mjpg") as response:
+                assert response.status == 200
+                assert response.headers["Content-Type"] == "multipart/x-mixed-replace; boundary=frame"
+                header = await asyncio.wait_for(response.content.readuntil(b"\r\n\r\n"), 1)
+                length = int(dict(line.split(b": ", 1) for line in header.split(b"\r\n")[1:-2])[b"Content-Length"])
+                body = await response.content.readexactly(length + 2)
+                _check_preview_part(header + body)
+
+    asyncio.run(check())
+
+
+def test_preview_mjpg_headers_and_encoding_thread_without_socket(tmp_path, monkeypatch):
+    import threading
+
+    import cv2
+
+    responses = _capture_preview(monkeypatch)
+    encode = cv2.imencode
+    threads = []
+
+    def spy(*args):
+        threads.append(threading.get_ident())
+        return encode(*args)
+
+    monkeypatch.setattr(cv2, "imencode", spy)
+    service = _preview_service(tmp_path)
+    # Auch Nicht-ASCII im HUD muss eine einzelne ASCII-Kopfzeile bleiben.
+    from test_live_preview import frame_info
+
+    info = frame_info()
+    info["rec"]["reasons"] = ["Pr\u00fcfung\r\n"]
+    service._session.frame_info = lambda: info
+    response = _run_preview(_preview_handler(service))
+    hud = _check_preview_part(responses[0].parts[0][1])
+    assert hud["rec"]["reasons"] == ["Pr\u00fcfung\r\n"]
+    assert response.headers["Cache-Control"] == "no-store"
+    assert threads and all(t != threading.get_ident() for t in threads)
+
+
+@pytest.mark.parametrize('nonfinite', [float('nan'), float('inf'), float('-inf')])
+def test_preview_mjpg_hud_maps_nonfinite_numbers_to_null(tmp_path, monkeypatch, nonfinite):
+    import json
+
+    from test_live_preview import frame_info
+
+    responses = _capture_preview(monkeypatch)
+    service = _preview_service(tmp_path)
+    info = frame_info()
+    info['track']['score'] = nonfinite
+    info['track']['regions'][0]['peak'] = nonfinite
+    info['track']['quad'] = ((nonfinite, 20), (180, 20), (180, 80), (20, 80))
+    info['cells'][0]['margin'] = nonfinite
+    service._session.frame_info = lambda: info
+    _run_preview(_preview_handler(service))
+    header = responses[0].parts[0][1].split(b'X-Hud: ')[1].split(b'\r\n')[0]
+
+    def reject_constant(value):
+        raise ValueError(f'Ungueltige JSON-Zahl: {value}')
+
+    hud = json.loads(header, parse_constant=reject_constant)
+    assert hud['track']['score'] is None
+    assert hud['track']['regions'][0]['peak'] is None
+    assert hud['track']['quad'][0] == [None, 20]
+    assert hud['cells'][0]['margin'] is None
+    assert hud['cells'][1]['margin'] == 0.41
+    assert hud['track']['regions'][0]['ok'] is True
+    assert hud['rec'] == info['rec']
+
+
+def test_two_streams_share_encoding(tmp_path, monkeypatch):
+    import itertools
+    import time
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import cv2
+    from test_live_preview import camera_frame
+
+    from dispread.live import preview
+
+    responses = _capture_preview(monkeypatch, limit=None)
+    calls = []
+    encode = cv2.imencode
+    # Lastmessung von der zufaelligen CPU-Last des Testrechners trennen.
+    monkeypatch.setattr(preview, "time", SimpleNamespace(monotonic=time.monotonic, perf_counter=lambda: 0.0))
+
+    def spy(*args):
+        calls.append(time.monotonic())
+        return encode(*args)
+
+    monkeypatch.setattr(cv2, "imencode", spy)
+    seqs = itertools.count(7)
+    image = camera_frame()
+    service = _preview_service(tmp_path, latest=lambda: (next(seqs), image))
+    transport = Mock()
+    transport.is_closing.return_value = False
+
+    async def check():
+        first = asyncio.create_task(_preview_handler(service, transport=transport))
+        await asyncio.sleep(0.015)
+        second = asyncio.create_task(_preview_handler(service, transport=transport))
+        await asyncio.sleep(0.485)
+        for task in (first, second):
+            task.cancel()
+        results = await asyncio.gather(first, second, return_exceptions=True)
+        assert all(isinstance(result, asyncio.CancelledError) for result in results)
+
+    start = time.monotonic()
+    _run_preview(asyncio.wait_for(check(), 1))
+    elapsed = time.monotonic() - start
+    assert len(responses) == 2 and all(len(r.parts) >= 3 for r in responses)
+    assert len(calls) <= int(elapsed / (1 / 15)) + 1
+
+
+@pytest.mark.parametrize('has_abort', [True, False])
+def test_preview_mjpg_slow_client_ends_stream(tmp_path, monkeypatch, has_abort):
+    import time
+    from unittest.mock import Mock
+
+    from test_live_camera import FakeSource
+
+    from dispread.live.camera import CameraOwner
+    from dispread.live.service import LiveService
+
+    transport = Mock(spec=['is_closing', 'close', 'abort'] if has_abort else ['is_closing', 'close'])
+    transport.is_closing.return_value = False
+    writing = asyncio.Event()
+
+    class BlockedResponse(web.StreamResponse):
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            writing.set()
+            await asyncio.Future()
+
+    monkeypatch.setattr("dispread.workbench.live_api.web.StreamResponse", BlockedResponse)
+    owner = CameraOwner(lambda: FakeSource([1], endless=True))
+    service = LiveService(owner, tmp_path, diagnostic_staging_root=tmp_path / "staging")
+    owner.start()
+    assert owner.wait_newer(0, 1.0) is not None
+
+    async def check():
+        start = time.monotonic()
+        task = asyncio.create_task(_preview_handler(service, transport=transport))
+        await asyncio.wait_for(writing.wait(), 1)
+        before = owner.latest()[0]
+        await asyncio.wait_for(task, 2.5)
+        assert time.monotonic() - start <= 2.5
+        assert owner.latest()[0] > before and owner.status()["running"]
+        if has_abort:
+            transport.abort.assert_called_once()
+            transport.close.assert_not_called()
+        else:
+            transport.close.assert_called_once()
+
+    try:
+        _run_preview(check())
+    finally:
+        owner.stop()
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_preview_mjpg_disconnect_without_new_frames(tmp_path, monkeypatch, missing):
+    from unittest.mock import Mock
+
+    responses = _capture_preview(monkeypatch, limit=None)
+    service = _preview_service(tmp_path)
+    service.preview_frame = Mock(return_value=None)
+    transport = None if missing else Mock()
+    if transport is not None:
+        # Die Kamera liefert kein Bild; danach trennt sich der Betrachter.
+        transport.is_closing.side_effect = [False, True]
+    _run_preview(asyncio.wait_for(_preview_handler(service, transport=transport), 0.1))
+    if missing:
+        service.preview_frame.assert_not_called()
+    else:
+        service.preview_frame.assert_called_once()
+    assert responses[0].parts == []
+
+
+def test_preview_mjpg_write_failure_closes_transport(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    _capture_preview(monkeypatch)
+    transport = Mock()
+    transport.is_closing.return_value = False
+    _run_preview(_preview_handler(_preview_service(tmp_path), transport=transport))
+    transport.close.assert_called_once()
+
+
+@pytest.mark.parametrize("first_write_s", [0.015, 0.3])
+def test_preview_mjpg_reaches_target_rate_with_instant_encoding(monkeypatch, first_write_s):
+    from types import SimpleNamespace
+
+    from dispread.live.preview import PreviewFrame
+    from dispread.workbench import live_api
+
+    now = [0.0]
+    sent = []
+    monkeypatch.setattr(live_api, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    async def sleep(delay):
+        now[0] += max(delay, 1e-9)
+
+    async def to_thread(fn, **kwargs):
+        return fn(**kwargs)
+
+    class Response(web.StreamResponse):
+        async def prepare(self, request):
+            return None
+
+        async def write(self, data):
+            if now[0] >= 1:
+                raise ConnectionResetError()
+            sent.append(now[0])
+            # Schreibdauer darf den Zeitplan nicht pro Bild verschieben.
+            now[0] += first_write_s if len(sent) == 1 else 0.015
+
+    monkeypatch.setattr(live_api.asyncio, "sleep", sleep)
+    monkeypatch.setattr(live_api.asyncio, "to_thread", to_thread)
+    monkeypatch.setattr(live_api.web, "StreamResponse", Response)
+    service = SimpleNamespace(preview_frame=lambda *, after_seq=None: PreviewFrame(
+        seq=len(sent), cap_ns=0, jpeg=b"jpeg", hud={"preview": {"fps": 15}}))
+    _run_preview(_preview_handler(service))
+    assert len(sent) >= (14 if first_write_s == 0.015 else 11)
+    assert sent[1] == pytest.approx(max(first_write_s, 1 / 15))
+    assert all(b - a == pytest.approx(1 / 15) for a, b in zip(sent[1:], sent[2:], strict=False))
+
+
+def test_preview_mjpg_limits_rate_and_sends_only_new_sequences(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from test_live_preview import camera_frame, frame_info
+
+    from dispread.workbench import live_api
+
+    now = [0.0]
+    clock = SimpleNamespace(monotonic=lambda: now[0], perf_counter=lambda: now[0])
+    monkeypatch.setattr(live_api, 'time', clock)
+    monkeypatch.setattr('dispread.live.preview.time', clock)
+    monkeypatch.setattr('dispread.live.service.time', clock)
+
+    async def sleep(delay):
+        now[0] += max(delay, 1e-9)
+
+    async def to_thread(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(live_api.asyncio, 'sleep', sleep)
+    monkeypatch.setattr(live_api.asyncio, 'to_thread', to_thread)
+    responses = _capture_preview(monkeypatch, limit=3, clock=clock.monotonic)
+    seqs = iter([7, 7, 8, 9])
+    service = _preview_service(tmp_path, latest=lambda: (next(seqs, 9), camera_frame()))
+    info = frame_info()
+    info["proc"]["skipped_recent"] = 0.2
+    frame_info_spy = Mock(return_value=info)
+    service._session = SimpleNamespace(frame_info=frame_info_spy)
+    _run_preview(asyncio.wait_for(_preview_handler(service), 2))
+    parts = responses[0].parts
+    huds = [json.loads(data.split(b"X-Hud: ")[1].split(b"\r\n")[0]) for _, data in parts]
+    assert [h["seq"] for h in huds] == [7, 8, 9]
+    assert frame_info_spy.call_count == 3
+    assert all(h["preview"] == {"fps": 5, "throttled": "messung"} for h in huds)
+    assert all(parts[i][0] - parts[i - 1][0] >= 0.2 for i in (1, 2))
+
+
+def test_preview_mjpg_expires_after_600s_without_repeating_frame(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from dispread.workbench import live_api
+
+    responses = _capture_preview(monkeypatch, limit=None)
+    now = [0.0]
+    monkeypatch.setattr(live_api, "time", SimpleNamespace(monotonic=lambda: now[0]), raising=False)
+
+    async def sleep(delay):
+        now[0] += 300.0
+
+    monkeypatch.setattr(live_api.asyncio, "sleep", sleep)
+    _run_preview(asyncio.wait_for(_preview_handler(_preview_service(tmp_path)), 1))
+    assert len(responses[0].parts) == 1 and now[0] == 600.0
 
 
 def test_status_carries_csrf_and_notice():
@@ -185,6 +580,8 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     from aiohttp.test_utils import make_mocked_request
     from live_ui_server import FakeLiveService
 
+    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+
     async def direct(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
@@ -204,9 +601,12 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
         assert data["csrf"] == "tok"
         if full:
             assert data["tracking_reasons"]["lcd_rand_fehlt"] == "lcd-rand nicht ausreichend bestaetigt"
+            assert data["cause_texts"] == LIVE_CAUSE_TEXT
         else:
             assert "tracking_reasons" not in data
+            assert "cause_texts" not in data
         assert "tracking_reasons" not in service.status()
+        assert "cause_texts" not in service.status()
 
     asyncio.run(check())
 
@@ -358,7 +758,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
             with pytest.raises(web.HTTPFound) as redirect:
                 await handle(method, "/live")
             assert redirect.value.location == "/login?next=/live"
-        for path in ("/live/status", "/live/preview.jpg", "/static/live.js"):
+        for path in ("/live/status", "/live/preview.jpg", "/static/live/app.js"):
             with pytest.raises(web.HTTPUnauthorized):
                 await handle("GET", path)
         response = await handle("POST", "/login", {"Host": "localhost", "Origin": "https://localhost"},
@@ -373,11 +773,11 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         response = await handle("GET", "/live/status", headers)
         csrf = json.loads(response.text)["csrf"]
         assert response.headers["Cache-Control"] == "no-store"
-        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions', '/live/setup/cancel'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["Origin"] = "https://localhost"
-        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions'):
+        for path in ('/live/run/start', '/live/run/mark', '/live/setup/regions', '/live/setup/cancel'):
             with pytest.raises(web.HTTPForbidden):
                 await handle('POST', path, headers)
         headers["X-CSRF-Token"] = csrf
@@ -386,6 +786,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
         assert (await handle('POST', '/live/run/mark', headers, {'text': 'Abdeckung'})).status == 200
         assert service.calls[-1] == ('mark', 'Abdeckung')
         assert (await handle("POST", "/live/run/stop", headers)).status == 409
+        assert (await handle("POST", "/live/setup/cancel", headers)).status == 409
 
     asyncio.run(check())
 
@@ -948,3 +1349,446 @@ def test_run_start_output_reaches_service_without_socket(monkeypatch):
                              'diagnostics': False, 'output': output}]
 
     asyncio.run(check())
+
+
+SCENE_NAMES = (
+    'idle', 'setup_focus', 'setup_focus_done', 'setup_standbilder', 'setup_ready_warnung',
+    'running_valid', 'running_transition', 'running_rahmen_verdeckt', 'running_stalled',
+    'running_anzeige_bewegt', 'stopped',
+)
+
+
+def _assert_real_keys(fake, real, path='status'):
+    if isinstance(real, dict):
+        assert isinstance(fake, dict), path
+        assert fake.keys() >= real.keys(), f'{path}: missing {real.keys() - fake.keys()}'
+        for key, value in real.items():
+            _assert_real_keys(fake[key], value, f'{path}.{key}')
+    elif isinstance(real, list) and real and isinstance(real[0], dict):
+        for item in fake:
+            _assert_real_keys(item, real[0], f'{path}[]')
+
+
+def test_fake_full_status_carries_cause_texts(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+
+    expected = LIVE_CAUSE_TEXT.copy()
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        assert 'cause_texts' not in service.status()
+        texts = service.status(full=True)['cause_texts']
+        assert texts == expected
+        texts['no_value'] = 'geaendert'
+        texts.pop('kontrast')
+        assert service.status(full=True)['cause_texts'] == expected
+        assert 'cause_texts' not in service.status()
+
+
+def test_fake_status_has_all_real_keys_for_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+    from test_live_session import _session, embed
+
+    from dispread.live.service import LiveService
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3)
+    session.start()
+    try:
+        session.step()
+        real = LiveService(session._owner, tmp_path, diagnostic_staging_root=tmp_path / 'staging')
+        fake = FakeLiveService(tmp_path / 'overlay.png')
+        for name in SCENE_NAMES:
+            fake.set_scene(name)
+            status = fake.status(full=True)
+            real._state = status['state']
+            real._setup_started_at = 0.0 if status['setup'] else None
+            real._proposal = None
+            if name == 'setup_ready_warnung' or status['run']:
+                real._proposal = {'setup_checks': {'overall': 'WARNUNG', 'checks': {
+                    'raster': {'status': 'WARNUNG'}, 'gegenlesen': {'status': 'OK'}}},
+                    'live_tracking': {'proposal_revision': 'v1', 'proposal': {}}}
+            real._session = session if status['run'] else None
+            real._run_dir = tmp_path / 'run-01'
+            _assert_real_keys(status, real.status(full=True), name)
+    finally:
+        session.stop()
+
+
+def test_fake_setup_grid_for_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        setup = service.status()['setup']
+        if name == 'idle':
+            assert setup is None
+        elif name in ('setup_focus', 'setup_focus_done', 'setup_standbilder'):
+            assert setup['grid'] is None
+        else:
+            grid = setup['grid']
+            assert grid['quad'] == [[810.0, 511.0], [1369.0, 511.0], [1377.0, 580.0], [814.0, 591.0]]
+            assert grid['target_size'] == [400, 160]
+            assert grid['source'] == 'dot_lattice'
+            assert len(grid['cell_boxes']) == 16
+            assert grid['cell_boxes'][0] == [0.0, 18.0, 25.0, 142.0]
+            assert grid['cell_boxes'][-1] == [375.0, 18.0, 25.0, 142.0]
+            grid['cell_boxes'][0][0] = -1
+            grid['quad'][0][0] = -1
+            assert service.status()['setup']['grid']['quad'][0] == [810.0, 511.0]
+            assert service.status()['setup']['grid']['cell_boxes'][0][0] == 0.0
+
+
+def test_fake_dump_scenes_matches_committed_fixtures(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
+    fixtures = root / 'tests' / 'fixtures' / 'live'
+    pythonpath = os.pathsep.join(filter(None, [os.environ.get('PYTHONPATH'), str(root / 'src')]))
+    subprocess.run([sys.executable, str(root / 'tests' / 'live_ui_server.py'),
+                    '--dump-scenes', str(tmp_path)], check=True, env={**os.environ, 'PYTHONPATH': pythonpath})
+    expected = {f'scene-{name}.json' for name in SCENE_NAMES}
+    assert {p.name for p in tmp_path.glob('scene-*.json')} == expected
+    assert {p.name for p in fixtures.glob('scene-*.json')} == expected
+    for name in expected:
+        assert (fixtures / name).read_bytes() == (tmp_path / name).read_bytes(), name
+    source = root / 'docs/superpowers/specs/2026-11-04-werkbank-redesign-mock/img/still.jpg'
+    assert (fixtures / 'still.jpg').read_bytes() == source.read_bytes()
+
+
+def test_fake_scene_values_and_hud(tmp_path):
+    import json
+
+    import cv2
+    import numpy as np
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for name, samples in [('setup_focus', 3), ('setup_focus_done', 9)]:
+        service.set_scene(name)
+        focus = service.status()['setup']['focus']
+        assert [p[0] for p in focus['samples']] == [48, 56, 40, 42, 44, 46, 50, 52, 54][:samples]
+        assert [round(p[1]) for p in focus['samples']] == [630, 274, 201, 302, 442, 543, 607, 525, 391][:samples]
+        assert (focus['verify'] is None) == (samples == 3)
+    service.set_scene('setup_standbilder')
+    progress = service.status()['setup']['progress']
+    assert progress['phase'] == 'stabilitaet'
+    assert progress['wait'] == {'elapsed_s': 9, 'total_s': 15}
+    assert service.status()['setup']['exposure']['rounds'] == [{
+        'level': 124.0, 'controls': {'focus_absolute': 48, 'exposure_time_absolute': 300,
+                                  'white_balance_temperature': 4742, 'gain': 10},
+    }]
+    for name in SCENE_NAMES:
+        service.set_scene(name)
+        frame = service.preview_frame()
+        hud = frame.hud
+        assert frame.seq == hud['seq'] and frame.cap_ns == hud['cap_ns']
+        assert hud['w'] == 1920 and hud['h'] == 1080
+        assert hud['preview'] == {'fps': 15, 'throttled': None}
+        assert len(json.dumps(hud, ensure_ascii=True, separators=(',', ':')).encode('ascii')) <= 2048
+        image = cv2.imdecode(np.frombuffer(frame.jpeg, np.uint8), cv2.IMREAD_COLOR)
+        assert image.shape == (540, 960, 3)
+        if not name.startswith('running_'):
+            assert hud['track'] is hud['cells'] is hud['rec'] is None
+        else:
+            assert hud['track']['quad'] == [[810, 511], [1369, 511], [1377, 580], [814, 591]]
+            assert len(hud['cells']) == 16
+            assert len(hud['track']['regions']) == len(service.status()['setup']['regions'])
+        if name == 'running_rahmen_verdeckt':
+            # Hand von rechts (Mock 8a): die Bereiche rechts der Anzeige verlieren ihren Treffer.
+            assert [i + 1 for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [4, 7, 8, 12]
+        if name == 'running_anzeige_bewegt':
+            assert not any(r['ok'] for r in hud['track']['regions'])
+        if name == 'running_stalled':
+            assert hud['rec']['status'] == 'stale' and hud['rec']['age_s'] > 0.5
+            camera = service.status()['camera']
+            assert camera['stalled'] and camera['running'] and 'Streamstillstand' in camera['error']
+            assert service.preview_frame().seq == frame.seq
+        if name == 'running_anzeige_bewegt':
+            hint = service.status()['run']['tracking_hint']
+            assert hint['kind'] == 'anzeige_bewegt' and hint['since_s'] == 3
+            assert service.status()['run']['tracking_hint'] == hint
+    with pytest.raises(ValueError):
+        service.set_scene('unknown')
+
+
+def test_fake_controls_without_socket(tmp_path, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    from aiohttp.test_utils import make_mocked_request
+    from live_ui_server import make_test_app
+
+    async def direct(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    app = make_test_app(tmp_path / 'overlay.png')
+    app.freeze()
+    auth = {}
+
+    async def call(path, data=None, *, method='POST', authenticated=True):
+        headers = {'Host': 'localhost', 'Origin': 'https://localhost'}
+        if authenticated:
+            headers.update(auth)
+        request = make_mocked_request(method, path, headers=headers, app=app)
+        request.json = AsyncMock(return_value=data)
+        return await app._handle(request)
+
+    async def check():
+        # Prueft Middleware und Handler gemeinsam, ohne lokale Sockets.
+        with pytest.raises(web.HTTPUnauthorized):
+            await call('/test/scene', {'name': 'idle'}, authenticated=False)
+        response = await call('/login', {'password': 'test-only'}, authenticated=False)
+        auth['Cookie'] = f"dispread_session={response.cookies['dispread_session'].value}"
+        response = await call('/live/status', method='GET')
+        auth['X-CSRF-Token'] = json.loads(response.text)['csrf']
+        assert (await call('/test/scene', {'name': 'setup_ready_warnung'})).status == 200
+        before = json.loads((await call('/live/status', method='GET')).text)
+        revision = before['setup']['proposal_revision']
+        changed = json.loads((await call('/test/revision')).text)['proposal_revision']
+        assert changed != revision
+        stale = await call('/live/setup/regions', {'proposal_revision': revision, 'add': [], 'remove': [0]})
+        assert stale.status == 409 and 'geaendert' in json.loads(stale.text)['error']
+        sleeps = []
+
+        async def sleep(seconds):
+            sleeps.append(seconds)
+
+        monkeypatch.setattr(asyncio, 'sleep', sleep)
+        assert (await call('/test/delay', {'path': '/live/setup/regions', 'ms': 1000})).status == 200
+        for rev in (changed, changed + '-edit'):
+            response = await call('/live/setup/regions', {'proposal_revision': rev, 'add': [[100, 100]], 'remove': []})
+            assert response.status == 200, response.text
+        assert sleeps == [1.0]  # Genau die naechste POST-Antwort.
+        assert (await call('/test/offline', {'on': True})).status == 200
+        pending = asyncio.create_task(call('/live/status', method='GET'))
+        await asyncio.wait((pending,), timeout=0.02)
+        assert not pending.done()
+        assert (await call('/test/offline', {'on': False})).status == 200
+        assert (await call('/live/status', method='GET')).status == 200
+        assert (await asyncio.wait_for(pending, 0.1)).status == 200
+        assert (await call('/test/scene', {'name': 'unknown'})).status == 400
+        assert (await call('/test/delay', {'path': '/live/setup', 'ms': -1})).status == 400
+        assert (await call('/test/offline', {'on': 'yes'})).status == 400
+        # Der alte Hook bleibt nutzbar, einschliesslich seiner Bildabmessungen.
+        assert (await call('/__test__/state', {'state': 'idle'})).status == 200
+        import cv2
+
+        assert cv2.imread(str(tmp_path / 'overlay.png')).shape == (24, 48, 3)
+        with pytest.raises(web.HTTPForbidden):
+            token = auth.pop('X-CSRF-Token')
+            try:
+                await call('/test/scene', {'name': 'idle'})
+            finally:
+                auth['X-CSRF-Token'] = token
+
+    asyncio.run(check())
+
+
+def test_fake_mjpeg_parts_and_cadence_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene('running_rahmen_verdeckt')
+    responses = _capture_preview(monkeypatch, limit=3)
+    _run_preview(_preview_handler(service))
+    parts = responses[0].parts
+    sequences = []
+    for _, part in parts:
+        header, body = part.split(b'\r\n\r\n', 1)
+        headers = dict(line.split(b': ', 1) for line in header.split(b'\r\n')[1:])
+        assert header.startswith(b'--frame\r\n')
+        assert headers[b'Content-Type'] == b'image/jpeg'
+        assert len(body) - 2 == int(headers[b'Content-Length'])
+        assert body.startswith(b'\xff\xd8') and body.endswith(b'\xff\xd9\r\n')
+        assert headers[b'X-Hud'].isascii() and len(headers[b'X-Hud']) <= 2048
+        hud = json.loads(headers[b'X-Hud'])
+        assert hud['seq'] == int(headers[b'X-Frame-Sequence'])
+        assert hud['cap_ns'] == int(headers[b'X-Capture-Ns'])
+        assert [i for i, r in enumerate(hud['track']['regions']) if not r['ok']] == [3, 6, 7, 11]
+        sequences.append(hud['seq'])
+    assert sequences == sorted(set(sequences)) and len(sequences) == 3
+    elapsed = parts[-1][0] - parts[0][0]
+    assert elapsed >= 2 / 15 - 0.02
+    assert elapsed < 0.5
+
+
+def test_fake_scene_confirmation_preserves_proposal_and_rejects_old_revision(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene('setup_ready_warnung')
+    revision = service.status()['setup']['proposal_revision']
+    service.bump_revision()
+    with pytest.raises(LiveError, match='geaendert'):
+        service.confirm(session_id='test-session', proposal_revision=revision)
+    proposal = service.status()['setup']
+    service.confirm(session_id='test-session', proposal_revision=proposal['proposal_revision'])
+    assert service.status()['state'] == 'confirmed'
+    assert service.status()['setup'] == proposal
+    service.start_run(test_override=True)
+    run = service.status()['run']
+    assert run['latest']['status'] == 'unreadable' and run['latest']['value'] is None
+    assert all(item[2] is None for item in run['recent'])
+    assert service.preview_frame().hud['rec']['status'] == 'unreadable'
+
+
+def test_fake_run_timing_reference_and_stopped_eval(tmp_path):
+    from live_ui_server import SCENES, FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    assert service.status()['reference_eval'] is None
+    assert service.status()['reference']['latest'] is None
+    for scene in SCENES:
+        if not scene.startswith('running_'):
+            continue
+        service.set_scene(scene)
+        status = service.status()
+        assert status['run']['started_at_utc'] == '2026-11-04T12:00:00+00:00'
+        assert status['run']['elapsed_s'] == 60.0
+        assert status['run']['ended_at_utc'] is None
+        assert status['reference']['latest'] == {
+            'cell_text': '+ 0.62427', 'raw': '+00.62427 mV/V', 'value': .62427, 'age_s': .1}
+        assert status['reference']['schedule_step'] == {'index': 1, 'factor': 2.0, 'since_s': 12.0}
+        assert status['reference_eval'] is None
+    before = service.status()['run']['recent']
+    service.stop_run()
+    status = service.status()
+    assert status['run']['recent'] == before
+    assert status['run']['ended_at_utc'] == '2026-11-04T12:01:00+00:00'
+    assert status['reference_eval'] == {'state': 'done', 'misreads': 0, 'compared_valid': 842,
+                                      'undecided_valid': 0, 'uncovered_valid': 0}
+    service.set_scene('stopped')
+    assert service.status()['run']['ended_at_utc'] == '2026-11-04T12:01:00+00:00'
+    assert service.status()['reference_eval']['misreads'] == 0
+    service.set_scene('stopped', test_run=True)
+    assert service.status()['run']['latest']['value'] is None
+    assert service.status()['reference_eval'] == {
+        'state': 'error', 'error': 'Abgleich abgelehnt: Testlauf: keine freigegebenen Messwerte '
+                                   'fuer einen Referenznachweis'}
+    service.set_scene('running_valid', test_run=True)
+    service.stop_run()
+    assert service.status()['reference_eval']['state'] == 'error'
+
+
+def test_run_start_forwards_output_configuration():
+    async def check(client, service):
+        config = {"transport": "tcp", "tcp_port": 5001}
+        response = await client.post("/live/run/start", json={"output": config})
+        assert response.status == 200
+        assert service.output == config
+
+    _run(check)
+
+
+@pytest.mark.parametrize('config', [
+    None, {'transport': 'off'}, {'port': '/fake/output'},
+    {'transport': 'serial', 'port': '/fake/output'},
+    {'transport': 'uart'}, {'transport': 'tcp'}, {'transport': 'unknown'},
+])
+def test_unified_output_route_forwards_unchanged_without_socket(monkeypatch, config):
+    import json
+    from unittest.mock import AsyncMock, Mock
+
+    from aiohttp.test_utils import make_mocked_request
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+
+    async def check():
+        service = FakeService()
+        app = web.Application()
+        add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+        request = make_mocked_request('POST', '/live/run/start', app=app, payload=Mock(at_eof=lambda: False))
+        request.json = AsyncMock(return_value={'output': config})
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 200, json.loads(response.text)
+        assert service.output == config
+
+    asyncio.run(check())
+
+
+def test_setup_cancel_route_returns_conflict_and_success_without_socket(tmp_path, monkeypatch):
+    import json
+
+    from aiohttp.test_utils import make_mocked_request
+    from test_live_service import FakeOwner
+
+    from dispread.live.service import LiveService
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+    service = LiveService(FakeOwner(), tmp_path)
+    app = web.Application()
+    add_live_routes(app, service, csrf_of=lambda _: 'tok')
+
+    async def check():
+        request = make_mocked_request('POST', '/live/setup/cancel', app=app)
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 409
+        assert json.loads(response.text) == {'error': 'Keine Einrichtung laeuft'}
+        service._state = 'setup_running'
+        response = await match.handler(request)
+        assert response.status == 200
+        assert json.loads(response.text) == {'ok': True}
+        assert service._setup_cancel.is_set()
+
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('scene', SCENE_NAMES)
+def test_fake_setup_cancel(tmp_path, scene):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    service.set_scene(scene)
+    if scene in ('setup_focus', 'setup_focus_done', 'setup_standbilder'):
+        service.cancel_setup()
+        status = service.status()
+        assert status['state'] == 'setup_failed'
+        assert status['error'] == 'Einrichtung abgebrochen'
+        assert any(step['state'] == 'failed' for step in status['setup']['progress']['steps'])
+        service.start_setup()
+        assert service.status()['state'] == 'setup_running'
+    else:
+        with pytest.raises(LiveError, match='Keine Einrichtung laeuft'):
+            service.cancel_setup()
+
+
+def test_fake_focus_roi_in_source_coordinates(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for scene in ('setup_focus', 'setup_focus_done'):
+        service.set_scene(scene)
+        roi = service.status()['setup']['focus']['roi']
+        assert roi == [640, 360, 640, 360]
+        roi[0] = -1
+        assert service.status()['setup']['focus']['roi'][0] == 640
+
+
+def test_fake_system_cpu_is_available_in_every_scene(tmp_path):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'overlay.png')
+    for scene in SCENE_NAMES:
+        service.set_scene(scene)
+        system = service.status()['system']
+        assert system == {'cpu_percent': 37.5, 'cpu_window_s': 1.0}
+        system['cpu_percent'] = -1
+        assert service.status()['system']['cpu_percent'] == 37.5

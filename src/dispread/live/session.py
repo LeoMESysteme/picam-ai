@@ -18,6 +18,7 @@ import threading
 import time
 from collections import Counter, deque
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ from typing import Any
 
 import cv2
 
+from dispread.gsv_transport import OutputConfig, OutputPublisher
 from dispread.layout import CharLayout
 from dispread.live import (
     DEFAULT_CALIBRATION,
@@ -37,7 +39,13 @@ from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
-from dispread.live.output import LiveOutput, validate_output
+from dispread.live.output import (
+    SERIAL_RELEASE_NOTE,
+    LiveOutput,
+    normalize_output,
+    require_output_acknowledgement,
+)
+from dispread.live.recent import RecentStrip
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -182,8 +190,9 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
+        output_factory: Callable[..., Any] = OutputPublisher,
         reference_recorder: Any = None,
-        output: dict | None = None,
+        output: dict | OutputConfig | None = None,
         diagnostics: bool = False,
         diagnostic_staging_root: Path = Path('/dev/shm'),
         reader_d_max_factor: float = 1.0,
@@ -213,8 +222,21 @@ class LiveSession:
         self._profile_path = Path(profile_path)
         self._config = config
         self._out_dir = Path(out_dir)
-        options = validate_output(output)
-        self._output = None if options is None else LiveOutput(options, self._out_dir / 'tx.jsonl')
+        self._output_config = normalize_output(output.to_dict() if isinstance(output, OutputConfig) else output)
+        self._output_transport = self._output_config['transport']
+        if test_run is not None and self._output_transport != 'off':
+            raise StartRefused('Testlauf erlaubt keine externe Ausgabe')
+        try:
+            require_output_acknowledgement(self._output_config)
+        except ValueError as exc:
+            raise StartRefused(str(exc)) from exc
+        self._output = None
+        if self._output_transport == 'serial':
+            options = {key: value for key, value in self._output_config.items()
+                       if key not in ('transport', 'acknowledge_unaccepted')}
+            self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
+        elif self._output_transport != 'off':
+            self._output = output_factory(OutputConfig.from_dict(self._output_config), self._out_dir)
         self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
@@ -237,6 +259,10 @@ class LiveSession:
         self._meta: dict = {}
         self._seen = 0
         self._by_status: dict[str, int] = {}
+        self.recent = RecentStrip()
+        self._frame_info: tuple[float, dict] | None = None
+        self._frame_info_warned = False
+        self._processing_window: deque[tuple[float, int]] = deque()
         #: TRANSITION wegen Ziffernwechsel (Grund anzeige_wechselt), getrennt
         #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
         self._display_changing = 0
@@ -258,6 +284,10 @@ class LiveSession:
         self._stop_lock = threading.Lock()
         self._stopped = False
         self._last_clock = 0.0
+        self._started_monotonic: float | None = None
+        self._ended_monotonic: float | None = None
+        self._ended_at_utc: str | None = None
+        self._frozen_recent: tuple[list[list], float] | None = None
 
     def _prepare_tracking_advice(self, image, profile):
         centres = [region['centre'] for region in
@@ -277,6 +307,7 @@ class LiveSession:
         self._out_dir.mkdir(parents=True, exist_ok=True)
         owner_status = self._owner.status()
         self._frame_gaps_start = owner_status.get("gaps", 0)
+        self._started_monotonic = self._monotonic()
         self._meta = {
             "schema": SCHEMA,
             "tracking": dict(self.tracking),
@@ -315,7 +346,10 @@ class LiveSession:
         self._sink.open()
         if self._output is not None:
             try:
-                self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                if self._output_transport == 'serial':
+                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                else:
+                    self._output.start()
             except Exception as exc:
                 self.stop(reason='start_failed')
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
@@ -345,7 +379,7 @@ class LiveSession:
         with self._stop_lock:
             if self._stopped:
                 return None
-            if (self._output is not None and not self._output_error_saved
+            if (self._output_transport == 'serial' and not self._output_error_saved
                     and self._output.failed_event.is_set()):
                 # Im Leserthread schreiben: kein Session-Dateirennen oder Lock/Join-Deadlock.
                 self._write_session(ended=False)
@@ -403,7 +437,10 @@ class LiveSession:
                 self._audit_errors += 1
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             if self._output is not None:
-                self._output.submit(record)
+                if self._output_transport == 'serial':
+                    self._output.submit(record)
+                else:
+                    self._output.publish(record)
             self._frames_read += 1
             if suppressed:
                 self._testlauf_unterdrueckt += 1
@@ -455,7 +492,73 @@ class LiveSession:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
                 self._write_session(ended=False)
+            # Nur kleine Metadaten nach erfolgreichem Audit, keine Bildkopien.
+            # Ein Anzeigeproblem darf weder Messung noch Ausgabe unterbrechen.
+            try:
+                now = self.latest_monotonic
+                self.recent.observe(now, record.status.value, record.value)
+                while self._processing_window and self._processing_window[0][0] <= now - 2.0:
+                    self._processing_window.popleft()
+                self._processing_window.append((now, skipped))
+                self._frame_info = (now, self._build_frame_info(sequence, record, track, coarse))
+            except Exception as exc:  # noqa: BLE001 - Messung hat Vorrang vor Anzeige
+                self._frame_info = None
+                if not self._frame_info_warned:
+                    _LOG.warning('Laufanzeige ausgefallen: %s', exc)
+                    self._frame_info_warned = True
             return record
+
+    def _build_frame_info(self, sequence, record, track, coarse) -> dict:
+        pipeline = self._pipeline
+        tracker = getattr(pipeline.locator, '_tracker', None)
+        regions = getattr(tracker, 'last_regions', None) or []
+        read = pipeline.last_read
+        diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
+        cells = diagnostics.get('cells')
+        if not (isinstance(cells, list) and cells
+                and all(isinstance(c, dict) and isinstance(c.get('best'), str)
+                        and isinstance(c.get('margin'), (int, float)) for c in cells)):
+            cells = []
+        trace = record.trace
+        latency = (None if trace is None or trace.t_record_built_ns is None else
+                   (trace.t_record_built_ns - trace.t_dequeue_ns) / 1e6)
+        count = len(self._processing_window)
+        skipped = sum(item[1] for item in self._processing_window)
+        return {
+            'rec': {'seq': sequence, 'status': record.status.value,
+                    'text': record.raw_text, 'unit': record.unit,
+                    'reasons': list(record.reject_reasons), 'age_s': 0.0},
+            'track': {
+                'quad': None if track is None or track.quad is None else
+                        [[float(x), float(y)] for x, y in track.quad],
+                'score': None if track is None else float(track.score),
+                'shift_px': None if track is None else float(track.shift),
+                'rotation_deg': None if track is None else float(track.rotation_deg),
+                'reason': None if track is None else track.reason,
+                'correcting': bool(coarse is not None and coarse.used),
+                'regions': [{'c': list(region['c']), 's': region['s'],
+                             'peak': float(region['peak']), 'ok': bool(region['ok'])}
+                            for region in regions],
+            },
+            'cells': [{'i': i, 'best': cell['best'], 'margin': cell['margin'],
+                       'uncertain': cell['margin'] < 0} for i, cell in enumerate(cells)],
+            'proc': {'fps': count / 2.0, 'latency_ms': latency,
+                     'skipped_recent': skipped / (count + skipped)},
+        }
+
+    def frame_info(self) -> dict | None:
+        """Unabhaengiges Abbild des letzten auditierten Bilds, ohne Bilddaten."""
+        snapshot = self._frame_info
+        if snapshot is None:
+            return None
+        observed, data = snapshot
+        info = deepcopy(data)
+        # Nur die Ansicht altert; Datensatz und gespeichertes Abbild bleiben gleich.
+        age = max(0.0, self._monotonic() - observed)
+        info['rec']['age_s'] = age
+        if age > 0.5:
+            info['rec']['status'] = 'stale'
+        return info
 
     def rejection_causes(self) -> dict:
         """Hauptursachen aller verarbeiteten Bilder der letzten zehn Sekunden."""
@@ -528,6 +631,18 @@ class LiveSession:
             data['diagnostics'] = self.diagnostics_status()
             self._save_session(data)
 
+    def timing_status(self) -> dict:
+        end = self._ended_monotonic if self._ended_monotonic is not None else self._monotonic()
+        return {'started_at_utc': self._meta.get('started_at_utc'),
+                'elapsed_s': None if self._started_monotonic is None else end - self._started_monotonic,
+                'ended_at_utc': self._ended_at_utc}
+
+    def recent_snapshot(self) -> tuple[list[list], float]:
+        if self._frozen_recent is None:
+            return self.recent.snapshot(self._monotonic())
+        entries, now_ms = self._frozen_recent
+        return [list(entry) for entry in entries], now_ms
+
     def stop(self, reason: str = "bediener") -> dict:
         with self._stop_lock:
             if self._stopped:
@@ -540,14 +655,19 @@ class LiveSession:
             except Exception as exc:  # noqa: BLE001 - Abschluss bleibt erhalten
                 self._reference_error = str(exc)
             finally:
-                if self._output is not None:
-                    self._output.stop()
                 self._clock.sample()
                 try:
-                    if self._sink is not None:
-                        self._sink.close()
+                    try:
+                        if self._output is not None:
+                            self._output.stop()
+                    finally:
+                        if self._sink is not None:
+                            self._sink.close()
                 finally:
                     try:
+                        self._ended_monotonic = self._monotonic()
+                        self._ended_at_utc = self._wall().isoformat()
+                        self._frozen_recent = self.recent.snapshot(self._ended_monotonic)
                         self._write_session(ended=True)
                     finally:
                         if self._tracking_advice is not None:
@@ -573,8 +693,42 @@ class LiveSession:
             status['error'] = self._reference_error
         return status
 
+    def reference_live_status(self) -> dict:
+        recorder = self._reference_recorder
+        return {**self.reference_status(),
+                'latest': None if recorder is None else recorder.latest_status(),
+                'schedule_step': None if recorder is None else recorder.schedule_step_status()}
+
     def output_status(self) -> dict | None:
-        return None if self._output is None else self._output.status()
+        """P4-3-Status unveraendert; Brueckenstatus mit Konfiguration."""
+        if self._output is None:
+            return None
+        status = self._output.status()
+        if self._output_transport == 'serial':
+            return status
+        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt'}
+
+    def unified_output_status(self) -> dict:
+        """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
+
+        failed: permanenter P4-3-Fehler ohne Wiederverbindung bis Laufende.
+        audit_failed: Tx-Audit ausgefallen. last_ack belegt ausschliesslich
+        lokale Treiberannahme, keinen GSVmulti-Empfang.
+        """
+        if self._output is None:
+            return {'transport': 'off', 'state': 'off'}
+        status = self.output_status()
+        if self._output_transport != 'serial':
+            return status
+        return {
+            'transport': 'serial',
+            **self._output.delivery_status(),
+            'config': dict(self._output_config),
+            'error': status['first_error'],
+            'release_block': None,
+            'acceptance': 'fehlt',
+            'release_note': SERIAL_RELEASE_NOTE,
+        }
 
     def _write_session(self, *, ended: bool) -> None:
         if self._stopped and not ended:
@@ -608,8 +762,10 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
-        if self._output is not None:
-            data['output'] = self.output_status()
+        if self._output_transport == 'serial':
+            data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
+        elif self._output is not None:
+            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status()}
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark
@@ -622,7 +778,7 @@ class LiveSession:
             data["test_run"] = self._test_run
             data["guesses"] = {"frames": self._guesses.total(), "top": self._guesses.most_common(10)}
         if ended:
-            data["ended_at_utc"] = self._wall().isoformat()
+            data["ended_at_utc"] = self._ended_at_utc
         self._save_session(data)
 
     def _save_session(self, data: dict) -> None:

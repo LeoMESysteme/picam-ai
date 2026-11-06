@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,9 +16,20 @@ from dispread.live.service import LiveError, LiveInputError
 STATIC = Path(__file__).parent / "static"
 
 
+def _finite_json(value: object) -> object:
+    """Nicht-endliche HUD-Zahlen als unbekannt an den Client geben."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _finite_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_json(item) for item in value]
+    return value
+
+
 def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Request], str]) -> None:
     async def page(_request):
-        return web.FileResponse(STATIC / "live.html")
+        return web.FileResponse(STATIC / "live" / "index.html")
 
     async def status(request):
         data = await asyncio.to_thread(service.status, **({"full": True} if request.query.get("full") == "1" else {}))
@@ -33,6 +46,9 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     async def setup(request):
         data = await request.json() if request.can_read_body else {}
         return await _call(service.start_setup, cell_text=data.get("cell_text"))
+
+    async def setup_cancel(_request):
+        return await _call(service.cancel_setup)
 
     async def regions(request):
         try:
@@ -98,9 +114,60 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
             raise web.HTTPServiceUnavailable()
         return web.Response(body=jpeg, content_type="image/jpeg")
 
+    async def preview_mjpg(request):
+        response = web.StreamResponse(headers={
+            "Content-Type": "multipart/x-mixed-replace; boundary=frame", "Cache-Control": "no-store",
+        })
+        await response.prepare(request)
+        started = time.monotonic()
+        previous = None
+        next_due = started
+        try:
+            while time.monotonic() - started < 600:
+                if request.transport is None or request.transport.is_closing():
+                    break
+                now = time.monotonic()
+                if now < next_due:
+                    await asyncio.sleep(min(next_due - now, 0.01))
+                    continue
+                frame = await asyncio.to_thread(service.preview_frame, after_seq=previous)
+                if frame is not None:
+                    interval = 1 / frame.hud["preview"]["fps"]
+                    if frame.seq != previous:
+                        hud = json.dumps(_finite_json(frame.hud), ensure_ascii=True,
+                                         separators=(",", ":"), allow_nan=False)
+                        header = (
+                            "--frame\r\nContent-Type: image/jpeg\r\n"
+                            f"Content-Length: {len(frame.jpeg)}\r\n"
+                            f"X-Frame-Sequence: {frame.seq}\r\nX-Capture-Ns: {frame.cap_ns}\r\n"
+                            f"X-Hud: {hud}\r\n\r\n"
+                        ).encode("ascii")
+                        await asyncio.wait_for(response.write(header + frame.jpeg + b"\r\n"), 2)
+                        previous = frame.seq
+                        next_due += interval
+                        now = time.monotonic()
+                        if now - next_due > interval:
+                            next_due = now
+                        continue
+                await asyncio.sleep(0.01)
+        except TimeoutError:
+            # Gepufferte Daten nicht mehr an einen blockierten Client zustellen.
+            if request.transport is not None:
+                abort = getattr(request.transport, "abort", None)
+                if callable(abort):
+                    abort()
+                else:
+                    request.transport.close()
+        except OSError:
+            # Auch aiohttp.write_eof() darf nicht am langsamen Client warten.
+            if request.transport is not None:
+                request.transport.close()
+        return response
+
     app.router.add_get("/live", page)
     app.router.add_get("/live/status", status)
     app.router.add_post("/live/setup", setup)
+    app.router.add_post("/live/setup/cancel", setup_cancel)
     app.router.add_post("/live/setup/regions", regions)
     app.router.add_post("/live/confirm", confirm)
     app.router.add_post("/live/run/start", run_start)
@@ -109,3 +176,4 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
     app.router.add_post("/live/camera/start", camera_start)
     app.router.add_get("/live/setup/{name}.png", setup_image)
     app.router.add_get("/live/preview.jpg", preview)
+    app.router.add_get("/live/preview.mjpg", preview_mjpg)

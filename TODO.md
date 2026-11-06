@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-30
+# TODO — Stand 2026-11-06
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -6,6 +6,109 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
+
+---
+
+## 2026-11-06: Nutzerentscheidungen und Fahrplan
+
+Leonhard hat am 2026-11-06 festgelegt, was nach dem Werkbank-Redesign
+kommt. Arbeitszweig ist `feat/werkbank-redesign` (Plan
+[2026-11-04 Werkbank-Redesign](docs/superpowers/plans/2026-11-04-werkbank-redesign.md),
+[Spec](docs/superpowers/specs/2026-11-04-werkbank-redesign-design.md)).
+In dieser Reihenfolge:
+
+1. **Werkbank-Redesign softwareseitig fertiggestellt (2026-11-06), einschließlich
+   GSVmulti-Ausgabewahl in der neuen `/live`-Oberfläche.** Pro Lauf genau ein Weg: Aus | UART
+   direkt (P4-3) | UART über Brücke | Netzwerk über Brücke. Backend steht
+   (Commit `7bb4898`): „UART direkt“ gibt echte Werte aus, ist aber dauerhaft
+   als „Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe“
+   markiert und startet nur nach ausdrücklicher Bestätigung
+   (`acknowledge_unaccepted`). Die Brückenwege bleiben bis zur
+   Windows-Abnahme strukturell DUT-gesperrt
+   ([GSVmulti-Stand](docs/GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt)).
+2. **Hardware-Abnahme Aufgabe 13 (T13) mit Leonhard:** echte Einrichtung,
+   Lauf ≥ 30 min mit Referenz, Vorschau-fps, übersprungene Bilder mit und
+   ohne Seite, CPU-Last, Verbrauch des alten Controllers. Erster Lauf vom
+   06.11. dauerte 22:38 min und enthielt absichtliche Bewegungen: keine
+   vollständige T13-Abnahme. [Auswertung](docs/quellen/werkbank-t13-2026-11-06.md),
+   dauerhafter zweiter Fit und missverständlicher Korrekturhinweis:
+   [OQ-63](docs/open-questions.md#oq-63). Nur mit Leonhards
+   Freigabe im Chat; Merge nach `master` nur mit seinem ausdrücklichen OK.
+3. **Spec Laufablage, Export und Aufbewahrung**
+   ([OQ-60](docs/open-questions.md#oq-60)). Vorgaben: immer ein gesetzter
+   Standard-Speicherort, überschreibbar (z. B. Logs und Diagnosebilder auf
+   SSD/USB); Download aus der Werkbank als txt, csv, json, GSVmulti-Format
+   und frei definierbar; Aufzeichnungsoptionen (Diagnosebilder gibt es schon
+   beim Laufstart). Zu klären: wird jeder Lauf gespeichert, wie läuft der
+   lokale Speicher nicht langsam voll (Produktion: 64-GB-SD ohne SSD), wie
+   finden unerfahrene Nutzer ihre Daten und löschen sie. Laufende nach nicht
+   korrigierbarer Verschiebung: **„Neu einrichten“** verwirft die bisherige
+   Aufzeichnung, **„Lauf stoppen“** behält sie zum Speichern, Export und
+   Ansehen. Heute bietet der Dialog „Anzeige hat sich bewegt“ Weiter
+   beobachten · Lauf stoppen · Neu einrichten, und „Neu einrichten“ lässt die
+   Dateien liegen; das Verwerfen kommt erst mit der Speicherverwaltung.
+   Grundlage: Platzprüfung und `dispread live aufraeumen` (R13-16).
+4. **Spec Nachberechnungsmodus plus Messungen**
+   ([OQ-59](docs/open-questions.md#oq-59)). Machbar als begrenzter
+   Lückenschluss: RAM-Ringpuffer (10–30 s) eines Ausschnitts um das
+   bestätigte Quad, bei Trackingverlust sichern und weiter aufzeichnen,
+   nach Neueinrichtung nachlesen. Vollbild dauerhaft scheidet aus (JPEG
+   25–40 GB/h, kein H.264-Hardware-Encoder am Pi 5). Vor der Entscheidung
+   messen: CPU und übersprungene Bilder mit Ringpuffer, Bytes/h, gleiche
+   Leseergebnisse auf gespeicherten Bildern, wie oft die Anzeige aus dem
+   Ausschnitt rutscht. Nachberechnete Werte nie live an GSVmulti, Herkunft
+   im Audit; ein Herkunftsfeld im `ValueRecord` bräuchte eine
+   Konzeptänderung (§8, neun Felder).
+5. **Bessere automatische Korrektur** bei Kamerastoß und Anzeigeverschiebung
+   (später). Heute: Grobverschiebung plus begrenzte ECC-Nachregistrierung
+   („Korrektur läuft“). Ziel: ein wichtiger Lauf geht nicht verloren und muss
+   nicht wiederholt werden ([OQ-26](docs/open-questions.md#oq-26)).
+6. **Alten Controller und alte Startseite entfernen** (OP-2 der Spec,
+   entschieden 2026-11-06), sobald die neue Werkbank produktionsreif ist.
+   Vorher Bestandsaufnahme, was nur dort lebt (Datensatz-Sammelmodus,
+   Profilbearbeitung, Terminals, Anmeldung …;
+   [OQ-61](docs/open-questions.md#oq-61)).
+7. **Fahrplan danach** ([Roadmap P9](docs/ROADMAP.md#p9-betrieb-und-ausbau)),
+   sobald neue Werkbank und GSVmulti-Anbindung fertig sind:
+   1. Codebasis polieren.
+   2. Wiki polieren (Doku und Zensical-Seite).
+   3. TUI für Einrichtung, Verwaltung, Konfiguration und Fehlersuche; soll
+      möglichst viel abdecken und wird entsprechend umfangreich.
+   4. Test auf frisch installiertem bzw. neuem Pi: Einrichtung,
+      Konfiguration und Betrieb laufen glatt. Einrichtung sehr
+      benutzerfreundlich, am besten ein Befehl, der alles installiert
+      ([OQ-49](docs/open-questions.md#oq-49)).
+   5. Produktionsabnahme, eventuell durch Abteilungsleiter Holger Kabelitz.
+   6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
+
+**Windows-Einrichtung der GSVmulti-Brücke vereinfachen** (Nutzervorgabe
+2026-11-06, später; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
+GSVmulti-Ausgabe in der Werkbank führt zu einer passenden Verbindungsanleitung.
+Bevorzugt lädt die Person eine fertige Windows-EXE herunter, die benötigte
+Komponenten installiert und einrichtet. Eine einfache GUI bietet UART oder
+Netzwerk an, erkennt Geräte/Ports und zeigt verständlich „bereit“ oder die
+konkrete fehlende Aktion, etwa „USB-Adapter anschließen“. Als mögliche
+Alternative ein einziger Befehl zum Herunterladen und Ausführen eines
+Einrichtungsskripts. Werkbank oder EXE erzeugt möglichst eine passende
+GSVmulti-Sessiondatei zum Öffnen/Importieren in GSVmulti. Normale Benutzer
+sollen Python-Umgebung, COM-Paar und Portzuordnung nicht selbst zusammensetzen.
+Die EXE muss ohne vorinstalliertes Python und neben alten Installationen
+(z. B. Visual-Studio-Python 3.7) funktionieren; sie darf nicht zufällig den
+Systeminterpreter wählen. Eine Skriptalternative prüft die Version vorab und
+richtet automatisch eine geeignete isolierte Laufzeit ein. Bestehende
+Python-/Visual-Studio-Installationen erhalten. Frisch-PC-Tests decken sowohl
+„kein Python“ als auch „nur Python 3.7“ ab.
+Netzerkennung und überprüfte Kopplung mehrerer Pi sowie Verhalten bei
+Netzwechseln in [OQ-64](docs/open-questions.md#oq-64) klären. Nutzer erlaubt
+Downloads während der Ersteinrichtung; Offline-Installationspaket derzeit
+keine Pflicht. Architektur gewählt: bestehender Python-Kern + Qt-GUI +
+Windows-Installer. [Designentwurf](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
+unabhängig auf Planungslücken geprüft (keine wichtigen offenen Fragen);
+Dokumentfreigabe vor Implementierung noch ausstehend.
+Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
+([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
+ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den
+laufenden Abnahmearbeiten spezifizieren; heute nur Anforderung erfasst.
 
 ---
 
@@ -375,6 +478,58 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
+   **2026-11-04:** Software-Prototyp mit UserDefined-Formatter,
+   TCP-/UART-Brücke gebaut; echte DUT-Ausgabe über die Brücke gesperrt.
+
+   - [ ] Ausgabewahl (Aus | UART direkt | UART über Brücke | Netzwerk über Brücke) in der neuen /live-Oberfläche — in Arbeit (Werkbank-Redesign G2)
+
+   **2026-11-06 (Nutzerentscheidung):** „UART direkt“ gibt weiter echte
+   Werte aus, ist aber dauerhaft als „Prototyp – nicht am Windows-PC
+   abgenommen, keine Messfreigabe“ markiert und startet nur nach
+   ausdrücklicher Bestätigung (`acknowledge_unaccepted`). Brückenwege bleiben
+   bis zur Windows-Abnahme strukturell DUT-gesperrt.
+
+   Direkte UART-Demowerte unter Windows 11/GSVmulti 2.03 Pro gespeichert:
+   Rampen und acht Sprünge korrekt, Timeout und Fortsetzung belegt.
+   Ungültige Zeiträume fehlen aber im Export, auch bei NaN und bestätigtem
+   Replace Missing Values ([OQ-06](docs/open-questions.md#oq-06),
+   [OQ-50](docs/open-questions.md#oq-50), [OQ-51](docs/open-questions.md#oq-51)).
+   Reproduktionsfall mit GSVmulti-Entwicklung klären; Belegpaket lokal vorhanden,
+   kein Kontakt versandt. Lauf 11 belegt 510 korrekte Zahlen, mV/V und
+   Skalierung 1 in TDMS sowie Unit=mV/V in gespeicherter Session; TXT ohne
+   eigene Einheit. Gültiges Zahlenprofil der 2.03-Pro-Konfiguration geklärt
+   ([OQ-01](docs/open-questions.md#oq-01)). Als Nächstes getrennt
+   Altwert-/Puffernachlauf und Port-/Prozesswiederanlauf prüfen. Lauf 12:
+   Wiederöffnen nach Close scheitert mit 805306614; zuerst Portbelegung gegen
+   DLL-Zustand trennen ([OQ-52](docs/open-questions.md#oq-52)). Filter-aus-
+   Vergleich 14 mit abgeglichener10Hz/mV/V-Session bleibt auf Timeout;
+   positive Gegenprobe15 liest gültige Zahlen wieder. A-Präfix ohne Filter
+   bleibt in16 durchgehend auf Timeout ([OQ-53](docs/open-questions.md#oq-53)).
+   Geladene Windows-GSV-Versionen erfasst, OQ-54 geklärt
+   ([Inventar](docs/GSVMULTI_PROTOCOL.md#geladene-gsv-bibliotheken)).
+   LogLevel2 wirksam: Close-/Open-Fehler zweimal protokolliert; initial
+   zusätzlich Clear-Buffer-Fehler. Gegenprobe über Add Channel reproduziert
+   beide Signaturen bei1 statt10 Hz ([OQ-55](docs/open-questions.md#oq-55));
+   Zusammenhang offen. Vergleichspaket für direkten Entwicklungskontakt
+   lokal vorbereitet, kein Versand; OQ-52/OQ-53 bleiben teilweise geklärt.
+   Nutzer akzeptiert vollständigen GSVmulti-Neustart als Workaround;
+   Fehlerbehebung vorerst zurückgestellt. Nutzer wählt wieder com0com als
+   nächsten Weg: Nach angeleitetem Vovsoft-Buildwechsel alle sechs Geräte
+   Code0, COM5/COM6 bidirektional geprüft; Hash passt, SecureBoot/HVCI aktiv.
+   Lokale Windows-Demo COM5→COM6/GSVmulti mit600/600 exakten Zahlen samt
+   mV/V/Scaling1 vollständig gespeichert. Gemeinsamer Pi-TCP-/JSONL-/ACK-
+   Demolauf:600/600 Werte exakt in TXT/TDMS, passende ACKs/Payloads und Einheiten
+   belegt. Brückenprozess-Wiederanlauf:510/510 geschriebene Werte exakt gespeichert,
+   ohne Zwischenhistorie fortgesetzt; Exportpause weiter unmarkiert. Zusatzersatz
+   Frame356 unter [OQ-58](docs/open-questions.md#oq-58) isolieren; gemeinsamer UART
+   und übrige Abbruch-/Altwertfälle noch prüfen
+   ([OQ-47](docs/open-questions.md#oq-47)). Echte DUT-Ausgabe bleibt gesperrt.
+   [Arbeitsplan](docs/superpowers/plans/2026-11-04-gsvmulti-anbindung.md),
+   [Messbelege](docs/VALIDATION.md#uart-demo-20261104-10).
+   `protocol/gsv_ascii` wirft weiterhin absichtlich; Format provisorisch.
+   Kein Protokoll erfinden; Messfreigabe erst nach erfüllten Abnahmeschranken.
+
+   **Historischer Planungsstand (2026-10-28 bis 2026-10-30, P4-3 direkt):**
    **2026-10-30:** P4-1 bis P4-3 sind als Prototyp gebaut:
    `UserDefinedFormatter`, Demo-Sender und Opt-in-Ausgabe im Live-Lauf.
    Geprüft ist das nur mit pty; der Windows-Test steht aus
@@ -394,6 +549,12 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
 5. **UI/UX-Überarbeitung der Werkbank** (nicht prod-ready), einschließlich
    schnellerer Vorschau (Seite holt Bild und Status nur alle 0,5 s) und der
    zurückgestellten Bedienpunkte unter „Offen“ Punkt 2.
+   Seit 2026-11-04 als Werkbank-Redesign in Arbeit. Folgearbeiten laut
+   Entscheidung 2026-11-06 (oben, „Nutzerentscheidungen und Fahrplan“):
+   Laufablage/Export ([OQ-60](docs/open-questions.md#oq-60)),
+   Nachberechnungsmodus ([OQ-59](docs/open-questions.md#oq-59)), alten
+   Controller und alte Startseite nach Bestandsaufnahme entfernen
+   ([OQ-61](docs/open-questions.md#oq-61)).
 6. **Aufräumen im Messpfad:** alten 7-Segment-Lesepfad entfernen.
    Live-Audit ohne verlustbehaftete Rotation ist seit R13-16 gebaut.
 7. **Rest aus Review Task 5** (nicht blockierend): `DEFAULT_RESTORE_POINT`

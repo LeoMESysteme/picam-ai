@@ -377,3 +377,25 @@ def test_failed_reconfiguration_without_resume_stays_blocked(tmp_path, monkeypat
     assert recorder.is_reconfiguring(1000)
     assert recorder.is_reconfiguring(100_000_000_000)
     assert not recorder.is_reconfiguring(999)
+
+
+def test_reference_schedule_step_age_and_copy(tmp_path, monkeypatch):
+    port = RegisterPort()
+    ticks = [0.0]
+    monkeypatch.setattr('dispread.gsv2as_serial._sleep', lambda seconds: None)
+    point = {'register': {'norm': {'daten': [80, 27, 228]}, 'dpoint': {'daten': [1]}}}
+    recorder = ReferenceRecorder(lambda: port, tmp_path / 'reference.jsonl',
+                                 norm_schedule=[(2, 20)], restore_point=point,
+                                 monotonic=lambda: ticks[0])
+    assert recorder.schedule_step_status() is None
+    recorder.start()
+    try:
+        _wait_for(lambda: recorder.schedule_step_status() is not None)
+        ticks[0] = 3.0
+        step = recorder.schedule_step_status()
+        assert step == {'index': 0, 'factor': 2.0, 'since_s': 3.0}
+        step['factor'] = 99
+        ticks[0] = 4.0
+        assert recorder.schedule_step_status() == {'index': 0, 'factor': 2.0, 'since_s': 4.0}
+    finally:
+        recorder.stop()

@@ -1,0 +1,137 @@
+{
+  "state": "setup_running",
+  "error": null,
+  "setup": {
+    "grid": null,
+    "step": "fokus",
+    "elapsed_s": 5.0,
+    "focus": {
+      "method": "climb",
+      "roi": [
+        640,
+        360,
+        640,
+        360
+      ],
+      "samples": [
+        [
+          48,
+          630.3558194010419
+        ],
+        [
+          56,
+          273.53271242939513
+        ],
+        [
+          40,
+          201.1113182858314
+        ]
+      ],
+      "verify": null
+    },
+    "exposure": {
+      "target": 130,
+      "band": [
+        115,
+        150
+      ],
+      "rounds": []
+    },
+    "progress": {
+      "steps": [
+        {
+          "key": "fokus",
+          "state": "running",
+          "elapsed_s": 5.0
+        },
+        {
+          "key": "kamera",
+          "state": "pending",
+          "elapsed_s": null
+        },
+        {
+          "key": "belichtung",
+          "state": "pending",
+          "elapsed_s": null
+        },
+        {
+          "key": "standbilder",
+          "state": "pending",
+          "elapsed_s": null
+        },
+        {
+          "key": "vorschlag",
+          "state": "pending",
+          "elapsed_s": null
+        }
+      ],
+      "attempt": 1,
+      "attempts_max": 3,
+      "phase": null,
+      "wait": null
+    },
+    "checks_live": {}
+  },
+  "run": null,
+  "reader_tolerance": null,
+  "session_id": "test-session",
+  "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
+  "camera": {
+    "running": true,
+    "stalled": false,
+    "error": null,
+    "frames": 1,
+    "gaps": 0,
+    "source": {
+      "model": "logitech_streamcam",
+      "usb_id": "046d:0893",
+      "size": [
+        1920,
+        1080
+      ],
+      "fourcc": "YUYV",
+      "fps": 30,
+      "device": "/dev/video0",
+      "controls": {
+        "focus_absolute": 48,
+        "exposure_time_absolute": 300,
+        "white_balance_temperature": 4742,
+        "gain": 10
+      }
+    },
+    "last_start": null
+  },
+  "diagnostic_leftovers": [],
+  "storage": {
+    "free_bytes": 4200000000,
+    "reserve_bytes": 2000000000,
+    "level": "warn",
+    "message": "4.20 GB frei"
+  },
+  "system": {
+    "cpu_percent": 37.5,
+    "cpu_window_s": 1.0
+  },
+  "step": null,
+  "simulate": false,
+  "profile": null,
+  "run_block": null,
+  "test_run": null,
+  "diagnostics": {
+    "enabled": false,
+    "reason": "kein Diagnoselauf"
+  },
+  "diagnose_kopie": false,
+  "last_mark": null,
+  "output": {
+    "transport": "off",
+    "state": "off"
+  },
+  "reference": {
+    "enabled": false,
+    "reason": "kein Referenzlauf",
+    "latest": null,
+    "schedule_step": null
+  },
+  "reference_eval": null
+}

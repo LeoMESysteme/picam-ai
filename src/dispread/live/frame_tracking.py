@@ -1103,6 +1103,7 @@ class FrameTracker:
         self.edge_points = np.asarray([edge.point for edge in self.edges]).reshape(-1, 2)
         self.edge_normals = np.asarray([edge.normal for edge in self.edges]).reshape(-1, 2)
         self.last_coarse: CoarseEstimate | None = None
+        self.last_regions: list[dict] | None = None
         # Fester Ausschnitt und feste Maske; kein Zustand aus aktuellen Bildern.
         outer = np.asarray(proposal.outer_limit)
         lo = np.maximum(np.floor(outer.min(axis=0)).astype(int), 0)
@@ -1198,6 +1199,12 @@ class FrameTracker:
 
     def _fine_update(self, gray, offset=(0, 0), *, similarity=False) -> TrackResult:
         config = self.config
+        # Immer nur der letzte Feinversuch; kein Befund des Vorbilds bleibt stehen.
+        self.last_regions = [
+            {'c': [float(x + offset[0]), float(y + offset[1])],
+             's': region.size, 'peak': 0.0, 'ok': False}
+            for (x, y), region in zip(self.sources, self.proposal.regions, strict=True)
+        ]
 
         def reject(reason):
             return TrackResult(None, 0.0, 0.0, 0.0, reason)
@@ -1217,6 +1224,8 @@ class FrameTracker:
             if patch is None or search is None:
                 continue
             position, peak, ambiguous = _peak(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config)
+            region = self.last_regions[index]
+            region['peak'] = float(peak)
             # Ein Randmaximum kann ausserhalb weiter steigen. Ohne beide
             # Nachbarn ist weder ein Peak noch seine Subpixelposition belegt.
             if peak < config.min_peak or np.any(position <= 0) or np.any(position >= 2*r):
@@ -1224,6 +1233,7 @@ class FrameTracker:
             if ambiguous:
                 ambiguous_count += 1
                 continue
+            region['ok'] = True
             indices.append(index)
             targets.append(position + (x-r, y-r))
             peaks.append(peak)
@@ -1234,6 +1244,8 @@ class FrameTracker:
         if fit is None:
             return reject("rahmen_unstimmig")
         rotation, translation, inliers = fit[:3]
+        for index, inlier in zip(indices, inliers, strict=True):
+            self.last_regions[index]['ok'] = bool(inlier)
         scale = fit[3] if similarity else 1.0
         if similarity and self.last_coarse is not None:
             self.last_coarse = replace(self.last_coarse, scale=scale)

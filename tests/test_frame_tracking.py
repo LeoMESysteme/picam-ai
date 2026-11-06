@@ -170,6 +170,30 @@ def test_teilverdeckung_niemals_falsche_geometrie(scene):
     close_quad(tracker.update(image), quad)
 
 
+def test_frame_tracker_exposes_last_regions(scene):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    assert tracker.last_regions is None
+    image = reference.copy()
+    x, y = map(int, proposal.regions[0].centre)
+    r = config.patch_size // 2
+    image[y-r:y+r+1, x-r:x+r+1] = 0
+    close_quad(tracker.update(image), quad)
+    regions = tracker.last_regions
+    assert len(regions) == len(proposal.regions)
+    assert regions[0]['ok'] is False
+    assert all(region['ok'] is True for region in regions[1:])
+    for region, source in zip(regions, proposal.regions, strict=True):
+        assert set(region) == {'c', 's', 'peak', 'ok'}
+        assert region['c'] == list(source.centre)
+        assert region['s'] == source.size
+        assert isinstance(region['peak'], float)
+    tracker.update(reference)
+    assert all(region['ok'] for region in tracker.last_regions)
+    tracker.update(reference[:10, :10])
+    assert not any(region['ok'] for region in tracker.last_regions)
+
+
 def test_verdeckung_und_bewegung_ausserhalb_suche(scene):
     reference, _, config, _, tracker = scene
     assert tracker.update(np.zeros_like(reference)).quad is None

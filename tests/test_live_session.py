@@ -78,6 +78,183 @@ def _session(tmp_path, images, *, reference_ok=True, **kw):
     )
 
 
+def test_frame_info_has_quad_cells_regions_and_proc(tmp_path):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from dispread.live.frame_tracking import CoarseEstimate
+    from dispread.track import TrackResult
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, monotonic=lambda: now[0])
+    assert session.frame_info() is None
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+    regions = [{'c': [10, 20], 's': 15, 'peak': 0.92, 'ok': True}]
+
+    def injected(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline.locator.last_track = TrackResult(QUAD, 0.4, 0.2, 0.93, None)
+        pipeline.locator._tracker = SimpleNamespace(
+            last_regions=regions, last_coarse=CoarseEstimate(3, 2, 0.8, used=True))
+        pipeline.last_read = replace(pipeline.last_read, diagnostics={'cells': [
+            {'best': '7', 'margin': -0.1 if i == 8 else 0.4} for i in range(16)]})
+        return record
+
+    pipeline.process = injected
+    try:
+        record = session.step()
+        info = session.frame_info()
+        assert set(info) == {'rec', 'track', 'cells', 'proc'}
+        assert info['rec'] == {'seq': record.frame_sequence, 'status': record.status.value,
+                               'text': record.raw_text, 'unit': record.unit,
+                               'reasons': list(record.reject_reasons), 'age_s': 0.0}
+        assert len(info['track']['quad']) == 4
+        assert info['track'] == {'quad': QUAD, 'score': 0.93, 'shift_px': 0.4,
+                                 'rotation_deg': 0.2, 'reason': None, 'correcting': True,
+                                 'regions': regions}
+        assert len(info['cells']) == 16
+        assert info['cells'][8] == {'i': 8, 'best': '7', 'margin': -0.1, 'uncertain': True}
+        assert info['cells'][7]['uncertain'] is False
+        assert info['proc']['latency_ms'] >= 0
+        assert info['proc']['latency_ms'] == (
+            record.trace.t_record_built_ns - record.trace.t_dequeue_ns) / 1e6
+        # Keine Referenzen auf den Locator und keine veraenderbaren Rueckgaben.
+        regions[0]['c'][0] = -1
+        info['cells'][8]['best'] = '?'
+        assert session.frame_info()['track']['regions'][0]['c'] == [10, 20]
+        assert session.frame_info()['cells'][8]['best'] == '7'
+    finally:
+        session.stop()
+
+
+def test_frame_info_skipped_recent(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, monotonic=lambda: now[0])
+    session._owner.items = [(seq, image) for seq, (_, image) in
+                            zip([1, 2, 5, 6], session._owner.items, strict=True)]
+    wait_newer = session._owner.wait_newer
+
+    def different_source_sequence(after, timeout):
+        sequence, frame = wait_newer(after, timeout)
+        return sequence, replace(frame, frame_sequence=sequence + 100)
+
+    monkeypatch.setattr(session._owner, 'wait_newer', different_source_sequence)
+    session.start()
+    try:
+        for i, sequence in enumerate([1, 2, 5, 6]):
+            now[0] = 100 + i * 0.4
+            record = session.step()
+            assert record.frame_sequence == sequence + 100
+            assert session.frame_info()['rec']['seq'] == sequence
+        assert session.frame_info()['proc']['skipped_recent'] == pytest.approx(2 / 6)
+        assert session.frame_info()['proc']['fps'] == pytest.approx(4 / 2)
+        session._owner.items.append((7, embed('+ 1.2345 ')))
+        now[0] = 104.0
+        session.step()
+        assert session.frame_info()['proc']['skipped_recent'] == 0
+        assert session.frame_info()['proc']['fps'] == pytest.approx(1 / 2)
+    finally:
+        session.stop()
+
+
+@pytest.mark.parametrize('backend,cells', [
+    ('dotmatrix', [{'best': '7', 'margin': 0.4}, {'best': '8', 'margin': None}]),
+    ('dotmatrix', [{'best': None, 'margin': 0.4}]),
+    ('dotmatrix', [None]),
+    ('dotmatrix', {'best': '7', 'margin': 0.4}),
+    ('other', [{'best': '7', 'margin': 0.4}]),
+])
+def test_frame_info_invalid_cells_keep_other_hud_fields(tmp_path, backend, cells):
+    from dataclasses import replace
+
+    from dispread.track import TrackResult
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')])
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+
+    def injected(frame, **kwargs):
+        record = process(frame, **kwargs)
+        pipeline.locator.last_track = TrackResult(QUAD, 0.4, 0.2, 0.93, None)
+        pipeline.last_read = replace(pipeline.last_read, backend_id=backend, diagnostics={'cells': cells})
+        return record
+
+    pipeline.process = injected
+    try:
+        record = session.step()
+        info = session.frame_info()
+        assert info is not None
+        assert info['cells'] == []
+        assert info['track']['quad'] == QUAD
+        assert info['rec']['status'] == record.status.value
+        assert info['proc']['latency_ms'] >= 0
+        assert len(session.records_path.read_text().splitlines()) == 1
+    finally:
+        session.stop()
+
+
+def test_frame_info_display_failure_does_not_break_measurement(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2)
+    session.start()
+    session._pipeline.locator._tracker = SimpleNamespace(last_regions=[object()])
+    try:
+        for _ in range(2):
+            record = session.step()
+        assert record.status is ValueStatus.VALID
+        assert len(session.records_path.read_text().splitlines()) == 2
+        assert session.frame_info() is None
+        assert session._by_status == {'transition': 1, 'valid': 1}
+    finally:
+        session.stop()
+
+
+def test_frame_info_only_published_after_audit(tmp_path, monkeypatch):
+    session = _session(tmp_path, [embed('+ 1.2345 ')])
+    session.start()
+
+    def failed(record):
+        assert session.frame_info() is None
+        raise AuditFailed('Test: Audit nicht geschrieben')
+
+    monkeypatch.setattr(session._sink, 'emit', failed)
+    try:
+        with pytest.raises(AuditFailed):
+            session.step()
+        assert session.frame_info() is None
+        assert session.recent.to_list(session._monotonic()) == []
+    finally:
+        session.stop()
+
+
+def test_frame_info_age_marks_old_record_stale_without_changing_audit(tmp_path):
+    now = [100.0]
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2, monotonic=lambda: now[0])
+    session.start()
+    try:
+        session.step()
+        record = session.step()
+        fresh = session.frame_info()
+        assert fresh['rec']['status'] == 'valid'
+        now[0] += 0.25
+        assert session.frame_info()['rec']['age_s'] == 0.25
+        assert session.frame_info()['rec']['status'] == 'valid'
+        now[0] += 0.26
+        assert session.frame_info()['rec']['age_s'] == pytest.approx(0.51)
+        assert session.frame_info()['rec']['status'] == 'stale'
+        assert fresh['rec']['status'] == 'valid' and fresh['rec']['age_s'] == 0
+        assert session.latest is record and record.status is ValueStatus.VALID
+        assert json.loads(session.records_path.read_text().splitlines()[-1])['status'] == 'valid'
+    finally:
+        session.stop()
+
+
 @pytest.mark.parametrize("markers", [
     {"offline": True}, {"confirmed_by": "offline-auswertung"},
 ])
@@ -1606,9 +1783,17 @@ def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run
         def is_reconfiguring(self, capture_boottime_ns):
             return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 3 * 33_333_333 + 1000
 
+    if test_run is not None:
+        monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff im Testlauf'))
+        with pytest.raises(StartRefused, match='^Testlauf erlaubt keine externe Ausgabe$'):
+            _session(tmp_path, [], test_run=test_run, output={'port': '/fake/output', 'acknowledge_unaccepted': True})
+        assert not (tmp_path / 'run').exists()
+        return
+
     master, slave = os.openpty()
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, reference_recorder=Recorder(),
-                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#'})
+                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#',
+                                                 'acknowledge_unaccepted': True})
     session._config = replace(session._config, confirm_frames=1)
     session.start()
     try:
@@ -1642,13 +1827,13 @@ def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run
 
 
 def test_output_open_failure_refuses_session(tmp_path):
-    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port')})
+    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port'), 'acknowledge_unaccepted': True})
     with pytest.raises(StartRefused, match='Ausgabe'):
         session.start()
     assert session.latest is None
 
 
-@pytest.mark.parametrize('options', [{}, {'output': None}])
+@pytest.mark.parametrize('options', [{}, {'output': None}, {'output': {'transport': 'off'}}])
 def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
     from datetime import UTC, datetime
     from pathlib import Path

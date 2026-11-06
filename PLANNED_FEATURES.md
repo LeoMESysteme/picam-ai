@@ -4,6 +4,29 @@ Stand: 2026-10-21. Die aktive Arbeitsreihenfolge steht in [TODO.md](TODO.md),
 der aktuelle Bau- und Prüfstand in [docs/status.md](docs/status.md).
 Diese Liste beschreibt Produktziele; sie ist keine Freigabezusage.
 
+## Windows-Brücke: einfache Einrichtung (Vorgabe 2026-11-06)
+
+Nach Auswahl der GSVmulti-Ausgabe führt die Werkbank durch die Verbindung.
+Bevorzugter Einstieg ist eine herunterladbare Windows-EXE mit automatischer
+Installation und Konfiguration, Wahl UART/Netzwerk und einfacher
+Bereitschaftsanzeige mit konkreten nächsten Schritten (z. B. USB anschließen).
+Die EXE muss unabhängig von fehlendem oder veraltetem System-Python
+funktionieren. Ein Ein-Befehl-Einrichtungsskript ist eine mögliche Alternative;
+es muss die Laufzeit vorab prüfen und passend isoliert einrichten, statt
+blind `py -3` zu verwenden. Vorhandene Python-/Visual-Studio-Installationen
+bleiben erhalten. Abnahmetests: frisches Windows ohne Python und Windows mit
+nur Python 3.7. Werkbank
+oder EXE soll eine zum gewählten Weg passende GSVmulti-Sessiondatei erzeugen,
+die nur noch in GSVmulti geöffnet/importiert wird. Python-Umgebung,
+Treiber/virtuelles Portpaar und Zuordnung sollen nicht manuell verkettet
+werden müssen. Dies ist geplant; unterstützte Sessionformate, Windows- und
+GSVmulti-Versionen sowie Installationsrechte sind noch zu klären.
+Architektur gewählt am 06.11.: bestehender Python-Brückenkern, Qt-GUI und
+Windows-Installer. [Designentwurf](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md)
+noch zur Freigabe; keine Umsetzung zugesichert.
+[Offene Umsetzungspunkte](docs/open-questions.md#oq-62),
+[aktive Arbeitsreihenfolge](TODO.md).
+
 ## Bedienablauf und heutiger Stand
 
 | Schritt | Stand |
@@ -43,3 +66,16 @@ Modell-Konfidenz ist ohne Kalibriermessung keine Fehlerwahrscheinlichkeit.
   absichern; Leistung am Aufbau messen. Installationspaket und automatischer
   Dienst bleiben Ausbauziele. Der vorhandene Python-Einsprungpunkt heißt
   `dispread`; Node.js ist für die Workbench-Laufzeit nicht erforderlich.
+
+* **SSH-tauglicher Ein-Befehl-Installer (Nutzerwunsch 2026-11-04):** Ein
+  extern erreichbarer Bootstrap lädt die Einrichtung herunter, prüft
+  vorhandene Komponenten und ergänzt nur Fehlendes. Anschließend führt
+  die geplante Setup-TUI/CLI durch die Konfiguration; ein Betrieb ohne GUI
+  und ein nichtinteraktiver Modus gehören dazu. Entscheidend ist der
+  SSH-Zielrechner: Pi-Pakete auf dem Pi, Windows-Brücke/COM-Treiber auf
+  Windows. Die Installationsdatei darf kein bereits geklontes Repo
+  voraussetzen. Veröffentlichung/Download-Adresse, Versionierung und
+  Integritätsprüfung sind noch festzulegen. Die Prüfung muss den tatsächlichen
+  Treiberstart samt PnP-Fehlercode einbeziehen; ein vorhandenes Setup oder
+  ein erfolgreicher Installationsaufruf genügt nicht
+  ([OQ-49](docs/open-questions.md#oq-49)).

@@ -6,6 +6,42 @@ IMX500-Pakete in den Bestandslisten unten stammen vom früheren Aufbau; die
 aktuelle Bildquelle `v4l2://` nutzt OpenCV und V4L2. Die Regel für die
 Projekt-venv mit Debian-Systempaketen gilt weiterhin.
 
+## Windows-Brücke {#windows-bruecke}
+
+Die neue GSVmulti-Brücke benötigt auf Windows Python **3.13 oder neuer**
+und **pySerial 3.5**. Dies ist dieselbe Bibliothek, die auf dem Pi bereits
+als Debian-Systempaket vorliegt; es kommt keine neue Python-Bibliothek für
+die Linux-Messpipeline hinzu. Die Brücke importiert nur die leichtgewichtigen
+Datensatz-/Format-/Transportmodule, keine Kamera-, NumPy- oder OpenCV-Module.
+
+Auf Windows im bereitgestellten Projektverzeichnis eine eigene Umgebung
+anlegen und nur Brückenabhängigkeiten installieren:
+
+```powershell
+py -3.13 -m venv --system-site-packages .venv
+.\.venv\Scripts\python.exe -m pip install --no-deps pyserial==3.5
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .
+.\.venv\Scripts\python.exe scripts/gsv-bridge.py --help
+```
+
+Ein virtueller COM-Treiber ist zusätzlich erforderlich. Das Originalpaket
+[com0com3.0.0.0](https://com0com.sourceforge.net/) blieb auf dem Zielrechner
+mit Code52 blockiert. Nach angeleitetem Wechsel zur
+[Vovsoft-verlinkten com0com-Ausgabe](https://vovsoft.com/blog/how-to-sniff-serial-port-communication/)
+meldet der Nutzer am2026-11-04 alle sechs PnP-Geräte ohne Fehler; COM5/COM6
+sind vorhanden. Installer-SHA256:
+`ae0dd19472f92bab3165d370c3713616a3ffb708fad785684759b04653705a71`.
+Bidirektionale Portprobe erfolgreich, aktiver Dateihash passt und SecureBoot/
+HVCI bleiben aktiv. Gültige synthetische TCP-Werte und Brückenprozess-
+Wiederanlauf in GSVmulti-Dateien belegt; vollständige Abnahme bleibt offen;
+keine allgemeine Win11-/HVCI-Kompatibilität behaupten. Der physische FTDI-USB-TTL-Adapter ist
+separat als COM4/StatusOK belegt.
+[Einrichtung und Abnahmegrenzen](GSVMULTI_PROTOCOL.md#windows-bruecke).
+
+Auf dem Pi gelten unverändert die untenstehenden Regeln: Projekt-`.venv`
+mit `--system-site-packages`, Projektinstallation mit `--no-deps` und keine
+PyPI-Kopien der Debian-Kamera-/CV-/Serialpakete.
+
 ## Zensical-Pflege auf dem Forgejo-Runner
 
 Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
@@ -114,10 +150,18 @@ Konsolenbefehl `dispread` ist in `pyproject.toml` registriert.
 | Debian `openssl` | Systempaket | Lokales TLS-Zertifikat und Fingerabdruck |
 | `@xterm/xterm` | 5.5.0 | Browser-Terminalemulator |
 | `@xterm/addon-fit` | 0.10.0 | Anpassung der Terminalgröße |
+| Schrift Noto Sans (Regular, Medium, SemiBold, Bold) | 2.015 | Grundschrift der Live-Seite `/live` |
+| Schrift Noto Sans Mono (Regular, Bold) | 2.014 | Werte, Koordinaten und Kennungen auf `/live` |
 
 Die beiden xterm-Pakete wurden versioniert von jsDelivr bezogen und liegen
 mit MIT-Lizenzen unter `src/dispread/workbench/static/vendor/`. Im Betrieb
-werden keine CDN-Verbindungen benötigt. Browserassets werden mit dem Python-
+werden keine CDN-Verbindungen benötigt. Die Noto-Schriften (SIL OFL 1.1)
+stammen aus den offiziellen Builds unter
+`github.com/notofonts/notofonts.github.io` (`fonts/NotoSans*/hinted/ttf`) und
+liegen als woff2-Teilmenge (Latein, Griechisch, Satz- und Pfeilzeichen) mit
+`LICENSE.noto` unter `static/vendor/fonts/`; Quell-Prüfsummen und
+Teilmengenbereich stehen in der Lizenzdatei. Die Teilmenge entstand mit
+fontTools in einer temporären Umgebung, nicht in der Projekt-venv. Browserassets werden mit dem Python-
 Paket ausgeliefert; es ist keine Node.js-Laufzeit erforderlich.
 
 Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
@@ -159,3 +203,17 @@ die Karte ohne Animation bedienbar.
 Für ein Update die Datei samt Versionsnummer im Namen tauschen, `ANIME_FILE`
 in `tour.js` und `ANIME_URL` in `roadmap.js` anpassen und die Docs-Tests laufen
 lassen.
+
+
+## Einmalige TDMS-Auswertung, 2026-11-04
+
+Für den Nutzerexport aus UART-Demo 05 wurde npTDMS 1.13.0 mit
+`./.venv/bin/python -m pip download --no-deps --only-binary=:all:` nach
+`var/diagnostics/gsvmulti/analysis-tools/` geladen und direkt als Wheel über
+sys.path im lokalen Analyserezept importiert. Es wurde weder in die
+Projekt-venv installiert noch als Laufzeitabhängigkeit hinzugefügt;
+pyproject.toml/install.sh benötigen es nicht. Keine zusätzlichen Pakete
+heruntergeladen, Debian-NumPy weiter verwendet. Wheelhash und Importpfad
+stehen in `recording-comparison.json` von Lauf 05.
+[Reader-Dokumentation](https://nptdms.readthedocs.io/en/stable/reading.html),
+[Auswertung](VALIDATION.md#uart-demo-20261104-05).

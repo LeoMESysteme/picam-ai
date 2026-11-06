@@ -9,6 +9,108 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Windows-Anwendung mit bestehendem Python-Brückenkern
+
+**Problem:** Die manuelle Einrichtung auf einem weiteren Windows-PC benötigt
+Python-Auswahl, Treiber, Portpaar und COM-Zuordnung; Python 3.7 führte direkt
+zu einem Importfehler. Netzverbindungen dürfen nicht von einer festen
+Pi-IP oder einem bestimmten Tailscale-Aufbau abhängen.
+
+**Entscheidung:** Leonhard wählt vorhandenen Python-Brückenkern plus Qt-GUI
+und Windows-Installer als Grundlage der konkreten Spezifikation. Die EXE
+bringt eine passende Laufzeit mit; Downloads bei Einrichtung sind erlaubt.
+Workbench und Windows-Anwendung teilen sich Pi-Verbindungsprofil und lokal
+passende GSVmulti-Sessionerzeugung als unterschiedliche Aufgaben.
+
+**Alternativen:** Vollständiger C#/.NET-Neubau hätte zusätzliche Übertragung
+und Prüfung der Brückenlogik erfordert. Ein reines Downloadskript als
+Haupteinstieg erfüllt die gewünschte GUI und Fehlerführung nicht; als
+spätere Alternative bleibt es möglich.
+
+**Konsequenz:** Ein eigener Windows-Build und Ergänzungen auf der Pi-Seite
+sind erforderlich. Konkrete Paketierung, Kopplung, Zielplattform und
+Abnahmeschranken stehen zunächst im [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md).
+Architekturwahl ist keine Freigabe dieses Entwurfs oder der Implementierung;
+Treiber-, Session- und fachliche DUT-Abnahme bleiben eigene Nachweise.
+
+## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART
+
+**Problem:** GSVmulti benötigt einen COM-Eingang, der Pi soll wahlweise über
+Netzwerk oder das vorhandene USB-TTL-Kabel senden. Der Nutzer will bei
+Verbindungsabbruch weiter lokal messen und nach Wiederverbindung aktuelle
+Werte sehen. Ein direkter UART-Schreibvorgang liefert dem Pi keinen
+GSVmulti-Empfangsnachweis; das Beispiel-ZIP besitzt zudem bekannte
+Fehler- und Puffernachlaufprobleme.
+
+**Entscheidung:** Beide Wege benutzen eine eigene Windows-Brücke mit
+kostenfrei zu prüfendem com0com-Portpaar. Das interne versionierte Protokoll
+führt Lauf-/Bildkennung und bestätigungspflichtige Invalidierung getrennt
+vom jüngsten Zahlenwert. ACK bedeutet nur COM-Treiberschreibvorgang. Die
+Brücke ist ein Python-/pySerial-Baustein ohne Kamera-/CV-Abhängigkeiten.
+Der lokale Lauf bleibt bei Transportausfall aktiv, die Oberfläche warnt.
+Historische Übertragungslücken werden separat untersucht (OQ-48).
+
+**Alternativen:** UART direkt an GSVmulti entfällt zugunsten einheitlicher
+Überwachung für beide Wege. VSPE als fertige TCP-/COM-Lösung wurde wegen
+der bevorzugten kostenfreien Lösung nicht gewählt. Das Beispielprogramm
+unverändert zu übernehmen verwürfe die bereits dokumentierten Fehler.
+Historische Werte in den aktuellen Zahlenstrom nachzusenden würde ohne
+belegtes Zeitstempelfeld ihren Zeitbezug verfälschen und ist ausgeschlossen.
+
+**Konsequenz:** Es gibt einen zusätzlichen Windows-Prozess und einen noch
+zu prüfenden virtuellen COM-Treiber. Software kann vorbereitet und mit
+Demodaten geprüft werden; echte DUT-Zahlen bleiben bis zum Nachweis von
+Ungültig-/STALE-Semantik und Altwertbehandlung in GSVmulti strukturell
+gesperrt. Ein geöffnetes Portpaar hebt diese Sperre nicht auf. Änderungen
+an Hardware oder Windows wurden in dieser Implementierung nicht vorgenommen.
+
+## 2026-11-04 — com0com-Auswahl bleibt nach Windows-Code-52 ungeprüft
+
+Die ursprünglich für die kostenfreie gemeinsame Windows-Brücke gewählte
+com0com-Basis besteht den lokalen Treiberstart nicht: Nutzer bestätigt
+signierte Ausgabe, PnP meldet für beide Busgeräte Code 52. Das beweist
+keine generelle Unbrauchbarkeit aller com0com-Pakete, verhindert aber den
+Empfangstest mit der vorliegenden Installation. Namensänderungen am
+virtuellen Port sind damit nicht die nächste Problemlösung.
+
+HHD Free Virtual Serial Ports wird für den Firmen-Laborbetrieb wegen des
+expliziten Ausschlusses kommerzieller Nutzung in der Free-Version nicht
+als kostenlose Ersatzbasis empfohlen. VSPE-Erprobung und ein isolierter
+direkter UART-Demotest bleiben mögliche nächste Wege; noch keine Auswahl
+oder Abnahme. Die Brücke bleibt vom VCOM-Anbieter unabhängig, echte
+DUT-Ausgabe gesperrt. Quellen und Grenzen:
+[GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#com0com-code52).
+
+## 2026-11-04 — Direkter UART-Demotest vor weiterer VCOM-Auswahl
+
+Nach Code 52 der signierten com0com-Ausgabe wählt der Nutzer zunächst den
+direkten UART-Empfangstest. Ein endlicher Pi-Demosender soll über das
+USB-TTL-Kabel den realen Windows-COM-Port von GSVmulti erreichen. Für
+diesen begrenzten Versuch entfällt die virtuelle Portstrecke. VSPE wird
+jetzt nicht installiert; die dauerhafte VCOM-Lösung bleibt offen.
+Die gemeinsame Brückenarchitektur und deren Fehler-/Nachweisanforderungen
+werden dadurch nicht als abgenommen behandelt. Vor Verdrahtung sind
+Kabelbelegung und Windows-Port zu bestätigen; echte DUT-Ausgabe bleibt
+gesperrt. Siehe [Testweg](GSVMULTI_PROTOCOL.md#gewahlter-nachster-versuch-uart-direkt).
+
+## 2026-11-04 — Gemeinsamer TCP-Demoweg belegt, Freigabe und UI-Übernahme getrennt
+
+Nach Nutzerentscheidung zurück zu com0com wurde dessen Code52 auf genau dem
+Windows11-Zielrechner durch Vovsoft-verlinkten Build überwunden; Schutz blieb
+aktiv.600/600 gültige Werte über gemeinsamen TCP-Dateipfad und510/510 COM-
+geschriebene Werte beim Brückenprozesswiederanlauf belegt. Keine historische
+Aufholfolge. Direkte USB-CDC-Option wegen Nutzerpriorität und ungeklärter
+X1201-/USB-C-Stromführung zurückgestellt, kein Gadget aktiviert.
+
+Die Workbench-Ausgabenaht ist bereits als Software-Prototyp vorhanden;
+eine spätere Gestaltung übernimmt sie. Eine zweite parallele Brücke oder
+Entsperrung aufgrund gültiger Demowerte wird nicht eingeführt: GSVmulti
+verdichtet Ausfallzeiten weiterhin auf nominelle0,1s. Der gesonderte
+Throwaway-Generator für den Abbruchtest ersetzt den ACK-wartenden endlichen
+Demosender nur diagnostisch, nicht als neue Produktionsquelle.
+Nutzer beendet Session, beauftragt Commit/Push und wünscht Übergabe auch an
+Claude. Status/Belegarchiv halten Nachweise und offene Schranken getrennt.
+
 ## 2026-10-30 — R13-23: Grobfehlertoleranz vor unveränderter Feinprüfung
 
 **Problem:** Faktor 4 spart Zeit, verliert mit einer harten 20-px-Sperre
@@ -75,6 +177,143 @@ Werteplan-/Rückstellaktivität. Live mindestens 9600 Baud, konservativ für
 R13-17 und R13-21 wirken vor jeder Ausgabe. Lokale
 pty-/Fake-Belege ersetzen keine Windows-Abnahme, M8 oder Ungültigsemantik.
 Keine Hardwareänderung und keine neue Abhängigkeit.
+
+## 2026-10-30 — R13-22: Bildlieferung unabhängig vom blockierten Read überwachen
+
+Der `CameraOwner` überwacht die monotone Host-Zeit seit der letzten
+Bildlieferung. Zwei Sekunden entsprechen rund 60 Bildabständen bei 30 fps
+und der vorhandenen `READ_FAIL_TIMEOUT_S`-Kulanz. Vor dem ersten Bild nach
+Start/Neustart gelten ab Leserstart nach Quellenöffnung eigene 5 s
+(`STREAM_START_TIMEOUT_S`). Dieselben 2 s auch beim Anlauf wurden verworfen:
+STREAMON und erster Read bei 1920×1080 YUYV unter Last sind ungemessen;
+vor dem ersten Bild entsteht kein Wert. Die 5 s sind Reserve und kein
+Hardwarebeleg. Ein bloßer Timeout in `UvcSource.frames()`
+wurde verworfen: Während OpenCV in `read()` blockiert, läuft diese Logik
+nicht. Stattdessen prüfen Status, Warten auf Bilder und die Rückkehr eines
+Reads die Frist unter derselben Zustandssperre. Der Stillstand bleibt bis
+zum erfolgreichen Quellenstart gespeichert; späte Bilder werden verworfen,
+damit ein bereits beendeter Lauf nicht stillschweigend wieder aktuell wird.
+
+Der Lauf endet über den bestehenden `CameraLost`-Pfad und wartet dabei nicht
+auf den Kamera-Lesethread. Gewaltsames Threadende oder Schließen der Quelle
+aus einem anderen Thread wurde ausgeschlossen; `stop()` meldet einen noch
+lebenden Thread nach begrenztem Join mit `False`, `restart()` lehnt dann ab.
+Bereits dieser Timeout setzt unabhängig von der Bildfrist einen sichtbaren
+Lesethread-Fehler mit `running=False`, `stalled=True`. Das Stop-Event darf
+keinen normal laufenden Stream vortäuschen; auch während des Joins warten
+leere Vorschauabrufe begrenzt. Quelldiagnosen (`read_error`, verworfene
+Zeitstempel seit letzter Lieferung/Start) ergänzen den gespeicherten Fehler,
+auch wenn sie erst beim späteren Ende des Reads vorliegen.
+Nach dessen Ende darf derselbe Owner eine neue Quelle starten.
+Die Vorschau erholt sich nicht selbst; die Bedienung verbindet manuell neu.
+
+`CAP_PROP_READ_TIMEOUT_MSEC` wird nicht gesetzt: Die OpenCV-4.10-Dokumentation
+beschränkt es auf FFmpeg/GStreamer, V4L2 implementiert es nicht. Eine globale
+Änderung von `OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT` ist für die unabhängige
+Erkennung unnötig und bleibt aus. Tests verwenden ausschließlich blockierende
+Fake-Quellen; reale Abschluss- und Wiederanlaufzeiten sind nicht an Hardware
+geprüft. Quellen und Bedienfolgen stehen in der
+[Live-Anleitung](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).
+
+## 2026-10-30 — R13-24: Ähnlichkeitsversuch ohne Mindestverschiebung {#r13-24-konfiguration}
+
+`coarse_min_shift_px` entfällt. R13-19b sperrte Verschiebungen unter 2 px,
+weil ein zweiter starrer Fit ohne anderen Suchmittelpunkt denselben Versuch
+wiederholt hätte. Seit R13-19c schätzt ausschließlich der zweite Versuch
+zusätzlich einen gleichförmigen Maßstab; auch mit Offset (0,0) ist er daher
+sinnvoll. Schrägsicht am 30.10. zeigt den Fehler schon bei etwa −0,1 % Maßstab.
+
+Nur den Default auf 0 zu setzen wurde verworfen: gespeicherte Profile mit
+2.0 würden die wirksame Korrektur weiter verhindern. Eine Untergrenze für
+einen rein starren zweiten Fall wird ebenfalls nicht behalten, weil es diesen
+Fall im aktuellen Updatepfad nicht gibt. Beim Laden wird der bekannte
+Altparameter nach Prüfung auf Float, endlich und nicht negativ entfernt;
+das gilt für Konfiguration und Vorschlagskonfiguration. Damit passen alte
+Profile weiterhin zur normalisierten Konfiguration. Unbekannte Felder,
+fehlende bisherige Pflichtgrenzen und die Referenz-/Quad-/SHA-Bindung bleiben
+strikt. Der Parameter ist in neu serialisierten Konfigurationen nicht mehr
+enthalten. Die Grobantwort muss weiterhin endlich und stärker als 0,15 sein;
+Grobobergrenze und sämtliche Feinprüfungen bleiben unverändert.
+
+Nachweise und Grenzen: [R13-24-Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30)
+und [Laborjournal](lab_journal.md#r13-24-kleiner-versatz).
+
+## 2026-10-30 — R13-25: Wiederfindbarkeit bei der Einrichtung {#r13-25-einrichtung}
+
+Die Laufschwelle bleibt bei 0,75. Schwache Regionen im schrägen Aufbau
+`live-20261030T133635Z` werden bei der Einrichtung ersetzt; niedrigere
+Laufschwellen oder gelockerte Streuung würden die Nachweisqualität schwächen.
+
+**Reviewkorrektur:** Die erste Lösung mit gemitteltem Zweitbild und vier
+zusätzlichen Halb-Pixel-Proben war zu optimistisch. Eine gewählte Region
+überschritt in keinem der 210 Diagnosebilder die Laufschwelle. Die frühere
+Begründung, diese Probe weise ausreichende Rauschreserve nach, ist verworfen.
+Stattdessen bleiben die acht ungemittelten Bilder des ohnehin aufgenommenen
+Stabilitätsstapels im Speicher. Sieben von acht müssen Peak ≥0,775, die
+Lauf-Eindeutigkeit, ein inneres Maximum und höchstens 2 px Abstand zum
+Sollort bestehen. Die Auswahl zählt nur solche Regionen für Streuung und
+zwei Ausfälle je Rahmenseite. Die Lageprüfung verhindert, dass eine andere
+ähnliche Struktur als Wiederfindbarkeit am unbewegten Sollort zählt.
+Die zusätzliche Phasenprobe am Zweitbild entfällt; die bereits bestehende
+Bewegungsprobe für neue Fasenstruktur bleibt unverändert.
+
+Die Kalibrierung vergleicht Probe-Ersatzbilder und spätere Diagnosebilder
+getrennt. Historische Laufbilder sind bereits bewegt: Für den Ersatz der
+stationären Setup-Aufnahme wird ausschließlich ganzzahlig verschoben, ohne
+Mitteln oder interpoliertes Entrauschen. Der unveränderte Tracker erhält
+weiter die ursprünglichen Laufbilder. Bildabschnitte außerhalb des
+Such-/Bewegungsbereichs bleiben im Gesamtergebnis sichtbar. Reserve 0,025
+ist ein Entwicklungswert und keine garantierte Rauschobergrenze.
+
+Das Speichern zusätzlicher Einzelbilder wurde verworfen: nur die vorhandenen
+Mittelbilder und Kennzahlen bleiben auf Platte. Manuelle Neubewertung
+verwendet dieselben Einzelbilder im Speicher und kontrolliert die Datei-SHA
+des gemittelten Zweitbilds. Ohne Speicherbelege ist neu einzurichten. Das
+bestehende `stability.png` wird bei der Vorschlagsbindung geprüft und gehasht,
+nicht erneut geschrieben.
+
+Bestätigte Profile werden beim Start nicht neu ausgewählt. Nur das reine
+Einrichtungsfeld `proposal_stability_peak_margin` entfällt aus dem Vergleich
+mit aktuellen Laufdefaults; die gespeicherte Konfiguration und
+Vorschlagsbindung bleiben erhalten. Abweichende Laufgrenzen wie ein hohes
+`min_peak` bleiben abgelehnt. Die frühere Aussage zu solchen Altprofilen war
+falsch und ist korrigiert.
+
+Der aktuelle Einzelbild-Kandidat erreicht die Abnahme nicht: 738→859 Tracks
+auf den geforderten 1.123 Bildern, aber drei vorherige Tracks verloren;
+im erweiterten Bestand dreizehn. Auch der Sweep verliert drei Tracks.
+Reserve- und mehrere Rangfolgenproben wurden ohne Lösung dieser Fälle
+verworfen. Eine Lockerung der Lauf-Gates zur Erhaltung der Annahmen bleibt
+verworfen. Die faire zusätzliche Halb-Pixel-Probe entfernt schwache und
+perfekte Bereiche; ein pauschal fehlender Nutzen ist nicht belegt. Dieser
+Stand wird deshalb als nicht abnahmefähige Entwicklung dokumentiert.
+
+[Messungen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
+[Laborjournal](lab_journal.md#r13-25-stabile-rahmenregionen).
+
+### 2026-10-31 — R13-25 Runde 3: Minimalprinzip statt Neuwahl {#r13-25-runde-3}
+
+Die Neuwahl der Runde 2 tauschte bis zu 15 von 20 Bereichen. Schon ein
+Lagebias von 0,1 px kippte Grenzbilder der LCD-Randprüfung. Entschieden:
+Die bisherige Auswahl bleibt, nur probefällige Bereiche werden ersetzt, und
+ein Ersatz muss im starren Konsens der Einzelbilder liegen. Die Stufen sind
+die Laufgrenzen RMS 0,35, Mitte 0,50, Einzelresiduum 0,65 px.
+
+Verworfen, jeweils auf allen 1.492 Bestandsbildern gemessen:
+
+* reiner Nahersatz: 46–74 verlorene Bilder;
+* Mediankonsens und feste 0,35-px-Grenze: Reserve in mehreren
+  Einrichtungen unerfüllbar;
+* feste 0,50-px-Grenze: neue Verluste;
+* Lageprüfung auch für bewährte Bereiche: fast überall ohne Reserve;
+* Rückfall nach Kandidatenstärke;
+* gar kein Rückfall: `121101` würde abgelehnt.
+
+Den Rückfall ohne Lageprüfung meldet `nachfuehrung` als WARNUNG, die Person
+bestätigt (Konzept §4). Lockern der Laufgrenzen oder der Randprüfung bleibt
+verworfen. Der Stand ist nicht abnahmefähig: 4 verlorene Bilder, 22
+verlorene synthetische Tracks in `121101`.
+[Messungen](VALIDATION.md#r13-25-runde-3).
 
 ## 2026-10-28 — P4-1/P4-2: isolierter UserDefined-Transportprototyp
 
@@ -178,6 +417,91 @@ Fit in den 208 Live-Diagnosebildern. Die Feinprüfung bleibt dort der
 belegte Engpass; keine Behauptung einer verbesserten Live-Verfügbarkeit.
 Einzelbelege: [Validierung](VALIDATION.md#r13-19b-grobschaetzung-2026-10-28),
 weitere Klärung: [OQ-46](open-questions.md#oq-46).
+
+# 2026-10-28 — Session-Archiv vom Messpfad und vom Wiki-Build trennen
+
+Der Records Explorer sollte alle abgeschlossenen Läufe und ihre Entwicklung
+im Wiki zeigen. Eine verpflichtende Session-Quelle im gemeinsamen Build hätte
+Playwright und den getrennten Doku-Pflegerunner von lokalen Messdaten abhängig
+gemacht. Ein direkter Bind-Mount von `var/live` in den Runner hätte außerdem
+laufende Dateien sichtbar gemacht und keine Rechenlast verhindert.
+
+Gewählt: eigener, begrenzter Exportdienst unter dem bisherigen Quellbesitzer,
+unveränderliche und dauerhaft erhaltene Archivgenerationen, optionales
+Einbinden erst im Veröffentlichungsworkflow. Keine Importarbeit bei laufender
+Workbench. Ein gescheiterter Import verwendet den bisherigen geprüften Stand
+oder einen Leerzustand. Runner, Workbench und Messpfad erhalten keine neuen
+Steuerkopplungen. Zusätzlicher Objektspeicher wurde zugunsten des vorhandenen
+geschützten Pages-Hostings verworfen; Originalblöcke werden verlustfrei
+komprimiert und aufgeteilt. Automatische Bereinigung ist nicht vorgesehen.
+
+Zwei Statistikansichten vermeiden eine versteckte Gewichtungsentscheidung:
+jeder Lauf gleich oder alle einzelnen Frames gemeinsam. Echte gepoolte
+Mediane und p95 werden aus den Beobachtungen berechnet; Mediane von
+Session-Medianen heißen ausdrücklich so. Vergleichsgruppen trennen Gerät,
+Einheit, Leser, Toleranz, Bestätigung und Aufnahmeparameter; Softwarestände
+bleiben als erklärende Versionsmarkierungen vergleichbar. Testläufe sind
+separat. VALID-Verfügbarkeit und Konfidenz werden nicht als Messrichtigkeit
+behauptet. Das bestehende Wiki-Design bleibt erhalten; der vorhandene Explorer
+arbeitet in einer eigenen eingebetteten Ansicht, um globale CSS- und
+Ereigniswechselwirkungen zu begrenzen.
+
+[Umsetzungsplan](superpowers/plans/2026-10-28-session-explorer.md) und
+[Hosting](HOSTING.md#session-archiv-und-explorer) beschreiben die Grenzen.
+
+# 2026-10-28 — UserDefined als Einstieg für einen GSVmulti-Prototyp
+
+Das bereitgestellte PDF führt zur bisher fehlenden Herstelleranleitung
+v2.6. Deren S. 118–121 beschreiben einen konfigurierbaren seriellen
+Zahlenimport in GSVmulti PRO. Die frühere Annahme, es müsse erst ein natives
+GSV-Geräteprotokoll beschafft oder mitgeschnitten werden, ist für diesen
+Einstieg damit überholt. [Bewertung und Quellen](GSVMULTI_PROTOCOL.md).
+
+Geplanter Einstieg: ein eigener einkanaliger UserDefined-Formatter hinter
+`TelegramFormatter`, zunächst Demowerte über einen ausgewählten
+Windows-COM-Transport. Native Geräteemulation und der ungeprüfte direkte
+NetGSV-Anschluss werden dafür nicht benötigt. Das Dreikanalprofil des PDFs
+ist keine Anforderung an den einzelnen optischen DUT. Das bisherige
+`AsciiCsvFormatter`-Defaulttelegramm ist wegen Zusatzfeldern kein passender
+Ersatz. `gsv_ascii.py` bleibt der absichtlich werfende Platzhalter.
+
+Dies ist eine dokumentierte Implementierungsrichtung, noch keine gebaute
+Anbindung. Der aktuelle Live-Pfad schreibt nur JSONL; dessen Ausgabe braucht
+zusätzlich Lebenszyklus, Fehlerbehandlung und Laufmetadaten. Vor der
+Messfreigabe sind tatsächlicher Empfang in der dokumentierten 2.01-Pro-
+Installation, sichere Ungültigbehandlung, Zeitachse und Wiederanlauf zu
+belegen. OQ-01/OQ-07 sind teilweise geklärt, OQ-06 bleibt offen und OQ-47
+erfasst den konkreten Transport. Keine Hardwareänderung und kein Messlauf.
+
+Das nachgereichte Beispiel-ZIP wurde anschließend im Quelltext und mit elf
+Softwareprüfungen untersucht. Der Demo-Sender und lokale TCP-Transport sind
+damit nachvollziehbar. Die optionale Bridge ist vor einer Übernahme zu
+korrigieren: COM-Schreibfehler werden als TCP-Abbruch behandelt, vollständige
+überlange Frames können die Größenprüfung umgehen. Zahlenlexik und
+Altersprüfung sind weitere Grenzen; die erste Zeile jeder Verbindung wird
+absichtlich verworfen. PDF und ZIP bleiben unverändert als Quellen im Repo.
+Diese Prüfungen ersetzen weder Windows-VCOM noch GSVmulti-Empfang.
+
+## 2026-10-28 — R13-20: Lokale Displaybelichtung nach dem Fokus
+
+Die Gesamtbild-Automatik bleibt nur Ausgangspunkt nach dem Fokus. Der
+Live-Assistent misst anschließend die Anzeige und übernimmt die besten
+festen Regler in Kameradiagnose und Profil. Eine bloße Warnung wurde als
+einzige Abhilfe verworfen: Sie erklärt die Unterbelichtung, korrigiert sie
+aber nicht. Eine Korrektur im Leser wurde ebenfalls ausgeschlossen; das
+Quellbild muss brauchbar sein und Referenzwerte dürfen das Lesen nicht
+beeinflussen.
+
+Vor dem Rasterfit steht noch kein Quad zur Verfügung. Daher p80 grüner
+Pixel innerhalb der vorhandenen Hinweisbox, nach dem Fit eine unabhängige
+Vorprüfung mit entzerrtem p80. Ungefiltertes hohes Boxperzentil verworfen,
+weil die Sicherheitsränder helle Umgebung enthalten können; das ist mit
+einem Fake reproduziert. Zwölf gespeicherte Bilder begrenzen die beobachtete
+Abweichung der gewählten Definition auf 4 Graustufen. Höchstens vier
+Korrekturrunden begrenzen die Einrichtung; bei Fehlschlag beste Werte und
+WARNUNG statt eines neuen Abbruchgrundes. Die reale Kennlinie und die
+Vorabgrenzen sind damit noch nicht allgemein validiert; Belege und Grenzen
+stehen im Laborjournal und in VALIDATION unter R13-20.
 
 # 2026-10-23 — R13-16: Vollständiges Live-Audit auf der 64-GB-SD
 
@@ -338,70 +662,6 @@ Konfigurationsvergleich am Laufstart abgelehnt und müssen neu eingerichtet
 werden. Die Auswahländerung braucht eine neue Abnahme. Offline-Belege:
 [VALIDATION](VALIDATION.md#r13-r11-2026-10-23).
 
-# 2026-10-28 — Session-Archiv vom Messpfad und vom Wiki-Build trennen
-
-Der Records Explorer sollte alle abgeschlossenen Läufe und ihre Entwicklung
-im Wiki zeigen. Eine verpflichtende Session-Quelle im gemeinsamen Build hätte
-Playwright und den getrennten Doku-Pflegerunner von lokalen Messdaten abhängig
-gemacht. Ein direkter Bind-Mount von `var/live` in den Runner hätte außerdem
-laufende Dateien sichtbar gemacht und keine Rechenlast verhindert.
-
-Gewählt: eigener, begrenzter Exportdienst unter dem bisherigen Quellbesitzer,
-unveränderliche und dauerhaft erhaltene Archivgenerationen, optionales
-Einbinden erst im Veröffentlichungsworkflow. Keine Importarbeit bei laufender
-Workbench. Ein gescheiterter Import verwendet den bisherigen geprüften Stand
-oder einen Leerzustand. Runner, Workbench und Messpfad erhalten keine neuen
-Steuerkopplungen. Zusätzlicher Objektspeicher wurde zugunsten des vorhandenen
-geschützten Pages-Hostings verworfen; Originalblöcke werden verlustfrei
-komprimiert und aufgeteilt. Automatische Bereinigung ist nicht vorgesehen.
-
-Zwei Statistikansichten vermeiden eine versteckte Gewichtungsentscheidung:
-jeder Lauf gleich oder alle einzelnen Frames gemeinsam. Echte gepoolte
-Mediane und p95 werden aus den Beobachtungen berechnet; Mediane von
-Session-Medianen heißen ausdrücklich so. Vergleichsgruppen trennen Gerät,
-Einheit, Leser, Toleranz, Bestätigung und Aufnahmeparameter; Softwarestände
-bleiben als erklärende Versionsmarkierungen vergleichbar. Testläufe sind
-separat. VALID-Verfügbarkeit und Konfidenz werden nicht als Messrichtigkeit
-behauptet. Das bestehende Wiki-Design bleibt erhalten; der vorhandene Explorer
-arbeitet in einer eigenen eingebetteten Ansicht, um globale CSS- und
-Ereigniswechselwirkungen zu begrenzen.
-
-[Umsetzungsplan](superpowers/plans/2026-10-28-session-explorer.md) und
-[Hosting](HOSTING.md#session-archiv-und-explorer) beschreiben die Grenzen.
-
-# 2026-10-28 — UserDefined als Einstieg für einen GSVmulti-Prototyp
-
-Das bereitgestellte PDF führt zur bisher fehlenden Herstelleranleitung
-v2.6. Deren S. 118–121 beschreiben einen konfigurierbaren seriellen
-Zahlenimport in GSVmulti PRO. Die frühere Annahme, es müsse erst ein natives
-GSV-Geräteprotokoll beschafft oder mitgeschnitten werden, ist für diesen
-Einstieg damit überholt. [Bewertung und Quellen](GSVMULTI_PROTOCOL.md).
-
-Geplanter Einstieg: ein eigener einkanaliger UserDefined-Formatter hinter
-`TelegramFormatter`, zunächst Demowerte über einen ausgewählten
-Windows-COM-Transport. Native Geräteemulation und der ungeprüfte direkte
-NetGSV-Anschluss werden dafür nicht benötigt. Das Dreikanalprofil des PDFs
-ist keine Anforderung an den einzelnen optischen DUT. Das bisherige
-`AsciiCsvFormatter`-Defaulttelegramm ist wegen Zusatzfeldern kein passender
-Ersatz. `gsv_ascii.py` bleibt der absichtlich werfende Platzhalter.
-
-Dies ist eine dokumentierte Implementierungsrichtung, noch keine gebaute
-Anbindung. Der aktuelle Live-Pfad schreibt nur JSONL; dessen Ausgabe braucht
-zusätzlich Lebenszyklus, Fehlerbehandlung und Laufmetadaten. Vor der
-Messfreigabe sind tatsächlicher Empfang in der dokumentierten 2.01-Pro-
-Installation, sichere Ungültigbehandlung, Zeitachse und Wiederanlauf zu
-belegen. OQ-01/OQ-07 sind teilweise geklärt, OQ-06 bleibt offen und OQ-47
-erfasst den konkreten Transport. Keine Hardwareänderung und kein Messlauf.
-
-Das nachgereichte Beispiel-ZIP wurde anschließend im Quelltext und mit elf
-Softwareprüfungen untersucht. Der Demo-Sender und lokale TCP-Transport sind
-damit nachvollziehbar. Die optionale Bridge ist vor einer Übernahme zu
-korrigieren: COM-Schreibfehler werden als TCP-Abbruch behandelt, vollständige
-überlange Frames können die Größenprüfung umgehen. Zahlenlexik und
-Altersprüfung sind weitere Grenzen; die erste Zeile jeder Verbindung wird
-absichtlich verworfen. PDF und ZIP bleiben unverändert als Quellen im Repo.
-Diese Prüfungen ersetzen weder Windows-VCOM noch GSVmulti-Empfang.
-
 # 2026-10-23 — Roadmap als räumliche Kartenhierarchie
 
 ## Problem
@@ -447,6 +707,55 @@ mit den Karten zusammen geprüft.
 
 ---
 
+## 2026-10-23 — R13-14: Offline-Profile dauerhaft von Live trennen
+
+Die Offline-Einrichtung speist zwei gespeicherte Einzelbilder und deren
+Aufnahmezeiten in den vorhandenen `assist_measure`-Vertrag ein. Fit,
+Rasterfeinschliff, Prüfungen, Gegenlesen und `propose_with_fit` bleiben
+unverändert; Live behält Fokus, Mittelung, Wiederholungen und echte
+Wartezeit. Ein zweiter kopierter Fit-/Prüfpfad wurde verworfen, weil er vom
+Live-Verhalten abweichen könnte. Eine zusätzliche Extraktion aus dem
+Live-Dienst ist durch die vorhandene Kamera-/Zeitinjektion unnötig.
+
+`SessionProfile` erhält ein optionales boolesches Feld `offline`, das bei
+bestehenden Profilen ohne Feld ausgelassen wird. Nur `r13-replay.py` erlaubt
+es ausdrücklich beim gemeinsamen Pipeline-Aufbau; `LiveSession.start`
+weist es vor Leser-, Quellen- und Ausgabedateizugriff ab. Eine Markierung
+nur im Dateinamen oder in rohem JSON wurde verworfen: Beim Laden und
+Speichern würde die Sperre sonst verloren gehen. Bestätigt wird nur ohne
+FEHLER und ohne Override, mit `confirmed_by: offline-auswertung`. Der
+Stabilitätsabstand bleibt wie im Live-Dienst mindestens 15 Sekunden.
+Die beiden neuen Winkelaufnahmen scheitern schon am Rasterfit; Befunde
+und Grenzen stehen in VALIDATION.md und im Task-R14-Bericht.
+
+Fixrunde 1 schliesst auch die Kamera-Ernte: `require_live_profile` in
+`session_profile.py` wird vom Pipeline-Aufbau und von `harvest.py` verwendet.
+Die Pruefung weist sowohl `offline: true` als auch die Bestaetigungsherkunft
+`offline-auswertung` ab, selbst nach manuellem Entfernen des Flags. Eine nur
+im Live-Pipeline-Aufbau liegende Sperre wurde verworfen, weil Harvest die
+Kamera ueber `sync-record.py` startet und diesen Aufbau umgeht. Reine
+Dateiauswertungen und der ausdrueckliche Replay-Opt-in bleiben moeglich.
+
+## 2026-10-21 — Referenz im Live-Lauf getrennt aufzeichnen
+
+**Entscheidung (Task 5):** Der serielle Referenzstrom bleibt ein separates
+Audit mit einem Portleser und einem Dateischreiber, begrenzter Warteschlange
+und Verlustzähler. Die bewährten GSV-2AS-Helfer liegen gemeinsam in
+`dispread.gsv2as_serial`; Live-Recorder, `sync-record.py` und
+`gsv-registers.py` verwenden dieselbe Kodierung und dieselben Wartezeiten.
+Eine zweite Portverbindung für den Werteplan würde Antwortbytes stehlen;
+kopierte Helfer würden bei Protokollkorrekturen auseinanderlaufen. Beide
+Alternativen sind deshalb verworfen. Die Referenz als Eingabe für Pipeline
+oder Gate widerspräche Konzept §7 und bleibt strukturell ausgeschlossen.
+
+Der Controller hat den Zielkonflikt beim Stoppen ausdrücklich aufgelöst:
+rein lesend höchstens zwei Sekunden, mit Werteplan erst Rückstellung und
+Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
+„gestoppt“ vor abgeschlossener Rückstellung sind verworfen. Es gibt keine
+Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
+bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
+in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).
+
 # 2026-10-13 — pytest-Importpfad und Aufbewahrung im Worktree (MEM-5)
 
 ## Problem
@@ -474,6 +783,36 @@ Vorhandene Daten außerhalb des Aufgaben-Worktrees werden nicht gelöscht.
 
 ---
 
+## 2026-10-13 — Doku-Pflege: Korrekturrunden statt Einmal-Lauf
+
+### Entscheidung
+
+Der Codex-Doku-Lauf bekommt Ablehnungen des Gates zurück und darf sie in
+höchstens zwei fortgesetzten Runden derselben Session beheben
+(`codex exec resume`). Die Pfadgrenzen bleiben unverändert: Korrigiert wird
+nur innerhalb der Doku-Dateien, die der Gate ohnehin zulässt. Generierte
+Prüfungen, die Codex nicht beheben darf (OQ-Index, Tour-Fakten), stoppen
+den Job schon vor dem Codex-Aufruf.
+
+### Verworfene Alternativen
+
+* **Neue Session pro Korrektur:** verliert den Kontext des ersten Laufs und
+  müsste Repo und Auftrag erneut lesen; teurer und ohne Wissen, welche
+  Änderung abgelehnt wurde.
+* **Unbegrenzte Runden:** keine Kostengrenze, und ein im Doku-Rahmen
+  unlösbarer Fehler (etwa in einer Szene) würde den Lauf bis zum Timeout
+  ziehen.
+* **Codex darf auch Code, Szenen oder Tests anpassen:** der Job pusht ohne
+  Review direkt nach `master`, und das Gate prüft nur Doku (keine pytest-
+  oder Hardwareprüfung). Ein Code-Fix bräuchte einen eigenen Ablauf mit
+  Pull Request und menschlicher Abnahme.
+
+### Konsequenz
+
+Kleine eigene Fehler (Anker, Codeblock-Links, fehlender Status) behebt der
+Lauf selbst; abgelehnte Stände bleiben als Patch-Artefakt prüfbar. Eine
+Korrekturrunde kostet etwa so viel Eingabe-Token wie der bisherige Verlauf.
+
 # 2026-10-12 — Playwright auf dem bestehenden Forgejo-Doku-Runner
 
 ## Problem
@@ -499,6 +838,67 @@ verfügbar, sind nicht Teil dieses Host-Jobs. Systembibliotheken bleiben
 Aufgabe der Pi-Einrichtung; der Job lädt nur die passenden Browserdateien.
 
 ---
+
+## 2026-10-12 — Live-Cockpit als neue Sites-Website
+
+Der Nutzer hat ein zunächst privates, deutsches Live-Cockpit mit den
+Hauptbereichen „In Arbeit“, „Als Nächstes“ und „Projektzustand“ bestätigt.
+Die schriftliche Spezifikation steht in
+[Projektcockpit](superpowers/specs/2026-10-12-projektcockpit-design.md);
+Spezifikation und Umsetzungsplan wurden freigegeben. Die Website ist
+[privat veröffentlicht](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site).
+
+GitHub-Prüfungen und Statusdokumente erhalten Quellen-, Datum- und
+Commit-Bezug. Historische grüne Prüfungen gelten nicht als aktueller
+Nachweis; widersprüchliche Dokumente bleiben sichtbar. Die Datenanbindung
+ist über den für Sites zugelassenen, ausschließlich lesenden
+GitHub-Connector umgesetzt. Die Site besitzt ein eigenständiges
+Quellrepository unter `sites/picam-ai-cockpit`. 27 fachliche Tests,
+TypeScript, Build und lokale Browserprüfungen bestehen. Der gehostete
+Live-Zugriff mit Besucheranmeldung ist noch nicht bestätigt; ein
+technischer Site-Zugriff liefert keine Besucher-Connector-Berechtigung.
+
+Ein periodisch erzeugter Snapshot wurde wegen seiner geringeren
+Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte
+die gewünschte eigenständige Übersicht weniger direkt erfüllt. Eine
+pauschale Codequalitätsnote würde die unterschiedlichen Prüf- und
+Validierungsbelege zu stark vereinfachen.
+
+## 2026-10-12 — Cockpit: Timeline und Codebase-Auswertung
+
+Der Nutzer hat die Überarbeitung mit grafischer P0–P8-Phasenfolge, dunklerer
+Navigation, Codebase-Zahlen und dezenten Animationen freigegeben. Die
+Timeline verwendet die vorhandenen Phasen und Exit-Kriterien statt eines
+unbelegten Kalenderplans. Die Sprachverteilung beruht auf Dateiendungen
+und Dateigrößen des vollständigen, Commit-gebundenen GitHub-Dateibaums.
+Codezeilen wurden als Alternative zurückgestellt: Sie verlangen zusätzliche
+Dateiabrufe und wären ohne getrennte Definition von Leerzeilen und Kommentaren
+missverständlich. Eine Qualitätsnote wird weiterhin nicht abgeleitet.
+Die Site bleibt privat; keine neue Abhängigkeit wurde eingeführt.
+
+## 2026-10-12 — Forgejo ist das Hauptrepository des Cockpits
+
+Der Nutzer hat klargestellt, dass GitHub nur Mirror ist, und den Wechsel
+auf das private Forgejo-Repository `l.hentschke/picam-ai` autorisiert.
+Die Forgejo-Läufe bestanden am aktuellen Commit, während der Mirror ältere
+oder ungeeignete Prüfläufe zeigte. GitHub-Prüfungen als Hauptnachweis wurden
+deshalb verworfen; ein stiller Fallback auf den Mirror würde den falschen
+Prüfstand erneut einführen. GitHub bleibt nur als Mirror verlinkt.
+
+Ein passender Forgejo-Connector wurde bei der Plugin-Suche nicht gefunden.
+Die vorhandenen Datenflüsse verwenden stattdessen feste, serverseitige
+Forgejo-GET-Aufrufe. Der vom Nutzer gelieferte Read-only-Token liegt als
+Sites-Geheimnis außerhalb von Quellcode, Browser und Veröffentlichungspaket.
+Die Site bleibt für denselben privaten Empfängerkreis zugänglich.
+
+Die Zeilenanalyse nutzt das authentifiziert geladene Archiv des gewählten
+Commits und prüft die gezählten Dateien gegen ihre Git-Blobs. Einzelne
+Dateiabrufe wurden zugunsten des begrenzten Archivs zurückgestellt.
+Paginierung und ein gemeinsames Zeitlimit begrenzen API-Arbeit; Zeilen
+werden ohne pro Zeile angelegte Arrays gezählt. Quelltext mit Kommentaren
+und Leerzeilen wird nicht mit ausführbaren Codezeilen oder Qualität
+verwechselt. Spezifikation und Plan wurden unter bestehenden Identitäten
+im Repository und der Library korrigiert.
 
 # 2026-10-01 — Cursorpunkte gegen schwache Schatten absichern
 
@@ -533,6 +933,32 @@ Der feste `sc7a`-Quad passiert `propose` mit 2j OK und Gesamt-WARNUNG.
 Die relative Grenze ist ein Vorabwert für die Einrichtung und kein
 allgemeiner Beleg für alle Lichtlagen; unlesbare oder tatsächlich belegte
 Cursorzeilen bleiben gesperrt.
+
+## 2026-10-01 — Leser genügt für den GSV-Sensor, weiter mit dem Messpfad
+
+### Entscheidung
+
+Der Nutzer hat Variante B gewählt. Der Dot-Matrix-Leser (`stufe2c`) gilt
+für den GSV-Sensor (Displaytech 161A) als ausreichend validiert:
+* Abnahme 3: 215/0/0 an `ab5` und `ab6`.
+* Lesetest `sc7`: 111/111.
+
+Als Nächstes wird er in den Messpfad eingebunden: Werkbank bzw.
+`dispread serve` mit StreamCam, Ausgabe an GSVmulti. Das beginnt, sobald
+Nacharbeit 5 am Einrichtungsassistenten gemergt ist.
+
+### Verworfene Alternativen
+
+* **Variante A:** weitere Aufstellungen ins Training, neu einfrieren als
+  `stufe2d`, dann Abnahme 4. Das verbessert die Abdeckung, schiebt aber das
+  eigentliche Ziel, die Messwertübertragung, weiter hinaus. Der Leser hat
+  in drei Läufen auf neuen Aufstellungen keinen falschen Wert geliefert.
+
+### Konsequenz
+
+Die Freigabe nennt die Grenzen ausdrücklich: nur Raumlicht, ein Gerät, eine
+Einheit, keine anderen Lichtquellen. Neue Trainings- oder Abnahmerunden gibt
+es nur noch, wenn sich daran etwas ändert.
 
 # 2026-09-30 — Feste Quads an 2j statt an Raster-Ersatzmaßen messen
 
@@ -754,6 +1180,184 @@ unverändert.
 
 ---
 
+## 2026-09-30 — Mehrdeutige Plusanker und breite Hinweisboxen
+
+### Entscheidung
+
+Die automatische Rasteranpassung prüft räumlich getrennte plausible
+Plusanker. Konkurrierende gültige Raster mit ähnlich vielen Punkten
+werden abgelehnt. Liefern die ersten acht Startlagen keinen Fit, wird
+eine zweite begrenzte Runde geprüft. Bei einer breiten grünen Hinweisbox
+wird ein kleinerer geschätzter Punktabstand als zusätzlicher Startversuch
+genutzt. Die aus dem Format bekannten Leerzellen und der Zeilen- und
+Zellen-Bias begrenzen weiterhin die Annahme eines Rasters.
+
+### Verworfene Alternativen
+
+* **Nur der stärkste Plusanker:** Ein zweites vollständiges Display mit
+  einem einzigen schlechter erkannten Pluspunkt würde nicht geprüft.
+* **Unbegrenzte Startlagensuche:** Sie hätte die ohnehin hohen Laufzeiten
+  auf dem Raspberry Pi ohne begründeten Sicherheitsgewinn vergrößert.
+* **Aus der grünen Box direkt ein Quad ableiten:** Die Glasfläche ist
+  größer als die Zeichenzeile; ihre Grenzen sind keine Punktkoordinaten.
+
+### Konsequenz
+
+Auf sechs gespeicherten Aufstellungen trifft der Fit mit automatisch
+erkannter grüner Hinweisbox die bestätigten Ecken auf höchstens 0,57 px.
+Ein synthetischer Fall mit zwei fast gleich gut erkannten Anzeigen wird
+als mehrdeutig abgelehnt. Echte Mehrfachanzeigen und andere Glasformen
+bleiben für den ersten gemeinsamen Kameralauf offen.
+
+# 2026-09-29 — Aufnahme zuerst in den RAM, dann auf die SD-Karte
+
+## Problem
+
+Bei den StreamCam-Ernten stieg der Anteil verworfener Bilder von 0–1 % am
+2026-09-28 auf 16–34 % am 2026-09-29. Ein Subagent hat das gemessen:
+* Die SD-Karte, ein No-Name-Modell, schafft mit fsync 7,1 MB/s. Die
+  Aufnahme braucht 5,9 MB/s.
+* Zeitweise schreibt die Karte sekundenlang gar nicht. In `sc6` gab es 14
+  Stillstände über 0,5 s, bis etwa 42 s am Stück.
+* Die Kodierung (JPEG q95, 13 ms je Bild, GIL frei) und die CPU sind nicht
+  der Engpass.
+* Ein Nebeneffekt: Weil der serielle Thread `commands.jsonl` selbst schrieb,
+  verlängerten die Hänger die GSV-Sendepausen. Daraus entstanden lange
+  `telegrammluecke`-Ablehnungen.
+
+## Entscheidung
+
+`sync-record.py --staging-root /dev/shm` für Ernten. Die Aufnahme läuft
+vollständig in tmpfs, erst danach wird mit fsync auf die Karte kopiert.
+`commands.jsonl` bekommt einen eigenen Schreiber. Der Platz wird vorab
+geprüft, ein Kopierfehler lässt die Zwischenablage stehen. Die Bildrate
+bleibt bei 15 fps.
+
+## Alternativen
+
+* **Größere Warteschlange:** Um 42 s zu überbrücken, wären etwa 630 Bilder
+  nötig, also 3,9 GB BGR. Zudem lag die mittlere Schreibrate von 3,8 MB/s
+  unter dem Bedarf. Verworfen.
+* **Mehrere Schreiber-Threads:** Die Kodierung ist nicht der Engpass.
+  Verworfen.
+* **Niedrigere JPEG-Qualität:** Das würde die Eingangsbilder des
+  Dot-Matrix-Lesers unbemerkt verschlechtern. Nur mit eigener `loo`-Prüfung
+  denkbar, vorerst verworfen.
+* **Ernte mit 5 fps:** Der Import wählt ohnehin höchstens 3 Bilder je
+  Plateau. Das bleibt eine Option, falls der RAM knapp wird. Zurückgestellt,
+  bis eine echte Aufnahme mit Zwischenablage vorliegt.
+* **Nur den Ausschnitt um das Quad speichern:** verlustfrei und klein, aber
+  ein größerer Umbau (Koordinaten in Import, Profil und Referenzbild).
+  Später.
+* **Schnellere Karte oder USB3-SSD für `var/`:** empfohlen, aber
+  Hardware. Die Softwaremaßnahme hilft unabhängig davon.
+
+## Konsequenz
+
+* Eine Ernte belegt während der Aufnahme bis zu etwa 2,3 GB RAM (geschätzt).
+* Ist nicht genug frei, lehnt `sync-record.py` vor dem Start ab.
+* Das Kopieren nach der Aufnahme dauert einige Minuten.
+* Der Nachweis an der Kamera steht aus (TODO.md).
+
+## 2026-09-29 — Einrichtungsassistent für Ernte-Aufstellungen
+
+### Entscheidung
+
+Das Quad einer neuen Dot-Matrix-Aufstellung wird aus dem sichtbaren
+Punktraster geschätzt. Die feste Anzeigegeometrie (16 Zellen, 5×7 Punkte
+plus Cursorzeile) verankert die Homographie; mehrere mögliche Startlagen
+werden geprüft und eine unklare Lage abgelehnt. Qualitätsprüfungen und
+Overlays gehen in einen Vorschlag, den weiterhin ein Mensch bestätigt.
+Ein `FEHLER` kann nur mit dokumentierter Begründung übersteuert werden.
+
+### Verworfene Alternativen
+
+* Der bisherige Glasdetektor allein: Er traf bei den gespeicherten
+  StreamCam-Aufstellungen teils die Blende oder Reflexe statt des Glases.
+* Vier von Hand abgelesene Stützpunkte: Sie lieferten die Referenzquads,
+  waren aber der zeitaufwendigste Einrichtungsschritt.
+* Isotrope Glättung im entzerrten Bild: Die vertikale Streckung erzeugte
+  doppelte Punktkandidaten zwischen den tatsächlichen Zeilen.
+
+### Konsequenz
+
+Der Assistent verwendet benannte Vorabschwellen und speichert Kennzahlen
+neben der Ampel. Sechs vorhandene Standbilder prüfen die Geometrie
+offline; Kamerazugriff und tatsächliche Einrichtungsdauer sind noch nicht
+auf echter Hardware mit dem Nutzer geprüft.
+
+# 2026-09-25 — Logitech StreamCam statt Raspberry Pi AI Camera (IMX500)
+
+## Problem
+
+Die IMX500 war über Wochen der Engpass jeder Kamerasitzung. Die
+RP2040-Brücke zwischen Pi und Sensor blieb beim Streamstart hängen (OQ-22):
+zuerst nach 20–25 Starts je Boot, am 2026-09-24 schon beim 8. Start, und
+nach einem Warmreboot war nicht einmal der erste Start sicher. Jede Sitzung
+musste deshalb mit einem Streambudget und wenigen Starts geplant werden. Ein
+Wedge kostete einen Reboot. Am 2026-09-25 fiel die Kamera zusätzlich
+**mitten in einem laufenden Stream** aus (I2C-Fehler `-121`,
+„Camera frontend has timed out"), nachdem sie mechanisch bewegt worden war.
+Der Fokus ließ sich nur mechanisch am Objektiv einstellen, und die
+AI-Funktionen des Sensors nutzte das Projekt nicht (die mitgelieferten
+Modelle taugen nicht für Messverstärker-Displays, der Primärpfad ist die
+bestätigte manuelle ROI).
+
+## Entscheidung
+
+Nutzerentscheidung 2026-09-25: offizieller Wechsel auf die **Logitech
+StreamCam** (USB 3, UVC, USB-ID `046d:0893`), angebunden über V4L2
+(`v4l2://`, `UvcSource`). Die IMX500-Pfade (`picamera2://`, `imx500://`,
+Streamstart-Budget, ScalerCrop) sind außer Betrieb. Doku und Verweise auf
+die IMX500 bleiben für eine mögliche Rückumstellung erhalten, sind aber als
+historisch gekennzeichnet. Spec
+`docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`, Plan
+`docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
+
+## Begründung
+
+Ein Test am 2026-09-25 zeigte, dass die StreamCam alles liefert, was die
+Ernte braucht: 1920×1080 YUYV mit 25–30 fps, Fokus per Software
+(`focus_absolute` = 48 am besten bei abgeschaltetem Autofokus), etwa
+3,6 px je Punktspalte des GSV-Sensor-Glases (Schwelle 2,6 px) und je Bild
+einen V4L2-Pufferzeitstempel in CLOCK_MONOTONIC. Es gibt keinen
+Streamstart-Wedge und kein Startbudget, und der Fokus lässt sich
+reproduzierbar im Profil speichern.
+
+## Alternativen
+
+* **IMX500 behalten und OQ-22 weiter verfolgen** (Testplan mit dem
+  Kernel-Maintainer: Standard-cmdline, dann Kernel-Zweig
+  `naushir/linux#imx500_tests`). Verworfen: offener Ausgang, jeder Versuch
+  kostet Reboots, und der Ausfall mitten im Stream wäre damit nicht
+  erklärt.
+* **Kameradienst**, der die IMX500 einmal beim Boot öffnet und Bilder
+  verteilt (vorgemerkte Idee vom 2026-09-25). Verworfen: umgeht nur den
+  Wedge beim Start, nicht den Ausfall im Stream, und hätte 3–4 Tage Arbeit
+  gekostet.
+* **Fokus der IMX500 mechanisch nachstellen**, sonst alles lassen.
+  Verworfen: löst weder Wedge noch Ausfall.
+
+## Konsequenz
+
+* Kamerazeitstempel liegen jetzt in CLOCK_MONOTONIC statt BOOTTIME
+  (`TimeBaseKind.V4L2_MONOTONIC`). Jede Aufnahme misst den Versatz
+  BOOTTIME − MONOTONIC zu Beginn und Ende (`session.json`), und alle
+  Auswerter rechnen über `records.to_boottime_ns` um. Fehlt der Versatz oder
+  lag ein Suspend dazwischen, wird abgelehnt.
+* Die Semantik des UVC-Zeitstempels (Belichtung oder Pufferempfang) ist
+  offen (OQ-43). Deshalb ist vor der ersten StreamCam-Ernte eine
+  **Timing-Kalibrierung Pflicht** (`timing-calibration.py`,
+  `var/calibration/timing-streamcam.json`). Das Schutzfenster M = 695 ms der
+  IMX500 gilt nicht mehr.
+* Profile haben Schema 3 mit einem `camera`-Block (Fokus, Belichtung,
+  Weißabgleich, Verstärkung). IMX500-Profile (Schema 2) bleiben für Import
+  und Datensatz lesbar, `harvest.py` lehnt sie für neue Ernten ab.
+* Die Kamera der Werkbank (`dispread serve`) ist außer Betrieb, bis die
+  StreamCam dort angebunden ist; `--simulate` läuft weiter.
+* Es gibt keine Treiber-Bildnummer mehr (`sensor_sequence` fehlt).
+  Aussetzer erkennt `frame_gaps` in `session.json` über die Zeitstempel.
+
 # 2026-09-24 — Keine automatische URL-Nachfuehrung in Zensical
 
 ## Problem
@@ -962,6 +1566,357 @@ Wird das TODO-Format so verändert, dass die Aufgabenüberschrift nicht mehr
 erkannt wird, stoppt der Doku-Build mit einer Meldung. Nach einem TODO- oder
 OQ-Statuswechsel muss `scripts/oq-index.py` laufen. Die Cloudflare-Seite
 bleibt durch die bestehende Forgejo-Anmeldung und Schutzprüfung abgesichert.
+
+---
+
+# 2026-09-23 — Doku-Seite: Zensical statt KI-Wiki, Hosting auf Cloudflare Pages mit Forgejo-Anmeldung
+
+## Problem
+
+Die Doku ist umfangreich (> 20 000 Zeilen Markdown), hatte aber keine
+Navigation, keine Suche und keine API-Referenz. Wer nur Zugriff auf das
+Forgejo-Repo hat, soll sie als Web-Oberfläche lesen können.
+
+## Entscheidung
+
+* **Generator: Zensical** über die vorhandenen Markdown-Dateien, dazu eine
+  API-Referenz aus den Docstrings (mkdocstrings). Kein KI-generiertes Wiki.
+* **Build:** Forgejo-Runner auf dem Pi (Label `picam-docs`, Host-Modus,
+  per systemd abgeschottet). Ergebnis ist immer ein Offline-ZIP am Lauf.
+* **Hosting: Cloudflare Pages mit einer eigenen Pages Function** als
+  Zugriffsschutz. Anmeldung über Forgejo, Zugang nur mit Leserecht am Repo.
+  Live geht ein Stand nur nach bestandener Schutzprüfung auf einem
+  Prüfstand. Details in [HOSTING.md](HOSTING.md).
+
+## Begründung / Alternativen
+
+- **KI-Wikis** (Repowise, FSoft CodeWiki, deepwiki-open, Google Code Wiki,
+  DeepWiki). Verworfen: Sie erzeugen plausibel klingende Fehler, und im
+  Kalibrierlabor ist eine falsche Beschreibung schlimmer als eine fehlende.
+  Repowise schrieb über `src/dispread` nachweislich Unzutreffendes. Die
+  gehosteten Varianten können nur öffentliche GitHub-Repos.
+- **MkDocs + Material.** Verworfen: Material ist seit November 2025 im
+  Wartungsmodus, MkDocs 2.0 streicht Plugins und damit mkdocstrings. Zensical
+  ist der Nachfolger vom Material-Team und liest dieselbe Konfiguration.
+  **Sphinx + MyST** wäre die konservative Rückfallebene, die Markdown-Dateien
+  bleiben dafür unverändert.
+- **Hosting in Forgejo selbst.** Nicht möglich: Forgejo 15 hat keine Pages,
+  HTML aus dem Repo kommt als `text/plain` mit `nosniff`. Ein HTML-Renderer im
+  iframe (`app.ini`) hat offene Fehler und trägt keine mehrseitige Seite.
+  Das **Wiki** trüge nur schlichtes Markdown ohne Zensical-Oberfläche.
+- **Eigener Dienst** (Forge-Pages, oauth2-proxy). Technisch am saubersten,
+  die Daten blieben im Haus. Verworfen, weil es keinen zusätzlichen Server
+  geben soll. Den Pi als Webserver wollten wir nicht, weil er das Messgerät ist.
+- **Cloudflare Access (Zero Trust)** vor Pages. Zuerst gewählt, dann
+  verworfen: Auch der kostenlose Plan verlangt eine hinterlegte
+  Kreditkarte. Die Pages Function prüft zudem genauer, nämlich die
+  Repo-Rechte statt einer E-Mail-Regel. Dafür ist ihr Anmelde-Code selbst
+  geschrieben statt ein Fertigprodukt.
+- **Gemeinsames Passwort** (Basic Auth in der Function). Verworfen: Es wäre
+  nicht an Forgejo-Konten gebunden, und wer das Projekt verlässt, kennt es weiter.
+- **GitHub Pages.** Verworfen: ohne Enterprise Cloud öffentlich.
+- **Netlify, Vercel, Codeberg Pages.** Verworfen: Zugriffsschutz nur
+  kostenpflichtig, Hobby-Tarif nicht für gewerbliche Nutzung, bzw. öffentlich
+  und nur für Open Source gedacht.
+- **GitLab.com Pages** mit Zugriffsschutz im Free-Tarif. Verworfen: Jeder
+  Leser bräuchte ein GitLab-Konto, und private Gruppen sind seit August 2026
+  auf 5 Nutzer begrenzt.
+
+## Konsequenz
+
+Die Doku liegt zusätzlich bei Cloudflare. Der Schutz hält Fremde fern, nicht
+den Anbieter. Zugelassen ist genau, wer das Repo in Forgejo lesen darf.
+Entzogene Rechte wirken spätestens nach 8 h (Sitzungsdauer). Lehre aus einem
+ersten, von Hand angelegten und ungeschützten Pages-Projekt: Kein Deploy ohne
+automatische Schutzprüfung davor.
+Zensical ist jung (0.0.x) und deshalb in `requirements-docs.txt` gepinnt.
+
+# 2026-09-18 — Datensatz-Sammelmodus: eigener Rohbild-Sammelpfad statt Lockerung der produktiven ROI-/Clip-Voraussetzungen
+
+## Problem
+
+Reale, unkalibrierte Prüfbilder sollten im Browser gesammelt werden können,
+ohne Segmentraster oder bestätigtes Produktionsprofil vorauszusetzen. Die
+bestehende Clipaufnahme (`Controller._clip_start`) verlangt genau das:
+bestätigte Geometrie, Livebild und einen konstanten sichtbaren Wert je Clip.
+
+## Entscheidung
+
+Ein vollständig eigenständiger Speicher- und Bedienpfad
+(`src/dispread/workbench/datasets.py`, `dataset_capture.py`, `dataset.js`)
+statt einer Lockerung der bestehenden `roi`-/`clip.start`-Voraussetzungen.
+Eigene Geräteregistrierung mit UUID und Split-Sperre, eigene Capture-Tokens
+(getrennt vom kleinen ROI-Editor-Cache `Controller.frames`), eigenes
+`DatasetStore`-Lock, eigene `dataset.*`-Kommandos über das bestehende
+`/command`.
+
+## Begründung / Alternativen
+
+- **`clip.start`/`clip.stop` um einen unkalibrierten Modus erweitern.**
+  Verworfen: hätte bedeutet, `confirmed`-Prüfungen dort probeweise zu
+  umgehen — genau die Art Lockerung, die AGENTS.md für Freigaberegeln
+  ausschließt, und die bestehenden Clip-Regressionstests (Manifest,
+  Schreibfehlerbehandlung, `write_failures`) hätten für einen zweiten,
+  unverwandten Anwendungsfall mitgepflegt werden müssen.
+- **Zielbox/Label direkt in `ValueRecord` oder das Profilschema aufnehmen.**
+  Verworfen: `ValueRecord` ist der stabile Vertrag aus Konzept.md §8 und
+  darf laut Aufgabenstellung nicht angefasst werden; ein getipptes Label ist
+  zudem strukturell etwas anderes als ein erkannter Wert und darf nach
+  Konzept.md §7 niemals in `ValueReader`/`ReleaseGate` einfließen.
+- **Bestehenden `Controller.frames`-Editor-Cache für Capture-Tokens
+  wiederverwenden.** Verworfen: der ist an Profil-/Editorlogik gekoppelt
+  (Revision, `roi`-Bestätigung) und auf vier Einträge mit stiller
+  FIFO-Verdrängung ausgelegt — der Sammelmodus braucht dagegen eine
+  explizite Ablehnung statt Verdrängung bei Erreichen des Limits
+  (`MAX_OPEN_CAPTURES`).
+
+## Konsequenz
+
+Der Sammelmodus ergänzt den bestehenden Betriebspfad, ohne dessen
+Freigaberegeln zu berühren: `ValueRecord`, `ReleaseGate` und
+`TelegramFormatter` sind unverändert, Capture/Save fassen `self.config`,
+`self.tracker` und `self.reading` nicht an (siehe Tests in
+`tests/test_dataset_capture.py`). Kosten: zwei parallele Speicherpfade
+(`clips/` und `datasets/samples/`) mit ähnlicher, aber bewusst nicht
+gemeinsamer Schreiblogik — vertretbar, weil beide unterschiedliche
+Garantien geben (ein Clip ist ein konstanter Wert über die Zeit, eine
+Sample-Probe ein Einzelbild mit Zielbox).
+
+---
+
+# 2026-09-11 — OCR-Selbstkalibrierung: verankerte Werkzeuge statt genereller OCR/Klassifikator
+
+## Problem
+
+Die Ausgangsmessung vom 2026-09-11 (`sevenseg/2` gegen alle gelabelten realen
+Annotationen, siehe [VALIDATION.md](VALIDATION.md)) zeigte, dass Rastergeometrie,
+Segmentschwellen und Anzeigepolarität weiterhin von Hand kalibriert werden
+mussten und dabei fehleranfällig waren. Für
+[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
+waren mehrere naheliegende Alternativen zu bewerten, bevor Autofit
+(`fit_layout`) und Nachführung (`QuadTracker`) gebaut wurden.
+
+## Entscheidung
+
+Der Plan bleibt bei Werkzeugen, die **am bestätigten manuellen Ausschnitt
+verankert** sind — Autofit aus einem einmal getippten Sollwert und begrenzte
+Nachführung eines bereits bestätigten Quads — statt einer generellen,
+unverankerten OCR- oder Klassifikatorlösung.
+
+## Begründung / Alternativen
+
+- **ssocr** (`https://www.unix-ag.uni-kl.de/~auerswal/ssocr/`, GPLv3, C, nur
+  CLI) — vom Bediener vorgeschlagen. Verworfen als Primärpfad: liefert nur die
+  Ziffernfolge, keine Per-Segment-Evidenz, und `ReleaseGate.evaluate` verlangt
+  `contrast` und `min_margin` aus der Segmentanalyse ([OQ-19](open-questions.md)).
+  Dazu Subprozessgrenze je Bild und eigene Ziffernsegmentierung, die den
+  bereits bestätigten Rasterhinweis nicht nutzt. Als späteres, unabhängig
+  implementiertes Vergleichsbackend neben Tesseract ([OQ-15](open-questions.md))
+  weiterhin denkbar.
+- **Gitterfreier Per-Ziffer-Decoder** (ssocr-Logik in-process, Raster je Bild
+  neu herleiten). Verworfen, weil er [OQ-25](open-questions.md) in den
+  **Lesepfad** erbt: `fit_ocr_box` wählt an dem realen Netzteil konsequent die
+  falsche Zeile (untere `A`-Anzeige statt oberer `V`-Anzeige, IoU 0,0 an
+  beiden Bildern). Als Vorschlag ist das folgenlos, im Lesepfad wäre es eine
+  stille Ablesung der falschen Messgröße — die Haupt-/Nebenanzeige-
+  Verwechslung aus `Konzept.md` §7. Die brauchbare Hälfte (Selbstskalierung je
+  Ziffer) ist stattdessen **verankert** aufgenommen: `fit_layout` optimiert
+  nur innerhalb einer Umgebung des bereits bestätigten Rasters.
+- **Kleiner Ziffernklassifikator, rein synthetisch trainiert.** Umgeht das
+  Annotationsproblem, nicht das Datenproblem — `Konzept.md` §9 und der
+  Docstring von `layout.py` sagen beide, dass synthetische Daten ein reales
+  Testset ergänzen und nie ersetzen. Dazu: Softmax ist keine
+  Fehlerwahrscheinlichkeit (`AGENTS.md`), die Freigabe bräuchte einen neuen
+  Evidenzvertrag ([OQ-19](open-questions.md)), und der IMX500-*Converter*
+  fehlt auf dem Pi ([OQ-11](open-questions.md)). Gehört nach ROADMAP-P8, nicht
+  in diesen Plan.
+- **Rasterfeinschliff je Bild** (Projektionsprofil zieht die Zellgrenzen pro
+  Frame nach). Aus diesem Plan gestrichen: Phase C (`QuadTracker`) fängt
+  starre Bewegung des ganzen Quads bereits ab, und ein Feinschliff ohne
+  Verankerung am bestätigten Raster bringt nur bei nicht-starren Änderungen
+  im Ausschnitt etwas — und würde ohne Verankerung dieselbe
+  Haupt-/Nebenanzeige-Verwechslung aus OQ-25 erben. Als eigener Punkt
+  festgehalten in [OQ-27](open-questions.md), nicht gebaut.
+
+## Konsequenz
+
+`fit_layout` (`src/dispread/ocr/autofit.py`) und `QuadTracker`
+(`src/dispread/track.py`) bleiben beide auf den einmal bestätigten manuellen
+Ausschnitt bezogen — kein Ersatz für `manual_roi`, kein automatisch
+übernommener Wert ohne diese Verankerung. Eine reale Messschwäche entdeckt:
+`thickness_ratio`/`inset_ratio` sind für den aktuellen Punktabtast-Decoder
+strukturell wirkungslos (nie gelesen in `sevenseg.py`) — offen als Teil von
+[OQ-28](open-questions.md). Die Nachführungsschwellen (`max_shift`,
+`max_rotation_deg`, `min_score`) bleiben unvalidierte Vorabdefaults —
+[OQ-26](open-questions.md).
+
+---
+
+# 2026-09-09 — Perspektivisches ROI-Quad und kurze Controller-Sperren
+
+**Entscheidung:** Das Profil behält die achsparallele `roi` als Hülle für
+Qualitätsmetriken und Abwärtskompatibilität, ergänzt aber in Schema 2 ein
+geordnetes `roi_quad` aus vier normierten Ecken. Der OCR-Ausschnitt wird aus
+diesem Quad entzerrt; Profile aus Schema 1 werden beim Laden aus ihrem Rechteck
+verlustfrei migriert. Bildsuche, Overlay und JPEG-Kompression laufen außerhalb
+des Controller-Locks. Nach Bestätigung endet die Vollbildsuche, während die
+OCR-Vorschau mit eigener 5-Hz-Rate weiterläuft.
+
+**Verworfene Alternativen:**
+
+* `roi` selbst je nach Version als Rechteck oder Polygon zu überladen: Jeder
+  Verbraucher müsste den Typ erraten; eine getrennte kanonische Quad-Geometrie
+  hält den Vertrag eindeutig.
+* Nur Drehwinkel plus Rechteck zu speichern: korrigiert Rotation, aber keine
+  perspektivische Trapezverzerrung.
+* Die gesamte Verarbeitung unter dem Controller-Lock zu lassen und nur die
+  Bildrate zu senken: Status und Shutdown blieben im ungünstigen Moment an
+  OpenCV gebunden.
+* Einen Web-Abschaltknopf anzubieten: unnötig großer externer
+  Zustandsänderungspfad. `dispread stop` bleibt auf den privaten Unix-Socket
+  begrenzt.
+
+**Konsequenz:** Vier Ecken sind im eingefrorenen Original direkt editierbar;
+Zellen und Segmentpunkte werden perspektivisch zurückgezeichnet. Alte Profile
+bleiben ladbar. Die Änderung verbessert Ausrichtung und Bedienbarkeit, ist aber
+kein Training und behebt die reale VFD-Glyphenabweichung aus OQ-23 nicht.
+
+---
+
+# 2026-09-09 — Separater, sichtbarer OCR-Innenrahmen
+
+**Entscheidung:** Profilschema 3 ergänzt ein normiertes `ocr_box` innerhalb des
+perspektivisch entzerrten `roi_quad`. Das äußere Quad beschreibt die physische
+Displayebene und ihre Perspektive; der innere Rahmen beschreibt ausschließlich
+den Bereich, über den Vorzeichen- und Ziffernzellen verteilt werden. Im
+eingefrorenen Browserbild werden Rahmen, Zellen und dieselben sieben
+Abtastpunkte gezeichnet, die `SevenSegmentReader` tatsächlich misst.
+
+**Verworfene Alternativen:** Nur das äußere Quad enger um die Ziffern zu legen
+vermischt Perspektivkante und Lesergrenze und wird bei Blenden/Leerraum
+unpräzise. Frei editierbare Grenzen je einzelner Zelle würden viele kaum
+prüfbare Profilparameter erzeugen und könnten eine Anzeige auf genau einen
+Frame überanpassen. Eine automatisch als bestätigt gespeicherte Grenzerkennung
+aus dem Einzelbild würde helle Segmente, Einheit und Reflexionen ohne reale
+Validierung verwechseln; unbekannte Eingaben müssen abgelehnt statt geraten
+werden.
+
+**Konsequenz:** Die manuelle Framekalibrierung ist direkt wirksam und visuell
+nachprüfbar. Schema-1/2-Profile bleiben durch Migration mit vollem `ocr_box`
+ladbar. Automatische Vorschläge können später auf gelabelten Realbildern
+ergänzt werden, dürfen aber die Bedienbestätigung nicht ersetzen.
+
+**Korrektur nach Bedienprüfung:** Das zunächst beim Einfrieren kopierte Raster
+blieb bei Änderungen an `layout` stehen, während die allgemeine Profilrevision
+`Enter` mit „Modus/Profil geändert“ ablehnte. Reine Rasteränderungen übernehmen
+nun die Revision des offenen Editierbilds und `snapshot()` liefert das aktuelle
+Raster für den Browser. Bild- oder Kamerageometrieänderungen tun das bewusst
+nicht. Die feste Dezimalposition wird als Kalibriermarker gezeichnet, aber
+weiterhin nicht als optisch erkannt ausgegeben.
+
+---
+
+# 2026-09-08 — Eigenständige Kameravorschau mit MJPEG und Konturheuristik
+
+## Entscheidung
+
+Ein einzelnes Beispielskript kombiniert Kamera, geometrische Display-Vorschläge
+und HTTP-Vorschau auf Loopback. Windows verwendet einen SSH-Tunnel und den
+Browser. Das Skript bleibt unabhängig von Messwertpipeline und Quellenregistry;
+der nächste Versuch braucht weder OCR noch eine vollständige `picamera2://`-
+Implementierung. Keine Änderung des manuellen ROI-Primärpfads.
+
+## Verworfene Alternativen
+
+* X11/VNC: zusätzliche Einrichtung auf Windows für eine reine Bildvorschau.
+* WebRTC/H.264: mehr Protokoll-/Clientaufwand als für den ersten Versuch nötig;
+  MJPEG benötigt mehr Bandbreite, ist hier aber direkt im Browser nutzbar.
+* Flask oder separates Frontend-Projekt: Standardbibliothek plus eingebettete
+  HTML-Seite genügen, zusätzliche Abhängigkeiten entfallen.
+* Stock-IMX500-Modelle: laut bisherigen Versuchen kein geeigneter
+  Messgeräte-Displaydetektor. Training eines eigenen Modells benötigt Daten.
+* Nur manuelle ROI: vom Nutzer für diesen Prototyp zugunsten automatischer
+  Vorschläge verworfen; die Heuristik bleibt ausdrücklich unbestätigt.
+
+## Konsequenz
+
+Schneller, nachvollziehbarer Versuch mit geometrischen Filtern. Keine
+Behauptung semantischer Display-Erkennung und keine Konfidenzwahrscheinlichkeit.
+Reale Kameraübertragung ist lokal geprüft; die visuelle Abnahme am Gerät und
+unter Windows steht aus. Anleitung: [Livevorschau](anleitung/10-kamera-livevorschau.md).
+
+---
+
+# 2026-09-08 — Workbench statt weiter wachsendem Beispielskript
+
+**Entscheidung:** Kamerabesitzer, Profile, HTTPS-Server, Shellverwaltung,
+CLI/TUI und Browserassets unter `dispread.workbench` getrennt. Das Beispiel
+bleibt Einstieg. HTTP/WebSockets mit aiohttp, TUI mit Textual, echte Shells
+über PTYs und xterm.js. Systempakete erhalten die Projekt-ABI-Regel.
+
+**Bedienentscheidung des Nutzers:** Möglichst keine Buttons/Slider. TUI in der
+Shell statt separater Regleroberfläche oder reiner Befehlsliste. Kamera oben,
+Shell darunter, Log rechts. Shell-Tabs überleben Browsertrennung. Gesamte
+Oberfläche mit dem normalen SSH-/Linux-Passwort von `me-systeme` schützen;
+nicht mit einem separaten root-Passwort. Interne Bindadresse bleibt erhalten,
+TLS mit lokalem oder Firmenzertifikat schützt die Passwortübertragung.
+
+**Verworfene Alternativen:** Webserver als root (unnötige Privilegien),
+Passwortkopie im Profil (PAM prüft das Linux-Konto), unabhängige Kameraprozesse
+je Bedienweg (Gerätekonflikte), Live-Nachtraining bei Boxkorrektur (fehlende
+getrennte Validierung). Die aktuelle Konturheuristik ist kein trainierbares
+Modell. Annotationen werden auf eingefrorenen Originalbildern gespeichert.
+
+**Umsetzungshinweis:** Ein frischer Shell-Hilfsprozess übernimmt das PTY und
+führt Bash aus. Das ersetzt `forkpty` im mehrthreadigen Server, das im Test
+berechtigt vor möglichen Deadlocks warnte. Ausgabe ist pro Tab auf 2 MiB
+begrenzt; gekürzte Historie wird beim Wiederverbinden sichtbar gemeldet.
+
+**Grenzen:** `run` ist in dieser Workbench fester Vorschau-/Erkennungsbetrieb,
+keine Messwertfreigabe. Auto-Setup bleibt bestätigungspflichtige Einstellhilfe
+(OQ-20). Hardware-Worker und TLS/WSS-Backend sind geprüft; Browser-Gesamtabnahme
+unter Windows und mit echter PAM-Anmeldung bleibt offen (OQ-21).
+
+---
+
+# 2026-09-08 — Ablesung in der Workbench: Anzeige statt Freigabe
+
+**Entscheidung:** Der Controller liest bei bestätigter ROI jedes Kamerabild mit
+`SevenSegmentReader` und führt `ReleaseGate` mit — aber ausschließlich als
+**Anzeige** für den Bediener. Es entsteht kein `ValueRecord`, keine Freigabe und
+keine serielle Ausgabe; `released` ist konstant `false`. Angezeigt werden der
+Rohtext, die Evidenz je Stelle und vor allem die **Ablehnungsgründe** des Gates,
+weil das die eigentliche Bedienhilfe ist: der Bediener sieht, woran eine
+Ablesung scheitert, statt nur „unlesbar" zu lesen.
+
+**Verworfene Alternativen:**
+
+* *Freigabe direkt in der Workbench, inklusive Senden.* Die Freigabeschwellen
+  sind Vorabdefaults und an echten Geräten nicht validiert (OQ-14), das
+  GSVmulti-Telegramm ist unbekannt (OQ-07). Eine Freigabe hier hätte beides
+  stillschweigend als geklärt behandelt.
+* *Eigene Leseimplementierung in der Workbench.* Hätte die Kette aus Konzept §3
+  gedoppelt. Stattdessen benutzt die Workbench `rectify`, `SevenSegmentReader`
+  und `ReleaseGate` unverändert — dieselben Verträge, dieselbe Evidenz.
+* *Zahlenformat aus dem Bild schätzen.* Konzept §4 verlangt die Bestätigung
+  durch den Bediener; das Format steht deshalb im Profil (`layout`) und wird
+  validiert, nicht geraten. `decimals: null` bleibt wählbar, führt aber
+  ehrlich zur Ablehnung, weil der Dezimalpunkt nicht gemessen wird (OQ-17).
+* *Zeitstempel der Vorschau als Messwertzeitbezug.* Die Veralterung im Gate
+  bekommt CLOCK_MONOTONIC, klar als solches gekennzeichnet. Der
+  Aufnahmezeitstempel liegt in SENSOR_BOOTTIME mit unbekannter Semantik; beides
+  zu vermischen wäre genau der Fehler, den AGENTS.md verbietet.
+
+**Umsetzungshinweis:** Die sieben Abtastpunkte je Ziffernstelle werden ins
+Kamerabild zurückprojiziert und je nach gemessenem Zustand hell oder dunkel
+gezeichnet. Weil die ROI achsparallel ist, genügt dafür eine lineare Abbildung
+aus dem entzerrten Ausschnitt. Das macht Rasterfehler sofort sichtbar — ohne
+diese Rückmeldung ist ein Zahlenformat kaum einzustellen.
+
+**Grenzen:** Die Bedienzeilen für das Zahlenformat und die Tests des Lesepfads
+fehlen noch (Stand in `docs/status.md`). Geprüft ist der Kern nur gegen eine
+synthetisch gerenderte Anzeige — synthetische Daten ergänzen nach Konzept §9,
+sie zählen nie zum Testset.
 
 ---
 
@@ -1244,858 +2199,3 @@ und `json` in der stdlib ist — das vermeidet zwei weitere Abhängigkeiten, die
 Systempakete überschatten könnten.
 
 ---
-
-# 2026-09-08 — Eigenständige Kameravorschau mit MJPEG und Konturheuristik
-
-## Entscheidung
-
-Ein einzelnes Beispielskript kombiniert Kamera, geometrische Display-Vorschläge
-und HTTP-Vorschau auf Loopback. Windows verwendet einen SSH-Tunnel und den
-Browser. Das Skript bleibt unabhängig von Messwertpipeline und Quellenregistry;
-der nächste Versuch braucht weder OCR noch eine vollständige `picamera2://`-
-Implementierung. Keine Änderung des manuellen ROI-Primärpfads.
-
-## Verworfene Alternativen
-
-* X11/VNC: zusätzliche Einrichtung auf Windows für eine reine Bildvorschau.
-* WebRTC/H.264: mehr Protokoll-/Clientaufwand als für den ersten Versuch nötig;
-  MJPEG benötigt mehr Bandbreite, ist hier aber direkt im Browser nutzbar.
-* Flask oder separates Frontend-Projekt: Standardbibliothek plus eingebettete
-  HTML-Seite genügen, zusätzliche Abhängigkeiten entfallen.
-* Stock-IMX500-Modelle: laut bisherigen Versuchen kein geeigneter
-  Messgeräte-Displaydetektor. Training eines eigenen Modells benötigt Daten.
-* Nur manuelle ROI: vom Nutzer für diesen Prototyp zugunsten automatischer
-  Vorschläge verworfen; die Heuristik bleibt ausdrücklich unbestätigt.
-
-## Konsequenz
-
-Schneller, nachvollziehbarer Versuch mit geometrischen Filtern. Keine
-Behauptung semantischer Display-Erkennung und keine Konfidenzwahrscheinlichkeit.
-Reale Kameraübertragung ist lokal geprüft; die visuelle Abnahme am Gerät und
-unter Windows steht aus. Anleitung: [Livevorschau](anleitung/10-kamera-livevorschau.md).
-
----
-
-# 2026-09-08 — Workbench statt weiter wachsendem Beispielskript
-
-**Entscheidung:** Kamerabesitzer, Profile, HTTPS-Server, Shellverwaltung,
-CLI/TUI und Browserassets unter `dispread.workbench` getrennt. Das Beispiel
-bleibt Einstieg. HTTP/WebSockets mit aiohttp, TUI mit Textual, echte Shells
-über PTYs und xterm.js. Systempakete erhalten die Projekt-ABI-Regel.
-
-**Bedienentscheidung des Nutzers:** Möglichst keine Buttons/Slider. TUI in der
-Shell statt separater Regleroberfläche oder reiner Befehlsliste. Kamera oben,
-Shell darunter, Log rechts. Shell-Tabs überleben Browsertrennung. Gesamte
-Oberfläche mit dem normalen SSH-/Linux-Passwort von `me-systeme` schützen;
-nicht mit einem separaten root-Passwort. Interne Bindadresse bleibt erhalten,
-TLS mit lokalem oder Firmenzertifikat schützt die Passwortübertragung.
-
-**Verworfene Alternativen:** Webserver als root (unnötige Privilegien),
-Passwortkopie im Profil (PAM prüft das Linux-Konto), unabhängige Kameraprozesse
-je Bedienweg (Gerätekonflikte), Live-Nachtraining bei Boxkorrektur (fehlende
-getrennte Validierung). Die aktuelle Konturheuristik ist kein trainierbares
-Modell. Annotationen werden auf eingefrorenen Originalbildern gespeichert.
-
-**Umsetzungshinweis:** Ein frischer Shell-Hilfsprozess übernimmt das PTY und
-führt Bash aus. Das ersetzt `forkpty` im mehrthreadigen Server, das im Test
-berechtigt vor möglichen Deadlocks warnte. Ausgabe ist pro Tab auf 2 MiB
-begrenzt; gekürzte Historie wird beim Wiederverbinden sichtbar gemeldet.
-
-**Grenzen:** `run` ist in dieser Workbench fester Vorschau-/Erkennungsbetrieb,
-keine Messwertfreigabe. Auto-Setup bleibt bestätigungspflichtige Einstellhilfe
-(OQ-20). Hardware-Worker und TLS/WSS-Backend sind geprüft; Browser-Gesamtabnahme
-unter Windows und mit echter PAM-Anmeldung bleibt offen (OQ-21).
-
----
-
-# 2026-09-08 — Ablesung in der Workbench: Anzeige statt Freigabe
-
-**Entscheidung:** Der Controller liest bei bestätigter ROI jedes Kamerabild mit
-`SevenSegmentReader` und führt `ReleaseGate` mit — aber ausschließlich als
-**Anzeige** für den Bediener. Es entsteht kein `ValueRecord`, keine Freigabe und
-keine serielle Ausgabe; `released` ist konstant `false`. Angezeigt werden der
-Rohtext, die Evidenz je Stelle und vor allem die **Ablehnungsgründe** des Gates,
-weil das die eigentliche Bedienhilfe ist: der Bediener sieht, woran eine
-Ablesung scheitert, statt nur „unlesbar" zu lesen.
-
-**Verworfene Alternativen:**
-
-* *Freigabe direkt in der Workbench, inklusive Senden.* Die Freigabeschwellen
-  sind Vorabdefaults und an echten Geräten nicht validiert (OQ-14), das
-  GSVmulti-Telegramm ist unbekannt (OQ-07). Eine Freigabe hier hätte beides
-  stillschweigend als geklärt behandelt.
-* *Eigene Leseimplementierung in der Workbench.* Hätte die Kette aus Konzept §3
-  gedoppelt. Stattdessen benutzt die Workbench `rectify`, `SevenSegmentReader`
-  und `ReleaseGate` unverändert — dieselben Verträge, dieselbe Evidenz.
-* *Zahlenformat aus dem Bild schätzen.* Konzept §4 verlangt die Bestätigung
-  durch den Bediener; das Format steht deshalb im Profil (`layout`) und wird
-  validiert, nicht geraten. `decimals: null` bleibt wählbar, führt aber
-  ehrlich zur Ablehnung, weil der Dezimalpunkt nicht gemessen wird (OQ-17).
-* *Zeitstempel der Vorschau als Messwertzeitbezug.* Die Veralterung im Gate
-  bekommt CLOCK_MONOTONIC, klar als solches gekennzeichnet. Der
-  Aufnahmezeitstempel liegt in SENSOR_BOOTTIME mit unbekannter Semantik; beides
-  zu vermischen wäre genau der Fehler, den AGENTS.md verbietet.
-
-**Umsetzungshinweis:** Die sieben Abtastpunkte je Ziffernstelle werden ins
-Kamerabild zurückprojiziert und je nach gemessenem Zustand hell oder dunkel
-gezeichnet. Weil die ROI achsparallel ist, genügt dafür eine lineare Abbildung
-aus dem entzerrten Ausschnitt. Das macht Rasterfehler sofort sichtbar — ohne
-diese Rückmeldung ist ein Zahlenformat kaum einzustellen.
-
-**Grenzen:** Die Bedienzeilen für das Zahlenformat und die Tests des Lesepfads
-fehlen noch (Stand in `docs/status.md`). Geprüft ist der Kern nur gegen eine
-synthetisch gerenderte Anzeige — synthetische Daten ergänzen nach Konzept §9,
-sie zählen nie zum Testset.
-
----
-
-# 2026-09-09 — Perspektivisches ROI-Quad und kurze Controller-Sperren
-
-**Entscheidung:** Das Profil behält die achsparallele `roi` als Hülle für
-Qualitätsmetriken und Abwärtskompatibilität, ergänzt aber in Schema 2 ein
-geordnetes `roi_quad` aus vier normierten Ecken. Der OCR-Ausschnitt wird aus
-diesem Quad entzerrt; Profile aus Schema 1 werden beim Laden aus ihrem Rechteck
-verlustfrei migriert. Bildsuche, Overlay und JPEG-Kompression laufen außerhalb
-des Controller-Locks. Nach Bestätigung endet die Vollbildsuche, während die
-OCR-Vorschau mit eigener 5-Hz-Rate weiterläuft.
-
-**Verworfene Alternativen:**
-
-* `roi` selbst je nach Version als Rechteck oder Polygon zu überladen: Jeder
-  Verbraucher müsste den Typ erraten; eine getrennte kanonische Quad-Geometrie
-  hält den Vertrag eindeutig.
-* Nur Drehwinkel plus Rechteck zu speichern: korrigiert Rotation, aber keine
-  perspektivische Trapezverzerrung.
-* Die gesamte Verarbeitung unter dem Controller-Lock zu lassen und nur die
-  Bildrate zu senken: Status und Shutdown blieben im ungünstigen Moment an
-  OpenCV gebunden.
-* Einen Web-Abschaltknopf anzubieten: unnötig großer externer
-  Zustandsänderungspfad. `dispread stop` bleibt auf den privaten Unix-Socket
-  begrenzt.
-
-**Konsequenz:** Vier Ecken sind im eingefrorenen Original direkt editierbar;
-Zellen und Segmentpunkte werden perspektivisch zurückgezeichnet. Alte Profile
-bleiben ladbar. Die Änderung verbessert Ausrichtung und Bedienbarkeit, ist aber
-kein Training und behebt die reale VFD-Glyphenabweichung aus OQ-23 nicht.
-
----
-
-# 2026-09-09 — Separater, sichtbarer OCR-Innenrahmen
-
-**Entscheidung:** Profilschema 3 ergänzt ein normiertes `ocr_box` innerhalb des
-perspektivisch entzerrten `roi_quad`. Das äußere Quad beschreibt die physische
-Displayebene und ihre Perspektive; der innere Rahmen beschreibt ausschließlich
-den Bereich, über den Vorzeichen- und Ziffernzellen verteilt werden. Im
-eingefrorenen Browserbild werden Rahmen, Zellen und dieselben sieben
-Abtastpunkte gezeichnet, die `SevenSegmentReader` tatsächlich misst.
-
-**Verworfene Alternativen:** Nur das äußere Quad enger um die Ziffern zu legen
-vermischt Perspektivkante und Lesergrenze und wird bei Blenden/Leerraum
-unpräzise. Frei editierbare Grenzen je einzelner Zelle würden viele kaum
-prüfbare Profilparameter erzeugen und könnten eine Anzeige auf genau einen
-Frame überanpassen. Eine automatisch als bestätigt gespeicherte Grenzerkennung
-aus dem Einzelbild würde helle Segmente, Einheit und Reflexionen ohne reale
-Validierung verwechseln; unbekannte Eingaben müssen abgelehnt statt geraten
-werden.
-
-**Konsequenz:** Die manuelle Framekalibrierung ist direkt wirksam und visuell
-nachprüfbar. Schema-1/2-Profile bleiben durch Migration mit vollem `ocr_box`
-ladbar. Automatische Vorschläge können später auf gelabelten Realbildern
-ergänzt werden, dürfen aber die Bedienbestätigung nicht ersetzen.
-
-**Korrektur nach Bedienprüfung:** Das zunächst beim Einfrieren kopierte Raster
-blieb bei Änderungen an `layout` stehen, während die allgemeine Profilrevision
-`Enter` mit „Modus/Profil geändert“ ablehnte. Reine Rasteränderungen übernehmen
-nun die Revision des offenen Editierbilds und `snapshot()` liefert das aktuelle
-Raster für den Browser. Bild- oder Kamerageometrieänderungen tun das bewusst
-nicht. Die feste Dezimalposition wird als Kalibriermarker gezeichnet, aber
-weiterhin nicht als optisch erkannt ausgegeben.
-
----
-
-# 2026-09-11 — OCR-Selbstkalibrierung: verankerte Werkzeuge statt genereller OCR/Klassifikator
-
-## Problem
-
-Die Ausgangsmessung vom 2026-09-11 (`sevenseg/2` gegen alle gelabelten realen
-Annotationen, siehe [VALIDATION.md](VALIDATION.md)) zeigte, dass Rastergeometrie,
-Segmentschwellen und Anzeigepolarität weiterhin von Hand kalibriert werden
-mussten und dabei fehleranfällig waren. Für
-[PLAN_2026-09-11-ocr-selbstkalibrierung.md](PLAN_2026-09-11-ocr-selbstkalibrierung.md)
-waren mehrere naheliegende Alternativen zu bewerten, bevor Autofit
-(`fit_layout`) und Nachführung (`QuadTracker`) gebaut wurden.
-
-## Entscheidung
-
-Der Plan bleibt bei Werkzeugen, die **am bestätigten manuellen Ausschnitt
-verankert** sind — Autofit aus einem einmal getippten Sollwert und begrenzte
-Nachführung eines bereits bestätigten Quads — statt einer generellen,
-unverankerten OCR- oder Klassifikatorlösung.
-
-## Begründung / Alternativen
-
-- **ssocr** (`https://www.unix-ag.uni-kl.de/~auerswal/ssocr/`, GPLv3, C, nur
-  CLI) — vom Bediener vorgeschlagen. Verworfen als Primärpfad: liefert nur die
-  Ziffernfolge, keine Per-Segment-Evidenz, und `ReleaseGate.evaluate` verlangt
-  `contrast` und `min_margin` aus der Segmentanalyse ([OQ-19](open-questions.md)).
-  Dazu Subprozessgrenze je Bild und eigene Ziffernsegmentierung, die den
-  bereits bestätigten Rasterhinweis nicht nutzt. Als späteres, unabhängig
-  implementiertes Vergleichsbackend neben Tesseract ([OQ-15](open-questions.md))
-  weiterhin denkbar.
-- **Gitterfreier Per-Ziffer-Decoder** (ssocr-Logik in-process, Raster je Bild
-  neu herleiten). Verworfen, weil er [OQ-25](open-questions.md) in den
-  **Lesepfad** erbt: `fit_ocr_box` wählt an dem realen Netzteil konsequent die
-  falsche Zeile (untere `A`-Anzeige statt oberer `V`-Anzeige, IoU 0,0 an
-  beiden Bildern). Als Vorschlag ist das folgenlos, im Lesepfad wäre es eine
-  stille Ablesung der falschen Messgröße — die Haupt-/Nebenanzeige-
-  Verwechslung aus `Konzept.md` §7. Die brauchbare Hälfte (Selbstskalierung je
-  Ziffer) ist stattdessen **verankert** aufgenommen: `fit_layout` optimiert
-  nur innerhalb einer Umgebung des bereits bestätigten Rasters.
-- **Kleiner Ziffernklassifikator, rein synthetisch trainiert.** Umgeht das
-  Annotationsproblem, nicht das Datenproblem — `Konzept.md` §9 und der
-  Docstring von `layout.py` sagen beide, dass synthetische Daten ein reales
-  Testset ergänzen und nie ersetzen. Dazu: Softmax ist keine
-  Fehlerwahrscheinlichkeit (`AGENTS.md`), die Freigabe bräuchte einen neuen
-  Evidenzvertrag ([OQ-19](open-questions.md)), und der IMX500-*Converter*
-  fehlt auf dem Pi ([OQ-11](open-questions.md)). Gehört nach ROADMAP-P8, nicht
-  in diesen Plan.
-- **Rasterfeinschliff je Bild** (Projektionsprofil zieht die Zellgrenzen pro
-  Frame nach). Aus diesem Plan gestrichen: Phase C (`QuadTracker`) fängt
-  starre Bewegung des ganzen Quads bereits ab, und ein Feinschliff ohne
-  Verankerung am bestätigten Raster bringt nur bei nicht-starren Änderungen
-  im Ausschnitt etwas — und würde ohne Verankerung dieselbe
-  Haupt-/Nebenanzeige-Verwechslung aus OQ-25 erben. Als eigener Punkt
-  festgehalten in [OQ-27](open-questions.md), nicht gebaut.
-
-## Konsequenz
-
-`fit_layout` (`src/dispread/ocr/autofit.py`) und `QuadTracker`
-(`src/dispread/track.py`) bleiben beide auf den einmal bestätigten manuellen
-Ausschnitt bezogen — kein Ersatz für `manual_roi`, kein automatisch
-übernommener Wert ohne diese Verankerung. Eine reale Messschwäche entdeckt:
-`thickness_ratio`/`inset_ratio` sind für den aktuellen Punktabtast-Decoder
-strukturell wirkungslos (nie gelesen in `sevenseg.py`) — offen als Teil von
-[OQ-28](open-questions.md). Die Nachführungsschwellen (`max_shift`,
-`max_rotation_deg`, `min_score`) bleiben unvalidierte Vorabdefaults —
-[OQ-26](open-questions.md).
-
----
-
-# 2026-09-18 — Datensatz-Sammelmodus: eigener Rohbild-Sammelpfad statt Lockerung der produktiven ROI-/Clip-Voraussetzungen
-
-## Problem
-
-Reale, unkalibrierte Prüfbilder sollten im Browser gesammelt werden können,
-ohne Segmentraster oder bestätigtes Produktionsprofil vorauszusetzen. Die
-bestehende Clipaufnahme (`Controller._clip_start`) verlangt genau das:
-bestätigte Geometrie, Livebild und einen konstanten sichtbaren Wert je Clip.
-
-## Entscheidung
-
-Ein vollständig eigenständiger Speicher- und Bedienpfad
-(`src/dispread/workbench/datasets.py`, `dataset_capture.py`, `dataset.js`)
-statt einer Lockerung der bestehenden `roi`-/`clip.start`-Voraussetzungen.
-Eigene Geräteregistrierung mit UUID und Split-Sperre, eigene Capture-Tokens
-(getrennt vom kleinen ROI-Editor-Cache `Controller.frames`), eigenes
-`DatasetStore`-Lock, eigene `dataset.*`-Kommandos über das bestehende
-`/command`.
-
-## Begründung / Alternativen
-
-- **`clip.start`/`clip.stop` um einen unkalibrierten Modus erweitern.**
-  Verworfen: hätte bedeutet, `confirmed`-Prüfungen dort probeweise zu
-  umgehen — genau die Art Lockerung, die AGENTS.md für Freigaberegeln
-  ausschließt, und die bestehenden Clip-Regressionstests (Manifest,
-  Schreibfehlerbehandlung, `write_failures`) hätten für einen zweiten,
-  unverwandten Anwendungsfall mitgepflegt werden müssen.
-- **Zielbox/Label direkt in `ValueRecord` oder das Profilschema aufnehmen.**
-  Verworfen: `ValueRecord` ist der stabile Vertrag aus Konzept.md §8 und
-  darf laut Aufgabenstellung nicht angefasst werden; ein getipptes Label ist
-  zudem strukturell etwas anderes als ein erkannter Wert und darf nach
-  Konzept.md §7 niemals in `ValueReader`/`ReleaseGate` einfließen.
-- **Bestehenden `Controller.frames`-Editor-Cache für Capture-Tokens
-  wiederverwenden.** Verworfen: der ist an Profil-/Editorlogik gekoppelt
-  (Revision, `roi`-Bestätigung) und auf vier Einträge mit stiller
-  FIFO-Verdrängung ausgelegt — der Sammelmodus braucht dagegen eine
-  explizite Ablehnung statt Verdrängung bei Erreichen des Limits
-  (`MAX_OPEN_CAPTURES`).
-
-## Konsequenz
-
-Der Sammelmodus ergänzt den bestehenden Betriebspfad, ohne dessen
-Freigaberegeln zu berühren: `ValueRecord`, `ReleaseGate` und
-`TelegramFormatter` sind unverändert, Capture/Save fassen `self.config`,
-`self.tracker` und `self.reading` nicht an (siehe Tests in
-`tests/test_dataset_capture.py`). Kosten: zwei parallele Speicherpfade
-(`clips/` und `datasets/samples/`) mit ähnlicher, aber bewusst nicht
-gemeinsamer Schreiblogik — vertretbar, weil beide unterschiedliche
-Garantien geben (ein Clip ist ein konstanter Wert über die Zeit, eine
-Sample-Probe ein Einzelbild mit Zielbox).
-
----
-
-# 2026-09-23 — Doku-Seite: Zensical statt KI-Wiki, Hosting auf Cloudflare Pages mit Forgejo-Anmeldung
-
-## Problem
-
-Die Doku ist umfangreich (> 20 000 Zeilen Markdown), hatte aber keine
-Navigation, keine Suche und keine API-Referenz. Wer nur Zugriff auf das
-Forgejo-Repo hat, soll sie als Web-Oberfläche lesen können.
-
-## Entscheidung
-
-* **Generator: Zensical** über die vorhandenen Markdown-Dateien, dazu eine
-  API-Referenz aus den Docstrings (mkdocstrings). Kein KI-generiertes Wiki.
-* **Build:** Forgejo-Runner auf dem Pi (Label `picam-docs`, Host-Modus,
-  per systemd abgeschottet). Ergebnis ist immer ein Offline-ZIP am Lauf.
-* **Hosting: Cloudflare Pages mit einer eigenen Pages Function** als
-  Zugriffsschutz. Anmeldung über Forgejo, Zugang nur mit Leserecht am Repo.
-  Live geht ein Stand nur nach bestandener Schutzprüfung auf einem
-  Prüfstand. Details in [HOSTING.md](HOSTING.md).
-
-## Begründung / Alternativen
-
-- **KI-Wikis** (Repowise, FSoft CodeWiki, deepwiki-open, Google Code Wiki,
-  DeepWiki). Verworfen: Sie erzeugen plausibel klingende Fehler, und im
-  Kalibrierlabor ist eine falsche Beschreibung schlimmer als eine fehlende.
-  Repowise schrieb über `src/dispread` nachweislich Unzutreffendes. Die
-  gehosteten Varianten können nur öffentliche GitHub-Repos.
-- **MkDocs + Material.** Verworfen: Material ist seit November 2025 im
-  Wartungsmodus, MkDocs 2.0 streicht Plugins und damit mkdocstrings. Zensical
-  ist der Nachfolger vom Material-Team und liest dieselbe Konfiguration.
-  **Sphinx + MyST** wäre die konservative Rückfallebene, die Markdown-Dateien
-  bleiben dafür unverändert.
-- **Hosting in Forgejo selbst.** Nicht möglich: Forgejo 15 hat keine Pages,
-  HTML aus dem Repo kommt als `text/plain` mit `nosniff`. Ein HTML-Renderer im
-  iframe (`app.ini`) hat offene Fehler und trägt keine mehrseitige Seite.
-  Das **Wiki** trüge nur schlichtes Markdown ohne Zensical-Oberfläche.
-- **Eigener Dienst** (Forge-Pages, oauth2-proxy). Technisch am saubersten,
-  die Daten blieben im Haus. Verworfen, weil es keinen zusätzlichen Server
-  geben soll. Den Pi als Webserver wollten wir nicht, weil er das Messgerät ist.
-- **Cloudflare Access (Zero Trust)** vor Pages. Zuerst gewählt, dann
-  verworfen: Auch der kostenlose Plan verlangt eine hinterlegte
-  Kreditkarte. Die Pages Function prüft zudem genauer, nämlich die
-  Repo-Rechte statt einer E-Mail-Regel. Dafür ist ihr Anmelde-Code selbst
-  geschrieben statt ein Fertigprodukt.
-- **Gemeinsames Passwort** (Basic Auth in der Function). Verworfen: Es wäre
-  nicht an Forgejo-Konten gebunden, und wer das Projekt verlässt, kennt es weiter.
-- **GitHub Pages.** Verworfen: ohne Enterprise Cloud öffentlich.
-- **Netlify, Vercel, Codeberg Pages.** Verworfen: Zugriffsschutz nur
-  kostenpflichtig, Hobby-Tarif nicht für gewerbliche Nutzung, bzw. öffentlich
-  und nur für Open Source gedacht.
-- **GitLab.com Pages** mit Zugriffsschutz im Free-Tarif. Verworfen: Jeder
-  Leser bräuchte ein GitLab-Konto, und private Gruppen sind seit August 2026
-  auf 5 Nutzer begrenzt.
-
-## Konsequenz
-
-Die Doku liegt zusätzlich bei Cloudflare. Der Schutz hält Fremde fern, nicht
-den Anbieter. Zugelassen ist genau, wer das Repo in Forgejo lesen darf.
-Entzogene Rechte wirken spätestens nach 8 h (Sitzungsdauer). Lehre aus einem
-ersten, von Hand angelegten und ungeschützten Pages-Projekt: Kein Deploy ohne
-automatische Schutzprüfung davor.
-Zensical ist jung (0.0.x) und deshalb in `requirements-docs.txt` gepinnt.
-# 2026-09-25 — Logitech StreamCam statt Raspberry Pi AI Camera (IMX500)
-
-## Problem
-
-Die IMX500 war über Wochen der Engpass jeder Kamerasitzung. Die
-RP2040-Brücke zwischen Pi und Sensor blieb beim Streamstart hängen (OQ-22):
-zuerst nach 20–25 Starts je Boot, am 2026-09-24 schon beim 8. Start, und
-nach einem Warmreboot war nicht einmal der erste Start sicher. Jede Sitzung
-musste deshalb mit einem Streambudget und wenigen Starts geplant werden. Ein
-Wedge kostete einen Reboot. Am 2026-09-25 fiel die Kamera zusätzlich
-**mitten in einem laufenden Stream** aus (I2C-Fehler `-121`,
-„Camera frontend has timed out"), nachdem sie mechanisch bewegt worden war.
-Der Fokus ließ sich nur mechanisch am Objektiv einstellen, und die
-AI-Funktionen des Sensors nutzte das Projekt nicht (die mitgelieferten
-Modelle taugen nicht für Messverstärker-Displays, der Primärpfad ist die
-bestätigte manuelle ROI).
-
-## Entscheidung
-
-Nutzerentscheidung 2026-09-25: offizieller Wechsel auf die **Logitech
-StreamCam** (USB 3, UVC, USB-ID `046d:0893`), angebunden über V4L2
-(`v4l2://`, `UvcSource`). Die IMX500-Pfade (`picamera2://`, `imx500://`,
-Streamstart-Budget, ScalerCrop) sind außer Betrieb. Doku und Verweise auf
-die IMX500 bleiben für eine mögliche Rückumstellung erhalten, sind aber als
-historisch gekennzeichnet. Spec
-`docs/superpowers/specs/2026-09-25-streamcam-switch-design.md`, Plan
-`docs/superpowers/plans/2026-09-25-streamcam-switch.md`.
-
-## Begründung
-
-Ein Test am 2026-09-25 zeigte, dass die StreamCam alles liefert, was die
-Ernte braucht: 1920×1080 YUYV mit 25–30 fps, Fokus per Software
-(`focus_absolute` = 48 am besten bei abgeschaltetem Autofokus), etwa
-3,6 px je Punktspalte des GSV-Sensor-Glases (Schwelle 2,6 px) und je Bild
-einen V4L2-Pufferzeitstempel in CLOCK_MONOTONIC. Es gibt keinen
-Streamstart-Wedge und kein Startbudget, und der Fokus lässt sich
-reproduzierbar im Profil speichern.
-
-## Alternativen
-
-* **IMX500 behalten und OQ-22 weiter verfolgen** (Testplan mit dem
-  Kernel-Maintainer: Standard-cmdline, dann Kernel-Zweig
-  `naushir/linux#imx500_tests`). Verworfen: offener Ausgang, jeder Versuch
-  kostet Reboots, und der Ausfall mitten im Stream wäre damit nicht
-  erklärt.
-* **Kameradienst**, der die IMX500 einmal beim Boot öffnet und Bilder
-  verteilt (vorgemerkte Idee vom 2026-09-25). Verworfen: umgeht nur den
-  Wedge beim Start, nicht den Ausfall im Stream, und hätte 3–4 Tage Arbeit
-  gekostet.
-* **Fokus der IMX500 mechanisch nachstellen**, sonst alles lassen.
-  Verworfen: löst weder Wedge noch Ausfall.
-
-## Konsequenz
-
-* Kamerazeitstempel liegen jetzt in CLOCK_MONOTONIC statt BOOTTIME
-  (`TimeBaseKind.V4L2_MONOTONIC`). Jede Aufnahme misst den Versatz
-  BOOTTIME − MONOTONIC zu Beginn und Ende (`session.json`), und alle
-  Auswerter rechnen über `records.to_boottime_ns` um. Fehlt der Versatz oder
-  lag ein Suspend dazwischen, wird abgelehnt.
-* Die Semantik des UVC-Zeitstempels (Belichtung oder Pufferempfang) ist
-  offen (OQ-43). Deshalb ist vor der ersten StreamCam-Ernte eine
-  **Timing-Kalibrierung Pflicht** (`timing-calibration.py`,
-  `var/calibration/timing-streamcam.json`). Das Schutzfenster M = 695 ms der
-  IMX500 gilt nicht mehr.
-* Profile haben Schema 3 mit einem `camera`-Block (Fokus, Belichtung,
-  Weißabgleich, Verstärkung). IMX500-Profile (Schema 2) bleiben für Import
-  und Datensatz lesbar, `harvest.py` lehnt sie für neue Ernten ab.
-* Die Kamera der Werkbank (`dispread serve`) ist außer Betrieb, bis die
-  StreamCam dort angebunden ist; `--simulate` läuft weiter.
-* Es gibt keine Treiber-Bildnummer mehr (`sensor_sequence` fehlt).
-  Aussetzer erkennt `frame_gaps` in `session.json` über die Zeitstempel.
-
-# 2026-09-29 — Aufnahme zuerst in den RAM, dann auf die SD-Karte
-
-## Problem
-
-Bei den StreamCam-Ernten stieg der Anteil verworfener Bilder von 0–1 % am
-2026-09-28 auf 16–34 % am 2026-09-29. Ein Subagent hat das gemessen:
-* Die SD-Karte, ein No-Name-Modell, schafft mit fsync 7,1 MB/s. Die
-  Aufnahme braucht 5,9 MB/s.
-* Zeitweise schreibt die Karte sekundenlang gar nicht. In `sc6` gab es 14
-  Stillstände über 0,5 s, bis etwa 42 s am Stück.
-* Die Kodierung (JPEG q95, 13 ms je Bild, GIL frei) und die CPU sind nicht
-  der Engpass.
-* Ein Nebeneffekt: Weil der serielle Thread `commands.jsonl` selbst schrieb,
-  verlängerten die Hänger die GSV-Sendepausen. Daraus entstanden lange
-  `telegrammluecke`-Ablehnungen.
-
-## Entscheidung
-
-`sync-record.py --staging-root /dev/shm` für Ernten. Die Aufnahme läuft
-vollständig in tmpfs, erst danach wird mit fsync auf die Karte kopiert.
-`commands.jsonl` bekommt einen eigenen Schreiber. Der Platz wird vorab
-geprüft, ein Kopierfehler lässt die Zwischenablage stehen. Die Bildrate
-bleibt bei 15 fps.
-
-## Alternativen
-
-* **Größere Warteschlange:** Um 42 s zu überbrücken, wären etwa 630 Bilder
-  nötig, also 3,9 GB BGR. Zudem lag die mittlere Schreibrate von 3,8 MB/s
-  unter dem Bedarf. Verworfen.
-* **Mehrere Schreiber-Threads:** Die Kodierung ist nicht der Engpass.
-  Verworfen.
-* **Niedrigere JPEG-Qualität:** Das würde die Eingangsbilder des
-  Dot-Matrix-Lesers unbemerkt verschlechtern. Nur mit eigener `loo`-Prüfung
-  denkbar, vorerst verworfen.
-* **Ernte mit 5 fps:** Der Import wählt ohnehin höchstens 3 Bilder je
-  Plateau. Das bleibt eine Option, falls der RAM knapp wird. Zurückgestellt,
-  bis eine echte Aufnahme mit Zwischenablage vorliegt.
-* **Nur den Ausschnitt um das Quad speichern:** verlustfrei und klein, aber
-  ein größerer Umbau (Koordinaten in Import, Profil und Referenzbild).
-  Später.
-* **Schnellere Karte oder USB3-SSD für `var/`:** empfohlen, aber
-  Hardware. Die Softwaremaßnahme hilft unabhängig davon.
-
-## Konsequenz
-
-* Eine Ernte belegt während der Aufnahme bis zu etwa 2,3 GB RAM (geschätzt).
-* Ist nicht genug frei, lehnt `sync-record.py` vor dem Start ab.
-* Das Kopieren nach der Aufnahme dauert einige Minuten.
-* Der Nachweis an der Kamera steht aus (TODO.md).
-
-
-## 2026-09-29 — Einrichtungsassistent für Ernte-Aufstellungen
-
-### Entscheidung
-
-Das Quad einer neuen Dot-Matrix-Aufstellung wird aus dem sichtbaren
-Punktraster geschätzt. Die feste Anzeigegeometrie (16 Zellen, 5×7 Punkte
-plus Cursorzeile) verankert die Homographie; mehrere mögliche Startlagen
-werden geprüft und eine unklare Lage abgelehnt. Qualitätsprüfungen und
-Overlays gehen in einen Vorschlag, den weiterhin ein Mensch bestätigt.
-Ein `FEHLER` kann nur mit dokumentierter Begründung übersteuert werden.
-
-### Verworfene Alternativen
-
-* Der bisherige Glasdetektor allein: Er traf bei den gespeicherten
-  StreamCam-Aufstellungen teils die Blende oder Reflexe statt des Glases.
-* Vier von Hand abgelesene Stützpunkte: Sie lieferten die Referenzquads,
-  waren aber der zeitaufwendigste Einrichtungsschritt.
-* Isotrope Glättung im entzerrten Bild: Die vertikale Streckung erzeugte
-  doppelte Punktkandidaten zwischen den tatsächlichen Zeilen.
-
-### Konsequenz
-
-Der Assistent verwendet benannte Vorabschwellen und speichert Kennzahlen
-neben der Ampel. Sechs vorhandene Standbilder prüfen die Geometrie
-offline; Kamerazugriff und tatsächliche Einrichtungsdauer sind noch nicht
-auf echter Hardware mit dem Nutzer geprüft.
-
-## 2026-09-30 — Mehrdeutige Plusanker und breite Hinweisboxen
-
-### Entscheidung
-
-Die automatische Rasteranpassung prüft räumlich getrennte plausible
-Plusanker. Konkurrierende gültige Raster mit ähnlich vielen Punkten
-werden abgelehnt. Liefern die ersten acht Startlagen keinen Fit, wird
-eine zweite begrenzte Runde geprüft. Bei einer breiten grünen Hinweisbox
-wird ein kleinerer geschätzter Punktabstand als zusätzlicher Startversuch
-genutzt. Die aus dem Format bekannten Leerzellen und der Zeilen- und
-Zellen-Bias begrenzen weiterhin die Annahme eines Rasters.
-
-### Verworfene Alternativen
-
-* **Nur der stärkste Plusanker:** Ein zweites vollständiges Display mit
-  einem einzigen schlechter erkannten Pluspunkt würde nicht geprüft.
-* **Unbegrenzte Startlagensuche:** Sie hätte die ohnehin hohen Laufzeiten
-  auf dem Raspberry Pi ohne begründeten Sicherheitsgewinn vergrößert.
-* **Aus der grünen Box direkt ein Quad ableiten:** Die Glasfläche ist
-  größer als die Zeichenzeile; ihre Grenzen sind keine Punktkoordinaten.
-
-### Konsequenz
-
-Auf sechs gespeicherten Aufstellungen trifft der Fit mit automatisch
-erkannter grüner Hinweisbox die bestätigten Ecken auf höchstens 0,57 px.
-Ein synthetischer Fall mit zwei fast gleich gut erkannten Anzeigen wird
-als mehrdeutig abgelehnt. Echte Mehrfachanzeigen und andere Glasformen
-bleiben für den ersten gemeinsamen Kameralauf offen.
-
-## 2026-10-01 — Leser genügt für den GSV-Sensor, weiter mit dem Messpfad
-
-### Entscheidung
-
-Der Nutzer hat Variante B gewählt. Der Dot-Matrix-Leser (`stufe2c`) gilt
-für den GSV-Sensor (Displaytech 161A) als ausreichend validiert:
-* Abnahme 3: 215/0/0 an `ab5` und `ab6`.
-* Lesetest `sc7`: 111/111.
-
-Als Nächstes wird er in den Messpfad eingebunden: Werkbank bzw.
-`dispread serve` mit StreamCam, Ausgabe an GSVmulti. Das beginnt, sobald
-Nacharbeit 5 am Einrichtungsassistenten gemergt ist.
-
-### Verworfene Alternativen
-
-* **Variante A:** weitere Aufstellungen ins Training, neu einfrieren als
-  `stufe2d`, dann Abnahme 4. Das verbessert die Abdeckung, schiebt aber das
-  eigentliche Ziel, die Messwertübertragung, weiter hinaus. Der Leser hat
-  in drei Läufen auf neuen Aufstellungen keinen falschen Wert geliefert.
-
-### Konsequenz
-
-Die Freigabe nennt die Grenzen ausdrücklich: nur Raumlicht, ein Gerät, eine
-Einheit, keine anderen Lichtquellen. Neue Trainings- oder Abnahmerunden gibt
-es nur noch, wenn sich daran etwas ändert.
-
-## 2026-10-12 — Live-Cockpit als neue Sites-Website
-
-Der Nutzer hat ein zunächst privates, deutsches Live-Cockpit mit den
-Hauptbereichen „In Arbeit“, „Als Nächstes“ und „Projektzustand“ bestätigt.
-Die schriftliche Spezifikation steht in
-[Projektcockpit](superpowers/specs/2026-10-12-projektcockpit-design.md);
-Spezifikation und Umsetzungsplan wurden freigegeben. Die Website ist
-[privat veröffentlicht](https://picam-ai-cockpit.me-me-system-9148.chatgpt.site).
-
-GitHub-Prüfungen und Statusdokumente erhalten Quellen-, Datum- und
-Commit-Bezug. Historische grüne Prüfungen gelten nicht als aktueller
-Nachweis; widersprüchliche Dokumente bleiben sichtbar. Die Datenanbindung
-ist über den für Sites zugelassenen, ausschließlich lesenden
-GitHub-Connector umgesetzt. Die Site besitzt ein eigenständiges
-Quellrepository unter `sites/picam-ai-cockpit`. 27 fachliche Tests,
-TypeScript, Build und lokale Browserprüfungen bestehen. Der gehostete
-Live-Zugriff mit Besucheranmeldung ist noch nicht bestätigt; ein
-technischer Site-Zugriff liefert keine Besucher-Connector-Berechtigung.
-
-Ein periodisch erzeugter Snapshot wurde wegen seiner geringeren
-Aktualität zurückgestellt. Eine Erweiterung der bestehenden Doku hätte
-die gewünschte eigenständige Übersicht weniger direkt erfüllt. Eine
-pauschale Codequalitätsnote würde die unterschiedlichen Prüf- und
-Validierungsbelege zu stark vereinfachen.
-
-## 2026-10-12 — Cockpit: Timeline und Codebase-Auswertung
-
-Der Nutzer hat die Überarbeitung mit grafischer P0–P8-Phasenfolge, dunklerer
-Navigation, Codebase-Zahlen und dezenten Animationen freigegeben. Die
-Timeline verwendet die vorhandenen Phasen und Exit-Kriterien statt eines
-unbelegten Kalenderplans. Die Sprachverteilung beruht auf Dateiendungen
-und Dateigrößen des vollständigen, Commit-gebundenen GitHub-Dateibaums.
-Codezeilen wurden als Alternative zurückgestellt: Sie verlangen zusätzliche
-Dateiabrufe und wären ohne getrennte Definition von Leerzeilen und Kommentaren
-missverständlich. Eine Qualitätsnote wird weiterhin nicht abgeleitet.
-Die Site bleibt privat; keine neue Abhängigkeit wurde eingeführt.
-
-## 2026-10-12 — Forgejo ist das Hauptrepository des Cockpits
-
-Der Nutzer hat klargestellt, dass GitHub nur Mirror ist, und den Wechsel
-auf das private Forgejo-Repository `l.hentschke/picam-ai` autorisiert.
-Die Forgejo-Läufe bestanden am aktuellen Commit, während der Mirror ältere
-oder ungeeignete Prüfläufe zeigte. GitHub-Prüfungen als Hauptnachweis wurden
-deshalb verworfen; ein stiller Fallback auf den Mirror würde den falschen
-Prüfstand erneut einführen. GitHub bleibt nur als Mirror verlinkt.
-
-Ein passender Forgejo-Connector wurde bei der Plugin-Suche nicht gefunden.
-Die vorhandenen Datenflüsse verwenden stattdessen feste, serverseitige
-Forgejo-GET-Aufrufe. Der vom Nutzer gelieferte Read-only-Token liegt als
-Sites-Geheimnis außerhalb von Quellcode, Browser und Veröffentlichungspaket.
-Die Site bleibt für denselben privaten Empfängerkreis zugänglich.
-
-Die Zeilenanalyse nutzt das authentifiziert geladene Archiv des gewählten
-Commits und prüft die gezählten Dateien gegen ihre Git-Blobs. Einzelne
-Dateiabrufe wurden zugunsten des begrenzten Archivs zurückgestellt.
-Paginierung und ein gemeinsames Zeitlimit begrenzen API-Arbeit; Zeilen
-werden ohne pro Zeile angelegte Arrays gezählt. Quelltext mit Kommentaren
-und Leerzeilen wird nicht mit ausführbaren Codezeilen oder Qualität
-verwechselt. Spezifikation und Plan wurden unter bestehenden Identitäten
-im Repository und der Library korrigiert.
-
-## 2026-10-13 — Doku-Pflege: Korrekturrunden statt Einmal-Lauf
-
-### Entscheidung
-
-Der Codex-Doku-Lauf bekommt Ablehnungen des Gates zurück und darf sie in
-höchstens zwei fortgesetzten Runden derselben Session beheben
-(`codex exec resume`). Die Pfadgrenzen bleiben unverändert: Korrigiert wird
-nur innerhalb der Doku-Dateien, die der Gate ohnehin zulässt. Generierte
-Prüfungen, die Codex nicht beheben darf (OQ-Index, Tour-Fakten), stoppen
-den Job schon vor dem Codex-Aufruf.
-
-### Verworfene Alternativen
-
-* **Neue Session pro Korrektur:** verliert den Kontext des ersten Laufs und
-  müsste Repo und Auftrag erneut lesen; teurer und ohne Wissen, welche
-  Änderung abgelehnt wurde.
-* **Unbegrenzte Runden:** keine Kostengrenze, und ein im Doku-Rahmen
-  unlösbarer Fehler (etwa in einer Szene) würde den Lauf bis zum Timeout
-  ziehen.
-* **Codex darf auch Code, Szenen oder Tests anpassen:** der Job pusht ohne
-  Review direkt nach `master`, und das Gate prüft nur Doku (keine pytest-
-  oder Hardwareprüfung). Ein Code-Fix bräuchte einen eigenen Ablauf mit
-  Pull Request und menschlicher Abnahme.
-
-### Konsequenz
-
-Kleine eigene Fehler (Anker, Codeblock-Links, fehlender Status) behebt der
-Lauf selbst; abgelehnte Stände bleiben als Patch-Artefakt prüfbar. Eine
-Korrekturrunde kostet etwa so viel Eingabe-Token wie der bisherige Verlauf.
-
-
-## 2026-10-21 — Referenz im Live-Lauf getrennt aufzeichnen
-
-**Entscheidung (Task 5):** Der serielle Referenzstrom bleibt ein separates
-Audit mit einem Portleser und einem Dateischreiber, begrenzter Warteschlange
-und Verlustzähler. Die bewährten GSV-2AS-Helfer liegen gemeinsam in
-`dispread.gsv2as_serial`; Live-Recorder, `sync-record.py` und
-`gsv-registers.py` verwenden dieselbe Kodierung und dieselben Wartezeiten.
-Eine zweite Portverbindung für den Werteplan würde Antwortbytes stehlen;
-kopierte Helfer würden bei Protokollkorrekturen auseinanderlaufen. Beide
-Alternativen sind deshalb verworfen. Die Referenz als Eingabe für Pipeline
-oder Gate widerspräche Konzept §7 und bleibt strukturell ausgeschlossen.
-
-Der Controller hat den Zielkonflikt beim Stoppen ausdrücklich aufgelöst:
-rein lesend höchstens zwei Sekunden, mit Werteplan erst Rückstellung und
-Prüfung, insgesamt höchstens 20 Sekunden. Verkürzte Gerätewartezeiten oder
-„gestoppt“ vor abgeschlossener Rückstellung sind verworfen. Es gibt keine
-Live-Prüfung von EEnow; der Hinweis beschreibt ausschließlich den bereits
-bekannten Befund. Abgleich und die Grenze der Toleranzlauf-Zuordnung stehen
-in [Anleitung Kapitel 10](anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich).
-
-## 2026-10-23 — R13-14: Offline-Profile dauerhaft von Live trennen
-
-Die Offline-Einrichtung speist zwei gespeicherte Einzelbilder und deren
-Aufnahmezeiten in den vorhandenen `assist_measure`-Vertrag ein. Fit,
-Rasterfeinschliff, Prüfungen, Gegenlesen und `propose_with_fit` bleiben
-unverändert; Live behält Fokus, Mittelung, Wiederholungen und echte
-Wartezeit. Ein zweiter kopierter Fit-/Prüfpfad wurde verworfen, weil er vom
-Live-Verhalten abweichen könnte. Eine zusätzliche Extraktion aus dem
-Live-Dienst ist durch die vorhandene Kamera-/Zeitinjektion unnötig.
-
-`SessionProfile` erhält ein optionales boolesches Feld `offline`, das bei
-bestehenden Profilen ohne Feld ausgelassen wird. Nur `r13-replay.py` erlaubt
-es ausdrücklich beim gemeinsamen Pipeline-Aufbau; `LiveSession.start`
-weist es vor Leser-, Quellen- und Ausgabedateizugriff ab. Eine Markierung
-nur im Dateinamen oder in rohem JSON wurde verworfen: Beim Laden und
-Speichern würde die Sperre sonst verloren gehen. Bestätigt wird nur ohne
-FEHLER und ohne Override, mit `confirmed_by: offline-auswertung`. Der
-Stabilitätsabstand bleibt wie im Live-Dienst mindestens 15 Sekunden.
-Die beiden neuen Winkelaufnahmen scheitern schon am Rasterfit; Befunde
-und Grenzen stehen in VALIDATION.md und im Task-R14-Bericht.
-
-Fixrunde 1 schliesst auch die Kamera-Ernte: `require_live_profile` in
-`session_profile.py` wird vom Pipeline-Aufbau und von `harvest.py` verwendet.
-Die Pruefung weist sowohl `offline: true` als auch die Bestaetigungsherkunft
-`offline-auswertung` ab, selbst nach manuellem Entfernen des Flags. Eine nur
-im Live-Pipeline-Aufbau liegende Sperre wurde verworfen, weil Harvest die
-Kamera ueber `sync-record.py` startet und diesen Aufbau umgeht. Reine
-Dateiauswertungen und der ausdrueckliche Replay-Opt-in bleiben moeglich.
-
-## 2026-10-28 — R13-20: Lokale Displaybelichtung nach dem Fokus
-
-Die Gesamtbild-Automatik bleibt nur Ausgangspunkt nach dem Fokus. Der
-Live-Assistent misst anschließend die Anzeige und übernimmt die besten
-festen Regler in Kameradiagnose und Profil. Eine bloße Warnung wurde als
-einzige Abhilfe verworfen: Sie erklärt die Unterbelichtung, korrigiert sie
-aber nicht. Eine Korrektur im Leser wurde ebenfalls ausgeschlossen; das
-Quellbild muss brauchbar sein und Referenzwerte dürfen das Lesen nicht
-beeinflussen.
-
-Vor dem Rasterfit steht noch kein Quad zur Verfügung. Daher p80 grüner
-Pixel innerhalb der vorhandenen Hinweisbox, nach dem Fit eine unabhängige
-Vorprüfung mit entzerrtem p80. Ungefiltertes hohes Boxperzentil verworfen,
-weil die Sicherheitsränder helle Umgebung enthalten können; das ist mit
-einem Fake reproduziert. Zwölf gespeicherte Bilder begrenzen die beobachtete
-Abweichung der gewählten Definition auf 4 Graustufen. Höchstens vier
-Korrekturrunden begrenzen die Einrichtung; bei Fehlschlag beste Werte und
-WARNUNG statt eines neuen Abbruchgrundes. Die reale Kennlinie und die
-Vorabgrenzen sind damit noch nicht allgemein validiert; Belege und Grenzen
-stehen im Laborjournal und in VALIDATION unter R13-20.
-
-## 2026-10-30 — R13-22: Bildlieferung unabhängig vom blockierten Read überwachen
-
-Der `CameraOwner` überwacht die monotone Host-Zeit seit der letzten
-Bildlieferung. Zwei Sekunden entsprechen rund 60 Bildabständen bei 30 fps
-und der vorhandenen `READ_FAIL_TIMEOUT_S`-Kulanz. Vor dem ersten Bild nach
-Start/Neustart gelten ab Leserstart nach Quellenöffnung eigene 5 s
-(`STREAM_START_TIMEOUT_S`). Dieselben 2 s auch beim Anlauf wurden verworfen:
-STREAMON und erster Read bei 1920×1080 YUYV unter Last sind ungemessen;
-vor dem ersten Bild entsteht kein Wert. Die 5 s sind Reserve und kein
-Hardwarebeleg. Ein bloßer Timeout in `UvcSource.frames()`
-wurde verworfen: Während OpenCV in `read()` blockiert, läuft diese Logik
-nicht. Stattdessen prüfen Status, Warten auf Bilder und die Rückkehr eines
-Reads die Frist unter derselben Zustandssperre. Der Stillstand bleibt bis
-zum erfolgreichen Quellenstart gespeichert; späte Bilder werden verworfen,
-damit ein bereits beendeter Lauf nicht stillschweigend wieder aktuell wird.
-
-Der Lauf endet über den bestehenden `CameraLost`-Pfad und wartet dabei nicht
-auf den Kamera-Lesethread. Gewaltsames Threadende oder Schließen der Quelle
-aus einem anderen Thread wurde ausgeschlossen; `stop()` meldet einen noch
-lebenden Thread nach begrenztem Join mit `False`, `restart()` lehnt dann ab.
-Bereits dieser Timeout setzt unabhängig von der Bildfrist einen sichtbaren
-Lesethread-Fehler mit `running=False`, `stalled=True`. Das Stop-Event darf
-keinen normal laufenden Stream vortäuschen; auch während des Joins warten
-leere Vorschauabrufe begrenzt. Quelldiagnosen (`read_error`, verworfene
-Zeitstempel seit letzter Lieferung/Start) ergänzen den gespeicherten Fehler,
-auch wenn sie erst beim späteren Ende des Reads vorliegen.
-Nach dessen Ende darf derselbe Owner eine neue Quelle starten.
-Die Vorschau erholt sich nicht selbst; die Bedienung verbindet manuell neu.
-
-`CAP_PROP_READ_TIMEOUT_MSEC` wird nicht gesetzt: Die OpenCV-4.10-Dokumentation
-beschränkt es auf FFmpeg/GStreamer, V4L2 implementiert es nicht. Eine globale
-Änderung von `OPENCV_VIDEOIO_V4L_SELECT_TIMEOUT` ist für die unabhängige
-Erkennung unnötig und bleibt aus. Tests verwenden ausschließlich blockierende
-Fake-Quellen; reale Abschluss- und Wiederanlaufzeiten sind nicht an Hardware
-geprüft. Quellen und Bedienfolgen stehen in der
-[Live-Anleitung](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).
-
-
-## 2026-10-30 — R13-24: Ähnlichkeitsversuch ohne Mindestverschiebung {#r13-24-konfiguration}
-
-`coarse_min_shift_px` entfällt. R13-19b sperrte Verschiebungen unter 2 px,
-weil ein zweiter starrer Fit ohne anderen Suchmittelpunkt denselben Versuch
-wiederholt hätte. Seit R13-19c schätzt ausschließlich der zweite Versuch
-zusätzlich einen gleichförmigen Maßstab; auch mit Offset (0,0) ist er daher
-sinnvoll. Schrägsicht am 30.10. zeigt den Fehler schon bei etwa −0,1 % Maßstab.
-
-Nur den Default auf 0 zu setzen wurde verworfen: gespeicherte Profile mit
-2.0 würden die wirksame Korrektur weiter verhindern. Eine Untergrenze für
-einen rein starren zweiten Fall wird ebenfalls nicht behalten, weil es diesen
-Fall im aktuellen Updatepfad nicht gibt. Beim Laden wird der bekannte
-Altparameter nach Prüfung auf Float, endlich und nicht negativ entfernt;
-das gilt für Konfiguration und Vorschlagskonfiguration. Damit passen alte
-Profile weiterhin zur normalisierten Konfiguration. Unbekannte Felder,
-fehlende bisherige Pflichtgrenzen und die Referenz-/Quad-/SHA-Bindung bleiben
-strikt. Der Parameter ist in neu serialisierten Konfigurationen nicht mehr
-enthalten. Die Grobantwort muss weiterhin endlich und stärker als 0,15 sein;
-Grobobergrenze und sämtliche Feinprüfungen bleiben unverändert.
-
-Nachweise und Grenzen: [R13-24-Validierung](VALIDATION.md#r13-24-kleiner-versatz-2026-10-30)
-und [Laborjournal](lab_journal.md#r13-24-kleiner-versatz).
-
-## 2026-10-30 — R13-25: Wiederfindbarkeit bei der Einrichtung {#r13-25-einrichtung}
-
-Die Laufschwelle bleibt bei 0,75. Schwache Regionen im schrägen Aufbau
-`live-20261030T133635Z` werden bei der Einrichtung ersetzt; niedrigere
-Laufschwellen oder gelockerte Streuung würden die Nachweisqualität schwächen.
-
-**Reviewkorrektur:** Die erste Lösung mit gemitteltem Zweitbild und vier
-zusätzlichen Halb-Pixel-Proben war zu optimistisch. Eine gewählte Region
-überschritt in keinem der 210 Diagnosebilder die Laufschwelle. Die frühere
-Begründung, diese Probe weise ausreichende Rauschreserve nach, ist verworfen.
-Stattdessen bleiben die acht ungemittelten Bilder des ohnehin aufgenommenen
-Stabilitätsstapels im Speicher. Sieben von acht müssen Peak ≥0,775, die
-Lauf-Eindeutigkeit, ein inneres Maximum und höchstens 2 px Abstand zum
-Sollort bestehen. Die Auswahl zählt nur solche Regionen für Streuung und
-zwei Ausfälle je Rahmenseite. Die Lageprüfung verhindert, dass eine andere
-ähnliche Struktur als Wiederfindbarkeit am unbewegten Sollort zählt.
-Die zusätzliche Phasenprobe am Zweitbild entfällt; die bereits bestehende
-Bewegungsprobe für neue Fasenstruktur bleibt unverändert.
-
-Die Kalibrierung vergleicht Probe-Ersatzbilder und spätere Diagnosebilder
-getrennt. Historische Laufbilder sind bereits bewegt: Für den Ersatz der
-stationären Setup-Aufnahme wird ausschließlich ganzzahlig verschoben, ohne
-Mitteln oder interpoliertes Entrauschen. Der unveränderte Tracker erhält
-weiter die ursprünglichen Laufbilder. Bildabschnitte außerhalb des
-Such-/Bewegungsbereichs bleiben im Gesamtergebnis sichtbar. Reserve 0,025
-ist ein Entwicklungswert und keine garantierte Rauschobergrenze.
-
-Das Speichern zusätzlicher Einzelbilder wurde verworfen: nur die vorhandenen
-Mittelbilder und Kennzahlen bleiben auf Platte. Manuelle Neubewertung
-verwendet dieselben Einzelbilder im Speicher und kontrolliert die Datei-SHA
-des gemittelten Zweitbilds. Ohne Speicherbelege ist neu einzurichten. Das
-bestehende `stability.png` wird bei der Vorschlagsbindung geprüft und gehasht,
-nicht erneut geschrieben.
-
-Bestätigte Profile werden beim Start nicht neu ausgewählt. Nur das reine
-Einrichtungsfeld `proposal_stability_peak_margin` entfällt aus dem Vergleich
-mit aktuellen Laufdefaults; die gespeicherte Konfiguration und
-Vorschlagsbindung bleiben erhalten. Abweichende Laufgrenzen wie ein hohes
-`min_peak` bleiben abgelehnt. Die frühere Aussage zu solchen Altprofilen war
-falsch und ist korrigiert.
-
-Der aktuelle Einzelbild-Kandidat erreicht die Abnahme nicht: 738→859 Tracks
-auf den geforderten 1.123 Bildern, aber drei vorherige Tracks verloren;
-im erweiterten Bestand dreizehn. Auch der Sweep verliert drei Tracks.
-Reserve- und mehrere Rangfolgenproben wurden ohne Lösung dieser Fälle
-verworfen. Eine Lockerung der Lauf-Gates zur Erhaltung der Annahmen bleibt
-verworfen. Die faire zusätzliche Halb-Pixel-Probe entfernt schwache und
-perfekte Bereiche; ein pauschal fehlender Nutzen ist nicht belegt. Dieser
-Stand wird deshalb als nicht abnahmefähige Entwicklung dokumentiert.
-
-[Messungen](VALIDATION.md#r13-25-stabile-rahmenregionen-2026-10-30),
-[Laborjournal](lab_journal.md#r13-25-stabile-rahmenregionen).
-
-### 2026-10-31 — R13-25 Runde 3: Minimalprinzip statt Neuwahl {#r13-25-runde-3}
-
-Die Neuwahl der Runde 2 tauschte bis zu 15 von 20 Bereichen. Schon ein
-Lagebias von 0,1 px kippte Grenzbilder der LCD-Randprüfung. Entschieden:
-Die bisherige Auswahl bleibt, nur probefällige Bereiche werden ersetzt, und
-ein Ersatz muss im starren Konsens der Einzelbilder liegen. Die Stufen sind
-die Laufgrenzen RMS 0,35, Mitte 0,50, Einzelresiduum 0,65 px.
-
-Verworfen, jeweils auf allen 1.492 Bestandsbildern gemessen:
-
-* reiner Nahersatz: 46–74 verlorene Bilder;
-* Mediankonsens und feste 0,35-px-Grenze: Reserve in mehreren
-  Einrichtungen unerfüllbar;
-* feste 0,50-px-Grenze: neue Verluste;
-* Lageprüfung auch für bewährte Bereiche: fast überall ohne Reserve;
-* Rückfall nach Kandidatenstärke;
-* gar kein Rückfall: `121101` würde abgelehnt.
-
-Den Rückfall ohne Lageprüfung meldet `nachfuehrung` als WARNUNG, die Person
-bestätigt (Konzept §4). Lockern der Laufgrenzen oder der Randprüfung bleibt
-verworfen. Der Stand ist nicht abnahmefähig: 4 verlorene Bilder, 22
-verlorene synthetische Tracks in `121101`.
-[Messungen](VALIDATION.md#r13-25-runde-3).
