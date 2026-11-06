@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Demo lieferte 599 statt 600 Werte (BQ5). Ursache: `ended` überholte den letzten Wert. Der Pi-Slot ist
+  Latest-only; der Producer setzte 1/rate nach dem letzten Wert `stop()`, und ein dann noch nicht abgefragter letzter
+  Wert wurde nie angeboten (`hub.py` `produce`). Jetzt wartet der Producer nach dem letzten Wert begrenzt
+  (`DEMO_FINAL_GRACE_S` = 2 s, Lease-Ablauf beendet früher) bis er angeboten und beantwortet ist
+  (`OutputState.settled`). Keine Lockerung von Barriere, unklarer Übergabe oder DUT-Sperre. Der „Stillstand nach
+  Demo-Ende“ im TLS-Rig war ein Messartefakt: `QTest.qWait` im Hauptthread hält die GIL und hungert Worker und
+  Server aus; mit `processEvents`+`sleep` läuft der Worker nach `ended` weiter.
 * 2026-11-06: Windows-Brücke ruckelte im Leerlauf (Diagnoseexport: 26 268 `exchange/idle` in 4,8 MB). Ursache:
   Worker pollte nach `idle` alle 10 ms, jedes Ereignis schrieb synchron (fsync) in den Diagnosespeicher und löste
   einen kompletten UI-Neuaufbau aus. Jetzt: adaptiver Leerlauftakt 50 → 200 ms (nach `written`/Nicht-Idle sofort

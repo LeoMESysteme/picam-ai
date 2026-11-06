@@ -21,6 +21,7 @@ from .types import PeerHello
 
 HEARTBEAT_INTERVAL_S = 1
 LEASE_TIMEOUT_S = 5
+DEMO_FINAL_GRACE_S = 2.0
 
 
 @dataclass
@@ -255,6 +256,7 @@ class BridgeHub:
             self.bind_run(run_id, state, transport=transport)
             def produce():
                 try:
+                    last = None
                     with (state.out_dir / 'records.jsonl').open('w', encoding='utf-8') as records:
                         for record in demo_records(count):
                             if stop.is_set():
@@ -262,6 +264,7 @@ class BridgeHub:
                             records.write(json.dumps(record.to_dict(), allow_nan=False) + '\n')
                             records.flush()
                             state.publish(record)
+                            last = record.frame_sequence
                             # Bounded waits also handle extremely small positive
                             # rates without overflowing the OS timeout. A silent
                             # expired client cannot reserve the bridge forever.
@@ -272,6 +275,15 @@ class BridgeHub:
                                 if remaining <= 0:
                                     break
                                 stop.wait(min(.2, remaining))
+                    # ``ended`` must not overtake the final value: a client that
+                    # polls late would otherwise get 599 of 600. Bounded; a silent
+                    # client loses its lease (_expire) and ends the wait too.
+                    grace = time.monotonic() + DEMO_FINAL_GRACE_S
+                    while last is not None and not stop.is_set() and not state.settled(last):
+                        self._expire()
+                        if time.monotonic() >= grace:
+                            break
+                        stop.wait(.02)
                 finally:
                     try:
                         state.stop()

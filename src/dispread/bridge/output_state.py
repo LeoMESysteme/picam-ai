@@ -143,6 +143,11 @@ class OutputState:
                 "barrier_id": barrier_id,
             }
 
+    def settled(self, frame_sequence):
+        """True once ``frame_sequence`` was offered and answered (any outcome)."""
+        with self._lock:
+            return self._pending is None and self._attempted_sequence >= frame_sequence
+
     def abandon_pending(self):
         """Record uncertainty; losing an ACK never proves non-delivery."""
         with self._lock:

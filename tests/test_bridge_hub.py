@@ -303,3 +303,31 @@ def test_delayed_demo_request_cannot_cross_lease_boundary(tmp_path, monkeypatch,
         resume.set()
         worker.join(1)
         hub.close()
+
+
+def test_demo_end_does_not_overtake_the_last_value(tmp_path):
+    """A demo of N values must be offered N times even if the client polls late:
+    ``ended`` may not discard the final, still unoffered value (BQ5, 599 of 600)."""
+    import time
+
+    hub = BridgeHub('pi', tmp_path)
+    lease = hub.attach('pc', 'network')
+    hub.exchange(lease.lease_id, dict(version=2, type='demo_request', request_id='d', pi_id='pi',
+                                      client_id='pc', run_id=None, transport='network', count=3, rate_hz=50))
+    run_id = hub.status()['run_id']
+    time.sleep(.3)                      # the client is late; the demo has produced all three values
+    offered = []
+    for number in range(6):
+        message = dict(request(hub, lease), request_id=f'p{number}', run_id=run_id)
+        reply = hub.exchange(lease.lease_id, message)
+        if reply['type'] != 'record':
+            break
+        offered.append(reply['record']['frame_sequence'])
+        hub.exchange(lease.lease_id, dict(message, type='ack', outcome='written',
+                                          frame_sequence=offered[-1], barrier_id=reply['barrier_id']))
+    assert offered == [2]               # latest-value semantics: the final value is still delivered
+    deadline = time.monotonic() + 3
+    while hub.status()['run_id'] is not None and time.monotonic() < deadline:
+        time.sleep(.02)
+    assert hub.status()['run_id'] is None
+    hub.close()

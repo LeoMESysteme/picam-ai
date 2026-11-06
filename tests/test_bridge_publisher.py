@@ -32,7 +32,7 @@ def test_demo_request_uses_separate_audit_and_run_id(tmp_path):
     hub = BridgeHub('pi', tmp_path)
     hub.attach('pc', 'network')
     run_id = hub.start_demo('pc', 'network', count=1, rate_hz=100)
-    hub._demo_thread.join(1)
+    hub._demo_thread.join(4)  # the final value waits (bounded) for the client, see DEMO_FINAL_GRACE_S
     meta = json.loads((tmp_path / 'demo' / run_id / 'demo.json').read_text())
     assert meta['demo'] is True and meta['provisional'] is True and meta['time_claim'] is False
     next_id = hub.start_demo('pc', 'network', count=1, rate_hz=100)
