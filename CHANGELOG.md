@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Hardwaregebundene Pi-Identität, öffentliche Zertifikats-/UART-
+  Signaturprüfung und widerrufbare Kopplung ergänzt. Einmalangebote mit
+  256 Bit verfallen nach höchstens 300 Sekunden auch bei Datenbanksperren;
+  dauerhafte Tokens bleiben gehasht und nach Client/Transport getrennt.
+  Lokale CLI provisioniert nur ausdrücklich und exportiert keine privaten
+  Schlüssel. 26 gezielte Tests bestanden; Server-/HTTP-Anbindung folgt.
+
 * 2026-11-06: Zwei historische GSVmulti-UCFs und eine originale Empfangsdatei
   samt Archivpfaden und Hashes als Vorlagenbelege gesichert. Inspektion und
   Manifestprüfung erkennen nur diese Originale; unbekannte Version und

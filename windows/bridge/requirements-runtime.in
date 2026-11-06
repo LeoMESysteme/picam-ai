@@ -2,3 +2,6 @@
 # Resolve for the chosen explicit Python >=3.13 Windows 11 x64 runtime.
 PySide6
 pyserial
+
+# Candidate only; Windows qualification and hash locks still required.
+cryptography==50.0.1

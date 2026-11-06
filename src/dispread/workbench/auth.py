@@ -1,12 +1,27 @@
 """Linux-PAM, kurzlebige Websessions; kein Passwortspeicher."""
 
+import os
+import pwd
+import re
 import secrets
 import time
 from collections import defaultdict, deque
 
 
-def authenticate(password):
+def pam_username(username=None):
+    """Explicit operator configuration or the effective local OS account."""
+    value = username if username is not None else os.environ.get("DISPREAD_PAM_USER")
+    if value is None:
+        value = pwd.getpwuid(os.geteuid()).pw_name
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}\$?", value):
+        raise ValueError("Ungueltiger PAM-Benutzername")
+    return value
+
+
+def authenticate(password, username=None):
     import PAM
+
+    username = pam_username(username)
 
     def conversation(_auth, queries, _data):
         replies = []
@@ -14,7 +29,7 @@ def authenticate(password):
             if kind == PAM.PAM_PROMPT_ECHO_OFF:
                 replies.append((password, 0))
             elif kind == PAM.PAM_PROMPT_ECHO_ON:
-                replies.append(("me-systeme", 0))
+                replies.append((username, 0))
             elif kind in (PAM.PAM_ERROR_MSG, PAM.PAM_TEXT_INFO):
                 replies.append(("", 0))
             else:
@@ -23,7 +38,7 @@ def authenticate(password):
 
     try:
         handle = PAM.pam()
-        handle.start("login", "me-systeme", conversation)
+        handle.start("login", username, conversation)
         handle.authenticate()
         handle.acct_mgmt()
         return True

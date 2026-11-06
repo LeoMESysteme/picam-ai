@@ -73,10 +73,55 @@ def positive_days(value):
     return days
 
 
+def bridge_command(args):
+    """Local OS-authorized provisioning/export only; never start a measurement."""
+    from dataclasses import asdict
+
+    from dispread.bridge.identity import DeviceIdentity, local_hardware_id
+    from dispread.bridge.pairing import PairingStore
+    from dispread.bridge.protocol import parse_profile
+    from dispread.bridge.types import BridgeProfile
+
+    directory = Path(args.directory)
+    if args.action == "revoke":
+        PairingStore(directory / "pairing").revoke(args.client_id)
+        print("Client-Zugang widerrufen")
+        return
+    load = DeviceIdentity.load_or_create if args.action == "identity" and args.provision else DeviceIdentity.load
+    identity = load(directory, local_hardware_id())
+    if args.action == "identity":
+        print(json.dumps({"pi_id": identity.pi_id, "certificate_sha256": identity.fingerprint}, indent=2))
+        return
+    profile = BridgeProfile(
+        schema=1, pi_id=identity.pi_id, name=args.name,
+        certificate_pem=identity.certificate_pem, certificate_sha256=identity.fingerprint,
+        endpoints=tuple(args.endpoint), protocol_version=2,
+    )
+    # Validate all operator-provided configuration before issuing an offer.
+    parse_profile(json.dumps(asdict(profile)).encode("utf-8"))
+    # Exclusive creation prevents accidental replacement of an exported profile.
+    fd = os.open(args.output, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            value = asdict(profile)
+            if args.pair:
+                value["pairing_offer"] = PairingStore(directory / "pairing").create_offer(args.transport, args.client_id)
+            raw = json.dumps(value, indent=2, ensure_ascii=False)
+            parse_profile(raw.encode("utf-8"))
+            stream.write(raw + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        Path(args.output).unlink(missing_ok=True)
+        raise
+    print(f"Verbindungsprofil: {args.output}")
+
+
 def parser():
     root = argparse.ArgumentParser(description="Kamera-Workbench und TUI")
     sub = root.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve")
+    serve.add_argument("--pam-user", default=None, help="PAM-Konto; sonst DISPREAD_PAM_USER oder lokales Dienstkonto")
     serve.add_argument("--host", default="100.122.154.35")
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("--camera", type=int, default=0)
@@ -118,12 +163,31 @@ def parser():
     tls = sub.add_parser("init-tls")
     tls.add_argument("--directory", default="var/workbench/tls")
     tls.add_argument("--host", default="100.122.154.35")
+    bridge = sub.add_parser("bridge", help="Pi-Identitaet und lokale Kopplung ohne Messstart")
+    bridge_sub = bridge.add_subparsers(dest="action", required=True)
+    identity = bridge_sub.add_parser("identity")
+    identity.add_argument("--directory", default="var/workbench/bridge")
+    identity.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")
+    export = bridge_sub.add_parser("export-profile")
+    export.add_argument("--directory", default="var/workbench/bridge")
+    export.add_argument("--output", required=True)
+    export.add_argument("--name", required=True)
+    export.add_argument("--endpoint", action="append", default=[])
+    export.add_argument("--pair", action="store_true", help="Einmalangebot fuer 300 Sekunden hinzufuegen")
+    export.add_argument("--transport", choices=["network", "uart"], default="network")
+    export.add_argument("--client-id")
+    revoke = bridge_sub.add_parser("revoke")
+    revoke.add_argument("--directory", default="var/workbench/bridge")
+    revoke.add_argument("client_id")
     return root
 
 
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        if args.command == "bridge":
+            bridge_command(args)
+            return 0
         if args.command == "serve":
             from .server import serve
 

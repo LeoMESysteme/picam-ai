@@ -58,6 +58,24 @@ Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
 bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
 [Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
 
+## Brücke v2: Identität und Kopplung
+
+Der Pi benötigt zusätzlich Debian `python3-cryptography`;
+`scripts/install-workbench.sh` deklariert es, ohne Qt/PyPI-Kopien einzuführen.
+Die vorhandene Testumgebung stellt cryptography 50.0.1 bereit; in dieser
+Umsetzung wurde nichts installiert. Windows führt cryptography 50.0.1
+als Buildkandidaten in seiner getrennten `.in`-Datei, nicht als bereits
+qualifizierten Windows-Lock.
+
+Die öffentliche Zertifikats-/Signaturprüfung ist auch ohne POSIX-Module
+importierbar. Persistente Identität und lokale Erstkonfiguration sind
+Pi-Aufgaben: Eigentümerverzeichnis 0700, private Identitätsdatei 0600,
+hardwaregebundene ID und RSA-3072-Zertifikat. Bereitstellung ausschließlich
+über ausdrückliches `dispread bridge identity --provision`; bestehende
+Zertifikate und laufende Dienste werden dabei nicht ersetzt. Offline-UART
+kann ein lokal exportiertes Profil mit höchstens fünf Minuten gültigem
+Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung folgt gesondert.
+
 ## Zensical-Pflege auf dem Forgejo-Runner
 
 Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
