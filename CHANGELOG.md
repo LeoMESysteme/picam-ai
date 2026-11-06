@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Echter `AppController` der Windows-App „GSVmulti-Brücke“
+  (`windows/bridge/src/dispread_bridge_app/app_controller.py`) erfüllt den `ControllerPort` mit dem Kern
+  (strikter Profilparser, `ConnectionManager`, `BridgeWorker`, `DeliveryJournal`, `CredentialStore`).
+  Client-ID und App-Zustand (Profil ohne Kopplungscode, Weg, Endpunkt, Portpaar, Schritt) versioniert unter
+  `%LOCALAPPDATA%\dispread-bridge\`; Kopplungscode nur im Speicher; Worker startet erst nach
+  authentifizierter Verbindung, Demo nur über ausdrückliche Aktion; kein Portpaar wird erzeugt (Treiberanbieter
+  unverifiziert), stattdessen „Vorhandenes Portpaar angeben“ (Chip „Portpaar manuell“); Sessionexport bleibt
+  gesperrt (manuelle Anleitung); Empfang bleibt „nicht nachgewiesen“; Diagnose-ZIP redigiert. Oberfläche:
+  neue Port-Methoden, Profil per Dialog/Drag&Drop/`.dispread`-Argument, Abbildung der Kern-Readiness
+  (`output_off`, `demo_only`, `blocked`, `ended`, `unavailable`) und aller Maschinencodes, Mock-Beispieldaten
+  aus den Einrichtungsschritten entfernt, `main.py` nutzt standardmäßig den echten Controller (`--demo-ui` bleibt
+  Fake). **Nur unter Linux offscreen und gegen einen lokalen TLS-Pi geprüft (Fake-COM); Windows-APIs (DPAPI,
+  pySerial-COM, Geräte, Instanzschutz), Treiber und GSVmulti ungeprüft; unsigniert.**
 * 2026-11-06: Interner Testbuild-Weg der Windows-App „GSVmulti-Brücke“: `windows/bridge/build-test.ps1`
   (ein Befehl, explizites Python ≥ 3.13 x64, frische venv, `PIP_CONFIG_FILE=NUL`, nur Binärpakete),
   `packaging/bridge-app.spec` (GUI-Ordnerpaket, `console=False`), `packaging/app_launcher.py`
