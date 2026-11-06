@@ -53,6 +53,14 @@ def settle(w):
     pump(100)
 
 
+def wait_until(pred, timeout=5000):
+    import time
+    end = time.monotonic() + timeout / 1000
+    while not pred():
+        assert time.monotonic() < end, 'erwartete Ansicht nicht erreicht'
+        QTest.qWait(20)
+
+
 def click(w, name):
     b = w.findChild(QPushButton, name)
     assert b is not None, name
@@ -64,22 +72,22 @@ def test_setup_walk_through_with_manual_port_pair_and_profile(real):
     c, w = real()
     assert c.context().mode == 'setup' and c.context().setup.variant == 'E1'
     click(w, 'btn_manual_pair')
+    wait_until(lambda: len(w.setup_view.findChildren(QRadioButton)) == 6 and not w.pool.activeThreadCount())
     assert c.context().setup.variant == 'E1manual'
     radios = w.setup_view.findChildren(QRadioButton)
     assert len(radios) == 6                      # je Seite drei COM-Ports, nichts vorgewählt
     radios[0].setChecked(True)                   # Brückenseite COM3
     radios[5].setChecked(True)                   # GSVmulti-Seite COM5
-    pump()
     click(w, 'btn_set_port_pair')
+    wait_until(lambda: c.context().setup.variant == 'E1ok')
     assert c.snapshot().components == 'manual_pair'
     assert c.context().setup.variant == 'E1ok'
     labels = ' '.join(lab.text() for lab in w.setup_view.findChildren(type(w.setup_view.lead)))
     assert 'nicht von der App geprüft' in labels
     w.setup_view.next_button.click()
-    pump()
-    assert c.context().setup.step == 2 and c.context().setup.variant == 'E2'
+    wait_until(lambda: c.context().setup.variant == 'E2' and w.setup_view.variant[0] == 'E2')
     w.open_profile_path(str(real.profile))
-    settle(w)
+    wait_until(lambda: c.context().setup.variant == 'E2b' and w.setup_view.variant[0] == 'E2b' and 'pair' in w.setup_view.buttons)
     assert c.context().setup.variant == 'E2b' and c.context().pi_name == 'Prüfstand 2'
     # Koppeln bleibt aus, bis der Fingerabdruck bestätigt ist
     assert not w.setup_view.buttons['pair'].isEnabled()
