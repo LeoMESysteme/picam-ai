@@ -4743,3 +4743,29 @@ Seite bis mindestens 30 Minuten Gesamtlauf. Tatsächliche Phasengrenzen aus
 Rückmeldung und Messmarken auswerten, keine geplante Zeit als beobachtet
 ausgeben. X-Hud-Vorschau-fps und Verbrauch des alten Controllers noch nicht
 belegt. Rohstatus: `var/diagnostics/werkbank-t13-20261106/status-run-start.json`.
+
+
+### T13-Lauf beendet und ausgewertet — 2026-11-06
+
+Leonhard meldet mehrfach leicht bewegte Anzeige, sinkende Lesequalität und
+am Ende dauerhaften Nachführhinweis. Lauf manuell nach 22 min 38,353 s beendet;
+keine volle 30-Minuten-Abnahme. Referenzabgleich erneut offline ausgeführt:
+0 Abweichungen unter 10.773 vergleichbaren Freigaben. In stabilen
+Referenzabschnitten sinkt der gültige Anteil von 100 % vor erster
+Bewegungsmarke auf 67,02 % während der Bewegungsphase und erholt sich danach
+auf 93,50 %. Bewegung und Zurückschieben sind als Bedienermarken belegt;
+das sind Meldezeiten, keine exakt gemessenen Bewegungsanfänge.
+
+Code und Zähler erklären den Dauerhinweis: zweite Fitstufe wird pro Bild
+abgeschlossen, war aber bei den letzten 8284 Bildern jedes Mal nötig;
+6605 Quads akzeptiert. `correcting` spiegelt verwendeten zweiten Fit,
+keinen noch laufenden Auftrag. Kein blockierter Leser; letztes Bild VALID.
+Exakte physische Ursache des Erstfit-Versagens nicht rekonstruierbar,
+weil Diagnosebilder deaktiviert und HUD nicht archiviert. OQ-63 erfasst
+Bilddiagnose und nötige Klärung der UI-Semantik, keine Implementierung.
+
+Status-/top-Beobachter nach Laufende gestoppt; Werkbank bleibt aktiv.
+Diagnose-Schnappschuss nach Lauf sowie Dienstjournal gesichert. Keine
+bestätigte Vorschau-aus-Phase: Lastunterschied nicht kausal bewerten.
+[Auswertung](quellen/werkbank-t13-2026-11-06.md) dokumentiert Zahlen,
+Zeitbasen, Methode und Grenzen; Rohdaten bleiben im Diagnoseordner.

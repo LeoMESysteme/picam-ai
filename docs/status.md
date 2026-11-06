@@ -6,30 +6,30 @@ Worktree bereinigt. Laufende Clients für geladene Hooks/Werkzeuglisten neu
 starten. Der bisherige fachliche Arbeitsstand folgt unverändert.
 
 Arbeitszweig `feat/werkbank-redesign`, Worktree
-`.claude/worktrees/feat-werkbank-redesign`. T13 läuft jetzt auf dem echten
-Dienst `dispread-werkbank-t13.service`, Oberfläche
-`https://100.122.154.35:8082/live`. Nutzer hat selbst bestätigt und gestartet:
-`live-20261106T112527Z/run-01`, Start 12:55:55 MEZ (11:55:55 UTC).
-Referenz aktiv, GSVmulti-Ausgabe aus, kein Test-Override. Zwischenstand bei
-82,677 s: 1434 VALID, 113 TRANSITION, 233 übersprungen; keine Auditfehler,
-Trackingverluste oder Referenz-Parserfehler. Noch keine Abnahme; spätere
-Statusproben enthalten auch UNREADABLE und sind vollständig auszuwerten.
+`.claude/worktrees/feat-werkbank-redesign`. Erster T13-Lauf beendet:
+`live-20261106T112527Z/run-01`, 12:55:55–13:18:33 MEZ, 22:38 min.
+Nutzer bewegte die Anzeige absichtlich mehrfach. 39.886 Datensätze,
+75,79 % VALID; 0 Abweichungen unter 10.773 eindeutig vergleichbaren
+Referenzfreigaben, 19.451 im Wechsel-Schutzfenster unentschieden, 5 ungedeckt.
+Keine Audit-/Kamerafehler. Noch keine vollständige T13-Abnahme.
 
-Zuerst etwa 15 Minuten mit geöffneter Seite, dann 15 Minuten ohne Seite.
-Nutzer soll gegen 13:11 MEZ die Seite schließen und Rückmeldung geben;
-wirkliche Phasengrenze erst dann markieren. Frühester 30-Minuten-Zeitpunkt
-13:25:55 MEZ. Lauf nicht automatisch beendet. Status- und top-Beobachter
-`dispread-t13-observe` / `dispread-t13-top` aktiv, maximal zwei Stunden;
-Rohdaten unter `var/diagnostics/werkbank-t13-20261106/`. Bei Abschluss beenden.
-X-Hud-Vorschau-fps und alter Controller-Verbrauch noch offen; keine Builds
-oder Tests während der Lastvergleichsphasen starten.
+Dauerhafte Korrekturanzeige: letzte 8284 Bilder alle mit zweitem Fit,
+6605 akzeptiert. Kein blockierter Lauf; letzter Datensatz VALID.
+`correcting` bedeutet derzeit „zweiten Fit verwendet“. UI-Semantik und
+physischer Grund der dauerhaften Erstfit-Ablehnung offen (OQ-63).
+Diagnosebilder waren aus; Nachanalyse kann die Bildursache nicht beweisen.
+[Auswertung](quellen/werkbank-t13-2026-11-06.md) enthält alle Befunde.
 
-UART-Brücke auf ausdrücklichen Nutzerwunsch zurückgestellt. Pi-Demosender
-beendet, ttyAMA0 frei. Letzter Versuch ohne TXD-Rückleitung: 0 bestätigte
-COM-Schreibvorgänge. Neuer Windows-PC: Python 3.15 / `.venv315`, COM6 FTDI
-(0403:6001, SER AB8556ZCA), Brücke COM6→COM5, GSVmulti COM4. Zusätzliche
-Leitung Kabel-TXD→physischer Pi-Pin 10 laut letzter Rückmeldung nicht
-angeschlossen. Vor Fortsetzung prüfen. Details im Laborjournal.
+Status- und top-Beobachter beendet. Werkbank weiter zum Ansehen aktiv auf
+`https://100.122.154.35:8082/live`, Dienst `dispread-werkbank-t13.service`.
+Vor neuer Abnahme: HUD/Bilddiagnose planen, Korrekturhinweis klären;
+anschließend >=30 Minuten und dokumentierten Vorschauvergleich durchführen.
+X-Hud-fps und isolierter Controllerverbrauch fehlen weiterhin.
+
+UART-Brücke bleibt zurückgestellt, Pi-Demosender beendet. Neuer Windows-PC:
+Python 3.15 / `.venv315`, COM6 FTDI, Brücke COM6→COM5, GSVmulti COM4.
+Letzter UART-Versuch ohne TXD-Rückkanal: 0 COM-Schreibbestätigungen.
+Kabel-TXD→physischer Pi-Pin 10 vor Fortsetzung bestätigen lassen.
 
 Die neue `/live`-Werkbank ist
 softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
@@ -52,7 +52,7 @@ startet und wartet auf Pi-Antwort. Erster Pi-Demoversuch `uart-demo-01`
 kontrolliert unterbrochen: 0 COM-Schreibbestätigungen. Nutzer bestätigt
 weiterhin nur GND/RXD verdrahtet, Rückkanal TXD→Pi-Pin 10 fehlt. Pi-Sender
 ist beendet und ttyAMA0 frei. Auf zusätzliche Leitung und erneute
-Bereitschaftsmeldung für später warten; T13-Leserabnahmelauf inzwischen aktiv. Der aktuelle praktische Schritt ist T13; UART-Demotest ist zurückgestellt.
+Bereitschaftsmeldung für später warten; T13-Leserabnahmelauf inzwischen beendet und ausgewertet. T13-Lauf 01 ist ausgewertet; UART-Demotest ist zurückgestellt.
 
 ## Übernahme und Abschluss
 
@@ -106,7 +106,7 @@ T13-Einrichtung steht im Laborjournal und in VALIDATION.md.
 
 ## Nächster Schritt
 
-1. Laufenden T13 mit Leonhard abschließen: echte Einrichtung, mindestens 30 Minuten
+1. Neue T13-Abnahme nach Klärung von OQ-63 mit Leonhard vorbereiten: echte Einrichtung, mindestens 30 Minuten
    Lauf mit Referenz, Vorschau-/Lastvergleich mit und ohne geöffnete Seite,
    übersprungene Bilder und Ressourcenverbrauch des alten Controllers.
 2. Erst danach Integration nach ausdrücklicher Merge-Freigabe.

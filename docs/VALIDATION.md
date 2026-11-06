@@ -6566,3 +6566,25 @@ sind ein datierter Rohstatus-Zwischenstand; keine bestandene Dauerabnahme,
 kein Vorschauvergleich und keine physische Latenzaussage. Weitere
 5-s-Statusproben stehen im Diagnoseordner; spätere Zähler können abweichen.
 [Aufbau und geplante Vergleichsphasen](lab_journal.md).
+
+
+## 2026-11-06 — T13-Lauf 01 ausgewertet, Abnahme noch offen
+
+Start 12:55:55,272 MEZ, Stopp 13:18:33,625 MEZ, Dauer 22 min 38,353 s.
+39.886 Datensätze: 30.229 VALID (75,79 %), 6633 TRANSITION (16,63 %),
+2979 UNREADABLE (7,47 %), 45 STALE (0,11 %). 2546 Referenztelegramme ohne
+Parserfehler/Lücken/Queue-Verlust. Nach bestehendem 695-ms-Referenzschutz:
+0 Abweichungen unter 10.773 vergleichbaren Freigaben, 19.451 unentschieden
+im Wechselfenster und 5 ohne Referenzabdeckung. Kein Nachweis für alle Werte.
+
+Gültiganteil auf stabilen Referenzabschnitten vor erster Bewegungsmarke
+5608/5608 = 100 %, während markierter Bewegung bis Zurückschieben
+1784/2662 = 67,02 %, danach 3381/3616 = 93,50 % (letzte Teilphase 96,81 %).
+Letzte 8284 Bilder alle mit zweitem Nachführfit, davon 6605 akzeptiert;
+Leser läuft bis zum letzten gültigen Auditbild. 1800 Trackingverluste
+insgesamt, keine Audit-/Kamerafehler. 739 übersprungen = 1,82 % von gelesen
+plus übersprungen. Dienst-CPU in 271 top-Proben Median 131,5 % eines Kerns,
+p95 148,4 %. Keine bestätigte Seite-geschlossen-Phase, kein X-Hud-fps-Nachweis,
+keine isolierte Controllerlast, weniger als 30 Minuten: T13 bleibt offen.
+Zeitbasen V4L2_MONOTONIC, gespeicherte BOOTTIME-Versätze und HOST_MONOTONIC;
+keine physische Latenzaussage. [Vollständige Auswertung und Belege](quellen/werkbank-t13-2026-11-06.md).

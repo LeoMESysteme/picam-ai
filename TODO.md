@@ -28,7 +28,11 @@ In dieser Reihenfolge:
    ([GSVmulti-Stand](docs/GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt)).
 2. **Hardware-Abnahme Aufgabe 13 (T13) mit Leonhard:** echte Einrichtung,
    Lauf ≥ 30 min mit Referenz, Vorschau-fps, übersprungene Bilder mit und
-   ohne Seite, CPU-Last, Verbrauch des alten Controllers. Nur mit Leonhards
+   ohne Seite, CPU-Last, Verbrauch des alten Controllers. Erster Lauf vom
+   06.11. dauerte 22:38 min und enthielt absichtliche Bewegungen: keine
+   vollständige T13-Abnahme. [Auswertung](docs/quellen/werkbank-t13-2026-11-06.md),
+   dauerhafter zweiter Fit und missverständlicher Korrekturhinweis:
+   [OQ-63](docs/open-questions.md#oq-63). Nur mit Leonhards
    Freigabe im Chat; Merge nach `master` nur mit seinem ausdrücklichen OK.
 3. **Spec Laufablage, Export und Aufbewahrung**
    ([OQ-60](docs/open-questions.md#oq-60)). Vorgaben: immer ein gesetzter

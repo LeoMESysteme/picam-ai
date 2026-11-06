@@ -58,6 +58,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-62](#oq-62) | — | offen | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
+| [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3155,3 +3156,29 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   einschließlich fehlendem Adapter und Wiederanlauf abnehmen.
 * **Antwort landet in:** [Geplante Funktionen](../PLANNED_FEATURES.md),
   [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md) und einer späteren Umsetzungsspec.
+
+
+---
+
+<span id="oq-63"></span>
+
+## OQ-63 — Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen?
+
+* **Status:** teilweise geklärt (2026-11-06) · erkannt beim T13-Störlauf
+* **Befund:** Nutzer meldet dauerhafte Nachführung. Letzte 8284 Auditbilder
+  benötigen alle die zweite Stufe, 6605 Quads akzeptiert. Leser liefert bis
+  zum Stopp weiter gültige Werte; kein blockierter Lauf. Der zustandslose
+  Tracker prüft stets gegen die feste Referenz. `track.correcting` bedeutet
+  aktuell „zweiter Fit verwendet“, nicht „Auftrag noch nicht abgeschlossen“;
+  der Viewer erneuert dadurch fortlaufend den Korrektureffekt.
+* **Offen:** Welcher konkrete Erstfit-Fehler und welche Bildänderung die
+  dauerhafte zweite Stufe verursachen; Diagnosebilder waren aus, X-Hud nicht
+  archiviert. UI muss erfolgreichen zweiten Fit, erfolglose Suche und echte
+  Störung verständlich unterscheiden. Keine automatische Referenzübernahme
+  oder Abschwächung der Akzeptanzregeln ohne gesonderte fachliche Prüfung.
+* **Klärung:** Begrenzten Bild-/HUD-Diagnoselauf mit reproduzierten Bewegungen
+  aufzeichnen, Erst-/Zweitfit-Gründe vergleichen und UI-Semantik spezifizieren.
+  OQ-26 bleibt die allgemeine Hardware-Validierung; OQ-59 betrifft spätere
+  Bildaufzeichnung/Nachberechnung.
+* **Antwort landet in:** [Laufauswertung](quellen/werkbank-t13-2026-11-06.md),
+  [VALIDATION](VALIDATION.md) und einer späteren UI-/Tracking-Spezifikation.
