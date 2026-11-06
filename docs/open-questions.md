@@ -3130,6 +3130,15 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   USB-Adapter anschließen). Mögliches alternatives Angebot: ein einziger
   Download-/Ausführungsbefehl für ein Einrichtungsskript. Werkbank oder EXE
   erzeugt möglichst eine passende GSVmulti-Sessiondatei zum Öffnen/Importieren.
+* **Ergänzung 2026-11-06, Laufzeit:** Auf dem neuen PC wählte `py -3`
+  ausschließlich Visual-Studio-Python 3.7; der Brückenimport scheiterte an
+  `enum.StrEnum` (benötigt Python >= 3.11). Die EXE muss ohne vorinstalliertes
+  Python und neben alten Versionen funktionieren, ohne diese zu verändern.
+  Eine Skriptalternative prüft die Version vor dem Erstellen der Umgebung
+  und richtet eine geeignete isolierte Laufzeit automatisch ein. Kein blindes
+  Vertrauen auf `py -3` oder PATH. Abnahmefälle: kein Python, nur Python 3.7,
+  mehrere vorhandene Versionen; verständliche Hinweise bei gescheiterter
+  Einrichtung statt eines Python-Tracebacks.
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
   Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung

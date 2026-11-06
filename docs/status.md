@@ -35,7 +35,12 @@ Windows-EXE mit Installation/Konfiguration und GUI, Wahl UART/Netzwerk,
 konkrete Bereitschaftshinweise sowie möglichst automatisch erzeugte
 GSVmulti-Sessiondatei. Ein Ein-Befehl-Skript ist eine mögliche Alternative.
 In TODO, PLANNED_FEATURES und OQ-62 erfasst; noch keine neue Funktion
-implementiert. Der aktuelle UART-Demotest bleibt der nächste praktische Schritt.
+implementiert. Ergänzt: unabhängig von fehlendem/altem System-Python;
+Skriptalternative mit vorab geprüfter, automatisch eingerichteter isolierter
+Laufzeit. Abnahme auch ohne Python und mit ausschließlich Python 3.7.
+Aktueller Windows-Test blockiert am Visual-Studio-Python 3.7; offizieller
+Python-3.13-Installer und Befehle für separate `.venv313` ausgegeben,
+Installation und erneuter Brückenstart noch nicht bestätigt. Der aktuelle UART-Demotest bleibt der nächste praktische Schritt.
 
 ## Übernahme und Abschluss
 

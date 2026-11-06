@@ -88,6 +88,12 @@ Alternative ein einziger Befehl zum Herunterladen und Ausführen eines
 Einrichtungsskripts. Werkbank oder EXE erzeugt möglichst eine passende
 GSVmulti-Sessiondatei zum Öffnen/Importieren in GSVmulti. Normale Benutzer
 sollen Python-Umgebung, COM-Paar und Portzuordnung nicht selbst zusammensetzen.
+Die EXE muss ohne vorinstalliertes Python und neben alten Installationen
+(z. B. Visual-Studio-Python 3.7) funktionieren; sie darf nicht zufällig den
+Systeminterpreter wählen. Eine Skriptalternative prüft die Version vorab und
+richtet automatisch eine geeignete isolierte Laufzeit ein. Bestehende
+Python-/Visual-Studio-Installationen erhalten. Frisch-PC-Tests decken sowohl
+„kein Python“ als auch „nur Python 3.7“ ab.
 Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
 ([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
 ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den

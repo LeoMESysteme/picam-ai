@@ -10,7 +10,12 @@ Nach Auswahl der GSVmulti-Ausgabe führt die Werkbank durch die Verbindung.
 Bevorzugter Einstieg ist eine herunterladbare Windows-EXE mit automatischer
 Installation und Konfiguration, Wahl UART/Netzwerk und einfacher
 Bereitschaftsanzeige mit konkreten nächsten Schritten (z. B. USB anschließen).
-Ein Ein-Befehl-Einrichtungsskript ist eine mögliche Alternative. Werkbank
+Die EXE muss unabhängig von fehlendem oder veraltetem System-Python
+funktionieren. Ein Ein-Befehl-Einrichtungsskript ist eine mögliche Alternative;
+es muss die Laufzeit vorab prüfen und passend isoliert einrichten, statt
+blind `py -3` zu verwenden. Vorhandene Python-/Visual-Studio-Installationen
+bleiben erhalten. Abnahmetests: frisches Windows ohne Python und Windows mit
+nur Python 3.7. Werkbank
 oder EXE soll eine zum gewählten Weg passende GSVmulti-Sessiondatei erzeugen,
 die nur noch in GSVmulti geöffnet/importiert wird. Python-Umgebung,
 Treiber/virtuelles Portpaar und Zuordnung sollen nicht manuell verkettet
