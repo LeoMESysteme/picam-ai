@@ -9,8 +9,8 @@ import {confirmBody, confirmModel, fieldsReady} from '../src/dispread/workbench/
 import {exposureHTML} from '../src/dispread/workbench/static/live/setup/exposure.js';
 import {stepsHTML} from '../src/dispread/workbench/static/live/setup/steps.js';
 import {REGION_NETWORK_ERROR, editFeedback, regionAt, resultText} from '../src/dispread/workbench/static/live/viewer/regions-edit.js';
-import {storageItem} from '../src/dispread/workbench/static/live/shell.js';
-import {trackingModeText} from '../src/dispread/workbench/static/live/run/inspector.js';
+import {referenceItem, storageItem} from '../src/dispread/workbench/static/live/shell.js';
+import {diagnosticsText, trackingModeText} from '../src/dispread/workbench/static/live/run/inspector.js';
 
 const latest = (over) => ({frame_sequence: 7, status: 'valid', raw_text: '+1.2345', unit: 'mV/V',
   reject_reasons: [], ...over});
@@ -741,4 +741,39 @@ test('tracking mode texts as on the old page; before a run only known modes are 
   assert.equal(trackingModeText('frame_local'), 'frame_local');
   assert.equal(trackingModeText('frame_local', {known: true}), '');
   assert.equal(trackingModeText(undefined, {known: true}), '');
+});
+
+test('diagnostics text as on the old page: counts, first error, copy in progress and saved, leftovers', () => {
+  const diag = {enabled: true, saved: 4, bytes: 12_500_000, dropped_queue: 2, dropped_limit: 1,
+    dropped_memory: 2, dropped_mark_rate: 3, write_errors: 1, first_error: 'Platte voll',
+    staging: '/dev/shm/dispread-diagnose-x', copied: false};
+  const copying = diagnosticsText({diagnostics: diag, diagnose_kopie: true,
+    diagnostic_leftovers: [{path: '/test/dispread-diagnose-old', bytes: 2_500_000}, {path: '/test/b', bytes: null}]});
+  assert.equal(copying, 'Diagnose: 4 Bilder, 12.5 MB; Queue verworfen: 2, Limit verworfen: 1, RAM verworfen: 2, ' +
+    'Markenbilder verworfen: 3, Schreibfehler: 1 · Diagnose wird kopiert … · Platte voll · RAM-Ablage: ' +
+    '/dev/shm/dispread-diagnose-x · Verbliebene RAM-Ablage: /test/dispread-diagnose-old (2.5 MB)' +
+    ' · Verbliebene RAM-Ablage: /test/b (Größe unbekannt)');
+  const copied = diagnosticsText({diagnostics: {...diag, first_error: null, write_errors: 0, copied: true},
+    diagnose_kopie: false});
+  assert.match(copied, /Schreibfehler: 0 · Kopie gesichert$/);
+  assert.doesNotMatch(copied, /wird kopiert|Platte voll|RAM-Ablage/);
+  assert.match(diagnosticsText({diagnostics: {...diag, first_error: 'x', staging: null}}), /· x · RAM-Ablage: —/);
+  // Ältere Status ohne die neuen Zähler: 0 statt undefined.
+  assert.match(diagnosticsText({diagnostics: {enabled: true, saved: 0, bytes: 0, dropped_queue: 0,
+    dropped_limit: 0, write_errors: 0}}), /RAM verworfen: 0, Markenbilder verworfen: 0/);
+  assert.equal(diagnosticsText({diagnostics: {enabled: false, reason: 'vom Bediener deaktiviert'}}),
+    'Diagnose aus: vom Bediener deaktiviert');
+  assert.equal(diagnosticsText({}), 'Diagnose aus: nicht gestartet');
+});
+
+test('reference count in the status bar: an unknown count reads "–", never 0', () => {
+  for (const lines of [undefined, null, Number.NaN]) {
+    const item = referenceItem({enabled: true, lines});
+    assert.match(item.html, /Referenz <b>–<\/b> Telegramme/);
+    assert.equal(item.title, 'Referenz: – Telegramme');
+    assert.doesNotMatch(item.html, /<b>0<\/b>/);
+  }
+  assert.match(referenceItem({enabled: true, lines: 0}).html, /<b>0<\/b>/);
+  assert.match(referenceItem({enabled: true, lines: 12345}).html, /<b>12\u202f345<\/b>/);
+  assert.equal(referenceItem({enabled: false, reason: 'kein Referenzlauf'}).title, 'ohne Referenz: kein Referenzlauf');
 });

@@ -38,6 +38,15 @@ was ist die Konsequenz.
   * **CI:** `playwright.yml` führt `playwright.live.config.ts` als eigenen
     Schritt aus (Fake-Server Port 8767, Doku 8766). Es gibt einen eigenen
     Bericht `playwright-report-live`.
+    In CI wiederholt die Suite einen fehlgeschlagenen Test einmal, weil der
+    Pi-Runner gedrosselt wird und die Suite 0,5-s- und 1,5-s-Grenzen prüft.
+    Lokal gibt es keine Wiederholung.
+  * **Referenzzähler:** Die Statusleiste zeigte bei unbekannter
+    Telegrammzahl „Referenz 0 Telegramme“. Unbekannt heißt jetzt „–“, wie im
+    Lauf-Dock; eine unbekannte Zahl darf nicht als null erscheinen.
+  * Tests für den Testmodus-Haken (neue Revision oder Sitzung verlangt
+    einen neuen Haken) und für die Diagnosezeile (erster Fehler,
+    Kopie läuft/gesichert, Schreibfehler, Reste) kamen zurück.
 
 * 2026-11-04: Nacharbeit am Übungslauf und an der Hilfe der Live-Seite.
   * **Falscher Hinweis nach dem Übungslauf:** Wer die Übung mitten im Lauf

@@ -819,8 +819,9 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
-  await hook(page, '/__test__/state', { state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
-    profile: { confirmed_by: 'L. Hentschke' } });
+  const blocked = { state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
+    profile: { confirmed_by: 'L. Hentschke' }, setup: { proposal_revision: 'rev-1' } };
+  await hook(page, '/__test__/state', blocked);
   const title = page.getByRole('banner');
   const start = title.locator('.hdr-act').getByRole('button', { name: 'Lauf starten', exact: true });
   await expect(start).toBeDisabled();
@@ -834,6 +835,21 @@ test('Laufstart: Optionen im Popover, Testlauf und Werteplan bestätigen im Dial
   await expect(pop).toContainText('EEnow = 0');
   await pop.getByText('Testmodus (nur zu Testzwecken)').click();
   await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  await expect(start).toBeEnabled();
+
+  // Jede neue Revision und jede neue Sitzung verlangt einen neuen Testmodus-Haken.
+  const tick = pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ });
+  await hook(page, '/test/revision', {});
+  await expect(tick).not.toBeChecked();
+  await expect(start).toBeDisabled();
+  await tick.check();
+  await expect(start).toBeEnabled();
+  await page.waitForTimeout(1200);
+  await expect(tick).toBeChecked(); // Statusabrufe ohne Änderung lassen den Haken stehen.
+  await hook(page, '/__test__/state', { ...blocked, session_id: 'neue-sitzung', setup: { proposal_revision: 'rev-1-bump' } });
+  await expect(tick).not.toBeChecked();
+  await expect(start).toBeDisabled();
+  await tick.check();
   await expect(start).toBeEnabled();
 
   let requests = 0;

@@ -247,7 +247,7 @@ export function storageItem(storage) {
     title: `${prefix}SD-Speicher: ${free} frei`};
 }
 
-function referenceItem(reference) {
+export function referenceItem(reference) {
   // Texte aus der alten Live-Seite (woertlich).
   if (reference?.restoring) {
     return {cls: 'warn', html: '<span class="sq warn"></span><span class="tx">Werte werden zurückgestellt …</span>',
@@ -255,8 +255,10 @@ function referenceItem(reference) {
   }
   if (reference?.error) return {cls: 'err', html: `<span class="sq err"></span><span class="tx">${esc(reference.error)}</span>`, title: reference.error};
   if (reference?.enabled) {
-    return {cls: '', html: `<span class="sq ok"></span><span class="tx">Referenz <b>${grp(reference.lines ?? 0)}</b> Telegramme</span>`,
-      title: `Referenz: ${reference.lines} Telegramme`};
+    // Unbekannte Zahl als "–", nie als 0 (wie das Lauf-Dock).
+    const lines = finite(reference.lines) ? grp(reference.lines) : '–';
+    return {cls: '', html: `<span class="sq ok"></span><span class="tx">Referenz <b>${lines}</b> Telegramme</span>`,
+      title: `Referenz: ${lines} Telegramme`};
   }
   const text = `ohne Referenz: ${reference?.reason || 'nicht gestartet'}`;
   return {cls: '', html: `<span class="sq stale"></span><span class="tx">${esc(text)}</span>`, title: text};
