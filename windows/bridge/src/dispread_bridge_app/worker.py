@@ -8,6 +8,10 @@ from dispread.bridge.types import BridgeEvent
 from dispread.gsv_bridge import BridgeAuditError, BridgeSession, DeliveryBlockedError, DeliveryUncertainError
 
 
+IDLE_FIRST_S, IDLE_MAX_S = 0.05, 0.2
+_QUIET = frozenset({'idle', 'ended'})
+
+
 @dataclass(frozen=True)
 class WorkerStatus:
     """Local demo COM readiness, to combine with W1's connection readiness.
@@ -22,6 +26,7 @@ class WorkerStatus:
     code: str | None
     demo_only: bool = True
     gsv_receipt_confirmed: bool = False
+    exchanges_total: int = 0      # additiv: alle Poll-Runden, auch die nicht gemeldeten Leerlaufrunden
 
 
 class BridgeWorker:
@@ -47,6 +52,8 @@ class BridgeWorker:
         self._com = None
         self._last_event = self._failure = None
         self._state = 'idle'
+        self._exchanges = 0
+        self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
 
     @staticmethod
     def _copy_event(event):
@@ -59,7 +66,8 @@ class BridgeWorker:
             return WorkerStatus(self._state, self.is_active(),
                                 self._state == 'running' and self._failure is None
                                 and not self._stop.is_set(),
-                                None if self._failure is None else self._failure.code)
+                                None if self._failure is None else self._failure.code,
+                                exchanges_total=self._exchanges)
 
     @property
     def last_event(self):
@@ -152,6 +160,8 @@ class BridgeWorker:
     def _run(self):
         com = link = None
         recovering = False
+        idle_delay = 0.0          # adaptiver Leerlauftakt; 0 = naechster Poll sofort
+        last_outcome = None
         try:
             pi_id = self.connection.profile.pi_id
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
@@ -160,7 +170,7 @@ class BridgeWorker:
                 try:
                     current = self.connection.data_link()
                     if recovering and current is link:
-                        self._stop.wait(0.05)
+                        self._wait(0.05)
                         continue
                     if com is None or recovering:
                         self._check_journal(recovering=recovering)
@@ -174,7 +184,17 @@ class BridgeWorker:
                         recovering = False
                     link = current
                     outcome = session.exchange(link, com)
-                    self._event('exchange', outcome=outcome)
+                    with self._lock:
+                        self._exchanges += 1
+                    # Wiederholtes idle/ended nur als Uebergang melden; alles
+                    # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
+                    if outcome not in _QUIET or outcome != last_outcome:
+                        self._event('exchange', outcome=outcome)
+                    last_outcome = outcome
+                    if outcome in _QUIET:
+                        idle_delay = IDLE_FIRST_S if idle_delay == 0 else min(idle_delay * 2, IDLE_MAX_S)
+                    else:
+                        idle_delay = 0.0
                     # ended completes a run, not the authenticated connection.
                     # Only a later explicit producer run supplies more values.
                 except (DeliveryBlockedError, DeliveryUncertainError, BridgeAuditError):
@@ -189,9 +209,12 @@ class BridgeWorker:
                         self._check_journal(recovering=True)
                         self._event('recovering', code='connection_unavailable')
                         recovering = True
-                    self._stop.wait(0.05)
-                # Prevent an idle/busy loop without buffering historical values.
-                self._stop.wait(0.01)
+                    last_outcome, idle_delay = None, 0.0
+                    self._wait(0.05)
+                # Idle polling backs off (50 -> 200 ms, far below the 1 s heartbeat
+                # and 5 s lease); after any real outcome the next poll is immediate,
+                # so no value waits behind a queue and none is buffered.
+                self._wait(idle_delay)
         except DeliveryBlockedError:
             self._event('blocked', strict=False, code='unknown_invalidation', outcome='unknown')
         except DeliveryUncertainError:

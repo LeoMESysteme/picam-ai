@@ -220,7 +220,7 @@ def test_slow_uart_keeps_latest_bounded(tmp_path):
         assert done.wait(2)
         w.stop()
         assert len(com.payloads) == 2
-        assert sequences == [10000, 10000]
+        assert sequences[:2] == [10000, 10000]  # Poll ohne Wartezeit: weitere Runden moeglich
         assert [r.frame_sequence for r in db.attempts()] == [1, 10000]
 
 
@@ -652,3 +652,112 @@ def test_stop_interrupts_transient_recovery(tmp_path):
             w.stop()
         assert not w.is_active() and connection.disconnected
     assert not com.closed and com.payloads == []
+
+
+# ---- BQ4: Leerlauftakt und Ereignisverdichtung (injizierte Uhr, keine echte Zeit)
+class ScriptLink:
+    """Antwortet je Poll aus einem Skript; danach dauerhaft idle."""
+    def __init__(self, script=()):
+        self.script, self.messages, self.polls = list(script), [], 0
+    def send(self, msg):
+        self.messages.append(msg)
+        self.polls += msg['type'] == 'poll'
+    def receive(self):
+        rid = self.messages[-1]['request_id']
+        if self.messages[-1]['type'] != 'poll':
+            return dict(version=1, type='idle', request_id=rid, run_id=None, release_block=None)
+        reply = self.script.pop(0) if self.script else dict(type='idle', run_id=None, release_block=None)
+        return dict(reply, version=1, request_id=rid)
+
+
+class SimClock:
+    """Ersetzt Event.wait: sammelt Wartezeiten, stoppt nach simulierter Zeit."""
+    def __init__(self, w, limit):
+        self.w, self.limit, self.now, self.waits = w, limit, 0.0, []
+    def __call__(self, seconds):
+        self.waits.append(seconds)
+        self.now += seconds + 0.001           # 1 ms Netzzeit je Runde
+        if self.now >= self.limit:
+            self.w._stop.set()
+        return self.w._stop.is_set()
+
+
+def run_sim(tmp_path, script=(), limit=10.0):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    link, events = ScriptLink(script), []
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        from dispread_bridge_app.worker import BridgeWorker
+        w = BridgeWorker(Connection(link), lambda: Com(), db, events.append)
+        clock = SimClock(w, limit)
+        w._wait = clock
+        w._run()
+    return link, events, clock
+
+
+def test_idle_poll_rate_is_bounded(tmp_path):
+    link, events, clock = run_sim(tmp_path, limit=10.0)
+    assert link.polls / 10.0 <= 25
+    assert clock.waits[:5] == [0.05, 0.1, 0.2, 0.2, 0.2]
+    assert max(clock.waits) <= 0.2          # unter dem 1-s-Heartbeat und dem 5-s-Lease
+
+
+def test_poll_after_written_has_no_wait(tmp_path):
+    rec = dict(message(sequence=1), request_id='x')
+    rec.pop('request_id')
+    link, events, clock = run_sim(tmp_path, script=[rec, dict(rec, record=message(sequence=2)['record'])],
+                                  limit=1.0)
+    outcomes = [e.detail['outcome'] for e in events if e.kind == 'exchange']
+    assert outcomes[:2] == ['written', 'written']
+    assert clock.waits[0] == 0 and clock.waits[1] == 0
+    assert clock.waits[2] == 0.05           # Backoff beginnt erst mit dem Leerlauf
+
+
+def test_idle_backoff_resets_after_record(tmp_path):
+    rec = message(sequence=3)
+    rec.pop('request_id', None)
+    idle = dict(type='idle', run_id=None, release_block=None)
+    link, events, clock = run_sim(tmp_path, script=[idle, idle, idle, rec], limit=1.0)
+    assert clock.waits[:5] == [0.05, 0.1, 0.2, 0, 0.05]
+
+
+def test_thousand_idle_rounds_emit_one_idle_event(tmp_path):
+    link, events, clock = run_sim(tmp_path, limit=1000 * 0.2)
+    idle = [e for e in events if e.kind == 'exchange' and e.detail['outcome'] == 'idle']
+    assert link.polls >= 900 and len(idle) == 1
+
+
+def test_idle_after_written_emits_transition_again(tmp_path):
+    rec = message(sequence=3)
+    idle = dict(type='idle', run_id=None, release_block=None)
+    link, events, clock = run_sim(tmp_path, script=[idle, idle, rec, idle, idle], limit=1.0)
+    outcomes = [e.detail['outcome'] for e in events if e.kind == 'exchange']
+    assert outcomes == ['idle', 'written', 'idle']
+
+
+def test_status_counts_exchanges(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.worker import BridgeWorker
+    link = ScriptLink()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = BridgeWorker(Connection(link), lambda: Com(), db, lambda e: None)
+        w._wait = SimClock(w, 1.0)
+        w._run()
+        assert w.status.exchanges_total == link.polls > 3
+
+
+def test_stop_during_idle_wait_is_prompt(tmp_path):
+    import time
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    link = ScriptLink()
+    done = threading.Event()
+    def emit(e):
+        if e.kind == 'stopped':
+            done.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(Connection(link), Com(), db, emit)
+        w.start()
+        time.sleep(0.5)                      # Backoff hat 0,2 s erreicht
+        t = time.monotonic()
+        w.stop()
+        assert done.wait(1) and time.monotonic() - t < 0.05
+        assert not w.is_active()
