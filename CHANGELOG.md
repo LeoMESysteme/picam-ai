@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Interner Testbuild-Weg der Windows-App „GSVmulti-Brücke“: `windows/bridge/build-test.ps1`
+  (ein Befehl, explizites Python ≥ 3.13 x64, frische venv, `PIP_CONFIG_FILE=NUL`, nur Binärpakete),
+  `packaging/bridge-app.spec` (GUI-Ordnerpaket, `console=False`), `packaging/app_launcher.py`
+  (`freeze_support()`, `--self-test-out` vor jedem GUI-Import), `dispread_bridge_app/selftest.py`,
+  optional Benutzer-Setup `packaging/setup-app.iss` (ohne Admin, `.dispread` pro Benutzer, keine
+  Löschung von Benutzerdaten), `build_info.py` wird beim Bau erzeugt (gitignored). Dazu
+  `windows/bridge/TESTLAUF.md` (erster Test Pi ↔ Windows ↔ GSVmulti, mit Grenzen und Checkliste) und
+  README-Abschnitt. **Nicht auf Windows gebaut oder ausgeführt (auf dem Pi unmöglich), nur statische
+  Tests und der Selbsttest unter Linux; unsigniert, unqualifiziert; `build.ps1`/`bridge.spec` unverändert.**
 * 2026-11-06: Qt-Oberfläche der Windows-App „GSVmulti-Brücke“ (`windows/bridge/src/dispread_bridge_app/ui/`:
   `port.py`, `theme.py`, `texts.py`, `status_view.py`, `setup_view.py`, `window.py`, `fake.py`) und
   `main.py` (Einzelinstanz, Tray, `--demo-ui` mit FakeController). Die Oberfläche hängt nur am

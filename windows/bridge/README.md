@@ -296,3 +296,20 @@ Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/to
 `FakeController` (Zustände des Mocks, synthetisch) zur Sichtprüfung auf Windows. Tests offscreen:
 `QT_QPA_PLATFORM=offscreen PYTHONPATH=src:../../src python -m pytest -q tests/test_ui*.py`.
 Nur unter Linux geprüft, keine Windows-Abnahme.
+
+## Interner Testbuild (GUI)
+
+Ein Befehl auf einem Windows-11-x64-PC (Python ≥ 3.13 x64, ausdrücklich angegeben, kein PATH-Suchen):
+
+```powershell
+.\windows\bridge\build-test.ps1 -Python 'C:\Python313\python.exe' [-Inno 'C:\...\ISCC.exe']
+```
+
+Es entsteht unter `windows/bridge/dist-test/` ein ZIP (`GSVmulti-Bruecke-<version>-<commit12>-test.zip`)
+und mit `-Inno` ein Benutzer-Setup ohne Administratorrechte (`packaging/setup-app.iss`). Die EXE
+wird einmal im Selbsttest (`--self-test-out`, Importtest ohne Fenster) gestartet; schlägt er fehl,
+entsteht kein Paket. **Unsigniert, unqualifiziert, nur interner Test.** Das ist nicht der Weg zu
+einem Produkt: `build.ps1` mit `packaging/bridge.spec` (Hash-Locks, Konsolenprobe, N1-Nachweis)
+bleibt unverändert der einzige qualifizierte Bauweg. Auf dem Pi (Linux) lässt sich nichts davon
+bauen; hier laufen nur statische Tests (`tests/test_packaging_app.py`). Ablauf des ersten
+Gesamttests: [TESTLAUF.md](TESTLAUF.md).

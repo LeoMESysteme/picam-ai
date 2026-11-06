@@ -37,3 +37,6 @@ node_modules/
 # Isolierte Windows-Bruecken-Builds und Artefakte
 /windows/bridge/.build/
 /windows/bridge/dist/
+/windows/bridge/.build-test/
+/windows/bridge/dist-test/
+/windows/bridge/src/dispread_bridge_app/build_info.py

@@ -1,0 +1,164 @@
+# Erster Testlauf: Pi ↔ Windows-App ↔ GSVmulti
+
+Interner Testlauf, kein Freigabeverfahren. Er zeigt, ob die Kette technisch
+zusammenpasst. **Es werden keine Messwerte an GSVmulti übergeben**: die
+DUT-Ausgabe bleibt gesperrt. Nichts in dieser Anleitung wurde bisher auf einem
+Windows-PC ausgeführt.
+
+**Stand beim Schreiben:** Die Oberfläche der App gibt es; der echte
+AppController (Verbindung, Kopplung, Portpaar) wird parallel gebaut. Ohne ihn
+zeigt `--demo-ui` nur Beispielzustände. Prüfen Sie vor Abschnitt B, ob der
+Stand des Branches `feat/bruecke-ui` den Controller enthält (Änderungsprotokoll
+`CHANGELOG.md`, oberster Eintrag). Wenn nicht, bricht die App mit
+„Kein Controller verfügbar“ ab und der Lauf ab Abschnitt C ist noch nicht möglich.
+
+## A. Pi vorbereiten (Entwickler, jeder Schritt mit Freigabe)
+
+Alles in diesem Abschnitt greift in den laufenden Pi ein und wird **nur mit
+Freigabe von Leonhard** ausgeführt, nie nebenbei. Kein Reboot, keine
+Kernel-Änderung nötig.
+
+1. **Branch ausrollen.** Heute läuft der Dienst `dispread-werkbank-t13` aus dem
+   alten Redesign-Worktree auf `100.122.154.35:8082` (mit `--cert`/`--key`). Er
+   kennt die Brücken-Oberfläche nicht. Der Branch `feat/bruecke-ui` muss
+   ausgerollt und der Dienst neu gestartet werden (*mit Freigabe ausführen*;
+   „Werkbank erst neu starten, wenn die Diagnosekopie aus /dev/shm fertig ist“).
+   Nie während eines laufenden Aufnahmelaufs.
+2. **Identität anlegen** (einmalig, nur wenn `var/workbench/bridge` fehlt):
+   `PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge identity --provision`
+   Das Kommando zeigt `pi_id` und `certificate_sha256`. Notieren Sie den
+   Fingerabdruck; er wird in Abschnitt C verglichen.
+3. **Werkbank mit Brücken-Identität starten** (Beispiel, Adresse und Port
+   anpassen; bestehende Zertifikatsdateien weiter verwenden):
+   `... serve --host <pi-adresse> --port <port> --bridge-directory var/workbench/bridge --bridge-endpoint https://<pi-adresse>:<port> --bridge-name "Labor-Pi" [--cert ... --key ...]`
+   Ohne `--bridge-endpoint` enthält das Profil keinen Weg; die App verlangt dann
+   „Adresse fehlt“ und die Adresse muss von Hand eingetragen werden.
+4. **Nur UART-Weg:** Empfang vorbereiten, entweder im Werkbank-Dialog,
+   Schritt 4 „UART-Empfang“, Knopf „UART-Empfang vorbereiten“, oder per
+   `... bridge prepare-uart`. Hinweis der Werkbank: „UART direkt und der
+   Brücken-UART nutzen denselben Port und nie gleichzeitig.“ Datenport ist
+   `/dev/ttyAMA0`; Pegel nie direkt an RS-232 (OQ-09).
+
+## B. Windows-PC vorbereiten
+
+5. **App bereitstellen.** Auf einem Windows-11-x64-PC mit Python ≥ 3.13 (x64):
+   `.\windows\bridge\build-test.ps1 -Python 'C:\...\python.exe' [-Inno 'C:\...\ISCC.exe']`
+   Ergebnis in `windows\bridge\dist-test\`: ZIP (entpacken, `GSVmulti-Bruecke.exe`
+   starten) und mit `-Inno` ein Setup ohne Administratorrechte. Die Ausgabe nennt
+   Pfade und SHA-256; vergleichen Sie den Hash nach dem Kopieren auf den
+   GSVmulti-PC. **Unsigniert, unqualifiziert, nur interner Test**: Windows
+   SmartScreen oder Virenschutz können warnen. Das ist erwartet; die IT
+   entscheidet über die Freigabe.
+6. **COM-Portpaar einrichten.** Die App erzeugt keine Paare, und der Treiber ist
+   unverifiziert. Richten Sie mit **com0com** von Hand ein Paar ein, z. B.
+   `COM21` ↔ `COM22`, und notieren Sie, welche Seite die Brücke und welche
+   GSVmulti bekommt. Das Installieren eines Treibers braucht Administratorrechte
+   und meist die Freigabe Ihrer IT (Signatur des Treibers prüfen lassen).
+7. **App starten.** Erster Start: Fenster „GSVmulti-Brücke“. Zweitstart holt
+   nur das vorhandene Fenster nach vorn. Minimieren hält die Brücke im
+   Infobereich aktiv.
+
+## C. Kopplung
+
+8. In der Werkbank (`/live`) im Start-Popover bei „GSVmulti-Ausgabe“ den Weg
+   **„Netzwerk über Brücke“** (oder „UART über Brücke“) wählen, dann
+   **„Brücke einrichten…“**. Der Dialog „Windows-Brücke einrichten“ ist nur im
+   Ruhezustand änderbar („Im Lauf nicht änderbar.“).
+9. Schritt „Pi-Verbindungsprofil“: **„Profil herunterladen (pi.dispread)“**.
+   Datei zum Windows-PC bringen.
+10. In der App: Schritt 2 „Pi-Profil öffnen“, Datei auf „Profil hierher ziehen“
+    ziehen oder doppelklicken (mit Setup ist `.dispread` zugeordnet).
+11. **Fingerabdruck vergleichen.** App: „Vergleichen Sie den Fingerabdruck mit
+    der Werkbank (Brücke einrichten › Profil).“ Werkbank: „In der Windows-App
+    muss derselbe Fingerabdruck erscheinen.“ Alle 64 Zeichen (Vierergruppen),
+    und gegen den Wert aus Schritt 2 prüfen. Stimmt er überein, Haken setzen:
+    „Der Fingerabdruck stimmt mit der Werkbank überein.“ Bei Abweichung
+    **abbrechen**.
+12. Werkbank Schritt „Kopplung freigeben“: **„Kopplungscode erzeugen“**.
+    „Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.“ In der App
+    bei „Kopplungscode“ eingeben, **„Koppeln“**. Abgelaufen
+    („Code abgelaufen“) heißt: nichts gekoppelt, neuen Code erzeugen.
+13. App Schritt 3 „Weg zum Pi wählen“: Netzwerk: gefundenen Pi oder
+    Adresse/Name von Hand („Tailscale wird nur benutzt, wenn Sie hier den
+    Tailscale-Namen oder die Adresse eintragen.“). Ein mDNS-Fund ist kein
+    Identitätsnachweis. UART: USB-Seriell-Adapter wählen (115200 Baud, 8N1, kein
+    Handshake; Verdrahtung wie angezeigt). Dann **„Verbinden“**.
+    Erwartet: „Pi verbunden (Identität geprüft)“. Das ist „noch keine
+    Messfreigabe“.
+14. Portpaar in der App angeben (Brückenseite und GSVmulti-Seite aus Schritt 6).
+
+## D. GSVmulti einrichten
+
+15. Die automatische Session ist gesperrt (OQ-53/N3: keine geprüfte
+    GSVmulti-Vorlage). Falls die App „GSVmulti-Version unbekannt – Automatik
+    gesperrt“ zeigt, erzeugt sie keine Datei. Stellen Sie in GSVmulti **von Hand**
+    ein: Kanal auf die **GSVmulti-Seite** des Paars, **115200 Baud, 8N1, kein
+    Handshake**. Legen Sie eine **eigene Testsession** an, keine produktive
+    Session überschreiben. Haken in der App: „Ich habe GSVmulti so eingestellt.“
+
+## E. Empfangstest (synthetische Demo)
+
+16. App Schritt 5: „Ich verwende eine getrennte GSVmulti-Testsession.“ setzen,
+    **„Test starten“**. Gesendet werden 600 synthetische Werte mit 10 Hz
+    (etwa 60 s).
+17. **In GSVmulti selbst prüfen:** Kommen Werte an, wie viele, in welcher
+    Reihenfolge, steigt die Zeitachse gleichmäßig? Speichern Sie die Aufzeichnung.
+    Optional „Testdatei auswählen …“: die App vergleicht Wert für Wert. „Empfang
+    belegt“ gilt nur „für diese Testdatei und Konfiguration“.
+18. Ergebnis, GSVmulti-Version, Dateiname und Auffälligkeiten in der Checkliste
+    (G) notieren. Vergleichsergebnis der App allein ersetzt nicht die Sicht in
+    GSVmulti.
+
+## F. Echter Lauf in der Werkbank
+
+19. Werkbank: Weg **„Netzwerk über Brücke“**, Lauf starten. Erwartet: Die App
+    zeigt „Verbunden“ mit „DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte
+    frei“; die Werkbank zeigt „gesperrt“ und: „DUT-Ausgabe gesperrt: Windows-Abnahme
+    fehlt. Verbindung und Diagnose sind vorbereitet; Messwerte werden noch nicht an
+    GSVmulti ausgegeben.“ **Es dürfen keine Messwerte in GSVmulti erscheinen.**
+    Erscheinen welche, ist das ein Fehler: sofort Lauf stoppen und melden.
+20. Störungstests, einzeln. Die Erwartungen stammen aus den Texttabellen, nicht
+    aus einer Beobachtung; notieren Sie, was Werkbank und App **tatsächlich** zeigen:
+    * **Netz trennen** (LAN-Kabel/WLAN am Windows-PC): Die App zeigt „Pi antwortet
+      nicht – Versuch in … s“ und baut neu auf. Werkbank: „Verbindung
+      unterbrochen – lokaler Lauf läuft weiter“. Der Lauf auf dem Pi läuft weiter.
+    * **App minimieren:** läuft im Infobereich weiter (einmaliger Hinweis), Status
+      unverändert.
+    * **Pi-Dienst neu starten** (*mit Freigabe*): Verbindung bricht ab, die App
+      versucht neu; der Pi-Lauf endet mit dem Dienst.
+    * **App beenden:** Rückfrage „Brücke beenden?“; Beenden trennt, „Der Lauf auf
+      dem Pi läuft weiter.“
+
+## G. Was der Lauf belegt und was nicht
+
+**Er belegt höchstens:** App startet; Kopplung und Verbindung mit
+Identitätsprüfung; synthetischer Empfang in einer bestimmten GSVmulti-Version
+und Konfiguration; Verhalten bei den Störungen oben.
+
+**Er belegt nicht:** keine Messfreigabe; kein Nachweis für N1 (saubere VM ohne
+Python), N2 (qualifizierter Treiber, Installer-Rollback) oder N3 (kontrollierte
+GSVmulti-Konfiguration); keine Aussage über Messwerte, Zeitzuordnung oder
+Dauerbetrieb; kein Ersatz für die Qualifikation von `build.ps1`.
+
+**Wohin mit Ergebnissen:** Diagnoseexport und Ereignisjournal der App liegen im
+Benutzerprofil des Windows-PCs (`%LOCALAPPDATA%`); der genaue Ordner und der
+Menüpunkt für den Export standen beim Schreiben noch nicht fest (AppController
+in Arbeit): im Zweifel beim Entwickler nachfragen. Die Deinstallation löscht
+diese Daten nicht. Hängen Sie beides mit der ausgefüllten Checkliste an Ihre
+Rückmeldung an.
+Journal/Diagnose enthalten keine Zugangsdaten („Begrenzt, Zugangsdaten werden
+nicht protokolliert.“); prüfen Sie dennoch vor dem Weitergeben.
+
+### Checkliste (ausfüllen)
+
+| Nr. | Prüfpunkt | Ergebnis (ok / Abweichung) | Notiz |
+| --- | --- | --- | --- |
+| 5 | Build/Setup, SHA-256 notiert | | |
+| 6 | com0com-Paar (Seiten notiert) | | |
+| 11 | Fingerabdruck identisch | | |
+| 12 | Kopplung erfolgreich | | |
+| 13 | „Pi verbunden (Identität geprüft)“ | | |
+| 15 | GSVmulti-Version / 115200 8N1 | | |
+| 17 | Demo: Werte in GSVmulti, Anzahl/Reihenfolge | | |
+| 19 | Echter Lauf: keine Werte in GSVmulti | | |
+| 20 | Netz getrennt / minimiert / Pi-Neustart / App beendet | | |
