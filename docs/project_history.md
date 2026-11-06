@@ -9,6 +9,29 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Dauerhafter COM-Intent und atomare Schreibzulassung
+
+**Problem:** Nach Prozessabbruch zwischen COM-Schreiben und ACK ist eine
+Zahlübergabe unklar. Eine bloße Vorprüfung kann außerdem während blockierender
+Portkonfiguration durch Stop oder Verbindungswechsel veralten.
+
+**Entscheidung:** SQLite hält einen synchron bestätigten Intent und das
+anschließende Ergebnis, gebunden an Pi/Lauf/Bild/Barriere und Payloadhash.
+Unklare Zahlen werden nicht erneut gesendet; unbekannte Invalidierung sperrt
+spätere Zahlen desselben Pi. Manager-Generationslock und kurze Worker-Zulassung
+prüfen die genaue Verbindung, Stop und Restbudget atomar nach Portkonfiguration.
+COM und Journal-I/O liegen außerhalb dieser Locks.
+
+**Alternativen:** Nur RAM-Entdopplung überlebt keinen Abbruch. Eine Prüfung
+vor Portkonfiguration oder irgendeine aktuell gültige Verbindung schützt
+nicht vor einem Wechsel von Generation A nach B. Unklare Übergaben als
+erfolgreich zu behandeln hätte keinen Beleg.
+
+**Konsequenz:** Ein bereits zugelassener Schreibversuch kann bei Abbruch
+unklar bleiben; Bytes lassen sich nicht rückgängig machen. Keine Exactly-once-
+Zusage und keine Ableitung von GSVmulti-Empfang. Die konkrete Manager-Naht
+und echte Windows-Dauerhaftigkeit werden separat integriert/geprüft.
+
 ## 2026-11-06 — Ein Hub für Ausgabe, Ressourcen und echte Laufidentität
 
 **Problem:** Publisher allein sehen weder ausgeschaltete noch direkte serielle

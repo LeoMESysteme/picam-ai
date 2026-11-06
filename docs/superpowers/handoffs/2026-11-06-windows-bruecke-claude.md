@@ -139,3 +139,31 @@ der neue POSIX-Port-Lease betrifft Pi-Ausgänge/Listener.
 P4-Review nach zwei Fixrunden sauber; zuletzt 97 betroffene Tests und zehn
 Wiederholungen des sporadischen UART-Falls bestanden. Breite Vorprüfung 837
 und Node 158 sind getrennt dokumentiert. Echte Abnahme und GUI fehlen weiter.
+
+## W2: Worker-/Journalvertrag für die GUI
+
+`BridgeWorker` konsumiert ausschließlich `connection.profile.pi_id`,
+`data_link()`, `admit_write(link, claim)` und `disconnect()`. Der Adapter ist
+pro authentisierter Generation stabil. Zulassung prüft unter denselben
+Metadatenlocks genaue Generation, Stop und Restbudget nach möglicher
+Portkonfiguration; keine I/O-Arbeit unter diesen Locks.
+
+`worker.status` enthält active/output_ready/code sowie demo_only=true und
+gsv_receipt_confirmed=false. Ein Fehler bleibt über `failure` und status.code
+erhalten, auch nach dem Stop. GUI kombiniert diese Backend-Entscheidung mit
+W1-Bereitschaft und darf ein false nicht durch „Pi verbunden“ überstimmen.
+Callbacks liefern gemeinsame BridgeEvent-Objekte vom Workerthread; GUI
+marshalt sie in ihren Thread. Detailversion ist Ereignisschema, nicht die
+Version des Drahtprotokolls.
+
+Stop ist endgültig: keine Wiederaufnahme desselben Workers. Minimieren
+ruft ihn nicht auf. Explizites Beenden/Abmelden/Standby muss ihn aufrufen;
+die OS-/Qt-Hooks gehören noch zu Claude. Ein hängender Treiber kann als
+stopping/active sichtbar bleiben; der Kern behauptet keinen abgeschlossenen
+Stop. Zweitstart signalisiert ein SID-gebundenes Aktivierungsevent; GUI
+hebt das vorhandene Fenster hervor. Echte Windows-Nachweise fehlen.
+
+Journal und Lauf-Audit behalten. Unbekannte Invalidierung hat keinen
+GUI-Bypass. Diagnosedetails separat begrenzt und redigiert, auch unbekannte
+JSON-Schlüssel; für physische Leerlaufbereinigung Backend-prune regelmäßig
+planen. Aktuell 93 fokussierte Tests und ein echter Windows-Skip, Review sauber.

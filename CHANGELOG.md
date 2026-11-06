@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Windows-Worker mit dauerhaftem SQLite-Übergabejournal und
+  atomarer Schreibzulassung ergänzt. Generationswechsel, Stop und Restbudget
+  werden nach Portkonfiguration geprüft; unklare Zahlen werden nicht erneut
+  gesendet, unbekannte Invalidierung sperrt weitere Ausgabe. Diagnosen sind
+  separat begrenzt und auch bei alten Daten rekursiv redigiert; SID-basierter
+  Instanzschutz bleibt GUI-unabhängig. 93 fokussierte Tests bestanden, ein
+  echter Windows-Prozesstest hier übersprungen; Reviewkorrekturen bestätigt.
+  Konkreter Verbindungsmanager und echte Windows-Nachweise folgen separat.
+
 * 2026-11-06: Gekoppelten Pi-Hub mit exklusiven Leases, nicht konsumierendem
   Heartbeat, signiertem UART-Handshake und ausdrücklicher lokaler Vorbereitung
   angeschlossen. Jeder echte Lauf reserviert vor dem Start eine frische ID,

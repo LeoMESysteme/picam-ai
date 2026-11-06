@@ -26,12 +26,41 @@ class BridgeError(RuntimeError):
     """A transport attempt failed; its bytes must not be blindly retried."""
 
 
+class _AdmissionExpired(BridgeError):
+    """No COM attempt was admitted before the host request deadline."""
+
+
+class BridgeAuditError(BridgeError):
+    """Durable evidence failed; COM output must stop."""
+
+
+class DeliveryBlockedError(BridgeError):
+    """Unknown invalidation prevents further output for this Pi."""
+
+
+class DeliveryUncertainError(BridgeError):
+    """An earlier submission must never be automatically repeated."""
+
+
+class DeliveryAlreadyAttempted(RuntimeError):
+    """Atomic journal claim found a previous intent; only written may re-ACK."""
+
+    def __init__(self, outcome):
+        self.outcome = outcome
+        super().__init__(f"duplicate attempt: {outcome}")
+
+
 class BridgeSession:
     """One request at a time, with an independently logged COM write receipt."""
 
-    def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns):
+    def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns,
+                 journal=None, pi_id=None, before_write=None, admit_write=None):
         if max_frame_age_ms <= 0 or timeout_s <= 0:
             raise ValueError("positive age/timeout required")
+        if journal is not None and (not isinstance(pi_id, str) or not pi_id):
+            raise ValueError("durable delivery requires a validated Pi identity")
+        self.journal, self.pi_id, self.before_write = journal, pi_id, before_write
+        self.admit_write = admit_write
         self.log = log
         self.max_age_ns = int(max_frame_age_ms * 1_000_000)
         self.timeout_ns = int(timeout_s * 1_000_000_000)
@@ -80,6 +109,11 @@ class BridgeSession:
                 raise ValueError("synthetic frame has no measured age")
             if age is None and record.capture_timestamp.base is not TimeBaseKind.SYNTHETIC:
                 raise ValueError("missing measured age")
+            if self.journal is not None:
+                if record.status is ValueStatus.VALID and barrier is not None:
+                    raise ValueError("valid record must not carry barrier")
+                if record.status is not ValueStatus.VALID and (barrier is None or barrier <= 0):
+                    raise ValueError("invalid record requires positive barrier")
             payload = self.formatter.format(record)
             if payload is None:
                 raise ValueError("invalid state must not be silently omitted")
@@ -91,31 +125,115 @@ class BridgeSession:
         # the receiver's own buffers or prove the physical DUT measurement age.
         remaining = min(self.timeout_ns - (self.clock() - started),
                         self.max_age_ns - age - (self.clock() - started) if age is not None else self.timeout_ns)
-        if remaining <= 0:
+        if remaining <= 0 and self.journal is None:
             link.send(dict(ack, outcome="expired"))
             self._event(**ack, outcome="expired")
             return "expired"
         key = (run_id, record.frame_sequence, barrier)
-        if key == self._last_written:
+        if self.journal is None and key == self._last_written:
             link.send(dict(ack, outcome="written"))
             self._event(**ack, outcome="duplicate_ack", completion_stage="com_driver_write")
             return "written"
+        attempt_id = None
+        if self.journal is not None:
+            try:
+                attempt_id = self.journal.begin_attempt(
+                    self.pi_id, run_id, record.frame_sequence, barrier, payload)
+            except DeliveryAlreadyAttempted as exc:
+                if exc.outcome == "written":
+                    link.send(dict(ack, outcome="written"))
+                    self._event(**ack, outcome="duplicate_ack", completion_stage="com_driver_write")
+                    return "written"
+                state = "unknown" if exc.outcome in ("pending", "unknown") else exc.outcome
+                raise DeliveryUncertainError(f"{state} prior delivery; automatic retry blocked") from exc
+            except DeliveryBlockedError:
+                raise
+            except Exception as exc:
+                raise BridgeAuditError("audit_failed before COM; output stopped") from exc
+            # Durable intent can block on fsync/locks. Recheck the host request
+            # budget afterwards; synthetic capture timestamps imply no latency.
+            elapsed = self.clock() - started
+            remaining = min(self.timeout_ns - elapsed,
+                            self.max_age_ns - age - elapsed if age is not None else self.timeout_ns)
+            if remaining <= 0:
+                self._finish_attempt(attempt_id, "not_written")
+                link.send(dict(ack, outcome="expired"))
+                self._event(**ack, outcome="expired")
+                return "expired"
+        if self.before_write is not None:
+            try:
+                self.before_write()
+            except Exception:
+                if attempt_id is not None:
+                    self._finish_attempt(attempt_id, "not_written")
+                raise
+        if self.journal is not None:
+            # Connection generation checks can also wait. No pre-write work
+            # may extend the host request's deadline.
+            elapsed = self.clock() - started
+            remaining = min(self.timeout_ns - elapsed,
+                            self.max_age_ns - age - elapsed if age is not None else self.timeout_ns)
+            if remaining <= 0:
+                self._finish_attempt(attempt_id, "not_written")
+                link.send(dict(ack, outcome="expired"))
+                self._event(**ack, outcome="expired")
+                return "expired"
+        admitted = False
+
+        def claim():
+            # Called synchronously under the connection's generation lock and
+            # worker's cancellation lock. No disk, driver or network operation
+            # belongs here. Lock waits and timeout setup consume the budget.
+            nonlocal admitted
+            if admitted:
+                raise BridgeError("COM attempt already admitted")
+            elapsed = self.clock() - started
+            budget = min(self.timeout_ns - elapsed,
+                         self.max_age_ns - age - elapsed if age is not None else self.timeout_ns)
+            if budget <= 0:
+                raise _AdmissionExpired("host request expired before COM admission")
+            admitted = True
+
         try:
+            # Driver configuration can block. It MUST finish before the atomic
+            # generation/stop/deadline claim; it is not itself a byte submission.
             com.write_timeout = remaining / 1_000_000_000
+            if self.admit_write is not None:
+                self.admit_write(link, claim)
+                if not admitted:
+                    raise BridgeError("COM admission callback did not claim attempt")
+            elif self.journal is not None:
+                claim()
+            else:
+                admitted = True  # preserve the legacy v1 default call sequence
+            # No manager/worker admission lock is held across a driver call.
+            # An already admitted attempt may become unknown after revocation.
             written = com.write(payload)
             if written != len(payload):
                 raise OSError(f"partial COM write: {written}/{len(payload)}")
             elapsed = self.clock() - started
             if elapsed >= self.timeout_ns or (age is not None and age + elapsed > self.max_age_ns):
                 raise TimeoutError("COM write exceeded remaining freshness budget")
+        except _AdmissionExpired:
+            if attempt_id is not None:
+                self._finish_attempt(attempt_id, "not_written")
+            link.send(dict(ack, outcome="expired"))
+            self._event(**ack, outcome="expired")
+            return "expired"
         except Exception as exc:
-            self._event(**ack, outcome="failed", attempted_bytes_hex=payload.hex(), error=str(exc))
-            try:
-                com.reset_output_buffer()
-            except Exception:
-                pass
+            if attempt_id is not None:
+                self._finish_attempt(attempt_id, "unknown" if admitted else "not_written")
+            self._event(**ack, outcome="failed", attempted_bytes_hex=payload.hex() if admitted else None,
+                        error=str(exc))
+            if admitted:
+                try:
+                    com.reset_output_buffer()
+                except Exception:
+                    pass
             link.send(dict(ack, outcome="failed"))
             raise BridgeError(f"COM: {exc}") from exc
+        if attempt_id is not None:
+            self._finish_attempt(attempt_id, "written")
         self._last_written = key
         self._event(**ack, outcome="written", wire_bytes_hex=payload.hex(),
                     completion_stage="com_driver_write")
@@ -125,6 +243,14 @@ class BridgeSession:
             self._event(**ack, outcome="unconfirmed", completion_stage="com_driver_write")
             raise
         return "written"
+
+    def _finish_attempt(self, attempt_id, outcome):
+        try:
+            self.journal.finish_attempt(attempt_id, outcome)
+        except Exception as exc:
+            # The committed pending intent remains conservative evidence when
+            # the final disk write fails. Never send a written ACK here.
+            raise BridgeAuditError("audit_failed; delivery unknown; output stopped") from exc
 
 
 class _Link:

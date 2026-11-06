@@ -383,3 +383,40 @@ def test_publisher_stop_error_still_closes_audit_and_saves_session(tmp_path, mon
     assert "start failure" in meta["end_reason"]
     assert any("stop failure" in error for error in meta["cleanup_errors"])
     assert meta["output_status"]["state"] == "audit_failed"
+
+
+def test_durable_hooks_commit_intent_before_com_and_result_before_ack():
+    steps = []
+    class Journal:
+        def begin_attempt(self, pi, run, sequence, barrier, payload):
+            assert (pi, run, sequence, barrier, payload) == (
+                'pi-1', 'run-1', 7, None, b'%+0.12345\r\n')
+            steps.append('intent')
+            return 'attempt'
+        def finish_attempt(self, attempt, outcome):
+            assert (attempt, outcome) == ('attempt', 'written')
+            steps.append('result')
+    class OrderedCom(Com):
+        def write(self, payload):
+            steps.append('com')
+            return super().write(payload)
+    class OrderedLink(Link):
+        def send(self, message):
+            if message['type'] == 'ack':
+                steps.append('ack')
+            super().send(message)
+    BridgeSession(journal=Journal(), pi_id='pi-1').exchange(OrderedLink(reply()), OrderedCom())
+    assert steps == ['intent', 'com', 'result', 'ack']
+
+
+@pytest.mark.parametrize('status,barrier', [(ValueStatus.VALID, 3),
+                                          (ValueStatus.UNREADABLE, None)])
+def test_durable_metadata_is_validated_before_intent(status, barrier):
+    class Journal:
+        def begin_attempt(self, *args):
+            pytest.fail('malformed barrier reached durable intent')
+    com = Com()
+    with pytest.raises(BridgeError, match='barrier'):
+        BridgeSession(journal=Journal(), pi_id='pi-1').exchange(
+            Link(reply(status, barrier_id=barrier)), com)
+    assert com.payloads == []

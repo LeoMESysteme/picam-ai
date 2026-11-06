@@ -58,6 +58,21 @@ Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
 bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
 [Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
 
+## Windows-Worker und geschützte Prozessinstanz
+
+Das Übergabejournal nutzt SQLite aus der Standardbibliothek mit bestätigtem
+Intent vor COM und Ergebnis danach. Es ist Lauf-Audit und wird nicht durch
+Diagnoserotation gelöscht. Detaildiagnosen sind getrennt auf 64 MiB/sieben
+Tage begrenzt; Zugriffe und Export wenden die Aufbewahrung an. Wer genaue
+physische Löschung auch während Leerlauf braucht, plant `prune()` regelmäßig
+im Backend ein. Globale Laufbereinigung bleibt OQ-60.
+
+Die Prozessinstanz verwendet native Win32-SID/DACL-/Mutex-/Event-APIs über
+`ctypes`, ohne zusätzliche Bibliothek und ohne GUI-Fenstercode. Linux-Fakes
+sind vom echten Windows-Prozesstest getrennt; dessen Ergebnis steht aus.
+GSVmulti wird nicht beendet. Die GUI muss Aktivierungswunsch, explizites
+Beenden, Abmelden und Standby an die vorhandenen Kernoperationen anbinden.
+
 ## Windows-Installer und Updateverträge
 
 W3 verwendet Standardbibliothek plus die bereits getrennt deklarierte
