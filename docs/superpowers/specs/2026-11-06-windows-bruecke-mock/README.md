@@ -44,15 +44,16 @@ Einrichtung (Schrittkopf 1–5):
 
 Betrieb:
 [B1](mock.html#B1) normal, DUT gesperrt ·
-[B1t](mock.html#B1t) normal, Empfang belegt (nach E5ok) ·
+[B1t](mock.html#B1t) normal, Empfang belegt (nach E5ok, Test war Demo) ·
+[B1x](mock.html#B1x) **künftig**, nach Abnahme, noch nicht freigegeben ·
 [B2](mock.html#B2) wartet auf Lauf ·
 [B3](mock.html#B3) Pi antwortet nicht ·
-[B4a](mock.html#B4a) COM-Port belegt ·
-[B4b](mock.html#B4b) COM-Schreibfehler ·
-[B4c](mock.html#B4c) COM-Ergebnis unklar ·
+[B4a](mock.html#B4a) COM-Port belegt (während Demo) ·
+[B4b](mock.html#B4b) COM-Schreibfehler (während Demo) ·
+[B4c](mock.html#B4c) COM-Ergebnis unklar (während Demo) ·
 [B5](mock.html#B5) Demo (synthetisch) ·
 [B6](mock.html#B6) Chip-Detail ·
-[B7](mock.html#B7) Beenden bei aktiver Übertragung ·
+[B7](mock.html#B7) Beenden bei aktiver Übertragung (künftig, über B1x) ·
 [B8](mock.html#B8) Minimiert, Tray-Hinweis und Symbolvarianten ·
 [B9](mock.html#B9) lange Namen bei 200 % ·
 [B10](mock.html#B10) anderer Pi in Auswahl.
@@ -64,8 +65,23 @@ Betrieb:
   die Brücke gibt keine Messwerte frei“ (Achtung-Symbol). Im Produkt kommt der
   Sperrzustand vom Pi (Hello, §9), im Mock ist er fest gesetzt; geht der Pi
   verloren (B3), bleibt der zuletzt gemeldete Stand stehen. Der Zustandssatz
-  wiederholt die Sperre deshalb nicht (B1: „Verbunden – Lauf 7 wird
-  übertragen“).
+  wiederholt die Sperre deshalb nicht.
+* **Unter der DUT-Sperre fließen keine Werte (Wahrheitsregel).** Der Pi
+  meldet dann nur Leerlauf mit Sperre; die Brücke schreibt nichts an COM.
+  B1 sagt deshalb „Verbunden – Lauf 7 läuft, keine Werteausgabe“, der
+  Weitergabe-Chip ist neutral „Keine Weitergabe / DUT-Ausgabe gesperrt“, das
+  Journal nennt „Lauf 6 verbunden – Ausgabe gesperrt (Windows-Abnahme fehlt)“.
+  „Weitergabe bestätigt“ und „vom Port angenommen“ gibt es nur (a) in der
+  **Demo** (B5, B4a–c, als Demo-Werte gekennzeichnet) und (b) im
+  **künftigen** Zustand **B1x** („nach Abnahme“): dort ersetzt „Ausgabe
+  freigegeben am TT.MM.JJJJ (Abnahme-ID: Platzhalter)“ die Sperrzeile; der
+  Zustand trägt im Fenster das Zeichen „Künftig, nicht freigegeben“ und im
+  Mock-Wähler den Vermerk „[künftig]“. Er ist Gestaltungsvorlage für den Fall,
+  dass die Windows-Abnahme einmal bestanden ist; heute ist er nicht
+  erreichbar. B7 (Beenden bei aktiver Übertragung) liegt deshalb über B1x;
+  aus B1 heraus fragt der Dialog mit „Die Verbindung zum Pi endet; es werden
+  keine Werte übertragen. Der Lauf auf dem Pi läuft weiter.“ Der
+  Empfangstest-Beleg in B1t stammt aus einer Demo.
 * **Schloss rechts im Kopf = „Pi-Wechsel gesperrt“** (Tooltip und Name, bleibt
   fokussierbar, Klick nennt den Grund). Es hat nichts mit der DUT-Sperre zu tun.
 * **Sechs Prüfpunkte als 3 × 2-Raster, bewusste Entscheidung:** Sechs Chips mit
@@ -73,14 +89,15 @@ Betrieb:
   Statuswörter zu kürzen. Chips einer Reihe sind gleich hoch, auch wenn Wörter
   umbrechen. Reihenfolge: Komponenten, UART, Pi / Ausgabe, Weitergabe,
   GSVmulti. Nicht benutzte Prüfpunkte tragen ein Strich-Symbol.
-* **Nie pauschal grün:** „Ausgabe“ bleibt Achtung. **GSVmulti** ist nach der
-  Bedienerbestätigung nur neutral (Info) mit Unterzeile „Empfang nicht
-  nachgewiesen“; erst nach dem Empfangstest (E5ok) zeigt B1t grün „Empfang
-  belegt“ mit „Test 14:02, 600/600“, nur für genau diese Konfiguration. Der
-  **Weitergabe**-Chip trägt die Unterzeile „vom Port angenommen“ (in B4:
-  „COM4 (Brückenseite)“); Ports stehen konsistent als „COM4 (Brückenseite)“
-  und „GSVmulti hört auf COM5“. In der Demo (B5) steht „Demo-Werte“ im
-  Achtung-Ton.
+* **Nie pauschal grün:** „Ausgabe“ bleibt Achtung (außer im künftigen B1x).
+  **GSVmulti** ist nach der Bedienerbestätigung nur neutral (Info) mit
+  Unterzeile „Empfang nicht nachgewiesen“; erst nach dem Empfangstest (E5ok)
+  zeigt B1t grün „Empfang belegt“ mit „Test 14:02 (Demo), 600/600“, nur für
+  genau diese Konfiguration. Der **Weitergabe**-Chip ist neutral „Keine
+  Weitergabe“ (B1); „Bestätigt / vom Port angenommen“ nur in B5 und B1x. In B4
+  stehen die Ports konsistent als „COM4 (Brückenseite)“ und „GSVmulti hört auf
+  COM5“; B4 gilt während der Demo („Während Demo“ im Kopf, „Demo-Werte“ im
+  Ausgabe-Chip). In der Demo (B5) steht „Demo-Werte“ im Achtung-Ton.
 * **Fingerabdruck wie in der Werkbank:** Kleinbuchstaben-Hex, Vierergruppen,
   4 Gruppen je Zeile in 4 Zeilen, Mono, nie gekürzt, kein Umbruch (B6, E2b,
   E2bad). In E2bad sind abweichende Gruppen fett und unterstrichen.
@@ -242,7 +259,7 @@ Session · Empfangstest“, Fuß „Diagnose exportieren“ links, „Zurück“
 erst Primäraktion, wenn der Schritt erfüllt ist). Gemeinsam in **allen**
 Zuständen, unter dem Zustandssatz: „DUT-Ausgabe gesperrt – die Brücke gibt keine
 Messwerte frei“. Gemeinsam in allen Betriebszuständen (siehe B1): Chips, Segmented, Journal, Fuß „Diagnose
-exportieren“, „Details“, „Version 0.1.0.dev0“. In den Betriebszuständen B1t–B10
+exportieren“, „Details“, „Version 0.1.0.dev0“. In den Betriebszuständen B1t–B10 (B1x, B7: künftig)
 sind nur die **Abweichungen von B1** aufgeführt. Screenreader-Präfixe der
 Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „Unklar:“,
 „Nicht benutzt:“.
@@ -586,13 +603,13 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 #### B1 – Normal, DUT gesperrt
 
 - Prüfstand 2 · Netzwerk (LAN)
-- Verbunden – Lauf 7 wird übertragen
+- Verbunden – Lauf 7 läuft, keine Werteausgabe
 - DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei
 - Komponenten Installiert
 - UART nicht benutzt
 - Pi Verbunden
 - Ausgabe DUT gesperrt
-- Weitergabe Bestätigt vom Port angenommen
+- Weitergabe Keine Weitergabe DUT-Ausgabe gesperrt
 - GSVmulti Übernahme bestätigt Empfang nicht nachgewiesen
 - Alle
 - Störungen
@@ -605,7 +622,7 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 - 14:12:40
 - Verbindung unterbrochen wieder verbunden · Netzwerk (LAN), gleicher Pi 4 s
 - 14:05:12
-- Weitergabe bestätigt Erster Wert dieses Laufs · COM4 → COM5
+- Lauf 6 verbunden – Ausgabe gesperrt Windows-Abnahme fehlt · keine Werte an COM geschrieben
 - 13:58:30
 - Pi verbunden (Identität geprüft) Prüfstand 2 · pi-4b7e09c1
 - 13:58:29
@@ -614,7 +631,7 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 - 17:02:11
 - Brücke beendet Auf Wunsch des Bedieners
 - 16:20:03
-- COM4 (Brückenseite): Schreibfehler Wert nicht erneut gesendet · weiter mit dem nächsten Wert 1 Wert
+- COM4 (Brückenseite): Schreibfehler Demo · Wert nicht erneut gesendet · weiter mit dem nächsten Wert 1 Wert
 - 15:44:51
 - Pi antwortet nicht wieder verbunden · Versuche nach 1, 2, 4, 8 s 14 s
 - 15:10:02
@@ -625,13 +642,22 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 
 #### B1t – Normal, Empfang belegt (nach E5ok)
 
-- GSVmulti Empfang belegt Test 14:02, 600/600
+- GSVmulti Empfang belegt Test 14:02 (Demo), 600/600
+
+#### B1x – [künftig] nach Abnahme (nicht freigegeben)
+
+- Verbunden – Lauf 7 wird übertragen Künftig, nicht freigegeben
+- Ausgabe freigegeben am TT.MM.JJJJ (Abnahme-ID: Platzhalter)
+- Ausgabe Freigegeben
+- Weitergabe Bestätigt vom Port angenommen
+- Neuer Lauf erkannt Lauf 7 · Ausgabe freigegeben (Platzhalter)
+- Weitergabe bestätigt Erster Wert dieses Laufs · COM4 → COM5
 
 #### B2 – Wartet auf Lauf
 
 - Verbunden – wartet auf einen Lauf auf dem Pi
 - Ausgabe Wartet auf Lauf
-- Weitergabe Noch nichts übertragen
+- Weitergabe Keine Weitergabe kein Lauf
 - 9 Einträge
 
 #### B3 – Pi antwortet nicht
@@ -648,41 +674,45 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 - 14:32:20
 - Pi antwortet nicht läuft noch · Netzwerk (LAN), Versuch 3 12 s
 
-#### B4a – COM-Port belegt
+#### B4a – COM-Port belegt (während Demo)
 
-- Weitergabe gestört – COM4 belegt
+- Demo: Weitergabe gestört – COM4 belegt Während Demo
 - COM4 (Brückenseite) belegt – GSVmulti hört auf COM5
 - Ein anderes Programm hält COM4. Es wurde nichts gesendet. Schließen Sie es und prüfen Sie erneut.
 - Erneut prüfen
+- Ausgabe Demo-Werte
 - Weitergabe Port belegt COM4 (Brückenseite)
 - 11 Einträge
 - 14:33:41
-- COM4 (Brückenseite) belegt läuft noch · ein anderes Programm hält den Port 8 s
+- COM4 (Brückenseite) belegt Demo · läuft noch · ein anderes Programm hält den Port 8 s
 
-#### B4b – COM-Schreibfehler
+#### B4b – COM-Schreibfehler (während Demo)
 
-- Weitergabe gestört – Schreibfehler
+- Demo: Weitergabe gestört – Schreibfehler Während Demo
 - Schreibfehler auf COM4 (Brückenseite)
 - Der Port hat den Wert nicht vollständig angenommen. Er wird nicht erneut gesendet; es geht mit dem nächsten zulässigen Wert weiter.
+- Ausgabe Demo-Werte
 - Weitergabe Schreibfehler COM4 (Brückenseite)
 - 11 Einträge
 - 14:33:41
-- COM4 (Brückenseite): Schreibfehler Wert nicht erneut gesendet · Bild 18343 1 Wert
+- COM4 (Brückenseite): Schreibfehler Demo · Wert nicht erneut gesendet · Bild 18343 1 Wert
 
-#### B4c – COM-Ergebnis unklar
+#### B4c – COM-Ergebnis unklar (während Demo)
 
-- Weitergabe unklar – kein Nachweis
+- Demo: Weitergabe unklar – kein Nachweis Während Demo
 - Ergebnis unklar auf COM4 (Brückenseite)
 - Keine Bestätigung vom Port nach dem Schreiben. Ob GSVmulti den Wert erhalten hat, ist offen. Nicht wiederholt, im Journal vermerkt.
+- Ausgabe Demo-Werte
 - Weitergabe Ergebnis unklar COM4 (Brückenseite)
 - 11 Einträge
 - 14:33:41
-- COM4 (Brückenseite): Ergebnis unklar keine Quittung · nicht wiederholt · Bild 18343 1 Wert
+- COM4 (Brückenseite): Ergebnis unklar Demo · keine Quittung · nicht wiederholt · Bild 18343 1 Wert
 
 #### B5 – Demo läuft (synthetisch)
 
 - Verbunden – Demo läuft Synthetisch
 - Ausgabe Demo-Werte
+- Weitergabe Bestätigt Demo-Werte vom Port angenommen
 - 11 Einträge
 - 14:34:02
 - Demo gestartet Werte sind synthetisch · vom Pi gemeldet
@@ -698,11 +728,17 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 - a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 0e5b c3f8 9a46 71de
 - Protokoll
 - Version 2
-- Letzte Quittung
-- COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis
+- Letzte Meldung
+- Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben
 
-#### B7 – Beenden bei aktiver Übertragung
+#### B7 – [künftig] Beenden bei aktiver Übertragung
 
+- Verbunden – Lauf 7 wird übertragen Künftig, nicht freigegeben
+- Ausgabe freigegeben am TT.MM.JJJJ (Abnahme-ID: Platzhalter)
+- Ausgabe Freigegeben
+- Weitergabe Bestätigt vom Port angenommen
+- Neuer Lauf erkannt Lauf 7 · Ausgabe freigegeben (Platzhalter)
+- Weitergabe bestätigt Erster Wert dieses Laufs · COM4 → COM5
 - Brücke beenden?
 - Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.
 - Weiter übertragen
@@ -711,7 +747,7 @@ Statussymbole: „Erfolg:“, „Achtung:“, „Fehler:“, „Hinweis:“, „
 #### B8 – Minimiert: Tray-Hinweis und Symbole
 
 - Mock – Tray-Symbol: Normal · Achtung · Fehler. Tooltip = Kopfsatz. Zustandswechsel ändern nur Symbol und Tooltip, kein neues Pop-up.
-- Weitergabe gestört – COM4 belegt
+- Demo: Weitergabe gestört – COM4 belegt
 - Pi antwortet nicht – Versuch in 4 s
 - GSVmulti-Brücke
 - Die Brücke läuft im Infobereich weiter. Dieser Hinweis erscheint nur einmal. Ein Klick auf das Symbol öffnet das Fenster.
@@ -750,15 +786,17 @@ Aufbau: Titel, Schließen-Knopf „Details schließen“, Schlüssel/Wert-Liste,
 
 - B1 · Komponenten: Windows: 11, 64 Bit · App-Version: 0.1.0.dev0 · Portpaar: COM4 ↔ COM5 (com0com) — Hinweis: Alle Systemkomponenten sind vorhanden. Das sagt nichts über Verbindung oder Empfang.
 - B1 · UART: Weg: Netzwerk (LAN) · USB-Adapter: nicht benutzt — Hinweis: Ein USB-Adapter wird nur im Weg „UART“ gebraucht.
-- B1 · Pi – technische Werte: Pi-ID: pi-4b7e09c1 · Endpunkt: wss://192.168.10.24 (LAN, Beispiel) · TLS-Fingerabdruck (SHA-256): a3f90c1d7b42e58a19d6f03c84ab2e715c0db8f463a9d1270e5bc3f89a4671de · Protokoll: Version 2 · Letzte Quittung: COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis
+- B1 · Pi – technische Werte: Pi-ID: pi-4b7e09c1 · Endpunkt: wss://192.168.10.24 (LAN, Beispiel) · TLS-Fingerabdruck (SHA-256): a3f90c1d7b42e58a19d6f03c84ab2e715c0db8f463a9d1270e5bc3f89a4671de · Protokoll: Version 2 · Letzte Meldung: Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben
 - B1 · Ausgabe: Ausgabe: DUT-Ausgabe gesperrt · Bedeutung: Der Pi gibt die Messwerte des Prüflings noch nicht frei. — Hinweis: Die Brücke gibt nichts frei und startet keine Messung.
-- B1 · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Letzte Quittung: COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis — Hinweis: „Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.
+- B1 · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Letzte Quittung: keine — Hinweis: Solange die DUT-Ausgabe gesperrt ist, schreibt die Brücke keine Messwerte an COM.
 - B1 · GSVmulti: Session: GSVmulti_Prüfstand2_COM5.ucf · Übernahme: vom Bediener bestätigt (keine Prüfung durch die Brücke) · Empfangsnachweis: nicht nachgewiesen — Hinweis: Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.
-- B1t · GSVmulti: Session: GSVmulti_Prüfstand2_COM5.ucf · Übernahme: vom Bediener bestätigt · Empfangsnachweis: Belegt für die Testdatei GSVmulti_Test_Prüfstand2.txt und diese Konfiguration (600/600) — Hinweis: Gilt nur für genau diese Konfiguration, nicht für spätere Läufe.
+- B1t · GSVmulti: Session: GSVmulti_Prüfstand2_COM5.ucf · Übernahme: vom Bediener bestätigt · Empfangsnachweis: Belegt für die Testdatei GSVmulti_Test_Prüfstand2.txt und diese Konfiguration (600/600) — Hinweis: Der Test war eine Demo mit synthetischen Werten und gilt nur für genau diese Konfiguration. Die Weitergabe von Messwerten bleibt gesperrt.
+- B1x · Ausgabe: Ausgabe: Freigegeben (Platzhalter) · Abnahme: TT.MM.JJJJ, ID: Platzhalter — Hinweis: Dieser Zustand existiert erst nach der Windows-Abnahme und ist hier nur als künftige Gestaltung gezeigt.
+- B1x · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Letzte Quittung: COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis — Hinweis: „Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.
 - B2 · Ausgabe: Ausgabe: Wartet auf Lauf · Bedeutung: Der Pi ist erreichbar, es läuft aber keine Messung. — Hinweis: Die Brücke startet keinen Lauf.
-- B3 · Pi – technische Werte: Pi-ID: pi-4b7e09c1 · Endpunkt: wss://192.168.10.24 (LAN, Beispiel) · TLS-Fingerabdruck (SHA-256): a3f90c1d7b42e58a19d6f03c84ab2e715c0db8f463a9d1270e5bc3f89a4671de · Protokoll: Version 2 · Letzte Quittung: COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis
+- B3 · Pi – technische Werte: Pi-ID: pi-4b7e09c1 · Endpunkt: wss://192.168.10.24 (LAN, Beispiel) · TLS-Fingerabdruck (SHA-256): a3f90c1d7b42e58a19d6f03c84ab2e715c0db8f463a9d1270e5bc3f89a4671de · Protokoll: Version 2 · Letzte Meldung: Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben
 - B3 · Ausgabe: Ausgabe: Unbekannt, solange der Pi nicht antwortet · Letzter Stand: DUT-Ausgabe gesperrt (zuletzt vom Pi gemeldet) — Hinweis: Die Brücke gibt nichts frei und startet keine Messung.
-- B3 · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Letzte Quittung: Vor 12 s
+- B3 · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Letzte Quittung: keine — Hinweis: Solange die DUT-Ausgabe gesperrt ist, schreibt die Brücke keine Messwerte an COM.
 - B4b · Weitergabe: Brückenseite: COM4 · GSVmulti-Seite: COM5 · Status: Schreibfehler · Letzte Quittung: COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis — Hinweis: Ein Wert wird nach unklarem oder kurzem Schreiben nie blind wiederholt.
 - B5 · Ausgabe: Ausgabe: Demo (synthetisch) · Bedeutung: Die Werte kommen aus einer Demo, nicht von einem Messgerät. — Hinweis: Nicht für Kalibrierungen verwenden.
 
@@ -770,6 +808,6 @@ Aufbau: Titel, Schließen-Knopf „Details schließen“, Schlüssel/Wert-Liste,
 * Filter „Störungen“ ohne Treffer: „Keine Störungen seit dem Start der Brücke.“
 * Details-Flyout („Details“ im Fuß): App 0.1.0.dev0 · Brückenseite COM4 · Gegenport COM5 · Pi-ID · Protokoll Version 2 · Journal „Begrenzt, Zugangsdaten werden nicht protokolliert.“
 * Titelleistenknöpfe (Tooltip/Name): „Minimieren“, „Maximieren“ (ausgeschaltet), „Schließen“. Schließen ohne aktive Übertragung beendet die Brücke ohne Rückfrage.
-* Tray-Symbol-Tooltip = Kopfsatz (normal „Verbunden – Lauf 7 wird übertragen“, Achtung „Weitergabe gestört – COM4 belegt“, Fehler „Pi antwortet nicht – Versuch in 4 s“).
+* Tray-Symbol-Tooltip = Kopfsatz (normal „Verbunden – Lauf 7 läuft, keine Werteausgabe“, Achtung „Demo: Weitergabe gestört – COM4 belegt“, Fehler „Pi antwortet nicht – Versuch in 4 s“).
 * Tray (B8): Titel „GSVmulti-Brücke“, „Die Brücke läuft im Infobereich weiter.“, Nebensatz „Dieser Hinweis erscheint nur einmal. Ein Klick auf das Symbol öffnet das Fenster.“; Symbol-Tooltip = Kopfsatz.
-* Dialog Brücke beenden (B7): Titel „Brücke beenden?“, Text „Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.“, Primär „Weiter übertragen“ (Standard, Esc), sekundär „Beenden“.
+* Dialog Brücke beenden (B7, künftig/Demo): Titel „Brücke beenden?“, Text „Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.“; bei gesperrter DUT-Ausgabe (B1): „Die Verbindung zum Pi endet; es werden keine Werte übertragen. Der Lauf auf dem Pi läuft weiter.“, Primär „Weiter übertragen“ (Standard, Esc), sekundär „Beenden“.

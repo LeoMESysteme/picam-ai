@@ -346,7 +346,7 @@ function fp(groups, mark){ return `<div class="fp mono" aria-label="Fingerabdruc
 /* ===================== Kopf, Chips, Journal ===================== */
 const PI = 'Prüfstand 2';
 const PI_LONG = 'Prüfstand 2 – Kalibrierlabor Halle B, Platz 14';
-function head({name, way, sentence, kind='info', tag='', pisw='none', flyOpen=false, piswOpen=false}){
+function head({name, way, sentence, kind='info', tag='', pisw='none', flyOpen=false, piswOpen=false, lock=null}){
   const sw = pisw==='free'
     ? `<button type="button" class="pisw" data-act="pisw" aria-haspopup="listbox" aria-expanded="${piswOpen}" title="Anderen Pi wählen" aria-label="Anderen Pi wählen">${sym('chev')}</button>`
     : pisw==='locked'
@@ -360,7 +360,7 @@ function head({name, way, sentence, kind='info', tag='', pisw='none', flyOpen=fa
     </ul></div><p class="note">Nach dem Wechsel muss neu verbunden werden. Ein Wechsel während der Übertragung ist nicht möglich.</p></div>`;
   return `<header class="head"><h1 title="${esc(name)} · ${esc(way)}">${esc(name)} <span class="way">· ${esc(way)}</span></h1>
   <div class="srow"><p class="sentence">${ico(kind,20)}<span>${esc(sentence)}${tag?`<span class="tag">${sym('warn')}${esc(tag)}</span>`:''}</span></p>${sw}</div>
-  <p class="lockline">${ico('warn')}<span>DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei</span></p>${fly}</header>`;
+  <p class="lockline">${lock?ico('info'):ico('warn')}<span>${esc(lock||'DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei')}</span></p>${fly}</header>`;
 }
 function chip(c, open){
   return `<li><button type="button" class="chip ${c.k==='off'?'off':''}" data-chip="${c.id}" aria-expanded="${open===c.id}" aria-haspopup="dialog"><span class="cl">${esc(c.l)}</span><span class="cw">${ico(c.k)}<span>${esc(c.w)}</span></span>${c.sub?`<span class="cs">${esc(c.sub)}</span>`:''}</button></li>`;
@@ -374,23 +374,26 @@ function chipsBlock(list, open){
   }
   return `<div class="chips-wrap"><ul class="chips" aria-label="Prüfpunkte">${list.map(c=>chip(c,open)).join('')}</ul>${fly}</div>`;
 }
-const PI_DETAIL = (extra={}) => [
+const PI_DETAIL = (live) => [
   ['Pi-ID','pi-4b7e09c1',true],
   ['Endpunkt','wss://192.168.10.24 (LAN, Beispiel)',true],
   ['TLS-Fingerabdruck (SHA-256)',FP,true],
   ['Protokoll','Version 2'],
-  ['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis'],
+  live ? ['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']
+       : ['Letzte Meldung','Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben'],
 ];
 function baseChips(o={}){
   const tested = UI.tested;
   const c = {
     komp:{id:'komp',l:'Komponenten',k:'ok',w:'Installiert',d:[['Windows','11, 64 Bit'],['App-Version','0.1.0.dev0'],['Portpaar','COM4 ↔ COM5 (com0com)']],note:'Alle Systemkomponenten sind vorhanden. Das sagt nichts über Verbindung oder Empfang.'},
     uart:{id:'uart',l:'UART',k:'off',w:'nicht benutzt',d:[['Weg','Netzwerk (LAN)'],['USB-Adapter','nicht benutzt']],note:'Ein USB-Adapter wird nur im Weg „UART“ gebraucht.'},
-    pi:{id:'pi',l:'Pi',k:'ok',w:'Verbunden',title:'Pi – technische Werte',d:PI_DETAIL()},
+    pi:{id:'pi',l:'Pi',k:'ok',w:'Verbunden',title:'Pi – technische Werte',d:PI_DETAIL(UI.live2)},
     out:{id:'out',l:'Ausgabe',k:'warn',w:'DUT gesperrt',d:[['Ausgabe','DUT-Ausgabe gesperrt'],['Bedeutung','Der Pi gibt die Messwerte des Prüflings noch nicht frei.']],note:'Die Brücke gibt nichts frei und startet keine Messung.'},
-    com:{id:'com',l:'Weitergabe',k:'ok',w:'Bestätigt',sub:'vom Port angenommen',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'},
+    com: UI.live2
+      ? {id:'com',l:'Weitergabe',k:'ok',w:'Bestätigt',sub:'vom Port angenommen',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'}
+      : {id:'com',l:'Weitergabe',k:'off',w:'Keine Weitergabe',sub:'DUT-Ausgabe gesperrt',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','keine']],note:'Solange die DUT-Ausgabe gesperrt ist, schreibt die Brücke keine Messwerte an COM.'},
     gsv: tested
-      ? {id:'gsv',l:'GSVmulti',k:'ok',w:'Empfang belegt',sub:'Test 14:02, 600/600',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt'],['Empfangsnachweis','Belegt für die Testdatei GSVmulti_Test_Prüfstand2.txt und diese Konfiguration (600/600)']],note:'Gilt nur für genau diese Konfiguration, nicht für spätere Läufe.'}
+      ? {id:'gsv',l:'GSVmulti',k:'ok',w:'Empfang belegt',sub:'Test 14:02 (Demo), 600/600',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt'],['Empfangsnachweis','Belegt für die Testdatei GSVmulti_Test_Prüfstand2.txt und diese Konfiguration (600/600)']],note:'Der Test war eine Demo mit synthetischen Werten und gilt nur für genau diese Konfiguration. Die Weitergabe von Messwerten bleibt gesperrt.'}
       : {id:'gsv',l:'GSVmulti',k:'info',w:'Übernahme bestätigt',sub:'Empfang nicht nachgewiesen',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt (keine Prüfung durch die Brücke)'],['Empfangsnachweis','nicht nachgewiesen']],note:'Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.'},
   };
   for(const [k,v] of Object.entries(o)) c[k] = {...c[k], ...v};
@@ -401,11 +404,11 @@ const J_BASE = [
   ['Heute','14:32:07','ok','Neuer Lauf erkannt','Lauf 7 · DUT-Ausgabe gesperrt'],
   ['Heute','14:31:55','info','Pi-Lauf beendet','Lauf 6'],
   ['Heute','14:12:40','warn','Verbindung unterbrochen','wieder verbunden · Netzwerk (LAN), gleicher Pi','4 s'],
-  ['Heute','14:05:12','ok','Weitergabe bestätigt','Erster Wert dieses Laufs · COM4 → COM5'],
+  ['Heute','14:05:12','info','Lauf 6 verbunden – Ausgabe gesperrt','Windows-Abnahme fehlt · keine Werte an COM geschrieben'],
   ['Heute','13:58:30','ok','Pi verbunden (Identität geprüft)','Prüfstand 2 · pi-4b7e09c1'],
   ['Heute','13:58:29','info','Brücke gestartet','Version 0.1.0.dev0'],
   ['Gestern','17:02:11','info','Brücke beendet','Auf Wunsch des Bedieners'],
-  ['Gestern','16:20:03','err','COM4 (Brückenseite): Schreibfehler','Wert nicht erneut gesendet · weiter mit dem nächsten Wert','1 Wert'],
+  ['Gestern','16:20:03','err','COM4 (Brückenseite): Schreibfehler','Demo · Wert nicht erneut gesendet · weiter mit dem nächsten Wert','1 Wert'],
   ['Gestern','15:44:51','warn','Pi antwortet nicht','wieder verbunden · Versuche nach 1, 2, 4, 8 s','14 s'],
   ['Gestern','15:10:02','ok','Pi verbunden (Identität geprüft)','Prüfstand 2 · pi-4b7e09c1'],
 ];
@@ -434,9 +437,9 @@ function foot(setup){
 
 /* ===================== Betriebsansicht ===================== */
 function ops(o){
-  const {name=PI, way='Netzwerk (LAN)', sentence, kind='info', tag, pisw='locked', chips=baseChips(), journalRows=J_BASE, infobar='', jfor=''} = o;
+  const {name=PI, way='Netzwerk (LAN)', sentence, kind='info', tag, pisw='locked', chips=baseChips(), journalRows=J_BASE, infobar='', jfor='', lock=null} = o;
   UI.trayInfo = {kind, text:sentence};
-  return `<div class="main">${head({name,way,sentence,kind,tag,pisw,flyOpen:UI.lockOpen,piswOpen:UI.piswOpen})}${infobar}
+  return `<div class="main">${head({name,way,sentence,kind,tag,pisw,flyOpen:UI.lockOpen,piswOpen:UI.piswOpen,lock})}${infobar}
     ${chipsBlock(chips, UI.open)}${journal(journalRows, UI.filter, jfor)}</div>${foot(false)}`;
 }
 
@@ -582,35 +585,43 @@ def('E5ok','Einrichtung','… Empfang belegt (600/600)',()=>e5('ok'));
 def('E5bad','Einrichtung','… Abweichung (598/600)',()=>e5('bad'));
 
 /* --- Betrieb --- */
-const S_RUN = 'Verbunden – Lauf 7 wird übertragen';
+const S_RUN = 'Verbunden – Lauf 7 läuft, keine Werteausgabe';
+const S_LIVE = 'Verbunden – Lauf 7 wird übertragen';
+const J_LIVE = [['Heute','14:32:07','ok','Neuer Lauf erkannt','Lauf 7 · Ausgabe freigegeben (Platzhalter)'],['Heute','14:31:55','info','Pi-Lauf beendet','Lauf 6'],J_BASE[2],['Heute','14:05:12','ok','Weitergabe bestätigt','Erster Wert dieses Laufs · COM4 → COM5'],...J_BASE.slice(4)];
+function live(fn){ UI.live2=true; try{ return fn(); } finally{ UI.live2=false; } }
 def('B1','Betrieb','Normal, DUT gesperrt',()=>ops({sentence:S_RUN,kind:'info'}));
 def('B1t','Betrieb','Normal, Empfang belegt (nach E5ok)',()=>{ UI.tested=true; try{ return ops({sentence:S_RUN,kind:'info'}); } finally { UI.tested=false; } });
+def('B1x','Betrieb','nach Abnahme (nicht freigegeben)',()=>live(()=>ops({sentence:S_LIVE,kind:'info',tag:'Künftig, nicht freigegeben',lock:'Ausgabe freigegeben am TT.MM.JJJJ (Abnahme-ID: Platzhalter)',
+  chips:baseChips({out:{k:'ok',w:'Freigegeben',d:[['Ausgabe','Freigegeben (Platzhalter)'],['Abnahme','TT.MM.JJJJ, ID: Platzhalter']],note:'Dieser Zustand existiert erst nach der Windows-Abnahme und ist hier nur als künftige Gestaltung gezeigt.'}}),journalRows:J_LIVE})),{future:true});
 def('B2','Betrieb','Wartet auf Lauf',()=>ops({sentence:'Verbunden – wartet auf einen Lauf auf dem Pi',kind:'info',
-  chips:baseChips({out:{k:'info',w:'Wartet auf Lauf',d:[['Ausgabe','Wartet auf Lauf'],['Bedeutung','Der Pi ist erreichbar, es läuft aber keine Messung.']],note:'Die Brücke startet keinen Lauf.'},com:{k:'off',w:'Noch nichts',sub:'übertragen',note:''}}),
+  chips:baseChips({out:{k:'info',w:'Wartet auf Lauf',d:[['Ausgabe','Wartet auf Lauf'],['Bedeutung','Der Pi ist erreichbar, es läuft aber keine Messung.']],note:'Die Brücke startet keinen Lauf.'},com:{sub:'kein Lauf'}}),
   journalRows:[['Heute','14:31:55','info','Pi-Lauf beendet','Lauf 6'],...J_BASE.slice(2)]}));
 def('B3','Betrieb','Pi antwortet nicht',()=>ops({sentence:'Pi antwortet nicht – Versuch in 4 s',kind:'err',pisw:'locked',
   infobar:bar('err','Keine Antwort vom Pi seit 14:32:20','Mögliche Ursachen: Pi-Dienst, Netzwerk oder Strom des Pi. Wiederholung nach 1, 2, 4, 8 s, dann alle 8 s. „Nicht mehr versuchen“ stoppt das automatische Wiederverbinden.',btn('Nicht mehr versuchen',{act:'abort'})+btn('Erneut versuchen',{accent:true,act:'retry'})),
-  chips:baseChips({pi:{k:'err',w:'Antwortet nicht'},out:{k:'help',w:'Unbekannt',d:[['Ausgabe','Unbekannt, solange der Pi nicht antwortet'],['Letzter Stand','DUT-Ausgabe gesperrt (zuletzt vom Pi gemeldet)']]},com:{k:'warn',w:'Keine Weitergabe',sub:'Pi antwortet nicht',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','Vor 12 s']],note:''}}),
+  chips:baseChips({pi:{k:'err',w:'Antwortet nicht'},out:{k:'help',w:'Unbekannt',d:[['Ausgabe','Unbekannt, solange der Pi nicht antwortet'],['Letzter Stand','DUT-Ausgabe gesperrt (zuletzt vom Pi gemeldet)']]},com:{sub:'Pi antwortet nicht'}}),
   journalRows:[['Heute','14:32:20','err','Pi antwortet nicht','läuft noch · Netzwerk (LAN), Versuch 3','12 s'],...J_BASE]}));
 function b4(kind){
+  return live(()=>b4i(kind));
+}
+function b4i(kind){
   const P='COM4 (Brückenseite)';
   const v = {
    a:{k:'warn',w:'Port belegt',sent:'Weitergabe gestört – COM4 belegt',bar:bar('warn','COM4 (Brückenseite) belegt – GSVmulti hört auf COM5','Ein anderes Programm hält COM4. Es wurde nichts gesendet. Schließen Sie es und prüfen Sie erneut.',btn('Erneut prüfen',{accent:true,act:'retry'})),j:['warn',P+' belegt','läuft noch · ein anderes Programm hält den Port','8 s']},
    b:{k:'err',w:'Schreibfehler',sent:'Weitergabe gestört – Schreibfehler',bar:bar('err','Schreibfehler auf '+P,'Der Port hat den Wert nicht vollständig angenommen. Er wird nicht erneut gesendet; es geht mit dem nächsten zulässigen Wert weiter.',btn('Diagnose exportieren',{act:'diag'})+btn('Details',{accent:true,act:'details'})),j:['err',P+': Schreibfehler','Wert nicht erneut gesendet · Bild 18343','1 Wert']},
    c:{k:'help',w:'Ergebnis unklar',sent:'Weitergabe unklar – kein Nachweis',bar:bar('warn','Ergebnis unklar auf '+P,'Keine Bestätigung vom Port nach dem Schreiben. Ob GSVmulti den Wert erhalten hat, ist offen. Nicht wiederholt, im Journal vermerkt.',btn('Diagnose exportieren',{act:'diag'})),j:['warn',P+': Ergebnis unklar','keine Quittung · nicht wiederholt · Bild 18343','1 Wert']},
   }[kind];
-  return ops({sentence:v.sent,kind:v.k==='help'?'warn':v.k,infobar:v.bar,
-    chips:baseChips({com:{k:v.k,w:v.w,sub:P,d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Status',v.w],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'Ein Wert wird nach unklarem oder kurzem Schreiben nie blind wiederholt.'}}),
-    journalRows:[['Heute','14:33:41',...v.j],...J_BASE]});
+  return ops({sentence:'Demo: '+v.sent,kind:v.k==='help'?'warn':v.k,infobar:v.bar,tag:'Während Demo',lock:null,
+    chips:baseChips({out:{k:'warn',w:'Demo-Werte',d:[['Ausgabe','Demo (synthetisch)']],note:'Diese Störung tritt in der Demo auf; unter der DUT-Sperre schreibt die Brücke nichts an COM.'},com:{k:v.k,w:v.w,sub:P,d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Status',v.w],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'Ein Wert wird nach unklarem oder kurzem Schreiben nie blind wiederholt.'}}),
+    journalRows:[['Heute','14:33:41',v.j[0],v.j[1],'Demo · '+v.j[2],v.j[3]],...J_BASE]});
 }
-def('B4a','Betrieb','COM-Port belegt',()=>b4('a'));
-def('B4b','Betrieb','COM-Schreibfehler',()=>b4('b'));
-def('B4c','Betrieb','COM-Ergebnis unklar',()=>b4('c'));
-def('B5','Betrieb','Demo läuft (synthetisch)',()=>ops({sentence:'Verbunden – Demo läuft',kind:'warn',tag:'Synthetisch',
-  chips:baseChips({out:{k:'warn',w:'Demo-Werte',d:[['Ausgabe','Demo (synthetisch)'],['Bedeutung','Die Werte kommen aus einer Demo, nicht von einem Messgerät.']],note:'Nicht für Kalibrierungen verwenden.'}}),
-  journalRows:[['Heute','14:34:02','warn','Demo gestartet','Werte sind synthetisch · vom Pi gemeldet'],...J_BASE]}));
+def('B4a','Betrieb','COM-Port belegt (während Demo)',()=>b4('a'));
+def('B4b','Betrieb','COM-Schreibfehler (während Demo)',()=>b4('b'));
+def('B4c','Betrieb','COM-Ergebnis unklar (während Demo)',()=>b4('c'));
+def('B5','Betrieb','Demo läuft (synthetisch)',()=>live(()=>ops({sentence:'Verbunden – Demo läuft',kind:'warn',tag:'Synthetisch',
+  chips:baseChips({out:{k:'warn',w:'Demo-Werte',d:[['Ausgabe','Demo (synthetisch)'],['Bedeutung','Die Werte kommen aus einer Demo, nicht von einem Messgerät.']],note:'Nicht für Kalibrierungen verwenden.'},com:{sub:'Demo-Werte vom Port angenommen'}}),
+  journalRows:[['Heute','14:34:02','warn','Demo gestartet','Werte sind synthetisch · vom Pi gemeldet'],...J_BASE]})));
 def('B6','Betrieb','Chip-Detail (Flyout)',()=>ops({sentence:S_RUN,kind:'info'}),{open:'pi'});
-def('B7','Betrieb','Beenden bei aktiver Übertragung',()=>ops({sentence:S_RUN,kind:'info'}),{dialog:true});
+def('B7','Betrieb','Beenden bei aktiver Übertragung',()=>live(()=>ops({sentence:S_LIVE,kind:'info',tag:'Künftig, nicht freigegeben',lock:'Ausgabe freigegeben am TT.MM.JJJJ (Abnahme-ID: Platzhalter)',chips:baseChips({out:{k:'ok',w:'Freigegeben'}}),journalRows:J_LIVE})),{dialog:true,future:true});
 def('B8','Betrieb','Minimiert: Tray-Hinweis und Symbole',()=>'',{desktop:true});
 def('B9','Betrieb','Lange Namen, 200 %',()=>ops({name:PI_LONG,sentence:S_RUN,kind:'info',
   journalRows:[['Heute','14:32:07','ok','Neuer Lauf erkannt','Prüfstand 2 – Kalibrierlabor Halle B, Platz 14 · Lauf 7'],...J_BASE.slice(1)]}),{zoom:2});
@@ -725,7 +736,7 @@ function rerenderDetails(){
 function openDialog(w){
   if($('.scrim',w)) return;
   const s=document.createElement('div'); s.className='scrim';
-  s.innerHTML=`<div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dt" aria-describedby="dd"><div class="db"><h2 id="dt">Brücke beenden?</h2><p id="dd">Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.</p></div>
+  s.innerHTML=`<div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dt" aria-describedby="dd"><div class="db"><h2 id="dt">Brücke beenden?</h2><p id="dd">${['B7','B1x','B5','B4a','B4b','B4c'].includes(UI.cur)?'Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.':'Die Verbindung zum Pi endet; es werden keine Werte übertragen. Der Lauf auf dem Pi läuft weiter.'}</p></div>
   <div class="df"><button type="button" class="btn accent" id="dkeep">Weiter übertragen</button><button type="button" class="btn" id="dquit">Beenden</button></div></div>`;
   w.appendChild(s); UI.dialog=true;
   const keep=$('#dkeep',s), quit=$('#dquit',s);
@@ -740,7 +751,7 @@ function openDialog(w){
 function closeDialog(){ const w=$('.win'); $('.scrim',w)?.remove(); UI.dialog=false; $('[data-act="close"]',w)?.focus(); }
 
 /* Tray (Mock-Vorschau) */
-const TRAY_TXT = {info:'Verbunden – Lauf 7 wird übertragen',warn:'Weitergabe gestört – COM4 belegt',err:'Pi antwortet nicht – Versuch in 4 s'};
+const TRAY_TXT = {info:'Verbunden – Lauf 7 läuft, keine Werteausgabe',warn:'Demo: Weitergabe gestört – COM4 belegt',err:'Pi antwortet nicht – Versuch in 4 s'};
 function trayIcon(kind){
   const bd = kind==='warn'||kind==='err'||kind==='help' ? `<span class="bd"><svg viewBox="0 0 20 20" class="k-${kind==='help'?'warn':kind}" aria-hidden="true"><use href="#s-${kind==='help'?'warn':kind}"/></svg></span>` : '';
   return `<span class="trayic"><svg class="lg" viewBox="0 0 16 16" aria-hidden="true"><use href="#s-logo"/></svg>${bd}</span>`;
@@ -755,7 +766,7 @@ function deskHtml(){
   const v = k => `<div class="strip">${trayIcon(k)}<span class="tip">${esc(TRAY_TXT[k])}</span></div>`;
   return `<div class="deskview" aria-label="Windows-Desktop, Mock"><div class="trayvar"><span class="ttl">Mock – Tray-Symbol: Normal · Achtung · Fehler. Tooltip = Kopfsatz. Zustandswechsel ändern nur Symbol und Tooltip, kein neues Pop-up.</span>${v('info')}${v('warn')}${v('err')}</div>
   <div class="toast" role="status"><div class="th">${sym('logo')} GSVmulti-Brücke</div><b>Die Brücke läuft im Infobereich weiter.</b><span class="cap2">Dieser Hinweis erscheint nur einmal. Ein Klick auf das Symbol öffnet das Fenster.</span></div>
-  <div class="taskbar"><button class="tray" data-tray aria-label="GSVmulti-Brücke im Infobereich – Fenster öffnen" title="Verbunden – Lauf 7 wird übertragen">${trayIcon('info')}</button><span>14:35</span></div></div>`;
+  <div class="taskbar"><button class="tray" data-tray aria-label="GSVmulti-Brücke im Infobereich – Fenster öffnen" title="Verbunden – Lauf 7 läuft, keine Werteausgabe">${trayIcon('info')}</button><span>14:35</span></div></div>`;
 }
 function wireDesk(){ $('[data-tray]').addEventListener('click',()=>{ UI.restored=true; go(UI.prev&&UI.prev!=='B8'?UI.prev:'B1'); setTimeout(()=>UI.restored=false,0); }); }
 
@@ -763,7 +774,7 @@ function wireDesk(){ $('[data-tray]').addEventListener('click',()=>{ UI.restored
 function buildList(){
   let html='', g=null;
   for(const id of ORDER){ const s=S[id]; if(s.group!==g){ g=s.group; html+=`<h3>${g}</h3>`; }
-    html+=`<button class="pick" data-state="${id}" aria-current="false"><span class="id">${id}</span>${esc(s.label)}</button>`; }
+    html+=`<button class="pick" data-state="${id}" aria-current="false"><span class="id">${id}</span>${s.future?'[künftig] ':''}${esc(s.label)}</button>`; }
   $('#statelist').innerHTML=html;
   $('#statelist').addEventListener('click',e=>{ const b=e.target.closest('[data-state]'); if(b){ UI.restored=false; go(b.dataset.state); } });
 }
