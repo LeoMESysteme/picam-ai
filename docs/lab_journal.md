@@ -4673,3 +4673,21 @@ Beide lesen nur; sie starten oder stoppen keinen Messlauf. Status-Abfragezeit
 ist HOST_MONOTONIC auf dem Pi plus UTC-Beobachtungszeit und ersetzt keine
 physische Aufnahmezeit. Für den Vergleich mit/ohne Seite müssen die Phasen
 noch festgelegt und die X-Hud-Vorschaudaten erfasst werden.
+
+
+### T13-Fortsetzung: Bestätigung und neuer Windows-PC
+
+Leonhard bestätigt den Vorschlag auf der Seite; Serverzustand `confirmed`,
+keine Laufsperre, Ausgabe aus. Vor Laufstart möchte er auch die UART-Brücke
+prüfen. Auf dem neuen Windows-PC sind Python und GSVmulti vorhanden,
+com0com-Portpaar fehlt. Kabel laut Nutzer weiterhin nur GND/RXD; zusätzliche
+TXD-Leitung noch nicht bestätigt. Daher kein UART-Publisher gestartet.
+
+Portable Brücke aus unveränderten Projektmodulen (Quellstand `7a98e55`)
+mit README und Hashmanifest neu gepackt; isolierte Softwareprobe ergibt
+drei synthetische ASCII-Telegramme. Kein Windows- oder Hardwarebeleg.
+Paket unter `var/diagnostics/werkbank-t13-20261106/download/`, zeitlich
+begrenzter Download auf Tailscale-IP, Port 8083 (eigener Dienst
+`dispread-t13-download.service`). Keine Treiber mitgeliefert. Nächster
+Schritt: Portpaar auf dem neuen Rechner einrichten und Ports melden;
+anschließend lokale Demo und erst danach gemeinsamer UART-Transporttest.

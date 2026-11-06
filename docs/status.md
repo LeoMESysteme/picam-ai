@@ -4,8 +4,17 @@ Arbeitszweig `feat/werkbank-redesign`, Worktree
 `.claude/worktrees/feat-werkbank-redesign`. T13 ist jetzt vorbereitet: echter Dienst `dispread-werkbank-t13.service`
 auf `https://100.122.154.35:8082/live`, Sitzung `live-20261106T112527Z`.
 Automatische Einrichtung nach 55,990 s fertig, Gesamturteil WARNUNG
-(Raster/Displayfehler), Gegenlesen OK, keine Laufsperre. Leonhard muss
-Rahmen und Format auf der Seite prüfen und bestätigen. Noch kein Lauf.
+(Raster/Displayfehler), Gegenlesen OK, keine Laufsperre. Leonhard hat
+Rahmen und Format auf der Seite bestätigt; Serverzustand `confirmed`, keine
+Laufsperre, Ausgabe `off`. Laufstart mit Referenz auf der Seite steht aus. Nutzer möchte zuvor auch
+UART-Brücke testen. Neuer Windows-PC: Python/GSVmulti vorhanden, virtuelles
+Portpaar fehlt; bisher nur GND/RXD verdrahtet. Frisches Brückenpaket unter
+`var/diagnostics/werkbank-t13-20261106/download/` vorbereitet und isoliert
+mit drei synthetischen Telegrammen geprüft. Download nur über Tailscale:
+`http://100.122.154.35:8083/gsvmulti-bridge-20261106.zip`, begrenzter Dienst
+`dispread-t13-download.service` (maximal zwei Stunden). README enthält
+Windows-venv, Portliste, com0com-Anbieterlink, Verdrahtung und Demo-Befehle.
+Noch keine neue UART-Verbindung und kein GSVmulti-Empfang nachgewiesen.
 Beobachter `dispread-t13-observe` und `dispread-t13-top` sammeln bis zu
 zwei Stunden unter `var/diagnostics/werkbank-t13-20261106/`; bei Abschluss
 beenden. Kamera und Werkbank laufen für die gemeinsame Abnahme weiter.
