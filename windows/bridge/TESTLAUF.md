@@ -49,7 +49,17 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
 ## B. Windows-PC vorbereiten
 
 5. **App bereitstellen.** Auf einem Windows-11-x64-PC mit Python ≥ 3.13 (x64):
-   `.\windows\bridge\build-test.ps1 -Python 'C:\...\python.exe' [-Inno 'C:\...\ISCC.exe']`
+   In PowerShell im entpackten bzw. geklonten Ordner `picam-ai`:
+
+   ```powershell
+   $py = py -3.13 -c "import sys; print(sys.executable)"   # Pfad zum Python 3.13 x64
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\bridge\build-test.ps1 -Python "$py"
+   # optional mit Setup: zusätzlich  -Inno "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+   ```
+
+   `-ExecutionPolicy Bypass` gilt nur für diesen einen Aufruf und ändert keine
+   Systemeinstellung; nötig, weil heruntergeladene unsignierte Skripte sonst
+   blockiert werden. Ohne Git (ZIP-Download) steht als Quelle „unbekannt“.
    Ergebnis in `windows\bridge\dist-test\`: ZIP (entpacken, `GSVmulti-Bruecke.exe`
    starten) und mit `-Inno` ein Setup ohne Administratorrechte. Die Ausgabe nennt
    Pfade und SHA-256; vergleichen Sie den Hash nach dem Kopieren auf den

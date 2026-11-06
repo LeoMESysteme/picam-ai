@@ -42,10 +42,15 @@ if (-not $Version) { throw "Version in pyproject.toml nicht gefunden." }
 
 $Commit = "unbekannt"
 $Dirty = $false
-$Head = (& git -C $RepoRoot rev-parse HEAD 2>$null)
-if ($LASTEXITCODE -eq 0 -and $Head) {
-    $Commit = $Head.Trim()
-    $Dirty = [bool](& git -C $RepoRoot status --porcelain --untracked-files=no 2>$null)
+# Ohne Git (z. B. ZIP-Download) bleibt die Quelle "unbekannt"; der Bau laeuft trotzdem.
+if (Test-Path -LiteralPath (Join-Path $RepoRoot ".git")) {
+    try {
+        $Head = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $Head) {
+            $Commit = $Head.Trim()
+            $Dirty = [bool](& git -C $RepoRoot status --porcelain --untracked-files=no 2>$null)
+        }
+    } catch { $Commit = "unbekannt" }
 }
 $Commit12 = if ($Commit.Length -ge 12) { $Commit.Substring(0, 12) } else { $Commit }
 $CommitLabel = if ($Dirty) { "$Commit+geaendert" } else { $Commit }

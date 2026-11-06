@@ -302,7 +302,8 @@ Nur unter Linux geprüft, keine Windows-Abnahme.
 Ein Befehl auf einem Windows-11-x64-PC (Python ≥ 3.13 x64, ausdrücklich angegeben, kein PATH-Suchen):
 
 ```powershell
-.\windows\bridge\build-test.ps1 -Python 'C:\Python313\python.exe' [-Inno 'C:\...\ISCC.exe']
+$py = py -3.13 -c "import sys; print(sys.executable)"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\bridge\build-test.ps1 -Python "$py"   # optional: -Inno "<Pfad>\ISCC.exe"
 ```
 
 Es entsteht unter `windows/bridge/dist-test/` ein ZIP (`GSVmulti-Bruecke-<version>-<commit12>-test.zip`)
