@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSessionArchive } from './session-fixtures';
 
-const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="/open-questions.html"]')
+const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="open-questions.html"], .md-content__inner a[href$="open-questions.html#oq-07"]')
   .filter({ hasText: /^OQ-07$/ }).first();
 
 for (const width of [1280, 375]) {
@@ -264,7 +264,7 @@ test('Hinweise funktionieren per Touch', async ({ browser, baseURL }) => {
     await expect(page.locator('#wiki-hint[data-open="true"]')).toBeVisible();
     expect(page.url()).toBe(url);
     await link.tap();
-    await expect(page).toHaveURL(/\/docs\/open-questions\.html$/);
+    await expect(page).toHaveURL(/\/docs\/open-questions\.html#oq-07$/);
     await expect(page.locator('#wiki-hint[data-open="true"]')).toHaveCount(0);
   } finally {
     await context.close();

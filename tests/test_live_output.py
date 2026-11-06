@@ -6,7 +6,10 @@ from dataclasses import replace
 
 import pytest
 from dotmatrix_helpers import embed
+from test_live_service import FakeOwner
 from test_live_session import _session
+
+from dispread.live.service import LiveError, LiveService
 
 
 def wait_receipts(session, count):
@@ -413,3 +416,295 @@ def test_unexpected_audit_exception_latches_without_stopping_reader(tmp_path, mo
         assert not session.output_status()['enabled'] and not session._output._busy
     finally:
         session.stop()
+
+
+class Publisher:
+    def __init__(self, config, out_dir):
+        self.config, self.out_dir = config, out_dir
+        self.started = self.stopped = False
+        self.records = []
+
+    def start(self):
+        self.started = True
+
+    def publish(self, record):
+        # This fails if publication precedes the mandatory audit.
+        lines = (self.out_dir / "records.jsonl").read_text().splitlines()
+        assert json.loads(lines[-1]) == record.to_dict()
+        self.records.append(record)
+
+    def stop(self):
+        self.stopped = True
+
+    def status(self):
+        return {"transport": self.config.transport, "state": "disconnected", "release_block": "Windows-Abnahme fehlt",
+                "error": None, "last_ack": None}
+
+    def metadata(self):
+        return {"config": self.config.to_dict(), "provisional": True}
+
+
+def test_publish_follows_audit_and_stop_closes_output(tmp_path):
+    from dispread.gsv_transport import OutputConfig
+
+    session = _session(tmp_path, [embed("+ 1.2345 "), embed("+ 1.2345 ")],
+                       output=OutputConfig.from_dict({"transport": "tcp"}), output_factory=Publisher)
+    session.start()
+    assert session._output.started
+    session.step()
+    session.step()
+    assert len(session._output.records) == 2
+    assert session.output_status()["state"] == "disconnected"
+    assert session.end_reason is None
+    assert session._sink.max_bytes == 0
+    session.stop()
+    assert session._output.stopped
+    data = json.loads(session.session_path.read_text())
+    assert data["output"]["provisional"] is True
+    assert data["output"]["status"]["state"] == "disconnected"
+
+
+def test_failed_audit_does_not_publish_record(tmp_path, monkeypatch):
+    from dispread.gsv_transport import OutputConfig
+    from dispread.live.session import AuditFailed
+    from dispread.records import TxReceipt
+
+    session = _session(tmp_path, [embed("+ 1.2345 ")],
+                       output=OutputConfig.from_dict({"transport": "tcp"}), output_factory=Publisher)
+    session.start()
+    monkeypatch.setattr(session._sink, "emit", lambda record: TxReceipt(record.frame_sequence, 1, "jsonl", None, 0, None))
+    with pytest.raises(AuditFailed):
+        session.step()
+    assert session._output.records == []
+    session.stop()
+    assert session._output.stopped
+
+
+def test_test_override_refuses_external_output_before_creating_run(tmp_path):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state = "confirmed"
+    service._profile_path = tmp_path / "profile.json"
+    service._run_block = "Gegenlesen fehlt"
+    with pytest.raises(LiveError, match="Testlauf"):
+        service.start_run(test_override=True, reference=False, output={"transport": "tcp"})
+    assert not list(tmp_path.glob("run-*"))
+
+
+def test_invalid_output_is_live_error_before_creating_run(tmp_path):
+    service = LiveService(FakeOwner(), tmp_path)
+    with pytest.raises(LiveError):
+        service.start_run(output={"transport": "unknown"})
+    assert not list(tmp_path.glob("run-*"))
+
+
+def test_late_start_metadata_failure_closes_audit_and_output(tmp_path, monkeypatch):
+    from dispread.gsv_transport import OutputConfig
+
+    session = _session(tmp_path, [], output=OutputConfig.from_dict({"transport": "tcp"}),
+                       output_factory=Publisher)
+    write = session._write_session
+    calls = []
+
+    def fail_second_write(*, ended):
+        calls.append(ended)
+        if len(calls) == 2:
+            raise OSError("Metadaten voll")
+        return write(ended=ended)
+
+    monkeypatch.setattr(session, "_write_session", fail_second_write)
+    with pytest.raises(OSError, match="Metadaten voll"):
+        session.start()
+    assert session._output.stopped
+    assert session._sink._fh is None
+
+
+OUTPUT_CASES = [
+    ({'port': '/fake/output'}, 'serial'),
+    ({'transport': 'serial', 'port': '/fake/output', 'prefix': '#', 'baudrate': 9600}, 'serial'),
+    ({'transport': 'uart'}, 'uart'),
+    ({'transport': 'tcp', 'tcp_port': 5001}, 'tcp'),
+    (None, 'off'),
+    ({'transport': 'off'}, 'off'),
+]
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES)
+def test_unified_service_output_contract(tmp_path, monkeypatch, config, transport):
+    monkeypatch.setattr('serial.Serial', FakeSerial)
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+
+    def factory(owner, profile, settings, out_dir, **kwargs):
+        return _session(tmp_path, [], out_dir=out_dir, output_factory=Publisher, **kwargs)
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    try:
+        service.start_run(reference=False, output=config)
+        status = service.status()
+        output = status['output']
+        assert output['transport'] == transport
+        if transport == 'off':
+            assert output == {'transport': 'off', 'state': 'off'}
+            assert 'output' not in status['run']
+        else:
+            assert {'transport', 'state', 'config', 'error', 'release_block'} <= output.keys()
+            assert 'last_ack' in output or 'last_driver_ack' in output
+            assert output['config']['transport'] == transport
+            if transport == 'serial':
+                assert status['run']['output'] == service._session.output_status()
+                assert 'state' not in status['run']['output']
+                assert output['state'] == 'serial_ready'
+                assert output['last_driver_ack'] is None
+                assert status['run']['output']['prefix'] == (config or {}).get('prefix', '%')
+            else:
+                assert output['state'] == 'disconnected'
+                assert output['release_block']
+    finally:
+        service.stop_run()
+    if transport == 'serial':
+        assert service.status()['output']['state'] == 'stopped'
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES[:4])
+def test_all_external_transports_reject_test_override_before_side_effects(tmp_path, monkeypatch, config, transport):
+    service = LiveService(FakeOwner(), tmp_path)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff im Testlauf'))
+    with pytest.raises(LiveError, match='^Testlauf erlaubt keine externe Ausgabe$'):
+        service.start_run(test_override=True, reference=False, output=config)
+    assert not list(tmp_path.iterdir())
+    assert service._owner.restarts == 0
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES[:4])
+def test_session_also_rejects_external_output_for_test_run(tmp_path, config, transport):
+    from dispread.live.session import StartRefused
+
+    with pytest.raises(StartRefused, match='^Testlauf erlaubt keine externe Ausgabe$'):
+        _session(tmp_path, [], test_run={'testlauf': True}, output=config, output_factory=Publisher)
+
+
+def test_no_run_reports_output_off(tmp_path):
+    assert LiveService(FakeOwner(), tmp_path).status()['output'] == {'transport': 'off', 'state': 'off'}
+
+
+@pytest.mark.parametrize('config', [
+    {'transport': 'unknown'}, {'transport': None}, {'transport': ['serial']},
+])
+def test_unknown_transport_has_german_live_error(tmp_path, config):
+    with pytest.raises(LiveError, match='Unbekannter Ausgabeweg'):
+        LiveService(FakeOwner(), tmp_path).start_run(output=config)
+
+
+@pytest.mark.parametrize('config', [
+    {'transport': 'serial', 'port': '/dev/serial0'},
+    {'transport': 'serial', 'port': '/dev/ttyUSB0'},
+    {'transport': 'serial', 'port': '/fake/output', 'unknown': True},
+    {'transport': 'uart', 'serial_port': '/dev/ttyUSB0'},
+    {'transport': 'tcp', 'tcp_port': 0},
+])
+def test_explicit_transports_keep_existing_validation_locks(tmp_path, config):
+    with pytest.raises(LiveError):
+        LiveService(FakeOwner(), tmp_path).start_run(output=config)
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES)
+def test_ui_fake_accepts_unified_output_without_losing_scenes(tmp_path, config, transport):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'preview.png')
+    service.start_run(reference=False, output=config, diagnostics=True)
+    status = service.status(full=True)
+    assert status['state'] == 'running' and status['run']['latest']['status'] == 'valid'
+    assert status['output']['transport'] == transport
+    assert status['diagnostics']['enabled']
+    assert status['cause_texts']
+    assert status['setup']['grid']['quad']
+    assert 'latest' in status['reference']
+    service.stop_run()
+    assert service.status()['output']['state'] == ('off' if transport == 'off' else 'stopped')
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES[:4])
+def test_ui_fake_rejects_output_for_test_run_before_scene_change(tmp_path, config, transport):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'preview.png')
+    before = service.status()
+    with pytest.raises(LiveError, match='^Testlauf erlaubt keine externe Ausgabe$'):
+        service.start_run(test_override=True, output=config)
+    assert service.status() == before
+
+
+@pytest.mark.parametrize('text,value', [
+    ('+ 1.7643', 1.7643), ('-012.50', -12.5), ('0', 0.0),
+    ('-0.000', -0.0), ('+000.00', 0.0), (' 12 3.45 ', 123.45),
+    ('+0.12345', 0.12345), ('0.10000000000000001', 0.1),
+])
+def test_formatter_contracts_are_distinct_over_existing_fixtures(text, value):
+    from test_userdefined_formatter import record
+
+    from dispread.sink.protocol.user_defined import UserDefinedFormatter as BridgeFormatter
+    from dispread.sink.protocol.userdefined import UserDefinedFormatter as DirectFormatter
+
+    item = replace(record(text, value), unit='mV/V')
+    direct, bridge = DirectFormatter(), BridgeFormatter()
+    if ' ' in text or text == '0':
+        assert direct.format(item) == ('%' + text.replace(' ', '') + '\r\n').encode('ascii')
+        with pytest.raises(ValueError):
+            bridge.format(item)
+    elif text == '0.10000000000000001':
+        assert direct.format(item) is None
+        assert bridge.format(item) == b'%0.10000000000000001\r\n'
+    else:
+        assert direct.format(item) == bridge.format(item) == ('%' + text + '\r\n').encode('ascii')
+
+
+@pytest.mark.parametrize('stop_fails', [False, True])
+def test_bridge_stop_runs_once_and_always_closes_audit(tmp_path, stop_fails):
+    class ClosingPublisher(Publisher):
+        stops = 0
+
+        def stop(self):
+            self.stops += 1
+            if stop_fails:
+                raise OSError('Ausgabeabschluss fehlgeschlagen')
+            super().stop()
+
+    session = _session(tmp_path, [], output={'transport': 'tcp'}, output_factory=ClosingPublisher)
+    session.start()
+    if stop_fails:
+        with pytest.raises(OSError, match='Ausgabeabschluss'):
+            session.stop()
+    else:
+        session.stop()
+    assert session._output.stops == 1
+    assert session._sink._fh is None
+    assert session._stopped
+
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_unified_session_keeps_real_publisher_dut_lock(tmp_path, monkeypatch, transport):
+    from dispread.gsv_transport import RELEASE_BLOCK, OutputPublisher
+
+    # Echte Publisher-Logik und Audit, aber kein Port oder Socket im Test.
+    monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
+    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport})
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    try:
+        item = session.step()
+        assert item.status.value == 'valid'
+        assert json.loads(session.records_path.read_text()) == item.to_dict()
+        output = session.unified_output_status()
+        assert output['config']['transport'] == transport
+        assert output['error'] is None and output['last_ack'] is None
+        assert output['release_block'] == RELEASE_BLOCK
+        reply = session._output.handle({'version': 1, 'type': 'poll', 'request_id': 'dut'})
+        assert reply['type'] == 'idle' and 'record' not in reply
+        assert reply['release_block'] == RELEASE_BLOCK
+    finally:
+        session.stop()
+    data = json.loads(session.session_path.read_text())['output']
+    assert data['formatter']['provisional'] is True
+    assert data['release_block'] == RELEASE_BLOCK

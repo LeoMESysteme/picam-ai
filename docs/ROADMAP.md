@@ -1,10 +1,12 @@
 # Roadmap
 
-Stand des Abgleichs: **2026-10-28**. Die UserDefined-Schnittstelle ist durch
-die Herstelleranleitung belegt; ein GSVmulti-Prototyp kann jetzt gebaut
-werden ([Bewertung](GSVMULTI_PROTOCOL.md)). P4 ist noch nicht umgesetzt
-oder abgenommen: Empfang in 2.01 Pro (OQ-01), Ungültigbehandlung (OQ-06),
-Transport/Wiederanlauf (OQ-47) und Zeitachse (M8/P5) brauchen Nachweise.
+Stand des Abgleichs: **2026-11-04**. UserDefined-Formatter, gemeinsame
+TCP-/UART-Windows-Brücke und Live-Konfiguration sind als Software-Prototyp
+gebaut ([Bewertung](GSVMULTI_PROTOCOL.md)). P4 ist teilweise umgesetzt,
+aber nicht abgenommen: Echte DUT-Ausgabe bleibt strukturell gesperrt.
+Gültiger Zahlenimport in 2.03 Pro ist belegt (OQ-01), auch über gemeinsame
+TCP-Brücke. Ungültigbehandlung (OQ-06), Puffernachlauf/Wiederanlauf (OQ-47)
+und Zeitachse (M8/P5) brauchen weitere Nachweise am Windows-PC.
 OQ-02, OQ-03 und OQ-04 betreffen weiterhin die Abnahme.
 
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
@@ -13,7 +15,7 @@ OQ-02, OQ-03 und OQ-04 betreffen weiterhin die Abnahme.
 | **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — seit 2026-09-25 StreamCam statt IMX500; `camera-commissioning.sh` Exit 0 (2026-09-28), Zeitbasis MONOTONIC → BOOTTIME über gemessenen Versatz, `replay://` implementiert; Zeitstempel-Semantik offen (OQ-43, für die Ernte durch die Timing-Kalibrierung abgedeckt) |
 | **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | **teilweise** — Sammelmodus, serielle Auto-Labels, Timing-Kalibrierung, Ernte und Import gebaut; reale Dot-Matrix-Daten und mehrere Aufstellungen vorhanden. Geräte-/Displayvielfalt und zwei gesperrte Geräteinstanzen fehlen; mehrere Aufstellungen desselben GSV-2AS sind keine weiteren Geräte |
 | **P3** | Werterkennung an realen Anzeigen, Freigabeschwellen kalibrieren | ja | nein | Trefferquote **pro Fehlerklasse** aufgeschlüsselt; reale Freigabeschwellen für den vereinbarten Gerätekreis belegt | **teilweise** — Dot-Matrix-Abnahme 3: 215/215 richtig auf zwei neuen Aufstellungen desselben GSV-2AS (2026-09-30); Live-Bedienerläufe seit 2026-10-21. Andere Geräte, Vorzeichen, Einheiten und angepasste Toleranz nicht abgenommen |
-| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | **offen** — UserDefined-Spezifikation vorhanden (2026-10-28), Prototyp baubar; Adapter und Abnahme fehlen (OQ-01, OQ-06, OQ-47) |
+| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | **teilweise** — Software gebaut; direkter UART-Demoimport, gespeicherte Sprünge und lokale Windows-Demo sowie gemeinsamer Pi-TCP-/JSONL-/ACK-Dateipfad über COM5/COM6 jeweils mit600/600 exakten Werten belegt (2026-11-04). Timeout und Fortsetzung nach Datenpause belegt, Ungültigabschnitte fehlen auch mit NaN und bestätigtem Replace Missing Values; mV/V/Skalierung 1 in TDMS/Session belegt, Prozesswiederanlauf mit510/510 geschriebenen Werten belegt, übrige Abbruch-/Altwertfälle offen; DUT-Ausgabe gesperrt (OQ-06, OQ-47, OQ-50, OQ-51, OQ-52) |
 | **P5** | Zeitbezug vollständig: §6 von Prosa in Zahlen | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | **teilweise** — StreamCam-Timing-Kalibrierung und Live-Referenzauswertung vorhanden; getrenntes Budget, Referenzsynchronität und M8 weiter offen |
 | **P6** | Robustheit und Dauerbetrieb (§10 Ph. 3) | ja | teilw. | 72-h-Dauerlauf mit provozierten Störungen; **kein unmarkierter Altwert**; Speicher stabil | **teilweise** — Live-Pfad mit STALE und Audit gebaut, kurze Störversuche vorhanden; 72 h, Audit-Aufbewahrung und Nachführung bei großen Wertwechseln offen ([OQ-26](open-questions.md#oq-26)) |
 | **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | offen |
@@ -53,8 +55,8 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 | P3 | p3-fehlerklassen | Trefferquote nach Fehlerklassen aufschlüsseln | offen | — | [Fehlerklassen](VALIDATION.md#fehlerklassen-getrennt-zu-zahlen) |
 | P4 | p4-format | UserDefined-Spezifikation für den Prototyp beschaffen | belegt | 2026-10-28 | [Primärquelle und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#quellen), [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
 | P4 | p4-ungueltig | Behandlung ungültiger und veralteter Werte vereinbaren | offen | — | [OQ-06](open-questions.md#oq-06) |
-| P4 | p4-anbindung | UserDefined-Formatter, Transport und Live-Lebenszyklus anbinden | offen | — | [Anbindungsnaht](GSVMULTI_PROTOCOL.md#die-naht-im-code), [OQ-47](open-questions.md#oq-47) |
-| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | offen | — | [Abnahmeplan](GSVMULTI_PROTOCOL.md#abnahme) |
+| P4 | p4-anbindung | Software-Prototyp: Formatter, Transport und Live-Lebenszyklus mit DUT-Ausgabesperre | gebaut | 2026-11-04 | [Anbindungsnaht](GSVMULTI_PROTOCOL.md#die-naht-im-code), [OQ-47](open-questions.md#oq-47) |
+| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | teilweise | 2026-11-04 | [UART-Demo und Ungültiggrenze](VALIDATION.md#uart-demo-20261104-10); mV/V in TDMS/Session [belegt](VALIDATION.md#uart-demo-20261104-11); lokale Windows-Demo600/600 [belegt](VALIDATION.md#windows-local-demo-20261104-01), gemeinsamer TCP-Dateipfad600/600 [belegt](VALIDATION.md#tcp-demo-20261104-01), Prozesswiederanlauf510/510 geschriebene Werte [belegt](VALIDATION.md#tcp-reconnect-20261104-01); ungültige Zeiträume unmarkiert, vollständiges Ungültig-/Abbruchverhalten offen, [Abnahmeplan](GSVMULTI_PROTOCOL.md#abnahme) |
 | P5 | p5-kalibrierung | StreamCam-Timing-Kalibrierung | vorhanden | — | [Zeitbezug](TIMING.md) |
 | P5 | p5-referenz | Live-Referenzauswertung | vorhanden | 2026-10-21 | [Werteplan-Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21) |
 | P5 | p5-budget | Unsicherheitsbudget mit getrennten Einzelbeiträgen ausfüllen | offen | — | [Zeitbezug und Messprogramm](TIMING.md) |
@@ -89,7 +91,8 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
   aber kein VALID in stabilen Referenzfenstern bei Faktor 2 und 5;
   Rückstellung bestätigt. Die Nachführung bleibt damit offen
   ([Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21)).
-  Keine serielle Ausgabe an GSVmulti; diese bleibt P4 / OQ-07.
+  Seit 2026-11-04 ist die optionale TCP-/UART-Brücke eingebunden; echte
+  DUT-Ausgabe bleibt bis zum Windows-Nachweis gesperrt (P4 / OQ-06 / OQ-47).
 
 - [x] Repo-Grundgerüst nach MEhub-Konventionen, Importpaket `dispread`
 - [x] Projekt-venv mit `--system-site-packages`, Paket mit `--no-deps`

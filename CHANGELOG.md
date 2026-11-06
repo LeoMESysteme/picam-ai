@@ -5,6 +5,33 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: GSVmulti: Brücke und P4-3-Direktausgabe unter einem Ausgabevertrag.
+  Laufstart akzeptiert Aus, serielle Direktausgabe, UART über Brücke und
+  Netzwerk über Brücke; bestehende Port-Konfigurationen bleiben gültig.
+  Der gemeinsame Ausgabestatus ergänzt den bisherigen P4-3-Status.
+  Testläufe lehnen jeden externen Ausgabeweg vor dem Laufstart ab.
+  Die Brückensperre für echte DUT-Werte und die Port-Schutzregeln bleiben
+  erhalten. Beide Formatter bleiben wegen unterschiedlicher Zahlenlexik,
+  Konsistenzprüfung und Demo-NaN getrennt. Fake-Server und Status-Fixtures
+  bilden den erweiterten Vertrag ab.
+
+* 2026-11-04: GSVmulti-Software-Prototyp ergänzt: einkanaliger
+  `UserDefinedFormatter` erhält die gelesene Dezimalauflösung, gemeinsame
+  Windows-Brücke empfängt wahlweise über TCP oder UART und schreibt an ein
+  virtuelles COM-Portpaar. Die Live-Seite bietet Aus/UART/Netzwerk und
+  Verbindungsstatus; Audit wird vor Veröffentlichung geschrieben und je
+  Lauf nicht mehr wegrotiert. Transportfehler lassen Kamera/Audit weiterlaufen,
+  Wiederanlauf verwirft historische Aufholfolgen. Unbestätigte Invalidierung
+  bleibt getrennt vom jüngsten Zahlenwert erhalten. **Echte DUT-Ausgabe ist
+  bis zur vollständigen Abnahme strukturell gesperrt**. Gültiger TCP-Demoweg
+  mit600/600 exakten TXT-/TDMS-Werten und Brückenprozess-Wiederanlauf mit
+  510/510 geschriebenen Werten belegt. GSVmulti verdichtet Ausfälle weiter
+  auf nominelle0,1s; Ungültig-/Altwertbehandlung, weitere Abbruchfälle und
+  historischer Import bleiben offen. com0com auf dem getesteten Windows11-PC
+  mit aktivem SecureBoot/HVCI funktionsfähig; keine allgemeine Treiberzulassung. Neue
+  Transportmarken tragen die explizite Zeitbasis `HOST_MONOTONIC`; die
+  bestehenden Bezeichnungslücken aus OQ-45 werden damit nicht geschlossen.
+
 * 2026-11-04: Die alte Live-Seite ist abgelöst; die neue Werkbank-Seite
   `/live` ist die einzige.
   * **Entfernt:** `static/live.html`, `static/live.js` und die Übergangsroute

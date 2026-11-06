@@ -27,6 +27,7 @@ from typing import Any
 
 import cv2
 
+from dispread.gsv_transport import OutputConfig, OutputPublisher
 from dispread.layout import CharLayout
 from dispread.live import (
     DEFAULT_CALIBRATION,
@@ -38,7 +39,7 @@ from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
-from dispread.live.output import LiveOutput, validate_output
+from dispread.live.output import LiveOutput, normalize_output
 from dispread.live.recent import RecentStrip
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
@@ -184,8 +185,9 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
+        output_factory: Callable[..., Any] = OutputPublisher,
         reference_recorder: Any = None,
-        output: dict | None = None,
+        output: dict | OutputConfig | None = None,
         diagnostics: bool = False,
         diagnostic_staging_root: Path = Path('/dev/shm'),
         reader_d_max_factor: float = 1.0,
@@ -215,8 +217,16 @@ class LiveSession:
         self._profile_path = Path(profile_path)
         self._config = config
         self._out_dir = Path(out_dir)
-        options = validate_output(output)
-        self._output = None if options is None else LiveOutput(options, self._out_dir / 'tx.jsonl')
+        self._output_config = normalize_output(output.to_dict() if isinstance(output, OutputConfig) else output)
+        self._output_transport = self._output_config['transport']
+        if test_run is not None and self._output_transport != 'off':
+            raise StartRefused('Testlauf erlaubt keine externe Ausgabe')
+        self._output = None
+        if self._output_transport == 'serial':
+            options = {key: value for key, value in self._output_config.items() if key != 'transport'}
+            self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
+        elif self._output_transport != 'off':
+            self._output = output_factory(OutputConfig.from_dict(self._output_config), self._out_dir)
         self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
@@ -326,7 +336,10 @@ class LiveSession:
         self._sink.open()
         if self._output is not None:
             try:
-                self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                if self._output_transport == 'serial':
+                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                else:
+                    self._output.start()
             except Exception as exc:
                 self.stop(reason='start_failed')
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
@@ -356,7 +369,7 @@ class LiveSession:
         with self._stop_lock:
             if self._stopped:
                 return None
-            if (self._output is not None and not self._output_error_saved
+            if (self._output_transport == 'serial' and not self._output_error_saved
                     and self._output.failed_event.is_set()):
                 # Im Leserthread schreiben: kein Session-Dateirennen oder Lock/Join-Deadlock.
                 self._write_session(ended=False)
@@ -414,7 +427,10 @@ class LiveSession:
                 self._audit_errors += 1
                 raise AuditFailed(f"Audit nicht geschrieben: {health.last_error or 'Schreibfehler'}")
             if self._output is not None:
-                self._output.submit(record)
+                if self._output_transport == 'serial':
+                    self._output.submit(record)
+                else:
+                    self._output.publish(record)
             self._frames_read += 1
             if suppressed:
                 self._testlauf_unterdrueckt += 1
@@ -629,12 +645,14 @@ class LiveSession:
             except Exception as exc:  # noqa: BLE001 - Abschluss bleibt erhalten
                 self._reference_error = str(exc)
             finally:
-                if self._output is not None:
-                    self._output.stop()
                 self._clock.sample()
                 try:
-                    if self._sink is not None:
-                        self._sink.close()
+                    try:
+                        if self._output is not None:
+                            self._output.stop()
+                    finally:
+                        if self._sink is not None:
+                            self._sink.close()
                 finally:
                     try:
                         self._ended_monotonic = self._monotonic()
@@ -672,7 +690,32 @@ class LiveSession:
                 'schedule_step': None if recorder is None else recorder.schedule_step_status()}
 
     def output_status(self) -> dict | None:
-        return None if self._output is None else self._output.status()
+        """P4-3-Status unveraendert; Brueckenstatus mit Konfiguration."""
+        if self._output is None:
+            return None
+        status = self._output.status()
+        return status if self._output_transport == 'serial' else {**status, 'config': dict(self._output_config)}
+
+    def unified_output_status(self) -> dict:
+        """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
+
+        Fehler bleiben wie im Direktausgang verriegelt. last_driver_ack ist
+        unbekannt: P4-3 zaehlt Writes, speichert hier aber keinen letzten ACK.
+        """
+        if self._output is None:
+            return {'transport': 'off', 'state': 'off'}
+        status = self.output_status()
+        if self._output_transport != 'serial':
+            return status
+        return {
+            'transport': 'serial',
+            'state': ('disconnected' if status['first_error'] else
+                      'serial_ready' if status['enabled'] else 'stopped'),
+            'config': dict(self._output_config),
+            'error': status['first_error'],
+            'release_block': None,
+            'last_driver_ack': None,
+        }
 
     def _write_session(self, *, ended: bool) -> None:
         if self._stopped and not ended:
@@ -706,8 +749,10 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
-        if self._output is not None:
+        if self._output_transport == 'serial':
             data['output'] = self.output_status()
+        elif self._output is not None:
+            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status()}
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark

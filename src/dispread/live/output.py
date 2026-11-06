@@ -12,6 +12,7 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from dispread.gsv_transport import OutputConfig
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord
 from dispread.sink.protocol.userdefined import UserDefinedFormatter
 from dispread.sink.serial_out import SerialSink
@@ -80,6 +81,24 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
         return {'port': port, 'baudrate': baudrate, 'prefix': prefix, 'allow_reference_adapter': allow}
     except (ValueError, OSError, RuntimeError) as exc:
         raise ValueError(f'Ausgabe: {exc}') from exc
+
+
+def normalize_output(value, *, reference_port: str | None = None) -> dict:
+    """Gemeinsamer Vertrag; P4-3 ohne transport bleibt die Direktausgabe."""
+    if value is None:
+        return OutputConfig.from_dict(None).to_dict()
+    if not isinstance(value, dict):
+        raise ValueError('Ausgabe: Ausgabekonfiguration muss ein Objekt sein')
+    if 'transport' not in value and 'port' not in value:
+        raise ValueError('Ausgabe: transport oder Port erforderlich')
+    transport = value.get('transport', 'serial')
+    if transport == 'serial':
+        options = validate_output({key: item for key, item in value.items() if key != 'transport'},
+                                  reference_port=reference_port)
+        return {'transport': 'serial', **options}
+    if transport not in ('off', 'uart', 'tcp'):
+        raise ValueError('Unbekannter Ausgabeweg')
+    return OutputConfig.from_dict(value).to_dict()
 
 
 class LiveOutput:

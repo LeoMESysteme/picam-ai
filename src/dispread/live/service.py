@@ -30,7 +30,7 @@ from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
-from dispread.live.output import validate_output
+from dispread.live.output import normalize_output
 from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
@@ -316,6 +316,9 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "output": (self._session.unified_output_status()
+                           if self._session is not None and hasattr(self._session, 'unified_output_status')
+                           else {"transport": "off", "state": "off"}),
                 "reference_eval": deepcopy(self._reference_eval),
                 "diagnostics": (self._session.diagnostics_status()
                                 if self._session is not None and hasattr(self._session, 'diagnostics_status')
@@ -795,7 +798,9 @@ class LiveService:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
-            output = validate_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
+            output = normalize_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
+            if test_override and output['transport'] != 'off':
+                raise ValueError('Testlauf erlaubt keine externe Ausgabe')
         except (TypeError, ValueError) as exc:
             raise LiveError(str(exc)) from exc
         with self._operation_lock:
@@ -846,7 +851,7 @@ class LiveService:
                     reader_tolerance=self._reader_tolerance,
                     reference_recorder=recorder,
                     diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
-                    **({'output': output} if output is not None else {}),
+                    **({'output': output} if output['transport'] != 'off' else {}),
                 )
                 session.start()
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite

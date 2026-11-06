@@ -91,6 +91,22 @@ const causes = fields({
   window_s: number, frames: integer, limited: boolean,
   causes: array(fields({ reason: string, count: integer, fraction: number })),
 });
+function output(v, p) {
+  fields({ transport: choice('off', 'serial', 'uart', 'tcp'), state: string })(v, p);
+  if (v.transport === 'off') {
+    choice('off')(v.state, `${p}.state`);
+    return;
+  }
+  fields({
+    state: choice('waiting', 'bridge_connected', 'disconnected', 'audit_failed', 'stopped', 'serial_ready'),
+    config: object, error: nullable(string), release_block: nullable(string),
+  })(v, p);
+  if (!Object.hasOwn(v, 'last_ack') && !Object.hasOwn(v, 'last_driver_ack')) {
+    fail(`${p}.last_ack`, 'last_ack oder last_driver_ack');
+  }
+  optional(v, 'last_ack', nullable(object), p);
+  optional(v, 'last_driver_ack', nullable(object), p);
+}
 function run(v, p) {
   fields({
     latest: nullable(latest), summary: object,
@@ -128,6 +144,7 @@ const root = fields({
 /** Throws TypeError with a field path if required status fields have a wrong shape. */
 export function assertStatusShape(status) {
   root(status, 'status');
+  optional(status, 'output', output, 'status');
   optional(status, 'csrf', string, 'status');
   optional(status, 'tracking_reasons', dictionary(string), 'status');
   optional(status, 'cause_texts', dictionary(string), 'status');

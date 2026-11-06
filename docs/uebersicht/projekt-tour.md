@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-10-28. Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-11-04 (vorheriger Stand: 2026-10-28). Alle sechs Kapitel sind fertig: Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -34,8 +34,9 @@ Links steht der Prüfling, hier ein GSV-2AS. Seine Anzeige ist ein
 Punktraster-LCD. Eine Logitech StreamCam filmt sie über USB 3, und ein
 Raspberry Pi 5 liest den Wert aus jedem Bild. Eingerichtet wird das Ganze im
 Browser an der Werkbank. Am Ende soll der Wert seriell an das Programm
-GSVmulti gehen. Diese Verbindung ist noch offen, weil das Datenformat fehlt,
-das GSVmulti erwartet.
+GSVmulti gehen. UserDefined-Formatter und gemeinsame Netzwerk-/UART-Brücke
+sind als Software-Prototyp gebaut. Echte DUT-Ausgabe bleibt gesperrt, bis
+Empfang, ungültige Werte und Altwertpuffer in GSVmulti geprüft sind.
 
 Die beschrifteten Etiketten auf der Bühne öffnen die Kapitel.
 
@@ -55,7 +56,7 @@ begründete Ablehnung, nie ein geratener Wert.
 Der Punkt läuft den Weg eines Werts entlang: von der Anzeige über die Kamera
 zum Pi. Dort entsteht ein Datensatz, der ins Audit-Protokoll (JSONL) geschrieben
 wird, auch wenn der Wert abgelehnt wurde. Der Weg zu GSVmulti endet beim „?“,
-weil das Datenformat noch offen ist.
+weil die Windows-Abnahme noch offen ist und echte DUT-Ausgabe gesperrt bleibt.
 
 Unten läuft die Kalibrierreferenz, also das Vergleichsgerät des Labors. Ihr
 Wert wird erst **nachher** über die Zeitstempel zugeordnet. In die Erkennung
@@ -336,10 +337,12 @@ Qualitätskennzahl. Sie sagt **nicht**, wie wahrscheinlich der Wert falsch
 ist.
 
 Jeder Datensatz geht als eine JSON-Zeile in das Audit-Protokoll. Die
-serielle Senke als Baustein ist gebaut; der aktuelle Live-Lauf schreibt
-ausschließlich das JSONL-Audit. Die Anbindung an GSVmulti ist noch offen,
-weil dessen Telegrammformat nicht geklärt ist (OQ-07). Was tatsächlich über die
-Leitung ging, hält ein eigener `TxReceipt` fest, getrennt vom Datensatz.
+serielle Senke als Baustein und die gemeinsame TCP-/UART-Brücke sind gebaut.
+Der Live-Lauf schreibt zuerst das JSONL-Audit und kann den Verbindungszustand
+der Brücke anzeigen. Echte DUT-Zahlen werden bis zur Windows-Abnahme nicht
+weitergegeben. Der `UserDefinedFormatter` erhält die gelesene Dezimalauflösung;
+Übertragungsbelege bleiben getrennt vom `ValueRecord`. Ein COM-Schreibbeleg
+bestätigt keine Verarbeitung durch GSVmulti.
 
 Mehr dazu: [Verträge (API)](../../api/vertraege.md) ·
 [Ausgabe (API)](../../api/sink.md) ·
@@ -796,8 +799,9 @@ Freigabesicherung ist umgesetzt ([OQ-44](../open-questions.md#oq-44)).
 
 Der Live-Pfad ist am Aufbau gelaufen, aber noch nicht umfassend abgenommen:
 Große Wertwechsel können die Nachführung verlieren lassen (OQ-26), die
-angepasste Toleranz bleibt nicht validiert. Die Ausgabe an GSVmulti bleibt
-offen, bis das Telegrammformat feststeht (OQ-07).
+angepasste Toleranz bleibt nicht validiert. Der UserDefined-Software-Prototyp
+ist gebaut; echte DUT-Ausgabe an GSVmulti bleibt bis zur Prüfung von Empfang,
+ungültigen Werten und Altwertpuffern gesperrt (OQ-06, OQ-47).
 
 Mehr dazu: [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md) ·
 [Arbeitsliste](../../TODO.md) · [Betrieb](../anleitung/09-betrieb.md)
@@ -912,19 +916,23 @@ Mehr dazu: [OCR (API)](../../api/ocr.md) ·
 
 ### Kein erfundenes Protokoll {#regeln-protokoll}
 
-**Kurz:** Solange niemand weiß, welches Telegramm GSVmulti erwartet, wird
-keines geraten.
+**Kurz:** UserDefined ist dokumentiert und als Prototyp gebaut. Ein
+unbelegtes natives Geräteprotokoll wird weiterhin nicht geraten.
 
 Was könnte passieren? Ein ausgedachtes Format würde in Tests grün
 erscheinen, in Berichten als „Ausgabe funktioniert“ stehen und erst am
 Laborplatz auffallen.
 
-Darum wirft der Platzhalter für das echte GSVmulti-Format
-(`GsvAsciiFormatter`) absichtlich einen Fehler und verweist auf OQ-07. Zum
-Testen der Kette gibt es nur ein CSV-Format, das sichtbar als vorläufig
-markiert ist (`provisional = True`). Nach der Projektregel in `AGENTS.md`
-gehört diese Markierung in jedes Laufergebnis. Belastbar wäre ein Mitschnitt: ein echtes GSV-Gerät an
-GSVmulti anschließen und den Datenstrom aufzeichnen.
+Darum wirft der Platzhalter für das native GSV-Geräteprotokoll
+(`GsvAsciiFormatter`) weiterhin absichtlich einen Fehler. Der neue
+`UserDefinedFormatter` setzt den dokumentierten Zahlenimport um; die
+Windows-Brücke empfängt dafür wahlweise über Netzwerk oder UART. Auch
+dieser Prototyp ist vorläufig (`provisional = True`), und diese Markierung
+gehört in jedes Laufergebnis. Das ältere CSV-Testformat bleibt erhalten.
+
+Echte DUT-Ausgabe bleibt strukturell gesperrt, bis Empfang, ungültige Werte
+und Altwertpuffer in der eingesetzten GSVmulti-Version geprüft sind.
+Ein erfolgreicher COM-Schreibvorgang allein hebt diese Sperre nicht auf.
 
 Mehr dazu: [GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md) ·
 [OQ-07](../open-questions.md#oq-07)
@@ -950,7 +958,7 @@ Offen sind:
 * das Minuszeichen: Dieses Gerät zeigt nie negative Werte, deshalb kennt der
   Leser nur „+“,
 * Freigabeschwellen an realen Geräten (OQ-14),
-* das GSVmulti-Format (OQ-07),
+* GSVmulti-Empfang, Ungültigbehandlung und Altwertpuffer (OQ-07, OQ-06, OQ-47),
 * die Nachführung bei großen Wertwechseln (OQ-26) und die vollständige
   Live-Abnahme,
 * eine belastbare Validierung der angepassten Lesetoleranz.

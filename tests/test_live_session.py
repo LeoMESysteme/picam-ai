@@ -1783,6 +1783,13 @@ def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run
         def is_reconfiguring(self, capture_boottime_ns):
             return 2 * 33_333_333 + 1000 <= capture_boottime_ns < 3 * 33_333_333 + 1000
 
+    if test_run is not None:
+        monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff im Testlauf'))
+        with pytest.raises(StartRefused, match='^Testlauf erlaubt keine externe Ausgabe$'):
+            _session(tmp_path, [], test_run=test_run, output={'port': '/fake/output'})
+        assert not (tmp_path / 'run').exists()
+        return
+
     master, slave = os.openpty()
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, reference_recorder=Recorder(),
                        test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#'})
@@ -1825,7 +1832,7 @@ def test_output_open_failure_refuses_session(tmp_path):
     assert session.latest is None
 
 
-@pytest.mark.parametrize('options', [{}, {'output': None}])
+@pytest.mark.parametrize('options', [{}, {'output': None}, {'output': {'transport': 'off'}}])
 def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
     from datetime import UTC, datetime
     from pathlib import Path

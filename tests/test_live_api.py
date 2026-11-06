@@ -24,8 +24,9 @@ class FakeService:
     def confirm(self, **kw):
         raise LiveError("Kein Vorschlag zum Bestaetigen")
 
-    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False):
+    def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):
         self.calls.append(("run", test_override))
+        self.output = output
 
     def stop_run(self):
         raise LiveError("kein Lauf aktiv")
@@ -1615,3 +1616,43 @@ def test_fake_run_timing_reference_and_stopped_eval(tmp_path):
     service.set_scene('running_valid', test_run=True)
     service.stop_run()
     assert service.status()['reference_eval']['state'] == 'error'
+
+
+def test_run_start_forwards_output_configuration():
+    async def check(client, service):
+        config = {"transport": "tcp", "tcp_port": 5001}
+        response = await client.post("/live/run/start", json={"output": config})
+        assert response.status == 200
+        assert service.output == config
+
+    _run(check)
+
+
+@pytest.mark.parametrize('config', [
+    None, {'transport': 'off'}, {'port': '/fake/output'},
+    {'transport': 'serial', 'port': '/fake/output'},
+    {'transport': 'uart'}, {'transport': 'tcp'}, {'transport': 'unknown'},
+])
+def test_unified_output_route_forwards_unchanged_without_socket(monkeypatch, config):
+    import json
+    from unittest.mock import AsyncMock, Mock
+
+    from aiohttp.test_utils import make_mocked_request
+
+    async def direct(fn, **kwargs):
+        return fn(**kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', direct)
+
+    async def check():
+        service = FakeService()
+        app = web.Application()
+        add_live_routes(app, service, csrf_of=lambda _r: 'tok')
+        request = make_mocked_request('POST', '/live/run/start', app=app, payload=Mock(at_eof=lambda: False))
+        request.json = AsyncMock(return_value={'output': config})
+        match = await app.router.resolve(request)
+        response = await match.handler(request)
+        assert response.status == 200, json.loads(response.text)
+        assert service.output == config
+
+    asyncio.run(check())

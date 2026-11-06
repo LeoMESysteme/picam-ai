@@ -3726,7 +3726,6 @@ Befehle, vollständige 60-Fälle-Tabelle mit allen Eckverschiebungen und
 Testbelege: `.superpowers/sdd/2026-10-21-r13/task-R13-report.md`.
 Aufbau und Deutung: [Laborjournal](lab_journal.md#2026-10-23-r13-13-startsuche-bildgate-und-softwarekosten).
 
-
 ## 2026-10-23 — R13-15 Fix round 1: Offline-Bewegungshinweis
 
 Entwicklungsregression, keine Hardware-/Freigabeabnahme. Quelle:
@@ -3757,7 +3756,6 @@ Ausschnitt-/Grauwertvorbereitung maximal 2,42 ms. Zeitbasis:
 monotone Host-Verarbeitungsdauer (`time.perf_counter`), keine
 Aufnahmelatenz oder Live-Durchsatzmessung. Scheduler weiterhin höchstens
 ein offener Auftrag und mindestens zwei Sekunden zwischen Schätzungen.
-
 
 ## R13-19b — Grobschätzung 2026-10-28 {#r13-19b-grobschaetzung-2026-10-28}
 
@@ -3933,6 +3931,54 @@ Timing-Test. Ruff (`src tests examples scripts`, außer `wiki-check.py`),
 Wiki-Prüfung und `git diff --check` bestehen. `docs/status.md` bleibt
 auf ausdrücklichen Auftrag unverändert, kein Commit.
 
+## R13-20 — Displaybelichtung, offline und Fakes (2026-10-28) {#r13-20-belichtung-2026-10-28}
+
+Datensatz: zwölf vorhandene `live/live-<Kennung>/setup/still.png`, jeweils
+Quad aus `proposal.json`; ausschließlich lesender Zugriff, keine neue Aufnahme.
+Aufbau, vollständige Tabelle und Deutung im
+[Laborjournal](lab_journal.md#2026-10-28-r13-20-displaybelichtung-statt-gesamtbild-automatik).
+
+Die entzerrten Grau-p80-Werte im Ausschnitt `[20:140,5:395]` bei 400×160
+reproduzieren die zwölf übergebenen Werte exakt: gute/helle Fälle 112–152,
+dunkle Fälle 98 und 78. Die neue Vorabwarnung <105 trennt diese Befunde.
+Die vier beauftragten Echtdaten-Tests ergeben 134306Z WARNUNG (98),
+123044Z OK (125), 110248Z OK (143), 100613Z OK (119).
+
+Hinweisbox gefunden in **12/12** Bildern. Grau-p80 der grünen Pixel in
+der Box: 112, 114, 116, 113, 118, 148, 142, 137, 128, 144, 97, 77
+(Reihenfolge wie im Laborjournal). Absoluter Abstand zum entzerrten p80:
+**Mittel 2, Median 2, Maximum 4 Graustufen**. Diese Offline-Kalibrierung
+begründet das vorläufige Regelziel 130 und Band 115–150; eine echte
+Kameraregelung oder neue VALID-Rate ist damit nicht nachgewiesen.
+
+Die Fake-Kamera liefert beispielsweise dunkel 81 → 116 bei 200 → 300
+und unverändert Gain 10; zu hell 209 → 184 → 92 → 133 bei 300/200/100
+und schließlich Gain 38. Unterschiedliche Gain-Steigungen werden aus
+den eigenen Messungen nachgeführt. Ein ausgefallener Gain beendet die
+Suche nach genau vier Runden und stellt die beste Messung wieder her.
+Diese Zahlen sind synthetisch; keine neue Latenzaussage oder Hardware-Abnahme.
+
+Reviewregression: Ausgang 200/Gain 0, p80 112 → 300/Gain 0, p80 169 →
+200/Gain 18, p80 132. Bereits gemessene Paare werden für die Planung
+wiederverwendet; eine Rückkehr zur kürzeren Belichtung bricht nicht als
+Wiederholung ab. Vor Korrektur blieb dieser Fake-Fall unerreicht, danach
+erreicht er das Band in zwei Korrekturrunden.
+
+Prüfabschluss (keine volle Suite):
+
+| Prüfung | Vorher | Nachher |
+| --- | ---: | ---: |
+| Vier beauftragte Python-Dateien, `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev`, `-q -n 3` | 306 bestanden | 349 bestanden |
+| Live-Node-Tests (direkt ausgeführt; zusätzlich `node --test`) | 51 bestanden | 52 bestanden |
+| Tour-Fakten, `tests/test_tour_facts.py` | — | 5 bestanden |
+
+Alle neuen Verhaltensänderungen wurden mit zuvor fehlgeschlagenen Tests
+entwickelt, einschließlich einer Rückstellung mit ungültigem
+Automatik-Ausgangswert bei Boxverlust. Ruff (`src tests examples scripts`,
+außer `scripts/wiki-check.py`), Wiki-Check, OQ-Index-Prüfung,
+JavaScript-Syntaxprüfung der angepassten Tour und `git diff --check` bestehen.
+Kein Docs-Playwright, kein Commit, `docs/status.md` unverändert.
+
 ## R13-23 — billigere Grobsuche, Reviewkorrektur 2026-10-30 {#r13-23-grobsuche-2026-10-30}
 
 OQ-46-Nachtrag, ausschließlich offline auf Pi 5 `raspi06`, OpenCV 4.10.0.
@@ -4093,55 +4139,6 @@ keinen verbleibenden Befund.
 Keine Hardware, kein Docs-Playwright, kein Commit; `docs/status.md`,
 TODO und Messdaten bleiben wie beauftragt unverändert. Keine neue Abnahme,
 der bekannte gemeinsame Rahmen-Bias aus R13-19c bleibt dokumentiert.
-
-## R13-20 — Displaybelichtung, offline und Fakes (2026-10-28) {#r13-20-belichtung-2026-10-28}
-
-Datensatz: zwölf vorhandene `live/live-<Kennung>/setup/still.png`, jeweils
-Quad aus `proposal.json`; ausschließlich lesender Zugriff, keine neue Aufnahme.
-Aufbau, vollständige Tabelle und Deutung im
-[Laborjournal](lab_journal.md#2026-10-28-r13-20-displaybelichtung-statt-gesamtbild-automatik).
-
-Die entzerrten Grau-p80-Werte im Ausschnitt `[20:140,5:395]` bei 400×160
-reproduzieren die zwölf übergebenen Werte exakt: gute/helle Fälle 112–152,
-dunkle Fälle 98 und 78. Die neue Vorabwarnung <105 trennt diese Befunde.
-Die vier beauftragten Echtdaten-Tests ergeben 134306Z WARNUNG (98),
-123044Z OK (125), 110248Z OK (143), 100613Z OK (119).
-
-Hinweisbox gefunden in **12/12** Bildern. Grau-p80 der grünen Pixel in
-der Box: 112, 114, 116, 113, 118, 148, 142, 137, 128, 144, 97, 77
-(Reihenfolge wie im Laborjournal). Absoluter Abstand zum entzerrten p80:
-**Mittel 2, Median 2, Maximum 4 Graustufen**. Diese Offline-Kalibrierung
-begründet das vorläufige Regelziel 130 und Band 115–150; eine echte
-Kameraregelung oder neue VALID-Rate ist damit nicht nachgewiesen.
-
-Die Fake-Kamera liefert beispielsweise dunkel 81 → 116 bei 200 → 300
-und unverändert Gain 10; zu hell 209 → 184 → 92 → 133 bei 300/200/100
-und schließlich Gain 38. Unterschiedliche Gain-Steigungen werden aus
-den eigenen Messungen nachgeführt. Ein ausgefallener Gain beendet die
-Suche nach genau vier Runden und stellt die beste Messung wieder her.
-Diese Zahlen sind synthetisch; keine neue Latenzaussage oder Hardware-Abnahme.
-
-Reviewregression: Ausgang 200/Gain 0, p80 112 → 300/Gain 0, p80 169 →
-200/Gain 18, p80 132. Bereits gemessene Paare werden für die Planung
-wiederverwendet; eine Rückkehr zur kürzeren Belichtung bricht nicht als
-Wiederholung ab. Vor Korrektur blieb dieser Fake-Fall unerreicht, danach
-erreicht er das Band in zwei Korrekturrunden.
-
-Prüfabschluss (keine volle Suite):
-
-| Prüfung | Vorher | Nachher |
-| --- | ---: | ---: |
-| Vier beauftragte Python-Dateien, `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev`, `-q -n 3` | 306 bestanden | 349 bestanden |
-| Live-Node-Tests (direkt ausgeführt; zusätzlich `node --test`) | 51 bestanden | 52 bestanden |
-| Tour-Fakten, `tests/test_tour_facts.py` | — | 5 bestanden |
-
-Alle neuen Verhaltensänderungen wurden mit zuvor fehlgeschlagenen Tests
-entwickelt, einschließlich einer Rückstellung mit ungültigem
-Automatik-Ausgangswert bei Boxverlust. Ruff (`src tests examples scripts`,
-außer `scripts/wiki-check.py`), Wiki-Check, OQ-Index-Prüfung,
-JavaScript-Syntaxprüfung der angepassten Tour und `git diff --check` bestehen.
-Kein Docs-Playwright, kein Commit, `docs/status.md` unverändert.
-
 
 ## 2026-10-30 — R13-24: Ähnlichkeitsversuch bei kleinem Versatz {#r13-24-kleiner-versatz-2026-10-30}
 
@@ -5351,3 +5348,1185 @@ Die Runde-2-Einzelwerte stehen in `/tmp/r13-25-correction/final-calibration.json
 | 17 | 947 / 687 | Ersatz für 778 / 636 (177 px) | 0.798 | 29,0 % | 26,7 % |
 | 18 | 1465 / 426 | bisher | 0.796 | 100,0 % | 100,0 % |
 | 19 | 1397 / 714 | bisher | 0.855 | 100,0 % | 100,0 % |
+
+---
+
+## 2026-11-04 — Erster direkter UART-Demoversuch (kein Empfangsnachweis) {#uart-demo-20261104-01}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-01/`,
+`session.json`, `tx.jsonl` sowie vom Nutzer übermittelte Screenshots
+`receiver-timeout.png`, `receiver-add-channel.png`, `receiver-define.png`.
+Ausschließlich synthetische Zahlen, kein DUT-/Kameramesslauf;
+`provisional=True`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / vom Pi-Treiber angenommene Telegramme | 600 / 600, jeweils vollständiger `write()` protokolliert |
+| Vom Pi-Treiber angenommene Bytes | 6600 |
+| Erste / letzte Bytefolge | `%-000.300\r\n` / `%+000.299\r\n` (Backslashes hier Darstellung der Steuerbytes) |
+| Soll-Senderate | 10 Telegramme/s, keine gemessene Empfangsrate |
+| Hostlaufzeit des Sendeprogramms | 60,316465131 s; Differenz von `t_sender_start_ns` und `t_sender_end_ns` in `HOST_MONOTONIC`, einschließlich Portöffnung und Protokollierung |
+| GSVmulti | Nutzer meldet Timeout wenige Sekunden nach Connect, keine Werte beobachtet; genaue Empfangsanzahl unbekannt |
+| Gezeigte Kanalkonfiguration | COM4, 115200 Baud, UserDefined, Zeichenpräfix `%`, ein Wert, Position 1, Zahlenfilter aus |
+| Gezeigte GSVmulti-Datenfrequenz | 1 Hz; stimmt nicht mit der Soll-Senderate überein, erklärt für sich keinen fehlenden Bytestrom |
+
+Zeitbasis der generierten Werte ist `SYNTHETIC` und trägt keine
+Aufnahmezeitinformation. Die Hostlaufzeit beschreibt nur das Sendeprogramm,
+nicht Sensorlatenz, Messwertalter, Windows-Empfangszeit oder Synchronität.
+Ein erfolgreicher Pi-Schreibvorgang beweist keine elektrische Übertragung
+oder Verarbeitung in GSVmulti.
+
+**Urteil:** Kein erfolgreicher Ende-zu-Ende-Empfang nachgewiesen. Die
+Startreihenfolge ist eine zu prüfende Ursache: GSVmulti war bereits vor dem
+Senden verbunden und meldete Timeout. Weitere Leitungs-/Empfangsfehler sind
+damit weder bestätigt noch ausgeschlossen. Aufbau und Folgeschritt stehen
+im [Laborjournal](lab_journal.md). Echte DUT-Ausgabe bleibt gesperrt.
+
+## 2026-11-04 — UART-Demo 02: Sender vor Connect (kein Empfangsnachweis) {#uart-demo-20261104-02}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-02/`,
+`session.json`, `tx.jsonl`; Rezept `var/diagnostics/gsvmulti/send-uart-demo.py`.
+Dieser Lauf startete den Pi-Sender vor dem angeforderten Connect in GSVmulti.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / vom Pi-Treiber angenommene Telegramme | 1200 / 1044 |
+| Vom Pi-Treiber angenommene Bytes | 11484 |
+| Erste / letzte protokollierte Bytefolge | `%-000.600\r\n` / `%+000.443\r\n` |
+| Hostlaufzeit Sendeprogramm | 105,522084465 s, HOST_MONOTONIC; keine Sensorzeit |
+| Abschluss | Kontrolliert per SIGINT für weitere Diagnose beendet, nachdem Nutzer erneut Timeout und keine Zahlen meldete; kein UART-Schreibfehler beobachtet |
+| GSVmulti-Empfang | Weiter nicht nachgewiesen; genaue Empfangsanzahl unbekannt |
+
+**Urteil:** Die geänderte Startreihenfolge brachte laut Nutzer keine
+sichtbaren Messwerte. Als alleinige Lösung ist sie nicht bestätigt.
+Nächster isolierender Test: GSVmulti schließen und COM4 direkt auf Windows
+lesen, während der Pi Demodaten sendet. DUT-Ausgabe bleibt gesperrt;
+synthetische Aufnahmezeiten tragen keine Latenz-/Synchronitätsaussage.
+
+## 2026-11-04 — UART-Demo 03: Windows-Rohdaten korrekt (GSVmulti-Import offen) {#uart-demo-20261104-03}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-03/`,
+`session.json`, `tx.jsonl`, `windows-receiver-first-chunks.txt` und
+`windows-receiver-first-bytes.bin`. Die Binärdatei wurde aus den vom Nutzer
+kopierten Hex-Zeilen rekonstruiert, nicht direkt auf Windows aufgenommen.
+Rezept: `var/diagnostics/gsvmulti/send-uart-raw-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / vom Pi-Treiber angenommene Telegramme | 600 / 600 |
+| Vom Pi-Treiber angenommene Bytes | 6600 |
+| Hostlaufzeit des Sendeprogramms | 63,891135362 s, HOST_MONOTONIC; keine Sensorzeit |
+| Windows-Empfänger | PowerShell SerialPort.Read auf COM4, 115200, 8N1, kein Handshake; GSVmulti geschlossen |
+| Übermittelter Empfangsausschnitt | 67 Bytes: sechs vollständige Telegramme plus Präfix des nächsten |
+| Bestätigte vollständige Telegramme | `%-000.300`, `%-000.299`, `%-000.298`, `%-000.297`, `%-000.296`, `%-000.295`, jeweils CRLF |
+| Gesamtzahl Windows-empfangener Bytes/Telegramme | unbekannt; kein Vollständigkeits- oder Verlustnachweis für den ganzen Lauf |
+
+Die Hex-Zeilen `25` und `2D-30-30-30-2E-33-30-30-0D-0A` sind zusammen
+`%-000.300\r\n`. Teilweise einzeln angezeigte `0D`/`0A` sind Lesegrenzen
+der Abfrage, keine nachgewiesenen fehlerhaften Telegrammgrenzen.
+
+**Urteil:** Für sechs übermittelte Proben ist die Bytefolge vom Pi bis zum
+Windows-COM-Port korrekt angekommen. GPIO-Strecke und Windows-Empfang sind
+für diesen Ausschnitt belegt. GSVmulti war dabei geschlossen; dessen Import
+ist weiter offen. Keine DUT-, Latenz-, Synchronitäts- oder Dauerbetriebsfreigabe.
+Nächster Einzelvariablen-Test: Zahlenfilter in UserDefined einschalten;
+sonstiges Format unverändert lassen.
+
+
+## 2026-11-04 — UART-Demo 04: Zahlen in GSVmulti sichtbar {#uart-demo-20261104-04}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-04/`,
+`session.json`, `tx.jsonl`, `receiver-setup.json`, `receiver-numeric-display.png`.
+Rezept: `var/diagnostics/gsvmulti/send-uart-filter-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Kontrollierte Änderung | Filter Out Non-Numeric in UserDefined eingeschaltet; weitere Einstellungen laut Anweisung unverändert |
+| Angeforderte / vom Pi-Treiber angenommene Telegramme | 600 / 600 |
+| Vom Pi-Treiber angenommene Bytes | 6600 |
+| Erste / letzte Bytefolge | `%-000.300\r\n` / `%+000.299\r\n` |
+| Hostlaufzeit des Sendeprogramms | 60,519593368 s, HOST_MONOTONIC; keine Sensorzeit |
+| Zielrate | 10 Telegramme/s; keine Messung der GSVmulti-Empfangsrate |
+| Empfänger | Windows 11, GSVmulti 2.03 Pro, COM4, 115200/8N1, Präfix %, ein Wert/Position 1 |
+| Sichtbarer Zahlenwert | −0,134500; Datenfrequenzfeld weiterhin 1 Hz, Einheit leer |
+| Einzelwerttreue / vollständige Empfangsanzahl | nicht nachgewiesen; keine GSVmulti-Messdatei vorhanden |
+
+**Urteil:** Erstmals sichtbarer Zahlenempfang in GSVmulti nach Einschalten
+des Zahlenfilters. Das ist ein Empfangsbeleg für den direkten UART-Demoweg,
+keine Abnahme der gemeinsamen Windows-Brücke oder echter DUT-Ausgabe.
+Der angezeigte Wert liegt außerhalb der gesendeten 0,001-Schritte. Die
+[Herstelleranleitung v2.6, S. 34](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+beschreibt Mittelwertbildung für numerische Anzeigen auf vier Anzeigen/s.
+Das passt zum Zwischenwert, beweist aber weder sein konkretes Mittelungsfenster
+noch unveränderte gespeicherte Einzelwerte. Die 1-Hz-Konfiguration ist separat
+zur 10-Hz-Zielrate zu klären. Nächster Nachweis über Aufzeichnung ohne
+Datenreduktion und Vergleich mit `tx.jsonl`, siehe [OQ-50](open-questions.md#oq-50).
+Keine Latenz-, Synchronitäts-, Dauerbetriebs- oder Ungültigwertfreigabe.
+
+
+## 2026-11-04 — UART-Demo 05: Sender für Aufzeichnungsvergleich beendet {#uart-demo-20261104-05}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-05/`,
+`session.json`, `tx.jsonl`, `receiver-setup.json` und drei Setup-Screenshots.
+Rezept: `var/diagnostics/gsvmulti/send-uart-recording-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / Pi-seitig angenommene Telegramme | 600 / 600 |
+| Pi-seitig angenommene Bytes | 6600 |
+| Erste / letzte Bytefolge | `%-000.300\r\n` / `%+000.299\r\n` |
+| Hostlaufzeit | 60,398420834 s, HOST_MONOTONIC; keine Sensorzeit |
+| Zielrate / Ausgangszeitbasis | 10/s / SYNTHETIC |
+| Aufnahmevorbereitung | Manuelles Starten/Stoppen und Record every value per Screenshot bestätigt |
+| Auto-Export | Einschalten, tab-getrennter Text und Zielordner angeleitet; Nutzer meldet bereit, resultierende Konfiguration nicht unabhängig gezeigt |
+| Tatsächlicher Aufnahmestart, Empfangszahl und gespeicherte Werte | unbekannt; Export angefordert, noch nicht vorhanden |
+
+**Urteil:** Sender regulär abgeschlossen, noch kein neuer GSVmulti-Einzelwert-
+oder Verlustnachweis. Nutzer wird zum Stop Recording und Übermitteln des
+Text-Exports aufgefordert. Senderstart liegt vor dem angeforderten
+Aufnahmestart; fehlenden Anfang getrennt von Lücken innerhalb der Aufnahme
+bewerten. Vorher gezeigte GSVmulti-Datenfrequenz 1 Hz bleibt zur Zielrate
+10/s zu klären. Keine zusätzliche Mittelung im Sender. [OQ-50](open-questions.md#oq-50).
+
+
+### Lauf 05: TDMS und Text gegen Sender geprüft
+
+Der Nutzer übermittelt `04_11_26-13_20_57.tdms`, den zugehörigen Index
+und den TXT-Export. Originale mit SHA256 unter `receiver/` im Laufverzeichnis
+archiviert. Reproduzierbare Auswertung:
+`var/diagnostics/gsvmulti/analyze-recording-05.py`, Ergebnis
+`recording-comparison.json`. TDMS gelesen mit npTDMS 1.13.0 als isoliert
+importiertem Wheel; keine Installation in der Projekt-venv und keine
+zusätzlichen Abhängigkeiten geladen. Debian-NumPy wird weiter verwendet.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Werte in TXT / TDMS | 420 / 420, ein Kanal `Chan. 4_1` |
+| Zugeordnete Senderindizes (ab 0) | 180–599 von 600 |
+| Erster / letzter Wert | −0,120 / +0,299 |
+| TXT gegen gesendete Dezimalwerte | Alle 420 Werte exakt gleich |
+| TDMS gegen Float64-Darstellung gesendeter Werte | Alle 420 exakt gleich; maximale absolute Differenz 0,0 |
+| TDMS gegen TXT | Alle 420 Werte gleich in Float64-Darstellung |
+| Lücken / doppelte Werte innerhalb dieser Sequenz | 0 / 0 |
+| Negative Werte / Null / positive Werte | 120 / 1 / 299 |
+| Nicht aufgezeichneter Anfang / Rest nach letztem Wert | 180 / 0 Senderwerte |
+| TDMS-Datenreduktion | `Not used. Every value from device recorded.` |
+| Version / Skalierung / Einheit laut TDMS | 2.03 Pro / 1,0 / leer |
+| Frequenz-Metadatum | 1,0 Hz; nicht gleich dem Wellenformintervall oder der Ziel-Senderate |
+| TDMS-Wellenformintervall | 0,10240713017714835 s, rechnerisch ca. 9,765 Werte/s; erzeugte GSVmulti-Zeitachse, kein Nachweis einzelner Empfangszeiten |
+| TXT-Zeitspanne erster bis letzter Wert | 42,908590 s auf exportierter GSVmulti-Zeitachse |
+| Pi-Schreibereignisse derselben Indizes | 42,160910364 s, HOST_MONOTONIC |
+
+**Bewertung:** Für den aufgezeichneten Ausschnitt sind unveränderte Einzelwerte
+und eine lückenlose Reihenfolge bis zum Senderende belegt. Kein Hinweis auf
+Mittelung in diesen gespeicherten Rampenwerten. Die fehlenden ersten 180
+Werte passen zum später angeforderten manuellen Aufnahmestart; die genaue
+Aufnahmegrenze ist nicht unabhängig protokolliert. Kein Verlustfreiheitsnachweis
+für alle 600 Sendewerte und kein Sprungtreuenachweis durch diese Rampe.
+
+Die TDMS-Zeitachse verwendet einen UTC-Wellenformstart, konstantes Intervall
+und Endzeit (`dt mode=tf`); `ToffsetUTC=1` passt zur lokalen TXT-Darstellung.
+Sie ist keine verifizierte Aufnahmezeitbasis unserer Quelle. Die beiden
+Spannen unterscheiden sich um 0,747679636 s. Das sind unterschiedliche
+Zeitbasen auf zwei Rechnern, keine gemessene Transportlatenz oder Aussage
+über die Einzelwertzeitpunkte. Ursache und Bedeutung von Frequenzfeld und
+Zeitrekonstruktion bleiben in [OQ-50](open-questions.md#oq-50) offen.
+Weitere Prüfung: abrupte Sprünge, Zeitachse, Ungültig-/Altwertverhalten
+und Wiederanlauf. Echte DUT-Ausgabe bleibt gesperrt.
+
+
+## 2026-11-04 — UART-Demo 06: Datenfrequenz 10 Hz gemeldet, Sender beendet {#uart-demo-20261104-06}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-06/`,
+`session.json`, `tx.jsonl`, `receiver-setup.json`, ursprünglicher Rate-Dialog.
+Rezept: `var/diagnostics/gsvmulti/send-uart-rate-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Kontrollierte Änderung | Nutzer bestätigt GSVmulti-Datenfrequenz von 1 auf 10 Hz gestellt |
+| Sendefolge gegenüber Lauf 05 | Alle 600 Telegramm-Bytefolgen identisch, per Assertion geprüft |
+| Angeforderte / Pi-seitig angenommene Telegramme | 600 / 600 |
+| Pi-seitig angenommene Bytes | 6600 |
+| Erste / letzte Bytefolge | `%-000.300\r\n` / `%+000.299\r\n` |
+| Hostlaufzeit | 60,575376702 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sender-Zielrate / Ausgangszeitbasis | 10/s / SYNTHETIC |
+| GSVmulti-Aufnahme | Connect / Start Measuring / Start Recording angeleitet; genauer Start unbekannt |
+| Aufzeichnungs-/Export-Einstellungen | Filter, Record every value und tab-getrennter Auto-Export unverändert angeleitet; keine neue unabhängige Sichtprüfung |
+| Empfangsanzahl, Einzelwerte und Zeitachse | Noch offen, Nutzerexport angefordert |
+
+**Urteil:** Regulär abgeschlossener Senderlauf, noch kein Beleg, dass die
+geänderte Rate die GSVmulti-Zeitachse berichtigt. Quelle und Sender unverändert;
+Sprungfolge folgt separat. Nach Export denselben Werteabschnitt gegen
+Pi-Schreibereignisse (HOST_MONOTONIC) prüfen, keine Transportlatenz aus
+synthetischer Aufnahmezeit ableiten. [OQ-50](open-questions.md#oq-50).
+
+
+### Lauf 06: 467 Einzelwerte korrekt, Zeitmodus trotz 10 Hz unverändert
+
+Nutzer-TDMS, Index und TXT `04_11_26-13_27_12.*` sind mit Hashes unter
+`receiver/` im Laufverzeichnis gesichert. Rezept
+`var/diagnostics/gsvmulti/analyze-recording-06.py`, Vergleichsbericht
+`recording-comparison.json`, Vergleich beider Läufe `rate-comparison.json`.
+Derselbe isolierte npTDMS-Reader wie für Lauf 05; keine neue Installation.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Werte in TXT / TDMS | 467 / 467 |
+| Zugeordnete Senderindizes (ab 0) | 133–599 von 600 |
+| Erster / letzter Wert | −0,167 / +0,299 |
+| TXT gegen gesendete Dezimalwerte | Alle 467 exakt gleich |
+| TDMS gegen Float64-Darstellung der Senderwerte und des TXT | Alle 467 exakt gleich; maximale absolute Differenz 0,0 |
+| Lücken / doppelte Werte im Ausschnitt | 0 / 0 |
+| Negative Werte / Null / positive Werte | 167 / 1 / 299 |
+| Nicht aufgezeichneter Anfang / Rest nach letztem Wert | 133 / 0 Senderwerte |
+| Frequenz-Metadatum | 10,0 Hz; Umstellung damit unabhängig bestätigt |
+| Datenreduktion / Skalierung / Einheit | Keine Dezimierung / 1,0 / leer |
+| TDMS-Wellenformintervall | 0,10343088428369951 s, rechnerisch ca. 9,668 Werte/s |
+| TXT-Zeitspanne erster bis letzter Wert | 48,198790 s, erzeugte GSVmulti-Zeitachse |
+| Pi-Schreibereignisse derselben Indizes | 47,088755820 s, HOST_MONOTONIC |
+| Differenz beider Spannen | 1,110034180 s, ca. 2,357 %; kein Transportlatenzmaß |
+| TDMS-Zeitmodus | `tf`, wie bereits Lauf 05 |
+
+**Bewertung:** Die aufgezeichnete Folge ist bis zum Senderende unverändert
+und lückenlos. Fehlender Anfang passt zum manuellen Aufnahmestart; dessen
+genaue Grenze ist unbekannt. Kein Gesamtverlustfreiheitsnachweis für alle
+600 Telegramme und noch kein Sprungtest. Mehr aufgenommene Werte gegenüber
+Lauf 05 belegen keine Durchsatzverbesserung, weil die Aufnahmegrenzen variieren.
+
+Die [Herstelleranleitung, S. 73–74 und 155](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+erklärt Timestamp Calculation: Im Modus `tf` wird dt aus
+(Endzeit − Startzeit) / (Werteanzahl − 1) gebildet. Die Rechnung mit den
+TDMS-Metadaten passt innerhalb 1e-8 s zum gespeicherten Wellenformintervall.
+Die Datenfrequenz allein bestimmt in diesem Modus also nicht dt. Das
+Zeitinkrement-Verfahren ist damit geklärt; genaue Ursachen der Spannenabweichung
+und tatsächliche Einzelwertzeiten bleiben offen. Aufnahmeende, Pufferung und
+Hostzeitbasis sind nicht einzeln gemessen; keine Verzögerungsursache raten.
+
+**Nächster Schritt:** Configure Recording → Advanced zeigen lassen und
+Timestamp Calculation prüfen, zunächst nichts verändern. Ein erzwungenes
+dt=0,1 s wäre eine nominelle Zeitachse und kein Nachweis echter Quellzeiten;
+auch der Sender hat Scheduling-Abweichungen. Keine Latenz aus SYNTHETIC
+ableiten. [OQ-50](open-questions.md#oq-50) bleibt teilweise geklärt;
+echte DUT-Ausgabe bleibt gesperrt.
+
+
+## 2026-11-04 — UART-Demo 07: Sprungfolge gesendet, Empfangsauswertung offen {#uart-demo-20261104-07}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-07/`,
+`session.json`, `tx.jsonl`, `receiver-setup.json`, ursprünglicher
+Advanced-Screenshot und `fixture-smoke.json`. Lokales Wegwerf-Rezept
+`var/diagnostics/gsvmulti/send-uart-step-demo.py`, keine Produktcodeänderung.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / Pi-seitig angenommene Telegramme | 600 / 600 |
+| Pi-seitig angenommene Bytes | 6600 |
+| Hostlaufzeit | 60,345691839 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sender-Zielrate / Ausgangszeitbasis | 10/s / SYNTHETIC |
+| Vorlauf | 200 Werte 0, nominal 20 s |
+| Folgende Blöcke | Je 50 Werte: −0,250 → +0,750 → 0 → −0,125 → +0,500 → −0,500 → 0 → +0,250 |
+| Sprünge im Pi-Sendelog | Acht direkte Übergänge; Blockwerte und -längen gegen Fixture per Assertion geprüft |
+| Formatter-Vorprüfung | In-Memory 600 Telegramme/6600 Bytes/acht Sprünge exakt, keine UART-Übertragung in dieser Vorprüfung |
+| Angeforderter GSVmulti-Zeitmodus | Auto-Select aus, Use device data rate bei 10 Hz, nominell dt=0,1 s; Nutzer meldet bereit |
+| Tatsächlicher Aufnahmestart / Empfang / gespeicherte Werte | Noch unbekannt; TXT-/TDMS-Export angefordert |
+
+**Urteil:** Sender regulär beendet, Sprungfolge Pi-seitig belegt. Das ist
+noch kein Empfangs- oder Sprungtreuenachweis in GSVmulti. Bestätigter
+Zeitmodus vor Änderung war Auto-Select mit Calculate dt from Final time;
+gewünschter neuer Modus ist noch im Export zu prüfen. Ein nominelles 0,1-s-
+Raster ist kein Nachweis tatsächlicher Quellzeitpunkte, Synchronisierung
+oder Latenz. Vorlauf und Aufnahmebeginn sind nicht unabhängig synchronisiert.
+Reale DUT-Ausgabe bleibt gesperrt. [OQ-50](open-questions.md#oq-50).
+
+
+### Lauf 07: Alle acht Sprünge und nominelles Raster bestätigt
+
+Nutzerdateien `04_11_26-13_32_40.tdms`, Index und TXT sind mit SHA256 im
+Laufverzeichnis unter `receiver/` gesichert. Reproduzierbares Rezept
+`var/diagnostics/gsvmulti/analyze-recording-07.py`, Bericht
+`recording-comparison.json`. Derselbe isolierte npTDMS-Reader wie zuvor.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Werte in TXT / TDMS | 446 / 446 |
+| Passender Senderabschnitt (Indizes ab 0) | 154–599, eindeutig passende vollständige Folge |
+| Aufgezeichneter Null-Vorlauf | 46 Werte von 200 gesendeten Vorlaufwerten |
+| Folgende Wertblöcke | Alle acht vollständig, jeweils genau 50 Werte |
+| Sprungfolge | 0 → −0,250 → +0,750 → 0 → −0,125 → +0,500 → −0,500 → 0 → +0,250 |
+| Direkte Übergänge | Alle acht in identischer Reihenfolge; keine zusätzlichen Zwischenwerte |
+| TXT gegen gesendete Dezimalwerte | Alle 446 exakt gleich |
+| TDMS gegen Float64-Darstellung von Sender und TXT | Alle 446 exakt gleich; maximale absolute Differenz 0,0 |
+| Nicht aufgezeichneter Anfang / Rest am Ende | 154 Vorlaufwerte / 0 Werte |
+| Frequenz / Zeitmodus | 10,0 Hz / `1/f0` |
+| TDMS-Wellenformintervall / alle TXT-Zeitschritte | 0,1 s / 0,1 s, nominell |
+| Erster bis letzter exportierter Zeitwert | 44,5 s, nominelles GSVmulti-Raster |
+| Pi-Schreibereignisspanne desselben Werteabschnitts | 44,765583329 s, HOST_MONOTONIC |
+| Datenreduktion / Skalierung / Einheit | Keine Dezimierung / 1,0 / leer |
+
+**Bewertung:** Alle getesteten abrupten Sprünge bleiben in den gespeicherten
+Werten unverändert, einschließlich des direkten Wechsels −0,250 → +0,750.
+Die Folge und Blocklängen entsprechen exakt dem Senderabschnitt bis zum
+Senderende. Die ersten 154 Nullwerte passen zum späteren manuellen
+Aufnahmestart; dessen genaue Grenze ist nicht unabhängig protokolliert.
+Bei konstanten Plateaus können sich kompensierende Verluste und Wiederholungen
+nicht erkennen lassen. Deshalb kein allgemeiner Einzeltelegramm-Verlustnachweis
+oder Vollständigkeitsbeleg für alle 600 gesendeten Werte.
+
+Der Zeitmodus `1/f0` bestätigt die angeleitete Umstellung. Das 0,1-s-Raster
+ist eine Darstellung aus der eingestellten Rate, kein gemessener Aufnahme-
+oder Empfangszeitpunkt. Die Pi-Schreibereignisse zeigen bereits eine andere
+Spanne; daraus weder Latenz noch Synchronität behaupten. Reale DUT-Ausgabe
+bleibt gesperrt. Nächster Schwerpunkt: Ungültig-/Altwertmarkierung,
+Puffernachlauf und Wiederanlauf (OQ-06/OQ-47). Der Zahlenimport allein und
+Sprungtreue erfüllen die P4-Abnahme noch nicht; Einheit weiterhin leer.
+
+
+## 2026-11-04 — UART-Demo 08: Timeout und Fortsetzung sichtbar, Datenpause im Raster verloren {#uart-demo-20261104-08}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-08/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`fixture-smoke.json`, Nutzerdateien und Screenshot unter `receiver/`.
+Senderrezept `var/diagnostics/gsvmulti/send-uart-outage-demo.py`,
+Auswertung `analyze-recording-08.py`, Bericht `recording-comparison.json`.
+Originale und Rezept mit SHA256 gesichert; isolierter npTDMS-Reader wie zuvor.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / Pi-seitig angenommene Telegramme | 500 / 500 |
+| Pi-seitig angenommene Bytes | 5500 |
+| Hostlaufzeit Senderprogramm | 80,823739876 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sendefolge | 300× +0,250, absichtliche Sendepause, 200× −0,750 |
+| Pausenmarker-Abstand | 30,000983790 s, HOST_MONOTONIC |
+| Pi-Schreibereignisse zwischen Pausenmarkern | 0 |
+| Abstand letztes Schreibereignis vor / erstes nach Pause | 30,102895564 s, HOST_MONOTONIC |
+| TXT / TDMS | 500 / 500 Werte; beide exakt gesamte gesendete Zahlenfolge |
+| Aufgezeichnete Blöcke | 300× +0,250 und 200× −0,750, keine zusätzlichen Zahlen |
+| Screenshot aus der Pause | Messwertfeld timeout!, Status Recording started |
+| Timeout-Eintrittszeit | Nicht gemessen, Screenshot nicht unabhängig zeitlich zugeordnet |
+| Fortsetzung nach Pause | Nutzer bestätigt ohne manuellen Eingriff; neuer −0,750-Block in Datei vorhanden |
+| Zeitmodus / Frequenz | 1/f0 / 10 Hz, nominell |
+| Exportierter Abstand beider Werte am Pausenübergang | 0,1 s |
+| Erster bis letzter Exportzeitwert | 49,9 s auf nominellem GSVmulti-Raster |
+| Pi-Schreibereignisspanne erster bis letzter Wert | 80,721821120 s, HOST_MONOTONIC |
+| Kennzeichnung der Datenpause im hochgeladenen Zahlenkanal | Keine zusätzliche Zeile, Zeitlücke oder Ungültigmarkierung |
+| Skalierung / Einheit | 1,0 / leer |
+
+**Bewertung:** Bei dieser absichtlichen No-Byte-Pause mit offenem Pi-Port
+zeigt GSVmulti einen Timeout und setzt den Empfang laut Nutzer ohne manuellen
+Eingriff fort. Alle 500 gesendeten Zahlen erscheinen in derselben Reihenfolge
+und Blocklänge. Bei konstanten Werten sind kompensierende Verluste und
+Wiederholungen nicht einzeln nachweisbar. Kein Test einer physischen
+Unterbrechung, eines Prozessneustarts, des tatsächlichen DUT-Invalidierungspfads
+oder der gemeinsamen Windows-Brücke.
+
+**Freigabelücke:** Das nominelle 0,1-s-Raster entfernt die Datenpause aus der
+exportierten Zeitachse. Der sichtbare Timeout schützt diese Messdatei nicht
+vor der Verwendung als scheinbar kontinuierliche Datenfolge. Es wurde kein
+Wert in der Pause künstlich nachgesendet; die Zeitverdichtung entsteht in der
+Aufzeichnung. Dieses Verhalten erfüllt die Ungültig-/Altwertanforderung für
+die Kalibrierauswertung nicht. Echte DUT-Ausgabe bleibt gesperrt. Auch die
+Anzeigezeit bis zum Timeout und die Verwendung eines Altwerts vor dessen
+Eintritt sind weiterhin ungemessen.
+
+Der TDMS-Start ist eine Host-Wallclock-Wellenformangabe und nicht als erster
+Sende-/Aufnahmezeitpunkt verifiziert; absolute Zeitdifferenzen zwischen
+Rechnern sind keine Latenzmessung. Der Zeitbasisnachweis der Pause stammt
+allein aus Pi-HOST_MONOTONIC-Ereignissen, nicht aus SYNTHETIC-Quellzeiten.
+Nächster Versuch: explizite Ungültigmarkierung in einem separaten synthetischen
+Test prüfen; Annahme und Erhaltung von NaN bleiben unbestätigt. Kein behaupteter
+Protokollsupport und keine Produktionsfreigabe aus diesem Demotest.
+[OQ-06](open-questions.md#oq-06), [OQ-47](open-questions.md#oq-47),
+[OQ-50](open-questions.md#oq-50).
+
+
+## 2026-11-04 — UART-Demo 09: NaN im getesteten Profil nicht als Ungültigmarker erhalten {#uart-demo-20261104-09}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-09/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`fixture-smoke.json`, Nutzer-TXT/TDMS/Index und Screenshot unter `receiver/`.
+Senderrezept `send-uart-nan-demo.py`, Auswerterezept `analyze-recording-09.py`
+im Diagnose-Basisverzeichnis. Bericht `recording-comparison.json`, Originale,
+Rezept und Logs mit SHA256. Derselbe isolierte npTDMS-Reader wie zuvor.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit | 70,865717076 s, HOST_MONOTONIC; keine Sensorzeit |
+| Gültige Sendewerte | 300× +0,125, später 200× −0,625 |
+| Ungültiger Sendeblock | 200 synthetische UNREADABLE-Datensätze, value=None, über demo-only SEND_NAN zu `%NaN\r\n` formatiert |
+| NaN-Phasendauer | 20,326734103 s zwischen HOST_MONOTONIC-Phasenmarkern |
+| Abstand letztes/erstes gültiges Schreibereignis über NaN | 20,427649216 s, HOST_MONOTONIC |
+| TXT / TDMS | 408 / 408 identische Werte |
+| Gespeicherte Zahlenblöcke | 208× +0,125, 200× −0,625 |
+| NaN in TXT / TDMS | 0 / 0 |
+| Andere Nicht-Endliche / Marker ≥1e299 in TDMS | 0 / 0 |
+| Gültige Folge gegen Sender | Exakt der gültige Senderrest ab Index 92; 92 gültige Anfangswerte fehlen, passend zum späteren Aufnahmestart |
+| Datei-Abstand beider Zahlenblöcke | 0,1 s; keine Abbildung des ungültigen Zeitraums |
+| Exportierte nominelle Spanne / Pi-Spanne der zugeordneten gültigen Ereignisse | 40,7 s / 61,408367379 s (HOST_MONOTONIC) |
+| Screenshot / Nutzerrückmeldung | timeout! bei Recording started; nach NaN wird ohne Lücke weitergelesen |
+| Zeitmodus / Frequenz / Skalierung / Einheit | 1/f0 / 10 Hz / 1,0 / leer |
+
+**Bewertung:** Im getesteten UserDefined-Profil mit aktiviertem Zahlenfilter
+bleiben die NaN-Marker nicht als ungültige Einträge in TDMS oder TXT erhalten.
+Die beobachtete Wirkung entspricht einer Zahlenpause: Timeout sichtbar,
+anschließend gültige Zahlen ohne ungültigen Zwischenabschnitt. NaN ist damit
+für diese Konfiguration keine nachgewiesene Ungültigbehandlung. Das erlaubt
+keine Aussage, jede andere UserDefined-Konfiguration oder das native GSV-
+Protokoll unterstütze NaN ebenfalls nicht. Die verwerfende Parser-/Filterstufe
+wurde nicht isoliert. Kein getakteter Windows-Rohdatenmitschnitt der NaN-Bytes.
+
+Reale DUT-Ausgabe bleibt gesperrt. Übertragene Zahlen sind korrekt, aber der
+ungültige Zeitraum fehlt; nominelles Raster und sichtbarer Timeout erfüllen
+keine kontinuierliche Messfreigabe. Keine Latenz aus SYNTHETIC ableiten.
+
+**Nächster kontrollierter Vergleich:** Die
+[Herstelleranleitung S. 74](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+beschreibt die Empfängeroption Replace Missing values mit per Timeout-Zählung
+abgeleitetem Marker 1E+300. Noch kein Beleg ihrer Eignung bei UserDefined.
+Vorbereitetes lokales Rezept `send-uart-replace-missing-demo.py` sendet dieselbe
+NaN-Folge, keine neuen Zahlenmarker. Nur die Empfängeroption soll sich ändern;
+noch nicht gestartet. Marker darf nicht als gültige Messzahl ausgewertet werden.
+[OQ-06](open-questions.md#oq-06), [OQ-51](open-questions.md#oq-51).
+
+
+## 2026-11-04 — UART-Demo 10: Replace Missing Values bestätigt aktiv, keine Ungültigmarkierung {#uart-demo-20261104-10}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-10/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`stimulus-comparison.json`, Originale und Screenshot unter `receiver/`.
+Rezept `send-uart-replace-missing-demo.py`, Auswertung `analyze-recording-10.py`
+im Diagnose-Basisverzeichnis; Bericht `recording-comparison.json`, Dateien
+und Rezepte mit SHA256 gesichert. Derselbe isolierte TDMS-Reader wie zuvor.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Kontrollierte Empfängeränderung | Replace Missing Values aktiviert; Nutzer prüft nach dem Test nochmals und bestätigt den Haken |
+| Sendefolge gegenüber Lauf 09 | Alle 700 Telegramm-Bytefolgen identisch; Fixture-AST und vollständige Payloadfolge geprüft |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit Senderprogramm | 70,501553623 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sendeblöcke | 300× +0,125, 200× %NaN, 200× −0,625 |
+| NaN-Phasendauer | 20,086055080 s, HOST_MONOTONIC |
+| Abstand letzter/erster gültiger Zahl über NaN | 20,186442122 s, HOST_MONOTONIC |
+| TXT / TDMS | 428 / 428 identische gültige Zahlen |
+| Aufgezeichnete Blöcke | 228× +0,125, 200× −0,625 |
+| NaN / Inf / Marker ≥1e299 in TDMS | 0 / 0 / 0 |
+| Vergleich mit gültiger Sendefolge | Exakter Rest ab Senderindex 72, ohne die NaN-Telegramme; fehlender Anfang passt zur späteren Aufnahme |
+| Abstand beider aufgezeichneter Zahlenblöcke | 0,1 s, keine Ungültigmarkierung oder Zeitlücke |
+| Exportierte nominelle Spanne / Pi-Schreibereignisspanne zugeordneter Zahlen | 42,7 s / 63,095700362 s (HOST_MONOTONIC) |
+| Nutzerbeobachtung / Screenshot | Während NaN Timeout, Recorder-Grafik steht; Screenshot timeout! bei Recording started |
+| Zeitmodus / Rate / Skalierung / Einheit | 1/f0 / 10 Hz / 1,0 / leer |
+
+**Bewertung:** Auch mit bestätigter Option Replace Missing Values erhält
+TDMS/TXT im getesteten UserDefined-Profil keine Fehlwertmarker. Mehr Zahlen
+als in Lauf 09 erklären sich durch die andere manuelle Aufnahmegrenze,
+nicht durch eine nachgewiesene Wirkung der Option. Die gleiche NaN-Sendefolge
+ist byteweise verglichen. Die Empfängeroption ist als aktiv bestätigt,
+die interne Ursache ihrer fehlenden Wirkung bei UserDefined aber nicht isoliert.
+Kein allgemeiner Ausschluss für andere Gerätetypen, Versionen oder Einstellungen.
+
+Zahlenimport und getestete Sprungtreue sind belegt; weder Senderpause,
+NaN-Marker noch diese Empfängeroption ergeben hier eine Aufnahme, die den
+ungültigen Zeitraum erhält. Das reicht nicht zur P4-Freigabe. Keine weiteren
+unbelegten Format- oder Markeränderungen aus diesem Ergebnis ableiten.
+Reale DUT-Ausgabe bleibt gesperrt. Nächster Schritt: Konkreten UserDefined-
+Reproduktionsfall mit GSVmulti-Entwicklung klären (OQ-06/OQ-51); technische
+Fragen und Belege unter [Diagnosefall](GSVMULTI_PROTOCOL.md#userdefined-ungueltig-repro).
+Keine gemessenen Aufnahmezeiten oder Latenzen aus dem nominellen Raster.
+
+
+## 2026-11-04 — UART-Demo 11: Gültige Rampe zur Einheitenprüfung gesendet {#uart-demo-20261104-11}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-11/`,
+`session.json`, `tx.jsonl`, `receiver-setup.json`.
+Rezept: `var/diagnostics/gsvmulti/send-uart-unit-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Empfängervorbereitung | Unit=mV/V, User Scaling=1 und neue Sessiondatei angeleitet; Nutzer meldet bereit |
+| Angeforderte / Pi-seitig angenommene Telegramme | 600 / 600 |
+| Pi-seitig angenommene Bytes | 6600 |
+| Erste / letzte Bytefolge | `%-000.300\r\n` / `%+000.299\r\n` |
+| Hostlaufzeit | 61,473499440 s, HOST_MONOTONIC; keine Sensorzeit |
+| Zielrate / Ausgangszeitbasis | 10/s / SYNTHETIC |
+| Vergleich mit Lauf 06 | Alle 600 Payloads bytegleich, per Assertion geprüft |
+| Einheit, Skalierung und Werte in GSVmulti-Aufnahme | Noch offen; TXT/TDMS und gegebenenfalls gespeicherte Session angefordert |
+
+**Urteil:** Sender regulär abgeschlossen. Erwartete Einheit mV/V ist damit
+nicht als Empfängereigenschaft bewiesen; Format selbst trägt weiterhin nur
+die Zahl. Aufnahmebeginn liegt nicht unabhängig protokolliert vor.
+Keine Ungültig-/Altwertfreigabe, kein Quellzeit-/Latenznachweis aus gültiger
+synthetischer Rampe. Reale DUT-Ausgabe bleibt gesperrt.
+
+
+### Lauf 11: Zahlen, Skalierung und gespeicherte Einheit bestätigt
+
+Nutzerdateien `04_11_26-14_00_02.txt`, `.tdms` und
+`svmulti-uart-mvv-test.ucf` sind mit Hashes unter `receiver/` im
+Laufverzeichnis gesichert. Rezept
+`var/diagnostics/gsvmulti/analyze-recording-11.py`, Ergebnis
+`recording-comparison.json`. UCF als INI-Daten gelesen, keine Inhalte ausgeführt.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| TXT / TDMS | 510 / 510 identische Werte |
+| Zugeordneter Senderabschnitt, Indizes ab 0 | 90–599 |
+| Erster / letzter Wert | −0,210 / +0,299 |
+| TXT-Dezimalwerte gegen Sender | Alle 510 exakt gleich |
+| TDMS-Float64 gegen Sender und TXT | Alle 510 exakt gleich, maximale absolute Differenz 0,0 |
+| Lücken / doppelte Werte im Ausschnitt | 0 / 0 |
+| TDMS-Skalierung | 1,0 |
+| TDMS unit_string / NI_UnitDescription | mV/V / mV/V |
+| UCF ch1.Unit | mV/V |
+| UCF Port / Bitrate / Frequency | COM4 / 115200 / 10 Hz |
+| Explizite Einheit im TXT | Nicht vorhanden; TXT enthält Zahlen und Header ohne Einheit |
+| Gespeicherten UCF-Wert durch Neuladen geprüft | Nein; Persistierung in der Datei und Einheit in TDMS belegt |
+| Zeitmodus / Wellenformintervall | 1/f0 / 0,1 s, nominell |
+| Nominelle Exportspanne / Pi-Schreibereignisspanne gleicher Werte | 50,9 s / 52,314450467 s (HOST_MONOTONIC) |
+
+**Bewertung:** Gültige Zahlen dieses Ausschnitts sind unverändert, Skalierung 1
+und mV/V in TDMS sowie der gespeicherten Session belegt. Die ersten 90 Werte
+fehlen passend zum späteren manuellen Aufnahmestart; dessen genaue Grenze ist
+unbekannt. Kein Vollständigkeitsnachweis aller 600 Senderwerte. TXT allein
+trägt hier keine Einheitenangabe und muss mit den zugehörigen Metadaten
+aufbewahrt werden. Automatisches Wiederherstellen der Session noch nicht
+abgenommen. Ungültigzeiträume, gemeinsame Brücke und Quellzeit-/Latenzfragen
+werden durch diese gültige Zahlenrampe nicht geschlossen; echte DUT-Ausgabe
+bleibt gesperrt. [Gültiges Zahlenprofil](GSVMULTI_PROTOCOL.md#userdefined-format).
+
+
+## 2026-11-04 — UART-Demo 12: Wiederöffnen scheitert, Puffernachlauf nicht bewertbar {#uart-demo-20261104-12}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-12/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`receiver-actions.jsonl`, `fixture-smoke.json`, `receiver-error.json` und
+`receiver-reopen-error.png`. Rezept
+`var/diagnostics/gsvmulti/send-uart-reopen-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Angeforderte / Pi-seitig angenommene Telegramme | 900 / 900, alle Payloads eindeutig |
+| Pi-seitig angenommene Bytes | 9900 |
+| Hostlaufzeit | 91,232970889 s, HOST_MONOTONIC; keine Sensorzeit |
+| Stimulus | Je 300 Werte +0,100..+0,399 / −0,100..−0,399 / +0,600..+0,899, Zielrate 10/s ohne Sendepause |
+| Kanal schließen | Nutzer bestätigt Device Close |
+| Wiederöffnen | Nicht erfolgreich; Nutzer meldet Fehler beim Öffnen |
+| Fehlercode | 805306614, hex 0x300000F6 |
+| Dialogtext | MEGSV.DLL: Comport requested for opening is already open |
+| Aufrufkette laut Screenshot | MEgsvError Converter → GS Vactivate Extended → OpenDevice2.vi |
+| Weitere Nutzerbeobachtung | Nach Device Close oder Channel Close erneutes Verbinden nicht möglich; erst vollständiges Beenden/Neustarten von GSVmulti hilft |
+| Aufnahme nach Wiederöffnen | Nicht zustande gekommen; keine Erfolgs- oder Puffernachlaufbewertung |
+
+**Urteil:** Sender regulär abgeschlossen, aber geplanter Empfängerwiederanlauf
+fehlgeschlagen. Daraus weder Altwertnachlauf noch dessen Abwesenheit ableiten.
+Windows-Aktionsgrenzen sind nicht unabhängig zeitlich erfasst. Der Marker
+für den Empfang der Schließbestätigung liegt bereits nach Beginn des frischen
+Senderabschnitts; er ist ausdrücklich kein tatsächlicher Schließzeitpunkt.
+Keine Latenz- oder Quellzeitbehauptung aus SYNTHETIC.
+
+Die [verwandte Hersteller-DLL-Referenz](https://www.me-systeme.de/produkte/elektronik/gsv-8/anleitungen/gsv86dll_referencemanual.pdf)
+führt denselben Code als ERR_COM_ALREADY_OPEN. Das passt zum sichtbaren
+Dialog, identifiziert aber weder einen Windows-Portbesitzer noch die
+interne Ursache dieser MEGSV-/GSVmulti-Version. Unterschied zwischen noch
+gehaltenem COM-Handle und interner DLL-Verwaltung ist offen (OQ-52).
+
+**Nächste Diagnose:** Bei weiter laufendem GSVmulti im Fehlerzustand COM4
+extern mit PowerShell SerialPort.Open/Dispose prüfen, keine Bytes schreiben.
+Dasselbe bei vollständig beendetem GSVmulti vergleichen. Laut
+[Microsoft](https://learn.microsoft.com/en-us/dotnet/api/system.io.ports.serialport.open?view=netframework-4.8.1)
+kann verweigerter Zugriff auf einen bereits geöffneten Port hindeuten;
+allein daraus folgt kein Eigentümerprozess. Skript vorbereitet unter
+`var/diagnostics/gsvmulti/windows-reopen-port-probe.ps1`, noch nicht auf
+Windows ausgeführt. Reale DUT-Ausgabe bleibt gesperrt.
+
+
+### Lauf 12: Externe COM4-Probe vor GSVmulti-Ende verweigert
+
+Nutzer führt SerialPort.Open auf COM4 bei weiter laufendem GSVmulti im
+Fehlerzustand aus: Zugriff auf COM4 verweigert. Beleg im Laufverzeichnis:
+`windows-probe-before-exit.json` und `.txt`. Das ist kein Nachweis eines
+bestimmten Eigentümerprozesses oder einer bestimmten DLL-Fehlerursache.
+Vergleich bei vollständig beendetem GSVmulti steht noch aus.
+
+Der Nutzer gibt finally erst nach dem bereits ausgeführten try/catch separat
+ein; PowerShell meldet CommandNotFoundException. Daher ist Dispose in diesem
+Transkript nicht ausgeführt. Open war zuvor fehlgeschlagen, kein erfolgreicher
+Mess-/Empfangstest und keine Bytezählung. Zum Aufräumen explizites Dispose
+anleiten; nächste Open/Dispose-Probe als zusammenhängendes &-Skript verwenden.
+Kein neuer Pi-Senderlauf erforderlich oder gestartet.
+
+
+### Lauf 12: COM4 nach vollständigem GSVmulti-Ende extern zugänglich
+
+Nutzer meldet nach vollständigem Beenden von GSVmulti für dieselbe externe
+SerialPort.Open-Probe: COM4 öffnen erfolgreich. Die bereitgestellte Probe
+schließt ihren Handle im finally des umschließenden &-Blocks. Beleg:
+`windows-probe-after-exit.json` und `.txt` im Laufverzeichnis.
+
+Der Vorher-/Nachher-Vergleich spricht für eine mit GSVmulti bzw. seiner
+Bibliothek verbundene Port-Ressourcenverwaltung: nach Device/Channel Close
+bei laufendem Prozess externer Zugriff verweigert, nach vollständigem
+Prozessende erfolgreich. Ein rein interner DLL-Buchführungsfehler bei zu
+diesem Zeitpunkt frei zugänglichem Windows-Port ist dadurch nicht gestützt.
+Der genaue Handle-Eigentümer ist ohne Prozess-/Handle-Erfassung trotzdem
+nicht bewiesen, ebenso wenig die interne Fehlerursache. Kein neuer
+Senderlauf, kein erfolgreicher Wiederanlauf im selben GSVmulti-Prozess und
+kein Puffernachlaufnachweis. Vollständiges Beenden/Neustarten bleibt der vom
+Nutzer berichtete funktionierende Wiederanlaufweg.
+
+
+## 2026-11-04 — UART-Demo 13: Filter aus, durchgehend Timeout laut Nutzer {#uart-demo-20261104-13}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-13/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`receiver-result.json`, `receiver-valid-phase-observation.json` und
+Ausgangsscreenshot vor Filteränderung. Rezept
+`var/diagnostics/gsvmulti/send-uart-no-filter-nan-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Kontrollierte Änderung | Filter Out Non-Numeric ausschalten angeleitet, Nutzer meldet bereit; gespeicherte geänderte Definition noch nicht eingesehen |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit | 70,340202721 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sendefolge | 300× +0,125, 200× demo-only %NaN, 200× −0,625 |
+| Vergleich zu Lauf 10 | Alle 700 Payloads bytegleich, per Assertion geprüft |
+| NaN-Phasendauer | 20,078144215 s, HOST_MONOTONIC |
+| Nutzerbeobachtung erster gültiger Abschnitt | Weiterhin Timeout oder keine Zahl |
+| Nutzerbeobachtung gesamter Folge | Durchgehend Timeout, auch während NaN und danach |
+| Erfolgreiche Empfängeraufzeichnung | Nicht belegt; keine neuen Messdateien geliefert |
+
+**Bewertung:** Ausschalten des Zahlenfilters liefert hier keinen
+funktionierenden gültigen Zahlenempfang. Damit scheitert bereits diese
+Voraussetzung; aus dem durchgehenden Timeout allein keine allgemeine Aussage
+über NaN-Unterstützung oder die intern ablehnende Stufe ableiten. Die Wirkung
+der geänderten Definition ist noch anhand der gespeicherten Session zu prüfen.
+OQ-01 bleibt für das zuvor belegte gültige Filter-ein-Profil geklärt; die neue
+Variante hebt dessen Belege nicht auf. Echte DUT-Ausgabe bleibt gesperrt.
+
+**Nächste Diagnose:** Aktuelle Filter-aus-Session mit der gültigen gespeicherten
+mV/V-Session aus Lauf 11 vergleichen. Ein möglicher weiterer dokumentierter
+UI-Vergleich wäre Has Binary Prefix mit 25 hex bei unverändertem %-Byte; ein
+solches Rezept ist vorbereitet, aber nicht gestartet. Die beiden UI-Präfixmodi
+können intern dieselbe Byte-Einstellung repräsentieren; ein anderer Parserweg
+ist nicht belegt. Vor einem weiteren Sendetest zunächst Konfigurationsdaten
+sichern, keine Wirkung durch bloße UI-Auswahl voraussetzen.
+
+
+### Lauf 13: Gespeicherte Filter-aus-Session weicht auch bei Rate und Einheit ab
+
+Nutzer liefert `svmulti-uart-mvv-test2.ucf`. Mit der erfolgreich verwendeten
+`svmulti-uart-mvv-test.ucf` aus Lauf 11 als INI-Daten verglichen; beide
+Originale unter `receiver/` im Laufverzeichnis gesichert. Ergebnis und Hashes
+in `saved-profile-comparison.json`.
+
+| Gespeichertes Feld | Erfolgreiche Session Lauf 11 | Neue Session nach Filter-aus-Versuch |
+| --- | --- | --- |
+| ch1.Unit | mV/V | leer |
+| UserDevice.Frequency | 10,000000 | 1,000000 |
+| UserDevice.Separator | 256 | 0 |
+| ch1.OpenFlags | 1073741824 | 1073741824 |
+| ComNr / BaudRate / Input | 4 / 115200 / 1 | identisch |
+| NumChan / Prefix | 1 / 37 | identisch |
+
+Dies sind die einzigen Feldunterschiede. Separator ist hier ein gespeichertes
+Rohfeld; seine genaue Kodierung ist nicht belegt. Nicht als eigenständige
+Trennzeichenänderung oder gesichertes Filterbit interpretieren. Rate und
+Einheit entsprechen hingegen nicht den angeleiteten unveränderten Vorgaben.
+Der Vergleich ist somit nicht als reiner Ein-Variablen-Versuch abgesichert.
+Diese Unterschiede beweisen für sich keine Ursache des durchgehenden Timeouts.
+
+Nächster Schritt: In der aktuellen Filter-aus-Definition 10 Hz und mV/V
+wieder setzen, Skalierung 1 beibehalten, neue Session speichern und zusammen
+mit Definition-Screenshot erneut vergleichen. Vor weiterem Senden richtige
+Empfängerkonfiguration belegen. Keine Gültig-/NaN-/Latenzfreigabe aus dem
+Dateivergleich. [OQ-53](open-questions.md#oq-53).
+
+
+Nach dem UCF-Vergleich gelieferte Screenshots bestätigen den korrigierten
+UI-Stand: Filter aus, Character Prefix %, ein Wert/Position1, COM4/115200
+und 10 Hz. Unit/Skalierung nicht sichtbar, neue gespeicherte UCF noch offen.
+Bilder und Hashes im Laufverzeichnis, `corrected-ui-configuration.json`.
+Kein neuer Sendeversuch und kein Nachweis der NaN-Annahme.
+
+
+### Korrigierte UCF vor Lauf 14: Nur ein gespeichertes Rohfeld abweichend
+
+Nutzer liefert zunächst `svmulti-uart-mvv-test3.ucf` mit 10 Hz, aber noch leerer
+Einheit, dann eine aktualisierte gleichnamige Datei mit mV/V. Beide Varianten
+unter getrennten Namen im Receiver-Verzeichnis von Lauf 13 erhalten:
+`profile-test3-before-unit.ucf` und `profile-test3-with-unit.ucf`.
+Die jüngste Datei ist zusätzlich `receiver-profile.ucf` in Lauf 14.
+Vergleichsbericht `corrected-saved-profile-comparison.json` (Lauf 13) bzw.
+`receiver-setup.json` (Lauf 14).
+
+Die korrigierte Datei stimmt in allen gespeicherten Feldern mit der
+funktionierenden Lauf-11-Session überein, außer UserDevice.Separator:
+256 → 0. UI-Screenshot zeigt Filter aus. Damit sind 10 Hz und mV/V nun
+abgeglichen, die genaue allgemeine Kodierung des Rohfelds bleibt unbewiesen.
+Keine neue Wire-Formatkonvention und keine Decoderimplementierung daraus ableiten.
+
+## 2026-11-04 — UART-Demo 14: Korrigiertes Filter-aus-Profil weiterhin ohne Zahlenempfang {#uart-demo-20261104-14}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-14/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-profile.ucf`,
+`receiver-setup.json`, `receiver-result.json`. Dasselbe Rezept wie Lauf 13:
+`var/diagnostics/gsvmulti/send-uart-no-filter-nan-demo.py`.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Abgeglichene gespeicherte Parameter | mV/V, 10 Hz, COM4/115200, ein Wert/Position1, Prefix37, identische OpenFlags |
+| Unterschied zur funktionierenden UCF aus Lauf 11 | Nur Separator0 statt256; Filter aus im zugehörigen UI-Screenshot |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit | 70,365982680 s, HOST_MONOTONIC; keine Sensorzeit |
+| NaN-Phasendauer | 20,067549642 s, HOST_MONOTONIC |
+| Sendefolge | 300× +0,125, 200× demo-only %NaN, 200× −0,625 |
+| Payloadvergleich zu Lauf 10 | Alle 700 Bytefolgen identisch, per Assertion geprüft |
+| Erster gültiger Abschnitt | Nutzer meldet weiterhin Timeout/keine Zahl |
+| Gesamter Durchlauf | Nutzer bestätigt durchgehend Timeout, auch NaN und abschließend −0,625 |
+| Erfolgreicher Empfängerexport | Nicht belegt, keine neue Messdatei geliefert |
+
+**Bewertung:** Auch nach Korrektur von Rate und Einheit liefert das
+Filter-aus-Profil keinen nutzbaren Empfang gültiger Zahlen. Das ergibt keinen
+isolierten NaN-Nachweis oder internen Parserbefund. Die bislang erfolgreiche
+Lauf-11-UCF unterscheidet nur ein gespeichertes Feld, verwendet dort aber eine
+gültige Rampe. Lauf 10 hat identische NaN-Payloads, dort war die Einheit noch
+leer. Keine darüber hinausgehende vollständig gepaarte Kausalität behaupten.
+
+**Nächste Gegenprobe:** Bereits geprüfte funktionierende Lauf-11-Session bei
+vollständig neu gestartetem GSVmulti laden, damit übrige gespeicherte Felder
+identisch bleiben und Filter wieder ein ist. Exakt dieselbe 700er-Folge wie
+Lauf 14 senden. Rezept `send-uart-filter-on-control-demo.py` vorbereitet,
+Fixture-AST unverändert, noch nicht gestartet. Vor Erfolg keine Ursache oder
+NaN-Semantik festschreiben. Reale DUT-Ausgabe bleibt gesperrt.
+
+
+## 2026-11-04 — UART-Demo 15: Positive Zahlenkontrolle wiederhergestellt, NaN weiterhin nicht erhalten {#uart-demo-20261104-15}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-15/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-setup.json`,
+`expected-loaded-profile.ucf`, Nutzer-TXT/TDMS unter `receiver/`.
+Senderrezept `send-uart-filter-on-control-demo.py`, Auswertung
+`analyze-recording-15.py` im Diagnose-Basisverzeichnis. Bericht
+`recording-comparison.json`, Originale und Logs mit SHA256 gesichert.
+
+| Prüfkriterium | Ergebnis / Beleggrenze |
+| --- | --- |
+| Empfängervorbereitung | Vollständiger GSVmulti-Neustart und Laden der ursprünglichen funktionierenden Filter-ein-Session angeleitet, Nutzer bereit |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit | 70,668683281 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sendefolge gegenüber Lauf 14 | Alle 700 Payloads identisch, per Assertion geprüft |
+| NaN-Phase | 200 %NaN-Telegramme, 20,336218894 s (HOST_MONOTONIC) |
+| Abstand letzter/erster gültiger Zahl über NaN | 20,437256326 s, HOST_MONOTONIC |
+| Erste gültige Anzeige | Nutzer bestätigt +0,125 |
+| TXT / TDMS | 440 / 440 identische gültige Werte |
+| Gespeicherte Blöcke | 240× +0,125, 200× −0,625 |
+| NaN / Inf / großer Fehlwertmarker in TDMS | 0 / 0 / 0 |
+| Zahlenfolge | Exakter Rest der gültigen Sendefolge ab Index 60 bis699, ohne NaN-Bereich300–499 |
+| Unit / Scaling / Frequency in TDMS | mV/V / 1,0 / 10 Hz |
+| Zeitmodus / Übergang beider Zahlenblöcke | 1/f0 / 0,1 s, nominell |
+| Nominelle Exportspanne / Pi-Spanne gleicher gültiger Zahlen | 43,9 s / 64,547879613 s (HOST_MONOTONIC) |
+| Replace Missing Values aktuell unabhängig bestätigt | Nein; zuletzt in Lauf10 ausdrücklich bestätigt, hier unverändert angeleitet |
+
+**Bewertung:** Mit der erwarteten geladenen Filter-ein-Session sind gültige
+Zahlen wieder sichtbar und korrekt gespeichert. Mit dem abgeglichenen
+Filter-aus-Profil (Lauf14) war durchgehend Timeout beobachtet worden.
+Die NaN-Marker fehlen auch in dieser positiven Kontrolle vollständig; der
+ungültige Zeitraum ist im nominellen Raster verdichtet. Fehlende 60 gültige
+Anfangswerte passen zum späteren Aufnahmestart, dessen Grenze ist ungemessen.
+Kein Handle-/Parser-Implementierungsnachweis, keine allgemeine NaN-Aussage
+über andere Konfigurationen und kein Quellzeit-/Latenznachweis. Vollständiger
+Prozessneustart ist Teil der Kontrollvorbereitung; kausalen Filtereffekt nicht
+über die beobachtete Profilabhängigkeit hinaus behaupten. Reale DUT-Ausgabe
+bleibt gesperrt.
+
+**Weitere gezielte Probe vorbereitet:** Die
+[Herstelleranleitung S.119](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf)
+erlaubt auch A als Zeichenpräfix. Vergleich zur Filter-aus-Konfiguration14:
+Character Prefix A, Filter weiter aus, übrige gespeicherte Parameter gleich.
+Der Sender ändert nur den ersten Bytewert über einen eigenen synthetischen
+Demo-TelegramFormatter: A+000.125 / ANaN / A-000.625, jeweils CRLF. Keine
+bestimmte interne Parserursache angenommen. Lokales Rezept
+`send-uart-A-prefix-nan-demo.py` und `A-prefix-nan-preparation.json` vorbereitet,
+In-Memory 700 Telegramme/6700 Bytes und Ablehnung nichtsynthetischer Eingaben
+geprüft; kein echter A-Präfix-Lauf gestartet. Neue UCF vor Sendetest prüfen,
+danach vollständiger GSVmulti-Neustart und Laden genau dieser Datei.
+
+
+Vorbereitetes A-Profil anschließend per Nutzer-UCF geprüft:
+`svmulti-uart-mvv-test5.ucf` unterscheidet sich vom Filter-aus-Profil14 exakt
+in UserDevice.Prefix37→65. Separator0, Frequency10Hz, UnitmV/V, COM4/115200
+und ein Wert unverändert. Snapshot/Hash im Diagnose-Basisverzeichnis.
+Aktives Neuladen und tatsächlicher A-Empfang noch nicht nachgewiesen;
+noch kein A-Sendeversuch.
+
+## 2026-11-04 — UART-Demo 16: A-Präfix ohne Zahlenfilter weiterhin Timeout {#uart-demo-20261104-16}
+
+**Datensatz:** `var/diagnostics/gsvmulti/uart-direct-demo-20261104-16/`,
+`session.json`, `tx.jsonl`, `phase-events.jsonl`, `receiver-profile.ucf`,
+`receiver-setup.json`, `receiver-result.json`, `fixture-smoke.json`.
+Rezept `send-uart-A-prefix-nan-demo.py` im Diagnose-Basisverzeichnis.
+
+| Angabe | Ergebnis / Beleggrenze |
+| --- | --- |
+| Gespeicherte Konfiguration gegenüber Lauf 14 | Nur Prefix37→65 (%→A); Filter aus, mV/V, 10 Hz, COM4/115200 unverändert |
+| Vorbereitung | Vollständiger Neustart und Laden der geprüften A-UCF angeleitet; Nutzer bereit |
+| Angeforderte / Pi-seitig angenommene Telegramme | 700 / 700 |
+| Pi-seitig angenommene Bytes | 6700 |
+| Hostlaufzeit | 71,213798174 s, HOST_MONOTONIC; keine Sensorzeit |
+| Sendefolge | 300× A+000.125, 200× ANaN, 200× A-000.625, jeweils CRLF |
+| NaN-Phasendauer | 20,079974009 s, HOST_MONOTONIC |
+| Payloadvergleich zu Lauf 14 | Alle 700 Frames identisch bis auf erstes Byte 0x25→0x41, geprüft |
+| Erster gültiger Abschnitt | Nutzer meldet Timeout oder keine Zahl |
+| Gesamter Durchlauf | Nutzer bestätigt durchgehend Timeout |
+| Erfolgreicher Empfängerexport | Nicht belegt; keine neue Messdatei geliefert |
+
+**Bewertung:** Der dokumentierte alternative Zeichenpräfix A stellt gültigen
+Zahlenempfang mit ausgeschaltetem Filter nicht wieder her. NaN-Annahme und
+interne Parserursache bleiben dadurch ungetrennt. Pi-Schreibbestätigungen
+belegen keine GSVmulti-Verarbeitung. Reale DUT-Ausgabe bleibt gesperrt.
+Nächster Diagnoseschritt: tatsächlich geladene Windows-GSV-Bibliotheken samt
+Version und Pfad ausschließlich lesend erfassen ([OQ-54](open-questions.md#oq-54)).
+
+## 2026-11-04 — Empfängerdiagnose: Logging belegt Clear-Buffer- und Wiederöffnungsfehler {#userdefined-logging-20261104}
+
+Kein neuer UART-Senderlauf, keine DUT-Messung. Datensatz
+`var/diagnostics/gsvmulti/userdefined-reopen-logging-20261104/` mit vom Nutzer
+kopiertem Logausschnitt, Screenshot, Versionsinventar, erwartetem Profil,
+Beobachtungen und SHA256-Manifest. Originale vollständige Windows-Logdatei
+nicht geliefert; Pfad laut Nutzer `C:\GSVmultiLog\Log_04_11_26-15_18_22.txt`.
+
+| Befund im gelieferten Ausschnitt | Anzahl / Grenze |
+| --- | --- |
+| Programmstart und Open Session UserDevice COM4/Input1/Fdata10,000 | Je ein Eintrag |
+| Fehler0xFFFFFFFF bei GS Vclear Buffer.vi | 1, bereits beim initialen Sessionladen |
+| Fehler0x300000F6 bei GS Vactivate Extended.vi | 2, über OpenDevice2.vi/OpenSession.vi |
+| Screenshot | Could not open device at COM4, Comport requested for opening is already open |
+| Expliziter Close-/Deaktivierungsaufruf im Logausschnitt | Nicht enthalten |
+| Logging wirksam / erfolgreiche Wiederöffnung | Ja / nein |
+| Aktiver Sender | Nein |
+
+Die externen Log-Zeittexte bleiben unverändert als Herkunft erhalten:
+TimeBaseKind nicht zugeordnet (None), Zeitzone nicht unabhängig bestätigt,
+Unsicherheit unbekannt (None). Keine Latenz/Intervalle daraus berechnet.
+Nutzer bestätigt, dass GSVmulti leer startet und er die Session selbst lädt.
+
+**Einordnung:** Logging funktioniert und reproduziert die bereits bekannte
+Aktivierungsstörung. 0xFFFFFFFF entspricht als signed32 dem Wert−1; der alte
+öffentliche Header definiert GSV_ERROR=−1. Die
+[Herstellerreferenz S.171](https://www.me-systeme.de/produkte/software/megsv/ba-megsv-v2.0.pdf)
+beschreibt GSVclearBuffer und mehrere mögliche Fehlerursachen. Das belegt
+keine bestimmte Ursache im aktuellen UserDefined-Pfad, keinen leeren Puffer
+und keinen Zusammenhang mit NaN oder dem späteren Wiederöffnungsfehler.
+OQ-52 bleibt teilweise geklärt, neue OQ-55 für den Clear-Buffer-Befund.
+
+**Nächste Gegenprobe:** Vollständiger Neustart ohne Sessionladen, denselben
+UserDefined-Kanal direkt über Add Channel anlegen, dann einmal Device Close
+und über Add Channel wieder anlegen. Neueste Logdatei vergleichen. Ohne
+Sender ist numerischer Timeout getrennt von Aktivierungsfehlern zu bewerten.
+Gegenprobe noch nicht ausgeführt, reale DUT-Ausgabe gesperrt.
+
+### Gegenprobe ohne Sessionladen: Add Channel reproduziert beide Fehler {#userdefined-addchannel-logging-20261104}
+
+Nutzer liefert Logausschnitt aus `C:\GSVmultiLog\Log_04_11_26-15_25_19.txt`
+und Original-Screenshot. Frischer leerer Programmstart, direktes Anlegen über
+Add Channel und einmaliges Device Close/erneutes Add Channel waren angeleitet.
+Kein Sender aktiv. Original-Voll-Log und neue UCF nicht geliefert. Artefakte:
+`var/diagnostics/gsvmulti/userdefined-addchannel-logging-20261104/`.
+
+| Befund | Ergebnis / Grenze |
+| --- | --- |
+| Initialer Fehler in GS Vclear Buffer.vi | Einmal 0xFFFFFFFF |
+| Add-Channel-Eintrag | UserDevice, COM4, Input1, Fdata1,000 |
+| Wiederöffnungsfehler in GS Vactivate Extended.vi | Zweimal 0x300000F6 |
+| Neue Aufrufkette | OpenDevice2.vi / AddChannel_v5.vi |
+| Screenshot | Error805306614, Comport requested for opening is already open |
+| Explizite Close-/Deactivate-Zeile | Nicht im Ausschnitt enthalten |
+| Datenrate gegenüber Sessionfall | 1 Hz statt10 Hz, somit kein reiner Ein-Variablen-Vergleich |
+
+**Bewertung:** Beide Fehlersignaturen treten auch ohne Laden einer gespeicherten
+Session auf. Sessionladen ist damit keine notwendige Bedingung des beobachteten
+Fehlers. Andere Konfigurationseinflüsse und der Zusammenhang der beiden Fehler
+bleiben offen; die Rate unterscheidet sich und neue UCF fehlt. Weder Buffer-
+Leere noch ausgebliebene Deaktivierung, bestimmter Handle-Eigentümer oder
+Treiberfehler bewiesen. Zeittexte sind externe unzugeordnete Angaben
+(TimeBaseKind=None, Unsicherheit=None), keine Latenz/Intervalle abgeleitet.
+
+Nutzer bestätigt direkten Kontakt zur zuständigen Entwicklung. Vergleichs-
+paket mit beiden Fällen, Screenshots, Versionsinventar, Fragen und geprüften
+CRC/SHA256 lokal erstellt: `var/exports/gsvmulti-userdefined-reopen-comparison-2026-11-04.zip`,
+39844 Bytes,12 manifestierte Dateien plus Manifest, SHA256
+`7b2dc934d014b2ebf938e7ff8b5a311af09e9cc1b6d9072e47c932af77176e6c`.
+Kein Versand. Nächster Schritt: internen UserDevice-ClearBuffer-/Cleanup-Pfad
+anhand der Belege prüfen lassen; keine weitere gleichartige Wiederholung
+vorgesehen. Vollständiger Prozessneustart bleibt Workaround, reale Ausgabe gesperrt.
+
+## 2026-11-04 — com0com-PnP-/CodeIntegrity-Diagnose {#com0com-ci-20261104}
+
+Nutzer liefert PnPUtil-/Service-/Ereignisauszug, unverändert unter
+`var/diagnostics/gsvmulti/com0com-driver-diagnosis-20261104/user-pnputil-service-codeintegrity.txt`
+mit Hash/strukturierter Auswertung gesichert. Kein Transport-/DUT-Senderlauf.
+ROOT\COM0COM\0000: Code52, Problemstatus0xC0000428, bestbewerteter/installierter
+Treiber oem234.inf (Original com0com.inf), Signierer CyberCircuits.
+Dienst com0com Stopped, Pfad C:\windows\system32\drivers\com0com.sys.
+Ausschnitt enthält zweimal3004 (Dateihash nicht im System gefunden) und
+einmal3076 (Audit, Laden laut Meldung erlaubt). Keine Intervalle abgeleitet:
+externe Zeittexte ohne zugeordneten TimeBaseKind, Unsicherheit=None.
+
+0xC0000428 ist [STATUS_INVALID_IMAGE_HASH](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55).
+PnP-Signierer widerspricht früherem WMI-IsSigned=False nicht als einzelne
+Ladeprüfung: unterschiedliche Metadaten-/Verifikationsstufen. Vorhandene
+Katalogsigniererangabe beweist keine Kernel-Ladefreigabe. Ereignis3076 allein
+ist keine belegte aktuelle Sperre. Aktive Binärdatei/Hash/Katalogzuordnung noch
+ungeprüft; weder Beschädigung, x86-Rest noch Secure-Boot-Ursache bewiesen.
+Nächster Schritt: aktive Datei per SHA256/Authenticode mit Original vergleichen.
+
+### Aktive com0com.sys stimmt mit offiziellem x64-Treiber überein
+
+Nutzer-SHA256 ist exakt der zuvor unabhängig aus dem offiziellen x64-Paket
+ermittelte Wert: `3ea9374e0da84ac3baba16cfd1b2cb8e1b7c18e8495ad6757e16010a85ea6c2e`.
+Vergleich per Assertion bestätigt. Pfad C:\windows\System32\drivers\com0com.sys,
+Get-AuthenticodeSignature StatusValid, Signierer CyberCircuits. Snapshot
+`active-driver-hash-authenticode.json` im Treiber-Diagnoseverzeichnis.
+Damit kein x86-Rest oder abweichender Dateiinhalt an diesem Pfad. Dienststart
+und Kernel-Zulassung sind damit nicht belegt; Code52/0xC0000428 bleibt letzter
+Gerätestatus. Kataloginstallation und konkrete Richtlinienwirkung weiter offen.
+
+### Windows-Schutzstatus und weiterer com0com-Testkandidat
+
+Nutzer bestätigt Windows11 Pro10.0.26200/Build26200, SecureBoot=True,
+VBSStatus2, SecurityServicesConfigured{2,3,4}, Running{2,3,4,7} und
+CodeIntegrityPolicyEnforcementStatus2. Damit sind VBS/Speicherintegrität aktiv
+und CI erzwungen. Das isoliert keine einzelne Ablehnungsregel und beweist
+keine Katalogursache. Aktiver Original-x64-Treiber weiter ohne Ladefreigabe.
+
+Zusätzlich rein statisch geprüfter Kandidat aus Vovsofts eigenem Repository:
+x64-Treiber SHA256 `e61c4943fb534f932193a81e8fbcb2f453e4b073a14159f9c161537b38d2bc38`,
+Signierer Christos Nikolaou, Zertifikatsbeginn13.6.2012. Installer SHA256
+`ae0dd19472f92bab3165d370c3713616a3ffb708fad785684759b04653705a71`.
+Kein Microsoft-WHQL-/HVCI-Nachweis. Mehrere PE-Sektionen unterscheiden sich
+vom bisher installierten Build; kein reiner Signaturwechsel. Ziel-Windows-
+Prüfung/Installation steht aus, noch kein neues COM-Portpaar.
+
+### Nach angeleitetem Vovsoft-Buildwechsel: Alle sechs PnP-Geräte ohne Fehler {#com0com-pnp-ok-20261104}
+
+Nutzer liefert sechs com0com-Geräte mit ConfigManagerErrorCode0: beide Busse,
+CNCA0/CNCB0 sowie CNCA1/CNCB1. Paar1 ist konkret CNCA1=COM5, CNCB1=COM6.
+Strukturierter Snapshot `post-vovsoft-device-status.json` im Treiber-
+Diagnoseverzeichnis. Der bisherige Code52 liegt in diesem Snapshot nicht vor.
+Noch kein Öffnungs-/Byteübertragungsnachweis oder GSVmulti-Empfang. Aktiver
+Dateihash und SecureBoot/HVCI nach Installation noch nicht erneut bestätigt;
+letzter Sicherheitsbeleg stammt von davor. Bidirektionale SerialPort-Probe
+mit zwei exakten ASCII-Zeilen und finally-Dispose vorbereitet, nicht ausgeführt.
+Keine Aussage über dauerhafte Windows-Kompatibilität oder echte DUT-Freigabe.
+
+### COM5/COM6 übertragen in beide Richtungen, Schutzstatus und Kandidat bestätigt {#com0com-pair-ok-20261104}
+
+Nutzer meldet COM5→COM6:OK und COM6→COM5:OK aus dem vorbereiteten
+SerialPort-Test mit exaktem Vergleich von % +000.125 bzw. % -000.625 (auf
+der Leitung ohne Zwischenraum nach%). Beide Ports werden in finally
+freigegeben. Eine Zeile je Richtung ist belegt, kein Durchsatz-/Abbruchtest.
+Nach Installation weiterhin SecureBoot=True, Running{2,3,4,7}, CIStatus2.
+Treiber-SHA256 `e61c4943fb534f932193a81e8fbcb2f453e4b073a14159f9c161537b38d2bc38`
+stimmt per Assertion mit dem zuvor statisch geprüften Vovsoft-x64-Treiber
+überein. Daten in `com5-com6-transfer-and-security.json` im Diagnoseverzeichnis.
+Damit auf diesem Zielrechner funktionale Portpaarprobe mit aktiver Speicher-
+integrität/SecureBoot belegt; keine allgemeine HVCI-Zertifizierung behauptet.
+Gemeinsame Windows-Python-Brücke und GSVmulti-Empfang über COM6 noch offen.
+
+Vorhandenes portables Paket mit aktuellen Quellen byteweise verglichen und
+mit aktualisierter README/Manifest unter neuem Namen gesichert:
+`var/exports/gsvmulti-windows-com5-com6-2026-11-04.zip`,19155 Bytes, SHA256
+`b91053bf47afbe6adae778a8b3ad85908a6b8422a2083ecdf38097fd7a14069f`.
+CRC und alle Manifestdateien geprüft. Kein Produktcode geändert, noch keine
+Windows-Ausführung dieses Pakets. Nutzer hat es noch nicht auf Windows;
+Übertragung über bestehendes SSH und isolierte Python3.15-Einrichtung vorbereitet.
+
+### Windows-Python-Umgebung und Hilfe-Smoke erfolgreich {#windows-bridge-help-20261104}
+
+Nutzer liefert erfolgreichen SCP-Transfer des19155-Byte-Pakets, pyserial3.5-
+Installation und vollständige gsv-bridge.py --help-Ausgabe. Vorbereiteter
+Ablauf erzeugte Python3.15-venv mit --system-site-packages und prüfte Paket-
+SHA256; Brückenordner vom Nutzer bestätigt. Snapshot unter
+`var/diagnostics/gsvmulti/windows-local-demo-20261104-01/setup.json`.
+Damit Importe/Argumentparser auf Windows ausführbar; noch kein Demo-COM-
+Schreiben, GSVmulti-Empfang oder JSONL-/ACK-Austausch der Brücke belegt.
+Nächste Probe vorbereitet:600 eindeutige synthetische Werte−0,300…+0,299,
+Zielrate10Hz, COM5→COM6/GSVmulti. Noch nicht gestartet.
+
+## 2026-11-04 — Lokale Windows-Demo: 600/600 Werte exakt in GSVmulti gespeichert {#windows-local-demo-20261104-01}
+
+Datensatz `var/diagnostics/gsvmulti/windows-local-demo-20261104-01/`,
+Originale unter receiver/, Senderlog bridge.jsonl, SHA256 und vollständiger
+Bericht recording-comparison.json. Rezept analyze-windows-local-demo-01.py
+im Diagnose-Basisverzeichnis. npTDMS1.13.0 nur aus isoliertem Analyse-Wheel
+importiert, Debian-NumPy; keine Umgebung geändert. Alle Vergleichsassertionen
+bestanden. Senderprozess-Exitcode nicht mitgeliefert; das Log umfasst alle600.
+
+| Prüfkriterium | Ergebnis / Grenze |
+| --- | --- |
+| Weg | Windows-Python3.15-Demomodus → COM5 → com0com → COM6 → GSVmulti |
+| Senderlog / Bytes | 600 vollständige Telegramme / 6600 Bytes, Sequenz0…599 |
+| TXT / TDMS | 600 / 600 Werte |
+| Zahlenfolge | Exakt −0,300…+0,299, Schritt0,001 |
+| Fehlende / doppelte / vertauschte Werte | 0 / 0 / 0 innerhalb der vollständigen Folge |
+| TXT gegen Sender | Alle600 Decimal-Werte exakt gleich |
+| TDMS gegen Sender und TXT | Alle600 Float64-Werte exakt gleich |
+| Unit / Scaling / Frequency / DevComNo | mV/V / 1 / 10 Hz / 6 |
+| NaN / Inf | 0 / 0; reine gültige Demo, keine Ungültigprobe |
+| dt mode / wf_increment | 1/f0 / 0,1 s, nominell |
+| Exportspanne erster bis letzter Wert | 59,9 s, nominelles Raster |
+| Windows-Schreibereignisspanne derselben600 Werte | 66,132265700 s, HOST_MONOTONIC |
+| Mittlere Schreibereignisrate | 9,057605900 Hz, Ziel10Hz |
+| Schreibereignisabstände min / median / max | 0,107019500 / 0,110381600 / 0,113210800 s, HOST_MONOTONIC |
+
+**Urteil:** Der lokale Windows-Demoweg über das neue virtuelle Paar nimmt alle
+600 gültigen Zahlen mit Einheit/Skalierung unverändert in GSVmulti auf.
+Die Zeitachse ist keine Ankunftszeitmessung: Nominal59,9 s gegenüber66,1322657 s
+monotoner Windows-Ereignisspanne. Keine Übertragungsverzögerung daraus ableiten;
+synthetische Aufnahmezeit, unbekannte Unsicherheit=None, ungepaarte externe
+Wallclock-Ursprünge. Abweichende Demo-Zielrate gesondert nachführen (OQ-57).
+
+Dieser Demomodus umgeht noch Pi/TCP/UART und den internen JSONL-/ACK-Austausch.
+Kein Nachweis für Ungültig-/Altwert-/Pufferverhalten oder echte DUT-Freigabe.
+Nächste Probe: Pi-TCP-Publisher mit600 synthetischen Werten bei Ziel10Hz,
+Windows-Brücke auf COM5 und unverändert GSVmulti auf COM6. Windows-Abfrage
+auf100Hz setzen, um die10Hz-Quelle nicht durch eine ebenso langsame
+Polling-Schleife zu begrenzen; das ist keine100Hz-Messquelle. Ergebnis siehe unten.
+
+## 2026-11-04 — Gemeinsamer TCP-Demoweg: 600/600 Werte exakt gespeichert {#tcp-demo-20261104-01}
+
+Datensatz `var/diagnostics/gsvmulti/tcp-demo-20261104-01/`, Pi-Originale unter
+pi-publisher/, Empfängeroriginale unter receiver/ und Windows-Log bridge.jsonl.
+Quellbericht source-audit-comparison.json entstand vor Empfängerupload;
+aktueller vollständiger Bericht recording-comparison.json samt Original-SHA256.
+Rezept analyze-tcp-demo-01-receiver.py im Diagnose-Basisverzeichnis; sämtliche
+Sequenz-, Werte-, Request-/Run-/Frame-, Payload- und ACK-Assertions bestanden.
+Run-ID `1d3736c2958442f8975be00135c8adc4`, Pi-Publisherprozess Exitcode0.
+npTDMS1.13.0 isoliert aus Analyse-Wheel importiert, Debian-NumPy; keine Installation.
+
+| Prüfkriterium | Ergebnis / Grenze |
+| --- | --- |
+| Weg | Pi → TCP/Tailscale100.122.154.35:5000 → Windows-Brücke → COM5/com0com/COM6 → GSVmulti-TXT/TDMS |
+| Pi-Audit / angeboten / ACK outcome=written | 600 / 600 / 600, jeweils Frame0…599 |
+| Windows-COM-written / Bytes | 600 / 6600; alle Payloads bytegleich zur Quelle |
+| Request-IDs | 600 eindeutig, alle Run-/Frame-Zuordnungen zwischen Quelle und beiden ACK-Logs passend |
+| TXT / TDMS | 600 / 600 Werte |
+| Zahlenfolge | Exakt −0,300…+0,299, Schritt0,001 |
+| Fehlende / doppelte / vertauschte Werte | 0 / 0 / 0 innerhalb der vollständigen Folge |
+| TXT gegen Quelle | Alle600 Decimal-Werte exakt gleich |
+| TDMS gegen Quelle und TXT | Alle600 Float64-Werte exakt gleich; keine NaN/Inf |
+| Unit / Scaling / Frequency / DevComNo | mV/V in beiden Unit-Feldern / 1 / 10 Hz / 6 |
+| Quell-Zielrate / Windows-Abfrageziel | 10 Hz / 100 Hz; Abfrageziel ist keine Messrate |
+| Pi-Angebotsereignisspanne | 60,134787925 s, HOST_MONOTONIC auf Pi |
+| Pi-ACK-Ereignisspanne / mittlere Rate | 60,133694357 s / 9,961137535 Hz, HOST_MONOTONIC auf Pi |
+| Windows-Schreibereignisspanne / mittlere Rate | 60,133669900 s / 9,961141587 Hz, HOST_MONOTONIC auf Windows |
+| Windows-Schreibabstände min / median / max | 0,013991800 / 0,098355700 / 0,219698700 s, HOST_MONOTONIC auf Windows |
+| dt mode / wf_increment / Exportspanne | 1/f0 / 0,1 s / 59,9 s, nominell |
+| Windows-Log während der Zahlenfolge | 600 written,1631 idle; keine connection_error/failed/expired/duplicate_ack |
+| Windows-Log vor / nach der Zahlenfolge | Vorher5 connection_error+1 idle; nachher2 idle+1 ended+19 connection_error |
+| Windows-Log insgesamt | 2259 Ereignisse:600 written,1634 idle,24 connection_error,1 ended |
+| GSVmulti-Anzeige | Nutzer bestätigt wechselnde Zahlen während des TCP-Laufs |
+
+**Urteil:** Für gültige synthetische Werte ist erstmals der vollständige
+Pi-TCP-/JSONL-/ACK-Weg bis zur GSVmulti-Datei belegt. Keine Änderung an
+Vorzeichen, Auflösung oder Reihenfolge. Die protokollierten TimeoutError-
+Verbindungsversuche liegen sämtlich außerhalb der Zahlenfolge und passen
+zur angeleiteten Startreihenfolge sowie dem weiter verbindenden Windows-
+Client nach endlichem Pi-Senderende. Kein Nachweis eines Wiederanlaufs unter
+laufender Wertequelle. Windows-Prozess-Exitcode/Cleanup nicht separat bestätigt.
+
+ACKs allein belegen nur COM-Treiberübergabe; der neue vollständige TXT-/TDMS-
+Vergleich belegt zusätzlich die Speicherung. Ereignisspannen beziehen sich
+jeweils auf ihren eigenen Host; keine Differenzbildung zwischen Pi- und
+Windows-Uhren, keine Latenzaussage. Aufnahmezeit SYNTHETIC, demo/provisional
+true, time_claim=false, unbekannte Zeitunsicherheit=None. GSVmulti speichert
+ein nominelles Raster statt gemessener Ankunftsabstände.
+
+Keine Ungültig-/Altwert-/Puffer-/Abbruchabnahme und keine echte DUT-Freigabe.
+Nächster bestehender Prüfpunkt: kontrollierte Unterbrechung und Wiederanlauf
+der gemeinsamen Brücke mit eindeutig zuordenbaren synthetischen Folgen.
+
+## 2026-11-04 — Lokale Vorprobe der unabhängig laufenden Wiederanlauf-Demo {#tcp-reconnect-precheck-20261104-01}
+
+Throwaway-Rezept reconnect-source-spike.py unter var/diagnostics/gsvmulti/
+benutzt den vorhandenen OutputPublisher mit demo=true und unverändertem
+BridgeSession. Anders als scripts/gsv-publisher-demo.py zählt die Quelle
+unabhängig von COM-ACKs weiter; jede Eingabe erst im JsonlSink persistiert.
+Keine Produktcodeänderung. Quelle SYNTHETIC, demo/provisional=true,
+time_claim=false, Veröffentlichungsereignisse HOST_MONOTONIC auf Pi.
+
+Lokale Vorprobe precheck-reconnect-source-spike.py mit echtem Loopback-TCP,
+aber reinem Memory-COM-Ausgang, vollständig bestanden.100 Quellwerte bei
+Ziel50Hz erzeugt, Prozess Exit0. Letzte erste Empfangssequenz19, erste nach
+Wiederverbindung69, letzte99.50 Publish-complete-Ereignisse zwischen lokalem
+Disconnect und erstem Wiederanlaufangebot. Sequenz69 entspricht dem neuesten
+Quellwert im Publish-start/complete-Zeitfenster des Angebots; keine50er-
+Historienfolge nachgesendet. Quellen und Bericht in
+var/diagnostics/gsvmulti/tcp-reconnect-precheck-20261104-01/.
+
+Dies belegt nur die Eignung des Diagnosegenerators und lokale Latest-Auswahl,
+keine Windows-/com0com-/GSVmulti-Abnahme, keine physische Frische oder Latenz.
+Die synthetischen Datensätze tragen weiterhin kein messbares Framealter.
+
+Windows-Versuch vorbereitet, noch nicht gestartet:
+var/diagnostics/gsvmulti/tcp-reconnect-20261104-01/setup.json.
+600 unabhängige synthetische Quellwerte bei Ziel10Hz; Windows-Polling100Hz,
+COM5→COM6. Controller beendet nur seinen eigenen Brücken-Kindprozess nach
+100 COM-written-Einträgen, pausiert10s und startet neue Brücke mit eigenem Log.
+GSVmulti bleibt samt Aufnahme/Kanal offen. Am letzten Wert Frame599 beendet
+der Controller nach2s seinen Kindprozess und bündelt eigene Logs als ZIP;
+GSVmulti-Aufnahme muss Nutzer stoppen/exportieren. Tatsächliche Prozess-
+Abstände werden auf Windows HOST_MONOTONIC separat protokolliert. Quelle
+startet erst nach bestätigter Aufnahme-/Controllerbereitschaft. Echte DUT-
+Ausgabe bleibt gesperrt; kein GSVmulti-Close/Open und keine neue NaN-Probe.
+
+## 2026-11-04 — Brückenprozess-Neustart: 510/510 COM-Werte exakt gespeichert, Pause fehlt weiterhin {#tcp-reconnect-20261104-01}
+
+Datensatz var/diagnostics/gsvmulti/tcp-reconnect-20261104-01/, Quellaudit und
+source-events.jsonl unter pi-publisher/, Nutzeroriginale unter receiver/ und
+windows/. Berichte source-audit-comparison.json und recording-comparison.json,
+Rezept analyze-tcp-reconnect-01-receiver.py. Alle Byte-/Zahlen-/Sequenz-/
+Request-/Run-/Frame-Assertions bestanden, Original-SHA256 im Bericht.
+Run-ID `8b9b4a84d9454d10af7cc171c1768891`, Pi-Prozess Exit0.
+
+| Prüfkriterium | Ergebnis / Grenze |
+| --- | --- |
+| Quelle | 600 unabhängig von ACK erzeugte synthetische Werte, −0,300…+0,299, Ziel10Hz |
+| Verbindungen / Abbruch | 2 connected / 1 ConnectionResetError nach absichtlichem Beenden des Windows-Kindprozesses |
+| Angebote / COM-written-ACK / unconfirmed | 510 / 510 / 0 |
+| Windows vor / nach Neustart | 100 / 410 written; sämtliche Payloads bytegleich zur Pi-Quelle |
+| TXT / TDMS | 510 / 510 Werte, alle exakt gleich zu den geschriebenen Werten |
+| Zusätzlicher Verlust / Duplikate / Umordnung nach COM-Schreiben | 0 / 0 / 0 |
+| Nicht angeboten beim Wiederanlauf | Frames100…188,89 Werte, bewusst keine historische Aufholfolge |
+| Zusätzlich nicht angeboten außerhalb der Unterbrechung | Frame356 = +0,056; bereits vor COM-Übergabe durch Latest-Auswahl ersetzt, OQ-58 |
+| Während Pi-Disconnect→Reconnect weiter veröffentlicht | 90 Datensätze; der jüngste189 wurde nach Wiederanlauf angeboten |
+| Letzter vor / erster nach Wiederanlauf | Frame99=−0,201 / Frame189=−0,111 |
+| Latest-Auswahl | Alle Angebote innerhalb der jüngsten Publish-start/complete-Sequenzgrenzen; keine historische Folge nachgesendet |
+| Windows-Steuerpause | 10,000188500 s, Windows HOST_MONOTONIC |
+| Windows-COM-Ereignisabstand am Übergang | 10,177916800 s, Windows HOST_MONOTONIC |
+| Pi-Disconnect→Reconnect | 10,118051212 s, Pi HOST_MONOTONIC |
+| Derselbe Übergang in TXT | 0,1 s; kein NaN/Inf/Fehlwertmarker |
+| Gesamte Windows-Schreibereignisspanne / TXT-Rasterspanne | 61,187919600 s HOST_MONOTONIC / 50,9 s nominell |
+| Unit / Scaling / Frequency / DevComNo | mV/V in beiden Unit-Feldern / 1 / 10 Hz / 6 |
+| Windows-Controller | completed=true; PIDs24760/19232; beide gezielt beendet, Exit1 durch TerminateProcess erwartet |
+| Windows-Log vor / nach Neustart | Vorher5 anfängliche Verbindungs-Timeouts,100 written,289 idle; danach410 written,1139 idle,1 ended, keine Fehler |
+| Bedienerbeobachtung | Wieder wechselnde Zahlen ohne Eingriff in GSVmulti bestätigt |
+
+**Urteil:** Wiederanlauf nach gezieltem Windows-Brückenprozessabbruch ist für
+synthetische Daten belegt. Lokales Audit lief weiter, aktuelle Veröffentlichungen
+setzten sich ohne Zwischenhistorie fort, alle COM-geschriebenen Werte stehen
+korrekt in GSVmulti-Dateien. Die bewusst nicht angebotenen Werte bleiben nur
+im Pi-Audit. Der zusätzliche ersetzte Wert356 ist keine verlorene COM-
+Übertragung; genaue Zeit-/Schedulingursache noch zu isolieren (OQ-58).
+
+GSVmulti erhält die Unterbrechung weiterhin nicht als ungültigen Zeitraum:
+die Exportzeitachse verdichtet sie auf0,1s. Kein Netz-Blackout, UART-Kabelbruch,
+Pi-/Windows-Neustart oder GSVmulti-Close/Open untersucht. Kein gemessenes
+Framealter: SYNTHETIC, demo/provisional=true, time_claim=false. Nur innerhalb
+des jeweiligen HOST_MONOTONIC-Hosts vergleichen, keine Latenz-/Quellzeit-
+Aussage und keine echte DUT-Freigabe. npTDMS isoliert importiert, keine neue
+Laufzeitabhängigkeit oder Produktcodeänderung für diesen Versuch.

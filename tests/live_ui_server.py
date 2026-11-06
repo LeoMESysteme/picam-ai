@@ -20,7 +20,9 @@ import numpy as np
 from aiohttp import web
 
 from dispread.charcells import CharGrid
+from dispread.gsv_transport import RELEASE_BLOCK
 from dispread.live import RELEASE_NOTICE
+from dispread.live.output import normalize_output
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
 from dispread.records import TimeBaseKind, Timestamp
@@ -226,6 +228,7 @@ class FakeLiveService:
                 "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
                 "diagnose_kopie": False, "last_mark": None,
+                "output": {"transport": "off", "state": "off"},
                 "reference": {"enabled": False, "reason": "kein Referenzlauf",
                               "latest": None, "schedule_step": None}, "reference_eval": None,
                 **copy.deepcopy(state),
@@ -328,8 +331,22 @@ class FakeLiveService:
             self._status["state"] = "confirmed"
 
     def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):
+        from dispread.live.service import LiveError
+
+        try:
+            config = normalize_output(output, reference_port='/dev/ttyUSB0' if reference else None)
+        except ValueError as exc:
+            raise LiveError(str(exc)) from exc
+        transport = config['transport']
+        if test_override and transport != 'off':
+            raise LiveError('Testlauf erlaubt keine externe Ausgabe')
         self.set_scene("running_valid")
         with self._lock:
+            self._status['output'] = ({'transport': 'off', 'state': 'off'} if transport == 'off' else {
+                'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'disconnected',
+                'config': config, 'error': None, 'release_block': None if transport == 'serial' else RELEASE_BLOCK,
+                'last_driver_ack': None,
+            })
             self._status["diagnostics"] = {"enabled": diagnostics, "saved": 0,
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
                         "dropped_mark_rate": 0, "write_errors": 0}
@@ -352,6 +369,8 @@ class FakeLiveService:
         with self._lock:
             # Wie der echte Dienst: Sitzung und Lauf bleiben nach dem Stopp lesbar.
             self._status["state"] = "stopped"
+            if self._status['output']['transport'] != 'off':
+                self._status['output']['state'] = 'stopped'
             if self._status.get("run"):
                 self._status["run"]["summary"]["end_reason"] = "bediener"
                 self._status['run']['ended_at_utc'] = '2026-11-04T12:01:00+00:00'

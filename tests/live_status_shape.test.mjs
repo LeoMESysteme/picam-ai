@@ -49,7 +49,9 @@ test('setup grid accepts reader boxes or null and rejects malformed or missing g
 test('all committed scenes exist', () => assert.equal(scenes.length, 11));
 for (const name of scenes) {
   test(`${name}: complete contract`, () => {
-    assert.doesNotThrow(() => assertStatusShape(JSON.parse(readFileSync(new URL(name, dir)))));
+    const status = JSON.parse(readFileSync(new URL(name, dir)));
+    assert.deepEqual(status.output, { transport: 'off', state: 'off' });
+    assert.doesNotThrow(() => assertStatusShape(status));
   });
 }
 const cases = [
@@ -97,9 +99,10 @@ for (const [scene, path, wrong] of cases) {
     });
   }
 }
-test('root fields are required and extra fields are allowed', () => {
+test('existing root fields are required and additions are allowed', () => {
   const status = load('idle');
   for (const key of Object.keys(status)) {
+    if (key === 'output') continue;
     const broken = { ...status };
     delete broken[key];
     assert.throws(() => assertStatusShape(broken), TypeError, key);
@@ -167,5 +170,34 @@ test('reference evaluation accepts running, complete counts or error, rejecting 
 test('reference latest and schedule can be null', () => {
   const status = r19Status();
   status.reference.latest = status.reference.schedule_step = null;
+  assert.doesNotThrow(() => assertStatusShape(status));
+});
+
+test('output requires a known transport and complete enabled status', () => {
+  const status = load('idle');
+  delete status.output;
+  assert.doesNotThrow(() => assertStatusShape(status));
+  for (const transport of ['serial', 'uart', 'tcp']) {
+    status.output = { transport, state: transport === 'serial' ? 'serial_ready' : 'waiting',
+      config: { transport }, error: null, release_block: null, last_ack: null };
+    assert.doesNotThrow(() => assertStatusShape(status));
+    delete status.output.last_ack;
+    status.output.last_driver_ack = null;
+    assert.doesNotThrow(() => assertStatusShape(status));
+    for (const key of ['state', 'config', 'error', 'release_block', 'last_driver_ack']) {
+      const valid = status.output;
+      status.output = { ...valid };
+      delete status.output[key];
+      assert.throws(() => assertStatusShape(status), TypeError);
+      status.output = valid;
+    }
+  }
+  for (const output of [undefined, null, [], {}, { transport: 'off', state: 'waiting' },
+    { transport: 'unknown', state: 'off' }, { transport: 'serial', state: 'serial_ready' },
+    { transport: 'tcp', state: 'invented', config: {}, error: null, release_block: null, last_ack: null }]) {
+    status.output = output;
+    assert.throws(() => assertStatusShape(status), TypeError);
+  }
+  status.output = { transport: 'off', state: 'off' };
   assert.doesNotThrow(() => assertStatusShape(status));
 });

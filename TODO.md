@@ -375,6 +375,49 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    zurück. Danach entscheiden, ob die Toleranz als validiert gilt (für
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
+   **2026-11-04:** Software-Prototyp mit UserDefined-Formatter,
+   TCP-/UART-Brücke und Live-Auswahl gebaut; echte DUT-Ausgabe gesperrt.
+   Direkte UART-Demowerte unter Windows 11/GSVmulti 2.03 Pro gespeichert:
+   Rampen und acht Sprünge korrekt, Timeout und Fortsetzung belegt.
+   Ungültige Zeiträume fehlen aber im Export, auch bei NaN und bestätigtem
+   Replace Missing Values ([OQ-06](docs/open-questions.md#oq-06),
+   [OQ-50](docs/open-questions.md#oq-50), [OQ-51](docs/open-questions.md#oq-51)).
+   Reproduktionsfall mit GSVmulti-Entwicklung klären; Belegpaket lokal vorhanden,
+   kein Kontakt versandt. Lauf 11 belegt 510 korrekte Zahlen, mV/V und
+   Skalierung 1 in TDMS sowie Unit=mV/V in gespeicherter Session; TXT ohne
+   eigene Einheit. Gültiges Zahlenprofil der 2.03-Pro-Konfiguration geklärt
+   ([OQ-01](docs/open-questions.md#oq-01)). Als Nächstes getrennt
+   Altwert-/Puffernachlauf und Port-/Prozesswiederanlauf prüfen. Lauf 12:
+   Wiederöffnen nach Close scheitert mit 805306614; zuerst Portbelegung gegen
+   DLL-Zustand trennen ([OQ-52](docs/open-questions.md#oq-52)). Filter-aus-
+   Vergleich 14 mit abgeglichener10Hz/mV/V-Session bleibt auf Timeout;
+   positive Gegenprobe15 liest gültige Zahlen wieder. A-Präfix ohne Filter
+   bleibt in16 durchgehend auf Timeout ([OQ-53](docs/open-questions.md#oq-53)).
+   Geladene Windows-GSV-Versionen erfasst, OQ-54 geklärt
+   ([Inventar](docs/GSVMULTI_PROTOCOL.md#geladene-gsv-bibliotheken)).
+   LogLevel2 wirksam: Close-/Open-Fehler zweimal protokolliert; initial
+   zusätzlich Clear-Buffer-Fehler. Gegenprobe über Add Channel reproduziert
+   beide Signaturen bei1 statt10 Hz ([OQ-55](docs/open-questions.md#oq-55));
+   Zusammenhang offen. Vergleichspaket für direkten Entwicklungskontakt
+   lokal vorbereitet, kein Versand; OQ-52/OQ-53 bleiben teilweise geklärt.
+   Nutzer akzeptiert vollständigen GSVmulti-Neustart als Workaround;
+   Fehlerbehebung vorerst zurückgestellt. Nutzer wählt wieder com0com als
+   nächsten Weg: Nach angeleitetem Vovsoft-Buildwechsel alle sechs Geräte
+   Code0, COM5/COM6 bidirektional geprüft; Hash passt, SecureBoot/HVCI aktiv.
+   Lokale Windows-Demo COM5→COM6/GSVmulti mit600/600 exakten Zahlen samt
+   mV/V/Scaling1 vollständig gespeichert. Gemeinsamer Pi-TCP-/JSONL-/ACK-
+   Demolauf:600/600 Werte exakt in TXT/TDMS, passende ACKs/Payloads und Einheiten
+   belegt. Brückenprozess-Wiederanlauf:510/510 geschriebene Werte exakt gespeichert,
+   ohne Zwischenhistorie fortgesetzt; Exportpause weiter unmarkiert. Zusatzersatz
+   Frame356 unter [OQ-58](docs/open-questions.md#oq-58) isolieren; gemeinsamer UART
+   und übrige Abbruch-/Altwertfälle noch prüfen
+   ([OQ-47](docs/open-questions.md#oq-47)). Echte DUT-Ausgabe bleibt gesperrt.
+   [Arbeitsplan](docs/superpowers/plans/2026-11-04-gsvmulti-anbindung.md),
+   [Messbelege](docs/VALIDATION.md#uart-demo-20261104-10).
+   `protocol/gsv_ascii` wirft weiterhin absichtlich; Format provisorisch.
+   Kein Protokoll erfinden; Messfreigabe erst nach erfüllten Abnahmeschranken.
+
+   **Historischer Planungsstand (2026-10-28 bis 2026-10-30, P4-3 direkt):**
    **2026-10-30:** P4-1 bis P4-3 sind als Prototyp gebaut:
    `UserDefinedFormatter`, Demo-Sender und Opt-in-Ausgabe im Live-Lauf.
    Geprüft ist das nur mit pty; der Windows-Test steht aus

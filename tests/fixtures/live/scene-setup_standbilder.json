@@ -158,6 +158,10 @@
   },
   "diagnose_kopie": false,
   "last_mark": null,
+  "output": {
+    "transport": "off",
+    "state": "off"
+  },
   "reference": {
     "enabled": false,
     "reason": "kein Referenzlauf",

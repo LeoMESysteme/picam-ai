@@ -307,7 +307,7 @@
 
   T.register("regeln-protokoll", (ctx) => {
     const { tl, A, layer, tour } = ctx;
-    const head = heading(layer, "Kein erfundenes Protokoll", "UserDefined ist dokumentiert. Adapter und Abnahme bleiben offen.");
+    const head = heading(layer, "Kein erfundenes Protokoll", "UserDefined ist gebaut. Die GSVmulti-Abnahme bleibt offen.");
 
     const rec = T.group(layer, "regeln-rec");
     T.panel(rec, 40, 200, 170, 64, "t-panel t-flow-box");
@@ -316,9 +316,9 @@
     const csv = T.group(layer, "regeln-csv");
     const csvRect = T.panel(csv, 300, 104, 330, 92, "t-panel");
     csvRect.setAttribute("style", PLAN_PANEL);
-    T.label(csv, 318, 132, "AsciiCsvFormatter", "t-mono t-strong");
+    T.label(csv, 318, 132, "UserDefinedFormatter", "t-mono t-strong");
     T.label(csv, 318, 156, "provisional = True", "t-mono t-mono-sm t-plan-text");
-    T.label(csv, 318, 180, "nur zum Testen der Ausgabekette", "t-small");
+    T.label(csv, 318, 180, "Zahlenformat als Prototyp gebaut", "t-small");
     const csvBadge = T.badge(csv, 580, 132, "vorläufig", "plan", 86);
     void csvBadge;
 
@@ -336,7 +336,7 @@
     const target = T.group(layer, "regeln-target");
     T.panel(target, 720, 200, 200, 64, "t-panel t-planned-box");
     T.label(target, 820, 228, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    T.label(target, 820, 250, "Adapter fehlt", "t-small t-plan-text", { "text-anchor": "middle" });
+    T.label(target, 820, 250, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
     tour.docLink(target, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 214]);
     const toTarget = T.svg("path", { d: "M630 314C680 314 680 250 716 242", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
     const stop = T.group(layer, "regeln-stop");
@@ -391,7 +391,7 @@
       ["andere Lichtquellen", "Freigabe bisher nur für Raumlicht", null],
       ["Minuszeichen", "Gerät zeigt nie „−“, der Leser kennt nur „+“", null],
       ["Freigabeschwellen", "an realen Geräten validieren · OQ-14", "docs/open-questions.html#oq-14"],
-      ["GSVmulti-Anbindung", "Adapter und Abnahme offen · OQ-07", "docs/open-questions.html#oq-07"],
+      ["GSVmulti-Anbindung", "DUT gesperrt · Abnahme offen", "docs/open-questions.html#oq-07"],
     ].map(([title, sub, href], i) => {
       const g = T.group(open, "regeln-open");
       const y = 146 + i * 48;
