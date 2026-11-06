@@ -97,3 +97,82 @@ Ein numerischer Versuch wird als unbestätigt auditiert und nie wieder angeboten
 eine Barriere bleibt bis zur bestätigten Invalidierung wirksam. Kein historisches
 Nachsenden und keine Exactly-once-Zusage. COM-ACK bedeutet vollständige Annahme
 durch den lokalen COM-Schreibpfad, niemals Empfang durch GSVmulti.
+
+## P4: Lease und explizite UART-Vorauthentifizierung
+
+`heartbeat` enthält exakt die Basisfelder plus `run_id` (nullable) und
+`lease_id`. Antwort ist `heartbeat` mit denselben Bindungen. Intervall 1 s,
+Ablauf bei **>= 5 s** ohne gültige Nachricht, monotone Pi-Uhr. Heartbeat liest
+keinen Datensatz, reserviert keine Übergabe und bestätigt keinen COM-Write.
+Neue Runs werden durch `hello` mit neuer Run-ID synchronisiert; ein ACK mit
+fremder Run-/Lease-/Request-/Frame-/Barrier-ID wird abgelehnt.
+
+UART wird nur durch eine autorisierte lokale/Operator-Prepare-Aktion geöffnet.
+Vorab kennt der Client das geprüfte, gepinnte Profil. Die Kontrollnachrichten
+haben die gemeinsamen Basisfelder (`version`, `type`, `request_id`, `pi_id`,
+`client_id`) und ausschließlich folgende Zusatzfelder:
+
+| Typ | Pflichtfelder | Grenzen |
+| --- | --- | --- |
+| `uart_challenge` | `nonce` | frische 256-Bit-Token-Darstellung |
+| `uart_proof` | `nonce`, `signature` | gleiche Nonce; Base64-Signatur, max. 4096 Zeichen |
+| `uart_auth` | `nonce`, `mode`, `credential` | mode `token` oder `offer`; 256-Bit-Credential |
+| `uart_authenticated` | `token` | 256-Bit-UART-Token (auch nach Angebotseinlösung) |
+
+Der Pi signiert P2 `canonical_uart_hello(pi_id, client_id, nonce)`; der Client
+muss Nonce, Profilpin/Zertifikatsgültigkeit und RSA-Beweis prüfen, **bevor** er
+`uart_auth` sendet. Ein Auth-Schritt gilt nur für die unmittelbar vorherige
+Challenge derselben Client-/Request-/Pi-ID, maximal fünf Sekunden. Credentials
+werden ausschließlich im UART-Scope autorisiert/eingelöst, nie in capabilities
+oder Audit/Fehlertexte kopiert. Nach `uart_authenticated` ist ein reguläres
+v2-UART-`hello` erforderlich; erst dann entsteht eine Lease. Alle Frames bleiben
+auf 65536 Bytes beschränkt; Read/Write sind zeitlich begrenzt. Unauthentifizierte
+Bereitschaft ist kein PeerHello und keine Lease. Rücksetzung/Abbruch verwirft
+fragmentierte Eingaben und Sessionzustand.
+
+### Pi-Bereitschafts-API und lokale Aktion
+
+- `GET /live/bridge/status`: Operator-Sitzung; `pi_id`, nullable `run_id`,
+  `real_run`, `connected`, nullable `transport`, `uart_prepared`, `uart_state`,
+  nullable `uart_error`, `release_block`. `opening`/`listening` bedeuten nur
+  vorbereiteten UART; `connected` verlangt eine gültige authentifizierte Lease.
+- `POST /live/bridge/prepare` mit exakt `{"transport":"uart"}`: Operator,
+  Origin und CSRF erforderlich. Antwort ist obiger Status, kein PeerHello.
+  Konflikte liefern HTTP 409. Wiederholung übernimmt keine fremde Belegung.
+- `DELETE /live/bridge/prepare`: gleiche Autorisierung, beendet eigenen Listener
+  und dessen Lease; Antwort Status. Profilabruf und Dienststart öffnen UART nie.
+- Ohne Netzwerk und ohne bekannte Windows-Client-ID:
+  `dispread bridge prepare-uart --socket /PFAD/control.sock`.
+  `bridge status` und `bridge stop-uart` verwenden denselben optionalen
+  `--socket`-Parameter. Autorisierung erfolgt über den privaten (0700)
+  lokalen Dienstsocket. Der bereits gestartete Dienst muss mit
+  `serve --bridge-directory BESTEHENDE_IDENTITAET` konfiguriert sein.
+
+`tcp` im bestehenden Live-Konfigurationsobjekt bedeutet nun gekoppeltes WSS
+am konfigurierten HTTPS-Dienst. Alte `tcp_host`/`tcp_port`-Felder bleiben als
+Konfigurationskompatibilität erhalten und öffnen keinen eigenen Listener.
+Unkonfigurierte `LiveService`-/`LiveSession`-Brückenausgabe wird abgelehnt;
+v1-Transport ist nur durch ausdrückliche Demo-/Test-Factory-Injektion nutzbar.
+
+Jeder echte Lauf, auch `off` und direkte `serial`-Ausgabe, reserviert vor dem
+Kamerastart eine frische globale Run-ID. `session.json` und der gekoppelte
+Publisher tragen diese ID. Eine Demo benutzt `bridge/demo/<Run-ID>/` mit
+`demo.json`, `records.jsonl` und `output.jsonl`, nur synthetischen Zeitstempeln
+und `demo=true`, `provisional=true`, `time_claim=false`. Sie startet weder
+Kamera noch Referenz und wird bei reserviertem echten Lauf abgelehnt. Client-
+Abbruch oder Lease-Ablauf beendet die erzeugte Demo und gibt ihre Reservierung
+frei; auch langsame Raten warten in abbrechbaren Abschnitten von höchstens
+200 ms.
+
+UART und direkte serielle Ausgabe teilen kanonische Gerätebelegung über
+prozessübergreifendes `flock` in einem geschützten benutzerspezifischen
+Lockverzeichnis; zusätzlich verlangt pySerial `exclusive=True`.
+`/dev/ttyUSB0`, Symlinks und dieselbe Gerätedatei über Geräte-ID sind als
+Ausgang verboten, unabhängig vom alten Referenzadapter-Override.
+POSIX-Locks werden erst beim Pi-Portzugriff importiert.
+
+Der Hub-Registry-Lock schützt ausschließlich Metadaten. Ausgabe-Audit und
+ACK-/Invalidierungsserialisierung benutzen den bestehenden OutputState-Lock;
+Lease/Run werden danach erneut geprüft. Socket-/UART-I/O findet außerhalb
+beider Locks statt. Ein verlorenes ACK bleibt unbestätigt: Zahlen werden
+nicht wiederholt, eine offene Ungültigkeitsbarriere bleibt erhalten.

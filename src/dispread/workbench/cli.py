@@ -82,6 +82,9 @@ def bridge_command(args):
     from dispread.bridge.protocol import parse_profile
     from dispread.bridge.types import BridgeProfile
 
+    if args.action in ('prepare-uart', 'stop-uart', 'status'):
+        print(json.dumps(asyncio.run(request('bridge.' + args.action, socket_path=args.socket)), indent=2))
+        return
     directory = Path(args.directory)
     if args.action == "revoke":
         PairingStore(directory / "pairing").revoke(args.client_id)
@@ -169,6 +172,9 @@ def parser():
     tls.add_argument("--host", default="127.0.0.1")
     bridge = sub.add_parser("bridge", help="Pi-Identitaet und lokale Kopplung ohne Messstart")
     bridge_sub = bridge.add_subparsers(dest="action", required=True)
+    for action in ('prepare-uart', 'stop-uart', 'status'):
+        local = bridge_sub.add_parser(action)
+        local.add_argument('--socket', default=default_socket())
     identity = bridge_sub.add_parser("identity")
     identity.add_argument("--directory", default="var/workbench/bridge")
     identity.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")

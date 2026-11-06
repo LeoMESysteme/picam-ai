@@ -307,9 +307,21 @@ def bridge_service_config(args):
                 bridge_name=getattr(args, "bridge_name", "Dispread Pi")), identity.tls_context()
 
 
-async def handle_local_op(op, args, controller, live):
+async def handle_local_op(op, args, controller, live, bridge_hub=None):
     """Lokale Live-Steuerung; Bestaetigung und Laufstart bleiben auf /live."""
     try:
+        if op.startswith('bridge.'):
+            if bridge_hub is None:
+                raise ValueError('Bridge hub not configured')
+            if args:
+                raise ValueError('Bridge local action takes no arguments')
+            if op == 'bridge.prepare-uart':
+                return web.json_response(await asyncio.to_thread(bridge_hub.prepare_uart))
+            if op == 'bridge.stop-uart':
+                return web.json_response(await asyncio.to_thread(bridge_hub.stop_uart))
+            if op == 'bridge.status':
+                return web.json_response(bridge_hub.status())
+            raise ValueError('Unknown bridge action')
         if not op.startswith("live."):
             return web.json_response(controller.command(op, args))
         if op == "live.status":
@@ -370,7 +382,16 @@ async def serve(args):
         owner = CameraOwner(lambda: open_source("synthetic://seven-seg"), max_fps=10)
     else:
         owner = CameraOwner(lambda: UvcSource(preview_settings(), apply_controls=False))
-    live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)), simulate=args.simulate)
+    bridge_hub = None
+    if bridge_config:
+        from dispread.bridge.hub import BridgeHub
+        bridge_hub = BridgeHub(bridge_config['bridge_identity'].pi_id,
+                               Path(getattr(args, 'live_data', LIVE_DATA_DIR)) / 'bridge',
+                               identity=bridge_config['bridge_identity'],
+                               pairing_store=bridge_config['bridge_pairing_store'])
+        bridge_config['bridge_hub'] = bridge_hub
+    live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)),
+                       simulate=args.simulate, bridge_hub=bridge_hub)
     controller = Controller(args.data, args.camera, args.simulate, owner=owner)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):
@@ -393,7 +414,7 @@ async def serve(args):
             if data["op"] == "server.stop":
                 stop.set()
                 return web.json_response({"stopping": True})
-            return await handle_local_op(data["op"], data.get("args"), controller, live)
+            return await handle_local_op(data["op"], data.get("args"), controller, live, bridge_hub)
         except (ValueError, KeyError, TypeError, OSError) as error:
             return web.json_response({"error": str(error)}, status=400)
 
@@ -469,6 +490,11 @@ async def serve(args):
             await asyncio.to_thread(live.close)
         except Exception as error:  # noqa: BLE001 - Kamera und Socket trotzdem freigeben
             controller.log("error", f"Live: {error}")
+        if bridge_hub is not None:
+            try:
+                await asyncio.to_thread(bridge_hub.close)
+            except Exception:
+                controller.log('error', 'Bridge cleanup failed')
         await asyncio.to_thread(owner.stop)
         socket_path.unlink(missing_ok=True)
         lockfile.close()

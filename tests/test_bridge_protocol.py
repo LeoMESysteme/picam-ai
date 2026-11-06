@@ -181,3 +181,23 @@ def test_v2_rejects_excessive_nesting_and_nonfinite_exponent():
     for raw in [b'{"x":' + b"[" * 18 + b"0" + b"]" * 18 + b"}", b'{"version":2,"x":1e999}']:
         with pytest.raises(ValueError):
             decode_v2(raw)
+
+
+@pytest.mark.parametrize('kind,fields', [
+    ('heartbeat', {'run_id': None, 'lease_id': 'lease'}),
+    ('uart_challenge', {'nonce': 'a' * 43}),
+    ('uart_proof', {'nonce': 'a' * 43, 'signature': 'YWJj'}),
+    ('uart_auth', {'nonce': 'a' * 43, 'mode': 'token', 'credential': 'b' * 43}),
+    ('uart_authenticated', {'token': 'b' * 43}),
+])
+def test_heartbeat_and_uart_controls_are_bounded_exact_schemas(kind, fields):
+    message = dict(version=2, type=kind, request_id='r', pi_id='pi', client_id='pc', **fields)
+    assert decode_v2(encode_v2(message)) == message
+    with pytest.raises(ValueError):
+        encode_v2({**message, 'capabilities': {'token': 'b' * 43}})
+    if 'nonce' in message:
+        with pytest.raises(ValueError):
+            encode_v2({**message, 'nonce': 'short'})
+    if kind == 'uart_auth':
+        with pytest.raises(ValueError):
+            encode_v2({**message, 'mode': 'network'})

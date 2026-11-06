@@ -93,6 +93,12 @@ class SerialSink:
         self.baudrate = baudrate
         self.timeout = timeout
         self.write_timeout = write_timeout
+        import uuid
+
+        from dispread.bridge.resources import SerialPortLease
+
+        self._port_lease = SerialPortLease()
+        self._port_owner = uuid.uuid4().hex
         self._serial = None
         self._lock = threading.Lock()
         self._tx_seq = 0
@@ -104,18 +110,27 @@ class SerialSink:
     def open(self) -> None:
         import serial
 
-        self._serial = serial.Serial(
-            self.port,
-            baudrate=self.baudrate,
-            timeout=self.timeout,
-            write_timeout=self.write_timeout,
-        )
+        port = self._port_lease.acquire(self.port, self._port_owner, 'serial')
+        try:
+            self._serial = serial.Serial(
+                port,
+                baudrate=self.baudrate,
+                timeout=self.timeout,
+                write_timeout=self.write_timeout,
+                exclusive=True,
+            )
+        except BaseException:
+            self._port_lease.release(self._port_owner)
+            raise
 
     def close(self) -> None:
         with self._lock:
-            if self._serial is not None:
-                self._serial.close()
+            try:
+                if self._serial is not None:
+                    self._serial.close()
+            finally:
                 self._serial = None
+                self._port_lease.release(self._port_owner)
 
     def emit(self, record: ValueRecord) -> TxReceipt:
         t0 = time.monotonic_ns()

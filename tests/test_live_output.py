@@ -551,10 +551,12 @@ OUTPUT_CASES = [
 @pytest.mark.parametrize('config,transport', OUTPUT_CASES)
 def test_unified_service_output_contract(tmp_path, monkeypatch, config, transport):
     monkeypatch.setattr('serial.Serial', FakeSerial)
-    service = LiveService(FakeOwner(), tmp_path)
+    from dispread.bridge.hub import BridgeHub
+    service = LiveService(FakeOwner(), tmp_path, bridge_hub=BridgeHub('pi', tmp_path / 'audit'))
     service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
 
     def factory(owner, profile, settings, out_dir, **kwargs):
+        kwargs.pop('output_factory', None)  # contract fixture uses its controlled publisher
         return _session(tmp_path, [], out_dir=out_dir, output_factory=Publisher, **kwargs)
 
     monkeypatch.setattr('dispread.live.service.LiveSession', factory)
@@ -709,12 +711,13 @@ def test_bridge_stop_runs_once_and_always_closes_audit(tmp_path, stop_fails):
 
 
 @pytest.mark.parametrize('transport', ['uart', 'tcp'])
-def test_unified_session_keeps_real_publisher_dut_lock(tmp_path, monkeypatch, transport):
+def test_explicit_legacy_v1_demo_publisher_keeps_dut_lock(tmp_path, monkeypatch, transport):
     from dispread.gsv_transport import RELEASE_BLOCK, OutputPublisher
 
     # Echte Publisher-Logik und Audit, aber kein Port oder Socket im Test.
     monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
-    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport})
+    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport},
+                       output_factory=OutputPublisher)
     session._config = replace(session._config, confirm_frames=1)
     session.start()
     try:
@@ -834,3 +837,46 @@ def test_formatter_comparison_includes_bridge_fixtures():
     invalid = record(status=ValueStatus.UNREADABLE)
     assert direct.format(invalid) is None
     assert BridgeFormatter(invalid_policy=InvalidValuePolicy.SEND_NAN, demo=True).format(invalid) == b'%NaN\r\n'
+
+
+def test_standalone_session_refuses_unconfigured_paired_output(tmp_path, monkeypatch):
+    from dispread.gsv_transport import OutputPublisher
+    from dispread.live.session import StartRefused
+    # RED guard: do not permit the old default to open a raw test listener.
+    monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
+    session = _session(tmp_path, [], output={'transport': 'tcp'})
+    with pytest.raises(StartRefused, match='hub is not configured'):
+        session.start()
+
+
+def test_paired_client_loss_keeps_camera_and_record_audit_running(tmp_path):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.bridge.publisher import PairedOutputPublisher
+    now = [0.0]
+    hub = BridgeHub('pi', tmp_path / 'bridge', clock=lambda: now[0])
+    hub.reserve_real_run('real-run')
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, output={'transport': 'tcp'},
+                       output_factory=lambda config, out_dir: PairedOutputPublisher(
+                           config, out_dir, hub=hub, run_id='real-run'))
+    session.bridge_run_id = 'real-run'
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    lease = hub.attach('pc', 'network')
+    try:
+        assert session.step().status.value == 'valid'
+        now[0] = 5.0
+        assert session.step().status.value == 'valid'
+        with pytest.raises(ValueError, match='expired'):
+            hub.exchange(lease.lease_id, dict(version=2, type='heartbeat', request_id='beat', pi_id='pi',
+                         client_id='pc', lease_id=lease.lease_id, run_id='real-run'))
+        assert session.step().status.value == 'valid'
+        records = [json.loads(line) for line in session.records_path.read_text().splitlines()]
+        assert len(records) == 3
+        assert session._output._latest.frame_sequence == records[-1]['frame_sequence']
+        assert session._output._pending is None
+        assert session.unified_output_status()['release_block']
+    finally:
+        session.stop()
+        hub.release_real_run('real-run')
+        hub.close()
+    assert json.loads(session.session_path.read_text())['run_id'] == 'real-run'

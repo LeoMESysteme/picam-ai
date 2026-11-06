@@ -21,13 +21,15 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from statistics import median
 from typing import Any
 
 import cv2
 
-from dispread.gsv_transport import OutputConfig, OutputPublisher
+from dispread.bridge.publisher import PairedOutputPublisher
+from dispread.gsv_transport import OutputConfig
 from dispread.layout import CharLayout
 from dispread.live import (
     DEFAULT_CALIBRATION,
@@ -190,7 +192,7 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
-        output_factory: Callable[..., Any] = OutputPublisher,
+        output_factory: Callable[..., Any] = partial(PairedOutputPublisher, hub=None),
         reference_recorder: Any = None,
         output: dict | OutputConfig | None = None,
         diagnostics: bool = False,
@@ -762,6 +764,8 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
+        if hasattr(self, "bridge_run_id"):
+            data["run_id"] = self.bridge_run_id
         if self._output_transport == 'serial':
             data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
         elif self._output is not None:

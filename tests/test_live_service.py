@@ -1531,6 +1531,8 @@ def test_setup_saves_cross_masked_text_before_2j_failure_or_success(tmp_path, pr
     offset = SimpleNamespace(status=offset_status, to_dict=lambda: {"status": offset_status})
     monkeypatch.setattr(live_setup, "raster_offset_check", lambda *a: offset)
     monkeypatch.setattr(live_setup, "propose_with_fit", lambda *a, **kw: proposal)
+    # This test exercises text masking, not the local ignored template artifact.
+    monkeypatch.setattr(live_setup, "diagnose_reader", lambda *a, **kw: None)
     monkeypatch.setattr(live_setup.time, "sleep", lambda s: None)
     texts = iter(["+0.60970 ", "+0.60970 "] + ["+0.60971 ", "+0.60972 "] * 5 + ["+0.61971 ", "+0.61971 "])
     monkeypatch.setattr(live_setup, "serial_cell_text", lambda port: next(texts))
@@ -3162,3 +3164,56 @@ def test_cancel_real_setup_worker_within_one_slice(tmp_path, monkeypatch, checkp
     finally:
         proceed.set()
         service._setup_thread.join(2)
+
+
+@pytest.mark.parametrize('output', [None, {'transport': 'serial', 'port': '/fake/output', 'acknowledge_unaccepted': True}])
+def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_path, monkeypatch, output):
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    class Session(MarkerSession):
+        def __init__(self, *args, output=None, **kwargs):
+            super().__init__(*args, **kwargs)
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    service._bridge_hub = hub
+    service._profile_camera = object()
+    seen = []
+    def restart(*args, **kwargs):
+        seen.append(hub.status()['run_id'])
+        assert hub.status()['real_run']
+        with pytest.raises(ValueError, match='real run'):
+            hub.start_demo('pc', 'network', count=1)
+    service._owner.restart = restart
+    service.start_run(reference=False, output=output)
+    first = seen[-1]
+    service.stop_run()
+    assert hub.status()['run_id'] is None
+    service.start_run(reference=False, output=output)
+    assert seen[-1] != first
+    service.close()
+    assert hub.status()['run_id'] is None
+
+
+@pytest.mark.parametrize('stage', ['storage', 'camera', 'constructor', 'start', 'thread'])
+def test_bridge_startup_failure_releases_reservation(tmp_path, monkeypatch, stage):
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    def fail(*args, **kwargs):
+        assert hub.status()['real_run']
+        raise OSError('injected startup failure')
+    if stage == 'storage':
+        monkeypatch.setattr(service, '_require_storage', fail)
+    elif stage == 'camera':
+        service._profile_camera = object()
+        monkeypatch.setattr(service._owner, 'restart', fail)
+    elif stage == 'constructor':
+        monkeypatch.setattr('dispread.live.service.LiveSession', fail)
+    elif stage == 'start':
+        monkeypatch.setattr(MarkerSession, 'start', fail)
+    else:
+        monkeypatch.setattr('dispread.live.service.threading.Thread.start', fail)
+    with pytest.raises((LiveError, OSError), match='startup failure'):
+        service.start_run(reference=False)
+    assert hub.status()['run_id'] is None
+    assert service.status()['state'] != 'running'

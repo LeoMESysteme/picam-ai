@@ -38,6 +38,17 @@ dieses Hinweises (`acknowledge_unaccepted`). Ungültige Werte werden dort
 ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter
 ([OQ-06](open-questions.md#oq-06)).
 
+**Technischer Stand 2026-11-06, Arbeitszweig Windows-Brücke:** Der v2-Hub
+bindet jeden echten Lauf an eine frische ID, auch bei Ausgabe Aus/direkt.
+`tcp` wählt im Produkt den gekoppelten WSS-Weg am ausdrücklich eingerichteten
+HTTPS-Dienst; UART benötigt lokale Vorbereitung, Identitätsnachweis und
+transportgebundene Kopplung. Direkte Ausgabe und Brückenlistener teilen
+dieselbe Portbelegung. Ohne Hub wird die Brückenausgabe abgewiesen; rohe
+v1-Sockets bleiben benannten Demowerkzeugen vorbehalten. Dies ändert weder
+die folgenden historischen Windows-Belege noch die fehlende EXE-/Treiber-/
+Sessionabnahme. [V2-Vertrag](BRIDGE_PROTOCOL_V2.md),
+[Umsetzungsstand](status.md), [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
+
 **Echte DUT-Ausgabe über die Brücke bleibt strukturell gesperrt.** Der Pi beantwortet
 Brücken-Live-Abfragen ohne DUT-Zahlen; die Windows-Brücke lehnt nichtsynthetische
 Messdaten ab. Es gibt keinen Freigabeschalter in der Oberfläche. Erst ein

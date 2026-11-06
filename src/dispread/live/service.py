@@ -12,6 +12,7 @@ import logging
 import shutil
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -147,8 +148,10 @@ class LiveService:
         diagnostic_staging_root: Path = Path('/dev/shm'),
         disk_usage: Callable[[Path], Any] | None = None,
         cpu_reader: Callable[[], str] | None = None,
+        bridge_hub=None,
     ) -> None:
         self._owner = owner
+        self._bridge_hub = bridge_hub
         self._data_dir = Path(data_dir)
         self._disk_usage = disk_usage or shutil.disk_usage
         self._cpu_reader = cpu_reader or (lambda: Path('/proc/stat').read_text(encoding='ascii'))
@@ -882,57 +885,89 @@ class LiveService:
                 # Nach der Bestaetigung keine Bereichskorrektur mehr: nie
                 # Einrichtungs-Einzelbilder durch den Lauf mitschleppen.
                 self._stability_frames = ()
-            self._require_storage(diagnostics=diagnostics)
-            number = 1
-            while True:
-                out_dir = profile_path.parent / f"run-{number:02d}"
+            run_id = uuid.uuid4().hex
+            previous_state = self._state
+            session = None
+            from dispread.bridge.publisher import PairedOutputPublisher
+
+            def output_factory(config, out_dir):
+                return PairedOutputPublisher(config, out_dir, hub=self._bridge_hub, run_id=run_id)
+
+            if output['transport'] in ('tcp', 'uart') and self._bridge_hub is None:
+                raise LiveError('paired bridge hub is not configured')
+            if self._bridge_hub is not None:
                 try:
-                    out_dir.mkdir(parents=True)
-                    break
-                except FileExistsError:
-                    number += 1
-            test_run = None
-            if block is not None:
-                test_run = {
-                    "testlauf": True, "run_block": block,
-                    "confirmed_by": confirmed_by,
-                    "started_at_utc": self._wall().isoformat(),
-                    "hinweis": "Lesesperre uebergangen. Werte nicht freigegeben, nicht fuer Messungen verwenden.",
-                }
-                (out_dir / "TESTLAUF.json").write_text(
-                    json.dumps(test_run, indent=2, ensure_ascii=False), encoding="utf-8",
-                )
-            if camera is not None:
-                try:
-                    self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
-                except RuntimeError as exc:
-                    raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
+                    self._bridge_hub.reserve_real_run(run_id)
+                except ValueError as exc:
+                    raise LiveError(str(exc)) from exc
             try:
-                recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
-                                              norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
-                session = LiveSession(
-                    self._owner, profile_path, self._config, out_dir, test_run=test_run,
-                    reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
-                    reader_tolerance=self._reader_tolerance,
-                    reference_recorder=recorder,
-                    diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
-                    **({'output': output} if output['transport'] != 'off' else {}),
-                )
-                session.start()
-            except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
-                raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
-            stop = threading.Event()
-            with self._lock:
-                self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
-                                           if getattr(s, 'diagnose_kopie', False)]
-                self._session, self._run_stop, self._state, self._error = session, stop, "running", None
-                self._run_dir = out_dir
-                self._test_run = test_run
-                self._run_reference = reference
-                self._reference_eval = None
-            self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
-                                                daemon=True)
-            self._run_thread.start()
+                self._require_storage(diagnostics=diagnostics)
+                number = 1
+                while True:
+                    out_dir = profile_path.parent / f"run-{number:02d}"
+                    try:
+                        out_dir.mkdir(parents=True)
+                        break
+                    except FileExistsError:
+                        number += 1
+                test_run = None
+                if block is not None:
+                    test_run = {
+                        "testlauf": True, "run_block": block,
+                        "confirmed_by": confirmed_by,
+                        "started_at_utc": self._wall().isoformat(),
+                        "hinweis": "Lesesperre uebergangen. Werte nicht freigegeben, nicht fuer Messungen verwenden.",
+                    }
+                    (out_dir / "TESTLAUF.json").write_text(
+                        json.dumps(test_run, indent=2, ensure_ascii=False), encoding="utf-8",
+                    )
+                if camera is not None:
+                    try:
+                        self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
+                    except RuntimeError as exc:
+                        raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
+                try:
+                    recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
+                                                  norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
+                    session = LiveSession(
+                        self._owner, profile_path, self._config, out_dir, test_run=test_run,
+                        reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
+                        reader_tolerance=self._reader_tolerance,
+                        reference_recorder=recorder,
+                        diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
+                        **({'output': output} if output['transport'] != 'off' else {}),
+                        **({'output_factory': output_factory} if output['transport'] in ('tcp', 'uart') else {}),
+                    )
+                    session.bridge_run_id = run_id
+                    session.start()
+                except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
+                    raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
+                stop = threading.Event()
+                with self._lock:
+                    self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
+                                               if getattr(s, 'diagnose_kopie', False)]
+                    self._session, self._run_stop, self._state, self._error = session, stop, "running", None
+                    self._run_dir = out_dir
+                    self._test_run = test_run
+                    self._run_reference = reference
+                    self._reference_eval = None
+                self._run_thread = threading.Thread(target=self._run_worker, args=(session, stop), name="live-run",
+                                                    daemon=True)
+                self._run_thread.start()
+            except BaseException:
+                try:
+                    if session is not None:
+                        try:
+                            session.stop('startup_failed')
+                        except Exception:
+                            _LOG.error('Laufstart: Bereinigung fehlgeschlagen; urspruenglichen Fehler erhalten')
+                finally:
+                    if self._bridge_hub is not None:
+                        self._bridge_hub.release_real_run(run_id)
+                    with self._lock:
+                        self._state = previous_state
+                        self._run_thread = None
+                raise
 
     def _run_worker(self, session: LiveSession, stop: threading.Event) -> None:
         session.run(stop)
@@ -951,6 +986,8 @@ class LiveService:
 
     def _finish_run(self, session: LiveSession, error: str | None) -> None:
         """Unter self._lock, erst nach dem Abschluss der Laufdateien."""
+        if self._bridge_hub is not None:
+            self._bridge_hub.release_real_run(getattr(session, 'bridge_run_id', None))
         self._state, self._error = 'stopped', error
         if self._run_reference:
             self._reference_eval = {'state': 'running'}

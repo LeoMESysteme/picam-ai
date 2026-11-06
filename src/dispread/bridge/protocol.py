@@ -25,6 +25,11 @@ _FIELDS = {
     ),
     "demo_request": ({"transport", "run_id", "count", "rate_hz"}, set()),
     "poll": (_BOUND, set()),
+    "heartbeat": (_BOUND, set()),
+    "uart_challenge": ({"nonce"}, set()),
+    "uart_proof": ({"nonce", "signature"}, set()),
+    "uart_auth": ({"nonce", "mode", "credential"}, set()),
+    "uart_authenticated": ({"token"}, set()),
     "record": (_BOUND | {"demo", "record", "frame_age_ns", "barrier_id"}, set()),
     "idle": (_BOUND | {"release_block"}, set()),
     "ended": (_BOUND, set()),
@@ -295,7 +300,7 @@ def _validate_v2(message):
     for key in ("request_id", "pi_id", "client_id"):
         _identifier(message[key])
     if "run_id" in message:
-        _identifier(message["run_id"], nullable=kind in ("hello", "demo_request", "error", "poll", "idle"))
+        _identifier(message["run_id"], nullable=kind in ("hello", "demo_request", "error", "poll", "idle", "heartbeat"))
     if "lease_id" in message:
         _identifier(message["lease_id"], nullable=kind in ("hello", "error"))
     if "release_block" in message:
@@ -316,6 +321,17 @@ def _validate_v2(message):
             _token(message["nonce"])
         if "signature" in message:
             _text(message["signature"])
+    elif kind.startswith("uart_"):
+        if "nonce" in message:
+            _token(message["nonce"])
+        if "signature" in message:
+            _text(message["signature"], maximum=4096)
+        if "token" in message:
+            _token(message["token"])
+        if kind == "uart_auth":
+            if message["mode"] not in ("token", "offer"):
+                raise ValueError("invalid UART authentication mode")
+            _token(message["credential"])
     elif kind == "demo_request":
         _transport(message["transport"])
         _integer(message["count"], minimum=1, maximum=100000)

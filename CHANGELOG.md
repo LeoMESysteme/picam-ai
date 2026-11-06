@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Gekoppelten Pi-Hub mit exklusiven Leases, nicht konsumierendem
+  Heartbeat, signiertem UART-Handshake und ausdrücklicher lokaler Vorbereitung
+  angeschlossen. Jeder echte Lauf reserviert vor dem Start eine frische ID,
+  auch bei Ausgabe Aus/direkt; Demos können ihn nicht überholen. Direkte
+  Ausgabe und Listener teilen die Portbelegung, Referenzport-Aliase werden
+  abgelehnt. Produkt und eigenständige Sitzung fallen ohne Hub nicht auf
+  rohe v1-Sockets zurück. 97 abschließend betroffene Tests und 158 Node-Tests
+  bestanden; zwei Reviewrunden einschließlich sporadischer Store-Race
+  korrigiert. Physische Windows-/UART-Abnahme und GUI bleiben separat offen.
+
 * 2026-11-06: Pi-Profil, Operator-Kopplung und TLS-/Token-geschützten WSS-
   Zugang vorbereitet. Widerruf gilt bereits vor Hello; Zugangsspeicher und
   Verbindungsende haben feste Fristen und geben Leases auch bei Fehlern frei.

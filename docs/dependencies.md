@@ -114,7 +114,8 @@ hardwaregebundene ID und RSA-3072-Zertifikat. Bereitstellung ausschließlich
 über ausdrückliches `dispread bridge identity --provision`; bestehende
 Zertifikate und laufende Dienste werden dabei nicht ersetzt. Offline-UART
 kann ein lokal exportiertes Profil mit höchstens fünf Minuten gültigem
-Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung ist vorbereitet; der echte Hub folgt gesondert.
+Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung und gemeinsamer Hub sind als Backend integriert;
+Aktivierung und reale Abnahme bleiben ausdrücklich getrennt.
 
 ## Zensical-Pflege auf dem Forgejo-Runner
 

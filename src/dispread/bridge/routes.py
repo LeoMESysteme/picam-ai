@@ -137,6 +137,32 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
         await operator(request)
         return web.json_response(public_profile, headers={"Content-Disposition": 'attachment; filename="pi.dispread"'})
 
+    async def bridge_status(request):
+        await operator(request)
+        if not hasattr(hub, 'status'):
+            raise web.HTTPServiceUnavailable(text='Bridge hub unavailable')
+        return web.json_response(hub.status())
+
+    async def prepare_uart(request):
+        await operator(request)
+        data = await _body(request)
+        if data != {'transport': 'uart'}:
+            raise web.HTTPBadRequest(text='Explicit UART transport required')
+        if not hasattr(hub, 'prepare_uart'):
+            raise web.HTTPServiceUnavailable(text='Bridge hub unavailable')
+        try:
+            result = await asyncio.to_thread(hub.prepare_uart)
+        except (ValueError, OSError):
+            raise web.HTTPConflict(text='UART unavailable or occupied; release its owner first') from None
+        return web.json_response(result)
+
+    async def stop_uart(request):
+        await operator(request)
+        if not hasattr(hub, 'stop_uart'):
+            raise web.HTTPServiceUnavailable(text='Bridge hub unavailable')
+        await asyncio.to_thread(hub.stop_uart)
+        return web.json_response(hub.status())
+
     async def offers(request):
         await operator(request)
         data = await _body(request)
@@ -211,6 +237,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
         await ws.prepare(request)
         connections.add(ws)
         lease_id = None
+        created_lease = [None]
         watchdog = None
         authorization_ended = False
 
@@ -219,11 +246,17 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
             if authorization_ended or ws.closed or current != client_id:
                 raise PairingError("Connection authorization ended")
 
-        def detach():
+        async def detach():
             nonlocal lease_id
-            if lease_id is not None:
-                value, lease_id = lease_id, None
-                hub.detach(value)
+            value = lease_id or created_lease[0]
+            lease_id = created_lease[0] = None
+            if value is not None:
+                try:
+                    async with asyncio.timeout(.35):
+                        await asyncio.to_thread(hub.detach, value)
+                except TimeoutError:
+                    # Late audit cleanup cannot restore the connection/lease.
+                    pass
 
         async def close_connection(*, message=b"Client authorization ended"):
             try:
@@ -248,7 +281,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                     authorization_ended = True
                     # An unavailable authorization source never leaves a lease live.
                     try:
-                        detach()
+                        await detach()
                     finally:
                         await close_connection()
                     return
@@ -274,8 +307,28 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
             ):
                 raise ValueError("expected network readiness hello")
             await check_authorization()
-            lease = hub.attach(client_id, "network")
+            def attach_authorized():
+                lease = hub.attach(client_id, "network")
+                created_lease[0] = lease.lease_id
+                if authorization_ended or ws.closed:
+                    hub.detach(lease.lease_id)
+                    raise ValueError('Connection authorization ended')
+                return lease
+
+            try:
+                lease = await asyncio.to_thread(attach_authorized)
+            except ValueError:
+                if not authorization_ended and not ws.closed:
+                    response = dict(version=2, type='error', request_id=message['request_id'],
+                                    pi_id=identity.pi_id, client_id=client_id, run_id=None,
+                                    code='lease_unavailable',
+                                    detail='Bridge lease unavailable; close the existing connection first')
+                    async with asyncio.timeout(.35):
+                        await ws.send_str(encode_v2(response).decode('utf-8'))
+                raise
+            await check_authorization()
             lease_id = lease.lease_id
+            readiness = hub.prepare("network", client_id)
             response = dict(
                 version=2,
                 type="hello",
@@ -288,7 +341,8 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 state=readiness.state,
                 release_block=readiness.release_block,
                 lease_id=lease_id,
-                capabilities={"protocol_version": 2, "dut_output": False},
+                capabilities={"protocol_version": 2, "dut_output": False,
+                              "heartbeat_interval_s": 1, "lease_timeout_s": 5},
                 permissions=["readiness", "demo"],
             )
             await ws.send_str(encode_v2(response).decode("utf-8"))
@@ -300,7 +354,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                     raise ValueError("authorization ended")
                 message = decode_v2(frame.data.encode("utf-8"))
                 bound(message)
-                if message["type"] not in {"poll", "ack", "demo_request"}:
+                if message["type"] not in {"poll", "ack", "heartbeat", "demo_request"}:
                     raise ValueError("unexpected client message")
                 if message["type"] == "demo_request":
                     if message["transport"] != "network":
@@ -308,7 +362,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 elif message["lease_id"] != lease_id:
                     raise ValueError("lease mismatch")
                 # The hub owns run transitions and checks run binding before output.
-                response = hub.exchange(lease_id, message)
+                response = await asyncio.to_thread(hub.exchange, lease_id, message)
                 bound(response)
                 if response.get("lease_id", lease_id) != lease_id or response["request_id"] != message["request_id"]:
                     raise ValueError("hub response binding mismatch")
@@ -324,7 +378,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                         await watchdog
             finally:
                 try:
-                    detach()
+                    await detach()
                 finally:
                     connections.discard(ws)
                     await close_connection()
@@ -334,6 +388,9 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
         await asyncio.gather(*(ws.close(code=1001, message=b"Service stopping") for ws in tuple(connections)))
 
     app.on_shutdown.append(shutdown)
+    app.router.add_get("/live/bridge/status", bridge_status)
+    app.router.add_post("/live/bridge/prepare", prepare_uart)
+    app.router.add_delete("/live/bridge/prepare", stop_uart)
     app.router.add_get("/live/bridge/profile", profile)
     app.router.add_post("/live/bridge/offers", offers)
     app.router.add_delete("/live/bridge/clients/{client_id}", revoke)

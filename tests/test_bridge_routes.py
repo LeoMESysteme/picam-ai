@@ -60,9 +60,13 @@ def identity(tmp_path_factory):
 
 
 @asynccontextmanager
-async def service(tmp_path, identity, *, tls=True, configured_hub=True):
+async def service(tmp_path, identity, *, tls=True, configured_hub=True, real_hub=False):
     store = PairingStore(tmp_path / "pairing")
-    hub = FakeHub(identity.pi_id)
+    if real_hub:
+        from dispread.bridge.hub import BridgeHub
+        hub = BridgeHub(identity.pi_id, tmp_path / 'audit', identity=identity, pairing_store=store)
+    else:
+        hub = FakeHub(identity.pi_id)
     from dispread.workbench.controller import Controller
 
     controller = Controller(tmp_path / "data", simulate=True)
@@ -93,6 +97,8 @@ async def service(tmp_path, identity, *, tls=True, configured_hub=True):
             yield client, base, store, hub
         finally:
             await runner.cleanup()
+            if real_hub:
+                hub.close()
 
 
 async def login(client, base):
@@ -597,4 +603,100 @@ def test_revocation_aborts_transport_when_close_handshake_stalls(tmp_path, ident
             finally:
                 monkeypatch.setattr(web.WebSocketResponse, "close", original)
 
+    asyncio.run(check())
+
+
+def test_heartbeat_is_explicitly_allowed_without_poll(tmp_path, identity):
+    async def check():
+        async with service(tmp_path, identity) as (client, base, store, hub):
+            token = store.redeem_offer(store.create_offer('network'), 'client-a', 'network')
+            async with client.ws_connect(base + '/bridge/v2', headers={'Authorization': 'Bearer ' + token}) as ws:
+                await ws.send_str(encode_v2(hello(identity)).decode())
+                first = decode_v2((await ws.receive()).data.encode())
+                message = dict(version=2, type='heartbeat', request_id='beat', pi_id=identity.pi_id,
+                               client_id='client-a', lease_id=first['lease_id'], run_id=None)
+                await ws.send_str(encode_v2(message).decode())
+                response = await ws.receive(timeout=1)
+                assert response.type == aiohttp.WSMsgType.TEXT
+                assert hub.exchanged == [message]
+    asyncio.run(check())
+
+
+def test_operator_uart_prepare_requires_csrf_and_is_explicit(tmp_path, identity):
+    async def check():
+        async with service(tmp_path, identity) as (client, base, store, hub):
+            prepared = []
+            hub.prepare_uart = lambda: prepared.append(True) or {'uart_prepared': True}
+            hub.status = lambda: {'uart_prepared': bool(prepared)}
+            assert (await client.post(base + '/live/bridge/prepare', json={'transport': 'uart'})).status == 401
+            headers = await login(client, base)
+            await client.get(base + '/live/bridge/profile')
+            assert prepared == []
+            assert (await client.post(base + '/live/bridge/prepare', json={'transport': 'uart'})).status == 403
+            response = await client.post(base + '/live/bridge/prepare', json={'transport': 'uart'}, headers=headers)
+            assert response.status == 200
+            assert prepared == [True]
+            response = await client.get(base + '/live/bridge/status')
+            assert (await response.json())['uart_prepared'] is True
+    asyncio.run(check())
+
+
+def test_real_hub_wss_idle_run_resync_demo_and_lease_exclusion(tmp_path, identity):
+    async def check():
+        async with service(tmp_path, identity, real_hub=True) as (client, base, store, hub):
+            token = store.redeem_offer(store.create_offer('network'), 'client-a', 'network')
+            headers = {'Authorization': 'Bearer ' + token}
+            async with client.ws_connect(base + '/bridge/v2', headers=headers) as ws:
+                await ws.send_str(encode_v2(hello(identity)).decode())
+                first = decode_v2((await ws.receive(timeout=1)).data.encode())
+                assert first['run_id'] is None and first['state'] == 'output_off'
+                async with client.ws_connect(base + '/bridge/v2', headers=headers) as duplicate:
+                    await duplicate.send_str(encode_v2(hello(identity)).decode())
+                    conflict = decode_v2((await duplicate.receive(timeout=1)).data.encode())
+                    assert conflict['type'] == 'error' and conflict['code'] == 'lease_unavailable'
+                    assert 'existing connection' in conflict['detail']
+                message = dict(version=2, type='heartbeat', request_id='beat', pi_id=identity.pi_id,
+                               client_id='client-a', lease_id=first['lease_id'], run_id=None)
+                hub.reserve_real_run('real')
+                await ws.send_str(encode_v2(message).decode())
+                resync = decode_v2((await ws.receive(timeout=1)).data.encode())
+                assert resync['type'] == 'hello' and resync['run_id'] == 'real'
+                hub.release_real_run('real')
+                demo = dict(version=2, type='demo_request', request_id='demo', pi_id=identity.pi_id,
+                            client_id='client-a', run_id=None, transport='network', count=10, rate_hz=10)
+                await ws.send_str(encode_v2(demo).decode())
+                started = decode_v2((await ws.receive(timeout=1)).data.encode())
+                assert started['type'] == 'hello' and started['run_id'] != 'real'
+                await ws.send_str(encode_v2({**message, 'type': 'poll', 'run_id': started['run_id']}).decode())
+                output = decode_v2((await ws.receive(timeout=1)).data.encode())
+                assert output['type'] == 'record' and output['demo'] is True
+                assert output['record']['capture_timestamp']['base'] == 'synthetic'
+    asyncio.run(check())
+
+
+def test_revocation_during_pending_attach_does_not_leave_late_lease(tmp_path, identity):
+    import threading
+    async def check():
+        async with service(tmp_path, identity) as (client, base, store, hub):
+            entered, release = threading.Event(), threading.Event()
+            original = hub.attach
+            def blocked(client_id, transport):
+                entered.set()
+                assert release.wait(2)
+                return original(client_id, transport)
+            hub.attach = blocked
+            token = store.redeem_offer(store.create_offer('network'), 'client-a', 'network')
+            async with client.ws_connect(base + '/bridge/v2', headers={'Authorization': 'Bearer ' + token}) as ws:
+                await ws.send_str(encode_v2(hello(identity)).decode())
+                assert await asyncio.to_thread(entered.wait, 1)
+                store.revoke('client-a')
+                try:
+                    assert (await ws.receive(timeout=1)).type == aiohttp.WSMsgType.CLOSE
+                finally:
+                    release.set()
+                for _ in range(100):
+                    if hub.detached:
+                        break
+                    await asyncio.sleep(.01)
+                assert hub.detached and not hub.leases
     asyncio.run(check())

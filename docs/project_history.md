@@ -9,6 +9,29 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Ein Hub für Ausgabe, Ressourcen und echte Laufidentität
+
+**Problem:** Publisher allein sehen weder ausgeschaltete noch direkte serielle
+Läufe. Eine Demo könnte parallel starten; ein Brückenlistener könnte denselben
+UART belegen. Ein stiller v1-Fallback würde außerdem den gekoppelten Pfad umgehen.
+
+**Entscheidung:** LiveService reserviert jeden echten Lauf mit frischer UUID
+vor Ressourcenstart, unabhängig vom Ausgabeweg, und bindet die Factory an
+dieselbe ID. Hub und direkte UART-Ausgabe teilen einen kanonischen,
+prozessübergreifenden Port-Lease. UART öffnet erst auf Operatoraktion, auch
+über den lokalen geschützten Socket. Dedizierter Heartbeat verbraucht keine
+Daten; der Hub hält seinen eigenen Lock nur für Metadaten.
+
+**Alternativen:** Reservierung erst im Publisher übersieht Ausgabe off/serial
+und das Startfenster. Rohe v1-Sockets als Standard können Kopplung nicht
+ersetzen. Deshalb bleiben sie ausdrücklich benannten Demo-/Entwicklungswegen
+vorbehalten; auch eigenständige LiveSession verweigert einen fehlenden Hub.
+
+**Konsequenz:** Demo, echte Messung und UART-Besitzer können einander nicht
+still ersetzen; fehlgeschlagene Starts geben ihre ID wieder frei. Audit-/
+Invalidierungsregeln und DUT-Sperre bleiben erhalten. GUI-Anbindung und
+reale physische Abnahme folgen getrennt.
+
 ## 2026-11-06 — Begrenzte Discovery und ausdrückliche Identitäts-TLS-Auswahl
 
 **Problem:** Die mDNS-Bibliothek bietet für Start und Ende keine vollständige

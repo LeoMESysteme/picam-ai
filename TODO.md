@@ -7,6 +7,13 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
+Aktuelle freigegebene Umsetzung: Windows-Brücke v2 auf
+`codex/windows-bridge-core`, Worktree
+`/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`.
+Backend/Paketierung durch Codex, EXE-GUI und sichtbare Workbench-Anbindung
+anschließend durch Claude gemäß [Übergabe](docs/superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
+Der bisherige Redesign-Worktree und dessen laufender Dienst bleiben erhalten.
+
 ---
 
 ## 2026-11-06: Nutzerentscheidungen und Fahrplan

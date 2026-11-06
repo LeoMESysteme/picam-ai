@@ -116,3 +116,26 @@ Discovery ist optional und unbestätigt; Such-Kindprozess erhält keine Secrets.
 GUI-Aufbau aufrufen** und den tatsächlichen Suchprozess unter Windows prüfen.
 IPv6-Link-local braucht den Scope der lokalen Windows-Schnittstelle; einen
 Pi-Interfaceindex nicht ungeprüft als Windows-Index übernehmen.
+
+## P4: tatsächliche Ausgabenaht
+
+Produktserver verwendet einen Hub für LiveService und Routen. Jeder echte
+Lauf reserviert vor Start eine frische Run-ID; off/serial schließen Demos
+ebenfalls aus. Ohne Hub verweigern Produkt und eigenständige LiveSession
+den Brückenweg. Explizite v1-Demowerkzeuge bleiben getrennt.
+
+Operator-API GET `/live/bridge/status`, POST `/live/bridge/prepare` mit
+`{"transport":"uart"}`, DELETE derselbe Prepare-Pfad; Änderungen nur mit
+Anmeldung/Origin/CSRF. Offline: `dispread bridge prepare-uart`, `stop-uart`,
+`status` über den vorhandenen privaten Socket. Dies öffnet keine Kamera
+und startet keine Messung. Listener-Vorbereitung ist keine Peer-Verbindung.
+
+Der [V2-Anhang](../../BRIDGE_PROTOCOL_V2.md) definiert Heartbeat und genaue
+UART-Kontrollen. Erst gepinntes Zertifikat prüfen, frische Nonce signieren
+lassen und verifizieren, dann transportgebundenes Token/Einmalangebot senden;
+anschließend v2-Hello/Lease. Die Windows-COM-Factory verwendet pySerial;
+der neue POSIX-Port-Lease betrifft Pi-Ausgänge/Listener.
+
+P4-Review nach zwei Fixrunden sauber; zuletzt 97 betroffene Tests und zehn
+Wiederholungen des sporadischen UART-Falls bestanden. Breite Vorprüfung 837
+und Node 158 sind getrennt dokumentiert. Echte Abnahme und GUI fehlen weiter.

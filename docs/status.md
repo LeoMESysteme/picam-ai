@@ -25,25 +25,26 @@ Deployment, Hardwareeingriff oder neue Paketinstallation vorgenommen.
 | N3 | Originale UCF/TXT samt Archivprovenienz und Inspektion, 17 Tests; unbekannte Dateiversion, keine freigegebenen Änderungsfelder, automatischer Export blockiert. |
 | P2 | Hardwaregebundene Identität, portable Zertifikats-/Signaturprüfung, Einmalangebote und widerrufbare Tokens, lokale CLI; 26 gezielte Tests nach Reviewkorrekturen. |
 | P3 | Profil/Operatoraktionen, gekoppelter WSS-Zugang und begrenzte Discovery; 163 relevante Tests, 2 bestehende Fixture-Skips nach Korrekturen; Nachprüfung sauber, echter Hub folgt. |
+| P4 | Hub, Lease, UART-Handshake und Live-Factory integriert; 97 betroffene Tests auf letztem Stand, Review nach zwei Fixrunden sauber. 158 Node-Tests; zuvor 837 breite Python-Prüfungen vor den letzten lokalisierten Korrekturen. |
 | W3 | Fortsetzbarer Installer-/Updatekern, 47 fokussierte Tests nach Auswahlkorrektur; Nachprüfung sauber. Native Installation und Release-Signierung ausstehend. |
 
 Commitfolge bisher: `71f01cf` (P1), `4077cff` (N2), `c90a350` (N1),
-`e3b67e1`/`3887907` (N3/Doku), `6e9e2e6` (P2); W3 `8b97697`. P3 wird mit diesem Status versioniert.
+`e3b67e1`/`3887907` (N3/Doku), `6e9e2e6` (P2); W3 `8b97697`. P3 `348e08e`; P4 wird mit diesem Status versioniert.
 Die technische Umsetzung ist keine fertige EXE und keine Produktabnahme.
 Die [Pläne](superpowers/plans/2026-11-06-windows-bruecke.md) unterscheiden
 lokal geprüften Code und reale Abnahmeschritte.
 
-Nächste Backend-Aufgaben nach P3-Nachprüfung: gemeinsamer
-Hub mit Lease/UART und Live-Ausgabenaht (P4), Windows-Verbindung/geschützter
-Speicher (W1), dauerhaftes Übergabejournal und Worker (W2), Backendintegration
-(G1). GUI und sichtbare Workbench-Integration folgen bei Claude.
+Nächste Backend-Aufgaben: Windows-Verbindung/geschützter Speicher (W1),
+abschließende Prüfung des Windows-Workers/Journals (W2), Backendintegration
+(G1). W2 ist implementiert und nach Korrekturen im Review. GUI und sichtbare
+Workbench-Integration folgen bei Claude. P4 aktualisiert ausschließlich Backend.
 
-Vor Live-Integration: 493 bestehende Tests bestanden, einer scheitert im
-frischen Worktree an der nicht versionierten Laufzeitdatei
-`var/dotmatrix/templates-stufe2c-2026-09-30.json`. Isoliert reproduziert und
-über den tatsächlichen Setupfehler eingegrenzt; kein Brückenregressionsbeleg.
-Der betreffende Fake-Setup-Test soll seine Template-Abhängigkeit selbst
-injizieren. Kein grüner Gesamtlauf behauptet.
+Der zuvor fehlgeschlagene Fake-Setup-Test ist nun unabhängig von der nicht
+versionierten Template-Datei; kein Trainingsbestand wurde kopiert.
+Der breite P4-Lauf hatte 837 bestandene Prüfungen; nach den letzten lokalen
+Hub-/UART-Korrekturen bestanden 97 betroffene Tests und der ursprüngliche
+sporadische Fehlerfall zehn Wiederholungen. Kein einzelner eingefrorener
+837-Test-Lauf auf dem letzten Stand behauptet; G1 führt die Endprüfung durch.
 
 ## Offene externe Gates
 
