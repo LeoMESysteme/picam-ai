@@ -1,6 +1,7 @@
 """AppController gegen Fakes (Transport, COM, Geräte, DPAPI); kein Windows nötig."""
 import json
 import logging
+import threading
 import time
 import zipfile
 from dataclasses import asdict
@@ -297,7 +298,7 @@ def test_events_reach_subscribers_and_journal_and_unsubscribe(tmp_path):
     ev = BridgeEvent('exchange', 'exchange', None, None, dict(outcome='written'))
     c._emit(ev)
     assert got == [ev] and c.context().last_ack.startswith('COM-Weitergabe bestätigt')
-    assert c.context().journal[0].title == 'Weitergabe'
+    assert c.context().journal[0].title == 'Demo: 1 Wert weitergegeben'
     off()
     c._emit(ev)
     assert len(got) == 1
@@ -405,3 +406,96 @@ def test_step3_next_with_active_worker_never_reconnects(tmp_path, identity):
     with pytest.raises(AppError) as e:
         c.setup_step('next')
     assert e.value.code == 'not_connected'                  # nicht transmission_active, kein connect
+
+
+# ---- BQ4: _emit blockiert nicht, Diagnose gebuendelt, Journal verdichtet
+def _ev(outcome, kind='exchange'):
+    from dispread.bridge.types import BridgeEvent
+    return BridgeEvent(kind, outcome, None, None, dict(outcome=outcome))
+
+
+def test_emit_returns_immediately_with_slow_store(tmp_path):
+    import time
+    c = make(tmp_path)
+    gate = threading.Event()
+
+    class Slow:
+        def append(self, ev):
+            gate.wait(5)
+        def export(self):
+            return b''
+    c._diag = Slow()
+    t = time.monotonic()
+    for _ in range(50):
+        c._emit(_ev('failed'))
+    assert time.monotonic() - t < 0.2
+    gate.set()
+
+
+def test_emit_overflow_counts_instead_of_blocking(tmp_path, monkeypatch):
+    import queue
+    import time
+    from dispread_bridge_app import app_controller as ac
+    monkeypatch.setattr(ac, 'DIAG_QUEUE_MAX', 3)
+    c = make(tmp_path)
+    gate = threading.Event()
+
+    class Slow:
+        def __init__(self):
+            self.got = []
+        def append(self, ev):
+            gate.wait(5)
+            self.got.append(ev)
+        def export(self):
+            return b''
+    slow = c._diag = Slow()
+    t = time.monotonic()
+    for _ in range(20):
+        c._emit(_ev('failed'))
+    assert time.monotonic() - t < 0.2
+    assert c._diag_dropped > 0
+    gate.set()
+    c._diag_flush()
+    assert any(e.kind == 'diagnostics' and e.detail['count'] > 0 for e in slow.got)
+
+
+def test_written_events_are_summarised_in_diagnostics(tmp_path):
+    c = make(tmp_path)
+    got = []
+    c._diag = type('S', (), {'append': lambda self, ev: got.append(ev), 'export': lambda self: b''})()
+    for _ in range(500):
+        c._emit(_ev('written'))
+    c._diag_flush()
+    written = [e for e in got if e.kind == 'exchange']
+    assert len(written) <= 2 and sum(e.detail['count'] for e in written) == 500
+
+
+def test_journal_counter_line_updates_in_place_and_is_bounded(tmp_path):
+    c = make(tmp_path)
+    for _ in range(1000):
+        c._emit(_ev('written'))
+    j = c.context().journal
+    assert len(j) == 1 and j[0].title == 'Demo: 1000 Werte weitergegeben'
+    for _ in range(1000):
+        c._emit(_ev('idle'))
+        c._emit(_ev('failed'))
+    assert len(c.context().journal) <= 500
+
+
+def test_repeated_idle_is_one_journal_line(tmp_path):
+    c = make(tmp_path)
+    for _ in range(100):
+        c._emit(_ev('idle'))
+    assert [e.title for e in c.context().journal] == ['Wartet auf Messlauf']
+    c._emit(_ev('written'))
+    c._emit(_ev('idle'))
+    assert len(c.context().journal) == 3
+
+
+def test_diagnostics_export_contains_flushed_summary(tmp_path, identity):
+    c = make(tmp_path)
+    for _ in range(10):
+        c._emit(_ev('written'))
+    out = c.export_diagnostics(tmp_path / 'diag.zip')
+    lines = zipfile.ZipFile(out).read('details.jsonl').decode()
+    assert 'written_summary' in lines and lines.count('\n') <= 2

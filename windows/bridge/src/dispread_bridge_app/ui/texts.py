@@ -444,6 +444,10 @@ def event_entry(event: BridgeEvent, ctx: UiContext | None = None, now: str = '')
         outcome = (event.detail or {}).get('outcome')
         if outcome in ('unknown', 'stopped'):
             return JournalEntry(now, 'Weitergabe unklar', 'nicht wiederholt', tone='warn', fault=True)
+        if outcome == 'idle':
+            return JournalEntry(now, 'Wartet auf Messlauf', 'kein Wert vorhanden', tone='info')
+        if outcome == 'ended':
+            return JournalEntry(now, 'Messlauf beendet', tone='info')
         return JournalEntry(now, 'Weitergabe', str(outcome or ''), tone='info')
     return JournalEntry(now, 'Ereignis', event.kind, tone='info')
 

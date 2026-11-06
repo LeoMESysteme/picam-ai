@@ -173,7 +173,7 @@ class DeliveryJournal:
 _PUBLIC_FIELDS = frozenset({'type', 'outcome', 'state', 'completion_stage', 'provisional',
                             'time_base', 't_ns', 'bytes', 'error_code', 'nested',
                             'kind', 'code', 'detail', 'demo_only', 'output_ready',
-                            'gsv_receipt_confirmed'})
+                            'gsv_receipt_confirmed', 'count'})
 
 
 _PUBLIC_VALUES = frozenset({
@@ -182,6 +182,7 @@ _PUBLIC_VALUES = frozenset({
     'connection_failed', 'blocked', 'unknown_invalidation', 'unknown_delivery',
     'recovering', 'connection_unavailable',
     'com_driver_write', 'host_monotonic', 'synthetic',
+    'written_summary', 'diagnostics', 'dropped',
 })
 
 

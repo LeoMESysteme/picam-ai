@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import threading
 import uuid
 import zipfile
@@ -30,11 +31,14 @@ from .credentials import CredentialStore
 from .delivery_journal import DeliveryJournal, DiagnosticStore
 from .readiness import Readiness
 from .types import InstallResult, PortPair, valid_port_name
-from .ui.port import SetupState, UiContext
+from .ui.port import JournalEntry, SetupState, UiContext
 from .vcom import VcomAdapter, VcomUnverifiedError
 from .worker import BridgeWorker, WorkerStatus
 
 STATE_VERSION = 1
+JOURNAL_MAX = 500
+DIAG_QUEUE_MAX = 1000
+DIAG_FLUSH_S = 0.5
 DEV_BUILD = 'Entwicklungsstand'
 _FIRST = Readiness('ready', 'unknown', 'disconnected', 'unavailable', 'unknown', 'unconfirmed', 'connect')
 
@@ -131,7 +135,16 @@ class AppController:
         self._journal: DeliveryJournal | None = None
         self._lock = threading.RLock()
         self._subs: list[Callable] = []
-        self._entries: deque = deque(maxlen=200)
+        self._entries: deque = deque(maxlen=JOURNAL_MAX)
+        self._counter_entry = None           # die laufende Zaehlerzeile, solange sie oben steht
+        self._last_exchange = None
+        # Diagnose: Schreiben nie im Workerthread (Datei-I/O, fsync).
+        self._diag_queue: queue.Queue = queue.Queue(maxsize=DIAG_QUEUE_MAX)
+        self._diag_written_pending = 0
+        self._diag_dropped = 0
+        self._diag_stop = threading.Event()
+        self._diag_thread = threading.Thread(target=self._diag_loop, name='bridge-diag-writer', daemon=True)
+        self._diag_thread.start()
         self._manager = self._worker = None
         self._starter_cancel = threading.Event()
         # nur im Speicher
@@ -220,9 +233,9 @@ class AppController:
         return unsubscribe
 
     def _emit(self, event: BridgeEvent) -> None:
-        """Nie werfen: ein Fehler hier darf den Worker nicht in audit_failed treiben."""
+        """Nie werfen, nie blockieren: ein Fehler hier darf den Worker nicht in audit_failed treiben."""
         try:
-            self._diag.append(event)
+            self._diag_enqueue(event)
         except Exception:
             pass
         try:
@@ -237,14 +250,73 @@ class AppController:
             except Exception:
                 pass
 
+    # ------------------------------------------------------------ Diagnose-Schreiber
+    def _diag_enqueue(self, event: BridgeEvent) -> None:
+        with self._lock:
+            if event.kind == 'exchange' and (event.detail or {}).get('outcome') == 'written':
+                self._diag_written_pending += 1          # gebuendelt: Zaehler statt Zeile je Wert
+                return
+        self._diag_put(event)
+
+    def _diag_put(self, event: BridgeEvent) -> None:
+        try:
+            self._diag_queue.put_nowait(event)
+        except queue.Full:
+            with self._lock:
+                self._diag_dropped += 1                  # zaehlen statt blockieren
+
+    def _diag_collect(self) -> list[BridgeEvent]:
+        extra: list[BridgeEvent] = []
+        with self._lock:
+            n, self._diag_written_pending = self._diag_written_pending, 0
+            dropped, self._diag_dropped = self._diag_dropped, 0
+        if n:
+            extra.append(BridgeEvent('exchange', 'written_summary', None, None,
+                                     dict(outcome='written', count=n)))
+        if dropped:
+            extra.append(BridgeEvent('diagnostics', 'dropped', None, None, dict(count=dropped)))
+        return extra
+
+    def _diag_write(self, events) -> None:
+        for ev in events:
+            try:
+                self._diag.append(ev)
+            except Exception:
+                pass
+
+    def _diag_loop(self) -> None:
+        while True:
+            try:
+                batch = [self._diag_queue.get(timeout=DIAG_FLUSH_S)]
+            except queue.Empty:
+                batch = []
+            while True:
+                try:
+                    batch.append(self._diag_queue.get_nowait())
+                except queue.Empty:
+                    break
+            self._diag_write(batch + self._diag_collect())
+            for _ in batch:
+                self._diag_queue.task_done()
+            if self._diag_stop.is_set() and self._diag_queue.empty():
+                return
+
+    def _diag_flush(self, timeout: float = 5.0) -> None:
+        """Ausstehende Diagnose schreiben (Export, Beenden); begrenzt wartend."""
+        deadline = threading.Event()
+        t = threading.Thread(target=lambda: (self._diag_queue.join(), deadline.set()), daemon=True)
+        t.start()
+        deadline.wait(timeout)
+        self._diag_write(self._diag_collect())
+
     def _note(self, event: BridgeEvent) -> None:
         from .ui import texts
         with self._lock:
             now = datetime.now().strftime('%H:%M:%S')
             if event.kind == 'connection' and event.code == 'authenticated':
                 self._last_contact = now
+            outcome = (event.detail or {}).get('outcome') if event.kind == 'exchange' else None
             if event.kind == 'exchange':
-                outcome = (event.detail or {}).get('outcome')
                 if outcome == 'written':
                     self._written += 1
                     self._com_issue = None
@@ -253,6 +325,21 @@ class AppController:
                     self._com_issue = 'write_failed'
                 elif outcome in ('unknown', 'unconfirmed', 'stopped'):
                     self._com_issue = 'unclear'
+                if outcome == self._last_exchange and outcome in ('idle', 'ended'):
+                    return                              # Leerlauf nie als Einzelzeilen
+                self._last_exchange = outcome
+            if outcome == 'written':
+                # Eine laufende Zaehlerzeile, die aktualisiert statt neu angehaengt wird.
+                n = self._written
+                entry = JournalEntry(now, f'Demo: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
+                                     'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info')
+                if self._counter_entry is not None and self._entries and self._entries[0] is self._counter_entry:
+                    self._entries[0] = entry
+                else:
+                    self._entries.appendleft(entry)
+                self._counter_entry = entry
+                return
+            self._counter_entry = None
             self._entries.appendleft(texts.event_entry(event, now=now))
 
     # ------------------------------------------------------------ Profil
@@ -697,6 +784,7 @@ class AppController:
                                     unresolved=len(self._journal_open().unresolved())))
         with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as z:
             z.writestr('summary.json', json.dumps(summary, indent=2))
+            self._diag_flush()
             z.writestr('details.jsonl', self._diag.export())
         return destination
 
@@ -705,6 +793,8 @@ class AppController:
         if not confirmed:
             return False
         self._stop_all()
+        self._diag_flush()
+        self._diag_stop.set()
         if self._journal is not None:
             try:
                 self._journal.close()
