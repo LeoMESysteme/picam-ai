@@ -32,8 +32,10 @@ sind erforderlich. Konkrete Paketierung, Kopplung, Zielplattform und
 Abnahmeschranken stehen zunächst im [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md).
 Der vollständige Entwurf wurde danach am 06.11.2026 ausdrücklich freigegeben.
 Der [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md) trennt
-Machbarkeitsnachweise, Pi/Protokoll und Windows-Anwendung. Planprüfung und
-Ausführungsmethode stehen noch aus; Treiber-, Session- und fachliche
+Machbarkeitsnachweise, Pi/Protokoll und Windows-Anwendung. Plan und Ausführung durch Codex mit Subagents sind freigegeben. EXE-GUI
+und sichtbare Workbench-Anbindung bleiben nach Leonhards weiterer
+Anweisung Claude vorbehalten. Technische Vorarbeit findet isoliert auf
+`codex/windows-bridge-core` statt; Treiber-, Session- und fachliche
 DUT-Abnahme bleiben eigene Nachweise.
 
 ## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART

@@ -75,6 +75,14 @@ jeweiligen Produzentenaufgaben. GUI konsumiert nur diese Typen; keine
 zweite Port-/Zustandslogik in Widgets. Schnittstellenänderung: erst alle
 betroffenen Aufgaben und Tests mitziehen, dann Code ändern.
 
+## Umsetzungsstand 06.11.2026
+
+P1-Kern umgesetzt und geprüft. N1-Build-, N2-Geräte-/Portpaar- und
+N3-Vorlagenprüfung als lokal testbare Grundlagen vorhanden. Deren echte
+Windows-/Treiber-/GSVmulti-Gates bleiben offen; N3 blockiert den automatischen
+Sessionexport. Weitere Backend-Aufgaben laufen im isolierten Arbeitszweig.
+Dies ist keine fertige EXE oder Ende-zu-Ende-Abnahme.
+
 ## Endabnahme G1
 
 **Files:** `tests/test_bridge_end_to_end.py`, `windows/bridge/tests/test_installed_e2e.py`, `docs/VALIDATION.md`, `docs/lab_journal.md`, `docs/status.md`, `TODO.md`, `CHANGELOG.md`, `docs/dependencies.md`.
@@ -99,4 +107,5 @@ Spec §§1–4: N1/N2/W3; §§5–7: P1/P2/P3/P4/W1;
 Fünf Review-Fokusfälle sind den genannten Regressionen zugeordnet.
 Drei Teilpläne halten die prüfbaren Grenzen getrennt; konkrete Tools/
 Protokolldetails sind Entwurfsentscheidungen innerhalb der freigegebenen Spec.
-Ausführungsmethode (Native oder subagentengetrieben) noch auszuwählen.
+Ausführung durch Codex mit Subagents freigegeben; EXE-GUI und sichtbare
+Workbench-Anbindung bleiben nach Nutzeranweisung Claude vorbehalten.
