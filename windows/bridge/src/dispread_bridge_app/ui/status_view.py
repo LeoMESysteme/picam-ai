@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListView,
+    QScrollArea,
     QSizePolicy,
     QStyledItemDelegate,
     QVBoxLayout,
@@ -26,7 +27,7 @@ from .widgets import (
     InfoBar,
     StateIcon,
     button,
-    footer_frame,
+    footer_frame2,
     paint_focus,
 )
 
@@ -40,7 +41,7 @@ class Chip(FocusToolButton):
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(2)
         self.name = QLabel()
         self.name.setProperty('secondary', True)
@@ -76,7 +77,7 @@ class Chip(FocusToolButton):
         self.setAccessibleName(f'{v.name}: {texts.SCREEN_READER[v.tone]} {v.word}' + (f', {v.sub}' if v.sub else ''))
 
     def needed_height(self, width: int) -> int:
-        inner = width - 16
+        inner = width - 12
         h = 12 + self.name.sizeHint().height()
         h += max(self.state_icon.height(), self.word.heightForWidth(inner - 18) if self.word.heightForWidth(inner - 18) > 0
                  else self.word.sizeHint().height()) + 2
@@ -85,10 +86,20 @@ class Chip(FocusToolButton):
         return h
 
 
+def _caption(text: str) -> QLabel:
+    lab = QLabel(text)
+    lab.setWordWrap(True)
+    lab.setProperty('secondary', True)
+    lab.setProperty('caption', True)
+    return lab
+
+
 class Flyout(QFrame):
     closed = Signal()
+    action = Signal(str)
+    toggled = Signal(bool)
 
-    def __init__(self, view: texts.ChipView, parent=None):
+    def __init__(self, view: texts.ChipView, parent=None, toggle: tuple[str, bool] | None = None):
         super().__init__(parent, Qt.WindowType.Popup)
         self.setProperty('popup', True)
         self.setObjectName('flyout')
@@ -117,6 +128,28 @@ class Flyout(QFrame):
                 vl.setFont(theme.make_font(9, mono=True))
                 vl.setProperty('mono', True)
             lay.addWidget(vl)
+        for label, aid, enabled, reason in view.actions:
+            b = button(label, name='flyout_action')
+            b.setEnabled(enabled)
+            if not enabled:
+                b.setToolTip(reason)
+                lay.addWidget(_caption(reason))
+            b.clicked.connect(lambda _=False, a=aid: (self.action.emit(a), self.close()))
+            lay.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
+        if toggle is not None:
+            from PySide6.QtWidgets import QCheckBox
+            cb = QCheckBox()
+            cb.setAccessibleName(toggle[0])
+            cb.setChecked(toggle[1])
+            cb.toggled.connect(self.toggled)
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            tl = QLabel(toggle[0])
+            tl.setWordWrap(True)
+            row.addWidget(cb, 0, Qt.AlignmentFlag.AlignTop)
+            row.addWidget(tl, 1)
+            lay.addSpacing(4)
+            lay.addLayout(row)
         if view.hint:
             h = QLabel(view.hint)
             h.setWordWrap(True)
@@ -312,8 +345,10 @@ class StatusView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        body = QVBoxLayout()
-        body.setContentsMargins(16, 12, 16, 12)
+        self.body_widget = QWidget()
+        self.body_widget.setObjectName('status_body')
+        body = QVBoxLayout(self.body_widget)
+        body.setContentsMargins(12, 12, 12, 12)
         body.setSpacing(12)
         self.header = Header()
         self.header.lock_clicked.connect(self.lock_clicked)
@@ -323,7 +358,7 @@ class StatusView(QWidget):
         self.infobar.action.connect(self.action)
         body.addWidget(self.infobar)
         grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
+        grid.setHorizontalSpacing(6)
         grid.setVerticalSpacing(8)
         self.chips: list[Chip] = []
         for i in range(6):
@@ -374,19 +409,31 @@ class StatusView(QWidget):
         body.addWidget(self.journal, 1)
         body.addWidget(self.empty_label, 1)
         self.empty_label.hide()
-        root.addLayout(body, 1)
-        foot, fl = footer_frame()
-        self.export_button = button('Diagnose exportieren', name='export')
+        self.journal.setMinimumHeight(150)
+        scroll = QScrollArea()                      # bei 380x560 passt nicht alles: dann scrollt der Kopfbereich
+        scroll.setObjectName('status_scroll')
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(self.body_widget)
+        self.scroll = scroll
+        root.addWidget(scroll, 1)
+        foot, fl, fl2 = footer_frame2()
+        self.export_button = button('Diagnose', name='export')
+        self.export_button.setAccessibleName('Diagnose exportieren')
         self.details_button = button('Details', name='details')
-        self.setup_button = button('Einrichtung', name='setup')
+        self.setup_button = button('Einrichtung ändern …', name='setup')
+        self.exit_button = button('Beenden …', name='exit_bridge')
         self.version_label = QLabel()
         self.version_label.setProperty('secondary', True)
         self.version_label.setProperty('caption', True)
         fl.addWidget(self.export_button)
-        fl.addWidget(self.details_button)
-        fl.addWidget(self.setup_button)
         fl.addStretch(1)
-        fl.addWidget(self.version_label)
+        fl.addWidget(self.setup_button)
+        self.version_label.setWordWrap(True)
+        fl2.addWidget(self.details_button)
+        fl2.addWidget(self.version_label, 1)
+        fl2.addWidget(self.exit_button)
         self.channel_label = QLabel()
         self.channel_label.setProperty('strong', True)
         self.channel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -396,7 +443,8 @@ class StatusView(QWidget):
         root.addWidget(foot)
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
         self.details_button.clicked.connect(lambda: self.action.emit('details'))
-        self.setup_button.clicked.connect(lambda: self.action.emit('resume_setup'))
+        self.setup_button.clicked.connect(lambda: self.action.emit('change_setup'))
+        self.exit_button.clicked.connect(lambda: self.action.emit('exit_bridge'))
         self.flyout: Flyout | None = None
         self._pi_name = None
         self.lock_button = self.header.lock_button
@@ -415,7 +463,7 @@ class StatusView(QWidget):
 
     def focus_chain(self) -> list[QWidget]:
         return [self.lock_button, *self.infobar.buttons, *self.chips, self.seg_all, self.seg_faults, self.journal,
-                self.export_button, self.details_button]
+                self.export_button, self.setup_button, self.details_button, self.exit_button]
 
     def update_from(self, readiness, worker, ctx, locked: bool) -> None:
         self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked)

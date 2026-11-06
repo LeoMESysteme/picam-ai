@@ -72,12 +72,13 @@ def test_setup_walk_through_with_manual_port_pair_and_profile(real):
     c, w = real()
     assert c.context().mode == 'setup' and c.context().setup.variant == 'E1'
     click(w, 'btn_manual_pair')
-    wait_until(lambda: len(w.setup_view.findChildren(QRadioButton)) == 6 and not w.pool.activeThreadCount())
+    wait_until(lambda: len(w.setup_view.combos) == 2 and not w.pool.activeThreadCount())
     assert c.context().setup.variant == 'E1manual'
-    radios = w.setup_view.findChildren(QRadioButton)
-    assert len(radios) == 6                      # je Seite drei COM-Ports, nichts vorgewählt
-    radios[0].setChecked(True)                   # Brückenseite COM3
-    radios[5].setChecked(True)                   # GSVmulti-Seite COM5
+    combos = w.setup_view.combos
+    assert [combos[n].count() for n in ('bridge_port', 'gsv_port')] == [4, 4]    # Platzhalter + drei COM-Ports
+    assert combos['bridge_port'].currentIndex() == 0                              # nichts vorgewählt
+    combos['bridge_port'].setCurrentText('COM3')
+    combos['gsv_port'].setCurrentText('COM5')
     click(w, 'btn_set_port_pair')
     wait_until(lambda: c.context().setup.variant == 'E1ok')
     assert c.snapshot().components == 'manual_pair'
@@ -247,8 +248,11 @@ def test_active_connection_locks_only_configuration_not_navigation(fake_win):
 def test_later_steps_stay_fully_usable_while_connected(fake_win):
     fc, w = fake_win('E4locked_run')
     sv = w.setup_view
-    assert sv.back_button.isEnabled() and sv.next_button.isEnabled() and sv.export_button.isEnabled()
+    assert sv.back_button.isEnabled() and sv.export_button.isEnabled()
     assert sv.checks['session_ok'].isEnabled()
+    assert not sv.next_button.isEnabled()                       # „Weiter“ erst nach dem Pflichthaken
+    sv.checks['session_ok'].setChecked(True)
+    assert sv.next_button.isEnabled()
     fc.set_state('E5_run')
     w.refresh()
     assert sv.checks['test_session_ok'].isEnabled()

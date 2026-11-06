@@ -70,6 +70,8 @@ STATES: dict[str, tuple] = {
     'E3_run': (_OK, _RUN, replace(_setup('E3', 3)[2], setup=SetupState(3, 'E3', dict(
         found_items=(('https://pi.local', 'aus dem Profil', True),), choices={'found': ('https://pi.local',)})))),
     'E4locked_run': (_OK, _RUN, replace(_setup('E4locked', 4)[2])),
+    'E1ok_run': (_OK, _RUN, replace(_setup('E1ok', 1)[2])),
+    'E2ok_run': (_OK, _RUN, replace(_setup('E2ok', 2)[2])),
     'E5_run': (_OK, _RUN, replace(_setup('E5', 5)[2])),
     'E5busy': (replace(_OK, output='blocked', next_action='dut_release_blocked'), _RUN, replace(_setup('E5busy', 5)[2])),
     'blocked': (_OK, WorkerStatus('blocked', False, False, 'unknown_delivery'), _BASE),
@@ -128,6 +130,11 @@ class FakeController:
     def rescan(self): self._rec('rescan')
     def confirm_session(self, on): self._rec('confirm_session', on)
     def setup_step(self, direction): self._rec('setup_step', direction)
+    def set_auto_connect(self, on): self._rec('set_auto_connect', on)
+    def auto_connect_at_start(self):
+        self._rec('auto_connect_at_start')
+        return False
+    def switch_pi(self, pi_id): self._rec('switch_pi', pi_id)
     def export_diagnostics(self, destination):
         self._rec('export_diagnostics', destination)
         return destination

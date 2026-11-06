@@ -51,6 +51,8 @@ def run(argv=None, *, instance=None, controller_factory=None, exec_loop=True, on
         controller = controller_factory()
     window = MainWindow(controller)
     window.show()
+    if controller_factory is None and '--demo-ui' not in argv:
+        window.auto_connect_at_start()      # nur gleicher Pi/Weg/Endpunkt, nie Demo (Controller entscheidet)
     profile_path = _profile_arg(argv)
     if profile_path:
         window.open_profile_path(profile_path)      # Dateizuordnung .dispread: Pfad als Argument

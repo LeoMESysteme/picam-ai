@@ -51,7 +51,7 @@ def test_output_not_ready_is_not_connected_ok():
 def test_receipt_proven_only_with_test_proof():
     r, w, c = STATES['B1']
     assert chips('B1')['gsv'].tone == 'info'
-    assert chips('B1')['gsv'].sub == 'Empfang nicht nachgewiesen'
+    assert chips('B1')['gsv'].sub == 'erhält im Lauf keine Werte'
     unproven = replace(c, receipt=Receipt(False, 'Test 14:02'))
     assert {x.key: x for x in texts.chips(r, w, unproven)}['gsv'].tone != 'ok'
     # der Worker selbst belegt nie Empfang

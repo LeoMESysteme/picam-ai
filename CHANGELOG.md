@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Bedienung der Windows-App „GSVmulti-Brücke“ geglättet (BQ6, Usability-Review). Schritt 3: Fortschritt
+  „Verbindung zu <Pi> wird aufgebaut …“ mit Fußknopf „Abbrechen“ (kein Mehrfachstart), Backoff-Countdown aus dem
+  bekannten Plan 1/2/4/8 s (im Controller abgeleitet, nicht vom Backend gemeldet), Fehlerleiste oberhalb der Wegwahl
+  mit Aktion je Code (neuer Code / anderes Profil / erneut versuchen). Schritt 2: „Code übernehmen“ (Enter, „Anzeigen“,
+  Gate-Hinweis), 5-Minuten-Ablauf lokal gezählt, danach wirklich `E2exp`. Spätere Änderungen („Portpaar ändern“,
+  „Anderes Profil öffnen …“, „Einrichtung ändern …“ → Schritt 1, Pi-Flyout „Zu diesem Pi wechseln“). Schritt 4:
+  belegte GSVmulti-Einstellungen (UserDef, 115200 8N1, %, mV/V, 10 Hz), kein Trennzeichen (OQ-53). Betrieb: Info-Leiste
+  „Lauf n läuft … Das ist kein Fehler“, GSVmulti-Feld „erhält im Lauf keine Werte“. Neustart: „Nicht verbunden.“ +
+  „Mit <Pi> verbinden“, Einstellung „Beim Start automatisch verbinden“ (Standard an nach fertiger Einrichtung; nur
+  gleicher Pi/Weg/Endpunkt, nie Demo). 380×560: zweizeiliger Fuß, umbrechende Haken, InfoBar stapelt Knöpfe und hält
+  Mindesthöhe, Statusansicht scrollt. Schritt 1: zwei Auswahllisten statt Radio-Kaskade. „Weiter“ grau mit Grund,
+  Fehlerleiste mit Fokus, Beenden-Dialog „Abbrechen“, „Beenden …“ im Fuß. Wahrheitsregeln unverändert.
 * 2026-11-06: Demo lieferte 599 statt 600 Werte (BQ5). Ursache: `ended` überholte den letzten Wert. Der Pi-Slot ist
   Latest-only; der Producer setzte 1/rate nach dem letzten Wert `stop()`, und ein dann noch nicht abgefragter letzter
   Wert wurde nie angeboten (`hub.py` `produce`). Jetzt wartet der Producer nach dem letzten Wert begrenzt

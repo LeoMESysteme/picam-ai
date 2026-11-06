@@ -12,9 +12,11 @@ nur ein vorhandenes ausdrücklich übernommen; unbekannt = gesperrt.
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import threading
+import time
 import uuid
 import zipfile
 from collections import deque
@@ -39,6 +41,7 @@ STATE_VERSION = 1
 JOURNAL_MAX = 500
 DIAG_QUEUE_MAX = 1000
 DIAG_FLUSH_S = 0.5
+CODE_LIFETIME_S = 300
 DEV_BUILD = 'Entwicklungsstand'
 _FIRST = Readiness('ready', 'unknown', 'disconnected', 'unavailable', 'unknown', 'unconfirmed', 'connect')
 
@@ -115,7 +118,8 @@ class AppController:
                  list_ports: Callable | None = None, discover: Callable | None = None,
                  manager_factory: Callable | None = None, worker_factory: Callable | None = None,
                  network_diagnostics=None, version: str | None = None, build_info=None,
-                 demo_count: int = 600, demo_rate_hz: float = 10.0):
+                 demo_count: int = 600, demo_rate_hz: float = 10.0, clock: Callable[[], float] | None = None):
+        self._clock = clock or time.monotonic
         self.data_dir = Path(data_dir) if data_dir else default_data_dir()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._devices = devices
@@ -155,6 +159,11 @@ class AppController:
         self._vcom_unverified = False
         self._manual_open = False
         self._connect_attempted = False
+        self._offer_at: float | None = None      # Eingabezeitpunkt des Kopplungscodes (lokal gezählt)
+        self._code_expired = False
+        self._editing_pair = False
+        self._resumed = False
+        self._bo_n, self._bo_t = 0, 0.0           # Backoff: Anzahl Fehlversuche, Zeit des letzten
         self._demo_started = False
         self._written = 0
         self._com_issue: str | None = None
@@ -170,6 +179,7 @@ class AppController:
         self._session_confirmed = False
         self._setup_done = False
         self._overview = False
+        self._auto_connect: bool | None = None   # None = Standard (an)
         self._step = 1
         self.client_id = ''
         self._load_state()
@@ -204,7 +214,9 @@ class AppController:
         self._adapter_id = data.get('adapter_id') if isinstance(data.get('adapter_id'), str) else None
         self._session_confirmed = data.get('session_confirmed') is True
         self._setup_done = data.get('setup_done') is True and self._profile is not None and self._pair is not None
+        self._auto_connect = data.get('auto_connect') if isinstance(data.get('auto_connect'), bool) else None
         self._step = 1 if self._pair is None else (2 if self._profile is None else 3)
+        self._resumed = self._step == 3 and not self._setup_done
         self._save_state()
 
     def _save_state(self) -> None:
@@ -216,7 +228,8 @@ class AppController:
                     endpoint=self._endpoint, adapter_id=self._adapter_id,
                     port_pair=None if self._pair is None else dict(bridge_port=self._pair.bridge_port,
                                                                     gsv_port=self._pair.gsv_port),
-                    session_confirmed=self._session_confirmed, setup_done=self._setup_done)
+                    session_confirmed=self._session_confirmed, setup_done=self._setup_done,
+                    auto_connect=self._auto_connect)
         tmp = self._state_path.with_suffix('.tmp')
         tmp.write_text(json.dumps(data), 'utf-8')
         os.replace(tmp, self._state_path)
@@ -313,8 +326,16 @@ class AppController:
         from .ui import texts
         with self._lock:
             now = datetime.now().strftime('%H:%M:%S')
-            if event.kind == 'connection' and event.code == 'authenticated':
-                self._last_contact = now
+            if event.kind in ('connection', 'exchange'):
+                self._last_contact = now             # Lebenszeichen des Pi (jede Meldung zählt)
+            if event.kind == 'connection' and not str(event.code or '').startswith('tailscale_'):
+                m = self._manager
+                peer = m.snapshot().peer if m is not None else None
+                if peer == 'backoff':
+                    self._bo_n += 1
+                    self._bo_t = self._clock()
+                elif peer != 'connecting':
+                    self._bo_n = 0
             outcome = (event.detail or {}).get('outcome') if event.kind == 'exchange' else None
             if event.kind == 'exchange':
                 if outcome == 'written':
@@ -358,6 +379,7 @@ class AppController:
             if self._endpoint not in profile.endpoints:
                 self._endpoint = profile.endpoints[0] if profile.endpoints else None
             self._connect_attempted = False
+            self._code_expired, self._offer_at, self._resumed = False, None, False
             self._setup_done = False
             if self._step < 2 and self._pair is not None:
                 self._step = 2
@@ -378,6 +400,8 @@ class AppController:
             raise AppError('code_invalid') from None
         with self._lock:
             self._offer = code
+            self._offer_at = self._clock()
+            self._code_expired = self._resumed = False
             self._step = 3
 
     def _is_paired(self) -> bool:
@@ -414,6 +438,7 @@ class AppController:
     def open_manual_pair(self) -> None:
         with self._lock:
             self._manual_open = True
+            self._editing_pair = self._pair is not None      # „Portpaar ändern“
 
     @_reports
     def set_port_pair(self, bridge_port: str, gsv_port: str) -> None:
@@ -428,6 +453,7 @@ class AppController:
             raise AppError('portpair_invalid')
         with self._lock:
             self._pair = pair
+            self._editing_pair = False
             self._save_state()
 
     # ------------------------------------------------------------ Weg
@@ -438,6 +464,7 @@ class AppController:
             raise AppError('transmission_active')
         with self._lock:
             self._route = mode
+            self._connect_attempted = False
             self._save_state()
 
     @_reports
@@ -452,12 +479,14 @@ class AppController:
             raise AppError('endpoint_unsupported') from None
         with self._lock:
             self._endpoint, self._route = endpoint, 'network'
+            self._connect_attempted = False
             self._save_state()
 
     @_reports
     def select_adapter(self, device_id: str) -> None:
         with self._lock:
             self._adapter_id, self._route = device_id, 'uart'
+            self._connect_attempted = False
             self._save_state()
 
     def rescan(self) -> None:
@@ -512,7 +541,8 @@ class AppController:
             if selected_device_id:
                 self._adapter_id = selected_device_id
             self._save_state()
-            self._connect_attempted = True
+            self._connect_attempted, self._resumed = True, False
+            self._bo_n = 0
             self._demo_started, self._written, self._com_issue = False, 0, None
             self._exited = False
             kwargs = {}
@@ -594,6 +624,8 @@ class AppController:
                 self._manager is not None and self._manager.snapshot().peer == 'authenticated'):
             if self._worker is not None and self._worker.is_active():
                 raise AppError('not_connected')        # Verbindung wird gerade wiederhergestellt; kein connect
+            if self._manager is not None and self._manager.snapshot().peer == 'connecting':
+                return                                  # Aufbau läuft: kein Mehrfachstart
             self.connect(self._route or 'network', None)      # „Verbinden“; keine Demo, keine Messung
             return
         with self._lock:
@@ -603,8 +635,12 @@ class AppController:
                 self._overview = True
             elif direction == 'resume':
                 self._overview, self._setup_done = False, False
+            elif direction == 'change_setup':
+                self._overview, self._setup_done, self._step = False, False, 1
+                self._editing_pair = False
             elif direction == 'pairing':
                 self._setup_done, self._overview, self._step = False, False, 2
+                self._code_expired = False
                 self._save_state()
             elif direction == 'restart':
                 self._setup_done, self._overview, self._step = False, False, 1
@@ -640,6 +676,7 @@ class AppController:
 
     def _finish(self) -> None:
         self._setup_done, self._step = True, 5
+        self._resumed = False
         self._save_state()
 
     # ------------------------------------------------------------ Lesezugriffe
@@ -661,7 +698,7 @@ class AppController:
     def _variant(self, r: Readiness, w: WorkerStatus | None) -> tuple[str, dict]:
         step, d = self._step, {}
         if step == 1:
-            if self._pair is not None:
+            if self._pair is not None and not self._editing_pair:
                 return 'E1ok', d
             if self._manual_open or self._vcom_unverified:
                 ports = tuple(self._safe_ports())
@@ -669,17 +706,24 @@ class AppController:
                          unverified=self._vcom_unverified)
                 return 'E1manual', d
             return 'E1', d
+        if step in (2, 3) and self._code_expiry_due(r):
+            with self._lock:
+                self._offer, self._offer_at, self._code_expired, self._step = None, None, True, 2
+            step = 2
         if step == 2:
             if self._profile is None:
                 return 'E2', d
             if self._is_paired():
                 return 'E2ok', d
+            if self._code_expired:
+                return 'E2exp', d
             return 'E2b', d
         if step == 3:
             return self._variant_route(r, d)
         if step == 4:
             d['session_confirmed'] = self._session_confirmed
             return 'E4locked', d
+        d['auto_connect'] = self._auto_effective()
         done = self._demo_started and (r.output == 'ended' or self._written >= self._demo_count)
         if self._demo_started and not done:
             d.update(progress_value=int(100 * self._written / max(1, self._demo_count)),
@@ -692,6 +736,48 @@ class AppController:
         if self._run_active(r):
             return 'E5busy', d
         return 'E5', d
+
+    def _code_remaining(self) -> int | None:
+        if self._offer is None or self._offer_at is None:
+            return None
+        return max(0, int(math.ceil(CODE_LIFETIME_S - (self._clock() - self._offer_at))))
+
+    def _code_expiry_due(self, r: Readiness) -> bool:
+        rem = self._code_remaining()
+        return (rem == 0 and r.peer not in ('connecting', 'authenticated') and not self._is_paired())
+
+    def _retry_in(self, r: Readiness) -> int | None:
+        """Restzeit bis zum nächsten Versuch aus dem bekannten Backoff-Plan (1, 2, 4, 8, 8 … s)."""
+        if r.peer != 'backoff' or self._bo_n < 1:
+            return None
+        wait = min(2 ** min(self._bo_n - 1, 3), 8)
+        left = math.ceil(wait - (self._clock() - self._bo_t))
+        return left if left > 0 else None
+
+    def _auto_effective(self) -> bool:
+        return True if self._auto_connect is None else self._auto_connect
+
+    def set_auto_connect(self, on: bool) -> None:
+        with self._lock:
+            self._auto_connect = bool(on)
+            self._save_state()
+
+    def auto_connect_at_start(self) -> bool:
+        """Gleicher Pi, gleicher Weg, gleicher Endpunkt; nie Demo, nie Wechsel."""
+        if not (self._auto_effective() and self._setup_done and self._profile is not None
+                and self._pair is not None and self._is_paired()):
+            return False
+        if self._worker is not None and self._worker.is_active():
+            return False
+        self.connect(self._route or 'network')
+        return True
+
+    @_reports
+    def switch_pi(self, pi_id: str) -> None:
+        if self._worker is not None and self._worker.is_active():
+            raise AppError('transmission_active')
+        if self._profile is None or pi_id != self._profile.pi_id:
+            raise AppError('profile_required')      # nur ein Profil gespeichert: anderes Profil öffnen
 
     def _run_active(self, r: Readiness) -> bool:
         """Ein Lauf des Pi (Messlauf oder fremde Demo), den wir nicht selbst gestartet haben."""
@@ -707,11 +793,15 @@ class AppController:
         route = self._route or 'network'
         if r.peer == 'authenticated':
             return 'E3ok', d
-        failed = (self._connect_attempted and r.peer in ('disconnected', 'backoff')
-                  and r.next_action not in (None, 'connect', 'reconnect', 'disconnected')) or r.peer == 'backoff'
-        if failed:
-            d['code'] = r.next_action
-            return 'E3err', d
+        if self._resumed:
+            d['resumed'] = True
+        if r.peer == 'connecting':
+            d['connecting'] = True
+        elif r.peer == 'backoff':
+            d.update(backoff=True, code=r.next_action)
+        elif (self._connect_attempted and r.peer == 'disconnected'
+              and r.next_action not in (None, 'connect', 'reconnect', 'disconnected')):
+            d['code'] = r.next_action                # Fehlerleiste; die Auswahl bleibt bedienbar
         if route == 'uart':
             adapters = [a for a in self._adapters if a.is_supported]
             ids = tuple(a.instance_id for a in adapters)
@@ -762,7 +852,9 @@ class AppController:
                 version=self._version, channel=self._channel, pi_id=p.pi_id if p else '',
                 endpoint=(self._endpoint or '') if self._route != 'uart' else 'UART (USB-Adapter)',
                 fingerprint=format_fingerprint(p.certificate_sha256) if p else '',
-                protocol='Version 2' if p else None,
+                protocol='Version 2' if p else None, retry_in_s=self._retry_in(r),
+                code_remaining_s=self._code_remaining() if not self._is_paired() else None,
+                auto_connect=self._auto_effective(),
                 paired=((p.name, p.pi_id, 'gekoppelt'),) if p and self._is_paired() else (),
                 journal=journal, last_report=self._last_contact, last_ack=self._last_ack)
 

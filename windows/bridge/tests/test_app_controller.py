@@ -136,7 +136,7 @@ def test_manual_port_pair_is_marked_and_validated(tmp_path):
     assert (ctx.bridge_port, ctx.gsv_port) == ('COM4', 'COM5')
     assert c.snapshot().components == 'manual_pair'
     chip = texts.chips(c.snapshot(), None, ctx)[0]
-    assert chip.word == 'Portpaar manuell' and chip.tone == 'warn'
+    assert chip.word == 'Portpaar COM4 ↔ COM5' and chip.tone == 'info'
 
 
 def test_install_components_never_creates_a_pair(tmp_path):
@@ -354,7 +354,7 @@ def test_step4_needs_manual_confirmation_then_step5(tmp_path, identity):
     c = _connected(tmp_path, identity)
     c._step = 4
     spec = texts.setup_spec(c.context())
-    assert 'In GSVmulti den Kanal auf COM5 115200 8N1 einstellen' in repr(spec['blocks'])
+    assert 'UserDef' in repr(spec['blocks']) and 'COM5' in repr(spec['blocks'])
     with pytest.raises(AppError) as e:
         c.setup_step('next')
     assert e.value.code == 'session_unconfirmed'

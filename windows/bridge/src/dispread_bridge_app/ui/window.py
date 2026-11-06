@@ -64,7 +64,7 @@ class _Task(QRunnable):
 
 
 class ExitDialog(QDialog):
-    def __init__(self, text: str, parent=None):
+    def __init__(self, text: str, parent=None, transmitting: bool = True):
         super().__init__(parent, Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setModal(True)
         self.confirmed = False
@@ -81,7 +81,7 @@ class ExitDialog(QDialog):
         row = QHBoxLayout()
         row.addStretch(1)
         self.quit_button = button(texts.EXIT_QUIT, name='exit_quit')
-        self.keep_button = button(texts.EXIT_KEEP, True, name='exit_keep')
+        self.keep_button = button(texts.EXIT_KEEP if transmitting else texts.EXIT_CANCEL, True, name='exit_keep')
         self.keep_button.setDefault(True)
         row.addWidget(self.quit_button)
         row.addWidget(self.keep_button)
@@ -145,7 +145,20 @@ class MainWindow(QWidget):
         self._unsubscribe = controller.subscribe(self._bridge.event.emit)
         self._build_tray()
         self._flyout = None
+        self._ticking = False
+        self._tick = QTimer(self)                  # Countdowns (Backoff, Code) ticken sekündlich
+        self._tick.setInterval(1000)
+        self._tick.timeout.connect(self._on_tick)
+        self._tick.start()
         self.refresh()
+
+    def _on_tick(self) -> None:
+        if self._ticking and not self._refresh_timer.isActive():
+            self.refresh()
+
+    def auto_connect_at_start(self) -> None:
+        """Einmal nach dem Start: verbindet nur, wenn der Controller es erlaubt (gleicher Pi, Weg, Endpunkt)."""
+        self._call(self.controller.auto_connect_at_start)
 
     # ---------------------------------------------------------------- Tray
     def _build_tray(self) -> None:
@@ -187,6 +200,7 @@ class MainWindow(QWidget):
             self.stack.setCurrentWidget(self.setup_view)
         else:
             self.stack.setCurrentWidget(self.status_view)
+        self._ticking = c.retry_in_s is not None or c.code_remaining_s is not None
         h = texts.headline(r, w, c)
         self.tray_state = {'err': 'err', 'warn': 'warn'}.get(h.tone, 'normal')
         self._tray_tip = h.text
@@ -224,6 +238,8 @@ class MainWindow(QWidget):
             if done:
                 done(result, exc)
             self.refresh()
+            if exc is not None and self.stack.currentWidget() is self.setup_view:
+                QTimer.singleShot(0, self.setup_view.focus_error)
         sig.callback = finished
         self.pool.start(task)
 
@@ -263,14 +279,36 @@ class MainWindow(QWidget):
                 self._call(ctl.export_diagnostics, Path(dest))
         elif aid == 'pair':
             self._call(ctl.pair, self.setup_view.code_text(), self.setup_view.checked('fp_ok'))
+        elif aid == 'next' and self.setup_view.variant and self.setup_view.variant[0] == 'E1manual' \
+                and all(self.setup_view.selected_ports()):
+            bp, gp = self.setup_view.selected_ports()      # „Weiter“ übernimmt die Auswahl
+
+            def take():
+                ctl.set_port_pair(bp, gp)
+                ctl.setup_step('next')
+            self._call(take)
         elif aid in ('next', 'back'):
             self._call(ctl.setup_step, aid)
+        elif aid == 'cancel_connect':
+            self._call(ctl.disconnect)
+        elif aid == 'change_pair':
+            self._call(ctl.open_manual_pair)
+        elif aid == 'change_setup':
+            self._call(ctl.setup_step, 'change_setup')
+        elif aid == 'exit_bridge':
+            self.exit_bridge()
+        elif aid.startswith('auto_connect:'):
+            self._call(ctl.set_auto_connect, aid.endswith(':on'))
+        elif aid.startswith('switch_pi:'):
+            self._call(ctl.switch_pi, aid.split(':', 1)[1])
+        elif aid.startswith('code_show:'):
+            pass
         elif aid in ('goto_pairing', 'new_code'):
             self._call(ctl.setup_step, 'pairing')
         elif aid == 'manual_pair':
             self._call(ctl.open_manual_pair)
         elif aid == 'set_port_pair':
-            self._call(ctl.set_port_pair, self._ports.get('bridge_port'), self._ports.get('gsv_port'))
+            self._call(ctl.set_port_pair, *self.setup_view.selected_ports())
         elif aid == 'rescan':
             self._call(ctl.rescan)
         elif aid == 'entry:manual_endpoint':
@@ -328,10 +366,12 @@ class MainWindow(QWidget):
                 e.acceptProposedAction()
                 return
 
-    def _flyout_show(self, view: texts.ChipView, anchor: QWidget) -> None:
+    def _flyout_show(self, view: texts.ChipView, anchor: QWidget, toggle=None) -> None:
         if self._flyout is not None:
             self._flyout.close()
-        fly = Flyout(view, self)
+        fly = Flyout(view, self, toggle)
+        fly.action.connect(self.do_action)
+        fly.toggled.connect(lambda on: self.do_action('auto_connect:' + ('on' if on else 'off')))
         fly.closed.connect(anchor.setFocus)
         pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
         fly.move(max(0, pos.x() - 200), pos.y() + 4)
@@ -345,8 +385,12 @@ class MainWindow(QWidget):
 
     def _show_switch(self) -> None:
         c = self.controller.context()
+        free = not c.switch_locked
+        acts = tuple((texts.SWITCH_PI, f'switch_pi:{i}', free, texts.REASON_TRANSMISSION_FIRST)
+                     for _n, i, _w in c.paired if i != c.pi_id)
         v = texts.ChipView('switch', 'Gekoppelte Pi', '', 'info',
-                           details=tuple((n, f'{i} · {when}') for n, i, when in c.paired), hint=texts.PI_SWITCH_NOTE)
+                           details=tuple((n, f'{i} · {when}') for n, i, when in c.paired), hint=texts.PI_SWITCH_NOTE,
+                           actions=acts)
         self._flyout_show(v, self.stack.currentWidget().header.switch_button)
 
     def _show_details(self) -> None:
@@ -354,13 +398,14 @@ class MainWindow(QWidget):
         v = texts.ChipView('details', 'Details', '', 'info', details=(
             ('App', c.version or '–'), ('Brückenseite', c.bridge_port or '–'), ('Gegenport', c.gsv_port or '–'),
             ('Pi-ID', c.pi_id or '–'), ('Protokoll', c.protocol or '–'), ('Journal', texts.JOURNAL_DETAILS)))
-        self._flyout_show(v, self.status_view.details_button)
+        toggle = (f'Beim Start automatisch mit {c.pi_name} verbinden', c.auto_connect) if c.pi_name else None
+        self._flyout_show(v, self.status_view.details_button, toggle)
 
     # ---------------------------------------------------------------- Beenden
     def build_exit_dialog(self) -> ExitDialog:
         c = self.controller.context()
         text = texts.EXIT_TEXT_ACTIVE if (c.release and not c.dut_locked) else texts.EXIT_TEXT_LOCKED
-        return ExitDialog(text, self)
+        return ExitDialog(text, self, transmitting=bool(c.release and not c.dut_locked))
 
     def _confirm_exit_dialog(self) -> bool:
         dlg = self.build_exit_dialog()
@@ -370,7 +415,9 @@ class MainWindow(QWidget):
     def _confirm_disconnect_dialog(self) -> bool:
         box = QMessageBox(QMessageBox.Icon.Question, texts.DISCONNECT_TITLE, texts.DISCONNECT_TEXT,
                           QMessageBox.StandardButton.NoButton, self)
-        keep = box.addButton(texts.EXIT_KEEP, QMessageBox.ButtonRole.RejectRole)
+        c = self.controller.context()
+        keep = box.addButton(texts.EXIT_KEEP if (c.release and not c.dut_locked) else texts.EXIT_CANCEL,
+                             QMessageBox.ButtonRole.RejectRole)
         box.addButton('Trennen', QMessageBox.ButtonRole.AcceptRole)
         box.setDefaultButton(keep)
         box.exec()

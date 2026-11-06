@@ -93,32 +93,44 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
     **abbrechen**.
 12. Werkbank Schritt „Kopplung freigeben“: **„Kopplungscode erzeugen“**.
     „Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.“ In der App
-    bei „Kopplungscode“ eingeben. Der Code wird in Schritt 2 nur übernommen;
-    **gekoppelt wird erst beim Verbinden in Schritt 3.** Abgelaufen
-    („Code abgelaufen“) heißt: nichts gekoppelt, neuen Code erzeugen.
+    bei „Kopplungscode“ eingeben (optional „Code anzeigen“), dann **„Code übernehmen“**
+    (Enter im Feld genügt; der Knopf bleibt grau, bis Fingerabdruck bestätigt und Code
+    eingegeben ist). Danach folgt Schritt 3 mit Fokus auf „Verbinden“ und dem Hinweis
+    „Code gespeichert – gekoppelt wird beim Verbinden, jetzt gleich (Code noch m:ss gültig).“
+    **Gekoppelt wird erst beim Verbinden.** Nach 5 Minuten (ab Eingabe, lokal gezählt)
+    springt die App zurück zu Schritt 2: „Code abgelaufen – in der Werkbank einen neuen
+    erzeugen“; es wurde nichts gekoppelt.
 13. App Schritt 3 „Weg zum Pi wählen“: Netzwerk: gefundenen Pi oder
     Adresse/Name von Hand („Tailscale wird nur benutzt, wenn Sie hier den
     Tailscale-Namen oder die Adresse eintragen.“). Ein mDNS-Fund ist kein
     Identitätsnachweis. UART: USB-Seriell-Adapter wählen (115200 Baud, 8N1, kein
     Handshake; Verdrahtung wie angezeigt). Dann **„Verbinden“** (hier erfolgt die Kopplung; der Übertragungs-Worker startet erst nach authentifiziertem Pi).
+    Während des Aufbaus zeigt die App „Verbindung zu <Pi> wird aufgebaut …“, der Fußknopf heißt
+    „Abbrechen“. Bei Fehlern steht die Fehlerleiste oberhalb von Weg und Adresse (z. B.
+    „Neuen Code eingeben“, „Anderes Profil öffnen“, „Erneut versuchen“); die Auswahl bleibt bedienbar.
     Erwartet: „Pi verbunden (Identität geprüft)“. Das ist „noch keine
     Messfreigabe“.
-14. Portpaar in der App angeben (Brückenseite und GSVmulti-Seite aus Schritt 6).
+14. Portpaar in der App angeben (Schritt 1, „Portpaar prüfen“ bzw. „Vorhandenes Portpaar
+    angeben“): Die automatische Prüfung ist in dieser Version nicht verfügbar. Zwei Auswahllisten
+    „Brückenseite“ und „GSVmulti-Seite“ (aus Schritt 6), gleiche Ports sind nicht wählbar; „Weiter“
+    übernimmt die Auswahl. Spätere Änderung: „Portpaar ändern“ (nur ohne aktive Verbindung).
 
 ## D. GSVmulti einrichten
 
 15. Die automatische Session ist gesperrt (OQ-53/N3: keine geprüfte
-    GSVmulti-Vorlage). Falls die App „GSVmulti-Version unbekannt – Automatik
-    gesperrt“ zeigt, erzeugt sie keine Datei. Stellen Sie in GSVmulti **von Hand**
-    ein: Kanal auf die **GSVmulti-Seite** des Paars, **115200 Baud, 8N1, kein
-    Handshake**. Legen Sie eine **eigene Testsession** an, keine produktive
-    Session überschreiben. Haken in der App: „Ich habe GSVmulti so eingestellt.“
+    GSVmulti-Vorlage). Die Karte „In GSVmulti einstellen“ nennt die im ersten Testlauf
+    belegten Werte: Gerät **UserDef**, COM-Port = **GSVmulti-Seite** des Paars, **115200 Baud, 8N1**,
+    1 Kanal, Präfix **%**, Einheit **mV/V**, Frequenz **10 Hz** (Muster: Session aus dem Testlauf vom
+    06.11.2026, nur Port anpassen). Trennzeichen/Filter nennt die App nicht (OQ-53 offen). Legen Sie eine **eigene Testsession** an, keine produktive
+    Session überschreiben. Haken in der App: „In GSVmulti eingestellt …“ („Weiter“ bleibt bis dahin grau, mit Grund).
 
 ## E. Empfangstest (synthetische Demo)
 
 16. App Schritt 5: „Ich verwende eine getrennte GSVmulti-Testsession.“ setzen,
     **„Test starten“**. Gesendet werden 600 synthetische Werte mit 10 Hz
-    (etwa 60 s). Die Testsession hat keinen Abbrechen-Knopf: abwarten.
+    (etwa 60 s). Die Testsession hat keinen Abbrechen-Knopf: abwarten. Läuft auf dem Pi ein Messlauf,
+    steht dort „Diese Ansicht aktualisiert sich selbst, sobald der Lauf endet.“; „Ohne Test beenden“
+    schließt die Einrichtung ohne Empfangstest.
 17. **In GSVmulti selbst prüfen:** Kommen Werte an, wie viele, in welcher
     Reihenfolge, steigt die Zeitachse gleichmäßig? Speichern Sie die Aufzeichnung.
     Optional „Testdatei auswählen …“: die App vergleicht Wert für Wert. „Empfang
@@ -131,7 +143,8 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
 
 19. Werkbank: Weg **„Netzwerk über Brücke“**, Lauf starten. Erwartet: Die App
     zeigt „Verbunden“ mit „DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte
-    frei“; die Werkbank zeigt „gesperrt“ und: „DUT-Ausgabe gesperrt: Windows-Abnahme
+    frei“ und die Info „Lauf n läuft. GSVmulti erhält absichtlich keine Messwerte … Das ist kein
+    Fehler.“ (GSVmulti-Feld: „erhält im Lauf keine Werte“); die Werkbank zeigt „gesperrt“ und: „DUT-Ausgabe gesperrt: Windows-Abnahme
     fehlt. Verbindung und Diagnose sind vorbereitet; Messwerte werden noch nicht an
     GSVmulti ausgegeben.“ **Es dürfen keine Messwerte in GSVmulti erscheinen.**
     Erscheinen welche, ist das ein Fehler: sofort Lauf stoppen und melden.
@@ -144,7 +157,10 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
       unverändert.
     * **Pi-Dienst neu starten** (*mit Freigabe*): Verbindung bricht ab, die App
       versucht neu; der Pi-Lauf endet mit dem Dienst.
-    * **App beenden:** Rückfrage „Brücke beenden?“; Beenden trennt, „Der Lauf auf
+    * **Neustart der App** nach fertiger Einrichtung: „Nicht verbunden.“ mit „Mit <Pi> verbinden“;
+      „Beim Start automatisch mit <Pi> verbinden“ (Standard an, abschaltbar unter „Details“) verbindet
+      nur mit demselben Pi, Weg und Endpunkt, startet nie eine Demo.
+    * **App beenden:** „Beenden …“ im Fuß oder Tray-Menü; Rückfrage „Brücke beenden?“; Beenden trennt, „Der Lauf auf
       dem Pi läuft weiter.“
 
 ## G. Was der Lauf belegt und was nicht

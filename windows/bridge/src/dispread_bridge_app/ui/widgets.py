@@ -175,6 +175,7 @@ class InfoBar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setProperty('bar', True)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)   # Knöpfe stapeln statt Breite erzwingen
         self.setProperty('kind', 'info')
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -191,14 +192,20 @@ class InfoBar(QFrame):
         self.text_label.setProperty('secondary', False)
         self.btn_row = QHBoxLayout()
         self.btn_row.setSpacing(8)
-        self.btn_row.addStretch(1)
+        self.btn_row.setContentsMargins(0, 6, 0, 0)
         col.addWidget(self.title_label)
         col.addWidget(self.text_label)
+        self.btn_col = QVBoxLayout()
+        self.btn_col.setSpacing(6)
+        self.btn_col.setContentsMargins(0, 6, 0, 0)
         col.addLayout(self.btn_row)
+        col.addLayout(self.btn_col)
         lay.addLayout(col, 1)
+        self._stacked = False
         # Zwei feste Knöpfe: Wegwerf-Widgets mit Python-Unterklasse stürzen PySide beim Neuzeichnen ab
         self._secondary = button('', name='bar_secondary')
         self._primary = button('', True, name='bar_primary')
+        self.btn_row.addStretch(1)
         self.btn_row.addWidget(self._secondary)
         self.btn_row.addWidget(self._primary)
         self._aids = ['', '']
@@ -212,6 +219,37 @@ class InfoBar(QFrame):
     @property
     def action_ids(self):
         return self.bar.action_ids if self.bar else ()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._arrange()
+        self._fit_height()
+
+    def _fit_height(self) -> None:
+        """Mindesthöhe nach heightForWidth: umbrechender Text darf die Knöpfe nie überdecken."""
+        lay = self.layout()
+        h = lay.totalHeightForWidth(self.width()) if lay is not None else 0
+        if h > 0 and h != self.minimumHeight():
+            self.setMinimumHeight(h)
+
+    def _arrange(self) -> None:
+        """Passen die Knöpfe nicht nebeneinander, werden sie untereinander gestapelt (380 px)."""
+        shown = [b for b in (self._secondary, self._primary) if not b.isHidden()]
+        need = sum(b.sizeHint().width() for b in shown) + 8 * max(0, len(shown) - 1)
+        avail = self.width() - 24 - 10 - 16 - 2
+        stack = len(shown) > 1 and need > avail
+        if stack == self._stacked:
+            return
+        self._stacked = stack
+        for b in (self._secondary, self._primary):
+            self.btn_row.removeWidget(b)
+            self.btn_col.removeWidget(b)
+        if stack:
+            for b in (self._primary, self._secondary):         # Hauptaktion oben
+                self.btn_col.addWidget(b, 0, Qt.AlignmentFlag.AlignRight)
+        else:
+            self.btn_row.addWidget(self._secondary)
+            self.btn_row.addWidget(self._primary)
 
     def set_bar(self, bar: texts.ActionBar | None) -> None:
         if bar is not None and bar == self.bar and not self.isHidden():
@@ -236,7 +274,13 @@ class InfoBar(QFrame):
             self._aids[1 if b is self._primary else 0] = aid
             b.show()
             self.buttons.append(b)
+        top = 6 if self.buttons else 0
+        self.btn_row.setContentsMargins(0, top, 0, 0)
+        self.btn_col.setContentsMargins(0, top, 0, 0)
+        self.setMinimumHeight(0)
         self.show()
+        self._arrange()
+        self._fit_height()
 
 
 def footer_frame() -> tuple[QFrame, QHBoxLayout]:
@@ -246,3 +290,18 @@ def footer_frame() -> tuple[QFrame, QHBoxLayout]:
     lay.setContentsMargins(16, 10, 16, 10)
     lay.setSpacing(8)
     return f, lay
+
+
+def footer_frame2() -> tuple[QFrame, QHBoxLayout, QHBoxLayout]:
+    """Fuß mit zwei Zeilen: Aktionen oben, Version/„Beenden …“ unten (passt in 380 px)."""
+    f = QFrame()
+    f.setObjectName('footer')
+    outer = QVBoxLayout(f)
+    outer.setContentsMargins(16, 10, 16, 8)
+    outer.setSpacing(6)
+    row1, row2 = QHBoxLayout(), QHBoxLayout()
+    row1.setSpacing(8)
+    row2.setSpacing(8)
+    outer.addLayout(row1)
+    outer.addLayout(row2)
+    return f, row1, row2

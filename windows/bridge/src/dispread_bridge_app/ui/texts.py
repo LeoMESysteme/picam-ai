@@ -37,7 +37,10 @@ EXIT_TITLE = 'Brücke beenden?'
 EXIT_TEXT_ACTIVE = 'Die Übertragung an GSVmulti endet. Der Lauf auf dem Pi läuft weiter.'
 EXIT_TEXT_LOCKED = ('Die Verbindung zum Pi endet; es werden keine Werte übertragen. '
                     'Der Lauf auf dem Pi läuft weiter.')
-EXIT_KEEP, EXIT_QUIT = 'Weiter übertragen', 'Beenden'
+EXIT_KEEP, EXIT_QUIT, EXIT_CANCEL = 'Weiter übertragen', 'Beenden', 'Abbrechen'
+REASON_DISCONNECT_FIRST = 'Erst Verbindung trennen'
+REASON_TRANSMISSION_FIRST = 'Erst Übertragung beenden'
+SWITCH_PI = 'Zu diesem Pi wechseln'
 DISCONNECT_TITLE = 'Verbindung trennen?'
 DISCONNECT_TEXT = 'Die Verbindung zum Pi und die Übertragung an GSVmulti enden. Der Lauf auf dem Pi läuft weiter.'
 JOURNAL_DETAILS = 'Begrenzt, Zugangsdaten werden nicht protokolliert.'
@@ -58,6 +61,7 @@ class ChipView:
     sub: str = ''
     details: tuple[tuple[str, str], ...] = ()
     hint: str = ''
+    actions: tuple[tuple[str, str, bool, str], ...] = ()    # (Beschriftung, Aktions-ID, aktiv, Grund wenn inaktiv)
 
 
 @dataclass(frozen=True)
@@ -80,7 +84,8 @@ WORKER_CODE_TEXT = {
     'blocked': 'Übertragung blockiert',
 }
 CONNECTION_CODE_TEXT = {
-    'peer_invalid': ('Pi nicht bestätigt', 'Der antwortende Pi passt nicht zum Profil.'),
+    'peer_invalid': ('Pi nicht bestätigt', 'Unter dieser Adresse antwortet ein anderer Pi als im Profil. '
+                     'Adresse oder Profil prüfen.'),
     'profile_invalid': ('Profil ungültig', 'Das Profil lässt sich nicht verwenden. Öffnen Sie ein neues Profil.'),
     'clock_or_certificate_invalid': ('Zertifikat oder Uhrzeit ungültig',
                                      'Prüfen Sie die Uhrzeit dieses PCs und das Profil.'),
@@ -168,6 +173,11 @@ _TONE_OF_PEER = {'authenticated': 'ok', 'disconnected': 'info', 'backoff': 'err'
 
 
 NOT_SET = 'nicht festgelegt'
+BACKOFF_DETAIL = ('Mögliche Ursachen: Pi-Dienst, Netzwerk oder Strom des Pi. Wiederholung nach 1, 2, 4, 8 s, dann '
+                  'alle 8 s. „Automatik stoppen“ beendet das automatische Wiederverbinden.')
+RUN_LOCK_SENTENCE = ('GSVmulti erhält absichtlich keine Messwerte – die DUT-Ausgabe ist gesperrt '
+                     '(Windows-Abnahme fehlt). Das ist kein Fehler.')
+_CLOCK = _re.compile(r'^\d\d:\d\d:\d\d$')
 
 
 def _port(value):
@@ -176,6 +186,10 @@ def _port(value):
 
 def _unknown(key, name):
     return ChipView(key, name, 'Unbekannt', 'info')
+
+
+def _in_locked_run(peer_ok: bool, ctx: UiContext) -> bool:
+    return bool(peer_ok and ctx.run_id and ctx.dut_locked and not ctx.demo and not ctx.waiting_for_run)
 
 
 def _worker_active_failure(readiness: Readiness, worker: WorkerStatus | None) -> str | None:
@@ -245,8 +259,10 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     comp = {'ready': ChipView('components', 'Komponenten', 'Installiert', 'ok'),
             'missing': ChipView('components', 'Komponenten', 'Portpaar fehlt', 'err'),
             'restart': ChipView('components', 'Komponenten', 'Neustart nötig', 'warn'),
-            'manual_pair': ChipView('components', 'Komponenten', 'Portpaar manuell', 'warn',
-                                    'nicht von der App geprüft')
+            'manual_pair': ChipView('components', 'Komponenten',
+                                    f'Portpaar {ctx.bridge_port} ↔ {ctx.gsv_port}' if ctx.bridge_port and ctx.gsv_port
+                                    else 'Portpaar manuell',
+                                    'warn' if ctx.com_issue == 'busy' else 'info', 'nicht von der App geprüft')
             }.get(readiness.components, _unknown('components', 'Komponenten'))
     comp = ChipView(comp.key, comp.name, comp.word, comp.tone, comp.sub,
                     (('Windows', '11, 64 Bit'), ('App-Version', ctx.version or '–'), ('Portpaar', pair)),
@@ -281,7 +297,8 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                    ('Letzte Meldung', ctx.last_report or '–'))
                   + ((('Code', readiness.next_action),) if readiness.next_action not in (
                       None, 'connect', 'reconnect', 'disconnected', 'output_off', 'run_ended', 'dut_release_blocked',
-                      'peer_release_blocked') and readiness.next_action not in CONNECTION_CODE_TEXT else ()))
+                      'peer_release_blocked') and readiness.next_action not in CONNECTION_CODE_TEXT else ()),
+                  BACKOFF_DETAIL if readiness.peer == 'backoff' else '')
     # Ausgabe
     if code:
         out = ChipView('output', 'Ausgabe', 'Blockiert', 'err', WORKER_CODE_TEXT.get(code, code))
@@ -350,10 +367,12 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                  'Konfiguration. Die Weitergabe von Messwerten bleibt gesperrt.' if ctx.receipt.demo else
                  'Gilt nur für genau diese Testdatei und Konfiguration.')
     elif ctx.session_confirmed:
-        gsv = ChipView('gsv', 'GSVmulti', 'Übernahme bestätigt', 'info', 'Empfang nicht nachgewiesen')
+        gsv = ChipView('gsv', 'GSVmulti', 'Von Hand eingestellt', 'info',
+                       'erhält im Lauf keine Werte' if _in_locked_run(peer_ok, ctx) else 'Empfang nicht nachgewiesen')
         ghint = 'Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.'
     else:
         gsv = ChipView('gsv', 'GSVmulti', 'Kanal einstellen', 'info',
+                       'erhält im Lauf keine Werte' if _in_locked_run(peer_ok, ctx) else
                        f'{ctx.gsv_port} · 115200 8N1 in GSVmulti' if ctx.gsv_port else 'Portpaar festlegen')
         ghint = ('Stellen Sie GSVmulti auf den Port der GSVmulti-Seite ein und bestätigen Sie das in der Einrichtung. '
                  'Nur der Empfangstest belegt Empfang.')
@@ -392,10 +411,8 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
     peer = readiness.peer
     if peer == 'backoff':
         t = f'Keine Antwort vom Pi seit {ctx.last_report}' if ctx.last_report else 'Keine Antwort vom Pi'
-        return ActionBar('err', t, 'Mögliche Ursachen: Pi-Dienst, Netzwerk oder Strom des Pi. Wiederholung nach '
-                         '1, 2, 4, 8 s, dann alle 8 s. „Nicht mehr versuchen“ stoppt das automatische '
-                         'Wiederverbinden.', (('Nicht mehr versuchen', 'stop_retry', False),
-                                              ('Erneut versuchen', 'reconnect', True)))
+        return ActionBar('err', t, 'Die Brücke versucht es automatisch weiter; Details stehen beim Pi.',
+                         (('Automatik stoppen', 'stop_retry', False), ('Erneut versuchen', 'reconnect', True)))
     if peer == 'disconnected':
         na = readiness.next_action
         if readiness.adapter == 'unavailable' or na == 'adapter_unavailable':
@@ -412,14 +429,16 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
             title, text = explain_code(na)
             return ActionBar('info', title, text, (('Erneut versuchen', 'reconnect', True),))
         if ctx.pi_name:
-            return ActionBar('info', 'Es läuft keine Übertragung',
-                             'Ein Pi-Wechsel ist jetzt möglich. Verbinden Sie danach neu.',
-                             (('Verbinden', 'connect', True),))
+            return ActionBar('info', 'Nicht verbunden.', '',
+                             ((f'Mit {ctx.pi_name} verbinden', 'connect', True),))
         return None
     if peer == 'authenticated':
         if ctx.waiting_for_run:
             return ActionBar('info', 'Wartet auf einen Lauf', 'Starten Sie den Lauf auf dem Pi. '
                              'Die Brücke startet keinen Lauf.')
+        if _in_locked_run(True, ctx):
+            life = (f' Letzte Antwort vom Pi: {ctx.last_report}.' if _CLOCK.match(ctx.last_report or '') else '')
+            return ActionBar('info', f'Lauf {ctx.run_id} läuft.', RUN_LOCK_SENTENCE + life)
     return None
 
 
@@ -468,11 +487,13 @@ _PORTS = ('card', 'Portpaar', (('Brückenseite', '{bridge_port}'), ('Gegenport f
 _TEST_INFO = ('info', 'warn', 'Synthetischer Test – getrennte GSVmulti-Testsession verwenden',
               'Die Testwerte sind künstlich und dürfen nicht in einer Kalibriermessung landen.', ())
 _NEXT = 'Weiter'
+_AUTO = ('check_dyn', 'Beim Start automatisch mit {pi_name} verbinden', 'auto_connect', 'auto_connect')
 
 
-def _s(step, lead, blocks, nxt=_NEXT, ready=False, back=True, header=None):
-    """Ein Einrichtungszustand: Schritt, Leitsatz, Blöcke, Fuß."""
-    return dict(step=step, lead=lead, blocks=tuple(blocks), next=nxt, ready=ready, back=back, header=header)
+def _s(step, lead, blocks, nxt=_NEXT, ready=False, back=True, header=None, gate=None):
+    """Ein Einrichtungszustand: Schritt, Leitsatz, Blöcke, Fuß. ``gate``: (Pflichtfeld, Grund) für „Weiter“."""
+    return dict(step=step, lead=lead, blocks=tuple(blocks), next=nxt, ready=ready, back=back, header=header,
+                gate=gate, next_action='next', freeze=False)
 
 
 SETUP: dict[str, dict] = {
@@ -488,9 +509,10 @@ SETUP: dict[str, dict] = {
         ('info', 'warn', 'Portpaar manuell – nicht von der App geprüft',
          'Die App legt kein Portpaar an und ändert keines. Wählen Sie zwei verschiedene, bereits vorhandene '
          'COM-Ports, die zusammen ein Paar bilden (Brückenseite und GSVmulti-Seite).', ()),
-        ('radios_dyn', 'bridge_port', 'Brückenseite (hier schreibt die Brücke)'),
-        ('radios_dyn', 'gsv_port', 'GSVmulti-Seite (hier hört GSVmulti)'),
-        ('button', 'Portpaar übernehmen', 'set_port_pair', True)], back=False),
+        ('combo_dyn', 'bridge_port', 'Brückenseite (hier schreibt die Brücke)'),
+        ('combo_dyn', 'gsv_port', 'GSVmulti-Seite (hier hört GSVmulti)'),
+        ('button', 'Portpaar übernehmen', 'set_port_pair', True)], back=False,
+        gate=('ports', 'Erst beide COM-Ports wählen (zwei verschiedene)')),
     'E1uac': _s(1, 'Schritt 1 von 5: Komponenten prüfen.', [
         ('info', 'err', 'IT-Freigabe erforderlich',
          'Windows hat die Administratorfreigabe nicht erteilt. Die Brücke ändert ohne Freigabe nichts. Bitten Sie '
@@ -505,7 +527,8 @@ SETUP: dict[str, dict] = {
         _INV, ('card', 'COM-Portpaar eingerichtet', (('', 'Wird erst nach dem Neustart nutzbar.'),))], back=False),
     'E1ok': _s(1, 'Schritt 1 von 5: Portpaar festgelegt.', [
         _INV, ('card', 'Portpaar manuell angegeben', (('', 'Brückenseite {bridge_port} · GSVmulti-Seite {gsv_port}. '
-                                                           'Manuell, nicht von der App geprüft.'),))],
+                                                           'Manuell, nicht von der App geprüft.'),)),
+        ('button', 'Portpaar ändern', 'change_pair', False)],
         ready=True, back=False),
     'E2': _s(2, 'Schritt 2 von 5: Pi-Profil öffnen.', [
         ('drop', 'Profil hierher ziehen', 'Datei „pi.dispread“', 'Profil öffnen …', 'open_profile'),
@@ -517,11 +540,11 @@ SETUP: dict[str, dict] = {
         ('text', 'Vergleichen Sie den Fingerabdruck mit der Werkbank (Brücke einrichten › Profil).'),
         ('check', 'Der Fingerabdruck stimmt mit der Werkbank überein.', 'fp_ok'),
         ('code', 'Kopplungscode', 'Der Code ist 5 Minuten gültig und nur einmal verwendbar.'),
-        ('button', 'Koppeln', 'pair', True)]),
+        ('button', 'Code übernehmen', 'pair', True),
+        ('gate_hint', 'pair', 'Erst Fingerabdruck bestätigen und Code eingeben')]),
     'E2exp': _s(2, 'Schritt 2 von 5: Pi koppeln.', [
-        ('info', 'err', 'Code abgelaufen',
-         'Der Kopplungscode war 5 Minuten gültig. Es wurde nichts gekoppelt. Erzeugen Sie in der Werkbank '
-         'einen neuen Code und geben Sie ihn ein.', (('Neuen Code eingeben', 'new_code', True),)), _PROFILE]),
+        ('info', 'err', 'Code abgelaufen – in der Werkbank einen neuen erzeugen',
+         'Der Kopplungscode war 5 Minuten gültig. Es wurde nichts gekoppelt. Geben Sie den neuen Code ein.', (('Neuen Code eingeben', 'new_code', True),)), _PROFILE]),
     'E2bad': _s(2, 'Schritt 2 von 5: Pi koppeln.', [
         ('info', 'err', 'Fingerabdruck stimmt nicht – falsches Gerät',
          'Der Pi, der geantwortet hat, ist nicht der Pi aus dem Profil. Es wurde nichts gekoppelt und nichts '
@@ -532,7 +555,8 @@ SETUP: dict[str, dict] = {
         ('fpdiff', 'Beim antwortenden Gerät (fett unterstrichen = abweichend)', FP_OTHER, FP_PROFILE)]),
     'E2ok': _s(2, 'Schritt 2 von 5: Pi ist gekoppelt.', [
         ('card', 'Pi gekoppelt', (('Anzeigename', '{pi_name}'), ('Pi-ID', '{pi_id}'),
-                                  ('Zugang', 'Gilt nur für diesen PC und ist in der Werkbank widerrufbar.')))],
+                                  ('Zugang', 'Gilt nur für diesen PC und ist in der Werkbank widerrufbar.'))),
+        ('button', 'Anderes Profil öffnen …', 'open_profile', False)],
         ready=True),
     'E3': _s(3, 'Schritt 3 von 5: Weg zum Pi wählen.', [
         _WAY,
@@ -569,12 +593,16 @@ SETUP: dict[str, dict] = {
     'E4locked': _s(4, 'Schritt 4 von 5: GSVmulti manuell einrichten.', [
         ('info', 'warn', 'Automatische Session noch nicht freigegeben',
          'Es wird keine Sessiondatei erzeugt. Stellen Sie GSVmulti von Hand ein.', ()),
-        ('card', 'In GSVmulti selbst einstellen', (('', 'In GSVmulti den Kanal auf {gsv_port} 115200 8N1 einstellen.'),
-                                                  ('Port', '{gsv_port}'), ('Baudrate', '115200'),
-                                                  ('Format', '8N1, kein Handshake'))),
+        ('card', 'In GSVmulti einstellen', (('Gerät', 'UserDef (benutzerdefiniert)'), ('COM-Port', '{gsv_port}'),
+                                           ('Übertragung', '115200 Baud, 8N1'),
+                                           ('Kanäle', '1 Kanal – ein „Kanal“ ist ein Messkanal der Session; '
+                                                      'die Brücke liefert einen einzigen Wertestrom.'),
+                                           ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz'))),
+        ('text', 'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen).'),
+        ('text', 'Legen Sie eine neue Testsession an und speichern Sie sie unter eigenem Namen.'),
         ('text', 'Ob GSVmulti die Einstellungen übernimmt, belegt erst der Empfangstest.'),
         ('check_dyn', 'In GSVmulti eingestellt: Kanal auf {gsv_port}, 115200 8N1.', 'session_ok', 'session_confirmed')],
-        nxt='Weiter'),
+        nxt='Weiter', gate=('session_ok', 'Erst bestätigen, dass GSVmulti eingestellt ist')),
     'E4': _s(4, 'Schritt 4 von 5: GSVmulti-Session erzeugen.', [
         _PORTS, ('text', 'Die Session verweist auf {gsv_port}. Vorhandene GSVmulti-Sessions bleiben unverändert.'),
         ('button', 'Session erzeugen', 'export_session', True)]),
@@ -584,7 +612,8 @@ SETUP: dict[str, dict] = {
          (('Ordner öffnen', 'open_folder', False), ('In GSVmulti öffnen', 'open_in_gsv', True))),
         ('card', 'In GSVmulti: Datei › Öffnen …', (('', 'Die erzeugte Datei auswählen.'),)),
         ('text', 'Hier bestätigen, dass die Session geöffnet ist.'),
-        ('check', 'Ich habe die Session in GSVmulti geöffnet.', 'session_ok')]),
+        ('check_dyn', 'Ich habe die Session in GSVmulti geöffnet.', 'session_ok', 'session_confirmed')],
+        gate=('session_ok', 'Erst bestätigen, dass die Session in GSVmulti geöffnet ist')),
     'E4unk': _s(4, 'Schritt 4 von 5: GSVmulti manuell einrichten.', [
         ('info', 'warn', 'GSVmulti-Version unbekannt – Automatik gesperrt',
          'Für diese Version gibt es keine geprüfte Vorlage. Es wird keine Sessiondatei erzeugt. '
@@ -594,7 +623,8 @@ SETUP: dict[str, dict] = {
                                                        ('Format', '8N1, kein Handshake'))),
         ('text', 'Die Menüführung Ihrer GSVmulti-Version ist nicht geprüft. Ob GSVmulti die Einstellungen '
                  'übernimmt, belegt erst der Empfangstest.'),
-        ('check', 'Ich habe GSVmulti so eingestellt.', 'session_ok')]),
+        ('check_dyn', 'Ich habe GSVmulti so eingestellt.', 'session_ok', 'session_confirmed')],
+        gate=('session_ok', 'Erst bestätigen, dass GSVmulti eingestellt ist')),
     'E5': _s(5, 'Schritt 5 von 5: Empfang prüfen.', [
         _TEST_INFO,
         ('text', 'Die Brücke sendet 600 synthetische Werte mit 10 Hz (etwa 60 s). GSVmulti zeichnet sie in der '
@@ -607,13 +637,15 @@ SETUP: dict[str, dict] = {
         ('text', 'Der Test lässt sich nicht abbrechen; der Pi beendet ihn nach der eingestellten Anzahl Werte.')],
         back=False),
     'E5busy': _s(5, 'Schritt 5 von 5: Empfang prüfen.', [
-        ('info', 'warn', RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT, ())], nxt='Fertig'),
+        ('info', 'warn', RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT, ()),
+        ('text', 'Diese Ansicht aktualisiert sich selbst, sobald der Lauf endet.'),
+        _AUTO], nxt='Ohne Test beenden'),
     'E5done': _s(5, 'Schritt 5 von 5: Test gesendet.', [
         _TEST_INFO,
         ('info', 'warn', 'Empfang nicht nachgewiesen – Werte in GSVmulti selbst prüfen',
          '{written} synthetische Werte wurden an den COM-Port übergeben. Ob GSVmulti sie empfangen hat, prüft die '
          'Brücke nicht (Testdateivergleich noch nicht verfügbar). Vergleichen Sie die Aufzeichnung der '
-         'Testsession in GSVmulti selbst.', ())], nxt='Fertig', ready=True),
+         'Testsession in GSVmulti selbst.', ()), _AUTO], nxt='Fertig', ready=True),
     'E5file': _s(5, 'Schritt 5 von 5: Empfang prüfen.', [
         _TEST_INFO,
         ('info', 'info', 'Testdatei auswählen',
@@ -627,7 +659,7 @@ SETUP: dict[str, dict] = {
                       ('Werte', '600 von 600'))),
         ('fp', 'SHA-256', '{test_sha256}'),
         ('text', 'Im Betrieb zeigt die Brücke danach „Empfang belegt“ nur für diese Konfiguration; die '
-                 'COM-Weitergabe bleibt eine eigene Aussage.')], nxt='Fertig', ready=True),
+                 'COM-Weitergabe bleibt eine eigene Aussage.'), _AUTO], nxt='Fertig', ready=True),
     'E5bad': _s(5, 'Schritt 5 von 5: Empfang nicht belegt.', [
         ('info', 'err', 'Abweichung: 598/600',
          'Zwei Werte der Testdatei stimmen nicht mit dem Test überein. Der Empfang ist für diese Datei nicht belegt.',
@@ -646,6 +678,48 @@ def fill(obj, mapping):
     if isinstance(obj, (tuple, list)):
         return tuple(fill(o, mapping) for o in obj)
     return obj
+
+
+STEP3_SELECT = ('E3', 'E3uart', 'E3uart2')
+UNVERIFIED_PAIR = ('Portpaar von Hand wählen',
+                   'Automatische Prüfung ist in dieser Version nicht verfügbar – wählen Sie Ihr Paar '
+                   '(z. B. com0com COM7 ↔ COM8). Die App legt kein Portpaar an und ändert keines.')
+RESUMED_LEAD = 'Schritt 3 von 5: Verbindung neu herstellen (Ihr Fortschritt bis hier ist gespeichert).'
+# Fehlercode -> (Aktionsbeschriftung, Aktions-ID); alles andere: „Erneut versuchen“
+CODE_ACTION = {'pairing_refused': ('Neuen Code eingeben', 'new_code'),
+               'pairing_required': ('Neuen Code eingeben', 'new_code'),
+               'peer_invalid': ('Anderes Profil öffnen', 'open_profile'),
+               'profile_invalid': ('Anderes Profil öffnen', 'open_profile')}
+
+
+def _clock_text(seconds: int) -> str:
+    return f'{seconds // 60}:{seconds % 60:02d}'
+
+
+def _step3_head(ctx, data) -> tuple[list, dict]:
+    """Leisten oberhalb der Wegwahl (Fehler, Backoff, Aufbau, Codehinweis) und Fußänderungen."""
+    pre, foot = [], {}
+    if data.get('connecting'):
+        pre.append(('progress_busy', f'Verbindung zu {ctx.pi_name or "Pi"} wird aufgebaut …',
+                    'Das kann einige Sekunden dauern. Mit „Abbrechen“ stoppen Sie den Versuch.'))
+        foot.update(next='Abbrechen', next_action='cancel_connect', ready=False, back=False, freeze=True)
+    elif data.get('backoff'):
+        n = f' in {ctx.retry_in_s} s' if ctx.retry_in_s is not None else ' läuft'
+        pre.append(('livebar', 'err', f'Pi antwortet nicht – nächster Versuch{n}',
+                    'Die Brücke versucht es automatisch weiter.',
+                    (('Automatik stoppen', 'stop_retry', False), ('Erneut versuchen', 'reconnect', True))))
+        foot.update(next=None)
+    elif data.get('code'):
+        title, text = explain_code(data['code'])
+        label, aid = CODE_ACTION.get(data['code'], ('Erneut versuchen', 'reconnect'))
+        pre.append(('info', 'err', title, text, ((label, aid, True),)))
+        if aid in ('reconnect', 'new_code'):
+            foot.update(next=None)
+    if ctx.code_remaining_s is not None and not data.get('code'):
+        pre.append(('livebar', 'info',
+                    f'Code gespeichert – gekoppelt wird beim Verbinden, jetzt gleich '
+                    f'(Code noch {_clock_text(ctx.code_remaining_s)} gültig).', '', ()))
+    return pre, foot
 
 
 def setup_spec(ctx, locked=False):
@@ -669,6 +743,14 @@ def setup_spec(ctx, locked=False):
                 blocks.append(('text', EMPTY_CHOICE.get(name, 'Keine Einträge gefunden.')))
             else:
                 blocks.append(('radios', name, tuple(items), heading))
+        elif kind == 'combo_dyn':
+            name, heading = blk[1], blk[2]
+            ports = tuple(data.get('ports', ()))
+            current = ctx.bridge_port if name == 'bridge_port' else ctx.gsv_port
+            if not ports:
+                blocks.append(('text', EMPTY_CHOICE.get(name, 'Keine COM-Ports gefunden.')))
+            else:
+                blocks.append(('combo', name, heading, ports, current if current in ports else None))
         elif kind == 'check_dyn':
             blocks.append(('check', blk[1], blk[2], bool(data.get(blk[3]))))
         elif kind == 'error_code':
@@ -677,7 +759,16 @@ def setup_spec(ctx, locked=False):
                            text, (('Erneut versuchen', 'reconnect', True),)))
         else:
             blocks.append(blk)
-    blocks = fill(tuple(blocks), m)
+    if ctx.setup.variant == 'E1manual' and data.get('unverified'):
+        blocks[0] = ('info', 'warn', *UNVERIFIED_PAIR, ())
+    blocks = list(fill(tuple(blocks), m))
+    if ctx.setup.variant in STEP3_SELECT:
+        pre, foot = _step3_head(ctx, data)
+        blocks = pre + blocks
+        spec.update(foot)
+        if data.get('resumed'):
+            spec['lead'] = RESUMED_LEAD
+    blocks = tuple(blocks)
     if data.get('notice'):
         title, text = explain_code(data['notice'])
         blocks = (('info', 'err', title, text, ()),) + blocks
