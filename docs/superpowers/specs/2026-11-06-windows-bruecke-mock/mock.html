@@ -80,15 +80,27 @@ input,textarea{caret-color:var(--accent)}
 .cap:hover{background:rgba(127,127,127,.18)}
 .cap.close:hover{background:var(--close-hover);color:#fff}
 .app{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
-.main{flex:1;min-height:0;display:flex;flex-direction:column}
+.main{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;scrollbar-width:thin}
 .scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--stroke-strong) transparent}
 
 /* Kopf */
 .head{padding:8px 16px 0;position:relative}
-.head-row{display:flex;align-items:flex-start;gap:8px}
-.head h1{flex:1;min-width:0;margin:0;font-size:20px;line-height:28px;font-weight:600;overflow-wrap:anywhere}
+.head h1{margin:0;font-size:20px;line-height:28px;font-weight:600;overflow-wrap:anywhere}
 .head h1 .way{font-size:14px;line-height:20px;font-weight:400;color:var(--text2);white-space:nowrap}
-.sentence{display:flex;gap:8px;align-items:flex-start;margin:4px 0 0;font-weight:600}
+.srow{display:flex;gap:8px;align-items:flex-start}
+.sentence{flex:1;min-width:0;display:flex;gap:8px;align-items:flex-start;margin:4px 0 0;font-weight:600}
+.lockline{display:flex;gap:6px;align-items:flex-start;margin:2px 0 0;font-size:12px;line-height:16px}
+.lockline .i{margin-top:0}
+.traypv{margin-top:12px;font-size:12px;line-height:16px;font-family:var(--mono);max-width:440px;width:100%}
+.strip{display:flex;align-items:center;gap:10px;margin-top:4px;padding:6px 10px;background:var(--mica2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;font-family:var(--font)}
+.trayic{position:relative;width:24px;height:24px;display:grid;place-items:center;flex:none;color:var(--text)}
+.trayic svg.lg{width:16px;height:16px}
+.trayic .bd{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;background:var(--mica2)}
+.trayic .bd svg{width:10px;height:10px;display:block}
+.tip{background:var(--card);border:1px solid var(--stroke);border-radius:4px;padding:2px 8px;box-shadow:var(--shadow-fly)}
+.trayvar{position:absolute;left:12px;top:12px;width:300px;display:flex;flex-direction:column;gap:6px;color:var(--text);font-size:12px;line-height:16px}
+.trayvar .strip{margin:0;padding:4px 8px}
+.deskview .ttl{font-family:var(--mono);font-size:11px;line-height:16px;color:var(--panel-text)}
 .sentence svg{flex:none;margin-top:2px}
 .tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;font-weight:600;padding:0 6px;border:1px solid var(--warn);color:var(--text);border-radius:4px;margin-left:6px;vertical-align:1px;white-space:nowrap}
 .tag svg{color:var(--warn)}
@@ -122,19 +134,21 @@ input,textarea{caret-color:var(--accent)}
 .bar .bt{font-weight:600}
 .bar .bm{color:var(--text)}
 .bar .bm.sec{color:var(--text2)}
-.bar .acts .btn{white-space:nowrap}
+.bar .acts .btn{white-space:nowrap;padding:4px 10px}
 .bar .acts{grid-column:2;flex-wrap:wrap;display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .bar ul{margin:6px 0 0;padding-left:18px}
 
 /* Prüfpunkt-Chips */
 .chips-wrap{position:relative;margin:10px 16px 0;flex:none}
 .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0;padding:0;list-style:none}
-.chip{width:100%;height:100%;text-align:left;display:flex;flex-direction:column;gap:1px;padding:4px 10px 6px;background:var(--card);border:1px solid var(--stroke);border-radius:4px;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out}
+.chips li{display:flex}
+.chip{width:100%;flex:1;text-align:left;display:flex;flex-direction:column;gap:1px;padding:4px 10px 6px;background:var(--card);border:1px solid var(--stroke);border-radius:4px;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out}
 .chip:hover{background:var(--ctrl-hover)}
 .chip[aria-expanded="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .chip .cl{font-size:12px;line-height:16px;color:var(--text2)}
 .chip .cw{display:flex;gap:6px;align-items:flex-start;font-size:12px;line-height:16px;font-weight:600}
 .chip .cw svg{margin-top:0}
+  .chip .cs{font-size:12px;line-height:16px;color:var(--text2)}
 .chip.off .cw{font-weight:400;color:var(--text2)}
 
 /* Flyout */
@@ -155,8 +169,8 @@ input,textarea{caret-color:var(--accent)}
 .seg button{border:1px solid transparent;background:none;padding:2px 14px;border-radius:3px;cursor:pointer;min-height:28px;transition:background-color .15s ease-out}
 .seg button:hover{background:var(--ctrl-hover)}
 .seg button[aria-checked="true"]{background:var(--card);border-color:var(--stroke);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
-.jhead .cnt{font-size:12px;line-height:16px;color:var(--text2)}
-.journal{flex:1;min-height:0;margin:0 16px;background:var(--card);border:1px solid var(--stroke);border-radius:8px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--stroke-strong) transparent}
+.jhead .cnt{font-size:12px;line-height:16px;color:var(--text2);text-align:right;max-width:58%}
+.journal{flex:1;min-height:150px;margin:0 16px;background:var(--card);border:1px solid var(--stroke);border-radius:8px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--stroke-strong) transparent}
 .jg{margin:0;padding:8px 12px 4px;font-size:12px;line-height:16px;font-weight:600;color:var(--text2);background:var(--card);position:sticky;top:0;z-index:1}
 .jl{list-style:none;margin:0;padding:0}
 .jr{display:grid;grid-template-columns:58px 16px 1fr auto;gap:0 10px;align-items:start;padding:6px 12px;border-top:1px solid var(--stroke)}
@@ -195,7 +209,7 @@ input,textarea{caret-color:var(--accent)}
 .inv li:first-child{border-top:0;padding-top:0}.inv li:last-child{padding-bottom:0}
 .inv .v{color:var(--text2);font-size:12px;line-height:16px}
 .stack{display:flex;flex-direction:column;gap:8px}
-.fp{display:grid;grid-template-columns:repeat(4,auto);justify-content:start;gap:2px 12px;font-family:var(--mono);font-size:13px;line-height:20px;margin:6px 0}
+.fp{display:grid;grid-template-columns:repeat(4,max-content);white-space:nowrap;justify-content:start;gap:2px 12px;font-family:var(--mono);font-size:13px;line-height:20px;margin:6px 0}
 .fp b{font-weight:700;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0}
 .kv dt{color:var(--text2);font-size:12px;line-height:20px}.kv dd{margin:0;overflow-wrap:anywhere}
@@ -295,6 +309,7 @@ code,.fname{font-family:var(--mono);font-size:12px;line-height:18px;overflow-wra
   <main class="stage">
     <div class="stage-wrap">
       <div class="desktop" id="desktop"></div>
+      <div class="traypv" id="traypv"></div>
       <div class="mocknote" id="mocknote" role="status" aria-live="polite"></div>
     </div>
     <div class="stage-foot">Mock – synthetische Daten · Gestaltungsvorlage für die Qt-Umsetzung, keine Funktion</div>
@@ -323,10 +338,10 @@ function bar(kind, title, msg, acts='', o={}){
   return `<div class="bar ${kind}" role="${kind==='err'?'alert':'status'}">${icon}<div><div class="bt">${esc(title)}</div>${msg?`<div class="bm${o.sec?' sec':''}">${msg}</div>`:''}</div>${acts?`<div class="acts">${acts}</div>`:''}</div>`;
 }
 function groups4(hex){ return hex.match(/.{4}/g); }
-const FP = 'A3F9 0C1D 7B42 E58A 19D6 F03C 84AB 2E71 5C0D B8F4 63A9 D127 0E5B C3F8 9A46 71DE'.split(' ');
-const FP_OTHER = 'A3F9 0C1D 7B42 E58A 19D6 F03C 84AB 2E71 5C0D B8F4 63A9 D127 55E0 1B6C 9A46 3F02'.split(' ');
+const FP = 'a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 0e5b c3f8 9a46 71de'.split(' ');
+const FP_OTHER = 'a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 55e0 1b6c 9a46 3f02'.split(' ');
+const SHA = '9f2c41ab07d3e58a19d6f03c84ab2e715c0db8f463a9d1270e5bc3f89a4671de'.match(/.{4}/g);
 function fp(groups, mark){ return `<div class="fp mono" aria-label="Fingerabdruck SHA-256 in Vierergruppen">${groups.map((g,i)=>mark&&mark.includes(i)?`<b>${g}</b>`:`<span>${g}</span>`).join('')}</div>`; }
-const SHORT_FP = 'A3F9 0C1D … 71DE';
 
 /* ===================== Kopf, Chips, Journal ===================== */
 const PI = 'Prüfstand 2';
@@ -335,7 +350,7 @@ function head({name, way, sentence, kind='info', tag='', pisw='none', flyOpen=fa
   const sw = pisw==='free'
     ? `<button type="button" class="pisw" data-act="pisw" aria-haspopup="listbox" aria-expanded="${piswOpen}" title="Anderen Pi wählen" aria-label="Anderen Pi wählen">${sym('chev')}</button>`
     : pisw==='locked'
-    ? `<button type="button" class="pisw locked" data-act="lockwhy" aria-expanded="${flyOpen}" title="Pi-Wechsel gesperrt, solange übertragen wird" aria-label="Pi-Wechsel gesperrt, Grund anzeigen">${sym('lock')}</button>` : '';
+    ? `<button type="button" class="pisw locked" data-act="lockwhy" aria-expanded="${flyOpen}" title="Pi-Wechsel gesperrt" aria-label="Pi-Wechsel gesperrt – Grund anzeigen">${sym('lock')}</button>` : '';
   let fly = '';
   if(pisw==='locked' && flyOpen) fly = `<div class="fly head-fly" role="dialog" aria-label="Pi-Wechsel gesperrt"><h2>Pi-Wechsel gesperrt</h2><p style="margin:0">Solange die Brücke an GSVmulti überträgt, bleibt der Pi festgelegt. Beenden Sie die Übertragung, um einen anderen Pi zu wählen.</p></div>`;
   if(pisw==='free' && piswOpen) fly = `<div class="fly head-fly" role="listbox" aria-label="Gekoppelte Pi"><h2>Gekoppelte Pi</h2>
@@ -343,36 +358,40 @@ function head({name, way, sentence, kind='info', tag='', pisw='none', flyOpen=fa
       <li><label class="radio"><input type="radio" name="pisel" value="a"><span class="rt">${esc(PI)}<span class="cap2">pi-4b7e09c1 · zuletzt vor 2 Stunden</span></span></label></li>
       <li><label class="radio"><input type="radio" name="pisel" value="b" checked><span class="rt">Prüfstand 3 – Halle A<span class="cap2">pi-d21a77e6 · zuletzt gestern</span></span></label></li>
     </ul></div><p class="note">Nach dem Wechsel muss neu verbunden werden. Ein Wechsel während der Übertragung ist nicht möglich.</p></div>`;
-  return `<header class="head"><div class="head-row"><h1 title="${esc(name)} · ${esc(way)}">${esc(name)} <span class="way">· ${esc(way)}</span></h1>${sw}</div>
-  <p class="sentence">${ico(kind,20)}<span>${esc(sentence)}${tag?`<span class="tag">${sym('warn')}${esc(tag)}</span>`:''}</span></p>${fly}</header>`;
+  return `<header class="head"><h1 title="${esc(name)} · ${esc(way)}">${esc(name)} <span class="way">· ${esc(way)}</span></h1>
+  <div class="srow"><p class="sentence">${ico(kind,20)}<span>${esc(sentence)}${tag?`<span class="tag">${sym('warn')}${esc(tag)}</span>`:''}</span></p>${sw}</div>
+  <p class="lockline">${ico('warn')}<span>DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei</span></p>${fly}</header>`;
 }
 function chip(c, open){
-  return `<li><button type="button" class="chip ${c.k==='off'?'off':''}" data-chip="${c.id}" aria-expanded="${open===c.id}" aria-haspopup="dialog"><span class="cl">${esc(c.l)}</span><span class="cw">${ico(c.k)}<span>${esc(c.w)}</span></span></button></li>`;
+  return `<li><button type="button" class="chip ${c.k==='off'?'off':''}" data-chip="${c.id}" aria-expanded="${open===c.id}" aria-haspopup="dialog"><span class="cl">${esc(c.l)}</span><span class="cw">${ico(c.k)}<span>${esc(c.w)}</span></span>${c.sub?`<span class="cs">${esc(c.sub)}</span>`:''}</button></li>`;
 }
 function chipsBlock(list, open){
   let fly = '';
   const o = list.find(c=>c.id===open);
   if(o){
     fly = `<div class="fly" role="dialog" aria-label="${esc(o.l)} – Details"><h2><span>${esc(o.title||o.l)}</span><button type="button" class="x" data-act="closefly" aria-label="Details schließen">${sym('close')}</button></h2>
-    <dl>${o.d.map(([k,v,m])=>`<dt>${esc(k)}</dt><dd class="${m?'mono':''}">${esc(v)}</dd>`).join('')}</dl>${o.note?`<p class="note">${esc(o.note)}</p>`:''}</div>`;
+    <dl>${o.d.map(([k,v,m])=>`<dt>${esc(k)}</dt><dd class="${m?'mono':''}">${Array.isArray(v)?fp(v):esc(v)}</dd>`).join('')}</dl>${o.note?`<p class="note">${esc(o.note)}</p>`:''}</div>`;
   }
   return `<div class="chips-wrap"><ul class="chips" aria-label="Prüfpunkte">${list.map(c=>chip(c,open)).join('')}</ul>${fly}</div>`;
 }
 const PI_DETAIL = (extra={}) => [
   ['Pi-ID','pi-4b7e09c1',true],
   ['Endpunkt','wss://192.168.10.24 (LAN, Beispiel)',true],
-  ['TLS-Fingerabdruck','A3F9 0C1D 7B42 E58A … 9A46 71DE',true],
+  ['TLS-Fingerabdruck (SHA-256)',FP,true],
   ['Protokoll','Version 2'],
   ['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis'],
 ];
 function baseChips(o={}){
+  const tested = UI.tested;
   const c = {
     komp:{id:'komp',l:'Komponenten',k:'ok',w:'Installiert',d:[['Windows','11, 64 Bit'],['App-Version','0.1.0.dev0'],['Portpaar','COM4 ↔ COM5 (com0com)']],note:'Alle Systemkomponenten sind vorhanden. Das sagt nichts über Verbindung oder Empfang.'},
     uart:{id:'uart',l:'UART',k:'off',w:'nicht benutzt',d:[['Weg','Netzwerk (LAN)'],['USB-Adapter','nicht benutzt']],note:'Ein USB-Adapter wird nur im Weg „UART“ gebraucht.'},
     pi:{id:'pi',l:'Pi',k:'ok',w:'Verbunden',title:'Pi – technische Werte',d:PI_DETAIL()},
     out:{id:'out',l:'Ausgabe',k:'warn',w:'DUT gesperrt',d:[['Ausgabe','DUT-Ausgabe gesperrt'],['Bedeutung','Der Pi gibt die Messwerte des Prüflings noch nicht frei.']],note:'Die Brücke gibt nichts frei und startet keine Messung.'},
-    com:{id:'com',l:'COM5',k:'ok',w:'Weitergabe bestätigt',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'},
-    gsv:{id:'gsv',l:'GSVmulti',k:'ok',w:'Übernahme bestätigt',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt'],['Empfangsnachweis','Nur der Empfangstest belegt Empfang.']],note:'Der laufende Betrieb zeigt nur die COM-Weitergabe, nicht den Empfang in GSVmulti.'},
+    com:{id:'com',l:'Weitergabe',k:'ok',w:'Bestätigt',sub:'vom Port angenommen',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'},
+    gsv: tested
+      ? {id:'gsv',l:'GSVmulti',k:'ok',w:'Empfang belegt',sub:'Test 14:02, 600/600',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt'],['Empfangsnachweis','Belegt für die Testdatei GSVmulti_Test_Prüfstand2.txt und diese Konfiguration (600/600)']],note:'Gilt nur für genau diese Konfiguration, nicht für spätere Läufe.'}
+      : {id:'gsv',l:'GSVmulti',k:'info',w:'Übernahme bestätigt',sub:'Empfang nicht nachgewiesen',d:[['Session','GSVmulti_Prüfstand2_COM5.ucf'],['Übernahme','vom Bediener bestätigt (keine Prüfung durch die Brücke)'],['Empfangsnachweis','nicht nachgewiesen']],note:'Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.'},
   };
   for(const [k,v] of Object.entries(o)) c[k] = {...c[k], ...v};
   return Object.values(c);
@@ -381,16 +400,16 @@ function baseChips(o={}){
 const J_BASE = [
   ['Heute','14:32:07','ok','Neuer Lauf erkannt','Lauf 7 · DUT-Ausgabe gesperrt'],
   ['Heute','14:31:55','info','Pi-Lauf beendet','Lauf 6'],
-  ['Heute','14:12:40','warn','Verbindung unterbrochen – nach 4 s wieder verbunden','Netzwerk (LAN), gleicher Pi','4 s'],
-  ['Heute','14:05:12','ok','COM5: Weitergabe bestätigt','Erster Wert dieses Laufs'],
+  ['Heute','14:12:40','warn','Verbindung unterbrochen','wieder verbunden · Netzwerk (LAN), gleicher Pi','4 s'],
+  ['Heute','14:05:12','ok','Weitergabe bestätigt','Erster Wert dieses Laufs · COM4 → COM5'],
   ['Heute','13:58:30','ok','Pi verbunden (Identität geprüft)','Prüfstand 2 · pi-4b7e09c1'],
   ['Heute','13:58:29','info','Brücke gestartet','Version 0.1.0.dev0'],
   ['Gestern','17:02:11','info','Brücke beendet','Auf Wunsch des Bedieners'],
-  ['Gestern','16:20:03','err','COM-Schreibfehler – Wert nicht erneut gesendet','Übertragung lief mit dem nächsten Wert weiter','1 Wert'],
-  ['Gestern','15:44:51','warn','Pi antwortet nicht – nach 14 s wieder verbunden','Versuche nach 1, 2, 4, 8 s','14 s'],
+  ['Gestern','16:20:03','err','COM4 (Brückenseite): Schreibfehler','Wert nicht erneut gesendet · weiter mit dem nächsten Wert','1 Wert'],
+  ['Gestern','15:44:51','warn','Pi antwortet nicht','wieder verbunden · Versuche nach 1, 2, 4, 8 s','14 s'],
   ['Gestern','15:10:02','ok','Pi verbunden (Identität geprüft)','Prüfstand 2 · pi-4b7e09c1'],
 ];
-function journal(rows, filter){
+function journal(rows, filter, jfor){
   const list = filter==='stoer' ? rows.filter(r=>r[2]==='warn'||r[2]==='err') : rows;
   let html='';
   if(!list.length) html = `<div class="jempty">Keine Störungen seit dem Start der Brücke.</div>`;
@@ -405,7 +424,7 @@ function journal(rows, filter){
   return `<div class="jhead"><div class="seg" role="radiogroup" aria-label="Ereignisse filtern">
     <button type="button" role="radio" aria-checked="${filter!=='stoer'}" data-filter="alle">Alle</button>
     <button type="button" role="radio" aria-checked="${filter==='stoer'}" data-filter="stoer">Störungen</button></div>
-    <span class="cnt">${list.length} ${list.length===1?'Eintrag':'Einträge'}</span></div>
+    <span class="cnt">${list.length} ${list.length===1?'Eintrag':'Einträge'}${jfor?' · '+esc(jfor):''}</span></div>
     <div class="journal" role="region" aria-label="Ereignisjournal" tabindex="0">${html}</div>`;
 }
 function foot(setup){
@@ -415,9 +434,10 @@ function foot(setup){
 
 /* ===================== Betriebsansicht ===================== */
 function ops(o){
-  const {name=PI, way='Netzwerk (LAN)', sentence, kind='info', tag, pisw='locked', chips=baseChips(), journalRows=J_BASE, infobar=''} = o;
+  const {name=PI, way='Netzwerk (LAN)', sentence, kind='info', tag, pisw='locked', chips=baseChips(), journalRows=J_BASE, infobar='', jfor=''} = o;
+  UI.trayInfo = {kind, text:sentence};
   return `<div class="main">${head({name,way,sentence,kind,tag,pisw,flyOpen:UI.lockOpen,piswOpen:UI.piswOpen})}${infobar}
-    ${chipsBlock(chips, UI.open)}${journal(journalRows, UI.filter)}</div>${foot(false)}`;
+    ${chipsBlock(chips, UI.open)}${journal(journalRows, UI.filter, jfor)}</div>${foot(false)}`;
 }
 
 /* ===================== Einrichtung ===================== */
@@ -521,7 +541,7 @@ def('E4','Einrichtung','Session: erzeugen',()=>setup({step:4,name:PI,way:'Netzwe
   <p class="cap2" style="margin-top:8px">Die Session verweist auf COM5. Vorhandene GSVmulti-Sessions bleiben unverändert.</p>
   <div style="margin-top:12px">${btn('Session erzeugen',{accent:true,block:true,go:'E4ok'})}</div></div>`}));
 def('E4ok','Einrichtung','… Sessiondatei erzeugt',()=>setup({step:4,name:PI,way:'Netzwerk (LAN)',sentence:'Schritt 4 von 5: Session in GSVmulti öffnen.',back:'E4',nextEnabled:false,nextGo:'E5',
-  bar:bar('ok','Sessiondatei erzeugt: GSVmulti_Prüfstand2_COM5.ucf','Die Datei allein belegt nicht, dass GSVmulti die Einstellungen übernommen hat.',btn('Ordner öffnen',{icon:'folder',act:'folder'})),
+  bar:bar('info','Sessiondatei erzeugt: GSVmulti_Prüfstand2_COM5.ucf','Die Datei allein belegt nicht, dass GSVmulti die Einstellungen übernommen hat.',btn('Ordner öffnen',{icon:'folder',act:'folder'})),
   body:`<div class="card"><h2>In GSVmulti öffnen</h2><ol class="how"><li>In GSVmulti: Datei › Öffnen …</li><li>Die erzeugte Datei auswählen.</li><li>Hier bestätigen, dass die Session geöffnet ist.</li></ol>
   <label class="check" style="margin-top:6px"><input type="checkbox" id="opened"><span class="rt">Ich habe die Session in GSVmulti geöffnet.</span></label></div>`,
   mount(w){ const c=$('#opened',w), n=$('#next',w); c.addEventListener('change',()=>{ n.disabled=!c.checked; n.classList.toggle('accent',c.checked); n.dataset.go=c.checked?'E5':''; }); }}));
@@ -547,10 +567,10 @@ function e5(stage){
   if(stage==='file') return setup({...opts,bar:warn,body:`<div class="card"><h2>Testdatei auswählen</h2><p>Der Test ist gesendet. Speichern Sie die Aufzeichnung in GSVmulti und wählen Sie die originale Datei aus. Die Brücke vergleicht jeden Wert und die Reihenfolge.</p>
     <div style="margin-top:10px">${btn('Testdatei auswählen …',{accent:true,icon:'file',go:'E5ok'})}</div>
 </div>`});
-  if(stage==='ok') return setup({...opts,sentence:'Schritt 5 von 5: Empfang belegt.',kind:'ok',nextEnabled:true,nextGo:'B1',nextLabel:'Fertig',
-    bar:bar('ok','Empfang belegt für diese Testdatei und Konfiguration','600/600 Werte stimmen überein. SHA-256 der Datei: 9f2c 41ab … e41a.'),
-    body:`<div class="card"><p>Das gilt nur für die ausgewählte Testdatei und diese Konfiguration, nicht für spätere Läufe. Im Betrieb zeigt die Brücke nur die COM-Weitergabe.</p>
-    <dl class="kv"><dt>Datei</dt><dd class="mono">GSVmulti_Test_Prüfstand2.txt</dd><dt>Werte</dt><dd>600 von 600</dd><dt>SHA-256</dt><dd class="mono">9f2c 41ab 07d3 … e41a</dd></dl></div>`});
+  if(stage==='ok') return setup({...opts,sentence:'Empfang belegt für diese Testdatei und Konfiguration',kind:'ok',nextEnabled:true,nextGo:'B1t',nextLabel:'Fertig',
+    bar:bar('ok','600/600 Werte stimmen überein','Der Vergleich gilt nur für die ausgewählte Testdatei und diese Konfiguration, nicht für spätere Läufe.'),
+    body:`<div class="card"><dl class="kv"><dt>Datei</dt><dd class="mono">GSVmulti_Test_Prüfstand2.txt</dd><dt>Test</dt><dd>14:02, synthetisch</dd><dt>Werte</dt><dd>600 von 600</dd><dt>SHA-256</dt><dd></dd></dl>${fp(SHA)}
+    <p class="cap2">Im Betrieb zeigt die Brücke danach „Empfang belegt“ nur für diese Konfiguration; die COM-Weitergabe bleibt eine eigene Aussage.</p></div>`});
   return setup({...opts,sentence:'Schritt 5 von 5: Empfang nicht belegt.',kind:'err',back:'E5',
     bar:bar('err','Abweichung: 598/600','Zwei Werte der Testdatei stimmen nicht mit dem Test überein. Der Empfang ist für diese Datei nicht belegt.',btn('Diagnose exportieren',{act:'diag'})+btn('Test wiederholen',{accent:true,go:'E5'})),
     body:`<div class="card"><h2>Fehlende Werte</h2><dl class="kv"><dt>Nr. 211</dt><dd>fehlt in der Testdatei</dd><dt>Nr. 212</dt><dd>fehlt in der Testdatei</dd></dl></div>`});
@@ -562,40 +582,42 @@ def('E5ok','Einrichtung','… Empfang belegt (600/600)',()=>e5('ok'));
 def('E5bad','Einrichtung','… Abweichung (598/600)',()=>e5('bad'));
 
 /* --- Betrieb --- */
-def('B1','Betrieb','Normal, DUT gesperrt',()=>ops({sentence:'Verbunden – DUT-Ausgabe gesperrt',kind:'info'}));
+const S_RUN = 'Verbunden – Lauf 7 wird übertragen';
+def('B1','Betrieb','Normal, DUT gesperrt',()=>ops({sentence:S_RUN,kind:'info'}));
+def('B1t','Betrieb','Normal, Empfang belegt (nach E5ok)',()=>{ UI.tested=true; try{ return ops({sentence:S_RUN,kind:'info'}); } finally { UI.tested=false; } });
 def('B2','Betrieb','Wartet auf Lauf',()=>ops({sentence:'Verbunden – wartet auf einen Lauf auf dem Pi',kind:'info',
-  chips:baseChips({out:{k:'info',w:'Wartet auf Lauf',d:[['Ausgabe','Wartet auf Lauf'],['Bedeutung','Der Pi ist erreichbar, es läuft aber keine Messung.']],note:'Die Brücke startet keinen Lauf.'},com:{k:'off',w:'Noch nichts übertragen',note:''}}),
+  chips:baseChips({out:{k:'info',w:'Wartet auf Lauf',d:[['Ausgabe','Wartet auf Lauf'],['Bedeutung','Der Pi ist erreichbar, es läuft aber keine Messung.']],note:'Die Brücke startet keinen Lauf.'},com:{k:'off',w:'Noch nichts',sub:'übertragen',note:''}}),
   journalRows:[['Heute','14:31:55','info','Pi-Lauf beendet','Lauf 6'],...J_BASE.slice(2)]}));
-def('B3','Betrieb','Pi antwortet nicht',()=>ops({sentence:'Pi antwortet nicht – nächster Versuch in 4 s',kind:'err',pisw:'locked',
-  infobar:bar('err','Verbindung zum Pi unterbrochen seit 14:32:20','Die Brücke versucht es selbst weiter (nach 1, 2, 4, 8 s, danach alle 8 s). Aktuell: Versuch 3.',btn('Abbrechen',{act:'abort'})+btn('Erneut versuchen',{accent:true,act:'retry'})),
-  chips:baseChips({pi:{k:'err',w:'Antwortet nicht'},out:{k:'help',w:'Unbekannt',d:[['Ausgabe','Unbekannt, solange der Pi nicht antwortet']]},com:{k:'warn',w:'Keine Weitergabe',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','Vor 12 s']],note:''}}),
-  journalRows:[['Heute','14:32:20','err','Pi antwortet nicht – seit 12 s','Netzwerk (LAN), Versuch 3','12 s'],...J_BASE.slice(0,1).map(r=>r),...J_BASE.slice(1)]}));
+def('B3','Betrieb','Pi antwortet nicht',()=>ops({sentence:'Pi antwortet nicht – Versuch in 4 s',kind:'err',pisw:'locked',
+  infobar:bar('err','Keine Antwort vom Pi seit 14:32:20','Mögliche Ursachen: Pi-Dienst, Netzwerk oder Strom des Pi. Wiederholung nach 1, 2, 4, 8 s, dann alle 8 s. „Nicht mehr versuchen“ stoppt das automatische Wiederverbinden.',btn('Nicht mehr versuchen',{act:'abort'})+btn('Erneut versuchen',{accent:true,act:'retry'})),
+  chips:baseChips({pi:{k:'err',w:'Antwortet nicht'},out:{k:'help',w:'Unbekannt',d:[['Ausgabe','Unbekannt, solange der Pi nicht antwortet'],['Letzter Stand','DUT-Ausgabe gesperrt (zuletzt vom Pi gemeldet)']]},com:{k:'warn',w:'Keine Weitergabe',sub:'Pi antwortet nicht',d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Letzte Quittung','Vor 12 s']],note:''}}),
+  journalRows:[['Heute','14:32:20','err','Pi antwortet nicht','läuft noch · Netzwerk (LAN), Versuch 3','12 s'],...J_BASE]}));
 function b4(kind){
+  const P='COM4 (Brückenseite)';
   const v = {
-   a:{k:'warn',w:'Port belegt',sent:'Verbunden – COM4 ist belegt',bar:bar('warn','COM4 ist von einem anderen Programm belegt','Es wurde nichts gesendet. Schließen Sie das andere Programm und prüfen Sie erneut.',btn('Erneut prüfen',{accent:true,act:'retry'})),j:['warn','COM4 belegt – es wird nichts geschrieben','Ein anderes Programm hält den Port','seit 8 s']},
-   b:{k:'err',w:'Schreibfehler',sent:'Verbunden – Schreibfehler auf COM4',bar:bar('err','Schreibfehler auf COM4','Der Port hat den Wert nicht vollständig angenommen. Er wird nicht erneut gesendet; es geht mit dem nächsten zulässigen Wert weiter.',btn('Diagnose exportieren',{act:'diag'})+btn('Details',{accent:true,act:'details'})),j:['err','COM-Schreibfehler – Wert nicht erneut gesendet','Teilweise geschrieben (Bild 18343)','1 Wert']},
-   c:{k:'help',w:'Ergebnis unklar',sent:'Verbunden – COM-Ergebnis unklar',bar:bar('warn','Ergebnis unklar','Keine Bestätigung vom Port nach dem Schreiben. Ob GSVmulti den Wert erhalten hat, ist offen. Nicht wiederholt, im Journal vermerkt.',btn('Diagnose exportieren',{act:'diag'})),j:['warn','COM-Ergebnis unklar – keine Quittung','Bild 18343, nicht wiederholt','1 Wert']},
+   a:{k:'warn',w:'Port belegt',sent:'Weitergabe gestört – COM4 belegt',bar:bar('warn','COM4 (Brückenseite) belegt – GSVmulti hört auf COM5','Ein anderes Programm hält COM4. Es wurde nichts gesendet. Schließen Sie es und prüfen Sie erneut.',btn('Erneut prüfen',{accent:true,act:'retry'})),j:['warn',P+' belegt','läuft noch · ein anderes Programm hält den Port','8 s']},
+   b:{k:'err',w:'Schreibfehler',sent:'Weitergabe gestört – Schreibfehler',bar:bar('err','Schreibfehler auf '+P,'Der Port hat den Wert nicht vollständig angenommen. Er wird nicht erneut gesendet; es geht mit dem nächsten zulässigen Wert weiter.',btn('Diagnose exportieren',{act:'diag'})+btn('Details',{accent:true,act:'details'})),j:['err',P+': Schreibfehler','Wert nicht erneut gesendet · Bild 18343','1 Wert']},
+   c:{k:'help',w:'Ergebnis unklar',sent:'Weitergabe unklar – kein Nachweis',bar:bar('warn','Ergebnis unklar auf '+P,'Keine Bestätigung vom Port nach dem Schreiben. Ob GSVmulti den Wert erhalten hat, ist offen. Nicht wiederholt, im Journal vermerkt.',btn('Diagnose exportieren',{act:'diag'})),j:['warn',P+': Ergebnis unklar','keine Quittung · nicht wiederholt · Bild 18343','1 Wert']},
   }[kind];
   return ops({sentence:v.sent,kind:v.k==='help'?'warn':v.k,infobar:v.bar,
-    chips:baseChips({com:{k:v.k,w:v.w,d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Status',v.w],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'Ein Wert wird nach unklarem oder kurzem Schreiben nie blind wiederholt.'}}),
+    chips:baseChips({com:{k:v.k,w:v.w,sub:P,d:[['Brückenseite','COM4'],['GSVmulti-Seite','COM5'],['Status',v.w],['Letzte Quittung','COM-Weitergabe bestätigt (Bild 18342) – kein GSVmulti-Empfangsnachweis']],note:'Ein Wert wird nach unklarem oder kurzem Schreiben nie blind wiederholt.'}}),
     journalRows:[['Heute','14:33:41',...v.j],...J_BASE]});
 }
 def('B4a','Betrieb','COM-Port belegt',()=>b4('a'));
 def('B4b','Betrieb','COM-Schreibfehler',()=>b4('b'));
 def('B4c','Betrieb','COM-Ergebnis unklar',()=>b4('c'));
 def('B5','Betrieb','Demo läuft (synthetisch)',()=>ops({sentence:'Verbunden – Demo läuft',kind:'warn',tag:'Synthetisch',
-  chips:baseChips({out:{k:'warn',w:'Demo',d:[['Ausgabe','Demo (synthetisch)'],['Bedeutung','Die Werte kommen aus einer Demo, nicht von einem Messgerät.']],note:'Nicht für Kalibrierungen verwenden.'}}),
-  journalRows:[['Heute','14:34:02','warn','Demo gestartet – Werte sind synthetisch','Vom Pi gemeldet'],...J_BASE]}));
-def('B6','Betrieb','Chip-Detail (Flyout)',()=>ops({sentence:'Verbunden – DUT-Ausgabe gesperrt',kind:'info'}),{open:'pi'});
-def('B7','Betrieb','Beenden bei aktiver Übertragung',()=>ops({sentence:'Verbunden – DUT-Ausgabe gesperrt',kind:'info'}),{dialog:true});
-def('B8','Betrieb','Minimiert: Tray-Hinweis',()=>'',{desktop:true});
-def('B9','Betrieb','Lange Namen, 200 %',()=>ops({name:PI_LONG,sentence:'Verbunden – DUT-Ausgabe gesperrt',kind:'info',
-  chips:baseChips({com:{l:'COM5',w:'Weitergabe bestätigt'},gsv:{w:'Übernahme bestätigt'}}),
+  chips:baseChips({out:{k:'warn',w:'Demo-Werte',d:[['Ausgabe','Demo (synthetisch)'],['Bedeutung','Die Werte kommen aus einer Demo, nicht von einem Messgerät.']],note:'Nicht für Kalibrierungen verwenden.'}}),
+  journalRows:[['Heute','14:34:02','warn','Demo gestartet','Werte sind synthetisch · vom Pi gemeldet'],...J_BASE]}));
+def('B6','Betrieb','Chip-Detail (Flyout)',()=>ops({sentence:S_RUN,kind:'info'}),{open:'pi'});
+def('B7','Betrieb','Beenden bei aktiver Übertragung',()=>ops({sentence:S_RUN,kind:'info'}),{dialog:true});
+def('B8','Betrieb','Minimiert: Tray-Hinweis und Symbole',()=>'',{desktop:true});
+def('B9','Betrieb','Lange Namen, 200 %',()=>ops({name:PI_LONG,sentence:S_RUN,kind:'info',
   journalRows:[['Heute','14:32:07','ok','Neuer Lauf erkannt','Prüfstand 2 – Kalibrierlabor Halle B, Platz 14 · Lauf 7'],...J_BASE.slice(1)]}),{zoom:2});
-def('B10','Betrieb','Anderer Pi in Auswahl (frei)',()=>ops({name:'Prüfstand 3 – Halle A',way:'Nicht verbunden',sentence:'Nicht verbunden – Pi ausgewählt',kind:'info',pisw:'free',
+def('B10','Betrieb','Anderer Pi in Auswahl (frei)',()=>ops({name:'Prüfstand 3 – Halle A',way:'Netzwerk (LAN)',sentence:'Nicht verbunden – Pi ausgewählt',kind:'info',pisw:'free',jfor:'Prüfstand 3 – Halle A',
   infobar:bar('info','Es läuft keine Übertragung','Ein Pi-Wechsel ist jetzt möglich. Verbinden Sie danach neu.',btn('Verbinden',{accent:true,act:'connect'})),
-  chips:baseChips({uart:{w:'nicht benutzt'},pi:{k:'off',w:'nicht verbunden',d:[['Pi-ID','pi-d21a77e6',true],['Status','Nicht verbunden']]},out:{k:'off',w:'unbekannt'},com:{k:'off',w:'keine Übertragung'},gsv:{k:'off',w:'noch nicht gekoppelt',d:[['Session','Für diesen Pi noch nicht erzeugt']]}}),
-  journalRows:[['Heute','14:40:02','info','Anderer Pi ausgewählt: Prüfstand 3 – Halle A','Übertragung war beendet'],['Heute','14:39:48','info','Brücke beendet','Auf Wunsch des Bedieners'],...J_BASE.slice(2,6)]}),{piswOpen:true});
+  chips:baseChips({pi:{k:'off',w:'nicht verbunden',d:[['Pi-ID','pi-d21a77e6',true],['Status','Nicht verbunden']]},out:{k:'off',w:'unbekannt',d:[['Ausgabe','Unbekannt, solange nicht verbunden']]},com:{k:'off',w:'Keine',sub:'Übertragung',note:''},gsv:{k:'off',w:'Noch nicht gekoppelt',sub:'Empfang nicht nachgewiesen',d:[['Session','Für diesen Pi noch nicht erzeugt']],note:''}}),
+  journalRows:[['Heute','14:40:02','info','Pi ausgewählt','Prüfstand 3 – Halle A · pi-d21a77e6'],['Gestern','16:02:44','info','Brücke beendet','Prüfstand 3 – Halle A · auf Wunsch des Bedieners'],['Gestern','14:20:11','ok','Pi verbunden (Identität geprüft)','Prüfstand 3 – Halle A · pi-d21a77e6']]}),{piswOpen:true});
 
 /* ===================== Zustand, Rendering ===================== */
 const UI = {cur:'B1', theme:'light', zoom:1, min:false, filter:'alle', open:null, lockOpen:false, piswOpen:null, dialog:false, live:false, prev:null};
@@ -622,15 +644,16 @@ const TRANSMITTING = id => /^B([1-9])/.test(id) && id!=='B2' && id!=='B3' && id!
 function render(){
   const st = S[UI.cur];
   const desk = $('#desktop');
-  if(st.desktop && !UI.restored){ desk.innerHTML = deskHtml(); wireDesk(); updateCtl(); return; }
+  if(st.desktop && !UI.restored){ desk.innerHTML = deskHtml(); wireDesk(); UI.trayInfo=null; renderTray(); updateCtl(); return; }
   const w = document.createElement('div'); w.className = 'win'+(UI.min?' min':''); w.setAttribute('role','application'); w.setAttribute('aria-label','GSVmulti-Brücke');
   w.style.setProperty('--zoom', UI.zoom);
-  let inner; UI.mount=null;
+  let inner; UI.mount=null; UI.trayInfo=null;
   if(st.desktop){ inner = ops({sentence:'Verbunden – DUT-Ausgabe gesperrt',kind:'info'}); }
   else { inner = st.fn(); }
   // Zustand-abhängige Parameter nachreichen (Flyouts, Filter)
   w.innerHTML = titlebar() + `<div class="app" id="app">${inner}</div>`;
   desk.replaceChildren(w);
+  renderTray();
   if(UI.mount) UI.mount(w);
   wire(w); wireInner(w);
   if(UI.dialog) openDialog(w);
@@ -716,10 +739,23 @@ function openDialog(w){
 }
 function closeDialog(){ const w=$('.win'); $('.scrim',w)?.remove(); UI.dialog=false; $('[data-act="close"]',w)?.focus(); }
 
-/* Desktop für B8 */
+/* Tray (Mock-Vorschau) */
+const TRAY_TXT = {info:'Verbunden – Lauf 7 wird übertragen',warn:'Weitergabe gestört – COM4 belegt',err:'Pi antwortet nicht – Versuch in 4 s'};
+function trayIcon(kind){
+  const bd = kind==='warn'||kind==='err'||kind==='help' ? `<span class="bd"><svg viewBox="0 0 20 20" class="k-${kind==='help'?'warn':kind}" aria-hidden="true"><use href="#s-${kind==='help'?'warn':kind}"/></svg></span>` : '';
+  return `<span class="trayic"><svg class="lg" viewBox="0 0 16 16" aria-hidden="true"><use href="#s-logo"/></svg>${bd}</span>`;
+}
+function renderTray(){
+  const el=$('#traypv'); if(!el) return;
+  const t=UI.trayInfo;
+  if(!t){ el.innerHTML=''; return; }
+  el.innerHTML = `Mock – Infobereich (nicht Teil des Fensters)<div class="strip">${trayIcon(t.kind)}<span class="tip">${esc(t.text)}</span></div>`;
+}
 function deskHtml(){
-  return `<div class="deskview" aria-label="Windows-Desktop, Mock"><div class="toast" role="status"><div class="th">${sym('logo')} GSVmulti-Brücke</div><b>Die Brücke läuft im Infobereich weiter.</b><span class="cap2">Dieser Hinweis erscheint nur einmal. Ein Klick auf das Symbol öffnet das Fenster.</span></div>
-  <div class="taskbar"><button class="tray" data-tray aria-label="GSVmulti-Brücke im Infobereich – Fenster öffnen" title="GSVmulti-Brücke – Verbunden"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#s-logo"/></svg></button><span>14:35</span></div></div>`;
+  const v = k => `<div class="strip">${trayIcon(k)}<span class="tip">${esc(TRAY_TXT[k])}</span></div>`;
+  return `<div class="deskview" aria-label="Windows-Desktop, Mock"><div class="trayvar"><span class="ttl">Mock – Tray-Symbol: Normal · Achtung · Fehler. Tooltip = Kopfsatz. Zustandswechsel ändern nur Symbol und Tooltip, kein neues Pop-up.</span>${v('info')}${v('warn')}${v('err')}</div>
+  <div class="toast" role="status"><div class="th">${sym('logo')} GSVmulti-Brücke</div><b>Die Brücke läuft im Infobereich weiter.</b><span class="cap2">Dieser Hinweis erscheint nur einmal. Ein Klick auf das Symbol öffnet das Fenster.</span></div>
+  <div class="taskbar"><button class="tray" data-tray aria-label="GSVmulti-Brücke im Infobereich – Fenster öffnen" title="Verbunden – Lauf 7 wird übertragen">${trayIcon('info')}</button><span>14:35</span></div></div>`;
 }
 function wireDesk(){ $('[data-tray]').addEventListener('click',()=>{ UI.restored=true; go(UI.prev&&UI.prev!=='B8'?UI.prev:'B1'); setTimeout(()=>UI.restored=false,0); }); }
 
