@@ -3,13 +3,26 @@ from __future__ import annotations
 
 from html import escape
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-                               QRadioButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QToolTip,
+    QVBoxLayout,
+    QWidget,
+)
 
 from . import texts, theme
-from .widgets import Header, InfoBar, StateIcon, button, footer_frame
+from .widgets import Header, InfoBar, button, footer_frame
 
 
 class StepHeader(QWidget):
@@ -25,37 +38,57 @@ class StepHeader(QWidget):
     def set_step(self, n: int) -> None:
         self.current = n
         self.setAccessibleName(f'Schritt {n} von 5: {texts.STEPS[n - 1]}')
-        self.setToolTip(' · '.join(f'{i}. {s}' for i, s in enumerate(texts.STEPS, 1)))
         self.update()
 
-    def _label_size(self, w: float) -> float:
-        """Größte Schrift (9 bis 7 pt), bei der keine zwei Labels sich berühren oder abgeschnitten werden."""
-        size = 9.0
-        while size > 7:
-            rects = []
-            for i, label in enumerate(texts.STEPS, 1):
-                font = theme.make_font(size, QFont.Weight.DemiBold if i == self.current else QFont.Weight.Normal)
-                tw = QFontMetricsF(font).horizontalAdvance(label) + 2
-                x = min(max((i - .5) * w - tw / 2, 0), self.width() - tw)
-                rects.append((x, x + tw))
-            if all(b[0] - a[1] >= 4 for a, b in zip(rects, rects[1:])):
-                break
-            size -= .5
-        return size
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.setFixedHeight(54 if self.labels_visible() else 30)    # ohne Labels nur die Kreise
+
+    LABEL_PT = 9.0          # 12 px: Lesbarkeitsgrenze, nie kleiner
+
+    def _label_boxes(self) -> list[tuple[float, float]]:
+        """Je Label (x0, x1), erstes/letztes an der Kante ausgerichtet."""
+        w = self.width() / 5
+        boxes = []
+        for i, label in enumerate(texts.STEPS, 1):
+            font = theme.make_font(self.LABEL_PT, QFont.Weight.Normal)      # gleiche Breite für alle Schritte
+            tw = QFontMetricsF(font).horizontalAdvance(label) + 2
+            x = min(max((i - .5) * w - tw / 2, 0), self.width() - tw)
+            boxes.append((x, x + tw))
+        return boxes
+
+    def labels_visible(self) -> bool:
+        """Labels nur, wenn alle ohne Berührung in die Breite passen; sonst nur die Kreise."""
+        boxes = self._label_boxes()
+        return all(b[0] - a[1] >= 4 for a, b in zip(boxes, boxes[1:], strict=False))
+
+    def circle_rect(self, i: int) -> QRectF:
+        return QRectF((i - .5) * self.width() / 5 - 11, 3, 22, 22)
+
+    def event(self, e):
+        if e.type() == QEvent.Type.ToolTip:
+            for i, name in enumerate(texts.STEPS, 1):
+                if self.circle_rect(i).contains(QPointF(e.pos())):
+                    QToolTip.showText(e.globalPos(), f'Schritt {i}: {name}', self)
+                    return True
+            QToolTip.hideText()
+            return True
+        return super().event(e)
 
     def paintEvent(self, e):
         t = theme.tokens()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width() / 5
-        size = self._label_size(w)
+        show = self.labels_visible()
+        boxes = self._label_boxes()
         for i, label in enumerate(texts.STEPS, 1):
             cx = (i - .5) * w
             done, cur = i < self.current, i == self.current
             if i < 5:
                 p.setPen(QPen(QColor(t['accent'] if done else t['stroke_strong']), 1.5))
                 p.drawLine(QPointF(cx + 14, 14), QPointF(cx + w - 14, 14))
-            r = QRectF(cx - 11, 3, 22, 22)
+            r = self.circle_rect(i)
             p.setPen(QPen(QColor(t['accent'] if (done or cur) else t['stroke_strong']), 1.5))
             p.setBrush(QColor(t['accent']) if (done or cur) else QColor(t['mica']))
             p.drawEllipse(r)
@@ -66,12 +99,11 @@ class StepHeader(QWidget):
                 p.drawPolyline([QPointF(cx - 5, 14), QPointF(cx - 1.5, 17.5), QPointF(cx + 5, 10)])
             else:
                 p.drawText(r, Qt.AlignmentFlag.AlignCenter, str(i))
-            font = theme.make_font(size, QFont.Weight.DemiBold if cur else QFont.Weight.Normal)
-            tw = QFontMetricsF(font).horizontalAdvance(label) + 2
-            p.setFont(font)
-            p.setPen(QColor(t['text'] if cur else t['text2']))
-            x = min(max(cx - tw / 2, 0), self.width() - tw)      # erstes/letztes Label bleibt im Fenster
-            p.drawText(QRectF(x, 28, tw, 22), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, label)
+            if show:
+                p.setFont(theme.make_font(self.LABEL_PT, QFont.Weight.Normal))
+                p.setPen(QColor(t['text'] if cur else t['text2']))
+                x0, x1 = boxes[i - 1]
+                p.drawText(QRectF(x0, 28, x1 - x0, 22), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, label)
         p.end()
 
 
@@ -85,12 +117,12 @@ def _card() -> tuple[QFrame, QVBoxLayout]:
 
 
 def _label(text, secondary=False, caption=False, strong=False, wrap=True) -> QLabel:
-    l = QLabel(text)
-    l.setWordWrap(wrap)
-    l.setProperty('secondary', secondary)
-    l.setProperty('caption', caption)
-    l.setProperty('strong', strong)
-    return l
+    lab = QLabel(text)
+    lab.setWordWrap(wrap)
+    lab.setProperty('secondary', secondary)
+    lab.setProperty('caption', caption)
+    lab.setProperty('strong', strong)
+    return lab
 
 
 def fingerprint_label(fp: str, other: str | None = None) -> QLabel:
@@ -106,13 +138,13 @@ def fingerprint_label(fp: str, other: str | None = None) -> QLabel:
                 g = f'<b><u>{g}</u></b>'
             parts.append(g)
         lines.append('&nbsp;'.join(parts))
-    l = QLabel('<br>'.join(lines))
-    l.setTextFormat(Qt.TextFormat.RichText)
-    l.setFont(theme.make_font(9, mono=True))
-    l.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-    l.setAccessibleName('Fingerabdruck ' + ' '.join(groups))
-    l.setWordWrap(False)
-    return l
+    lab = QLabel('<br>'.join(lines))
+    lab.setTextFormat(Qt.TextFormat.RichText)
+    lab.setFont(theme.make_font(9, mono=True))
+    lab.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    lab.setAccessibleName('Fingerabdruck ' + ' '.join(groups))
+    lab.setWordWrap(False)
+    return lab
 
 
 class SetupView(QWidget):
@@ -238,7 +270,7 @@ class SetupView(QWidget):
         bar = InfoBar()
         bar.set_bar(texts.ActionBar(kind, title, text, tuple(buttons)))
         bar.action.connect(self.action)
-        for b, (_, aid, _p) in zip(bar.buttons, buttons):
+        for b, (_, aid, _p) in zip(bar.buttons, buttons, strict=False):
             self.buttons[aid] = b
         return bar
 

@@ -105,7 +105,9 @@ class FakeController:
         self.calls.append((name, *a))
 
     # Port
-    def load_profile(self, raw): self._rec('load_profile', raw); return self._r
+    def load_profile(self, raw):
+        self._rec('load_profile', raw)
+        return self._r
     def install_components(self): self._rec('install_components')
     def connect(self, mode, selected_device_id=None): self._rec('connect', mode, selected_device_id)
     def disconnect(self): self._rec('disconnect')
@@ -120,7 +122,9 @@ class FakeController:
     def rescan(self): self._rec('rescan')
     def confirm_session(self, on): self._rec('confirm_session', on)
     def setup_step(self, direction): self._rec('setup_step', direction)
-    def export_diagnostics(self, destination): self._rec('export_diagnostics', destination); return destination
+    def export_diagnostics(self, destination):
+        self._rec('export_diagnostics', destination)
+        return destination
 
     def request_exit(self, confirmed):
         self._rec('request_exit', confirmed)

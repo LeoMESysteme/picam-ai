@@ -7,6 +7,7 @@ ein Worker-Code oder output_ready=False wird nie von "Pi verbunden"
 """
 from __future__ import annotations
 
+import re as _re
 from dataclasses import dataclass
 
 from dispread.bridge.types import BridgeEvent
@@ -618,8 +619,6 @@ SETUP: dict[str, dict] = {
         ('card', 'Fehlende Werte', (('Nr. 211', 'fehlt in der Testdatei'), ('Nr. 212', 'fehlt in der Testdatei')))]),
 }
 
-
-import re as _re
 
 _TOKEN = _re.compile(r'\{([a-z_0-9]+)\}')
 

@@ -98,7 +98,6 @@ def _install_power_filter(app, controller) -> None:
     class _Filter(QAbstractNativeEventFilter):
         def nativeEventFilter(self, event_type, message):
             if event_type == b'windows_generic_MSG':
-                import ctypes
                 from ctypes import wintypes
                 msg = wintypes.MSG.from_address(int(message))
                 if msg.message == 0x0218 and msg.wParam == 0x4:   # PBT_APMSUSPEND

@@ -8,9 +8,10 @@ Oberfläche über einen Thread-Pool abgesetzt.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from dispread.bridge.types import BridgeEvent
 from dispread_bridge_app.readiness import Readiness

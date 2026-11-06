@@ -1,12 +1,13 @@
 """Wahrheitsregeln der Texte, ohne Qt-Fenster."""
 from dataclasses import replace
 
-from dispread.bridge.types import BridgeEvent
 from dispread_bridge_app.readiness import Readiness
 from dispread_bridge_app.ui import texts
 from dispread_bridge_app.ui.fake import STATES
 from dispread_bridge_app.ui.port import Receipt, UiContext
 from dispread_bridge_app.worker import WorkerStatus
+
+from dispread.bridge.types import BridgeEvent
 
 
 def chips(key):
@@ -24,7 +25,7 @@ def test_never_all_six_chips_green_under_dut_lock():
 
 
 def test_dut_lock_line_in_every_state():
-    for key, (r, w, c) in STATES.items():
+    for key, (_r, _w, c) in STATES.items():
         text, tone = texts.dut_line(c)
         if c.dut_locked:
             assert text == texts.DUT_LOCK_LINE and tone == 'warn', key

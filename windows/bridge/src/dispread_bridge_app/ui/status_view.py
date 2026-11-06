@@ -3,13 +3,32 @@ from __future__ import annotations
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter
-from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel, QListView,
-                               QPushButton, QSizePolicy, QStyledItemDelegate, QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QButtonGroup,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QListView,
+    QSizePolicy,
+    QStyledItemDelegate,
+    QVBoxLayout,
+    QWidget,
+)
 
 from . import texts, theme
 from .port import JournalEntry
-from .widgets import (FocusPushButton, FocusToolButton, Header, InfoBar, StateIcon, button, footer_frame, paint_focus,
-                      repolish)
+from .widgets import (
+    FocusPushButton,
+    FocusToolButton,
+    Header,
+    InfoBar,
+    StateIcon,
+    button,
+    footer_frame,
+    paint_focus,
+)
 
 
 class Chip(FocusToolButton):
@@ -387,7 +406,7 @@ class StatusView(QWidget):
 
     def _set_tab_order(self) -> None:
         seq = self.focus_chain()
-        for a, b in zip(seq, seq[1:]):
+        for a, b in zip(seq, seq[1:], strict=False):
             QWidget.setTabOrder(a, b)
 
     def focus_chain(self) -> list[QWidget]:
@@ -397,7 +416,7 @@ class StatusView(QWidget):
     def update_from(self, readiness, worker, ctx, locked: bool) -> None:
         self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked)
         self.infobar.set_bar(texts.action_bar(readiness, worker, ctx))
-        for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx)):
+        for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx), strict=False):
             chip.set_view(view)
         self.version_label.setText(texts.version_label(ctx.version))
         self.channel_label.setText(ctx.channel or '')

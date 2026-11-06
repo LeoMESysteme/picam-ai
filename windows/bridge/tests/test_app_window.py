@@ -163,9 +163,36 @@ def test_empty_journal_shows_calm_empty_state(real):
     assert sv.empty_label.text() == texts.NO_EVENTS and sv.count_label.text().startswith('0 Einträge')
 
 
-def test_step_labels_never_leave_the_window(real):
+def test_step_bar_hides_labels_at_380_and_shows_them_inside_geometry_at_440(real):
     c, w = real()
-    w.resize(380, 720)
-    pump()
     sh = w.setup_view.step_header
-    assert sh.toolTip() and sh.width() >= 300
+    w.resize(380, 720)
+    wait_until(lambda: sh.width() <= 380 and sh.width() > 300)
+    assert not sh.labels_visible()                     # 12 px passen nicht: nur Kreise
+    assert sh.height() == 30
+    assert sh.LABEL_PT >= 9                            # nie unter die Lesbarkeitsgrenze
+    for i in range(1, 6):
+        assert sh.circle_rect(i).right() <= sh.width() and sh.circle_rect(i).left() >= 0
+    w.resize(440, 720)
+    wait_until(lambda: sh.width() > 400)
+    assert sh.labels_visible() and sh.height() == 54
+    boxes = sh._label_boxes()
+    assert all(x0 >= 0 and x1 <= sh.width() for x0, x1 in boxes)
+    assert all(b[0] - a[1] >= 4 for a, b in zip(boxes, boxes[1:], strict=False))
+
+
+def test_step_circle_tooltip_names_the_step(real):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QHelpEvent
+    c, w = real()
+    sh = w.setup_view.step_header
+    shown = []
+    import dispread_bridge_app.ui.setup_view as sv
+    orig = sv.QToolTip.showText
+    sv.QToolTip.showText = lambda pos, text, widget=None, *a: shown.append(text)
+    try:
+        r = sh.circle_rect(3).center().toPoint()
+        QApplication.sendEvent(sh, QHelpEvent(QHelpEvent.Type.ToolTip, r, QPoint(0, 0)))
+    finally:
+        sv.QToolTip.showText = orig
+    assert shown == ['Schritt 3: Verbinden']

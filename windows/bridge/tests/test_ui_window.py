@@ -4,13 +4,13 @@ import threading
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
+from dispread_bridge_app.ui.fake import FakeController
+from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from dispread.bridge.types import BridgeEvent
-from dispread_bridge_app.ui.fake import FakeController
-from dispread_bridge_app.ui.window import MainWindow
 
 
 @pytest.fixture(scope='session')
@@ -94,8 +94,7 @@ def test_segmented_filters_faults(make):
 def test_tab_order_head_bar_chips_filter_journal_footer(make):
     _, w = make('B3')
     s = w.status_view
-    order = []
-    cur = s.lock_button if s.lock_button.focusPolicy() else s.chips[0]
+    s.lock_button if s.lock_button.focusPolicy() else s.chips[0]
     start = s.focus_chain()
     names = [x.objectName() for x in start]
     assert names.index('bar_primary') < names.index('chip0') < names.index('chip5') \

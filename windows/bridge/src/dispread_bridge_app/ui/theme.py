@@ -173,7 +173,6 @@ def status_pixmap(tone: str, size: int = 16, dpr: float = 2.0) -> QPixmap:
     pen = QPen(color, 1.5)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    inner = QColor(t['card'])
     s = size
     if tone == 'warn':
         p.setBrush(color)
