@@ -128,7 +128,7 @@ def test_demo_of_ten_values_reaches_fake_com_and_ui_says_demo_only(tmp_path, ide
         assert chips['forward'].word == 'Bestätigt' and 'Demo' in chips['forward'].sub
         assert chips['gsv'].word != 'Empfang belegt'
         assert texts.dut_line(ctx)[0] == texts.DUT_LOCK_LINE
-        assert any(e.title == 'Weitergabe' for e in ctl.context().journal)
+        assert any(e.title.startswith('Demo: ') and 'weitergegeben' in e.title for e in ctl.context().journal)
         assert ctx.last_ack.startswith('COM-Weitergabe bestätigt')
         for path in (tmp_path / 'app').rglob('*'):
             if path.is_file():

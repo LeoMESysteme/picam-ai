@@ -747,6 +747,7 @@ def test_status_counts_exchanges(tmp_path):
 
 def test_stop_during_idle_wait_is_prompt(tmp_path):
     import time
+
     from dispread_bridge_app.delivery_journal import DeliveryJournal
     link = ScriptLink()
     done = threading.Event()

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from dispread.bridge.types import BridgeEvent
 from dispread.gsv_bridge import BridgeAuditError, BridgeSession, DeliveryBlockedError, DeliveryUncertainError
 
-
 IDLE_FIRST_S, IDLE_MAX_S = 0.05, 0.2
 _QUIET = frozenset({'idle', 'ended'})
 

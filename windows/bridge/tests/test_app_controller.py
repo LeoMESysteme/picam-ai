@@ -433,8 +433,8 @@ def test_emit_returns_immediately_with_slow_store(tmp_path):
 
 
 def test_emit_overflow_counts_instead_of_blocking(tmp_path, monkeypatch):
-    import queue
     import time
+
     from dispread_bridge_app import app_controller as ac
     monkeypatch.setattr(ac, 'DIAG_QUEUE_MAX', 3)
     c = make(tmp_path)

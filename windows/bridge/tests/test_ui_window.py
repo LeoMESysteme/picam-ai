@@ -203,3 +203,25 @@ def test_controller_calls_leave_gui_thread(make):
 def test_dark_theme_applies(make):
     _, w = make(dark=True)
     assert w.palette().window().color().name() == '#202020'
+
+
+def test_event_burst_is_coalesced(make):
+    fc, w = make('B1')
+    pump(300)
+    before = w._refresh_count
+    for _ in range(1000):
+        fc.emit(BridgeEvent('exchange', 'idle', None, None, dict(outcome='idle')))
+    pump(1000)
+    assert w._refresh_count - before <= 6
+    pump(300)
+    assert not w._refresh_dirty
+
+
+def test_single_event_refreshes_promptly_and_journal_stays_bounded(make):
+    fc, w = make('B1')
+    pump(300)
+    before = w._refresh_count
+    fc.emit(BridgeEvent('connection', 'backoff', None, None, {}))
+    pump(50)
+    assert w._refresh_count == before + 1
+    assert w.status_view.journal.model().rowCount() <= 500 + 2     # Zeilen + Tageskopf

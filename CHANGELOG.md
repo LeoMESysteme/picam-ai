@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Windows-Brücke ruckelte im Leerlauf (Diagnoseexport: 26 268 `exchange/idle` in 4,8 MB). Ursache:
+  Worker pollte nach `idle` alle 10 ms, jedes Ereignis schrieb synchron (fsync) in den Diagnosespeicher und löste
+  einen kompletten UI-Neuaufbau aus. Jetzt: adaptiver Leerlauftakt 50 → 200 ms (nach `written`/Nicht-Idle sofort
+  nächster Poll), `idle`/`ended` nur als Übergang gemeldet, `WorkerStatus.exchanges_total` additiv; Diagnose über
+  Hintergrundschreiber mit begrenzter Warteschlange (Überlauf wird gezählt), `written` als Zählerzeile gebündelt;
+  Journal auf 500 Zeilen mit einer fortlaufenden Zählerzeile „Demo: n Werte weitergegeben“; UI zeichnet höchstens
+  alle 200 ms neu. Gemessen (Fake-Link, 10 ms RTT, 10 s Leerlauf): Polls/s 50,9 → 5,1, Ereignisse/s 51 → 0,
+  UI-Refreshes/s 47,6 → 0, Diagnose 96 kB → 0,3 kB. Audit-/Journalverträge des Kerns unverändert.
 * 2026-11-06: Echter `AppController` der Windows-App „GSVmulti-Brücke“
   (`windows/bridge/src/dispread_bridge_app/app_controller.py`) erfüllt den `ControllerPort` mit dem Kern
   (strikter Profilparser, `ConnectionManager`, `BridgeWorker`, `DeliveryJournal`, `CredentialStore`).

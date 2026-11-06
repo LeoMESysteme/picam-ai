@@ -26,6 +26,8 @@ from .setup_view import SetupView
 from .status_view import Flyout, StatusView
 from .widgets import button
 
+REFRESH_INTERVAL_MS = 200
+
 
 class _EventBridge(QObject):
     """Wohnt im GUI-Thread; Signal aus dem Workerthread wird queued zugestellt."""
@@ -133,6 +135,13 @@ class MainWindow(QWidget):
             v.switch_clicked.connect(lambda: QTimer.singleShot(0, self._show_switch))
         self._bridge = _EventBridge(self)
         self._bridge.event.connect(self._on_event, Qt.ConnectionType.QueuedConnection)
+        # Ereignisse koaleszieren: hoechstens ein refresh() je REFRESH_INTERVAL_MS.
+        self._refresh_dirty = False
+        self._refresh_count = 0
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(REFRESH_INTERVAL_MS)
+        self._refresh_timer.timeout.connect(self._flush_refresh)
         self._unsubscribe = controller.subscribe(self._bridge.event.emit)
         self._build_tray()
         self._flyout = None
@@ -169,6 +178,7 @@ class MainWindow(QWidget):
         return bool(ctx.switch_locked or (worker is not None and worker.active))
 
     def refresh(self) -> None:
+        self._refresh_count += 1
         r, w, c = self.controller.snapshot(), self.controller.worker_status(), self.controller.context()
         locked = self._locked(c, w)
         self.status_view.update_from(r, w, c, locked)
@@ -189,9 +199,18 @@ class MainWindow(QWidget):
             self.thread()
         if self.on_event_hook:
             self.on_event_hook(event)
-        from datetime import datetime
-        self.status_view.add_entry(texts.event_entry(event, now=datetime.now().strftime('%H:%M:%S')))
+        # Das Journal fuehrt der Controller (verdichtet, begrenzt); refresh() liest es.
+        if self._refresh_timer.isActive():
+            self._refresh_dirty = True        # nur markieren, der Timer zeichnet nach
+            return
         self.refresh()
+        self._refresh_timer.start()
+
+    def _flush_refresh(self) -> None:
+        if self._refresh_dirty:
+            self._refresh_dirty = False
+            self.refresh()
+            self._refresh_timer.start()
 
     # ---------------------------------------------------------------- Aktionen
     def _call(self, fn, *args, done=None) -> None:
