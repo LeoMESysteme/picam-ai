@@ -151,7 +151,7 @@ def explain_code(code: str | None) -> tuple[str, str]:
 def version_label(version: str | None) -> str:
     if not version:
         return ''
-    return version if version == 'Entwicklungsstand' else f'Version {version}'
+    return version if (version == 'Entwicklungsstand' or ' · ' in version) else f'Version {version}'
 
 _TONE_OF_PEER = {'authenticated': 'ok', 'disconnected': 'info', 'backoff': 'err', 'connecting': 'info'}
 

@@ -69,13 +69,21 @@ def _open_com(port: str):
     return Serial(port, 115200, bytesize=8, parity='N', stopbits=1, timeout=1, write_timeout=2)
 
 
-def _build_label() -> str:
-    try:
-        from . import build_info
-    except ImportError:
-        return DEV_BUILD
-    ident = getattr(build_info, 'BUILD_ID', None) or getattr(build_info, 'VERSION', None)
-    return str(ident) if ident else DEV_BUILD
+def _build_label(info=None) -> tuple[str, str | None]:
+    """(Fußzeile, Kanal) aus build_info (version, commit, channel); ohne Modul „Entwicklungsstand“."""
+    if info is None:
+        try:
+            from . import build_info as info
+        except ImportError:
+            return DEV_BUILD, None
+    if info is False:
+        return DEV_BUILD, None
+    version = getattr(info, 'version', None)
+    if not version:
+        return DEV_BUILD, None
+    commit = str(getattr(info, 'commit', '') or '')[:12]
+    channel = getattr(info, 'channel', None)
+    return (f'{version} · {commit}' if commit else str(version)), (str(channel) if channel else None)
 
 
 def _reports(fn):
@@ -100,7 +108,7 @@ class AppController:
                  transport_factory=None, com_factory: Callable | None = None,
                  list_ports: Callable | None = None, discover: Callable | None = None,
                  manager_factory: Callable | None = None, worker_factory: Callable | None = None,
-                 network_diagnostics=None, version: str | None = None,
+                 network_diagnostics=None, version: str | None = None, build_info=None,
                  demo_count: int = 600, demo_rate_hz: float = 10.0):
         self.data_dir = Path(data_dir) if data_dir else default_data_dir()
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -113,7 +121,8 @@ class AppController:
         self._manager_factory = manager_factory or ConnectionManager
         self._worker_factory = worker_factory or BridgeWorker
         self._network_diagnostics = network_diagnostics
-        self._version = version or _build_label()
+        label, self._channel = _build_label(build_info)
+        self._version = version or label
         self._demo_count, self._demo_rate = demo_count, demo_rate_hz
         self._credentials = CredentialStore(self.data_dir / 'credentials', protector=protector)
         self._diag = DiagnosticStore(self.data_dir / 'diagnostics')
@@ -639,7 +648,7 @@ class AppController:
                 bridge_port=pair.bridge_port if pair else None, gsv_port=pair.gsv_port if pair else None,
                 session_name=None, session_confirmed=self._session_confirmed, receipt=None,
                 switch_locked=bool(w is not None and w.active),
-                version=self._version, pi_id=p.pi_id if p else '',
+                version=self._version, channel=self._channel, pi_id=p.pi_id if p else '',
                 endpoint=(self._endpoint or '') if self._route != 'uart' else 'UART (USB-Adapter)',
                 fingerprint=format_fingerprint(p.certificate_sha256) if p else '',
                 protocol='Version 2' if p else None,

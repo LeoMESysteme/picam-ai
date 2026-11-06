@@ -363,6 +363,12 @@ class StatusView(QWidget):
         fl.addWidget(self.details_button)
         fl.addStretch(1)
         fl.addWidget(self.version_label)
+        self.channel_label = QLabel()
+        self.channel_label.setProperty('strong', True)
+        self.channel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.channel_label.setWordWrap(True)
+        self.channel_label.hide()
+        root.addWidget(self.channel_label)
         root.addWidget(foot)
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
         self.details_button.clicked.connect(lambda: self.action.emit('details'))
@@ -392,6 +398,8 @@ class StatusView(QWidget):
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx)):
             chip.set_view(view)
         self.version_label.setText(texts.version_label(ctx.version))
+        self.channel_label.setText(ctx.channel or '')
+        self.channel_label.setVisible(bool(ctx.channel))
         if ctx.pi_name != self._pi_name or self.model.total == 0:
             self.model.set_entries(ctx.journal)
             self._pi_name = ctx.pi_name

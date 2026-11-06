@@ -133,3 +133,13 @@ def test_operate_mode_after_finish_shows_status_view(real):
     assert c.context().mode == 'operate'
     assert w.stack.currentWidget() is w.status_view
     assert w.status_view.dut_label.text() == texts.DUT_LOCK_LINE
+
+
+def test_footer_shows_channel_when_build_info_present(real):
+    import types
+    c, w = real()
+    from dataclasses import replace
+    c.context = lambda ctx=c.context(): replace(ctx, channel='Interner Testbuild - nicht qualifiziert')
+    w.refresh()
+    assert w.status_view.channel_label.text() == 'Interner Testbuild - nicht qualifiziert'
+    assert not w.status_view.channel_label.isHidden()

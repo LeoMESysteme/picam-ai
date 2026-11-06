@@ -301,3 +301,15 @@ def test_events_reach_subscribers_and_journal_and_unsubscribe(tmp_path):
     off()
     c._emit(ev)
     assert len(got) == 1
+
+
+def test_build_info_fields_shape_footer_and_channel(tmp_path):
+    import types
+    info = types.SimpleNamespace(version='0.1.0', commit='0123456789abcdef0123', build_time_utc='2026-11-06T10:00:00Z',
+                                channel='Interner Testbuild - nicht qualifiziert')
+    ctx = make(tmp_path, build_info=info).context()
+    assert ctx.version == '0.1.0 · 0123456789ab'
+    assert ctx.channel == 'Interner Testbuild - nicht qualifiziert'
+    assert texts.version_label(ctx.version) == '0.1.0 · 0123456789ab'
+    none = make(tmp_path / 'x', build_info=False).context()
+    assert none.version == 'Entwicklungsstand' and none.channel is None

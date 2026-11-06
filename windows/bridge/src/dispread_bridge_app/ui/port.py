@@ -66,6 +66,7 @@ class UiContext:
     receipt: Receipt | None = None
     switch_locked: bool = False
     version: str | None = None          # App-Version; None = unbekannt
+    channel: str | None = None          # z. B. "Interner Testbuild - nicht qualifiziert"
     pi_id: str = ''
     endpoint: str = ''
     fingerprint: str = ''
