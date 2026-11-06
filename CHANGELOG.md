@@ -5,6 +5,23 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank `/live`, Finish-Review F1 (Teil 1): In der laufenden
+  Einrichtung steht „Einrichtung abbrechen“ neben dem gesperrten Bestätigen
+  (`POST /live/setup/cancel` mit CSRF); der Übungslauf beantwortet den
+  Abbruch selbst und meldet jetzt auch Fokus-ROI, CPU und Ausgabe „aus“, wie
+  es der Statusvertrag verlangt (drei rote Szenario-Tests wieder grün). Die
+  Ergebnisanzeige zeigt die Zeit des neuesten Datensatzes aus Laufstart,
+  Laufzeit und Datensatzalter (nie die Browseruhr) und „Freigegeben
+  hh:mm:ss,s“ nur bei freigegebenem Wert; Veraltet, Unlesbar und Testlauf
+  zeigen keine Freigabe. Ergebnisanzeige und Hinweise tragen keine
+  Kennungen wie „(anzeige_wechselt)“ mehr (Ursachenliste behält sie),
+  „Rahmen verdeckt“ und „Vorschlag mit WARNUNG“ sprechen den Spec-Wortlaut.
+  Die Wert-Tabelle hat eine Referenzspalte, die Statusleiste die CPU-Last,
+  das Lauf-Dock kein doppeltes „Referenz: “ mehr. Der Dialog „Anzeige hat
+  sich bewegt“ heißt jetzt „Lauf beenden und neu einrichten“ (Ruling R28).
+  Die Wertbeschriftung der Zeitleiste rückt vor die Jetzt-Linie, statt sie
+  zu unterbrechen.
+
 * 2026-11-06: Die Live-Einrichtung lässt sich über `/live/setup/cancel`
   kooperativ abbrechen. Fokusproben, Unterphasen und Warteintervalle prüfen
   den Abbruch; der laufende Schritt endet mit „Einrichtung abgebrochen“,

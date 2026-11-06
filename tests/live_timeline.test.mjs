@@ -5,8 +5,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {BUCKET_MS, VIEW_MS, createTimeline, layoutTimeline, placeMarkLabel, valueTrace}
   from '../src/dispread/workbench/static/live/run/timeline.js';
-import {resultModel} from '../src/dispread/workbench/static/live/run/result.js';
+import {recordClock, resultModel, withoutCodes} from '../src/dispread/workbench/static/live/run/result.js';
 import {statusView} from '../src/dispread/workbench/static/live/model.js';
+import {createRecordLog, renderRunInspector} from '../src/dispread/workbench/static/live/run/inspector.js';
 import {readoutTag} from '../src/dispread/workbench/static/live/viewer/hud.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
@@ -223,4 +224,111 @@ test('comparison rows follow reference_eval only after the run', async () => {
   assert.equal(hms(3725.9), '01:02:05');
   assert.equal(planText(stopped.reference), 'set norm 2 (Schritt 2)');
   assert.equal(planText({norm_schedule: [[1, 20], [2, 20]], schedule_step: null}), '1:20, 2:20');
+});
+
+// ---------------------------------------------------------------------------
+// Finish-Review F1: Zeit des Datensatzes, Bedienertexte ohne Kennungen,
+// Wertbeschriftung neben (nicht auf) der Jetzt-Linie.
+// ---------------------------------------------------------------------------
+test('record clock comes from the run (start + elapsed - age), never the browser clock', () => {
+  const status = load('running_valid');
+  const run = {...status.run, started_at_utc: '2026-11-04T09:44:18.000+00:00', elapsed_s: 5.04, latest_age_s: 0.04};
+  const at = new Date(Date.parse('2026-11-04T09:44:23.000Z'));
+  const pad = (n) => String(n).padStart(2, '0');
+  const expected = `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())},0`;
+  assert.equal(recordClock({...status, run}), expected);
+  assert.equal(recordClock({...status, run: {...run, latest_age_s: null}}), null);
+  assert.equal(recordClock({...status, run: {...run, latest: null}}), null);
+  assert.equal(recordClock({...status, state: 'stopped', run}), null);
+});
+
+test('result: released line and header time only for a released value', () => {
+  const status = load('running_valid');
+  status.run = {...status.run, started_at_utc: '2026-11-04T09:44:18.000+00:00', elapsed_s: 5.04, latest_age_s: 0.04};
+  const clock = recordClock(status);
+  const model = resultModel(status, statusView(status), hudRec(status));
+  assert.equal(model.time, clock);
+  assert.equal(model.released, `Freigegeben ${clock}`);
+  // Veraltet, unlesbar, Testlauf: nie "Freigegeben" (Wahrheitsregel 1 und 2).
+  const stale = resultModel(status, statusView(status), hudRec(status), {frameAgeS: 2});
+  assert.equal(stale.cls, 'S');
+  assert.equal(stale.released, '');
+  assert.equal(resultModel(status, statusView(status), hudRec(status), {offline: true}).released, '');
+  const test = {...status, test_run: {testlauf: true}};
+  assert.equal(resultModel(test, statusView(test), hudRec(test)).released, '');
+  const lost = load('running_rahmen_verdeckt');
+  assert.equal(resultModel(lost, statusView(lost), hudRec(lost)).released, '');
+  const stopped = load('stopped');
+  assert.equal(resultModel(stopped, statusView(stopped), null).time, null);
+});
+
+test('withoutCodes strips (code) suffixes, also nested, and keeps plain words', () => {
+  assert.equal(withoutCodes('Wert wechselt (anzeige_wechselt)'), 'Wert wechselt');
+  assert.equal(withoutCodes('Anzeige verloren — Kamera bewegt? Neu einrichten (Rahmen unstimmig (tracking_lost:rahmen_unstimmig))'),
+    'Anzeige verloren — Kamera bewegt? Neu einrichten (Rahmen unstimmig)');
+  assert.equal(withoutCodes('Neu einrichten (tracking_lost:rahmen_unstimmig)'), 'Neu einrichten');
+  assert.equal(withoutCodes('A (low_score), B (no_value)'), 'A, B');
+  assert.equal(withoutCodes('Toleranz (×1,5) nicht validiert'), 'Toleranz (×1,5) nicht validiert');
+  assert.equal(withoutCodes('Bild (neu)'), 'Bild (neu)');
+});
+
+test('result card shows no reason codes; the causes list keeps them', () => {
+  const lost = load('running_rahmen_verdeckt');
+  lost.tracking_reasons = {rahmen_unstimmig: 'Rahmenbereiche passen nicht zusammen'};
+  const model = resultModel(lost, statusView(lost), hudRec(lost));
+  assert.ok(!model.sub.includes('tracking_lost'), model.sub);
+  assert.match(model.sub, /Rahmenbereiche passen nicht zusammen/);
+  // Ohne HUD (nur Status): derselbe Text ohne Kennung.
+  assert.ok(!resultModel(lost, statusView(lost), null).sub.includes('rahmen_unstimmig'));
+  const changing = load('running_transition');
+  changing.run.rejection_causes.causes = [{reason: 'anzeige_wechselt', count: 3, fraction: 0.3, explanation: 'Wert wechselt'}];
+  const t = resultModel(changing, statusView(changing), hudRec(changing));
+  assert.equal(t.sub, 'Wert wechselt');
+  // statusView selbst bleibt unveraendert (alte Seite, Spec "Technik").
+  assert.match(statusView(changing).detail, /\(anzeige_wechselt\)/);
+});
+
+test('value labels sit left of the now line once the run fills the window', () => {
+  const calls = [];
+  const ctx = {setTransform() {}, clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fillRect(x, y, w, h) {
+    calls.push(['rect', x, y, w, h]); }, measureText: (t) => ({width: t.length * 6}),
+  fillText(text, x, y) { calls.push(['text', text, x, y, this.textAlign]); }, set fillStyle(v) {}, set strokeStyle(v) {},
+  set lineWidth(v) {}, set font(v) {}, set textAlign(v) { this._align = v; }, get textAlign() { return this._align; },
+  set textBaseline(v) {}};
+  const canvas = {width: 0, height: 0, getBoundingClientRect: () => ({width: 800, height: 91}), getContext: () => ctx};
+  let t = 100_000;
+  const timeline = createTimeline(canvas, {now: () => t, wallNow: () => 1_700_000_000_000});
+  for (let k = 0; k < 200; k++) timeline.push(60_000 + k * 250, 'valid', 1.25);
+  t = 60_000 + 200 * 250;
+  timeline.setUnit('mV/V');
+  timeline.draw();
+  const W = 800;
+  const nowX = 800 - 12;
+  const labels = calls.filter(([kind, text]) => kind === 'text' && /mV\/V|^0$/.test(text));
+  assert.ok(labels.length >= 2, JSON.stringify(labels));
+  for (const [, text, x, , align] of labels) {
+    assert.equal(align, 'right');
+    // Rechtsbuendig mit Abstand zur Jetzt-Linie: die Beschriftung endet vor ihr.
+    assert.ok(x <= nowX - 4, `${text} endet bei ${x}, Jetzt-Linie bei ${nowX} (W ${W})`);
+  }
+});
+
+test('Wert table carries the reference text current when each row began, Δ stays out (OP-1)', () => {
+  let wall = Date.parse('2026-11-04T09:44:18Z');
+  const log = createRecordLog({wallNow: () => wall});
+  log.note({seq: 1, status: 'valid', text: '+0.62427', unit: 'mV/V'}, {reference: {text: '+ 0.62427', stale: false}});
+  wall += 100;
+  // Gleiche Zeile: die Referenz der ersten Zeile bleibt.
+  log.note({seq: 2, status: 'valid', text: '+0.62427', unit: 'mV/V'}, {reference: {text: '+ 0.62428', stale: false}});
+  log.note({seq: 3, status: 'transition', text: '+0.62427', unit: 'mV/V'}, {reference: {text: '+ 0.62428', stale: true}});
+  log.note({seq: 4, status: 'valid', text: '+0.62428', unit: 'mV/V'});
+  const host = {};
+  renderRunInspector(host, load('running_valid'), 'Wert', {log});
+  assert.match(host._html, /<th[^>]*>Referenz<\/th>/);
+  assert.ok(!host._html.includes('Δ'));
+  const rows = host._html.split('<tr').slice(2);
+  assert.equal(rows.length, 3);
+  assert.match(rows[0], />–<\/td>/); // ohne Referenz: Strich
+  assert.match(rows[1], /class="[^"]*struck[^"]*"[^>]*>\+ 0\.62428</); // veraltet: durchgestrichen
+  assert.match(rows[2], />\+ 0\.62427</);
 });

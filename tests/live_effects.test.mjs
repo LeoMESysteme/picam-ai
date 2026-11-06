@@ -195,7 +195,7 @@ test('alerts: Anzeige bewegt opens the dialog once per episode, Esc is remembere
   assert.equal(opts.title, 'Anzeige hat sich bewegt');
   assert.match(opts.text, /^Anzeige hat sich bewegt \(ca\. 19 px \(Ecken\), 2,2 Grad\) – Werte werden nicht freigegeben\. Bitte neu einrichten\./);
   assert.deepEqual(opts.actions.map((a) => [a.label, a.value]),
-    [['Weiter beobachten', 'weiter'], ['Lauf stoppen', 'stopp'], ['Neu einrichten', 'neu']]);
+    [['Weiter beobachten', 'weiter'], ['Lauf stoppen', 'stopp'], ['Lauf beenden und neu einrichten', 'neu']]);
   assert.equal(opts.actions.find((a) => a.escape).value, 'weiter');
   assert.equal(opts.actions.find((a) => a.primary).value, 'neu');
   await settle();
@@ -398,4 +398,45 @@ test('effects animate only what moves and follow a reduced-motion change at runt
   dom.frame();
   fx.update(lost, {offline: false, httpStatus: 200, lastOkMs: 0});
   assert.equal(dom.advance(500), 0);
+});
+
+// ---------------------------------------------------------------------------
+// Bedienertexte (Finish-Review F1): keine Kennungen in Hinweisen, Spec-Wortlaut.
+// ---------------------------------------------------------------------------
+test('alerts: Rahmen verdeckt toast says the spec text even without a tracking hint', () => {
+  const h = harness();
+  const lost = scene('running_rahmen_verdeckt');
+  assert.equal(lost.run.tracking_hint, null);
+  createAlerts(h.deps).update(lost);
+  const toast = h.toasts.get('nachfuehrung');
+  assert.equal(toast.title, LOST_TITLE);
+  assert.equal(toast.text, 'Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen. Werte werden nicht freigegeben.');
+});
+
+test('alerts: WARNUNG toast names the check by its glossary word and asks to check the image', () => {
+  const h = harness();
+  const ready = scene('setup_ready_warnung');
+  createAlerts(h.deps).update(ready);
+  const toast = h.toasts.get('vorschlag');
+  assert.equal(toast.title, 'Vorschlag mit WARNUNG');
+  assert.equal(toast.text, 'Prüfung Raster. Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.');
+  // Mit Grund aus check_reasons: Wort der Pruefung plus Grund; Kennungen fallen weg.
+  const why = structuredClone(ready);
+  why.session_id = 'andere';
+  why.setup.check_reasons = {raster: 'Raster am Rand knapp'};
+  createAlerts(h.deps).update(why);
+  assert.equal(h.toasts.get('vorschlag').text, 'Raster: Raster am Rand knapp. Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.');
+  const coded = structuredClone(ready);
+  coded.session_id = 'dritte';
+  coded.setup.check_reasons = {raster: 'zu_wenige_belastbare_zellen'};
+  createAlerts(h.deps).update(coded);
+  assert.equal(h.toasts.get('vorschlag').text, 'Prüfung Raster. Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.');
+});
+
+test('alerts: dialog "Lauf beenden und neu einrichten" stops the run, then starts setup', async () => {
+  const h = harness({answer: 'neu'});
+  createAlerts(h.deps).update(scene('running_anzeige_bewegt'));
+  await settle();
+  await settle();
+  assert.deepEqual(h.calls, ['stop', 'setup']);
 });

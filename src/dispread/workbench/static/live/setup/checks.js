@@ -16,6 +16,8 @@ const UNCHECKED = ['nicht geprüft', 'pend'];
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 const label = (key) => CHECK_LABELS[key] || key;
+// Wort der Pruefung wie in Inspektor und Glossar (glossar-de.json, Abschnitt Pruefungen).
+export const checkLabel = label;
 
 function row(key, status, hint) {
   const [word, tone] = WORDS[status] || UNCHECKED;

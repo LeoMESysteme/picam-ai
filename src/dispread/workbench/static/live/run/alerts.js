@@ -16,8 +16,10 @@
 // gesperrt) fragt die Seite nach dem Neuladen eben noch einmal.
 import {openModal as defaultModal} from '../ui/modal.js';
 import {closeToast as defaultClose, toast as defaultToast} from '../ui/toasts.js';
-import {statusView, trackingHintText} from '../model.js';
+import {trackingHintText} from '../model.js';
+import {checkLabel} from '../setup/checks.js';
 import {runTitle} from './dock.js';
+import {isCode, withoutCodes} from './result.js';
 
 export const STORE_KEY = 'werkbank.anzeige-bewegt';
 // Spec "Meldungen" (fields.py live_cause mit Umlauten und Halbgeviertstrich).
@@ -27,8 +29,12 @@ export const MOVED_TITLE = 'Anzeige hat sich bewegt';
 const MOVED_ACTIONS = [
   {label: 'Weiter beobachten', value: 'weiter', escape: true, cls: 'ghost'},
   {label: 'Lauf stoppen', value: 'stopp', cls: 'danger', icon: 'stop'},
-  {label: 'Neu einrichten', value: 'neu', primary: true, icon: 'redo'},
+  // Ruling R28: beendet den Lauf (Dateien bleiben liegen) und startet die Einrichtung.
+  {label: 'Lauf beenden und neu einrichten', value: 'neu', primary: true, icon: 'redo'},
 ];
+// Spec "Meldungen", Zeile "Rahmen verdeckt": Text des Hinweises (trackingHintText, woertlich).
+const COVERED_TEXT = trackingHintText({kind: 'rahmen_verdeckt'});
+const WARN_ASK = 'Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.';
 // Toleranz fuer "Verlust begann vor dem Weglegen" (Abrufabstand, Uhrsprung).
 const START_SLACK_MS = 1500;
 
@@ -66,13 +72,19 @@ function lostOf(status) {
   const hint = status.run?.tracking_hint || null;
   const lost = (status.run?.latest?.reject_reasons || []).some((r) => r.startsWith('tracking_lost:'));
   if (!hint && !lost) return null;
-  return {hint, fresh: freshLatest(status), text: trackingHintText(hint) || statusView(status).detail};
+  // Ohne Hinweis des Servers (nur tracking_lost:*) gilt der Spec-Text fuer "Rahmen verdeckt".
+  return {hint, fresh: freshLatest(status), text: trackingHintText(hint) || COVERED_TEXT};
 }
 
-function warningWhy(status) {
+// "Raster: Raster am Rand knapp. Bitte im Bild pruefen …" bzw. "Pruefung Raster. …":
+// Wort der Pruefung wie im Glossar, Grund nur als Klartext (eine Kennung faellt weg).
+export function warningText(status) {
   const setup = status.setup || {};
-  return Object.entries(setup.checks || {}).filter(([, v]) => v === 'WARNUNG')
-    .map(([k]) => setup.check_reasons?.[k] || k).join(', ');
+  const parts = Object.entries(setup.checks || {}).filter(([, v]) => v === 'WARNUNG').map(([key]) => {
+    const reason = withoutCodes(setup.check_reasons?.[key] || '').trim();
+    return reason && !isCode(reason) ? `${checkLabel(key)}: ${reason}` : `Prüfung ${checkLabel(key)}`;
+  });
+  return parts.length ? `${parts.join('; ')}. ${WARN_ASK}` : WARN_ASK;
 }
 
 const DEFAULTS = {toast: defaultToast, closeToast: defaultClose, openModal: defaultModal, wallNow: () => Date.now(), run: {}};
@@ -183,8 +195,7 @@ export function createAlerts(initial = {}) {
       const key = status.session_id;
       if (warned !== key) {
         warned = key;
-        const why = warningWhy(status);
-        toast({level: 'warn', title: 'Vorschlag mit WARNUNG', text: why, key: 'vorschlag'});
+        toast({level: 'warn', title: 'Vorschlag mit WARNUNG', text: warningText(status), key: 'vorschlag'});
       }
     }
 

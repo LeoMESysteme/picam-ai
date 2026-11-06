@@ -479,3 +479,6 @@ input[type=search]::placeholder{color:#8a847b}
   .vt [data-act=fit] .lbl,.vt [data-act=legend] .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .statusbar .it.cam .dt{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+/* Finish-Review F1: Referenz im Werteraster, Freigabezeit im Ergebnis */
+.grid td.struck{color:#8a857d;text-decoration:line-through;text-decoration-color:#6b665f}
+.judge .jsub .rel{font-variant-numeric:tabular-nums}

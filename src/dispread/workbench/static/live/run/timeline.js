@@ -200,13 +200,17 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
   ctx.stroke();
   ctx.textBaseline = 'alphabetic';
   // Wertbeschriftung rechts; gezeichnet wird sie zuletzt auf Dock-Grund,
-  // damit Marken, Jetzt-Linie und Spur sie nicht kreuzen.
+  // damit Marken und Spur sie nicht kreuzen. Laege sie auf der Jetzt-Linie
+  // (Lauf fuellt das Fenster), rueckt sie links davor, statt die Linie zu unterbrechen.
   ctx.font = `10.5px ${MONO}`;
+  const nowX = running && layout.nowMs <= t1 ? Math.round(x(layout.nowMs)) + 0.5 : null;
   const valueLabels = levels.map((v) => {
     const text = v === 0 ? '0' : `${fmt(v)}${unit ? ` ${unit}` : ''}`;
     const ly = Math.round(y(v)) - 3;
     const w = ctx.measureText(text).width;
-    return {text, ly, x0: W - PAD - w - 3, x1: W - PAD, y0: ly - 9, y1: ly + 2};
+    let right = W - PAD;
+    if (nowX !== null && nowX >= right - w - 6 && nowX <= right + 3) right = Math.floor(nowX - 6);
+    return {text, ly, right, x0: right - w - 3, x1: right, y0: ly - 9, y1: ly + 2};
   });
   // Statusband.
   for (const band of bands) {
@@ -252,12 +256,11 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
     ctx.fillRect(tx, by + bh + 2, 1, 4);
     if (tx + 60 < W) ctx.fillText(clock(wall(t)), tx + 3, by + bh + 15);
   }
-  if (running && layout.nowMs <= t1) {
-    const nx = Math.round(x(layout.nowMs)) + 0.5;
+  if (nowX !== null) {
     ctx.strokeStyle = COL.tx;
     ctx.beginPath();
-    ctx.moveTo(nx, ty0 - 4);
-    ctx.lineTo(nx, by + bh + 2);
+    ctx.moveTo(nowX, ty0 - 4);
+    ctx.lineTo(nowX, by + bh + 2);
     ctx.stroke();
   }
   ctx.font = `10.5px ${MONO}`;
@@ -266,7 +269,7 @@ function paint(ctx, layout, {W, H, unit, running, wall}) {
     ctx.fillStyle = COL.dock;
     ctx.fillRect(label.x0, label.y0, label.x1 - label.x0, label.y1 - label.y0);
     ctx.fillStyle = COL.axis;
-    ctx.fillText(label.text, W - PAD, label.ly);
+    ctx.fillText(label.text, label.right, label.ly);
   }
   ctx.textAlign = 'left';
 }

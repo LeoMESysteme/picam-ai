@@ -59,11 +59,14 @@ export function planText(reference) {
   return step ? `set norm ${step.factor} (Schritt ${step.index + 1})` : plan;
 }
 
-export function referenceLine(reference) {
+// label = false: hinter einer Bezeichnung "Referenz" ohne doppelten Vorsatz.
+export function referenceLine(reference, {label = true} = {}) {
   // Texte aus der alten Live-Seite (woertlich).
   if (reference?.restoring) return 'Werte werden zurückgestellt …';
   if (reference?.error) return reference.error;
-  if (reference?.enabled) return `Referenz: ${finite(reference.lines) ? grp(reference.lines) : '–'} Telegramme`;
+  if (reference?.enabled) {
+    return `${label ? 'Referenz: ' : ''}${finite(reference.lines) ? grp(reference.lines) : '–'} Telegramme`;
+  }
   return `ohne Referenz: ${reference?.reason || 'nicht gestartet'}`;
 }
 
@@ -97,7 +100,7 @@ export function runDockHTML(status, {resultCls = 'X'} = {}) {
   const comparison = `<div class="sect kvf">` +
     comparisonRows(status).map(([label, text, cls, mono]) =>
       `<div><span>${esc(label)}</span><b class="${cls}${mono ? '' : ' t'}">${esc(text)}</b></div>`).join('') +
-    `<div><span>Referenz</span><b class="t">${esc(referenceLine(reference))}</b></div>` +
+    `<div><span>Referenz</span><b class="t">${esc(referenceLine(reference, {label: false}))}</b></div>` +
     `<div><span>Werteplan</span><b>${esc(planText(reference))}</b></div></div>`;
   const storage = stopped
     ? `<div class="sect"><dl class="kv"><dt>Ablage</dt><dd class="wrap">${esc([status?.session_id, run.dir].filter(Boolean).join('/') || '–')}</dd></dl></div>`

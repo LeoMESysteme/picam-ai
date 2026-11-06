@@ -16,7 +16,7 @@ import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/foc
 import {exposureHTML} from './setup/exposure.js';
 import {overallView, renderChecks, warningCount} from './setup/checks.js';
 import {mountConfirm} from './setup/confirm.js';
-import {renderResult} from './run/result.js';
+import {referenceModel, renderResult} from './run/result.js';
 import {runDockHTML, runTitle} from './run/dock.js';
 import {RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
 import {createTimeline} from './run/timeline.js';
@@ -361,6 +361,8 @@ if (typeof document !== 'undefined') {
   };
   const handlers = {
     setup: (cellText) => act('/live/setup', {cell_text: cellText || null}),
+    // Im Uebungslauf beantwortet das Szenario den Abbruch (client.useSource), nie der Server.
+    cancelSetup: () => act('/live/setup/cancel'),
     confirm: () => confirmUi?.submit(),
     // Optionen und Bestaetigungen im Pop-up (Referenz, Diagnosebilder, Werteplan, Testmodus).
     runStart: () => startPop.start(),
@@ -374,6 +376,10 @@ if (typeof document !== 'undefined') {
   const startPop = mountStartPopover(titlebar, client, {onStart: (body) => act('/live/run/start', body),
     onChange: () => renderTitle(status, titleView(), handlers)});
   const markPop = mountMarkPopover(titlebar, client);
+
+  // Datensatz des gezeigten Bilds in die Wert-Tabelle, mit dem gerade gueltigen Referenztext.
+  const noteRecord = () => log.note(hud?.rec, {testRun: Boolean(status.test_run),
+    reference: referenceModel(status.reference, {offline: Boolean(conn?.offline)})});
 
   // Ergebnis: Statuswort nach derselben Regel wie das HUD-Etikett (Bildalter laeuft mit).
   const renderRun = () => {
@@ -487,7 +493,7 @@ if (typeof document !== 'undefined') {
     hudProc = hud?.proc || null;
     viewerUi.setFrame(canvas, hud);
     effects.refresh();
-    if (status?.state === 'running' && log.note(hud?.rec, {testRun: Boolean(status.test_run)})) runDirty = true;
+    if (status?.state === 'running' && noteRecord()) runDirty = true;
   }
 
   async function startPractice() {
@@ -541,7 +547,7 @@ if (typeof document !== 'undefined') {
       hud = frameHud || null;
       viewerUi.setFrame(bitmap, frameHud);
       effects.refresh();
-      if (status?.state === 'running' && log.note(hud?.rec, {testRun: Boolean(status.test_run)})) runDirty = true;
+      if (status?.state === 'running' && noteRecord()) runDirty = true;
     }, preview.signal, {onState: viewerUi.setStream});
   };
   const stopPreview = () => {

@@ -67,6 +67,10 @@ const CONTROLS = {focus_absolute: 48, exposure_time_absolute: 300, white_balance
 const SOURCE = {model: 'logitech_streamcam', usb_id: '046d:0893', size: [1920, 1080], fourcc: 'YUYV', fps: 30, device: 'Übung'};
 const REGION_SIZE = 15;
 const ADDED_SIZE = 5;
+// Messbereich der Fokussuche am Geraet: immer das mittlere Drittel (live/setup.py measurement_roi_pixels).
+const FOCUS_ROI = [640, 360, 640, 360];
+// Simulierte Last wie im Mock, falls die Werkbank keine meldet.
+const SYSTEM = {cpu_percent: 38.0, cpu_window_s: 1.0};
 // Wie live_cause (workbench/fields.py) fuer die beiden Gruende, die das Szenario erzeugt.
 const CAUSE_EXPLANATION = {'anzeige_wechselt': 'Wert wechselt',
   'tracking_lost:rahmen_unstimmig': 'Rahmenbereiche verdeckt oder verschoben - Kamera und Sicht pruefen'};
@@ -150,7 +154,7 @@ const ok = (data = {ok: true}) => ({ok: true, error: null, data});
 const fail = (error) => ({ok: false, error, data: {error}});
 
 export function createScenario({clock = () => globalThis.performance.now(), wall = () => Date.now(), base = null} = {}) {
-  // phase: idle | setup | ready | confirmed | run | stopped
+  // phase: idle | setup | failed | ready | confirmed | run | stopped
   let phase = 'idle';
   let phaseAt = clock();
   let sessionId = `uebung-${stamp(wall())}`;
@@ -164,13 +168,15 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
   let stopR = null;
   let lastMark = null;
   let setupEndElapsed = null;
+  // Abbruch: Mock-Uhr der Einrichtung beim Abbruch (bleibt danach stehen).
+  let cancelU = null;
 
   const seconds = () => (clock() - phaseAt) / 1000;
   const enter = (next) => { phase = next; phaseAt = clock(); };
   const revision = () => `uebung-r${revisionNo}`;
   // Mock-Uhr der Einrichtung; nach dem Vorschlag steht sie bei U_READY.
   const setupU = () => (phase === 'setup' ? Math.min(U0 + seconds(), U_READY)
-    : phase === 'idle' ? 0 : U_READY);
+    : phase === 'idle' ? 0 : phase === 'failed' ? cancelU : U_READY);
   const runR = () => (phase === 'run' ? seconds() : phase === 'stopped' ? stopR : 0);
   const nowR = () => (phase === 'run' ? seconds() : phase === 'stopped' ? stopR + seconds() : 0);
 
@@ -184,7 +190,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
 
   function chapter() {
     advance();
-    if (phase === 'idle') return CHAPTERS[0];
+    if (phase === 'idle' || phase === 'failed') return CHAPTERS[0];
     if (phase === 'setup') {
       const u = setupU();
       const index = STEP_SPANS.findIndex(([, a, b]) => u >= a && u < b);
@@ -201,12 +207,15 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
 
   function setupBlock() {
     const u = setupU();
-    const ready = phase !== 'idle' && phase !== 'setup';
+    const failed = phase === 'failed';
+    const ready = !['idle', 'setup', 'failed'].includes(phase);
     const steps = STEP_SPANS.map(([key, a, b]) => {
-      const state = u >= b ? 'done' : u >= a ? 'running' : 'pending';
-      return {key, state, elapsed_s: state === 'done' ? round1(pt(b) - pt(a)) : state === 'running' ? round1(pt(u) - pt(a)) : null};
+      let state = u >= b ? 'done' : u >= a ? 'running' : 'pending';
+      if (failed && state === 'running') state = 'failed';
+      return {key, state, elapsed_s: state === 'done' ? round1(pt(b) - pt(a))
+        : state === 'running' || state === 'failed' ? round1(pt(u) - pt(a)) : null};
     });
-    const running = steps.find((s) => s.state === 'running');
+    const running = steps.find((s) => s.state === 'running' || s.state === 'failed');
     let progressPhase = null;
     let wait = null;
     if (running?.key === 'standbilder') {
@@ -221,8 +230,8 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
     const setup = {
       grid: u >= U_GRID ? copy(GRID) : null,
       step: running?.key || (ready ? 'vorschlag' : null),
-      elapsed_s: ready ? setupEndElapsed : round1(pt(u) - pt(U0)),
-      focus: {method: 'climb', samples, verify: u >= U_VERIFY ? {...FOCUS_VERIFY} : null},
+      elapsed_s: ready || failed ? setupEndElapsed : round1(pt(u) - pt(U0)),
+      focus: {method: 'climb', roi: [...FOCUS_ROI], samples, verify: u >= U_VERIFY ? {...FOCUS_VERIFY} : null},
       exposure: {target: 130, band: [115, 150], rounds: u >= U_EXPOSED ? [{level: 124.0, controls: {...CONTROLS}}] : []},
       progress: {steps, attempt: 1, attempts_max: 3, phase: progressPhase, wait},
       checks_live: live,
@@ -361,10 +370,12 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
     const camera = {running: true, stalled, error: stalled ? `Streamstillstand: kein Bild seit ${(r - EP.stall[0]).toFixed(1)} s` : null,
       frames, gaps: 0, source: {...SOURCE, controls: {...CONTROLS, focus_absolute: phase === 'setup' ? Math.round(focusAt(u)) : 48}},
       last_start: null};
-    const state = {idle: 'idle', setup: 'setup_running', ready: 'setup_ready', confirmed: 'confirmed', run: 'running', stopped: 'stopped'}[phase];
+    const state = {idle: 'idle', setup: 'setup_running', failed: 'setup_failed', ready: 'setup_ready', confirmed: 'confirmed',
+      run: 'running', stopped: 'stopped'}[phase];
     const result = {
-      state, step: null, error: null, simulate: true, camera,
+      state, step: null, error: phase === 'failed' ? 'Einrichtung abgebrochen' : null, simulate: true, camera,
       storage: base?.storage ? copy(base.storage) : {free_bytes: 18_400_000_000, reserve_bytes: 2_000_000_000, level: 'ok', message: '18.40 GB frei'},
+      system: Number.isFinite(base?.system?.cpu_window_s) ? copy(base.system) : {...SYSTEM},
       release_notice: typeof base?.release_notice === 'string' ? base.release_notice : '',
       session_id: sessionId,
       setup: phase === 'idle' ? null : setupBlock(),
@@ -377,6 +388,8 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       reference: referenceBlock(),
       reference_eval: phase === 'stopped' && runOpts?.reference
         ? {state: 'done', misreads: 0, compared_valid: countsUntil(stopR).valid, undecided_valid: 0, uncovered_valid: 0} : null,
+      // Der Uebungslauf gibt nie etwas aus (einheitlicher Ausgabestatus, transport off).
+      output: {transport: 'off', state: 'off'},
     };
     return result;
   }
@@ -441,8 +454,17 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       runOpts = null;
       stopR = null;
       lastMark = null;
+      cancelU = null;
       setupEndElapsed = round1(pt(U_READY) - pt(U0));
       enter('setup');
+      return ok();
+    }
+    if (path === '/live/setup/cancel') {
+      // Wie live/service.py cancel_setup: nur waehrend der Einrichtung.
+      if (phase !== 'setup') return fail('Keine Einrichtung laeuft');
+      cancelU = setupU();
+      setupEndElapsed = round1(pt(cancelU) - pt(U0));
+      enter('failed');
       return ok();
     }
     if (path === '/live/setup/regions') {

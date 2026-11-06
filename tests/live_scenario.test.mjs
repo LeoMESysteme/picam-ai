@@ -189,6 +189,42 @@ test('scenario run follows the mock: values, transition, hand, stall, correction
   assert.match(s.session_id, /^uebung-/);
 });
 
+test('scenario carries focus ROI, CPU and output off; cancel answers like the server', async () => {
+  const clock = manualClock();
+  const scenario = createScenario({clock});
+  let status = scenario.status();
+  assert.deepEqual(status.output, {transport: 'off', state: 'off'});
+  assert.equal(typeof status.system.cpu_percent, 'number');
+  assert.equal(status.system.cpu_window_s > 0, true);
+  // Abbruch nur waehrend der Einrichtung (live/service.py cancel_setup, woertlich).
+  assert.deepEqual(await scenario.act('/live/setup/cancel', {}),
+    {ok: false, error: 'Keine Einrichtung laeuft', data: {error: 'Keine Einrichtung laeuft'}});
+  await scenario.act('/live/setup', {cell_text: null});
+  clock.advance(2);
+  status = scenario.status();
+  assertStatusShape(status);
+  // Messbereich wie am Geraet: mittleres Drittel des Kamerabilds.
+  assert.deepEqual(status.setup.focus.roi, [640, 360, 640, 360]);
+  assert.equal((await scenario.act('/live/setup/cancel', {})).ok, true);
+  status = scenario.status();
+  assertStatusShape(status);
+  assert.equal(status.state, 'setup_failed');
+  assert.equal(status.error, 'Einrichtung abgebrochen');
+  assert.equal(status.setup.progress.steps.find((s) => s.key === 'fokus').state, 'failed');
+  // Stehen geblieben: die Zeit laeuft nach dem Abbruch nicht weiter.
+  const elapsed = status.setup.elapsed_s;
+  clock.advance(30);
+  status = scenario.status();
+  assert.equal(status.state, 'setup_failed');
+  assert.equal(status.setup.elapsed_s, elapsed);
+  assert.equal((await scenario.act('/live/setup/cancel', {})).error, 'Keine Einrichtung laeuft');
+  // Neu starten geht wie nach jedem Abbruch.
+  assert.equal((await scenario.act('/live/setup', {cell_text: null})).ok, true);
+  status = scenario.status();
+  assert.equal(status.state, 'setup_running');
+  assert.equal(status.error, null);
+});
+
 test('scenario status never answers from the server and cannot pose as a real session', () => {
   const scenario = createScenario({clock: manualClock()});
   const status = scenario.status();

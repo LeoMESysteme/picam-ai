@@ -18,6 +18,31 @@ const dec = (x, digits) => x.toFixed(digits).replace('.', ',').replace(/^-/, '�
 const esc = (value) => String(value ?? '').replace(/[&<>"]/g,
   (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
+// Bedienertext ohne Kennungen: "Wert wechselt (anzeige_wechselt)" -> "Wert wechselt".
+// Entfernt nur Klammern, deren Inhalt eine Kennung ist (Kleinbuchstaben mit _ oder :),
+// auch verschachtelt. Die Kennungen stehen weiter in Ursachen und Glossar.
+const CODE_SUFFIX = /\s*\((?:[a-z0-9]+[_:])+[a-z0-9_:]*\)/g;
+export function withoutCodes(text) {
+  let out = String(text ?? '');
+  for (let previous = null; previous !== out;) { previous = out; out = out.replace(CODE_SUFFIX, ''); }
+  return out;
+}
+export const isCode = (text) => /^(?:[a-z0-9]+[_:])+[a-z0-9_:]*$/.test(String(text ?? ''));
+
+const pad2 = (n) => String(n).padStart(2, '0');
+// Zeit des neuesten Datensatzes (run.latest) als hh:mm:ss,s in Ortszeit, nur aus
+// Serverangaben: Laufstart (Wanduhr) + Laufzeit - Alter des Datensatzes (beide
+// monoton im selben Abruf). Nie die Browseruhr; nach dem Stopp nicht mehr
+// (die Laufzeit steht, das Alter zaehlt weiter).
+export function recordClock(status) {
+  const run = status?.run;
+  if (status?.state !== 'running' || !run?.latest) return null;
+  const start = Date.parse(run.started_at_utc);
+  if (!Number.isFinite(start) || !finite(run.elapsed_s) || !finite(run.latest_age_s)) return null;
+  const d = new Date(start + (run.elapsed_s - run.latest_age_s) * 1000);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())},${Math.floor(d.getMilliseconds() / 100)}`;
+}
+
 function ageText(s) {
   if (!finite(s)) return '–';
   return s < 1 ? `${Math.round(s * 1000)} ms` : `${dec(s, 1)} s`;
@@ -47,7 +72,7 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   const latest = run.latest || null;
   const testRun = Boolean(status?.test_run);
   const base = {ref: referenceModel(status?.reference, {offline}), spur: finite(track?.score) ? dec(track.score, 2) : '–',
-    seq: hudRec?.seq ?? latest?.frame_sequence ?? null};
+    seq: hudRec?.seq ?? latest?.frame_sequence ?? null, time: recordClock(status), released: ''};
   if (status?.state === 'stopped') {
     return {...base, cls: 'X', word: 'Lauf beendet', code: '', value: '–', unit: '', struck: false,
       sub: 'Kein Wert freigegeben: Lauf gestoppt.', subErr: false, age: '–', spur: '–'};
@@ -85,21 +110,27 @@ export function resultModel(status, view, hudRec, {frameAgeS = 0, offline = fals
   } else if (key === view?.cls && view.detail) sub = view.detail;
   else if (key === 'transition') sub = 'Wert wechselt';
   else if (key === 'unreadable') {
+    // Klartext je Grund; ohne Erklaerung bleibt nur die Kennung (sie wird unten nicht gekuerzt).
     sub = reasons.map((reason) => {
       const short = reason.startsWith('tracking_lost:') ? reason.slice('tracking_lost:'.length) : reason;
-      return status?.tracking_reasons?.[short] ? `${status.tracking_reasons[short]} (${reason})` : reason;
+      return status?.tracking_reasons?.[short] || status?.cause_texts?.[reason] || reason;
     }).join(', ');
   } else if (offline) sub = 'Keine Verbindung zur Werkbank – letzter bekannter Wert, nicht freigegeben.';
   else if (status?.camera?.stalled || frameAgeS > FRAME_MAX_AGE_S) {
     sub = `Letzter Wert, veraltet · kein neues Kamerabild seit ${dec(Math.max(frameAgeS, finite(age) ? age : 0), 1)} s`;
   } else sub = 'Letzter Wert, veraltet';
+  // Kennungen in Klammern gehoeren in die Ursachenliste, nicht in die Anzeige.
+  sub = withoutCodes(sub);
   // Leser-Vermutung im Testlauf nur bei Wechselt oder Unlesbar (Wahrheitsregel 2),
   // woertlich aus statusView und dort ausdruecklich als nicht freigegeben bezeichnet.
   if (testRun && ['transition', 'unreadable'].includes(key) && view?.detail && !sub.includes('Leser-Vermutung')) {
     const guess = view.detail.split('\n').filter((line) => /^(Leser-Vermutung|unsichere Zellen)/.test(line));
     if (guess.length) sub = [sub, ...guess].join('\n');
   }
-  return {...base, ...META[key], value, unit: valueUnit, struck: key === 'stale', sub,
+  // "Freigegeben hh:mm:ss,s" nur neben einem freigegebenen Wert, dessen Datensatz
+  // auch im Status freigegeben ist (Wahrheitsregel 1: Veraltet ist nie freigegeben).
+  const released = key === 'valid' && latest?.status === 'valid' && base.time ? `Freigegeben ${base.time}` : '';
+  return {...base, ...META[key], value, unit: valueUnit, struck: key === 'stale', sub, released,
     subErr: key === 'unreadable' && !testRun, age: ageText(age)};
 }
 
@@ -111,12 +142,16 @@ export function renderResult(host, view, status, hudRec, opts = {}) {
   const model = resultModel(status, view, hudRec, opts);
   const numeric = model.cls === 'V' || (model.cls === 'S' && model.value !== '–');
   for (const cls of ['V', 'T', 'U', 'S', 'X']) host.classList.toggle(cls, model.cls === cls);
-  // Keine Uhrzeit im Kopf: eine laufende Browseruhr neben einem alten Wert taeuscht Frische vor.
+  // Uhrzeit im Kopf ist die Zeit des Datensatzes (recordClock), nie eine laufende
+  // Browseruhr: die wuerde neben einem alten Wert Frische vortaeuschen.
   const ref = model.ref;
-  const html = `<div class="jh"><span class="jw">${esc(model.word)}</span><span class="code">${esc(model.code)}</span></div>` +
+  const sub = [model.released ? `<span class="rel">${esc(model.released)}</span>` : '', esc(model.sub)]
+    .filter(Boolean).join(' · ');
+  const html = `<div class="jh"><span class="jw">${esc(model.word)}</span><span class="code">${esc(model.code)}</span>` +
+    `${model.time ? `<span class="tm" title="Zeit des neuesten Datensatzes">${esc(model.time)}</span>` : ''}</div>` +
     `<div class="jb"><div class="jv"><span class="num${numeric ? ' mono' : ' word'}${model.struck ? ' struck' : ''}">` +
     `${esc(model.value)}</span><span class="unit">${esc(model.unit)}</span></div>` +
-    `<div class="jsub${model.subErr ? ' err' : ''}">${esc(model.sub)}</div>` +
+    `<div class="jsub${model.subErr ? ' err' : ''}">${sub}</div>` +
     `<dl class="jref"><dt>Referenz</dt><dd class="wide"><span class="ref${ref.stale ? ' struck' : ''}"` +
     `${ref.stale ? ' title="Referenz veraltet"' : ''}>${esc(ref.text)}</span>` +
     `${ref.age ? ` <span class="age${ref.stale ? ' stale' : ''}">${esc(ref.age)}</span>` : ''}</dd>` +

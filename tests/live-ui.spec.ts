@@ -750,8 +750,12 @@ test('Ergebnis zeigt Veraltet durchgestrichen', async ({ page }) => {
   await expect(value).toHaveCSS('text-decoration-line', 'line-through');
   await expect(judge).not.toContainText('Freigegeben');
   await expect(judge).toContainText('kein neues Kamerabild');
-  // Keine Browseruhr im Kopf neben einem alten Wert; "Bild N" steht nur einmal da.
-  await expect(judge.locator('.jh')).toHaveText(/^\s*Veraltet\s*STALE\s*$/);
+  // Keine Browseruhr im Kopf neben einem alten Wert: rechts steht die Zeit des
+  // Datensatzes, und die laeuft nicht weiter. "Bild N" steht nur einmal da.
+  await expect(judge.locator('.jh')).toHaveText(/^\s*Veraltet\s*STALE\s*\d\d:\d\d:\d\d,\d\s*$/);
+  const recordTime = await judge.locator('.jh .tm').textContent();
+  await page.waitForTimeout(1200);
+  await expect(judge.locator('.jh .tm')).toHaveText(recordTime!);
   await expect(judge).toContainText('Bild');
   expect((await judge.textContent())!.match(/Bild/g)!.length).toBe(1);
   // Referenz mit Alter, frisch (0,1 s) also nicht durchgestrichen.
@@ -779,11 +783,12 @@ test('Testlauf zeigt nie einen Wert', async ({ page }) => {
   await expect(judge).toContainText('Testlauf: keine Wertfreigabe');
   // Ueber mehrere Bilder und Statusabrufe: nie ein Pruefling-Wert (Wertfeld,
   // Grundzeile, Datensaetze). Die Referenz darf stehen; sie ist kein freigegebener Wert.
-  const records = page.locator('.inspector');
+  // Spalte Wert der Datensaetze; die Spalte Referenz darf den Referenztext tragen.
+  const records = page.locator('.inspector table.grid tbody td:nth-child(2)');
   for (let i = 0; i < 6; i++) {
     await expect(judge.locator('.jv')).not.toContainText('0.62427');
     await expect(judge.locator('.jsub')).not.toContainText('0.62427');
-    await expect(records).not.toContainText('0.62427');
+    for (const cell of await records.all()) await expect(cell).not.toContainText('0.62427');
     await page.waitForTimeout(250);
   }
   await expect(judge.locator('.jref')).toContainText('+ 0.62427');
@@ -1077,7 +1082,8 @@ test('Rahmen verdeckt: Leuchten, Hinweis, Ecken rechts', async ({ page }) => {
   await expect(stage).toHaveClass(/fx-err/);
   const toast = page.locator('.toast', { hasText: 'Rahmenbereiche verdeckt oder verschoben – Kamera und Sicht prüfen' });
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText('Anzeige verloren');
+  // Spec "Meldungen": Wortlaut fuer "Rahmen verdeckt", auch ohne Hinweis des Servers.
+  await expect(toast).toContainText('Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen. Werte werden nicht freigegeben.');
   const fx = page.locator('canvas.vfx');
   await expect.poll(() => fx.evaluate((el: any) => el.effects.stats().kind)).toBe('error');
   expect(await fx.evaluate((el: any) => el.effects.stats().corners)).toEqual([1, 2]);
@@ -1126,8 +1132,8 @@ test('Anzeige bewegt: Dialog, Esc = Weiter beobachten, kein Wiederauftauchen nac
   const modal = page.getByRole('dialog', { name: 'Anzeige hat sich bewegt' });
   await expect(modal).toBeVisible();
   await expect(modal).toContainText('Anzeige hat sich bewegt (ca. 19 px (Ecken), 2,2 Grad) – Werte werden nicht freigegeben. Bitte neu einrichten.');
-  for (const name of ['Weiter beobachten', 'Lauf stoppen', 'Neu einrichten']) {
-    await expect(modal.getByRole('button', { name })).toBeVisible();
+  for (const name of ['Weiter beobachten', 'Lauf stoppen', 'Lauf beenden und neu einrichten']) {
+    await expect(modal.getByRole('button', { name, exact: true })).toBeVisible();
   }
   await expect(modal.getByRole('button', { name: 'Lauf stoppen' })).toHaveClass(/danger/);
   expect(await page.locator('canvas.vfx').evaluate((el: any) => el.effects.stats().corners)).toEqual([0, 1, 2, 3]);
@@ -1621,3 +1627,96 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1920, 1080]]) {
     expect(errors).toEqual([]);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Finish-Review F1
+// ---------------------------------------------------------------------------
+test('Einrichtung abbrechen: Knopf neben gesperrtem Bestätigen, POST mit CSRF, Ende als abgebrochen', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  const title = page.getByRole('banner');
+  const cancel = title.getByRole('button', { name: 'Einrichtung abbrechen' });
+  await expect(cancel).toBeEnabled();
+  await expect(cancel).toHaveClass(/danger/);
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeDisabled();
+  await fits(page, 'Titelleiste in setup_running');
+  const request = page.waitForRequest('**/live/setup/cancel');
+  await cancel.click();
+  const sent = await request;
+  expect(sent.method()).toBe('POST');
+  expect(sent.headers()['x-csrf-token']).toBeTruthy();
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('.lead h2')).toHaveText('Einrichtung abgebrochen');
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'failed');
+  await expect(cancel).toHaveCount(0);
+  await expect(title.getByRole('button', { name: 'Einrichtung starten', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Übungslauf: Einrichtung abbrechen beantwortet das Szenario, kein POST', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'idle' });
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Hilfe' }).click();
+  await page.getByRole('menuitem', { name: /Übungslauf/ }).click();
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+  await title.getByRole('button', { name: 'Einrichtung abbrechen' }).click();
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'failed');
+  await expect(left.locator('.lead h2')).toHaveText('Einrichtung abgebrochen');
+  await title.getByRole('button', { name: 'Übung beenden' }).click();
+  expect(posts).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Ergebnis: „Freigegeben hh:mm:ss,s“ und Datensatzzeit nur bei freigegebenem Wert; CPU in der Statusleiste', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const judge = page.getByRole('region', { name: 'Ergebnis' });
+  await expect(judge.locator('.jh')).toContainText('Freigegeben');
+  await expect(judge.locator('.jsub')).toHaveText(/^Freigegeben \d\d:\d\d:\d\d,\d$/);
+  const time = (await judge.locator('.jsub').textContent())!.replace('Freigegeben ', '');
+  await expect(judge.locator('.jh .tm')).toHaveText(time);
+  const bar = page.getByRole('contentinfo');
+  await expect(bar.locator('[data-item="cpu"]')).toHaveText('CPU 38 %');
+  await expect(bar.locator('[data-item="cpu"]')).toHaveAttribute('title', /1,0 s/);
+  // Wert-Tabelle: Referenzspalte mit dem Text der Referenz.
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.locator('table.grid th', { hasText: 'Referenz' })).toBeVisible();
+  // Linkes Dock: kein doppeltes „Referenz · Referenz:“.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' })).not.toContainText('Referenz:');
+  // Stillstand: veraltet, nie „Freigegeben“.
+  await hook(page, '/test/scene', { name: 'running_stalled' });
+  await expect(judge.locator('.jh')).toContainText('Veraltet');
+  await expect(judge.locator('.jsub')).not.toContainText('Freigegeben');
+  // Unlesbar und Rahmen verdeckt: Klartext ohne Kennung, Hinweis mit dem Spec-Wortlaut.
+  await hook(page, '/test/scene', { name: 'running_rahmen_verdeckt' });
+  await expect(judge.locator('.jh')).toContainText('Unlesbar');
+  await expect(judge.locator('.jsub')).not.toContainText('tracking_lost');
+  await expect(judge.locator('.jsub')).not.toContainText('Freigegeben');
+  await expect(page.locator('.toast', { hasText: 'Rahmenbereiche verdeckt' }))
+    .toContainText('Rahmen verdeckt? Hand oder Gegenstand vom Rahmen nehmen. Werte werden nicht freigegeben.');
+  await hook(page, '/test/scene', { name: 'running_transition' });
+  await expect(judge.locator('.jh')).toContainText('Wechselt');
+  await expect(judge.locator('.jsub')).not.toContainText('anzeige_wechselt');
+  expect(errors).toEqual([]);
+});
+
+test('Vorschlag mit WARNUNG: Hinweis nennt die Prüfung und bittet um Prüfung im Bild', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const toast = page.locator('.toast', { hasText: 'Vorschlag mit WARNUNG' });
+  await expect(toast).toContainText('Prüfung Raster. Bitte im Bild prüfen und die Warnung zur Kenntnis nehmen.');
+  expect(errors).toEqual([]);
+});

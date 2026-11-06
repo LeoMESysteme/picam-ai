@@ -9,6 +9,7 @@ const ICONS = `<svg class="sprite" aria-hidden="true" focusable="false"><defs>
 <symbol id="i-down" viewBox="0 0 10 10"><path d="M2.5 3.8L5 6.3l2.5-2.5"/></symbol>
 <symbol id="i-run" viewBox="0 0 16 16"><path d="M5 3.5v9l7-4.5z"/></symbol>
 <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
 <symbol id="i-flag" viewBox="0 0 16 16"><path d="M4 14V2.5M4 3h8l-1.8 3L12 9H4"/></symbol>
 <symbol id="i-redo" viewBox="0 0 16 16"><path d="M12.5 4.5v3h-3"/><path d="M12.3 7.3A5 5 0 1 0 13 10"/></symbol>
 <symbol id="i-zm" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/></symbol>
@@ -51,6 +52,7 @@ const TEMPLATE = `${ICONS}
     <span class="it" data-item="frames"></span>
     <span class="it" data-item="gaps"></span>
     <span class="it" data-item="latency"></span>
+    <span class="it" data-item="cpu"></span>
     <span class="it" data-item="storage"></span>
     <span class="it shr" data-item="reference"></span>
     <span class="it shr" data-item="tolerance" hidden></span>
@@ -137,7 +139,10 @@ function titleActions(status, view, handlers) {
     actions.push({kind: 'setup', label: state === 'stopped' ? 'Neu einrichten' : 'Einrichtung starten',
       icon: state === 'stopped' ? 'redo' : 'run', disabled: busy || !handlers.setup});
   } else if (state === 'setup_running') {
+    // Abbrechen ist die Aktion dieses Zustands (POST /live/setup/cancel); Bestaetigen steht gesperrt daneben.
     actions.push({kind: 'note', text: 'Bestätigen erst nach dem Vorschlag'},
+      {kind: 'button', name: 'cancelSetup', label: 'Einrichtung abbrechen', icon: 'x', cls: 'danger',
+        disabled: busy || !handlers.cancelSetup},
       {kind: 'button', name: 'confirm', label: 'Bestätigen', cls: 'primary', disabled: true, title: 'Erst nach dem Vorschlag'});
   } else if (state === 'setup_ready') {
     const ready = Boolean(view.canConfirm && handlers.confirm) && !busy;
@@ -235,6 +240,16 @@ export function renderTitle(status, view = {}, handlers = {}) {
   if (toggle) toggle.disabled = Boolean(actions.find((a) => a.kind === 'setup')?.disabled);
 }
 
+// CPU-Last des Pi aus status.system (live/service.py, /proc/stat ueber cpu_window_s).
+export function cpuItem(system) {
+  const percent = system?.cpu_percent;
+  const window = system?.cpu_window_s;
+  const known = finite(percent);
+  return {html: `CPU <b>${known ? `${Math.round(percent)} %` : '–'}</b>`,
+    title: known && finite(window) && window > 0 ? `CPU-Last des Pi, gemittelt über ${dec(window, 1)} s`
+      : 'CPU-Last noch nicht gemessen'};
+}
+
 export function storageItem(storage) {
   if (!storage || storage.free_bytes == null) {
     const message = storage?.message || 'Speicherplatz nicht verfuegbar';
@@ -297,6 +312,7 @@ export function renderStatusbar(status, hudProc = null) {
   setItem(items.gaps, {html: `Lücken <b>${finite(camera.gaps) ? grp(camera.gaps) : '–'}</b>`,
     cls: camera.gaps > 0 ? 'warn' : ''});
   setItem(items.latency, {html: `Latenz <b>${finite(hudProc?.latency_ms) ? `${Math.round(hudProc.latency_ms)} ms` : '–'}</b>`});
+  setItem(items.cpu, cpuItem(status?.system));
   setItem(items.storage, storageItem(status?.storage));
   setItem(items.reference, referenceItem(status?.reference));
   const tolerance = status?.reader_tolerance;

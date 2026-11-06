@@ -20,21 +20,23 @@ const sq = (tone) => `<span class="sq ${tone}"></span>`;
 
 // Letzte Datensaetze: eine Zeile je Wechsel von Status oder Text (wie im
 // Mock), mit der Zahl der Bilder in dieser Zeile. Im Testlauf wird ein
-// VALID nie als Wert gefuehrt (Wahrheitsregel 2).
+// VALID nie als Wert gefuehrt (Wahrheitsregel 2). reference = {text, stale}
+// (referenceModel) beim ersten Bild der Zeile; kein Live-Abgleich (OP-1).
 export function createRecordLog({max = 40, wallNow = () => Date.now()} = {}) {
   const rows = [];
   let lastSeq = null;
   return {
     rows: () => rows,
     clear() { rows.length = 0; lastSeq = null; },
-    note(rec, {testRun = false} = {}) {
+    note(rec, {testRun = false, reference = null} = {}) {
       if (!rec || rec.seq == null || rec.seq === lastSeq) return false;
       lastSeq = rec.seq;
       const status = STATUS[rec.status] ? (testRun && rec.status === 'valid' ? 'unreadable' : rec.status) : 'unreadable';
       const text = status === 'valid' ? `${rec.text ?? ''}` : '';
       const top = rows[0];
       if (top && top.status === status && top.text === text) { top.frames += 1; top.lastSeq = rec.seq; return true; }
-      rows.unshift({at: wallNow(), status, text, unit: rec.unit || '', frames: 1, firstSeq: rec.seq, lastSeq: rec.seq});
+      const ref = reference && reference.text && reference.text !== '–' ? {text: reference.text, stale: Boolean(reference.stale)} : null;
+      rows.unshift({at: wallNow(), status, text, unit: rec.unit || '', frames: 1, firstSeq: rec.seq, lastSeq: rec.seq, ref});
       if (rows.length > max) rows.length = max;
       return true;
     },
@@ -51,10 +53,14 @@ function wertHTML(log) {
   const body = rows.map((row) => {
     const [tone, word] = STATUS[row.status];
     return `<tr><td class="m">${clockText(row.at)}</td><td class="m r">${row.status === 'valid' ? esc(row.text) : '–'}</td>` +
-      `<td><span class="stc">${sq(tone)}${word}</span></td><td class="m r">${grp(row.frames)}</td></tr>`;
+      `<td><span class="stc">${sq(tone)}${word}</span></td>` +
+      (row.ref ? `<td class="m r${row.ref.stale ? ' struck' : ''}"${row.ref.stale ? ' title="Referenz veraltet"' : ''}>${esc(row.ref.text)}</td>`
+        : '<td class="m r">–</td>') +
+      `<td class="m r">${grp(row.frames)}</td></tr>`;
   }).join('');
-  return '<table class="grid"><thead><tr><th>Zeit</th><th class="r">Wert</th><th>Status</th><th class="r">Bilder</th></tr></thead>' +
-    `<tbody>${body || '<tr class="pend"><td colspan="4">Keine Datensätze seit dem Laden der Seite</td></tr>'}</tbody></table>` +
+  return '<table class="grid"><thead><tr><th>Zeit</th><th class="r">Wert</th><th>Status</th><th class="r">Referenz</th>' +
+    '<th class="r">Bilder</th></tr></thead>' +
+    `<tbody>${body || '<tr class="pend"><td colspan="5">Keine Datensätze seit dem Laden der Seite</td></tr>'}</tbody></table>` +
     '<p class="note pad">Eine Zeile je Wechsel von Status oder Wert; Werte nur bei Freigegeben.</p>';
 }
 
@@ -129,7 +135,7 @@ function referenzHTML(status) {
   const n = (x) => (finite(x) ? grp(x) : '–');
   const mark = status?.last_mark;
   const latest = reference.enabled ? reference.latest : null;
-  return `<div class="blk"><h4>Referenz GSV-2AS<span>${sq(tone)} ${esc(referenceLine(reference))}</span></h4>` +
+  return `<div class="blk"><h4>Referenz GSV-2AS<span>${sq(tone)} ${esc(referenceLine(reference, {label: false}))}</span></h4>` +
     `<dl class="kv2"><dt>Telegramme</dt><dd>${n(reference.lines)}</dd><dt>Lesefehler</dt><dd>${n(reference.parse_errors)}</dd>` +
     `<dt>Lücken</dt><dd>${n(reference.gaps)}</dd><dt>Verworfen</dt><dd>${n(reference.dropped_oldest)}</dd>` +
     `<dt>Letzter Wert</dt><dd>${esc(referenceText(reference))}</dd>` +
