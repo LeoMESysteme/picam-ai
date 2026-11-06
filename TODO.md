@@ -77,6 +77,22 @@ In dieser Reihenfolge:
    5. Produktionsabnahme, eventuell durch Abteilungsleiter Holger Kabelitz.
    6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
 
+**Windows-Einrichtung der GSVmulti-Brücke vereinfachen** (Nutzervorgabe
+2026-11-06, später; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
+GSVmulti-Ausgabe in der Werkbank führt zu einer passenden Verbindungsanleitung.
+Bevorzugt lädt die Person eine fertige Windows-EXE herunter, die benötigte
+Komponenten installiert und einrichtet. Eine einfache GUI bietet UART oder
+Netzwerk an, erkennt Geräte/Ports und zeigt verständlich „bereit“ oder die
+konkrete fehlende Aktion, etwa „USB-Adapter anschließen“. Als mögliche
+Alternative ein einziger Befehl zum Herunterladen und Ausführen eines
+Einrichtungsskripts. Werkbank oder EXE erzeugt möglichst eine passende
+GSVmulti-Sessiondatei zum Öffnen/Importieren in GSVmulti. Normale Benutzer
+sollen Python-Umgebung, COM-Paar und Portzuordnung nicht selbst zusammensetzen.
+Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
+([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
+ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den
+laufenden Abnahmearbeiten spezifizieren; heute nur Anforderung erfasst.
+
 ---
 
 ## Stand 2026-09-30 nachmittags: Abnahme 3 bestanden

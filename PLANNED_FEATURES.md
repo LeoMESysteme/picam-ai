@@ -4,6 +4,21 @@ Stand: 2026-10-21. Die aktive Arbeitsreihenfolge steht in [TODO.md](TODO.md),
 der aktuelle Bau- und Prüfstand in [docs/status.md](docs/status.md).
 Diese Liste beschreibt Produktziele; sie ist keine Freigabezusage.
 
+## Windows-Brücke: einfache Einrichtung (Vorgabe 2026-11-06)
+
+Nach Auswahl der GSVmulti-Ausgabe führt die Werkbank durch die Verbindung.
+Bevorzugter Einstieg ist eine herunterladbare Windows-EXE mit automatischer
+Installation und Konfiguration, Wahl UART/Netzwerk und einfacher
+Bereitschaftsanzeige mit konkreten nächsten Schritten (z. B. USB anschließen).
+Ein Ein-Befehl-Einrichtungsskript ist eine mögliche Alternative. Werkbank
+oder EXE soll eine zum gewählten Weg passende GSVmulti-Sessiondatei erzeugen,
+die nur noch in GSVmulti geöffnet/importiert wird. Python-Umgebung,
+Treiber/virtuelles Portpaar und Zuordnung sollen nicht manuell verkettet
+werden müssen. Dies ist geplant; unterstützte Sessionformate, Windows- und
+GSVmulti-Versionen sowie Installationsrechte sind noch zu klären.
+[Offene Umsetzungspunkte](docs/open-questions.md#oq-62),
+[aktive Arbeitsreihenfolge](TODO.md).
+
 ## Bedienablauf und heutiger Stand
 
 | Schritt | Stand |

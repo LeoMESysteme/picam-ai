@@ -4691,3 +4691,15 @@ begrenzter Download auf Tailscale-IP, Port 8083 (eigener Dienst
 `dispread-t13-download.service`). Keine Treiber mitgeliefert. Nächster
 Schritt: Portpaar auf dem neuen Rechner einrichten und Ports melden;
 anschließend lokale Demo und erst danach gemeinsamer UART-Transporttest.
+
+
+### Neuer Windows-PC: Ports für den UART-Brückentest erfasst
+
+Nutzer meldet nach Einrichtung des virtuellen Paars und Anschließen des
+Adapters: COM5 = COM0COM\PORT\CNCA1, COM4 = COM0COM\PORT\CNCB1;
+physischer FTDI-USB-UART = COM6, VID:PID 0403:6001, Seriennummer AB8556ZCA.
+Vorgesehener Weg: Pi ttyAMA0 → physisches COM6 → Windows-Brücke → COM5
+→ virtuelles Paar → GSVmulti COM4. COM1 ist der vorhandene
+Kommunikationsanschluss und wird nicht benutzt. Keine Übertragung oder
+GSVmulti-Aufzeichnung dieses Aufbaus belegt. Die zusätzliche Verbindung
+Kabel-TXD → physischer Pi-Pin 10 ist weiterhin nicht bestätigt.

@@ -7,8 +7,11 @@ Automatische Einrichtung nach 55,990 s fertig, Gesamturteil WARNUNG
 (Raster/Displayfehler), Gegenlesen OK, keine Laufsperre. Leonhard hat
 Rahmen und Format auf der Seite bestätigt; Serverzustand `confirmed`, keine
 Laufsperre, Ausgabe `off`. Laufstart mit Referenz auf der Seite steht aus. Nutzer möchte zuvor auch
-UART-Brücke testen. Neuer Windows-PC: Python/GSVmulti vorhanden, virtuelles
-Portpaar fehlt; bisher nur GND/RXD verdrahtet. Frisches Brückenpaket unter
+UART-Brücke testen. Neuer Windows-PC: Python/GSVmulti und virtuelles Portpaar inzwischen
+vorhanden. Nutzer-Portliste: COM5=CNCA1 ↔ COM4=CNCB1, physischer FTDI-Adapter
+COM6 (0403:6001, SER AB8556ZCA). Brücke soll COM6→COM5 verwenden, GSVmulti
+COM4. Zusätzliche TXD-Leitung zum Pi-Pin 10 noch nicht bestätigt; kein
+UART-Publisher gestartet. Frisches Brückenpaket unter
 `var/diagnostics/werkbank-t13-20261106/download/` vorbereitet und isoliert
 mit drei synthetischen Telegrammen geprüft. Download nur über Tailscale:
 `http://100.122.154.35:8083/gsvmulti-bridge-20261106.zip`, begrenzter Dienst
@@ -23,6 +26,16 @@ Die neue `/live`-Werkbank ist
 softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
 abschließenden Backend- und UI-Korrekturen. Hardware-Abnahme T13 und Merge
 nach `master` stehen aus und brauchen Leonhards ausdrückliches OK.
+
+## Neue Produktanforderung für später
+
+Leonhard verlangt eine wesentlich einfachere Windows-Einrichtung der
+GSVmulti-Brücke: Anleitung aus der Ausgabewahl der Werkbank, bevorzugt
+Windows-EXE mit Installation/Konfiguration und GUI, Wahl UART/Netzwerk,
+konkrete Bereitschaftshinweise sowie möglichst automatisch erzeugte
+GSVmulti-Sessiondatei. Ein Ein-Befehl-Skript ist eine mögliche Alternative.
+In TODO, PLANNED_FEATURES und OQ-62 erfasst; noch keine neue Funktion
+implementiert. Der aktuelle UART-Demotest bleibt der nächste praktische Schritt.
 
 ## Übernahme und Abschluss
 

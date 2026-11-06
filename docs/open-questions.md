@@ -57,6 +57,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-49](#oq-49) | — | offen | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
+| [OQ-62](#oq-62) | — | offen | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3113,3 +3114,35 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   abschalten; CHANGELOG und Wiki im selben Commit nachziehen.
 * **Antwort landet in:** [Werkbank-Spec OP-2](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte),
   [TODO](../TODO.md) und [CHANGELOG](../CHANGELOG.md).
+
+
+---
+
+<span id="oq-62"></span>
+
+## OQ-62 — Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet?
+
+* **Status:** offen · erkannt 2026-11-06 bei der Einrichtung auf einem neuen Windows-PC
+* **Nutzervorgabe:** Wahl der GSVmulti-Ausgabe in der Werkbank bietet eine
+  Verbindungsanleitung. Bevorzugt fertige Windows-EXE, die benötigte Komponenten
+  installiert/einrichtet, UART und Netzwerk auswählbar macht und in einer
+  einfachen GUI Bereitschaft oder konkrete fehlende Schritte anzeigt (z. B.
+  USB-Adapter anschließen). Mögliches alternatives Angebot: ein einziger
+  Download-/Ausführungsbefehl für ein Einrichtungsskript. Werkbank oder EXE
+  erzeugt möglichst eine passende GSVmulti-Sessiondatei zum Öffnen/Importieren.
+* **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
+  Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
+  Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung
+  sowie belegte Sessionerzeugung für die unterstützten GSVmulti-Versionen.
+  Kein Sessionformat erfinden; OQ-53 enthält die offene Filterkodierung.
+  Bestehende Einstellungen dürfen nicht ungeprüft überschrieben werden.
+* **Abgrenzung:** OQ-49 beschreibt den Pi-Bootstrap; hier geht es um den
+  Windows-Verbindungsassistenten. Die aktuelle Python-ZIP ist ein Prüfwerkzeug,
+  kein fertiger Installer. „Verbunden“ oder COM-Schreibbestätigung beweist
+  keinen GSVmulti-Empfang und keine Messfreigabe (OQ-47/OQ-06).
+* **Klärung:** Nach den laufenden Abnahmearbeiten den Bedienablauf spezifizieren,
+  echte Referenz-Sessiondateien und Import-/Öffnen-Verhalten prüfen, dann
+  Installation und Erstverbindung auf einem frisch eingerichteten Windows-PC
+  einschließlich fehlendem Adapter und Wiederanlauf abnehmen.
+* **Antwort landet in:** [Geplante Funktionen](../PLANNED_FEATURES.md),
+  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md) und einer späteren Umsetzungsspec.
