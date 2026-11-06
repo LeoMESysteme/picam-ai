@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Werkbank /live: Dialog „Windows-Brücke einrichten“ (nur
+  Oberfläche, keine Hardware). Fünf Schritte mit Zustand: Windows-App-Hinweis
+  (Installer noch nicht veröffentlicht), Profil-Download `pi.dispread` mit
+  Fingerabdruck in Vierergruppen, Kopplungscode mit 5-Minuten-Countdown (nach
+  Ablauf und beim Schließen aus dem DOM entfernt), UART-Empfang vorbereiten/
+  beenden, Bereitschaft (Status alle 2 s nur bei offenem Dialog; ein
+  verbundener Client heißt nur Verbindung, die Ausgabesperre bleibt sichtbar).
+  Erreichbar aus dem Start-Popover und lesend aus dem Ausgabe-Dock im Lauf;
+  der TCP-Port liegt nun unter „Erweitert: Demo-/Entwicklungsweg“. Serverfehler
+  (409, 503) erscheinen wörtlich. Fake-Routen im UI-Testserver, 7 Node- und
+  6 Playwright-Tests neu; bestehende Live-Suite grün.
+
 * 2026-11-06: Gemeinsamen Wiederanlauf von Verbindungsmanager und Worker
   fertiggestellt. Gewöhnlicher Kanalverlust überlässt den Backoff dem Manager;
   der Worker wartet auf eine neu geprüfte Verbindung, ohne alte Werte oder

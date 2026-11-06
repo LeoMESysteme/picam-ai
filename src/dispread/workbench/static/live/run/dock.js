@@ -83,7 +83,8 @@ export function outputDockHTML(output) {
     `${output.transport === 'serial' ? `<span class="pa"><span class="tag">${MARKER}</span></span>` : ''}</div>` +
     `<p class="${tone ? `${tone}-t ` : ''}wrap"><b>${esc(lines[0])}</b></p>` +
     lines.slice(1).map((line) => `<p class="note wrap">${esc(line)}</p>`).join('') +
-    (cfg ? `<p class="note mono">${esc(cfg)}</p>` : '') + '</div>';
+    (cfg ? `<p class="note mono">${esc(cfg)}</p>` : '') +
+    (['uart', 'tcp'].includes(output.transport) ? '<p class="brow"><button type="button" class="ghost" data-act="bridge-setup">Brücke anzeigen…</button></p>' : '') + '</div>';
 }
 
 export function runDockHTML(status, {resultCls = 'X'} = {}) {

@@ -522,6 +522,71 @@ def make_test_app(image_path):
             online.set()
         return web.json_response({"ok": True})
 
+    # --- Fake-Bruecke (BW1): Routen wie src/dispread/bridge/routes.py, Zustand per /test/bridge schaltbar. ---
+    bridge = {"hub": True, "connected": False, "transport": None, "uart_state": "unprepared", "uart_error": None,
+              "release_block": "DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.", "prepare_409": False,
+              "expires_in_s": 300, "offers": 0}
+
+    def bridge_status():
+        return {"pi_id": "pi-test-0001", "run_id": None, "real_run": False, "transport": bridge["transport"],
+                "connected": bridge["connected"], "uart_prepared": bridge["uart_state"] == "listening",
+                "uart_state": bridge["uart_state"], "uart_error": bridge["uart_error"],
+                "release_block": bridge["release_block"]}
+
+    def bridge_down():
+        return web.Response(status=503, text="Bridge hub unavailable")
+
+    async def bridge_hook(request):
+        data = await request.json()
+        for key in bridge:
+            if key in data:
+                bridge[key] = data[key]
+        return web.json_response({"ok": True, "offers": bridge["offers"]})
+
+    async def bridge_profile(_request):
+        body = json.dumps({"schema": 1, "pi_id": "pi-test-0001", "name": "Werkbank-Pi",
+                           "certificate_pem": "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n",
+                           "certificate_sha256": "0123456789abcdef" * 4, "endpoints": [], "protocol_version": 2})
+        return web.Response(text=body, content_type="application/json",
+                            headers={"Content-Disposition": 'attachment; filename="pi.dispread"'})
+
+    async def bridge_offers(request):
+        data = await request.json()
+        if data.get("transport") not in ("network", "uart"):
+            return web.Response(status=400, text="bad transport")
+        bridge["offers"] += 1
+        return web.json_response({"offer": f"TESTCODE-{bridge['offers']}-{data['transport']}",
+                                  "expires_in_s": bridge["expires_in_s"]})
+
+    async def bridge_clients_delete(_request):
+        return web.json_response({"ok": True})
+
+    async def bridge_get_status(_request):
+        return web.json_response(bridge_status()) if bridge["hub"] else bridge_down()
+
+    async def bridge_prepare(_request):
+        if not bridge["hub"]:
+            return bridge_down()
+        if bridge["prepare_409"]:
+            return web.Response(status=409, text="UART unavailable or occupied; release its owner first")
+        bridge["uart_state"], bridge["uart_error"] = "listening", None
+        return web.json_response(bridge_status())
+
+    async def bridge_release(_request):
+        if not bridge["hub"]:
+            return bridge_down()
+        bridge["uart_state"] = "stopped"
+        return web.json_response(bridge_status())
+
+    app.router.add_post("/test/bridge", bridge_hook)
+    app.router.add_get("/live/bridge/profile", bridge_profile)
+    app.router.add_post("/live/bridge/offers", bridge_offers)
+    app.router.add_delete("/live/bridge/clients/{client_id}", bridge_clients_delete)
+    app.router.add_get("/live/bridge/status", bridge_get_status)
+    app.router.add_post("/live/bridge/prepare", bridge_prepare)
+    app.router.add_delete("/live/bridge/prepare", bridge_release)
+    # --- Ende Fake-Bruecke ---
+
     # Hinter dem bestehenden Sitzungs-, Origin- und CSRF-Schutz.
     app.middlewares.append(controls)
     app.router.add_post("/test/scene", scene)

@@ -65,7 +65,7 @@ function popoverShell(host, {label, cls}) {
 
 // host: Titelleiste (Pop-up rechts darunter). onStart(body) sendet den Start;
 // ohne onStart geht der POST direkt ueber client. confirm = openModal.
-export function mountStartPopover(host, client, {onStart = null, confirm = openModal, onChange = () => {}} = {}) {
+export function mountStartPopover(host, client, {onStart = null, confirm = openModal, onChange = () => {}, onBridgeSetup = null} = {}) {
   const pop = popoverShell(host, {label: 'Laufoptionen', cls: 'runpop'});
   pop.el.innerHTML =
     `<div class="runblock" data-part="block" hidden><strong>${esc(TEXT.blockTitle)}</strong><p data-part="block-reason"></p></div>` +
@@ -84,8 +84,10 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     '<label class="f" for="out-prefix">Präfix</label><input type="text" id="out-prefix" class="mono" maxlength="1" data-part="out-prefix" autocomplete="off" spellcheck="false">' +
     `<p class="note err-t" data-part="out-note">${esc(SERIAL_NOTE)}</p>` +
     `<label class="ck"><input type="checkbox" data-part="out-ack"> ${esc(SERIAL_ACK)}</label></div>` +
-    '<div data-part="out-tcpbox" hidden><label class="f" for="out-tcp">TCP-Port</label>' +
-    '<input type="number" id="out-tcp" class="mono" min="1" max="65535" data-part="out-tcp"></div>' +
+    '<details class="fold" data-part="out-tcpbox" hidden><summary>Erweitert: Demo-/Entwicklungsweg</summary>' +
+    '<label class="f" for="out-tcp">TCP-Port</label>' +
+    '<input type="number" id="out-tcp" class="mono" min="1" max="65535" data-part="out-tcp"></details>' +
+    '<div class="brow" data-part="out-bridge" hidden><button type="button" data-part="bridge-setup">Brücke einrichten…</button></div>' +
     `<p class="note warn-t" data-part="out-lock" hidden>${esc(LOCK_NOTICE)}</p>` +
     '<p class="note" data-part="out-ro" hidden></p></fieldset>' +
     `<details class="fold" data-part="test" hidden><summary>${esc(TEXT.testSummary)}</summary>` +
@@ -107,6 +109,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     part('out-serial').hidden = mode !== 'serial';
     part('out-tcpbox').hidden = mode !== 'tcp';
     part('out-lock').hidden = !['uart', 'tcp'].includes(mode);
+    part('out-bridge').hidden = !['uart', 'tcp'].includes(mode) || !onBridgeSetup;
   };
   const setChoice = (key) => { part(`path-${key}`).checked = true; showOutput(); };
   part('out-port').value = DEFAULTS.port;
@@ -138,6 +141,10 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     if (event.key === 'Enter') { event.preventDefault(); api.start(); }
   });
   part('start').addEventListener('click', () => api.start());
+  part('bridge-setup').addEventListener('click', () => {
+    pop.close({focus: true});
+    onBridgeSetup?.(choice(), Boolean(running()));
+  });
   for (const name of ['reference', 'plan']) part(name).addEventListener('input', () => showError(''));
 
   const api = {

@@ -1896,6 +1896,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await expect(pop.locator('[data-part="out-lock"]')).toHaveText(/^DUT-Ausgabe gesperrt: Windows-Abnahme fehlt\./);
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByText('Erweitert: Demo-/Entwicklungsweg').click();
   await pop.getByLabel('TCP-Port').fill('5001');
 
   const sentTcp = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
@@ -2062,4 +2063,154 @@ test('Einrichtung abbrechen: 409 des Servers erscheint wörtlich als stehender H
   await page.getByRole('banner').getByRole('button', { name: 'Einrichtung abbrechen' }).click();
   await expect(page.locator('.toast', { hasText: 'Keine Einrichtung läuft' })).toBeVisible();
   expect(errors).toEqual(['Failed to load resource: the server responded with a status of 409 (Conflict)']);
+});
+
+// --- Windows-Brücke einrichten (BW1) ---
+const BRIDGE_RESET = { hub: true, connected: false, transport: null, uart_state: 'unprepared', uart_error: null,
+  release_block: 'DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.', prepare_409: false, expires_in_s: 300, offers: 0 };
+
+async function openBridge(page: Page, choose: 'Netzwerk über Brücke' | 'UART über Brücke') {
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  await hook(page, '/test/scene', { name: 'idle' }); // ein früherer Lauf darf den Ausgabeweg nicht festhalten
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop.getByRole('button', { name: 'Brücke einrichten…' })).toBeHidden();
+  await pop.getByText(choose, { exact: true }).click();
+  await pop.getByRole('button', { name: 'Brücke einrichten…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Windows-Brücke einrichten' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test('Brücke einrichten (Netzwerk): Profil, Kopplungscode mit Ablauf, nichts bleibt im DOM', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  await expect(dialog).toContainText('Interner Testbuild – beim Entwickler anfragen');
+  await expect(dialog.locator('[data-step="uart"]')).toBeHidden();
+  const shots = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
+  await page.screenshot({ path: `${shots}/bw1-1-ohne-code.png` });
+
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Profil herunterladen (pi.dispread)' }).click();
+  expect((await download).suggestedFilename()).toBe('pi.dispread');
+  await expect(dialog).toContainText('Werkbank-Pi');
+  await expect(dialog).toContainText('pi-test-0001');
+  await expect(dialog.locator('[data-part="p-fp"]')).toHaveText(/^0123 4567 89ab cdef 0123/);
+  await expect(dialog).toContainText('In der Windows-App muss derselbe Fingerabdruck erscheinen.');
+
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-network');
+  await expect(dialog.locator('[data-part="count"]')).toHaveText(/^[45]:\d\d$/);
+  await expect(dialog).toContainText('Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.');
+  await page.screenshot({ path: `${shots}/bw1-2-mit-code.png` });
+  await page.clock.fastForward(301_000);
+  await expect(dialog.locator('[data-part="code"]')).toHaveCount(0);
+  await expect(dialog).toContainText('Abgelaufen – neuen Code erzeugen');
+  expect(await page.content()).not.toContain('TESTCODE');
+
+  // Neuer Code, dann Schließen: der Code ist weder im DOM noch im Speicher der Seite.
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-2-network');
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  await expect(dialog).toBeHidden();
+  expect(await page.content()).not.toContain('TESTCODE');
+  expect(await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]))).not.toContain('TESTCODE');
+  expect(errors).toEqual([]);
+});
+
+test('Brücke einrichten: verbundene Windows-App heißt nur Verbindung, nie Freigabe', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  await expect(dialog).toContainText('nicht verbunden');
+  await expect(dialog).toContainText('DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.');
+  await hook(page, '/test/bridge', { connected: true, transport: 'network' });
+  await expect(dialog).toContainText('verbunden über Netzwerk', { timeout: 6000 });
+  await expect(dialog).toContainText('DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.');
+  await expect(dialog).not.toContainText(/Messfreigabe|bereit zur Messung/);
+  await expect(dialog).toContainText('pi-test-0001');
+});
+
+test('Brücke einrichten (UART): 409 wörtlich, Vorbereiten und Beenden', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'UART über Brücke');
+  const uart = dialog.locator('[data-step="uart"]');
+  await expect(uart).toBeVisible();
+  await expect(uart).toContainText('nicht vorbereitet');
+  await expect(uart).toContainText('UART direkt und der Brücken-UART nutzen denselben Port');
+  await hook(page, '/test/bridge', { prepare_409: true });
+  await uart.getByRole('button', { name: 'UART-Empfang vorbereiten' }).click();
+  await expect(uart.getByRole('alert')).toHaveText('UART unavailable or occupied; release its owner first');
+  await hook(page, '/test/bridge', { prepare_409: false });
+  await uart.getByRole('button', { name: 'UART-Empfang vorbereiten' }).click();
+  await expect(uart).toContainText('wartet auf Windows-App');
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/bw1-3-uart.png' });
+  await uart.getByRole('button', { name: 'Beenden' }).click();
+  await expect(uart).toContainText('beendet');
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-uart');
+});
+
+test('Brücke einrichten: Brückendienst fehlt (503) ohne Fehlerflut, Profil bleibt nutzbar', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', { hub: false });
+  const dialog = await openBridge(page, 'UART über Brücke');
+  await hook(page, '/test/bridge', { hub: false });
+  await expect(dialog.locator('[data-step="uart"]')).toContainText('Brückendienst auf dem Pi nicht aktiv');
+  await expect(dialog.locator('[data-step="ready"]')).toContainText('Brückendienst auf dem Pi nicht aktiv');
+  await expect(dialog.getByRole('button', { name: 'UART-Empfang vorbereiten' })).toBeDisabled();
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/bw1-4-hub-fehlt.png' });
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Profil herunterladen (pi.dispread)' }).click();
+  expect((await download).suggestedFilename()).toBe('pi.dispread');
+  // Der Browser meldet 503 als Konsolenfehler "Failed to load resource"; sonst nichts.
+  expect(errors.filter((e) => !/503/.test(e))).toEqual([]);
+});
+
+test('Brücke einrichten: Fokusfalle, Esc schließt, Fokus kehrt zurück', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  const inside = () => page.evaluate(() => Boolean(document.activeElement?.closest('.modal.bridge')));
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    expect(await inside()).toBe(true);
+  }
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Shift+Tab');
+    expect(await inside()).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' })).toBeFocused();
+});
+
+test('Brücke im Lauf: lesend aus dem Dock, UART-Aktionen gesperrt, Kopplung bleibt möglich', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  await hook(page, '/test/scene', { name: 'idle' });
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await left.getByRole('button', { name: 'Brücke anzeigen…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Windows-Brücke einrichten' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'UART-Empfang vorbereiten' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Beenden' })).toBeDisabled();
+  await expect(dialog).toContainText('Im Lauf nicht änderbar.');
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-uart');
 });
