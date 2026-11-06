@@ -84,7 +84,7 @@ def scene_state(name):
     setup = {
         "grid": None,
         "step": step, "elapsed_s": 5.0 if focus else 36.4,
-        "focus": {"method": "climb", "roi": [790, 490, 610, 120],
+        "focus": {"method": "climb", "roi": [640, 360, 640, 360],
                   "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus" else FOCUS_SAMPLES),
                   "verify": None if name == "setup_focus" else {
                       "score": 624.465370104453, "threshold": 0.85 * FOCUS_SAMPLES[0][1]}},

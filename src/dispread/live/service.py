@@ -42,6 +42,7 @@ from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
+SETUP_FOCUS_HINT: live_setup.HintBox | None = None
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
 STORAGE_RESERVE_BYTES = 2_000_000_000
@@ -536,7 +537,9 @@ class LiveService:
                     self._step_times[step] = [now, None]
                 self._setup_phase = self._setup_wait = None
             if step == "fokus":
-                self._setup_focus["roi"] = live_setup.measurement_roi_pixels((1920, 1080), None)
+                self._setup_focus["roi"] = live_setup.measurement_roi_pixels(
+                    live_setup.FOCUS_SOURCE_SIZE, SETUP_FOCUS_HINT,
+                )
             self._step = self._setup_step = step
             self._setup_message = self._setup_message_base = None
 
@@ -625,6 +628,7 @@ class LiveService:
                 self._setup_focus["method"] = "sweep"
 
         def exposure_round(entry: dict) -> None:
+            self._check_setup_cancel()
             with self._lock:
                 self._setup_exposure["rounds"].append(deepcopy(entry))
 
@@ -632,7 +636,7 @@ class LiveService:
         with self._lock:
             start_focus = self._last_confirmed_focus
         settings, sweep = live_setup.focus_camera(
-            OwnerSetupCamera(self._owner), None, start_focus=start_focus, info=self._setup_progress,
+            OwnerSetupCamera(self._owner), SETUP_FOCUS_HINT, start_focus=start_focus, info=self._setup_progress,
             on_sample=focus_sample, on_fallback=focus_fallback, should_stop=self._setup_cancel.is_set,
         )
         with self._lock:

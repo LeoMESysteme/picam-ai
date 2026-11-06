@@ -3025,6 +3025,55 @@ def test_system_cpu_unreadable_or_reset_needs_two_new_samples(tmp_path, bad):
     assert service.status()['system'] == {'cpu_percent': 25.0, 'cpu_window_s': 1.0}
 
 
+def test_cancel_during_belichtung_stops_before_next_exposure_round(tmp_path, monkeypatch):
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    entered, proceed = threading.Event(), threading.Event()
+    settings = CameraSettings('logitech_streamcam', '046d:0893', (1920, 1080), 'YUYV', 30,
+                              {'focus_absolute': 48, 'exposure_time_absolute': 100,
+                               'white_balance_temperature': 4600, 'gain': 0})
+    monkeypatch.setattr(live_setup, 'focus_camera', lambda *a, **kw: (settings, FocusMeasurements()))
+    measurements = []
+
+    def capture(cam):
+        measurements.append(len(measurements))
+        if len(measurements) == 2:
+            entered.set()
+            assert proceed.wait(2)
+        return np.zeros((12, 12, 3), dtype=np.uint8)
+
+    monkeypatch.setattr(live_setup, 'mean_still', capture)
+    monkeypatch.setattr(live_setup, 'find_green_hint_box', lambda image: (0, 0, 1, 1))
+    monkeypatch.setattr(live_setup, 'hint_glass_level', lambda image, box: 50.0)
+    adjust_exposure = live_setup.adjust_exposure
+    monkeypatch.setattr(live_setup, 'adjust_exposure', lambda *a, **kw:
+                        adjust_exposure(*a, **kw, sleep=lambda seconds: None))
+    owner = FakeOwner()
+    service = LiveService(owner, tmp_path)
+    service.start_setup(cell_text='+ 1.2345 ')
+    try:
+        assert entered.wait(1), service.status()
+        assert service.status()['setup']['step'] == 'belichtung'
+        service.cancel_setup()
+        proceed.set()
+        service._setup_thread.join(.5)
+        status = service.status()
+        assert status['state'] == 'setup_failed'
+        assert status['error'] == 'Einrichtung abgebrochen'
+        assert len(measurements) == 2
+        assert owner.restarts == 2  # Feste Kamera und genau eine Belichtungsanpassung.
+        assert len(status['setup']['exposure']['rounds']) == 1
+        steps = {step['key']: step['state'] for step in status['setup']['progress']['steps']}
+        assert steps['belichtung'] == 'failed'
+        assert steps['standbilder'] == 'pending'
+    finally:
+        proceed.set()
+        service._setup_thread.join(2)
+
+
 @pytest.mark.parametrize('checkpoint', ['focus', 'stability_wait'])
 def test_cancel_real_setup_worker_within_one_slice(tmp_path, monkeypatch, checkpoint):
     from types import SimpleNamespace

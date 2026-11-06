@@ -12,7 +12,8 @@ was ist die Konsequenz.
   Status ergänzt die tatsächliche Fokusregion in Kamerapixeln und die
   Gesamt-CPU-Auslastung aus `/proc/stat`-Differenzen; bis zur zweiten Probe
   oder bei Lesefehlern bleibt CPU unbekannt. Fake, Fixtures und
-  Statusvertragsprüfungen bilden die Ergänzungen ab.
+  Statusvertragsprüfungen bilden die Ergänzungen ab. Auch Belichtungsrunden
+  prüfen den Abbruch; Fake und Dienst verwenden dieselbe mittlere Fokusregion.
 
 * 2026-11-06: Der Test zur verweigerten UART-Direktausgabe ohne ausdrückliche
   Bestätigung vergleicht Laufzustand, Ausgabe und Sitzungsidentität gezielt.

@@ -45,6 +45,7 @@ N_CELLS = 16
 DEFAULT_TARGET_SIZE = (400, 160)
 LATTICE_GRID = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
 WHITE_BALANCE_SETTLE_S = 3.0
+FOCUS_SOURCE_SIZE = (1920, 1080)
 # Vorabwerte: p80 gruener Boxpixel liegt an 12 Standbildern hoechstens 4 Graustufen
 # neben dem entzerrten Glas-p80 (Laborjournal 2026-10-28, R13-20).
 EXPOSURE_TARGET = 130.0
@@ -445,7 +446,7 @@ def focus_camera(
     settings = CameraSettings(
         model=STREAMCAM_MODEL,
         usb_id=STREAMCAM_USB_ID,
-        size=(1920, 1080),
+        size=FOCUS_SOURCE_SIZE,
         fourcc="YUYV",
         fps=30,
         controls={

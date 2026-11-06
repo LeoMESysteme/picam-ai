@@ -1719,9 +1719,9 @@ def test_fake_focus_roi_in_source_coordinates(tmp_path):
     for scene in ('setup_focus', 'setup_focus_done'):
         service.set_scene(scene)
         roi = service.status()['setup']['focus']['roi']
-        assert roi == [790, 490, 610, 120]
+        assert roi == [640, 360, 640, 360]
         roi[0] = -1
-        assert service.status()['setup']['focus']['roi'][0] == 790
+        assert service.status()['setup']['focus']['roi'][0] == 640
 
 
 def test_fake_system_cpu_is_available_in_every_scene(tmp_path):
