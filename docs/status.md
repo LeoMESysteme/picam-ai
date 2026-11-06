@@ -1,100 +1,100 @@
 # Status und Übergabe — 2026-11-06
 
-## Aktueller Auftrag
+## Auftrag und Arbeitszweig
 
-Leonhard hat Entwurf und Ausführung der Windows-Brücke freigegeben.
-Codex übernimmt Backend, Paketierung und testbare Vorarbeit mit Subagents.
-**EXE-GUI und sämtliche sichtbaren Workbench-Anpassungen bleiben Claude
-vorbehalten**, einschließlich Anleitung je Weg und Verbindung/Bereitschaft.
-Die konkrete [Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md)
-wird fortgeschrieben; noch keine Nachricht an einen anderen Chat versandt.
+Windows-Brücke gemäß freigegebenem Entwurf: Codex erledigt den technischen
+Kern; **EXE-GUI und sichtbare Workbench-Anpassungen übernimmt Claude**.
+Konkreter Einstieg: [Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md)
+mit APIs, Bedienaufgaben und offenen Nachweisen. Kein anderer Chat wurde angeschrieben.
 
-Isolierter Worktree:
-`/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`, Branch
-`codex/windows-bridge-core`, Basis `ea29e44`. Der vorhandene Redesign-Worktree
-mit fremden Änderungen und laufendem Dienst bleibt unberührt. Kein Merge,
-Deployment, Hardwareeingriff oder neue Paketinstallation vorgenommen.
+Worktree `/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`,
+Branch `codex/windows-bridge-core`, Basis `ea29e44`. Alter Redesign-Worktree
+und laufender Labordienst bleiben erhalten. Kein Merge/Push, Deployment,
+Hardwareeingriff oder neue Paketinstallation.
 
 ## Technischer Lieferstand
 
-| Teil | Stand und geprüfte Grenze |
-| --- | --- |
-| P1 | Strikter v2-Vertrag und begrenzter Ausgabekern, 70 relevante Tests; Taskreview sauber. |
-| N1 | Isolierter Build/Probe mit an Freigabedaten gebundenen Hashes; 79 Tests inklusive Bestand, ein echter Windows-Test hier übersprungen; Reviewkorrekturen bestätigt. |
-| N2 | PnP-/USB-Erkennung und Portpaaradapter, 48 Tests; fehlende Seriennummer fordert Auswahl; echter Treiberprovider bleibt unverifiziert und gesperrt. |
-| N3 | Originale UCF/TXT samt Archivprovenienz und Inspektion, 17 Tests; unbekannte Dateiversion, keine freigegebenen Änderungsfelder, automatischer Export blockiert. |
-| P2 | Hardwaregebundene Identität, portable Zertifikats-/Signaturprüfung, Einmalangebote und widerrufbare Tokens, lokale CLI; 26 gezielte Tests nach Reviewkorrekturen. |
-| P3 | Profil/Operatoraktionen, gekoppelter WSS-Zugang und begrenzte Discovery; 163 relevante Tests, 2 bestehende Fixture-Skips nach Korrekturen; Nachprüfung sauber, echter Hub folgt. |
-| P4 | Hub, Lease, UART-Handshake und Live-Factory integriert; 97 betroffene Tests auf letztem Stand, Review nach zwei Fixrunden sauber. 158 Node-Tests; zuvor 837 breite Python-Prüfungen vor den letzten lokalisierten Korrekturen. |
-| W1 | Gepinntes WSS, signierter UART, DPAPI-/Zertifikatsbindung und zentrale Bereitschaft: 59 abschließende Tests, zwei echte Windows-Skips; Review nach zwei Fixrunden sauber. |
-| W2 | Dauerhafter COM-Intent/Worker, begrenzte Diagnose und SID-Instanzschutz; 93 fokussierte Tests, ein echter Windows-Skip nach bestätigten Reviewkorrekturen; W1-Integration folgt. |
-| W3 | Fortsetzbarer Installer-/Updatekern, 47 fokussierte Tests nach Auswahlkorrektur; Nachprüfung sauber. Native Installation und Release-Signierung ausstehend. |
+P1–P4: strikter v2-Vertrag, begrenzter Ausgabekern, hardwaregebundene
+Pi-Identität und widerrufbare Kopplung, TLS-/WSS-Routen, Discovery, exklusiver
+Hub und signierter UART. Identitäts-TLS und Listener werden ausdrücklich
+aktiviert; hier keine Dienstumstellung.
 
-Commitfolge bisher: `71f01cf` (P1), `4077cff` (N2), `c90a350` (N1),
-`e3b67e1`/`3887907` (N3/Doku), `6e9e2e6` (P2); W3 `8b97697`. P3 `348e08e`, P4 `d9eb1d9`; W2 wird mit diesem Status versioniert.
-Die technische Umsetzung ist keine fertige EXE und keine Produktabnahme.
-Die [Pläne](superpowers/plans/2026-11-06-windows-bruecke.md) unterscheiden
-lokal geprüften Code und reale Abnahmeschritte.
+W1/W2: gepinntes WSS, UART-Proof vor Zugangsdaten, DPAPI-/Zertifikatsbindung,
+Readiness, dauerhaftes SQLite-COM-Journal, atomare Schreibzulassung und
+SID-Instanzschutz. G1 integriert tatsächlichen Manager/Worker/Hub/SQLite
+über lokales TLS mit Fake-COM. Gewöhnlicher Kanalverlust wartet auf die neue
+validierte Generation; der Manager allein besitzt Backoff und Wiederanlauf.
+Keine alten Werte, ACKs oder automatischen Demostarts. Ordentliches Laufende
+hält die Verbindung bereit; Stop, Auditfehler und unklare Übergaben bleiben
+terminal. COM und Konfiguration wechseln nicht.
 
-Letzter Backend-Schritt: gemeinsame Integration G1. Der bisherige Worker
-beendet sich bei gewöhnlichem Verbindungsverlust/ended noch vorzeitig und
-unterbricht den Manager-Backoff. G1 korrigiert ausschließlich diesen
-zusammengesetzten Wiederanlauf und prüft ihn mit den tatsächlichen Klassen.
-Expliziter Stop sowie Audit-/Invalidierungsfehler bleiben dauerhaft gesperrt.
-Danach folgen Gesamtprüfung, Branchreview und Claude-Übergabe.
+N1–N3/W3: Build-/Runtime-Probe, USB-/Portpaaradapter, Original-UCF/TXT-
+Provenienz und portabler Installer-/Updatekern vorhanden. Native
+Deployment-/Treiberprovider, Produktpaket und Sessiongenerator fehlen bzw.
+bleiben ohne echte Qualifikation gesperrt. **Noch keine fertige EXE.**
 
-Der zuvor fehlgeschlagene Fake-Setup-Test ist nun unabhängig von der nicht
-versionierten Template-Datei; kein Trainingsbestand wurde kopiert.
-Der breite P4-Lauf hatte 837 bestandene Prüfungen; nach den letzten lokalen
-Hub-/UART-Korrekturen bestanden 97 betroffene Tests und der ursprüngliche
-sporadische Fehlerfall zehn Wiederholungen. Kein einzelner eingefrorener
-837-Test-Lauf auf dem letzten Stand behauptet; G1 führt die Endprüfung durch.
+## Abschließender Prüfstand
 
-## Offene externe Gates
+- Eingefrorener betroffener Backendlauf: **430 bestanden, vier native
+  Windows-Gates übersprungen**, 48,60 s. Gesamtes Windows-Testverzeichnis
+  plus Bridge-Endintegration, Bestandstransport, Hub/Routen/Protokoll,
+  OutputState, Kopplung und UART. Ruff für die G1-Dateien und Diff-Prüfung bestanden.
+- P4 nach seinen letzten Änderungen: 97 betroffene Tests bestanden; der
+  ursprüngliche sporadische UART-Fall zusätzlich zehnmal. Breiterer Lauf
+  zuvor 837 bestanden und 158 Node-Tests; kein neu behaupteter eingefrorener
+  837-Test-Lauf auf dem Abschlussstand. Unveränderte Live-/CV-Batches nicht wiederholt.
+- Doku: strenger Build bestanden, gesamter Playwright-Lauf **91 bestanden**
+  in 6,7 min. OQ-66 geklärt: Auswahlvorbedingung im Tastaturtest kontrolliert;
+  drei gezielte Wiederholungen und unabhängiges Review bestanden. Wiki-UI unverändert.
+- Gemeinsames G1-/Branchreview: ein wichtiger Statusfehler korrigiert.
+  Windows reicht den geprüften Pi-Sperrgrund jetzt über den öffentlichen
+  Snapshot weiter; Diagnose erhält die festen Wiederanlaufcodes. Einmalige
+  Nachprüfung: beide Befunde behoben, kein neuer wichtiger Befund. Backend-
+  Übergabe freigegeben. Ein nicht reproduzierter Zwischenlauf-Timeout des
+  neuen kombinierten Testfalls bleibt als OQ-67 dokumentiert; die finale
+  Zustandsprüfung und getrennte numerische Integration sind grün.
 
-N1: echte Windows-11-x64-Qualifikation ohne Python sowie neben Python 3.7,
-passende Qt/Python-Locks und tatsächlicher Freeze. N2: konkretes signiertes
-Treiberpaket, HVCI/PnP, Besitz und bidirektionaler Portnachweis. N3: genaue
-GSVmulti-/Dateiversion, kontrollierte Feldänderungen und echter Import-/
-Wiederöffnungs-/Empfangsroundtrip. Signierung, Release-Kanal und Windows-Runner
-sind gesonderte Voraussetzungen. Keine erfundene Sessiondatei oder erfolgreiche
-Installation als Ersatz. OQ-53 und externe Gates bleiben offen; OQ-62/OQ-64 in Arbeit, Releasepolitik OQ-65 offen.
+Diese Tests sind Software-/Fake-COM-Evidenz; keine Messung, native
+Windows-Qualifikation oder GSVmulti-Empfangsabnahme.
 
-DUT-Werte über Windows-Brücken bleiben strukturell gesperrt. Erlaubt sind
-synthetische Demos mit provisional=true und ohne Zeitaussage. COM-Schreiben
-belegt keine Annahme durch GSVmulti. Die getrennte direkte UART-Ausgabe
-behält den bestätigungspflichtigen Prototypstatus. Testläufe senden nichts.
+## Nächste Arbeit und externe Gates
 
-## Vorheriger Laborstand
+Claude: Qt-Onboarding/Tray, UART-/Netz-/Endpunktauswahl, Profil/Kopplung,
+Anleitung in der Workbench und getrennte Statusanzeigen für Verbindung,
+Treiber, Demo-Bereitschaft und belegten Empfang. Öffentliche Kern-APIs verwenden.
 
-Erster T13-Lauf `live-20261106T112527Z/run-01` beendet und
-[ausgewertet](quellen/werkbank-t13-2026-11-06.md): 22:38 min,
-39.886 Datensätze, 75,79 % VALID; 0 Abweichungen unter 10.773 eindeutig
-vergleichbaren Referenzfreigaben, 19.451 im Wechsel-Schutzfenster unentschieden,
-5 ungedeckt. Keine vollständige T13-Abnahme. Letzte 8284 Bilder verwendeten
-den zweiten Fit, 6605 akzeptiert; kein blockierter Lauf. Physischer Grund
-der dauerhaften Erstfit-Ablehnung offen (OQ-63), Diagnosebilder fehlten.
+N1: Windows 11 x64 ohne Python sowie neben unverändertem Python 3.7,
+qualifizierte Wheel-/Qt-Locks und Freeze. Die vier Linux-Skips betreffen
+DPAPI, geschützten Store/DACL, Instanzschutz und tatsächliches Freeze-Artefakt.
+N2/W3: konkreter signierter Treiber, HVCI/PnP und bidirektionales Portpaar,
+vertrauenswürdiger nativer UAC-/Deploymentanbieter sowie echte Installations-,
+Reboot-, Reparatur-, Rollback- und Deinstallationsläufe.
+N3: genaue GSVmulti-/Dateiversion und kontrollierter Feld-/Import-/
+Wiederöffnungs-/Empfangsroundtrip; automatische Sessionerzeugung bleibt blockiert.
+Release-Key/Hosting/Versionspolitik OQ-65 offen; OQ-62/OQ-64 in Arbeit.
 
-Beobachter beendet; bisherige Werkbank bleibt unter
-`https://100.122.154.35:8082/live` zum Ansehen aktiv,
-Dienst `dispread-werkbank-t13.service`. Vor neuer Abnahme Diagnose/HUD planen
-und mindestens 30 Minuten mit dokumentiertem Vorschau-/Lastvergleich prüfen.
-Vorherige UI-Fertigstellung: 229 Node- und 46 Workbench-Playwright-Tests
-bestanden. Wiki-Gesamtlauf hatte einen Roadmap-Fehler; isoliert danach 3/3
-bestanden, deshalb keine durchgehend grüne Wiki-Gesamtabnahme.
+Physische G1-Abnahme: zwei Pi, UART/LAN/Tailscale, Abziehen/Prozessabbruch/
+Standby, 30-Minuten-Demos und Vergleich originaler GSV-Dateien mit COM-/Quellaudit.
+DUT-Ausgabe bleibt strukturell gesperrt. Synthetische Demos sind provisional
+und tragen keine Latenz-/Altersaussage. COM-Erfolg belegt keinen GSVmulti-Empfang.
+Direkte UART-Ausgabe behält ihren getrennten bestätigungspflichtigen Prototypstatus.
+
+## Bisheriger Laborstand
+
+T13 `live-20261106T112527Z/run-01`: 22:38 min, 39.886 Datensätze,
+75,79 % VALID, 0 Abweichungen unter 10.773 eindeutig vergleichbaren Freigaben;
+19.451 im Wechselschutz unentschieden und fünf ungedeckt. Keine vollständige
+T13-Abnahme. Letzte 8284 Bilder nutzten Zweitfit, 6605 akzeptiert; kein
+blockierter Lauf. Physischer Erstfit-Grund offen, Diagnosebilder fehlten:
+[Auswertung](quellen/werkbank-t13-2026-11-06.md), OQ-63.
+
+Vorhandene Werkbank weiter `https://100.122.154.35:8082/live`, Dienst
+`dispread-werkbank-t13.service`; Beobachter beendet. Frühere UI-Prüfung:
+229 Node- und 46 Workbench-Playwright-Tests bestanden. Neue Hardware-Abnahme
+mit Diagnose/HUD, mindestens 30 Minuten und dokumentiertem Vorschau-/Lastvergleich.
 
 UART-Versuch zurückgestellt, Pi-Demosender beendet. Windows zuletzt Python
-3.15 / .venv315, COM6 FTDI → Brücke COM5 → GSVmulti COM4. Nur GND/RXD
-bestätigt; TXD-Rückleitung zum physischen Pi-Pin 10 fehlt. Keine erfolgreiche
-UART-Brückenübergabe behauptet. Vor Fortsetzung Verdrahtung bestätigen.
-Historische Windows-Demobelege vom 04.11. stehen in
-[VALIDATION](VALIDATION.md) und [Protokoll](GSVMULTI_PROTOCOL.md).
-
-Nach T13 bleiben Aufbewahrung/Export (OQ-60), Nachberechnung (OQ-59) und
-Altcontroller-Bestandsaufnahme (OQ-61) gemäß [TODO](../TODO.md) spätere Arbeit.
-
-Doku-Vorprüfung: strenger Build bestanden. Browserlauf 90 bestanden/1 Fehler
-im unveränderten Session-Explorer-Test; isoliert danach 3/3. OQ-66 eingegrenzt:
-Testvorbedingung für Maus-/Tabellenwahl jetzt explizit, ursprüngliche
-Tastaturprüfungen erhalten; nach Testfix 3/3 und Review sauber. Vollständige
-Wiederholung folgt, keine Änderung am Wiki-Oberflächenverhalten.
+3.15/.venv315, COM6 FTDI → Brücke COM5 → GSVmulti COM4. Nur GND/RXD
+bestätigt; TXD zum physischen Pi-Pin 10 fehlt. Keine erfolgreiche UART-
+Brückenübergabe behauptet. Vor Fortsetzung Verdrahtung bestätigen.
+Aufbewahrung OQ-60, Nachberechnung OQ-59 und Altcontroller OQ-61 folgen laut [TODO](../TODO.md).

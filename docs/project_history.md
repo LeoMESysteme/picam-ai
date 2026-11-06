@@ -9,6 +9,27 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Ein Besitzer des Wiederanlaufs
+
+**Problem:** Der Worker trennte nach gewöhnlichem Kanalverlust und nach
+Laufende den Manager. Dadurch wurde dessen bereits implementierter Backoff
+abgebrochen; beide einzeln geprüften Komponenten erholten sich zusammen nicht.
+
+**Entscheidung:** Nur der Manager verbindet erneut. Der Worker wartet bei
+bekannten vorübergehenden Verbindungsfehlern auf eine neue authentisierte
+Generation und prüft das Journal vor der Fortsetzung. COM und Konfiguration
+bleiben gleich; alte Werte, ACKs und Demostarts werden nicht zwischengespeichert.
+Ein ordentliches Laufende beendet den Datenlauf, nicht die Verbindung.
+
+**Alternativen:** Wiederanlauf in GUI oder Worker würde eine zweite
+Verbindungszustandsmaschine schaffen. Pauschal jeden Fehler zu wiederholen
+könnte unklare COM-Übergaben oder Audit-/Invalidierungssperren übergehen.
+
+**Konsequenz:** `recovering` bleibt sichtbar und nicht ausgabebereit.
+Expliziter Stop und dauerhafte Fehler bleiben terminal. Lokale TLS-/SQLite-
+Integration mit Fake-COM belegt die Zusammensetzung, keine Windows- oder
+physische Empfangsabnahme.
+
 ## 2026-11-06 — Zertifikatsbindung gespeicherter Windows-Tokens
 
 **Problem:** Pi-ID und Transport allein binden einen gespeicherten Token

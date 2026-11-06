@@ -29,6 +29,8 @@ class BridgeWorker:
 
     com_factory() opens the explicitly selected COM endpoint and must return a
     pySerial-compatible, bounded-timeout handle. start() never reconnects W1.
+    Ordinary link loss waits for W1's validated replacement; completed runs
+    leave the worker available for the next explicitly requested demo.
     stop() is permanent for this worker/connection: release the Pi lease, cancel
     a blocked driver write when supported, then wait up to two seconds. A driver
     that ignores cancellation remains visibly active until its call returns.
@@ -78,6 +80,8 @@ class BridgeWorker:
             self._last_event = event
             if kind == 'started':
                 self._state = 'running'
+            elif kind == 'recovering':
+                self._state = 'recovering'
             elif kind == 'stopped':
                 self._state = 'stopped'
             if kind in ('audit_failed', 'connection_failed', 'blocked'):
@@ -118,32 +122,74 @@ class BridgeWorker:
         # reconnect/revocation. Lock order is manager -> worker admission.
         return self.connection.admit_write(link, claim_unless_stopped)
 
-    def _run(self):
-        com = None
+    def _check_journal(self, *, recovering=False):
         try:
-            link = self.connection.data_link()  # validation precedes opening COM
-            if self._stop.is_set():
-                return
             pi_id = self.connection.profile.pi_id
-            try:
-                if self.journal.has_unresolved_invalidation(pi_id):
-                    raise DeliveryBlockedError('unknown invalidation')
-            except DeliveryBlockedError:
-                raise
-            except Exception as exc:
-                raise BridgeAuditError('audit_failed reading journal') from exc
+            if self.journal.has_unresolved_invalidation(pi_id):
+                raise DeliveryBlockedError('unknown invalidation')
+            # A COM failure can itself lose its failed ACK. That outer link
+            # exception must never hide uncertain bytes and enable auto-resume.
+            if recovering and any(row.pi_id == pi_id for row in self.journal.unresolved()):
+                raise DeliveryUncertainError('unknown delivery')
+        except (DeliveryBlockedError, DeliveryUncertainError):
+            raise
+        except Exception as exc:
+            raise BridgeAuditError('audit_failed reading journal') from exc
+
+    def _may_recover(self, error):
+        # Local import avoids connection -> readiness -> worker import cycle.
+        from .connection import ConnectionError
+
+        if not isinstance(error, ConnectionError) or error.code not in {
+                'connection_unavailable', 'connection_lost', 'lease_unavailable'}:
+            return False
+        state = self.connection.snapshot()
+        # W1 owns retry/backoff. A terminal refusal or explicit disconnect must
+        # not leave this worker waiting forever on an already stopped manager.
+        return (state.peer in {'connecting', 'backoff', 'authenticated'}
+                or (state.peer == 'disconnected' and state.next_action == 'reconnect'))
+
+    def _run(self):
+        com = link = None
+        recovering = False
+        try:
+            pi_id = self.connection.profile.pi_id
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
                                     admit_write=self._admit_write)
-            com = self.com_factory()
-            with self._lock:
-                self._com = com
-            self._event('started')
             while not self._stop.is_set():
-                link = self.connection.data_link()
-                outcome = session.exchange(link, com)
-                self._event('exchange', outcome=outcome)
-                if outcome == 'ended':
-                    break
+                try:
+                    current = self.connection.data_link()
+                    if recovering and current is link:
+                        self._stop.wait(0.05)
+                        continue
+                    if com is None or recovering:
+                        self._check_journal(recovering=recovering)
+                        if self._stop.is_set():
+                            break
+                        if com is None:
+                            com = self.com_factory()
+                            with self._lock:
+                                self._com = com
+                        self._event('started')
+                        recovering = False
+                    link = current
+                    outcome = session.exchange(link, com)
+                    self._event('exchange', outcome=outcome)
+                    # ended completes a run, not the authenticated connection.
+                    # Only a later explicit producer run supplies more values.
+                except (DeliveryBlockedError, DeliveryUncertainError, BridgeAuditError):
+                    raise
+                except Exception as error:
+                    if self._stop.is_set():
+                        self._check_journal(recovering=True)
+                        break
+                    if not self._may_recover(error):
+                        raise
+                    if not recovering:
+                        self._check_journal(recovering=True)
+                        self._event('recovering', code='connection_unavailable')
+                        recovering = True
+                    self._stop.wait(0.05)
                 # Prevent an idle/busy loop without buffering historical values.
                 self._stop.wait(0.01)
         except DeliveryBlockedError:
@@ -151,22 +197,22 @@ class BridgeWorker:
         except DeliveryUncertainError:
             self._event('blocked', strict=False, code='unknown_delivery', outcome='unknown')
         except BridgeAuditError:
-            self._event('audit_failed', strict=False, outcome='unknown')
+            self._event('audit_failed', strict=False, code='audit_failed', outcome='unknown')
         except Exception:
             # No arbitrary exception strings: they may contain credentials/URLs.
-            self._event('connection_failed', strict=False, outcome='stopped')
+            self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
         finally:
             with self._admission_lock:
                 self._stop.set()
             try:
                 self.connection.disconnect()
             except Exception:
-                self._event('connection_failed', strict=False, outcome='stopped')
+                self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
             try:
                 if com is not None:
                     com.close()
             except Exception:
-                self._event('connection_failed', strict=False, outcome='stopped')
+                self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
             with self._lock:
                 self._com = None
             self._event('stopped', strict=False)

@@ -476,7 +476,7 @@ def test_blocked_replacement_opener_clears_revoked_output_readiness(setup, worke
     from dispread_bridge_app.worker import WorkerStatus
     manager, factory, hub, events = setup
     old_link = connected(manager)
-    assert manager.snapshot().output == 'demo_only'
+    assert manager.snapshot().output == 'output_off'
     class Worker:
         status = WorkerStatus('running' if worker_code is None else 'stopped', False,
                               worker_code is None, worker_code)
@@ -523,3 +523,40 @@ def test_bound_auth_or_identity_error_remains_fatal(setup, error_code, wrong_pi,
     assert not manager._thread.is_alive()
     assert len(factory.transports) == 1
     assert 's' * 43 not in repr(events)
+
+
+def test_same_run_idle_release_updates_are_safe_and_bound_to_current_generation(setup):
+    from dispread.bridge.output_state import RELEASE_BLOCK, OutputState
+    manager, factory, hub, events = setup
+    link = connected(manager)
+    assert (manager.snapshot().output, manager.snapshot().next_action) == ('output_off', 'output_off')
+    state = OutputState(hub.audit_root / 'peer-readiness', demo=True)
+    state.start()
+    hub.bind_run(state.run_id, state)
+    try:
+        link.heartbeat()  # Run-change Hello must refresh the output state.
+        assert manager.snapshot().output == 'demo_only'
+        transport = factory.transports[0]
+        for index, block, reason in [(1, RELEASE_BLOCK, 'dut_release_blocked'),
+                                     (2, 'token=SECRET', 'peer_release_blocked'),
+                                     (3, None, None)]:
+            transport.mutate = lambda reply, block=block: dict(reply, release_block=block)
+            link.send(dict(version=1, type='poll', request_id=f'readiness-{index}'))
+            assert link.receive()['type'] == 'idle'
+            snapshot = manager.snapshot()
+            assert snapshot.output == ('demo_only' if block is None else 'blocked')
+            assert snapshot.next_action == reason
+            latest = [event for event in events if event.code == 'peer_output_changed'][-1]
+            assert latest.run_id == state.run_id
+            assert latest.detail['reason'] == reason
+            assert latest.detail['generation'] == link.generation
+        assert 'SECRET' not in repr(events)
+        manager.disconnect()
+        cleared = manager.snapshot()
+        assert (cleared.output, cleared.next_action) == ('unavailable', 'connect')
+        with pytest.raises(ConnectionError):
+            link.heartbeat()
+        assert manager.snapshot() == cleared
+    finally:
+        hub.unbind_run(state.run_id)
+        state.stop()

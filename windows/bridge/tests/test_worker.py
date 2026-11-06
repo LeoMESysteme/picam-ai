@@ -562,3 +562,93 @@ def test_admission_lock_wait_consumes_final_budget(tmp_path):
         assert session(db, clock=lambda: now[0], admit_write=waited_admission).exchange(link, com) == 'expired'
         assert db.attempts()[0].outcome == 'not_written'
     assert com.payloads == [] and claims == []
+
+
+class RecoveringConnection(Connection):
+    def __init__(self, link):
+        super().__init__(link)
+        self.peer, self.action = 'authenticated', None
+    def snapshot(self):
+        return SimpleNamespace(peer=self.peer, next_action=self.action)
+    def data_link(self):
+        from dispread_bridge_app.connection import ConnectionError as LinkError
+        if self.peer != 'authenticated':
+            raise LinkError('connection_unavailable')
+        return super().data_link()
+
+
+def test_transient_loss_waits_for_new_validated_link_without_disconnect(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    connection = RecoveringConnection(Link())
+    connection.peer, connection.action = 'backoff', 'network_unavailable'
+    com, recovering, resumed = Com(), threading.Event(), threading.Event()
+    def emit(event):
+        if event.kind == 'recovering':
+            recovering.set()
+        if event.kind == 'exchange':
+            resumed.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, com, db, emit)
+        w.start()
+        try:
+            assert recovering.wait(2)
+            assert w.status.state == 'recovering' and not w.status.output_ready
+            assert not connection.disconnected and not com.closed
+            connection.link = Link(message(sequence=50))
+            connection.peer, connection.action = 'authenticated', None
+            assert resumed.wait(2)
+            assert w.status.output_ready and w.failure is None
+        finally:
+            w.stop()
+    assert com.payloads == [b'%+1.0\r\n']
+
+
+def test_clean_ended_keeps_worker_available_for_next_explicit_run(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    link = Link(dict(version=1, type='ended', run_id='old'))
+    connection, com, ended, written = Connection(link), Com(), threading.Event(), threading.Event()
+    def emit(event):
+        if event.kind == 'exchange' and event.detail['outcome'] == 'ended':
+            ended.set()
+        if event.kind == 'exchange' and event.detail['outcome'] == 'written':
+            written.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, com, db, emit)
+        w.start()
+        try:
+            assert ended.wait(2)
+            assert w.is_active() and not connection.disconnected and not com.closed
+            link.reply = message(run='new', sequence=100)
+            assert written.wait(2)
+        finally:
+            w.stop()
+    assert com.payloads == [b'%+1.0\r\n']
+
+
+@pytest.mark.parametrize('action', ['peer_invalid', 'pairing_required', 'authentication_refused', 'connect'])
+def test_permanent_manager_failure_is_not_a_recovery_spin(tmp_path, action):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    connection = RecoveringConnection(Link())
+    connection.peer, connection.action = 'disconnected', action
+    done = threading.Event()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, Com(), db, lambda e: done.set() if e.kind == 'stopped' else None)
+        w.start()
+        assert done.wait(2)
+        assert w.failure.kind == 'connection_failed'
+        w.stop()
+
+
+def test_stop_interrupts_transient_recovery(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    connection, recovering, com = RecoveringConnection(Link()), threading.Event(), Com()
+    connection.peer, connection.action = 'backoff', 'network_unavailable'
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, com, db, lambda e: recovering.set() if e.kind == 'recovering' else None)
+        w.start()
+        try:
+            assert recovering.wait(2)
+        finally:
+            w.stop()
+        assert not w.is_active() and connection.disconnected
+    assert not com.closed and com.payloads == []

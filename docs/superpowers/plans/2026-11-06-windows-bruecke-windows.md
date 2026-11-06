@@ -27,18 +27,29 @@
 - Teilinstallation, belegtes fremdes Paar oder abgelehnte UAC (W3).
 - Sessiondatei erzeugt ohne tatsächliche Übernahme in GSVmulti (W4).
 
+## Lokaler Backendstand 06.11.2026
+
+W1 und W2 einschließlich gemeinsamen Wiederanlaufs sind lokal implementiert;
+W3 besitzt portable Installer-/Updateadapter. Abschließender betroffener Lauf:
+430 bestanden, vier native Windows-Gates übersprungen. Reale DPAPI/DACL,
+Instanz-/Freezeprüfung, native Treiber-/Deploymentanbieter und Produktpaket
+bleiben offen. W4 und sichtbare Workbench-Anbindung übernimmt Claude.
+Gemischte Schritte mit Windows-/GUI-Abnahme bleiben unten deshalb offen;
+die [Übergabe](../handoffs/2026-11-06-windows-bruecke-claude.md) benennt die
+vorhandenen APIs und die fehlenden Nachweise. Kein fertiger Produktinstaller.
+
 ### W1: Verbindung, geschützter Speicher und Bereitschaftsmodell
 
 **Files:** Create `windows/bridge/src/dispread_bridge_app/connection.py`, `credentials.py`, `readiness.py`, `transports.py`; create `windows/bridge/tests/test_connection.py`, `test_credentials.py`, `test_readiness.py`; consume N2 devices.py/vcom.py and P1 protocol/types.
 
 **Interfaces:** `ConnectionManager(profile: BridgeProfile, client_id: str, credentials, devices, transport_factory, emit)` with `connect(mode: str, selected_device_id: str | None=None)`, `disconnect()`, `cancel()`, `snapshot()->Readiness`; `CredentialStore.save(pi_id, transport, token)`, `load(pi_id, transport)->str|None`, `remove(pi_id, transport)`; `Readiness(components: str, adapter: str, peer: str, output: str, com: str, gsv: str, next_action: str|None)` mit unabhängigem GSV-Empfangsstatus. Transportadapter exponiert `send/receive/close`, ist vom Qt-Thread getrennt.
 
-- [ ] W1.1 RED: falsche Pi-ID/Pin, abgelaufenes Zertifikat/Offer, falsche Protokollversion und anderer Transport abweisen. `test_same_hostname_different_pi_never_reconnects` und `test_matching_adapter_without_unique_serial_needs_selection` müssen keine COM-Weitergabe auslösen.
-- [ ] W1.2 Verbindungszustandsmaschine mit abbrechbaren Hintergrundoperationen implementieren. Netzwerk = gekoppelte WSS-Verbindung mit geprüftem Pin/Gültigkeit; UART = echter signierter Hello. DiscoveryCandidate ist unbestätigt, bis Identität geprüft. Backoff 1/2/4/8 s, auf 8 s begrenzt; keine aktive Transportumschaltung.
+- [x] W1.1 RED: falsche Pi-ID/Pin, abgelaufenes Zertifikat/Offer, falsche Protokollversion und anderer Transport abweisen. `test_same_hostname_different_pi_never_reconnects` und `test_matching_adapter_without_unique_serial_needs_selection` müssen keine COM-Weitergabe auslösen.
+- [x] W1.2 Verbindungszustandsmaschine mit abbrechbaren Hintergrundoperationen implementieren. Netzwerk = gekoppelte WSS-Verbindung mit geprüftem Pin/Gültigkeit; UART = echter signierter Hello. DiscoveryCandidate ist unbestätigt, bis Identität geprüft. Backoff 1/2/4/8 s, auf 8 s begrenzt; keine aktive Transportumschaltung.
 - [ ] W1.3 Credentials benutzergebunden mit Windows-Schutz speichern, Dateirechte und Logredaktion testen. Kein Token in GSV-Datei, Profilexport oder Fehlerdialog. `test_other_windows_user_cannot_reuse_credentials` muss erneute Kopplung statt ungeschützter Ersatzablage verlangen.
 - [ ] W1.4 RED/GREEN: USB-Abziehen/Wiederanschluss mit COM6→COM9, mDNS-Ausfall mit explizitem Endpunkt, Tailscale abgemeldet, Uhrfehler, Cancel während Backoff. „Adapter erkannt, Pi antwortet nicht“ darf keine konkrete fehlende Leitung behaupten.
 - [ ] W1.5 `./.build-venv/Scripts/python.exe -m pytest -q windows/bridge/tests/test_connection.py windows/bridge/tests/test_credentials.py windows/bridge/tests/test_readiness.py`. Echte DPAPI-/Windows-API-Tests getrennt von Fake-Unit-Tests kennzeichnen.
-- [ ] W1.6 Reinen Verbindungskern plus Tests/Doku/CHANGELOG committen; noch keine produktive Ausgabe.
+- [x] W1.6 Reinen Verbindungskern plus Tests/Doku/CHANGELOG committen; noch keine produktive Ausgabe.
 
 ### W2: Auditierter Brückenworker und kontrolliertes Lebensende
 
@@ -46,13 +57,13 @@
 
 **Interfaces:** `BridgeWorker(connection, com_factory, journal, emit)` with `start()`, `stop()`, `is_active()->bool`; verwendet `BridgeSession.exchange()` über validierten v2/v1-Datenadapter. `DeliveryJournal.begin_attempt(pi_id, run_id, frame_sequence, barrier_id, payload: bytes)->str`, `finish_attempt(attempt_id, outcome: str)`, `unresolved()->tuple`, `should_emit(...)->bool`; Schlüssel enthält Pi/Run/Frame/Barriere. `SingleInstance.activate_or_acquire()->bool` schützt eine Appinstanz pro Windows-Benutzer; Port-/Runexklusivität kommt zusätzlich aus OS und Pi-Lease.
 
-- [ ] W2.1 RED mit Fake-COM: `test_kill_after_write_before_ack_does_not_resend_numeric`, `test_partial_write_is_unknown_not_success`, `test_full_disk_before_intent_prevents_write`, `test_audit_failure_after_write_stops_and_marks_unknown`. GSV-Empfang darf nie aus erfolgreichem COM-Schreiben abgeleitet werden.
-- [ ] W2.2 Persistentes Journal mit bestätigtem Intent vor COM und Ergebnis danach implementieren (SQLite-Transaktionen oder gleichwertig nachweisbarer dauerhafter Speicher). COM-Aufruf und Journaladapter über die bestehende BridgeSession nahtlos verbinden; einmalige Formatierung und keine zweite Zahlenerkennung. Crash zwischen Ergebnis und ACK: vorhandenes Ergebnis quittieren, keine Zahl erneut schreiben.
-- [ ] W2.3 Unklare Zahlenübergabe nicht wiederholen. Unbestätigte Invalidierung getrennt halten; solange deren Auflösung nicht durch geprüfte idempotente Regel gedeckt ist, Ausgabe blockieren statt gültige Zahlen an ihr vorbeizulassen. `test_unknown_invalidation_blocks_new_valid_after_restart` prüft diese Grenze. Keine Exactly-once-Zusage bei unbestätigtem COM-Erfolg. `test_slow_uart_keeps_latest_bounded` prüft mit langsamer 115200-Baud-Strecke begrenzten Speicher und dass aktuelle Zahlen nicht hinter einer historischen Queue warten.
+- [x] W2.1 RED mit Fake-COM: `test_kill_after_write_before_ack_does_not_resend_numeric`, `test_partial_write_is_unknown_not_success`, `test_full_disk_before_intent_prevents_write`, `test_audit_failure_after_write_stops_and_marks_unknown`. GSV-Empfang darf nie aus erfolgreichem COM-Schreiben abgeleitet werden.
+- [x] W2.2 Persistentes Journal mit bestätigtem Intent vor COM und Ergebnis danach implementieren (SQLite-Transaktionen oder gleichwertig nachweisbarer dauerhafter Speicher). COM-Aufruf und Journaladapter über die bestehende BridgeSession nahtlos verbinden; einmalige Formatierung und keine zweite Zahlenerkennung. Crash zwischen Ergebnis und ACK: vorhandenes Ergebnis quittieren, keine Zahl erneut schreiben.
+- [x] W2.3 Unklare Zahlenübergabe nicht wiederholen. Unbestätigte Invalidierung getrennt halten; solange deren Auflösung nicht durch geprüfte idempotente Regel gedeckt ist, Ausgabe blockieren statt gültige Zahlen an ihr vorbeizulassen. `test_unknown_invalidation_blocks_new_valid_after_restart` prüft diese Grenze. Keine Exactly-once-Zusage bei unbestätigtem COM-Erfolg. `test_slow_uart_keeps_latest_bounded` prüft mit langsamer 115200-Baud-Strecke begrenzten Speicher und dass aktuelle Zahlen nicht hinter einer historischen Queue warten.
 - [ ] W2.4 Workerstop, GUI-Abbruch, zweiter Appstart und Leaseverlust testen. Bestehendes Fenster aktivieren; Minimieren hält Worker aktiv; explizites Beenden/Abmelden/Suspend unterbricht erkennbar. Keine laufende GSVmulti-Instanz zwangsweise schließen.
 - [ ] W2.5 Windows-Detaildiagnose auf maximal 64 MiB/7 Tage begrenzen und transparent anzeigen; Run-Audit bis expliziter Bereinigung erhalten. Volle Platte führt zu `audit_failed` und gestoppter COM-Ausgabe, nicht zu stiller Löschung. Diagnoseexport redigiert Secrets. Globale Laufaufbewahrung bleibt OQ-60.
 - [ ] W2.6 `./.build-venv/Scripts/python.exe -m pytest -q windows/bridge/tests/test_worker.py windows/bridge/tests/test_delivery_journal.py windows/bridge/tests/test_instance.py`; Pi-Regression `PYTHONPATH=src ./.venv/bin/pytest -q tests/test_gsv_bridge.py tests/test_gsv_transport.py`. Echten Prozessabbruch auf Test-Portpaar protokollieren.
-- [ ] W2.7 Kern/Journaldoku/CHANGELOG committen. Keine Kamera-/Referenzänderung und keine Freigabe von DUT-Werten.
+- [x] W2.7 Kern/Journaldoku/CHANGELOG committen. Keine Kamera-/Referenzänderung und keine Freigabe von DUT-Werten.
 
 ### W3: Fortsetzbarer Installer, Reparatur und Update
 
@@ -65,7 +76,7 @@
 - [ ] W3.3 N2-Komponenten idempotent einrichten, Rechte/Neustart erklären; kein Security-Abschalten oder neues Paar bei jeder Reparatur. Vorherige Version erhalten und Konfiguration versioniert migrieren; nach fehlgeschlagenem Update kontrolliert zurückkehren. Benutzer muss über aktive Ausgabe/noch offene Logs informiert bleiben.
 - [ ] W3.4 Release-Artefakte auf Windows bauen/signieren und manifestieren. Neue Forgejo-Jobdatei benutzt nur `picam-windows-x64`, keine Pi-Runner-/Systempaketänderungen. Ohne Runner/Signierung nur klar markierter interner Build über dokumentiertes `build.ps1`; kein erfolgreicher Produktrelease-Status.
 - [ ] W3.5 `./.build-venv/Scripts/python.exe -m pytest -q windows/bridge/tests/test_install.py windows/bridge/tests/test_updates.py`; echtes Setup auf frischer VM, verweigerte UAC, Reboot und zweimalige Reparatur prüfen. Hashes/Signaturen/PnP-Ergebnisse als Artefakte sichern.
-- [ ] W3.6 Installer/Build/Abhängigkeitsdoku/CHANGELOG committen. Veröffentlichen oder Installation auf realem Arbeits-PC nur innerhalb konkret autorisierter Aktion.
+- [x] W3.6 Installer/Build/Abhängigkeitsdoku/CHANGELOG committen. Veröffentlichen oder Installation auf realem Arbeits-PC nur innerhalb konkret autorisierter Aktion.
 
 ### W4: Sessiongenerator und Qt-Einrichtungsoberfläche
 

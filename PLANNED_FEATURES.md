@@ -25,7 +25,10 @@ Architektur gewählt am 06.11.: bestehender Python-Brückenkern, Qt-GUI und
 Windows-Installer. [Spezifikation](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md)
 am 06.11. freigegeben; [Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md)
 mit getrennten Nachweisen, Pi-/Protokollteil und Windows-Anwendung liegt vor.
-Noch kein Produktcode dieser Erweiterung implementiert.
+Backend für Kopplung, TLS/UART, Geräte-/Installeradapter, Journal und
+Bereitschaft implementiert und lokal integriert. EXE-GUI und sichtbare
+Workbench-Anleitung folgen durch Claude. Native Windows-/Treiberqualifikation,
+Produktpaket und belegter Sessionexport bleiben offen; noch keine fertige EXE.
 [Offene Umsetzungspunkte](docs/open-questions.md#oq-62),
 [aktive Arbeitsreihenfolge](TODO.md).
 

@@ -13,6 +13,10 @@ Aktuelle freigegebene Umsetzung: Windows-Brücke v2 auf
 Backend/Paketierung durch Codex, EXE-GUI und sichtbare Workbench-Anbindung
 anschließend durch Claude gemäß [Übergabe](docs/superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
 Der bisherige Redesign-Worktree und dessen laufender Dienst bleiben erhalten.
+Backend einschließlich Wiederanlauf lokal integriert: 430 Tests bestanden,
+vier native Windows-Prüfungen übersprungen; Branchreview/Nachprüfung sauber.
+Nächster Arbeitsschritt: Claude-UI auf dem vorhandenen Kern; native Windows-Provider,
+Treiber-/Paketqualifikation und belegter Sessionexport bleiben offene Gates.
 
 ---
 

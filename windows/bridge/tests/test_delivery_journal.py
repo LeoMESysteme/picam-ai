@@ -185,3 +185,21 @@ def test_legacy_diagnostic_export_redacts_unknown_secret_keys_recursively(tmp_pa
     exported = store.export()
     assert 'TOPSECRET' not in exported and 'SECRET2' not in exported
     assert 'connected' in exported
+
+
+
+def test_diagnostic_export_preserves_reviewed_recovery_codes_and_redacts_nested_text(tmp_path):
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    from dispread.bridge.types import BridgeEvent
+    store = DiagnosticStore(tmp_path)
+    store.append(BridgeEvent('recovering', 'connection_unavailable', None, None,
+                             dict(nested=[dict(code='token=SECRET', kind='arbitrary-state')],
+                                  token='SECRET')))
+    exported = store.export()
+    value = json.loads(exported)
+    assert (value['kind'], value['code']) == ('recovering', 'connection_unavailable')
+    assert value['detail']['nested'] == [dict(code='[redacted]', kind='[redacted]')]
+    assert 'SECRET' not in exported and 'arbitrary-state' not in exported

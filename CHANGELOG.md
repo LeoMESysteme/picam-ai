@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Gemeinsamen Wiederanlauf von Verbindungsmanager und Worker
+  fertiggestellt. Gewöhnlicher Kanalverlust überlässt den Backoff dem Manager;
+  der Worker wartet auf eine neu geprüfte Verbindung, ohne alte Werte oder
+  Demos zu wiederholen. Nach Laufende bleibt die Verbindung für die nächste
+  ausdrückliche Demo bereit. Stop, Auditfehler und unklare COM-Übergaben bleiben dauerhaft
+  gesperrt. Authentisierte Pi-Ausgabe aus, Demo, Laufende und DUT-Sperrgrund
+  werden im Windows-Status getrennt weitergegeben; Diagnose erhält die festen
+  Wiederanlaufcodes. 430 abschließende Backend-Prüfungen bestanden, vier native
+  Windows-Prüfungen hier übersprungen. GUI und reale Windows-/GSVmulti-
+  Abnahme bleiben getrennte nächste Schritte.
+
 * 2026-11-06: Windows-Verbindungskern für gepinntes WSS und signierten UART
   ergänzt, mit geschütztem DPAPI-Speicher und zentraler Bereitschaft. Tokens
   sind zusätzlich an den Zertifikatsfingerprint gebunden; ein neues Zertifikat

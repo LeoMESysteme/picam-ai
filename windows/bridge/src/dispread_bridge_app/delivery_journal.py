@@ -180,6 +180,7 @@ _PUBLIC_VALUES = frozenset({
     'started', 'stopped', 'connected', 'idle', 'ended', 'exchange', 'written',
     'unknown', 'pending', 'not_written', 'expired', 'failed', 'audit_failed',
     'connection_failed', 'blocked', 'unknown_invalidation', 'unknown_delivery',
+    'recovering', 'connection_unavailable',
     'com_driver_write', 'host_monotonic', 'synthetic',
 })
 

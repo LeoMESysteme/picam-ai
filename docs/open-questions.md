@@ -61,7 +61,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
-| [OQ-66](#oq-66) | — | in Arbeit | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
+| [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -73,6 +73,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
 | [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
+| [OQ-66](#oq-66) | — | geklärt | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
 
 <!-- OQ-INDEX:END -->
 
@@ -3150,6 +3151,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   ist zur Ausführung freigegeben. EXE-GUI und sichtbare Workbench-Anbindung
   bleiben auf Nutzerwunsch Claude vorbehalten. Architekturwahl klärt nicht Treiberzulassung,
   Sessionformat oder produktive Messfreigabe.
+* **Umsetzung 2026-11-06:** Verbindungs-/Bereitschaftskern, geschützter
+  CredentialStore, COM-Journal und portable Installeradapter sind lokal
+  integriert. Native Windows-Provider und Qualifikation fehlen weiterhin;
+  EXE-/Workbench-Oberflächen folgen durch Claude gemäß
+  [Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
   Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung
@@ -3227,10 +3233,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Discovery entdeckt Kandidaten; sie ersetzt weder Erreichbarkeit noch
   Identitätsprüfung. Ohne Route zwischen getrennten Netzen kann eine EXE
   keine Verbindung allein durch eine bekannte IP herstellen.
-* **Umsetzung 2026-11-06:** Geräteidentität, widerrufbare Kopplung und
-  strikter v2-Vertrag sind als Backend geprüft; Dienst-/Discovery- und
-  Windows-Anbindung folgen. Keine reale Zwei-Pi-/Netzwechselabnahme daraus
-  ableiten. [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
+* **Umsetzung 2026-11-06:** Geräteidentität, widerrufbare Kopplung, v2-
+  Dienst/Discovery sowie Windows-WSS-/UART-Kern sind lokal integriert.
+  Wiederanlauf prüft dieselbe Pi-Identität und neue Lease, ohne Demo-/
+  Zahlenwiederholung; Zertifikatswechsel verlangt neue Kopplung. Auswahl
+  des konkreten Endpunkts und Erstkonfiguration bleiben App-/Dienstaufgaben.
+  Keine reale Zwei-Pi-/Netzwechselabnahme daraus ableiten.
+  [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
 * **Klärung:** Freigegebenen Entwurf umsetzen, Kopplungs-,
   Berechtigungs- und Zustandsvertrag spezifizieren. Tests mit zwei Pi,
   DHCP-/Netzwechsel, gesperrtem Multicast, Ausfall/Neustart und falscher
@@ -3280,14 +3289,14 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-66 — Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag?
 
-* **Status:** in Arbeit · erkannt 2026-11-06 beim Doku-Regressionslauf der Windows-Brücke
+* **Status:** geklärt (2026-11-06) · erkannt 2026-11-06 beim Doku-Regressionslauf der Windows-Brücke
 * **Beobachtung:** Gesamtlauf `playwright.docs.config.ts`: 90 bestanden,
   ein Fehler in „Session-Dateidownload bleibt bytegleich; Tastatur und
   Wiki-Theme erreichen den Explorer“. Nach Fokus auf das Diagramm erwartet
   der Test den zuletzt gewählten 23.10.2026, 10:00 UTC, der Tooltip zeigt
   stattdessen 28.10.2026, 10:00 UTC. Es handelt sich um Testfixtures, nicht
   um eine Messung. Die Brückenänderungen berühren weder Test noch Explorer-
-  Assets; unabhängige Wiederholungen und Ereignisfolge werden eingegrenzt.
+  Assets; unabhängige Wiederholungen grenzten die Testvorbedingung ein.
 * **Eingegrenzt 2026-11-06:** Diagrammfokus übernimmt eine gültige aktuelle
   Auswahl; Tabellen-Fokus und Pointerenter können sie vorher ändern. Der
   bisherige Test prüfte diese Voraussetzung nach Download/Scrollen nicht.
@@ -3296,9 +3305,43 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Korrektur:** Maus außerhalb parken, gewünschte Tabellensteuerung
   ausdrücklich fokussieren und aktive Zeile prüfen, danach die unveränderten
   Übernahme-/End-/Home-Prüfungen. Drei echte Wiederholungen bestanden;
-  unabhängiges Review ohne Befund. Gesamtlauf nach Korrektur steht aus.
-* **Klärung:** betroffenen Test isoliert wiederholen, Pointer-/Fokusfolge
-  gegen die gewünschte Tastaturbedienung prüfen; einen nötigen Testfix von
-  einer tatsächlichen UI-Korrektur unterscheiden.
-* **Antwort landet in:** `tests/docs-site.spec.ts` und gegebenenfalls
-  `docs-site/assets/wiki-sessions.js`; Zusammenfassung in [Status](status.md).
+  unabhängiges Review ohne Befund. Abschließender Gesamtlauf: 91 bestanden
+  in 6,7 Minuten. Keine Änderung am Explorer-Oberflächenverhalten.
+* **Antwort 2026-11-06:** Die Prüfung braucht eine ausdrücklich kontrollierte
+  aktuelle Auswahl vor dem Diagrammfokus. Diese Voraussetzung ist im Test
+  hergestellt; die frühere genaue Pointerfolge bleibt unbeobachtet und wird
+  nicht als nachgewiesener UI-Fehler ausgegeben.
+* **Antwort liegt in:** `tests/docs-site.spec.ts`, Commit `8efe4a7`;
+  Prüfzusammenfassung in [Status](status.md).
+
+
+---
+
+<span id="oq-67"></span>
+
+## OQ-67 — Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test?
+
+* **Status:** offen · erkannt 2026-11-06 beim abschließenden Backendtest
+* **Beobachtung:** Ein neu erweiterter lokaler TLS-/Fake-COM-Test
+  `test_dut_stays_locked_after_successful_pairing` lief nach DUT → Aus → Demo
+  beim zusätzlich erwarteten numerischen `written`-Ereignis in sein Zeitlimit.
+  Zwischenlauf: 59 bestanden, ein Fehler. DUT-Sperre und öffentliche
+  Statusassertionen waren dabei bereits erfüllt. Für diesen ersten Fehler
+  fehlen genaue Worker-/Journal-Zustandsdaten; keine Hardwaremessung.
+* **Eingrenzung:** Nach fester Zustandsdiagnose fünf isolierte Wiederholungen
+  und derselbe 60-Test-Satz bestanden. Daraus folgt keine nachgewiesene
+  Ursache oder Produktfehlerfreiheit. Keine Produktionsfrist erhöht und kein
+  Worker-/Transportworkaround eingebaut.
+* **Prüfgrenze:** Die finale Zustandsregression verwendet eine ausdrücklich
+  leere synthetische Demo, ursprüngliche DUT-Leerausgabe bleibt geprüft.
+  Numerische Übergaben prüfen die getrennten unveränderten TLS-/Barriere-/
+  Latest-Tests. Abschließender betroffener Lauf: 430 bestanden, vier native
+  Windows-Gates übersprungen; unabhängige Nachprüfung akzeptiert diese
+  Trennung als Zustandsprüfung, nicht als Diagnose des ersten Timeouts.
+* **Klärung:** Bei erneuter Reproduktion feste Worker-/Snapshot-/Journal-
+  Zustände und Ereignisfolge sichern; bei physischer G1-Abnahme Zustandswechsel
+  und numerische Übergaben gemeinsam aufzeichnen. Unklaren COM-Erfolg weder
+  wiederholen noch als sicher erfolgreich darstellen.
+* **Antwort landet in:** `tests/test_bridge_end_to_end.py` und
+  [Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md);
+  tatsächliche Windows-/Hardwarebelege später in [VALIDATION](VALIDATION.md).

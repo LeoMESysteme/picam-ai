@@ -77,11 +77,16 @@ betroffenen Aufgaben und Tests mitziehen, dann Code ändern.
 
 ## Umsetzungsstand 06.11.2026
 
-P1-Kern umgesetzt und geprüft. N1-Build-, N2-Geräte-/Portpaar- und
-N3-Vorlagenprüfung als lokal testbare Grundlagen vorhanden. Deren echte
-Windows-/Treiber-/GSVmulti-Gates bleiben offen; N3 blockiert den automatischen
-Sessionexport. Weitere Backend-Aufgaben laufen im isolierten Arbeitszweig.
-Dies ist keine fertige EXE oder Ende-zu-Ende-Abnahme.
+P1–P4 und W1/W2 sind als Backend lokal integriert, W3 als portabler
+Installer-/Updatekern vorhanden. G1-Wiederanlauf mit wirklichem Manager,
+Worker, TLS und SQLite geprüft: 430 Tests bestanden, vier native Windows-
+Gates übersprungen. Doku-Playwright: 91 bestanden. Abschlussreview und
+Nachprüfung der einmaligen Korrektur sauber; Backend-Übergabe freigegeben.
+N1-Build-, N2-Geräte-/Portpaar- und N3-Vorlagenprüfung sind Grundlagen;
+deren echte Windows-/Treiber-/GSVmulti-Gates bleiben offen. N3 blockiert
+automatischen Sessionexport. GUI/Workbench übernimmt Claude gemäß
+[Übergabe](../handoffs/2026-11-06-windows-bruecke-claude.md).
+Dies ist keine fertige EXE oder physische Ende-zu-Ende-Abnahme.
 
 ## Endabnahme G1
 
@@ -90,14 +95,14 @@ Dies ist keine fertige EXE oder Ende-zu-Ende-Abnahme.
 **Interfaces:** Konsumiert `BridgeHub`, `ConnectionManager`, Sessiongenerator
 und signiertes Release-Artefakt aus P4/W1/W3/W4. Keine neue Messfreigabe-API.
 
-- [ ] G1.1 Regression zuerst: bestehenden `tests/test_gsv_bridge.py`, `test_gsv_transport.py`, `test_live_output.py`, `test_live_service.py`, `test_live_api.py` ohne neue Hardware laufen lassen; Bestand und Fehler festhalten.
-- [ ] G1.2 Integrationstests schreiben: falsche Identität/zweiter Client, Demo-Invalidierung vor jüngstem VALID, Kanalabbruch, Schreibfehler und Neustart. `test_dut_stays_locked_after_successful_pairing` muss `COM payloads == []` und sichtbaren Release-Block prüfen.
-- [ ] G1.3 RED/GREEN für neue Integration: `PYTHONPATH=src ./.venv/bin/pytest -q tests/test_bridge_end_to_end.py`; keine grünen Mocks als Windows-Nachweis darstellen.
+- [x] G1.1 Regression zuerst: bestehenden `tests/test_gsv_bridge.py`, `test_gsv_transport.py`, `test_live_output.py`, `test_live_service.py`, `test_live_api.py` ohne neue Hardware laufen lassen; Bestand und Fehler festhalten.
+- [x] G1.2 Integrationstests schreiben: falsche Identität/zweiter Client, Demo-Invalidierung vor jüngstem VALID, Kanalabbruch, Schreibfehler und Neustart. `test_dut_stays_locked_after_successful_pairing` muss `COM payloads == []` und sichtbaren Release-Block prüfen.
+- [x] G1.3 RED/GREEN für neue Integration: `PYTHONPATH=src ./.venv/bin/pytest -q tests/test_bridge_end_to_end.py`; keine grünen Mocks als Windows-Nachweis darstellen.
 - [ ] G1.4 Signiertes Paket auf frischer Windows-11-x64-VM ohne Python installieren; UAC/Neustart/Reparatur/Deinstallation prüfen, mit Python-3.7- und Mehrversions-VM wiederholen. Hardwaretreiber nur auf dafür freigegebenen Zielsystemen.
 - [ ] G1.5 Zwei Pi, UART und LAN sowie Tailscale getrennt mit festem synthetischem Stimulus prüfen; Original-GSVmulti-Dateien gegen Quell-/COM-Audit vergleichen. Abziehen, Prozessabbruch, Standby und neue Run-ID kontrolliert aufnehmen; unklare Übergaben dürfen nicht als exakt einmal behauptet werden.
 - [ ] G1.6 30-minütige Brücken-Demoläufe je freigegebenem Weg, Versions-/Treiber-/Hashbelege und Daten-/Ungültig-/Ausfallprüfung dokumentieren. Reale DUT-Freigabe bleibt separates OQ-06/OQ-47-Verfahren; dieser Plan entsperrt sie nicht.
 - [ ] G1.7 Ganze betroffene Unit-/Windows-Suite, Ruff für geänderte Python-Dateien, Workbench-Playwright nach UI-Integration, `./scripts/docs-site.sh build -s` und vor Merge die Docs-Playwright-Suite ausführen. Keine vorhandene flaky Prüfung still ignorieren.
-- [ ] G1.8 Eigene Dateien gezielt committen, status.md überschreiben; abschließendes Review über den gesamten Änderungszweig. Veröffentlichung/Produktivinstallation und Merge benötigen eigene Nutzerfreigabe für das konkrete Artefakt.
+- [x] G1.8 Eigene Dateien gezielt committen, status.md überschreiben; abschließendes Review über den gesamten Änderungszweig. Veröffentlichung/Produktivinstallation und Merge benötigen eigene Nutzerfreigabe für das konkrete Artefakt.
 
 ## Selbstprüfung des Plans
 

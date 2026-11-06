@@ -18,7 +18,7 @@ from dispread.bridge.types import BridgeEvent, BridgeProfile
 
 from .credentials import CredentialError
 from .devices import DeviceSelectionError
-from .readiness import Readiness, aggregate_readiness
+from .readiness import Readiness, aggregate_readiness, peer_output_readiness
 from .transports import TransportError, TransportFactory
 
 
@@ -41,6 +41,8 @@ class _DataLink:
         self.lease_id = self.run_id = None
         self.renewed_at = 0
         self.valid = False
+        self._peer_state, self._peer_release_block = 'unknown', None
+        self.output, self.output_reason = 'unavailable', None
         self._operation = threading.Lock()
         self._local = threading.local()
         self._offered = None
@@ -78,7 +80,9 @@ class _DataLink:
                     raise ConnectionError('peer_invalid')
             elif reply.get('run_id') != self.run_id:
                 raise ConnectionError('peer_invalid')
+            output_changed = False
             with self.manager._lock:
+                previous_run = self.run_id
                 if initial:
                     self.lease_id, self.run_id = reply['lease_id'], reply['run_id']
                 else:
@@ -86,7 +90,23 @@ class _DataLink:
                     if reply['type'] == 'hello':
                         self.run_id = reply['run_id']
                         self._offered = None
+                if reply['type'] == 'hello':
+                    self._peer_state = reply['state']
+                    self._peer_release_block = reply['release_block']
+                elif reply['type'] == 'idle':
+                    self._peer_release_block = reply['release_block']
+                elif reply['type'] == 'record':
+                    self._peer_state, self._peer_release_block = 'ready', None
+                elif reply['type'] == 'ended':
+                    self._peer_state = 'ended'
+                self.output, self.output_reason = peer_output_readiness(
+                    self._peer_state, self.run_id, self._peer_release_block)
                 self.renewed_at = time.monotonic()
+                if not initial:
+                    output_changed = self.manager._peer_output_locked(self) or previous_run != self.run_id
+            if output_changed:
+                self.manager._event('peer_output_changed', run_id=self.run_id, output=self.output,
+                                    reason=self.output_reason, generation=self.generation)
             return reply
         except Exception as error:
             self.failed.set()
@@ -211,21 +231,34 @@ class ConnectionManager:
                 base = replace(base, peer='disconnected', output='unavailable', next_action='reconnect')
         return aggregate_readiness(base, None if worker is None else worker.status)
 
-    def _event(self, code):
+    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None):
+        detail = dict(version=2, demo_only=True, provisional=True, gsv_receipt_confirmed=False)
+        if output is not None:
+            detail.update(output=output, reason=reason, generation=generation)
         try:
-            self._emit(BridgeEvent('connection', code, None, None,
-                                   dict(version=2, demo_only=True, provisional=True, gsv_receipt_confirmed=False)))
+            self._emit(BridgeEvent('connection', code, run_id, None, detail))
         except Exception:
             pass
+
+    def _peer_output_locked(self, link):
+        """Called only after current generation/lease/run validation under _lock."""
+        changed = (self._readiness.output, self._readiness.next_action) != (link.output, link.output_reason)
+        self._readiness = replace(self._readiness, output=link.output, next_action=link.output_reason)
+        return changed
 
     def _state(self, generation, peer, action=None, adapter=None):
         with self._lock:
             if generation != self._generation or self._cancel.is_set():
                 return
-            self._readiness = replace(self._readiness, peer=peer, next_action=action,
-                                      adapter=adapter or self._readiness.adapter,
-                                      output='demo_only' if peer == 'authenticated' else 'unavailable')
-        self._event(action or peer)
+            link = self._link if peer == 'authenticated' else None
+            if peer == 'authenticated' and link is None:
+                return
+            output = link.output if link else 'unavailable'
+            reason = link.output_reason if link else action
+            self._readiness = replace(self._readiness, peer=peer, next_action=reason,
+                                      adapter=adapter or self._readiness.adapter, output=output)
+            run_id = link.run_id if link else None
+        self._event(action or peer, run_id=run_id, output=output, reason=reason, generation=generation)
 
     def _check_locked(self, link):
         if (self._link is not link or not link.valid or self._cancel.is_set()
