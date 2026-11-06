@@ -5,6 +5,11 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Gestaltungsmock der Windows-App „GSVmulti-Brücke“ ergänzt
+  (`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`, mit Qt-Umsetzungsnotiz
+  und Texttabelle) sowie `windows/bridge/PRODUCT.md`. Reine Doku, synthetische
+  Daten; keine Funktion, nichts als geprüft oder ausgeliefert zu verstehen.
+
 * 2026-11-06: Werkbank /live: Dialog „Windows-Brücke einrichten“ (nur
   Oberfläche, keine Hardware). Fünf Schritte mit Zustand: Windows-App-Hinweis
   (Installer noch nicht veröffentlicht), Profil-Download `pi.dispread` mit
