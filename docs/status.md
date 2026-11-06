@@ -48,8 +48,12 @@ Arbeitsstand dieser Umsetzung: verwalteter Worktree
 `/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`, Branch
 `codex/windows-bridge-core`, Basis `ea29e44`. Der bisherige Redesign-Worktree
 mit fremden Änderungen und laufender Werkbank bleibt unberührt.
-N1/N2/P1 parallel in getrennten Dateien umgesetzt bzw. geprüft; P1-Kern
-und Codec haben 70 relevante bestandene Tests. Windows-Paket-/Treiber-
+P1-Kern und Codec: 70 relevante Tests bestanden, Review ohne wichtige
+Befunde. N2-Geräte-/Portpaaradapter: 48 Tests bestanden, beide wichtigen
+Reviewbefunde korrigiert und nachgeprüft. Der echte Treiberprovider bleibt
+unverifiziert und verweigert Änderungen. N1-Paketierung wird nach zwei
+Reviewbefunden korrigiert; P2-Identität und N3-Vorlagenbelege in Arbeit.
+Windows-Paket-/Treiber-
 Nachweise bleiben separat ausstehend, keine Qt-Pakete am Pi installiert.
 Weitere technische Teile und Reviews folgen gemäß [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
 [Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md)

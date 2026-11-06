@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Windows-Brücke erkennt USB-UART-Geräte über PnP/COM-Inventar
+  und verlangt bei fehlender Seriennummer eine ausdrückliche Auswahl.
+  Portpaarverwaltung prüft Besitz, Gerätefehler und begrenzte bidirektionale
+  Übertragung statt nur Installer-Exitcodes; Neustart-/UAC-Ergebnisse bleiben
+  bei Folgefehlern erhalten. Der echte signierte Treiberadapter bleibt bis
+  zum Windows-Nachweis gesperrt. 48 gezielte Adaptertests bestanden.
+
 * 2026-11-06: Technische Grundlage für die Windows-Brücke v2: strenge,
   größenbegrenzte Profil-/Nachrichtencodierung und eindeutige UART-
   Signaturbytes ergänzt. Begrenzten Ausgabezustand aus dem bisherigen
