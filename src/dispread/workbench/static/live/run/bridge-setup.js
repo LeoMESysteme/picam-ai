@@ -29,9 +29,17 @@ export function countdownText(seconds) {
 }
 export const offerRemainingS = (deadlineMs, nowMs) => Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000));
 
+// Einheitliche Darstellung wie in der Windows-App: Kleinbuchstaben, Vierergruppen.
 export function fingerprintGroups(value) {
-  const clean = String(value ?? '').replace(/[^0-9a-zA-Z]/g, '');
+  const clean = String(value ?? '').replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
   return clean.match(/.{1,4}/g)?.join(' ') ?? '';
+}
+// Vier Gruppen je Zeile (SHA-256: vier Zeilen), nie gekuerzt.
+export function fingerprintLines(value) {
+  const groups = fingerprintGroups(value).split(' ').filter(Boolean);
+  const lines = [];
+  for (let i = 0; i < groups.length; i += 4) lines.push(groups.slice(i, i + 4).join(' '));
+  return lines;
 }
 
 // Fehlertext des Servers woertlich: {"error": ...} oder Klartext.

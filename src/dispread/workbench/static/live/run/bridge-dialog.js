@@ -3,7 +3,7 @@
 // Esc schliesst. Das Kopplungsangebot lebt nur im Speicher und im DOM dieses
 // Dialogs: nie in Konsole oder localStorage, und weg beim Schliessen.
 import {HUB_DOWN, NOT_IN_RUN, OFFER_TTL_S, PROFILE_FILENAME, STATUS_POLL_MS, TEXT, bridgeTransport, countdownText,
-  createBridgeApi, fingerprintGroups, offerRemainingS, readinessRows, uartView} from './bridge-setup.js';
+  createBridgeApi, fingerprintLines, offerRemainingS, readinessRows, uartView} from './bridge-setup.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"]/g,
   (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -168,7 +168,7 @@ export function mountBridgeDialog(client, {fetchImpl, doc = globalThis.document}
       state.profile = p;
       part('p-name').textContent = p.name ?? '–';
       part('p-id').textContent = p.pi_id ?? '–';
-      part('p-fp').textContent = fingerprintGroups(p.certificate_sha256) || '–';
+      part('p-fp').textContent = fingerprintLines(p.certificate_sha256).join('\n') || '–';
       part('profile-info').hidden = false;
       render();
     });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {PROFILE_FILENAME, bridgeTransport, countdownText, fingerprintGroups, offerBody, offerRemainingS,
+import {PROFILE_FILENAME, bridgeTransport, countdownText, fingerprintGroups, fingerprintLines, offerBody, offerRemainingS,
   prepareBody, readinessRows, requestError, uartView} from '../src/dispread/workbench/static/live/run/bridge-setup.js';
 
 test('Countdown 5:00 bis 0:00, nie negativ', () => {
@@ -20,7 +20,7 @@ test('Restzeit aus Ablaufzeitpunkt, aufgerundet', () => {
 
 test('Fingerabdruck in Vierergruppen, Trennzeichen entfernt', () => {
   assert.equal(fingerprintGroups('ab12cd34ef56'), 'ab12 cd34 ef56');
-  assert.equal(fingerprintGroups('AB:12:CD:34:EF'), 'AB12 CD34 EF');
+  assert.equal(fingerprintGroups('AB:12:CD:34:EF'), 'ab12 cd34 ef');
   assert.equal(fingerprintGroups(''), '');
   assert.equal(fingerprintGroups(null), '');
 });
@@ -62,4 +62,14 @@ test('Bereitschaft: Verbindung heisst nie Freigabe, Sperre woertlich', () => {
   assert.equal(off.length, 2, 'ohne Sperrtext keine Ausgabezeile');
   assert.ok(!JSON.stringify(rows).match(/bereit zur Messung|Messfreigabe/));
   assert.deepEqual(readinessRows(null), []);
+});
+
+test('Fingerabdruck: Kleinbuchstaben, vier Gruppen je Zeile, nie gekuerzt', () => {
+  const hex = ('0123456789ABCDEF'.repeat(4));
+  const lines = fingerprintLines(hex);
+  assert.equal(lines.length, 4);
+  for (const line of lines) assert.equal(line, '0123 4567 89ab cdef');
+  assert.equal(lines.join('').replace(/ /g, ''), hex.toLowerCase());
+  assert.deepEqual(fingerprintLines('AB:12:CD:34:EF:56:78:90:11'), ['ab12 cd34 ef56 7890', '11']);
+  assert.deepEqual(fingerprintLines(null), []);
 });

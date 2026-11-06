@@ -2100,7 +2100,12 @@ test('Brücke einrichten (Netzwerk): Profil, Kopplungscode mit Ablauf, nichts bl
   expect((await download).suggestedFilename()).toBe('pi.dispread');
   await expect(dialog).toContainText('Werkbank-Pi');
   await expect(dialog).toContainText('pi-test-0001');
-  await expect(dialog.locator('[data-part="p-fp"]')).toHaveText(/^0123 4567 89ab cdef 0123/);
+  await expect(dialog.locator('[data-part="p-fp"]')).toHaveText(Array(4).fill('0123 4567 89ab cdef').join('\n'));
+  const fp = await dialog.locator('[data-part="p-fp"]').evaluate((el) => ({ ws: getComputedStyle(el).whiteSpace, h: el.getBoundingClientRect().height,
+    lh: parseFloat(getComputedStyle(el).lineHeight), overflow: el.scrollWidth > el.clientWidth }));
+  expect(fp.ws).toBe('pre');
+  expect(Math.round(fp.h / fp.lh)).toBe(4);
+  expect(fp.overflow).toBe(false);
   await expect(dialog).toContainText('In der Windows-App muss derselbe Fingerabdruck erscheinen.');
 
   await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();

@@ -514,7 +514,7 @@ input[type=search]::placeholder{color:#8a847b}
 .bkv{padding:2px 0 6px;font-size:12.5px}
 .bkv dd{text-align:left;font-family:var(--sans);word-break:break-word}
 .bkv dd.mono{font-family:var(--mono)}
-.bkv dd.fp{letter-spacing:.02em;line-height:1.5}
+.bkv dd.fp{letter-spacing:.02em;line-height:1.5;white-space:pre;word-break:normal;overflow-wrap:normal}
 .bcoderow{display:flex;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap}
 .bcode{padding:5px 9px;background:#1b1a17;border:1px solid var(--line);font-size:14px;letter-spacing:.04em;color:var(--tx);user-select:all;word-break:break-all}
 .bcount{font-size:13px;color:var(--tx2)}
