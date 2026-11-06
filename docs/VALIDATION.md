@@ -6554,3 +6554,15 @@ kein GSVmulti-Empfang nachgewiesen. Zielrate 10 Hz ist keine gemessene Rate;
 Ereignisse HOST_MONOTONIC, demo/provisional=true, time_claim=false.
 Aufbau und Deutung im [Laborjournal](lab_journal.md), Diagnose unter
 `var/diagnostics/werkbank-t13-20261106/uart-demo-01/`.
+
+
+### 2026-11-06 — T13-Lauf 01: Zwischenstand nach Start
+
+`live-20261106T112527Z/run-01`, Start 11:55:55,271828 UTC (12:55:55 MEZ),
+Referenz aktiv, externe Ausgabe aus, kein Test-Override. Dienst-Laufzeit
+82,677 s: 1434 VALID, 113 TRANSITION, 233 übersprungen, 0 Trackingverluste,
+0 Auditfehler; 154 Referenzzeilen, 0 Parserfehler, 0 Referenzlücken. Angaben
+sind ein datierter Rohstatus-Zwischenstand; keine bestandene Dauerabnahme,
+kein Vorschauvergleich und keine physische Latenzaussage. Weitere
+5-s-Statusproben stehen im Diagnoseordner; spätere Zähler können abweichen.
+[Aufbau und geplante Vergleichsphasen](lab_journal.md).

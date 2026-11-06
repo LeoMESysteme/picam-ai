@@ -4723,3 +4723,23 @@ Kein Ende-zu-Ende-Nachweis. Ereigniszeitbasis HOST_MONOTONIC auf dem Pi,
 keine Latenzaussage. Diagnose: `var/diagnostics/werkbank-t13-20261106/uart-demo-01/`.
 Nächster Schritt: Brücke auf Windows stoppen, zusätzliche Leitung vom
 beschrifteten Kabelkontakt TXD zu physischem Pi-Pin 10, dann neuer Versuch.
+
+
+### 2026-11-06 — T13-Leserabnahmelauf gestartet, UART zurückgestellt
+
+Nutzer startet selbst `live-20261106T112527Z/run-01` und stellt die Brücke
+auf später zurück. Start laut Dienst: 11:55:55,271828 UTC (12:55:55 MEZ).
+Statusprüfung bestätigt `running`, Referenz aktiv, Ausgabe `off`, kein
+Test-Override. Bei elapsed_s=82,677: 1434 VALID, 113 TRANSITION, 233
+übersprungene Bilder, 0 Trackingverluste und 0 Auditfehler. Referenz:
+154 Zeilen, 0 Parserfehler, 0 Lücken. Das ist ein Zwischenstand, keine
+bestandene 30-Minuten-Abnahme. Beobachtungsdauer ist relative Host-Laufzeit,
+keine physische Kameralatenz.
+
+Status- und top-Beobachter weiterhin aktiv. Messmarke zum ersten Abschnitt
+mit geöffneter Werkbank gesetzt. Geplanter Bedienerschritt: Seite etwa
+13:11 MEZ schließen und Rückmeldung geben; danach Vergleichsabschnitt ohne
+Seite bis mindestens 30 Minuten Gesamtlauf. Tatsächliche Phasengrenzen aus
+Rückmeldung und Messmarken auswerten, keine geplante Zeit als beobachtet
+ausgeben. X-Hud-Vorschau-fps und Verbrauch des alten Controllers noch nicht
+belegt. Rohstatus: `var/diagnostics/werkbank-t13-20261106/status-run-start.json`.
