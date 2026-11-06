@@ -27,6 +27,10 @@ MAX_TELEGRAM_BYTES = MAX_DISPLAY_TEXT_LENGTH + 1 + 2  # Praefix + CRLF.
 FRAME_INTERVAL_NS = 33_000_000
 MIN_LIVE_BAUDRATE = 9600  # 19 * 10 / 9600 = 19,79 ms; 4800 schon 39,58 ms.
 WRITE_TIMEOUT_S = 1.0
+SERIAL_RELEASE_NOTE = (
+    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
+    'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
+)
 
 
 def same_port(left: str, right: str) -> bool:
@@ -93,12 +97,20 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
         raise ValueError('Ausgabe: transport oder Port erforderlich')
     transport = value.get('transport', 'serial')
     if transport == 'serial':
-        options = validate_output({key: item for key, item in value.items() if key != 'transport'},
-                                  reference_port=reference_port)
-        return {'transport': 'serial', **options}
+        options = {key: item for key, item in value.items()
+                   if key not in ('transport', 'acknowledge_unaccepted')}
+        options = validate_output(options, reference_port=reference_port)
+        return {'transport': 'serial', **options,
+                'acknowledge_unaccepted': value.get('acknowledge_unaccepted', False)}
     if transport not in ('off', 'uart', 'tcp'):
         raise ValueError('Unbekannter Ausgabeweg')
     return OutputConfig.from_dict(value).to_dict()
+
+
+def require_output_acknowledgement(config: dict) -> None:
+    """P4-3 erst nach ausdruecklicher Bestaetigung der fehlenden Abnahme."""
+    if config['transport'] == 'serial' and config.get('acknowledge_unaccepted') is not True:
+        raise ValueError('Ausgabe: UART direkt ist nicht abgenommen – Hinweis bestätigen')
 
 
 class LiveOutput:
@@ -115,6 +127,8 @@ class LiveOutput:
         self._busy = False
         self._closing = False
         self._failed = False
+        self._audit_failed = False
+        self._last_ack = None
         self.failed_event = threading.Event()
         self._sequence = 0
         self._counts = dict(sent=0, omitted=0, dropped=0, errors=0)
@@ -141,10 +155,21 @@ class LiveOutput:
             return {**self._options, 'capabilities': caps, **self._counts,
                     'first_error': self._first_error, 'enabled': not self._failed and not self._closing}
 
-    def _error(self, message: str) -> None:
+    def delivery_status(self) -> dict:
+        """Nur lokale Treiberannahme; Fehler bis Laufende verriegelt."""
+        with self._lock:
+            return {
+                'state': ('audit_failed' if self._audit_failed else 'failed' if self._failed else
+                          'stopped' if self._closing else 'serial_ready'),
+                'last_ack': None if self._last_ack is None else dict(self._last_ack),
+                'ack_scope': 'lokale Annahme',
+            }
+
+    def _error(self, message: str, *, audit: bool = False) -> None:
         self._counts['errors'] += 1
         self._first_error = self._first_error or message
         self._failed = True
+        self._audit_failed |= audit
         self.failed_event.set()
 
     def _receipt(self, record: ValueRecord, sequence: int, enqueue: int, **kwargs) -> TxReceipt:
@@ -183,6 +208,12 @@ class LiveOutput:
         self._counts['omitted'] += int(receipt.omitted)
         self._counts['dropped'] += int(receipt.dropped)
         self._counts['sent'] += int(not receipt.omitted and receipt.t_complete_ns is not None)
+        if not receipt.omitted and not receipt.error and receipt.t_complete_ns is not None:
+            self._last_ack = {
+                'frame_sequence': receipt.frame_sequence, 'tx_sequence': receipt.tx_sequence,
+                'bytes_written': receipt.bytes_written, 't_complete_ns': receipt.t_complete_ns,
+                'time_base': 'host_monotonic', 'uncertainty_ns': None,
+            }
         try:
             data = asdict(receipt)
             data['wire_bytes'] = None if receipt.wire_bytes is None else receipt.wire_bytes.hex()
@@ -193,7 +224,7 @@ class LiveOutput:
             self._stream.flush()
         except Exception as exc:
             # Auch ValueError (z. B. geschlossene Datei) darf den Leser nicht beenden.
-            self._error(f'Tx-Audit: {type(exc).__name__}: {exc}')
+            self._error(f'Tx-Audit: {type(exc).__name__}: {exc}', audit=True)
 
     def _run(self) -> None:
         pending = None
@@ -256,4 +287,4 @@ class LiveOutput:
                 self._stream.close()
             except OSError as exc:
                 with self._lock:
-                    self._error(f'Tx-Audit schliessen: {exc}')
+                    self._error(f'Tx-Audit schliessen: {exc}', audit=True)

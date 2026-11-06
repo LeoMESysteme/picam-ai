@@ -376,7 +376,10 @@ streng 45 s (0/715), Toleranz ×1,8 5,6 min (0/6630), streng 12 min (0/8979,
    diese Aufstellung).
 4. **Serielle Ausgabe an GSVmulti** ([OQ-07](docs/open-questions.md#oq-07)):
    **2026-11-04:** Software-Prototyp mit UserDefined-Formatter,
-   TCP-/UART-Brücke und Live-Auswahl gebaut; echte DUT-Ausgabe gesperrt.
+   TCP-/UART-Brücke gebaut; echte DUT-Ausgabe über die Brücke gesperrt.
+
+   - [ ] Ausgabewahl (Aus | UART direkt | UART über Brücke | Netzwerk über Brücke) in der neuen /live-Oberfläche — in Arbeit (Werkbank-Redesign G2)
+
    Direkte UART-Demowerte unter Windows 11/GSVmulti 2.03 Pro gespeichert:
    Rampen und acht Sprünge korrekt, Timeout und Fortsetzung belegt.
    Ungültige Zeiträume fehlen aber im Export, auch bei NaN und bestätigtem

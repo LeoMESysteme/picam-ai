@@ -49,7 +49,7 @@ class FakeSerial:
 def make_session(tmp_path, monkeypatch, factory, **kwargs):
     monkeypatch.setattr('serial.Serial', factory)
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 5,
-                       output={'port': '/fake/output'}, **kwargs)
+                       output={'port': '/fake/output', 'acknowledge_unaccepted': True}, **kwargs)
     session._config = replace(session._config, confirm_frames=1)
     return session
 
@@ -161,6 +161,8 @@ def test_transport_failure_latches_and_never_appends_a_frame(tmp_path, monkeypat
         assert session.end_reason is None and session.latest.status.value == 'valid'
         status = session.output_status()
         assert status['sent'] == 0 and status['errors'] == 1 and not status['enabled']
+        assert session.unified_output_status()['state'] == 'failed'
+        assert session.unified_output_status()['last_ack'] is None
         assert not session._output._busy
         assert tx['error'] and tx['t_complete_ns'] is None
         assert tx['bytes_written'] == (2 if failure in ('no_progress', 'deadline', 'eagain') else None)
@@ -172,6 +174,7 @@ def test_transport_failure_latches_and_never_appends_a_frame(tmp_path, monkeypat
     finally:
         session.stop()
     assert json.loads(session.session_path.read_text())['output']['first_error'] == tx['error']
+    assert session.unified_output_status()['state'] == 'failed'
 
 
 def test_backlog_drops_new_frame_without_purging_previous(tmp_path, monkeypatch):
@@ -414,6 +417,7 @@ def test_unexpected_audit_exception_latches_without_stopping_reader(tmp_path, mo
         session.step()
         assert session.latest.frame_sequence == 2 and session.end_reason is None
         assert not session.output_status()['enabled'] and not session._output._busy
+        assert session.unified_output_status()['state'] == 'audit_failed'
     finally:
         session.stop()
 
@@ -438,7 +442,7 @@ class Publisher:
 
     def status(self):
         return {"transport": self.config.transport, "state": "disconnected", "release_block": "Windows-Abnahme fehlt",
-                "error": None, "last_ack": None}
+                "error": None, "last_ack": None, "ack_scope": "COM driver write, not GSVmulti reception"}
 
     def metadata(self):
         return {"config": self.config.to_dict(), "provisional": True}
@@ -519,8 +523,9 @@ def test_late_start_metadata_failure_closes_audit_and_output(tmp_path, monkeypat
 
 
 OUTPUT_CASES = [
-    ({'port': '/fake/output'}, 'serial'),
-    ({'transport': 'serial', 'port': '/fake/output', 'prefix': '#', 'baudrate': 9600}, 'serial'),
+    ({'port': '/fake/output', 'acknowledge_unaccepted': True}, 'serial'),
+    ({'transport': 'serial', 'port': '/fake/output', 'prefix': '#', 'baudrate': 9600,
+      'acknowledge_unaccepted': True}, 'serial'),
     ({'transport': 'uart'}, 'uart'),
     ({'transport': 'tcp', 'tcp_port': 5001}, 'tcp'),
     (None, 'off'),
@@ -548,13 +553,18 @@ def test_unified_service_output_contract(tmp_path, monkeypatch, config, transpor
             assert 'output' not in status['run']
         else:
             assert {'transport', 'state', 'config', 'error', 'release_block'} <= output.keys()
-            assert 'last_ack' in output or 'last_driver_ack' in output
+            assert {'last_ack', 'ack_scope', 'acceptance'} <= output.keys()
+            assert output['acceptance'] == 'fehlt'
             assert output['config']['transport'] == transport
             if transport == 'serial':
                 assert status['run']['output'] == service._session.output_status()
                 assert 'state' not in status['run']['output']
                 assert output['state'] == 'serial_ready'
-                assert output['last_driver_ack'] is None
+                assert output['last_ack'] is None
+                assert output['ack_scope'] == 'lokale Annahme'
+                assert output['release_note'] == (
+                    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
+                    'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.')
                 assert status['run']['output']['prefix'] == (config or {}).get('prefix', '%')
             else:
                 assert output['state'] == 'disconnected'
@@ -708,3 +718,104 @@ def test_unified_session_keeps_real_publisher_dut_lock(tmp_path, monkeypatch, tr
     data = json.loads(session.session_path.read_text())['output']
     assert data['formatter']['provisional'] is True
     assert data['release_block'] == RELEASE_BLOCK
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.parametrize('ack', ['missing', False, None, 1, 'true'])
+@pytest.mark.parametrize('fake', [False, True])
+def test_serial_requires_explicit_ack_before_start(tmp_path, monkeypatch, legacy, ack, fake):
+    from live_ui_server import FakeLiveService
+
+    service = FakeLiveService(tmp_path / 'preview.png') if fake else LiveService(FakeOwner(), tmp_path)
+    before = service.status()
+    files_before = list(tmp_path.iterdir())
+    config = {'port': '/fake/output'}
+    if not legacy:
+        config['transport'] = 'serial'
+    if ack != 'missing':
+        config['acknowledge_unaccepted'] = ack
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff ohne Bestaetigung'))
+    with pytest.raises(LiveError, match='^Ausgabe: UART direkt ist nicht abgenommen – Hinweis bestätigen$'):
+        service.start_run(reference=False, output=config)
+    after = service.status()
+    assert after['run'] is before['run'] is None
+    if fake:
+        # Nur Startfolgen vergleichen, keine zeitabhaengigen Vorschauwerte.
+        keys = ('state', 'error', 'output', 'session_id', 'test_run')
+        assert {key: after[key] for key in keys} == {key: before[key] for key in keys}
+    else:
+        # Freier Plattenplatz kann sich durch parallele Tests aendern.
+        assert {key: value for key, value in after.items() if key != 'storage'} == {
+            key: value for key, value in before.items() if key != 'storage'}
+        assert service._owner.restarts == 0
+    assert list(tmp_path.iterdir()) == files_before
+
+
+@pytest.mark.parametrize('config,transport', OUTPUT_CASES)
+def test_fake_output_status_matches_real_transport_keys(tmp_path, monkeypatch, config, transport):
+    from live_ui_server import FakeLiveService
+
+    from dispread.gsv_transport import OutputPublisher
+
+    monkeypatch.setattr('serial.Serial', FakeSerial)
+    session = _session(tmp_path, [], output=config)
+    fake = FakeLiveService(tmp_path / 'preview.png')
+    fake.start_run(reference=False, output=config)
+    real_status, fake_status = session.unified_output_status(), fake.status()['output']
+    assert fake_status.keys() == real_status.keys()
+    assert fake_status == real_status
+    if transport in ('uart', 'tcp'):
+        assert real_status['state'] == 'waiting'
+        assert real_status['ack_scope'] == 'COM driver write, not GSVmulti reception'
+        assert real_status['acceptance'] == 'fehlt'
+        # G1 ergaenzt Konfiguration/Abnahmestand, die Bruecke selbst bleibt unveraendert.
+        assert OutputPublisher(session._output.config, tmp_path).status().keys() == (
+            real_status.keys() - {'config', 'acceptance'})
+
+
+def test_serial_last_ack_records_only_completed_driver_writes(tmp_path, monkeypatch):
+    from test_userdefined_formatter import record
+
+    from dispread.records import ValueStatus
+
+    session = make_session(tmp_path, monkeypatch, FakeSerial)
+    session.start()
+    try:
+        assert session.unified_output_status()['last_ack'] is None
+        session.step()
+        receipt = wait_receipts(session, 1)[0]
+        ack = session.unified_output_status()['last_ack']
+        assert ack == {'frame_sequence': 1, 'tx_sequence': 1, 'bytes_written': 10,
+                       't_complete_ns': receipt['t_complete_ns'], 'time_base': 'host_monotonic',
+                       'uncertainty_ns': None}
+        assert session.unified_output_status()['ack_scope'] == 'lokale Annahme'
+        session._output.submit(record('0', None, status=ValueStatus.UNREADABLE))
+        wait_receipts(session, 2)
+        assert session.unified_output_status()['last_ack'] == ack
+    finally:
+        session.stop()
+
+
+def test_formatter_comparison_includes_bridge_fixtures():
+    from test_gsv_transport import record
+
+    from dispread.records import InvalidValuePolicy, ValueStatus
+    from dispread.sink.protocol.user_defined import UserDefinedFormatter as BridgeFormatter
+    from dispread.sink.protocol.userdefined import UserDefinedFormatter as DirectFormatter
+
+    direct, bridge = DirectFormatter(), BridgeFormatter()
+    assert direct.format(record()) == bridge.format(record()) == b'%+0.12345\r\n'
+    assert direct.format(record(status=ValueStatus.UNREADABLE)) is None
+    assert bridge.format(record(status=ValueStatus.UNREADABLE)) is None
+    mismatch = replace(record(), value=0.2)
+    assert direct.format(mismatch) is None
+    with pytest.raises(ValueError):
+        bridge.format(mismatch)
+    for raw in ['1e2', '1_0', ' NaN', '1\n2', '+inf', '+0.12345 ']:
+        item = replace(record(), raw_text=raw)
+        with pytest.raises(ValueError):
+            bridge.format(item)
+        assert direct.format(item) == (b'%+0.12345\r\n' if raw == '+0.12345 ' else None)
+    invalid = record(status=ValueStatus.UNREADABLE)
+    assert direct.format(invalid) is None
+    assert BridgeFormatter(invalid_policy=InvalidValuePolicy.SEND_NAN, demo=True).format(invalid) == b'%NaN\r\n'

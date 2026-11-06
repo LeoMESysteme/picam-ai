@@ -22,7 +22,7 @@ from aiohttp import web
 from dispread.charcells import CharGrid
 from dispread.gsv_transport import RELEASE_BLOCK
 from dispread.live import RELEASE_NOTICE
-from dispread.live.output import normalize_output
+from dispread.live.output import SERIAL_RELEASE_NOTE, normalize_output, require_output_acknowledgement
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
 from dispread.records import TimeBaseKind, Timestamp
@@ -335,17 +335,20 @@ class FakeLiveService:
 
         try:
             config = normalize_output(output, reference_port='/dev/ttyUSB0' if reference else None)
+            if test_override and config['transport'] != 'off':
+                raise ValueError('Testlauf erlaubt keine externe Ausgabe')
+            require_output_acknowledgement(config)
         except ValueError as exc:
             raise LiveError(str(exc)) from exc
         transport = config['transport']
-        if test_override and transport != 'off':
-            raise LiveError('Testlauf erlaubt keine externe Ausgabe')
         self.set_scene("running_valid")
         with self._lock:
             self._status['output'] = ({'transport': 'off', 'state': 'off'} if transport == 'off' else {
-                'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'disconnected',
+                'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'waiting',
                 'config': config, 'error': None, 'release_block': None if transport == 'serial' else RELEASE_BLOCK,
-                'last_driver_ack': None,
+                'last_ack': None, 'acceptance': 'fehlt',
+                'ack_scope': 'lokale Annahme' if transport == 'serial' else 'COM driver write, not GSVmulti reception',
+                **({'release_note': SERIAL_RELEASE_NOTE} if transport == 'serial' else {}),
             })
             self._status["diagnostics"] = {"enabled": diagnostics, "saved": 0,
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,

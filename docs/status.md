@@ -76,9 +76,9 @@ Nicht erneut eine zweite Transportstrecke bauen. Vorhandene Nähte:
 * src/dispread/live/service.py, workbench/live_api.py: optionale output-
   Konfiguration an /live/run/start, Ausgabestatus an /live/status;
   Test-Override erlaubt keine externe Ausgabe.
-* workbench/static/live.html und live.js: Auswahl Aus/UART/Netzwerk,
-  UART-Gerät/TCP-Port, Status/Warnung und Freigabesperre. Auswahl während Lauf
-  gesperrt. Meldung unterscheidet COM-Bestätigung und GSVmulti-Empfang.
+* Die alte Auswahl in workbench/static/live.html und live.js ist entfernt.
+  Die Ausgabewahl (Aus/UART direkt/UART über Brücke/Netzwerk über Brücke)
+  in der neuen /live-Oberfläche ist in Arbeit (Werkbank-Redesign G2).
 
 Die neue Workbench-Gestaltung kann diese Nähte übernehmen; UI-Umbau und echte
 Messfreigabe bleiben getrennte Aufgaben. Browser-/Unitprüfungen ersetzen keinen

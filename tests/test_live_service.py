@@ -2663,7 +2663,8 @@ def test_output_error_visible_in_service_status_and_run_continues(tmp_path, monk
                         lambda owner, profile, config, out_dir, **kw:
                         _session(tmp_path, [embed('+ 1.2345 ')] * 2, out_dir=out_dir, **kw))
     try:
-        service.start_run(reference=False, output={'port': '/fake/output', 'baudrate': 9600, 'prefix': '#'})
+        service.start_run(reference=False, output={'port': '/fake/output', 'baudrate': 9600, 'prefix': '#',
+                                                  'acknowledge_unaccepted': True})
         deadline = time.monotonic() + 5
         while not service.status()['run']['output']['errors']:
             assert time.monotonic() < deadline
@@ -2686,7 +2687,7 @@ def test_output_open_failure_rejects_service_start(tmp_path, monkeypatch):
     monkeypatch.setattr('dispread.live.service.LiveSession',
                         lambda owner, profile, config, out_dir, **kw: _session(tmp_path, [], out_dir=out_dir, **kw))
     with pytest.raises(LiveError, match='Ausgabe nicht gestartet'):
-        service.start_run(reference=False, output={'port': str(tmp_path / 'missing')})
+        service.start_run(reference=False, output={'port': str(tmp_path / 'missing'), 'acknowledge_unaccepted': True})
     assert service.status()['state'] == 'confirmed'
     assert service.status()['run'] is None
 

@@ -98,14 +98,11 @@ function output(v, p) {
     return;
   }
   fields({
-    state: choice('waiting', 'bridge_connected', 'disconnected', 'audit_failed', 'stopped', 'serial_ready'),
+    state: choice('waiting', 'bridge_connected', 'disconnected', 'audit_failed', 'stopped', 'serial_ready', 'failed'),
     config: object, error: nullable(string), release_block: nullable(string),
+    last_ack: nullable(object), ack_scope: string, acceptance: choice('fehlt'),
   })(v, p);
-  if (!Object.hasOwn(v, 'last_ack') && !Object.hasOwn(v, 'last_driver_ack')) {
-    fail(`${p}.last_ack`, 'last_ack oder last_driver_ack');
-  }
-  optional(v, 'last_ack', nullable(object), p);
-  optional(v, 'last_driver_ack', nullable(object), p);
+  if (v.transport === 'serial') fields({ release_note: string })(v, p);
 }
 function run(v, p) {
   fields({

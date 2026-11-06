@@ -41,6 +41,8 @@ keinen Schalter zum Umgehen dieser Sperre.
 
 ## Schnittstellen und Sicherungen
 
+- Die strukturelle DUT-Sperre gilt nur für die Brückenwege; P4-3 direkt bleibt Opt-in mit ausdrücklicher Bestätigung der fehlenden Abnahme (Nutzerentscheidung 2026-11-06).
+
 - Optionales `output` an `/live/run/start`, ohne Auswahl `off`.
   `/live/status` ergänzt Ausgabestatus; `session.json` hält Konfiguration,
   Formatterfähigkeiten und Sperrgrund fest.

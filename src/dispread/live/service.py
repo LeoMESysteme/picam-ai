@@ -30,7 +30,7 @@ from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
-from dispread.live.output import normalize_output
+from dispread.live.output import normalize_output, require_output_acknowledgement
 from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
@@ -801,6 +801,7 @@ class LiveService:
             output = normalize_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
             if test_override and output['transport'] != 'off':
                 raise ValueError('Testlauf erlaubt keine externe Ausgabe')
+            require_output_acknowledgement(output)
         except (TypeError, ValueError) as exc:
             raise LiveError(str(exc)) from exc
         with self._operation_lock:

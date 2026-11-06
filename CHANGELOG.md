@@ -5,6 +5,24 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Der Test zur verweigerten UART-Direktausgabe ohne ausdrückliche
+  Bestätigung vergleicht Laufzustand, Ausgabe und Sitzungsidentität gezielt.
+  Veränderliche Statuswerte und freier Plattenplatz lösen unter paralleler
+  Testlast keinen unbegründeten Fehler mehr aus; ein Lauf oder Portzugriff
+  bleibt weiterhin ausgeschlossen.
+
+* 2026-11-06: UART direkt bleibt nach Nutzerentscheidung als nicht abgenommener
+  P4-3-Prototyp nutzbar. Der Laufstart verlangt dafür ausdrücklich
+  `output.acknowledge_unaccepted: true`, auch bei bestehenden Port-Objekten
+  ohne `transport`: bewusste Verschärfung des bisherigen POST-Vertrags.
+  Alle externen Wege melden `acceptance: fehlt`; direkt erklärt ein
+  Freigabehinweis den unmarkiert stehenbleibenden GSVmulti-Altwert bei
+  ausgelassenen ungültigen Werten. Einheitlich gelten `last_ack` und
+  `ack_scope`; P4-3 bestätigt nur lokale Treiberannahme. Dauerhafte direkte
+  Sendefehler heißen `failed`, Tx-Auditfehler `audit_failed`; die Brücke
+  behält Wiederanlauf und DUT-Sperre. Fake und Statusprüfungen folgen dem
+  Vertrag, die neue Ausgabewahl bleibt Aufgabe G2.
+
 * 2026-11-06: GSVmulti: Brücke und P4-3-Direktausgabe unter einem Ausgabevertrag.
   Laufstart akzeptiert Aus, serielle Direktausgabe, UART über Brücke und
   Netzwerk über Brücke; bestehende Port-Konfigurationen bleiben gültig.

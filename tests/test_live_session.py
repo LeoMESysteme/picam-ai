@@ -1786,13 +1786,14 @@ def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run
     if test_run is not None:
         monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff im Testlauf'))
         with pytest.raises(StartRefused, match='^Testlauf erlaubt keine externe Ausgabe$'):
-            _session(tmp_path, [], test_run=test_run, output={'port': '/fake/output'})
+            _session(tmp_path, [], test_run=test_run, output={'port': '/fake/output', 'acknowledge_unaccepted': True})
         assert not (tmp_path / 'run').exists()
         return
 
     master, slave = os.openpty()
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 4, reference_recorder=Recorder(),
-                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#'})
+                       test_run=test_run, output={'port': os.ttyname(slave), 'baudrate': 115200, 'prefix': '#',
+                                                 'acknowledge_unaccepted': True})
     session._config = replace(session._config, confirm_frames=1)
     session.start()
     try:
@@ -1826,7 +1827,7 @@ def test_output_pty_uses_records_after_all_locks(tmp_path, monkeypatch, test_run
 
 
 def test_output_open_failure_refuses_session(tmp_path):
-    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port')})
+    session = _session(tmp_path, [], output={'port': str(tmp_path / 'missing-port'), 'acknowledge_unaccepted': True})
     with pytest.raises(StartRefused, match='Ausgabe'):
         session.start()
     assert session.latest is None

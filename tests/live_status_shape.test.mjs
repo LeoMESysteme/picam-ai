@@ -179,12 +179,20 @@ test('output requires a known transport and complete enabled status', () => {
   assert.doesNotThrow(() => assertStatusShape(status));
   for (const transport of ['serial', 'uart', 'tcp']) {
     status.output = { transport, state: transport === 'serial' ? 'serial_ready' : 'waiting',
-      config: { transport }, error: null, release_block: null, last_ack: null };
+      config: { transport }, error: null, release_block: null, last_ack: null, ack_scope: 'lokale Annahme',
+      acceptance: 'fehlt', ...(transport === 'serial' ? { release_note: 'Prototyp' } : {}) };
     assert.doesNotThrow(() => assertStatusShape(status));
     delete status.output.last_ack;
     status.output.last_driver_ack = null;
-    assert.doesNotThrow(() => assertStatusShape(status));
-    for (const key of ['state', 'config', 'error', 'release_block', 'last_driver_ack']) {
+    assert.throws(() => assertStatusShape(status), TypeError);
+    delete status.output.last_driver_ack;
+    status.output.last_ack = null;
+    for (const state of transport === 'serial' ? ['failed', 'audit_failed', 'stopped'] : ['waiting']) {
+      status.output.state = state;
+      assert.doesNotThrow(() => assertStatusShape(status));
+    }
+    for (const key of ['state', 'config', 'error', 'release_block', 'last_ack', 'ack_scope', 'acceptance',
+      ...(transport === 'serial' ? ['release_note'] : [])]) {
       const valid = status.output;
       status.output = { ...valid };
       delete status.output[key];

@@ -39,7 +39,12 @@ from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
-from dispread.live.output import LiveOutput, normalize_output
+from dispread.live.output import (
+    SERIAL_RELEASE_NOTE,
+    LiveOutput,
+    normalize_output,
+    require_output_acknowledgement,
+)
 from dispread.live.recent import RecentStrip
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
@@ -221,9 +226,14 @@ class LiveSession:
         self._output_transport = self._output_config['transport']
         if test_run is not None and self._output_transport != 'off':
             raise StartRefused('Testlauf erlaubt keine externe Ausgabe')
+        try:
+            require_output_acknowledgement(self._output_config)
+        except ValueError as exc:
+            raise StartRefused(str(exc)) from exc
         self._output = None
         if self._output_transport == 'serial':
-            options = {key: value for key, value in self._output_config.items() if key != 'transport'}
+            options = {key: value for key, value in self._output_config.items()
+                       if key not in ('transport', 'acknowledge_unaccepted')}
             self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
         elif self._output_transport != 'off':
             self._output = output_factory(OutputConfig.from_dict(self._output_config), self._out_dir)
@@ -694,13 +704,16 @@ class LiveSession:
         if self._output is None:
             return None
         status = self._output.status()
-        return status if self._output_transport == 'serial' else {**status, 'config': dict(self._output_config)}
+        if self._output_transport == 'serial':
+            return status
+        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt'}
 
     def unified_output_status(self) -> dict:
         """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
 
-        Fehler bleiben wie im Direktausgang verriegelt. last_driver_ack ist
-        unbekannt: P4-3 zaehlt Writes, speichert hier aber keinen letzten ACK.
+        failed: permanenter P4-3-Fehler ohne Wiederverbindung bis Laufende.
+        audit_failed: Tx-Audit ausgefallen. last_ack belegt ausschliesslich
+        lokale Treiberannahme, keinen GSVmulti-Empfang.
         """
         if self._output is None:
             return {'transport': 'off', 'state': 'off'}
@@ -709,12 +722,12 @@ class LiveSession:
             return status
         return {
             'transport': 'serial',
-            'state': ('disconnected' if status['first_error'] else
-                      'serial_ready' if status['enabled'] else 'stopped'),
+            **self._output.delivery_status(),
             'config': dict(self._output_config),
             'error': status['first_error'],
             'release_block': None,
-            'last_driver_ack': None,
+            'acceptance': 'fehlt',
+            'release_note': SERIAL_RELEASE_NOTE,
         }
 
     def _write_session(self, *, ended: bool) -> None:
