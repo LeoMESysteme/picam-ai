@@ -95,3 +95,24 @@ Offene Gates und Teilaufgaben bleiben im Hauptplan/status.md sichtbar.
 Release-Key/-Kanal und Schutz gegen alte signierte Versionen bleiben in
 [OQ-65](../../open-questions.md#oq-65) offen. Keine Testschlüssel übernehmen.
 W3 liefert ausdrücklich keinen nativen UAC-Launcher/Deploymentanbieter.
+
+## P3-Vertrag für Hub und spätere Windows-Verbindung
+
+Explizite `serve --bridge-directory`-Auswahl lädt vorhandene Identität;
+`--bridge-endpoint` wird wiederholt für tatsächliche LAN-/Tailscale-Adressen
+angegeben. `--host`/`init-tls --host` haben den portablen Standard 127.0.0.1.
+PAM ist an das konfigurierte effektive Dienstkonto gebunden. Bestehende
+TLS-Dateien werden nicht ersetzt. Ohne echten Hub bleibt WSS mit 503 gesperrt.
+
+Operator-API: GET `/live/bridge/profile`, POST `/live/bridge/offers`, DELETE
+`/live/bridge/clients/{client_id}`; Änderungen mit Anmeldung, Origin und CSRF.
+Netzwerkclient: TLS-POST `/bridge/v2/pair` mit Pi-/Client-ID, transport=network
+und Einmalangebot; anschließend WSS `/bridge/v2` mit Bearer-Token. Client
+sendet zuerst striktes v2-Hello ohne alte Lease/Run-ID, Server antwortet mit
+aktuellem Hello/Lease. P4 ergänzt echte Hub-/Laufsemantik und UART-Kontrollen.
+
+Discovery ist optional und unbestätigt; Such-Kindprozess erhält keine Secrets.
+**Im eingefrorenen Windows-Einstieg `multiprocessing.freeze_support()` vor
+GUI-Aufbau aufrufen** und den tatsächlichen Suchprozess unter Windows prüfen.
+IPv6-Link-local braucht den Scope der lokalen Windows-Schnittstelle; einen
+Pi-Interfaceindex nicht ungeprüft als Windows-Index übernehmen.

@@ -24,16 +24,16 @@ Deployment, Hardwareeingriff oder neue Paketinstallation vorgenommen.
 | N2 | PnP-/USB-Erkennung und Portpaaradapter, 48 Tests; fehlende Seriennummer fordert Auswahl; echter Treiberprovider bleibt unverifiziert und gesperrt. |
 | N3 | Originale UCF/TXT samt Archivprovenienz und Inspektion, 17 Tests; unbekannte Dateiversion, keine freigegebenen Änderungsfelder, automatischer Export blockiert. |
 | P2 | Hardwaregebundene Identität, portable Zertifikats-/Signaturprüfung, Einmalangebote und widerrufbare Tokens, lokale CLI; 26 gezielte Tests nach Reviewkorrekturen. |
+| P3 | Profil/Operatoraktionen, gekoppelter WSS-Zugang und begrenzte Discovery; 163 relevante Tests, 2 bestehende Fixture-Skips nach Korrekturen; Nachprüfung sauber, echter Hub folgt. |
 | W3 | Fortsetzbarer Installer-/Updatekern, 47 fokussierte Tests nach Auswahlkorrektur; Nachprüfung sauber. Native Installation und Release-Signierung ausstehend. |
 
 Commitfolge bisher: `71f01cf` (P1), `4077cff` (N2), `c90a350` (N1),
-`e3b67e1`/`3887907` (N3/Doku), `6e9e2e6` (P2); W3 folgt im selben
-Commit wie dieser Status. P3 ist in Umsetzung.
+`e3b67e1`/`3887907` (N3/Doku), `6e9e2e6` (P2); W3 `8b97697`. P3 wird mit diesem Status versioniert.
 Die technische Umsetzung ist keine fertige EXE und keine Produktabnahme.
 Die [Pläne](superpowers/plans/2026-11-06-windows-bruecke.md) unterscheiden
 lokal geprüften Code und reale Abnahmeschritte.
 
-Nächste Backend-Aufgaben: Dienstprofil/Discovery/WSS (P3), gemeinsamer
+Nächste Backend-Aufgaben nach P3-Nachprüfung: gemeinsamer
 Hub mit Lease/UART und Live-Ausgabenaht (P4), Windows-Verbindung/geschützter
 Speicher (W1), dauerhaftes Übergabejournal und Worker (W2), Backendintegration
 (G1). GUI und sichtbare Workbench-Integration folgen bei Claude.

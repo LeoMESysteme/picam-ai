@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Pi-Profil, Operator-Kopplung und TLS-/Token-geschützten WSS-
+  Zugang vorbereitet. Widerruf gilt bereits vor Hello; Zugangsspeicher und
+  Verbindungsende haben feste Fristen und geben Leases auch bei Fehlern frei.
+  Discovery bleibt unbestätigt und zeitlich begrenzt, konfigurierte Endpunkte
+  bleiben unabhängig davon verfügbar. Host/PAM und Identitäts-TLS sind
+  ausdrücklich konfigurierbar. 163 relevante Tests bestanden, zwei bestehende
+  Fixture-Skips; Nachprüfung sauber. Echten Hub und UART-Ausgabenaht folgen
+  separat; ohne Hub verweigert WSS den Betrieb. Keine Dienstumstellung.
+
 * 2026-11-06: Fortsetzbaren Windows-Installer-/Updatekern ergänzt: aktuelle
   Portprüfung, Auswahl nach Abbruch, Besitzschutz, auditierte Aktionen,
   signierte Manifeste und Hashprüfung vor Versionswechsel. Aktive Ausgabe

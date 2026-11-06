@@ -22,7 +22,7 @@ from dispread.live import LIVE_CV_THREADS, LIVE_DATA_DIR
 from dispread.live.camera import CameraOwner
 from dispread.live.service import LiveError, LiveService
 
-from .auth import Sessions, authenticate
+from .auth import Sessions, authenticate, pam_username
 from .controller import Controller
 from .datasets import zip_export
 from .fields import actions, rows
@@ -39,11 +39,23 @@ def same_origin(request):
     return request.headers.get("Origin") == f"https://{request.host}"
 
 
-def make_app(controller, terminals, verifier=authenticate, live=None):
+def make_app(controller, terminals, verifier=authenticate, live=None, *,
+             bridge_identity=None, bridge_pairing_store=None, bridge_hub=None,
+             bridge_endpoints=(), bridge_name="Dispread Pi"):
+    bridge_public_paths = frozenset()
+    if bridge_identity is not None:
+        from dispread.bridge.routes import PUBLIC_PATHS, add_bridge_routes
+        bridge_public_paths = PUBLIC_PATHS
+
     sessions = Sessions()
 
     @web.middleware
     async def guard(request, handler):
+        bridge_public = request.path in bridge_public_paths
+        if bridge_public:
+            # These TLS endpoints enforce their own scoped credential/offer auth;
+            # browser cookies and browser CSRF do not authorize them.
+            return await handler(request)
         public = request.path in ("/login", "/static/login.css", "/static/login.js")
         session = sessions.get(request.cookies.get(COOKIE))
         if not public and not session:
@@ -255,7 +267,44 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
     app.router.add_static("/static", STATIC)
     if live is not None:
         add_live_routes(app, live, csrf_of=lambda request: sessions.get(request.cookies.get(COOKIE))["csrf"])
+    if bridge_identity is not None:
+        if bridge_pairing_store is None:
+            raise ValueError("Bridge identity requires its pairing store")
+
+        def authorize_operator(request):
+            session = sessions.get(request.cookies.get(COOKIE))
+            if session is None:
+                raise web.HTTPUnauthorized()
+            if request.method not in ("GET", "HEAD"):
+                if not same_origin(request) or request.headers.get("X-CSRF-Token") != session["csrf"]:
+                    raise web.HTTPForbidden(text="CSRF rejected")
+
+        add_bridge_routes(app, bridge_identity, bridge_pairing_store, bridge_hub,
+                          authorize_operator, endpoints=bridge_endpoints, name=bridge_name)
     return app
+
+
+def service_pam_user(configured=None):
+    username = pam_username(configured)
+    if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != username:
+        raise ValueError("Workbench ohne sudo unter dem konfigurierten PAM-Konto starten")
+    return username
+
+
+def bridge_service_config(args):
+    """Explicit opt-in: load existing identity, never provision or replace TLS."""
+    directory = getattr(args, "bridge_directory", None)
+    if directory is None:
+        if getattr(args, "bridge_endpoint", ()) or getattr(args, "bridge_discovery", False):
+            raise ValueError("Bridge endpoints/discovery require --bridge-directory")
+        return {}, None
+    from dispread.bridge.identity import DeviceIdentity, local_hardware_id
+    from dispread.bridge.pairing import PairingStore
+
+    identity = DeviceIdentity.load(Path(directory), local_hardware_id())
+    return dict(bridge_identity=identity, bridge_pairing_store=PairingStore(identity.directory / "pairing"),
+                bridge_endpoints=tuple(getattr(args, "bridge_endpoint", ())),
+                bridge_name=getattr(args, "bridge_name", "Dispread Pi")), identity.tls_context()
 
 
 async def handle_local_op(op, args, controller, live):
@@ -291,8 +340,8 @@ async def handle_local_op(op, args, controller, live):
 
 
 async def serve(args):
-    if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != "me-systeme":
-        raise ValueError("Workbench als me-systeme starten, nicht mit sudo")
+    username = service_pam_user(getattr(args, "pam_user", None))
+    bridge_config, bridge_tls = bridge_service_config(args)
     import signal
 
     stop = asyncio.Event()
@@ -333,7 +382,9 @@ async def serve(args):
     if data != controller.config:
         controller._change(data)
     terminals = Terminals(Path.cwd(), socket_path)
-    runner = web.AppRunner(make_app(controller, terminals, live=live), access_log=None)
+    runner = web.AppRunner(make_app(controller, terminals, live=live,
+                                   verifier=lambda password: authenticate(password, username=username),
+                                   **bridge_config), access_log=None)
     local = web.Application()
 
     async def control(request):
@@ -358,25 +409,41 @@ async def serve(args):
             await asyncio.sleep(0.5)
 
     watcher = None
+    publication = None
     try:
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context = bridge_tls
+        if context is None:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(args.cert, args.key)
         context.set_alpn_protocols(["http/1.1"])
-        context.load_cert_chain(args.cert, args.key)
         await runner.setup()
         await unix.setup()
         await web.UnixSite(unix, str(socket_path)).start()
         os.chmod(socket_path, 0o600)
         await web.TCPSite(runner, args.host, args.port, ssl_context=context).start()
+        if getattr(args, "bridge_discovery", False):
+            from dispread.bridge.discovery import publish_service
+            try:
+                publication = await asyncio.to_thread(
+                    publish_service, bridge_config["bridge_identity"], bridge_config["bridge_endpoints"],
+                    name=bridge_config["bridge_name"],
+                )
+            except (ImportError, OSError, ValueError) as error:
+                controller.log("error", f"Bridge discovery unavailable: {type(error).__name__}; configured endpoints remain usable")
         controller.start()
         try:
             owner.start(reason="serverstart")
         except Exception as error:  # noqa: BLE001 - Server laeuft weiter, Seite zeigt den Fehler
             controller.log("error", f"Kamera: {error}")
         watcher = asyncio.create_task(watch())
-        print(f"Workbench: https://{args.host}:{args.port} | Anmeldung: me-systeme", flush=True)
+        print(f"Workbench: https://{args.host}:{args.port} | Anmeldung: {username}", flush=True)
         await stop.wait()
     finally:
+        if publication is not None:
+            # Optional discovery must not prevent camera/socket shutdown.
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(publication.close)
         if watcher:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):

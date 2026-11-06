@@ -74,6 +74,30 @@ deshalb wurde keine zusätzliche CI-Jobdatei angelegt. Konkrete Inno-Version,
 Signierung und VM-Nachweise sind externe Voraussetzungen, keine Installation
 in der Pi-venv.
 
+## Brücke v2: optionale Discovery und HTTPS-Zugang
+
+Debian `python3-zeroconf` wird im Workbench-Installationsskript deklariert.
+Es wird erst für ausdrücklich aktivierte DNS-SD-Veröffentlichung benötigt;
+SDK-Fehler lassen konfigurierte HTTPS/WSS-Endpunkte verwendbar. Hier wurde
+das Paket nicht installiert. Windows führt `zeroconf` als eigenen, noch zu
+qualifizierenden Buildkandidaten. Die Adapter-API wurde gegen die
+[primäre SDK-Dokumentation](https://python-zeroconf.readthedocs.io/en/latest/api.html)
+und freigegebenen Quelltext geprüft, nicht am installierten Netzwerk.
+
+Die Suche läuft per `multiprocessing` mit `spawn` in einem begrenzten
+Kindprozess, einschließlich SDK-Start und Aufräumen. Der spätere eingefrorene
+Windows-Einstieg braucht `multiprocessing.freeze_support()` und eine echte
+Windows-Suchprüfung. Dies betrifft keine Kameraprozesse. Veröffentlichung
+ist separat optional; explizite Endpunkte bleiben unabhängig davon erhalten.
+
+`--bridge-directory` lädt ausschließlich eine vorhandene provisionierte
+Identität und verwendet deren Zertifikat am HTTPS-Dienst. Vorhandene
+`--cert`/`--key`-Dateien werden nicht überschrieben. Ohne Opt-in bleibt der
+bisherige TLS-Weg. Der portable Bind-Standard ist 127.0.0.1; externe
+Erreichbarkeit braucht eine ausdrückliche Dienstadresse und konfigurierte
+Endpunkte. PAM-Konto muss zum lokalen Dienstkonto passen und ist
+konfigurierbar; kein festes me-systeme-Konto als allgemeiner Vertrag.
+
 ## Brücke v2: Identität und Kopplung
 
 Der Pi benötigt zusätzlich Debian `python3-cryptography`;
@@ -90,7 +114,7 @@ hardwaregebundene ID und RSA-3072-Zertifikat. Bereitstellung ausschließlich
 über ausdrückliches `dispread bridge identity --provision`; bestehende
 Zertifikate und laufende Dienste werden dabei nicht ersetzt. Offline-UART
 kann ein lokal exportiertes Profil mit höchstens fünf Minuten gültigem
-Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung folgt gesondert.
+Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung ist vorbereitet; der echte Hub folgt gesondert.
 
 ## Zensical-Pflege auf dem Forgejo-Runner
 
@@ -182,7 +206,7 @@ Spezialisierte Traineddata (`ssd`, `letsgodigital`) sind nicht in Debian, siehe
 
 Nichts über die dokumentierten Systempakete hinaus. Der Messkern nutzt
 `numpy`, `cv2` und `pyserial`. Für die Workbench kommen `aiohttp` und PAM
-hinzu; die optionale TUI nutzt `textual` (Pakete siehe unten). Die aktive
+hinzu; Brücke v2 benötigt cryptography und für optionale Discovery zeroconf; die optionale TUI nutzt `textual` (Pakete siehe unten). Die aktive
 UVC-Bildquelle öffnet OpenCV erst beim Öffnen der Kamera. `picamera2` wird von ihr nicht importiert; Tests und Beispiele ohne
 Kamera bleiben ausführbar ([Bildquellen-API](../api/frames.md)).
 
@@ -217,8 +241,9 @@ Paket ausgeliefert; es ist keine Node.js-Laufzeit erforderlich.
 Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
 übernimmt das steuernde Terminal vor `exec`; kein Python-Code nach einem
 Fork aus dem mehrthreadigen Kameraprozess. Kein tmux notwendig. PAM nutzt den
-vorhandenen Dienst `login` für den eigenen Benutzer `me-systeme`; Serverstart
-als root oder als anderer Benutzer wird abgelehnt.
+vorhandenen Dienst `login` für das konfigurierte lokale Dienstkonto
+(standardmäßig effektiver OS-Benutzer). Serverstart als root oder mit einem
+PAM-Konto, dessen UID nicht zum Dienst passt, wird abgelehnt.
 
 ## Doku-Seite und CI (2026-09-23)
 

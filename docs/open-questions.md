@@ -3268,5 +3268,6 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   sind kein verteilter Vertrauensanker. Aktive Ausgabe blockiert Updates;
   vorhandene Konfiguration und Audits dürfen nicht still verloren gehen.
 * **Antwort landet in:** [Windows-Spec §4](superpowers/specs/2026-11-06-windows-bruecke-design.md#4-installation-und-wiederholung),
-  [Windows-Buildrezept](../windows/bridge/README.md) und
-  [Updatekern](../windows/bridge/src/dispread_bridge_app/updates.py).
+  [Abhängigkeiten und Buildgrenzen](dependencies.md#windows-installer-und-updatevertrage);
+  im Repository zusätzlich `windows/bridge/README.md` und
+  `windows/bridge/src/dispread_bridge_app/updates.py`.

@@ -9,6 +9,28 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Begrenzte Discovery und ausdrückliche Identitäts-TLS-Auswahl
+
+**Problem:** Die mDNS-Bibliothek bietet für Start und Ende keine vollständige
+Aufruferzeitgrenze. Die bisherige Workbench verwendet ein anderes TLS-Zertifikat
+und eine konkrete Adresse; beides darf nicht stillschweigend ersetzt werden.
+
+**Entscheidung:** Discovery-Suchen laufen in einem isolierten `spawn`-Prozess
+mit begrenztem Ergebnis und Abbruch/Reaping. Konfigurierte Endpunkte bleiben
+unabhängig von Suchtreffern erhalten. `--bridge-directory` aktiviert
+ausdrücklich die bereits provisionierte Geräteidentität als HTTPS-Zertifikat;
+sonst bleibt der bisherige TLS-Weg. LAN-/Tailscale-Endpunkte sind Konfiguration,
+keine Ableitung aus dem HTTP-Host-Header.
+
+**Alternativen:** Ein Hintergrundthread allein kann blockierende native
+SDK-Lebenszyklen nicht hart beenden. Vorhandene Zertifikate zu überschreiben
+würde einen unbeauftragten Vertrauenswechsel bewirken.
+
+**Konsequenz:** Seltenes Suchen trägt Prozessstartkosten; eingefrorener
+Windows-Einstieg braucht `freeze_support()` und echten Suchnachweis. mDNS
+liefert Kandidaten, keine Identitätsfreigabe. Keine Netzkonfiguration und
+kein laufender Dienst wurden bei dieser Umsetzung geändert.
+
 ## 2026-11-06 — Windows-Vorarbeit ohne unbelegte Produktfreigabe
 
 **Problem:** Linux-Vertragstests können Windows-Paketierung, Treiber-/HVCI-
