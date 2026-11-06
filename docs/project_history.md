@@ -9,6 +9,26 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-06 — Zertifikatsbindung gespeicherter Windows-Tokens
+
+**Problem:** Pi-ID und Transport allein binden einen gespeicherten Token
+nicht an das bekannte Zertifikat. Ein importiertes anderes Zertifikat könnte
+dieselbe öffentliche Pi-ID beanspruchen und den alten Token erhalten.
+
+**Entscheidung:** CredentialStore bindet den verschlüsselten Inhalt an
+`expected_pin`; Manager lädt/speichert ausschließlich mit dem Profilfingerprint.
+Alte ungebundene oder abweichende Einträge erfordern frische Kopplung.
+Der WSS-Client prüft zusätzlich den wirklichen Peer vor HTTP-Headern über
+einen eng begrenzten, exakt versionsgesperrten aiohttp-Connector.
+
+**Alternative:** Nur Profil-Selbstkonsistenz oder Pi-ID/Transport zu prüfen
+verhindert diese Tokenweitergabe nicht. Ein tatsächlicher TLS-Negativtest
+hat sie vor der Korrektur nachgewiesen.
+
+**Konsequenz:** Zertifikatswechsel verwenden keine alten Tokens. Der private
+SDK-Hook kostet eine explizite Versions-/Windows-Qualifikation; keine globale
+Lockerung von TLS und kein neuer Windows-Nachweis werden daraus abgeleitet.
+
 ## 2026-11-06 — Dauerhafter COM-Intent und atomare Schreibzulassung
 
 **Problem:** Nach Prozessabbruch zwischen COM-Schreiben und ACK ist eine

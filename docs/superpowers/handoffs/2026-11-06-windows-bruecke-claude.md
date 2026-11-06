@@ -76,10 +76,10 @@ Windows-Import nicht ausgeführt. Einmalangebote sind 256 Bit, höchstens
 Lokale technische Vorbereitung (keine Messung):
 
 ```bash
-./.venv/bin/dispread bridge identity --directory var/workbench/bridge --provision
-./.venv/bin/dispread bridge export-profile --directory var/workbench/bridge \
+PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge identity --directory var/workbench/bridge --provision
+PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge export-profile --directory var/workbench/bridge \
   --output pi-profil.json --name Labor-Pi --pair --transport uart
-./.venv/bin/dispread bridge revoke --directory var/workbench/bridge CLIENT_ID
+PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge revoke --directory var/workbench/bridge CLIENT_ID
 ```
 
 Nur auf dem tatsächlich einzurichtenden Pi und unter dessen autorisiertem
@@ -167,3 +167,29 @@ Journal und Lauf-Audit behalten. Unbekannte Invalidierung hat keinen
 GUI-Bypass. Diagnosedetails separat begrenzt und redigiert, auch unbekannte
 JSON-Schlüssel; für physische Leerlaufbereinigung Backend-prune regelmäßig
 planen. Aktuell 93 fokussierte Tests und ein echter Windows-Skip, Review sauber.
+
+Im isolierten Worktree zeigt `.venv` auf die vorhandene Projektumgebung.
+Für die hier geänderten Module `PYTHONPATH=src` wie oben verwenden; die
+gemeinsame Umgebung nicht auf einen anderen Checkout uminstallieren.
+
+## W1: Verbindung und Bereitschaft konsumieren
+
+Manager bietet `connect`, `disconnect/cancel`, `data_link`, `admit_write`,
+`start_demo`, `snapshot` und `set_worker`. Worker einmal mit `set_worker`
+binden, die sieben Felder der aggregierten Readiness rendern. GUI konstruiert
+keine v2-Nachrichten und keine eigene Freigabelogik. Kopplung, Heartbeat,
+Run-Resync und ACK-Antworten verarbeitet der Kern.
+
+CredentialStore-Aufrufe des Managers verwenden immer `expected_pin`;
+eigene Adapter müssen dies unterstützen und durchsetzen. Zertifikatswechsel
+oder alte ungebundene Einträge verlangen eine frische Kopplung.
+
+Aktuelle Routinggrenze: Standardfactory verwendet den ersten ausdrücklich
+konfigurierten Endpunkt. LAN-/Tailscale-/Discovery-Auswahl gehört vor die
+Manager-Erzeugung; erwartete Pi-ID/Zertifikat beibehalten. Es gibt keinen
+stillen Routen-/Pi-/Transportwechsel, keine CONNECT-Proxys oder Präfixpfade.
+Die vollständige sichtbare Auswahl bleibt App-Aufgabe.
+
+W1 abschließend 59 Tests, zwei native Windows-Skips, Review sauber.
+G1 ergänzt noch den gemeinsamen automatischen Wiederanlauf mit W2; dessen
+frühere allgemeine Stop-Aussagen werden im Endstand entsprechend präzisiert.

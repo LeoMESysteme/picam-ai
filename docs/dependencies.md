@@ -58,6 +58,24 @@ Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
 bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
 [Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
 
+## Windows-Verbindungskern
+
+Der reale WSS-Client verwendet aiohttp **3.14.3** als exakt geprüften
+API-Kandidaten in der getrennten Windows-`.in`-Datei. Ein enger Connector-Hook
+prüft den tatsächlichen Peer vor dem HTTP-Schreiben; weil diese API privat
+ist, verweigert ein anderer SDK-Stand den Betrieb. Gültigkeit, Pi-ID und Pin
+werden vor Zugangsdaten geprüft. Die Sperre ersetzt keine qualifizierten
+Windows-Wheels/Hashlocks; keine Bibliothek wurde hier installiert.
+
+Zunächst unterstützt sind direkte HTTPS/WSS-Verbindungen zu konfigurierten
+Origins oder `/bridge/v2`. CONNECT-Proxys und Reverse-Proxy-Pfadpräfixe
+werden ausdrücklich nicht geraten. Globale SSL-Einstellungen bleiben
+unverändert. CredentialStore verwendet Windows-DPAPI und SID-DACLs über
+`ctypes`, ohne Maschinenfreigabe oder Klartextfallback. Die nativen
+Windows-Nachweise bleiben separat offen. Gespeicherte Tokens sind an den
+Zertifikatsfingerprint gebunden; Manager-Aufrufe von CredentialStore verwenden
+immer `expected_pin`. Eigene Speicheradapter müssen diese Bindung erhalten.
+
 ## Windows-Worker und geschützte Prozessinstanz
 
 Das Übergabejournal nutzt SQLite aus der Standardbibliothek mit bestätigtem

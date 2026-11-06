@@ -5,6 +5,15 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-06: Windows-Verbindungskern für gepinntes WSS und signierten UART
+  ergänzt, mit geschütztem DPAPI-Speicher und zentraler Bereitschaft. Tokens
+  sind zusätzlich an den Zertifikatsfingerprint gebunden; ein neues Zertifikat
+  kann keine alten Zugangsdaten erhalten. Leasekonflikte verwenden abbrechbaren
+  Backoff, Ersatzverbindungen löschen alte Bereitschaft atomar. 59 fokussierte
+  Tests bestanden, zwei native Windows-Prüfungen hier übersprungen; zwei
+  Reviewrunden bestätigt. GUI, gemeinsame Wiederanlaufintegration und echte
+  Windows-Qualifikation folgen getrennt.
+
 * 2026-11-06: Windows-Worker mit dauerhaftem SQLite-Übergabejournal und
   atomarer Schreibzulassung ergänzt. Generationswechsel, Stop und Restbudget
   werden nach Portkonfiguration geprüft; unklare Zahlen werden nicht erneut

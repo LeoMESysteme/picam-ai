@@ -8,3 +8,6 @@ cryptography==50.0.1
 
 # Optional DNS-SD discovery; candidate only, qualify on Windows first.
 zeroconf
+
+# Exact tested client connector API; Windows qualification/hashed locks pending.
+aiohttp==3.14.3

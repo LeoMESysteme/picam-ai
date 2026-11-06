@@ -26,6 +26,7 @@ Deployment, Hardwareeingriff oder neue Paketinstallation vorgenommen.
 | P2 | Hardwaregebundene Identität, portable Zertifikats-/Signaturprüfung, Einmalangebote und widerrufbare Tokens, lokale CLI; 26 gezielte Tests nach Reviewkorrekturen. |
 | P3 | Profil/Operatoraktionen, gekoppelter WSS-Zugang und begrenzte Discovery; 163 relevante Tests, 2 bestehende Fixture-Skips nach Korrekturen; Nachprüfung sauber, echter Hub folgt. |
 | P4 | Hub, Lease, UART-Handshake und Live-Factory integriert; 97 betroffene Tests auf letztem Stand, Review nach zwei Fixrunden sauber. 158 Node-Tests; zuvor 837 breite Python-Prüfungen vor den letzten lokalisierten Korrekturen. |
+| W1 | Gepinntes WSS, signierter UART, DPAPI-/Zertifikatsbindung und zentrale Bereitschaft: 59 abschließende Tests, zwei echte Windows-Skips; Review nach zwei Fixrunden sauber. |
 | W2 | Dauerhafter COM-Intent/Worker, begrenzte Diagnose und SID-Instanzschutz; 93 fokussierte Tests, ein echter Windows-Skip nach bestätigten Reviewkorrekturen; W1-Integration folgt. |
 | W3 | Fortsetzbarer Installer-/Updatekern, 47 fokussierte Tests nach Auswahlkorrektur; Nachprüfung sauber. Native Installation und Release-Signierung ausstehend. |
 
@@ -35,10 +36,12 @@ Die technische Umsetzung ist keine fertige EXE und keine Produktabnahme.
 Die [Pläne](superpowers/plans/2026-11-06-windows-bruecke.md) unterscheiden
 lokal geprüften Code und reale Abnahmeschritte.
 
-Nächste Backend-Aufgaben: Windows-Verbindung/geschützter Speicher (W1),
-Backendintegration (G1). W2 ist nach Korrekturen geprüft, W1 ist nun in
-Umsetzung und konsumiert die festgelegte atomare Schreibzulassung. GUI und sichtbare
-Workbench-Integration folgen bei Claude. P4 aktualisiert ausschließlich Backend.
+Letzter Backend-Schritt: gemeinsame Integration G1. Der bisherige Worker
+beendet sich bei gewöhnlichem Verbindungsverlust/ended noch vorzeitig und
+unterbricht den Manager-Backoff. G1 korrigiert ausschließlich diesen
+zusammengesetzten Wiederanlauf und prüft ihn mit den tatsächlichen Klassen.
+Expliziter Stop sowie Audit-/Invalidierungsfehler bleiben dauerhaft gesperrt.
+Danach folgen Gesamtprüfung, Branchreview und Claude-Übergabe.
 
 Der zuvor fehlgeschlagene Fake-Setup-Test ist nun unabhängig von der nicht
 versionierten Template-Datei; kein Trainingsbestand wurde kopiert.
