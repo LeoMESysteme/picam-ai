@@ -36,20 +36,22 @@ softwareseitig umgesetzt, einschließlich GSVmulti-Ausgabewahl und der
 abschließenden Backend- und UI-Korrekturen. Hardware-Abnahme T13 und Merge
 nach `master` stehen aus und brauchen Leonhards ausdrückliches OK.
 
-## Windows-EXE: Architektur gewählt, Design zur Freigabe
+## Windows-EXE: Spec freigegeben, Umsetzungsplan erstellt
 
-Aktuelle Aufgabe: konkrete Spezifikation, noch keine Implementierung.
-Leonhard hat Python-Brückenkern + Qt-GUI + Windows-Installer gewählt.
-Downloads bei Einrichtung sind erlaubt. [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md)
-legt Installation, Pi-Erstzugang, Geräteidentität/Kopplung, LAN/Tailscale,
-UART, Zustandsmodell, Sessiongenerator, Wiederanlauf und Abnahme fest.
-Unabhängiger Builder-Check abgeschlossen: keine wichtigen offenen
-Planungsfragen. Strenger Doku-Build erfolgreich. Das Dokument selbst
-muss vor Umsetzung freigegeben werden. Vorgeschlagene Details wie
-Windows 11 x64 zuerst, Tray-App, PyInstaller/Inno Setup und gekoppelte
-WSS-Verbindung sind als Entwurfsentscheidungen markiert. Produktcode und
-Abhängigkeiten unverändert. OQ-62/OQ-64 bleiben bis zu den nötigen
-Nachweisen offen; OQ-53 und fachliche DUT-Sperren bestehen weiter.
+Leonhard hat am 06.11.2026 den vollständigen [Entwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md)
+freigegeben. Der [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md)
+liegt mit drei Teilplänen und zwölf Aufgaben vor: Nachweise (N1–N3),
+Pi/Protokoll (P1–P4), Windows (W1–W4), Endabnahme (G1).
+Selbstprüfung gegen alle Spec-Abschnitte, Schnittstellen und fünf
+Review-Fokusfälle durchgeführt. Nächster Schritt ist Planprüfung und
+Auswahl Native/subagentengetrieben; noch kein Produktcode verändert.
+
+Zuerst Windows-Paket ohne System-Python, zulässiges automatisiertes Portpaar,
+belegte GSVmulti-Session und überprüfte Kopplung. Größerer GUI-Ausbau wartet
+auf diese Nachweise. Der vorhandene Forgejo-Runner ist ein Pi-Host;
+Windows-Build/Treibertests benötigen eigenen Windows-Rechner/Runner.
+Bestehende DUT-Sperren und OQ-53/OQ-62/OQ-64 bleiben bis zum tatsächlichen
+Nachweis bestehen. Neue Qt-/Buildabhängigkeiten noch nicht installiert.
 
 ## Neue Produktanforderung für später
 

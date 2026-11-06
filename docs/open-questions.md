@@ -3143,8 +3143,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Einrichtung statt eines Python-Tracebacks.
 * **Architekturwahl 2026-11-06:** Leonhard wählt Python-Brückenkern + Qt-GUI
   + Windows-Installer; Online-Downloads bei Einrichtung sind erlaubt.
-  [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md) wird vor Umsetzung geprüft und zur
-  Freigabe vorgelegt. Architekturwahl klärt nicht Treiberzulassung,
+  [Spezifikation](superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
+  am 06.11. freigegeben; [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md)
+  liegt zur Planprüfung vor. Architekturwahl klärt nicht Treiberzulassung,
   Sessionformat oder produktive Messfreigabe.
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere

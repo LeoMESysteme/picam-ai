@@ -30,8 +30,11 @@ spätere Alternative bleibt es möglich.
 **Konsequenz:** Ein eigener Windows-Build und Ergänzungen auf der Pi-Seite
 sind erforderlich. Konkrete Paketierung, Kopplung, Zielplattform und
 Abnahmeschranken stehen zunächst im [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md).
-Architekturwahl ist keine Freigabe dieses Entwurfs oder der Implementierung;
-Treiber-, Session- und fachliche DUT-Abnahme bleiben eigene Nachweise.
+Der vollständige Entwurf wurde danach am 06.11.2026 ausdrücklich freigegeben.
+Der [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md) trennt
+Machbarkeitsnachweise, Pi/Protokoll und Windows-Anwendung. Planprüfung und
+Ausführungsmethode stehen noch aus; Treiber-, Session- und fachliche
+DUT-Abnahme bleiben eigene Nachweise.
 
 ## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART
 

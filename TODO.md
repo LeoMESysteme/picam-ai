@@ -101,10 +101,11 @@ Python-/Visual-Studio-Installationen erhalten. Frisch-PC-Tests decken sowohl
 Netzerkennung und überprüfte Kopplung mehrerer Pi sowie Verhalten bei
 Netzwechseln in [OQ-64](docs/open-questions.md#oq-64) klären. Nutzer erlaubt
 Downloads während der Ersteinrichtung; Offline-Installationspaket derzeit
-keine Pflicht. Architektur gewählt: bestehender Python-Kern + Qt-GUI +
-Windows-Installer. [Designentwurf](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
-unabhängig auf Planungslücken geprüft (keine wichtigen offenen Fragen);
-Dokumentfreigabe vor Implementierung noch ausstehend.
+keine Pflicht. Architektur und [Spezifikation](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md)
+sind am 06.11. freigegeben: bestehender Python-Kern + Qt-GUI + Windows-Installer.
+[Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md) mit drei
+Teilplänen und zwölf Aufgaben liegt vor. Nachweise vor GUI-Ausbau;
+Planprüfung und Ausführungsmethode noch ausstehend.
 Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
 ([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
 ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den
