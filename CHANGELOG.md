@@ -8,7 +8,8 @@ was ist die Konsequenz.
 * 2026-11-06: Windows-Brücke ruckelte im Leerlauf (Diagnoseexport: 26 268 `exchange/idle` in 4,8 MB). Ursache:
   Worker pollte nach `idle` alle 10 ms, jedes Ereignis schrieb synchron (fsync) in den Diagnosespeicher und löste
   einen kompletten UI-Neuaufbau aus. Jetzt: adaptiver Leerlauftakt 50 → 200 ms (nach `written`/Nicht-Idle sofort
-  nächster Poll), `idle`/`ended` nur als Übergang gemeldet, `WorkerStatus.exchanges_total` additiv; Diagnose über
+  nächster Poll, danach 2 s lang 10-ms-Takt, damit der Latest-only-Slot des Pi keine Werte überspringt: 600 Demo-Werte
+  bei 20 Hz ergaben mit reinem Backoff nur 573 COM-Schreibvorgänge, mit Haltezeit 600), `idle`/`ended` nur als Übergang gemeldet, `WorkerStatus.exchanges_total` additiv; Diagnose über
   Hintergrundschreiber mit begrenzter Warteschlange (Überlauf wird gezählt), `written` als Zählerzeile gebündelt;
   Journal auf 500 Zeilen mit einer fortlaufenden Zählerzeile „Demo: n Werte weitergegeben“; UI zeichnet höchstens
   alle 200 ms neu. Gemessen (Fake-Link, 10 ms RTT, 10 s Leerlauf): Polls/s 50,9 → 5,1, Ereignisse/s 51 → 0,

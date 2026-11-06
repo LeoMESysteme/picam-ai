@@ -674,6 +674,7 @@ class SimClock:
     """Ersetzt Event.wait: sammelt Wartezeiten, stoppt nach simulierter Zeit."""
     def __init__(self, w, limit):
         self.w, self.limit, self.now, self.waits = w, limit, 0.0, []
+        w._clock = lambda: self.now
     def __call__(self, seconds):
         self.waits.append(seconds)
         self.now += seconds + 0.001           # 1 ms Netzzeit je Runde
@@ -709,7 +710,7 @@ def test_poll_after_written_has_no_wait(tmp_path):
     outcomes = [e.detail['outcome'] for e in events if e.kind == 'exchange']
     assert outcomes[:2] == ['written', 'written']
     assert clock.waits[0] == 0 and clock.waits[1] == 0
-    assert clock.waits[2] == 0.05           # Backoff beginnt erst mit dem Leerlauf
+    assert clock.waits[2] == 0.01           # kurze Haltezeit: Pi-Slot haelt nur den letzten Wert
 
 
 def test_idle_backoff_resets_after_record(tmp_path):
@@ -717,7 +718,7 @@ def test_idle_backoff_resets_after_record(tmp_path):
     rec.pop('request_id', None)
     idle = dict(type='idle', run_id=None, release_block=None)
     link, events, clock = run_sim(tmp_path, script=[idle, idle, idle, rec], limit=1.0)
-    assert clock.waits[:5] == [0.05, 0.1, 0.2, 0, 0.05]
+    assert clock.waits[:5] == [0.05, 0.1, 0.2, 0, 0.01]
 
 
 def test_thousand_idle_rounds_emit_one_idle_event(tmp_path):
@@ -762,3 +763,38 @@ def test_stop_during_idle_wait_is_prompt(tmp_path):
         w.stop()
         assert done.wait(1) and time.monotonic() - t < 0.05
         assert not w.is_active()
+
+
+def test_active_hold_then_backoff_after_record(tmp_path):
+    rec = message(sequence=3)
+    link, events, clock = run_sim(tmp_path, script=[rec], limit=10.0)
+    assert clock.waits[:3] == [0, 0.01, 0.01]
+    assert 0.05 in clock.waits and clock.waits[-1] == 0.2    # nach 2 s Backoff
+    assert link.polls / 10.0 <= 25 + 100 * 2 / 10             # Haltezeit zaehlt einmalig
+
+
+def test_producer_at_20hz_loses_no_values(tmp_path):
+    """Pi-Slot haelt nur den letzten Wert: Takt nach einem Wert darf keinen ueberspringen."""
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.worker import BridgeWorker
+
+    class Slot:
+        def __init__(self, clock):
+            self.clock, self.messages, self.last = clock, [], -1
+        def send(self, m):
+            self.messages.append(m)
+        def receive(self):
+            rid = self.messages[-1]['request_id']
+            seq = int(self.clock.now / 0.05)            # neuer Wert alle 50 ms, nur letzter bleibt
+            if seq < 600 and seq != self.last:
+                self.last = seq
+                return dict(message(sequence=seq), request_id=rid)
+            return dict(version=1, type='idle', request_id=rid, run_id=None, release_block=None)
+    events, com = [], Com()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = BridgeWorker(Connection(None), lambda: com, db, events.append)
+        clock = SimClock(w, 33.0)
+        w._wait = clock
+        w.connection.link = Slot(clock)
+        w._run()
+    assert len(com.payloads) == 600
