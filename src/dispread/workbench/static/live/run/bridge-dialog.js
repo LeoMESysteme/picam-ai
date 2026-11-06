@@ -237,7 +237,10 @@ export function mountBridgeDialog(client, {fetchImpl, doc = globalThis.document}
       close: finish,
       isOpen: () => !state.closed,
       update(next) {
+        const before = bridgeTransport(state.choice);
         state.choice = next.choice ?? state.choice;
+        // Ein Code gilt nur fuer den Transport, fuer den er erzeugt wurde.
+        if (bridgeTransport(state.choice) !== before) { clearCode(); state.expired = false; }
         state.running = Boolean(next.running);
         if (!state.closed) render();
       },

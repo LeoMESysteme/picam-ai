@@ -2214,3 +2214,28 @@ test('Brücke im Lauf: lesend aus dem Dock, UART-Aktionen gesperrt, Kopplung ble
   await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
   await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-uart');
 });
+
+test('Brücke einrichten: Wechsel des Transports verwirft den aktiven Kopplungscode', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  // Über die Oberfläche ist der Wechsel nicht erreichbar (Dialog modal); die Schutzlogik prüft eine eigene Instanz.
+  const result = await page.evaluate(async (token) => {
+    const { mountBridgeDialog } = await import('/static/live/run/bridge-dialog.js');
+    const ui = mountBridgeDialog({ serverStatus: () => ({ csrf: token }) });
+    ui.open({ choice: 'tcp', running: false });
+    const dlg = document.querySelector('.modal.bridge') as HTMLElement;
+    (dlg.querySelector('[data-part="offer-btn"]') as HTMLElement).click();
+    for (let i = 0; i < 50 && !dlg.querySelector('[data-part="code"]'); i++) await new Promise((r) => setTimeout(r, 50));
+    const had = dlg.querySelector('[data-part="code"]')?.textContent;
+    ui.open({ choice: 'uart', running: false });
+    const after = dlg.querySelector('[data-part="code"]');
+    const word = dlg.querySelector('[data-part="offer-word"]')?.textContent;
+    ui.close();
+    return { had, gone: after === null, word };
+  }, csrf);
+  expect(result.had).toBe('TESTCODE-1-network');
+  expect(result.gone).toBe(true);
+  expect(result.word).toBe('kein Code');
+});
