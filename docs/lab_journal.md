@@ -4769,3 +4769,26 @@ Diagnose-Schnappschuss nach Lauf sowie Dienstjournal gesichert. Keine
 bestätigte Vorschau-aus-Phase: Lastunterschied nicht kausal bewerten.
 [Auswertung](quellen/werkbank-t13-2026-11-06.md) dokumentiert Zahlen,
 Zeitbasen, Methode und Grenzen; Rohdaten bleiben im Diagnoseordner.
+
+## 2026-11-06 — Erster Windows-Testlauf der GSVmulti-Brücke (Netzwerk)
+
+Leonhard hat den internen Testbuild der Windows-App auf seinem Windows-11-PC gebaut (`build-test.ps1`, unsigniert, nicht qualifiziert). Der Bau lief nach zwei Korrekturen für Windows PowerShell 5.1 durch, der Selbsttest der EXE war erfolgreich.
+
+Ablauf:
+- Die App mit dem Pi-Profil gekoppelt; der Fingerabdruck stimmte überein.
+- Über LAN verbunden; der Pi meldet `connected`.
+- Das com0com-Paar COM7↔COM8 manuell angegeben, GSVmulti als UserDef auf COM8.
+
+Ergebnisse:
+- **Empfangstest mit Demo:** 599 Übergaben an COM7, alle `written`. Laut Leonhard kamen die Werte in GSVmulti an. Einen Vergleich gegen eine Originaldatei gab es nicht, deshalb ist der Empfang nicht belegt.
+- **Echter Werkbank-Lauf:** In GSVmulti kam kein Wert an. Das ist erwartet, weil die DUT-Ausgabe der Brücke gesperrt ist.
+
+Befunde:
+- **App laggt:** Der Worker pollt im Leerlauf alle 10 ms. Das ergab 26.268 Leerlaufereignisse. Jedes davon schreibt synchron in die Diagnose und baut die Oberfläche neu auf.
+- **Bedienung blockiert:** Nach dem Verbinden war die Einrichtungsansicht gesperrt. Das ist behoben.
+
+Außerdem auf der Pi-Seite: Der Werkbank-Dienst lief zuerst ohne den `var`-Link im neuen Worktree. Die Einrichtung brach deshalb mit `[Errno 2] var/dotmatrix/…` ab. Der Link ist ergänzt.
+
+Die GSVmulti-Session des Tests unterscheidet sich von der Lauf-11-Vorlage nur in den drei Port-Feldern und einem ergänzten Abschnitt `[CopyPaste]`. Das ist ein Beitrag zu OQ-53/N3, aber kein Roundtrip-Nachweis.
+
+[Belege und Vergleich](quellen/bruecke-testlauf-2026-11-06/README.md)

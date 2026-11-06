@@ -2829,6 +2829,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   A-Präfix mit Filter aus (Lauf16) bleibt ebenfalls durchgehend auf Timeout.
   Keine allgemeine Kodierung oder interne Parserursache daraus bewiesen.
   [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-14).
+* **Beleg 2026-11-06 (Windows-Brücke):** Die Session aus dem ersten Windows-
+  Testlauf empfing Demo-Werte über das com0com-Paar auf COM8. Sie weicht von
+  der Lauf-11-Vorlage nur in `ComNr`, `Name` und `ComNo` ab, plus einem von
+  GSVmulti ergänzten `[CopyPaste]`-Abschnitt mit Standardwerten; Separator=256,
+  10 Hz und mV/V sind unverändert. Das zeigt, welche Felder ein Portwechsel
+  betrifft. Es ist kein Generator-Roundtrip und klärt die Separator-Kodierung
+  nicht. [Beleg](quellen/bruecke-testlauf-2026-11-06/README.md).
 * **Blockiert:** belastbaren Ein-Variablen-Vergleich des Filtermodus und
   späteres automatisiertes Übernehmen dieser Sessioneinstellung. Die zuvor
   belegte gültige Filter-ein-Konfiguration (OQ-01) bleibt davon unberührt.
