@@ -4,7 +4,7 @@ from __future__ import annotations
 from html import escape
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QRadioButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
@@ -25,13 +25,30 @@ class StepHeader(QWidget):
     def set_step(self, n: int) -> None:
         self.current = n
         self.setAccessibleName(f'Schritt {n} von 5: {texts.STEPS[n - 1]}')
+        self.setToolTip(' · '.join(f'{i}. {s}' for i, s in enumerate(texts.STEPS, 1)))
         self.update()
+
+    def _label_size(self, w: float) -> float:
+        """Größte Schrift (9 bis 7 pt), bei der keine zwei Labels sich berühren oder abgeschnitten werden."""
+        size = 9.0
+        while size > 7:
+            rects = []
+            for i, label in enumerate(texts.STEPS, 1):
+                font = theme.make_font(size, QFont.Weight.DemiBold if i == self.current else QFont.Weight.Normal)
+                tw = QFontMetricsF(font).horizontalAdvance(label) + 2
+                x = min(max((i - .5) * w - tw / 2, 0), self.width() - tw)
+                rects.append((x, x + tw))
+            if all(b[0] - a[1] >= 4 for a, b in zip(rects, rects[1:])):
+                break
+            size -= .5
+        return size
 
     def paintEvent(self, e):
         t = theme.tokens()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width() / 5
+        size = self._label_size(w)
         for i, label in enumerate(texts.STEPS, 1):
             cx = (i - .5) * w
             done, cur = i < self.current, i == self.current
@@ -49,9 +66,12 @@ class StepHeader(QWidget):
                 p.drawPolyline([QPointF(cx - 5, 14), QPointF(cx - 1.5, 17.5), QPointF(cx + 5, 10)])
             else:
                 p.drawText(r, Qt.AlignmentFlag.AlignCenter, str(i))
-            p.setFont(theme.make_font(9, QFont.Weight.DemiBold if cur else QFont.Weight.Normal))
+            font = theme.make_font(size, QFont.Weight.DemiBold if cur else QFont.Weight.Normal)
+            tw = QFontMetricsF(font).horizontalAdvance(label) + 2
+            p.setFont(font)
             p.setPen(QColor(t['text'] if cur else t['text2']))
-            p.drawText(QRectF(cx - w / 2, 28, w, 22), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, label)
+            x = min(max(cx - tw / 2, 0), self.width() - tw)      # erstes/letztes Label bleibt im Fenster
+            p.drawText(QRectF(x, 28, tw, 22), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, label)
         p.end()
 
 

@@ -347,10 +347,12 @@ class StatusView(QWidget):
         self.journal.setModel(self.model)
         self.empty_label = QLabel(texts.NO_FAULTS)
         self.empty_label.setProperty('secondary', True)
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setProperty('caption', True)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.empty_label.setContentsMargins(0, 24, 0, 0)
         self.empty_label.setWordWrap(True)
         body.addWidget(self.journal, 1)
-        body.addWidget(self.empty_label)
+        body.addWidget(self.empty_label, 1)
         self.empty_label.hide()
         root.addLayout(body, 1)
         foot, fl = footer_frame()
@@ -411,7 +413,8 @@ class StatusView(QWidget):
         n = self.model.total
         pi = f' · {self._pi_name}' if self._pi_name and self._pi_name != 'Prüfstand 2' else ''
         self.count_label.setText(f'{n} Einträge{pi}')
-        empty = self.model.only_faults and self.model.rowCount() == 0
+        empty = self.model.rowCount() == 0
+        self.empty_label.setText(texts.NO_FAULTS if self.model.only_faults and self.model.total else texts.NO_EVENTS)
         self.empty_label.setVisible(empty)
         self.journal.setVisible(not empty)
 

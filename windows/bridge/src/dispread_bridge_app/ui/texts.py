@@ -28,6 +28,7 @@ LOCK_TEXT = ('Solange die Brücke an GSVmulti überträgt, bleibt der Pi festgel
 PI_SWITCH_NOTE = ('Nach dem Wechsel muss neu verbunden werden. '
                   'Ein Wechsel während der Übertragung ist nicht möglich.')
 NO_FAULTS = 'Keine Störungen seit dem Start der Brücke.'
+NO_EVENTS = 'Noch keine Ereignisse seit dem Start der Brücke.'
 TRAY_HINT_TITLE = APP_TITLE
 TRAY_HINT = ('Die Brücke läuft im Infobereich weiter. Dieser Hinweis erscheint nur einmal. '
              'Ein Klick auf das Symbol öffnet das Fenster.')
@@ -342,8 +343,10 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
         gsv = ChipView('gsv', 'GSVmulti', 'Übernahme bestätigt', 'info', 'Empfang nicht nachgewiesen')
         ghint = 'Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.'
     else:
-        gsv = ChipView('gsv', 'GSVmulti', 'Noch nicht gekoppelt', 'info', 'Empfang nicht nachgewiesen')
-        ghint = 'Nur der Empfangstest belegt Empfang.'
+        gsv = ChipView('gsv', 'GSVmulti', 'Kanal einstellen', 'info',
+                       f'{ctx.gsv_port} · 115200 8N1 in GSVmulti' if ctx.gsv_port else 'Portpaar festlegen')
+        ghint = ('Stellen Sie GSVmulti auf den Port der GSVmulti-Seite ein und bestätigen Sie das in der Einrichtung. '
+                 'Nur der Empfangstest belegt Empfang.')
     gsv = ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, gsv.sub,
                    (('Session', ctx.session_name or '–'),
                     ('Empfangsnachweis', ctx.receipt.label if ctx.receipt and ctx.receipt.proven

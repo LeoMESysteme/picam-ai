@@ -47,13 +47,17 @@ def pump(ms=400):
     QTest.qWait(ms)
 
 
+def settle(w):
+    pump(50)
+    w.pool.waitForDone(5000)
+    pump(100)
+
+
 def click(w, name):
     b = w.findChild(QPushButton, name)
     assert b is not None, name
     b.click()
-    pump()
-    w.pool.waitForDone(3000)
-    pump()
+    settle(w)
 
 
 def test_setup_walk_through_with_manual_port_pair_and_profile(real):
@@ -75,7 +79,7 @@ def test_setup_walk_through_with_manual_port_pair_and_profile(real):
     pump()
     assert c.context().setup.step == 2 and c.context().setup.variant == 'E2'
     w.open_profile_path(str(real.profile))
-    pump(300)
+    settle(w)
     assert c.context().setup.variant == 'E2b' and c.context().pi_name == 'Prüfstand 2'
     # Koppeln bleibt aus, bis der Fingerabdruck bestätigt ist
     assert not w.setup_view.buttons['pair'].isEnabled()
@@ -88,7 +92,7 @@ def test_drag_and_drop_opens_profile(real):
     ev = QDropEvent(QPoint(10, 10), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton,
                     Qt.KeyboardModifier.NoModifier)
     w.dropEvent(ev)
-    pump(300)
+    settle(w)
     assert c.context().pi_name == 'Prüfstand 2'
 
 
@@ -97,7 +101,7 @@ def test_invalid_profile_shows_error_notice_not_exception(real, tmp_path):
     bad = tmp_path / 'bad.dispread'
     bad.write_bytes(b'{}')
     w.open_profile_path(str(bad))
-    pump(300)
+    settle(w)
     assert c.context().pi_name is None
     assert c.context().setup.data['notice'] == 'profile_invalid'
     flat = ' '.join(lab.text() for lab in w.setup_view.findChildren(type(w.setup_view.lead)))
@@ -108,7 +112,7 @@ def test_pairing_flow_from_window(real):
     c, w = real()
     c.set_port_pair('COM4', 'COM5')
     w.open_profile_path(str(real.profile))
-    pump(300)
+    settle(w)
     c.setup_step('next') if c.context().setup.step == 1 else None
     assert c.context().setup.variant == 'E2b'
     w.refresh()
@@ -136,10 +140,24 @@ def test_operate_mode_after_finish_shows_status_view(real):
 
 
 def test_footer_shows_channel_when_build_info_present(real):
-    import types
     c, w = real()
     from dataclasses import replace
     c.context = lambda ctx=c.context(): replace(ctx, channel='Interner Testbuild - nicht qualifiziert')
     w.refresh()
     assert w.status_view.channel_label.text() == 'Interner Testbuild - nicht qualifiziert'
     assert not w.status_view.channel_label.isHidden()
+
+
+def test_empty_journal_shows_calm_empty_state(real):
+    c, w = real()
+    sv = w.status_view
+    assert sv.model.rowCount() == 0 and not sv.empty_label.isHidden()
+    assert sv.empty_label.text() == texts.NO_EVENTS and sv.count_label.text().startswith('0 Einträge')
+
+
+def test_step_labels_never_leave_the_window(real):
+    c, w = real()
+    w.resize(380, 720)
+    pump()
+    sh = w.setup_view.step_header
+    assert sh.toolTip() and sh.width() >= 300

@@ -81,3 +81,12 @@ def test_session_export_text_is_manual_instruction():
     flat = repr(texts.setup_spec(ctx)['blocks'])
     assert 'Automatische Session noch nicht freigegeben' in flat
     assert 'In GSVmulti den Kanal auf COM5 115200 8N1 einstellen' in flat and '{' not in flat.replace('{}', '')
+
+
+def test_gsv_chip_describes_gsv_side_not_pairing():
+    r = Readiness('ready', 'not_required', 'authenticated', 'output_off', 'idle', 'unconfirmed', 'output_off')
+    g = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5'))[5]
+    assert (g.word, g.tone, g.sub) == ('Kanal einstellen', 'info', 'COM5 · 115200 8N1 in GSVmulti')
+    assert 'gekoppelt' not in g.word
+    g2 = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5', session_confirmed=True))[5]
+    assert (g2.word, g2.sub) == ('Übernahme bestätigt', 'Empfang nicht nachgewiesen')
