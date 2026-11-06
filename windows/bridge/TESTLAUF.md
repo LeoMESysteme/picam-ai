@@ -18,26 +18,36 @@ Alles in diesem Abschnitt greift in den laufenden Pi ein und wird **nur mit
 Freigabe von Leonhard** ausgeführt, nie nebenbei. Kein Reboot, keine
 Kernel-Änderung nötig.
 
-1. **Branch ausrollen.** Heute läuft der Dienst `dispread-werkbank-t13` aus dem
-   alten Redesign-Worktree auf `100.122.154.35:8082` (mit `--cert`/`--key`). Er
-   kennt die Brücken-Oberfläche nicht. Der Branch `feat/bruecke-ui` muss
-   ausgerollt und der Dienst neu gestartet werden (*mit Freigabe ausführen*;
-   „Werkbank erst neu starten, wenn die Diagnosekopie aus /dev/shm fertig ist“).
-   Nie während eines laufenden Aufnahmelaufs.
-2. **Identität anlegen** (einmalig, nur wenn `var/workbench/bridge` fehlt):
+**Stand (06.11. 18:04, mit Freigabe von Leonhard bereits erledigt):** Der Pi ist
+vorbereitet. Die Schritte 1 bis 3 sind nur nötig, falls neu aufgesetzt wird.
+
+* Identität liegt in `/home/me-systeme/picam-ai/var/workbench/bridge`,
+  `pi_id` 565e3468-d378-4380-9753-891abc563c7c, Zertifikat-SHA-256
+  `f87b34f0c71637709df5a4660586aad8e90956d5fe017cfac566925b29c1217e`
+  (dieser Fingerabdruck wird in Abschnitt C verglichen).
+* Die Werkbank läuft als User-Unit `dispread-werkbank-bruecke` (systemd-run) aus
+  `/home/me-systeme/picam-ai/.worktrees/bruecke-run` (detached, `feat/bruecke-ui`):
+  `serve --host 100.122.154.35 --port 8082 … --socket /tmp/dispread-werkbank-bruecke/control.sock --bridge-directory …/var/workbench/bridge --bridge-endpoint https://100.122.154.35:8082`.
+  Die alte Unit `dispread-werkbank-t13` ist gestoppt.
+* Der Browser fragt wegen des neuen Zertifikats einmal neu; der Fingerabdruck im
+  Browser muss dem Wert oben entsprechen.
+* Status prüfen (Socket-Verzeichnis muss Modus 0700 haben):
+  `PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge status --socket /tmp/dispread-werkbank-bruecke/control.sock`
+
+Nur falls neu aufgesetzt wird (jeder Schritt *mit Freigabe*; nie während eines
+laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
+/dev/shm fertig ist):
+
+1. **Branch ausrollen** und den Dienst neu starten.
+2. **Identität anlegen** (nur wenn `var/workbench/bridge` fehlt):
    `PYTHONPATH=src ./.venv/bin/python -m dispread.workbench.cli bridge identity --provision`
-   Das Kommando zeigt `pi_id` und `certificate_sha256`. Notieren Sie den
-   Fingerabdruck; er wird in Abschnitt C verglichen.
-3. **Werkbank mit Brücken-Identität starten** (Beispiel, Adresse und Port
-   anpassen; bestehende Zertifikatsdateien weiter verwenden):
-   `... serve --host <pi-adresse> --port <port> --bridge-directory var/workbench/bridge --bridge-endpoint https://<pi-adresse>:<port> --bridge-name "Labor-Pi" [--cert ... --key ...]`
-   Ohne `--bridge-endpoint` enthält das Profil keinen Weg; die App verlangt dann
-   „Adresse fehlt“ und die Adresse muss von Hand eingetragen werden.
-4. **Nur UART-Weg:** Empfang vorbereiten, entweder im Werkbank-Dialog,
-   Schritt 4 „UART-Empfang“, Knopf „UART-Empfang vorbereiten“, oder per
-   `... bridge prepare-uart`. Hinweis der Werkbank: „UART direkt und der
-   Brücken-UART nutzen denselben Port und nie gleichzeitig.“ Datenport ist
-   `/dev/ttyAMA0`; Pegel nie direkt an RS-232 (OQ-09).
+   Fingerabdruck notieren.
+3. **Werkbank mit Brücken-Identität starten:** `... serve --host <pi-adresse> --port <port> --bridge-directory var/workbench/bridge --bridge-endpoint https://<pi-adresse>:<port> --bridge-name "Labor-Pi" [--cert ... --key ...]`.
+   Ohne `--bridge-endpoint` enthält das Profil keinen Weg; die Adresse muss dann von Hand eingetragen werden.
+4. **Nur UART-Weg:** Empfang vorbereiten, im Werkbank-Dialog Schritt 4
+   „UART-Empfang“, Knopf „UART-Empfang vorbereiten“, oder per `... bridge prepare-uart`.
+   Hinweis der Werkbank: „UART direkt und der Brücken-UART nutzen denselben Port und nie gleichzeitig.“
+   Datenport ist `/dev/ttyAMA0`; Pegel nie direkt an RS-232 (OQ-09).
 
 ## B. Windows-PC vorbereiten
 
@@ -76,13 +86,14 @@ Kernel-Änderung nötig.
     **abbrechen**.
 12. Werkbank Schritt „Kopplung freigeben“: **„Kopplungscode erzeugen“**.
     „Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.“ In der App
-    bei „Kopplungscode“ eingeben, **„Koppeln“**. Abgelaufen
+    bei „Kopplungscode“ eingeben. Der Code wird in Schritt 2 nur übernommen;
+    **gekoppelt wird erst beim Verbinden in Schritt 3.** Abgelaufen
     („Code abgelaufen“) heißt: nichts gekoppelt, neuen Code erzeugen.
 13. App Schritt 3 „Weg zum Pi wählen“: Netzwerk: gefundenen Pi oder
     Adresse/Name von Hand („Tailscale wird nur benutzt, wenn Sie hier den
     Tailscale-Namen oder die Adresse eintragen.“). Ein mDNS-Fund ist kein
     Identitätsnachweis. UART: USB-Seriell-Adapter wählen (115200 Baud, 8N1, kein
-    Handshake; Verdrahtung wie angezeigt). Dann **„Verbinden“**.
+    Handshake; Verdrahtung wie angezeigt). Dann **„Verbinden“** (hier erfolgt die Kopplung; der Übertragungs-Worker startet erst nach authentifiziertem Pi).
     Erwartet: „Pi verbunden (Identität geprüft)“. Das ist „noch keine
     Messfreigabe“.
 14. Portpaar in der App angeben (Brückenseite und GSVmulti-Seite aus Schritt 6).
@@ -100,7 +111,7 @@ Kernel-Änderung nötig.
 
 16. App Schritt 5: „Ich verwende eine getrennte GSVmulti-Testsession.“ setzen,
     **„Test starten“**. Gesendet werden 600 synthetische Werte mit 10 Hz
-    (etwa 60 s).
+    (etwa 60 s). Die Testsession hat keinen Abbrechen-Knopf: abwarten.
 17. **In GSVmulti selbst prüfen:** Kommen Werte an, wie viele, in welcher
     Reihenfolge, steigt die Zeitachse gleichmäßig? Speichern Sie die Aufzeichnung.
     Optional „Testdatei auswählen …“: die App vergleicht Wert für Wert. „Empfang
@@ -141,11 +152,11 @@ GSVmulti-Konfiguration); keine Aussage über Messwerte, Zeitzuordnung oder
 Dauerbetrieb; kein Ersatz für die Qualifikation von `build.ps1`.
 
 **Wohin mit Ergebnissen:** Diagnoseexport und Ereignisjournal der App liegen im
-Benutzerprofil des Windows-PCs (`%LOCALAPPDATA%`); der genaue Ordner und der
-Menüpunkt für den Export standen beim Schreiben noch nicht fest (AppController
-in Arbeit): im Zweifel beim Entwickler nachfragen. Die Deinstallation löscht
-diese Daten nicht. Hängen Sie beides mit der ausgefüllten Checkliste an Ihre
-Rückmeldung an.
+Benutzerprofil des Windows-PCs: `%LOCALAPPDATA%\dispread-bridge\` mit
+`delivery.sqlite` (Übergabe-Journal) und `diagnostics\`. Den Diagnoseexport
+erzeugt der Knopf „Diagnose exportieren“ (ZIP, Ort wählbar). Die Deinstallation
+löscht diese Daten nicht. Hängen Sie Export und die ausgefüllte Checkliste an
+Ihre Rückmeldung an.
 Journal/Diagnose enthalten keine Zugangsdaten („Begrenzt, Zugangsdaten werden
 nicht protokolliert.“); prüfen Sie dennoch vor dem Weitergeben.
 
