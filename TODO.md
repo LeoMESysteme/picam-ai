@@ -98,6 +98,11 @@ Systeminterpreter wählen. Eine Skriptalternative prüft die Version vorab und
 richtet automatisch eine geeignete isolierte Laufzeit ein. Bestehende
 Python-/Visual-Studio-Installationen erhalten. Frisch-PC-Tests decken sowohl
 „kein Python“ als auch „nur Python 3.7“ ab.
+Netzerkennung und überprüfte Kopplung mehrerer Pi sowie Verhalten bei
+Netzwechseln in [OQ-64](docs/open-questions.md#oq-64) klären. Nutzer erlaubt
+Downloads während der Ersteinrichtung; Offline-Installationspaket derzeit
+keine Pflicht. Technologieempfehlung wird gerade erarbeitet, noch keine
+Entscheidung oder Implementierung freigegeben.
 Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
 ([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
 ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den

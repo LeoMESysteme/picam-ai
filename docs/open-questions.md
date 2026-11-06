@@ -59,6 +59,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-62](#oq-62) | — | offen | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
+| [OQ-64](#oq-64) | — | offen | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3182,3 +3183,52 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Bildaufzeichnung/Nachberechnung.
 * **Antwort landet in:** [Laufauswertung](quellen/werkbank-t13-2026-11-06.md),
   [VALIDATION](VALIDATION.md) und einer späteren UI-/Tracking-Spezifikation.
+
+
+---
+
+<span id="oq-64"></span>
+
+## OQ-64 — Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale?
+
+* **Status:** offen · erkannt 2026-11-06 beim Entwurf der Windows-Einrichtung
+* **Nutzerauftrag:** automatische Installation sowie Verbindung per UART
+  oder Netzwerk ohne fest angenommene Pi-IP; verschiedene Pi und Netze,
+  mit und ohne Tailscale und nachvollziehbare Fehlerbehandlung. Download
+  während der Ersteinrichtung ist ausdrücklich erlaubt; ein vollständiges
+  Offline-Installationspaket ist aktuell keine Pflicht.
+* **Codebefund:** `OutputPublisher` öffnet für TCP einen Socket mit eigenem
+  Port (Vorgabe 5000) ohne TLS oder Anwendungskopplung. Workbench-CLI hat eine
+  konkrete Tailscale-Adresse als Host-Vorgabe; PAM-Anmeldung verwendet
+  aktuell den Benutzer `me-systeme`. Für einen allgemeinen Geräteeinsatz
+  brauchen auch Pi-Dienst, Identität und Erstkonfiguration eine Spezifikation.
+  Der bestehende Messgeräte-`device_id` ersetzt keine eindeutige Pi-Identität.
+* **Vorschläge, noch nicht freigegeben:** generische Windows-Anwendung mit
+  gebündelter Laufzeit; universeller Installer und getrenntes Verbindungsprofil
+  aus der Workbench; stabile Pi-Identität mit überprüfter Kopplung. LAN-Suche
+  per DNS-SD/mDNS plus Host-/Adressfallback, optional Tailscale-FQDN; bei
+  Adresswechsel erneut finden und Identität prüfen. Verschlüsselter,
+  authentifizierter Netzwerkpfad, vorzugsweise am vorhandenen HTTPS-Dienst.
+  Keine automatische Auswahl eines anderen Pi oder eines anderen
+  Ausgabewegs während eines Laufs.
+* **Offen:** erste Netzaufnahme eines noch nicht erreichbaren Pi (OQ-49),
+  Vertrauen bei Erstkopplung, SD-Karten-Klone, mehrere Geräte/NICs, IPv6,
+  VLAN/Multicast-Sperren und Client-Isolation, Tailscale-Anmeldung/Freigabe,
+  Firewalls, Proxy, Zertifikatswechsel und erlaubte Wiederanlaufsemantik.
+  Discovery entdeckt Kandidaten; sie ersetzt weder Erreichbarkeit noch
+  Identitätsprüfung. Ohne Route zwischen getrennten Netzen kann eine EXE
+  keine Verbindung allein durch eine bekannte IP herstellen.
+* **Klärung:** technische Varianten mit Leonhard auswählen; dann Kopplungs-,
+  Berechtigungs- und Zustandsvertrag spezifizieren. Tests mit zwei Pi,
+  DHCP-/Netzwechsel, gesperrtem Multicast, Ausfall/Neustart und falscher
+  Identität; Altwerte/Doppelausgabe strukturell verhindern. OQ-62 führt den
+  Windows-Installer und OQ-53 die tatsächliche GSVmulti-Sessionkodierung.
+* **Quellen:** [PyInstaller: gebündelter Interpreter](https://pyinstaller.org/en/stable/operating-mode.html),
+  [Windows-Build erforderlich](https://pyinstaller.org/en/stable/),
+  [Pi-Netzerkennung](https://www.raspberrypi.com/documentation/computers/remote-access.html),
+  [MagicDNS](https://tailscale.com/docs/features/magicdns),
+  [Windows-Treibersignaturen](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/driver-signing),
+  [USB-Portmetadaten](https://pyserial.readthedocs.io/en/latest/tools.html).
+* **Antwort landet in:** spätere Windows-Brücken-Spezifikation,
+  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md), [Abhängigkeiten](dependencies.md)
+  und [Geplante Funktionen](../PLANNED_FEATURES.md).
