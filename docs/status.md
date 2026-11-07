@@ -1,4 +1,4 @@
-# Status und Übergabe — 2026-11-06
+# Status und Übergabe — Stand 2026-11-06, redaktionell abgeglichen 2026-11-07
 
 Werkzeugpflege 2026-11-06: Repowise auf Nutzerwunsch systemweit deinstalliert.
 Agent-Anweisungen, Doku-Pflegeprompt und lokale Plugin-Einträge in diesem
