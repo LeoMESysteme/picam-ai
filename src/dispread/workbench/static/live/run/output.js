@@ -16,7 +16,7 @@ export const BRIDGE_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen,
   'ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
 export const BRIDGE_ACK = 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe';
 export const BRIDGE_NO_ACK = 'Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.';
-export const UART_RATE_NOTE = 'UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s; für höhere Raten Netzwerk verwenden.';
+export const UART_RATE_NOTE = 'UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s; für UART über Brücke in GSVmulti höchstens 4 Hz einstellen, 10 Hz nur über Netzwerk.';
 export const RELEASE_TAG = 'Testfreigabe – nicht abgenommen';
 export const TEST_BLOCK = 'Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.';
 export const UNCONFIRMED = 'GSVmulti-Empfang unbestätigt.';

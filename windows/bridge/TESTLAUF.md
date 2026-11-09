@@ -182,7 +182,16 @@ Die EXE muss aus dem Stand ab R1 gebaut sein (ältere Stände lehnen die Testfre
     zeigt dann den letzten Wert unmarkiert weiter. Das ist erwartet; am Messplatz darauf achten.
 19c. Lauf stoppen: App „Ausgabe wieder gesperrt“ bzw. „Lauf beendet“.
 19d. **UART-Rate:** „UART über Brücke“ trägt bei 115 200 Baud nur etwa 3–4 Werte/s (Messung R1: gut jeder zweite
-    Wert bei 10 Hz, Latenz ≈ 150 ms). Für höhere Raten **Netzwerk** verwenden.
+    Wert bei 10 Hz, Latenz ≈ 150 ms). **Für UART über Brücke in GSVmulti höchstens 4 Hz einstellen; 10 Hz nur über
+    Netzwerk.** Das Netzwerk ist der Hauptweg. Die Baudrate bleibt unverändert.
+19e. **UART-Adapter und Verdrahtung** (nur Weg „UART über Brücke“; Quelle: `docs/HARDWARE_PROFILE.md`, Abschnitt
+    zum Pi-UART-Demotest): Der Adapter ist ein **USB-TTL-Adapter mit 3,3 V** (kein RS-232, kein Pegelwandler),
+    **nie 5 V**. **VCC wird nicht verbunden.** TX und RX werden gekreuzt (Pi-TX an Adapter-RXD, Pi-RX an
+    Adapter-TXD). Dokumentiert und am 2026-11-04 für die eine Richtung genutzt: Pi Pin 8 (GPIO14/TXD0) an
+    Adapter-RXD (Block „RXD“, Kabelfarbe Gelb laut Nutzerrecherche), Pi Pin 6 (GND) an GND (Schwarz). Für die
+    Brücke wird zusätzlich Pi-RXD0 (GPIO15) an Adapter-TXD (Orange laut Nutzerrecherche) gebraucht; diese
+    Rückrichtung ist im Hardwareprofil **nicht** beschrieben oder geprüft. CTS, RTS bleiben frei. Den 6-poligen
+    Kabelblock nicht direkt auf die Pi-Leiste stecken (Pinfolge verschieden); Einzeljumper benutzen.
 
 ## G. Was der Lauf belegt und was nicht
 
