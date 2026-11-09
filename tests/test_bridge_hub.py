@@ -424,3 +424,58 @@ def test_release_change_is_announced_by_hello_before_any_record(tmp_path):
     ended = hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': 'run'})
     assert ended['type'] == 'hello' and ended['run_id'] is None and 'release' not in ended
     hub.close()
+
+
+def test_released_run_then_blocked_run_never_offers_values_to_a_polling_client(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    lease = hub.attach('pc', 'network')
+    hub.reserve_real_run('a')
+    state_a = OutputState(tmp_path / 'a', release='test_unaccepted')
+    state_a.run_id = 'a'
+    hub.bind_run('a', state_a, transport='network')
+    state_a.publish(_real(1))
+    assert hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': None})['type'] == 'hello'
+    assert hub.exchange(lease.lease_id, request(hub, lease))['type'] == 'record'
+    hub.exchange(lease.lease_id, request(hub, lease, 'ack', frame_sequence=1, barrier_id=None, outcome='written'))
+    hub.unbind_run('a')
+    hub.release_real_run('a')
+    hub.reserve_real_run('b')
+    state_b = OutputState(tmp_path / 'b', release=None)
+    state_b.run_id = 'b'
+    hub.bind_run('b', state_b, transport='network')
+    state_b.publish(_real(1))
+    state_b.publish(_real(2))
+    stale = {**request(hub, lease), 'run_id': 'a'}  # Client pollt weiter mit dem alten Lauf
+    hello = hub.exchange(lease.lease_id, stale)
+    assert hello['type'] == 'hello' and hello['run_id'] == 'b'
+    assert hello['release_block'] == RELEASE_BLOCK and 'release' not in hello
+    for i in range(3):
+        reply = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': f'n{i}'})
+        assert reply['type'] == 'idle' and reply['release_block'] == RELEASE_BLOCK and 'record' not in reply
+    hub.close()
+
+
+def test_open_barrier_precedes_values_across_lease_change_under_release(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state = OutputState(tmp_path / 'run', release='test_unaccepted')
+    state.run_id = 'run'
+    state.start()
+    hub.bind_run('run', state, transport='network')
+    state.publish(_real(1, 'unreadable'))
+    first = hub.attach('pc', 'network')
+    hub.exchange(first.lease_id, {**request(hub, first), 'run_id': None})
+    offered = hub.exchange(first.lease_id, request(hub, first))
+    assert offered['type'] == 'record' and offered['barrier_id'] is not None
+    hub.detach(first.lease_id)  # Barriere unquittiert, Lease wechselt
+    state.publish(_real(2))
+    second = hub.attach('pc', 'network')
+    hub.exchange(second.lease_id, {**request(hub, second), 'run_id': None})
+    again = hub.exchange(second.lease_id, request(hub, second))
+    assert again['record']['status'] == 'unreadable' and again['barrier_id'] == offered['barrier_id']
+    hub.exchange(second.lease_id, request(hub, second, 'ack', frame_sequence=1,
+                                          barrier_id=again['barrier_id'], outcome='omitted'))
+    value = hub.exchange(second.lease_id, {**request(hub, second), 'request_id': 'v'})
+    assert value['record']['frame_sequence'] == 2 and value['barrier_id'] is None
+    hub.close()
+    state.stop()

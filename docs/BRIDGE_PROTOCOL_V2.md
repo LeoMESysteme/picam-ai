@@ -206,6 +206,18 @@ gesperrt; die EXE hat keinen Schalter dafür.
   Wert höchstens `max_frame_age_ms` (Konfiguration, Standard 1000 ms) nach
   seiner Veröffentlichung an, gemessen nur auf der Pi-Uhr; danach verfällt er
   (`stale_skipped` im Audit), kein Nachsenden.
+- **Altersschranke Ende zu Ende:** Sie besteht aus zwei getrennten Budgets: Pi
+  `max_frame_age_ms` (Standard 1000 ms) ab Veröffentlichung, danach Windows bis
+  `timeout_s` (Standard 1,0 s) für Anfrage, Verarbeitung und COM-Übergabe. Die
+  OCR-Laufzeit vor der Veröffentlichung ist nicht enthalten. Ein bei GSVmulti
+  ankommender Wert kann also bis ca. 2 s plus OCR-Laufzeit alt sein; das ist
+  keine Aussage über das Messalter der Anzeige.
+- **Barriere und Laufwechsel:** Eine offene Invalidierungsbarriere gehört zum
+  Lauf und wird bei einem Laufwechsel nicht in den nächsten Lauf übernommen.
+  Innerhalb eines Laufs (z. B. Lease-Wechsel) geht sie jedem späteren Wert vor.
+- **Zeitbasis:** Unter Testfreigabe bietet der Pi nur Datensätze mit echter
+  Kamerazeitbasis (`v4l2_monotonic`) an; andere (synthetisch/Replay) werden
+  nie angeboten (Audit `release_time_base_rejected`).
 - **Nur VALID an COM:** Der Windows-Kern formatiert freigegebene Werte mit
   dem P4-3-`UserDefinedFormatter(prefix="%")` – byte-gleich mit UART direkt.
   Ungültige Werte laufen weiter als Invalidierungsbarriere, werden aber mit

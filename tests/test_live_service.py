@@ -3217,3 +3217,29 @@ def test_bridge_startup_failure_releases_reservation(tmp_path, monkeypatch, stag
         service.start_run(reference=False)
     assert hub.status()['run_id'] is None
     assert service.status()['state'] != 'running'
+
+
+def test_start_during_demo_gives_german_message(tmp_path, monkeypatch):
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    hub.reserve_real_run('demo-or-other')  # belegt die Bruecke wie ein laufender Empfangstest
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    with pytest.raises(LiveError, match='Empfangstest \\(Demo\\).*Windows-App warten') as caught:
+        service.start_run(reference=False)
+    assert 'occupied' not in str(caught.value)
+
+
+def test_run_passes_confirming_operator_to_session(tmp_path, monkeypatch):
+    seen = {}
+
+    class Session(MarkerSession):
+        def start(self):
+            seen['by'] = getattr(self, 'bridge_acknowledged_by', None)
+            super().start()
+
+    service = _confirmed_service(tmp_path, monkeypatch, Session)
+    service._profile_info = {'confirmed_by': 'Operator'}
+    service.start_run(reference=False)
+    assert seen['by'] == 'Operator'
+    service.stop_run()

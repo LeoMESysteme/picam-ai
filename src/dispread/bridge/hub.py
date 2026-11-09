@@ -24,6 +24,10 @@ LEASE_TIMEOUT_S = 5
 DEMO_FINAL_GRACE_S = 2.0
 
 
+class BridgeOccupied(ValueError):
+    """Bruecke ist durch einen Lauf oder Empfangstest belegt."""
+
+
 @dataclass
 class Lease:
     lease_id: str
@@ -146,7 +150,7 @@ class BridgeHub:
         _identifier(run_id)
         with self._lock:
             if self._closed or self._run_id is not None:
-                raise ValueError('bridge occupied by an active run')
+                raise BridgeOccupied('bridge occupied by an active run')
             self._real_run = self._run_id = run_id
 
     def release_real_run(self, run_id):

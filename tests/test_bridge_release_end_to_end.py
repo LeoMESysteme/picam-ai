@@ -10,10 +10,9 @@ import json
 
 import pytest
 
-pytest.importorskip('dispread_bridge_app')
 pytest.importorskip('serial')
 
-from bridge_release_harness import barrier_order_holds, run_release  # noqa: E402
+from bridge_release_harness import barrier_order_holds, com_barrier_order_holds, run_release  # noqa: E402
 
 from dispread.bridge.identity import DeviceIdentity  # noqa: E402
 from dispread.bridge.output_state import RELEASE_BLOCK  # noqa: E402
@@ -33,6 +32,7 @@ def _assert_released(result, transport):
     assert m['in_order'], m
     assert m['barriers_omitted'] >= 1, m          # Wertwechsel -> TRANSITION -> Barriere
     assert barrier_order_holds(result['pi_events'])
+    assert com_barrier_order_holds(result['writes'], result['pi_events'])  # COM-Seite
     assert all(payload.startswith(b'%') and payload.endswith(b'\r\n') and b'NaN' not in payload
                for _, _, payload in result['writes'])
     assert all(a.outcome == 'written' for a in result['attempts'])
@@ -87,3 +87,10 @@ def test_measure_latency_and_lost_values(tmp_path, identity, transport, bytes_pe
     m = result['metrics']
     assert m['invalid_written'] == 0 and m['bytes_exact'] and m['in_order'], m
     assert barrier_order_holds(result['pi_events'])
+
+
+def test_com_barrier_order_check_detects_overtaking():
+    ev = [{'event': 'offered', 'barrier_id': 1, 'frame_sequence': 5}]
+    assert com_barrier_order_holds([(4, 0, b''), (6, 0, b'')], ev)
+    assert not com_barrier_order_holds([(6, 0, b''), (4, 0, b'')], ev)
+    assert not com_barrier_order_holds([(5, 0, b'')], ev)

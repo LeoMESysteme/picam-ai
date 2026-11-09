@@ -187,3 +187,17 @@ def test_test_release_never_offers_a_value_older_than_the_freshness_limit(tmp_pa
 def test_release_marker_is_exact_and_never_for_demo(tmp_path, kwargs):
     with pytest.raises(ValueError):
         OutputState(tmp_path, **kwargs)
+
+
+@pytest.mark.parametrize("status", [ValueStatus.VALID, ValueStatus.UNREADABLE])
+def test_test_release_never_offers_synthetic_time_base(tmp_path, status):
+    state = OutputState(tmp_path, release=TEST_RELEASE)
+    state.start()
+    state.publish(real(1))
+    state.publish(record(2, status))  # SYNTHETIC: keine echte Kamerazeitbasis
+    reply = poll(state)
+    assert reply["type"] == "idle"
+    state.stop()
+    events = [json.loads(line) for line in (tmp_path / "output.jsonl").read_text().splitlines()]
+    assert not any(e["event"] == "offered" for e in events)
+    assert any(e["event"] == "release_time_base_rejected" for e in events)

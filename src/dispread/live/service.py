@@ -50,6 +50,10 @@ STORAGE_RESERVE_BYTES = 2_000_000_000
 STORAGE_WARNING_BYTES = 5_000_000_000
 _LOG = logging.getLogger(__name__)
 
+BRIDGE_BUSY_TEXT = ("Die Windows-Brücke führt gerade einen Empfangstest (Demo) aus. Bitte in der Windows-App "
+                    "warten, bis er endet (höchstens wenige Sekunden nach dem letzten Wert), dann den Lauf "
+                    "erneut starten.")
+
 
 class LiveError(ValueError):
     """Bedienfehler oder abgelehnter Schritt; Meldung fuer die Seite."""
@@ -888,6 +892,7 @@ class LiveService:
             run_id = uuid.uuid4().hex
             previous_state = self._state
             session = None
+            from dispread.bridge.hub import BridgeOccupied
             from dispread.bridge.publisher import PairedOutputPublisher
 
             def output_factory(config, out_dir, *, release=None):
@@ -900,6 +905,8 @@ class LiveService:
             if self._bridge_hub is not None:
                 try:
                     self._bridge_hub.reserve_real_run(run_id)
+                except BridgeOccupied as exc:
+                    raise LiveError(BRIDGE_BUSY_TEXT) from exc
                 except ValueError as exc:
                     raise LiveError(str(exc)) from exc
             try:
@@ -941,6 +948,7 @@ class LiveService:
                         **({'output_factory': output_factory} if output['transport'] in ('tcp', 'uart') else {}),
                     )
                     session.bridge_run_id = run_id
+                    session.bridge_acknowledged_by = confirmed_by
                     session.start()
                 except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                     raise LiveError(f"Lauf nicht gestartet: {exc}") from exc

@@ -180,6 +180,10 @@ Die EXE muss aus dem Stand ab R1 gebaut sein (ältere Stände lehnen die Testfre
     Das Journal führt „Testfreigabe aktiv (Lauf n)“. **In GSVmulti erscheinen nur gültige Werte**; ungültige oder
     veraltete werden ausgelassen (App: „n ausgelassen (ungültig/veraltet)“, Journal „Wert ausgelassen“) – GSVmulti
     zeigt dann den letzten Wert unmarkiert weiter. Das ist erwartet; am Messplatz darauf achten.
+19f. **Grenzen der Werte in GSVmulti:** GSVmulti-Werte nach einem Abbruch, einer Ungültigkeitsphase oder nach
+    Laufende sind nicht verwertbar (der letzte Wert bleibt unmarkiert stehen). Werte können bis ca. 2 s alt sein.
+    Keine Abnahme. **Während des Laufstarts keine Demo (Empfangstest) in der App laufen lassen**; die Werkbank
+    meldet sonst, dass die Brücke belegt ist.
 19c. Lauf stoppen: App „Ausgabe wieder gesperrt“ bzw. „Lauf beendet“.
 19d. **UART-Rate:** „UART über Brücke“ trägt bei 115 200 Baud nur etwa 3–4 Werte/s (Messung R1: gut jeder zweite
     Wert bei 10 Hz, Latenz ≈ 150 ms). **In GSVmulti höchstens 4 Hz einstellen; 10 Hz nur über Netzwerk.** Das Netzwerk ist der Hauptweg. Die Baudrate bleibt unverändert.
@@ -200,7 +204,9 @@ Die EXE muss aus dem Stand ab R1 gebaut sein (ältere Stände lehnen die Testfre
 Identitätsprüfung; synthetischer Empfang in einer bestimmten GSVmulti-Version
 und Konfiguration; Verhalten bei den Störungen oben.
 
-**Er belegt nicht:** keine Messfreigabe; kein Nachweis für N1 (saubere VM ohne
+**Er belegt nicht:** keine Messfreigabe; GSVmulti-Werte nach einem Abbruch, einer Ungültigkeitsphase oder nach
+Laufende sind nicht verwertbar (letzter Wert bleibt unmarkiert stehen), Werte können bis ca. 2 s alt sein, keine
+Abnahme; während des Laufstarts keine Demo in der App laufen lassen; kein Nachweis für N1 (saubere VM ohne
 Python), N2 (qualifizierter Treiber, Installer-Rollback) oder N3 (kontrollierte
 GSVmulti-Konfiguration); keine Aussage über Messwerte, Zeitzuordnung oder
 Dauerbetrieb; kein Ersatz für die Qualifikation von `build.ps1`.

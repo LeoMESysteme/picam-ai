@@ -906,6 +906,7 @@ def _bridge_session(tmp_path, *, ack, transport='tcp'):
                        output_factory=lambda cfg, out_dir, **kw: PairedOutputPublisher(
                            cfg, out_dir, hub=hub, run_id='real-run', **kw))
     session.bridge_run_id = 'real-run'
+    session.bridge_acknowledged_by = 'Leonhard Hentschke'
     session._config = replace(session._config, confirm_frames=1)
     return hub, session
 
@@ -947,9 +948,11 @@ def test_bridge_test_release_is_marked_in_status_and_session_json(tmp_path, ack)
     if ack:
         assert data['release'] == 'test_unaccepted' and data['release_block'] is None
         assert data['acknowledged_at_utc']
+        assert data['acknowledged_by'] == 'Leonhard Hentschke'
         assert data['status']['release_note'] == BRIDGE_RELEASE_NOTE
     else:
         assert data['release_block'] == RELEASE_BLOCK and data['acknowledged_at_utc'] is None
+        assert data['acknowledged_by'] is None
 
 
 def test_acknowledged_session_refuses_publisher_that_ignores_release(tmp_path):

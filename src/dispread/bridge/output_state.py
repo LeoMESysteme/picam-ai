@@ -121,6 +121,13 @@ class OutputState:
                 raise OSError(self._error or "output audit failed")
             if self._stop.is_set():
                 return
+            if self.release is not None and record.capture_timestamp.base is not TimeBaseKind.V4L2_MONOTONIC:
+                # Testfreigabe gilt nur fuer echte Kamerazeitbasis; Synthetik/Replay
+                # wird nie als Wert angeboten (wie gesperrt, mit Audit-Grund).
+                self._latest = None
+                self._event("release_time_base_rejected", frame_sequence=record.frame_sequence,
+                            time_base=record.capture_timestamp.base.value)
+                return
             if record.status is not ValueStatus.VALID:
                 # Ungueltigkeit traegt nur ihre Barriere; der zuvor juengste
                 # gueltige Wert ist damit ueberholt und wird nie mehr angeboten.

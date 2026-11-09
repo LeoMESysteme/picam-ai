@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-09: **Testfreigabe: Review-Befunde geschlossen (R4).** Pi-Ausgabe unter Testfreigabe bietet nur
+  Datensätze mit `V4L2_MONOTONIC` an (andere: nicht angeboten, Audit `release_time_base_rejected`); Laufstart
+  während einer Demo meldet deutsch statt „bridge occupied“ (409, `BridgeOccupied`); `session.json` trägt
+  `output.acknowledged_by` (Name der Einrichtungsbestätigung); Tests: Hub (freigegebener Lauf A, gesperrter Lauf B;
+  Barriere vor Wert bei Lease-Wechsel), COM-seitige Barrierenreihenfolge im E2E; `windows/bridge/src` im
+  pytest-Pfad, E2E läuft in der Standardsuite statt übersprungen zu werden; Doku (Altersschranke ca. 2 s + OCR,
+  Barriere nicht über Läufe, TESTLAUF F2/G).
 * 2026-11-09: **Testfreigabe echter Werte über die Brücke: Oberfläche (R2).** Werkbank `/live`: bei „UART über
   Brücke“/„Netzwerk über Brücke“ Hinweis (`BRIDGE_NOTE`, per Test gegen `BRIDGE_RELEASE_NOTE` abgeglichen) und
   Haken „Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe“; ohne Haken startet der

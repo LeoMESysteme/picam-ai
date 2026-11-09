@@ -380,3 +380,20 @@ def barrier_order_holds(pi_events) -> bool:
         elif event['event'] == 'ack' and event['barrier_id'] == pending and event['outcome'] == 'omitted':
             pending = None
     return True
+
+
+def com_barrier_order_holds(writes, pi_events) -> bool:
+    """COM-Seite: Barrieren werden nie geschrieben; vor einer Barriere liegende Werte
+    stehen vor, spaetere nach ihr (kein Wert ueberholt die Ungueltigkeit)."""
+    seqs = [seq for seq, _t, _payload in writes]
+    for event in pi_events:
+        if event['event'] != 'offered' or event['barrier_id'] is None:
+            continue
+        b = event['frame_sequence']
+        if b in seqs:
+            return False
+        before = [i for i, s in enumerate(seqs) if s < b]
+        after = [i for i, s in enumerate(seqs) if s > b]
+        if before and after and max(before) > min(after):
+            return False
+    return True

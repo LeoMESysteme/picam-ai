@@ -784,7 +784,9 @@ class LiveSession:
             data['output'] = {**self._output.metadata(), 'status': self.unified_output_status(),
                               'acceptance': 'fehlt',
                               'acknowledged_unaccepted': self._bridge_acknowledged,
-                              'acknowledged_at_utc': self._bridge_acknowledged_at_utc}
+                              'acknowledged_at_utc': self._bridge_acknowledged_at_utc,
+                              'acknowledged_by': (getattr(self, 'bridge_acknowledged_by', None)
+                                                  if self._bridge_acknowledged else None)}
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark
