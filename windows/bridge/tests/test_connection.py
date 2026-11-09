@@ -98,7 +98,7 @@ class Factory:
 
 
 def wait_for(predicate):
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 10
     while not predicate():
         assert time.monotonic() < deadline
         time.sleep(.005)

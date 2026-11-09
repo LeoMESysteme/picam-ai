@@ -27,7 +27,9 @@ def test_never_all_six_chips_green_under_dut_lock():
 def test_dut_lock_line_in_every_state():
     for key, (_r, _w, c) in STATES.items():
         text, tone = texts.dut_line(c)
-        if c.dut_locked and not c.test_release:
+        if c.test_release:
+            assert text == texts.TEST_RELEASE_LINE and tone == 'warn', key
+        elif c.dut_locked:
             assert text == texts.DUT_LOCK_LINE and tone == 'warn', key
 
 
