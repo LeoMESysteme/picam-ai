@@ -5,6 +5,26 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-09: Bestätigte **Testfreigabe** echter Messwerte über die GSVmulti-Brücke (UART und Netzwerk), R1.
+  Nutzerentscheidung für den Test am 11.11.: wie UART direkt nur nach ausdrücklicher Bestätigung je Lauf
+  (`output = {transport: uart|tcp, acknowledge_unaccepted: true}`), **keine Abnahme, keine Messfreigabe**
+  (OQ-06/OQ-47 offen). Ohne Bestätigung bleibt der Brückenweg gesperrt wie bisher. Pi: `status.output` meldet
+  `release: "test_unaccepted"`, `release_block: null`, `acceptance: "fehlt"`, `release_note`; `session.json` hält
+  Bestätigung, Zeitpunkt und Transport fest. Protokoll v2 additiv: `release` in `hello`/`idle`/`record`,
+  ACK-Ergebnis `omitted`; der Pi kündigt einen geänderten Freigabestand per `hello` an, bevor ein Wert kommt.
+  Nur VALID an COM, formatiert wie UART direkt (P4-3-Formatter, Präfix `%`); Ungültiges bleibt Barriere, wird aber
+  `omitted` quittiert (GSVmulti zeigt dann den letzten Wert unmarkiert weiter). Ein Wert verfällt nach
+  `max_frame_age_ms` auf der Pi-Uhr statt verspätet nachzulaufen. Windows-Kern: `test_release` und
+  `WorkerStatus.demo_only = False` nur aus dem Pi-Marker der aktuellen Generation/Run-ID, kein lokaler Schalter.
+  Nebenbei behoben: UART las auf Pi und Windows mit `read(4096)` und wartete so je Nachricht das volle
+  pySerial-Timeout (100 ms); jetzt nur vorhandene Bytes. Nachweis **nur auf Linux** mit Harness
+  (`tests/bridge_release_harness.py`): echter LiveSession-Lauf aus synthetischen Bildern, UART über ein
+  pty-Kabel (nie `/dev/ttyAMA0`), Netzwerk über lokales TLS, Fake-COM. Kein Windows, kein Treiber, kein GSVmulti.
+  Gemessen über je 30 s (Publish → COM-Write, gleiche Prozessuhr): TLS 10 Hz 272/272, 20 Hz 542/542 gültige Werte,
+  p50 8–9 ms, p95 15–19 ms; ungedrosseltes pty 271/271 und 542/544, p50 ≈ 8 ms. **Auf 115 200 Baud gedrosselt**
+  trägt der UART-Weg nur ≈ 3,4–4,4 Werte/s (Record ≈ 1,2 kB JSON ≈ 103 ms Leitungszeit): bei 10 Hz 132 von 274,
+  bei 20 Hz 102 von 549, p50 133–153 ms, p95 ≤ 206 ms. Übersprungene Werte sind überholte, keine veralteten
+  (Latest-only, kein Nachsenden); in allen Läufen 0 ungültige Werte an COM, Bytes exakt.
 * 2026-11-06: Bedienung der Windows-App „GSVmulti-Brücke“ geglättet (BQ6, Usability-Review). Schritt 3: Fortschritt
   „Verbindung zu <Pi> wird aufgebaut …“ mit Fußknopf „Abbrechen“ (kein Mehrfachstart), Backoff-Countdown aus dem
   bekannten Plan 1/2/4/8 s (im Controller abgeleitet, nicht vom Backend gemeldet), Fehlerleiste oberhalb der Wegwahl

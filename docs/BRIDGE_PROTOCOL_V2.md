@@ -1,8 +1,10 @@
 # Pi-/Windows-Brückenprotokoll 2
 
-Stand: 2026-11-06. Eigener Brückenvertrag, kein GSV-Telegramm.
-DUT-Ausgabe bleibt fachlich gesperrt. Version 2 und eine erfolgreiche
-Kopplung sind keine Ausgabeabnahme. V1 bleibt ausschließlich explizite Demo.
+Stand: 2026-11-09. Eigener Brückenvertrag, kein GSV-Telegramm.
+DUT-Ausgabe bleibt fachlich gesperrt; einzige Ausnahme ist die je Lauf vom
+Pi-Bediener bestätigte **Testfreigabe** (Abschnitt unten, keine Abnahme).
+Version 2 und eine erfolgreiche Kopplung sind keine Ausgabeabnahme. V1 bleibt
+ausschließlich explizite Demo.
 
 ## Kodierung und Grenzen
 
@@ -24,13 +26,13 @@ erteilt aber keine Berechtigung.
 
 | type | zusätzliche Pflichtfelder | optionale Felder |
 | --- | --- | --- |
-| `hello` | `protocol_version: 2`, `transport: network\|uart`, `run_id: ID\|null`, `state: Text`, `release_block: Text\|null`, `capabilities: Objekt`, `permissions: Textliste` | `lease_id: ID\|null`, `nonce: Text`, `signature: Text` |
+| `hello` | `protocol_version: 2`, `transport: network\|uart`, `run_id: ID\|null`, `state: Text`, `release_block: Text\|null`, `capabilities: Objekt`, `permissions: Textliste` | `lease_id: ID\|null`, `nonce: Text`, `signature: Text`, `release: "test_unaccepted"` |
 | `demo_request` | `transport: network\|uart`, `run_id: ID\|null`, `count: Ganzzahl 1..100000`, `rate_hz: endliche Zahl >0..100` | — |
 | `poll` | Run-/Leasebindung | — |
-| `record` | Run-/Leasebindung, `demo: true`, `record: ValueRecord`, `frame_age_ns: null`, `barrier_id: positive Ganzzahl\|null` | — |
-| `idle` | Run-/Leasebindung, `release_block: Text\|null` | — |
+| `record` | Run-/Leasebindung, `demo: true\|false`, `record: ValueRecord`, `frame_age_ns: null`, `barrier_id: positive Ganzzahl\|null` | `release: "test_unaccepted"` (Pflicht bei `demo: false`, verboten bei `demo: true`) |
+| `idle` | Run-/Leasebindung, `release_block: Text\|null` | `release: "test_unaccepted"` |
 | `ended` | Run-/Leasebindung | — |
-| `ack` | Run-/Leasebindung, `frame_sequence: Ganzzahl ≥0`, `barrier_id: positive Ganzzahl\|null`, `outcome: written\|expired\|failed\|unconfirmed` | — |
+| `ack` | Run-/Leasebindung, `frame_sequence: Ganzzahl ≥0`, `barrier_id: positive Ganzzahl\|null`, `outcome: written\|expired\|failed\|unconfirmed\|omitted` | — |
 | `error` | `code: ID`, `detail: Text`, `run_id: ID\|null` | `lease_id: ID\|null` |
 
 Texte sind höchstens 4096 Zeichen lang, `state` höchstens 128. Fähigkeiten
@@ -42,8 +44,8 @@ entscheidet anhand der authentisierten Berechtigungen und exklusiven Lease.
 
 `record` enthält das vollständige unveränderte `ValueRecord.to_dict()`-Schema 1,
 mit Zeitbasis, Unsicherheit (unbekannt bleibt `null`), Status und Ablehnungsgründen.
-In dieser Version ist ausschließlich synthetische Ausgabe erlaubt; deshalb
-bleibt `frame_age_ns` `null`. Es gibt keine Subtraktion von Pi-/Windows-Uhren.
+Ohne bestätigte Testfreigabe (siehe unten) ist ausschließlich synthetische
+Ausgabe erlaubt; `frame_age_ns` bleibt in jedem Fall `null`. Es gibt keine Subtraktion von Pi-/Windows-Uhren.
 Die Formatter-Metadaten einschließlich `provisional` gehören ins Runartefakt.
 
 ## Profil
@@ -176,3 +178,43 @@ ACK-/Invalidierungsserialisierung benutzen den bestehenden OutputState-Lock;
 Lease/Run werden danach erneut geprüft. Socket-/UART-I/O findet außerhalb
 beider Locks statt. Ein verlorenes ACK bleibt unbestätigt: Zahlen werden
 nicht wiederholt, eine offene Ungültigkeitsbarriere bleibt erhalten.
+
+## Testfreigabe echter Werte (seit 2026-11-09, additiv, v2 bleibt v2)
+
+Nutzerentscheidung 2026-11-09 für den Test am 11.11.: echte Messwerte dürfen
+über die Brücke (UART und Netzwerk) nach GSVmulti, **nur** wenn der
+Pi-Bediener den Lauf mit `output = {transport: "uart"|"tcp", …,
+acknowledge_unaccepted: true}` startet. Das ist **keine Abnahme** und keine
+Messfreigabe (OQ-06/OQ-47 bleiben offen). Ohne `true` bleibt alles wie oben
+gesperrt; die EXE hat keinen Schalter dafür.
+
+- **Freigabestand:** `hello` und `idle` tragen `release: "test_unaccepted"`
+  und `release_block: null` nur, wenn der gebundene echte Lauf bestätigt ist
+  **und** die Lease denselben Ausgabeweg nutzt. Sonst fehlt `release`, und
+  `release_block` nennt die Sperre. Der Codec akzeptiert ausschließlich diesen
+  Wert und nie zusammen mit einer Sperre. Der Pi sendet das Feld nur im
+  freigegebenen Fall: ein alter Client ohne R1-Codec lehnt es als unbekanntes
+  Feld ab und verbindet nicht (fail-closed); ein neuer Client nimmt ohne Feld
+  „gesperrt“ an. `capabilities.dut_output` bleibt `false`.
+- **Ankündigung vor Wert:** Ändert sich der Freigabestand im selben Lauf (die
+  Run-ID wird vor der Publisher-Bindung reserviert), antwortet der Pi auf
+  `poll`/`heartbeat` zuerst mit `hello`. Ein `record` mit `demo: false` geht
+  nur an eine Lease, der der aktuelle Stand angekündigt wurde.
+- **Record:** `demo: false`, `release: "test_unaccepted"`, vollständiger
+  `ValueRecord` mit seiner echten Zeitbasis, `frame_age_ns: null` (keine
+  Altersbehauptung, keine Uhrensubtraktion). Der Pi bietet einen gültigen
+  Wert höchstens `max_frame_age_ms` (Konfiguration, Standard 1000 ms) nach
+  seiner Veröffentlichung an, gemessen nur auf der Pi-Uhr; danach verfällt er
+  (`stale_skipped` im Audit), kein Nachsenden.
+- **Nur VALID an COM:** Der Windows-Kern formatiert freigegebene Werte mit
+  dem P4-3-`UserDefinedFormatter(prefix="%")` – byte-gleich mit UART direkt.
+  Ungültige Werte laufen weiter als Invalidierungsbarriere, werden aber mit
+  `ack.outcome = "omitted"` quittiert, ohne ein COM-Byte. Der Pi lehnt
+  `written` für eine Barriere im Testfreigabe-Lauf ab und hebt die Barriere
+  nur mit passendem `omitted` auf. Ein Demo-Lauf akzeptiert `omitted` nie.
+  GSVmulti zeigt bei ausgelassenen Werten den letzten Wert unmarkiert weiter;
+  genau so steht es im Hinweis (`release_note`).
+- **Windows-Seite:** `test_release` nur, wenn Hello/Idle der aktuellen
+  Generation und Run-ID den Marker trugen (`_DataLink.test_release_for`). Ein
+  `record` mit `demo: false` ohne vorherige Ankündigung widerruft die
+  Verbindung (`peer_invalid`).

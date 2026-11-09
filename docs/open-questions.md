@@ -237,6 +237,15 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Aufzeichnung und Kalibrierauswertung gemeinsam prüfen; ungültige Zeiträume
   dürfen keine Messfreigabe erhalten. [Prüffälle](GSVMULTI_PROTOCOL.md#ungultige-werte).
 
+* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
+  Abnahme:** Echte Werte dürfen auch über die GSVmulti-Brücke (UART und
+  Netzwerk) laufen, wenn der Pi-Bediener den Lauf mit
+  `acknowledge_unaccepted: true` startet – wie bei UART direkt. Ungültige und
+  veraltete Werte werden ausgelassen (`omit_record`, Brücke quittiert
+  `omitted`); GSVmulti zeigt dann den letzten Wert unmarkiert weiter, genau so
+  steht es im Hinweis. Diese Frage bleibt damit offen.
+  [BRIDGE_PROTOCOL_V2.md](BRIDGE_PROTOCOL_V2.md#testfreigabe-echter-werte-seit-2026-11-09-additiv-v2-bleibt-v2)
+
 * **Teilantwort 2026-11-04:** Lauf 08: 30,000983790 s absichtliche
   UART-Sendepause (HOST_MONOTONIC), Screenshot zeigt timeout! bei gestarteter
   Aufnahme; Fortsetzung auf neue −0,750 laut Nutzer ohne Eingriff. TXT/TDMS
@@ -2459,6 +2468,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
 * **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs; zuvor offen (Stand 2026-10-30).
+
+* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
+  Abnahme:** Die Brücke gibt echte Werte nach ausdrücklicher Bestätigung je
+  Lauf weiter (UART und Netzwerk), nur VALID an COM, Bytes wie UART direkt.
+  Ende zu Ende nur auf Linux belegt (pty-Kabel, lokales TLS, Fake-COM); kein
+  Windows-Treiber, kein GSVmulti, kein Altwertverhalten geprüft.
 
 * **Live-Prototyp (2026-10-30):** P4-3 hat höchstens einen offenen
   Senderauftrag, verwirft neue Frames bei Stau mit Tx-Beleg und liefert sie
