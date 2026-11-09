@@ -1968,7 +1968,7 @@ test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zust
   await expect(ack).toBeHidden();
   await pop.getByText('UART über Brücke', { exact: true }).click();
   await expect(pop.locator('[data-part="out-release-note"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe.');
-  await expect(pop.locator('[data-part="out-rate"]')).toHaveText('UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s; für UART über Brücke in GSVmulti höchstens 4 Hz einstellen, 10 Hz nur über Netzwerk.');
+  await expect(pop.locator('[data-part="out-rate"]')).toHaveText('UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s: in GSVmulti höchstens 4 Hz einstellen; 10 Hz nur über Netzwerk.');
   await expect(ack).not.toBeChecked();
   await expect(pop.locator('[data-part="out-lock"]')).toContainText('Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.');
   await noOverflow(page);
