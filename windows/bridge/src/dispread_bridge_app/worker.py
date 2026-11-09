@@ -62,6 +62,7 @@ class BridgeWorker:
         self._state = 'idle'
         self._exchanges = 0
         self._released = False
+        self._link = None
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
 
@@ -73,11 +74,17 @@ class BridgeWorker:
     @property
     def status(self) -> WorkerStatus:
         with self._lock:
+            link, released = self._link, self._released
+        # The cached value only lags one exchange; the link's current Pi marker
+        # is rechecked outside the worker lock (manager lock order unchanged).
+        if released:
+            released = link is not None and self._release_gate(link, getattr(link, 'run_id', None))
+        with self._lock:
             return WorkerStatus(self._state, self.is_active(),
                                 self._state == 'running' and self._failure is None
                                 and not self._stop.is_set(),
                                 None if self._failure is None else self._failure.code,
-                                demo_only=not self._released,
+                                demo_only=not (released and self._released),
                                 exchanges_total=self._exchanges)
 
     @property
@@ -204,6 +211,8 @@ class BridgeWorker:
                         self._event('started')
                         recovering = False
                     link = current
+                    with self._lock:
+                        self._link = link
                     outcome = session.exchange(link, com)
                     released = self._release_gate(link, getattr(link, 'run_id', None))
                     with self._lock:
@@ -262,7 +271,7 @@ class BridgeWorker:
             except Exception:
                 self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
             with self._lock:
-                self._com = None
+                self._com = self._link = None
             self._event('stopped', strict=False)
 
     def stop(self):

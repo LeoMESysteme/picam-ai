@@ -906,3 +906,48 @@ def test_worker_reports_release_only_while_link_holds_it(tmp_path):
             assert __import__('time').monotonic() < deadline
         worker.stop()
     assert com.payloads == [b'%+1.2345\r\n']
+
+
+def test_worker_drops_release_immediately_when_link_loses_it_between_exchanges(tmp_path):
+    import threading as _threading
+    import time as _time
+
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.worker import BridgeWorker
+
+    hold = _threading.Event()
+
+    class ReleasedLink(Link):
+        released, run_id = True, 'run'
+
+        def test_release_for(self, run_id):
+            return self.released and run_id == self.run_id
+
+        def receive(self):
+            if len(self.messages) > 2:
+                hold.wait(3)  # naechster Austausch bleibt haengen
+            return super().receive()
+
+    link = ReleasedLink(released())
+
+    class Manager:
+        profile = SimpleNamespace(pi_id='pi')
+
+        def data_link(self):
+            return link
+
+        def admit_write(self, link, claim):
+            return claim()
+
+        def disconnect(self):
+            hold.set()
+
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        worker = BridgeWorker(Manager(), lambda: Com(), db, lambda event: None)
+        worker.start()
+        deadline = _time.monotonic() + 3
+        while worker.status.demo_only:
+            assert _time.monotonic() < deadline
+        link.released = False  # Pi meldet neuen, gesperrten Lauf
+        assert worker.status.demo_only is True
+        worker.stop()
