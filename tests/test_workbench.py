@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import json
-import os
 import shutil
 import threading
 import time
@@ -268,38 +267,6 @@ def test_session_expiry_rate_limit():
     assert s.get(token)
     s.sessions[token]["created"] -= 9 * 3600
     assert s.get(token) is None
-
-
-def test_shell_persistence_resize_and_cleanup(tmp_path):
-    from dispread.workbench.terminals import Terminals
-
-    async def check():
-        manager = Terminals(tmp_path, tmp_path / "control.sock")
-        terminal = manager.create()
-        try:
-            terminal.resize(92, 28)
-            await terminal.write(b"printf 'WORKBENCH_OK\\n'; stty size\n")
-            deadline = time.monotonic() + 3
-            while b"28 92" not in terminal.buffer and time.monotonic() < deadline:
-                await asyncio.sleep(0.02)
-            assert b"WORKBENCH_OK" in terminal.buffer
-            assert b"28 92" in terminal.buffer
-            # No WebSocket attached; shell remains available.
-            assert terminal.exit_code is None
-            await terminal.write(b"sleep 20\n")
-            await asyncio.sleep(0.1)
-            await terminal.write(b"\x03")
-            await terminal.write(b"echo AFTER_INTERRUPT\n")
-            deadline = time.monotonic() + 3
-            while b"AFTER_INTERRUPT" not in terminal.buffer and time.monotonic() < deadline:
-                await asyncio.sleep(0.02)
-            assert b"AFTER_INTERRUPT" in terminal.buffer
-        finally:
-            await manager.close()
-        with pytest.raises(ProcessLookupError):
-            os.kill(terminal.pid, 0)
-
-    asyncio.run(check())
 
 
 def _frame():
@@ -761,7 +728,7 @@ def test_tui_uses_choices_and_reports_blocked_actions(tmp_path, monkeypatch):
     asyncio.run(check())
 
 
-def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
+def test_tls_login_status_and_logout(tmp_path):
     import ssl
     import subprocess
 
@@ -769,8 +736,6 @@ def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
     from aiohttp import web
 
     from dispread.workbench.server import make_app
-    from dispread.workbench.terminals import Terminals
-
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
     subprocess.run(
         [
@@ -795,8 +760,7 @@ def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
 
     async def check():
         c = Controller(tmp_path / "data", simulate=True)
-        terminals = Terminals(tmp_path, tmp_path / "control.sock")
-        runner = web.AppRunner(make_app(c, terminals, verifier=lambda p: p == "test-only"))
+        runner = web.AppRunner(make_app(c, verifier=lambda p: p == "test-only"))
         await runner.setup()
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(cert, key)
@@ -818,71 +782,22 @@ def test_tls_shell_websocket_reconnect_and_logout(tmp_path):
                 assert [row["key"] for row in status["setup"]["rows"]][:2] == ["mode", "role"]
                 assert [action["hotkey"] for action in status["setup"]["actions"]][:1] == ["a"]
                 headers["X-CSRF-Token"] = status["csrf"]
-                data = await (await client.post(base + "/terminals", headers=headers)).json()
-                url = base + "/terminals/" + data["id"] + "/ws"
-                with pytest.raises(aiohttp.WSServerHandshakeError):
-                    await client.ws_connect(url, headers={"Origin": "https://evil.invalid"})
-                socket = await client.ws_connect(url, headers=headers)
-                await socket.receive_json()  # reset
-                await socket.send_bytes(b"printf 'WSS_ROUNDTRIP\\n'\n")
-                output = b""
-                async with asyncio.timeout(3):
-                    while b"WSS_ROUNDTRIP" not in output:
-                        message = await socket.receive()
-                        if message.type == aiohttp.WSMsgType.BINARY:
-                            output += message.data
-                await socket.close()
-                terminal = terminals.items[data["id"]]
-                assert terminal.exit_code is None
-                second = await client.ws_connect(url, headers=headers)
-                assert (await second.receive_json())["reset"]
                 assert (await client.post(base + "/logout", headers=headers)).status == 200
-                async with asyncio.timeout(3):
-                    async for _ in second:
-                        pass
-                assert terminal.exit_code is None
                 assert (await client.get(base + "/status")).status == 401
         finally:
-            await terminals.close()
             await runner.cleanup()
 
     asyncio.run(check())
 
 
-def test_serve_stops_accepting_connections_before_closing_terminals(tmp_path, monkeypatch):
-    """Nutzerfund: 'dispread serve' liess sich nicht mit Strg+C beenden.
-
-    Live-Diagnose auf dem Pi (gdb/py-spy an einem haengenden Prozess) zeigte:
-    das SIGINT wurde korrekt verarbeitet, `serve()` lief bis zum Ende der
-    eigenen `finally`-Kette durch - der Prozess blieb trotzdem fuer immer
-    haengen, unerreichbar fuer jedes weitere Strg+C. Ursache: die alte
-    Reihenfolge schloss `terminals.close()` VOR `runner.cleanup()`/
-    `unix.cleanup()` ab. Solange der HTTP-Server (bzw. der lokale
-    Steuersocket) noch Verbindungen annimmt, kann zwischen dem Setzen von
-    `stop` und diesem Zeitpunkt ein neues `POST /terminals` eine Shell
-    anlegen, die `terminals.close()` nie zu Gesicht bekommt. Ihr
-    Reap-Task (`asyncio.to_thread(subprocess.wait)`) blockiert dann fuer
-    immer einen Worker-Thread des asyncio-Default-Executors - und genau den
-    joint `asyncio.run()` beim eigenen, nicht unterbrechbaren Abbau, lange
-    nachdem `serve()` selbst schon zurueckgekehrt ist und der
-    Signal-Handler damit weg ist.
-
-    Dieser Test prueft die eigentliche Korrektur direkt: `runner.cleanup()`
-    und `unix.cleanup()` (beide reale `web.AppRunner`-Instanzen) muessen vor
-    `Terminals.close()` aufgerufen werden - unabhaengig vom genauen Timing
-    eines echten HTTP-Requests, der sich nicht ohne Flakiness nachstellen
-    laesst.
-    """
+def test_serve_stops_cleanly_via_control_socket(tmp_path, monkeypatch):
+    """`dispread serve` endet auf `server.stop` ueber den lokalen Steuersocket."""
     import argparse
     import socket
     import subprocess as sp
 
-    from aiohttp import web
-
     from dispread.workbench import cli as cli_module
     from dispread.workbench.server import serve
-    from dispread.workbench.terminals import Terminals
-
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
     sp.run(
         [
@@ -899,22 +814,6 @@ def test_serve_stops_accepting_connections_before_closing_terminals(tmp_path, mo
     # kann schon länger sein; relativ bleibt der Socket im selben tmp_path.
     monkeypatch.chdir(tmp_path)
     control_socket = Path("control.sock")
-
-    order = []
-    original_terminals_close = Terminals.close
-
-    async def recording_terminals_close(self):
-        order.append("terminals.close")
-        return await original_terminals_close(self)
-
-    original_apprunner_cleanup = web.AppRunner.cleanup
-
-    async def recording_apprunner_cleanup(self):
-        order.append("apprunner.cleanup")
-        return await original_apprunner_cleanup(self)
-
-    monkeypatch.setattr(Terminals, "close", recording_terminals_close)
-    monkeypatch.setattr(web.AppRunner, "cleanup", recording_apprunner_cleanup)
 
     args = argparse.Namespace(
         host="127.0.0.1",
@@ -937,12 +836,6 @@ def test_serve_stops_accepting_connections_before_closing_terminals(tmp_path, mo
         await asyncio.wait_for(serve_task, timeout=10)
 
     asyncio.run(check())
-
-    # runner.cleanup() (öffentliches HTTPS, inkl. "POST /terminals") und
-    # unix.cleanup() (lokaler Steuersocket) muessen abgeschlossen sein, bevor
-    # terminals.close() beginnt - sonst kann in der Luecke eine Shell
-    # entstehen, die nie geschlossen wird.
-    assert order == ["apprunner.cleanup", "apprunner.cleanup", "terminals.close"]
 
 
 def test_loading_a_confirmed_profile_warns_about_unverified_geometry(tmp_path):

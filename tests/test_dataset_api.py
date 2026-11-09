@@ -16,7 +16,6 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from dispread.workbench.controller import Controller
 from dispread.workbench.server import make_app
-from dispread.workbench.terminals import Terminals
 
 
 def _image(fill=100, width=200, height=100):
@@ -24,8 +23,7 @@ def _image(fill=100, width=200, height=100):
 
 
 async def _authenticated_client(tmp_path, controller):
-    terminals = Terminals(tmp_path, tmp_path / "control.sock")
-    client = TestClient(TestServer(make_app(controller, terminals, lambda password: password == "test-only")))
+    client = TestClient(TestServer(make_app(controller, lambda password: password == "test-only")))
     await client.start_server()
     headers = {"Host": "test.local", "Origin": "https://test.local"}
     login = await client.post("/login", json={"password": "test-only"}, headers=headers)
@@ -33,7 +31,7 @@ async def _authenticated_client(tmp_path, controller):
     headers["Cookie"] = "dispread_session=" + login.cookies["dispread_session"].value
     status = await (await client.get("/status", headers=headers)).json()
     headers["X-CSRF-Token"] = status["csrf"]
-    return client, terminals, headers
+    return client, headers
 
 
 async def _command(client, headers, op, args=None):
@@ -57,14 +55,12 @@ def _device_payload():
 def test_dataset_routes_require_authentication(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
-        terminals = Terminals(tmp_path, tmp_path / "control.sock")
-        client = TestClient(TestServer(make_app(c, terminals, lambda password: password == "test-only")))
+        client = TestClient(TestServer(make_app(c, lambda password: password == "test-only")))
         await client.start_server()
         try:
             assert (await client.get("/dataset/captures/" + "a" * 32 + ".jpg")).status == 401
             assert (await client.get("/dataset/exports/" + "a" * 32 + ".zip")).status == 401
         finally:
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -73,7 +69,7 @@ def test_dataset_routes_require_authentication(tmp_path):
 def test_dataset_command_without_csrf_is_rejected(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             no_csrf = dict(headers)
             del no_csrf["X-CSRF-Token"]
@@ -83,7 +79,6 @@ def test_dataset_command_without_csrf_is_rejected(tmp_path):
             assert response.status == 403
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -92,7 +87,7 @@ def test_dataset_command_without_csrf_is_rejected(tmp_path):
 def test_device_list_command_returns_a_json_list_over_http(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             created = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
             listed = await (await _command(client, headers, "dataset.device.list")).json()
@@ -100,7 +95,6 @@ def test_device_list_command_returns_a_json_list_over_http(tmp_path):
             assert [d["id"] for d in listed] == [created["id"]]
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -117,7 +111,7 @@ def test_marking_a_sample_as_representative_makes_the_group_exportable(tmp_path)
 
     async def check():
         c = Controller(tmp_path, simulate=True)
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
             group = await (
@@ -173,7 +167,6 @@ def test_marking_a_sample_as_representative_makes_the_group_exportable(tmp_path)
             assert with_selection["coverage"]["images"] == 1
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -184,7 +177,7 @@ def test_relabel_command_corrects_a_typo_over_http(tmp_path):
 
     async def check():
         c = Controller(tmp_path, simulate=True)
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
             group = await (
@@ -229,7 +222,6 @@ def test_relabel_command_corrects_a_typo_over_http(tmp_path):
             assert relabeled["label_history"][0]["previous_expected_text"] == "-01.25"
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -242,7 +234,7 @@ def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
         # vollen Exportpfad, und synthetische Fixtures zaehlen seit Aufgabe 6
         # nie zur realen Exportabdeckung (Konzept, Exportvertrag).
         c.publish(_image(fill=42), {"timebase": "file_mtime"})
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             device = await (await _command(client, headers, "dataset.device.create", _device_payload())).json()
             group = await (
@@ -287,7 +279,6 @@ def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
             assert any(name.startswith("images/") for name in names)
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())
@@ -296,7 +287,7 @@ def test_full_capture_preview_and_export_download_roundtrip(tmp_path):
 def test_unknown_capture_token_and_export_id_are_rejected_without_leaking(tmp_path):
     async def check():
         c = Controller(tmp_path, simulate=True)
-        client, terminals, headers = await _authenticated_client(tmp_path, c)
+        client, headers = await _authenticated_client(tmp_path, c)
         try:
             response = await client.get("/dataset/captures/" + "a" * 32 + ".jpg", headers=headers)
             assert response.status == 400
@@ -307,7 +298,6 @@ def test_unknown_capture_token_and_export_id_are_rejected_without_leaking(tmp_pa
             assert response.status in (400, 404)
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())

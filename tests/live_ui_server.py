@@ -199,11 +199,6 @@ class FakeController:
         return {"live": False}
 
 
-class FakeTerminals:
-    def list(self):
-        return []
-
-
 class FakeLiveService:
     def __init__(self, image_path):
         self._lock = threading.Lock()
@@ -464,7 +459,7 @@ class FakeLiveService:
 
 def make_test_app(image_path):
     live = FakeLiveService(image_path)
-    app = make_app(FakeController(), FakeTerminals(), verifier=lambda p: p == "test-only", live=live)
+    app = make_app(FakeController(), verifier=lambda p: p == "test-only", live=live)
 
     async def state(request):
         live.set_state(await request.json())

@@ -742,7 +742,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
 
     async def check():
         service = FakeService()
-        app = make_app(None, None, verifier=lambda _password: True, live=service)
+        app = make_app(None, verifier=lambda _password: True, live=service)
         guard = app.middlewares[0]
 
         async def handle(method, path, headers=None, body=None):
@@ -971,8 +971,6 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         monkeypatch.setattr(server.Path, "open", track_open)
         live_factory = Mock(return_value=live)
         monkeypatch.setattr(server, "LiveService", live_factory)
-        terminals = Mock(close=AsyncMock())
-        monkeypatch.setattr(server, "Terminals", Mock(return_value=terminals))
         app_factory = Mock(return_value=web.Application())
         monkeypatch.setattr(server, "make_app", app_factory)
         runner = Mock(setup=AsyncMock(), cleanup=AsyncMock())
@@ -1008,7 +1006,7 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         live_factory.assert_called_once_with(owner, tmp_path / "live", simulate=simulate,
                                              bridge_hub=bridge_hub if configured else None)
         controller_factory.assert_called_once_with(args.data, args.camera, args.simulate, owner=owner)
-        app_factory.assert_called_once_with(controller, terminals, live=live, verifier=ANY,
+        app_factory.assert_called_once_with(controller, live=live, verifier=ANY,
                                              **({**bridge_config, 'bridge_hub': bridge_hub} if configured else {}))
         if configured:
             bridge_hub.close.assert_called_once_with()

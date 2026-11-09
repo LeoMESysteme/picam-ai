@@ -78,18 +78,16 @@ def test_http_auth_stream_and_camera_failure(tmp_path):
     from aiohttp.test_utils import TestClient, TestServer
 
     from dispread.workbench.server import make_app
-    from dispread.workbench.terminals import Terminals
 
     async def check():
         c = Controller(tmp_path, simulate=True)
         c.publish(panel_image(), {"timebase": "synthetic"})
-        terminals = Terminals(tmp_path, tmp_path / "control.sock")
-        client = TestClient(TestServer(make_app(c, terminals, lambda password: password == "test-only")))
+        client = TestClient(TestServer(make_app(c, lambda password: password == "test-only")))
         await client.start_server()
         headers = {"Host": "test.local", "Origin": "https://test.local"}
         try:
             assert (await client.get("/status")).status == 401
-            assert (await client.post("/terminals", headers=headers)).status == 401
+            assert (await client.post("/command", json={"op": "status"}, headers=headers)).status == 401
             wrong = await client.post("/login", json={"password": "wrong"}, headers=headers)
             assert wrong.status == 401
             login = await client.post("/login", json={"password": "test-only"}, headers=headers)
@@ -121,7 +119,6 @@ def test_http_auth_stream_and_camera_failure(tmp_path):
             assert (await client.get("/status", headers=headers)).status == 401
         finally:
             c.stop.set()
-            await terminals.close()
             await client.close()
 
     asyncio.run(check())

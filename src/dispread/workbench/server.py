@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
 import pwd
 import re
@@ -13,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 import cv2
-from aiohttp import WSMsgType, web
+from aiohttp import web
 
 from dispread.camera_settings import preview_settings
 from dispread.frames import open_source
@@ -27,7 +26,6 @@ from .controller import Controller
 from .datasets import zip_export
 from .fields import actions, rows
 from .live_api import add_live_routes
-from .terminals import Terminals
 
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -39,7 +37,7 @@ def same_origin(request):
     return request.headers.get("Origin") == f"https://{request.host}"
 
 
-def make_app(controller, terminals, verifier=authenticate, live=None, *,
+def make_app(controller, verifier=authenticate, live=None, *,
              bridge_identity=None, bridge_pairing_store=None, bridge_hub=None,
              bridge_endpoints=(), bridge_name="Dispread Pi"):
     bridge_public_paths = frozenset()
@@ -119,7 +117,6 @@ def make_app(controller, terminals, verifier=authenticate, live=None, *,
     async def status(request):
         result = controller.snapshot()
         result["csrf"] = sessions.get(request.cookies.get(COOKIE))["csrf"]
-        result["terminals"] = terminals.list()
         result["setup"] = {"rows": rows(result), "actions": actions(result)}
         return web.json_response(result)
 
@@ -195,62 +192,6 @@ def make_app(controller, terminals, verifier=authenticate, live=None, *,
             pass
         return response
 
-    async def new_terminal(_):
-        return web.json_response({"id": terminals.create().id})
-
-    async def close_terminal(request):
-        terminal = terminals.items.pop(request.match_info["id"])
-        await terminal.close()
-        return web.json_response({"ok": True})
-
-    async def websocket(request):
-        if not same_origin(request):
-            raise web.HTTPForbidden(text="Origin rejected")
-        terminal = terminals.items[request.match_info["id"]]
-        ws = web.WebSocketResponse(heartbeat=15, max_msg_size=32768)
-        await ws.prepare(request)
-        token = request.cookies.get(COOKIE)
-
-        async def output():
-            position = terminal.offset
-            await ws.send_json({"reset": True, "truncated": terminal.offset > 0})
-            while not ws.closed and sessions.get(token) and not terminal.closed:
-                if position < terminal.offset:
-                    position = terminal.offset
-                    await ws.send_json({"reset": True, "truncated": True})
-                start = position - terminal.offset
-                data = bytes(terminal.buffer[start : start + 65536])
-                if data:
-                    await ws.send_bytes(data)
-                    position += len(data)
-                elif terminal.exit_code is not None:
-                    await ws.send_json({"exit_code": terminal.exit_code})
-                    break
-                await asyncio.sleep(0.03)
-            await ws.close()
-
-        task = asyncio.create_task(output())
-        try:
-            async for message in ws:
-                if not sessions.get(token):
-                    break
-                if message.type == WSMsgType.BINARY:
-                    await terminal.write(message.data)
-                elif message.type == WSMsgType.TEXT:
-                    data = json.loads(message.data)
-                    if data.get("type") == "resize":
-                        terminal.resize(int(data["cols"]), int(data["rows"]))
-                elif message.type == WSMsgType.ERROR:
-                    break
-        except (ValueError, OSError):
-            pass
-        finally:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, ConnectionError):
-                await task
-            await ws.close()
-        return ws
-
     app.router.add_route("GET", "/login", login)
     app.router.add_route("POST", "/login", login)
     app.router.add_post("/logout", logout)
@@ -261,9 +202,6 @@ def make_app(controller, terminals, verifier=authenticate, live=None, *,
     app.router.add_get("/dataset/captures/{token}.jpg", dataset_capture_preview)
     app.router.add_get("/dataset/exports/{id}.zip", dataset_export_download)
     app.router.add_get("/stream.mjpg", stream)
-    app.router.add_post("/terminals", new_terminal)
-    app.router.add_delete("/terminals/{id}", close_terminal)
-    app.router.add_get("/terminals/{id}/ws", websocket)
     app.router.add_static("/static", STATIC)
     if live is not None:
         add_live_routes(app, live, csrf_of=lambda request: sessions.get(request.cookies.get(COOKIE))["csrf"])
@@ -402,8 +340,7 @@ async def serve(args):
             data["detection"][name] = getattr(args, name)
     if data != controller.config:
         controller._change(data)
-    terminals = Terminals(Path.cwd(), socket_path)
-    runner = web.AppRunner(make_app(controller, terminals, live=live,
+    runner = web.AppRunner(make_app(controller, live=live,
                                    verifier=lambda password: authenticate(password, username=username),
                                    **bridge_config), access_log=None)
     local = web.Application()
@@ -469,22 +406,9 @@ async def serve(args):
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
-        # Reihenfolge ist sicherheitsrelevant fuer ein saubers Beenden: solange
-        # runner/unix noch Verbindungen annehmen, kann "POST /terminals" (oder
-        # der lokale Steuersocket) zwischen SIGINT und hier eine neue Shell
-        # anlegen, die terminals.close() nie zu Gesicht bekommt. Ihr
-        # Reap-Task (asyncio.to_thread(subprocess.wait)) haengt dann fuer
-        # immer in einem Worker-Thread des Default-Executors - und genau den
-        # joint asyncio.run() beim eigenen, unterbrechungsfreien Abbau nach
-        # dem Ende dieser Funktion. Ergebnis: der Prozess reagiert auf kein
-        # weiteres Ctrl+C mehr, weil der Event-Loop und sein Signal-Handler zu
-        # diesem Zeitpunkt schon weg sind (beobachteter Bug: eine ueber die
-        # Werkbank-Oberflaeche angelegte Shell blieb so als Zombie-Aufnahme
-        # zurueck). Erst wenn runner/unix nichts mehr annehmen, ist
-        # terminals.close() garantiert vollstaendig.
+        # Erst die Server schliessen, dann Controller und Live-Dienst abbauen.
         await runner.cleanup()
         await unix.cleanup()
-        await terminals.close()
         await asyncio.to_thread(controller.close)
         try:
             await asyncio.to_thread(live.close)

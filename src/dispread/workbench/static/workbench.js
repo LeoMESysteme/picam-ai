@@ -2,9 +2,8 @@
 const $=id=>document.getElementById(id);
 const feed=$('feed'), viewport=$('viewport'), canvas=$('overlay'), ctx=canvas.getContext('2d');
 let csrf='', state=null, lastLog=0, sequence=-1, lastProgress=performance.now(), lastReply=performance.now();
-let stream=false, busy=false, editing=null, drag=null, sessionEnded=false, active='setup', terminalBusy=false;
+let stream=false, busy=false, editing=null, drag=null, sessionEnded=false;
 let setupRows=[], setupActions=[], setupBusy=false;
-const terminals=new Map();
 function log(level,message,timestamp=new Date().toISOString()){
  const box=$('logs'),follow=box.scrollHeight-box.scrollTop-box.clientHeight<32;
  const row=document.createElement('div');row.className='line';
@@ -22,7 +21,7 @@ async function command(op,args={}){return api('/command','POST',{op,args});}
 function disconnect(){if(!editing){feed.hidden=true;feed.removeAttribute('src');$('empty').hidden=false;}stream=false;$('metrics').textContent='—';$('status').textContent='offline';$('status').className='';}
 feed.onerror=()=>{if(!editing && feed.hasAttribute('src'))disconnect();};
 $('clear').onclick=()=>$('logs').replaceChildren();
-$('logout').onclick=async()=>{try{await api('/logout','POST',{});sessionEnded=true;for(const t of terminals.values())t.ws?.close();location.replace('/login');}catch(e){log('error',e.message);}};
+$('logout').onclick=async()=>{try{await api('/logout','POST',{});sessionEnded=true;location.replace('/login');}catch(e){log('error',e.message);}};
 async function poll(){
  if(busy || sessionEnded)return;busy=true;
  try{
@@ -42,8 +41,6 @@ async function poll(){
   }else disconnect();
   if(s.setup)renderSetup(s.setup);
   updateClipPanel(s.clip);
-  syncTabs(s.terminals);
-  if(!s.terminals.length && !terminalBusy){terminalBusy=true;try{await api('/terminals','POST',{});}finally{terminalBusy=false;}}
  }catch(e){disconnect();}finally{busy=false;}
 }
 /* Einstelltabelle: dieselben Zeilen und Aktionen wie dispread tui. */
@@ -177,46 +174,7 @@ $('setup-pane').onkeydown=event=>{
   if(action){event.preventDefault();run(action);}
  }
 };
-/* Shell-Tabs. */
-function fit(t){if(t.id===active){try{t.fit.fit();if(t.ws?.readyState===1)t.ws.send(JSON.stringify({type:'resize',cols:t.term.cols,rows:t.term.rows}));}catch(_){}}}
-function select(id){
- active=id;
- const setup=id==='setup';
- $('setup-pane').hidden=!setup;$('terminals').hidden=setup;$('setup-tab').classList.toggle('active',setup);
- for(const t of terminals.values()){t.pane.hidden=t.id!==id;t.button.classList.toggle('active',t.id===id);}
- if(setup){$('setup-pane').focus();return;}
- const t=terminals.get(id);if(t){fit(t);t.term.focus();}
-}
-$('setup-tab').onclick=()=>select('setup');
-function connect(t){
- if(sessionEnded || !terminals.has(t.id))return;
- t.ws=new WebSocket(`wss://${location.host}/terminals/${t.id}/ws`);t.ws.binaryType='arraybuffer';
- t.ws.onopen=()=>fit(t);
- t.ws.onmessage=event=>{if(event.data instanceof ArrayBuffer)t.term.write(new Uint8Array(event.data));else{
-  const data=JSON.parse(event.data);if(data.reset){t.term.reset();if(data.truncated)log('warn','Shell-Historie gekürzt; Ausgabe-Puffer ist begrenzt.');}
-  if(data.exit_code!==undefined){t.exited=true;log('info',`Shell beendet: ${data.exit_code}`);}
- }};
- t.ws.onclose=()=>{if(!sessionEnded && terminals.has(t.id) && !t.exited)setTimeout(()=>connect(t),1200);};
-}
-function syncTabs(items){
- for(const [id,t] of terminals)if(!items.some(item=>item.id===id)){terminals.delete(id);t.ws?.close();t.term.dispose();t.pane.remove();t.tab.remove();}
- for(const [index,item] of items.entries()){
-  if(terminals.has(item.id))continue;
-  const pane=document.createElement('div');pane.className='terminal-pane';pane.hidden=true;$('terminals').append(pane);
-  const tab=document.createElement('span'),button=document.createElement('button'),close=document.createElement('button');
-  button.className='tab';button.textContent='shell '+(index+1);close.textContent='×';close.ariaLabel='Shell schließen';tab.append(button,close);$('tabs').append(tab);
-  const term=new Terminal({fontFamily:'Consolas,monospace',fontSize:12,scrollback:3000,theme:{background:'#0b0d0f',foreground:'#c6ccd2'},allowProposedApi:false});
-  const fitAddon=new FitAddon.FitAddon();term.loadAddon(fitAddon);term.open(pane);
-  const t={id:item.id,pane,tab,button,term,fit:fitAddon,ws:null,exited:item.exit_code!==null};terminals.set(item.id,t);
-  button.onclick=()=>select(item.id);close.onclick=async()=>{try{await api('/terminals/'+item.id,'DELETE');}catch(e){log('error',e.message);}};
-  term.onData(data=>{if(t.ws?.readyState===1){const bytes=new TextEncoder().encode(data);for(let start=0;start<bytes.length;start+=8192)t.ws.send(bytes.slice(start,start+8192));}});
-  connect(t);
- }
- if(active!=='setup' && !terminals.has(active))select(terminals.keys().next().value ?? 'setup');
-}
-$('plus').onclick=async()=>{if(terminalBusy)return;terminalBusy=true;try{const t=await api('/terminals','POST',{});const s=await api('/status');syncTabs(s.terminals);select(t.id);}catch(e){log('error',e.message);}finally{terminalBusy=false;}};
-new ResizeObserver(()=>{for(const t of terminals.values())fit(t);draw();}).observe(viewport);
-new ResizeObserver(()=>{for(const t of terminals.values())fit(t);}).observe($('terminals'));
+new ResizeObserver(()=>draw()).observe(viewport);
 /* Kamerabild einfrieren und Anzeigebereich setzen. */
 async function freeze(){
  if(editing)return;
@@ -496,6 +454,6 @@ $('clip-stop').onclick=async()=>{
  await poll();
 };
 setInterval(()=>{if(!editing && (performance.now()-lastReply>2000||performance.now()-lastProgress>2000))disconnect();},250);
-select('setup');
-log('info','Einrichtung im setup-Tab: Werte auswählen, Tasten in Klammern lösen Aktionen aus. Kamerabereich mit E oder Doppelklick bearbeiten.');
+$('setup-pane').focus();
+log('info','Einrichtung: Werte auswählen, Tasten in Klammern lösen Aktionen aus. Kamerabereich mit E oder Doppelklick bearbeiten.');
 setInterval(poll,500);poll();

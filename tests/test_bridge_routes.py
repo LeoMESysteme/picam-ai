@@ -70,10 +70,8 @@ async def service(tmp_path, identity, *, tls=True, configured_hub=True, real_hub
     from dispread.workbench.controller import Controller
 
     controller = Controller(tmp_path / "data", simulate=True)
-    terminals = type("Terminals", (), {"list": lambda self: []})()
     app = make_app(
         controller,
-        terminals,
         verifier=lambda password: password == "local-test",
         bridge_identity=identity,
         bridge_pairing_store=store,
