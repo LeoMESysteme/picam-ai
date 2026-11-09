@@ -10,9 +10,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from dispread.detect.vision import DetectionConfig
 from dispread.layout import DisplayLayout
-
-from .vision import DetectionConfig
 
 DEFAULT = {
     "schema_version": 4,

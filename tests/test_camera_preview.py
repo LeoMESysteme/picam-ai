@@ -7,8 +7,8 @@ import time
 import cv2
 import numpy as np
 
+from dispread.detect.vision import box_iou, draw_overlay, find_display_candidates
 from dispread.workbench.controller import Controller
-from dispread.workbench.vision import box_iou, draw_overlay, find_display_candidates
 
 
 def panel_image():

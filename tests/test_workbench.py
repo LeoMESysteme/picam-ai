@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import pytest
 
+from dispread.detect.vision import fit_ocr_box, fit_quad_in_region
 from dispread.frames import open_source
 from dispread.frames.synthetic_source import render_display
 from dispread.layout import DisplayLayout
@@ -20,7 +21,6 @@ from dispread.workbench import fields
 from dispread.workbench.auth import Sessions
 from dispread.workbench.controller import CLIP_QUEUE_DEPTH, MAX_GEOMETRY_CYCLES, Controller
 from dispread.workbench.profiles import DEFAULT, atomic_json, validate
-from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 
 
 @pytest.mark.parametrize(

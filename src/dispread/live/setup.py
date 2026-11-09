@@ -33,12 +33,12 @@ from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
 from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, proposal_from_regions, propose_regions
+from dispread.live.texts import REASONS
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
 from dispread.setup_hint import GREEN_HUE_MAX, GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE, find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
-from dispread.workbench.fields import REASONS
 
 GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
 N_CELLS = 16

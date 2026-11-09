@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from dispread.workbench.vision import lcd_quad_in_region
+from dispread.detect.vision import lcd_quad_in_region
 
 
 def _blank_image(width=400, height=300):

@@ -580,7 +580,7 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     from aiohttp.test_utils import make_mocked_request
     from live_ui_server import FakeLiveService
 
-    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+    from dispread.live.texts import LIVE_CAUSE_TEXT
 
     async def direct(fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -1386,7 +1386,7 @@ def _assert_real_keys(fake, real, path='status'):
 def test_fake_full_status_carries_cause_texts(tmp_path):
     from live_ui_server import FakeLiveService
 
-    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+    from dispread.live.texts import LIVE_CAUSE_TEXT
 
     expected = LIVE_CAUSE_TEXT.copy()
     service = FakeLiveService(tmp_path / 'overlay.png')

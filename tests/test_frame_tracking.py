@@ -297,7 +297,7 @@ def test_r23_laufzeit_zweiter_durchgang(scene):
 
 
 def test_neue_gruende_haben_bedientexte():
-    from dispread.workbench.fields import REASONS
+    from dispread.live.texts import REASONS
 
     reasons = {"zu_wenig_rahmenbereiche", "rahmenbereiche_einseitig", "zu_wenig_rahmenmerkmale",
                "rahmen_mehrdeutig", "rahmen_unstimmig", "lcd_rand_fehlt", "rahmenbereiche_ohne_reserve",

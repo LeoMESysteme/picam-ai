@@ -147,7 +147,7 @@ def display_defect_check(images: Sequence[np.ndarray], quad, *, grid: CharGrid =
     des Setup-Zellentexts. Dieser muss fuer alle Standbilder gelten;
     wechselnde/unbekannte Zellen bleiben '?', niemals Leerzeichen.
     """
-    from dispread.workbench.fields import DISPLAY_DEFECT_HINT
+    from dispread.live.texts import DISPLAY_DEFECT_HINT
 
     if not images:
         raise ValueError('Displayfehlerpruefung braucht mindestens ein Standbild')

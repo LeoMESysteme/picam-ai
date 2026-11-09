@@ -2170,7 +2170,7 @@ def test_old_confirmed_profile_exposes_tracking_mode_before_run(tmp_path, propos
 
 
 def test_full_status_carries_cause_texts(tmp_path):
-    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+    from dispread.live.texts import LIVE_CAUSE_TEXT
 
     expected = LIVE_CAUSE_TEXT.copy()
     service = LiveService(FakeOwner(), tmp_path)
@@ -2184,7 +2184,7 @@ def test_full_status_carries_cause_texts(tmp_path):
 
 
 def test_tracking_reasons_only_in_explicit_full_status(tmp_path):
-    from dispread.workbench.fields import REASONS
+    from dispread.live.texts import REASONS
 
     service = LiveService(FakeOwner(), tmp_path)
     assert "tracking_reasons" not in service.status()
