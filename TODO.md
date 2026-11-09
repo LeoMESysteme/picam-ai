@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-06
+# TODO — Stand 2026-11-09
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -7,16 +7,31 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
-Aktuelle freigegebene Umsetzung: Windows-Brücke v2 auf
-`codex/windows-bridge-core`, Worktree
-`/home/me-systeme/.codex/worktrees/windows-bridge-core/picam-ai`.
-Backend/Paketierung durch Codex, EXE-GUI und sichtbare Workbench-Anbindung
-anschließend durch Claude gemäß [Übergabe](docs/superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
-Der bisherige Redesign-Worktree und dessen laufender Dienst bleiben erhalten.
-Backend einschließlich Wiederanlauf lokal integriert: 430 Tests bestanden,
-vier native Windows-Prüfungen übersprungen; Branchreview/Nachprüfung sauber.
-Nächster Arbeitsschritt: Claude-UI auf dem vorhandenen Kern; native Windows-Provider,
-Treiber-/Paketqualifikation und belegter Sessionexport bleiben offene Gates.
+## Zuerst: Test mit echten Werten am Mittwoch, 2026-11-11
+
+- **Zweig und Stand:** `feat/bruecke-ui` (Worktree `.worktrees/bruecke-ui`), gepusht und nicht gemergt. Darin stecken Codex' Brückenkern und Claudes Oberflächen für Werkbank und Windows-App.
+- **Dienst auf dem Pi:** `dispread-werkbank-bruecke` (systemd-run, `--user`) läuft aus `.worktrees/bruecke-run`, einem detached Stand auf c5cb924.
+  - Der Worktree braucht einen `var`-Link, sonst bricht die Einrichtung ab.
+  - Pi-ID `565e3468-…`, Zertifikat `f87b34f0…`, Adresse `https://100.122.154.35:8082`.
+- **Ablauf:** [windows/bridge/TESTLAUF.md](windows/bridge/TESTLAUF.md); F2 beschreibt die echten Werte.
+  - Der Bediener setzt beim Laufstart den Haken „Testfreigabe – nicht abgenommen“. Das ist eine Nutzerentscheidung vom 2026-11-09 und keine Abnahme.
+  - Netzwerk ist der Hauptweg.
+  - Für „UART über Brücke“ in GSVmulti höchstens 4 Hz einstellen. Bei 115 200 Baud trägt dieser Weg nur 3–4 Werte/s, weil jeder Datensatz rund 1,2 kB JSON umfasst.
+  - Der Adapter ist USB-TTL mit 3,3 V. Pin 10 für RXD0 ist vor Ort zu prüfen.
+- **Vorher erledigen:** Die EXE muss aus dem aktuellen Stand gebaut werden (`build-test.ps1`). Ältere EXE geben keine Werte aus.
+  - Beim Laufstart darf in der App keine Demo laufen.
+  - GSVmulti-Werte nach einem Abbruch, einer Ungültig-Phase oder dem Laufende sind nicht verwertbar. Ein Wert kann bis etwa 2 s plus OCR-Zeit alt sein.
+- **Nachweise bisher:** Linux mit pty-UART und lokalem TLS sowie ein unabhängiges Review („freigebbar“). Dazu kommt der erste echte Windows-Test vom 2026-11-06 mit Demo-Werten in GSVmulti, siehe [Belege](docs/quellen/bruecke-testlauf-2026-11-06/README.md).
+
+## Danach offen (Brücke)
+
+- **Merge:** `feat/bruecke-ui` nach `master`, erst mit Leonhards OK nach dem Test.
+- **UART kompakter kodieren:** Für 10 Hz über UART muss das Protokoll kompakter werden. Das ist ein Eingriff ins Protokoll mit Review.
+- **Tracking-Tests:** 15 Tests in `tests/test_frame_tracking.py` (R19b, R19c, R25) schlagen fehl, sobald `var/` vorhanden ist. Das gilt auch auf `master`; ohne `var/` werden sie übersprungen, ihr Fehlschlag blieb deshalb bisher unbemerkt. Ursache klären.
+- **Wackelnde Integrationstests:** `windows/bridge/tests/test_app_controller_integration.py` wackelt unter starker CPU-Last.
+- **Statuswörter:** Die ergänzten Wörter („Unbekannt“, „Keine Weitergabe“, „nicht verbunden“, „Testfreigabe“) in die Spec §10 übernehmen.
+- **Alter Controller (OQ-61):** S1, S2 und S4 sind umgesetzt; S3 und S5–S9 folgen erst nach dem Test. Der Datensatz-Sammelmodus bleibt, weil er für die invertierten GSV-Anzeigen gebraucht wird. Siehe Audit in `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`.
+- **Abnahmegates:** N1, N2 und N3 auf Windows (Paket, Treiber, Sessionexport) bleiben offen.
 
 ---
 
