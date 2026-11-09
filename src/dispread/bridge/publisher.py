@@ -5,8 +5,11 @@ from .output_state import OutputState
 
 
 class PairedOutputPublisher(OutputState):
-    def __init__(self, config, out_dir, *, hub, demo=False, run_id=None):
-        super().__init__(out_dir, demo=demo)
+    def __init__(self, config, out_dir, *, hub, demo=False, run_id=None, release=None):
+        # Frischegrenze nur fuer die bestaetigte Testfreigabe echter Werte;
+        # max_frame_age_ms ist der bestehende Konfigurationswert (1..1000 ms).
+        super().__init__(out_dir, demo=demo, release=release,
+                         max_offer_age_ns=config.max_frame_age_ms * 1_000_000 if release else None)
         self.config, self.hub = config, hub
         if run_id is not None:
             self.run_id = run_id

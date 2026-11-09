@@ -28,6 +28,7 @@ from typing import Any
 
 import cv2
 
+from dispread.bridge.protocol import TEST_RELEASE
 from dispread.bridge.publisher import PairedOutputPublisher
 from dispread.gsv_transport import OutputConfig
 from dispread.layout import CharLayout
@@ -42,8 +43,10 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
+    BRIDGE_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
+    bridge_config,
     normalize_output,
     require_output_acknowledgement,
 )
@@ -233,12 +236,18 @@ class LiveSession:
         except ValueError as exc:
             raise StartRefused(str(exc)) from exc
         self._output = None
+        self._bridge_acknowledged = False
         if self._output_transport == 'serial':
             options = {key: value for key, value in self._output_config.items()
                        if key not in ('transport', 'acknowledge_unaccepted')}
             self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
         elif self._output_transport != 'off':
-            self._output = output_factory(OutputConfig.from_dict(self._output_config), self._out_dir)
+            # Testfreigabe nur aus der Laufbestaetigung des Pi-Bedieners (R1).
+            self._bridge_acknowledged = self._output_config['acknowledge_unaccepted'] is True
+            self._output = output_factory(bridge_config(self._output_config), self._out_dir,
+                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}))
+            if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:
+                raise StartRefused('Ausgabe: Testfreigabe vom Brückenweg nicht übernommen')
         self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
@@ -249,6 +258,8 @@ class LiveSession:
         self._clock = clock or ClockLog()
         self._monotonic = monotonic
         self._wall = wall or (lambda: datetime.now(UTC))
+        self._bridge_acknowledged_at_utc = (self._wall().isoformat()
+                                            if self._bridge_acknowledged else None)
         self.session_path = self._out_dir / "session.json"
         self.records_path = self._out_dir / "records.jsonl"
         self.latest: ValueRecord | None = None
@@ -708,7 +719,8 @@ class LiveSession:
         status = self._output.status()
         if self._output_transport == 'serial':
             return status
-        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt'}
+        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt',
+                **({'release_note': BRIDGE_RELEASE_NOTE} if self._bridge_acknowledged else {})}
 
     def unified_output_status(self) -> dict:
         """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
@@ -769,7 +781,10 @@ class LiveSession:
         if self._output_transport == 'serial':
             data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
         elif self._output is not None:
-            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status()}
+            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status(),
+                              'acceptance': 'fehlt',
+                              'acknowledged_unaccepted': self._bridge_acknowledged,
+                              'acknowledged_at_utc': self._bridge_acknowledged_at_utc}
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark

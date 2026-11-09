@@ -201,3 +201,59 @@ def test_heartbeat_and_uart_controls_are_bounded_exact_schemas(kind, fields):
     if kind == 'uart_auth':
         with pytest.raises(ValueError):
             encode_v2({**message, 'mode': 'network'})
+
+
+# R1 (2026-11-09): bestaetigte Testfreigabe echter Werte, additiv in v2.
+def released_record():
+    message = demo_record()
+    message["demo"] = False
+    message["release"] = "test_unaccepted"
+    message["record"]["capture_timestamp"]["base"] = "v4l2_monotonic"
+    return message
+
+
+def test_test_release_record_carries_real_capture_without_age_claim():
+    message = released_record()
+    assert decode_v2(encode_v2(message)) == message
+    message["record"]["capture_timestamp"]["base"] = "synthetic"  # synthetische Live-Quelle
+    assert decode_v2(encode_v2(message)) == message
+
+
+@pytest.mark.parametrize("changes", [
+    {"release": None}, {"release": "accepted"}, {"release": True}, {"frame_age_ns": 5},
+])
+def test_test_release_record_requires_exact_marker_and_no_age(changes):
+    with pytest.raises(ValueError):
+        encode_v2({**released_record(), **changes})
+    without = released_record()
+    del without["release"]
+    with pytest.raises(ValueError):
+        encode_v2(without)
+
+
+def test_demo_record_never_carries_release_marker():
+    with pytest.raises(ValueError):
+        encode_v2({**demo_record(), "release": "test_unaccepted"})
+
+
+def hello(**changes):
+    return {**dict(version=2, type="hello", request_id="r", pi_id="pi-test", client_id="pc-1",
+                   protocol_version=2, transport="uart", run_id="run-1", state="ready", release_block=None,
+                   capabilities={}, permissions=[], lease_id="lease-1"), **changes}
+
+
+def test_hello_and_idle_release_marker_is_optional_exact_and_unblocked():
+    assert "release" not in decode_v2(encode_v2(hello()))
+    assert decode_v2(encode_v2(hello(release="test_unaccepted")))["release"] == "test_unaccepted"
+    idle = {**poll(), "type": "idle", "release_block": None, "release": "test_unaccepted"}
+    assert decode_v2(encode_v2(idle)) == idle
+    for message in (hello(release="accepted"), hello(release=None),
+                    hello(release="test_unaccepted", release_block="gesperrt"),
+                    {**idle, "release_block": "gesperrt"}, {**idle, "release": ""}):
+        with pytest.raises(ValueError):
+            encode_v2(message)
+
+
+def test_ack_may_report_local_omission():
+    ack = {**poll(), "type": "ack", "frame_sequence": 3, "barrier_id": 2, "outcome": "omitted"}
+    assert decode_v2(encode_v2(ack))["outcome"] == "omitted"

@@ -331,3 +331,73 @@ def test_demo_end_does_not_overtake_the_last_value(tmp_path):
         time.sleep(.02)
     assert hub.status()['run_id'] is None
     hub.close()
+
+
+# R1 (2026-11-09): Freigabestand maschinenlesbar in Hello/Idle/Status.
+def _real(seq, status='valid'):
+    from dispread.records import TimeBaseKind, Timestamp, ValueRecord, ValueStatus
+    valid = status == 'valid'
+    return ValueRecord(seq, Timestamp(seq, TimeBaseKind.V4L2_MONOTONIC), 1.5 if valid else None, 'mV/V',
+                       ValueStatus(status), 1.0, 'p', None, None, raw_text='+ 1.5' if valid else '',
+                       reject_reasons=() if valid else ('unreadable',))
+
+
+@pytest.mark.parametrize('release', [None, 'test_unaccepted'])
+def test_hello_idle_and_status_report_release_only_for_confirmed_test_release(tmp_path, release):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state = OutputState(tmp_path / 'run', release=release)
+    state.run_id = 'run'
+    state.start()
+    hub.bind_run('run', state, transport='network')
+    lease = hub.attach('pc', 'network')
+    hello = hub._hello(lease, 'h')
+    decode_v2(encode_v2(hello))
+    status = hub.status()
+    assert status['release'] == release
+    if release is None:
+        assert hello['release_block'] == RELEASE_BLOCK and 'release' not in hello
+        assert status['release_block'] == RELEASE_BLOCK
+        assert hub.prepare('network', 'pc').release is None
+    else:
+        assert hello['release_block'] is None and hello['release'] == 'test_unaccepted'
+        assert status['release_block'] is None
+        assert hub.prepare('network', 'pc').release == 'test_unaccepted'
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle.get('release') == release
+    state.publish(_real(1))
+    offer = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': 'r2'})
+    if release is None:
+        assert offer['type'] == 'idle' and offer['release_block'] == RELEASE_BLOCK
+    else:
+        assert (offer['type'], offer['demo'], offer['release']) == ('record', False, 'test_unaccepted')
+        after = hub.exchange(lease.lease_id, {**request(hub, lease, 'ack', frame_sequence=1, barrier_id=None,
+                                                        outcome='written'), 'request_id': 'r2'})
+        assert after['type'] == 'idle' and after['release_block'] is None and after['release'] == release
+    hub.close()
+    state.stop()
+
+
+def test_release_applies_only_to_the_bound_transport(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state = OutputState(tmp_path / 'run', release='test_unaccepted')
+    state.run_id = 'run'
+    hub.bind_run('run', state, transport='uart')
+    lease = hub.attach('pc', 'network')
+    hello = hub._hello(lease, 'h')
+    assert hello['release_block'] == RELEASE_BLOCK and 'release' not in hello
+    state.publish(_real(1))
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['release_block'] == RELEASE_BLOCK and 'release' not in idle
+    hub.close()
+
+
+def test_reserved_run_without_bound_output_stays_blocked(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')  # z. B. Ausgabe aus oder UART direkt
+    lease = hub.attach('pc', 'network')
+    hello = hub._hello(lease, 'h')
+    assert hello['release_block'] == RELEASE_BLOCK and 'release' not in hello
+    assert hub.status()['release'] is None
+    hub.close()

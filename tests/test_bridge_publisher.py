@@ -93,3 +93,26 @@ def test_silent_expired_lease_stops_slow_demo(tmp_path):
         assert hub.status()['run_id'] is None
     finally:
         hub.close()
+
+
+def test_confirmed_test_release_publisher_reports_release_and_freshness_limit(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('fresh')
+    publisher = PairedOutputPublisher(OutputConfig(transport='tcp', max_frame_age_ms=250), tmp_path / 'run',
+                                      hub=hub, run_id='fresh', release='test_unaccepted')
+    publisher.start()
+    assert publisher.max_offer_age_ns == 250_000_000
+    meta = publisher.metadata()
+    assert (meta['release'], meta['release_block'], meta['wire_transport']) == ('test_unaccepted', None, 'wss')
+    status = publisher.status()
+    assert (status['release'], status['release_block'], status['transport']) == ('test_unaccepted', None, 'tcp')
+    assert hub.status()['release'] == 'test_unaccepted'
+    publisher.stop()
+    assert hub.status()['release'] is None
+    hub.release_real_run('fresh')
+
+
+def test_unconfirmed_publisher_keeps_lock_and_has_no_release(tmp_path):
+    publisher = PairedOutputPublisher(OutputConfig(transport='tcp'), tmp_path / 'run', hub=None, run_id='x')
+    assert publisher.release is None and publisher.max_offer_age_ns is None
+    assert publisher.metadata()['release'] is None

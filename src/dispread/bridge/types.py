@@ -24,6 +24,9 @@ class PeerHello:
     run_id: str | None
     state: str
     release_block: str | None
+    #: R1: "test_unaccepted" nur bei bestaetigter Testfreigabe fuer genau
+    #: diesen Ausgabeweg; sonst None (echte Werte gesperrt).
+    release: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

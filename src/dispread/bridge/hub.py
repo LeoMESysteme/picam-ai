@@ -63,15 +63,34 @@ class BridgeHub:
             with state._lock:
                 yield state
 
+    def _release_locked(self, transport=None):
+        """Testfreigabe nur fuer den gebundenen echten Lauf und seinen Ausgabeweg.
+
+        Die Freigabe kommt ausschliesslich aus dem vom Pi-Bediener bestaetigten
+        Laufstart (OutputState.release), nie aus einer Client-Nachricht.
+        """
+        state = self._state
+        if (state is None or state.demo or state.release is None or self._real_run != state.run_id
+                or (transport is not None and self._transport not in (None, transport))):
+            return None
+        return state.release
+
+    def _block_locked(self, transport=None):
+        if self._release_locked(transport) is not None:
+            return None
+        return RELEASE_BLOCK if self._real_run or (self._state and not self._state.demo) else None
+
     def status(self):
         with self._lock:
             lease = self._lease
+            release = self._release_locked()
             return dict(pi_id=self.pi_id, run_id=self._run_id, real_run=self._real_run is not None,
                         transport=lease.transport if lease else None,
                         connected=lease is not None and self.clock() - lease.renewed_at < LEASE_TIMEOUT_S,
                         uart_prepared=self._uart is not None and self._uart.state in ('opening', 'listening'),
                         uart_state=self._uart.state if self._uart else 'unprepared',
-                        uart_error=self._uart.error if self._uart else None, release_block=RELEASE_BLOCK)
+                        uart_error=self._uart.error if self._uart else None,
+                        release_block=None if release else RELEASE_BLOCK, release=release)
 
     def prepare(self, transport, client_id):
         _transport(transport)
@@ -83,7 +102,7 @@ class BridgeHub:
                 raise ValueError('UART requires explicit operator prepare')
             return PeerHello(self.pi_id, client_id, 2, transport, self._run_id,
                              'output_off' if self._state is None else 'ready',
-                             RELEASE_BLOCK if self._real_run or (self._state and not self._state.demo) else None)
+                             self._block_locked(transport), self._release_locked(transport))
 
     def _expire(self):
         with self._lock:
@@ -165,8 +184,12 @@ class BridgeHub:
                     client_id=lease.client_id, lease_id=lease.lease_id, run_id=hello.run_id,
                     protocol_version=2, transport=lease.transport, state=hello.state,
                     release_block=hello.release_block,
+                    # dut_output bleibt False: Testfreigabe ist keine Abnahme.
                     capabilities=dict(heartbeat_interval_s=1, lease_timeout_s=5, dut_output=False),
-                    permissions=['readiness', 'demo'])
+                    permissions=['readiness', 'demo'],
+                    # Additiv (R1): nur gesendet, wenn freigegeben; alte Clients
+                    # lehnen das unbekannte Feld ab und bleiben so ohne Ausgabe.
+                    **({'release': hello.release} if hello.release else {}))
 
     def exchange(self, lease_id, message):
         # Validation precedes state mutation even for in-process callers.
@@ -213,7 +236,8 @@ class BridgeHub:
                 legacy['version'] = 1
                 reply = state.handle_v1(legacy)
                 if reply is None:
-                    return {**base, 'type': 'idle', 'release_block': None if state.demo else RELEASE_BLOCK}
+                    return {**base, 'type': 'idle', 'release_block': state.release_block,
+                            **({'release': state.release} if state.release else {})}
                 reply.pop('version')
                 if reply['type'] != 'record':
                     reply.pop('demo', None)

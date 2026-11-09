@@ -18,10 +18,15 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _TOKEN = re.compile(r"(?:[A-Za-z0-9_-]{43}|[0-9a-f]{64})\Z")
 _BASE = {"version", "type", "request_id", "pi_id", "client_id"}
 _BOUND = {"run_id", "lease_id"}
+#: Additiv seit 2026-11-09 (R1): bestaetigte Testfreigabe echter Werte. Fehlt
+#: das Feld, gilt fuer echte Werte weiterhin die Sperre. Es gibt bewusst nur
+#: diesen einen Wert, keine "Abnahme"-Stufe.
+TEST_RELEASE = "test_unaccepted"
+ACK_OUTCOMES = ("written", "expired", "failed", "unconfirmed", "omitted")
 _FIELDS = {
     "hello": (
         {"protocol_version", "transport", "run_id", "state", "release_block", "capabilities", "permissions"},
-        {"lease_id", "nonce", "signature"},
+        {"lease_id", "nonce", "signature", "release"},
     ),
     "demo_request": ({"transport", "run_id", "count", "rate_hz"}, set()),
     "poll": (_BOUND, set()),
@@ -30,8 +35,8 @@ _FIELDS = {
     "uart_proof": ({"nonce", "signature"}, set()),
     "uart_auth": ({"nonce", "mode", "credential"}, set()),
     "uart_authenticated": ({"token"}, set()),
-    "record": (_BOUND | {"demo", "record", "frame_age_ns", "barrier_id"}, set()),
-    "idle": (_BOUND | {"release_block"}, set()),
+    "record": (_BOUND | {"demo", "record", "frame_age_ns", "barrier_id"}, {"release"}),
+    "idle": (_BOUND | {"release_block"}, {"release"}),
     "ended": (_BOUND, set()),
     "ack": (_BOUND | {"frame_sequence", "barrier_id", "outcome"}, set()),
     "error": ({"code", "detail", "run_id"}, {"lease_id"}),
@@ -250,13 +255,13 @@ def _timestamp(value):
     _integer(value["uncertainty_ns"], nullable=True)
 
 
-def _record(value):
+def _record(value, *, demo=True):
     _fields(value, _RECORD_FIELDS)
     if type(value["schema_version"]) is not int or value["schema_version"] != 1:
         raise ValueError("unsupported ValueRecord schema")
     _integer(value["frame_sequence"])
     _timestamp(value["capture_timestamp"])
-    if value["capture_timestamp"]["base"] != "synthetic":
+    if demo and value["capture_timestamp"]["base"] != "synthetic":
         raise ValueError("DUT output remains blocked; only synthetic demo records allowed")
     if value["result_timestamp"] is not None:
         _timestamp(value["result_timestamp"])
@@ -305,6 +310,10 @@ def _validate_v2(message):
         _identifier(message["lease_id"], nullable=kind in ("hello", "error"))
     if "release_block" in message:
         _text(message["release_block"], nullable=True)
+    if "release" in message:
+        # Nur der exakte Testfreigabe-Marker, nie zusammen mit einer Sperre.
+        if message["release"] != TEST_RELEASE or message.get("release_block") is not None:
+            raise ValueError("invalid release marker")
     if kind == "hello":
         if type(message["protocol_version"]) is not int or message["protocol_version"] != 2:
             raise ValueError("incompatible hello protocol")
@@ -339,14 +348,17 @@ def _validate_v2(message):
         if not 0 < message["rate_hz"] <= 100:
             raise ValueError("invalid demo rate")
     elif kind == "record":
-        if message["demo"] is not True or message["frame_age_ns"] is not None:
-            raise ValueError("only synthetic demo without age claim allowed")
+        # Echte Werte nur mit Testfreigabe-Marker; nie eine Altersbehauptung.
+        demo = message["demo"]
+        if (demo is not True and (demo is not False or message.get("release") != TEST_RELEASE)) \
+                or (demo is True and "release" in message) or message["frame_age_ns"] is not None:
+            raise ValueError("only synthetic demo or confirmed test release without age claim allowed")
         _integer(message["barrier_id"], minimum=1, nullable=True)
-        _record(message["record"])
+        _record(message["record"], demo=demo)
     elif kind == "ack":
         _integer(message["frame_sequence"])
         _integer(message["barrier_id"], minimum=1, nullable=True)
-        if message["outcome"] not in ("written", "expired", "failed", "unconfirmed"):
+        if message["outcome"] not in ACK_OUTCOMES:
             raise ValueError("invalid ACK outcome")
     elif kind == "error":
         _identifier(message["code"])

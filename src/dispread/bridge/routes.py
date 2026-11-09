@@ -344,6 +344,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 capabilities={"protocol_version": 2, "dut_output": False,
                               "heartbeat_interval_s": 1, "lease_timeout_s": 5},
                 permissions=["readiness", "demo"],
+                **({"release": readiness.release} if readiness.release else {}),
             )
             await ws.send_str(encode_v2(response).decode("utf-8"))
             async for frame in ws:

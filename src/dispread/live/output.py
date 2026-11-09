@@ -31,6 +31,11 @@ SERIAL_RELEASE_NOTE = (
     'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
     'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
 )
+# R1 (Nutzerentscheidung 2026-11-09): Testfreigabe ueber die Bruecke wie UART direkt.
+BRIDGE_RELEASE_NOTE = (
+    'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
+    'Ungültige und veraltete Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
+)
 
 
 def same_port(left: str, right: str) -> bool:
@@ -104,7 +109,19 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
                 'acknowledge_unaccepted': value.get('acknowledge_unaccepted', False)}
     if transport not in ('off', 'uart', 'tcp'):
         raise ValueError('Unbekannter Ausgabeweg')
-    return OutputConfig.from_dict(value).to_dict()
+    if transport == 'off':
+        return OutputConfig.from_dict(value).to_dict()
+    # Brueckenweg: ohne ausdrueckliche Bestaetigung bleibt er gesperrt (Lauf startet).
+    acknowledged = value.get('acknowledge_unaccepted', False)
+    if type(acknowledged) is not bool:
+        raise ValueError('Ausgabe: acknowledge_unaccepted muss bool sein')
+    options = {key: item for key, item in value.items() if key != 'acknowledge_unaccepted'}
+    return {**OutputConfig.from_dict(options).to_dict(), 'acknowledge_unaccepted': acknowledged}
+
+
+def bridge_config(config: dict) -> OutputConfig:
+    """OutputConfig ohne die Bestaetigung; die gehoert zum Lauf, nicht zur Leitung."""
+    return OutputConfig.from_dict({key: item for key, item in config.items() if key != 'acknowledge_unaccepted'})
 
 
 def require_output_acknowledgement(config: dict) -> None:

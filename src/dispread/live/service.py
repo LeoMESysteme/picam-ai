@@ -37,9 +37,9 @@ from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
+from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
-from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
@@ -890,8 +890,10 @@ class LiveService:
             session = None
             from dispread.bridge.publisher import PairedOutputPublisher
 
-            def output_factory(config, out_dir):
-                return PairedOutputPublisher(config, out_dir, hub=self._bridge_hub, run_id=run_id)
+            def output_factory(config, out_dir, *, release=None):
+                # release kommt nur aus der Laufbestaetigung (LiveSession), R1.
+                return PairedOutputPublisher(config, out_dir, hub=self._bridge_hub, run_id=run_id,
+                                             release=release)
 
             if output['transport'] in ('tcp', 'uart') and self._bridge_hub is None:
                 raise LiveError('paired bridge hub is not configured')

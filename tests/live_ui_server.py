@@ -23,11 +23,16 @@ from aiohttp import web
 from dispread.charcells import CharGrid
 from dispread.gsv_transport import RELEASE_BLOCK
 from dispread.live import RELEASE_NOTICE
-from dispread.live.output import SERIAL_RELEASE_NOTE, normalize_output, require_output_acknowledgement
+from dispread.live.output import (
+    BRIDGE_RELEASE_NOTE,
+    SERIAL_RELEASE_NOTE,
+    normalize_output,
+    require_output_acknowledgement,
+)
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
+from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.records import TimeBaseKind, Timestamp
-from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -365,12 +370,16 @@ class FakeLiveService:
         transport = config['transport']
         self.set_scene("running_valid")
         with self._lock:
+            released = transport in ('uart', 'tcp') and config['acknowledge_unaccepted'] is True
             self._status['output'] = ({'transport': 'off', 'state': 'off'} if transport == 'off' else {
                 'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'waiting',
-                'config': config, 'error': None, 'release_block': None if transport == 'serial' else RELEASE_BLOCK,
+                'config': config, 'error': None,
+                'release_block': None if transport == 'serial' or released else RELEASE_BLOCK,
                 'last_ack': None, 'acceptance': 'fehlt',
                 'ack_scope': 'lokale Annahme' if transport == 'serial' else 'COM driver write, not GSVmulti reception',
                 **({'release_note': SERIAL_RELEASE_NOTE} if transport == 'serial' else {}),
+                **({'release': 'test_unaccepted' if released else None} if transport != 'serial' else {}),
+                **({'release_note': BRIDGE_RELEASE_NOTE} if released else {}),
             })
             self._status["diagnostics"] = {"enabled": diagnostics, "saved": 0,
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,

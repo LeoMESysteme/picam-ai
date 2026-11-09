@@ -880,3 +880,108 @@ def test_paired_client_loss_keeps_camera_and_record_audit_running(tmp_path):
         hub.release_real_run('real-run')
         hub.close()
     assert json.loads(session.session_path.read_text())['run_id'] == 'real-run'
+
+
+# R1 (2026-11-09): Testfreigabe ueber die Bruecke nur nach ausdruecklicher Bestaetigung.
+def test_bridge_acknowledgement_is_explicit_bool_and_defaults_to_locked():
+    from dispread.live.output import normalize_output
+
+    assert normalize_output({'transport': 'uart'})['acknowledge_unaccepted'] is False
+    assert normalize_output({'transport': 'tcp', 'acknowledge_unaccepted': True})['acknowledge_unaccepted'] is True
+    for value in (None, 1, 'true'):
+        with pytest.raises(ValueError, match='acknowledge_unaccepted'):
+            normalize_output({'transport': 'uart', 'acknowledge_unaccepted': value})
+    off = normalize_output({'transport': 'off'})
+    assert off.get('acknowledge_unaccepted', False) is False
+
+
+def _bridge_session(tmp_path, *, ack, transport='tcp'):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.bridge.publisher import PairedOutputPublisher
+
+    hub = BridgeHub('pi', tmp_path / 'bridge')
+    hub.reserve_real_run('real-run')
+    config = {'transport': transport, **({'acknowledge_unaccepted': True} if ack else {})}
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, output=config,
+                       output_factory=lambda cfg, out_dir, **kw: PairedOutputPublisher(
+                           cfg, out_dir, hub=hub, run_id='real-run', **kw))
+    session.bridge_run_id = 'real-run'
+    session._config = replace(session._config, confirm_frames=1)
+    return hub, session
+
+
+@pytest.mark.parametrize('ack', [False, True])
+def test_bridge_test_release_is_marked_in_status_and_session_json(tmp_path, ack):
+    from dispread.bridge.output_state import RELEASE_BLOCK
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    hub, session = _bridge_session(tmp_path, ack=ack)
+    session.start()
+    lease = hub.attach('pc', 'network')
+    try:
+        status = session.unified_output_status()
+        assert status['acceptance'] == 'fehlt'
+        assert status['config']['acknowledge_unaccepted'] is ack
+        hello = hub._hello(lease, 'h')
+        session.step()
+        reply = hub.exchange(lease.lease_id, dict(version=2, type='poll', request_id='p', pi_id='pi',
+                                                  client_id='pc', lease_id=lease.lease_id, run_id='real-run'))
+        if ack:
+            assert status['release_block'] is None and status['release'] == 'test_unaccepted'
+            assert status['release_note'] == BRIDGE_RELEASE_NOTE
+            assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
+            assert (reply['type'], reply['demo'], reply['release']) == ('record', False, 'test_unaccepted')
+            assert reply['record']['raw_text'] == '+1.2345'
+        else:
+            assert status['release_block'] == RELEASE_BLOCK and status['release'] is None
+            assert 'release_note' not in status
+            assert 'release' not in hello and hello['release_block'] == RELEASE_BLOCK
+            assert reply['type'] == 'idle' and reply['release_block'] == RELEASE_BLOCK
+    finally:
+        session.stop()
+        hub.close()
+    data = json.loads(session.session_path.read_text())['output']
+    assert data['acceptance'] == 'fehlt'
+    assert data['acknowledged_unaccepted'] is ack
+    assert data['wire_transport'] == 'wss'
+    if ack:
+        assert data['release'] == 'test_unaccepted' and data['release_block'] is None
+        assert data['acknowledged_at_utc']
+        assert data['status']['release_note'] == BRIDGE_RELEASE_NOTE
+    else:
+        assert data['release_block'] == RELEASE_BLOCK and data['acknowledged_at_utc'] is None
+
+
+def test_acknowledged_session_refuses_publisher_that_ignores_release(tmp_path):
+    from dispread.live.session import StartRefused
+
+    with pytest.raises(StartRefused, match='Testfreigabe'):
+        _session(tmp_path, [], output={'transport': 'tcp', 'acknowledge_unaccepted': True},
+                 output_factory=lambda cfg, out_dir, **kw: Publisher(cfg, out_dir))
+
+
+def test_service_passes_confirmed_test_release_to_paired_publisher(tmp_path, monkeypatch):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    service = LiveService(FakeOwner(), tmp_path, bridge_hub=hub)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+
+    def factory(owner, profile, settings, out_dir, **kwargs):
+        return _session(tmp_path, [], out_dir=out_dir, **kwargs)
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    try:
+        service.start_run(reference=False, output={'transport': 'tcp', 'acknowledge_unaccepted': True})
+        assert hub.status()['release'] == 'test_unaccepted'
+        output = service.status()['output']
+        assert output['release_note'] == BRIDGE_RELEASE_NOTE and output['release_block'] is None
+    finally:
+        service.stop_run()
+    service.start_run(reference=False, output={'transport': 'tcp'})
+    try:
+        assert hub.status()['release'] is None and hub.status()['release_block']
+    finally:
+        service.stop_run()
+        service.close()
