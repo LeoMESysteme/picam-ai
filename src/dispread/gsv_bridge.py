@@ -17,9 +17,11 @@ import uuid
 from collections import deque
 from pathlib import Path
 
+from dispread.bridge.protocol import TEST_RELEASE
 from dispread.gsv_transport import JsonLineReader, encode_message
 from dispread.records import InvalidValuePolicy, TimeBaseKind, Timestamp, ValueRecord, ValueStatus
 from dispread.sink.protocol.user_defined import UserDefinedFormatter
+from dispread.sink.protocol.userdefined import UserDefinedFormatter as DirectFormatter
 
 
 class BridgeError(RuntimeError):
@@ -54,7 +56,9 @@ class BridgeSession:
     """One request at a time, with an independently logged COM write receipt."""
 
     def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns,
-                 journal=None, pi_id=None, before_write=None, admit_write=None):
+                 journal=None, pi_id=None, before_write=None, admit_write=None, release_gate=None):
+        """``release_gate(link, run_id)`` (R1) bestaetigt die Pi-Testfreigabe der
+        aktuellen Verbindung; ohne ihn bleiben echte Werte gesperrt."""
         if max_frame_age_ms <= 0 or timeout_s <= 0:
             raise ValueError("positive age/timeout required")
         if journal is not None and (not isinstance(pi_id, str) or not pi_id):
@@ -66,12 +70,15 @@ class BridgeSession:
         self.timeout_ns = int(timeout_s * 1_000_000_000)
         self.clock = clock
         self.formatter = UserDefinedFormatter(invalid_policy=InvalidValuePolicy.SEND_NAN, demo=True)
+        # Testfreigabe: dieselben Bytes wie UART direkt (P4-3), Ungueltiges entfaellt.
+        self.release_gate = release_gate
+        self.release_formatter = DirectFormatter(prefix="%")
         self._last_written = None
 
-    def _event(self, **event):
+    def _event(self, *, formatter=None, **event):
         if self.log is not None:
             event.update(t_ns=self.clock(), time_base="host_monotonic", provisional=True,
-                         format_id=self.formatter.capabilities.format_id,
+                         format_id=(formatter or self.formatter).capabilities.format_id,
                          carries_capture_timestamp=False, timestamp_resolution_ns=None)
             self.log.write(json.dumps(event, allow_nan=False) + "\n")
             self.log.flush()
@@ -90,8 +97,11 @@ class BridgeSession:
             return kind
         if kind != "record":
             raise BridgeError("unknown reply type")
-        if reply.get("demo") is not True:
-            raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt")
+        released = reply.get("demo") is not True
+        if released and (reply.get("demo") is not False or reply.get("release") != TEST_RELEASE
+                         or self.release_gate is None or not self.release_gate(link, reply.get("run_id"))):
+            raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
+        formatter = self.release_formatter if released else self.formatter
         run_id = reply.get("run_id")
         barrier = reply.get("barrier_id")
         age = reply.get("frame_age_ns")
@@ -103,24 +113,30 @@ class BridgeSession:
             record = ValueRecord.from_dict(reply["record"])
             if type(record.frame_sequence) is not int or record.frame_sequence < 0:
                 raise ValueError("invalid frame sequence")
-            if record.capture_timestamp.base is not TimeBaseKind.SYNTHETIC:
+            if not released and record.capture_timestamp.base is not TimeBaseKind.SYNTHETIC:
                 raise ValueError("only synthetic demo captures are allowed")
             if age is not None:
-                raise ValueError("synthetic frame has no measured age")
-            if age is None and record.capture_timestamp.base is not TimeBaseKind.SYNTHETIC:
-                raise ValueError("missing measured age")
+                # Keine Altersbehauptung ueber ungepaarte Pi-/Windows-Uhren.
+                raise ValueError("frame age claims are not supported")
             if self.journal is not None:
                 if record.status is ValueStatus.VALID and barrier is not None:
                     raise ValueError("valid record must not carry barrier")
                 if record.status is not ValueStatus.VALID and (barrier is None or barrier <= 0):
                     raise ValueError("invalid record requires positive barrier")
-            payload = self.formatter.format(record)
-            if payload is None:
+            payload = formatter.format(record)
+            if payload is None and not released:
                 raise ValueError("invalid state must not be silently omitted")
         except (KeyError, TypeError, ValueError, AssertionError) as exc:
             raise BridgeError(f"invalid record: {exc}") from exc
         ack = {"version": 1, "type": "ack", "request_id": request_id, "run_id": run_id,
                "frame_sequence": record.frame_sequence, "barrier_id": barrier}
+        if payload is None:
+            # Testfreigabe: nur VALID an COM. Ungueltigkeit (Barriere) und nicht
+            # formatierbare Werte werden quittiert, ohne ein Byte zu schreiben;
+            # GSVmulti zeigt dann den letzten Wert unmarkiert weiter.
+            link.send(dict(ack, outcome="omitted"))
+            self._event(**ack, outcome="omitted", status=record.status.value, formatter=formatter)
+            return "omitted"
         # Budget includes request, processing and COM submission; it cannot bound
         # the receiver's own buffers or prove the physical DUT measurement age.
         remaining = min(self.timeout_ns - (self.clock() - started),
@@ -236,7 +252,7 @@ class BridgeSession:
             self._finish_attempt(attempt_id, "written")
         self._last_written = key
         self._event(**ack, outcome="written", wire_bytes_hex=payload.hex(),
-                    completion_stage="com_driver_write")
+                    completion_stage="com_driver_write", formatter=formatter)
         try:
             link.send(dict(ack, outcome="written"))
         except Exception:

@@ -560,3 +560,64 @@ def test_same_run_idle_release_updates_are_safe_and_bound_to_current_generation(
     finally:
         hub.unbind_run(state.run_id)
         state.stop()
+
+
+# R1 (2026-11-09): echte Werte nur nach Pi-Freigabestand dieser Generation/Run-ID.
+def _real(seq):
+    from dispread.records import TimeBaseKind, Timestamp, ValueRecord, ValueStatus
+    return ValueRecord(seq, Timestamp(seq, TimeBaseKind.V4L2_MONOTONIC), 1.5, 'mV/V', ValueStatus.VALID,
+                       1.0, 'p', None, None, raw_text='+1.5')
+
+
+def _bind(hub, run_id, *, release):
+    from dispread.bridge.output_state import OutputState
+    hub.reserve_real_run(run_id)
+    state = OutputState(hub.audit_root / run_id, release=release)
+    state.run_id = run_id
+    state.start()
+    hub.bind_run(run_id, state, transport='network')
+    return state
+
+
+def test_test_release_follows_pi_marker_for_current_run_only(setup):
+    manager, factory, hub, events = setup
+    state = _bind(hub, 'released-run', release='test_unaccepted')
+    try:
+        link = connected(manager)
+        assert (manager.snapshot().output, manager.snapshot().next_action) == ('test_release', None)
+        assert link.test_release_for('released-run') and not link.test_release_for('other')
+        state.publish(_real(1))
+        link.send(dict(version=1, type='poll', request_id='p1'))
+        reply = link.receive()
+        assert (reply['type'], reply['demo'], reply['release']) == ('record', False, 'test_unaccepted')
+        link.send(dict(version=1, type='ack', request_id='p1', run_id='released-run', frame_sequence=1,
+                       barrier_id=None, outcome='written'))
+    finally:
+        hub.release_real_run('released-run')
+        state.stop()
+    blocked = _bind(hub, 'locked-run', release=None)
+    try:
+        link.send(dict(version=1, type='poll', request_id='p2'))  # Laufwechsel -> Hello ohne Freigabe
+        assert link.receive()['type'] == 'idle'
+        assert not link.test_release_for('locked-run')
+        assert (manager.snapshot().output, manager.snapshot().next_action) == ('blocked', 'dut_release_blocked')
+    finally:
+        hub.release_real_run('locked-run')
+        blocked.stop()
+
+
+def test_record_claiming_release_without_prior_pi_marker_revokes_link(setup):
+    manager, factory, hub, events = setup
+    factory.mutate = lambda reply: ({k: v for k, v in reply.items() if k != 'release'}
+                                    if reply['type'] in ('hello', 'idle') else reply)
+    state = _bind(hub, 'sneaky-run', release='test_unaccepted')
+    try:
+        link = connected(manager)
+        assert manager.snapshot().output == 'demo_only' or manager.snapshot().output != 'test_release'
+        state.publish(_real(1))
+        with pytest.raises(ConnectionError, match='peer_invalid'):
+            link.send(dict(version=1, type='poll', request_id='p1'))
+        assert not link.test_release_for('sneaky-run')
+    finally:
+        hub.release_real_run('sneaky-run')
+        state.stop()

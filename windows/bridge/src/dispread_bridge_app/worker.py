@@ -5,6 +5,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+from dispread.bridge.protocol import TEST_RELEASE
 from dispread.bridge.types import BridgeEvent
 from dispread.gsv_bridge import BridgeAuditError, BridgeSession, DeliveryBlockedError, DeliveryUncertainError
 
@@ -19,10 +20,12 @@ _QUIET = frozenset({'idle', 'ended'})
 
 @dataclass(frozen=True)
 class WorkerStatus:
-    """Local demo COM readiness, to combine with W1's connection readiness.
+    """Local COM readiness, to combine with W1's connection readiness.
 
     This never authorizes DUT values or proves GSVmulti reception. failure code
     persists through stopped so a connected peer cannot mask a blocked journal.
+    demo_only is False only while the current link carries the Pi-operator's
+    confirmed test release (R1); the worker itself can never set it.
     """
 
     state: str
@@ -58,6 +61,7 @@ class BridgeWorker:
         self._last_event = self._failure = None
         self._state = 'idle'
         self._exchanges = 0
+        self._released = False
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
 
@@ -73,6 +77,7 @@ class BridgeWorker:
                                 self._state == 'running' and self._failure is None
                                 and not self._stop.is_set(),
                                 None if self._failure is None else self._failure.code,
+                                demo_only=not self._released,
                                 exchanges_total=self._exchanges)
 
     @property
@@ -85,22 +90,31 @@ class BridgeWorker:
         with self._lock:
             return self._copy_event(self._failure)
 
+    @staticmethod
+    def _release_gate(link, run_id):
+        """Pi-marked test release of this exact generation/run; no local switch."""
+        check = getattr(link, 'test_release_for', None)
+        return bool(check is not None and check(run_id))
+
     def _event(self, kind, *, strict=True, code=None, **fields):
+        with self._lock:
+            released = self._released and kind not in ('recovering', 'stopped')
         event = BridgeEvent(kind, code or fields.get('outcome') or kind, None, None,
-                            dict(version=1, provisional=True, demo_only=True,
+                            dict(version=1, provisional=True, demo_only=not released,
                                  gsv_receipt_confirmed=False,
-                                 completion_stage='com_driver_write', **fields))
+                                 completion_stage='com_driver_write',
+                                 **({'release': TEST_RELEASE} if released else {}), **fields))
         with self._lock:
             self._last_event = event
             if kind == 'started':
                 self._state = 'running'
             elif kind == 'recovering':
-                self._state = 'recovering'
+                self._state, self._released = 'recovering', False
             elif kind == 'stopped':
-                self._state = 'stopped'
+                self._state, self._released = 'stopped', False
             if kind in ('audit_failed', 'connection_failed', 'blocked'):
                 self._failure = event
-                self._state = kind
+                self._state, self._released = kind, False
         try:
             self.emit(self._copy_event(event))
         except Exception as exc:
@@ -172,7 +186,7 @@ class BridgeWorker:
         try:
             pi_id = self.connection.profile.pi_id
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
-                                    admit_write=self._admit_write)
+                                    admit_write=self._admit_write, release_gate=self._release_gate)
             while not self._stop.is_set():
                 try:
                     current = self.connection.data_link()
@@ -191,11 +205,13 @@ class BridgeWorker:
                         recovering = False
                     link = current
                     outcome = session.exchange(link, com)
+                    released = self._release_gate(link, getattr(link, 'run_id', None))
                     with self._lock:
                         self._exchanges += 1
+                        changed, self._released = self._released != released, released
                     # Wiederholtes idle/ended nur als Uebergang melden; alles
                     # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
-                    if outcome not in _QUIET or outcome != last_outcome:
+                    if outcome not in _QUIET or outcome != last_outcome or changed:
                         self._event('exchange', outcome=outcome)
                     last_outcome = outcome
                     if outcome not in _QUIET:

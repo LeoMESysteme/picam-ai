@@ -77,10 +77,18 @@ bilden jetzt auch den authentisierten Pi-Ausgabestand ab:
 | --- | --- | --- |
 | `output_off` | `output_off` | Keine aktive Ausgabe bzw. kein Lauf |
 | `demo_only` | `None` | Bekannter synthetischer Lauf; keine DUT-Freigabe |
+| `test_release` | `None` | Seit 2026-11-09 (R1): Pi meldet für diesen Lauf `release: "test_unaccepted"` – vom Pi-Bediener bestätigte Testfreigabe echter Werte, **keine Abnahme**; nur VALID an COM, Ungültiges wird ausgelassen (`omitted`) |
 | `blocked` | `dut_release_blocked` | Bekannte DUT-Abnahmesperre |
 | `blocked` | `peer_release_blocked` | Anderer Sperrgrund; kein Peer-Freitext als Anweisung |
 | `ended` | `run_ended` | Datenlauf beendet, Verbindung weiter vorhanden |
 | `unavailable` | `peer_output_unknown` | Unbekannter Ausgabestand |
+
+`test_release` entsteht ausschließlich aus Hello/Idle der aktuellen
+Generation und Run-ID (`_DataLink.test_release_for(run_id)`); ein `record`
+mit `demo: false` ohne vorherigen Pi-Marker widerruft die Verbindung
+(`peer_invalid`). `WorkerStatus.demo_only` ist nur dann `False`. Es gibt
+keinen lokalen Schalter in der EXE. Ein neuer Lauf ohne Bestätigung meldet
+sofort wieder `blocked`/`dut_release_blocked`.
 
 Disconnect/Generationswechsel löschen den alten Stand; lokale Workerfehler
 haben Vorrang. COM und GSV bleiben eigenständige Felder. Nach Backendereignis

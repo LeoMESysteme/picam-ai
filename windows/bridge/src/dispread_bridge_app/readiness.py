@@ -2,6 +2,7 @@
 from dataclasses import dataclass, replace
 
 from dispread.bridge.output_state import RELEASE_BLOCK
+from dispread.bridge.protocol import TEST_RELEASE
 
 from .worker import WorkerStatus
 
@@ -17,12 +18,19 @@ class Readiness:
     next_action: str | None
 
 
-def peer_output_readiness(state: str, run_id: str | None, release_block: str | None) -> tuple[str, str | None]:
-    """Project validated peer evidence to fixed codes, never peer UI instructions."""
+def peer_output_readiness(state: str, run_id: str | None, release_block: str | None,
+                          release: str | None = None) -> tuple[str, str | None]:
+    """Project validated peer evidence to fixed codes, never peer UI instructions.
+
+    ``test_release`` (R1, 2026-11-09) only from the authenticated Pi marker
+    ``release == "test_unaccepted"`` of the current run; a block always wins.
+    """
     if release_block is not None:
         return 'blocked', 'dut_release_blocked' if release_block == RELEASE_BLOCK else 'peer_release_blocked'
     if state == 'output_off' or (state == 'ready' and run_id is None):
         return 'output_off', 'output_off'
+    if state == 'ready' and release is not None:
+        return ('test_release', None) if release == TEST_RELEASE else ('unavailable', 'peer_output_unknown')
     if state == 'ready':
         return 'demo_only', None
     if state == 'ended':

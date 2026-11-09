@@ -13,7 +13,7 @@ from dataclasses import asdict, replace
 
 from dispread.bridge.discovery import TailscaleStatus, tailscale_status
 from dispread.bridge.identity import verify_certificate
-from dispread.bridge.protocol import _identifier, decode_v2, encode_v2, parse_profile
+from dispread.bridge.protocol import TEST_RELEASE, _identifier, decode_v2, encode_v2, parse_profile
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
 from .credentials import CredentialError
@@ -42,6 +42,7 @@ class _DataLink:
         self.renewed_at = 0
         self.valid = False
         self._peer_state, self._peer_release_block = 'unknown', None
+        self._peer_release = None  # R1: nur der Pi-Marker dieser Generation/Run-ID
         self.output, self.output_reason = 'unavailable', None
         self._operation = threading.Lock()
         self._local = threading.local()
@@ -93,14 +94,23 @@ class _DataLink:
                 if reply['type'] == 'hello':
                     self._peer_state = reply['state']
                     self._peer_release_block = reply['release_block']
+                    self._peer_release = reply.get('release')
                 elif reply['type'] == 'idle':
                     self._peer_release_block = reply['release_block']
+                    self._peer_release = reply.get('release')
                 elif reply['type'] == 'record':
+                    # Ein echter Wert ist nur zulaessig, wenn der Pi die
+                    # Testfreigabe fuer genau diesen Lauf vorher gemeldet hat.
+                    if reply['demo'] is not True and (self._peer_release != TEST_RELEASE
+                                                      or reply.get('release') != TEST_RELEASE):
+                        raise ConnectionError('peer_invalid')
+                    if reply['demo'] is True:
+                        self._peer_release = None
                     self._peer_state, self._peer_release_block = 'ready', None
                 elif reply['type'] == 'ended':
-                    self._peer_state = 'ended'
+                    self._peer_state, self._peer_release = 'ended', None
                 self.output, self.output_reason = peer_output_readiness(
-                    self._peer_state, self.run_id, self._peer_release_block)
+                    self._peer_state, self.run_id, self._peer_release_block, self._peer_release)
                 self.renewed_at = time.monotonic()
                 if not initial:
                     output_changed = self.manager._peer_output_locked(self) or previous_run != self.run_id
@@ -115,6 +125,13 @@ class _DataLink:
                 raise
             raise ConnectionError('peer_invalid' if isinstance(error, (ValueError, KeyError, TypeError))
                                   else 'connection_lost') from None
+
+    def test_release_for(self, run_id) -> bool:
+        """True only for the current authenticated generation and Pi-marked run."""
+        with self.manager._lock:
+            return (self.valid and self.manager._link is self and run_id is not None
+                    and run_id == self.run_id and self._peer_release == TEST_RELEASE
+                    and self._peer_release_block is None)
 
     def handshake(self):
         with self._operation:
@@ -232,7 +249,8 @@ class ConnectionManager:
         return aggregate_readiness(base, None if worker is None else worker.status)
 
     def _event(self, code, *, run_id=None, output=None, reason=None, generation=None):
-        detail = dict(version=2, demo_only=True, provisional=True, gsv_receipt_confirmed=False)
+        detail = dict(version=2, demo_only=output != 'test_release', provisional=True,
+                      gsv_receipt_confirmed=False)
         if output is not None:
             detail.update(output=output, reason=reason, generation=generation)
         try:

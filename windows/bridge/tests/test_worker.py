@@ -798,3 +798,111 @@ def test_producer_at_20hz_loses_no_values(tmp_path):
         w.connection.link = Slot(clock)
         w._run()
     assert len(com.payloads) == 600
+
+
+# R1 (2026-11-09): echte Werte nur mit Pi-Testfreigabe der aktuellen Bindung.
+def released(status=ValueStatus.VALID, sequence=9, barrier=None, raw='+ 1.2345 ', value=1.2345, release=True):
+    valid = status is ValueStatus.VALID
+    record = ValueRecord(sequence, Timestamp(5, TimeBaseKind.V4L2_MONOTONIC), value if valid else None, 'mV/V',
+                         status, 1.0, 'p', None, None, raw_text=raw if valid else '',
+                         reject_reasons=() if valid else ('unreadable',))
+    return dict(version=1, type='record', run_id='run', record=record.to_dict(), frame_age_ns=None,
+                barrier_id=barrier, demo=False, **({'release': 'test_unaccepted'} if release else {}))
+
+
+@pytest.mark.parametrize('gate', [None, False])
+def test_real_record_without_current_pi_release_never_reaches_com(tmp_path, gate):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    com = Com()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        kwargs = {} if gate is None else dict(release_gate=lambda link, run_id: gate)
+        with pytest.raises(BridgeError, match='gesperrt'):
+            session(db, **kwargs).exchange(Link(released()), com)
+        assert db.attempts() == ()
+    assert com.payloads == []
+
+
+def test_real_record_without_release_marker_is_refused_even_with_open_gate(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    com = Com()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        with pytest.raises(BridgeError, match='gesperrt'):
+            session(db, release_gate=lambda link, run_id: True).exchange(Link(released(release=False)), com)
+    assert com.payloads == []
+
+
+def test_released_valid_value_uses_direct_uart_formatter_bytes(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+
+    from dispread.records import ValueRecord as VR
+    from dispread.sink.protocol.userdefined import UserDefinedFormatter
+    com, seen = Com(), []
+    reply = released()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        link = Link(reply)
+        gate = lambda link, run_id: seen.append(run_id) or True  # noqa: E731
+        assert session(db, release_gate=gate).exchange(link, com) == 'written'
+        assert [a.outcome for a in db.attempts()] == ['written']
+    expected = UserDefinedFormatter(prefix='%').format(VR.from_dict(reply['record']))
+    assert com.payloads == [expected] == [b'%+1.2345\r\n']
+    assert seen == ['run']
+    assert link.messages[-1]['outcome'] == 'written'
+
+
+@pytest.mark.parametrize('reply', [
+    released(ValueStatus.UNREADABLE, barrier=3),
+    released(raw='+ 1.2346 '),  # Text/Wert inkonsistent: Formatter laesst aus
+])
+def test_released_invalidation_or_unformattable_value_is_omitted_not_written(tmp_path, reply):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    com = Com()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        link = Link(reply)
+        assert session(db, release_gate=lambda link, run_id: True).exchange(link, com) == 'omitted'
+        assert db.attempts() == ()
+        assert not db.has_unresolved_invalidation('pi')
+    assert com.payloads == []
+    ack = link.messages[-1]
+    assert (ack['type'], ack['outcome'], ack['barrier_id']) == ('ack', 'omitted', reply['barrier_id'])
+
+
+def test_worker_reports_release_only_while_link_holds_it(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.worker import BridgeWorker
+
+    class ReleasedLink(Link):
+        released = True
+        run_id = 'run'
+
+        def test_release_for(self, run_id):
+            return self.released and run_id == self.run_id
+
+    link = ReleasedLink(released())
+
+    class Manager:
+        profile = SimpleNamespace(pi_id='pi')
+
+        def data_link(self):
+            return link
+
+        def admit_write(self, link, claim):
+            return claim()
+
+        def disconnect(self):
+            pass
+
+    com, events = Com(), []
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        worker = BridgeWorker(Manager(), lambda: com, db, events.append)
+        assert worker.status.demo_only is True
+        worker.start()
+        deadline = __import__('time').monotonic() + 3
+        while not any(e.detail.get('release') == 'test_unaccepted' for e in list(events) if e.kind == 'exchange'):
+            assert __import__('time').monotonic() < deadline
+        assert com.payloads and worker.status.demo_only is False
+        link.released = False
+        link.reply = dict(version=1, type='idle', run_id='run', release_block='gesperrt')
+        while worker.status.demo_only is False:
+            assert __import__('time').monotonic() < deadline
+        worker.stop()
+    assert com.payloads == [b'%+1.2345\r\n']

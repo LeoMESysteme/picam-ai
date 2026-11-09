@@ -42,3 +42,26 @@ def test_idle_worker_preserves_peer_block_and_off_reason_but_failure_wins():
         assert combined.com == 'idle'
         failed = aggregate_readiness(base, WorkerStatus('stopped', False, False, 'audit_failed'))
         assert (failed.output, failed.next_action) == ('blocked', 'audit_failed')
+
+
+# R1 (2026-11-09): bestaetigte Testfreigabe nur aus dem Pi-Freigabestand.
+def test_test_release_needs_exact_pi_marker_and_never_overrides_a_block():
+    from dispread_bridge_app.readiness import peer_output_readiness
+
+    from dispread.bridge.output_state import RELEASE_BLOCK
+    assert peer_output_readiness('ready', 'run', None, 'test_unaccepted') == ('test_release', None)
+    assert peer_output_readiness('ready', 'run', None) == ('demo_only', None)
+    assert peer_output_readiness('ready', 'run', None, 'accepted') == ('unavailable', 'peer_output_unknown')
+    assert peer_output_readiness('ready', 'run', RELEASE_BLOCK, 'test_unaccepted') == (
+        'blocked', 'dut_release_blocked')
+    assert peer_output_readiness('ready', None, None, 'test_unaccepted') == ('output_off', 'output_off')
+    assert peer_output_readiness('ended', 'run', None, 'test_unaccepted') == ('ended', 'run_ended')
+
+
+def test_test_release_shows_only_while_worker_writes():
+    base = Readiness('ready', 'ready', 'authenticated', 'test_release', 'unknown', 'unconfirmed', None)
+    running = aggregate_readiness(base, WorkerStatus('running', True, True, None, demo_only=False))
+    assert (running.output, running.next_action, running.com, running.gsv) == (
+        'test_release', None, 'driver_ready', 'unconfirmed')
+    idle = aggregate_readiness(base, WorkerStatus('idle', False, False, None))
+    assert idle.output == 'unavailable'
