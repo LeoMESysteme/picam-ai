@@ -29,7 +29,7 @@ dispread = "dispread.workbench.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"dispread.workbench" = ["static/*", "static/vendor/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
+"dispread.workbench" = ["static/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
 
 [tool.ruff]
 line-length = 120

@@ -737,20 +737,13 @@ das Zertifikat auf. Für eine andere Adresse `init-tls --host ADRESSE` in einem
 neuen Zertifikatverzeichnis verwenden. SSH-Tunnel bleiben mit
 `serve --host 127.0.0.1` möglich, ebenfalls mit HTTPS und Anmeldung.
 
-## Oberfläche: Kamera, setup-Tab und echte Shell
+## Oberfläche: Kamera und setup-Tabelle (alte Seite)
 
-Kamera oben links, darunter die Tab-Leiste, Log rechts; auf schmalen
-Bildschirmen werden die Bereiche gestapelt. Der erste Tab heißt `setup` und ist
-nach der Anmeldung **sofort aktiv** — die Einrichtung braucht kein Kommando
-mehr. `+` öffnet eine weitere Shell, `×` schließt sie samt laufenden Prozessen.
-Maximal acht Shell-Tabs. Browser schließen, Verbindung verlieren oder abmelden
-lässt die Shells weiterlaufen; erneutes Anmelden verbindet wieder. Serverende
-schließt alle Shells. Die Sessions überleben keinen Serverneustart.
-
-Jede Shell läuft als `me-systeme` im Startverzeichnis der Workbench. Der PATH
-verwendet die Projekt-venv. `sudo`, Editoren, `Ctrl+C` und Größenänderungen sind
-normal nutzbar. Bis zu 2 MiB Terminalausgabe pro Tab bleiben für Wiederverbindung
-im Speicher; bei Überschreitung erscheint ein Hinweis auf gekürzte Historie.
+Kamera oben links, Log rechts; auf schmalen Bildschirmen werden die Bereiche
+gestapelt. Die Einstelltabelle ist nach der Anmeldung sofort aktiv.
+Seit 2026-11-09 (OQ-61, S4) gibt es **keine Browser-Shell** mehr; Zugriff auf
+den Pi geht per SSH. Die alte Seite wird schrittweise abgebaut, die Bedienung
+läuft auf `/live`.
 
 ### Einstelltabelle bedienen
 

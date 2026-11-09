@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-09: **OQ-61 Abbau des alten Controllers, Schritte S1, S2, S4.** Audit in
+  `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`. S1/S2: Bedienertexte (`REASONS`,
+  `LIVE_CAUSE_TEXT`, `live_cause`, `DISPLAY_DEFECT_HINT`) nach `dispread/live/texts.py`, Erkennung
+  `workbench/vision.py` nach `detect/vision.py`, `CROP_SIZE`/`crop_box` nach `ocr/autofit.py`;
+  `/live`, `benchmark.py` und Skripte hängen nicht mehr am Workbench-Controller. S4: Browser-Terminals
+  (PTY hinter PAM-Anmeldung) entfernt: `terminals.py`, `shell.py`, xterm, Routen `/terminals*`;
+  `make_app(controller, verifier, live=...)`. Schriftdateien unter `static/vendor/fonts` bleiben
+  (live.css). Offen: S5–S9 (alte Seite, TUI/CLI `mode|profile|camera`, Datensatz-Sammelmodus als
+  Entwicklerwerkzeug behalten, Controller entfernen). Playwright live 53/53, Suite grün bis auf
+  vorbestehende Umgebungsfehler (Skript-Subprozesse nutzen die editierbare Installation des
+  Hauptcheckouts, `test_r13_offline_setup`).
 * 2026-11-09: Bestätigte **Testfreigabe** echter Messwerte über die GSVmulti-Brücke (UART und Netzwerk), R1.
   Nutzerentscheidung für den Test am 11.11.: wie UART direkt nur nach ausdrücklicher Bestätigung je Lauf
   (`output = {transport: uart|tcp, acknowledge_unaccepted: true}`), **keine Abnahme, keine Messfreigabe**
