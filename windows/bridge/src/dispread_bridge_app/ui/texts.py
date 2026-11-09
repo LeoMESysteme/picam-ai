@@ -19,6 +19,10 @@ from .port import JournalEntry, UiContext
 APP_TITLE = 'GSVmulti-Brücke'
 DUT_LOCK_LINE = 'DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei'
 DUT_LOCK_DEFAULT_SEE = DUT_LOCK_LINE
+TEST_RELEASE_LINE = ('Testfreigabe – nicht abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; '
+                     'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.')
+TEST_RELEASE_HINT = ('Der Pi-Bediener hat echte Werte ausdrücklich zum Test freigegeben. Das ist keine Abnahme '
+                     'und kein Nachweis des GSVmulti-Empfangs.')
 NO_PI = 'Kein Pi gekoppelt · Weg noch offen'
 SCREEN_READER = {'ok': 'Erfolg:', 'warn': 'Achtung:', 'err': 'Fehler:', 'info': 'Hinweis:',
                  'unclear': 'Unklar:', 'unused': 'Nicht benutzt:'}
@@ -189,7 +193,16 @@ def _unknown(key, name):
 
 
 def _in_locked_run(peer_ok: bool, ctx: UiContext) -> bool:
-    return bool(peer_ok and ctx.run_id and ctx.dut_locked and not ctx.demo and not ctx.waiting_for_run)
+    return bool(peer_ok and ctx.run_id and ctx.dut_locked and not ctx.demo and not ctx.waiting_for_run
+                and not ctx.test_release)
+
+
+def _test_release(readiness: Readiness) -> bool:
+    return readiness.peer == 'authenticated' and readiness.output == 'test_release'
+
+
+def _values(n: int) -> str:
+    return f'{n} {"Wert" if n == 1 else "Werte"}'
 
 
 def _worker_active_failure(readiness: Readiness, worker: WorkerStatus | None) -> str | None:
@@ -217,6 +230,8 @@ def headline(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) 
     if peer == 'authenticated':
         if worker is not None and not worker.output_ready and worker.state not in ('idle', 'starting', 'stopped'):
             return Headline('Verbunden – Übertragung nicht bereit', 'warn')
+        if _test_release(readiness):
+            return Headline(f'Verbunden – Lauf {ctx.run_id or "?"}, Testfreigabe aktiv', 'warn')
         if ctx.release and not ctx.dut_locked and not ctx.demo:
             return Headline(f'Verbunden – Lauf {ctx.run_id or "?"} wird übertragen', 'ok')
         if ctx.demo:
@@ -245,6 +260,8 @@ def head_title(ctx: UiContext) -> tuple[str, str]:
 
 def dut_line(ctx: UiContext) -> tuple[str, str]:
     """Die Sperrzeile ist in jedem Zustand sichtbar."""
+    if ctx.test_release:
+        return TEST_RELEASE_LINE, 'warn'
     if ctx.release and not ctx.dut_locked:
         return ctx.release, 'ok'
     return DUT_LOCK_LINE, 'warn'
@@ -310,6 +327,8 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
         out = ChipView('output', 'Ausgabe', 'Wartet auf Lauf', 'info')
     elif readiness.output == 'ended':
         out = ChipView('output', 'Ausgabe', 'Lauf beendet', 'info', 'Verbindung besteht weiter')
+    elif _test_release(readiness):
+        out = ChipView('output', 'Ausgabe', 'Testfreigabe', 'warn', 'nicht abgenommen')
     elif readiness.output == 'blocked':
         out = (ChipView('output', 'Ausgabe', 'DUT gesperrt', 'warn') if readiness.next_action == 'dut_release_blocked'
                else ChipView('output', 'Ausgabe', 'Gesperrt (Pi)', 'warn', 'Sperrgrund vom Pi'))
@@ -325,7 +344,7 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
         out = ChipView('output', 'Ausgabe', 'DUT gesperrt', 'warn')
     else:
         out = _unknown('output', 'Ausgabe')
-    hints = {'Freigegeben': 'Dieser Zustand existiert erst nach der Windows-Abnahme.',
+    hints = {'Testfreigabe': TEST_RELEASE_HINT, 'Freigegeben': 'Dieser Zustand existiert erst nach der Windows-Abnahme.',
              'Wartet auf Lauf': 'Die Brücke startet keinen Lauf.',
              'DUT gesperrt': 'Die Brücke gibt nichts frei und startet keine Messung.',
              'Demo-Werte': 'Nicht für Kalibrierungen verwenden.'}
@@ -348,6 +367,11 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                       'Pi antwortet nicht' if readiness.peer == 'backoff' else '')
     elif ctx.waiting_for_run:
         fw = ChipView('forward', 'Weitergabe', 'Keine Weitergabe', 'info', 'kein Lauf')
+    elif _test_release(readiness) and readiness.com == 'driver_ready':
+        extra = f' · {ctx.omitted} ausgelassen (ungültig/veraltet)' if ctx.omitted else ''
+        fw = ChipView('forward', 'Weitergabe',
+                      f'{_values(ctx.forwarded)} an {ctx.bridge_port or "den Port"} übergeben', 'warn',
+                      'vom Port angenommen' + extra)
     elif readiness.com == 'driver_ready' and (ctx.demo or (ctx.release and not ctx.dut_locked)):
         fw = ChipView('forward', 'Weitergabe', 'Bestätigt', 'info', 'vom Port angenommen'
                       if not ctx.demo else 'Demo-Werte vom Port angenommen')
@@ -356,9 +380,12 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     else:
         fw = _unknown('forward', 'Weitergabe')
     fw = ChipView(fw.key, fw.name, fw.word, fw.tone, fw.sub,
-                  ports + (('Letzte Quittung', ctx.last_ack),),
+                  ports + (('Letzte Quittung', ctx.last_ack),)
+                  + ((('Ausgelassen (ungültig/veraltet)', str(ctx.omitted)),) if _test_release(readiness) else ()),
                   '„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'
                   if fw.word == 'Bestätigt' else
+                  'Übergeben heißt: der Windows-Port hat die Daten angenommen – nicht, dass GSVmulti sie empfangen hat.'
+                  if _test_release(readiness) else
                   'Solange die DUT-Ausgabe gesperrt ist, schreibt die Brücke keine Messwerte an COM.')
     # GSVmulti: grün nur mit Testnachweis
     if ctx.receipt is not None and ctx.receipt.proven:
@@ -463,6 +490,8 @@ def event_entry(event: BridgeEvent, ctx: UiContext | None = None, now: str = '')
         outcome = (event.detail or {}).get('outcome')
         if outcome in ('unknown', 'stopped'):
             return JournalEntry(now, 'Weitergabe unklar', 'nicht wiederholt', tone='warn', fault=True)
+        if outcome == 'omitted':
+            return JournalEntry(now, 'Wert ausgelassen', 'ungültig oder veraltet – nichts an COM geschrieben', tone='warn')
         if outcome == 'idle':
             return JournalEntry(now, 'Wartet auf Messlauf', 'kein Wert vorhanden', tone='info')
         if outcome == 'ended':

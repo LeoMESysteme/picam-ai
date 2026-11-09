@@ -57,6 +57,13 @@ STATES: dict[str, tuple] = {
                                '(Abnahme-ID: Platzhalter)', last_ack='COM-Weitergabe bestätigt (Bild 18342) – '
                                                                        'kein GSVmulti-Empfangsnachweis',
                                switch_locked=True)),
+    'B1tr': (replace(_OK, output='test_release', next_action=None), WorkerStatus('running', True, True, None, demo_only=False),
+             replace(_BASE, test_release=True, forwarded=128, omitted=5,
+                     last_ack='COM-Weitergabe bestätigt – kein GSVmulti-Empfangsnachweis',
+                     journal=(J('14:41:09', 'Wert ausgelassen', 'ungültig oder veraltet – nichts an COM geschrieben', tone='warn'),
+                              J('14:40:02', 'Testfreigabe: 128 Werte weitergegeben',
+                                'COM-Weitergabe · nicht abgenommen · kein GSVmulti-Empfangsnachweis', tone='warn'),
+                              J('14:38:11', 'Testfreigabe aktiv (Lauf 7)', 'echte Werte, nicht abgenommen', tone='warn')) + _HEUTE)),
     'B2': (_OK, _RUN, replace(_BASE, waiting_for_run=True, run_id=None)),
     'B3': (replace(_OK, peer='backoff', output='unavailable', com='unknown', next_action='reconnect'),
            None, replace(_BASE, retry_in_s=4, last_report='14:32:20')),

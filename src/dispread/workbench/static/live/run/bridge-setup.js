@@ -65,7 +65,8 @@ export function readinessRows(status) {
     {label: 'Windows-App', value: status.connected ? `verbunden${via ? ` über ${via}` : ''}` : 'nicht verbunden',
       tone: status.connected ? 'ok' : 'pend'},
   ];
-  if (status.release_block) rows.push({label: 'Ausgabe', value: String(status.release_block), tone: 'warn'});
+  if (status.release === 'test_unaccepted') rows.push({label: 'Ausgabe', value: 'Testfreigabe – nicht abgenommen', tone: 'warn'});
+  else if (status.release_block) rows.push({label: 'Ausgabe', value: String(status.release_block), tone: 'warn'});
   return rows;
 }
 

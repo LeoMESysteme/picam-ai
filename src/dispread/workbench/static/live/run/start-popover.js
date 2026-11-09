@@ -3,7 +3,7 @@
 // Ereignis markieren mit Text. Texte, Ablauf und POST-Koerper woertlich aus
 // der alten Live-Seite; window.confirm ist durch openModal ersetzt.
 import {openModal} from '../ui/modal.js';
-import {BAUDRATES, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, TEST_BLOCK, configText,
+import {BAUDRATES, BRIDGE_ACK, BRIDGE_NO_ACK, BRIDGE_NOTE, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, TEST_BLOCK, UART_RATE_NOTE, configText,
   loadChoice, outputBody, saveChoice} from './output.js';
 
 const TEXT = {
@@ -88,7 +88,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     '<label class="f" for="out-tcp">TCP-Port</label>' +
     '<input type="number" id="out-tcp" class="mono" min="1" max="65535" data-part="out-tcp"></details>' +
     '<div class="brow" data-part="out-bridge" hidden><button type="button" data-part="bridge-setup">Brücke einrichten…</button></div>' +
-    `<p class="note warn-t" data-part="out-lock" hidden>${esc(LOCK_NOTICE)}</p>` +
+    `<p class="note" data-part="out-rate" hidden>${esc(UART_RATE_NOTE)}</p>` +
+    '<div data-part="out-release" hidden>' +
+    `<p class="note err-t" data-part="out-release-note">${esc(BRIDGE_NOTE)}</p>` +
+    `<label class="ck"><input type="checkbox" data-part="out-release-ack"> ${esc(BRIDGE_ACK)}</label></div>` +
+    `<p class="note warn-t" data-part="out-lock" hidden>${esc(LOCK_NOTICE)} ${esc(BRIDGE_NO_ACK)}</p>` +
     '<p class="note" data-part="out-ro" hidden></p></fieldset>' +
     `<details class="fold" data-part="test" hidden><summary>${esc(TEXT.testSummary)}</summary>` +
     `<label class="ck"><input type="checkbox" data-part="override"> ${esc(TEXT.testLabel)}</label></details>` +
@@ -108,7 +112,10 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     const mode = choice();
     part('out-serial').hidden = mode !== 'serial';
     part('out-tcpbox').hidden = mode !== 'tcp';
-    part('out-lock').hidden = !['uart', 'tcp'].includes(mode);
+    const bridge = ['uart', 'tcp'].includes(mode) && !running();
+    part('out-release').hidden = !bridge;
+    part('out-rate').hidden = mode !== 'uart' || running();
+    part('out-lock').hidden = !bridge || part('out-release-ack').checked;
     part('out-bridge').hidden = !['uart', 'tcp'].includes(mode) || !onBridgeSetup;
   };
   const setChoice = (key) => { part(`path-${key}`).checked = true; showOutput(); };
@@ -134,6 +141,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   };
   part('override').addEventListener('change', () => { showError(''); syncTest(); refresh(); });
   part('out-ack').addEventListener('change', () => { showError(''); refresh(); });
+  part('out-release-ack').addEventListener('change', () => { showError(''); showOutput(); refresh(); });
   for (const [key] of PATHS) {
     part(`path-${key}`).addEventListener('change', () => { saveChoice(key); showOutput(); showError(''); refresh(); });
   }
@@ -154,7 +162,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       status = next;
       // Jeder neue Vorschlag bzw. jede neue Sitzung verlangt einen neuen Testmodus-Haken.
       const key = `${next?.session_id}|${next?.setup?.proposal_revision ?? ''}`;
-      if (key !== resetKey) { resetKey = key; part('override').checked = false; part('out-ack').checked = false; }
+      if (key !== resetKey) { resetKey = key; part('override').checked = false; part('out-ack').checked = false; part('out-release-ack').checked = false; showOutput(); }
       // Im Lauf schreibgeschuetzt und aus status.output.config vorbelegt.
       const live = running();
       for (const el of part('output').querySelectorAll('input, select')) el.disabled = Boolean(live);
@@ -216,8 +224,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
         const body = {test_override: override, reference: part('reference').checked,
           norm_schedule: schedule || null, diagnostics: part('diagnostics').checked,
           output: outputBody(mode, {port: part('out-port').value, baudrate: part('out-baud').value,
-            prefix: part('out-prefix').value, tcpPort: part('out-tcp').value, ack: part('out-ack').checked})};
+            prefix: part('out-prefix').value, tcpPort: part('out-tcp').value,
+            ack: mode === 'serial' ? part('out-ack').checked : part('out-release-ack').checked && !override})};
         part('out-ack').checked = false;
+        part('out-release-ack').checked = false;
+        showOutput();
         return onStart ? await onStart(body) : await client.post('/live/run/start', body);
       } finally {
         busy = false;

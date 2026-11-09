@@ -5,6 +5,17 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-09: **Testfreigabe echter Werte über die Brücke: Oberfläche (R2).** Werkbank `/live`: bei „UART über
+  Brücke“/„Netzwerk über Brücke“ Hinweis (`BRIDGE_NOTE`, per Test gegen `BRIDGE_RELEASE_NOTE` abgeglichen) und
+  Haken „Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe“; ohne Haken startet der
+  Lauf gesperrt wie bisher (nicht blockiert, anders als UART direkt), mit Haken sendet der POST
+  `acknowledge_unaccepted: true`; Testmodus nie. Dock, Inspektor, Statusleiste und Bridge-Dialog zeigen bei
+  `release == "test_unaccepted"` „Testfreigabe – nicht abgenommen“ (Warn-Ton) statt „gesperrt“; Hinweis zur
+  UART-Rate (3–4 Werte/s bei 115 200 Baud). Windows-App: `output == "test_release"` → Ausgabe „Testfreigabe“,
+  Weitergabe „n Werte an <Port> übergeben“ (Achtung-Ton, nie grün), `omitted`-Zähler, Kopfsatz, Warnzeile statt
+  Sperrzeile, Journal („Testfreigabe aktiv (Lauf n)“, „Ausgabe wieder gesperrt“, „Wert ausgelassen“). Die
+  Info „GSVmulti erhält absichtlich keine Messwerte“ nur noch bei gesperrt. `TESTLAUF.md` F2. Nicht abgenommen,
+  nicht auf Windows-Hardware geprüft.
 * 2026-11-09: **OQ-61 Abbau des alten Controllers, Schritte S1, S2, S4.** Audit in
   `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`. S1/S2: Bedienertexte (`REASONS`,
   `LIVE_CAUSE_TEXT`, `live_cause`, `DISPLAY_DEFECT_HINT`) nach `dispread/live/texts.py`, Erkennung

@@ -5,7 +5,7 @@
 import {trackingHintText} from '../model.js';
 import {dec, esc, grp} from '../shell.js';
 import {referenceText} from './result.js';
-import {MARKER, configText, isOff, outputLines, outputTone} from './output.js';
+import {configText, markerText, isOff, outputLines, outputTone} from './output.js';
 import {comparisonRows, planText, referenceLine} from './dock.js';
 
 export const RUN_TABS = ['Wert', 'Ursachen', 'Nachführung', 'Referenz'];
@@ -136,8 +136,8 @@ export function outputInspectorHTML(output) {
   const lines = outputLines(output);
   const tone = outputTone(output);
   const cfg = configText(output);
-  return `<div class="blk" data-part="output"><h4>GSVmulti-Ausgabe<span>${isOff(output) ? '' : sq(tone || 'ok')}${output?.transport === 'serial'
-    ? ` <span class="tag">${MARKER}</span>` : ''}</span></h4>` +
+  return `<div class="blk" data-part="output"><h4>GSVmulti-Ausgabe<span>${isOff(output) ? '' : sq(tone || 'ok')}${markerText(output)
+    ? ` <span class="tag">${esc(markerText(output))}</span>` : ''}</span></h4>` +
     lines.map((line, i) => `<p class="${i === 0 && tone ? `${tone}-t` : i ? 'note' : ''} wrap">${esc(line)}</p>`).join('') +
     (cfg ? `<dl class="kv2"><dt>Verbindung</dt><dd class="wrap">${esc(cfg)}</dd>` +
       `<dt>Abnahme</dt><dd>${esc(output.acceptance || '–')}</dd></dl>` : '') + '</div>';

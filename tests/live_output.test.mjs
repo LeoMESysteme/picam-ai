@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {outputBody, outputItem, outputTone, outputView, loadChoice, saveChoice, SERIAL_NOTE, LOCK_NOTICE}
+import {outputBody, outputItem, outputTone, outputView, loadChoice, saveChoice, SERIAL_NOTE, LOCK_NOTICE, BRIDGE_NOTE, markerText}
   from '../src/dispread/workbench/static/live/run/output.js';
 
 const bridge = (transport, state, extra = {}) => ({transport, state, config: {}, error: null,
@@ -71,4 +71,28 @@ test('Wahl wird gemerkt, kaputter Speicher stoert nicht', () => {
   const broken = {getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); }};
   assert.equal(loadChoice(broken), 'off');
   saveChoice('uart', broken);
+});
+
+const released = (transport, state, extra = {}) => bridge(transport, state, {release: 'test_unaccepted', release_block: null,
+  release_note: BRIDGE_NOTE, ...extra});
+
+test('Testfreigabe: Hinweis woertlich, Marker, Warn-Ton, keine Sperrzeile', () => {
+  const view = outputView(released('tcp', 'bridge_connected'));
+  assert.ok(view.includes(BRIDGE_NOTE));
+  assert.doesNotMatch(view, /DUT-Ausgabe gesperrt/);
+  assert.equal(outputTone(released('tcp', 'bridge_connected')), 'warn');
+  assert.equal(outputTone(released('uart', 'audit_failed')), 'err');
+  const item = outputItem(released('uart', 'waiting'));
+  assert.match(item.html, /Testfreigabe – nicht abgenommen/);
+  assert.doesNotMatch(item.html, />gesperrt</);
+  assert.equal(markerText(released('tcp', 'waiting')), 'Testfreigabe – nicht abgenommen');
+  assert.equal(markerText(bridge('tcp', 'waiting')), null);
+  assert.match(outputItem(bridge('tcp', 'waiting')).html, />gesperrt</);
+});
+
+test('Testfreigabe: POST-Koerper nur mit Haken', () => {
+  assert.deepEqual(outputBody('uart', {ack: true}), {transport: 'uart', acknowledge_unaccepted: true});
+  assert.deepEqual(outputBody('tcp', {tcpPort: '5001', ack: true}), {transport: 'tcp', tcp_port: 5001, acknowledge_unaccepted: true});
+  assert.deepEqual(outputBody('uart', {ack: false}), {transport: 'uart'});
+  assert.deepEqual(outputBody('off', {ack: true}), {transport: 'off'});
 });

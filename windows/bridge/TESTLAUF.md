@@ -163,6 +163,27 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
     * **App beenden:** „Beenden …“ im Fuß oder Tray-Menü; Rückfrage „Brücke beenden?“; Beenden trennt, „Der Lauf auf
       dem Pi läuft weiter.“
 
+## F2. Echte Werte (Testfreigabe)
+
+Nur nach F. und nur bewusst: Die Testfreigabe sendet **echte** Werte an GSVmulti. Sie ist keine Abnahme.
+Die EXE muss aus dem Stand ab R1 gebaut sein (ältere Stände lehnen die Testfreigabe fail-closed ab).
+
+19a. Werkbank: Lauf neu einrichten, im Start-Popover Weg **„Netzwerk über Brücke“** (oder „UART über Brücke“)
+    wählen. Es erscheint der Hinweis „Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe …“.
+    **Haken setzen:** „Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe“, dann
+    Lauf starten. Ohne Haken startet der Lauf gesperrt wie in F.
+19b. Erwartet Werkbank: Dock/Statusleiste zeigen „Testfreigabe – nicht abgenommen“ (Warn-Ton, kein „gesperrt“).
+    Erwartet App: Kopfsatz „Verbunden – Lauf n, Testfreigabe aktiv“; Ausgabe „Testfreigabe / nicht abgenommen“;
+    Weitergabe „n Werte an COMx übergeben / vom Port angenommen“ (Zähler steigt); dauerhafte Zeile
+    „Testfreigabe – nicht abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; GSVmulti zeigt dann
+    den letzten Wert unmarkiert weiter.“; die Info „GSVmulti erhält absichtlich keine Messwerte“ entfällt.
+    Das Journal führt „Testfreigabe aktiv (Lauf n)“. **In GSVmulti erscheinen nur gültige Werte**; ungültige oder
+    veraltete werden ausgelassen (App: „n ausgelassen (ungültig/veraltet)“, Journal „Wert ausgelassen“) – GSVmulti
+    zeigt dann den letzten Wert unmarkiert weiter. Das ist erwartet; am Messplatz darauf achten.
+19c. Lauf stoppen: App „Ausgabe wieder gesperrt“ bzw. „Lauf beendet“.
+19d. **UART-Rate:** „UART über Brücke“ trägt bei 115 200 Baud nur etwa 3–4 Werte/s (Messung R1: gut jeder zweite
+    Wert bei 10 Hz, Latenz ≈ 150 ms). Für höhere Raten **Netzwerk** verwenden.
+
 ## G. Was der Lauf belegt und was nicht
 
 **Er belegt höchstens:** App startet; Kopplung und Verbindung mit

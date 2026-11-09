@@ -73,3 +73,8 @@ test('Fingerabdruck: Kleinbuchstaben, vier Gruppen je Zeile, nie gekuerzt', () =
   assert.deepEqual(fingerprintLines('AB:12:CD:34:EF:56:78:90:11'), ['ab12 cd34 ef56 7890', '11']);
   assert.deepEqual(fingerprintLines(null), []);
 });
+
+test('Bereitschaft: Testfreigabe ersetzt den Sperrtext', () => {
+  const rows = readinessRows({pi_id: 'p', connected: true, transport: 'network', release: 'test_unaccepted', release_block: null});
+  assert.deepEqual(rows[2], {label: 'Ausgabe', value: 'Testfreigabe – nicht abgenommen', tone: 'warn'});
+});

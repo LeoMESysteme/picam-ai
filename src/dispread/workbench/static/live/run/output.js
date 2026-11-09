@@ -11,6 +11,13 @@ export const LOCK_NOTICE = 'DUT-Ausgabe gesperrt: Windows-Abnahme fehlt. Verbind
 export const SERIAL_NOTE = 'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; ' +
   'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
 export const SERIAL_ACK = 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe';
+// Testfreigabe ueber die Bruecke (R1/R2): wortgleich BRIDGE_RELEASE_NOTE (dispread.live.output), per Test abgeglichen.
+export const BRIDGE_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. Ungültige und veraltete Werte werden ' +
+  'ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
+export const BRIDGE_ACK = 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe';
+export const BRIDGE_NO_ACK = 'Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.';
+export const UART_RATE_NOTE = 'UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s; für höhere Raten Netzwerk verwenden.';
+export const RELEASE_TAG = 'Testfreigabe – nicht abgenommen';
 export const TEST_BLOCK = 'Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.';
 export const UNCONFIRMED = 'GSVmulti-Empfang unbestätigt.';
 export const MARKER = 'nicht abgenommen';
@@ -23,6 +30,7 @@ const STATES = {disconnected: 'Verbindung unterbrochen – lokaler Lauf läuft w
 const OUTCOMES = {failed: 'fehlgeschlagen', expired: 'veraltet – nicht weitergegeben', unconfirmed: 'unbestätigt'};
 
 export const isOff = (output) => !output || output.transport === 'off';
+export const isReleased = (output) => !isOff(output) && output.release === 'test_unaccepted';
 export const stateWord = (output) => STATES[output?.state] || output?.state || 'Verbindungszustand unbekannt';
 
 // Kurzform fuer die Statusleiste: "<Weg> · <Zustand>" (Zustand ohne Erklaerzusatz).
@@ -34,6 +42,7 @@ export function outputTone(output) {
   if (isOff(output)) return '';
   if (['failed', 'audit_failed'].includes(output.state)) return 'err';
   if (['disconnected', 'waiting'].includes(output.state)) return 'warn';
+  if (isReleased(output)) return 'warn';
   return '';
 }
 
@@ -50,6 +59,8 @@ export function outputLines(output) {
     output.release_note, output.release_block, output.error, attempt,
     ack && output.ack_scope ? `Geltung der Quittung: ${output.ack_scope}` : null, UNCONFIRMED].filter(Boolean);
 }
+// Marker fuer Dock/Inspektor: UART direkt und Testfreigabe tragen "nicht abgenommen".
+export const markerText = (output) => output?.transport === 'serial' ? MARKER : isReleased(output) ? RELEASE_TAG : null;
 export const outputView = (output) => outputLines(output).join('\n');
 
 // Konfiguration im Lauf, schreibgeschuetzt (config aus status.output).
@@ -67,8 +78,10 @@ export function outputBody(choice, fields = {}) {
     return {transport: 'serial', port: fields.port, baudrate: Number(fields.baudrate), prefix: fields.prefix,
       acknowledge_unaccepted: fields.ack === true};
   }
-  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort)};
-  if (choice === 'uart') return {transport: 'uart'};
+  // Brueckenwege: Testfreigabe nur mit gesetztem Haken, sonst bleibt das Feld weg (Ausgabe gesperrt).
+  const release = fields.ack === true ? {acknowledge_unaccepted: true} : {};
+  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort), ...release};
+  if (choice === 'uart') return {transport: 'uart', ...release};
   return {transport: 'off'};
 }
 
@@ -87,7 +100,10 @@ export function outputItem(output, esc = String) {
   if (isOff(output)) return {hidden: true, html: ''};
   const way = `GSVmulti: ${NAMES[output.transport] || output.transport} · `;
   const mark = output.transport === 'serial' ? ` <span class="tag">${MARKER}</span>`
+    : isReleased(output) ? ` <span class="tag warn" title="${esc(output.release_note || BRIDGE_NOTE)}">${RELEASE_TAG}</span>`
     : ` <span class="tag" title="${esc(LOCK_NOTICE)}">gesperrt</span>`;
-  return {hidden: false, cls: outputTone(output), html: `<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${mark}`,
+  // Testfreigabe: Marker zuerst, damit die Kuerzung der Leiste ihn nie abschneidet.
+  const lead = isReleased(output) ? `${mark.trim()} ` : '';
+  return {hidden: false, cls: outputTone(output), html: `${lead}<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${lead ? '' : mark}`,
     title: outputView(output)};
 }

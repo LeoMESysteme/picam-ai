@@ -59,6 +59,9 @@ class UiContext:
     demo: bool = False
     waiting_for_run: bool = False
     retry_in_s: int | None = None
+    test_release: bool = False              # Testfreigabe des Pi aktiv (R1): echte Werte, nicht abgenommen
+    forwarded: int = 0                      # Testfreigabe: an den Port übergebene Werte dieses Laufs
+    omitted: int = 0                        # Testfreigabe: ausgelassene (ungültige/veraltete) Werte
     com_issue: str | None = None            # busy | write_failed | unclear (nur Demo)
     bridge_port: str | None = None      # echter Wert vom Portpaar; None = nicht festgelegt
     gsv_port: str | None = None

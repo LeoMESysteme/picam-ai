@@ -132,3 +132,66 @@ def test_setup_spec_fills_ports_from_context_not_examples():
     assert 'COM4' not in repr(spec) and '{bridge_port}' not in repr(spec)
     spec = texts.setup_spec(UiContext(bridge_port='COM9', gsv_port='COM8', setup=SetupState(4, 'E4')))
     assert 'COM9' in repr(spec) and 'COM8' in repr(spec)
+
+
+# ---- Testfreigabe (R2) --------------------------------------------------------
+def _tr(**kw):
+    r = Readiness('ready', 'not_required', 'authenticated', 'test_release', 'driver_ready', 'unconfirmed', None)
+    w = WorkerStatus('running', True, True, None, demo_only=False)
+    c = replace(STATES['B1'][2], test_release=True, run_id='7', bridge_port='COM12', gsv_port='COM13',
+                forwarded=3, omitted=0, **kw)
+    return r, w, c
+
+
+def test_test_release_chips_are_warn_never_ok():
+    r, w, c = _tr()
+    cv = {x.key: x for x in texts.chips(r, w, c)}
+    assert (cv['output'].word, cv['output'].tone, cv['output'].sub) == ('Testfreigabe', 'warn', 'nicht abgenommen')
+    assert cv['forward'].word == '3 Werte an COM12 übergeben'
+    assert cv['forward'].tone == 'warn' and cv['forward'].sub == 'vom Port angenommen'
+    assert cv['gsv'].tone != 'ok'
+    assert all(x.tone != 'ok' for x in (cv['output'], cv['forward'], cv['gsv']))
+
+
+def test_test_release_omitted_counter_and_singular():
+    r, w, c = _tr()
+    cv = {x.key: x for x in texts.chips(r, w, replace(c, forwarded=1, omitted=4))}
+    assert cv['forward'].word == '1 Wert an COM12 übergeben'
+    assert '4 ausgelassen (ungültig/veraltet)' in cv['forward'].sub
+
+
+def test_test_release_headline_line_and_no_lock_bar():
+    r, w, c = _tr()
+    h = texts.headline(r, w, c)
+    assert (h.text, h.tone) == ('Verbunden – Lauf 7, Testfreigabe aktiv', 'warn')
+    text, tone = texts.dut_line(c)
+    assert tone == 'warn' and text.startswith('Testfreigabe – nicht abgenommen, keine Messfreigabe.')
+    assert 'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.' in text
+    bar = texts.action_bar(r, w, c)
+    assert bar is None or 'absichtlich keine Messwerte' not in bar.text + bar.title
+
+
+def test_locked_run_keeps_info_bar_and_lock_line():
+    r, w, c = STATES['B1']
+    assert texts.dut_line(c)[0] == texts.DUT_LOCK_LINE
+    bar = texts.action_bar(r, w, c)
+    assert bar is not None and 'absichtlich keine Messwerte' in bar.text
+
+
+def test_test_release_worker_code_overrules():
+    r, _w, c = _tr()
+    w = WorkerStatus('blocked', False, False, 'unknown_delivery', demo_only=False)
+    assert texts.headline(r, w, c).tone == 'err'
+    cv = {x.key: x for x in texts.chips(r, w, c)}
+    assert cv['output'].tone == 'err' and cv['forward'].tone == 'err'
+
+
+def test_unknown_new_output_value_stays_unknown():
+    r, w, c = _tr()
+    cv = {x.key: x for x in texts.chips(replace(r, output='freigabe_neu'), w, replace(c, test_release=False, dut_locked=False))}
+    assert (cv['output'].word, cv['output'].tone) == ('Unbekannt', 'info')
+
+
+def test_omitted_exchange_journal_entry():
+    e = texts.event_entry(BridgeEvent('exchange', 'omitted', None, None, {'outcome': 'omitted'}), now='10:00:00')
+    assert e.title == 'Wert ausgelassen' and e.tone == 'warn'

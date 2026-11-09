@@ -1950,6 +1950,72 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   expect(errors).toEqual([]);
 });
 
+async function startBody(page: Page, pop: Locator) {
+  const sent = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  return (await sent).postDataJSON().output;
+}
+
+test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zustände', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  const ack = pop.getByRole('checkbox', { name: 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe' });
+  await expect(ack).toBeHidden();
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-release-note"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe.');
+  await expect(pop.locator('[data-part="out-rate"]')).toHaveText('UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s; für höhere Raten Netzwerk verwenden.');
+  await expect(ack).not.toBeChecked();
+  await expect(pop.locator('[data-part="out-lock"]')).toContainText('Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.');
+  await noOverflow(page);
+  // Ohne Haken: Start ist nicht blockiert, das Feld fehlt.
+  expect(await startBody(page, pop)).toEqual({ transport: 'uart' });
+  // Netzwerk mit Haken; der Hinweis zur UART-Rate gehört nur zu UART.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-rate"]')).toBeHidden();
+  await ack.check();
+  await expect(pop.locator('[data-part="out-lock"]')).toBeHidden();
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-popover.png' });
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, acknowledge_unaccepted: true });
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-part="output"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen');
+  await expect(left.locator('[data-part="output"]')).not.toContainText('DUT-Ausgabe gesperrt');
+  await expect(left.locator('[data-part="output"] .tag')).toHaveText('Testfreigabe – nicht abgenommen');
+  const bar = page.getByRole('contentinfo').locator('[data-item="output"]');
+  await expect(bar.locator('.tag')).toHaveText('Testfreigabe – nicht abgenommen');
+  await expect(bar).toHaveClass(/warn/);
+  await noOverflow(page);
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-dock.png' });
+  // Neue Sitzung verlangt den Haken neu.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await expect(ack).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testmodus sendet nie die Testfreigabe', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/__test__/state', { state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
+    profile: { confirmed_by: 'L. Hentschke' }, setup: { proposal_revision: 'rev-1' } });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByRole('checkbox', { name: /^Testfreigabe: echte Werte/ }).check();
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /Lesesperre übergehen/ }).check();
+  await expect(pop.getByRole('radio', { name: 'Aus' })).toBeChecked();
+  await expect(pop.locator('[data-part="out-release"]')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('Ausgabe: Testmodus sperrt die Ausgabewahl und zeigt sie als Aus', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1280, height: 800 });

@@ -621,3 +621,16 @@ def test_controller_notice_error_is_raised_as_app_error(real):
     c, _ = real()
     with pytest.raises(AppError):
         c.setup_step('next')
+
+
+def test_b1tr_shows_test_release_and_shot(fake_win):
+    from pathlib import Path
+    fc, w = fake_win('B1tr')
+    QTest.qWait(50)
+    texts_all = ' '.join(lbl.text() for lbl in w.findChildren(QLabel))
+    assert 'Testfreigabe aktiv' in texts_all and 'nicht abgenommen' in texts_all
+    assert '128 Werte an COM4 übergeben' in texts_all
+    assert 'GSVmulti erhält absichtlich keine Messwerte' not in texts_all
+    out = Path('/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots')
+    if out.is_dir():
+        w.grab().save(str(out / 'r2-app-B1-testfreigabe.png'))

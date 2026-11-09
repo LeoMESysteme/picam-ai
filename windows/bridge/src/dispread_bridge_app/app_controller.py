@@ -168,6 +168,7 @@ class AppController:
         self._written = 0
         self._com_issue: str | None = None
         self._last_ack = 'keine'
+        self._tr_active, self._tr_written, self._tr_omitted = False, 0, 0
         self._last_contact = ''
         self._exited = False
         # persistiert
@@ -324,6 +325,7 @@ class AppController:
 
     def _note(self, event: BridgeEvent) -> None:
         from .ui import texts
+        run_now = self._run_id_now() if (event.detail or {}).get('release') else None   # ausserhalb der Sperre
         with self._lock:
             now = datetime.now().strftime('%H:%M:%S')
             if event.kind in ('connection', 'exchange'):
@@ -337,7 +339,21 @@ class AppController:
                 elif peer != 'connecting':
                     self._bo_n = 0
             outcome = (event.detail or {}).get('outcome') if event.kind == 'exchange' else None
+            test_release = (event.detail or {}).get('release') == 'test_unaccepted'
             if event.kind == 'exchange':
+                if test_release and not self._tr_active:
+                    self._tr_active, self._tr_written, self._tr_omitted = True, 0, 0
+                    self._counter_entry = None
+                    self._entries.appendleft(JournalEntry(now, f'Testfreigabe aktiv (Lauf {run_now or "?"})',
+                                                          'echte Werte, nicht abgenommen', tone='warn'))
+                elif not test_release and self._tr_active:
+                    self._tr_active = False
+                    self._counter_entry = None
+                    self._entries.appendleft(JournalEntry(now, 'Ausgabe wieder gesperrt', tone='info'))
+                if test_release and outcome == 'written':
+                    self._tr_written += 1
+                elif test_release and outcome == 'omitted':
+                    self._tr_omitted += 1
                 if outcome == 'written':
                     self._written += 1
                     self._com_issue = None
@@ -351,9 +367,12 @@ class AppController:
                 self._last_exchange = outcome
             if outcome == 'written':
                 # Eine laufende Zaehlerzeile, die aktualisiert statt neu angehaengt wird.
-                n = self._written
-                entry = JournalEntry(now, f'Demo: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
-                                     'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info')
+                n = self._tr_written if test_release else self._written
+                entry = (JournalEntry(now, f'Testfreigabe: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
+                                      'COM-Weitergabe · nicht abgenommen · kein GSVmulti-Empfangsnachweis', tone='warn')
+                         if test_release else
+                         JournalEntry(now, f'Demo: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
+                                      'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info'))
                 if self._counter_entry is not None and self._entries and self._entries[0] is self._counter_entry:
                     self._entries[0] = entry
                 else:
@@ -779,9 +798,15 @@ class AppController:
         if self._profile is None or pi_id != self._profile.pi_id:
             raise AppError('profile_required')      # nur ein Profil gespeichert: anderes Profil öffnen
 
+    def _run_id_now(self):
+        try:
+            return self._manager.data_link().run_id if self._manager is not None else None
+        except Exception:
+            return None
+
     def _run_active(self, r: Readiness) -> bool:
         """Ein Lauf des Pi (Messlauf oder fremde Demo), den wir nicht selbst gestartet haben."""
-        return r.peer == 'authenticated' and r.output in ('blocked', 'demo_only') and not self._demo_started
+        return r.peer == 'authenticated' and r.output in ('blocked', 'demo_only', 'test_release') and not self._demo_started
 
     def _safe_ports(self):
         try:
@@ -835,6 +860,7 @@ class AppController:
                 run_id = None
         route = {'network': 'Netzwerk', 'uart': 'UART (USB-Adapter)'}.get(self._route or '', None)
         demo = authenticated and r.output == 'demo_only'
+        test_release = authenticated and r.output == 'test_release'
         with self._lock:
             journal = tuple(self._entries)
             com_issue = self._com_issue if demo else None
@@ -844,7 +870,9 @@ class AppController:
                 mode='operate' if (self._setup_done or self._overview) else 'setup',
                 setup=SetupState(self._step, variant, data),
                 dut_locked=True,                         # nie freigegeben: Abnahme fehlt (OQ-06/OQ-47)
-                demo=demo, waiting_for_run=authenticated and r.output == 'output_off',
+                demo=demo, test_release=test_release,
+                forwarded=self._tr_written if test_release else 0, omitted=self._tr_omitted if test_release else 0,
+                waiting_for_run=authenticated and r.output == 'output_off',
                 com_issue=com_issue,
                 bridge_port=pair.bridge_port if pair else None, gsv_port=pair.gsv_port if pair else None,
                 session_name=None, session_confirmed=self._session_confirmed, receipt=None,

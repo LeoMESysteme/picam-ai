@@ -153,7 +153,7 @@ function stamp(ms) { return new Date(ms).toISOString().replace(/[-:]/g, '').repl
 const ok = (data = {ok: true}) => ({ok: true, error: null, data});
 const fail = (error) => ({ok: false, error, data: {error}});
 
-import {LOCK_NOTICE, SERIAL_NOTE} from '../run/output.js';
+import {BRIDGE_NOTE, LOCK_NOTICE, SERIAL_NOTE} from '../run/output.js';
 
 export function createScenario({clock = () => globalThis.performance.now(), wall = () => Date.now(), base = null} = {}) {
   // phase: idle | setup | failed | ready | confirmed | run | stopped
@@ -402,11 +402,13 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
     const out = outputChoice;
     if (!out) return {transport: 'off', state: 'off'};
     const serial = out.transport === 'serial';
-    const {acknowledge_unaccepted: _ack, transport: _t, ...config} = out;
+    const {acknowledge_unaccepted: ack, transport: _t, ...config} = out;
+    const released = !serial && ack === true;
     return {transport: out.transport, state: phase === 'stopped' ? 'stopped' : serial ? 'serial_ready' : 'waiting',
       config: serial || out.transport === 'tcp' ? config : {port: '/dev/ttyAMA0', baudrate: 115200},
-      error: null, release_block: serial ? null : LOCK_NOTICE, last_ack: null, acceptance: 'fehlt',
-      ack_scope: 'Übungslauf: simuliert, nichts gesendet', ...(serial ? {release_note: SERIAL_NOTE} : {})};
+      error: null, release_block: serial || released ? null : LOCK_NOTICE, last_ack: null, acceptance: 'fehlt',
+      ack_scope: 'Übungslauf: simuliert, nichts gesendet', ...(serial ? {release_note: SERIAL_NOTE} : {}),
+      ...(released ? {release: 'test_unaccepted', release_note: BRIDGE_NOTE} : {})};
   }
 
   // ---- Bild und HUD ----

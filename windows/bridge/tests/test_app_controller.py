@@ -499,3 +499,25 @@ def test_diagnostics_export_contains_flushed_summary(tmp_path, identity):
     out = c.export_diagnostics(tmp_path / 'diag.zip')
     lines = zipfile.ZipFile(out).read('details.jsonl').decode()
     assert 'written_summary' in lines and lines.count('\n') <= 2
+
+
+def _tr_ev(outcome, release=True):
+    from dispread.bridge.types import BridgeEvent
+    detail = dict(outcome=outcome, **({'release': 'test_unaccepted'} if release else {}))
+    return BridgeEvent('exchange', outcome, None, None, detail)
+
+
+def test_test_release_journal_counters_and_transitions(tmp_path):
+    c = make(tmp_path)
+    for _ in range(3):
+        c._emit(_tr_ev('written'))
+    c._emit(_tr_ev('omitted'))
+    c._emit(_tr_ev('written'))
+    titles = [e.title for e in c.context().journal]
+    assert titles[-1].startswith('Testfreigabe aktiv (Lauf ')
+    assert 'Testfreigabe: 4 Werte weitergegeben' in titles and 'Wert ausgelassen' in titles
+    assert (c._tr_written, c._tr_omitted) == (4, 1)
+    c._emit(_tr_ev('idle', release=False))
+    assert [e.title for e in c.context().journal[:2]] == ['Wartet auf Messlauf', 'Ausgabe wieder gesperrt']
+    c._emit(_tr_ev('written'))         # neue Freigabe: Zähler beginnen neu
+    assert c._tr_written == 1 and c._tr_omitted == 0

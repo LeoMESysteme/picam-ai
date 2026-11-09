@@ -985,3 +985,17 @@ def test_service_passes_confirmed_test_release_to_paired_publisher(tmp_path, mon
     finally:
         service.stop_run()
         service.close()
+
+
+def test_js_bridge_note_matches_python():
+    """Die JS-Konstante der Werkbank ist wortgleich BRIDGE_RELEASE_NOTE."""
+    import re
+    from pathlib import Path
+
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    js = (Path(__file__).parents[1] / "src/dispread/workbench/static/live/run/output.js").read_text(encoding="utf-8")
+    match = re.search(r"BRIDGE_NOTE = ((?:'[^']*'(?: \+\n\s*)?)+);", js)
+    assert match
+    parts = re.findall(r"'([^']*)'", match.group(1))
+    assert "".join(parts) == BRIDGE_RELEASE_NOTE
