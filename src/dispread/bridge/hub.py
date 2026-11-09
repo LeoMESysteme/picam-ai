@@ -220,7 +220,11 @@ class BridgeHub:
                         raise ValueError('lease mismatch')
                     run_id, state, transport = self._run_id, self._state, self._transport
                     if message['run_id'] != run_id:
-                        if kind in ('poll', 'heartbeat'):
+                        if kind in ('poll', 'heartbeat') or (kind == 'ack' and message['run_id'] == lease.run_id):
+                            # Eine Quittung fuer den Lauf, in dem diese Lease zuletzt war, ueberlebt
+                            # dessen Ende: nicht angenommen (das Angebot ist als "unconfirmed"
+                            # auditiert, abandon_pending), Verbindung bleibt, Client bekommt den neuen
+                            # Laufstand. Fremde Lauf-IDs bleiben ein Fehler.
                             lease.run_id = run_id
                             return self._hello(lease, message['request_id'])
                         raise ValueError('run mismatch')
@@ -243,6 +247,9 @@ class BridgeHub:
                     return {**base, 'type': 'heartbeat'}
                 if state is None or transport not in (None, lease.transport):
                     if kind == 'ack':
+                        if state is None:
+                            # Lauf beendet (Ausgabe abgebaut), Reservierung noch nicht freigegeben.
+                            return self._hello(lease, message['request_id'])
                         raise ValueError('no pending output')
                     return {**base, 'type': 'idle', 'release_block': RELEASE_BLOCK if self._real_run else None}
                 legacy = {k: v for k, v in message.items() if k not in ('pi_id', 'client_id', 'lease_id')}

@@ -169,7 +169,12 @@ class _DataLink:
                         raise ConnectionError('invalid_legacy_request')
                     request = dict(self._base('poll', message['request_id']), lease_id=self.lease_id, run_id=self.run_id)
                     reply = self._exchange(request)
-                    if reply['type'] == 'hello':
+                    # Der Pi kann zwischen Anfrage und Wiederholung erneut wechseln (Ausgabe abgebaut,
+                    # dann Lauf freigegeben): jedes hello nur begrenzt oft nachfuehren, jede Antwort
+                    # bleibt voll validiert (unten); mehr als drei in Folge sind ein Peer-Fehler.
+                    for _ in range(3):
+                        if reply['type'] != 'hello':
+                            break
                         request['run_id'] = self.run_id
                         reply = self._exchange(request)
                     if reply['type'] not in ('record', 'idle', 'ended'):
@@ -190,8 +195,10 @@ class _DataLink:
                     request = dict(message, version=2, pi_id=self.manager.profile.pi_id,
                                    client_id=self.manager.client_id, lease_id=self.lease_id)
                     reply = self._exchange(request)
-                    if reply['type'] != 'idle':
+                    if reply['type'] not in ('idle', 'hello'):
                         raise ConnectionError('peer_invalid')
+                    # hello: der Lauf endete vor der Quittung; der Pi nimmt sie nicht an (sein Audit
+                    # fuehrt das Angebot als unbestaetigt), die Verbindung bleibt.
                     self._offered = None  # drain ACK response; never queue it as the next poll.
                     return
                 raise ConnectionError('invalid_legacy_request')

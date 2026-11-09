@@ -359,3 +359,63 @@ def test_numeric_unknown_survives_sqlite_restart_without_retransmit(tmp_path, id
             rig.worker.stop()
             reopened.close()
     exercise_tls(tmp_path, identity, check)
+
+
+@pytest.mark.parametrize('before_release', [True, False], ids=['run-still-reserved', 'run-released'])
+def test_ack_in_flight_at_run_end_does_not_kill_the_connection(tmp_path, identity, before_release):
+    """Wert angeboten, Lauf endet, dann kommt die Quittung: kein terminaler Verbindungsfehler.
+
+    Die Pi-Seite hat das Angebot beim Laufende als unbestaetigt auditiert (abandon_pending);
+    die verspaetete Quittung wird nicht angenommen, die Verbindung bleibt fuer den naechsten Lauf.
+    """
+    def check(rig):
+        state = rig.bind(demo=True)
+        state.publish(record(1))
+        link = rig.manager.data_link()
+        link.send({'version': 1, 'type': 'poll', 'request_id': 'p1'})
+        offered = link.receive()
+        assert offered['type'] == 'record'
+        rig.hub.unbind_run(state.run_id)
+        if not before_release:
+            rig.hub.release_real_run(state.run_id)
+        link.send({'version': 1, 'type': 'ack', 'request_id': offered['request_id'], 'run_id': offered['run_id'],
+                   'frame_sequence': 1, 'barrier_id': None, 'outcome': 'written'})
+        assert rig.manager.snapshot().peer == 'authenticated'
+        assert rig.manager.data_link() is link
+        link.send({'version': 1, 'type': 'poll', 'request_id': 'p2'})
+        assert link.receive()['type'] in ('idle', 'ended')
+    exercise_tls(tmp_path, identity, check)
+
+
+def test_poll_survives_two_state_changes_between_hello_and_retry(tmp_path, identity):
+    """Ursache des R4-Befunds (connection_failed am Laufende): zwischen unbind_run und release_real_run
+    antwortet der Pi zweimal mit hello (Freigabestand weg, dann Lauf weg). Ein einziger Wiederholversuch
+    endete in peer_invalid; der Client muss mehrere Zustandswechsel hintereinander aufnehmen."""
+    from dispread.bridge.output_state import TEST_RELEASE
+
+    def check(rig):
+        rig.hub.reserve_real_run('run-r')
+        state = OutputState(tmp_path / 'run-r', release=TEST_RELEASE)
+        state.run_id = 'run-r'
+        state.start()
+        rig.hub.bind_run('run-r', state, transport='network')
+        link = rig.manager.data_link()
+        link.send({'version': 1, 'type': 'poll', 'request_id': 'p0'})
+        assert link.receive()['type'] == 'idle'
+        rig.hub.unbind_run('run-r')          # Freigabestand verschwindet, Lauf noch reserviert
+        original, calls = link._exchange, []
+
+        def exchange(request, **kwargs):
+            reply = original(request, **kwargs)
+            calls.append(reply['type'])
+            if len(calls) == 1:
+                assert reply['type'] == 'hello'
+                rig.hub.release_real_run('run-r')   # zweiter Wechsel vor der Wiederholung
+            return reply
+        link._exchange = exchange
+        link.send({'version': 1, 'type': 'poll', 'request_id': 'p1'})
+        assert link.receive()['type'] == 'idle'
+        assert calls[0] == 'hello' and calls[-1] == 'idle'
+        assert rig.manager.snapshot().peer == 'authenticated'
+        state.stop()
+    exercise_tls(tmp_path, identity, check)

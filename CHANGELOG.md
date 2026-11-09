@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-09: **Brücke: kein terminaler `connection_failed` am Laufende (R4-Nachtrag).** Ursache (per Traceback am
+  `connection_failed` belegt, `connection.py` Poll-Pfad): zwischen `unbind_run` und `release_real_run` antwortet der
+  Pi auf einen Poll zweimal mit `hello` (Freigabestand weg, dann Lauf weg); der Client wiederholte nur einmal und
+  brach mit `peer_invalid` ab. Jetzt bis zu drei Wiederholungen, jede Antwort bleibt voll validiert. Zusätzlich
+  (deterministisch nachgestellt, nicht als Ursache des Befunds belegt): eine Quittung, die das Laufende überlebt,
+  wird vom Pi nicht angenommen (Angebot bleibt als `unconfirmed` auditiert), antwortet `hello` statt Fehler, und
+  der Client behält die Verbindung; fremde Lauf-IDs bleiben ein Fehler. Tests: `tests/test_bridge_end_to_end.py`.
 * 2026-11-09: **Testfreigabe: Review-Befunde geschlossen (R4).** Pi-Ausgabe unter Testfreigabe bietet nur
   Datensätze mit `V4L2_MONOTONIC` an (andere: nicht angeboten, Audit `release_time_base_rejected`); Laufstart
   während einer Demo meldet deutsch statt „bridge occupied“ (409, `BridgeOccupied`); `session.json` trägt
