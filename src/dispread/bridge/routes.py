@@ -329,6 +329,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
             await check_authorization()
             lease_id = lease.lease_id
             readiness = hub.prepare("network", client_id)
+            lease.release = readiness.release  # angekuendigter Freigabestand (R1)
             response = dict(
                 version=2,
                 type="hello",

@@ -127,7 +127,10 @@ class SerialTransport:
             while not self._closed.is_set() and time.monotonic() < deadline:
                 if self._messages:
                     return self._messages.pop(0)
-                self._messages.extend(self._reader.feed(self._stream.read(4096)))
+                # pySerial read(n) blocks for n bytes or the timeout: read only
+                # what is waiting (at least one byte), never a fixed 4096 (R1).
+                waiting = getattr(self._stream, 'in_waiting', 0) or 0
+                self._messages.extend(self._reader.feed(self._stream.read(max(1, min(waiting, 4096)))))
         except Exception:
             raise TransportError('uart_peer_unavailable') from None
         raise TransportError('uart_peer_unavailable')

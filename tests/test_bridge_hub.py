@@ -401,3 +401,26 @@ def test_reserved_run_without_bound_output_stays_blocked(tmp_path):
     assert hello['release_block'] == RELEASE_BLOCK and 'release' not in hello
     assert hub.status()['release'] is None
     hub.close()
+
+
+def test_release_change_is_announced_by_hello_before_any_record(tmp_path):
+    # Laufstart: Reservierung vor Publisher-Bindung. Ein Client, der den Lauf
+    # schon gesperrt gesehen hat, bekommt zuerst ein Hello mit Freigabe.
+    hub = BridgeHub('pi', tmp_path)
+    lease = hub.attach('pc', 'network')
+    hub.reserve_real_run('run')
+    first = hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': None})
+    assert first['type'] == 'hello' and first['run_id'] == 'run' and 'release' not in first
+    state = OutputState(tmp_path / 'run', release='test_unaccepted')
+    state.run_id = 'run'
+    hub.bind_run('run', state, transport='network')
+    state.publish(_real(1))
+    announced = hub.exchange(lease.lease_id, request(hub, lease))
+    assert announced['type'] == 'hello' and announced['release'] == 'test_unaccepted'
+    assert hub.exchange(lease.lease_id, request(hub, lease))['type'] == 'record'
+    hub.exchange(lease.lease_id, request(hub, lease, 'ack', frame_sequence=1, barrier_id=None, outcome='written'))
+    hub.unbind_run('run')
+    hub.release_real_run('run')
+    ended = hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': 'run'})
+    assert ended['type'] == 'hello' and ended['run_id'] is None and 'release' not in ended
+    hub.close()

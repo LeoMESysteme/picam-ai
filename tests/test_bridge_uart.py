@@ -386,3 +386,48 @@ def test_uart_pending_store_call_remains_exclusive_after_timeout(ready, identity
         assert hub._uart._token is None and hub._lease is None
     finally:
         release.set()
+
+
+def test_listener_reads_available_bytes_instead_of_waiting_for_full_timeout(tmp_path, identity):
+    """pySerial read(n) blocks until n bytes or timeout; read(4096) cost 100 ms per message (R1)."""
+    import threading
+
+    class PySerialLike(Wire):
+        def __init__(self):
+            super().__init__()
+            self.buffer, self.cv = b'', threading.Condition()
+
+        @property
+        def in_waiting(self):
+            with self.cv:
+                return len(self.buffer)
+
+        def send(self, message, fragmented=False):
+            with self.cv:
+                self.buffer += encode_v2(message)
+                self.cv.notify_all()
+
+        def read(self, count):
+            with self.cv:
+                self.cv.wait_for(lambda: len(self.buffer) >= count, timeout=.1)
+                result, self.buffer = self.buffer[:count], self.buffer[count:]
+                return result
+
+    wire = PySerialLike()
+    hub = BridgeHub(identity.pi_id, tmp_path / 'audit', identity=identity,
+                    pairing_store=PairingStore(tmp_path / 'pairing'), serial_opener=lambda *a, **kw: wire,
+                    port_leases=SerialPortLease(tmp_path / 'locks'))
+    hub.prepare_uart()
+    try:
+        deadline = time.monotonic() + 2
+        while hub.status()['uart_state'] != 'listening':
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        time.sleep(.05)
+        started = time.monotonic()
+        for _ in range(5):  # fuenf Rundlaeufe: mit read(4096) je ~100 ms
+            wire.send(base(identity, 'uart_challenge', nonce=secrets.token_urlsafe(32)))
+            assert wire.receive()['type'] == 'uart_proof'
+        assert time.monotonic() - started < .25
+    finally:
+        hub.close()

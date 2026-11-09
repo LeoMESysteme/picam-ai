@@ -437,3 +437,56 @@ def test_changed_certificate_same_pi_never_receives_saved_token_before_fresh_pai
             await runner.cleanup()
             hub.close()
     asyncio.run(check())
+
+
+def test_uart_receive_reads_available_bytes_instead_of_waiting_for_full_timeout(tmp_path):
+    """pySerial read(n) blocks until n bytes or timeout; read(4096) cost 100 ms per message (R1)."""
+    import base64
+    import threading
+    import time
+
+    from dispread_bridge_app.transports import SerialTransport
+    from dispread_bridge_app.types import DeviceInfo
+
+    from dispread.bridge.protocol import canonical_uart_hello, decode_v2, encode_v2
+    from dispread.bridge.types import BridgeProfile
+
+    identity = _test_identity(tmp_path / 'identity', 'uart-latency')
+    profile = BridgeProfile(1, identity.pi_id, 'Pi', identity.certificate_pem, identity.fingerprint, (), 2)
+
+    class PySerialLike:
+        timeout = .1
+
+        def __init__(self):
+            self.buffer = b''
+
+        @property
+        def in_waiting(self):
+            return len(self.buffer)
+
+        def write(self, raw):
+            message = decode_v2(raw)
+            base = {k: message[k] for k in ('version', 'pi_id', 'client_id', 'request_id')}
+            if message['type'] == 'uart_challenge':
+                signature = identity.sign_hello(canonical_uart_hello(identity.pi_id, message['client_id'],
+                                                                     message['nonce']))
+                self.buffer += encode_v2(dict(base, type='uart_proof', nonce=message['nonce'],
+                                              signature=base64.b64encode(signature).decode()))
+            else:
+                self.buffer += encode_v2(dict(base, type='uart_authenticated', token=message['credential']))
+            return len(raw)
+
+        def read(self, count):
+            if len(self.buffer) < count:
+                time.sleep(self.timeout)  # pySerial: wartet bis count Bytes oder Timeout
+            result, self.buffer = self.buffer[:count], self.buffer[count:]
+            return result
+
+        def close(self):
+            pass
+
+    device = DeviceInfo('a', 'COM6', 0x403, 0x6001, 'serial-a', None, 0)
+    started = time.monotonic()
+    SerialTransport(profile, 'client', 'a' * 43, device, threading.Event(),
+                    opener=lambda **kw: PySerialLike()).close()
+    assert time.monotonic() - started < .15

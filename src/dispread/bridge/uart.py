@@ -162,7 +162,10 @@ class UartListener:
                         self._authorize()
                     if self._lease and self.hub.clock() - self._lease.renewed_at >= 5:
                         self._reset()
-                    data = self._stream.read(4096)
+                    # pySerial read(n) wartet auf n Bytes oder das Timeout; nur
+                    # Vorhandenes lesen, sonst kostet jede Nachricht 100 ms (R1).
+                    waiting = getattr(self._stream, 'in_waiting', 0) or 0
+                    data = self._stream.read(max(1, min(waiting, 4096)))
                     if not data:
                         continue
                     for message in self._decoder.feed(data):

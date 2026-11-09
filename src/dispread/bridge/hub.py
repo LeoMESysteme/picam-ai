@@ -31,6 +31,9 @@ class Lease:
     transport: str
     run_id: str | None
     renewed_at: float
+    #: Zuletzt per Hello/Idle angekuendigter Freigabestand (R1). Ein Record
+    #: geht nur an einen Client, der den aktuellen Stand schon kennt.
+    release: str | None = None
 
 
 class BridgeHub:
@@ -180,6 +183,7 @@ class BridgeHub:
 
     def _hello(self, lease, request_id):
         hello = self.prepare(lease.transport, lease.client_id)
+        lease.release = hello.release
         return dict(version=2, type='hello', request_id=request_id, pi_id=self.pi_id,
                     client_id=lease.client_id, lease_id=lease.lease_id, run_id=hello.run_id,
                     protocol_version=2, transport=lease.transport, state=hello.state,
@@ -216,6 +220,11 @@ class BridgeHub:
                             lease.run_id = run_id
                             return self._hello(lease, message['request_id'])
                         raise ValueError('run mismatch')
+                    if kind in ('poll', 'heartbeat') and lease.release != self._release_locked(lease.transport):
+                        # Freigabestand hat sich im selben Lauf geaendert (Bindung
+                        # nach Reservierung): erst ankuendigen, dann Werte.
+                        lease.renewed_at = self.clock()
+                        return self._hello(lease, message['request_id'])
                     lease.renewed_at = self.clock()
                     lease.run_id = run_id
                 if kind == 'demo_request':
@@ -236,6 +245,7 @@ class BridgeHub:
                 legacy['version'] = 1
                 reply = state.handle_v1(legacy)
                 if reply is None:
+                    lease.release = state.release
                     return {**base, 'type': 'idle', 'release_block': state.release_block,
                             **({'release': state.release} if state.release else {})}
                 reply.pop('version')
