@@ -403,3 +403,16 @@ def test_tc_residuen_je_bereich_werden_additiv_mitgeschrieben(recorder):
         {'peak': 0.95, 'ok': False, 'res1': 1.4321, 'res2': 0.7}]
     # Ohne Bereiche (ECC-Altmodus, injizierter Locator) kein Feld.
     assert 'regions' not in rows(rec)[1]['tracking']
+
+
+def test_tb_stillgelegter_bereich_traegt_off(recorder):
+    rec, _ = recorder
+    regions = [{'c': [10.0, 20.0], 's': 15, 'peak': 0.9, 'ok': True, 'res1': 0.1, 'res2': None},
+               {'c': [30.0, 20.0], 's': 15, 'peak': 0.0, 'ok': False, 'res1': None, 'res2': None, 'off': True}]
+    observe(rec, lost=True, regions=regions)
+    rec.stop()
+    assert rec.wait(3)
+    # Additiv nur am stillgelegten Bereich; die anderen behalten genau ihre bisherigen Felder.
+    assert rows(rec)[0]['tracking']['regions'] == [
+        {'peak': 0.9, 'ok': True, 'res1': 0.1, 'res2': None},
+        {'peak': 0.0, 'ok': False, 'res1': None, 'res2': None, 'off': True}]

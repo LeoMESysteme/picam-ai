@@ -95,6 +95,11 @@ const regionHint = fields({
                           median_px: number, frames: integer })),
   rest_median_px: number, frames: integer, limit_px: number,
 });
+// TB 2026-11-11: automatisch stillgelegte Rahmenbereiche, in Reihenfolge der Stilllegung.
+const regionDeactivated = fields({
+  number: positive, index: integer, centre: point, share: number, median_px: number,
+  frame_sequence: integer, rest_median_px: number,
+});
 const previousRegionHint = fields({
   session_id: nullable(string), run: nullable(string),
   quad: nullable(array(point)),
@@ -128,6 +133,7 @@ function run(v, p) {
   })(v, p);
   optional(v, 'output', object, p);
   optional(v, 'region_hint', nullable(regionHint), p);
+  optional(v, 'region_deactivated', array(regionDeactivated), p);
 }
 function referenceEval(v, p) {
   fields({ state: choice('running', 'done', 'error') })(v, p);

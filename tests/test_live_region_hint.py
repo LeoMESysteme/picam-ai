@@ -112,3 +112,117 @@ def test_ungueltige_zeilen_werden_ignoriert():
     window.observe(['x'] * len(CENTRES))
     assert window.summary()['frames'] == 1  # nur die NaN-Zeile ist formal gueltig
     assert window.snapshot() is None
+
+
+# --- TB 2026-11-11: Vorschlag zur Stilllegung im Lauf ----------------------------------
+
+def _feed_vectors(window, frames, *, bad=(), bad_vector=None, good=0.1, seed=3):
+    """Zeilen mit Residuum und Richtung; bad_vector(frame, index) -> (dx, dy) fuer kranke Bereiche."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    for frame in range(frames):
+        vectors = [list(rng.normal(0, good, 2)) for _ in CENTRES]
+        for index in bad:
+            vectors[index] = list(bad_vector(frame, index, rng))
+        window.observe([float(np.hypot(*v)) for v in vectors], vectors)
+
+
+def _glint(frame, index, rng):
+    # Nicht starr: Betrag 0,9 bis 1,6 px, Richtung je Bild anders.
+    import numpy as np
+
+    angle, size = rng.uniform(0, 2*np.pi), rng.uniform(0.9, 1.6)
+    return size*np.cos(angle), size*np.sin(angle)
+
+
+def test_tb_konstanten_der_stilllegung():
+    assert rh.DEACTIVATE_MIN_WINDOW == 300 == rh.WINDOW_FRAMES
+    assert rh.DEACTIVATE_MIN_SHARE == 0.50 > rh.MIN_SHARE
+    assert rh.DEACTIVATE_MAX_REST_MEDIAN_PX == 0.40
+    assert rh.COORDINATED_MAX_RATIO == 0.5
+    summary = RegionConsistency(CENTRES, limit_px=LIMIT).summary()
+    assert summary['deactivated'] == [] and summary['deactivation_refused'] == []
+    assert summary['deactivation'] == {'min_window': 300, 'min_share': 0.5, 'max_rest_median_px': 0.4,
+                                       'coordinated_max_ratio': 0.5}
+
+
+def test_tb_einzelner_kranker_bereich_erst_nach_vollem_fenster():
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(window, 299, bad=(5,), bad_vector=_glint)
+    assert window.snapshot() is not None  # Hinweis ja ...
+    assert window.deactivation_candidate() is None  # ... Stilllegung erst ab 300 Bildern
+    _feed_vectors(window, 1, bad=(5,), bad_vector=_glint, seed=4)
+    candidate = window.deactivation_candidate()
+    assert candidate['index'] == 5 and candidate['number'] == 6 and candidate['share'] == 1.0
+    assert candidate['rest_median_px'] < 0.4 and candidate['coordination_ratio'] > 0.5
+    assert candidate['window_frames'] == 300
+
+
+def test_tb_hinweisschwelle_reicht_nicht_fuer_stilllegung():
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    # 40 %: Hinweis, aber keine Stilllegung.
+    _feed_vectors(window, 300, bad=(2,), bad_vector=lambda f, i, rng: _glint(f, i, rng) if f % 5 < 2 else (0.1, 0))
+    assert [r['index'] for r in window.snapshot()['regions']] == [2]
+    assert window.deactivation_candidate() is None
+
+
+@pytest.mark.parametrize('cluster', [(1, 2), (1, 2, 3), (0, 3, 6, 7)])
+@pytest.mark.parametrize('shift', [(0.8, 0.0), (0.0, -1.2), (2.0, 1.0)])
+def test_tb_gleichlaeufige_bereiche_nie_vorgeschlagen(cluster, shift):
+    """Koordinierte Verschiebung: alle reissen die Grenze, keiner wird vorgeschlagen."""
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(window, 600, bad=cluster,
+                  bad_vector=lambda f, i, rng: (shift[0] + rng.normal(0, 0.1), shift[1] + rng.normal(0, 0.1)))
+    assert {r['index'] for r in window.snapshot()['regions']} == set(cluster)
+    assert window.deactivation_candidate() is None
+
+
+def test_tb_halbe_amplitude_gilt_noch_als_gleichlauf():
+    # Ein Partner, der dieselbe Richtung mit halber Amplitude zeigt, blockiert ebenfalls.
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(window, 300, bad=(1, 2),
+                  bad_vector=lambda f, i, rng: (1.4, 0.0) if i == 1 else (0.75, 0.0))
+    assert window.deactivation_candidate() is None
+
+
+def test_tb_ohne_vektoren_oder_bei_streuendem_rest_kein_vorschlag():
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed(window, 300, bad=5, bad_value=1.4)  # nur Betraege: Gleichlauf nicht pruefbar
+    assert window.snapshot() is not None and window.deactivation_candidate() is None
+    other = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(other, 300, bad=(5,), bad_vector=_glint, good=0.5)
+    assert other.deactivation_candidate() is None
+
+
+def test_tb_stilllegung_leert_fenster_und_verschiebt_verlauf():
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(window, 300, bad=(5,), bad_vector=_glint)
+    candidate = window.deactivation_candidate()
+    window.note_deactivated({'frame_sequence': 1234, **candidate})
+    assert window.snapshot() is None and window.deactivation_candidate() is None
+    summary = window.summary()
+    # Kein "bitte entfernen" mehr fuer die naechste Einrichtung; Verlauf steht im Ereignis.
+    assert summary['regions'] == []
+    (event,) = summary['deactivated']
+    assert event['index'] == 5 and event['frame_sequence'] == 1234
+    assert event['hint_history']['number'] == 6
+    assert window.deactivated() == summary['deactivated']
+    # Der stillgelegte Bereich liefert keine Residuen mehr; erst ein neues volles Fenster zaehlt.
+    _feed_vectors(window, 299, bad=(2,), bad_vector=_glint)
+    assert window.deactivation_candidate() is None
+    _feed_vectors(window, 1, bad=(2,), bad_vector=_glint)
+    assert window.deactivation_candidate()['index'] == 2
+
+
+def test_tb_verweigerung_einmal_je_bereich_und_grund():
+    window = RegionConsistency(CENTRES, limit_px=LIMIT)
+    _feed_vectors(window, 300, bad=(5,), bad_vector=_glint)
+    window.note_refused(5, 'reserve_verletzt', 10)
+    assert window.deactivation_candidate() is None
+    window.note_refused(5, 'reserve_verletzt', 40)
+    window.note_refused(5, 'schutzprobe_verletzt', 70, detail={'worst_error_px': 3.5})
+    assert window.summary()['deactivation_refused'] == [
+        {'index': 5, 'number': 6, 'reason': 'reserve_verletzt', 'frame_sequence': 10, 'detail': None},
+        {'index': 5, 'number': 6, 'reason': 'schutzprobe_verletzt', 'frame_sequence': 70,
+         'detail': {'worst_error_px': 3.5}}]

@@ -5,6 +5,33 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
+  Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
+  24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.
+  * *Einrichtung:* Automatische Kandidaten mit flachem Autokorrelationsgipfel (Krümmung < 0,08) **und**
+    lichtabhängiger Lage (> 0,12 px unter Gamma-, Glanz- und Hellproben) werden nicht mehr gewählt
+    (`proposal_min_peak_curvature`, `proposal_max_photometric_shift_px`, `metrics.localisation_weak_candidates`).
+    Kalibriert an 55 Einrichtungen; alle 53 geeigneten bleiben geeignet. Offline auf den Diagnosebildern:
+    103604Z 221/222 statt 113/222, 122753Z 221/222 statt 112/222. Ältere Profile bleiben startbar.
+  * *Stilllegung im Lauf:* Dieselbe Fensterauswertung wie der TC-Hinweis schlägt einen Bereich vor, wenn er
+    über volle 300 Bilder in ≥ 50 % die Grenze reißt, der Rest im Median < 0,4 px liegt und er mit keinem
+    anderen Bereich gleichläuft. Harte Grenzen: höchstens 3 Bereiche bzw. 15 %; Mindestzahl, Streuung und
+    Reserve wie bei der Einrichtung; dazu eine Schutzprobe am Referenzbild (Raster des Tests
+    „koordinierter lokaler Bias“, kein angenommenes Quad > 1,0 px falsch), die im Hintergrund läuft. Ohne
+    Probe wäre es unsicher: Im Fixture setzt eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche
+    Lage durch. Der Bereich wird ab dem nächsten Bild nicht mehr gesucht, wirkt also wie ein Vorschlag
+    ohne ihn. Prüfgrenze 0,65 px, RMS 0,35 px, RANSAC 1,5 px und alle übrigen Schwellen bleiben unverändert.
+  * *Audit:* Ereignis vor der Stilllegung in `tracking_events.jsonl` (Bild, Bereich, Anteil, Median,
+    Rest-Median, Gleichlaufmaß, Probe), `summary.tracking_region_hint.deactivated`, additiv
+    `component_versions.locator_regions_disabled` in jedem folgenden Datensatz und `off` je Bereich in
+    `diagnose/images.jsonl`. Schlägt das Schreiben fehl, bleibt der Bereich aktiv.
+  * *Werkbank:* Statusleiste und Inspektor (Nachführung) zeigen „Bereich N automatisch stillgelegt
+    (x % unstimmig)“ ohne Statusfarbe; der Hinweis „entfernen“ entfällt für stillgelegte Bereiche, das Bild
+    zeichnet sie nicht mehr als Verlust. Status: `run.region_deactivated`.
+  * *Konsequenz:* Neu eingerichtete Geräte wählen die bekannten Problemstellen nicht mehr; ältere Profile
+    verlieren sie nach etwa 10 s im Lauf. Die Lauf-Gültigquote unter aktiver Laständerung (122753Z: 59 %)
+    hängt danach vor allem an `anzeige_wechselt` (18 %); ≥ 75 % ist offline nicht belegt. Nachweis im echten
+    Lauf steht aus.
 * 2026-11-11: **Einrichtung: Hinweise zu Rahmenbereichen entrümpelt (T3).** Die Bereichsbearbeitung
   zeigte je Stelle des letzten Laufs eine gelbe Zeile, auch „dort liegt kein Bereich“, das ist der gute
   Fall. Jetzt erscheint ein Hinweis nur, wenn im neuen Vorschlag ein Bereich (Toleranz 8 px) an einer

@@ -353,6 +353,8 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
     const flagged = new Set(Array.isArray(view.flagged) ? view.flagged : []);
     regions.forEach((region, i) => {
       if (!Array.isArray(region?.c) || !finite(region.c[0]) || !finite(region.c[1])) return;
+      // TB 2026-11-11: stillgelegte Bereiche werden nicht mehr gesucht; kein roter Verlust im Bild.
+      if (region.off === true) return;
       const centre = toS(region.c);
       const half = (finite(region.s) ? region.s : 15) / 2;
       const lost = !region.ok;

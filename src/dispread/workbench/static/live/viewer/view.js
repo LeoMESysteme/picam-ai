@@ -10,7 +10,7 @@
 import {ALL_LAYERS, FRAME_MAX_AGE_S, LAYERS, VALUE_MAX_AGE_S, drawHud, drawSetupHud, hitTest, markerInfo, readoutTag,
   setupOverlay} from './hud.js';
 import {renderLegend} from './legend.js';
-import {regionHintIndices} from '../model.js';
+import {activeRegionHint, regionHintIndices} from '../model.js';
 
 const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 16;
@@ -734,7 +734,9 @@ export function mountViewer(host, {statusbar = null} = {}) {
       status = next;
       const grid = next?.setup?.grid || null;
       viewer.setGrid(grid);
-      viewer.setFlagged(['running', 'stopped'].includes(next?.state) ? regionHintIndices(next?.run?.region_hint) : []);
+      // TB: stillgelegte Bereiche nicht mehr als unstimmig zeichnen.
+      viewer.setFlagged(['running', 'stopped'].includes(next?.state)
+        ? regionHintIndices(activeRegionHint(next?.run?.region_hint, next?.run?.region_deactivated)) : []);
       // Ohne Lauf-HUD rahmt der Vorschlag die Ansicht (Anzeigerahmen + Rahmenbereiche).
       const quad = Array.isArray(grid?.quad) && grid.quad.length === 4 ? grid.quad : null;
       viewer.setFraming(quad ? [...quad, ...(next?.setup?.regions || []).map((r) => r?.centre)] : null);

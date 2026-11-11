@@ -94,9 +94,17 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: Felder, die nur die Auswahl bei der Einrichtung steuern, nie den Lauf.
+_SETUP_ONLY_TRACKING_FIELDS = frozenset({
+    "proposal_stability_peak_margin",
+    # TB 2026-11-11: strengere Auswahl; aeltere Profile bleiben startbar.
+    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+})
+
+
 def _run_start_tracking_config(config: dict) -> dict:
-    # Diese Marge bewertet nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
-    return {key: value for key, value in config.items() if key != "proposal_stability_peak_margin"}
+    # Diese Grenzen bewerten nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
+    return {key: value for key, value in config.items() if key not in _SETUP_ONLY_TRACKING_FIELDS}
 
 
 def build_live_pipeline(
@@ -288,6 +296,9 @@ class LiveSession:
         # TC 2026-11-11: Bereichshinweis, reine Diagnose ohne Rueckweg in den Messpfad.
         self._region_consistency: RegionConsistency | None = None
         self._region_consistency_warned = False
+        # TB 2026-11-11: laufende Schutzprobe und Ergebnisse je (Satz, Bereich).
+        self._region_probe: dict | None = None
+        self._region_probe_cache: dict = {}
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -514,7 +525,7 @@ class LiveSession:
                         _LOG.warning('Bewegungsdiagnose ausgefallen: %s', exc)
                         self._tracking_advice_warned = True
                     self._tracking_advice.failed(self.latest_monotonic)
-            regions = self._observe_regions()
+            regions = self._observe_regions(record.frame_sequence)
             self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'],
                                       regions=regions)
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
@@ -537,11 +548,13 @@ class LiveSession:
                     self._frame_info_warned = True
             return record
 
-    def _observe_regions(self) -> list | None:
+    def _observe_regions(self, frame_sequence=None) -> list | None:
         """Residuen je Rahmenbereich ins Hinweisfenster; erst nach geschriebenem Record.
 
-        Nur Bedienhilfe: weder Record noch Freigabe noch Ausgabe haengen davon ab,
-        ein Fehler hier schaltet nur den Hinweis ab.
+        Der Hinweis ist reine Bedienhilfe. Die Stilllegung (TB 2026-11-11) wirkt
+        erst ab dem naechsten Bild und nur ueber FrameTracker.disable_region mit
+        dessen harten Grenzen. Jeder Fehler hier laesst alle Bereiche aktiv
+        (strengster Zustand) und bricht den Lauf nicht ab.
         """
         try:
             tracker = getattr(self._pipeline.locator, '_tracker', None)
@@ -551,7 +564,14 @@ class LiveSession:
             if self._region_consistency is None:
                 self._region_consistency = RegionConsistency(
                     tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
-            self._region_consistency.observe([region.get('res1') for region in regions])
+            self._region_consistency.observe([region.get('res1') for region in regions],
+                                             [region.get('v1') for region in regions])
+            self._maybe_disable_region(tracker, frame_sequence)
+            disabled = getattr(tracker, 'disabled', None) or ()
+            if disabled:
+                # images.jsonl: stillgelegte Bereiche additiv kennzeichnen.
+                regions = [{**region, 'off': True} if index in disabled else region
+                           for index, region in enumerate(regions)]
             return regions
         except Exception as exc:  # noqa: BLE001 - Bedienhilfe darf keinen Lauf abbrechen
             if not self._region_consistency_warned:
@@ -559,10 +579,92 @@ class LiveSession:
                 self._region_consistency_warned = True
             return None
 
+    def _maybe_disable_region(self, tracker, frame_sequence) -> None:
+        """Vorschlag des Fensters pruefen; Schutzprobe im Hintergrund; erst auditieren, dann stilllegen.
+
+        Ablauf (TB 2026-11-11): Das Fenster schlaegt hoechstens einen Bereich vor.
+        disable_refusal prueft Hoechstzahl und Reserve. Danach laeuft die
+        Schutzprobe (FrameTracker.bias_probe, einige Sekunden) in einem
+        Hintergrundthread auf einem eigenen Tracker. Erst wenn sie bestanden ist
+        UND das Fenster denselben Bereich weiter vorschlaegt, wird das Ereignis
+        geschrieben und der Bereich stillgelegt. Jede Unsicherheit laesst alle
+        Bereiche aktiv.
+        """
+        window = self._region_consistency
+        if not callable(getattr(tracker, 'disable_region', None)):
+            return
+        pending = self._region_probe
+        if pending is not None:
+            if pending['thread'].is_alive():
+                return
+            self._region_probe = None
+            result = pending.get('result')
+            self._region_probe_cache[(pending['base'], pending['index'])] = result
+            if result is None:
+                window.note_refused(pending['index'], 'schutzprobe_fehler', frame_sequence,
+                                    detail=pending.get('error'))
+                return
+        candidate = window.deactivation_candidate()
+        if candidate is None:
+            return
+        index = candidate['index']
+        refusal = tracker.disable_refusal(index)
+        if refusal is not None:
+            window.note_refused(index, refusal, frame_sequence)
+            return
+        base = frozenset(tracker.disabled)
+        key = (base, index)
+        if key not in self._region_probe_cache:
+            self._start_region_probe(tracker, base, index)
+            return
+        probe = self._region_probe_cache[key]
+        if probe is None:
+            return  # Probe ist gescheitert; Grund steht schon in deactivation_refused
+        if not probe.get('ok'):
+            window.note_refused(index, 'schutzprobe_verletzt', frame_sequence, detail=probe)
+            return
+        event = {'event': 'rahmenbereich_stillgelegt', 'frame_sequence': frame_sequence,
+                 'utc': self._wall().isoformat(), **candidate,
+                 'disabled_count': len(base) + 1, 'disabled_limit': tracker.disable_limit(), 'probe': probe}
+        # Ohne geschriebenes Ereignis keine Stilllegung (Fehler -> alle Bereiche bleiben aktiv).
+        with (self._out_dir / 'tracking_events.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        if not tracker.disable_region(index, probe):
+            raise RuntimeError(f'Stilllegung von Bereich {index + 1} unerwartet verweigert')
+        window.note_deactivated(event)
+        _LOG.info('Rahmenbereich %d automatisch stillgelegt (%.0f %% unstimmig, Bild %s)',
+                  index + 1, 100 * candidate['share'], frame_sequence)
+
+    def _start_region_probe(self, tracker, base, index) -> None:
+        """Schutzprobe im Hintergrund, niedrige Prioritaet; das Messen laeuft weiter."""
+        pending = {'base': base, 'index': index, 'result': None, 'error': None}
+
+        def work():
+            try:
+                os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 19)
+            except (AttributeError, OSError):
+                pass
+            try:
+                pending['result'] = tracker.bias_probe(base | {index})
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                pending['error'] = f'{type(exc).__name__}: {exc}'
+
+        pending['thread'] = threading.Thread(target=work, name='rahmen-schutzprobe', daemon=True)
+        self._region_probe = pending
+        pending['thread'].start()
+
+    def region_deactivations(self) -> list[dict]:
+        """Stilllegungen dieses Laufs fuer Status und Werkbank; leer ohne Rahmenbereiche."""
+        window = self._region_consistency
+        return [] if window is None else window.deactivated()
+
     def _build_frame_info(self, sequence, record, track, coarse) -> dict:
         pipeline = self._pipeline
         tracker = getattr(pipeline.locator, '_tracker', None)
         regions = getattr(tracker, 'last_regions', None) or []
+        disabled = getattr(tracker, 'disabled', None) or ()
         read = pipeline.last_read
         diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
         cells = diagnostics.get('cells')
@@ -587,9 +689,11 @@ class LiveSession:
                 'rotation_deg': None if track is None else float(track.rotation_deg),
                 'reason': None if track is None else track.reason,
                 'correcting': bool(coarse is not None and coarse.used),
+                # TB: 'off' nur an stillgelegten Bereichen (additiv, wenige Bytes im X-Hud).
                 'regions': [{'c': list(region['c']), 's': region['s'],
-                             'peak': float(region['peak']), 'ok': bool(region['ok'])}
-                            for region in regions],
+                             'peak': float(region['peak']), 'ok': bool(region['ok']),
+                             **({'off': True} if index in disabled else {})}
+                            for index, region in enumerate(regions)],
             },
             'cells': [{'i': i, 'best': cell['best'], 'margin': cell['margin'],
                        'uncertain': cell['margin'] < 0} for i, cell in enumerate(cells)],

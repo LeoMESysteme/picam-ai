@@ -2382,3 +2382,39 @@ test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ 
   await page.screenshot({ path: `${T3_SHOTS}/t3-einrichtung-neue-aufstellung.png` });
   expect(errors).toEqual([]);
 });
+
+// TB 2026-11-11: automatisch stillgelegter Rahmenbereich, ruhiger Info-Ton (keine Statusfarbe).
+const TB_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots';
+test('Stilllegung: Statusleiste und Inspektor zeigen den Bereich ruhig, ohne "entfernen"', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const bar = page.getByRole('contentinfo');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const item = bar.locator('[data-item="regionOff"]');
+  await expect(bar.locator('[data-item="session"]')).toBeVisible();
+  await expect(item).toBeHidden();
+
+  await hook(page, '/test/scene', { name: 'running_bereich_stillgelegt' });
+  await expect(item).toBeVisible();
+  await expect(item).toHaveText('Bereich 6 automatisch stillgelegt (91 % unstimmig)');
+  await expect(item).not.toHaveClass(/warn|err/);
+  await expect(item.locator('.sq')).toHaveCount(0);
+  await expect(item).toHaveAttribute('title', /übrigen Rahmenbereiche führen nach; Prüfgrenzen unverändert/);
+  await expect(bar.locator('[data-item="region"]')).toBeHidden();
+  const tab = inspector.getByRole('tab', { name: /Nachführung/ });
+  await expect(tab.locator('.cnt')).toHaveCount(0);
+  await tab.click();
+  const block = inspector.locator('[data-part="region-off"]');
+  await expect(block).toContainText('Bereich 6 automatisch stillgelegt (91 % unstimmig).');
+  await expect(block).not.toContainText('entfernen');
+  await expect(block.locator('.warn-t, .err-t, .sq.warn, .sq.err')).toHaveCount(0);
+  await expect(inspector.locator('[data-part="region-hint"]')).toHaveCount(0);
+  await expect(inspector.getByRole('row').filter({ hasText: 'stillgelegt' }).first()).toBeVisible();
+  // Der Wert bleibt freigegeben; die Stilllegung ist kein Alarm.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead')).toHaveClass(/valid/);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TB_SHOTS}/tb-lauf-bereich-stillgelegt.png` });
+  expect(errors).toEqual([]);
+});

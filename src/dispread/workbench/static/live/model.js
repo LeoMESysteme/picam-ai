@@ -128,6 +128,36 @@ export function regionHintShort(hint) {
   return `${regions.length === 1 ? 'Bereich' : 'Bereiche'} ${joinDe(regions.map((r) => String(r.number)))} unstimmig`;
 }
 
+// TB 2026-11-11: automatisch stillgelegte Rahmenbereiche (status.run.region_deactivated,
+// dispread.live.region_hint). Ruhiger Info-Ton: die Nachführung läuft mit den
+// übrigen Bereichen weiter, Prüfgrenzen unverändert; kein "bitte entfernen".
+function deactivatedRegions(list) {
+  const items = Array.isArray(list) ? list : [];
+  const valid = items.every((r) => Number.isInteger(r?.number) && Number.isInteger(r?.index) && r.index >= 0
+    && Number.isFinite(r?.share));
+  return valid ? [...items].sort((a, b) => a.number - b.number) : [];
+}
+
+export function regionDeactivatedIndices(list) {
+  return deactivatedRegions(list).map((r) => r.index);
+}
+
+export function regionDeactivatedText(list) {
+  const regions = deactivatedRegions(list);
+  if (!regions.length) return '';
+  const one = regions.length === 1;
+  return `${one ? 'Bereich' : 'Bereiche'} ${joinDe(regions.map((r) => String(r.number)))} automatisch stillgelegt ` +
+    `(${joinDe(regions.map((r) => `${Math.round(100 * r.share)} %`))} unstimmig)`;
+}
+
+// Hinweis ohne stillgelegte Bereiche: für sie entfällt "entfernen".
+export function activeRegionHint(hint, deactivated) {
+  const off = new Set(regionDeactivatedIndices(deactivated));
+  if (!off.size || !Array.isArray(hint?.regions)) return hint;
+  const regions = hint.regions.filter((r) => !off.has(r?.index));
+  return regions.length ? {...hint, regions} : null;
+}
+
 export function connectionLost(lastOkMs, nowMs, httpStatus) {
   return httpStatus === null || httpStatus < 200 || httpStatus >= 300 ||
     lastOkMs === null || nowMs - lastOkMs > 1500;

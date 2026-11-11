@@ -340,6 +340,9 @@ class LiveService:
                                       if hasattr(self._session, "tracking_hint") else None),
                     "region_hint": (self._session.region_hint()
                                     if hasattr(self._session, "region_hint") else None),
+                    # TB 2026-11-11: automatisch stillgelegte Rahmenbereiche, in Reihenfolge.
+                    "region_deactivated": (self._session.region_deactivations()
+                                           if hasattr(self._session, "region_deactivations") else []),
                 }
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()

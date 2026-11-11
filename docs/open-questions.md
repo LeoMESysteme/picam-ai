@@ -3238,6 +3238,25 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `summary.tracking_region_hint`). Die Werkbank zeigt den Hinweis ruhig im Lauf und markiert den Bereich in der
   Bereichsbearbeitung der Neueinrichtung. Freigabe, Schwellen und Entscheidungen bleiben bitgleich (Tests auf
   den 222 Diagnosebildern). Offen bleibt die Einrichtungsregel, solche Bereiche gar nicht erst zu wählen.
+* **Einrichtungsregel und Stilllegung seit 2026-11-11 (TB, Freigabe Leonhard):**
+  * *Einrichtung:* Die automatische Auswahl schließt Kandidaten aus, deren Autokorrelationsgipfel flach ist
+    (Krümmung < 0,08) **und** deren Lage unter festen Lichtproben (Gamma, Glanz, Hell) um > 0,12 px wandert.
+    Kalibriert an 55 Einrichtungen: Die belegt unstimmigen Glanz- und Fasenbereiche aus 103604Z, 122753Z und
+    095426Z werden nicht mehr gewählt; alle 53 zuvor geeigneten Einrichtungen bleiben geeignet (≥ 6 Bereiche
+    je Achsenseite). Mit den neuen Vorschlägen bestehen offline 221 von 222 Diagnosebildern in 103604Z und in
+    122753Z (vorher 113 bzw. 112). Die Laufzeitprüfung bleibt unverändert.
+  * *Stilllegung im Lauf:* Reißt ein einzelner Bereich über ein volles Fenster von 300 Bildern in ≥ 50 % die
+    Grenze, liegt der Rest im Median < 0,4 px und läuft er mit keinem anderen Bereich gleich, wird er für den
+    Rest des Laufs aus der Nachführung genommen. Grenzen: höchstens 3 Bereiche bzw. 15 %, Mindestzahl,
+    Streuung und Reserve wie bei der Einrichtung, dazu eine Schutzprobe am Referenzbild (Halbseiten-Bias-Raster,
+    kein angenommenes Quad > 1,0 px falsch). Ohne diese Probe wäre die Stilllegung unsicher: Im Fixture setzt
+    eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche Lage durch. Jede Stilllegung steht in
+    `tracking_events.jsonl`, in `summary.tracking_region_hint.deactivated` und additiv in
+    `component_versions.locator_regions_disabled`. Offline auf den Diagnosebildern der alten Profile wird
+    Bereich 6 stillgelegt (103604Z: 200/222 statt 113/222; 122753Z: 187/222, mit Bereich 1 218/222).
+  * *Zweiter Fit:* Auf den Diagnosebildern sinkt die Zahl der Zweitversuche nach der Stilllegung von 134 auf
+    52 (103604Z, Bereich 6 aus) bzw. von 143 auf 46 (122753Z, Bereiche 1 und 6 aus). Die UI-Frage zu
+    „Korrektur läuft“ bleibt offen.
 * **Antwort landet in:** [Laufauswertung](quellen/werkbank-t13-2026-11-06.md),
   [VALIDATION](VALIDATION.md) und einer späteren UI-/Tracking-Spezifikation.
 

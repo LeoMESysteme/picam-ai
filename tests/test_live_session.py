@@ -1935,6 +1935,160 @@ def test_tc_ausfall_der_bereichsdiagnose_bricht_lauf_nicht_ab(tmp_path, monkeypa
         session.stop()
 
 
+class _TbTracker:
+    """Rahmen-Tracker-Attrappe fuer die Stilllegung (TB): Bereich 5 (Index 4) zittert nicht starr."""
+
+    def __init__(self, probe_ok=True):
+        import numpy as np
+
+        from dispread.live.frame_tracking import FrameTrackingConfig
+
+        self.config = FrameTrackingConfig()
+        self.sources = np.asarray([[100.0 + 40 * i, 200.0] for i in range(8)])
+        self.disabled = frozenset()
+        self.probe_ok = probe_ok
+        self.probes = []
+        self._rng = np.random.default_rng(5)
+        self.last_regions = None
+
+    def update(self):
+        import numpy as np
+
+        rows = []
+        for index, centre in enumerate(self.sources):
+            if index in self.disabled:
+                rows.append({'c': list(centre), 's': 15, 'peak': 0.0, 'ok': False,
+                             'res1': None, 'res2': None, 'v1': None})
+                continue
+            if index == 4:
+                angle, size = self._rng.uniform(0, 2*np.pi), self._rng.uniform(0.9, 1.6)
+                vector = [size*np.cos(angle), size*np.sin(angle)]
+            else:
+                vector = list(self._rng.normal(0, 0.1, 2))
+            rows.append({'c': list(centre), 's': 15, 'peak': 0.9, 'ok': True,
+                         'res1': float(np.hypot(*vector)), 'res2': None, 'v1': vector})
+        self.last_regions = rows
+
+    def disable_limit(self):
+        return 3
+
+    def disable_refusal(self, index):
+        return 'bereits_stillgelegt' if index in self.disabled else None
+
+    def bias_probe(self, disabled):
+        self.probes.append(sorted(disabled))
+        return {'disabled': sorted(disabled), 'cases': 288, 'accepted': 24, 'worst_error_px': 0.9,
+                'worst_case': None, 'tolerance_px': 1.0, 'ok': self.probe_ok}
+
+    def disable_region(self, index, probe=None):
+        if not (probe and probe['ok'] and probe['disabled'] == sorted(self.disabled | {index})):
+            return False
+        self.disabled = self.disabled | {index}
+        return True
+
+
+def _tb_session(tmp_path, monkeypatch, tracker, frames=14):
+    from dispread.live import region_hint as rh
+
+    for name, value in (('WINDOW_FRAMES', 6), ('DEACTIVATE_MIN_WINDOW', 6), ('MIN_FRAMES', 3),
+                        ('EVALUATE_EVERY', 1)):
+        monkeypatch.setattr(rh, name, value)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * frames)
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+
+    def injected(frame, **kwargs):
+        pipeline.locator._tracker = tracker
+        tracker.update()
+        return process(frame, **kwargs)
+
+    pipeline.process = injected
+
+    def step():
+        record = session.step()
+        probe = session._region_probe
+        if probe is not None:
+            probe['thread'].join(5)  # Schutzprobe laeuft im Hintergrund
+        return record
+
+    return session, step
+
+
+def test_tb_stilllegung_im_lauf_auditiert_und_wirkt_ab_naechstem_bild(tmp_path, monkeypatch):
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        for _ in range(12):
+            step()
+        assert tracker.disabled == frozenset({4})
+        assert tracker.probes == [[4]]  # genau eine Probe fuer genau diesen Satz
+        lines = (session._out_dir / 'tracking_events.jsonl').read_text().splitlines()
+        (event,) = [json.loads(line) for line in lines]
+        assert event['event'] == 'rahmenbereich_stillgelegt'
+        assert event['index'] == 4 and event['number'] == 5 and event['share'] >= 0.5
+        assert isinstance(event['frame_sequence'], int) and event['median_px'] > 0.65
+        assert event['rest_median_px'] < 0.4 and event['coordination_ratio'] > 0.5
+        assert event['probe']['ok'] and event['disabled_count'] == 1 and event['disabled_limit'] == 3
+        deactivated = session.region_deactivations()
+        assert [item['index'] for item in deactivated] == [4]
+        assert session.region_hint() is None or 4 not in [r['index'] for r in session.region_hint()['regions']]
+        # Werkbank-HUD: nur der stillgelegte Bereich traegt 'off' (kein roter Verlust im Bild).
+        regions = session.frame_info()['track']['regions']
+        assert regions[4]['off'] is True and all('off' not in r for i, r in enumerate(regions) if i != 4)
+    finally:
+        session.stop()
+    hint = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert [item['frame_sequence'] for item in hint['deactivated']] == [event['frame_sequence']]
+    # Fuer die naechste Einrichtung kein "bitte entfernen" mehr fuer den stillgelegten Bereich.
+    assert all(region['index'] != 4 for region in hint['regions'])
+
+
+def test_tb_ohne_bestandene_schutzprobe_keine_stilllegung(tmp_path, monkeypatch):
+    tracker = _TbTracker(probe_ok=False)
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        for _ in range(12):
+            step()
+        assert tracker.disabled == frozenset()
+        assert tracker.probes == [[4]]  # nicht bei jeder Auswertung neu
+        assert not (session._out_dir / 'tracking_events.jsonl').exists()
+        refused = session._region_consistency.summary()['deactivation_refused']
+        assert [(item['index'], item['reason']) for item in refused] == [(4, 'schutzprobe_verletzt')]
+    finally:
+        session.stop()
+
+
+def test_tb_ohne_audit_keine_stilllegung_und_lauf_geht_weiter(tmp_path, monkeypatch):
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    (session._out_dir / 'tracking_events.jsonl').mkdir()  # Schreiben scheitert
+    try:
+        statuses = [step().status for _ in range(12)]
+        assert statuses[-1] is ValueStatus.VALID
+        assert tracker.disabled == frozenset()
+        assert len(session.records_path.read_text().splitlines()) == 12
+    finally:
+        session.stop()
+
+
+def test_tb_stillgelegte_bereiche_in_component_versions_und_bilddiagnose():
+    from types import SimpleNamespace
+
+    from dispread.live.tracking import ConfirmedRegionLocator
+    from dispread.pipeline import Pipeline
+
+    locator = ConfirmedRegionLocator.__new__(ConfirmedRegionLocator)
+    locator._tracker = SimpleNamespace(disabled=frozenset())
+    assert locator.component_extra() == {}
+    pipeline = Pipeline(source=SimpleNamespace(source_id='synthetic'), locator=locator,
+                        reader=SimpleNamespace(backend_id='dotmatrix'), gate=None, sinks=[], config=None)
+    plain = pipeline.component_versions()
+    assert 'locator_regions_disabled' not in plain  # ohne Stilllegung bytegleich
+    locator._tracker.disabled = frozenset({5, 0})
+    assert pipeline.component_versions() == {**plain, 'locator_regions_disabled': '1,6'}
+
+
 def ticked_session(tmp_path, monkeypatch):
     from test_live_output import FakeSerial
     from test_live_tick import Clocks

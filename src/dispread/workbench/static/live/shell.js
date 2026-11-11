@@ -2,7 +2,7 @@
 // Zeitleiste, Ergebnis und Inspektor rechts, Statusleiste. Die Huelle kennt
 // nur Layout und Kontextaktionen; Inhalte rendern die Ansichten in die
 // zurueckgegebenen Knoten.
-import {cameraView, regionHintShort, regionHintText} from './model.js';
+import {activeRegionHint, cameraView, regionDeactivatedText, regionHintShort, regionHintText} from './model.js';
 import {outputItem} from './run/output.js';
 
 const ICONS = `<svg class="sprite" aria-hidden="true" focusable="false"><defs>
@@ -59,6 +59,7 @@ const TEMPLATE = `${ICONS}
     <span class="it shr" data-item="output" hidden></span>
     <span class="it shr" data-item="tolerance" hidden></span>
     <span class="it shr" data-item="region" hidden></span>
+    <span class="it shr" data-item="regionOff" hidden></span>
     <span class="it notice" data-item="notice" hidden></span>
     <span class="it last" data-item="session"></span>
   </footer>
@@ -324,10 +325,16 @@ export function renderStatusbar(status, hudProc = null) {
     html: `<span class="sq warn"></span><span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert</span>`,
     title: tolerance ? `Angepasste Lesetoleranz ×${tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft, nicht validiert.` : ''});
   // TC 2026-11-11: ruhiger Warnhinweis, Volltext im Titel und im Inspektor (Nachführung).
-  const regionHint = ['running', 'stopped'].includes(status?.state) ? status?.run?.region_hint : null;
+  const shown = ['running', 'stopped'].includes(status?.state);
+  const deactivated = shown ? status?.run?.region_deactivated : null;
+  const regionHint = shown ? activeRegionHint(status?.run?.region_hint, deactivated) : null;
   const regionShort = regionHintShort(regionHint);
   setItem(items.region, {hidden: !regionShort, cls: 'warn',
     html: `<span class="sq warn"></span><span class="tx">${esc(regionShort)}</span>`, title: regionHintText(regionHint)});
+  // TB 2026-11-11: ruhiger Info-Ton, keine Statusfarbe (Nachführung läuft mit den übrigen Bereichen).
+  const offText = regionDeactivatedText(deactivated);
+  setItem(items.regionOff, {hidden: !offText, cls: '', html: `<span class="tx">${esc(offText)}</span>`,
+    title: offText ? `${offText}. Die übrigen Rahmenbereiche führen nach; Prüfgrenzen unverändert.` : ''});
   const notice = status?.release_notice;
   setItem(items.notice, {hidden: !notice, html: `<span>${esc(notice)}</span>`, title: notice || ''});
   setItem(items.session, {html: `Sitzung <b>${esc(status?.session_id || '–')}</b>`});

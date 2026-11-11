@@ -137,8 +137,10 @@ class DiagnosticRecorder:
             if regions:
                 # TC 2026-11-11, additiv: Treffer und Residuum je Rahmenbereich
                 # (px, Erst-/Zweitfit), Reihenfolge = Bereichsindex im Vorschlag.
+                # TB 2026-11-11, additiv: 'off' nur bei stillgelegten Bereichen.
                 tracking['regions'] = [{'peak': _round(region.get('peak')), 'ok': bool(region.get('ok')),
-                                        'res1': _round(region.get('res1')), 'res2': _round(region.get('res2'))}
+                                        'res1': _round(region.get('res1')), 'res2': _round(region.get('res2')),
+                                        **({'off': True} if region.get('off') else {})}
                                        for region in regions]
             metadata = {
                 **self._hashes, 'frame_sequence': frame.frame_sequence, 'owner_sequence': owner_sequence,
