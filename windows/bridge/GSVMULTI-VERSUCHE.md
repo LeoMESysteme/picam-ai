@@ -146,3 +146,14 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Kanäle 8_2 bis 8_4 lassen sich ausblenden: in der Konfiguration „Actual Channel“ wählen, dann Menü Channel → Hide.
 - Versteckte Kanäle werden **nur aufgezeichnet**, wenn unter Configure Recording → Advanced „Record Hidden Channels“ an ist.
 - Damit der Fehlwert die Y-Achse von 8_1 nicht sprengt, Autoscale Y für 8_1 ausschalten und Min/Max fest einstellen. Der Fehlwert liegt dann sichtbar außerhalb der Skala.
+
+**Versuch 2b, ausgeblendete Kanäle (2026-11-11):**
+- **Session:** 8_2 bis 8_4 sind ausgeblendet (`IsHidden = TRUE`); in Configure Recording → Advanced ist „Record Hidden Channels“ an.
+- **Ergebnis: bestanden.** 250 von 250 Zeilen, alle vier Kanäle in der TDMS.
+  - Wert, Gültigkeit und Sequenz sind identisch.
+  - Der Zeitkanal weicht höchstens 0,24 µs ab. Das ist die float64-Auflösung bei 1,79·10⁹ s.
+- **Wichtig für Vorlage und Anleitung:**
+  - Die Session-Datei (`.ucf`) speichert **nur** `IsHidden` je Kanal, **nicht** die Recorder-Einstellung „Record Hidden Channels“.
+  - Diese muss der Bediener in jeder GSVmulti-Installation selbst setzen. Sonst fehlen Gültigkeit, Sequenz und Zeit still in der Aufnahme.
+  - Laut Leonhard bleibt die Einstellung offenbar nicht in der Session erhalten. Ob GSVmulti sie programmweit speichert, ist offen.
+  - App (Einrichtung Schritt 4) und Wiki müssen darauf ausdrücklich hinweisen.
