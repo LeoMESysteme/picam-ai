@@ -103,17 +103,78 @@ def test_busy_zero_source_access_and_guard(tmp_path):
     archive = tmp_path / "archive"
     assert w.Exporter(source, archive, idle=lambda: False).run() is None
     assert not archive.exists()
-    proc = tmp_path / "proc"
-    proc.mkdir()
-    assert w.workbench_idle(proc)
-    p = proc / "123"
-    p.mkdir()
-    (p / "cmdline").write_bytes(b"/usr/bin/python\0-m\0dispread\0serve\0")
-    assert not w.workbench_idle(proc)
-    (p / "cmdline").write_bytes(b"/usr/local/bin/dispread\0serve\0")
-    assert not w.workbench_idle(proc)
-    (p / "cmdline").unlink()
-    assert not w.workbench_idle(proc)
+
+
+def open_run(source, name="run-01", *, ended=False, records=True):
+    run = source / "live-20261110T120000Z" / name
+    run.mkdir(parents=True)
+    meta = {"schema": "live-session/1", "started_at_utc": "2026-11-10T12:00:00Z"}
+    if ended:
+        meta["ended_at_utc"] = "2026-11-10T13:00:00Z"
+    (run / "session.json").write_text(json.dumps(meta))
+    if records:
+        (run / "records.jsonl").write_text("{}\n")
+    return run
+
+
+def age(run, seconds):
+    for path in [run, *run.iterdir()]:
+        stamp = path.stat().st_mtime - seconds
+        w.os.utime(path, (stamp, stamp))
+
+
+def test_no_active_run_ignores_running_workbench_and_finished_runs(tmp_path):
+    source = tmp_path / "live"
+    assert w.no_active_run(source)  # fehlende Quelle: nichts läuft
+    source.mkdir()
+    assert w.no_active_run(source)
+    open_run(source, ended=True)
+    (source / "bridge").mkdir()  # Brückenverzeichnis ohne run-*
+    assert w.no_active_run(source)
+
+
+def test_no_active_run_blocks_on_fresh_open_run(tmp_path):
+    source = tmp_path / "live"
+    run = open_run(source)
+    assert not w.no_active_run(source)
+    # Start: Verzeichnis angelegt, session.json noch nicht geschrieben.
+    (run / "session.json").unlink()
+    (run / "records.jsonl").unlink()
+    assert not w.no_active_run(source)
+    # Halb geschriebene oder unlesbare Metadaten zählen als offen.
+    (run / "session.json").write_text("{")
+    assert not w.no_active_run(source)
+
+
+def test_no_active_run_releases_abandoned_run_after_window(tmp_path):
+    source = tmp_path / "live"
+    run = open_run(source)
+    age(run, w.ACTIVE_WINDOW_S + 5)
+    assert w.no_active_run(source)
+    # Laufende Records-Datei hält einen Lauf mit alter session.json offen.
+    (run / "records.jsonl").write_text("{}\n{}\n")
+    assert not w.no_active_run(source)
+
+
+def test_no_active_run_fails_closed_on_unreadable_source(tmp_path, monkeypatch):
+    source = tmp_path / "live"
+    open_run(source, ended=True)
+
+    def broken(path):
+        raise PermissionError("fixture")
+
+    monkeypatch.setattr(w.os, "scandir", broken)
+    assert not w.no_active_run(source)
+
+
+def test_exporter_default_guard_defers_on_open_run(tmp_path):
+    source, archive = tmp_path / "source", tmp_path / "archive"
+    make_run(source)
+    open_run(source)
+    exporter = w.Exporter(source, archive)
+    assert exporter.run() is None
+    assert exporter.deferred
+    assert not archive.exists()
 
 
 def test_invalid_json_unknown_status_and_timebases(tmp_path):
@@ -315,7 +376,7 @@ def test_unreadable_records_visible_without_fake_observations(tmp_path, monkeypa
 
 
 def test_cli_deferred_success_json(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(w, "workbench_idle", lambda: False)
+    monkeypatch.setattr(w, "no_active_run", lambda source: False)
     assert w.main(["export", "--source", str(tmp_path / "missing"), "--archive", str(tmp_path / "archive")]) == 0
     assert json.loads(capsys.readouterr().out) == {"path": None, "deferred": True, "error": None}
 

@@ -9,13 +9,13 @@ import stat
 import time
 from pathlib import Path
 
-from wiki_sessions import GUARD_INTERVAL_S, Exporter, workbench_idle
+from wiki_sessions import BUDGET_S, GUARD_INTERVAL_S, Exporter, no_active_run
 
 ARCHIVE = Path("/srv/picam-wiki-export/archive")
 
 
 class ExposureDeferred(Exception):
-    """Workbench activity stopped a permission update."""
+    """An open measurement run stopped a permission update."""
 
 
 def _check(idle):
@@ -69,7 +69,7 @@ def _chmod(path, permissions, *, directory=False, keep_setgid=False):
 
 
 def throttled(idle, interval=GUARD_INTERVAL_S):
-    """Scan /proc at most every interval; a busy answer is never cached."""
+    """Scan the source at most every interval; a busy answer is never cached."""
     last = [None]
 
     def guard():
@@ -84,10 +84,10 @@ def throttled(idle, interval=GUARD_INTERVAL_S):
     return guard
 
 
-def expose_snapshot(archive, snapshot, *, idle=workbench_idle):
+def expose_snapshot(archive, snapshot, *, idle):
     """Grant group access to one published generation; expose current last.
 
-    Return False when Workbench activity interrupts the walk. Nothing is
+    Return False when an open measurement run interrupts the walk. Nothing is
     created, copied or chowned here: chunks are hard links to the shared 0640
     block store, and every published entry must already carry the archive's
     group (inherited through setgid). Files are opened first, directories
@@ -165,9 +165,12 @@ def expose_snapshot(archive, snapshot, *, idle=workbench_idle):
         return False
 
 
-def run_once(source, archive=ARCHIVE, *, idle=workbench_idle, exporter_factory=Exporter, budget_s=45):
+def run_once(source, archive=ARCHIVE, *, idle=None, exporter_factory=Exporter, budget_s=BUDGET_S):
     """One fixed-archive service pass; injectable paths/factory support tiny tests."""
     result = {"path": None, "deferred": False, "error": None}
+    if idle is None:
+        def idle():
+            return no_active_run(source)
     try:
         if not idle():
             result["deferred"] = True

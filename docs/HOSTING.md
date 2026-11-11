@@ -108,7 +108,7 @@ nichts in sein Verzeichnis.
 **Einmalige Kosten nach diesem Update:** Der Integritätscache bekommt ein
 neues Schlüsselformat, und alle Läufe mit vorhandener Quelle werden nach den
 neuen Zählregeln neu ausgewertet. Das braucht mehrere Exportphasen
-(je 45 s bei 25 % CPU); bis dahin bleibt der bisherige Archivstand sichtbar.
+(je bis zu 600 s bei 25 % CPU); bis dahin bleibt der bisherige Archivstand sichtbar.
 Nach dem Update in einer Messpause einige Phasen anstoßen (Befehl unten).
 
 Das nächste reguläre Produktionsdeployment schreibt
@@ -120,10 +120,18 @@ systemd (root); der Exportdienst braucht keinen Zugriff darauf, und der
 Runner keinen Neustart. Scheitert das Schreiben, steht der Fehler als
 `request_error` im JSON-Ergebnis des CI-Schritts, und es wird nicht
 gewartet. Der Exportdienst
-arbeitet pro Anfrage höchstens 45 s, mit zusätzlicher systemd-Zeitgrenze von
-75 s. Bei laufendem `dispread serve` oder unklarem Prozessstatus importiert er
-nichts. Startet eine Workbench während der Bearbeitung, endet sie am nächsten
-begrenzten Prüfschritt. Die Workbench wird niemals angehalten oder am Start
+arbeitet pro Anfrage höchstens 600 s, mit zusätzlicher systemd-Zeitgrenze von
+720 s. Er ist I/O-gebunden: Am 2026-11-10 brauchten neun neue Läufe 3 min 43 s
+bei 11 s CPU; das frühere Budget von 45 s reichte für keinen Nachholstau.
+Solange unter `var/live` ein Messlauf offen ist, importiert er nichts. Offen
+heißt: `session.json` ohne `ended_at_utc` (oder unlesbar) und eine Änderung an
+Laufverzeichnis, `session.json` oder `records.jsonl` in den letzten 300 s; ein
+abgestürzter Lauf hält den Export also höchstens 5 min auf. Eine laufende
+Werkbank ohne Messlauf blockiert nicht mehr (bis 2026-11-10 tat sie das per
+`/proc`-Suche nach `dispread serve`, erkannte aber `python -m
+dispread.workbench.cli serve` nicht). Startet ein Messlauf während der
+Bearbeitung, endet sie am nächsten begrenzten Prüfschritt. Die Workbench wird
+niemals angehalten oder am Start
 gehindert. Das ersetzt keine harte Ressourcenisolation: Builds und Browsertests
 gehören auf dem gemeinsamen Pi weiterhin in Messpausen.
 
@@ -173,7 +181,7 @@ Eine veränderte Quelle unter derselben Laufkennung wird als Konflikt gemeldet.
 Dieses Verzeichnis separat sichern.
 
 ```bash
-# Nach beendeter Workbench eine Exportphase anfordern:
+# Außerhalb eines Messlaufs eine Exportphase anfordern:
 sudo systemctl start picam-wiki-export.service
 sudo journalctl -u picam-wiki-export.service -n 20 --no-pager
 ```
@@ -183,9 +191,9 @@ JSONL-Verarbeitung setzen innerhalb einer Datei am letzten geprüften Block
 fort; fertige exakte Statistiken werden zwischengespeichert. Eine unterbrochene
 einzelne SQL-Abfrage beginnt erneut, ohne doppelte Beobachtungen einzufügen.
 Das Zeitbudget wird bei jedem Prüfschritt und in jedem SQLite-Progress-Callback
-geprüft. Der teurere Prozessscan (`/proc`) läuft höchstens alle 100 ms, im
+geprüft. Der teurere Scan der Laufverzeichnisse läuft höchstens alle 100 ms, im
 Exporter wie bei der Freigabe; der erste Prüfschritt jeder Exportphase scannt
-immer, sodass eine laufende Workbench jeden Quellzugriff verhindert. Der
+immer, sodass ein offener Messlauf jede Archivarbeit verhindert. Der
 Integritätscache verifizierter Blöcke ist an Inode, Größe und mtime gebunden,
 nicht an ctime: Hardlinks und `chmod` ändern ctime und lösten früher bei
 jeder neuen Generation ein vollständiges Neuhashen aus. Neue Blöcke werden
@@ -221,7 +229,9 @@ fehlenden `stats.rules` erkennbar.
 
 Kommt keine neue Generation rechtzeitig an, bleibt der letzte geprüfte Stand
 sichtbar. Die Veröffentlichungsseite nennt immer das Archivdatum; während
-einer dauerhaft geöffneten Workbench kommen keine neuen Sessions hinzu.
+eines offenen Messlaufs kommen keine neuen Sessions hinzu. Der Deploy wartet
+höchstens 15 s auf den Export; dauert er länger, zeigt erst der nächste Deploy
+die neuen Sessions.
 Der Runner merkt den letzten erfolgreich eingebundenen Stand unter
 `/var/lib/forgejo-runner/wiki-session-state.json`. Bei beschädigten oder zu
 großen Daten wird ein früherer gültiger Stand verwendet, sonst eine leere

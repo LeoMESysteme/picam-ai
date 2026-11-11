@@ -14,8 +14,9 @@ CPUWeight=1
 IOSchedulingClass=idle
 MemoryMax=256M
 # The application checkpoints each bounded block. Timeout is an additional
-# limit; a kill cannot publish a partial generation.
-TimeoutStartSec=75
+# limit above the cooperative 600 s budget (wiki_sessions.BUDGET_S); a kill
+# cannot publish a partial generation.
+TimeoutStartSec=720
 NoNewPrivileges=true
 PrivateDevices=true
 ProtectHome=read-only
