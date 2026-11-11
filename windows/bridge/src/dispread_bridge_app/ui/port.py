@@ -46,6 +46,54 @@ class SetupState:
     data: dict[str, Any] = field(default_factory=dict)
 
 
+MODES = ('uart_direct', 'uart_bridge', 'network')   # Reihenfolge der Moduswahl (UX2)
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """Ergebnis einer echten Prüfung einer Eingabe (UX2). Nie geraten, nie Secrets im Text.
+
+    ``state``: ``ok`` (geprüft und angenommen), ``warn`` (angenommen, aber mit Vorbehalt,
+    z. B. Port vorhanden, aber kein com0com-Paar erkannt), ``err`` (abgelehnt).
+    ``message`` ist ein kurzer Satz in Bedienersprache („Pi erreichbar, Zertifikat passt“),
+    ``detail`` optional eine Zweitzeile mit der nächsten Aktion.
+    """
+    state: str
+    message: str
+    detail: str = ''
+
+
+@dataclass(frozen=True)
+class ModeInfo:
+    """Zustand eines der drei Ausgabewege für das Moduswahl-Fenster (UX2)."""
+    mode: str                 # uart_direct | uart_bridge | network
+    configured: bool          # Einrichtung dieses Wegs abgeschlossen
+    active: bool              # aktuell gewählter Weg
+    status: str               # kurz, z. B. „Adapter COM9 erkannt“, „gekoppelt mit Prüfstand 2“
+    tone: str = 'info'        # ok | warn | err | info (Proven-Green-Regel gilt)
+    available: bool = True    # jetzt wählbar; False z. B. während einer Übertragung
+    reason: str = ''          # warum nicht wählbar
+
+
+@dataclass(frozen=True)
+class PortChoice:
+    """Ein COM-Port bzw. USB-Adapter für Auswahllisten (UX2)."""
+    port: str                 # „COM7“
+    label: str                # „COM7 – com0com Brückenseite“ / „COM9 – FTDI USB Serial“
+    kind: str = 'other'       # com0com | usb_serial | other
+    busy: bool | None = None  # True = belegt, None = unbekannt
+    device_id: str | None = None   # für select_adapter (nur USB-Adapter)
+
+
+@dataclass(frozen=True)
+class SessionExport:
+    """Erzeugte GSVmulti-Session (UX2): Kopie der belegten Vorlage, nur Port geändert."""
+    path: Path
+    port: str
+    template_id: str
+    sha256: str
+
+
 @dataclass(frozen=True)
 class UiContext:
     """Anzeigekontext, den Readiness/WorkerStatus nicht tragen."""
@@ -81,6 +129,15 @@ class UiContext:
     last_ack: str = 'keine'
     code_remaining_s: int | None = None     # Kopplungscode gespeichert: Restgültigkeit; None = kein Code
     auto_connect: bool = False              # "Beim Start automatisch verbinden"
+    # --- UX2 ---
+    route_mode: str | None = None           # uart_direct | uart_bridge | network; None = noch nicht gewählt
+    setup_leavable: bool = False            # Einrichtung darf ohne Abschluss verlassen werden
+    activity_seq: int = 0                   # zählt jeden erfolgreichen Austausch mit dem Pi (Herzschlag-Anzeige)
+    uart_baud: int | None = None            # Pi↔Brücke-UART laut Profil/Konstante (eine Quelle, Anzeige)
+    gsv_baud: int | None = None             # Baudrate der GSVmulti-Seite laut Session-Vorlage (Anzeige)
+    adapter_port: str | None = None         # gewählter USB-UART-Adapter, z. B. „COM9“
+    adapter_present: bool | None = None     # steckt der gewählte Adapter gerade? None = unbekannt
+    session_template: str | None = None     # Kennung der Vorlage, aus der Sessions erzeugt werden
 
 
 class ControllerPort(Protocol):
@@ -105,6 +162,18 @@ class ControllerPort(Protocol):
     def set_auto_connect(self, on: bool) -> None: ...
     def auto_connect_at_start(self) -> bool: ...
     def switch_pi(self, pi_id: str) -> None: ...
+    # --- UX2 (blockierend erlaubt, laufen im Pool) ---
+    def modes(self) -> tuple[ModeInfo, ...]: ...            # immer alle drei, Reihenfolge MODES
+    def select_mode(self, mode: str) -> None: ...           # nicht eingerichtet → Einrichtung dieses Wegs; gesperrt → AppError('mode_locked')
+    def leave_setup(self) -> None: ...                      # zurück in den Betrieb, gespeicherte Konfiguration bleibt
+    def list_ports(self) -> tuple[PortChoice, ...]: ...     # alle COM-Ports mit Art/Belegung
+    def list_adapters(self) -> tuple[PortChoice, ...]: ...  # nur USB-Seriell-Adapter
+    def check_endpoint(self, text: str) -> CheckResult: ...         # Syntax → Namensauflösung → TCP → TLS-Fingerabdruck
+    def check_port_pair(self, bridge_port: str, gsv_port: str) -> CheckResult: ...
+    def check_adapter(self, port: str) -> CheckResult: ...          # vorhanden, exklusiv zu öffnen, wieder frei
+    def check_pairing_code(self, code: str) -> CheckResult: ...     # nur Format, lokal, nicht blockierend
+    def export_session_file(self, destination: Path, port: str | None = None) -> SessionExport: ...
+    def diagnostics_contents(self) -> tuple[tuple[str, str], ...]: ...   # (Datei im ZIP, was drinsteht)
     # nicht blockierende Lesezugriffe
     def snapshot(self) -> Readiness: ...
     def worker_status(self) -> WorkerStatus | None: ...

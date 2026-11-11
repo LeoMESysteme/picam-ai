@@ -14,6 +14,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.output_state import RELEASE_BLOCK as RELEASE_BLOCK
 from dispread.bridge.output_state import OutputState
 
@@ -55,7 +56,7 @@ class JsonLineReader:
 class OutputConfig:
     transport: str = "off"
     serial_port: str = "/dev/ttyAMA0"
-    baudrate: int = 115200
+    baudrate: int = UART_BAUD
     tcp_host: str = "0.0.0.0"
     tcp_port: int = 5000
     max_frame_age_ms: int = 1000
@@ -65,8 +66,8 @@ class OutputConfig:
             raise ValueError("Unbekannter Ausgabeweg")
         if self.serial_port != "/dev/ttyAMA0":
             raise ValueError("UART-Ausgang muss /dev/ttyAMA0 sein; Referenzport bleibt frei")
-        if type(self.baudrate) is not int or self.baudrate != 115200:
-            raise ValueError("Prototyp benötigt 115200 Baud")
+        if type(self.baudrate) is not int or self.baudrate != UART_BAUD:
+            raise ValueError(f"Brücke benötigt {UART_BAUD} Baud")
         if type(self.tcp_port) is not int or not 1 <= self.tcp_port <= 65535:
             raise ValueError("Ungültiger TCP-Port")
         if not isinstance(self.tcp_host, str) or not self.tcp_host:

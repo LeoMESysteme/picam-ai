@@ -282,3 +282,16 @@ def test_valid_record_still_requires_a_confirmed_frame():
         encode_v2(message)
     message["record"]["frames_confirmed"] = 1
     assert decode_v2(encode_v2(message)) == message
+
+
+def test_profile_uart_baud_defaults_and_explicit_rate():
+    # Ohne Feld stammt das Profil von einem Pi vor UX2, der noch 115 200 Baud fährt.
+    legacy = {k: v for k, v in profile().items() if k != "uart_baud"}
+    assert parse_profile(json.dumps(legacy).encode()).uart_baud == 115200
+    assert parse_profile(json.dumps(profile(uart_baud=230400)).encode()).uart_baud == 230400
+
+
+@pytest.mark.parametrize('rate', [True, None, '460800', 0, -1, 99999999])
+def test_profile_rejects_invalid_uart_baud(rate):
+    with pytest.raises(ValueError):
+        parse_profile(json.dumps(profile(uart_baud=rate)).encode())

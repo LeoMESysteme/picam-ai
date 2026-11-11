@@ -1,7 +1,7 @@
 """Betriebsansicht: Zustand oben, Journal darunter."""
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListView,
     QScrollArea,
     QSizePolicy,
+    QSpacerItem,
     QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
@@ -21,19 +22,32 @@ from PySide6.QtWidgets import (
 from . import texts, theme
 from .port import JournalEntry
 from .widgets import (
+    ColorFlash,
     FocusPushButton,
     FocusToolButton,
     Header,
+    IconButton,
+    IndeterminateBar,
     InfoBar,
     StateIcon,
-    button,
-    footer_frame2,
     paint_focus,
+    toolbar_frame,
 )
 
 
+def _fit_words(label: QLabel, raw: str, avail: int) -> None:
+    """Weiche Trennstellen nur, wenn ein Wort sonst nicht in die Kachel passt (schmal, große Schrift)."""
+    fm = QFontMetrics(label.font())
+    too_long = any(fm.horizontalAdvance(tok) > avail for tok in raw.split())
+    text = texts.hyphenate(raw) if too_long else raw
+    if label.text() != text:
+        label.setText(text)
+
+
 class Chip(FocusToolButton):
-    """Prüfpunkt: Name, Symbol + Statuswort, optionale Unterzeile."""
+    """Prüfpunkt-Kachel: Komponenten-Symbol, Name, Info-Symbol (Erklärung), Statussymbol + Wort, Zweitzeile.
+
+    Bei echtem Zustandswechsel kurzer Farbübergang (200 ms); ein Klick öffnet das Detailfenster."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -41,133 +55,108 @@ class Chip(FocusToolButton):
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 6)
-        lay.setSpacing(2)
-        self.name = QLabel()
-        self.name.setProperty('secondary', True)
-        self.name.setProperty('caption', True)
+        lay.setContentsMargins(6, 6, 6, 8)
+        lay.setSpacing(3)
+        self.top = QHBoxLayout()
+        self.top.setSpacing(6)
+        self.comp_icon = QLabel()
+        self.comp_icon.setFixedSize(16, 16)
+        self.name = theme.set_typo(QLabel(), 'caption')
+        self.info_icon = QLabel()
+        self.info_icon.setObjectName('chip_info')
+        self.info_icon.setFixedSize(16, 16)
+        self.info_icon.setPixmap(theme.icon_pixmap('info', 'text2', 16))
+        self.info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self.top.addWidget(self.comp_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.top.addWidget(self.name, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.top.addWidget(self.info_icon, 0, Qt.AlignmentFlag.AlignTop)
+        self.name_row = QHBoxLayout()           # schmale Kachel: Name in eigener Zeile
+        self.name_row.setSpacing(0)
         row = QHBoxLayout()
         row.setSpacing(4)
-        self.state_icon = StateIcon(size=14)
-        self.word = QLabel()
-        self.word.setProperty('caption', True)
-        self.word.setProperty('strong', True)
+        self.state_icon = StateIcon(size=16)
+        self.word = theme.set_typo(QLabel(), 'caption_strong')
         self.word.setWordWrap(True)
         row.addWidget(self.state_icon, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(self.word, 1)
-        self.sub = QLabel()
-        self.sub.setProperty('caption', True)
-        self.sub.setProperty('secondary', True)
+        self.sub = theme.set_typo(QLabel(), 'caption')
         self.sub.setWordWrap(True)
-        lay.addWidget(self.name)
+        lay.addLayout(self.top)
+        lay.addLayout(self.name_row)
         lay.addLayout(row)
         lay.addWidget(self.sub)
         lay.addStretch(1)
-        for w in (self.name, self.word, self.sub, self.state_icon):
+        for w in (self.comp_icon, self.name, self.word, self.sub, self.state_icon):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        # Das Info-Symbol bleibt für den Mauszeiger erreichbar (Tooltip); Klicks reicht QLabel an die Kachel weiter.
         self.view: texts.ChipView | None = None
+        self.flash = ColorFlash(self)
+        self._inline = True
+        self._spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
     def set_view(self, v: texts.ChipView) -> None:
+        prev = self.view
+        if v == prev:
+            return
         self.view = v
+        if prev is None or prev.key != v.key:
+            self.comp_icon.setPixmap(theme.icon_pixmap(texts.CHIP_ICON.get(v.key, 'info'), 'text2', 16))
         self.name.setText(v.name)
         self.state_icon.set_tone(v.tone)
         self.word.setText(v.word)
         self.sub.setText(v.sub)
         self.sub.setVisible(bool(v.sub))
+        help_text = texts.CHIP_HELP.get(v.key, '')
+        self.info_icon.setToolTip(help_text)
+        self.info_icon.setAccessibleName(f'Erklärung {v.name}')
+        self.info_icon.setVisible(bool(help_text))
+        self.setToolTip(f'{v.word}' + (f' – {v.sub}' if v.sub else ''))
         self.setAccessibleName(f'{v.name}: {texts.SCREEN_READER[v.tone]} {v.word}' + (f', {v.sub}' if v.sub else ''))
+        self.setAccessibleDescription(help_text)
+        if prev is not None and prev.key == v.key and (prev.tone, prev.word) != (v.tone, v.word):
+            self.flash.start(v.tone)
 
-    def needed_height(self, width: int) -> int:
+    def _set_inline(self, inline: bool) -> None:
+        if inline == self._inline:
+            return
+        self._inline = inline
+        if inline:
+            self.name_row.removeWidget(self.name)
+            self.top.removeItem(self._spacer)
+            self.top.insertWidget(1, self.name, 1, Qt.AlignmentFlag.AlignVCenter)
+        else:
+            self.top.removeWidget(self.name)
+            self.top.insertItem(1, self._spacer)
+            self.name_row.addWidget(self.name, 1)
+
+    def fits_inline(self, width: int) -> bool:
+        """Passt der Name neben Komponenten- und Info-Symbol? Sonst steht er in eigener Zeile."""
+        return 16 + 6 + self.name.sizeHint().width() + 6 + 16 <= width - 12
+
+    def needed_height(self, width: int, inline: bool | None = None) -> int:
         inner = width - 12
-        h = 12 + self.name.sizeHint().height()
-        h += max(self.state_icon.height(), self.word.heightForWidth(inner - 18) if self.word.heightForWidth(inner - 18) > 0
-                 else self.word.sizeHint().height()) + 2
+        self._set_inline(self.fits_inline(width) if inline is None else inline)
+        h = 14 + max(16, self.name.sizeHint().height() if self._inline else 16)
+        if not self._inline:
+            h += self.name.sizeHint().height() + 3
+        _fit_words(self.word, self.view.word if self.view else '', inner - 20)
+        _fit_words(self.sub, self.view.sub if self.view else '', inner)
+        ww = self.word.heightForWidth(inner - 20)
+        h += 3 + max(16, ww if ww > 0 else self.word.sizeHint().height())
         if self.sub.isVisibleTo(self):
-            h += self.sub.heightForWidth(inner) + 2
+            h += 3 + self.sub.heightForWidth(inner)
         return h
 
-
-def _caption(text: str) -> QLabel:
-    lab = QLabel(text)
-    lab.setWordWrap(True)
-    lab.setProperty('secondary', True)
-    lab.setProperty('caption', True)
-    return lab
-
-
-class Flyout(QFrame):
-    closed = Signal()
-    action = Signal(str)
-    toggled = Signal(bool)
-
-    def __init__(self, view: texts.ChipView, parent=None, toggle: tuple[str, bool] | None = None):
-        super().__init__(parent, Qt.WindowType.Popup)
-        self.setProperty('popup', True)
-        self.setObjectName('flyout')
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(6)
-        head = QHBoxLayout()
-        t = QLabel(view.name if view.key != 'pi' else 'Pi – technische Werte')
-        t.setProperty('strong', True)
-        head.addWidget(t, 1)
-        self.close_button = button('×', name='flyout_close')
-        self.close_button.setAccessibleName('Details schließen')
-        self.close_button.setProperty('flat', True)
-        self.close_button.clicked.connect(self.close)
-        head.addWidget(self.close_button)
-        lay.addLayout(head)
-        for k, v in view.details:
-            kl = QLabel(k)
-            kl.setProperty('secondary', True)
-            kl.setProperty('caption', True)
-            lay.addWidget(kl)
-            vl = QLabel(v)
-            vl.setWordWrap(True)
-            vl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            if k.startswith('TLS'):
-                vl.setFont(theme.make_font(9, mono=True))
-                vl.setProperty('mono', True)
-            lay.addWidget(vl)
-        for label, aid, enabled, reason in view.actions:
-            b = button(label, name='flyout_action')
-            b.setEnabled(enabled)
-            if not enabled:
-                b.setToolTip(reason)
-                lay.addWidget(_caption(reason))
-            b.clicked.connect(lambda _=False, a=aid: (self.action.emit(a), self.close()))
-            lay.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
-        if toggle is not None:
-            from PySide6.QtWidgets import QCheckBox
-            cb = QCheckBox()
-            cb.setAccessibleName(toggle[0])
-            cb.setChecked(toggle[1])
-            cb.toggled.connect(self.toggled)
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            tl = QLabel(toggle[0])
-            tl.setWordWrap(True)
-            row.addWidget(cb, 0, Qt.AlignmentFlag.AlignTop)
-            row.addWidget(tl, 1)
-            lay.addSpacing(4)
-            lay.addLayout(row)
-        if view.hint:
-            h = QLabel(view.hint)
-            h.setWordWrap(True)
-            h.setProperty('secondary', True)
-            h.setProperty('caption', True)
-            lay.addSpacing(4)
-            lay.addWidget(h)
-        self.setFixedWidth(340)
-
-    def keyPressEvent(self, e):
-        if e.key() == Qt.Key.Key_Escape:
-            self.close()
-        else:
-            super().keyPressEvent(e)
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if self.flash.running:
+            p = QPainter(self)
+            self.flash.paint(p, self.rect(), 4)
+            p.end()
 
     def hideEvent(self, e):
         super().hideEvent(e)
-        self.closed.emit()
+        self.flash.stop()
 
 
 class JournalModel(QAbstractListModel):
@@ -339,6 +328,7 @@ class StatusView(QWidget):
     action = Signal(str)
     lock_clicked = Signal()
     switch_clicked = Signal()
+    chip_clicked = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -353,6 +343,7 @@ class StatusView(QWidget):
         self.header = Header()
         self.header.lock_clicked.connect(self.lock_clicked)
         self.header.switch_clicked.connect(self.switch_clicked)
+        self.header.mode_clicked.connect(lambda: self.action.emit('open_modes'))
         body.addWidget(self.header)
         self.infobar = InfoBar()
         self.infobar.action.connect(self.action)
@@ -366,7 +357,7 @@ class StatusView(QWidget):
             c.setObjectName(f'chip{i}')
             grid.addWidget(c, i // 3, i % 3)
             self.chips.append(c)
-            c.clicked.connect(lambda _=False, n=i: QTimer.singleShot(0, lambda: self._open_flyout(n)))
+            c.clicked.connect(lambda _=False, n=i: QTimer.singleShot(0, lambda: self._chip_clicked(n)))
         self.chip_grid = grid
         body.addLayout(grid)
         seg_row = QHBoxLayout()
@@ -416,24 +407,30 @@ class StatusView(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(self.body_widget)
+        self.body_widget.installEventFilter(self)
         self.scroll = scroll
+        self.busy_bar = IndeterminateBar()          # laufende Aufgabe ohne eigenen Platz (Export, Session)
+        self.busy_bar.setObjectName('busy_bar')
+        root.addWidget(self.busy_bar)
         root.addWidget(scroll, 1)
-        foot, fl, fl2 = footer_frame2()
-        self.export_button = button('Diagnose', name='export')
-        self.export_button.setAccessibleName('Diagnose exportieren')
-        self.details_button = button('Details', name='details')
-        self.setup_button = button('Einrichtung ändern …', name='setup')
-        self.exit_button = button('Beenden …', name='exit_bridge')
+        foot, fl = toolbar_frame()
+        self.settings_button = IconButton('settings', texts.SETTINGS, name='settings')
+        self.export_button = IconButton('document_arrow_down', texts.EXPORT_LOGS, name='export')
+        self.details_button = IconButton('info', texts.INFO, name='details')
+        self.exit_button = IconButton('power', texts.EXIT_TIP, name='exit_bridge')
         self.version_label = QLabel()
-        self.version_label.setProperty('secondary', True)
-        self.version_label.setProperty('caption', True)
-        fl.addWidget(self.export_button)
-        fl.addStretch(1)
-        fl.addWidget(self.setup_button)
+        self.version_label.setObjectName('version')
+        theme.set_typo(self.version_label, 'caption')
         self.version_label.setWordWrap(True)
-        fl2.addWidget(self.details_button)
-        fl2.addWidget(self.version_label, 1)
-        fl2.addWidget(self.exit_button)
+        self.version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.version_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        fl.addWidget(self.settings_button)
+        fl.addWidget(self.export_button)
+        fl.addWidget(self.details_button)
+        fl.addSpacing(8)
+        fl.addWidget(self.version_label, 1)
+        fl.addSpacing(4)
+        fl.addWidget(self.exit_button)
         self.channel_label = QLabel()
         self.channel_label.setProperty('strong', True)
         self.channel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -441,11 +438,12 @@ class StatusView(QWidget):
         self.channel_label.hide()
         root.addWidget(self.channel_label)
         root.addWidget(foot)
+        self.toolbar = foot
+        self.settings_button.clicked.connect(lambda: self.action.emit('open_settings'))
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
         self.details_button.clicked.connect(lambda: self.action.emit('details'))
-        self.setup_button.clicked.connect(lambda: self.action.emit('change_setup'))
         self.exit_button.clicked.connect(lambda: self.action.emit('exit_bridge'))
-        self.flyout: Flyout | None = None
+        self.open_chip: int | None = None
         self._pi_name = None
         self.lock_button = self.header.lock_button
         self.dut_label = self.header.dut
@@ -462,11 +460,13 @@ class StatusView(QWidget):
             QWidget.setTabOrder(a, b)
 
     def focus_chain(self) -> list[QWidget]:
-        return [self.lock_button, *self.infobar.buttons, *self.chips, self.seg_all, self.seg_faults, self.journal,
-                self.export_button, self.setup_button, self.details_button, self.exit_button]
+        h = self.header
+        return [h.mode_button, h.switch_button, self.lock_button, *self.infobar.buttons, *self.chips, self.seg_all,
+                self.seg_faults, self.journal, self.settings_button, self.export_button, self.details_button,
+                self.exit_button]
 
     def update_from(self, readiness, worker, ctx, locked: bool) -> None:
-        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked)
+        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer)
         self.infobar.set_bar(texts.action_bar(readiness, worker, ctx))
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx), strict=False):
             chip.set_view(view)
@@ -498,11 +498,18 @@ class StatusView(QWidget):
         self._update_counts()
 
     def fit_chips(self) -> None:
+        """Gleich hohe Kacheln je Reihe; der Name steht in allen sechs gleich (neben dem Symbol oder darunter)."""
+        w = max(10, min(c.width() for c in self.chips))
+        inline = all(c.fits_inline(w) for c in self.chips)
         for row in (self.chips[:3], self.chips[3:]):
-            w = max(10, row[0].width())
-            h = max(c.needed_height(w) for c in row)
+            h = max(c.needed_height(w, inline) for c in row)
             for c in row:
                 c.setFixedHeight(h)
+
+    def eventFilter(self, obj, e):
+        if obj is self.body_widget and e.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self.fit_chips)          # Bildlaufleiste erscheint/verschwindet: neu einpassen
+        return super().eventFilter(obj, e)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -512,21 +519,12 @@ class StatusView(QWidget):
         super().showEvent(e)
         self.fit_chips()
 
-    def _open_flyout(self, n: int) -> None:
-        chip = self.chips[n]
-        if self.flyout is not None:
-            self.flyout.close()
-        if self.flyout is None or not chip.isChecked():
-            pass
-        if not chip.isChecked():
-            return
+    def _chip_clicked(self, n: int) -> None:
+        """Kachel öffnet das Detailfenster; die gewählte Kachel trägt den Akzentrand, solange es offen ist."""
+        self.mark_open_chip(n)
+        self.chip_clicked.emit(n)
+
+    def mark_open_chip(self, n: int | None) -> None:
+        self.open_chip = n
         for i, c in enumerate(self.chips):
-            if i != n:
-                c.setChecked(False)
-        fly = Flyout(chip.view, self)
-        self.flyout = fly
-        fly.closed.connect(lambda c=chip: (c.setChecked(False), c.setFocus()))
-        pos = chip.mapToGlobal(chip.rect().bottomLeft())
-        fly.move(pos.x(), pos.y() + 4)
-        fly.show()
-        fly.setFocus()
+            c.setChecked(i == n)

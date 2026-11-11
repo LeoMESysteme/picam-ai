@@ -112,3 +112,49 @@ def test_no_serial_device_requires_explicit_instance_selection():
     selected = devices.select_supported(("instance", r"usb\vid_0403&pid_6001\5&abc&0&2"))
     assert selected.port == "COM6"
     assert selected.serial is None
+
+
+def test_pnp_inventory_is_cached_but_serial_presence_is_live():
+    now, calls, attached = [0.], [], [serial()]
+    def query():
+        calls.append(now[0])
+        return [pnp(port='COM6')]
+    devices = WindowsDevices(query, lambda: attached, clock=lambda: now[0])
+    assert devices.inventory()[0].port == 'COM6'
+    devices.inventory()
+    assert calls == [0.]
+    now[0] = 31.
+    devices.inventory()
+    assert calls == [0., 31.]
+    devices.invalidate_pnp()
+    devices.inventory()
+    assert calls == [0., 31., 31.]
+
+
+def test_windows_pnp_process_has_no_console(monkeypatch):
+    from dispread_bridge_app import devices
+    monkeypatch.setattr(devices.sys, 'platform', 'win32')
+    monkeypatch.setattr(devices.subprocess, 'CREATE_NO_WINDOW', 0x08000000, raising=False)
+    seen = []
+    def run(argv, **kw):
+        seen.append(kw)
+        return SimpleNamespace(returncode=0, stdout='[]')
+    monkeypatch.setattr(devices.subprocess, 'run', run)
+    assert devices.query_windows_pnp() == ()
+    assert seen[0]['creationflags'] == 0x08000000
+
+
+def test_failed_pnp_query_is_cached_until_explicit_rescan():
+    calls = []
+    def broken():
+        calls.append(1)
+        raise OSError('unavailable')
+    devices = WindowsDevices(broken, lambda: [])
+    for _ in range(3):
+        with pytest.raises(OSError):
+            devices.inventory()
+    assert len(calls) == 1
+    devices.invalidate_pnp()
+    with pytest.raises(OSError):
+        devices.inventory()
+    assert len(calls) == 2

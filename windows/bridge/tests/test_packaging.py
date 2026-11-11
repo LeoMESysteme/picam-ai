@@ -226,10 +226,13 @@ def test_probe_subprocess_uses_scrubbed_environment(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0, json.dumps(valid_report()), "")
 
     monkeypatch.setattr(mod.subprocess, "run", run)
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+    monkeypatch.setattr(mod.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setenv("PATH", r"C:\Python37")
     assert mod.run_frozen_probe(executable)["system_python_used"] is False
     assert "Python37" not in seen["env"]["PATH"]
     assert seen["timeout"] == 45
+    assert seen["creationflags"] == 0x08000000
 
 
 def test_source_snapshot_detects_concurrent_changes(tmp_path):

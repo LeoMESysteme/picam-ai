@@ -15,7 +15,16 @@ from dispread_bridge_app.ui.port import SetupState, UiContext
 from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLabel, QProgressBar, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFrame,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QToolButton,
+)
 from test_app_controller import (  # noqa: F401
     CODE,
     FakeWorker,
@@ -305,28 +314,32 @@ def test_footer_setup_button_goes_to_overview_step_one(tmp_path, identity):
     assert ctx.mode == 'setup' and ctx.setup.step == 1 and ctx.setup.variant == 'E1ok'
 
 
-def test_status_footer_label_and_action(fake_win):
+def test_status_toolbar_settings_and_change_setup_action(fake_win):
     fc, w = fake_win('B1')
-    assert w.status_view.setup_button.text() == 'Einrichtung ändern …'
-    w.status_view.setup_button.click()
+    b = w.status_view.settings_button
+    assert b.toolTip() == 'Einstellungen' and b.accessibleName() == 'Einstellungen' and b.isVisibleTo(w)
+    b.click()
+    settle(w)
+    assert 'open_settings' in w.unhandled          # Einstellungen-Fenster folgt in Runde UI-2
+    w.do_action('change_setup')                    # „Einrichtung ändern“ lebt dort weiter
     settle(w)
     assert ('setup_step', 'change_setup') in fc.calls
 
 
-def test_pi_flyout_offers_switch_only_when_free(fake_win):
+def test_paired_window_offers_switch_only_when_free(fake_win):
     fc, w = fake_win('B1')
     w._show_switch()
     QTest.qWait(50)
-    btns = [b for b in w._flyout.findChildren(QPushButton) if b.text() == 'Zu diesem Pi wechseln']
+    win = w.tool_windows['paired']
+    btns = [b for b in win.findChildren(QPushButton) if b.text() == 'Zu diesem Pi wechseln']
     assert len(btns) == 1 and btns[0].isEnabled()
     btns[0].click()
     settle(w)
     assert ('switch_pi', 'pi-d21a77e6') in fc.calls
-    view = texts.ChipView('switch', 'x', '', 'info', actions=(('Zu diesem Pi wechseln', 'switch_pi:a', False,
-                                                              'Erst Übertragung beenden'),))
-    from dispread_bridge_app.ui.status_view import Flyout
-    fly = Flyout(view)
-    b = fly.findChildren(QPushButton)[-1]
+    fc2, w2 = fake_win('B1x')                       # Übertragung läuft: Wechsel gesperrt, mit Grund
+    w2._show_switch()
+    QTest.qWait(50)
+    b = [b for b in w2.tool_windows['paired'].findChildren(QPushButton) if b.text() == 'Zu diesem Pi wechseln'][0]
     assert not b.isEnabled() and 'Erst Übertragung beenden' in b.toolTip()
 
 
@@ -412,15 +425,17 @@ def test_auto_connect_needs_finished_setup(tmp_path, identity):
     assert c.auto_connect_at_start() is False and not c.connects
 
 
-def test_auto_connect_checkbox_in_details_flyout(fake_win):
+def test_auto_connect_checkbox_in_info_window(fake_win):
     fc, w = fake_win('B1')
     w._show_details()
     QTest.qWait(50)
-    box = [b for b in w._flyout.findChildren(QCheckBox)][0]
+    win = w.tool_windows['info']
+    box = [b for b in win.findChildren(QCheckBox)][0]
     box.setChecked(True)
     settle(w)
     assert ('set_auto_connect', True) in fc.calls
-    assert 'automatisch mit Prüfstand 2 verbinden' in labels(w._flyout)
+    assert 'automatisch mit Prüfstand 2 verbinden' in labels(win)
+    assert 'Gespeichert' in labels(win) and w._info.saved_row.isVisibleTo(win)
 
 
 def test_window_requests_auto_connect_once_at_start(fake_win):
@@ -443,8 +458,8 @@ def test_no_clipped_buttons_or_labels_at_minimum_size(fake_win, state):
         if b.isVisibleTo(w) and b.objectName() not in ('bar_secondary', 'bar_primary') or (
                 b.isVisibleTo(w) and b.parentWidget() is not None):
             assert b.width() >= b.sizeHint().width() - 1, (state, b.objectName(), b.text())
-    foot = view.findChild(type(view.findChild(QPushButton, 'export').parentWidget()), 'footer')
-    btns = [b for b in foot.findChildren(QPushButton) if b.isVisibleTo(w)]
+    foot = view.findChild(QFrame, 'toolbar') or view.findChild(QFrame, 'footer')
+    btns = [b for b in foot.findChildren(QPushButton) + foot.findChildren(QToolButton) if b.isVisibleTo(w)]
     for i, a in enumerate(btns):
         for b in btns[i + 1:]:
             ra, rb = a.geometry(), b.geometry()
@@ -561,7 +576,7 @@ def test_visible_exit_action_in_footer(fake_win):
         fc, w = fake_win(state)
         view = w.stack.currentWidget()
         b = view.exit_button
-        assert b.text() == 'Beenden …' and b.isVisibleTo(w)
+        assert b.accessibleName() == b.toolTip() == 'Brücke beenden …' and b.isVisibleTo(w)
         asked = []
         w.confirm_exit = lambda a=asked: a.append(1) or False
         b.click()

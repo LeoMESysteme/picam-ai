@@ -12,6 +12,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Protocol
 
+from .session_export import GSVMULTI_BAUD
 from .types import InstallResult, PortPair
 
 
@@ -208,7 +209,7 @@ class VcomAdapter:
                 return False
             with ExitStack() as stack:
                 a, b = [stack.enter_context(self._serial_factory(
-                    port=port, baudrate=115200, timeout=0.25, write_timeout=0.5
+                    port=port, baudrate=GSVMULTI_BAUD, timeout=0.25, write_timeout=0.5
                 )) for port in (pair.bridge_port, pair.gsv_port)]
                 a.reset_input_buffer()
                 b.reset_input_buffer()

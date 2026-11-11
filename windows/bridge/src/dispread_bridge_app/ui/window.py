@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -23,8 +24,9 @@ from PySide6.QtWidgets import (
 from . import texts, theme
 from .port import ControllerPort
 from .setup_view import SetupView
-from .status_view import Flyout, StatusView
-from .widgets import button
+from .status_view import StatusView
+from .tool_windows import ExportWindow, InfoContent, ToolWindow, build_chip_detail, build_lock, build_paired
+from .widgets import button, fade_in
 
 REFRESH_INTERVAL_MS = 200
 
@@ -124,8 +126,10 @@ class MainWindow(QWidget):
         self.confirm_disconnect = self._confirm_disconnect_dialog
         self.pick_file = lambda: QFileDialog.getOpenFileName(self, 'Profil öffnen', '', 'Profil (*.dispread)')[0]
         self.pick_folder = lambda: QFileDialog.getExistingDirectory(self, 'Ordner für die Session')
-        self.pick_save = lambda: QFileDialog.getSaveFileName(self, 'Diagnose speichern', 'dispread-diagnose.zip',
-                                                             'ZIP (*.zip)')[0]
+        self.pick_save = lambda: QFileDialog.getSaveFileName(
+            self, texts.EXPORT_DIALOG, f'GSVmulti-Bruecke-Protokolle-{time.strftime("%Y%m%d-%H%M")}.zip',
+            'ZIP (*.zip)')[0]
+        self.open_folder = lambda path: QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         self._ports: dict[str, str] = {}
         self.setAcceptDrops(True)
         self.unhandled: list[str] = []
@@ -133,6 +137,9 @@ class MainWindow(QWidget):
             v.action.connect(self.do_action)
             v.lock_clicked.connect(lambda: QTimer.singleShot(0, self._show_lock))
             v.switch_clicked.connect(lambda: QTimer.singleShot(0, self._show_switch))
+        self.status_view.chip_clicked.connect(self._show_chip)
+        self.tool_windows: dict[str, ToolWindow] = {}
+        self._info: InfoContent | None = None
         self._bridge = _EventBridge(self)
         self._bridge.event.connect(self._on_event, Qt.ConnectionType.QueuedConnection)
         # Ereignisse koaleszieren: hoechstens ein refresh() je REFRESH_INTERVAL_MS.
@@ -144,7 +151,6 @@ class MainWindow(QWidget):
         self._refresh_timer.timeout.connect(self._flush_refresh)
         self._unsubscribe = controller.subscribe(self._bridge.event.emit)
         self._build_tray()
-        self._flyout = None
         self._ticking = False
         self._tick = QTimer(self)                  # Countdowns (Backoff, Code) ticken sekündlich
         self._tick.setInterval(1000)
@@ -195,11 +201,15 @@ class MainWindow(QWidget):
         r, w, c = self.controller.snapshot(), self.controller.worker_status(), self.controller.context()
         locked = self._locked(c, w)
         self.status_view.update_from(r, w, c, locked)
+        before = self.stack.currentWidget()
         if c.setup is not None and c.mode == 'setup':
             self.setup_view.update_from(r, w, c, locked)
             self.stack.setCurrentWidget(self.setup_view)
         else:
             self.stack.setCurrentWidget(self.status_view)
+        if self.stack.currentWidget() is not before:
+            fade_in(self.stack.currentWidget())
+        self._refresh_tool_windows(r, w, c, locked)
         self._ticking = c.retry_in_s is not None or c.code_remaining_s is not None
         h = texts.headline(r, w, c)
         self.tray_state = {'err': 'err', 'warn': 'warn'}.get(h.tone, 'normal')
@@ -274,9 +284,9 @@ class MainWindow(QWidget):
         elif aid == 'start_demo_check':
             self._call(ctl.begin_demo_check, self.setup_view.checked('test_session_ok'))
         elif aid == 'export_diagnostics':
-            dest = self.pick_save()
-            if dest:
-                self._call(ctl.export_diagnostics, Path(dest))
+            self._show_export()
+        elif aid == 'show_paired':
+            self._show_switch()
         elif aid == 'pair':
             self._call(ctl.pair, self.setup_view.code_text(), self.setup_view.checked('fp_ok'))
         elif aid == 'next' and self.setup_view.variant and self.setup_view.variant[0] == 'E1manual' \
@@ -298,7 +308,12 @@ class MainWindow(QWidget):
         elif aid == 'exit_bridge':
             self.exit_bridge()
         elif aid.startswith('auto_connect:'):
-            self._call(ctl.set_auto_connect, aid.endswith(':on'))
+            info = self._info
+
+            def saved(_result, exc):
+                if exc is None and info is not None and info is self._info:
+                    info.confirm_saved()
+            self._call(ctl.set_auto_connect, aid.endswith(':on'), done=saved)
         elif aid.startswith('switch_pi:'):
             self._call(ctl.switch_pi, aid.split(':', 1)[1])
         elif aid.startswith('code_show:'):
@@ -326,7 +341,7 @@ class MainWindow(QWidget):
         elif aid == 'recheck' or aid == 'recheck_adapter':
             self._call(lambda: None)      # liest den Zustand neu; der Controller meldet über subscribe
         else:
-            self.unhandled.append(aid)    # z. B. pair, export_diagnostics: Port hat noch keine Methode
+            self.unhandled.append(aid)    # z. B. open_modes, open_settings: Fenster folgen in Runde UI-2
 
     def _radio(self, aid: str) -> None:
         _, name, idx = aid.split(':')
@@ -366,40 +381,116 @@ class MainWindow(QWidget):
                 e.acceptProposedAction()
                 return
 
-    def _flyout_show(self, view: texts.ChipView, anchor: QWidget, toggle=None) -> None:
-        if self._flyout is not None:
-            self._flyout.close()
-        fly = Flyout(view, self, toggle)
-        fly.action.connect(self.do_action)
-        fly.toggled.connect(lambda on: self.do_action('auto_connect:' + ('on' if on else 'off')))
-        fly.closed.connect(anchor.setFocus)
-        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
-        fly.move(max(0, pos.x() - 200), pos.y() + 4)
-        fly.show()
-        fly.setFocus()
-        self._flyout = fly
+    # ---------------------------------------------------------------- Werkzeugfenster
+    def tool_window(self, kind: str, title: str, cls=ToolWindow) -> ToolWindow:
+        """Höchstens eine Instanz je Art; erneutes Öffnen holt das vorhandene Fenster nach vorn."""
+        win = self.tool_windows.get(kind)
+        if win is None:
+            win = cls(self) if cls is not ToolWindow else ToolWindow(kind, title, self)
+            self.tool_windows[kind] = win
+            if kind == 'chip':
+                win.closed.connect(self._chip_window_closed)
+        win.setWindowTitle(title)
+        return win
+
+    def _chip_window_closed(self) -> None:
+        n = self.status_view.open_chip
+        self.status_view.mark_open_chip(None)
+        if n is not None and self.stack.currentWidget() is self.status_view:
+            self.status_view.chips[n].setFocus()
+
+    def _show_chip(self, n: int) -> None:
+        win = self.tool_window('chip', self.status_view.chips[n].view.name)
+        self._fill_chip(win, n)
+        win.present()
+        self.status_view.mark_open_chip(n)
+
+    def _fill_chip(self, win: ToolWindow, n: int) -> None:
+        view = self.status_view.chips[n].view
+        if view is None:
+            return
+        win.setWindowTitle(f'{view.name} – {texts.APP_TITLE}')
+        win.set_content(('chip', view), lambda body: build_chip_detail(view, body, self._tool_action))
+
+    def _tool_action(self, aid: str) -> None:
+        self.do_action(aid)
 
     def _show_lock(self) -> None:
-        v = texts.ChipView('lock', texts.LOCK_TITLE, '', 'info', hint=texts.LOCK_TEXT)
-        self._flyout_show(v, self.stack.currentWidget().lock_button)
+        win = self.tool_window('lock', texts.LOCK_TITLE)
+        win.set_content('lock', build_lock)
+        win.present()
 
     def _show_switch(self) -> None:
-        c = self.controller.context()
-        free = not c.switch_locked
-        acts = tuple((texts.SWITCH_PI, f'switch_pi:{i}', free, texts.REASON_TRANSMISSION_FIRST)
-                     for _n, i, _w in c.paired if i != c.pi_id)
-        v = texts.ChipView('switch', 'Gekoppelte Pi', '', 'info',
-                           details=tuple((n, f'{i} · {when}') for n, i, when in c.paired), hint=texts.PI_SWITCH_NOTE,
-                           actions=acts)
-        self._flyout_show(v, self.stack.currentWidget().header.switch_button)
+        win = self.tool_window('paired', texts.PAIRED_TITLE)
+        self._fill_paired(win, self.controller.context())
+        win.present()
+
+    def _fill_paired(self, win: ToolWindow, c) -> None:
+        win.set_content(('paired', c.paired, c.pi_id, c.switch_locked),
+                        lambda body: build_paired(c, body, self._tool_action))
 
     def _show_details(self) -> None:
-        c = self.controller.context()
-        v = texts.ChipView('details', 'Details', '', 'info', details=(
-            ('App', c.version or '–'), ('Brückenseite', c.bridge_port or '–'), ('Gegenport', c.gsv_port or '–'),
-            ('Pi-ID', c.pi_id or '–'), ('Protokoll', c.protocol or '–'), ('Journal', texts.JOURNAL_DETAILS)))
-        toggle = (f'Beim Start automatisch mit {c.pi_name} verbinden', c.auto_connect) if c.pi_name else None
-        self._flyout_show(v, self.status_view.details_button, toggle)
+        win = self.tool_window('info', f'{texts.INFO} – {texts.APP_TITLE}')
+        self._fill_info(win, self.controller.context())
+        win.present()
+
+    def _info_key(self, c) -> tuple:
+        return ('info', c.version, c.channel, c.protocol, c.run_id, c.pi_name, c.pi_id, c.endpoint, c.fingerprint,
+                c.paired, c.bridge_port, c.gsv_port, c.adapter_port, c.uart_baud, c.gsv_baud)
+
+    def _fill_info(self, win: ToolWindow, c) -> None:
+        def build(body):
+            self._info = InfoContent(c, body, self._tool_action)
+        win.set_content(self._info_key(c), build)
+
+    def _show_export(self) -> None:
+        win = self.tool_window('export', f'{texts.EXPORT_LOGS} – {texts.APP_TITLE}', ExportWindow)
+        if not getattr(win, '_wired', False):
+            win._wired = True
+            win.save_requested.connect(self._export_save)
+            win.open_folder.connect(lambda path: self.open_folder(path))
+        if win.state != 'saving':
+            win.set_state('idle')
+        win.present()
+        fn = getattr(self.controller, 'diagnostics_contents', None)
+        if fn is None:
+            win.set_contents(())
+            return
+
+        def done(result, exc):
+            win.set_contents(() if exc is not None or not result else result)
+        self._call(fn, done=done)
+
+    def _export_save(self) -> None:
+        win = self.tool_windows.get('export')
+        dest = self.pick_save()
+        if not dest or win is None:
+            return
+        win.set_state('saving')
+        self.status_view.busy_bar.begin()
+
+        def done(result, exc):
+            self.status_view.busy_bar.end()
+            if exc is not None:
+                win.set_state('failed')
+            else:
+                win.set_state('done', Path(result) if result else Path(dest))
+        self._call(self.controller.export_diagnostics, Path(dest), done=done)
+
+    def _refresh_tool_windows(self, r, w, c, locked) -> None:
+        """Offene Fenster folgen dem Zustand; neu gebaut wird nur bei geänderten Daten."""
+        win = self.tool_windows.get('chip')
+        if win is not None and win.isVisible() and self.status_view.open_chip is not None:
+            self._fill_chip(win, self.status_view.open_chip)
+        win = self.tool_windows.get('paired')
+        if win is not None and win.isVisible():
+            self._fill_paired(win, c)
+        win = self.tool_windows.get('info')
+        if win is not None and win.isVisible():
+            self._fill_info(win, c)
+        win = self.tool_windows.get('lock')
+        if win is not None and win.isVisible() and not locked:
+            win.close()
 
     # ---------------------------------------------------------------- Beenden
     def build_exit_dialog(self) -> ExitDialog:
@@ -456,6 +547,8 @@ class MainWindow(QWidget):
         except Exception:
             pass
         self.pool.waitForDone(2000)
+        for win in self.tool_windows.values():
+            win.close()
         if self.tray is not None:
             self.tray.hide()
         self.close()

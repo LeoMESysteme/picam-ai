@@ -7,6 +7,8 @@ import json
 import re
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
@@ -43,7 +45,8 @@ class DeviceSelectionError(ValueError):
 def _execute(argv: tuple[str, ...]):
     if sys.platform != "win32":
         raise OSError("Windows PnP inventory is unavailable on this platform")
-    return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=30, check=False)
+    return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+                          creationflags=subprocess.CREATE_NO_WINDOW)
 
 
 def query_windows_pnp(execute: Callable = _execute) -> tuple[Mapping[str, Any], ...]:
@@ -85,12 +88,36 @@ def _usb_fields(instance: str) -> tuple[int | None, int | None, str | None]:
 
 class WindowsDevices:
     def __init__(self, pnp_query: Callable[[], Iterable[Mapping]] = query_windows_pnp,
-                 port_query: Callable[[], Iterable] = _serial_ports):
+                 port_query: Callable[[], Iterable] = _serial_ports, *, clock=time.monotonic):
         self._pnp_query = pnp_query
         self._port_query = port_query
+        self._clock = clock
+        self._pnp_lock = threading.Lock()
+        self._pnp_at = float('-inf')
+        self._pnp_records = ()
+        self._pnp_failed = False
+
+    def invalidate_pnp(self):
+        with self._pnp_lock:
+            self._pnp_at = float('-inf')
+
+    def _cached_pnp(self):
+        with self._pnp_lock:
+            if self._clock() - self._pnp_at >= 30:
+                try:
+                    self._pnp_records = tuple(self._pnp_query())
+                    self._pnp_failed = False
+                except Exception:
+                    self._pnp_records, self._pnp_failed = (), True
+                    raise
+                finally:
+                    self._pnp_at = self._clock()
+            if self._pnp_failed:
+                raise OSError('Windows PnP inventory unavailable (cached)')
+            return self._pnp_records
 
     def inventory(self) -> tuple[DeviceInfo, ...]:
-        records = tuple(self._pnp_query())
+        records = self._cached_pnp()
         ports = {item.device.upper(): item for item in self._port_query()
                  if isinstance(item.device, str) and valid_port_name(item.device.upper())}
         devices = []

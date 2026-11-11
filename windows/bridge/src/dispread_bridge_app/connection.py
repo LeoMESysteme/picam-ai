@@ -81,6 +81,11 @@ class _DataLink:
                     raise ConnectionError('peer_invalid')
             elif reply.get('run_id') != self.run_id:
                 raise ConnectionError('peer_invalid')
+            allowed = {'hello': {'hello'}, 'heartbeat': {'heartbeat', 'hello'},
+                       'poll': {'record', 'idle', 'ended', 'hello'}, 'ack': {'idle', 'hello'},
+                       'demo_request': {'hello'}}
+            if reply['type'] not in allowed.get(request['type'], set()):
+                raise ConnectionError('peer_invalid')
             output_changed = False
             with self.manager._lock:
                 previous_run = self.run_id
@@ -117,6 +122,10 @@ class _DataLink:
             if output_changed:
                 self.manager._event('peer_output_changed', run_id=self.run_id, output=self.output,
                                     reason=self.output_reason, generation=self.generation)
+            try:
+                self.manager._emit(BridgeEvent('activity', request['type'], self.run_id, None, {}))
+            except Exception:
+                pass
             return reply
         except Exception as error:
             self.failed.set()

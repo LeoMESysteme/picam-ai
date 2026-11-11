@@ -49,6 +49,90 @@ DISCONNECT_TITLE = 'Verbindung trennen?'
 DISCONNECT_TEXT = 'Die Verbindung zum Pi und die Übertragung an GSVmulti enden. Der Lauf auf dem Pi läuft weiter.'
 JOURNAL_DETAILS = 'Begrenzt, Zugangsdaten werden nicht protokolliert.'
 
+# ---- UX2: Kopf, Kacheln, Symbolleiste, Fenster
+MODE_SHORT = {'uart_direct': 'UART direkt', 'uart_bridge': 'UART · Brücke', 'network': 'Netzwerk'}
+MODE_ICON = {'uart_direct': 'plug_connected', 'uart_bridge': 'usb_stick', 'network': 'globe'}
+MODE_NONE = 'Weg wählen'
+MODE_TEXT = {
+    'uart_direct': ('UART direkt', 'Das Pi-Kabel steckt am GSVmulti-PC, GSVmulti liest den Adapter direkt. '
+                    'Die Brücke hilft nur beim Einrichten.'),
+    'uart_bridge': ('UART über Brücke', 'Das Pi-Kabel steckt an diesem PC, die Brücke gibt die Werte an '
+                    'GSVmulti weiter.'),
+    'network': ('Netzwerk über Brücke', 'Der Pi ist über LAN oder Tailscale verbunden, verschlüsselt. '
+                'Die Brücke gibt die Werte an GSVmulti weiter.'),
+}
+CHIP_ICON = {'components': 'cube', 'uart': 'serial_port', 'pi': 'developer_board', 'output': 'arrow_export_ltr',
+             'forward': 'arrow_forward', 'gsv': 'data_line'}
+CHIP_HELP = {
+    'components': 'Prüft, ob die Windows-Bausteine der Brücke vorhanden sind, vor allem das virtuelle Portpaar. '
+                  'Sagt nichts über die Verbindung zum Pi oder den Empfang in GSVmulti.',
+    'uart': 'Zeigt, ob der USB-Seriell-Adapter für einen UART-Weg steckt und bereit ist. Im Weg „Netzwerk“ wird '
+            'er nicht gebraucht. Ein bereiter Adapter heißt nicht, dass der Pi antwortet.',
+    'pi': 'Zeigt, ob die Brücke mit dem gekoppelten Pi verbunden ist und seine Identität geprüft hat. '
+          'Verbunden heißt nicht, dass Werte weitergegeben werden.',
+    'output': 'Zeigt, ob der Pi Werte zur Ausgabe freigibt. Die Brücke gibt selbst nichts frei und startet '
+              'keine Messung.',
+    'forward': 'Zeigt, ob der Windows-Port der Brückenseite geschriebene Werte angenommen hat. Weitergabe ist '
+               'nicht Empfang: ob GSVmulti die Werte gelesen hat, belegt erst der Empfangstest.',
+    'gsv': 'Zeigt, was über GSVmulti bekannt ist: einzustellen, von Hand bestätigt oder Empfang per Test belegt. '
+           'Nur der Empfangstest belegt Empfang, und nur für genau diese Konfiguration.',
+}
+HEARTBEAT_ALIVE = 'Kontakt zum Pi – der Punkt pulsiert bei jedem Austausch. Das sagt nichts über die Weitergabe.'
+HEARTBEAT_IDLE = 'Kein Kontakt zum Pi.'
+HEARTBEAT_BUSY = 'Verbindung zum Pi wird aufgebaut …'
+SETTINGS = 'Einstellungen'
+EXPORT_LOGS = 'Protokolle exportieren'
+INFO = 'Info'
+EXIT_TIP = 'Brücke beenden …'
+PI_SWITCH_TIP = 'Pi wechseln'
+PAIRED_TITLE = 'Gekoppelte Pi'
+CURRENT_PI = 'aktuell gewählt'
+COPY_TIP = 'Kopieren'
+COPIED = 'Kopiert'
+SAVED = 'Gespeichert'
+EXPORT_LEAD = 'Das Paket enthält:'
+EXPORT_NOTE = ('Die Protokolle halten fest, was die Brücke getan hat. Sie prüfen nichts und sind kein '
+               'Gesundheitscheck. Messwerte und Zugangsdaten sind nicht enthalten.')
+EXPORT_LOADING = 'Inhalt wird ermittelt …'
+EXPORT_UNKNOWN = 'Inhalt nicht verfügbar – das Paket wird trotzdem vollständig gespeichert.'
+EXPORT_SAVE = 'Speichern unter …'
+EXPORT_SAVING = 'Wird gespeichert …'
+EXPORT_DONE = 'Protokolle gespeichert'
+EXPORT_FAILED = 'Speichern fehlgeschlagen'
+EXPORT_FAILED_TEXT = 'Wählen Sie einen anderen Ort und versuchen Sie es erneut.'
+EXPORT_PATH = 'Datei'
+OPEN_FOLDER = 'Ordner öffnen'
+EXPORT_DIALOG = 'Protokolle speichern'
+AUTO_CONNECT = 'Beim Start automatisch mit {pi} verbinden'
+ICON_CREDIT = 'Symbole: Fluent UI System Icons, © Microsoft Corporation, MIT-Lizenz'
+# Werte, die als kopierbares Feld (Daten, Mono) erscheinen
+TECH_FIELDS = frozenset({'Pi-ID', 'Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Protokoll', 'Brückenseite',
+                         'GSVmulti-Seite', 'Gegenport', 'App-Version', 'Version', 'Session', 'Portpaar', 'Code',
+                         'Lauf-ID', 'USB-Adapter'})
+EMPTY_VALUES = frozenset({'', '–', 'nicht festgelegt', 'nicht benutzt', 'offen', 'nicht nachgewiesen'})
+
+
+_SHY = '\u00ad'
+_HYPHEN = {w.replace('|', ''): w.replace('|', _SHY) for w in (
+    'Test|freigabe', 'Weiter|gabe', 'Instal|liert', 'ein|gestellt', 'über|geben', 'an|genommen', 'aus|gelassen',
+    'nach|gewiesen', 'ab|genommen', 'Kompo|nenten', 'Schreib|fehler', 'Frei|gegeben', 'Über|tragung', 'Ab|nahme')}
+
+
+def hyphenate(text: str) -> str:
+    """Weiche Trennstellen in langen Wörtern der Kacheln (schmale Fenster, 200 %); Anzeige, nie Screenreader."""
+    return _re.sub(r'[A-Za-zÄÖÜäöüß]+', lambda m: _HYPHEN.get(m.group(0), m.group(0)), text)
+
+
+def mode_view(ctx: UiContext) -> tuple[str, str | None, str]:
+    """(Kurzname, Symbol, Tooltip) des Moduswahl-Knopfs."""
+    mode = ctx.route_mode
+    if mode is None and ctx.route:      # Controller ohne route_mode: aus dem Wegnamen ableiten
+        mode = 'uart_bridge' if ctx.route.startswith('UART') else 'network' if ctx.route.startswith('Netz') else None
+    if mode not in MODE_SHORT:
+        return MODE_NONE, None, MODE_NONE
+    tip = f'Weg: {MODE_TEXT[mode][0]}' + (f' ({ctx.route})' if ctx.route else '') + ' – Weg wählen'
+    return MODE_SHORT[mode], MODE_ICON[mode], tip
+
 
 @dataclass(frozen=True)
 class Headline:
@@ -116,8 +200,8 @@ CONNECTION_CODE_TEXT = {
     'demo_unconfirmed': ('Demo nicht bestätigt', 'Der Pi hat den Demostart nicht bestätigt. Nichts wird wiederholt.'),
     'run_changed': ('Lauf gewechselt', 'Der Pi meldet einen anderen Lauf. Die Brücke liest neu.'),
     'stale_ack': ('Quittung veraltet', 'Eine Quittung passte nicht mehr zum Lauf. Sie wurde verworfen.'),
-    'no_pending_poll': ('Interner Ablauf gestört', 'Verbinden Sie neu und exportieren Sie bei Wiederholung die Diagnose.'),
-    'invalid_legacy_request': ('Interner Ablauf gestört', 'Verbinden Sie neu und exportieren Sie bei Wiederholung die Diagnose.'),
+    'no_pending_poll': ('Interner Ablauf gestört', 'Verbinden Sie neu und exportieren Sie bei Wiederholung die Protokolle.'),
+    'invalid_legacy_request': ('Interner Ablauf gestört', 'Verbinden Sie neu und exportieren Sie bei Wiederholung die Protokolle.'),
     'transport_unsupported': ('Weg nicht unterstützt', 'Wählen Sie Netzwerk oder UART.'),
     'windows_protection_required': ('Windows-Schutz fehlt', 'Zugangsdaten lassen sich ohne Windows-Schutz nicht speichern.'),
     'cancelled': ('Verbindung abgebrochen', 'Verbinden Sie bei Bedarf erneut.'),
@@ -164,7 +248,7 @@ def explain_code(code: str | None) -> tuple[str, str]:
     if code in OUTPUT_TEXT:
         return OUTPUT_TEXT[code]
     if code in WORKER_CODE_TEXT:
-        return WORKER_CODE_TEXT[code], 'Diagnose exportieren und Ursache klären.'
+        return WORKER_CODE_TEXT[code], 'Protokolle exportieren und Ursache klären.'
     return 'Unbekannt', f'Code: {code}' if code else ''
 
 
@@ -415,8 +499,8 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
     code = _worker_active_failure(readiness, worker)
     if code:
         return ActionBar('err', f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(code, code)}',
-                         'Die Brücke schreibt nichts mehr an COM. Diagnose exportieren und Ursache klären; '
-                         'danach neu verbinden.', (('Diagnose exportieren', 'export_diagnostics', True),))
+                         'Die Brücke schreibt nichts mehr an COM. Protokolle exportieren und Ursache klären; '
+                         'danach neu verbinden.', (('Protokolle exportieren', 'export_diagnostics', True),))
     notice = (ctx.setup.data.get('notice') if ctx.setup is not None else None)
     if notice:
         title, text = explain_code(notice)

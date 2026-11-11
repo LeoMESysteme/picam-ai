@@ -53,6 +53,7 @@ def ready(tmp_path, identity):
                     serial_opener=opener, port_leases=SerialPortLease(tmp_path / 'locks'))
     assert opened == []
     hub.prepare_uart()
+    assert opened[0][1]["baudrate"] == 460800
     yield hub, wire, store
     hub.close()
     assert wire.closed

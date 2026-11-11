@@ -309,3 +309,16 @@ def test_public_discovery_imports_without_posix_fcntl(monkeypatch):
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "discover_services", lambda timeout_s: ())
     assert module.discover_with_fallback(("https://pi.example:8080",))[0].endpoints == ("https://pi.example:8080",)
+
+
+def test_windows_tailscale_process_is_hidden(monkeypatch):
+    import subprocess
+    import sys
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000, raising=False)
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(returncode=0, stdout='{"BackendState":"Running"}')
+    assert discovery.tailscale_status(run=run).state == 'running'
+    assert calls[0]['creationflags'] == 0x08000000

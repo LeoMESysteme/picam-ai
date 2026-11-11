@@ -28,7 +28,9 @@ def main() -> int:
         report.update(status='automatic_export_blocked', detail=str(error))
         print(json.dumps(report))
         return 2
-    raise RuntimeError('No automatic exporter has been implemented')
+    report.update(status='restricted_generator_available', automatic_export_allowed=True)
+    print(json.dumps(report))
+    return 0
 
 
 if __name__ == '__main__':

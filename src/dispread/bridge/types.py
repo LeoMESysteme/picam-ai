@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from .baud import UART_BAUD
+
 
 @dataclass(frozen=True, slots=True)
 class BridgeProfile:
@@ -13,6 +15,7 @@ class BridgeProfile:
     endpoints: tuple[str, ...]
     protocol_version: int
     pairing_offer: str | None = None
+    uart_baud: int = UART_BAUD
 
 
 @dataclass(frozen=True, slots=True)

@@ -71,15 +71,18 @@ def test_setup_state_shows_setup_view(make):
     assert w.setup_view.step_header.current == 2
 
 
-def test_click_chip_opens_flyout_and_escape_closes(make):
+def test_click_chip_opens_detail_window_and_escape_closes(make):
     _, w = make()
     chip = w.status_view.chips[2]
     QTest.mouseClick(chip, Qt.LeftButton)
     pump()
-    assert w.status_view.flyout is not None and w.status_view.flyout.isVisible()
-    QTest.keyClick(w.status_view.flyout, Qt.Key_Escape)
+    win = w.tool_windows['chip']
+    assert win.isVisible() and not win.isModal() and win.parentWidget() is w
+    assert not (win.windowFlags() & Qt.WindowType.Popup) == Qt.WindowType.Popup
+    assert chip.isChecked() and 'Pi' in win.windowTitle()
+    QTest.keyClick(win, Qt.Key_Escape)
     pump()
-    assert not w.status_view.flyout.isVisible()
+    assert not win.isVisible() and not chip.isChecked()
 
 
 def test_segmented_filters_faults(make):

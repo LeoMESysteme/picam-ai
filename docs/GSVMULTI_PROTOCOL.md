@@ -359,8 +359,11 @@ benötigt, TX jeweils zum RX der Gegenseite. VCC, CTS und RTS bleiben frei.
 Der Pi-Ausgang ist `/dev/ttyAMA0`, nicht `/dev/serial0`; die konkreten
 GPIO-Pins gegen das [Hardwareprofil](HARDWARE_PROFILE.md) und die aktive
 Konfiguration prüfen. Der Referenzport `/dev/ttyUSB0` bleibt unberührt.
-115200 Baud, 8N1 und kein Handshake sind die Prototypvorgaben. Eine neue
-Verdrahtung wurde in dieser Software-Session nicht vorgenommen.
+Die Pi↔Brücke-Strecke verwendet seit UX2 `dispread.bridge.baud.UART_BAUD`
+(460800 Baud), 8N1 und keinen Handshake; v2 exportiert die Rate im Profil.
+Die GSVmulti-Seite bleibt bei der Baudrate ihrer Session (115200 Baud in
+der belegten COM8-Vorlage). Alte Kabeltests unten dokumentieren ihren
+damaligen Stand. Eine neue Verdrahtung wurde nicht vorgenommen.
 
 ### Weiterlaufen, Wiederanlauf und Historie
 

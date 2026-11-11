@@ -420,3 +420,18 @@ def test_durable_metadata_is_validated_before_intent(status, barrier):
         BridgeSession(journal=Journal(), pi_id='pi-1').exchange(
             Link(reply(status, barrier_id=barrier)), com)
     assert com.payloads == []
+
+
+def test_cli_separates_pi_uart_from_gsv_output_rate(tmp_path, monkeypatch):
+    from dispread import gsv_bridge
+    opened = []
+    class Port:
+        def close(self): pass
+    def serial(port, baudrate):
+        opened.append((port, baudrate))
+        return Port()
+    monkeypatch.setattr(gsv_bridge, '_serial', serial)
+    def stop(*args): raise KeyboardInterrupt
+    monkeypatch.setattr(gsv_bridge.BridgeSession, 'exchange', stop)
+    assert gsv_bridge.main(['--uart-port', 'COM9', '--com-port', 'COM4', '--log', str(tmp_path / 'cli.log')]) == 0
+    assert opened == [('COM4', 115200), ('COM9', 460800)]

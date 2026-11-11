@@ -1,7 +1,7 @@
 """Recognize reviewed archive originals without claiming a session format.
 
-This is an evidence catalog, not a UCF parser or generator. No application/file
-version or editable field has yet been established by a controlled roundtrip.
+The COM8 source permits only the three-field generator in session_export.
+Archive originals still carry no controlled roundtrip acceptance.
 Only code-reviewed catalog changes can add evidence; external manifests cannot
 promote a file into a supported session template.
 """
@@ -24,7 +24,11 @@ class TemplateEvidence:
     roundtrip_verified: bool
 
     def require_automatic_export(self) -> None:
-        """No exporter is supported by the current archive-only evidence."""
+        """Only the pinned COM8 source permits its three-field generator."""
+        from .session_export import ALLOWED_FIELDS, TEMPLATE_ID, TEMPLATE_SHA256
+        if (self.template_id == TEMPLATE_ID and self.source_sha256 == TEMPLATE_SHA256
+                and self.allowed_fields == ALLOWED_FIELDS and not self.roundtrip_verified):
+            return
         raise SessionTemplateError(
             'automatic_export_blocked: exact GSVmulti/file versions and a '
             'controlled reopen/receiver check for port, unit, scale, rate, '
@@ -77,8 +81,11 @@ _EXPECTED_MANIFEST = {
 def inspect_template(path: Path) -> TemplateEvidence:
     """Return provenance for exact known bytes; do not infer fields or versions."""
     with path.open('rb') as source:
-        # Both reviewed originals are shorter; an unknown large file is not parsed.
-        digest = sha256(source.read(266)).hexdigest()
+        # Bound unknown input; hash the complete reviewed sources.
+        digest = sha256(source.read(65537)).hexdigest()
+    from .session_export import ALLOWED_FIELDS, TEMPLATE_ID, TEMPLATE_SHA256
+    if digest == TEMPLATE_SHA256:
+        return TemplateEvidence(TEMPLATE_ID, None, digest, ALLOWED_FIELDS, False)
     for entry in _EXPECTED_MANIFEST['templates']:
         if digest == entry['source_sha256']:
             return TemplateEvidence(entry['template_id'], None, digest, (), False)

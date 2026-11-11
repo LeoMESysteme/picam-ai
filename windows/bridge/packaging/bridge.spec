@@ -8,7 +8,8 @@ a = Analysis(
     [str(bridge_root / "src/dispread_bridge_app/probe_main.py")],
     pathex=[str(bridge_root / "src"), str(repo_root / "src")],
     binaries=[],
-    datas=[],
+    datas=[(str(bridge_root / "src/dispread_bridge_app/templates/Session-COM8.ucf"),
+            "dispread_bridge_app/templates")],
     hiddenimports=[
         "dispread.gsv_bridge", "serial", "serial.tools.list_ports",
         "PySide6.QtCore", "PySide6.QtWidgets",

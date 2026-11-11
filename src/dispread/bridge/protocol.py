@@ -8,6 +8,7 @@ import math
 import re
 from urllib.parse import urlsplit
 
+from dispread.bridge.baud import LEGACY_UART_BAUD
 from dispread.bridge.types import BridgeProfile
 from dispread.records import TimeBaseKind, TimestampSemantics, ValueRecord
 
@@ -201,7 +202,7 @@ def parse_profile(raw: bytes) -> BridgeProfile:
     _fields(
         obj,
         {"schema", "pi_id", "name", "certificate_pem", "certificate_sha256", "endpoints", "protocol_version"},
-        {"pairing_offer"},
+        {"pairing_offer", "uart_baud"},
     )
     if type(obj["schema"]) is not int or obj["schema"] != 1:
         raise ValueError("unsupported profile schema")
@@ -227,6 +228,11 @@ def parse_profile(raw: bytes) -> BridgeProfile:
         raise ValueError("duplicate endpoints")
     if obj.get("pairing_offer") is not None:
         _token(obj["pairing_offer"])
+    if "uart_baud" in obj:
+        if type(obj["uart_baud"]) is not int or not 1 <= obj["uart_baud"] <= 4_000_000:
+            raise ValueError("invalid UART baud rate")
+    else:
+        obj = {**obj, "uart_baud": LEGACY_UART_BAUD}   # Pi ohne Feld: alter Stand, alte Rate
     return BridgeProfile(**{**obj, "endpoints": tuple(endpoints)})
 
 

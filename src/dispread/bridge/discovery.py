@@ -9,6 +9,7 @@ import math
 import multiprocessing
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -286,7 +287,8 @@ def tailscale_status(*, run=subprocess.run, connection_error: OSError | None = N
     this function does not perform a DNS query or change network configuration.
     """
     try:
-        result = run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=2, check=False)
+        result = run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=2, check=False,
+                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
     except FileNotFoundError:
         return TailscaleStatus("not_installed")
     except (OSError, subprocess.TimeoutExpired):

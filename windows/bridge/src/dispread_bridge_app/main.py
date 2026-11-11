@@ -42,7 +42,7 @@ def run(argv=None, *, instance=None, controller_factory=None, exec_loop=True, on
     if controller_factory is None:
         if '--demo-ui' in argv:
             from .ui.fake import FakeController
-            controller = FakeController(_demo_state(argv))
+            controller = FakeController(_demo_state(argv), heartbeat_s=1.5)
         else:
             from .app_controller import AppController
             from .devices import WindowsDevices

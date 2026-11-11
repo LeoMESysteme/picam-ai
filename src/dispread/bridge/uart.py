@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 
+from .baud import UART_BAUD
 from .protocol import V2LineReader, canonical_uart_hello, encode_v2
 from .resources import SerialPortLease
 
@@ -149,7 +150,7 @@ class UartListener:
             if opener is None:
                 import serial
                 opener = serial.Serial
-            self._stream = opener(port, baudrate=115200, timeout=.1, write_timeout=.2, exclusive=True)
+            self._stream = opener(port, baudrate=UART_BAUD, timeout=.1, write_timeout=.2, exclusive=True)
             if self._stop.is_set():
                 return
             self.state = 'listening'

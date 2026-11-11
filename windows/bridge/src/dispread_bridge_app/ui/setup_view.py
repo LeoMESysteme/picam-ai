@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import texts, theme
-from .widgets import Header, InfoBar, StateIcon, button, footer_frame2, repolish
+from .widgets import Header, IconButton, InfoBar, StateIcon, button, footer_frame2, repolish
 
 
 class StepHeader(QWidget):
@@ -191,8 +191,7 @@ class SetupView(QWidget):
         self.next_reason.hide()
         root.addWidget(self.next_reason)
         foot, fl, fl2 = footer_frame2()
-        self.export_button = button('Diagnose', name='export')
-        self.export_button.setAccessibleName('Diagnose exportieren')
+        self.export_button = IconButton('document_arrow_down', texts.EXPORT_LOGS, name='export')
         self.exit_button = button('Beenden …', name='exit_bridge')
         fl2.addStretch(1)
         fl2.addWidget(self.exit_button)
@@ -242,9 +241,11 @@ class SetupView(QWidget):
         return bool(c and c.isChecked())
 
     def update_from(self, readiness, worker, ctx, locked: bool) -> None:
-        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, allow_switch=False)
+        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, allow_switch=False,
+                                peer=readiness.peer, allow_mode=False)     # Moduswahl in der Einrichtung: Runde UI-2
         self.header.headline.setVisible(False)
         self.header.head_icon.setVisible(False)
+        self.header.pulse_slot.setVisible(False)
         st = ctx.setup
         self.overview_button.setVisible(readiness.peer == 'authenticated')
         spec = texts.setup_spec(ctx, locked)

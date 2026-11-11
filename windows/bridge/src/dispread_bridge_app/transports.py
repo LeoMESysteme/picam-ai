@@ -50,6 +50,26 @@ def _verified(profile):
         raise TransportError('profile_invalid') from None
 
 
+def tls_context(profile):
+    _verified(profile)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.check_hostname = False  # Pi URI identity, not routing hostname
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.load_verify_locations(cadata=profile.certificate_pem)
+    return context
+
+
+def verify_tls_peer(profile, der):
+    """The same DER pin and Pi certificate policy for probes and actual WSS."""
+    try:
+        if not der or not hmac.compare_digest(hashlib.sha256(der).hexdigest(), profile.certificate_sha256):
+            raise ValueError('pin mismatch')
+        verify_certificate(ssl.DER_cert_to_PEM_cert(der), profile.certificate_sha256, profile.pi_id)
+    except Exception:
+        raise TransportError('peer_invalid') from None
+
+
 def _bound(reply, request):
     reply = decode_v2(encode_v2(reply))
     if any(reply[k] != request[k] for k in ('pi_id', 'client_id', 'request_id')):
@@ -76,7 +96,7 @@ class SerialTransport:
         self._messages = []
         self.authenticated_token = None
         try:
-            self._stream = opener(port=device.port, baudrate=115200, timeout=.1, write_timeout=.2)
+            self._stream = opener(port=device.port, baudrate=profile.uart_baud, timeout=.1, write_timeout=.2)
             if cancel.is_set():
                 raise TransportError('cancelled')
             nonce = secrets.token_urlsafe(32)
@@ -206,11 +226,7 @@ class WssTransport:
         if aiohttp.__version__ != '3.14.3':
             raise TransportError('components_unsupported')
         profile = self._profile
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
-        context.check_hostname = False  # URI Pi identity is checked, endpoint hostname is only routing.
-        context.verify_mode = ssl.CERT_REQUIRED
-        context.load_verify_locations(cadata=profile.certificate_pem)
+        context = tls_context(profile)
 
         class PinnedConnector(aiohttp.TCPConnector):
             async def _wrap_create_connection(self, *args, **kwargs):
@@ -218,9 +234,7 @@ class WssTransport:
                 try:
                     peer = transport.get_extra_info('ssl_object')
                     der = peer.getpeercert(binary_form=True) if peer else None
-                    if not der or not hmac.compare_digest(hashlib.sha256(der).hexdigest(), profile.certificate_sha256):
-                        raise TransportError('peer_invalid')
-                    verify_certificate(ssl.DER_cert_to_PEM_cert(der), profile.certificate_sha256, profile.pi_id)
+                    verify_tls_peer(profile, der)
                 except Exception:
                     transport.abort()
                     raise TransportError('peer_invalid') from None

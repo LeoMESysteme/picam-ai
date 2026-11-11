@@ -293,7 +293,14 @@ def test_signed_uart_proof_precedes_credential_submission(tmp_path):
             pass
     device = DeviceInfo('a', 'COM6', 0x403, 0x6001, 'serial-a', None, 0)
     good = Stream()
-    adapter = SerialTransport(profile, 'client', 'a' * 43, device, threading.Event(), opener=lambda **kw: good)
+    opened = []
+    def opener(**kw):
+        opened.append(kw)
+        return good
+    from dataclasses import replace
+    profile = replace(profile, uart_baud=230400)
+    adapter = SerialTransport(profile, 'client', 'a' * 43, device, threading.Event(), opener=opener)
+    assert opened[0]['baudrate'] == 230400
     assert good.types == ['uart_challenge', 'uart_auth']
     assert adapter.authenticated_token == 'a' * 43
     adapter.close()

@@ -268,12 +268,12 @@ def test_active_transmission_blocks_route_change(tmp_path, identity):
     assert c.context().switch_locked
 
 
-def test_session_export_stays_blocked_and_writes_nothing(tmp_path):
+def test_unreviewed_session_settings_stay_blocked_and_write_nothing(tmp_path):
     c = make(tmp_path)
     dest = tmp_path / 'out'
     dest.mkdir()
     with pytest.raises(AppError) as e:
-        c.export_session({'gsv_port': 'COM5'}, dest)
+        c.export_session({'gsv_port': 'COM5', 'scale': 1}, dest)
     assert e.value.code == 'automatic_export_blocked'
     assert list(dest.iterdir()) == []
 

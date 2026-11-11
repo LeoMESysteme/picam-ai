@@ -194,9 +194,11 @@ def test_heartbeat_has_no_numeric_poll_and_demo_is_explicit(setup):
     link.send(dict(version=1, type='poll', request_id='poll-a'))
     reply = link.receive()
     if reply['type'] == 'record':
+        before_ack = sum(e.kind == 'activity' and e.code == 'ack' for e in events)
         link.send(dict(version=1, type='ack', request_id='poll-a', run_id=run_id,
                        frame_sequence=reply['record']['frame_sequence'], barrier_id=reply['barrier_id'], outcome='written'))
         assert factory.transports[0].pending is None
+        assert sum(e.kind == 'activity' and e.code == 'ack' for e in events) == before_ack + 1
     link.send(dict(version=1, type='poll', request_id='poll-b'))
     assert link.receive()['request_id'] == 'poll-b'
 
@@ -621,3 +623,26 @@ def test_record_claiming_release_without_prior_pi_marker_revokes_link(setup):
     finally:
         hub.release_real_run('sneaky-run')
         state.stop()
+
+
+def test_activity_events_count_validated_polls_ack_and_heartbeat(setup):
+    manager, factory, hub, events = setup
+    connected(manager)
+    link = manager.data_link()
+    before = sum(e.kind == 'activity' for e in events)
+    link.heartbeat()
+    link.send(dict(version=1, type='poll', request_id='ux2-poll'))
+    link.receive()
+    assert sum(e.kind == 'activity' for e in events) == before + 2
+    kinds = {e.code for e in events if e.kind == 'activity'}
+    assert {'hello', 'heartbeat', 'poll'} <= kinds
+
+
+def test_invalid_response_never_becomes_activity(setup):
+    manager, factory, hub, events = setup
+    connected(manager)
+    before = sum(e.kind == 'activity' for e in events)
+    factory.transports[-1].mutate = lambda reply: dict(reply, client_id='foreign-client')
+    with pytest.raises(ConnectionError):
+        manager.data_link().heartbeat()
+    assert sum(e.kind == 'activity' for e in events) == before

@@ -25,15 +25,19 @@ from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 
+from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.protocol import parse_profile
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
 from .connection import ConnectionManager
 from .credentials import CredentialStore
 from .delivery_journal import DeliveryJournal, DiagnosticStore
+from .input_checks import InputChecks
+from .port_inventory import PortInventory, serial_ports
 from .readiness import Readiness
+from .session_export import GSVMULTI_BAUD, TEMPLATE_ID, generate_session
 from .types import InstallResult, PortPair, valid_port_name
-from .ui.port import JournalEntry, SetupState, UiContext
+from .ui.port import MODES, CheckResult, JournalEntry, ModeInfo, SessionExport, SetupState, UiContext
 from .vcom import VcomAdapter, VcomUnverifiedError
 from .worker import BridgeWorker, WorkerStatus
 
@@ -65,15 +69,9 @@ def format_fingerprint(hexstr: str) -> str:
     return ' '.join(h[i:i + 4] for i in range(0, len(h), 4))
 
 
-def _list_ports_default() -> list[str]:
-    from serial.tools import list_ports
-    return sorted((p.device for p in list_ports.comports() if valid_port_name(p.device)),
-                  key=lambda n: int(n[3:]))
-
-
 def _open_com(port: str):
     from serial import Serial
-    return Serial(port, 115200, bytesize=8, parity='N', stopbits=1, timeout=1, write_timeout=2)
+    return Serial(port, GSVMULTI_BAUD, bytesize=8, parity='N', stopbits=1, timeout=1, write_timeout=2)
 
 
 def _build_label(info=None) -> tuple[str, str | None]:
@@ -115,6 +113,7 @@ def _reports(fn):
 class AppController:
     def __init__(self, data_dir: Path | str | None = None, *, protector=None, devices=None, vcom=None,
                  transport_factory=None, com_factory: Callable | None = None,
+                 resolver=None, socket_factory=None, tls_factory=None, port_opener=None,
                  list_ports: Callable | None = None, discover: Callable | None = None,
                  manager_factory: Callable | None = None, worker_factory: Callable | None = None,
                  network_diagnostics=None, version: str | None = None, build_info=None,
@@ -126,7 +125,10 @@ class AppController:
         self._vcom = vcom if vcom is not None else VcomAdapter()
         self._transport_factory = transport_factory
         self._com_factory = com_factory or _open_com
-        self._list_ports = list_ports or _list_ports_default
+        self._ports = PortInventory(list_ports or serial_ports, self._clock)
+        self._checks = InputChecks(self.list_ports, self._vcom.inventory, resolver=resolver,
+                                   socket_factory=socket_factory, tls_factory=tls_factory, port_opener=port_opener)
+        self._presence_stop = threading.Event()
         self._discover = discover
         self._manager_factory = manager_factory or ConnectionManager
         self._worker_factory = worker_factory or BridgeWorker
@@ -171,9 +173,18 @@ class AppController:
         self._tr_active, self._tr_written, self._tr_omitted = False, 0, 0
         self._last_contact = ''
         self._exited = False
+        self._activity_seq = 0
+        self._setup_revision = 0
+        self._paired_cached = False
         # persistiert
         self._profile: BridgeProfile | None = None
         self._route: str | None = None
+        self._route_mode: str | None = None
+        self._configured_modes: set[str] = set()
+        self._adapter_port: str | None = None
+        self._session_path: str | None = None
+        self._session_port: str | None = None
+        self._sessions: dict[str, dict[str, str]] = {}
         self._endpoint: str | None = None
         self._adapter_id: str | None = None
         self._pair: PortPair | None = None
@@ -184,6 +195,141 @@ class AppController:
         self._step = 1
         self.client_id = ''
         self._load_state()
+        self._refresh_pairing()
+        threading.Thread(target=self._presence_loop, name='bridge-adapter-presence', daemon=True).start()
+
+    # ------------------------------------------------------------ UX2
+    def _require_mode_unlocked(self):
+        if self._worker is not None and self._worker.is_active():
+            raise AppError('mode_locked')
+
+    def _restore_session(self):
+        mode = self._route_mode or 'network'
+        port = self._adapter_port if mode == 'uart_direct' else self._pair.gsv_port if self._pair else None
+        self._session_path = self._sessions.get(mode, {}).get(port)
+        self._session_port = port if self._session_path else None
+
+    def _refresh_mode_state(self):
+        self._setup_revision += 1
+        self._setup_done = self._route_mode in self._configured_modes
+        self._overview = False
+        self._restore_session()
+
+    def modes(self) -> tuple[ModeInfo, ...]:
+        locked = self._worker is not None and self._worker.is_active()
+        with self._lock:
+            present = self._ports.present(self._adapter_port)
+            result = []
+            for mode in MODES:
+                configured = mode in self._configured_modes
+                status = 'Eingerichtet' if configured else 'Nicht eingerichtet'
+                tone = 'info'
+                if mode == 'uart_direct' and self._adapter_port:
+                    status = ('Adapter erkannt' if present else 'Adapter fehlt' if present is False
+                              else 'Adapterpräsenz unbekannt')
+                    tone = 'ok' if present else 'warn'
+                result.append(ModeInfo(mode, configured, mode == self._route_mode, status, tone,
+                                       not locked, 'Übertragung aktiv' if locked else ''))
+            return tuple(result)
+
+    @_reports
+    def select_mode(self, mode: str) -> None:
+        if mode not in MODES:
+            raise AppError('transport_unsupported')
+        self._require_mode_unlocked()
+        self._stop_all()
+        with self._lock:
+            self._manager = self._worker = None
+            self._route_mode = mode
+            self._route = {'uart_bridge': 'uart', 'network': 'network'}.get(mode)
+            self._refresh_mode_state()
+            self._step = 4 if mode == 'uart_direct' and self._setup_done else 1
+            self._connect_attempted = False
+            self._save_state()
+        if mode == 'uart_direct':
+            self.list_adapters()
+
+    def leave_setup(self) -> None:
+        with self._lock:
+            self._overview = True
+            self._save_state()
+
+    def list_ports(self):
+        return self._ports.refresh()
+
+    def list_adapters(self):
+        return tuple(p for p in self.list_ports() if p.kind == 'usb_serial')
+
+    def _presence_loop(self):
+        while not self._presence_stop.wait(2):
+            if self._adapter_port is not None:
+                self._ports.refresh()
+
+    def check_endpoint(self, text: str) -> CheckResult:
+        with self._lock:
+            profile = self._profile
+        return self._checks.endpoint(text, profile)
+
+    def check_port_pair(self, bridge_port: str, gsv_port: str) -> CheckResult:
+        if self._worker is not None and self._worker.is_active():
+            pair = self._pair
+            if pair and (bridge_port, gsv_port) == (pair.bridge_port, pair.gsv_port):
+                return CheckResult('ok', 'Gespeichertes Portpaar wird von der Brücke verwendet.')
+            return CheckResult('err', 'Übertragung aktiv.', 'Übertragung vor der Portprüfung beenden.')
+        return self._checks.port_pair(bridge_port, gsv_port)
+
+    def check_adapter(self, port: str) -> CheckResult:
+        if self._worker is not None and self._worker.is_active():
+            return CheckResult('err', 'Übertragung aktiv.', 'Übertragung vor der Adapterprüfung beenden.')
+        with self._lock:
+            baud = GSVMULTI_BAUD if self._route_mode == 'uart_direct' else (
+                self._profile.uart_baud if self._profile else UART_BAUD)
+        return self._checks.adapter(port, baud)
+
+    def check_pairing_code(self, code: str) -> CheckResult:
+        return self._checks.pairing_code(code)
+
+    def _direct_step(self, direction):
+        # Probes run outside the metadata lock; stale continuations cannot mutate a new setup.
+        with self._lock:
+            revision, step, port = self._setup_revision, self._step, self._adapter_port
+        if direction == 'next' and step == 1:
+            if port is None or self.check_adapter(port).state != 'ok':
+                raise AppError('adapter_required')
+        with self._lock:
+            if (self._route_mode != 'uart_direct' or self._setup_revision != revision
+                    or self._step != step or self._adapter_port != port):
+                raise AppError('setup_changed')
+            self._setup_revision += 1
+            if direction == 'next':
+                if self._step == 3 and (not self._session_path or self._session_port != self._adapter_port):
+                    raise AppError('session_required')
+                if self._step >= 4:
+                    self._finish_direct()
+                else:
+                    self._step += 1
+            elif direction == 'finish':
+                if self._step != 4:
+                    raise AppError('session_required')
+                self._finish_direct()
+            elif direction == 'back':
+                self._step = max(1, self._step - 1)
+            elif direction == 'overview':
+                self._overview = True
+            elif direction in ('restart', 'change_setup', 'resume'):
+                self._overview, self._setup_done, self._step = False, False, 1
+            self._save_state()
+
+    def _finish_direct(self):
+        if not self._adapter_port or not self._session_path or self._session_port != self._adapter_port:
+            raise AppError('session_required')
+        self._setup_done, self._step = True, 4
+        self._configured_modes.add('uart_direct')
+
+    @staticmethod
+    def diagnostics_contents():
+        return (('summary.json', 'Version, Bereitschaft, Worker-Zustand, Weg, Portpaar und Übergabezähler.'),
+                ('details.jsonl', 'Ereignisprotokoll der App; Zugangsdaten redigiert, keine Messwerte.'))
 
     # ------------------------------------------------------------ Zustand
     @property
@@ -211,12 +357,37 @@ class AppController:
         except (ValueError, KeyError, TypeError):
             self._profile = self._pair = None
         self._route = data.get('route') if data.get('route') in ('network', 'uart') else None
+        self._route_mode = data.get('route_mode')
+        if self._route_mode not in MODES:
+            self._route_mode = {'uart': 'uart_bridge', 'network': 'network'}.get(self._route)
+        self._adapter_port = data.get('adapter_port') if valid_port_name(data.get('adapter_port')) else None
+        self._session_path = data.get('session_path') if isinstance(data.get('session_path'), str) else None
+        self._session_port = data.get('session_port') if valid_port_name(data.get('session_port')) else None
+        sessions = data.get('sessions')
+        if isinstance(sessions, dict):
+            self._sessions = {mode: {port: path for port, path in entries.items()
+                                    if valid_port_name(port) and isinstance(path, str)}
+                              for mode, entries in sessions.items() if mode in MODES and isinstance(entries, dict)}
+        elif self._session_path and self._session_port:
+            self._sessions[self._route_mode or 'network'] = {self._session_port: self._session_path}
+        self._restore_session()
+        configured = data.get('configured_modes', [])
+        self._configured_modes = set(m for m in configured if m in MODES) if isinstance(configured, list) else set()
         self._endpoint = data.get('endpoint') if isinstance(data.get('endpoint'), str) else None
         self._adapter_id = data.get('adapter_id') if isinstance(data.get('adapter_id'), str) else None
         self._session_confirmed = data.get('session_confirmed') is True
-        self._setup_done = data.get('setup_done') is True and self._profile is not None and self._pair is not None
+        legacy_done = data.get('setup_done') is True and self._profile is not None and self._pair is not None
+        if legacy_done and self._route_mode in ('network', 'uart_bridge'):
+            self._configured_modes.add(self._route_mode)
+        if self._profile is None or self._pair is None:
+            self._configured_modes.difference_update(('network', 'uart_bridge'))
+        if not (self._adapter_port and self._sessions.get('uart_direct', {}).get(self._adapter_port)):
+            self._configured_modes.discard('uart_direct')
+        self._setup_done = self._route_mode in self._configured_modes
         self._auto_connect = data.get('auto_connect') if isinstance(data.get('auto_connect'), bool) else None
         self._step = 1 if self._pair is None else (2 if self._profile is None else 3)
+        if self._route_mode == 'uart_direct':
+            self._step = 4 if self._setup_done else 1
         self._resumed = self._step == 3 and not self._setup_done
         self._save_state()
 
@@ -226,7 +397,9 @@ class AppController:
             profile = asdict(replace(self._profile, pairing_offer=None))   # Angebot nie speichern
             profile['endpoints'] = list(profile['endpoints'])
         data = dict(version=STATE_VERSION, client_id=self.client_id, profile=profile, route=self._route,
-                    endpoint=self._endpoint, adapter_id=self._adapter_id,
+                    endpoint=self._endpoint, adapter_id=self._adapter_id, route_mode=self._route_mode,
+                    configured_modes=sorted(self._configured_modes), adapter_port=self._adapter_port,
+                    session_path=self._session_path, session_port=self._session_port, sessions=self._sessions,
                     port_pair=None if self._pair is None else dict(bridge_port=self._pair.bridge_port,
                                                                     gsv_port=self._pair.gsv_port),
                     session_confirmed=self._session_confirmed, setup_done=self._setup_done,
@@ -248,12 +421,20 @@ class AppController:
 
     def _emit(self, event: BridgeEvent) -> None:
         """Nie werfen, nie blockieren: ein Fehler hier darf den Worker nicht in audit_failed treiben."""
+        if event.kind == 'connection' and event.code == 'authenticated':
+            self._refresh_pairing()
         try:
-            self._diag_enqueue(event)
+            if event.kind != 'activity':
+                self._diag_enqueue(event)
         except Exception:
             pass
         try:
-            self._note(event)
+            if event.kind == 'activity':
+                with self._lock:
+                    self._activity_seq += 1
+                    self._last_contact = datetime.now().strftime('%H:%M:%S')
+            else:
+                self._note(event)
         except Exception:
             pass
         with self._lock:
@@ -392,6 +573,7 @@ class AppController:
         if self._worker is not None and self._worker.is_active():
             raise AppError('transmission_active')
         with self._lock:
+            self._setup_revision += 1
             self._offer = profile.pairing_offer          # nur im Speicher
             self._profile = replace(profile, pairing_offer=None)
             self._candidates = ()
@@ -400,9 +582,11 @@ class AppController:
             self._connect_attempted = False
             self._code_expired, self._offer_at, self._resumed = False, None, False
             self._setup_done = False
+            self._configured_modes.difference_update(('network', 'uart_bridge'))
             if self._step < 2 and self._pair is not None:
                 self._step = 2
             self._save_state()
+        self._refresh_pairing()
         return self.snapshot()
 
     @_reports
@@ -424,14 +608,22 @@ class AppController:
             self._step = 3
 
     def _is_paired(self) -> bool:
-        if self._profile is None:
-            return False
-        try:
-            return any(self._credentials.load(self._profile.pi_id, m,
-                                              expected_pin=self._profile.certificate_sha256)
-                       for m in ('network', 'uart'))
-        except Exception:
-            return False
+        return self._paired_cached
+
+    def _refresh_pairing(self) -> None:
+        # Called by background operations, never from context()/snapshot().
+        with self._lock:
+            profile = self._profile
+        paired = False
+        if profile is not None:
+            try:
+                paired = any(self._credentials.load(profile.pi_id, mode,
+                                 expected_pin=profile.certificate_sha256) for mode in ('network', 'uart'))
+            except Exception:
+                pass
+        with self._lock:
+            if self._profile is profile:
+                self._paired_cached = bool(paired)
 
     # ------------------------------------------------------------ Komponenten / Portpaar
     @_reports
@@ -439,6 +631,7 @@ class AppController:
         """Nur Inventur. Ein Portpaar wird nie erzeugt; ohne verifizierten Treiberanbieter
         bleibt nur die ausdrückliche manuelle Angabe."""
         try:
+            self.list_ports()
             pairs = self._vcom.inventory()
         except VcomUnverifiedError:
             with self._lock:
@@ -455,6 +648,7 @@ class AppController:
         return InstallResult('missing', False, None, 'pair_not_found')
 
     def open_manual_pair(self) -> None:
+        self.list_ports()
         with self._lock:
             self._manual_open = True
             self._editing_pair = self._pair is not None      # „Portpaar ändern“
@@ -468,10 +662,16 @@ class AppController:
             raise AppError('portpair_invalid') from None
         if self._worker is not None and self._worker.is_active():
             raise AppError('transmission_active')
-        if not {bridge_port, gsv_port} <= set(self._list_ports()):
+        if not {bridge_port, gsv_port} <= {p.port for p in self.list_ports()}:
             raise AppError('portpair_invalid')
         with self._lock:
+            self._setup_revision += 1
             self._pair = pair
+            self._configured_modes.difference_update(('network', 'uart_bridge'))
+            if self._route_mode != 'uart_direct':
+                self._setup_done = False
+            self._restore_session()
+            self._session_confirmed = False
             self._editing_pair = False
             self._save_state()
 
@@ -483,12 +683,15 @@ class AppController:
             raise AppError('transmission_active')
         with self._lock:
             self._route = mode
+            self._route_mode = 'uart_bridge' if mode == 'uart' else 'network'
+            self._refresh_mode_state()
             self._connect_attempted = False
             self._save_state()
 
     @_reports
     def select_endpoint(self, endpoint: str, manual: bool = False) -> None:
         from .transports import TransportError, resolve_endpoints
+        self._require_mode_unlocked()
         endpoint = endpoint.strip()
         if manual and '://' not in endpoint:
             endpoint = 'https://' + endpoint
@@ -497,21 +700,54 @@ class AppController:
         except (TransportError, ValueError):
             raise AppError('endpoint_unsupported') from None
         with self._lock:
-            self._endpoint, self._route = endpoint, 'network'
+            previous = self._route_mode
+            if endpoint != self._endpoint:
+                self._configured_modes.discard('network')
+            self._endpoint, self._route, self._route_mode = endpoint, 'network', 'network'
+            self._refresh_mode_state()
+            if previous == 'uart_direct':
+                self._step = 1
             self._connect_attempted = False
             self._save_state()
 
     @_reports
     def select_adapter(self, device_id: str) -> None:
+        self._require_mode_unlocked()
+        choices = self.list_adapters()
+        selected = next((p for p in choices if device_id in (p.device_id, p.port)), None)
+        # The legacy wizard supplies PnP instance IDs from rescan().
+        legacy = next((d for d in self._adapters if d.instance_id == device_id), None)
+        port = selected.port if selected else (legacy.port if legacy else None)
+        if self._route_mode == 'uart_direct' and port is None:
+            raise AppError('adapter_required')
+        if self._route_mode != 'uart_direct' and selected and self._devices is not None:
+            adapters = tuple(self._devices.inventory())
+            matches = [d for d in adapters if d.port == port and d.is_supported]
+            if len(matches) != 1:
+                raise AppError('adapter_required')
+            device_id = matches[0].instance_id
         with self._lock:
-            self._adapter_id, self._route = device_id, 'uart'
+            changed = self._adapter_port != port or self._adapter_id != device_id
+            previous = self._route_mode
+            if changed:
+                self._configured_modes.difference_update(('uart_direct', 'uart_bridge'))
+                if previous == 'uart_direct':
+                    self._step = 1
+            self._adapter_id, self._adapter_port = device_id, port
+            if self._route_mode != 'uart_direct':
+                self._route, self._route_mode = 'uart', 'uart_bridge'
+            self._refresh_mode_state()
             self._connect_attempted = False
             self._save_state()
 
     def rescan(self) -> None:
         """Adapter, COM-Ports und Netzkandidaten neu lesen (blockiert)."""
+        self.list_ports()
         if self._devices is not None:
             try:
+                invalidate = getattr(self._devices, 'invalidate_pnp', None)
+                if invalidate is not None:
+                    invalidate()
                 self._adapters = tuple(i for i in self._devices.inventory() if i.is_supported)
             except Exception:
                 self._adapters = ()
@@ -557,6 +793,7 @@ class AppController:
         self._stop_all()
         with self._lock:
             self._route = mode
+            self._route_mode = 'uart_bridge' if mode == 'uart' else 'network'
             if selected_device_id:
                 self._adapter_id = selected_device_id
             self._save_state()
@@ -628,8 +865,32 @@ class AppController:
     # ------------------------------------------------------------ Session
     @_reports
     def export_session(self, settings, destination: Path):
-        """Gesperrt (N3): keine Datei, nur die manuelle Anleitung in der UI."""
-        raise AppError('automatic_export_blocked')
+        """Compatibility entry: only the reviewed generator's port setting is allowed."""
+        if not isinstance(settings, dict) or set(settings) != {'gsv_port'}:
+            raise AppError('automatic_export_blocked')
+        return self.export_session_file(destination, settings['gsv_port'])
+
+    @_reports
+    def export_session_file(self, destination: Path, port: str | None = None) -> SessionExport:
+        from hashlib import sha256
+        with self._lock:
+            export_mode = self._route_mode or 'network'
+            chosen = port if port is not None else (self._adapter_port if self._route_mode == 'uart_direct'
+                                                    else self._pair.gsv_port if self._pair else None)
+        try:
+            raw = generate_session(chosen)
+        except ValueError:
+            raise AppError('session_port_invalid') from None
+        destination = Path(destination)
+        try:
+            destination.write_bytes(raw)
+        except OSError:
+            raise AppError('session_write_failed') from None
+        with self._lock:
+            self._sessions.setdefault(export_mode, {})[chosen] = str(destination)
+            self._restore_session()
+            self._save_state()
+        return SessionExport(destination, chosen, TEMPLATE_ID, sha256(raw).hexdigest())
 
     def confirm_session(self, on: bool) -> None:
         with self._lock:
@@ -639,6 +900,9 @@ class AppController:
     # ------------------------------------------------------------ Einrichtungsschritte
     @_reports
     def setup_step(self, direction: str) -> None:
+        if self._route_mode == 'uart_direct':
+            self._direct_step(direction)
+            return
         if direction == 'next' and self._step == 3 and not (
                 self._manager is not None and self._manager.snapshot().peer == 'authenticated'):
             if self._worker is not None and self._worker.is_active():
@@ -695,6 +959,8 @@ class AppController:
 
     def _finish(self) -> None:
         self._setup_done, self._step = True, 5
+        if self._route_mode:
+            self._configured_modes.add(self._route_mode)
         self._resumed = False
         self._save_state()
 
@@ -716,6 +982,15 @@ class AppController:
 
     def _variant(self, r: Readiness, w: WorkerStatus | None) -> tuple[str, dict]:
         step, d = self._step, {}
+        if self._route_mode == 'uart_direct':
+            d.update(adapter_port=self._adapter_port, adapter_present=self._ports.present(self._adapter_port),
+                     adapter_items=tuple((p.label, '', p.port == self._adapter_port)
+                                         for p in self._ports.cached() if p.kind == 'usb_serial'),
+                     choices={'adapter': tuple(p.device_id or p.port for p in self._ports.cached()
+                                               if p.kind == 'usb_serial')},
+                     gsv_port=self._adapter_port, gsv_baud=GSVMULTI_BAUD,
+                     session_path=self._session_path, session_template=TEMPLATE_ID)
+            return f'D{min(step, 4)}', d
         if step == 1:
             if self._pair is not None and not self._editing_pair:
                 return 'E1ok', d
@@ -783,6 +1058,8 @@ class AppController:
 
     def auto_connect_at_start(self) -> bool:
         """Gleicher Pi, gleicher Weg, gleicher Endpunkt; nie Demo, nie Wechsel."""
+        if self._route_mode == 'uart_direct':
+            return False
         if not (self._auto_effective() and self._setup_done and self._profile is not None
                 and self._pair is not None and self._is_paired()):
             return False
@@ -809,10 +1086,7 @@ class AppController:
         return r.peer == 'authenticated' and r.output in ('blocked', 'demo_only', 'test_release') and not self._demo_started
 
     def _safe_ports(self):
-        try:
-            return self._list_ports()
-        except Exception:
-            return ()
+        return tuple(p.port for p in self._ports.cached())
 
     def _variant_route(self, r: Readiness, d: dict) -> tuple[str, dict]:
         route = self._route or 'network'
@@ -858,7 +1132,8 @@ class AppController:
                 run_id = self._manager.data_link().run_id
             except Exception:
                 run_id = None
-        route = {'network': 'Netzwerk', 'uart': 'UART (USB-Adapter)'}.get(self._route or '', None)
+        route = {'network': 'Netzwerk', 'uart_bridge': 'UART (USB-Adapter)',
+                 'uart_direct': 'UART direkt'}.get(self._route_mode)
         demo = authenticated and r.output == 'demo_only'
         test_release = authenticated and r.output == 'test_release'
         with self._lock:
@@ -874,15 +1149,19 @@ class AppController:
                 forwarded=self._tr_written if test_release else 0, omitted=self._tr_omitted if test_release else 0,
                 waiting_for_run=authenticated and r.output == 'output_off',
                 com_issue=com_issue,
-                bridge_port=pair.bridge_port if pair else None, gsv_port=pair.gsv_port if pair else None,
-                session_name=None, session_confirmed=self._session_confirmed, receipt=None,
+                bridge_port=pair.bridge_port if pair else None, gsv_port=self._adapter_port if self._route_mode == 'uart_direct' else pair.gsv_port if pair else None,
+                session_name=Path(self._session_path).name if self._session_path else None, session_confirmed=self._session_confirmed, receipt=None,
                 switch_locked=bool(w is not None and w.active),
                 version=self._version, channel=self._channel, pi_id=p.pi_id if p else '',
                 endpoint=(self._endpoint or '') if self._route != 'uart' else 'UART (USB-Adapter)',
                 fingerprint=format_fingerprint(p.certificate_sha256) if p else '',
                 protocol='Version 2' if p else None, retry_in_s=self._retry_in(r),
                 code_remaining_s=self._code_remaining() if not self._is_paired() else None,
-                auto_connect=self._auto_effective(),
+                auto_connect=self._auto_effective(), route_mode=self._route_mode,
+                setup_leavable=True, activity_seq=self._activity_seq,
+                uart_baud=p.uart_baud if p else UART_BAUD, gsv_baud=GSVMULTI_BAUD,
+                adapter_port=self._adapter_port, adapter_present=self._ports.present(self._adapter_port),
+                session_template=TEMPLATE_ID,
                 paired=((p.name, p.pi_id, 'gekoppelt'),) if p and self._is_paired() else (),
                 journal=journal, last_report=self._last_contact, last_ack=self._last_ack)
 
@@ -898,7 +1177,7 @@ class AppController:
         r, w = self.snapshot(), self.worker_status()
         summary = dict(version=self._version, readiness=asdict(r),
                        worker=None if w is None else asdict(w),
-                       route=self._route, port_pair=None if self._pair is None else
+                       route=self._route_mode, port_pair=None if self._pair is None else
                        dict(bridge_port=self._pair.bridge_port, gsv_port=self._pair.gsv_port, manual=True),
                        journal=dict(attempts=len(attempts), by_outcome=counts,
                                     unresolved=len(self._journal_open().unresolved())))
@@ -912,6 +1191,7 @@ class AppController:
     def request_exit(self, confirmed: bool) -> bool:
         if not confirmed:
             return False
+        self._presence_stop.set()
         self._stop_all()
         self._diag_flush()
         self._diag_stop.set()

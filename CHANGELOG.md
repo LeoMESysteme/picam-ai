@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Windows-Brücke UX2: Backend und belegter Session-Generator.** Drei Wege
+  (`network`, `uart_bridge`, `uart_direct`), direkter Einrichtungshelfer ohne Kopplung/Worker,
+  begrenzte Eingabeprüfungen mit gemeinsamem TLS-Pin-Prüfer und gecachte Adapterpräsenz.
+  Session-Export ändert nur drei COM-Felder der SHA-256-gepinnten COM8-Vorlage; übrige
+  Bytes bleiben erhalten. Kein GSVmulti-Empfangsnachweis, N3/OQ-53 bleiben offen.
+  Pi↔Brücke-UART (v1/v2) bezieht 460800 Baud aus einer gemeinsamen Quelle; optionales
+  Profilfeld `uart_baud`, GSVmulti liest seine eigene Rate aus der Vorlage.
+  Validierte Pi-Antworten zählen für die Aktivitätsanzeige; PnP-Inventur gecacht und
+  Windows-Subprozesse ohne Konsolenfenster. Keine Windows-/Hardwareabnahme in dieser Session.
+
 * 2026-11-11: **Brücke: Verbindungsabbruch bei jedem Wechsel gültig → ungültig behoben (Brückentest mit echten Werten).**
   Befund im Lauf `live-20261111T095426Z/run-01` (Netzwerk, Testfreigabe): 1 560 Werte an COM übergeben, aber alle 2–15 s
   ein Abbruch von ca. 2 s; jedes Mal beim ersten Übergangswert nach gültigen Werten (`offered` und `unconfirmed` in

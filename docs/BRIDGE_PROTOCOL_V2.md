@@ -1,6 +1,6 @@
 # Pi-/Windows-Brückenprotokoll 2
 
-Stand: 2026-11-09. Eigener Brückenvertrag, kein GSV-Telegramm.
+Stand: 2026-11-11. Eigener Brückenvertrag, kein GSV-Telegramm.
 DUT-Ausgabe bleibt fachlich gesperrt; einzige Ausnahme ist die je Lauf vom
 Pi-Bediener bestätigte **Testfreigabe** (Abschnitt unten, keine Abnahme).
 Version 2 und eine erfolgreiche Kopplung sind keine Ausgabeabnahme. V1 bleibt
@@ -52,7 +52,11 @@ Die Formatter-Metadaten einschließlich `provisional` gehören ins Runartefakt.
 
 UTF-8-JSON, maximal 16384 Bytes, exakt diese Felder: `schema: 1`, `pi_id`, `name`,
 `certificate_pem`, `certificate_sha256`, `endpoints`, `protocol_version: 2`,
-optional `pairing_offer` (sonst `null`). `endpoints` enthält höchstens acht
+optional `pairing_offer` (sonst `null`) und `uart_baud`.
+`uart_baud` ist eine Ganzzahl 1..4000000 (kein Boolean); ohne Feld gilt
+`dispread.bridge.baud.UART_BAUD` (460800 Baud). Der Pi exportiert den Wert
+im Profil, Windows verwendet ihn für Pi↔Brücke. GSVmulti und die direkte
+Pi-Ausgabe sind davon getrennt und behalten ihre Session-Baudrate. `endpoints` enthält höchstens acht
 verschiedene absolute `https`-/`wss`-URLs, ohne Zugangsdaten, Query oder Fragment.
 IPv6 muss geklammert sein; eine Scope-ID bleibt unverändert erhalten. Kein
 Dateipfad, Shellbefehl oder ausführbares URL-Schema wird akzeptiert.

@@ -206,3 +206,9 @@ def test_event_clock_is_a_declared_time_base(tmp_path):
     publisher._events = io.StringIO()
     publisher._event("test")
     assert TimeBaseKind(json.loads(publisher._events.getvalue())["time_base"]).carries_time_information
+
+
+def test_v1_bridge_uart_uses_shared_rate_and_rejects_gsv_rate():
+    assert OutputConfig(transport='uart').baudrate == 460800
+    with pytest.raises(ValueError):
+        OutputConfig(transport='uart', baudrate=115200)

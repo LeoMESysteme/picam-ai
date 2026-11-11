@@ -163,7 +163,8 @@ def run_frozen_probe(executable: Path) -> dict:
     try:
         result = subprocess.run([str(executable.resolve()), "--self-test"], cwd=executable.parent,
                                 env=probe_environment(), capture_output=True, text=True,
-                                encoding="utf-8", timeout=45, check=False)
+                                encoding="utf-8", timeout=45, check=False,
+                                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise BuildError(f"frozen probe did not run: {exc}") from exc
     if result.returncode:

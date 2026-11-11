@@ -9,6 +9,31 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-11 — UX2: begrenzter Session-Export und getrennte UART-Raten
+
+**Problem:** Die Brücke sperrte jeden Session-Export; Pi-UART und GSVmulti
+teilten feste Baudraten trotz verschiedener Aufgaben.
+
+**Entscheidung:** Nur die belegte COM8-Datei (SHA-256 im Code) darf mit
+geänderten `ch1.ComNr`, `ch1.Name` und `UserDevice.ComNo` exportiert werden.
+Die GSVmulti-Baudrate wird aus diesen Paketbytes gelesen. Pi↔Brücke bezieht
+seine Rate aus dem kleinen, transportfreien Modul `dispread.bridge.baud`;
+auch v1 kann es ohne Abhängigkeit auf Windows oder Transportklassen nutzen.
+`uart_direct` bleibt ein Einrichtungshelfer ohne Übertragungsworker.
+
+**Alternativen:** Ein allgemeiner UCF-Schreiber würde unbelegte Felder
+interpretieren; eine weiter vollständige Exportsperre widerspräche dem
+freigegebenen UX2-Auftrag. Doppelte Baudkonstanten oder eine gemeinsame
+Rate für Pi und GSVmulti würden die Strecken erneut vermischen.
+
+**Konsequenz:** Alte Profile ohne Baudfeld laden weiter; Pi und EXE müssen
+für die neue UART-Rate zusammen aktualisiert werden. Export ist keine
+Abnahme: Öffnen und Empfang in GSVmulti (N3/OQ-53) bleiben offen.
+Prüfungen verwenden ein Gesamtbudget von 2,8 s mit einer begrenzten
+Hintergrundprüfung je Controller; ein blockierter OS-Aufruf verhindert
+weitere Probes bis zu seiner Rückkehr, ohne GUI-Lesezugriffe zu blockieren.
+
+
 ## 2026-11-06 — Ein Besitzer des Wiederanlaufs
 
 **Problem:** Der Worker trennte nach gewöhnlichem Kanalverlust und nach

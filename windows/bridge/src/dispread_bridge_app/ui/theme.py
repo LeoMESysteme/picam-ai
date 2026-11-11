@@ -1,8 +1,14 @@
 """Gestaltungs-Tokens (DESIGN.md) als QPalette + QSS, hell/dunkel."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
+import os
+import sys
+
+from PySide6.QtCore import QByteArray, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+
+from . import icons
 
 LIGHT = dict(
     mica='#f3f3f3', mica2='#ededed', card='#fbfbfb', stroke='#e5e5e5', stroke_strong='#8a8a8a',
@@ -87,6 +93,55 @@ def make_font(pt: float = 10.5, weight=QFont.Weight.Normal, mono=False, tabular=
     return f
 
 
+# ---------------------------------------------------------------- Typografie (Spec UX2)
+# Rolle -> (Punkt, Gewicht, Mono, sekundär). Als QSS-Property ``typo`` und für gezeichnete Texte.
+TYPO = {
+    'title': (15, QFont.Weight.DemiBold, False, False),          # Pi-Name im Kopf, Titel im Fensterinhalt
+    'section': (11, QFont.Weight.DemiBold, False, False),        # Überschriften in Fenstern
+    'body_strong': (10.5, QFont.Weight.DemiBold, False, False),  # Zustandssatz, Kartentitel
+    'body': (10.5, QFont.Weight.Normal, False, False),
+    'caption': (9, QFont.Weight.Normal, False, True),            # Feldnamen, Zweitzeilen (text2)
+    'caption_strong': (9, QFont.Weight.DemiBold, False, False),  # Statuswörter
+    'data': (9, QFont.Weight.Normal, True, False),               # Pi-ID, Endpunkt, Fingerabdruck, Ports
+}
+
+
+def typo_font(role: str) -> QFont:
+    pt, weight, mono, _ = TYPO[role]
+    return make_font(pt, weight, mono=mono, tabular=role in ('caption', 'caption_strong', 'data'))
+
+
+def set_typo(widget, role: str):
+    """Typostufe setzen (QSS-Property ``typo``; Mono zusätzlich über ``mono``/Schrift)."""
+    widget.setProperty('typo', role)
+    if TYPO[role][2]:
+        widget.setProperty('mono', True)
+        widget.setFont(typo_font(role))
+    return widget
+
+
+# ---------------------------------------------------------------- Bewegung
+MOTION_ENV = 'DISPREAD_UI_MOTION'      # "0" schaltet Bewegung ab (Tests: deterministisch)
+SPI_GETCLIENTAREAANIMATION = 0x1042
+
+
+def motion_enabled() -> bool:
+    """Zentraler Schalter für alle Animationen. Windows: folgt „Animationseffekte“."""
+    env = os.environ.get(MOTION_ENV)
+    if env is not None:
+        return env.strip().lower() not in ('0', 'off', 'false', 'no', '')
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            from ctypes import wintypes
+            on = wintypes.BOOL(True)
+            if ctypes.windll.user32.SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(on), 0):
+                return bool(on.value)
+        except Exception:
+            return True
+    return True
+
+
 def qss(t: dict) -> str:
     return f"""
 * {{ outline: 0; }}
@@ -98,6 +153,13 @@ QLabel[secondary="true"] {{ color: {t['text2']}; }}
 QLabel[caption="true"] {{ font-size: 9pt; }}
 QLabel[strong="true"] {{ font-weight: 600; }}
 QLabel[subtitle="true"] {{ font-size: 15pt; font-weight: 600; }}
+QLabel[typo="title"] {{ font-size: 15pt; font-weight: 600; }}
+QLabel[typo="section"] {{ font-size: 11pt; font-weight: 600; }}
+QLabel[typo="body_strong"] {{ font-size: 10.5pt; font-weight: 600; }}
+QLabel[typo="body"] {{ font-size: 10.5pt; font-weight: 400; }}
+QLabel[typo="caption"] {{ font-size: 9pt; font-weight: 400; color: {t['text2']}; }}
+QLabel[typo="caption_strong"] {{ font-size: 9pt; font-weight: 600; }}
+QLabel[typo="data"] {{ font-family: {MONO_QSS}; font-size: 9pt; }}
 QFrame.Card, QFrame[card="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 QFrame[card="true"] QLabel {{ background: transparent; border: none; }}
 QFrame#footer {{ background: {t['mica2']}; border-top: 1px solid {t['stroke']}; }}
@@ -116,7 +178,15 @@ QPushButton[seg="true"]:checked {{ background: {t['card']}; border-bottom: 2px s
 QToolButton[chip="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; padding: 4px 6px; text-align: left; }}
 QToolButton[chip="true"]:hover {{ background: {t['ctrl_hover']}; }}
 QToolButton[chip="true"]:checked {{ border: 1px solid {t['accent']}; }}
-QToolButton[flat="true"] {{ background: transparent; border: none; padding: 4px; }}
+QToolButton[flat="true"] {{ background: transparent; border: 1px solid transparent; padding: 4px; }}
+QToolButton[flat="true"]:hover {{ background: {t['ctrl_hover']}; }}
+QToolButton[flat="true"]:pressed {{ background: {t['ctrl_press']}; }}
+QToolButton[flat="true"]:disabled {{ background: transparent; }}
+QToolButton[mode="true"] {{ background: transparent; border: 1px solid transparent; padding: 2px 6px; }}
+QToolButton[mode="true"]:hover {{ background: {t['ctrl_hover']}; border: 1px solid {t['stroke']}; }}
+QToolButton[mode="true"]:pressed {{ background: {t['ctrl_press']}; }}
+QFrame#toolbar {{ background: {t['mica2']}; border-top: 1px solid {t['stroke']}; }}
+QFrame[section="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 QFrame[bar="true"] {{ border-radius: 4px; border: 1px solid transparent; }}
 QFrame[bar="true"][kind="ok"] {{ background: {t['bar_ok']}; }}
 QFrame[bar="true"][kind="warn"] {{ background: {t['bar_warn']}; }}
@@ -167,52 +237,72 @@ def apply_theme(app, dark: bool | None = None) -> dict:
     return _current
 
 
-# ---------------------------------------------------------------- Symbole
-def status_pixmap(tone: str, size: int = 16, dpr: float = 2.0) -> QPixmap:
-    t = tokens()
-    color = QColor(t.get({'ok': 'ok', 'warn': 'warn', 'err': 'err'}.get(tone, 'info'), t['info']))
-    pm = QPixmap(int(size * dpr), int(size * dpr))
-    pm.setDevicePixelRatio(dpr)
+# ---------------------------------------------------------------- Symbole (Fluent, icons.py)
+_STATUS_ICON = {'ok': 'status_ok', 'warn': 'status_warn', 'err': 'status_err', 'info': 'status_info',
+                'unclear': 'status_unclear', 'unused': 'status_unused'}
+_STATUS_COLOR = {'ok': 'ok', 'warn': 'warn', 'err': 'err', 'info': 'info', 'unclear': 'warn', 'unused': 'text2'}
+_pix_cache: dict[tuple, QPixmap] = {}
+
+
+def _color(color_key: str) -> str:
+    """Token-Name oder direkt ein Farbwert (#rrggbb)."""
+    return color_key if color_key.startswith('#') else _current.get(color_key, _current['text'])
+
+
+def screen_dpr() -> float:
+    try:
+        scr = QGuiApplication.primaryScreen()
+        return max(1.0, float(scr.devicePixelRatio())) if scr is not None else 1.0
+    except Exception:
+        return 1.0
+
+
+def _svg_for(name: str, size: int) -> str:
+    if size <= 16 and f'{name}@16' in icons.SVG:
+        return icons.SVG[f'{name}@16']
+    try:
+        return icons.SVG[name]
+    except KeyError:
+        raise KeyError(f'Symbol {name!r} ist nicht eingebettet (ui/icons.py)') from None
+
+
+def icon_pixmap(name: str, color_key: str = 'text2', size: int = 16, dpr: float | None = None) -> QPixmap:
+    """Symbol als Pixmap, eingefärbt aus den Tokens; gecacht je (Name, Farbe, Größe, DPR)."""
+    dpr = dpr or screen_dpr()
+    color = _color(color_key)
+    key = (name, color, size, dpr)
+    pm = _pix_cache.get(key)
+    if pm is not None:
+        return pm
+    svg = _svg_for(name, size).replace('<svg ', f'<svg fill="{color}" ', 1)
+    px = max(1, round(size * dpr))
+    pm = QPixmap(px, px)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    r = QRectF(1, 1, size - 2, size - 2)
-    pen = QPen(color, 1.5)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    s = size
-    if tone == 'warn':
-        p.setBrush(color)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawPolygon(QPolygonF([QPointF(s / 2, 1), QPointF(s - 1, s - 2), QPointF(1, s - 2)]))
-        p.setPen(QPen(QColor(t['on_accent'] if not _dark else '#000000') if False else QColor('#ffffff' if not _dark else '#000000'), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(QPointF(s / 2, s * .42), QPointF(s / 2, s * .65))
-        p.drawPoint(QPointF(s / 2, s * .8))
-    elif tone == 'unused':
-        p.setPen(pen)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(r)
-        p.drawLine(QPointF(s * .3, s / 2), QPointF(s * .7, s / 2))
-    else:
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(color)
-        p.drawEllipse(r)
-        on = QColor('#ffffff' if not _dark else '#000000')
-        p.setPen(QPen(on, 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        if tone == 'ok':
-            p.drawPolyline(QPolygonF([QPointF(s * .3, s * .52), QPointF(s * .45, s * .66), QPointF(s * .72, s * .36)]))
-        elif tone == 'err':
-            p.drawLine(QPointF(s * .34, s * .34), QPointF(s * .66, s * .66))
-            p.drawLine(QPointF(s * .66, s * .34), QPointF(s * .34, s * .66))
-        elif tone == 'unclear':
-            f = make_font(s * 0.55 * 0.75, QFont.Weight.Bold)
-            p.setFont(f)
-            p.drawText(r, Qt.AlignmentFlag.AlignCenter, '?')
-        else:  # info
-            p.drawLine(QPointF(s / 2, s * .46), QPointF(s / 2, s * .72))
-            p.drawPoint(QPointF(s / 2, s * .3))
+    QSvgRenderer(QByteArray(svg.encode('ascii'))).render(p, QRectF(0, 0, px, px))
     p.end()
+    pm.setDevicePixelRatio(dpr)
+    _pix_cache[key] = pm
     return pm
+
+
+def icon(name: str, color_key: str = 'text2', size: int = 16) -> QIcon:
+    """QIcon mit Pixmaps für 100 %, 150 % und 200 % (Qt wählt je Bildschirm)."""
+    ic = QIcon()
+    for dpr in sorted({1.0, 1.5, 2.0, screen_dpr()}):
+        ic.addPixmap(icon_pixmap(name, color_key, size, dpr))
+    return ic
+
+
+def status_pixmap(tone: str, size: int = 16, dpr: float | None = None) -> QPixmap:
+    """Statussymbol (ok/warn/err/info/unclear/unused) aus demselben Symbolsatz, in der Statusfarbe."""
+    return icon_pixmap(_STATUS_ICON.get(tone, 'status_info'), _STATUS_COLOR.get(tone, 'info'), size, dpr)
+
+
+def glyph_icon(kind: str, size: int = 16) -> QIcon:
+    """Altname: ``lock`` / ``chevron`` aus dem Fluent-Satz."""
+    return icon({'lock': 'lock_closed', 'chevron': 'chevron_down'}.get(kind, kind), 'text2', size)
 
 
 def tray_icon(state: str = 'normal') -> QIcon:
@@ -233,28 +323,5 @@ def tray_icon(state: str = 'normal') -> QIcon:
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(t['warn' if state == 'warn' else 'err']))
         p.drawEllipse(QRectF(18, 18, 13, 13))
-    p.end()
-    return QIcon(pm)
-
-
-def glyph_icon(kind: str, size: int = 16) -> QIcon:
-    """lock / chevron als gezeichnete Symbole (keine Emoji-Schrift nötig)."""
-    t = tokens()
-    dpr = 2
-    pm = QPixmap(size * dpr, size * dpr)
-    pm.setDevicePixelRatio(dpr)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    col = QColor(t['text2'])
-    p.setPen(QPen(col, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    s = size
-    if kind == 'lock':
-        p.setBrush(col)
-        p.drawRoundedRect(QRectF(s * .2, s * .46, s * .6, s * .4), 2, 2)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawArc(QRectF(s * .32, s * .12, s * .36, s * .5), 0, 180 * 16)
-    else:
-        p.drawPolyline(QPolygonF([QPointF(s * .28, s * .4), QPointF(s * .5, s * .62), QPointF(s * .72, s * .4)]))
     p.end()
     return QIcon(pm)
