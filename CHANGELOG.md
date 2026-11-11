@@ -12,6 +12,25 @@ was ist die Konsequenz.
   das Feld. Der Codec akzeptiert nur diese Werte oder `null`, nur in `hello`/`idle`. Gesendet wird es nur an
   Clients mit Hello-Fähigkeit `tick: 1`; ältere Codecs lehnen unbekannte Felder ab und bekommen es nie. Die
   Windows-Verbindung legt den Wert als `peer_output_format` ab (sonst `None`).
+* 2026-11-11: **Nachführung: Stilllegung nach Review nachgeschärft (TB, W1/W2/G3–G5).**
+  * *W1:* Die Schutzprobe vergleicht jetzt den Schritt vom bisherigen zum neuen Satz, auch mit einem weiteren
+    ausfallenden Bereich. Stillgelegt wird nur, wenn ein Zusatzausfall dadurch weder häufiger noch um mehr als
+    0,05 px schwerer gefährlich (> 1,0 px) wird und der neue Satz selbst höchstens 0,05 px schlechter ist.
+    Beleg: Der frühere Testsatz {0, 5, 15} bestand die alte Probe (0,957 px), wird jetzt aber abgelehnt
+    (Zusatzausfall 8/16/17/19: 1,46 px statt < 1,0 px). Die Entscheidung je Probenbild ist genau `update()`
+    (Treffer werden je Bild einmal gesucht; `_match`/`_decide` bitgleich aus `_fine_update` ausgelagert).
+  * *G4:* Die Probe läuft als eigener Prozess (`python -m dispread.live.region_probe`, nice 19) und wird bei
+    Laufende abgebrochen. An 1080p: 31 s CPU, 41 s bis zur Entscheidung; `update()` im Messprozess dabei
+    13,1 statt 12,0 ms je Bild.
+  * *G3:* `off` erst ab dem Bild nach der Stilllegung; je Satz und Bereich höchstens ein Audit-Versuch (kein
+    doppeltes Ereignis), Verzeichnis-fsync, eigener Fehlerzähler `deactivation_errors`. *G5:* Die Obergrenze
+    zählt nur nutzbare Bereiche.
+  * *W2:* Der Echtdatentest misst neu akzeptierte Quads gegen einen unabhängigen Glasbezug (Lage allein aus den
+    LCD-Kanten). Sie liegen nicht weiter davon weg als die bisher guten Quads desselben Laufs. Eine absolute
+    Grenze von 0,35 px lässt sich so nicht belegen, weil der Glasbezug selbst bis 0,8 px streut.
+  * *OQ-70-Gegenprobe:* Mit der strengeren Auswahl wählen die drei positiven Aufstellungen
+    (`164508Z`, `165234Z`, `165754Z`, Paket per SHA-256 geprüft) genau ihre gespeicherten 20 Bereiche mit Reserve.
+    Der Fehlfall `155557Z` bleibt gleich einseitig ([[2, 7], [12, 7]]): nicht verschlimmert, nicht behoben.
 * 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
   Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
   24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.

@@ -199,6 +199,80 @@ def build_live_pipeline(
     return pipeline, profile, calibration, tracking
 
 
+class ProbeProcess:
+    """Schutzprobe in einem eigenen Interpreter (kein GIL, nice 19); poll() blockiert nie.
+
+    Ein Hilfsthread uebergibt den Auftrag per stdin und wartet nur auf E/A; der
+    Leserthread fragt mit poll() ab. cancel() beendet den Prozess (Laufende).
+    """
+
+    def __init__(self, payload, base, index, *, command=None):
+        import pickle
+        import subprocess
+        import sys
+
+        self.base, self.index = frozenset(base), index
+        self._outcome = None
+        self._cancelled = False
+        self._process = subprocess.Popen(command or [sys.executable, '-m', 'dispread.live.region_probe'],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL)
+        job = pickle.dumps((payload, sorted(self.base), sorted(self.base | {index})))
+
+        def talk():
+            try:
+                out, _ = self._process.communicate(job)
+                self._outcome = (pickle.loads(out) if out else
+                                 ('error', f'Probenprozess ohne Ergebnis beendet (Code {self._process.returncode})'))
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                self._outcome = ('error', f'{type(exc).__name__}: {exc}')
+
+        self._thread = threading.Thread(target=talk, name='rahmen-schutzprobe', daemon=True)
+        self._thread.start()
+
+    @property
+    def pid(self) -> int:
+        return self._process.pid
+
+    def poll(self):
+        """None solange die Probe laeuft, sonst ('ok', Ergebnis) oder ('error', Text)."""
+        if self._thread.is_alive():
+            return None
+        if self._cancelled:
+            return ('error', 'abgebrochen')
+        return self._outcome
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        if self._process.poll() is None:
+            self._process.kill()
+        self._thread.join(2)
+
+
+class _ProbeThread:
+    """Nur fuer Attrappen ohne probe_payload (Tests): dieselbe Schnittstelle im Thread."""
+
+    def __init__(self, tracker, base, index):
+        self.base, self.index = frozenset(base), index
+        self._outcome = None
+        self._stop = threading.Event()
+
+        def work():
+            try:
+                self._outcome = ('ok', tracker.bias_probe(self.base, self.base | {index}))
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                self._outcome = ('error', f'{type(exc).__name__}: {exc}')
+
+        self.thread = threading.Thread(target=work, name='rahmen-schutzprobe', daemon=True)
+        self.thread.start()
+
+    def poll(self):
+        return None if self.thread.is_alive() else self._outcome
+
+    def cancel(self) -> None:
+        self._stop.set()
+
+
 class LiveSession:
     def __init__(
         self,
@@ -300,8 +374,12 @@ class LiveSession:
         self._region_consistency: RegionConsistency | None = None
         self._region_consistency_warned = False
         # TB 2026-11-11: laufende Schutzprobe und Ergebnisse je (Satz, Bereich).
-        self._region_probe: dict | None = None
+        self._region_probe = None
         self._region_probe_cache: dict = {}
+        self._region_event_attempted: set = set()
+        self._frame_disabled: frozenset = frozenset()
+        self._region_disable_errors = 0
+        self._region_disable_warned = False
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -570,8 +648,16 @@ class LiveSession:
                     tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
             self._region_consistency.observe([region.get('res1') for region in regions],
                                              [region.get('v1') for region in regions])
-            self._maybe_disable_region(tracker, frame_sequence)
-            disabled = getattr(tracker, 'disabled', None) or ()
+            # Satz, mit dem DIESES Bild bewertet wurde; eine Stilllegung wirkt erst ab dem naechsten.
+            disabled = frozenset(getattr(tracker, 'disabled', None) or ())
+            self._frame_disabled = disabled
+            try:
+                self._maybe_disable_region(tracker, frame_sequence)
+            except Exception as exc:  # noqa: BLE001 - ohne Stilllegung weitermessen
+                self._region_disable_errors += 1
+                if not self._region_disable_warned:
+                    _LOG.warning('Stilllegung ausgefallen, alle Bereiche bleiben aktiv: %s', exc)
+                    self._region_disable_warned = True
             if disabled:
                 # images.jsonl: stillgelegte Bereiche additiv kennzeichnen.
                 regions = [{**region, 'off': True} if index in disabled else region
@@ -588,25 +674,26 @@ class LiveSession:
 
         Ablauf (TB 2026-11-11): Das Fenster schlaegt hoechstens einen Bereich vor.
         disable_refusal prueft Hoechstzahl und Reserve. Danach laeuft die
-        Schutzprobe (FrameTracker.bias_probe, einige Sekunden) in einem
-        Hintergrundthread auf einem eigenen Tracker. Erst wenn sie bestanden ist
-        UND das Fenster denselben Bereich weiter vorschlaegt, wird das Ereignis
-        geschrieben und der Bereich stillgelegt. Jede Unsicherheit laesst alle
-        Bereiche aktiv.
+        Schutzprobe (FrameTracker.bias_probe, etwa eine Minute CPU) in einem
+        eigenen Prozess mit nice 19, ohne den Messprozess zu bremsen. Erst wenn
+        sie bestanden ist UND das Fenster denselben Bereich weiter vorschlaegt,
+        wird das Ereignis geschrieben und der Bereich stillgelegt. Jede
+        Unsicherheit laesst alle Bereiche aktiv; ein Ereignis wird je Satz und
+        Bereich hoechstens einmal versucht.
         """
         window = self._region_consistency
         if not callable(getattr(tracker, 'disable_region', None)):
             return
         pending = self._region_probe
         if pending is not None:
-            if pending['thread'].is_alive():
+            outcome = pending.poll()
+            if outcome is None:
                 return
             self._region_probe = None
-            result = pending.get('result')
-            self._region_probe_cache[(pending['base'], pending['index'])] = result
-            if result is None:
-                window.note_refused(pending['index'], 'schutzprobe_fehler', frame_sequence,
-                                    detail=pending.get('error'))
+            kind, value = outcome
+            self._region_probe_cache[(pending.base, pending.index)] = value if kind == 'ok' else None
+            if kind != 'ok':
+                window.note_refused(pending.index, 'schutzprobe_fehler', frame_sequence, detail=value)
                 return
         candidate = window.deactivation_candidate()
         if candidate is None:
@@ -619,7 +706,7 @@ class LiveSession:
         base = frozenset(tracker.disabled)
         key = (base, index)
         if key not in self._region_probe_cache:
-            self._start_region_probe(tracker, base, index)
+            self._region_probe = self._probe_runner(tracker, base, index)
             return
         probe = self._region_probe_cache[key]
         if probe is None:
@@ -627,37 +714,45 @@ class LiveSession:
         if not probe.get('ok'):
             window.note_refused(index, 'schutzprobe_verletzt', frame_sequence, detail=probe)
             return
+        if key in self._region_event_attempted:
+            return  # Audit fuer genau diese Stilllegung schon einmal gescheitert: nie doppelt
+        self._region_event_attempted.add(key)
         event = {'event': 'rahmenbereich_stillgelegt', 'frame_sequence': frame_sequence,
                  'utc': self._wall().isoformat(), **candidate,
                  'disabled_count': len(base) + 1, 'disabled_limit': tracker.disable_limit(), 'probe': probe}
-        # Ohne geschriebenes Ereignis keine Stilllegung (Fehler -> alle Bereiche bleiben aktiv).
-        with (self._out_dir / 'tracking_events.jsonl').open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps(event, ensure_ascii=False) + '\n')
-            stream.flush()
-            os.fsync(stream.fileno())
+        path = self._out_dir / 'tracking_events.jsonl'
+        created = not path.exists()
+        # Eine Zeile in einem Schreibaufruf; ohne geschriebenes Ereignis keine Stilllegung.
+        line = (json.dumps(event, ensure_ascii=False) + '\n').encode('utf-8')
+        descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            if os.write(descriptor, line) != len(line):
+                raise OSError('Ereignis unvollstaendig geschrieben')
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        if created:
+            directory = os.open(self._out_dir, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         if not tracker.disable_region(index, probe):
             raise RuntimeError(f'Stilllegung von Bereich {index + 1} unerwartet verweigert')
         window.note_deactivated(event)
         _LOG.info('Rahmenbereich %d automatisch stillgelegt (%.0f %% unstimmig, Bild %s)',
                   index + 1, 100 * candidate['share'], frame_sequence)
 
-    def _start_region_probe(self, tracker, base, index) -> None:
-        """Schutzprobe im Hintergrund, niedrige Prioritaet; das Messen laeuft weiter."""
-        pending = {'base': base, 'index': index, 'result': None, 'error': None}
+    def _probe_runner(self, tracker, base, index):
+        """Schutzprobe starten: echter Tracker im eigenen Prozess, sonst (Testattrappen) im Thread."""
+        if callable(getattr(tracker, 'probe_payload', None)):
+            return ProbeProcess(tracker.probe_payload(), base, index)
+        return _ProbeThread(tracker, base, index)
 
-        def work():
-            try:
-                os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 19)
-            except (AttributeError, OSError):
-                pass
-            try:
-                pending['result'] = tracker.bias_probe(base | {index})
-            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
-                pending['error'] = f'{type(exc).__name__}: {exc}'
-
-        pending['thread'] = threading.Thread(target=work, name='rahmen-schutzprobe', daemon=True)
-        self._region_probe = pending
-        pending['thread'].start()
+    def _cancel_region_probe(self) -> None:
+        pending, self._region_probe = self._region_probe, None
+        if pending is not None:
+            pending.cancel()
 
     def region_deactivations(self) -> list[dict]:
         """Stilllegungen dieses Laufs fuer Status und Werkbank; leer ohne Rahmenbereiche."""
@@ -668,7 +763,8 @@ class LiveSession:
         pipeline = self._pipeline
         tracker = getattr(pipeline.locator, '_tracker', None)
         regions = getattr(tracker, 'last_regions', None) or []
-        disabled = getattr(tracker, 'disabled', None) or ()
+        # Satz, mit dem dieses Bild bewertet wurde (Review G3), nicht der danach gesetzte.
+        disabled = self._frame_disabled
         read = pipeline.last_read
         diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
         cells = diagnostics.get('cells')
@@ -836,6 +932,7 @@ class LiveSession:
                     finally:
                         if self._tracking_advice is not None:
                             self._tracking_advice.close()
+                        self._cancel_region_probe()
                         self._stopped = True
                         self._diagnostics.stop(on_done=self._diagnostics_done)
                         if not self._diagnostics.copying and self.diagnostics_status()['write_errors']:
@@ -947,7 +1044,8 @@ class LiveSession:
         data["summary"] = self.summary
         if self._region_consistency is not None:
             # Nur mit Rahmenbereich-Nachfuehrung; andere Modi behalten ihre bisherigen Bytes.
-            self.summary['tracking_region_hint'] = self._region_consistency.summary()
+            self.summary['tracking_region_hint'] = {**self._region_consistency.summary(),
+                                                    'deactivation_errors': self._region_disable_errors}
         if getattr(self._reference_recorder, 'reconfiguration_enabled', False):
             self.summary['reconfiguration_suppressed'] = self._reconfiguration_suppressed
         if self._test_run is not None:

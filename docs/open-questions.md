@@ -3249,8 +3249,11 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
     Grenze, liegt der Rest im Median < 0,4 px und läuft er mit keinem anderen Bereich gleich, wird er für den
     Rest des Laufs aus der Nachführung genommen. Grenzen: höchstens 3 Bereiche bzw. 15 %, Mindestzahl,
     Streuung und Reserve wie bei der Einrichtung, dazu eine Schutzprobe am Referenzbild (Halbseiten-Bias-Raster,
-    kein angenommenes Quad > 1,0 px falsch). Ohne diese Probe wäre die Stilllegung unsicher: Im Fixture setzt
-    eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche Lage durch. Jede Stilllegung steht in
+    kein angenommenes Quad > 1,0 px falsch, höchstens 0,05 px schlechter als vorher; seit dem Review auch mit
+    einem weiteren ausfallenden Bereich nicht häufiger oder schwerer gefährlich). Ohne diese Probe wäre die
+    Stilllegung unsicher: Im Fixture setzt eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche Lage
+    durch, und nach {0, 5, 15} würde ein Zusatzausfall von 8/16/17/19 gefährlich (1,46 px). Die Probe läuft in
+    einem eigenen Prozess (nice 19, an 1080p 31 s CPU, 41 s bis zur Stilllegung). Jede Stilllegung steht in
     `tracking_events.jsonl`, in `summary.tracking_region_hint.deactivated` und additiv in
     `component_versions.locator_regions_disabled`. Offline auf den Diagnosebildern der alten Profile wird
     Bereich 6 stillgelegt (103604Z: 200/222 statt 113/222; 122753Z: 187/222, mit Bereich 1 218/222).

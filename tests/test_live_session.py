@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 import threading
+from pathlib import Path
 
 import cv2
 import pytest
@@ -1975,13 +1977,15 @@ class _TbTracker:
     def disable_refusal(self, index):
         return 'bereits_stillgelegt' if index in self.disabled else None
 
-    def bias_probe(self, disabled):
-        self.probes.append(sorted(disabled))
-        return {'disabled': sorted(disabled), 'cases': 288, 'accepted': 24, 'worst_error_px': 0.9,
-                'worst_case': None, 'tolerance_px': 1.0, 'ok': self.probe_ok}
+    def bias_probe(self, base, target):
+        self.probes.append(sorted(target))
+        return {'base': sorted(base), 'disabled': sorted(target), 'cases': 288, 'worst_error_px': 0.9,
+                'base_worst_error_px': 0.9, 'worst_case': None, 'extra': [], 'violations': [],
+                'tolerance_px': 1.0, 'margin_px': 0.05, 'ok': self.probe_ok}
 
     def disable_region(self, index, probe=None):
-        if not (probe and probe['ok'] and probe['disabled'] == sorted(self.disabled | {index})):
+        if not (probe and probe['ok'] and probe['disabled'] == sorted(self.disabled | {index})
+                and probe['base'] == sorted(self.disabled)):
             return False
         self.disabled = self.disabled | {index}
         return True
@@ -2008,8 +2012,8 @@ def _tb_session(tmp_path, monkeypatch, tracker, frames=14):
     def step():
         record = session.step()
         probe = session._region_probe
-        if probe is not None:
-            probe['thread'].join(5)  # Schutzprobe laeuft im Hintergrund
+        if probe is not None and hasattr(probe, 'thread'):
+            probe.thread.join(5)  # Attrappe: Schutzprobe im Thread
         return record
 
     return session, step
@@ -2068,6 +2072,127 @@ def test_tb_ohne_audit_keine_stilllegung_und_lauf_geht_weiter(tmp_path, monkeypa
         assert statuses[-1] is ValueStatus.VALID
         assert tracker.disabled == frozenset()
         assert len(session.records_path.read_text().splitlines()) == 12
+    finally:
+        session.stop()
+    # Review G3: genau ein Versuch, kein wiederholtes oder halbes Ereignis; Fehler gezaehlt.
+    summary = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert summary['deactivation_errors'] == 1 and summary['deactivated'] == []
+
+
+_TB_FAKE_PROBE = ("import os, pickle, sys; payload, base, target = pickle.loads(sys.stdin.buffer.read()); "
+                  "sys.stdout.buffer.write(pickle.dumps(('ok', {'base': base, 'disabled': target, "
+                  "'payload': sorted(payload), 'nice': os.nice(0)})))")
+
+
+def _tb_wait(handle, seconds=30):
+    import time
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        outcome = handle.poll()
+        if outcome is not None:
+            return outcome
+        time.sleep(0.05)
+    raise AssertionError('Probe ohne Ergebnis')
+
+
+def test_tb_schutzprobe_laeuft_im_eigenen_prozess_und_ist_abbrechbar():
+    import sys
+
+    from dispread.live.session import ProbeProcess
+
+    handle = ProbeProcess({'reference': 1, 'quad': 2}, {3}, 4, command=[sys.executable, '-c', _TB_FAKE_PROBE])
+    assert handle.pid != os.getpid()
+    kind, result = _tb_wait(handle)
+    assert kind == 'ok' and result['base'] == [3] and result['disabled'] == [3, 4]
+    assert result['payload'] == ['quad', 'reference']
+    sleeping = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', 'import time; time.sleep(60)'])
+    assert sleeping.poll() is None
+    sleeping.cancel()  # Laufende: Prozess wird beendet, keine Last fuer den naechsten Lauf
+    assert sleeping._process.poll() is not None and sleeping.poll() == ('error', 'abgebrochen')
+    broken = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', 'raise SystemExit(3)'])
+    assert _tb_wait(broken)[0] == 'error'
+
+
+def test_tb_probenprozess_modul_rechnet_mit_niedriger_prioritaet(monkeypatch):
+    """Echter Kindprozess (python -m dispread.live.region_probe) mit kleinem Auftrag."""
+    import cv2
+    import numpy as np
+
+    from dispread.live import region_probe
+    from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, propose_regions
+    from dispread.live.session import ProbeProcess
+
+    fixtures = Path(__file__).parent / 'fixtures' / 'r13'
+    reference = cv2.imread(str(fixtures / 'reference.jpg'))
+    quad = np.asarray(json.loads((fixtures / 'r13-fixtures.json').read_text())['quad'])
+    tracker = FrameTracker(reference, quad, propose_regions(reference, quad, FrameTrackingConfig()))
+    # Aufbau aus dem Payload im selben Prozess, Probe ersetzt (die echte dauert rund eine Minute).
+    monkeypatch.setattr(FrameTracker, 'bias_probe',
+                        lambda self, base, target, stop=None: {'n': len(self.sources), 'base': base, 'disabled': target})
+    assert region_probe.run(tracker.probe_payload(), [], [7]) == {'n': len(tracker.sources), 'base': [], 'disabled': [7]}
+    # Ungueltiger Auftrag im echten Kindprozess: Fehler statt Ergebnis, keine Stilllegung.
+    handle = ProbeProcess({'config': {}}, set(), 1)
+    kind, text = _tb_wait(handle)
+    assert kind == 'error' and 'ValueError' in text
+
+
+class _TbManualProbe:
+    def __init__(self, base, index):
+        self.base, self.index, self.outcome, self.cancelled = frozenset(base), index, None, False
+
+    def poll(self):
+        return self.outcome
+
+    def cancel(self):
+        self.cancelled = True
+
+
+def test_tb_probe_laeuft_waehrend_der_vorschlag_wechselt(tmp_path, monkeypatch):
+    """Review G6: Probe fuer Bereich 5 endet erst, nachdem das Fenster Bereich 3 vorschlaegt."""
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker, frames=30)
+    started = []
+    session._probe_runner = lambda trk, base, index: started.append(_TbManualProbe(base, index)) or started[-1]
+    try:
+        for _ in range(8):
+            step()
+        assert [probe.index for probe in started] == [4] and tracker.disabled == frozenset()
+        original = tracker.update
+
+        def moved_glint():
+            original()
+            tracker.last_regions[4], tracker.last_regions[2] = tracker.last_regions[2], tracker.last_regions[4]
+            for index in (2, 4):
+                tracker.last_regions[index]['c'] = list(tracker.sources[index])
+
+        tracker.update = moved_glint
+        for _ in range(8):
+            step()
+        assert session._region_consistency.deactivation_candidate()['index'] == 2
+        started[0].outcome = ('ok', {'ok': True, 'base': [], 'disabled': [4]})
+        step()
+        # Ergebnis fuer 4 kommt an, das Fenster schlaegt aber 2 vor: 4 bleibt aktiv, Probe fuer 2 startet.
+        assert tracker.disabled == frozenset()
+        assert [probe.index for probe in started] == [4, 2]
+        session.stop()
+        assert started[-1].cancelled  # Laufende bricht die offene Probe ab
+    finally:
+        session.stop()
+
+
+def test_tb_off_erst_ab_dem_bild_nach_der_stilllegung(tmp_path, monkeypatch):
+    """Review G3: Das Ereignisbild wurde noch mit dem Bereich bewertet."""
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        while not tracker.disabled:
+            step()
+            regions = session.frame_info()['track']['regions']
+            if tracker.disabled:
+                assert all('off' not in region for region in regions)
+        step()
+        assert session.frame_info()['track']['regions'][4]['off'] is True
     finally:
         session.stop()
 
