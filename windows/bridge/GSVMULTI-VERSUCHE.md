@@ -110,3 +110,11 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Belegt sind: `0` (Filter aus, unused), `256` (Filter an, unused), `315 = 256 + 59` (Filter an, `;`).
 - Für die Vierkanal-Session gilt: `NumChan = 4`, `Separator = 315`, Kanäle über „Open all input channels“.
 - Im Define-Dialog muss das Dropdown „Value Separator“ gewählt sein. Das Feld „Separator Char“ allein reicht nicht.
+
+**Versuch 1c (2026-11-11):** Vierkanal-Session (`NumChan = 4`, `Separator = 315`, 10 Hz, Filter an).
+- **Ergebnis: bestanden.** 600 von 600 Telegrammen, alle vier Kanäle bit-identisch mit dem Senderprotokoll:
+  - Wert, Gültigkeit und Sequenz 1…600 lückenlos.
+  - Der Zeitkanal (Unix-Sekunden mit 6 Nachkommastellen) ist ohne Rundung erhalten, float64 in der TDMS.
+- Der Sender war höchstens 30 ms verspätet.
+- Mehrkanal-Telegramme bei UserDefined sind damit **gemessen**, nicht mehr nur aus dem Handbuch abgeleitet.
+- Auswertung mit `docs/quellen/gsvmulti-versuche-2026-11-11/tdms_lesen.py`. Mehrkanalige TDMS speichern je Segment mehrere Blöcke pro Kanal hintereinander, nicht verschachtelt.
