@@ -23,8 +23,8 @@ class FakePort:
 
 def run(nummer):
     port, log, now = FakePort(), io.StringIO(), [0.0]
-    gv.senden(gv.versuch(nummer, clock=lambda: 1789000000.0), port, log=log,
-              monotonic=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s), wall=lambda: 0.0)
+    gv.senden(gv.versuch(nummer), port, log=log,
+              monotonic=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s), wall=lambda: 1789000000.0)
     return port.data.decode("ascii").split("\r\n")[:-1], [json.loads(z) for z in log.getvalue().splitlines()]
 
 
@@ -50,8 +50,11 @@ def test_versuch_5_pauses_send_nothing():
     assert sum("telegramm" not in e for e in log) == (2 + 4 + 8 + 30) * 10
 
 
-def test_versuch_3_markers_single_channel():
+def test_versuch_3_markers_four_channels_flagged_invalid():
     lines, _ = run(3)
-    assert "%1E+300" in lines and "%99999999.0" in lines
-    assert all(";" not in z for z in lines)
     assert len(lines) == len(gv.MARKER) * 100 + 50
+    assert all(z.count(";") == 3 for z in lines)
+    marker = [z for z in lines if z.split(";")[1] == "0"]
+    assert len(marker) == len(gv.MARKER) * 50
+    assert {z[1:].split(";")[0] for z in marker} == set(gv.MARKER)
+    assert [int(z.split(";")[2]) for z in lines] == list(range(1, len(lines) + 1))

@@ -52,11 +52,12 @@ Die `0` ist nur ein Platzhalter für diesen Test, im Messpfad nie.
 
 ## Versuch 3: Marker im Wertkanal (mittel)
 
-**Einstellung:** einkanalig wie heute (Number of values = 1).
+**Einstellung:** die Vierkanal-Session aus Versuch 1/2. Die Session muss nicht gewechselt werden.
 
 **Telegramme:**
-- Abwechselnd je 50 Ticks `%0.5` und 50 Ticks Marker.
+- Abwechselnd je 50 gültige Ticks und 50 Marker-Ticks. Ein Marker-Tick hat den Marker im Wertkanal und `gültig = 0`; Sequenz und Zeit laufen weiter.
 - Marker der Reihe nach: `1E+300`, `1e300`, `+1.0E+300`, `99999999.0`, `NaN`, `+NaN`, `Inf`.
+- Insgesamt 750 Ticks, also 75 s.
 
 **Beobachten:**
 - Welche Schreibweise steht unverändert in der TDMS/TXT?
@@ -118,3 +119,12 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Der Sender war höchstens 30 ms verspätet.
 - Mehrkanal-Telegramme bei UserDefined sind damit **gemessen**, nicht mehr nur aus dem Handbuch abgeleitet.
 - Auswertung mit `docs/quellen/gsvmulti-versuche-2026-11-11/tdms_lesen.py`. Mehrkanalige TDMS speichern je Segment mehrere Blöcke pro Kanal hintereinander, nicht verschachtelt.
+
+**Versuch 2 (2026-11-11):** Vierkanal-Session, `dt mode = tf`.
+- **Ergebnis: bestanden.**
+  - 250 von 250 Zeilen, alle vier Kanäle bit-identisch.
+  - Die 50 ungültigen Zeilen stehen genau in den Zeilen 100–149.
+  - Die Sequenz ist lückenlos.
+- Die Achse von GSVmulti (`tf`, 0,1028 s je Zeile) weicht am Ende um bis zu 0,8 s vom Zeitkanal ab. Das Inkrement ergibt sich aus Start- und Stopp-Klick der Aufnahme, nicht aus den Werten.
+  - Für die Zuordnung zur Referenz zählt deshalb der Zeitkanal, nicht die GSVmulti-Achse.
+- Der Zeitkanal stand in Versuch 1c/2 auf der Erzeugungszeit des Ticks, etwa 100 ms vor dem Senden. Seit diesem Stand trägt der Sender die Uhrzeit beim Senden ein.

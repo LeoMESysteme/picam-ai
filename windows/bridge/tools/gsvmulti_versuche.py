@@ -43,25 +43,26 @@ def _wert(i: int) -> str:
     return f"{0.5 + (i % 1000) / 100000:.5f}"
 
 
-def _vierkanal(wert: str, gueltig: int, seq: int, zeit: float) -> str:
-    return f"{wert};{gueltig};{seq};{zeit:.6f}"
+def _vierkanal(wert: str, gueltig: int, seq: int) -> str:
+    # {zeit} wird erst beim Senden durch die Uhrzeit des Senders ersetzt.
+    return f"{wert};{gueltig};{seq};{{zeit}}"
 
 
-def versuch(nummer: int, clock=time.time) -> Iterator[Tick]:
-    """Erzeugt die Ticks eines Versuchs; Zeitkanal = Uhrzeit beim Erzeugen."""
+def versuch(nummer: int) -> Iterator[Tick]:
+    """Erzeugt die Ticks eines Versuchs; der Zeitkanal wird beim Senden gefüllt."""
     seq = 0
 
     def gueltig(n, note):
         nonlocal seq
         for _ in range(n):
             seq += 1
-            yield Tick(_vierkanal(_wert(seq), 1, seq, clock()), note)
+            yield Tick(_vierkanal(_wert(seq), 1, seq), note)
 
     def ungueltig(n, note):
         nonlocal seq
         for _ in range(n):
             seq += 1
-            yield Tick(_vierkanal("0", 0, seq, clock()), note)
+            yield Tick(_vierkanal("0", 0, seq), note)
 
     def pause(sekunden, note):
         for _ in range(round(sekunden * RATE_HZ)):
@@ -73,14 +74,13 @@ def versuch(nummer: int, clock=time.time) -> Iterator[Tick]:
         yield from gueltig(100, "gueltig")
         yield from ungueltig(50, "ungueltig")
         yield from gueltig(100, "gueltig")
-    elif nummer == 3:  # Marker im Wertkanal (einkanalig)
+    elif nummer == 3:  # Marker im Wertkanal, vierkanalig wie Versuch 1/2 (gueltig = 0)
         for marker in MARKER:
+            yield from gueltig(50, "gueltig")
             for _ in range(50):
-                yield Tick("0.5", "gueltig")
-            for _ in range(50):
-                yield Tick(marker, f"marker {marker}")
-        for _ in range(50):
-            yield Tick("0.5", "gueltig")
+                seq += 1
+                yield Tick(_vierkanal(marker, 0, seq), f"marker {marker}")
+        yield from gueltig(50, "gueltig")
     elif nummer == 4:  # Start/Ende der Aufnahme per Schwelle auf Kanal 2
         yield from ungueltig(50, "vorlauf ungueltig")
         yield from gueltig(600, "gueltig")
@@ -108,7 +108,8 @@ def senden(ticks, port, *, prefix="%", rate_hz=RATE_HZ, log=sys.stdout, monotoni
         eintrag = {"tick": i, "soll_s": round(soll - start, 4), "ist_s": round(ist - start, 4),
                    "spaet_ms": round(max(0.0, ist - soll) * 1000, 1), "uhrzeit": wall(), "note": tick.note}
         if tick.text is not None:
-            telegramm = f"{prefix}{tick.text}\r\n".encode("ascii")
+            text = tick.text.replace("{zeit}", f"{wall():.6f}")
+            telegramm = f"{prefix}{text}\r\n".encode("ascii")
             if port is not None:
                 geschrieben = port.write(telegramm)
                 if geschrieben != len(telegramm):
