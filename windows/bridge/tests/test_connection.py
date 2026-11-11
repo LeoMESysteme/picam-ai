@@ -62,7 +62,9 @@ class HubTransport:
         self.kinds.append(message['type'])
         if message['type'] == 'hello':
             try:
-                self.lease = self.hub.attach(message['client_id'], self.mode)
+                self.hello = message
+                self.lease = self.hub.attach(message['client_id'], self.mode,
+                                             capabilities=message['capabilities'])
             except ValueError:
                 # Match the real WSS route's typed, bound lease-conflict reply.
                 self.pending = {key: message[key] for key in ('version', 'pi_id', 'client_id', 'request_id')}
@@ -620,4 +622,75 @@ def test_record_claiming_release_without_prior_pi_marker_revokes_link(setup):
         assert not link.test_release_for('sneaky-run')
     finally:
         hub.release_real_run('sneaky-run')
+        state.stop()
+
+
+# B2 (2026-11-11): Taktnachricht ueber die validierte v1-Naht.
+def _bind_ticks(hub, run_id, *, release='test_unaccepted'):
+    from dispread.bridge.output_state import OutputState
+    hub.reserve_real_run(run_id)
+    clock = [0]
+    state = OutputState(hub.audit_root / run_id, release=release, clock=lambda: clock[0], tick_rate_hz=10,
+                        tick_thread=False)
+    state.run_id = run_id
+    state.start()
+    hub.bind_run(run_id, state, transport='network')
+
+    def advance(ticks=1):
+        for _ in range(ticks):
+            clock[0] += 100_000_000
+            state.step_ticks()
+    return state, advance
+
+
+def test_client_hello_announces_tick_capability(setup):
+    manager, factory, hub, events = setup
+    connected(manager)
+    assert factory.transports[-1].hello['capabilities'] == {'tick': 1}
+
+
+def test_tick_and_tick_ack_cross_the_validated_seam(setup):
+    manager, factory, hub, events = setup
+    state, advance = _bind_ticks(hub, 'tick-run')
+    try:
+        link = connected(manager)
+        assert link.test_release_for('tick-run')
+        advance(2)
+        link.send(dict(version=1, type='poll', request_id='p1'))
+        reply = link.receive()
+        assert (reply['type'], reply['seq'], reply['valid'], reply['version']) == ('tick', 1, False, 1)
+        assert set(reply) == {'version', 'type', 'request_id', 'run_id', 'seq', 'valid', 'value_text',
+                              'frame_sequence', 'time_unix_ns', 'origin_unix_ns', 'rate_hz', 'release'}
+        with pytest.raises(ConnectionError, match='stale_ack'):
+            link.send(dict(version=1, type='tick_ack', request_id='p1', run_id='tick-run', seq=2,
+                           outcome='written', filled=0))
+        link = connected(manager)
+        advance()
+        link.send(dict(version=1, type='poll', request_id='p2'))
+        second = link.receive()
+        assert second['seq'] == 2                       # Takt 1 bleibt unbestaetigt, nie erneut
+        link.send(dict(version=1, type='tick_ack', request_id='p2', run_id='tick-run', seq=2,
+                       outcome='written', filled=1))
+        tick = state.status()['tick']
+        assert (tick['acknowledged'], tick['unconfirmed']) == (1, 1)
+    finally:
+        hub.release_real_run('tick-run')
+        state.drain_timeout_s = 0
+        state.stop()
+
+
+def test_tick_claiming_release_without_prior_pi_marker_revokes_link(setup):
+    manager, factory, hub, events = setup
+    factory.mutate = lambda reply: ({k: v for k, v in reply.items() if k != 'release'}
+                                    if reply['type'] in ('hello', 'idle') else reply)
+    state, advance = _bind_ticks(hub, 'sneaky-tick')
+    try:
+        link = connected(manager)
+        advance()
+        with pytest.raises(ConnectionError, match='peer_invalid'):
+            link.send(dict(version=1, type='poll', request_id='p1'))
+        assert not link.test_release_for('sneaky-tick')
+    finally:
+        hub.release_real_run('sneaky-tick')
+        state.drain_timeout_s = 0
         state.stop()

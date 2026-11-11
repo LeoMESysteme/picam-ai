@@ -17,11 +17,13 @@ import uuid
 from collections import deque
 from pathlib import Path
 
-from dispread.bridge.protocol import TEST_RELEASE
+from dispread.bridge.protocol import TEST_RELEASE, TICK_WINDOW
 from dispread.gsv_transport import JsonLineReader, encode_message
+from dispread.live.tick import Tick, nominal_unix_ns, validate_rate
 from dispread.records import InvalidValuePolicy, TimeBaseKind, Timestamp, ValueRecord, ValueStatus
 from dispread.sink.protocol.user_defined import UserDefinedFormatter
 from dispread.sink.protocol.userdefined import UserDefinedFormatter as DirectFormatter
+from dispread.sink.protocol.userdefined_4ch import TickFormatter, checked_value_text
 
 
 class BridgeError(RuntimeError):
@@ -30,6 +32,10 @@ class BridgeError(RuntimeError):
 
 class _AdmissionExpired(BridgeError):
     """No COM attempt was admitted before the host request deadline."""
+
+
+class _TickWriteFailed(BridgeError):
+    """A tick line reached the driver call and failed; it stays ``unknown``."""
 
 
 class BridgeAuditError(BridgeError):
@@ -73,7 +79,29 @@ class BridgeSession:
         # Testfreigabe: dieselben Bytes wie UART direkt (P4-3), Ungueltiges entfaellt.
         self.release_gate = release_gate
         self.release_formatter = DirectFormatter(prefix="%")
+        self.tick_formatter = TickFormatter()
         self._last_written = None
+        self._tick_lock = threading.Lock()
+        self._tick_stats = self._empty_tick_stats(None)
+
+    @staticmethod
+    def _empty_tick_stats(run_id):
+        return dict(run_id=run_id, ticks_written=0, ticks_invalid=0, ticks_filled=0, tick_disturbed=False)
+
+    def tick_stats(self):
+        """Taktzeilen des laufenden bzw. letzten Laufs; nur lokale COM-Annahme."""
+        with self._tick_lock:
+            return dict(self._tick_stats)
+
+    def _count_tick(self, run_id, **increments):
+        with self._tick_lock:
+            if self._tick_stats["run_id"] != run_id:
+                self._tick_stats = self._empty_tick_stats(run_id)
+            for key, value in increments.items():
+                if key == "tick_disturbed":
+                    self._tick_stats[key] = self._tick_stats[key] or value
+                else:
+                    self._tick_stats[key] += value
 
     def _event(self, *, formatter=None, **event):
         if self.log is not None:
@@ -95,6 +123,8 @@ class BridgeSession:
         if kind in ("idle", "ended"):
             self._event(outcome=kind, run_id=reply.get("run_id"), release_block=reply.get("release_block"))
             return kind
+        if kind == "tick":
+            return self._exchange_tick(link, com, reply, request_id, started)
         if kind != "record":
             raise BridgeError("unknown reply type")
         released = reply.get("demo") is not True
@@ -259,6 +289,152 @@ class BridgeSession:
             self._event(**ack, outcome="unconfirmed", completion_stage="com_driver_write")
             raise
         return "written"
+
+    @staticmethod
+    def _parse_tick(reply):
+        """Takt streng pruefen; der Pi hat ihn schon validiert, Windows vertraut nicht."""
+        seq, valid, text = reply.get("seq"), reply.get("valid"), reply.get("value_text")
+        frame, time_ns, origin = reply.get("frame_sequence"), reply.get("time_unix_ns"), reply.get("origin_unix_ns")
+        rate = reply.get("rate_hz")
+        if (type(seq) is not int or not 0 < seq < 2**63 or type(valid) is not bool
+                or type(time_ns) is not int or time_ns < 0 or type(origin) is not int or origin < 0):
+            raise ValueError("invalid tick fields")
+        validate_rate(rate)
+        if valid:
+            if not isinstance(text, str) or checked_value_text(text) != text or type(frame) is not int or frame < 0:
+                raise ValueError("invalid valid tick")
+        elif text is not None or frame is not None:
+            raise ValueError("invalid tick carries value")
+        return Tick(seq, valid, text, time_ns, frame), origin, rate
+
+    def _exchange_tick(self, link, com, reply, request_id, started):
+        """Ein Pi-Takt: fehlende Takte zuerst als Fehlwertzeilen, dann der Takt.
+
+        Jede Zeile wird vor dem COM-Schreiben dauerhaft beabsichtigt. Geschrieben
+        wird nur oberhalb der hoechsten geschriebenen Taktnummer; kein Wert wird
+        nachgereicht oder wiederholt. Luecken ueber ``TICK_WINDOW`` bleiben stehen
+        und melden die Ausgabe als gestoert (Spec F2).
+        """
+        run_id = reply.get("run_id")
+        if not isinstance(run_id, str) or not run_id or len(run_id) > 256:
+            raise BridgeError("invalid run metadata")
+        if reply.get("release") != TEST_RELEASE or self.release_gate is None or not self.release_gate(link, run_id):
+            raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
+        if self.journal is None or self.pi_id is None:
+            raise BridgeError("tick output requires the durable delivery journal")
+        try:
+            tick, origin, rate = self._parse_tick(reply)
+            payload = self.tick_formatter.format_tick(tick)
+        except (TypeError, ValueError) as exc:
+            raise BridgeError(f"invalid tick: {exc}") from exc
+        ack = {"version": 1, "type": "tick_ack", "request_id": request_id, "run_id": run_id, "seq": tick.seq}
+        self._count_tick(run_id)
+        try:
+            existing = self.journal.tick_outcome(self.pi_id, run_id, tick.seq)
+            last = self.journal.last_tick_written(self.pi_id, run_id)
+        except Exception as exc:
+            raise BridgeAuditError("audit_failed reading tick journal") from exc
+        if existing == "written":
+            link.send(dict(ack, outcome="written", filled=0))
+            return "written"
+        if existing in ("pending", "unknown"):
+            raise DeliveryUncertainError("unknown prior tick delivery; automatic retry blocked")
+        if existing is not None or tick.seq <= last:
+            raise BridgeError("tick out of order; never written twice")
+        missing = tick.seq - last - 1
+        lines = []
+        if missing > TICK_WINDOW:
+            try:
+                self.journal.record_tick_gap(self.pi_id, run_id, tick.seq, missing)
+            except Exception as exc:
+                raise BridgeAuditError("audit_failed recording tick gap") from exc
+            self._count_tick(run_id, tick_disturbed=True)
+            self._event(outcome="tick_gap_unfilled", run_id=run_id, seq=tick.seq, missing=missing,
+                        formatter=self.tick_formatter)
+        else:
+            for seq in range(last + 1, tick.seq):
+                fill = Tick(seq, False, None, nominal_unix_ns(origin, rate, seq), None)
+                lines.append(("fill", fill, self.tick_formatter.format_tick(fill)))
+        lines.append(("tick", tick, payload))
+        filled = 0
+        for kind, line, data in lines:
+            try:
+                outcome = self._write_tick_line(link, com, run_id, kind, line, data, started)
+            except _TickWriteFailed as exc:
+                self._event(**ack, outcome="failed", filled=filled, failed_seq=line.seq, error=str(exc),
+                            formatter=self.tick_formatter)
+                link.send(dict(ack, outcome="failed", filled=filled))
+                raise
+            if outcome != "written":
+                link.send(dict(ack, outcome="expired", filled=filled))
+                self._event(**ack, outcome="expired", filled=filled, formatter=self.tick_formatter)
+                return "expired"
+            if kind == "fill":
+                filled += 1
+                self._count_tick(run_id, ticks_filled=1)
+            else:
+                self._count_tick(run_id, ticks_written=1, ticks_invalid=int(not line.valid))
+        self._event(**ack, outcome="written", filled=filled, wire_bytes_hex=payload.hex(),
+                    completion_stage="com_driver_write", formatter=self.tick_formatter)
+        try:
+            link.send(dict(ack, outcome="written", filled=filled))
+        except Exception:
+            self._event(**ack, outcome="unconfirmed", completion_stage="com_driver_write",
+                        formatter=self.tick_formatter)
+            raise
+        return "written"
+
+    def _write_tick_line(self, link, com, run_id, kind, line, payload, started):
+        """Eine Zeile: Absicht, Zulassung im Budget, COM, Ergebnis. ``not_written`` bei Ablauf."""
+        try:
+            attempt_id = self.journal.begin_tick(self.pi_id, run_id, line.seq, kind, line.valid, payload)
+        except (DeliveryBlockedError, DeliveryAlreadyAttempted) as exc:
+            raise DeliveryUncertainError("unknown prior delivery; automatic retry blocked") from exc
+        except Exception as exc:
+            raise BridgeAuditError("audit_failed before COM; output stopped") from exc
+        admitted = False
+
+        def claim():
+            nonlocal admitted
+            if admitted:
+                raise BridgeError("COM attempt already admitted")
+            if self.timeout_ns - (self.clock() - started) <= 0:
+                raise _AdmissionExpired("host request expired before COM admission")
+            admitted = True
+
+        try:
+            remaining = self.timeout_ns - (self.clock() - started)
+            if remaining <= 0:
+                raise _AdmissionExpired("host request expired before COM admission")
+            com.write_timeout = remaining / 1_000_000_000
+            if self.admit_write is not None:
+                self.admit_write(link, claim)
+                if not admitted:
+                    raise BridgeError("COM admission callback did not claim attempt")
+            else:
+                claim()
+            written = com.write(payload)
+            if written != len(payload):
+                raise OSError(f"partial COM write: {written}/{len(payload)}")
+        except _AdmissionExpired:
+            self._finish_tick(attempt_id, "not_written")
+            return "expired"
+        except Exception as exc:
+            self._finish_tick(attempt_id, "unknown" if admitted else "not_written")
+            if admitted:
+                try:
+                    com.reset_output_buffer()
+                except Exception:
+                    pass
+            raise _TickWriteFailed(f"COM: {exc}") from exc
+        self._finish_tick(attempt_id, "written")
+        return "written"
+
+    def _finish_tick(self, attempt_id, outcome):
+        try:
+            self.journal.finish_tick(attempt_id, outcome)
+        except Exception as exc:
+            raise BridgeAuditError("audit_failed; tick delivery unknown; output stopped") from exc
 
     def _finish_attempt(self, attempt_id, outcome):
         try:

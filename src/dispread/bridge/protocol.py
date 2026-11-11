@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from dispread.bridge.types import BridgeProfile
 from dispread.records import TimeBaseKind, TimestampSemantics, ValueRecord
+from dispread.sink.protocol.userdefined_4ch import checked_value_text
 
 MAX_MESSAGE_BYTES = 65536
 MAX_PROFILE_BYTES = 16384
@@ -23,6 +24,14 @@ _BOUND = {"run_id", "lease_id"}
 #: diesen einen Wert, keine "Abnahme"-Stufe.
 TEST_RELEASE = "test_unaccepted"
 ACK_OUTCOMES = ("written", "expired", "failed", "unconfirmed", "omitted")
+#: Additiv seit 2026-11-11 (B2): kompakte Taktnachricht fuer den Vierkanal-Takt.
+#: Der Pi haelt hoechstens so viele Takte zum Angebot vor, Windows fuellt
+#: hoechstens so viele fehlende Takte mit Fehlwertzeilen auf (Spec F2, 5 s bei 10 Hz).
+TICK_WINDOW = 50
+TICK_ACK_OUTCOMES = ("written", "expired", "failed", "unconfirmed")
+#: Faehigkeit im Client-Hello; ohne sie bietet der Pi nie einen Takt an.
+TICK_CAPABILITY = "tick"
+TICK_CAPABILITY_VERSION = 1
 _FIELDS = {
     "hello": (
         {"protocol_version", "transport", "run_id", "state", "release_block", "capabilities", "permissions"},
@@ -39,6 +48,9 @@ _FIELDS = {
     "idle": (_BOUND | {"release_block"}, {"release"}),
     "ended": (_BOUND, set()),
     "ack": (_BOUND | {"frame_sequence", "barrier_id", "outcome"}, set()),
+    "tick": (_BOUND | {"seq", "valid", "value_text", "frame_sequence", "time_unix_ns", "origin_unix_ns",
+                       "rate_hz", "release"}, set()),
+    "tick_ack": (_BOUND | {"seq", "outcome", "filled"}, set()),
     "error": ({"code", "detail", "run_id"}, {"lease_id"}),
 }
 _RECORD_FIELDS = {
@@ -296,6 +308,33 @@ def _record(value, *, demo=True):
         raise ValueError("invalid ValueRecord") from exc
 
 
+def _tick(message):
+    """Ein Takt: gueltig mit dezimalem Anzeigetext und Bildnummer, sonst beides null.
+
+    Kein Exponent, NaN, Inf oder reservierter Fehlwerttext; die Formatierung des
+    Telegramms bleibt beim TickFormatter der Windows-Seite.
+    """
+    if message["release"] != TEST_RELEASE:
+        raise ValueError("tick requires the confirmed test release")
+    _integer(message["seq"], minimum=1)
+    _integer(message["time_unix_ns"])
+    _integer(message["origin_unix_ns"])
+    rate = message["rate_hz"]
+    _number(rate)
+    if not 1 <= rate <= 10:
+        raise ValueError("invalid tick rate")
+    if message["valid"] is True:
+        text = message["value_text"]
+        if not isinstance(text, str) or checked_value_text(text) != text:
+            raise ValueError("invalid tick value text")
+        _integer(message["frame_sequence"])
+    elif message["valid"] is False:
+        if message["value_text"] is not None or message["frame_sequence"] is not None:
+            raise ValueError("invalid tick carries no value or frame")
+    else:
+        raise ValueError("tick validity must be boolean")
+
+
 def _validate_v2(message):
     if not isinstance(message, dict) or type(message.get("version")) is not int or message["version"] != 2:
         raise ValueError("expected bridge protocol version 2")
@@ -357,6 +396,13 @@ def _validate_v2(message):
             raise ValueError("only synthetic demo or confirmed test release without age claim allowed")
         _integer(message["barrier_id"], minimum=1, nullable=True)
         _record(message["record"], demo=demo)
+    elif kind == "tick":
+        _tick(message)
+    elif kind == "tick_ack":
+        _integer(message["seq"], minimum=1)
+        _integer(message["filled"], maximum=TICK_WINDOW)
+        if message["outcome"] not in TICK_ACK_OUTCOMES:
+            raise ValueError("invalid tick ACK outcome")
     elif kind == "ack":
         _integer(message["frame_sequence"])
         _integer(message["barrier_id"], minimum=1, nullable=True)

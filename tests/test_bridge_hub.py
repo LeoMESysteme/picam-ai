@@ -479,3 +479,75 @@ def test_open_barrier_precedes_values_across_lease_change_under_release(tmp_path
     assert value['record']['frame_sequence'] == 2 and value['barrier_id'] is None
     hub.close()
     state.stop()
+
+
+# --- B2 (2026-11-11): Taktnachricht nur an Clients mit Faehigkeit ``tick`` ----------
+
+def _tick_hub(tmp_path, *, capabilities, transport='network'):
+    from test_bridge_output_state import tick_state
+
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state, clocks = tick_state(tmp_path / 'run')
+    state.run_id = 'run'
+    hub.bind_run('run', state, transport=transport)
+    lease = hub.attach('pc', transport, capabilities=capabilities)
+    return hub, state, clocks, lease
+
+
+def test_tick_capable_client_gets_strict_ticks_in_order(tmp_path):
+    from test_bridge_output_state import advance
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    hello = hub._hello(lease, 'h')
+    assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
+    advance(state, clocks, 3)
+    seqs = []
+    for index in range(3):
+        tick = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': f'p{index}'})
+        assert tick == decode_v2(encode_v2(tick)) and tick['type'] == 'tick' and 'demo' not in tick
+        seqs.append(tick['seq'])
+        after = hub.exchange(lease.lease_id, {**request(hub, lease, 'tick_ack', seq=tick['seq'],
+                                                        outcome='written', filled=0), 'request_id': f'p{index}'})
+        assert after['type'] == 'idle' and after['release'] == 'test_unaccepted'
+    assert seqs == [1, 2, 3]
+    assert state.status()['tick']['acknowledged'] == 3
+    hub.close()
+    state.stop()
+
+
+@pytest.mark.parametrize('capabilities', [None, {}, {'tick': True}, {'tick': 2}])
+def test_client_without_tick_capability_never_sees_a_tick(tmp_path, capabilities):
+    from test_bridge_output_state import advance
+
+    from dispread.bridge.hub import TICK_CLIENT_BLOCK
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities=capabilities)
+    hello = hub._hello(lease, 'h')
+    assert hello['release_block'] == TICK_CLIENT_BLOCK and 'release' not in hello
+    advance(state, clocks, 3)
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['release_block'] == TICK_CLIENT_BLOCK and 'release' not in idle
+    assert state.status()['tick']['offered'] == 0
+    with pytest.raises(ValueError):
+        hub.exchange(lease.lease_id, request(hub, lease, 'tick_ack', seq=1, outcome='written', filled=0))
+    hub.close()
+    state.stop()
+
+
+def test_tick_ack_after_run_end_is_not_accepted_but_keeps_connection(tmp_path):
+    from test_bridge_output_state import advance
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    hub._hello(lease, 'h')
+    advance(state, clocks)
+    tick = hub.exchange(lease.lease_id, request(hub, lease))
+    state.drain_timeout_s = 0
+    hub.unbind_run('run')
+    state.stop()
+    hub.release_real_run('run')
+    reply = hub.exchange(lease.lease_id, {**request(hub, lease, 'tick_ack', seq=tick['seq'], outcome='written',
+                                                    filled=0), 'run_id': 'run'})
+    assert reply['type'] == 'hello' and reply['run_id'] is None
+    assert state.status()['tick']['unconfirmed'] == 1
+    hub.close()

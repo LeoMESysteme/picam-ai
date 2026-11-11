@@ -129,7 +129,7 @@ class UartListener:
         if kind == 'hello':
             if self._lease or message['transport'] != 'uart' or message['run_id'] is not None or message.get('lease_id'):
                 raise ValueError('fresh UART hello required')
-            self._lease = self.hub.attach(self._client, 'uart')
+            self._lease = self.hub.attach(self._client, 'uart', capabilities=message['capabilities'])
             self._deadline = None
             return self.hub._hello(self._lease, message['request_id'])
         if self._lease is None:

@@ -26,6 +26,23 @@ class JournalError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class TickAttempt:
+    """Eine COM-Zeile des Vierkanal-Takts: Pi-Takt (``tick``) oder Windows-Auffuellung (``fill``)."""
+
+    attempt_id: str
+    pi_id: str
+    run_id: str
+    seq: int
+    kind: str
+    valid: bool
+    payload_digest: str
+    outcome: str
+
+
+TICK_KINDS = ('tick', 'fill')
+
+
+@dataclass(frozen=True)
 class Attempt:
     attempt_id: str
     pi_id: str
@@ -61,6 +78,23 @@ class DeliveryJournal:
                 created_ns INTEGER NOT NULL, finished_ns INTEGER,
                 time_base TEXT NOT NULL, clock_domain TEXT NOT NULL,
                 UNIQUE(pi_id, run_id, frame_sequence, barrier_key))''')
+            # B2 (2026-11-11): eine Zeile je COM-Schreibvorgang des Vierkanal-Takts.
+            # Auffuellungen haben eine eigene Art: ein nicht geschriebener Pi-Takt
+            # (expired) wird spaeter als Fehlwertzeile derselben Nummer aufgefuellt.
+            # Geschrieben wird je Nummer hoechstens einmal (nur oberhalb der
+            # hoechsten geschriebenen Nummer, BridgeSession).
+            self._db.execute('''CREATE TABLE IF NOT EXISTS ticks (
+                attempt_id TEXT PRIMARY KEY, pi_id TEXT NOT NULL, run_id TEXT NOT NULL,
+                seq INTEGER NOT NULL, kind TEXT NOT NULL, valid INTEGER NOT NULL,
+                payload_digest TEXT NOT NULL, outcome TEXT NOT NULL,
+                created_ns INTEGER NOT NULL, finished_ns INTEGER,
+                time_base TEXT NOT NULL, clock_domain TEXT NOT NULL,
+                UNIQUE(pi_id, run_id, seq, kind))''')
+            self._db.execute('''CREATE TABLE IF NOT EXISTS tick_gaps (
+                pi_id TEXT NOT NULL, run_id TEXT NOT NULL, seq INTEGER NOT NULL,
+                missing INTEGER NOT NULL, created_ns INTEGER NOT NULL,
+                time_base TEXT NOT NULL, clock_domain TEXT NOT NULL,
+                UNIQUE(pi_id, run_id, seq))''')
             self._db.commit()
         except BaseException:
             self._db.close()
@@ -114,6 +148,111 @@ class DeliveryJournal:
             except BaseException:
                 self._db.rollback()
                 raise
+
+    @staticmethod
+    def _tick_identity(pi_id, run_id, seq, kind, valid, payload):
+        if (not isinstance(pi_id, str) or not pi_id or len(pi_id) > 256
+                or not isinstance(run_id, str) or not run_id or len(run_id) > 256
+                or type(seq) is not int or not 0 < seq < 2**63 or kind not in TICK_KINDS
+                or type(valid) is not bool or (kind == 'fill' and valid)
+                or not isinstance(payload, bytes) or not payload or len(payload) > 4096):
+            raise JournalError('invalid tick identity/payload')
+        return pi_id, run_id, seq, kind, int(valid), hashlib.sha256(payload).hexdigest()
+
+    def _tick_blocked(self, pi_id):
+        return self._db.execute('''SELECT 1 FROM ticks WHERE pi_id=?
+            AND outcome IN ('pending', 'unknown') LIMIT 1''', (pi_id,)).fetchone() is not None
+
+    def has_unresolved_tick(self, pi_id) -> bool:
+        with self._lock:
+            return self._tick_blocked(pi_id)
+
+    def begin_tick(self, pi_id, run_id, seq, kind, valid, payload: bytes) -> str:
+        """Dauerhafte Absicht vor genau einer COM-Zeile; offene Zeilen sperren den Pi."""
+        identity = self._tick_identity(pi_id, run_id, seq, kind, valid, payload)
+        with self._lock:
+            try:
+                self._db.execute('BEGIN IMMEDIATE')
+                row = self._db.execute('''SELECT payload_digest, outcome FROM ticks
+                    WHERE pi_id=? AND run_id=? AND seq=? AND kind=?''', identity[:4]).fetchone()
+                if self._blocked(pi_id) or self._tick_blocked(pi_id):
+                    if row is not None:
+                        raise DeliveryAlreadyAttempted(row[1])
+                    raise DeliveryBlockedError('unknown delivery blocks this Pi')
+                if row is not None:
+                    raise DeliveryAlreadyAttempted(row[1])
+                attempt_id = uuid.uuid4().hex
+                self._db.execute('INSERT INTO ticks VALUES (?,?,?,?,?,?,?,?,?,NULL,?,?)',
+                                 (attempt_id, *identity, 'pending', time.monotonic_ns(),
+                                  TimeBaseKind.HOST_MONOTONIC.value, self._clock_domain))
+                self._db.commit()
+                self._owned_attempts.add(attempt_id)
+                return attempt_id
+            except BaseException:
+                self._db.rollback()
+                raise
+
+    def finish_tick(self, attempt_id, outcome: str):
+        if outcome not in ('written', 'unknown', 'not_written'):
+            raise JournalError('invalid delivery outcome')
+        with self._lock:
+            try:
+                self._db.execute('BEGIN IMMEDIATE')
+                row = self._db.execute('SELECT outcome FROM ticks WHERE attempt_id=?', (attempt_id,)).fetchone()
+                if row is None:
+                    raise JournalError('unknown attempt')
+                if row[0] != 'pending':
+                    raise JournalError('terminal outcome cannot be changed')
+                if attempt_id not in self._owned_attempts:
+                    raise JournalError('attempt has no live claim; orphan remains unknown')
+                self._db.execute('UPDATE ticks SET outcome=?,finished_ns=? WHERE attempt_id=?',
+                                 (outcome, time.monotonic_ns(), attempt_id))
+                self._db.commit()
+                self._owned_attempts.discard(attempt_id)
+            except BaseException:
+                self._db.rollback()
+                raise
+
+    def last_tick_written(self, pi_id, run_id) -> int:
+        """Hoechste geschriebene Taktnummer (Pi-Takt oder Auffuellung), sonst 0."""
+        with self._lock:
+            row = self._db.execute("""SELECT MAX(seq) FROM ticks WHERE pi_id=? AND run_id=?
+                AND outcome='written'""", (pi_id, run_id)).fetchone()
+        return row[0] or 0
+
+    def tick_outcome(self, pi_id, run_id, seq):
+        with self._lock:
+            row = self._db.execute("""SELECT outcome FROM ticks WHERE pi_id=? AND run_id=? AND seq=?
+                AND kind='tick'""", (pi_id, run_id, seq)).fetchone()
+        return None if row is None else row[0]
+
+    def record_tick_gap(self, pi_id, run_id, seq, missing):
+        """Nicht aufgefuellte Luecke (> Fenster): Ausgabe gestoert, Zeilenzahl weicht ab."""
+        with self._lock:
+            try:
+                self._db.execute('BEGIN IMMEDIATE')
+                self._db.execute('INSERT OR IGNORE INTO tick_gaps VALUES (?,?,?,?,?,?,?)',
+                                 (pi_id, run_id, seq, missing, time.monotonic_ns(),
+                                  TimeBaseKind.HOST_MONOTONIC.value, self._clock_domain))
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                raise
+
+    def tick_gaps(self, pi_id, run_id):
+        with self._lock:
+            rows = self._db.execute('''SELECT seq, missing FROM tick_gaps WHERE pi_id=? AND run_id=?
+                ORDER BY seq''', (pi_id, run_id)).fetchall()
+        return tuple(tuple(row) for row in rows)
+
+    def tick_attempts(self) -> tuple[TickAttempt, ...]:
+        with self._lock:
+            rows = self._db.execute('''SELECT attempt_id,pi_id,run_id,seq,kind,valid,payload_digest,outcome
+                FROM ticks ORDER BY rowid''').fetchall()
+        return tuple(TickAttempt(*row[:5], bool(row[5]), *row[6:]) for row in rows)
+
+    def unresolved_ticks(self) -> tuple[TickAttempt, ...]:
+        return tuple(row for row in self.tick_attempts() if row.outcome in ('pending', 'unknown'))
 
     def finish_attempt(self, attempt_id, outcome: str):
         if outcome not in ('written', 'unknown', 'not_written'):
@@ -184,6 +323,7 @@ _PUBLIC_VALUES = frozenset({
     'com_driver_write', 'host_monotonic', 'synthetic',
     'written_summary', 'diagnostics', 'dropped',
     'omitted', 'test_unaccepted', 'test_release',
+    'tick_disturbed', 'tick_gap_unfilled',
 })
 
 

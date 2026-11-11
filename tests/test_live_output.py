@@ -1130,3 +1130,41 @@ def test_four_channel_release_refused_before_any_port_open(tmp_path, monkeypatch
     with pytest.raises(StartRefused):
         _session(tmp_path, [], output={'port': '/fake/output', 'format': '4ch',
                                       'acknowledge_unaccepted': ack}, test_run=test_run)
+
+
+# --- B2 (2026-11-11): Format und Takt auch fuer die Brueckenwege uart/tcp -------------
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_without_format_stays_exactly_single_channel(transport):
+    from dispread.live.output import bridge_config, normalize_output
+
+    config = normalize_output({'transport': transport, 'acknowledge_unaccepted': True})
+    assert config == {'transport': transport, 'serial_port': '/dev/ttyAMA0', 'baudrate': 115200,
+                      'tcp_host': '0.0.0.0', 'tcp_port': 5000, 'max_frame_age_ms': 1000,
+                      'acknowledge_unaccepted': True}
+    assert bridge_config(config).to_dict() == {k: v for k, v in config.items() if k != 'acknowledge_unaccepted'}
+
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_accepts_four_channel_tick(transport):
+    from dispread.live.output import bridge_config, bridge_tick_options, normalize_output
+
+    config = normalize_output({'transport': transport, 'format': '4ch', 'acknowledge_unaccepted': True})
+    assert config['format'] == '4ch' and config['rate_hz'] == 10
+    assert bridge_tick_options(config) == {'tick_rate_hz': 10, 'tick_max_frame_age_ns': 1_000_000_000}
+    assert 'format' not in bridge_config(config).to_dict()
+    slow = normalize_output({'transport': transport, 'format': '4ch', 'rate_hz': 2.5, 'max_frame_age_ms': 400})
+    assert bridge_tick_options(slow) == {'tick_rate_hz': 2.5, 'tick_max_frame_age_ns': 400_000_000}
+    one = normalize_output({'transport': transport, 'format': '1ch'})
+    assert one['format'] == '1ch' and 'rate_hz' not in one and bridge_tick_options(one) == {}
+
+
+@pytest.mark.parametrize('value', [
+    {'format': '2ch'}, {'format': '4ch', 'rate_hz': 0}, {'format': '4ch', 'rate_hz': 11},
+    {'format': '4ch', 'rate_hz': True}, {'format': '1ch', 'rate_hz': 10}, {'rate_hz': 10},
+])
+def test_bridge_tick_options_are_validated(value):
+    from dispread.live.output import normalize_output
+
+    with pytest.raises(ValueError):
+        normalize_output({'transport': 'uart', **value})

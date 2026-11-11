@@ -32,6 +32,36 @@ was ist die Konsequenz.
     verlieren sie nach etwa 10 s im Lauf. Die Lauf-Gültigquote unter aktiver Laständerung (122753Z: 59 %)
     hängt danach vor allem an `anzeige_wechselt` (18 %); ≥ 75 % ist offline nicht belegt. Nachweis im echten
     Lauf steht aus.
+* 2026-11-11: **GSVmulti-Vierkanal-Takt über die Brücke (B2, nicht abgenommen).** Problem: Über
+  UART-Brücke und Netzwerk gingen nur gültige Werte als volle `record`-Nachricht nach Windows, latest-only;
+  ungültige Abschnitte und verlorene Werte fehlten in GSVmulti ohne Lücke. Neu, additiv zu Protokoll v2:
+  `output.format: '4ch'` (und `rate_hz` 1–10, Vorgabe 10) gilt jetzt auch für `uart`/`tcp`; ohne
+  `format` bleibt der Einkanalweg bytegleich. Der Pi entscheidet jeden Takt mit demselben `Ticker` wie
+  UART direkt, auditiert ihn in `output.jsonl` **vor** dem Angebot und bietet die Takte der Reihe nach als
+  kompakte Nachricht `tick` an (`seq`, `valid`, `value_text`, `frame_sequence`, `time_unix_ns`,
+  `origin_unix_ns`, `rate_hz`, `release`; Quittung `tick_ack` mit `filled`). Höchstens 50 Takte warten;
+  ältere gelten als verloren und bleiben in der Taktnummer sichtbar. Takte gibt es nur bei bestätigter
+  Testfreigabe und nur an Clients mit Hello-Fähigkeit `tick: 1`; alte Clients bleiben gesperrt
+  (`TICK_CLIENT_BLOCK`). Windows formatiert mit dem `TickFormatter`, füllt einen Sprung von *n* auf *n+k*
+  mit *k−1* Fehlwertzeilen (`99999999.0`, gültig 0, Nominalzeit) auf, bei mehr als 50 nicht (Lücke im
+  Journal, `tick_disturbed`). Jede Zeile, auch jede Auffüllung, steht vor dem COM-Schreiben im
+  `DeliveryJournal` (neue Tabellen `ticks`, `tick_gaps`); eine offene Zeile sperrt die Ausgabe. Kein Takt
+  wird zweimal geschrieben, kein Wert nachgereicht. Status: Pi `output.tick` mit `offered`,
+  `acknowledged`, `unconfirmed`, `lost`, `queued`; Windows `WorkerStatus.ticks_written`,
+  `ticks_invalid`, `ticks_filled`, `tick_disturbed`.
+  Linux-E2E (pty und TLS, Fake-COM, kein Windows-/GSVmulti-Nachweis) über je 6000 Takte im Zeitraffer
+  mit virtueller Pi-Taktuhr und Gegendruck (lastunabhängig), unlesbaren und dunklen Phasen, drei
+  Pi-Aussetzern (11 verpasste Takte) und zwei Windows-Staus über das Fenster (20 verlorene Takte): auf
+  beiden Wegen 6000 Zeilen = 6000 Takte, Folge lückenlos, 31 Auffüllzeilen bytegenau mit Nominalzeit,
+  5479 gültige Zeilen, kein Bild doppelt, nur frische Bilder. Ein Stau über 120 Takte ergibt den Sprung
+  um 71 > 50: nicht aufgefüllt, Journal-Lücke, `tick_disturbed`. Echtzeit 10 Hz über 600 Takte ohne Staus:
+  Latenz Pi-Takt → COM-Zeile p50/p99 8,8/52 ms (pty) bzw. 10,0/83 ms (TLS), nichts verloren.
+  **UART-Kapazität:** Ein Takt kostet mit Poll, Quittung und Idle etwa 1,2 kB (Taktnachricht 410 Byte),
+  dazu kommen Leerlauf-Polls. Auf 115 200 Baud gedrosselt fällt die Brücke zurück (p50 ≈ 5 s, 97 von 600
+  Takten verloren, Laufende abgeschnitten); auf 460 800 Baud 600/600 Zeilen, p50/p99 22,6/44,5 ms. Der
+  Vierkanal-Takt über die UART-Brücke braucht deshalb die Baudrate aus `feat/bruecke-ux`.
+  `uart.py` bleibt hier unverändert; Windows-UI, Werkbank-Frontend und Abnahme sind
+  nicht Teil von B2. Doku: `docs/BRIDGE_PROTOCOL_V2.md`, Abschnitt Taktnachricht.
 * 2026-11-11: **Einrichtung: Hinweise zu Rahmenbereichen entrümpelt (T3).** Die Bereichsbearbeitung
   zeigte je Stelle des letzten Laufs eine gelbe Zeile, auch „dort liegt kein Bereich“, das ist der gute
   Fall. Jetzt erscheint ein Hinweis nur, wenn im neuen Vorschlag ein Bereich (Toleranz 8 px) an einer

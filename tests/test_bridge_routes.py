@@ -28,10 +28,11 @@ class FakeHub:
         self.exchanged = []
         self.detached = []
 
-    def prepare(self, transport, client_id):
+    def prepare(self, transport, client_id, lease=None):
         return PeerHello(self.pi_id, client_id, 2, transport, None, "idle", "output_off")
 
-    def attach(self, client_id, transport):
+    def attach(self, client_id, transport, capabilities=None):
+        self.capabilities = capabilities
         lease = Lease("lease-" + str(len(self.leases) + 1))
         self.leases[lease.lease_id] = client_id
         return lease
@@ -678,10 +679,10 @@ def test_revocation_during_pending_attach_does_not_leave_late_lease(tmp_path, id
         async with service(tmp_path, identity) as (client, base, store, hub):
             entered, release = threading.Event(), threading.Event()
             original = hub.attach
-            def blocked(client_id, transport):
+            def blocked(client_id, transport, **kwargs):
                 entered.set()
                 assert release.wait(2)
-                return original(client_id, transport)
+                return original(client_id, transport, **kwargs)
             hub.attach = blocked
             token = store.redeem_offer(store.create_offer('network'), 'client-a', 'network')
             async with client.ws_connect(base + '/bridge/v2', headers={'Authorization': 'Bearer ' + token}) as ws:

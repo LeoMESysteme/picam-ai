@@ -35,6 +35,11 @@ class WorkerStatus:
     demo_only: bool = True
     gsv_receipt_confirmed: bool = False
     exchanges_total: int = 0      # additiv: alle Poll-Runden, auch die nicht gemeldeten Leerlaufrunden
+    # B2 (2026-11-11), additiv, je laufendem bzw. letztem Lauf; nur lokale COM-Annahme:
+    ticks_written: int = 0        # vom Pi empfangene Takte, als Zeile an COM geschrieben
+    ticks_invalid: int = 0        # davon vom Pi als ungueltig markiert (gueltig = 0)
+    ticks_filled: int = 0         # von Windows aufgefuellte Fehlwertzeilen fuer verlorene Takte
+    tick_disturbed: bool = False  # Luecke > 50 Takte nicht aufgefuellt: Zeilenzahl weicht ab
 
 
 class BridgeWorker:
@@ -63,6 +68,7 @@ class BridgeWorker:
         self._exchanges = 0
         self._released = False
         self._link = None
+        self._session = None
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
 
@@ -80,12 +86,19 @@ class BridgeWorker:
         if released:
             released = link is not None and self._release_gate(link, getattr(link, 'run_id', None))
         with self._lock:
+            session = self._session
+        ticks = session.tick_stats() if session is not None else {}
+        with self._lock:
             return WorkerStatus(self._state, self.is_active(),
                                 self._state == 'running' and self._failure is None
                                 and not self._stop.is_set(),
                                 None if self._failure is None else self._failure.code,
                                 demo_only=not (released and self._released),
-                                exchanges_total=self._exchanges)
+                                exchanges_total=self._exchanges,
+                                ticks_written=ticks.get('ticks_written', 0),
+                                ticks_invalid=ticks.get('ticks_invalid', 0),
+                                ticks_filled=ticks.get('ticks_filled', 0),
+                                tick_disturbed=ticks.get('tick_disturbed', False))
 
     @property
     def last_event(self):
@@ -162,6 +175,9 @@ class BridgeWorker:
             pi_id = self.connection.profile.pi_id
             if self.journal.has_unresolved_invalidation(pi_id):
                 raise DeliveryBlockedError('unknown invalidation')
+            # B2: eine unbekannte Taktzeile macht die Zeilenzahl ungewiss.
+            if self.journal.has_unresolved_tick(pi_id):
+                raise DeliveryUncertainError('unknown tick delivery')
             # A COM failure can itself lose its failed ACK. That outer link
             # exception must never hide uncertain bytes and enable auto-resume.
             if recovering and any(row.pi_id == pi_id for row in self.journal.unresolved()):
@@ -194,6 +210,9 @@ class BridgeWorker:
             pi_id = self.connection.profile.pi_id
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
                                     admit_write=self._admit_write, release_gate=self._release_gate)
+            with self._lock:
+                self._session = session
+            disturbed = None
             while not self._stop.is_set():
                 try:
                     current = self.connection.data_link()
@@ -222,6 +241,11 @@ class BridgeWorker:
                     # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
                     if outcome not in _QUIET or outcome != last_outcome or changed:
                         self._event('exchange', outcome=outcome)
+                    ticks = session.tick_stats()
+                    if ticks['tick_disturbed'] and disturbed != ticks['run_id']:
+                        # Einmal je Lauf: Luecke ueber 50 Takte, nicht aufgefuellt.
+                        disturbed = ticks['run_id']
+                        self._event('tick_disturbed', code='tick_gap_unfilled')
                     last_outcome = outcome
                     if outcome not in _QUIET:
                         idle_delay, last_active = 0.0, self._clock()

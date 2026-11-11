@@ -13,7 +13,15 @@ from dataclasses import asdict, replace
 
 from dispread.bridge.discovery import TailscaleStatus, tailscale_status
 from dispread.bridge.identity import verify_certificate
-from dispread.bridge.protocol import TEST_RELEASE, _identifier, decode_v2, encode_v2, parse_profile
+from dispread.bridge.protocol import (
+    TEST_RELEASE,
+    TICK_CAPABILITY,
+    TICK_CAPABILITY_VERSION,
+    _identifier,
+    decode_v2,
+    encode_v2,
+    parse_profile,
+)
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
 from .credentials import CredentialError
@@ -107,6 +115,12 @@ class _DataLink:
                     if reply['demo'] is True:
                         self._peer_release = None
                     self._peer_state, self._peer_release_block = 'ready', None
+                elif reply['type'] == 'tick':
+                    # B2: ein Takt traegt immer echte Werte bzw. Fehlwerte und
+                    # setzt dieselbe vorher angekuendigte Testfreigabe voraus.
+                    if self._peer_release != TEST_RELEASE or reply['release'] != TEST_RELEASE:
+                        raise ConnectionError('peer_invalid')
+                    self._peer_state, self._peer_release_block = 'ready', None
                 elif reply['type'] == 'ended':
                     self._peer_state, self._peer_release = 'ended', None
                 self.output, self.output_reason = peer_output_readiness(
@@ -136,7 +150,9 @@ class _DataLink:
     def handshake(self):
         with self._operation:
             request = dict(self._base('hello'), protocol_version=2, transport=self.mode,
-                           run_id=None, state='ready', release_block=None, capabilities={}, permissions=[])
+                           run_id=None, state='ready', release_block=None,
+                           # B2: ohne diese Faehigkeit bietet der Pi nie einen Takt an.
+                           capabilities={TICK_CAPABILITY: TICK_CAPABILITY_VERSION}, permissions=[])
             reply = self._exchange(request, initial=True)
             if reply['type'] != 'hello':
                 raise ConnectionError('peer_invalid')
@@ -177,11 +193,13 @@ class _DataLink:
                             break
                         request['run_id'] = self.run_id
                         reply = self._exchange(request)
-                    if reply['type'] not in ('record', 'idle', 'ended'):
+                    if reply['type'] not in ('record', 'tick', 'idle', 'ended'):
                         raise ConnectionError('peer_invalid')
                     if reply['type'] == 'record':
                         self._offered = (reply['request_id'], reply['run_id'],
                                          reply['record']['frame_sequence'], reply['barrier_id'])
+                    elif reply['type'] == 'tick':
+                        self._offered = ('tick', reply['request_id'], reply['run_id'], reply['seq'])
                     self._local.run_id = reply['run_id']
                     self._local.reply = {k: v for k, v in reply.items() if k not in ('pi_id', 'client_id', 'lease_id')}
                     self._local.reply['version'] = 1
@@ -200,6 +218,19 @@ class _DataLink:
                     # hello: der Lauf endete vor der Quittung; der Pi nimmt sie nicht an (sein Audit
                     # fuehrt das Angebot als unbestaetigt), die Verbindung bleibt.
                     self._offered = None  # drain ACK response; never queue it as the next poll.
+                    return
+                if kind == 'tick_ack':
+                    if set(message) != {'version', 'type', 'request_id', 'run_id', 'seq', 'outcome', 'filled'}:
+                        raise ConnectionError('invalid_legacy_request')
+                    binding = ('tick', *(message[k] for k in ('request_id', 'run_id', 'seq')))
+                    if binding != self._offered or message['run_id'] != self.run_id:
+                        raise ConnectionError('stale_ack')
+                    request = dict(message, version=2, pi_id=self.manager.profile.pi_id,
+                                   client_id=self.manager.client_id, lease_id=self.lease_id)
+                    reply = self._exchange(request)
+                    if reply['type'] not in ('idle', 'hello'):
+                        raise ConnectionError('peer_invalid')
+                    self._offered = None
                     return
                 raise ConnectionError('invalid_legacy_request')
             except Exception:
