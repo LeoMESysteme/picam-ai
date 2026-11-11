@@ -1933,3 +1933,90 @@ def test_tc_ausfall_der_bereichsdiagnose_bricht_lauf_nicht_ab(tmp_path, monkeypa
         assert session.region_hint() is None
     finally:
         session.stop()
+
+
+def ticked_session(tmp_path, monkeypatch):
+    from test_live_output import FakeSerial
+    from test_live_tick import Clocks
+
+    from dispread.live.tick import TickTimebase
+
+    port = FakeSerial(write_timeout=1.0)
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3,
+                       output={'port': '/fake/output', 'format': '4ch', 'rate_hz': 5,
+                               'acknowledge_unaccepted': True})
+    clocks = Clocks()
+    session._output._clock_ns = lambda: clocks.now
+    session._output._timebase = TickTimebase(session._clock, clock=clocks.read, ntp_status='yes')
+    return session, clocks, port
+
+
+def test_four_channel_session_has_frozen_time_mapping_and_tick_stats(tmp_path, monkeypatch):
+    import time
+
+    session, clocks, port = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        before = json.loads(session.session_path.read_text())['output']['tick']
+        assert before['rate_hz'] == 5 and before['valid'] == before['invalid'] == before['missed'] == 0
+        assert before['ntp_synchronized'] == 'yes'
+        assert before['time_uncertainty_ns'] is None and before['provisional'] is True
+        clocks.now = 200_000_000
+        session._output._wake.set()
+        deadline = time.monotonic() + 3
+        while session.output_status()['sent'] < 1:
+            assert time.monotonic() < deadline
+            time.sleep(.005)
+        clocks.wall_offset += 5_000_000_000  # NTP-Schritt kurz vor Laufende
+    finally:
+        session.stop()
+    after = json.loads(session.session_path.read_text())['output']['tick']
+    assert after['realtime_minus_monotonic_ns'] == before['realtime_minus_monotonic_ns']
+    assert after['realtime_jump_detected'] is True
+    assert after['realtime_max_deviation_ns'] == 5_000_000_000
+    assert (after['total'], after['valid'], after['invalid'], after['missed']) == (1, 0, 1, 0)
+    assert port.writes == [b'%99999999.0;0;1;1794397184.200000\r\n']
+    assert session.unified_output_status()['tick'] == after
+
+
+def test_reserved_display_text_becomes_unreadable_in_audit(tmp_path, monkeypatch):
+    from test_live_tick import captured
+
+    session, clocks, port = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        monkeypatch.setattr(session._pipeline, 'process', lambda *a, **kw: captured(
+            190_000_000, raw_text='99999999.0', value=99999999.0))
+        record = session.step()
+        assert record.status is ValueStatus.UNREADABLE and record.value is None
+        assert record.reject_reasons == ('reserved_output_value',)
+        audit = json.loads(session.records_path.read_text().splitlines()[0])
+        assert audit['status'] == 'unreadable' and audit['raw_text'] == '99999999.0'
+        clocks.now = 200_000_000
+        session._output._wake.set()
+        from test_live_output import wait_output_count
+
+        wait_output_count(session._output, 1)
+    finally:
+        session.stop()
+    assert port.writes == [b'%99999999.0;0;1;1794397184.200000\r\n']
+
+
+def test_four_channel_release_note_describes_marked_invalid_ticks(tmp_path, monkeypatch):
+    session, _, _ = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        status = session.unified_output_status()
+        assert '99999999.0' in status['release_note']
+    finally:
+        session.stop()
+
+
+def test_four_channel_session_records_tick_origin(tmp_path, monkeypatch):
+    session, _, _ = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        assert session.unified_output_status()['tick']['start_monotonic_ns'] == 0
+    finally:
+        session.stop()

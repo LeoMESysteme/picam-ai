@@ -5,6 +5,23 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **GSVmulti-Vierkanal-Takt für UART direkt (B1, noch nicht abgenommen).**
+  Neues Format `gsvmulti_userdefined_4ch_v1` mit `MARK_RECORD`: pro Takt
+  `%wert;gültig;takt;zeit\r\n`, bei ungültigem Takt genau `99999999.0` und Gültigkeit 0.
+  `format: '4ch'` aktiviert 1–10 Hz (Vorgabe 10); das feste Monotonraster holt
+  verpasste Takte nicht nach. Nur frische Bilder aus dem aktuellen Rasterfenster
+  werden gültig gesendet; derselbe Rahmen nie zweimal, derselbe Zahlenwert aus
+  einem neuen Bild ist erlaubt. Reservierter Fehlwert-Anzeigetext wird vor dem
+  Audit als UNREADABLE abgelehnt. Erfassungszeit über `records.to_boottime_ns`
+  und den geklammert gemessenen REALTIME−MONOTONIC-Startversatz; spätere
+  Uhrsprünge ändern den Zeitkanal nicht und werden protokolliert. `session.json`
+  erhält `output.tick` mit Taktstatistik, Uhrversatz, NTP-Status und unbekannter
+  Zeitunsicherheit (`null`); Zeitsemantik bleibt wegen OQ-43 provisional.
+  Testfreigabe bleibt Pflicht, Testläufe erzeugen keine externe Ausgabe.
+  `format: '1ch'` und alte Konfigurationen ohne Format behalten die bisherigen
+  Einkanalbytes; U1 muss Vierkanal als neue Vorgabe explizit auswählen.
+  **Brückentransport und Windows-Auffüllen kommen erst in B2**, Werkbank-/EXE-UI
+  und Hardware-/GSVmulti-Abnahme sind nicht Teil von B1.
 * 2026-11-11: **Nachführung: Diagnose je Rahmenbereich und Hinweis „Rahmenbereich N dauerhaft unstimmig“ (TC, reine
   Diagnose).** Anlass: Brückentest `live-20261111T103604Z/run-01` mit 24 % `tracking_lost:rahmen_unstimmig`. Ursache war
   ein einzelner Bereich auf einer Glanzlinie der Fase (in der Werkbank Bereich 6), der sich nach einer Lichtänderung

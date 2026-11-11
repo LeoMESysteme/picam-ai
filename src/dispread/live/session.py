@@ -44,6 +44,7 @@ from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
     BRIDGE_RELEASE_NOTE,
+    SERIAL_4CH_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
     bridge_config,
@@ -59,6 +60,7 @@ from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus, to_boottime_ns
 from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
+from dispread.sink.protocol.userdefined_4ch import checked_value_text
 from dispread.timing_calibration import load_calibration
 from dispread.validate import ReleaseGate, default_gate_config
 
@@ -364,7 +366,9 @@ class LiveSession:
         if self._output is not None:
             try:
                 if self._output_transport == 'serial':
-                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None),
+                                       **({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
                 else:
                     self._output.start()
             except Exception as exc:
@@ -411,6 +415,12 @@ class LiveSession:
             self._seen = sequence
             self._frames_skipped += skipped
             record = self._pipeline.process(frame, dropped_frames=skipped)
+            if self._output_config.get('format') == '4ch' and record.status is ValueStatus.VALID:
+                try:
+                    checked_value_text(record.raw_text)
+                except ValueError:
+                    record = replace(record, status=ValueStatus.UNREADABLE, value=None,
+                                     reject_reasons=('reserved_output_value',))
             # Testlauf sperrt die Freigabe vor Audit und jeder weiteren Ausgabe.
             gate_record = record
             suppressed = self._test_run is not None and record.status is ValueStatus.VALID
@@ -770,11 +780,12 @@ class LiveSession:
         return {
             'transport': 'serial',
             **self._output.delivery_status(),
+            **({'tick': status['tick']} if 'tick' in status else {}),
             'config': dict(self._output_config),
             'error': status['first_error'],
             'release_block': None,
             'acceptance': 'fehlt',
-            'release_note': SERIAL_RELEASE_NOTE,
+            'release_note': SERIAL_4CH_RELEASE_NOTE if 'tick' in status else SERIAL_RELEASE_NOTE,
         }
 
     def _write_session(self, *, ended: bool) -> None:

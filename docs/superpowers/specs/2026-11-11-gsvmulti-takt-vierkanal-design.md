@@ -52,7 +52,7 @@ Nur die Kanäle 8_2–8_4 werden in GSVmulti ausgeblendet; sichtbar bleibt der M
 - Der Takt entspricht der in GSVmulti eingestellten Frequenz, nicht fest 10 Hz. Er wird beim Laufstart angegeben, Vorgabe 10 Hz, erlaubt 1–10 Hz.
 - Die Taktquelle ist der Pi selbst (Monotonuhr, fester Raster, **kein Aufholen**). Nur der Pi kann die Frische eines Werts gegen seine Kamerazeit prüfen.
 - **Pro Takt genau ein Datensatz:**
-  - Ein gültiger Wert, wenn der jüngste VALID-Datensatz aus diesem Takt stammt. Genauer: Seine Erfassung liegt nach dem vorigen Takt, und sein Alter liegt unter `max_frame_age_ms`.
+  - Ein gültiger Wert, wenn der jüngste Datensatz VALID ist, aus einem noch nicht gesendeten Bild stammt und jünger als `max_frame_age_ms` ist. Ein Zwang, dass das Bild im eigenen Taktfenster aufgenommen wurde, entfällt: Die Auswertung dauert 50–90 ms, und in der Simulation des Laufs vom 11.11. kostete das Fenster 40 % statt 51 % gültige Takte. Der Zeitkanal trägt ohnehin die echte Erfassungszeit.
   - Sonst ein Fehlwert mit `gültig = 0`.
 - **Kein gültiger Wert wird zweimal gesendet.** Liegt kein neuer gültiger Wert vor, folgt `gültig = 0`; den alten Wert erneut zu senden ist verboten.
   - Offene Frage F1: Die Anzeige wechselt nur etwa 1,4-mal pro Sekunde. Ein unveränderter, aber im neuen Takt neu gelesener Wert ist ein **neuer** gültiger Datensatz und keine Wiederholung. Entscheidend ist der Erfassungszeitpunkt, nicht der Zahlenwert.
