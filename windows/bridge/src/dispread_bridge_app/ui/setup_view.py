@@ -34,7 +34,7 @@ from .widgets import (
     StateIcon,
     ValidatedField,
     button,
-    footer_frame2,
+    footer_frame,
     repolish,
     slide_in,
 )
@@ -218,17 +218,17 @@ class SetupView(QWidget):
         self.next_reason.setContentsMargins(16, 4, 16, 0)
         self.next_reason.hide()
         root.addWidget(self.next_reason)
-        foot, fl, fl2 = footer_frame2()
+        foot, fl = footer_frame()
         self.export_button = IconButton('document_arrow_down', texts.EXPORT_LOGS, name='export')
-        self.exit_button = button('Beenden …', name='exit_bridge')
-        fl2.addStretch(1)
-        fl2.addWidget(self.exit_button)
+        self.exit_button = IconButton('power', texts.EXIT_TIP, name='exit_bridge')
         self.back_button = button('Zurück', name='back')
         self.next_button = button('Weiter', name='next')
         fl.addWidget(self.export_button)
         fl.addStretch(1)
         fl.addWidget(self.back_button)
         fl.addWidget(self.next_button)
+        fl.addSpacing(4)
+        fl.addWidget(self.exit_button)
         root.addWidget(foot)
         self.export_button.clicked.connect(lambda: self.action.emit('export_diagnostics'))
         self.overview_button.clicked.connect(lambda: self.action.emit('overview'))
@@ -447,6 +447,13 @@ class SetupView(QWidget):
             return bool(a and c and a != c)
         if kind == 'blocked':
             return False
+        if kind == 'pair':
+            f = self.fields.get('pairing_code')
+            return bool(self.checked('fp_ok') and self.code_text()
+                        and not (f is not None and f.state == 'err'))          # formal falscher Code
+        if kind.startswith('clear:'):            # Prüfung darf weder fehlgeschlagen sein noch laufen
+            f = self.fields.get(kind[6:])
+            return not (f is not None and f.state in ('pending', 'checking', 'err'))
         if kind.startswith('check:'):
             f = self.fields.get(kind[6:])
             return bool(f is not None and f.ok)
@@ -457,8 +464,7 @@ class SetupView(QWidget):
         try:
             b = self.buttons.get('pair')
             if b is not None and not (self._locked and self._step <= 3):
-                ok = self.checked('fp_ok') and bool(self.code_text())
-                b.setEnabled(ok)
+                b.setEnabled(self._gate_ok(('pair',), None, None))
             h = self.gate_hints.get('pair')
             if h is not None:
                 h.setVisible(b is not None and not b.isEnabled() and not self._locked)
@@ -477,6 +483,10 @@ class SetupView(QWidget):
                 ok = self._gate_ok(gate, a, c)
                 if not ok:
                     reason = gate[1]
+                    if gate[0].startswith('clear:'):
+                        f = self.fields.get(gate[0][6:])
+                        reason = (texts.GATE_CHECK_RUNNING if f is not None and f.state in ('pending', 'checking')
+                                  else gate[1])
             if ok and self._record_hidden_gate and not self.checked('record_hidden_ok'):
                 ok, reason = False, texts.RECORD_HIDDEN_GATE
             if gate is not None or self._record_hidden_gate:
@@ -622,7 +632,11 @@ class SetupView(QWidget):
         for k, v in rows:
             if k:
                 lay.addWidget(_label(k, secondary=True, caption=True))
-            lay.addWidget(_label(v))
+            lab = _label(v)
+            if k == 'Pi-ID':                       # Kennung: Mono, damit sie sich zeichengenau vergleichen lässt
+                lab.setProperty('mono', True)
+                lab.setFont(theme.make_font(10.5, mono=True))
+            lay.addWidget(lab)
         return f
 
     def _b_statusrows(self, heading, rows):

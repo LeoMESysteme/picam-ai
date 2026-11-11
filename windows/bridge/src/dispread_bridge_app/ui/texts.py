@@ -50,6 +50,8 @@ EXIT_KEEP, EXIT_QUIT, EXIT_CANCEL = 'Weiter übertragen', 'Beenden', 'Abbrechen'
 REASON_DISCONNECT_FIRST = 'Erst Verbindung trennen'
 REASON_TRANSMISSION_FIRST = 'Erst Übertragung beenden'
 SWITCH_PI = 'Zu diesem Pi wechseln'
+INFO_ABOUT = 'Über'
+INFO_OPEN_SETTINGS = 'Einstellungen öffnen …'
 DISCONNECT_TITLE = 'Verbindung trennen?'
 DISCONNECT_TEXT = 'Die Verbindung zum Pi und die Übertragung an GSVmulti enden. Der Lauf auf dem Pi läuft weiter.'
 JOURNAL_DETAILS = 'Begrenzt, Zugangsdaten werden nicht protokolliert.'
@@ -430,7 +432,7 @@ def _direct_adapter(ctx: UiContext) -> tuple[str, str]:
     if ctx.adapter_present is None:
         return 'Adapterzustand unbekannt', 'info'
     if ctx.adapter_present:
-        return f'Adapter {port} steckt', 'info'
+        return f'Adapter {port} steckt', 'ok'
     return f'Adapter {port} fehlt', 'warn'
 
 
@@ -653,7 +655,7 @@ def _direct_uart(ctx: UiContext) -> ChipView:
     if ctx.adapter_present is None:
         word, tone, sub = 'Adapterzustand unbekannt', 'info', ''
     elif ctx.adapter_present:
-        word, tone, sub = 'Adapter steckt', 'info', port
+        word, tone, sub = 'Adapter steckt', 'ok', port
     else:
         word, tone, sub = 'Adapter fehlt', 'warn', port
     return ChipView('uart', 'UART', word, tone, sub, (('Weg', 'UART direkt'), ('USB-Adapter', f'{port}: {word}')),
@@ -784,6 +786,11 @@ STEPS_DIRECT = ('Adapter', 'Verdrahtung', 'Session', 'Fertig')
 STEP_SETS = {'bridge': STEPS, 'direct': STEPS_DIRECT}
 
 
+GATE_CHECK_RUNNING = 'Die Prüfung läuft noch – bitte kurz warten'
+GATE_NO_ADAPTER = 'Erst einen USB-Adapter wählen'
+GATE_ADAPTER_MISSING = 'Erst den Adapter einstecken – er fehlt'
+
+
 def _s(step, lead, blocks, nxt=_NEXT, ready=False, back=True, header=None, gate=None, steps='bridge'):
     """Ein Einrichtungszustand: Schritt, Leitsatz, Blöcke, Fuß. ``gate``: (Pflichtfeld, Grund) für „Weiter“.
 
@@ -837,7 +844,8 @@ SETUP: dict[str, dict] = {
         ('check', 'Der Fingerabdruck stimmt mit der Werkbank überein.', 'fp_ok'),
         ('code', 'Kopplungscode', 'Der Code ist 5 Minuten gültig und nur einmal verwendbar.'),
         ('button', 'Code übernehmen', 'pair', True),
-        ('gate_hint', 'pair', 'Erst Fingerabdruck bestätigen und Code eingeben')]),
+        ('gate_hint', 'pair', 'Erst Fingerabdruck bestätigen und Code eingeben')],
+        gate=('pair', 'Erst Fingerabdruck bestätigen und einen gültigen Code eingeben')),
     'E2exp': _s(2, 'Schritt 2 von 5: Pi koppeln.', [
         ('info', 'err', 'Code abgelaufen – in der Werkbank einen neuen erzeugen',
          'Der Kopplungscode war 5 Minuten gültig. Es wurde nichts gekoppelt. Geben Sie den neuen Code ein.', (('Neuen Code eingeben', 'new_code', True),)), _PROFILE]),
@@ -860,19 +868,22 @@ SETUP: dict[str, dict] = {
         ('text', 'Ein gefundener Name ist kein Identitätsnachweis. Erst die Prüfung gegen das Profil bestätigt den Pi.'),
         ('entry', 'Adresse oder Name manuell eintragen',
          'Tailscale wird nur benutzt, wenn Sie hier den Tailscale-Namen oder die Adresse eintragen. Ohne Tailscale '
-         'braucht es ein gemeinsames Netz oder die VPN-Route Ihrer IT.')], nxt='Verbinden', ready=True),
+         'braucht es ein gemeinsames Netz oder die VPN-Route Ihrer IT.')], nxt='Verbinden', ready=True,
+        gate=('clear:endpoint', 'Erst die Adresse korrigieren – die Prüfung ist fehlgeschlagen')),
     'E3err': _s(3, 'Schritt 3 von 5: Verbindung herstellen.', [
         ('error_code', 'code', 'Verbindung nicht möglich')], nxt='Verbinden'),
     'E3uart': _s(3, 'Schritt 3 von 5: Weg zum Pi wählen.', [
         _WAY_U,
         ('radios_dyn', 'adapter', 'USB-Adapter'),
-        ('card', 'Verdrahtung', (('', UART_WIRING),))], nxt='Verbinden', ready=True, header='uart'),
+        ('card', 'Verdrahtung', (('', UART_WIRING),))], nxt='Verbinden', ready=True, header='uart',
+        gate=('clear:adapter', 'Erst einen Adapter wählen und seine Prüfung bestehen')),
     'E3uart2': _s(3, 'Schritt 3 von 5: Weg zum Pi wählen.', [
         ('info', 'warn', 'Zwei gleiche Adapter – Auswahl nötig',
          'Die Adapter lassen sich nur am USB-Anschluss unterscheiden. Wählen Sie den Adapter, der am Pi hängt.', ()),
         _WAY_U,
         ('radios_dyn', 'adapter', 'USB-Adapter'),
-        ('card', 'Verdrahtung', (('', UART_WIRING),))], nxt='Verbinden', header='uart'),
+        ('card', 'Verdrahtung', (('', UART_WIRING),))], nxt='Verbinden', header='uart',
+        gate=('clear:adapter', 'Erst einen Adapter wählen und seine Prüfung bestehen')),
     'E3ok': _s(3, 'Schritt 3 von 5: Pi verbunden.', [
         ('info', 'ok', 'Pi verbunden (Identität geprüft)',
          'Der Pi hat seine Identität belegt; der Fingerabdruck passt zum Profil. Das ist noch keine Messfreigabe.', ()),
@@ -1096,6 +1107,10 @@ def setup_spec(ctx, locked=False):
                 word, tone = ({True: ('steckt', 'ok'), False: ('fehlt – Adapter einstecken', 'err')}
                               .get(present, ('Präsenz unbekannt', 'info')))
                 blocks.append(('statusrows', 'USB-Adapter', ((port, word, tone),)))
+                if present is False and ctx.setup.variant == 'D2':
+                    spec['gate'] = ('blocked', GATE_ADAPTER_MISSING)
+            if port is None and ctx.setup.variant == 'D2':
+                spec['gate'] = ('blocked', GATE_NO_ADAPTER)
         elif kind == 'error_code':
             title, text = explain_code(data.get('code'))
             blocks.append(('info', 'err', title if title != 'Unbekannt' else 'Unbekannt',
@@ -1108,6 +1123,9 @@ def setup_spec(ctx, locked=False):
     gate = spec.get('gate')
     if gate is not None and gate[0].startswith('data:'):
         spec['gate'] = None if data.get(gate[0][5:]) else ('blocked', gate[1])
+    if ctx.setup.variant in ('E3uart', 'E3uart2') and not (data.get('adapter_items')
+                                                          and (ctx.adapter_port or data.get('adapter_port'))):
+        spec['gate'] = ('blocked', GATE_NO_ADAPTER)
     if ctx.setup.variant in STEP3_SELECT:
         pre, foot = _step3_head(ctx, data)
         blocks = pre + blocks

@@ -159,7 +159,6 @@ class MainWindow(QWidget):
             v.switch_clicked.connect(lambda: QTimer.singleShot(0, self._show_switch))
         self.status_view.chip_clicked.connect(self._show_chip)
         self.tool_windows: dict[str, ToolWindow] = {}
-        self._info: InfoContent | None = None
         self._bridge = _EventBridge(self)
         self._bridge.event.connect(self._on_event, Qt.ConnectionType.QueuedConnection)
         # Ereignisse koaleszieren: hoechstens ein refresh() je REFRESH_INTERVAL_MS.
@@ -350,11 +349,7 @@ class MainWindow(QWidget):
         elif aid == 'exit_bridge':
             self.exit_bridge()
         elif aid.startswith('auto_connect:'):
-            info = self._info
-
             def saved(_result, exc):
-                if exc is None and info is not None and info is self._info:
-                    info.confirm_saved()
                 win = self.tool_windows.get('settings')
                 if exc is None and win is not None:
                     win.mark_saved('auto')
@@ -490,13 +485,14 @@ class MainWindow(QWidget):
         win.present()
 
     def _show_switch(self) -> None:
-        win = self.tool_window('paired', texts.PAIRED_TITLE)
+        win = self.tool_window('paired', f'{texts.PAIRED_TITLE} – {texts.APP_TITLE}')
         self._fill_paired(win, self.controller.context())
         win.present()
 
     def _fill_paired(self, win: ToolWindow, c) -> None:
-        win.set_content(('paired', c.paired, c.pi_id, c.switch_locked),
-                        lambda body: build_paired(c, body, self._tool_action))
+        locked = self._locked(c, self.controller.worker_status())
+        win.set_content(('paired', c.paired, c.pi_id, locked),
+                        lambda body: build_paired(c, body, self._tool_action, locked))
 
     def _show_details(self) -> None:
         win = self.tool_window('info', f'{texts.INFO} – {texts.APP_TITLE}')
@@ -504,13 +500,10 @@ class MainWindow(QWidget):
         win.present()
 
     def _info_key(self, c) -> tuple:
-        return ('info', c.version, c.channel, c.protocol, c.run_id, c.pi_name, c.pi_id, c.endpoint, c.fingerprint,
-                c.paired, c.bridge_port, c.gsv_port, c.adapter_port, c.uart_baud, c.gsv_baud)
+        return ('info', c.version, c.channel, c.protocol, c.run_id, c.pi_id)
 
     def _fill_info(self, win: ToolWindow, c) -> None:
-        def build(body):
-            self._info = InfoContent(c, body, self._tool_action)
-        win.set_content(self._info_key(c), build)
+        win.set_content(self._info_key(c), lambda body: InfoContent(c, body, self._tool_action))
 
     def _show_export(self) -> None:
         win = self.tool_window('export', f'{texts.EXPORT_LOGS} – {texts.APP_TITLE}', ExportWindow)

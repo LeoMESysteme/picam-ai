@@ -46,7 +46,7 @@ _BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', pro
                   pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
                   endpoint='wss://192.168.10.24 (LAN, Beispiel)', fingerprint=_FP,
                   last_report='Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben',
-                  session_name='GSVmulti_Prüfstand2_COM5.ucf', session_confirmed=True, journal=_HEUTE,
+                  session_name='GSVmulti_Pruefstand2_COM5.ucf', session_confirmed=True, journal=_HEUTE,
                   paired=(('Prüfstand 2', 'pi-4b7e09c1', 'zuletzt vor 2 Stunden'),
                           ('Prüfstand 3 – Halle A', 'pi-d21a77e6', 'zuletzt gestern')),
                   route_mode='network', activity_seq=1, uart_baud=460800, gsv_baud=115200,

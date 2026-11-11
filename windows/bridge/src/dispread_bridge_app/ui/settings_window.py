@@ -6,6 +6,7 @@ bestätigt es. Während einer Übertragung sind Weg, Pi und Ports schreibgeschü
 """
 from __future__ import annotations
 
+import string
 import time
 from dataclasses import dataclass
 
@@ -44,9 +45,18 @@ def session_mode_port(ctx) -> str | None:
     return ctx.adapter_port if ctx.route_mode == 'uart_direct' else ctx.gsv_port
 
 
+_UMLAUT = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss'}
+
+
+def ascii_name_part(text: str) -> str:
+    """Nur ``A-Za-z0-9_-``: Umlaute umschrieben, alles andere entfernt (Dateiname für GSVmulti)."""
+    out = ''.join(_UMLAUT.get(ch, ch) for ch in text)
+    return ''.join(ch for ch in out if ch in string.ascii_letters + string.digits + '_-')
+
+
 def session_default_name(ctx, port: str) -> str:
-    pi = ''.join(ch for ch in (ctx.pi_name or 'Pi') if ch.isalnum() or ch in '-_') or 'Pi'
-    return f'GSVmulti_{pi}_{port}.ucf'
+    pi = ascii_name_part(ctx.pi_name or 'Pi') or 'Pi'
+    return f'GSVmulti_{pi}_{ascii_name_part(port) or "COM"}.ucf'
 
 
 def record_hidden_box(path: str, confirmed: set, on_change=None) -> QWidget:
@@ -448,4 +458,4 @@ def _valid(obj) -> bool:
         return True
 
 
-__all__ = ['SessionState', 'SettingsWindow', 'record_hidden_box', 'session_default_name', 'session_mode_port']
+__all__ = ['ascii_name_part', 'SessionState', 'SettingsWindow', 'record_hidden_box', 'session_default_name', 'session_mode_port']

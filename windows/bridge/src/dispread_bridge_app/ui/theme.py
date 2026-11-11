@@ -142,6 +142,20 @@ def motion_enabled() -> bool:
     return True
 
 
+def _chevron_url(t: dict) -> str:
+    """Combo-Pfeil als PNG im Temp-Ordner (QSS kann nur Dateien), in Textfarbe; Pfad mit Schrägstrichen."""
+    import tempfile
+    try:
+        d = os.path.join(tempfile.gettempdir(), 'dispread-bridge-ui')
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, f"chevron-{t['text'].lstrip('#')}.png")
+        if not os.path.exists(path):
+            icon_pixmap('chevron_down', t['text'], 12, 2.0).save(path, 'PNG')
+        return path.replace('\\', '/')
+    except Exception:
+        return ''
+
+
 def qss(t: dict) -> str:
     return f"""
 * {{ outline: 0; }}
@@ -214,9 +228,29 @@ QProgressBar::chunk {{ background: {t['accent']}; border-radius: 2px; }}
 QListView {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px;
   selection-background-color: transparent; }}
 QScrollArea {{ background: transparent; border: none; }}
-QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
+QScrollBar {{ background: transparent; border: none; }}
+QScrollBar:vertical {{ background: transparent; border: none; width: 10px; margin: 0; }}
+QScrollBar:horizontal {{ background: transparent; border: none; height: 10px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: {t['stroke_strong']}; border-radius: 3px; min-height: 24px; margin: 2px; }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+QScrollBar::handle:horizontal {{ background: {t['stroke_strong']}; border-radius: 3px; min-width: 24px; margin: 2px; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; background: none; border: none; }}
+QComboBox {{ background: {t['ctrl']}; color: {t['text']}; border: 1px solid {t['ctrl_stroke']};
+  border-bottom: 1px solid {t['stroke_strong']}; border-radius: 4px; padding: 4px 8px; min-height: 22px;
+  selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
+QComboBox:hover {{ background: {t['ctrl_hover']}; }}
+QComboBox:focus, QComboBox:on {{ border-bottom: 2px solid {t['accent']}; }}
+QComboBox:disabled {{ background: {t['mica2']}; color: {t['text_dis']}; border: 1px solid {t['stroke']}; }}
+QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: none;
+  background: transparent; }}
+QComboBox::down-arrow {{ image: url({_chevron_url(t)}); width: 12px; height: 12px; }}
+QComboBox QAbstractItemView {{ background: {t['ctrl']}; color: {t['text']}; border: 1px solid {t['ctrl_stroke']};
+  outline: 0; padding: 2px; selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
+QComboBox QAbstractItemView::item {{ min-height: 24px; padding: 2px 6px; background: transparent; color: {t['text']}; }}
+QComboBox QAbstractItemView::item:selected, QComboBox QAbstractItemView::item:hover {{
+  background: {t['accent']}; color: {t['on_accent']}; }}
 QToolTip {{ background: {t['card']}; color: {t['text']}; border: 1px solid {t['stroke']}; padding: 4px; }}
 QFrame[popup="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 """

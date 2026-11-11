@@ -200,9 +200,16 @@ class Header(QWidget):
         sl.addWidget(self.ring, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         self.pulse_slot = slot
         self.head_icon = StateIcon()                 # nur bei Achtung/Fehler: Word-Beside-Color
+        self._icon_fx = QGraphicsOpacityEffect(self.head_icon)    # Herzschlag-Puls auf dem Symbol (Deckkraft)
+        self._icon_fx.setOpacity(1.0)
+        self.head_icon.setGraphicsEffect(self._icon_fx)
+        self._icon_anim = _ease_anim(self, 0.0, 1.0, 250)
+        self._icon_anim.valueChanged.connect(lambda v: self._icon_fx.setOpacity(0.35 + 0.65 * float(v)))
+        self.icon_pulses = 0
         self.headline = theme.set_typo(QLabel(), 'body_strong')
         self.headline.setWordWrap(True)
         self.headline.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
+        self.headline.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         row.addWidget(slot, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(self.head_icon, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(self.headline, 1)
@@ -217,6 +224,13 @@ class Header(QWidget):
         row2.addWidget(self.dut_icon, 0, Qt.AlignmentFlag.AlignTop)
         row2.addWidget(self.dut, 1)
         lay.addLayout(row2)
+        lay.addStretch(1)      # überzählige Höhe nach unten, nicht zwischen die Zeilen
+
+    def _pulse_icon(self) -> None:
+        self.icon_pulses += 1
+        if theme.motion_enabled() and self.head_icon.isVisible():
+            self._icon_anim.stop()
+            self._icon_anim.start()
 
     def update_from(self, ctx, headline: texts.Headline, locked: bool, allow_switch=True, peer: str | None = None,
                     allow_mode=True) -> None:
@@ -228,14 +242,20 @@ class Header(QWidget):
         busy = peer in ('connecting', 'backoff')
         self.head_icon.set_tone(headline.tone)
         # Ring = es wird versucht. Kein Fehlersymbol daneben: das steht in Infobar und Kachel.
-        self.head_icon.setVisible(headline.tone in ('warn', 'err') and not busy)
+        show_icon = headline.tone in ('warn', 'err') and not busy
+        self.head_icon.setVisible(show_icon)
+        self.pulse_slot.setVisible(not show_icon)    # Statussymbol ersetzt den Punkt: nie beides vor dem Satz
         self.headline.setText(headline.text)
         self.ring.setVisible(busy)
         tip = texts.HEARTBEAT_RETRY if peer == 'backoff' else texts.HEARTBEAT_BUSY
         self.ring.setToolTip(tip)
         self.ring.setAccessibleName(tip)
         self.heartbeat.setVisible(not busy)
+        self.pulse_slot.setVisible(busy or not show_icon)     # bei Achtung/Fehler pulsiert nur das Symbol
+        before = self.heartbeat.pulses
         self.heartbeat.set_contact(peer == 'authenticated', ctx.activity_seq)
+        if show_icon and self.heartbeat.pulses != before:
+            self._pulse_icon()
         text, tone = texts.dut_line(ctx)
         self.dut.setText(text)
         self.dut_icon.set_tone(tone)
@@ -296,6 +316,8 @@ class InfoBar(QFrame):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._arrange()
+        if self.layout() is not None:
+            self.layout().invalidate()      # Textumbruch neu rechnen: sonst bleibt die Zeilenzahl der alten Breite stehen
         self._fit_height()
 
     def _fit_height(self) -> None:

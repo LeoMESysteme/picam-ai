@@ -57,6 +57,20 @@ $env:QT_SCALE_FACTOR = "2";   & $py windows\bridge\probes\ux_tour.py ux2-bilder\
 Remove-Item Env:QT_SCALE_FACTOR
 ```
 
+**Skalierung relativ zur System-DPI.** `QT_SCALE_FACTOR` wirkt zusätzlich zur
+Windows-Skalierung der Anzeige; es gilt: Faktor = Ziel ÷ System. Steht Windows
+schon auf 150 %, ergibt der Faktor 1.5 insgesamt 225 %. Für 100 %, 150 % und
+200 % Zielskalierung braucht man dann:
+
+| Windows-Skalierung | Ziel 100 % | Ziel 150 % | Ziel 200 % |
+| --- | --- | --- | --- |
+| 100 % | leer lassen | `1.5` | `2` |
+| 150 % | `0.6667` | leer lassen | `1.3333` |
+| 200 % | `0.5` | `0.75` | leer lassen |
+
+Die Befehle oben gehen von Windows auf 100 % aus; bei 150 % im System die
+Zeilen mit `QT_SCALE_FACTOR` entsprechend der Tabelle anpassen.
+
 Jeder Ordner enthält `tour.tsv`, in der jede Szene `ok` tragen muss, sonst
 die Fehlermeldung. Danach jedes Bild ansehen (Read-Werkzeug) und prüfen:
 
@@ -68,7 +82,7 @@ die Fehlermeldung. Danach jedes Bild ansehen (Read-Werkzeug) und prüfen:
 | A-04 | Kontrast | Sekundärtext, Hinweise und deaktivierte Knöpfe lesbar, besonders im Dunkelmodus |
 | A-05 | Rahmen | Werkzeugfenster (`10`–`22`) haben einen normalen Windows-Rahmen mit Titel und Schließen-Knopf |
 | A-06 | Grün | Grün nur bei belegten Zuständen („Installiert“, „Verbunden“, „steckt“); „Session-Datei erzeugt“, „Aktiv“ und „Übernahme bestätigt“ sind **nicht** grün |
-| A-07 | DUT-Zeile | Die Sperrzeile steht in jedem Hauptfenster-Bild |
+| A-07 | DUT-Zeile | Die Sperrzeile steht in jedem Hauptfenster-Bild. Bei Testfreigabe (`02`) ersetzt die Achtung-Zeile die Sperrzeile; im Weg UART direkt (`06`) steht die neutrale Zeile „Die Brücke gibt in diesem Weg keine Werte weiter …“. Beides ist gewollt |
 | A-08 | Gesamteindruck | Je Bild ein Satz: aufgeräumt? klar gegliedert? Was stört? |
 
 ## Teil B – Bedienung im Demo-Modus (Leonhard bedient)

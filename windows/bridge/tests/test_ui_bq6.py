@@ -327,7 +327,7 @@ def test_status_toolbar_settings_and_change_setup_action(fake_win):
 
 
 def test_paired_window_offers_switch_only_when_free(fake_win):
-    fc, w = fake_win('B1')
+    fc, w = fake_win('B10')
     w._show_switch()
     QTest.qWait(50)
     win = w.tool_windows['paired']
@@ -335,7 +335,7 @@ def test_paired_window_offers_switch_only_when_free(fake_win):
     assert len(btns) == 1 and btns[0].isEnabled()
     btns[0].click()
     settle(w)
-    assert ('switch_pi', 'pi-d21a77e6') in fc.calls
+    assert ('switch_pi', 'pi-4b7e09c1') in fc.calls         # der andere Pi, nicht der aktuelle (B10: d21a77e6)
     fc2, w2 = fake_win('B1x')                       # Übertragung läuft: Wechsel gesperrt, mit Grund
     w2._show_switch()
     QTest.qWait(50)
@@ -425,17 +425,19 @@ def test_auto_connect_needs_finished_setup(tmp_path, identity):
     assert c.auto_connect_at_start() is False and not c.connects
 
 
-def test_auto_connect_checkbox_in_info_window(fake_win):
+def test_auto_connect_checkbox_only_in_settings_and_usable_while_transmitting(fake_win):
     fc, w = fake_win('B1')
     w._show_details()
     QTest.qWait(50)
-    win = w.tool_windows['info']
-    box = [b for b in win.findChildren(QCheckBox)][0]
-    box.setChecked(True)
+    assert not w.tool_windows['info'].findChildren(QCheckBox)
+    w._show_settings()
+    QTest.qWait(50)
+    win = w.tool_windows['settings']
+    box = win.findChild(QCheckBox, 'auto_connect')
+    assert box is not None and box.isEnabled()
+    box.setChecked(not box.isChecked())
     settle(w)
-    assert ('set_auto_connect', True) in fc.calls
-    assert 'automatisch mit Prüfstand 2 verbinden' in labels(win)
-    assert 'Gespeichert' in labels(win) and w._info.saved_row.isVisibleTo(win)
+    assert any(c[0] == 'set_auto_connect' for c in fc.calls)
 
 
 def test_window_requests_auto_connect_once_at_start(fake_win):
@@ -546,6 +548,9 @@ def test_error_on_next_scrolls_to_the_bar_and_focuses_it(real):
     w.refresh()
     w.activateWindow()
     sv = w.setup_view
+    assert not sv.next_button.isEnabled()                       # ohne Code gesperrt (Gate), nicht abweisbar
+    sv.checks['fp_ok'].setChecked(True)
+    sv.code_edit.setText(CODE)
     sv.scroll.verticalScrollBar().setValue(sv.scroll.verticalScrollBar().maximum())
     sv.next_button.click()
     settle(w)

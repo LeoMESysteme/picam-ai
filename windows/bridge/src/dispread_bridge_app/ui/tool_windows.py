@@ -11,7 +11,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -244,9 +243,10 @@ def build_lock(body: QVBoxLayout) -> None:
     body.addWidget(label(texts.LOCK_TEXT))
 
 
-def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None]) -> None:
+def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None], locked: bool | None = None) -> None:
+    """``locked``: Wechsel gesperrt (Übertragung läuft); ohne Angabe gilt ``ctx.switch_locked``."""
     body.addWidget(label(texts.PAIRED_TITLE, 'title'))
-    free = not ctx.switch_locked
+    free = not (ctx.switch_locked if locked is None else locked)
     for name, pi_id, when in ctx.paired:
         card = QFrame()
         card.setProperty('section', True)
@@ -269,83 +269,24 @@ def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None]) -> No
 
 
 class InfoContent:
-    """Info (bisher „Details“): Version, Pi, Ports, Autostart-Schalter."""
+    """Info: nur „Über“ (Version, Kanal, Protokoll, Lauf-ID, Pi-ID); alles Einstellbare steht in den Einstellungen."""
 
     def __init__(self, ctx, body: QVBoxLayout, on_action: Callable[[str], None]):
-        self.auto_box: QCheckBox | None = None
-        self.saved: QLabel | None = None
         body.addWidget(label(texts.APP_TITLE, 'title'))
-        box, inner = section('Diese Brücke')
+        box, inner = section(texts.INFO_ABOUT)
         inner.addWidget(field('Version', ctx.version or '–'))
         if ctx.channel:
             inner.addWidget(field('Kanal', ctx.channel, copy=False))
         inner.addWidget(field('Protokoll', ctx.protocol or '–'))
         if ctx.run_id:
             inner.addWidget(field('Lauf-ID', ctx.run_id))
+        if ctx.pi_id:
+            inner.addWidget(field('Pi-ID', ctx.pi_id))
         body.addWidget(box)
-        box, inner = section('Pi')
-        inner.addWidget(field('Name', ctx.pi_name or '–', copy=False))
-        inner.addWidget(field('Pi-ID', ctx.pi_id or '–'))
-        inner.addWidget(field('Endpunkt', ctx.endpoint or '–'))
-        inner.addWidget(field('TLS-Fingerabdruck (SHA-256)', ctx.fingerprint or '–'))
-        if ctx.pi_name:
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            cb = QCheckBox()
-            cb.setObjectName('auto_connect')
-            text_ = texts.AUTO_CONNECT.format(pi=ctx.pi_name)
-            cb.setAccessibleName(text_)
-            cb.setChecked(ctx.auto_connect)
-            row.addWidget(cb, 0, Qt.AlignmentFlag.AlignTop)
-            row.addWidget(label(text_), 1)
-            inner.addLayout(row)
-            saved = QWidget()
-            sl = QHBoxLayout(saved)
-            sl.setContentsMargins(28, 0, 0, 0)
-            sl.setSpacing(6)
-            ok = QLabel()
-            ok.setPixmap(theme.icon_pixmap('checkmark', 'ok', 16))
-            sl.addWidget(ok)
-            self.saved = label(texts.SAVED, 'caption', wrap=False)
-            sl.addWidget(self.saved)
-            sl.addStretch(1)
-            saved.hide()
-            self.saved_row = saved
-            inner.addWidget(saved)
-            self.auto_box = cb
-            cb.toggled.connect(lambda on: on_action('auto_connect:' + ('on' if on else 'off')))
-        if len(ctx.paired) > 1:
-            b = button(texts.PAIRED_TITLE + ' …', name='show_paired')
-            b.clicked.connect(lambda: on_action('show_paired'))
-            inner.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
-        body.addWidget(box)
-        box, inner = section('Ports')
-        inner.addWidget(field('Brückenseite', ctx.bridge_port or texts.NOT_SET))
-        inner.addWidget(field('GSVmulti-Seite', ctx.gsv_port or texts.NOT_SET))
-        if ctx.adapter_port:
-            inner.addWidget(field('USB-Adapter', ctx.adapter_port))
-        if ctx.uart_baud:
-            inner.addWidget(field('UART Pi ↔ Brücke', f'{ctx.uart_baud} Baud', copy=False))
-        if ctx.gsv_baud:
-            inner.addWidget(field('GSVmulti-Seite (Session)', f'{ctx.gsv_baud} Baud', copy=False))
-        body.addWidget(box)
-        box, inner = section('Journal')
-        inner.addWidget(label(texts.JOURNAL_DETAILS))
-        body.addWidget(box)
+        b = button(texts.INFO_OPEN_SETTINGS, name='open_settings')
+        b.clicked.connect(lambda: on_action('open_settings'))
+        body.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
         body.addWidget(label(texts.ICON_CREDIT, 'caption'))
-
-    def confirm_saved(self) -> None:
-        """Häkchen „Gespeichert“ nach dem Speichern des Schalters, blendet nach 2 s aus."""
-        if self.saved is None:
-            return
-        self.saved_row.show()
-        QTimer.singleShot(2000, self._hide_saved)
-
-    def _hide_saved(self) -> None:
-        try:
-            self.saved_row.hide()
-        except RuntimeError:
-            pass
 
 
 class ExportWindow(ToolWindow):

@@ -272,7 +272,7 @@ def test_settings_session_export_result_not_green_and_hints(win, tmp_path):
     sw.findChild(QPushButton, 'settings_make_session').click()
     settle(w)
     call = [c for c in fc.calls if c[0] == 'export_session_file'][0]
-    assert call[1] == tmp_path / 'GSVmulti_Prüfstand3HalleA_COM5.ucf'           # Standardname GSVmulti_<Pi>_<COMx>
+    assert call[1] == tmp_path / 'GSVmulti_Pruefstand3HalleA_COM5.ucf'           # Standardname GSVmulti_<Pi>_<COMx>
     assert call[2] == 'COM5'
     sw = w.tool_windows['settings']
     shown = texts_of(sw)
@@ -435,7 +435,7 @@ def test_bridge_session_step_has_real_button(win, tmp_path):
     w.pick_session = lambda name: str(tmp_path / name)
     b.click()
     settle(w)
-    assert ('export_session_file', tmp_path / 'GSVmulti_Prüfstand2_COM5.ucf', 'COM5') in fc.calls
+    assert ('export_session_file', tmp_path / 'GSVmulti_Pruefstand2_COM5.ucf', 'COM5') in fc.calls
     assert texts.SESSION_DONE in texts_of(sv) and texts.SINGLE_CHANNEL_WARNING in texts_of(sv)
 
 
@@ -489,7 +489,7 @@ def _direct(present=True):
 
 
 def test_direct_headline_and_tone():
-    for present, text, tone in ((True, 'UART direkt – Adapter COM9 steckt', 'info'),
+    for present, text, tone in ((True, 'UART direkt – Adapter COM9 steckt', 'ok'),
                                 (False, 'UART direkt – Adapter COM9 fehlt', 'warn'),
                                 (None, 'UART direkt – Adapterzustand unbekannt', 'info')):
         r, w, c = _direct(present)
@@ -511,11 +511,11 @@ def test_direct_infobar_never_offers_connect():
 def test_direct_chips_and_dut_line():
     r, w, c = _direct(True)
     ch = {x.key: x for x in texts.chips(r, w, c)}
-    assert ch['uart'].word == 'Adapter steckt' and ch['uart'].tone == 'info' and ch['uart'].sub == 'COM9'
+    assert ch['uart'].word == 'Adapter steckt' and ch['uart'].tone == 'ok' and ch['uart'].sub == 'COM9'
     for k in ('pi', 'output', 'forward'):
         assert (ch[k].word, ch[k].tone, ch[k].sub) == ('nicht benutzt', 'unused', 'UART direkt')
     assert ch['gsv'].sub == 'Empfang nicht nachgewiesen'
-    assert all(x.tone != 'ok' for x in ch.values() if x.key != 'components')
+    assert all(x.tone != 'ok' for x in ch.values() if x.key not in ('components', 'uart'))   # USB-Präsenz ist belegt
     assert texts.chips(*_direct(False))[1].word == 'Adapter fehlt'
     assert texts.dut_line(c) == (texts.DIRECT_DUT_LINE, 'info')
 
@@ -527,3 +527,158 @@ def test_direct_view_hides_pi_switch(app):
     win.show()
     app.processEvents()
     assert not win.findChild(QWidget_, 'switch') or not win.findChild(QWidget_, 'switch').isVisible()
+
+
+# ---------------------------------------------------------------- Korrekturrunde A (Windows-Prüfung)
+def test_paired_window_switch_locked_during_transmission(win):
+    fc, w = win('B1')                                  # Lauf aktiv: Wechsel gesperrt
+    ctx = fc.context()
+    fc.set(context=replace(ctx, paired=(('Prüfstand 2', ctx.pi_id, 'jetzt'), ('Halle A', 'pi-d21a77e6', 'gestern'))))
+    w._show_switch()
+    settle(w)
+    pw = w.tool_windows['paired']
+    assert pw.windowTitle() == f'{texts.PAIRED_TITLE} – {texts.APP_TITLE}'
+    b = [x for x in pw.findChildren(QPushButton) if x.text() == texts.SWITCH_PI]
+    assert len(b) == 1 and not b[0].isEnabled() and b[0].toolTip() == texts.REASON_TRANSMISSION_FIRST
+    fc.set_state('B10')
+    fc.set(context=replace(fc.context(), paired=(('A', fc.context().pi_id, 'jetzt'), ('B', 'pi-x', 'gestern'))))
+    w.refresh()
+    settle(w)
+    b = [x for x in pw.findChildren(QPushButton) if x.text() == texts.SWITCH_PI]
+    assert len(b) == 1 and b[0].isEnabled()
+
+
+def test_direct_uart_adapter_present_is_ok_everywhere(win):
+    fc, w = win('Bdirect')
+    chip = next(c for c in w.status_view.chips if c.view.key == 'uart')
+    assert chip.view.word == 'Adapter steckt' and chip.view.tone == 'ok'
+    assert texts.headline(fc.snapshot(), fc.worker_status(), fc.context()).tone == 'ok'
+    _, w2 = win('D2')
+    assert 'steckt' in texts_of(w2.setup_view)
+    fc3, w3 = win('usb_missing')
+    fc3.set_state('Bdirect')
+    fc3.set(context=replace(fc3.context(), adapter_present=False))
+    w3.refresh()
+    chip = next(c for c in w3.status_view.chips if c.view.key == 'uart')
+    assert chip.view.tone == 'warn'
+
+
+def test_main_actions_gated_while_problem_open(win):
+    # E3: Adressprüfung err -> „Verbinden“ gesperrt, mit sichtbarem Grund
+    fc, w = win('E3')
+    sv = w.setup_view
+    sv.endpoint_edit.setText('gibtsnicht.example')
+    QTest.qWait(600)
+    settle(w)
+    assert sv.fields['endpoint'].state == 'err'
+    assert not sv.next_button.isEnabled() and sv.next_reason.isVisibleTo(w) and sv.next_reason.text()
+    sv.endpoint_edit.setText('pi.local')
+    QTest.qWait(600)
+    settle(w)
+    assert sv.fields['endpoint'].ok and sv.next_button.isEnabled()
+    # E3uart ohne Adapter gesperrt, mit Adapter frei
+    fc2, w2 = win('E3uart')                            # Demo-Zustand: kein Adapter in der Liste
+    assert not w2.setup_view.next_button.isEnabled() and w2.setup_view.next_reason.text() == texts.GATE_NO_ADAPTER
+    st = fc2.context().setup
+    data = dict(st.data, adapter_items=(('COM9 – FTDI USB Serial', '', True),), adapter_port='COM9')
+    fc2.set(context=replace(fc2.context(), setup=replace(st, data=data)))
+    w2.refresh()
+    settle(w2)
+    assert w2.setup_view.fields['adapter'].ok and w2.setup_view.next_button.isEnabled()
+    # D2 mit fehlendem Adapter: „Weiter“ gesperrt
+    _, w3 = win('D2missing')
+    assert not w3.setup_view.next_button.isEnabled() and w3.setup_view.next_reason.text() == texts.GATE_ADAPTER_MISSING
+    _, w4 = win('D2')
+    assert w4.setup_view.next_button.isEnabled()
+    # E2b: leerer oder falscher Code sperrt „Weiter“ und „Code übernehmen“
+    _, w5 = win('E2b')
+    sv5 = w5.setup_view
+    assert not sv5.next_button.isEnabled() and not sv5.buttons['pair'].isEnabled()
+    sv5.checks['fp_ok'].setChecked(True)
+    sv5.code_edit.setText('123')
+    settle(w5)
+    assert sv5.fields['pairing_code'].state == 'err'
+    assert not sv5.next_button.isEnabled() and not sv5.buttons['pair'].isEnabled()
+
+
+def test_setup_footer_is_single_row_with_power_icon(win):
+    from PySide6.QtWidgets import QFrame
+    for width in (380, 440):
+        for state in ('E2b', 'E5busy', 'E3'):
+            _, w = win(state, size=(width, 560))
+            sv = w.setup_view
+            ys = {b.mapTo(sv, b.rect().center()).y() for b in (sv.export_button, sv.back_button, sv.next_button,
+                                                                   sv.exit_button) if b.isVisibleTo(sv)}
+            assert max(ys) - min(ys) <= 4, (state, width, ys)
+            assert sv.exit_button.toolTip() == texts.EXIT_TIP == sv.exit_button.accessibleName()
+            assert sv.exit_button.geometry().right() <= sv.width()
+            assert isinstance(sv.exit_button.parentWidget(), QFrame)
+
+
+def test_pi_id_is_mono_in_pairing_card(win):
+    _, w = win('E2b')
+    pid = w.setup_view.findChildren(QLabel)
+    lab = next(x for x in pid if x.text() == w.controller.context().pi_id)
+    assert lab.property('mono') is True
+
+
+def test_german_single_quotes_are_balanced():
+    ui = Path(__file__).resolve().parents[1] / 'src' / 'dispread_bridge_app' / 'ui'
+    for f in ui.glob('*.py'):
+        src = f.read_text('utf-8')
+        assert src.count('‚') == src.count('‘'), f.name
+        for bad in ('’', '‛', "‚’"):
+            assert bad not in src, (f.name, repr(bad))
+    assert '‚Autoscale Y‘' in texts.AUTOSCALE_HINT
+
+
+def test_header_shows_only_status_icon_when_warn_and_pulses_it(win):
+    fc, w = win('B1tr')
+    h = w.status_view.header
+    assert h.head_icon.isVisibleTo(w) and not h.pulse_slot.isVisibleTo(w)
+    n = h.icon_pulses
+    fc.tick()
+    w.refresh()
+    assert h.icon_pulses == n + 1
+    fc.set_state('B1')
+    w.refresh()
+    assert not h.head_icon.isVisibleTo(w) and h.pulse_slot.isVisibleTo(w)
+
+
+def test_empty_journal_has_card_frame(win):
+    _, w = win('Bdirect')
+    sv = w.status_view
+    assert sv.model.rowCount() == 0
+    assert sv.empty_frame.isVisibleTo(w) and sv.empty_frame.property('card') is True
+    assert sv.empty_frame.minimumHeight() >= 150
+
+
+def test_journal_keeps_min_height_at_380x560(win):
+    _, w = win('B1', size=(380, 560))
+    sv = w.status_view
+    settle(w)
+    assert sv.journal.height() >= 150
+
+
+def test_session_file_name_is_ascii():
+    from types import SimpleNamespace
+
+    from dispread_bridge_app.ui.settings_window import ascii_name_part, session_default_name
+    ctx = SimpleNamespace(pi_name='Prüfstand 2')
+    assert session_default_name(ctx, 'COM5') == 'GSVmulti_Pruefstand2_COM5.ucf'
+    assert ascii_name_part('Straße äöü ÄÖÜ -_ .:*') == 'Strasseaeoeue AeOeUe'.replace(' ', '') + '-_'
+    assert session_default_name(SimpleNamespace(pi_name='Halle Ä/3 – neu'), 'COM10').isascii()
+    assert session_default_name(SimpleNamespace(pi_name=None), 'COM3') == 'GSVmulti_Pi_COM3.ucf'
+
+
+def test_head_has_no_gap_and_no_scrollbar_at_440x720(win):
+    from dispread_bridge_app.ui.status_view import StatusView
+    for state in ('B1', 'B1tr', 'B3'):
+        _fc, w = win(state)
+        sv = w.findChild(StatusView)
+        assert not sv.scroll.verticalScrollBar().isVisible(), state
+        body = sv.body_widget
+        head = sv.header
+        dut_bottom = head.mapTo(body, head.dut.geometry().bottomLeft()).y()
+        assert sv.infobar.y() - dut_bottom <= 16 or not sv.infobar.isVisible(), state
+        assert head.height() <= head.layout().totalHeightForWidth(head.width()) + 1, state

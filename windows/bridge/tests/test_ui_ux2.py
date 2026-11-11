@@ -16,7 +16,7 @@ from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QToolButton
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QPushButton, QToolButton
 
 UI = Path(__file__).resolve().parents[1] / 'src' / 'dispread_bridge_app' / 'ui'
 
@@ -98,7 +98,9 @@ def test_no_unicode_glyph_buttons_and_no_popup_anywhere(win):
     w._show_details()
     QTest.qWait(50)
     for top in QApplication.topLevelWidgets():
-        assert (top.windowFlags() & Qt.WindowType.Popup) != Qt.WindowType.Popup or top.inherits('QMenu')
+        # Auswahllisten von QComboBox (Qt-eigener Container) sind kein Flyout-Ersatz und erlaubt
+        assert ((top.windowFlags() & Qt.WindowType.Popup) != Qt.WindowType.Popup or top.inherits('QMenu')
+                or top.metaObject().className() == 'QComboBoxPrivateContainer')
     for b in w.findChildren(QPushButton) + w.findChildren(QToolButton):
         assert not (len(b.text().strip()) == 1 and not b.text().strip().isalnum()), b.objectName()
 
@@ -269,10 +271,25 @@ def test_info_window_lists_copyable_technical_values(win):
     settle(w)
     info = w.tool_windows['info']
     names = {f.name_label.text(): f for f in info.findChildren(CopyField)}
-    for n in ('Version', 'Protokoll', 'Lauf-ID', 'Pi-ID', 'Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Brückenseite',
-              'GSVmulti-Seite'):
+    for n in ('Version', 'Protokoll', 'Lauf-ID', 'Pi-ID'):
         assert n in names and not names[n].copy_button.isHidden(), n
+    for n in ('Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Brückenseite', 'GSVmulti-Seite'):
+        assert n not in names, n                     # steht in den Einstellungen, nicht doppelt in der Info
     assert texts.ICON_CREDIT in texts_of(info)
+
+
+def test_info_window_is_about_only_and_opens_settings(win):
+    _, w = win('B1')
+    w._show_details()
+    settle(w)
+    info = w.tool_windows['info']
+    assert not info.findChildren(QCheckBox)          # Autostart steht nur in den Einstellungen
+    assert 'automatisch' not in texts_of(info)
+    btn = [b for b in info.findChildren(QPushButton) if b.text() == texts.INFO_OPEN_SETTINGS]
+    assert len(btn) == 1
+    btn[0].click()
+    settle(w)
+    assert w.tool_windows['settings'].isVisible()
 
 
 def test_toolbar_has_icons_with_names_and_no_diagnose_wording(win):

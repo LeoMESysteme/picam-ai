@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QListView,
     QScrollArea,
     QSizePolicy,
@@ -329,6 +330,42 @@ class SegButton(FocusPushButton):
         super().keyPressEvent(e)
 
 
+class _HeadBody(QWidget):
+    """Inhalt des Kopfbereichs. Qt meldet für Layouts mit umbrechenden Texten als Mindesthöhe die Höhe bei der
+    kleinsten Breite (Kopfzeile: 100 px statt 73 px bei 416 px). Der Bildlaufbereich nähme die als Mindesthöhe und
+    ließe eine Lücke im Kopf. Darum hier die Höhe bei der tatsächlichen Breite."""
+
+    def minimumSizeHint(self):
+        lay = self.layout()
+        if lay is None:
+            return super().minimumSizeHint()
+        w = max(self.width(), lay.totalMinimumSize().width())
+        h = lay.totalHeightForWidth(w) if lay.hasHeightForWidth() else lay.totalMinimumSize().height()
+        return QSize(lay.totalMinimumSize().width(), h)
+
+
+class _HeadScroll(QScrollArea):
+    """Bildlaufbereich für den Kopf (Zustand, Hinweis, Kacheln): will genau seine Inhaltshöhe bei der aktuellen
+    Breite, gibt aber nach, damit das Journal darunter seine Mindesthöhe behält. Dann scrollt der Kopf."""
+
+    def sizeHint(self):
+        w = self.widget()
+        width = max(10, (self.width() or 380) - 2 * self.frameWidth())
+        h = 0
+        if w is not None and w.layout() is not None:
+            lay = w.layout()
+            h = lay.totalHeightForWidth(width) if lay.hasHeightForWidth() else lay.totalSizeHint().height()
+        return QSize(width, h + 2 * self.frameWidth())
+
+    def minimumSizeHint(self):
+        return QSize(0, 72)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if e.size().width() != e.oldSize().width():
+            self.updateGeometry()                   # Höhenwunsch hängt von der Breite ab
+
+
 class StatusView(QWidget):
     action = Signal(str)
     lock_clicked = Signal()
@@ -340,10 +377,11 @@ class StatusView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        self.body_widget = QWidget()
+        self.body_widget = _HeadBody()
         self.body_widget.setObjectName('status_body')
         body = QVBoxLayout(self.body_widget)
-        body.setContentsMargins(12, 12, 12, 12)
+        body.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
+        body.setContentsMargins(12, 12, 12, 4)
         body.setSpacing(12)
         self.header = Header()
         self.header.lock_clicked.connect(self.lock_clicked)
@@ -365,6 +403,11 @@ class StatusView(QWidget):
             c.clicked.connect(lambda _=False, n=i: QTimer.singleShot(0, lambda: self._chip_clicked(n)))
         self.chip_grid = grid
         body.addLayout(grid)
+        self.journal_box = QWidget()
+        self.journal_box.setObjectName('journal_box')
+        jl = QVBoxLayout(self.journal_box)
+        jl.setContentsMargins(12, 4, 12, 12)
+        jl.setSpacing(12)
         seg_row = QHBoxLayout()
         seg = QFrame()
         seg.setObjectName('segmented')
@@ -392,7 +435,7 @@ class StatusView(QWidget):
         seg_row.addWidget(seg)
         seg_row.addStretch(1)
         seg_row.addWidget(self.count_label)
-        body.addLayout(seg_row)
+        jl.addLayout(seg_row)
         self.model = JournalModel()
         self.journal = JournalView()
         self.journal.setModel(self.model)
@@ -400,24 +443,34 @@ class StatusView(QWidget):
         self.empty_label.setProperty('secondary', True)
         self.empty_label.setProperty('caption', True)
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        self.empty_label.setContentsMargins(0, 24, 0, 0)
+        self.empty_label.setContentsMargins(8, 24, 8, 0)
         self.empty_label.setWordWrap(True)
-        body.addWidget(self.journal, 1)
-        body.addWidget(self.empty_label, 1)
-        self.empty_label.hide()
+        self.empty_frame = QFrame()                 # leeres Journal: derselbe Kartenrahmen wie das gefüllte
+        self.empty_frame.setObjectName('journal_empty')
+        self.empty_frame.setProperty('card', True)
+        ef = QVBoxLayout(self.empty_frame)
+        ef.setContentsMargins(0, 0, 0, 0)
+        ef.addWidget(self.empty_label)
+        self.empty_frame.setMinimumHeight(150)
+        jl.addWidget(self.journal, 1)
+        jl.addWidget(self.empty_frame, 1)
+        self.empty_frame.hide()
         self.journal.setMinimumHeight(150)
-        scroll = QScrollArea()                      # bei 380x560 passt nicht alles: dann scrollt der Kopfbereich
+        scroll = _HeadScroll()                      # bei 380x560 passt nicht alles: dann scrollt der Kopfbereich
         scroll.setObjectName('status_scroll')
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(self.body_widget)
         self.body_widget.installEventFilter(self)
+        scroll.installEventFilter(self)
         self.scroll = scroll
         self.busy_bar = IndeterminateBar()          # laufende Aufgabe ohne eigenen Platz (Export, Session)
         self.busy_bar.setObjectName('busy_bar')
         root.addWidget(self.busy_bar)
-        root.addWidget(scroll, 1)
+        root.addWidget(scroll, 0)
+        root.addWidget(self.journal_box, 1)
+        self.journal_box.setMinimumHeight(150 + 12 + 40 + 16)
         foot, fl = toolbar_frame()
         self.settings_button = IconButton('settings', texts.SETTINGS, name='settings')
         self.export_button = IconButton('document_arrow_down', texts.EXPORT_LOGS, name='export')
@@ -491,7 +544,7 @@ class StatusView(QWidget):
         self.count_label.setText(f'{n} Einträge{pi}')
         empty = self.model.rowCount() == 0
         self.empty_label.setText(texts.NO_FAULTS if self.model.only_faults and self.model.total else texts.NO_EVENTS)
-        self.empty_label.setVisible(empty)
+        self.empty_frame.setVisible(empty)
         self.journal.setVisible(not empty)
 
     def add_entry(self, entry: JournalEntry) -> None:
@@ -502,17 +555,28 @@ class StatusView(QWidget):
         self.model.set_only_faults(faults)
         self._update_counts()
 
-    def fit_chips(self) -> None:
-        """Gleich hohe Kacheln je Reihe; der Name steht in allen sechs gleich (neben dem Symbol oder darunter)."""
-        w = max(10, min(c.width() for c in self.chips))
+    def _set_chip_heights(self, w: int) -> None:
         inline = all(c.fits_inline(w) for c in self.chips)
         for row in (self.chips[:3], self.chips[3:]):
             h = max(c.needed_height(w, inline) for c in row)
             for c in row:
                 c.setFixedHeight(h)
 
+    def fit_chips(self) -> None:
+        """Gleich hohe Kacheln je Reihe; der Name steht in allen sechs gleich (neben dem Symbol oder darunter).
+
+        Zuerst mit der Breite ohne Bildlaufleiste rechnen; nur wenn der Kopf dann nicht in den Bereich passt
+        (Leiste nötig), mit der tatsächlichen Breite. So pendelt die Leiste nicht zwischen beiden Zuständen."""
+        m = self.body_widget.layout().contentsMargins()
+        gaps = 2 * self.chip_grid.horizontalSpacing()
+        full = (self.scroll.width() - 2 * self.scroll.frameWidth() - m.left() - m.right() - gaps) // 3
+        self._set_chip_heights(max(10, full))
+        if self.scroll.sizeHint().height() > self.scroll.height():
+            self._set_chip_heights(max(10, min(c.width() for c in self.chips)))
+        self.scroll.updateGeometry()
+
     def eventFilter(self, obj, e):
-        if obj is self.body_widget and e.type() == QEvent.Type.Resize:
+        if obj in (self.body_widget, self.scroll) and e.type() == QEvent.Type.Resize:
             QTimer.singleShot(0, self.fit_chips)          # Bildlaufleiste erscheint/verschwindet: neu einpassen
         return super().eventFilter(obj, e)
 
