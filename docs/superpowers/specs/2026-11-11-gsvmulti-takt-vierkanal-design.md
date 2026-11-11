@@ -1,6 +1,6 @@
 # GSVmulti: fester Takt mit Vierkanal-Telegramm (Design)
 
-**Stand:** 2026-11-11 · Entwurf zur Freigabe durch Leonhard · Branch `feat/bruecke-ui`
+**Stand:** 2026-11-11 · F1–F3 und F5 von Leonhard entschieden (2026-11-11), F4 offen · Branch `feat/bruecke-ui`
 
 **Grundlage:**
 - Brückentest mit echten Werten: [Beleg](../../quellen/bruecke-testlauf-2026-11-11/README.md)
@@ -110,10 +110,10 @@ Nur die Kanäle 8_2–8_4 werden in GSVmulti ausgeblendet; sichtbar bleibt der M
    - Die Zeitkanäle stimmen mit dem Pi-Audit überein.
 4. **Versuch mit `1/f0`** statt `tf` (optional): Ist die GSVmulti-Achse dann genau?
 
-## 6. Offene Entscheidungen
+## 6. Entscheidungen (Leonhard, 2026-11-11)
 
-- **F1:** Ein gleicher Zahlenwert aus einem neuen Bild zählt als neuer gültiger Takt (Vorschlag: ja).
-- **F2:** Verlorene Takte auf Windows mit Fehlwertzeilen auffüllen (Vorschlag: ja, höchstens 5 s).
-- **F3:** Bleibt die alte Einkanal-Ausgabe neben dem Vierkanal-Takt wählbar, oder wird sie abgelöst? Vorschlag: bis zur Abnahme wählbar, danach entfernen.
-- **F4:** Takt-Obergrenze 10 Hz. Mehr bringt nichts, weil die Anzeige langsamer wechselt und der Pi bei etwa 30 Bildern/s mit nur rund 50 % gültigen Bildern liest.
-- **F5:** Muss das Fehlwert-Format mit der GSVmulti-Entwicklung abgestimmt werden, oder reicht der eigene Beleg?
+- **F1, ja:** Ein gleicher Zahlenwert aus einem neuen Bild zählt als neuer gültiger Takt. Entscheidend ist der Erfassungszeitpunkt.
+- **F2, ja:** Verlorene Takte füllt die Windows-App mit Fehlwertzeilen auf, höchstens 50 Takte (5 s).
+- **F3, ja, mit Warnung:** Die alte Einkanal-Ausgabe bleibt bis zur Abnahme wählbar. Werkbank (Laufstart und Lauf) und App zeigen dann deutlich: „Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.“
+- **F4, offen:** Die Takt-Obergrenze bleibt vorerst 10 Hz. Begründung an Leonhard 2026-11-11: Mehr Takt bringt kaum Information, kostet aber mehr Fehlwertzeilen. Höher erst, wenn die Bildwiederholrate der Anzeige gemessen ist.
+- **F5, eigene Belege reichen:** Das Fehlwert-Format `99999999.0` wird nicht mit der GSVmulti-Entwicklung abgestimmt.
