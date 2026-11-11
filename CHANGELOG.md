@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Brücke: Verbindungsabbruch bei jedem Wechsel gültig → ungültig behoben (Brückentest mit echten Werten).**
+  Befund im Lauf `live-20261111T095426Z/run-01` (Netzwerk, Testfreigabe): 1 560 Werte an COM übergeben, aber alle 2–15 s
+  ein Abbruch von ca. 2 s; jedes Mal beim ersten Übergangswert nach gültigen Werten (`offered` und `unconfirmed` in
+  derselben Millisekunde). Ursache: `protocol._record` verlangte `frames_confirmed >= 1`; unlesbare Datensätze der echten
+  Kette (leere Anzeige, `no_value`) tragen 0. Die Barriere war nicht kodierbar, der Pi trennte die Lease. Synthetische
+  Quellen erzeugen nie 0, daher blieb es in den Linux-E2E-Tests unentdeckt. Jetzt gilt `>= 1` nur für VALID, sonst
+  `>= 0`. Gegen alle 6 184 Datensätze des Laufs geprüft. Die Prüfung sitzt auch in der EXE: Pi-Dienst **und** EXE
+  müssen neu gebaut werden. Sicherheit war nicht betroffen (fail closed: kein Wert ohne Barriere).
 * 2026-11-09: **Brücke: kein terminaler `connection_failed` am Laufende (R4-Nachtrag).** Ursache (per Traceback am
   `connection_failed` belegt, `connection.py` Poll-Pfad): zwischen `unbind_run` und `release_real_run` antwortet der
   Pi auf einen Poll zweimal mit `hello` (Freigabestand weg, dann Lauf weg); der Client wiederholte nur einmal und

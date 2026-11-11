@@ -271,7 +271,9 @@ def _record(value, *, demo=True):
     _text(value["profile_id"], maximum=128)
     _text(value["raw_text"], nullable=True, allow_empty=True, allow_controls=True)
     _integer(value["trigger_sequence"], nullable=True)
-    _integer(value["frames_confirmed"], minimum=1)
+    # Ungueltige Datensaetze der echten Kette (leere Anzeige, Uebergang) tragen
+    # frames_confirmed = 0; nur VALID braucht ein bestaetigtes Bild.
+    _integer(value["frames_confirmed"], minimum=1 if value.get("status") == "valid" else 0)
     _integer(value["confirmation_span_ns"])
     if not isinstance(value["reject_reasons"], list) or len(value["reject_reasons"]) > 128:
         raise ValueError("invalid rejection reasons")

@@ -257,3 +257,28 @@ def test_hello_and_idle_release_marker_is_optional_exact_and_unblocked():
 def test_ack_may_report_local_omission():
     ack = {**poll(), "type": "ack", "frame_sequence": 3, "barrier_id": 2, "outcome": "omitted"}
     assert decode_v2(encode_v2(ack))["outcome"] == "omitted"
+
+
+# Brückentest 2026-11-11: unlesbare/Übergangswerte der echten Kamera tragen
+# frames_confirmed = 0; die Barriere dafür muss kodierbar bleiben, sonst trennt
+# der Pi bei jedem Wechsel gültig -> ungültig die Verbindung.
+@pytest.mark.parametrize("status", ["transition", "unreadable", "stale"])
+def test_invalid_record_may_have_zero_confirmed_frames(status):
+    message = released_record()
+    message["record"]["status"] = status
+    message["record"]["frames_confirmed"] = 0
+    assert decode_v2(encode_v2(message)) == message
+    demo = demo_record()
+    demo["record"]["status"] = status
+    demo["record"]["frames_confirmed"] = 0
+    assert decode_v2(encode_v2(demo)) == demo
+
+
+def test_valid_record_still_requires_a_confirmed_frame():
+    message = released_record()
+    message["record"].update(status="valid", value=0.5, raw_text="0.5", frames_confirmed=0)
+    message["barrier_id"] = None
+    with pytest.raises(ValueError):
+        encode_v2(message)
+    message["record"]["frames_confirmed"] = 1
+    assert decode_v2(encode_v2(message)) == message
