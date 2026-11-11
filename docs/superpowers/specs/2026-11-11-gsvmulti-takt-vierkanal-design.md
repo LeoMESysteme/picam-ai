@@ -1,6 +1,6 @@
 # GSVmulti: fester Takt mit Vierkanal-Telegramm (Design)
 
-**Stand:** 2026-11-11 · F1–F3 und F5 von Leonhard entschieden (2026-11-11), F4 offen · Branch `feat/bruecke-ui`
+**Stand:** 2026-11-11 · F1–F5 von Leonhard entschieden (2026-11-11), freigegeben · Branch `feat/bruecke-ui`
 
 **Grundlage:**
 - Brückentest mit echten Werten: [Beleg](../../quellen/bruecke-testlauf-2026-11-11/README.md)
@@ -61,7 +61,7 @@ Nur die Kanäle 8_2–8_4 werden in GSVmulti ausgeblendet; sichtbar bleibt der M
 ### 3.3 Weg zu GSVmulti
 
 - **Neue Ausgabeart** `InvalidValuePolicy.MARK_RECORD` mit dem Format `gsvmulti_userdefined_4ch_v1`. Sie gilt für alle drei Wege: UART direkt (P4-3), UART über Brücke und Netzwerk über Brücke. Damit passt dieselbe Session-Vorlage überall.
-  - Die bisherige Ausgabe (nur VALID, `OMIT_RECORD`, einkanalig) bleibt als Auswahl bestehen. Bis zur Abnahme bleibt sie die Vorgabe.
+  - Die bisherige Ausgabe (nur VALID, `OMIT_RECORD`, einkanalig) bleibt bis zur Abnahme wählbar, mit Warnung (F3). Vorgabe wird der Vierkanal-Takt, sobald er umgesetzt ist.
 - **Formatierung** nur über den TelegramFormatter. Wie heute formatiert die Windows-Seite. Die Brücke überträgt dafür eine neue, kompakte Taktnachricht statt des vollen ValueRecord:
   - Felder: `run_id`, `takt`, `gültig`, `wert_text` (nur bei gültig), `zeit_ns`, `frame_sequence`.
   - Das sind etwa 150 Byte JSON statt etwa 1,2 kB. Der volle Datensatz bleibt im Pi-Audit.
@@ -115,5 +115,5 @@ Nur die Kanäle 8_2–8_4 werden in GSVmulti ausgeblendet; sichtbar bleibt der M
 - **F1, ja:** Ein gleicher Zahlenwert aus einem neuen Bild zählt als neuer gültiger Takt. Entscheidend ist der Erfassungszeitpunkt.
 - **F2, ja:** Verlorene Takte füllt die Windows-App mit Fehlwertzeilen auf, höchstens 50 Takte (5 s).
 - **F3, ja, mit Warnung:** Die alte Einkanal-Ausgabe bleibt bis zur Abnahme wählbar. Werkbank (Laufstart und Lauf) und App zeigen dann deutlich: „Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.“
-- **F4, offen:** Die Takt-Obergrenze bleibt vorerst 10 Hz. Begründung an Leonhard 2026-11-11: Mehr Takt bringt kaum Information, kostet aber mehr Fehlwertzeilen. Höher erst, wenn die Bildwiederholrate der Anzeige gemessen ist.
+- **F4: 10 Hz ist Obergrenze und Vorgabe.** Mehr Takt brächte kaum Information, aber mehr Fehlwertzeilen (bei 20 Hz nur 1–2 Bilder je Takt) und Zeitnot in der Brücke (Quittung p99 49 ms). Höher erst, wenn die Bildwiederholrate der Anzeige gemessen ist und der Leser deutlich mehr gültige Bilder liefert.
 - **F5, eigene Belege reichen:** Das Fehlwert-Format `99999999.0` wird nicht mit der GSVmulti-Entwicklung abgestimmt.
