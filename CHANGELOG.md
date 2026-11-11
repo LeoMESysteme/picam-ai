@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
+  Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
+  (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste
+  „In GSVmulti“ inkl. „Record Hidden Channels“; POST sendet `format`/`rate_hz` (Vierkanal) bzw. `format: '1ch'`;
+  Testlauf sperrt die Felder. Im Lauf zeigen Dock und Statusleiste Takt, Anteil gültig, verpasst (verloren/
+  unbestätigt bei > 0) aus `run.output.tick`, bei Einkanal die Kurzwarnung; Brücken-Dialog „Bereitschaft“ mit Zeile
+  „Format“. Laufoptionen scrollen in niedrigen Fenstern. Konsequenz: neue Läufe gehen standardmäßig im Vierkanal-Takt
+  hinaus; Tests (Node, Playwright mit Fake-Server-Szenen) decken Körper, Warnung, Sperre und Statuszeile ab.
 * 2026-11-11: **Brücke: Ausgabeformat des Laufs in `hello`/`idle` (Nachtrag B2, additiv).** Problem: Die
   Windows-App erfuhr das Format des Laufs erst am ersten Wert und konnte nicht vorher warnen, wenn die erzeugte
   GSVmulti-Session nicht passt. Neu: `hello` und `idle` tragen `output_format: "4ch"|"1ch"` des gebundenen

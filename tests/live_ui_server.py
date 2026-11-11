@@ -299,7 +299,7 @@ class FakeLiveService:
             cv2.imwrite(str(self._image_path), self._scene_image)
             self._frame_due = 0.0
 
-    def set_output(self, state, error=None):
+    def set_output(self, state, error=None, tick=None):
         # Test-Haken: Zustand des laufenden Ausgabewegs setzen (Form wie der echte Status).
         with self._lock:
             output = self._status['output']
@@ -307,6 +307,8 @@ class FakeLiveService:
                 raise ValueError('Kein Ausgabeweg gewaehlt')
             output['state'] = state
             output['error'] = error
+            if tick is not None:
+                output['tick'] = tick
 
     def bump_revision(self):
         from dispread.live.service import LiveError
@@ -424,6 +426,9 @@ class FakeLiveService:
                 **({'release_note': SERIAL_RELEASE_NOTE} if transport == 'serial' else {}),
                 **({'release': 'test_unaccepted' if released else None} if transport != 'serial' else {}),
                 **({'release_note': BRIDGE_RELEASE_NOTE} if released else {}),
+                # Vierkanal: Taktstatistik wie tick_status (B1/B2); per /test/output ueberschreibbar.
+                **({'tick': {'rate_hz': config['rate_hz'], 'seq': 0, 'total': 0, 'valid': 0, 'invalid': 0, 'missed': 0}}
+                   if config.get('format') == '4ch' else {}),
             })
             self._status["diagnostics"] = {"enabled": diagnostics, "saved": 0,
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
@@ -552,7 +557,7 @@ def make_test_app(image_path):
 
     async def set_output(request):
         data = await request.json()
-        live.set_output(data["state"], data.get("error"))
+        live.set_output(data["state"], data.get("error"), data.get("tick"))
         return web.json_response({"ok": True})
 
     async def delay(request):

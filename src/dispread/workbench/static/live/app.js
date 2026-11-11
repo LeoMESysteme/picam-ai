@@ -387,13 +387,13 @@ if (typeof document !== 'undefined') {
   const titlebar = nodes.titleActions.closest('.titlebar');
   const startPop = mountStartPopover(titlebar, client, {onStart: (body) => act('/live/run/start', body),
     onChange: () => renderTitle(status, titleView(), handlers),
-    onBridgeSetup: (choice, running) => bridgeUi.open({choice, running})});
+    onBridgeSetup: (choice, running, format) => bridgeUi.open({choice, running, output: running ? status?.output : {transport: choice, config: {format}}})});
   const bridgeUi = mountBridgeDialog(client);
   // Im Lauf lesend aus der Ausgabeanzeige (Dock) erreichbar; Klick-Weg ueber Delegation, weil das Dock neu gezeichnet wird.
   document.addEventListener('click', (event) => {
     if (!event.target.closest?.('[data-act="bridge-setup"]')) return;
     const output = status?.output;
-    bridgeUi.open({choice: output?.transport, running: status?.state === 'running'});
+    bridgeUi.open({choice: output?.transport, running: status?.state === 'running', output});
   });
   const markPop = mountMarkPopover(titlebar, client);
 
@@ -600,7 +600,7 @@ if (typeof document !== 'undefined') {
   const alertRun = {stop: () => act('/live/run/stop'), setup: () => act('/live/setup', {cell_text: null})};
   client.start((next) => {
     status = next;
-    if (bridgeUi.isOpen()) bridgeUi.open({running: next.state === 'running'});
+    if (bridgeUi.isOpen()) bridgeUi.open({running: next.state === 'running', output: next.state === 'running' ? next.output : undefined});
     render();
     effects.update(next, undefined);
     // Ein Waechter je Quelle: sein letzter Stand (prev) gehoert nur zu ihr. So meldet die

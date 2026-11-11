@@ -124,6 +124,31 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
     06.11.2026, nur Port anpassen). Trennzeichen/Filter nennt die App nicht (OQ-53 offen). Legen Sie eine **eigene Testsession** an, keine produktive
     Session überschreiben. Haken in der App: „In GSVmulti eingestellt …“ („Weiter“ bleibt bis dahin grau, mit Grund).
 
+## D2. Vierkanal-Takt (Laufstart und GSVmulti)
+
+Der Vierkanal-Takt ist die empfohlene Ausgabe (Spec 2026-11-11). Der Pi sendet in festem Raster ein Telegramm je
+Takt, auch bei Übergang und unlesbarer Anzeige (dann mit Fehlwert), damit GSVmulti die Lücken aufzeichnet.
+
+**Laufstart (Werkbank, Laufoptionen):**
+
+1. Ausgabeweg wählen (nicht „Aus“). Darunter erscheint „Format“.
+2. „Vierkanal-Takt (empfohlen)“ ist vorgewählt. **Takt** 1–10 Hz (Vorgabe 10); in GSVmulti **dieselbe Frequenz**
+   einstellen (Data Frequency).
+3. „Einkanal (nur gültige Werte)“ bleibt wählbar und zeigt die Warnung: Bei Übergang und unlesbarer Anzeige werden
+   keine Zeilen gesendet, GSVmulti zeichnet die Lücken nicht auf, Laufzeit und Zeitachse sind nicht genau.
+4. Testlauf und Übungslauf: keine Ausgabe, Format und Takt sind gesperrt.
+
+**In GSVmulti (Checkliste, steht auch im Start-Popover):**
+
+- Vierkanal-Session aus der Windows-App verwenden (8_2–8_4 ausgeblendet).
+- **Configure Recording → Advanced → „Record Hidden Channels“ einschalten.** Pflicht; die Einstellung steht nicht
+  in der Session und muss bei jeder Aufnahme geprüft werden.
+- Für 8_1 Autoscale Y aus, Min/Max fest einstellen (Fehlwerte gehen über den Rand).
+
+**Im Lauf:** Dock und Statusleiste zeigen „Vierkanal-Takt 10 Hz · gültig x % · verpasst n“ (bei Brückenwegen
+zusätzlich „verloren“/„unbestätigt“, wenn > 0). Bei Einkanal steht dauerhaft „Einkanal: Lücken werden in GSVmulti
+nicht aufgezeichnet“. Der Brücken-Dialog zeigt im Schritt „Bereitschaft“ die Zeile „Format“.
+
 ## E. Empfangstest (synthetische Demo)
 
 16. App Schritt 5: „Ich verwende eine getrennte GSVmulti-Testsession.“ setzen,

@@ -1,3 +1,4 @@
+const SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots/';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Die beiden Abläufe der abgelösten alten Seite,
@@ -1891,7 +1892,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
     return (await sent).postDataJSON().output;
   };
   expect(await bodyOf('Aus')).toEqual({ transport: 'off' });
-  expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart' });
+  expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await expect(pop.locator('[data-part="out-lock"]')).toHaveText(/^DUT-Ausgabe gesperrt: Windows-Abnahme fehlt\./);
@@ -1901,7 +1902,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
 
   const sentTcp = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
-  expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001 });
+  expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001, format: '4ch', rate_hz: 10 });
 
   // UART direkt: Hinweis wörtlich, Start gesperrt bis zum Haken, Haken wird nie gemerkt.
   await confirmedState(page);
@@ -1926,7 +1927,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   const sentSerial = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   expect((await sentSerial).postDataJSON().output).toEqual({ transport: 'serial', port: '/dev/ttyAMA0',
-    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true });
+    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
 
   // Lauf: Zeile im Dock, Inspektor, Statusleiste mit Marker; Gruppe schreibgeschützt.
   const left = page.getByRole('complementary', { name: 'Ablauf' });
@@ -1973,7 +1974,7 @@ test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zust
   await expect(pop.locator('[data-part="out-lock"]')).toContainText('Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.');
   await noOverflow(page);
   // Ohne Haken: Start ist nicht blockiert, das Feld fehlt.
-  expect(await startBody(page, pop)).toEqual({ transport: 'uart' });
+  expect(await startBody(page, pop)).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
   // Netzwerk mit Haken; der Hinweis zur UART-Rate gehört nur zu UART.
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
@@ -1982,7 +1983,7 @@ test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zust
   await ack.check();
   await expect(pop.locator('[data-part="out-lock"]')).toBeHidden();
   await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-popover.png' });
-  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, acknowledge_unaccepted: true });
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
   const left = page.getByRole('complementary', { name: 'Ablauf' });
   await expect(left.locator('[data-part="output"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen');
   await expect(left.locator('[data-part="output"]')).not.toContainText('DUT-Ausgabe gesperrt');
@@ -2091,6 +2092,81 @@ test('Ausgabe: Übungslauf stellt den gewählten Weg nach und sendet keinen POST
     .toContainText('GSVmulti: Netzwerk über Brücke · Warte auf Windows-Brücke');
   expect(posts.filter((p) => p.endsWith('/run/start'))).toEqual([]);
   expect(posts).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Format und Takt im POST, Warnung bei Einkanal, Checkliste bei Vierkanal', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop.locator('[data-part="out-format"]')).toBeHidden();
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.getByRole('radio', { name: 'Vierkanal-Takt (empfohlen)' })).toBeChecked();
+  await expect(pop.getByLabel('Takt (Hz)')).toHaveValue('10');
+  await expect(pop).toContainText('In GSVmulti dieselbe Frequenz einstellen (Data Frequency).');
+  await expect(pop.locator('[data-part="checklist"]')).toContainText('Record Hidden Channels');
+  await expect(pop.locator('[data-part="checklist"]')).toContainText('Autoscale Y aus');
+  await expect(pop.locator('[data-part="fmt-warn"]')).toBeHidden();
+  await page.screenshot({ path: SHOTS + 'u1-start-4ch.png' });
+  // Ungültiger Takt sperrt den Start.
+  await pop.getByLabel('Takt (Hz)').fill('11');
+  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeDisabled();
+  await pop.getByLabel('Takt (Hz)').fill('4');
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, format: '4ch', rate_hz: 4 });
+  // Einkanal: Warnung wörtlich, kein Takt im Körper.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await pop.getByText('Einkanal (nur gültige Werte)', { exact: true }).click();
+  await expect(pop.locator('[data-part="fmt-warn"]')).toHaveText('Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.');
+  await expect(pop.locator('[data-part="fmt-box"]')).toBeHidden();
+  await page.screenshot({ path: SHOTS + 'u1-start-1ch.png' });
+  expect(await startBody(page, pop)).toEqual({ transport: 'uart', format: '1ch' });
+  const bar = page.getByRole('contentinfo').locator('[data-item="output"]');
+  await expect(bar.locator('[data-part="one-ch"]')).toHaveText('Einkanal');
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-part="output"] [data-part="one-ch"]'))
+    .toHaveText('Einkanal: Lücken werden in GSVmulti nicht aufgezeichnet');
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Vierkanal im Lauf zeigt Takt, Anteil gültig und verpasste Takte', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await startBody(page, pop);
+  const dock = page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-part="output"]');
+  await expect(dock.locator('[data-part="tick"]')).toHaveText('Vierkanal-Takt 10 Hz · gültig – · verpasst 0');
+  await hook(page, '/test/output', { state: 'bridge_connected', tick: { rate_hz: 10, seq: 203, total: 200, valid: 150, invalid: 50, missed: 3, lost: 4, unconfirmed: 0 } });
+  await expect(dock.locator('[data-part="tick"]')).toHaveText('Vierkanal-Takt 10 Hz · gültig 75 % · verpasst 3 · verloren 4');
+  await expect(page.getByRole('contentinfo').locator('[data-item="output"]')).toContainText('10 Hz · 75 % gültig');
+  await expect(dock.locator('[data-part="one-ch"]')).toHaveCount(0);
+  await page.screenshot({ path: SHOTS + 'u1-lauf-4ch.png' });
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testlauf sperrt Format und Takt und sendet keine Ausgabe', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page, { run_block: 'Lauf gesperrt: Gegenlesen WARNUNG' });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-format"]')).toBeVisible();
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  await expect(pop.locator('[data-part="out-format"]')).toBeHidden();
+  await expect(pop.locator('[data-part="out-rate-hz"]')).toBeDisabled();
+  await expect(pop.locator('[data-part="fmt-1ch"]')).toBeDisabled();
   expect(errors).toEqual([]);
 });
 
