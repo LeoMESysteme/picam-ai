@@ -51,6 +51,19 @@ def section(title: str) -> tuple[QWidget, QVBoxLayout]:
     return box, inner
 
 
+def note_line(tone: str, text: str, name: str = '') -> QWidget:
+    """Hinweiszeile: Statussymbol + Text (Word-Beside-Color), nicht schließbar. ``info`` = neutral."""
+    w = QWidget()
+    if name:
+        w.setObjectName(name)
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(8)
+    lay.addWidget(StateIcon(tone, 16), 0, Qt.AlignmentFlag.AlignTop)
+    lay.addWidget(label(text, 'caption' if tone == 'info' else 'body'), 1)
+    return w
+
+
 def field(name: str, value: str, copy: bool | None = None) -> QWidget:
     """Technischer Wert als CopyField; Fingerabdruck in Vierergruppen, nie gekürzt."""
     copyable = (name in texts.TECH_FIELDS) if copy is None else copy
@@ -201,6 +214,8 @@ def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callab
     help_text = texts.CHIP_HELP.get(view.key, '')
     if help_text:
         body.addWidget(label(help_text))
+    if view.warn:
+        body.addWidget(note_line('warn', view.warn, 'chip_warn'))
     if view.details:
         box, inner = section('Werte')
         for k, v in view.details:
@@ -349,10 +364,14 @@ class ExportWindow(ToolWindow):
         self.ring.hide()
         self.busy_label = label(texts.EXPORT_SAVING, 'caption', wrap=False)
         self.busy_label.hide()
+        self.close_button = button(texts.CLOSE, name='export_close')
+        self.close_button.clicked.connect(self.close)
+        self.close_button.hide()
         self.foot_lay.addWidget(self.ring)
         self.foot_lay.addWidget(self.busy_label)
         self.foot_lay.addStretch(1)
         self.foot_lay.addWidget(self.save_button)
+        self.foot_lay.addWidget(self.close_button)
         self.foot.show()
         self._render()
 
@@ -366,6 +385,17 @@ class ExportWindow(ToolWindow):
         self.ring.setVisible(busy)
         self.busy_label.setVisible(busy)
         self.save_button.setEnabled(not busy)
+        done = state == 'done'
+        # Nach dem Speichern ist „Schließen“ die nächste Aktion (Akzent), „Erneut speichern …“ bleibt Standard.
+        self.save_button.setText(texts.EXPORT_SAVE_AGAIN if state in ('done', 'failed') else texts.EXPORT_SAVE)
+        self.save_button.setProperty('accent', not done)
+        self.close_button.setVisible(done)
+        self.close_button.setProperty('accent', done)
+        for b in (self.save_button, self.close_button):
+            b.style().unpolish(b)
+            b.style().polish(b)
+        if done:
+            self.close_button.setDefault(True)
         self._render()
 
     def _render(self) -> None:
@@ -419,4 +449,4 @@ class ExportWindow(ToolWindow):
 
 
 __all__ = ['ToolWindow', 'ExportWindow', 'InfoContent', 'build_chip_detail', 'build_lock', 'build_paired',
-           'field', 'label', 'section']
+           'field', 'label', 'note_line', 'section']

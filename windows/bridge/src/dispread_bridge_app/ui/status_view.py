@@ -47,7 +47,10 @@ def _fit_words(label: QLabel, raw: str, avail: int) -> None:
 class Chip(FocusToolButton):
     """Prüfpunkt-Kachel: Komponenten-Symbol, Name, Info-Symbol (Erklärung), Statussymbol + Wort, Zweitzeile.
 
-    Bei echtem Zustandswechsel kurzer Farbübergang (200 ms); ein Klick öffnet das Detailfenster."""
+    Bei echtem Zustandswechsel kurzer Farbübergang (200 ms); ein Klick öffnet das Detailfenster.
+    Symbol, Name und Info-Symbol stehen in einer Zeile; nur wenn ein Name dort nicht passt, stehen die
+    Namen aller Kacheln in eigener Zeile."""
+    PAD_L, PAD_R, GAP_NAME, GAP_INFO = 6, 4, 4, 2
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -55,10 +58,10 @@ class Chip(FocusToolButton):
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 8)
+        lay.setContentsMargins(self.PAD_L, 6, self.PAD_R, 8)
         lay.setSpacing(3)
         self.top = QHBoxLayout()
-        self.top.setSpacing(6)
+        self.top.setSpacing(0)
         self.comp_icon = QLabel()
         self.comp_icon.setFixedSize(16, 16)
         self.name = theme.set_typo(QLabel(), 'caption')
@@ -68,7 +71,9 @@ class Chip(FocusToolButton):
         self.info_icon.setPixmap(theme.icon_pixmap('info', 'text2', 16))
         self.info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
         self.top.addWidget(self.comp_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.top.addSpacing(self.GAP_NAME)
         self.top.addWidget(self.name, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.top.addSpacing(self.GAP_INFO)
         self.top.addWidget(self.info_icon, 0, Qt.AlignmentFlag.AlignTop)
         self.name_row = QHBoxLayout()           # schmale Kachel: Name in eigener Zeile
         self.name_row.setSpacing(0)
@@ -123,18 +128,18 @@ class Chip(FocusToolButton):
         if inline:
             self.name_row.removeWidget(self.name)
             self.top.removeItem(self._spacer)
-            self.top.insertWidget(1, self.name, 1, Qt.AlignmentFlag.AlignVCenter)
+            self.top.insertWidget(2, self.name, 1, Qt.AlignmentFlag.AlignVCenter)
         else:
             self.top.removeWidget(self.name)
-            self.top.insertItem(1, self._spacer)
+            self.top.insertItem(2, self._spacer)
             self.name_row.addWidget(self.name, 1)
 
     def fits_inline(self, width: int) -> bool:
         """Passt der Name neben Komponenten- und Info-Symbol? Sonst steht er in eigener Zeile."""
-        return 16 + 6 + self.name.sizeHint().width() + 6 + 16 <= width - 12
+        return 16 + self.GAP_NAME + self.name.sizeHint().width() + self.GAP_INFO + 16 <= width - self.PAD_L - self.PAD_R
 
     def needed_height(self, width: int, inline: bool | None = None) -> int:
-        inner = width - 12
+        inner = width - self.PAD_L - self.PAD_R
         self._set_inline(self.fits_inline(width) if inline is None else inline)
         h = 14 + max(16, self.name.sizeHint().height() if self._inline else 16)
         if not self._inline:
@@ -465,9 +470,9 @@ class StatusView(QWidget):
                 self.seg_faults, self.journal, self.settings_button, self.export_button, self.details_button,
                 self.exit_button]
 
-    def update_from(self, readiness, worker, ctx, locked: bool) -> None:
+    def update_from(self, readiness, worker, ctx, locked: bool, configured: bool | None = None) -> None:
         self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer)
-        self.infobar.set_bar(texts.action_bar(readiness, worker, ctx))
+        self.infobar.set_bar(texts.action_bar(readiness, worker, ctx, configured))
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx), strict=False):
             chip.set_view(view)
         self.version_label.setText(texts.version_label(ctx.version))

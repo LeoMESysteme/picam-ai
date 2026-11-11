@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import re
 import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -49,7 +50,7 @@ _BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', pro
                   paired=(('Prüfstand 2', 'pi-4b7e09c1', 'zuletzt vor 2 Stunden'),
                           ('Prüfstand 3 – Halle A', 'pi-d21a77e6', 'zuletzt gestern')),
                   route_mode='network', activity_seq=1, uart_baud=460800, gsv_baud=115200,
-                  session_template='Session-COM8.ucf')
+                  session_template='Session-COM8.ucf', session_channels=1)
 
 
 _DATA = dict(peer_fingerprint='a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 55e0 1b6c 9a46 3f02',
@@ -65,6 +66,27 @@ def _setup(variant, step, **kw):
     pre['setup_leavable'] = variant not in ('E1', 'E1uac', 'E1restart', 'E1ok', 'E2')
     return (replace(_OK, peer='disconnected', output='unavailable', com='unknown'), None,
             replace(_BASE, mode='setup', setup=SetupState(step, variant, dict(_DATA)), **pre, **kw))
+
+
+_DIRECT = dict(pi_name=None, pi_id='', endpoint='', fingerprint='', route='UART direkt', route_mode='uart_direct',
+               adapter_port='COM9', adapter_present=True, gsv_port='COM9', bridge_port=None, run_id=None, journal=(),
+               activity_seq=0, session_confirmed=False, session_name=None, paired=(), session_channels=None)
+_D_ITEMS = (('COM9 – FTDI USB Serial', '', True),)
+
+
+def _direct(variant, step, session=False, **kw):
+    """UART direkt (D1–D4): Datenschlüssel wie der echte Controller (Codex-Übergabe)."""
+    ctx = dict(_DIRECT, **kw)
+    port = ctx['adapter_port']
+    path = f'C:\\Users\\Labor\\Documents\\GSVmulti_Pi_{port}.ucf' if session and port else None
+    data = dict(adapter_port=port, adapter_present=ctx['adapter_present'],
+                adapter_items=tuple((lab, sub, sel and port is not None) for lab, sub, sel in _D_ITEMS),
+                choices={'adapter': ('COM9',)}, gsv_port=port, gsv_baud=115200, session_path=path,
+                session_template='bruecke-session-com8-20261106')
+    if path:
+        ctx['session_name'] = path.rsplit('\\', 1)[-1]
+    return (replace(_OK, adapter='ready', peer='disconnected', output='unavailable', com='unknown', next_action=None),
+            None, replace(_BASE, mode='setup', setup=SetupState(step, variant, data), setup_leavable=True, **ctx))
 
 
 STATES: dict[str, tuple] = {
@@ -117,7 +139,23 @@ STATES: dict[str, tuple] = {
     'E4': _setup('E4', 4), 'E4ok': _setup('E4ok', 4), 'E4unk': _setup('E4unk', 4), 'E5': _setup('E5', 5),
     'E5run': _setup('E5run', 5), 'E5file': _setup('E5file', 5), 'E5ok': _setup('E5ok', 5),
     'E5bad': _setup('E5bad', 5),
+    # --- UX2 Runde 2
+    'first_run': _setup('E1', 1),
+    'Bnone': (replace(_OK, peer='disconnected', output='unavailable', com='unknown', next_action=None), None,
+              replace(_BASE, pi_name=None, pi_id='', endpoint='', fingerprint='', route=None, route_mode=None,
+                      run_id=None, journal=(), activity_seq=0, session_confirmed=False, session_name=None, paired=(),
+                      bridge_port=None, gsv_port=None)),
+    'D1': _direct('D1', 1, adapter_port=None, gsv_port=None, adapter_present=None),
+    'D1sel': _direct('D1', 1),
+    'D2': _direct('D2', 2),
+    'D2missing': _direct('D2', 2, adapter_present=False),
+    'D3': _direct('D3', 3),
+    'D3done': _direct('D3', 3, session=True),
+    'D4': _direct('D4', 4, session=True),
+    'E1manual': _setup('E1manual', 1),
+    'E4session': _setup('E4locked', 4, session_name=None, session_confirmed=False),
 }
+STATES['E1manual'][2].setup.data.update(ports=('COM1', 'COM4', 'COM5', 'COM9'))
 
 
 _PORTS = (PortChoice('COM4', 'COM4 – com0com Brückenseite', 'com0com', False),
@@ -134,6 +172,9 @@ _SESSION_PLACEHOLDER = '; Platzhalter der Demo-Oberfläche – keine GSVmulti-Se
 
 
 class FakeController:
+    check_delay = 0.0               # Sekunden je Prüfung (Bildschirmfotos der laufenden Prüfung)
+    record_hidden = False           # erzeugte Session verlangt „Record Hidden Channels“ (Vorlagenkatalog)
+
     def __init__(self, state: str = 'B1', heartbeat_s: float | None = None):
         self.calls: list[tuple] = []
         self._subs: list = []
@@ -184,9 +225,26 @@ class FakeController:
     def begin_demo_check(self, confirmed_test_session): self._rec('begin_demo_check', confirmed_test_session)
     def pair(self, code, fingerprint_confirmed): self._rec('pair', fingerprint_confirmed)   # Code nie aufzeichnen
     def select_route(self, mode): self._rec('select_route', mode)
-    def select_endpoint(self, endpoint, manual=False): self._rec('select_endpoint', endpoint, manual)
-    def select_adapter(self, device_id): self._rec('select_adapter', device_id)
-    def set_port_pair(self, bridge_port, gsv_port): self._rec('set_port_pair', bridge_port, gsv_port)
+    def select_endpoint(self, endpoint, manual=False):
+        self._rec('select_endpoint', endpoint, manual)
+        self._c = replace(self._c, endpoint=endpoint if '://' in endpoint or not manual else 'https://' + endpoint)
+
+    def select_adapter(self, device_id):
+        self._rec('select_adapter', device_id)
+        p = next((q for q in _PORTS if device_id in (q.port, q.device_id)), None)
+        if p is not None:
+            direct = self._c.route_mode == 'uart_direct'
+            self._c = replace(self._c, adapter_port=p.port, adapter_present=True,
+                              **({'gsv_port': p.port} if direct else {}))
+            st = self._c.setup
+            if st is not None and st.variant.startswith('D'):
+                data = dict(st.data, adapter_port=p.port, adapter_present=True, gsv_port=p.port,
+                            adapter_items=tuple((lab, sub, True) for lab, sub, _s in _D_ITEMS))
+                self._c = replace(self._c, setup=replace(st, data=data))
+
+    def set_port_pair(self, bridge_port, gsv_port):
+        self._rec('set_port_pair', bridge_port, gsv_port)
+        self._c = replace(self._c, bridge_port=bridge_port, gsv_port=gsv_port)
     def open_manual_pair(self): self._rec('open_manual_pair')
     def rescan(self): self._rec('rescan')
     def confirm_session(self, on): self._rec('confirm_session', on)
@@ -244,6 +302,8 @@ class FakeController:
         configured = {m.mode: m.configured for m in self.modes()}
         if configured.get(mode):
             self._c = replace(self._c, route_mode=mode)
+        elif mode == 'uart_direct':
+            self._r, self._w, self._c = _direct('D1', 1, adapter_port=None, gsv_port=None, adapter_present=None)
         else:
             self._c = replace(self._c, route_mode=mode, mode='setup', setup_leavable=True,
                               setup=SetupState(1, 'E1ok', dict(_DATA)))
@@ -260,8 +320,13 @@ class FakeController:
         self._rec('list_adapters')
         return tuple(p for p in _PORTS if p.kind == 'usb_serial')
 
+    def _slow(self):
+        if self.check_delay:
+            time.sleep(self.check_delay)
+
     def check_endpoint(self, text):
         self._rec('check_endpoint', text)
+        self._slow()
         m = _HOST.match((text or '').strip())
         if not m or (m.group(2) and not 0 < int(m.group(2)) < 65536):
             return CheckResult('err', 'Keine gültige Adresse', 'Name oder IP-Adresse, z. B. pi.local')
@@ -279,6 +344,7 @@ class FakeController:
 
     def check_port_pair(self, bridge_port, gsv_port):
         self._rec('check_port_pair', bridge_port, gsv_port)
+        self._slow()
         names = {p.port: p for p in _PORTS}
         if not bridge_port or not gsv_port:
             return CheckResult('err', 'Beide Ports wählen')
@@ -296,6 +362,7 @@ class FakeController:
 
     def check_adapter(self, port):
         self._rec('check_adapter', port)
+        self._slow()
         p = {q.port: q for q in _PORTS}.get(port)
         if p is None:
             return CheckResult('err', f'{port} nicht vorhanden', 'Adapter einstecken und neu suchen')
@@ -303,7 +370,7 @@ class FakeController:
             return CheckResult('err', f'{port} ist kein USB-Seriell-Adapter')
         if p.busy:
             return CheckResult('err', f'{port} ist belegt', 'Programm schließen, das den Port hält')
-        baud = self._c.uart_baud or 0
+        baud = (self._c.gsv_baud if self._c.route_mode == 'uart_direct' else self._c.uart_baud) or 0
         return CheckResult('ok', f'{port} bereit' + (f' ({baud} Baud geöffnet und wieder freigegeben)' if baud else ''))
 
     def check_pairing_code(self, code):
@@ -321,7 +388,14 @@ class FakeController:
         self._rec('export_session_file', Path(destination), port)
         data = _SESSION_PLACEHOLDER.format(n=re.sub(r'\D', '', port) or '0').encode('cp1252')
         Path(destination).write_bytes(data)         # nur im Fake: Platzhalter, keine echte Session
-        return SessionExport(Path(destination), port, 'demo-placeholder', hashlib.sha256(data).hexdigest())
+        hidden = self.record_hidden
+        self._c = replace(self._c, session_name=Path(destination).name)
+        st = self._c.setup
+        if st is not None and st.variant.startswith('D'):
+            self._c = replace(self._c, setup=replace(st, data=dict(st.data, session_path=str(destination))))
+        return SessionExport(Path(destination), port, 'demo-placeholder', hashlib.sha256(data).hexdigest(),
+                             channels=4 if hidden else 1, hidden_channels=3 if hidden else 0,
+                             record_hidden_required=hidden)
 
     def diagnostics_contents(self):
         self._rec('diagnostics_contents')

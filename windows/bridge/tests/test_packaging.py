@@ -14,6 +14,26 @@ BRIDGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BRIDGE / "src"))
 
 
+@pytest.mark.parametrize('spec_name', ['bridge.spec', 'bridge-app.spec'])
+def test_packaged_session_data_include_both_pinned_originals(spec_name):
+    import ast
+
+    tree = ast.parse((BRIDGE / 'packaging' / spec_name).read_text())
+    analysis = next(node for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Analysis')
+    data_node = next(keyword.value for keyword in analysis.keywords if keyword.arg == 'datas')
+    data = eval(compile(ast.Expression(data_node), spec_name, 'eval'), {'bridge_root': BRIDGE})
+    packaged = {Path(source).name: (Path(source).read_bytes(), destination) for source, destination in data}
+    originals = {
+        'Session-COM8.ucf': 'bruecke-testlauf-2026-11-06/Session-COM8.ucf',
+        'versuch2b-session-hidden.ucf': 'gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf',
+    }
+    for filename, source in originals.items():
+        assert filename in packaged
+        assert packaged[filename] == ((BRIDGE.parents[1] / 'docs/quellen' / source).read_bytes(),
+                                      'dispread_bridge_app/templates')
+
+
 def support():
     spec = importlib.util.spec_from_file_location("bridge_build_support", BRIDGE / "packaging/build_support.py")
     module = importlib.util.module_from_spec(spec)

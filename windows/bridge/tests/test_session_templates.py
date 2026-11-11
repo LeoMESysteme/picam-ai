@@ -148,3 +148,63 @@ def test_probe_rejects_unknown_template(tmp_path):
     )
     assert result.returncode == 1
     assert json.loads(result.stdout)['status'] == 'unknown_template'
+
+
+def test_catalog_loads_pinned_sources_and_derives_channel_metadata():
+    catalog = templates.load_session_catalog()
+    assert len(catalog) == 2
+    active = catalog[templates.ACTIVE_SESSION_TEMPLATE]
+    assert active.spec.template_id == 'bruecke-session-com8-20261106'
+    assert active.spec.status == 'active'
+    assert active.spec.telegram_format == 'single_value'
+    prepared = catalog['bruecke-session-4ch-hidden-20261111']
+    assert prepared.spec.status == 'prepared'
+    assert prepared.spec.telegram_format == 'gsvmulti_userdefined_4ch_v1'
+    for entry, channels, hidden, required in [(active, 1, 0, False), (prepared, 4, 3, True)]:
+        assert entry.raw == (ROOT / entry.spec.source_path).read_bytes()
+        assert sha256(entry.raw).hexdigest() == entry.spec.source_sha256
+        assert (entry.channels, entry.hidden_channels, entry.record_hidden_required) == (channels, hidden, required)
+        assert entry.baud_rate == 115200
+    checksums = (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/SHA256SUMS').read_text()
+    assert f'{prepared.spec.source_sha256}  versuch2b-session-hidden.ucf' in checksums
+
+
+@pytest.mark.parametrize('template_id', [
+    'bruecke-session-com8-20261106', 'bruecke-session-4ch-hidden-20261111',
+])
+def test_catalog_rejects_changed_package_bytes(tmp_path, monkeypatch, template_id):
+    for spec in templates.SESSION_TEMPLATES:
+        target = tmp_path / spec.package_file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / spec.source_path).read_bytes())
+        if spec.template_id == template_id:
+            target.write_bytes(target.read_bytes() + b'\r\n')
+    monkeypatch.setattr(templates, 'files', lambda package: tmp_path)
+    with pytest.raises(templates.SessionTemplateError, match='source_hash_mismatch'):
+        templates.load_session_catalog()
+
+
+def test_catalog_rejects_different_baud_rates_even_with_valid_hashes(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    specs = []
+    for spec in templates.SESSION_TEMPLATES:
+        raw = (ROOT / spec.source_path).read_bytes()
+        if spec.status == 'prepared':
+            raw = raw.replace(b'BaudRate = 115200', b'BaudRate = 9600')
+        target = tmp_path / spec.package_file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+        specs.append(replace(spec, source_sha256=sha256(raw).hexdigest()))
+    monkeypatch.setattr(templates, 'files', lambda package: tmp_path)
+    monkeypatch.setattr(templates, 'SESSION_TEMPLATES', tuple(specs))
+    with pytest.raises(templates.SessionTemplateError, match='baud_rate_mismatch'):
+        templates.load_session_catalog()
+
+
+def test_prepared_evidence_cannot_authorize_automatic_export():
+    evidence = templates.inspect_template(
+        ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf')
+    assert evidence.template_id == 'bruecke-session-4ch-hidden-20261111'
+    with pytest.raises(templates.SessionTemplateError, match='automatic_export_blocked'):
+        evidence.require_automatic_export()

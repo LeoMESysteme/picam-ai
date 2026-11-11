@@ -162,7 +162,7 @@ def test_header_mode_button_heartbeat_and_dut_line(win):
     assert texts.DUT_LOCK_LINE in h.dut.text() and h.dut.isVisibleTo(w)
     h.mode_button.click()
     settle(w)
-    assert 'open_modes' in w.unhandled
+    assert w.tool_windows['modes'].isVisible() and 'open_modes' not in w.unhandled
 
 
 @pytest.mark.parametrize('state', ('B3', 'B3c'))

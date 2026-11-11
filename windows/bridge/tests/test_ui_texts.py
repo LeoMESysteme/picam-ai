@@ -29,6 +29,8 @@ def test_dut_lock_line_in_every_state():
         text, tone = texts.dut_line(c)
         if c.test_release:
             assert text == texts.TEST_RELEASE_LINE and tone == 'warn', key
+        elif c.route_mode == 'uart_direct':
+            assert text == texts.DIRECT_DUT_LINE and tone == 'info', key
         elif c.dut_locked:
             assert text == texts.DUT_LOCK_LINE and tone == 'warn', key
 

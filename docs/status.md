@@ -1,48 +1,57 @@
 # Status und Übergabe — 2026-11-11
 
-Windows-Brücke UX2, Backend-Auftrag aus
-`.superpowers/sdd/2026-11-11-bruecke-ux2/codex-backend.md` umgesetzt im
-Worktree `bruecke-ux` (`feat/bruecke-ux`). Änderungen liegen uncommittet im
-Arbeitsbaum; kein Merge, Push, Deployment, Hardwareeingriff oder neue Abhängigkeit.
-Die parallel bearbeiteten UI-Dateien gehören zum separaten UI-Auftrag.
-`ui/port.py` wurde vom Backend nicht verändert.
+Auftrag `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-catalog.md`
+im vorhandenen Worktree `bruecke-ux` (`feat/bruecke-ux`) umgesetzt. Alle
+Änderungen bleiben uncommittet. Kein Merge, Push, Deployment, Hardwareeingriff
+oder neue Abhängigkeit. Der parallel bearbeitete UI-Bereich wurde durch diesen
+Auftrag nicht verändert; bestehende Änderungen in `app_controller.py` bleiben
+neben den gezielten Exportanpassungen erhalten.
 
-AppController erfüllt den UX2-Port einschließlich drei Wegen, Prüfungen mit
-2,8-s-Gesamtbudget, Session-Erzeugung, Aktivitätszähler und gecachter
-Adapterpräsenz. `uart_direct` benötigt weder Kopplung noch Worker; Varianten
-D1–D4. Session-Metadaten sind nach Weg und Port getrennt, Abschlusszustände
-werden bei Änderungen verworfen, verspätete Prüfergebnisse können keinen
-anderen Assistenten fortsetzen. Credential-Lesezugriffe sind aus `context()`
-entfernt. PnP-Erfolge und Fehler werden 30 s gecacht; explizite Neusuche
-erneuert sie. Windows-Subprozesse verwenden CREATE_NO_WINDOW.
+Der exportierbare Vorlagenkatalog steht zentral in `session_templates.py`:
 
-Der Generator verändert nur drei COM-Felder der gepinnten COM8-Vorlage;
-COM8 bleibt byte-identisch, COM4 passt zum unabhängigen Archivbeleg.
-Gemeinsame Pi↔Brücke-UART-Quelle: `dispread.bridge.baud.UART_BAUD` (460800),
-optional im v2-Profil; v1 nutzt dieselbe Quelle. GSVmulti liest die eigene
-Baudrate aus der Vorlage; direkte Pi-Ausgabe bleibt getrennt.
+- `bruecke-session-com8-20261106`: `Session-COM8.ucf`, `single_value`,
+  `active`, ein Kanal, keiner ausgeblendet, kein Aufnahmehinweis erforderlich.
+- `bruecke-session-4ch-hidden-20261111`: `versuch2b-session-hidden.ucf`,
+  `gsvmulti_userdefined_4ch_v1`, `prepared`, vier Kanäle, drei ausgeblendet,
+  „Record Hidden Channels“ erforderlich.
 
-Prüfstand des Backend-Abschlusslaufs:
+SHA-256 und Herkunft sind im Code gepinnt, die neue Paketdatei entspricht dem
+Original und dessen `SHA256SUMS`. Kanalzahl, Sichtbarkeit und Baudrate werden
+beim Laden aus der Datei gelesen. Alle Katalogvorlagen müssen dieselbe Baudrate
+tragen (derzeit 115200). `ACTIVE_SESSION_TEMPLATE` wählt die reguläre Vorlage;
+zusätzlich muss ihr Status `active` sein. Der öffentliche Export bietet keine
+Vorlagenauswahl. Vorbereitete Vorlagen benötigen den Entwicklereinstieg mit
+`allow_prepared=True`. Die Aktivierung bleibt eine geprüfte Codeänderung.
 
-- Windows: 228 bestanden, ein natives Windows-Gate übersprungen,
-  zehn bestehende Socket-Tests ausgeschlossen. Der vorherige vollständige
-  Lauf der betroffenen Dateien scheiterte an diesen zehn Tests, weil die
-  Sandbox lokale Sockets verbietet (221 bestanden, ein übersprungen).
-- Pi: 119 bestanden, fünf bestehende Socket-Tests ausgeschlossen. Vorherige
-  Versuche dieser fünf Fälle scheiterten ebenfalls an der Socket-Sperre.
-- Ruff und `git diff --check` bestanden. OQ-Index, Tour-Fakten und Wiki-Check
-  bestanden. Strenger Doku-Build scheitert am bestehenden TODO-Link auf
-  `windows/bridge/TESTLAUF.md` (vom Doku-Baum nicht erfasst).
-  Playwright-Doku-Tests scheitern beim Start ihres lokalen Webservers an
-  `PermissionError: [Errno 1] Operation not permitted`.
-- Unabhängiges Backend-Review: drei wichtige Zustands-/Nebenläufigkeitsbefunde
-  behoben, mit zuerst fehlgeschlagenen Regressionstests. Keine offenen
-  wichtigen Review-Befunde; keine Windows-/Hardware-/GSVmulti-Abnahme behauptet.
+Portersetzung ändert ausschließlich `ComNr`/`Name` in jedem `[chN]` und
+`UserDevice.ComNo`; die Kanalnummer im Namen kommt aus `Input`. Sonstige Bytes,
+Zeilenenden und Reihenfolge bleiben erhalten. COM8 ist für beide Vorlagen
+byte-identisch zum jeweiligen Beleg, COM4 ändert bei vier Kanälen genau neun
+Zeilen. `SessionExport` trägt die abgeleiteten Kanal-/Aufnahmehinweise; Diagnose-
+und Kontextlogik bleiben unverändert. Beide PyInstaller-Specs paketieren beide
+Dateien; das bestehende setuptools-Muster erfasst sie ebenfalls. Erkannte
+Archivoriginale bleiben vom exportierbaren Katalog getrennt.
 
-Vollständiger Abschlussbericht mit Dateiliste, Fehlercodes, D1–D4-Daten,
-Baud-Fundstellen und Testbefehlen:
+Prüfstand:
+
+- Angeforderte fünf Testdateien: **141 bestanden, ein natives Windows-Gate
+  übersprungen**. Einschließlich separater Prozessprüfung der späteren
+  Vierkanal-Aktivierung mit Export- und Kontextmetadaten.
+- Ruff, `git diff --check`, OQ-Index, Tour-Fakten und Wiki-Check bestanden.
+- Unabhängiges Review: keine kritischen, wichtigen oder kleinen Befunde.
+- Gesamte Brücken-Suite: **589 bestanden, vier übersprungen, 14 fehlgeschlagen**.
+  Dreizehn Fälle in `test_app_controller_integration.py` und `test_transports.py`
+  benötigen Sockets, die die Sandbox verbietet (`PermissionError: [Errno 1]`);
+  dazu gehört der Versionswächter, der schon `network_unavailable` erhält.
+  Ein Unterprozessfall in `test_worker.py` findet das Brückenpaket ohne
+  `PYTHONPATH` nicht; separat mit `PYTHONPATH=src:../../src` bestanden.
+  Alle Fehlernamen und die vollständige Dateiliste stehen im Abschlussbericht
+  `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-catalog-abschluss.txt`.
+
+Offen bleibt die Senderumstellung von Pi/Brücke auf das Vierkanalformat sowie
+die anschließende Windows-/GSVmulti-Abnahme. `prepared` wird hier nicht aktiviert.
+„Record Hidden Channels“ muss in GSVmulti selbst eingeschaltet werden; die UCF
+kann diese Einstellung nicht speichern. Die vorherigen UX2-Backend- und
+parallelen UI-Arbeiten bleiben eigenständige Aufträge; Details des ursprünglichen
+Backend-Abschlusses stehen in
 `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-backend-abschluss.txt`.
-Offen bleiben der separate UI-Abschluss (neue Varianten und Fehlercodes),
-Tests außerhalb der Socket-Sandbox sowie native Windows-/GSVmulti-Prüfung
-(N3/OQ-53). Pi und Windows-Brücke müssen für die neue UART-Rate gemeinsam
-aktualisiert werden.

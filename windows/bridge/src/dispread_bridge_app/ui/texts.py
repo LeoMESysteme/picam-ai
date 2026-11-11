@@ -24,6 +24,11 @@ TEST_RELEASE_LINE = ('Testfreigabe – nicht abgenommen, keine Messfreigabe. Ung
 TEST_RELEASE_HINT = ('Der Pi-Bediener hat echte Werte ausdrücklich zum Test freigegeben. Das ist keine Abnahme '
                      'und kein Nachweis des GSVmulti-Empfangs.')
 NO_PI = 'Kein Pi gekoppelt · Weg noch offen'
+DIRECT_TITLE = 'UART direkt – Adapter noch offen'
+NO_PI_WAY_SET = 'Kein Pi gekoppelt'
+DIRECT_DUT_LINE = 'Die Brücke gibt in diesem Weg keine Werte weiter – Messfreigabe nicht durch die Brücke'
+DIRECT_UNUSED = 'nicht benutzt'
+DIRECT_UNUSED_SUB = 'UART direkt'
 SCREEN_READER = {'ok': 'Erfolg:', 'warn': 'Achtung:', 'err': 'Fehler:', 'info': 'Hinweis:',
                  'unclear': 'Unklar:', 'unused': 'Nicht benutzt:'}
 STEPS = ('Komponenten', 'Pi koppeln', 'Verbinden', 'Session', 'Empfangstest')
@@ -61,6 +66,24 @@ MODE_TEXT = {
     'network': ('Netzwerk über Brücke', 'Der Pi ist über LAN oder Tailscale verbunden, verschlüsselt. '
                 'Die Brücke gibt die Werte an GSVmulti weiter.'),
 }
+
+
+def baud_text(baud: int | None) -> str:
+    """„<Rate> Baud, 8N1“ aus dem Kontext; ohne bekannte Rate nur „8N1“ (nie geraten)."""
+    return f'{baud} Baud, 8N1' if baud else '8N1'
+
+
+def mode_text(mode: str, ctx: UiContext | None = None) -> tuple[str, str]:
+    """(Name, Erklärung) eines Wegs; Raten kommen aus dem Kontext, nie fest aus dem Text."""
+    name, text = MODE_TEXT[mode]
+    if ctx is not None:
+        if mode == 'uart_bridge' and ctx.uart_baud:
+            text += f' UART mit {ctx.uart_baud} Baud.'
+        elif mode == 'uart_direct' and ctx.gsv_baud:
+            text += f' GSVmulti liest mit {ctx.gsv_baud} Baud.'
+    return name, text
+
+
 CHIP_ICON = {'components': 'cube', 'uart': 'serial_port', 'pi': 'developer_board', 'output': 'arrow_export_ltr',
              'forward': 'arrow_forward', 'gsv': 'data_line'}
 CHIP_HELP = {
@@ -80,6 +103,7 @@ CHIP_HELP = {
 HEARTBEAT_ALIVE = 'Kontakt zum Pi – der Punkt pulsiert bei jedem Austausch. Das sagt nichts über die Weitergabe.'
 HEARTBEAT_IDLE = 'Kein Kontakt zum Pi.'
 HEARTBEAT_BUSY = 'Verbindung zum Pi wird aufgebaut …'
+HEARTBEAT_RETRY = 'Keine Antwort – die Brücke versucht es automatisch erneut …'
 SETTINGS = 'Einstellungen'
 EXPORT_LOGS = 'Protokolle exportieren'
 INFO = 'Info'
@@ -96,6 +120,8 @@ EXPORT_NOTE = ('Die Protokolle halten fest, was die Brücke getan hat. Sie prüf
 EXPORT_LOADING = 'Inhalt wird ermittelt …'
 EXPORT_UNKNOWN = 'Inhalt nicht verfügbar – das Paket wird trotzdem vollständig gespeichert.'
 EXPORT_SAVE = 'Speichern unter …'
+EXPORT_SAVE_AGAIN = 'Erneut speichern …'
+CLOSE = 'Schließen'
 EXPORT_SAVING = 'Wird gespeichert …'
 EXPORT_DONE = 'Protokolle gespeichert'
 EXPORT_FAILED = 'Speichern fehlgeschlagen'
@@ -105,6 +131,95 @@ OPEN_FOLDER = 'Ordner öffnen'
 EXPORT_DIALOG = 'Protokolle speichern'
 AUTO_CONNECT = 'Beim Start automatisch mit {pi} verbinden'
 ICON_CREDIT = 'Symbole: Fluent UI System Icons, © Microsoft Corporation, MIT-Lizenz'
+
+# ---- UX2 Runde 2: Prüfen, Moduswahl, Einstellungen, Session
+CHECKING = 'Wird geprüft …'
+CHECK_FAILED = 'Prüfung nicht möglich'
+CHECK_FAILED_DETAIL = 'Erneut versuchen; bei Wiederholung die Protokolle exportieren.'
+LEAVE_SETUP = 'Einrichtung verlassen'
+RESCAN_TIP = 'Suche wiederholen'
+RESCAN_PORTS_TIP = 'Ports neu einlesen'
+MODES_TITLE = 'Weg wählen'
+MODES_LEAD = 'Wie kommen die Werte vom Pi zu GSVmulti?'
+MODE_ACTIVE = 'Aktiv'
+MODE_SWITCH = 'Wechseln'
+MODE_CANCEL = 'Abbrechen'
+MODE_IS_ACTIVE = 'Dieser Weg ist bereits aktiv.'
+MODE_UNCONFIGURED_HINT = 'Ein Wechsel startet die Einrichtung dieses Wegs.'
+MODE_LOCKED_TITLE = 'Weg während der Übertragung gesperrt'
+MODE_LOCKED_TEXT = 'Beenden Sie zuerst die Übertragung; dann lässt sich der Weg wechseln.'
+MODE_LOADING = 'Wege werden gelesen …'
+CHANGE_SETUP = 'Einrichtung erneut durchlaufen …'
+NOT_SET_UP_TITLE = 'Nicht eingerichtet'
+NOT_SET_UP_TEXT = 'Der gewählte Weg ist noch nicht fertig eingerichtet. Bis dahin überträgt die Brücke nichts.'
+NOT_SET_UP_NO_WAY = 'Es ist noch kein Weg gewählt. Bis dahin überträgt die Brücke nichts.'
+START_SETUP = 'Einrichtung starten'
+SETTINGS_LOCKED = 'Während der Übertragung schreibgeschützt – Anzeige und Kopieren bleiben möglich.'
+SETTINGS_LOCKED_SHORT = 'Schreibgeschützt, solange die Brücke überträgt'
+SETTINGS_WAY = 'Weg'
+SETTINGS_PI = 'Pi'
+SETTINGS_PORTS = 'Ports'
+SETTINGS_SESSION = 'GSVmulti-Session'
+SETTINGS_LOGS = 'Protokolle'
+SETTINGS_ABOUT = 'Über'
+SETTINGS_CHOOSE_WAY = 'Weg wählen …'
+SETTINGS_ENDPOINT = 'Endpunkt'
+SETTINGS_TAKE_OVER = 'Übernehmen'
+SETTINGS_PORTS_NOTE = ('Nach einer Änderung muss die GSVmulti-Session neu erzeugt oder bestätigt werden.')
+SETTINGS_DIRECT_PI = ('Im Weg „UART direkt“ verbindet sich die Brücke nicht mit dem Pi; GSVmulti liest den '
+                      'Adapter selbst.')
+SETTINGS_LOGS_TEXT = 'Speichert, was die Brücke getan hat – ohne Messwerte und ohne Zugangsdaten.'
+SETTINGS_LOGS_BUTTON = 'Protokolle exportieren …'
+PORT_BRIDGE = 'Brückenseite (hier schreibt die Brücke)'
+PORT_GSV = 'GSVmulti-Seite (hier hört GSVmulti)'
+PORT_CHOOSE = 'Bitte wählen …'
+ADAPTER = 'USB-Adapter'
+NO_ADAPTER = 'Kein USB-Seriell-Adapter gefunden. Stecken Sie ihn an und suchen Sie erneut.'
+NO_PORTS = 'Keine COM-Ports gefunden.'
+SESSION_MAKE = 'Session-Datei erzeugen …'
+SESSION_DIALOG = 'GSVmulti-Session speichern'
+SESSION_SAVING = 'Session-Datei wird erzeugt …'
+SESSION_DONE = 'Session-Datei erzeugt'
+SESSION_PATH = 'Datei'
+SESSION_PORT = 'Port in der Session'
+SESSION_TEMPLATE = 'Vorlage'
+SESSION_NOT_ACCEPTED = ('Nicht abgenommen – erst nach Öffnen in GSVmulti und dem Empfangstest belegt.')
+SESSION_WHAT = ('Kopie der geprüften Session aus dem Testlauf vom 06.11.2026; geändert wird nur der Port. '
+                'Vorhandene GSVmulti-Sessions bleiben unverändert.')
+SESSION_HOWTO = ('In GSVmulti öffnen: GSVmulti starten, die erzeugte Datei (.ucf) als Session öffnen und '
+                 'prüfen, dass der Kanal auf {port} steht. Ob GSVmulti die Werte empfängt, zeigt erst der '
+                 'Empfangstest.')
+SESSION_NO_PORT = 'Erst den Port festlegen (Portpaar oder USB-Adapter).'
+SESSION_FAILED = 'Session-Datei nicht erzeugt'
+SESSION_AGAIN = 'Neu erzeugen …'
+RECORD_HIDDEN = ('In GSVmulti: Configure Recording → Advanced → ‚Record Hidden Channels‘ einschalten. Diese '
+                 'Einstellung steht nicht in der Session-Datei; ohne sie fehlen die ausgeblendeten Kanäle '
+                 '(Gültigkeit, Sequenz, Zeit) still in der Aufnahme.')
+RECORD_HIDDEN_OK = 'Habe ich eingeschaltet'
+AUTOSCALE_HINT = ('Für Kanal {channel} ‚Autoscale Y‘ ausschalten und Min/Max fest einstellen, damit Fehlwerte '
+                  'sichtbar über den Rand gehen.')
+SINGLE_CHANNEL_WARNING = ('Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden '
+                          'keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der '
+                          'Aufnahme sind deshalb nicht genau.')
+
+
+def gsv_channel(port: str | None) -> str | None:
+    """GSVmulti-Kanalbezeichnung aus dem Port: COM8 -> „8_1“ (erster Kanal der Session)."""
+    m = _re.fullmatch(r'COM(\d+)', port or '')
+    return f'{m.group(1)}_1' if m else None
+
+
+def autoscale_hint(port: str | None) -> str:
+    ch = gsv_channel(port)
+    return AUTOSCALE_HINT.format(channel=ch) if ch else ''
+
+
+def single_channel_warning(ctx) -> str:
+    """F3: nur bei Einkanal-Vorlage auf einem Brückenweg; unbekannte Kanalzahl -> nichts."""
+    if getattr(ctx, 'session_channels', None) == 1 and ctx.route_mode in ('uart_bridge', 'network'):
+        return SINGLE_CHANNEL_WARNING
+    return ''
+RECORD_HIDDEN_GATE = 'Erst „Record Hidden Channels“ in GSVmulti einschalten und bestätigen'
 # Werte, die als kopierbares Feld (Daten, Mono) erscheinen
 TECH_FIELDS = frozenset({'Pi-ID', 'Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Protokoll', 'Brückenseite',
                          'GSVmulti-Seite', 'Gegenport', 'App-Version', 'Version', 'Session', 'Portpaar', 'Code',
@@ -150,6 +265,7 @@ class ChipView:
     details: tuple[tuple[str, str], ...] = ()
     hint: str = ''
     actions: tuple[tuple[str, str, bool, str], ...] = ()    # (Beschriftung, Aktions-ID, aktiv, Grund wenn inaktiv)
+    warn: str = ''            # Achtung-Hinweis im Detailfenster (z. B. F3 Einkanal-Ausgabe)
 
 
 @dataclass(frozen=True)
@@ -236,6 +352,18 @@ ERROR_TEXT = {
     'endpoint_unsupported': ('Adresse nicht unterstützt', 'Erlaubt sind direkte https-Adressen ohne Proxy und Pfadpräfix.'),
     'run_active': (RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT),
     'demo_rejected': (RUN_ACTIVE_TITLE, RUN_ACTIVE_TEXT),
+    'mode_locked': ('Während der Übertragung gesperrt',
+                    'Weg, Pi-Adresse und Adapter lassen sich erst nach dem Ende der Übertragung ändern.'),
+    'adapter_required': ('USB-Adapter nicht bereit',
+                         'Wählen Sie den Adapter und warten Sie, bis seine Prüfung bestanden ist.'),
+    'session_required': ('Session-Datei fehlt',
+                         'Erzeugen Sie die Session-Datei für den gewählten Port; danach geht es weiter.'),
+    'session_port_invalid': ('Port für die Session ungültig',
+                             'Erlaubt sind COM1 bis COM256. Legen Sie den Port neu fest.'),
+    'session_write_failed': ('Session-Datei nicht gespeichert',
+                             'Der Ort ist nicht beschreibbar. Wählen Sie einen anderen Ordner.'),
+    'setup_changed': ('Einrichtung inzwischen geändert',
+                      'Die Prüfung gehörte zu einer älteren Auswahl. Prüfen Sie die aktuelle Auswahl erneut.'),
 }
 
 
@@ -296,7 +424,20 @@ def _worker_active_failure(readiness: Readiness, worker: WorkerStatus | None) ->
     return None
 
 
+def _direct_adapter(ctx: UiContext) -> tuple[str, str]:
+    """(Zustandstext, Ton) des Adapters im direkten Weg; „steckt“ belegt nur USB-Präsenz."""
+    port = ctx.adapter_port or 'Adapter'
+    if ctx.adapter_present is None:
+        return 'Adapterzustand unbekannt', 'info'
+    if ctx.adapter_present:
+        return f'Adapter {port} steckt', 'info'
+    return f'Adapter {port} fehlt', 'warn'
+
+
 def headline(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> Headline:
+    if ctx.route_mode == 'uart_direct':
+        text, tone = _direct_adapter(ctx)
+        return Headline(f'UART direkt – {text}', tone)
     code = _worker_active_failure(readiness, worker)
     if code:
         return Headline(f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(code, "Code " + code)}', 'err')
@@ -337,13 +478,18 @@ def headline(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) 
 
 def head_title(ctx: UiContext) -> tuple[str, str]:
     """(Name, Weg); Name leer vor der Pi-Wahl."""
+    if ctx.route_mode == 'uart_direct':
+        # Direkter Weg: kein gekoppelter Pi, die Brücke kennt nur den Adapter.
+        return (f'USB-Adapter {ctx.adapter_port}' if ctx.adapter_port else DIRECT_TITLE), ''
     if not ctx.pi_name:
-        return NO_PI, ''
+        return (NO_PI if ctx.route_mode is None else NO_PI_WAY_SET), ''
     return ctx.pi_name, ctx.route or ''
 
 
 def dut_line(ctx: UiContext) -> tuple[str, str]:
     """Die Sperrzeile ist in jedem Zustand sichtbar."""
+    if ctx.route_mode == 'uart_direct':
+        return DIRECT_DUT_LINE, 'info'
     if ctx.test_release:
         return TEST_RELEASE_LINE, 'warn'
     if ctx.release and not ctx.dut_locked:
@@ -484,23 +630,50 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     else:
         gsv = ChipView('gsv', 'GSVmulti', 'Kanal einstellen', 'info',
                        'erhält im Lauf keine Werte' if _in_locked_run(peer_ok, ctx) else
-                       f'{ctx.gsv_port} · 115200 8N1 in GSVmulti' if ctx.gsv_port else 'Portpaar festlegen')
+                       f'{ctx.gsv_port} · {baud_text(ctx.gsv_baud).replace(" Baud,", "")} in GSVmulti'
+                       if ctx.gsv_port else 'Portpaar festlegen')
         ghint = ('Stellen Sie GSVmulti auf den Port der GSVmulti-Seite ein und bestätigen Sie das in der Einrichtung. '
                  'Nur der Empfangstest belegt Empfang.')
     gsv = ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, gsv.sub,
                    (('Session', ctx.session_name or '–'),
                     ('Empfangsnachweis', ctx.receipt.label if ctx.receipt and ctx.receipt.proven
-                     else 'nicht nachgewiesen')), ghint)
+                     else 'nicht nachgewiesen')), ghint, warn=single_channel_warning(ctx))
+    if ctx.route_mode == 'uart_direct':
+        return (comp, _direct_uart(ctx)) + tuple(
+            ChipView(k, n, DIRECT_UNUSED, 'unused', DIRECT_UNUSED_SUB, (('Weg', 'UART direkt'),),
+                     'Im Weg „UART direkt“ überträgt die Brücke nichts; dieser Punkt wird nicht benutzt.')
+            for k, n in (('pi', 'Pi'), ('output', 'Ausgabe'), ('forward', 'Weitergabe'))) + (
+            ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, 'Empfang nicht nachgewiesen' if gsv.tone != 'ok'
+                     else gsv.sub, gsv.details, gsv.hint, warn=''),)
     return (comp, uart, pi, out, fw, gsv)
 
 
-def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> ActionBar | None:
-    """Genau eine nächste Aktion, höchstens zwei Knöpfe."""
+def _direct_uart(ctx: UiContext) -> ChipView:
+    port = ctx.adapter_port or 'USB-Adapter'
+    if ctx.adapter_present is None:
+        word, tone, sub = 'Adapterzustand unbekannt', 'info', ''
+    elif ctx.adapter_present:
+        word, tone, sub = 'Adapter steckt', 'info', port
+    else:
+        word, tone, sub = 'Adapter fehlt', 'warn', port
+    return ChipView('uart', 'UART', word, tone, sub, (('Weg', 'UART direkt'), ('USB-Adapter', f'{port}: {word}')),
+                    'Zeigt nur, ob der USB-Seriell-Adapter am PC steckt. Ob GSVmulti Werte erhält, zeigt nur GSVmulti.')
+
+
+def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext,
+               configured: bool | None = None) -> ActionBar | None:
+    """Genau eine nächste Aktion, höchstens zwei Knöpfe. ``configured=False``: Weg nicht fertig eingerichtet."""
     code = _worker_active_failure(readiness, worker)
     if code:
         return ActionBar('err', f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(code, code)}',
                          'Die Brücke schreibt nichts mehr an COM. Protokolle exportieren und Ursache klären; '
                          'danach neu verbinden.', (('Protokolle exportieren', 'export_diagnostics', True),))
+    if ctx.route_mode == 'uart_direct':
+        if ctx.adapter_present is False:
+            return ActionBar('warn', f'Adapter {ctx.adapter_port or ""} fehlt – einstecken'.replace('  ', ' '), '',
+                             (('Weg wählen', 'open_modes', False),))
+        return ActionBar('info', f'GSVmulti liest {ctx.adapter_port or "den Adapter"} direkt.',
+                         'Die Brücke überträgt in diesem Weg nichts; ob Werte ankommen, zeigt nur GSVmulti.')
     notice = (ctx.setup.data.get('notice') if ctx.setup is not None else None)
     if notice:
         title, text = explain_code(notice)
@@ -520,6 +693,10 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
                                  'hat, ist offen. Nicht wiederholt, im Journal vermerkt.'),
         }.get(ctx.com_issue)
     peer = readiness.peer
+    if peer not in ('authenticated', 'connecting', 'backoff') and (configured is False or (
+            ctx.route_mode is None and configured is not None)):
+        return ActionBar('info', NOT_SET_UP_TITLE, NOT_SET_UP_NO_WAY if ctx.route_mode is None else NOT_SET_UP_TEXT,
+                         ((START_SETUP, 'start_setup', True),))
     if peer == 'backoff':
         t = f'Keine Antwort vom Pi seit {ctx.last_report}' if ctx.last_report else 'Keine Antwort vom Pi'
         return ActionBar('err', t, 'Die Brücke versucht es automatisch weiter; Details stehen beim Pi.',
@@ -587,7 +764,7 @@ def event_entry(event: BridgeEvent, ctx: UiContext | None = None, now: str = '')
 # ---------------------------------------------------------------- Einrichtung
 FP_PROFILE = '{fingerprint}'
 FP_OTHER = '{peer_fingerprint}'
-UART_WIRING = ('115200 Baud, 8N1, kein Handshake. TX des Adapters an RX des Pi, RX des Adapters an TX des Pi, '
+UART_WIRING = ('{uart_line}, kein Handshake. TX des Adapters an RX des Pi, RX des Adapters an TX des Pi, '
                'GND an GND. VCC, CTS und RTS bleiben frei.')
 _INV = ('statusrows', 'Bestandsaufnahme', (('Windows', 'Windows 11, 64 Bit – unterstützt', 'ok'),
                                            ('Brücke', '{version}', 'info')))
@@ -603,10 +780,17 @@ _NEXT = 'Weiter'
 _AUTO = ('check_dyn', 'Beim Start automatisch mit {pi_name} verbinden', 'auto_connect', 'auto_connect')
 
 
-def _s(step, lead, blocks, nxt=_NEXT, ready=False, back=True, header=None, gate=None):
-    """Ein Einrichtungszustand: Schritt, Leitsatz, Blöcke, Fuß. ``gate``: (Pflichtfeld, Grund) für „Weiter“."""
+STEPS_DIRECT = ('Adapter', 'Verdrahtung', 'Session', 'Fertig')
+STEP_SETS = {'bridge': STEPS, 'direct': STEPS_DIRECT}
+
+
+def _s(step, lead, blocks, nxt=_NEXT, ready=False, back=True, header=None, gate=None, steps='bridge'):
+    """Ein Einrichtungszustand: Schritt, Leitsatz, Blöcke, Fuß. ``gate``: (Pflichtfeld, Grund) für „Weiter“.
+
+    Pflichtfeld: Name eines Hakens, ``ports`` (beide Ports gewählt), ``check:<feld>`` (bestandene Prüfung)
+    oder ``data:<schlüssel>`` (Wert im Controllerzustand vorhanden)."""
     return dict(step=step, lead=lead, blocks=tuple(blocks), next=nxt, ready=ready, back=back, header=header,
-                gate=gate, next_action='next', freeze=False)
+                gate=gate, next_action='next', freeze=False, steps=STEP_SETS[steps])
 
 
 SETUP: dict[str, dict] = {
@@ -622,8 +806,7 @@ SETUP: dict[str, dict] = {
         ('info', 'warn', 'Portpaar manuell – nicht von der App geprüft',
          'Die App legt kein Portpaar an und ändert keines. Wählen Sie zwei verschiedene, bereits vorhandene '
          'COM-Ports, die zusammen ein Paar bilden (Brückenseite und GSVmulti-Seite).', ()),
-        ('combo_dyn', 'bridge_port', 'Brückenseite (hier schreibt die Brücke)'),
-        ('combo_dyn', 'gsv_port', 'GSVmulti-Seite (hier hört GSVmulti)'),
+        ('portpair_dyn',),
         ('button', 'Portpaar übernehmen', 'set_port_pair', True)], back=False,
         gate=('ports', 'Erst beide COM-Ports wählen (zwei verschiedene)')),
     'E1uac': _s(1, 'Schritt 1 von 5: Komponenten prüfen.', [
@@ -677,8 +860,7 @@ SETUP: dict[str, dict] = {
         ('text', 'Ein gefundener Name ist kein Identitätsnachweis. Erst die Prüfung gegen das Profil bestätigt den Pi.'),
         ('entry', 'Adresse oder Name manuell eintragen',
          'Tailscale wird nur benutzt, wenn Sie hier den Tailscale-Namen oder die Adresse eintragen. Ohne Tailscale '
-         'braucht es ein gemeinsames Netz oder die VPN-Route Ihrer IT.'),
-        ('button', 'Suche wiederholen', 'rescan', False)], nxt='Verbinden', ready=True),
+         'braucht es ein gemeinsames Netz oder die VPN-Route Ihrer IT.')], nxt='Verbinden', ready=True),
     'E3err': _s(3, 'Schritt 3 von 5: Verbindung herstellen.', [
         ('error_code', 'code', 'Verbindung nicht möglich')], nxt='Verbinden'),
     'E3uart': _s(3, 'Schritt 3 von 5: Weg zum Pi wählen.', [
@@ -700,21 +882,21 @@ SETUP: dict[str, dict] = {
         ('info', 'err', 'Adapter erkannt, Pi antwortet nicht',
          'Der USB-Adapter ist da, aber der Pi hat nicht geantwortet. Mögliche Ursachen:', (('Erneut versuchen', 'reconnect', True),)),
         ('bullets', ('Der Pi-Dienst läuft nicht.', 'TX, RX oder GND sind nicht richtig verbunden.',
-                     'Die Parameter stimmen nicht (115200 Baud, 8N1).')),
+                     'Die Parameter stimmen nicht ({uart_line}).')),
         ('card', '', (('Adapter', 'USB-Seriell-Adapter · COM6'), ('USB-Ort', 'Port 3'),
-                      ('Parameter', '115200 Baud, 8N1, kein Handshake')))], header='uart'),
-    'E4locked': _s(4, 'Schritt 4 von 5: GSVmulti manuell einrichten.', [
-        ('info', 'warn', 'Automatische Session noch nicht freigegeben',
-         'Es wird keine Sessiondatei erzeugt. Stellen Sie GSVmulti von Hand ein.', ()),
-        ('card', 'In GSVmulti einstellen', (('Gerät', 'UserDef (benutzerdefiniert)'), ('COM-Port', '{gsv_port}'),
-                                           ('Übertragung', '115200 Baud, 8N1'),
-                                           ('Kanäle', '1 Kanal – ein „Kanal“ ist ein Messkanal der Session; '
-                                                      'die Brücke liefert einen einzigen Wertestrom.'),
-                                           ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz'))),
+                      ('Parameter', '{uart_line}, kein Handshake')))], header='uart'),
+    'E4locked': _s(4, 'Schritt 4 von 5: GSVmulti-Session.', [
+        ('session', 'gsv_port'),
+        ('card', 'In GSVmulti einstellen – ohne Session-Datei', (
+            ('Gerät', 'UserDef (benutzerdefiniert)'), ('COM-Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'),
+            ('Kanäle', '1 Kanal – ein „Kanal“ ist ein Messkanal der Session; die Brücke liefert einen einzigen '
+                       'Wertestrom.'),
+            ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz'))),
         ('text', 'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen).'),
         ('text', 'Legen Sie eine neue Testsession an und speichern Sie sie unter eigenem Namen.'),
         ('text', 'Ob GSVmulti die Einstellungen übernimmt, belegt erst der Empfangstest.'),
-        ('check_dyn', 'In GSVmulti eingestellt: Kanal auf {gsv_port}, 115200 8N1.', 'session_ok', 'session_confirmed')],
+        ('check_dyn', 'Session in GSVmulti geöffnet bzw. Kanal auf {gsv_port}, {gsv_line} eingestellt.',
+         'session_ok', 'session_confirmed')],
         nxt='Weiter', gate=('session_ok', 'Erst bestätigen, dass GSVmulti eingestellt ist')),
     'E4': _s(4, 'Schritt 4 von 5: GSVmulti-Session erzeugen.', [
         _PORTS, ('text', 'Die Session verweist auf {gsv_port}. Vorhandene GSVmulti-Sessions bleiben unverändert.'),
@@ -732,7 +914,7 @@ SETUP: dict[str, dict] = {
          'Für diese Version gibt es keine geprüfte Vorlage. Es wird keine Sessiondatei erzeugt. '
          'Die manuelle Anleitung ist eingeschränkt.', ()),
         ('card', 'Manuelle Anleitung (eingeschränkt)', (('', 'Stellen Sie in GSVmulti selbst ein:'),
-                                                       ('Port', '{gsv_port}'), ('Baudrate', '115200'),
+                                                       ('Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'),
                                                        ('Format', '8N1, kein Handshake'))),
         ('text', 'Die Menüführung Ihrer GSVmulti-Version ist nicht geprüft. Ob GSVmulti die Einstellungen '
                  'übernimmt, belegt erst der Empfangstest.'),
@@ -778,6 +960,29 @@ SETUP: dict[str, dict] = {
          'Zwei Werte der Testdatei stimmen nicht mit dem Test überein. Der Empfang ist für diese Datei nicht belegt.',
          (('Test wiederholen', 'start_demo_check', True),)),
         ('card', 'Fehlende Werte', (('Nr. 211', 'fehlt in der Testdatei'), ('Nr. 212', 'fehlt in der Testdatei')))]),
+    # ---- UART direkt (Einrichtungshelfer, kein Worker, keine Kopplung)
+    'D1': _s(1, 'Schritt 1 von 4: USB-Seriell-Adapter wählen.', [
+        ('text', 'Das Kabel vom Pi steckt über einen USB-Seriell-Adapter an diesem PC. GSVmulti liest den Adapter '
+                 'später selbst; die Brücke überträgt in diesem Weg nichts.'),
+        ('adapter_pick', 'USB-Adapter')], ready=True, back=False, steps='direct',
+        gate=('check:adapter', 'Erst einen Adapter wählen und seine Prüfung abwarten')),
+    'D2': _s(2, 'Schritt 2 von 4: Verdrahtung prüfen.', [
+        ('adapter_state',),
+        ('card', 'Verdrahtung', (('Übertragung', '{gsv_line}, kein Handshake – wie in der GSVmulti-Session'),
+                                 ('Leitungen', 'TX des Adapters an RX des Pi, RX des Adapters an TX des Pi, GND an '
+                                               'GND. VCC, CTS und RTS bleiben frei.'))),
+        ('text', 'Die Brücke prüft die Verdrahtung nicht. Ob Werte ankommen, zeigt erst GSVmulti.')],
+        ready=True, steps='direct'),
+    'D3': _s(3, 'Schritt 3 von 4: GSVmulti-Session erzeugen.', [
+        ('session', 'adapter_port')], ready=True, steps='direct',
+        gate=('data:session_path', 'Erst die Session-Datei für diesen Adapter erzeugen')),
+    'D4': _s(4, 'Schritt 4 von 4: Fertig.', [
+        ('info', 'info', 'Weg „UART direkt“ eingerichtet ({adapter_port})',
+         'Öffnen Sie die erzeugte Session in GSVmulti; GSVmulti liest den Adapter dann selbst. Die Brücke zeigt '
+         'danach nur, ob der Adapter steckt; die Werte laufen an ihr vorbei. Ob Werte ankommen, zeigt erst '
+         'GSVmulti.', ()),
+        ('adapter_state',),
+        ('session', 'adapter_port')], nxt='Fertig', ready=True, steps='direct'),
 }
 
 
@@ -839,8 +1044,11 @@ def setup_spec(ctx, locked=False):
     """SETUP-Zustand mit Werten aus ctx (und ctx.setup.data) gefüllt."""
     m = dict(bridge_port=ctx.bridge_port, gsv_port=ctx.gsv_port, version=ctx.version, protocol=ctx.protocol,
              pi_name=ctx.pi_name, pi_id=ctx.pi_id, endpoint=ctx.endpoint, fingerprint=ctx.fingerprint,
-             session_name=ctx.session_name)
+             session_name=ctx.session_name, adapter_port=ctx.adapter_port,
+             uart_line=baud_text(ctx.uart_baud), gsv_line=baud_text(ctx.gsv_baud))
     data = ctx.setup.data
+    if data.get('gsv_baud') and not ctx.gsv_baud:
+        m['gsv_line'] = baud_text(data['gsv_baud'])
     m.update({k: v for k, v in data.items() if isinstance(v, (str, int, float))})
     spec = dict(SETUP[ctx.setup.variant])
     blocks = []
@@ -852,10 +1060,15 @@ def setup_spec(ctx, locked=False):
             if items is None:
                 items = tuple((p, 'vorhandener COM-Port', p == (ctx.bridge_port if name == 'bridge_port' else
                                                               ctx.gsv_port)) for p in data.get('ports', ()))
-            if not items:
+            if not items and name not in RESCAN_LISTS:
                 blocks.append(('text', EMPTY_CHOICE.get(name, 'Keine Einträge gefunden.')))
             else:
                 blocks.append(('radios', name, tuple(items), heading))
+        elif kind == 'portpair_dyn':
+            ports = tuple(data.get('ports', ()))
+            cur_b = ctx.bridge_port if ctx.bridge_port in ports else None
+            cur_g = ctx.gsv_port if ctx.gsv_port in ports else None
+            blocks.append(('portpair', ports, cur_b, cur_g))
         elif kind == 'combo_dyn':
             name, heading = blk[1], blk[2]
             ports = tuple(data.get('ports', ()))
@@ -866,6 +1079,23 @@ def setup_spec(ctx, locked=False):
                 blocks.append(('combo', name, heading, ports, current if current in ports else None))
         elif kind == 'check_dyn':
             blocks.append(('check', blk[1], blk[2], bool(data.get(blk[3]))))
+        elif kind == 'session':
+            port = data.get(blk[1]) or getattr(ctx, blk[1], None)
+            path = data.get('session_path') if 'session_path' in data else None
+            name = path.replace('\\', '/').rsplit('/', 1)[-1] if path else ctx.session_name
+            blocks.append(('session', port, name, path))
+        elif kind == 'adapter_pick':
+            items = tuple(data.get('adapter_items') or ())
+            blocks.append(('adapter_pick', blk[1], items, ctx.adapter_port or data.get('adapter_port')))
+        elif kind == 'adapter_state':
+            port = ctx.adapter_port or data.get('adapter_port')
+            present = data.get('adapter_present', ctx.adapter_present)
+            if port is None:
+                blocks.append(('statusrows', 'USB-Adapter', (('Adapter', 'nicht gewählt', 'warn'),)))
+            else:
+                word, tone = ({True: ('steckt', 'ok'), False: ('fehlt – Adapter einstecken', 'err')}
+                              .get(present, ('Präsenz unbekannt', 'info')))
+                blocks.append(('statusrows', 'USB-Adapter', ((port, word, tone),)))
         elif kind == 'error_code':
             title, text = explain_code(data.get('code'))
             blocks.append(('info', 'err', title if title != 'Unbekannt' else 'Unbekannt',
@@ -875,6 +1105,9 @@ def setup_spec(ctx, locked=False):
     if ctx.setup.variant == 'E1manual' and data.get('unverified'):
         blocks[0] = ('info', 'warn', *UNVERIFIED_PAIR, ())
     blocks = list(fill(tuple(blocks), m))
+    gate = spec.get('gate')
+    if gate is not None and gate[0].startswith('data:'):
+        spec['gate'] = None if data.get(gate[0][5:]) else ('blocked', gate[1])
     if ctx.setup.variant in STEP3_SELECT:
         pre, foot = _step3_head(ctx, data)
         blocks = pre + blocks
@@ -892,6 +1125,7 @@ def setup_spec(ctx, locked=False):
     return spec
 
 
+RESCAN_LISTS = ('found', 'adapter')      # Listen mit Symbolknopf „Suche wiederholen“ daneben
 EMPTY_CHOICE = {'found': 'Keine Adresse im Profil und nichts gefunden. Tragen Sie unten eine Adresse ein.',
                 'adapter': 'Kein unterstützter USB-Seriell-Adapter gefunden. Stecken Sie ihn an und suchen Sie erneut.',
                 'bridge_port': 'Keine COM-Ports gefunden.', 'gsv_port': ''}

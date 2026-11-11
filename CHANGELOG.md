@@ -5,6 +5,26 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Windows-Brücke: belegter Session-Vorlagenkatalog.** Einkanal-COM8
+  bleibt aktiv; Vierkanal-Vorlage mit drei ausgeblendeten Kanälen ist SHA-gepinnt
+  als `prepared` paketiert und nur ausdrücklich für Entwickler erzeugbar.
+  Portersetzung erhält alle übrigen Bytes; Kanal-/Aufnahmehinweise und gemeinsame
+  GSVmulti-Baudrate werden aus den Vorlagen gelesen. Pi/Brücke senden weiterhin
+  das bisherige Format; keine zusätzliche Empfangs- oder Messfreigabe.
+
+* 2026-11-11: **Windows-Brücke UX2, Runde UI-2: Moduswahl, Einstellungen, geprüfte Eingaben, UART direkt.**
+  Moduswahl-Fenster (drei Karten, Radio-Semantik, „Wechseln“ → `select_mode`, öffnet sich beim ersten Start ohne
+  Weg einmal selbst) und Einstellungen-Fenster (Weg · Pi · Ports · GSVmulti-Session · Protokolle · Über; während
+  der Übertragung schreibgeschützt). Neuer Baustein `ValidatedField`: echte `check_*`-Prüfung im Pool, 500 ms nach
+  dem Tippen bzw. sofort bei Auswahl, veraltete Ergebnisse verworfen, „ok“ nur nach bestandener Prüfung.
+  Einrichtung: „Einrichtung verlassen“, Prüffelder für Adresse/Portpaar/Adapter/Kopplungscode, „Suche wiederholen“
+  als Symbolknopf, „Gespeichert“-Zeile, Schrittwechsel-Überblendung, Varianten D1–D4 für „UART direkt“ (4 Schritte),
+  echter Knopf „Session-Datei erzeugen …“ statt der Sperre. Erzeugte Sessions gelten als nicht abgenommen
+  (nie grün); Pflichthinweis „Record Hidden Channels“ nur bei `record_hidden_required`, Einkanal-Warnung (F3) bei
+  `session_channels == 1` auf Brückenwegen. Feste Baudraten in Texten ersetzt (Pi↔Brücke `uart_baud`, GSVmulti
+  `gsv_baud`). Ursache des leeren Portpaar-Auswahlfelds: `context()` liest die Portliste nur aus dem Cache; die
+  Oberfläche liest sie jetzt selbst im Pool nach. Keine Windows-Abnahme in dieser Session.
+
 * 2026-11-11: **Windows-Brücke UX2: Backend und belegter Session-Generator.** Drei Wege
   (`network`, `uart_bridge`, `uart_direct`), direkter Einrichtungshelfer ohne Kopplung/Worker,
   begrenzte Eingabeprüfungen mit gemeinsamem TLS-Pin-Prüfer und gecachte Adapterpräsenz.

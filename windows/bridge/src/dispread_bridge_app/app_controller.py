@@ -35,7 +35,8 @@ from .delivery_journal import DeliveryJournal, DiagnosticStore
 from .input_checks import InputChecks
 from .port_inventory import PortInventory, serial_ports
 from .readiness import Readiness
-from .session_export import GSVMULTI_BAUD, TEMPLATE_ID, generate_session
+from .session_export import GSVMULTI_BAUD, TEMPLATE_CHANNELS, TEMPLATE_ID, generate_session
+from .session_templates import SessionTemplateError, active_session_template
 from .types import InstallResult, PortPair, valid_port_name
 from .ui.port import MODES, CheckResult, JournalEntry, ModeInfo, SessionExport, SetupState, UiContext
 from .vcom import VcomAdapter, VcomUnverifiedError
@@ -377,6 +378,8 @@ class AppController:
         self._adapter_id = data.get('adapter_id') if isinstance(data.get('adapter_id'), str) else None
         self._session_confirmed = data.get('session_confirmed') is True
         legacy_done = data.get('setup_done') is True and self._profile is not None and self._pair is not None
+        if legacy_done and self._route_mode is None:
+            self._route = self._route_mode = 'network'
         if legacy_done and self._route_mode in ('network', 'uart_bridge'):
             self._configured_modes.add(self._route_mode)
         if self._profile is None or self._pair is None:
@@ -879,6 +882,9 @@ class AppController:
                                                     else self._pair.gsv_port if self._pair else None)
         try:
             raw = generate_session(chosen)
+            template = active_session_template()
+        except SessionTemplateError:
+            raise AppError('session_template_invalid') from None
         except ValueError:
             raise AppError('session_port_invalid') from None
         destination = Path(destination)
@@ -890,7 +896,9 @@ class AppController:
             self._sessions.setdefault(export_mode, {})[chosen] = str(destination)
             self._restore_session()
             self._save_state()
-        return SessionExport(destination, chosen, TEMPLATE_ID, sha256(raw).hexdigest())
+        return SessionExport(destination, chosen, template.spec.template_id, sha256(raw).hexdigest(),
+                             channels=template.channels, hidden_channels=template.hidden_channels,
+                             record_hidden_required=template.record_hidden_required)
 
     def confirm_session(self, on: bool) -> None:
         with self._lock:
@@ -958,6 +966,8 @@ class AppController:
             self._finish()
 
     def _finish(self) -> None:
+        if self._route_mode is None and self._profile is not None:
+            self._route = self._route_mode = 'network'
         self._setup_done, self._step = True, 5
         if self._route_mode:
             self._configured_modes.add(self._route_mode)
@@ -1161,7 +1171,7 @@ class AppController:
                 setup_leavable=True, activity_seq=self._activity_seq,
                 uart_baud=p.uart_baud if p else UART_BAUD, gsv_baud=GSVMULTI_BAUD,
                 adapter_port=self._adapter_port, adapter_present=self._ports.present(self._adapter_port),
-                session_template=TEMPLATE_ID,
+                session_template=TEMPLATE_ID, session_channels=TEMPLATE_CHANNELS,
                 paired=((p.name, p.pi_id, 'gekoppelt'),) if p and self._is_paired() else (),
                 journal=journal, last_report=self._last_contact, last_ack=self._last_ack)
 

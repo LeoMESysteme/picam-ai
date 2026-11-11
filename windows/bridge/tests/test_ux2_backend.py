@@ -85,6 +85,45 @@ def test_leave_setup_keeps_incomplete_state_and_legacy_route(tmp_path):
     assert make(tmp_path).context().route_mode == "uart_bridge"
 
 
+def test_finish_without_selected_route_configures_network(tmp_path, identity):
+    c = make(tmp_path)
+    try:
+        c.set_port_pair("COM4", "COM5")
+        c.load_profile(profile_bytes(identity))
+        c.setup_step("finish")
+        assert c.context().route_mode == "network"
+        assert next(m for m in c.modes() if m.mode == "network").configured
+        c2 = make(tmp_path)
+        try:
+            assert c2.context().mode == "operate"
+            assert c2.context().route_mode == "network"
+        finally:
+            c2.request_exit(True)
+    finally:
+        c.request_exit(True)
+
+
+@pytest.mark.parametrize("route", [None, "network", "uart"])
+def test_legacy_finished_setup_restores_implicit_or_explicit_route(tmp_path, identity, route):
+    c = make(tmp_path)
+    c.set_port_pair("COM4", "COM5")
+    c.load_profile(profile_bytes(identity))
+    c.request_exit(True)
+    state = json.loads(c._state_path.read_text())
+    state.pop("route_mode")
+    state.pop("configured_modes")
+    state.update(setup_done=True, route=route)
+    c._state_path.write_text(json.dumps(state))
+    c2 = make(tmp_path)
+    try:
+        expected = "uart_bridge" if route == "uart" else "network"
+        assert c2.context().route_mode == expected
+        assert c2.context().mode == "operate"
+        assert next(m for m in c2.modes() if m.mode == expected).configured
+    finally:
+        c2.request_exit(True)
+
+
 def test_active_worker_locks_mode_endpoint_and_adapter(tmp_path):
     c = make(tmp_path)
     c._worker = SimpleNamespace(is_active=lambda: True, status=SimpleNamespace(active=True))
@@ -374,3 +413,9 @@ def test_inactive_direct_completion_survives_restart(tmp_path):
     c2 = make(tmp_path, list_ports=lambda: [usb()])
     c2.select_mode("uart_direct")
     assert c2.context().mode == "operate" and c2.context().session_name == "direct9.ucf"
+
+
+def test_context_reports_active_template_channels_for_single_channel_warning(tmp_path):
+    # F3-Warnung der Oberfläche hängt an session_channels; die aktive Vorlage ist einkanalig.
+    c = make(tmp_path)
+    assert c.context().session_channels == 1

@@ -162,6 +162,9 @@ QLabel[typo="caption_strong"] {{ font-size: 9pt; font-weight: 600; }}
 QLabel[typo="data"] {{ font-family: {MONO_QSS}; font-size: 9pt; }}
 QFrame.Card, QFrame[card="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 QFrame[card="true"] QLabel {{ background: transparent; border: none; }}
+QFrame[card="true"][selected="true"] {{ border: 1px solid {t['accent']}; }}
+QFrame[card="true"][dimmed="true"] QLabel[typo="body_strong"] {{ color: {t['text2']}; }}
+QFrame[card="true"] QLabel[badge="true"] {{ border: 1px solid {t['stroke_strong']}; }}
 QFrame#footer {{ background: {t['mica2']}; border-top: 1px solid {t['stroke']}; }}
 QFrame#segmented {{ background: {t['mica2']}; border-radius: 4px; }}
 QPushButton, QToolButton {{ background: {t['ctrl']}; border: 1px solid {t['ctrl_stroke']}; border-radius: 4px;
@@ -198,6 +201,12 @@ QLineEdit {{ background: {t['ctrl']}; border: 1px solid {t['ctrl_stroke']}; bord
   border-radius: 4px; padding: 5px 8px; selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
 QLineEdit:focus {{ border-bottom: 2px solid {t['accent']}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
+QRadioButton::indicator {{ width: 12px; height: 12px; border-radius: 7px; border: 1px solid {t['stroke_strong']};
+  background: {t['ctrl']}; }}
+QRadioButton::indicator:hover {{ background: {t['ctrl_hover']}; }}
+QRadioButton::indicator:checked {{ width: 6px; height: 6px; border: 4px solid {t['accent']}; background: {t['on_accent']}; }}
+QRadioButton::indicator:disabled {{ border-color: {t['text_dis']}; background: {t['mica2']}; }}
+QRadioButton::indicator:checked:disabled {{ border-color: {t['text_dis']}; background: {t['mica2']}; }}
 QWidget:disabled {{ color: {t['text_dis']}; }}
 QLineEdit:disabled {{ background: {t['mica2']}; color: {t['text_dis']}; border: 1px solid {t['stroke']}; }}
 QProgressBar {{ background: {t['stroke']}; border: none; border-radius: 2px; max-height: 4px; min-height: 4px; }}

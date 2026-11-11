@@ -320,7 +320,7 @@ def test_status_toolbar_settings_and_change_setup_action(fake_win):
     assert b.toolTip() == 'Einstellungen' and b.accessibleName() == 'Einstellungen' and b.isVisibleTo(w)
     b.click()
     settle(w)
-    assert 'open_settings' in w.unhandled          # Einstellungen-Fenster folgt in Runde UI-2
+    assert w.tool_windows['settings'].isVisible() and 'open_settings' not in w.unhandled
     w.do_action('change_setup')                    # „Einrichtung ändern“ lebt dort weiter
     settle(w)
     assert ('setup_step', 'change_setup') in fc.calls
@@ -345,7 +345,7 @@ def test_paired_window_offers_switch_only_when_free(fake_win):
 
 # ---- 5: GSVmulti-Einstellungen
 def test_step4_card_states_the_verified_settings():
-    spec = texts.setup_spec(_ctx('E4locked', 4))
+    spec = texts.setup_spec(_ctx("E4locked", 4, gsv_baud=115200))
     s = flat(spec)
     for needle in ('UserDef', 'COM8', '115200 Baud, 8N1', '1 Kanal', 'mV/V', '10 Hz', '%',
                    'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen)',
@@ -500,6 +500,7 @@ def test_unverified_pair_check_hint_and_two_combos(real):
     c, w = real()
     c._vcom_unverified = c._manual_open = True
     w.refresh()
+    settle(w)                    # Portliste ist anfangs leer (Cache): die Oberfläche liest sie im Pool selbst ein
     sv = w.setup_view
     assert 'Automatische Prüfung ist in dieser Version nicht verfügbar – wählen Sie Ihr Paar ' \
            '(z. B. com0com COM7 ↔ COM8).' in labels(sv)

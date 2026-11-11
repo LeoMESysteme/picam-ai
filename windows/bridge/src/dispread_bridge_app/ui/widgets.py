@@ -225,18 +225,22 @@ class Header(QWidget):
         self.title.setToolTip(name)
         self.mode_button.set_view(*texts.mode_view(ctx))
         self.mode_button.setVisible(allow_mode)
-        self.head_icon.set_tone(headline.tone)
-        self.head_icon.setVisible(headline.tone in ('warn', 'err'))
-        self.headline.setText(headline.text)
         busy = peer in ('connecting', 'backoff')
+        self.head_icon.set_tone(headline.tone)
+        # Ring = es wird versucht. Kein Fehlersymbol daneben: das steht in Infobar und Kachel.
+        self.head_icon.setVisible(headline.tone in ('warn', 'err') and not busy)
+        self.headline.setText(headline.text)
         self.ring.setVisible(busy)
+        tip = texts.HEARTBEAT_RETRY if peer == 'backoff' else texts.HEARTBEAT_BUSY
+        self.ring.setToolTip(tip)
+        self.ring.setAccessibleName(tip)
         self.heartbeat.setVisible(not busy)
         self.heartbeat.set_contact(peer == 'authenticated', ctx.activity_seq)
         text, tone = texts.dut_line(ctx)
         self.dut.setText(text)
         self.dut_icon.set_tone(tone)
         self.lock_button.setVisible(locked)
-        self.switch_button.setVisible(allow_switch and not locked and len(ctx.paired) > 1)
+        self.switch_button.setVisible(allow_switch and not locked and len(ctx.paired) > 1 and ctx.route_mode != 'uart_direct')
 
 class InfoBar(QFrame):
     action = Signal(str)
@@ -737,3 +741,276 @@ def toolbar_frame() -> tuple[QFrame, QHBoxLayout]:
     lay.setContentsMargins(10, 6, 10, 6)
     lay.setSpacing(4)
     return f, lay
+
+
+# ================================================================ UX2 Runde 2: Prüfen, Gespeichert, Schrittwechsel
+def _alive(obj) -> bool:
+    try:
+        import shiboken6
+        return shiboken6.isValid(obj)
+    except Exception:          # pragma: no cover - shiboken fehlt nie unter PySide6
+        return True
+
+
+def pop_label(lab: QLabel, name: str, color_key: str, size: int) -> None:
+    """Symbol in einem QLabel mit 150 ms Skalierung setzen (ohne Bewegung: sofort)."""
+    if not theme.motion_enabled() or not lab.isVisible():
+        lab.setPixmap(theme.icon_pixmap(name, color_key, size))
+        return
+    a = _ease_anim(lab, max(8, size - 6), size, 150)
+    a.valueChanged.connect(lambda v: lab.setPixmap(theme.icon_pixmap(name, color_key, int(v))))
+    a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+
+def run_now(fn, args, done) -> None:
+    """Standard-Ausführer ohne Thread-Pool (Bausteintests). Das Hauptfenster setzt seinen Pool ein."""
+    try:
+        result, exc = fn(*args), None
+    except Exception as e:  # noqa: BLE001 - Text nie anzeigen, nur „Prüfung nicht möglich“
+        result, exc = None, e
+    done(result, exc)
+
+
+class ValidatedField(QWidget):
+    """Eingabe oder Auswahl mit Statusfläche rechts und Meldungszeile darunter (UX2).
+
+    ``check(value)`` ist eine echte, blockierende Prüfung des Controllers (``check_*``); sie läuft über
+    ``runner(fn, args, done)`` im Thread-Pool. Getippt wird 500 ms nach der letzten Eingabe geprüft, eine
+    Auswahl sofort. Jede Änderung verwirft das alte Ergebnis (Sequenznummer): ``ok`` erscheint nur nach
+    einer bestandenen Prüfung genau des angezeigten Werts. Leer = kein Status.
+    """
+    result_changed = Signal(object)          # CheckResult | None
+    DEBOUNCE_MS = 500
+    STATES = ('idle', 'pending', 'checking', 'ok', 'warn', 'err')
+
+    def __init__(self, editor: QWidget, check, value=None, runner=None, label: str = '', debounce_ms=None,
+                 parent=None, name: str = '', label_role: str = 'body_strong'):
+        super().__init__(parent)
+        if name:
+            self.setObjectName(name)
+        self.editor, self.check = editor, check
+        self.runner = runner or run_now
+        self._value = value
+        self.state, self.result, self.checked_value = 'idle', None, None
+        self.seq = 0
+        self.dropped = 0                       # verworfene, veraltete Ergebnisse (Test/Diagnose)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        if label:
+            self.label = theme.set_typo(QLabel(label), label_role)
+            self.label.setWordWrap(True)
+            lay.addWidget(self.label)
+        else:
+            self.label = None
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(editor, 1)
+        slot = QWidget()
+        slot.setFixedSize(20, 20)
+        sl = QHBoxLayout(slot)
+        sl.setContentsMargins(0, 0, 0, 0)
+        self.ring = ProgressRing(16)
+        self.ring.setAccessibleName(texts.CHECKING)
+        self.ring.hide()
+        self.icon = QLabel()
+        self.icon.setFixedSize(20, 20)
+        self.icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon.hide()
+        sl.addWidget(self.ring, 0, Qt.AlignmentFlag.AlignCenter)
+        sl.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignCenter)
+        self.status_slot = slot
+        row.addWidget(slot, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(row)
+        self.message = theme.set_typo(QLabel(), 'caption_strong')
+        self.message.setWordWrap(True)
+        self.message.setTextFormat(Qt.TextFormat.PlainText)
+        self.message.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
+        self.detail = theme.set_typo(QLabel(), 'caption')
+        self.detail.setWordWrap(True)
+        self.detail.setTextFormat(Qt.TextFormat.PlainText)
+        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
+        self.message.hide()
+        self.detail.hide()
+        lay.addWidget(self.message)
+        lay.addWidget(self.detail)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._start)
+        self.debounce_ms = self.DEBOUNCE_MS if debounce_ms is None else debounce_ms
+        from PySide6.QtWidgets import QComboBox, QLineEdit
+        if isinstance(editor, QLineEdit):
+            editor.textChanged.connect(lambda _t: self.schedule())
+        elif isinstance(editor, QComboBox):
+            editor.currentIndexChanged.connect(lambda _i: self.schedule(immediate=True))
+
+    # --- Wert
+    def value(self):
+        if self._value is not None:
+            return self._value() if callable(self._value) else self._value
+        from PySide6.QtWidgets import QComboBox, QLineEdit
+        if isinstance(self.editor, QLineEdit):
+            return self.editor.text().strip()
+        if isinstance(self.editor, QComboBox):
+            data = self.editor.currentData()
+            return data if data is not None else (self.editor.currentText() if self.editor.currentIndex() > 0
+                                                  else None)
+        return None
+
+    def set_value(self, value) -> None:
+        """Fester Wert (z. B. gewählter Adapter aus dem Kontext): bei Änderung sofort prüfen."""
+        if value == (self._value() if callable(self._value) else self._value) and self.state != 'idle':
+            return
+        self._value = value
+        self.schedule(immediate=True)
+
+    @property
+    def ok(self) -> bool:
+        return self.state == 'ok' and self.checked_value == self.value()
+
+    @property
+    def accepted(self) -> bool:
+        """ok oder warn – geprüft und (mit Vorbehalt) angenommen."""
+        return self.state in ('ok', 'warn') and self.checked_value == self.value()
+
+    # --- Ablauf
+    def schedule(self, immediate: bool = False) -> None:
+        self.seq += 1                          # jedes ausstehende Ergebnis ist ab jetzt veraltet
+        self._timer.stop()
+        self.result = self.checked_value = None
+        v = self.value()
+        if v in (None, '', ()):
+            self._show('idle')
+            return
+        if immediate or self.debounce_ms <= 0:
+            self._start()
+        else:
+            self._show('pending')
+            self._timer.start(self.debounce_ms)
+
+    def recheck(self) -> None:
+        self.schedule(immediate=True)
+
+    def _start(self) -> None:
+        v = self.value()
+        if v in (None, '', ()):
+            self._show('idle')
+            return
+        seq = self.seq
+        self._show('checking')
+        args = tuple(v) if isinstance(v, tuple) else (v,)
+        self.runner(self.check, args, lambda r, e, s=seq, val=v: self._done(s, val, r, e))
+
+    def _done(self, seq: int, value, result, exc) -> None:
+        if not _alive(self):
+            return
+        if seq != self.seq:
+            self.dropped += 1                  # Eingabe hat sich inzwischen geändert: verwerfen
+            return
+        from .port import CheckResult
+        if exc is not None or not isinstance(result, CheckResult) or result.state not in ('ok', 'warn', 'err'):
+            result = CheckResult('err', texts.CHECK_FAILED, texts.CHECK_FAILED_DETAIL)
+        self.result, self.checked_value = result, value
+        self._show(result.state)
+        self.result_changed.emit(result)
+
+    def _show(self, state: str) -> None:
+        prev = self.state
+        self.state = state
+        self.ring.setVisible(state == 'checking')
+        self.icon.setVisible(state in ('ok', 'warn', 'err'))
+        if state == 'ok':
+            if prev != 'ok':
+                pop_label(self.icon, 'checkmark', 'ok', 16)
+            self.icon.setAccessibleName(texts.SCREEN_READER['ok'])
+        elif state in ('warn', 'err'):
+            self.icon.setPixmap(theme.status_pixmap(state, 16))
+            self.icon.setAccessibleName(texts.SCREEN_READER[state])
+        r = self.result if state in ('ok', 'warn', 'err') else None
+        msg = r.message if r else (texts.CHECKING if state == 'checking' else '')
+        detail = r.detail if (r and state in ('warn', 'err')) else ''
+        self.message.setText(msg)
+        self.message.setProperty('typo', 'caption' if state == 'checking' else 'caption_strong')
+        repolish(self.message)
+        self.message.setVisible(bool(msg))
+        self.detail.setText(detail)
+        self.detail.setVisible(bool(detail))
+        desc = ' '.join(x for x in ((texts.SCREEN_READER.get(state, '') if r else ''), msg, detail) if x)
+        self.editor.setAccessibleDescription(desc)
+        self.setAccessibleDescription(desc)
+        if state in ('idle', 'pending', 'checking'):
+            self.result_changed.emit(None)
+
+
+class SavedNote(QWidget):
+    """Kurze Bestätigungszeile „Gespeichert“ mit Häkchen; blendet nach 2 s aus."""
+    SHOW_MS = 2000
+
+    def __init__(self, text: str | None = None, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.icon = QLabel()
+        self.icon.setFixedSize(16, 16)
+        self.icon.setAccessibleName(texts.SCREEN_READER['ok'])
+        self.label = theme.set_typo(QLabel(text or texts.SAVED), 'caption')
+        lay.addWidget(self.icon)
+        lay.addWidget(self.label)
+        lay.addStretch(1)
+        self.shown_count = 0
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._fade)
+        self.hide()
+
+    def flash(self, ms: int | None = None) -> None:
+        self.shown_count += 1
+        self.setGraphicsEffect(None)
+        self.show()
+        pop_label(self.icon, 'checkmark', 'ok', 16)
+        self._timer.start(self.SHOW_MS if ms is None else ms)
+
+    @property
+    def active(self) -> bool:
+        return self._timer.isActive()
+
+    def _fade(self) -> None:
+        if not theme.motion_enabled():
+            self.hide()
+            return
+        eff = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(eff)
+        a = QPropertyAnimation(eff, b'opacity', self)
+        a.setStartValue(1.0)
+        a.setEndValue(0.0)
+        a.setDuration(150)                     # Ausgang schneller als Eingang
+        a.setEasingCurve(QEasingCurve.Type.OutCubic)
+        a.finished.connect(self.hide)
+        a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+
+def slide_in(widget: QWidget, layout, direction: int, margins=(16, 4, 16, 12), ms: int = 200) -> None:
+    """Schrittwechsel: Überblendung mit 12 px Versatz in Laufrichtung (+1 vor, -1 zurück). Ohne Bewegung: nichts."""
+    if not theme.motion_enabled() or not widget.isVisible() or not direction:
+        return
+    left, top, right, bottom = margins
+    dx = 12 * (1 if direction > 0 else -1)
+    eff = QGraphicsOpacityEffect(widget)
+    eff.setOpacity(0.0)
+    widget.setGraphicsEffect(eff)
+    a = _ease_anim(widget, 0.0, 1.0, ms)
+
+    def step(v):
+        v = float(v)
+        off = round(dx * (1 - v))
+        layout.setContentsMargins(left + off, top, right - off, bottom)
+        if _alive(eff):
+            eff.setOpacity(v)
+
+    def end():
+        layout.setContentsMargins(left, top, right, bottom)
+        widget.setGraphicsEffect(None)
+    a.valueChanged.connect(step)
+    a.finished.connect(end)
+    a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)

@@ -1,5 +1,6 @@
 """Abbildung der Kernwerte (Readiness-Tabelle, Maschinencodes) auf deutsche Texte."""
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -78,15 +79,21 @@ def test_setup_texts_contain_no_mock_sample_values():
 def test_session_export_text_is_manual_instruction():
     ctx = UiContext(gsv_port='COM5', setup=__import__('dispread_bridge_app.ui.port', fromlist=['x']).SetupState(
         4, 'E4locked', {}))
-    flat = repr(texts.setup_spec(ctx)['blocks'])
-    assert 'Automatische Session noch nicht freigegeben' in flat
-    assert 'UserDef' in flat and 'COM5' in flat and '{' not in flat.replace('{}', '')
+    blocks = texts.setup_spec(ctx)['blocks']
+    flat = repr(blocks)
+    assert blocks[0] == ('session', 'COM5', None, None)             # UX2: echter Knopf „Session-Datei erzeugen …“
+    assert 'UserDef' in flat and 'COM5' in flat and '{' not in flat.replace('{}', '')   # Handanleitung bleibt
+    assert 'Baud' not in flat                                       # Rate unbekannt: weglassen, nie raten
+    flat2 = repr(texts.setup_spec(replace(ctx, gsv_baud=115200))['blocks'])
+    assert '115200 Baud, 8N1' in flat2
 
 
 def test_gsv_chip_describes_gsv_side_not_pairing():
     r = Readiness('ready', 'not_required', 'authenticated', 'output_off', 'idle', 'unconfirmed', 'output_off')
-    g = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5'))[5]
+    g = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5', gsv_baud=115200))[5]
     assert (g.word, g.tone, g.sub) == ('Kanal einstellen', 'info', 'COM5 · 115200 8N1 in GSVmulti')
+    g0 = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5'))[5]
+    assert g0.sub == 'COM5 · 8N1 in GSVmulti'                      # Rate nur aus dem Kontext
     assert 'gekoppelt' not in g.word
     g2 = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5', session_confirmed=True))[5]
     assert (g2.word, g2.sub) == ('Von Hand eingestellt', 'Empfang nicht nachgewiesen')

@@ -92,6 +92,10 @@ class SessionExport:
     port: str
     template_id: str
     sha256: str
+    channels: int = 1                       # Kanäle der Vorlage (NumChan)
+    hidden_channels: int = 0                # davon ausgeblendet (IsHidden = TRUE)
+    record_hidden_required: bool = False    # Bediener muss in GSVmulti „Record Hidden Channels“ einschalten
+                                            # (steht nicht in der .ucf, sonst fehlen diese Kanäle still)
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,7 @@ class UiContext:
     adapter_port: str | None = None         # gewählter USB-UART-Adapter, z. B. „COM9“
     adapter_present: bool | None = None     # steckt der gewählte Adapter gerade? None = unbekannt
     session_template: str | None = None     # Kennung der Vorlage, aus der Sessions erzeugt werden
+    session_channels: int | None = None     # Kanalzahl der aktiven Vorlage (1 = Einkanal-Ausgabe, F3-Warnung)
 
 
 class ControllerPort(Protocol):

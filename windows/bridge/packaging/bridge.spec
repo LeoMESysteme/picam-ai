@@ -9,6 +9,8 @@ a = Analysis(
     pathex=[str(bridge_root / "src"), str(repo_root / "src")],
     binaries=[],
     datas=[(str(bridge_root / "src/dispread_bridge_app/templates/Session-COM8.ucf"),
+            "dispread_bridge_app/templates"),
+           (str(bridge_root / "src/dispread_bridge_app/templates/versuch2b-session-hidden.ucf"),
             "dispread_bridge_app/templates")],
     hiddenimports=[
         "dispread.gsv_bridge", "serial", "serial.tools.list_ports",

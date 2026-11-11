@@ -56,6 +56,11 @@ typography:
     fontSize: "20px"
     fontWeight: 600
     lineHeight: "28px"
+  section:
+    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: "20px"
   body:
     fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
     fontSize: "14px"
@@ -159,13 +164,12 @@ components:
 
 # Design System: GSVmulti-Brücke (Windows-App)
 
-Stand der Ablage: Das ausgelieferte Artefakt ist der freigegebene HTML-Mock
-(`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/mock.html`) samt
-Qt-Umsetzungsnotiz im README; Quelle der Werte sind dessen Custom Properties und
-Selektoren, belegt durch die Bilder `bx1-*.png`. Unter
-`windows/bridge/src/dispread_bridge_app/ui` liegt zum Zeitpunkt dieser Ablage
-kein Qt-Code. Weicht die spätere Qt-Umsetzung ab, gilt der Bau und dieses
-Dokument wird nachgezogen.
+Stand: Qt-Umsetzung unter `windows/bridge/src/dispread_bridge_app/ui` nach UX2
+(Spec `docs/superpowers/specs/2026-11-11-windows-bruecke-ux2.md`, Runden UI-1 und
+UI-2). Ursprung ist der freigegebene HTML-Mock
+(`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/mock.html`); wo der Bau
+abweicht, gilt der Bau. Die Abschnitte „UX2-Bausteine“ und „Bewegung“ unten
+beschreiben, was gegenüber dem Mock neu ist.
 
 ## Overview
 
@@ -187,7 +191,7 @@ dunkle Werkbank-HMI-Optik und keine Ampel-plus-Verbinden-Knopf-Kategorie.
 **Key Characteristics:**
 - Hell und dunkel folgen dem Windows-Farbschema; Akzent ist der Systemakzent.
 - Zustand immer als Symbol plus Wort, nie nur Farbe.
-- Sechs Prüfpunkte als 3 × 2-Raster (bewusste Abweichung von der Einzeile des Direction Contracts, siehe Chips).
+- Sechs Prüfpunkte als 3 × 2-Raster (bewusste Abweichung von der Einzeile des Direction Contracts, siehe Kacheln).
 - Ereignisjournal mit Tabellenziffern und Störungsdauer als Signatur.
 - Feste DUT-Sperrzeile in jedem Zustand.
 
@@ -198,12 +202,12 @@ Statusstufen, und Grün ist knapp gehalten. Alle Werte stehen in der Frontmatter
 Dunkelvarianten tragen das Suffix `-dark`.
 
 ### Primary
-- **Systemakzent** (`primary` #005fb8 hell, `primary-dark` #60cdff dunkel): Primäraktion der InfoBar und des Schritts, Auswahl (aktives Segment als 2-px-Unterstrich, geöffneter Chip als Rand), Fokus bei Eingabefeldern (2-px-Unterstrich), Fortschrittsbalken. Die Mock-Werte sind Platzhalter; zur Laufzeit ersetzt `QPalette.Highlight` sie, mit `on-primary` als Textfarbe.
+- **Systemakzent** (`primary` #005fb8 hell, `primary-dark` #60cdff dunkel): Primäraktion der InfoBar und des Schritts, Auswahl (aktives Segment als 2-px-Unterstrich, geöffnete Kachel und gewählte Karte als Rand), Fokus bei Eingabefeldern (2-px-Unterstrich), Fortschrittsbalken. Die Mock-Werte sind Platzhalter; zur Laufzeit ersetzt `QPalette.Highlight` sie, mit `on-primary` als Textfarbe.
 
 ### Neutral
 - **Mica** (`mica` #f3f3f3 / `mica-dark` #202020): Fensterfläche.
 - **Mica vertieft** (`mica-recessed` #ededed / #1b1b1b): Fußleiste, Segmentgrund, Dialogfuß.
-- **Karte** (`card` #fbfbfb / #2b2b2b): Karten, Journal, Chips, Flyouts.
+- **Karte** (`card` #fbfbfb / #2b2b2b): Karten, Journal, Kacheln, Werkzeugfenster-Inhalt.
 - **Kartenrand** (`stroke` #e5e5e5 / #3a3a3a): 1-px-Rand und Trennlinien.
 - **Bedienrand** (`stroke-strong` #8a8a8a / #9a9a9a): Radio, Checkbox, Ablagefläche; Kontrast ≥ 3 : 1.
 - **Schaltfläche** (`control`, `-hover`, `-press`, `control-stroke`): Standardschaltflächen.
@@ -227,11 +231,12 @@ Dunkelvarianten tragen das Suffix `-dark`.
 **Character:** Die Systemschrift von Windows, in wenigen Stufen. Kein Display-Schnitt in Bedienelementen; Zahlen stehen in Tabellenziffern.
 
 ### Hierarchy
-- **Untertitel** (600, 20/28 px, Qt 15 pt): Pi-Anzeigename im Kopf, Dialogtitel. Der Weg („· Netzwerk (LAN)“) folgt im Kopf in Text 14/20, sekundär.
+- **Titel** (600, 20/28 px, Qt 15 pt): Pi-Anzeigename im Kopf, Titel im Fensterinhalt. Der Weg steht nicht mehr als Text im Kopf, sondern im Moduswahl-Knopf rechts.
+- **Abschnitt** (600, 15/20 px, Qt 11 pt): Überschriften in Werkzeugfenstern (Einstellungen, Moduswahl, Detailfenster). Keine Kicker darüber.
 - **Text** (400, 14/20 px, Qt 10,5 pt): Fließtext, Journaltitel, Schaltflächen.
 - **Text stark** (600, 14/20): Zustandssatz, InfoBar-Titel, Kartenüberschrift.
-- **Beschriftung** (400, 12/16, Qt 9 pt): Chip-Name, Zweitzeile, Journalzeit, Version.
-- **Beschriftung stark** (600, 12/16): Chip-Statuswort, Störungsdauer.
+- **Beschriftung** (400, 12/16, Qt 9 pt): Kachel-Name, Feldnamen, Zweitzeile, Journalzeit, Version.
+- **Beschriftung stark** (600, 12/16): Kachel-Statuswort, Störungsdauer, Prüfmeldung.
 - **Daten** (Mono, 12/18): Fingerabdruck, Pi-ID, Endpunkt, Dateinamen; Fingerabdruck in Kleinbuchstaben-Hex, Vierergruppen, 4 Gruppen je Zeile, nie gekürzt.
 
 ### Named Rules
@@ -239,20 +244,20 @@ Dunkelvarianten tragen das Suffix `-dark`.
 
 ## Layout
 
-Ein einspaltiges Kompaktfenster, 4-px-Raster (4 / 8 / 12 / 16 / 20). Außenrand 16, Karteninnenrand 12 bis 14, Abstand zwischen Karten 12, Chip-Lücke 8, Journalzeile 6 oben und unten, 12 seitlich. Betrieb von oben nach unten: Kopf (Name · Weg, Pi-Wechsel-Symbol rechts), Zustandssatz, feste DUT-Sperrzeile, InfoBar, Chip-Raster, Segmented „Alle | Störungen“ mit Eintragszahl, Journal (scrollt, flexibel), Fuß mit „Diagnose exportieren“, „Details“ und Version. Die Einrichtung ersetzt im selben Fenster den Inhalt durch einen Schrittkopf 1 bis 5 unter derselben Kopfzeile; der Inhalt scrollt, der Fuß bleibt.
+Ein einspaltiges Kompaktfenster, 4-px-Raster (4 / 8 / 12 / 16 / 20). Außenrand 16, Karteninnenrand 12 bis 14, Abstand zwischen Karten 12, Kachel-Lücke 6/8, Journalzeile 6 oben und unten, 12 seitlich. Betrieb von oben nach unten: Kopf (Pi-Name, rechts Moduswahl-Knopf, Pi-Wechsel, Schloss), Herzschlag + Zustandssatz, feste DUT-Sperrzeile, InfoBar, Kachel-Raster, Segmented „Alle | Störungen“ mit Eintragszahl, Journal (scrollt, flexibel), Symbolleiste. Die Einrichtung ersetzt im selben Fenster den Inhalt durch einen Schrittkopf (Brückenwege 5 Schritte, „UART direkt“ 4 Schritte: Adapter · Verdrahtung · Session · Fertig) unter derselben Kopfzeile; rechts neben dem Leitsatz steht „Einrichtung verlassen“ (`dismiss`), wenn der Controller es erlaubt. Der Inhalt scrollt, der Fuß bleibt.
 
-Bei 380 × 560 schrumpft nur das Journal (Mindesthöhe 150); Kopf und Chips bleiben. Skalierung 100 bis 200 % ohne Abschneiden, lange Namen brechen um, der volle Name steht im Tooltip; keine festen Pixelhöhen für Text. Tab-Reihenfolge Betrieb: Pi-Wechsel, sechs Chips, Segmented, Journal, „Diagnose exportieren“, „Details“.
+Bei 380 × 560 schrumpft nur das Journal (Mindesthöhe 150); Kopf und Kacheln bleiben, reicht die Höhe nicht, scrollt der Kopfbereich. Skalierung 100 bis 200 % ohne Abschneiden, lange Namen brechen um, der volle Name steht im Tooltip; keine festen Pixelhöhen für Text. Tab-Reihenfolge Betrieb: Moduswahl, Pi-Wechsel, Schloss, InfoBar-Knöpfe, sechs Kacheln, Segmented, Journal, Symbolleiste.
 
 ## Elevation & Depth
 
-Tonale Schichtung, flach im Ruhezustand: Mica, darauf Karten mit 1-px-Rand, Fußleiste vertieft. Schatten haben nur schwebende Ebenen: Flyout und Dialog (`0 8px 16px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.2)` hell, 50 % Schwarz dunkel). Das Fenster selbst nutzt den Systemschatten, in der Qt-Umsetzung den nativen Rahmen. Hinter dem Dialog liegt ein Scrim (30 % hell, 50 % dunkel). Keine Verläufe.
+Tonale Schichtung, flach im Ruhezustand: Mica, darauf Karten mit 1-px-Rand, Symbolleiste vertieft. Schatten haben nur schwebende Ebenen: Werkzeugfenster (nativ) und Dialog (`0 8px 16px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.2)` hell, 50 % Schwarz dunkel). Das Fenster selbst nutzt den Systemschatten, in der Qt-Umsetzung den nativen Rahmen. Hinter dem Dialog liegt ein Scrim (30 % hell, 50 % dunkel). Keine Verläufe.
 
 ### Named Rules
-**The Flat-Until-Floating Rule.** Karten, Chips und InfoBars tragen Rand statt Schatten; Schatten gibt es nur für Flyout und Dialog.
+**The Flat-Until-Floating Rule.** Karten, Kacheln und InfoBars tragen Rand statt Schatten. Werkzeugfenster haben den nativen Windows-Rahmen und dessen Schatten, keinen eigenen.
 
 ## Shapes
 
-Zwei Radien: 4 px für Schaltfläche, Chip, InfoBar, Eingabefeld, Segmente und Abzeichen; 8 px für Karte, Journal, Flyout, Dialog, Fenster. Kreise nur für Radio und Schrittpunkte. Ränder sind 1 px; Fokus ist ein doppelter Rahmen (2 px `focus-outer`, innen 1 px `focus-inner`, hell schwarz/weiß, dunkel weiß/schwarz), innerhalb der Widgetfläche gezeichnet, damit Scrollbereiche nichts abschneiden. Eingabefelder zeigen stattdessen einen 2-px-Akzent-Unterstrich. Hochkontrast übernimmt die Systempalette ohne feste Hex-Werte, die Karten behalten ihren 1-px-Rand in `WindowText`. Bewegung: nur 150 ms für Hover und Zustandswechsel, bei „Animationseffekte aus“ ohne Übergang.
+Zwei Radien: 4 px für Schaltfläche, Kachel, InfoBar, Eingabefeld, Segmente und Abzeichen; 8 px für Karte, Journal, Dialog, Fenster. Kreise nur für Radio und Schrittpunkte. Ränder sind 1 px; Fokus ist ein doppelter Rahmen (2 px `focus-outer`, innen 1 px `focus-inner`, hell schwarz/weiß, dunkel weiß/schwarz), innerhalb der Widgetfläche gezeichnet, damit Scrollbereiche nichts abschneiden. Eingabefelder zeigen stattdessen einen 2-px-Akzent-Unterstrich. Hochkontrast übernimmt die Systempalette ohne feste Hex-Werte, die Karten behalten ihren 1-px-Rand in `WindowText`. Bewegung: siehe Abschnitt „Bewegung“.
 
 ## Components
 
@@ -264,15 +269,15 @@ Zwei Radien: 4 px für Schaltfläche, Chip, InfoBar, Eingabefeld, Segmente und A
 ### Infobar
 - Eine nächste Aktion, höchstens zwei Knöpfe, Primäraktion rechts; Titel Text stark, Symbol links in 20-px-Spalte. Töne `warn`, `err`, `ok`, `info`. Kein weiteres Pop-up bei Wiederholung; Zustand aktualisieren, „Erneut versuchen“/„Abbrechen“ anbieten. Eine erzeugte Sessiondatei (E4ok) ist `info`, nicht `ok`.
 
-### Prüfpunkt-Chips
-- **Raster:** 3 × 2, bewusste Abweichung vom Direction Contract (eine Zeile): sechs Chips mit Statuswort und Unterzeile passen bei 440 px nicht in eine Zeile, ohne Wörter zu kürzen. Reihenfolge: Komponenten, UART, Pi / Ausgabe, Weitergabe, GSVmulti. Chips einer Reihe sind gleich hoch.
-- **Aufbau:** Name (Beschriftung, sekundär), Symbol + Statuswort (Beschriftung stark), optionale Zweitzeile. Nicht benutzte Prüfpunkte tragen ein Strich-Symbol und Wort ohne Fettung („nicht benutzt“).
-- **Zustand:** Hover `control-hover`; geöffnet = 1-px-Akzentrand und Detail-Flyout (Karte, Radius 8), schließt bei Esc und Klick außerhalb, Fokus kehrt zum Chip zurück.
+### Prüfpunkt-Kacheln (bisher Chips)
+- **Raster:** 3 × 2, bewusste Abweichung vom Direction Contract (eine Zeile): sechs Kacheln mit Statuswort und Unterzeile passen bei 440 px nicht in eine Zeile, ohne Wörter zu kürzen. Reihenfolge: Komponenten, UART, Pi / Ausgabe, Weitergabe, GSVmulti. Kacheln einer Reihe sind gleich hoch.
+- **Aufbau:** erste Zeile Komponenten-Symbol (16 px, `text2`) + Name (Beschriftung, sekundär) + rechts Info-Symbol (Tooltip aus `CHIP_HELP`: was der Prüfpunkt bedeutet und was nicht). Passt ein Name dort nicht (echter Platzmangel, z. B. 380 px), stehen die Namen aller sechs Kacheln in eigener Zeile. Darunter Statussymbol + Statuswort (Beschriftung stark), optionale Zweitzeile; lange Wörter bekommen nur bei Platzmangel weiche Trennstellen.
+- **Zustand:** Hover `control-hover`; geöffnet = 1-px-Akzentrand, solange das Detailfenster offen ist. Echter Zustandswechsel: 200-ms-Farbübergang aus dem Ton der neuen Stufe zurück zur Kartenfläche, nie beim bloßen Neuzeichnen.
 
 ### Wahrheitsregeln der Aussagen (tragend)
-- **Weitergabe ist nicht Empfang.** „Weitergabe bestätigt“ und „vom Port angenommen“ heißen ausschließlich, dass der COM-Treiber geschrieben hat; sie erscheinen nur in der Demo (als „Demo-Werte“ gekennzeichnet) und im künftigen, nicht erreichbaren Zustand B1x. Im Normalzustand unter DUT-Sperre steht der Chip neutral: „Keine Weitergabe“ / „DUT-Ausgabe gesperrt“.
-- **GSVmulti-Chip:** Nach Bedienerbestätigung nur `info` mit „Übernahme bestätigt“ und Zweitzeile „Empfang nicht nachgewiesen“. „Empfang belegt“ in Grün erscheint erst nach dem Empfangstest mit Vergleich gegen die Originaltestdatei, mit Zweitzeile wie „Test 14:02 (Demo), 600/600“, und gilt nur für genau diese Konfiguration. Weichen Werte ab (598/600), bleibt es kein Beleg.
-- **Ausgabe-Chip:** `warn` „DUT gesperrt“, solange der Pi die Sperre meldet; geht der Pi verloren, bleibt der zuletzt gemeldete Stand stehen, der Chip meldet „Unbekannt“.
+- **Weitergabe ist nicht Empfang.** „Weitergabe bestätigt“ und „vom Port angenommen“ heißen ausschließlich, dass der COM-Treiber geschrieben hat; sie erscheinen nur in der Demo (als „Demo-Werte“ gekennzeichnet) und im künftigen, nicht erreichbaren Zustand B1x. Im Normalzustand unter DUT-Sperre steht die Kachel neutral: „Keine Weitergabe“ / „DUT-Ausgabe gesperrt“.
+- **GSVmulti-Kachel:** Nach Bedienerbestätigung nur `info` mit „Übernahme bestätigt“ und Zweitzeile „Empfang nicht nachgewiesen“. „Empfang belegt“ in Grün erscheint erst nach dem Empfangstest mit Vergleich gegen die Originaltestdatei, mit Zweitzeile wie „Test 14:02 (Demo), 600/600“, und gilt nur für genau diese Konfiguration. Weichen Werte ab (598/600), bleibt es kein Beleg.
+- **Ausgabe-Kachel:** `warn` „DUT gesperrt“, solange der Pi die Sperre meldet; geht der Pi verloren, bleibt der zuletzt gemeldete Stand stehen, die Kachel meldet „Unbekannt“.
 - **Zustandssatz** wiederholt die Sperre nicht und nennt keine Messfreigabe; die Brücke gibt keine Messwerte frei.
 
 ### DUT-Sperrzeile
@@ -290,8 +295,37 @@ Zwei Radien: 4 px für Schaltfläche, Chip, InfoBar, Eingabefeld, Segmente und A
 ### Schrittkopf, Karten, Felder
 - Fünf Schritte (erledigt: gefüllt `text`; aktuell: `primary`; offen: Rand `stroke-strong`), Punkt 24 px. Karten Radius 8, Rand `stroke`, Polster 12/14. Eingabefeld 32 px, Unterstrich-Fokus. Radio und Kontrollkästchen 20 px, Auswahl im Akzent. Ablagefläche gestrichelter `stroke-strong`-Rand, bei Zug durchgezogen im Akzent. Fortschritt 4 px hoch, Text in separater Zeile. Abzeichen („Unbestätigt“, „Synthetisch“): 12/16, Rand, Radius 4.
 
+### UX2-Bausteine
+- **Symbolknopf** (`IconButton`): 32 × 32, flach, Hover `control-hover`, Fluent-Symbol 20 px (16 px in Feldern). Tooltip und Screenreader-Name sind Pflicht. Symbole kommen ausschließlich aus Fluent UI System Icons (eingebettete SVGs, gefärbt aus den Tokens); keine Unicode-Zeichen oder Emoji.
+- **Symbolleiste** statt Fußleiste: links Einstellungen (`settings`), Protokolle exportieren (`document_arrow_down`), Info (`info`); rechts Version (Beschriftung) und Beenden (`power`). Grund `mica-recessed`, Rand oben `stroke`.
+- **Moduswahl-Knopf** im Kopf: Symbol des Wegs, Kurzname („Netzwerk“, „UART · Brücke“, „UART direkt“), Chevron; öffnet das Moduswahl-Fenster.
+- **Werkzeugfenster** (`ToolWindow`) statt Flyout: nicht modal, nativer Rahmen, Besitzer = Hauptfenster, Esc schließt, Position je Art für die Laufzeit gemerkt, höchstens eine Instanz je Art, Inhalt scrollt, Mindestbreite 360. Arten: Kachel-Details, Schloss, gekoppelte Pi, Info, Protokolle exportieren, Moduswahl, Einstellungen. Fenster-Fuß `mica-recessed`; nach erfolgreichem Speichern wandert der Akzent auf „Schließen“.
+- **Moduswahl:** drei Karten untereinander (Radio-Semantik, Pfeiltasten), je Symbol, Name, ein Satz Erklärung (Raten aus dem Kontext), Statuszeile mit Symbol + Wort. Gewählte Karte 1-px-Akzentrand; aktiver Weg trägt das Abzeichen „Aktiv“ (Rand + Text, nie grün). Nicht wählbare Karten: Name sekundär, Schloss + Grund in lesbarem Kontrast. Fuß „Abbrechen“ / „Wechseln“ (Akzent).
+- **Einstellungen:** Abschnitte Weg · Pi · Ports · GSVmulti-Session · Protokolle · Über, Abschnitt-Überschrift über Karte. Während einer Übertragung oben eine Schlosszeile mit Grund und in Weg/Pi/Ports „schreibgeschützt“; Werte bleiben als CopyField sichtbar und kopierbar.
+- **CopyField:** Feldname (Beschriftung) über Wert (Daten, auswählbar, bricht an Trennern um, nie gekürzt), Kopierknopf rechts; nach dem Kopieren 1,5 s `checkmark` in `ok`, Tooltip „Kopiert“.
+- **ValidatedField:** Eingabe oder Auswahl, rechts 20-px-Statusfläche, darunter Meldungszeile (Beschriftung stark) und bei Achtung/Fehler die nächste Aktion (Beschriftung). Leer = kein Status; Tippen → 500 ms Ruhe → ProgressRing 16 px; Auswahl prüft sofort. `ok` (Häkchen in `ok`) nur nach bestandener echter Prüfung des angezeigten Werts; jede Änderung verwirft ältere Ergebnisse. Meldung zusätzlich als `accessibleDescription`. In den Einstellungen übernimmt eine bestandene Auswahlprüfung sofort, Text (Endpunkt) über „Übernehmen“; bestätigt wird mit „Gespeichert“.
+- **Gespeichert:** Häkchen in `ok` + Beschriftung, blendet nach 2 s aus (Einrichtung unter dem Schrittkopf, Einstellungen am Feld).
+- **Herzschlag:** 8-px-Punkt vor dem Zustandssatz in `text2` (Kontakt zum Pi, keine Weitergabe, daher nie grün), hohl in `stroke-strong` ohne Kontakt; Puls je neuem `activity_seq`. Bei Aufbau und Backoff steht stattdessen ein ProgressRing, ohne zusätzliches Fehlersymbol (das steht in InfoBar und Kachel).
+- **Session-Ergebnis:** Häkchen in `text` (erzeugt ist nicht abgenommen, nie grün), Pfad als CopyField, „Ordner öffnen“, Hinweis „nicht abgenommen“. Verlangt die Vorlage „Record Hidden Channels“, folgt eine nicht schließbare Achtung-Zeile mit Bestätigungshaken (Bedienerangabe, kein Beleg). Einkanal-Vorlagen auf Brückenwegen tragen die Achtung-Zeile zur Einkanal-Ausgabe (auch im Detailfenster der GSVmulti-Kachel).
+
+### Bewegung
+Nur wo sie Zustand erklärt, 150–250 ms, ease-out, Ausgang schneller als Eingang. Zentraler Schalter `theme.motion_enabled()` (Windows: „Animationseffekte“; `DISPREAD_UI_MOTION=0` für Tests). Aus = Endzustand sofort, Bedeutung bleibt.
+
+| Ort | Bewegung |
+| --- | --- |
+| Herzschlag | Puls 250 ms je Pi-Kontakt |
+| Verbindungsaufbau, Backoff, Prüfungen, Suche | ProgressRing (unbestimmt) |
+| Export, Session ohne eigenen Platz | 2-px-Ladebalken unter dem Kopf |
+| Kachel-Zustandswechsel | Farbübergang 200 ms |
+| Betrieb ↔ Einrichtung | Überblendung 200 ms |
+| Schrittwechsel | Überblendung + 12 px Versatz in Laufrichtung, 200 ms |
+| Kopieren, Prüfung ok, Gespeichert | Symbol mit 150 ms Skalierung; „Gespeichert“ blendet in 150 ms aus |
+| Fenster öffnen | Systemanimation |
+
+Keine Dauerschleifen außer Ring/Ladebalken während echter Arbeit; versteckte Fenster stoppen ihre Animationen.
+
 ### Dialog und Tray
-- ContentDialog über Scrim, max. 360 px, Radius 8, Fuß `mica-recessed`; Standard- und Esc-Taste ist die ungefährliche Wahl („Weiter übertragen“). Tray-Symbol in drei Varianten (normal, Achtung, Fehler als 10-px-Badge), Tooltip = Zustandssatz; der einmalige Hinweis erscheint nur beim ersten Minimieren.
+- Modal sind nur Bestätigungen, die die Übertragung beenden (Beenden, Trennen): max. 360 px, Radius 8, Fuß `mica-recessed`; Standard- und Esc-Taste ist die ungefährliche Wahl („Weiter übertragen“). Alles andere sind nicht modale Werkzeugfenster. Tray-Symbol in drei Varianten (normal, Achtung, Fehler als 10-px-Badge), Tooltip = Zustandssatz; der einmalige Hinweis erscheint nur beim ersten Minimieren.
 
 ## Do's and Don'ts
 

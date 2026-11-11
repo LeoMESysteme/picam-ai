@@ -9,6 +9,33 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-11 — Session-Katalog mit vorbereiteter Vierkanal-Vorlage
+
+**Problem:** Der Einkanal-Generator enthielt feste COM8-Ersetzungen. Der
+Vierkanal-Beleg aus Versuch 2b hat dagegen vier Kanäle und drei ausgeblendete
+Hilfskanäle; Pi und Brücke senden das zugehörige Format noch nicht.
+
+**Entscheidung:** Ein Code-Katalog in `session_templates.py` hält Paketpfad,
+Belegpfad, SHA-256, Telegrammformat und Status jeder Vorlage. Nur
+`ACTIVE_SESSION_TEMPLATE` wählt die regulär exportierte Vorlage, deren Status
+zusätzlich `active` sein muss. Vierkanal bleibt `prepared`; ein eigener
+Entwicklereinstieg verlangt dafür `allow_prepared=True`. Kanalzahl, Sichtbarkeit
+und Baudrate kommen aus den gepinnten Bytes. Der Export ersetzt ausschließlich
+`ComNr`/`Name` je Kanal und `UserDevice.ComNo`; Kanalnamen folgen `Input`.
+
+**Alternativen:** Eine UI-Auswahl vorbereiteter Vorlagen könnte eine Session
+erzeugen, die nicht zum Sender passt. Ein allgemeiner UCF-Schreiber würde
+Kodierung und Zeilenenden unnötig verändern. Doppelt eingetragene Kanal- und
+Baudmetadaten könnten vom Beleg abweichen. Der bestehende Archivkatalog bleibt
+getrennt: erkannte Archivoriginale werden dadurch nicht exportierbar.
+
+**Konsequenz:** Beide Paketdateien sind in beiden PyInstaller-Specs enthalten.
+Alle Vorlagen müssen dieselbe Baudrate tragen. `record_hidden_required` folgt
+den ausgeblendeten Kanälen; „Record Hidden Channels“ muss der Bediener selbst
+in GSVmulti einschalten, diese Einstellung steht nicht in der UCF. Aktivierung
+des Vierkanalformats und dessen Sender-/Empfangsabnahme bleiben ausstehend.
+
+
 ## 2026-11-11 — UX2: begrenzter Session-Export und getrennte UART-Raten
 
 **Problem:** Die Brücke sperrte jeden Session-Export; Pi-UART und GSVmulti

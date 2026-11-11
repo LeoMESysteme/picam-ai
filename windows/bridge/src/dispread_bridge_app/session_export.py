@@ -1,32 +1,68 @@
-"""Byte-preserving export of the single approved COM8 source (not receiver acceptance)."""
+"""Byte-preserving COM substitution of pinned sessions (not receiver acceptance)."""
 import re
-from hashlib import sha256
-from importlib.resources import files
 
-TEMPLATE_ID = 'bruecke-session-com8-20261106'
-TEMPLATE_SHA256 = '6e553a1e34194266a9a753b621910c144fab95fd16a5219395e1d1d8c8085992'
-ALLOWED_FIELDS = ('ch1.ComNr', 'ch1.Name', 'UserDevice.ComNo')
+from .session_templates import (
+    SessionTemplate,
+    SessionTemplateError,
+    active_session_template,
+    load_session_catalog,
+)
+
+# Compatibility names are derived, never a second catalog or selection point.
+_ACTIVE_TEMPLATE = active_session_template()
+TEMPLATE_ID = _ACTIVE_TEMPLATE.spec.template_id
+TEMPLATE_SHA256 = _ACTIVE_TEMPLATE.spec.source_sha256
+TEMPLATE_CHANNELS = _ACTIVE_TEMPLATE.channels
+ALLOWED_FIELDS = _ACTIVE_TEMPLATE.allowed_fields
+# GSVmulti's rate belongs to the active session, independently of the bridge UART.
+GSVMULTI_BAUD = _ACTIVE_TEMPLATE.baud_rate
 
 
-def _template() -> bytes:
-    raw = files('dispread_bridge_app').joinpath('templates/Session-COM8.ucf').read_bytes()
-    if sha256(raw).hexdigest() != TEMPLATE_SHA256:
-        raise ValueError('session_template_invalid')
-    return raw
-
-
-# GSVmulti's rate belongs to the reviewed session, independently of the bridge UART.
-GSVMULTI_BAUD = int(re.search(rb'^BaudRate = ([0-9]+)\r$', _template(), re.MULTILINE)[1])
-
-
-def generate_session(port: str) -> bytes:
+def _generate(port: str, template: SessionTemplate) -> bytes:
     if not isinstance(port, str) or not re.fullmatch(r'COM[1-9][0-9]{0,2}', port) or int(port[3:]) > 256:
         raise ValueError('session_port_invalid')
     number = port[3:].encode('ascii')
-    raw = _template()
-    # The source hash fixes both the sections and the uniqueness of these lines.
-    for before, after in ((b'ComNr = 8\r\n', b'ComNr = ' + number + b'\r\n'),
-                          (b'Name = "Chan. 8_1"\r\n', b'Name = "Chan. ' + number + b'_1"\r\n'),
-                          (b'ComNo = 8\r\n', b'ComNo = ' + number + b'\r\n')):
-        raw = raw.replace(before, after, 1)
-    return raw
+    inputs = dict(template.channel_inputs)
+    section = ''
+    seen = set()
+    result = []
+    for line in template.raw.splitlines(keepends=True):
+        content = line.rstrip(b'\r\n')
+        ending = line[len(content):]
+        if content.startswith(b'[') and content.endswith(b']'):
+            section = content[1:-1].decode('ascii')
+        replacement = content
+        field = content.split(b' = ', 1)[0]
+        if section in inputs and field == b'ComNr':
+            replacement = b'ComNr = ' + number
+        elif section in inputs and field == b'Name':
+            replacement = b'Name = "Chan. ' + number + b'_' + str(inputs[section]).encode('ascii') + b'"'
+        elif section == 'UserDevice' and field == b'ComNo':
+            replacement = b'ComNo = ' + number
+        else:
+            result.append(line)
+            continue
+        key = f'{section}.{field.decode("ascii")}'
+        if key in seen:
+            raise SessionTemplateError('session_template_invalid: duplicate COM field')
+        seen.add(key)
+        result.append(replacement + ending)
+    if seen != set(template.allowed_fields):
+        raise SessionTemplateError('session_template_invalid: missing COM field')
+    return b''.join(result)
+
+
+def generate_session(port: str) -> bytes:
+    """Public generator: always the selected active template, with no override."""
+    return _generate(port, active_session_template())
+
+
+def generate_template_session(port: str, template_id: str, *, allow_prepared: bool = False) -> bytes:
+    """Developer/test entry; prepared templates need an explicit opt-in."""
+    try:
+        template = load_session_catalog()[template_id]
+    except KeyError:
+        raise SessionTemplateError('unknown_template') from None
+    if template.spec.status == 'prepared' and not allow_prepared:
+        raise SessionTemplateError('automatic_export_blocked: prepared template')
+    return _generate(port, template)
