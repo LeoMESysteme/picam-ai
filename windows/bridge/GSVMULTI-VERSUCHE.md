@@ -87,3 +87,14 @@ Die `0` ist nur ein Platzhalter für diesen Test, im Messpfad nie.
 **Telegramme:** je 100 gültige Ticks, dazwischen Pausen von 2, 4, 8 und 30 s, in denen gar nichts gesendet wird.
 
 **Erfolg:** Die Pause bleibt als Marker-Zeile oder Zeitlücke sichtbar. Zu erwarten ist das nach Lauf 08/10 nicht; dann ist die Frage für UserDef abschließend negativ beantwortet.
+
+## Ergebnisse
+
+Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quellen/gsvmulti-versuche-2026-11-11/).
+
+**Versuch 1a (2026-11-11):** Session noch einkanalig (`NumChan = 1`, `Frequency = 1`, `Separator = 256`), Sender mit vierkanaligen Telegrammen.
+- **Ergebnis:** 600 von 600 Telegrammen aufgezeichnet, in Reihenfolge und ohne Verlust. GSVmulti nimmt aus `%wert;gültig;seq;zeit` den **ersten Wert** und ignoriert den Rest.
+- Ein einkanalig eingestelltes GSVmulti verträgt damit das Mehrkanal-Telegramm.
+- Der Sender war höchstens 42 ms verspätet.
+- Die Zeitachse ist äquidistant (`tf`, 0,1019 s), weil die Aufnahme um etwa 1 s länger lief als das Senden.
+- Offen bleibt der eigentliche Versuch 1 mit `NumChan = 4` und dem Trennzeichen Semikolon.
