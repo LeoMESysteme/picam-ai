@@ -25,7 +25,7 @@ py -3.13 tools\gsvmulti_versuche.py --port COM7 --versuch 1
 
 ## Versuch 1: Vier Kanäle in einem Telegramm (Erfolgsaussicht hoch)
 
-**Einstellung:** UserDef, Präfix `%`, Number of values = **4**, Trennzeichen **Semikolon**, „Filter-Out Non-Numeric“ aus. Bei „Add Channel“ alle Eingangskanäle öffnen, Frequenz 10 Hz.
+**Einstellung:** UserDef, Präfix `%`, Number of values = **4**, Trennzeichen **Semikolon**, „Filter-Out Non-Numeric“ **an lassen** (mit „aus“ kam in Versuch 1b und in den Läufen 13/14 nichts bzw. nur Timeout an). Bei „Add Channel“ alle Eingangskanäle öffnen, Frequenz 10 Hz.
 
 **Telegramm** (600 Ticks): `%0.50001;1;1;1789123456.123456` = Wert; gültig (1/0); Sequenz; Uhrzeit des Senders in s.
 
@@ -98,3 +98,9 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Der Sender war höchstens 42 ms verspätet.
 - Die Zeitachse ist äquidistant (`tf`, 0,1019 s), weil die Aufnahme um etwa 1 s länger lief als das Senden.
 - Offen bleibt der eigentliche Versuch 1 mit `NumChan = 4` und dem Trennzeichen Semikolon.
+
+**Versuch 1b (2026-11-11):** Session `NumChan = 1`, `Frequency = 10`, `Separator = 0`. Laut Leonhard war der Filter aus.
+- **Ergebnis:** 600 Telegramme gesendet, die Aufnahme ist **leer** (TDMS mit 0 Byte). GSVmulti hat nichts angenommen.
+- Das passt zu den Läufen 13/14: Mit `Separator = 0` gab es dort auch bei gültigen Zahlen nur Timeout. Mit `Separator = 256` (Lauf 11, Versuch 1a) wurde angenommen.
+- **Arbeitshypothese, nicht belegt:** Das Rohfeld `Separator` kodiert Trennzeichen und Filter gemeinsam; der Wert 256 steht für „Filter an“. Der Filter muss an bleiben.
+- `NumChan` blieb bei 1; die Einstellung für 4 Werte ist nicht in der Session angekommen.
