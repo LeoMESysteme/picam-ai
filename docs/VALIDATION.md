@@ -4478,3 +4478,177 @@ Framealter: SYNTHETIC, demo/provisional=true, time_claim=false. Nur innerhalb
 des jeweiligen HOST_MONOTONIC-Hosts vergleichen, keine Latenz-/Quellzeit-
 Aussage und keine echte DUT-Freigabe. npTDMS isoliert importiert, keine neue
 Laufzeitabhängigkeit oder Produktcodeänderung für diesen Versuch.
+
+
+## 2026-11-11 — Offline-Diagnose eines abgebrochenen Raster-Setups
+
+Nutzerlauf `live-20261111T154459Z`, laufender Worktree `bruecke-run` auf
+`08ac9b9`: Fokus/Belichtung abgeschlossen, Rasterstart 0/3 erfolgreich
+(`keine_startlage`). Gespeichertes Bild 1920 × 1080; lokale Offline-Wiederholung
+mit automatisch erkannter Hinweisbox liefert ebenfalls `keine_startlage`.
+Im ersten Durchgang: 1.274 Punktkandidaten, 32 verfeinerte Raster, kein
+angenommenes Raster. Ablehnungen: 7 `plus_nicht_gefunden`, 23 `leerzelle_belegt`,
+2 `zu_wenige_punkte`; gewählter Plus-Anker (484,89; 553,56) liegt links außerhalb
+der grünen Anzeige. Engere Box und weitere reine Offline-Ankerversuche führen
+noch nicht zum Erfolg. Keine neue Live-Messung, keine Zeit-/Latenzaussage,
+kein Eingriff in den laufenden Dienst. Belege lokal unter
+`var/diagnostics/raster-20261111-live-154459Z/`, offene Klärung [OQ-69](open-questions.md#oq-69).
+
+## 2026-11-11 — Belegpaket für gescheiterte Einrichtungen
+
+[Originale, Quellstand und Wiederholungsrezept](quellen/setup-failures-2026-11-11.md)
+für fünf Sitzungen gesichert: 22 vorhandene Setup-Dateien, darunter vier
+Standbilder, ein zweites Mittelbild und drei Überlagerungen. Der reine
+Fokusabbruch hat kein Bild. Die letzte Aufstellung ist als eigener Fall
+mit gültigem Raster und fehlerhafter Nachführung erfasst.
+
+Offline-Wiederholung aus dem archivierten Quellstand `08ac9b9`:
+
+| Sitzung | Beobachteter Raster-Fit | Historisches Ergebnis wiederholt? |
+| --- | --- | --- |
+| `live-20261111T154403Z` | `startlage_mehrdeutig` | ja |
+| `live-20261111T154459Z` | `keine_startlage` | ja |
+| `live-20261111T155404Z` | `keine_startlage` | ja; der ursprüngliche Lauf wurde danach abgebrochen |
+| `live-20261111T155557Z` | `ok`, 158 von 159 Punkten zugeordnet | ja |
+
+Für den manuell bearbeiteten Vorschlag der letzten Sitzung sind 16 Bereiche
+und 20 Änderungsversuche gespeichert. Geometrie-Gate erneut berechnet:
+Achsenseiten `[[2, 6], [11, 7]]`, mindestens drei je Seite, mit Reserve fünf;
+`spread_ok=false`, `reserve_ok=false`, passend zur gespeicherten Ablehnung.
+Die acht ursprünglichen Stabilitäts-Einzelbilder sind nicht gespeichert;
+ihre zeitliche Prüfung wurde nicht wiederholt. Frühere Mittelbilder der
+mehrfachen Startversuche fehlen ebenfalls. Das Paket dokumentiert diese
+Grenzen statt daraus vollständige Reproduzierbarkeit abzuleiten.
+
+Rezept greift ausschließlich auf Dateien zu; kein neuer Hardwarelauf,
+keine neue Messfreigabe und keine Zeit-/Latenzaussage. Prüfsummen aller
+Originalkopien und ZIP-Einträge sowie ZIP-CRC geprüft. Offene Korrekturen:
+[OQ-69](open-questions.md#oq-69), [OQ-70](open-questions.md#oq-70).
+
+
+## 2026-11-11 — Bedien-Sackgasse nach fehlerhaftem Einrichtungsvorschlag
+
+Hohe Priorität, [OQ-71](open-questions.md#oq-71). Nutzer meldet fehlendes
+Abbrechen und Neu einrichten bei `setup_ready + FEHLER`. Offline-Prüfung am
+gesicherten Vorschlag und Quellstand `08ac9b9`: `fieldsReady=true`; genau
+eine Kontextaktion, Bestätigen aktiv; tatsächliche Service-Prüfungen lehnen
+Bestätigen (`Einrichtung meldet FEHLER - nicht bestaetigbar`) und Abbruch
+(`Keine Einrichtung laeuft`) ab. Zustand danach unverändert `setup_ready`.
+Reine UI-Funktionen und Vorbedingungsprüfungen ausgeführt, kein Browser,
+HTTP-/Kamerazugriff oder Laufstart. Rezept und Originalausgabe im
+[Belegpaket](quellen/setup-failures-2026-11-11.md), Aufruf `replay.py --ui`.
+Dies ist ein reproduzierter Bug, keine Fehlerbehebung.
+
+
+## 2026-11-11 — Weitere Vorprüfungsabbrüche und lokale Statusantworten
+
+[Zusatzbelege nach Neustart](quellen/setup-followup-2026-11-11.md):
+`live-20261111T161702Z` und `live-20261111T161955Z` jeweils erster Rasterfit
+`keine_startlage`, zweiter `ok`, anschließend Abbruch `kanten (Zelle 7)`.
+Keine Stabilitätsprüfung gestartet. Fokus und Belichtung abgeschlossen.
+Ersten Fall mit gespeichertem Bild und archiviertem Code wiederholt:
+Raster 145/145 Punkte zugeordnet; Kantenprüfung FEHLER für Zellindex 7,
+`cell_occupied_step=29,8053` gegenüber Fehlergrenze 20. Andere Vorprüfungen
+OK, Stabilität nicht durchgeführt. Zweiten Fall ebenfalls offline wiederholt:
+Raster 145/145, Kanten-FEHLER Zelle 7 mit `cell_occupied_step=29,7929`.
+Kein Schwellenwert verändert (OQ-72).
+
+Vier lokale Statusanforderungen nach dem Abbruch: 172,836 / 6,562 / 1,724 /
+2,326 ms. `monotonic_ns`, Zeitbasis HOST_MONOTONIC auf demselben Host,
+Unsicherheit unbekannt. Erster Aufruf einschließlich kalter Client-/Import-
+Initialisierung; keine reine Serverlaufzeit und kein HTTP-/Browser-/Frame-
+Latenzbeleg. Die beobachtete Verzögerung unter Einrichtungs-Last bleibt
+unbestimmt (OQ-73).
+
+Fokusmeldung des Nutzers in Versuch `161955Z`: Ziel 60, beste Schärfe
+734,4518, Endprüfung 727,4116; spätere Regleranforderung und Rückmeldung 60,
+Autofokus aus. Werte aus gespeicherter Diagnose, keine neue Fokusmessung.
+Optischer Rückfall nach Fokussuche bleibt OQ-74; numerischer Rücksprung
+nicht belegt. Tatsächlicher Betriebsstand `bruecke-run/08ac9b9`, Fokusmodule
+byte-identisch zu den geprüften neueren Brücken-Zweigen. Keine neue
+Hardwaremessung oder Ausrollung für diese Diagnose durchgeführt.
+
+
+## 2026-11-11 — Neue Aufstellung 162902Z für autonome Korrektur gesichert
+
+[Eigenes Belegpaket](quellen/setup-new-position-2026-11-11-162902.md),
+[Claude-Übergabe](superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
+`live-20261111T162902Z`: drei Rasterstartversuche, alle `keine_startlage`;
+kein Vorschlag und keine Stabilitätsmessung. Vier vorhandene Originaldateien
+(Standbild, Regler/Fokusdaten, Zellentexte, Fehler) und ein abgeschlossener
+Dateischnappschuss mit vollständigem lesenden Status gesichert.
+Offline-Rezept mit eingefrorenem Quellstand `08ac9b9` liefert erneut
+`keine_startlage` auf dem letzten Originalmittelbild.
+
+Bild 1920 × 1080. Automatische grüne Hinweisbox in Pixeln
+(538,3; 144,62; 800,4; 110,04), berichtete Fokus-ROI
+(640; 360; 640; 360): Schnittfläche 0 px². Fokusziel 46, beste protokollierte
+Schärfe 174,9093, Endprüfung 173,1235. Das gesicherte Bild stammt nicht vom
+Fokuszeitpunkt; unveränderte Aufstellung und optische Endlage über den
+anschließenden Kameraneustart sind nicht unabhängig belegt. Keine neue
+Fokusmessung ausgelöst. Befund in OQ-69/OQ-74 ergänzt; keine alleinige
+Ursache für die Rasterablehnung daraus abgeleitet.
+
+Rohstapel und die ersten beiden Versuchs-Mittelbilder waren nicht auf Platte
+vorhanden. Status-Erfassungszeit Host-Wanduhr UTC, Unsicherheit unbekannt;
+Mtime ausschließlich FILE_MTIME. Keine Framealter- oder Latenzaussage.
+
+
+## 2026-11-11 — Positive Regressionsaufstellungen und Laufminimum
+
+[Originale, Quellstand und ausführbare Wiederholung](quellen/workbench-positive-regression-2026-11-11.md).
+Drei weitere Nutzeraufstellungen: `164508Z`, `165234Z`, `165754Z`, jeweils
+bestätigte Einrichtung mit WARNUNG. Statische Offline-Wiederholung mit
+archiviertem Betriebsstand `08ac9b9`: drei erfolgreiche Fits samt echter
+Quad-Verfeinerung auf zweitem Standbild; Endquads jeweils 0,0 px maximale
+Eckabweichung zu gespeichertem Vorschlag, Gegenlesen OK. Nachführverteilung
+je Achsenseite: `[[7,10],[8,9]]`, `[[11,11],[7,8]]`, `[[10,10],[9,7]]`;
+Reserve jeweils erfüllt. Keine neue zeitliche Stabilitätsmessung.
+Sechs historische Kontrollbilder `sc3/sc4/sc5/ab1/ab2/sc6` zusätzlich mit
+Profil und verfügbaren Metadaten erhalten: ursprüngliche Geometrietests
+6 bestanden, 41 nicht ausgewählte Tests (kein Volltest).
+
+`164508Z/run-01`: Auditdatei erneut gezählt, 3.843 Datensätze = 2.920 VALID,
+757 TRANSITION, 166 UNREADABLE, kein STALE. 75,98230549 % VALID auf diesen
+verarbeiteten Datensätzen, vom Nutzer genanntes Minimum 75 % erreicht;
+26 zusätzlich übersprungene Frames nicht in diesem Nenner. 0 Trackingverluste,
+0 Auditfehler, kein Kameralesefehler, Ende `bediener`.
+Host-Wanduhr UTC-Laufspanne 129,940458 s, Unsicherheit unbekannt; kein
+Sensorlatenzbeleg. Referenzstatus: 0 Fehler unter 556 vergleichbaren VALID,
+2.352 unentschieden, 12 ungedeckt. UART direkt 2.920 gesendet, 923 ausgelassen,
+0 Ausgabefehler, provisional, Abnahme fehlt. Kein Windows-EXE-Empfangstest.
+
+`165234Z/run-01`: 28 UNREADABLE und Trackingverluste, 5 übersprungene Frames.
+**Nutzerklärung:** absichtlicher Start-/Stopp-Umweg, weil „Neu einrichten“
+nach Bestätigung fehlte und eine neue Aufstellung eingerichtet werden sollte.
+Nicht als eigenständigen Trackingfehler oder negativen Regressionslauf
+bewerten; OQ-76 geklärt und OQ-71 um diesen Bedienzustand erweitert.
+`165754Z`: kein Lauf bei Sicherung. Diagnose-Rohbilder der Läufe fehlen.
+
+## 2026-11-11 — Gemeldeter gleichzeitiger Verbindungs-/Bildausfall
+
+[Gesicherte Logs und Befehlsausgaben](quellen/workbench-outage-2026-11-11.md).
+Etwa 7 s laut Nutzerschätzung, exakter Beginn/Ende unbekannt. Dienst PID
+3321848 seit 17:16:36 MEZ, NRestarts=0, bei Prüfung aktiv. Kein zugeordnetes
+Neustartereignis im Appjournal. Kernel-/Netzwerkjournale gesichert;
+USB-U1-Warnungen früher bei Setup-Neustarts und Tailscale-Ereignisse sind
+keine bewiesene Ursache. Keine Latenz- oder Verfügbarkeitsmessung daraus
+ableiten; OQ-75 offen. Priorität aller offenen Workbench-Fälle kritisch.
+
+
+## 2026-11-11 — Erneuter optischer Fokusbefund, Kantenfall 170836Z
+
+[Originale und Offline-Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+`live-20261111T170836Z`: erster Rasterfit OK, 155/155 Punkte zugeordnet;
+Kanten-Gesamturteil FEHLER, markierte Zellen 14/15. Leerzellen-
+Helligkeitsstufe 11,0 bzw. 7,0; Fehlergrenze 8, Warngrenze 6. Somit
+Zelle 14 FEHLER, Zelle 15 WARNUNG; die zusammengefasste Fehlermeldung nennt
+beide. Statische Wiederholung mit eingefrorenem Code reproduziert dies.
+Keine Stabilitätsmessung begonnen. Kein Schwellenwert verändert.
+
+Nutzer meldet erneut schlechteren optischen Fokus als sichtbar möglich.
+Ziel und Rückmeldung 56, Autofokus aus; bestes protokolliertes Schärfemaß
+522,219448, Endprüfung 517,933823, Prüfschwelle 443,886531. Keine unabhängig
+aufgezeichnete Fokusbildfolge, kein nachgewiesener numerischer Rücksprung.
+Vier originale Setup-Dateien samt Status und Quellstand erhalten; OQ-72/74
+ergänzt. Offline-Reproduktion ist keine physische Fokusabnahme.

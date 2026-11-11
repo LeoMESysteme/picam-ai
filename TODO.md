@@ -1,4 +1,4 @@
-# TODO — Stand 2026-10-21
+# TODO — Stand 2026-11-11
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -8,6 +8,32 @@ Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ---
+
+## Aktueller Blocker — kritisch, zuerst bearbeiten (2026-11-11)
+
+[Gesamtauftrag und Abschlusskriterien](docs/WORKBENCH_BLOCKER.md),
+[autonome Claude-Übergabe](docs/superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
+Bridge-/EXE-Weiterentwicklung, Systemtests und Kaulitz-Abnahme sind blockiert.
+Nach Limit-Reset zuerst stabilen gemeinsamen Betriebsstand herstellen;
+Nutzerrückkehr Freitag, 2026-11-13. Frühere Aufgaben unten sind nachgeordnet.
+
+Priorität: Bedien-Sackgasse OQ-71, Rasterstart OQ-69, Fokus OQ-74,
+Bereichsverteilung OQ-70, Kantenprüfung OQ-72, verzögerte Oberfläche OQ-73,
+kurzer Verbindungs-/Kameraausfall OQ-75. Diese bleiben offen.
+OQ-76 ist durch Bedienererklärung geklärt; der kurze Lauf war ein
+notwendiger Umweg zu „Neu einrichten“ (ebenfalls OQ-71). Laufender Dienst weiterhin `bruecke-run/08ac9b9`;
+neuere Workbench-/EXE-Zweige und uncommittete Kandidaten zuerst vergleichen.
+
+Drei neue bestätigte Aufstellungen (`164508Z`, `165234Z`, `165754Z`) und
+sechs historische Kontrollen sind gesichert. `164508Z/run-01`: 75,9823 %
+VALID auf 3.843 verarbeiteten Datensätzen. `165234Z/run-01`: 28/28
+Trackingverluste beim absichtlichen Start-/Stopp-Umweg für eine neue
+Aufstellung, kein eigenständiger belegter Trackingfehler. Setup-Erfolg und
+Lauf-Erfolg getrennt prüfen. [Referenzen und Laufkontext](docs/quellen/workbench-positive-regression-2026-11-11.md).
+Originalbilder, eingefrorener Quellstand, reproduzierbare Rezepte und Logs
+stehen unter `docs/quellen/`. Versehentlicher Zellentext mit „hatte“ war
+laut Nutzer Fehleingabe; kein zusätzlicher belegter Bug.
+
 
 ## Stand 2026-09-30 nachmittags: Abnahme 3 bestanden
 
@@ -290,6 +316,35 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 ## Die Aufgaben, in Reihenfolge
 
 ### Messpfad live (aktiv)
+
+**Claude-Übergabe für autonome Korrektur ohne ursprüngliche Aufstellung:**
+[Auftrag, priorisierte Fehler, Pakete und Grenzen](docs/superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
+Neuester positiver Fall ist `live-20261111T165754Z`; negative Fälle und
+Standalone-Rezepte mit Quellkopie bleiben erhalten.
+
+**Kritische Priorität: Bedien-Sackgasse nach fehlerhaftem Vorschlag**
+([OQ-71](docs/open-questions.md#oq-71)): `setup_ready + FEHLER` bietet
+Bestätigen an, wird vom Server abgelehnt und hat weder Abbrechen noch
+Neu einrichten. Diesen Ausweg zuerst korrigieren; die Fehlersperre der
+Bestätigung bleibt erhalten. Backend-Abbruch funktioniert bisher nur bei
+`setup_running`, daher nicht allein einen Knopf ergänzen.
+
+**Wiedereinstieg 2026-11-11 — Einrichtung:** Vor einer Korrektur die
+[gesicherten Fehlerfälle mit Offline-Rezept](docs/quellen/setup-failures-2026-11-11.md)
+verwenden: Rasterstart [OQ-69](docs/open-questions.md#oq-69), danach die
+gesonderte Bereichsverteilung [OQ-70](docs/open-questions.md#oq-70).
+Originale und Quellstand sind im Belegpaket erhalten; fehlende Rohstapel und
+Stabilitäts-Einzelbilder sind dort ausdrücklich benannt. Bei einer neuen
+Aufnahme diese Einzelbilder und alle Vorschlagsrevisionen mit sichern.
+
+**Folgebeobachtungen nach Neustart:** Beide neuen Abbrüche kommen aus der
+Kantenprüfung [OQ-72](docs/open-questions.md#oq-72); verzögerte Oberfläche
+[OQ-73](docs/open-questions.md#oq-73) und optischer Fokusrückfall
+[OQ-74](docs/open-questions.md#oq-74) getrennt untersuchen.
+[Zusatzbelege samt Betriebs-Worktreeprüfung](docs/quellen/setup-followup-2026-11-11.md).
+Dienst läuft weiterhin auf `bruecke-run/08ac9b9`, nicht dem neueren
+Workbench-Gesamtstand. Fokusmodule in den geprüften Brücken-Zweigen gleich;
+keine Fokusbehebung allein durch einen Zweigwechsel behaupten.
 
 **Stand 2026-10-21 abends:** Der Messpfad läuft am Aufbau. Lesesperre,
 schwankende Ziffern, Licht-Hinweis/Toleranz, Leser mit ~30 Bildern/s,

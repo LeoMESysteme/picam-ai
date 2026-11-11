@@ -1,135 +1,107 @@
-# Status und Übergabe — 2026-11-04
+# Status und Übergabe — 2026-11-11
 
-Gesicherter GSVmulti-Arbeitsstand auf Branch `feat/gsvmulti-bridge`.
-Nutzer beendet die Arbeit für einige Tage und hat Dokumentation, Commit und
-Push beauftragt. Kein Merge nach master und keine weiteren Messversuche.
-Einstieg für Fortsetzung durch Codex/Claude:
-[Arbeitsplan](superpowers/plans/2026-11-04-gsvmulti-anbindung.md),
-[Protokoll/Schranken](GSVMULTI_PROTOCOL.md#windows-bruecke),
-[TODO](../TODO.md), [Belegarchiv](quellen/gsvmulti-validation-2026-11-04.md).
+## Kritischer Auftrag: Workbench vor Bridge/EXE stabilisieren
 
-## Ergebnis der heutigen Hardware-/Windowsversuche
+[Blocker, Prioritäten und Abschlusskriterien](WORKBENCH_BLOCKER.md),
+[ausführliche Claude-Übergabe](superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
+Nach Limit-Reset zuerst bearbeiten. Wiederholte Setupfehler, Fokus- und
+Bedienprobleme sowie kurzer Verbindungs-/Bildausfall blockieren Bridge-/EXE-
+Weiterentwicklung, Systemtests und Kaulitz-Teilabnahme. Nutzerrückkehr und
+Zieltermin: Freitag, 2026-11-13. Kein Beleg einer bereits erfolgten Behebung.
 
-* Windows11 Pro Build26200, GSVmulti2.03 Pro (EXE2.3.4), Python3.15x64.
-* com0com auf diesem Rechner funktionsfähig: CNCA1=COM5 (Brücke), CNCB1=COM6
-  (GSVmulti). Bidirektionale Probe bestanden; SecureBoot/HVCI weiter aktiv.
-  Aktiver x64-Treiberhash e61c4943fb534f932193a81e8fbcb2f453e4b073a14159f9c161537b38d2bc38,
-  Vovsoft-verlinkter Build. Keine allgemeine Treiberzulassung behaupten.
-* Lokaler Windows-Demoweg:600/600 Werte exakt in TXT/TDMS, mV/V/Scaling1.
-  Tatsächliche Windows-Ereignisrate9,0576Hz bei Ziel10Hz, OQ-57.
-* Gemeinsamer Pi→TCP→Windows-Brücke→COM5/com0com/COM6→GSVmulti-Dateipfad:
-  600/600 Werte−0,300…+0,299 exakt in TXT/TDMS, alle ACK-/Request-/Run-/
-  Frame-Zuordnungen und Payloads passend. [Beleg](VALIDATION.md#tcp-demo-20261104-01).
-* Brückenprozessabbruch bei weiterlaufender Quelle:600 Quellwerte auditiert,
-  510 angeboten/COM-geschrieben, alle510 exakt in TXT/TDMS. Nach100 written
-  eigener Windows-Kindprozess beendet,10,0001885s Steuerpause, Neustart.
-  Übergang Frame99=−0,201 → Frame189=−0,111, jüngste Veröffentlichung;
-  89 Zwischenwerte nicht nachgesendet. Zusätzlich Frame356=+0,056 schon vor
-  Angebot durch Latest-Auswahl ersetzt (OQ-58). Anzeige ohne Bedienereingriff
-  fortgesetzt. Beide Kindprozesse absichtlich beendet, Controller completed.
-  [Beleg](VALIDATION.md#tcp-reconnect-20261104-01).
-* GSVmulti verdichtet weiterhin Ausfallzeiten:10,1779168s zwischen Windows-
-  Schreibereignissen werden am Übergang in TXT zu0,1s, kein Fehlwertmarker.
-  Gesamtraster50,9s gegenüber61,1879196s Windows-Ereignisspanne. Nominelles
-  dt mode=1/f0 ist keine gemessene Quell-/Ankunftszeitachse.
-* 16 direkte UART-Demoversuche belegen Rampen/Sprünge/Einheit, aber NaN/Pause
-  verschwinden auch mit bestätigtem Replace Missing Values. Filter aus
-  scheitert schon bei gültigen Zahlen, Gegenprobe mit Filter ein funktioniert.
-  [Belege](VALIDATION.md#uart-demo-20261104-08).
+OQ-71 kritisch: Abbruch/Neustart bei `setup_ready + FEHLER` fehlen;
+Bestätigen wird korrekt abgelehnt. Zusätzlich fehlt nach erfolgreicher
+Bestätigung ein direkter Einstieg in neue Einrichtung. Nutzer musste dafür
+`165234Z/run-01` starten und stoppen. Die vorläufige Deutung dieses kurzen
+Laufs als eigenständiger Trackingfehler ist zurückgenommen, OQ-76 geklärt.
+OQ-69/70/72/73/74/75 bleiben offen und kritisch. Versehentlicher Zellentext
+mit „hatte“ war laut Nutzer Fehleingabe, kein neuer belegter Softwarebug.
 
-Nur synthetische Demo, demo/provisional=true, time_claim=false. Ereigniszeiten
-jeweils HOST_MONOTONIC auf eigenem Host, Pi und Windows nicht gepaart.
-Keine physische Framealter-/Latenzaussage. Kein Kabel-/Netz-Blackout oder
-Betriebssystem-Neustart und keine reale DUT-Abnahme. Echte Ausgabe bleibt
-strukturell gesperrt. Keine Mittelung, keine Referenzkorrektur, keine Altwerte
-unmarkiert weiterführen und keinen Freigabebypass ergänzen.
+## Gesicherte Referenzen und Zahlen
 
-## Workbench ist bereits als Prototyp angeschlossen
+Neueste bestätigte Einrichtung: `live-20261111T165754Z`, WARNUNG bestätigt,
+bei Sicherung kein Lauf. Zusammen mit `164508Z` und `165234Z` drei positive
+Setup-Gegenproben, je zehn Originaldateien mit Bildern, Vorschlag, Profil,
+Bestätigung; sechs historische Geometriekontrollen zusätzlich erhalten.
+[Regressionspaket mit ausführbarem Rezept](quellen/workbench-positive-regression-2026-11-11.md).
+Alle drei statischen Setup-Replays einschließlich echter Quad-Verfeinerung,
+Gegenlesen und Bereichsreserve bestanden; Endquads jeweils 0,0 px Unterschied
+zum gespeicherten Vorschlag. Sechs historische Originaltests bestanden.
 
-Nicht erneut eine zweite Transportstrecke bauen. Vorhandene Nähte:
+`164508Z/run-01`: 2.920 VALID / 3.843 Auditdatensätze = 75,9823 %,
+757 TRANSITION, 166 UNREADABLE; 26 weitere Frames übersprungen.
+0 Trackingverluste, 0 Auditfehler, kein Kameralesefehler. 129,940458 s
+Host-Wanduhrspanne UTC, Unsicherheit unbekannt, keine Latenzmessung.
+Referenzvergleich: 0 Abweichungen unter 556 vergleichbaren VALID,
+2.352 unentschieden, 12 ungedeckt. UART direkt, kein Windows-/GSVmulti-
+Empfangsnachweis. 75-%-Minimum auf verarbeiteten Datensätzen erreicht,
+keine vollständige Hardware-/Langlaufabnahme daraus ableiten.
 
-* src/dispread/sink/protocol/user_defined.py: UserDefinedFormatter erhält
-  Rohtext-Dezimalauflösung und prüft Zahl/Wert. Format provisional; natives
-  gsv_ascii.py wirft absichtlich. SEND_NAN ausschließlich Demo.
-* src/dispread/gsv_transport.py: OutputConfig/OutputPublisher, TCP/UART,
-  höchstens ein ausstehendes Angebot plus jüngster Wert; Invalidierungsbarriere
-  getrennt, Run-/Frame-/Request-IDs. ACK nur COM-Treiberübergabe.
-* src/dispread/gsv_bridge.py und scripts/gsv-bridge.py: gemeinsame Windows-
-  Python-/pySerial-Brücke, nur synthetische Demowerte akzeptiert.
-* src/dispread/live/session.py: Audit vor Publish, vollständiger Lauf ohne
-  JSONL-Rotation, Ausgabestart/-stop und Konfiguration im session.json.
-* src/dispread/live/service.py, workbench/live_api.py: optionale output-
-  Konfiguration an /live/run/start, Ausgabestatus an /live/status;
-  Test-Override erlaubt keine externe Ausgabe.
-* workbench/static/live.html und live.js: Auswahl Aus/UART/Netzwerk,
-  UART-Gerät/TCP-Port, Status/Warnung und Freigabesperre. Auswahl während Lauf
-  gesperrt. Meldung unterscheidet COM-Bestätigung und GSVmulti-Empfang.
+## Neuester fehlgeschlagener Versuch
 
-Die neue Workbench-Gestaltung kann diese Nähte übernehmen; UI-Umbau und echte
-Messfreigabe bleiben getrennte Aufgaben. Browser-/Unitprüfungen ersetzen keinen
-Live-DUT-Nachweis. Referenz bleibt Audit und korrigiert keinen DUT-Wert.
+`live-20261111T170836Z`: Nutzer sieht erneut geringere optische Schärfe als
+möglich; Raster erster Versuch OK, danach Kanten-FEHLER in Leerzellen 14/15,
+keine Stabilitätsmessung. Vier Setup-Originale und Fokus-/Statusdaten erhalten.
+Ziel/Rückmeldung 56, beste Schärfe 522,219448, Endprüfung 517,933823;
+kein numerischer Rücksprung belegt. [Eigenes Paket und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+Weitere zufällige Aufstellungen vorerst nicht erforderlich; gezielte
+Fokus-Bildfolge wäre bei späterer Hardwareprüfung die relevante Ergänzung.
 
-## Reihenfolge für die Fortsetzung
+## Fehlerbelege und Logs
 
-1. Belege/Code von diesem Branch übernehmen, Status und OQ-06/OQ-47/OQ-50/
-   OQ-51 lesen. GSVmulti-Entwicklung muss Ungültig-/Zeitsemantik klären;
-   Nutzer hat direkten Kontakt, Agent hat nichts versandt. Lokales Support-
-   Vergleichspaket im Belegarchiv. Fehlerbehebung derzeit zurückgestellt.
-2. OQ-58 isolieren: zusätzliche Latest-Ersetzung Frame356 während bestehender
-   Verbindung anhand Quell-Publikationen/Poll-/ACK-Reihenfolge prüfen; kein
-   Verlust nach COM-Schreiben. Keine ungepaarten Uhren subtrahieren.
-3. UART über dieselbe gemeinsame Windows-Brücke prüfen. Direkter UART-Erfolg
-   umgeht diese Strecke. Weitere Netz-/COM-/ACK-/Startreihenfolge-/Pufferfälle
-   getrennt prüfen. Belegter Prozesswiederanlauf ersetzt sie nicht.
-4. Workbench-Prototyp in die geplante Gestaltung übernehmen; Warnung,
-   lokale Fortsetzung bei Abbruch, Audit vor Publish, Testlaufsperre und
-   strukturelle DUT-Sperre erhalten. Native GSV-Protokolle nicht erfinden.
-5. Erst nach belegter Ungültig-/Altwert-/Zeitbehandlung Freigabeimplementierung
-   gesondert reviewen und je Weg mindestens30min Live-Abnahme. Historischer
-   Import OQ-48 bleibt getrennt, keine alten Daten in aktuellen Stream nachholen.
-6. Danach extern erreichbaren Ein-Befehl-Bootstrap/Setup-TUI/CLI für SSH
-   umsetzen (OQ-49). SCP-Pilot ist kein veröffentlichter Installer.
+* [Erste Fehlerfälle und reproduzierte Bedien-Sackgasse](quellen/setup-failures-2026-11-11.md):
+  Rasterstart, manuell bearbeitete Nachführverteilung, echte UI-/Backend-Funktionen.
+* [Kantenabbrüche und Worktree-/Fokusprüfung](quellen/setup-followup-2026-11-11.md):
+  `161702Z`/`161955Z`, Raster 145/145, Kanten-FEHLER Zelle 7 jeweils offline.
+* [Weitere Aufstellung 162902Z](quellen/setup-new-position-2026-11-11-162902.md):
+  drei Mal `keine_startlage`, letztes Bild, Fokusdaten und Standalone-Rezept.
+  Im letzten Bild LCD-Hinweisbox vollständig außerhalb fester Fokus-ROI;
+  Bild vom Fokuszeitpunkt fehlt, daher keine alleinige Ursache bewiesen.
+* [Ausfalllogs](quellen/workbench-outage-2026-11-11.md):
+  ungefähr sieben Sekunden laut Nutzer. Dienst PID 3321848 blieb aktiv,
+  NRestarts=0, kein zugeordnetes Neustartereignis. App-/Kernel-/Netzwerklogs
+  samt Fehlerausgaben erhalten. Ursache offen, Dauer nicht gemessen.
+* [Kandidatenstände und passive Dateiversionen](quellen/workbench-recovery-context-2026-11-11.md):
+  Quell-HEADs, relevante binärfähige Patches und neue Dateien aus ui/ux;
+  ungeprüfte Kandidaten, keine heimlich ausgerollten Fixes.
 
-## Wiederaufbau und bekannte Fallstricke
+ZIPs unter `docs/quellen/` mit äußerem SHA-256 und innerem Manifest;
+Arbeitskopien `var/diagnostics/`. Zahlen in [VALIDATION](VALIDATION.md),
+Aufbau und Bedienerklärungen im [Laborjournal](lab_journal.md).
+Sicherungsbranch: `docs/workbench-critical-2026-11-11`; tatsächlichen
+Commit-/Remote-Stand über Git prüfen. Fremde lokale Änderungen erhalten.
 
-Pi raspi06/Pi5, SSH/TCP über Tailscale100.122.154.35; TCP-Port5000 zuletzt
-frei, kein Demopublisher aktiv. Windows-Brückenordner:
-C:\Users\EE-User-4\gsvmulti-demo-da3ed32a\bridge.
-UserDefined COM6/115200/8N1, Zeichenpräfix%, ein Wert, Zahlenfilter ein,
-Separator unused,10Hz,mV/V,Scaling1. Manuelle Aufnahme aller Werte, TXT-
-Autoexport. Für neue Verbindung GSVmulti vollständig neu starten; Close/Open
-scheitert mit Port already open (OQ-52/OQ-55), Workaround vom Nutzer akzeptiert.
-LogLevel2 unter ProgramData/MEsystemeGSVmulti/config.ini, Logs C:\GSVmultiLog.
-COM4 FTDI-USB-TTL; direkter Pi-UART ttyAMA0, RXD an physischem Pin8/TXD0,
-GND an Pin6 laut Nutzer, übrige Kontakte frei. COM3 Intel AMT SOL.
+## Prüfung dieser Sicherung
 
-Der endliche scripts/gsv-publisher-demo.py wartet pro Datensatz auf ACK;
-für weiterlaufende Quelle bei Ausfall ungeeignet. Deshalb getrennter Throwaway-
-Generator reconnect-source-spike.py unter var/diagnostics/gsvmulti/, ebenfalls
-im Archiv. Windows-Controller unterbricht nur eigene Kindprozesse, keine
-GSVmulti-Prozesse. Nicht als fertiges Produktionswerkzeug darstellen.
+Sieben ZIPs: äußere SHA-256, ZIP-CRC und alle inneren Manifestdateien geprüft.
+Frisch entpacktes positives Paket bestätigt Integrität; drei statische
+Setup-Replays und sechs historische Geometrietests erfolgreich. Neuester
+Kantenfehler offline reproduziert. Code-Patches beider Arbeitskandidaten
+gegen frisch entpackte HEAD-Quellen anwendbar. Strenger Doku-Build bestanden.
+Der vollständige 90-Test-Doku-Browserlauf wurde beendet: 5 bestanden,
+1 Diagrammtest mit 30-s-Timeout fehlgeschlagen, 1 unterbrochen, 83 nicht
+ausgeführt. Gezielte Wiederholung des Diagrammtests und des unterbrochenen
+JS-Fallback-Tests ohne parallele Archivarbeit: 2 bestanden (17,6 s,
+60-s-Testbudget). Ursache des ersten Timeouts nicht bewiesen. Das ist keine
+bestandene Gesamtsuite; vollständiger Lauf vor Merge erforderlich.
+Es gab keine Produktcodeänderung und keinen Merge.
 
-Originale/Rezepte weiter lokal unter var/diagnostics/gsvmulti/.292 relevante
-Dateien zusätzlich versioniert im ZIP unter docs/quellen/ (Manifest/Hashes).
-Drittanbieter-Treiber/Installer und npTDMS-Wheel nicht enthalten. Keine neue
-Pi-Laufzeitabhängigkeit; .venv mit --system-site-packages, Installation --no-deps.
-Reale Messbelege weiterhin nur GSV-2AS/Displaytech161A/Raumlicht/mV/V.
-USB-C-Gadget auf Nutzerwunsch zurückgestellt: X1201V1.1 versorgt Pi; parallele
-Pi-USB-C-Stromführung nicht freigegeben, kein Gadget aktiviert (OQ-56).
+## Betriebsstand und Grenzen
 
-Unabhängige lokale Redesign-Entwürfe, Benutzer-Notizen und Synchronisations-
-Dateien gehören nicht zum GSVmulti-Commit und bleiben im Arbeitsplatz erhalten.
-Nachführung/Testlauf-Audit/alte Zeitbasis-Bezeichnungen (OQ-26/OQ-44/OQ-45)
-weiter offen. Aktuelle Abschlussprüfungen und Commit stehen im Git-Verlauf;
-keine vollständige Hardware-/Windows-Systemabnahme behaupten.
+Dienst `dispread-werkbank-bruecke.service`, PID 3321848 seit 17:16:36 MEZ,
+`.worktrees/bruecke-run`, Commit `08ac9b9`, `PYTHONPATH=src`,
+`https://100.122.154.35:8082/live`. Importpfade mit passendem Interpreter und
+Prozessumgebung geprüft. Der ausdrücklich gewünschte Neustart lud denselben
+alten Stand, kein Update. Neuere Arbeit in `feat/bruecke-ui` (`8335abf`)
+und `feat/bruecke-ux` (`2c5be9b`) plus uncommittete Änderungen sind gesichert.
+Vor Korrekturen aktuellen Zielstand gegen archivierte Fälle vergleichen.
+Fokusmodule run/ui/takt/ux identisch; Branchwechsel allein belegt keinen Fix.
 
-## Abschlussprüfung dieser Sicherung
-
-87 gezielte GSV-/Live-Backendtests bestanden, Ruff grün,40 Node-Clienttests bestanden;
-strikter Doku-Build und vollständige Wertevergleiche beider TCP-Versuche
-bestanden. Vorheriger vollständiger Implementierungslauf:1805 Tests bestanden,
-76 übersprungen,90 Doku-Browserfälle und2 Live-Browserfälle abgedeckt.
-Die erneute vollständige pytest-/Doku-Browserwiederholung beim Sessionende
-wurde auf ausdrücklichen Nutzerwunsch „werde jetzt fertig“ abgebrochen;
-sie wird nicht als abgeschlossener grüner Lauf ausgegeben. Vor Merge die
-vollständigen Doku-Browserprüfungen erneut abschließen. Kein Merge erfolgt.
+Rohstapel, verlorene Stabilitätsproben und Fokusbilder vor/nach Kameraneustart
+fehlen. Keine künstlichen Kopien als unabhängige Nachweise ausgeben.
+FILE_MTIME und Sicherungs-Wanduhr sind keine Sensor-Latenzbelege.
+Statische Regressionen und große Teile der Zustands-/Steuersequenz sind
+auch ohne Aufbau bearbeitbar; physische/Windows-Abnahme getrennt halten.
+Keine weiteren Kameraaktionen oder Dienstumstellung für die Sicherung.
+Keine Claude-Sitzung gestartet oder angeschrieben; lokale Einstiegsverweise
+auch in ui/ux gesetzt, ausführlicher Auftrag für Wiederaufnahme vorhanden.

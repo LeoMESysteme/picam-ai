@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+> **KRITISCHER BLOCKER — 2026-11-11:** Workbench-Einrichtung/Fokus/Bedienung
+> und Verbindungsabbrüche zuerst beheben. Bridge-/EXE-Ausbau und Abnahme
+> durch Herrn Kaulitz sind blockiert. Ziel: zuverlässiger gemeinsamer Stand
+> bis Freitag, 2026-11-13. Nach Claude-Limit-Reset sofort mit
+> [Blocker und Belegen](docs/WORKBENCH_BLOCKER.md) und
+> [Claude-Auftrag](docs/superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md)
+> beginnen. Keine bereits erfolgte Fehlerbehebung behaupten.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Einstiegsreihenfolge (verbindlich)
