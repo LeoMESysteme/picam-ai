@@ -97,7 +97,8 @@ const regionHint = fields({
 });
 const previousRegionHint = fields({
   session_id: nullable(string), run: nullable(string),
-  regions: array(fields({ number: positive, centre: point, max_share: number })),
+  quad: nullable(array(point)),
+  regions: array(fields({ number: positive, centre: point, max_share: number, flagged_evaluations: integer })),
 });
 const causes = fields({
   window_s: number, frames: integer, limited: boolean,

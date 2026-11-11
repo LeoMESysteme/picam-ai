@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Einrichtung: Hinweise zu Rahmenbereichen entrümpelt (T3).** Die Bereichsbearbeitung
+  zeigte je Stelle des letzten Laufs eine gelbe Zeile, auch „dort liegt kein Bereich“, das ist der gute
+  Fall. Jetzt erscheint ein Hinweis nur, wenn im neuen Vorschlag ein Bereich (Toleranz 8 px) an einer
+  dauerhaft unstimmigen Stelle liegt: Anteil ≥ 0,30 und mehrfach markiert, höchstens 3, stärkste zuerst.
+  Bei neuer Aufstellung (Anzeige-Viereck um mehr als 12 px verschoben) wird nichts verglichen. Der Dienst
+  reicht dafür nur dauerhaft Unstimmiges samt Zähler und Viereck in `previous_region_hint` weiter.
+  Messpfad, Tracker und `session.json` bleiben unverändert.
 * 2026-11-11: **GSVmulti-Vierkanal-Takt für UART direkt (B1, noch nicht abgenommen).**
   Neues Format `gsvmulti_userdefined_4ch_v1` mit `MARK_RECORD`: pro Takt
   `%wert;gültig;takt;zeit\r\n`, bei ungültigem Takt genau `99999999.0` und Gültigkeit 0.

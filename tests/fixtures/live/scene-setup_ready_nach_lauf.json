@@ -401,6 +401,24 @@
   "previous_region_hint": {
     "session_id": "live-20261111T103604Z",
     "run": "run-01",
+    "quad": [
+      [
+        810.0,
+        511.0
+      ],
+      [
+        1369.0,
+        511.0
+      ],
+      [
+        1377.0,
+        580.0
+      ],
+      [
+        814.0,
+        591.0
+      ]
+    ],
     "regions": [
       {
         "number": 6,
@@ -408,7 +426,8 @@
           830.0,
           413.0
         ],
-        "max_share": 0.937
+        "max_share": 0.937,
+        "flagged_evaluations": 3
       }
     ]
   },

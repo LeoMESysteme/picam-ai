@@ -54,17 +54,38 @@ export function regionAt(regions, [x, y], scale = 1) {
   });
 }
 
-// TC 2026-11-11: Bereiche, die im letzten Lauf dauerhaft unstimmig waren
-// (status.previous_region_hint), im aktuellen Vorschlag ueber die Lage
-// wiederfinden. Nach einer Neueinrichtung kann sich die Nummer aendern; ohne
-// Neueinrichtung ist sie gleich. Bis MATCH_PX Abstand gilt als derselbe Ort
-// (halbe Fenstergroesse 7,5 px plus Einrasten; Mindestabstand der Bereiche 28 px).
+// TC 2026-11-11, T3 2026-11-11: Stellen, die im letzten Lauf dauerhaft unstimmig waren
+// (status.previous_region_hint), im aktuellen Vorschlag ueber die Lage wiederfinden.
+// Nur ein Bereich im neuen Vorschlag nahe dieser Stelle ist einen Hinweis wert;
+// "dort liegt kein Bereich" ist der gute Fall und bleibt still. Bis MATCH_PX Abstand
+// gilt als derselbe Ort (halbe Fenstergroesse 7,5 px plus Einrasten; Mindestabstand
+// der Bereiche 28 px). "Dauerhaft" = Anteil >= HINT_SHARE (wie dispread.live.region_hint.
+// MIN_SHARE) und in mindestens HINT_MIN_MARKS Auswertungen markiert. Bei neuer
+// Aufstellung (Anzeige-Viereck um mehr als MOVED_PX verschoben) werden alte
+// Positionen nicht verglichen. Hoechstens MAX_HINTS Hinweise.
 export const MATCH_PX = 8;
-export function previousRegionMatches(previous, regions) {
+export const HINT_SHARE = 0.30;
+export const HINT_MIN_MARKS = 2;
+export const MOVED_PX = 12;
+export const MAX_HINTS = 3;
+
+function quadMoved(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 4 || b.length !== 4) return false;
+  return a.some((p, i) => Array.isArray(p) && Array.isArray(b[i])
+    && Math.hypot(p[0] - b[i][0], p[1] - b[i][1]) > MOVED_PX);
+}
+
+// quad = Anzeige-Viereck des aktuellen Vorschlags (setup.grid.quad), optional.
+export function previousRegionMatches(previous, regions, quad = null) {
   const items = Array.isArray(previous?.regions) ? previous.regions : [];
   const list = Array.isArray(regions) ? regions : [];
-  return items.filter((item) => Number.isInteger(item?.number) && Array.isArray(item?.centre)
-    && finite(item.centre[0]) && finite(item.centre[1])).map((item) => {
+  if (quadMoved(previous?.quad, quad)) return [];
+  const matches = [];
+  for (const item of items) {
+    if (!Number.isInteger(item?.number) || !Array.isArray(item?.centre)
+      || !finite(item.centre[0]) || !finite(item.centre[1])) continue;
+    if (!finite(item.max_share) || item.max_share < HINT_SHARE
+      || !(item.flagged_evaluations >= HINT_MIN_MARKS)) continue;
     let index = -1;
     let best = Infinity;
     list.forEach((region, i) => {
@@ -72,16 +93,15 @@ export function previousRegionMatches(previous, regions) {
       const d = Math.hypot(region.centre[0] - item.centre[0], region.centre[1] - item.centre[1]);
       if (d <= MATCH_PX && d < best) { best = d; index = i; }
     });
-    return {number: item.number, centre: item.centre, share: finite(item.max_share) ? item.max_share : null, index};
-  });
+    if (index >= 0) matches.push({number: item.number, centre: item.centre, share: item.max_share, index});
+  }
+  return matches.sort((x, y) => y.share - x.share || x.index - y.index).slice(0, MAX_HINTS);
 }
 
-export function previousRegionText(match, run) {
-  const where = `bei ${match.centre.map((v) => Math.round(v)).join(', ')}`;
-  const from = `Im letzten Lauf${run ? ` (${run})` : ''} war Bereich ${match.number} ${where} dauerhaft unstimmig`;
-  if (match.index < 0) return `${from}. Im neuen Vorschlag liegt dort kein Bereich.`;
-  const now = match.index + 1;
-  return `${from}. ${now === match.number ? 'Er heißt hier ebenfalls' : 'Hier heißt er'} Bereich ${now}: entfernen.`;
+export function previousRegionText(match) {
+  return `Bereich ${match.index + 1} liegt an einer Stelle, die im letzten Lauf dauerhaft unstimmig war ` +
+    `(${Math.round(match.share * 100)} %). Die Einrichtung wählt solche Stellen künftig selbst ab; ` +
+    'bei Bedarf hier entfernen.';
 }
 
 // Etikett nach der Antwort: {ok, text}. edit = {add, remove}; result = client.post(...).
@@ -194,7 +214,7 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     if (shown() && viewer.layers().has('rahmen')) {
       const track = {regions: regions().filter((r) => Array.isArray(r?.centre))
         .map((r) => ({c: r.centre, s: r.size, ok: true}))};
-      const flagged = previousRegionMatches(current?.previous_region_hint, regions())
+      const flagged = previousRegionMatches(current?.previous_region_hint, regions(), current?.setup?.grid?.quad)
         .map((match) => match.index).filter((index) => index >= 0);
       drawHud(ctx, {track}, {...view, hover: hover >= 0 ? {kind: 'region', index: hover} : null, searchWindows: true,
         flagged}, new Set(['rahmen']));
@@ -239,7 +259,7 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
 
   return {
     update(next) {
-      const key = (s) => JSON.stringify([s?.state, s?.setup?.proposal_revision, s?.setup?.regions, s?.previous_region_hint]);
+      const key = (s) => JSON.stringify([s?.state, s?.setup?.proposal_revision, s?.setup?.regions, s?.setup?.grid?.quad, s?.previous_region_hint]);
       const before = key(current);
       current = next;
       if (waitFor && (next?.state !== 'setup_ready' || next?.setup?.proposal_revision !== waitFor.revision)) release(true);
@@ -320,11 +340,11 @@ export function mountRegionPanel(host, editor) {
     input.disabled = !editable;
     q('[data-part="selection"]').textContent = `Auswahl: ${setup.auswahl || 'automatisch'}`;
     // Liste nur bei neuer Revision neu bauen: fokussierte Entfernen-Knoepfe bleiben.
-    const matches = editable ? previousRegionMatches(status?.previous_region_hint, regions) : [];
+    const matches = editable ? previousRegionMatches(status?.previous_region_hint, regions, setup.grid?.quad) : [];
     const flagged = new Set(matches.map((match) => match.index).filter((index) => index >= 0));
     const previous = q('[data-part="previous"]');
     const previousHtml = matches.map((match) => `<p class="warn-t wrap"><span class="sq warn"></span> ` +
-      `${escapeText(previousRegionText(match, status?.previous_region_hint?.run))}</p>`).join('');
+      `${escapeText(previousRegionText(match))}</p>`).join('');
     previous.hidden = !matches.length;
     if (previous._html !== previousHtml) { previous._html = previousHtml; previous.innerHTML = previousHtml; }
     const key = JSON.stringify([setup.proposal_revision, regions, [...flagged]]);

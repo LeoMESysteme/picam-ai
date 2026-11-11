@@ -91,26 +91,49 @@ test('HUD markiert den auffaelligen Bereich in Warnfarbe mit Nummer', () => {
   assert.ok(marked.texts.includes('6'));
 });
 
-test('Einrichtung: Bereich des letzten Laufs ueber die Lage wiederfinden', () => {
-  const previous = {session_id: 'live-x', run: 'run-01', regions: [
-    {number: 6, centre: [515, 774], max_share: 0.937}, {number: 2, centre: [900, 900], max_share: 0.5}]};
+const PREV = (regions, quad) => ({session_id: 'live-x', run: 'run-01', quad, regions});
+const QUAD = [[810, 511], [1369, 511], [1377, 580], [814, 591]];
+const mk = (number, x, y, share = 0.9, marks = 3) => ({number, centre: [x, y], max_share: share, flagged_evaluations: marks});
+
+test('Einrichtung: nur ein Bereich nahe einer dauerhaft unstimmigen Stelle gibt einen Hinweis', () => {
+  const previous = PREV([mk(6, 515, 774, 0.937), mk(2, 900, 900, 0.5)], QUAD);
   const regions = [{centre: [100, 100], size: 15}, {centre: [517, 772], size: 15}, {centre: [300, 300], size: 15}];
-  assert.deepEqual(previousRegionMatches(previous, regions), [
-    {number: 6, centre: [515, 774], share: 0.937, index: 1},
-    {number: 2, centre: [900, 900], share: 0.5, index: -1},
-  ]);
-  // Gleiche Nummer, wenn der Vorschlag unveraendert ist.
-  const same = Array.from({length: 8}, (_, i) => ({centre: i === 5 ? [515, 774] : [10 * i, 0], size: 15}));
-  assert.equal(previousRegionMatches(previous, same)[0].index + 1, 6);
+  // Stelle ohne Bereich im neuen Vorschlag: stumm.
+  assert.deepEqual(previousRegionMatches(previous, regions, QUAD),
+    [{number: 6, centre: [515, 774], share: 0.937, index: 1}]);
   assert.deepEqual(previousRegionMatches(null, regions), []);
-  assert.deepEqual(previousRegionMatches({regions: [{number: 6, centre: [526, 774], max_share: 0.9}]}, regions)[0].index, -1);
+  assert.deepEqual(previousRegionMatches(PREV([mk(6, 526, 774)], QUAD), regions, QUAD), []);
 });
 
-test('Einrichtung: Text nennt alte und neue Nummer samt Lage', () => {
-  assert.equal(previousRegionText({number: 6, centre: [515, 774], index: 4}, 'run-01'),
-    'Im letzten Lauf (run-01) war Bereich 6 bei 515, 774 dauerhaft unstimmig. Hier heißt er Bereich 5: entfernen.');
-  assert.equal(previousRegionText({number: 6, centre: [515, 774], index: 5}, 'run-01'),
-    'Im letzten Lauf (run-01) war Bereich 6 bei 515, 774 dauerhaft unstimmig. Er heißt hier ebenfalls Bereich 6: entfernen.');
-  assert.equal(previousRegionText({number: 6, centre: [515.4, 773.6], index: -1}, null),
-    'Im letzten Lauf war Bereich 6 bei 515, 774 dauerhaft unstimmig. Im neuen Vorschlag liegt dort kein Bereich.');
+test('Einrichtung: dauerhaft heisst Anteil >= 0,30 und mehrfach markiert', () => {
+  const regions = [{centre: [10, 10], size: 15}];
+  const hit = (share, marks) => previousRegionMatches(PREV([mk(1, 10, 10, share, marks)], QUAD), regions, QUAD).length;
+  assert.equal(hit(0.30, 2), 1);
+  assert.equal(hit(0.29, 5), 0);
+  assert.equal(hit(0.90, 1), 0);
+  const old = {number: 1, centre: [10, 10], max_share: 0.9};  // altes Statusformat ohne Zaehler
+  assert.equal(previousRegionMatches(PREV([old], QUAD), regions, QUAD).length, 0);
+});
+
+test('Einrichtung: neue Aufstellung vergleicht keine alten Positionen', () => {
+  const previous = PREV([mk(1, 10, 10)], QUAD);
+  const regions = [{centre: [10, 10], size: 15}];
+  const near = QUAD.map(([x, y]) => [x + 5, y - 4]);
+  const far = QUAD.map(([x, y]) => [x + 60, y + 40]);
+  assert.equal(previousRegionMatches(previous, regions, near).length, 1);
+  assert.deepEqual(previousRegionMatches(previous, regions, far), []);
+  // Ohne bekanntes Viereck wird nicht geraten: vergleichen wie bisher.
+  assert.equal(previousRegionMatches(previous, regions, null).length, 1);
+});
+
+test('Einrichtung: hoechstens drei Hinweise, die staerksten zuerst', () => {
+  const previous = PREV([mk(1, 0, 0, 0.4), mk(2, 50, 0, 0.9), mk(3, 100, 0, 0.5), mk(4, 150, 0, 0.7), mk(5, 200, 0, 0.35)], QUAD);
+  const regions = [0, 50, 100, 150, 200].map((x) => ({centre: [x, 0], size: 15}));
+  assert.deepEqual(previousRegionMatches(previous, regions, QUAD).map((m) => m.index), [1, 3, 2]);
+});
+
+test('Einrichtung: Hinweistext nennt neue Nummer und Anteil', () => {
+  assert.equal(previousRegionText({number: 6, centre: [515, 774], share: 0.937, index: 4}),
+    'Bereich 5 liegt an einer Stelle, die im letzten Lauf dauerhaft unstimmig war (94 %). ' +
+    'Die Einrichtung wählt solche Stellen künftig selbst ab; bei Bedarf hier entfernen.');
 });

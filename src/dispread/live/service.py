@@ -35,6 +35,7 @@ from dispread.live.output import normalize_output, require_output_acknowledgemen
 from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
+from dispread.live.region_hint import MIN_SHARE
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
@@ -1007,12 +1008,17 @@ class LiveService:
         self._state, self._error = 'stopped', error
         summary = getattr(session, 'summary', None)
         hint = summary.get('tracking_region_hint') if isinstance(summary, dict) else None
-        regions = (hint.get('regions') if isinstance(hint, dict) else None) or []
+        # T3: nur dauerhaft Unstimmiges (Anteil und mehrfach markiert) wandert in die Einrichtung;
+        # einmal kurz Aufgefallenes ist Rauschen. Das Viereck erlaubt, neue Aufstellungen zu erkennen.
+        regions = [r for r in ((hint.get('regions') if isinstance(hint, dict) else None) or [])
+                   if r.get('max_share', 0) >= MIN_SHARE and r.get('flagged_evaluations', 0) >= 2]
+        grid = self._setup_grid
         self._previous_region_hint = None if not regions else {
             'session_id': None if self._session_dir is None else self._session_dir.name,
             'run': None if self._run_dir is None else self._run_dir.name,
-            'regions': [{'number': r['number'], 'centre': list(r['centre']), 'max_share': r['max_share']}
-                        for r in regions]}
+            'quad': deepcopy(grid.get('quad')) if isinstance(grid, dict) else None,
+            'regions': [{'number': r['number'], 'centre': list(r['centre']), 'max_share': r['max_share'],
+                         'flagged_evaluations': r['flagged_evaluations']} for r in regions]}
         if self._run_reference:
             self._reference_eval = {'state': 'running'}
             threading.Thread(target=self._reference_eval_worker, args=(session, self._run_dir),
