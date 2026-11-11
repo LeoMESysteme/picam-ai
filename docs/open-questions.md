@@ -62,6 +62,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
+| [OQ-68](#oq-68) | — | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3367,3 +3368,26 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** `tests/test_bridge_end_to_end.py` und
   [Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md);
   tatsächliche Windows-/Hardwarebelege später in [VALIDATION](VALIDATION.md).
+
+
+---
+
+<span id="oq-68"></span>
+
+## OQ-68 — Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut?
+
+* **Status:** offen · erkannt 2026-11-11 beim Testbau für den Brückentest
+* **Befund:** Der Testbau ist für den Bediener zu umständlich und hat viele
+  Bruchstellen: Branch in Forgejo wählen, ZIP laden und entpacken,
+  Skriptordner suchen, ExecutionPolicy umgehen, 3–4 min Build, EXE suchen.
+  Die EXE lässt sich nur unter Windows bauen; der Pi kann das nicht
+  übernehmen.
+* **Offen:** Gibt es einen Windows-Rechner, der dauerhaft im Labornetz
+  erreichbar ist und als Forgejo-Runner `Setup.exe` bei Tag/Merge baut und
+  als Release-Anhang ablegt? Wer betreut ihn?
+* **Ziel danach:** Die Werkbank bietet im Brücken-Dialog Schritt 1 genau
+  den zum Pi-Stand passenden Installer an; die App meldet beim Verbinden,
+  wenn sie veraltet ist. Übergang bis dahin: `build.cmd` als
+  Doppelklick-Starter. Signatur und Updatekanal: [OQ-65](#oq-65).
+* **Antwort landet in:** `TODO.md` (Abschnitt „Danach offen (Brücke)“),
+  `windows/bridge/README.md`.
