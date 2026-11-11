@@ -31,6 +31,9 @@ class FakeHub:
     def prepare(self, transport, client_id, lease=None):
         return PeerHello(self.pi_id, client_id, 2, transport, None, "idle", "output_off")
 
+    def output_format_fields(self, lease):
+        return {}
+
     def attach(self, client_id, transport, capabilities=None):
         self.capabilities = capabilities
         lease = Lease("lease-" + str(len(self.leases) + 1))

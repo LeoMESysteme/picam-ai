@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Brücke: Ausgabeformat des Laufs in `hello`/`idle` (Nachtrag B2, additiv).** Problem: Die
+  Windows-App erfuhr das Format des Laufs erst am ersten Wert und konnte nicht vorher warnen, wenn die erzeugte
+  GSVmulti-Session nicht passt. Neu: `hello` und `idle` tragen `output_format: "4ch"|"1ch"` des gebundenen
+  Laufs (`4ch` bei Taktbetrieb, sonst `1ch`, also auch ohne `format` im Start-POST). Ohne gebundenen Lauf fehlt
+  das Feld. Der Codec akzeptiert nur diese Werte oder `null`, nur in `hello`/`idle`. Gesendet wird es nur an
+  Clients mit Hello-Fähigkeit `tick: 1`; ältere Codecs lehnen unbekannte Felder ab und bekommen es nie. Die
+  Windows-Verbindung legt den Wert als `peer_output_format` ab (sonst `None`).
 * 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
   Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
   24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.

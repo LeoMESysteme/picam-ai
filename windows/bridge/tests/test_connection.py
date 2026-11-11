@@ -694,3 +694,18 @@ def test_tick_claiming_release_without_prior_pi_marker_revokes_link(setup):
         hub.release_real_run('sneaky-tick')
         state.drain_timeout_s = 0
         state.stop()
+
+
+def test_link_exposes_pi_output_format_before_first_value(setup):
+    manager, factory, hub, events = setup
+    link = connected(manager)
+    assert link.peer_output_format is None                  # kein Lauf gebunden
+    state, advance = _bind_ticks(hub, 'format-run')
+    try:
+        link.send(dict(version=1, type='poll', request_id='p1'))   # Laufwechsel -> hello
+        link.receive()
+        assert link.peer_output_format == '4ch'
+    finally:
+        hub.release_real_run('format-run')
+        state.drain_timeout_s = 0
+        state.stop()

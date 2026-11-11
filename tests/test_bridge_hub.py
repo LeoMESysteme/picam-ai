@@ -551,3 +551,62 @@ def test_tick_ack_after_run_end_is_not_accepted_but_keeps_connection(tmp_path):
     assert reply['type'] == 'hello' and reply['run_id'] is None
     assert state.status()['tick']['unconfirmed'] == 1
     hub.close()
+
+
+# --- Nachtrag B2: output_format des gebundenen Laufs in hello/idle -------------------
+
+def _record_run_hub(tmp_path, capabilities):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state = OutputState(tmp_path / 'run', release='test_unaccepted')
+    state.run_id = 'run'
+    state.start()
+    hub.bind_run('run', state, transport='network')
+    return hub, state, hub.attach('pc', 'network', capabilities=capabilities)
+
+
+def test_hello_and_idle_announce_four_channel_run_format(tmp_path):
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    assert hub._hello(lease, 'h')['output_format'] == '4ch'
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['output_format'] == '4ch'
+    hub.close()
+    state.drain_timeout_s = 0
+    state.stop()
+
+
+def test_hello_and_idle_announce_single_channel_run_format(tmp_path):
+    hub, state, lease = _record_run_hub(tmp_path, {'tick': 1})
+    assert hub._hello(lease, 'h')['output_format'] == '1ch'
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['output_format'] == '1ch'
+    state.publish(_real(1))
+    offer = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': 'r2'})
+    assert offer['type'] == 'record' and 'output_format' not in offer
+    after = hub.exchange(lease.lease_id, {**request(hub, lease, 'ack', frame_sequence=1, barrier_id=None,
+                                                    outcome='written'), 'request_id': 'r2'})
+    assert after['type'] == 'idle' and after['output_format'] == '1ch'
+    hub.close()
+    state.stop()
+
+
+def test_output_format_absent_without_bound_run(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    lease = hub.attach('pc', 'network', capabilities={'tick': 1})
+    assert 'output_format' not in hub._hello(lease, 'h')
+    hub.reserve_real_run('run')       # reserviert, aber keine Ausgabe gebunden (z. B. UART direkt)
+    hello = hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': None})
+    assert hello['type'] == 'hello' and 'output_format' not in hello
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and 'output_format' not in idle
+    hub.close()
+
+
+@pytest.mark.parametrize('capabilities', [None, {}])
+def test_old_client_never_receives_output_format(tmp_path, capabilities):
+    # Alte Codecs lehnen unbekannte Felder ab: nur Clients mit tick-Fähigkeit kennen es.
+    hub, state, lease = _record_run_hub(tmp_path, capabilities)
+    assert 'output_format' not in hub._hello(lease, 'h')
+    assert 'output_format' not in hub.exchange(lease.lease_id, request(hub, lease))
+    hub.close()
+    state.stop()

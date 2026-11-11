@@ -197,6 +197,19 @@ class BridgeHub:
                     state.abandon_pending()
                 return
 
+    def output_format_fields(self, lease):
+        """``output_format`` des gebundenen Laufs fuer hello/idle (Nachtrag B2).
+
+        Nur an Clients mit Taktfaehigkeit: deren Codec kennt das Feld; alte
+        Codecs lehnen unbekannte Felder ab und bekommen es deshalb nie.
+        Ohne gebundenen Lauf fehlt das Feld.
+        """
+        with self._lock:
+            state = self._state
+        if state is None or lease is None or not lease.tick:
+            return {}
+        return {'output_format': '4ch' if state.tick_mode else '1ch'}
+
     def _hello(self, lease, request_id):
         hello = self.prepare(lease.transport, lease.client_id, lease=lease)
         lease.release = hello.release
@@ -209,7 +222,8 @@ class BridgeHub:
                     permissions=['readiness', 'demo'],
                     # Additiv (R1): nur gesendet, wenn freigegeben; alte Clients
                     # lehnen das unbekannte Feld ab und bleiben so ohne Ausgabe.
-                    **({'release': hello.release} if hello.release else {}))
+                    **({'release': hello.release} if hello.release else {}),
+                    **self.output_format_fields(lease))
 
     def exchange(self, lease_id, message):
         # Validation precedes state mutation even for in-process callers.
@@ -264,24 +278,27 @@ class BridgeHub:
                             # Lauf beendet (Ausgabe abgebaut), Reservierung noch nicht freigegeben.
                             return self._hello(lease, message['request_id'])
                         raise ValueError('no pending output')
-                    return {**base, 'type': 'idle', 'release_block': RELEASE_BLOCK if self._real_run else None}
+                    return {**base, 'type': 'idle', 'release_block': RELEASE_BLOCK if self._real_run else None,
+                            **self.output_format_fields(lease)}
                 if state.tick_mode and not lease.tick:
                     # Nie ein Takt an einen Client ohne Taktfaehigkeit, auch keine Quittung.
                     if kind != 'poll':
                         raise ValueError('tick output requires tick-capable client')
-                    return {**base, 'type': 'idle', 'release_block': TICK_CLIENT_BLOCK}
+                    return {**base, 'type': 'idle', 'release_block': TICK_CLIENT_BLOCK}  # Client ohne tick
                 legacy = {k: v for k, v in message.items() if k not in ('pi_id', 'client_id', 'lease_id')}
                 legacy['version'] = 1
                 reply = state.handle_v1(legacy)
                 if reply is None:
                     lease.release = state.release
                     return {**base, 'type': 'idle', 'release_block': state.release_block,
-                            **({'release': state.release} if state.release else {})}
+                            **({'release': state.release} if state.release else {}),
+                            **self.output_format_fields(lease)}
                 reply.pop('version')
                 if reply['type'] != 'record':
                     reply.pop('demo', None)
                 if reply['type'] == 'idle':
                     reply.setdefault('release_block', None)
+                    reply.update(self.output_format_fields(lease))
                 return decode_v2(encode_v2({**base, **reply}))
 
     def start_demo(self, client_id, transport, count=600, rate_hz=10.0, *, _expected_lease_id=None):

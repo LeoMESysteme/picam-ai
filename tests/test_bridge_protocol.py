@@ -340,3 +340,27 @@ def test_tick_ack_is_bounded():
                     {"frame_sequence": 1}, {"run_id": None}):
         with pytest.raises(ValueError):
             encode_v2(tick_ack(**changes))
+
+
+# --- Nachtrag B2 (2026-11-11): output_format in hello/idle ---------------------------
+
+@pytest.mark.parametrize("value", ["4ch", "1ch", None])
+def test_hello_and_idle_may_carry_output_format(value):
+    idle = {**poll(), "type": "idle", "release_block": None, "output_format": value}
+    assert decode_v2(encode_v2(idle)) == idle
+    assert decode_v2(encode_v2(hello(output_format=value)))["output_format"] == value
+    assert "output_format" not in decode_v2(encode_v2(hello()))      # alte Form bleibt gültig
+
+
+@pytest.mark.parametrize("value", ["4CH", "2ch", "", 4, True, ["4ch"]])
+def test_output_format_is_strict(value):
+    with pytest.raises(ValueError):
+        encode_v2(hello(output_format=value))
+    with pytest.raises(ValueError):
+        encode_v2({**poll(), "type": "idle", "release_block": None, "output_format": value})
+
+
+def test_output_format_only_in_hello_and_idle():
+    for message in (poll(output_format="4ch"), {**poll(), "type": "ended", "output_format": "4ch"}):
+        with pytest.raises(ValueError):
+            encode_v2(message)

@@ -26,11 +26,11 @@ erteilt aber keine Berechtigung.
 
 | type | zusätzliche Pflichtfelder | optionale Felder |
 | --- | --- | --- |
-| `hello` | `protocol_version: 2`, `transport: network\|uart`, `run_id: ID\|null`, `state: Text`, `release_block: Text\|null`, `capabilities: Objekt`, `permissions: Textliste` | `lease_id: ID\|null`, `nonce: Text`, `signature: Text`, `release: "test_unaccepted"` |
+| `hello` | `protocol_version: 2`, `transport: network\|uart`, `run_id: ID\|null`, `state: Text`, `release_block: Text\|null`, `capabilities: Objekt`, `permissions: Textliste` | `lease_id: ID\|null`, `nonce: Text`, `signature: Text`, `release: "test_unaccepted"`, `output_format: "1ch"\|"4ch"\|null` |
 | `demo_request` | `transport: network\|uart`, `run_id: ID\|null`, `count: Ganzzahl 1..100000`, `rate_hz: endliche Zahl >0..100` | — |
 | `poll` | Run-/Leasebindung | — |
 | `record` | Run-/Leasebindung, `demo: true\|false`, `record: ValueRecord`, `frame_age_ns: null`, `barrier_id: positive Ganzzahl\|null` | `release: "test_unaccepted"` (Pflicht bei `demo: false`, verboten bei `demo: true`) |
-| `idle` | Run-/Leasebindung, `release_block: Text\|null` | `release: "test_unaccepted"` |
+| `idle` | Run-/Leasebindung, `release_block: Text\|null` | `release: "test_unaccepted"`, `output_format: "1ch"\|"4ch"\|null` |
 | `ended` | Run-/Leasebindung | — |
 | `ack` | Run-/Leasebindung, `frame_sequence: Ganzzahl ≥0`, `barrier_id: positive Ganzzahl\|null`, `outcome: written\|expired\|failed\|unconfirmed\|omitted` | — |
 | `tick` (B2) | Run-/Leasebindung, `seq`, `valid`, `value_text`, `frame_sequence`, `time_unix_ns`, `origin_unix_ns`, `rate_hz`, `release: "test_unaccepted"` | — (siehe Abschnitt Taktnachricht) |
@@ -307,3 +307,15 @@ unconfirmed + lost + queued` und `seq = total + missed`. Windows
 und bei `4ch` `rate_hz` (1–10, Vorgabe 10); `max_frame_age_ms` gilt als
 Altersgrenze des Takts. Ohne `format` bleibt die Einkanal-Ausgabe
 unverändert (`record`, nur VALID an COM).
+
+### Ausgabeformat in `hello`/`idle` (Nachtrag B2, additiv)
+
+`hello` und `idle` tragen `output_format` mit dem Format des gebundenen Laufs:
+`"4ch"` bei Taktbetrieb (`output.format: "4ch"`), sonst `"1ch"`, auch wenn der
+Start-POST kein `format` enthielt. Ohne gebundenen Lauf (kein Lauf, Ausgabe aus,
+UART direkt) fehlt das Feld; der Codec akzeptiert sonst nur `null`. In anderen
+Nachrichten ist es verboten. Gesendet wird es nur an Clients mit Hello-Fähigkeit
+`tick: 1`, weil ältere Codecs unbekannte Felder ablehnen. Die Windows-App liest
+es als `_DataLink.peer_output_format` und kann vor dem ersten Wert warnen, wenn
+die erzeugte GSVmulti-Session nicht zum Format passt. Das Feld ist eine
+Ankündigung, keine Freigabe; Freigabe und Takt bleiben wie oben.
