@@ -3262,16 +3262,26 @@ def test_tc_bereichshinweis_im_status_und_fuer_die_neueinrichtung(tmp_path):
     service._session = session
     for full in (False, True):
         assert service.status(full=full)['run']['region_hint'] == hint
+    service._setup_grid = {'quad': [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]]}
     assert service.status()['previous_region_hint'] is None
     with service._lock:
         service._finish_run(session, None)
-    expected = {'session_id': 'live-x', 'run': 'run-01',
-                'regions': [{'number': 6, 'centre': [515.0, 774.0], 'max_share': 0.937}]}
+    expected = {'session_id': 'live-x', 'run': 'run-01', 'quad': [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]],
+                'regions': [{'number': 6, 'centre': [515.0, 774.0], 'max_share': 0.937, 'flagged_evaluations': 2}]}
     assert service.status()['previous_region_hint'] == expected
     # Neue Einrichtung verwirft die Sitzung, der Hinweis fuer die Bereichsbearbeitung bleibt.
     service._session, service._state = None, 'setup_ready'
     status = service.status()
     assert status['run'] is None and status['previous_region_hint'] == expected
+    # T3: nur dauerhaft Unstimmiges (Anteil >= 0,30 und mehrfach markiert) bleibt im Hinweis.
+    weak = SimpleNamespace(summary={'tracking_region_hint': {'regions': [
+        {'number': 1, 'centre': [1.0, 1.0], 'flagged_evaluations': 1, 'max_share': 0.9},
+        {'number': 2, 'centre': [2.0, 2.0], 'flagged_evaluations': 5, 'max_share': 0.2}], 'last': None}})
+    with service._lock:
+        service._finish_run(weak, None)
+    assert service.status()['previous_region_hint'] is None
+    with service._lock:
+        service._finish_run(session, None)
     # Ein Lauf ohne Auffaelligkeit loescht den alten Hinweis.
     quiet = SimpleNamespace(summary={'tracking_region_hint': {'regions': [], 'last': None}})
     with service._lock:

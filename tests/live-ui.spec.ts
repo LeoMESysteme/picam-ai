@@ -2313,6 +2313,7 @@ test('Brücke einrichten: Wechsel des Transports verwirft den aktiven Kopplungsc
 
 // TC 2026-11-11: Rahmenbereich dauerhaft unstimmig – ruhiger Hinweis im Lauf,
 // Wiederfinden in der Bereichsbearbeitung nach der Neueinrichtung.
+const T3_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots';
 const TC_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
 test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ page }) => {
   const errors = watchErrors(page);
@@ -2353,7 +2354,7 @@ test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ 
   await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf' });
   await expect(item).toBeHidden();
   const previous = inspector.locator('[data-part="previous"]');
-  await expect(previous).toHaveText(/Im letzten Lauf \(run-01\) war Bereich 6 bei 830, 413 dauerhaft unstimmig\. Hier heißt er Bereich 5: entfernen\./);
+  await expect(previous).toHaveText(/Bereich 5 liegt an einer Stelle, die im letzten Lauf dauerhaft unstimmig war \(94 %\)\. Die Einrichtung wählt solche Stellen künftig selbst ab; bei Bedarf hier entfernen\./);
   await inspector.getByText('Bereiche einzeln').click();
   const flagged = inspector.locator('.rlist li.flag');
   await expect(flagged).toHaveCount(1);
@@ -2362,5 +2363,22 @@ test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ 
   await expect.poll(() => colourNear(page, [836.5, 411], [229, 165, 53], 3, 60)).toBe(true);
   await noOverflow(page);
   await page.screenshot({ path: `${TC_SHOTS}/tc-einrichtung-bereich-wiederfinden.png` });
+
+  // T3: Rauschen im letzten Lauf: genau ein Hinweis, keine "liegt kein Bereich"-Zeilen.
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf_rauschen' });
+  await expect(previous.locator('p')).toHaveCount(1);
+  await expect(previous).toContainText('Bereich 5 liegt an einer Stelle');
+  await expect(previous).toContainText('(62 %)');
+  await expect(previous).not.toContainText('kein Bereich');
+  await expect(inspector.locator('.rlist li.flag')).toHaveCount(1);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await noOverflow(page);
+  await page.screenshot({ path: `${T3_SHOTS}/t3-einrichtung-rauschen.png` });
+
+  // T3: neue Aufstellung: alte Positionen werden nicht verglichen, nichts angezeigt.
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf_neu' });
+  await expect(previous).toBeHidden();
+  await expect(inspector.locator('.rlist li.flag')).toHaveCount(0);
+  await page.screenshot({ path: `${T3_SHOTS}/t3-einrichtung-neue-aufstellung.png` });
   expect(errors).toEqual([]);
 });
