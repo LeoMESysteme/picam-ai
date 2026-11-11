@@ -2763,9 +2763,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [Messbeleg und Antwort](VALIDATION.md#uart-demo-20261104-10).
 * **Beleg mit echten Werten 2026-11-11:** Brückenlauf über Netzwerk mit Testfreigabe,
   555 s. Die TDMS enthält genau die 7 389 vom Pi quittierten Werte, ohne Abweichung, mit festem
-  `wf_increment = 0,1 s`: GSVmulti zählt Werte statt Zeit. Ausgelassene ungültige Abschnitte
-  (längste 6,9 s) verschwinden ohne Zeitlücke, und bei 13,3 Werten/s ergibt die Zeitachse 739 s
-  statt 555 s. Eine Änderung an GSVmulti ist unwahrscheinlich (zentrales Kundenprodukt, Leonhard
+  äquidistanter Zeitachse (`dt mode = tf`, Handbuch S. 73): GSVmulti zählt Werte statt Zeit.
+  Ausgelassene ungültige Abschnitte (längste 6,9 s) verschwinden ohne Zeitlücke. Lücken können
+  nur als Wert im Telegramm überleben; Versuche dazu: `windows/bridge/GSVMULTI-VERSUCHE.md`. Eine Änderung an GSVmulti ist unwahrscheinlich (zentrales Kundenprodukt, Leonhard
   2026-11-11). Deshalb zuerst prüfen, ob sich in GSVmulti selbst etwas einstellen lässt; sonst
   Ausgleich auf unserer Seite (fester Sendetakt, Nachberechnung aus Pi-/Windows-Journal).
   [Beleg](quellen/bruecke-testlauf-2026-11-11/README.md).

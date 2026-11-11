@@ -40,9 +40,9 @@ Die Dateien hier sind Originale von Leonhard:
 - Auf dem Weg Pi → App → COM → GSVmulti ging nichts verloren, und nichts kam doppelt an.
 
 **Zeitachse in GSVmulti** (Beitrag zu OQ-51):
-- Die TDMS trägt `wf_increment = 0,1 s`, also einen festen Abstand je empfangenem Wert.
+- Die TDMS ist äquidistant (Handbuch S. 73): `dt mode = tf`, Start und Ende der Aufnahme von Hand. Das Inkrement ergibt sich aus der Aufnahmespanne geteilt durch die Wertezahl: 744,14 s / 7 388 = 0,10072 s (`wf_increment` am Dateiende).
 - Ausgelassene, ungültige Abschnitte fehlen daher ohne Zeitlücke. Die längste echte Lücke dauerte 6,9 s; 21 Lücken waren länger als 2 s.
-- Der Pi hat im Mittel 13,3 Werte/s geschickt statt 10. GSVmulti rechnet 7 389 × 0,1 s = 739 s, der Lauf dauerte aber 555 s.
+- Der Pi hat im Mittel 13,3 Werte/s geschickt statt 10. Die Aufnahme dauerte 744 s, der Pi-Lauf 555 s. Innerhalb der Aufnahme verteilt GSVmulti die Werte gleichmäßig; Pausen, Häufungen und Ratenabweichungen verschwinden.
 - Die Zeitachse von GSVmulti ist auf diesem Weg damit nicht für die zeitliche Zuordnung von Prüfling und Referenz verwendbar. Belastbar sind nur die Zeitstempel im Pi-Audit.
 
 **Leser auf dem Pi** (16 427 Datensätze, Kamera ~30 Bilder/s):
