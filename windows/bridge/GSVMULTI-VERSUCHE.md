@@ -128,3 +128,21 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Die Achse von GSVmulti (`tf`, 0,1028 s je Zeile) weicht am Ende um bis zu 0,8 s vom Zeitkanal ab. Das Inkrement ergibt sich aus Start- und Stopp-Klick der Aufnahme, nicht aus den Werten.
   - Für die Zuordnung zur Referenz zählt deshalb der Zeitkanal, nicht die GSVmulti-Achse.
 - Der Zeitkanal stand in Versuch 1c/2 auf der Erzeugungszeit des Ticks, etwa 100 ms vor dem Senden. Seit diesem Stand trägt der Sender die Uhrzeit beim Senden ein.
+
+**Versuch 3 (2026-11-11):** Vierkanal-Session, je 50 Marker-Ticks mit `gültig = 0`.
+
+| Marker im Wertkanal | aufgezeichnet | Wert in der TDMS |
+| --- | --- | --- |
+| `1E+300`, `1e300`, `+1.0E+300` | 50/50 Zeilen | **`1.0`**: Die Exponentschreibweise wird still abgeschnitten. Das ist gefährlich, weil der Wert plausibel aussieht |
+| `99999999.0` | 50/50 Zeilen | `99999999.0`, unverändert |
+| `NaN`, `+NaN`, `Inf` | **0/50**, das ganze Telegramm wird verworfen | – (zusammen 150 Zeilen weg, damit fällt der feste Takt aus) |
+
+**Folgerung:**
+- Als Fehlwert im Wertkanal taugt nur eine einfache Dezimalzahl ohne Exponent außerhalb des Messbereichs, z. B. `99999999.0`, immer zusammen mit `gültig = 0`.
+- Exponentschreibweise, NaN und Inf dürfen nie gesendet werden.
+- Der Formatter muss auch echte Werte ohne Exponent ausgeben; das tut er heute schon, weil er den Anzeigetext überträgt.
+
+**Anzeige in GSVmulti** (Handbuch S. 18, 30, 49, 73):
+- Kanäle 8_2 bis 8_4 lassen sich ausblenden: in der Konfiguration „Actual Channel“ wählen, dann Menü Channel → Hide.
+- Versteckte Kanäle werden **nur aufgezeichnet**, wenn unter Configure Recording → Advanced „Record Hidden Channels“ an ist.
+- Damit der Fehlwert die Y-Achse von 8_1 nicht sprengt, Autoscale Y für 8_1 ausschalten und Min/Max fest einstellen. Der Fehlwert liegt dann sichtbar außerhalb der Skala.
