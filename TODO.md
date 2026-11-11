@@ -37,6 +37,11 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
   2. Die Werkbank bietet im Brücken-Dialog Schritt 1 genau diesen zum Pi-Stand passenden Installer zum Download an.
   3. Die App prüft beim Verbinden die Protokoll-/Versionspassung und sagt, wenn sie veraltet ist.
   - Übergangslösung bis dahin: `build.cmd` als Doppelklick-Starter (ruft PowerShell mit `-ExecutionPolicy Bypass`, findet Python 3.13 selbst und öffnet am Ende den Ausgabeordner).
+- **Keine aufblitzenden Konsolenfenster in der Windows-App (Leonhard, 2026-11-11):** Läuft die Werkbank nicht, öffnet sich bei jedem Verbindungsversuch (alle paar Sekunden) kurz ein Kommandozeilenfenster. Ursache: `windows/bridge/src/dispread_bridge_app/devices.py` `_execute()` startet für die PnP-Inventur `powershell.exe` per `subprocess.run` ohne `creationflags=subprocess.CREATE_NO_WINDOW`, und das bei jedem Versuch.
+  - Fix: Flag setzen (Backend, Codex).
+  - Inventur nicht bei jedem Wiederholversuch neu abfragen.
+  - Test, dass jeder Subprozess der App ohne Fenster startet.
+  - Gehört zum späteren Design-Polish der EXE: Leonhard will das evtl. an seinem Windows-PC machen, damit die EXE unter echten Bedingungen mit /impeccable geprüft wird.
 
 ---
 
