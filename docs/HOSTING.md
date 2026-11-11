@@ -6,9 +6,12 @@ wird nicht mehr erzeugt. Lesen darf die Seite nur, wer sich über
 Forgejo anmeldet **und das Repo `l.hentschke/picam-ai` lesen darf**.
 
 Ein Push auf `master` baut und veröffentlicht die Seite automatisch, sofern
-`CLOUDFLARE_PAGES_PROJECT` gesetzt ist. Ein
-manuell gestarteter Lauf darf Build, Tests und den Prüfstand ausführen, aber
-nie das produktive Deployment überschreiben; ebenso wenig ein Feature-Branch.
+`CLOUDFLARE_PAGES_PROJECT` gesetzt ist. Ein manuell gestarteter Lauf auf
+`master` tut dasselbe, inklusive Session-Archiv; so lässt sich ein am Netz
+gescheiterter Upload ohne Leer-Commit wiederholen (seit 2026-11-11, vorher
+nur Push). Ein manueller Lauf auf einem anderen Branch und jeder
+Feature-Branch dürfen Build, Tests und den Prüfstand ausführen, aber nie das
+produktive Deployment überschreiben.
 
 ```mermaid
 flowchart LR

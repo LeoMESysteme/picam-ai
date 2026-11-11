@@ -32,8 +32,11 @@ jobs:
       # Optional: weder PR-/Browserbuilds noch der getrennte Pflegerunner
       # brauchen Sessiondaten. Ein ausgefallener Export verwendet den letzten
       # geprüften Stand oder eine leere Ansicht. Auth-Gates unten bleiben hart.
+      # Push und manueller Start auf master; nie ein anderer Branch.
       - name: Geprüftes Session-Archiv ergänzen
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/master'
         run: |
           # Projektregel: eigene .venv mit Debian-Systempaketen. Der reine
           # Standardbibliothekshelfer braucht weder pip noch Paketinstallation.
@@ -91,14 +94,15 @@ jobs:
       - name: Deploy auf Produktion und Schutz prüfen
         if: >-
           vars.CLOUDFLARE_PAGES_PROJECT != '' &&
-          github.event_name == 'push' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
           github.ref == 'refs/heads/master'
         env:
           PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          # Produktion kommt ausschliesslich aus einem Push auf master.
+          # Produktion kommt ausschliesslich aus master (Push oder manueller
+          # Start auf master, z. B. nach einem gescheiterten Upload).
           cd cloudflare
           npx --yes wrangler@4.136.3 pages deploy ../site --project-name="$PROJECT" \
             --branch=master --commit-hash="$GITHUB_SHA" --commit-dirty=false | tee ../deploy-prod.log

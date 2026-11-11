@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: Doku-Workflow: Ein manueller Start („Run workflow“) auf
+  `master` bindet jetzt das Session-Archiv ein und deployt in die Produktion,
+  wie ein Push. Problem: Lauf 1033 scheiterte am 11.11. beim Cloudflare-Upload
+  (`fetch failed`, Netz); ein manueller Neustart hätte weder Sessions noch
+  Produktion erreicht, nur ein Leer-Commit. Andere Branches bleiben auf den
+  Prüfstand beschränkt. Konsequenz: gescheiterte Uploads per Neustart
+  wiederholbar.
+
 * 2026-11-11: Wiki-Sessionexport wartet auf offene Messläufe statt auf die
   Werkbank und hat ein Budget von 600 s. Problem: Seit dem 30.10. kam keine
   neue Generation mehr ins Wiki. 45 s je Phase reichten für den I/O-gebundenen
