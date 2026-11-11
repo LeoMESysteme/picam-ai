@@ -29,7 +29,7 @@ from .settings_window import SessionState, SettingsWindow, session_default_name,
 from .setup_view import SetupView
 from .status_view import StatusView
 from .tool_windows import ExportWindow, InfoContent, ToolWindow, build_chip_detail, build_lock, build_paired
-from .widgets import button, fade_in
+from .widgets import button
 
 REFRESH_INTERVAL_MS = 200
 FIRST_RUN_ENV = 'DISPREAD_UI_FIRST_RUN_MODES'     # "0": Moduswahl beim ersten Start nicht selbst öffnen (Tests)
@@ -108,7 +108,7 @@ class MainWindow(QWidget):
     def __init__(self, controller: ControllerPort, dark: bool | None = None, first_run_modes: bool | None = None):
         super().__init__()
         self.controller = controller
-        theme.apply_theme(QApplication.instance(), dark)
+        theme.apply_theme(QApplication.instance(), dark if dark is not None else theme.stored_preference())
         self.setObjectName('root')
         self.setWindowTitle(texts.APP_TITLE)
         self.resize(440, 720)
@@ -130,6 +130,7 @@ class MainWindow(QWidget):
         self.on_event_hook = None
         self.confirm_exit = self._confirm_exit_dialog
         self.confirm_disconnect = self._confirm_disconnect_dialog
+        self.confirm_mode_switch = self._confirm_mode_switch_dialog
         self.pick_file = lambda: QFileDialog.getOpenFileName(self, 'Profil öffnen', '', 'Profil (*.dispread)')[0]
         self.pick_folder = lambda: QFileDialog.getExistingDirectory(self, 'Ordner für die Session')
         self.pick_save = lambda: QFileDialog.getSaveFileName(
@@ -148,8 +149,10 @@ class MainWindow(QWidget):
         self.adapter_choices: tuple = ()
         self.session_state = SessionState()
         self.record_hidden_confirmed: set[str] = set()
+        self.checklist_done: set[str] = set()
         self.setup_view.bind(self.check_fns(), self._run)
         self.setup_view.record_hidden_confirmed = self.record_hidden_confirmed
+        self.setup_view.checklist_done = self.checklist_done
         self._ports: dict[str, str] = {}
         self.setAcceptDrops(True)
         self.unhandled: list[str] = []
@@ -195,7 +198,7 @@ class MainWindow(QWidget):
         a_open = QAction('Öffnen', menu)
         a_open.triggered.connect(self.restore)
         a_quit = QAction('Brücke beenden…', menu)
-        a_quit.triggered.connect(self.exit_bridge)
+        a_quit.triggered.connect(self.exit_bridge_from_tray)
         menu.addAction(a_open)
         menu.addAction(a_quit)
         self._tray_menu = menu
@@ -210,6 +213,11 @@ class MainWindow(QWidget):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+
+    def exit_bridge_from_tray(self) -> None:
+        """Tray → „Brücke beenden …“: Hauptfenster zuerst nach vorn, damit der Dialog nicht dahinter verschwindet."""
+        self.restore()
+        self.exit_bridge()
 
     # ---------------------------------------------------------------- Zustand
     def _locked(self, ctx, worker) -> bool:
@@ -232,14 +240,11 @@ class MainWindow(QWidget):
         r, w, c = self.controller.snapshot(), self.controller.worker_status(), self.controller.context()
         locked = self._locked(c, w)
         self.status_view.update_from(r, w, c, locked, configured=self.configured(c))
-        before = self.stack.currentWidget()
         if c.setup is not None and c.mode == 'setup':
             self.setup_view.update_from(r, w, c, locked)
             self.stack.setCurrentWidget(self.setup_view)
         else:
             self.stack.setCurrentWidget(self.status_view)
-        if self.stack.currentWidget() is not before:
-            fade_in(self.stack.currentWidget())
         self._refresh_tool_windows(r, w, c, locked)
         self._fetch_modes(c, locked)
         self._ticking = c.retry_in_s is not None or c.code_remaining_s is not None
@@ -573,14 +578,34 @@ class MainWindow(QWidget):
         if not getattr(win, '_wired', False):
             win._wired = True
             win.switch_requested.connect(self._select_mode)
+            win.disconnect_requested.connect(lambda: self.do_action('disconnect'))
             win.change_setup.connect(lambda: (win.close(), self.do_action('change_setup')))
         c = self.controller.context()
         win.set_state(self._modes, c, None)
         win.present()
         self._fetch_modes(c, self._locked(c, self.controller.worker_status()), force=True)
 
+    def _confirm_mode_switch_dialog(self) -> bool:
+        box = QMessageBox(QMessageBox.Icon.Question, texts.MODE_SWITCH_DISCONNECT_TITLE,
+                          texts.MODE_SWITCH_DISCONNECT_TEXT, QMessageBox.StandardButton.NoButton,
+                          self.tool_windows.get('modes') or self)
+        keep = box.addButton(texts.MODE_CANCEL, QMessageBox.ButtonRole.RejectRole)
+        box.addButton(texts.MODE_SWITCH_DISCONNECT_OK, QMessageBox.ButtonRole.AcceptRole)
+        box.setDefaultButton(keep)
+        box.show()
+        box.raise_()
+        box.exec()
+        return box.clickedButton() is not keep
+
     def _select_mode(self, mode: str) -> None:
+        """Wechsel des Wegs. Bei bloßer Verbindung (ohne Übertragung) erst nach Bestätigung trennen."""
         win = self.tool_windows.get('modes')
+        c = self.controller.context()
+        disconnect_first = False
+        if mode != c.route_mode and not texts.is_transmitting(c) and self._transmitting():
+            if not self.confirm_mode_switch():
+                return
+            disconnect_first = True
         if win is not None:
             win.set_busy(True)
 
@@ -593,7 +618,11 @@ class MainWindow(QWidget):
                 win.set_state(self._modes, self.controller.context(), getattr(exc, 'code', None) or 'unknown_error')
             else:
                 win.close()
-        self._call(self.controller.select_mode, mode, done=done)
+        def switch():
+            if disconnect_first:
+                self.controller.disconnect()
+            self.controller.select_mode(mode)
+        self._call(switch, done=done)
 
     # ---------------------------------------------------------------- Einstellungen (UX2)
     def _fetch_ports(self, refresh: bool = False) -> None:
@@ -618,9 +647,10 @@ class MainWindow(QWidget):
         win = self.tool_window('settings', f'{texts.SETTINGS} – {texts.APP_TITLE}', SettingsWindow)
         if not getattr(win, '_wired', False):
             win._wired = True
-            win.bind(self.check_fns(), self._run, self.record_hidden_confirmed)
+            win.bind(self.check_fns(), self._run, self.record_hidden_confirmed, self.checklist_done)
             win.action.connect(self._tool_action)
             win.apply.connect(self._settings_apply)
+            win.theme_changed.connect(self._set_theme)
         self._fill_settings(win, self.controller.context())
         win.present()
         self._fetch_ports()
@@ -629,6 +659,20 @@ class MainWindow(QWidget):
         if locked is None:
             locked = self._locked(c, self.controller.worker_status())
         win.update_from(c, locked, self.port_choices, self.adapter_choices, self.session_state)
+
+    def _set_theme(self, mode: str) -> None:
+        """System/Hell/Dunkel: lokal gespeichert, wirkt sofort; statische Symbole werden neu eingefärbt."""
+        theme.store_preference(mode)
+        theme.apply_theme(QApplication.instance(), {'dark': True, 'light': False}.get(mode))
+        from .widgets import IconButton
+        for b in self.findChildren(IconButton):
+            b.set_icon(b.icon_name, b.color_key)
+        self.setup_view.variant = ''
+        for chip in self.status_view.chips:
+            chip.view = None
+        for win in self.tool_windows.values():
+            win._key = None
+        self.refresh()
 
     def _settings_apply(self, kind: str, value) -> None:
         ctl, win = self.controller, self.tool_windows.get('settings')
@@ -700,6 +744,9 @@ class MainWindow(QWidget):
 
     def _confirm_exit_dialog(self) -> bool:
         dlg = self.build_exit_dialog()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
         dlg.exec()
         return dlg.confirmed
 

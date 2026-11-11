@@ -6,6 +6,7 @@ from html import escape
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -17,26 +18,27 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
-    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
-from . import texts, theme
-from .tool_windows import note_line
+from . import texts, theme, tooltips
+from .session_panel import SessionPanel, checklist_items
 from .widgets import (
-    CopyField,
+    Badge,
     Header,
     IconButton,
     InfoBar,
+    InfoIcon,
     ProgressRing,
     SavedNote,
     StateIcon,
     ValidatedField,
+    ValueField,
+    _alive,
+    badge_row,
     button,
-    footer_frame,
     repolish,
-    slide_in,
 )
 
 
@@ -88,9 +90,9 @@ class StepHeader(QWidget):
         if e.type() == QEvent.Type.ToolTip:
             for i, name in enumerate(self.steps, 1):
                 if self.circle_rect(i).contains(QPointF(e.pos())):
-                    QToolTip.showText(e.globalPos(), f'Schritt {i}: {name}', self)
+                    tooltips.show(f'Schritt {i}: {name}', e.globalPos(), self)
                     return True
-            QToolTip.hideText()
+            tooltips.hide()
             return True
         return super().event(e)
 
@@ -187,7 +189,11 @@ class SetupView(QWidget):
         self.header.switch_clicked.connect(self.switch_clicked)
         self.header.mode_clicked.connect(lambda: self.action.emit('open_modes'))
         self.step_header = StepHeader()
-        self.leave_button = IconButton('dismiss', texts.LEAVE_SETUP, name='leave_setup')
+        self.leave_button = button(texts.LEAVE_LABEL, name='leave_setup')      # beschriftet statt ×
+        self.leave_button.setIcon(theme.icon('dismiss', 'text', 16))
+        self.leave_button.setLayoutDirection(Qt.LayoutDirection.RightToLeft)   # Symbol rechts vom Wort
+        self.leave_button.setToolTip(texts.LEAVE_TIP)
+        self.leave_button.setAccessibleName(texts.LEAVE_SETUP)
         self.leave_button.clicked.connect(lambda: self.action.emit('leave_setup'))
         self.leave_button.hide()
         self.saved_note = SavedNote()
@@ -214,11 +220,20 @@ class SetupView(QWidget):
         self.cl.setSpacing(12)
         self.scroll.setWidget(self.content)
         root.addWidget(self.scroll, 1)
+        foot = QFrame()
+        foot.setObjectName('footer')
+        fv = QVBoxLayout(foot)
+        fv.setContentsMargins(16, 10, 16, 10)
+        fv.setSpacing(4)
+        fl = QHBoxLayout()
+        fl.setSpacing(8)
+        fv.addLayout(fl)
+        # Grund einer gesperrten Hauptaktion: kurze Zeile direkt unter dem Knopf (zusätzlich im Tooltip)
         self.next_reason = _label('', secondary=True, caption=True)
-        self.next_reason.setContentsMargins(16, 4, 16, 0)
+        self.next_reason.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.next_reason.setObjectName('next_reason')
         self.next_reason.hide()
-        root.addWidget(self.next_reason)
-        foot, fl = footer_frame()
+        fv.addWidget(self.next_reason)
         self.export_button = IconButton('document_arrow_down', texts.EXPORT_LOGS, name='export')
         self.exit_button = IconButton('power', texts.EXIT_TIP, name='exit_bridge')
         self.back_button = button('Zurück', name='back')
@@ -250,6 +265,8 @@ class SetupView(QWidget):
         self.error_bar: InfoBar | None = None
         self._next_action, self._gate, self._freeze, self._last_step = 'next', None, False, 0
         self._locked, self._step = False, 1
+        self.code_shown = False
+        self.eye_action = None
         self._steps = texts.STEPS
         self._last_variant = ''
         # Anbindung an den Controller (setzt das Hauptfenster): echte Prüfungen und Thread-Pool
@@ -259,9 +276,11 @@ class SetupView(QWidget):
         self.session_export = None                 # letzte SessionExport dieser Laufzeit (Pfad, Record Hidden)
         self.session_busy = False
         self.record_hidden_confirmed: set[str] = set()
+        self.checklist_done: set[str] = set()          # Haken „Autoscale“/„Session geöffnet“ je Datei (Laufzeit)
         self.searching = False
         self._ports_requested_for = None
         self._ctx = None
+        self._last_fp = None
         self._search_buttons: list = []
         self._record_hidden_gate = False
 
@@ -311,7 +330,9 @@ class SetupView(QWidget):
             self._locked, self._step, self._steps = locked, spec['step'], spec['steps']
             self.step_header.set_step(spec['step'], spec['steps'])
             self.lead.setText(spec['lead'])
+            snap = self._snapshot(st.variant, ctx)
             self._build(spec)
+            self._restore(snap, st.variant, ctx)
             if spec['step'] == 3 and self._last_step == 2 and self.next_button.isVisibleTo(self):
                 QTimer.singleShot(0, self.next_button.setFocus)      # nach „Code übernehmen“ weiter mit „Verbinden“
             same_flow = prev_steps == spec['steps'] and prev_step > 0
@@ -319,12 +340,77 @@ class SetupView(QWidget):
                 if spec['step'] > prev_step or (spec['step'] == prev_step and st.variant.endswith('ok')
                                                  and not prev_variant.endswith('ok')):
                     self.saved_note.flash()                           # übernommener Schritt
-                if spec['step'] != prev_step:
-                    slide_in(self.content, self.cl, spec['step'] - prev_step, self.CONTENT_MARGINS)
             self._last_step, self._last_variant = spec['step'], st.variant
         for bar, blk in zip(self.live_bars, [b for b in spec['blocks'] if b[0] == 'livebar'], strict=False):
             bar.set_bar(texts.ActionBar(blk[1], blk[2], blk[3], tuple(blk[4])))
         self._apply_searching()
+
+    # --- Neuaufbau ohne Verlust (R3-5): Eingabetext, Haken der Oberfläche, Auswahl, Fokus und Bildlauf
+    LOCAL_CHECKS = ('fp_ok', 'test_session_ok')     # reine Oberflächenfelder; session_ok kommt vom Controller
+
+    def _snapshot(self, variant: str, ctx) -> dict:
+        """Was der Bediener eingegeben hat, bevor ``_build`` die Widgets ersetzt."""
+        snap: dict = {'step': self._last_step, 'variant': self._last_variant, 'fp': self._last_fp,
+                      'texts': {}, 'checks': {}, 'combos': {}, 'focus': None,
+                      'scroll': self.scroll.verticalScrollBar().value()}
+        try:
+            for name in ('code_edit', 'endpoint_edit'):
+                e = getattr(self, name, None)
+                if e is not None:
+                    snap['texts'][e.objectName()] = (e.text(), e.cursorPosition())
+            for aid in self.LOCAL_CHECKS:
+                c = self.checks.get(aid)
+                if c is not None:
+                    snap['checks'][aid] = c.isChecked()
+            for name, cb in self.combos.items():
+                if cb.currentIndex() > 0:
+                    snap['combos'][name] = cb.currentData() if cb.currentData() is not None else cb.currentText()
+            fw = QApplication.focusWidget() or self.focusWidget()      # auch im inaktiven Fenster
+            if fw is not None and fw.objectName() and self.content.isAncestorOf(fw):
+                pos = fw.cursorPosition() if isinstance(fw, QLineEdit) else 0
+                snap['focus'] = (fw.objectName(), pos, bool(getattr(fw, '_key_focus', False)))
+        except RuntimeError:
+            pass
+        return snap
+
+    def _restore(self, snap: dict, variant: str, ctx) -> None:
+        """Gleicher Schritt: Texte, Auswahl, Haken, Bildlauf und Fokus zurückgeben. Anderer Schritt: nichts."""
+        fp, self._last_fp = snap.get('fp'), getattr(ctx, 'fingerprint', None)
+        if snap.get('step') != self._step:
+            return
+        try:
+            for name, (text, cur) in snap['texts'].items():
+                e = self.content.findChild(QLineEdit, name)
+                if e is not None and not e.text():
+                    e.setText(text)
+                    e.setCursorPosition(cur)
+            same = snap.get('variant') == variant and fp == self._last_fp
+            if same:                           # ein anderes Profil verwirft die Fingerabdruck-Bestätigung
+                for aid, on in snap['checks'].items():
+                    c = self.checks.get(aid)
+                    if c is not None and c.isEnabled() and on != c.isChecked():
+                        c.setChecked(on)
+            for name, data in snap['combos'].items():
+                cb = self.combos.get(name)
+                idx = cb.findData(data) if cb is not None else -1
+                if cb is not None and idx > 0 and cb.currentIndex() != idx and cb.isEnabled():
+                    cb.setCurrentIndex(idx)
+            bar, val = self.scroll.verticalScrollBar(), snap['scroll']
+            QTimer.singleShot(0, lambda: bar.setValue(val) if _alive(bar) else None)
+            if snap['focus'] is not None:
+                QTimer.singleShot(0, lambda f=snap['focus']: self._restore_focus(*f))   # erst nach dem Einblenden
+        except RuntimeError:
+            pass
+
+    def _restore_focus(self, name: str, pos: int, keyed: bool) -> None:
+        try:
+            w = self.content.findChild(QWidget, name)
+            if w is not None and w.isEnabled() and w.isVisibleTo(self):
+                w.setFocus(Qt.FocusReason.TabFocusReason if keyed else Qt.FocusReason.OtherFocusReason)
+                if isinstance(w, QLineEdit):
+                    w.setCursorPosition(pos)
+        except RuntimeError:
+            pass
 
     def set_searching(self, on: bool) -> None:
         self.searching = on
@@ -465,12 +551,15 @@ class SetupView(QWidget):
             b = self.buttons.get('pair')
             if b is not None and not (self._locked and self._step <= 3):
                 b.setEnabled(self._gate_ok(('pair',), None, None))
-            h = self.gate_hints.get('pair')
-            if h is not None:
-                h.setVisible(b is not None and not b.isEnabled() and not self._locked)
             t, tb = self.checks.get('test_session_ok'), self.buttons.get('start_demo_check')
             if t is not None and tb is not None:
                 tb.setEnabled(t.isChecked())
+            for aid, h in self.gate_hints.items():      # Grund der gesperrten Hauptaktion: Zeile am Knopf + Tooltip
+                hb = self.buttons.get(aid)
+                show = hb is not None and not hb.isEnabled() and not self._locked
+                h.setVisible(show)
+                if hb is not None and not self._locked:
+                    hb.setToolTip(h.text() if show else '')
             self._sync_combos()
             a, c = self.selected_ports()
             pb = self.buttons.get('set_port_pair')
@@ -509,12 +598,12 @@ class SetupView(QWidget):
                 cb.model().item(i).setEnabled(port != other)
 
     def _field(self, editor, check_name: str, value=None, label: str = '', debounce_ms=None,
-               name: str = '') -> ValidatedField | None:
+               name: str = '', label_tip: str = '') -> ValidatedField | None:
         fn = self.check_fns.get(check_name)
         if fn is None:
             return None
         f = ValidatedField(editor, fn, value=value, runner=self.runner, label=label, debounce_ms=debounce_ms,
-                           name=name or f'field_{check_name}')
+                           name=name or f'field_{check_name}', label_tip=label_tip)
         return f
 
     def _search_button(self, aid: str = 'rescan', tip: str = texts.RESCAN_TIP) -> QWidget:
@@ -626,30 +715,51 @@ class SetupView(QWidget):
         return self._ctx.setup.variant if self._ctx is not None and self._ctx.setup is not None else None
 
     def _b_card(self, heading, rows):
+        return self._b_fields(heading, tuple((k, v) for k, v in rows), None, '')
+
+    def _b_fields(self, heading, rows, badge=None, tip=''):
+        """Werte als Wertfelder (R3-1): Bezeichner darüber, Wert im grauen Feld; Erklärung im ⓘ, Einschränkung als
+        Abzeichen."""
         f, lay = _card()
         if heading:
-            lay.addWidget(_label(heading, strong=True))
+            head = QHBoxLayout()
+            head.setSpacing(6)
+            head.addWidget(_label(heading, strong=True), 0)
+            if tip:
+                head.addWidget(InfoIcon(tip, f'Erklärung {heading}'), 0, Qt.AlignmentFlag.AlignVCenter)
+            head.addStretch(1)
+            lay.addLayout(head)
         for k, v in rows:
             if k:
-                lay.addWidget(_label(k, secondary=True, caption=True))
-            lab = _label(v)
-            if k == 'Pi-ID':                       # Kennung: Mono, damit sie sich zeichengenau vergleichen lässt
-                lab.setProperty('mono', True)
-                lab.setFont(theme.make_font(10.5, mono=True))
-            lay.addWidget(lab)
+                lay.addWidget(ValueField(k, v, copyable=k in texts.TECH_FIELDS, mono=True))
+            else:
+                lay.addWidget(_label(v))
+        if badge:
+            lay.addWidget(badge_row(Badge(badge[0], badge[1])))
         return f
 
+    def _b_badges(self, items):
+        return badge_row(*(Badge(t, tip) for t, tip in items))
+
+    def _b_hint(self, text, tip):
+        """Ein kurzer Satz mit ⓘ für die Erklärung."""
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        lay.addWidget(_label(text, secondary=True, caption=True), 1)
+        lay.addWidget(InfoIcon(tip, 'Erklärung'), 0, Qt.AlignmentFlag.AlignTop)
+        return w
+
     def _b_statusrows(self, heading, rows):
-        """Je Zeile: Label (Caption, grau) darüber, Wert (Body) mit Statussymbol."""
+        """Je Zeile: Statussymbol + Wertfeld (Bezeichner darüber)."""
         f, lay = _card()
         lay.addWidget(_label(heading, strong=True))
         for key, value, tone in rows:
-            lay.addWidget(_label(key, secondary=True, caption=True))
             row = QHBoxLayout()
             row.setSpacing(6)
-            icon = StateIcon(tone, 16)
-            row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
-            row.addWidget(_label(value), 1)
+            row.addWidget(StateIcon(tone, 16), 0, Qt.AlignmentFlag.AlignBottom)
+            row.addWidget(ValueField(key, value, copyable=False, mono=True), 1)
             lay.addLayout(row)
         return f
 
@@ -676,7 +786,7 @@ class SetupView(QWidget):
         lay.addStretch(1)
         return w
 
-    def _b_check(self, text, aid, checked=False):
+    def _b_check(self, text, aid, checked=False, tip=''):
         """Haken + umbrechendes Label (QCheckBox bricht nicht um); Klick auf den Text schaltet um."""
         w = QWidget()
         lay = QHBoxLayout(w)
@@ -690,6 +800,8 @@ class SetupView(QWidget):
         lab.mousePressEvent = lambda e, c=c: c.toggle() if c.isEnabled() else None
         lay.addWidget(c, 0, Qt.AlignmentFlag.AlignTop)
         lay.addWidget(lab, 1)
+        if tip:
+            lay.addWidget(InfoIcon(tip, 'Erklärung'), 0, Qt.AlignmentFlag.AlignTop)
         self.checks[aid] = c
         c.toggled.connect(lambda on, a=aid: self.action.emit(a + (':on' if on else ':off')))
         return w
@@ -713,15 +825,14 @@ class SetupView(QWidget):
         return f
 
     def _b_fp(self, label, fp):
-        f, lay = _card()
-        lay.addWidget(_label(label, secondary=True, caption=True))
-        lay.addWidget(fingerprint_label(fp))
-        return f
+        groups = fp.lower().split()
+        text = '\n'.join(' '.join(groups[i:i + 4]) for i in range(0, len(groups), 4))
+        return ValueField(label, fp.lower(), display=text)
 
     def _b_fpdiff(self, label, fp, ref):
-        f, lay = _card()
-        lay.addWidget(_label(label, secondary=True, caption=True))
-        lay.addWidget(fingerprint_label(fp, ref))
+        f = ValueField(label, fp.lower(), copyable=False)
+        f.value_label.setTextFormat(Qt.TextFormat.RichText)
+        f.value_label.setText(fingerprint_label(fp, ref).text())
         return f
 
     def _b_code(self, label, note):
@@ -736,21 +847,36 @@ class SetupView(QWidget):
         e.setProperty('mono', True)
         e.setMaxLength(64)
         e.setEchoMode(QLineEdit.EchoMode.Password)      # Code nicht mitlesbar am Bildschirm
-        f = self._field(e, 'pairing_code', label=label, debounce_ms=0, name='field_pairing_code')
+        self.eye_action = e.addAction(theme.icon('eye', 'text2', 16), QLineEdit.ActionPosition.TrailingPosition)
+        self.eye_action.triggered.connect(self.toggle_code_visible)
+        self._apply_code_visible(e)
+        f = self._field(e, 'pairing_code', label=label, debounce_ms=0, name='field_pairing_code', label_tip=note)
         if f is None:
             lay.addWidget(_label(label, strong=True))
             lay.addWidget(e)
         else:
             self.fields['pairing_code'] = f
             lay.addWidget(f)
-        show = self._b_check('Code anzeigen', 'code_show')
-        self.checks['code_show'].toggled.connect(
-            lambda on: e.setEchoMode(QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password))
-        lay.addWidget(show)
-        lay.addWidget(_label(note, secondary=True, caption=True))
         self.code_edit = e
         e.returnPressed.connect(self._enter_in_code)
         return w
+
+    def toggle_code_visible(self) -> None:
+        self.code_shown = not self.code_shown
+        self._apply_code_visible(getattr(self, 'code_edit', None))
+
+    def _apply_code_visible(self, e) -> None:
+        """Augen-Symbolknopf im Feld: eye = anzeigen, eye_off = verbergen. Der Zustand überlebt einen Neuaufbau."""
+        try:
+            if e is None:
+                return
+            e.setEchoMode(QLineEdit.EchoMode.Normal if self.code_shown else QLineEdit.EchoMode.Password)
+            tip = texts.CODE_HIDE if self.code_shown else texts.CODE_SHOW
+            self.eye_action.setIcon(theme.icon('eye_off' if self.code_shown else 'eye', 'text2', 16))
+            self.eye_action.setToolTip(tip)
+            self.eye_action.setText(tip)
+        except RuntimeError:
+            pass
 
     def _enter_in_code(self) -> None:
         b = self.buttons.get('pair')
@@ -767,14 +893,13 @@ class SetupView(QWidget):
         e.setAccessibleName(label)
         e.editingFinished.connect(lambda: self.action.emit('entry:manual_endpoint'))
         self.endpoint_edit = e
-        f = self._field(e, 'endpoint', label=label, name='field_endpoint')
+        f = self._field(e, 'endpoint', label=label, name='field_endpoint', label_tip=note)
         if f is None:
             lay.addWidget(_label(label, strong=True))
             lay.addWidget(e)
         else:
             self.fields['endpoint'] = f
             lay.addWidget(f)
-        lay.addWidget(_label(note, secondary=True, caption=True))
         return w
 
     def _b_progress(self, title, text, value):
@@ -816,12 +941,18 @@ class SetupView(QWidget):
             rl = QHBoxLayout(row)
             rl.setContentsMargins(12, 8, 12, 8)
             rb = QRadioButton()
+            rb.setObjectName(f'radio_{name}_{idx}')
             rb.setChecked(checked)
             self.radio_buttons.append(rb)
             rb.setAccessibleName(f'{title}. {desc}' if desc else title)
+            row.setProperty('selected', bool(checked))
+            rb.toggled.connect(lambda on, r=row: (r.setProperty('selected', on), repolish(r)))
             rb.toggled.connect(lambda on, n=name, i=idx: on and self.action.emit(f'radio:{n}:{i}'))
             group.addButton(rb)
+            rb.setContentsMargins(0, 2, 0, 0)               # Punkt auf Höhe der ersten Textzeile
             rl.addWidget(rb, 0, Qt.AlignmentFlag.AlignTop)
+            row.setCursor(Qt.CursorShape.PointingHandCursor)
+            row.mousePressEvent = lambda e, rb=rb: rb.setChecked(True) if rb.isEnabled() else None   # ganze Box klickbar
             col = QVBoxLayout()
             col.setSpacing(0)
             col.addWidget(_label(title, strong=True))
@@ -855,13 +986,12 @@ class SetupView(QWidget):
             return self._adapter_field(w)
         return w
 
-    def _b_session(self, port, name, path):
-        """Session-Datei erzeugen (Kopie der geprüften Vorlage, nur Port geändert) oder das Ergebnis zeigen."""
+    def _b_session(self, port, name, path, confirm=None, confirmed=False):
+        """Session-Karte: Ergebniszeile (Pfad im Wertfeld, Symbolknöpfe) und Checkliste „In GSVmulti einstellen“."""
         f, lay = _card()
         f.setObjectName('session_card')
         lay.setSpacing(8)
         exp = self.session_export
-        warn = texts.single_channel_warning(self._ctx) if self._ctx is not None else ''
         full = path or (str(exp.path) if exp is not None and name and exp.path.name == name else None)
         if self.session_busy:
             row = QHBoxLayout()
@@ -870,77 +1000,30 @@ class SetupView(QWidget):
             row.addWidget(_label(texts.SESSION_SAVING, secondary=True), 1)
             lay.addLayout(row)
             return f
-        if name:
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            ic = QLabel()
-            ic.setObjectName('session_done_icon')
-            ic.setPixmap(theme.icon_pixmap('checkmark', 'text', 16))     # erzeugt ≠ abgenommen: nie grün
-            ic.setAccessibleName(texts.SCREEN_READER['info'])
-            row.addWidget(ic, 0, Qt.AlignmentFlag.AlignTop)
-            row.addWidget(_label(texts.SESSION_DONE, strong=True), 1)
-            lay.addLayout(row)
-            lay.addWidget(CopyField(texts.SESSION_PATH, full or name))
-            if port:
-                lay.addWidget(CopyField(texts.SESSION_PORT, port))
-            lay.addWidget(_label(texts.SESSION_NOT_ACCEPTED, secondary=True, caption=True))
-            if exp is not None and full and str(exp.path) == full and exp.record_hidden_required:
-                lay.addWidget(self._record_hidden_block(full))
-            if warn:
-                lay.addWidget(note_line('warn', warn, 'single_channel_warning'))
-            hint = texts.autoscale_hint(port)
-            if hint:
-                    lay.addWidget(note_line('info', hint, 'autoscale_hint'))
-            lay.addWidget(_label(texts.SESSION_HOWTO.format(port=port or '–'), secondary=True, caption=True))
-            brow = QHBoxLayout()
-            brow.setSpacing(8)
-            if full:
-                ob = button(texts.OPEN_FOLDER, name='btn_open_session_folder')
-                ob.setIcon(theme.icon('folder_open', 'text', 16))
-                ob.clicked.connect(lambda: self.action.emit('open_session_folder:' + full))
-                self.buttons['open_session_folder'] = ob
-                brow.addWidget(ob)
-            again = button(texts.SESSION_AGAIN, name='btn_make_session')
-            again.clicked.connect(lambda: self.action.emit('make_session'))
-            again.setEnabled(bool(port))
-            self.buttons['make_session'] = again
-            brow.addWidget(again)
-            brow.addStretch(1)
-            lay.addLayout(brow)
-            return f
-        lay.addWidget(_label(texts.SESSION_WHAT))
-        if warn:
-            lay.addWidget(note_line('warn', warn, 'single_channel_warning'))
-        if port:
-            lay.addWidget(CopyField(texts.SESSION_PORT, port))
-        b = button(texts.SESSION_MAKE, True, name='btn_make_session')
-        b.clicked.connect(lambda: self.action.emit('make_session'))
-        b.setEnabled(bool(port))
-        self.buttons['make_session'] = b
-        lay.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
-        if not port:
-            lay.addWidget(_label(texts.SESSION_NO_PORT, secondary=True, caption=True))
+        hidden = bool(exp is not None and full and str(exp.path) == full and exp.record_hidden_required)
+        items = checklist_items(port, full, hidden, confirm)
+        states = {'record_hidden_ok': full in self.record_hidden_confirmed, 'session_ok': confirmed,
+                  'autoscale_ok': f'autoscale_ok|{full}' in self.checklist_done,
+                  'open_ok': f'open_ok|{full}' in self.checklist_done}
+        warn = bool(texts.single_channel_warning(self._ctx)) if self._ctx is not None else False
+        panel = SessionPanel(port=port, path=full, single_channel=warn, items=items, states=states)
+        panel.action.connect(self.action)
+        panel.toggled.connect(lambda key, on, p=full: self._checklist_toggled(key, on, p))
+        for key, btn in panel.buttons.items():
+            self.buttons[key] = btn
+        for key, cb in panel.checks.items():
+            self.checks[key] = cb
+        self._record_hidden_gate = 'record_hidden_ok' in panel.checks
+        lay.addWidget(panel)
         return f
 
-    def _record_hidden_block(self, path: str) -> QWidget:
-        """Pflichtschritt in GSVmulti, der nicht in der Session steht: Achtung, nicht wegklickbar, nie grün."""
-        w = QFrame()
-        w.setProperty('bar', True)
-        w.setProperty('kind', 'warn')
-        w.setObjectName('record_hidden')
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(12, 10, 12, 10)
-        lay.setSpacing(8)
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        row.addWidget(StateIcon('warn', 16), 0, Qt.AlignmentFlag.AlignTop)
-        row.addWidget(_label(texts.RECORD_HIDDEN), 1)
-        lay.addLayout(row)
-        chk = self._b_check(texts.RECORD_HIDDEN_OK, 'record_hidden_ok', path in self.record_hidden_confirmed)
-        chk.layout().setContentsMargins(26, 0, 0, 0)
-        c = self.checks['record_hidden_ok']
-        c.toggled.connect(lambda on, p=path: (self.record_hidden_confirmed.add(p) if on
-                                              else self.record_hidden_confirmed.discard(p)))
-        lay.addWidget(chk)
-        self._record_hidden_gate = True
-        return w
+    def _checklist_toggled(self, key: str, on: bool, path: str | None) -> None:
+        """Haken der Checkliste: ``session_ok`` bestätigt beim Controller, die übrigen merkt sich die Oberfläche."""
+        if key == 'session_ok':
+            self.action.emit('session_ok:' + ('on' if on else 'off'))
+        elif key == 'record_hidden_ok':
+            (self.record_hidden_confirmed.add if on else self.record_hidden_confirmed.discard)(path)
+        else:
+            entry = f'{key}|{path}'
+            (self.checklist_done.add if on else self.checklist_done.discard)(entry)
+        self._update_gates()

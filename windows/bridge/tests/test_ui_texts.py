@@ -55,7 +55,7 @@ def test_output_not_ready_is_not_connected_ok():
 def test_receipt_proven_only_with_test_proof():
     r, w, c = STATES['B1']
     assert chips('B1')['gsv'].tone == 'info'
-    assert chips('B1')['gsv'].sub == 'erhält im Lauf keine Werte'
+    assert chips('B1')['gsv'].sub == 'keine Werte'
     unproven = replace(c, receipt=Receipt(False, 'Test 14:02'))
     assert {x.key: x for x in texts.chips(r, w, unproven)}['gsv'].tone != 'ok'
     # der Worker selbst belegt nie Empfang
@@ -98,7 +98,7 @@ def test_bar_has_at_most_two_buttons():
 
 def test_b1_headlines_match_mock():
     r, w, c = STATES['B1']
-    assert texts.headline(r, w, c).text == 'Verbunden – Lauf 7 läuft, keine Werteausgabe'
+    assert texts.headline(r, w, c).text == 'Verbunden – Lauf läuft'
     r, w, c = STATES['B3']
     assert texts.headline(r, w, c).text == 'Pi antwortet nicht – Versuch in 4 s'
     r, w, c = STATES['B4a']
@@ -151,8 +151,8 @@ def test_test_release_chips_are_warn_never_ok():
     r, w, c = _tr()
     cv = {x.key: x for x in texts.chips(r, w, c)}
     assert (cv['output'].word, cv['output'].tone, cv['output'].sub) == ('Testfreigabe', 'warn', 'nicht abgenommen')
-    assert cv['forward'].word == '3 Werte an COM12 übergeben'
-    assert cv['forward'].tone == 'warn' and cv['forward'].sub == 'vom Port angenommen'
+    assert (cv['forward'].word, cv['forward'].sub) == ('Übergeben', '3 Werte')
+    assert cv['forward'].tone == 'warn'
     assert cv['gsv'].tone != 'ok'
     assert all(x.tone != 'ok' for x in (cv['output'], cv['forward'], cv['gsv']))
 
@@ -160,26 +160,26 @@ def test_test_release_chips_are_warn_never_ok():
 def test_test_release_omitted_counter_and_singular():
     r, w, c = _tr()
     cv = {x.key: x for x in texts.chips(r, w, replace(c, forwarded=1, omitted=4))}
-    assert cv['forward'].word == '1 Wert an COM12 übergeben'
-    assert '4 ausgelassen (ungültig/veraltet)' in cv['forward'].sub
+    assert (cv['forward'].word, cv['forward'].sub) == ('Übergeben', '1 Wert')
+    assert ('Ausgelassen (ungültig/veraltet)', '4') in cv['forward'].details
 
 
 def test_test_release_headline_line_and_no_lock_bar():
     r, w, c = _tr()
     h = texts.headline(r, w, c)
-    assert (h.text, h.tone) == ('Verbunden – Lauf 7, Testfreigabe aktiv', 'warn')
+    assert (h.text, h.tone) == ('Verbunden – Testfreigabe aktiv', 'warn')
     text, tone = texts.dut_line(c)
-    assert tone == 'warn' and text.startswith('Testfreigabe – nicht abgenommen, keine Messfreigabe.')
-    assert 'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.' in text
+    assert tone == 'warn' and text == 'Testfreigabe – nicht abgenommen, keine Messfreigabe'
+    assert 'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.' in texts.dut_info(c)
     bar = texts.action_bar(r, w, c)
     assert bar is None or 'absichtlich keine Messwerte' not in bar.text + bar.title
 
 
-def test_locked_run_keeps_info_bar_and_lock_line():
+def test_locked_run_has_lock_line_and_explanation_in_info_not_in_a_bar():
     r, w, c = STATES['B1']
     assert texts.dut_line(c)[0] == texts.DUT_LOCK_LINE
-    bar = texts.action_bar(r, w, c)
-    assert bar is not None and 'absichtlich keine Messwerte' in bar.text
+    assert texts.action_bar(r, w, c) is None                      # R3-2: keine Infobar, die die Sperrzeile wiederholt
+    assert 'absichtlich keine Messwerte' in texts.dut_info(c)
 
 
 def test_test_release_worker_code_overrules():

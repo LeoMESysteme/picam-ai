@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import texts, theme
-from .widgets import CopyField, ProgressRing, StateIcon, button, format_fingerprint
+from .widgets import Badge, InfoIcon, ProgressRing, StateIcon, ValueField, badge_row, button, format_fingerprint
 
 
 def label(text: str, role: str = 'body', wrap: bool = True) -> QLabel:
@@ -34,13 +34,20 @@ def label(text: str, role: str = 'body', wrap: bool = True) -> QLabel:
     return lab
 
 
-def section(title: str) -> tuple[QWidget, QVBoxLayout]:
-    """Abschnitt-Überschrift mit Karte darunter (Feldname-über-Wert-Liste)."""
+def section(title: str, info: str = '') -> tuple[QWidget, QVBoxLayout]:
+    """Abschnitt-Überschrift (mit ⓘ für die Erklärung) und Karte darunter (Feldname-über-Wert-Liste)."""
     box = QWidget()
     outer = QVBoxLayout(box)
     outer.setContentsMargins(0, 4, 0, 0)
     outer.setSpacing(6)
-    outer.addWidget(label(title, 'section'))
+    head = QHBoxLayout()
+    head.setContentsMargins(0, 0, 0, 0)
+    head.setSpacing(6)
+    head.addWidget(label(title, 'section', wrap=False), 0)
+    if info:
+        head.addWidget(InfoIcon(info, f'Erklärung {title}'), 0, Qt.AlignmentFlag.AlignVCenter)
+    head.addStretch(1)
+    outer.addLayout(head)
     card = QFrame()
     card.setProperty('section', True)
     inner = QVBoxLayout(card)
@@ -64,10 +71,10 @@ def note_line(tone: str, text: str, name: str = '') -> QWidget:
 
 
 def field(name: str, value: str, copy: bool | None = None) -> QWidget:
-    """Technischer Wert als CopyField; Fingerabdruck in Vierergruppen, nie gekürzt."""
+    """Technischer Wert als ValueField; Fingerabdruck in Vierergruppen, nie gekürzt."""
     copyable = (name in texts.TECH_FIELDS) if copy is None else copy
     display = format_fingerprint(value) if name.startswith('TLS') else None
-    return CopyField(name, value, display=display, copyable=copyable, mono=copyable)
+    return ValueField(name, value, display=display, copyable=copyable, mono=copyable)
 
 
 class _Content(QWidget):
@@ -134,17 +141,19 @@ class ToolWindow(QDialog):
         if key == self._key:
             return False
         self._key = key
+        bar = self.scroll.verticalScrollBar()
+        pos = bar.value()
         self._new_content()
         build(self.body)
         self.body.addStretch(1)
         self._fit()
+        QTimer.singleShot(0, lambda: bar.setValue(pos))        # Bildlaufposition bleibt über einen Neuaufbau
         if self.isVisible():                      # neue Kinder zeigt Qt erst verzögert: danach erneut einpassen
             QTimer.singleShot(0, self._fit)
         return True
 
     def _fit(self) -> None:
-        """Höhe nach Inhalt (heightForWidth, nach dem Polieren der Stile), höchstens 80 % des Bildschirms."""
-        owner = self.parentWidget()
+        """Höhe nach Inhalt (heightForWidth, nach dem Polieren der Stile), höchstens Bildschirmhöhe − 48 px."""
         if self.content is None:
             return
         width = max(self.MIN_W, self.width() if self.isVisible() else 380)
@@ -157,8 +166,25 @@ class ToolWindow(QDialog):
             h = lay.totalSizeHint().height()
         if not self.foot.isHidden():
             h += self.foot.sizeHint().height()
-        screen = (owner.screen() if owner is not None else self.screen()).availableGeometry()
-        self.resize(width, min(h + 2, int(screen.height() * 0.8)))
+        screen = self._available()
+        self.resize(width, min(h + 2, max(200, screen.height() - self.SCREEN_MARGIN)))
+        self._clamp()
+
+    SCREEN_MARGIN = 48          # Fensterhöhe höchstens verfügbare Bildschirmhöhe − 48 px (Titelleiste, Rand)
+
+    def _available(self):
+        owner = self.parentWidget()
+        return (owner.screen() if owner is not None else self.screen()).availableGeometry()
+
+    def _clamp(self) -> None:
+        """Position in die verfügbare Fläche des Bildschirms klemmen (nie halb außerhalb)."""
+        scr = self._available()
+        fg = self.frameGeometry()
+        w, h = max(fg.width(), self.width()), max(fg.height(), self.height())
+        x = min(max(fg.x(), scr.left()), max(scr.left(), scr.right() + 1 - w))
+        y = min(max(fg.y(), scr.top()), max(scr.top(), scr.bottom() + 1 - h))
+        if (x, y) != (fg.x(), fg.y()):
+            self.move(self.x() + x - fg.x(), self.y() + y - fg.y())
 
     def present(self) -> None:
         """Zeigen; ist es schon offen, nach vorn holen."""
@@ -175,6 +201,7 @@ class ToolWindow(QDialog):
                 self.move(x, g.top())
         first = not self.isVisible()
         self.show()
+        self._clamp()
         self.raise_()
         self.activateWindow()
         if first:
@@ -214,7 +241,7 @@ def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callab
     if help_text:
         body.addWidget(label(help_text))
     if view.warn:
-        body.addWidget(note_line('warn', view.warn, 'chip_warn'))
+        body.addWidget(badge_row(Badge(texts.BADGE_SINGLE_CHANNEL, view.warn, name='chip_warn')))
     if view.details:
         box, inner = section('Werte')
         for k, v in view.details:
@@ -357,7 +384,7 @@ class ExportWindow(ToolWindow):
                                 'body_strong'), 1)
             body.addLayout(row)
             if self.state == 'done' and self.path is not None:
-                body.addWidget(CopyField(texts.EXPORT_PATH, str(self.path)))
+                body.addWidget(ValueField(texts.EXPORT_PATH, str(self.path)))
                 b = button(texts.OPEN_FOLDER, name='open_folder')
                 b.setIcon(theme.icon('folder_open', 'text', 16))
                 b.clicked.connect(lambda: self.open_folder.emit(str(self.path.parent)))

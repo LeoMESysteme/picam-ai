@@ -13,7 +13,7 @@ import pytest
 from dispread_bridge_app.ui import texts
 from dispread_bridge_app.ui.fake import FakeController
 from dispread_bridge_app.ui.port import MODES, CheckResult
-from dispread_bridge_app.ui.widgets import CopyField, ValidatedField
+from dispread_bridge_app.ui.widgets import ValidatedField, ValueField
 from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
@@ -95,10 +95,10 @@ def test_validated_field_drops_stale_results_and_shows_ok_only_after_check(app):
     edit.setText('x.invalid')
     assert f.state == 'checking' and not f.ok                                  # Änderung verwirft das alte ok
     run.finish(2)
-    assert f.state == 'err' and f.detail.text() == 'Schreibweise prüfen' and not f.detail.isHidden()
+    assert f.state == 'err' and f.detail_icon.toolTip() == 'Schreibweise prüfen' and not f.detail_icon.isHidden()
     assert 'Name nicht auflösbar' in edit.accessibleDescription() and 'Schreibweise' in edit.accessibleDescription()
     edit.setText('')
-    assert f.state == 'idle' and f.message.isHidden()
+    assert f.state == 'idle' and not f.message.isVisibleTo(f)
 
 
 def test_validated_field_waits_500_ms_after_typing(app):
@@ -142,7 +142,8 @@ def test_modes_window_three_cards_active_badge_and_arrow_keys(win):
     assert net.findChild(QLabel, 'badge_active') is not None and net.radio.isChecked()
     assert all(c.findChild(QLabel, 'badge_active') is None for k, c in mw.cards.items() if k != 'network')
     assert not mw.switch_button.isEnabled()                       # aktiver Weg: nichts zu wechseln
-    assert '460800 Baud' in texts_of(mw.cards['uart_bridge'])     # Rate aus dem Kontext, nicht fest im Text
+    assert '460800 Baud' not in texts_of(mw.cards['uart_bridge'])         # R3-2: Baudrate nur im ⓘ
+    assert '460800 Baud' in mw.cards['uart_bridge'].info_icon.toolTip()    # Rate aus dem Kontext, nicht fest im Text
     net.radio.setFocus(Qt.FocusReason.TabFocusReason)
     QTest.keyClick(net.radio, Qt.Key.Key_Up)
     assert mw.selected == 'uart_bridge' and mw.cards['uart_bridge'].property('selected') is True
@@ -154,13 +155,14 @@ def test_modes_window_three_cards_active_badge_and_arrow_keys(win):
 
 
 def test_modes_window_locked_during_transmission(win):
-    fc, w = win('B1')                                             # Worker aktiv
+    fc, w = win('B1x')                                            # Freigabe mit Lauf = echte Übertragung
     w.do_action('open_modes')
     settle(w)
     mw = w.tool_windows['modes']
-    assert mw.findChild(QWidget_, 'modes_locked') is not None
+    assert mw.findChild(QWidget_, 'modes_locked') is None         # R3-2: keine Infobar, die Sperre steht an der Karte
     for k in ('uart_direct', 'uart_bridge'):
         assert not mw.cards[k].radio.isEnabled() and mw.cards[k].reason_label.text() == 'Erst Übertragung beenden'
+        assert mw.cards[k].disconnect_button is not None
     assert not mw.switch_button.isEnabled()
     w._select_mode('uart_direct')                                 # trotzdem versucht: Controller lehnt ab
     settle(w)
@@ -245,7 +247,7 @@ def test_settings_locked_while_transmitting_but_values_copyable(win):
     assert sw.locked and sw.findChild(QLineEdit, 'settings_endpoint_edit') is None
     assert sw.findChild(QComboBox, 'settings_gsv_port') is None
     assert texts.SETTINGS_LOCKED in texts_of(sw)
-    names = {f.name_label.text(): f for f in sw.findChildren(CopyField)}
+    names = {f.name_label.text(): f for f in sw.findChildren(ValueField)}
     for n in ('Pi-ID', 'Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Brückenseite', 'GSVmulti-Seite'):
         assert n in names and not names[n].copy_button.isHidden(), n
     for name in ('settings_modes', 'settings_change_setup'):
@@ -279,7 +281,7 @@ def test_settings_session_export_result_not_green_and_hints(win, tmp_path):
     assert texts.SESSION_DONE in shown and texts.SESSION_NOT_ACCEPTED in shown
     assert texts.autoscale_hint('COM5') in shown and 'Kanal 5_1' in shown
     assert sw.findChild(QWidget_, 'record_hidden') is None                    # Normalfall: kein Pflichthinweis
-    assert any(f.value == str(call[1]) for f in sw.findChildren(CopyField))
+    assert any(f.value == str(call[1]) for f in sw.findChildren(ValueField))
     assert not w.status_view.busy_bar.busy
 
 

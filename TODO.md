@@ -1,5 +1,10 @@
 # TODO — Stand 2026-11-09
 
+> **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
+> Einstieg: [/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md](/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md).
+> Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
+> Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
+
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
 in den verlinkten Dateien; hier steht, was zu tun ist und warum.

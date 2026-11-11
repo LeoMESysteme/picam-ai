@@ -48,7 +48,7 @@ def test_sizes(make):
 def test_b1_content(make):
     _, w = make()
     s = w.status_view
-    assert s.headline_label.text() == 'Verbunden – Lauf 7 läuft, keine Werteausgabe'
+    assert s.headline_label.text() == 'Verbunden – Lauf läuft'
     assert 'DUT-Ausgabe gesperrt' in s.dut_label.text() and s.dut_label.isVisibleTo(w)
     assert len(s.chips) == 6
     assert len({c.height() for c in s.chips[:3]}) == 1 and len({c.height() for c in s.chips[3:]}) == 1
@@ -139,7 +139,7 @@ def test_tray_hint_only_once(make):
 
 def test_tray_state_and_tooltip_follow_headline(make):
     fc, w = make('B1')
-    assert w.tray_state == 'normal' and w.tray_tooltip() == 'Verbunden – Lauf 7 läuft, keine Werteausgabe'
+    assert w.tray_state == 'normal' and w.tray_tooltip() == 'Verbunden – Lauf läuft'
     fc.set_state('B3')
     w.refresh()
     assert w.tray_state == 'err' and w.tray_tooltip().startswith('Pi antwortet nicht')

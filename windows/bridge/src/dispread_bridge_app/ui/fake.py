@@ -44,7 +44,7 @@ _IDLE = WorkerStatus('idle', False, False, None)
 _RUN = WorkerStatus('running', True, True, None)
 _BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', protocol='Version 2',
                   pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
-                  endpoint='wss://192.168.10.24 (LAN, Beispiel)', fingerprint=_FP,
+                  endpoint='https://192.168.10.24:8443', fingerprint=_FP,
                   last_report='Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben',
                   session_name='GSVmulti_Pruefstand2_COM5.ucf', session_confirmed=True, journal=_HEUTE,
                   paired=(('Prüfstand 2', 'pi-4b7e09c1', 'zuletzt vor 2 Stunden'),
@@ -220,7 +220,12 @@ class FakeController:
         return self._r
     def install_components(self): self._rec('install_components')
     def connect(self, mode, selected_device_id=None): self._rec('connect', mode, selected_device_id)
-    def disconnect(self): self._rec('disconnect')
+    def disconnect(self):
+        self._rec('disconnect')
+        self._r = replace(self._r, peer='disconnected', output='unavailable', com='unknown', next_action=None)
+        self._w = None
+        self._c = replace(self._c, release=None, dut_locked=True, demo=False, test_release=False, run_id=None,
+                          switch_locked=False)
     def export_session(self, settings, destination): self._rec('export_session', settings, destination)
     def begin_demo_check(self, confirmed_test_session): self._rec('begin_demo_check', confirmed_test_session)
     def pair(self, code, fingerprint_confirmed): self._rec('pair', fingerprint_confirmed)   # Code nie aufzeichnen
@@ -248,7 +253,24 @@ class FakeController:
     def open_manual_pair(self): self._rec('open_manual_pair')
     def rescan(self): self._rec('rescan')
     def confirm_session(self, on): self._rec('confirm_session', on)
-    def setup_step(self, direction): self._rec('setup_step', direction)
+    FLOW_BRIDGE = ('E1', 'E2b', 'E3', 'E4session', 'E5')
+    FLOW_DIRECT = ('D1', 'D2', 'D3', 'D4')
+
+    def setup_step(self, direction):
+        """„Weiter“/„Zurück“ der Demo: schaltet die Einrichtung durch (E1→E2b→E3→E4session→E5, D1→D4)."""
+        self._rec('setup_step', direction)
+        st = self._c.setup
+        if direction not in ('next', 'back') or st is None:
+            return
+        flow = self.FLOW_DIRECT if st.variant.startswith('D') else self.FLOW_BRIDGE
+        step = min(max(st.step, 1), len(flow))
+        target = step + (1 if direction == 'next' else -1)
+        if target < 1:
+            return
+        if target > len(flow):
+            self._c = replace(self._c, mode='operate', setup=None)       # letzter Schritt: Einrichtung beendet
+            return
+        self._r, self._w, self._c = STATES[flow[target - 1]]
     def set_auto_connect(self, on): self._rec('set_auto_connect', on)
     def auto_connect_at_start(self):
         self._rec('auto_connect_at_start')

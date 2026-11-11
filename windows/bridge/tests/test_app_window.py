@@ -188,14 +188,14 @@ def test_step_circle_tooltip_names_the_step(real):
     c, w = real()
     sh = w.setup_view.step_header
     shown = []
-    import dispread_bridge_app.ui.setup_view as sv
-    orig = sv.QToolTip.showText
-    sv.QToolTip.showText = lambda pos, text, widget=None, *a: shown.append(text)
+    from dispread_bridge_app.ui import tooltips
+    orig = tooltips.show
+    tooltips.show = lambda text, pos, widget=None: shown.append(text)
     try:
         r = sh.circle_rect(3).center().toPoint()
         QApplication.sendEvent(sh, QHelpEvent(QHelpEvent.Type.ToolTip, r, QPoint(0, 0)))
     finally:
-        sv.QToolTip.showText = orig
+        tooltips.show = orig
     assert shown == ['Schritt 3: Verbinden']
 
 

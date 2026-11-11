@@ -213,7 +213,7 @@ def test_pair_button_gate_helper_enter_and_show_toggle(fake_win):
     assert btn.isEnabled()
     from PySide6.QtWidgets import QLineEdit
     assert sv.code_edit.echoMode() == QLineEdit.EchoMode.Password
-    sv.checks['code_show'].setChecked(True)
+    sv.toggle_code_visible()                                     # Augen-Symbolknopf im Feld
     assert sv.code_edit.echoMode() == QLineEdit.EchoMode.Normal
     QTest.keyClick(sv.code_edit, Qt.Key.Key_Return)
     settle(w)

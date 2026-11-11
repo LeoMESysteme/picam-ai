@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 from . import texts, theme
 from .port import JournalEntry
 from .widgets import (
-    ColorFlash,
     FocusPushButton,
     FocusToolButton,
     Header,
@@ -48,7 +47,7 @@ def _fit_words(label: QLabel, raw: str, avail: int) -> None:
 class Chip(FocusToolButton):
     """Prüfpunkt-Kachel: Komponenten-Symbol, Name, Info-Symbol (Erklärung), Statussymbol + Wort, Zweitzeile.
 
-    Bei echtem Zustandswechsel kurzer Farbübergang (200 ms); ein Klick öffnet das Detailfenster.
+    Ein Klick öffnet das Detailfenster; Zustandswechsel werden ohne Farbblitz sofort gezeigt.
     Symbol, Name und Info-Symbol stehen in einer Zeile; nur wenn ein Name dort nicht passt, stehen die
     Namen aller Kacheln in eigener Zeile."""
     PAD_L, PAD_R, GAP_NAME, GAP_INFO = 6, 4, 4, 2
@@ -96,7 +95,6 @@ class Chip(FocusToolButton):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         # Das Info-Symbol bleibt für den Mauszeiger erreichbar (Tooltip); Klicks reicht QLabel an die Kachel weiter.
         self.view: texts.ChipView | None = None
-        self.flash = ColorFlash(self)
         self._inline = True
         self._spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -119,8 +117,6 @@ class Chip(FocusToolButton):
         self.setToolTip(f'{v.word}' + (f' – {v.sub}' if v.sub else ''))
         self.setAccessibleName(f'{v.name}: {texts.SCREEN_READER[v.tone]} {v.word}' + (f', {v.sub}' if v.sub else ''))
         self.setAccessibleDescription(help_text)
-        if prev is not None and prev.key == v.key and (prev.tone, prev.word) != (v.tone, v.word):
-            self.flash.start(v.tone)
 
     def _set_inline(self, inline: bool) -> None:
         if inline == self._inline:
@@ -153,16 +149,74 @@ class Chip(FocusToolButton):
             h += 3 + self.sub.heightForWidth(inner)
         return h
 
-    def paintEvent(self, e):
-        super().paintEvent(e)
-        if self.flash.running:
-            p = QPainter(self)
-            self.flash.paint(p, self.rect(), 4)
-            p.end()
 
-    def hideEvent(self, e):
-        super().hideEvent(e)
-        self.flash.stop()
+class DirectRoute(QFrame):
+    """Weg „UART direkt“ als Bild (B-19): USB-Adapter → Wertfeld mit dem Port → GSVmulti. So ist auf einen Blick
+    erkennbar, dass GSVmulti den Port direkt liest; die Brücke steht nicht dazwischen."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('direct_route')
+        self.setProperty('card', True)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(8)
+        self.adapter_icon = QLabel()
+        self.adapter_icon.setPixmap(theme.icon_pixmap('usb_stick', 'text', 20))
+        self.adapter_state = StateIcon('info', 16)
+        self.adapter_word = theme.set_typo(QLabel(), 'caption_strong')
+        self.adapter_word.setWordWrap(True)
+        left = QVBoxLayout()
+        left.setSpacing(4)
+        left.addWidget(self.adapter_icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        left.addWidget(theme.set_typo(QLabel(texts.ROUTE_ADAPTER), 'caption'), 0, Qt.AlignmentFlag.AlignHCenter)
+        st = QHBoxLayout()
+        st.setSpacing(4)
+        st.addStretch(1)
+        st.addWidget(self.adapter_state)
+        st.addWidget(self.adapter_word)
+        st.addStretch(1)
+        left.addLayout(st)
+        self.port_slot = QWidget()
+        self.port_slot.setMinimumWidth(96)
+        PortLay = QVBoxLayout(self.port_slot)
+        PortLay.setContentsMargins(0, 0, 0, 0)
+        self._port_lay = PortLay
+        self._port_value = None
+        gsv = QVBoxLayout()
+        gsv.setSpacing(4)
+        gi = QLabel()
+        gi.setPixmap(theme.icon_pixmap('data_line', 'text', 20))
+        gsv.addWidget(gi, 0, Qt.AlignmentFlag.AlignHCenter)
+        gsv.addWidget(theme.set_typo(QLabel(texts.ROUTE_GSV), 'caption'), 0, Qt.AlignmentFlag.AlignHCenter)
+        gsv.addWidget(theme.set_typo(QLabel(texts.ROUTE_READS), 'caption_strong'), 0, Qt.AlignmentFlag.AlignHCenter)
+        arrows = []
+        for _ in range(2):
+            a = QLabel()
+            a.setPixmap(theme.icon_pixmap('arrow_forward', 'text2', 20))
+            arrows.append(a)
+        lay.addLayout(left, 1)
+        lay.addWidget(arrows[0], 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(self.port_slot, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(arrows[1], 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(gsv, 1)
+        self.setAccessibleName(texts.ROUTE_ACCESSIBLE)
+
+    def set_state(self, port: str | None, present: bool | None) -> None:
+        from .widgets import ValueField
+        if port != self._port_value:
+            self._port_value = port
+            while self._port_lay.count():
+                it = self._port_lay.takeAt(0)
+                if it.widget() is not None:
+                    it.widget().deleteLater()
+            self.port_field = ValueField('', port or texts.NOT_SET, copyable=bool(port))
+            self._port_lay.addWidget(self.port_field)
+        tone, word = {True: ('ok', texts.ROUTE_PRESENT), False: ('warn', texts.ROUTE_MISSING)}.get(
+            present, ('info', texts.ROUTE_UNKNOWN))
+        self.adapter_state.set_tone(tone)
+        self.adapter_word.setText(word)
+        self.setAccessibleDescription(f'{texts.ROUTE_ADAPTER} {port or ""}: {word} – {texts.ROUTE_GSV} {texts.ROUTE_READS}')
 
 
 class JournalModel(QAbstractListModel):
@@ -403,6 +457,9 @@ class StatusView(QWidget):
             c.clicked.connect(lambda _=False, n=i: QTimer.singleShot(0, lambda: self._chip_clicked(n)))
         self.chip_grid = grid
         body.addLayout(grid)
+        self.route = DirectRoute()
+        self.route.hide()
+        body.addWidget(self.route)
         self.journal_box = QWidget()
         self.journal_box.setObjectName('journal_box')
         jl = QVBoxLayout(self.journal_box)
@@ -524,10 +581,16 @@ class StatusView(QWidget):
                 self.exit_button]
 
     def update_from(self, readiness, worker, ctx, locked: bool, configured: bool | None = None) -> None:
-        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer)
+        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer,
+                                badges=texts.header_badges(readiness, ctx))
         self.infobar.set_bar(texts.action_bar(readiness, worker, ctx, configured))
+        direct = ctx.route_mode == 'uart_direct'
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx), strict=False):
             chip.set_view(view)
+            chip.setVisible(not direct)               # UART direkt: die Strecke als Bild statt „nicht benutzt“-Kacheln
+        self.route.setVisible(direct)
+        if direct:
+            self.route.set_state(ctx.adapter_port, ctx.adapter_present)
         self.version_label.setText(texts.version_label(ctx.version))
         self.channel_label.setText(ctx.channel or '')
         self.channel_label.setVisible(bool(ctx.channel))

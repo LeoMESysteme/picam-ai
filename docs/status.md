@@ -1,5 +1,10 @@
 # Status und Übergabe — 2026-11-11
 
+> **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
+> Einstieg: [/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md](/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md).
+> Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
+> Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
+
 Auftrag `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-catalog.md`
 im vorhandenen Worktree `bruecke-ux` (`feat/bruecke-ux`) umgesetzt. Alle
 Änderungen bleiben uncommittet. Kein Merge, Push, Deployment, Hardwareeingriff

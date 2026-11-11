@@ -253,3 +253,86 @@ GSVmulti-Seite liest ihre Baudrate aus der Vorlage); `activity_seq`;
   Zustände hell/dunkel bei 380 × 560 und 440 × 720.
 * Windows: Prüfanleitung `windows/bridge/PRUEFUNG-UX2.md` für eine lokale
   Claude-Sitzung auf Leonhards PC; deren Bericht fließt in die nächste Runde.
+
+## Runde 3: Gestaltung nach Leonhards Rückmeldung (2026-11-11)
+
+Leonhard nach Teil B der Windows-Prüfung, wörtlich: „Generell bin ich nicht
+wirklich mit dem design zufrieden. Die animationen funktionieren nicht und
+sind bloß ein flackern. Es wird viel text verwendet der das ui unübersichtlich
+macht. infos wie com port, datei locations, frequenz usw... könnte man in
+graue felder packen so das erkennbar ist das diese werte sich ändern können
+und keine standard infos/texte sind). bitte reduziere den text, und lasse das
+ui für sich sprechen (funktionen, bedeutung, usw... soll durch das design
+kommuniziert werden)“
+
+Leitsatz: **Werte sind Felder, Zustände sind Formen, Text ist die Ausnahme.**
+
+### R3-1 Wertfeld
+Jeder veränderliche Wert (COM-Port, Pfad, Baudrate, Frequenz, Pi-ID,
+Endpunkt, Fingerabdruck, Lauf-ID, Version, Zähler, Zeiten in Details) steht
+in einem **Wertfeld**: Grund `mica2` (dunkel `ctrl`), Radius 4, Polster 3/8,
+Cascadia Mono 9 pt, Textfarbe `text`. Bezeichner davor oder darüber in
+Beschriftung `text2`. Kopieren: Klick auf das Feld oder ein Kopiersymbol,
+das bei Hover/Fokus im Feld rechts erscheint; danach Häkchen 1,2 s. Sätze
+enthalten **keine** Werte mehr („Die Session verweist auf COM5“ →
+Bezeichner „Port“ + Wertfeld `COM5`). Ersetzt den bisherigen CopyField-Look.
+
+### R3-2 Textbudget
+* Karte, Infobar, Kachel: höchstens **ein** kurzer Satz (Richtwert ≤ 70
+  Zeichen); Kachel-Zweitzeile höchstens drei Wörter oder ein Wertfeld.
+* Erklärungen gehen ins ⓘ-Tooltip oder ins Detailfenster, nie als Absatz in
+  die Hauptansicht.
+* Wiederkehrende Einschränkungen werden **Abzeichen** (Umriss
+  `stroke_strong`, Beschriftung 9 pt, Radius 4, kein Grün): „nicht
+  abgenommen“, „Demo“, „Testfreigabe“, „kein Empfangsnachweis“,
+  „Einkanal“. Ein Abzeichen trägt ein ⓘ-Tooltip mit der Erklärung (z. B. der
+  F3-Wortlaut bei „Einkanal“).
+* Keine Dopplung: Was die DUT-Sperrzeile sagt, sagt keine Infobar noch
+  einmal. Infobar nur bei Handlungsbedarf oder Störung; im Normalbetrieb
+  (Lauf läuft, Ausgabe gesperrt) **keine** Infobar.
+* Moduswahl-Karten: Name + ein Satz + Status; Baudraten nur im Detail.
+
+### R3-3 Session (Einrichtung E4/D3 und Einstellungen)
+Eine Ergebniszeile: neutrales Häkchen, Wertfeld mit Pfad, Symbolknöpfe
+„Ordner öffnen“ und „Neu erzeugen“. Darunter Checkliste „In GSVmulti
+einstellen“: je Punkt ein Kontrollkästchen mit kurzem Text + ⓘ
+(„Record Hidden Channels einschalten“ – Pflicht, nur bei ausgeblendeten
+Kanälen, hält „Weiter“ zurück; „Autoscale Y für Kanal 8_1 aus“ – Empfehlung;
+„Session in GSVmulti öffnen“). Einkanal-Warnung als Abzeichen „Einkanal“ mit
+ⓘ, nicht als Block. Keine Anleitungsprosa.
+
+### R3-4 Zustand über Form
+* ValidatedField: Rand des Feldes in `ok`/`warn`/`err` (2 px unten, 1 px
+  rundum), Statussymbol **vor** der einzeiligen Meldung unter dem Feld,
+  nicht rechts in einer Spalte.
+* Kopplungscode: Augen-Symbolknopf im Feld (`eye`/`eye_off`) statt Text.
+* Gesperrte Hauptaktion: Grund im Tooltip und als eine kurze Zeile direkt
+  links neben/unter dem Knopf, in `text2`.
+* Einrichtung verlassen: beschrifteter Knopf „Verlassen“ mit Symbol rechts in
+  der Zeile des Schritttitels (Tooltip „Einrichtung verlassen – Gespeichertes
+  bleibt erhalten“).
+
+### R3-5 Bewegung – nur was sauber läuft
+Flackern ist schlechter als keine Bewegung. Erlaubt bleiben nur:
+ProgressRing (mit **Mindestanzeigedauer 400 ms**), Herzschlag-Puls,
+Kopier-/Prüf-Häkchen, Ladebalken. **Entfernt**: Überblendung
+Betrieb↔Einrichtung, Schrittübergang (`slide_in`, `fade_in`), Kachel-
+Farbblitz – es sei denn, sie laufen nachweislich ohne Neuaufbau der Widgets
+flimmerfrei. Grundregel: Kein Widget wird bei einem bloßen Datenwechsel neu
+aufgebaut; die Einrichtung aktualisiert vorhandene Widgets und behält
+Eingabetext und Fokus (B-12: „Suche wiederholen“ löschte die Adresse).
+
+### R3-6 Fehler aus Teil B
+B-01 Tooltips als Box (Rich Text, Höchstbreite 320 px, Verzögerung ≈ 300 ms,
+überall gleich). B-07 Moduswahl: ohne laufende Übertragung (kein Lauf mit
+Weitergabe) ist der Wechsel erlaubt und trennt nach Bestätigung; während
+Übertragung steht in der Sperrzeile der Karte ein Knopf „Trennen …“ mit dem
+bestehenden Dialog. B-08 Pfeiltasten in der Moduswahl. B-10 Werkzeugfenster
+höchstens verfügbare Bildschirmhöhe − 48 px, Position in die verfügbare
+Fläche geklemmt, Inhalt scrollt. B-12 Suche: kein Neuaufbau, Text bleibt,
+Ergebnis „Nichts gefunden“ sichtbar. B-17 Demo (`ui/fake.py`): „Weiter“/
+„Zurück“ schalten E1→E2b→E3→E4session→E5 bzw. D1→D4 durch; ein aktives
+„Weiter“ tut nie wortlos nichts. B-22 Enter/Return löst fokussierte Knöpfe,
+Symbolknöpfe und Kacheln aus, auch in Werkzeugfenstern (QDialog-Standard-
+knopf-Logik beachten). Tray → „Brücke beenden …“: Dialog kommt nach vorn
+(`raise_`/`activateWindow`, Hauptfenster vorher wiederherstellen).

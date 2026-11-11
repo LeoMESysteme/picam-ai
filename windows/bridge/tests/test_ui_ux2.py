@@ -11,7 +11,7 @@ from dispread_bridge_app.ui import icons, texts, theme
 from dispread_bridge_app.ui.fake import FakeController
 from dispread_bridge_app.ui.port import MODES
 from dispread_bridge_app.ui.tool_windows import ToolWindow
-from dispread_bridge_app.ui.widgets import CopyField, IconButton
+from dispread_bridge_app.ui.widgets import IconButton, ValueField
 from dispread_bridge_app.ui.window import MainWindow
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QGuiApplication
@@ -124,7 +124,7 @@ def test_motion_switch_follows_environment(monkeypatch):
 
 def test_copy_field_copies_raw_value_and_confirms(app):
     fp = 'a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 0e5b c3f8 9a46 71de'
-    f = CopyField('TLS-Fingerabdruck (SHA-256)', fp, display=fp.replace(' 19d6', '\n19d6'))
+    f = ValueField('TLS-Fingerabdruck (SHA-256)', fp, display=fp.replace(' 19d6', '\n19d6'))
     f._reset.setInterval(60)
     f.show()
     f.copy_button.click()
@@ -133,7 +133,7 @@ def test_copy_field_copies_raw_value_and_confirms(app):
     QTest.qWait(150)
     assert not f.confirming and f.copy_button.icon_name == 'copy' and f.copy_button.toolTip() == texts.COPY_TIP
     assert f.value_label.property('typo') == 'data' and f.name_label.property('typo') == 'caption'
-    empty = CopyField('Pi-ID', '–')
+    empty = ValueField('Pi-ID', '–')
     assert empty.copy_button.isHidden()
 
 
@@ -212,15 +212,33 @@ def test_tiles_have_component_icon_info_tooltip_and_state_word(win):
     assert 'Verbunden heißt nicht' in texts.CHIP_HELP['pi']
 
 
-def test_tile_flash_only_on_real_change(win):
-    fc, w = win('B1')
-    chip = w.status_view.chips[2]
-    n = chip.flash.count
-    w.refresh()
-    assert chip.flash.count == n                              # Neuzeichnen ist kein Zustandswechsel
-    fc.set_state('B3')
-    w.refresh()
-    assert chip.flash.count == n + 1 and not chip.flash.running   # Bewegung aus: Endzustand sofort
+def test_r3_no_flicker_animations_left():
+    """R3-5: Kachel-Farbblitz, Überblendung und Schrittübergang sind entfernt."""
+    from dispread_bridge_app.ui import widgets
+    for name in ('ColorFlash', 'fade_in', 'slide_in'):
+        assert not hasattr(widgets, name)
+    for f in UI.glob('*.py'):
+        src = f.read_text(encoding='utf-8')
+        assert 'slide_in(' not in src and 'fade_in(' not in src and 'ColorFlash' not in src
+
+
+def test_progress_ring_minimum_display_400ms(win, monkeypatch):
+    monkeypatch.setenv(theme.MOTION_ENV, '1')
+    from dispread_bridge_app.ui.widgets import ProgressRing
+    _, w = win('B1')
+    ring = ProgressRing(16, w)
+    ring.move(5, 5)
+    ring.setVisible(True)
+    ring.setVisible(False)                                   # sofort wieder aus: bleibt bis 400 ms
+    QTest.qWait(80)
+    assert ring.isVisible()
+    QTest.qWait(450)
+    assert not ring.isVisible()
+    ring.setVisible(True)
+    ring.setVisible(False)
+    ring.setVisible(True)                                    # erneutes Zeigen bricht das Ausblenden ab
+    QTest.qWait(500)
+    assert ring.isVisible()
 
 
 def test_tile_heights_equal_and_nothing_clipped_at_both_sizes(win):
@@ -248,7 +266,7 @@ def test_chip_window_single_instance_switches_content(win):
     assert 'Pi-ID' in texts_of(first) and w.status_view.chips[2].isChecked() and not w.status_view.chips[0].isChecked()
     assert len([t for t in QApplication.topLevelWidgets() if isinstance(t, ToolWindow) and t.kind == 'chip'
                 and t.parentWidget() is w]) == 1
-    fields = [f for f in first.findChildren(CopyField) if f.name_label.text() == 'TLS-Fingerabdruck (SHA-256)']
+    fields = [f for f in first.findChildren(ValueField) if f.name_label.text() == 'TLS-Fingerabdruck (SHA-256)']
     assert fields and fields[0].value == w.controller.context().fingerprint
 
 
@@ -270,7 +288,7 @@ def test_info_window_lists_copyable_technical_values(win):
     w.status_view.details_button.click()
     settle(w)
     info = w.tool_windows['info']
-    names = {f.name_label.text(): f for f in info.findChildren(CopyField)}
+    names = {f.name_label.text(): f for f in info.findChildren(ValueField)}
     for n in ('Version', 'Protokoll', 'Lauf-ID', 'Pi-ID'):
         assert n in names and not names[n].copy_button.isHidden(), n
     for n in ('Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Brückenseite', 'GSVmulti-Seite'):
@@ -324,7 +342,7 @@ def test_export_window_shows_contents_then_saves_and_opens_folder(win, tmp_path)
     ex.save_button.click()
     settle(w)
     assert ('export_diagnostics', dest) in fc.calls and ex.state == 'done'
-    fields = ex.findChildren(CopyField)
+    fields = ex.findChildren(ValueField)
     assert fields and fields[0].value == str(dest)
     folder = [b for b in ex.findChildren(QPushButton) if b.text() == texts.OPEN_FOLDER][0]
     folder.click()

@@ -1,11 +1,12 @@
-"""Wiederverwendbare Bausteine: Statussymbol, Kopf, InfoBar, Fußleiste, Symbolknopf, Kopierfeld,
+"""Wiederverwendbare Bausteine: Statussymbol, Kopf, InfoBar, Fußleiste, Symbolknopf, Wertfeld,
 Fortschritt, Herzschlag, Farbblitz und Überblendung (UX2)."""
 from __future__ import annotations
+
+import time
 
 from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
-    QObject,
     QPointF,
     QPropertyAnimation,
     QRectF,
@@ -15,7 +16,7 @@ from PySide6.QtCore import (
     QVariantAnimation,
     Signal,
 )
-from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QPainter, QPen
+from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
     QFrame,
@@ -30,6 +31,73 @@ from PySide6.QtWidgets import (
 )
 
 from . import texts, theme
+
+
+class InfoIcon(QLabel):
+    """ⓘ: die Erklärung steht im Tooltip (Box), nicht im Fließtext. Nur Mauszeiger; für Screenreader als Beschreibung."""
+
+    def __init__(self, tip: str, name: str = 'Erklärung', size: int = 16, parent=None):
+        super().__init__(parent)
+        self.setObjectName('info_icon')
+        self.setFixedSize(size, size)
+        self.setPixmap(theme.icon_pixmap('info', 'text2', size))
+        self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self.set_tip(tip, name)
+
+    def set_tip(self, tip: str, name: str | None = None) -> None:
+        self.setToolTip(tip)
+        self.setAccessibleDescription(tip)
+        if name:
+            self.setAccessibleName(name)
+        # Nie ein elternloses Widget zeigen: es würde kurz ein eigenes Fenster (Blitzfenster)
+        if not tip:
+            self.hide()
+        elif self.parent() is not None:
+            self.show()
+
+
+class Badge(QFrame):
+    """Abzeichen für eine wiederkehrende Einschränkung („nicht abgenommen“, „Demo“, „Einkanal“ …): Umriss
+    ``stroke_strong``, 9-pt-Beschriftung, Radius 4, nie grün. Die Erklärung steht im ⓘ im Abzeichen."""
+
+    def __init__(self, text: str, tip: str = '', parent=None, name: str = ''):
+        super().__init__(parent)
+        self.setProperty('badgeBox', True)
+        self.setObjectName(name or 'badge_box')
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(6, 1, 3 if tip else 6, 1)
+        lay.setSpacing(3)
+        self.label = QLabel(text)
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
+        self.label.setProperty('badgeText', True)
+        lay.addWidget(self.label)
+        self.info = InfoIcon(tip, f'Erklärung {text}', size=14)
+        lay.addWidget(self.info)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        if tip:
+            self.setToolTip(tip)
+        self.setAccessibleName(text)
+        self.setAccessibleDescription(tip)
+
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        p = QPainter(self)           # Umriss selbst zeichnen: unabhängig von der Stylesheet-Kaskade des Besitzers
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor(theme.tokens()['stroke_strong']), 1))
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 4, 4)
+        p.end()
+
+
+def badge_row(*badges: Badge) -> QWidget:
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(6)
+    for b in badges:
+        lay.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+    lay.addStretch(1)
+    return w
 
 
 def repolish(w: QWidget) -> None:
@@ -87,6 +155,16 @@ class _FocusMixin:
         super().focusOutEvent(e)
         self.update()
 
+    def keyPressEvent(self, e):
+        # Enter löst den fokussierten Knopf aus (Windows-Verhalten), nicht nur die Leertaste; auch Symbolknöpfe,
+        # Kacheln und Knöpfe in Werkzeugfenstern (der Dialog-Standardknopf bekommt die Taste dann nicht mehr).
+        if (e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not e.isAutoRepeat()
+                and isinstance(self, QAbstractButton) and self.isEnabled()):
+            e.accept()
+            self.click()
+            return
+        super().keyPressEvent(e)
+
     def paintEvent(self, e):
         super().paintEvent(e)
         if self.hasFocus() and self._key_focus:
@@ -94,12 +172,7 @@ class _FocusMixin:
 
 
 class FocusPushButton(_FocusMixin, QPushButton):
-    def keyPressEvent(self, e):
-        # Enter löst den fokussierten Knopf aus (Windows-Verhalten), nicht nur die Leertaste
-        if e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not e.isAutoRepeat():
-            self.click()
-            return
-        super().keyPressEvent(e)
+    pass
 
 
 class FocusToolButton(_FocusMixin, QToolButton):
@@ -192,6 +265,8 @@ class Header(QWidget):
         self.ring.setAccessibleName(texts.HEARTBEAT_BUSY)
         self.ring.setToolTip(texts.HEARTBEAT_BUSY)
         self.ring.hide()
+        self._busy = False
+        self.ring.gone.connect(self._sync_beat)
         slot = QWidget()
         slot.setFixedWidth(16)
         sl = QHBoxLayout(slot)
@@ -223,8 +298,24 @@ class Header(QWidget):
         self.dut.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         row2.addWidget(self.dut_icon, 0, Qt.AlignmentFlag.AlignTop)
         row2.addWidget(self.dut, 1)
+        self.dut_info = InfoIcon('', 'Erklärung zur Sperrzeile')
+        row2.addWidget(self.dut_info, 0, Qt.AlignmentFlag.AlignTop)
         lay.addLayout(row2)
+        self.badges = QWidget()
+        self.badges_lay = QHBoxLayout(self.badges)
+        self.badges_lay.setContentsMargins(0, 0, 0, 0)
+        self.badges_lay.setSpacing(6)
+        self._badges_key: tuple = ()
+        self.badges.hide()
+        lay.addWidget(self.badges)
         lay.addStretch(1)      # überzählige Höhe nach unten, nicht zwischen die Zeilen
+
+    def _sync_beat(self) -> None:
+        """Punkt erst, wenn der Ring (Mindestanzeigedauer) wirklich weg ist: nie beide übereinander."""
+        try:
+            self.heartbeat.setVisible(not self._busy and not self.ring.isVisibleTo(self.pulse_slot))
+        except RuntimeError:
+            pass
 
     def _pulse_icon(self) -> None:
         self.icon_pulses += 1
@@ -232,33 +323,49 @@ class Header(QWidget):
             self._icon_anim.stop()
             self._icon_anim.start()
 
+    def set_badges(self, items: tuple[tuple[str, str], ...]) -> None:
+        """Abzeichen (Einschränkungen) unter der Sperrzeile; Neuaufbau nur bei geänderter Liste."""
+        if items == self._badges_key:
+            return
+        self._badges_key = items
+        while self.badges_lay.count():
+            it = self.badges_lay.takeAt(0)
+            if it.widget() is not None:
+                it.widget().deleteLater()
+        for text, tip in items:
+            b = Badge(text, tip, name='badge_' + text.replace(' ', '_'))
+            self.badges_lay.addWidget(b, 0)
+            repolish(b)
+        self.badges_lay.addStretch(1)
+        self.badges.setVisible(bool(items))
+
     def update_from(self, ctx, headline: texts.Headline, locked: bool, allow_switch=True, peer: str | None = None,
-                    allow_mode=True) -> None:
+                    allow_mode=True, badges: tuple = ()) -> None:
         name, _route = texts.head_title(ctx)
         self.title.setText(name)
         self.title.setToolTip(name)
         self.mode_button.set_view(*texts.mode_view(ctx))
         self.mode_button.setVisible(allow_mode)
         busy = peer in ('connecting', 'backoff')
-        self.head_icon.set_tone(headline.tone)
-        # Ring = es wird versucht. Kein Fehlersymbol daneben: das steht in Infobar und Kachel.
-        show_icon = headline.tone in ('warn', 'err') and not busy
-        self.head_icon.setVisible(show_icon)
-        self.pulse_slot.setVisible(not show_icon)    # Statussymbol ersetzt den Punkt: nie beides vor dem Satz
+        # Nur der farbige Punkt steht vor dem Zustandssatz (kein zweites Symbol); Ring nur bei Aufbau/Backoff.
+        self.head_icon.hide()
+        self.pulse_slot.setVisible(True)
+        self.heartbeat.set_tone(
+            ('err' if headline.tone == 'err' else 'warn' if headline.tone == 'warn' else 'ok')
+            if peer == 'authenticated' else 'info')
         self.headline.setText(headline.text)
         self.ring.setVisible(busy)
         tip = texts.HEARTBEAT_RETRY if peer == 'backoff' else texts.HEARTBEAT_BUSY
         self.ring.setToolTip(tip)
         self.ring.setAccessibleName(tip)
-        self.heartbeat.setVisible(not busy)
-        self.pulse_slot.setVisible(busy or not show_icon)     # bei Achtung/Fehler pulsiert nur das Symbol
-        before = self.heartbeat.pulses
+        self._busy = busy
+        self._sync_beat()
         self.heartbeat.set_contact(peer == 'authenticated', ctx.activity_seq)
-        if show_icon and self.heartbeat.pulses != before:
-            self._pulse_icon()
         text, tone = texts.dut_line(ctx)
         self.dut.setText(text)
         self.dut_icon.set_tone(tone)
+        self.dut_info.set_tip(texts.dut_info(ctx))
+        self.set_badges(badges)
         self.lock_button.setVisible(locked)
         self.switch_button.setVisible(allow_switch and not locked and len(ctx.paired) > 1 and ctx.route_mode != 'uart_direct')
 
@@ -373,7 +480,8 @@ class InfoBar(QFrame):
         self.btn_row.setContentsMargins(0, top, 0, 0)
         self.btn_col.setContentsMargins(0, top, 0, 0)
         self.setMinimumHeight(0)
-        self.show()
+        if self.parent() is not None:
+            self.show()          # elternlos nie zeigen (Blitzfenster); beim Einhängen wird sie sichtbar
         self._arrange()
         self._fit_height()
 
@@ -463,70 +571,159 @@ def format_fingerprint(fp: str) -> str:
     return '\n'.join(' '.join(groups[i:i + 4]) for i in range(0, len(groups), 4))
 
 
-class CopyField(QWidget):
-    """Feldname (Beschriftung) über Wert (Daten), Kopierknopf rechts; Häkchen 1,5 s nach dem Kopieren."""
+class ValueField(QFrame):
+    """Wertfeld (R3-1): jeder veränderliche Wert steht in einem grauen Feld, damit man sieht, dass er sich
+    ändern kann und kein fester Text ist (COM-Port, Pfad, Baudrate, Frequenz, Pi-ID, Endpunkt, Fingerabdruck …).
+
+    Grund ``field`` (hell ``mica2``, dunkel ``ctrl``), Radius 4, Polster 3/8, Cascadia Mono 9 pt. Der Bezeichner
+    steht darüber oder (``inline``) davor in ``text2``. Kopieren: Klick auf das Feld oder das Kopiersymbol, das
+    bei Hover/Fokus rechts erscheint; danach 1,2 s ein Häkchen."""
     copied = Signal(str)
-    CONFIRM_MS = 1500
+    CONFIRM_MS = 1200
 
     def __init__(self, label: str, value: str, parent=None, display: str | None = None, copyable=True,
-                 mono=True):
+                 mono=True, inline=False, label_width: int = 0):
         super().__init__(parent)
         self.value = value
         self.setObjectName('copy_field')
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(8)
-        col = QVBoxLayout()
-        col.setSpacing(2)
+        self.setProperty('valueFieldRow', True)
+        self._copyable = bool(copyable and value not in texts.EMPTY_VALUES)
+        outer = QVBoxLayout(self) if not inline else QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(2 if not inline else 8)
         self.name_label = theme.set_typo(QLabel(label), 'caption')
         self.name_label.setWordWrap(True)
+        self.name_label.setTextFormat(Qt.TextFormat.PlainText)
+        if inline:
+            self.name_label.setSizePolicy(QSizePolicy.Policy.Fixed if label_width else QSizePolicy.Policy.Minimum,
+                                          QSizePolicy.Policy.Preferred)
+            if label_width:
+                self.name_label.setFixedWidth(label_width)
+        # --- das Feld selbst
+        self.box = _ValueBox(self)
+        bl = QHBoxLayout(self.box)
+        bl.setContentsMargins(8, 3, 4, 3)
+        bl.setSpacing(4)
         self.value_label = QLabel(display if display is not None else _breakable(value))
         theme.set_typo(self.value_label, 'data' if mono else 'body')
         self.value_label.setWordWrap(True)
         self.value_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.value_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         self.value_label.setAccessibleName(f'{label}: {value}')
-        col.addWidget(self.name_label)
-        col.addWidget(self.value_label)
-        lay.addLayout(col, 1)
-        self.copy_button = IconButton('copy', f'{label} {texts.COPY_TIP.lower()}', name='copy', color_key='text2',
-                                      icon_size=16)
+        self.value_label.setProperty('empty', value in texts.EMPTY_VALUES)
+        bl.addWidget(self.value_label, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.copy_button = IconButton('copy', f'{label} {texts.COPY_TIP.lower()}', parent=self.box, name='copy',
+                                      color_key='text2', icon_size=16)
+        self.copy_button.setFixedSize(22, 22)
         self.copy_button.setToolTip(texts.COPY_TIP)
+        self.copy_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)        # das Feld selbst nimmt den Fokus
         self.copy_button.clicked.connect(self.copy)
-        self.copy_button.setVisible(copyable and value not in texts.EMPTY_VALUES)
-        lay.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        if not self._copyable:
+            self.copy_button.hide()
+        bl.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignTop)
+        self.box.setProperty('copyable', self._copyable)
+        if self._copyable:
+            self.box.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.box.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            self.box.setToolTip(texts.COPY_TIP)
+            self.box.clicked.connect(self.copy)
+            self.box.setAccessibleName(f'{label}: {value} – {texts.COPY_TIP}')
         self._reset = QTimer(self)
         self._reset.setSingleShot(True)
         self._reset.setInterval(self.CONFIRM_MS)
         self._reset.timeout.connect(self._restore)
+        self._idle_icon(False)
+        self.box.hover_changed.connect(self._idle_icon)
+        if inline:
+            outer.addWidget(self.name_label, 0, Qt.AlignmentFlag.AlignTop)
+            outer.addWidget(self.box, 1)
+        else:
+            outer.addWidget(self.name_label)
+            outer.addWidget(self.box)
+        self.name_label.setVisible(bool(label))
+
+    def _idle_icon(self, active: bool) -> None:
+        """Kopiersymbol nur bei Hover/Fokus sichtbar (Platz bleibt reserviert, der Text springt nicht)."""
+        if self._reset.isActive():
+            return
+        self.copy_button.setIcon(theme.icon('copy', 'text2', 16) if active else QIcon())
 
     @property
     def confirming(self) -> bool:
         return self._reset.isActive()
 
     def copy(self) -> None:
+        if not self._copyable:
+            return
         QGuiApplication.clipboard().setText(self.value)
         self.copy_button.set_icon('checkmark', 'ok')
         self.copy_button.setToolTip(texts.COPIED)
         self.copy_button.setAccessibleName(texts.COPIED)
-        pop_icon(self.copy_button, 16)
-        self._reset.start()
+        self._reset.start()        # nur Symbolwechsel: sicher sichtbar, ohne Skalierungsanimation
         self.copied.emit(self.value)
 
     def _restore(self) -> None:
         self.copy_button.set_icon('copy', 'text2')
         self.copy_button.setToolTip(texts.COPY_TIP)
         self.copy_button.setAccessibleName(f'{self.name_label.text()} {texts.COPY_TIP.lower()}')
+        self._idle_icon(self.box.underMouse() or self.box.hasFocus())
+
+
+class _ValueBox(_FocusMixin, QFrame):
+    """Die graue Fläche des Wertfelds; kopierbar = klickbar und per Tastatur erreichbar (Enter/Leertaste)."""
+    clicked = Signal()
+    hover_changed = Signal(bool)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty('valueField', True)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+    def enterEvent(self, e):
+        super().enterEvent(e)
+        self.hover_changed.emit(True)
+
+    def leaveEvent(self, e):
+        super().leaveEvent(e)
+        self.hover_changed.emit(self.hasFocus())
+
+    def focusInEvent(self, e):
+        super().focusInEvent(e)
+        self.hover_changed.emit(True)
+
+    def focusOutEvent(self, e):
+        super().focusOutEvent(e)
+        self.hover_changed.emit(self.underMouse())
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton and self.property('copyable') and self.rect().contains(e.pos()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(e)
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space) and self.property('copyable'):
+            e.accept()
+            self.clicked.emit()
+            return
+        super().keyPressEvent(e)
 
 
 class ProgressRing(QWidget):
-    """Unbestimmter Fortschrittsring (16/20 px, Akzent). Läuft nur sichtbar und mit Bewegung."""
+    """Unbestimmter Fortschrittsring (16/20 px, Akzent). Läuft nur sichtbar und mit Bewegung.
+
+    Mindestanzeigedauer 400 ms (mit Bewegung): ein Ring, der nach 50 ms wieder verschwindet, wirkt wie ein
+    Flackern. ``setVisible(False)`` wird dann bis zum Ablauf der Mindestdauer aufgeschoben."""
+    MIN_MS = 400
+    gone = Signal()                 # tatsächlich ausgeblendet (nach der Mindestdauer)
 
     def __init__(self, size: int = 16, parent=None):
         super().__init__(parent)
         self.setFixedSize(size, size)
         self._angle = 0.0
+        self._shown_at = 0.0
+        self._pending_hide = QTimer(self)
+        self._pending_hide.setSingleShot(True)
+        self._pending_hide.timeout.connect(lambda: QWidget.setVisible(self, False))
         self._anim = QVariantAnimation(self)
         self._anim.setStartValue(0.0)
         self._anim.setEndValue(360.0)
@@ -543,14 +740,33 @@ class ProgressRing(QWidget):
         self._angle = float(v)
         self.update()
 
+    def setVisible(self, visible: bool) -> None:
+        if visible:
+            self._pending_hide.stop()
+            if self.isHidden():
+                self._shown_at = time.monotonic()
+            super().setVisible(True)
+            return
+        if self.isHidden():
+            return
+        left = self.MIN_MS / 1000 - (time.monotonic() - self._shown_at)
+        if theme.motion_enabled() and left > 0 and not self._pending_hide.isActive():
+            self._pending_hide.start(int(left * 1000) + 1)       # Mindestanzeigedauer abwarten
+            return
+        if not self._pending_hide.isActive():
+            super().setVisible(False)
+
     def showEvent(self, e):
         super().showEvent(e)
+        if self._shown_at == 0.0:
+            self._shown_at = time.monotonic()
         if theme.motion_enabled():
             self._anim.start()
 
     def hideEvent(self, e):
         super().hideEvent(e)
         self._anim.stop()
+        self.gone.emit()
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -627,7 +843,8 @@ class IndeterminateBar(QWidget):
 
 
 class HeartbeatDot(QWidget):
-    """8-px-Punkt vor dem Zustandssatz. Neutral (text2): belegt nur Kontakt zum Pi, keine Weitergabe.
+    """8-px-Punkt vor dem Zustandssatz: trägt den Zustand der Pi-Verbindung (grün nur bei authentifizierter Verbindung
+    ohne Störung, gelb Achtung, rot Fehler); sagt nichts über Weitergabe oder Empfang.
 
     Gefüllt = Kontakt, hohl (stroke_strong) = kein Kontakt. Ein neues ``activity_seq`` löst einen
     kurzen Puls aus (250 ms, ease-out), nur mit Bewegung."""
@@ -637,6 +854,7 @@ class HeartbeatDot(QWidget):
         super().__init__(parent)
         self.setFixedSize(16, max(16, height))
         self.contact = False
+        self.tone = 'info'
         self.seq: int | None = None
         self.pulses = 0
         self._t = 1.0
@@ -652,6 +870,12 @@ class HeartbeatDot(QWidget):
     def _step(self, v) -> None:
         self._t = float(v)
         self.update()
+
+    def set_tone(self, tone: str) -> None:
+        """Zustand der Pi-Verbindung: ok (belegt verbunden, keine Störung), warn, err; ``info`` = neutral."""
+        if tone != self.tone:
+            self.tone = tone
+            self.update()
 
     def set_contact(self, contact: bool, seq: int) -> None:
         if contact != self.contact:
@@ -680,7 +904,7 @@ class HeartbeatDot(QWidget):
         c = QPointF(self.width() / 2, self.height() / 2)
         r = self.DOT / 2
         if self.contact:
-            col = QColor(t['text2'])
+            col = QColor(t[self.tone] if self.tone in ('ok', 'warn', 'err') else t['text2'])
             if self._anim.state() == QAbstractAnimation.State.Running:
                 halo = QColor(col)
                 halo.setAlphaF(0.45 * (1 - self._t))
@@ -695,64 +919,6 @@ class HeartbeatDot(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawEllipse(c, r - 0.6, r - 0.6)
         p.end()
-
-
-_FLASH_BAR = {'ok': 'bar_ok', 'warn': 'bar_warn', 'err': 'bar_err', 'unclear': 'bar_warn'}
-
-
-class ColorFlash(QObject):
-    """Farbübergang bei echtem Zustandswechsel: kurzer Ton der neuen Stufe, 200 ms zurück zur Fläche.
-
-    Der Besitzer ruft ``paint`` in seinem paintEvent (unter den Kindwidgets)."""
-
-    def __init__(self, widget: QWidget, ms: int = 200):
-        super().__init__(widget)
-        self.widget = widget
-        self.tone = 'info'
-        self.count = 0
-        self._anim = _ease_anim(self, 1.0, 0.0, ms)
-        self._anim.valueChanged.connect(lambda _v: widget.update())
-
-    @property
-    def running(self) -> bool:
-        return self._anim.state() == QAbstractAnimation.State.Running
-
-    def start(self, tone: str) -> None:
-        self.count += 1
-        if not theme.motion_enabled() or not self.widget.isVisible():
-            return
-        self.tone = tone
-        self._anim.stop()
-        self._anim.start()
-
-    def stop(self) -> None:
-        self._anim.stop()
-
-    def paint(self, p: QPainter, rect, radius: float = 4) -> None:
-        if not self.running:
-            return
-        c = QColor(theme.tokens()[_FLASH_BAR.get(self.tone, 'bar_info')])
-        c.setAlphaF(max(0.0, min(1.0, float(self._anim.currentValue()))))
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(c)
-        p.drawRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), radius, radius)
-
-
-def fade_in(widget: QWidget, ms: int = 200) -> None:
-    """Überblendung beim Einblenden (z. B. Betrieb ↔ Einrichtung). Ohne Bewegung: sofort."""
-    if not theme.motion_enabled() or not widget.isVisible():
-        return
-    eff = QGraphicsOpacityEffect(widget)
-    eff.setOpacity(0.0)
-    widget.setGraphicsEffect(eff)
-    a = QPropertyAnimation(eff, b'opacity', widget)
-    a.setStartValue(0.0)
-    a.setEndValue(1.0)
-    a.setDuration(ms)
-    a.setEasingCurve(QEasingCurve.Type.OutCubic)
-    a.finished.connect(lambda: widget.setGraphicsEffect(None))
-    a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
 
 
 def toolbar_frame() -> tuple[QFrame, QHBoxLayout]:
@@ -806,7 +972,7 @@ class ValidatedField(QWidget):
     STATES = ('idle', 'pending', 'checking', 'ok', 'warn', 'err')
 
     def __init__(self, editor: QWidget, check, value=None, runner=None, label: str = '', debounce_ms=None,
-                 parent=None, name: str = '', label_role: str = 'body_strong'):
+                 parent=None, name: str = '', label_role: str = 'body_strong', label_tip: str = ''):
         super().__init__(parent)
         if name:
             self.setObjectName(name)
@@ -822,40 +988,46 @@ class ValidatedField(QWidget):
         if label:
             self.label = theme.set_typo(QLabel(label), label_role)
             self.label.setWordWrap(True)
-            lay.addWidget(self.label)
+            lrow = QHBoxLayout()
+            lrow.setSpacing(6)
+            lrow.addWidget(self.label, 0)
+            if label_tip:
+                lrow.addWidget(InfoIcon(label_tip, f'Erklärung {label}'), 0, Qt.AlignmentFlag.AlignVCenter)
+            lrow.addStretch(1)
+            lay.addLayout(lrow)
         else:
             self.label = None
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        row.addWidget(editor, 1)
-        slot = QWidget()
-        slot.setFixedSize(20, 20)
-        sl = QHBoxLayout(slot)
-        sl.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(editor)
+        # Zustand über Form (R3-4): Feldrand in Statusfarbe; das Symbol steht VOR der einzeiligen Meldung darunter
+        self.msg_row = QWidget()
+        mr = QHBoxLayout(self.msg_row)
+        mr.setContentsMargins(0, 0, 0, 0)
+        mr.setSpacing(6)
         self.ring = ProgressRing(16)
         self.ring.setAccessibleName(texts.CHECKING)
         self.ring.hide()
+        self.ring.gone.connect(lambda: self._sync_icon())
         self.icon = QLabel()
-        self.icon.setFixedSize(20, 20)
+        self.icon.setFixedSize(16, 16)
         self.icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.icon.hide()
+        slot = QWidget()
+        slot.setFixedSize(16, 16)
+        sl = QHBoxLayout(slot)
+        sl.setContentsMargins(0, 0, 0, 0)
         sl.addWidget(self.ring, 0, Qt.AlignmentFlag.AlignCenter)
         sl.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignCenter)
         self.status_slot = slot
-        row.addWidget(slot, 0, Qt.AlignmentFlag.AlignVCenter)
-        lay.addLayout(row)
         self.message = theme.set_typo(QLabel(), 'caption_strong')
         self.message.setWordWrap(True)
         self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
-        self.detail = theme.set_typo(QLabel(), 'caption')
-        self.detail.setWordWrap(True)
-        self.detail.setTextFormat(Qt.TextFormat.PlainText)
-        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
-        self.message.hide()
-        self.detail.hide()
-        lay.addWidget(self.message)
-        lay.addWidget(self.detail)
+        self.detail_icon = InfoIcon('', 'Erklärung zur Meldung')     # Erklärung/Abhilfe im ⓘ statt als zweite Zeile
+        mr.addWidget(slot, 0, Qt.AlignmentFlag.AlignTop)
+        mr.addWidget(self.message, 1)
+        mr.addWidget(self.detail_icon, 0, Qt.AlignmentFlag.AlignTop)
+        self.msg_row.hide()
+        lay.addWidget(self.msg_row)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._start)
@@ -936,11 +1108,29 @@ class ValidatedField(QWidget):
         self._show(result.state)
         self.result_changed.emit(result)
 
+    def _sync_icon(self) -> None:
+        """Ergebnissymbol erst, wenn der Ring (Mindestanzeigedauer) wirklich verschwunden ist: nie beide übereinander."""
+        try:
+            self.icon.setVisible(self.state in ('ok', 'warn', 'err') and not self.ring.isVisibleTo(self.status_slot))
+        except RuntimeError:
+            pass
+
+    def _paint_editor(self, state: str) -> None:
+        """Rand des Feldes in der Statusfarbe (Eigenschaft ``vstate`` für das QSS), auch bei zusammengesetzten Editoren."""
+        from PySide6.QtWidgets import QComboBox, QLineEdit
+        value = state if state in ('ok', 'warn', 'err') else ''
+        targets = [self.editor] if isinstance(self.editor, (QLineEdit, QComboBox)) else \
+            self.editor.findChildren(QComboBox) + self.editor.findChildren(QLineEdit)
+        for w in targets:
+            if w.property('vstate') != value:
+                w.setProperty('vstate', value)
+                repolish(w)
+
     def _show(self, state: str) -> None:
         prev = self.state
         self.state = state
         self.ring.setVisible(state == 'checking')
-        self.icon.setVisible(state in ('ok', 'warn', 'err'))
+        self._sync_icon()
         if state == 'ok':
             if prev != 'ok':
                 pop_label(self.icon, 'checkmark', 'ok', 16)
@@ -954,9 +1144,10 @@ class ValidatedField(QWidget):
         self.message.setText(msg)
         self.message.setProperty('typo', 'caption' if state == 'checking' else 'caption_strong')
         repolish(self.message)
-        self.message.setVisible(bool(msg))
-        self.detail.setText(detail)
-        self.detail.setVisible(bool(detail))
+        self.detail_icon.set_tip(detail)
+        self.status_slot.setVisible(state in ('checking', 'ok', 'warn', 'err'))
+        self.msg_row.setVisible(bool(msg))
+        self._paint_editor(state)
         desc = ' '.join(x for x in ((texts.SCREEN_READER.get(state, '') if r else ''), msg, detail) if x)
         self.editor.setAccessibleDescription(desc)
         self.setAccessibleDescription(desc)
@@ -1010,29 +1201,3 @@ class SavedNote(QWidget):
         a.setEasingCurve(QEasingCurve.Type.OutCubic)
         a.finished.connect(self.hide)
         a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
-
-
-def slide_in(widget: QWidget, layout, direction: int, margins=(16, 4, 16, 12), ms: int = 200) -> None:
-    """Schrittwechsel: Überblendung mit 12 px Versatz in Laufrichtung (+1 vor, -1 zurück). Ohne Bewegung: nichts."""
-    if not theme.motion_enabled() or not widget.isVisible() or not direction:
-        return
-    left, top, right, bottom = margins
-    dx = 12 * (1 if direction > 0 else -1)
-    eff = QGraphicsOpacityEffect(widget)
-    eff.setOpacity(0.0)
-    widget.setGraphicsEffect(eff)
-    a = _ease_anim(widget, 0.0, 1.0, ms)
-
-    def step(v):
-        v = float(v)
-        off = round(dx * (1 - v))
-        layout.setContentsMargins(left + off, top, right - off, bottom)
-        if _alive(eff):
-            eff.setOpacity(v)
-
-    def end():
-        layout.setContentsMargins(left, top, right, bottom)
-        widget.setGraphicsEffect(None)
-    a.valueChanged.connect(step)
-    a.finished.connect(end)
-    a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)

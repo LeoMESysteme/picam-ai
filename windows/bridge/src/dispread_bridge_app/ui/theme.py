@@ -11,19 +11,21 @@ from PySide6.QtSvg import QSvgRenderer
 from . import icons
 
 LIGHT = dict(
-    mica='#f3f3f3', mica2='#ededed', card='#fbfbfb', stroke='#e5e5e5', stroke_strong='#8a8a8a',
+    mica='#eeeeee', mica2='#e6e6e6', card='#ffffff', stroke='#e0e0e0', stroke_strong='#8a8a8a',
     text='#1a1a1a', text2='#5d5d5d', text_dis='#9a9a9a', ctrl='#fdfdfd', ctrl_hover='#f6f6f6',
     ctrl_press='#efefef', ctrl_stroke='#d1d1d1', accent='#005fb8', accent_hover='#196ebd',
     accent_press='#3a82c5', on_accent='#ffffff', ok='#0f7b0f', warn='#9d5d00', err='#c42b1c',
     info='#5d5d5d', bar_ok='#dff6dd', bar_warn='#fff4ce', bar_err='#fde7e9', bar_info='#f9f9f9',
-    focus_outer='#1a1a1a', focus_inner='#ffffff', scrim='rgba(0,0,0,77)')
+    focus_outer='#1a1a1a', focus_inner='#ffffff', scrim='rgba(0,0,0,77)',
+    field='#e8e8e8', field_hover='#dcdcdc', ok_icon='#107c10', warn_icon='#c27c00', err_icon='#d13438')
 DARK = dict(
     mica='#202020', mica2='#1b1b1b', card='#2b2b2b', stroke='#3a3a3a', stroke_strong='#9a9a9a',
     text='#ffffff', text2='#cfcfcf', text_dis='#7a7a7a', ctrl='#323232', ctrl_hover='#3a3a3a',
     ctrl_press='#292929', ctrl_stroke='#464646', accent='#60cdff', accent_hover='#52b7e6',
     accent_press='#44a0cc', on_accent='#000000', ok='#6ccb5f', warn='#fce100', err='#ff99a4',
     info='#cfcfcf', bar_ok='#393d1b', bar_warn='#433519', bar_err='#442726', bar_info='#2f2f2f',
-    focus_outer='#ffffff', focus_inner='#1a1a1a', scrim='rgba(0,0,0,128)')
+    focus_outer='#ffffff', focus_inner='#1a1a1a', scrim='rgba(0,0,0,128)',
+    field='#323232', field_hover='#3c3c3c', ok_icon='#6ccb5f', warn_icon='#fce100', err_icon='#ff99a4')
 
 FONT_FAMILIES = ['Segoe UI Variable Text', 'Segoe UI', 'Noto Sans', 'DejaVu Sans']
 MONO_FAMILIES = ['Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'monospace']
@@ -31,6 +33,8 @@ MONO_FAMILIES = ['Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'monospace']
 FONT_QSS = ', '.join(f'"{n}"' for n in FONT_FAMILIES) + ', sans-serif'
 MONO_QSS = '"Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace'
 
+LIGHT['select'] = '#f0f6fc'
+DARK['select'] = '#2b3a46'
 _current: dict = dict(LIGHT)
 _dark = False
 
@@ -77,6 +81,13 @@ def _accent(base: dict) -> dict:
     t['accent_press'] = acc.lighter(125).name() if not _dark else acc.darker(120).name()
     t['on_accent'] = '#ffffff' if contrast(acc, '#ffffff') >= contrast(acc, '#000000') else '#000000'
     return t
+
+
+def _mix(fg: str, bg: str, a: float) -> str:
+    """``a`` Anteil von ``fg`` über ``bg`` (zarter Auswahlton)."""
+    f, b = QColor(fg), QColor(bg)
+    return QColor(round(f.red() * a + b.red() * (1 - a)), round(f.green() * a + b.green() * (1 - a)),
+                  round(f.blue() * a + b.blue() * (1 - a))).name()
 
 
 def make_font(pt: float = 10.5, weight=QFont.Weight.Normal, mono=False, tabular=False) -> QFont:
@@ -156,6 +167,20 @@ def _chevron_url(t: dict) -> str:
         return ''
 
 
+def _check_url(t: dict) -> str:
+    """Haken des Kontrollkästchens als PNG (QSS kann nur Dateien), in der Schrift-auf-Akzent-Farbe."""
+    import tempfile
+    try:
+        d = os.path.join(tempfile.gettempdir(), 'dispread-bridge-ui')
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, f"check-{t['on_accent'].lstrip('#')}.png")
+        if not os.path.exists(path):
+            icon_pixmap('checkmark', t['on_accent'], 12, 2.0).save(path, 'PNG')
+        return path.replace('\\', '/')
+    except Exception:
+        return ''
+
+
 def qss(t: dict) -> str:
     return f"""
 * {{ outline: 0; }}
@@ -176,9 +201,15 @@ QLabel[typo="caption_strong"] {{ font-size: 9pt; font-weight: 600; }}
 QLabel[typo="data"] {{ font-family: {MONO_QSS}; font-size: 9pt; }}
 QFrame.Card, QFrame[card="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 QFrame[card="true"] QLabel {{ background: transparent; border: none; }}
-QFrame[card="true"][selected="true"] {{ border: 1px solid {t['accent']}; }}
+QFrame[card="true"][selected="true"] {{ background: {t['select']}; border: 1px solid {t['accent']}; }}
 QFrame[card="true"][dimmed="true"] QLabel[typo="body_strong"] {{ color: {t['text2']}; }}
-QFrame[card="true"] QLabel[badge="true"] {{ border: 1px solid {t['stroke_strong']}; }}
+QFrame[card="true"] QFrame[badgeBox="true"] {{ background: transparent; border: 1px solid {t['stroke_strong']}; border-radius: 4px; }}
+QFrame[badgeBox="true"] QLabel {{ border: none; padding: 0; font-size: 9pt; background: transparent; }}
+QLabel[badge="true"] {{ border: 1px solid {t['stroke_strong']}; }}
+QFrame[valueField="true"] {{ background: {t['field']}; border: 1px solid transparent; border-radius: 4px; }}
+QFrame[valueField="true"][copyable="true"]:hover {{ background: {t['field_hover']}; }}
+QFrame[valueField="true"] QLabel {{ background: transparent; border: none; }}
+QFrame[valueField="true"] QLabel[empty="true"] {{ color: {t['text2']}; }}
 QFrame#footer {{ background: {t['mica2']}; border-top: 1px solid {t['stroke']}; }}
 QFrame#segmented {{ background: {t['mica2']}; border-radius: 4px; }}
 QPushButton, QToolButton {{ background: {t['ctrl']}; border: 1px solid {t['ctrl_stroke']}; border-radius: 4px;
@@ -194,7 +225,7 @@ QPushButton[seg="true"] {{ background: transparent; border: none; border-bottom:
 QPushButton[seg="true"]:checked {{ background: {t['card']}; border-bottom: 2px solid {t['accent']}; font-weight: 600; }}
 QToolButton[chip="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; padding: 4px 6px; text-align: left; }}
 QToolButton[chip="true"]:hover {{ background: {t['ctrl_hover']}; }}
-QToolButton[chip="true"]:checked {{ border: 1px solid {t['accent']}; }}
+QToolButton[chip="true"]:checked {{ background: {t['select']}; border: 1px solid {t['accent']}; }}
 QToolButton[flat="true"] {{ background: transparent; border: 1px solid transparent; padding: 4px; }}
 QToolButton[flat="true"]:hover {{ background: {t['ctrl_hover']}; }}
 QToolButton[flat="true"]:pressed {{ background: {t['ctrl_press']}; }}
@@ -214,6 +245,10 @@ QLabel[badge="true"] {{ border: 1px solid {t['stroke_strong']}; border-radius: 4
 QLineEdit {{ background: {t['ctrl']}; border: 1px solid {t['ctrl_stroke']}; border-bottom: 1px solid {t['stroke_strong']};
   border-radius: 4px; padding: 5px 8px; selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
 QLineEdit:focus {{ border-bottom: 2px solid {t['accent']}; }}
+QLineEdit[readOnly="true"] {{ background: {t['field']}; border: 1px solid transparent; }}
+QLineEdit[vstate="ok"], QComboBox[vstate="ok"] {{ border: 1px solid {t['ok']}; border-bottom: 2px solid {t['ok']}; }}
+QLineEdit[vstate="warn"], QComboBox[vstate="warn"] {{ border: 1px solid {t['warn']}; border-bottom: 2px solid {t['warn']}; }}
+QLineEdit[vstate="err"], QComboBox[vstate="err"] {{ border: 1px solid {t['err']}; border-bottom: 2px solid {t['err']}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
 QRadioButton::indicator {{ width: 12px; height: 12px; border-radius: 7px; border: 1px solid {t['stroke_strong']};
   background: {t['ctrl']}; }}
@@ -228,15 +263,25 @@ QProgressBar::chunk {{ background: {t['accent']}; border-radius: 2px; }}
 QListView {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px;
   selection-background-color: transparent; }}
 QScrollArea {{ background: transparent; border: none; }}
-QScrollBar {{ background: transparent; border: none; }}
-QScrollBar:vertical {{ background: transparent; border: none; width: 10px; margin: 0; }}
-QScrollBar:horizontal {{ background: transparent; border: none; height: 10px; margin: 0; }}
+QScrollBar {{ background: {t['mica']}; border: none; }}
+QScrollBar:vertical {{ background: {t['mica']}; border: none; width: 10px; margin: 0; }}
+QScrollBar:horizontal {{ background: {t['mica']}; border: none; height: 10px; margin: 0; }}
+QListView QScrollBar, QListView QScrollBar:vertical {{ background: {t['card']}; }}
+QScrollBar::groove:vertical, QScrollBar::groove:horizontal {{ background: none; border: none; }}
 QScrollBar::handle:vertical {{ background: {t['stroke_strong']}; border-radius: 3px; min-height: 24px; margin: 2px; }}
 QScrollBar::handle:horizontal {{ background: {t['stroke_strong']}; border-radius: 3px; min-width: 24px; margin: 2px; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; background: none; border: none; }}
+QScrollBar::up-arrow, QScrollBar::down-arrow, QScrollBar::left-arrow, QScrollBar::right-arrow {{ background: none; width: 0; height: 0; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {t['stroke_strong']}; border-radius: 4px;
+  background: {t['ctrl']}; }}
+QCheckBox::indicator:hover {{ background: {t['ctrl_hover']}; }}
+QCheckBox::indicator:checked {{ background: {t['accent']}; border: 1px solid {t['accent']};
+  image: url({_check_url(t)}); }}
+QCheckBox::indicator:disabled {{ border-color: {t['text_dis']}; background: {t['mica2']}; }}
+QCheckBox::indicator:checked:disabled {{ background: {t['text_dis']}; border-color: {t['text_dis']}; }}
 QComboBox {{ background: {t['ctrl']}; color: {t['text']}; border: 1px solid {t['ctrl_stroke']};
   border-bottom: 1px solid {t['stroke_strong']}; border-radius: 4px; padding: 4px 8px; min-height: 22px;
   selection-background-color: {t['accent']}; selection-color: {t['on_accent']}; }}
@@ -251,7 +296,7 @@ QComboBox QAbstractItemView {{ background: {t['ctrl']}; color: {t['text']}; bord
 QComboBox QAbstractItemView::item {{ min-height: 24px; padding: 2px 6px; background: transparent; color: {t['text']}; }}
 QComboBox QAbstractItemView::item:selected, QComboBox QAbstractItemView::item:hover {{
   background: {t['accent']}; color: {t['on_accent']}; }}
-QToolTip {{ background: {t['card']}; color: {t['text']}; border: 1px solid {t['stroke']}; padding: 4px; }}
+QToolTip {{ background: {t['card']}; color: {t['text']}; border: 1px solid {t['stroke_strong']}; padding: 6px 8px; font-size: 9pt; }}
 QFrame[popup="true"] {{ background: {t['card']}; border: 1px solid {t['stroke']}; border-radius: 8px; }}
 """
 
@@ -262,11 +307,28 @@ def palette(t: dict) -> QPalette:
                       (QPalette.WindowText, 'text'), (QPalette.Text, 'text'), (QPalette.ButtonText, 'text'),
                       (QPalette.Button, 'ctrl'), (QPalette.Highlight, 'accent'),
                       (QPalette.HighlightedText, 'on_accent'), (QPalette.PlaceholderText, 'text2'),
-                      (QPalette.ToolTipBase, 'card'), (QPalette.ToolTipText, 'text')):
+                      (QPalette.ToolTipBase, 'card'), (QPalette.ToolTipText, 'text'),
+                      (QPalette.Light, 'mica'), (QPalette.Midlight, 'mica'), (QPalette.Mid, 'stroke'),
+                      (QPalette.Dark, 'stroke_strong')):
         p.setColor(role, QColor(t[key]))
     for role in (QPalette.Text, QPalette.ButtonText, QPalette.WindowText):
         p.setColor(QPalette.Disabled, role, QColor(t['text_dis']))
     return p
+
+
+PREF_KEY = 'ui/theme'          # system | light | dark
+
+
+def stored_preference() -> bool | None:
+    """Gespeicherte Darstellung (QSettings, lokal): None = System, True = dunkel, False = hell."""
+    from PySide6.QtCore import QSettings
+    v = QSettings('ME-Systeme', 'GSVmulti-Bruecke').value(PREF_KEY, 'system')
+    return {'dark': True, 'light': False}.get(str(v))
+
+
+def store_preference(mode: str) -> None:
+    from PySide6.QtCore import QSettings
+    QSettings('ME-Systeme', 'GSVmulti-Bruecke').setValue(PREF_KEY, mode)
 
 
 def apply_theme(app, dark: bool | None = None) -> dict:
@@ -274,6 +336,9 @@ def apply_theme(app, dark: bool | None = None) -> dict:
     global _current, _dark
     _dark = system_dark() if dark is None else dark
     _current = _accent(DARK if _dark else LIGHT)
+    from . import tooltips
+    tooltips.install(app)
+    _current['select'] = _mix(_current['accent'], _current['card'], 0.12 if _dark else 0.06)
     app.setFont(make_font())
     app.setPalette(palette(_current))
     app.setStyleSheet(qss(_current))
@@ -283,7 +348,8 @@ def apply_theme(app, dark: bool | None = None) -> dict:
 # ---------------------------------------------------------------- Symbole (Fluent, icons.py)
 _STATUS_ICON = {'ok': 'status_ok', 'warn': 'status_warn', 'err': 'status_err', 'info': 'status_info',
                 'unclear': 'status_unclear', 'unused': 'status_unused'}
-_STATUS_COLOR = {'ok': 'ok', 'warn': 'warn', 'err': 'err', 'info': 'info', 'unclear': 'warn', 'unused': 'text2'}
+_STATUS_COLOR = {'ok': 'ok_icon', 'warn': 'warn_icon', 'err': 'err_icon', 'info': 'info', 'unclear': 'warn_icon',
+                 'unused': 'text2'}      # Grafik braucht ≥ 3:1; die Statuswörter bleiben in den dunkleren Textfarben
 _pix_cache: dict[tuple, QPixmap] = {}
 
 

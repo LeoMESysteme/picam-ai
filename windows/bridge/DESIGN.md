@@ -10,10 +10,14 @@ colors:
   primary-dark-hover: "#52b7e6"
   primary-dark-press: "#44a0cc"
   on-primary-dark: "#000000"
-  mica: "#f3f3f3"
-  mica-recessed: "#ededed"
-  card: "#fbfbfb"
-  stroke: "#e5e5e5"
+  mica: "#eeeeee"
+  mica-recessed: "#e6e6e6"
+  card: "#ffffff"
+  stroke: "#e0e0e0"
+  ok-icon: "#107c10"
+  warn-icon: "#c27c00"
+  err-icon: "#d13438"
+  select: "#f0f6fc"
   stroke-strong: "#8a8a8a"
   control: "#fdfdfd"
   control-hover: "#f6f6f6"
@@ -214,6 +218,7 @@ Dunkelvarianten tragen das Suffix `-dark`.
 - **Text** (`text` #1a1a1a / #ffffff), **Text sekundär** (`text-secondary` #5d5d5d / #cfcfcf, hell ≈ 6,0 : 1, dunkel ≈ 11 : 1), **Text deaktiviert** (`text-disabled`).
 
 ### Status
+Statussymbole (Grafik, ≥ 3:1) tragen in Hell eigene Tokens `ok-icon`, `warn-icon`, `err-icon`; Statuswörter bleiben in den dunkleren Textfarben `ok`/`warn`/`err` (≥ 4,5:1). In Dunkel sind beide gleich. Ebenen im Hellen: Karte `#ffffff` auf Grund `#eeeeee`, Wertfelder und vertiefter Grund bleiben sichtbar grau. Ausgewählte Karten (Moduswahl, Auswahlboxen, geöffnete Kachel) tragen einen zarten Akzentton (`select`, ≈ 6 % Akzent auf Weiß) plus Akzentrand. Der Kopfbereich steht direkt auf dem Grund, Inhalte liegen auf Karten. Darstellung: Automatisch/Hell/Dunkel in den Einstellungen (erster Abschnitt). Kontrollkästchen und Bildlaufleisten sind vollständig aus den Tokens gestylt.
 - **Erfolg** (`ok` #0f7b0f / #6ccb5f), **Achtung** (`warn` #9d5d00 / #fce100), **Fehler** (`err` #c42b1c / #ff99a4), **Info/neutral** (`info` #5d5d5d / #cfcfcf, ausdrücklich kein Akzent).
 - InfoBar-Töne `bar-ok`, `bar-warn`, `bar-err`, `bar-info` (letzter mit Rand `stroke`, die anderen randlos).
 
@@ -301,12 +306,16 @@ Zwei Radien: 4 px für Schaltfläche, Kachel, InfoBar, Eingabefeld, Segmente und
 - **Moduswahl-Knopf** im Kopf: Symbol des Wegs, Kurzname („Netzwerk“, „UART · Brücke“, „UART direkt“), Chevron; öffnet das Moduswahl-Fenster.
 - **Werkzeugfenster** (`ToolWindow`) statt Flyout: nicht modal, nativer Rahmen, Besitzer = Hauptfenster, Esc schließt, Position je Art für die Laufzeit gemerkt, höchstens eine Instanz je Art, Inhalt scrollt, Mindestbreite 360. Arten: Kachel-Details, Schloss, gekoppelte Pi, Info, Protokolle exportieren, Moduswahl, Einstellungen. Fenster-Fuß `mica-recessed`; nach erfolgreichem Speichern wandert der Akzent auf „Schließen“.
 - **Moduswahl:** drei Karten untereinander (Radio-Semantik, Pfeiltasten), je Symbol, Name, ein Satz Erklärung (Raten aus dem Kontext), Statuszeile mit Symbol + Wort. Gewählte Karte 1-px-Akzentrand; aktiver Weg trägt das Abzeichen „Aktiv“ (Rand + Text, nie grün). Nicht wählbare Karten: Name sekundär, Schloss + Grund in lesbarem Kontrast. Fuß „Abbrechen“ / „Wechseln“ (Akzent).
-- **Einstellungen:** Abschnitte Weg · Pi · Ports · GSVmulti-Session · Protokolle · Über, Abschnitt-Überschrift über Karte. Während einer Übertragung oben eine Schlosszeile mit Grund und in Weg/Pi/Ports „schreibgeschützt“; Werte bleiben als CopyField sichtbar und kopierbar.
-- **CopyField:** Feldname (Beschriftung) über Wert (Daten, auswählbar, bricht an Trennern um, nie gekürzt), Kopierknopf rechts; nach dem Kopieren 1,5 s `checkmark` in `ok`, Tooltip „Kopiert“.
-- **ValidatedField:** Eingabe oder Auswahl, rechts 20-px-Statusfläche, darunter Meldungszeile (Beschriftung stark) und bei Achtung/Fehler die nächste Aktion (Beschriftung). Leer = kein Status; Tippen → 500 ms Ruhe → ProgressRing 16 px; Auswahl prüft sofort. `ok` (Häkchen in `ok`) nur nach bestandener echter Prüfung des angezeigten Werts; jede Änderung verwirft ältere Ergebnisse. Meldung zusätzlich als `accessibleDescription`. In den Einstellungen übernimmt eine bestandene Auswahlprüfung sofort, Text (Endpunkt) über „Übernehmen“; bestätigt wird mit „Gespeichert“.
+- **Einstellungen (Runde 3):** Abschnitte Allgemein (Autostart, Darstellung System/Hell/Dunkel als Segmented, lokal per QSettings, wirkt sofort) · Pi · Ports · GSVmulti-Session · Protokolle · Über; kein Abschnitt „Weg“ (der Weg wird nur über den Knopf im Kopf gewählt, „Einrichtung erneut durchlaufen“ steht in der Moduswahl). Während einer Übertragung steht oben das Abzeichen „schreibgeschützt“ mit ⓘ; Werte bleiben als Wertfeld kopierbar. Endpunkt: schreibgeschütztes Wertfeld mit Stift-Symbolknopf, beim Bearbeiten wird er zum Haken „Bestätigen und speichern“ (gesperrt bei falschem Format), kein Textknopf. Portpaar prüft wie in der Einrichtung (gleicher Port, Nicht-Paar: err/warn, kein stilles Übernehmen). Übernehmen baut das Fenster nicht neu auf; die Bildlaufposition bleibt. Comboboxen reagieren nur mit Fokus auf das Mausrad.
+- **Wertfeld (`ValueField`, R3-1):** Jeder veränderliche Wert (Port, Pfad, Baudrate, Frequenz, Pi-ID, Endpunkt, Fingerabdruck, Version, Zähler) steht in einem grauen Feld: Grund `field` (hell `mica-recessed`, dunkel `control`), Radius 4, Polster 3/8, Cascadia Mono 9 pt. Bezeichner darüber in `text2`. Kopieren per Klick auf das Feld, Enter/Leertaste oder das Kopiersymbol (nur bei Hover/Fokus sichtbar); danach 1,2 s `checkmark`. Sätze enthalten keine Werte. Leere Werte stehen in `text2` ohne Kopiersymbol.
+- **ValidatedField (R3-4):** Zustand über Form: Rand des Feldes in `ok`/`warn`/`err` (1 px rundum, 2 px unten), darunter eine einzeilige Meldung mit Statussymbol **davor** (Wort + Symbol, nicht nur Farbe); Erklärung und Abhilfe im ⓘ hinter der Meldung. Der Ring wird durch das Ergebnissymbol erst nach seiner Mindestdauer ersetzt. Leer = kein Status; Tippen → 500 ms Ruhe → ProgressRing 16 px; Auswahl prüft sofort. `ok` (Häkchen in `ok`) nur nach bestandener echter Prüfung des angezeigten Werts; jede Änderung verwirft ältere Ergebnisse. Meldung zusätzlich als `accessibleDescription`. In den Einstellungen übernimmt eine bestandene Auswahlprüfung sofort, Text (Endpunkt) über „Übernehmen“; bestätigt wird mit „Gespeichert“.
 - **Gespeichert:** Häkchen in `ok` + Beschriftung, blendet nach 2 s aus (Einrichtung unter dem Schrittkopf, Einstellungen am Feld).
-- **Herzschlag:** 8-px-Punkt vor dem Zustandssatz in `text2` (Kontakt zum Pi, keine Weitergabe, daher nie grün), hohl in `stroke-strong` ohne Kontakt; Puls je neuem `activity_seq`. Bei Aufbau und Backoff steht stattdessen ein ProgressRing, ohne zusätzliches Fehlersymbol (das steht in InfoBar und Kachel).
-- **Session-Ergebnis:** Häkchen in `text` (erzeugt ist nicht abgenommen, nie grün), Pfad als CopyField, „Ordner öffnen“, Hinweis „nicht abgenommen“. Verlangt die Vorlage „Record Hidden Channels“, folgt eine nicht schließbare Achtung-Zeile mit Bestätigungshaken (Bedienerangabe, kein Beleg). Einkanal-Vorlagen auf Brückenwegen tragen die Achtung-Zeile zur Einkanal-Ausgabe (auch im Detailfenster der GSVmulti-Kachel).
+- **Herzschlag:** 8-px-Punkt vor dem Zustandssatz, das einzige Zeichen davor (kein zweites Statussymbol). Er trägt den Zustand der Pi-Verbindung: `ok` (grün) nur bei authentifiziert verbundenem Pi ohne Störung, `warn` bei Achtung, `err` bei Fehler, hohl in `stroke-strong` ohne Verbindung. Tooltip „Kontakt zum Pi – sagt nichts über Weitergabe oder Empfang“; Puls je neuem `activity_seq`. Bei Aufbau und Backoff steht stattdessen ein ProgressRing. Proven-Green bleibt: grün nur bei belegter, authentifizierter Verbindung.
+- **Session (R3-3):** Eine Ergebniszeile: neutrales Häkchen (erzeugt ist nicht abgenommen, nie grün), Pfad im Wertfeld, Symbolknöpfe „Ordner öffnen“ und „Neu erzeugen“. Darunter Abzeichen „nicht abgenommen“ und (Einkanal-Vorlage auf Brückenwegen) „Einkanal“, beide mit ⓘ; der F3-Wortlaut steht unverändert im ⓘ von „Einkanal“, auch im Detailfenster der GSVmulti-Kachel. Checkliste „In GSVmulti einstellen“: je Punkt Kontrollkästchen, kurzer Text, ⓘ. „Record Hidden Channels einschalten“ trägt das Abzeichen „Pflicht“ (nur bei ausgeblendeten Kanälen) und hält „Weiter“ zurück; „Autoscale Y für Kanal … aus“ ist Empfehlung; „Session in GSVmulti öffnen“ bestätigt die Einrichtung. Haken sind Bedienerangaben, kein Beleg.
+- **Abzeichen (`Badge`, R3-2):** wiederkehrende Einschränkung als Umriss `stroke-strong`, 9 pt, Radius 4, nie grün, mit ⓘ für die Erklärung: „nicht abgenommen“, „Demo“, „Testfreigabe“, „kein Empfangsnachweis“ („Weitergabe ist nicht Empfang“ im ⓘ), „Einkanal“, „schreibgeschützt“, „Pflicht“. Im Betrieb stehen sie unter der Sperrzeile.
+- **Textbudget (R3-2):** Karte, Infobar, Kachel höchstens ein kurzer Satz (≈ 70 Zeichen); Kachel-Zweitzeile höchstens drei Wörter oder ein Wert. Erklärungen stehen im ⓘ (Tooltip als Box, höchstens 320 px, 300 ms) oder im Detailfenster. Im Normalbetrieb (Lauf läuft, Ausgabe gesperrt) steht keine Infobar, die die Sperrzeile wiederholt; die Erklärung der Sperre steht im ⓘ der Sperrzeile.
+- **Strecke „UART direkt“ (B-19):** Statt Kacheln ein Bild: USB-Adapter (steckt/fehlt) → Wertfeld mit dem Port → GSVmulti „liest direkt“.
+- **Auswahlbox:** Bei Radio-Auswahlen (Adapterliste, Netzwerk/UART, Moduswahl) ist die ganze Box klickbar; Pfeiltasten wechseln die Moduskarten; Enter löst fokussierte Knöpfe, Symbolknöpfe und Kacheln aus, auch in Werkzeugfenstern.
 
 ### Bewegung
 Nur wo sie Zustand erklärt, 150–250 ms, ease-out, Ausgang schneller als Eingang. Zentraler Schalter `theme.motion_enabled()` (Windows: „Animationseffekte“; `DISPREAD_UI_MOTION=0` für Tests). Aus = Endzustand sofort, Bedeutung bleibt.
@@ -314,15 +323,12 @@ Nur wo sie Zustand erklärt, 150–250 ms, ease-out, Ausgang schneller als Einga
 | Ort | Bewegung |
 | --- | --- |
 | Herzschlag | Puls 250 ms je Pi-Kontakt |
-| Verbindungsaufbau, Backoff, Prüfungen, Suche | ProgressRing (unbestimmt) |
+| Verbindungsaufbau, Backoff, Prüfungen, Suche | ProgressRing (unbestimmt), Mindestanzeigedauer 400 ms |
 | Export, Session ohne eigenen Platz | 2-px-Ladebalken unter dem Kopf |
-| Kachel-Zustandswechsel | Farbübergang 200 ms |
-| Betrieb ↔ Einrichtung | Überblendung 200 ms |
-| Schrittwechsel | Überblendung + 12 px Versatz in Laufrichtung, 200 ms |
 | Kopieren, Prüfung ok, Gespeichert | Symbol mit 150 ms Skalierung; „Gespeichert“ blendet in 150 ms aus |
 | Fenster öffnen | Systemanimation |
 
-Keine Dauerschleifen außer Ring/Ladebalken während echter Arbeit; versteckte Fenster stoppen ihre Animationen.
+Runde 3: Kachel-Farbblitz, Überblendung Betrieb ↔ Einrichtung und Schrittübergang sind entfernt (sie flackerten); die Einrichtung baut bei einem Datenwechsel zwar Widgets neu auf, behält aber Eingabetext, Haken, Auswahl, Fokus und Bildlaufposition. Keine Dauerschleifen außer Ring/Ladebalken während echter Arbeit; versteckte Fenster stoppen ihre Animationen.
 
 ### Dialog und Tray
 - Modal sind nur Bestätigungen, die die Übertragung beenden (Beenden, Trennen): max. 360 px, Radius 8, Fuß `mica-recessed`; Standard- und Esc-Taste ist die ungefährliche Wahl („Weiter übertragen“). Alles andere sind nicht modale Werkzeugfenster. Tray-Symbol in drei Varianten (normal, Achtung, Fehler als 10-px-Badge), Tooltip = Zustandssatz; der einmalige Hinweis erscheint nur beim ersten Minimieren.
