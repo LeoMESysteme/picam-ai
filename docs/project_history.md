@@ -9,6 +9,30 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-11 — Session-Format je Lauf statt globaler Vorlagenaktivierung
+
+**Problem:** Die globale Aktivierung aus dem vorigen Katalogauftrag passt
+nicht zur jetzt abgestimmten Formatwahl pro Werkbanklauf. Versuch 2b enthält
+zudem noch nicht die für Kanal 1 gewünschte Einheit mV/V.
+
+**Entscheidung:** Beide Formate sind regulär erzeugbar; die neue gepinnte
+`vorlage-4kanal-mvv.ucf` ersetzt die Versuchsvorlage im Paket. Nur
+`DEFAULT_SESSION_FORMAT` legt die Vorgabe fest (`single`, bis U1 auf dem Pi
+eingespielt ist). Sessionformat und Pfad werden je Weg/Port gespeichert.
+Die validierte Verbindung meldet das aus `record`/`tick` erkannte Format über
+das bestehende Aktivitätsereignis, gebunden an Lauf und Verbindungsgeneration;
+der Controller stellt es ohne zusätzliche I/O für den UI-Abgleich bereit.
+
+**Alternativen:** Ein zweiter Schalter `ACTIVE_SESSION_TEMPLATE` könnte der
+Vorgabe widersprechen. Ableitung des Lauf-Formats aus der erzeugten Session
+würde gerade den zu erkennenden Unterschied verdecken. Eine zusätzliche
+Nachrichtenabfrage im UI würde blockieren und die Protokollprüfung duplizieren.
+
+**Konsequenz:** Laufwechsel/kein Lauf liefern zunächst unbekannt, bis eine
+passende Nachricht eintrifft. Ein später validiertes Hello-/Idle-Feld
+`output_format` kann an der markierten Stelle Vorrang erhalten. Bestehende
+Sessionpfade ohne Formatmetadaten bleiben Einkanal; GSVmulti-Abnahme steht aus.
+
 ## 2026-11-11 — Session-Katalog mit vorbereiteter Vierkanal-Vorlage
 
 **Problem:** Der Einkanal-Generator enthielt feste COM8-Ersetzungen. Der

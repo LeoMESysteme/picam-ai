@@ -717,3 +717,50 @@ def test_tick_claiming_release_without_prior_pi_marker_revokes_link(setup):
         hub.release_real_run('sneaky-tick')
         state.drain_timeout_s = 0
         state.stop()
+
+
+def test_controller_run_format_from_validated_messages_and_run_changes(setup, tmp_path):
+    from test_app_controller import make
+
+    manager, factory, hub, events = setup
+    controller = make(tmp_path)
+    controller.select_mode('network')
+    controller._manager = manager
+    manager._emit = controller._emit
+    state, advance = _bind_ticks(hub, 'format-ticks')
+    try:
+        link = connected(manager)
+        assert controller.context().run_format is None
+        advance()
+        link.send(dict(version=1, type='poll', request_id='format-p1'))
+        assert link.receive()['type'] == 'tick'
+        assert controller.context().run_format == '4ch'
+        link.send(dict(version=1, type='tick_ack', request_id='format-p1', run_id='format-ticks', seq=1,
+                       outcome='written', filled=0))
+        # Idle/heartbeat for the same run keep the observed format.
+        link.heartbeat()
+        assert controller.context().run_format == '4ch'
+    finally:
+        hub.release_real_run('format-ticks')
+        state.drain_timeout_s = 0
+        state.stop()
+    state = _bind(hub, 'format-records', release='test_unaccepted')
+    try:
+        link.heartbeat()  # new run, no value yet
+        assert controller.context().run_id == 'format-records'
+        assert controller.context().run_format is None
+        state.publish(_real(1))
+        link.send(dict(version=1, type='poll', request_id='format-p2'))
+        assert link.receive()['type'] == 'record'
+        assert controller.context().run_format == '1ch'
+        link.send(dict(version=1, type='ack', request_id='format-p2', run_id='format-records', frame_sequence=1,
+                       barrier_id=None, outcome='written'))
+    finally:
+        hub.release_real_run('format-records')
+        state.stop()
+    link.heartbeat()
+    assert controller.context().run_id is None
+    assert controller.context().run_format is None
+    manager.disconnect()
+    assert controller.context().run_format is None
+    controller.request_exit(confirmed=True)

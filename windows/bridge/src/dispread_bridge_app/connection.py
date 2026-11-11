@@ -47,6 +47,7 @@ class _DataLink:
     def __init__(self, manager, transport, mode, generation):
         self.manager, self.transport, self.mode, self.generation = manager, transport, mode, generation
         self.lease_id = self.run_id = None
+        self.run_format = self._declared_run_format = None
         self.renewed_at = 0
         self.valid = False
         self._peer_state, self._peer_release_block = 'unknown', None
@@ -128,6 +129,14 @@ class _DataLink:
                     self._peer_state, self._peer_release_block = 'ready', None
                 elif reply['type'] == 'ended':
                     self._peer_state, self._peer_release = 'ended', None
+                if previous_run != self.run_id or self.run_id is None or reply['type'] == 'ended':
+                    self.run_format = self._declared_run_format = None
+                if self.run_id is not None and reply['type'] != 'ended':
+                    # Sobald Hello/Idle output_format validiert: Vorrang per Einzeiler:
+                    # self._declared_run_format = reply.get('output_format', self._declared_run_format)
+                    self.run_format = self._declared_run_format or {
+                        'tick': '4ch', 'record': '1ch'}.get(reply['type'], self.run_format)
+                event_run_id, event_format = self.run_id, self.run_format
                 self.output, self.output_reason = peer_output_readiness(
                     self._peer_state, self.run_id, self._peer_release_block, self._peer_release)
                 self.renewed_at = time.monotonic()
@@ -137,7 +146,8 @@ class _DataLink:
                 self.manager._event('peer_output_changed', run_id=self.run_id, output=self.output,
                                     reason=self.output_reason, generation=self.generation)
             try:
-                self.manager._emit(BridgeEvent('activity', request['type'], self.run_id, None, {}))
+                self.manager._emit(BridgeEvent('activity', request['type'], event_run_id, None,
+                                              dict(run_format=event_format, generation=self.generation)))
             except Exception:
                 pass
             return reply

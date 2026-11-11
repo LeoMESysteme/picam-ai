@@ -29,14 +29,15 @@ from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.protocol import parse_profile
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
+from . import session_templates
 from .connection import ConnectionManager
 from .credentials import CredentialStore
 from .delivery_journal import DeliveryJournal, DiagnosticStore
 from .input_checks import InputChecks
 from .port_inventory import PortInventory, serial_ports
 from .readiness import Readiness
-from .session_export import GSVMULTI_BAUD, TEMPLATE_CHANNELS, TEMPLATE_ID, generate_session
-from .session_templates import SessionTemplateError, active_session_template
+from .session_export import GSVMULTI_BAUD, generate_session
+from .session_templates import SessionTemplateError, load_session_catalog, session_template
 from .types import InstallResult, PortPair, valid_port_name
 from .ui.port import MODES, CheckResult, JournalEntry, ModeInfo, SessionExport, SetupState, UiContext
 from .vcom import VcomAdapter, VcomUnverifiedError
@@ -175,6 +176,10 @@ class AppController:
         self._last_contact = ''
         self._exited = False
         self._activity_seq = 0
+        self._run_format: str | None = None
+        self._format_run_id = self._format_generation = None
+        # Read and validate package data once; context() performs no file I/O.
+        self._session_catalog = load_session_catalog()
         self._setup_revision = 0
         self._paired_cached = False
         # persistiert
@@ -185,7 +190,9 @@ class AppController:
         self._adapter_port: str | None = None
         self._session_path: str | None = None
         self._session_port: str | None = None
+        self._session_format: str | None = None
         self._sessions: dict[str, dict[str, str]] = {}
+        self._session_formats: dict[str, dict[str, str]] = {}
         self._endpoint: str | None = None
         self._adapter_id: str | None = None
         self._pair: PortPair | None = None
@@ -209,6 +216,10 @@ class AppController:
         port = self._adapter_port if mode == 'uart_direct' else self._pair.gsv_port if self._pair else None
         self._session_path = self._sessions.get(mode, {}).get(port)
         self._session_port = port if self._session_path else None
+        self._session_format = self._session_formats.get(mode, {}).get(port) if self._session_path else None
+
+    def _context_session_template(self):
+        return session_template(self._session_format, catalog=self._session_catalog)
 
     def _refresh_mode_state(self):
         self._setup_revision += 1
@@ -371,6 +382,16 @@ class AppController:
                               for mode, entries in sessions.items() if mode in MODES and isinstance(entries, dict)}
         elif self._session_path and self._session_port:
             self._sessions[self._route_mode or 'network'] = {self._session_port: self._session_path}
+        formats = data.get('session_formats')
+        if isinstance(formats, dict):
+            self._session_formats = {
+                mode: {port: fmt for port, fmt in entries.items()
+                       if port in self._sessions.get(mode, {}) and fmt in ('1ch', '4ch')}
+                for mode, entries in formats.items() if mode in MODES and isinstance(entries, dict)}
+        else:
+            # Before per-run formats, every publicly exported session was single.
+            self._session_formats = {mode: dict.fromkeys(entries, '1ch')
+                                     for mode, entries in self._sessions.items()}
         self._restore_session()
         configured = data.get('configured_modes', [])
         self._configured_modes = set(m for m in configured if m in MODES) if isinstance(configured, list) else set()
@@ -403,6 +424,7 @@ class AppController:
                     endpoint=self._endpoint, adapter_id=self._adapter_id, route_mode=self._route_mode,
                     configured_modes=sorted(self._configured_modes), adapter_port=self._adapter_port,
                     session_path=self._session_path, session_port=self._session_port, sessions=self._sessions,
+                    session_formats=self._session_formats,
                     port_pair=None if self._pair is None else dict(bridge_port=self._pair.bridge_port,
                                                                     gsv_port=self._pair.gsv_port),
                     session_confirmed=self._session_confirmed, setup_done=self._setup_done,
@@ -436,7 +458,15 @@ class AppController:
                 with self._lock:
                     self._activity_seq += 1
                     self._last_contact = datetime.now().strftime('%H:%M:%S')
+                    if 'run_format' in event.detail:
+                        self._run_format = event.detail['run_format']
+                        self._format_run_id = event.run_id
+                        self._format_generation = event.detail.get('generation')
             else:
+                if event.kind == 'connection' and (event.code in ('connecting', 'disconnected')
+                                                  or event.detail.get('output') == 'unavailable'):
+                    with self._lock:
+                        self._run_format = self._format_run_id = self._format_generation = None
                 self._note(event)
         except Exception:
             pass
@@ -874,17 +904,18 @@ class AppController:
         return self.export_session_file(destination, settings['gsv_port'])
 
     @_reports
-    def export_session_file(self, destination: Path, port: str | None = None) -> SessionExport:
+    def export_session_file(self, destination: Path, port: str | None = None, fmt: str | None = None) -> SessionExport:
         from hashlib import sha256
         with self._lock:
             export_mode = self._route_mode or 'network'
             chosen = port if port is not None else (self._adapter_port if self._route_mode == 'uart_direct'
                                                     else self._pair.gsv_port if self._pair else None)
         try:
-            raw = generate_session(chosen)
-            template = active_session_template()
-        except SessionTemplateError:
-            raise AppError('session_template_invalid') from None
+            template = session_template(fmt)
+            raw = generate_session(chosen, fmt=template.spec.fmt)
+        except SessionTemplateError as error:
+            raise AppError('session_format_invalid' if str(error) == 'session_format_invalid'
+                           else 'session_template_invalid') from None
         except ValueError:
             raise AppError('session_port_invalid') from None
         destination = Path(destination)
@@ -894,11 +925,12 @@ class AppController:
             raise AppError('session_write_failed') from None
         with self._lock:
             self._sessions.setdefault(export_mode, {})[chosen] = str(destination)
+            self._session_formats.setdefault(export_mode, {})[chosen] = template.spec.fmt
             self._restore_session()
             self._save_state()
         return SessionExport(destination, chosen, template.spec.template_id, sha256(raw).hexdigest(),
                              channels=template.channels, hidden_channels=template.hidden_channels,
-                             record_hidden_required=template.record_hidden_required)
+                             record_hidden_required=template.record_hidden_required, fmt=template.spec.fmt)
 
     def confirm_session(self, on: bool) -> None:
         with self._lock:
@@ -999,7 +1031,7 @@ class AppController:
                      choices={'adapter': tuple(p.device_id or p.port for p in self._ports.cached()
                                                if p.kind == 'usb_serial')},
                      gsv_port=self._adapter_port, gsv_baud=GSVMULTI_BAUD,
-                     session_path=self._session_path, session_template=TEMPLATE_ID)
+                     session_path=self._session_path, session_template=self._context_session_template().spec.template_id)
             return f'D{min(step, 4)}', d
         if step == 1:
             if self._pair is not None and not self._editing_pair:
@@ -1137,9 +1169,11 @@ class AppController:
         variant, data = self._variant(r, w)
         authenticated = r.peer == 'authenticated'
         run_id = None
+        generation = None
         if authenticated and self._manager is not None:
             try:
-                run_id = self._manager.data_link().run_id
+                link = self._manager.data_link()
+                run_id, generation = link.run_id, getattr(link, 'generation', None)
             except Exception:
                 run_id = None
         route = {'network': 'Netzwerk', 'uart_bridge': 'UART (USB-Adapter)',
@@ -1147,6 +1181,7 @@ class AppController:
         demo = authenticated and r.output == 'demo_only'
         test_release = authenticated and r.output == 'test_release'
         with self._lock:
+            template = self._context_session_template()
             journal = tuple(self._entries)
             com_issue = self._com_issue if demo else None
             data = dict(data, notice=self._notice)
@@ -1171,7 +1206,12 @@ class AppController:
                 setup_leavable=True, activity_seq=self._activity_seq,
                 uart_baud=p.uart_baud if p else UART_BAUD, gsv_baud=GSVMULTI_BAUD,
                 adapter_port=self._adapter_port, adapter_present=self._ports.present(self._adapter_port),
-                session_template=TEMPLATE_ID, session_channels=TEMPLATE_CHANNELS,
+                session_template=template.spec.template_id, session_channels=template.channels,
+                session_format=self._session_format, default_session_format=session_templates.DEFAULT_SESSION_FORMAT,
+                run_format=self._run_format if (authenticated and run_id is not None
+                                               and run_id == self._format_run_id
+                                               and generation == self._format_generation
+                                               and self._route_mode != 'uart_direct') else None,
                 paired=((p.name, p.pi_id, 'gekoppelt'),) if p and self._is_paired() else (),
                 journal=journal, last_report=self._last_contact, last_ack=self._last_ack)
 

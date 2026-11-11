@@ -419,3 +419,52 @@ def test_context_reports_active_template_channels_for_single_channel_warning(tmp
     # F3-Warnung der Oberfläche hängt an session_channels; die aktive Vorlage ist einkanalig.
     c = make(tmp_path)
     assert c.context().session_channels == 1
+
+
+def test_session_format_follows_mode_port_and_restart(tmp_path, monkeypatch):
+    from dispread_bridge_app import session_templates
+
+    c = make(tmp_path, list_ports=lambda: ['COM4', 'COM5', 'COM8', usb()])
+    c.select_mode('network')
+    c.set_port_pair('COM4', 'COM5')
+    c.export_session_file(tmp_path / 'network5.ucf', fmt='4ch')
+    assert (c.context().session_format, c.context().session_channels) == ('4ch', 4)
+    c.set_port_pair('COM4', 'COM8')
+    assert (c.context().session_format, c.context().session_channels) == (None, 1)
+    c.export_session_file(tmp_path / 'network8.ucf', fmt='1ch')
+    c.select_mode('uart_bridge')
+    assert c.context().session_format is None
+    c.export_session_file(tmp_path / 'bridge8.ucf', fmt='4ch')
+    c.select_mode('uart_direct')
+    c.select_adapter('usb-9')
+    direct = c.export_session_file(tmp_path / 'direct9.ucf', fmt='4ch')
+    assert direct.fmt == c.context().session_format == '4ch'
+    # A later default change must never relabel an existing file.
+    monkeypatch.setattr(session_templates, 'DEFAULT_SESSION_FORMAT', '4ch')
+    c2 = make(tmp_path, list_ports=lambda: ['COM4', 'COM5', 'COM8', usb()])
+    assert (c2.context().session_format, c2.context().session_channels) == ('4ch', 4)
+    c2.select_mode('network')
+    assert (c2.context().session_format, c2.context().session_channels) == ('1ch', 1)
+    assert c2.context().default_session_format == '4ch'
+    c2.set_port_pair('COM4', 'COM5')
+    assert (c2.context().session_format, c2.context().session_channels) == ('4ch', 4)
+    c2.select_mode('uart_bridge')
+    assert c2.context().session_format is None
+    c2.set_port_pair('COM4', 'COM8')
+    assert c2.context().session_format == '4ch'
+
+
+def test_legacy_session_path_is_single_even_after_default_switch(tmp_path, monkeypatch):
+    from dispread_bridge_app import session_templates
+
+    c = make(tmp_path)
+    c.select_mode('network')
+    c.set_port_pair('COM4', 'COM5')
+    c.export_session_file(tmp_path / 'legacy.ucf')
+    state = json.loads(c._state_path.read_text())
+    state.pop('session_formats', None)
+    c._state_path.write_text(json.dumps(state))
+    monkeypatch.setattr(session_templates, 'DEFAULT_SESSION_FORMAT', '4ch')
+    c2 = make(tmp_path)
+    assert c2.context().default_session_format == '4ch'
+    assert (c2.context().session_format, c2.context().session_channels) == ('1ch', 1)

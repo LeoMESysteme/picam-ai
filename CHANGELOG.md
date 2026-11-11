@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Windows-Brücke: Session-Format je Lauf abgleichen.** Einkanal und
+  SHA-gepinnte `vorlage-4kanal-mvv.ucf` sind regulär exportierbar; Versuch 2b
+  bleibt ausschließlich Beleg. Einzige Vorgabe ist `DEFAULT_SESSION_FORMAT =
+  'single'` bis U1 auf dem Pi. Session-Format wird je Weg/Port gespeichert;
+  validierte `tick`-/`record`-Antworten liefern das Lauf-Format für den
+  UI-Abgleich, Laufwechsel und Verbindungsverlust setzen es zurück.
+
 * 2026-11-11: **Windows-Brücke: belegter Session-Vorlagenkatalog.** Einkanal-COM8
   bleibt aktiv; Vierkanal-Vorlage mit drei ausgeblendeten Kanälen ist SHA-gepinnt
   als `prepared` paketiert und nur ausdrücklich für Entwickler erzeugbar.

@@ -7,6 +7,20 @@ weg: entwickeln
 **Vorher lesen:** [Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
 und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
 
+**Session-Format (2026-11-11):** Die Werkbank bestimmt pro Lauf Einkanal
+(`record`, ohne `format`) oder Vierkanal (`tick`, `format: '4ch'`). Der
+Windows-Export bietet `single` und `4ch`; allein `DEFAULT_SESSION_FORMAT` in
+`windows/bridge/src/dispread_bridge_app/session_templates.py` bestimmt die
+Vorgabe, bis zum Einspielen von U1 auf dem Pi weiterhin `single`. Die neue
+[Vierkanalvorlage mit mV/V](quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf)
+ist SHA-gepinnt und ersetzt Versuch 2b im Paket, dessen Beleg bleibt erhalten.
+Format und Sessionpfad werden je Weg/Port gespeichert; der Controller meldet
+zusätzlich das aus validierten Nachrichten erkannte Lauf-Format (unbekannt bei
+Laufwechsel/ohne Lauf), damit die Oberfläche Abweichungen anzeigen kann.
+Kanalzahl folgt der erzeugten Session, sonst der Vorgabe; „Record Hidden
+Channels“ bleibt bei Vierkanal erforderlich. Export und Abgleich sind keine
+GSVmulti-Empfangsabnahme.
+
 ## Stand: Software-Prototyp gebaut, nicht freigegeben; Brücken-DUT-Ausgabe gesperrt {#stand-das-format-ist-unbekannt}
 
 **Stand 2026-10-30:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
