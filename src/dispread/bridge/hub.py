@@ -16,12 +16,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .output_state import RELEASE_BLOCK, OutputState
-from .protocol import _identifier, _transport, decode_v2, encode_v2
+from .protocol import TICK_CAPABILITY, TICK_CAPABILITY_VERSION, _identifier, _transport, decode_v2, encode_v2
 from .types import PeerHello
 
 HEARTBEAT_INTERVAL_S = 1
 LEASE_TIMEOUT_S = 5
 DEMO_FINAL_GRACE_S = 2.0
+#: B2: Ein Vierkanal-Takt-Lauf bietet nur Clients mit Taktfaehigkeit etwas an.
+TICK_CLIENT_BLOCK = 'DUT-Ausgabe gesperrt: Brücken-App kennt den Vierkanal-Takt nicht (bitte aktualisieren)'
 
 
 class BridgeOccupied(ValueError):
@@ -38,6 +40,8 @@ class Lease:
     #: Zuletzt per Hello/Idle angekuendigter Freigabestand (R1). Ein Record
     #: geht nur an einen Client, der den aktuellen Stand schon kennt.
     release: str | None = None
+    #: B2: Client hat im Hello ``capabilities.tick == 1`` gemeldet.
+    tick: bool = False
 
 
 class BridgeHub:
@@ -70,7 +74,7 @@ class BridgeHub:
             with state._lock:
                 yield state
 
-    def _release_locked(self, transport=None):
+    def _release_locked(self, transport=None, lease=None):
         """Testfreigabe nur fuer den gebundenen echten Lauf und seinen Ausgabeweg.
 
         Die Freigabe kommt ausschliesslich aus dem vom Pi-Bediener bestaetigten
@@ -80,11 +84,16 @@ class BridgeHub:
         if (state is None or state.demo or state.release is None or self._real_run != state.run_id
                 or (transport is not None and self._transport not in (None, transport))):
             return None
+        if state.tick_mode and lease is not None and not lease.tick:
+            # Alte Clients sehen nie einen Takt (fail-closed, B2).
+            return None
         return state.release
 
-    def _block_locked(self, transport=None):
-        if self._release_locked(transport) is not None:
+    def _block_locked(self, transport=None, lease=None):
+        if self._release_locked(transport, lease) is not None:
             return None
+        if self._release_locked(transport) is not None:
+            return TICK_CLIENT_BLOCK
         return RELEASE_BLOCK if self._real_run or (self._state and not self._state.demo) else None
 
     def status(self):
@@ -99,7 +108,7 @@ class BridgeHub:
                         uart_error=self._uart.error if self._uart else None,
                         release_block=None if release else RELEASE_BLOCK, release=release)
 
-    def prepare(self, transport, client_id):
+    def prepare(self, transport, client_id, lease=None):
         _transport(transport)
         _identifier(client_id)
         with self._lock:
@@ -109,7 +118,7 @@ class BridgeHub:
                 raise ValueError('UART requires explicit operator prepare')
             return PeerHello(self.pi_id, client_id, 2, transport, self._run_id,
                              'output_off' if self._state is None else 'ready',
-                             self._block_locked(transport), self._release_locked(transport))
+                             self._block_locked(transport, lease), self._release_locked(transport, lease))
 
     def _expire(self):
         with self._lock:
@@ -118,15 +127,18 @@ class BridgeHub:
         if lease_id:
             self.detach(lease_id)
 
-    def attach(self, client_id, transport):
+    def attach(self, client_id, transport, capabilities=None):
         self.prepare(transport, client_id)
+        tick = (isinstance(capabilities, dict)
+                and type(capabilities.get(TICK_CAPABILITY)) is int
+                and capabilities[TICK_CAPABILITY] == TICK_CAPABILITY_VERSION)
         self._expire()
         with self._lock:
             if self._closed:
                 raise ValueError('bridge closed')
             if self._lease is not None:
                 raise ValueError('bridge occupied by another connection')
-            lease = Lease(uuid.uuid4().hex, client_id, transport, self._run_id, self.clock())
+            lease = Lease(uuid.uuid4().hex, client_id, transport, self._run_id, self.clock(), tick=tick)
             self._lease = lease
             return lease
 
@@ -186,7 +198,7 @@ class BridgeHub:
                 return
 
     def _hello(self, lease, request_id):
-        hello = self.prepare(lease.transport, lease.client_id)
+        hello = self.prepare(lease.transport, lease.client_id, lease=lease)
         lease.release = hello.release
         return dict(version=2, type='hello', request_id=request_id, pi_id=self.pi_id,
                     client_id=lease.client_id, lease_id=lease.lease_id, run_id=hello.run_id,
@@ -214,13 +226,14 @@ class BridgeHub:
                     if message['pi_id'] != self.pi_id or message['client_id'] != lease.client_id:
                         raise ValueError('identity mismatch')
                     kind = message['type']
-                    if kind not in ('poll', 'ack', 'heartbeat', 'demo_request'):
+                    if kind not in ('poll', 'ack', 'tick_ack', 'heartbeat', 'demo_request'):
                         raise ValueError('unexpected message')
                     if kind != 'demo_request' and message['lease_id'] != lease_id:
                         raise ValueError('lease mismatch')
                     run_id, state, transport = self._run_id, self._state, self._transport
                     if message['run_id'] != run_id:
-                        if kind in ('poll', 'heartbeat') or (kind == 'ack' and message['run_id'] == lease.run_id):
+                        if kind in ('poll', 'heartbeat') or (kind in ('ack', 'tick_ack')
+                                                             and message['run_id'] == lease.run_id):
                             # Eine Quittung fuer den Lauf, in dem diese Lease zuletzt war, ueberlebt
                             # dessen Ende: nicht angenommen (das Angebot ist als "unconfirmed"
                             # auditiert, abandon_pending), Verbindung bleibt, Client bekommt den neuen
@@ -228,7 +241,7 @@ class BridgeHub:
                             lease.run_id = run_id
                             return self._hello(lease, message['request_id'])
                         raise ValueError('run mismatch')
-                    if kind in ('poll', 'heartbeat') and lease.release != self._release_locked(lease.transport):
+                    if kind in ('poll', 'heartbeat') and lease.release != self._release_locked(lease.transport, lease):
                         # Freigabestand hat sich im selben Lauf geaendert (Bindung
                         # nach Reservierung): erst ankuendigen, dann Werte.
                         lease.renewed_at = self.clock()
@@ -246,12 +259,17 @@ class BridgeHub:
                 if kind == 'heartbeat':
                     return {**base, 'type': 'heartbeat'}
                 if state is None or transport not in (None, lease.transport):
-                    if kind == 'ack':
+                    if kind in ('ack', 'tick_ack'):
                         if state is None:
                             # Lauf beendet (Ausgabe abgebaut), Reservierung noch nicht freigegeben.
                             return self._hello(lease, message['request_id'])
                         raise ValueError('no pending output')
                     return {**base, 'type': 'idle', 'release_block': RELEASE_BLOCK if self._real_run else None}
+                if state.tick_mode and not lease.tick:
+                    # Nie ein Takt an einen Client ohne Taktfaehigkeit, auch keine Quittung.
+                    if kind != 'poll':
+                        raise ValueError('tick output requires tick-capable client')
+                    return {**base, 'type': 'idle', 'release_block': TICK_CLIENT_BLOCK}
                 legacy = {k: v for k, v in message.items() if k not in ('pi_id', 'client_id', 'lease_id')}
                 legacy['version'] = 1
                 reply = state.handle_v1(legacy)

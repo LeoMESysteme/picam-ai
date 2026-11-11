@@ -282,3 +282,61 @@ def test_valid_record_still_requires_a_confirmed_frame():
         encode_v2(message)
     message["record"]["frames_confirmed"] = 1
     assert decode_v2(encode_v2(message)) == message
+
+
+# --- B2 (2026-11-11): kompakte Taktnachricht ``tick`` und ``tick_ack`` -----------------
+
+def tick(**changes):
+    return {**poll(), "type": "tick", "seq": 7, "valid": True, "value_text": "0.63956",
+            "frame_sequence": 42, "time_unix_ns": 1_794_397_184_232_361_000,
+            "origin_unix_ns": 1_794_397_183_532_361_000, "rate_hz": 10,
+            "release": "test_unaccepted", **changes}
+
+
+def tick_ack(**changes):
+    return {**poll(), "type": "tick_ack", "seq": 7, "outcome": "written", "filled": 0, **changes}
+
+
+def test_tick_roundtrip_is_compact():
+    raw = encode_v2(tick())
+    assert decode_v2(raw) == tick()
+    assert len(raw) < 330  # statt ~1,2 kB je ValueRecord
+    invalid = tick(valid=False, value_text=None, frame_sequence=None)
+    assert decode_v2(encode_v2(invalid)) == invalid
+
+
+@pytest.mark.parametrize("changes", [
+    {"value_text": "1E+300"}, {"value_text": "1e3"}, {"value_text": "NaN"}, {"value_text": "Inf"},
+    {"value_text": "-inf"}, {"value_text": "99999999.0"}, {"value_text": "99999999"},
+    {"value_text": " 1.0"}, {"value_text": ""}, {"value_text": None},
+    {"valid": False},                                   # Wert nur bei gueltig
+    {"valid": False, "value_text": None},               # Bildnummer nur bei gueltig
+    {"frame_sequence": None},
+    {"valid": 1}, {"seq": 0}, {"seq": True}, {"seq": 1.0},
+    {"time_unix_ns": -1}, {"time_unix_ns": 1.5}, {"origin_unix_ns": None},
+    {"rate_hz": 0}, {"rate_hz": 11}, {"rate_hz": True},
+    {"run_id": None}, {"release": None}, {"release": "accepted"},
+    {"release_block": None}, {"extra": 1},
+])
+def test_tick_schema_is_strict(changes):
+    with pytest.raises(ValueError):
+        encode_v2(tick(**changes))
+    with pytest.raises(ValueError):
+        decode_v2(json.dumps(tick(**changes)).encode())
+
+
+def test_tick_without_release_marker_is_rejected():
+    message = tick()
+    del message["release"]
+    with pytest.raises(ValueError):
+        encode_v2(message)
+
+
+def test_tick_ack_is_bounded():
+    assert decode_v2(encode_v2(tick_ack(filled=50))) == tick_ack(filled=50)
+    for outcome in ("written", "expired", "failed", "unconfirmed"):
+        decode_v2(encode_v2(tick_ack(outcome=outcome)))
+    for changes in ({"outcome": "omitted"}, {"filled": 51}, {"filled": -1}, {"seq": 0},
+                    {"frame_sequence": 1}, {"run_id": None}):
+        with pytest.raises(ValueError):
+            encode_v2(tick_ack(**changes))

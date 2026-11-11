@@ -43,11 +43,13 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
+    BRIDGE_4CH_RELEASE_NOTE,
     BRIDGE_RELEASE_NOTE,
     SERIAL_4CH_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
     bridge_config,
+    bridge_tick_options,
     normalize_output,
     require_output_acknowledgement,
 )
@@ -248,7 +250,8 @@ class LiveSession:
             # Testfreigabe nur aus der Laufbestaetigung des Pi-Bedieners (R1).
             self._bridge_acknowledged = self._output_config['acknowledge_unaccepted'] is True
             self._output = output_factory(bridge_config(self._output_config), self._out_dir,
-                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}))
+                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}),
+                                          **bridge_tick_options(self._output_config))
             if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:
                 raise StartRefused('Ausgabe: Testfreigabe vom Brückenweg nicht übernommen')
         self._output_error_saved = False
@@ -370,7 +373,8 @@ class LiveSession:
                                        **({'clock_log': self._clock}
                                           if self._output_config.get('format') == '4ch' else {}))
                 else:
-                    self._output.start()
+                    self._output.start(**({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
             except Exception as exc:
                 self.stop(reason='start_failed')
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
@@ -762,8 +766,9 @@ class LiveSession:
         status = self._output.status()
         if self._output_transport == 'serial':
             return status
+        note = BRIDGE_4CH_RELEASE_NOTE if self._output_config.get('format') == '4ch' else BRIDGE_RELEASE_NOTE
         return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt',
-                **({'release_note': BRIDGE_RELEASE_NOTE} if self._bridge_acknowledged else {})}
+                **({'release_note': note} if self._bridge_acknowledged else {})}
 
     def unified_output_status(self) -> dict:
         """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.

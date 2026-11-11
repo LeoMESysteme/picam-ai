@@ -1,6 +1,6 @@
 # Pi-/Windows-Brückenprotokoll 2
 
-Stand: 2026-11-09. Eigener Brückenvertrag, kein GSV-Telegramm.
+Stand: 2026-11-11 (Taktnachricht B2 additiv, Abschnitt am Ende). Eigener Brückenvertrag, kein GSV-Telegramm.
 DUT-Ausgabe bleibt fachlich gesperrt; einzige Ausnahme ist die je Lauf vom
 Pi-Bediener bestätigte **Testfreigabe** (Abschnitt unten, keine Abnahme).
 Version 2 und eine erfolgreiche Kopplung sind keine Ausgabeabnahme. V1 bleibt
@@ -33,6 +33,8 @@ erteilt aber keine Berechtigung.
 | `idle` | Run-/Leasebindung, `release_block: Text\|null` | `release: "test_unaccepted"` |
 | `ended` | Run-/Leasebindung | — |
 | `ack` | Run-/Leasebindung, `frame_sequence: Ganzzahl ≥0`, `barrier_id: positive Ganzzahl\|null`, `outcome: written\|expired\|failed\|unconfirmed\|omitted` | — |
+| `tick` (B2) | Run-/Leasebindung, `seq`, `valid`, `value_text`, `frame_sequence`, `time_unix_ns`, `origin_unix_ns`, `rate_hz`, `release: "test_unaccepted"` | — (siehe Abschnitt Taktnachricht) |
+| `tick_ack` (B2) | Run-/Leasebindung, `seq: Ganzzahl ≥1`, `outcome: written\|expired\|failed\|unconfirmed`, `filled: Ganzzahl 0..50` | — |
 | `error` | `code: ID`, `detail: Text`, `run_id: ID\|null` | `lease_id: ID\|null` |
 
 Texte sind höchstens 4096 Zeichen lang, `state` höchstens 128. Fähigkeiten
@@ -230,3 +232,78 @@ gesperrt; die EXE hat keinen Schalter dafür.
   Generation und Run-ID den Marker trugen (`_DataLink.test_release_for`). Ein
   `record` mit `demo: false` ohne vorherige Ankündigung widerruft die
   Verbindung (`peer_invalid`).
+
+## Taktnachricht für den Vierkanal-Takt (seit 2026-11-11, B2, additiv)
+
+Spec: `docs/superpowers/specs/2026-11-11-gsvmulti-takt-vierkanal-design.md`
+(F1–F5). Gilt nur für einen echten Lauf mit `output.format: "4ch"` auf `uart`
+oder `tcp` **und** bestätigter Testfreigabe. Keine Abnahme, keine Messfreigabe.
+
+**Takt auf dem Pi.** Der Pi entscheidet jeden Takt selbst, mit demselben
+`dispread.live.tick.Ticker` wie bei UART direkt (B1): festes Monotonraster,
+1–10 Hz (Vorgabe 10), kein Aufholen; gültig nur ein noch nicht gesendetes,
+VALID-Bild mit echter Kamerazeitbasis, jünger als `max_frame_age_ms`. Jeder
+erzeugte Takt wird **vor** dem Angebot als `tick` in `output.jsonl` auditiert.
+Ohne Testfreigabe entsteht kein Takt (auch keine Fehlwertzeile).
+
+**Warteschlange statt latest-only.** Der Pi hält die erzeugten Takte in
+Reihenfolge vor und bietet sie einzeln an (ein offenes Angebot je Lease wie
+bisher). Ein Takt, der mehr als `TICK_WINDOW = 50` Takte hinter dem jüngsten
+liegt, gilt als verloren (`tick_lost`, `reason: window`); am Laufende werden
+erzeugte Takte begrenzt (1 s) noch abgeholt, danach `reason: run_end`. Ein
+angebotener Takt wird nie erneut angeboten (Lease-Verlust: `unconfirmed`).
+
+**Fähigkeit.** Der Windows-Client meldet im Hello `capabilities: {"tick": 1}`.
+Ohne diese Fähigkeit bietet der Pi in einem Taktlauf nichts an: Hello/Idle
+tragen keinen `release`, sondern die Sperre `TICK_CLIENT_BLOCK`; eine
+`tick_ack` dieses Clients wird abgelehnt. Alte Clients sehen also nie einen
+Takt (fail-closed). Das Pi-Hello bleibt sonst unverändert.
+
+**Nachricht `tick`** (gemessen 410 Byte mit 32-stelligen Kennungen, statt
+~1,2 kB je `record`; die Spec-Schätzung von 150 Byte enthielt die
+Basisfelder nicht). Ein Takt kostet mit Poll, Quittung und Idle-Antwort etwa
+1,2 kB auf der Leitung; auf UART reicht das bei 10 Hz erst mit 460 800 Baud
+(`bridge/baud.py`, Branch `feat/bruecke-ux`) sicher, siehe Messung im
+CHANGELOG-Eintrag B2.
+
+| Feld | Inhalt |
+| --- | --- |
+| `seq` | Taktnummer ab 1, aufsteigend; Lücken = verpasste oder verlorene Takte |
+| `valid` | `true`/`false` (JSON-Bool) |
+| `value_text` | nur bei `valid`: dezimaler Anzeigetext ohne Leerzeichen, nie Exponent/NaN/Inf/`99999999.0`; sonst `null` |
+| `frame_sequence` | nur bei `valid`: Bildnummer ≥ 0; sonst `null` |
+| `time_unix_ns` | gültig: Erfassungszeit des Bilds; ungültig: Nominalzeit des Takts (Unix-ns aus Pi-Monotonuhr + eingefrorenem Startversatz, OQ-43 provisional) |
+| `origin_unix_ns` | Rasterursprung in Unix-ns; Nominalzeit von Takt *s* = `origin + ceil(s · 10⁹ / rate_hz)` |
+| `rate_hz` | 1–10 |
+| `release` | Pflicht, genau `test_unaccepted` |
+
+**Quittung `tick_ack`** bindet Request, Run und `seq` exakt. `written`: die
+Taktzeile wurde vom lokalen COM-Treiber angenommen (kein GSVmulti-Empfang).
+`expired`: Zeile nicht geschrieben (Windows-Budget 1 s abgelaufen); der Pi
+zählt den Takt als verloren, Windows füllt ihn beim nächsten Takt auf.
+`failed`/`unconfirmed`: unbekannt. `filled`: Zahl der Fehlwertzeilen, die
+Windows unmittelbar vor diesem Takt geschrieben hat.
+
+**Windows: Formatieren und Auffüllen.** Windows formatiert mit dem
+`TickFormatter` (`gsvmulti_userdefined_4ch_v1`): `%wert;gültig;takt;zeit\r\n`.
+Ist die höchste geschriebene Taktnummer dieses Laufs *n* und kommt Takt *n+k*,
+schreibt Windows zuerst *k−1* Fehlwertzeilen `%99999999.0;0;s;Nominalzeit`,
+dann den Takt. Ist *k−1 > 50*, wird nicht aufgefüllt; die Lücke steht im
+Journal (`tick_gaps`) und der Lauf gilt als gestört (`tick_disturbed`). Ein
+Takt mit *s ≤ n* wird nie geschrieben (bereits geschriebener Takt: nur erneute
+Quittung). Jede Zeile, auch jede Auffüllung, wird **vor** dem COM-Schreiben im
+`DeliveryJournal` (Tabelle `ticks`, Art `tick`/`fill`) beabsichtigt; eine
+offene oder unbekannte Zeile sperrt die weitere Ausgabe für diesen Pi.
+
+**Statusfelder.** Pi (`run.output.tick`, `session.json.output.tick` bzw.
+`output.status.tick`): B1-Felder (`rate_hz`, `seq`, `total`, `valid`,
+`invalid`, `missed`, Zeitbasis) plus `offered`, `acknowledged`,
+`unconfirmed`, `lost`, `queued`, `window`. Es gilt `total = acknowledged +
+unconfirmed + lost + queued` und `seq = total + missed`. Windows
+(`WorkerStatus`): `ticks_written`, `ticks_invalid`, `ticks_filled`,
+`tick_disturbed`, je laufendem bzw. letztem Lauf.
+
+**Laufstart.** `output` für `uart`/`tcp` nimmt additiv `format: "1ch"|"4ch"`
+und bei `4ch` `rate_hz` (1–10, Vorgabe 10); `max_frame_age_ms` gilt als
+Altersgrenze des Takts. Ohne `format` bleibt die Einkanal-Ausgabe
+unverändert (`record`, nur VALID an COM).

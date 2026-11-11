@@ -14,7 +14,7 @@ from pathlib import Path
 
 from dispread.gsv_transport import OutputConfig
 from dispread.live.clock import ClockLog
-from dispread.live.tick import Ticker, TickTimebase, validate_rate
+from dispread.live.tick import Ticker, TickTimebase, tick_status, validate_rate
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord
 from dispread.sink.protocol.userdefined import UserDefinedFormatter
 from dispread.sink.protocol.userdefined_4ch import TickFormatter
@@ -42,6 +42,12 @@ SERIAL_4CH_RELEASE_NOTE = (
 BRIDGE_RELEASE_NOTE = (
     'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
     'Ungültige und veraltete Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
+)
+# B2 (2026-11-11): Vierkanal-Takt ueber die Bruecke.
+BRIDGE_4CH_RELEASE_NOTE = (
+    'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
+    'Ungültige Takte werden mit 99999999.0 und Gültigkeit 0 markiert; verlorene Takte füllt die '
+    'Brücken-App mit solchen Fehlwertzeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.'
 )
 
 
@@ -139,13 +145,38 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
     acknowledged = value.get('acknowledge_unaccepted', False)
     if type(acknowledged) is not bool:
         raise ValueError('Ausgabe: acknowledge_unaccepted muss bool sein')
-    options = {key: item for key, item in value.items() if key != 'acknowledge_unaccepted'}
-    return {**OutputConfig.from_dict(options).to_dict(), 'acknowledge_unaccepted': acknowledged}
+    options = {key: item for key, item in value.items() if key not in ('acknowledge_unaccepted', *_TICK_KEYS)}
+    result = OutputConfig.from_dict(options).to_dict()
+    # B2: Format/Takt additiv; ohne Angabe bleibt der Einkanalvertrag bytegleich.
+    fmt = value.get('format', '1ch')
+    if fmt not in ('1ch', '4ch'):
+        raise ValueError('Ausgabe: Format muss 1ch oder 4ch sein')
+    if 'format' in value:
+        result['format'] = fmt
+    if fmt == '4ch':
+        try:
+            result['rate_hz'] = validate_rate(value.get('rate_hz', 10))
+        except ValueError as exc:
+            raise ValueError(f'Ausgabe: {exc}') from exc
+    elif 'rate_hz' in value:
+        raise ValueError('Ausgabe: Taktoptionen erfordern format=4ch')
+    return {**result, 'acknowledge_unaccepted': acknowledged}
+
+
+_TICK_KEYS = ('format', 'rate_hz')
 
 
 def bridge_config(config: dict) -> OutputConfig:
-    """OutputConfig ohne die Bestaetigung; die gehoert zum Lauf, nicht zur Leitung."""
-    return OutputConfig.from_dict({key: item for key, item in config.items() if key != 'acknowledge_unaccepted'})
+    """OutputConfig ohne Bestaetigung und Taktoptionen; die gehoeren zum Lauf, nicht zur Leitung."""
+    return OutputConfig.from_dict({key: item for key, item in config.items()
+                                   if key not in ('acknowledge_unaccepted', *_TICK_KEYS)})
+
+
+def bridge_tick_options(config: dict) -> dict:
+    """Taktparameter fuer den Brueckenkern; leer beim Einkanalvertrag."""
+    if config.get('format') != '4ch':
+        return {}
+    return {'tick_rate_hz': config['rate_hz'], 'tick_max_frame_age_ns': config['max_frame_age_ms'] * 1_000_000}
 
 
 def require_output_acknowledgement(config: dict) -> None:
@@ -208,11 +239,7 @@ class LiveOutput:
                     **({'tick': self._tick_status()} if self._four_channel else {})}
 
     def _tick_status(self):
-        return {'rate_hz': self._options['rate_hz'],
-                'start_monotonic_ns': None if self._ticker is None else self._ticker.start_ns,
-                **({} if self._timebase is None else self._timebase.status()),
-                **({'seq': 0, 'total': 0, 'valid': 0, 'invalid': 0, 'missed': 0}
-                   if self._ticker is None else self._ticker.stats())}
+        return tick_status(self._options['rate_hz'], self._ticker, self._timebase)
 
     def delivery_status(self) -> dict:
         """Nur lokale Treiberannahme; Fehler bis Laufende verriegelt."""

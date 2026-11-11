@@ -901,10 +901,11 @@ class LiveService:
             from dispread.bridge.hub import BridgeOccupied
             from dispread.bridge.publisher import PairedOutputPublisher
 
-            def output_factory(config, out_dir, *, release=None):
-                # release kommt nur aus der Laufbestaetigung (LiveSession), R1.
+            def output_factory(config, out_dir, *, release=None, **tick):
+                # release kommt nur aus der Laufbestaetigung (LiveSession), R1;
+                # tick (B2) nur aus format=4ch der Laufkonfiguration.
                 return PairedOutputPublisher(config, out_dir, hub=self._bridge_hub, run_id=run_id,
-                                             release=release)
+                                             release=release, **tick)
 
             if output['transport'] in ('tcp', 'uart') and self._bridge_hub is None:
                 raise LiveError('paired bridge hub is not configured')

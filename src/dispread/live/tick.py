@@ -85,6 +85,20 @@ def _ntp_status():
         return 'unknown'
 
 
+def tick_period_ns(rate_hz):
+    """Exakte Taktperiode als Bruch; dieselbe Rechnung auf Pi und Windows."""
+    return Fraction(1_000_000_000) / Fraction(str(validate_rate(rate_hz)))
+
+
+def nominal_unix_ns(origin_unix_ns, rate_hz, seq):
+    """Nominalzeit von Takt ``seq`` (Rasterursprung + ceil(seq * Periode)).
+
+    Windows fuellt verlorene Takte damit auf; der Wert ist bytegleich mit der
+    Zeit, die der Pi fuer einen ungueltigen Takt derselben Nummer sendet.
+    """
+    return origin_unix_ns + math.ceil(seq * tick_period_ns(rate_hz))
+
+
 def validate_rate(rate_hz):
     if (type(rate_hz) not in (int, float) or not math.isfinite(rate_hz)
             or not 1 <= rate_hz <= 10):
@@ -111,6 +125,11 @@ class Ticker:
         self._seq = self._total = self._valid = self._missed = 0
         self._latest = None
         self._last_frame = -1
+
+    @property
+    def origin_unix_ns(self):
+        """Rasterursprung in Unix-Zeit (eingefrorener Startversatz)."""
+        return self.timebase.unix_ns(self.start_ns)
 
     @property
     def next_deadline_ns(self):
@@ -154,3 +173,12 @@ class Ticker:
     def stats(self):
         return {'seq': self._seq, 'total': self._total, 'valid': self._valid,
                 'invalid': self._total - self._valid, 'missed': self._missed}
+
+
+def tick_status(rate_hz, ticker=None, timebase=None):
+    """Gemeinsame Taktfelder fuer UART direkt und Bruecke (session.json/Status)."""
+    return {'rate_hz': rate_hz,
+            'start_monotonic_ns': None if ticker is None else ticker.start_ns,
+            **({} if timebase is None else timebase.status()),
+            **({'seq': 0, 'total': 0, 'valid': 0, 'invalid': 0, 'missed': 0}
+               if ticker is None else ticker.stats())}
