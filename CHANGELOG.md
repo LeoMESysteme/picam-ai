@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: Wiki-Sessionexport wartet auf offene Messläufe statt auf die
+  Werkbank und hat ein Budget von 600 s. Problem: Seit dem 30.10. kam keine
+  neue Generation mehr ins Wiki. 45 s je Phase reichten für den I/O-gebundenen
+  Nachholstau nie (manuell 3 min 43 s bei 11 s CPU), der Lauf am 07.11. wurde
+  nach 75 s von systemd beendet. Die `/proc`-Prüfung auf `dispread serve`
+  übersah `python -m dispread.workbench.cli serve`; korrekt erkannt hätte sie
+  wegen der dauerhaft laufenden Brücken-Werkbank jeden Export verschoben.
+  Änderung: `no_active_run()` in `scripts/wiki_sessions.py` sperrt nur, solange
+  ein Lauf unter `var/live` ohne `ended_at_utc` in den letzten 300 s geschrieben
+  hat (unlesbar zählt als offen); `BUDGET_S = 600`, `TimeoutStartSec=720`.
+  Konsequenz: Neuinstallation per `sudo ./scripts/wiki-session-export-install.sh`;
+  ein abgestürzter Lauf hält den Export höchstens 5 min auf.
+
 * 2026-11-06: Werkbank `/live`, Schlussreview UI (W4): Ein abgelehnter Datensatz, den
   der Server beim Altern auf `stale` umschreibt, erscheint nicht mehr als
   durchgestrichener letzter Wert, sondern als „Kein Wert“. Ohne HUD-Datensatz läuft

@@ -27,7 +27,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 MAX_BLOCK = 1024 * 1024
-# A /proc walk per guarded step is expensive; the deadline stays unconditional.
+# Zeitbudget je Exportphase. Der Export ist I/O-gebunden (Dienst mit
+# IOSchedulingClass=idle auf der SD-Karte): neun neue Läufe brauchten am
+# 2026-11-10 3 min 43 s bei 11 s CPU. 45 s reichten nie für einen Nachholstau,
+# und je Deploy gibt es nur eine Phase. systemd TimeoutStartSec liegt darüber.
+BUDGET_S = 600
+# A source scan per guarded step is expensive; the deadline stays unconditional.
 GUARD_INTERVAL_S = 0.1
 # Published generations keep: current plus one previous (preferably exposed).
 # Der Dienst kann den Runner-State nicht lesen; mehrere freigegebene Vorstände
@@ -47,28 +52,63 @@ def _reject_constant(name):
     raise ValueError("non-standard JSON constant " + name)
 
 class Deferred(Exception):
-    """The caller's time slice or idle permission ended."""
+    """The caller's time slice ended or a measurement run is open."""
 
 
-def workbench_idle(proc_root=Path("/proc")):
-    """Fail closed on unreadable process status; match module and executable CLI."""
+# Ein Messlauf schreibt session.json beim Start und danach mindestens jede
+# Minute (LiveSession, clock_interval_s = 60 s), records.jsonl laufend. Ein
+# Lauf ohne ended_at_utc gilt als offen, solange er innerhalb dieses Fensters
+# geschrieben wurde; ein abgestürzter Lauf hält den Export höchstens so lange auf.
+ACTIVE_WINDOW_S = 300.0
+
+
+def _run_open(run, limit):
+    """Offen: frisch geändert und ohne ended_at_utc. Unklare Metadaten zählen als offen."""
+    newest = run.lstat().st_mtime
+    for name in ("session.json", "records.jsonl"):
+        try:
+            newest = max(newest, (run / name).lstat().st_mtime)
+        except FileNotFoundError:
+            pass
+    if newest < limit:
+        return False
     try:
-        for entry in proc_root.iterdir():
-            if not entry.name.isdigit():
-                continue
+        meta = json.loads((run / "session.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    return not (isinstance(meta, dict) and meta.get("ended_at_utc"))
+
+
+def no_active_run(source, *, now=time.time, window_s=ACTIVE_WINDOW_S):
+    """True, solange unter source kein Messlauf offen ist.
+
+    Eine laufende Werkbank allein hält den Export nicht auf (die
+    Brücken-Werkbank läuft dauerhaft); nur ein Messlauf. Fail closed:
+    Unlesbare Verzeichnisse zählen als belegt. Symlinks werden nicht verfolgt.
+    """
+    limit = now() - window_s
+    try:
+        with os.scandir(source) as sessions:
+            entries = [e for e in sessions if e.is_dir(follow_symlinks=False)]
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    try:
+        for session in entries:
             try:
-                args = (entry / "cmdline").read_bytes().split(b"\0")
+                with os.scandir(session.path) as runs:
+                    candidates = [
+                        Path(r.path) for r in runs if r.name.startswith("run-") and r.is_dir(follow_symlinks=False)
+                    ]
             except FileNotFoundError:
-                if entry.exists():
-                    return False
-                continue  # process exited during enumeration
-            except OSError:
-                return False
-            decoded = [a.decode("utf-8", "replace") for a in args if a]
-            if "serve" not in decoded:
-                continue
-            if any(Path(a).name in {"dispread", "dispread.py"} for a in decoded):
-                return False
+                continue  # während der Aufzählung entfernt
+            for run in candidates:
+                try:
+                    if _run_open(run, limit):
+                        return False
+                except FileNotFoundError:
+                    continue
         return True
     except OSError:
         return False
@@ -331,7 +371,7 @@ def _rules_sample_key(sample_key):
 class Exporter:
     def __init__(self, source, archive, *, idle=None, block_size=MAX_BLOCK):
         self.source, self.archive = Path(source), Path(archive)
-        self.idle = idle if idle is not None else workbench_idle
+        self.idle = idle if idle is not None else (lambda: no_active_run(self.source))
         if not 0 < block_size <= MAX_BLOCK:
             raise ValueError("block_size must be between 1 and 1048576")
         self.block_size = block_size
@@ -342,7 +382,7 @@ class Exporter:
     def _check(self):
         # Deadline every call; the process scan at most every GUARD_INTERVAL_S,
         # shared with the SQLite progress handler. The first check of a run
-        # always scans, so a busy Workbench still prevents any source access.
+        # always scans, so an open measurement run prevents any archive work.
         now = time.monotonic()
         if now >= self.deadline:
             raise Deferred()
@@ -351,7 +391,7 @@ class Exporter:
             if not self.idle():
                 raise Deferred()
 
-    def run(self, budget_s=45):
+    def run(self, budget_s=BUDGET_S):
         self.deadline = time.monotonic() + max(0, budget_s)
         self.deferred, self.error = False, None
         self._guard_at = None
@@ -420,7 +460,7 @@ class Exporter:
 
     def _sql_progress(self):
         # SQLite invokes this every 1,000 VM instructions. Keep the deadline
-        # unconditional, but avoid a full /proc walk on every few records.
+        # unconditional, but avoid a full source scan on every few records.
         now = time.monotonic()
         last_guard = self._guard_at
         if now >= self.deadline:
@@ -1112,7 +1152,7 @@ def main(argv=None):
     export = commands.add_parser("export")
     export.add_argument("--source", type=Path, required=True)
     export.add_argument("--archive", type=Path, required=True)
-    export.add_argument("--budget", type=float, default=45)
+    export.add_argument("--budget", type=float, default=BUDGET_S)
     args = parser.parse_args(argv)
     exporter = Exporter(args.source, args.archive)
     snapshot = exporter.run(args.budget)

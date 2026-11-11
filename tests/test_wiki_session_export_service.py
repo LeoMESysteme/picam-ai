@@ -118,6 +118,27 @@ def test_busy_service_does_not_construct_exporter_or_walk(tmp_path):
     assert not (tmp_path / "archive").exists()
 
 
+def test_service_default_guard_reads_source_runs(tmp_path):
+    source = tmp_path / "live"
+    run = source / "live-20261110T120000Z" / "run-01"
+    run.mkdir(parents=True)
+    (run / "session.json").write_text(json.dumps({"schema": "live-session/1"}))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("exporter constructed during an open run")
+
+    result = service.run_once(source, tmp_path / "archive", exporter_factory=forbidden)
+    assert result == {"path": None, "deferred": True, "error": None}
+
+
+def test_service_budget_fits_systemd_timeout():
+    unit = (SCRIPTS.parent / "systemd" / "picam-wiki-export.service").read_text()
+    timeout = int(next(line.split("=")[1] for line in unit.splitlines() if line.startswith("TimeoutStartSec=")))
+    assert service.BUDGET_S >= 600
+    # Puffer für Freigabe und Prozessende nach dem kooperativen Budget.
+    assert timeout >= service.BUDGET_S + 60
+
+
 def test_main_logs_json_without_traceback(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PICAM_EXPORT_SOURCE", str(tmp_path / "source"))
     monkeypatch.setattr(service, "run_once", lambda source: {"path": None, "deferred": False, "error": "fixture"})
