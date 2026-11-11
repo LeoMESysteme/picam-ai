@@ -1852,3 +1852,84 @@ def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
     actual = actual.replace(str(tmp_path), '<root>')
     assert actual == (fixture / 'session.json').read_text()
     assert not (session.records_path.parent / 'tx.jsonl').exists()
+
+
+def test_tc_bereichshinweis_status_und_zusammenfassung_ohne_wirkung_auf_records(tmp_path, monkeypatch):
+    """TC 2026-11-11: reine Diagnose; Records bleiben bitgleich zu einem Lauf ohne Hinweis."""
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live import region_hint as rh
+    from dispread.live.frame_tracking import FrameTrackingConfig
+
+    monkeypatch.setattr(rh, 'MIN_FRAMES', 3)
+    monkeypatch.setattr(rh, 'EVALUATE_EVERY', 1)
+    centres = [[100.0 + 40 * i, 200.0] for i in range(6)]
+
+    def run(directory, *, with_tracker):
+        directory.mkdir()
+        session = _session(directory, [embed('+ 1.2345 ')] * 5)
+        session.start()
+        pipeline = session._pipeline
+        process = pipeline.process
+
+        def injected(frame, **kwargs):
+            if with_tracker:
+                pipeline.locator._tracker = SimpleNamespace(
+                    config=FrameTrackingConfig(), sources=np.asarray(centres),
+                    last_regions=[{'c': c, 's': 15, 'peak': 0.9, 'ok': i != 4,
+                                   'res1': 1.3 if i == 4 else 0.2, 'res2': None}
+                                  for i, c in enumerate(centres)])
+            return process(frame, **kwargs)
+
+        pipeline.process = injected
+        assert session.region_hint() is None
+        for _ in range(5):
+            session.step()
+        hint = session.region_hint()
+        session.stop()
+        records = [{k: v for k, v in json.loads(line).items() if k not in ('trace', 'emitted_at_utc', 'result_timestamp')}
+                   for line in session.records_path.read_text().splitlines()]
+        return session, hint, records
+
+    session, hint, records = run(tmp_path / 'a', with_tracker=True)
+    assert hint['regions'][0]['number'] == 5 and hint['regions'][0]['share'] == 1.0
+    summary = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert summary['limit_px'] == FrameTrackingConfig().max_inlier_residual_px
+    assert [region['number'] for region in summary['regions']] == [5]
+    assert summary['last']['regions'][0]['centre'] == [260.0, 200.0]
+    # Nach dem Stopp bleibt der letzte Hinweis abrufbar (Lauf beendet, Bediener richtet neu ein).
+    assert session.region_hint() == hint
+
+    plain, none, plain_records = run(tmp_path / 'b', with_tracker=False)
+    assert none is None
+    # Ohne Rahmenbereich-Nachfuehrung bleibt session.json byte-kompatibel: kein Feld.
+    assert 'tracking_region_hint' not in json.loads(plain.session_path.read_text())['summary']
+    assert records == plain_records
+
+
+def test_tc_ausfall_der_bereichsdiagnose_bricht_lauf_nicht_ab(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live.frame_tracking import FrameTrackingConfig
+    from dispread.live.region_hint import RegionConsistency
+
+    def broken(self, residuals):
+        raise RuntimeError('kaputt')
+
+    monkeypatch.setattr(RegionConsistency, 'observe', broken)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3)
+    session.start()
+    session._pipeline.locator._tracker = SimpleNamespace(
+        config=FrameTrackingConfig(), sources=np.zeros((2, 2)),
+        last_regions=[{'c': [0, 0], 's': 15, 'peak': 0.9, 'ok': True, 'res1': 0.1, 'res2': None}] * 2)
+    try:
+        statuses = [session.step().status for _ in range(3)]
+        assert statuses[-1] is ValueStatus.VALID
+        assert len(session.records_path.read_text().splitlines()) == 3
+        assert session.region_hint() is None
+    finally:
+        session.stop()

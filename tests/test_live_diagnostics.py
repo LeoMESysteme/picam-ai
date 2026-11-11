@@ -381,3 +381,25 @@ def test_copy_remains_pending_until_completion_metadata_is_saved(recorder):
     finally:
         release.set()
         assert rec.wait(3)
+
+
+def test_tc_residuen_je_bereich_werden_additiv_mitgeschrieben(recorder):
+    rec, now = recorder
+    regions = [{'c': [10.0, 20.0], 's': 15, 'peak': 0.912345678, 'ok': True, 'res1': 0.123456789, 'res2': None},
+               {'c': [30.0, 20.0], 's': 15, 'peak': 0.4, 'ok': False, 'res1': None, 'res2': None},
+               {'c': [50.0, 20.0], 's': 15, 'peak': 0.95, 'ok': False, 'res1': 1.4321, 'res2': 0.7}]
+    observe(rec, lost=True, regions=regions)
+    now[0] = 2.0
+    observe(rec, 2, lost=True)
+    rec.stop()
+    assert rec.wait(3)
+    first = rows(rec)[0]
+    # Bisherige Felder unveraendert, Bereiche zusaetzlich (Reihenfolge = Bereichsindex).
+    assert {key: first['tracking'][key] for key in ('mode', 'reason', 'score', 'shift', 'rotation_deg', 'quad')} == {
+        'mode': 'rahmenbereiche', 'reason': 'abdeckung', 'score': 0.1, 'shift': 2.0, 'rotation_deg': 0.5, 'quad': None}
+    assert first['tracking']['regions'] == [
+        {'peak': 0.9123, 'ok': True, 'res1': 0.1235, 'res2': None},
+        {'peak': 0.4, 'ok': False, 'res1': None, 'res2': None},
+        {'peak': 0.95, 'ok': False, 'res1': 1.4321, 'res2': 0.7}]
+    # Ohne Bereiche (ECC-Altmodus, injizierter Locator) kein Feld.
+    assert 'regions' not in rows(rec)[1]['tracking']

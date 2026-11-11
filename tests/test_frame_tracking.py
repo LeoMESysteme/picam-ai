@@ -184,7 +184,8 @@ def test_frame_tracker_exposes_last_regions(scene):
     assert regions[0]['ok'] is False
     assert all(region['ok'] is True for region in regions[1:])
     for region, source in zip(regions, proposal.regions, strict=True):
-        assert set(region) == {'c', 's', 'peak', 'ok'}
+        # res1/res2: reine Diagnose (TC 2026-11-11), Residuum je Bereich in px.
+        assert set(region) == {'c', 's', 'peak', 'ok', 'res1', 'res2'}
         assert region['c'] == list(source.centre)
         assert region['s'] == source.size
         assert isinstance(region['peak'], float)
@@ -2159,3 +2160,141 @@ def test_r25_raw_probe_uses_runtime_ambiguity_rule(scene, monkeypatch):
     monkeypatch.setattr(ft.cv2, 'matchTemplate', lambda *_args: response.copy())
     _, reason = ft._stability_peak(ft._gray(reference), ft._gray(reference), original.regions[0].centre, config)
     assert reason is None
+
+
+# --- TC 2026-11-11: Residuum je Rahmenbereich, reine Diagnose -------------------------
+
+def _tc_outcome(tracker, result):
+    coarse = tracker.last_coarse
+    return (result.reason, result.score, result.shift, result.rotation_deg,
+            None if result.quad is None else np.asarray(result.quad).tolist(),
+            None if coarse is None else (coarse.dx, coarse.dy, coarse.response, coarse.used, coarse.scale),
+            [(region['c'], region['peak'], region['ok']) for region in tracker.last_regions])
+
+
+def test_tc_residuum_je_bereich_erst_und_zweitfit(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, _, config, _, tracker = scene
+    target = tracker.sources.copy()
+    target[0, 1] += 0.8
+    rotation, translation, inliers = ft._ransac(tracker.sources, target, config)
+    assert inliers.all()
+    expected = np.linalg.norm(tracker.sources @ rotation.T + translation - target, axis=1)
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    # Entscheidung wie bisher: Residualgrenze kippt Erst- und Zweitfit.
+    assert result.reason == 'rahmen_unstimmig' and tracker.last_coarse.used
+    first = [region['res1'] for region in tracker.last_regions]
+    second = [region['res2'] for region in tracker.last_regions]
+    np.testing.assert_allclose(first, expected, atol=1e-9)
+    assert first[0] > config.max_inlier_residual_px
+    assert max(first[1:]) < config.max_inlier_residual_px
+    assert all(isinstance(value, float) for value in second)
+    assert second[0] > config.max_inlier_residual_px
+
+
+def test_tc_residuum_auch_fuer_ausreisser_und_ohne_zweitfit(scene, monkeypatch):
+    reference, _, config, _, tracker = scene
+    target = tracker.sources.copy()
+    target[0, 1] += 3.0  # jenseits der RANSAC-Toleranz: Ausreisser, Bild trotzdem nachgefuehrt
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    assert result.quad is not None and result.reason is None
+    regions = tracker.last_regions
+    assert regions[0]['ok'] is False
+    assert regions[0]['res1'] == pytest.approx(3.0, abs=0.05)
+    assert all(region['res2'] is None for region in regions)
+    assert max(region['res1'] for region in regions[1:]) < 0.05
+
+
+def test_tc_residuum_fehlt_ohne_treffer_oder_fit(scene):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    image = reference.copy()
+    x, y = map(int, proposal.regions[0].centre)
+    r = config.patch_size // 2
+    image[y-r:y+r+1, x-r:x+r+1] = 0
+    close_quad(tracker.update(image), quad)
+    assert tracker.last_regions[0]['res1'] is None
+    assert all(isinstance(region['res1'], float) for region in tracker.last_regions[1:])
+    tracker.update(reference[:10, :10])
+    assert all(region['res1'] is None and region['res2'] is None for region in tracker.last_regions)
+
+
+def _tc_scenarios(reference, quad, config, proposal):
+    h, w = reference.shape[:2]
+    centre = tuple(np.asarray(quad).mean(axis=0))
+    occluded = reference.copy()
+    for region in proposal.regions[:2]:
+        x, y = map(int, region.centre)
+        r = config.patch_size // 2 + config.search_radius_px + 2
+        occluded[y-r:y+r+1, x-r:x+r+1] = 0
+    yield 'referenz', reference
+    yield 'verschoben', cv2.warpAffine(reference, np.float32([[1, 0, 3.4], [0, 1, -2.2]]), (w, h))
+    yield 'gedreht', cv2.warpAffine(reference, cv2.getRotationMatrix2D(centre, 0.6, 1.0), (w, h))
+    yield 'massstab', cv2.warpAffine(reference, cv2.getRotationMatrix2D(centre, 0.0, 1.003), (w, h))
+    yield 'weit_verschoben', cv2.warpAffine(reference, np.float32([[1, 0, 25], [0, 1, 0]]), (w, h))
+    yield 'teilverdeckt', occluded
+    yield 'lokal_verschoben', _paste_region_motion(
+        reference, proposal, config.patch_size // 2 + config.search_radius_px,
+        np.float32([[1, 0, 1.0], [0, 1, 0.0]]), [0, 3, 7])
+    yield 'dunkel', (reference * 0.6).astype(np.uint8)
+    yield 'schwarz', np.zeros_like(reference)
+
+
+def test_tc_residuen_aendern_keine_entscheidung(scene, monkeypatch):
+    """Harte Grenze TC: mit und ohne Residuendiagnose bitgleiche Entscheidungen."""
+    reference, quad, config, proposal, _ = scene
+    scenarios = list(_tc_scenarios(reference, quad, config, proposal))
+    with_diagnosis = FrameTracker(reference, quad, proposal, config)
+    observed = {name: _tc_outcome(with_diagnosis, with_diagnosis.update(image)) for name, image in scenarios}
+    monkeypatch.setattr(FrameTracker, '_note_residuals', lambda *args, **kwargs: None)
+    without = FrameTracker(reference, quad, proposal, config)
+    for name, image in scenarios:
+        assert _tc_outcome(without, without.update(image)) == observed[name], name
+    reasons = {outcome[0] for outcome in observed.values()}
+    # Die Szenarien decken Annahme, Ablehnung und den Zweitfit ab.
+    assert None in reasons and len(reasons) >= 3
+    assert any(outcome[5] is not None and outcome[5][3] for outcome in observed.values())
+
+
+@pytest.mark.slow
+def test_tc_echtlauf_20261111_bitgleich_und_bereich_6_dauerhaft_unstimmig():
+    """222 Diagnosebilder des Laufs live-20261111T103604Z/run-01.
+
+    Die Werte in images.jsonl stammen aus dem Lauf VOR der Residuendiagnose;
+    Grund, Score, Lage und Quad muessen exakt gleich bleiben. Danach muss die
+    Fensterauswertung den Glanzbereich R5 (0-basiert, Mitte ~515,774) als
+    Rahmenbereich 6 melden, so wie die Werkbank ihn nummeriert.
+    """
+    from dispread.live.frame_tracking import RegionProposal
+    from dispread.live.region_hint import RegionConsistency
+
+    root = local_recording('live/live-20261111T103604Z/profile.json').parent
+    diagnose = diagnose_dir(root / 'run-01')
+    if not (diagnose / 'images.jsonl').exists():
+        pytest.skip('Diagnosebilder fehlen (DISPREAD_DEV_DATA setzen)')
+    profile = json.loads((root / 'profile.json').read_text())
+    block = profile['live_tracking']
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    rows = [json.loads(line) for line in (diagnose / 'images.jsonl').read_text().splitlines() if line.strip()]
+    assert len(rows) == 222
+    window = RegionConsistency(tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+    for row in rows:
+        result = tracker.update(cv2.imread(str(diagnose / row['image'])))
+        logged = row['tracking']
+        assert result.reason == logged['reason'], row['image']
+        assert result.score == logged['score'] and result.shift == logged['shift'], row['image']
+        assert result.rotation_deg == logged['rotation_deg'], row['image']
+        quad = None if result.quad is None else [list(map(float, point)) for point in result.quad]
+        assert quad == logged['quad'], row['image']
+        window.observe([region['res1'] for region in tracker.last_regions])
+    hint = window.snapshot()
+    assert hint is not None
+    first = hint['regions'][0]
+    assert first['number'] == 6 and first['index'] == 5
+    assert np.hypot(first['centre'][0] - 515, first['centre'][1] - 774) < 3
+    assert first['share'] >= 0.30 and hint['rest_median_px'] < 0.40

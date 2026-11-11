@@ -32,6 +32,10 @@ QUEUE_SIZE = 8
 PNG_COMPRESSION = 1
 
 
+def _round(value):
+    return None if value is None else round(float(value), 4)
+
+
 def read_mem_available(path=Path('/proc/meminfo')):
     """Verfuegbarer Hauptspeicher in Bytes; tmpfs-Freiraum reicht nicht (Swap)."""
     for line in Path(path).read_text().splitlines():
@@ -122,18 +126,25 @@ class DiagnosticRecorder:
             if self._state['first_error'] is None:
                 self._state['first_error'] = f'{type(exc).__name__}: {exc}'
 
-    def observe(self, frame, record, track, *, owner_sequence, mode):
+    def observe(self, frame, record, track, *, owner_sequence, mode, regions=None):
         if not self._state['enabled'] or self._stop.is_set():
             return
         try:
             now = self._monotonic()
             lost = any(r.startswith('tracking_lost:') for r in record.reject_reasons)
+            tracking = {'mode': mode, **{key: getattr(track, key, None)
+                        for key in ('reason', 'score', 'shift', 'rotation_deg', 'quad')}}
+            if regions:
+                # TC 2026-11-11, additiv: Treffer und Residuum je Rahmenbereich
+                # (px, Erst-/Zweitfit), Reihenfolge = Bereichsindex im Vorschlag.
+                tracking['regions'] = [{'peak': _round(region.get('peak')), 'ok': bool(region.get('ok')),
+                                        'res1': _round(region.get('res1')), 'res2': _round(region.get('res2'))}
+                                       for region in regions]
             metadata = {
                 **self._hashes, 'frame_sequence': frame.frame_sequence, 'owner_sequence': owner_sequence,
                 'camera_sequence': frame.raw_metadata.get('sequence'),
                 'capture_timestamp': frame.capture_timestamp.to_dict(),
-                'tracking': {'mode': mode, **{key: getattr(track, key, None)
-                    for key in ('reason', 'score', 'shift', 'rotation_deg', 'quad')}},
+                'tracking': tracking,
                 'status': record.status.value, 'reject_reasons': list(record.reject_reasons),
             }
             with self._lock:

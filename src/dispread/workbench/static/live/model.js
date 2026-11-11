@@ -94,6 +94,40 @@ export function trackingHintText(hint) {
   return '';
 }
 
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig (status.run.region_hint,
+// dispread.live.region_hint). Reine Diagnose: kein Freigabeentscheid, Werte
+// bleiben geschuetzt. Nummern 1-basiert wie Lauf-HUD und Bereichsbearbeitung.
+function hintRegions(hint) {
+  const regions = Array.isArray(hint?.regions) ? hint.regions : [];
+  const valid = regions.every((r) => Number.isInteger(r?.number) && Number.isInteger(r?.index) && r.index >= 0
+    && Number.isFinite(r?.share));
+  return valid ? [...regions].sort((a, b) => a.number - b.number) : [];
+}
+
+const joinDe = (items) => (items.length < 2 ? items.join('')
+  : `${items.slice(0, -1).join(', ')} und ${items.at(-1)}`);
+
+export function regionHintIndices(hint) {
+  return hintRegions(hint).map((r) => r.index);
+}
+
+export function regionHintText(hint) {
+  const regions = hintRegions(hint);
+  if (!regions.length) return '';
+  const numbers = joinDe(regions.map((r) => String(r.number)));
+  const shares = joinDe(regions.map((r) => `${Math.round(100 * r.share)} %`));
+  const one = regions.length === 1;
+  return `${one ? 'Rahmenbereich' : 'Rahmenbereiche'} ${numbers} ${one ? 'ist' : 'sind'} dauerhaft unstimmig ` +
+    `(${shares} der Bilder). Werte bleiben geschützt; es gehen nur Werte verloren. ` +
+    `Nach dem Lauf neu einrichten und ${one ? 'Bereich' : 'Bereiche'} ${numbers} entfernen.`;
+}
+
+export function regionHintShort(hint) {
+  const regions = hintRegions(hint);
+  if (!regions.length) return '';
+  return `${regions.length === 1 ? 'Bereich' : 'Bereiche'} ${joinDe(regions.map((r) => String(r.number)))} unstimmig`;
+}
+
 export function connectionLost(lastOkMs, nowMs, httpStatus) {
   return httpStatus === null || httpStatus < 200 || httpStatus >= 300 ||
     lastOkMs === null || nowMs - lastOkMs > 1500;

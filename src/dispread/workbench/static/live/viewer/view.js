@@ -10,6 +10,7 @@
 import {ALL_LAYERS, FRAME_MAX_AGE_S, LAYERS, VALUE_MAX_AGE_S, drawHud, drawSetupHud, hitTest, markerInfo, readoutTag,
   setupOverlay} from './hud.js';
 import {renderLegend} from './legend.js';
+import {regionHintIndices} from '../model.js';
 
 const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 16;
@@ -127,7 +128,7 @@ export function createViewer(canvas, opts = {}) {
     const v = view();
     return {imageToScreen, screenToImage, width: v.W, height: v.H, scale: v.s, dpr: dprOf(),
       hover: state.pinned || state.hover, frameAgeS: frameAgeS(), source: state.src, grid: state.grid,
-      offline: state.offline};
+      offline: state.offline, flagged: state.flagged || []};
   }
 
   function draw() {
@@ -395,6 +396,13 @@ export function createViewer(canvas, opts = {}) {
       redraw();
     },
     grid: () => state.grid,
+    // Indizes dauerhaft unstimmiger Rahmenbereiche im Lauf-HUD (status.run.region_hint).
+    setFlagged(indices) {
+      const next = Array.isArray(indices) ? indices.filter(Number.isInteger) : [];
+      if (JSON.stringify(next) === JSON.stringify(state.flagged || [])) return;
+      state.flagged = next;
+      redraw();
+    },
     // Zusatzebenen (Bereichsbearbeitung, Effekte): painter(ctx, viewState)
     // zeichnet nach dem HUD in CSS-px; Rueckgabe entfernt ihn wieder.
     addPainter(painter) {
@@ -726,6 +734,7 @@ export function mountViewer(host, {statusbar = null} = {}) {
       status = next;
       const grid = next?.setup?.grid || null;
       viewer.setGrid(grid);
+      viewer.setFlagged(['running', 'stopped'].includes(next?.state) ? regionHintIndices(next?.run?.region_hint) : []);
       // Ohne Lauf-HUD rahmt der Vorschlag die Ansicht (Anzeigerahmen + Rahmenbereiche).
       const quad = Array.isArray(grid?.quad) && grid.quad.length === 4 ? grid.quad : null;
       viewer.setFraming(quad ? [...quad, ...(next?.setup?.regions || []).map((r) => r?.centre)] : null);

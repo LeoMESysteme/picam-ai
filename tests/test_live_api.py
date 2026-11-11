@@ -1366,7 +1366,7 @@ def test_run_start_output_reaches_service_without_socket(monkeypatch):
 SCENE_NAMES = (
     'idle', 'setup_focus', 'setup_focus_done', 'setup_standbilder', 'setup_ready_warnung',
     'running_valid', 'running_transition', 'running_rahmen_verdeckt', 'running_stalled',
-    'running_anzeige_bewegt', 'stopped',
+    'running_anzeige_bewegt', 'stopped', 'running_bereich_unstimmig', 'setup_ready_nach_lauf',
 )
 
 

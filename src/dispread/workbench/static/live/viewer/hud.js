@@ -349,13 +349,16 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
 
   if (track && layerOn(layers, 'rahmen')) {
     const regions = track.regions || [];
+    // view.flagged: Indizes dauerhaft unstimmiger Bereiche (TC 2026-11-11, reine Diagnose).
+    const flagged = new Set(Array.isArray(view.flagged) ? view.flagged : []);
     regions.forEach((region, i) => {
       if (!Array.isArray(region?.c) || !finite(region.c[0]) || !finite(region.c[1])) return;
       const centre = toS(region.c);
       const half = (finite(region.s) ? region.s : 15) / 2;
       const lost = !region.ok;
       const hovered = hover?.kind === 'region' && hover.index === i;
-      const color = lost ? COL.err : COL.mag;
+      const warn = flagged.has(i);
+      const color = lost ? COL.err : warn ? COL.warn : COL.mag;
       // Suchfenster im Lauf nur am verlorenen oder gezeigten Bereich, sonst bleibt das
       // Bild ruhig; in der Einrichtung an jedem Bereich (view.searchWindows, Mock #t=46).
       if (lost || hovered || view.searchWindows) {
@@ -366,14 +369,15 @@ export function drawHud(ctx, hud, view, layers = ALL_LAYERS) {
         ctx.stroke();
         ctx.setLineDash([]);
       }
-      const width = hovered ? 2 : 1;
+      const width = hovered || warn ? 2 : 1;
       const corner = screenRect(ctx, centre, Math.max(half * view.scale, 3), width, dpr);
       if (lost) {
         ctx.fillStyle = 'rgba(238,91,77,.22)';
         ctx.fill();
       }
       strokeHalo(ctx, color, width);
-      if (hovered) badge(ctx, corner[0] + 3, corner[1] - 1, String(i + 1), color);
+      // Der auffaellige Bereich traegt seine Nummer dauerhaft (gleiche Nummer wie in der Einrichtung).
+      if (hovered || warn) badge(ctx, corner[0] + 3, corner[1] - 1, String(i + 1), color);
     });
   }
 

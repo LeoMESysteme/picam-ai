@@ -168,6 +168,15 @@ Bilder werden mit eigenem Grund abgelehnt. Randfenster werden uebersprungen.
 
 Score = Inlierzahl / vorgeschlagene Regionen * mittlerer Inlierpeak, [0, 1];
 er ist nur informativ und keine Fehlerwahrscheinlichkeit.
+
+TC 2026-11-11, reine Diagnose: last_regions traegt je Bereich res1/res2, den
+euklidischen Abstand des gefundenen Bereichs (Inlier wie Ausreisser) zum Erst-
+bzw. Zweitfit in Rohpixeln; None ohne Treffer, ohne Fit oder ohne Zweitfit.
+Gerechnet wird gleich nach dem RANSAC-Fit, also auch fuer spaeter mit
+rahmen_unstimmig abgelehnte Bilder. Die Rechnung laeuft getrennt von den
+Pruefungen; Freigabe, Schwellen, RANSAC und Entscheidung bleiben bitgleich
+(tests: tc_residuen_aendern_keine_entscheidung, tc_echtlauf_20261111).
+Auswertung: dispread.live.region_hint.
 """
 
 from __future__ import annotations
@@ -1180,6 +1189,28 @@ class FrameTracker:
         self.last_coarse = None
         gray = _gray(image)
         first = self._fine_update(gray)
+        first_regions = self.last_regions
+        result = self._second_attempt(gray, first)
+        self._attach_residuals(first_regions)
+        return result
+
+    def _attach_residuals(self, first_regions):
+        # Reine Diagnose (TC): Residuen je Bereich aus Erst- und Zweitfit an
+        # den gemeldeten Feinversuch haengen. Wirkt auf keine Entscheidung und
+        # vertraegt Feinversuche, die last_regions nicht neu setzen.
+        regions = self.last_regions
+        if regions is None:
+            return
+        second = regions is not first_regions
+        earlier = (first_regions if first_regions is not None and len(first_regions) == len(regions)
+                   else [{}] * len(regions))
+        for region, before in zip(regions, earlier, strict=True):
+            region['res2'] = region.get('res') if second else None
+            region['res1'] = before.get('res')
+        for region in regions:
+            region.pop('res', None)
+
+    def _second_attempt(self, gray, first) -> TrackResult:
         if first.reason not in {"rahmen_unstimmig", "zu_wenig_rahmenmerkmale", "rahmen_mehrdeutig"}:
             return first
         estimate = self._estimate_coarse(gray)
@@ -1197,12 +1228,20 @@ class FrameTracker:
         self.last_coarse = replace(estimate, used=True)
         return self._fine_update(gray, offset, similarity=True)
 
+    def _note_residuals(self, indices, source, target, transform, translation):
+        # Nur Diagnose: Abstand JEDES gefundenen Bereichs (Inlier und
+        # Ausreisser) zu diesem Fit, eigene Rechnung auf Kopien. Die
+        # Pruefungen unten rechnen unveraendert mit ihren eigenen Werten.
+        residuals = np.linalg.norm(source @ transform.T + translation - target, axis=1)
+        for index, residual in zip(indices, residuals, strict=True):
+            self.last_regions[index]['res'] = float(residual)
+
     def _fine_update(self, gray, offset=(0, 0), *, similarity=False) -> TrackResult:
         config = self.config
         # Immer nur der letzte Feinversuch; kein Befund des Vorbilds bleibt stehen.
         self.last_regions = [
             {'c': [float(x + offset[0]), float(y + offset[1])],
-             's': region.size, 'peak': 0.0, 'ok': False}
+             's': region.size, 'peak': 0.0, 'ok': False, 'res': None}
             for (x, y), region in zip(self.sources, self.proposal.regions, strict=True)
         ]
 
@@ -1250,6 +1289,7 @@ class FrameTracker:
         if similarity and self.last_coarse is not None:
             self.last_coarse = replace(self.last_coarse, scale=scale)
         transform = scale*rotation if similarity else rotation
+        self._note_residuals(indices, source, target, transform, translation)
         if not _spread(source[inliers], self.normalised_quad, config):
             return reject("rahmen_unstimmig")
         # Jeder Inlier muss entbehrlich sein: geometrische Hebelwirkung direkt

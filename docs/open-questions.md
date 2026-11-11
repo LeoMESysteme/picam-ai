@@ -3227,6 +3227,17 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   aufzeichnen, Erst-/Zweitfit-Gründe vergleichen und UI-Semantik spezifizieren.
   OQ-26 bleibt die allgemeine Hardware-Validierung; OQ-59 betrifft spätere
   Bildaufzeichnung/Nachberechnung.
+* **Teilbefund 2026-11-11 (Brückentest, Lauf `live-20261111T103604Z/run-01`):** Ein einzelner nicht starrer
+  Rahmenbereich (Glanzlinie der Fase, in der Werkbank Bereich 6) lässt den Erstfit scheitern; 23 von 25 erst
+  im Zweitfit angenommenen Diagnosebildern scheiterten im Erstfit an ihm. Das ist ein konkreter Mechanismus für
+  „dauerhaft zweiter Fit nötig“. [Bericht](quellen/bruecke-testlauf-2026-11-11/README.md).
+* **Diagnose je Bereich seit 2026-11-11 (reine Diagnose):** `last_regions` trägt je Bereich das Residuum zum
+  Erst- und Zweitfit (`res1`/`res2`, px, auch Ausreißer und abgelehnte Bilder), `diagnose/images.jsonl` schreibt
+  es je Bild mit. Ein Fenster über 300 Bilder meldet einen Bereich als dauerhaft unstimmig, wenn er in ≥ 30 %
+  seiner Bilder die Grenze 0,65 px reißt und der Rest im Median < 0,4 px liegt (`run.region_hint`,
+  `summary.tracking_region_hint`). Die Werkbank zeigt den Hinweis ruhig im Lauf und markiert den Bereich in der
+  Bereichsbearbeitung der Neueinrichtung. Freigabe, Schwellen und Entscheidungen bleiben bitgleich (Tests auf
+  den 222 Diagnosebildern). Offen bleibt die Einrichtungsregel, solche Bereiche gar nicht erst zu wählen.
 * **Antwort landet in:** [Laufauswertung](quellen/werkbank-t13-2026-11-06.md),
   [VALIDATION](VALIDATION.md) und einer späteren UI-/Tracking-Spezifikation.
 

@@ -41,7 +41,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "live"
 SCENES = (
     "idle", "setup_focus", "setup_focus_done", "setup_standbilder", "setup_ready_warnung",
     "running_valid", "running_transition", "running_rahmen_verdeckt", "running_stalled",
-    "running_anzeige_bewegt", "stopped",
+    "running_anzeige_bewegt", "stopped", "running_bereich_unstimmig", "setup_ready_nach_lauf",
 )
 # Aus live-20261030T133635Z/setup; keine Laufzeitabhaengigkeit von var/.
 FOCUS_SAMPLES = [[48, 630.3558194010419], [56, 273.53271242939513], [40, 201.1113182858314],
@@ -52,6 +52,14 @@ REGION_CENTRES = [[873, 385], [915, 737], [1256, 422], [1485, 658], [829, 411], 
 # Zwoelf echte Bereiche lassen im 2-KB-HUD Platz fuer alle 16 Zellen.
 # Bereiche rechts der Anzeige (Rahmen verdeckt von rechts, Ecken oben/unten rechts).
 RIGHT_REGIONS = {3, 6, 7, 11}
+# TC 2026-11-11: Bereich 6 (Index 5) dauerhaft unstimmig, Zahlen wie im Lauf
+# live-20261111T103604Z (Erstfit-Residuen, dispread.live.region_hint).
+REGION_HINT = {"regions": [{"number": 6, "index": 5, "centre": [822.0, 737.0], "share": 0.917,
+                            "median_px": 1.332, "frames": 205}],
+               "rest_median_px": 0.175, "frames": 210, "limit_px": 0.65}
+# Neueinrichtung: derselbe Ort heisst im neuen Vorschlag Bereich 5 (Index 4, 829,411).
+PREVIOUS_REGION_HINT = {"session_id": "live-20261111T103604Z", "run": "run-01",
+                        "regions": [{"number": 6, "centre": [830.0, 413.0], "max_share": 0.937}]}
 QUAD = [[810, 511], [1369, 511], [1377, 580], [814, 591]]
 CAMERA_SOURCE = {"model": "logitech_streamcam", "usb_id": "046d:0893", "size": [1920, 1080],
                  "fourcc": "YUYV", "fps": 30, "device": "/dev/video0", "controls": {
@@ -67,6 +75,14 @@ def scene_state(name):
         raise ValueError(f"Unbekannte Szene: {name}")
     if name == "idle":
         return {"state": name}
+    if name == "running_bereich_unstimmig":
+        state = scene_state("running_valid")
+        state["run"]["region_hint"] = copy.deepcopy(REGION_HINT)
+        return state
+    if name == "setup_ready_nach_lauf":
+        state = scene_state("setup_ready_warnung")
+        state["previous_region_hint"] = copy.deepcopy(PREVIOUS_REGION_HINT)
+        return state
     if name == "stopped":
         # Wie der echte Dienst: die Sitzung bleibt nach dem Stopp stehen,
         # run traegt Zusammenfassung und Endgrund (kein Wert ist mehr frisch).
@@ -229,7 +245,7 @@ class FakeLiveService:
                 "system": {"cpu_percent": 37.5, "cpu_window_s": 1.0},
                 "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
-                "diagnose_kopie": False, "last_mark": None,
+                "diagnose_kopie": False, "last_mark": None, "previous_region_hint": None,
                 "output": {"transport": "off", "state": "off"},
                 "reference": {"enabled": False, "reason": "kein Referenzlauf",
                               "latest": None, "schedule_step": None}, "reference_eval": None,
@@ -279,6 +295,7 @@ class FakeLiveService:
                 data["cause_texts"] = LIVE_CAUSE_TEXT.copy()
             if data.get("run") is not None:
                 data["run"].setdefault("tracking_hint", None)
+                data["run"].setdefault("region_hint", None)
                 window = data["run"].setdefault("rejection_causes",
                     {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
                 window["causes"] = [live_cause(c) for c in window["causes"]]

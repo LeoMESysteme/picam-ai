@@ -2,7 +2,7 @@
 // Datensaetze), Ursachen (10-s-Fenster aus rejection_causes), Nachfuehrung
 // (Rahmenbereiche mit Treffer) und Referenz (mit "Ablage" fuer Diagnose).
 // Kein Live-Abgleich gegen die Referenz (Spec OP-1), keine erfundenen Zahlen.
-import {trackingHintText} from '../model.js';
+import {regionHintIndices, regionHintText, trackingHintText} from '../model.js';
 import {dec, esc, grp} from '../shell.js';
 import {referenceText} from './result.js';
 import {configText, markerText, isOff, outputLines, outputTone} from './output.js';
@@ -48,7 +48,29 @@ export function createRecordLog({max = 40, wallNow = () => Date.now()} = {}) {
 
 export function runBadges(status) {
   const causes = status?.state === 'running' ? status?.run?.rejection_causes?.causes || [] : [];
-  return {Ursachen: causes.length};
+  const flagged = regionHintIndices(status?.run?.region_hint).length;
+  return {Ursachen: causes.length, ...(flagged ? {'Nachführung': flagged} : {})};
+}
+// Ursachen sind Ablehnungen (Fehlerton); der Bereichshinweis ist ein ruhiger Warnhinweis.
+export const RUN_BADGE_TONE = {Ursachen: 'err-t', 'Nachführung': 'warn-t'};
+
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig (status.run.region_hint), im
+// Lauf und nach dem Stopp. Reine Diagnose: kein Freigabeentscheid, kein Alarm.
+function regionHintHTML(hint) {
+  const text = regionHintText(hint);
+  if (!text) return '';
+  const rows = [...hint.regions].sort((a, b) => a.number - b.number).map((r) =>
+    `<tr><td class="m r">${r.number}</td><td class="m r">${Array.isArray(r.centre) ? r.centre.map((v) => Math.round(v)).join(', ') : '–'}</td>` +
+    `<td class="m r">${Math.round(100 * r.share)} %</td><td class="m r">${finite(r.median_px) ? `${dec(r.median_px, 2)} px` : '–'}</td></tr>`).join('');
+  const limit = finite(hint.limit_px) ? `${dec(hint.limit_px, 2)} px` : '–';
+  const rest = finite(hint.rest_median_px) ? `${dec(hint.rest_median_px, 2)} px` : '–';
+  return `<div class="blk rhint" data-part="region-hint"><h4>${sq('warn')} Rahmenbereich unstimmig` +
+    `<span>${finite(hint.frames) ? `letzte ${grp(hint.frames)} Bilder` : ''}</span></h4>` +
+    `<p class="warn-t wrap">${esc(text)}</p>` +
+    '<table class="grid"><thead><tr><th class="r">Nr.</th><th class="r">Mitte</th><th class="r">Anteil</th>' +
+    `<th class="r">Median</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<p class="note">Anteil der Bilder, in denen der Bereich mehr als ${esc(limit)} von der gemeinsamen Lage abweicht ` +
+    `(übrige Bereiche im Median ${esc(rest)}). Nur Diagnose: Freigabe und Grenzen bleiben unverändert.</p></div>`;
 }
 
 function wertHTML(log) {
@@ -98,14 +120,16 @@ function trackingHTML(status, hud) {
   const value = (x, digits, unit = '') => (finite(x) ? `${dec(x, digits)}${unit}` : '–');
   const correcting = track?.correcting ? '<span class="teal-t">Korrektur läuft</span>' : 'ruhend';
   const hint = status?.state === 'running' ? trackingHintText(status?.run?.tracking_hint) : '';
+  const flagged = new Set(regionHintIndices(status?.run?.region_hint));
   const regions = (track?.regions || []).map((region, i) => {
     const ok = region?.ok !== false;
-    return `<tr><td class="m r">${i + 1}</td><td class="m r">${Array.isArray(region?.c) ? region.c.map((v) => Math.round(v)).join(', ') : '–'}</td>` +
-      `<td class="m r">${value(region?.peak, 2)}</td><td><span class="stc">${sq(ok ? 'ok' : 'err')}${ok ? 'Treffer' : 'kein Treffer'}</span></td></tr>`;
+    const state = flagged.has(i) ? `${sq('warn')}dauerhaft unstimmig` : `${sq(ok ? 'ok' : 'err')}${ok ? 'Treffer' : 'kein Treffer'}`;
+    return `<tr${flagged.has(i) ? ' class="flag"' : ''}><td class="m r">${i + 1}</td><td class="m r">${Array.isArray(region?.c) ? region.c.map((v) => Math.round(v)).join(', ') : '–'}</td>` +
+      `<td class="m r">${value(region?.peak, 2)}</td><td><span class="stc">${state}</span></td></tr>`;
   }).join('');
   const lost = Object.entries(summary.tracking_lost_reasons || {}).map(([reason, count]) =>
     `<tr><td class="wrap">${esc(status?.tracking_reasons?.[reason] || reason)}</td><td class="m r">${grp(count)}</td></tr>`).join('');
-  return `<div class="blk"><h4>Spurgüte<span>${esc(trackingModeText(status?.run?.tracking?.mode ?? status?.profile?.tracking_mode))}</span></h4>` +
+  return regionHintHTML(status?.run?.region_hint) + `<div class="blk"><h4>Spurgüte<span>${esc(trackingModeText(status?.run?.tracking?.mode ?? status?.profile?.tracking_mode))}</span></h4>` +
     `<dl class="kv2"><dt>Spur</dt><dd>${value(track?.score, 2)}</dd><dt>Versatz</dt><dd>${value(track?.shift_px, 1, ' px')}</dd>` +
     `<dt>Drehung</dt><dd>${value(track?.rotation_deg, 1, '°')}</dd><dt>Nachregistrierung</dt><dd class="t">${correcting}</dd>` +
     `<dt>Spur im Lauf</dt><dd>${finite(score.median) ? `${value(score.min, 2)} · ${value(score.median, 2)} · ${value(score.max, 2)}` : '–'}</dd></dl>` +

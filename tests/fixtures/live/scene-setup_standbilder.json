@@ -168,6 +168,7 @@
   },
   "diagnose_kopie": false,
   "last_mark": null,
+  "previous_region_hint": null,
   "output": {
     "transport": "off",
     "state": "off"

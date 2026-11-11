@@ -2310,3 +2310,57 @@ test('Brücke einrichten: Wechsel des Transports verwirft den aktiven Kopplungsc
   expect(result.gone).toBe(true);
   expect(result.word).toBe('kein Code');
 });
+
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig – ruhiger Hinweis im Lauf,
+// Wiederfinden in der Bereichsbearbeitung nach der Neueinrichtung.
+const TC_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
+test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const bar = page.getByRole('contentinfo');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(bar.locator('[data-item="session"]')).toBeVisible();
+  await expect(bar.locator('[data-item="region"]')).toBeHidden();
+  await expect(inspector.getByRole('tab', { name: 'Nachführung' }).locator('.cnt')).toHaveCount(0);
+
+  await hook(page, '/test/scene', { name: 'running_bereich_unstimmig' });
+  const item = bar.locator('[data-item="region"]');
+  await expect(item).toBeVisible();
+  await expect(item).toHaveText('Bereich 6 unstimmig');
+  await expect(item).toHaveClass(/warn/);
+  await expect(item).toHaveAttribute('title', 'Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder). ' +
+    'Werte bleiben geschützt; es gehen nur Werte verloren. Nach dem Lauf neu einrichten und Bereich 6 entfernen.');
+  const tab = inspector.getByRole('tab', { name: /Nachführung/ });
+  await expect(tab.locator('.cnt')).toHaveText('1');
+  await expect(tab.locator('.cnt')).toHaveClass(/warn-t/);
+  await tab.click();
+  const block = inspector.locator('[data-part="region-hint"]');
+  await expect(block).toContainText('Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder).');
+  await expect(block).toContainText('Nur Diagnose: Freigabe und Grenzen bleiben unverändert.');
+  await expect(block.locator('p.warn-t')).toHaveCount(1);
+  await expect(inspector.locator('tr.flag')).toContainText('dauerhaft unstimmig');
+  await expect(inspector.locator('tr.flag td').first()).toHaveText('6');
+  // Der Wert bleibt freigegeben: der Hinweis ist kein Alarm und keine Ablehnung.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead')).toHaveClass(/valid/);
+  // Bereich 6 (Index 5, 822,737) im Bild in Warnfarbe, ein anderer Bereich nicht.
+  await expect.poll(() => colourNear(page, [829.5, 737], [229, 165, 53], 3, 60)).toBe(true);
+  expect(await colourNear(page, [836.5, 411], [229, 165, 53], 3, 60)).toBe(false);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TC_SHOTS}/tc-lauf-bereich-unstimmig.png` });
+
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf' });
+  await expect(item).toBeHidden();
+  const previous = inspector.locator('[data-part="previous"]');
+  await expect(previous).toHaveText(/Im letzten Lauf \(run-01\) war Bereich 6 bei 830, 413 dauerhaft unstimmig\. Hier heißt er Bereich 5: entfernen\./);
+  await inspector.getByText('Bereiche einzeln').click();
+  const flagged = inspector.locator('.rlist li.flag');
+  await expect(flagged).toHaveCount(1);
+  await expect(flagged.locator('.n')).toHaveText('5');
+  await expect(flagged.getByRole('button', { name: /Bereich 5 entfernen/ })).toBeEnabled();
+  await expect.poll(() => colourNear(page, [836.5, 411], [229, 165, 53], 3, 60)).toBe(true);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TC_SHOTS}/tc-einrichtung-bereich-wiederfinden.png` });
+  expect(errors).toEqual([]);
+});

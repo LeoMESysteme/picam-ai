@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-11: **Nachführung: Diagnose je Rahmenbereich und Hinweis „Rahmenbereich N dauerhaft unstimmig“ (TC, reine
+  Diagnose).** Anlass: Brückentest `live-20261111T103604Z/run-01` mit 24 % `tracking_lost:rahmen_unstimmig`. Ursache war
+  ein einzelner Bereich auf einer Glanzlinie der Fase (in der Werkbank Bereich 6), der sich nach einer Lichtänderung
+  nicht mehr starr mitbewegt. Das war im Lauf nicht zu sehen. Neu: `FrameTracker.last_regions` trägt je Bereich
+  `res1`/`res2` (Abstand zum Erst-/Zweitfit in px, auch für Ausreißer und abgelehnte Bilder); `diagnose/images.jsonl`
+  schreibt sie je Bild mit (`tracking.regions`, additiv). `dispread.live.region_hint` wertet die Erstfit-Residuen
+  über 300 Bilder aus: auffällig, wenn ein Bereich in ≥ 30 % seiner Bilder die Prüfgrenze
+  `max_inlier_residual_px` (0,65 px, aus der Tracker-Konfiguration) reißt und der Rest im Median < 0,40 px liegt,
+  frühestens nach 150 Bildern. Live-Status `run.region_hint`, nach dem Lauf `previous_region_hint` (für die
+  Neueinrichtung), `session.json` `summary.tracking_region_hint` (nur bei Rahmenbereich-Nachführung, sonst
+  bleibt die Datei byte-gleich). Werkbank `/live`: ruhiger Warnhinweis in Statusleiste und Inspektor
+  (Nachführung, mit Abzeichen) „Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder). Werte bleiben
+  geschützt; es gehen nur Werte verloren. Nach dem Lauf neu einrichten und Bereich 6 entfernen.“, der Bereich
+  ist im Bild in Warnfarbe mit Nummer markiert. In der Bereichsbearbeitung der Neueinrichtung wird er über die Lage
+  (≤ 8 px) wiedergefunden und mit alter und neuer Nummer benannt, da eine Neueinrichtung neu nummerieren kann.
+  **Freigabe, Schwellen, RANSAC, Akzeptanzentscheidung und ValueRecord bleiben bitgleich**: Tests mit und ohne
+  Residuenrechnung auf synthetischen Szenen und exakter Vergleich von Grund, Score, Lage und Quad gegen alle 222
+  Diagnosebilder des Laufs (`test_tc_echtlauf_20261111_…`, meldet dort genau Bereich 6). Die Einrichtungsregel,
+  solche Bereiche gar nicht erst zu wählen, ist nicht Teil davon (OQ-63).
 * 2026-11-11: **Brücke: Verbindungsabbruch bei jedem Wechsel gültig → ungültig behoben (Brückentest mit echten Werten).**
   Befund im Lauf `live-20261111T095426Z/run-01` (Netzwerk, Testfreigabe): 1 560 Werte an COM übergeben, aber alle 2–15 s
   ein Abbruch von ca. 2 s; jedes Mal beim ersten Übergangswert nach gültigen Werten (`offered` und `unconfirmed` in

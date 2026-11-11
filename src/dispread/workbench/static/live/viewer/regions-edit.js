@@ -54,6 +54,36 @@ export function regionAt(regions, [x, y], scale = 1) {
   });
 }
 
+// TC 2026-11-11: Bereiche, die im letzten Lauf dauerhaft unstimmig waren
+// (status.previous_region_hint), im aktuellen Vorschlag ueber die Lage
+// wiederfinden. Nach einer Neueinrichtung kann sich die Nummer aendern; ohne
+// Neueinrichtung ist sie gleich. Bis MATCH_PX Abstand gilt als derselbe Ort
+// (halbe Fenstergroesse 7,5 px plus Einrasten; Mindestabstand der Bereiche 28 px).
+export const MATCH_PX = 8;
+export function previousRegionMatches(previous, regions) {
+  const items = Array.isArray(previous?.regions) ? previous.regions : [];
+  const list = Array.isArray(regions) ? regions : [];
+  return items.filter((item) => Number.isInteger(item?.number) && Array.isArray(item?.centre)
+    && finite(item.centre[0]) && finite(item.centre[1])).map((item) => {
+    let index = -1;
+    let best = Infinity;
+    list.forEach((region, i) => {
+      if (!Array.isArray(region?.centre)) return;
+      const d = Math.hypot(region.centre[0] - item.centre[0], region.centre[1] - item.centre[1]);
+      if (d <= MATCH_PX && d < best) { best = d; index = i; }
+    });
+    return {number: item.number, centre: item.centre, share: finite(item.max_share) ? item.max_share : null, index};
+  });
+}
+
+export function previousRegionText(match, run) {
+  const where = `bei ${match.centre.map((v) => Math.round(v)).join(', ')}`;
+  const from = `Im letzten Lauf${run ? ` (${run})` : ''} war Bereich ${match.number} ${where} dauerhaft unstimmig`;
+  if (match.index < 0) return `${from}. Im neuen Vorschlag liegt dort kein Bereich.`;
+  const now = match.index + 1;
+  return `${from}. ${now === match.number ? 'Er heißt hier ebenfalls' : 'Hier heißt er'} Bereich ${now}: entfernen.`;
+}
+
 // Etikett nach der Antwort: {ok, text}. edit = {add, remove}; result = client.post(...).
 export function editFeedback(edit, result, trackingReasons) {
   if (!result.ok) return {ok: false, text: result.network ? REGION_NETWORK_ERROR : result.error};
@@ -164,8 +194,10 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
     if (shown() && viewer.layers().has('rahmen')) {
       const track = {regions: regions().filter((r) => Array.isArray(r?.centre))
         .map((r) => ({c: r.centre, s: r.size, ok: true}))};
-      drawHud(ctx, {track}, {...view, hover: hover >= 0 ? {kind: 'region', index: hover} : null, searchWindows: true},
-        new Set(['rahmen']));
+      const flagged = previousRegionMatches(current?.previous_region_hint, regions())
+        .map((match) => match.index).filter((index) => index >= 0);
+      drawHud(ctx, {track}, {...view, hover: hover >= 0 ? {kind: 'region', index: hover} : null, searchWindows: true,
+        flagged}, new Set(['rahmen']));
     }
     if (!feedback?.point || !shown()) {
       label.hidden = true;
@@ -207,10 +239,11 @@ export function enableRegionEditing(mounted, client, status = null, {onBusy = ()
 
   return {
     update(next) {
-      const before = JSON.stringify([current?.state, current?.setup?.proposal_revision, current?.setup?.regions]);
+      const key = (s) => JSON.stringify([s?.state, s?.setup?.proposal_revision, s?.setup?.regions, s?.previous_region_hint]);
+      const before = key(current);
       current = next;
       if (waitFor && (next?.state !== 'setup_ready' || next?.setup?.proposal_revision !== waitFor.revision)) release(true);
-      if (JSON.stringify([next?.state, next?.setup?.proposal_revision, next?.setup?.regions]) !== before) {
+      if (key(next) !== before) {
         if (hover >= regions().length) hover = -1;
         viewer.redraw();
         notify();
@@ -241,6 +274,7 @@ export function mountRegionPanel(host, editor) {
     <div class="inrow"><input type="text" id="region-coordinates" class="mono" placeholder="z. B. 320,240" autocomplete="off" spellcheck="false">
       <button type="button" data-part="add">Bereich hinzufügen</button></div>
     <p class="msg" data-part="msg" role="status" aria-live="polite" hidden></p>
+    <div class="rprev" data-part="previous" hidden></div>
     <p class="mut selection" data-part="selection"></p>
     <details class="fold"><summary>Bereiche einzeln<span class="mut" data-part="list-count"></span></summary>
       <ul class="rlist" data-part="region-list"></ul></details>
@@ -286,12 +320,20 @@ export function mountRegionPanel(host, editor) {
     input.disabled = !editable;
     q('[data-part="selection"]').textContent = `Auswahl: ${setup.auswahl || 'automatisch'}`;
     // Liste nur bei neuer Revision neu bauen: fokussierte Entfernen-Knoepfe bleiben.
-    const key = JSON.stringify([setup.proposal_revision, regions]);
+    const matches = editable ? previousRegionMatches(status?.previous_region_hint, regions) : [];
+    const flagged = new Set(matches.map((match) => match.index).filter((index) => index >= 0));
+    const previous = q('[data-part="previous"]');
+    const previousHtml = matches.map((match) => `<p class="warn-t wrap"><span class="sq warn"></span> ` +
+      `${escapeText(previousRegionText(match, status?.previous_region_hint?.run))}</p>`).join('');
+    previous.hidden = !matches.length;
+    if (previous._html !== previousHtml) { previous._html = previousHtml; previous.innerHTML = previousHtml; }
+    const key = JSON.stringify([setup.proposal_revision, regions, [...flagged]]);
     const list = q('[data-part="region-list"]');
     if (key !== listKey) {
       listKey = key;
       list.innerHTML = regions.map((region, index) =>
-        `<li><span class="n">${index + 1}</span><span class="c">${region.centre.join(', ')}</span>` +
+        `<li${flagged.has(index) ? ' class="flag"' : ''}><span class="n">${index + 1}</span><span class="c">${region.centre.join(', ')}</span>` +
+        `${flagged.has(index) ? '<span class="tag">letzter Lauf unstimmig</span>' : ''}` +
         `<button type="button" class="ghost" data-index="${index}" aria-label="Bereich ${index + 1} entfernen (${region.centre.join(', ')})">Entfernen</button></li>`).join('');
     }
     for (const button of list.querySelectorAll('button')) button.disabled = !editable || busy;

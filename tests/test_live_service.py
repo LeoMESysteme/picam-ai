@@ -3243,3 +3243,37 @@ def test_run_passes_confirming_operator_to_session(tmp_path, monkeypatch):
     service.start_run(reference=False)
     assert seen['by'] == 'Operator'
     service.stop_run()
+
+
+def test_tc_bereichshinweis_im_status_und_fuer_die_neueinrichtung(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'live-x' / 'run-01'
+    service._session_dir = tmp_path / 'live-x'
+    hint = {'regions': [{'number': 6, 'index': 5, 'centre': [515.0, 774.0], 'share': 0.917,
+                         'median_px': 1.332, 'frames': 205}],
+            'rest_median_px': 0.175, 'frames': 210, 'limit_px': 0.65}
+    summary = {'tracking_region_hint': {'regions': [
+        {'number': 6, 'index': 5, 'centre': [515.0, 774.0], 'flagged_evaluations': 2,
+         'max_share': 0.937, 'median_px': 1.414}], 'last': hint}}
+    session = SimpleNamespace(latest=None, summary=summary, latest_age_s=lambda: None,
+                              region_hint=lambda: hint)
+    service._session = session
+    for full in (False, True):
+        assert service.status(full=full)['run']['region_hint'] == hint
+    assert service.status()['previous_region_hint'] is None
+    with service._lock:
+        service._finish_run(session, None)
+    expected = {'session_id': 'live-x', 'run': 'run-01',
+                'regions': [{'number': 6, 'centre': [515.0, 774.0], 'max_share': 0.937}]}
+    assert service.status()['previous_region_hint'] == expected
+    # Neue Einrichtung verwirft die Sitzung, der Hinweis fuer die Bereichsbearbeitung bleibt.
+    service._session, service._state = None, 'setup_ready'
+    status = service.status()
+    assert status['run'] is None and status['previous_region_hint'] == expected
+    # Ein Lauf ohne Auffaelligkeit loescht den alten Hinweis.
+    quiet = SimpleNamespace(summary={'tracking_region_hint': {'regions': [], 'last': None}})
+    with service._lock:
+        service._finish_run(quiet, None)
+    assert service.status()['previous_region_hint'] is None

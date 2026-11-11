@@ -343,6 +343,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       guess: null,
       tracking: {mode: 'frame_local', profile_mode: 'frame_local', version: 1, regions: regions.length},
       tracking_hint: hint,
+      region_hint: null,
       rejection_causes: causesAt(r),
     };
   }
@@ -386,7 +387,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       run_block: null, test_run: null, reader_tolerance: null,
       run: runPhase ? runBlock() : null,
       diagnostics: {enabled: Boolean(runOpts?.diagnostics && runPhase), reason: runOpts?.diagnostics ? null : 'kein Diagnoselauf'},
-      diagnose_kopie: false, diagnostic_leftovers: [],
+      diagnose_kopie: false, diagnostic_leftovers: [], previous_region_hint: null,
       last_mark: lastMark ? {...lastMark} : null,
       reference: referenceBlock(),
       reference_eval: phase === 'stopped' && runOpts?.reference

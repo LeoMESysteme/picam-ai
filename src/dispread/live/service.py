@@ -187,6 +187,8 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        # TC 2026-11-11: auffaellige Bereiche des letzten Laufs fuer die Neueinrichtung, nur Anzeige.
+        self._previous_region_hint: dict | None = None
         self._setup_grid: dict | None = None
         self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
@@ -335,6 +337,8 @@ class LiveService:
                     "tracking": dict(getattr(self._session, "tracking", {})),
                     "tracking_hint": (self._session.tracking_hint()
                                       if hasattr(self._session, "tracking_hint") else None),
+                    "region_hint": (self._session.region_hint()
+                                    if hasattr(self._session, "region_hint") else None),
                 }
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()
@@ -360,6 +364,7 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "previous_region_hint": deepcopy(self._previous_region_hint),
                 "output": (self._session.unified_output_status()
                            if self._session is not None and hasattr(self._session, 'unified_output_status')
                            else {"transport": "off", "state": "off"}),
@@ -957,6 +962,7 @@ class LiveService:
                     self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                                if getattr(s, 'diagnose_kopie', False)]
                     self._session, self._run_stop, self._state, self._error = session, stop, "running", None
+                    self._previous_region_hint = None
                     self._run_dir = out_dir
                     self._test_run = test_run
                     self._run_reference = reference
@@ -999,6 +1005,14 @@ class LiveService:
         if self._bridge_hub is not None:
             self._bridge_hub.release_real_run(getattr(session, 'bridge_run_id', None))
         self._state, self._error = 'stopped', error
+        summary = getattr(session, 'summary', None)
+        hint = summary.get('tracking_region_hint') if isinstance(summary, dict) else None
+        regions = (hint.get('regions') if isinstance(hint, dict) else None) or []
+        self._previous_region_hint = None if not regions else {
+            'session_id': None if self._session_dir is None else self._session_dir.name,
+            'run': None if self._run_dir is None else self._run_dir.name,
+            'regions': [{'number': r['number'], 'centre': list(r['centre']), 'max_share': r['max_share']}
+                        for r in regions]}
         if self._run_reference:
             self._reference_eval = {'state': 'running'}
             threading.Thread(target=self._reference_eval_worker, args=(session, self._run_dir),

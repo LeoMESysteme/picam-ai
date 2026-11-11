@@ -51,6 +51,7 @@ from dispread.live.output import (
     require_output_acknowledgement,
 )
 from dispread.live.recent import RecentStrip
+from dispread.live.region_hint import RegionConsistency
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -282,6 +283,9 @@ class LiveSession:
         self._rejection_window = RejectionWindow()
         self._tracking_advice: TrackingAdvice | None = None
         self._tracking_advice_warned = False
+        # TC 2026-11-11: Bereichshinweis, reine Diagnose ohne Rueckweg in den Messpfad.
+        self._region_consistency: RegionConsistency | None = None
+        self._region_consistency_warned = False
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -500,7 +504,9 @@ class LiveSession:
                         _LOG.warning('Bewegungsdiagnose ausgefallen: %s', exc)
                         self._tracking_advice_warned = True
                     self._tracking_advice.failed(self.latest_monotonic)
-            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
+            regions = self._observe_regions()
+            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'],
+                                      regions=regions)
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
@@ -520,6 +526,28 @@ class LiveSession:
                     _LOG.warning('Laufanzeige ausgefallen: %s', exc)
                     self._frame_info_warned = True
             return record
+
+    def _observe_regions(self) -> list | None:
+        """Residuen je Rahmenbereich ins Hinweisfenster; erst nach geschriebenem Record.
+
+        Nur Bedienhilfe: weder Record noch Freigabe noch Ausgabe haengen davon ab,
+        ein Fehler hier schaltet nur den Hinweis ab.
+        """
+        try:
+            tracker = getattr(self._pipeline.locator, '_tracker', None)
+            regions = getattr(tracker, 'last_regions', None)
+            if not regions:
+                return None
+            if self._region_consistency is None:
+                self._region_consistency = RegionConsistency(
+                    tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+            self._region_consistency.observe([region.get('res1') for region in regions])
+            return regions
+        except Exception as exc:  # noqa: BLE001 - Bedienhilfe darf keinen Lauf abbrechen
+            if not self._region_consistency_warned:
+                _LOG.warning('Bereichsdiagnose ausgefallen: %s', exc)
+                self._region_consistency_warned = True
+            return None
 
     def _build_frame_info(self, sequence, record, track, coarse) -> dict:
         pipeline = self._pipeline
@@ -580,6 +608,11 @@ class LiveSession:
     def tracking_hint(self) -> dict | None:
         """Bedienhilfe mit monotoner Verlustdauer; kein Freigabeentscheid."""
         return None if self._tracking_advice is None else self._tracking_advice.snapshot(self._monotonic())
+
+    def region_hint(self) -> dict | None:
+        """Bereich(e) dauerhaft unstimmig, letzte Auswertung; auch nach dem Stopp. Kein Freigabeentscheid."""
+        window = self._region_consistency
+        return None if window is None else window.snapshot()
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
@@ -792,6 +825,9 @@ class LiveSession:
         data['last_mark'] = self.last_mark
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
+        if self._region_consistency is not None:
+            # Nur mit Rahmenbereich-Nachfuehrung; andere Modi behalten ihre bisherigen Bytes.
+            self.summary['tracking_region_hint'] = self._region_consistency.summary()
         if getattr(self._reference_recorder, 'reconfiguration_enabled', False):
             self.summary['reconfiguration_suppressed'] = self._reconfiguration_suppressed
         if self._test_run is not None:

@@ -56,6 +56,21 @@ Die Dateien hier sind Originale von Leonhard:
 
 Das Diagnosebild `diagnose/0002.png` (Frame 1332, `rahmen_unstimmig`) zeigt eine ruhige, scharfe Anzeige `+0.63956 mV/V`. Die Nachführung meldet hier offenbar einen Fehlalarm (OQ-63).
 
+**Ursache der `rahmen_unstimmig`-Schübe (Nachstellung aller 222 Diagnosebilder, bitgenau):**
+- Ein einzelner automatisch gewählter Rahmenbereich liegt auf einer schmalen **Glanzlinie der unteren linken Fase**
+  (Mitte 515, 774). Nach einer leichten Lichtänderung kurz nach Laufbeginn bewegt er sich nicht mehr starr mit dem
+  Gerät, sondern weicht 0,7 bis 2,6 px ab. Ab 0,65 px kippt er die Residualgrenze, über 1,5 px wird er als
+  Ausreißer verworfen und das Bild besteht wieder. Daher die kurzen Schübe.
+- **Nummerierung:** Im Diagnosebericht heißt er R5 (0-basiert). In der Werkbank (Lauf-HUD, Nachführungstabelle,
+  Bereichsbearbeitung) ist es **Rahmenbereich 6**.
+- Keine echte Bewegung, kein Sicherheitsproblem: Die Ablehnungen sind richtig im Sinne der Prüfung, es gehen nur
+  Werte verloren. Die Laufzeitgrenzen 0,35/0,65/1,5 px bleiben unverändert (eine Lockerung ließe im Sicherheitstest
+  falsche Geometrie bis 3,5 px durch).
+- Abhilfe ohne Code: unter Laufbeleuchtung neu einrichten und den Bereich an dieser Stelle entfernen. Seit
+  2026-11-11 meldet die Werkbank so einen Bereich selbst („Rahmenbereich 6 ist dauerhaft unstimmig …“) und findet
+  ihn nach der Neueinrichtung über die Lage wieder (CHANGELOG, OQ-63).
+- Bericht: `.superpowers/sdd/2026-11-06-bruecke-ui/tracking-fehlalarm-diagnose.md`.
+
 **Weitere Beobachtungen:**
 - Die Einrichtung stand auf „WARNUNG“ (bestätigt).
 - Die Timing-Kalibrierung wurde nicht angewendet (`applied: false`).
